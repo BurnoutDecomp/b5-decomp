@@ -1,5 +1,8 @@
 #pragma once
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "BrnCommonTypes.h"                                             // Vector2 parameter of DebugDisplayRenderTarget
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 // Original ARTIST debug-tunable bloom scale, defined by BrnRendererModule.cpp.
@@ -7,6 +10,7 @@ extern f32 gfBloomLuminanceScale;
 extern f32 gfBloomThresholdScale;
 namespace CgsDev { namespace Assert { struct AssertData; } }
 namespace BrnEffects { class EffectsModule; }
+namespace BrnGame { struct BrnCpuMonitors; }
 
 // Real loading-screen-path member types (Option B: these are reconstructed for real; the
 // off-path gameplay-render subsystems below remain opaque storage until reached).
@@ -38,27 +42,6 @@ namespace BrnEffects { class EffectsModule; }
 #include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
-
-namespace CgsGraphics
-{
-// CgsGraphics::Im2dRenderBuffer is the real type (CgsImRenderBuffer.h, ImRenderBuffer<Basic2dColouredTexturedVertex>).
-// CgsGraphics::Im2d is the real type (CgsIm2d.h) - the loading screen renders through it.
-
-class Im2dUntex
-{
-};
-
-// Im3d, Im3dUntex and Im3dRenderBufferUntex are NOT declared here any more. They had empty
-// placeholder definitions in this namespace while their real ones live in CgsIm3d.h
-// (`struct Im3d`, `struct Im3dUntex`, and `typedef Im3dUntex Im3dRenderBufferUntex` -- the
-// buffer/renderer split folds onto one type on the PC target). Because this module holds all
-// three BY VALUE below, its size was being computed from the empty stand-ins. CgsIm3d.h had
-// already flagged the hazard and named the assumption that kept it latent -- "the two are
-// never included in the same TU" -- which stopped being true when ParticleModule.h began
-// including the Lion blend renderer, since Im3dBlend derives from Im3dBase<V> in CgsIm3d.h.
-// This mirrors what was already done for the 2D pair noted at the top of this block.
-
-}
 
 // EffectsArbitrator is the real type (BrnEffectsArbitrator.h); Im3dSkyDome is the real
 // BrnGraphics::Im3dSkyDome (BrnIm3d.h) now that the sky-dome draw path is mounted -- the
@@ -118,14 +101,6 @@ namespace BrnDirector { namespace Camera { struct Camera; } }
 #include "GameSource/Graphics/BrnRendererMemory.h"
 
 // BrnShaderConstantsFrame is the real type (BrnShaderConstantsFrame.h).
-
-struct TextureStateParameters
-{
-};
-
-struct Resource
-{
-};
 
 // BrnBlobbyShadowManager is the real type now (GameSource/Graphics/BrnBlobbyShadowManager.h,
 // included via BrnRendererModuleIO.h above). The empty stub that lived here ODR-clashed with the
@@ -188,6 +163,7 @@ namespace BrnGraphics
     class DebugComponent : public CgsDev::DebugComponent
     {
     public:
+        DebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::RendererConstructorTag()) {}
         void Construct(::BrnRendererModule* lpRendererModule);
         const bool GetOverrideSunBrightness();
         const f32 GetOverriddenSunBrightness();
@@ -198,9 +174,9 @@ namespace BrnGraphics
         void OnActivate() ;
 
     private:
-        ::BrnRendererModule* mpRendererModule = 0;
-        f32 mfSunFlareOverrideBrightness = 0.3f;
-        bool mbSunFlareOverrideBrightness = false;
+        ::BrnRendererModule* mpRendererModule;
+        f32 mfSunFlareOverrideBrightness;
+        bool mbSunFlareOverrideBrightness;
     };
 }
 
@@ -288,9 +264,19 @@ public:
 
         void Construct()
         {
-            s32* lpMonitor = &miWholeDispatchThread;
-            for (u32 luIndex = 0; luIndex < sizeof(BrnCpuMonitors) / sizeof(s32); ++luIndex)
-                lpMonitor[luIndex] = 0;
+            miWholeDispatchThread = miObjectToMeshListConversion = miStartSortJobs = -1;
+            miStartTintBlendJob = miDispatchShadowmapNearCSMList = miWaitOnShadowNearSortJob = -1;
+            miDispatchShadowmapFarCSMList = miWaitOnShadowFarSortJob = miDispatchEnvmapLists = -1;
+            miWaitOnEnvmapSortJobs = miDispatchWorldLists = miDispatchWorldOpaqueList = -1;
+            miDispatchWorldTransparentList = miWaitOnWorldOpaqueSortJob = miWaitOnWorldTransparentSortJob = -1;
+            miGenerateOcclusionQueryList = miDispatchOcclusionQueries = miDispatchCarLists = -1;
+            miDispatchCarOpaqueList = miDispatchCarTransparentList = miWaitOnCarOpaqueSortJob = -1;
+            miWaitOnCarTransparentSortJob = miRenderSky = miRenderCoronas = -1;
+            miEffectsUpdate = miBuildParticleVertexBuffers = miWaitOnParticleVertexBuffersJob = -1;
+            miRenderFullResParticles = miRenderQuarterResParticles = miPPUShaderPatching = -1;
+            miRenderIm3d = miRenderDebugData = miRenderPostFX = -1;
+            miRenderHUD = miRenderApt = miShowPixelBuffer = -1;
+            miClearGraphicsContext = miWaitOnPreZSortJob = miDispatchPreZ = -1;
         }
     };
 
@@ -330,7 +316,8 @@ public:
             miScreenClear = miShadowmap = miSky = miEnvironmentMap = -1;
             miWorldOpaque = miWorldTransparent = miCarOpaque = miCarTransparent = -1;
             miResolveMSAAFromEDRAM = miDownsampleMSAAAndCompParticles = -1;
-            miSunCoronaVisibilityTest = miFullResParticles = miQuarterResParticles = -1;
+            // ARTIST leaves the sun-visibility ID untouched until registration.
+            miFullResParticles = miQuarterResParticles = -1;
             miCoronas = miPostFX = miIm3dAndRacePositions = miMenusAndHud = -1;
             miDebug3d = miDebug2d = miPreZ = -1;
         }
@@ -348,16 +335,19 @@ public:
 
         void Construct()
         {
-            s32* lpMonitor = &miEnvMap;
-            for (u32 luIndex = 0; luIndex < sizeof(BrnGpuHwCounters) / sizeof(s32); ++luIndex)
-                lpMonitor[luIndex] = 0;
+            // ARTIST8240AD84..AD9C, before CPU/GPU monitor registration.
+            miEnvMap = miShadowMap = miWorldOpaque = miCarOpaque = -1;
+            miWorldTransparent = miCarTransparent = miPostFX = -1;
         }
     };
 
     BrnRendererModule();
 
+    // ARTIST823F5628; native SDK refresh rate rounded to the nearest integer.
+    static s32 GetVSynchRate();
+
     // One-time construction of the renderer's subsystems.
-    void Construct();
+    void Construct(const BrnGame::BrnCpuMonitors&, f32& aspectRatio, bool& highDefinition);
 
     // Prepare the renderer-owned buffers from GameData bank 31 and register its debug page.
     bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
@@ -406,7 +396,7 @@ public:
     // ADDRESS to the output buffer (forming renderer +0xC8FC as the argument), the
     // game module latches it, and LoadingScriptedState::Update FreeAll's it before each world
     // drive. It is an embedded member on the console, not a pointer.
-    CgsMemory::LinearMalloc* GetReusableLoadingScreenAllocator() { return &mReusableLoadingScreenAllocator; }
+    CgsMemory::LinearMalloc* GetReusableLoadingScreenAllocator() { return mLoadingScreenRenderer.GetReusableDataAllocator(); }
 
 private:
     enum
@@ -601,11 +591,9 @@ private:
                            f32 lfWhiteLevel);
 
     //
-    bool mbSkyDomeReady;
-    bool mbSkyDomeTried;
-
+    ERendererPrepareStage mePrepareStage;
     ERendererReleaseStage meReleaseStage;
-    s32                   mDisplayType;
+    renderengine::Device::Parameters::DisplayType mDisplayType;
     u16                   mu16FrontBufferHeight;
     bool                  mbIsHD;
     bool                  mbIsInterlaced;
@@ -633,13 +621,13 @@ private:
     renderengine::TextureState::Parameters mTextureStateParams;
     rw::Resource                       mTextureStateResource;
     renderengine::TextureState*         mpEnvMapTextureState;
-    TextureStateParameters              mEnvMapTextureStateParams;
-    Resource                            mEnvMapTextureStateResource;
+    renderengine::TextureState::Parameters mEnvMapTextureStateParams;
+    rw::Resource                        mEnvMapTextureStateResource;
     renderengine::Texture*              mpGlassFractureTexture;
     renderengine::TextureState*         mpGlassFractureTextureState;
-    TextureStateParameters              mGlassFractureTextureStateParams;
-    Resource                            mGlassFractureTextureStateResource;
-    Resource                            mBackBufferTextureResource;
+    renderengine::TextureState::Parameters mGlassFractureTextureStateParams;
+    rw::Resource                        mGlassFractureTextureStateResource;
+    rw::Resource                        mBackBufferTextureResource;
     renderengine::TextureState*         mpShadowMapTextureState[2];
     CgsGraphics::Im3dRenderBuffer       mIm3dBufferRacePosition;
     CgsGraphics::Im3dRenderBuffer       mIm3dBufferMenusAndHud;
@@ -676,8 +664,6 @@ private:
     s32                                 miShowShadowMapIndex;
     f32                                 mfAspectCorrection;
     RendererIO::RenderSwitches          mRenderSwitches;
-    // Renderer +0xC8FC -- the allocator Update publishes (see GetReusableLoadingScreenAllocator).
-    CgsMemory::LinearMalloc             mReusableLoadingScreenAllocator;
     bool                                mbRenderPreZ;
     bool                                mbRenderWorldOpaque;
     bool                                mbRenderCarsOpaque;
@@ -739,11 +725,26 @@ private:
     BrnGpuHwCounters                    mGpuHwMonitors;
     s32                                 miCpuPerfMonDispatchThread;
     BrnGraphics::ShadowMapRenderManager mShadowMapRenderManager;
-    bool                                mbDiskErrorLastFrame;
-    s32                                 miFramesSinceDiskErrorReported;
     BrnGraphics::DebugComponent         mDebugComponent;
 
 };
+
+// ARTIST823F51A8; DecFIGS BrnRendererModule.h postfix increment declaration.
+inline BrnRendererModule::ERendererPrepareStage operator++(
+    BrnRendererModule::ERendererPrepareStage& leEnumIndex, int)
+{
+    const BrnRendererModule::ERendererPrepareStage old = leEnumIndex;
+    leEnumIndex = static_cast<BrnRendererModule::ERendererPrepareStage>(
+        static_cast<u32>(leEnumIndex) + 1u);
+    if (static_cast<s32>(leEnumIndex) > BrnRendererModule::eRendererPrepareDone)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("leEnumIndex <= BrnRendererModule::eRendererPrepareDone",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\graphics\\BrnRendererModule.h", 818);
+        CgsDev::Assert::EndAssert();
+    }
+    return old;
+}
 
 inline void BrnRendererModule::ClearDispatchCounters()
 {
@@ -800,129 +801,3 @@ inline void BrnRendererModule::ConstructRenderSwitches()
 // KU_NUM_SHADOWMAP_DISPATCH_JOBS / KU_NUM_ENVMAP_SORT_JOBS), then one call per standalone sort
 // job. The jobs are NAMED later, by the setup paths that give them their code and data.
 // Job has no default constructor, so each member is listed here in declaration order.
-inline BrnRendererModule::BrnRendererModule()
-    : maObjectToMeshJob{ EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
-                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
-                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
-                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
-                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
-                        EA::Jobs::Job(0) }
-    , maShadowMapSortJob{ EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
-                          EA::Jobs::Job(0), EA::Jobs::Job(0) }
-    , maEnvmapSortJobs{ EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
-                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0) }
-    , mPreZSortJob(0)
-    , mWorldOpaqueSortJob(0)
-    , mCarOpaqueSortJob(0)
-    , mWorldTransparentSortJob(0)
-    , mCarTransparentSortJob(0)
-{
-    mePrepareStage = eRendererPrepareStart;
-    meReleaseStage = eRendererReleaseStart;
-    mDisplayType = 0;
-    mu16FrontBufferHeight = 0;
-    mbIsHD = false;
-    mbIsInterlaced = false;
-
-    mu8ShaderConstantsFrameInternal = 0;
-    mu8ShaderConstantsFrameExternal = 1;
-    mpInterpreter = 0;
-    for (u32 luIndex = 0; luIndex < KU_NUM_INTERPRET_FUNCTIONS; ++luIndex)
-        maInterpretFunctions[luIndex] = 0;
-
-    mpTextureState = 0;
-    // ARTIST C++ constructor827E008C..827E0110: the preview/single-shadow
-    // sampler starts with point filters, mip mode2, anisotropy13 and two flags.
-    // Construct later changes U/V to clamp; DebugDisplay only replaces raster.
-    mTextureStateParams = {};
-    mTextureStateParams.muMipFilter = 2;
-    mTextureStateParams.muMaxAnisotropy = 13;
-    mTextureStateParams.muField10 = 1;
-    mTextureStateParams.mu8Field43 = 1;
-    mTextureStateParams.mu8Field44 = 1;
-    mpEnvMapTextureState = 0;
-    mpGlassFractureTexture = 0;
-    mpGlassFractureTextureState = 0;
-    mpShadowMapTextureState[0] = 0;
-    mpShadowMapTextureState[1] = 0;
-    mpBlobbyShadowTexture = 0;
-    // The console's Construct stores 0.7f into this slot; the other platform backend's own
-    // declaration carries the same value independently. It was 0.0f here, i.e. fully transparent
-    // blobs.
-    mfBlobbyShadowAlpha = 0.7f;
-    mpGraphicsAllocator = 0;
-    for (u32 luIndex = 0; luIndex < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++luIndex)
-        mapaObjectToMeshJobOutputDispatchLists[luIndex] = 0;
-
-    // ⚠ CORRECTED 2026-08-16 (anti-aliasing wave): this was `false`; THE CONSOLE STORES 1, and it is
-    // the single byte the console's whole anti-aliasing configuration hangs off.
-    //
-    // (1) IT IS SET UNCONDITIONALLY, in Construct's opening block -- there is no display-mode read,
-    //     no video-settings query and no branch anywhere near it: it forms the address of
-    //     +0xC400 and stores the constant 1 into mbMultisampledBackbuffer.
-    //
-    // (2) IT IS ALSO THE POOL'S lbEnableMSAA -- the same byte, read straight back, placed in the
-    //     outgoing argument block and handed to BrnRendererMemory::Construct,
-    //     which reads it as lbEnableMSAA and forwards
-    //     it untouched to CreateAntiAliasBuffer, which is what selects
-    //     BrnGraphics::KMSAA_TILING_PLAN (multisample format 1 == 2 samples, two predicated tiles)
-    //     over KNO_MSAA_TILING_PLAN. See BrnAntiAliasTiling.h.
-    //
-    // So the target's multisample format and the frame bracket's tiled branch CANNOT be set
-    // independently without inventing a console configuration that does not exist. The PC bring-up
-    // creator takes this same flag as its argument for exactly that reason
-    // (BrnRendererMemory::PCBringUpCreatePostFxSceneTargets).
-    //
-    // WHAT THE PC SAMPLE COUNT IS is a separate question and is NOT decided here: the leaf maps the
-    // plan's multisample format to a D3DMULTISAMPLE_TYPE and applies the renderengine::gAntiAliasing
-    // override (Xbox2SurfaceShims.h). At the default (0) that is the console's own 2x.
-    mbMultisampledBackbuffer = true;
-    mbShowEnvironmentMap = false;
-    mbShowShadowMap = false;
-    mbSortDisplayListsWideNotLong = false;
-    miShowShadowMapIndex = 0;
-    // The console's BrnRendererModule::Construct loads the constant 1.0f (0x3F800000) and stores
-    // it into this slot, at +0xC408. It was 0.0f here -- a placeholder
-    // zero, and this member is a RATIO whose neutral is 1.0: Render's letterbox branch is
-    // `if (mfAspectCorrection < 1.0f) RenderLetterBoxBars(mfAspectCorrection, ...)`, so 0.0f means
-    // "letterbox every frame", and BrnPostFx::Render takes the same value as its own aspect
-    // correction, where 0.0f would stretch the composite by an invented number.
-    mfAspectCorrection = 1.0f;
-    ConstructRenderSwitches();
-
-    mbOcclusionCullCarOpaque = false;
-    mbOcclusionCullWorldOpaque = false;
-    mbOcclusionCullCarTransparent = false;
-    mbOcclusionCullWorldTransparent = false;
-    mbOcclusionCullShadowMap = false;
-    // ARTIST8240BC78/7C: near-only flag and linear threshold (float8203BA4C).
-    mbPreZNearOnly = true;
-    mbRenderPreZAlpha = false;
-    mfPreZDistanceThreshold = 200.0f;
-    mfOccludeeNearClipOffset = 0.0f;
-    muOcclusionCullIndexCountThreshold = 0;
-    mbGreyBackgroundColour = false;
-
-    mbClearDispatchCounts = false;
-    ClearDispatchCounters();
-    ClearScreenshotState();
-
-    mKeyLightDirection.SetZero();
-    mKeyLightColor.SetZero();
-    mKeyLightSpecularColour.SetZero();
-    mAmbientColour.SetZero();
-    mvBackgroundColour.SetZero();
-    mpCloudDensity0Texture = 0;
-    mpCloudLighting0Texture = 0;
-    mbSkyDomeReady = false;
-    mbSkyDomeTried = false;
-
-    meFrameStallStage = E_FRAMESTALL_NOT_STALLED;
-    miFrameStallCountdown = 0;
-    mCpuMonitors.Construct();
-    mGpuMonitors.Construct();
-    mGpuHwMonitors.Construct();
-    miCpuPerfMonDispatchThread = 0;
-    mbDiskErrorLastFrame = false;
-    miFramesSinceDiskErrorReported = 0;
-}

@@ -1,915 +1,277 @@
-#include <algorithm>
-#ifdef AddMonitor
-#undef AddMonitor
-#endif
-#include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
-#include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Graphics/BrnRendererModule.h"
-#include "GameShared/GameClasses/System/CgsHardwareInit.h"
-#include "SDKs/EATech/eajobs/job_scheduler.h"
-#include "SDKs/EATech/eajobs/jobs.h"
-#include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"           // CgsRenderTarget::GetDepthTexture (the s15 bind)
+#include "GameSource/Game/BrnGlobalCpuMonitors.h"
+#include "GameSource/Resource/BrnResourceAllocator.h"
+#include "GameSource/Graphics/PostFx/BrnPostFx.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
+#include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsTextureScopeTable.h"
-#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetResource (the global texture binds)
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
-#include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
-#include "GameSource/Graphics/BrnEffectsArbitrator.h"      // BrnGraphics::EffectsArbitrator
-#include "SharedClasses/Graphics/BrnEffectsData.h"         // BrnEffectsFrame + the five data blocks
-#include "GameSource/Graphics/PostFx/BrnPostFx.h"          // msPostFx + every setter/getter the apply block drives
-#include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxcolourcube.h"  // ColourCube::GetSize
-#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"  // Attrib::StringToKey ("198102", the base-frame vignette asset)
-#include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera -- the staged camera-input record
-#include "GameSource/Effects/Particles/ParticleModule.h"     // BrnParticle::ParticleModule::RenderFullResParticles (the full-res particle pass)
-#include "GameSource/Resource/BrnResourceAllocator.h" // Allocators and the debug/global graphics allocators
-#include "rw/rwcore_general_alloc.h"              // rw::core::GeneralResourceAllocator base conversion
-#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/statehelper.h"
+#include "rw/rwcore_general_alloc.h"
 
-// BrnRendererModule::Render publishes the threshold read by InterpretOcclusionQuery.
-namespace CgsGraphics
+// ARTIST827DFF48..827E03FC. Genuine base/member constructors run in declaration
+// order: mutexes, resources, sampler parameters, factories and32unnamed Jobs.
+// Runtime flags and subsystem startup belong to Construct, not this C++ ctor.
+BrnRendererModule::BrnRendererModule()
 {
-    extern OcclusionCullManager* spOcclusionCullManager;
-    extern u32 suOcclusionCullIndexCountThreshold;
+    CGS_STATIC_ASSERT((sizeof(BrnRendererModule) == 0xCA80), "ARTIST Renderer size");
+    CGS_STATIC_ASSERT((__alignof(BrnRendererModule) == 128), "ARTIST Renderer alignment");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mAllocatedRenderTargets) == 0x238), "ARTIST mAllocatedRenderTargets");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mDoubleBufferedDispatchFrame) == 0x2A8), "ARTIST mDoubleBufferedDispatchFrame");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mSingleBufferedDispatchFrame) == 0x300), "ARTIST mSingleBufferedDispatchFrame");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mEffectsArbitrator) == 0x480), "ARTIST mEffectsArbitrator");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, maShaderConstantsFrames) == 0x490), "ARTIST maShaderConstantsFrames");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mIm2dRenderBuffer) == 0xAE8), "ARTIST mIm2dRenderBuffer");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mIm2dRenderer) == 0xB30), "ARTIST mIm2dRenderer");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mIm2dRendererUntex) == 0xF70), "ARTIST mIm2dRendererUntex");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mIm3dRenderBuffer) == 0x1090), "ARTIST mIm3dRenderBuffer");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mIm3dRenderer) == 0x10E0), "ARTIST mIm3dRenderer");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mpGraphicsAllocator) == 0x394C), "ARTIST mpGraphicsAllocator");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mSkyDome) == 0xC4E8), "ARTIST mSkyDome");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mOcclusionCullManager) == 0xC580), "ARTIST mOcclusionCullManager");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mLoadingScreenRenderer) == 0xC8C0), "ARTIST mLoadingScreenRenderer");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mCalibrationTextureHandle) == 0xC920), "ARTIST mCalibrationTextureHandle");
+    CGS_STATIC_ASSERT((offsetof(BrnRendererModule, mDebugComponent) == 0xCA40), "ARTIST mDebugComponent");
 }
 
-// ---------------------------------------------------------------------------------------------
-// BRN_SHADOW_MAP_TARGET_AVAILABLE -- the shadow-map RENDER TARGET gate (PC bring-up, 2026-08-12).
-//
-// OPENED 2026-08-12 (the render-target wave). The shadow-map pass and the s15 bind below call
-// into BrnShadowMapRenderManager.cpp (Begin/EndRenderShadowMap), BrnRendererMemory.cpp
-// (GetShadowMapBuffer) and CgsRenderTarget.cpp (GetDepthTexture). Until this wave none of those
-// three could be mounted, because the layer BENEATH them did not exist: the postfx RenderTarget /
-// RenderTargetState surface (postfx::gpDefaultRenderTargetState,
-// RenderTarget::{Get,Set}SectionRenderTargetState, RenderTarget::Parameters::Parameters(),
-// RenderTarget::Initialize, renderengine::Device::SetState(const RenderTargetState*)) was
-// declared everywhere and defined nowhere. The console's own version of that layer is EDRAM-based
-// and has no PC counterpart, so it is now realised as a Direct3D 9 bring-up leaf:
-//     pc/gcm/renderengine/PostFxRenderTarget.cpp
-// which creates a real depth-sampleable INTZ texture (1280x1920, the 1x3 cascade atlas) and binds
-// it as the depth-stencil surface. All four TUs are in tools/build/build_game_exe.bat and the
-// closure was proved with dumpbin over the linked object set, NOT with the compile gate --
-// `cl /c` cannot see unresolved externals and /OPT:REF does NOT excuse them (measured, twice).
-//
-// (The two-step this paragraph used to describe is CLOSED, twice over. The safety it named --
-// WorldModule::PublishWorldShadingConstantsBringUp force-writing a shadows-off c14/c15/c16
-// block every frame, which pinned the shadow factor at 1.0 -- was retired with the shadow
-// producer on 2026-08-12, and the whole bring-up publisher went with it in the env-manager
-// go-live wave on 2026-08-16: WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 is
-// the producer now and it does not write c14..c17 at all (BrnWorldModule.cpp:4792-4794), so
-// the retirement holds BY CONSTRUCTION rather than by ordering. The real writers are
-// ShadowMap::SetConstants' slots 15/16 (BrnShadowMap.cpp:372/375) and the cascades reach the
-// screen.
+// ARTIST823F5628: the main caller supplies no renderer receiver.
+s32 BrnRendererModule::GetVSynchRate()
+{
+    XVIDEO_MODE mode;
+    XGetVideoMode(&mode);
+    return static_cast<s32>(mode.RefreshRate + 0.5f);
+}
 
-#define BRN_SHADOW_MAP_TARGET_AVAILABLE 1
-
-// ---------------------------------------------------------------------------------------------
-// BRN_ANTIALIAS_BRACKET_AVAILABLE -- the ANTI-ALIASED SCENE-PASS BRACKET gate.
-// Opened 2026-08-13 at 0 (bodies landed, compiled out). TURNED ON 2026-08-14.
-//
-// BeginRenderAntiAliased @0x823FFA18 and ResolveMSAA @0x823FFBE0 are reconstructed further down this
-// file (after RenderShadowMapPasses), together with the PC bring-up blit that presents the scene
-// target. Render now CALLS them, at the console's own position, so from this build the world passes
-// render into the off-screen anti-alias buffer and are blitted back to the swap chain.
-//
-// ⚠ THIS TEXT WAS NEVER COMPILED BEFORE THIS FLIP. While the macro was 0 the compiler read none of
-// it, so the per-TU gate, the faithfulness lint and the reviewer packet all passed on text they had
-// never seen. Any ordinary compile error in :911-:1476 is a FIRST sighting, not a regression.
-//
-// ⚠ THE ONE EXPECTED VISIBLE DIFFERENCE, so it is not mistaken for a defect: THE BACKGROUND COLOUR.
-// Before this flip the world drew onto the swap chain, which renderengine::Device::FrameBegin clears
-// to BLACK (device.cpp:117, D3DCOLOR_XRGB(0,0,0)). Now it draws onto the anti-alias buffer, whose
-// clean-slate colour is mvBackgroundColour -- and with mbGreyBackgroundColour false (Construct's
-// default, BrnRendererModule.h) that is whiteLevel * (0.72, 0.83, 0.89), a PALE BLUE. It is the
-// console's own clear colour, read off flt_820473AC/A8/A4 (see the constants block below), so the
-// change is FAITHFUL, not a bug. Anywhere the world, the sky dome and the 2D tail all fail to cover
-// a pixel, that pixel goes from black to pale blue. Treat it as the instrument it is: pale blue
-// means "the bracket and the blit work and nothing drew there"; black means the blit did not run.
-//
-// WHAT EACH OF THE SIX PREVIOUSLY-UNRESOLVED SYMBOLS GOT:
-//
-//  (a) THE FOUR Xenos entry points -- SATISFIED. renderengine::D3DDevice_BeginTiling /
-//      _SetPredication / _Resolve / _EndTiling are declared in
-//      pc/gcm/renderengine/Xbox2SurfaceShims.h:92/118/109/100 and are now DEFINED in
-//      pc/gcm/renderengine/XenonD3D9Shims.cpp, which is on the exe source list
-//      (build_game_exe.bat:321). ⚠ THIS MACRO MUST NOT BE 1 WITHOUT THOSE DEFINITIONS: check with
-//      `grep -n "^void D3DDevice_BeginTiling\|^int D3DDevice_Resolve" XenonD3D9Shims.cpp` before
-//      trusting a build.
-//
-//      ⚠ UPDATED 2026-08-16 (anti-aliasing wave): ALL FOUR NOW RUN. This paragraph used to end
-//      "on this build only _Resolve actually runs (mbMultisampledBackbuffer is false everywhere ...
-//      the other three are correct and dead)". That was true only because the tree's inline
-//      BrnRendererModule::Construct initialised mbMultisampledBackbuffer to `false` -- a DEFECT: the
-//      X360 stores 1 (`li r28, 1` @0x8240A7B4 / `stb r28, 0(this+0xC400)` @0x8240A7C4) and hands the
-//      same byte to the pool as lbEnableMSAA. With that corrected (BrnRendererModule.h) both bodies
-//      below take their TILED branch, so BeginTiling opens the frame with the two-rect clear,
-//      SetPredication is called three times a frame, the two per-tile resolve pairs run, and
-//      EndTiling closes. On PC the two rectangles of BrnGraphics::KMSAA_TILING_PLAN partition a
-//      1280x720 surface EXACTLY, so "per tile" degrades to "over its own band" with no gap.
-//
-//  (b) THE TWO GPU perf-monitor bodies -- NOT SATISFIED, AND NOT PRETENDED OTHERWISE. Their eight
-//      call sites below, and the header that declares them, are behind BRN_GPU_PERFMON_AVAILABLE
-//      (next banner). The console's calls are kept verbatim in the source; they are not renamed,
-//      forwarded or deleted.
-//
-//  (c) THE POOL -- SATISFIED. Render gates both calls on EnsurePostFxSceneTargets() returning true
-//      (this file, :348-365) and NOT by a guard inside these bodies, which have no null test
-//      because the X360 asm at 0x823FFB08-0x823FFB34 has none. That gate is also what makes
-//      GetDownSampleBuffer() safe to dereference: PCBringUpCreatePostFxSceneTargets creates the
-//      down-sample buffer BEFORE the anti-alias buffer and refuses to create either at a zero
-//      extent (BrnRendererMemory.cpp), and the gate latches on the anti-alias slot, so a true
-//      return implies both slots are filled.
-//
-//  (d) SOMETHING MUST PUT THE SCENE BACK ON THE BACK BUFFER -- SATISFIED by
-//      PCBringUpBlitSceneTargetToBackBuffer below, called from Render inside the same gate and
-//      AFTER ResolveMSAA (the order is load-bearing; see its own banner). It is NOT the post-fx
-//      composite -- BrnPostFx::Render @0x8240A468 is the next wave and retires it.
-//
-// STILL NOT CALLED, and deliberately: EndRenderAntiAliased @0x82408B00 and BeginQuarterResBuffer
-// @0x82408C38 are DECLARATION-ONLY in this tree (BrnRendererModule.h:385/:389 and the banner above
-// them), so calling either would be an unresolved external. renderengine::PCSceneBlit_Begin/_End
-// stand in for the surface half of EndRenderAntiAliased until it is mounted.
-//
-// HOW TO REVERT, in one edit: set this macro back to 0. Everything the wiring step added lives
-// inside `#if BRN_ANTIALIAS_BRACKET_AVAILABLE`, so at 0 this translation unit preprocesses to
-// exactly the code it produced before the flip.
-#define BRN_ANTIALIAS_BRACKET_AVAILABLE 1
-
-// ---------------------------------------------------------------------------------------------
-// BRN_POSTFX_COMPOSITE_AVAILABLE -- THE REAL POST-FX COMPOSITE (2026-08-14).
-//
-//
-// WHY IT IS 1 (2026-08-15): the two preconditions the shipped `#error` named are both met.
-//   (1) A PC vertex/pixel program pair exists for permutation 0 -- pc/gcm/renderengine/
-//       PostFxProgramsPC.cpp, RECOVERED from the Xenos microcode (tools/assets/shaders/xenos.py,
-//       proven against the SHADERS.BNDL / SHADERS_PC.BNDL bundle-pair oracle) and adopted by
-//       BrnPostFxShader::Shader::Construct through ProgramBufferPC_Adopt. Only permutation 0 --
-//       the one this build's constant block ever selects (effects off, motion blur off).
-//   (2) BrnPostFx.cpp is link-closed and mounted: the RenderEngineClub post-fx effect TUs, the
-//       bloom passes and the two cached state pointers landed in the gate-flip wave (scratch/
-//       postfx_step3_effects/, verified per group).
-// What the flip needs on the PC side, all in this wave: gpDefaultRenderTargetState installed from
-// Device::Start (the back-buffer target is USE_DEVICE_FOR_WRITE and binds through it), the bloom /
-// depth-of-field / back-buffer pool slots created by PCBringUpCreatePostFxSceneTargets (the console
-// body samples the first two and composites into the third without a test), and BrnPostFx::Construct
-// run once from EnsurePostFxSceneTargets through the seam. THE PICTURE MUST NOT CHANGE at the
-// default sliders: permutation 0's neutrals were derived from the recovered math (GlobalParams
-// {1,0,0,0} so the white level must be 1; BloomColour 0 collapses the screen blend to the source;
-// inner == outer vignette; Tint2d 0), and brightness/contrast at the game's default 50/50 pre-scale to
-// exactly 0.0f / 1.0f. The FIRST VISIBLE CHANGE is the options-menu brightness slider taking effect.
-//
-// REVERT: set the macro back to 0. One character; measured to preprocess back to the pre-composite
-// bring-up blit save the mfAspectCorrection initialiser (driver REPORT.md, step 5B).
-#define BRN_POSTFX_COMPOSITE_AVAILABLE 1
-
-#if BRN_POSTFX_COMPOSITE_AVAILABLE
+// Initial image values82F24234/38; DWARF cpp116/174 names the mutable globals.
+u32 KU32_SIZEOFDISPATCHBIN_DOUBLEBUFFERED = 0x001BC000;
+u32 KU32_SIZEOFDISPATCHBIN_SINGLEBUFFERED = 0x00187000;
 
 namespace
 {
-    // The options-menu calibration sliders reach the composite pre-scaled, and BOTH constants are
-    // RECOVERED off the X360 call site (asm 0x8240DCF8 `fmsubs f28, f0, f30, f29` and 0x8240DD40
-    // `fmadds f30, f0, f30, f29`, with f30 = flt_82002138 and f29 = flt_82001DA0):
-    //     brightness -> setting * 0.01f - 0.5f          contrast -> setting * 0.01f + 0.5f
-    //   * flt_82001DA0 == 0.5f is dumped (scratch/postfx_wave1b_dossiers/DATA_DUMP.md:1552).
-    //   * flt_82002138 == 0.01f is read off BrnDirector::Camera::Utils::Looker::Parameters::Construct
-    //     @0x821F8D80, where `lfs f11, flt_82002138@l(r10)` @0x821F8D8C feeds `stfs f11, 0x28(r3)`
-    //     @0x821F8D94 and Hex-Rays prints that store as `*(result + 40) = 0.0099999998;`.
-    const f32 KF_CALIBRATION_SLIDER_SCALE = 0.01f;   // flt_82002138
-    const f32 KF_CALIBRATION_SLIDER_BIAS  = 0.5f;    // flt_82001DA0
 
-    // ⚠ THE NO-DISPATCH-BUFFER FALLBACK IS A PC CHOICE, AND IT IS DERIVED RATHER THAN PICKED.
-    // The console has no such path: it reads GetBrightness/GetContrast off the buffer unconditionally
-    // inside the gate at 0x8240DC7C. On PC Render is entered with a null buffer on the frames before
-    // the dispatch ring comes up (see the `lpDispatchThreadInputBuffer != 0` test at the top of
-    // Render), so a value is needed. It is the game's OWN default slider position, run through the
-    // formula above by the compiler rather than by hand: BrnGui::KI_DEFAULT_BRIGHTNESS and
-    // KI_DEFAULT_CONTRAST are both 50 (BrnGuiOptionsDataProfile.h:29/:35, applied at
-    // BrnGuiOptionsDataProfile.cpp:57-58). That yields exactly 0.0f and 1.0f -- the neutral pair --
-    // but the derivation is the point: if the scale or the bias is ever corrected, the fallback moves
-    // with them instead of silently disagreeing. Spelled locally rather than by including
-    // BrnGuiOptionsDataProfile.h, which would drag the whole options/profile slice into the renderer.
-    const s32 KI_DEFAULT_CALIBRATION_SETTING = 50;
-}
-#endif  // BRN_POSTFX_COMPOSITE_AVAILABLE
-
-// ---------------------------------------------------------------------------------------------
-// BRN_ENVMAP_PASS_AVAILABLE -- THE ENVIRONMENT-MAP (CAR REFLECTION) PASS (reflections step 1,
-// 2026-08-17).
-//
-// At 1 this file carries BrnRendererModule::BeginRenderEnvironmentMapFace @0x823F63E0,
-// EndRenderEnvironmentMapFace @0x823FC5E8 and Render's own six-face loop
-// (@0x8240BFA8 pseudocode 645-722, asm 0x8240CB64-0x8240CD8C), at the console's own position:
-// after the shadow-map pass and BEFORE BeginRenderAntiAliased. It also unparks the sampler-13
-// bind that has been a documented hole since the shadow wave.
-//
-// WHAT REVERTING TO 0 LEAVES BEHIND, measured rather than claimed. Both positions were
-// preprocessed (cl /P) and diffed against HEAD, ignoring #line/#pragma and blank lines; at 0 this
-// translation unit differs from HEAD by exactly TWO things and nothing else:
-//   * the header DECLARATIONS this wave adds -- GetEnvMapBuffer, PCBringUpCreateEnvMapBuffer,
-//     Begin/EndRenderEnvironmentMapFace, gEnvironmentMap, the third Device::Clear overload,
-//     Target::Resolve(u32), CgsRenderTarget::GetMultisampleFormat, shadow::Device::
-//     Lock/UnlockDepthStencilState. Declarations emit no code and add no link requirement.
-//   * PublishSkyConstantsBringUp's env-map half (the six face matrices + mEnvMapViewPosition),
-//     which is deliberately NOT under this macro: it completes the copy of the world's frame and
-//     is inert with nothing to consume it. Reverting the macro does not revert that, by design.
-// The loop, the two bodies, the pool accessor's USE, the s13 bind and the knob seed are all
-// inside the `#if` and all disappear.
-//
-// ⚠ THIS TEXT HAS NEVER BEEN COMPILED AT 0 IN A SHIPPED TREE. It is authored at 1 and gated so the
-// conductor has a one-character revert, not so it can sit dark: the anti-alias wave's banner above
-// records what happens when a body ships behind a 0 (the per-TU gate, the lint and the reviewer all
-// pass on text nobody compiled). Both positions ARE compiled in this wave's gate.
-//
-// WHAT IT NEEDS THAT THIS TU DOES NOT OWN -- three symbols, all cross-group in the same wave:
-//   (a) rw::graphics::postfx::Target::Resolve(u32 luFace)  -- the PER-FACE overload, X360
-//       0x823F9170, owned by the `cubeleaf` group (rwgpfxrendertarget.h + the D3D9 leaf). On the
-//       Xenos every face renders into the SAME EDRAM tile and the face only matters at resolve
-//       time, which is exactly why CgsRenderTarget::SetRenderTargetStateInvertDepth binds section
-//       0 regardless of its argument (CgsRenderTarget.cpp:336). EndRenderEnvironmentMapFace is
-//       its only caller here.
-//   (b) BrnGame::DispatchThreadInputBuffer::GetEnvMapFaceRender(u32) const -- owned by the
-//       `envproducer` group. The console reads the same byte inline, WITH a bounds assert: Render
-//       @0x8240CC04 does `cmplwi r29, 6 / blt` else FireAssert("luIndex<6",
-//       "..\GameSource\Game/BrnDispatchThreadInputBuffer.h", 0xF4) -- so the console's own
-//       accessor is an inline header getter at h:244 with that assert, which is what the seam
-//       reproduces. The byte itself is buffer+0x99B4 (`addis r17, r11, 1 / addi r17, r17, -0x664C`
-//       @0x8240CB94/0x8240CBC0, i.e. +0x10000-0x664C), which is mabEnvMapFaceRender[6] --
-//       BrnDispatchThreadInputBuffer.h:194, six bytes ending exactly where mbIsWriteBuffer starts
-//       at +0x99BA.
-//   (c) renderengine::Device::Clear(const ClearColorParameters&, const ClearDepthStencilParameters&,
-//       ETargetId) -- X360 0x82B61E18, DECLARED by this wave in pc/gcm/renderengine/device.h beside
-//       its two already-declared siblings; its PC body belongs beside DeviceClearDepthStencil (the
-//       depth/stencil-only member of the same console family). See CROSS-GROUP in the wave report.
-// A missing (a)/(b)/(c) is an LNK2019, not a wrong picture: `cl /c` cannot see them.
-#define BRN_ENVMAP_PASS_AVAILABLE 1
-
-// ---------------------------------------------------------------------------------------------
-#ifdef AddMonitor
-#undef AddMonitor
-#endif
-
-// GPU timing uses the original registry/brackets and a native D3D9 query transport.
-// The GPU transport never substitutes CPU submission duration for a GPU sample.
-#define BRN_GPU_PERFMON_AVAILABLE 1
-
-#include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (the PC presentation draw)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] BRN_IM2D_TRACE probes
-#include "rw/rwcore_structs.h"                   // rw::LinearResourceAllocator (world dispatch bin memory)
-#include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"  // ShaderConstantTable::BeginFrame (StartOfFrame)
-#include <xtl.h>   // [diag] GetEnvironmentVariableA
-#include <cstdio>      // [diag] snprintf
-#include <cstring>     // memcpy (per-pass DispatchObjectContext copies)
-#include <cmath>       // std::sqrt (PCBringUpPublishCoronaCamera's two projection scalars)
-#include <new>         // world dispatch bring-up heap
-#include <cstdlib>     // [diag] std::getenv (BRN_LION_QRES_OFF, the quarter-res A/B pin)
-
-// [diag] present counter (device.cpp) - stamps the trace lines with their frame.
-namespace renderengine { extern u32 guPresentCount; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30
-
-// High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
-namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
-namespace CgsSystem { u64 GetSystemTimerBaseTime64(); u64 GetSystemTimerFrequency64(); }   // the console's width (CgsTimeUtils.cpp)
-
-// The engine-global shader-constant table (bodied by the CgsShaderConstants TU); the X360
-// StartOfFrame @0x823FC160 opens its frame on the GDL write bin.
-namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
-
-namespace
+typedef BrnRendererModule::BrnCpuMonitors RendererCpuMonitors;
+struct CpuMonitorDefinition
 {
-    // The clear colour BrnRendererModule::BeginQuarterResBuffer @0x82408C38 clears every colour
-    // target to before the quarter-resolution particle pass. The console loads ONE float and stores
-    // it four times -- `lfs f0, flt_82001CC0@l(r11)` @0x82408CC4, then `stfs` @0x82408CCC /
-    // 0x82408CD0 / 0x82408CD4 / 0x82408CD8 -- so the four components are one value, which is why
-    // this is one constant.
-    // ATTESTED, not defaulted: scratch/postfx_wave1_dossiers/DATA_DUMP.md dumps flt_82001CC0 as
-    // +0x0000 = 0x00000000 = 0.0f, and only +0x0000 belongs to the symbol (that block runs on into
-    // the string "Monitor " at +0x0008, and the assembly addresses no other displacement).
-    const f32 KF_QUARTER_RES_CLEAR_COMPONENT = 0.0f;
+    s32 RendererCpuMonitors::* member;
+    const char* name;
+    f32 budget;
+};
+const CpuMonitorDefinition kCpuMonitorDefinitions[] =
+{
+    { &RendererCpuMonitors::miWholeDispatchThread, "DT: All", 100.0f },
+    { &RendererCpuMonitors::miObjectToMeshListConversion, "DT: Object lists to mesh lists", 100.0f },
+    { &RendererCpuMonitors::miStartSortJobs, "DT: Start list sort jobs", 100.0f },
+    { &RendererCpuMonitors::miStartTintBlendJob, "DT: Start tint blend job", 100.0f },
+    { &RendererCpuMonitors::miDispatchShadowmapNearCSMList, "DT: Dispatch near CSM list", 100.0f },
+    { &RendererCpuMonitors::miWaitOnShadowNearSortJob, "    WaitOn shadow0 sort job", 100.0f },
+    { &RendererCpuMonitors::miDispatchShadowmapFarCSMList, "DT: Dispatch far CSM list", 100.0f },
+    { &RendererCpuMonitors::miWaitOnShadowFarSortJob, "    WaitOn shadow1 sort job", 100.0f },
+    { &RendererCpuMonitors::miDispatchEnvmapLists, "DT: Dispatch envmap lists", 100.0f },
+    { &RendererCpuMonitors::miWaitOnEnvmapSortJobs, "    WaitOn envmap sort jobs", 100.0f },
+    { &RendererCpuMonitors::miDispatchPreZ, "DT: Dispatch pre-z", 100.0f },
+    { &RendererCpuMonitors::miWaitOnPreZSortJob, "    WaitOn pre-z sort job", 100.0f },
+    { &RendererCpuMonitors::miDispatchCarLists, "DT: Dispatch car lists", 100.0f },
+    { &RendererCpuMonitors::miDispatchCarOpaqueList, "    Dispatch car opaque", 100.0f },
+    { &RendererCpuMonitors::miDispatchCarTransparentList, "    Dispatch car transparent", 100.0f },
+    { &RendererCpuMonitors::miWaitOnCarOpaqueSortJob, "    WaitOn C opaque sort job", 100.0f },
+    { &RendererCpuMonitors::miWaitOnCarTransparentSortJob, "    WaitOn C trans sort job", 100.0f },
+    { &RendererCpuMonitors::miDispatchWorldLists, "DT: Dispatch world lists", 100.0f },
+    { &RendererCpuMonitors::miDispatchWorldOpaqueList, "    Dispatch world opaque", 100.0f },
+    { &RendererCpuMonitors::miDispatchWorldTransparentList, "    Dispatch world transparent", 100.0f },
+    { &RendererCpuMonitors::miWaitOnWorldOpaqueSortJob, "    WaitOn W opaque sort job", 100.0f },
+    { &RendererCpuMonitors::miWaitOnWorldTransparentSortJob, "    WaitOn W trans sort job", 100.0f },
+    { &RendererCpuMonitors::miGenerateOcclusionQueryList, "    Wait on occlusion job", 100.0f },
+    { &RendererCpuMonitors::miDispatchOcclusionQueries, "    Dispatch occlusion queries", 100.0f },
+    { &RendererCpuMonitors::miRenderSky, "DT: Render sky", 100.0f },
+    { &RendererCpuMonitors::miPPUShaderPatching, "DT: Fragment Shaders Patching", 100.0f },
+    { &RendererCpuMonitors::miRenderCoronas, "DT: Render coronas", 100.0f },
+    { &RendererCpuMonitors::miEffectsUpdate, "DT: Effects Update", 2.5f },
+    { &RendererCpuMonitors::miBuildParticleVertexBuffers, "DT: Build particle VBs", 2.5f },
+    { &RendererCpuMonitors::miWaitOnParticleVertexBuffersJob, "DT: WaitOn particle VBs job", 2.5f },
+    { &RendererCpuMonitors::miRenderFullResParticles, "DT: Render full res particles", 2.5f },
+    { &RendererCpuMonitors::miRenderQuarterResParticles, "DT: Render 1/4 res particles", 2.5f },
+    { &RendererCpuMonitors::miRenderIm3d, "DT: Render Im3D", 100.0f },
+    { &RendererCpuMonitors::miRenderDebugData, "DT; Render debug data", 100.0f },
+    { &RendererCpuMonitors::miRenderPostFX, "DT: Render PostFX", 100.0f },
+    { &RendererCpuMonitors::miRenderHUD, "DT: Render HUD", 100.0f },
+    { &RendererCpuMonitors::miRenderApt, "DT: Render Apt", 100.0f },
+    { &RendererCpuMonitors::miShowPixelBuffer, "DT: Show pixel buffer", 100.0f },
+    { &RendererCpuMonitors::miClearGraphicsContext, "DT: Clear graphics context", 100.0f },
+};
 
-#if BRN_ENVMAP_PASS_AVAILABLE
-    // --- BrnRendererModule::BeginRenderEnvironmentMapFace @0x823F63E0's four clear constants ------
-    // Each is matched to the DISPLACEMENT the assembly addresses, and each is a value this file
-    // ALREADY attests at that displacement for another consumer, which is why none of them is a
-    // fresh read:
-    //   flt_82004740 +0x00 == 0x3E99999A == 0.300000012f -- addressed by `lfs f0, flt_82004740@l(r11)`
-    //     @0x823F6494 and multiplied by the white level (`fmuls f0, f31, f0` @0x823F649C). The SAME
-    //     displacement is KF_BACKGROUND_COLOUR_GREY below (BeginRenderAntiAliased @0x823FFA44).
-    //   flt_82001CC0 +0x00 == 0.0f -- `lfs f13, flt_82001CC0@l(r11)` @0x823F64B0, stored to the clear
-    //     colour's ALPHA (@0x823F64B8) and to the depth field (@0x823F64C0). Same symbol as
-    //     KF_QUARTER_RES_CLEAR_COMPONENT above.
-    // The depth constant is spelled separately from the alpha one on purpose: they are the same
-    // number today because the console loads one register twice, but they answer two unrelated
-    // questions (what an unwritten reflection texel's alpha is; where the inverted-depth far plane
-    // is), and a later correction to either must not silently move the other. The two EDRAM-era
-    // helpers in this file are commented the same way for the same reason.
-    const f32 KF_ENV_MAP_CLEAR_COLOUR_SCALE = 0.3f;   // flt_82004740 +0x00 -- the SAME .rdata word as
-                                                      // KF_BACKGROUND_COLOUR_GREY below (the env-map
-                                                      // clear IS the background grey x white level);
-                                                      // kept as its own name deliberately so a later
-                                                      // correction to one cannot silently move the
-                                                      // other (verify F13)
-    const f32 KF_ENV_MAP_CLEAR_ALPHA        = 0.0f;   // flt_82001CC0 +0x00
-    const f32 KF_ENV_MAP_CLEAR_DEPTH        = 0.0f;   // flt_82001CC0 +0x00, the INVERTED far plane
+typedef BrnRendererModule::BrnGpuMonitors RendererGpuMonitors;
+struct GpuMonitorDefinition
+{
+    s32 RendererGpuMonitors::* member;
+    const char* name;
+    f32 budget;
+};
+const GpuMonitorDefinition kGpuMonitorDefinitions[] =
+{
+    { &RendererGpuMonitors::miScreenClear, "ScreenClear", 1.0f },
+    { &RendererGpuMonitors::miShadowmap, "ShadowMap", 10.0f },
+    { &RendererGpuMonitors::miSky, "Sky", 3.0f },
+    { &RendererGpuMonitors::miEnvironmentMap, "EnvironmentMap", 6.0f },
+    { &RendererGpuMonitors::miPreZ, "Pre-Z", 3.0f },
+    { &RendererGpuMonitors::miWorldOpaque, "WorldOpaque", 23.0f },
+    { &RendererGpuMonitors::miWorldTransparent, "WorldTransparent", 3.0f },
+    { &RendererGpuMonitors::miCarOpaque, "CarOpaque", 20.0f },
+    { &RendererGpuMonitors::miCarTransparent, "CarTransparent", 3.0f },
+    { &RendererGpuMonitors::miFullResParticles, "FullResParticles", 1.0f },
+    { &RendererGpuMonitors::miQuarterResParticles, "ShrinkZ&DrawQuarterResParticles", 5.0f },
+    { &RendererGpuMonitors::miResolveMSAAFromEDRAM, "ResolveMSAAFromEDRAM", 2.5f },
+    { &RendererGpuMonitors::miDownsampleMSAAAndCompParticles, "CompParticles&DownsampledMSAA", 2.5f },
+    { &RendererGpuMonitors::miSunCoronaVisibilityTest, "Sun corona visibility test", 0.1f },
+    { &RendererGpuMonitors::miCoronas, "Coronas", 0.4f },
+    { &RendererGpuMonitors::miPostFX, "PostFX", 9.0f },
+    { &RendererGpuMonitors::miIm3dAndRacePositions, "Im3dAndRacePositions", 1.0f },
+    { &RendererGpuMonitors::miMenusAndHud, "MenusAndHud", 3.0f },
+    { &RendererGpuMonitors::miDebug3d, "Debug3d", 0.0f },
+    { &RendererGpuMonitors::miDebug2d, "Debug2d", 0.0f },
+};
 
-    // The XENON D3DCLEAR_* bits. NOT PC Direct3D 9's: the console reserves bits 0..3 for its four
-    // colour targets and puts ZBUFFER at 0x10 / STENCIL at 0x20, which is why the clear word is 0x30
-    // and not 0x6. The same two constants are already modelled twice in this tree -- once in
-    // ShadowPass.h's ClearDepthStencilParameters banner and once in ImmediateMode.cpp's
-    // DeviceClearDepthStencil, which translates them -- so these are named here rather than spelled
-    // as a literal 0x30 that a reader would have to re-derive.
-    const u32 KU_XENON_CLEAR_ZBUFFER = 0x10u;
-    const u32 KU_XENON_CLEAR_STENCIL = 0x20u;
-#endif  // BRN_ENVMAP_PASS_AVAILABLE
-
-#if BRN_ENVMAP_PASS_AVAILABLE
-    // The first of the six ENV-MAP mesh lists. Render @0x8240CCA4 forms the list id as
-    // `addi r4, r29, 5` with r29 the face index, i.e. GetList(5 + face) -- lists 5..10. The world
-    // producer fills the same six (WorldModule::GenerateDispatchLists @0x827D1CE8 ->
-    // WorldEntityModule::GenerateDispatchListsForEnvironmentMap into list 5+face). They are the
-    // env-map SHADER-LOD lists, so their materials are the cheap permutations, which is why six
-    // 128x128 faces are affordable at all.
-    const u32 KU_ENV_MAP_FIRST_MESH_LIST = 5u;
-#endif  // BRN_ENVMAP_PASS_AVAILABLE
-
-    u64  gu64LastMonitorTick = 0;
-    bool gbMonitorTickValid  = false;
-
-    // Submit one solid-coloured quad (4-vertex triangle strip) through the Im2d, in 1280x720 logical px.
-    void EmitColouredQuad(CgsGraphics::Im2d* lpIm2d, f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, CgsGraphics::RGBA8 lColour)
+// ARTIST8203BA70, native three-channel256-entry gamma ramp.
+const D3DGAMMARAMP kInitialGammaRamp =
+{
     {
-        CgsGraphics::Basic2dColouredTexturedVertex laVerts[4];
-        const f32 laPos[4][2] = { {lfX0, lfY0}, {lfX1, lfY0}, {lfX0, lfY1}, {lfX1, lfY1} };   // TL,TR,BL,BR
-        for (s32 liVertex = 0; liVertex < 4; ++liVertex)
-        {
-            laVerts[liVertex].mv2Pos    = { laPos[liVertex][0], laPos[liVertex][1] };
-            laVerts[liVertex].mv2Tex0UV = { 0.0f, 0.0f };
-            laVerts[liVertex].mv4Colour = lColour;
-        }
-        lpIm2d->Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
-    }
+        0x0000, 0x0200, 0x0300, 0x0500, 0x0700, 0x0800, 0x0A00, 0x0C00, 0x0D00, 0x0F00, 0x1000, 0x1200, 0x1400, 0x1500, 0x1600, 0x1800,
+        0x1900, 0x1B00, 0x1C00, 0x1D00, 0x1E00, 0x2000, 0x2100, 0x2200, 0x2300, 0x2400, 0x2500, 0x2600, 0x2700, 0x2800, 0x2900, 0x2A00,
+        0x2B00, 0x2C00, 0x2D00, 0x2E00, 0x2F00, 0x3000, 0x3100, 0x3200, 0x3300, 0x3400, 0x3500, 0x3600, 0x3700, 0x3800, 0x3900, 0x3A00,
+        0x3B00, 0x3C00, 0x3D00, 0x3E00, 0x3F00, 0x4000, 0x4100, 0x4200, 0x4300, 0x4400, 0x4500, 0x4600, 0x4600, 0x4700, 0x4800, 0x4900,
+        0x4A00, 0x4B00, 0x4C00, 0x4D00, 0x4E00, 0x4F00, 0x5000, 0x5100, 0x5200, 0x5300, 0x5500, 0x5600, 0x5700, 0x5800, 0x5900, 0x5A00,
+        0x5B00, 0x5C00, 0x5D00, 0x5E00, 0x5F00, 0x6000, 0x6100, 0x6200, 0x6300, 0x6400, 0x6500, 0x6600, 0x6700, 0x6800, 0x6900, 0x6A00,
+        0x6B00, 0x6C00, 0x6D00, 0x6E00, 0x6F00, 0x7000, 0x7100, 0x7200, 0x7300, 0x7400, 0x7500, 0x7600, 0x7700, 0x7800, 0x7900, 0x7A00,
+        0x7B00, 0x7C00, 0x7D00, 0x7E00, 0x7F00, 0x8000, 0x8100, 0x8200, 0x8300, 0x8400, 0x8500, 0x8600, 0x8700, 0x8800, 0x8900, 0x8A00,
+        0x8B00, 0x8C00, 0x8D00, 0x8E00, 0x8F00, 0x9000, 0x9100, 0x9200, 0x9300, 0x9400, 0x9500, 0x9600, 0x9700, 0x9800, 0x9900, 0x9A00,
+        0x9B00, 0x9C00, 0x9C00, 0x9D00, 0x9E00, 0x9F00, 0xA000, 0xA100, 0xA200, 0xA300, 0xA400, 0xA500, 0xA600, 0xA700, 0xA800, 0xA900,
+        0xAA00, 0xAB00, 0xAC00, 0xAD00, 0xAD00, 0xAE00, 0xAF00, 0xB000, 0xB100, 0xB200, 0xB300, 0xB400, 0xB500, 0xB600, 0xB700, 0xB800,
+        0xB900, 0xBA00, 0xBA00, 0xBB00, 0xBC00, 0xBD00, 0xBE00, 0xBF00, 0xC000, 0xC100, 0xC200, 0xC300, 0xC400, 0xC400, 0xC500, 0xC600,
+        0xC700, 0xC800, 0xC900, 0xCA00, 0xCB00, 0xCC00, 0xCD00, 0xCD00, 0xCE00, 0xCF00, 0xD000, 0xD100, 0xD200, 0xD300, 0xD400, 0xD500,
+        0xD600, 0xD600, 0xD700, 0xD800, 0xD900, 0xDA00, 0xDB00, 0xDC00, 0xDD00, 0xDE00, 0xDE00, 0xDF00, 0xE000, 0xE100, 0xE200, 0xE300,
+        0xE400, 0xE500, 0xE600, 0xE600, 0xE700, 0xE800, 0xE900, 0xEA00, 0xEB00, 0xEC00, 0xED00, 0xED00, 0xEE00, 0xEF00, 0xF000, 0xF100,
+        0xF200, 0xF300, 0xF400, 0xF400, 0xF500, 0xF600, 0xF700, 0xF800, 0xF900, 0xFA00, 0xFB00, 0xFB00, 0xFC00, 0xFD00, 0xFE00, 0xFF00,
+    },
+    {
+        0x0000, 0x0200, 0x0300, 0x0500, 0x0700, 0x0800, 0x0A00, 0x0C00, 0x0D00, 0x0F00, 0x1000, 0x1200, 0x1400, 0x1500, 0x1600, 0x1800,
+        0x1900, 0x1B00, 0x1C00, 0x1D00, 0x1E00, 0x2000, 0x2100, 0x2200, 0x2300, 0x2400, 0x2500, 0x2600, 0x2700, 0x2800, 0x2900, 0x2A00,
+        0x2B00, 0x2C00, 0x2D00, 0x2E00, 0x2F00, 0x3000, 0x3100, 0x3200, 0x3300, 0x3400, 0x3500, 0x3600, 0x3700, 0x3800, 0x3900, 0x3A00,
+        0x3B00, 0x3C00, 0x3D00, 0x3E00, 0x3F00, 0x4000, 0x4100, 0x4200, 0x4300, 0x4400, 0x4500, 0x4600, 0x4600, 0x4700, 0x4800, 0x4900,
+        0x4A00, 0x4B00, 0x4C00, 0x4D00, 0x4E00, 0x4F00, 0x5000, 0x5100, 0x5200, 0x5300, 0x5500, 0x5600, 0x5700, 0x5800, 0x5900, 0x5A00,
+        0x5B00, 0x5C00, 0x5D00, 0x5E00, 0x5F00, 0x6000, 0x6100, 0x6200, 0x6300, 0x6400, 0x6500, 0x6600, 0x6700, 0x6800, 0x6900, 0x6A00,
+        0x6B00, 0x6C00, 0x6D00, 0x6E00, 0x6F00, 0x7000, 0x7100, 0x7200, 0x7300, 0x7400, 0x7500, 0x7600, 0x7700, 0x7800, 0x7900, 0x7A00,
+        0x7B00, 0x7C00, 0x7D00, 0x7E00, 0x7F00, 0x8000, 0x8100, 0x8200, 0x8300, 0x8400, 0x8500, 0x8600, 0x8700, 0x8800, 0x8900, 0x8A00,
+        0x8B00, 0x8C00, 0x8D00, 0x8E00, 0x8F00, 0x9000, 0x9100, 0x9200, 0x9300, 0x9400, 0x9500, 0x9600, 0x9700, 0x9800, 0x9900, 0x9A00,
+        0x9B00, 0x9C00, 0x9C00, 0x9D00, 0x9E00, 0x9F00, 0xA000, 0xA100, 0xA200, 0xA300, 0xA400, 0xA500, 0xA600, 0xA700, 0xA800, 0xA900,
+        0xAA00, 0xAB00, 0xAC00, 0xAD00, 0xAD00, 0xAE00, 0xAF00, 0xB000, 0xB100, 0xB200, 0xB300, 0xB400, 0xB500, 0xB600, 0xB700, 0xB800,
+        0xB900, 0xBA00, 0xBA00, 0xBB00, 0xBC00, 0xBD00, 0xBE00, 0xBF00, 0xC000, 0xC100, 0xC200, 0xC300, 0xC400, 0xC400, 0xC500, 0xC600,
+        0xC700, 0xC800, 0xC900, 0xCA00, 0xCB00, 0xCC00, 0xCD00, 0xCD00, 0xCE00, 0xCF00, 0xD000, 0xD100, 0xD200, 0xD300, 0xD400, 0xD500,
+        0xD600, 0xD600, 0xD700, 0xD800, 0xD900, 0xDA00, 0xDB00, 0xDC00, 0xDD00, 0xDE00, 0xDE00, 0xDF00, 0xE000, 0xE100, 0xE200, 0xE300,
+        0xE400, 0xE500, 0xE600, 0xE600, 0xE700, 0xE800, 0xE900, 0xEA00, 0xEB00, 0xEC00, 0xED00, 0xED00, 0xEE00, 0xEF00, 0xF000, 0xF100,
+        0xF200, 0xF300, 0xF400, 0xF400, 0xF500, 0xF600, 0xF700, 0xF800, 0xF900, 0xFA00, 0xFB00, 0xFB00, 0xFC00, 0xFD00, 0xFE00, 0xFF00,
+    },
+    {
+        0x0000, 0x0200, 0x0300, 0x0500, 0x0700, 0x0800, 0x0A00, 0x0C00, 0x0D00, 0x0F00, 0x1000, 0x1200, 0x1400, 0x1500, 0x1600, 0x1800,
+        0x1900, 0x1B00, 0x1C00, 0x1D00, 0x1E00, 0x2000, 0x2100, 0x2200, 0x2300, 0x2400, 0x2500, 0x2600, 0x2700, 0x2800, 0x2900, 0x2A00,
+        0x2B00, 0x2C00, 0x2D00, 0x2E00, 0x2F00, 0x3000, 0x3100, 0x3200, 0x3300, 0x3400, 0x3500, 0x3600, 0x3700, 0x3800, 0x3900, 0x3A00,
+        0x3B00, 0x3C00, 0x3D00, 0x3E00, 0x3F00, 0x4000, 0x4100, 0x4200, 0x4300, 0x4400, 0x4500, 0x4600, 0x4600, 0x4700, 0x4800, 0x4900,
+        0x4A00, 0x4B00, 0x4C00, 0x4D00, 0x4E00, 0x4F00, 0x5000, 0x5100, 0x5200, 0x5300, 0x5500, 0x5600, 0x5700, 0x5800, 0x5900, 0x5A00,
+        0x5B00, 0x5C00, 0x5D00, 0x5E00, 0x5F00, 0x6000, 0x6100, 0x6200, 0x6300, 0x6400, 0x6500, 0x6600, 0x6700, 0x6800, 0x6900, 0x6A00,
+        0x6B00, 0x6C00, 0x6D00, 0x6E00, 0x6F00, 0x7000, 0x7100, 0x7200, 0x7300, 0x7400, 0x7500, 0x7600, 0x7700, 0x7800, 0x7900, 0x7A00,
+        0x7B00, 0x7C00, 0x7D00, 0x7E00, 0x7F00, 0x8000, 0x8100, 0x8200, 0x8300, 0x8400, 0x8500, 0x8600, 0x8700, 0x8800, 0x8900, 0x8A00,
+        0x8B00, 0x8C00, 0x8D00, 0x8E00, 0x8F00, 0x9000, 0x9100, 0x9200, 0x9300, 0x9400, 0x9500, 0x9600, 0x9700, 0x9800, 0x9900, 0x9A00,
+        0x9B00, 0x9C00, 0x9C00, 0x9D00, 0x9E00, 0x9F00, 0xA000, 0xA100, 0xA200, 0xA300, 0xA400, 0xA500, 0xA600, 0xA700, 0xA800, 0xA900,
+        0xAA00, 0xAB00, 0xAC00, 0xAD00, 0xAD00, 0xAE00, 0xAF00, 0xB000, 0xB100, 0xB200, 0xB300, 0xB400, 0xB500, 0xB600, 0xB700, 0xB800,
+        0xB900, 0xBA00, 0xBA00, 0xBB00, 0xBC00, 0xBD00, 0xBE00, 0xBF00, 0xC000, 0xC100, 0xC200, 0xC300, 0xC400, 0xC400, 0xC500, 0xC600,
+        0xC700, 0xC800, 0xC900, 0xCA00, 0xCB00, 0xCC00, 0xCD00, 0xCD00, 0xCE00, 0xCF00, 0xD000, 0xD100, 0xD200, 0xD300, 0xD400, 0xD500,
+        0xD600, 0xD600, 0xD700, 0xD800, 0xD900, 0xDA00, 0xDB00, 0xDC00, 0xDD00, 0xDE00, 0xDE00, 0xDF00, 0xE000, 0xE100, 0xE200, 0xE300,
+        0xE400, 0xE500, 0xE600, 0xE600, 0xE700, 0xE800, 0xE900, 0xEA00, 0xEB00, 0xEC00, 0xED00, 0xED00, 0xEE00, 0xEF00, 0xF000, 0xF100,
+        0xF200, 0xF300, 0xF400, 0xF400, 0xF500, 0xF600, 0xF700, 0xF800, 0xF900, 0xFA00, 0xFB00, 0xFB00, 0xFC00, 0xFD00, 0xFE00, 0xFF00,
+    },
+};
 }
 
-// @ 0x82405A30 - BrnRendererModule::RenderThreeThreadMonitors. Three squares bottom-centre, one per
-// worker thread: green when the thread is running in real time, red when it has fallen behind. The X360
-// draws them via the untextured Basic2dColouredVertex renderer at normalised coords (x 0.55/0.57/0.59,
-// y 0.91-0.94); reconstructed through mIm2dRenderer untextured (SetTexture(null) -> solid colour), with
-// the normalised coords scaled to the 1280x720 logical space.
-void BrnRendererModule::RenderThreeThreadMonitors(bool lbThread0, bool lbThread1, bool lbThread2)
+// ARTIST8240A778. These references are the original boot caller's actual
+// monitor input, aspect output and display-mode HD output, not host fallbacks.
+void BrnRendererModule::Construct(const BrnGame::BrnCpuMonitors& globalMonitors,
+    f32& aspectRatio, bool& highDefinition)
 {
-    const f32 KF_W = 1280.0f;
-    const f32 KF_H = 720.0f;
-    const CgsGraphics::RGBA8 KC_GREEN = { 0, 255, 0, 255 };
-    const CgsGraphics::RGBA8 KC_RED   = { 255, 0, 0, 255 };
-
-    const f32  laLeftX[3]      = { 0.55f, 0.57f, 0.59f };   // normalised left edge; width 0.015
-    const bool labThreadOk[3]  = { lbThread0, lbThread1, lbThread2 };
-
-    mIm2dRenderer.BeginRendering();
-    mIm2dRenderer.SetState(static_cast<const CgsGraphics::BlendState*>(0));
-    mIm2dRenderer.SetTexture(0);   // untextured -> solid vertex colour
-    for (s32 liThread = 0; liThread < 3; ++liThread)
-    {
-        const CgsGraphics::RGBA8 lColour = labThreadOk[liThread] ? KC_GREEN : KC_RED;
-        EmitColouredQuad(&mIm2dRenderer,
-                         laLeftX[liThread] * KF_W,           0.91f * KF_H,
-                         (laLeftX[liThread] + 0.015f) * KF_W, 0.94f * KF_H, lColour);
-    }
-    mIm2dRenderer.EndRendering();
-}
-
-// @0x82406208. ARTIST calls this with a normalized upper-right position (0.7, 0.0),
-// a normalized size (0.3, 0.3), and opaque white to show a render-target texture.
-void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* lpTexture,
-                                                  Vector2 lrPosition, Vector2 lrSize,
-                                                  CgsDev::RGBA luColour)
-{
-    mIm2dRenderer.BeginRendering();
-    // ARTIST8240623C..82406298 rebuilds the actual owned TextureState in
-    // its existing resource, then binds its complete sampler/raster at stage0.
-    mTextureStateParams.mpTexture = lpTexture;
-    mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource, &mTextureStateParams);
-    mIm2dRenderer.SetState(mpTextureState);
-
-    const f32 KF_LOGICAL_WIDTH = 1280.0f;
-    const f32 KF_LOGICAL_HEIGHT = 720.0f;
-    const f32 lfLeft = lrPosition.x * KF_LOGICAL_WIDTH;
-    const f32 lfTop = lrPosition.y * KF_LOGICAL_HEIGHT;
-    const f32 lfRight = (lrPosition.x + lrSize.x) * KF_LOGICAL_WIDTH;
-    const f32 lfBottom = (lrPosition.y + lrSize.y) * KF_LOGICAL_HEIGHT;
-
-    const CgsGraphics::RGBA8 lColour = {
-        static_cast<u8>(luColour & 0xFFu),
-        static_cast<u8>((luColour >> 8) & 0xFFu),
-        static_cast<u8>((luColour >> 16) & 0xFFu),
-        static_cast<u8>((luColour >> 24) & 0xFFu)
-    };
-    CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
-    laVertices[0].mv2Pos = { lfLeft, lfTop };
-    laVertices[1].mv2Pos = { lfLeft, lfBottom };
-    laVertices[2].mv2Pos = { lfRight, lfTop };
-    laVertices[3].mv2Pos = { lfRight, lfBottom };
-    laVertices[0].mv2Tex0UV = { 0.0f, 0.0f };
-    laVertices[1].mv2Tex0UV = { 0.0f, 1.0f };
-    laVertices[2].mv2Tex0UV = { 1.0f, 0.0f };
-    laVertices[3].mv2Tex0UV = { 1.0f, 1.0f };
-    for (u32 luVertex = 0; luVertex < 4; ++luVertex)
-        laVertices[luVertex].mv4Colour = lColour;
-
-    // The native backend consumes logical pixels; BeginRendering's published
-    // screen transform and the coordinate conversion above lower ARTIST's
-    // SetTransform(flt_830112D0). Reuse the full shared F20/F3C state objects.
-    mIm2dRenderer.SetState(
-        reinterpret_cast<const CgsGraphics::BlendState*>(CgsGui::gpGuiBlendStateStandard));
-    mIm2dRenderer.SetState(
-        reinterpret_cast<const CgsGraphics::RasterizerState*>(CgsGui::gpGuiRasterizerStateCullNone));
-    mIm2dRenderer.Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
-    mIm2dRenderer.EndRendering();
-}
-
-// @ 0x82406410 - BrnRendererModule::RenderLetterBoxBars. Draw the two solid-black bars that frame a
-// widescreen (letterboxed) view - one across the top, one across the bottom. lfDestAspectRatio is the
-// visible/kept vertical fraction of the screen; the cropped-away remainder (1 - lfDestAspectRatio) is
-// split evenly between the two bars, so each bar is (1 - lfDestAspectRatio) * 0.5 of the height and
-// spans the full width. The X360 draws them through the immediate-mode 2D renderer in normalised
-// [0,1] screen space: BeginRendering -> SetTransform(cached screen transform) -> Render(top bar) ->
-// Render(bottom bar) -> EndRendering, with each quad's four vertices coloured from a const RGBA black
-// (DWARF locals lLetterboxY / lBlack / lTransform). Each quad is a 4-vertex triangle strip (prim 6).
-void BrnRendererModule::RenderLetterBoxBars(CgsGraphics::Im2d& lIm2d, f32 lfDestAspectRatio)
-{
-    using namespace CgsGraphics;
-
-    const RGBA8 KC_BLACK = { 0, 0, 0, 255 };
-    const f32   lfLetterboxY = (1.0f - lfDestAspectRatio) * 0.5f;   // height of each bar (top + bottom)
-
-    lIm2d.BeginRendering();
-
-    // X360 SetTransform of the renderer's cached [0,1]->screen transform (module static @0x830112D0).
-    // The exact matrix bytes are not recovered from the ARTIST rodata, so the default-constructed
-    // Im2dTransform stands in for that cached screen transform here.
-    Im2dTransform lTransform;
-    lIm2d.SetTransform(lTransform);
-
-    Basic2dColouredTexturedVertex laVerts[4];
-    for (s32 liVertex = 0; liVertex < 4; ++liVertex)
-    {
-        laVerts[liVertex].mv4Colour  = KC_BLACK;
-        laVerts[liVertex].mv2Tex0UV  = { 0.0f, 0.0f };
-    }
-
-    // Top bar: full width (x 0..1), y in [0, lfLetterboxY]. Triangle-strip order TL, BL, TR, BR.
-    laVerts[0].mv2Pos = { 0.0f, 0.0f };
-    laVerts[1].mv2Pos = { 0.0f, lfLetterboxY };
-    laVerts[2].mv2Pos = { 1.0f, 0.0f };
-    laVerts[3].mv2Pos = { 1.0f, lfLetterboxY };
-    lIm2d.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
-
-    // Bottom bar: full width, y in [1 - lfLetterboxY, 1].
-    laVerts[0].mv2Pos = { 0.0f, 1.0f - lfLetterboxY };
-    laVerts[1].mv2Pos = { 0.0f, 1.0f };
-    laVerts[2].mv2Pos = { 1.0f, 1.0f - lfLetterboxY };
-    laVerts[3].mv2Pos = { 1.0f, 1.0f };
-    lIm2d.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
-
-    lIm2d.EndRendering();
-}
-
-// @ 0x8240A778 - BrnRendererModule::Construct. Reconstructed from the X360 ARTIST build.
-//
-// Option B (layout-faithful incremental): the loading-screen render path is reconstructed
-// for real here - the double-buffered shader-constant frames and the loading-screen
-// renderer, which is what actually draws during boot. The occlusion manager is constructed
-// on the first enabled query pass after the host device exists; other device-backed managers
-// remain incrementally reconstructed and do not draw during the loading screen.
-namespace
-{
-    // [PC bring-up] The dispatch bins' backing memory. The X360 carves them from
-    // the renderer's graphics allocator (BrnRendererMemory::Construct ->
-    // mpGraphicsAllocator, this+14668) whose reconstruction is still open; until
-    // it lands, a renderer-owned rw::LinearResourceAllocator over one heap block
-    // supplies DoAllocate with identical semantics.
-    rw::LinearResourceAllocator sWorldDispatchAllocator;
-    bool                        sbWorldDispatchAllocatorReady = false;
-
-    bool EnsureWorldDispatchAllocator()
-    {
-        if (sbWorldDispatchAllocatorReady)
-            return true;
-
-        void* lpHeap = ::operator new(luHeapBytes, std::nothrow);
-        if (lpHeap == 0)
-            return false;
-
-        rw::Resource lHeapResource;
-        rw::ResourceDescriptor lHeapCapacity;
-        for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
-        {
-            lHeapResource.m_baseResources[luLane] = (luLane == 0) ? lpHeap : 0;
-            lHeapCapacity.m_baseResourceDescriptors[luLane].m_size      = (luLane == 0) ? luHeapBytes : 0u;
-            lHeapCapacity.m_baseResourceDescriptors[luLane].m_alignment = (luLane == 0) ? 128u : 1u;
-        }
-        sWorldDispatchAllocator.AdoptMemory(lHeapResource, lHeapCapacity);
-        sbWorldDispatchAllocatorReady = true;
-        return true;
-    }
-
-    // [PC bring-up] The shadow-map render target, created on the first frame that HAS a device.
-    //
-    // Value-latched on the created target, not on a `static bool tried` -- a one-shot flag set
-    // during the loading screen (before renderengine::gDevice exists) would burn the single
-    // attempt and the target would never be built. The pointer below only becomes non-null once
-    // a real CgsRenderTarget is in pool slot 1.
-    CgsRenderTarget* gpShadowMapTarget = 0;
-
-    bool EnsureShadowMapTarget(BrnRendererMemory& lrRendererMemory)
-    {
-        if (gpShadowMapTarget != 0)
-            return true;
-              // no device yet -- retry next frame
-        if (!EnsureWorldDispatchAllocator())
-            return false;
-
-        gpShadowMapTarget = lrRendererMemory.GetShadowMapBuffer(0);
-        return gpShadowMapTarget != 0;
-    }
-
-   // X360 flt_82004014 (DATA_DUMP.md)
-
-    // [PC bring-up] The POST-FX SCENE TARGETS, created the same lazy way and for the same reason.
-    //
-    // WHY THIS IS NOT JUST `Construct()`. BrnRendererMemory::Construct @0x823FCA38 is the console's one
-    // entry point into the pool and it is now much closer to linkable -- the post-fx spine wave bodied
-    // the eight sibling Create*Buffer helpers, which were the bulk of the fourteen unresolved externals
-    // in its BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner. Two blockers remain, and neither is
-    // honestly closeable yet:
-    //   * BrnResource::Allocators::GetGlobalGraphicsAllocator() is still declaration-only,
-    //   * the four gacIm2d{Depth,Composite}Blit{Vertex,Pixel}Program blobs are XENOS MICROCODE. Their
-    //     bytes ARE recoverable (they are at unk_8203DAA8 / DC00 / DCF0 / DE80 and this wave dumped
-    //     them), but linking Xenos microcode into a D3D9 build would satisfy the linker with data the
-    //     GPU cannot execute -- a green build that draws garbage. They wait for a PC program leaf.
-    // So the gate stays at 0 and the spine goes through this bring-up entry point, exactly as the
-    // shadow slice does. DELETE BOTH once those two land and Construct() can be called.
-    //
-    // ⚠️ ORDER IS LOAD-BEARING: PCBringUpCreateShadowMapBufferOnly NULLS EVERY POOL SLOT before it
-    // fills the shadow one, so it must run FIRST. EnsureShadowMapTarget is called before this on every
-    // path below, and this function additionally refuses to run until that target exists.
-    CgsRenderTarget* gpAntiAliasTarget = 0;
-
-    // lbEnableMSAA is BrnRendererModule::mbMultisampledBackbuffer, threaded from the caller instead
-    // of re-derived here: on the console that ONE byte both selects the anti-alias buffer's tiling
-    // plan (via BrnRendererMemory::Construct's arg_97 -> CreateAntiAliasBuffer @0x823F6B40) and
-    // picks the branch BeginRenderAntiAliased / ResolveMSAA take. Deriving it twice is how a
-    // multisampled target ends up driven by the untiled bracket, which nothing would report.
-    bool EnsurePostFxSceneTargets(BrnRendererMemory& lrRendererMemory, bool lbEnableMSAA)
-    {
-        if (gpAntiAliasTarget != 0)
-            return true;
-              // no device yet -- retry next frame
-        if (gpShadowMapTarget == 0)
-            return false;              // the slot-nulling pass has not run yet (see above)
-        if (!EnsureWorldDispatchAllocator())
-            return false;
-
-        // The eight Create*Buffer helpers are private to BrnRendererMemory (only Construct calls them
-        // on the console), so the bring-up goes through the one public entry point that owns the order.
-
-        gpAntiAliasTarget = lrRendererMemory.GetAntiAliasBuffer();
-
-        // ⚠️ THE GATE, NOT THE BODY, IS WHERE THE NULL TEST BELONGS. BeginRenderAntiAliased reaches
-        // lpTarget->GetRenderTarget()->GetSectionRenderTargetState(0) with no test on either result,
-        // and that is FAITHFUL -- the X360 asm has no null test there either, because on the console
-        // the pool cannot fail. On PC it can: rw::graphics::postfx::RenderTarget::Initialize returns
-        // nullptr when CarveZeroed fails (PostFxRenderTarget.cpp), and CgsRenderTarget::Construct
-        // stores that straight through. So a failed allocation would turn a degraded frame into a
-        // null-pointer crash inside a console-faithful body.
-        //
-        // Requiring the post-fx RenderTarget here keeps the console body untouched and leaves the
-        // failure where every other PC bring-up guard in this file already lives: the bracket simply
-        // never opens, the world keeps drawing straight to the back buffer, and the frame degrades
-        // instead of crashing.
-        const bool lbTargetsReady = gpAntiAliasTarget != 0
-            && gpAntiAliasTarget->GetRenderTarget() != 0;
-
-#if BRN_POSTFX_COMPOSITE_AVAILABLE
-        // The console's BrnPostFx::Construct runs from BrnRendererModule::Construct @0x8240A778
-        // (`bl BrnPostFx__Construct` @0x8240B78C, on this->mpGraphicsAllocator). On PC that Construct
-        // has no device and a null graphics allocator, so -- like every pool object above and like
-        // mIm3dRendererSkyDome.Construct further down -- it runs here, once, on the bring-up
-        // allocator, the frame the post-fx pool exists. Idempotent inside. Under the composite gate
-        // because BrnRendererModule.cpp reaches BrnPostFx only through the seam header (see the
-        // include under the gate above).
-        if (lbTargetsReady)
-        {
-        }
-#endif
-        return lbTargetsReady;
-    }
-
-#if BRN_ENVMAP_PASS_AVAILABLE
-    // =============================================================================================
-    // [PC bring-up] THE ENVIRONMENT-MAP RENDER TARGET -- a 128x128 CUBE colour target with its own
-    // multisampled depth, pool slot 3.
-    //
-    // Same lazy shape, and the same DELETE-WHEN, as EnsureShadowMapTarget / EnsurePostFxSceneTargets
-    // above: BrnRendererMemory::Construct @0x823FCA38 builds the whole pool on the console and is
-    // gated out here, and it would run before the D3D9 device exists anyway.
-    //
-    // ⚠ RULE 9 OF THIS WAVE, ENFORCED RATHER THAN LOGGED: "the frame looks identical" is not a gate
-    // (verify F3, envface: the E_TYPE_CUBE test below is renderengine::Texture::GetType, which on this
-    // backend reports the CREATE-TIME dimension the leaf recorded in the raster header -- a metadata
-    // test, not an IDirect3DBaseTexture9::GetType() query. The object's real D3DRTYPE is printed by
-    // the side that created it: PostFxRenderTarget.cpp's `[envmap-rt] cube ...` line. Read
-    // BOTH lines off the boot log; this one alone proves extent + object + requested dimension.)
-    // for an off-screen target. This function REFUSES -- once, loudly, latched so it never retries --
-    // when the leaf hands back anything other than a non-degenerate CUBE colour texture, because a
-    // 0x0 or 2D "cube" would render six faces into nothing and error nowhere. That refusal keeps
-    // sampler 13 unbound and the six-face loop off, which is precisely the build this wave started
-    // from: a regression to the previous behaviour rather than to a wrong picture.
-    //
-    // The latch is the created TARGET (a pointer), never a `static bool tried`: a one-shot set during
-    // the loading screen -- before renderengine::gDevice exists -- would burn the single attempt and
-    // the cube would never be built. That is this project's most repeated bring-up bug and both
-    // neighbours above carry the same note. `gbEnvMapTargetRefused` is a SEPARATE latch and is only
-    // ever set after a real creation attempt has been made and judged.
-    // =============================================================================================
-    CgsRenderTarget* gpEnvMapTarget       = 0;
-    bool             gbEnvMapTargetRefused = false;
-
-    bool EnsureEnvMapTarget(BrnRendererMemory& lrRendererMemory)
-    {
-        if (gpEnvMapTarget != 0)
-            return true;
-        if (gbEnvMapTargetRefused)
-            return false;
-              // no device yet -- retry next frame
-        if (gpShadowMapTarget == 0)
-            return false;              // the slot-nulling pass has not run yet (see the note above it)
-        if (!EnsureWorldDispatchAllocator())
-            return false;
-
-        CgsRenderTarget* const lpTarget = lrRendererMemory.GetEnvMapBuffer();
-        rw::graphics::postfx::RenderTarget* const lpRenderTarget =
-            (lpTarget != 0) ? lpTarget->GetRenderTarget() : 0;
-        renderengine::Texture* const lpColourTexture =
-            (lpRenderTarget != 0) ? lpRenderTarget->GetTexture(0) : 0;
-
-        const u32 luWidth  = (lpTarget != 0) ? lpTarget->GetWidth()  : 0u;
-        const u32 luHeight = (lpTarget != 0) ? lpTarget->GetHeight() : 0u;
-        const s32 lnMultisampleRequested =
-            (lpTarget != 0) ? lpTarget->GetMultisampleFormat() : 0;
-        const s32 lnTextureType = (lpColourTexture != 0)
-            ? static_cast<s32>(renderengine::Texture::GetType(lpColourTexture))
-            : -1;
-        // The D3D object itself, reported as a pointer rather than as a D3DRTYPE. Reading
-        // IDirect3DBaseTexture9::GetType() here would need <d3d9.h> in the renderer TU -- texture.h
-        // deliberately keeps the type a forward declaration -- and the answer belongs to the side
-        // that CREATED the object: the cube create path logs its own D3DRTYPE at creation (cubeleaf).
-        // What this line owes, and pays, is the OTHER half of rule 9: a non-degenerate EXTENT and a
-        // real object, or a refusal.
-        void* const lpD3DObject =
-            (lpColourTexture != 0) ? static_cast<void*>(lpColourTexture->mpD3DTexture) : 0;
-
-        const bool lbUsable = (lpTarget != 0) && (lpRenderTarget != 0)
-                           && (lpColourTexture != 0)
-                           && (lpD3DObject != 0)
-                           && (lnTextureType == static_cast<s32>(renderengine::Texture::E_TYPE_CUBE))
-                           && (luWidth != 0u) && (luHeight != 0u);
-
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[envmap] target " << static_cast<s32>(luWidth) << "x" << static_cast<s32>(luHeight)
-                << " sections=" << static_cast<s32>((lpTarget != 0) ? lpTarget->GetNumSections() : 0u)
-                << " msaaReqFormat=" << lnMultisampleRequested << "(console; 2==4x)"
-                << " colourTexture=type" << lnTextureType << " (3==E_TYPE_CUBE, create-time metadata)"
-                << " depthTex=" << static_cast<void*>(
-                       (lpRenderTarget != 0) ? lpRenderTarget->GetDepthStencilTexture() : 0)
-                << " d3dObject=" << lpD3DObject
-                << " -> "
-                << (lbUsable ? "USABLE" : "REFUSED -- the env-map pass and sampler 13 stay off")
-                << "\n";
-        }
-
-        if (!lbUsable)
-        {
-            gbEnvMapTargetRefused = true;
-            return false;
-        }
-
-        gpEnvMapTarget = lpTarget;
-        // ARTIST 8240BE80..9C registers EnvMap slot3's colour texture0.
-        // PC allocation occurs here on the D3D owner after the device exists.
-        CgsGraphics::gTextureScopeTable.SetTexture(
-            CgsGraphics::E_TEXTURE_PURPOSE_ENVIRONMENT_MAP,
-            lpTarget->GetRenderTarget()->GetTexture(0));
-
-        return true;
-    }
-
-    // =============================================================================================
-    // [PC bring-up] THE SAMPLER-13 TEXTURE STATE -- BrnRendererModule::Construct's second
-    // TextureState, deferred exactly like every other Construct step in this file.
-    //
-    // WHAT THE CONSOLE BUILDS, decoded off Construct @0x8240A778 (pseudocode 556-574) rather than
-    // guessed. The three triples the WAVE_NOTE quotes as byte indices resolve, against the committed
-    // member ORDER in BrnRendererModule.h, to exactly this object: taking `mpTextureState` as the
-    // block's origin, mTextureStateParams sits at +4, mTextureStateResource at +80,
-    // mpEnvMapTextureState at +100, mEnvMapTextureStateParams at +104,
-    // mEnvMapTextureStateResource at +180 -- and Hex-Rays' gap15DE[] indices are those numbers plus
-    // 2, which is what makes [102]/[106]/[182] the env-map triple and [2]/[6]/[82] the shadow one.
-    // The identification is CLOSED at both ends: the same arithmetic puts mpGlassFractureTextureState
-    // at [206] (line 597 zeroes it, and the ctor in BrnRendererModule.h zeroes it too) and
-    // mpShadowMapTextureState[0]/[1] at [326]/[330] (lines 554/555) -- and Render's own binds then
-    // read `*(this + 5924)` for s15 and `*(this + 5700)` for s13, whose difference is 224, which is
-    // exactly [326] - [102].
-    //
-    //   mEnvMapTextureStateParams.muAddressU = muAddressV = muAddressW = 2   (lines 559-561)
-    //   mEnvMapTextureStateParams.muMagFilter = muMinFilter = muMipFilter = 1 (lines 556-558)
-    //   mEnvMapTextureStateParams.mpTexture   = GetEnvMapBuffer()->GetTexture(0)  (line 562, and
-    //       `*&v1->gap15DE[178]` == params + 72 == renderengine::TextureState::Parameters::mpTexture)
-    //   mpEnvMapTextureState = TextureState::Initialize(&mEnvMapTextureStateResource,
-    //                                                   &mEnvMapTextureStateParams)  (line 574)
-    // The 2s and 1s are not decoded here from first principles: the tree already decodes this exact
-    // vocabulary twice, against the SAME field order, and both agree -- CLAMP is 2 and LINEAR is 1
-    // (XenonD3D9Shims.cpp ApplyVolumeSamplerState, built from rw::graphics::postfx::Tint::Initialize
-    // @0x82403B48's addressU=V=W=2 / mag=min=1; and PostFxDepthSampler_ApplyState, built from
-    // RenderTarget::CreateStates @0x82403A18's mag=min=0 == POINT). So the env map asks for a
-    // trilinear, clamped cube sampler -- which is what a 128x128 reflection needs and what the 22
-    // shipped vehicle pixel shaders sample at s13.
-    //
-    // TWO DISCLOSED PC DEVIATIONS, both forced and neither hidden:
-    //  1. THE PARAMS AND THE RESOURCE BLOCK LIVE ON THE STACK, not in mEnvMapTextureStateParams /
-    //     mEnvMapTextureStateResource. Those two members exist in BrnRendererModule.h but their types
-    //     are still the file's EMPTY placeholder structs (`struct TextureStateParameters {};` /
-    //     `struct Resource {};`, BrnRendererModule.h:132-138), and retyping them to
-    //     renderengine::TextureState::Parameters / rw::Resource means including renderstates.h from
-    //     BrnRendererModule.h -- a header pulled into the game module and the immediate-mode layer.
-    //     That cascade is its own change. Nothing is lost: on PC TextureState::Initialize
-    //     (pc/gcm/renderengine/texturestate.cpp) IGNORES lpResourceMemory entirely (it `new`s the
-    //     object and memcpy's the leading sampler words out of the params), so the two members are
-    //     dead storage on this backend either way. The OUTPUT -- mpEnvMapTextureState -- is the
-    //     tree's own member, so there is no parallel global and no split brain.
-    //  2. THE SAMPLER WORDS DO NOT REACH D3D9 THROUGH THIS OBJECT. shadow::Device::SetState(const
-    //     TextureState*, u32) applies them through SetSamplerStateLowLevel, which is the documented
-    //     no-op on this backend (XenonD3D9Shims.cpp, the banner over ApplyVolumeSamplerState). The
-    //     tree's answer for the two earlier cases was to key the state off WHAT WAS BOUND inside
-    //     D3DDevice_SetTexture -- a volume texture gets LINEAR/CLAMP, a raw-depth texture gets
-    //     POINT/CLAMP -- and a CUBE texture is the third case of the same shape. That arm is a
-    //     CROSS-GROUP REQUEST to cubeleaf (it also fixes the 234 shipped world cube rasters), and it
-    //     is why this function does NOT declare a new leaf entry point: the seam already exists.
-    //     Until that arm lands, unit 13 keeps whatever filter it last held.
-    //
-    // Built through the REAL TextureState so that the whole-unit shadow key
-    // (shadow::Device::mapTextureState[13]) is what the console's own bind writes -- Render
-    // @0x8240CD?? binds it with `sub_8227D158(*(this + 5700), 13)`, the TextureState overload, not
-    // the bare-resource one.
-    // =============================================================================================
-    bool EnsureEnvMapTextureState(renderengine::TextureState** lppEnvMapTextureState,
-                                 CgsRenderTarget* lpEnvMapTarget)
-    {
-        if (lppEnvMapTextureState == 0)
-            return false;
-        if (*lppEnvMapTextureState != 0)
-            return true;
-        if (lpEnvMapTarget == 0 || lpEnvMapTarget->GetRenderTarget() == 0)
-            return false;
-
-        renderengine::Texture* const lpColourTexture =
-            lpEnvMapTarget->GetRenderTarget()->GetTexture(0);
-        if (lpColourTexture == 0)
-            return false;
-
-        renderengine::TextureState::Parameters lParameters;
-        std::memset(&lParameters, 0, sizeof(lParameters));
-        lParameters.muAddressU  = 2;   // Construct line 559 -- CLAMP
-        lParameters.muAddressV  = 2;   // Construct line 560
-        lParameters.muAddressW  = 2;   // Construct line 561
-        lParameters.muMagFilter = 1;   // Construct line 556 -- LINEAR
-        lParameters.muMinFilter = 1;   // Construct line 557
-        lParameters.muMipFilter = 1;   // Construct line 558
-        lParameters.mpTexture   = lpColourTexture;   // Construct line 562
-
-        // lpResourceMemory: the console passes &mEnvMapTextureStateResource, carved from the
-        // graphics allocator; the PC Initialize ignores the argument (see deviation 1 above).
-        *lppEnvMapTextureState = renderengine::TextureState::Initialize(0, &lParameters);
-        CgsGraphics::gTextureScopeTable.SetTextureState(
-            CgsGraphics::E_TEXTURE_PURPOSE_ENVIRONMENT_MAP, *lppEnvMapTextureState);
-        return *lppEnvMapTextureState != 0;
-    }
-
-    bool EnvMapDebugFaceColours()
-    {
-        static int siDebug = -1;      // -1 = not looked at yet, 0 = off, 1 = on
-        if (siDebug < 0)
-        {
-            char lacValue[16] = { 0 };
-            if (siDebug != 0)
-            {
-                CgsDev::Log::WriteToLog(
-                    "[envmap] BRN_ENVMAP_DEBUG=1 -- every cube face is cleared to its own colour and"
-                    " NO world geometry or sky is drawn into it (0 +X red, 1 -X cyan, 2 +Y green,"
-                    " 3 -Y magenta, 4 +Z blue, 5 -Z yellow)\n");
-            }
-        }
-        return siDebug != 0;
-    }
-#endif  // BRN_ENVMAP_PASS_AVAILABLE
-}
-
-void BrnRendererModule::Construct()
-{
-    // ARTIST8240A7C0: bind the actual typed GlobalGraphics wrapper.
-    // Its original backing owner remains separate from the retained native arenas.
     mpGraphicsAllocator = BrnResource::GetGraphicsAllocator();
+    rw::IResourceAllocator* const allocator = mpGraphicsAllocator;
+    mbMultisampledBackbuffer = true;
+    mEffectsArbitrator.Construct(mpGraphicsAllocator);
+    maShaderConstantsFrames[0].Construct();
+    maShaderConstantsFrames[1].Construct();
+    mu8ShaderConstantsFrameExternal = 1;
+    mu8ShaderConstantsFrameInternal = 0;
+    maShaderConstantsFrames[1].LockForWriting();
+    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].UnlockForWriting();
+    CgsModule::ModuleSingleBuffered::Construct();
 
-    // ARTIST8240B43C..8240B710: preserve registration order, white RGBA,
-    // and the original refresh-budget percentages (WorldOpaque is raw23.0).
-    // This belongs here, after DebugManager::Construct, not in the C++ ctor.
-    const rw::RGBA lGpuMonitorColour(255, 255, 255, 255);
-    mGpuMonitors.miScreenClear = CgsDev::PerfMonGpu::AddMonitor("ScreenClear", lGpuMonitorColour, 1.0f);
-    mGpuMonitors.miShadowmap = CgsDev::PerfMonGpu::AddMonitor("ShadowMap", lGpuMonitorColour, 10.0f);
-    mGpuMonitors.miSky = CgsDev::PerfMonGpu::AddMonitor("Sky", lGpuMonitorColour, 3.0f);
-    mGpuMonitors.miEnvironmentMap = CgsDev::PerfMonGpu::AddMonitor("EnvironmentMap", lGpuMonitorColour, 6.0f);
-    mGpuMonitors.miPreZ = CgsDev::PerfMonGpu::AddMonitor("Pre-Z", lGpuMonitorColour, 3.0f);
-    mGpuMonitors.miWorldOpaque = CgsDev::PerfMonGpu::AddMonitor("WorldOpaque", lGpuMonitorColour, 23.0f);
-    mGpuMonitors.miWorldTransparent = CgsDev::PerfMonGpu::AddMonitor("WorldTransparent", lGpuMonitorColour, 3.0f);
-    mGpuMonitors.miCarOpaque = CgsDev::PerfMonGpu::AddMonitor("CarOpaque", lGpuMonitorColour, 20.0f);
-    mGpuMonitors.miCarTransparent = CgsDev::PerfMonGpu::AddMonitor("CarTransparent", lGpuMonitorColour, 3.0f);
-    mGpuMonitors.miFullResParticles = CgsDev::PerfMonGpu::AddMonitor("FullResParticles", lGpuMonitorColour, 1.0f);
-    mGpuMonitors.miQuarterResParticles = CgsDev::PerfMonGpu::AddMonitor("ShrinkZ&DrawQuarterResParticles", lGpuMonitorColour, 5.0f);
-    mGpuMonitors.miResolveMSAAFromEDRAM = CgsDev::PerfMonGpu::AddMonitor("ResolveMSAAFromEDRAM", lGpuMonitorColour, 2.5f);
-    mGpuMonitors.miDownsampleMSAAAndCompParticles = CgsDev::PerfMonGpu::AddMonitor("CompParticles&DownsampledMSAA", lGpuMonitorColour, 2.5f);
-    mGpuMonitors.miSunCoronaVisibilityTest = CgsDev::PerfMonGpu::AddMonitor("Sun corona visibility test", lGpuMonitorColour, 0.1f);
-    mGpuMonitors.miCoronas = CgsDev::PerfMonGpu::AddMonitor("Coronas", lGpuMonitorColour, 0.4f);
-    mGpuMonitors.miPostFX = CgsDev::PerfMonGpu::AddMonitor("PostFX", lGpuMonitorColour, 9.0f);
-    mGpuMonitors.miIm3dAndRacePositions = CgsDev::PerfMonGpu::AddMonitor("Im3dAndRacePositions", lGpuMonitorColour, 1.0f);
-    mGpuMonitors.miMenusAndHud = CgsDev::PerfMonGpu::AddMonitor("MenusAndHud", lGpuMonitorColour, 3.0f);
-    mGpuMonitors.miDebug3d = CgsDev::PerfMonGpu::AddMonitor("Debug3d", lGpuMonitorColour, 0.0f);
-    mGpuMonitors.miDebug2d = CgsDev::PerfMonGpu::AddMonitor("Debug2d", lGpuMonitorColour, 0.0f);
+    mePrepareStage = eRendererPrepareStart;
+    mbIsInterlaced = false;
+    mfAspectCorrection = 1.0f;
+    meReleaseStage = eRendererReleaseDone;
+    mDisplayType = renderengine::Device::Parameters::DISPLAYTYPE_HDTV_720P;
+    renderengine::Device::Parameters parameters;
+    parameters.Initialize(4);
+    mu16FrontBufferHeight = static_cast<u16>(parameters.GetFrontBufferHeight());
+    mbIsHD = mu16FrontBufferHeight >= 720;
+    aspectRatio = 16.0f / 9.0f;
+    XVIDEO_MODE videoMode;
+    XGetVideoMode(&videoMode);
+    highDefinition = videoMode.fIsHiDef != FALSE;
+    rw::math::fpu::Matrix33Template<float> correction =
+        { 1.0f, 0.0f, 0.0f, 0.0f, mfAspectCorrection, 0.0f, 0.0f, 0.0f, 1.0f };
+    CgsGraphics::Im2dTransform::SetAspectCorrectionMatrix(correction);
+    mAllocatedRenderTargets.Construct(parameters, mpGraphicsAllocator, mbMultisampledBackbuffer);
 
+    mDoubleBufferedDispatchFrame.SetNumDispatchFrames(2);
+    mDoubleBufferedDispatchFrame.Construct(13, KU32_SIZEOFDISPATCHBIN_DOUBLEBUFFERED, mpGraphicsAllocator);
+    mSingleBufferedDispatchFrame.Construct(25, KU32_SIZEOFDISPATCHBIN_SINGLEBUFFERED, mpGraphicsAllocator);
+    renderengine::StateHelper::Initialize();
+    mBlendStateFactory.Construct(mpGraphicsAllocator);
+    mRasterizerStateFactory.Construct(mpGraphicsAllocator);
+    mDepthStencilStateFactory.Construct(mpGraphicsAllocator);
+    CgsGraphics::SetupBuiltinInterpreters(maInterpretFunctions);
+    mpInterpreter = new CgsGraphics::DispatchPacketInterpreter(maInterpretFunctions, 4);
+
+    mIm2dRenderer.Construct(mpGraphicsAllocator);
+    mIm2dRendererUntex.Construct(mpGraphicsAllocator);
+    mIm3dRenderer.Construct(mpGraphicsAllocator);
+    mIm3dRendererUntex.Construct(mpGraphicsAllocator);
+    mIm3dRendererSkyDome.Construct(mpGraphicsAllocator);
+    mIm3dRendererZOnly.Construct(mpGraphicsAllocator);
     mIm2dRenderBuffer.Construct();
-    mIm2dDebugRenderBuffer.Construct();
     mIm3dRenderBuffer.Construct();
     mIm3dRenderBufferUntex.Construct();
     mIm3dDebugRenderBuffer.Construct();
+    mIm2dDebugRenderBuffer.Construct();
     mIm3dBufferRacePosition.Construct();
     mIm3dBufferMenusAndHud.Construct();
-    // Double-buffered per-frame shader constants (maShaderConstantsFrames[2]).
-    // ⭐ THE REUSABLE LOADING-SCREEN ALLOCATOR, 2026-08-17 (boot audit F-P2-4/F-P6-12). The
-    // console owns this as an embedded member at renderer+0xC8FC and lends its address to the
-    // game module through RendererIO::OutputBuffer every GamePrepare pass; the loading flow
-    // FreeAll's it once per world drive and hands it to the world virtual. That whole
-    // mechanism -- renderer owns, renderer publishes, game latches, flow recycles -- is now
-    // real, which retires the invented file-static the world drive was using instead.
-    //
-    // [FLAG] the SIZE is still ours. The console's backing carve does not appear in Construct
-    // @0x8240A778 or Prepare @0x82409C20 (no LinearMalloc::Construct call in either), so it
-    // comes from the allocator layer this build does not have. 512 KiB is what the retired
-    // static used, kept so the swap changes ownership and not behaviour; re-source it with the
-    // renderer's real memory carve when the allocator gate lands.
-    static const size_t KN_LOADING_SCREEN_ALLOCATOR_SIZE = 512u * 1024u;
-    static u8 saLoadingScreenAllocatorBacking[KN_LOADING_SCREEN_ALLOCATOR_SIZE];
-    mReusableLoadingScreenAllocator.Construct();
-    mReusableLoadingScreenAllocator.Create(saLoadingScreenAllocatorBacking,
-                                           KN_LOADING_SCREEN_ALLOCATOR_SIZE);
+    mBlobbyShadowManager.Construct();
+    mpBlobbyShadowTexture = 0;
+    mCoronaManager.Construct(*allocator);
 
-    maShaderConstantsFrames[0].Construct();
-    maShaderConstantsFrames[1].Construct();
-    // ARTIST 8240A7E0..7FC: external1 starts writable, internal0 readable.
-    mu8ShaderConstantsFrameExternal = 1;
-    mu8ShaderConstantsFrameInternal = 0;
-    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].LockForWriting();
-    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].UnlockForWriting();
-    // ARTIST8240A800: original base initialization follows the two shader frames.
-    // The genuine new-module classification remains at the end of Construct.
-    CgsModule::ModuleSingleBuffered::Construct();
+    mCpuMonitors.Construct();
+    mGpuMonitors.Construct();
+    mGpuHwMonitors.Construct();
+    for (u32 i = 0; i != sizeof(kCpuMonitorDefinitions) / sizeof(kCpuMonitorDefinitions[0]); ++i)
+        mCpuMonitors.*kCpuMonitorDefinitions[i].member = CgsDev::PerfMonCpu::AddMonitor(
+            kCpuMonitorDefinitions[i].name, CgsDev::E_PMP_10, false,
+            kCpuMonitorDefinitions[i].budget, false);
+    const rw::RGBA white(255, 255, 255, 255);
+    for (u32 i = 0; i != sizeof(kGpuMonitorDefinitions) / sizeof(kGpuMonitorDefinitions[0]); ++i)
+        mGpuMonitors.*kGpuMonitorDefinitions[i].member = CgsDev::PerfMonGpu::AddMonitor(
+            kGpuMonitorDefinitions[i].name, white, kGpuMonitorDefinitions[i].budget);
+    // ARTIST8240B714..B780 resets the hardware monitor IDs after registration.
+    mGpuHwMonitors.miEnvMap = mGpuHwMonitors.miShadowMap = 0;
+    mGpuHwMonitors.miWorldOpaque = mGpuHwMonitors.miCarOpaque = 0;
+    mGpuHwMonitors.miWorldTransparent = mGpuHwMonitors.miCarTransparent = mGpuHwMonitors.miPostFX = 0;
+    miCpuPerfMonDispatchThread = globalMonitors.miDT_DispatchToGpu;
+    msPostFx.Construct(mpGraphicsAllocator);
 
-    // ARTIST 8240ACD0..ACDC: two empty blobby banks, internal0/external1.
-    mBlobbyShadowManager.maBuffers[0].miNumShadows = 0;
-    mBlobbyShadowManager.maBuffers[1].miNumShadows = 0;
-    mBlobbyShadowManager.mu8Internal = 0;
-    mBlobbyShadowManager.mu8External = 1;
-
-    // ---- The display class (X360 Construct @0x8240A778, right after the stage seeds) ----
-    //     renderengine::Device::Parameters::Initialize(&params, 4);   // 1280x720@60
-    //     mu16FrontBufferHeight = LOWORD(params.height);              // +0x234
-    //     mbIsHD                = mu16FrontBufferHeight >= 0x2D0;     // +0x236
-    //     XGetVideoMode(&mode); *lpbIsHiDefOut = mode.fIsHiDef != 0;  // -> GuiModule::Construct
-    // The console asks mode 4 for its OWN class and the TV for the GUI's; on this host the
-    // swap chain IS the display (renderengine::gDisplayWidth/Height -- the values device.cpp
-    // hands D3DPRESENT_PARAMETERS, config.ini-overridable), so both questions read the same
-    // extent. Until 2026-09-07 neither member left the ctor's `false`, which is one half of
-    // BurnoutDecomp/b5-decomp#11 (the GUI cache's HD byte was never written -- see
-    // BrnGameModule::Construct's GuiModule::Construct call for the other half).
-    {
-        const s32 liHeight = renderengine::gDisplayHeight;
-        mu16FrontBufferHeight = static_cast<u16>((liHeight > 0 && liHeight < 0x10000) ? liHeight : 0);
-        mbIsHD                = mu16FrontBufferHeight >= 0x2D0u;
-    }
-
-    // ---- the GAME-side named shader constants (X360 Construct, in this order) --
-    // Slots 0..7 belong to the engine and are registered by the table's own ctor
-    // (@0x827EDDC8); these 27 are the game set. The registration ORDER is the
-    // console's -- AddShaderConstant bumps mu8NumUsedConstants once per call, and
-    // the setters bounds-check the slot index against that COUNT, so the whole set
-    // has to be registered before the first SetShaderConstantData.
     CgsGraphics::mShaderConstantTable.AddShaderConstant( 8u, "ViewPosition",                 16);
     CgsGraphics::mShaderConstantTable.AddShaderConstant( 9u, "KeyLightColour",               16);
     CgsGraphics::mShaderConstantTable.AddShaderConstant(10u, "KeyLightDirection",            16);
@@ -938,229 +300,227 @@ void BrnRendererModule::Construct()
     CgsGraphics::mShaderConstantTable.AddShaderConstant(31u, "g_glassFractureUVOffsets",     16);
     CgsGraphics::mShaderConstantTable.AddShaderConstant(32u, "g_glassFractureFresnelRanges", 16);
 
-    // ---- The render-dispatch machinery (X360 Construct mid-section) ----------
-    // DispatchFrame::Construct(&this+768, 25, dword_82F24238, mpGraphicsAllocator)
-    // + SetupBuiltinInterpreters(&maInterpretFunctions) + the interpreter object.
-    // The GDL side (mDoubleBufferedDispatchFrame, this+680) is built through the
-    // real BufferedDispatchFrame with 2 slots so the game thread can fill the
-    // write frame while Render walks the read frame.
-    if (EnsureWorldDispatchAllocator())
-    {
-        CGS_ASSERT(lbIm2dReady, "mIm2dRenderBuffer.Prepare");
-        CGS_ASSERT(lbIm2dDebugReady, "mIm2dDebugRenderBuffer.Prepare");
-        CGS_ASSERT(lbAssertReady, "mIm2dAssertRenderBufferPC.Prepare");
-        // ARTIST Prepare82409C20: textured3D source vertex banks are32-byte
-        // records, including RacePosition's128KiB commands/vertices. MenusHud
-        // uses512 command bytes and static vertex runs (4-byte vertex bank).
-        CGS_ASSERT(lbIm3dReady, "mIm3dRenderBuffer.Prepare");
-        CGS_ASSERT(lbIm3dUntexReady, "mIm3dRenderBufferUntex.Prepare");
-        CGS_ASSERT(lbIm3dDebugReady, "mIm3dDebugRenderBuffer.Prepare");
-        CGS_ASSERT(lbRacePositionReady, "mIm3dBufferRacePosition.Prepare");
-        CGS_ASSERT(lbMenusHudReady, "mIm3dBufferMenusAndHud.Prepare");
-
-        mDoubleBufferedDispatchFrame.SetNumDispatchFrames(2);
-
-        CgsGraphics::SetupBuiltinInterpreters(maInterpretFunctions);
-        mpInterpreter = new CgsGraphics::DispatchPacketInterpreter(maInterpretFunctions, 4);
-        mpInterpreter->SetSingleBufferedDispatchFrame(&mSingleBufferedDispatchFrame);
-        mpInterpreter->SetTime(0.0f);
-    }
-
-    // ARTIST @8240BC94 constructs the renderer's debug-menu owner before the remaining managers.
+    mbUpdateThreadTakeScreenshot = false;
+    mbDispatchThreadTakeScreenshot = false;
+    mbCaptureOverlaysInScreenshot = false;
+    muScreenshotCounter = 1;
+    macScreenShotText[0] = 0;
+    mbShowEnvironmentMap = false;
+    mbShowShadowMap = false;
+    mbSortDisplayListsWideNotLong = false;
+    miShowShadowMapIndex = 0;
+    ConstructRenderSwitches();
+    mbOcclusionCullCarOpaque = false;
+    mbOcclusionCullWorldOpaque = true;
+    mbOcclusionCullCarTransparent = false;
+    mbOcclusionCullWorldTransparent = true;
+    mbOcclusionCullShadowMap = false;
+    mbPreZNearOnly = true;
+    mbRenderPreZAlpha = false;
+    mfPreZDistanceThreshold = 200.0f;
+    mfOccludeeNearClipOffset = 150.0f;
+    muOcclusionCullIndexCountThreshold = 32;
+    mbGreyBackgroundColour = true;
+    mfBlobbyShadowAlpha = 0.7f;
     mDebugComponent.Construct(this);
+    ClearDispatchCounters();
 
-    // ARTIST8240BD14..8240BD94: clamp U/V, retain the constructor's point
-    // filters and allocate the five-lane resource used by the preview's
-    // TextureState::Initialize. The existing native allocator owns its memory;
-    // no per-frame heap state or opaque one-byte Resource is used by the preview.
-    mTextureStateParams.muAddressU = mTextureStateParams.muAddressV = 2;
-    mTextureStateParams.muMagFilter = mTextureStateParams.muMinFilter = 0;
-    rw::ResourceDescriptor lTextureStateDescriptor;
-    renderengine::TextureState::GetResourceDescriptor(&lTextureStateDescriptor);
-    mTextureStateResource = BrnResource::Allocators::GetGlobalGraphicsAllocator()->DoAllocate(
-        lTextureStateDescriptor, 0);
-
-    // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
+    mTextureStateParams.muMagFilter = 0;
+    mTextureStateParams.muMinFilter = 0;
+    mTextureStateParams.muAddressU = 2;
+    mTextureStateParams.muAddressV = 2;
+    mTextureStateParams.mpTexture = mAllocatedRenderTargets.GetShadowMapBuffer(0)->GetDepthTexture();
+    rw::ResourceDescriptor descriptor;
+    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    mTextureStateResource = mpGraphicsAllocator->Allocate(descriptor, 0);
+    mpShadowMapTextureState[0] = renderengine::TextureState::Initialize(&mTextureStateResource, &mTextureStateParams);
+    mpShadowMapTextureState[1] = 0;
+    mEnvMapTextureStateParams.muMagFilter = 1;
+    mEnvMapTextureStateParams.muMinFilter = 1;
+    mEnvMapTextureStateParams.muMipFilter = 1;
+    mEnvMapTextureStateParams.muAddressU = 2;
+    mEnvMapTextureStateParams.muAddressV = 2;
+    mEnvMapTextureStateParams.muAddressW = 2;
+    mEnvMapTextureStateParams.mpTexture = mAllocatedRenderTargets.GetEnvMapBuffer()->GetTexture(0);
+    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    mEnvMapTextureStateResource = mpGraphicsAllocator->Allocate(descriptor, 0);
+    mpEnvMapTextureState = renderengine::TextureState::Initialize(&mEnvMapTextureStateResource, &mEnvMapTextureStateParams);
+    CgsGraphics::gTextureScopeTable.SetTexturePurposeData(CgsGraphics::E_TEXTURE_PURPOSE_SHADOW_MAP_0,
+        mAllocatedRenderTargets.GetShadowMapBuffer(0)->GetDepthTexture());
+    CgsGraphics::gTextureScopeTable.SetTexturePurposeTextureState(CgsGraphics::E_TEXTURE_PURPOSE_SHADOW_MAP_0, mpShadowMapTextureState[0]);
+    CgsGraphics::gTextureScopeTable.SetTexturePurposeData(CgsGraphics::E_TEXTURE_PURPOSE_ENVIRONMENT_MAP,
+        mAllocatedRenderTargets.GetEnvMapBuffer()->GetTexture(0));
+    CgsGraphics::gTextureScopeTable.SetTexturePurposeTextureState(CgsGraphics::E_TEXTURE_PURPOSE_ENVIRONMENT_MAP, mpEnvMapTextureState);
+    mpGlassFractureTextureState = 0;
+    D3DDevice_SetGammaRamp(::gpD3DDevice, 0, &kInitialGammaRamp);
+    mSkyDome.Construct();
+    mpCloudDensity0Texture = 0;
+    mpCloudLighting0Texture = 0;
+    mSunCorona.Construct(mpGraphicsAllocator);
     mShadowMapRenderManager.Construct(2);
-
-    // The loading-screen renderer (creates its textures + scratch buffer, picks language).
+    meFrameStallStage = E_FRAMESTALL_NOT_STALLED;
+    miFrameStallCountdown = 0;
+    mOcclusionCullManager.Construct(&mIm3dRendererUntex, &mIm3dRendererZOnly, mpGraphicsAllocator, 8192);
     mLoadingScreenRenderer.Construct();
-
-    // X360 Construct @0x8240BF74-0x8240BF88: `ld r11, qword_82FAFF20` (CgsResource::NULLResourceHandle)
-    // / `stdx r11, r31, 0xC920` -- the calibration ramp texture handle Render latches (see the
-    // composite call below) starts null. Follows LoadingScreenRenderer::Construct @0x8240BF70 as
-    // on the console.
     mCalibrationTextureHandle = CgsResource::NULLResourceHandle;
-
-    // ARTIST 8240BF90: classify the constructed renderer as a new-IO module.
-    // This is the original lifetime seed, not Prepare completion or allocator readiness.
+    MemoryUsage();
     mbIsNewModule = true;
 }
 
-// @0x82409C20. ARTIST's stage helper increments before checking the terminal state;
-// it returns the previous value, which each call site discards.
-bool BrnRendererModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+// ARTIST823FBDE0: sample all five resource lanes before any conditional log output.
+void BrnRendererModule::MemoryUsage()
 {
-    const auto AdvancePrepareStage = [this]()
-    {
-        mePrepareStage = static_cast<ERendererPrepareStage>(mePrepareStage + 1);
-        CGS_ASSERT(mePrepareStage <= eRendererPrepareDone,
-                   "leEnumIndex <= BrnRendererModule::eRendererPrepareDone");
-    };
+    const rw::Resource bases = mpGraphicsAllocator->GetLinearHeapBase();
+    const rw::ResourceDescriptor usage = mpGraphicsAllocator->GetCurrentUsage();
+    const rw::ResourceDescriptor capacity = mpGraphicsAllocator->GetCapacity();
+    const u32 mainStart = reinterpret_cast<u32>(bases.m_baseResources[0]);
+    const u32 physicalStart = reinterpret_cast<u32>(bases.m_baseResources[2]);
+    const u32 mainCapacity = capacity.m_baseResourceDescriptors[0].m_size;
+    const u32 physicalCapacity = capacity.m_baseResourceDescriptors[2].m_size;
+    const u32 mainUsage = usage.m_baseResourceDescriptors[0].m_size;
+    const u32 physicalUsage = usage.m_baseResourceDescriptors[2].m_size;
 
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "===================================================\n";
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "BrnRendererModule: Memory Usage ";
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "for XBox360\n";
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        CgsDev::StrStreamBase* const stream = CgsDev::Log::gpDebugPrint;
+        *stream << "Main Memory start address ";
+        CgsDev::StrStreamBase* chain = &(*stream << mainStart);
+        *chain << " end address: ";
+        chain = &(*chain << (mainStart + mainCapacity));
+        *chain << "\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        CgsDev::StrStreamBase* const stream = CgsDev::Log::gpDebugPrint;
+        *stream << "Main Memory total usage ";
+        CgsDev::StrStreamBase* chain = &(*stream << mainUsage);
+        *chain << "b out of ";
+        chain = &(*chain << mainCapacity);
+        *chain << "b so ";
+        chain = &(*chain << (mainCapacity - mainUsage));
+        *chain << "b free\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        CgsDev::StrStreamBase* const stream = CgsDev::Log::gpDebugPrint;
+        *stream << "Physical Memory start address ";
+        CgsDev::StrStreamBase* chain = &(*stream << physicalStart);
+        *chain << " end address: ";
+        chain = &(*chain << (physicalStart + physicalCapacity));
+        *chain << "\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        CgsDev::StrStreamBase* const stream = CgsDev::Log::gpDebugPrint;
+        *stream << "Physical Memory total usage ";
+        CgsDev::StrStreamBase* chain = &(*stream << physicalUsage);
+        *chain << "b out of ";
+        chain = &(*chain << physicalCapacity);
+        *chain << "b so ";
+        chain = &(*chain << (physicalCapacity - physicalUsage));
+        *chain << "b free\n";
+    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "======================================================\n";
+}
+
+// ARTIST82409C20. Failed manager preparation leaves its stage available to retry;
+// completion publishes release-start and prepares the original seven streams.
+bool BrnRendererModule::Prepare(const BrnResource::GameDataIO::AllocatorList* allocators)
+{
+    bool prepared = false;
     switch (mePrepareStage)
     {
     case eRendererPrepareStart:
-        AdvancePrepareStage();
-        [[fallthrough]];
+        mePrepareStage++;
     case eRendererPrepareManager:
         if (!CgsModule::ModuleSingleBuffered::Prepare())
-            return false;
-        AdvancePrepareStage();
-        [[fallthrough]];
+            break;
+        mePrepareStage++;
     case eRendererPrepareBlobbyShadows:
-        AdvancePrepareStage();
-        [[fallthrough]];
+        mePrepareStage++;
     case eRendererPrepareCoronas:
-        AdvancePrepareStage();
-        [[fallthrough]];
+        mePrepareStage++;
     case eRendererPrepareDone:
+        prepared = true;
         meReleaseStage = eRendererReleaseStart;
         break;
     default:
-        CGS_ASSERT(false, "Invalid Render Module Prepare State");
-        return false;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Invalid Render Module Prepare State",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1439);
+        CgsDev::Assert::EndAssert();
+        break;
     }
+    if (!prepared)
+        return false;
 
-    rw::core::GeneralResourceAllocator* const lpAllocator =
-        lpAllocatorList->GetRWGeneralResourceAllocator(31);
-
-    const bool lbIm2dPrepared = mIm2dRenderBuffer.Prepare(110592, 393216, lpAllocator, false);
-    CGS_ASSERT(lbIm2dPrepared,
-               "mIm2dRenderBuffer.Prepare( KI_IM2D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
-               "KI_IM2D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )");
-    const bool lbIm3dPrepared = mIm3dRenderBuffer.Prepare(1024, 0x8000, lpAllocator, false);
-    CGS_ASSERT(lbIm3dPrepared,
-               "mIm3dRenderBuffer.Prepare( KI_IM3D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
-               "KI_IM3D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )");
-    const bool lbIm3dUntexPrepared =
-        mIm3dRenderBufferUntex.Prepare(0x4000, 0x80000, lpAllocator, false);
-    CGS_ASSERT(lbIm3dUntexPrepared,
-               "mIm3dRenderBufferUntex.Prepare( KI_IM3D_RENDER_BUFFER_UNTEX_COMMAND_BUFFER_SIZE, "
-               "KI_IM3D_RENDER_BUFFER_UNTEX_VERTEX_BUFFER_SIZE, lpAllocator )");
-
-    CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
-               "Allocators::mpInternalDebugAllocator");
-    const bool lbIm3dDebugPrepared = mIm3dDebugRenderBuffer.Prepare(
-        0x100000, 0x100000, BrnResource::GetDebugAllocator(), true);
-    CGS_ASSERT(lbIm3dDebugPrepared,
-               "mIm3dDebugRenderBuffer.Prepare( KI_IM3D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
-               "KI_IM3D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )");
-
-    CGS_ASSERT(BrnResource::Allocators::mpInternalDebugAllocator,
-               "Allocators::mpInternalDebugAllocator");
-    const bool lbIm2dDebugPrepared = mIm2dDebugRenderBuffer.Prepare(
-        81920, 0x200000, BrnResource::GetDebugAllocator(), true);
-    CGS_ASSERT(lbIm2dDebugPrepared,
-               "mIm2dDebugRenderBuffer.Prepare( KI_IM2D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, "
-               "KI_IM2D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )");
-
-    const bool lbRacePositionPrepared =
-        mIm3dBufferRacePosition.Prepare(0x20000, 0x20000, lpAllocator, false);
-    CGS_ASSERT(lbRacePositionPrepared,
-               "mIm3dBufferRacePosition.Prepare( KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_COMMANDBUFFER_SIZE, "
-               "KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_VERTEXBUFFER_SIZE, lpAllocator )");
-    const bool lbMenusHudPrepared =
-        mIm3dBufferMenusAndHud.Prepare(512, 4, lpAllocator, false);
-    CGS_ASSERT(lbMenusHudPrepared,
-               "mIm3dBufferMenusAndHud.Prepare( KI_IM3D_RENDER_BUFFER_MENUSANDHUD_COMMANDBUFFER_SIZE, "
-               "KI_IM3D_RENDER_BUFFER_MENUSANDHUD_VERTEXBUFFER_SIZE, lpAllocator )");
-
-    mSkyDome.Prepare(&mIm3dRendererSkyDome,
-                     BrnResource::Allocators::GetGlobalGraphicsAllocator());
+    rw::IResourceAllocator* const allocator = allocators->GetRWGeneralResourceAllocator(31);
+    if (!mIm2dRenderBuffer.Prepare(110592, 393216, allocator, false))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mIm2dRenderBuffer.Prepare( KI_IM2D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, KI_IM2D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1456);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mIm3dRenderBuffer.Prepare(1024, 32768, allocator, false))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mIm3dRenderBuffer.Prepare( KI_IM3D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, KI_IM3D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1466);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mIm3dRenderBufferUntex.Prepare(16384, 524288, allocator, false))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mIm3dRenderBufferUntex.Prepare( KI_IM3D_RENDER_BUFFER_UNTEX_COMMAND_BUFFER_SIZE, KI_IM3D_RENDER_BUFFER_UNTEX_VERTEX_BUFFER_SIZE, lpAllocator )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1470);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mIm3dDebugRenderBuffer.Prepare(1048576, 1048576, BrnResource::GetDebugAllocator(), true))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mIm3dDebugRenderBuffer.Prepare( KI_IM3D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, KI_IM3D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1477);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mIm2dDebugRenderBuffer.Prepare(81920, 2097152, BrnResource::GetDebugAllocator(), true))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mIm2dDebugRenderBuffer.Prepare( KI_IM2D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, KI_IM2D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1482);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mIm3dBufferRacePosition.Prepare(131072, 131072, allocator, false))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mIm3dBufferRacePosition.Prepare( KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_COMMANDBUFFER_SIZE, KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_VERTEXBUFFER_SIZE, lpAllocator )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1488);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mIm3dBufferMenusAndHud.Prepare(512, 4, allocator, false))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mIm3dBufferMenusAndHud.Prepare( KI_IM3D_RENDER_BUFFER_MENUSANDHUD_COMMANDBUFFER_SIZE, KI_IM3D_RENDER_BUFFER_MENUSANDHUD_VERTEXBUFFER_SIZE, lpAllocator )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1492);
+        CgsDev::Assert::EndAssert();
+    }
+    mSkyDome.Prepare(&mIm3dRendererSkyDome, BrnResource::GetGraphicsAllocator());
     mDebugComponent.Register();
     MemoryUsage();
     return true;
 }
 
-// @ 0x82405E28 (BrnRendererModule::Update, the SetDispatchFrame expression)
-// The GDL frame the game side fills this update frame:
-//   v26 = (*(*(this + 680) + 28))(this + 680);   // vtable slot 7
-//   RendererIO::OutputBuffer::SetDispatchFrame(lpOutput, v26);
-// The full Update (camera copy, the fourteen other OutputBuffer publications,
-// the render-switch/effects-frame plumbing) lands with the renderer IO buffers;
-// this accessor is the one lane the world dispatch feed needs, named so the
-// renderer -> world bridge binds to a real seam instead of poking the member.
-CgsGraphics::DispatchFrame* BrnRendererModule::GetDispatchFrameForWrite()
+// ARTIST823FFE28: one syncing countdown precedes the stalled-buffer state.
+void BrnRendererModule::EndOfFrame(bool stalled)
 {
-    return &mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite();
-}
-
-// ARTIST 823FC160. A native presentation opens a write generation, but
-// only a completed command producer makes that generation publishable.
-void BrnRendererModule::StartOfFrame()
-{
-
-    if (mpInterpreter != 0)
-        mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
-
-    // Original seven write-buffer rewinds, in their original order.
-    mIm2dRenderBuffer.Clear();
-    mIm3dRenderBuffer.Clear();
-    mIm3dRenderBufferUntex.Clear();
-    mIm3dDebugRenderBuffer.Clear();
-    mIm2dDebugRenderBuffer.Clear();
-    mIm3dBufferRacePosition.Clear();
-    mIm3dBufferMenusAndHud.Clear();
-
-    if (mpInterpreter != 0)
-        CgsGraphics::mShaderConstantTable.BeginFrame(
-            &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
-    // ARTIST 823FC2D0..2F0 clears the cache word of all seven purposes.
-    for (auto& lrEntry : CgsGraphics::gTextureScopeTable.maEntries)
-        lrEntry.mClearState = 0;
-    mCoronaManager.Clear();
-}
-
-// ARTIST 823FC678. All original banks publish together; the native generation
-// check preserves their last immutable frame across extra host presentations.
-void BrnRendererModule::SwapBuffers()
-{
-
-    if (mpInterpreter != 0)
-    {
-        mDoubleBufferedDispatchFrame.Swap();
-    }
-    // The two ICF-folded EndFrame calls at 823FC6AC/B0 have empty bodies.
-    if (sbEffectsArbitratorConstructed)
-        mEffectsArbitrator.EndOfFrame();
-
-    mu8ShaderConstantsFrameInternal = mu8ShaderConstantsFrameExternal;
-    mu8ShaderConstantsFrameExternal = static_cast<u8>(1u - mu8ShaderConstantsFrameInternal);
-    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].Construct();
-    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].LockForWriting();
-    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].UnlockForWriting();
-
-    mIm2dRenderBuffer.Swap();
-    mIm3dRenderBuffer.Swap();
-    mIm3dRenderBufferUntex.Swap();
-    mIm3dDebugRenderBuffer.Swap();
-    mIm2dDebugRenderBuffer.Swap();
-    mIm3dBufferRacePosition.Swap();
-    mIm3dBufferMenusAndHud.Swap();
-
-    // Original inlined BrnBlobbyShadowManager::Swap, 823FC748..770.
-    mBlobbyShadowManager.mu8Internal = mBlobbyShadowManager.mu8External;
-    mBlobbyShadowManager.mu8External = static_cast<u8>(1u - mBlobbyShadowManager.mu8Internal);
-    mBlobbyShadowManager.maBuffers[mBlobbyShadowManager.mu8External].miNumShadows = 0;
-    mCoronaManager.Swap();
-}
-
-// ARTIST 823FFE28. This is the real resource-stall synchronisation path,
-// followed by the screenshot-request handoff; it is not a debug-camera freeze.
-void BrnRendererModule::EndOfFrame(bool lbStalled)
-{
-    if (lbStalled)
+    if (stalled)
     {
         if (meFrameStallStage == E_FRAMESTALL_NOT_STALLED)
         {
@@ -1174,3567 +534,26 @@ void BrnRendererModule::EndOfFrame(bool lbStalled)
         miFrameStallCountdown = 0;
     }
 
-    if (meFrameStallStage == E_FRAMESTALL_NOT_STALLED)
-        SwapBuffers();
-    else if (meFrameStallStage == E_FRAMESTALL_SYNCING_BUFFERS)
+    bool swap = false;
+    switch (meFrameStallStage)
     {
-        if (--miFrameStallCountdown == 0)
-        {
-            meFrameStallStage = E_FRAMESTALL_STALLED;
-            SwapBuffers();
-        }
-    }
-    else if (static_cast<u32>(meFrameStallStage) < 3u)
-    {
+    case E_FRAMESTALL_NOT_STALLED:
+        swap = true;
+        break;
+    case E_FRAMESTALL_SYNCING_BUFFERS:
+        miFrameStallCountdown = static_cast<s32>(static_cast<u32>(miFrameStallCountdown) - 1u);
+        if (miFrameStallCountdown != 0)
+            break;
+    case E_FRAMESTALL_STALLED:
         meFrameStallStage = E_FRAMESTALL_STALLED;
-        SwapBuffers();
+        swap = true;
+        break;
     }
-
+    if (swap)
+        SwapBuffers();
     if (mbUpdateThreadTakeScreenshot)
     {
         mbUpdateThreadTakeScreenshot = false;
         mbDispatchThreadTakeScreenshot = true;
     }
-}
-
-namespace
-{
-    // ARTIST 82FAEDD8/82FAEDD4/82FAEE00. The render owner publishes these before
-    // submission and does not reclaim the bin until every conversion has joined.
-    CgsGraphics::DispatchCommand* spObjectToMeshSharedMemory;
-    u32 suObjectToMeshSharedBlockMax;
-    CGS_ALIGN(128) u32 suObjectToMeshNextBlock;
-}
-
-// ARTIST 823F5670: copy the job record, clear the job, then set code/data/name.
-static void FillInObjectToMeshJobData(EA::Jobs::Job* lpOutJob,
-                                     ObjectToMeshJobInfo* lpOutJobData,
-                                     const ObjectToMeshJobInfo* lpInput)
-{
-    CGS_ASSERT(lpOutJobData != 0, "lpOutJobData");
-    CGS_ASSERT(lpOutJob != 0, "lpOutJob");
-    *lpOutJobData = *lpInput;
-    lpOutJob->Clear();
-    lpOutJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
-                      reinterpret_cast<const void*>(&ObjectToMeshEntry), 0);
-    lpOutJob->SetData(lpOutJobData, sizeof(*lpOutJobData));
-    lpOutJob->SetName("ObjectToMesh");
-}
-
-// ARTIST 823F5748. World input list11 is partitioned on complete 128-object
-// constant-refresh groups. Starting a worker at an arbitrary key loses inherited
-// constants; the four original partitions preserve those producer boundaries.
-void BrnRendererModule::CreateObjectToMeshJob(u32 luJobIndex,
-        const CgsGraphics::DispatchObjectContext* lpContext,
-        CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
-        u32 luInputList, s32 liGroupIndex, u32 luGroupSize)
-{
-}
-
-// ARTIST 823F5898. Both original switches82F2423C/D initialize to1. Keep the
-// serial fallback and dependency-chain controls for native comparisons.
-void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame* lpGdlFrames,
-                                               CgsGraphics::DispatchFrame* lpMeshFrame,
-                                               CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
-                                               const CgsGraphics::DispatchObjectContext* lpContext)
-{
-}
-
-// ARTIST 823F5EA0 / DecFIGS _FillInJobData(Job*,SortInfo*,DispatchList*).
-static void FillInSortJobData(EA::Jobs::Job* lpOutJob, SortInfo* lpOutJobData,
-                             CgsGraphics::DispatchList* lpDispatchList)
-{
-    lpDispatchList->PrepareSortJobInfo(&lpOutJobData->mInputOutputInfo);
-    CGS_ASSERT(lpOutJobData, "lpOutJobData");
-    CGS_ASSERT(lpOutJob, "lpOutJob");
-    const auto luAddress = reinterpret_cast<uintptr_t>(lpOutJobData->mInputOutputInfo.mpaFlatKeys);
-    lpOutJobData->mu64KeyInAddress = luAddress;
-    lpOutJobData->mu64KeyOutAddress = luAddress;
-    lpOutJobData->mu16Count = static_cast<u16>(lpOutJobData->mInputOutputInfo.muKeyCount);
-    lpOutJob->Clear();
-    lpOutJob->mEntryPoint.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
-        reinterpret_cast<const void*>(&RadixSortEntry), 0);
-    lpOutJob->SetData(lpOutJobData, sizeof(SortInfo));
-    lpOutJob->mEntryPoint.SetName("RadixSort");
-}
-
-// ARTIST 823F5F70 prepares sixteen jobs. Its default is the dependency chain;
-// the optional wide branch submits independent jobs. Native frame banks retain
-// their own descriptors until their consumers or a rebuild join them.
-
-// =============================================================================
-// @0x8240BFA8 (Render:545-640) - BrnRendererModule's SHADOW-MAP PASS.
-//
-// Three cascades, each one Begin/EndRenderShadowMap around a Z-only walk of its mesh
-// lists. The list-to-cascade map is the X360's, read straight off the unrolled body:
-//   cascade 0 -> GetList(0) then GetList(2)
-//   cascade 1 -> GetList(1) then GetList(3)
-//   cascade 2 -> GetList(4)
-// The console clears on every BeginRenderShadowMap (the literal 1 in each call) and hands
-// the manager &mAllocatedRenderTargets. The cascade count is not a variable on the console
-// either -- the body is written out three times.
-//
-// Each of the five lists joins its sort job before consumption. The front/back
-// helpers bracket the corresponding rasterizer state just as on the console.
-// =============================================================================
-void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext,
-    const BrnParticle::ParticleModule::ParticleRenderData* lpParticleData)
-{
-    using namespace CgsGraphics;
-
-    // The gate the console reads at Render:545 (*(this+50188)). Until this wave the switch was
-    // WRITTEN by ConstructRenderSwitches and never READ anywhere -- this is its first reader.
-    if (!mRenderSwitches.mbRenderShadows)
-        return;
-
-    // The cascade -> mesh-list map, as three explicit rows (the X360 body is unrolled the same
-    // way). -1 = the cascade has no second list.
-    static const s32 KAI_CASCADE_LISTS[3][2] = { { 0, 2 }, { 1, 3 }, { 4, -1 } };
-
-    // Nothing to draw: with no shadow-caster records the whole pass is a target bind, a clear and
-    // a resolve of an empty depth buffer. The console pays that every frame; this build skips it
-    // so that a boot with no world data leaves the device exactly as it found it (the same
-    // data-gating the world passes below use).
-    u32 lauCascadeCounts[3] = { 0u, 0u, 0u };
-    u32 luTotalShadowRecords = 0u;
-    for (s32 liCascade = 0; liCascade < 3; ++liCascade)
-    {
-        for (s32 liSlot = 0; liSlot < 2; ++liSlot)
-        {
-            const s32 liList = KAI_CASCADE_LISTS[liCascade][liSlot];
-            if (liList < 0)
-                continue;
-        }
-        luTotalShadowRecords += lauCascadeCounts[liCascade];
-    }
-
-#if !BRN_SHADOW_MAP_TARGET_AVAILABLE
-    // No shadow-map render target exists on this build (see the gate banner at the top of this
-    // file). Returning HERE -- after the diagnostic, before the target bind -- is deliberate:
-    // dispatching the cascades with no shadow target bound would draw every caster straight into
-    // the back buffer, which is far worse than rendering no shadows at all.
-    return;
-#else
-
-    // Pass stats, the same way the world block below accumulates its four (the raw totals feed
-    // the debug HUD; mu32NumShadowObjects is the 60-frame average the console derives from them,
-    // and is left to the averaging pass that owns the other four).
-    mu32NumShadowObjectTotals += luTotalShadowRecords;
-
-    u32       lauCascadeDrawCalls[3] = { 0u, 0u, 0u };
-
-    for (s32 liCascade = 0; liCascade < 3; ++liCascade)
-    {
-        mShadowMapRenderManager.BeginRenderShadowMap(liCascade, /*lbClear*/ true,
-                                                     &mAllocatedRenderTargets);
-
-        for (s32 liSlot = 0; liSlot < 2; ++liSlot)
-        {
-            const s32 liList = KAI_CASCADE_LISTS[liCascade][liSlot];
-            if (liList < 0)
-                continue;
-
-            // ARTIST Render @8240C84C..CB0C brackets lists 0/1/4 with the Front helpers
-            // and 2/3 with the Back helpers. The manager flag selects the locked group.
-            if (liSlot == 0)
-                mShadowMapRenderManager.BeginFrontFaceCullRender();
-            else
-                mShadowMapRenderManager.BeginBackFaceCullRender();
-
-            if (liSlot == 0)
-                mShadowMapRenderManager.EndFrontFaceCullRender();
-            else
-                mShadowMapRenderManager.EndBackFaceCullRender();
-        }
-
-        mShadowMapRenderManager.EndRenderShadowMap(liCascade, &mAllocatedRenderTargets);
-    }
-
-#endif  // BRN_SHADOW_MAP_TARGET_AVAILABLE
-}
-
-#if BRN_ENVMAP_PASS_AVAILABLE
-// =================================================================================================
-// THE ENVIRONMENT-MAP FACE BRACKET -- BeginRenderEnvironmentMapFace @0x823F63E0 /
-// EndRenderEnvironmentMapFace @0x823FC5E8.
-//
-// Both were ledger-`reviewed` and ABSENT from this tree until this wave -- the fourth subsystem in
-// which that has been true, so the status is worth nothing and the asm is worth everything.
-//
-// WHAT Begin DOES, in the asm's order (0x823F63E0-0x823F65AC):
-//   1. the two asserts, whose strings ARE the accessor's name (see BrnRendererMemory.h);
-//   2. GetEnvMapBuffer()->SetRenderTargetStateInvertDepth(luFace) -- bind the target's section-0
-//      surface state and set a viewport whose depth range is INVERTED, MinZ=1 / MaxZ=0
-//      (CgsRenderTarget.cpp:336, already in the tree). The face argument is deliberately ignored by
-//      that body, faithfully: on the Xenos every face renders into the SAME EDRAM tile and the face
-//      only selects the RESOLVE destination, which is End's job;
-//   3. ONE combined clear, `sub_82B61E18(&colour, &clearParams, 4)`.
-//   4. the three cached render-state applies.
-//
-// (3) DECODED, value by value, with the displacement each constant is addressed at -- this file
-// already pays for the lesson that a .rdata block runs past its symbol (see the bracket constants
-// further down):
-//   colour.rgb = lfWhiteLevel * flt_82004740 (`lfs f0, flt_82004740@l(r11)` @0x823F6494, `fmuls f0,
-//     f31, f0` @0x823F649C, stored three times @0x823F64A0/A4/AC). flt_82004740 +0x00 is ALREADY
-//     attested in this file as 0.300000012f -- it is KF_BACKGROUND_COLOUR_GREY, the grey-background
-//     channel BeginRenderAntiAliased loads from the same displacement. The env-map face therefore
-//     clears to 30% of the frame's white level in all three channels: a mid-grey stand-in for the
-//     sky wherever neither the world nor the dome covers a texel.
-//   colour.a   = flt_82001CC0 (`stfs f13, ...var_54` @0x823F64B8) == 0.0f, attested in this file
-//     as KF_QUARTER_RES_CLEAR_COMPONENT.
-//   clearParams = { flags 0x30, depth, stencil 0 }: `li r11, 0x30 / stw r11, var_70` @0x823F63F0-
-//     0x823F6404 and `stw r28(0), var_68` @0x823F6410. 0x30 is the XENON D3DCLEAR mask
-//     ZBUFFER(0x10) | STENCIL(0x20) -- the same word, with the same meaning, that the shadow pass
-//     already builds (ShadowPass.h's ClearDepthStencilParameters banner).
-//   depth      = 0.0f, AND THE TWO-STEP IS THE PROOF: the console stores flt_82001C98 == 1.0f into
-//     var_6C at 0x823F6420 -- before the asserts, i.e. the struct's default construction, which is
-//     exactly what the shadow pass's own {0x30, 1.0f, 0} block is -- and then OVERWRITES it with
-//     flt_82001CC0 == 0.0f at 0x823F64C0, immediately before the call. So the value that reaches
-//     the device is 0.0, and the override is the whole point: under the INVERTED depth range set one
-//     step earlier, 0.0 is the FAR plane. Clearing to 1.0 here would clear the face to the NEAR
-//     plane and reject every triangle. The reconstruction writes the settled value once and records
-//     the two-step here rather than replaying a store that is immediately dead.
-//   the `4`    = renderengine::E_TARGETID_COLOUR_ALL, which the helper turns into `flags |= 0xF`
-//     (all four Xenon colour targets). Combined with the 0x30 already in the word, one call clears
-//     colour + depth + stencil. (device.h's ETargetId banner establishes that on X360 the value 4
-//     means ALL COLOUR TARGETS and NOT depth/stencil -- the PS3 DWARF numbers this enum differently
-//     and importing its numbering would turn this into a depth-only clear.)
-//
-// (4) DECODED. The tail is three copies of one pattern:
-//     `v = <a state global>; if (!<its lock byte> && <the shadow slot> != v) { <apply>; <shadow> = v; }`
-// which is character for character shadow::Device::SetState(const DepthStencilState*) @0x82276AD0,
-// (const RasterizerState*) @0x82276B38 and (const BlendMaterialState*) @0x82276A68 -- all three
-// already reconstructed in shadowingdevice.cpp with those exact gates and shadows. The X360
-// compiler INLINED them here, which is why the pseudocode shows the raw globals; un-inlining them
-// is the reconstruction rule, and the DecFIGS DWARF independently confirms it -- BrnGraphicsUnity.cpp
-// :4633 lists this function's body as `ClearDepthStencilParameters lClearZbuffer;` followed by
-// exactly three `shadow::Device::SetState(...)` calls.
-//   dword_8301091C = CgsDepthStencilStateFactory::saDepthStencilStates[4]
-//                    == E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON (CgsDepthStencilStateFactory.h:93)
-//                    -- Z on, Z func GREATER-EQUAL, Z write on. GREATER-EQUAL is the INVERTED-depth
-//                    test, and it is the one state in the whole five-slot table that is: the pass
-//                    clears depth to 0.0 and keeps whatever is nearer, i.e. larger. The clear value,
-//                    the viewport inversion and this slot are three independent witnesses to the same
-//                    fact, which is why none of them is a guess.
-//   dword_83010A3C = CgsRasterizerStateFactory::saRasterizerStates[1]
-//                    == E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT (CgsRasterizerStateFactory.h:148)
-//   dword_83010F70 = CgsBlendStateFactory::saBlendStates[0]
-//                    == E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA (CgsBlendStateFactory.h:148)
-// and the three gate bytes (mbDepthStencilStateLocked, mbRasteriserStateLocked, byte_83010907 ==
-// mbBlendStateLocked) plus the three shadow slots (dword_83010A28 / dword_83010A2C / dword_83010964)
-// are the setters' OWN state, which is why nothing here reads or writes them: calling the setter is
-// how the console's stores happen.
-//
-// ⚠ WHY THIS DOES NOT COPY THE SHADOW PASS'S TAIL. BrnGraphics::ShadowMapRenderManager::
-// BeginRenderShadowMap ends with `ImDeviceSetDepthStencilState(gpShadowDepthStencilState)` -- ONE
-// state, through ImRendererBase::SetState @0x82276AD0's immediate-mode spelling, and its slot is
-// saDepthStencilStates[0] (Z <= ). That is a DIFFERENT console call with a DIFFERENT argument; the
-// env-map face applies all three thirds and picks the GREATER-EQUAL slot. Reusing the shadow pass's
-// line here -- which the brief's "mirror what the tree's shadow pass does" could be read as asking
-// for -- would bind the wrong depth function and reject the whole face.
-// =================================================================================================
-void BrnRendererModule::BeginRenderEnvironmentMapFace(u32 luFace, f32 lfWhiteLevel)
-{
-    CgsRenderTarget* const lpEnvMapBuffer = mAllocatedRenderTargets.GetEnvMapBuffer();
-    CGS_ASSERT(lpEnvMapBuffer != 0, "mAllocatedRenderTargets.GetEnvMapBuffer()");
-    CGS_ASSERT(lpEnvMapBuffer != 0 && lpEnvMapBuffer->GetRenderTarget() != 0,
-               "mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()");
-
-    // Bind the cube target's surfaces + an INVERTED-depth viewport (see the banner).
-    lpEnvMapBuffer->SetRenderTargetStateInvertDepth(luFace);
-
-    renderengine::ClearColorParameters lClearColour;
-    lClearColour.mafColourRGBA[0] = lfWhiteLevel * KF_ENV_MAP_CLEAR_COLOUR_SCALE;
-    lClearColour.mafColourRGBA[1] = lClearColour.mafColourRGBA[0];
-    lClearColour.mafColourRGBA[2] = lClearColour.mafColourRGBA[0];
-    lClearColour.mafColourRGBA[3] = KF_ENV_MAP_CLEAR_ALPHA;
-
-    renderengine::ClearDepthStencilParameters lClearZbuffer;
-    lClearZbuffer.mu32Flags   = KU_XENON_CLEAR_ZBUFFER | KU_XENON_CLEAR_STENCIL;   // 0x30
-    lClearZbuffer.mfDepth     = KF_ENV_MAP_CLEAR_DEPTH;                            // 0.0 == FAR, inverted
-    lClearZbuffer.mu32Stencil = 0;
-    renderengine::Device::Clear(lClearColour, lClearZbuffer, renderengine::E_TARGETID_COLOUR_ALL);
-
-
-
-    // The three cached render-state applies (see the banner for each slot's identification).
-    shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
-                                 E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON));
-    shadow::Device::SetState(CgsBlendStateFactory::GetState(
-                                 E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
-}
-
-// @0x823FC5E8 -- resolve colour target 0 of the env-map render target into cube face luFace.
-// The console body is the two asserts (same strings, file lines 4204/4205) and one call:
-//     sub_823F9170(GetEnvMapBuffer()->GetRenderTarget() + 0x20, luFace)
-// rt+0x20 IS maColourTargets[0] on the 4-byte-pointer image (rwgpfxrendertarget.h's layout block:
-// mpSection0State at +0x1C, maColourTargets at +0x20), so the call is
-// `maColourTargets[0].Resolve(luFace)` -- the PER-FACE overload of Target::Resolve, whose other
-// xref is BrnGraphics::ShadowMapRenderManager::EndRenderShadowMap. The member is reached BY NAME
-// here; the +0x20 is documentation, and does not survive the x64 widening in any case.
-void BrnRendererModule::EndRenderEnvironmentMapFace(u32 luFace)
-{
-    CgsRenderTarget* const lpEnvMapBuffer = mAllocatedRenderTargets.GetEnvMapBuffer();
-    CGS_ASSERT(lpEnvMapBuffer != 0, "mAllocatedRenderTargets.GetEnvMapBuffer()");
-    CGS_ASSERT(lpEnvMapBuffer != 0 && lpEnvMapBuffer->GetRenderTarget() != 0,
-               "mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()");
-
-    lpEnvMapBuffer->GetRenderTarget()->maColourTargets[0].Resolve(luFace);
-}
-#endif  // BRN_ENVMAP_PASS_AVAILABLE
-
-#if BRN_ANTIALIAS_BRACKET_AVAILABLE
-
-#include "GameSource/Graphics/BrnAntiAliasTiling.h"  // BrnGraphics::KMSAA_TILING_PLAN / KNO_MSAA_TILING_PLAN (the recovered tile rects)
-#if BRN_GPU_PERFMON_AVAILABLE
-#include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"  // CgsDev::PerfMonGpu::Start/StopMonitor
-#endif
-
-// ================================================================================================
-// THE FRAME BRACKET -- BeginRenderAntiAliased @0x823FFA18 / ResolveMSAA @0x823FFBE0.
-//
-//
-//   BeginRenderAntiAliased -- HALF AND HALF. Console EDRAM machinery with no D3D9 counterpart:
-//     D3DDevice_BeginTiling + D3DDevice_SetPredication. Platform-neutral frame logic the PC build
-//     MUST execute: the background-colour maths, the mvBackgroundColour publish, and the section-0
-//     RenderTargetState bind -- that bind IS what makes the world pass render off-screen.
-//
-//   ResolveMSAA -- NOTHING in it is platform-neutral; every call it makes is the EDRAM copy-out
-//     0x300 colour resolve is the ONLY clear on the untiled path -- BeginRenderAntiAliased's untiled
-//     branch deliberately clears nothing at all.
-//
-// WHAT THAT MEANS FOR THE FOUR SHIMS, stated as answers rather than options:
-//   * D3DDevice_SetPredication and D3DDevice_EndTiling can be legitimately EMPTY on PC. With one
-//     pass over the whole surface there is no tile replay to select and no tiling pass to close
-//     (D3DDevice_Begin/EndConditionalRendering @XenonD3D9Shims.cpp:3123 are the existing precedent
-//     for a legitimately empty D3DDevice_* shim).
-//   * D3DDevice_BeginTiling CANNOT be empty. The console got TWO things out of it that nothing else
-//     in this function supplies: (1) the VIEWPORT + SCISSOR, which on the Xenos come from the tile
-//     rects -- BeginRenderAntiAliased issues no D3DDevice_SetViewportF / SetScissorRect anywhere
-//     (0x823FFA18-0x823FFBD8 contains neither call), so on PC the pass would inherit whatever
-//     viewport the shadow or env-map pass left; and (2) the colour/Z/stencil CLEAR.
-//     ⚠ (1) is INTERPRETATION from the documented Xenon tiling model, NOT recovered from this
-//     image; (2) is FACT, read off the three clear arguments at 0x823FFB44-0x823FFB54.
-//   * D3DDevice_Resolve CANNOT be empty either, for the clear in the paragraph above.
-//
-// (A) NO FORKED SYMBOLS. All four Xenos entry points are declared in their committed home,
-// pc/gcm/renderengine/Xbox2SurfaceShims.h, inside namespace renderengine -- D3DDevice_EndTiling and
-// D3DDevice_Resolve were already there (lines 34-42) and are CORRECTED in place to the ABI decoded
-// below; D3DDevice_BeginTiling and D3DDevice_SetPredication are genuinely new and are added beside
-// their siblings. Nothing is re-declared here. renderengine::gpD3DDevice comes from the same header
-// (line 45), so the local `namespace renderengine { extern void* gpD3DDevice; }` an earlier draft
-// carried is gone too.
-// ================================================================================================
-
-namespace
-{
-    // --- the bracket's recovered constants ------------------------------------------------------
-    // Every value below is matched to the DISPLACEMENT the assembly addresses. Each .rdata block in
-    // DATA_DUMP.md runs PAST its symbol into unrelated rodata (flt_82001CC0 +0x08 spells "Monitor ",
-    // flt_82004740 +0x08 spells "mpIceWra", flt_820473A4 +0x14 spells "kColourAndPo"), so a value
-    // taken from a block's first dword instead of its addressed displacement would be wrong.
-
-    // Grey-background channel: flt_82004740 +0x00 == 0x3E99999A == 0.300000012f, addressed by
-    // `lfs f0, flt_82004740@l(r11)` @0x823FFA44.
-    const f32 KF_BACKGROUND_COLOUR_GREY  = 0.3f;
-
-    // The normal background tint -- one displacement each into the flt_820473A4 block, matched to
-    // the store that consumes it:
-    //   flt_820473AC = block +0x08 = 0x3F3851EC = 0.720000029f -> RED   (lfs @0x823FFA70, stfs .x @0x823FFA7C)
-    //   flt_820473A8 = block +0x04 = 0x3F547AE1 = 0.829999983f -> GREEN (lfs @0x823FFA80, stfs .y @0x823FFA8C)
-    //   flt_820473A4 = block +0x00 = 0x3F63D70A = 0.889999986f -> BLUE  (lfs @0x823FFA90, stfs .z @0x823FFA98)
-    // R < G < B: it is a pale blue.
-    const f32 KF_BACKGROUND_COLOUR_RED   = 0.72f;
-    const f32 KF_BACKGROUND_COLOUR_GREEN = 0.83f;
-    const f32 KF_BACKGROUND_COLOUR_BLUE  = 0.89f;
-
-    // Alpha: flt_82001CC0 +0x00 == 0x00000000 == 0.0f (asm @0x823FFA5C / @0x823FFA9C). A DUMPED
-    // zero, read off a cited displacement -- not a placeholder standing in for an unknown.
-    const f32 KF_BACKGROUND_COLOUR_ALPHA = 0.0f;
-
-    // Every clear and resolve in the bracket clears Z to flt_82001C98 +0x00 == 0x3F800000 == 1.0f
-    // (`lfs f1, flt_82001C98@l(r10)` @0x823FFB54; `lfs f31, ...` @0x823FFC78 / @0x823FFDAC).
-    const f32 KF_CLEAR_Z = 1.0f;
-
-    // The HALF-PIXEL scale the console's own render targets compute their UV offset with.
-    // rw::graphics::postfx::RenderTarget::GetHalfPixelOffset @0x823FE668 builds
-    // (1.0f/width, 1.0f/height, 0, 0) -- `fdivs f12, f0, f12` / `fdivs f0, f0, f13` @0x823FE6D4/D8
-    // with f0 = flt_82001C98 = 1.0f -- and multiplies the whole vector by a splat of flt_82001DA0
-    // (`lvx128 v0` on the block whose word 0 is that constant, `vspltw v0, v0, 0` @0x823FE6AC/B4,
-    // then `vmulfp128 v0, v13, v0` @0x823FE6EC). BrnPostFx::Render @0x8240A468 inlines exactly the
-    // same sequence for the same purpose (@0x8240A574-0x8240A630).
-    //
-    // ⚠ flt_82001DA0 IS NOT IN scratch/postfx_wave1_dossiers/DATA_DUMP.md -- 0x82001DA0 needs to be
-    // added to the next dump. It is NOT a placeholder: the value is settled in-image, twice, by
-    // functions where a load from it is stored with no arithmetic in between and Hex-Rays renders
-    // the store as a literal --
-    //   BrnDirector::Camera::Utils::Looker::Parameters::Construct @0x821F8D80:
-    //     `lfs f0, flt_82001DA0@l(r10)` @0x821F8E28 -> `stfs f0, 0x40(r3)` @0x821F8E30 and
-    //     `stfs f0, 0x50(r3)` @0x821F8E34, pseudocode `*(result + 64) = 0.5;` / `*(result + 80) = 0.5;`
-    //   BrnDirector::Camera::BehaviourRig::Parameters::Construct @0x821F9680:
-    //     `lfs f10, flt_82001DA0@l(r11)` @0x821F96C8 -> `stfs f10, 0xEC(r3)` @0x821F96D0,
-    //     pseudocode `*(result + 236) = 0.5;`
-    // 0x40 == 64, 0x50 == 80, 0xEC == 236. Two unrelated functions, three stores, one value.
-    const f32 KF_HALF_PIXEL = 0.5f;
-
-    // The multisampled path always drives TWO EDRAM tiles. IMMEDIATE in both functions:
-    // `li r5, 2` @0x823FFB50 (BeginTiling's Count) and `cmplwi cr6, r31, 2` @0x823FFD2C (the resolve
-    // loop bound). Neither reads BrnGraphics::KMSAA_TILING_PLAN.mu32NumTiles, which happens to hold
-    // the same 2 -- the immediate is what the binary does and the immediate is what is reproduced.
-    const u32 KU_NUM_MSAA_TILES = 2u;
-
-    // Two predication bits per tile (`li r24, 3` @0x823FFC80, shifted by 2*tile via
-    // `slwi r11, r31, 1` + `slw r4, r24, r11` @0x823FFC84/8C).
-    const u32 KU_PREDICATION_BITS_PER_TILE = 3u;
-
-    // The two D3DRESOLVE_* masks, exactly as the X360 immediates (`li r4, 0x14` @0x823FFCDC /
-    // @0x823FFDCC and `li r4, 0x300` @0x823FFD18 / @0x823FFE08).
-    //
-    // VALUES, not off my decomposition:
-    //   0x04  = "the depth/stencil surface". PROVEN INSIDE THIS IMAGE:
-    //           renderengine::PixelBuffer::Xbox2ResolveTo @0x82B62300 does `ori r28, r28, 4`
-    //           (@0x82B62358) on exactly the branch where the surface kind is 1 == depth-stencil.
-    //   0x100 / 0x200 = the colour and depth/stencil CLEARS. SUPPORTED INSIDE THIS IMAGE: the 0x300
-    //           call is the one that passes a non-null clear colour (`addi r10, r1, var_70`
-    //           @0x823FFCF8) while the 0x14 call passes null (`li r10, 0` @0x823FFCC0). A resolve
-    //           that took no clear colour would have no use for one.
-    //   0x10  = FRAGMENT0 (take sample 0 rather than averaging, because depth samples cannot be
-    //           averaged). INTERPRETATION from the documented Xenon D3DRESOLVE_* set -- an external
-    //           platform API, NOT recovered from this image. Nothing below depends on it.
-    const u32 KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0 = 0x14u;
-    const u32 KU_RESOLVE_COLOUR_AND_CLEAR        = 0x300u;
-
-    // The Xenon D3DPOINT (destination corner) D3DDevice_Resolve takes: two dwords, x then y, built
-    // on the stack (`stw r10, var_80` / `stw r11, var_7C` @0x823FFCAC/B0 and the zero pair
-    // @0x823FFD7C/D84). TU-local on purpose, exactly like the ViewportF / ScissorRect argument
-    // blocks that CgsRenderTarget.cpp, BrnShadowMapRenderManager.cpp and rwgpfxrendertarget.cpp each
-    // keep file-local: it is a call-argument block, not a shared type. If a second TU ever needs it,
-    // it moves to Xbox2SurfaceShims.h beside the shim that consumes it -- it does not get copied.
-    struct XenonPoint
-    {
-        s32 miX;   // +0x00
-        s32 miY;   // +0x04
-    };
-
-    // The render-target-state bind BeginRenderAntiAliased performs in BOTH of its branches: take
-    // section 0's RenderTargetState off the target's post-fx render target and install it, skipping
-    // the device call when it is already the installed one.
-    //
-    // WHAT THIS IS, per the DWARF: BrnGraphicsUnity.cpp:4597 lists shadow::Device::SetState TWICE
-    // inside BeginRenderAntiAliased -- exactly the two inlined instances the X360 shows at
-    // 0x823FFB20-0x823FFB34 and 0x823FFBB4-0x823FFBC8. So the original operation is
-    // shadow::Device::SetState(const renderengine::RenderTargetState*). It has NO home in this tree:
-    // shadowingdevice.h declares only SetState(void*, u32 luSamplerId) (line 58). This function is a
-    // disclosed TU-LOCAL stand-in for that missing overload -- named for the operation rather than
-    // claiming the DWARF name at the wrong scope -- and it is written once instead of twice because
-    // AGENTS.md requires inlining reversal. DELETE it and call shadow::Device::SetState the day that
-    // overload lands (the proposal, with its four other open-coded copies, is in this task's notes).
-    //
-    // IT IS DELIBERATELY NOT CgsRenderTarget::SetRenderTargetState @0x827E7588, and the difference is
-    // itself part of the seam: that function ALSO sets the viewport and scissor to the target's full
-    // extent and falls back to postfx::gpDefaultRenderTargetState when the section state is null.
-    // BeginRenderAntiAliased does neither -- 0x823FFB08-0x823FFB34 contains no D3DDevice_SetViewportF,
-    // no D3DDevice_SetScissorRect and no null test -- because on the Xenos the viewport comes from the
-    // tile rects BeginTiling is handed. (The DWARF's PS3 body DOES call
-    // CgsRenderTarget::SetRenderTargetState; the X360 asm does not, and rung 1 arbitrates.)
-    //
-    // THE CACHE WORD IS X360 dword_83010A30 and it is reached at its ONE canonical host home,
-    // renderengine::gpLastRenderTargetState (declared ShadowPass.h:52, defined
-    // PostFxRenderTarget.cpp:463) -- the same variable CgsRenderTarget::SetRenderTargetState*
-    // and rw::graphics::postfx::RenderTarget::Begin read. No second copy is minted here. (There IS a
-    // pre-existing second host home for that word, shadow::Device::muMisc30, which has a WRITE and no
-    // readers; it is recorded as an open defect in REPORT.md and is deliberately NOT touched by this
-    // wave, because shadowingdevice.cpp is mounted and ResetShadowing runs per frame.)
-    //
-    // THE STORE IS INSIDE THE BRANCH, and that is faithful, not tidied: the asm's `stw r29,
-    // dword_83010A30` @0x823FFB34 sits AFTER the `beq` at 0x823FFB28, i.e. on the not-equal path
-    // only. This is the compare-and-SKIP shape, NOT the unconditional-write-back shape of the
-    // blend/depth/rasterizer cached-state setters elsewhere in this wave -- do not "harmonise" them.
-    void ShadowedSetRenderTargetState(CgsRenderTarget* lpTarget)
-    {
-
-        const renderengine::RenderTargetState* const lpState =
-            lpTarget->GetRenderTarget()->GetSectionRenderTargetState(0);
-        if (renderengine::gpLastRenderTargetState != lpState)
-        {
-            renderengine::Device::SetState(lpState);
-            renderengine::gpLastRenderTargetState = lpState;
-        }
-    }
-
-}
-
-// 0x823FFA18 -- open the frame's ANTI-ALIASED scene pass.
-//
-// Member identification (offset authority = the X360 asm; every member is reached BY NAME):
-//   this+0xC400 -> mbMultisampledBackbuffer      this+0xC434 -> mbGreyBackgroundColour
-//   this+0xC4D0 -> mvBackgroundColour (.x/.y/.z/.w at 0xC4D0/D4/D8/DC)
-//   this+0xC9C4 -> mGpuMonitors.miScreenClear    this+0x238  -> mapRenderTarget[0] (GetAntiAliasBuffer())
-// The three flag/vector offsets are pinned by walking the committed header's member order from
-// 0xC400 (four flag bytes + s32 + f32 + the 6-byte RenderSwitches + 19 bools + 3 dwords lands
-// mbGreyBackgroundColour at exactly 0xC434; continuing through the counters, macScreenShotText[32]
-// and the four 16-byte light Vector3s lands mvBackgroundColour at exactly 0xC4D0), and PrepareAgain's
-// already-committed note (BrnRendererModule.h:392) corroborates from the other side by putting the
-// two cloud textures at 0xC4E0 / 0xC4E4, i.e. immediately after that Vector4.
-// The monitor is pinned arithmetically: `addis r31, r31, 1; addi r31, r31, -0x363C` @0x823FFB64/68
-// gives +0xC9C4, ResolveMSAA's gives +0xC9E4, and 0x20 == 8 dwords == BrnGpuMonitors index 0 ->
-// index 8, which the committed header spells miScreenClear (line 264) -> miDownsampleMSAAAndCompParticles
-// (line 272) with exactly eight members between them.
-void BrnRendererModule::BeginRenderAntiAliased(f32 lfWhiteLevel, bool lbClearStencil,
-                                               u8 luStencilClearValue)
-{
-    // lbClearStencil is NOT read by the X360 body: nothing in 0x823FFA18-0x823FFBD8 touches r5, and
-    // the only appearance of r5 in the whole listing is `li r5, 2` -- an OUTGOING argument. On this
-    // platform the clear rides inside the tiling pass, which clears colour + Z + stencil and takes
-    // the stencil value unconditionally. The flag gates a stencil clear on the PS3/GCM path only,
-    // which the DWARF body hint shows as ClearDepthStencilParameters::SetStencil inside a
-    // ClearColorParameters / ClearDepthStencilParameters block the X360 does not have. Reproduced as
-    // unused, never repurposed.
-    (void)lbClearStencil;
-
-    // This frame's background colour, scaled by the white level. Grey mode drives all three channels
-    // off one constant; otherwise it is the pale-blue tint. Alpha is always 0. (DWARF: the first of
-    // the two rw::math::vpu::Vector4::Set calls it lists.)
-    //
-    // WRITTEN BY LANE, not through a setter, and that is a PC-vocabulary fact rather than a change
-    // of behaviour: this tree's rw::math::vpu::Vector4 (vendor rw/math/vpu/types.h:26) is the
-    // portable reconstruction of the console's single 16-byte VectorIntrinsic -- an alignas(16) POD
-    // of four named floats x/y/z/w whose ONLY member function is SetZero(). The SDK's SIMD
-    // Set/GetX..GetW live in the rwmath *_operation headers, which that vendor header's own banner
-    // says are deliberately not reproduced ("The SIMD operations live in the SDK's *_operation
-    // headers and are not reproduced here"). Same four lanes, same order, same alignment; the
-    // console's `stvx128 v0, r0, r11` @0x823FFAC4 is one 16-byte store either way.
-    if (mbGreyBackgroundColour)
-    {
-        const f32 lfGrey = lfWhiteLevel * KF_BACKGROUND_COLOUR_GREY;
-        {
-            const Vector4 lAggregateValue = { lfGrey, lfGrey, lfGrey, KF_BACKGROUND_COLOUR_ALPHA };
-            mvBackgroundColour = lAggregateValue;
-        }
-    }
-    else
-    {
-        {
-            const Vector4 lAggregateValue = { lfWhiteLevel * KF_BACKGROUND_COLOUR_RED,
-                                      lfWhiteLevel * KF_BACKGROUND_COLOUR_GREEN,
-                                      lfWhiteLevel * KF_BACKGROUND_COLOUR_BLUE,
-                                      KF_BACKGROUND_COLOUR_ALPHA };
-            mvBackgroundColour = lAggregateValue;
-        }
-    }
-
-    // ...then read straight back OUT of the member into the D3DVECTOR4 the clear consumes. This is
-    // the DWARF's SECOND rw::math::vpu::Vector4::Set, and the asm shows why the pair is not
-    // redundant: the branches above build four floats in the stack block var_40..var_34, publish
-    // them to mvBackgroundColour with one `stvx128 v0, r0, r11` @0x823FFAC4 (r11 = this+0xC4D0), and
-    // then reload the four floats back into the SAME stack block component by component
-    // (@0x823FFACC-0x823FFAFC, from 0xC4D0/D4/D8/DC), whose address is what BeginTiling is handed
-    // (`addi r7, r1, var_40` @0x823FFB48). Modelled as a real rw::math::vpu::Vector4 rather than a
-    // bare float[4]: Vector4 owns a single alignas(16) four-lane VectorIntrinsic, so &lvClearColour
-    // is the same four contiguous x/y/z/w floats the console passes, with no invented struct.
-    // Written and read BY LANE for the reason given at the publish above: this tree's Vector4 has
-    // x/y/z/w and SetZero() and nothing else.
-    const Vector4 lvClearColour = { mvBackgroundColour.x, mvBackgroundColour.y,
-                                    mvBackgroundColour.z, mvBackgroundColour.w };
-
-    if (mbMultisampledBackbuffer)
-    {
-        void* const lpDevice = renderengine::gpD3DDevice;
-
-        // Bind the anti-alias buffer's surfaces BEFORE opening the tiling pass (asm order:
-        // 0x823FFB08-0x823FFB34, then the BeginTiling call).
-        ShadowedSetRenderTargetState(mAllocatedRenderTargets.GetAntiAliasBuffer());
-
-        // ...then open the predicated-tiling pass over the two EDRAM tiles, clearing to the
-        // background colour / Z 1.0 / the caller's stencil value. The rect list is the MSAA tiling
-        // plan's rectangle array -- `addi r6, r11, (unk_8203E088 - 0x8203E080)` @0x823FFB4C, i.e.
-        // &KMSAA_TILING_PLAN.maTile[0], the +0x08 rectangle array of the 0x48-byte record. That
-        // record already has a home: GameSource/Graphics/BrnAntiAliasTiling.h, landed by the pool
-        // wave, which recovered both plans byte-exact AND names these two functions as its readers.
-        // The stencil byte is zero-extended into the DWORD parameter (`clrlwi r9, r27, 24`
-        // @0x823FFB44).
-        const auto lPlan = BrnGraphics::ScaleTilingPlan(BrnGraphics::KMSAA_TILING_PLAN,
-            mAllocatedRenderTargets.GetAntiAliasBuffer()->GetWidth(),
-            mAllocatedRenderTargets.GetAntiAliasBuffer()->GetHeight());
-        renderengine::D3DDevice_BeginTiling(lpDevice, 0u, KU_NUM_MSAA_TILES,
-                                            lPlan.maTile,
-                                            &lvClearColour, KF_CLEAR_Z, luStencilClearValue);
-
-        // The screen-clear GPU monitor brackets the predication RESET only -- the clear itself rode
-        // inside the tiling pass opened above. BeginTiling turns predication on for the tile it
-        // opens; clearing the mask submits every following draw to every tile, so the game does not
-        // predicate its GEOMETRY, only its resolves (see ResolveMSAA).
-#if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miScreenClear);
-#endif
-        renderengine::D3DDevice_SetPredication(lpDevice, 0u);
-#if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miScreenClear);
-#endif
-    }
-    else
-    {
-        // Untiled: there is NO clear here at all, and the device pointer is never even loaded (the
-        // untiled branch 0x823FFB90-0x823FFBD8 contains no reference to off_83271608). The previous
-        // frame's ResolveMSAA already left both EDRAM surfaces cleared -- its colour resolve carries
-        // the 0x300 mask -- so opening the pass is just the bind. Note the monitor order flips
-        // relative to the tiled branch: StartMonitor comes FIRST here (@0x823FFB9C, before the bind
-        // at 0x823FFBA0-0x823FFBC8), which is why the bind cannot be hoisted out of the if.
-#if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miScreenClear);
-#endif
-        ShadowedSetRenderTargetState(mAllocatedRenderTargets.GetAntiAliasBuffer());
-#if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miScreenClear);
-#endif
-    }
-
-    // [DIAG] THE WORLD PASS'S SURFACE PAIR, at the moment the bracket opens it. This is the
-    // reference the trail pass (BrnTrailSystem.cpp) and the resolve are compared against; on its
-    // own it says nothing. See BrnDiagBoundSurfaces.h. DELETE-WHEN-STABLE.
-}
-
-// 0x823FFBE0 -- resolve the anti-aliased scene out of EDRAM into the down-sample buffer.
-//
-// ================================================================================================
-// THE ABI DECODE, RESTATED. My previous submission got the argument MAPPING right and the
-// JUSTIFICATION wrong: it called the two stack-spilled Resolve arguments "slots 8 and 9 of an area
-// based at r1+0x18", which reads as ClearZ's own positional slot plus one. Here is the honest
-// derivation, which is stronger than what it replaced because every step is attested more than once.
-//
-// STEP 1 -- THE OUTGOING-PARAMETER AREA IS ANCHORED AT r1+0x18 WITH EIGHT 8-BYTE GPR HOMES, so the
-// first overflow slot is 0x58 and the second 0x60. Proven WITHOUT reference to any other function,
-// by frame-size invariance across four attested call sites with four different frames:
-//     rw::graphics::postfx::Target::Resolve       @0x823F9118  frame 0x70  `stw r5, 0x70+var_14` -> 0x5C
-//     rw::graphics::postfx::RenderTarget::Resolve @0x823F9338  frame 0x80  `stw r5, 0x80+var_24` -> 0x5C
-//     renderengine::PixelBuffer::Xbox2ResolveTo   @0x82B62300  frame 0xE0  -> 0x5C and 0x64
-//     BrnRendererModule::ResolveMSAA              @0x823FFBE0  frame 0xF0  -> 0x5C and 0x64
-// Four frame sizes, one pair of absolute offsets. Only a fixed base can do that. (It also matches
-// the independent homing evidence in BrnRendererMemory::Construct @0x823FCA44-0x823FCA6C, where
-// `std r4..r10` lands at 0x20/0x28/.../0x50 -- stride 8 from a base of 0x18.) The stores are at 0x5C
-// and 0x64 rather than 0x58 and 0x60 because a 32-bit `stw` into a big-endian 8-byte slot is
-// right-justified at slot+4 -- the same convention Construct reads back with `arg_8C` = 0x88+4 for a
-// word and `arg_97` = 0x90+7 for a byte.
-//
-// STEP 2 -- WITHIN r3-r10, A FLOAT ARGUMENT CONSUMES ITS POSITIONAL GPR AND LEAVES IT UNWRITTEN.
-// D3DDevice_EndTiling settles this and needs no interpretation: at both attested call sites r8 is
-// never written in the call block (here it still holds the stale 0xC4DC displacement from
-// @0x823FFC14; in Xbox2ResolveTo likewise), ClearZ rides f1, and the argument AFTER ClearZ lands in
-// r9. So EndTiling is (pDevice, ResolveFlags, pResolveRects, pDestTexture, pClearColor, ClearZ,
-// ClearStencil, pParameters) -- eight arguments, r10 = pParameters = 0 at both sites. IDA's own
-// "pParameters" comment on r9 @0x823FFD44 is therefore off by one, which is what my previous
-// submission said and remains true.
-//
-// STEP 3 -- PAST r10, AN FPR-PASSED ARGUMENT RESERVES NO STACK SLOT; the remaining arguments pack
-// from 0x58 upward. This is the correction, and the discriminating evidence is that both
-// postfx::Target::Resolve and postfx::RenderTarget::Resolve write their LAST argument at 0x5C, i.e.
-// into the FIRST overflow slot, while ClearZ (`lfs f1, flt_82001C98`) rides f1. Had ClearZ reserved
-// slot 0x58 the following argument would have gone to 0x60/0x64 instead. So for D3DDevice_Resolve:
-//     r3..r10 = args 1-8 (pDevice, Flags, pSourceRect, pDestTexture, pDestPoint, DestLevel,
-//               DestSliceOrFace, pClearColor)
-//     f1      = arg 9  ClearZ,        no stack slot
-//     0x58    = arg 10 ClearStencil   (written as a word at 0x5C)
-//     0x60    = arg 11 pParameters    (written as a word at 0x64, zero everywhere)
-// This is exactly the emitted argument order below; only the reasoning changed.
-//
-// STEP 4 -- THE VALUE CHAIN CONFIRMS THAT arg 10 AND EndTiling's r9 ARE THE SAME PARAMETER.
-// In Xbox2ResolveTo the ONE incoming value read from `arg_5C` is forwarded to EndTiling's r9
-// (@0x82B623A0) on one branch and stored to the Resolve call's 0x5C (@0x82B62444) on the other -- the
-// same value into both positions. In ResolveMSAA the stencil argument (r26) goes to exactly those two
-// places as well (`stw r26, 0x5C` @0x823FFCBC/@0x823FFCFC and `mr r9, r26` @0x823FFD44). Two
-// unrelated functions, the same pairing: EndTiling's r9 == Resolve's arg 10 == ClearStencil.
-// ================================================================================================
-//
-// PLATFORM-NEUTRAL half: none. Every call this function makes is EDRAM mechanics -- the resolve IS
-// the copy out of EDRAM, and on PC the scene target already is the texture the rest of the frame
-// samples. CONSOLE-ONLY half: all of it.
-// carries the 0x300 mask and a live clear colour, and on the untiled path it is the ONLY clear in the
-// whole bracket (BeginRenderAntiAliased's untiled branch clears nothing, deliberately). A PC shim
-// that no-ops Resolve outright must still clear colour to mvBackgroundColour and Z to 1.0, or nothing
-// ever clears the scene target.
-//
-// Member identification (offset authority = the X360 asm; reached BY NAME):
-//   this+0xC400 -> mbMultisampledBackbuffer   this+0xC4D0 -> mvBackgroundColour
-//   this+0xC9E4 -> mGpuMonitors.miDownsampleMSAAAndCompParticles (0x20 == 8 dwords past
-//                  miScreenClear, i.e. BrnGpuMonitors index 8, which the committed header spells
-//                  exactly eight members after index 0)
-//   this+0x248  -> mapRenderTarget[4] (GetDownSampleBuffer()). The base and the slot numbering are
-//                  corroborated from the other side by CreateBackBuffer, which reads
-//                  mapRenderTarget[4] and asserts "GetDownSampleBuffer() != NULL"; 0x248 - 0x238 =
-//                  0x10 = four slots past GetAntiAliasBuffer's slot 0.
-void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
-{
-    // lfWhiteLevel is NOT read by the X360 body. The white level was already baked into
-    // mvBackgroundColour by BeginRenderAntiAliased -- which is exactly what this function reads back
-    // -- and every ClearZ here is the constant 1.0f (flt_82001C98, loaded into f31 @0x823FFC78 /
-    // @0x823FFDAC and `fmr f1, f31`'d into place before each call, OVERWRITING the incoming f1).
-    // Reproduced as unused, never repurposed.
-    (void)lfWhiteLevel;
-
-    // The colour the resolve leaves the EDRAM colour surface at, ready for the next pass: this
-    // frame's background colour, read back component by component out of the member (the four `lfsx`
-    // from this+0xC4D0/D4/D8/DC @0x823FFC18-0x823FFC48 into the stack block var_70..var_64). Same
-    // rw::math::vpu::Vector4 modelling as BeginRenderAntiAliased, for the same reason: one
-    // alignas(16) four-lane VectorIntrinsic is the four contiguous x/y/z/w floats the console passes.
-    // Written and read BY LANE, exactly as in BeginRenderAntiAliased: this tree's Vector4 exposes
-    // x/y/z/w and SetZero() only.
-    const Vector4 lvClearColour = { mvBackgroundColour.x, mvBackgroundColour.y,
-                                    mvBackgroundColour.z, mvBackgroundColour.w };
-
-    void* const lpDevice = renderengine::gpD3DDevice;
-
-    // [DIAG] THE SURFACE PAIR THE RESOLVE IS ABOUT TO READ. Together with "world-begin" and
-    // "trail" this closes the identity question: a trail drawn into a surface this call does not
-    // read is a draw nothing ever presents. DELETE-WHEN-STABLE.
-
-    if (mbMultisampledBackbuffer)
-    {
-#if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
-#endif
-
-        for (u32 luTile = 0; luTile < KU_NUM_MSAA_TILES; ++luTile)
-        {
-            // Predicate the pair of resolves below so each executes only during its own tile's
-            // replay of the command stream (two predication bits per tile).
-            renderengine::D3DDevice_SetPredication(lpDevice,
-                                                   KU_PREDICATION_BITS_PER_TILE << (2u * luTile));
-
-            // The tile's screen rectangle, out of the MSAA tiling plan's rectangle array. The asm
-            // walks it as base + 16*tile + 8 (`slwi r11, r31, 4` / `add r11, r11, r25` /
-            // `addi r27, r11, 8` @0x823FFC94-0x823FFCA0, r25 = &unk_8203E080) -- i.e. maTile[tile] of
-            // the 0x48-byte record whose committed home is GameSource/Graphics/BrnAntiAliasTiling.h.
-            const BrnGraphics::AntiAliasTilingPlan::TileRect& lrTile =
-                BrnGraphics::ScaleTilingPlan(BrnGraphics::KMSAA_TILING_PLAN,
-                    mAllocatedRenderTargets.GetAntiAliasBuffer()->GetWidth(),
-                    mAllocatedRenderTargets.GetAntiAliasBuffer()->GetHeight()).maTile[luTile];
-
-            // Each tile lands back at its own screen position: the destination point is the tile
-            // rect's top-left corner. The asm reads the rect's FIRST TWO dwords -- `lwz r10, 8(r11)`
-            // and `lwz r11, 0xC(r11)` @0x823FFCA4/A8, i.e. maTile[tile].mu32Left / .mu32Top -- and
-            // stores them as the two-dword point @0x823FFCAC/B0.
-            const XenonPoint lDestPoint = { static_cast<s32>(lrTile.mu32Left),
-                                            static_cast<s32>(lrTile.mu32Top) };
-
-            // Depth/stencil first, fragment 0 only. pClearColor is NULL on this one (`li r10, 0`
-            // @0x823FFCC0) -- a depth resolve has no colour to clear to.
-            //
-            // ⚠ WHAT THIS PAIR-PER-TILE MEANS ON PC, stated here because the CALLER is what makes it
-            // load-bearing and the leaf is where it is handled (anti-aliasing wave, 2026-08-16).
-            // The console's per-tile depth resolve copies THAT TILE's EDRAM depth; the PC depth
-            // resolve is the D3D9 vendor "RESZ" mechanism, which resolves the WHOLE bound
-            // depth-stencil and CANNOT be rectangle-clamped. That is fine for tile 0 -- and only for
-            // tile 0. The 0x300 colour resolve immediately below carries D3DCLEAR_ZBUFFER over its
-            // own band, so by the time tile 1's depth resolve runs, rows 0..384 of the bound depth
-            // surface have ALREADY BEEN CLEARED TO Z=1, and repeating the whole-surface RESZ would
-            // overwrite the good copy with a half-cleared one. The down-sample buffer's INTZ would
-            // then hand the depth-of-field / motion-blur permutations a flat top band -- plausible
-            // enough on screen to be missed.
-            // THE RULE THE LEAF IMPLEMENTS (D3DDevice_Resolve, XenonD3D9Shims.cpp): perform the RESZ
-            // for the FIRST depth resolve of the bracket only -- discriminated with no state by the
-            // source rect's TOP being 0, which is true of KMSAA_TILING_PLAN.maTile[0] {0,0,1280,384}
-            // and of KNO_MSAA_TILING_PLAN.maTile[0] {0,0,1280,720} and false for maTile[1]. The
-            // console's calls are reproduced verbatim here; the collapse belongs to the platform
-            // that cannot express a partial depth resolve, not to this body.
-            renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0, &lrTile,
-                                            mAllocatedRenderTargets.GetDownSampleBuffer()->GetDepthTexture(),
-                                            &lDestPoint, 0u, 0u, 0,
-                                            KF_CLEAR_Z, luStencilValue, 0);
-
-            // ...then colour target 0 with the samples averaged (that IS the downsample), clearing
-            // both EDRAM surfaces behind it to the background colour / Z 1.0 / the caller's stencil.
-            // The down-sample buffer is re-fetched for the second resolve exactly as the console does
-            // (`lwz r3, 0x248(r30)` appears once per resolve, @0x823FFC98 and @0x823FFCEC).
-            renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_COLOUR_AND_CLEAR, &lrTile,
-                                            mAllocatedRenderTargets.GetDownSampleBuffer()->GetTexture(0u),
-                                            &lDestPoint, 0u, 0u, &lvClearColour,
-                                            KF_CLEAR_Z, luStencilValue, 0);
-        }
-
-        // StopMonitor comes BEFORE EndTiling (@0x823FFD38 then @0x823FFD5C) -- the tiling close is
-        // outside the downsample monitor's bracket. Order preserved.
-#if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
-#endif
-
-        // Close the tiling pass. Nothing is left to resolve or clear at this level -- the per-tile
-        // resolves above did both -- so every pointer argument is null and only ClearZ and the
-        // stencil value ride along.
-        renderengine::D3DDevice_EndTiling(lpDevice, 0u, 0, 0, 0,
-                                          KF_CLEAR_Z, luStencilValue, 0);
-    }
-    else
-    {
-        // Untiled: one resolve pair over the whole screen, landing at the origin. No predication to
-        // set and no tiling pass to close, because none was opened. The destination point is an
-        // explicitly ZEROED stack pair (`li r29, 0` @0x823FFD74 then `stw r29, var_78` /
-        // `stw r29, var_74` @0x823FFD7C/D84), not the rect's corner.
-        const XenonPoint lDestPoint = { 0, 0 };
-
-        // The single full-screen rectangle: `addi r5, r26, (unk_8203E0D0 - 0x8203E0C8)` @0x823FFDC8
-        // with r26 = &unk_8203E0C8, i.e. &KNO_MSAA_TILING_PLAN.maTile[0].
-        const BrnGraphics::AntiAliasTilingPlan::TileRect& lrScreen =
-            BrnGraphics::ScaleTilingPlan(BrnGraphics::KNO_MSAA_TILING_PLAN,
-                mAllocatedRenderTargets.GetAntiAliasBuffer()->GetWidth(),
-                mAllocatedRenderTargets.GetAntiAliasBuffer()->GetHeight()).maTile[0];
-
-#if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
-#endif
-
-        renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0, &lrScreen,
-                                        mAllocatedRenderTargets.GetDownSampleBuffer()->GetDepthTexture(),
-                                        &lDestPoint, 0u, 0u, 0,
-                                        KF_CLEAR_Z, luStencilValue, 0);
-
-        renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_COLOUR_AND_CLEAR, &lrScreen,
-                                        mAllocatedRenderTargets.GetDownSampleBuffer()->GetTexture(0u),
-                                        &lDestPoint, 0u, 0u, &lvClearColour,
-                                        KF_CLEAR_Z, luStencilValue, 0);
-
-#if BRN_GPU_PERFMON_AVAILABLE
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
-#endif
-    }
-}
-
-#endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
-
-// =================================================================================================
-// BrnRendererModule::ComputeSunCoronaVisibility -- X360 @0x82405D80.
-// (Ledger `reviewed`, and ABSENT from this file until coronas step 2 -- the second recurring trap
-// this campaign records: a ledger `reviewed` does not mean the body exists.)
-//
-// THE WHOLE CONSOLE BODY, instruction for instruction:
-//     0x82405D98  lwz r3, 0(this+0xC9EC) ; bl PerfMonGpu::StartMonitor    mGpuMonitors.miSunCoronaVisibilityTest
-//     0x82405DA0  lbz r11, 0xAD0(this)                                    mu8ShaderConstantsFrameInternal
-//     0x82405DA8  mulli r11, r11, 0x320                                   sizeof(BrnShaderConstantsFrame)
-//     0x82405DB0  addi r30, r11, 0x490                                    &maShaderConstantsFrames[internal]
-//     0x82405DB8  bl BrnShaderConstantsFrame::GetViewProjectionMatrix     -> the stack Matrix44
-//     0x82405DBC  lbz 0x31C(r30) / assert "false == mbLockedForWriting"   the INLINED getters' assert
-//     0x82405DFC  lvx128 v2, r30, 0x300                                   mUnbiasedKeyLightDirection
-//     0x82405E00  lvx128 v1, r30, 0x040                                   mViewPosition
-//     0x82405E04  bl BrnSunCorona::ComputeSunPositionOnScreen             (r3 = this+0xC520 = mSunCorona)
-//     0x82405E08  lwz r5, 0x248(this)                                     mapRenderTarget[4]  DOWN_SAMPLE
-//     0x82405E0C  lwz r4, 0x260(this)                                     mapRenderTarget[10] SUN_CORONA
-//     0x82405E10  bl BrnSunCorona::GenerateOcclusionBuffer
-//     0x82405E18  bl PerfMonGpu::StopMonitor
-//
-// The two `lvx128` loads are the INLINED accessors GetUnbiasedKeyLightDirection() (+0x300) and
-// GetViewPosition() (+0x40) -- BrnShaderConstantsFrame.h:96/78 -- which is why only ONE of the
-// three reads has a `bl` and why the lock assert appears once, at the first inlined getter. They
-// are DE-INLINED onto the named accessors here (AGENTS.md "inlining reversal").
-//
-// ⚠ THE PERFMON BRACKET IS NOT REPRODUCED, for the reason this file's banner at :250 gives: every
-// id in mGpuMonitors is 0 on this build because nothing calls PerfMonGpu::AddMonitor, so a bracket
-// here would time one monitor id shared with every other pass.
-//
-// The world fills the original external bank through RendererIO; SwapBuffers
-// publishes that complete bank for this render owner to read.
-// =================================================================================================
-void BrnRendererModule::ComputeSunCoronaVisibility()
-{
-    BrnShaderConstantsFrame& lrFrame = maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
-
-    const Matrix44 lViewProjection = lrFrame.GetViewProjectionMatrix();
-    const Vector3  lViewPosition   = lrFrame.GetViewPosition();
-    const Vector3  lSunDir         = lrFrame.GetUnbiasedKeyLightDirection();
-
-    const bool lbFrameLive =
-        (lViewProjection.xAxis.x != 0.0f || lViewProjection.yAxis.x != 0.0f
-         || lViewProjection.zAxis.x != 0.0f)
-        && (lSunDir.x != 0.0f || lSunDir.y != 0.0f || lSunDir.z != 0.0f);
-    if (!lbFrameLive)
-    {
-        static bool sbLoggedDeadFrame = false;
-        if (!sbLoggedDeadFrame)
-        {
-            sbLoggedDeadFrame = true;
-            CgsDev::Log::WriteToLog(
-                "[suncorona] SKIPPED: the INTERNAL shader-constants frame carries no view"
-                " projection / key-light direction yet -- its producer is"
-                " WorldModule::GenerateDispatchLists (external slot) + SwapBuffers (external -> internal)\n");
-        }
-        return;
-    }
-
-    mSunCorona.ComputeSunPositionOnScreen(lViewProjection, lViewPosition, lSunDir);
-
-    mSunCorona.GenerateOcclusionBuffer(mAllocatedRenderTargets.GetSunCoronaBuffer(),
-                                       mAllocatedRenderTargets.GetDownSampleBuffer());
-}
-
-// =================================================================================================
-// BrnRendererModule::BeginQuarterResBuffer -- X360 @0x82408C38.
-//
-// Open the QUARTER-RESOLUTION particle buffer. Console body, in order:
-//     assert(mAllocatedRenderTargets.GetParticleBuffer() != NULL)                       (:4302)
-//     assert(mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL)    (:4303)
-//     CgsRenderTarget::SetRenderTargetState(particleBuffer, 0)
-//     clear colour = {0,0,0,0} (four consecutive stack floats @0x82408CCC..D8)
-//     renderengine::Device::Clear(thatColour, 4)          -- 4 == COLOUR_ALL, not depth
-//     push saDepthStencilStates[3] ZON_ZALL_ZWRITEON      (dword_83010918)
-//     push saRasterizerStates[2]   Scissor_CullModeNone   (dword_83010A40)
-//     push saBlendStates[7]        NoColourWrite_NoAlphaTest (dword_83010F8C, @0x82408D9C)
-//     BrnRendererMemory::BlitDepth(mIm2dRenderer, GetDownSampleBuffer())
-//     CgsRenderTarget::SetRenderTargetState(particleBuffer, 0)
-//
-// THE CLEAR IS THE WHOLE POINT OF THE BUFFER, and it is what this build has been missing: the
-// particles accumulate on ZERO, so the composite that follows can put them OVER the scene with a
-// (1 - accumulatedAlpha) term. Adding them straight onto the scene -- which is what this backend
-// did until 2026-09-05 -- makes a saturating plume ADD its background instead of REPLACING it.
-//
-// THE STATE TRIPLE IS THE DEPTH BLIT'S, not the particles': write depth, write no colour, cull
-// nothing. The particle pass that follows sets its own per-material states.
-//
-// ⚠ THE TRAILING RE-BIND IS THE CONSOLE'S OWN and is reproduced: BlitDepth ends with
-// shadow::Device::ResetShadowing, so the "last state installed" cache no longer knows what is
-// bound, and a SetRenderTargetState that would otherwise be skipped as redundant has to run.
-//
-// ⚠ THE PERFMON BRACKET IS NOT REPRODUCED (this file's banner at :250): every id in mGpuMonitors
-// is 0 on this build because nothing calls PerfMonGpu::AddMonitor.
-// =================================================================================================
-void BrnRendererModule::BeginQuarterResBuffer()
-{
-    CgsRenderTarget* const lpParticleBuffer = mAllocatedRenderTargets.GetParticleBuffer();
-    CGS_ASSERT(lpParticleBuffer != 0,
-               "mAllocatedRenderTargets.GetParticleBuffer() != NULL");
-    if (lpParticleBuffer == 0 || lpParticleBuffer->GetRenderTarget() == 0)
-    {
-        return;
-    }
-    CGS_ASSERT(lpParticleBuffer->GetRenderTarget() != 0,
-               "mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL");
-
-    lpParticleBuffer->SetRenderTargetState(0);
-
-    renderengine::ClearColorParameters lClearColour;
-    lClearColour.mafColourRGBA[0] = 0.0f;
-    lClearColour.mafColourRGBA[1] = 0.0f;
-    lClearColour.mafColourRGBA[2] = 0.0f;
-    lClearColour.mafColourRGBA[3] = 0.0f;
-    renderengine::Device::Clear(lClearColour, renderengine::E_TARGETID_COLOUR_ALL);
-
-
-    renderengine::DepthStencilState* const lpDepthStencil =
-        CgsDepthStencilStateFactory::GetState(E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON);
-    renderengine::RasterizerState* const lpRasterizer =
-        CgsRasterizerStateFactory::GetState(E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE);
-    renderengine::BlendMaterialState* const lpBlend =
-        CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST);
-    if (lpDepthStencil == 0 || lpRasterizer == 0 || lpBlend == 0)
-    {
-        if (!sbLoggedStates)
-        {
-            sbLoggedStates = true;
-            CgsDev::Log::WriteToLog("[qres] BeginQuarterResBuffer DEFERRED: the blend /"
-                                    " rasteriser / depth-stencil state factories are not"
-                                    " Constructed yet\n");
-        }
-        return;
-    }
-
-    shadow::Device::SetState(lpDepthStencil);
-    shadow::Device::SetState(lpRasterizer);
-    shadow::Device::SetState(lpBlend);
-
-    mAllocatedRenderTargets.BlitDepth(mIm2dRenderer, mAllocatedRenderTargets.GetDownSampleBuffer());
-
-    lpParticleBuffer->SetRenderTargetState(0);
-}
-
-// =================================================================================================
-// BrnRendererModule::EndRenderAntiAliased -- X360 @0x82408B00.
-//
-// Close the anti-aliased pass: composite the quarter-res particle buffer back over the scene.
-// Console body, in order:
-//     PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles) (a1[12922])
-//     v3 = mapRenderTarget[4]                                          the DOWN-SAMPLE buffer
-//     CgsRenderTarget::SetRenderTargetState(v3, 0)
-//     push saDepthStencilStates[1] ZOFF_ZALL_ZWRITEOFF  (dword_83010910, @0x82408BCC)
-//     push saRasterizerStates[2]   Scissor_CullModeNone (dword_83010A40)
-//     push saBlendStates[0]        Opaque_Modulate_NoAlphaTest_DestRGBA (dword_83010F70)
-//     BrnRendererMemory::BlitComposite(mIm2dRenderer, v3, mapRenderTarget[9], false, false)
-//     rw::graphics::postfx::RenderTarget::Resolve(v3->GetRenderTarget(), false, true)
-//     PerfMonGpu::StopMonitor
-//
-// THE TWO SLOT NUMBERS ARE READ, NOT GUESSED: mAllocatedRenderTargets sits at this+0x238, the body
-// loads the composite's destination as `lwz r28, 0x248(r29)` -- (0x248-0x238)/4 == 4 == DOWN_SAMPLE
-// -- and its overlay as `lwz r6, 0x25C(r29)` -- (0x25C-0x238)/4 == 9 == PARTICLE.
-//
-// ⚠ Resolve IS CALLED and IS A NO-OP HERE, deliberately. On the Xenos it copies the EDRAM tile back
-// over the sampleable texture BlitComposite just read; on PC that texture IS the surface
-// (PostFxRenderTarget.cpp's Resolve() banner), so there is nothing to copy. It is reproduced
-// rather than dropped so the call graph still matches and the day a backend needs it, it is there.
-//
-// The caller restores this original GPU bracket around the native composite.
-// =================================================================================================
-void BrnRendererModule::EndRenderAntiAliased()
-{
-    CgsRenderTarget* const lpSceneTarget    = mAllocatedRenderTargets.GetDownSampleBuffer();
-    CgsRenderTarget* const lpParticleBuffer = mAllocatedRenderTargets.GetParticleBuffer();
-    if (lpSceneTarget == 0 || lpSceneTarget->GetRenderTarget() == 0
-        || lpParticleBuffer == 0)
-    {
-        return;
-    }
-
-    lpSceneTarget->SetRenderTargetState(0);
-
-    renderengine::DepthStencilState* const lpDepthStencil =
-        CgsDepthStencilStateFactory::GetState(E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF);
-    renderengine::RasterizerState* const lpRasterizer =
-        CgsRasterizerStateFactory::GetState(E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE);
-    renderengine::BlendMaterialState* const lpBlend =
-        CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA);
-    if (lpDepthStencil == 0 || lpRasterizer == 0 || lpBlend == 0)
-    {
-        static bool sbLoggedStates = false;
-        if (!sbLoggedStates)
-        {
-            sbLoggedStates = true;
-            CgsDev::Log::WriteToLog("[qres] EndRenderAntiAliased DEFERRED: the blend /"
-                                    " rasteriser / depth-stencil state factories are not"
-                                    " Constructed yet\n");
-        }
-        return;
-    }
-
-    shadow::Device::SetState(lpDepthStencil);
-    shadow::Device::SetState(lpRasterizer);
-    shadow::Device::SetState(lpBlend);
-
-    mAllocatedRenderTargets.BlitComposite(mIm2dRenderer, lpSceneTarget, lpParticleBuffer,
-                                          false, false);
-
-    lpSceneTarget->GetRenderTarget()->Resolve(false, true);
-}
-
-// The three per-frame values Render reads off the LAYER-0 INTERNAL BrnEffectsFrame early
-// (asm 0x8240C290-0x8240C314) and carries in stack slots for the rest of the function.
-struct BrnRendererPostFxFrameBytes
-{
-    // var_CD0 -- mMotionBlurData.mbIsActive (frame +0x1E0, `lbz r9, 0x1E0(r9)` @0x8240C2DC).
-    // Consumed by BeginRenderAntiAliased's lbClearStencil (r5 @0x8240CDB0) and by
-    // BrnPostFx::Render's lbMotionBlurEnabled (r7 @0x8240DE18).
-    bool mbMotionBlurActive;
-
-    // var_CCE -- (u8)(mMotionBlurData.mfWorldBlurAmount * 255.0f) (frame +0x1DC, `lfs f13,
-    // 0x1DC(r8)` * flt_82010C20, `fctiwz` then the low byte @0x8240C2C0-0x8240C300).
-    // Consumed by BeginRenderAntiAliased (r6 @0x8240CDAC) and ResolveMSAA (r5 @0x8240D5B4).
-    u8 mu8WorldBlurStencil;
-
-    // var_CCF -- the same quantisation of mfCarsBlurAmount (frame +0x1D8, @0x8240C2F0-0x8240C314).
-    // Consumed by the CAR passes' stencil reference (r3 @0x8240CED0 / @0x8240D344), which this
-    // build does not reconstruct yet; carried so the read is complete and greppable.
-    u8 mu8CarsBlurStencil;
-};
-
-// ==================================================================================================
-// BrnRendererModule::Render @0x8240BFA8 -- THE EFFECTS-FRAME -> BrnPostFx APPLY BLOCK.
-//
-// This is Render's OWN block (pseudocode lines 964..1260, asm 0x8240C290-0x8240C314 and
-// 0x8240D700-0x8240DD4C), verbatim in behaviour and in Render's own translation unit, where the
-// console had it. Render calls each function below from the point the console executes it.
-//
-// WHAT THE BLOCK IS. The console's post-fx effects are driven entirely by data: the effects module,
-// the world's environment manager and the GUI's fx-event arbitrator each write a BrnEffectsFrame per
-// layer; BrnGraphics::EffectsArbitrator blends the layers into one evaluated block per effect; and
-// this block turns each evaluated block into (a) an m_enabledFx bit and (b) a state publish into the
-// render-engine effect object. Nothing here decides anything -- every branch is a frame byte and
-// every constant is read off the image.
-//
-// THE FRAME IS READ AT THE LAYER-0 *INTERNAL* SLOT, ALWAYS. Every read below is
-//   `496 * mu8EffectsFrameInternal + mapaEffectsFrames[0]`
-// (`lbz r5, 0xC(r30)` / `lwz r11, 0(r30)` / `mulli r11, r11, 0x1F0` with r30 = this+0x480, repeated
-// once per effect at 0x8240D704 / 0x8240D7B0 / 0x8240D8D0 / 0x8240D99C / 0x8240DC98). 0x1F0 == 496 is
-// the GUEST stride and is NOT reproduced here: the frame is reached through the arbitrator's
-// GetInternalEffectsFrame(layer, slot) accessor, which indexes the host array with the HOST stride.
-//
-// THE Eval* RETURN VALUES ARE DISCARDED, and that is the asm, not a simplification. At all four call
-// sites the sequence is `bl sub_823F9xxx` immediately followed by `li r11, 1` (0x8240D728/D72C,
-// 0x8240D7D8/D7E0, 0x8240D8F8/D900, 0x8240D9C4/D9CC): the "did this effect evaluate" flag is set
-// UNCONDITIONALLY after the call, so what actually gates the effect is the frame's own bool, tested
-// before the call. Consuming the return value here would be a behaviour the binary does not have.
-//
-// (Hex-Rays renders those calls as `sub_823F9AA8(&out, this + 1152)` -- out in r3, the arbitrator in
-// r4 -- which is the large-struct-return convention, not an argument order to copy. The seam this
-// file codes against is BrnEffectsArbitrator.h's `bool EvalBloom(BrnEffects::BloomData&) const`, per
-// the DWARF; whichever of the two the arbitrator group lands, the CALL SITE is the same and the
-// result is unused.)
-// ==================================================================================================
-
-// The original bloom scale globals are defined and debug-registered in
-// EnvironmentManager, their DWARF home. Render reads them through BrnRendererModule.h.
-
-namespace
-{
-    // Degrees -> radians. flt_8203B6D4, addressed as `(flt_8203B6D4 - 0x8203B710)(r21)` at
-    // 0x8240D87C (the vignette angle) and 0x8240DC44 (the blur angle); Hex-Rays prints both uses as
-    // the literal 0.017453292 (pseudocode lines 1050 and 1230).
-    const f32 KF_DEGREES_TO_RADIANS = 0.017453292f;
-
-    // The depth-of-field PROJECTION planes, which Render supplies rather than the effects frame:
-    // flt_82004014 -> DepthOfField::State::m_projNearPlane (`stfs f0, 0x3E0(r20)` @0x8240D988) and
-    // flt_82009E10 -> m_projFarPlane (`stfs f0, 0x3E4(r20)` @0x8240D990). Hex-Rays prints the pair
-    // as `_R20[248] = 0.1; _R20[249] = 1000.0;` (pseudocode lines 1092-1093).
-    const f32 KF_DOF_PROJECTION_NEAR_PLANE = 0.1f;
-    const f32 KF_DOF_PROJECTION_FAR_PLANE  = 1000.0f;
-
-    // The B4-blur speed normaliser: mfSpeedMPH * flt_82048914, clamped at 1.0f
-    // (`lfs f0, flt_82048914@l(r11)` / `fmuls f12, f13, f0` / `fcmpu`+`fmr f12, f31` @0x8240DA50-
-    // 0x8240DA60; Hex-Rays prints it as `v182 = (*(...+464) * 0.0060606059)` with the `> 1.0` clamp,
-    // pseudocode lines 1122-1124). 464 == 0x1D0 == BrnEffectsFrame::mfSpeedMPH.
-    const f32 KF_BLUR_SPEED_MPH_SCALE = 0.0060606059f;   // flt_82048914  (== 1/165)
-
-    // The two yaw-rate scalars the blur centres and amounts are biased by. Both are splatted from a
-    // one-float stack block and multiplied by splat(mAngularVelocity.y):
-    //   flt_82009B70 == -0.125f  -> the CENTRE bias   (stored to two stack blocks @0x8240DA88 /
-    //                               @0x8240DA90, Hex-Rays `v328[0] = -0.125; v329[0] = -0.125;`)
-    //   flt_82003F40 ==  0.25f   -> the AMOUNT bias   (@0x8240DAB8, Hex-Rays `v302 = 0.25;`)
-    const f32 KF_BLUR_CENTRE_YAW_SCALE = -0.125f;   // flt_82009B70
-    const f32 KF_BLUR_AMOUNT_YAW_SCALE =  0.25f;    // flt_82003F40
-
-    // The motion-blur STENCIL quantiser: both blur amounts are multiplied by flt_82010C20 and
-    // truncated to a byte (`fmuls f13, f13, f0` / `fctiwz` / `stfiwx` / `stb` @0x8240C2C0-0x8240C314).
-    // ATTESTED at 255.0f -- conductor idat dump, DATA_NOTE.md section 2 -- and corroborated inside
-    // the pseudocode, which prints the same multiply as `(*(... + 476) * 255.0)` (line 400).
-    const f32 KF_MOTION_BLUR_STENCIL_SCALE = 255.0f;   // flt_82010C20
-
-    const f32 KF_ZERO = 0.0f;
-    const f32 KF_ONE  = 1.0f;
-
-    // fsel-pair clamp to [0,1] (`fsel f0, -x, f27(0.0), x` then `fsubs f11, f31(1.0), f0` /
-    // `fsel f0, f11, f0, f31` @0x8240DB88-0x8240DBA8). De-optimised to the arithmetic it expresses,
-    // per AGENTS.md's strength-reduction rule.
-    f32 Clamp01(f32 lfValue)
-    {
-        if (lfValue < KF_ZERO)
-            return KF_ZERO;
-        if (lfValue > KF_ONE)
-            return KF_ONE;
-        return lfValue;
-    }
-
-    // `vandc vD, vS, v13` with v13 == splat(0x80000000) (`vspltisw v13, -1` + `vslw v13, v13, v13`
-    // @0x8240DA70 / @0x8240DA8C) -- a sign-bit clear, i.e. fabs (asm 0x8240DB48).
-    f32 AbsValue(f32 lfValue)
-    {
-        return (lfValue < KF_ZERO) ? -lfValue : lfValue;
-    }
-
-    const BrnEffectsFrame* GetBaseInternalFrame(const BrnGraphics::EffectsArbitrator* lpArbitrator)
-    {
-        if (lpArbitrator == 0)
-            return 0;
-        return &lpArbitrator->GetInternalEffectsFrame(
-            BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_BASE, 0u);
-    }
-
-    // The last frame's evaluated state, for the sampled diagnostic below only.
-    struct DiagState
-    {
-        bool mbBloom;
-        bool mbVignette;
-        bool mbDepthOfField;
-        bool mbBlur;
-        bool mbTint2d;
-        bool mbTint3d;   // the COLOUR-CUBE tint (m_enabledFx bit 0x20), set by the tint block below
-        f32  mfBloomLuminance;
-        f32  mfBloomThreshold;
-        f32  mafBloomColour[3];
-    };
-    DiagState gDiag = { false, false, false, false, false, false,
-                        0.0f, 0.0f, { 0.0f, 0.0f, 0.0f } };
-
-    // The motion-blur half of the same sampled diagnostic. mfWvpDelta is the largest absolute
-    // element difference between MotionBlurState's current and previous world-view-projection
-    // matrices: it is ZERO exactly when the reprojection has nothing to say (the pair is still the
-    // identity pair MotionBlurState::Construct left, or the camera has not moved), and non-zero the
-    // instant a real Update lands a moving camera. That single number is the cheapest proof the
-    // consumer chain is alive, because BlurMatrixX/Y/W are built from precisely that difference.
-    struct MotionBlurDiagState
-    {
-        bool mbActive;
-        bool mbUpdateCalled;
-        s32  miQuality;
-        f32  mfCarsBlurAmount;
-        f32  mfWorldBlurAmount;
-        f32  mfWvpDelta;
-    };
-    MotionBlurDiagState gMotionBlurDiag = { false, false, 0, 0.0f, 0.0f, 0.0f };
-
-    // Largest absolute element difference between the two WVP matrices, by named lane.
-    f32 MaxAbsoluteDifference(const rw::math::vpu::Matrix44& lLhs, const rw::math::vpu::Matrix44& lRhs)
-    {
-        const rw::math::vpu::Vector4* const lapLhs[4] =
-            { &lLhs.xAxis, &lLhs.yAxis, &lLhs.zAxis, &lLhs.wAxis };
-        const rw::math::vpu::Vector4* const lapRhs[4] =
-            { &lRhs.xAxis, &lRhs.yAxis, &lRhs.zAxis, &lRhs.wAxis };
-
-        f32 lfWorst = KF_ZERO;
-        for (u32 luRow = 0; luRow < 4u; ++luRow)
-        {
-            const f32 lafDelta[4] = { lapLhs[luRow]->x - lapRhs[luRow]->x,
-                                      lapLhs[luRow]->y - lapRhs[luRow]->y,
-                                      lapLhs[luRow]->z - lapRhs[luRow]->z,
-                                      lapLhs[luRow]->w - lapRhs[luRow]->w };
-            for (u32 luLane = 0; luLane < 4u; ++luLane)
-            {
-                const f32 lfAbs = AbsValue(lafDelta[luLane]);
-                if (lfAbs > lfWorst)
-                    lfWorst = lfAbs;
-            }
-        }
-        return lfWorst;
-    }
-}
-
-// ==================================================================================================
-// Render @0x8240C290-0x8240C314 -- the three bytes read off the layer-0 internal frame once per frame.
-//
-// The console reloads mapaEffectsFrames[0] and mu8EffectsFrameInternal THREE times here (0x8240C2A0,
-// 0x8240C2AC, 0x8240C2C8) and recomputes 496*internal three times, which is register-allocation
-// noise: all three address the same frame. One reference is the reconstruction of it.
-// ==================================================================================================
-void BrnRendererReadPostFxFrameBytes(const BrnGraphics::EffectsArbitrator* lpArbitrator,
-                                     BrnRendererPostFxFrameBytes* lpOut)
-{
-    if (lpOut == 0)
-        return;
-
-    lpOut->mbMotionBlurActive   = false;
-    lpOut->mu8WorldBlurStencil  = 0u;
-    lpOut->mu8CarsBlurStencil   = 0u;
-
-    const BrnEffectsFrame* const lpFrame = GetBaseInternalFrame(lpArbitrator);
-    if (lpFrame == 0)
-    {
-        return;
-    }
-
-    const BrnDirector::Camera::MotionBlurData& lrMotionBlur = lpFrame->GetMotionBlurData();
-
-    lpOut->mbMotionBlurActive = lrMotionBlur.mbIsActive;
-    lpOut->mu8WorldBlurStencil = static_cast<u8>(
-        static_cast<s32>(lrMotionBlur.mfWorldBlurAmount * KF_MOTION_BLUR_STENCIL_SCALE));
-    lpOut->mu8CarsBlurStencil = static_cast<u8>(
-        static_cast<s32>(lrMotionBlur.mfCarsBlurAmount * KF_MOTION_BLUR_STENCIL_SCALE));
-}
-
-// ==================================================================================================
-// Render @0x8240C69C-0x8240C798 -- THE COLOUR-CUBE (3D LUT) TINT BLOCK.
-//
-// It is NOT part of the apply block below, and its position matters: the console runs it EARLY --
-// inside PerfMonCpu monitor `*(this + 51508)` (StartMonitor @0x8240C698 / StopMonitor @0x8240C79C),
-// immediately BEFORE shadow::Device::ResetShadowing() and the three global texture binds -- because
-// BeginTintBlend SCHEDULES AN EA::Jobs JOB that blends the source cubes into the tint volume
-// texture while the shadow map and the world passes draw. BrnPostFx::Render then drains it
-// (`if (m_processTint) { m_blendJob.WaitOn(); Tint::EndBlendJob(); }`, BrnPostFx.cpp step 1) before
-// the composite samples s3. Moving this to the apply block would serialise the job against nothing
-// and shorten the window to zero.
-//
-// THE SHAPE, off the asm (Hex-Rays pseudocode lines 505-533 renders the same block):
-//   0x8240C6A8  lbz    r11, 0(this + 0xC41C)         -> mbRenderPostFX, the block's whole gate
-//   0x8240C6C0  addi   r5, r1, var_C70               -> the FIVE-entry WEIGHT array
-//   0x8240C6C4  addi   r4, r1, var_CA0               -> the FIVE-entry CUBE array
-//   0x8240C6C8  mr     r3, r21 (this + 0x480)        -> &mEffectsArbitrator
-//   0x8240C6CC  bl     EffectsArbitrator::EvalTint
-//   0x8240C6D0..EC                                   -> active = EvalTint() && lbEffectsAllowed
-//   0x8240C6F4..0C  ori/rlwinm 0x20 on m_enabledFx   -> BrnPostFx::SetTint(active), INLINED
-//   0x8240C710  beq                                  -> if (!active) skip the publish
-//   0x8240C718..90  five times:                         if (cube[i]) m_colourCubes[i] = cube[i];
-//                                                       m_tintFactors[i] = weight[i];
-//   0x8240C794  bl     BrnPostFx::BeginTintBlend
-//
-// THE NULL GUARD ON THE CUBE STORE IS REAL AND LOAD-BEARING (`cmplwi cr6, r11, 0` / `beq` before
-// each of the five `stw`s, and there is no such test before the five weight `stfs`). It exists
-// because the slots are PRE-SEEDED with a default cube at prepare time -- see
-// PCBringUpSeedTintBlendSources below -- so a layer that contributes no cube this frame leaves the
-// default in place rather than nulling a pointer the blend kernels dereference.
-//
-// IT IS SPELLED ONCE, IN BrnPostFx::SetColourCube (2026-08-16 fix round). The console has exactly
-// one test per slot and the five it has are inlined around the five `stw`s INTO m_colourCubes --
-// i.e. inside the setter that got inlined, not around the call to it. The first cut wrote the same
-// test in both places: behaviour-identical, but it reads as two different rules and invites the next
-// reader to "fix" one of them. The guard therefore lives with the store it guards, and the loop
-// below calls the setter for every slot, unconditionally, exactly as the console's source did.
-//
-// THE TWO STACK ARRAYS ARE RAW, exactly as the bloom/vignette out-blocks are: `addi r4, r1,
-// var_CA0` with no prior store. EvalTint writes all five entries of both on its true path (4 WORLD
-// + 1 FXEVENTS colour cubes, byte_8203E114 = {0,4,1}) and the arrays are read only inside the
-// `if (active)` arm, which cannot be entered on its false path.
-//
-// ---- BRN_POSTFX_TINT3D_AVAILABLE -- THE ONE-LINE KILL SWITCH, AND WHY IT EXISTS ------------------
-// E_FX_TINT (0x20) is the ONLY one of the five effect bits that moves the composite's PERMUTATION
-// INDEX (BrnPostFxShader.cpp `leShader = 4*blur | 2*dof | tint3d`), so switching it on switches the
-// composite from an even permutation to an ODD one -- and every odd permutation SAMPLES the tint
-// volume at s3 (`tex3D(Sampler3dTint, composedColour)`). All twelve permutation program pairs are
-// adopted on this build (BrnPostFxShader.cpp's "ALL TWELVE PAIRS NOW EXIST" banner), so the draw
-// itself is safe; what is NOT this group's to guarantee is what s3 CONTAINS -- the tint volume
-// texture, its Lock/Unlock and the seven CPU blend kernels are group `tintrender`'s half
-// (rw::graphics::postfx::Tint::Initialize @0x82403B48 / BeginBlendJob @0x823F8310 / the
-// TintBlend variant table @0x82F7238C). This half and that half must land TOGETHER: with the bit on
-// and no real volume texture behind s3, the grade is whatever that sampler returns. Set this to 0 to
-// revert the tint layer to the step-9 behaviour (bit permanently clear, permutation index unmoved)
-// without touching anything else. DELETE the switch once tintrender's half is committed and booted.
-#define BRN_POSTFX_TINT3D_AVAILABLE 1
-// ==================================================================================================
-#if BRN_POSTFX_TINT3D_AVAILABLE
-namespace
-{
-
-    // The one-shot proof line the step-10 boot check greps for. Printed the first time the tint
-    // layer actually schedules a blend.
-    //
-    // BUILT IN A LOOP OVER luCount (2026-08-16 fix round). The first cut took a count and then
-    // hard-indexed [0..4] in the format string and the argument list: correct only while
-    // EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT is 5, and that constant is BUILT from the console's
-    // byte_8203E114 {0,4,1} rather than written as a literal, so a hard five would over-read the
-    // caller's stack arrays the day it moves. The cube's EDGE is in the line now that the tree's
-    // ColourCube carries the DWARF's GetSize() -- it is the "edge=N" half of this wave's boot proof.
-    void LogTintBlendOnce(rw::graphics::postfx::ColourCube* const* lppColourCubes,
-                          const f32* lpfWeights, u32 luCount)
-    {
-        static bool sbReported = false;
-        if (sbReported)
-            return;
-        sbReported = true;
-
-        char lacMsg[384];
-        int liWritten = std::snprintf(lacMsg, sizeof(lacMsg),
-                                      "[postfx-tint] tint3d ON: %u sources",
-                                      static_cast<unsigned>(luCount));
-        size_t luUsed = (liWritten > 0) ? static_cast<size_t>(liWritten) : 0u;
-        if (luUsed > sizeof(lacMsg) - 1u)
-            luUsed = sizeof(lacMsg) - 1u;
-
-        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
-        {
-            const rw::graphics::postfx::ColourCube* const lpCube = lppColourCubes[luIndex];
-            liWritten = std::snprintf(lacMsg + luUsed, sizeof(lacMsg) - luUsed,
-                                      " [%u]=%p edge=%u w=%.3f",
-                                      static_cast<unsigned>(luIndex),
-                                      static_cast<const void*>(lpCube),
-                                      (lpCube != 0) ? static_cast<unsigned>(lpCube->GetSize()) : 0u,
-                                      static_cast<double>(lpfWeights[luIndex]));
-            if (liWritten <= 0)
-                break;
-            luUsed += static_cast<size_t>(liWritten);
-            if (luUsed > sizeof(lacMsg) - 1u)
-            {
-                luUsed = sizeof(lacMsg) - 1u;   // snprintf truncated; stop appending
-                break;
-            }
-        }
-
-        // The newline goes on through snprintf as well, so this function performs NO index
-        // arithmetic of its own into lacMsg -- every write is bounded by the runtime, and the
-        // compiler needs no /GS range check (i.e. no fresh CRT external) to see it.
-        std::snprintf(lacMsg + luUsed, sizeof(lacMsg) - luUsed, "\n");
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
-}
-#endif  // BRN_POSTFX_TINT3D_AVAILABLE
-
-// ==================================================================================================
-// Render @0x8240C69C-0x8240C798 (pseudocode 505..533) -- THE COLOUR-CUBE (3D LUT) TINT BLOCK.
-//
-// ⚠ CALL IT AT THE CONSOLE'S POSITION, WHICH IS NOT THE APPLY BLOCK'S. The console runs this EARLY
-// in Render -- inside the PerfMonCpu bracket at 0x8240C698/0x8240C79C, immediately before
-// shadow::Device::ResetShadowing() and the three global texture binds -- so that the blend job runs
-// concurrently with the shadow map and the world passes. BrnPostFx::Render drains it (m_processTint
-// -> Job::WaitOn -> Tint::EndBlendJob) before the composite samples the tint volume at s3.
-//   lbEffectsAllowed == the same v296 the apply block takes.
-// ==================================================================================================
-void BrnRendererBeginPostFxTintBlend(const BrnGraphics::EffectsArbitrator* lpArbitrator,
-                                     bool lbEffectsAllowed)
-{
-#if !BRN_POSTFX_TINT3D_AVAILABLE
-    // Kill switch OFF: the step-9 behaviour, spelled out rather than left implicit. m_enabledFx's
-    // tint bit is never set, so the composite keeps selecting an EVEN permutation and nothing
-    // samples s3. Nothing else in the frame changes.
-    (void)lpArbitrator;
-    (void)lbEffectsAllowed;
-    static bool sbReported = false;
-    if (!sbReported)
-    {
-        sbReported = true;
-    }
-#else
-
-    // The two raw out-arrays, sized by the arbitrator's own contract (4 WORLD + 1 FXEVENTS).
-    rw::graphics::postfx::ColourCube*
-        lapColourCubes[BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT];
-    f32 lafWeights[BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT];
-
-    // 0x8240C6CC. The return value IS consumed here (unlike the five Eval* in the apply block):
-    // `clrlwi r11, r3, 24` / `cmplwi` / `beq` is the first half of the active flag.
-    const bool lbEvaluated = lpArbitrator->EvalTint(lapColourCubes, lafWeights);
-
-    bool lbTintActive = lbEvaluated && lbEffectsAllowed;
-
-    // 0x8240C6F4-0x8240C70C: `ori r11, r11, 0x20` / `rlwinm r11, r11, 0,27,25` on m_enabledFx --
-    // BrnPostFx::SetTint(const bool&) inlined. AGENTS.md's inlining-reversal rule puts the call
-    // back; the bit is never poked directly. This is the bool that reaches
-    // BrnPostFxShader::Render as the composite's TINT3D permutation lane (BrnPostFx::Render
-    // step 10, `lbTint = lbEffectsAllowed && (m_enabledFx & E_FX_TINT)`).
-    msPostFx.SetTint(lbTintActive);
-    gDiag.mbTint3d = lbTintActive;
-
-    if (!lbTintActive)
-        return;
-
-    // 0x8240C718-0x8240C790, unrolled five times on the console (the count is a compile-time 5),
-    // re-rolled here. The console's cube store is null-GUARDED and its weight store is not -- and
-    // that guard lives inside BrnPostFx::SetColourCube, the setter the console inlined around that
-    // very `stw` (see the banner). Both calls are therefore unconditional here.
-    for (u32 luIndex = 0;
-         luIndex < BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT;
-         ++luIndex)
-    {
-        msPostFx.SetColourCube(static_cast<int>(luIndex), lapColourCubes[luIndex]);
-        msPostFx.SetTintBlendFactor(static_cast<int>(luIndex), lafWeights[luIndex]);
-    }
-
-    LogTintBlendOnce(lapColourCubes, lafWeights,
-                     BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT);
-
-    // 0x8240C794. Schedules the EA::Jobs blend of the (cube, weight) sources into the current
-    // tint volume texture and sets m_processTint; BrnPostFx::Render drains it.
-    msPostFx.BeginTintBlend();
-#endif  // BRN_POSTFX_TINT3D_AVAILABLE
-}
-
-//
-// WHY IT EXISTS: the composite's last colour op is `rgb = composite * lerp(inner, outer,
-// smoothstep(saturate(radius + gradientAdd))) + tint2d` (tools/assets/shaders/brn_postfx_composite.fx
-// :366-390), so this pair of colours IS the multiplier over the whole picture. The
-// `[postfx-fx] apply-call` sampler above only reports vig=1/0; it cannot tell a neutral vignette
-// from one that multiplies the frame by a dark blue. Bug-test lane `postfx` (b5-decomp#4).
-// DELETE-WHEN BrnRendererModule::PCBringUpProduceBaseEffectsFrame retires (the real
-// BrnEffects::EffectsModule::GenerateRenderRequests @0x8227FF10 becomes the base-frame producer).
-// ==================================================================================================
-namespace
-{
-
-    void BrnRendererLogPostFxVignette(bool lbActive, const BrnEffects::VignetteData& lrVignette)
-    {
-        static u32  suCalls  = 0u;
-        static u32  suPrints = 0u;
-        const u32   luCall   = suCalls++;
-
-        // Change detection on the six values the state carries, quantised to 1/1000 so a float
-        // that only jitters in its low bits does not print every frame.
-        static bool sbHave   = false;
-        static bool sbActive = false;
-        static s32  saiLast[10] = { 0 };
-        const f32 lafNow[10] = {
-            lrVignette.mv4InnerColour.x, lrVignette.mv4InnerColour.y, lrVignette.mv4InnerColour.z,
-            lrVignette.mv4OuterColour.x, lrVignette.mv4OuterColour.y, lrVignette.mv4OuterColour.z,
-            lrVignette.mv2Amount.x, lrVignette.mv2Amount.y,
-            lrVignette.mv2Centre.x, lrVignette.mv2Centre.y
-        };
-        bool lbChanged = (!sbHave) || (lbActive != sbActive);
-        for (int li = 0; li < 10; ++li)
-        {
-            const s32 liQ = static_cast<s32>(lafNow[li] * 1000.0f);
-            if (liQ != saiLast[li])
-                lbChanged = true;
-            saiLast[li] = liQ;
-        }
-        sbHave   = true;
-        sbActive = lbActive;
-        if (!lbChanged)
-            return;
-        ++suPrints;
-
-        char lacMsg[288];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-                      "[postfx] vignette apply %u: active=%d inner=(%.4f,%.4f,%.4f)"
-                      " outer=(%.4f,%.4f,%.4f) amount=(%.4f,%.4f) centre=(%.4f,%.4f)"
-                      " sharp=%.4f angle=%.4f\n",
-                      static_cast<unsigned>(luCall), lbActive ? 1 : 0,
-                      static_cast<double>(lrVignette.mv4InnerColour.x),
-                      static_cast<double>(lrVignette.mv4InnerColour.y),
-                      static_cast<double>(lrVignette.mv4InnerColour.z),
-                      static_cast<double>(lrVignette.mv4OuterColour.x),
-                      static_cast<double>(lrVignette.mv4OuterColour.y),
-                      static_cast<double>(lrVignette.mv4OuterColour.z),
-                      static_cast<double>(lrVignette.mv2Amount.x),
-                      static_cast<double>(lrVignette.mv2Amount.y),
-                      static_cast<double>(lrVignette.mv2Centre.x),
-                      static_cast<double>(lrVignette.mv2Centre.y),
-                      static_cast<double>(lrVignette.mfSharpness),
-                      static_cast<double>(lrVignette.mfAngle));
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
-}
-
-// ==================================================================================================
-// Render @0x8240D700-0x8240DC50 -- THE APPLY BLOCK.
-// ==================================================================================================
-void BrnRendererApplyEffectsFrameToPostFx(const BrnGraphics::EffectsArbitrator* lpArbitrator,
-                                          bool lbEffectsAllowed)
-{
-    const BrnEffectsFrame* const lpFrame = GetBaseInternalFrame(lpArbitrator);
-    if (lpFrame == 0)
-        return;
-    const BrnEffectsFrame& lrFrame = *lpFrame;
-
-    // ---- BLOOM (asm 0x8240D704-0x8240D7AC) --------------------------------------------------------
-    {
-        bool lbEvaluated = false;
-        // The out-block is a RAW STACK SLOT on the console (`addi r3, r1, var_C70` with no prior
-        // store), and it is left raw here too: it is only READ inside the `if (lbBloomActive)` arm,
-        // which cannot be entered unless the Eval above ran and filled it. Seeding it with
-        // BloomData::Construct() would be behaviour the binary does not have -- and would drag
-        // BloomData::kv4DefScale (SharedClasses/Graphics/BrnEffectsData.cpp) into this TU's link.
-        BrnEffects::BloomData lBloom;
-        if (lrFrame.GetUseBloom())
-        {
-            (void)lpArbitrator->EvalBloom(lBloom);   // return DISCARDED -- see the banner
-            lbEvaluated = true;
-        }
-
-        // `ori r9, r11, 2` / `rlwinm r9, r11, 0,31,29` on m_enabledFx (this+0x384) @0x8240D758-
-        // 0x8240D76C -- i.e. the console INLINED BrnPostFx::SetBloom(const bool&) here. AGENTS.md's
-        // inlining-reversal rule puts the call back; the bit is never poked directly.
-        const bool lbBloomActive = lbEvaluated && lbEffectsAllowed;
-        msPostFx.SetBloom(lbBloomActive);
-
-        if (lbBloomActive)
-        {
-            // The evaluated block's three members land in BrnPostFxBloomData (BrnPostFx's mBloomData,
-            // guest this+0x950):
-            //   mv4Scale    -> mColour      (`lvx128 v0, r0, &out+0x10` / `stvx128 v0, r20, 0x950`)
-            //   mfThreshold -> mfThreshold * gfBloomThresholdScale  (`stfs f0, 0x960(r20)`)
-            //   mfLuminance -> mfLuminance * gfBloomLuminanceScale  (`stfs f0, 0x964(r20)`)
-            // Note the ORDER the two scalars are read in: threshold (out+4) first, luminance (out+0)
-            // second -- the asm loads var_C6C before var_C70.
-            BrnPostFxBloomData* const lpBloomData = msPostFx.GetBloom();
-            lpBloomData->mColour     = lBloom.mv4Scale;
-            lpBloomData->mfThreshold = lBloom.mfThreshold * gfBloomThresholdScale;
-            lpBloomData->mfLuminance = lBloom.mfLuminance * gfBloomLuminanceScale;
-
-            gDiag.mfBloomThreshold  = lpBloomData->mfThreshold;
-            gDiag.mfBloomLuminance  = lpBloomData->mfLuminance;
-            gDiag.mafBloomColour[0] = lBloom.mv4Scale.x;
-            gDiag.mafBloomColour[1] = lBloom.mv4Scale.y;
-            gDiag.mafBloomColour[2] = lBloom.mv4Scale.z;
-        }
-        gDiag.mbBloom = lbBloomActive;
-    }
-
-    // ---- VIGNETTE (asm 0x8240D7B0-0x8240D8CC) -----------------------------------------------------
-    {
-        bool lbEvaluated = false;
-        BrnEffects::VignetteData lVignette;   // raw stack slot -- see the bloom arm's note
-        if (lrFrame.GetUseVignette())
-        {
-            (void)lpArbitrator->EvalVignette(lVignette);
-            lbEvaluated = true;
-        }
-
-        const bool lbVignetteActive = lbEvaluated && lbEffectsAllowed;
-        msPostFx.SetVignette(lbVignetteActive);   // `ori r11, r9, 0x10` / `rlwinm r11, r9, 0,28,26`
-
-        if (lbVignetteActive)
-        {
-            // BrnPostFx's Vignette::State (guest this+0x390, four Vector4s):
-            //   m_gradientScalars (+0x390) -- READ-MODIFY-WRITE: the console loads the CURRENT
-            //     state vector (`li r11, 0x390` / `lvx128 v11, r20, r11` @0x8240D854-0x8240D85C),
-            //     copies it to a stack block, overwrites LANE 0 with mfSharpness (`stfs f0,
-            //     var_CC0` @0x8240D870) and LANE 1 with mfAngle * DEG2RAD (`stfs f0, var_CBC`
-            //     @0x8240D890), then stores the block back (@0x8240D8BC). Lanes 2 and 3 are
-            //     DELIBERATELY PRESERVED -- rw::graphics::postfx::Vignette::SetState reads them, and
-            //     zeroing them here would be behaviour the binary does not have.
-            //   m_innerColour (+0x3A0) <- mv4InnerColour   (`lvx128 v11, var_BC0` / `stvx128 .. 0x3A0`)
-            //   m_outerColour (+0x3B0) <- mv4OuterColour   (`lvx128 v11, var_BB0` / `stvx128 .. 0x3B0`)
-            //   m_centerScale (+0x3C0) <- (centre.x, centre.y, amount.x, amount.y), built with four
-            //     vrlimi128 inserts: masks 8 and 4 at shift 0 take mv2Centre's lanes 0/1, masks 2 and
-            //     1 at shift 2 take mv2Amount's lanes 0/1 (@0x8240D84C-0x8240D86C). All four lanes
-            //     are written, so the `lvx128 v0, r20, 0x3C0` that seeds v0 is dead.
-            rw::graphics::postfx::Vignette::State* const lpState = msPostFx.GetVignetteState();
-
-            lpState->m_gradientScalars.x = lVignette.mfSharpness;
-            lpState->m_gradientScalars.y = lVignette.mfAngle * KF_DEGREES_TO_RADIANS;
-            // .z / .w untouched -- see above.
-
-            lpState->m_innerColour = lVignette.mv4InnerColour;
-            lpState->m_outerColour = lVignette.mv4OuterColour;
-
-            lpState->m_centerScale.x = lVignette.mv2Centre.x;
-            lpState->m_centerScale.y = lVignette.mv2Centre.y;
-            lpState->m_centerScale.z = lVignette.mv2Amount.x;
-            lpState->m_centerScale.w = lVignette.mv2Amount.y;
-
-            // `lwz r3, 0x5BC(r20)` (m_pfxVignette) / `addi r4, r20, 0x390` (&m_vignetteState) /
-            // `bl Vignette__SetState` @0x8240D830-0x8240D8C8. TWO arguments: r5/r6/r7 at the call are
-            // Hex-Rays noise -- r5 was last written at 0x8240D7B0 and r6/r7 at 0x8240D6EC/0x8240D678,
-            // all BEFORE the intervening `bl sub_823F9DE0`, which clobbers every volatile GPR. The
-            // committed declaration agrees: rwgpfxvignette.h `void SetState(const State&)`.
-            msPostFx.GetVignette()->SetState(*lpState);
-
-        }
-        gDiag.mbVignette = lbVignetteActive;
-    }
-
-    // ---- DEPTH OF FIELD (asm 0x8240D8D0-0x8240D998) -----------------------------------------------
-    {
-        bool lbEvaluated = false;
-        BrnEffects::DepthOfFieldData lDepthOfField;   // raw stack slot -- see the bloom arm's note
-        if (lrFrame.GetUseDepthOfField())
-        {
-            (void)lpArbitrator->EvalDepthOfField(lDepthOfField);
-            lbEvaluated = true;
-        }
-
-        const bool lbDofActive = lbEvaluated && lbEffectsAllowed;
-        msPostFx.SetDepthOfField(lbDofActive);   // `ori r11, r11, 1` / `clrrwi r11, r11, 1`
-
-        if (lbDofActive)
-        {
-            // DepthOfField::State (guest this+0x3D0): the four focal planes come straight off the
-            // evaluated block (`stfs` x4 into 0x3D0/0x3D4/0x3D8/0x3DC), the two PROJECTION planes are
-            // Render's own constants, and m_dofAmount is the block's fifth float (out+0x10 ->
-            // `stfs f0, 0x3E8(r20)`). m_blurRadius (+0x3EC) IS NOT WRITTEN by the console here --
-            // reproduced as untouched.
-            rw::graphics::postfx::DepthOfField::State* const lpState = msPostFx.GetDofState();
-            lpState->m_focalPlanes[0] = lDepthOfField.mfNearPlane;
-            lpState->m_focalPlanes[1] = lDepthOfField.mfFocalPlane;
-            lpState->m_focalPlanes[2] = lDepthOfField.mfFocalPlane2;
-            lpState->m_focalPlanes[3] = lDepthOfField.mfFarPlane;
-            lpState->m_projNearPlane  = KF_DOF_PROJECTION_NEAR_PLANE;
-            lpState->m_projFarPlane   = KF_DOF_PROJECTION_FAR_PLANE;
-            lpState->m_dofAmount      = lDepthOfField.mfDofAmount;
-
-        }
-        gDiag.mbDepthOfField = lbDofActive;
-    }
-
-    // ---- B4 BLUR (asm 0x8240D99C-0x8240DC50) ------------------------------------------------------
-    //
-    // The one VMX-heavy arm. Every vector op here is a splat-multiply on ONE scalar --
-    // mAngularVelocity.y, the camera's yaw rate (`lvx128 v0, r9, 0x1C0` then `vspltw v0, v0, 1`
-    // @0x8240DA38 / @0x8240DA68; frame +0x1C0 is mAngularVelocity and word element 1 is its .y lane)
-    // -- so the reconstruction is scalar arithmetic, not a fake vector library.
-    {
-        bool lbEvaluated = false;
-        BrnEffects::BlurData lBlur;   // raw stack slot -- see the bloom arm's note
-        if (lrFrame.GetUseBlur())
-        {
-            (void)lpArbitrator->EvalBlur(lBlur);
-            lbEvaluated = true;
-        }
-
-        const bool lbBlurActive = lbEvaluated && lbEffectsAllowed;
-        msPostFx.SetB4Blur(lbBlurActive);   // `ori r11, r11, 0x40` / `rlwinm r11, r11, 0,26,24`
-
-        if (lbBlurActive)
-        {
-            const f32 lfYawRate = lrFrame.GetAngularVelocity().y;
-
-            // The normalised speed factor, clamped at 1.0 (see KF_BLUR_SPEED_MPH_SCALE).
-            f32 lfSpeedFactor = lrFrame.GetSpeedMPH() * KF_BLUR_SPEED_MPH_SCALE;
-            if (lfSpeedFactor > KF_ONE)
-                lfSpeedFactor = KF_ONE;
-
-            // The yaw biases. The centres are pushed by yaw * -0.125 and clamped to [0,1]; the blend
-            // AMOUNT's x lane is reduced by |yaw * 0.25| (`vandc` then `vsubfp v0, v12, v0`
-            // @0x8240DB48-0x8240DB4C, v12 == splat(mv2BlendAmount.x)).
-            const f32 lfCentreBias  = lfYawRate * KF_BLUR_CENTRE_YAW_SCALE;
-            const f32 lfAmountBias  = AbsValue(lfYawRate * KF_BLUR_AMOUNT_YAW_SCALE);
-
-            rw::graphics::postfx::B4Blur::State* const lpState = msPostFx.GetB4BlurState();
-
-            // +0x3F0 m_blendAmount = { blendAmount.x - |yaw*0.25|, blendAmount.y, 0, 0 }.
-            // Lanes 2/3 are EXPLICITLY zeroed (`std r18, 0(&var_CA8)` @0x8240DBEC, r18 == 0).
-            lpState->m_blendAmount.x = lBlur.mv2BlendAmount.x - lfAmountBias;
-            lpState->m_blendAmount.y = lBlur.mv2BlendAmount.y;
-            lpState->m_blendAmount.z = KF_ZERO;
-            lpState->m_blendAmount.w = KF_ZERO;
-
-            // +0x400 m_blurAmount = the evaluated mv2BlurAmount, copied as ONE 16-byte vector
-            // (`lvx128 v0, r0, &out+0x30` / `stvx128 v0, r20, 0x400` @0x8240DBC0/@0x8240DBE0) -- i.e.
-            // all four lanes, including whatever BlurData::SetToBlend left in lanes 2/3. Reproduced
-            // as a whole-vector copy rather than two lanes, because that is what the store does.
-            lpState->m_blurAmount = lBlur.mv2BlurAmount;
-
-            // +0x410 m_blendCenter = { clamp01(blendCentre.x + yaw*-0.125), blendCentre.y, 0, 0 }
-            // (lanes 2/3 zeroed by `std r18, 0(&var_C38)` @0x8240DBAC).
-            lpState->m_blendCenter.x = Clamp01(lBlur.mv2BlendCentre.x + lfCentreBias);
-            lpState->m_blendCenter.y = lBlur.mv2BlendCentre.y;
-            lpState->m_blendCenter.z = KF_ZERO;
-            lpState->m_blendCenter.w = KF_ZERO;
-
-            // +0x420 m_blurCenter = { clamp01(blurCentre.x + yaw*-0.125), blurCentre.y, 0, 0 }
-            // (lanes 2/3 zeroed by `std r18, 0(&var_CB8)` @0x8240DBB4).
-            lpState->m_blurCenter.x = Clamp01(lBlur.mv2BlurCentre.x + lfCentreBias);
-            lpState->m_blurCenter.y = lBlur.mv2BlurCentre.y;
-            lpState->m_blurCenter.z = KF_ZERO;
-            lpState->m_blurCenter.w = KF_ZERO;
-
-            // +0x430 m_blurOpacity  <- mfOpacity                       (`stfs f0, 0x430(r20)`)
-            // +0x434 m_blurVelocity <- mfVelocity * speedFactor^2      (`fmuls f13, f0, f12` then
-            //                          `fmuls f0, f13, f12` @0x8240DBB8 / @0x8240DBF8 -- the factor
-            //                          is applied TWICE, which is the asm and not a typo)
-            lpState->m_blurOpacity  = lBlur.mfOpacity;
-            lpState->m_blurVelocity = lBlur.mfVelocity * lfSpeedFactor * lfSpeedFactor;
-
-            // +0x438/+0x43C m_blendSharpMUL / m_blendSharpADD, derived from the [-1,1] sharpness.
-            // Called HERE, between the velocity store and the noise store, exactly as the asm orders
-            // it (`bl B4Blur__State__SetBlendSharpness` @0x8240DC28, with r3 = this+0x3F0 and
-            // f1 = mfSharpness loaded @0x8240DBF4).
-            lpState->SetBlendSharpness(lBlur.mfSharpness);
-
-            // +0x440 m_blendNoise <- mfNoise                            (`stfs f0, 0x440(r20)`)
-            // +0x444 m_blendAngle <- mfAngle * DEG2RAD                   (`stfs f0, 0x444(r20)`)
-            lpState->m_blendNoise = lBlur.mfNoise;
-            lpState->m_blendAngle = lBlur.mfAngle * KF_DEGREES_TO_RADIANS;
-
-            //
-            // INERT ON THIS BUILD, and that is measured rather than hoped: the B4-blur arm only runs
-            // when the layer-0 internal frame's mbUseBlur is set, and the PC bring-up producer of that
-            // frame (BrnRendererModule::PCBringUpProduceBaseEffectsFrame) writes mbUseBlur = false,
-            // because the console's own producer derives it from a camera flag and two debug-component
-            // bytes that are all clear on a no-event frame (DATA_NOTE.md section 3). So this whole
-            // block is reconstructed-and-unreached today; it must not be reached until the publish
-            // above exists.
-        }
-        gDiag.mbBlur = lbBlurActive;
-    }
-}
-
-// ==================================================================================================
-// Render @0x8240DC80-0x8240DCBC -- the 2D tint colour.
-// ==================================================================================================
-void BrnRendererEvalPostFxTint2dColour(const BrnGraphics::EffectsArbitrator* lpArbitrator,
-                                       bool lbEffectsAllowed,
-                                       f32* lpafColourXYZW)
-{
-    if (lpafColourXYZW == 0)
-        return;
-
-    // The unconditional zero first (`vspltisw v0, 0` / `stvx128 v0, r0, &var_CA0`). This is why the
-    // composite's tint is a pass-through on a no-event frame -- it is the console's own value, not a
-    // fallback.
-    lpafColourXYZW[0] = KF_ZERO;
-    lpafColourXYZW[1] = KF_ZERO;
-    lpafColourXYZW[2] = KF_ZERO;
-    lpafColourXYZW[3] = KF_ZERO;
-
-    gDiag.mbTint2d = false;
-
-    // NOTE THE ORDER OF THE TWO CONDITIONS: the console tests `v296` (effects allowed) FIRST
-    // (`cmplwi cr6, r25, 0` / `beq` @0x8240DC88-0x8240DC90) and only then loads the frame byte. Every
-    // OTHER effect above tests the frame byte first and ANDs the allowed flag afterwards. Preserved.
-    if (!lbEffectsAllowed)
-        return;
-
-    const BrnEffectsFrame* const lpFrame = GetBaseInternalFrame(lpArbitrator);
-    if (lpFrame == 0)
-        return;
-    if (!lpFrame->GetUseTint2d())
-        return;
-
-    // The console evaluates INTO the slot it just zeroed (r3 == &var_CA0 at 0x8240DCB8 is the same
-    // address the `stvx128 v0` at 0x8240DC8C wrote), so the zero is the seed, not a separate value.
-    BrnEffects::TintData2d lTint2d;
-    lTint2d.mv4Colour.SetZero();
-    (void)lpArbitrator->EvalTint2d(lTint2d);   // return DISCARDED, as at the four sites above
-
-    lpafColourXYZW[0] = lTint2d.mv4Colour.x;
-    lpafColourXYZW[1] = lTint2d.mv4Colour.y;
-    lpafColourXYZW[2] = lTint2d.mv4Colour.z;
-    lpafColourXYZW[3] = lTint2d.mv4Colour.w;
-
-    gDiag.mbTint2d = true;
-}
-
-// ==================================================================================================
-// Render @0x8240DD04-0x8240DD4C -- MotionBlurState::Update.
-//
-// THE CALL, decoded off the asm rather than off Hex-Rays (which drops the fifth argument):
-//     r3 = this + 0x450                     -> BrnPostFx::mMotionBlurState
-//     r4 = particleRenderData + 0x60        (`addi r4, r24, 0x60`  @0x8240DD0C)
-//     r5 = particleRenderData + 0xA0        (`addi r5, r24, 0xA0`  @0x8240DD08)
-//     f1 = *(f32*)(particleRenderData + 0xC)(`lfs f1, 0xC(r24)`    @0x8240DD04)
-//     r7 = (frame.mMotionBlurData.mbIsExpensiveMotionBlur != 0)
-//          (`lbz r11, 0x1E1(r11)` / `cntlzw` / `extrwi r11,r11,1,26` / `xori r7, r11, 1`
-//           @0x8240DD38-0x8240DD48 -- a byte-to-bool with the sense INVERTED TWICE, i.e. plain != 0)
-// The float rides f1 and CONSUMES its GPR slot, which is why the fifth argument lands in r7 and not
-// r6 -- the PPC float-argument rule AGENTS.md rule 4 names. Hex-Rays prints only four arguments and
-// is wrong; the committed declaration (BrnPostFxShader.h:108) has five, ending in
-// `MotionBlurState::EQuality leQuality`, and 0/1 are E_QUALITY_CHEAP / E_QUALITY_EXPENSIVE.
-//
-// r24 == the value BrnGame::DispatchThreadInputBuffer's read-locked ParticleRenderData accessor
-// returns (`bl sub_8227F640` @0x8240C45C; that function asserts "Not locked for reading" and returns
-// `a1 + 14496` == this + 0x38A0 == &mParticleRenderData, BrnDispatchThreadInputBuffer.h:182).
-//
-// ⭐ BOTH BLOCKERS CLOSED 2026-08-15 (post-fx step-6 producers wave), and the gate is now 1:
-//   1. MotionBlurState::Update IS BODIED, in BrnPostFxShader.cpp, where the DWARF puts it. (The
-//      old note here said it needed the rw::math::fpu double-precision matrix family. That was
-//      wrong: Update is pure single-precision VMX with no call in it at all. The fpu double family
-//      is what BrnPostFxShader::Render's REPROJECTION block needs, and that now exists too.)
-//   2. DispatchThreadInputBuffer::ParticleRenderData HAS ITS REAL LAYOUT (DWARF ParticleModule.h:
-//      589-606), so the three arguments are reached BY NAME -- mfCurrentTimeStep, mCgsCamera's view
-//      and mCgsCamera's projection -- and the console's +0x0C / +0x60 / +0xA0 are three independent
-//      confirmations of that layout rather than three offsets anybody has to cast to.
-//
-// ⭐ THE THIRD BLOCKER -- THE PRODUCER -- CLOSED 2026-08-16 (post-fx step 9). On the console the
-// render data is filled every frame by BrnParticle::ParticleModule::GenerateRenderRequests
-// @0x82281BD8 -- the ONLY caller of the write-locked accessor:
-//   $ python -c "import json;print(json.load(open('.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8227F6E8.json'))['xrefs_to'])"
-//   [{'address': '0x82281BD8', 'name': 'BrnParticle::ParticleModule::GenerateRenderRequests'}]
-// which in turn is only reached from BrnEffects::EffectsModule::GenerateDispatchLists @0x82296668,
-// after BrnParticle::ParticleModule::Update @0x822817D8 (the vtable+68 virtual EffectsModule::Update
-// @0x8229EC28 drives) has refreshed the module's own record at ParticleModule+0x8E00. NEITHER module
-// is on this build's list -- `grep -n "Particle" tools/build/build_game_exe.bat` finds only the LION
-// vendor waveform TU -- so the record was never written and this function was handed a NULL.
-//
-// It is now written by the named PC bring-up stand-in for that pair,
-//     BrnParticle::PCBringUpProduceParticleRenderData  (ParticleModuleBringUp.cpp)
-// called from BrnGameModule::DoDispatch with the DIRECTOR's published camera and the SIM timer's
-// step / time / multiplier -- the same three floats the console's EffectsModule::Update reads off
-// the published TimerStatusInterface. BrnRendererModule.cpp now passes the READ-LOCKED
-// `GetPublishedParticleRenderDataPC()`, gated on that producer having run.
-//
-// ⚠ THE OLD WARNING IS KEPT AS HISTORY, BECAUSE THE HAZARD IT NAMES IS STILL REAL: DO NOT WIRE THE
-// ACCESSOR UP WITHOUT A PRODUCER. Passing `GetPublishedParticleRenderDataPC()`
-// unconditionally would hand this function UNINITIALISED memory before the first producer run:
-// neither DispatchThreadInputBuffer::Construct (faithfully -- the console does not clear that
-// payload either) nor CreateIOBuffer<T> (since the 2026-08-15 perf wave) zeroes it. A garbage view
-// matrix is almost surely singular or non-finite, and MotionBlurState::Update's zero-time-step arm
-// INVERTS it four times -- the resulting NaN would propagate straight into BlurMatrixX/Y/W and, from
-// there, into a tex2Dgrad gradient. That is exactly why the call site tests
-// BrnParticle::PCBringUpParticleRenderDataProduced() and not just the buffer pointer. The null arm
-// below stays for the frames before the first DoDispatch, and for any build where the producer is
-// unmounted.
-//
-// ⚠ STENCIL-MASK DEVIATION, LIVE FROM THIS CHANGE ON. The console's composite blurs CARS and WORLD
-// separately behind the stencil mask BrnPostFx writes; this tree's composite has no stencil mask, so
-// a real (non-zero) velocity now blurs the WHOLE frame uniformly instead of only what the mask
-// selects. That is a known, deliberate deviation -- the fix is the stencil mask, not a weakened
-// velocity. Until it lands, expect directional streaking of the world (and of the car with it) in
-// the intro / menu cameras, which is precisely the boot proof this rung is checked against.
-//
-// THE PARAMETER IS TYPED: BrnParticle::ParticleModule::ParticleRenderData. Passing a null pointer
-// -- which Render still does when nothing in this tree PRODUCES the render data -- is the honest
-// "no producer" signal, handled by the body with one reported line and not a crash.
-// ==================================================================================================
-#define BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE 1
-
-bool BrnRendererUpdatePostFxMotionBlur(
-    const BrnGraphics::EffectsArbitrator* lpArbitrator,
-    const BrnParticle::ParticleModule::ParticleRenderData* lpParticleRenderData)
-{
-    gMotionBlurDiag.mbUpdateCalled = false;
-
-    const BrnEffectsFrame* const lpFrame = GetBaseInternalFrame(lpArbitrator);
-    if (lpFrame == 0)
-        return false;
-    // r7 -- `lbz r11, 0x1E1(r11)` / cntlzw / extrwi / xori @0x8240DD38-0x8240DD48, i.e. plain != 0.
-    const BrnDirector::Camera::MotionBlurData& lrMotionBlur = lpFrame->GetMotionBlurData();
-    const MotionBlurState::EQuality leQuality =
-        lrMotionBlur.mbIsExpensiveMotionBlur ? MotionBlurState::E_QUALITY_EXPENSIVE
-                                             : MotionBlurState::E_QUALITY_CHEAP;
-
-    gMotionBlurDiag.mbActive          = lrMotionBlur.mbIsActive;
-    gMotionBlurDiag.miQuality         = static_cast<s32>(leQuality);
-    gMotionBlurDiag.mfCarsBlurAmount  = lrMotionBlur.mfCarsBlurAmount;
-    gMotionBlurDiag.mfWorldBlurAmount = lrMotionBlur.mfWorldBlurAmount;
-
-#if BRN_POSTFX_MOTION_BLUR_UPDATE_AVAILABLE
-    if (lpParticleRenderData == 0)
-    {
-        static bool sbReportedNoRenderData = false;
-        if (!sbReportedNoRenderData)
-        {
-            sbReportedNoRenderData = true;
-        }
-        return false;
-    }
-
-    const CgsGraphics::Camera& lrCamera = lpParticleRenderData->mCgsCamera;
-
-    {
-        const rw::math::vpu::Vector3 lAggregateValue = { lrCamera.mView.xAxis.x, lrCamera.mView.xAxis.y,
-                                                lrCamera.mView.xAxis.z, lrCamera.mView.xAxis.w };
-        lCameraView.xAxis = lAggregateValue;
-    }
-    {
-        const rw::math::vpu::Vector3 lAggregateValue = { lrCamera.mView.yAxis.x, lrCamera.mView.yAxis.y,
-                                                lrCamera.mView.yAxis.z, lrCamera.mView.yAxis.w };
-        lCameraView.yAxis = lAggregateValue;
-    }
-    {
-        const rw::math::vpu::Vector3 lAggregateValue = { lrCamera.mView.zAxis.x, lrCamera.mView.zAxis.y,
-                                                lrCamera.mView.zAxis.z, lrCamera.mView.zAxis.w };
-        lCameraView.zAxis = lAggregateValue;
-    }
-    {
-        const rw::math::vpu::Vector3 lAggregateValue = { lrCamera.mView.wAxis.x, lrCamera.mView.wAxis.y,
-                                                lrCamera.mView.wAxis.z, lrCamera.mView.wAxis.w };
-        lCameraView.wAxis = lAggregateValue;
-    }
-
-    // The console's five-argument call, argument for argument (asm 0x8240DD04-0x8240DD4C):
-    //   r3 = &BrnPostFx::mMotionBlurState        r4 = particleRenderData + 0x60  (the view)
-    //   r5 = particleRenderData + 0xA0 (proj)    f1 = *(f32*)(particleRenderData + 0x0C)
-    //   r7 = the quality (the float in f1 CONSUMES its GPR slot -- AGENTS.md's PPC rule 4 -- which
-    //        is why the fifth argument lands in r7 and Hex-Rays prints only four).
-    msPostFx.GetMotionBlurState().Update(lCameraView,
-                                         lrCamera.mProjection,
-                                         lpParticleRenderData->mfCurrentTimeStep,
-                                         leQuality);
-    gMotionBlurDiag.mbUpdateCalled = true;
-    gMotionBlurDiag.mfWvpDelta = MaxAbsoluteDifference(msPostFx.GetMotionBlurState().mCurrentWVP,
-                                                       msPostFx.GetMotionBlurState().mPreviousWVP);
-    return true;
-#else
-    (void)lpParticleRenderData;
-    static bool sbReported = false;
-    if (!sbReported)
-    {
-        sbReported = true;
-    }
-    return false;
-#endif
-}
-
-//
-// LATCHED ON A COUNTER, capped at six lines: base frame -> Eval* -> BrnPostFx is a per-frame steady
-// state, so a value latch would print once and a per-frame line would flood the log. Six samples 500
-// frames apart cover the loading screen, the menu and the first in-world frames.
-// DELETE with the bring-up.
-// ==================================================================================================
-void BrnRendererLogPostFxEffectState()
-{
-    static u32 suCalls  = 0u;
-    static u32 suPrints = 0u;
-    const u32 luFrame = suCalls++;
-    static u32 suLastFlags = ~0u;
-    char lacTrace[2];
-    suLastFlags = luFlags;
-    ++suPrints;
-
-    char lacMsg[224];
-    std::snprintf(lacMsg, sizeof(lacMsg),
-                  "[postfx-fx] apply-call %u: bloom=%d(lum %.3f thr %.3f col %.3f %.3f %.3f)"
-                  " vig=%d dof=%d blur=%d tint2d=%d tint3d=%d\n",
-                  static_cast<unsigned>(luFrame),
-                  gDiag.mbBloom ? 1 : 0,
-                  static_cast<double>(gDiag.mfBloomLuminance),
-                  static_cast<double>(gDiag.mfBloomThreshold),
-                  static_cast<double>(gDiag.mafBloomColour[0]),
-                  static_cast<double>(gDiag.mafBloomColour[1]),
-                  static_cast<double>(gDiag.mafBloomColour[2]),
-                  gDiag.mbVignette ? 1 : 0,
-                  gDiag.mbDepthOfField ? 1 : 0,
-                  gDiag.mbBlur ? 1 : 0,
-                  gDiag.mbTint2d ? 1 : 0,
-                  gDiag.mbTint3d ? 1 : 0);
-    CgsDev::Log::WriteToLog(lacMsg);
-
-    // The motion-blur consumer line. `updated` is 1 only when the console's five-argument
-    // MotionBlurState::Update actually ran; `wvpDelta` is the largest element difference between
-    // the current and previous world-view-projection matrices, which is what the composite's
-    // reprojection differences into BlurMatrixX/Y/W. With no producer wired, the honest reading is
-    // active=0 updated=0 wvpDelta=0.000 -- and any NON-zero wvpDelta with updated=0 would be a bug.
-    char lacMotionBlurMsg[192];
-    std::snprintf(lacMotionBlurMsg, sizeof(lacMotionBlurMsg),
-                  "[postfx-mb] apply-call %u: active=%d updated=%d quality=%d cars=%.2f world=%.2f"
-                  " wvpDelta=%.4f\n",
-                  static_cast<unsigned>(luFrame),
-                  gMotionBlurDiag.mbActive ? 1 : 0,
-                  gMotionBlurDiag.mbUpdateCalled ? 1 : 0,
-                  static_cast<int>(gMotionBlurDiag.miQuality),
-                  static_cast<double>(gMotionBlurDiag.mfCarsBlurAmount),
-                  static_cast<double>(gMotionBlurDiag.mfWorldBlurAmount),
-                  static_cast<double>(gMotionBlurDiag.mfWvpDelta));
-    CgsDev::Log::WriteToLog(lacMotionBlurMsg);
-}
-
-// The world/car/sky pass block of Render (@0x8240BFA8 :725+). Pass order and list ids are the
-// X360's (see the renderer wave log for the full map):
-//   shadow cascades (lists 0,2,1,3,4)  -> LIVE, and no longer here: they run in
-//     RenderShadowMapPasses above, called from Render BEFORE this block, which is the
-//     console's own order (Render:545-640 vs. the world passes at :725+)
-//   env-map faces (lists 5..10)        -> LIVE (Render's six-face loop, reflections step 1;
-//                                          runs BEFORE this block, after the shadow pass)
-//   pre-Z (list 21)         -> DispatchAllMeshesZOnly (mbRenderPreZ)
-//   CARS OPAQUE  (list 19)  -> DispatchAllMeshes
-//   WORLD OPAQUE (list 11)  -> DispatchAllMeshes
-//   sky                     -> BrnSkyDomeManager::Render (bring-up gated)
-//   WORLD TRANSPARENT (15)  -> DispatchAllMeshes
-//   CARS TRANSPARENT  (20)  -> enabled blobby-shadow draw, then DispatchAllMeshes
-// Occlusion-query interleaving is the mbOcclusionCull* path (default false).
-// The context is the one Render built through BuildDispatchLists, on Render's stack.
-void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer,
-                                          CgsGraphics::DispatchObjectContext* lpContext,
-                                          f32 lfWhiteLevel)
-{
-    using namespace CgsGraphics;
-
-    if (mpInterpreter == 0)
-        return;
-
-    DispatchObjectContext& lContext = *lpContext;
-
-    // X360 Render publishes the manager pointer and the camera/near-clip inputs before the
-    // query passes. On PC the manager is constructed only after the D3D9 device is available.
-    if (lbOcclusionCullReady)
-    {
-        mOcclusionCullManager.mViewProjectionMatrix =
-            lpDispatchThreadInputBuffer->GetOcclusionViewProjectionMatrix();
-        // ARTIST Render preserves the other lanes of the manager vector and stores this scalar
-        // into its z lane at 0x8240C164-0x8240C178.
-        mOcclusionCullManager.mNearClipOffset.z = mfOccludeeNearClipOffset;
-    }
-
-    static u32 suOcclusionProbeFrames = 0;
-    static u32 suOcclusionProbeStates = 0;
-    static u32 suOcclusionProbeBatches = 0;
-    static u32 suLastOcclusionProbeState = ~0u;
-    const u32 luOcclusionProbeFrame = sbOcclusionProbe ? suOcclusionProbeFrames++ : 0u;
-    if (sbOcclusionProbe)
-    {
-        const u32 luState = (mOcclusionCullManager.mbOcclusionEnabled ? 1u : 0u)
-            | (lbOcclusionCullReady ? 2u : 0u) | (mbOcclusionCullWorldOpaque ? 4u : 0u);
-        if (luState != suLastOcclusionProbeState && suOcclusionProbeStates < 24u)
-        {
-            char lacTrace[160];
-            std::snprintf(lacTrace, sizeof(lacTrace),
-                "[occ-state] frame=%u enabled=%u ready=%u world_opaque=%u\n",
-                static_cast<unsigned>(luOcclusionProbeFrame),
-                mOcclusionCullManager.mbOcclusionEnabled ? 1u : 0u,
-                lbOcclusionCullReady ? 1u : 0u, mbOcclusionCullWorldOpaque ? 1u : 0u);
-            CgsDev::Log::WriteToLog(lacTrace);
-            ++suOcclusionProbeStates;
-        }
-        suLastOcclusionProbeState = luState;
-    }
-
-    const auto DispatchOcclusionBatch = [&](DispatchList* lpList, s32 liFirst, s32 liCount)
-    {
-        mOcclusionCullManager.BeginQueries();
-        const s32 liQueryNext = lpList->DispatchAllMeshOcclusionQueries(mpInterpreter, liFirst, liCount);
-        mOcclusionCullManager.EndQueries();
-        mOcclusionCullManager.BeginConditionalRender();
-        const s32 liNext = lpList->DispatchAllMeshes(
-            mpInterpreter, &lContext, static_cast<u32>(liFirst), liCount);
-        mOcclusionCullManager.EndConditionalRender();
-        if (sbOcclusionProbe && suOcclusionProbeBatches < 192u)
-        {
-            char lacTrace[224];
-            std::snprintf(lacTrace, sizeof(lacTrace),
-                "[occ-batch] frame=%u list=%u total=%u first=%d count=%d query_next=%d draw_next=%d\n",
-                static_cast<unsigned>(luOcclusionProbeFrame), static_cast<unsigned>(luList),
-                static_cast<unsigned>(lpList->GetCount()), static_cast<int>(liFirst),
-                static_cast<int>(liCount), static_cast<int>(liQueryNext), static_cast<int>(liNext));
-            CgsDev::Log::WriteToLog(lacTrace);
-            ++suOcclusionProbeBatches;
-        }
-        return liNext;
-    };
-
-    const auto DispatchPassList = [&](DispatchList* lpList, bool lbCull, bool lbBatch)
-    {
-        if (!lbOcclusionCullReady || !lbCull)
-            return lpList->DispatchAllMeshes(mpInterpreter, &lContext, 0u, -1);
-        if (!lbBatch)
-            return DispatchOcclusionBatch(lpList, 0, -1);
-
-        s32 liFirst = 0;
-        do
-        {
-            liFirst = DispatchOcclusionBatch(lpList, liFirst, 64);
-        } while (liFirst != -1);
-        return -1;
-    };
-
-    mu32NumWorldOpaqueObjectTotals      += luWorldOpaque;
-    mu32NumCarOpaqueObjectTotals        += luCarOpaque;
-    mu32NumWorldTransparentObjectTotals += luWorldTransparent;
-    mu32NumCarTransparentObjectTotals   += luCarTransparent;
-
-    // X360 Render @0x8240C5FC..0x8240C688 publishes five 60-frame averages.
-    // RenderShadowMapPasses has already added this frame's shadow total before this pass.
-    ++mu32DispatchFrameCounter;
-    if (mu32DispatchFrameCounter == 60u)
-    {
-        mu32NumWorldOpaqueObjects      = mu32NumWorldOpaqueObjectTotals / 60u;
-        mu32NumCarOpaqueObjects        = mu32NumCarOpaqueObjectTotals / 60u;
-        mu32NumWorldTransparentObjects = mu32NumWorldTransparentObjectTotals / 60u;
-        mu32NumCarTransparentObjects   = mu32NumCarTransparentObjectTotals / 60u;
-        mu32NumShadowObjects           = mu32NumShadowObjectTotals / 60u;
-
-        mu32NumWorldOpaqueObjectTotals      = 0u;
-        mu32NumCarOpaqueObjectTotals        = 0u;
-        mu32NumWorldTransparentObjectTotals = 0u;
-        mu32NumCarTransparentObjectTotals   = 0u;
-        mu32NumShadowObjectTotals           = 0u;
-        mu32DispatchFrameCounter            = 0u;
-    }
-
-    const bool lbPreZWork   = (mbRenderPreZ && luPreZ != 0);
-    const bool lbOpaqueWork = (mbRenderCarsOpaque && luCarOpaque != 0)
-                           || (mbRenderWorldOpaque && luWorldOpaque != 0);
-    const bool lbTransparentWork = (mbRenderWorldTransparent && luWorldTransparent != 0)
-                                || (mbRenderCarsTransparent && luCarTransparent != 0);
-    // ARTIST gates the manager by the renderer switches, not mesh-list counts. These checks only
-    // cover PC availability: native Im3d is deferred until a device exists, and the matrix is in
-    // the dispatch input buffer.
-    const bool lbBlobbyShadowDraw = lbBlobbyShadowRender
-        && mBlobbyShadowManager.maBuffers[mBlobbyShadowManager.mu8Internal].miNumShadows > 0;
-
-    // [PC bring-up states] The per-pass render states normally come from the
-    // technique state groups the walk binds on each technique change
-    // (MaterialState -- its porter + the x64 state-object seam are still open).
-    // Opaque passes: Z test+write on, no blending. FLAG: replace with the real
-    // state-group binds when the MaterialState path lands.
-    //
-    // Applied ONLY when a pass will actually walk records: with no world data
-    // (boot, menus, every frame before the streamer delivers geometry) the whole
-    // block leaves the device state untouched, so the 2D/GUI tail below sees
-    // exactly the state it saw before this pass existed.
-    // PRE-Z (X360 Render @0x8240BFA8: right after BeginRenderAntiAliased, gated on
-    // mbRenderPreZ, mesh list 21 walked with DispatchAllMeshesZOnly). The list is fed
-    // by DrawRenderable::Interpret's pre-Z re-emit, which only runs when the object
-    // context carries mbPreZEnabled and the producer stamped a pre-Z list id.
-    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miPreZ);
-    if (lbPreZWork)
-    {
-    }
-    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miPreZ);
-
-    // ==============================================================================================
-    // THE CARS-vs-WORLD MOTION-BLUR MASK -- the CAR half (X360 Render @0x8240CEC4-0x8240CF90 and
-    // @0x8240D338-0x8240D3FC).
-    //
-    // WHAT THE CONSOLE'S MASK IS, end to end, decoded off Render's own asm:
-    //   * the layer-0 internal BrnEffectsFrame's mMotionBlurData is quantised to three stack bytes
-    //     at @0x8240C2C0-0x8240C314 -- mbIsActive, (u8)(mfWorldBlurAmount*255) and
-    //     (u8)(mfCarsBlurAmount*255) (BrnRendererPostFxFrameBytes, already read in Render);
-    //   * the WORLD amount is the frame's STENCIL CLEAR value: BeginRenderAntiAliased passes it to
-    //     D3DDevice_BeginTiling's ClearStencil (`clrlwi r9, r27, 24` @0x823FFB44) and ResolveMSAA
-    //     passes the same byte to D3DDevice_EndTiling's ClearStencil (`mr r9, r26` @0x823FFD44).
-    //     Both are already reconstructed and already carry the byte;
-    //   * the CARS amount is stamped into the stencil BY THE CAR PASSES THEMSELVES, which is this
-    //     block: `shadow::Device::BeginForceStencilWrite(carsByte)` before the car mesh list and
-    //     EndForceStencilWrite after it. The force window makes
-    //     shadow::Device::Xbox2SetDepthStencilStateLowLevelShadowed (X360 sub_827E8150) override
-    //     every material's depth/stencil third with StencilEnable 1 / TwoSided 0 / Func ALWAYS(7) /
-    //     WriteMask -1 / Ref = the forced value / Pass REPLACE(2) / ZFail KEEP(0). That override is
-    //     ALREADY IMPLEMENTED on PC (shadowingdevice.cpp:747-754), and the car meshes reach it
-    //     through Device::SetMaterialState -- so the window works here exactly as it does there;
-    //   * the composite then reads the stencil out of the depth fetch's fourth lane and multiplies
-    //     the screen velocity by it, giving cars and world DIFFERENT blur amounts per pixel.
-    // ⚠ THE LAST STEP IS THE ONE THIS BUILD STILL CANNOT DO: D3D9 cannot SAMPLE a depth-stencil
-    // surface's stencil, so PostFxProgramsPC.cpp's composite uses 1.0 for the mask (its own
-    // "TWO DISCLOSED PC DEVIATIONS" banner says so). This block therefore makes the mask CORRECT IN
-    // THE BUFFER while the consumer is still flat -- see the drive-fx wave report for the two
-    // candidate PC consumers. It is written now because it is a literal reconstruction of two
-    // console windows, because it is free (the whole thing is gated OFF unless a camera actually
-    // requested motion blur), and because the alternative -- a consumer with nothing to consume --
-    // cannot be brought up in the other order.
-    //
-    // THE GATE IS mMotionBlurData.mbIsActive, NOT the render-cars flag: `lbz r25, var_CD0` /
-    // `beq` @0x8240CEC8 skips only the Begin, and the symmetric `cmplwi r25` / `beq` @0x8240CF84
-    // skips only the End -- so the pair is balanced on ONE bool, which is what
-    // BeginForceStencilWrite's `!mbForceStencilWrite` assert and EndForceStencilWrite's
-    // `mbForceStencilWrite` assert require.
-    //
-    // POSITION OF THE READ: Render reads the three bytes once, right after SortDispatchLists, and
-    // carries them in stack slots to four consumers. They are read again here, for the same reason
-    // Render's own copy documents -- nothing writes the layer-0 INTERNAL frame between those two
-    // points (its only writers are StartOfFrame / DoDispatch in the UPDATE frame and
-    // EffectsArbitrator::EndOfFrame in SwapBuffers, all outside Render).
-    // ==============================================================================================
-    BrnRendererPostFxFrameBytes lCarMaskBytes;
-    BrnRendererReadPostFxFrameBytes(
-        sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, &lCarMaskBytes);
-    const bool lbForceCarStencil = lCarMaskBytes.mbMotionBlurActive;
-
-    if (lbOpaqueWork)
-    {
-
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miCarOpaque);
-        if (mbRenderCarsOpaque)
-        {
-            // X360 @0x8240CEC4-0x8240CED4 / @0x8240CF84-0x8240CF8C: the Begin/End pair sits INSIDE
-            // the render-cars-opaque gate (the `beq cr6, loc_8240CF94` at 0x8240CEC0 jumps past all
-            // three), and the dispatch of mesh list 0x13 sits between them.
-            if (lbForceCarStencil)
-                shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
-
-            if (lbForceCarStencil)
-                shadow::Device::EndForceStencilWrite();
-        }
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miCarOpaque);
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miWorldOpaque);
-        if (mbRenderWorldOpaque)
-        {
-        }
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miWorldOpaque);
-    }
-
-    // ---- THE SKY (X360 Render @0x8240BFA8: BrnSkyDomeManager::Render right here, between
-    // the opaque and the transparent passes, gated on mbRenderSky). --------------------
-    // The dome is camera-centred and 9500 units across, so it is drawn AFTER the opaque
-    // geometry and depth-tests against it (its depth/stencil state writes no depth) --
-    // it fills only the pixels the city left empty.
-    //
-    // The joined publication copied the world frame into the internal slot.
-    // Sky, reflections, coronas and post-FX consume that same immutable frame.
-    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miSky);
-    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miSky);
-
-    // Transparent passes: Z test on / write off, alpha blend on. Same FLAG.
-    if (lbTransparentWork)
-    {
-
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miWorldTransparent);
-        if (mbRenderWorldTransparent)
-        {
-        }
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miWorldTransparent);
-    }
-
-    // ARTIST @0x8240D2F4-0x8240D334 calls the manager inside the car-transparent gate, before
-    // BeginForceStencilWrite at 0x8240D348. Do not place it under lbTransparentWork: that PC
-    // optimization depends on mesh counts, while ARTIST calls the manager with empty lists too.
-    if (lbTransparentWork || lbBlobbyShadowRender)
-    {
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miCarTransparent);
-        if (mbRenderCarsTransparent)
-        {
-            if (lbBlobbyShadowRender)
-            {
-                mBlobbyShadowManager.Render(
-                    lpDispatchThreadInputBuffer->GetOcclusionViewProjectionMatrix(),
-                    &mIm3dRenderer,
-                    mpBlobbyShadowTexture,
-                    mfBlobbyShadowAlpha,
-                    lfWhiteLevel);
-            }
-
-            // Stencil and list-20 work stay after the manager. Preserve the existing PC
-            // combined transparent-list gate; the manager call is independent of that gate.
-            if (lbTransparentWork)
-            {
-                if (lbForceCarStencil)
-                    shadow::Device::BeginForceStencilWrite(lCarMaskBytes.mu8CarsBlurStencil);
-
-                if (lbForceCarStencil)
-                    shadow::Device::EndForceStencilWrite();
-            }
-        }
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miCarTransparent);
-    }
-
-    // Back to the opaque default before the 2D overlay tail (the Im2d path re-sets
-    // its own states, so this only matters for the frames a world pass ran).
-    if (lbPreZWork || lbOpaqueWork || lbTransparentWork || lbBlobbyShadowDraw)
-    {
-    }
-}
-
-// @ 0x823FF8F8 - BrnRendererModule::PrepareAgain. Store the five global textures
-// GamePrepare's stage-3 acquires resolved. The X360 body is five stores; the two cloud
-// slots (this+0xC4E0 / +0xC4E4) are the pair Render passes to BrnSkyDomeManager::Render,
-// which hard-returns if either is null.
-void BrnRendererModule::PrepareAgain(renderengine::Texture* lpBlobbyShadow,
-                                     renderengine::Texture* lpCloudDensity,
-                                     renderengine::Texture* lpCloudLighting,
-                                     renderengine::Texture* lpCoronaAtlas,
-                                     renderengine::Texture* lpGlassFracture)
-{
-    mpBlobbyShadowTexture   = lpBlobbyShadow;
-    mpCloudDensity0Texture  = lpCloudDensity;
-    mpCloudLighting0Texture = lpCloudLighting;
-    mpGlassFractureTexture  = lpGlassFracture;
-    // The corona atlas' slot is the CoronaManager's, not one of this module's members -- the X360
-    // hands it straight on (`mCoronaManager.SetTextureAtlas(allocator, lpCoronaAtlas)`). On this
-    // build the manager is not Constructed yet when PrepareAgain runs (there is no
-    // BrnRendererModule::Prepare and no device this early), so the texture is LATCHED and
-    // EnsureCoronaManagerBringUp hands it on at the first frame that can accept it. See that
-    // function's banner. (Until coronas step 1 this argument was accepted and dropped.)
-    gpCoronaAtlasTexture = lpCoronaAtlas;
-}
-
-void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
-                               const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
-{
-
-    // ARTIST 8240C340..398 draws only in the original stall stages 0 and 1.
-    // The native engine surface survives presentation. Suppressed frames must
-    // begin without the host FrameBegin clear, then still run the original
-    // loading-command, GDL and effects callback work before the draw gate.
-    const bool lbDrawFrame = meFrameStallStage == E_FRAMESTALL_NOT_STALLED
-        || meFrameStallStage == E_FRAMESTALL_SYNCING_BUFFERS;
-
-    // ARTIST 8240C0EC..8240C0F8 publishes renderer+0xC430 before loading
-    // commands, dispatch conversion, shadow draws and environment-map draws.
-    CgsGraphics::suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
-
-    // Forward the dispatch buffer's loading-screen command into the renderer - the X360
-    // Render does exactly this each frame (@0x8240BFA8: AddCommand(*(lpDispatchIn+9828)),
-    // the `lwzx r4, r26, 0x9990` at 0x8240C17C). The command is one-shot: the manager's
-    // end-of-frame Swap re-Constructs each new write buffer, so the slot reads
-    // E_LSC_NONE (AddCommand's no-op default) on the frames between events.
-    //
-    // (The old PC video gate died with the movie pass re-home: fullscreen movies now
-    // present inside the GUI pass exactly like the console, and the flow states manage
-    // the loading screen around them through the real 19/20 protocol -- BootLoading::
-    // OnLeave and PostTitleScreenLoad post StopAptLoadingMovie before playing a video.)
-    if (lpDispatchThreadInputBuffer != 0)
-        mLoadingScreenRenderer.AddCommand(
-            lpDispatchThreadInputBuffer->GetLoadingScreenCommand());
-
-    // ---- X360 Render:389-396 -- the object->mesh expansion and the pass sorts. ------------
-    // Hoisted up here (it used to live at the top of RenderWorldPasses) because the SHADOW
-    // pass below consumes mesh lists 0..4 and, on the console, runs before the world passes.
-    // The context object is on Render's stack exactly as the X360 keeps it.
-    CgsGraphics::DispatchObjectContext lDispatchContext;
-    const bool lbDispatchReady = BuildDispatchLists(&lDispatchContext);
-
-    // ARTIST 8240C31C..330: supplied owner, fresh control IO, after conversion
-    // and sorting, including stage 2. The control pair rotates independently
-    // of retained draw banks, so its events are consumed exactly once.
-    {
-        lpEffectsModule->DispatchThreadUpdate(lpDispatchThreadInputBuffer);
-    }
-
-    // ARTIST 8240C388..38C begins the frame-long read window only after
-    // the effects callback has released its own read lock.
-    if (lpDispatchThreadInputBuffer != 0)
-        lpDispatchThreadInputBuffer->LockForRead();
-
-    // Original 8240C398 -> 8240E25C skips all draws, including the HUD tail.
-    if (!lbDrawFrame)
-    {
-        if (lpDispatchThreadInputBuffer != 0)
-            lpDispatchThreadInputBuffer->UnlockForRead();
-        return;
-    }
-
-    // ARTIST 8240C4B0..C4C4: conversion uses time zero, then ALL mesh draw
-    // passes use the completed shader frame's game time (+0x314). Publish it
-    // after the draw gate so retained/stalled command banks keep their clock.
-    if (mpInterpreter != 0)
-        mpInterpreter->SetTime(maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].GetGameTime());
-
-    CgsDev::PerfMonGpu::StartProfiling(); // ARTIST8240C4C8.
-
-    // [PC bring-up] Realise the shadow-map render target. The console builds the whole
-    // render-target pool in BrnRendererMemory::Construct during BrnRendererModule::Construct;
-    // that pool is not linkable on this build (see the BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
-    // banner in BrnRendererMemory.cpp), and module Construct runs before the D3D9 device exists
-    // anyway. So the shadow slice is created lazily, here, on the first frame that has a device
-    // -- the same shape as the sky dome's PrepareSkyDome gate. DELETE with the pool.
-    EnsureShadowMapTarget(mAllocatedRenderTargets);
-
-    // [PC bring-up, post-fx spine wave 2026-08-13] Realise the off-screen SCENE target (and the
-    // down-sample buffer beside it) the same lazy way, on the first frame that has a device.
-    //
-    // NOTHING RENDERS INTO IT YET, and that is deliberate. This wave lands the pool half of the spine
-    // only: the console's frame bracket (BeginRenderAntiAliased @0x823FFA18 / ResolveMSAA @0x823FFBE0 /
-    // EndRenderAntiAliased @0x82408B00) is what actually redirects the world passes off-screen, and all
-    // three are still absent from the tree -- their ledger "reviewed" status is false, like the eight
-    // pool creators' was. Until they land, the world keeps drawing straight to the back buffer and this
-    // target is created, logged ("[postfx-rt] ...") and left idle. The point of landing it separately is
-    // that a wrong scene target and a wrong bracket look identical on screen; this half is provable on
-    // its own, from the log line and an unchanged frame.
-    EnsurePostFxSceneTargets(mAllocatedRenderTargets, mbMultisampledBackbuffer);
-
-    // [PC bring-up, gate-flip wave 2026-08-15] The three RENDER-STATE FACTORIES. The console
-    // constructs them in BrnRendererModule::Construct @0x8240A778 -- three vtbl[0] calls at
-    // 0x8240A950 / 0x8240A968 / 0x8240A980 on the by-value members at this+0x3940 / +0x3944 /
-    // +0x3948 (mBlendStateFactory / mRasterizerStateFactory / mDepthStencilStateFactory), each with
-    // r4 = this->mpGraphicsAllocator (`lwz r4, 0x394C(r31)`). On PC the module's Construct has no
-    // device and a null graphics allocator, so -- like the pool above and like BrnPostFx::Construct
-    // below -- they run here, once, on the bring-up allocator, the first frame that has a device.
-    // Every state the world / post-fx / corona code pushes by table slot (saBlendStates[n],
-    // saDepthStencilStates[n], saRasterizerStates[n]) is null until this runs; the composite's
-    // cull-mode-NONE push (saRasterizerStates[2]) was the first consumer to show it -- a compare-
-    // then-skip on null left the world's back-face cull in force and the full-screen quad was
-    // culled whole. Order = the console's (blend, rasterizer, depth-stencil).
-    {
-        static bool sbStateFactoriesConstructed = false;
-    }
-    // ARTIST Construct8240A9F0 constructs the textured3D renderer. Native
-    // D3D9 program adoption needs the device, so defer only that construction.
-
-    // ---- X360 Render:505-533 -- THE COLOUR-CUBE (3D LUT) TINT BLOCK. ---------------------
-    //
-    // POSITION IS THE POINT. The console runs this HERE -- inside the PerfMonCpu bracket
-    // `*(this + 51508)` (StartMonitor @0x8240C698, StopMonitor @0x8240C79C), after the dispatch
-    // sorts and BEFORE shadow::Device::ResetShadowing(), the three texture binds below and the
-    // shadow-map pass -- because BrnPostFx::BeginTintBlend SCHEDULES an EA::Jobs job that blends
-    // the source colour cubes into the tint volume texture while the shadow map and the world
-    // passes draw. BrnPostFx::Render drains it at the top of the composite (m_processTint ->
-    // Job::WaitOn -> Tint::EndBlendJob) before anything samples s3. Putting it down with the apply
-    // block would leave the job no window at all.
-    //
-    // THE GATE IS mbRenderPostFX (`lbz r11, 0(this + 0xC41C)` / `beq loc_8240C798` @0x8240C6A8-
-    // 0x8240C6BC) -- the same "Render PostFX" debug toggle that gates the apply block and the
-    // composite further down, tested a THIRD time here, exactly as the console tests it.
-    //
-    // ⚠ THE ONE PC PRECONDITION THIS BLOCK CARRIES ON TOP OF THE CONSOLE'S GATE, and it is not
-    // optional. BeginTintBlend LOCKS the tint volume texture (Tint::BeginBlendJob ->
-    // renderengine::Texture::Lock) and the ONLY thing that unlocks it is BrnPostFx::Render's step-1
-    // drain, `if (m_processTint) { m_blendJob.WaitOn(); EndTintBlend(); }`. On the console those two
-    // sites sit under ONE gate -- the same mbRenderPostFX byte, `lbz r11, 0(this + 0xC41C)` at
-    // 0x8240C6A8 here and at 0x8240DC6C for the composite -- so a lock can never outlive its frame.
-    // On PC the composite sits behind three further preconditions this block does not share:
-    // BRN_ANTIALIAS_BRACKET_AVAILABLE / BRN_POSTFX_COMPOSITE_AVAILABLE, the scene bracket
-    // (lbDispatchReady && EnsurePostFxSceneTargets, :3127), and the pool + Construct test inside
-    // PCBringUpRenderPostFxComposite. With any of them false the tint would Lock every frame and
-    // never Unlock -- re-locking the same alternating buffer while it is still held. So the block
-    // inherits the composite's whole precondition, evaluated here from the same inputs the bracket
-    // below uses: lbDispatchReady is fixed for the frame, EnsurePostFxSceneTargets is value-latched
-    // and has already run unconditionally above, and PCBringUpConstructPostFx runs from inside it --
-    // so asking here and asking at :3127 cannot disagree.
-#if BRN_ANTIALIAS_BRACKET_AVAILABLE && BRN_POSTFX_COMPOSITE_AVAILABLE
-#else
-    // No composite in this configuration => nothing would ever drain the blend, so it is not started.
-    const bool lbTintBlendWillDrain = false;
-#endif
-
-    if (mbRenderPostFX && lbTintBlendWillDrain)
-    {
-        // v296 -- DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx. The console
-        // reads it ONCE near the top of Render (pseudocode lines 440-441) and ANDs it into this
-        // block AND into all six effects in the apply block; this is the same read, inside the
-        // same frame-long read lock, so it is the same value. The no-buffer fallback is the
-        // buffer's OWN Construct default (BrnDispatchThreadInputBuffer.cpp:232 seeds it true),
-        // not a pick -- identical to the apply block's fallback below.
-        const bool lbTintEffectsAllowed = (lpDispatchThreadInputBuffer != 0)
-            ? lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
-            : true;
-
-        BrnRendererBeginPostFxTintBlend(
-            sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, lbTintEffectsAllowed);
-    }
-
-#if BRN_ENVMAP_PASS_AVAILABLE
-    // [PC bring-up] SEED THE CONSOLE'S OWN ENV-MAP SWITCH FROM config.ini, once.
-    //
-    // ConstructRenderSwitches (BrnRendererModule.h) sets mRenderSwitches.mbRenderEnvmap true, which
-    // is the console's value -- and it runs from the module's constructor, i.e. at STATIC-INIT time
-    // (the module is reached from `static BrnGame::BrnGameModule gGameModule;`, BrnMain.cpp:45).
-    // renderengine::Device::Initialize and BrnMain's LoadConfig both run later, so seeding the switch
-    // in the constructor would read the value the file has not been consulted for yet. It is
-    // therefore seeded here, on the first Render, from the knob -- and NOT re-applied per frame, so a
-    // debug menu that toggles the switch at run time still wins, exactly as it does on the console.
-    // DELETE-WHEN the debug component owns the switch and the knob can go.
-    {
-        static bool sbEnvMapSwitchSeeded = false;
-        if (!sbEnvMapSwitchSeeded)
-        {
-            sbEnvMapSwitchSeeded = true;
-            mRenderSwitches.mbRenderEnvmap = (renderengine::gEnvironmentMap != 0);
-            if (!mRenderSwitches.mbRenderEnvmap && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[envmap] config.ini [Settings] EnvironmentMap=0 -- the six-face pass and the"
-                       " sampler-13 bind are OFF\n";
-            }
-        }
-    }
-#endif  // BRN_ENVMAP_PASS_AVAILABLE
-
-    // ---- THE CORONA SWITCH, seeded from config.ini exactly like the env-map one above ---------
-    // ConstructRenderSwitches (BrnRendererModule.h:832) sets mbRenderCoronas true, which IS the
-    // console's value, and it runs at static-init time -- before Device::Initialize and before
-    // LoadConfig. So the knob seeds it here, on the first Render, once, and never again: a debug
-    // toggle at run time still wins, exactly as on the console. NO SECOND SWITCH IS MINTED
-    // (AGENTS.md rule 3) -- renderengine::gCoronas only seeds the module's own bool.
-    // DELETE-WHEN the debug component owns the switch and the knob can go.
-    {
-        static bool sbCoronaSwitchSeeded = false;
-        if (!sbCoronaSwitchSeeded)
-        {
-            sbCoronaSwitchSeeded = true;
-            mbRenderCoronas = (renderengine::gCoronas != 0);
-            if (!mbRenderCoronas && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[corona] config.ini [Settings] Coronas=0 -- the corona pass is OFF\n";
-            }
-        }
-    }
-
-    // ---- X360 Render:536-542 -- the three GLOBAL texture binds. --------------------------
-    //
-    // THIS IS THE SHADOW RECEIVER'S MISSING HALF. 92 of the 110 pixel shaders in the shipped
-    // SHADERS.BNDL declare `dcl_2d s15` and do `texldp r1, r1, s15`; the three
-    // ShadowMap_* constants they read alongside it are registered, name-bound and uploaded --
-    // but nothing in this build had ever bound a TEXTURE to sampler 15, so every one of those
-    // shaders was sampling an unbound sampler.
-    //
-    // The console runs these unconditionally, after shadow::Device::ResetShadowing() and before
-    // the shadow-map pass, through sub_8227D158 -- the shadow cache's TEXTURE STATE bind, which
-    // installs a renderengine::TextureState (sampler parameters + raster) built once in
-    // Construct @0x8240A778. This build has no TextureState objects for them (Construct's two
-    // TextureState::Initialize calls need the render-target pool and the resource allocator), so
-    // the binds go through the cache's other entry point, shadow::Device::SetResource @0x82276C70
-    // -> D3DDevice_SetTexture: the same D3D call at the end of the same shadow cache, minus the
-    // sampler-state half. FLAG: the sampler state (filter/address/comparison) therefore comes
-    // from whatever the unit last held; wire the TextureState pair when Construct's pool lands.
-    //
-    //   s15 <- GetDepthTexture(mapRenderTarget[SHADOW_MAP_0])   (this+5924 on the console)
-    //   s14 <- the blobby-shadow texture                        (this+5804, PrepareAgain's arg)
-    //   s13 <- GetTexture(mapRenderTarget[ENV_MAP], 0)          (this+5700)  [PARKED, see below]
-    {
-        // s15 -- the shadow map's resolved depth texture. Both guards are the console's own
-        // asserts in BeginRenderShadowMap; here they are a gate, because the pool is built
-        // lazily on this build and GetDepthTexture would assert on a target with no
-        // post-fx RenderTarget behind it yet.
-        //
-        // LIVE since the render-target wave (2026-08-12): GetShadowMapBuffer and GetDepthTexture
-        // now have a target behind them (EnsureShadowMapTarget above builds it on the first
-        // frame with a device, and PostFxRenderTarget.cpp creates the D3D9 depth texture).
-        // GetRenderTarget() being non-null is still the gate -- a device-less or
-        // depth-texture-less machine leaves sampler 15 unbound rather than binding garbage.
-#if BRN_SHADOW_MAP_TARGET_AVAILABLE
-        CgsRenderTarget* const lpShadowBuffer = mAllocatedRenderTargets.GetShadowMapBuffer(0);
-        if (lpShadowBuffer != 0 && lpShadowBuffer->GetRenderTarget() != 0)
-        {
-            shadow::Device::SetResource(lpShadowBuffer->GetDepthTexture(), 15u);
-
-        }
-#endif
-
-        // ⭐⭐ s14 -- THE GLASS-FRACTURE MAP. CORRECTED 2026-09-06 (cracked-glass wave): this
-        // bind used to hand unit 14 mpBlobbyShadowTexture, and that was a MISIDENTIFIED MEMBER,
-        // not a stand-in. The console's line is
-        //     v79 = *(this + 5804); if (v79) sub_8227D158(v79, 14);   Render @0x8240BFA8:538-540
-        // and this+5804 is mpGlassFractureTextureState, which PrepareAgain @0x823FF8F8 builds
-        // out of its SIXTH argument -- the glass-fracture texture -- three instructions after it
-        // stores that same argument into the params block:
-        //     stw r30, 0x16A8(r31)   ; 5800  mpGlassFractureTexture      = lpGlassFracture
-        //     stw r30, 0x16F8(r31)   ; 5880  mGlassFractureTextureStateParams.mpTexture (+72)
-        //     ...                    ; 5884  the TextureState resource block (5 words)
-        //     stw r3,  0x16AC(r31)   ; 5804  mpGlassFractureTextureState = Initialize(5884, 5808)
-        // The blobby-shadow texture is PrepareAgain's SECOND argument and lands at this+14320
-        // (`stw r11, 0x37F0(r31)`); its only reader in the whole XEX is
-        // BrnBlobbyShadowManager::Render (`*(v12 + 14320)`, Render:859). It never goes near a
-        // sampler unit.
-        //
-        // WHAT THE WRONG TEXTURE COST. All 22 shipped vehicle pixel shaders declare
-        // `GlassFractureSampler` at s14; the vehicle GLASS program
-        // (Glass_Specular_Transparent_Doublesided, PS in build/game/SHADERS.BNDL) samples it
-        // TWICE per pixel and its whole crack term is those two fetches:
-        //     texld r1, v6,      s14
-        //     texld r3, v6.zwzw, s14
-        //     max   r4.xyz, r1.xyww, r3.xyww
-        //     mad_sat r1.xy, r4, c5.y, -c5.x        ; c5 == g_glassFractureStrength
-        // so unit 14 was feeding the crack the blobby-shadow blob instead of the crack map.
-        //
-        // The bind stays GATED on the pointer exactly as the console gates it, and it goes
-        // through shadow::Device::SetResource for the same reason s15 above does: this build
-        // has no TextureState objects yet (Construct's Initialize pair needs the resource
-        // allocator), so the resource-only entry point plus an explicit sampler apply is the
-        // honest stand-in. The sampler half is NOT optional here -- the vertex program tiles
-        // the crack UVs (`mad o7, v3.xyxy, c160, c159` with per-pane offsets in [-0.9, +0.9]),
-        // so a CLAMPed unit would smear one texel across a whole pane.
-        if (mpGlassFractureTexture != 0)
-        {
-            shadow::Device::SetResource(mpGlassFractureTexture, 14u);
-
-            static bool sbLoggedGlassFractureBind = false;
-            if (!sbLoggedGlassFractureBind && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedGlassFractureBind = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[glassfx] s14 bound: glass-fracture texture " << mpGlassFractureTexture
-                    << " (WRAP/LINEAR)\n";
-            }
-        }
-        else if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            static bool sbLoggedGlassFractureMissing = false;
-            if (!sbLoggedGlassFractureMissing)
-            {
-                sbLoggedGlassFractureMissing = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[glassfx] s14 UNBOUND -- mpGlassFractureTexture is null; every cracked"
-                       " pane will sample whatever unit 14 last held\n";
-            }
-        }
-
-#if BRN_ENVMAP_PASS_AVAILABLE
-        // s13 -- UNPARKED (reflections step 1, 2026-08-17). The console's bind is
-        //     sub_8227D158(*(this + 5700), 13)          Render @0x8240BFA8 pseudocode line 542
-        // i.e. shadow::Device::SetState(mpEnvMapTextureState, 13) -- the WHOLE-UNIT TextureState
-        // overload, not the bare-resource one the two lines above use. this+5700 is
-        // mpEnvMapTextureState: its sibling at this+5924 is what line 538 binds to s15, the two
-        // differ by 224, and 224 is exactly the distance from mpEnvMapTextureState to
-        // mpShadowMapTextureState[0] in the committed member order (see EnsureEnvMapTextureState).
-        //
-        // THREE DIFFERENCES FROM THE CONSOLE, all of them PC preconditions rather than choices:
-        //   * the console binds UNCONDITIONALLY (no null test at line 542, unlike s14 at 540-541),
-        //     because its pool cannot fail. Here the target is built lazily and can legitimately not
-        //     exist yet -- or be refused outright by EnsureEnvMapTarget -- so the bind is gated on
-        //     the same value-latched gate the pass uses. An unbound unit is what this build already
-        //     ships; binding a non-cube texture to a samplerCUBE is not.
-        //   * it is gated on mRenderSwitches.mbRenderEnvmap as well, so config.ini
-        //     `[Settings] EnvironmentMap=0` really does leave sampler 13 exactly as it is today.
-        //     The console has no such gate because it has no such knob.
-        //   * the TextureState is built HERE, once, rather than in Construct @0x8240A778, for the
-        //     same reason every other Construct step in this file is deferred: the render-target
-        //     pool it samples does not exist until the D3D9 device does.
-        //
-        // POSITION IS THE CONSOLE'S -- before the shadow-map pass, in the same three-bind block --
-        // and it has to be, because the CAR passes that sample s13 (mesh lists 19/20) run much
-        // later, inside RenderWorldPasses. NOTHING BETWEEN THE TWO REBINDS UNIT 13; the check was
-        // made rather than assumed, against the COMMITTED tree (i.e. before this hunk lands):
-        //     $ grep -rn "SetResource(.*13\|SetState(.*, *13\|SetTexture(.*13\|, *13u)"         //           b5-decomp/src --include=*.cpp --include=*.h | grep -v "0x13\|\[13\]"
-        //     (no output)
-        // and the one PC bracket that does park a unit behind the engine's back
-        // (PCSurfaceBracket_Save) parks unit 15 only, by the named constant KU_SHADOW_SAMPLER_UNIT:
-        //     $ grep -rn "KU_SHADOW_SAMPLER_UNIT" b5-decomp/src
-        //     pc/gcm/renderengine/XenonD3D9Shims.cpp:4073: const u32 KU_SHADOW_SAMPLER_UNIT = 15u;
-        //     ...:4107 / :4110 / :4150 / :4151  (GetTexture / SetTexture(null) / restore / ApplyState)
-        // The env-map pass itself renders INTO this texture between the bind and the car passes,
-        // which on this backend means it is bound as a sampler source while it is written -- the
-        // same read-while-written hazard the shadow bracket documents. It is handled where it
-        // belongs, in the loop below, not here.
-        if (mRenderSwitches.mbRenderEnvmap && EnsureEnvMapTarget(mAllocatedRenderTargets)
-            && EnsureEnvMapTextureState(&mpEnvMapTextureState, gpEnvMapTarget))
-        {
-            shadow::Device::SetState(mpEnvMapTextureState, 13u);
-
-            static bool sbLoggedEnvMapBind = false;
-            if (!sbLoggedEnvMapBind && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedEnvMapBind = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[envmap] s13 bound: cube texture " << mpEnvMapTextureState->mpRaster
-                    << " (TextureState " << mpEnvMapTextureState << ")\n";
-            }
-        }
-#else
-        // s13 -- PARKED. See the BRN_ENVMAP_PASS_AVAILABLE banner at the top of this file.
-#endif  // BRN_ENVMAP_PASS_AVAILABLE
-    }
-
-    // ---- X360 Render:545-640 -- THE SHADOW-MAP PASS. -------------------------------------
-    // Before RenderWorldPasses and before anything binds the scene target, exactly as the
-    // console orders it. Gated on mRenderSwitches.mbRenderShadows.
-    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miShadowmap);
-    if (lbDispatchReady)
-    {
-    }
-    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miShadowmap);
-
-#if BRN_ANTIALIAS_BRACKET_AVAILABLE
-
-    // ---- the three arguments, all read rather than chosen -----------------------------------
-    //
-    // lfWhiteLevel -- f26 in the console's Render, loaded ONCE near the top:
-    //     0x8240C4B0  lbz    r11, 0xAD0(r31)
-    //     0x8240C4B4  mulli  r11, r11, 0x320
-    //     0x8240C4B8  add    r11, r11, r31
-    //     0x8240C4BC  lfs    f26, 0x7A8(r11)
-    // and handed to BeginRenderAntiAliased (`fmr f1, f26` @0x8240CDB4) and to ResolveMSAA
-    // (`fmr f1, f26` @0x8240D5B8) unchanged -- which is why one local serves both calls here.
-    // WHAT IT IS: this+0xAD0 is mu8ShaderConstantsFrameInternal and 0x320 is
-    // sizeof(BrnShaderConstantsFrame), so r11 = this + 0x320*index, and +0x7A8 off that is the
-    // frame's member at +0x318 -- mfWhiteLevel (BrnShaderConstantsFrame.h:99, "@0x318"). The
-    // arithmetic closes on itself: maShaderConstantsFrames is at this+0x490, 0x490 + 0x318 == 0x7A8,
-    // and 0x490 + 2*0x320 == 0xAD0, i.e. the array ends exactly where the two index bytes begin.
-    //
-    // ⭐ CORRECTED 2026-08-18 (coronas step 2, group `coronacalib`). This paragraph used to end
-    // "On this build the value is 1.0f ... nothing writes the INTERNAL frame's white level". That
-    // has not been true since post-fx step 10: PublishSkyConstantsBringUp writes the live
-    // EnvironmentManager white level into maShaderConstantsFrames[EXTERNAL]
-    // (SetWhiteLevel, this file's PublishSkyConstantsBringUp), and SwapBuffers makes that slot the
-    // INTERNAL one (`mu8ShaderConstantsFrameInternal = mu8ShaderConstantsFrameExternal`). The
-    // shipped boot log reads `[sky] ... whiteLevel 0.500000` on every sky publish, and
-    // `[postfx-composite] call 1000: ... white=1` only because those calls precede the first
-    // publish. It IS read from the member, never hard-coded, which is what matters -- and the
-    // SAME local feeds BeginRenderAntiAliased, the corona pass and the composite below, so the
-    // corona vertex program's `colour.rgb * cameraPositionPlusBrightness.w` and the composite's
-    // `GlobalParams.x = 1 / whiteLevel` (BrnPostFxShader.cpp:1458) are guaranteed to be the same
-    // number's multiply and divide -- the console's own round trip, cancelling exactly. A corona
-    // pass fed a DIFFERENT white level from the composite would be brighter or darker by that
-    // ratio, which is why the value is printed in the `[corona-calib]` line.
-    const f32 lfFrameWhiteLevel =
-        maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].GetWhiteLevel();
-
-    // lbClearStencil / luStencilClearValue -- the console reads BOTH off the LAYER-0 INTERNAL
-    // BrnEffectsFrame, at Render @0x8240C290-0x8240C314: `addi r21, r31, 0x480` (mEffectsArbitrator),
-    // `lwz r8, 0(r21)` (mapaEffectsFrames[0]), `lbz r11, 0xC(r21)` (mu8EffectsFrameInternal),
-    // `mulli r11, r11, 0x1F0` (== the GUEST sizeof(BrnEffectsFrame)), then
-    //   `lbz r9, 0x1E0(r9)`  -> mMotionBlurData.mbIsActive        -> var_CD0 -> r5 @0x8240CDB0
-    //   `lfs f13, 0x1DC(r8)` * flt_82010C20, fctiwz, low byte     -> var_CCE -> r6 @0x8240CDAC
-    //                        -> that member is mMotionBlurData.mfWorldBlurAmount.
-    // ResolveMSAA is handed the SAME var_CCE (`lbz r5, 0xD40+var_CCE(r1)` @0x8240D5B4), which is why
-    // one value serves both calls, and BrnPostFx::Render is handed the SAME var_CD0 (`lbz r7,
-    // 0xD40+var_CD0(r1)` @0x8240DE18). The motion blur is masked into the STENCIL buffer: the stencil
-    // clear value IS the world blur amount quantised to a byte, and the clear is gated on motion blur
-    // being active. A third byte, var_CCF, is (u8)(mfCarsBlurAmount * 255.0f) and feeds the CAR
-    // passes' stencil reference (@0x8240CED0 / @0x8240D344), which this build does not reconstruct.
-    //
-    // LIVE SINCE THE BLOOM WAVE (2026-08-15). This used to be a documented all-zero floor whose note
-    // read "mEffectsArbitrator is NEVER Constructed on this build". It IS Constructed now
-    // (EnsureEffectsArbitratorBringUp, above), so the bytes are READ -- through the arbitrator's
-    // GetInternalEffectsFrame accessor and the frame's named members, never through 496*index.
-    // flt_82010C20 is attested at 255.0f as well (conductor idat dump; the old note asked for it).
-    // The values are still 0/0/false on this build, and that is not a floor either: the layer-0
-    // producer posts no motion-blur event, so what the frame carries is what
-    // MotionBlurData::Construct @0x821F84E8 seeds -- mfCarsBlurAmount = mfWorldBlurAmount = 0.0f,
-    // mbIsActive = false -- which is exactly what the console reads on any frame without one.
-    //
-    // POSITION: the console performs these reads much earlier (0x8240C290, right after
-    // SortDispatchLists) and carries them in stack slots to four consumers. They are read here
-    // instead, at the first consumer, because nothing writes the layer-0 INTERNAL frame between
-    // those two points -- the only writers are the producers (StartOfFrame / DoDispatch, both in the
-    // UPDATE frame) and EffectsArbitrator::EndOfFrame (SwapBuffers, after Render), all outside this
-    // function.
-    //
-    // lbClearStencil is not observable: it is not read by the X360 BeginRenderAntiAliased body
-    // (see its own note). luSceneStencilClearValue NOW IS, and that changed with rung 8 -- the
-    // sentence here used to end "the PC scene target's depth surface is picked by a format ladder
-    // whose first candidate is D3DFMT_D24X8 -- no stencil bits -- so the PC D3DDevice_Resolve strips
-    // D3DCLEAR_STENCIL from its clear", which was true only while the target was single-sampled.
-    // A MULTISAMPLED scene target takes the MSAA depth ladder instead, whose first candidate is
-    // D3DFMT_D24S8 (PostFxRenderTarget.cpp KAE_MSAA_DEPTH_FORMATS[0], chosen because the
-    // build's own auto depth-stencil and the RESZ destination are both D24S8 layouts), so the
-    // bound depth DOES carry stencil and TilingClearFlagsForBoundSurfaces keeps D3DCLEAR_STENCIL.
-    // The value is still 0 on this build (no motion-blur event posts one), and clearing stencil to
-    // it is what the console does -- so this is a faithful widening, not a behaviour to undo.
-    BrnRendererPostFxFrameBytes lPostFxFrameBytes;
-    BrnRendererReadPostFxFrameBytes(
-        sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0, &lPostFxFrameBytes);
-
-    const bool lbSceneClearStencil      = lPostFxFrameBytes.mbMotionBlurActive;
-    const u8   luSceneStencilClearValue = lPostFxFrameBytes.mu8WorldBlurStencil;
-
-#if BRN_ENVMAP_PASS_AVAILABLE
-    // ============================================================================================
-    // ---- X360 Render pseudocode 645-722 (asm 0x8240CB64-0x8240CD8C) -- THE SIX-FACE ENV-MAP PASS.
-    //
-    // POSITION. The console runs this AFTER the shadow-map pass and BEFORE BeginRenderAntiAliased:
-    // the last EndRenderShadowMap is @0x8240CB1C, this loop's EndRenderEnvironmentMapFace is
-    // @0x8240CD74, and the BeginRenderAntiAliased call is @0x8240CDB8. So this is the console's own
-    // position, and the banner that used to stand at the bracket below -- "the env-map faces are not
-    // reconstructed on this build, so this point between the shadow pass and the world pass IS the
-    // console's position" -- is retired by this wave (it is corrected in place, above).
-    //
-    // ⚠ WHY IT SITS INSIDE `#if BRN_ANTIALIAS_BRACKET_AVAILABLE` AND ON lbSceneBracketOpen, which is
-    // a PC precondition with no console counterpart and the single most important line in this block.
-    // Each face BINDS THE 128x128 CUBE TARGET and leaves it bound. On the console the very next thing
-    // Render does is BeginRenderAntiAliased, which rebinds the scene target THROUGH
-    // renderengine::Device::SetState -- so the console needs no bracket and this build must not
-    // invent one. But on PC that call is conditional: it is compiled out at
-    // BRN_ANTIALIAS_BRACKET_AVAILABLE 0 and skipped at run time when lbSceneBracketOpen is false. If
-    // the faces ran and the rebind did not, RenderWorldPasses, the GUI and the 2D tail would all draw
-    // into a 128x128 cube face at a 128x128 viewport -- a black screen with no error anywhere. So the
-    // pass is gated on exactly the condition that guarantees its own rebind.
-    //   * NOT PCSurfaceBracket_Save/Restore, deliberately, even though it is the obvious tool: that
-    //     bracket also raises `sbShadowPassActive` (XenonD3D9Shims.cpp), which changes the cull and
-    //     depth-bias behaviour of WorldDraw_IndexedUP, and it parks sampler 15. Both are shadow-pass
-    //     semantics; borrowing them for the env map would be a fabricated convention.
-    //   * ShadowPass.h's four-part deletion condition for that bracket ends "(4) NOTHING
-    //     BETWEEN THIS PASS AND THAT CALL MAY DRAW WITHOUT BINDING ITS OWN TARGET. On the console the
-    //     env-map pass sits in that gap and binds its own; on PC, verify it." This IS that
-    //     verification: the pass binds its own target, and it only runs when the rebind will follow.
-    // VIEWPORT/gpLastRenderTargetState across the two, stated because a wrong answer here is
-    // invisible: SetRenderTargetStateInvertDepth binds through renderengine::Device::SetState and
-    // WRITES renderengine::gpLastRenderTargetState (CgsRenderTarget.cpp:348-352), so the engine's
-    // "last state installed" shadow stays truthful; BeginRenderAntiAliased then binds the anti-alias
-    // buffer's section-0 state through the same path, the pointers differ, and the bind therefore
-    // happens rather than being skipped. The face leaves a 128x128 viewport (MinZ=1/MaxZ=0) and a
-    // 128x128 scissor rect installed. The VIEWPORT is restored by BeginRenderAntiAliased's
-    // ShadowedSetRenderTargetState -> renderengine::Device::SetState -> IDirect3DDevice9::
-    // SetRenderTarget, which D3D9 documents as resetting the viewport to the full extent of the new
-    // render target (MinZ=0/MaxZ=1) -- XenonD3D9Shims.cpp's PCSurfaceBracket banner settled exactly
-    // this for rung 8; D3DDevice_BeginTiling sets no viewport and only logs a mismatch. The SCISSOR
-    // RECT is NOT restored by anything: it is harmless only because renderengine::Device::
-    // SetWorldPassDefaultStates drives D3DRS_SCISSORTESTENABLE off for the world passes and the
-    // post-fx tail sets its own; a future scissor-enabled pass between here and there would inherit
-    // 128x128 (verify F4, envface -- corrected from the first cut's "tile rects" claim).
-    //
-    // ⚠ READ-WHILE-WRITTEN, and it is REAL on this backend. Sampler 13 was bound to this cube's
-    // colour texture a few hundred lines above, and these faces render INTO it. On the console those
-    // are two different objects (the pass writes an EDRAM tile; the sampler reads the resolved copy),
-    // which is why the console leaves the bind standing. On D3D9 the texture IS the resolve
-    // destination, so unit 13 is parked for the length of the loop and restored after it -- the same
-    // treatment, for the same reason, that PCSurfaceBracket_Save gives unit 15, and the pointer put
-    // back is the one shadow::Device's cache still believes is bound, so the cache stays truthful.
-    //
-    // WHAT IS DROPPED FROM THE CONSOLE BODY, each with its reason (nothing is dropped silently):
-    //   * `D3DDevice_SetShaderGPRAllocation(dev, 0, 0x30, 0x50)` @0x8240CB38 -- a Xenos GPR-partition
-    //     hint with no D3D9 counterpart. This file already drops the other three occurrences in
-    //     Render (0x8240C7F0, 0x8240D6FC, 0x8240DE68); named here so it stays greppable.
-    // GPU pass timing surrounds the complete cube loop below. CPU monitor
-    // recovery remains separate from the native GPU timestamp transport.
-    // The per-face sort rendezvous at ARTIST 8240CBF8 is handled below by
-    // WaitForMeshSortPC, using the descriptors belonging to this frame bank.
-    // ============================================================================================
-    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miEnvironmentMap);
-    bool lbParticlesPreparedForCube = false;
-    if (mRenderSwitches.mbRenderEnvmap && lbSceneBracketOpen
-        && lpDispatchThreadInputBuffer != 0
-        && EnsureEnvMapTarget(mAllocatedRenderTargets))
-    {
-        // The sky half's own preconditions, evaluated ONCE for the whole loop. On the console the
-        // sky dome's geometry and constants are built in Construct/Prepare and filled by the world;
-        // on PC both are bring-up gates that RenderWorldPasses' main sky pass already carries
-        // (BrnRendererModule.cpp, the mbRenderSky block), and this pass carries the same set so that
-        // the two can never disagree about whether a dome exists.
-        //
-        // ARTIST 0x8240CD34..0x8240CD44 copies the INTERNAL shading frame.
-        // The native producer bridge now publishes it at SwapBuffers, after join.
-        const bool lbDebugFaceColours = EnvMapDebugFaceColours();
-        (void)lbDebugFaceColours;
-
-        const bool lbUnparkSampler13 = (mpEnvMapTextureState != 0);
-        if (lbUnparkSampler13)
-        {
-            shadow::Device::SetResource(0, 13u);
-        }
-
-        // [DIAG envmap-perf, reflections step 2] CPU stage timers for the six-face pass. MEASURED
-        // 2026-08-17 (VSync off, all six faces): loop=1614..1999 us/frame, begin+clear=9,
-        // dispatch=1558..1941, sky=35, end+resolve=11, meshes/frame=883..1130 -- i.e. the pass is
-        // DRAW-BOUND at ~1.7 us/mesh (the D3D9 runtime floor), not a per-face waste; the producer's
-        // own share is ~40 us (gShadowPerf). The registered world refresh control can select
-        // the original half schedule; its default remains all six faces. The line prints only
-        // with BRN_ENVMAP_PERF=1 (the two QueryPerformanceCounter calls per face stay -- they are
-        // cheaper than the log gate they feed). DELETE-WHEN a batching draw path lands.
-
-   // bit f = face f rendered at least once, ever
-   // total BeginRenderEnvironmentMapFace calls
-
-        for (u32 luFace = 0; luFace < BrnGraphics::E_FACE_NUM; ++luFace)
-        {
-            // X360 @0x8240CC24: `lbzx r11, r29, r17` where r17 == the READ buffer + 0x99B4, i.e.
-            // mabEnvMapFaceRender[luFace] -- the per-face "the producer filled list 5+face this
-            // dispatch" byte, read through the accessor whose bounds assert the console fires at
-            // 0x8240CC0C ("luIndex<6"). A face the producer did not fill is skipped whole: no
-            // Begin, no dispatch, no sky, no resolve -- which is what makes the console's
-            // three-faces-per-frame alternation (WorldModule::GenerateFrustumQueries :3486-3499)
-            // cost three faces and not six.
-            if (!lpDispatchThreadInputBuffer->GetEnvMapFaceRender(luFace))
-                continue;
-
-   // [probe] see the BRN_ENVMAP_STATS block
-
-             BeginRenderEnvironmentMapFace(luFace, lfFrameWhiteLevel);
-
-            // The lock window. The console asserts on entry and exit of BOTH thirds
-            // (shadowingdevice.h:1215/1220/1235/1240 -- the four assert strings are inline in
-            // Render at 0x8240CC54/0x8240CC88/0x8240CCDC/0x8240CD10), which is exactly
-            // Lock/UnlockRasteriserState + Lock/UnlockDepthStencilState. It is what stops the
-            // material walk's per-technique binds from replacing the inverted-depth GREATER-EQUAL
-            // state and the cull-front raster state BeginRenderEnvironmentMapFace just applied.
-            // ⚠ ORDER: rasteriser locks FIRST and unlocks FIRST (0x8240CC40 before 0x8240CC6C;
-            // 0x8240CCCC before 0x8240CCF4) -- it is NOT a nested pair, and reversing it would trip
-            // the asserts rather than merely reorder two writes.
-            shadow::Device::LockRasteriserState();
-            shadow::Device::LockDepthStencilState();
-
-            const u32 luMeshCount = lpList->GetCount();
-            lpList->DispatchAllMeshes(mpInterpreter, &lDispatchContext, 0, -1);
-
-            shadow::Device::UnlockRasteriserState();
-            shadow::Device::UnlockDepthStencilState();
-
-            if (lbSkyReady)
-            {
-                // The console copies the frame PER FACE (the copy constructor is inside the loop,
-                // @0x8240CD44) and passes the copy's address; RenderToEnvironmentMap takes a
-                // `const BrnShaderConstantsFrame*` (DecFIGS BrnSkyDomeManager.h:71), so the copy is
-                // the compiler materialising a by-value temporary. It is reproduced rather than
-                // hoisted: it is 800 bytes three times a frame, and the literal shape is worth more
-                // than the copy is worth saving.
-                const BrnShaderConstantsFrame lFrame =
-                    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
-                mSkyDome.RenderToEnvironmentMap(
-                    static_cast<BrnGraphics::EEnvironmentMapFace>(luFace),
-                    &mIm3dRendererSkyDome,
-                    mpCloudDensity0Texture, mpCloudLighting0Texture,
-                    &lFrame);
-            }
-
-             EndRenderEnvironmentMapFace(luFace);
-
-            if (!sbLoggedFirstFace && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedFirstFace = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[envmap] first face pass: face=" << static_cast<s32>(luFace)
-                    << " list=" << static_cast<s32>(KU_ENV_MAP_FIRST_MESH_LIST + luFace)
-                    << " meshes=" << static_cast<s32>(luMeshCount)
-                    << " sky=" << (lbSkyReady ? 1 : 0) << "\n";
-            }
-        }
-
-        if (lbUnparkSampler13)
-        {
-            shadow::Device::SetResource(mpEnvMapTextureState->mpRaster, 13u);
-        }
-
-        {
-         }
-    }
-    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miEnvironmentMap);
-#endif  // BRN_ENVMAP_PASS_AVAILABLE
-
-    if (lbSceneBracketOpen)
-    {
-        BeginRenderAntiAliased(lfFrameWhiteLevel, lbSceneClearStencil, luSceneStencilClearValue);
-    }
-#endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
-
-    // The gameplay render walk (the world/car/sky passes). On the X360 this whole
-    // block precedes the 2D overlay tail; with no world GDL data the lists are empty
-    // and every pass no-ops.
-    if (lbDispatchReady)
-    {
-        // ==========================================================================================
-        // ParticleModule::BuildLionVertexBuffers @0x8228AC20 -- and, inlined at its head,
-        // TrailSystem::Update. CONSOLE POSITION: Render @0x8240BFA8 :453-454, under the same gate
-        // as the full-res pass below and BEFORE any scene geometry. It publishes this frame's time
-        // and VIEW-PROJECTION into the trail renderer -- the matrix TrailSystem::Render transforms
-        // its strips by. Without it the tyre marks are transformed by a matrix nobody wrote.
-        // Same null test, same DELETE-WHEN, as the full-res pass -- see its banner.
-        if (mbRenderParticles && lpDispatchThreadInputBuffer != 0)
-        {
-            if (lpPreRenderData != 0 && lpPreRenderData->mpParticleModule != 0)
-            {
-                // ParticleModule::BeginParticleRenderJob @0x8228A7C0 -- the console calls it
-                // FIRST of the pair, at Render :453. It advances the spark motion-blur ring,
-                // retires dead bucket, flips + locks the two effects vertex buffers and (here,
-                // inline: no job scheduler on this build) builds the spark vertex buffer for
-                // the batches RenderFullResParticles replays. Landed 2026-09-06 with the spark
-                // family; before that this call had nothing to drive.
-                lpPreRenderData->mpParticleModule->BeginParticleRenderJob(lpPreRenderData);
-                if (!lbParticlesPreparedForCube)
-                    lpPreRenderData->mpParticleModule->BuildLionVertexBuffers(lpPreRenderData);
-            }
-        }
-
-        RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext, lfFrameWhiteLevel);
-
-        // ==========================================================================================
-        // THE CORONA PASS (coronas step 1, 2026-08-17).
-        //
-        // CONSOLE POSITION: BrnRendererModule::Render @0x8240BFA8 calls
-        // BrnCoronaManager::Render(&mCoronaManager, whiteLevel) gated on the module's own
-        // mbRenderCoronas switch, bracketed by the CgsDev::PerfMonCpu/PerfMonGpu pair whose monitor
-        // is registered as "DT: Render coronas" (mCpuMonitors.miRenderCoronas /
-        // mGpuMonitors.miCoronas) -- AFTER the transparent car pass and BEFORE the particles /
-        // post-fx composite. On this build that position is HERE: RenderWorldPasses ends with the
-        // transparent passes, and ResolveMSAA + the composite follow immediately below. The coronas
-        // are therefore drawn INTO the scene target, additively, and the post-fx grade sees them --
-        // which is what makes a flare bloom.
-        //
-        // THE SWITCH IS THE CONSOLE'S OWN. mbRenderCoronas already exists (BrnRendererModule.h:733,
-        // set true by ConstructRenderSwitches at :832) -- no new global is minted (AGENTS.md rule
-        // 3). The user-facing knob is config.ini [Settings] Coronas, which BrnMain seeds into it.
-        // ==========================================================================================
-        // (lbSceneBracketOpen: the console's only gate is mbRenderCoronas because its scene target
-        // always exists; here the additive pass must not land in whatever target is bound when the
-        // anti-alias bracket did not open.)
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miCoronas);
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miCoronas);
-
-        // ==========================================================================================
-        // THE FULL-RES PARTICLE PASS -- ParticleModule::RenderFullResParticles @0x8229AFD0.
-        // This is the TYRE MARKS (and, when they land, the debris / sparks / Lion).
-        //
-        // CONSOLE POSITION, exactly: Render @0x8240BFA8 pseudocode :887 draws the coronas, :894
-        // waits on the particle render job, :899 calls RenderFullResParticles -- then the 2D
-        // immediate-mode dispatches, then :920 ResolveMSAA. So it belongs HERE: after the corona
-        // pass, still inside the scene bracket, before the resolve. Drawn into the scene target,
-        // so the post-fx grade sees it -- which is what the console does too.
-        //
-        // HOW THE CONSOLE REACHES THE MODULE (asm/pseudocode :444-448):
-        //     v52 = sub_8227F640(dispatchThreadInputBuffer);   // GetParticleRenderData()
-        //     v53 = *(_DWORD *)v52;                            // renderData->mpParticleModule
-        //     ... RenderFullResParticles(v53, v52);
-        // i.e. the module pointer is the record's FIRST WORD -- ParticleModule::Construct writes
-        // `mRenderData.mpParticleModule = this` (+0x8E00) and GenerateRenderRequests publishes the
-        // whole record. That is why no renderer-side module handle is needed, and why the pointer
-        // is trustworthy exactly when a real producer has run.
-        //
-        // THE GATE IS THE CONSOLE'S OWN v295 (:442): mbRenderParticles && the dispatch buffer's
-        // CalibrationUnfriendlyEnablePostFx && !GetIsStalled(). The same three reads already drive
-        // lbEffectsAllowed / the sun corona in this function.
-        //
-        // ⚠ THE NULL TEST ON mpParticleModule IS NOT INVENTED DEFENSIVE DRESSING, AND IT IS
-        // TEMPORARY. Two producers can stamp this record on this build: the real
-        // ParticleModule::GenerateRenderRequests (mpParticleModule = the module) and the older PC
-        // bring-up stand-in BrnParticle::PCBringUpProduceParticleRenderData, which deliberately
-        // leaves that word NULL (its own banner says so). Until the bring-up producer is deleted,
-        // a frame stamped by it would have the renderer dereference NULL. DELETE-WHEN
-        // PCBringUpProduceParticleRenderData is gone: the console has no such test.
-        // ==========================================================================================
-        // ⭐ WHICH ARM THE LION PASS TAKES, published ONCE for this frame before either arm runs.
-        // The console has no such publish: both its arms always exist and mbIsInJunkyard alone
-        // selects. On PC the quarter-res half is a lazily built chain (pool slot 9 + the four blit
-        // programs) that can legitimately be absent, and with the console's gate restored an absent
-        // buffer would mean the Lion dispatch draws NOWHERE. Reading it once, here, is what stops
-        // the two arms from disagreeing inside a frame. See
-        // BrnParticle::ParticleModule::PCBringUpSetQuarterResRouting.
-        const bool lbQuarterResParticles =
-            lbSceneBracketOpen && EnsureQuarterResParticleChain(mAllocatedRenderTargets);
-
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miFullResParticles);
-        if (lbSceneBracketOpen && mbRenderParticles && lpDispatchThreadInputBuffer != 0)
-        {
-            if (lpFullResRenderData != 0 && lpFullResRenderData->mpParticleModule != 0
-                && lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
-                && !lpDispatchThreadInputBuffer->GetIsStalled())
-            {
-
-                lpFullResRenderData->mpParticleModule->RenderFullResParticles(lpFullResRenderData);
-            }
-        }
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miFullResParticles);
-    }
-
-#if BRN_ANTIALIAS_BRACKET_AVAILABLE
-    if (lbSceneBracketOpen)
-    {
-        // ---- THE CARS-vs-WORLD MOTION-BLUR MASK, CARRIED OUT OF THE STENCIL (step 11) -------
-        // The console's mask IS the stencil buffer, and both halves of the producer are already
-        // live on PC: BeginRenderAntiAliased clears stencil to mu8WorldBlurStencil and
-        // RenderWorldPasses' two force-stencil windows REPLACE it with mu8CarsBlurStencil over
-        // the car mesh lists (see the block in RenderWorldPasses above). Its CONSUMER cannot be:
-        // D3D9 has no way to sample a depth-stencil surface's stencil plane, which is why the
-        // composite used a hard-coded 1.0 until this wave.
-        //
-        // So the mask is COPIED into the scene target's ALPHA LANE here -- with the scene target
-        // and its own D24S8 depth-stencil still bound, using the stencil operation D3D9 DOES
-        // have (the TEST) -- and the composite reads `tex2D(SamplerSource, uv).a`. The resolve
-        // below carries all four lanes out, so this must run BEFORE it, and after every world
-        // pass, which is exactly where the console's own stencil content is final.
-        //
-        // GATED ON mMotionBlurData.mbIsActive, the same bool the console's force windows are
-        // gated on: on a frame with no blur request the composite picks a non-blur permutation,
-        // never samples the lane, and this costs nothing at all.
-        if (lPostFxFrameBytes.mbMotionBlurActive)
-        {
-        }
-
-        // ---- X360 Render:725+ -- CLOSE THE SCENE PASS (call @0x8240D5BC). --------------------
-        // Resolve the scene out of the anti-alias buffer into the down-sample buffer AND clear the
-        // anti-alias buffer behind the copy. That clear is the whole reason this call cannot be
-        // skipped: on the untiled path it is the ONLY clear in the bracket, because
-        // BeginRenderAntiAliased's untiled branch (0x823FFB90-0x823FFBD8) deliberately clears
-        // nothing -- the previous frame's resolve is what left the surface clean. Drop it and the
-        // scene's DEPTH is never cleared again.
-        // ARTIST 8240D520..D538: world immediate buffers and RacePosition
-        // share the textured3D renderer before the scene resolve/post-fx.
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miIm3dAndRacePositions);
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miIm3dAndRacePositions);
-        // ARTIST 8240D57C..D59C: debug3D follows world immediate mode,
-        // independently of its switch, before the scene resolve.
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDebug3d);
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDebug3d);
-        ResolveMSAA(lfFrameWhiteLevel, luSceneStencilClearValue);
-
-        // ==========================================================================================
-        // THE SUN CORONA (coronas step 2, 2026-08-18).
-        //
-        // CONSOLE POSITION, exactly: Render @0x8240BFA8 calls ResolveMSAA @0x8240D5BC, then
-        // ComputeSunCoronaVisibility @0x8240D5D0, then (after BeginQuarterResBuffer and the
-        // quarter-res particles) BrnSunCorona::RenderOccludedFlare @0x8240D688 -- both arms gated on
-        // the SAME byte, `lbz r25, var_CC8` @0x8240D5C0, which was loaded at 0x8240C41C from
-        // DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx(). That is the console's
-        // own gate and it is the reason the flare disappears on the calibration screen; the same
-        // read already drives lbTintEffectsAllowed / lbEffectsAllowed elsewhere in this function.
-        //
-        // AFTER ResolveMSAA IS LOAD-BEARING: GenerateOcclusionBuffer samples the DOWN-SAMPLE
-        // buffer's depth TEXTURE, and ResolveMSAA is what puts this frame's depth there.
-        //
-        // ⚠ THE FLARE'S TARGET IS A DECLARED PC DEVIATION. The console draws it into the QUARTER-RES
-        // particle buffer that BrnRendererModule::BeginQuarterResBuffer @0x82408C38 opens, and the
-        // post-fx composite adds that buffer to the frame. On PC neither exists: BeginQuarterResBuffer
-        // is declaration-only and pool slot 9 is never created (only ANTI_ALIAS + DOWN_SAMPLE are).
-        // So the flare is drawn into the DOWN-SAMPLE buffer -- the surface ResolveMSAA has just
-        // filled and the surface the composite reads -- i.e. the same colour bus one stage earlier.
-        // The blend is the console's own additive RGB either way. DELETE-WHEN the quarter-res
-        // buffer and BeginQuarterResBuffer land.
-        //
-        // ⚠ AND THE SCENE TARGET IS RE-BOUND UNCONDITIONALLY inside this gate, not only when the
-        // flare draws. CgsRenderTarget::Begin on the 1x1 occlusion buffer leaves that 1x1 surface
-        // (and a 1x1 viewport) bound -- End is a documented no-op on this backend -- so the
-        // condition that authorised the occlusion pass has to be the condition that hands the scene
-        // target back, or the composite below would run with a one-pixel target bound.
-        // ==========================================================================================
-        const bool lbSunCoronaAllowed = (lpDispatchThreadInputBuffer != 0)
-            ? lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
-            : false;
-
-        // ==========================================================================================
-        // ⭐⭐ THE QUARTER-RES PARTICLE BRACKET -- BeginQuarterResBuffer @0x82408C38,
-        // ParticleModule::RenderQuarterResParticles @0x82294A20, EndRenderAntiAliased @0x82408B00.
-        //
-        // CONSOLE POSITION, exactly: Render @0x8240BFA8 calls ResolveMSAA, then
-        // ComputeSunCoronaVisibility, then BeginQuarterResBuffer, then the quarter-res particles,
-        // then BrnSunCorona::RenderOccludedFlare @0x8240D688, then EndRenderAntiAliased -- so the
-        // bracket sits HERE, after the resolve and the corona visibility test and before the
-        // post-fx composite reads the down-sample buffer.
-        //
-        // WHAT IT IS FOR, in one line: the console accumulates particles in a CLEARED, SEPARATE
-        // buffer and composites them OVER the scene with a (1 - accumulatedAlpha) term, so a
-        // saturating plume REPLACES its background instead of ADDING to it. This backend added
-        // them straight onto the scene, which is what left the boost flame with a white core after
-        // the white-level fix in a4c7670b.
-        //
-        // ⚠ THE FLARE STAYS WHERE IT IS, and that is a MEASURED equivalence rather than an
-        // omission. The console draws RenderOccludedFlare INTO the particle buffer, between the
-        // particles and EndRenderAntiAliased; the flare's blend is
-        // eFactoryBlendState_Transparent_AdditiveRGB_NoAlphaTest_DestRGB -- additive RGB that
-        // writes NO alpha -- so in the particle buffer it contributes flareRGB with the alpha lane
-        // untouched, and the composite then evaluates scene*(1 - a) + particleRGB + flareRGB. Drawn
-        // one stage earlier into the down-sample buffer, as it is above, the composite evaluates
-        // (scene + flareRGB)*(1 - a) + particleRGB. The two differ only where the plume and the sun
-        // flare OVERLAP -- and the only cost of moving it would be redrawing it at half resolution.
-        // Stated rather than silently deviated from; the earlier "DELETE-WHEN the quarter-res
-        // buffer lands" note on that block is answered by this paragraph.
-        //
-        // ⚠ THE PARTICLE GATE IS THE FULL-RES ARM'S, verbatim: same three console reads, same
-        // temporary null test on mpParticleModule, same DELETE-WHEN. It is repeated rather than
-        // hoisted because the console repeats it -- the two arms are two independent call sites in
-        // Render, each with its own guard.
-        // ==========================================================================================
-        // The SAME latch published before the full-res arm above -- re-read here rather than
-        // carried in a local, because that arm sits in the pre-bracket scope. It is a pure
-        // query over what actually exists, so the two reads cannot disagree inside a frame.
-
-        //
-        // ⚠ AFTER ResolveMSAA, NOT BEFORE. renderengine::PCSceneBlit_Begin rebinds the back buffer
-        // and deliberately leaves it bound; the PC D3DDevice_Resolve REFUSES to clear when it finds
-        // the swap chain bound (it logs "[postfx-resolve] ResolveMSAA ran with the SWAP CHAIN
-        // bound") precisely so that this misordering cannot silently cost the frame its clear.
-        //
-        // Placed BEFORE the BRN_WORLD_ONLY early-out below on purpose: that diagnostic exists to
-        // show the world pass with the 2D tail suppressed, and with the world off-screen it would
-        // otherwise show black.
-        //
-        // ⚠ AND IT HANDS THE BACK BUFFER BACK ON EVERY PATH. BeginRenderAntiAliased above bound the
-        // scene target and nothing else unbinds it, so if this call could return without rebinding
-        // the swap chain the WHOLE 2D/GUI tail -- and the BRN_WORLD_ONLY early-out below -- would
-        // draw off-screen and the frame would present the black FrameBegin clear. The helper
-        // therefore calls PCBringUpHandBackTheBackBuffer() on both of its no-scene early returns;
-        // see its banner. That is why this call is UNCONDITIONAL inside the bracket gate: the
-        // condition that authorised the bind is the condition that guarantees the unbind.
-        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miPostFX);
-#if BRN_POSTFX_COMPOSITE_AVAILABLE
-        // ---- THE REAL COMPOSITE, at the console's own position (call @0x8240DE3C). -------------
-        //
-        // ARGUMENTS, all read off the X360 call site (asm 0x8240DE0C-0x8240DE3C) rather than chosen:
-        //   r4 = this + 0x238                  -> mAllocatedRenderTargets
-        //   r5 = *(mapRenderTarget[4] + 0x108) -> the DOWN-SAMPLE buffer's postfx RenderTarget (SRC)
-        //   r6 = *(mapRenderTarget[5] + 0x108) -> the BACK-BUFFER target's                     (DST)
-        //   v1 = the 2D tint colour Vector4, zeroed unless the layer-0 effects frame supplies one
-        //   r7 = the motion-blur-active byte off that same effects frame
-        //   f1 = GetBrightness() * 0.01f - 0.5f      f2 = GetContrast() * 0.01f + 0.5f
-        //   f3 = f26, the frame white level -- the SAME value BeginRenderAntiAliased / ResolveMSAA take
-        //   f4 = *(this + 0xC408)              -> mfAspectCorrection
-        //   stack = the calibration texture handle, or null
-        // The three that come off mEffectsArbitrator (tint vector, motion-blur flag, calibration
-        // texture) are the console's own NO-EVENT values, not invented ones, and the seam function
-        // documents each; mEffectsArbitrator is never Constructed on this build, so reading through
-        // mapaEffectsFrames[0] would crash rather than give a wrong answer.
-        //
-        // THE GATE IS THE CONSOLE'S. `lbz r11, 0(r26)` @0x8240DC6C / `beq cr6, loc_8240DE44` skips
-        // the entire block; r26 is this+0xC41C, which BrnGraphics::DebugComponent::OnActivate
-        // @0x823F7B98 registers as the "Render PostFX" toggle -- i.e. mbRenderPostFX
-        // (BrnRendererModule.h:593, defaulted true at :692).
-        //
-        // ⚠ BOTH ARMS END WITH THE SWAP CHAIN BOUND, and that is why the decision is here rather
-        // than inside the helper. BeginRenderAntiAliased redirected the world off-screen; if this
-        // point can be passed without rebinding, the whole 2D/GUI tail -- and the BRN_WORLD_ONLY
-        // early-out below -- draws where nobody will see it and the frame presents the black
-        // FrameBegin clear. The composite arm rebinds with PCBringUpHandBackTheBackBuffer(); the
-        // fallback arm calls the blit, which rebinds on all of its own paths.
-        //
-        // ⚠ AND THE FALLBACK IS NOT DEFENSIVE PADDING. PCBringUpRenderPostFxComposite returns false
-        // whenever the pool cannot supply BOTH surfaces, which is this build's state -- only
-        // DOWN_SAMPLE and ANTI_ALIAS are created. Handing the swap chain back without the composite
-        // COPIES NOTHING, so without this else-arm the frame would be black with the GUI on top.
-        // lbComposited is ALSO false when mbRenderPostFX is off, and the fallback covers that too:
-        // on the console, turning that debug toggle off leaves the frame with no presenter at all,
-        // which is a debug-menu behaviour, not one worth reproducing as a black screen on PC. That
-        // is the ONE deviation from the console's conditional and it is confined to the else-arm --
-        // the composite itself runs exactly when the console runs it.
-        //
-        // RETIRES THE BLIT: the day this gate is permanently 1 and EndRenderAntiAliased @0x82408B00
-        // lands, delete PCBringUpBlitSceneTargetToBackBuffer, PCBringUpHandBackTheBackBuffer,
-        // renderengine::PCSceneBlit_Begin/_End and their XenonD3D9Shims.cpp bodies together.
-        // ---- X360 Render lines 964..1232 -- THE EFFECTS-FRAME APPLY BLOCK. --------------------
-        //
-        // This is the block that turns the layer-0 internal BrnEffectsFrame into BrnPostFx's
-        // m_enabledFx bits and its four effect state blocks. Its statements sit above in this file,
-        // in BrnRendererApplyEffectsFrameToPostFx; it is called from here, at the console's
-        // position, with the console's gate.
-        //
-        // THE GATE IS `if (mbRenderPostFX)` (`if (*HIDWORD(v301[0]))` at pseudocode line 965, i.e.
-        // *(this + 50204) == this+0xC41C, which BrnGraphics::DebugComponent::OnActivate @0x823F7B98
-        // registers as the "Render PostFX" toggle) -- the SAME word that gates the composite below.
-        // The console tests it twice, once for each half; both tests are reproduced.
-        //
-        // v296 == lbEffectsAllowed == DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx
-        // (pseudocode lines 440-441 -- read ONCE near the top of Render and ANDed into every effect's
-        // active flag). The no-dispatch-buffer fallback is the buffer's OWN Construct default rather
-        // than a pick: DispatchThreadInputBuffer::Construct seeds
-        // mbCalibrationUnfriendlyEnablePostFx = true (BrnDispatchThreadInputBuffer.cpp:232).
-        const bool lbEffectsAllowed = (lpDispatchThreadInputBuffer != 0)
-            ? lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
-            : true;
-
-        BrnGraphics::EffectsArbitrator* const lpEffectsArbitrator =
-            sbEffectsArbitratorConstructed ? &mEffectsArbitrator : 0;
-
-        // ---- X360 Render lines 1237..1252 -- the second gate: tint colour + motion blur. -------
-        // The 2D tint vector is ALWAYS four floats (the console zeroes it before the conditional
-        // read), so a false mbRenderPostFX simply leaves the neutral zero the composite has been fed
-        // since it landed.
-        f32 lafTint2dColour[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-        if (mbRenderPostFX)
-        {
-            BrnRendererEvalPostFxTint2dColour(lpEffectsArbitrator, lbEffectsAllowed,
-                                              lafTint2dColour);
-
-            // MotionBlurState::Update @0x823F8490 -- LIVE (post-fx step 9). Its body, its two matrix
-            // arguments' layout and now its PRODUCER all exist:
-            //   * the body landed in BrnPostFxShader.cpp with the rung-7 producers wave;
-            //   * DispatchThreadInputBuffer::ParticleRenderData has its real DWARF layout
-            //     (ParticleModule.h:589-606), so the arguments are reached BY NAME;
-            //   * the record is now stamped every frame by the named PC bring-up producer
-            //     BrnParticle::PCBringUpProduceParticleRenderData, called from
-            //     BrnGameModule::DoDispatch on the buffer this Render read-locks after the swap.
-            // (The comment that stood here -- "BLOCKED ... its body does not exist" -- had been
-            // stale since rung 7.)
-            //
-            // THE READ LOCK IS ALREADY HELD FOR THE WHOLE FRAME: Render takes it at the top
-            // (`lpDispatchThreadInputBuffer->LockForRead()`, the console's own frame-long lock) and
-            // releases it at both exits, so the CONST GetParticleRenderData overload -- which
-            // asserts "Not locked for reading" -- is legal here. This is the same accessor the
-            // console's Render calls (`bl sub_8227F640` @0x8240C45C).
-            //
-            // THE LATCH IS NOT DEFENSIVE DRESSING. DispatchThreadInputBuffer::Construct
-            // deliberately does NOT clear mParticleRenderData (faithfully -- the console does not
-            // either) and CreateIOBuffer<T> has not zero-filled since the 2026-08-15 perf wave, so
-            // before the first producer run the payload is UNINITIALISED bytes. A garbage view
-            // matrix goes through four inverses in MotionBlurState::Update's zero-time-step arm and
-            // the resulting NaN would reach a tex2Dgrad gradient. So the pointer is handed over only
-            // once the producer has actually stamped a record -- THIS buffer instance's record: the
-            // buffer is double-buffered and the producer runs only on DoDispatch frames, so the
-            // latch is per instance (step-9 verify).
-            // DELETE the latch (not the call) when the real ParticleModule/EffectsModule producer
-            // runs -- from then on the record is written before any reader, as on the console.
-            const BrnParticle::ParticleModule::ParticleRenderData* lpParticleRenderData = 0;
-            (void)BrnRendererUpdatePostFxMotionBlur(lpEffectsArbitrator, lpParticleRenderData);
-        }
-
-        BrnRendererLogPostFxEffectState();
-
-        const s32 liBrightnessSetting = (lpDispatchThreadInputBuffer != 0)
-            ? lpDispatchThreadInputBuffer->GetBrightness()
-            : KI_DEFAULT_CALIBRATION_SETTING;
-        const s32 liContrastSetting = (lpDispatchThreadInputBuffer != 0)
-            ? lpDispatchThreadInputBuffer->GetContrast()
-            : KI_DEFAULT_CALIBRATION_SETTING;
-
-        // The tint / motion-blur arguments are the console's own effects-frame pair: v1 == the tint
-        // vector evaluated just above, r7 == the layer-0 internal frame's mMotionBlurData.mbIsActive
-        // read at the top of the bracket (lPostFxFrameBytes). (All twelve composite permutations
-        // adopt since rung 6, so a true motion-blur byte selects a REAL program.)
-        //
-        // ---- X360 Render @0x8240DD50-0x8240DE08 -- the CALIBRATION RAMP as the composite's override
-        // source. `mr r30, r18` (r18 == 0 since @0x8240CEE8) seeds the Texture* null; then, ONLY when
-        // GetCalibrationUnfriendlyEnablePostFx() is FALSE (`lbz r25, var_CC8` == the byte read at
-        // 0x8240C41C; `bne` skips everything when the post-fx are allowed -- i.e. the ramp is on
-        // screen exactly when the calibration screen has switched the effects off):
-        //   * `bl GetCalibrationTextureHandle` into var_CB0; if it != NULLResourceHandle
-        //     (qword_82FAFF20, both words) -> `stdx r9, r31, 0xC920`: LATCH it into
-        //     mCalibrationTextureHandle (DWARF BrnRendererModule.h:692, this+0xC920);
-        //   * if mCalibrationTextureHandle != NULLResourceHandle -> `lwz r11, 0(r10)` /
-        //     `lwz r30, 0(r11)`: the SmallResource double-deref (handle.mpResourceMemory's first word
-        //     is the main-memory Texture*, the same idiom ColourCalibrationScreen::Update uses).
-        // The latch is why the card survives a frame the screen did not re-post on: the member is
-        // never cleared while the effects stay disabled, and it is simply not consulted once they
-        // are re-enabled. `stw r30, var_CD4` @0x8240DE28 is the stack argument BrnPostFx::Render
-        // reads as its override source (BrnPostFx.cpp step 5).
-        // (`mCalibrationTextureHandle` is seeded null in Construct, as @0x8240BF74-BF88.)
-        renderengine::Texture* lpCalibrationTexture = 0;
-        if (!lbEffectsAllowed && lpDispatchThreadInputBuffer != 0)
-        {
-            const CgsResource::ResourceHandle lhCalibrationTexture =
-                lpDispatchThreadInputBuffer->GetCalibrationTextureHandle();
-            if (lhCalibrationTexture != CgsResource::NULLResourceHandle)
-            {
-                mCalibrationTextureHandle = lhCalibrationTexture;
-            }
-            if (mCalibrationTextureHandle != CgsResource::NULLResourceHandle)
-            {
-                lpCalibrationTexture = *reinterpret_cast<renderengine::Texture* const*>(
-                    mCalibrationTextureHandle.mpResourceMemory);
-            }
-        }
-
-        // [DIAG] NOT IN THE X360 BINARY -- issue #30: on a black present, every input of the composite.
-        {
-            static u32 suBlackCompositePrinted = 0u;
-            if (renderengine::gbDiagLastPresentBlack && suBlackCompositePrinted < 64u && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++suBlackCompositePrinted;
-                *CgsDev::Log::gpDebugPrint
-                    << "[composite-diag] BLACK-PRESENT present=" << renderengine::guPresentCount
-                    << " composited=" << (lbComposited ? 1 : 0) << " renderPostFX=" << (mbRenderPostFX ? 1 : 0)
-                    << " effectsAllowed=" << (lbEffectsAllowed ? 1 : 0)
-                    << " tint2d=(" << lafTint2dColour[0] << "," << lafTint2dColour[1] << "," << lafTint2dColour[2] << "," << lafTint2dColour[3] << ")"
-                    << " whiteLevel=" << lfFrameWhiteLevel << " brightness=" << liBrightnessSetting << " contrast=" << liContrastSetting
-                    << " motionBlur=" << (lPostFxFrameBytes.mbMotionBlurActive ? 1 : 0)
-                    << " calibTex=" << (lpCalibrationTexture != 0 ? 1 : 0) << "\n";
-            }
-        }
-        if (lbComposited)
-        {
-        }
-        else
-        {
-        }
-#else
-#endif
-        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miPostFX);
-    }
-#endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
-
-    static int siWorldOnly = -1;
-    if (siWorldOnly < 0)
-    {
-        char lacWorldOnly[8];
-    }
-    if (siWorldOnly == 1)
-    {
-        if (lpDispatchThreadInputBuffer != 0)
-            lpDispatchThreadInputBuffer->UnlockForRead();   // the frame-long read lock, both exits
-        CgsDev::PerfMonGpu::StopProfiling();
-        TakeScreenshot();
-        return;
-    }
-
-    // ARTIST Render @0x8240DEB4..DFF0 displays the selected shadow depth texture
-    // at the upper right: position (0.7, 0.0), size (0.3, 0.3), opaque white.
-    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miMenusAndHud);
-    if (mbShowShadowMap)
-    {
-        miShowShadowMapIndex %= 4;
-        CGS_ASSERT(miShowShadowMapIndex >= 0 && miShowShadowMapIndex < 4,
-                   "liIndex >=0 && liIndex<4");
-
-        Vector2 lPosition = {};
-        lPosition.x = 0.7f;
-        lPosition.y = 0.0f;
-        Vector2 lSize = {};
-        lSize.x = 0.3f;
-        lSize.y = 0.3f;
-        DebugDisplayRenderTarget(
-            mAllocatedRenderTargets.GetShadowMapBuffer(miShowShadowMapIndex)->GetDepthTexture(),
-            lPosition, lSize, 0xFFFFFFFFu);
-    }
-
-    // ARTIST 8240E000..E054: one HUD gate and the original command order.
-    // GUI and movie commands share the renderer-owned Im2d buffer.
-    if (mbRenderHudImmediateMode)
-    {
-        mLoadingScreenRenderer.RenderBackground(&mIm2dRenderer);
-        mIm2dRenderBuffer.Dispatch(&mIm2dRenderer);
-        mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
-    }
-
-    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miMenusAndHud);
-
-    // ARTIST 8240E158..E190 consumes the already published debug bank.
-    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDebug2d);
-    if (mbRenderHudImmediateMode
-        && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
-        mIm2dDebugRenderBuffer.Dispatch(&mIm2dRenderer);
-
-    // The three per-thread monitor squares (X360 RenderThreeThreadMonitors). The real per-thread
-    // "running in real time" flags need the threading system (deferred), so they are derived here from
-    // the present-to-present frame time - matching the observed behaviour (green at framerate, reddening
-    // as the game/CPU slows). The X360 gates this on a debug-display flag.
-    {
-        const u64 lu64Now  = CgsSystem::GetSystemTimerBaseTime64();
-        const u64 lu64Freq = CgsSystem::GetSystemTimerFrequency64();
-        f32 lfFrameMs = 0.0f;
-        if (gbMonitorTickValid && lu64Freq != 0u)
-            lfFrameMs = static_cast<f32>(static_cast<double>(lu64Now - gu64LastMonitorTick) * 1000.0 / static_cast<double>(lu64Freq));
-        gu64LastMonitorTick = lu64Now;
-        gbMonitorTickValid  = true;
-
-        const f32 lfBudgetMs = 1000.0f / 60.0f;
-        s32 liBehind = 0;
-        if (lfFrameMs > lfBudgetMs * 1.10f) liBehind = 1;
-        if (lfFrameMs > lfBudgetMs * 1.50f) liBehind = 2;
-        if (lfFrameMs > lfBudgetMs * 2.00f) liBehind = 3;
-        // ARTIST8240E194..E1E0 applies the same HUD/screenshot gate here.
-        if (mbRenderHudImmediateMode &&
-            (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
-            RenderThreeThreadMonitors(liBehind < 3, liBehind < 2, liBehind < 1);
-    }
-
-    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDebug2d);
-    renderengine::Device::ShowPixelBuffer();
-
-
-    // UnlockForRead @0x8240E304 -- the end of the console's frame-long read window (taken above).
-    if (lpDispatchThreadInputBuffer != 0)
-        lpDispatchThreadInputBuffer->UnlockForRead();
-
-    CgsDev::PerfMonGpu::StopProfiling(); // ARTIST8240E244, after Present.
-    // ARTIST8240E2B4 consumes the request after the presented frame exists.
-    TakeScreenshot();
-}
-
-// The corona manager's published (swap-current) submission interface. Bodied 2026-08-17
-// (boot audit F-P2-4).
-//
-// The header called this "Not X360-attested for this TU" and I left it unpublished when
-// BrnRendererModule::Update first landed rather than guess. That caution expired with the
-// extraction itself: Update @0x824060F0-108 forms the argument as
-//     C = corona; slot = C[0x130]; interface = C + slot*0x70 + 0x50
-// which names every part of it -- an array based at manager+0x50 with a 0x70 stride, indexed
-// by a byte at manager+0x130. This class has exactly one array of that shape,
-// mSubmissionInterface[2], and exactly one index byte beside it, mu8SubmissionSwapIndex. So
-// the expression IS attested -- by its caller, which is where an un-bodied accessor's shape
-// usually lives.
-//
-// MOVED HOME 2026-08-17 (coronas step 1). The paragraph that stood here said "defined from THIS TU
-// rather than BrnCoronaManager.cpp because that file is not on the build list ... move it home when
-// the corona TU is mounted for its own sake". That is exactly what this wave does:
-// GameSource/Graphics/BrnCoronaManager.cpp is now on tools/build/build_game_exe.bat and defines
-// GetSubmissionInterface (together with Construct / Clear / Swap / Render / SetCameraInfo, all of
-// which the same caller needs). Keeping this copy would be LNK2005, not a duplicate comment.
-// The reading above is unchanged and still correct -- see the body in BrnCoronaManager.cpp.
-
-// ============================================================================================
-// @ 0x82405E28 -- BrnRendererModule::Update.  RECONSTRUCTED 2026-08-17 (boot audit F-P2-4).
-//
-// The renderer's per-pass publication into the RendererIO buffer pair.  BrnGameModule::
-// GamePrepare's not-done tail creates the pair, calls this, and reads the loading-screen
-// allocator back out; the console runs it on EVERY not-done GamePrepare pass and again from
-// the loading-screen spine (F-P5-3) and RenderGUI (F-P6-18).
-//
-// EVERY SOURCE IN THE CONSOLE BODY IS A RAW OFFSET INTO THE RENDERER, and this build's layout
-// is an x64 reconstruction, so each one is resolved to its committed member BY TYPE AND ROLE
-// (the full offset->name derivation is in progress/boot_audit/phases/P2b_renderermodule_update.md):
-//
-//   this+0xAE8/0x1090/0x1270/0x1550/0x1598/0x172C/0x1774 -> the seven Im2d/Im3d buffers, which
-//     are the only members of those types in the class and appear in the console's order;
-//   the three effects families at E+0/+4/+8 with the shared slot byte at E+0xD -> the
-//     arbitrator's own GetExternalEffectsFrame(layer, slot).  The console forms
-//     `496 * (2*slot + internal)`, and EffectsArbitrator.h:141 documents that same expression
-//     as `mapaEffectsFrames[layer][slot][external]` -- so the console's loop index IS the slot
-//     and its `s` byte IS the external index.  Layer slot counts 1/4/2 match the loop bounds;
-//   this[0xAD1] + slot*0x320 + 0x490 -> maShaderConstantsFrames[mu8ShaderConstantsFrameExternal];
-//   the blobby/corona slot walks -> the managers' own GetExternalBuffer() / GetSubmissionInterface();
-//   this+0xC40C -> mRenderSwitches;  this+0xC8FC -> mReusableLoadingScreenAllocator.
-// ============================================================================================
-void BrnRendererModule::Update(CgsModule::IOBufferStack* /*lpUpdateInputStack*/,
-                               CgsModule::IOBufferStack* /*lpUpdateOutputStack*/,
-                               RendererIO::InputBuffer*  lpInput,
-                               RendererIO::OutputBuffer* lpOutput)
-{
-    CGS_ASSERT(lpOutput != 0, "lpOutput");   // X360 :0x11A7
-    CGS_ASSERT(lpInput  != 0, "lpInput");    // X360 :0x11A8
-
-    lpInput->LockForRead();
-    lpOutput->LockForWrite();
-
-    // @0x82405EA4-B0 -- the camera crosses first.
-    {
-        const BrnDirector::Camera::Camera& lrCamera = lpInput->GetBrnCamera();
-        lpOutput->SetBrnCamera(lrCamera);
-        // [cam-flags] BRN_CAM_INPUT_DIAG: the state flags as handed to the world dispatch.
-        static u32 suCamDiagCalls = 0;
-
-        // ARTIST 82405EC4..5FA0: only corona setup has the FOV > 0.1 gate.
-        // The renderer/world whole-camera copy above always occurs.
-        if (lrCamera.GetFOV() > 0.1f)
-        {
-            CgsGraphics::Camera lCamera;
-            lrCamera.CopyToCgsCamera(&lCamera);
-            const f32 lfOotHalfFovH = lCamera.maProjectionScalars[1];
-            const f32 lfOotHalfFovV = lCamera.maProjectionScalars[4];
-            const f32 lfClamped = lfOotHalfFovH >= 1.0f ? lfOotHalfFovH : 1.0f;
-            const Vector4 lViewXyScale = {
-                lfClamped, (lfOotHalfFovV / lfOotHalfFovH) * lfClamped, 0.0f, 0.0f };
-            mCoronaManager.GetSubmissionInterface()->SetCameraInfo(
-                lCamera.GetViewProjectionMatrix(), lrCamera.GetPosition(), lViewXyScale);
-        }
-        if (lrCamera.GetEffects().mbRequestingScreenshot)
-            mbUpdateThreadTakeScreenshot = true;
-    }
-
-    // @0x82405EBC-C0 -- THE LATCH SOURCE.  The console lends the ADDRESS of its embedded
-    // allocator; the game module stores that pointer at gm+0x9A0630 and FreeAll's it once per
-    // world drive.  This one call is why the PC had to invent a static 512 KiB world frame
-    // allocator (F-P6-12).
-    lpOutput->SetReusableLoadingScreenAllocator(&mReusableLoadingScreenAllocator);
-
-    lpInput->UnlockForRead();
-
-    // ---- the publication block (@0x82405FD0-0x82406130) -------------------------------
-    lpOutput->SetDispatchFrame(GetDispatchFrameForWrite());
-    lpOutput->SetIm2dRenderBuffer(&mIm2dRenderBuffer);
-    lpOutput->SetIm3dRenderBuffer(&mIm3dRenderBuffer);
-    lpOutput->SetIm3dRenderBufferUntex(&mIm3dRenderBufferUntex);
-    lpOutput->SetIm3dDebugRenderBuffer(&mIm3dDebugRenderBuffer);
-    lpOutput->SetIm2dDebugRenderBuffer(&mIm2dDebugRenderBuffer);
-
-    // The three effects families, in the console's order and with its loop bounds
-    // (kau8SlotsPerEffectsLayer == {1, 4, 2}).
-    lpOutput->SetBaseEffectsFrame(
-        mEffectsArbitrator.GetExternalEffectsFrame(
-            BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_BASE, 0));
-    for (u8 lu8Slot = 0; lu8Slot < 4; ++lu8Slot)
-    {
-        lpOutput->SetWorldEffectsFrame(lu8Slot,
-            mEffectsArbitrator.GetExternalEffectsFrame(
-                BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_WORLD, lu8Slot));
-    }
-    for (u8 lu8Slot = 0; lu8Slot < 2; ++lu8Slot)
-    {
-        lpOutput->SetFXEventsEffectsFrame(lu8Slot,
-            mEffectsArbitrator.GetExternalEffectsFrame(
-                BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_FX_EVENTS, lu8Slot));
-    }
-
-    lpOutput->SetShaderConstantsFrame(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
-    lpOutput->SetBlobbyShadowBuffer(mBlobbyShadowManager.GetExternalBuffer());
-    // @0x824060F0-108 -- the corona submission interface. (I left this unpublished on the
-    // first pass because GetSubmissionInterface was declared-only; re-testing the premise
-    // showed the accessor's shape is fully named by THIS caller -- `C + C[0x130]*0x70 + 0x50`
-    // is mSubmissionInterface[mu8SubmissionSwapIndex], the class's only 0x70-stride array and
-    // its only index byte. Bodied in BrnCoronaManager.cpp.)
-    lpOutput->SetCoronaSubmissionInterface(mCoronaManager.GetSubmissionInterface());
-    lpOutput->SetIm3dRenderBufferRacePosition(&mIm3dBufferRacePosition);
-    lpOutput->SetIm3dRenderBufferMenusAndHud(&mIm3dBufferMenusAndHud);
-    lpOutput->SetRenderSwitches(mRenderSwitches);
-
-    // [FLAG] @0x82406134-F0 -- the console then gathers ELEVEN scattered words
-    // (renderer +0xC938/+0xC940/+0xC948/+0xC9C0/+0xC954/+0xC958/+0xC9C8/+0xC9D0/+0xCA10/
-    // +0xC9D4/+0xC9D8) into a 0x2C-byte stack record and memcpy's it to lpOutput+0x1B8.
-    // Those eleven are NOT resolved to committed members yet -- they sit past mRenderSwitches
-    // in a region this layout has not itemised, and guessing eleven member identities is
-    // exactly the misattribution class this audit exists to remove (cf. F-P7-12). The record
-    // is left unwritten rather than filled with plausible-looking values; the output buffer's
-    // corresponding field keeps its Construct-time zeros. Tracked as the remainder of F-P2-4.
-
-    lpOutput->UnlockForWrite();
 }
