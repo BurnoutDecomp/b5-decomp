@@ -56,8 +56,6 @@ bool DynamicMixer::ConnectDMixIO(Nicotine::DMixIO* apDMixIO)
     const int liEffectId = apDMixIO->GetSFX_ID();
     if (!lpManager)
     {
-        // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): an endpoint no manager owns.
-        CgsSound::Diag::DMixDiagConnect(apDMixIO, "(no state manager)", liStateId, liInstance, liEffectId, false);
         return false;
     }
 
@@ -66,8 +64,6 @@ bool DynamicMixer::ConnectDMixIO(Nicotine::DMixIO* apDMixIO)
         lpState = lpState->GetNextState();
     if (!lpState)
     {
-        // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): an endpoint with no live state instance.
-        CgsSound::Diag::DMixDiagConnect(apDMixIO, "(no state instance)", liStateId, liInstance, liEffectId, false);
         return false;
     }
 
@@ -77,18 +73,10 @@ bool DynamicMixer::ConnectDMixIO(Nicotine::DMixIO* apDMixIO)
         lpEffect = lpEffect->mpNextEffectBase;
     if (!lpEffect)
     {
-        // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): an endpoint with no matching effect.
-        CgsSound::Diag::DMixDiagConnect(apDMixIO, "(no effect with this id)", liStateId, liInstance, liEffectId, false);
         return false;
     }
 
     lpEffect->SetDMixIOPtr(apDMixIO);
-    // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): the endpoint and the effect that
-    // now owns it -- the WRITER of its inputs, named.
-    CgsSound::Diag::DMixDiagConnect(apDMixIO,
-        apDMixIO->IsSFXObj() ? static_cast<EffectObject*>(lpEffect)->GetTypeName()
-                             : static_cast<EffectControl*>(lpEffect)->GetTypeName(),
-        liStateId, liInstance, liEffectId, true);
     return true;
 }
 
@@ -103,7 +91,7 @@ int DynamicMixer::DMixPrintf(const char* apFormat, ...)
     char lacText[256];
     va_list lArgs;
     va_start(lArgs, apFormat);
-    const int liCopied = std::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
+    const int liCopied = ::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
     va_end(lArgs);
     CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacText)),
                "lNumBytesCopied<(int32_t)luBytes");
@@ -119,7 +107,7 @@ void DynamicMixer::DMixAssert(bool abCondition, const char* apFormat, ...)
     char lacText[256];
     va_list lArgs;
     va_start(lArgs, apFormat);
-    const int liCopied = std::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
+    const int liCopied = ::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
     va_end(lArgs);
     CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacText)),
                "lNumBytesCopied<(int32_t)luBytes");
