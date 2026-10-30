@@ -130,7 +130,7 @@ namespace renderengine
         };
 
         static void Clear(const ClearColorParameters& lrColor, const ClearDepthStencilParameters& lrDepthStencil,
-                          RenderTargetState::TargetID leTarget); // ARTIST82B61E18, body pending
+                          RenderTargetState::TargetID leTarget); // ARTIST82B61E18
         static void ShowPixelBuffer(PixelBuffer* lpBuffer); // ARTIST82B63298, body pending
         static bool Initialize();
         static bool Start(const Parameters& lrParameters);
