@@ -28,7 +28,7 @@ namespace
 // time is computed just before a wrap gets an end stamp far ABOVE the post-wrap `now`, so
 // `now >= end` never holds and that HUD message never ends -- it sits on screen until the
 // counter catches up. Same defect class as HudMessageDirector's repeat-rate gate; same fix.
-namespace CgsSystem { u64 GetSystemTimerBaseTime64(); u64 GetSystemTimerFrequency64(); }
+namespace CgsSystem { u64 GetSystemTimerBaseTime(); u64 GetSystemTimerFrequency(); }
 
 #include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 
@@ -292,7 +292,7 @@ namespace
         }
         else if (leState == E_MESSAGESTATE_VISIBLE)
         {
-            if (CgsSystem::GetSystemTimerBaseTime64() >=
+            if (CgsSystem::GetSystemTimerBaseTime() >=
                 mpInGameMessagesQueue->muCurrentEventEndTime)
             {
                 EndMessage();
@@ -315,9 +315,9 @@ namespace
             const u8 luIndex = mpInGameMessagesQueue->muCurrentMessageIndex;
             const f32 lfDuration = mpInGameMessagesQueue->maMessages[luIndex].mfDuration;
             const f32 lfTicks =
-                static_cast<f32>(static_cast<f64>(CgsSystem::GetSystemTimerFrequency64())) * lfDuration;
+                static_cast<f32>(static_cast<f64>(CgsSystem::GetSystemTimerFrequency())) * lfDuration;
             const u64 luEndTime =
-                CgsSystem::GetSystemTimerBaseTime64() + static_cast<s64>(lfTicks);
+                CgsSystem::GetSystemTimerBaseTime() + static_cast<s64>(lfTicks);
             mpInGameMessagesQueue->muCurrentEventEndTime = luEndTime;
 
             CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
@@ -441,9 +441,9 @@ namespace
             const u8 luIndex = mpInGameMessagesQueue->muCurrentMessageIndex;
             const f32 lfDuration = mpInGameMessagesQueue->maMessages[luIndex].mfDuration;
             const f32 lfTicks =
-                static_cast<f32>(static_cast<f64>(CgsSystem::GetSystemTimerFrequency64())) * lfDuration;
+                static_cast<f32>(static_cast<f64>(CgsSystem::GetSystemTimerFrequency())) * lfDuration;
             mpInGameMessagesQueue->muCurrentEventEndTime =
-                CgsSystem::GetSystemTimerBaseTime64() + static_cast<s64>(lfTicks);
+                CgsSystem::GetSystemTimerBaseTime() + static_cast<s64>(lfTicks);
 
             CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
             mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex] =
