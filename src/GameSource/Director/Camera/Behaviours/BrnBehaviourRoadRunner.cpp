@@ -770,7 +770,7 @@ void BehaviourRoadRunner::Construct()
 
     // The shake transform the console builds with four stvx128s at +0x200/+0x210/+0x220/+0x230
     // (r10 = this+512, offsets 0/16/32/48) from two register constants.
-    mLastShakeTransform = rw::math::vpu::Matrix44Affine();
+    mLastShakeTransform.SetIdentity();
 
     // ⚠️ QUIET GATE: the shake seeds. The asm's `*(this+576..588) = 0.0` (mShake) and
     //   `*(this+592..604) = {0.0, 0.0, 1.0, 0.25}` (mShakeParams, written twice -- 0.06/1.15/
@@ -1002,12 +1002,12 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     //  than on it.)
     {
         rw::math::vpu::Matrix44Affine lCameraTransform = mTrafficLaneTruck.GetTransform();
+        const rw::math::vpu::Vector3 lHeight = { lfHeight, lfHeight, lfHeight, lfHeight };
+        const rw::math::vpu::Vector3 lLateralOffset = { 2.25f, 2.25f, 2.25f, 2.25f };
         lCameraTransform.wAxis = rw::math::vpu::MultAdd(
-            lCameraTransform.yAxis, rw::math::vpu::Vector3{ lfHeight, lfHeight, lfHeight, lfHeight },
-            lCameraTransform.wAxis);
+            lCameraTransform.yAxis, lHeight, lCameraTransform.wAxis);
         lCameraTransform.wAxis = rw::math::vpu::MultAdd(
-            lCameraTransform.xAxis, rw::math::vpu::Vector3{ 2.25f, 2.25f, 2.25f, 2.25f },
-            lCameraTransform.wAxis);
+            lCameraTransform.xAxis, lLateralOffset, lCameraTransform.wAxis);
         lrCamera.SetTransform(lCameraTransform);
     }
     lrCamera.SetFOV(95.0f);
@@ -1049,10 +1049,14 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
         const f32 lfCos = std::cos(lfBankRads);
 
         rw::math::vpu::Matrix44Affine lBank;
-        lBank.xAxis = {  lfCos, lfSin, 0.0f, 0.0f };
-        lBank.yAxis = { -lfSin, lfCos, 0.0f, 0.0f };
-        lBank.zAxis = {   0.0f,  0.0f, 1.0f, 0.0f };
-        lBank.wAxis = {   0.0f,  0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::Vector3 lXAxis = {  lfCos, lfSin, 0.0f, 0.0f };
+        const rw::math::vpu::Vector3 lYAxis = { -lfSin, lfCos, 0.0f, 0.0f };
+        const rw::math::vpu::Vector3 lZAxis = {   0.0f,  0.0f, 1.0f, 0.0f };
+        const rw::math::vpu::Vector3 lWAxis = {   0.0f,  0.0f, 0.0f, 0.0f };
+        lBank.xAxis = lXAxis;
+        lBank.yAxis = lYAxis;
+        lBank.zAxis = lZAxis;
+        lBank.wAxis = lWAxis;
 
         lrCamera.SetTransform(rw::math::vpu::Mult(lBank, lrCamera.GetTransform()));
     }
