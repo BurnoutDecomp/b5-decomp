@@ -49,6 +49,13 @@ namespace BrnFlapt
 
     struct FlaptRenderer
     {
+        // ARTIST827E3D88..8C: both embedded stacks start unconstructed.
+        FlaptRenderer()
+        {
+            maTransformStack.miLength = CgsContainers::KI_STACK_UNCONSTRUCTED;
+            mMaskMeshCounts.miLength = CgsContainers::KI_STACK_UNCONSTRUCTED;
+        }
+
         // Construct @ 0x82472270 : store the four collaborators (render set, text
         // renderer, language manager, font collection), clear the cached
         // texture/blend/shader state, build the default screen-space Im2dTransform
@@ -111,9 +118,7 @@ namespace BrnFlapt
         s32             miShaderProgram;              // +0x18  (Construct: -1)
         s32             miSpecialTextureShaderProgram;// +0x1C
         u8              mxFlags;                       // +0x20  (flags byte; bit0 = mask path)
-        u8              mau8Opaque21[0x0F];           // +0x21..0x2F  pad to the +0x30 transform stack
         CgsContainers::Stack<CgsGraphics::Im2dTransform, 33> maTransformStack; // +0x30 (miLength at +0x870)
-        u8              mau8OpaqueXform[0x0C];        // pad the transform-stack tail to the mask-count stack
         CgsContainers::Stack<u16, 2> mMaskMeshCounts; // +0x880 (miLength at +0x884; meshes drawn into each live mask)
     };
 }
