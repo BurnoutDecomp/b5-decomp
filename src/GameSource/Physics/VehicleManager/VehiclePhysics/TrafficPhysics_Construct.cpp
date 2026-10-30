@@ -81,7 +81,8 @@ namespace Vehicle
 
         mbFrozen = false;                       // +0x70  (ExternallySimulatedBody frame +0x60)
 
-        Reset(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+        const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Reset(lvZero);
 
         // LANE-Z-ONLY insert, read-modify-write: `lvx128 v0 ; vrlimi128 v0,v127,2,0 ; stvx128 v0`.
         // Mask 2 is lane z under the 8/4/2/1 == x/y/z/w convention, and the PS3 twin does the same
@@ -229,7 +230,7 @@ namespace Vehicle
 
         (void)lfUnused;   // the f2 slot is never read (its first mention is the FSM's own load)
 
-        const VecFloat lvfTimeStep{ lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
+        const VecFloat lvfTimeStep = { lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
 
         // 0x826395A8..0x826395C8: the 72-byte control block, copied so the FSM's writes do not
         // corrupt the caller's input. The COPY is what feeds UpdateShunt/UpdateCrashing.

@@ -589,10 +589,13 @@ void VehicleAttribs::Construct()
     mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z = KF_SURFACE_FACTOR;
     mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w = KF_SURFACE_FACTOR;
 
-    mBaseAttribs.mCrashExtraVelocityFactors = Vector3Plus{ KF_ZERO,
+    {
+        const Vector3Plus lValue = { KF_ZERO,
                                                            KF_CRASH_EXTRA_VELOCITY_FACTOR,
                                                            KF_CRASH_EXTRA_VELOCITY_FACTOR,
                                                            KF_CRASH_EXTRA_VELOCITY_FACTOR };
+        mBaseAttribs.mCrashExtraVelocityFactors = lValue;
+    }
     {
         const Vector4 lAggregateValue = { KF_DRIVETIME_DEFORM_LIMIT_X,
                                                    KF_DRIVETIME_DEFORM_LIMIT_Y,
@@ -1336,9 +1339,12 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
     mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
         = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
           * KF_AI_MAX_SPEED_SCALE;                              // MaxSpeed = 1.2 * source's
-    mBaseAttribs.mCrashExtraVelocityFactors = Vector3Plus{ 0.0f, KF_AI_CRASH_EXTRA_VEL_FACTOR,
+    {
+        const Vector3Plus lValue = { 0.0f, KF_AI_CRASH_EXTRA_VEL_FACTOR,
                                                            KF_AI_CRASH_EXTRA_VEL_FACTOR,
-                                                           KF_AI_CRASH_EXTRA_VEL_FACTOR };  // +0x30
+                                                           KF_AI_CRASH_EXTRA_VEL_FACTOR };
+        mBaseAttribs.mCrashExtraVelocityFactors = lValue;
+    }  // +0x30
     {
         const Vector4 lAggregateValue = { KF_AI_DEFORM_LIMIT_X, KF_AI_DEFORM_LIMIT_Y,
                                                    KF_AI_DEFORM_LIMIT_ZW, KF_AI_DEFORM_LIMIT_ZW };

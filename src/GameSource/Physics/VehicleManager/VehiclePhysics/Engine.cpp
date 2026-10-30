@@ -167,7 +167,8 @@ namespace
     void Engine::Construct()
     {
         mAttribs.Construct();
-        Reset(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Reset(lvfZero);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -189,7 +190,8 @@ namespace
         mvClutchFactor_RPM_CurrentGearChangeTime.x = 0.0f;          // clutch factor lane -> 0
         mu8CurrentGear = KU8_FIRST_GEAR;
 
-        Reset(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Reset(lvfZero);
         return true;
     }
 
@@ -415,8 +417,9 @@ namespace
         const f32 lfEngineInvInertia = 1.0f / mAttribs.GetFlyWheelInertia();
         const f32 lfCurveT = mvClutchFactor_RPM_CurrentGearChangeTime.y
                              / (2.0f * mAttribs.GetTorqueFallOffRPM());
+        const VecFloat lvfCurveT = { lfCurveT, lfCurveT, lfCurveT, lfCurveT };
         f32 lfTorque = mAttribs.mTorqueCurve
-                           .GetInterped(VecFloat{ lfCurveT, lfCurveT, lfCurveT, lfCurveT }).x
+                           .GetInterped(lvfCurveT).x
                        * mAttribs.GetTorqueScale(liGear) * lfGas;
 
         // -- Wheel speed seen through the current gearing (ComputeRpm): |v * ratio * diff| in
@@ -577,8 +580,8 @@ namespace
 
         // -- Writeback (the console epilogue's exact lane set).
         mu8CurrentGear = static_cast<u32>(liGear) & 0xFF;          // stw (clrlwi r20,24)
-        mAttribs.SetGearDownRPM(VecFloat{ lfGearDownRPM, lfGearDownRPM,
-                                          lfGearDownRPM, lfGearDownRPM });
+        const VecFloat lvfGearDownRPM = { lfGearDownRPM, lfGearDownRPM, lfGearDownRPM, lfGearDownRPM };
+        mAttribs.SetGearDownRPM(lvfGearDownRPM);
         mvClutchFactor_RPM_CurrentGearChangeTime.y = lfRPM;
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.x = lfEngineDrive;
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.z = lfFlyWheel;
