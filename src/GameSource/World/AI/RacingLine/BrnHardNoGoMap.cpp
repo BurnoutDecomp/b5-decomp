@@ -1,3 +1,4 @@
+#include <xtl.h>
 // BrnAI::HardNoGoMap -- the whole class, reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // The map is a 32 x 8 bit grid laid over one AI section as a bilinear patch between the
@@ -99,8 +100,33 @@ namespace
     // header another lane may also be growing this wave.
     inline f32 Distance2D(Vector2 lA, Vector2 lB)
     {
-        return vpu::Magnitude(Vector2{ lA.x - lB.x, lA.y - lB.y, 0.0f, 0.0f });
+        const XMVECTOR delta = __vsubfp(__lvx(&lA, 0), __lvx(&lB, 0));
+        const XMVECTOR squared = __vmulfp(delta, delta);
+        const XMVECTOR sum = __vaddfp(__vspltw(squared, 0), __vspltw(squared, 1));
+        const XMVECTOR zero = XMVectorZero();
+        const XMVECTOR one = XMVectorReplicate(1.0f);
+        const XMVECTOR half = XMVectorReplicate(0.5f);
+        XMVECTOR estimate = __vrsqrtefp(sum);
+        for (s32 i = 0; i < 2; ++i)
+        {
+            const XMVECTOR squaredEstimate = __vmulfp(estimate, estimate);
+            const XMVECTOR scaledEstimate = __vmulfp(estimate, half);
+            const XMVECTOR residual = __vnmsubfp(sum, squaredEstimate, one);
+            estimate = __vmaddfp(scaledEstimate, residual, estimate);
+        }
+        return __vsel(__vmulfp(sum, estimate), zero, __vcmpeqfp(sum, zero)).x;
     }
+
+    inline f32 Divide2D(f32 numerator, f32 denominator)
+    {
+        const XMVECTOR value = XMVectorReplicate(denominator);
+        const XMVECTOR one = XMVectorReplicate(1.0f);
+        XMVECTOR estimate = __vrefp(value);
+        for (s32 i = 0; i < 2; ++i)
+            estimate = __vmaddfp(estimate, __vnmsubfp(estimate, value, one), estimate);
+        return __vmulfp(XMVectorReplicate(numerator), estimate).x;
+    }
+
 }
 
 // ================================================================================================
@@ -784,15 +810,15 @@ void HardNoGoMap::GetHNGInterpXY(Vector2 lPos, f32& lfInterpX, f32& lfInterpY)
 
     lfInterpX = lfInterp;   // stfs 0(r4) @0x82777C40, before the length branch
 
-    const f32 lfSectionLength =
-        vpu::Magnitude(Vector2{ lfPreviousX - lfCurrentX, lfPreviousY - lfCurrentY, 0.0f, 0.0f });
+    const Vector2 lPrevious = { lfPreviousX, lfPreviousY, 0.0f, 0.0f };
+    const Vector2 lCurrent = { lfCurrentX, lfCurrentY, 0.0f, 0.0f };
+    const f32 lfSectionLength = Distance2D(lPrevious, lCurrent);
 
     if (fabsf(lfSectionLength) > KF_EPSILON)   // vandc (fabs) then vcmpgtfp vs flt_820C3B70
     {
-        const f32 lfAlong =
-            vpu::Magnitude(Vector2{ lPos.x - lfPreviousX, lPos.y - lfPreviousY, 0.0f, 0.0f });
+        const f32 lfAlong = Distance2D(lPos, lPrevious);
 
-        lfInterpY = lfAlong / lfSectionLength;   // vrefp + 2x Newton-Raphson == the divide
+        lfInterpY = Divide2D(lfAlong, lfSectionLength);   // vrefp + 2x Newton-Raphson == the divide
     }
     else
     {
@@ -882,7 +908,8 @@ void HardNoGoMap::Render(Vector3 lPosition)
     // The map plane is world (x, z).
     f32 lfInterpX = 0.0f;
     f32 lfInterpY = 0.0f;
-    GetHNGInterpXY(Vector2{ lPosition.x, lPosition.z, 0.0f, 0.0f }, lfInterpX, lfInterpY);
+    const Vector2 lMapPosition = { lPosition.x, lPosition.z, 0.0f, 0.0f };
+    GetHNGInterpXY(lMapPosition, lfInterpX, lfInterpY);
 
     const bool lbInsideMap = !(lfInterpX < 0.0f) && !(lfInterpX > 1.0f)
                           && !(lfInterpY < 0.0f) && !(lfInterpY > 1.0f);
@@ -917,11 +944,11 @@ void HardNoGoMap::RenderHNGSquare(s32 liWidth, s32 liStartHeight, s32 liEndHeigh
     const Vector2 lPreviousLeft  = GetPreviousLeft();
     const Vector2 lPreviousRight = GetPreviousRight();
 
-    lDebugInterface.GetRender().DrawLine(Vector3{ lCurrentRight.x,  lfHeight, lCurrentRight.y,  0.0f },
-                                         Vector3{ lPreviousRight.x, lfHeight, lPreviousRight.y, 0.0f },
-                                         KRGBA_HNG_RIGHT_EDGE);
-    lDebugInterface.GetRender().DrawLine(Vector3{ lCurrentLeft.x,   lfHeight, lCurrentLeft.y,   0.0f },
-                                         Vector3{ lPreviousLeft.x,  lfHeight, lPreviousLeft.y,  0.0f },
-                                         KRGBA_HNG_LEFT_EDGE);
+    const Vector3 lCurrentRight3 = { lCurrentRight.x, lfHeight, lCurrentRight.y, 0.0f };
+    const Vector3 lPreviousRight3 = { lPreviousRight.x, lfHeight, lPreviousRight.y, 0.0f };
+    const Vector3 lCurrentLeft3 = { lCurrentLeft.x, lfHeight, lCurrentLeft.y, 0.0f };
+    const Vector3 lPreviousLeft3 = { lPreviousLeft.x, lfHeight, lPreviousLeft.y, 0.0f };
+    lDebugInterface.GetRender().DrawLine(lCurrentRight3, lPreviousRight3, KRGBA_HNG_RIGHT_EDGE);
+    lDebugInterface.GetRender().DrawLine(lCurrentLeft3, lPreviousLeft3, KRGBA_HNG_LEFT_EDGE);
 }
 }
