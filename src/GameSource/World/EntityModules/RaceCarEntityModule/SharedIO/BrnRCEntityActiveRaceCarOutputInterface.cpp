@@ -143,7 +143,7 @@ void RCEntityActiveRaceCarOutputInterface::operator=(
 //   mePlayerEngineState        = E_ACTIVE_RACE_CAR_ENGINE_STATE_COUNT (4)
 //   mbIsPlayerCarActive        = false
 //   per car: AISection = 0x7FFF, colour idx = 0, paint idx = 0, flags = 0,
-//            global idx = 0, crashed-into-water = 0
+//            the global-index and crashed-into-water arrays are left untouched.
 //   per scoring index: maeActiveRaceCarIndex[i] = E_ACTIVE_RACE_CAR_INDEX_COUNT (8)
 //   mbPlayerWrecked = false; mbCanDriveAwayFromCrash = false
 // ============================================================================
@@ -161,8 +161,6 @@ void RCEntityActiveRaceCarOutputInterface::Clear()
         mauActiveRaceCarColourIndex[luIndex]  = 0;                 // @+0x26B0
         maiActiveRaceCarPaintFinishIndex[luIndex] = 0;             // @+0x26D0
         maxRaceCarFlags[luIndex]              = 0;                 // @+0x2780 (sets rival/network bits clear)
-        maGlobalRaceCarIndices[luIndex]       = E_GLOBAL_RACE_CAR_INDEX_0; // 0 @+0x2818
-        mbHasCrashedIntoWater[luIndex]        = false;             // @+0x2810
         maDeformationModelResourceHandles[luIndex].Clear();        // stw 0, +0x2864/+0x2868 + 8*i
         CGS_ASSERT(luIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
     }
