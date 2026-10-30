@@ -88,6 +88,64 @@ namespace CgsFileSystem
         }
     }
 
+    // Public wrappers inline the filesystem-wide lock in ARTIST resource handlers.
+    s32 FileSystem::Open(const char* lpName, FileAccess leAccess, s32 liPriority, bool lbCache)
+    {
+        mFileSystemFutex.Lock();
+        const s32 liResult = OpenInternal(lpName, leAccess, liPriority, lbCache);
+        mFileSystemFutex.Unlock();
+        return liResult;
+    }
+    bool FileSystem::Close(u32 luId)
+    {
+        mFileSystemFutex.Lock();
+        const bool lbResult = CloseInternal(luId);
+        mFileSystemFutex.Unlock();
+        return lbResult;
+    }
+    bool FileSystem::RegisterMemFile(const char* lpName, void* lpData, u64 luSize)
+    {
+        mFileSystemFutex.Lock();
+        const bool lbResult = RegisterMemFileInternal(lpName, lpData, luSize);
+        mFileSystemFutex.Unlock();
+        return lbResult;
+    }
+    bool FileSystem::UnregisterMemFile(const char* lpName)
+    {
+        mFileSystemFutex.Lock();
+        const bool lbResult = UnregisterMemFileInternal(lpName);
+        mFileSystemFutex.Unlock();
+        return lbResult;
+    }
+    // ARTIST828F0718 selects the first effectively closed file.
+    s32 FileSystem::OpenInternal(const char* lpName, FileAccess leAccess, s32 liPriority, bool lbCache)
+    {
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
+            if (maFiles[lu].GetStatus() == E_FILESTATE_CLOSED)
+            {
+                maFiles[lu].Open(lpName, leAccess, liPriority, lbCache);
+                return static_cast<s32>(lu);
+            }
+        CGS_ASSERT(false, "No more files available to open.\n");
+        return -1;
+    }
+    bool FileSystem::CloseInternal(u32 luId)
+    {
+        CGS_ASSERT(luId < KU_MAXNOOFFILES, "Invalid file id\n");
+        maFiles[luId].Close();
+        return true;
+    }
+    bool FileSystem::RegisterMemFileInternal(const char* lpName, void* lpData, u64 luSize)
+    {
+        CGS_ASSERT(mpMemFileSystem != 0, "No memory file system\n");
+        return mpMemFileSystem->RegisterMemFile(lpName, lpData, luSize);
+    }
+    bool FileSystem::UnregisterMemFileInternal(const char* lpName)
+    {
+        CGS_ASSERT(mpMemFileSystem != 0, "No memory file system\n");
+        return mpMemFileSystem->UnregisterMemFile(lpName);
+    }
+
     // @0x8264AE28.
     FileState FileSystem::GetStatus(u32 luFileId)
     {

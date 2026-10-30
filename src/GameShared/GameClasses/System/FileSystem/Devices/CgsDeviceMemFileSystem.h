@@ -20,6 +20,7 @@ namespace CgsFileSystem
         explicit DeviceMemFileSystem(const char* lpcName);
         virtual ~DeviceMemFileSystem();
         void Construct();
+        bool RegisterMemFile(const char* lpcName, void* lpData, u64 luSize);
         bool UnregisterMemFile(const char* lpcName);
         virtual void* Open(const char*, unsigned int, rw::core::filesys::Handle**);
         virtual void Close(void*);

@@ -135,6 +135,10 @@ namespace CgsResource
         CgsMemory::MemoryModule& GetMemoryModule() { return mMemoryModule; }
 
         // Native asynchronous stream and patch request entry points.
+        bool AddOpenFileRequest(const Events::OpenFileRequest* lpRequest);
+        bool AddCloseFileRequest(const Events::CloseFileRequest* lpRequest);
+        bool AddRegisterMemFileRequest(const Events::RegisterMemFileRequest* lpRequest);
+        bool AddUnregisterMemFileRequest(const Events::UnregisterMemFileRequest* lpRequest);
         bool AddAddPatchRequest(const Events::AddPatchRequest* lpRequest);
         bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* lpRequest);   // @0x828D8310
         bool AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* lpRequest); // @0x828D83A0
