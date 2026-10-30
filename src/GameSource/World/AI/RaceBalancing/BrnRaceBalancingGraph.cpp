@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-#include <cmath>   // std::fmaf (ComputeSpeedRatio's fnmsubs / fmadds)
+#include <cmath>
 
 namespace BrnAI
 {
@@ -94,7 +94,8 @@ f32 RaceBalancingGraph::ComputeSpeedRatio(GraphType leGraphType, f32 lfFraction)
     // 0x8277B8A0 `fmuls` by 7.0 @0x820054D0 (rule 4). Spelt as the negated fmsub, so an exact zero difference is
     // -0.0 as on the console, and a NaN lfFraction (the only operand that can be one) keeps its sign: it is negated
     // twice here, and fnmsubs leaves a NaN unnegated.
-    f32 lfSegmentFraction = -std::fmaf(static_cast<f32>(liPrevPoint), 1.0f / 7.0f, -lfFraction) * 7.0f;
+    const volatile f32 lfDifference = -(static_cast<f32>(liPrevPoint) * (1.0f / 7.0f) - lfFraction);
+    f32 lfSegmentFraction = lfDifference * 7.0f;
     lfSegmentFraction = (-lfSegmentFraction >= 0.0f) ? 0.0f : lfSegmentFraction;
     lfSegmentFraction = ((1.0f - lfSegmentFraction) >= 0.0f) ? lfSegmentFraction : 1.0f;
 
@@ -102,6 +103,6 @@ f32 RaceBalancingGraph::ComputeSpeedRatio(GraphType leGraphType, f32 lfFraction)
     const f32 lfNext = mafSpeedRatios[leGraphType][liNextPoint];
     // 0x8277B8B8 `fmadds f1, f11, f13, f0` = (next - prev) * segment + prev, ONE rounding (ROUNDING_RULE 3; the
     // fsubs at 0x8277B890 is rule 4).
-    return std::fmaf(lfNext - lfPrev, lfSegmentFraction, lfPrev);
+    return (lfNext - lfPrev) * lfSegmentFraction + lfPrev;
 }
 }
