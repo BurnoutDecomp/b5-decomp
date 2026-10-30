@@ -218,7 +218,7 @@ namespace CgsSceneManager
         CgsGeometric::Triangle4::Mask4 lIntersectMask;
 
         CgsDev::PerfMonCpu::StartMonitor(siTriangleTestPerfMon);
-        const u64 luStartTime = CgsSystem::GetSystemTimerBaseTime64();
+        const u64 luStartTime = CgsSystem::GetSystemTimerBaseTime();
         for (s32 liTest = 0; liTest < miTestsToExecute; ++liTest)
         {
             lIntersectMask = CgsGeometric::IntersectTriangle4SweptSphere(
@@ -228,8 +228,8 @@ namespace CgsSceneManager
                 laContactNormals[2], laTriangleNormals[2], laSphereContactPoints[2], laTriangleContactPoints[2],
                 laContactNormals[3], laTriangleNormals[3], laSphereContactPoints[3], laTriangleContactPoints[3]);
         }
-        const u64 luElapsedTicks = CgsSystem::GetSystemTimerBaseTime64() - luStartTime;
-        const u64 luTimerFrequency = CgsSystem::GetSystemTimerFrequency64();
+        const u64 luElapsedTicks = CgsSystem::GetSystemTimerBaseTime() - luStartTime;
+        const u64 luTimerFrequency = CgsSystem::GetSystemTimerFrequency();
         const u64 luElapsedScaled = luElapsedTicks * 3200000000ULL;
         const u64 luTotalCycles = luElapsedScaled / luTimerFrequency;
         miTotalCycles = static_cast<s32>(static_cast<u32>(luTotalCycles));

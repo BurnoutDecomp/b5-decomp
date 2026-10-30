@@ -7,6 +7,7 @@
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h"  // AchievementManagerBase::OnSetAllRoadRules
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsID, CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CgsDev::Assert
+#include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The in-game debug menu for the road-rules
 // StreetManager. Seven of this TU's eight X360-attested functions are bodied here:
@@ -35,10 +36,6 @@
 // The menu registrations go through the (unnamed) CgsDev::DebugComponent registration helpers,
 // which are the base-class methods reconstructed in CgsDebugComponent.h, called by name
 // (RegisterVariable / RegisterFunction) -- matching the sibling debug components.
-
-// GetSystemTimerBaseTime has no committed header of its own; the recovered siblings
-// (CgsDebugManager.cpp, CgsMoviePlayer.cpp) forward-declare it locally -- do the same.
-namespace CgsSystem { u32 GetSystemTimerBaseTime(); }
 
 namespace BrnGameState
 {
@@ -120,13 +117,12 @@ void StreetManagerDebugComponent::PopulateUserChallengeScores( void* lpData )
     }
 
     // A plain 64-bit linear-congruential generator (multiplier 0x5851F42D4C957F2D, increment 1
-    // -- the well-known Vigna/PCG constant) seeded from the system timer and warmed up eight
-    // times. It only scatters debug scores, so exact reproducibility is not required, but the
-    // full 64-bit multiply is reproduced faithfully (the X360 builds the constant with a
-    // lis/ori pair per dword + insrdi and iterates it with mulld).
+    // -- the well-known Vigna/PCG constant) warmed up eight times. ARTIST 0x8233F9A8 reads the
+    // full timer word, then `clrldi r11,r3,32` at 0x8233F9C4 keeps only its low 32 bits as the
+    // initial seed. The subsequent LCG operations are 64-bit `mulld`/`addi` steps.
     const u64 KU_LCG_MULTIPLIER = 0x5851F42D4C957F2Dull;
 
-    u64 luRng = CgsSystem::GetSystemTimerBaseTime();
+    u64 luRng = static_cast<u32>(CgsSystem::GetSystemTimerBaseTime());
     for ( s32 liWarmUp = 0; liWarmUp < 8; ++liWarmUp )
     {
         luRng = luRng * KU_LCG_MULTIPLIER + 1;
