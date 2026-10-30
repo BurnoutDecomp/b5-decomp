@@ -14,6 +14,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"                                            // TransformPoint / operator*
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
+#include <vectorintrinsics.h>
 #include <cmath>
 #include <cstring>
 
@@ -49,7 +50,8 @@ namespace CgsSceneManager
 
         Vector3 CopyVector3Plus(const Vector3Plus& lrPoint)
         {
-            return { lrPoint.x, lrPoint.y, lrPoint.z, lrPoint.w };
+            const Vector3 lResult = { lrPoint.x, lrPoint.y, lrPoint.z, lrPoint.w };
+            return lResult;
         }
 
         void DrawContactAxes(CgsDev::Debug3DImmediateRender* lpRender, const Vector3& lrPosition)
@@ -162,15 +164,42 @@ namespace CgsSceneManager
         const f32 lfTriZPlusScale = lfTriScale + lfTriZ;
 
         CgsGeometric::Triangle4 lTriangles = {};
-        lTriangles.mVertex0X = { lfTriX, lfTriX, lfTriX, lfTriX };
-        lTriangles.mVertex0Y = { lfTriY, lfTriY, lfTriY, lfTriY };
-        lTriangles.mVertex0Z = { lfTriZ, lfTriZ, lfTriZ, lfTriZ };
-        lTriangles.mVertex1X = { lfTriX, lfTriX, lfTriX, lfTriX };
-        lTriangles.mVertex1Y = { lfTriY, lfTriY, lfTriY, lfTriY };
-        lTriangles.mVertex1Z = { lfTriZPlusScale, lfTriZPlusScale, lfTriZPlusScale, lfTriZPlusScale };
-        lTriangles.mVertex2X = { lfTriXPlusScale, lfTriXPlusScale, lfTriXPlusScale, lfTriXPlusScale };
-        lTriangles.mVertex2Y = { lfTriY, lfTriY, lfTriY, lfTriY };
-        lTriangles.mVertex2Z = { lfTriZ, lfTriZ, lfTriZ, lfTriZ };
+        lTriangles.mVertex0X.x = lfTriX;
+        lTriangles.mVertex0X.y = lfTriX;
+        lTriangles.mVertex0X.z = lfTriX;
+        lTriangles.mVertex0X.w = lfTriX;
+        lTriangles.mVertex0Y.x = lfTriY;
+        lTriangles.mVertex0Y.y = lfTriY;
+        lTriangles.mVertex0Y.z = lfTriY;
+        lTriangles.mVertex0Y.w = lfTriY;
+        lTriangles.mVertex0Z.x = lfTriZ;
+        lTriangles.mVertex0Z.y = lfTriZ;
+        lTriangles.mVertex0Z.z = lfTriZ;
+        lTriangles.mVertex0Z.w = lfTriZ;
+        lTriangles.mVertex1X.x = lfTriX;
+        lTriangles.mVertex1X.y = lfTriX;
+        lTriangles.mVertex1X.z = lfTriX;
+        lTriangles.mVertex1X.w = lfTriX;
+        lTriangles.mVertex1Y.x = lfTriY;
+        lTriangles.mVertex1Y.y = lfTriY;
+        lTriangles.mVertex1Y.z = lfTriY;
+        lTriangles.mVertex1Y.w = lfTriY;
+        lTriangles.mVertex1Z.x = lfTriZPlusScale;
+        lTriangles.mVertex1Z.y = lfTriZPlusScale;
+        lTriangles.mVertex1Z.z = lfTriZPlusScale;
+        lTriangles.mVertex1Z.w = lfTriZPlusScale;
+        lTriangles.mVertex2X.x = lfTriXPlusScale;
+        lTriangles.mVertex2X.y = lfTriXPlusScale;
+        lTriangles.mVertex2X.z = lfTriXPlusScale;
+        lTriangles.mVertex2X.w = lfTriXPlusScale;
+        lTriangles.mVertex2Y.x = lfTriY;
+        lTriangles.mVertex2Y.y = lfTriY;
+        lTriangles.mVertex2Y.z = lfTriY;
+        lTriangles.mVertex2Y.w = lfTriY;
+        lTriangles.mVertex2Z.x = lfTriZ;
+        lTriangles.mVertex2Z.y = lfTriZ;
+        lTriangles.mVertex2Z.z = lfTriZ;
+        lTriangles.mVertex2Z.w = lfTriZ;
 
         const u32 luValidLane = 0xFFFFFFFFu;
         std::memcpy(&lTriangles.mValidMasks.x, &luValidLane, sizeof(luValidLane));
@@ -317,19 +346,30 @@ namespace CgsSceneManager
                                                           Vector3 lVertex0, Vector3 lVertex1,
                                                           Vector3 lVertex2, rw::RGBA lColour)
     {
-        const Vector3 lEdge0 = vmx::Subtract(lVertex0, lVertex1);
-        const Vector3 lEdge1 = vmx::Subtract(lVertex0, lVertex2);
-        // 828ABA84..94: rounded product, fused negative subtract, then YZXW.
-        const Vector3 lCross = {
-            vmx::NegativeMultiplySubtract(lEdge0.z, lEdge1.y, vmx::Multiply(lEdge0.y, lEdge1.z)),
-            vmx::NegativeMultiplySubtract(lEdge0.x, lEdge1.z, vmx::Multiply(lEdge0.z, lEdge1.x)),
-            vmx::NegativeMultiplySubtract(lEdge0.y, lEdge1.x, vmx::Multiply(lEdge0.x, lEdge1.y)),
-            vmx::NegativeMultiplySubtract(lEdge0.w, lEdge1.w, vmx::Multiply(lEdge0.w, lEdge1.w)) };
-        // This site has ONE unconditional refinement, unlike the two-step magnitudes.
-        const Vector3 lNormal = vmx::Normalize3Unconditional(lCross, 1);
-        lVertex0 = vmx::MultiplyAdd(lNormal, 0.04f, lVertex0);
-        lVertex1 = vmx::MultiplyAdd(lNormal, 0.04f, lVertex1);
-        lVertex2 = vmx::MultiplyAdd(lNormal, 0.04f, lVertex2);
+        const __vector4 lv0 = __lvx(&lVertex0, 0);
+        const __vector4 lv1 = __lvx(&lVertex1, 0);
+        const __vector4 lv2 = __lvx(&lVertex2, 0);
+        const __vector4 lvEdge0 = __vsubfp(lv0, lv1);
+        const __vector4 lvEdge1 = __vsubfp(lv0, lv2);
+        const __vector4 lvEdge0YZX = { lvEdge0.y, lvEdge0.z, lvEdge0.x, lvEdge0.w };
+        const __vector4 lvEdge1ZXY = { lvEdge1.z, lvEdge1.x, lvEdge1.y, lvEdge1.w };
+        const __vector4 lvEdge0ZXY = { lvEdge0.z, lvEdge0.x, lvEdge0.y, lvEdge0.w };
+        const __vector4 lvEdge1YZX = { lvEdge1.y, lvEdge1.z, lvEdge1.x, lvEdge1.w };
+        const __vector4 lvProduct = __vmulfp(lvEdge0YZX, lvEdge1ZXY);
+        const __vector4 lvCross = __vnmsubfp(lvEdge0ZXY, lvEdge1YZX, lvProduct);
+        const __vector4 lvLengthSquared = __vmsum3fp(lvCross, lvCross);
+        const __vector4 lvEstimate = __vrsqrtefp(lvLengthSquared);
+        const __vector4 lvHalf = { 0.5f, 0.5f, 0.5f, 0.5f };
+        const __vector4 lvOne = { 1.0f, 1.0f, 1.0f, 1.0f };
+        const __vector4 lvSquared = __vmulfp(lvEstimate, lvEstimate);
+        const __vector4 lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+        const __vector4 lvResidual = __vnmsubfp(lvLengthSquared, lvSquared, lvOne);
+        const __vector4 lvInverse = __vmaddfp(lvHalfEstimate, lvResidual, lvEstimate);
+        const __vector4 lvNormal = __vmulfp(lvCross, lvInverse);
+        const __vector4 lvOffset = { 0.04f, 0.04f, 0.04f, 0.04f };
+        __stvx(__vmaddfp(lvNormal, lvOffset, lv0), &lVertex0, 0);
+        __stvx(__vmaddfp(lvNormal, lvOffset, lv1), &lVertex1, 0);
+        __stvx(__vmaddfp(lvNormal, lvOffset, lv2), &lVertex2, 0);
 
         lpRender->DrawHollowTriangle(lVertex0, lVertex1, lVertex2,
             rw::RGBA(0xFFu, 0xFFu, 0xFFu, 0xFFu));
