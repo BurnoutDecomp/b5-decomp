@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
+#include "rw/rwcore_structs.h"
 
 // CgsGui::BillboardInfo - one billboard descriptor a GUI custom renderer collects into a
 // fixed Array<BillboardInfo,32> before submitting (the X360 BrnGui::BoostBarRenderer
@@ -23,17 +25,12 @@ namespace CgsGui
 {
     struct BillboardInfo
     {
-        f32 mfPosX;            // +0  (DWARF mv2Pos.x -- vpu Vector2)
-        f32 mfPosY;            // +4  (DWARF mv2Pos.y)
-        u8  mau8PosPad[8];     // +8..15  (vpu Vector2 z/w lanes -- unused)
-        f32 mfRotation;        // +16 (DWARF mfRotation)
-        u8  mau8RotPad[12];    // +20..31 (align to the next 16-byte vpu Vector2)
-        f32 mfSizeX;           // +32 (DWARF mv2Size.x)
-        f32 mfSizeY;           // +36 (DWARF mv2Size.y)
-        u8  mau8SizePad[8];    // +40..47
-        u32 muDiffuse;         // +48 (DWARF mcDiffuse -- packed RGBA colour word)
-        s32 miTextureFrame;    // +52 (DWARF miTextureFrame)
-        u8  mau8Tail[8];       // +56..63
+        BillboardInfo() : mcDiffuse(rw::RGBA::NoInitTag()) {}
+        Vector2 mv2Pos;
+        f32 mfRotation;
+        Vector2 mv2Size;
+        rw::RGBA mcDiffuse;
+        s32 miTextureFrame;
     };
 
     // The element stride the Array<BillboardInfo,32> bodies copy/index (Append's 8-qword std loop,

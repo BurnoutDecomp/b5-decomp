@@ -81,6 +81,7 @@ namespace CgsGui
         // field straight off the grow-fireball renderer subobject to bound the slam-gain window
         // (frames / 60s); an accessor here in place of the raw member read.
         s32 GetNumFrames() const { return miNumFrames; }
+        void SetAnimMode(eAnimMode leMode) { meAnimMode = leMode; }
 
     private:
         // 0x8284F478. Precompute the per-frame UV atlas: for a framesX x framesY grid, frame i lands
