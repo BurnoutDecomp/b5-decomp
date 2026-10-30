@@ -10,9 +10,7 @@
 #include "GameSource/Gui/BrnGuiShared.h"
 #include <cstring>
 #include <cmath>
-#if defined(_XBOX)
 #include <vectorintrinsics.h>
-#endif
 #include "GameSource/Gui/BrnGuiWorldDataController.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
@@ -50,7 +48,6 @@ namespace
     // reciprocal-root refinements are VMX operations, including the zero select.
     static bool IsWithinRouteExclusion(const void* lpPoint, const void* lpPeer)
     {
-#if defined(_XBOX)
         const __vector4 delta = __vsubfp(__lvx(lpPoint, 0), __lvx(lpPeer, 0));
         const __vector4 squared = __vmsum3fp(delta, delta);
         const __vector4 zero = __vspltisw(0);
@@ -69,12 +66,6 @@ namespace
         CGS_ALIGN(16) f32 lanes[4];
         __stvx(length, lanes, 0);
         return lanes[0] < 200.0f;
-#else
-        const f32* point = static_cast<const f32*>(lpPoint);
-        const f32* peer = static_cast<const f32*>(lpPeer);
-        const f32 x = point[0] - peer[0], y = point[1] - peer[1], z = point[2] - peer[2];
-        return std::sqrt(x * x + y * y + z * z) < 200.0f;
-#endif
     }
 
     // The shortest route an online event accepts (rodata 1000.0; the main-option handler
