@@ -44,7 +44,10 @@ static const f32 KF_UNIT_DELTA_EPSILON = 1.1920928955078125e-07f;
 // Normalize guards zero (an authored point never coincides with its endpoint).
 Vector3 IKDrivenPoint::ResolveConstraint(Vector3 lPosition, Vector3 lEndpoint, VecFloat lvfDesiredDistance)
 {
-    using namespace rw::math::vpu;
+    using rw::math::vpu::Subtract;
+    using rw::math::vpu::Normalize;
+    using rw::math::vpu::MagnitudeSquared;
+    using rw::math::vpu::Dot;
 
     // v = pos - endpoint, then drop its against-the-rest-side component: v -= n * min(dot(n, v), 0).
     Vector3 lDelta = Subtract(lPosition, lEndpoint);
@@ -67,7 +70,10 @@ Vector3 IKDrivenPoint::ResolveConstraint(Vector3 lPosition, Vector3 lEndpoint, V
 
 void IKDrivenPoint::Construct(const IKDrivenPointSpec* lpSpec, const TagPoint* lpTagPointArrayBase)
 {
-    using namespace rw::math::vpu;
+    using rw::math::vpu::Subtract;
+    using rw::math::vpu::Normalize;
+    using rw::math::vpu::MagnitudeSquared;
+    using rw::math::vpu::Dot;
 
     // Cache the spec and resolve the two endpoint tag points from the array base by the spec's
     // two indices (console: base + 32*index, i.e. &base[index] at stride sizeof(TagPoint)).
@@ -118,7 +124,7 @@ void IKDrivenPoint::Construct(const IKDrivenPointSpec* lpSpec, const TagPoint* l
     // vector, and one for which the (then missing) clamp would have been meaningless.
     const Vector3 lToPoint = Subtract(lInitialPos, mpTagPointA->GetInitialPosition());
     const f32     lfAlong  = Dot(lToPoint, lDirectionToB);
-    Vector3 lSide{ lToPoint.x - lDirectionToB.x * lfAlong,
+    Vector3 lSide = { lToPoint.x - lDirectionToB.x * lfAlong,
                    lToPoint.y - lDirectionToB.y * lfAlong,
                    lToPoint.z - lDirectionToB.z * lfAlong, 0.0f };
     {
@@ -142,10 +148,13 @@ void IKDrivenPoint::Construct(const IKDrivenPointSpec* lpSpec, const TagPoint* l
 
 void IKDrivenPoint::Update()
 {
-    using namespace rw::math::vpu;
+    using rw::math::vpu::Subtract;
+    using rw::math::vpu::Normalize;
+    using rw::math::vpu::MagnitudeSquared;
+    using rw::math::vpu::Dot;
 
     // Current driven-point position (xyz of mPositionPlusDistanceToA) and the two endpoints.
-    Vector3 lPosition{ mPositionPlusDistanceToA.x, mPositionPlusDistanceToA.y,
+    Vector3 lPosition = { mPositionPlusDistanceToA.x, mPositionPlusDistanceToA.y,
                        mPositionPlusDistanceToA.z, mPositionPlusDistanceToA.w };
 
     const Vector3& lPosA = mpTagPointA->GetPosition();
