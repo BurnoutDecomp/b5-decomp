@@ -31,6 +31,7 @@
 
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"
 #include <cstdlib>   // getenv ([cnav-diag])
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 #include "GameSource/Gui/BrnGuiCache.h"                          // BrnGui::GuiCache (resource pump + GetTime)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // sResourceTuple / GuiEventLoadNotification
@@ -153,32 +154,17 @@ namespace
     // console's own (InitResources' stack descriptor: clamp/clamp, linear/linear, mip 2,
     // aniso 13, lod bias 0, trailing flags 0,0,0,1,1). Same helper shape as
     // BrnSatNavRenderer::InitResources.
-    renderengine::TextureState* CreateIconTextureState(rw::Resource* lpBacking, const void* lpTexture)
+    renderengine::TextureState* CreateIconTextureState(rw::IResourceAllocator* lpAllocator, rw::Resource* lpBacking, const void* lpTexture)
     {
         renderengine::TextureState::Parameters lParams;
-        lParams.muAddressU      = 2u;   // v35
-        lParams.muAddressV      = 2u;   // v36
-        lParams.muAddressW      = 0u;   // v37
-        lParams.muMagFilter     = 1u;   // v38
-        lParams.muMinFilter     = 1u;   // v39
-        lParams.muMipFilter     = 2u;   // v40
-        lParams.muField6        = 0u;   // v41
-        lParams.muField7        = 0u;   // v42
-        lParams.muMaxAnisotropy = 13u;  // v43
-        lParams.muField9        = 0u;   // v44
-        lParams.muField10       = 1u;   // v45
-        lParams.mfMipLodBias    = 0.0f; // v46
-        lParams.mfField12       = 0.0f; // v47
-        lParams.muField13       = 0u;   // v48
-        lParams.muField14       = 0u;   // v49
-        lParams.muField15       = 0u;   // v50
-        lParams.mu8Field40      = 0u;   // v51
-        lParams.mu8Field41      = 0u;   // v52
-        lParams.mu8Field42      = 0u;   // v53
-        lParams.mu8Field43      = 1u;   // v54
-        lParams.mu8Field44      = 1u;   // v55
-        lParams.mpTexture       = reinterpret_cast<renderengine::Texture*>(
-                                      const_cast<void*>(lpTexture));   // v56
+        lParams.muAddressU = 2;
+        lParams.muAddressV = 2;
+        lParams.muMagFilter = 1;
+        lParams.muMinFilter = 1;
+        lParams.mpTexture = static_cast<renderengine::Texture*>(const_cast<void*>(lpTexture));
+        rw::ResourceDescriptor lDescriptor;
+        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        *lpBacking = lpAllocator->DoAllocate(lDescriptor, 0);
         return renderengine::TextureState::Initialize(lpBacking, &lParams);
     }
 }
@@ -198,17 +184,6 @@ namespace
 // ---------------------------------------------------------------------------
 CrashNavIconRenderer::CrashNavIconRenderer()
 {
-    mbFrameInputPCValid = false;
-    for (s32 li = 0; li < 5; ++li)
-    {
-        mBackgroundMaskTextureStateResource[li] = 0;   // +0x09C
-        mPreRaceMaskTextureStateResource[li]    = 0;   // +0x0B4
-        maIconResources[0][li]                  = 0;   // +0x0CC (the 2 x 5 loop)
-        maIconResources[1][li]                  = 0;
-        mIconsTextureStateResource[li]          = 0;   // +0x0FC
-        mRoadSignsTextureStateResource[li]      = 0;   // +0x114
-    }
-
     // `stw r5(-1), 0x144(r3)` -- the Array<u32,5> count word starts on the
     // KI_UNCONSTRUCTED sentinel; Construct() below flips it to 0 before the Appends.
     mOnlineStartpointsToIgnore.MarkUnconstructed();
@@ -222,7 +197,6 @@ CrashNavIconRenderer::CrashNavIconRenderer()
 void CrashNavIconRenderer::Construct()
 {
     CustomRenderComponentInterface::Construct();
-    mbFrameInputPCValid = false;
 
     mePrepareStage = E_PREPARESTAGE_START;   // stw 0, 0x54
     meReleaseStage = E_RELEASESTAGE_DONE;    // stw 1, 0x58 -- nothing to release yet
@@ -243,12 +217,8 @@ void CrashNavIconRenderer::Construct()
     mpIconsTextureState          = 0;   // 0x110
     mpRoadSignsTextureState      = 0;   // 0x128
 
-    // The ten-word clear loop from +0xCC: maIconResources[2][5].
-    for (s32 li = 0; li < 5; ++li)
-    {
-        maIconResources[0][li] = 0;
-        maIconResources[1][li] = 0;
-    }
+    maIconResources[0] = rw::Resource();
+    maIconResources[1] = rw::Resource();
 
     mapIconTextureStates[0] = 0;   // 0xF4
     mapIconTextureStates[1] = 0;   // 0xF8
@@ -453,7 +423,6 @@ void CrashNavIconRenderer::Update()
 {
     // The original Construct seeds only this record's pointer. Copy its object
     // representation; the scale is read only when a real bank has been published.
-    mbFrameInputPCValid = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +452,6 @@ CgsGui::eCustomRenderLayer CrashNavIconRenderer::GetRenderLayer() const
 void CrashNavIconRenderer::SetRenderEnabled(bool lbRenderEnabled)
 {
     mbRenderEnabled = lbRenderEnabled;   // stb r4, 4(r3)
-    mbFrameInputPCValid = false;
 
     mHoveredEventIcon.mHoveredDriveThroughID = 0;   // std r11, 0x150
     mHoveredEventIcon.mHoveredPlayerID       = 0;   // std r11, 0x158
@@ -515,9 +483,8 @@ void CrashNavIconRenderer::InitResources()
             mpGuiCache->GetLoadedResource(KA_RESOURCES_TO_LOAD[liTextureIndex].muId);
         CGS_ASSERT(lpTexture != 0, "lpTexture!=NULL");   // console line 631
 
-        maIconResources[liTextureIndex][0] = 0;   // the console's 5-dword descriptor slot
         mapIconTextureStates[liTextureIndex] =
-            CreateIconTextureState(&maIconTextureStateBacking[liTextureIndex], lpTexture);
+            CreateIconTextureState(mpHeapAllocator, &maIconResources[liTextureIndex], lpTexture);
         CGS_ASSERT(mapIconTextureStates[liTextureIndex] != 0,
                    "mapIconTextureStates[liTextureIndex]");   // console line 642
     }
@@ -525,8 +492,7 @@ void CrashNavIconRenderer::InitResources()
     {
         const void* const lpTexture = mpGuiCache->GetLoadedResource(KU_TEXTURE_ID_CRASHNAV_ICONS);
         CGS_ASSERT(lpTexture != 0, "lpTexture != NULL");   // console line 647
-        mIconsTextureStateResource[0] = 0;
-        mpIconsTextureState = CreateIconTextureState(&mIconsTextureStateBacking, lpTexture);
+        mpIconsTextureState = CreateIconTextureState(mpHeapAllocator, &mIconsTextureStateResource, lpTexture);
         CGS_ASSERT(mpIconsTextureState != 0, "mpIconsTextureState");   // console line 658
     }
 
@@ -536,27 +502,24 @@ void CrashNavIconRenderer::InitResources()
     {
         const void* const lpTexture = mpGuiCache->GetLoadedResource(KU_TEXTURE_ID_BACKGROUND_MASK);
         CGS_ASSERT(lpTexture != 0, "lpTexture != NULL");   // console line 665
-        mBackgroundMaskTextureStateResource[0] = 0;
         mpBackgroundMaskTextureState =
-            CreateIconTextureState(&mBackgroundMaskTextureStateBacking, lpTexture);
+            CreateIconTextureState(mpHeapAllocator, &mBackgroundMaskTextureStateResource, lpTexture);
         CGS_ASSERT(mpBackgroundMaskTextureState != 0, "mpBackgroundMaskTextureState");   // line 676
     }
 
     {
         const void* const lpTexture = mpGuiCache->GetLoadedResource(KU_TEXTURE_ID_PRERACE_MASK);
         CGS_ASSERT(lpTexture != 0, "lpTexture != NULL");   // console line 680
-        mPreRaceMaskTextureStateResource[0] = 0;
         mpPreRaceMaskTextureState =
-            CreateIconTextureState(&mPreRaceMaskTextureStateBacking, lpTexture);
+            CreateIconTextureState(mpHeapAllocator, &mPreRaceMaskTextureStateResource, lpTexture);
         CGS_ASSERT(mpPreRaceMaskTextureState != 0, "mpPreRaceMaskTextureState");   // line 691
     }
 
     {
         const void* const lpTexture = mpGuiCache->GetLoadedResource(KU_TEXTURE_ID_ROAD_SIGNS);
         CGS_ASSERT(lpTexture != 0, "lpTexture != NULL");   // console line 694
-        mRoadSignsTextureStateResource[0] = 0;
         mpRoadSignsTextureState =
-            CreateIconTextureState(&mRoadSignsTextureStateBacking, lpTexture);
+            CreateIconTextureState(mpHeapAllocator, &mRoadSignsTextureStateResource, lpTexture);
         CGS_ASSERT(mpRoadSignsTextureState != 0, "mpRoadSignsTextureState");   // line 705
     }
 }
@@ -1850,7 +1813,7 @@ void CrashNavIconRenderer::RenderDriveThroughs(Im2dCommandBuffer* lpRenderBuffer
             // states 1..25 -- a player or rival marker.
             CGS_ASSERT(miRivalIconsCount < KI_MAX_RIVALS,
                        "Trying to store too many rivals");   // console line 1652
-            mRivalIcons[miRivalIconsCount] = lrIcon;
+            mRivalIcons[miRivalIconsCount] = mGuiEventMapIconStatus.lpSatNavIcons[liIndex];
             ++miRivalIconsCount;
         }
         else if (leState >= MapIconBrnBase::E_ICONSTATE_CRASHNAV_JUNKYARD &&
@@ -1868,7 +1831,7 @@ void CrashNavIconRenderer::RenderDriveThroughs(Im2dCommandBuffer* lpRenderBuffer
             // states 51..52 -- the pre-race start/finish pair.
             CGS_ASSERT(miStartFinishIconCount < KI_NUM_STARTFINISH_ICONS,
                        "Trying to add too many start finishes");   // console line 1663
-            mStartFinishIcons[miStartFinishIconCount] = lrIcon;
+            mStartFinishIcons[miStartFinishIconCount] = mGuiEventMapIconStatus.lpSatNavIcons[liIndex];
             ++miStartFinishIconCount;
         }
     }
@@ -2021,19 +1984,9 @@ void CrashNavIconRenderer::RenderRoadSigns(Im2dCommandBuffer* lpRenderBuffer)
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::RenderStartFinish(Im2dCommandBuffer* lpRenderBuffer)
 {
-    static u32 suEndpointTick = 0;
-    static u32 suEndpointSamples = 0;
-    const bool lbEndpointSample = sbEndpointDiag && CgsDev::Log::gpDebugPrint != 0 &&
-        suEndpointSamples < 64 && ((suEndpointTick++ % 120) == 0);
-    if (lbEndpointSample)
-    {
-        ++suEndpointSamples;
-        *CgsDev::Log::gpDebugPrint << "[cnav-endpoint] count=" << miStartFinishIconCount << "\n";
-    }
-
     for (s32 liIndex = 0; liIndex < miStartFinishIconCount; ++liIndex)
     {
-        CrashNavMapIcon& lrIcon = mStartFinishIcons[liIndex];
+        CrashNavMapIcon& lrIcon = mStartFinishIcons[liIndex].mIcon;
 
         Vector4 lv4Uv;
         const MapIconBrnBase::IconState leState = lrIcon.GetState();
@@ -2054,12 +2007,6 @@ void CrashNavIconRenderer::RenderStartFinish(Im2dCommandBuffer* lpRenderBuffer)
                           KF_DEVICE_TO_NORMALISED_Y;
         const f32 lfBottom = (lv2Position.y + KF_STARTFINISH_HALFHEIGHT + KF_STARTFINISH_OFFSET_Y) *
                              KF_DEVICE_TO_NORMALISED_Y;
-
-        if (lbEndpointSample)
-            *CgsDev::Log::gpDebugPrint << "[cnav-endpoint] icon=" << liIndex
-                << " state=" << static_cast<s32>(leState) << " position="
-                << lv2Position.x << "," << lv2Position.y << " rect="
-                << lfLeft << "," << lfTop << "," << lfRight << "," << lfBottom << "\n";
 
         RenderQuad(lpRenderBuffer,
                    MakeV2(lfLeft,  lfTop),      // TL
@@ -2110,7 +2057,7 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
         mav2IconUvBottomRight[E_CRASHNAVICON_EVENT_NOTATTEMPTED][KI_PLAYER_ICON_OVERLAY_INDEX].y);
     for (s32 liIndex = 0; liIndex < miRivalIconsCount; ++liIndex)
     {
-        CrashNavMapIcon& lrIcon = mRivalIcons[liIndex];
+        CrashNavMapIcon& lrIcon = mRivalIcons[liIndex].mIcon;
 
         bool lbIsLocalPlayer = false;
         const Vector4 lv4IconColour = GetRivalIconColour(lrIcon.GetState(), &lbIsLocalPlayer);
@@ -2810,6 +2757,9 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     // v13, 1.0 / vmulfp v0, v127, unk_8305A950`) is exactly PackVertexColour's fold, and
     // unk_8305A950 is the same all-255 vector that helper already documents.
     const CgsGraphics::RGBA8 lTextRgba = PackVertexColour(lrv4SignColour);
+    const u32 lTextColour = (static_cast<u32>(lTextRgba.a) << 24) |
+        (static_cast<u32>(lTextRgba.b) << 16) |
+        (static_cast<u32>(lTextRgba.g) << 8) | lTextRgba.r;
 
     const f32 lfTextAnchorX = lv2Device.x + lfScale * lrSign.mvTextOffset.x;
     const f32 lfTextAnchorY = lv2Device.y + lfScale * lrSign.mvTextOffset.y;

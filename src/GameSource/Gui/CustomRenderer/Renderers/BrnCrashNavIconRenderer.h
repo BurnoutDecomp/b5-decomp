@@ -340,25 +340,16 @@ namespace BrnGui
 
         // h:397-411 -- five renderengine resource descriptors + their texture states. Each
         // "Resource" is the console's 5-dword descriptor the InitResources copy loop fills.
-        u32                           mBackgroundMaskTextureStateResource[5]; // h:397 X360 +0x09C
+        rw::Resource                  mBackgroundMaskTextureStateResource; // h:397 X360 +0x09C
         renderengine::TextureState*   mpBackgroundMaskTextureState;           // h:398 X360 +0x0B0 (texture id 203)
-        u32                           mPreRaceMaskTextureStateResource[5];    // h:400 X360 +0x0B4
+        rw::Resource                  mPreRaceMaskTextureStateResource;    // h:400 X360 +0x0B4
         renderengine::TextureState*   mpPreRaceMaskTextureState;              // h:401 X360 +0x0C8 (texture id 202)
-        u32                           maIconResources[E_CRASHNAVICON_NUM][5]; // h:404 X360 +0x0CC
+        rw::Resource                  maIconResources[E_CRASHNAVICON_NUM]; // h:404 X360 +0x0CC
         renderengine::TextureState*   mapIconTextureStates[E_CRASHNAVICON_NUM];// h:405 X360 +0x0F4 (ids 204/205)
-        u32                           mIconsTextureStateResource[5];          // h:407 X360 +0x0FC
+        rw::Resource                  mIconsTextureStateResource;          // h:407 X360 +0x0FC
         renderengine::TextureState*   mpIconsTextureState;                    // h:408 X360 +0x110 (texture id 206)
-        u32                           mRoadSignsTextureStateResource[5];      // h:410 X360 +0x114
+        rw::Resource                  mRoadSignsTextureStateResource;      // h:410 X360 +0x114
         renderengine::TextureState*   mpRoadSignsTextureState;                // h:411 X360 +0x128 (texture id 235)
-
-        // PC fold (BrnSatNavRenderer precedent): backing storage for the runtime-created
-        // texture states -- renderengine::TextureState::Initialize(rw::Resource*, Parameters*).
-        // The console's u32[5] descriptor slots above stay as the documented X360 shape.
-        rw::Resource                  mBackgroundMaskTextureStateBacking;
-        rw::Resource                  mPreRaceMaskTextureStateBacking;
-        rw::Resource                  maIconTextureStateBacking[E_CRASHNAVICON_NUM];
-        rw::Resource                  mIconsTextureStateBacking;
-        rw::Resource                  mRoadSignsTextureStateBacking;
 
         GuiEventDrawEventIcons::EIconDisplayType meIconDisplayType; // h:414 X360 +0x12C (Construct/Release/Destruct = COUNT)
         // h:417 X360 +0x130 (count word @+0x144). The DWARF types the element uint32_t, but
@@ -380,9 +371,9 @@ namespace BrnGui
         // treat it as valid only after the first event-560 arrival.
         f32                           mfCursorScaleFactor;
         GuiEventMapIconStatus         mGuiEventMapIconStatus;       // h:434 X360 +0x1C4 (8 B, event 561)
-        CrashNavMapIcon               mRivalIcons[KI_MAX_RIVALS];   // h:436 X360 +0x1D0 (stride 0x1F0)
+        CrashNavIconComponent         mRivalIcons[KI_MAX_RIVALS];   // h:436 X360 +0x1D0 (stride 0x1F0)
         s32                           miRivalIconsCount;            // h:437 X360 +0x1150
-        CrashNavMapIcon               mStartFinishIcons[KI_NUM_STARTFINISH_ICONS]; // h:439 X360 +0x1160
+        CrashNavIconComponent         mStartFinishIcons[KI_NUM_STARTFINISH_ICONS]; // h:439 X360 +0x1160
         s32                           miStartFinishIconCount;       // h:440 X360 +0x1540
         GuiEventRoadSignIconStatus    mRoadSignIconStatus;          // h:443 X360 +0x1544 (8 B, event 562)
         RoadSignList                  mRoadSignList;                // h:444 X360 +0x154C (65 x 104)
@@ -413,7 +404,6 @@ namespace BrnGui
         f32  mfIconFadeStartTime;                                 // h:475 X360 +0x34AC
         f32  mfIconFadeEndTime;                                   // h:476 X360 +0x34B0
 
-        bool mbFrameInputPCValid;
 
     public:
         // Never called; pins the pointer-invariant facts the X360 bodies depend on. These
