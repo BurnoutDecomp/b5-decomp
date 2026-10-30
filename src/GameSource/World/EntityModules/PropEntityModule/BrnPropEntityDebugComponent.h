@@ -50,6 +50,7 @@
 // / mbRenderPhysicalRed / mbRenderFrozenBlue split, RenderParts/RenderPartStats) are dropped.
 // ============================================================================
 
+#include <xtl.h>
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector2, Vector3, Matrix44Affine, VecFloat
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent
@@ -115,7 +116,7 @@ namespace BrnWorld
 
         // ---- out-of-line private helpers (this class owns them; bodies are their own TUs) ----
         // 0x822DC3D8 -- project a world position into the 2D cell-grid map.
-        Vector2 ToCellGridScreenCoords(Vector3 lWorldPosition);
+        Vector2 ToCellGridScreenCoords(__vector4 lWorldPosition);
         // 0x822C54C0 -- draw a single inertia box (called per-volume by RenderInertiaBoxes).
         void RenderInertiaBox(CgsDev::Debug3DImmediateRender* lpDisplay,
                               Matrix44Affine lTransform, Vector3 lCentre, VecFloat lfExtent);

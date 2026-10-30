@@ -1,3 +1,4 @@
+#include <xtl.h>
 // ============================================================================
 // Bodies for the prop-entity-module debug overlay, reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   Construct           @ 0x822A96A8
@@ -735,9 +736,11 @@ namespace BrnWorld
     void PropEntityDebugComponent::RenderCellGrid(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
         const f32 lfMapScale = 1000.0f / mfCellGridZoom;
-        mMapDimensions = { lfMapScale, lfMapScale, 0.0f, 0.0f };
+        const Vector2 lMapDimensions = { lfMapScale, lfMapScale, 0.0f, 0.0f };
+        mMapDimensions = lMapDimensions;
         const Vector2 lVirtualSize = lpDisplay->GetVirtualScreenSize();
-        mScreenSize = { lVirtualSize.x, lVirtualSize.y, 0.0f, 0.0f };
+        const Vector2 lScreenSize = { lVirtualSize.x, lVirtualSize.y, 0.0f, 0.0f };
+        mScreenSize = lScreenSize;
 
         // The result is unused, but the original range assertions still run.
         BrnPhysics::Props::PropZoneData::GetCellId(
@@ -752,9 +755,13 @@ namespace BrnWorld
             const Vector3 lCorner0 = MakeVector3(
                 static_cast<f32>(100 * lId.GetX()) - 5000.0f, 0.0f,
                 static_cast<f32>(100 * lId.GetZ()) - 5000.0f);
+            // ARTIST 0x822EFF48 advances the previous corner by +X, +Z, then -X.
+            const Vector3 lCorner1 = lCorner0 + MakeVector3(100.0f, 0.0f, 0.0f);
+            const Vector3 lCorner2 = lCorner1 + MakeVector3(0.0f, 0.0f, 100.0f);
+            const Vector3 lCorner3 = lCorner2 + MakeVector3(-100.0f, 0.0f, 0.0f);
             const Vector2 laPoints[4] = {
-                ToCellGridScreenCoords(lCorner0), ToCellGridScreenCoords(lCorner1),
-                ToCellGridScreenCoords(lCorner2), ToCellGridScreenCoords(lCorner3)
+                ToCellGridScreenCoords(__lvx(&lCorner0, 0)), ToCellGridScreenCoords(__lvx(&lCorner1, 0)),
+                ToCellGridScreenCoords(__lvx(&lCorner2, 0)), ToCellGridScreenCoords(__lvx(&lCorner3, 0))
             };
             if (lCell.IsActive())
                 lpDisplay->DrawSolidConvexPolygon(laPoints, 4, 0x3200FF00u);
@@ -770,23 +777,51 @@ namespace BrnWorld
                 const PropEntityInstance& lrProp = lrZoneManager.maProps[liProp];
                 const u32 luColour = (lrProp.mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT)
                     ? 0xFF0000FFu : 0xFFFFFFFFu;
-                const Vector2 lPosition = ToCellGridScreenCoords(lrProp.GetWorldTransform().Pos());
+                const Vector2 lPosition = ToCellGridScreenCoords(__lvx(&lrProp.GetWorldTransform().Pos(), 0));
                 lpDisplay->DrawCircle(lPosition, 2.0f, 3, luColour);
                 liProp = lrZoneManager.maUsedProps.GetNextNonZeroBit(liProp);
             }
         }
-        const Vector2 lPlayer = ToCellGridScreenCoords(mpPropEntityModule->mPlayerPosition);
+        const Vector2 lPlayer = ToCellGridScreenCoords(__lvx(&mpPropEntityModule->mPlayerPosition, 0));
         lpDisplay->DrawCircle(lPlayer, 5.0f, 5, 0xFF0000FFu);
     }
 
     // @ 0x822DC3D8. Translate into player-relative XZ space, shift the map by
     // half its world dimensions, normalise, then scale to the current virtual screen.
-    Vector2 PropEntityDebugComponent::ToCellGridScreenCoords(Vector3 lWorldPosition)
+    Vector2 PropEntityDebugComponent::ToCellGridScreenCoords(__vector4 lWorldPosition)
     {
-        // Raw vperm mask82CDA450 selects {x,z,x,x}; later inserts only replace
-        // lanes0/1. Preserve the two otherwise unused output lanes as well.
-        Vector2 lScreenPosition = { lRelative.x, lRelative.z, lRelative.x, lRelative.x };
-        return lScreenPosition;
+        const XMVECTOR position = lWorldPosition;
+        const XMVECTOR player = __lvx(&mpPropEntityModule->mPlayerPosition, 0);
+        const XMVECTOR relative = __vsubfp(position, player);
+        XMVECTOR result = __vspltw(relative, 0);
+        result = __vrlimi(result, __vspltw(relative, 2), 4, 0);
+        const XMVECTOR dimensions = __lvx(&mMapDimensions, 0);
+        const XMVECTOR screen = __lvx(&mScreenSize, 0);
+        const XMVECTOR one = XMVectorReplicate(1.0f);
+        const XMVECTOR half = XMVectorReplicate(0.5f);
+        const XMVECTOR width = __vspltw(dimensions, 0);
+        const XMVECTOR height = __vspltw(dimensions, 1);
+        XMVECTOR shifted = __vmaddfp(width, half, result);
+        result = __vrlimi(result, shifted, 8, 0);
+        shifted = __vmaddfp(height, half, result);
+        result = __vrlimi(result, shifted, 4, 0);
+        XMVECTOR reciprocal = __vrefp(width);
+        XMVECTOR residual = __vnmsubfp(reciprocal, width, one);
+        reciprocal = __vmaddfp(reciprocal, residual, reciprocal);
+        residual = __vnmsubfp(reciprocal, width, one);
+        reciprocal = __vmaddfp(reciprocal, residual, reciprocal);
+        result = __vrlimi(result, __vmulfp(reciprocal, result), 8, 0);
+        reciprocal = __vrefp(height);
+        residual = __vnmsubfp(reciprocal, height, one);
+        reciprocal = __vmaddfp(reciprocal, residual, reciprocal);
+        residual = __vnmsubfp(reciprocal, height, one);
+        reciprocal = __vmaddfp(reciprocal, residual, reciprocal);
+        result = __vrlimi(result, __vmulfp(reciprocal, result), 4, 0);
+        result = __vrlimi(result, __vmulfp(result, __vspltw(screen, 0)), 8, 0);
+        result = __vrlimi(result, __vmulfp(result, __vspltw(screen, 1)), 4, 0);
+        Vector2 screenPosition;
+        __stvx(result, &screenPosition, 0);
+        return screenPosition;
     }
 
     // @ 0x822A9758 -- the "Reset props" debug-menu action callback (registered in OnActivate
