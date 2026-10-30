@@ -5,7 +5,7 @@
 // TransformByAspectRatio @0x823DB448: folds the current display aspect ratio into the
 // transform in place. The X360 builds a 3x3 scalar (rw::math::fpu) affine from the
 // transform's Right/Up basis + Origin, multiplies it by the class aspect-correction
-// matrix (msAspectCorrectionMatrix, the static @0x830110F0), and stores the basis and
+// matrix (mgAspectRatioCorrection, the static @0x830110F0), and stores the basis and
 // origin rows of the product back into the transform.
 //
 // The console writes the two destination registers with quad-word lvx128/stvx128 pairs
@@ -21,9 +21,69 @@
 
 namespace CgsGraphics
 {
-    // X360 static @0x830110F0 (nine floats). Zero-initialised here; populated at runtime
-    // by Im2dTransform::SetAspectCorrectionMatrix(const Matrix33&) @0x827F98C0.
-    rw::math::fpu::Matrix33Template<float> Im2dTransform::msAspectCorrectionMatrix = {};
+    // ARTIST static initializer82C6C3E8..C494 constructs830112D0.
+    Im2dTransform Im2dTransform::mgDefault =
+    {
+        { -1.0f, 1.0f, 0.0f, 0.0f },
+        { 2.0f, 0.0f, 0.0f, -2.0f },
+        { 0.0f, 0.0f, 0.0f, 0.0f },
+        { 1.0f, 1.0f, 1.0f, 1.0f }
+    };
+    Im2dTransform Im2dTransform::mgAspectCorrected;
+    rw::math::fpu::Matrix33Template<float> Im2dTransform::mgAspectRatioCorrection;
+
+    // ARTIST827F98C0. The first validation precedes the matrix copy; the second
+    // validates the live input again before transforming the shared default.
+    void Im2dTransform::SetAspectCorrectionMatrix(
+        const rw::math::fpu::Matrix33Template<float>& correction)
+    {
+        using rw::math::fpu::Matrix33Template;
+        using rw::math::fpu::Vector3Template;
+        if (!rw::math::fpu::IsValid(Vector3Template<float>(correction.mRow0X, correction.mRow0Y, correction.mRow0Z))
+            || !rw::math::fpu::IsValid(Vector3Template<float>(correction.mRow1X, correction.mRow1Y, correction.mRow1Z))
+            || !rw::math::fpu::IsValid(Vector3Template<float>(correction.mRow2X, correction.mRow2Y, correction.mRow2Z)))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("IsValid(lAspectRatioCorrection)",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\ImmediateMode/CgsIm2dTransform.cpp", 61);
+            CgsDev::Assert::EndAssert();
+        }
+        mgAspectRatioCorrection = correction;
+        if (!rw::math::fpu::IsValid(Vector3Template<float>(correction.mRow0X, correction.mRow0Y, correction.mRow0Z))
+            || !rw::math::fpu::IsValid(Vector3Template<float>(correction.mRow1X, correction.mRow1Y, correction.mRow1Z))
+            || !rw::math::fpu::IsValid(Vector3Template<float>(correction.mRow2X, correction.mRow2Y, correction.mRow2Z)))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("IsValid(lMatrix)",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2dTransform.h", 206);
+            CgsDev::Assert::EndAssert();
+        }
+        Matrix33Template<float> source =
+        {
+            mgDefault.mRightUp.x, mgDefault.mRightUp.z, 0.0f,
+            mgDefault.mRightUp.y, mgDefault.mRightUp.w, 0.0f,
+            mgDefault.mOriginXYZ.x, mgDefault.mOriginXYZ.y, 1.0f
+        };
+        const Matrix33Template<float> product = rw::math::fpu::Mult(source, correction);
+        if (!rw::math::fpu::IsValid(Vector3Template<float>(product.mRow0X, product.mRow0Y, product.mRow0Z))
+            || !rw::math::fpu::IsValid(Vector3Template<float>(product.mRow1X, product.mRow1Y, product.mRow1Z))
+            || !rw::math::fpu::IsValid(Vector3Template<float>(product.mRow2X, product.mRow2Y, product.mRow2Z)))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("IsValid(lSrc)",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2dTransform.h", 219);
+            CgsDev::Assert::EndAssert();
+        }
+        mgAspectCorrected.mColourShift = mgDefault.mColourShift;
+        mgAspectCorrected.mColourScale = mgDefault.mColourScale;
+        mgAspectCorrected.mRightUp.x = product.mRow0X;
+        mgAspectCorrected.mRightUp.y = product.mRow0Y;
+        mgAspectCorrected.mRightUp.z = product.mRow1X;
+        mgAspectCorrected.mRightUp.w = product.mRow1Y;
+        mgAspectCorrected.mOriginXYZ.x = product.mRow2X;
+        mgAspectCorrected.mOriginXYZ.y = product.mRow2Y;
+        mgAspectCorrected.mOriginXYZ.w = 0.0f;
+    }
 
     void Im2dTransform::TransformByAspectRatio()
     {
@@ -33,11 +93,11 @@ namespace CgsGraphics
         // Validate the aspect-correction matrix (lMatrix), one Vector3 row at a time
         // (rows @+0x00/+0x0C/+0x18 of the static). @0x823DB46C..0x823DB494.
         const Vector3Template<float> lMatrixRow0(
-            msAspectCorrectionMatrix.mRow0X, msAspectCorrectionMatrix.mRow0Y, msAspectCorrectionMatrix.mRow0Z);
+            mgAspectRatioCorrection.mRow0X, mgAspectRatioCorrection.mRow0Y, mgAspectRatioCorrection.mRow0Z);
         const Vector3Template<float> lMatrixRow1(
-            msAspectCorrectionMatrix.mRow1X, msAspectCorrectionMatrix.mRow1Y, msAspectCorrectionMatrix.mRow1Z);
+            mgAspectRatioCorrection.mRow1X, mgAspectRatioCorrection.mRow1Y, mgAspectRatioCorrection.mRow1Z);
         const Vector3Template<float> lMatrixRow2(
-            msAspectCorrectionMatrix.mRow2X, msAspectCorrectionMatrix.mRow2Y, msAspectCorrectionMatrix.mRow2Z);
+            mgAspectRatioCorrection.mRow2X, mgAspectRatioCorrection.mRow2Y, mgAspectRatioCorrection.mRow2Z);
         if (!rw::math::fpu::IsValid(lMatrixRow0)
             || !rw::math::fpu::IsValid(lMatrixRow1)
             || !rw::math::fpu::IsValid(lMatrixRow2))
@@ -69,7 +129,7 @@ namespace CgsGraphics
 
         // lSrc = lTransform * lMatrix (the aspect-ratio fold). @0x823DB538.
         const Matrix33Template<float> lSrc =
-            rw::math::fpu::Mult(lTransform, msAspectCorrectionMatrix);
+            rw::math::fpu::Mult(lTransform, mgAspectRatioCorrection);
 
         // Validate the product (lSrc), one row at a time. @0x823DB588..0x823DB5B0.
         const Vector3Template<float> lSrcRow0(lSrc.mRow0X, lSrc.mRow0Y, lSrc.mRow0Z);
@@ -90,10 +150,10 @@ namespace CgsGraphics
         // Store the product's basis rows back into mRightUp (16B @+0x10) and its origin row
         // into mOriginXYZ (16B @+0x00), preserving mOriginXYZ.z and clearing the 4th origin
         // lane. @0x823DB5F0..0x823DB628 (stvx128 to r30=this+0x10 and r31=this).
-        mRightUp.x = lSrc.mRow0X;   // m00 (right.x)
-        mRightUp.y = lSrc.mRow1X;   // m10 (right.y)
-        mRightUp.z = lSrc.mRow0Y;   // m01 (up.x)
-        mRightUp.w = lSrc.mRow1Y;   // m11 (up.y)
+        mRightUp.x = lSrc.mRow0X;
+        mRightUp.y = lSrc.mRow0Y;
+        mRightUp.z = lSrc.mRow1X;
+        mRightUp.w = lSrc.mRow1Y;
 
         mOriginXYZ.x = lSrc.mRow2X;
         mOriginXYZ.y = lSrc.mRow2Y;
