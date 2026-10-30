@@ -34,6 +34,9 @@ namespace BrnGameState
     class RoadRulesDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        RoadRulesDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
+
+    public:
         // Inlined into RoadRulesManager::Construct: store the back-pointer, clear both render
         // toggles, then CgsDev::DebugComponent::Register() (the base Construct is not called).
         void Construct(RoadRulesManager* lpRoadRulesManager);

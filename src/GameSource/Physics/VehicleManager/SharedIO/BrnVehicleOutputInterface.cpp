@@ -89,7 +89,7 @@ namespace Vehicle
         mTrafficStateQueue.Append(lOther.mTrafficStateQueue);
 
         // @+0x65F0: GameEventQueue (0x610 bytes) -- raw block copy.
-        std::memcpy(&mGameEventQueueStorage, &lOther.mGameEventQueueStorage, sizeof(mGameEventQueueStorage));
+        std::memcpy(&mGameEventQueue, &lOther.mGameEventQueue, sizeof(mGameEventQueue));
 
         // @+0x6C00: AggressiveDrivingFlags (5 bytes, the bdnz-5 tail loop).
         mAggressiveDrivingFlags = lOther.mAggressiveDrivingFlags;
@@ -291,15 +291,9 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     void VehicleOutputInterface::Construct()
     {
-        // THE OPAQUE SPAN IS GATED BEFORE IT IS CONSTRUCTED THROUGH. mGameEventQueue is
-        // still modelled as a size-pinned storage array, and GetGameEventQueue() is this file's
-        // sanctioned cast seam; running a Construct through that cast is only sound if the real
-        // queue fits the span EXACTLY. It does, on the host as on the console:
-        //   1 (mbIsConstructed) + 1536 (macData) + 3 pad + 4 + 4 + 4 == 1552 == 0x610.
-        // If VariableEventQueue ever grows a pointer this fails to COMPILE instead of writing
-        // past mGameEventQueueStorage into mAggressiveDrivingFlags.
+        // The native queue is embedded directly; its full extent is attested here.
         CGS_STATIC_ASSERT((sizeof(CgsModule::VariableEventQueue<1536, 16>) == 0x610),
-                      "GameEventQueue must fit its size-pinned storage span exactly");
+                      "GameEventQueue native extent");
 
         mTrafficStateQueue.Construct();       // +0x2620
         mImpactEventQueue.Construct();        // +0x2310

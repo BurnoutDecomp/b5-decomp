@@ -101,6 +101,9 @@ enum EGsmGameAction
 // ARTIST827E44B8. Real members perform their C++ construction in native declaration order.
 GameStateModule::GameStateModule()
 {
+    mOutputGuiEventQueue.MarkUnconstructed();
+    mGameEventCarryQueue.MarkUnconstructed();
+    mShowtimePendingTrafficIndexStack.miLength = CgsContainers::KI_STACK_UNCONSTRUCTED;
 }
 
 void GameStateModule::Construct()

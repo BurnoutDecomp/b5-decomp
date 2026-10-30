@@ -11,7 +11,7 @@ namespace CgsSceneManager { class SceneManagerDebugComponent; class TriangleColl
 namespace CgsGameTalk { class GameTalkDebugComponent; }
 namespace BrnResource { class DebugComponent; class DLCDebugComponent; }
 namespace BrnProgression { struct ProgressionDebugComponent; }
-namespace BrnGameState { class StuntManagerDebugComponent; class TakedownManagerDebugComponent; class PaybackDebugComponent; class TriggerQueryManagerDebugComponent; class StreetManagerDebugComponent; class GameStateDebugComponent; class ResetPlayerDebugComponent; }
+namespace BrnGameState { class RoadRulesDebugComponent; class StuntManagerDebugComponent; class TakedownManagerDebugComponent; class PaybackDebugComponent; class TriggerQueryManagerDebugComponent; class StreetManagerDebugComponent; class GameStateDebugComponent; class ResetPlayerDebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -97,6 +97,7 @@ namespace CgsDev
         // Its native C++ construction leaves these base data members untouched.
         friend struct BrnProgression::ProgressionDebugComponent;
         // ARTIST827E44B8 only installs these embedded debug vtables.
+        friend class BrnGameState::RoadRulesDebugComponent;
         friend class BrnGameState::StuntManagerDebugComponent;
         friend class BrnGameState::TakedownManagerDebugComponent;
         friend class BrnGameState::PaybackDebugComponent;
