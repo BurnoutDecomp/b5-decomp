@@ -173,6 +173,7 @@ namespace renderengine
 
     protected:
         static void InitializeGlobalBuffers();
+        static bool UsingGlobalRasters();
         static void EnsureDefaultRenderTarget();
         static void InitPresentParameters(D3DPRESENT_PARAMETERS& lrPresent, const Parameters& lrParameters);
         static Parameters m_parameterCopy; // ARTIST 82F87B00
