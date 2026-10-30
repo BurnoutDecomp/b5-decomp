@@ -9,7 +9,9 @@ namespace CgsGui
 {
     // ARTIST827E4F10 constructs the real base and the two embedded owners. C++
     // performs their construction and vptr installation without console offsets.
-    ModelModule::ModelModule() = default;
+    ModelModule::ModelModule()
+    {
+    }
 
     // ARTIST82847760; the bool remains in r4 across the Interpreter call.
     void ModelModule::Construct(bool lbHighDef)
@@ -31,24 +33,24 @@ namespace CgsGui
         {
         case E_PREPARE_START:
             mePrepareStage = E_PREPARE_START;
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next successful stage.
         case E_PREPARE_MANAGER:
             mePrepareStage = E_PREPARE_MANAGER;
             if (!CgsModule::ModuleSingleBuffered::Prepare())
                 return false;
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next successful stage.
         case E_PREPARE_EVENT_INTERPRETER:
             mePrepareStage = E_PREPARE_EVENT_INTERPRETER;
             if (!mEventInterpreter.Prepare())
                 return false;
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next successful stage.
         case E_PREPARE_RESOURCE_MANAGER:
             mePrepareStage = E_PREPARE_RESOURCE_MANAGER;
             if (!mGuiResource.Prepare(liAptPersistentBundleBank, liAptStreamedBundleBank,
                 liFontBundleBank, liFSMBundleBank, liLanguageBundleBank,
                 liTexturesBundlePoolId, liGlobalTexturePoolId))
                 return false;
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next successful stage.
         case E_PREPARE_DONE:
             meReleaseStage = E_RELEASE_START;
             mePrepareStage = E_PREPARE_DONE;
@@ -63,31 +65,54 @@ namespace CgsGui
     // followed by Interpreter and Resource; this order is intentional.
     bool ModelModule::Release()
     {
-        const auto Advance = [this]() {
-            meReleaseStage = static_cast<ModelReleaseStage>(meReleaseStage + 1);
-            CGS_ASSERT(meReleaseStage <= E_RELEASE_DONE,
-                "leEnumIndex <= ModelModule::E_RELEASE_DONE");
-        };
         switch (meReleaseStage)
         {
         case E_RELEASE_START:
-            Advance();
-            [[fallthrough]];
+            meReleaseStage = static_cast<ModelReleaseStage>(meReleaseStage + 1);
+            if (meReleaseStage > E_RELEASE_DONE)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("leEnumIndex <= ModelModule::E_RELEASE_DONE",
+                    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h", 229);
+                CgsDev::Assert::EndAssert();
+            }
+            // C++03 native compiler: proceed into the next release stage.
         case E_RELEASE_MANAGER:
             if (!CgsModule::ModuleSingleBuffered::Release())
                 return false;
-            Advance();
-            [[fallthrough]];
+            meReleaseStage = static_cast<ModelReleaseStage>(meReleaseStage + 1);
+            if (meReleaseStage > E_RELEASE_DONE)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("leEnumIndex <= ModelModule::E_RELEASE_DONE",
+                    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h", 229);
+                CgsDev::Assert::EndAssert();
+            }
+            // C++03 native compiler: proceed into the next release stage.
         case E_RELEASE_EVENT_INTERPRETER:
             if (!mEventInterpreter.Release())
                 return false;
-            Advance();
-            [[fallthrough]];
+            meReleaseStage = static_cast<ModelReleaseStage>(meReleaseStage + 1);
+            if (meReleaseStage > E_RELEASE_DONE)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("leEnumIndex <= ModelModule::E_RELEASE_DONE",
+                    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h", 229);
+                CgsDev::Assert::EndAssert();
+            }
+            // C++03 native compiler: proceed into the next release stage.
         case E_RELEASE_RESOURCE_MANAGER:
             if (!mGuiResource.Release())
                 return false;
-            Advance();
-            [[fallthrough]];
+            meReleaseStage = static_cast<ModelReleaseStage>(meReleaseStage + 1);
+            if (meReleaseStage > E_RELEASE_DONE)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("leEnumIndex <= ModelModule::E_RELEASE_DONE",
+                    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h", 229);
+                CgsDev::Assert::EndAssert();
+            }
+            // C++03 native compiler: proceed into the next release stage.
         case E_RELEASE_DONE:
             mePrepareStage = E_PREPARE_START;
             return true;
@@ -189,8 +214,9 @@ namespace CgsGui
         if (!lpInput)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-            lStream << "Not locked for input";
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Not locked for input";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                 "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp", 373);
             CgsDev::Assert::EndAssert();
@@ -206,8 +232,9 @@ namespace CgsGui
         if (!lpInput)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-            lStream << "Not locked for input";
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Not locked for input";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                 "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp", 392);
             CgsDev::Assert::EndAssert();

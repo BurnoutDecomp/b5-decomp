@@ -28,7 +28,8 @@ namespace CgsGui
     void GuiModule::BridgeFromInputToModel(ModelIO::InputBuffer* lpModelInput,
         const CgsGuiModuleIO::InputBuffer* lpInput)
     {
-        const auto* lpEventQueue = lpInput->GetGuiEvents();
+        const CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue =
+            lpInput->GetGuiEvents();
         if (!lpEventQueue)
         {
             CgsDev::Assert::BeginAssert();
