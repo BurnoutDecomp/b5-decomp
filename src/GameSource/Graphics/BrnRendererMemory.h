@@ -13,7 +13,7 @@
 // Construct builds every render target (delegating to the Create* helpers) then compiles the four
 // blit shader programs and the blit texture state through the renderengine resource pipeline;
 // CreateBackBuffer builds the back-buffer render target and patches it to share the down-sample
-// buffer's depth surface. It is embedded by value inside BrnRendererModule (mAllocatedRenderTargets).
+// buffer's colour sampling state. It is embedded by value inside BrnRendererModule (mAllocatedRenderTargets).
 //
 // LAYOUT: the member set + order is the DecFIGS DWARF (GameSource/Graphics/BrnRendererMemory.h),
 // reconciled against the X360 ARTIST asm store offsets (offset authority):
@@ -73,7 +73,7 @@ struct BrnRendererMemory
 
     // 0x823F6F78 -- build the back-buffer render target (a 1-section colour+depth target at the
     // front-buffer resolution), realise it through the allocator, then patch its post-fx render
-    // target to share the down-sample buffer's depth surface and use the default render-target state.
+    // target to share the down-sample colour sampling state and use the Device default render-target state.
     void CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u32 luWidth, u32 luHeight);
 
     // 0x823F4910 -- return one of the shadow-map render targets by index. The X360 asserts the index
