@@ -215,10 +215,9 @@ namespace Deformation
         }
 
         // ---- 1. build the oriented box ----------------------------------------------------------
-        // The console stages the resource record on the stack, zeroes all five words, and stores
-        // the static buffer into word 0; Initialize reads only word 0 (`lwz r3, 0(r3)`), so the
-        // X360's five-entry BaseResources vs the host's four is inert here (the same <4>-vs-<5>
-        // drift CollisionVolume.hpp:75-81 records).
+        // The console clears five resource words and puts the static buffer in word 0;
+        // the native rw::Resource constructor clears the five slots before this assignment.
+        // BoxVolume::Initialize reads word 0 (`lwz r3, 0(r3)`).
         rw::Resource lVolumeResource;
         lVolumeResource.m_baseResources[0] = gBoxInitialiseStorage.maBoxInitialiseBuffer;
 

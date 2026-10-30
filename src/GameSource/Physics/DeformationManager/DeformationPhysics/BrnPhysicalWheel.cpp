@@ -316,10 +316,9 @@ namespace Deformation
         }
 
         // ---- 1. build the cylinder ---------------------------------------------------------------
-        // The console stages a 5-word rw::Resource on the stack, zeroes every word, and puts the
-        // static buffer in word 0; Initialize reads only word 0 (`lwz r11, 0(r3)`), so the X360's
-        // five-entry BaseResources vs the host's four is inert (the <4>-vs-<5> drift AGENTS.md
-        // records). CylinderVolume::Initialize's own DWARF/asm signature takes that slot directly.
+        // The native rw::Resource constructor clears the five resource words; the
+        // static buffer goes in word 0, which CylinderVolume::Initialize reads directly
+        // (`lwz r11, 0(r3)`).
         rw::Resource lVolumeResource;
         lVolumeResource.m_baseResources[0] = gCylinderInitialiseStorage.maCylinderInitialiseBuffer;
 
