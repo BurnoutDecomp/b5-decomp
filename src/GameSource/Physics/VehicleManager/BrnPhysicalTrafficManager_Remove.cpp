@@ -378,7 +378,8 @@ namespace Vehicle
             const u32 luOtherEntityIndex = (maTrafficEntityIDs[liOtherHalfIndex].muValue >> 10) & 0x3FFFu;
             CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[luOtherEntityIndex] != KU8_INVALID_MAP,
                        "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liOtherHalfIndex].GetEntityIndex()] != KU8_INVALID_MAP");
-            mu8GlobalToPhysicalEntityIndexMap[luOtherEntityIndex] = KU8_INVALID_MAP;
+            mu8GlobalToPhysicalEntityIndexMap[
+                (maTrafficEntityIDs[liOtherHalfIndex].muValue >> 10) & 0x3FFFu] = KU8_INVALID_MAP;
         }
 
         // `lwzx r28, r29, r31` then `lwz r5, 0x20(vehicle)` -- the removed car's own global id and
