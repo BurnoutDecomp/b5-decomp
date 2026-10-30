@@ -1,29 +1,7 @@
 #pragma once
 
-// Canonical home for BrnReplays::ReplayIO and its nested per-phase IO buffers
-// (InputBuffer_PreSim / InputBuffer_PostSim / OutputBuffer_PreSim / OutputBuffer_PostSim,
-// plus the ReplayIO_Buffer payload that embeds the two output buffers).
-// DWARF/assert home path: GameSource/Replays/BrnReplayModuleIO.h (the X360 bodies'
-// lock asserts cite this file's line numbers, recorded per accessor below).
-//
-// ReplayIO is the per-frame IO payload the replay module exchanges with the rest of
-// the game. It derives from CgsModule::IOBuffer (status byte at +0) and embeds two
-// phase output buffers: a pre-sim buffer (returned by GetOutputBuffer_PreSim) and a
-// post-sim buffer (returned by GetOutputBuffer_PostSim). The phase accessors take the
-// ReplayIO's READ lock (bit 4) and hand back the embedded sub-buffer pointer; the
-// sub-buffer is then WRITE-locked (bit 3) by its producer while it is filled.
-//
-// LAYOUT (X360 asm authoritative; getter return-offsets pin the two sub-buffers):
-//   base CgsModule::IOBuffer                          (status byte @ +0; +1..+3 pad)
-//   +0x004   OutputBuffer_PostSim mPostSimBuffer      (GetOutputBuffer_PostSim @0x823BB478 -> this+4)
-//   +0x61C   OutputBuffer_PreSim  mPreSimBuffer       (GetOutputBuffer_PreSim  @0x823BB128 -> this+1564)
-//
-// OutputBuffer_PostSim itself derives from CgsModule::IOBuffer and embeds a single
-// game-event queue: VariableEventQueue<1536,16> at +4 (AppendGameEventQueue @0x8265A798
-// write-locks, then Append<1536,16>'s a source <1536,16> queue into this+4). The
-// post-sim sub-buffer occupies +4..+1564 of ReplayIO (1560 bytes).
-// ARTIST 0x823BB478 is ICF-shared: ReplayIO_Buffer::GetOutputBuffer_PostSim and
-// OutputBuffer_PostSim::GetGameEventQueue() const both read-lock and return this+4.
+// Replay phase IO buffers and their native accessors. ARTIST allocates the phase
+// buffers separately; OutputBuffer_PostSim is 0x614 bytes (823AE66C).
 
 #include "types.hpp"
 
@@ -41,15 +19,15 @@ namespace BrnReplays
 namespace ReplayIO
 {
     // ---- post-sim output buffer ---------------------------------------------------
-    // Derives from IOBuffer (its own status byte at +0). The game-event queue lives at
-    // +4 (AppendGameEventQueue appends into this+4). VariableEventQueue<1536,16> has
-    // miBufferWritePos at queue-offset +1540 (X360 *(a1+1540)) -> sizeof 1552; with the
-    // 4-byte IOBuffer header that puts the buffer at 1556 bytes. The ReplayIO getter
-    // spacing (this+4 .. this+1564) gives the embedded sub-buffer a 1560-byte slot, so
-    // a 4-byte trailing reserve rounds it to the X360-observed stride.
+    // ARTIST 823AE66C allocates 0x614 bytes: IOBuffer followed by the queue.
     struct OutputBuffer_PostSim : public CgsModule::IOBuffer
     {
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+
+        // ARTIST 82653010 initializes IOBuffer then the queue.
+        void Construct();
+        // Destroy factory 823AE744 calls the IOBuffer-only destructor.
+        void Destruct();
 
         // X360 0x823BB478, callsite 0x823E93D0 (ICF-shared +4 read accessor):
         // asserts the buffer is locked for reading, then returns &mGameEventQueue.
@@ -66,7 +44,6 @@ namespace ReplayIO
     private:
         u8             maStatusPad[3];     // +0x001..+0x003 (force the queue to +4)
         GameEventQueue mGameEventQueue;    // +0x004 (queue.miBufferWritePos @ +1540)
-        u8             maTailReserve[4];   // round the sub-buffer to the +1560 stride
     };
 
     // ---- pre-sim output buffer ----------------------------------------------------
@@ -200,24 +177,5 @@ namespace ReplayIO
         GuiEventQueue    mGuiEventQueue;       // +0x030
     };
 
-    // ---- the replay module IO payload ---------------------------------------------
-    struct ReplayIO_Buffer : public CgsModule::IOBuffer
-    {
-        // X360 0x823BB478: read-lock (bit 4); asserts locked for reading
-        // ("Not locked for reading", BrnReplayModuleIO.h:175); returns &mPostSimBuffer
-        // (this+4).
-        OutputBuffer_PostSim* GetOutputBuffer_PostSim();
-        // X360 0x823BB128: read-lock (bit 4); asserts locked for reading
-        // ("Not locked for reading", BrnReplayModuleIO.h:107); returns &mPreSimBuffer
-        // (this+1564).
-        OutputBuffer_PreSim* GetOutputBuffer_PreSim();
-
-        static void _AssertLayout();
-
-    private:
-        u8                   maStatusPad[3];   // +0x001..+0x003 (force +4 placement)
-        OutputBuffer_PostSim mPostSimBuffer;   // +0x004
-        OutputBuffer_PreSim  mPreSimBuffer;    // +0x61C (this+1564)
-    };
 }
 }
