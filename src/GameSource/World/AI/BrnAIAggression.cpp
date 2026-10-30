@@ -258,7 +258,7 @@ f32 AIAggression::CalcSpeedMatchSpeed(f32 lfTimeStep, f32 lfTargetSpeed)
         // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): `fmadds f0, f12 (car+0x1420, the
         // knob), f0 (flt_820C4238 15.0), f13 (flt_820C488C 5.0)` @0x8278B824 -- ONE rounding of
         // rate * 15 + 5. The PC spelling rounded the product first.
-        lfMaxAccel = std::fmaf(mpCar->GetAggressiveness()->GetAcclerationRateForSpeedMatch(), 15.0f, 5.0f);
+        lfMaxAccel = mpCar->GetAggressiveness()->GetAcclerationRateForSpeedMatch() * 15.0f + 5.0f;
     }
 
     const f32 lfMaxStep = lfMaxAccel * lfTargetSpeed;
