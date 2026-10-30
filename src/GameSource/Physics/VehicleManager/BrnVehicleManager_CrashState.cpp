@@ -368,7 +368,8 @@ namespace Vehicle
                 lrPlayerCar.mSlamEffect.mfSlamLife         = 0.0f;   // stfs +0x111C
                 lrPlayerCar.mSlamEffect.mfTotalSlamTime    = 0.0f;   // stfs +0x1120
                 lrPlayerCar.mSlamEffect.mi8SlamNumber      = -1;     // stb  +0x1128
-                lrPlayerCar.mShuntEffect.mDirectionPlusDesiredSpeed = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 v0(0) +0x1130
+                const Vector3Plus lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lrPlayerCar.mShuntEffect.mDirectionPlusDesiredSpeed = lvZero;   // stvx128 v0(0) +0x1130
                 lrPlayerCar.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;    // vrlimi128 mask 4 (lane y) <- 0.0
                 lrPlayerCar.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;   // vrlimi128 mask 8 (lane x) <- -1.0 ; z/w kept
             }
@@ -398,12 +399,11 @@ namespace Vehicle
                 if (lbTypeIsShunt)                                                                 // 0x82636020..28
                 {
                     const f32 lfMagnitude = lEvent.mfMagnitude;                                    // lvlx 0x1C(ev) ; vspltw
-                    lrPlayerCar.AddShunt(VecFloat{ lfMagnitude, lfMagnitude, lfMagnitude, lfMagnitude },   // v1
+                    const VecFloat lvMagnitude = { lfMagnitude, lfMagnitude, lfMagnitude, lfMagnitude };
+                    const VecFloat lvQuitSpeed = { KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT, KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT, KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT, KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT };
+                    lrPlayerCar.AddShunt(lvMagnitude,   // v1
                                          lEvent.mDirection,                                               // v2 lvx128 0(ev)
-                                         VecFloat{ KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT,                 // v3 unk_82FB8050
-                                                   KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT,
-                                                   KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT,
-                                                   KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT },
+                                         lvQuitSpeed,
                                          static_cast<s8>(liAggressor));                                   // r4 extsb
                 }
                 if (lbTypeIsSlam || lbTypeIsShunt)                                                 // 0x8263605C..6C
@@ -646,10 +646,11 @@ namespace Vehicle
 
         EntityId lVictimId;
         lVictimId.muValue = static_cast<u32>(maRaceCarHandlingBodyIDs[leRaceCarIndex] >> 32);      // ld ; srdi 32
+        const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
         SetRaceCarCrashing(lVictimId,
                            lAggressorEntityId,                                                     // mr r5, r9
-                           Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },                                      // v1 (vspltisw 0)
-                           Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },                                      // v2 (vmr)
+                           lvZero,                                      // v1 (vspltisw 0)
+                           lvZero,                                      // v2 (vmr)
                            lpRequestOutputInterface,
                            lpVehicleManagerOutputInterface,
                            lpVehicleOutputInterface,
@@ -827,9 +828,9 @@ namespace Vehicle
             if (lfScale > 1.5f)  lfScale = 1.5f;                                                   // vminfp 1.5
         }
 
-        const VecFloat lvfScaledMagnitude{ lfScale * lvfMagnitude.x, lfScale * lvfMagnitude.y,     // 0x82619EBC vmulfp128 v1, v10, v126
+        const VecFloat lvfScaledMagnitude = { lfScale * lvfMagnitude.x, lfScale * lvfMagnitude.y,     // 0x82619EBC vmulfp128 v1, v10, v126
                                            lfScale * lvfMagnitude.z, lfScale * lvfMagnitude.w };
-        const VecFloat lvfSpeedIncreaseToQuit{ KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT, KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT,
+        const VecFloat lvfSpeedIncreaseToQuit = { KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT, KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT,
                                                KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT, KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT };   // unk_82FB9C30
 
         lpTraffic->AddShunt(lvfScaledMagnitude,                                                    // v1
@@ -882,9 +883,9 @@ namespace Vehicle
         if (!lrPlayerCar.IsPlayerVehicleInShowtime())                                              // 0x82629F84..9C (vtable +0x10)
             return;
 
-        const VecFloat lvfRaceCarTrafficMagnitude{ KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE,
+        const VecFloat lvfRaceCarTrafficMagnitude = { KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE,
                                                    KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE };   // unk_82FB7F30
-        const VecFloat lvfTrafficTrafficMagnitude{ KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE,
+        const VecFloat lvfTrafficTrafficMagnitude = { KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE,
                                                    KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE };   // unk_82FB7FB0
 
         // ---- race car vs traffic ----------------------------------------------------------------
