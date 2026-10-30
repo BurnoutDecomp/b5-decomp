@@ -603,3 +603,41 @@ void BrnRendererModule::Destruct()
     mpGraphicsAllocator->Free(mEnvMapTextureStateResource);
     msPostFx.Destruct();
 }
+
+// ARTIST823FC160. The call at823FC2A4 targets the true BLR ICF body8284CB38.
+void BrnRendererModule::StartOfFrame()
+{
+    mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
+    mIm2dRenderBuffer.Clear();
+    mIm3dRenderBuffer.Clear();
+    mIm3dRenderBufferUntex.Clear();
+    mIm3dDebugRenderBuffer.Clear();
+    mIm2dDebugRenderBuffer.Clear();
+    mIm3dBufferRacePosition.Clear();
+    mIm3dBufferMenusAndHud.Clear();
+    CgsGraphics::mShaderConstantTable.BeginFrame(
+        &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
+    CgsGraphics::gTextureScopeTable.BeginFrame();
+    mCoronaManager.Clear();
+}
+
+// ARTIST823FC678. Two calls at823FC6AC/B0 also target8284CB38 (BLR).
+void BrnRendererModule::SwapBuffers()
+{
+    mDoubleBufferedDispatchFrame.Swap();
+    mEffectsArbitrator.EndOfFrame();
+    mu8ShaderConstantsFrameInternal = mu8ShaderConstantsFrameExternal;
+    mu8ShaderConstantsFrameExternal = static_cast<u8>(1 - mu8ShaderConstantsFrameExternal);
+    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].Construct();
+    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].LockForWriting();
+    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].UnlockForWriting();
+    mIm2dRenderBuffer.Swap();
+    mIm3dRenderBuffer.Swap();
+    mIm3dRenderBufferUntex.Swap();
+    mIm3dDebugRenderBuffer.Swap();
+    mIm2dDebugRenderBuffer.Swap();
+    mIm3dBufferRacePosition.Swap();
+    mIm3dBufferMenusAndHud.Swap();
+    mBlobbyShadowManager.Swap();
+    mCoronaManager.Swap();
+}
