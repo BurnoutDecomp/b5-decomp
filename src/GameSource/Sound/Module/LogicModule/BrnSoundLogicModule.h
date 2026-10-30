@@ -96,6 +96,8 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // grown on top. (Overrides the engine base's virtual Construct -- the root
     // dispatches vtable slot 0 on this+0x280.)
     void Construct() ;
+    virtual bool Release();
+    virtual void Destruct();
 
     // Prepare (X360 0x82703C18, via vtable+0x58). The REAL resumable stage machine
     // (phase B5): capture the logic RW allocator; AttachBuffers; then per the console

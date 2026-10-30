@@ -86,6 +86,38 @@ void Module::Construct()
     mMessageQueue.Construct();
 }
 
+// ARTIST 0x826C44A8: early stages advance and return for a later retry.
+bool Module::Release()
+{
+    switch (meReleaseStage)
+    {
+    case eModuleReleaseStart:
+        meReleaseStage++;
+        // fall through
+    case eModuleDestroyHierarchyBuilder:
+        meReleaseStage++;
+        return false;
+    case eModuleReleaseEnvironment:
+        meReleaseStage++;
+        // fall through
+    case eModuleDestroyEnvironment:
+        mEnvironment.Destruct();
+        meReleaseStage++;
+        // fall through
+    case eModuleReleaseManager:
+        if (!CgsModule::ModuleSingleBuffered::Release())
+            return false;
+        meReleaseStage++;
+        // fall through
+    case eModuleReleaseDone:
+        mePrepareStage = eModulePrepareStart;
+        return true;
+    default:
+        CGS_ASSERT(false, "Invalid Release Stage");
+        return false;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Module::Prepare @0x826C42A8  (DWARF :82)
 //
