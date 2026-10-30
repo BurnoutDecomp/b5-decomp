@@ -402,10 +402,10 @@ namespace Deformation
 
         const Vector3 lNormal = lrContact.mNormal;
 
-        const s32 liRaceCarModelIndex =
-            FindModelIndexByEntityID(EntityId{ static_cast<u32>(lRaceCarVolInstId.muId >> 32) });
-        const s32 liTrafficModelIndex =
-            FindModelIndexByEntityID(EntityId{ static_cast<u32>(lTrafficVolInstId.muId >> 32) });
+        const EntityId lEntityRaceCarModelIndex = { static_cast<u32>(lRaceCarVolInstId.muId >> 32) };
+        const s32 liRaceCarModelIndex = FindModelIndexByEntityID(lEntityRaceCarModelIndex);
+        const EntityId lEntityTrafficModelIndex = { static_cast<u32>(lTrafficVolInstId.muId >> 32) };
+        const s32 liTrafficModelIndex = FindModelIndexByEntityID(lEntityTrafficModelIndex);
         CGS_ASSERT(liRaceCarModelIndex != -1, "liRaceCarModelIndex != -1");   // :1631
         CGS_ASSERT(liTrafficModelIndex != -1, "liTrafficModelIndex != -1");   // :1632
 
@@ -543,10 +543,10 @@ namespace Deformation
                    "lRaceCarVolInstId.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && (lTrafficVolInstId.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE || "
                    "lTrafficVolInstId.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR)");   // :1456
 
-        const s32 liRaceCarModelIndex =
-            FindModelIndexByEntityID(EntityId{ static_cast<u32>(lRaceCarVolInstId.muId >> 32) });
-        const s32 liTrafficModelIndex =
-            FindModelIndexByEntityID(EntityId{ static_cast<u32>(lTrafficVolInstId.muId >> 32) });
+        const EntityId lEntityRaceCarModelIndex = { static_cast<u32>(lRaceCarVolInstId.muId >> 32) };
+        const s32 liRaceCarModelIndex = FindModelIndexByEntityID(lEntityRaceCarModelIndex);
+        const EntityId lEntityTrafficModelIndex = { static_cast<u32>(lTrafficVolInstId.muId >> 32) };
+        const s32 liTrafficModelIndex = FindModelIndexByEntityID(lEntityTrafficModelIndex);
         CGS_ASSERT(liRaceCarModelIndex != -1, "liRaceCarModelIndex != -1");   // :1484
         CGS_ASSERT(liTrafficModelIndex != -1, "liTrafficModelIndex != -1");   // :1485
 
@@ -647,10 +647,10 @@ namespace Deformation
                    "( lCarAVolInstId.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && lCarBVolInstId.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR ) || "
                    "( lCarAVolInstId.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && lCarBVolInstId.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE )");   // :1772
 
-        const s32 liCarAModelIndex =
-            FindModelIndexByEntityID(EntityId{ static_cast<u32>(lCarAVolInstId.muId >> 32) });
-        const s32 liCarBModelIndex =
-            FindModelIndexByEntityID(EntityId{ static_cast<u32>(lCarBVolInstId.muId >> 32) });
+        const EntityId lEntityCarAModelIndex = { static_cast<u32>(lCarAVolInstId.muId >> 32) };
+        const s32 liCarAModelIndex = FindModelIndexByEntityID(lEntityCarAModelIndex);
+        const EntityId lEntityCarBModelIndex = { static_cast<u32>(lCarBVolInstId.muId >> 32) };
+        const s32 liCarBModelIndex = FindModelIndexByEntityID(lEntityCarBModelIndex);
         CGS_ASSERT(liCarAModelIndex != -1, "liCarAModelIndex != -1");   // :1798
         CGS_ASSERT(liCarBModelIndex != -1, "liCarBModelIndex != -1");   // :1799
 
