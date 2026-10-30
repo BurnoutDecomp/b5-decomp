@@ -81,6 +81,7 @@ namespace BrnGameState
 
     struct PaybackManager
     {
+    friend class GameStateModule;
         // DWARF BrnPaybackManager.h:121 -- the AGGRESSOR-side FSM (you earn + spend payback on the
         // player who took you down).
         enum EPaybackAggressorState

@@ -77,6 +77,7 @@ struct DriveThruTriggerData
 // ============================================================================
 struct DriveThruManager
 {
+    friend class GameStateModule;
 public:
     void Construct(CarSelectManager* lpCarSelectManager,
                    TrainingManager*  lpTrainingManager,
