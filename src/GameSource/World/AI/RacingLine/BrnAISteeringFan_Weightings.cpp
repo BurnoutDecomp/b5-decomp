@@ -1,3 +1,4 @@
+#include <xtl.h>
 #include "GameSource/World/AI/RacingLine/BrnAISteeringFan.h"
 
 #include "GameSource/World/AI/BrnAICar.h"                             // AICar getters
@@ -126,9 +127,9 @@ void SteeringFan::CalculateFanAngle(AICar* lpCar)
     // Both lerps are ONE rounding (ROUNDING_RULE 3): 0x82768D20 `fmadds f0, f10, f13, f0` (f10 = high - low, the
     // fsubs at 0x82768CE4, rule 4; f13 = the ratio; f0 = low) and 0x82768D2C `fmadds f0, f13, f11, f0` (the
     // ratio, 15.0, 10.0). fmadds frD = frA*frC + frB == std::fmaf(frA, frC, frB).
-    mfFanAngle        = std::fmaf(KF_STEER_AT_HIGH_SPEED - KF_STEER_AT_LOW_SPEED, lfRatio,
-                                  KF_STEER_AT_LOW_SPEED);                            // stfs 0x800
-    mfLookAheadRadius = std::fmaf(lfRatio, KF_FAN_LOOK_AHEAD_GROWTH, KF_FAN_LOOK_AHEAD_BASE); // stfs 0x7F8
+    volatile f32 lfFanRange = KF_STEER_AT_HIGH_SPEED - KF_STEER_AT_LOW_SPEED;
+    mfFanAngle        = lfFanRange * lfRatio + KF_STEER_AT_LOW_SPEED;                            // stfs 0x800
+    mfLookAheadRadius = lfRatio * KF_FAN_LOOK_AHEAD_GROWTH + KF_FAN_LOOK_AHEAD_BASE; // stfs 0x7F8
 }
 
 // ========================================================================================
@@ -208,7 +209,9 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
         // (ROUNDING_RULE 4); then 0x8277948C `fmadds f0, f0, f13, f28` = cube * mfFanAngle + base, ONE rounding
         // (rule 3).
         const f32 lfInterp = (lfT - 0.5f) * 2.0f;
-        const f32 lfAngle  = std::fmaf(lfInterp * lfInterp * lfInterp, mfFanAngle, lfBaseAngle);
+        volatile f32 lfSquared = lfInterp * lfInterp;
+        volatile f32 lfCubed = lfSquared * lfInterp;
+        const f32 lfAngle = lfCubed * mfFanAngle + lfBaseAngle;
 
         CGS_ASSERT(liStep < KI_FAN_STEPS, "Fan index out of range at ");
 
@@ -228,15 +231,10 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
 
         // 0x827796F4 / 0x82779724 `vmaddfp` (raw D,A,B,C = v13, v0, v13, v12 / v0, v0, v13, v12) = unit * radius +
         // origin, ONE rounding per lane (ROUNDING_RULE 3).
-        mTarget[liStep].x = std::fmaf(lUnit.x, mfLookAheadRadius, mFanOrigin2D.x);
-        mTarget[liStep].y = std::fmaf(lUnit.y, mfLookAheadRadius, mFanOrigin2D.y);
-        mTarget[liStep].z = 0.0f;
-        mTarget[liStep].w = 0.0f;
-
-        mHNGTarget[liStep].x = std::fmaf(lUnit.x, mfLookAheadHNGRadius, mFanOrigin2D.x);
-        mHNGTarget[liStep].y = std::fmaf(lUnit.y, mfLookAheadHNGRadius, mFanOrigin2D.y);
-        mHNGTarget[liStep].z = 0.0f;
-        mHNGTarget[liStep].w = 0.0f;
+        const XMVECTOR lDirection = __lvx(&lUnit, 0);
+        const XMVECTOR lOrigin = __lvx(&mFanOrigin2D, 0);
+        __stvx(__vmaddfp(lDirection, XMVectorReplicate(mfLookAheadRadius), lOrigin), &mTarget[liStep], 0);
+        __stvx(__vmaddfp(lDirection, XMVectorReplicate(mfLookAheadHNGRadius), lOrigin), &mHNGTarget[liStep], 0);
 
         lfT += mfReciprocalSteps;
     }
