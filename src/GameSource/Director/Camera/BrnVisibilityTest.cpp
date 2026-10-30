@@ -74,7 +74,6 @@ void VisibilityTest::GenerateSceneQueries(const Camera& lrCamera, f32 lfTimestep
                                           CgsSceneManager::EntityId lTargetEntityId)
 {
     (void)lfTimestep;
-    (void)lrRandom;
 
     const f32 KF_MAX_ON_SCREEN_DISTANCE = 25.0f;                                     // flt_82CDAD54 == 0x41C80000
     const f32 lfMaxDistanceSq = KF_MAX_ON_SCREEN_DISTANCE * KF_MAX_ON_SCREEN_DISTANCE;

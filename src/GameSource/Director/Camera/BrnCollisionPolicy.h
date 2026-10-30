@@ -204,12 +204,10 @@ public:
     virtual void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera)
     {
         (void)lrSharedInfo;
-        (void)lrCamera;
     }
     virtual void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera)
     {
         (void)lrSharedInfo;
-        (void)lrCamera;
     }
 
     // DWARF :504. BehaviourManager::ProcessSceneQueryResults @0x8221F70C reads it (`lbz 4(policy)`)
