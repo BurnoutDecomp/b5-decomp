@@ -89,14 +89,13 @@
 #include "SharedClasses/World/BrnWorldRegion.h"                         // WorldRegion (the case-95 arm's answer)
 #include <cstring>                                                      // memcpy (the case-95 arm's position)
 
-#if defined(D_PLATFORM_X360)
 #include <xtl.h>
 namespace vmx
 {
     inline f32 Dot3(const Vector3& a, const Vector3& b) { return __vmsum3fp(__lvx(&a, 0), __lvx(&b, 0)).x; }
     inline f32 Flush(f32 x) { return __vmulfp(XMVectorReplicate(x), XMVectorReplicate(1.0f)).x; }
 }
-#endif
+
 
 namespace BrnGameState
 {

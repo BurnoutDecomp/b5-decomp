@@ -21,7 +21,6 @@
 #include "SDKs/XboxMath/XMVectorACos.h"
 
 #include <cmath>
-#if defined(D_PLATFORM_X360)
 #include <xtl.h>
 namespace vmx
 {
@@ -49,7 +48,7 @@ namespace vmx
         const f32 result = __vmulfp(length, Refine(length, 2)).x; return length.x == 0.0f ? 0.0f : result;
     }
 }
-#endif
+
 
 namespace BrnGameState
 {
