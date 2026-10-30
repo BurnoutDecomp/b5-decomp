@@ -35,6 +35,7 @@
 // ============================================================================
 
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 #include "GameSource/Gui/BrnGuiCache.h"                     // BrnGui::GuiCache (GetTime)
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"           // BrnGui::MapTransform
@@ -178,31 +179,17 @@ namespace
     // 0, 1, lod 0.0/0.0, 0,0,0, then the byte flags 0,0,0,1,1). Byte-identical to
     // BrnCrashNavIconRenderer.cpp's CreateIconTextureState and BrnSatNavRenderer.cpp's
     // CreatePayloadTextureState -- the same shipped helper, inlined into three call sites.
-    renderengine::TextureState* CreateMaskTextureState(rw::Resource* lpBacking, const void* lpTexture)
+    renderengine::TextureState* CreateMaskTextureState(rw::IResourceAllocator* lpAllocator, rw::Resource* lpBacking, const void* lpTexture)
     {
         renderengine::TextureState::Parameters lParams;
-        lParams.muAddressU      = 2u;
-        lParams.muAddressV      = 2u;
-        lParams.muAddressW      = 0u;
-        lParams.muMagFilter     = 1u;
-        lParams.muMinFilter     = 1u;
-        lParams.muMipFilter     = 2u;
-        lParams.muField6        = 0u;
-        lParams.muField7        = 0u;
-        lParams.muMaxAnisotropy = 13u;
-        lParams.muField9        = 0u;
-        lParams.muField10       = 1u;
-        lParams.mfMipLodBias    = 0.0f;
-        lParams.mfField12       = 0.0f;
-        lParams.muField13       = 0u;
-        lParams.muField14       = 0u;
-        lParams.muField15       = 0u;
-        lParams.mu8Field40      = 0u;
-        lParams.mu8Field41      = 0u;
-        lParams.mu8Field42      = 0u;
-        lParams.mu8Field43      = 1u;
-        lParams.mu8Field44      = 1u;
-        lParams.mpTexture       = reinterpret_cast<renderengine::Texture*>(const_cast<void*>(lpTexture));
+        lParams.muAddressU = 2;
+        lParams.muAddressV = 2;
+        lParams.muMagFilter = 1;
+        lParams.muMinFilter = 1;
+        lParams.mpTexture = static_cast<renderengine::Texture*>(const_cast<void*>(lpTexture));
+        rw::ResourceDescriptor lDescriptor;
+        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        *lpBacking = lpAllocator->DoAllocate(lDescriptor, 0);
         return renderengine::TextureState::Initialize(lpBacking, &lParams);
     }
 }
@@ -221,15 +208,7 @@ namespace
 // ---------------------------------------------------------------------------
 MainMapRenderer::MainMapRenderer()
 {
-    for (s32 li = 0; li < 5; ++li)
-    {
-        mBackgroundMaskTextureStateResource[li] = 0;   // guest +0x48
-        mPreRaceMaskTextureStateResource[li]    = 0;   // guest +0x60
-        mMapTileBlendStateResource[li]          = 0;   // guest +0x78
-        mRouteSegmentTextureStateResource[li]   = 0;   // guest +0x90
-        mRouteSegmentBlendStateResource[li]     = 0;   // guest +0xA8
-        mPulseTextureStateResource[li]          = 0;   // guest +0xC0
-    }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -560,18 +539,16 @@ void MainMapRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType
             CGS_ASSERT(lpTexture != 0, "lpTexture!=NULL");   // console line 305
             if (lpTexture == 0)
                 break;
-            mBackgroundMaskTextureStateResource[0] = 0;   // the console's descriptor slot
             mpBackgroundMaskTextureState =
-                CreateMaskTextureState(&mBackgroundMaskTextureStateBacking, lpTexture);
+                CreateMaskTextureState(mpHeapAllocator, &mBackgroundMaskTextureStateResource, lpTexture);
         }
         else if (lpcNotification->muLoadRequestId == KU_LOADID_PRERACE_MASK)
         {
             CGS_ASSERT(lpTexture != 0, "lpTexture!=NULL");   // console line 323
             if (lpTexture == 0)
                 break;
-            mPreRaceMaskTextureStateResource[0] = 0;
             mpPreRaceMaskTextureState =
-                CreateMaskTextureState(&mPreRaceMaskTextureStateBacking, lpTexture);
+                CreateMaskTextureState(mpHeapAllocator, &mPreRaceMaskTextureStateResource, lpTexture);
         }
         break;
     }
