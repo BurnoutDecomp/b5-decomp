@@ -12,7 +12,7 @@ namespace renderengine
     u32 gDeviceCounter832716A8;
     u32 gDeviceCounter832716AC;
     LARGE_INTEGER gDevicePerformanceCounter832716B0;
-    u32 gDeviceCounter832716C8;
+    VertexProgramState* gpCurrentVertexProgramState = 0;
     __declspec(align(16)) PixelBuffer gOriginalColorBuffer;
     __declspec(align(16)) PixelBuffer gOriginalDepthStencilBuffer;
     u32 guTilingEnabled = 0;
@@ -41,7 +41,7 @@ namespace renderengine
         rw::Resource lResource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->DoAllocate(lDescriptor, 0);
         m_renderTargetState = RenderTargetState::Initialize(lResource, lTargetParameters);
         QueryPerformanceCounter(&gDevicePerformanceCounter832716B0);
-        gDeviceCounter832716C8 = 0;
+        gpCurrentVertexProgramState = 0;
         m_currentState = STATE_START;
         return true;
     }

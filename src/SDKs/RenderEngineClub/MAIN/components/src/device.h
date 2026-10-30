@@ -20,6 +20,8 @@ namespace renderengine
     struct ClearDepthStencilParameters { u32 m_clearFlags; f32 m_depth; u32 m_stencil; };
     CGS_STATIC_ASSERT((sizeof(ClearColorParameters) == 16), "ARTIST clear colour");
     CGS_STATIC_ASSERT((sizeof(ClearDepthStencilParameters) == 12), "ARTIST depth/stencil clear");
+    class VertexProgramState;
+    extern VertexProgramState* gpCurrentVertexProgramState; // ARTIST 832716C8
     // ARTIST Device-owned native surfaces 83271100/83271140 and flag8327161C.
     extern PixelBuffer gOriginalColorBuffer;
     extern PixelBuffer gOriginalDepthStencilBuffer;
