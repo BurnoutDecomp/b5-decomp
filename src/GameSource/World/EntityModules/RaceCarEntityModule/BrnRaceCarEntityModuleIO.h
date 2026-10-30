@@ -486,11 +486,9 @@ namespace RaceCarEntityModuleIO
             mRaceCarAIInterface.mbPlayerDataSet = false;      // X360 +1003956
             mAudioCarLoadedDataQueue.Construct();             // X360 +1004120
             mbRequestingRivalUpdate = false;                  // X360 +1004112
-            // [FLAG] the console's trailing eight-slot per-car clear at +1004520 (with the
-            // EActiveRaceCarIndex range assert, BurnoutConstants.h:39) is past this buffer's
-            // modelled member list -- it lands inside mAudioCarLoadedDataQueue's span on the
-            // console offsets, which the host layout does not reproduce byte-for-byte. Left out
-            // rather than poked by offset.
+            // ARTIST 0x822EA4E0 clears the eight replay-rendered flags after the audio queue.
+            for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+                mabReplayRaceCarRendered[liCar] = false;
         }
         const VehicleInputInterface* GetVehicleInputInterface() const;                      // :282
         VehicleInputInterface*       GetVehicleInputInterface();                            // :283 W  (0x822B4ED0)
@@ -508,6 +506,14 @@ namespace RaceCarEntityModuleIO
         RaceCarAIInterface*          GetRaceCarAIInterface();                                // :301
         bool                         IsRequestingRivalUpdate() const;                       // :303
         void                         SetRequestingRivalUpdate(bool);                        // :304
+        // X360-only per-car replay-render publication, written by PreSceneUpdate.
+        void SetReplayRaceCarRendered(EActiveRaceCarIndex leIndex)
+        {
+            CGS_ASSERT(leIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            mabReplayRaceCarRendered[leIndex] = true;
+        }
+
         AudioCarLoadedDataQueue*       GetAudioCarLoadedDataQueue();                         // :306
         const AudioCarLoadedDataQueue* GetAudioCarLoadedDataQueue() const;                  // :307
     private:
@@ -520,6 +526,12 @@ namespace RaceCarEntityModuleIO
         RaceCarAIInterface                   mRaceCarAIInterface;                           // :317
         bool                                 mbRequestingRivalUpdate;                       // :318
         AudioCarLoadedDataQueue              mAudioCarLoadedDataQueue;                      // :320
+        bool                                 mabReplayRaceCarRendered[E_ACTIVE_RACE_CAR_INDEX_COUNT]; // ARTIST +0xF53E8
+        static void AssertReplayRenderedLayout()
+        {
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mabReplayRaceCarRendered) == 0xF53E8),
+                              "ARTIST replay-rendered output offset");
+        }
     };
 
     // ============================================================================
