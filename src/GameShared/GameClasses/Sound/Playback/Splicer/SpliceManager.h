@@ -83,7 +83,7 @@ struct SpliceManager
     // The SpliceManager's assertion sink (DWARF `void (*)(char*)`). When set on the
     // global instance it is called with the failing check's message; when null the
     // check is silent. Read via gpSpliceManager->mAssertCallbackFunc.
-    typedef void (*AssertCallbackFunc)( const char* lpcMessage );
+    typedef void (*AssertCallbackFunc)( char* lpMessage );
 
     // SpliceManager.h:15 (DWARF).
     static const u32 KU_MAX_POOLED_VOICES = 64;
