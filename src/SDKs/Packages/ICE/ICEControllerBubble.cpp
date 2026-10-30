@@ -27,7 +27,7 @@
 // FLAG (ICEAuthor base): the controller IS-AN ICEAuthor and the same `this`. The
 // author members/methods used here (mpCameraSpaceHandler, IsEndKeyState,
 // GetWorldTransformationMatrix, SetKeyElementValue) are declared on ICEAuthor, so
-// they are reached through reinterpret_cast<ICE::ICEAuthor*>(this). When
+// they are reached through static_cast<ICEAuthor*>(this). When
 // ICEController grows its real `: public ICEAuthor` base these casts become plain
 // base accesses.
 //
@@ -87,9 +87,9 @@ namespace
         if (lpController->miState == E_ICE_AUTHOR_STATE_SELECT_COPY_MODE)   // 16
         {
             // FLAG (ICEAuthor base): IsEndKeyState is an author method on this `this`.
-            // miStateArg (+0xE9C) is the key index the copy-mode path disambiguates with.
+            // miPrevState (+0xE9C) is the key index the copy-mode path disambiguates with.
             liEndKey =
-                reinterpret_cast<const ICEAuthor*>(lpController)->IsEndKeyState(lpController->miStateArg)
+                static_cast<const ICEAuthor*>(lpController)->IsEndKeyState(lpController->miPrevState)
                     ? 1 : 0;
         }
         else if (lpController->miState == E_ICE_AUTHOR_STATE_END_KEY_SELECTED    // 13
@@ -255,7 +255,7 @@ void ICEController::FromBubble()
     // FLAG (ICEAuthor base): the author view of this `this` for the author members
     // and methods used below (mpCameraSpaceHandler, GetWorldTransformationMatrix,
     // SetKeyElementValue).
-    ICEAuthor* lpAuthor = reinterpret_cast<ICEAuthor*>(this);
+    ICEAuthor* lpAuthor = static_cast<ICEAuthor*>(this);
 
     if (miFlagOrient != 0)                                    // +0x7251 set
     {

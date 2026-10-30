@@ -1,56 +1,5 @@
-// ============================================================================
-// SDKs/Packages/ICE/ICEControllerEditOps.cpp
-//
-// ICE::ICEController -- the EDIT-OPS group of the in-game ICE camera-take editor:
-// ChangeKeyElementValue / ChangeKeyElementValues. These translate the per-frame
-// joystick-velocity accumulator into edits on the live edit take.
-//
-//   * ChangeKeyElementValue(liChangeIndex) applies one element-description's worth
-//     of accumulated joystick drive to the take. liChangeIndex selects the element
-//     description (ICEElementDescriptions[liChangeIndex]); the description's input
-//     type (mInputType @0x38) chooses the maths:
-//       - eICE_INPUT_ANALOG      (1): a direct velocity*timestep delta, fed to
-//                                     ICEAuthor::SetKeyElementValueChange.
-//       - eICE_INPUT_ACCELERATED (3): a two-axis accelerated/decayed velocity ramp
-//                                     held in a second 37-slot f32 accumulator, the
-//                                     summed ramp scaled by timestep then fed to
-//                                     ICEAuthor::SetKeyElementValueChange.
-//       - eICE_INPUT_DISCREET    (2): a stepped integer increment (one quant step
-//                                     per pass over a 0.1 dead-zone), clamped to the
-//                                     description's [mMin, mMax] read as int bits,
-//                                     written straight onto the edit take.
-//
-//   * ChangeKeyElementValues() is the driver: for each of the 37 change slots it
-//     walks the element schema and, for every description bound to the current
-//     channel whose inc/dec button indices match the slot, calls
-//     ChangeKeyElementValue for that slot.
-//
-// The reconstruction reverses compiler inlining of the embedded ICETake / change-
-// buffer / element-description accesses back into named-member access against the
-// layout in ICEController.hpp and the element schema in ICEDataEnums.hpp.
-//
-// FLAG (ICEAuthor base): the controller IS-AN ICEAuthor (Construct chains the base).
-// These bodies call ICEAuthor methods (SetKeyElementValueChange, IsEndKeyState,
-// GetIntervalKey) on `this`. ICEController.hpp does not yet derive from ICEAuthor
-// (the base header is owned in parallel), so those calls go through
-// reinterpret_cast<ICE::ICEAuthor*>(this) -- the same object, same address. Move to
-// plain base-method calls once ICEController becomes `: public ICEAuthor`.
-//
-// FLAG (missing header member -- second value-change accumulator): the accelerated
-// (input-type 3) path reads/writes a SECOND 37-slot f32 accumulator that sits
-// immediately after maChangeBuffer (at this+0x72FC == &maChangeBuffer[37]). The
-// joystick path drives this ramp; the summed ramp is what reaches the take. The
-// span is NOT named in ICEController.hpp (the header jumps from maChangeBuffer @0x7268
-// straight to miMenuTimer @0x73B8). It is accessed here by indexing one past the end
-// of maChangeBuffer (byte-exact +0x72FC) rather than editing the header. SUGGESTED:
-// add `f32 maRampAccum[KI_ICE_NUM_CHANGE_ELEMENTS];  // @0x72FC` after maChangeBuffer.
-//
-// FLAG (SetKeyElementValueChange second arg): the analog/accelerated paths set up
-// only the element index and the float delta for the call; the change-token middle
-// argument (liChange) is left as the incoming register and only matters on the
-// state-16 key path inside the author method. liChangeIndex is passed for it here so
-// the call is well-formed; the consumer ignores it outside state 16.
-// ============================================================================
+// ICE controller value editing. maRampAccum is the distinct native second
+// velocity bank; the existing arithmetic still requires a complete parity pass.
 
 #include "SDKs/Packages/ICE/ICEController.hpp"
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"    // ICE::ICEAuthor base methods reached via `this`
@@ -140,30 +89,29 @@ void ICEController::ChangeKeyElementValue(s32 liChangeIndex)
             const f32 lfSum = lfVelB + JoyVelocity(liVelA);
             if (lfSum != 0.0f)
             {
-                const f32 lfTimestep = *mpMenuB;   // *mpMenuB (this+0xF70 points at the timestep)
+                const f32 lfTimestep = mpMenuB->GetTimestep();   // mpMenuB->GetTimestep() (this+0xF70 points at the timestep)
                 lfDelta = (lrDesc.mfIncDecSpeed * lfTimestep) * lfSum;       // description +0x44
             }
-            // FLAG (ICEAuthor base): this->SetKeyElementValueChange via the base cast.
-            reinterpret_cast<ICE::ICEAuthor*>(this)->SetKeyElementValueChange(liChangeIndex, liChangeIndex, lfDelta);
+            // Apply the change through the author base.
+            ICEAuthor::SetKeyElementValueChange(liChangeIndex, liChangeIndex, lfDelta);
             break;
         }
 
         case eICE_INPUT_ACCELERATED:
         {
-            // Second 37-slot ramp accumulator immediately after maChangeBuffer
-            // (this+0x72FC). FLAG (missing header member): see file header.
-            f32* lpRamp = reinterpret_cast<f32*>(&maChangeBuffer[KI_ICE_NUM_CHANGE_ELEMENTS]);
+            // The native second velocity bank follows the first37 floats.
+            f32* lpRamp = maRampAccum;
 
             // Ramp each axis' slot from its joystick velocity, sum the two ramps, then
             // scale by the timestep. The second axis uses the negated velocity (lfVelB).
             const f32 lfRampA = RampElementVelocity(lpRamp[liVelA], lfVelA, lrDesc);
             const f32 lfRampB = RampElementVelocity(lpRamp[liVelB], lfVelB, lrDesc);
 
-            const f32 lfTimestep = *mpMenuB;   // *mpMenuB (this+0xF70 points at the timestep)
+            const f32 lfTimestep = mpMenuB->GetTimestep();   // mpMenuB->GetTimestep() (this+0xF70 points at the timestep)
             lfDelta = (lfRampB + lfRampA) * lfTimestep;
 
-            // FLAG (ICEAuthor base): this->SetKeyElementValueChange via the base cast.
-            reinterpret_cast<ICE::ICEAuthor*>(this)->SetKeyElementValueChange(liChangeIndex, liChangeIndex, lfDelta);
+            // Apply the change through the author base.
+            ICEAuthor::SetKeyElementValueChange(liChangeIndex, liChangeIndex, lfDelta);
             break;
         }
 
@@ -182,7 +130,7 @@ void ICEController::ChangeKeyElementValue(s32 liChangeIndex)
                 if (miState == 16)
                 {
                     // FLAG (ICEAuthor base): this->IsEndKeyState via the base cast.
-                    lbEndKey = reinterpret_cast<ICE::ICEAuthor*>(this)->IsEndKeyState(miStateArg);
+                    lbEndKey = ICEAuthor::IsEndKeyState(miPrevState);
                 }
                 else
                 {
@@ -199,7 +147,7 @@ void ICEController::ChangeKeyElementValue(s32 liChangeIndex)
                 const u16 lu16Interval = *reinterpret_cast<const u16*>(
                     reinterpret_cast<const u8*>(this) + (16 * (miCurrentChannel + 16)));
                 // FLAG (ICEAuthor base): this->GetIntervalKey via the base cast.
-                const s32 liIntervalKey = reinterpret_cast<ICE::ICEAuthor*>(this)->GetIntervalKey(lu16Interval);
+                const s32 liIntervalKey = ICEAuthor::GetIntervalKey(lu16Interval);
 
                 const u16 lu16Key = (u16)(liIntervalKey + (lbEndKey ? 1 : 0));
 

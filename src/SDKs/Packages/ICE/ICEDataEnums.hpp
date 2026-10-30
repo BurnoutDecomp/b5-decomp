@@ -378,6 +378,20 @@ public:
 const s32 eICE_NUM_ELEMENTS = 48;
 extern ICEElementDescription ICEElementDescriptions[eICE_NUM_ELEMENTS];
 
+// Existing native channel schedule: InitICEDescriptions fills it at stride0xCC;
+// JoyHandler 8253E910..8253E940 reads count+4 and key indices+8 for copy toggles.
+struct ICEElementChannel
+{
+    const char* mpName;                  // @0x00  channel name (seeded by loop 1)
+    s32         miNumKeyElements;         // @0x04  count of "key" element indices
+    s32         maiKeyElements[28];       // @0x08  element indices with desc index <  28
+    s32         miNumIntervalElements;    // @0x78  count of "interval" element indices
+    s32         maiIntervalElements[20];  // @0x7C  element indices with desc index >= 28
+};
+
+extern ICEElementChannel gaICEElementChannels[];
+CGS_STATIC_ASSERT((sizeof(ICEElementChannel) == 0xCC), "native ICE channel schedule stride");
+
 } // namespace ICE
 
 #endif // SDKS_PACKAGES_ICE_ICEDATAENUMS_HPP

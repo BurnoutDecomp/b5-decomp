@@ -490,15 +490,6 @@ static const s32 KI_ICE_ELEMENT_CONTAINS_SUBTAKE     = 47;
 // InitICEDescriptions + ICETake::SetParameter compile against one definition. When its
 // real home/name surfaces, MOVE this there and GROW that header (do NOT keep a fork).
 // -----------------------------------------------------------------------------
-struct ICEElementChannel
-{
-    const char* mpName;                  // @0x00  channel name (seeded by loop 1)
-    s32         miNumKeyElements;         // @0x04  count of "key" element indices
-    s32         maiKeyElements[28];       // @0x08  element indices with desc index <  28
-    s32         miNumIntervalElements;    // @0x78  count of "interval" element indices
-    s32         maiIntervalElements[20];  // @0x7C  element indices with desc index >= 28
-};
-
 ICEElementChannel gaICEElementChannels[eICE_NUM_CHANNELS];
 
 // -----------------------------------------------------------------------------
@@ -1395,9 +1386,9 @@ ICETakeData& ICETakeData::operator=(const ICETakeData& lrOther)
 //
 // So relocate-on-load for a take is: unlink it. Nothing else.
 // ---------------------------------------------------------------------------
-void ICETakeData::FixUp(const CgsResource::Resource& lrResource)
+void ICETakeData::FixUp(const CgsResource::Resource&)
 {
-    (void)lrResource;   // unread by the X360 body (r4 is never touched)
+    // The resource argument is unread by ARTIST; its forward declaration suffices.
 
     // bNode::Next @0x00 / bNode::Prev @0x04 -- mPadNodeBase is the committed placeholder
     // for the not-yet-reconstructed bTNode/bNode base, so clearing its two words IS the
@@ -1422,9 +1413,9 @@ void ICETakeData::FixUp(const CgsResource::Resource& lrResource)
 // The pointer "relocation" is performed entirely inside ICETake::SetDataPointers; the
 // only direct pointer write here is zeroing the two bTNode link words.
 // ---------------------------------------------------------------------------
-void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
+void ICETakeData::FixDown(const CgsResource::Resource&)
 {
-    (void)lrResource;   // resource arg is unused (relocation is self-contained)
+    // The ARTIST body does not read the resource argument.
 
     // Null the intrusive-tree links (bNode::Next @0x00, bNode::Prev @0x04) before
     // serialization -- they are rebuilt on load. mPadNodeBase is the placeholder for
@@ -1445,7 +1436,8 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
     // stand-in for a stack ICETake -- no constructor runs, matching that
     // the rebind is self-contained. FLAG: replace with a real `ICETake lTake;` once
     // the ICETake default ctor (and Cubic1D's) are reconstructed into the headers.
-    CGS_ALIGN(ICETake) u8 laTakeStorage[sizeof(ICETake)];
+    CGS_STATIC_ASSERT((__alignof(ICETake) == 4), "native ICETake scratch alignment");
+    CGS_ALIGN(4) u8 laTakeStorage[sizeof(ICETake)];
     ICETake& lTake = *reinterpret_cast<ICETake*>(laTakeStorage);
     lTake.SetDataPointers(this, false);    // bind live pointers over this take's data
 
@@ -2524,7 +2516,8 @@ void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
     // stack buffer reinterpreted as ICETake is the faithful stand-in.
     // FLAG: replace with a real `ICETake lTake;` once the ICETake (and Cubic1D) default
     // ctors are reconstructed into the headers.
-    CGS_ALIGN(ICETake) u8 laTakeStorage[sizeof(ICETake)];
+    CGS_STATIC_ASSERT((__alignof(ICETake) == 4), "native ICETake scratch alignment");
+    CGS_ALIGN(4) u8 laTakeStorage[sizeof(ICETake)];
     ICETake& lTake = *reinterpret_cast<ICETake*>(laTakeStorage);
     lTake.SetDataPointers(this, false);   // bind live pointers over this take's data
 

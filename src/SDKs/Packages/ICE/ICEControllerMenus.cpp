@@ -1,36 +1,5 @@
-// ============================================================================
-// SDKs/Packages/ICE/ICEControllerMenus.cpp
-//
-// ICE::ICEController -- the in-game ICE camera-take editor/driver. This TU bodies
-// the MENU-CONSTRUCT group of the controller's 23 functions: the editor-UI
-// lifecycle (ConstructMenus; DestructMenus is split into ICEControllerMenus_wG_11.cpp
-// so it can be on the link while this TU cannot) plus the two per-frame content fills
-// (RefreshMenu / RefreshInfoList). ConstructMenus allocates the seven menu widgets
-// + the two embedded time bars + the info list from the ICE memory manager and
-// positions them; RefreshMenu repopulates a menu's text cells
-// for the current editor state; RefreshInfoList rebuilds the read-out lines from
-// the author's live state.
-//
-// The reconstruction reverses compiler inlining of the embedded ICETake / widget /
-// author-base accesses back into named-member access against the layout in
-// ICEController.hpp (the source-spine offsets are facts pinned there; the bodies
-// access by name, not by cast).
-//
-// FLAG (ICEAuthor base): the controller IS-AN ICEAuthor. RefreshInfoList reads the
-// author's live state (GetStateName / GetValueFloat). ICEController.hpp forward-
-// declares ICEAuthor (the real base lands with ICEAuthor.hpp, included here), and
-// the bodies reach those author methods through `this` re-expressed as an
-// ICEAuthor* (a controller is-an author, same `this`), FLAGged at each call site.
-//
-// FLAG (menu-content tables): the per-style and per-channel MENU-CONTENT plan
-// tables that RefreshMenu walks (the label string + element-index + token-table
-// rows, and the per-channel element-plan rows) are ICE data-segment content that is
-// NOT recoverable as data. THIS group owns them: they are modelled below as
-// clearly-flagged file-local placeholder tables, kept empty so the control flow is
-// faithful but no invented label strings are emitted. Where the source spine
-// indexes the real per-element schema, the committed ICE::ICEElementDescriptions[]
-// global (ICEDataEnums.hpp) is used instead.
-// ============================================================================
+// ICE menu construction and refresh. Timebar and color-picker containment
+// is recovered; existing menu content/geometry placeholders remain separate debt.
 
 #include "SDKs/Packages/ICE/ICEController.hpp"                 // ICE::ICEController layout + widget members
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"                     // ICE::ICEAuthor (the take-authoring base)
@@ -230,6 +199,10 @@ void ICEController::ConstructMenus()
     mTimeBar2.Construct(KF_ICE_TIMEBAR_X, KF_ICE_TIMEBAR_Y + KF_ICE_TIMEBAR2_Y_STEP,
                         KF_ICE_TIMEBAR_START, KU_ICE_TIMEBAR_FLAG_2);
 
+    // ARTIST 82532124..8253216C: the contained color picker at7144.
+    // X/Y globals82FB6910/82FB643C are zero in the calibrated native image.
+    mColorPicker.Construct(0.0f, 0.0f, 50.0f);
+
     // Seed the logo / wide-screen-marker / info-list geometry the editor HUD draws.
     // The source spine writes a block of fixed layout floats into the target-box /
     // logo / info-list head region (the +0x713C..+0x71E4 lanes). Those lanes live
@@ -259,7 +232,7 @@ void ICEController::RefreshInfoList()
 {
     // FLAG (ICEAuthor base): the controller is-an author; the state read-outs call
     // ICEAuthor methods on this same `this`.
-    ICEAuthor* lpAuthor = reinterpret_cast<ICEAuthor*>(this);
+    ICEAuthor* lpAuthor = static_cast<ICEAuthor*>(this);
 
     // Reset the list (the source spine zeroes the row count before re-filling).
     mInfoList.miItemCount = 0;

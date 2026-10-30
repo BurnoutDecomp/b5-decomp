@@ -1,53 +1,6 @@
-// ============================================================================
-// SDKs/Packages/ICE/ICEControllerInput.cpp
-//
-// ICE::ICEController -- the INPUT group of the in-game ICE camera-take editor.
-// Reconstructed against the frozen layout in ICEController.hpp / ICEAuthor.hpp.
-// THIS TU bodies two functions:
-//
-//   Update     -- the per-frame editor tick. Drains the input queue (JoyHandler),
-//                 then runs the current editor sub-state's per-frame logic: anim /
-//                 assembly-anim advance, the zoom-cursor / bar-flip pass, the
-//                 shuttle MoveParameter, and the orientation/look edit (the
-//                 case-14/15 orientation-matrix block), then re-snaps the interval
-//                 spacing for the key-edit states.
-//   JoyHandler -- the input dispatch. Peeks the pending editor action off the
-//                 ActionRef stack, converts its magnitude into a per-axis joystick
-//                 velocity, then maps (editor-state, action-id) -> author/controller
-//                 op through a two-level switch, Pop()ing handled actions.
-//
-// The controller IS-AN ICEAuthor (same `this`), so the bodies reach the author's
-// take-authoring methods (SetState, AdvanceAnimation, MoveParameter, ...) through a
-// reinterpret_cast<ICE::ICEAuthor*>(this)-> call -- the ICEAuthor base is forward-
-// declared in ICEController.hpp and its real layout lives in ICEAuthor.hpp; the cast
-// is exact because the editor `this` IS the author. The controller's own helpers
-// (SetZoomRange / MoveCursor / BarFlipping / SetJoyVelocities / ChangeKeyElementValues
-// / ToBubble / FromBubble) are called directly through `this`.
-//
-// The embedded edit take (mEditTake @0x28, reached as `this+40` in the spine) takes
-// the ICETake ops directly (Insert / Delete / PopUndo / DeleteLeftSideKey /
-// GetValueInt / SetValue / Harden). The pending-action stack (mpMenuA @0xF74, the
-// ICE::ActionQueue : Stack<ActionRef,20>) is Peek()ed/Pop()ed for the input drain.
-//
-// ICEAuthor::MoveParameter(f32 lfDelta, bool lbApply) / SetParameterChange(f32, bool)
-// take the per-frame shuttle delta and the engage gate directly. The delta is the
-// horizontal shuttle velocity scaled by the frame timestep and the shuttle speed; the
-// gate is set when the engage axis (JoyVelocity(18)) exceeds the engage threshold. The
-// shuttle store at +0x7258 (mfCursorRatio) is a genuine read-out the editor keeps for
-// the cursor display; it is no longer the delta channel.
-//
-// FLAG (orientation edit, case 14/15): the spine's orientation-matrix block is a SIMD
-// transform of the joystick yaw/pitch/zoom deltas through the take's world-orientation
-// matrix. It is reconstructed here as the equivalent named-member math (build the
-// look delta from the two bubble angles, fetch the world-orientation matrix from the
-// camera-space handler, then push the resulting key-element value changes). The exact
-// per-lane vector ops are summarised, not transcribed.
-//
-// FLAG (action-id constants): the inner switch is keyed on the queued ActionRef id.
-// The ids that resolve to a named editor action are spelled as the E_ICE_ACTION_*
-// placeholders below; any id whose meaning is not independently attested is left as a
-// named placeholder constant (its numeric value is the spine's case label).
-// ============================================================================
+// ICE controller input dispatch. Author methods use real inheritance. The
+// assembly mark action uses separate timebar float endpoints and signed frames.
+// Other actions and the unresolved controller tail are not certified here.
 
 #include "SDKs/Packages/ICE/ICEController.hpp"
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"              // ICE::ICEAuthor base methods (called on `this`)
@@ -171,9 +124,9 @@ void ICEController::JoyHandler()
                     {
                         // Commit the current take/assembly and leave.
                         if (miFlagOrient /* spine *(this+32): edit-assembly flag */)
-                            reinterpret_cast<ICEAuthor*>(this)->CommitCurrentAssembly();
+                            ICEAuthor::CommitCurrentAssembly();
                         else
-                            reinterpret_cast<ICEAuthor*>(this)->CommitCurrentTake();
+                            ICEAuthor::CommitCurrentTake();
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         liNextState = 0;
@@ -190,7 +143,7 @@ void ICEController::JoyHandler()
                         // Reset: clear the edit take, then return to the scrubber-side
                         // state (7 or 8 by the edit-assembly flag, the same selector the
                         // BACK/id-5 path uses).
-                        reinterpret_cast<ICEAuthor*>(this)->ClearEditTake();
+                        ICEAuthor::ClearEditTake();
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         liNextState = miFlagOrient ? 8 : 7;
@@ -202,7 +155,7 @@ void ICEController::JoyHandler()
                         continue;
                     }
                     miMenuTimer = 0;
-                    reinterpret_cast<ICEAuthor*>(this)->SetState(liNextState);
+                    ICEAuthor::SetState(liNextState);
                     continue;
                 }
                 if (liAction == E_ICE_ACTION_BACK)
@@ -212,7 +165,7 @@ void ICEController::JoyHandler()
                     for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                         maChangeBuffer[li] = 0;
                     miMenuTimer = 0;
-                    reinterpret_cast<ICEAuthor*>(this)->SetState(miFlagOrient ? 8 : 7);
+                    ICEAuthor::SetState(miFlagOrient ? 8 : 7);
                     continue;
                 }
                 if (liAction == E_ICE_ACTION_UP)    { mpMenuAssembly->MoveDown(); lpQueue->Pop(); continue; }
@@ -233,9 +186,9 @@ void ICEController::JoyHandler()
                     {
                         // Confirm load (the spine LoadCurrentAssembly / LoadCurrentTake).
                         if (miFlagOrient)
-                            reinterpret_cast<ICEAuthor*>(this)->LoadCurrentAssembly();
+                            ICEAuthor::LoadCurrentAssembly();
                         else
-                            reinterpret_cast<ICEAuthor*>(this)->LoadCurrentTake();
+                            ICEAuthor::LoadCurrentTake();
                     }
                     else if (lpMenu->miSelectedRow != 0)
                     {
@@ -245,7 +198,7 @@ void ICEController::JoyHandler()
                     for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                         maChangeBuffer[li] = 0;
                     miMenuTimer = 0;
-                    reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_BROWSER);
+                    ICEAuthor::SetState(E_ICE_AUTHOR_STATE_BROWSER);
                     continue;
                 }
                 if (liAction == E_ICE_ACTION_BACK)
@@ -253,7 +206,7 @@ void ICEController::JoyHandler()
                     for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                         maChangeBuffer[li] = 0;
                     miMenuTimer = 0;
-                    reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_BROWSER);
+                    ICEAuthor::SetState(E_ICE_AUTHOR_STATE_BROWSER);
                     continue;
                 }
                 if (liAction == E_ICE_ACTION_UP)   { mpMenuCancel->MoveDown(); lpQueue->Pop(); continue; }
@@ -272,7 +225,7 @@ void ICEController::JoyHandler()
                     for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                         maChangeBuffer[li] = 0;
                     miMenuTimer = 0;
-                    reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+                    ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
                     continue;
                 }
                 if (liAction == E_ICE_ACTION_ASSEMBLY_TOGGLE)
@@ -298,7 +251,7 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
                         break;
                     case E_ICE_ACTION_UP:
                         // Insert a key at the current channel; bias the insert side by the
@@ -317,7 +270,7 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_PLAYING_ANIMATION);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_PLAYING_ANIMATION);
                         break;
                     case E_ICE_ACTION_TOGGLE_UI:
                         // Toggle show-UI in place (no Pop fall-through; the spine flips
@@ -333,7 +286,7 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCREENSHOT);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCREENSHOT);
                         break;
                     default:
                         break;
@@ -353,7 +306,7 @@ void ICEController::JoyHandler()
                             for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                                 maChangeBuffer[li] = 0;
                             miMenuTimer = 0;
-                            reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_INTERVAL_SETTINGS);
+                            ICEAuthor::SetState(E_ICE_AUTHOR_STATE_INTERVAL_SETTINGS);
                             // Reset the interval-main menu selection (spine *(menu+20)=0)
                             // only when it has rows.
                             if (mpMenuIntervalMain->miNumRows > 0)
@@ -363,11 +316,11 @@ void ICEController::JoyHandler()
                             }
                             continue;
                         case E_ICE_ACTION_PREV_KEY:
-                            reinterpret_cast<ICEAuthor*>(this)->JumpToPreviousKey();
+                            ICEAuthor::JumpToPreviousKey();
                             lpQueue->Pop();
                             continue;
                         case E_ICE_ACTION_NEXT_KEY:
-                            reinterpret_cast<ICEAuthor*>(this)->JumpToNextKey();
+                            ICEAuthor::JumpToNextKey();
                             lpQueue->Pop();
                             continue;
                         case E_ICE_ACTION_DOWN:
@@ -380,14 +333,14 @@ void ICEController::JoyHandler()
                             for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                                 maChangeBuffer[li] = 0;
                             miMenuTimer = 0;
-                            reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_START_KEY_SELECTED);
+                            ICEAuthor::SetState(E_ICE_AUTHOR_STATE_START_KEY_SELECTED);
                             continue;
                         case E_ICE_ACTION_RIGHT:
                             if (lfMagnitude <= 0.0f) { lpQueue->Pop(); continue; }
                             for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                                 maChangeBuffer[li] = 0;
                             miMenuTimer = 0;
-                            reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_END_KEY_SELECTED);
+                            ICEAuthor::SetState(E_ICE_AUTHOR_STATE_END_KEY_SELECTED);
                             continue;
                         default:
                             break;
@@ -407,87 +360,76 @@ void ICEController::JoyHandler()
                 {
                     case E_ICE_ACTION_BACK:
                         // Cancel the mark unless a drag is in progress.
-                        if (mfZoomCursorLo >= 0.0f || mfZoomCursorHi >= 0.0f)
+                        if (mTimeBar.mfLoopStart >= 0.0f || mTimeBar.mfLoopEnd >= 0.0f)
                         {
                             // A drag is active -> clear it and Pop (the cancel-drag path).
-                            mfZoomCursorLo = -0.1f;
-                            mfZoomCursorHi = -0.1f;
+                            mTimeBar.mfLoopStart = -0.1f;
+                            mTimeBar.mfLoopEnd = -0.1f;
                             lpQueue->Pop();
                             continue;
                         }
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_PREV_KEY:
-                        reinterpret_cast<ICEAuthor*>(this)->JumpToPreviousKey();
+                        ICEAuthor::JumpToPreviousKey();
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_NEXT_KEY:
-                        reinterpret_cast<ICEAuthor*>(this)->JumpToNextKey();
+                        ICEAuthor::JumpToNextKey();
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_UP:
                     {
-                        // Plant the next mark endpoint at the current take parameter,
-                        // storing the parameter and a sub-frame fraction into the active
-                        // drag pair, then latch the mark in/out endpoints.
-                        const f32 lfParameter = mEditTake.GetParameter();   // this+48
-                        ICETakeData* lpData = mEditTake.GetData();          // this+44
-                        const f32 lfLength = lpData ? lpData->GetLength() : 0.0f;
-                        const f32 lfSubFrac = ((lfLength * lfParameter) * 30.0f) + 0.00050000002f;
+                        // ARTIST 8253F01C..8253F134 uses the optional sub-take
+                        // at controller+38, then fmadds/fctiwz for frame indices.
+                        const f32 lfParameter = mEditTake.GetParameter();
+                        const f32 lfSubTime = mEditTake.GetSubTakeLength() * lfParameter;
+                        const s32 liFrame = (s32)((lfSubTime * 30.0f) + 0.00050000002f);
 
-                        if (mfZoomCursorLo < 0.0f || mfZoomCursorHi < 0.0f)
+                        if (mTimeBar.mfLoopStart >= 0.0f && mTimeBar.mfLoopEnd >= 0.0f)
                         {
-                            if (mfZoomCursorLo < 0.0f)
+                            mTimeBar.mfLoopStart = -0.1f;
+                            mTimeBar.mfLoopEnd = -0.1f;
+                            mfMarkIn = -1.0f;
+                            mfMarkOut = -1.0f;
+                            mTimeBar.mfLoopStart = lfParameter;
+                            mTimeBar.miLoopStartFrame = liFrame;
+                        }
+                        else if (mTimeBar.mfLoopStart >= 0.0f)
+                        {
+                            if (mTimeBar.mfLoopStart < lfParameter)
                             {
-                                // First endpoint of a fresh mark.
-                                mfZoomCursorLo = lfParameter;            // this+16144
-                                mfZoomCursorShakeLo = lfSubFrac;         // this+16152
-                                lpQueue->Pop();
+                                mTimeBar.mfLoopEnd = lfParameter;
+                                mTimeBar.miLoopEndFrame = liFrame;
                             }
                             else
                             {
-                                // Second endpoint: order it relative to the first.
-                                if (mfZoomCursorLo >= /*previous span*/ lfParameter)
-                                {
-                                    mfZoomCursorLo = lfParameter;
-                                    mfZoomCursorShakeLo = lfSubFrac;
-                                }
-                                else
-                                {
-                                    mfZoomCursorHi = lfParameter;        // this+16148
-                                    mfZoomCursorShakeHi = lfSubFrac;     // this+16156
-                                }
-                                mfMarkIn  = mfZoomCursorLo;              // this+29632
-                                mfMarkOut = mfZoomCursorHi;              // this+29636
-                                lpQueue->Pop();
+                                mTimeBar.mfLoopStart = lfParameter;
+                                mTimeBar.miLoopStartFrame = liFrame;
                             }
+                            mfMarkIn = mTimeBar.mfLoopStart;
+                            mfMarkOut = mTimeBar.mfLoopEnd;
                         }
                         else
                         {
-                            // Both endpoints already past the active range -> reset and
-                            // re-seed the high endpoint.
-                            mfZoomCursorLo = -0.1f;
-                            mfZoomCursorHi = -0.1f;
-                            mfMarkIn  = -1.0f;
-                            mfMarkOut = -1.0f;
-                            mfZoomCursorHi = lfParameter;
-                            mfZoomCursorShakeLo = lfSubFrac;
-                            lpQueue->Pop();
+                            mTimeBar.mfLoopStart = lfParameter;
+                            mTimeBar.miLoopStartFrame = liFrame;
                         }
+                        lpQueue->Pop();
                         continue;
                     }
                     case E_ICE_ACTION_PASTE:
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT);
-                        mfZoomCursorLo = -0.1f;
-                        mfZoomCursorHi = -0.1f;
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT);
+                        mTimeBar.mfLoopStart = -0.1f;
+                        mTimeBar.mfLoopEnd = -0.1f;
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_TOGGLE_UI:
@@ -511,15 +453,15 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_EXIT_CONFIRM);
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_PREV_KEY:
-                        reinterpret_cast<ICEAuthor*>(this)->JumpToPreviousKey();
+                        ICEAuthor::JumpToPreviousKey();
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_NEXT_KEY:
-                        reinterpret_cast<ICEAuthor*>(this)->JumpToNextKey();
+                        ICEAuthor::JumpToNextKey();
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_UP:
@@ -527,10 +469,10 @@ void ICEController::JoyHandler()
                         // Insert the marked assembly segment (only when a full mark exists).
                         if (!this->IsMarked()) { lpQueue->Pop(); continue; }
                         const f32 lfMarkedParam = mfMarkIn;                          // this+29632
-                        const f32 lfSubAssemRatio = reinterpret_cast<ICEAuthor*>(this)->GetSubAssemRatio();
+                        const f32 lfSubAssemRatio = ICEAuthor::GetSubAssemRatio();
                         // Corrected signature: InsertTakeSegment(lfTangent, lfSegmentLength);
                         // the caller passes (markedParam, subAssemRatio*(markOut-markIn)).
-                        if (!reinterpret_cast<ICEAuthor*>(this)->InsertTakeSegment(
+                        if (!ICEAuthor::InsertTakeSegment(
                                 lfMarkedParam, lfSubAssemRatio * (mfMarkOut - lfMarkedParam)))
                         {
                             lpQueue->Pop();
@@ -542,7 +484,7 @@ void ICEController::JoyHandler()
                         continue;
                     }
                     case E_ICE_ACTION_DOWN:
-                        reinterpret_cast<ICEAuthor*>(this)->DeleteTakeSegment();
+                        ICEAuthor::DeleteTakeSegment();
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_LEFT:
@@ -550,26 +492,26 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_START);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_START);
                         continue;
                     case E_ICE_ACTION_RIGHT:
                         if (lfMagnitude <= 0.0f) { lpQueue->Pop(); continue; }
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_END);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_END);
                         continue;
                     case E_ICE_ACTION_PASTE:
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_MARK);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_MARK);
                         continue;
                     case E_ICE_ACTION_SCRUB:
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_PLAYING);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_PLAYING);
                         continue;
                     case E_ICE_ACTION_TOGGLE_UI:
                         miShowUi = (miShowUi == 0);
@@ -591,7 +533,7 @@ void ICEController::JoyHandler()
                     for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                         maChangeBuffer[li] = 0;
                     miMenuTimer = 0;
-                    reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT);
+                    ICEAuthor::SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT);
                     continue;
                 }
                 if (liAction == E_ICE_ACTION_ASSEMBLY_TOGGLE)
@@ -617,7 +559,7 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
                         continue;
                     case E_ICE_ACTION_UP:
                         lpMenu->MoveDown();
@@ -652,7 +594,7 @@ void ICEController::JoyHandler()
                             lpcTag = "<Invalid colume ID>";
                         }
 
-                        const s32 liElement = reinterpret_cast<ICEAuthor*>(this)->GetElementIndexByTag(lpcTag);
+                        const s32 liElement = ICEAuthor::GetElementIndexByTag(lpcTag);
                         if (liElement == -1) { lpQueue->Pop(); continue; }
 
                         const s32 liOldValue = mEditTake.GetValueInt(liElement);
@@ -697,16 +639,16 @@ void ICEController::JoyHandler()
                             case 30:
                             {
                                 const u16 lu16Look = static_cast<u16>(mEditTake.GetCurrentInterval(miCurrentChannel));
-                                reinterpret_cast<ICEAuthor*>(this)->SwitchEyeSpace(
-                                    lu16Look, miStateArg /* spine *(this+256) */, liNewValue);
+                                ICEAuthor::SwitchEyeSpace(
+                                    lu16Look, miPrevState /* spine *(this+256) */, liNewValue);
                                 break;
                             }
                             case 31:
                             {
                                 const s32 liEye = mEditTake.GetValueInt(33);
                                 const u16 lu16Look = static_cast<u16>(mEditTake.GetCurrentInterval(miCurrentChannel));
-                                reinterpret_cast<ICEAuthor*>(this)->SwitchLookSpace(
-                                    lu16Look, miStateArg, liNewValue);
+                                ICEAuthor::SwitchLookSpace(
+                                    lu16Look, miPrevState, liNewValue);
                                 (void)liEye;
                                 break;
                             }
@@ -714,16 +656,16 @@ void ICEController::JoyHandler()
                             {
                                 const s32 liEye = mEditTake.GetValueInt(30);
                                 const u16 lu16Look = static_cast<u16>(mEditTake.GetCurrentInterval(miCurrentChannel));
-                                reinterpret_cast<ICEAuthor*>(this)->SwitchEyeSpace(
-                                    lu16Look, miStateArg, liEye);
+                                ICEAuthor::SwitchEyeSpace(
+                                    lu16Look, miPrevState, liEye);
                                 break;
                             }
                             case 33:
                             {
                                 const s32 liLook = mEditTake.GetValueInt(31);
                                 const u16 lu16Look = static_cast<u16>(mEditTake.GetCurrentInterval(miCurrentChannel));
-                                reinterpret_cast<ICEAuthor*>(this)->SwitchLookSpace(
-                                    lu16Look, miStateArg, liLook);
+                                ICEAuthor::SwitchLookSpace(
+                                    lu16Look, miPrevState, liLook);
                                 break;
                             }
                             default:
@@ -757,7 +699,7 @@ void ICEController::JoyHandler()
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
                         // Enter the orientation edit (14 from start-key, 15 from end-key).
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(lbIsEndKey ? 15 : 14);
+                        ICEAuthor::SetState(lbIsEndKey ? 15 : 14);
                         // On the head channel, drop into the bubble cursor.
                         if (miCurrentChannel) { lpQueue->Pop(); continue; }
                         this->ToBubble();
@@ -766,7 +708,7 @@ void ICEController::JoyHandler()
                     case E_ICE_ACTION_PREV_KEY:
                     {
                         // Open the copy menu over the assembly menu's selected line.
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SELECT_COPY_MODE);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SELECT_COPY_MODE);
                         ICEWidgetMenu* lpCopyMenu = mpMenuCommit;            // +0xF8C
                         const s32 liLine = lpCopyMenu->miSelectedRow;
                         // FLAG (copy-menu line table): the spine `dword..[51*channel]` is the
@@ -778,7 +720,7 @@ void ICEController::JoyHandler()
                         continue;
                     }
                     case E_ICE_ACTION_NEXT_KEY:
-                        reinterpret_cast<ICEAuthor*>(this)->PasteKeyElements();
+                        ICEAuthor::PasteKeyElements();
                         lpQueue->Pop();
                         continue;
                     case E_ICE_ACTION_LEFT:
@@ -787,7 +729,7 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
                         continue;
                     case E_ICE_ACTION_RIGHT:
                         if (lfMagnitude != 0.0f || liState != E_ICE_AUTHOR_STATE_END_KEY_SELECTED)
@@ -795,10 +737,10 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
                         continue;
                     case E_ICE_ACTION_PASTE:
-                        reinterpret_cast<ICEAuthor*>(this)->ToggleKey();
+                        ICEAuthor::ToggleKey();
                         lpQueue->Pop();
                         continue;
                     default:
@@ -820,7 +762,7 @@ void ICEController::JoyHandler()
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
                         continue;
                     case E_ICE_ACTION_BACK:
                         miFlagOrient = (miFlagOrient == 0);   // +0x7251 toggle orientation edit
@@ -855,27 +797,26 @@ void ICEController::JoyHandler()
                         // selected line against the per-channel copy line count
                         // (`unk..[204*channel + 1]`); a line below the count toggles that
                         // element's enable byte, otherwise it copies the checked elements.
-                        if (liSelected < lpMenu->miNumRows)
+                        const ICEElementChannel& lrChannel = gaICEElementChannels[miCurrentChannel];
+                        if (liSelected < lrChannel.miNumKeyElements)
                         {
-                            // Toggle the element-enable byte for the selected line.
-                            // FLAG (element-enable byte): the toggled byte is the author's
-                            // per-element enable flag; modelled via the toggle base member.
-                            miElementToggleBase = (miElementToggleBase == 0);
+                            const s32 liElement = lrChannel.maiKeyElements[liSelected];
+                            mabElementEnabled[liElement] = (mabElementEnabled[liElement] == 0);
                             lpQueue->Pop();
                             continue;
                         }
-                        reinterpret_cast<ICEAuthor*>(this)->CopyKeyElements();
+                        ICEAuthor::CopyKeyElements();
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
                         continue;
                     }
                     case E_ICE_ACTION_BACK:
                         for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                             maChangeBuffer[li] = 0;
                         miMenuTimer = 0;
-                        reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+                        ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
                         continue;
                     case E_ICE_ACTION_UP:
                         lpMenu->MoveDown();
@@ -906,7 +847,7 @@ void ICEController::JoyHandler()
                 for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                     maChangeBuffer[li] = 0;
                 miMenuTimer = 0;
-                reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT);
+                ICEAuthor::SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT);
                 continue;
             }
 
@@ -979,13 +920,13 @@ void ICEController::Update()
         // -----------------------------------------------------------------
         case E_ICE_AUTHOR_STATE_PLAYING_ANIMATION:
         {
-            const f32 lfTimestep = *mpMenuB;   // *(this+0xF70) per-frame timestep
-            if (!reinterpret_cast<ICEAuthor*>(this)->AdvanceAnimation(lfTimestep))
+            const f32 lfTimestep = mpMenuB->GetTimestep();   // *(this+0xF70) per-frame timestep
+            if (!ICEAuthor::AdvanceAnimation(lfTimestep))
             {
                 for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                     maChangeBuffer[li] = 0;
                 miMenuTimer = 0;
-                reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+                ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
             }
             break;
         }
@@ -999,7 +940,7 @@ void ICEController::Update()
             for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                 maChangeBuffer[li] = 0;
             miMenuTimer = 0;
-            reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
+            ICEAuthor::SetState(E_ICE_AUTHOR_STATE_SCRUBBER);
             break;
         }
 
@@ -1016,7 +957,7 @@ void ICEController::Update()
             this->MoveCursor();
 
             // Bar fade: decay by (zoomVelDelta * timestep * 3) toward [1.0, 20.0].
-            const f32 lfDelta = (JoyVelocity(35) - JoyVelocity(36)) * (*mpMenuB) * 3.0f;
+            const f32 lfDelta = (JoyVelocity(35) - JoyVelocity(36)) * (mpMenuB->GetTimestep()) * 3.0f;
             f32 lfFade = mfBarFade - lfDelta;             // 1.0 - (delta + fade) form
             if (lfFade < 1.0f)  lfFade = 1.0f;
             if (lfFade > 20.0f) lfFade = 20.0f;
@@ -1035,13 +976,13 @@ void ICEController::Update()
         // -----------------------------------------------------------------
         case E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_PLAYING:
         {
-            const f32 lfTimestep = *mpMenuB;
-            if (!reinterpret_cast<ICEAuthor*>(this)->AdvanceAssemblyAnimation(lfTimestep))
+            const f32 lfTimestep = mpMenuB->GetTimestep();
+            if (!ICEAuthor::AdvanceAssemblyAnimation(lfTimestep))
             {
                 for (s32 li = 0; li < KI_ICE_NUM_CHANGE_ELEMENTS; ++li)
                     maChangeBuffer[li] = 0;
                 miMenuTimer = 0;
-                reinterpret_cast<ICEAuthor*>(this)->SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT);
+                ICEAuthor::SetState(E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT);
             }
             break;
         }
@@ -1054,24 +995,24 @@ void ICEController::Update()
         case E_ICE_AUTHOR_STATE_START_KEY_SELECTED:
         case E_ICE_AUTHOR_STATE_END_KEY_SELECTED:
         {
-            const f32 lfShuttle = reinterpret_cast<ICEAuthor*>(this)->GetShuttleSpeed();
-            const f32 lfTimestep = *mpMenuB;
+            const f32 lfShuttle = ICEAuthor::GetShuttleSpeed();
+            const f32 lfTimestep = mpMenuB->GetTimestep();
             mfCursorRatio = lfShuttle;   // this+29272 (cursor-display shuttle read-out)
 
             // Move the take parameter by the horizontal velocity * timestep * shuttle.
             // The engage gate is set when the engage axis exceeds the engage threshold.
             const f32 lfMove = (JoyVelocity(34) - JoyVelocity(33)) * lfTimestep * lfShuttle; // 29424-29420
             const bool lbApply = JoyVelocity(18) > KF_ICE_PARAM_ENGAGE_THRESHOLD;            // 29360
-            reinterpret_cast<ICEAuthor*>(this)->MoveParameter(lfMove, lbApply);
+            ICEAuthor::MoveParameter(lfMove, lbApply);
 
             // Snap the interval bracket: pick the start or end edge by the end-key state.
             f32 lfBracketStart, lfBracketEnd;
             const u16 lu16Interval = mEditTake.GetCurrentInterval(miCurrentChannel);
-            reinterpret_cast<ICEAuthor*>(this)->GetIntervalBracket(lu16Interval, &lfBracketStart, &lfBracketEnd);
+            ICEAuthor::GetIntervalBracket(lu16Interval, &lfBracketStart, &lfBracketEnd);
 
             char lbEndKeyState = 0;
             if (miState == E_ICE_AUTHOR_STATE_SELECT_COPY_MODE)
-                lbEndKeyState = reinterpret_cast<ICEAuthor*>(this)->IsEndKeyState(miStateArg) ? 1 : 0;
+                lbEndKeyState = ICEAuthor::IsEndKeyState(miPrevState) ? 1 : 0;
             else if (miState == E_ICE_AUTHOR_STATE_END_KEY_SELECTED
                      || miState == E_ICE_AUTHOR_STATE_EDIT_END_KEY
                      || miState == E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_END)
@@ -1084,7 +1025,7 @@ void ICEController::Update()
             // is the ICETake interval re-spacing helper; reconstructed as the modelled
             // ICETake MoveParameter at the snapped boundary.
             mEditTake.MoveParameter(miCurrentChannel, lu16Interval, 0, lfSnap);
-            reinterpret_cast<ICEAuthor*>(this)->AdjustZoomRange();
+            ICEAuthor::AdjustZoomRange();
 
             // Seed each named interval element with its per-axis value change (skip ids
             // already seeded this pass).
@@ -1095,7 +1036,7 @@ void ICEController::Update()
             // is summarised here as the value-change push for the current channel's named
             // elements; the table lookups are FLAGged.
             const f32 lfZoomDelta = JoyVelocity(35) - JoyVelocity(36);   // 29408-29404
-            const f32 lfStep = *mpMenuB;
+            const f32 lfStep = mpMenuB->GetTimestep();
             (void)lfZoomDelta;
             (void)lfStep;
             break;
@@ -1117,7 +1058,7 @@ void ICEController::Update()
             {
                 // Orientation-bubble edit: integrate the bubble radius from the vertical
                 // velocity, clamped to [0.5, 1000.0] (the spine min/max clamp).
-                const f32 lfRadDelta = (JoyVelocity(33) - JoyVelocity(36)) * (*mpMenuB) * 20.0f; // 29376-29384
+                const f32 lfRadDelta = (JoyVelocity(33) - JoyVelocity(36)) * (mpMenuB->GetTimestep()) * 20.0f; // 29376-29384
                 f32 lfRadius = mfBubbleRadius - lfRadDelta;
                 if (lfRadius < 0.5f)    lfRadius = 0.5f;
                 if (lfRadius > 1000.0f) lfRadius = 1000.0f;
@@ -1126,8 +1067,8 @@ void ICEController::Update()
             else if (miFlagOrient)
             {
                 // Non-matched look spaces: a plain pitch value-change.
-                reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
-                    1, 0, ((JoyVelocity(36) - JoyVelocity(35)) * (*mpMenuB)) * 5.0f);  // 29384-29376
+                ICEAuthor::SetKeyElementValueChange(
+                    1, 0, ((JoyVelocity(36) - JoyVelocity(35)) * (mpMenuB->GetTimestep())) * 5.0f);  // 29384-29376
             }
 
             const s32 liLook = mEditTake.GetValueInt(31);
@@ -1147,7 +1088,7 @@ void ICEController::Update()
                 // vector. The per-lane multiply-accumulate transform is summarised as the
                 // named-member math below; the exact lane shuffles are not transcribed.
                 // -------------------------------------------------------------
-                const f32 lfTimestep = *mpMenuB;
+                const f32 lfTimestep = mpMenuB->GetTimestep();
 
                 // Two 90-degree reference angles -> sin/cos scale factors for the yaw and
                 // pitch velocity contributions.
@@ -1192,7 +1133,7 @@ void ICEController::Update()
                 const s32 liLookSpace = miFlagOrient ? mEditTake.GetValueInt(33) : mEditTake.GetValueInt(32);
                 Matrix4 lOrient;
                 ICEMath::Identity(&lOrient);
-                reinterpret_cast<ICEAuthor*>(this)->GetWorldTransformationMatrix(
+                ICEAuthor::GetWorldTransformationMatrix(
                     &lOrient, static_cast<u8>(liEyeSpace));
                 (void)liLookSpace;
 
@@ -1202,29 +1143,29 @@ void ICEController::Update()
                 s32 liBaseElement;
                 if (miFlagOrient)
                 {
-                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(5, 0, lfV);
+                    ICEAuthor::SetKeyElementValueChange(5, 0, lfV);
                     liBaseElement = 3;
                 }
                 else
                 {
-                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(2, 0, lfV);
+                    ICEAuthor::SetKeyElementValueChange(2, 0, lfV);
                     liBaseElement = 0;
                 }
-                reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(liBaseElement, 0, laPlane[0]);
+                ICEAuthor::SetKeyElementValueChange(liBaseElement, 0, laPlane[0]);
                 this->FromBubble();
             }
             else
             {
                 // Look spaces differ: drive the three orientation elements straight from
                 // the joystick velocities (no bubble transform).
-                const f32 lfTimestep = *mpMenuB;
-                reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
+                const f32 lfTimestep = mpMenuB->GetTimestep();
+                ICEAuthor::SetKeyElementValueChange(
                     0, 0, ((JoyVelocity(31) - JoyVelocity(32)) * lfTimestep) * -20.0f);   // 29404-29408
-                reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
+                ICEAuthor::SetKeyElementValueChange(
                     2, 0, ((JoyVelocity(32) - JoyVelocity(31)) * lfTimestep) *  20.0f);   // 29416-29412
-                reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
+                ICEAuthor::SetKeyElementValueChange(
                     3, 0, ((JoyVelocity(33) - JoyVelocity(34)) * lfTimestep) * -20.0f);   // 29420-29424
-                reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
+                ICEAuthor::SetKeyElementValueChange(
                     5, 0, ((JoyVelocity(36) - JoyVelocity(35)) * lfTimestep) * -20.0f);   // 29432-29428
             }
 
@@ -1233,9 +1174,9 @@ void ICEController::Update()
             {
                 if (!mEditTake.GetValueInt(31))
                 {
-                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValue(3, 0.0f);
-                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValue(4, 0.0f);
-                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValue(5, 0.0f);
+                    ICEAuthor::SetKeyElementValue(3, 0.0f);
+                    ICEAuthor::SetKeyElementValue(4, 0.0f);
+                    ICEAuthor::SetKeyElementValue(5, 0.0f);
                     miFlagReset = 0;
                     this->ToBubble();
                 }
@@ -1250,30 +1191,30 @@ void ICEController::Update()
         case E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_START:
         case E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_END:
         {
-            const f32 lfShuttle = reinterpret_cast<ICEAuthor*>(this)->GetShuttleSpeed();
-            const f32 lfTimestep = *mpMenuB;
+            const f32 lfShuttle = ICEAuthor::GetShuttleSpeed();
+            const f32 lfTimestep = mpMenuB->GetTimestep();
             mfCursorRatio = lfShuttle;   // this+29272 (cursor-display shuttle read-out)
 
             const f32 lfMove = ((JoyVelocity(34) - JoyVelocity(33)) * lfTimestep) * lfShuttle; // 29424-29420
             const bool lbApply = JoyVelocity(18) > KF_ICE_PARAM_ENGAGE_THRESHOLD;              // 29360
-            reinterpret_cast<ICEAuthor*>(this)->MoveParameter(lfMove, lbApply);
+            ICEAuthor::MoveParameter(lfMove, lbApply);
 
             // On the end state at the final interval, grow the assembly take length.
             // FLAG (assembly end-of-take test): the spine compares two channel-key
             // indices (this+416 == this+414 - 1); reconstructed as the end-key state test.
             if (liState == E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_END
-                && reinterpret_cast<ICEAuthor*>(this)->IsEndKeyState(miStateArg))
+                && ICEAuthor::IsEndKeyState(miPrevState))
             {
-                reinterpret_cast<ICEAuthor*>(this)->ChangeAssemTakeLength(lfMove);
+                ICEAuthor::ChangeAssemTakeLength(lfMove);
             }
 
             f32 lfBracketStart, lfBracketEnd;
             const u16 lu16Interval = mEditTake.GetCurrentInterval(miCurrentChannel);
-            reinterpret_cast<ICEAuthor*>(this)->GetIntervalBracket(lu16Interval, &lfBracketStart, &lfBracketEnd);
+            ICEAuthor::GetIntervalBracket(lu16Interval, &lfBracketStart, &lfBracketEnd);
 
             char lbEndKeyState = 0;
             if (miState == E_ICE_AUTHOR_STATE_SELECT_COPY_MODE)
-                lbEndKeyState = reinterpret_cast<ICEAuthor*>(this)->IsEndKeyState(miStateArg) ? 1 : 0;
+                lbEndKeyState = ICEAuthor::IsEndKeyState(miPrevState) ? 1 : 0;
             else if (miState == E_ICE_AUTHOR_STATE_END_KEY_SELECTED
                      || miState == E_ICE_AUTHOR_STATE_EDIT_END_KEY
                      || miState == E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_END)
@@ -1281,7 +1222,7 @@ void ICEController::Update()
 
             const f32 lfSnap = lbEndKeyState ? lfBracketEnd : lfBracketStart;
             mEditTake.MoveParameter(miCurrentChannel, lu16Interval, 0, lfSnap);
-            reinterpret_cast<ICEAuthor*>(this)->AdjustZoomRange();
+            ICEAuthor::AdjustZoomRange();
             break;
         }
 

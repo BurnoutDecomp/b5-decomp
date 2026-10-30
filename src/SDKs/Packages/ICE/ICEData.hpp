@@ -280,7 +280,8 @@ public:
     void SetSubTake(const ICETakeData* lpSubTakeData, bool lbForce);
 
     void SetLength(f32 lfLength);
-    f32  GetSubTakeLength() const;
+    // ARTIST 8252B1C8..8252B1E0 and 8253F01C..8253F038 inline this null guard.
+    f32  GetSubTakeLength() const { return mpSubTakeData ? mpSubTakeData->GetLength() : 0.0f; }
 
     // --- DECLARE-ONLY (value queries; bodies elsewhere) ---
     ICEValue GetValue(s32 liChannel, u16 lu16Key) const;
