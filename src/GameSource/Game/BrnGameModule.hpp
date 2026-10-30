@@ -1251,9 +1251,8 @@ namespace BrnGame
     // is BrnGameModule::EReleaseStage, public) so all Release-path users of the operator see it.
     BrnGameModule::EReleaseStage operator++(BrnGameModule::EReleaseStage& leStage, int);
 
-    // The game's single BrnGameModule (the X360 game-module global off_830102D0). Defined in
-    // BrnMain.cpp next to GetMainGameDataModule/GetMainSoundModule; the loading flow reads the
-    // update IO stacks through it, as the X360 loads do off the global.
-    BrnGameModule* GetMainGameModule();
-
 }
+
+// ARTIST off_830102D0; DecFIGS GameSource/Main/BrnMain.cpp names gpBurnoutGame.
+// The native entry publishes this exact process global after placement construction.
+extern BrnGame::BrnGameModule* gpBurnoutGame;

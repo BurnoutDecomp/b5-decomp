@@ -6,10 +6,10 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"   // DebugManager::Update during load
-#include "GameSource/Resource/BrnGameDataModule.h"   // GameDataModule + BrnGame::GetMainGameDataModule()
+#include "GameSource/Resource/BrnGameDataModule.h"   // GameDataModule + gpBurnoutGame->GetGameDataModule()
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (LoadSoundModule args)
-#include "GameSource/Sound/Module/BrnRootSoundModule.h"   // RootSoundModule + BrnGame::GetMainSoundModule() (stage 4)
-#include "GameSource/Game/BrnGameModule.hpp"         // BrnGame::GetMainGameModule() (the update IO stacks)
+#include "GameSource/Sound/Module/BrnRootSoundModule.h"   // RootSoundModule + gpBurnoutGame->GetSoundModule() (stage 4)
+#include "GameSource/Game/BrnGameModule.hpp"         // gpBurnoutGame (the update IO stacks)
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_OutputBuffer.h"   // EffectsIO::OutputBuffer (LoadEffectsModule scratch buffer)
 #include "GameSource/World/BrnWorldModuleIO.h"       // BrnWorldIO::UpdateOutputBuffer (LoadWorldModule scratch buffer)
 #include "GameSource/World/BrnWorldModule.h"         // BrnWorld::WorldModule::Update (the per-frame world drive)
@@ -38,7 +38,7 @@ namespace
     // *(*(off_830102D0 + 2524268) + 39312) @0x823EF688).
     BrnGame::DispatchThreadInputBuffer* GetDispatchWriteBuffer()
     {
-        return BrnGame::GetMainGameModule()->GetDispatchThreadInputBufferManager().GetWriteBuffer();
+        return gpBurnoutGame->GetDispatchThreadInputBufferManager().GetWriteBuffer();
     }
 }
 
@@ -68,7 +68,7 @@ void LoadingScriptedState::Render()
 {
     // ARTIST 823E7998 is shared by all six loading-state Render slots.
     if (gBrnScriptedLoadStage == 8)
-        BrnGame::GetMainGameModule()->DoDispatch();
+        gpBurnoutGame->DoDispatch();
 }
 
 // ARTIST 823CE098: original supplied-IO GUI command producer.
@@ -79,7 +79,7 @@ void LoadingScriptedState::RenderGUI(
     CgsGui::ViewIO::InputBuffer* lpGuiViewInput,
     bool lbSkipGui)
 {
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     CgsModule::IOBufferStack* const lpInputStack = lpGameModule->GetUpdateInputBufferStack();
     CgsModule::IOBufferStack* const lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
     RendererIO::InputBuffer* lpRendererInput = 0;
@@ -116,7 +116,7 @@ void LoadingScriptedState::RenderGUI(
 // was empty, so a dispatch through it silently did nothing (boot audit F-P6-19).
 void LoadingScriptedState::FinishLoading()
 {
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SendEvent(
+        gpBurnoutGame->GetMainFlowStateMachine().SendEvent(
             BrnGameMainFlowController::E_MGE_STATEEND);
 }
 
@@ -172,7 +172,7 @@ bool LoadingScriptedState::LoadEffectsModule(
         BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
         const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
 {
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* lpGameModule = gpBurnoutGame;
     CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
 
     BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutput = 0;
@@ -219,7 +219,7 @@ bool LoadingScriptedState::LoadEffectsModule(
 bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                                            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
 {
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* lpGameModule = gpBurnoutGame;
     CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
     CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
 
@@ -296,7 +296,7 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
 {
     (void)lpGameDataOutputBuffer;   // read by neither the console body nor this one
 
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* lpGameModule = gpBurnoutGame;
     CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
     CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
 
@@ -361,7 +361,7 @@ bool LoadingScriptedState::LoadGameState2(
         BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
         const BrnResource::GameDataIO::OutputBuffer* /*lpGameDataOutput*/)
 {
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     CgsModule::IOBufferStack* const lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
     BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput = 0;
     lpOutputStack->CreateIOBuffer(&lpGameStateOutput, "GameState");
@@ -414,7 +414,7 @@ bool LoadingScriptedState::LoadDirectorModule(
     BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
     const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
 {
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* lpGameModule = gpBurnoutGame;
     CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
 
     BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput = 0;
@@ -465,18 +465,18 @@ namespace BrnGameMainFlowController
 {
     BrnResource::GameDataIO::InputBuffer* GetScriptedLoadGameDataInput()
     {
-        return BrnGame::GetMainGameModule()->GetGameDataModuleInputBuffer();
+        return gpBurnoutGame->GetGameDataModuleInputBuffer();
     }
 
     BrnResource::GameDataIO::OutputBuffer* GetScriptedLoadGameDataOutput()
     {
-        return BrnGame::GetMainGameModule()->GetGameDataModuleOutputBuffer();
+        return gpBurnoutGame->GetGameDataModuleOutputBuffer();
     }
 }
 
 void LoadingScriptedState::Update()
 {
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     BrnResource::GameDataIO::InputBuffer* const lpGameDataInput =
         lpGameModule->GetGameDataModuleInputBuffer();
     BrnResource::GameDataIO::OutputBuffer* const lpGameDataOutput =
@@ -782,7 +782,7 @@ bool LoadingScriptedState::LoadSoundModuleAgain(
         BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
         const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
 {
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     CgsModule::IOBufferStack* const lpInputStack = lpGameModule->GetUpdateInputBufferStack();
     CgsModule::IOBufferStack* const lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
     BrnSound::Module::Io::RootInputBuffer* lpSoundInput = 0;
@@ -820,7 +820,7 @@ bool LoadingScriptedState::LoadSoundModuleAgain(
 bool LoadingScriptedState::LoadSoundModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                                            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
 {
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* lpGameModule = gpBurnoutGame;
     CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
     CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
 
@@ -839,7 +839,7 @@ bool LoadingScriptedState::LoadSoundModule(BrnResource::GameDataIO::InputBuffer*
     const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
         lpGameDataOutputBuffer ? lpGameDataOutputBuffer->GetAllocatorList() : 0;
 
-    bool lbPrepared = BrnGame::GetMainSoundModule()->Prepare(
+    bool lbPrepared = gpBurnoutGame->GetSoundModule().Prepare(
         lpAllocatorList, lpUpdateInputStack, lpUpdateOutputStack,
         lpRootInputBuffer, lpRootOutputBuffer);
 
@@ -891,7 +891,7 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
 
     // @0x823AA9C0 -- the pending-GUI-FSM-stage slot (gm+0x9A0644) is stamped 0 here; the
     // PC models that slot as RequestGuiFsmStage (BrnGameModule.hpp:483).
-    BrnGame::GetMainGameModule()->RequestGuiFsmStage(0);
+    gpBurnoutGame->RequestGuiFsmStage(0);
 
     meLoadingScreenStage = E_LOADINGSTAGE_START;
     mbGuiPreloadDone     = false;
@@ -900,7 +900,7 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
     // never targets state 0; Construct seeds it raw), so the initial-load update set stays
     // 0x80 there. The PC no longer calls OnEnter at boot either -- see the removed SetState
     // in BrnGameModule::Construct -- but the body is reproduced faithfully for re-entry.
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetSaveLoadState(true);
+        gpBurnoutGame->GetMainFlowStateMachine().SetSaveLoadState(true);
     // The show command posts from Update each tick (the X360 writes the dispatch write
     // buffer's command every Update @0x823EF688; Update runs this same frame).
 
@@ -923,7 +923,7 @@ void MainGameFlowStateInitialLoadingScreen::OnLeave()
     // dead as well as unfaithful. The screen lifecycle belongs to the dispatch-input
     // publishes (GamePrepare's tail shows it, BridgeGuiToGame's 19/20 hide it), not to the
     // flow state's transitions.
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetSaveLoadState(false);
+        gpBurnoutGame->GetMainFlowStateMachine().SetSaveLoadState(false);
 }
 
 // ARTIST823EF310: preparation and its same-call GUI retry/resource forward.
@@ -935,7 +935,7 @@ bool LoadingScriptedState::LoadGUIModule(
     CgsGui::ViewIO::InputBuffer* lpViewInput,
     const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
 {
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     BrnGui::GuiModule& lrGui = lpGameModule->GetGuiModule();
     if (lrGui.Prepare(lpGuiOutput, lpGameDataInput, lpGameDataOutput))
     {
@@ -980,7 +980,7 @@ bool LoadingScriptedState::LoadGUIModule(
 // ARTIST823EF688: the four GUI IO objects belong to this loading update.
 void MainGameFlowStateInitialLoadingScreen::Update()
 {
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     BrnResource::GameDataIO::InputBuffer* const lpGameDataInput =
         lpGameModule->GetGameDataModuleInputBuffer();
     BrnResource::GameDataIO::OutputBuffer* const lpGameDataOutput =
@@ -1103,9 +1103,9 @@ void MainGameFlowStateInitialLoadingScreen::FinishLoading()
     if (!mbGuiPreloadDone)
         return;
 
-    BrnGame::GetMainGameModule()->GetThreadLayout().SetResourcePercentageOfFrame(5);
+    gpBurnoutGame->GetThreadLayout().SetResourcePercentageOfFrame(5);
 
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
+        gpBurnoutGame->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
 }
 
 // --- MainGameFlowStateStartScreen (the legal/title screen phase) -------------------------
@@ -1123,11 +1123,11 @@ void MainGameFlowStateStartScreen::OnEnter()
                "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
     gBrnScriptedLoadPaused = true;
 
-    BrnGame::GetMainGameModule()->RequestGuiFsmStage(2);
+    gpBurnoutGame->RequestGuiFsmStage(2);
 
     // @0x823AAB94 -- mbVideoState = 1 (the title is still a video-state phase; OnLeave
     // writes none on the console).
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(true);
+        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "StartScreen: OnEnter -> GUI FSM stage 2 (BrnLegalFsm)\n";
 }
@@ -1141,13 +1141,13 @@ void MainGameFlowStateStartScreen::OnLeave() {}
 void MainGameFlowStateStartScreen::Update()
 {
     LoadingScriptedState::Update();
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     if (lpGameModule->GetGuiModule().IsPerformingInvite())
         lpGameModule->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
     else if (lpGameModule->IsGuiPreAcceptRequested())
     {
         ResumeLoadingWorld();
-        BrnGame::GetMainGameModule()->ClearGuiPreAccept();
+        gpBurnoutGame->ClearGuiPreAccept();
     }
     else if (lpGameModule->IsGuiPhaseComplete())
         lpGameModule->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
@@ -1171,17 +1171,17 @@ void MainGameFlowStateMarketingScreens::OnEnter()
                "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
     gBrnScriptedLoadPaused = true;
 
-    BrnGame::GetMainGameModule()->RequestGuiFsmStage(1);
+    gpBurnoutGame->RequestGuiFsmStage(1);
 
     // @0x823AAA80 -- mbVideoState = 1: the logos run with the world on the boot-video arm.
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(true);
+        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "MarketingScreens: OnEnter -> GUI FSM stage 1 (BrnVideoFsm)\n";
 }
 
 void MainGameFlowStateMarketingScreens::OnLeave() {
     // @0x823AABC4 -- mbVideoState = 0.
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(false);
+        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(false);
 }
 
 // @ 0x823F2CD8 -- advance when the GUI posts phase-complete (command 70: the Criterion
@@ -1191,9 +1191,9 @@ void MainGameFlowStateMarketingScreens::Update()
     // X360 0x823F2CD8 opens with the shared scripted-load spine.
     LoadingScriptedState::Update();
 
-    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete())
+    if (gpBurnoutGame->IsGuiPhaseComplete())
     {
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SendEvent(
+        gpBurnoutGame->GetMainFlowStateMachine().SendEvent(
             BrnGameMainFlowController::E_MGE_STATEEND);
     }
 }
@@ -1227,13 +1227,13 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
     // @0x823AAB00 -- the pending-GUI-FSM-stage slot (gm+0x9A0644) is stamped 4 here; the
     // PC models that slot as RequestGuiFsmStage (the same field Marketing/Start/MemoryCard
     // stamp with 1/2/4).
-    BrnGame::GetMainGameModule()->RequestGuiFsmStage(4);
+    gpBurnoutGame->RequestGuiFsmStage(4);
 
     // @0x823AAC84 / @0x823AAC8C -- mbSaveLoadState = 1, mbVideoState = 1 (the profile phase
     // is the sim-paused save-load window: update set 0xE1).
     {
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetSaveLoadState(true);
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(true);
+        gpBurnoutGame->GetMainFlowStateMachine().SetSaveLoadState(true);
+        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(true);
     }
 }
 void MainGameFlowStateCheckDiskSpace::OnLeave() {}
@@ -1251,7 +1251,7 @@ void MainGameFlowStateMemoryCard::OnEnter()
     // to be running, so this state never re-parks it.
     gBrnScriptedLoadPaused = false;
 
-    BrnGame::GetMainGameModule()->RequestGuiFsmStage(4);
+    gpBurnoutGame->RequestGuiFsmStage(4);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "MemoryCard: OnEnter -> GUI FSM stage 4 (BrnBFProFsm)\n";
 }
@@ -1259,8 +1259,8 @@ void MainGameFlowStateMemoryCard::OnEnter()
 void MainGameFlowStateMemoryCard::OnLeave()
 {
     {
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetSaveLoadState(false);   // @0x823AACE4
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(false);      // @0x823AACEC
+        gpBurnoutGame->GetMainFlowStateMachine().SetSaveLoadState(false);   // @0x823AACE4
+        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(false);      // @0x823AACEC
     }
 }
 
@@ -1279,13 +1279,13 @@ void MainGameFlowStateMemoryCard::Update()
     // @0x823F2FB0 -- the world-loaded gate, tested FIRST.
     if (gBrnScriptedLoadStage != 8)
         return;
-    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete())
+    if (gpBurnoutGame->IsGuiPhaseComplete())
     {
         // X360 @0x823F2FD0..D8: `stb r11(=1), 0x9A02F5(gm)` -- gm+10094117, the streaming-wait
         // request DoUpdate_GameStatePreWorld turns into game event 8 (-> WaitForStreaming ->
         // the boot pause), stored right before the STATEEND SendEvent.
-        BrnGame::GetMainGameModule()->RequestStreamingWait();
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SendEvent(
+        gpBurnoutGame->RequestStreamingWait();
+        gpBurnoutGame->GetMainFlowStateMachine().SendEvent(
             BrnGameMainFlowController::E_MGE_STATEEND);
     }
 }
@@ -1301,11 +1301,11 @@ void MainGameFlowStateCompleteLoading::OnEnter()
     // @0x823AABF0 -- CLEAR ONLY (see MemoryCard::OnEnter).
     gBrnScriptedLoadPaused = false;
 
-    BrnGame::GetMainGameModule()->RequestGuiFsmStage(3);
+    gpBurnoutGame->RequestGuiFsmStage(3);
     mbIsCollisionWorldPrepared = false;
 
     // @0x823AAC04 -- mbVideoState = 1 (the post-title intro is a video phase).
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(true);
+        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "CompleteLoading: OnEnter -> GUI FSM stage 3 (BrnCmpLdFsm)\n";
 }
@@ -1314,8 +1314,8 @@ void MainGameFlowStateCompleteLoading::OnEnter()
 // is initialized at82518B88 and read by both original resource validators.
 void MainGameFlowStateCompleteLoading::OnLeave()
 {
-        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(false);      // @0x823AAC34
-    BrnGame::GetMainGameModule()->GetGuiModule().SetMovieBootMode(false);                 // @0x823AAC3C
+        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(false);      // @0x823AAC34
+    gpBurnoutGame->GetGuiModule().SetMovieBootMode(false);                 // @0x823AAC3C
 }
 
 // @ 0x823F2E08 -- when the GUI posts phase-complete (the post-title intro finished) and
@@ -1326,7 +1326,7 @@ void MainGameFlowStateCompleteLoading::OnLeave()
 void MainGameFlowStateCompleteLoading::Update()
 {
     LoadingScriptedState::Update();
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* lpGameModule = gpBurnoutGame;
     if (lpGameModule->IsGuiPhaseComplete() && gBrnScriptedLoadStage == 8)
     {
         if (mbIsCollisionWorldPrepared)
@@ -1336,7 +1336,7 @@ void MainGameFlowStateCompleteLoading::Update()
             gBrnScriptedLoadStage = 7;
             mbIsCollisionWorldPrepared = true;
         }
-        lpGameModule = BrnGame::GetMainGameModule();
+        lpGameModule = gpBurnoutGame;
     }
     if (lpGameModule->IsGameOverRequested())
     {

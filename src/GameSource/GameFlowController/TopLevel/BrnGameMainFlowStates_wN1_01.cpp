@@ -14,7 +14,7 @@
 
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
 
-#include "GameSource/Game/BrnGameModule.hpp"                              // BrnGame::GetMainGameModule
+#include "GameSource/Game/BrnGameModule.hpp"                              // gpBurnoutGame
 #include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"            // CgsSystem::EFrameRate
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                     // GameDataIO::InputBuffer / OutputBuffer
 #include "GameSource/Network/BrnNetworkModule.h"                         // BrnNetwork::BrnNetworkModule::Prepare
@@ -37,7 +37,7 @@
 bool LoadingScriptedState::LoadNetworkModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                                              const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
 {
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* lpGameModule = gpBurnoutGame;
 
     CgsSystem::EFrameRate leFrameRate = CgsSystem::E_FRAMERATE_50HZ;
     if (lpGameModule->GetGameTimer().GetRate() != 0.02f)

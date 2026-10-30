@@ -1,5 +1,5 @@
 #include "GameSource/Game/BrnAutoTestManager.h"
-#include "GameSource/Game/BrnGameModule.hpp"                                   // GetMainGameModule / GetGameTimer / GetGameDataModule
+#include "GameSource/Game/BrnGameModule.hpp"                                   // gpBurnoutGame / GetGameTimer / GetGameDataModule
 #include "GameSource/Resource/BrnGameDataModule.h"                             // GameDataModule::DebugReportPools
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                        // CgsCore::StrCpy / StrCat
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"                     // HardwareInit::GetFOPENDirectory
@@ -43,7 +43,7 @@ namespace BrnGame
 
     bool AutoTestManager::IsInGame()
     {
-        return BrnGame::GetMainGameModule()->GuiAcceptsControllerInput() && mnCurrentGuiPage == KN_IN_GAME_GUI_PAGE;
+        return gpBurnoutGame->GuiAcceptsControllerInput() && mnCurrentGuiPage == KN_IN_GAME_GUI_PAGE;
     }
 
     void AutoTestManager::PerfMonCpuReportCallback(const CgsDev::PerfMonCpuMonitorData& lrData, void* lpUserData)
