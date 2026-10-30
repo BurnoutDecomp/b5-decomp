@@ -89,6 +89,8 @@ namespace renderengine
             };
 
             void Initialize(u32 videoMode);
+            bool Validate() const;
+            void FixD3DDefaults();
             u32 GetBackBufferWidth() const { return backBufferWidth; }
             u32 GetBackBufferHeight() const { return backBufferHeight; }
             PixelFormat GetBackBufferFormat() const { return backBufferFormat; }

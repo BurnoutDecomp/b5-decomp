@@ -11,6 +11,35 @@ namespace renderengine
     u32 guTilingEnabled = 0;
     u32 gDeviceFrameCounter83271624 = 0;
 
+    // ARTIST82B616B0: accepted native formats and minimum front-buffer dimensions.
+    bool Device::Parameters::Validate() const
+    {
+        switch (static_cast<u32>(frontBufferFormat))
+        {
+        case 0x28280106: case 0x18280106: case 0x28280136: case 0x18280136: break;
+        default: return false;
+        }
+        switch (static_cast<u32>(backBufferFormat))
+        {
+        case 0x18280186: case 0x28280186: case 0x182801B6: case 0x282801B6:
+        case 0x1A2201BF: case 0x2D200199: case 0x2D22AB9F: case 0x2D20AB8D:
+        case 0x1A20AB55: case 0x2DA2ABA4: case 0x1A20015A: case 0x1A22AB60:
+        case 0x2D22ABA5: break;
+        default: return false;
+        }
+        return frontBufferWidth >= 320 && frontBufferHeight >= 200;
+    }
+
+    // ARTIST82B617F0: defaults are applied only to the device-owned copy.
+    void Device::Parameters::FixD3DDefaults()
+    {
+        if (!primaryRingBufferSize) primaryRingBufferSize = 0x8000;
+        if (!secondaryRingBufferSize) secondaryRingBufferSize = 0x200000;
+        if (!ringBufferSegmentCount)
+            ringBufferSegmentCount = secondaryRingBufferSize > 0x1000000
+                ? (secondaryRingBufferSize * 2) & 0xFFFFFC00 : 32;
+    }
+
     // ARTIST 82B61540..82B616A8. Unknown modes deliberately preserve the
     // previous dimensions/refresh, and the bool's three padding bytes survive.
     void Device::Parameters::Initialize(u32 videoMode)
