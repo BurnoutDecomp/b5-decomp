@@ -553,9 +553,8 @@ void BrnCoronaManager::SetTextureAtlas(const rw::IResourceAllocator& allocatorRe
     parameters.muMagFilter = parameters.muMinFilter = 1;
     parameters.muMipFilter = 0;
     parameters.mpTexture = textureAtlas;
-    rw::ResourceDescriptor descriptor;
-    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    const rw::ResourceDescriptor descriptor = renderengine::TextureState::GetResourceDescriptor(parameters);
     m_textureStateAtlasResource = allocator->DoAllocate(descriptor, 0);
-    m_textureStateAtlas = renderengine::TextureState::Initialize(&m_textureStateAtlasResource, &parameters);
+    m_textureStateAtlas = renderengine::TextureState::Initialize(m_textureStateAtlasResource, parameters);
     renderengine::CoronaRenderer::SetTextureAtlas(m_textureStateAtlas, 4, &s_atlasUVs[0][0]);
 }

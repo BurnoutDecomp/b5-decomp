@@ -232,11 +232,10 @@ const renderengine::TextureState* ImRendererBase::ConstructDefaultTextureState(
     lParameters.mbUnidentified44 = 1;        // v10
     lParameters.mpTexture  = lpTexture;// v11 = a2
 
-    rw::ResourceDescriptor lDescriptor;
-    renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+    const rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lParameters);
     rw::Resource lStateResource = lpAllocator->DoAllocate(lDescriptor, 0);
 
-    return renderengine::TextureState::Initialize(&lStateResource, &lParameters);
+    return renderengine::TextureState::Initialize(lStateResource, lParameters);
 }
 
 // ---------------------------------------------------------------------------------------------------

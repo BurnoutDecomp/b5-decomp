@@ -144,22 +144,21 @@ namespace postfx
             lStateParams.muMipFilter     = 2;                // var_13C
             lStateParams.muMagFilter     = lrParams.mFilterMode;  // var_144 = a2[8]
             lStateParams.muMinFilter     = lrParams.mFilterMode;  // var_140 = a2[8]
-            lStateParams.muMaxAnisotropy = 13;               // var_130
-            lStateParams.muField10       = 1;                // var_128
+            lStateParams.muMinMipLevel = 13;               // var_130
+            lStateParams.muMaxAnisotropy       = 1;                // var_128
             lStateParams.mfMipLodBias    = 0.0f;             // var_124
-            lStateParams.mfField12       = 0.0f;             // var_120
-            lStateParams.mu8Field43      = 1;                // var_10D
-            lStateParams.mu8Field44      = 1;                // var_10C
+            lStateParams.mfAnisotropyBias       = 0.0f;             // var_120
+            lStateParams.mbPointBorderEnable      = 1;                // var_10D
+            lStateParams.mbUnidentified44      = 1;                // var_10C
             lStateParams.mpTexture       = lpTexture;
 
-            rw::BaseResourceDescriptors<5> lStateDescriptor;
-            renderengine::TextureState::GetResourceDescriptor(reinterpret_cast<u32*>(&lStateDescriptor));
+            const rw::ResourceDescriptor lStateDescriptor = renderengine::TextureState::GetResourceDescriptor(lStateParams);
 
             rw::IResourceAllocator* lpAllocator = lrParams.mpAllocator;
             rw::Resource lStateResource = lpAllocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), 0);
+                lStateDescriptor, 0);
             mpTextureState =
-                renderengine::TextureState::Initialize(&lStateResource, &lStateParams);
+                renderengine::TextureState::Initialize(lStateResource, lStateParams);
         }
 
         // --- the GPU PixelBuffer surface (always built) ----------------------------------------------
@@ -432,12 +431,12 @@ namespace postfx
 
         renderengine::TextureState::Parameters lStateParams;
         std::memset(&lStateParams, 0, sizeof(lStateParams));
-        lStateParams.muMaxAnisotropy = 13;               // v30 = 13
-        lStateParams.muField10       = 1;                // v32 = 1
+        lStateParams.muMinMipLevel = 13;               // v30 = 13
+        lStateParams.muMaxAnisotropy       = 1;                // v32 = 1
         lStateParams.mfMipLodBias    = 0.0f;             // v33
-        lStateParams.mfField12       = 0.0f;             // v34
-        lStateParams.mu8Field43      = 1;                // v41 = 1
-        lStateParams.mu8Field44      = 1;                // v42 = 1
+        lStateParams.mfAnisotropyBias       = 0.0f;             // v34
+        lStateParams.mbPointBorderEnable      = 1;                // v41 = 1
+        lStateParams.mbUnidentified44      = 1;                // v42 = 1
 
         // The bound colour texture: the provided colour state when there is one, else the colour
         // target's own resolved texture.
@@ -451,7 +450,7 @@ namespace postfx
         // target is provided OR the colour mode is none.
         if (muColourMode != 0 && muDepthStencilMode == 0)
         {
-            lStateParams.mu8Field40  = 1;                // v38 = 1
+            lStateParams.mbWhiteBorder  = 1;                // v38 = 1
             lStateParams.muMagFilter = 6;                // v22 = 6
         }
         else
@@ -462,13 +461,12 @@ namespace postfx
         lStateParams.muAddressV = lStateParams.muMagFilter; // v26[1] = v22
         lStateParams.muMipFilter = 2;                       // v27 = 2
 
-        rw::BaseResourceDescriptors<5> lStateDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(reinterpret_cast<u32*>(&lStateDescriptor));
+        const rw::ResourceDescriptor lStateDescriptor = renderengine::TextureState::GetResourceDescriptor(lStateParams);
 
         rw::Resource lStateResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), 0);
+            lStateDescriptor, 0);
         mpColourTextureState = reinterpret_cast<renderengine::TextureState*>(
-            renderengine::TextureState::Initialize(&lStateResource, &lStateParams));
+            renderengine::TextureState::Initialize(lStateResource, lStateParams));
     }
 
     // ============================================================================================
