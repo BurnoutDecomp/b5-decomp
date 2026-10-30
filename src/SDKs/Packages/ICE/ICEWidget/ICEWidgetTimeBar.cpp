@@ -90,11 +90,8 @@ namespace ICE
     // The bar's default visible half-height (14.0 when compact, else a fixed
     // data-segment float modelled here as the same default span).
     static const f32 KF_ICE_TIMEBAR_HEIGHT_COMPACT = 14.0f;
-    // FLAG: the non-compact default half-height (a fixed data-segment float, also
-    //       used in Reset's `32.0 - thatFloat` icon-centring) is not in the exports;
-    //       modelled as the icon's own half-height so the centring is
-    //       self-consistent.
-    static const f32 KF_ICE_TIMEBAR_HEIGHT_DEFAULT = 16.0f;
+    // ARTIST flt_82F298D0 (41A40000), shared by Render and Reset.
+    static const f32 KF_ICE_TIMEBAR_HEIGHT_DEFAULT = 20.5f;
 
     // The ICE editor frame rate (frames per second) SetTimeInfo maps seconds to.
     static const f32 KF_ICE_TIMEBAR_FPS      = 30.0f;
@@ -133,10 +130,14 @@ namespace ICE
                      const f32* lpColour4)
         {
             Poly lQuad;
-            lQuad.maVertices[0] = { lfLeft,  lfTop,    lfZ, 0.0f };
-            lQuad.maVertices[1] = { lfRight, lfTop,    lfZ, 0.0f };
-            lQuad.maVertices[2] = { lfRight, lfBottom, lfZ, 0.0f };
-            lQuad.maVertices[3] = { lfLeft,  lfBottom, lfZ, 0.0f };
+            const Vector3 lTopLeft = { lfLeft, lfTop, lfZ, 0.0f };
+            const Vector3 lTopRight = { lfRight, lfTop, lfZ, 0.0f };
+            const Vector3 lBottomRight = { lfRight, lfBottom, lfZ, 0.0f };
+            const Vector3 lBottomLeft = { lfLeft, lfBottom, lfZ, 0.0f };
+            lQuad.maVertices[0] = lTopLeft;
+            lQuad.maVertices[1] = lTopRight;
+            lQuad.maVertices[2] = lBottomRight;
+            lQuad.maVertices[3] = lBottomLeft;
 
             Vector4 lColour;
             lColour.x = lpColour4[0];
@@ -155,12 +156,8 @@ namespace ICE
     // ICEWidgetTimeBar::Construct
     // ------------------------------------------------------------------------
     void ICEWidgetTimeBar::Construct(f32 lfX, f32 lfY, f32 lfStart,
-                                     s32 liArg5, s32 liArg6, s32 liArg7, u8 lbCompact)
+                                     u8 lbCompact)
     {
-        (void)liArg5;   // the three int args seed marker/read-out state that Reset
-        (void)liArg6;   // immediately overwrites; kept in the signature for the call
-        (void)liArg7;   // shape (they arrive in the trailing integer arg slots).
-
         // Store the compact flag and the screen origin + window start times. lfStart
         // is written into both the bar-length lane and the time-min lane, and
         // lfX/lfY into the screen origin lanes.
@@ -179,23 +176,20 @@ namespace ICE
         mbShowAux      = 0;
         miMarkerSelA   = 0;
         miMarkerSelB   = 0;
-        // The read-out scratch (12152/12156 in the reserved block) is zeroed; left
-        // to Reset, which clears the full read-out state.
+        miLoopStartFrame = 0;
+        miLoopEndFrame = 0;
 
-        // Zero the whole 150-element marker array. The build does this with packed
+        // Initialize the 150-element marker array without touching its alignment bytes. The build does this with packed
         // vector zero stores (10 elements per loop pass, 15 passes); a plain
         // element-wise clear is the de-collapsed equivalent.
         for (s32 liMarker = 0; liMarker < KI_ICE_TIMEBAR_MAX_MARKERS; ++liMarker)
         {
             ICEWidgetTimeBarMarker& lMarker = maMarkers[liMarker];
-            for (s32 liLane = 0; liLane < 4; ++liLane)
-            {
-                lMarker.maPolyA[liLane] = 0.0f;
-                lMarker.maPolyB[liLane] = 0.0f;
-                lMarker.maPolyC[liLane] = 0.0f;
-                lMarker.maPolyD[liLane] = 0.0f;
-            }
-            lMarker.miIsKeyframe = 0;
+            // ARTIST loads vectors 0/1 from 82FB6580 and 2/3 from
+            // 82FB66A0; both contain four +0.0 lanes in the native image.
+            for (s32 liColour = 0; liColour < 4; ++liColour)
+                lMarker.maColours[liColour].SetZero();
+            lMarker.mbIsKeyframe = 0;
             lMarker.mfTime       = 0.0f;
         }
 
@@ -210,19 +204,16 @@ namespace ICE
     void ICEWidgetTimeBar::Reset()
     {
         // Clear each live marker element (walks miNumMarkers elements at stride 80,
-        // zeroing the embedded poly/colour lanes + the flag/time). Done before the
+        // zeroing the colour vectors + the byte flag/time). Done before the
         // count is itself cleared below.
         for (s32 liMarker = 0; liMarker < miNumMarkers; ++liMarker)
         {
             ICEWidgetTimeBarMarker& lMarker = maMarkers[liMarker];
-            for (s32 liLane = 0; liLane < 4; ++liLane)
-            {
-                lMarker.maPolyA[liLane] = 0.0f;
-                lMarker.maPolyB[liLane] = 0.0f;
-                lMarker.maPolyC[liLane] = 0.0f;
-                lMarker.maPolyD[liLane] = 0.0f;
-            }
-            lMarker.miIsKeyframe = 0;
+            // ARTIST loads vectors 0/1 from 82FB6580 and 2/3 from
+            // 82FB66A0; both contain four +0.0 lanes in the native image.
+            for (s32 liColour = 0; liColour < 4; ++liColour)
+                lMarker.maColours[liColour].SetZero();
+            lMarker.mbIsKeyframe = 0;
             lMarker.mfTime       = 0.0f;
         }
 
@@ -238,7 +229,6 @@ namespace ICE
         mfTrackFlagA = 0.0f;
         mbHasSelection = 0;
         mfSelFlagB   = 0.0f;
-        mbLoopActive = 0;
         mbShowAux    = 0;
         mfBarLength  = 0.0f;
         mbShowIcon   = 1;
@@ -248,7 +238,7 @@ namespace ICE
         miMarkerSelA = -1;     // selection/edit marker -> unset
 
         // The non-compact default half-height the icon is centred around.
-        const f32 lfHeight = KF_ICE_TIMEBAR_HEIGHT_DEFAULT - KF_ICE_TIMEBAR_HEIGHT_COMPACT;
+        const f32 lfHeight = KF_ICE_TIMEBAR_HEIGHT_DEFAULT;
 
         // Re-seat the embedded play-head icon: positioned at the bar origin X, with
         // a fixed 32x32 size, vertically centred on the bar centre line. The icon's
@@ -326,7 +316,7 @@ namespace ICE
                     lfEndX = (maMarkers[liMarker + 1].mfTime * lfScale) + lfBias;
                 }
 
-                const f32* lpColour = lMarker.miIsKeyframe ? KAF_ICE_TIMEBAR_COL_KEY
+                const f32* lpColour = lMarker.mbIsKeyframe ? KAF_ICE_TIMEBAR_COL_KEY
                                                            : KAF_ICE_TIMEBAR_COL_SEG;
 
                 // Segment body box.

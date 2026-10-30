@@ -88,26 +88,16 @@ static const f32 KF_ICE_MENU_ICON_H   = 10.0f;    // 0xF98 height          (plac
 // FLAG (placeholder pixels): a data-segment float with no symbol; value is a placeholder.
 static const f32 KF_ICE_COPY_MENU_Y_OFFSET = 0.0f;
 
-// The default int/flags arguments the time-bar Construct takes after its three float
-// args. FLAG: the source-spine pseudocode preserves only the float arguments (origin
-// x/y + start time); the trailing marker-count / flags arguments are not recoverable,
-// so they are zeroed. The final trailing flag IS recovered per bar (0 vs 1, below).
-static const s32 KI_ICE_TIMEBAR_ARG_DEFAULT = 0;
+// ARTIST 825320C8/825320EC seed r7 after the three float arguments.
+static const u8  KU_ICE_TIMEBAR_FLAG_MAIN = 0;
+static const u8  KU_ICE_TIMEBAR_FLAG_2    = 1;
 
-// The recovered trailing flag (the 7th Construct arg): 0 for the main bar, 1 for the
-// secondary/assembly bar.
-static const u8  KU_ICE_TIMEBAR_FLAG_MAIN = 0;   // mTimeBar  trailing flag = 0
-static const u8  KU_ICE_TIMEBAR_FLAG_2    = 1;   // mTimeBar2 trailing flag = 1
-
-// The two time-bar screen origins + the main bar's start-time seed ConstructMenus
-// passes. FLAG: the source spine reads the bar origin floats from the ICE data
-// segment (the editor's fixed HUD layout constants); reconstructed here as the
-// attested literal layout values (bar left 8.0 / top 388.0, second bar offset +32
-// vertically). The values are the editor's fixed on-screen bar placement.
-static const f32 KF_ICE_TIMEBAR_X       = 8.0f;     // bar screen left
-static const f32 KF_ICE_TIMEBAR_Y       = 388.0f;   // bar screen top
-static const f32 KF_ICE_TIMEBAR_START   = 560.0f;   // main bar start-time / length seed
-static const f32 KF_ICE_TIMEBAR2_Y_STEP = 32.0f;    // second bar vertical offset
+// Native data loaded at 825320D0..E4: 82F28848=32, 82F2884C=418,
+// 8207B5FC=560. The second origin adds f31=32 (loaded at 82532088).
+static const f32 KF_ICE_TIMEBAR_X       = 32.0f;
+static const f32 KF_ICE_TIMEBAR_Y       = 418.0f;
+static const f32 KF_ICE_TIMEBAR_START   = 560.0f;
+static const f32 KF_ICE_TIMEBAR2_Y_STEP = 32.0f;
 
 // The menu-string clamp diagnostic: RefreshMenu substitutes it for any candidate
 // label whose length exceeds the cell stride (kept faithful to the body's guard).
@@ -233,15 +223,12 @@ void ICEController::ConstructMenus()
     // value inside the controller). The main bar takes the fixed HUD origin + start;
     // the second bar is offset +32 vertically below it. The trailing Construct flag is
     // 0 for the main bar and 1 for the second bar (the recovered per-bar immediate).
-    // FLAG (time-bar args): the origin/start floats are placeholders; the trailing
-    // marker-count / flags args are zeroed; only the final flag (0 vs 1) is recovered.
+    // The trailing byte occupies r7 after the three float arguments (ARTIST
+    // 825320C8 and 825320EC); there are no intervening integer arguments.
     mTimeBar.Construct(KF_ICE_TIMEBAR_X, KF_ICE_TIMEBAR_Y, KF_ICE_TIMEBAR_START,
-                       KI_ICE_TIMEBAR_ARG_DEFAULT, KI_ICE_TIMEBAR_ARG_DEFAULT,
-                       KI_ICE_TIMEBAR_ARG_DEFAULT, KU_ICE_TIMEBAR_FLAG_MAIN);
+                       KU_ICE_TIMEBAR_FLAG_MAIN);
     mTimeBar2.Construct(KF_ICE_TIMEBAR_X, KF_ICE_TIMEBAR_Y + KF_ICE_TIMEBAR2_Y_STEP,
-                        KF_ICE_TIMEBAR_START,
-                        KI_ICE_TIMEBAR_ARG_DEFAULT, KI_ICE_TIMEBAR_ARG_DEFAULT,
-                        KI_ICE_TIMEBAR_ARG_DEFAULT, KU_ICE_TIMEBAR_FLAG_2);
+                        KF_ICE_TIMEBAR_START, KU_ICE_TIMEBAR_FLAG_2);
 
     // Seed the logo / wide-screen-marker / info-list geometry the editor HUD draws.
     // The source spine writes a block of fixed layout floats into the target-box /

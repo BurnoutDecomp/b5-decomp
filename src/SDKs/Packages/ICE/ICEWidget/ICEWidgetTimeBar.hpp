@@ -2,6 +2,7 @@
 #define SDKS_PACKAGES_ICE_ICEWIDGET_ICEWIDGETTIMEBAR_HPP
 
 #include "types.hpp"
+#include "SDKs/Packages/ICE/ICEMath.hpp"
 #include <cstddef>                                       // offsetof
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidget.hpp"     // ICE::ICEWidget base
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidgetIcon.hpp" // ICE::ICEWidgetIcon (the embedded play-head icon)
@@ -31,7 +32,7 @@
 //                              initialises all 150 (the loop runs 15 times, each
 //                              pass filling a 800-byte = 10-element group); Reset
 //                              clears miNumMarkers of them; Render walks element `e`
-//                              at this+e*80, reading the four embedded poly/colour
+//                              at this+e*80, reading the four embedded colour
 //                              lanes (+0x00/+0x10/+0x20/+0x30), an "is-keyframe"
 //                              flag (+0x40) and the element's normalised time
 //                              (+0x44). 150*80 == 12000 == miNumMarkers's offset.
@@ -69,14 +70,14 @@
 //       pinned below; the wide gaps between named fields (the read-out scratch
 //       block around +0x2F10..+0x2F67 and unused padding) are modelled as reserved
 //       byte arrays rather than invented fields. The marker element's internal
-//       shape (poly region / flag / time) is itself asm-derived; see the .cpp.
+//       shape (colour vectors / byte flag / time) is itself asm-derived; see the .cpp.
 //
 // FLAG: the read-out block accessed by Render through the local digit-count helper
 //       (offsets 12100/12101/12104/12108/12112/12116/12120/12124/12128/12132/
 //       12152/12156) is modelled as a packed reserved region with the handful of
 //       individually-touched fields named where their role is clear; the remainder
 //       are reserved bytes (no independent attestation of each role). Those
-//       reserved read-out fields are therefore NOT driven by Render/SetTimeInfo in
+//       reserved read-out fields are therefore NOT fully driven by Render/SetTimeInfo in
 //       this reconstruction (the read-out digit/threshold maths is summarised).
 // ============================================================================
 
@@ -92,13 +93,11 @@ namespace ICE
     // FLAG: element field names/offsets are derived from the body accesses.
     struct ICEWidgetTimeBarMarker
     {
-        f32 maPolyA[4];         // +0x00  first embedded poly/colour lane
-        f32 maPolyB[4];         // +0x10  second embedded poly/colour lane
-        f32 maPolyC[4];         // +0x20  third embedded poly/colour lane
-        f32 maPolyD[4];         // +0x30  fourth embedded poly/colour lane
-        s32 miIsKeyframe;       // +0x40  non-zero -> draw the keyframe sub-box
-        f32 mfTime;             // +0x44  normalised time of this element along the bar
-        u8  maReserved48[0x08]; // +0x48  reserved (cleared, not independently attested)
+        // ARTIST Render passes +0x20 and +0x30 as colour arguments, separately
+        // from its stack Poly. Four vector stores establish native alignment.
+        Vector4 maColours[4];   // +0x00..+0x30
+        u8 mbIsKeyframe;        // +0x40 (stb/lbz)
+        f32 mfTime;             // +0x44
     };
 
     // Marker array capacity: 150 elements (Construct's loop runs 15 passes, each
@@ -116,7 +115,7 @@ namespace ICE
         // the .cpp).
         // ------------------------------------------------------------------
         void Construct(f32 lfX, f32 lfY, f32 lfStart,
-                       s32 liArg5, s32 liArg6, s32 liArg7, u8 lbCompact);
+                       u8 lbCompact);
 
         // ------------------------------------------------------------------
         // Draw the whole bar: track background, the per-marker segment boxes, the
@@ -146,26 +145,27 @@ namespace ICE
         ICEWidgetTimeBarMarker  maMarkers[KI_ICE_TIMEBAR_MAX_MARKERS];    // +0x0000  per-take marker array (80B stride)
         s32                     miNumMarkers;                             // +0x2EE0  live marker count (12000)
         ICEWidgetIcon           mIcon;                                   // +0x2EE4  embedded play-head icon (12004)
-        s32                     mbShowIcon;                               // +0x2EF4  enable the play-head icon (12020)
+        u8                      mbShowIcon;                               // +0x2EF4  enable the play-head icon (12020)
         f32                     mfScreenLeft;                             // +0x2EF8  bar screen left / cursor time (12024)
         f32                     mfTrackFlagA;                             // +0x2EFC  read-out gate flag/time (12028)
-        s32                     mbHasSelection;                           // +0x2F00  selection-present flag (12032)
+        u8                      mbHasSelection;                           // +0x2F00  selection-present flag (12032)
         f32                     mfSelFlagB;                               // +0x2F04  second selection/loop flag (12036)
         s32                     mbLoopActive;                             // +0x2F08  loop-marker active flag (12040)
-        s32                     mbShowAux;                                // +0x2F0C  auxiliary read-out flag (12044)
-        u8                      maReservedReadout[0x58];                  // +0x2F10  numeric read-out scratch block (12048..12131)
+        u8                      mbShowAux;                                // +0x2F0C  auxiliary read-out flag (12044)
+        CGS_ALIGN(4) u8         maReservedReadout[0x58];                  // +0x2F10  numeric read-out scratch block (12048..12131)
         s32                     miMarkerSelA;                             // +0x2F68  selection/edit marker index (12136; -1 == unset)
         s32                     miMarkerSelB;                             // +0x2F6C  second marker step/index (12140)
         f32                     mfLoopStart;                              // +0x2F70  loop in-marker time (12144; -1 == unset)
         f32                     mfLoopEnd;                                // +0x2F74  loop out-marker time (12148; -1 == unset)
-        u8                      maReserved2F78[0x08];                     // +0x2F78  two more read-out values (12152/12156)
+        s32                     miLoopStartFrame;                         // +0x2F78  integer frame index (JoyHandler stw / Render lwz)
+        s32                     miLoopEndFrame;                           // +0x2F7C  integer frame index
         f32                     mfBarLength;                              // +0x2F80  bar length lane (12160)
         f32                     mfTimeMin;                                // +0x2F84  window time min (12164)
         f32                     mfDomainLo;                               // +0x2F88  time->screen domain low (12168)
         f32                     mfDomainHi;                               // +0x2F8C  time->screen domain high (12172)
         f32                     mfBarX;                                   // +0x2F90  screen X origin (12176)
         f32                     mfBarY;                                   // +0x2F94  screen Y origin / centre line (12180)
-        s32                     mbCompact;                                // +0x2F98  compact/minimised layout flag (12184)
+        u8                      mbCompact;                                // +0x2F98  compact/minimised layout flag (12184)
     };
 
     // Pin the offsets the four bodies read/write. The base is empty (EBO), so the
@@ -195,8 +195,13 @@ namespace ICE
 
     // The marker element is 80 bytes (the +80 stride the bodies walk); the two fields
     // the bodies read by offset are pinned.
+    CGS_STATIC_ASSERT((__alignof(ICEWidgetTimeBarMarker) == 16), "ICEWidgetTimeBarMarker native vector alignment");
+    CGS_STATIC_ASSERT((sizeof(ICEWidgetTimeBar) == 0x2FA0), "ICEWidgetTimeBar native extent");
+    CGS_STATIC_ASSERT((sizeof(((ICEWidgetTimeBarMarker*)0)->mbIsKeyframe) == 1), "timebar marker flag is a byte");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, miLoopStartFrame) == 0x2F78), "timebar start frame offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, miLoopEndFrame) == 0x2F7C), "timebar end frame offset");
     CGS_STATIC_ASSERT((sizeof(ICEWidgetTimeBarMarker) == 80), "ICEWidgetTimeBarMarker stride must be 80");
-    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBarMarker, miIsKeyframe) == 0x40), "ICEWidgetTimeBarMarker::miIsKeyframe offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBarMarker, mbIsKeyframe) == 0x40), "ICEWidgetTimeBarMarker::mbIsKeyframe offset");
     CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBarMarker, mfTime)       == 0x44), "ICEWidgetTimeBarMarker::mfTime offset");
 }
 
