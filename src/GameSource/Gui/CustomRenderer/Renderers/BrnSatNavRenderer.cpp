@@ -33,6 +33,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h" // Im2dRenderBuffer (SetState/Render)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the Apt 2D command buffer)
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"  // CgsGui::AptIm2dRenderBuffer (set slot 0)
 #include "GameSource/Gui/BrnCustomRendererManager.h"    // BrnGui::SetMaskRect (the mask push helper)
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // vertex
@@ -975,16 +976,6 @@ void SatNavRenderer::RenderIconsForSatNav(
                      lClosest.meSatNavIconType, lClosest.muEventTypeIndex, lpRenderBuffer);
 }
 
-// The immediate-mode layer's default blend / texture state singletons (X360 pointer-valued
-// globals dword_83010F20 / dword_83010F3C -- the ImRendererBase state library's standard
-// blend + untextured texture states). ⭐ H3b PC fold: the command dispatch's
-// IM_CMD_SET_STATE_BLEND case is value-independent (it installs the standard alpha-over
-// state) and a null TextureState resets stage 0 to the no-texture path, so both
-// singletons fold to null -- the calls stay (they are the state RESET brackets the
-// console emits), the pointers carry no payload on this host.
-const renderengine::BlendState* const   gpDefaultImBlendState   = 0; // dword_83010F20
-const renderengine::TextureState* const gpDefaultImTextureState = 0; // dword_83010F3C
-
 // 0x8245A3A0 -- build the four-vertex quad (top-left, bottom-left, top-right, bottom-right) for
 // one sat-nav icon and submit it through the immediate-mode render buffer. The quad colour is the
 // renderer's map-quad colour byte-swapped to the vertex RGBA packing; the four UVs come from the
@@ -1074,7 +1065,7 @@ void SatNavRenderer::RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfH
     }
 
     lpRenderBuffer->SetState(mapIconTextureStates[luRow]);
-    lpRenderBuffer->SetState(gpDefaultImBlendState);
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
 }
 
@@ -1214,8 +1205,8 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 
     // ---- the draw bracket (X360 @0x82466254-0x82466280) ----
     lrCmd.BeginRendering();
-    lrCmd.SetState(gpDefaultImBlendState);
-    lrCmd.SetState(gpDefaultImTextureState);
+    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
+    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpTextureState_Untextured);
     lrCmd.SetTransform(mTransform);
 
     // Lazy map / mask texture states from the payload textures (X360 @0x82466288 /
@@ -1225,9 +1216,16 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
             mpHeapAllocator, &mMapTextureStateResource, mRenderSatNavEvent.mpMapTexture);
     lrCmd.SetState(mpMapTextureState);
 
-    // The map BLEND state is created here on console (@0x824663A4) but never bound in
-    // this pass (the default blend stays active) -- on the PC fold the dispatch's blend
-    // case is value-independent, so the unused creation folds away entirely.
+    if (mpMapBlendState == 0)
+    {
+        renderengine::BlendState::Parameters lParams;
+        lParams.maBlendFactor[0] = 0x07060600u;
+        lParams.muState4 = 7;
+        lParams.mbHasCustomBlendFactors = 1;
+        const rw::ResourceDescriptor lDescriptor = renderengine::BlendState::GetResourceDescriptor(lParams);
+        mMapBlendStateResource = mpHeapAllocator->DoAllocate(lDescriptor, 0);
+        mpMapBlendState = renderengine::BlendState::Initialize(mMapBlendStateResource, lParams);
+    }
 
     if (mpMaskTextureState == 0)
         mpMaskTextureState = CreatePayloadTextureState(
@@ -1246,8 +1244,8 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     lrCmd.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
     RenderIconsForSatNav(&lrCmd);
     lrCmd.PopMask();
-    lrCmd.SetState(gpDefaultImBlendState);
-    lrCmd.SetState(gpDefaultImTextureState);
+    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
+    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpTextureState_Untextured);
     lrCmd.EndRendering();
 
     if (miSatNavRendererPM >= 0)
