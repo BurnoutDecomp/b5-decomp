@@ -251,13 +251,13 @@ namespace BrnGame
     {
         mxRendererFlags = 0;                              // +4
         CgsModule::IOBuffer::Construct();                 // *(+0) status = constructed
-        std::memset(&mParticleData, 0, sizeof(mParticleData));   // +24 = 0 (the particle-frame word; the
+        mParticleData.muChangedEffects = 0;                // ARTIST only clears +24.
         mParticleInterThreadEventQueue.Construct();       // +0x5980
         mbIsRenderingAtFullFrameRate = true;              // +0x99B0 = 1
         mabThreeThreadsOverBudget[0] = false;             // +0x99B1..B3 = 0
         mabThreeThreadsOverBudget[1] = false;
         mabThreeThreadsOverBudget[2] = false;
-        std::memset(&mSnapShotRequest, 0, sizeof(mSnapShotRequest));  // the take flag (+0x99AC) = 0
+        mSnapShotRequest.mbTakeSnapShot = false;           // ARTIST preserves all four coordinates.
         mbCalibrationUnfriendlyEnablePostFx = true;       // +0x99BB = 1
         mhCalibrationTextureHandle.Clear();               // +0x9994/+0x9998 = 0 (ResourceHandle::Clear)
         mbIsDiskError = false;                            // +0x99BD = 0

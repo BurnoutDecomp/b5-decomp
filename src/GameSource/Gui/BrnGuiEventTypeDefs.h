@@ -1121,6 +1121,26 @@ struct GuiOverlayCompleteEvent : public CgsGui::GuiEvent<189>
         meLeaveMethod = leLeaveMethod;
     }
 };
+// ARTIST823CB82C reads the payload returned by GetOutEventQueue, without a GUI header.
+struct GuiOverlayCompletePayload : public CgsModule::Event
+{
+    CgsID mOverlayId;
+    GuiOverlayCompleteEvent::LeaveMethod meLeaveMethod;
+};
+CGS_STATIC_ASSERT(offsetof(GuiOverlayCompletePayload, meLeaveMethod) == 8,
+    "ARTIST overlay completion payload leave method");
+
+// DecFIGS GuiSnapShotRequested h:3556; ARTIST native event362 is four floats.
+struct GuiSnapShotRequested : public CgsModule::Event
+{
+    f32 mfStartX;
+    f32 mfStartY;
+    f32 mfWidth;
+    f32 mfHeight;
+    s32 GetEventType() const { return 362; }
+};
+CGS_STATIC_ASSERT(sizeof(GuiSnapShotRequested) == 16, "ARTIST snapshot event payload");
+
 
 // ===================================================================================
 // BrnGui::GuiOverlayFullInfoResponse -- the full overlay description record the
