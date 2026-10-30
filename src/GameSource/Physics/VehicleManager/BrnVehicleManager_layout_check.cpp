@@ -223,7 +223,7 @@ namespace Vehicle
         // and none of the old padding runs survived.
 
         // ---- per-car impact bookkeeping (DWARF :923..:934) -------------------------------------
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::mafNoImpactTimeSeconds) == 32),
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->mafNoImpactTimeSeconds) == 32),
                       "8 x f32: HandleRaceCarRaceCarContact seeds it with lfsx/stfsx, so it is a FLOAT array");
 
         // ---- the per-car vulnerability / grinding arrays (DWARF :937..:951) --------------------
@@ -307,10 +307,10 @@ namespace Vehicle
         // the array on picks it up (KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK is +812 once it is rebased
         // on the new term; 172616 + 812 == 173428 -> 16-aligned 173440). Seventh move, seventh named
         // drift term.
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::maeImpactType) == 32), "EImpactType[8]");
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::mauImpactScore) == 8), "uint8[8]");
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32), "f32[8] -- NOT a scalar threshold");
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::mafOtherGrindingPlayerDurationSeconds) == 32), "f32[8] -- NOT a scalar threshold");
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->maeImpactType) == 32), "EImpactType[8]");
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->mauImpactScore) == 8), "uint8[8]");
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->mafPlayerGrindingOtherDurationSeconds) == 32), "f32[8] -- NOT a scalar threshold");
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->mafOtherGrindingPlayerDurationSeconds) == 32), "f32[8] -- NOT a scalar threshold");
         CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->mStuckInCollisionTestCacheSphere) == 16), "one stvx128 == 16 bytes");
 
         // =========================================================================================
@@ -375,9 +375,9 @@ namespace Vehicle
                           == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maRaceCarEntityIDs[8]");
         CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->maRaceCarHandlingBodyIDs) / sizeof(u64)
                           == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maRaceCarHandlingBodyIDs[8]");
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::maeRaceCarTypes) / sizeof(BrnWorld::ERaceCarType)
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->maeRaceCarTypes) / sizeof(BrnWorld::ERaceCarType)
                           == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maeRaceCarTypes[8]");
-        CGS_STATIC_ASSERT((sizeof(VehicleManager::mauNetworkCarHiddenFramesRemaining) / sizeof(u32)
+        CGS_STATIC_ASSERT((sizeof(((VehicleManager*)0)->mauNetworkCarHiddenFramesRemaining) / sizeof(u32)
                           == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "mauNetworkCarHiddenFrames[8]");
         // AND the per-car debug components. There is no span and no cast any more: this is a real
         // array of the real class, so what is checkable here is the count, and that the element's
