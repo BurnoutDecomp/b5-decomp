@@ -179,6 +179,9 @@ void RaceCarEntityModule::SendGameEvents(RaceCarEntityModuleIO::OutputBuffer_Pos
         BrnGameState::GameStateModuleIO::StreamingCompleteEvent lEvent;
         lEvent.meModule = BrnGameState::GameStateModuleIO::StreamingCompleteEvent::E_MODULE_RACE_CAR_ENTITY;
         lEvent.mUserId = mRaceCarStreamer.GetCarModelId(0);
+        // FLAG PC divergence: see StreamingCompleteEvent::mbPlayerCarLoadFailed and the
+        // car-select release in UpdateStreaming.
+        lEvent.mbPlayerCarLoadFailed = mbInCarSelectScreen && mRaceCarStreamer.HasDesiredRaceCarLoadFailed(0);
         lpOutput->GetGameEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lEvent),
             BrnGameState::GameStateModuleIO::E_EVENT_STREAMING_COMPLETE, sizeof(lEvent));
@@ -892,6 +895,15 @@ void RaceCarEntityModule::UpdateStreaming(
             // ATTACHED -> WAITING step and it is what retired the promote fiction.
             OnRaceCarResourcesLoaded( static_cast<EActiveRaceCarIndex>( liCar ),
                                       lpOutput->GetVehicleInputInterface() );
+        }
+        else if( mbInCarSelectScreen && mRaceCarStreamer.HasDesiredRaceCarLoadFailed( liCar ) )
+        {
+            // FLAG PC divergence: in the junkyard the player can pick a car whose data is not
+            // on disk (see RaceCarStreamer::HasDesiredRaceCarLoadFailed). It never loads, so
+            // holding the edge here kept CarSelectManager in E_STATE_CHANGING_CAR for ever and
+            // every later pick was only cached -- no car dropped in again. Let the edge fire
+            // so the screen returns to car select and another car can be chosen; the car
+            // itself stays waiting for its load.
         }
         else
         {

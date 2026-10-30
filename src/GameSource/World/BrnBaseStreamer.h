@@ -9,12 +9,12 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<N,ALIGN>
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"       // CgsContainers::RingBuffer<s32>
 
-// The load/unload completion events appear only as pointer parameters of the
-// pure-virtual notification hooks below, so a forward declaration is sufficient.
-// GameDataAssetEvent is fully homed in BrnGameDataEvents.h; UnloadGameDataResponse
-// is not yet reconstructed (FLAG: pointer-only use here; resolve when its home lands).
+// GameDataAssetEvent is held BY VALUE (the PC-held early replies below), so its home
+// header is included. UnloadGameDataResponse appears only as a pointer parameter of the
+// notification hooks and is not yet reconstructed (FLAG: pointer-only use here; resolve
+// when its home lands).
+#include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"     // GameDataIO::GameDataAssetEvent
 namespace BrnResource { namespace GameDataIO {
-    struct GameDataAssetEvent;
     struct UnloadGameDataResponse;
 } }
 
@@ -170,6 +170,12 @@ public:
 
     bool IsStreamComplete() const;
 
+    // FLAG PC divergence (not an X360 member): true while the last load of this wanted
+    // entry FAILED and it has not loaded since. On PC that means its data is not on disk
+    // (a car the profile owns but the retail data does not ship), so the base streamer's
+    // console retry can never succeed; callers that would wait on it for ever ask here.
+    bool HasEntryLoadFailed( CgsID lId, u64 luUserId ) const;
+
 protected:
     // BrnBaseStreamer.h:201 (DWARF, 9 params) -- X360 0x827C4A60. The parameter set was
     // previously modelled without the pending-entry storage and the slot-pool flag; both are
@@ -224,6 +230,26 @@ private:
     CgsContainers::RingBuffer<s32> mPendingEntryQueue; // BrnBaseStreamer.h:249 (X360 +0x1060)
     bool                       mbSlotPoolSystem;      // BrnBaseStreamer.h:250 (X360 +0x1074)
 
+    // FLAG PC divergence (not in the X360 layout): GameData replies that arrived before
+    // their entry became the current one -- see UpdateLoading's E_LOADSTREAM_WAIT. At most
+    // two loads are ever in flight (the current entry and one pipelined pending entry).
+    static const s32 KI_MAX_HELD_REPLIES = 2;
+    BrnResource::GameDataIO::GameDataAssetEvent maHeldReplies[KI_MAX_HELD_REPLIES];
+    s32                        miNumHeldReplies;
+
+    // FLAG PC divergence (not in the X360 layout): the wanted entries whose last load
+    // failed -- see HasEntryLoadFailed. Bounded by the largest streamer's list length
+    // (BaseStreamer<64>); a failure past the bound is simply not recorded, which leaves
+    // that entry with the console's behaviour.
+    struct FailedLoad
+    {
+        CgsID mResourceId;
+        u64   muUserId;
+    };
+    static const s32 KI_MAX_FAILED_LOADS = 64;
+    FailedLoad                 maFailedLoads[KI_MAX_FAILED_LOADS];
+    s32                        miNumFailedLoads;
+
     // Private helpers (declared for home completeness; not bodied by this TU).
     void ClearCurrentList();
     s32  CalculatePotentialLoadList();
@@ -240,6 +266,11 @@ private:
     void PostLoadRequest( s32 liListIndex );
     s32  AttemptLoad();
     s32  AttemptUnload();
+    // PC divergence helper (not a DWARF member): file one GameData reply under the
+    // held-reply store, rejecting a reply for an entry that has no load in flight.
+    void HoldLoadReply( const BrnResource::GameDataIO::GameDataAssetEvent& lrReply );
+    // PC divergence helper: record (lbFailed) or forget one entry's failed load.
+    void SetEntryLoadFailed( CgsID lId, u64 luUserId, bool lbFailed );
     bool UpdateLoading();
     bool UpdateUnloading();
 };

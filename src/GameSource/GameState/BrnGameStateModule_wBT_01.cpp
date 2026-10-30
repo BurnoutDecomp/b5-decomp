@@ -59,6 +59,8 @@ void GameStateModule::ProcessStreamingCompleteEvent(const GameStateModuleIO::Str
                 CGS_ASSERT(lpStreamingCompleteEvent->meModule ==
                                GameStateModuleIO::StreamingCompleteEvent::E_MODULE_RACE_CAR_ENTITY,
                            "Signalled streaming complete from wrong module, get Rob C");
+                // FLAG PC divergence: carry the "player car can never load" bit along.
+                mCarSelectManager.SetPlayerCarLoadFailed(lpStreamingCompleteEvent->mbPlayerCarLoadFailed);
                 mCarSelectManager.StreamingFinished(lpStreamingCompleteEvent->mUserId, lpActionQueue);
             }
         }
