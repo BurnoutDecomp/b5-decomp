@@ -695,13 +695,15 @@ union luai_Cast { double l_d; long l_l; };
 ** also add -DLUA_USE_DLOPEN.)
 ** If you do not want any kind of dynamic library, undefine all these
 ** options.
-** By default, _WIN32 gets LUA_DL_DLL and MAC OS X gets LUA_DL_DYLD.
+** By default, desktop _WIN32 gets LUA_DL_DLL and MAC OS X gets LUA_DL_DYLD.
+** Xbox 360 defines Windows platform symbols for path conventions, but the
+** game's ARTIST Lua build leaves dynamic-library loading disabled.
 */
 #if defined(LUA_USE_DLOPEN)
 #define LUA_DL_DLOPEN
 #endif
 
-#if defined(LUA_WIN)
+#if defined(LUA_WIN) && !defined(_XBOX)
 #define LUA_DL_DLL
 #endif
 
