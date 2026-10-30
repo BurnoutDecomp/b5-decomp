@@ -33,24 +33,10 @@ namespace
         rw::IResourceAllocator* lpAllocator,
         const renderengine::DepthStencilState::Parameters* lpParameters)
     {
-        renderengine::ResourceDescriptor5 lDescriptor;
-        renderengine::DepthStencilState::GetResourceDescriptor(&lDescriptor, lpParameters);
-
-        rw::ResourceDescriptor lAllocDescriptor;
-        lAllocDescriptor.m_baseResourceDescriptors[0].m_size      = lDescriptor.maEntries[0].muSize;
-        lAllocDescriptor.m_baseResourceDescriptors[0].m_alignment = lDescriptor.maEntries[0].muAlignment;
-        lAllocDescriptor.m_baseResourceDescriptors[1].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[1].m_alignment = 1u;
-        lAllocDescriptor.m_baseResourceDescriptors[2].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[2].m_alignment = 1u;
-        lAllocDescriptor.m_baseResourceDescriptors[3].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[3].m_alignment = 1u;
-
-        rw::Resource lResource = lpAllocator->DoAllocate(lAllocDescriptor, 0);
-        renderengine::DepthStencilState* lpStateHandle =
-            static_cast<renderengine::DepthStencilState*>(lResource.m_baseResources[0]);
-
-        return renderengine::DepthStencilState::Initialize(&lpStateHandle, lpParameters);
+        const rw::ResourceDescriptor descriptor =
+            renderengine::DepthStencilState::GetResourceDescriptor(*lpParameters);
+        const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+        return renderengine::DepthStencilState::Initialize(resource, *lpParameters);
     }
 }
 
@@ -72,7 +58,7 @@ void CgsDepthStencilStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
 
     // The shared fixed portion of the parameter block (identical for all 5 states; matches
     // the default depth/stencil params renderengine::StateHelper::Initialize builds).
-    renderengine::DepthStencilState::Parameters lParameters = {};
+    renderengine::DepthStencilState::Parameters lParameters;
     lParameters.muState4           = renderengine::DepthStencilState::E_FUNCTION_ALWAYS; // == 7
     lParameters.muState8           = renderengine::DepthStencilState::E_FUNCTION_ALWAYS; // == 7
     lParameters.muStencilReadMask  = 0xFFFFFFFFu;

@@ -1,7 +1,6 @@
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 // Reconstructed from the shipped console build of
 //   CgsBlendStateFactory::Construct  (2248 bytes, 562 instructions)
 //
@@ -28,54 +27,14 @@ namespace
     // KU_BLEND_FACTOR_WORD.
     const u32 KU_BLEND_FACTOR_DEFAULT = 0x07060706u;
 
-    // The rw resource allocator's Create slot, at vtable +0x10. Construct reaches the
-    // allocator through exactly one indirect call: load the allocator argument's vtable,
-    // take its +0x10 slot, and call it with (out, allocator, descriptor, 0) -- the same
-    // call the two sibling factories and the immediate-mode builders make.
-    class ResourceAllocator
+    // ARTIST inlines this resource sequence for each native factory slot.
+    renderengine::BlendState* CreateBlendState(rw::IResourceAllocator* allocator,
+        const renderengine::BlendState::Parameters* parameters)
     {
-    public:
-        // NOT a vtable slot. Declaring this `virtual` put it at slot 0, which on the
-        // rw::IResourceAllocator actually behind the reinterpret_cast is the VIRTUAL
-        // DESTRUCTOR -- so the call allocated nothing and left the allocator's vptr
-        // downgraded to the inert base for the rest of the run. Call the interface by
-        // NAME instead; see CgsResourceAllocatorCreate.h.
-        void* Create(
-            void* lpStateHandlesOut,
-            ResourceAllocator* /*lpAllocator*/,
-            const void* lpDescriptor,
-            int /*liFlags*/)
-        {
-            return CgsGraphics::ResourceAllocatorCreate(this, lpStateHandlesOut, lpDescriptor);
-        }
-    };
-
-    // Carve the backing store for one blend state through the supplied resource
-    // allocator, then initialise it. This is the block the original compiler INLINED nine
-    // times (each inlining keeps its own 32-byte out buffer; the five-word handle array
-    // is shared and zeroed once before the first slot). Re-rolled here, exactly the
-    // shape the sibling CgsRasterizerStateFactory.cpp's CreateRasterizerState already
-    // has:
-    //     GetResourceDescriptor  -> allocator vtable +0x10 -> copy 5 handle words
-    //                            -> BlendState::Initialize
-    renderengine::BlendMaterialState* CreateBlendState(
-        ResourceAllocator* lpAllocator,
-        const renderengine::BlendStateParameters* lpParameters)
-    {
-        renderengine::ResourceDescriptor5 lDescriptor;
-        renderengine::BlendState::GetResourceDescriptor(&lDescriptor, lpParameters);
-
-        renderengine::BlendMaterialState* lapStateHandles[5] = {};
-
-        lpAllocator->Create(lapAllocatedHandles, lpAllocator, &lDescriptor, 0);
-
-        // A five-iteration, 4-byte-stride copy out of the allocator's out buffer into the
-        // handle array Initialize is given.
-        for (int liHandle = 0; liHandle < 5; ++liHandle)
-            lapStateHandles[liHandle] = lapAllocatedHandles[liHandle];
-
-        return static_cast<renderengine::BlendMaterialState*>(
-            renderengine::BlendState::Initialize(lapStateHandles, lpParameters));
+        const rw::ResourceDescriptor descriptor =
+            renderengine::BlendState::GetResourceDescriptor(*parameters);
+        const rw::Resource resource = allocator->DoAllocate(descriptor, 0);
+        return renderengine::BlendState::Initialize(resource, *parameters);
     }
 }
 
@@ -105,14 +64,8 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     for (u32 luSlot = 0; luSlot < E_FACTORY_BLEND_STATE_COUNT; ++luSlot)
         saBlendStates[luSlot] = 0;
 
-    // The allocator is passed straight through to the TU-local single-entry-point shim.
-    // reinterpret_cast, not static_cast, because the shim is not related to
-    // rw::IResourceAllocator by inheritance; the POINTER VALUE is unchanged (the shim has
-    // no vtable and no bases) and ResourceAllocatorCreate casts it straight back.
-    ResourceAllocator* lpAllocatorShim = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-
     // ---- the thirteen fields every one of the nine blocks sets identically ----------
-    renderengine::BlendStateParameters lParameters = {};
+    renderengine::BlendStateParameters lParameters;
     lParameters.maBlendFactor[1] = KU_BLEND_FACTOR_DEFAULT;   // block +0x04, every block
     lParameters.maBlendFactor[2] = KU_BLEND_FACTOR_DEFAULT;   // block +0x08
     lParameters.maBlendFactor[3] = KU_BLEND_FACTOR_DEFAULT;   // block +0x0C
@@ -141,7 +94,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0u;
     lParameters.mbState16               = 0u;
     saBlendStates[E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA],
                "saBlendStates[ eFactoryBlendState_Opaque_Modulate_NoAlphaTest_DestRGBA ]");
 
@@ -156,7 +109,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0u;
     lParameters.mbState16               = 0u;
     saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_MODULATE_NO_ALPHA_TEST_DEST_RGBA] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_MODULATE_NO_ALPHA_TEST_DEST_RGBA],
                "saBlendStates[ eFactoryBlendState_Transparent_Modulate_NoAlphaTest_DestRGBA ]");
 
@@ -169,7 +122,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0u;
     lParameters.mbState16               = 0u;
     saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_ADDITIVE_NO_ALPHA_TEST_DEST_RGBA] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_ADDITIVE_NO_ALPHA_TEST_DEST_RGBA],
                "saBlendStates[ eFactoryBlendState_Transparent_Additive_NoAlphaTest_DestRGBA ]");
 
@@ -182,7 +135,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0u;
     lParameters.mbState16               = 0u;
     saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_SUBTRACTIVE_NO_ALPHA_TEST_DEST_RGBA] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_SUBTRACTIVE_NO_ALPHA_TEST_DEST_RGBA],
                "saBlendStates[ eFactoryBlendState_Transparent_Subtractive_NoAlphaTest_DestRGBA ]");
 
@@ -195,7 +148,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0u;
     lParameters.mbState16               = 0u;
     saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_ADDITIVE_ALPHA_ONE_NO_ALPHA_TEST_DEST_RGBA] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_ADDITIVE_ALPHA_ONE_NO_ALPHA_TEST_DEST_RGBA],
                "saBlendStates[ eFactoryBlendState_Transparent_AdditiveAlphaOne_NoAlphaTest_DestRGBA ]");
 
@@ -221,7 +174,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0u;
     lParameters.mbState16               = 0u;
     saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_ADDITIVE_RGB_NO_ALPHA_TEST_DEST_RGB] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_ADDITIVE_RGB_NO_ALPHA_TEST_DEST_RGB],
                "saBlendStates[ eFactoryBlendState_Transparent_AdditiveRGB_NoAlphaTest_DestRGB ]");
 
@@ -234,7 +187,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0u;
     lParameters.mbState16               = 0u;
     saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_ADDITIVE_INV_DEST_COLOR_NO_ALPHA_TEST_DEST_RGBA] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_TRANSPARENT_ADDITIVE_INV_DEST_COLOR_NO_ALPHA_TEST_DEST_RGBA],
                "saBlendStates[ eFactoryBlendState_Transparent_AdditiveInvDestColor_NoAlphaTest_DestRGBA ]");
 
@@ -249,7 +202,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0u;
     lParameters.mbState16               = 0u;
     saBlendStates[E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST],
                "saBlendStates[ eFactoryBlendState_NoColourWrite_NoAlphaTest ]");
 
@@ -265,7 +218,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState17               = 0x80u;
     lParameters.mbState16               = 1u;
     saBlendStates[E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_ALPHA_TEST] =
-        CreateBlendState(lpAllocatorShim, &lParameters);
+        CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_ALPHA_TEST],
                "saBlendStates[ eFactoryBlendState_NoColourWrite_AlphaTest ]");
 }

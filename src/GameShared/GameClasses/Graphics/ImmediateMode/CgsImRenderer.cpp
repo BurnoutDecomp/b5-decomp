@@ -94,15 +94,10 @@ const BlendState* ImRendererBase::ConstructNoAlphaTestBlendState(rw::IResourceAl
     lParameters.mbState14 = 0;
     lParameters.mbState16 = 0;
 
-    renderengine::BlendMaterialState* lapStateHandles[5] = {};
-    void* lpDescriptor[12] = {};
-    renderengine::BlendState::GetResourceDescriptor(lpDescriptor, &lParameters);
-
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    lpAllocatorIf->Create(lapStateHandles, lpAllocatorIf, lpDescriptor, 0);
-
-    return reinterpret_cast<const BlendState*>(
-        renderengine::BlendState::Initialize(lapStateHandles, &lParameters));
+    const rw::ResourceDescriptor descriptor =
+        renderengine::BlendState::GetResourceDescriptor(lParameters);
+    const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+    return renderengine::BlendState::Initialize(resource, lParameters);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -133,15 +128,10 @@ const BlendState* ImRendererBase::ConstructNoBlendNoAlphaTestBlendState(rw::IRes
     lParameters.mbState14 = 0;
     lParameters.mbState16 = 0;
 
-    renderengine::BlendMaterialState* lapStateHandles[5] = {};
-    void* lpDescriptor[12] = {};
-    renderengine::BlendState::GetResourceDescriptor(lpDescriptor, &lParameters);
-
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    lpAllocatorIf->Create(lapStateHandles, lpAllocatorIf, lpDescriptor, 0);
-
-    return reinterpret_cast<const BlendState*>(
-        renderengine::BlendState::Initialize(lapStateHandles, &lParameters));
+    const rw::ResourceDescriptor descriptor =
+        renderengine::BlendState::GetResourceDescriptor(lParameters);
+    const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+    return renderengine::BlendState::Initialize(resource, lParameters);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -156,25 +146,20 @@ const RasterizerState* ImRendererBase::ConstructRasteriserState(
 
     lParameters.muFillMode               = 0;                 // v5[0]
     lParameters.muCullMode               = static_cast<u32>(leCullMode);  // v5[1] = a2
-    lParameters.muDepthBias              = 0;                 // v5[2] = 0.0f
-    lParameters.muSlopeScaledDepthBias   = 0;                 // v5[3] = 0.0f
-    lParameters.muMultisampleEnable      = 0xFFFFFFFFu;       // v5[4] = -1
-    lParameters.muAntialiasedLineEnable  = 0x0000FFFFu;       // v5[5] = 0xFFFF
-    lParameters.mu8ScissorEnable         = 0;                 // v6
-    lParameters.mu8DepthClipEnable       = 1;                 // v7
-    lParameters.mu8FrontCounterClockwise = 1;                 // v8
-    lParameters.mu8ConservativeRaster    = 0;                 // v9
-    lParameters.mu8PaddingMode           = 1;                 // v10
+    lParameters.mfDepthBias              = 0;                 // v5[2] = 0.0f
+    lParameters.mfSlopeScaleDepthBias   = 0;                 // v5[3] = 0.0f
+    lParameters.muMultiSampleMask      = 0xFFFFFFFFu;       // v5[4] = -1
+    lParameters.muPrimitiveResetIndex  = 0x0000FFFFu;       // v5[5] = 0xFFFF
+    lParameters.mbScissorTestEnable         = 0;                 // v6
+    lParameters.mbMultiSampleAntiAlias       = 1;                 // v7
+    lParameters.mbViewportEnable = 1;                 // v8
+    lParameters.mbHalfPixelOffset    = 0;                 // v9
+    lParameters.mbPrimitiveResetEnable           = 1;                 // v10
 
-    renderengine::ResourceDescriptor5 lDescriptor;
-    renderengine::RasterizerState* lapStateHandles[8] = {};
-    renderengine::RasterizerState::GetResourceDescriptor(&lDescriptor, &lParameters);
-
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    lpAllocatorIf->Create(lapStateHandles, lpAllocatorIf, &lDescriptor, 0);
-
-    return reinterpret_cast<const RasterizerState*>(
-        renderengine::RasterizerState::Initialize(lapStateHandles, &lParameters));
+    const rw::ResourceDescriptor descriptor =
+        renderengine::RasterizerState::GetResourceDescriptor(lParameters);
+    const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+    return renderengine::RasterizerState::Initialize(resource, lParameters);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -208,15 +193,10 @@ const DepthStencilState* ImRendererBase::ConstructDepthStencilState(
     lParameters.mu8Flag4 = 0;              // v12
     lParameters.mu8Flag5 = 0;              // v13
 
-    renderengine::ResourceDescriptor5 lDescriptor;
-    renderengine::DepthStencilState* lapStateHandles[8] = {};
-    renderengine::DepthStencilState::GetResourceDescriptor(&lDescriptor, &lParameters);
-
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    lpAllocatorIf->Create(lapStateHandles, lpAllocatorIf, &lDescriptor, 0);
-
-    return reinterpret_cast<const DepthStencilState*>(
-        renderengine::DepthStencilState::Initialize(lapStateHandles, &lParameters));
+    const rw::ResourceDescriptor descriptor =
+        renderengine::DepthStencilState::GetResourceDescriptor(lParameters);
+    const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+    return renderengine::DepthStencilState::Initialize(resource, lParameters);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -347,15 +327,16 @@ renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAlloca
 // ---------------------------------------------------------------------------------------------------
 void ImRendererBase::ConstructOnceOnly(rw::IResourceAllocator* lpAllocator)
 {
-    // ConstructBlendState's recovered implementation uses `this` as the allocator. The console
-    // passes the allocator in r3 to this helper and forwards that same pointer in r3 to each blend
-    // builder, so preserve that existing helper contract through its class-typed receiver.
-    ImRendererBase* lpAllocatorView = reinterpret_cast<ImRendererBase*>(lpAllocator);
-    mgStateLibrary.mpBlendState_Standard = lpAllocatorView->ConstructBlendState(6, 7, 0);
-    mgStateLibrary.mpBlendState_Additive = lpAllocatorView->ConstructBlendState(6, 1, 0);
-    mgStateLibrary.mpBlendState_Subtractive = lpAllocatorView->ConstructBlendState(6, 7, 1);
-    mgStateLibrary.mpBlendState_SubtractiveColour = lpAllocatorView->ConstructBlendState(6, 1, 4);
-    mgStateLibrary.mpBlendState_Premultiplied = lpAllocatorView->ConstructBlendState(1, 7, 0);
+    mgStateLibrary.mpBlendState_Standard = ConstructBlendState(lpAllocator,
+        D3DBLEND_SRCALPHA, D3DBLEND_INVSRCALPHA, D3DBLENDOP_ADD);
+    mgStateLibrary.mpBlendState_Additive = ConstructBlendState(lpAllocator,
+        D3DBLEND_SRCALPHA, D3DBLEND_ONE, D3DBLENDOP_ADD);
+    mgStateLibrary.mpBlendState_Subtractive = ConstructBlendState(lpAllocator,
+        D3DBLEND_SRCALPHA, D3DBLEND_INVSRCALPHA, D3DBLENDOP_SUBTRACT);
+    mgStateLibrary.mpBlendState_SubtractiveColour = ConstructBlendState(lpAllocator,
+        D3DBLEND_SRCALPHA, D3DBLEND_ONE, D3DBLENDOP_REVSUBTRACT);
+    mgStateLibrary.mpBlendState_Premultiplied = ConstructBlendState(lpAllocator,
+        D3DBLEND_ONE, D3DBLEND_INVSRCALPHA, D3DBLENDOP_ADD);
     mgStateLibrary.mpBlendState_NoAlphaTest = ConstructNoAlphaTestBlendState(lpAllocator);
     mgStateLibrary.mpBlendState_NoBlendNoAlphaTest = ConstructNoBlendNoAlphaTestBlendState(lpAllocator);
 

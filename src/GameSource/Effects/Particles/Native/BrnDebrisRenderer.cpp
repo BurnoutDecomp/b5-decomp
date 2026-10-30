@@ -7,7 +7,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [diag] CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h" // shadow::Device
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h" // renderengine::BlendState*
-#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 #include <cstdio>   // [diag] snprintf (the first-draw witness)
 #include <cstdlib>  // [diag] getenv (the per-array draw witness, BRN_DEBRIS_DIAG)
 
@@ -32,30 +31,6 @@ void ImDeviceSetRasterizerState(void* lpState);
 //   maBlendFactor = { 0x07060701, 0x07060706, 0x07060706, 0x07060706 }
 //   muState15=4  muState4..7=15  muState8=0x87  muState17=1  muState9=0xFFFFFFFF
 //   mbHasCustomBlendFactors=1  mbState10..14=0  mbState16=1
-
-namespace
-{
-    // The rw resource allocator's Create slot; vtable offset +0x10 on X360 (same shape the
-    // immediate-mode blend-state builders use). Declared file-locally so the virtual
-    // dispatch compiles without pulling the full rwcore allocator surface.
-    class ResourceAllocator
-    {
-    public:
-        // NOT a vtable slot. Declaring this `virtual` put it at slot 0, which on the
-        // rw::IResourceAllocator actually behind the reinterpret_cast is the VIRTUAL
-        // DESTRUCTOR -- so the call allocated nothing and left the allocator's vptr
-        // downgraded to the inert base for the rest of the run. Call the interface by
-        // NAME instead; see CgsResourceAllocatorCreate.h.
-        void* Create(
-            void*                   lpResourceOut,
-            ResourceAllocator*      /*lpAllocator*/,
-            const void*             lpDescriptor,
-            int                     /*liFlags*/)
-        {
-            return CgsGraphics::ResourceAllocatorCreate(this, lpResourceOut, lpDescriptor);
-        }
-    };
-}
 
 namespace BrnParticle
 {
@@ -147,19 +122,10 @@ namespace Native
         // Cache the borrowed Im3d renderer (this[0]).
         mpRenderer = lpRenderer;
 
-        // Build the resource descriptor for the parameter block (X360: 48-byte scratch).
-        void* lpDescriptor[12] = {};
-        renderengine::BlendState::GetResourceDescriptor(lpDescriptor, &lParameters);
-
-        // Allocate the backing resource through the allocator's Create slot (vtable +0x10).
-        // X360: (*(*a2 + 16))(v6, a2, v7, 0) -- v6 is a 32-byte state-handle scratch.
-        renderengine::BlendMaterialState* lapStateHandles[8] = {};
-        ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-        lpAllocatorIf->Create(lapStateHandles, lpAllocatorIf, lpDescriptor, 0);
-
-        // Initialize the blend state in place and latch it (this[1]).
-        mpBlendState = reinterpret_cast<renderengine::BlendState*>(
-            renderengine::BlendState::Initialize(lapStateHandles, &lParameters) );
+        const rw::ResourceDescriptor descriptor =
+            renderengine::BlendState::GetResourceDescriptor(lParameters);
+        const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+        mpBlendState = renderengine::BlendState::Initialize(resource, lParameters);
 
         CGS_ASSERT( mpBlendState, "mpBlendState" );
     }

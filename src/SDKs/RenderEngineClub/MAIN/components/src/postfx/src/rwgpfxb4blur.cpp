@@ -508,13 +508,9 @@ namespace postfx
             renderengine::DepthStencilState::Parameters lParameters;
             BuildPostFxDepthStencilParameters(lParameters);
 
-            renderengine::ResourceDescriptor5 lDescriptor;
-            renderengine::DepthStencilState::GetResourceDescriptor(&lDescriptor, &lParameters);
-            m_quadDepthStencilStateResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
-            m_quadDepthStencilState = renderengine::DepthStencilState::Initialize(
-                reinterpret_cast<renderengine::DepthStencilState**>(&m_quadDepthStencilStateResource),
-                &lParameters);
+            const rw::ResourceDescriptor descriptor = renderengine::DepthStencilState::GetResourceDescriptor(lParameters);
+            m_quadDepthStencilStateResource = m_allocator->DoAllocate(descriptor, 0);
+            m_quadDepthStencilState = renderengine::DepthStencilState::Initialize(m_quadDepthStencilStateResource, lParameters);
         }
 
         // asm 0x823FEC0C: the blur quad's vertex program.
@@ -555,13 +551,9 @@ namespace postfx
             renderengine::DepthStencilState::Parameters lParameters;
             BuildPostFxDepthStencilParameters(lParameters);
 
-            renderengine::ResourceDescriptor5 lDescriptor;
-            renderengine::DepthStencilState::GetResourceDescriptor(&lDescriptor, &lParameters);
-            m_scatterDepthStencilStateResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
-            m_scatterDepthStencilState = renderengine::DepthStencilState::Initialize(
-                reinterpret_cast<renderengine::DepthStencilState**>(&m_scatterDepthStencilStateResource),
-                &lParameters);
+            const rw::ResourceDescriptor descriptor = renderengine::DepthStencilState::GetResourceDescriptor(lParameters);
+            m_scatterDepthStencilStateResource = m_allocator->DoAllocate(descriptor, 0);
+            m_scatterDepthStencilState = renderengine::DepthStencilState::Initialize(m_scatterDepthStencilStateResource, lParameters);
         }
 
         // asm 0x823FED7C `*(a1 + 264) = a2[1]` -- the scatter blend state, taken straight from the
@@ -646,26 +638,22 @@ namespace postfx
         // antialiased-line 0xFFFF, scissor off, depth-clip on, front-face CCW, conservative off,
         // padding-mode 1.
         {
-            renderengine::RasterizerState::Parameters lParameters = {};
+            renderengine::RasterizerState::Parameters lParameters;
             lParameters.muFillMode              = 0u;                    // v31[0]
             lParameters.muCullMode              = 0u;                    // v31[1]
-            lParameters.muDepthBias             = 0u;                    // v31[2] == 0.0f
-            lParameters.muSlopeScaledDepthBias  = 0u;                    // v31[3] == 0.0f
-            lParameters.muMultisampleEnable     = static_cast<u32>(-1);  // v31[4]
-            lParameters.muAntialiasedLineEnable = 0xFFFFu;               // v31[5]
-            lParameters.mu8ScissorEnable        = 0u;                    // v32
-            lParameters.mu8DepthClipEnable      = 1u;                    // v33
-            lParameters.mu8FrontCounterClockwise= 1u;                    // v34
-            lParameters.mu8ConservativeRaster   = 0u;                    // v35
-            lParameters.mu8PaddingMode          = 1u;                    // v36
+            lParameters.mfDepthBias             = 0u;                    // v31[2] == 0.0f
+            lParameters.mfSlopeScaleDepthBias  = 0u;                    // v31[3] == 0.0f
+            lParameters.muMultiSampleMask     = static_cast<u32>(-1);  // v31[4]
+            lParameters.muPrimitiveResetIndex = 0xFFFFu;               // v31[5]
+            lParameters.mbScissorTestEnable        = 0u;                    // v32
+            lParameters.mbMultiSampleAntiAlias      = 1u;                    // v33
+            lParameters.mbViewportEnable= 1u;                    // v34
+            lParameters.mbHalfPixelOffset   = 0u;                    // v35
+            lParameters.mbPrimitiveResetEnable          = 1u;                    // v36
 
-            renderengine::ResourceDescriptor5 lDescriptor;
-            renderengine::RasterizerState::GetResourceDescriptor(&lDescriptor, &lParameters);
-            m_rasterizerStateResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
-            m_rasterizerState = renderengine::RasterizerState::Initialize(
-                reinterpret_cast<renderengine::RasterizerState**>(&m_rasterizerStateResource),
-                &lParameters);
+            const rw::ResourceDescriptor descriptor = renderengine::RasterizerState::GetResourceDescriptor(lParameters);
+            m_rasterizerStateResource = m_allocator->DoAllocate(descriptor, 0);
+            m_rasterizerState = renderengine::RasterizerState::Initialize(m_rasterizerStateResource, lParameters);
         }
 
         // asm 0x823FEFFC `memcpy(a1, a2 + 4, 96)` -- 96 == the guest sizeof(State) (four 16-byte

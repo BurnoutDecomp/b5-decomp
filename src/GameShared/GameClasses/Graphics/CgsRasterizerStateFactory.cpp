@@ -39,16 +39,10 @@ namespace
         rw::IResourceAllocator* lpAllocator,
         const renderengine::RasterizerState::Parameters* lpParameters)
     {
-        renderengine::ResourceDescriptor5 lDescriptor;
-        renderengine::RasterizerState* lapStateHandles[5] = {};
-        renderengine::RasterizerState* lapAllocatedHandles[5] = {};
-
-        renderengine::RasterizerState::GetResourceDescriptor(&lDescriptor, lpParameters);
-        CgsGraphics::ResourceAllocatorCreate(lpAllocator, lapAllocatedHandles, &lDescriptor);
-        for (int liHandle = 0; liHandle < 5; ++liHandle)
-            lapStateHandles[liHandle] = lapAllocatedHandles[liHandle];
-
-        return renderengine::RasterizerState::Initialize(lapStateHandles, lpParameters);
+        const rw::ResourceDescriptor descriptor =
+            renderengine::RasterizerState::GetResourceDescriptor(*lpParameters);
+        const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+        return renderengine::RasterizerState::Initialize(resource, *lpParameters);
     }
 }
 
@@ -77,14 +71,14 @@ namespace
 // nothing in the tree read the old return value.
 void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
 {
-    renderengine::RasterizerState::Parameters lParameters = {};
+    renderengine::RasterizerState::Parameters lParameters;
 
-    lParameters.muMultisampleEnable = 0xffffffff;
-    lParameters.muAntialiasedLineEnable = 0xffff;
-    lParameters.mu8PaddingMode = 1;
-    lParameters.mu8DepthClipEnable = 1;
-    lParameters.mu8FrontCounterClockwise = 1;
-    lParameters.mu8ScissorEnable = 1;
+    lParameters.muMultiSampleMask = 0xffffffff;
+    lParameters.muPrimitiveResetIndex = 0xffff;
+    lParameters.mbPrimitiveResetEnable = 1;
+    lParameters.mbMultiSampleAntiAlias = 1;
+    lParameters.mbViewportEnable = 1;
+    lParameters.mbScissorTestEnable = 1;
 
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK] = 0;
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT] = 0;
@@ -92,20 +86,20 @@ void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
 
     lParameters.muFillMode = 0;
     lParameters.muCullMode = 2;
-    lParameters.mu8ConservativeRaster = 0;
+    lParameters.mbHalfPixelOffset = 0;
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK] =
         CreateRasterizerState(lpAllocator, &lParameters);
     CGS_ASSERT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK],
                "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeBack ]");
 
-    lParameters.mu8ScissorEnable = 1;
+    lParameters.mbScissorTestEnable = 1;
     lParameters.muCullMode = (lParameters.muCullMode & 4) | 1;
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT] =
         CreateRasterizerState(lpAllocator, &lParameters);
     CGS_ASSERT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT],
                "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeFront ]");
 
-    lParameters.mu8ScissorEnable = 1;
+    lParameters.mbScissorTestEnable = 1;
     lParameters.muCullMode &= 4u;
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE] =
         CreateRasterizerState(lpAllocator, &lParameters);

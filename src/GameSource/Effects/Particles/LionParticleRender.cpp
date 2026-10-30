@@ -476,14 +476,10 @@ U32 LionParticleRender::CreateInternalMaterial(const cParticleMaterial* apMateri
     // asm 0x82280F70..0x82280FAC -- size it, allocate it, initialise it. The console's
     // five-slot handle array is the rw resource-handle block BlendState::Initialize reads
     // slot 0 of; the descriptor is a fixed { 0x4C, 4 }.
-    renderengine::ResourceDescriptorEntry laDescriptor[5];
-    renderengine::BlendState::GetResourceDescriptor(laDescriptor, &lParams);
-
-    renderengine::BlendMaterialState* lapStateHandles[5] = { 0, 0, 0, 0, 0 };
-    lapStateHandles[0] = static_cast<renderengine::BlendMaterialState*>(
-        malloc(laDescriptor[0].muSize));
-    BrnGraphics::BlendState* const lpBlendState = static_cast<BrnGraphics::BlendState*>(
-        renderengine::BlendState::Initialize(lapStateHandles, &lParams));
+    const rw::ResourceDescriptor descriptor = renderengine::BlendState::GetResourceDescriptor(lParams);
+    rw::Resource resource;
+    resource.m_baseResources[0] = malloc(descriptor.m_baseResourceDescriptors[0].m_size);
+    BrnGraphics::BlendState* const lpBlendState = renderengine::BlendState::Initialize(resource, lParams);
 
     // asm 0x82280FB0..0x8228105C -- append under the hash. The console packs the pair into one
     // 64-bit store (`stdx r8, r9, r10` with the hash in the high word and the pointer in the
@@ -962,13 +958,11 @@ void LionParticleRender::Setup()
             lParams.mu8Flag4          = 0;
             lParams.mu8Flag5          = 0;
 
-            renderengine::ResourceDescriptor5 lDescriptor;
-            DepthStencilState::GetResourceDescriptor(&lDescriptor, &lParams);
-
-            void* lpMemory = mpHeapMalloc->Malloc(lDescriptor.maEntries[0].muSize,
-                                                  lDescriptor.maEntries[0].muAlignment);
-            DepthStencilState* lpState = reinterpret_cast<DepthStencilState*>(lpMemory);
-            saDepthStencilStates[liStateIndex] = DepthStencilState::Initialize(&lpState, &lParams);
+            const rw::ResourceDescriptor descriptor = DepthStencilState::GetResourceDescriptor(lParams);
+            rw::Resource resource;
+            resource.m_baseResources[0] = mpHeapMalloc->Malloc(descriptor.m_baseResourceDescriptors[0].m_size,
+                descriptor.m_baseResourceDescriptors[0].m_alignment);
+            saDepthStencilStates[liStateIndex] = DepthStencilState::Initialize(resource, lParams);
             ++liStateIndex;
         }
     }
@@ -999,13 +993,11 @@ void LionParticleRender::Setup()
     lDefault.mu8Flag4          = 0;
     lDefault.mu8Flag5          = 0;
 
-    renderengine::ResourceDescriptor5 lDefaultDescriptor;
-    DepthStencilState::GetResourceDescriptor(&lDefaultDescriptor, &lDefault);
-
-    void* lpDefaultMemory = mpHeapMalloc->Malloc(lDefaultDescriptor.maEntries[0].muSize,
-                                                 lDefaultDescriptor.maEntries[0].muAlignment);
-    DepthStencilState* lpDefaultState = reinterpret_cast<DepthStencilState*>(lpDefaultMemory);
-    spDefaultDepthStencil = DepthStencilState::Initialize(&lpDefaultState, &lDefault);
+    const rw::ResourceDescriptor descriptor = DepthStencilState::GetResourceDescriptor(lDefault);
+    rw::Resource resource;
+    resource.m_baseResources[0] = mpHeapMalloc->Malloc(descriptor.m_baseResourceDescriptors[0].m_size,
+        descriptor.m_baseResourceDescriptors[0].m_alignment);
+    spDefaultDepthStencil = DepthStencilState::Initialize(resource, lDefault);
 }
 
 // =================================================================================================
