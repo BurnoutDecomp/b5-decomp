@@ -794,9 +794,8 @@ void RaceCarEntityModule::SetUpPlayerCarForMode(
             // ---- 0x82305AA8..0x82305BB0 : ONLINE -- respawn the car ON the grid slot --------
             // v3 == unk_82181510, the same world UP axis row HandleResetPlayerCarAction feeds
             // BuildTransform (BrnRaceCarEntityModule.cpp:2088).
-            Matrix44Affine lGridTransform;
             const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
-            BrnMath::BuildTransform(lGridTransform, lStartPosition, lStartDirection, lWorldUp);
+            Matrix44Affine lGridTransform = BrnMath::BuildTransform(lStartPosition, lStartDirection, lWorldUp);
 
             lSeatDirection = lGridTransform.zAxis;   // stack copy read back at 0x82305BAC
             lSeatPosition  = lGridTransform.wAxis;   // ...and at 0x82305BA4

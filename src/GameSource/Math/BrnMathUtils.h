@@ -11,21 +11,11 @@
 //   BrnMath::MagnitudeSquared2D              @ 0x8276AD30
 //   BrnMath::RoundWithNumSignificantFigures  @ 0x82361600  (uses helper sub_82C09970 @ 0x82C09970)
 //
-// All five are math utilities the X360 build compiled over AltiVec/VMX SIMD (or the
-// scalar FPU, for RoundWith). Hex-Rays rendered them as raw __asm: the hidden sret
-// pointer, _savegprlr/_restgprlr, lvx128/stvx128, vperm lane permutes, COERCE_INT, and
-// the `result = EndAssert()` return-var noise are ALL compiler/decompiler artifacts and
-// are dropped. These are reconstructed at SEMANTIC PARITY in portable C++ -- NOT as
-// __asm transcriptions -- mirroring BrnTrafficLightTrigger.cpp:
-//   * the three-lane vspltw+vcmpeqfp self-equality cascade is the inlined per-lane NaN
-//     test = rw::math::vpu::IsValid(lVector), reversed to a single CGS_ASSERT;
-//   * the vrsqrtefp + two Newton-Raphson refinement steps that compute 1/sqrt (then x
-//     magnitude^2 -> magnitude) are de-optimised to an exact std::sqrt, numerically a
-//     touch tighter than the console's estimate, never a placeholder;
-//   * float32_t (the SDK type) is reconstructed as the project f32.
-//
-// "2D" throughout this TU means the X/Z ground plane (lanes 0 and 2 = .x and .z).
-// See the .cpp for the per-function FLAGs on every interpretive choice.
+// Vector3 IsNormal and BuildTransform retain the native VMX estimate/refinement
+// and multiply/FMA sequences. Vector3 values use v1/v2/v3; BuildTransform returns
+// a Matrix44Affine through r3 and returns that pointer. Other helpers retain their
+// existing scalar reconstructions and per-function evidence limits in the .cpp.
+// "2D" throughout this TU means the X/Z ground plane (lanes 0 and 2).
 
 namespace BrnMath
 {
@@ -67,7 +57,9 @@ namespace BrnMath
     //   zAxis = normalize(cross(xAxis, lUp)) wAxis = lPosition (asm stvx128 out+0x30)
     // The ONLY producer of a car's spawn pose: RaceCarEntityModule::HandleResetPlayerCarAction
     // calls it with the junkyard SpawnLocation's mPosition/mDirection and the world Y up axis.
-    void BuildTransform(Matrix44Affine& lrTransform, Vector3 lPosition, Vector3 lAt, Vector3 lUp);
+    // DecFIGS BrnMathUtils.cpp:48; ARTIST 825405A0 receives the hidden result in r3,
+    // vector values in v1/v2/v3, and returns that result pointer at 82540AA4.
+    Matrix44Affine BuildTransform(Vector3 lPosition, Vector3 lAt, Vector3 lUp);
 
     // ADDITIVE GROW (declare-only; body @ X360, not homed in this batch). Perpendicular
     // distance from lPoint to the infinite line through (lLineStart, lLineEnd). Called by
