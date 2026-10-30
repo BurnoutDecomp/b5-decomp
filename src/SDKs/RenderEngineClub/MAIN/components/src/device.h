@@ -10,6 +10,8 @@
 // ARTIST off_83271608. The native SDK owns the D3DDevice declaration and ABI.
 extern D3DDevice* gpD3DDevice;
 
+class BrnRendererModule;
+
 namespace renderengine
 {
     class PixelBuffer;
@@ -99,6 +101,7 @@ namespace renderengine
 
         protected:
             friend class Device;
+            friend class ::BrnRendererModule;
             u32 backBufferWidth;
             u32 backBufferHeight;
             PixelFormat backBufferFormat;
@@ -123,6 +126,7 @@ namespace renderengine
         static void Clear(const ClearColorParameters& lrColor, const ClearDepthStencilParameters& lrDepthStencil,
                           RenderTargetState::TargetID leTarget); // ARTIST82B61E18, body pending
         static void ShowPixelBuffer(PixelBuffer* lpBuffer); // ARTIST82B63298, body pending
+        static bool Start(const Parameters& lrParameters);
 
         struct DirectDraw
         {

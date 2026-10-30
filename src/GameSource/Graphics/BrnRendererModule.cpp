@@ -10,6 +10,38 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsTextureScopeTable.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/statehelper.h"
 #include "rw/rwcore_general_alloc.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
+// ARTIST byte_82FAEDD0: shared with Render's present-interval change check.
+// The original data image initializes this byte to zero.
+bool gRendererPresentInterval82FAEDD0 = false;
+
+// ARTIST823F5568. Assert failures report and execution continues, as in the original.
+void BrnRendererModule::DeviceInitialise()
+{
+    const char* const lpcFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
+    if (!shadow::Device::Initialize())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("RenderClub Graphics device intialise failed.\n", lpcFile, 488);
+        CgsDev::Assert::EndAssert();
+    }
+    renderengine::Device::Parameters lParameters;
+    lParameters.Initialize(4);
+    lParameters.primaryRingBufferSize = 0x8000;
+    lParameters.secondaryRingBufferSize = 0x800000;
+    lParameters.numVsyncs = 1;
+    gRendererPresentInterval82FAEDD0 = true;
+    lParameters.depthStencilAutoCreate = false;
+    if (!renderengine::Device::Start(lParameters))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Cannot start Graphics device.\n", lpcFile, 580);
+        CgsDev::Assert::EndAssert();
+    }
+}
 
 // ARTIST827DFF48..827E03FC. Genuine base/member constructors run in declaration
 // order: mutexes, resources, sampler parameters, factories and32unnamed Jobs.
