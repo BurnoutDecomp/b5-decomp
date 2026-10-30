@@ -9,6 +9,7 @@ namespace renderengine
     __declspec(align(16)) PixelBuffer gOriginalColorBuffer;
     __declspec(align(16)) PixelBuffer gOriginalDepthStencilBuffer;
     u32 guTilingEnabled = 0;
+    u32 gDeviceFrameCounter83271624 = 0;
 
     // ARTIST 82B61540..82B616A8. Unknown modes deliberately preserve the
     // previous dimensions/refresh, and the bool's three padding bytes survive.
