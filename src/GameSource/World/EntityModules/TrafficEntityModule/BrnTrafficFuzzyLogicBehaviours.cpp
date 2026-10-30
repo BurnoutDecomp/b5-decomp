@@ -283,7 +283,7 @@ namespace Fuzzy
                      Splat(lafTimeQueueingScores.x))
             + lfDriveAroundStickiness;
 
-        const Vector4 lZero = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector4 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
         const MaskScalar lMaskOutputs    = rw::math::vpu::IsGreater(lfMaxOutputs, lZero);
         const MaskScalar lMaskStickiness = rw::math::vpu::IsGreater(lfDriveAroundStickiness, lZero);
         const MaskScalar lMaskCombined   = rw::math::vpu::And(lMaskOutputs, lMaskStickiness);

@@ -1,3 +1,4 @@
+#include <xtl.h>
 // ============================================================================
 // BrnTrafficEntityModule_ProcessDeformationData.cpp -- the physics -> traffic DEFORMATION
 // readback (traffic-deformation wave, 2026-09-02).
@@ -195,70 +196,16 @@ void TrafficEntityModule::ProcessDeformationData(
                     // `vspltisw v0, 0`.
                     const Vector3Plus* lpSrc =
                         static_cast< const Vector3Plus* >( lrSkin.mpSkinOffsets_Scratch );
-                    Vector4 lv4MaxOffset = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    XMVECTOR lMaxOffset = XMVectorZero();
                     for ( u32 luPoint = 0; luPoint < TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS; ++luPoint )
                     {
-                        const Vector3Plus& lrOffset = lpSrc[ luPoint ];
-                        lpPhysInfo->maSkinningOffsets_Scratch[ luPoint ] = lrOffset;
-                        lv4MaxOffset = rw::math::vpu::Max(
-                            lv4MaxOffset, Vector4{ lrOffset.x, lrOffset.y, lrOffset.z, lrOffset.w } );
+                        const XMVECTOR lOffset = __lvx(&lpSrc[luPoint], 0);
+                        __stvx(lOffset, &lpPhysInfo->maSkinningOffsets_Scratch[luPoint], 0);
+                        lMaxOffset = __vmaxfp(lMaxOffset, lOffset);
                     }
+                    Vector4 lv4MaxOffset;
+                    __stvx(lMaxOffset, &lv4MaxOffset, 0);
 
-                    // ---- [tdef] NOT X360; opt-in on BRN_DEFORM_TRACE. The physics side's
-                    // reading of THIS car's skin block at the instant it lands in
-                    // TrafficPhysicsInfo: max / sum / non-zero rows plus the fatal inputs.
-                    // Printed only when the sum changes; pairs with the render TU's
-                    // [tdef-upload] line for the same vehicle. DELETE-WHEN banked.
-                    {
-                        static s32 siTraceOn = -1;
-                        if ( siTraceOn < 0 )
-                        {
-                        }
-                        if ( siTraceOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
-                        {
-                            // Per-SLOT change latch + budget (a global one exhausted itself on the
-                            // first promoted cars in run tdef_r2 and the rammed car never printed),
-                            // and the worst row's index so an asset-side offset can be named.
-                            static f32 safLastSum[ KU_MAX_PHYSICAL_TRAFFIC_VEHICLES ] = { 0 };
-                            static u32 saluLines[ KU_MAX_PHYSICAL_TRAFFIC_VEHICLES ] = { 0 };
-                            f32 lfMax  = 0.0f;
-                            f32 lfSum  = 0.0f;
-                            s32 liNnz  = 0;
-                            s32 liArgMax = -1;
-                            for ( u32 luRow = 0; luRow < TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS; ++luRow )
-                            {
-                                const Vector3Plus& lrRow = lpPhysInfo->maSkinningOffsets_Scratch[ luRow ];
-                                const f32 lfMag = sqrtf( lrRow.x * lrRow.x + lrRow.y * lrRow.y + lrRow.z * lrRow.z );
-                                if ( lfMag > lfMax ) { lfMax = lfMag; liArgMax = static_cast< s32 >( luRow ); }
-                                if ( lfMag > 0.0f ) { lfSum += lfMag; ++liNnz; }
-                            }
-                            const u32 luSlot = static_cast< u32 >( liPhysicalIndex ) % KU_MAX_PHYSICAL_TRAFFIC_VEHICLES;
-                            if ( lfSum != safLastSum[ luSlot ] && saluLines[ luSlot ] < 300u )
-                            {
-                                ++saluLines[ luSlot ];
-                                safLastSum[ luSlot ] = lfSum;
-                                const Vector3Plus lWorst = ( liArgMax >= 0 )
-                                    ? lpPhysInfo->maSkinningOffsets_Scratch[ liArgMax ]
-                                    : Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
-                                *CgsDev::Log::gpDebugPrint
-                                    << "[tdef] frame=" << static_cast< s32 >( renderengine::guPresentCount )
-                                    << " veh " << luVehicle
-                                    << " phys " << liPhysicalIndex
-                                    << " maxVerlet " << lfMax << " @" << liArgMax
-                                    << " (" << lWorst.x << ", " << lWorst.y << ", " << lWorst.z << ", w " << lWorst.w << ")"
-                                    << " sumVerlet " << lfSum
-                                    << " nnz " << liNnz
-                                    << " laneMax (" << lv4MaxOffset.x << ", " << lv4MaxOffset.y
-                                    << ", " << lv4MaxOffset.z << ")"
-                                    << " deforming " << ( lpPhysInfo->mbIsDeforming ? 1 : 0 )
-                                    << " fatal " << ( lpPhysInfo->mbIsFatallyCrashing ? 1 : 0 )
-                                    << " alive " << ( lpVehicle->IsAlive() ? 1 : 0 )
-                                    << "\n";
-                            }
-                        }
-                    }
-
-                    // `lbz r11, 5(vehicle) ; clrlwi 31` -- E_FLAG_ALIVE.
                     if ( lpVehicle->IsAlive() )
                     {
                         const VehicleTypeRuntime* lpVehicleRuntime =

@@ -147,7 +147,6 @@ namespace
     // == 2.0f (0x40000000, x360rd), stored by ChangeLightState @0x82751958.
     const f32 KF_AMBER_TIME = 2.0f;
 
-    s32 giTrafficLightDiagLinesLeft = 32;
 }
 
 // -- Construct @ 0x82751708 (18 insns) -----------------------------------------
@@ -209,10 +208,6 @@ void TrafficLightManager::SetCountdownValue(s32 liCountdownDisplay)
         meCountdownState         = E_TRAFFICLIGHTSTATE_GREEN;
     }
 
-    if (lpDiag != 0 && giTrafficLightDiagLinesLeft > 0)
-    {
-        --giTrafficLightDiagLinesLeft;
-    }
 }
 
 // -- ChangeLightState @ 0x827518E0 (47 insns) -- DWARF .cpp:175 (luInstance, lbChangeToRed) ----------
@@ -282,10 +277,6 @@ void TrafficLightManager::Update(f32 lfTimeDelta)
     mbCountdownLights        = false;
     meCountdownState         = E_TRAFFICLIGHTSTATE_COUNT;
 
-    if (lpDiag != 0 && giTrafficLightDiagLinesLeft > 0)
-    {
-        --giTrafficLightDiagLinesLeft;
-    }
 }
 
 // ============================================================================
