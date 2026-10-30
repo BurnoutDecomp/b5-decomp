@@ -362,10 +362,9 @@ void BrnRendererModule::Construct(const BrnGame::BrnCpuMonitors& globalMonitors,
     mTextureStateParams.muAddressU = 2;
     mTextureStateParams.muAddressV = 2;
     mTextureStateParams.mpTexture = mAllocatedRenderTargets.GetShadowMapBuffer(0)->GetDepthTexture();
-    rw::ResourceDescriptor descriptor;
-    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    rw::ResourceDescriptor descriptor = renderengine::TextureState::GetResourceDescriptor(mTextureStateParams);
     mTextureStateResource = mpGraphicsAllocator->Allocate(descriptor, 0);
-    mpShadowMapTextureState[0] = renderengine::TextureState::Initialize(&mTextureStateResource, &mTextureStateParams);
+    mpShadowMapTextureState[0] = renderengine::TextureState::Initialize(mTextureStateResource, mTextureStateParams);
     mpShadowMapTextureState[1] = 0;
     mEnvMapTextureStateParams.muMagFilter = 1;
     mEnvMapTextureStateParams.muMinFilter = 1;
@@ -374,9 +373,9 @@ void BrnRendererModule::Construct(const BrnGame::BrnCpuMonitors& globalMonitors,
     mEnvMapTextureStateParams.muAddressV = 2;
     mEnvMapTextureStateParams.muAddressW = 2;
     mEnvMapTextureStateParams.mpTexture = mAllocatedRenderTargets.GetEnvMapBuffer()->GetTexture(0);
-    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    descriptor = renderengine::TextureState::GetResourceDescriptor(mEnvMapTextureStateParams);
     mEnvMapTextureStateResource = mpGraphicsAllocator->Allocate(descriptor, 0);
-    mpEnvMapTextureState = renderengine::TextureState::Initialize(&mEnvMapTextureStateResource, &mEnvMapTextureStateParams);
+    mpEnvMapTextureState = renderengine::TextureState::Initialize(mEnvMapTextureStateResource, mEnvMapTextureStateParams);
     CgsGraphics::gTextureScopeTable.SetTexturePurposeData(CgsGraphics::E_TEXTURE_PURPOSE_SHADOW_MAP_0,
         mAllocatedRenderTargets.GetShadowMapBuffer(0)->GetDepthTexture());
     CgsGraphics::gTextureScopeTable.SetTexturePurposeTextureState(CgsGraphics::E_TEXTURE_PURPOSE_SHADOW_MAP_0, mpShadowMapTextureState[0]);

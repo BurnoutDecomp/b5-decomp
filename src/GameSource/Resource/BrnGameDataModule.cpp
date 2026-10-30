@@ -1106,8 +1106,7 @@ namespace BrnResource
         mTextureStateParams.muMagFilter = 1;
         mTextureStateParams.muMinFilter = 1;
         mTextureStateParams.muAddressV = 2;
-        rw::ResourceDescriptor lDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        const rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(mTextureStateParams);
         mTextureStateResource = static_cast<rw::IResourceAllocator*>(GetGlobalResourceAllocator())->DoAllocate(lDescriptor, 0);
         mbIsNewModule = true;
         miCollisionWorldRefCount = 0;

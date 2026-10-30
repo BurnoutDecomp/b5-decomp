@@ -75,11 +75,10 @@ namespace rw { namespace graphics { namespace postfx {
         stateParams.mbPointBorderEnable = 1;
         stateParams.mbUnidentified44 = 1;
         stateParams.mpTexture = tint->m_textureTintMap;
-        rw::ResourceDescriptor stateDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(&stateDescriptor);
+        const rw::ResourceDescriptor stateDescriptor = renderengine::TextureState::GetResourceDescriptor(stateParams);
         tint->m_textureStateTintMapResource = tint->m_allocator->DoAllocate(stateDescriptor, 0);
         tint->m_textureStateTintMap = renderengine::TextureState::Initialize(
-            &tint->m_textureStateTintMapResource, &stateParams);
+            tint->m_textureStateTintMapResource, stateParams);
 
         renderengine::ProgramBuffer::GetVariableHandleByName(gpTintPixelProgram,
             reinterpret_cast<const u8*>("lookupOffset"), &tint->m_colourLookupOffsetHandle);

@@ -175,8 +175,8 @@ void BrnRendererMemory::Construct(renderengine::Device::Parameters parameters,
     mpCompositeBlitPixelProgramBuffer = CreateBlitProgram(allocator, kaCompositeBlitPixelProgram,
         sizeof(kaCompositeBlitPixelProgram), 1);
 
-    rw::ResourceDescriptor descriptor;
-    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    renderengine::TextureState::Parameters textureStateParameters;
+    const rw::ResourceDescriptor descriptor = renderengine::TextureState::GetResourceDescriptor(textureStateParameters);
     rw::IResourceAllocator* const graphicsAllocator = BrnResource::GetGraphicsAllocator();
     mBlitTextureStateResource = graphicsAllocator->DoAllocate(descriptor, 0);
     mpBlitTextureState = 0;
