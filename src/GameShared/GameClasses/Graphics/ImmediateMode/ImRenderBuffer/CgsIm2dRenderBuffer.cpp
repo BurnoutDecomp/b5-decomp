@@ -84,11 +84,64 @@ namespace CgsGraphics
     {
     }
 
+    // ARTIST8246F638: append the command before reserving two vertices.
     void Im2dRenderBuffer::PushMask(renderengine::Texture* lpTexture,
         const Basic2dColouredTexturedVertex* lpaLogicalCorners)
     {
-        PushMaskGeometry(reinterpret_cast<uintptr_t>(lpTexture),
-                         lpaLogicalCorners[0], lpaLogicalCorners[1]);
+        const char* lpFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h";
+        if (!mbInRenderBlock)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", lpFile, 1216);
+            CgsDev::Assert::EndAssert();
+        }
+        __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u),
+                  mpWriteBuffer->mpu8CommandBuffer);
+        const u32 luCommandPos = mpWriteBuffer->muCommandBufferWritePos;
+        const u32 luCommandNext = luCommandPos + 16u;
+        u32* lpCommand = 0;
+        if (luCommandNext <= muCommandBufferSize)
+        {
+            lpCommand = reinterpret_cast<u32*>(mpWriteBuffer->mpu8CommandBuffer + luCommandPos);
+            lpCommand[1] = 16;
+            lpCommand[0] = 18;
+            mpWriteBuffer->muCommandBufferWritePos = luCommandNext;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+            if (!mbFailGracefully)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", lpFile, 1254);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        const u32 luVertexNext = mpWriteBuffer->muVertexBufferWritePos + 40u;
+        Basic2dColouredTexturedVertex* lpVertices = 0;
+        if (luVertexNext <= muVertexBufferSize)
+        {
+            __dcbz128(128, mpWriteBuffer->mpu8VertexBuffer + mpWriteBuffer->muVertexBufferWritePos);
+            lpVertices = reinterpret_cast<Basic2dColouredTexturedVertex*>(
+                mpWriteBuffer->mpu8VertexBuffer + mpWriteBuffer->muVertexBufferWritePos);
+            mpWriteBuffer->muVertexBufferWritePos = luVertexNext;
+        }
+        if (!lpVertices)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Im2dRenderBuffer: Push Mask, we have run out of vertex buffer space...",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h", 200);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpCommand && lpVertices)
+        {
+            lpCommand[2] = static_cast<u32>(reinterpret_cast<uintptr_t>(lpTexture));
+            lpCommand[3] = static_cast<u32>(reinterpret_cast<uintptr_t>(lpVertices));
+            const u32* lpSource = reinterpret_cast<const u32*>(lpaLogicalCorners);
+            u32* lpDestination = reinterpret_cast<u32*>(lpVertices);
+            for (u32 i = 0; i < 10; ++i)
+                lpDestination[i] = lpSource[i];
+        }
     }
 
     // -------------------------------------------------------------------------
