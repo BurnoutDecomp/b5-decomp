@@ -49,7 +49,7 @@ namespace CgsGui
             if (!CgsModule::ModuleSingleBuffered::Prepare())
                 return false;
             mStoredGuiEvents.Prepare();
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next successful stage.
         case E_PREPARE_MODEL:
             mePrepareStage = E_PREPARE_MODEL;
             if (!mGuiModel.Prepare(lrConfig.miAptPersistentBunldePoolId,
@@ -57,19 +57,19 @@ namespace CgsGui
                 lrConfig.miFSMBunldePoolId, lrConfig.miLanguageBundlePoolId,
                 lrConfig.miTexturesBundlePoolId, lrConfig.miGlobalTexturePoolId))
                 return false;
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next successful stage.
         case E_PREPARE_SKU:
             mePrepareStage = E_PREPARE_SKU;
             mSku.SetLanguage(mSku.FindLanguage());
             mSku.SetSku(mSku.FindSku());
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next successful stage.
         case E_PREPARE_CHECK_BUTTON_MAPPING:
         case E_PREPARE_VIEW:
             mePrepareStage = E_PREPARE_VIEW;
             if (!mpGuiView->Prepare(lrConfig.mpAptAllocator, lrConfig.mpRendererAllocator,
                 lrConfig.mpLanguageAllocator, lrConfig.mpFlaptAllocator))
                 return false;
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next successful stage.
         case E_PREPARE_DONE:
             mePrepareStage = E_PREPARE_DONE;
             meReleaseStage = E_RELEASE_START;
@@ -93,18 +93,18 @@ namespace CgsGui
             meReleaseStage = E_RELEASE_VIEW;
             if (!mpGuiView->Release())
                 return false;
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next release stage.
         case E_RELEASE_MODEL:
             meReleaseStage = E_RELEASE_MODEL;
             if (!mGuiModel.Release())
                 return false;
             mStoredGuiEvents.Release();
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next release stage.
         case E_RELEASE_MANAGER:
             meReleaseStage = E_RELEASE_MANAGER;
             if (!CgsModule::ModuleSingleBuffered::Release())
                 return false;
-            [[fallthrough]];
+            // C++03 native compiler: proceed into the next release stage.
         case E_RELEASE_DONE:
             meReleaseStage = E_RELEASE_DONE;
             mePrepareStage = E_PREPARE_START;
