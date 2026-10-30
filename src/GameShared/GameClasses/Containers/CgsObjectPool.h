@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<N>
 
+namespace BrnGameState { class HUDMessageLogic; class ChallengeManager; class StuntModeScoringOnline; }
+
 namespace CgsContainers
 {
 // Fixed-capacity object pool: N inline objects, a LIFO free-index queue, and an occupancy
@@ -13,6 +15,12 @@ template <typename T, s32 N, typename TIndex> struct ObjectPoolAlignment {};
 template <typename T, s32 N, typename TIndex>
 class ObjectPool : private ObjectPoolAlignment<T, N, TIndex>
 {
+    // ARTIST mode owners defer their pool seed to two-phase Construct/Prepare.
+    friend class BrnGameState::HUDMessageLogic;
+    friend class BrnGameState::ChallengeManager;
+    friend class BrnGameState::StuntModeScoringOnline;
+    struct ModeOwnerNoInitTag {};
+    explicit ObjectPool(ModeOwnerNoInitTag) {}
 public:
     static const s32 KI_CAPACITY = N;
 

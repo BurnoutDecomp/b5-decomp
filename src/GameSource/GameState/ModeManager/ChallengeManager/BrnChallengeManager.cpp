@@ -1,3 +1,4 @@
+#include <float.h>
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManager.cpp
 // ============================================================================
@@ -723,7 +724,7 @@ bool ChallengeManager::UpdateLocationOKStatusChange(bool lbWasLocationOk, bool l
 //
 // The recovered rodata floats are used as their attested literal values (BURNOUT_X360_ARTIST.XEX,
 // big-endian): flt_82001C98 == 1.0f, flt_82001DA0 == 0.5f, flt_820037C8 == -1.0f,
-// flt_82020AFC == 3.4028235e38f (FLT_MAX, the "uncapped" sentinel).
+// flt_82020AFC == FLT_MAX (FLT_MAX, the "uncapped" sentinel).
 //
 // BLOCKED in this group (reported in funcs_blocked, NOT bodied here):
 //   IsSkillScoreCurrentlySuccessful @ 0x823167A0 -- the X360 build drifted this to a
@@ -817,7 +818,7 @@ namespace BrnGameState
         {
             return -1.0f;              // flt_820037C8
         }
-        return 3.4028235e38f;         // flt_82020AFC (FLT_MAX -- the uncapped sentinel)
+        return FLT_MAX;         // flt_82020AFC (FLT_MAX -- the uncapped sentinel)
     }
 
     // ------------------------------------------------------------------------
@@ -2204,14 +2205,7 @@ void ChallengeManager::HandleWorldStunt(StuntElementType leStuntElementType, Cgs
                 maBillboardsCollected.Append(lStuntID);
             }
 
-            static s32        siCollectDiagLines = 0;
-            if (sbCollectDiag && siCollectDiagLines < 16 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siCollectDiagLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[collect] billboard skill +1 tracked=" << maBillboardsCollected.GetCount()
-                    << " status=" << static_cast<s32>(meChallengeManagerStatus) << "\n";
-            }
+
         }
     }
 }
@@ -4905,7 +4899,7 @@ bool ChallengeManager::CheckCurrentLocation(
     // The permute mask is dumped from the image: bytes 00 01 02 03 18 19 1A 1B 00 01 02 03
     // 00 01 02 03, i.e. lane 0 = x and lane 1 = byte 8 of the second (same) operand = z. The
     // pack is (x, z): XZ, confirmed.
-    const Vector2 l2DCarPosition = Vector2{ lCarPosition.x, lCarPosition.z };
+    const Vector2 l2DCarPosition = { lCarPosition.x, lCarPosition.z, 0.0f, 0.0f };
     const s32 liDistrict = static_cast<s32>(lpWorldMap->GetValue(l2DCarPosition));
 
     const CgsID lCurrentRoadID = mpRoadRulesManager->GetCurrentRoadID();

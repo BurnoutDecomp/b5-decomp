@@ -87,6 +87,9 @@ namespace BrnGameState
             u8      maPad14[12];         // +0x14 pad to the X360 32-byte stride
         };
 
+        StuntModeScoringOnline() : mStoredLeapingDataPool(
+            CgsContainers::ObjectPool<StoredLeapingData, KI_LEAPING_POOL_CAPACITY, s32>::ModeOwnerNoInitTag()) {}
+
         // The banked-multiplier element type (X360 stride 40). BankMultiplier (0x8232DE08) reserves a
         // slot via Array<MultiplierData,3>::AddNew() then fills it: a 1.0 weight @+0x00, the 6-word(24B)
         // pending-multiplier record @+0x04, and the cars-around-player-at-takeoff bitset snapshot @+0x20.

@@ -28,6 +28,9 @@ namespace BrnGameState
     class ModeManagerDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        ModeManagerDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
+
+    public:
         void Construct(ModeManager* lpModeManager);   // @ BrnModeManagerDebugComponent.cpp:200
 
     protected:

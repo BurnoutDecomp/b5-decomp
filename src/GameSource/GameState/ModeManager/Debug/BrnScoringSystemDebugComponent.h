@@ -30,6 +30,9 @@ namespace BrnGameState
     class ScoringSystemDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        ScoringSystemDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
+
+    public:
         // Header-inline in ARTIST's ModeManager::Construct: bind the embedded scoring
         // system and clear the overlay toggle before the component is registered.
         void Construct(ScoringSystem* lpScoringSystem)

@@ -222,6 +222,9 @@ namespace BrnGameState
             Vector3             mLeapRadiusEntryVector;   // +0x10 (DWARF :327; 16-aligned SIMD)
         };
 
+        ChallengeManager() : mPotentiallyLeaptCars(
+            CgsContainers::ObjectPool<StoredLeapingData, 7, s32>::ModeOwnerNoInitTag()) {}
+
         // DWARF BrnChallengeManager.h:295 -- one remote player's challenge-completion record.
         // X360 stride 0x108: the FastBitArray<2000> completion bit store (== the committed
         // GameStateModuleIO::CompletedFburnChallenges layout) + the player id (-1 == free slot)

@@ -23,6 +23,9 @@ namespace BrnGameState
     class CrashScoreDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        CrashScoreDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
+
+    public:
         void Construct(CrashModeScoring* lpCrashScoring);   // DecFIGS 0x1CC3D4; inlined at X360 ScoringSystem::Construct
         void Destruct();                                    // DecFIGS 0x1CC43C; X360 body/caller not yet pinned
 
