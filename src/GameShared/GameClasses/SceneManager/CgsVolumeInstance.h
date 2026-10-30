@@ -182,6 +182,6 @@ namespace CgsContainers
 {
     // DecFIGS IDA type metadata declares this pool 64-aligned; ARTIST attests
     // its offsets and extent. Scene constructor 0x827E1E30 does not clear it.
-    template <> struct CGS_ALIGN(64) ObjectPoolAlignment<CgsSceneManager::VolumeInstance, 5048> {};
+    template <> struct CGS_ALIGN(64) ObjectPoolAlignment<CgsSceneManager::VolumeInstance, 5048, s32> {};
     template <> inline ObjectPool<CgsSceneManager::VolumeInstance, 5048, s32>::ObjectPool() {}
 }

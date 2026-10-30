@@ -9,9 +9,9 @@ namespace CgsContainers
 // Fixed-capacity object pool: N inline objects, a LIFO free-index queue, and an occupancy
 // BitArray. Recovered from the X360 spine (CgsObjectPool.h) with member names from DWARF.
 // Empty base carries attested per-instantiation alignment, without storage.
-template <typename T, s32 N> struct ObjectPoolAlignment {};
+template <typename T, s32 N, typename TIndex> struct ObjectPoolAlignment {};
 template <typename T, s32 N, typename TIndex>
-class ObjectPool : private ObjectPoolAlignment<T, N>
+class ObjectPool : private ObjectPoolAlignment<T, N, TIndex>
 {
 public:
     static const s32 KI_CAPACITY = N;
