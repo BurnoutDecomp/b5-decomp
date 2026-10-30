@@ -2,6 +2,7 @@
 // advert textures, lookup table), per-frame subscriber creation, and the per-instance impression pass.
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 
 #include <cmath>   // std::fabs, std::sqrt
 #include <cstdio>
@@ -268,15 +269,17 @@ WorldEntityModule::UpdateMassive( BrnUpdateSet lUpdateSet )
         {
             renderengine::Texture* lpTexture = mapDynamicAdvertTextures[ miNumMassiveSubscribersCreated ];
 
+            // ARTIST 0x822A83B8..8464: read mip count, then format/depth/height/width/type.
+            const u32 luNumLevels = lpTexture->Format.MaxMipLevel + 1;
+            const renderengine::PixelFormat leFormat = lpTexture->GetFormat();
+            const u32 luDepth = lpTexture->GetDepth();
+            const u32 luHeight = lpTexture->GetHeight();
+            const u32 luWidth = lpTexture->GetWidth();
+            const renderengine::Texture::Type leType = lpTexture->GetType();
             const u32 luPixelDataSize = renderengine::Texture::GetPixelDataSize(
-                renderengine::Texture::GetType( lpTexture ),
-                renderengine::Texture::GetWidth( lpTexture ),
-                renderengine::Texture::GetHeight( lpTexture ),
-                renderengine::Texture::GetDepth( lpTexture ),
-                renderengine::Texture::GetFormat( lpTexture ),
-                luNumLevels );
-
-            mMassive.CreateSubscriber( miNumMassiveSubscribersCreated, lpTexture->mpD3DTexture, luPixelDataSize );
+                leType, luWidth, luHeight, luDepth, leFormat, luNumLevels);
+            void* lpPixelData = reinterpret_cast<void*>(lpTexture->Format.BaseAddress << 12);
+            mMassive.CreateSubscriber(miNumMassiveSubscribersCreated, lpPixelData, luPixelDataSize);
             ++miNumMassiveSubscribersCreated;
         }
 
