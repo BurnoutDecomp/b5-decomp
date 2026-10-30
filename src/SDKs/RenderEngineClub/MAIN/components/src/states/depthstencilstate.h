@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"
 #include <cstddef>
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/resourcedescriptor.h"
 
@@ -34,6 +35,17 @@ public:
     // them is a follow-up that has to land together with those files.
     struct Parameters
     {
+        // ARTIST82B643F4..4450; natural padding4A..4B is untouched.
+        Parameters()
+            : muFunction(3), muState4(7), muState8(7), muState9(0), muState10(0),
+              muStencilReadMask(0xFFFFFFFFu), muStencilWriteMask(0xFFFFFFFFu),
+              muState13(0), muState14(0xFFFFFFFFu), muState15(0xFFFFFFFFu), muState16(0),
+              mbDepthTestEnable(1), mbDepthWriteEnable(1), mu8Flag2(0), mu8Flag3(0),
+              mu8Flag4(0), mu8Flag5(0)
+        {
+            for (u32 i = 0; i != 3; ++i) maState1[i] = maState5[i] = 0;
+        }
+
         u32 muFunction;        // +0x00 -> muZFunc                 (the Function arg)
         u32 maState1[3];       // +0x04 -> muStencilFail / muStencilZFail / muStencilPass (zeroed)
         u32 muState4;          // +0x10 -> muStencilFunc           == 7 (E_FUNCTION_ALWAYS)
@@ -56,8 +68,8 @@ public:
     };
 
     // The builder passes parameters alongside the descriptor; this fixed-size sizer ignores them.
-    static ResourceDescriptor5* GetResourceDescriptor(ResourceDescriptor5* lpDescriptor, const Parameters* lpParameters);
-    static DepthStencilState* Initialize(DepthStencilState** ppState, const Parameters* lpParameters);
+    static rw::ResourceDescriptor GetResourceDescriptor(const Parameters&);
+    static DepthStencilState* Initialize(const rw::Resource&, const Parameters&);
 
     // The 0x60-byte object the X360 GetResourceDescriptor (0x82B636F8) sizes ({0x60, 4} entry-0
     // qword) and the serialised world MaterialState blob embeds: the 17 marshalled state words,

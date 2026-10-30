@@ -21,8 +21,8 @@ namespace renderengine
     struct VertexDescriptorData;
     class  DepthStencilState;
     class  RasterizerState;
-    struct BlendMaterialState;
-    class  SamplerState;
+    class BlendState; typedef BlendState BlendMaterialState;
+    class SamplerState;
     class  TextureState;      // pc/gcm/renderengine/renderstates.h -- the whole-unit bind (SetState overload)
 }
 

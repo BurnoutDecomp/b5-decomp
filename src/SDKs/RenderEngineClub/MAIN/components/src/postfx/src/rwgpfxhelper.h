@@ -22,7 +22,7 @@ namespace renderengine
     // takes; its home is .../states/blendstate.h:35. Forward-declared (pointer-only) so this header
     // does not pull the whole state surface into every post-fx includer -- the same treatment
     // pc/gcm/renderengine/renderstates.h gives it.
-    struct BlendMaterialState;
+    class BlendState; typedef BlendState BlendMaterialState;
     class MeshHelper;
     class VertexBuffer;
     struct VertexDescriptorData;

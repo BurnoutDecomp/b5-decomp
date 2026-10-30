@@ -46,7 +46,7 @@ namespace renderengine
 {
     class  TextureState;          // pc/gcm/renderengine/renderstates.h
     class  DepthStencilState;     // pc/gcm/renderengine/renderstates.h
-    struct BlendMaterialState;    // SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h
+    class BlendState; typedef BlendState BlendMaterialState;    // SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h
     class  CoronaBuffer;          // GameSource/Graphics/BrnCoronaManager.h
 
     class CoronaRenderer

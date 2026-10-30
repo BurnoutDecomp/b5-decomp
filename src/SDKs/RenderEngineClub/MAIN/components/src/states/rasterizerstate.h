@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"
 #include <cstddef>
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/resourcedescriptor.h"
 
@@ -21,21 +22,28 @@ public:
 
     struct Parameters
     {
+        // ARTIST82B64498..44E0; natural padding1D..1F is untouched.
+        Parameters()
+            : muFillMode(0), muCullMode(2), mfDepthBias(0.0f), mfSlopeScaleDepthBias(0.0f),
+              muMultiSampleMask(0xFFFFFFFFu), muPrimitiveResetIndex(0xFFFF),
+              mbScissorTestEnable(0), mbMultiSampleAntiAlias(1), mbViewportEnable(1),
+              mbHalfPixelOffset(0), mbPrimitiveResetEnable(1) {}
+
         u32 muFillMode;
         u32 muCullMode;
-        u32 muDepthBias;
-        u32 muSlopeScaledDepthBias;
-        u32 muMultisampleEnable;
-        u32 muAntialiasedLineEnable;
-        u8  mu8ScissorEnable;
-        u8  mu8DepthClipEnable;
-        u8  mu8FrontCounterClockwise;
-        u8  mu8ConservativeRaster;
-        u8  mu8PaddingMode;
+        f32 mfDepthBias;
+        f32 mfSlopeScaleDepthBias;
+        u32 muMultiSampleMask;
+        u32 muPrimitiveResetIndex;
+        u8  mbScissorTestEnable;
+        u8  mbMultiSampleAntiAlias;
+        u8  mbViewportEnable;
+        u8  mbHalfPixelOffset;
+        u8  mbPrimitiveResetEnable;
     };
 
-    static ResourceDescriptor5* GetResourceDescriptor(ResourceDescriptor5* lpDescriptor, const Parameters* lpParameters);
-    static RasterizerState* Initialize(RasterizerState** ppState, const Parameters* lpParameters);
+    static rw::ResourceDescriptor GetResourceDescriptor(const Parameters&);
+    static RasterizerState* Initialize(const rw::Resource&, const Parameters&);
 
     // The 13-word marshalled block. Every word's meaning is attested by the X360 rasteriser
     // half of the dispatch state triple (@0x827E8690), which pushes each one through its own
@@ -58,5 +66,5 @@ public:
 };
 CGS_STATIC_ASSERT((sizeof(RasterizerState) == 0x34), "X360 rasterizer state");
 CGS_STATIC_ASSERT((sizeof(RasterizerState::Parameters) == 0x20), "X360 rasterizer parameters");
-CGS_STATIC_ASSERT((offsetof(RasterizerState::Parameters, mu8PaddingMode) == 0x1C), "X360 last rasterizer parameter");
+CGS_STATIC_ASSERT((offsetof(RasterizerState::Parameters, mbPrimitiveResetEnable) == 0x1C), "X360 last rasterizer parameter");
 }

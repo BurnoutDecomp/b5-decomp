@@ -12,7 +12,7 @@
 
 namespace CgsLanguage { class LanguageManager; }
 namespace BrnReplays { class GuiModuleSerialiser; }
-namespace renderengine { struct BlendMaterialState; }
+namespace renderengine { class BlendState; typedef BlendState BlendMaterialState; }
 
 namespace BrnGui
 {

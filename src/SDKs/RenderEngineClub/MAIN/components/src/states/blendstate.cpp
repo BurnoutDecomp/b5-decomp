@@ -25,8 +25,10 @@ namespace renderengine
         const u32 KU_DEFAULT_BLEND_FACTOR = 65537;   // 0x00010001
     }
 
-    void* BlendState::GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams)
+    void BlendState::GetParameters(Parameters& parameters) const
     {
+        Parameters* const pParams = &parameters;
+        const BlendState* const pMaterial = this;
         pParams->mbHasCustomBlendFactors = 0;
         for (int liChannel = 0; liChannel < 4; ++liChannel)
         {
@@ -49,30 +51,20 @@ namespace renderengine
         pParams->muState15 = pMaterial->maState[15];
         pParams->muState17 = pMaterial->maState[17];
         pParams->mbState16 = pMaterial->maState[16] != 0;
-        return const_cast<BlendMaterialState*>(pMaterial);
     }
 
-    void* BlendState::GetResourceDescriptor(void* pOut)
+    rw::ResourceDescriptor BlendState::GetResourceDescriptor(const Parameters&)
     {
-        ResourceDescriptorEntry* lpOut = static_cast<ResourceDescriptorEntry*>(pOut);
-        for (ResourceDescriptorEntry* lpEntry = lpOut; lpEntry != lpOut + 5; ++lpEntry)
-        {
-            lpEntry->muSize = 0;
-            lpEntry->muAlignment = 1;
-        }
-        lpOut[0].muSize = 0x4C;
-        lpOut[0].muAlignment = 4;
-        return pOut;
+        rw::ResourceDescriptor descriptor;
+        descriptor.m_baseResourceDescriptors[0].m_size = 0x4C;
+        descriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+        return descriptor;
     }
 
-    void* BlendState::GetResourceDescriptor(void* pOut, const BlendStateParameters* /*pParams*/)
+    BlendState* BlendState::Initialize(const rw::Resource& resource, const Parameters& parameters)
     {
-        return GetResourceDescriptor(pOut);
-    }
-
-    void* BlendState::Initialize(BlendMaterialState** ppMaterial, const BlendStateParameters* pParams)
-    {
-        BlendMaterialState* lpMat = *ppMaterial;
+        const Parameters* const pParams = &parameters;
+        BlendState* const lpMat = static_cast<BlendState*>(resource.m_baseResources[0]);
 
         if (pParams->mbHasCustomBlendFactors)
         {

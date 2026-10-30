@@ -57,7 +57,7 @@ namespace renderengine
     class  TextureState;            // pc/gcm/renderengine/renderstates.h
     class  DepthStencilState;       // pc/gcm/renderengine/renderstates.h
     class SamplerState;
-    struct BlendMaterialState;      // SDKs/RenderEngineClub/.../states/blendstate.h
+    class BlendState; typedef BlendState BlendMaterialState; // states/blendstate.h
     struct VertexDescriptorData;    // pc/gcm/renderengine/VertexDescriptor.h
 }
 
