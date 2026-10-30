@@ -4,9 +4,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cfloat>   // FLT_MAX (the -3.4028235e38 / +3.4028235e38 seeds)
-#include <cmath>    // std::fmaf (AccumulateWeightings' fmadds)
-#include <cstdlib>  // [DIAG] getenv (BRN_AI_FAN_DIAG)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_AI_FAN_DIAG witness
 
 // BrnAI::SteeringFan -- partfile 1 of 2 for the weighting/target half (aiwave R6 lane).
 // This TU owns the TARGET SELECTION path plus the kfBias table every contributor is scaled by:
@@ -145,7 +142,7 @@ SteeringFan* SteeringFan::AccumulateWeightings()
         {
             for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
                 lafAccumulated[liStep] =
-                    std::fmaf(mfWeighting[liContributor][liStep], lfBias, lafAccumulated[liStep]);
+                    mfWeighting[liContributor][liStep] * lfBias + lafAccumulated[liStep];
         }
     }
 
@@ -154,16 +151,8 @@ SteeringFan* SteeringFan::AccumulateWeightings()
     for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
     {
         const f32 lfCumulative = mfCumulativeWeighting[liStep];
-        mfCumulativeWeighting[liStep] = std::fmaf(lafAccumulated[liStep] - lfCumulative, 0.5f, lfCumulative);
+        mfCumulativeWeighting[liStep] = (lafAccumulated[liStep] - lfCumulative) * 0.5f + lfCumulative;
     }
-
-    // [DIAG] NOT IN THE X360 BINARY (BRN_AI_FAN_DIAG=1). mfCumulativeWeighting measured ALL
-    // ZERO in every sample, which pins every AI car at a quarter of its speed via
-    // CalculateDesiredSpeed's (ratio*0.75 + 0.25) tail. This is the only writer of that array,
-    // so the question is whether it runs at all and, if it does, whether the CONTRIBUTOR rows
-    // it folds are themselves empty. Print the bias mode, how many bias entries are live, and
-    // the largest absolute contributor weight -- that separates "never called" from "called
-    // with nothing to fold" from "folded but the bias row is zero".
 
     return this;
 }
