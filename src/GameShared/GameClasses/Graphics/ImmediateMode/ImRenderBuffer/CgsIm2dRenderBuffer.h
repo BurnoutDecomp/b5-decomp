@@ -14,6 +14,7 @@ namespace CgsGraphics
         using Im2dColouredTexturedRenderBuffer::Dispatch;
 
         void SetTransform(const Im2dTransform& lrTransform);
+        void PopMask();
         void BatchTransformTextureBlendRenderStatic(const Im2dTransform& lrTransform,
             renderengine::Texture* lpTexture, const renderengine::BlendState* lpBlendState,
             renderengine::PrimitiveType lePrimitiveType,

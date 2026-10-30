@@ -39,9 +39,43 @@
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <ppcintrinsics.h>
 
 namespace CgsGraphics
 {
+
+    // ARTIST824501C8: the command buffer is the base subobject at this+4.
+    void Im2dRenderBuffer::PopMask()
+    {
+        const char* lpFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h";
+        if (!mbInRenderBlock)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", lpFile, 1216);
+            CgsDev::Assert::EndAssert();
+        }
+        __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u),
+                  mpWriteBuffer->mpu8CommandBuffer);
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        const u32 luNext = luPos + 16u;
+        if (luNext <= muCommandBufferSize)
+        {
+            u32* lpCommand = reinterpret_cast<u32*>(mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand[1] = 16;
+            lpCommand[0] = 19;
+            mpWriteBuffer->muCommandBufferWritePos = luNext;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+            if (!mbFailGracefully)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", lpFile, 1254);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+    }
 
     void Im2dRenderBuffer::BatchTransformTextureBlendRenderStatic(
         const Im2dTransform& lrTransform, renderengine::Texture* lpTexture,
