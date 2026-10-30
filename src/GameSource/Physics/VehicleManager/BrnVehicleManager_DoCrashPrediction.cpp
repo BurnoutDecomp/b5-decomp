@@ -1,3 +1,4 @@
+#include <float.h>
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_DoCrashPrediction.cpp
 //
@@ -79,7 +80,7 @@ namespace
     const f32 KF_BARYCENTRIC_TOLERANCE = 1.0e-5f;   // unk_82FB9EF0 <- flt_82004884
 
     // The running-minimum seed. `lfs f0, flt_8208F5EC` @0x826465B8 then `vspltw128 v59, v0, 0`.
-    const f32 KF_NO_HIT_DISTANCE = 3.4028235e38f;   // flt_8208F5EC == FLT_MAX
+    const f32 KF_NO_HIT_DISTANCE = FLT_MAX;   // flt_8208F5EC == FLT_MAX
 
     // ---- the three constants of the gate proper ------------------------------------------
     // ⭐ The first and third are NOT static-init thunks and NOT inline literals: each is a .bss
