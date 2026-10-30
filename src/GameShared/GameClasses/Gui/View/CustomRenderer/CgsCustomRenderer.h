@@ -96,7 +96,6 @@ namespace CgsGui
     class CustomRenderComponentInterface
     {
     public:
-        virtual ~CustomRenderComponentInterface() {}
 
         // cpp:73 -- @0x828476B0: `*(result + 4) = 0;` i.e. mbRenderEnabled = false.
         virtual void Construct() { mbRenderEnabled = false; }
@@ -197,7 +196,6 @@ namespace CgsGui
     class CustomRendererManager
     {
     public:
-        virtual ~CustomRendererManager() {}
 
         // cpp:228
         virtual void Construct()
