@@ -183,6 +183,8 @@ namespace BrnGui
             }
         }
 
+        void SetIconText(const char* lpcText, bool lbAlreadyLocalised);
+
         // @ 0x8244F5D0 [F3 2026-08-29] -- the per-frame COMMIT: push the dirty transform
         // fields out to the hosting component's apt view state, then (separately) the
         // icon-state label. This is what makes the crash-nav pool visible at all --

@@ -79,6 +79,15 @@ const char* const gaSatNavStateLabels[MapIconBrnBase::E_ICONSTATE_COUNT] =
     "invisible",                        // 52 E_ICONSTATE_CRASHNAV_CUSTOMRENDERED_FINISH_POINT
 };
 
+// @ 0x82448310
+void CrashNavMapIcon::SetIconText(const char* lpcText, bool lbAlreadyLocalised)
+{
+    if (lpcText != 0 && lbAlreadyLocalised)
+        mIconText.SetLocalisedText(lpcText, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+    else
+        mIconText.SetText(lpcText != 0 ? lpcText : "");
+}
+
 // @ 0x8244BA18
 //   The X360 byte-copies the icon starting at this+0x04 (the +0x00 vtable slot is NOT
 //   copied), copies the embedded TextField via TextField::operator=, then the two
