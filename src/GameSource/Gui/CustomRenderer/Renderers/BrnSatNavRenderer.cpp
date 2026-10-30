@@ -1206,7 +1206,7 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     // ---- the draw bracket (X360 @0x82466254-0x82466280) ----
     lrCmd.BeginRendering();
     lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
-    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpTextureState_Untextured);
+    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
     lrCmd.SetTransform(mTransform);
 
     // Lazy map / mask texture states from the payload textures (X360 @0x82466288 /
@@ -1245,7 +1245,7 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     RenderIconsForSatNav(&lrCmd);
     lrCmd.PopMask();
     lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
-    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpTextureState_Untextured);
+    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
     lrCmd.EndRendering();
 
     if (miSatNavRendererPM >= 0)
