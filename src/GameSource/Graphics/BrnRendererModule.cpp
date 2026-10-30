@@ -700,3 +700,109 @@ bool BrnRendererModule::PrepareAgain(const renderengine::Texture* blobbyShadow,
         CgsGraphics::E_TEXTURE_PURPOSE_GLASS_FRACTURE_PERSISTENT, mpGlassFractureTextureState);
     return true;
 }
+
+// ARTIST 823F65B0. This X360 body uses neither the receiver nor the target input.
+void BrnRendererModule::EndRenderPostFx(rw::graphics::postfx::RenderTarget*)
+{
+    shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+        E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF));
+    shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+        E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE));
+    shadow::Device::SetState(CgsBlendStateFactory::GetState(
+        E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
+}
+
+// ARTIST 823FC5E8. Resolve only the selected face of the first colour target.
+void BrnRendererModule::EndRenderEnvironmentMapFace(u32 face)
+{
+    const char* const file = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
+    if (!mAllocatedRenderTargets.GetEnvMapBuffer())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()", file, 4204);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()", file, 4205);
+        CgsDev::Assert::EndAssert();
+    }
+    mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()->maColourTargets[0].Resolve(face);
+}
+
+// ARTIST 82408B00. Keep the down-sample target saved across state and blit calls.
+void BrnRendererModule::EndRenderAntiAliased()
+{
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+    CgsRenderTarget* const downsample = mAllocatedRenderTargets.GetDownSampleBuffer();
+    downsample->SetRenderTargetState(0);
+    shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+        E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF));
+    shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+        E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE));
+    shadow::Device::SetState(CgsBlendStateFactory::GetState(
+        E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
+    mAllocatedRenderTargets.BlitComposite(mIm2dRenderer, downsample,
+        mAllocatedRenderTargets.GetParticleBuffer(), false, false);
+    downsample->GetRenderTarget()->Resolve(false, true);
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miDownsampleMSAAAndCompParticles);
+}
+
+// ARTIST 823F63E0. Environment faces use inverted depth and the front-cull state.
+void BrnRendererModule::BeginRenderEnvironmentMapFace(u32 face, f32 whiteLevel)
+{
+    const char* const file = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
+    if (!mAllocatedRenderTargets.GetEnvMapBuffer())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()", file, 4163);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()", file, 4164);
+        CgsDev::Assert::EndAssert();
+    }
+    mAllocatedRenderTargets.GetEnvMapBuffer()->SetRenderTargetStateInvertDepth(face);
+    const f32 grey = whiteLevel * 0.3f;
+    const renderengine::ClearColorParameters color = { { grey, grey, grey, 0.0f } };
+    const renderengine::ClearDepthStencilParameters depthStencil = { 48, 0.0f, 0 };
+    renderengine::Device::Clear(color, depthStencil, renderengine::RenderTargetState::TARGETID_COLOR_ALL);
+    shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+        E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON));
+    shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+        E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT));
+    shadow::Device::SetState(CgsBlendStateFactory::GetState(
+        E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
+}
+
+// ARTIST 82408C38. Depth is copied only after binding and clearing the particle target.
+void BrnRendererModule::BeginQuarterResBuffer()
+{
+    const char* const file = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
+    if (!mAllocatedRenderTargets.GetParticleBuffer())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetParticleBuffer() != NULL", file, 4302);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL", file, 4303);
+        CgsDev::Assert::EndAssert();
+    }
+    mAllocatedRenderTargets.GetParticleBuffer()->SetRenderTargetState(0);
+    const renderengine::ClearColorParameters color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+    renderengine::Device::Clear(color, renderengine::RenderTargetState::TARGETID_COLOR_ALL);
+    shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+        E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON));
+    shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+        E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE));
+    shadow::Device::SetState(CgsBlendStateFactory::GetState(
+        E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST));
+    mAllocatedRenderTargets.BlitDepth(mIm2dRenderer, mAllocatedRenderTargets.GetDownSampleBuffer());
+    mAllocatedRenderTargets.GetParticleBuffer()->SetRenderTargetState(0);
+}
