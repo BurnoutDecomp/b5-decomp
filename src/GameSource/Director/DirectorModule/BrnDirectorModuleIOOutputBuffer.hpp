@@ -87,14 +87,18 @@ namespace DirectorIO
         // X360 0x823B33B0 -> mResourceInterface @0x02E0. The consumer is
         // LoadDirectorModule's InputBuffer::AppendRequestInterface<512>, whose parameter is
         // `const RequestInterface<512>&` -- hence the const return.
-        const BrnResource::GameDataIO::RequestInterface<512>* Get();
+        const BrnResource::GameDataIO::RequestInterface<512>* Get() const;
+        const BrnResource::GameDataIO::RequestInterface<512>* GetResourceRequestInterface() const;
+        BrnResource::GameDataIO::RequestInterface<512>* GetResourceRequestInterface();
         u8*       GetDir();                     // -> mDirectorInterface        @0x0720
         // DecFIGS 0x33E0D0: const read getter for the typed DirectorOutputInterface;
         // ARTIST 0x823B3458 confirms the same member and read-lock contract.
         const BrnDirector::DirectorOutputInterface* GetDirectorOutputInterface() const;
         u8*       GetDirectorOu();              // legacy byte view for existing callers
         u8*       GetReplayRe();                // -> mReplayRequestInterface   @0x0724
-        CgsSystem::TimerRequestInterface* GetTimerRequestIn();   // -> mTimerRequestInterface @0x0500
+        const CgsSystem::TimerRequestInterface* GetTimerRequestIn() const;
+        const CgsSystem::TimerRequestInterface* GetTimerRequestInterface() const;
+        CgsSystem::TimerRequestInterface* GetTimerRequestInterface();   // -> mTimerRequestInterface @0x0500
         // X360 0x823B24A0 -> &mVaultRequestInterface (this+0x510), READ-lock. DWARF name
         // (BrnDirectorResourceManager.h:319 recorded the correction); the const overload is
         // the read-side twin so both can carry the one DWARF spelling.
