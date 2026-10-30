@@ -1,4 +1,5 @@
 #include "GameSource/Gui/SatNav/BrnMapManager.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 #include "SharedClasses/Gui/SatNav/BrnSatNavTile.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -6,7 +7,6 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple / ResourceRequestTypes
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetAllocator (Construct)
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"    // BrnGui::MapTransform (Construct's world box)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG-TEMP] the map-lowres probe
 
 #include <cstdlib>   // qsort (RefreshActiveTextureArray)
 #include <cmath>     // fabsf (SetZoomLevel)
@@ -357,17 +357,6 @@ namespace BrnGui
             return;
         }
 
-        // [DIAG-TEMP] NOT IN THE X360 BINARY -- [map-lowres] the backdrop build attempt.
-        static int32_t siLowResLog = 6;
-        const bool lbLog = (siLowResLog > 0 && CgsDev::Log::gpDebugPrint != 0);
-        if (lbLog)
-        {
-            --siLowResLog;
-            *CgsDev::Log::gpDebugPrint
-                << "[map-lowres] event 64 reached; cache=" << (lpCache != NULL ? 1 : 0)
-                << " alloc=" << (mpAllocator != NULL ? 1 : 0) << "\n";
-        }
-
         // The low-res sat-nav map texture resource (id 199, a localised-text-class resource).
         const uint32_t luMapTextureResourceId = 199u;
 
@@ -376,95 +365,29 @@ namespace BrnGui
         lResourceTuple.meType = CgsGui::E_GUI_RESOURCETYPE_LOCALISED_TEXT;   // 11
 
         const bool lbLoaded = lpCache->EnsureResourceIsLoaded(lResourceTuple);
-        if (lbLog)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[map-lowres] EnsureResourceIsLoaded(199,LOCALISED_TEXT)=" << (lbLoaded ? 1 : 0) << "\n";
-        }
         if (!lbLoaded)
         {
             return;
         }
 
         const void* lpTexture2D = lpCache->GetLoadedResource(luMapTextureResourceId);
-        if (lbLog)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[map-lowres] GetLoadedResource(199)=" << (lpTexture2D != NULL ? 1 : 0) << "\n";
-        }
         CGS_ASSERT(lpTexture2D != NULL, "lpTexture2D != NULL");
 
         // Sampler parameters for the backdrop texture-state (clamp-ish addressing, point/linear
         // filter, no mip bias). Field values mirror the X360 stores store-for-store.
         renderengine::TextureState::Parameters lParams;
-        lParams.muAddressU      = 2u;
-        lParams.muAddressV      = 2u;
-        lParams.muAddressW      = 0u;
-        lParams.muMagFilter     = 1u;
-        lParams.muMinFilter     = 1u;
-        lParams.muMipFilter     = 2u;
-        lParams.muField6        = 0u;
-        lParams.muField7        = 0u;
-        lParams.muMaxAnisotropy = 13u;
-        lParams.muField9        = 0u;
-        lParams.muField10       = 1u;
-        lParams.mfMipLodBias    = 0.0f;   // flt_82001CC0 == 0.0f
-        lParams.mfField12       = 0.0f;   // flt_82001CC0 == 0.0f
-        lParams.muField13       = 0u;
-        lParams.muField14       = 0u;
-        lParams.muField15       = 0u;
-        lParams.mu8Field40      = 0u;
-        lParams.mu8Field41      = 0u;
-        lParams.mu8Field42      = 0u;
-        lParams.mu8Field43      = 1u;
-        lParams.mu8Field44      = 1u;
-        lParams.mpTexture       = reinterpret_cast<renderengine::Texture*>(
-            const_cast<void*>(lpTexture2D));
-
-        // Size the texture-state resource, carve it from the manager's allocator, initialise the
-        // sampler+raster state in it, and latch the result into the low-res cache slot + backdrop.
-        //
-        // ⚠️ X360-vs-host descriptor WIDTH. The console's GetResourceDescriptor writes a
-        // rw::BaseResourceDescriptors<5> (10 words) and hands that same pointer straight to
-        // the allocator vtable slot; the host rwcore's rw::ResourceDescriptor is <4> (8 words).
-        // Reinterpreting the 10-word buffer as a ResourceDescriptor would be an X360 width on
-        // the host, so the slot-0 {size, alignment} is transcribed across explicitly and the
-        // remaining entries take rw's identity descriptor -- the committed pattern at
-        // CgsAptRenderHandler.cpp:325-341.
-        uint32_t laDescriptor[10];
-        renderengine::TextureState::GetResourceDescriptor(laDescriptor);
-
-        rw::ResourceDescriptor lAllocDescriptor;
-        lAllocDescriptor.m_baseResourceDescriptors[0].m_size      = laDescriptor[0];
-        lAllocDescriptor.m_baseResourceDescriptors[0].m_alignment = laDescriptor[1];
-        lAllocDescriptor.m_baseResourceDescriptors[1].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[1].m_alignment = 1u;
-        lAllocDescriptor.m_baseResourceDescriptors[2].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[2].m_alignment = 1u;
-        lAllocDescriptor.m_baseResourceDescriptors[3].m_size      = 0u;
-        lAllocDescriptor.m_baseResourceDescriptors[3].m_alignment = 1u;
-
-        // X360 `(*(**(this+1396) + 16))(&result, mpAllocator, descriptor, 0)` -- the
-        // IResourceAllocator DoAllocate slot, name argument NULL.
-        rw::Resource lAllocatedResource = mpAllocator->DoAllocate(lAllocDescriptor, NULL);
-
-        // X360: the five-word `*v12++ = *v11++` copy of the returned Resource into this+84.
-        mLowResTextureCache.mTextureStateResources[0] = lAllocatedResource;
-
+        lParams.muAddressU = 2;
+        lParams.muAddressV = 2;
+        lParams.muMagFilter = 1;
+        lParams.muMinFilter = 1;
+        lParams.mpTexture = const_cast<renderengine::Texture*>(
+            static_cast<const renderengine::Texture*>(lpTexture2D));
+        rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lParams);
+        mLowResTextureCache.mTextureStateResources[0] = mpAllocator->DoAllocate(lDescriptor, 0);
         renderengine::TextureState* lpState = renderengine::TextureState::Initialize(
-            &mLowResTextureCache.mTextureStateResources[0], &lParams);
-
-        mLowResTextureCache.mapTextureStates[0] =
-            reinterpret_cast<CgsGraphics::TextureState*>(lpState);
-        mLowResTexture.mpTextureState =
-            reinterpret_cast<CgsGraphics::TextureState*>(lpState);
-
-        // [DIAG-TEMP] NOT IN THE X360 BINARY.
-        if (lbLog)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[map-lowres] BACKDROP BUILT state=" << (lpState != NULL ? 1 : 0) << "\n";
-        }
+            mLowResTextureCache.mTextureStateResources[0], lParams);
+        mLowResTextureCache.mapTextureStates[0] = lpState;
+        mLowResTexture.mpTextureState = lpState;
     }
 
     // @0x8244FA80 -- rebuild the working tile set for the current world rect and zoom level. At

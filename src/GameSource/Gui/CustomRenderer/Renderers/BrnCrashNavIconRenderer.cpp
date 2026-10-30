@@ -162,10 +162,9 @@ namespace
         lParams.muMagFilter = 1;
         lParams.muMinFilter = 1;
         lParams.mpTexture = static_cast<renderengine::Texture*>(const_cast<void*>(lpTexture));
-        rw::ResourceDescriptor lDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lParams);
         *lpBacking = lpAllocator->DoAllocate(lDescriptor, 0);
-        return renderengine::TextureState::Initialize(lpBacking, &lParams);
+        return renderengine::TextureState::Initialize(*lpBacking, lParams);
     }
 }
 

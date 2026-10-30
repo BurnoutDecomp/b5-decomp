@@ -174,12 +174,11 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         lTextureStateParameters.mbUnidentified44      = 1;
         lTextureStateParameters.mpTexture       = lpColourCalibrationTexture;
 
-        rw::ResourceDescriptor lDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lTextureStateParameters);
         mTextureStateResource = lpAllocator->DoAllocate(lDescriptor, 0);
 
-        mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource,
-                                                                &lTextureStateParameters);
+        mpTextureState = renderengine::TextureState::Initialize(mTextureStateResource,
+                                                                lTextureStateParameters);
         CgsDev::Log::WriteToLog("[calib-screen] calibration texture acquired\n");
     }
         // FALLTHROUGH (the X360 case-2 body runs straight into the PREPARED publish).

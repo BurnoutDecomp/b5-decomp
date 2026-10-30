@@ -345,11 +345,10 @@ void CreditsTextRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEvent
             lParameters.mbUnidentified44 = 1;
             lParameters.mpTexture = *static_cast<renderengine::Texture**>(lFont.mpResourceMemory);
             CGS_ASSERT(lParameters.mpTexture != 0, "lpTexture!=NULL");
-            rw::ResourceDescriptor lDescriptor;
-            renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+            rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lParameters);
             mBackgroundMaskTextureStateResource = mpHeapAllocator->DoAllocate(lDescriptor, 0);
             mpBackgroundMaskTextureState = renderengine::TextureState::Initialize(
-                &mBackgroundMaskTextureStateResource, &lParameters);
+                mBackgroundMaskTextureStateResource, lParameters);
         }
     }
     else if (liEventType == 587)

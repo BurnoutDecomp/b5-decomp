@@ -11,7 +11,7 @@
 // the currently-reconstructed bodies are given full definitions; the remaining declared methods
 // (Construct/Destruct/SetTexture/... and the sRect helpers) land with the rest of the TU.
 
-namespace CgsGraphics
+namespace renderengine
 {
     class TextureState;
 }
@@ -56,7 +56,7 @@ namespace BrnGui
         // BrnSatNavTile.h:94 - one loaded texture + its local/world bounding box.
         struct sTexture
         {
-            CgsGraphics::TextureState* mpTextureState;  // +0x00
+            renderengine::TextureState* mpTextureState;  // +0x00
             sRect                      mBB;             // +0x04 (local)
             sRect                      mBBWorld;        // +0x14 (world)
 
@@ -75,7 +75,7 @@ namespace BrnGui
             SatNavTile*                mpTile;                      // +0x08
             uint32_t                   muTextureCount;              // +0x0C
             rw::Resource               mTextureStateResources[KU_MAX_NUMBER_OF_TEXTURES_PER_TILE]; // +0x10
-            CgsGraphics::TextureState* mapTextureStates[KU_MAX_NUMBER_OF_TEXTURES_PER_TILE];       // +0x4C
+            renderengine::TextureState* mapTextureStates[KU_MAX_NUMBER_OF_TEXTURES_PER_TILE];       // +0x4C
         };
 
         sRect    mBB[KU_MAX_NUMBER_OF_TEXTURES_PER_TILE];       // +0x00

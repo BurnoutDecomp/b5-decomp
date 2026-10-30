@@ -1,4 +1,6 @@
 #include "GameShared/GameClasses/Fonts/CgsFont.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // ConvertUtf8CharToUtf16Char
 #include "rw/rwcore_structs.h"                          // rw::IResourceAllocator
 
@@ -348,42 +350,26 @@ namespace CgsResource
 
     // Faithful port of X360 0x82835658. Build the sampler parameters for atlas page 0 and create the
     // font's runtime texture state, storing it in mpTextureState (backed by mTextureStateResource).
-    // The X360 sizes the state (renderengine::TextureState::GetResourceDescriptor), allocates it via
-    // the rw allocator, then renderengine::TextureState::Initialize marshals the sampler config into
-    // a Xenos GPU descriptor. [PC DIVERGENCE: the PC TextureState keeps the config + raster for
-    // draw-time use; the allocator/descriptor dance is X360 graphics memory management.]
-    void Font::CreateTextureState(rw::IResourceAllocator* /*lpAllocator*/)
+    // Size and allocate the resource, then initialize the state using the original sampler parameters.
+    void Font::CreateTextureState(rw::IResourceAllocator* lpAllocator)
     {
-        // (X360 asserts mpapTextures[0] != NULL, CgsFont.cpp:383.)
-        if (mpapTextures == 0 || mpapTextures[0] == 0)
-            return;
-
         renderengine::TextureState::Parameters lParams;
-        lParams.muAddressU      = 2u;
-        lParams.muAddressV      = 2u;
-        lParams.muAddressW      = 0u;
-        lParams.muMagFilter     = 1u;
-        lParams.muMinFilter     = 1u;
-        lParams.muMipFilter     = 1u;
-        lParams.muField6        = 0u;
-        lParams.muField7        = 0u;
-        lParams.muMaxAnisotropy = 13u;
-        lParams.muField9        = 0u;
-        lParams.muField10       = 1u;
-        lParams.mfMipLodBias    = -0.5f;
-        lParams.mfField12       = 0.0f;
-        lParams.muField13       = 0u;
-        lParams.muField14       = 0u;
-        lParams.muField15       = 0u;
-        lParams.mu8Field40      = 0u;
-        lParams.mu8Field41      = 0u;
-        lParams.mu8Field42      = 0u;
-        lParams.mu8Field43      = 1u;
-        lParams.mu8Field44      = 1u;
-        lParams.mpTexture       = mpapTextures[0];   // atlas page 0
-
-        u32 lauDescriptor[10];
-        renderengine::TextureState::GetResourceDescriptor(lauDescriptor);  // (X360 sizes + allocs the state)
-        mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource, &lParams);
+        lParams.muAddressU = 2;
+        lParams.muAddressV = 2;
+        lParams.muMagFilter = 1;
+        lParams.muMinFilter = 1;
+        lParams.muMipFilter = 1;
+        lParams.mfMipLodBias = -0.5f;
+        if (mpapTextures[0] == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpapTextures[0] != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsFont.cpp", 383);
+            CgsDev::Assert::EndAssert();
+        }
+        lParams.mpTexture = mpapTextures[0];
+        rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lParams);
+        mTextureStateResource = lpAllocator->DoAllocate(lDescriptor, 0);
+        mpTextureState = renderengine::TextureState::Initialize(mTextureStateResource, lParams);
     }
 }
