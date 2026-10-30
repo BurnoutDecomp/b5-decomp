@@ -91,8 +91,9 @@ namespace CgsGuiModuleIO
         if (!IsBufferLockedForWriting())
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-            lStream << "Not locked for writing\n";
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 285);
             CgsDev::Assert::EndAssert();
@@ -100,8 +101,9 @@ namespace CgsGuiModuleIO
         if (!lpSourceQueue)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-            lStream << "Invalid event queue pointer sent to OutputBuffer::AddGuiOutEvents";
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Invalid event queue pointer sent to OutputBuffer::AddGuiOutEvents";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 286);
             CgsDev::Assert::EndAssert();

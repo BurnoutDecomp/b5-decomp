@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace CgsGui
@@ -13,8 +14,9 @@ namespace CgsGui
         if (!lpInput)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-            lStream << "Invalid input queue in GuiModule::BridgeFromInputToView";
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Invalid input queue in GuiModule::BridgeFromInputToView";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 42);
             CgsDev::Assert::EndAssert();

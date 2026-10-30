@@ -61,8 +61,9 @@ namespace ModelIO
         if (!IsBufferLockedForWriting())
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-            lStream << "Not locked for writing\n";
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                 "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 88);
             CgsDev::Assert::EndAssert();
@@ -77,8 +78,9 @@ namespace ModelIO
         if (!IsBufferLockedForWriting())
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-            lStream << "Not locked for writing\n";
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
                 "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 105);
             CgsDev::Assert::EndAssert();
