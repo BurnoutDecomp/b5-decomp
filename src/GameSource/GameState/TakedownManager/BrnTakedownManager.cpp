@@ -1,3 +1,4 @@
+#include <float.h>
 #include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"
 
 #include <cmath>                                                        // std::asin (the de-SIMD'd XMVectorASin)
@@ -129,7 +130,7 @@ namespace BrnGameState
                                      EActiveRaceCarIndex leFocusOnRaceCarIndex, bool lbActive, bool lbIsRevengeTakedown)
         {
             GameStateModuleIO::SetTakedownCameraAction lAction;
-            lAction.meFocusOnRaceCarIndex = static_cast<decltype(lAction.meFocusOnRaceCarIndex)>(leFocusOnRaceCarIndex);
+            lAction.meFocusOnRaceCarIndex = leFocusOnRaceCarIndex;
             lAction.mbActive              = lbActive;
             lAction.mbIsSignature         = false;
             lAction.mbIsRevengeTakedown   = lbIsRevengeTakedown;
@@ -141,7 +142,7 @@ namespace BrnGameState
 
         void PostPlayerCarDriver(GameStateModuleIO::GameActionQueue* lpGameActionQueue, BrnWorld::CarControl leCarControl)
         {
-            GameStateModuleIO::SetPlayerCarDriverAction lAction = {};
+            GameStateModuleIO::SetPlayerCarDriverAction lAction = GameStateModuleIO::SetPlayerCarDriverAction();
             lAction.meCarControl  = leCarControl;
             lAction.mbIsDriveThru = false;
             lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
@@ -312,7 +313,7 @@ namespace BrnGameState
             RaceCarData*              lpRaceCarData = GetRaceCarData(leIndex);
 
             lpRaceCarData->mfTimeSinceLastTakedown += lfDeltaTime;
-            if (lpRaceCarData->mfTimeSinceLastTakenDown < 3.4028235e38f - lfDeltaTime)   // FLT_MAX guard (flt_82029B70)
+            if (lpRaceCarData->mfTimeSinceLastTakenDown < FLT_MAX - lfDeltaTime)   // FLT_MAX guard (flt_82029B70)
             {
                 lpRaceCarData->mfTimeSinceLastTakenDown += lfDeltaTime;
             }
@@ -473,7 +474,7 @@ namespace BrnGameState
             mbPlayerWaitingForControl = false;
 
             GameStateModuleIO::ShutdownFinishedAction lShutdown;
-            lShutdown.meActiveRaceCarIndex = static_cast<decltype(lShutdown.meActiveRaceCarIndex)>(meCurrentVictimActiveRaceCarIndex);
+            lShutdown.meActiveRaceCarIndex = meCurrentVictimActiveRaceCarIndex;
             lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lShutdown),
                                         GameStateModuleIO::E_ACTION_SHUTDOWN_FINISHED,
                                         static_cast<s32>(sizeof(lShutdown)));

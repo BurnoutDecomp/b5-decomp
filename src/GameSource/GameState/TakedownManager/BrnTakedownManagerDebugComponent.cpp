@@ -70,23 +70,6 @@ namespace BrnGameState
     // post-loop assert is unreachable for these fixed 0..7 loops.
     void TakedownManagerDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
     {
-        static s32 siTraceTransitionsRemaining = 32;
-        static s32 siTraceSamplesRemaining = 8;
-        static s32 siTraceCallsSinceSample = 0;
-        static bool sbHasTraceSnapshot = false;
-        static u32 suPreviousToggleMask = 0;
-        static u32 suPreviousActiveCarMask = 0;
-        static u32 suPreviousVulnerabilityShuntOrSlamMask = 0;
-        static u32 suPreviousVulnerabilityRecentContactMask = 0;
-        static u32 suPreviousRevengeMask = 0;
-        static u32 suPreviousGeometryCount = 0;
-        static s32 siPreviousPlayerIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
-        static bool sbPreviousPlayerCarActive = false;
-        u32 luActiveCarMask = 0;
-        u32 luVulnerabilityShuntOrSlamMask = 0;
-        u32 luVulnerabilityRecentContactMask = 0;
-        u32 luRevengeMask = 0;
-        u32 luGeometryCount = 0;
         bool lbPlayerCarActive = false;
         EActiveRaceCarIndex lePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
 
@@ -102,21 +85,16 @@ namespace BrnGameState
                 {
                     continue;
                 }
-                luActiveCarMask |= (1u << liIndex);
 
                 const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
                     lpActiveCarInterface->GetRaceCarState(leActiveRaceCarIndex);
                 if (lpRaceCarState->mShuntEffect.IsActive() || lpRaceCarState->mSlamEffect.mfSlamLife > 0.0f)
                 {
-                    luVulnerabilityShuntOrSlamMask |= (1u << liIndex);
                     lpRender->DrawSolidSphere(lpRaceCarState->mTransform.Pos(), 2.0f, rw::RGBA(255, 0, 0, 0x40));
-                    ++luGeometryCount;
                 }
                 else if (lpRaceCarState->mfTimeSinceLastRaceCarContact < 2.0f)
                 {
-                    luVulnerabilityRecentContactMask |= (1u << liIndex);
                     lpRender->DrawSolidSphere(lpRaceCarState->mTransform.Pos(), 2.0f, rw::RGBA(255, 255, 0, 0x40));
-                    ++luGeometryCount;
                 }
             }
         }
@@ -141,86 +119,19 @@ namespace BrnGameState
                     {
                         continue;
                     }
-                    luActiveCarMask |= (1u << liIndex);
                     if (!lpPlayerRaceCarData->mabRevengeRelationships[liIndex])
                     {
                         continue;
                     }
 
-                    luRevengeMask |= (1u << liIndex);
                     const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
                         lpActiveCarInterface->GetRaceCarState(leActiveRaceCarIndex);
                     lpRender->DrawSolidSphere(lpRaceCarState->mTransform.Pos(), 2.0f, rw::RGBA(255, 0, 0, 0x40));
-                    ++luGeometryCount;
                 }
             }
         }
 
-        // [PC trace only] Log up to 32 state transitions and eight samples (each after 60 stable
-        // enabled calls) from the same cached interface. Stable disabled frames cost no budget;
-        // separate caps preserve transitions for a scenario driven from the menu at high frame
-        // rates. The trace submits no extra geometry and changes no gameplay state. Set
-        // BRN_TAKEDOWN_DEBUG_TRACE=1 for the joint vulnerability/revenge scenario.
-        if (lbTraceThisCall)
-        {
-            const u32 luToggleMask = (mbShowVulnerability ? 1u : 0u) |
-                                     (mbShowLastTakedownInfo ? 2u : 0u) |
-                                     (mbShowRevengeTakedownInfo ? 4u : 0u);
-            const s32 liPlayerIndex = static_cast<s32>(lePlayerActiveRaceCarIndex);
-            const bool lbStateChanged = !sbHasTraceSnapshot ||
-                                        luToggleMask != suPreviousToggleMask ||
-                                        luActiveCarMask != suPreviousActiveCarMask ||
-                                        luVulnerabilityShuntOrSlamMask != suPreviousVulnerabilityShuntOrSlamMask ||
-                                        luVulnerabilityRecentContactMask != suPreviousVulnerabilityRecentContactMask ||
-                                        luRevengeMask != suPreviousRevengeMask ||
-                                        luGeometryCount != suPreviousGeometryCount ||
-                                        liPlayerIndex != siPreviousPlayerIndex ||
-                                        lbPlayerCarActive != sbPreviousPlayerCarActive;
-            bool lbWriteTrace = false;
-            const char* lpcTraceEvent = "sample";
-            if (lbStateChanged)
-            {
-                const bool lbHasVisibleState = sbHasTraceSnapshot || luToggleMask != 0;
-                sbHasTraceSnapshot = true;
-                suPreviousToggleMask = luToggleMask;
-                suPreviousActiveCarMask = luActiveCarMask;
-                suPreviousVulnerabilityShuntOrSlamMask = luVulnerabilityShuntOrSlamMask;
-                suPreviousVulnerabilityRecentContactMask = luVulnerabilityRecentContactMask;
-                suPreviousRevengeMask = luRevengeMask;
-                suPreviousGeometryCount = luGeometryCount;
-                siPreviousPlayerIndex = liPlayerIndex;
-                sbPreviousPlayerCarActive = lbPlayerCarActive;
-                siTraceCallsSinceSample = 0;
-                if (lbHasVisibleState && siTraceTransitionsRemaining > 0)
-                {
-                    --siTraceTransitionsRemaining;
-                    lbWriteTrace = true;
-                    lpcTraceEvent = "transition";
-                }
-            }
-            else if ((mbShowVulnerability || mbShowRevengeTakedownInfo) &&
-                     siTraceSamplesRemaining > 0 && ++siTraceCallsSinceSample >= 60)
-            {
-                --siTraceSamplesRemaining;
-                siTraceCallsSinceSample = 0;
-                lbWriteTrace = true;
-            }
 
-            if (lbWriteTrace)
-            {
-                CgsDev::SimpleStrStream lTrace;
-                lTrace << "[BRN_TAKEDOWN_DEBUG_TRACE] event=" << lpcTraceEvent
-                       << " slots=" << luActiveCarMask
-                       << " vulnerability-shunt-slam=" << luVulnerabilityShuntOrSlamMask
-                       << " vulnerability-recent-contact=" << luVulnerabilityRecentContactMask
-                       << " revenge=" << luRevengeMask
-                       << " player-active=" << (lbPlayerCarActive ? 1 : 0)
-                       << " player-slot=" << liPlayerIndex
-                       << " toggles=" << luToggleMask
-                       << " geometry-submissions=" << luGeometryCount << "\n";
-                *CgsDev::Log::gpDebugPrint << lTrace.GetBuffer();
-            }
-        }
     }
 
     void TakedownManagerDebugComponent::OnActivate()
