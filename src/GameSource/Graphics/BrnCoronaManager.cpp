@@ -437,10 +437,11 @@ void BrnCoronaManager::Construct(rw::IResourceAllocator& lrAllocator)
 void BrnCoronaManager::Clear()
 {
     BrnSubmissionInterface& lrInterface = mSubmissionInterface[mu8SubmissionSwapIndex];
-    if (lrInterface.mpBuffer != 0)
-    {
-        lrInterface.mpBuffer->Lock(lrInterface.mBufferIterator);
-    }
+    renderengine::CoronaBuffer* const buffer = lrInterface.mpBuffer;
+    renderengine::Corona* const data = buffer->mpData;
+    lrInterface.mBufferIterator.muIndex = 0;
+    lrInterface.mBufferIterator.mpData = data;
+    lrInterface.mBufferIterator.muNumCoronas = buffer->muNumCoronas;
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator / ResourceDescriptor / Resource
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"  // renderengine::PrimitiveType / Texture / TextureState fwd-decls
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"  // CgsGraphics::Basic2dColouredTexturedVertex
@@ -378,8 +380,38 @@ namespace CgsGraphics
         void Destruct();
 
         // ----- double-buffer management -----
-        void Swap();                                                                         // @0x1EA834
-        void Clear();                                                                        // @0x1EA7D4
+        // ARTIST823F9470/9558/9850: diagnose before re-reading the index.
+        // Rotation preserves both streams; StartOfFrame clears the new writer.
+        void Swap()
+        {
+            if (miWriteBufferIndex != 0 && miWriteBufferIndex != 1)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::StrStream message(CgsDev::Assert::gpcMessageBuffer,
+                    CgsDev::Assert::giMessageBufferSize);
+                const s32 index = miWriteBufferIndex;
+                message << "Oh dear we are in trouble, miWriteBufferIndex is :" << index << "\n";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                    "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h", 572);
+                CgsDev::Assert::EndAssert();
+            }
+            mbInRenderBlock = false;
+            mbBufferIsFull = false;
+            muLastEndRenderPos = 0;
+            miWriteBufferIndex = 1 - miWriteBufferIndex;
+            mpWriteBuffer = &maBuffers[miWriteBufferIndex];
+            mpDispatchBuffer = &maBuffers[1 - miWriteBufferIndex];
+        }
+
+        // ARTIST823FC1C0..823FC2A0, seven inline instantiations.
+        void Clear()
+        {
+            mpWriteBuffer->muCommandBufferWritePos = 0;
+            mpWriteBuffer->muVertexBufferWritePos = 0;
+            mbInRenderBlock = false;
+            mbBufferIsFull = false;
+            muLastEndRenderPos = 0;
+        }
 
         // ----- render block bookkeeping -----
         bool IsInARenderingBlock();                                                          // @0x5CEEA0

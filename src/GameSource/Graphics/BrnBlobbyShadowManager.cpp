@@ -9,6 +9,14 @@ void BrnBlobbyShadowManager::Construct()
     mu8External = 1;
 }
 
+// ARTIST823FC748..823FC770: publish the old external buffer and clear the next.
+void BrnBlobbyShadowManager::Swap()
+{
+    mu8Internal = mu8External;
+    mu8External = static_cast<u8>(1 - mu8External);
+    maBuffers[mu8External].miNumShadows = 0;
+}
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
