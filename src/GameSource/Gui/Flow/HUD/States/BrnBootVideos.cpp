@@ -201,6 +201,16 @@ namespace BrnGui
             }
         }
 
+        // ARTIST82478824..880 checks the loading stage before reading its events.
+        if (meUpdateStage == E_UPDATE_STAGE_LOADING &&
+            BrnGame::GetMainGameModule()->HasGameBeenSoftRebooted())
+        {
+            PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            meUpdateStage = E_UPDATE_STAGE_DONE;
+            lpInQueue->Clear();
+            return;
+        }
+
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
@@ -210,19 +220,6 @@ namespace BrnGui
             {
             case E_UPDATE_STAGE_LOADING:
             case E_UPDATE_STAGE_MAIN_HD_MOVIE:
-                // @0x8247882C -- a soft reboot skips the branding entirely: post the
-                // phase-complete command and jump straight to DONE.
-                // ⭐ ...and so does the TUB "-skipvideos" command-line latch, restored
-                // 2026-08-16 (boot audit F-P0-10). It takes the same exit for the same
-                // reason: skip the branding, tell the flow the phase is complete.
-                if (BrnGame::GetMainGameModule() != 0 &&
-                    (BrnGame::GetMainGameModule()->HasGameBeenSoftRebooted() != 0 ||
-                     BrnGame::GetMainGameModule()->GetSkipVideos()))
-                {
-                    PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-                    meUpdateStage = E_UPDATE_STAGE_DONE;
-                    break;
-                }
                 // Boot resource/cache ready -> latch the cache (the dwell clock lives on it)
                 // and play the EA logo with the keep-memory byte set.
                 if (liEventId == KI_EVENT_CACHE_READY)
