@@ -22,12 +22,46 @@
 #include "SDKs/XboxMath/XMVectorACos.h"
 #include "SDKs/XboxMath/XMVectorSinCos.h"
 
+#include <vectorintrinsics.h>
 #include <cmath>
 #include <cstring>
 
 namespace
 {
     using rw::math::vpu::Vector3;
+
+    rw::math::vpu::Vector4 MakeVector4(f32 x, f32 y, f32 z, f32 w)
+    {
+        const rw::math::vpu::Vector4 v = { x, y, z, w };
+        return v;
+    }
+
+    rw::math::vpu::Vector3Plus MakeVector3Plus(f32 x, f32 y, f32 z, f32 w)
+    {
+        const rw::math::vpu::Vector3Plus v = { x, y, z, w };
+        return v;
+    }
+
+    f32 VmxMadd(f32 a, f32 b, f32 c)
+    {
+        const __vector4 va = { a, a, a, a };
+        const __vector4 vb = { b, b, b, b };
+        const __vector4 vc = { c, c, c, c };
+        return __vmaddfp(va, vb, vc).x;
+    }
+
+    Vector3 OffsetTrianglePoint(const Vector3& normal, const Vector3& point, f32 offset)
+    {
+        const __vector4 lvNormal = __lvx(&normal, 0);
+        const __vector4 lvPoint = __lvx(&point, 0);
+        const __vector4 lvOffset = { offset, offset, offset, offset };
+        Vector3 result;
+        __stvx(__vmaddfp(lvNormal, lvOffset, lvPoint), &result, 0);
+        return result;
+    }
+
+    // ARTIST 0x828B361C..0x828B36E4 uses scalar fmuls/fmadds.
+    f32 ScalarMadd(f32 a, f32 b, f32 c) { return a * b + c; }
 
     f32 FloatFromTriangleDebugBits(u32 luBits)
     {
@@ -64,21 +98,21 @@ namespace
                                   + lrAxis.z * lrNormal.z;
         Vector3 lvAxisCrossNormal;
         lvAxisCrossNormal.x =
-            std::fma(lrAxis.y, lrNormal.z, -lrAxis.z * lrNormal.y);
+            VmxMadd(lrAxis.y, lrNormal.z, -lrAxis.z * lrNormal.y);
         lvAxisCrossNormal.y =
-            std::fma(lrAxis.z, lrNormal.x, -lrAxis.x * lrNormal.z);
+            VmxMadd(lrAxis.z, lrNormal.x, -lrAxis.x * lrNormal.z);
         lvAxisCrossNormal.z =
-            std::fma(lrAxis.x, lrNormal.y, -lrAxis.y * lrNormal.x);
+            VmxMadd(lrAxis.x, lrNormal.y, -lrAxis.y * lrNormal.x);
         const f32 lfAxisTerm = lfAxisDotNormal * (1.0f - lfCosine);
         Vector3 lvRotated;
-        lvRotated.x = std::fma(lrNormal.x, lfCosine,
-                               std::fma(lvAxisCrossNormal.x, lfSine,
+        lvRotated.x = VmxMadd(lrNormal.x, lfCosine,
+                               VmxMadd(lvAxisCrossNormal.x, lfSine,
                                         lrAxis.x * lfAxisTerm));
-        lvRotated.y = std::fma(lrNormal.y, lfCosine,
-                               std::fma(lvAxisCrossNormal.y, lfSine,
+        lvRotated.y = VmxMadd(lrNormal.y, lfCosine,
+                               VmxMadd(lvAxisCrossNormal.y, lfSine,
                                         lrAxis.y * lfAxisTerm));
-        lvRotated.z = std::fma(lrNormal.z, lfCosine,
-                               std::fma(lvAxisCrossNormal.z, lfSine,
+        lvRotated.z = VmxMadd(lrNormal.z, lfCosine,
+                               VmxMadd(lvAxisCrossNormal.z, lfSine,
                                         lrAxis.z * lfAxisTerm));
         Vector3 lvResult;
         lvResult.x = lvRotated.x;
@@ -110,11 +144,11 @@ namespace
         lResult.xAxis.w = 0.0f;
 
         lResult.yAxis.x = lfSinY * lfSinXCosZ - lfCosXSinZ;
-        lResult.yAxis.y = std::fma(lfSinY, lfSinXSinZ, lfCosXCosZ);
+        lResult.yAxis.y = VmxMadd(lfSinY, lfSinXSinZ, lfCosXCosZ);
         lResult.yAxis.z = lfCosY * lfSinX;
         lResult.yAxis.w = 0.0f;
 
-        lResult.zAxis.x = std::fma(lfSinY, lfCosXCosZ, lfSinXSinZ);
+        lResult.zAxis.x = VmxMadd(lfSinY, lfCosXCosZ, lfSinXSinZ);
         lResult.zAxis.y = lfSinY * lfCosXSinZ - lfSinXCosZ;
         lResult.zAxis.z = lfCosY * lfCosX;
         lResult.zAxis.w = 0.0f;
@@ -443,25 +477,31 @@ namespace CgsSceneManager
         const rw::math::vpu::Vector3& lrVertex0 = laPolyPoints[0];
         const rw::math::vpu::Vector3& lrVertex1 = laPolyPoints[1];
         const rw::math::vpu::Vector3& lrVertex2 = laPolyPoints[2];
-        const f32 lfEdge01X = lrVertex1.x - lrVertex0.x;
-        const f32 lfEdge01Y = lrVertex1.y - lrVertex0.y;
-        const f32 lfEdge01Z = lrVertex1.z - lrVertex0.z;
-        const f32 lfEdge12X = lrVertex2.x - lrVertex1.x;
-        const f32 lfEdge12Y = lrVertex2.y - lrVertex1.y;
-        const f32 lfEdge12Z = lrVertex2.z - lrVertex1.z;
+        // ARTIST 0x828B3C9C..0x828B3D04: rounded cross-product terms,
+        // followed by vmsum3fp and two reciprocal-square-root refinements.
+        const __vector4 lvVertex0 = __lvx(&lrVertex0, 0);
+        const __vector4 lvVertex1 = __lvx(&lrVertex1, 0);
+        const __vector4 lvVertex2 = __lvx(&lrVertex2, 0);
+        const __vector4 lvEdge01 = __vsubfp(lvVertex0, lvVertex1);
+        const __vector4 lvEdge12 = __vsubfp(lvVertex2, lvVertex1);
+        const __vector4 lvA = { lvEdge01.y, lvEdge01.z, lvEdge01.x, lvEdge01.w };
+        const __vector4 lvB = { lvEdge12.z, lvEdge12.x, lvEdge12.y, lvEdge12.w };
+        const __vector4 lvC = { lvEdge01.z, lvEdge01.x, lvEdge01.y, lvEdge01.w };
+        const __vector4 lvD = { lvEdge12.y, lvEdge12.z, lvEdge12.x, lvEdge12.w };
+        const __vector4 lvCross = __vnmsubfp(lvC, lvD, __vmulfp(lvA, lvB));
+        const __vector4 lvSquaredLength = __vmsum3fp(lvCross, lvCross);
+        const __vector4 lvHalf = { 0.5f, 0.5f, 0.5f, 0.5f };
+        const __vector4 lvOne = { 1.0f, 1.0f, 1.0f, 1.0f };
+        __vector4 lvInverse = __vrsqrtefp(lvSquaredLength);
+        for (int liStep = 0; liStep < 2; ++liStep)
+        {
+            const __vector4 lvSquare = __vmulfp(lvInverse, lvInverse);
+            const __vector4 lvHalfInverse = __vmulfp(lvInverse, lvHalf);
+            const __vector4 lvResidual = __vnmsubfp(lvSquaredLength, lvSquare, lvOne);
+            lvInverse = __vmaddfp(lvHalfInverse, lvResidual, lvInverse);
+        }
         rw::math::vpu::Vector3 lPolyNormal;
-        lPolyNormal.x = std::fma(lfEdge01Y, lfEdge12Z, -lfEdge01Z * lfEdge12Y);
-        lPolyNormal.y = std::fma(lfEdge01Z, lfEdge12X, -lfEdge01X * lfEdge12Z);
-        lPolyNormal.z = std::fma(lfEdge01X, lfEdge12Y, -lfEdge01Y * lfEdge12X);
-        const f32 lfNormalLength = std::sqrt(
-            lPolyNormal.x * lPolyNormal.x +
-            lPolyNormal.y * lPolyNormal.y +
-            lPolyNormal.z * lPolyNormal.z);
-        const f32 lfInvNormalLength = 1.0f / lfNormalLength;
-        lPolyNormal.x *= lfInvNormalLength;
-        lPolyNormal.y *= lfInvNormalLength;
-        lPolyNormal.z *= lfInvNormalLength;
-        lPolyNormal.w = 0.0f;
+        __stvx(__vmulfp(lvCross, lvInverse), &lPolyNormal, 0);
 
         rw::math::vpu::Vector3 lAveragePoint;
         lAveragePoint.x = 0.0f;
@@ -568,13 +608,13 @@ namespace CgsSceneManager
             mSpherePos.Z() += 10.0f; // flt_82004A20
         }
 
-        const rw::math::vpu::Vector3 lvSphereCentre{
+        const rw::math::vpu::Vector3 lvSphereCentre = {
             mSpherePos.X(), mSpherePos.Y(), mSpherePos.Z(), mfSphereRad
         };
-        const CgsGeometric::Sphere lSphere{
-            rw::math::vpu::Vector4{
+        const CgsGeometric::Sphere lSphere = {
+            MakeVector4(
                 mSpherePos.X(), mSpherePos.Y(), mSpherePos.Z(), mfSphereRad
-            }
+            )
         };
         lpRenderer->DrawSphere(lvSphereCentre, mfSphereRad,
                                RwRGBAFromPackedWord(0xFFFFFFFFu));
@@ -585,7 +625,7 @@ namespace CgsSceneManager
         const f32 KF_EXTRACTIONRADIUS = 5.0f;    // flt_820F2718
         const f32 KF_SPHERECONTACTPADDING = 1.0f; // 0x828BFB08..0x828BFB1C
         const f32 KF_TRIANGLEOFFSET = 0.02f;       // flt_82005574
-        const VecFloat lvSphereContactPadding{
+        const VecFloat lvSphereContactPadding = {
             KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING,
             KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING
         };
@@ -600,12 +640,12 @@ namespace CgsSceneManager
             const f32* const lapOverallAabb = lpPolySoupList->mOverallAabb;
             CgsGeometric::AxisAlignedBox lOverallAabb;
             lOverallAabb.Set(
-                rw::math::vpu::Vector4{
+                MakeVector4(
                     lapOverallAabb[0], lapOverallAabb[1], lapOverallAabb[2], lapOverallAabb[3]
-                },
-                rw::math::vpu::Vector4{
+                ),
+                MakeVector4(
                     lapOverallAabb[4], lapOverallAabb[5], lapOverallAabb[6], lapOverallAabb[7]
-                });
+                ));
             if (!lOverallAabb.ContainsPoint(lSphere.mPositionRadius))
                 continue;
 
@@ -676,36 +716,9 @@ namespace CgsSceneManager
                         CgsGeometric::Triangle4::AOSTriangle lAOSTriangle;
                         laTriangle4s[liTriangle4].GetAOSTriangle(liLane, lAOSTriangle);
                         // VMX vmaddfp computes normal*0.02 + vertex before the solid draw.
-                        const rw::math::vpu::Vector3 lvV0{
-                            std::fma(lAOSTriangle.mNormal.x, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex0.x),
-                            std::fma(lAOSTriangle.mNormal.y, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex0.y),
-                            std::fma(lAOSTriangle.mNormal.z, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex0.z),
-                            std::fma(lAOSTriangle.mNormal.w, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex0.w)
-                        };
-                        const rw::math::vpu::Vector3 lvV1{
-                            std::fma(lAOSTriangle.mNormal.x, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex1.x),
-                            std::fma(lAOSTriangle.mNormal.y, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex1.y),
-                            std::fma(lAOSTriangle.mNormal.z, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex1.z),
-                            std::fma(lAOSTriangle.mNormal.w, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex1.w)
-                        };
-                        const rw::math::vpu::Vector3 lvV2{
-                            std::fma(lAOSTriangle.mNormal.x, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex2.x),
-                            std::fma(lAOSTriangle.mNormal.y, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex2.y),
-                            std::fma(lAOSTriangle.mNormal.z, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex2.z),
-                            std::fma(lAOSTriangle.mNormal.w, KF_TRIANGLEOFFSET,
-                                     lAOSTriangle.mVertex2.w)
-                        };
+                        const rw::math::vpu::Vector3 lvV0 = OffsetTrianglePoint(lAOSTriangle.mNormal, lAOSTriangle.mVertex0, KF_TRIANGLEOFFSET);
+                        const rw::math::vpu::Vector3 lvV1 = OffsetTrianglePoint(lAOSTriangle.mNormal, lAOSTriangle.mVertex1, KF_TRIANGLEOFFSET);
+                        const rw::math::vpu::Vector3 lvV2 = OffsetTrianglePoint(lAOSTriangle.mNormal, lAOSTriangle.mVertex2, KF_TRIANGLEOFFSET);
                         lpRenderer->DrawSolidTriangle(
                             lvV0, lvV1, lvV2, RwRGBAFromPackedWord(0x64FFFFFFu));
                     }
@@ -751,12 +764,12 @@ namespace CgsSceneManager
         lvBoxHalfSize.w = 0.0f;
         CgsGeometric::Box lBox;
         lBox.Set(lTransform, lvBoxHalfSize,
-                 rw::math::vpu::Vector4{0.0f, 0.0f, 0.0f, 0.0f});
+                 MakeVector4(0.0f, 0.0f, 0.0f, 0.0f));
 
-        const rw::math::vpu::Vector3 lvLocalMin{
+        const rw::math::vpu::Vector3 lvLocalMin = {
             -lvBoxHalfSize.x, -lvBoxHalfSize.y, -lvBoxHalfSize.z, 0.0f
         };
-        const rw::math::vpu::Vector3 lvLocalMax{
+        const rw::math::vpu::Vector3 lvLocalMax = {
             lvBoxHalfSize.x, lvBoxHalfSize.y, lvBoxHalfSize.z, 0.0f
         };
         lpRenderer->DrawBox(lvLocalMin, lvLocalMax, lTransform,
@@ -877,9 +890,9 @@ namespace CgsSceneManager
                               lAOSTriangle.mVertex1,
                               lAOSTriangle.mVertex2);
                 s32 liNumContacts = 0;
-                const rw::math::vpu::Vector4 lvPadding{
+                const rw::math::vpu::Vector4 lvPadding = {
                     0.1f, 0.1f, 0.1f, 0.1f}; // flt_82004014
-                const rw::math::vpu::MaskScalar lvClampPenetration{
+                const rw::math::vpu::MaskScalar lvClampPenetration = {
                     0.0f, 0.0f, 0.0f, 0.0f}; // unk_8327F240+0x10, raw initial zero
 
                 const u64 luIntersectionStart = CgsSystem::GetSystemTimerBaseTime64();
@@ -963,10 +976,10 @@ namespace CgsSceneManager
                                    0xFFFFFFFFu);
         }
 
-        const rw::math::vpu::Vector3 lvStartPosition{
+        const rw::math::vpu::Vector3 lvStartPosition = {
             mSweptSpherePos.X(), mSweptSpherePos.Y(), mSweptSpherePos.Z(), 0.0f
         };
-        const rw::math::vpu::Vector3 lvVelocity{
+        const rw::math::vpu::Vector3 lvVelocity = {
             mSweptSphereVelocity.X(), mSweptSphereVelocity.Y(),
             mSweptSphereVelocity.Z(), 0.0f
         };
@@ -974,15 +987,15 @@ namespace CgsSceneManager
         // ARTIST computes length from the three velocity lanes. Its scalar broad-phase
         // path uses fused multiply-adds for the squared-length accumulation.
         const f32 lfVelocityXYLengthSquared =
-            std::fma(lvVelocity.x, lvVelocity.x, lvVelocity.y * lvVelocity.y);
+            ScalarMadd(lvVelocity.x, lvVelocity.x, lvVelocity.y * lvVelocity.y);
         const f32 lfVelocityLengthSquared =
-            std::fma(lvVelocity.z, lvVelocity.z, lfVelocityXYLengthSquared);
+            ScalarMadd(lvVelocity.z, lvVelocity.z, lfVelocityXYLengthSquared);
         const f32 lfVelocityLength = std::sqrt(lfVelocityLengthSquared);
 
         // The broad-phase sphere/AABB uses (length + 2*radius) * 1.05 (raw
         // flt_82005448); the narrow-phase SweptSphere retains the authored radius.
         const f32 lfBroadPhaseRadius =
-            std::fma(mSweptSphereSize, 2.0f, lfVelocityLength) * 1.05f;
+            ScalarMadd(mSweptSphereSize, 2.0f, lfVelocityLength) * 1.05f;
 
         CgsGeometric::Sphere lBroadPhaseSphere;
         {
@@ -994,18 +1007,18 @@ namespace CgsSceneManager
 
         CgsGeometric::AxisAlignedBox lQueryBox;
         lQueryBox.Set(
-            rw::math::vpu::Vector4{
+            MakeVector4(
                 lvStartPosition.x - lfBroadPhaseRadius,
                 lvStartPosition.y - lfBroadPhaseRadius,
                 lvStartPosition.z - lfBroadPhaseRadius,
                 -lfBroadPhaseRadius
-            },
-            rw::math::vpu::Vector4{
+            ),
+            MakeVector4(
                 lvStartPosition.x + lfBroadPhaseRadius,
                 lvStartPosition.y + lfBroadPhaseRadius,
                 lvStartPosition.z + lfBroadPhaseRadius,
                 lfBroadPhaseRadius
-            });
+            ));
 
         rw::math::vpu::Vector3 lvSweepDirection;
         if (lfVelocityLength <= 0.00001f) // flt_82004884
@@ -1029,18 +1042,18 @@ namespace CgsSceneManager
 
         CgsGeometric::SweptSphere lSweptSphere;
         lSweptSphere.Set(
-            rw::math::vpu::Vector3Plus{
+            MakeVector3Plus(
                 lvStartPosition.x, lvStartPosition.y, lvStartPosition.z, mSweptSphereSize
-            },
-            rw::math::vpu::Vector3Plus{
+            ),
+            MakeVector3Plus(
                 lvSweepDirection.x, lvSweepDirection.y, lvSweepDirection.z, lfVelocityLength
-            });
+            ));
 
         if (lp3DRenderer)
         {
             lp3DRenderer->DrawSphere(lvStartPosition, mSweptSphereSize,
                                      RwRGBAFromPackedWord(0xFFFF0000u));
-            const rw::math::vpu::Vector3 lvSweepEnd{
+            const rw::math::vpu::Vector3 lvSweepEnd = {
                 lvStartPosition.x + lvVelocity.x,
                 lvStartPosition.y + lvVelocity.y,
                 lvStartPosition.z + lvVelocity.z,
@@ -1131,11 +1144,11 @@ namespace CgsSceneManager
                 if (lHitMask.x == 0.0f || !lp3DRenderer)
                     continue;
 
-                const rw::math::vpu::Vector3 lvTriangleContactPoint{
+                const rw::math::vpu::Vector3 lvTriangleContactPoint = {
                     lTriangleContactPoint.x, lTriangleContactPoint.y,
                     lTriangleContactPoint.z, lTriangleContactPoint.w
                 };
-                const rw::math::vpu::Vector3 lvSphereContactPoint{
+                const rw::math::vpu::Vector3 lvSphereContactPoint = {
                     lSphereContactPoint.x, lSphereContactPoint.y,
                     lSphereContactPoint.z, lSphereContactPoint.w
                 };
@@ -1147,7 +1160,7 @@ namespace CgsSceneManager
                     lvTriangleContactPoint, lvSphereContactPoint,
                     RwRGBAFromPackedWord(0xFFFFFFFFu));
 
-                const rw::math::vpu::Vector3 lvArrowEnd{
+                const rw::math::vpu::Vector3 lvArrowEnd = {
                     lvTriangleContactPoint.x + lContactNormal.x,
                     lvTriangleContactPoint.y + lContactNormal.y,
                     lvTriangleContactPoint.z + lContactNormal.z,
