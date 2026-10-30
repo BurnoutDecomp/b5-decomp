@@ -514,7 +514,3 @@ namespace BrnResource
         BrnResource::DLCManager mDLCManager;            // +0x74338
     };
 }
-
-// Accessor for the one game-owned GameDataModule instance (BrnMain's gGameModule.mGameDataModule).
-// Lets the loading flow drive the real instance without pulling in the heavy BrnGameModule.hpp.
-namespace BrnGame { BrnResource::GameDataModule* GetMainGameDataModule(); }
