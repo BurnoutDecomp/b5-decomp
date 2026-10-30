@@ -4,6 +4,7 @@
 // struct itself is reconstructed in BrnVehicleEvents.h; this TU provides the out-of-line
 // assignment-operator body (called by CgsModule::EventQueue<CreateRaceCarEvent,8>::AddEvent).
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
+#include <cstring>
 
 namespace BrnPhysics
 {
@@ -33,8 +34,22 @@ namespace Vehicle
     //   lwz/stw @+0x90                           <- meBaseDeformationType
     //   lbz/stb @+0x94                           <- mbDisablePhysicsStateReset
     //   lwz/stw @+0x98                           <- miCarStrengthStat
-    // CreateRaceCarEvent is trivially copyable, so the defaulted memberwise assignment reproduces
-    // exactly this whole-object bitwise copy (the compiler emits the same field copies).
-    CreateRaceCarEvent& CreateRaceCarEvent::operator=(const CreateRaceCarEvent&) = default;
+    // ARTIST leaves alignment bytes untouched and transfers the deformation float through lfs/stfs.
+    CreateRaceCarEvent& CreateRaceCarEvent::operator=(const CreateRaceCarEvent& lrOther)
+    {
+        mVolumeInstanceID = lrOther.mVolumeInstanceID;
+        std::memcpy(&mInitialTransform, &lrOther.mInitialTransform, sizeof(mInitialTransform));
+        std::memcpy(&mInitialVelocity, &lrOther.mInitialVelocity, sizeof(mInitialVelocity));
+        std::memcpy(&mAngularVelocity, &lrOther.mAngularVelocity, sizeof(mAngularVelocity));
+        mCarAssetAttribKey = lrOther.mCarAssetAttribKey;
+        mModelHandle = lrOther.mModelHandle;
+        mGraphicsHandle = lrOther.mGraphicsHandle;
+        meRaceCarType = lrOther.meRaceCarType;
+        mfDeformAmount = lrOther.mfDeformAmount;
+        meBaseDeformationType = lrOther.meBaseDeformationType;
+        mbDisablePhysicsStateReset = lrOther.mbDisablePhysicsStateReset;
+        miCarStrengthStat = lrOther.miCarStrengthStat;
+        return *this;
+    }
 }
 }
