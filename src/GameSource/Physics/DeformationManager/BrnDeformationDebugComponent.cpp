@@ -26,6 +26,7 @@
 // (VariableCallbackFunction = void(*)(void*,void*) / DebugCallbackFunction = void(*)(void*)); the X360
 // passes the component as the user-data argument, which each callback casts back to a component.
 
+#include <float.h>
 #include "GameSource/Physics/DeformationManager/BrnDeformationDebugComponent.h"
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                          // DeformationManager
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"         // DeformableObject + debug accessors
@@ -170,7 +171,7 @@ namespace Deformation
         //     0x826071C8  lfs f31, flt_8208F5EC  == FLT_MAX   -> the seed   (min-updated at 0x82607364)
         // The step was 0.05, five times the console's, so this dev tool searched a fifth of the
         // scales the console does and reported the best of a coarser set as "the" answer.
-        const f32 KF_DRIVETIME_EXTENT_LIMIT  = 3.4028235e38f;  // flt_8208F5EC (FLT_MAX seed)
+        const f32 KF_DRIVETIME_EXTENT_LIMIT  = FLT_MAX;  // flt_8208F5EC (FLT_MAX seed)
         const f32 KF_DRIVETIME_COMPRESS_STEP = 0.00999999978f; // flt_82002138 (per-iteration scale add)
         const f32 KF_DRIVETIME_SCALE_LIMIT   = 0.99000001f;    // flt_820224B0 (stop once scale >= ~0.99)
 
@@ -311,8 +312,8 @@ namespace Deformation
             return;
         }
 
-        lpThis->mpSelectedSensor->SetLocalPosition(
-            Vector3{ lpThis->mfSensorX, lpThis->mfSensorY, lpThis->mfSensorZ, 0.0f } );
+        const Vector3 lSensorPosition = { lpThis->mfSensorX, lpThis->mfSensorY, lpThis->mfSensorZ, 0.0f };
+        lpThis->mpSelectedSensor->SetLocalPosition(lSensorPosition);
         lpThis->mpSelectedSensor->SetScratchAmount(lpThis->mfSensorScratch);
         lpThis->mpSelectedRig->SetDeformedThisFrameDebug();
     }
