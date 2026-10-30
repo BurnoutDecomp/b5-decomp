@@ -320,7 +320,7 @@ void Vehicle::InitialiseAsStandard(
     lpAxles->mBackAxle.ForceIntersectWithLane(lRung0, lRung1);
 
     UpdateMatrix(lpAxles, lOutMatrix, lpVehicleTypeRuntime,
-                 Vector3{ 0.0f, 1.0f, 0.0f, 0.0f });
+                 rw::math::vpu::GetVector3_YAxis());
 
     mxEffectState           = 0;
     miBrakelightState       = 0;
@@ -473,7 +473,7 @@ void Vehicle::InitialiseAsTrailer(
         lpAxles,
         lTransform,
         lpVehicleTypeRuntime,
-        Vector3{ 0.0f, 1.0f, 0.0f, 0.0f });
+        rw::math::vpu::GetVector3_YAxis());
     lOutMatrix = lTransform;
 
     mxEffectState = 0;

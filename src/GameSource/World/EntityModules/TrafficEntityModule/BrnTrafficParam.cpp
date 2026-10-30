@@ -472,11 +472,9 @@ void ParamTransform::Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecF
 
     const f32 lfSpeedScalar = lfSpeed.x;
     const f32 lfStep        = lfSpeedScalar * KF_INIT_LERP_STEP;
-    mLerpedPosAndSpeed.SetVector3(Vector3{
-        lPos.x - lDir.x * lfStep,
-        lPos.y - lDir.y * lfStep,
-        lPos.z - lDir.z * lfStep,
-        0.0f });
+    const Vector3 lLerpedPos = { lPos.x - lDir.x * lfStep,
+        lPos.y - lDir.y * lfStep, lPos.z - lDir.z * lfStep, 0.0f };
+    mLerpedPosAndSpeed.SetVector3(lLerpedPos);
     mLerpedPosAndSpeed.SetPlus(lfSpeedScalar);
 }
 
@@ -492,7 +490,8 @@ void ParamTransform::Construct()
 
     mRight = rw::math::vpu::GetVector3_XAxis();
 
-    mLerpedPosAndSpeed.SetVector3(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+    const Vector3 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+    mLerpedPosAndSpeed.SetVector3(lZero);
     mLerpedPosAndSpeed.SetPlus(0.0f);
 }
 
