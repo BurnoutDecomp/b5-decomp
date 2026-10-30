@@ -2,12 +2,16 @@
 
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"            // AptAuxPointer::mpAptAuxInst (the singleton)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"  // AptRenderHandler (Render + the transform/caches/pool)
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"  // CgsResource::GuiGeometryFile / GuiGeometryMesh / GuiGeometryObject
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the mask/command writers)
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"              // CgsGraphics::TextRenderer::RenderString / TextObject
 #include "GameShared/GameClasses/Gui/View/CgsGuiFontCollection.h"              // CgsGui::FontCollection (the empty-collection guard)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"   // CgsGraphics::Im2dRenderBuffer (RenderString arg)
 
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameSource/Gui/BrnGuiPerfmons.h"
+#include <vectorintrinsics.h>
 #include <cstdlib>   // bsearch
 #include <cmath>     // std::fabs
 
@@ -47,52 +51,50 @@ namespace CgsGui
     void AptCallbackRender::DrawRenderingUnit(AptAssetRenderingUnit lpRenderingUnit,
                                               AptMaskRenderOperation leMaskOperation, s32 liLevel)
     {
-        (void)liLevel;   // the apt mask level is carried for parity; this path keys off the op only
-
+        (void)liLevel;
+        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
+        CGS_ASSERT(AptAuxPointer::mpAptAuxInst != 0, "Invalid pointer to AptAux in AptCallbackRender::DrawRenderingUnit");
+        CGS_ASSERT(lpRenderingUnit != 0, "Invalid geometry in AptCallbackRender::DrawRenderingUnit");
         AptRenderHandler& lrHandler = AptAuxPointer::mpAptAuxInst->mRenderHandler;
-
-        // ---- Normal: just draw the shape through the committed render path -------------------
         if (leMaskOperation == AptMaskRenderOperation_Normal)
         {
             lrHandler.Render(reinterpret_cast<CgsResource::GuiGeometryFile*>(lpRenderingUnit), 0);
+            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
             return;
         }
-
-        // ---- Subtract: end/clear the current stencil mask -----------------------------------
         if (leMaskOperation == AptMaskRenderOperation_Subtract)
         {
-            lrHandler.GetCommandBuffer()->EndMask();
+            lrHandler.GetIm2dRendererType()->PopMask();
+            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
             return;
         }
-
-        // Any negative op other than Subtract is a no-op (the asm `bne exit`).
-        if (leMaskOperation < AptMaskRenderOperation_Normal)
+        if (leMaskOperation != AptMaskRenderOperation_Add)
+        {
+            CGS_ASSERT(false, "Unknown mask operation in AptCallbackRender::DrawRenderingUnit");
+            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
             return;
+        }
 
         // ---- Add (op > 0): build a stencil mask from each mesh's screen-space AABB ----------
         CgsResource::GuiGeometryFile* lpFile =
             reinterpret_cast<CgsResource::GuiGeometryFile*>(lpRenderingUnit);
-        Im2dCommandBuffer*            lpBuffer = lrHandler.GetCommandBuffer();
         const CgsGraphics::Im2dTransform& lrTransform = lrHandler.GetVertexTransform();
 
         for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
         {
             CgsResource::GuiGeometryMesh* lpMesh =
-                reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTable[luMesh]);
+                lpFile->mppGeometryMeshes[luMesh];
 
-            // The bound texture id: the mesh's mpTexture when its texture mode (mesh+4) is set,
-            // else the render handler's white fallback (guest p_mRenderHandler+128). The console
-            // stores this word at the mask command's +8 slot.
-            uintptr_t luTextureId;
-            if (lpMesh->miTextureMode != 0)
-                luTextureId = static_cast<uintptr_t>(lpMesh->mpTexture);
-            else
-                luTextureId = reinterpret_cast<uintptr_t>(lrHandler.GetWhiteTexture());
-
-            // The mesh's static vertex run (mppVerticies table, first entry).
-            const Im2dVertex* const* lppVertexTable = reinterpret_cast<const Im2dVertex* const*>(
-                static_cast<uintptr_t>(lpMesh->mppVerticies));
-            const Im2dVertex* lpVertices = *lppVertexTable;
+            CGS_ASSERT(lpMesh != 0, "Invalid mesh");
+            renderengine::Texture* lpTexture = lpMesh->mMeshHeader.miTextureMode
+                ? lpMesh->mMeshHeader.mpTexture
+                : lrHandler.GetWhiteTexture();
+            CGS_ASSERT(lpTexture != 0, "Invalid texture");
+            CgsGraphics::Im2dRenderBuffer* lpRenderer = lrHandler.GetIm2dRendererType();
+            const Im2dVertex* lpVertices = lpMesh->mppVerticies[0];
+            CGS_ASSERT(lpRenderer != 0, "Invalid Renderer");
+            CGS_ASSERT(lpVertices != 0, "No vertices to mask from");
+            CGS_ASSERT(lpMesh->muNumberOfVerticies == 6, "Expecting two triangles, making up one quad here!");
 
             const s32 liVertexCount = static_cast<s32>(lpMesh->muNumberOfVerticies);
 
@@ -120,38 +122,32 @@ namespace CgsGui
                 }
             }
 
-            // Transform each corner into screen space through the batch transform. The guest's VPU
-            // sequence (vmaddfp with a zeroed scale lane v31) reduces to the transform's additive
-            // origin/right/up basis applied to the corner; reconstructed as the standard Im2d
-            // screen transform: pos = origin + cornerX*right + cornerY*up (xy lanes). The corner's
-            // colour + UV are copied through verbatim.
-            Im2dVertex laCorners[2];
-            const f32 lfMinPosX = lpMin->mv2Pos.x;
-            const f32 lfMinPosY = lpMin->mv2Pos.y;
-            const f32 lfMaxPosX = lpMax->mv2Pos.x;
-            const f32 lfMaxPosY = lpMax->mv2Pos.y;
-
-            laCorners[0].mv2Pos.x = lrTransform.mOriginXYZ.x
-                                  + lfMinPosX * lrTransform.mRightUp.x
-                                  + lfMinPosY * lrTransform.mRightUp.z;
-            laCorners[0].mv2Pos.y = lrTransform.mOriginXYZ.y
-                                  + lfMinPosX * lrTransform.mRightUp.y
-                                  + lfMinPosY * lrTransform.mRightUp.w;
-            laCorners[0].mv4Colour = lpMin->mv4Colour;
-            laCorners[0].mv2Tex0UV = lpMin->mv2Tex0UV;
-
-            laCorners[1].mv2Pos.x = lrTransform.mOriginXYZ.x
-                                  + lfMaxPosX * lrTransform.mRightUp.x
-                                  + lfMaxPosY * lrTransform.mRightUp.z;
-            laCorners[1].mv2Pos.y = lrTransform.mOriginXYZ.y
-                                  + lfMaxPosX * lrTransform.mRightUp.y
-                                  + lfMaxPosY * lrTransform.mRightUp.w;
-            laCorners[1].mv4Colour = lpMax->mv4Colour;
-            laCorners[1].mv2Tex0UV = lpMax->mv2Tex0UV;
-
-            // Push the mask-geometry command (the muType-18 record + the 2-corner vertex run).
-            lpBuffer->PushMaskGeometry(luTextureId, laCorners[0], laCorners[1]);
+            CGS_ASSERT(lpMin != lpMax && lpMin != 0 && lpMax != 0,
+                       "Unable to find adequate min and max verts");
+            // ARTIST8285D1E0: four VMX fused operations use the x/w
+            // lanes of RightUp and x/y lanes of OriginXYZ respectively.
+            const __vector4 lvBasis = __lvx(&lrTransform.mRightUp, 0);
+            const __vector4 lvOrigin = __lvx(&lrTransform.mOriginXYZ, 0);
+            CGS_ALIGN(16) f32 laXY[4] = {lpMin->mv2Pos.x, lpMin->mv2Pos.y,
+                                          lpMax->mv2Pos.x, lpMax->mv2Pos.y};
+            const __vector4 lvXY = __lvx(laXY, 0);
+            const __vector4 lvXScale = __vspltw(lvBasis, 0);
+            const __vector4 lvYScale = __vspltw(lvBasis, 3);
+            const __vector4 lvXOrigin = __vspltw(lvOrigin, 0);
+            const __vector4 lvYOrigin = __vspltw(lvOrigin, 1);
+            CGS_ALIGN(16) f32 laResult[4];
+            Im2dVertex laCorners[2] = {*lpMin, *lpMax};
+            __stvx(__vmaddfp(lvXScale, __vspltw(lvXY, 0), lvXOrigin), laResult, 0);
+            laCorners[0].mv2Pos.x = laResult[0];
+            __stvx(__vmaddfp(lvYScale, __vspltw(lvXY, 1), lvYOrigin), laResult, 0);
+            laCorners[0].mv2Pos.y = laResult[0];
+            __stvx(__vmaddfp(lvXScale, __vspltw(lvXY, 2), lvXOrigin), laResult, 0);
+            laCorners[1].mv2Pos.x = laResult[0];
+            __stvx(__vmaddfp(lvYScale, __vspltw(lvXY, 3), lvYOrigin), laResult, 0);
+            laCorners[1].mv2Pos.y = laResult[0];
+            lpRenderer->PushMask(lpTexture, laCorners);
         }
+        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
     }
 
     // -------------------------------------------------------------------------
@@ -185,6 +181,7 @@ namespace CgsGui
         if (lrHandler.GetVertexTransform().mColourScale.w == 0.0f)
             return;
 
+        Im2dCommandBuffer* lpBuffer = lrHandler.GetCommandBuffer();
         lpBuffer->SetTransform(lrHandler.GetVertexTransform());
 
         // The pooled CgsAptString's leading member IS the CgsGraphics::TextObject (same address).
@@ -203,33 +200,26 @@ namespace CgsGui
                                         AptAssetTexture lpAssetTexture)
     {
         CgsResource::GuiGeometryObject* lpObject =
-            *reinterpret_cast<CgsResource::GuiGeometryObject**>(
-                reinterpret_cast<u8*>(lpUserData) + 12);
+            static_cast<AptDataHeader*>(lpUserData)->mpGeomStruct;
 
         const u32 luNumFiles = lpObject->muNumberOfFiles;
         if (luNumFiles == 0)
             return;
 
-        const u32* lpFileTable = reinterpret_cast<const u32*>(
-            static_cast<uintptr_t>(lpObject->mppGeometryFiles));
 
         for (u32 luFile = 0; luFile != luNumFiles; ++luFile)
         {
             CgsResource::GuiGeometryFile* lpFile =
-                reinterpret_cast<CgsResource::GuiGeometryFile*>(
-                    static_cast<uintptr_t>(lpFileTable[luFile]));
+                lpObject->mppGeometryFiles[luFile];
             if (lpFile->muNumberOfMeshes == 0)
                 continue;
 
-            const u32* lpMeshTable = reinterpret_cast<const u32*>(
-                static_cast<uintptr_t>(lpFile->mppGeometryMeshes));
             for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
             {
                 CgsResource::GuiGeometryMesh* lpMesh =
-                    reinterpret_cast<CgsResource::GuiGeometryMesh*>(
-                        static_cast<uintptr_t>(lpMeshTable[luMesh]));
-                if (lpMesh->miTextureId == liID)
-                    lpMesh->mpTexture = static_cast<u32>(reinterpret_cast<uintptr_t>(lpAssetTexture));
+                    lpFile->mppGeometryMeshes[luMesh];
+                if (lpMesh->mMeshHeader.miTextureId == liID)
+                    lpMesh->mMeshHeader.mpTexture = reinterpret_cast<renderengine::Texture*>(lpAssetTexture);
             }
         }
     }
@@ -241,34 +231,26 @@ namespace CgsGui
     AptAssetTexture AptCallbackRender::LoadTexture(AptAnimationUserData lpUserData, s32 liID)
     {
         CgsResource::GuiGeometryObject* lpObject =
-            *reinterpret_cast<CgsResource::GuiGeometryObject**>(
-                reinterpret_cast<u8*>(lpUserData) + 12);
+            static_cast<AptDataHeader*>(lpUserData)->mpGeomStruct;
 
         const u32 luNumFiles = lpObject->muNumberOfFiles;
         if (luNumFiles == 0)
             return 0;
 
-        const u32* lpFileTable = reinterpret_cast<const u32*>(
-            static_cast<uintptr_t>(lpObject->mppGeometryFiles));
 
         for (u32 luFile = 0; luFile != luNumFiles; ++luFile)
         {
             CgsResource::GuiGeometryFile* lpFile =
-                reinterpret_cast<CgsResource::GuiGeometryFile*>(
-                    static_cast<uintptr_t>(lpFileTable[luFile]));
+                lpObject->mppGeometryFiles[luFile];
             if (lpFile->muNumberOfMeshes == 0)
                 continue;
 
-            const u32* lpMeshTable = reinterpret_cast<const u32*>(
-                static_cast<uintptr_t>(lpFile->mppGeometryMeshes));
             for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
             {
                 CgsResource::GuiGeometryMesh* lpMesh =
-                    reinterpret_cast<CgsResource::GuiGeometryMesh*>(
-                        static_cast<uintptr_t>(lpMeshTable[luMesh]));
-                if (lpMesh->miTextureId == liID)
-                    return reinterpret_cast<AptAssetTexture>(
-                        static_cast<uintptr_t>(lpMesh->mpTexture));
+                    lpFile->mppGeometryMeshes[luMesh];
+                if (lpMesh->mMeshHeader.miTextureId == liID)
+                    return reinterpret_cast<AptAssetTexture>(lpMesh->mMeshHeader.mpTexture);
             }
         }
         return 0;
@@ -279,8 +261,8 @@ namespace CgsGui
     // record whose first word is the file id.
     static int FindGeometryFileCompare(const void* lpA, const void* lpB)
     {
-        const s32 liA = **reinterpret_cast<const s32* const*>(lpA);
-        const s32 liB = **reinterpret_cast<const s32* const*>(lpB);
+        const s32 liA = *static_cast<const s32*>(lpA);
+        const s32 liB = *static_cast<const s32*>(lpB);
         return liA - liB;
     }
 
@@ -293,18 +275,15 @@ namespace CgsGui
                                                               s32 liID)
     {
         CgsResource::GuiGeometryObject* lpObject =
-            *reinterpret_cast<CgsResource::GuiGeometryObject**>(
-                reinterpret_cast<u8*>(lpUserData) + 12);
+            static_cast<AptDataHeader*>(lpUserData)->mpGeomStruct;
 
         // The key is a one-word record holding the requested id (the guest's `v3 = lnID; &v3`).
         s32 liKey = liID;
-        const s32* lpKey = &liKey;
 
         // The file pointer table + count (object[8] table, object[0] count).
-        const void* lpTable = reinterpret_cast<const void*>(
-            static_cast<uintptr_t>(lpObject->mppGeometryFiles));
+        const void* lpTable = lpObject->mppGeometryFiles[0];
 
-        void* lpFound = bsearch(&lpKey, lpTable,
+        void* lpFound = bsearch(&liKey, lpTable,
                                 static_cast<size_t>(lpObject->muNumberOfFiles),
                                 12u, &FindGeometryFileCompare);
         return reinterpret_cast<AptAssetRenderingUnit>(lpFound);

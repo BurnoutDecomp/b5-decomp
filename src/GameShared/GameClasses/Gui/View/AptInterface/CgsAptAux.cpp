@@ -109,12 +109,12 @@ namespace CgsGui
     //   EA::Thread::Mutex::Init(a1+109672, ...);              -- the data-handler mutex
     //   AptAux::ConstructApt(a1);                              -- install the host callback table
     // -------------------------------------------------------------------------
-    void AptAux::Construct(::CgsGuiModuleIO::ImRendererSet* lpImRenderers,
+    void AptAux::Construct(ImRendererSet* lpImRenderers,
                            CgsGraphics::TextRenderer* lpTextRenderer,
                            CgsLanguage::LanguageManager* lpLanguageManager,
                            const FontCollection* lpFonts,
                            f32 lfAspectRatio,
-                           const rw::RGBA* lpAlternateTextColours,
+                           const ::RGBA* lpAlternateTextColours,
                            s32 liNumAlternateColours)
     {
         // The two leading state words the guest seeds (`*(a1+4) = 3; *a1 = 0`).
@@ -822,29 +822,7 @@ namespace CgsGui
 
         renderengine::Texture* lpTexture = lpManager->GetComponentTexture(
             lComponentID, liTextureIndex, &liShaderProgram,
-            reinterpret_cast<CgsGui::ImRendererSet*>(lpRenderHandler->GetImRendererSetRaw()));
-
-        // [custrend] -- capped bring-up trace. This callback had NO reader and NO caller
-        // before 2026-08-16, so "it is wired now" is a claim that needs evidence in the log
-        // rather than an inference from a clean boot. Prints the type string, the resolved
-        // CgsID, the parsed index, and whether a texture came back.
-        {
-            static s32 siCustRendLogs = 0;
-            if (siCustRendLogs < 40)
-            {
-                ++siCustRendLogs;
-                char lacProbe[224];
-                std::snprintf(lacProbe, sizeof(lacProbe),
-                              "[custrend] ControlRender type='%s' id=%016llX index=%d "
-                              "props='%s' -> tex=%p shader=%d\n",
-                              lpcType ? lpcType : "(null)",
-                              static_cast<unsigned long long>(lComponentID),
-                              liTextureIndex,
-                              lpcProperties ? lpcProperties : "(null)",
-                              static_cast<void*>(lpTexture), liShaderProgram);
-                CgsDev::Log::WriteToLog(lacProbe);
-            }
-        }
+            lpRenderHandler->GetImRendererSet());
 
         // No component, or the component is not renderable -> draw nothing at all. This is
         // the console behaviour AND the current state of the licence-card photo slot.
@@ -853,18 +831,14 @@ namespace CgsGui
 
         CgsResource::GuiGeometryFile* lpFile =
             reinterpret_cast<CgsResource::GuiGeometryFile*>(lpRenderingUnit);
-        const uintptr_t* lpMeshTable =
-            reinterpret_cast<const uintptr_t*>(lpFile->mppGeometryMeshes);
 
         // Pass 1: bind the substituted texture into every mesh (guest `*(v23 + 12) = v20`).
         for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
         {
             CgsResource::GuiGeometryMesh* lpMesh =
-                reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTable[luMesh]);
+                lpFile->mppGeometryMeshes[luMesh];
             CGS_ASSERT(lpMesh != 0, "Invalid gui Mesh in AptCallbackCustom::ControlRender");
-            if (lpMesh == 0)
-                continue;
-            lpMesh->mpTexture = reinterpret_cast<uintptr_t>(lpTexture);
+            lpMesh->mMeshHeader.mpTexture = lpTexture;
         }
 
         // Pass 2: stamp the standard full-quad UVs. The guest writes exactly these six
@@ -878,26 +852,13 @@ namespace CgsGui
         for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
         {
             CgsResource::GuiGeometryMesh* lpMesh =
-                reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTable[luMesh]);
-            if (lpMesh == 0)
-                continue;
-
+                lpFile->mppGeometryMeshes[luMesh];
             CGS_ASSERT(lpMesh->muNumberOfVerticies == 6,
                        "Flash custom component geometry without exactly 6 vertices");
-            if (lpMesh->muNumberOfVerticies != 6)
-                continue;
-
-            const uintptr_t* lppVertexTable =
-                reinterpret_cast<const uintptr_t*>(lpMesh->mppVerticies);
-            CgsGraphics::Basic2dColouredTexturedVertex* lpVertices =
-                reinterpret_cast<CgsGraphics::Basic2dColouredTexturedVertex*>(lppVertexTable[0]);
-            if (lpVertices == 0)
-                continue;
-
             for (s32 liVert = 0; liVert < 6; ++liVert)
             {
-                lpVertices[liVert].mv2Tex0UV.x = KAF_QUAD_UV[liVert][0];
-                lpVertices[liVert].mv2Tex0UV.y = KAF_QUAD_UV[liVert][1];
+                lpMesh->mppVerticies[liVert]->mv2Tex0UV.x = KAF_QUAD_UV[liVert][0];
+                lpMesh->mppVerticies[liVert]->mv2Tex0UV.y = KAF_QUAD_UV[liVert][1];
             }
         }
 
