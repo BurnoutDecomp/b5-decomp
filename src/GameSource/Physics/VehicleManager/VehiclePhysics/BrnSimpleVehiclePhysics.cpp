@@ -217,7 +217,8 @@ namespace Vehicle
         for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             maLocalTractionPoints[liWheel] = KV_ZERO;   // +0x530/+0x540/+0x550/+0x560
 
-        mfSpeedMPH           = { 0.0f, 0.0f, 0.0f, 0.0f };   // +1728 (VecFloat == Vector4)
+        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mfSpeedMPH = lvfZero;   // +1728 (VecFloat == Vector4)
 
         mbCrashing               = false;               // +1808
         mbStartedFatallyCrashing = false;               // +1809
@@ -415,7 +416,7 @@ namespace Vehicle
 
         // world position of the wheel: the three rotation rows scaled by the local lanes,
         // seeded with the translation row (exactly the console's vmaddfp cascade).
-        const Vector3 lvWorldWheelPos{
+        const Vector3 lvWorldWheelPos = {
             mTransform.xAxis.x * lrWheel.mPosition.x + mTransform.yAxis.x * lrWheel.mPosition.y
                 + mTransform.zAxis.x * lrWheel.mPosition.z + mTransform.wAxis.x,
             mTransform.xAxis.y * lrWheel.mPosition.x + mTransform.yAxis.y * lrWheel.mPosition.y
@@ -424,7 +425,7 @@ namespace Vehicle
                 + mTransform.zAxis.z * lrWheel.mPosition.z + mTransform.wAxis.z,
             0.0f };
 
-        const Vector3 lvDelta{ lvWorldWheelPos.x - lvPosition.x,
+        const Vector3 lvDelta = { lvWorldWheelPos.x - lvPosition.x,
                                lvWorldWheelPos.y - lvPosition.y,
                                lvWorldWheelPos.z - lvPosition.z, 0.0f };
         const f32 lfDistSq   = vpu::MagnitudeSquared(lvDelta);
@@ -516,7 +517,7 @@ namespace Vehicle
 
         // 0x825D8778..0x825D8798 -- worldWheelPos = mTransform * wheel.mPosition. Same cascade
         // as AddTractionPoint (three rows scaled by the local lanes, seeded with the wAxis row).
-        const Vector3 lvWorldWheelPos{
+        const Vector3 lvWorldWheelPos = {
             mTransform.xAxis.x * lrWheel.mPosition.x + mTransform.yAxis.x * lrWheel.mPosition.y
                 + mTransform.zAxis.x * lrWheel.mPosition.z + mTransform.wAxis.x,
             mTransform.xAxis.y * lrWheel.mPosition.x + mTransform.yAxis.y * lrWheel.mPosition.y
@@ -629,10 +630,10 @@ namespace Vehicle
         f32 lfSin, lfCos;
         SvpSinCos(lfAngle, lfSin, lfCos);
         Matrix44Affine lM;
-        lM.xAxis = { 1.0f,   0.0f,  0.0f, 0.0f };   // 0x825D92B4: X row untouched [V]
-        lM.yAxis = { 0.0f,  lfCos, lfSin, 0.0f };
-        lM.zAxis = { 0.0f, -lfSin, lfCos, 0.0f };
-        lM.wAxis = { 0.0f,   0.0f,  0.0f, 1.0f };
+        { const Vector3 lRow = { 1.0f,   0.0f,  0.0f, 0.0f }; lM.xAxis = lRow; }   // 0x825D92B4: X row untouched [V]
+        { const Vector3 lRow = { 0.0f,  lfCos, lfSin, 0.0f }; lM.yAxis = lRow; }
+        { const Vector3 lRow = { 0.0f, -lfSin, lfCos, 0.0f }; lM.zAxis = lRow; }
+        { const Vector3 lRow = { 0.0f,   0.0f,  0.0f, 1.0f }; lM.wAxis = lRow; }
         return lM;
     }
 
@@ -641,10 +642,10 @@ namespace Vehicle
         f32 lfSin, lfCos;
         SvpSinCos(lfAngle, lfSin, lfCos);
         Matrix44Affine lM;
-        lM.xAxis = { lfCos, 0.0f, -lfSin, 0.0f };
-        lM.yAxis = {  0.0f, 1.0f,   0.0f, 0.0f };   // 0x825D9460: Y row untouched [V]
-        lM.zAxis = { lfSin, 0.0f,  lfCos, 0.0f };
-        lM.wAxis = {  0.0f, 0.0f,   0.0f, 1.0f };
+        { const Vector3 lRow = { lfCos, 0.0f, -lfSin, 0.0f }; lM.xAxis = lRow; }
+        { const Vector3 lRow = {  0.0f, 1.0f,   0.0f, 0.0f }; lM.yAxis = lRow; }   // 0x825D9460: Y row untouched [V]
+        { const Vector3 lRow = { lfSin, 0.0f,  lfCos, 0.0f }; lM.zAxis = lRow; }
+        { const Vector3 lRow = {  0.0f, 0.0f,   0.0f, 1.0f }; lM.wAxis = lRow; }
         return lM;
     }
 
@@ -653,10 +654,10 @@ namespace Vehicle
         f32 lfSin, lfCos;
         SvpSinCos(lfAngle, lfSin, lfCos);
         Matrix44Affine lM;
-        lM.xAxis = {  lfCos, lfSin, 0.0f, 0.0f };
-        lM.yAxis = { -lfSin, lfCos, 0.0f, 0.0f };
-        lM.zAxis = {   0.0f,  0.0f, 1.0f, 0.0f };   // 0x825D8CFC: Z row untouched [V]
-        lM.wAxis = {   0.0f,  0.0f, 0.0f, 1.0f };
+        { const Vector3 lRow = {  lfCos, lfSin, 0.0f, 0.0f }; lM.xAxis = lRow; }
+        { const Vector3 lRow = { -lfSin, lfCos, 0.0f, 0.0f }; lM.yAxis = lRow; }
+        { const Vector3 lRow = {   0.0f,  0.0f, 1.0f, 0.0f }; lM.zAxis = lRow; }   // 0x825D8CFC: Z row untouched [V]
+        { const Vector3 lRow = {   0.0f,  0.0f, 0.0f, 1.0f }; lM.wAxis = lRow; }
         return lM;
     }
 
@@ -676,7 +677,7 @@ namespace Vehicle
             lpaORows[li]->z = lrRow.x * lrB.xAxis.z + lrRow.y * lrB.yAxis.z + lrRow.z * lrB.zAxis.z;
             lpaORows[li]->w = 0.0f;
         }
-        lOut.wAxis = { 0.0f, 0.0f, 0.0f, 1.0f };
+        { const Vector3 lRow = { 0.0f, 0.0f, 0.0f, 1.0f }; lOut.wAxis = lRow; }
         return lOut;
     }
 
@@ -798,8 +799,8 @@ namespace Vehicle
     // ===========================================================================================
     void SimpleVehiclePhysics::GetSimpleVehicleBox(CgsGeometric::Box& lrOutBox) const
     {
-        Vector3 lvMin{ -mHalfExtent.x, -mHalfExtent.y, -mHalfExtent.z, 0.0f };
-        Vector3 lvMax{  mHalfExtent.x,  mHalfExtent.y,  mHalfExtent.z, 0.0f };
+        Vector3 lvMin = { -mHalfExtent.x, -mHalfExtent.y, -mHalfExtent.z, 0.0f };
+        Vector3 lvMax = {  mHalfExtent.x,  mHalfExtent.y,  mHalfExtent.z, 0.0f };
 
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
@@ -809,7 +810,7 @@ namespace Vehicle
 
             // The wheel's lowest point in graphics/model space:
             //     COM offset + wheel centre - (0, radius, 0).
-            const Vector3 lvWheelBottom{
+            const Vector3 lvWheelBottom = {
                 mSimpleAttribs.mCOMOffset.x + lrWheel.mPosition.x,
                 mSimpleAttribs.mCOMOffset.y + lrWheel.mPosition.y - lrWheel.mSlipVariables.w,
                 mSimpleAttribs.mCOMOffset.z + lrWheel.mPosition.z,
@@ -819,13 +820,13 @@ namespace Vehicle
             lvMax = vpu::Max(lvMax, lvWheelBottom);
         }
 
-        const Vector3 lvCentre{
+        const Vector3 lvCentre = {
             (lvMin.x + lvMax.x) * 0.5f,
             (lvMin.y + lvMax.y) * 0.5f,
             (lvMin.z + lvMax.z) * 0.5f,
             0.0f
         };
-        const Vector3 lvDimensions{
+        const Vector3 lvDimensions = {
             lvMax.x - lvCentre.x,
             lvMax.y - lvCentre.y,
             lvMax.z - lvCentre.z,
@@ -836,7 +837,8 @@ namespace Vehicle
         lBoxTransform.wAxis = vpu::Add(lBoxTransform.wAxis,
                                        RotateCOMOffsetToWorld(lBoxTransform, lvCentre));
         lBoxTransform.wAxis.w = 1.0f;
-        lrOutBox.Set(lBoxTransform, lvDimensions, VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+        const VecFloat lvfNoPadding = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lrOutBox.Set(lBoxTransform, lvDimensions, lvfNoPadding);
     }
 
     // ===========================================================================================
@@ -875,7 +877,7 @@ namespace Vehicle
         const Vector3& lvUp = mTransform.yAxis;   // v125 = lvx this+0x20
 
         f32     lfBestHeight = KF_NO_CONTACT_HEIGHT;   // v127
-        Vector3 lvBestPoint{ 0.0f, 0.0f, 0.0f, 0.0f }; // v126
+        Vector3 lvBestPoint = { 0.0f, 0.0f, 0.0f, 0.0f }; // v126
         bool    lbAnyValid = false;                    // r14
 
         mbAnyWheelsDetatched = false;   // stb 0 -> +0x715 (before the loop)
@@ -913,13 +915,13 @@ namespace Vehicle
 
             // localBottom = wheel.mPosition with the y lane dropped by the radius
             // (mSlipVariables.w) -- the vsubfp + vrlimi(mask 4) pair.
-            const Vector3 lvLocalBottom{ lrWheel.mPosition.x,
+            const Vector3 lvLocalBottom = { lrWheel.mPosition.x,
                                          lrWheel.mPosition.y - lrWheel.mSlipVariables.w,
                                          lrWheel.mPosition.z, 0.0f };
 
             // worldBottom = mTransform * localBottom (the same vmaddfp cascade as
             // AddTractionPoint above).
-            const Vector3 lvWorldBottom{
+            const Vector3 lvWorldBottom = {
                 mTransform.xAxis.x * lvLocalBottom.x + mTransform.yAxis.x * lvLocalBottom.y
                     + mTransform.zAxis.x * lvLocalBottom.z + mTransform.wAxis.x,
                 mTransform.xAxis.y * lvLocalBottom.x + mTransform.yAxis.y * lvLocalBottom.y
