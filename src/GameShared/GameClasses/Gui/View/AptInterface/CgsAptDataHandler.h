@@ -53,14 +53,9 @@ namespace CgsGui
         // movie name (hash the name, linear-scan the (hash,header) table); null if absent.
         AptDataHeader* FindAptData(const char* lpacName);
 
-        // X360 0x82851990 (CgsAptDataHandler.cpp). Register a loaded AptDataHeader keyed by
-        // its movie name (idempotent -- returns the existing header if already registered).
-        // The console form reads the name from the header itself (its relocated
-        // mpacMovieName, the header's leading field) -- the form
-        // ViewModule::ProcessIncomingLoadNotification calls. On x64 the field is an
-        // un-relocated file offset (the no-op FixUp; see CgsAptDataHeader.cpp), resolved
-        // as header base + offset. Body in CgsAptDataHandler.cpp.
-        AptDataHeader* AddAptData(AptDataHeader* lpHeader);
+        // ARTIST82851990: use the relocated movie name and append a missing header.
+        // DecFIGS declares this operation void.
+        void AddAptData(AptDataHeader* lpHeader);
 
         // X360 0x8284A338 (CgsAptDataHandler.cpp). Un-register a loaded AptDataHeader BY ITS
         // NAME HASH -- the counterpart to AddAptData, and the one this table was missing.

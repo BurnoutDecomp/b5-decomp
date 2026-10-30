@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include <cstddef>
 
+namespace CgsResource { struct GuiGeometryObject; }
 namespace CgsGui
 {
     // ARTIST AptDataHeaderType::FixUp 0x828559D8 / FixDown 0x8285D980.
@@ -15,10 +16,10 @@ namespace CgsGui
             E_APTDATASTATE_ACTIVE = 2,
         };
 
-        u32 mpacMovieName;
-        u32 mpAptData;
-        u32 mpConstData;
-        u32 mpGeomStruct;
+        const char* mpacMovieName;
+        void* mpAptData;
+        void* mpConstData;
+        CgsResource::GuiGeometryObject* mpGeomStruct;
         u32 muSizeOfHeader;
         u32 meCurrentState;
 

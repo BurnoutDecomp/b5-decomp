@@ -1,25 +1,25 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"
-
 namespace CgsGui
 {
-    // ARTIST 0x828559D8: relocate the four offsets, then descend into geometry.
-    void AptDataHeader::FixUp(u32 luDelta)
+    template<class T> static T* Relocate(T* p, u32 delta)
     {
-        mpConstData += luDelta;
-        mpAptData += luDelta;
-        mpacMovieName += luDelta;
-        mpGeomStruct += luDelta;
-        reinterpret_cast<CgsResource::GuiGeometryObject*>(mpGeomStruct)->FixUp(luDelta);
+        return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(p) + delta);
     }
-
-    // ARTIST 0x8285D980: release geometry relocation before restoring file offsets.
-    void AptDataHeader::FixDown(u32 luDelta, bool lbEndianSwap)
+    void AptDataHeader::FixUp(u32 delta)
     {
-        reinterpret_cast<CgsResource::GuiGeometryObject*>(mpGeomStruct)->FixDown(luDelta, lbEndianSwap);
-        mpGeomStruct -= luDelta;
-        mpConstData -= luDelta;
-        mpAptData -= luDelta;
-        mpacMovieName -= luDelta;
+        mpGeomStruct = Relocate(mpGeomStruct, delta);
+        mpConstData = Relocate(mpConstData, delta);
+        mpAptData = Relocate(mpAptData, delta);
+        mpacMovieName = Relocate(mpacMovieName, delta);
+        mpGeomStruct->FixUp(delta);
+    }
+    void AptDataHeader::FixDown(u32 delta, bool lbEndianSwap)
+    {
+        mpGeomStruct->FixDown(delta, lbEndianSwap);
+        mpacMovieName = Relocate(mpacMovieName, 0u - delta);
+        mpAptData = Relocate(mpAptData, 0u - delta);
+        mpConstData = Relocate(mpConstData, 0u - delta);
+        mpGeomStruct = Relocate(mpGeomStruct, 0u - delta);
     }
 }

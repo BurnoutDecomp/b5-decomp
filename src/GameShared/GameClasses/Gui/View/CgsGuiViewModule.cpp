@@ -96,12 +96,12 @@ namespace CgsGui
         mFonts.Construct();
 
         mAptAux.Construct(
-            reinterpret_cast<::CgsGuiModuleIO::ImRendererSet*>(&mImRenderers),
+            &mImRenderers,
             &mTextRenderer,
             &mLanguageManager,
             &mFonts,
             lfAspectRatio,
-            reinterpret_cast<const rw::RGBA*>(lpAlternateTextColours),
+            lpAlternateTextColours,
             liNumAlternateColours);
 
         // Clear the custom-renderer mirror the render handler holds (guest +58596 ==

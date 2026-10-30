@@ -103,21 +103,14 @@ namespace CgsGui
     // AddAptData @0x82851990 -- register a loaded AptDataHeader (idempotent by name).
     // DECOMPILED FAITHFULLY from BURNOUT_X360_ARTIST.XEX. FindAptData first; on a miss,
     // assert capacity, hash the name, and append {hash, header} at the next free slot,
-    // bumping the count. Returns the found-or-registered header.
+    // bumping the count. DecFIGS declares the operation void.
     //
-    AptDataHeader* AptDataHandler::AddAptData(AptDataHeader* lpHeader)
+    void AptDataHandler::AddAptData(AptDataHeader* lpHeader)
     {
-        const uintptr_t luBase    = reinterpret_cast<uintptr_t>(lpHeader);
-        const uintptr_t luNameOff = static_cast<uintptr_t>(
-            *reinterpret_cast<const unsigned long long*>(luBase));
-        return AddAptData(lpHeader, reinterpret_cast<const char*>(luBase + luNameOff));
-    }
-
-    AptDataHeader* AptDataHandler::AddAptData(AptDataHeader* lpHeader, const char* lpacName)
-    {
+        const char* lpacName = lpHeader->mpacMovieName;
         AptDataHeader* lpFound = FindAptData(lpacName);
         if (lpFound)
-            return lpFound;   // already registered (the asm's `if (!result) { ... }`)
+            return;   // already registered
 
         CGS_ASSERT(miNumLoadedAptData < KI_MAX_LOADED_APT_HEADERS,
                    "Trying to add to many AptDataHeaders in AptDataHandler::AddAptData");
@@ -131,7 +124,6 @@ namespace CgsGui
         maAptDataHeaderInfo[miNumLoadedAptData].mHashKey = luHash;
         ++miNumLoadedAptData;
         maAptDataHeaderInfo[miNumLoadedAptData - 1].mpAptDataHeader = lpHeader;
-        return 0;   // the asm returns the (null) FindAptData result on the add path
     }
 
     // =========================================================================

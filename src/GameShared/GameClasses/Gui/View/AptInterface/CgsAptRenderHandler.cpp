@@ -1,10 +1,15 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"
+#include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameSource/Gui/BrnGuiPerfmons.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (SetTransform/SetProgram/SetTextureState/SetTexture/RenderFromStaticVertexBuffer)
 #include "rw/rwcore_structs.h"                        // rw::ResourceAllocatorRegistry::GetDefaultAllocator + rw::Resource
 
 #include <cmath>   // std::fabs
+#include <vectorintrinsics.h>
 
 // CgsGui::AptRenderHandler member functions.
 //   AptRenderHandler()    X360 0x827DFBD8
@@ -25,104 +30,86 @@
 // command API (CgsImRenderBufferTemplate.{h,cpp}); the GPU draw-flush that ultimately consumes
 // those commands is the platform leaf documented (and FLAG'd) in that buffer's Dispatch path.
 
+namespace CgsContainers
+{
+    template<> void HashTable<u32, renderengine::TextureState*, 25>::Insert(
+        HashTable<u32, renderengine::TextureState*, 25>::Element* lpElement);
+}
+
 namespace CgsGui
 {
     // -------------------------------------------------------------------------
-    // TextureStateCache::InsertSorted - the ordered insert AptRenderHandler::Render inlines.
-    // Bump-allocate the next free node from the cache's external pool, stamp {key, state}, and
-    // splice it into its bin (key % 25) keeping the bin sorted ascending by key. This reproduces
-    // the guest's compare-and-(InternalAddHead / InternalAddTail / InternalAddBefore) chain:
-    //   - empty bin            -> InternalAddHead
-    //   - key > tail's key     -> InternalAddTail
-    //   - otherwise walk to the first node whose key >= key and InternalAddBefore it
-    // (Render reads each candidate's key via the node+8 slot; here it is node->mData.mKey.)
-    // -------------------------------------------------------------------------
-    renderengine::TextureState* AptRenderHandler::TextureStateCache::InsertSorted(
-        u32 luKey, renderengine::TextureState* lpState)
-    {
-        // Bump-allocate the node from the pool (the guest's "16 * count++" + write-back of count).
-        Node* lpNode = &maNodePool[muNodeCount];
-        ++muNodeCount;
-        lpNode->mData.mKey   = luKey;
-        lpNode->mData.mValue = lpState;
-
-        Table::Bin& lrBin = mBins.GetBin(luKey);
-
-        CgsContainers::BaseLinkedListNode* lpHead = lrBin.InternalGetHead();
-        if (!lpHead)
-        {
-            lrBin.InternalAddHead(lpNode);
-            return lpState;
-        }
-
-        // tail's key < new key  => append at the tail.
-        Node* lpTail = static_cast<Node*>(lrBin.InternalGetTail());
-        if (lpTail->mData.mKey < luKey)
-        {
-            lrBin.InternalAddTail(lpNode);
-            return lpState;
-        }
-
-        // Walk from the head to the first node whose key is >= the new key, insert before it.
-        while (static_cast<Node*>(lpHead)->mData.mKey <= luKey)
-        {
-            CgsContainers::BaseLinkedListNode* lpNext = lpHead->GetNextNode();
-            lpHead = lpNext;
-            if (!lpNext)
-                return lpState;   // reached the end mid-walk (guest's null-mpNext early-out)
-        }
-        lrBin.InternalAddBefore(lpHead, lpNode);
-        return lpState;
-    }
-
-    // -------------------------------------------------------------------------
     // AptRenderHandler() - X360 0x827DFBD8.
     // -------------------------------------------------------------------------
+    // ARTIST827DFBD8: resource, hash-table and array members perform all stores.
     AptRenderHandler::AptRenderHandler()
-        : mpWhiteTexture(0)
-        , mpImRenderers(0)
-        , mpTextRenderer(0)
+        : mBackgroundColour(rw::RGBA::NoInitTag())
     {
-        // The stage clear colour + resolution start cleared (AptAux::Construct fills the
-        // resolution from the display mode; SetBackgroundColour sets the clear colour).
-        mBackgroundColour.m_rgba = 0;
-        mAptResolution.SetZero();
+    }
 
-        // The text-layout inputs start empty (AptAux::Construct seeds the font collection / effect
-        // / size scale from its construction arguments).
-        mpFontCollection      = 0;
-        miTextEffect          = 0;
-        mfFontSizeScale       = 1.0f;
-        mpLanguageManager     = 0;
-        mpAlternateTextColours = 0;
-        miNumAlternateColours  = 0;
-        // Both per-shape texture-state caches are left RAW here (X360 0x827DFBD8 stores the
-        // BaseLinkedList uninitialised sentinel into every bin and stamps muNodeCount to -1
-        // directly -- it does NOT call HashTable::Init() (mbInitialised stays false); the bins
-        // default-construct to that same sentinel state, so only the -1 node-count stamp needs
-        // reproducing here. The caches are brought properly live by Construct()'s Init() calls.
-        mWrapTextureCache.muNodeCount  = static_cast<u32>(-1);
-        mClampTextureCache.muNodeCount = static_cast<u32>(-1);
+    // ARTIST82854430; native VMX reciprocal refinement and transforms.
+    void AptRenderHandler::Construct(ImRendererSet* lpImRenderers,
+        CgsGraphics::TextRenderer* lpTextRenderer, CgsLanguage::LanguageManager* lpLanguageManager,
+        const FontCollection* lpFonts, f32 lfAspectRatio,
+        const ::RGBA* lpAlternateTextColours, s32 liNumAlternateColours)
+    {
+        CGS_ASSERT(lpImRenderers != 0, "Invalid renderer sent to AptRenderHandler::Construct");
+        mpImRenderers = lpImRenderers;
+        CGS_ASSERT(lpTextRenderer != 0, "Invalid text renderer sent to AptRenderHandler::Construct");
+        mpTextRenderer = lpTextRenderer;
+        CGS_ASSERT(lpFonts != 0, "lpFonts");
+        mpFontCollection = lpFonts;
+        CGS_ASSERT(lpLanguageManager != 0, "Invalid language manager sent to AptRenderHandler::Construct");
+        mpLanguageManager = lpLanguageManager;
 
-        // The batch transform starts cleared (the guest's leading zeroed dword runs).
-        mVertexTransform.mOriginXYZ.SetZero();
-        mVertexTransform.mRightUp.SetZero();
-        mVertexTransform.mColourShift.SetZero();
-        mVertexTransform.mColourScale.SetZero();
-
-        // Every AptString slot starts FREE (flag != 0 means available). The per-slot text
-        // storage starts empty (x64: inline buffers -- see the header note).
-        for (u32 luIndex = 0; luIndex < KU_NUM_APT_STRINGS; ++luIndex)
+        CGS_ALIGN(16) const f32 laResolution[4] = {1280.0f, 720.0f, 0.0f, 0.0f};
+        const __vector4 lvResolution = __lvx(laResolution, 0);
+        __stvx(lvResolution, &mAptResolution, 0);
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lvWidth = __vspltw(lvResolution, 0);
+        const __vector4 lvHeight = __vspltw(lvResolution, 1);
+        __vector4 lvInverseHeight = __vrefp(lvHeight);
+        for (int i = 0; i < 2; ++i)
+            lvInverseHeight = __vmaddfp(lvInverseHeight,
+                __vnmsubfp(lvInverseHeight, lvHeight, lvOne), lvInverseHeight);
+        CGS_ALIGN(16) f32 laRatio[4];
+        __stvx(__vmulfp(lvInverseHeight, lvWidth), laRatio, 0);
+        const f32 lfScale = lfAspectRatio / laRatio[0];
+        CGS_ALIGN(16) const f32 laInputs[4] = {1.0f / 1280.0f, -1.0f / 720.0f, lfScale, 2.0f};
+        const __vector4 lvInputs = __lvx(laInputs, 0);
+        const __vector4 lvInvWidth = __vspltw(lvInputs, 0);
+        const __vector4 lvNegHeight = __vmulfp(__vspltw(lvInputs, 1), __vspltw(lvInputs, 2));
+        static const CGS_ALIGN(16) u32 kauMaskA[4] = {0x08090A0B, 0x1C1D1E1F, 0x00010203, 0x00010203};
+        static const CGS_ALIGN(16) u32 kauMaskB[4] = {0x00010203, 0x00010203, 0x00010203, 0x14151617};
+        const __vector4 lvA = __vperm(lvInvWidth, lvNegHeight, __lvx(kauMaskA, 0));
+        const __vector4 lvB = __vperm(lvInvWidth, lvNegHeight, __lvx(kauMaskB, 0));
+        __stvx(__vmulfp(__vsldoi(lvB, lvA, 8), __vspltw(lvInputs, 3)), &mPlatformTransform, 0);
+        CGS_ASSERT(mPlatformTransform.x == mPlatformTransform.x && mPlatformTransform.y == mPlatformTransform.y &&
+                   mPlatformTransform.z == mPlatformTransform.z && mPlatformTransform.w == mPlatformTransform.w,
+                   "IsValid(mPlatformTransform)");
+        const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+        __stvx(__vmulfp(lvResolution, lvHalf), &mOriginTransform, 0);
+        CGS_ASSERT(mOriginTransform.x == mOriginTransform.x && mOriginTransform.y == mOriginTransform.y &&
+                   mOriginTransform.z == mOriginTransform.z && mOriginTransform.w == mOriginTransform.w,
+                   "IsValid(mOriginTransform)");
+        for (u32 i = 0; i < KU_NUM_APT_STRINGS; ++i)
         {
-            mabUnusedAptStrings[luIndex]    = 1;
-            maacAptStringChars[luIndex][0]  = 0;
+            mabUnusedAptStrings[i] = 1;
+            maAptStrings[i].Construct(lpAlternateTextColours, liNumAlternateColours);
         }
+        maWrapTextureStateTableElements.Construct();
+        mWrapTextureStateTable.Init();
+        maClampTextureStateTableElements.Construct();
+        mClampTextureStateTable.Init();
+        miTextEffect = 0;
+        mfFontSizeScale = 1.0f;
+        SetWhiteTexture(CgsGraphics::ImRendererBase::GetStateLibrary().mpTexture_White);
     }
 
     // -------------------------------------------------------------------------
     // SetWhiteTexture - X360 0x828466E0.
     // -------------------------------------------------------------------------
-    void AptRenderHandler::SetWhiteTexture(void* lpWhiteTexture)
+    void AptRenderHandler::SetWhiteTexture(renderengine::Texture* lpWhiteTexture)
     {
         CGS_ASSERT(lpWhiteTexture != 0,
                    "Invalid texture pointer sent to AptRenderHandler::SetWhiteTexture");
@@ -138,110 +125,35 @@ namespace CgsGui
     AptIm2dRenderBuffer* AptRenderHandler::GetIm2dRendererType() const
     {
         CGS_ASSERT(mpImRenderers != 0, "mpImRenderers");
-        return mpImRenderers->mpIm2dRenderer;
+        return mpImRenderers->mpIm2dRenderBuffer;
     }
 
-    // -------------------------------------------------------------------------
-    // Build the sampler Parameters for one mesh's texture state. luTextureId is the GuiTexture id
-    // the mesh references (the cache key + the bound raster); lbClampAddressing picks the addressU/V
-    // value (mesh texture-mode 1 => the CLAMP-cache fill, mode 2 => the WRAP-cache fill). The two
-    // fills are byte-identical apart from addressU/addressV. Decompiled verbatim from the v44 (mode-1)
-    // and v51 (mode-2) sampler-Parameters store blocks in AptRenderHandler::Render -- X360 ARTIST
-    // 0x82859300 @ 0x82859844 (mode 1, cache this+104176) and @0x82859704 (mode 2, cache this+99772).
-    //
-    // The numeric values below are transcribed directly from those X360 stores (the field index ==
-    // the guest's word index into the 16-word Parameters block; see renderstates.h):
-    //   addressU/addressV (word 0/1) : mode-1 fill stores 2, mode-2 fill stores 0  (the ONLY field
-    //                                  that differs between the two caches; r25==2 vs r31==0)
-    //   addressW          (word 2)   : 0
-    //   magFilter         (word 3)   : 1     minFilter (word 4) : 1
-    //   mipFilter         (word 5)   : 2     (r25; NOTE the Font path 0x82835658 stores 1 here -- the
-    //                                        Apt path differs, it stores 2)
-    //   maxAnisotropy     (word 8)   : 13    (r22 == 0xD)
-    //   word10            (word 10)  : 1
-    //   mipLodBias        (word 11)  : flt_82001CC0 == 0.0f (verified from the decrypted ARTIST XEX
-    //                                  rodata; the Font path uses flt_82004C78 == -0.5f instead)
-    //   word12            (word 12)  : flt_82001CC0 == 0.0f
-    //   words 6,7,9,13,14,15         : 0
-    //   field40..42                  : 0     field43,field44 : 1
-    //   mpTexture                    : the GuiTexture id (the raster the import resolves; the guest
-    //                                  stores the id at word offset 18, here Parameters::mpTexture)
-    //
-    // The committed PC consumer (renderengine::TextureState::Initialize, texturestate.cpp) memcpy's
-    // the leading 32-byte sampler block (words 0..7: addressU/V/W, mag/min/mipFilter, words 6/7) into
-    // the TextureState and binds mpTexture -- so reproducing those exact words makes the produced PC
-    // state genuinely identical to the block the console marshals. (On X360 the same words are
-    // marshalled into a Xenos GPU sampler descriptor; that GPU marshal is the platform leaf documented
-    // in texturestate.cpp -- NOT reproduced here.) The SamplerState enum NAMES the console source used
-    // for these literals are not recovered, so they are given as the authoritative integers, not by
-    // a guessed enum constant.
-    // -------------------------------------------------------------------------
-    static void BuildTextureStateParameters(renderengine::TextureState::Parameters* lpParamsOut,
-                                            u32 luTextureId, bool lbClampAddressing)
-    {
-        // addressU/addressV: the mode-1 (CLAMP cache) fill stores 2, the mode-2 (WRAP cache) fill
-        // stores 0. This is the sole field that differs between the guest's two fill blocks.
-        const u32 luAddress = lbClampAddressing ? 2u : 0u;
-        lpParamsOut->muAddressU      = luAddress;  // word 0
-        lpParamsOut->muAddressV      = luAddress;  // word 1
-        lpParamsOut->muAddressW      = 0u;   // word 2
-        lpParamsOut->muMagFilter     = 1u;   // word 3
-        lpParamsOut->muMinFilter     = 1u;   // word 4
-        lpParamsOut->muMipFilter     = 2u;   // word 5  (Apt fill stores 2; Font path stores 1)
-        lpParamsOut->muField6        = 0u;   // word 6
-        lpParamsOut->muField7        = 0u;   // word 7
-        lpParamsOut->muMaxAnisotropy = 13u;  // word 8  (r22 == 0xD)
-        lpParamsOut->muField9        = 0u;   // word 9
-        lpParamsOut->muField10       = 1u;   // word 10
-        lpParamsOut->mfMipLodBias    = 0.0f; // word 11 (flt_82001CC0 == 0.0f)
-        lpParamsOut->mfField12       = 0.0f; // word 12 (flt_82001CC0 == 0.0f)
-        lpParamsOut->muField13       = 0u;   // word 13
-        lpParamsOut->muField14       = 0u;   // word 14
-        lpParamsOut->muField15       = 0u;   // word 15
-        lpParamsOut->mu8Field40      = 0u;
-        lpParamsOut->mu8Field41      = 0u;
-        lpParamsOut->mu8Field42      = 0u;
-        lpParamsOut->mu8Field43      = 1u;
-        lpParamsOut->mu8Field44      = 1u;
-        // The bound raster: the GuiTexture id reinterpreted as the raster the import resolves
-        // (the guest stores `v50/v57 = textureId` then Initialize binds it as the state's raster).
-        lpParamsOut->mpTexture = reinterpret_cast<renderengine::Texture*>(
-            static_cast<uintptr_t>(luTextureId));
-    }
-
-    // -------------------------------------------------------------------------
-    // Resolve (and memoise) the texture state for one mesh: look the texture id up in the cache;
-    // on a miss build the Parameters, size the state, allocate it through the RW default resource
-    // allocator, Initialize it, and sorted-insert it into the cache. Returns the resolved state.
-    // Decompiled from the two (mode-1 / mode-2) miss paths in AptRenderHandler::Render @0x5CB230
-    // (identical apart from the cache + the address mode).
-    // -------------------------------------------------------------------------
+    // ARTIST82859704..798 / 82859844..8D0: key is the native texture pointer.
     static renderengine::TextureState* ResolveTextureState(
-        AptRenderHandler::TextureStateCache& lrCache, u32 luTextureId, bool lbClampAddressing)
+        AptRenderHandler::TextureStateTable& lrTable,
+        Array<AptRenderHandler::TextureStateElement, 256>& lrElements,
+        renderengine::Texture* lpTexture, bool lbClamp)
     {
-        renderengine::TextureState* lpCached = lrCache.Find(luTextureId);
-        if (lpCached)
-            return lpCached;
-
-        // ---- cache miss: build the sampler params ----
+        const u32 luKey = static_cast<u32>(reinterpret_cast<uintptr_t>(lpTexture));
+        renderengine::TextureState** lppState = lrTable.Get(luKey);
+        if (lppState)
+            return *lppState;
         renderengine::TextureState::Parameters lParams;
-        BuildTextureStateParameters(&lParams, luTextureId, lbClampAddressing);
-
-        // ARTIST 8285975C..798: allocate a Resource, then pass that same
-        // Resource object to Initialize. Its lane 0 owns the state storage.
+        lParams.muAddressU = lbClamp ? 2 : 0;
+        lParams.muAddressV = lbClamp ? 2 : 0;
+        lParams.muMagFilter = 1;
+        lParams.muMinFilter = 1;
+        lParams.mpTexture = lpTexture;
         rw::IResourceAllocator* lpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
-        rw::ResourceDescriptor lAllocDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(&lAllocDescriptor);
-        rw::Resource lResource = lpAllocator->DoAllocate(lAllocDescriptor, 0);
-
-        // Initialize the sampler+raster state in the carved memory (the guest's
-        // renderengine::TextureState::Initialize). [PC: the committed Initialize keeps the sampler
-        // config + bound raster for draw-time application instead of marshalling a Xenos GPU
-        // descriptor -- see texturestate.cpp.]
+        rw::ResourceDescriptor lDescriptor;
+        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
         renderengine::TextureState* lpState = renderengine::TextureState::Initialize(&lResource, &lParams);
-
-        // Memoise it (the ordered insert into the bin key % 25).
-        lrCache.InsertSorted(luTextureId, lpState);
+        AptRenderHandler::TextureStateElement lElement;
+        lrElements.Append(lElement);
+        AptRenderHandler::TextureStateElement* lpElement = &lrElements[lrElements.GetLength() - 1];
+        lpElement->Set(luKey, lpState);
+        lrTable.Insert(lpElement);
         return lpState;
     }
 
@@ -250,15 +162,16 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     void AptRenderHandler::Render(CgsResource::GuiGeometryFile* lpGeometry, int liShaderIndex)
     {
+        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miCgsAptFlashRender);
         // Validate the render set up front (the X360 fires these five debug asserts BEFORE the
         // alpha early-out): the set pointer (this+108588), the 2D renderer (*set), and the 3D
         // renderer (*(set+16)) must all be non-null. (The duplicate "mpImRenderers" asserts are the
         // inlined GetIm2dRendererType null-checks the guest emits at CgsAptRender.h:424/443.)
         CGS_ASSERT(mpImRenderers != 0, "Invalid renderer set in AptRenderHandler::Render");
         CGS_ASSERT(mpImRenderers != 0, "mpImRenderers");
-        CGS_ASSERT(mpImRenderers->mpIm2dRenderer != 0, "Invalid 2D renderer in AptRenderHandler::Render");
+        CGS_ASSERT(mpImRenderers->mpIm2dRenderBuffer != 0, "Invalid 2D renderer in AptRenderHandler::Render");
         CGS_ASSERT(mpImRenderers != 0, "mpImRenderers");
-        CGS_ASSERT(mpImRenderers->mp3dRenderer != 0, "Invalid 3D renderer in AptRenderHandler::Render");
+        CGS_ASSERT(mpImRenderers->mpIm3dRenderBufferMenusAndHud != 0, "Invalid 3D renderer in AptRenderHandler::Render");
 
         // Skip a fully-transparent batch: the colour-scale ALPHA below the epsilon means nothing
         // this batch draws is visible. Channel order is (Red, Green, Blue, Alpha) in
@@ -269,8 +182,11 @@ namespace CgsGui
         // ROTATES them into (R,G,B,A). The X360 original reads +0xC here, i.e. the fourth
         // lane, which is the direct attestation. Full evidence: CgsIm2d.cpp's
         // FoldIm2dColourChannel note.
-        if (std::fabs(mVertexTransform.mColourScale.w) < 0.00000011920929f)
+        if (!(std::fabs(mVertexTransform.mColourScale.w) >= 0.00000011920929f))
+        {
+            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptFlashRender);
             return;
+        }
 
         // Fetch the active 2D renderer base (GetIm2dRendererType == **(this+108588)) and reach its
         // command buffer at `base + 4` (the ImRenderBuffer<V> base). The guest stamps the transform on the base
@@ -282,7 +198,7 @@ namespace CgsGui
             lpRenderer;
 
         // Stamp the per-batch transform (the inlined 80-byte SET_TRANSFORM command writer).
-        lpBuffer->SetTransform(mVertexTransform);
+        lpRenderer->SetTransform(mVertexTransform);
 
         // Bind the shader program for this batch (sub_4F6DB4 == ImRenderBuffer<V>::SetProgram).
         lpBuffer->SetProgram(static_cast<s8>(liShaderIndex));
@@ -296,7 +212,7 @@ namespace CgsGui
         for (u32 luMesh = 0; luMesh < lpGeometry->muNumberOfMeshes; ++luMesh)
         {
             CgsResource::GuiGeometryMesh* lpMesh =
-                reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTable[luMesh]);
+                lpGeometry->mppGeometryMeshes[luMesh];
             CGS_ASSERT(lpMesh != 0, "Invalid Mesh in AptRenderHandler::Render");
 
             // Pick the primitive topology from the mesh type (miMeshType == mesh+0). The X360
@@ -305,7 +221,7 @@ namespace CgsGui
             // NOTHING -- the asm branches past the store (0x8285965C `b loc_82859678`), so the
             // primitive type is LEFT UNCHANGED (it keeps whatever the prior iteration / the init 4
             // left in v37). Faithfully reproduced: assert, then leave lePrimitiveType alone.
-            const s32 liMeshType = lpMesh->miMeshType;
+            const s32 liMeshType = lpMesh->mMeshHeader.miMeshType;
             if (liMeshType == 0)
             {
                 lePrimitiveType = static_cast<renderengine::PrimitiveType>(4);
@@ -314,7 +230,7 @@ namespace CgsGui
             {
                 lePrimitiveType = static_cast<renderengine::PrimitiveType>(6); // PRIMITIVETYPE_TRIANGLESTRIPS
             }
-            else if (liMeshType < 3)
+            else if (static_cast<u32>(liMeshType) < 3u)
             {
                 lePrimitiveType = static_cast<renderengine::PrimitiveType>(2); // PRIMITIVETYPE_LINES (type 2)
             }
@@ -322,48 +238,43 @@ namespace CgsGui
             {
                 // meshType >= 3: assert and leave lePrimitiveType at its prior value (the asm
                 // skips the v37 store on this path).
-                CGS_ASSERT(liMeshType < 3, "Unexpected meshtype in AptRenderHandler::Render");
+                CGS_ASSERT(static_cast<u32>(liMeshType) < 3u, "Unexpected meshtype in AptRenderHandler::Render");
             }
 
             // Resolve the bound texture/state from the mesh's texture mode (miTextureMode == mesh+4):
             //   1 -> CLAMP-addressed cache, 2 -> WRAP-addressed cache, 0 -> white fallback texture,
             //   >= 3 -> invalid. (X360 routes mode 1/2 through SetState(TextureState*), mode 0
             //   through SetTexture(white).)
-            const s32 liTextureMode = lpMesh->miTextureMode;
+            const s32 liTextureMode = lpMesh->mMeshHeader.miTextureMode;
 
             if (liTextureMode == 1 || liTextureMode == 2)
             {
-                // Native-8 texture bind: mpTexture holds the live renderengine::Texture* the
-                // container-import pass wrote at bundle load (the type-0 RwRaster handler's FixUp
-                // has already realised its D3D texture). Bind it directly -- the same object type
-                // the white-fallback SetTexture path takes. The console instead routes through the
-                // u32-keyed TextureState cache (clamp/wrap sampler state); that cache widening is
-                // still the faithful follow-on -- the direct bind renders the art with the device's
-                // current sampler addressing. A mesh whose slot was NOT import-patched (scrubbed to
-                // 0 by AptFixupGeometryFileNative8) keeps the white fallback.
-                if (luTextureId != 0)
-                    lpBuffer->SetTexture(reinterpret_cast<renderengine::Texture*>(luTextureId));
-                else
-                    lpBuffer->SetTexture(static_cast<renderengine::Texture*>(mpWhiteTexture));
+                renderengine::Texture* lpTexture = lpMesh->mMeshHeader.mpTexture;
+                CGS_ASSERT(lpTexture != 0, "lpGuiMesh->mMeshHeader.mpTexture!=NULL");
+                renderengine::TextureState* lpState = liTextureMode == 1
+                    ? ResolveTextureState(mClampTextureStateTable, maClampTextureStateTableElements, lpTexture, true)
+                    : ResolveTextureState(mWrapTextureStateTable, maWrapTextureStateTableElements, lpTexture, false);
+                lpBuffer->SetState(lpState);
             }
             else if (liTextureMode == 0)
             {
                 // SetTexture: bind the white fallback (guest +128).
-                lpBuffer->SetTexture(static_cast<renderengine::Texture*>(mpWhiteTexture));
+                lpBuffer->SetTexture(mpWhiteTexture);
             }
             else
             {
-                CGS_ASSERT(liTextureMode < 3, "Unexpected texturemode in AptRenderHandler::Render");
+                CGS_ASSERT(static_cast<u32>(liTextureMode) < 3u, "Unexpected texturemode in AptRenderHandler::Render");
             }
 
             const CgsGraphics::Basic2dColouredTexturedVertex* lpVertices =
-                reinterpret_cast<const CgsGraphics::Basic2dColouredTexturedVertex*>(lppVertexTable[0]);
+                lpMesh->mppVerticies[0];
             lpBuffer->RenderFromStaticVertexBuffer(lePrimitiveType, lpVertices,
                                                    lpMesh->muNumberOfVerticies);
         }
 
         // Reset the program to 0 at the end of the batch (sub_4F6DB4 with 0).
         lpBuffer->SetProgram(static_cast<s8>(0));
+        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptFlashRender);
     }
 
     // -------------------------------------------------------------------------
