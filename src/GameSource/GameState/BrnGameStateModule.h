@@ -126,6 +126,8 @@ public:
     virtual bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                  CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
                  const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+    // ARTIST vtable +0x44, 823756A8; caller supplies the output buffer.
+    virtual bool Release(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
     bool Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
