@@ -355,7 +355,6 @@ void RaceCarEntityModule::Construct()
 
     mpVehicleList        = 0;
     mpWheelList          = 0;
-    mbCarColoursBound    = false;
 
     // ARTIST 0x822FE1AC clears the eight car-select wait flags. The debug-car
     // request state follows at 0x822FE1B0..0x822FE1E4, including all four lanes
@@ -490,18 +489,7 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
         if( mReceiverQueue.GetCount() < miExpectedResponseCount )
             return false;
 
-        // ⭐ FIXED 2026-08-02 (colour-picker wave) -- THIS BLOCK READ PAST THE END OF THE
-        // EVENT. The stage-0/1 request above is a type-4 AcquireResourceRequest, so the pool
-        // module answers with a CgsResource::Events::AcquireResourceResponse (see
-        // PoolModule::DoAcquireResourceRequest @0x828FCD48, tag 6). The reply was being read
-        // through a BrnResource::GameDataIO::GameDataAssetEvent view, which is a DIFFERENT
-        // record: GameDataAssetEvent::mHandle sits at +40, while AcquireResourceResponse is
-        // only {PoolEvent, mpResourceMemory, mpSourceEntry} == 32 bytes on x64. So both
-        // `mCarColoursResource` and `mbCarColoursBound` were built from bytes past the end of
-        // the record -- which is why "[RaceCar] LoadGlobalResources done: ... carColours=0"
-        // reported a FALSE NEGATIVE even once the palette resource really was resident.
-        // Read it the way WorldDataController::Prepare's identical stage does: by name off
-        // the response's own two lanes.
+        // The resource response supplies the handle used to bind CarColours.
         const CgsModule::Event* lpEvent = 0;
         s32 liEventSize = 0;
         mReceiverQueue.GetFirstEvent( &lpEvent, &liEventSize );
@@ -516,7 +504,6 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
 
             CgsResource::ResourcePtr<GlobalColourPalette> lPalette( lHandle );
             mCarColoursResource  = lPalette;
-            mbCarColoursBound    = ( lpAcquire->mpResourceMemory != 0 );
         }
     }
     // fall through
@@ -579,15 +566,7 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
             mpWheelList = static_cast<const BrnResource::GameDataIO::GetWheelListResponse*>(lpReply)->GetWheelListPtr();
         }
 
-        if( CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[RaceCar] LoadGlobalResources done: VEHICLETEX -> pool "
-                << KI_POOL_CAR_SHARED
-                << ", vehicleList=" << ( mpVehicleList != 0 ? 1 : 0 )
-                << " wheelList=" << ( mpWheelList != 0 ? 1 : 0 )
-                << " carColours=" << ( mbCarColoursBound ? 1 : 0 ) << "\n";
-        }
+
     }
     // fall through
     case 0x11:
@@ -6769,7 +6748,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
                                       CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
         }
 
-        f32 lfClosestDistanceSquared = std::numeric_limits<f32>::max();
+        f32 lfClosestDistanceSquared = (std::numeric_limits<f32>::max)();
         s32 liClosestGlobalCar = -1;
         Vector3 lvClosestPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
         for( s32 liGlobal = 0; liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liGlobal )
