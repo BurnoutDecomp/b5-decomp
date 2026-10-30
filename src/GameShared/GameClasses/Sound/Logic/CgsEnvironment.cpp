@@ -154,9 +154,6 @@ void Environment::Update(f32 af32GameDt, f32 af32SimDt)
     // (the liUnused first arg rides the r5->r6 float-slot-skip; the asm passes only dt)
     mDynamicMixer.ProcessMixMap(0, af32GameDt);
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miDynamicMixer);
-    // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): the mix map's endpoints and
-    // master channels as the mixer just left them. Returns immediately when off.
-    CgsSound::Diag::DMixDiagTick(mDynamicMixer, mfGameTime);
 
     CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miProcessUpdate);
     for (u32 luSlot = 0; luSlot < mu32StateManagerCount; ++luSlot)
