@@ -10,10 +10,8 @@
 // ADJUSTED address per frame (rebased into the map's address space - what the reader matches + the
 // dialog prints) and the RAW captured address per frame.
 //
-// Physically-required PC substitutions (the X360 debug-monitor APIs have no PC equivalent): the stack
-// capture DmCaptureStackBackTrace -> CaptureStackBackTrace, and the module-base lookup
-// DmGetXbeInfo/DmWalkLoadedModules -> GetModuleHandle(nullptr). Addresses widen from the X360's 32-bit
-// to uintptr_t (x64). Everything else is a straight translation.
+// Native storage uses two arrays of25addresses. Prepare and ComputeAdjustedStack
+// call the actual XDK debug-monitor APIs; no host capture or module fallback is used.
 
 namespace CgsDev
 {
@@ -35,13 +33,11 @@ namespace CgsDev
         uintptr_t maStack[KI_MAX_STACK_ADDRESSES];           // raw captured return addresses
     };
 
-    // PC equivalent of StackUnpickX360 (the X360-specific capture/rebase derived class).
+    // Native umbrella spelling of the actual StackUnpickX360 capture/rebase class.
     struct StackUnpick : public StackUnpickBase
     {
-        StackUnpick() { miNumStackAddresses = 0; }
-
         // 0x82819118 - capture the calling thread's stack, count the frames, rebase them, drop frame 0.
-        void Prepare();
+        bool Prepare();
 
         // 0x828173D8 - copy the raw stack to the adjusted stack and rebase every frame at/above the
         // module load base into the map's address space (adjusted = raw - moduleBase + lBaseAddress).
