@@ -17,6 +17,21 @@ namespace CgsFileSystem
         mbConstructed = true;
     }
 
+    // ARTIST828DD378: first empty data slot, bounded name copy, then data and size.
+    bool DeviceMemFileSystem::RegisterMemFile(const char* lpcName, void* lpData, u64 luSize)
+    {
+        CGS_ASSERT(mbConstructed, "mbConstructed");
+        for (u32 lu = 0; lu < KU_MAX_MEM_FILES; ++lu)
+        {
+            if (maMemFiles[lu].mpData) continue;
+            strncpy(maMemFiles[lu].macName, lpcName, sizeof(maMemFiles[lu].macName));
+            maMemFiles[lu].mpData = lpData;
+            maMemFiles[lu].muSize = luSize;
+            return true;
+        }
+        return false;
+    }
+
     // ARTIST828DD428. Registration names use exact-case comparison here.
     bool DeviceMemFileSystem::UnregisterMemFile(const char* lpcName)
     {

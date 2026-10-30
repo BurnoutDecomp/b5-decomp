@@ -54,6 +54,10 @@ namespace CgsFileSystem
         void Destruct();    // 0x828E8A88
 
         bool HasDiskErrorOccured() const;
+        s32 Open(const char* lpcName, FileAccess leAccess, s32 liPriority, bool lbUseHDCache);
+        bool Close(u32 luFileId);
+        bool RegisterMemFile(const char* lpcName, void* lpData, u64 luSize);
+        bool UnregisterMemFile(const char* lpcName);
 
         // ---- X360-attested accessors (this TU) ----
         // @0x827DF320 (boot trace). Default-constructs the embedded handles/streams/log; the
@@ -99,6 +103,10 @@ namespace CgsFileSystem
         // The actual file I/O primitives, called under mFileSystemFutex by FileHandle::Read/Write.
         // DECLARE-ONLY here: bodies are their own TUs (ReadInternal @0x828E8B50-region /
         // WriteInternal @0x828E8B50, homed in CgsFileSystem.cpp).
+        s32 OpenInternal(const char* lpcName, FileAccess leAccess, s32 liPriority, bool lbUseHDCache);
+        bool CloseInternal(u32 luFileId);
+        bool RegisterMemFileInternal(const char* lpcName, void* lpData, u64 luSize);
+        bool UnregisterMemFileInternal(const char* lpcName);
         bool ReadInternal(u32 luFileID, void* lpOutputBuffer, u64 luFilePosition, u64 luSizeToRead);
         bool WriteInternal(u32 luFileID, const void* lpInputBuffer, u64 luFilePosition,
                            u64 luSizeToWrite);

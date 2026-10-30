@@ -106,6 +106,37 @@ namespace Events
         s32                                miEventId; // :946  (X360 +4)
     };
 
+    // ARTIST828F3D30: path +8, access +136, priority +140, cache +144.
+    struct OpenFileRequest : public FileEvent
+    {
+        const char* GetFileName() const { return macFileName; }
+        CgsFileSystem::FileAccess GetFileAccess() const { return meFileAccess; }
+        s32 GetPriority() const { return miPriority; }
+        bool GetUseHDCache() const { return mbUseHDCache; }
+    protected:
+        char macFileName[128];
+        CgsFileSystem::FileAccess meFileAccess;
+        s32 miPriority;
+        bool mbUseHDCache;
+    };
+
+    struct RegisterMemFileRequest : public Event
+    {
+        const char* GetFileName() const { return macFileName; }
+        void* GetData() const { return mpData; }
+        u64 GetSize() const { return muSize; }
+    private:
+        char macFileName[256];
+        void* mpData;
+        u64 muSize;
+    };
+    struct UnregisterMemFileRequest : public Event
+    {
+        const char* GetFileName() const { return macFileName; }
+    private:
+        char macFileName[256];
+    };
+
     // CgsResourceIOEvents.h -- a file IO event that carries a file-system handle.
     struct FileHandleEvent : public FileEvent
     {
@@ -118,6 +149,9 @@ namespace Events
 
     // CgsResourceIOEvents.h -- the reply to an open-file request (queue event id 20 on
     // the requester's receiver queue); miEventId is the requester's own id for the open.
+    struct CloseFileRequest : public FileHandleEvent {};
+    struct CloseFileResponse : public FileHandleEvent {};
+
     struct OpenFileResponse : public FileHandleEvent
     {
     };

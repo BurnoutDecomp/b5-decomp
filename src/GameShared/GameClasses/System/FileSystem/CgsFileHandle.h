@@ -30,7 +30,7 @@ namespace CgsFileSystem
     {
     public:
         // ---- DWARF CgsFileHandle.h:48-79 ----
-        void Construct(FileSystem* lpFileSystem, u32 luFileId);
+        void Construct(FileSystem* lpFileSystem, u32 luFileId) { mpFileSystem = lpFileSystem; muFileId = luFileId; }
         FileHandle& operator=(const FileHandle& lOtherHandle);
         bool operator==(const FileHandle& lOtherHandle) const;
 
@@ -43,7 +43,7 @@ namespace CgsFileSystem
         bool Write(const void* lpInputBuffer, u64 luFilePosition, u64 lnSizeToWrite);
 
         FileState GetStatus() const;
-        u32 GetFileId() const;
+        u32 GetFileId() const { return muFileId; }
         u64 GetLastOperationSize();
 
     private:

@@ -668,6 +668,10 @@ namespace CgsResource
         CGS_STATIC_ASSERT(offsetof(ResourceModule, mPendingFileResponses) == 0x58030, "ARTIST pending-response pool");
         CGS_STATIC_ASSERT(offsetof(ResourceModule, maPendingFileResponses) == 0x5803c, "ARTIST pending-response records");
         CGS_STATIC_ASSERT(offsetof(ResourceModule, maiPendingFileResponseFreeIndices) == 0x580fc, "ARTIST pending-response free indices");
+        CGS_STATIC_ASSERT(sizeof(Events::OpenFileRequest) == 148, "ARTIST open file request");
+        CGS_STATIC_ASSERT(sizeof(Events::CloseFileRequest) == 16, "ARTIST close file request");
+        CGS_STATIC_ASSERT(sizeof(Events::RegisterMemFileRequest) == 272, "ARTIST register memory file request");
+        CGS_STATIC_ASSERT(sizeof(Events::UnregisterMemFileRequest) == 256, "ARTIST unregister memory file request");
         CGS_STATIC_ASSERT(sizeof(Events::AddPatchRequest) == 268, "ARTIST patch request copy");
         CGS_STATIC_ASSERT(offsetof(Events::AddPatchRequest, macFileName) == 8, "ARTIST patch path");
         CGS_STATIC_ASSERT(offsetof(Events::AddPatchRequest, miPriority) == 264, "ARTIST patch priority");
@@ -707,6 +711,10 @@ namespace CgsResource
             case 17: AddOpenWriteStreamRequest(reinterpret_cast<const Events::OpenWriteStreamRequest*>(lpEvent)); break;
             case 18: AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent)); break;
             case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
+            case 20: AddOpenFileRequest(reinterpret_cast<const Events::OpenFileRequest*>(lpEvent)); break;
+            case 21: AddCloseFileRequest(reinterpret_cast<const Events::CloseFileRequest*>(lpEvent)); break;
+            case 22: AddRegisterMemFileRequest(reinterpret_cast<const Events::RegisterMemFileRequest*>(lpEvent)); break;
+            case 23: AddUnregisterMemFileRequest(reinterpret_cast<const Events::UnregisterMemFileRequest*>(lpEvent)); break;
             case 25: AddAddPatchRequest(reinterpret_cast<const Events::AddPatchRequest*>(lpEvent)); break;
             default: CGS_ASSERT(false, "Invalid event id\n"); break;
             }
@@ -782,6 +790,49 @@ namespace CgsResource
         mAddPatchRequest = *lpRequest;
         mbPatchRequestPending = true;
         return true;
+    }
+
+    // ARTIST828F3D30: open first, allocate the response, then retain it.
+    bool ResourceModule::AddOpenFileRequest(const Events::OpenFileRequest* lpRequest)
+    {
+        const s32 liFileId = mFileSystem.Open(lpRequest->GetFileName(), lpRequest->GetFileAccess(),
+                                              lpRequest->GetPriority(), lpRequest->GetUseHDCache());
+        CgsFileSystem::FileHandle lFile;
+        lFile.Construct(liFileId >= 0 ? &mFileSystem : 0, liFileId >= 0 ? static_cast<u32>(liFileId) : 0);
+        Events::OpenFileResponse* lpResponse = FileSystemAlloc<Events::OpenFileResponse>();
+        CGS_ASSERT(lpResponse != 0, "Failed to allocate temporary memory for file system request\n");
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+        lpResponse->SetFileHandle(lFile);
+        PendingFileResponse* lpPending = mPendingFileResponses.Pop();
+        CGS_ASSERT(lpPending != 0, "Failed to allocate record for file system request\n");
+        lpPending->mpResponse = lpResponse;
+        lpPending->meEvent = 20;
+        lpPending->muFileId = liFileId;
+        return true;
+    }
+    // ARTIST828F3EE0: close before allocating the pending record.
+    bool ResourceModule::AddCloseFileRequest(const Events::CloseFileRequest* lpRequest)
+    {
+        Events::CloseFileResponse* lpResponse = FileSystemAlloc<Events::CloseFileResponse>();
+        CGS_ASSERT(lpResponse != 0, "Failed to allocate temporary memory for file system request\n");
+        lpResponse->Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+        const CgsFileSystem::FileHandle lFile = lpRequest->GetFileHandle();
+        lpResponse->SetFileHandle(lFile);
+        mFileSystem.Close(lFile.GetFileId());
+        PendingFileResponse* lpPending = mPendingFileResponses.Pop();
+        CGS_ASSERT(lpPending != 0, "Failed to allocate record for file system request\n");
+        lpPending->mpResponse = lpResponse;
+        lpPending->meEvent = 21;
+        lpPending->muFileId = lFile.GetFileId();
+        return true;
+    }
+    bool ResourceModule::AddRegisterMemFileRequest(const Events::RegisterMemFileRequest* lpRequest)
+    {
+        return mFileSystem.RegisterMemFile(lpRequest->GetFileName(), lpRequest->GetData(), lpRequest->GetSize());
+    }
+    bool ResourceModule::AddUnregisterMemFileRequest(const Events::UnregisterMemFileRequest* lpRequest)
+    {
+        return mFileSystem.UnregisterMemFile(lpRequest->GetFileName());
     }
 
     // ARTIST @0x829070B0. Start the asynchronous read-stream open, build the
@@ -883,6 +934,22 @@ namespace CgsResource
                 lpUser = lpResponse->GetUser();
                 liResponseSize = sizeof(*lpResponse);
             }
+            else if (lpPending->meEvent == 20)
+            {
+                Events::OpenFileResponse* lpResponse = static_cast<Events::OpenFileResponse*>(lpPending->mpResponse);
+                lbComplete = lpResponse->GetFileHandle().GetStatus() == CgsFileSystem::E_FILESTATE_OPEN;
+                lpUser = lpResponse->GetUser();
+                liResponseSize = sizeof(*lpResponse);
+            }
+            else if (lpPending->meEvent == 21)
+            {
+                Events::CloseFileResponse* lpResponse = static_cast<Events::CloseFileResponse*>(lpPending->mpResponse);
+                lbComplete = mFileSystem.GetStatus(lpPending->muFileId) == CgsFileSystem::E_FILESTATE_CLOSED;
+                lpUser = lpResponse->GetUser();
+                liResponseSize = sizeof(*lpResponse);
+            }
+            else if (lpPending->meEvent == 17 || lpPending->meEvent == 19)
+                continue;
             else
             {
                 CGS_ASSERT(false, "Unexpected pending file response\n");
@@ -900,6 +967,10 @@ namespace CgsResource
             if (lpPending->meEvent == 16)
                 FileSystemFree(static_cast<Events::OpenReadStreamResponse*>(
                     lpPending->mpResponse));
+            else if (lpPending->meEvent == 20)
+                FileSystemFree(static_cast<Events::OpenFileResponse*>(lpPending->mpResponse));
+            else if (lpPending->meEvent == 21)
+                FileSystemFree(static_cast<Events::CloseFileResponse*>(lpPending->mpResponse));
             else
                 FileSystemFree(static_cast<Events::CloseReadStreamResponse*>(
                     lpPending->mpResponse));
