@@ -30,6 +30,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [boost*] witnesses
+#if defined(_XBOX)
+#include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
+#endif
 #include <cmath>                                              // sqrtf
 #include <cstdio>                                             // snprintf (witnesses)
 #include <cstdlib>                                            // std::getenv (the opt-in witness gate)
@@ -321,6 +324,7 @@ void BoostStateMachine::StartEffects(ParticleEffectHelper& lParticleEffectHelper
         mEffects[lu].muHandle = lModule.StartLionEffect(luNameHash, lpcEffectName, luWorldIndex);
     }
 
+#if !defined(_XBOX)
     // ---- [boostfx] witness. NOT console behaviour: ours, bounded, log-only. ---------
     // PRINTED OUTSIDE THE LOOP, DELIBERATELY. The loop above is bounded by muNumBoostTags,
     // so with a zero tag count StartEffects is a no-op that leaves NOTHING in the log --
@@ -346,6 +350,8 @@ void BoostStateMachine::StartEffects(ParticleEffectHelper& lParticleEffectHelper
             CgsDev::Log::WriteToLog(lacMsg);
         }
     }
+#endif
+
 }
 
 // =============================================================================
@@ -468,7 +474,11 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
                 lfMax = lpDebug->BoostTransitionMax();
             }
 
+#if defined(_XBOX)
+            const Vector3 lvParams = { lfMin, BrnParticleMath::ScalarMultiplyAdd(lfMax - lfMin, 0.5f, lfMin), lfMax, 0.0f };
+#else
             const Vector3 lvParams = { lfMin, std::fma(lfMax - lfMin, 0.5f, lfMin), lfMax, 0.0f };
+#endif
             const Vector2 lvScale  = { 0.0f, 1.0f, 0.0f, 0.0f };
             BrnEffects::Curves::SmoothStep lCurve;
             const f32 lfBlend = 1.0f - lCurve.Evaluate(lvParams, lvScale,
@@ -500,6 +510,25 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             // magnitude (vmsum3fp128 + rsqrt refine) and the running max via fsel.
             const BrnPhysics::Vehicle::RaceCarState& lCar = *lCarState.mpCarState;
             const Vector3& lvVel = lCar.mLinearVelocity;
+#if defined(_XBOX)
+            const __vector4 lvV = __lvx(&lvVel, 0);
+            const __vector4 lvLengthSquared = __vmsum3fp(lvV, lvV);
+            const __vector4 lvZero = XMVectorZero();
+            const __vector4 lvOne = XMVectorReplicate(1.0f);
+            const __vector4 lvHalf = XMVectorReplicate(0.5f);
+            __vector4 lvEstimate = __vrsqrtefp(lvLengthSquared);
+            for (u32 luStep = 0; luStep < 2; ++luStep)
+            {
+                const __vector4 lvSquare = __vmulfp(lvEstimate, lvEstimate);
+                const __vector4 lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+                const __vector4 lvError = __vnmsubfp(lvLengthSquared, lvSquare, lvOne);
+                lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+            }
+            f32 lfMax = __vsel(__vmulfp(lvLengthSquared, lvEstimate), lvZero,
+                               __vcmpeqfp(lvZero, lvLengthSquared)).x;
+#else
+            f32 lfMax = std::sqrt(lvVel.x * lvVel.x + lvVel.y * lvVel.y + lvVel.z * lvVel.z);
+#endif
             for (int liWheel = 0; liWheel < 4; ++liWheel)
             {
                 const f32 lfWheelSurfaceSpeed =

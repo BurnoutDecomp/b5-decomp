@@ -9,6 +9,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                               // CgsNumeric::Random
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [boost*] witnesses
+#if defined(_XBOX)
+#include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
+#endif
 #include <cfloat>                                                                   // FLT_MAX
 #include <cmath>                                                                    // std::fma (BurstAccumulator::Update's fmadds)
 #include <cstdio>                                             // snprintf (witnesses)
@@ -87,7 +90,11 @@ u32 BurstAccumulator::Update(f32 lfBurstSize, f32 lfTime, CgsNumeric::Random& lr
         liTruncated = static_cast<s64>(lfSize);
     const u32 luBurstCount = static_cast<u32>(static_cast<u64>(liTruncated));   // stfiwx: the low word
 
+#if defined(_XBOX)
+    mfBurstSizeThreshold = BrnParticleMath::ScalarMultiplyAdd(lfRange * lfRandom, lfRandom, mfMinBurstSize);
+#else
     mfBurstSizeThreshold = std::fma(lfRange * lfRandom, lfRandom, mfMinBurstSize);
+#endif
     mfCurrentBurstSize   = mfCurrentBurstSize - static_cast<f32>(static_cast<f64>(luBurstCount));
 
     return luBurstCount;
@@ -220,14 +227,17 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
     // the early one, so the log distinguishes the four outcomes that look identical
     // downstream: never called / called with the NULL resource / called with locators but no
     // FXBOOSTPOINT among them / called and counted N. DELETE-WHEN-STABLE.
+#if !defined(_XBOX)
     static u32 suExtractWitness = 0;
     const u32 KU_EXTRACT_WITNESS_LIMIT = 8;
     const bool lbWitness = (suExtractWitness < KU_EXTRACT_WITNESS_LIMIT);
     if (lbWitness)
         ++suExtractWitness;
 
+#endif
     if (CgsResource::NULLResourcePtr.IsEqual(&lrPhysicsResource))
     {
+#if !defined(_XBOX)
         if (lbWitness)
         {
             char lacMsg[192];
@@ -237,6 +247,7 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
                 suExtractWitness, mBoostMachine.muNumBoostTags);
             CgsDev::Log::WriteToLog(lacMsg);
         }
+#endif
         return;
     }
 
@@ -254,12 +265,15 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
     // from "no locators at all" and from "the tag enum decodes to something else". The mask
     // is 64 bits ON PURPOSE: FXBOOSTPOINT1..4 are 41..44, and a 32-bit mask could not have
     // shown them at all.
+#if !defined(_XBOX)
     u64 luTagTypeMask = 0;
     u32 luHighestTag  = 0;
 
+#endif
     for (u32 luTag = 0; luTag < luNumLocators; ++luTag)
     {
         const BrnPhysics::Deformation::LocatorPointSpec lLocator = lrGenericTags.CreateLo(luTag);
+#if !defined(_XBOX)
         if (lbWitness)
         {
             const u32 luTagType = static_cast<u32>(lLocator.meTagPointType);
@@ -268,6 +282,7 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
             if (luTagType > luHighestTag)
                 luHighestTag = luTagType;
         }
+#endif
         if (!IsBoostPointTag(lLocator.meTagPointType))
         {
             continue;
@@ -302,6 +317,7 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
         ++mBoostMachine.muNumBoostTags;
     }
 
+#if !defined(_XBOX)
     if (lbWitness)
     {
         char lacMsg[384];
@@ -314,6 +330,7 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
         CgsDev::Log::WriteToLog(lacMsg);
     }
 
+#endif
     mBoostMachine.mState = EffectsStateAllOff;
     mBoostMachine.mTime  = 0.0f;
     mJumpMachine.mState  = EffectsStateAllOff;
