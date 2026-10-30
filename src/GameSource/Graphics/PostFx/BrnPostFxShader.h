@@ -56,7 +56,7 @@ namespace renderengine
     class  Texture;                 // pc/gcm/renderengine/texture.h
     class  TextureState;            // pc/gcm/renderengine/renderstates.h
     class  DepthStencilState;       // pc/gcm/renderengine/renderstates.h
-    struct SamplerStateData;        // SDKs/RenderEngineClub/.../states/samplerstate.cpp (no header yet)
+    class SamplerState;
     struct BlendMaterialState;      // SDKs/RenderEngineClub/.../states/blendstate.h
     struct VertexDescriptorData;    // pc/gcm/renderengine/VertexDescriptor.h
 }
@@ -360,13 +360,13 @@ private:
     renderengine::DepthStencilState*    mpDepthStencilState;                // DWARF :215 (guest dword 197)
 
     rw::Resource                   mSamplerStateResource_Point;            // DWARF :217
-    renderengine::SamplerStateData*     mpSamplerState_Point;               // DWARF :218 (guest dword 203)
+    renderengine::SamplerState*     mpSamplerState_Point;               // DWARF :218 (guest dword 203)
 
     rw::Resource                   mSamplerStateResource_Linear;           // DWARF :220
-    renderengine::SamplerStateData*     mpSamplerState_Linear;              // DWARF :221 (guest dword 209)
+    renderengine::SamplerState*     mpSamplerState_Linear;              // DWARF :221 (guest dword 209)
 
     rw::Resource                   maSamplerStateResource_MotionBlur[MotionBlurState::E_QUALITY_COUNT]; // DWARF :223
-    renderengine::SamplerStateData*     mapSamplerState_MotionBlur[MotionBlurState::E_QUALITY_COUNT];   // DWARF :224
+    renderengine::SamplerState*     mapSamplerState_MotionBlur[MotionBlurState::E_QUALITY_COUNT];   // DWARF :224
 };
 
 #endif // BRN_POST_FX_SHADER_H

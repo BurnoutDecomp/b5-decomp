@@ -3,6 +3,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.h"
 
 #include "types.hpp"
 namespace renderengine
@@ -26,8 +27,7 @@ namespace CgsGraphics
     class DepthStencilState;
     class RasterizerState;
     class RenderTargetState;
-    class SamplerState;
-    class TextureState;
+    using renderengine::SamplerState;
     class ProgramBuffer;
 
     struct ImRendererBase
@@ -42,8 +42,6 @@ namespace CgsGraphics
         void SetState(const RenderTargetState* lpState);
         void SetState(const SamplerState* lpState);
         void SetState(const SamplerState* lpState, u32 luSampler);
-        void SetState(const TextureState* lpState);
-        void SetState(const TextureState* lpState, u32 luStage);
         void SetState(const ProgramBuffer* lpVertexProgram, const ProgramBuffer* lpPixelProgram);
         void SetState(const renderengine::TextureState* lpTextureState);
         void SetState(const renderengine::TextureState* lpTextureState, u32 luStage);
@@ -68,7 +66,7 @@ namespace CgsGraphics
             const DepthStencilState* mpDepthStencilState_ZBufferGreaterEqWriteOff;
             const DepthStencilState* mpDepthStencilState_ZBufferOff;
             renderengine::Texture*   mpTexture_White;
-            const TextureState*      mpTextureState_Untextured;
+            const renderengine::TextureState* mpTextureState_Untextured;
             const SamplerState*      mpSamplerState_Linear_MipNearest_ClampUV;
             const SamplerState*      mpSamplerState_Linear_MipNearest_TileUV;
             const SamplerState*      mpSamplerState_Nearest_MipNearest_ClampUV;
@@ -97,7 +95,7 @@ namespace CgsGraphics
                                                          u32 luArg2, u32 luArg3,
                                                          u32 luArg4, u32 luArg5);
         static renderengine::Texture* ConstructWhiteTexture(rw::IResourceAllocator* lpAllocator);
-        static const TextureState* ConstructDefaultTextureState(
+        static const renderengine::TextureState* ConstructDefaultTextureState(
             rw::IResourceAllocator* lpAllocator, renderengine::Texture* lpTexture);
 
         void* SetStateLowLevel(const void* lpState);

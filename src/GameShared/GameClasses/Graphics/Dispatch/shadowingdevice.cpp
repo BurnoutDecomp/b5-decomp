@@ -12,150 +12,43 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // MaterialTechniqueView
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"    // BlendMaterialState
 
-struct IDirect3DDevice9;
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/meshhelper.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 
-extern IDirect3DDevice9* gpD3DDevice;
-
-extern "C" void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* lpDevice,
-                                               u32 lePrimitiveType,
-                                               u32 luBaseVertexIndex,
-                                               u32 luMinVertexIndex,
-                                               u32 luNumVertices);
-
-// --- Xbox 360 D3D fast-path binders the shadow device drives -----------------------------------
-// These are the Xenon D3DDevice_* thunks the immediate-mode renderers bind through. No project TU
-// homes them; declared here as the minimal extern surface the shadow cache calls. Signatures match
-// the XDK d3d9 fast-set API and the precedent in CgsImRenderer.cpp.
-extern "C"
+namespace shadow
 {
-    void D3DDevice_SetVertexShader(IDirect3DDevice9* lpDevice, void* lpShader);
-    void D3DDevice_SetPixelShader(IDirect3DDevice9* lpDevice, void* lpShader);
-    void D3DDevice_SetVertexDeclaration(IDirect3DDevice9* lpDevice, void* lpDecl);
-    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice, u32 luStreamNumber,
-                                   const void* lpStreamData, u32 luOffsetInBytes,
-                                   u32 luStride, u32 luFlags);
-    unsigned int D3DDevice_SetTexture(IDirect3DDevice9* lpDevice, u32 luSampler,
-                                      void* lpTexture, unsigned int luFlags);
-
-    void D3DDevice_SetBlendState(IDirect3DDevice9* lpDevice, u32 luRenderTargetIndex, u32 luBlendState);
-    void D3DDevice_SetRenderState_ColorWriteEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_ColorWriteEnable1(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_ColorWriteEnable2(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_ColorWriteEnable3(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_BlendFactor(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_AlphaToMaskEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_AlphaToMaskOffsets(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HighPrecisionBlendEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HighPrecisionBlendEnable1(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HighPrecisionBlendEnable2(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HighPrecisionBlendEnable3(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_AlphaTestEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_AlphaRef(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_AlphaFunc(IDirect3DDevice9* lpDevice, u32 luValue);
-
-    // The depth/stencil half (X360 applier @0x827E8150).
-    void D3DDevice_SetRenderState_ZEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_ZWriteEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_ZFunc(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_StencilEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_TwoSidedStencilMode(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_StencilFunc(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_StencilFail(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_StencilZFail(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_StencilPass(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_CCWStencilFunc(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_CCWStencilFail(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_CCWStencilZFail(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_CCWStencilPass(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_StencilRef(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_StencilMask(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_StencilWriteMask(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_CCWStencilRef(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_CCWStencilMask(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_CCWStencilWriteMask(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HiStencilEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HiStencilWriteEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HiStencilFunc(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HiStencilRef(IDirect3DDevice9* lpDevice, u32 luValue);
-
-    // The rasteriser half (X360 applier @0x827E8690).
-    void D3DDevice_SetRenderState_CullMode(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_FillMode(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_ScissorTestEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_DepthBias(IDirect3DDevice9* lpDevice, u32 luFloatAsDword);
-    void D3DDevice_SetRenderState_SlopeScaleDepthBias(IDirect3DDevice9* lpDevice, u32 luFloatAsDword);
-    void D3DDevice_SetRenderState_MultiSampleAntiAlias(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_MultiSampleMask(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_ViewportEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_HalfPixelOffset(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_PrimitiveResetEnable(IDirect3DDevice9* lpDevice, u32 luValue);
-    void D3DDevice_SetRenderState_PrimitiveResetIndex(IDirect3DDevice9* lpDevice, u32 luValue);
+    void ApplyNativeSamplerState(const renderengine::SamplerState* lpState, u32 luSampler, bool lbWasUnset);
 }
-
-// The D3D "current vertex program state" global (X360 dword_832716C8): the last vertex program
-// state object FlushVertexProgramState bound. Lives in the renderengine device layer; modelled by
-// name here as the flush's write target.
-renderengine::VertexProgramState* gpCurrentVertexProgramState = 0;
-
-// The low-level sampler-state setter (X360 sub_827E8950) SetState forwards to. It is an external
-// renderengine helper with no project home and no recovered asm for this TU; declared here so the
-// shadow setter can call it by name. Returns the device/result pointer (X360 r3 passthrough).
-extern "C" void* SetSamplerStateLowLevel(void* lpState, u32 luSamplerId, bool lbWasUnset);
-
 
 namespace
 {
-    // The two alternative bound-geometry stream descriptors FlushVertexProgramState walks. Their
-    // byte layout is recovered from the X360 flush asm (no DWARF/leak source for these vendor
-    // blocks); only the fields the flush reads are named, the rest is reserved padding.
-
-    // mpStreamArray (X360 off_83010950): the stream-source pointer table. The flush reads the
-    // active stream count from the byte at +0x26 and the per-stream data pointers from +0x2C on.
-    // The X360 build stores 4-byte (guest) pointers; modelled as u32 words so the recovered byte
-    // offsets stay exact (the data words are re-typed to const void* at the call site). Packed so
-    // the LLP64 host does not realign the word table away from +0x2C.
-#pragma pack(push, 1)
-    struct StreamArray
-    {
-        u8 mauReserved00[0x26];        // +0x00
-        u8 muStreamCount;              // +0x26  (byte; X360 lbz 0x26)
-        u8 mauReserved27[0x05];        // +0x27  (pad up to the +0x2C data table)
-        u32 mauStreamData[8];          // +0x2C  per-stream data pointers (guest 4-byte words)
-    };
-#pragma pack(pop)
-
-    // mpIndexStreamArray (X360 off_83010954): a word-array descriptor. Word[1] is the stream count;
-    // the per-stream data pointers live at word (word[0] + 2 + streamIndex).
-    struct IndexStreamArray
-    {
-        u32 mauWords[32];              // word[0]=base index, word[1]=stream count, ...
-    };
-
     // X360 stream-source flag: (1<<63) >> (((21846*(95-stream))>>16)+32), taken as its low 32 bits.
+    inline D3DBLENDSTATE NativeBlendState(u32 luWord)
+    {
+        D3DBLENDSTATE lState;
+        memcpy(&lState, &luWord, sizeof(lState));
+        return lState;
+    }
+
     inline u32 MakeStreamSourceFlag(u32 luStream)
     {
         const u32 luShift = ((21846u * (95u - luStream)) >> 16) + 32u;
         return static_cast<u32>((1ull << 63) >> luShift);
     }
 
-    CGS_STATIC_ASSERT((offsetof(StreamArray, muStreamCount) == 0x26),
-                  "StreamArray stream-count byte at +0x26");
-    CGS_STATIC_ASSERT((offsetof(StreamArray, mauStreamData) == 0x2C),
-                  "StreamArray data-pointer table at +0x2C");
+
 }
 
 namespace shadow
 {
     renderengine::VertexProgramState Device::mVertexProgramState = {};
-    // ⚠ Seeded here, not only in Device::Initialize. The X360 fills this slot in
-    // Device::Initialize @0x827ED6E0 -- but shadow::Device::Initialize has NO caller on this
-    // build (BrnMain calls renderengine::Device::Initialize, its base, directly), so the slot
-    // stayed { nullptr, ... } and GetVertexProgramState -> VertexProgramState::
-    // InitializeNoBindX360 dereferenced `*lppState` == null on the first flush. The value is
-    // the same constant Initialize writes, so seeding it at definition is equivalent and
-    // cannot go stale.
-    renderengine::VertexProgramState* Device::mapVertexProgramStateSlot[5] =
-        { &Device::mVertexProgramState, 0, 0, 0, 0 };
+    // ARTIST83011118 is zero in the original image; Initialize publishes the state.
+    renderengine::VertexProgramState* Device::mapVertexProgramStateSlot[5] = { 0, 0, 0, 0, 0 };
     bool Device::mbVertexProgramStateDirty = false;
 
     const void* Device::mpStreamArray = 0;
@@ -234,7 +127,7 @@ namespace shadow
         const DrawIndexedParameters& lrParameters)
     {
         D3DDevice_DrawIndexedVertices(gpD3DDevice,
-                                      lrParameters.mePrimitiveType,
+                                      static_cast<D3DPRIMITIVETYPE>(lrParameters.mePrimitiveType),
                                       lrParameters.muBaseVertexIndex,
                                       lrParameters.muMinVertexIndex,
                                       lrParameters.muNumVertices);
@@ -292,7 +185,7 @@ namespace shadow
         {
             lpShader = const_cast<u8*>(reinterpret_cast<const u8*>(lpPixelProgram)) + 0x14;
         }
-        D3DDevice_SetPixelShader(gpD3DDevice, lpShader);
+        D3DDevice_SetPixelShader(gpD3DDevice, static_cast<D3DPixelShader*>(lpShader));
         mpPixelProgramShadow = lpPixelProgram;
         return true;
     }
@@ -311,20 +204,18 @@ namespace shadow
     }
 
     // @0x822769E0: bind a sampler-state object through the shadow.
-    void* Device::SetState(void* lpState, u32 luSamplerId)
+    void Device::SetState(const renderengine::SamplerState* lpState, u32 luSamplerId)
     {
         CGS_ASSERT(luSamplerId < KU_MAX_TEXTURE_STATES, "luSamplerId < MaxTextureStates");
 
-        void* lpResult = lpState;
         void* const lpPrevious = mapSamplerState[luSamplerId];
         if (lpPrevious != lpState)
         {
             // X360 passes (lpPrevious == 0) as the "no previous state" flag to the sub-setter.
-            lpResult = SetSamplerStateLowLevel(lpState, luSamplerId, lpPrevious == 0);
-            mapSamplerState[luSamplerId] = lpState;
+            ApplyNativeSamplerState(lpState, luSamplerId, lpPrevious == 0);
+            mapSamplerState[luSamplerId] = const_cast<renderengine::SamplerState*>(lpState);
             mapTextureState[luSamplerId] = 0;   // a bare-sampler bind invalidates the whole-unit key
         }
-        return lpResult;
     }
 
     // @0x82276C70: bind a texture (resource) through the shadow.
@@ -339,7 +230,7 @@ namespace shadow
             // 0 this is 0x80000000 (the Xenon "set sampler N" mask).
             const u32 luFlags =
                 static_cast<u32>((1ull << 63) >> (luSamplerId + 32));
-            D3DDevice_SetTexture(gpD3DDevice, luSamplerId, lpTexture, luFlags);
+            D3DDevice_SetTexture(gpD3DDevice, luSamplerId, static_cast<D3DBaseTexture*>(lpTexture), luFlags);
             mapSamplerTexture[luSamplerId] = lpTexture;
             mapTextureState[luSamplerId] = 0;   // a bare-texture bind invalidates the whole-unit key
             lpResult = lpTexture;
@@ -362,11 +253,8 @@ namespace shadow
     //     sampler-state object -- its first 32 bytes are the sampler block, so the pointer is a valid
     //     key for the bare-sampler binder's compare), texture shadow = the raster.
     // No unit-range assert here (0x8227D158 has none; the two bare binders do) -- faithful.
-    // Return: r3 passthrough = lpState, as the siblings; the assert path's EndAssert value is never
-    // consumed by any caller.
-    void* Device::SetState(const renderengine::TextureState* lpState, u32 luSamplerId)
+    void Device::SetState(const renderengine::TextureState* lpState, u32 luSamplerId)
     {
-        void* lpResult = const_cast<void*>(static_cast<const void*>(lpState));
         const renderengine::TextureState* const lpPrevious = mapTextureState[luSamplerId];
         if (lpPrevious == lpState)
         {
@@ -376,15 +264,14 @@ namespace shadow
         else
         {
             void* const lpTexture = static_cast<void*>(lpState->mpRaster);              // lwz r27, 0x20(r3)
-            SetSamplerStateLowLevel(lpResult, luSamplerId, lpPrevious == 0);      // bl sub_827E8950
+            ApplyNativeSamplerState(lpState, luSamplerId, lpPrevious == 0);
             const u32 luFlags =
                 static_cast<u32>((1ull << 63) >> (luSamplerId + 32));                   // li r10,1 / srd r6,r10,r9
-            D3DDevice_SetTexture(gpD3DDevice, luSamplerId, lpTexture, luFlags);         // bl D3DDevice_SetTexture
+            D3DDevice_SetTexture(gpD3DDevice, luSamplerId, static_cast<D3DBaseTexture*>(lpTexture), luFlags);         // bl D3DDevice_SetTexture
             mapTextureState[luSamplerId]   = lpState;                                    // stw r31, dword_83010968[r30]
-            mapSamplerState[luSamplerId]   = lpResult;                                   // stw r31, dword_830109A8[r30]
+            mapSamplerState[luSamplerId]   = const_cast<renderengine::TextureState*>(lpState);                                   // stw r31, dword_830109A8[r30]
             mapSamplerTexture[luSamplerId] = lpTexture;                                  // stw r27, dword_830109E8[r30]
         }
-        return lpResult;
     }
 
     // The console's own per-unit texture shadow, reached by name -- see the declaration's banner
@@ -409,17 +296,6 @@ namespace shadow
     void Device::FlushVertexProgramState()
     {
 
-        // A flush with nothing bound has nothing to rebind -- and the block below
-        // dereferences BOTH shadows unconditionally (mpVertexDescriptor->mpDeclaration,
-        // and GetD3DVertexShader() is `&program->mauD3DVertexShader`, i.e. a fixed +0x14
-        // off the program pointer, so a null program yields the bogus address 0x14
-        // rather than null). ResetShadowing() nulls both, so any caller that flushes
-        // before its first bind would fault here.
-        if (mpVertexDescriptor == 0 || mpVertexProgramShadow == 0)
-        {
-            return;
-        }
-
         if (mbVertexProgramStateDirty)
         {
             renderengine::VertexProgramState* lpState =
@@ -427,7 +303,7 @@ namespace shadow
             CGS_ASSERT(lpState != 0, "lVertexProgramState != NULL");
 
             D3DDevice_SetVertexShader(gpD3DDevice, lpState->GetD3DVertexShader());
-            gpCurrentVertexProgramState = lpState;
+            renderengine::gpCurrentVertexProgramState = lpState;
             D3DDevice_SetVertexDeclaration(gpD3DDevice, mpVertexDescriptor->mpDeclaration);
             mbVertexProgramStateDirty = false;
         }
@@ -451,15 +327,14 @@ namespace shadow
                 lauStreamStride[luStream] = mpVertexDescriptor->GetElementStrides()[luElement];
             }
 
-            const StreamArray* lpStreams = static_cast<const StreamArray*>(mpStreamArray);
-            const u32 luStreamCount = lpStreams->muStreamCount;
+            const RenderableMesh* lpStreams = static_cast<const RenderableMesh*>(mpStreamArray);
+            const u32 luStreamCount = lpStreams->mu8NumVertexBuffers;
             u32 luOffsetInBytes = 0;
             for (u32 luStream = 0; luStream < luStreamCount; ++luStream)
             {
                 const u32 luStride = lauStreamStride[luStream];
-                const void* lpStreamData = reinterpret_cast<const void*>(
-                    static_cast<uintptr_t>(lpStreams->mauStreamData[luStream]));
-                D3DDevice_SetStreamSource(gpD3DDevice, luStream, lpStreamData, luOffsetInBytes,
+                void* lpStreamData = lpStreams->maBuffers[luStream + 1];
+                D3DDevice_SetStreamSource(gpD3DDevice, luStream, static_cast<D3DVertexBuffer*>(lpStreamData), luOffsetInBytes,
                                           luStride, MakeStreamSourceFlag(luStream));
                 luOffsetInBytes += luStride;
             }
@@ -479,18 +354,15 @@ namespace shadow
                 lauStreamStride[luStream] = mpVertexDescriptor->GetElementStrides()[luElement];
             }
 
-            const IndexStreamArray* lpStreams =
-                static_cast<const IndexStreamArray*>(mpIndexStreamArray);
-            const u32 luStreamCount = lpStreams->mauWords[1];
+            const renderengine::MeshHelper* lpStreams =
+                static_cast<const renderengine::MeshHelper*>(mpIndexStreamArray);
+            const u32 luStreamCount = lpStreams->GetNumVertexBuffers();
             u32 luOffsetInBytes = 0;
             for (u32 luStream = 0; luStream < luStreamCount; ++luStream)
             {
                 const u32 luStride = lauStreamStride[luStream];
-                // The data pointers begin at word (mauWords[0] + 2 + luStream).
-                const void* lpStreamData = reinterpret_cast<const void*>(
-                    static_cast<uintptr_t>(
-                        lpStreams->mauWords[lpStreams->mauWords[0] + 2 + luStream]));
-                D3DDevice_SetStreamSource(gpD3DDevice, luStream, lpStreamData, luOffsetInBytes,
+                const renderengine::VertexBuffer* lpStreamData = lpStreams->GetVertexBuffer(luStream);
+                D3DDevice_SetStreamSource(gpD3DDevice, luStream, const_cast<renderengine::VertexBuffer*>(lpStreamData), luOffsetInBytes,
                                           luStride, MakeStreamSourceFlag(luStream));
                 luOffsetInBytes += luStride;
             }
@@ -566,7 +438,7 @@ namespace shadow
     {
 
         const u32* const lpu = static_cast<const u32*>(lpState);
-        IDirect3DDevice9* const lpDevice = gpD3DDevice;
+        D3DDevice* const lpDevice = gpD3DDevice;
 
         if (lbWasUnset)
         {
@@ -575,10 +447,10 @@ namespace shadow
                 mauLowLevelStateShadow[i] = lpu[i];
             }
 
-            D3DDevice_SetBlendState(lpDevice, 0, lpu[0]);
-            D3DDevice_SetBlendState(lpDevice, 1, lpu[1]);
-            D3DDevice_SetBlendState(lpDevice, 2, lpu[2]);
-            D3DDevice_SetBlendState(lpDevice, 3, lpu[3]);
+            D3DDevice_SetBlendState(lpDevice, 0, NativeBlendState(lpu[0]));
+            D3DDevice_SetBlendState(lpDevice, 1, NativeBlendState(lpu[1]));
+            D3DDevice_SetBlendState(lpDevice, 2, NativeBlendState(lpu[2]));
+            D3DDevice_SetBlendState(lpDevice, 3, NativeBlendState(lpu[3]));
             D3DDevice_SetRenderState_ColorWriteEnable(lpDevice, lpu[4]);
             D3DDevice_SetRenderState_ColorWriteEnable1(lpDevice, lpu[5]);
             D3DDevice_SetRenderState_ColorWriteEnable2(lpDevice, lpu[6]);
@@ -599,22 +471,22 @@ namespace shadow
             if (mauLowLevelStateShadow[0] != lpu[0])
             {
                 mauLowLevelStateShadow[0] = lpu[0];
-                D3DDevice_SetBlendState(lpDevice, 0, lpu[0]);
+                D3DDevice_SetBlendState(lpDevice, 0, NativeBlendState(lpu[0]));
             }
             if (mauLowLevelStateShadow[1] != lpu[1])
             {
                 mauLowLevelStateShadow[1] = lpu[1];
-                D3DDevice_SetBlendState(lpDevice, 1, lpu[1]);
+                D3DDevice_SetBlendState(lpDevice, 1, NativeBlendState(lpu[1]));
             }
             if (mauLowLevelStateShadow[2] != lpu[2])
             {
                 mauLowLevelStateShadow[2] = lpu[2];
-                D3DDevice_SetBlendState(lpDevice, 2, lpu[2]);
+                D3DDevice_SetBlendState(lpDevice, 2, NativeBlendState(lpu[2]));
             }
             if (mauLowLevelStateShadow[3] != lpu[3])
             {
                 mauLowLevelStateShadow[3] = lpu[3];
-                D3DDevice_SetBlendState(lpDevice, 3, lpu[3]);
+                D3DDevice_SetBlendState(lpDevice, 3, NativeBlendState(lpu[3]));
             }
             if (mauLowLevelStateShadow[4] != lpu[4])
             {
@@ -700,7 +572,7 @@ namespace shadow
     {
         const renderengine::DepthStencilState* const lpDs =
             static_cast<const renderengine::DepthStencilState*>(lpState);
-        IDirect3DDevice9* const lpDevice = gpD3DDevice;
+        D3DDevice* const lpDevice = gpD3DDevice;
         if (lpDs == 0)
             return lpState;
 
@@ -755,7 +627,7 @@ namespace shadow
     {
         const renderengine::RasterizerState* const lpRs =
             static_cast<const renderengine::RasterizerState*>(lpState);
-        IDirect3DDevice9* const lpDevice = gpD3DDevice;
+        D3DDevice* const lpDevice = gpD3DDevice;
         if (lpRs == 0)
             return lpState;
 

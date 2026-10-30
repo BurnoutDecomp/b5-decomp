@@ -54,10 +54,9 @@ namespace renderengine
     {
         // The shared sampler declaration retains its earlier member spellings;
         // its 0x48-byte parameter representation is the same native prefix.
-        SamplerStateData* lpSampler = static_cast<SamplerStateData*>(lpResource->m_baseResources[0]);
-        SamplerStateData* const lpResult = SamplerState::Initialize(
-            &lpSampler, reinterpret_cast<const SamplerStateParameters*>(lpParams));
-        TextureState* lpState = reinterpret_cast<TextureState*>(lpResult);
+        SamplerState* const lpResult = SamplerState::Initialize(
+            *lpResource, *lpParams);
+        TextureState* lpState = static_cast<TextureState*>(lpResult);
         lpState->mpRaster = lpParams->mpTexture;
         return lpState;
     }

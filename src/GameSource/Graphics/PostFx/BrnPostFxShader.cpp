@@ -359,68 +359,7 @@ namespace
 #endif  // BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE
 }
 
-#if BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE
-namespace renderengine
-{
-    // renderengine::SamplerState's parameter block and the two entry points Construct needs. Its
-    // GetResourceDescriptor @0x82B63588 / Initialize @0x82B62630 are reconstructed in
-    // SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.cpp, which has NO HEADER and is
-    // NOT on the exe build list. Declared here the same way the two other mounted consumers already
-    // declare their copies (GameSource/Graphics/ImmediateMode/BrnIm3d.cpp:81 and
-    // GameSource/Graphics/BrnRendererMemory.cpp:61).
-    //
-    // ⚠ THIS BLOCK IS DELIBERATELY IN `namespace renderengine`, NOT IN AN ANONYMOUS ONE, AND THE TWO
-    // SIGNATURES ARE COPIED VERBATIM FROM samplerstate.cpp. MSVC mangles the parameter type into the
-    // function's decorated name, so a copy of this struct in an anonymous namespace -- or an
-    // Initialize spelled over `SamplerState*` instead of `SamplerStateData*` -- produces a symbol NO
-    // TU CAN EVER DEFINE. That is the exact defect ShadowPass.h exists to document; it was
-    // caught here by dumping this object's undefined externals rather than by reading.
-    //
-    // ⚠ THREE OF THE FIELD NAMES BELOW ARE WRONG, and the evidence is in Construct. samplerstate.cpp
-    // calls +0x0C/+0x10 `muBias`/`muMaxLevel` and +0x28 `muConvolution`, but Construct writes
-    // (0,0) / (1,1) / (4,4) into the first pair for the POINT / LINEAR / ANISOTROPIC samplers and
-    // 1 / 1 / (4 or 16) into the second -- i.e. they are MinFilter, MagFilter and MaxAnisotropy. The
-    // DWARF agrees: Construct's recorded setters are SetAddressU/V/W, SetMinMipLevel, SetMaxMipLevel,
-    // SetMinFilter, SetMagFilter, SetMipFilter, SetMaxAnisotropy. Renaming them is a mechanical pass
-    // across samplerstate.cpp + texturestate.cpp + BrnIm3d.cpp + BrnRendererMemory.cpp and is NOT done
-    // here; the assignments in Construct write the same BYTES through the tree's CURRENT names and
-    // say, per line, which field each one really is.
-    struct SamplerStateData;   // the 0x20-byte runtime block; opaque to this TU
-
-    struct SamplerStateParameters
-    {
-        u32 muAddressU;
-        u32 muAddressV;
-        u32 muAddressW;
-        u32 muBias;                   // really: MIN filter
-        u32 muMaxLevel;               // really: MAG filter
-        u32 muMinLevel;               // really: MIP filter
-        u32 muMaxAnisotropy;
-        u32 muMagFilter;
-        u32 muMinFilter;
-        u32 muMipFilter;
-        u32 muConvolution;            // really: MAX ANISOTROPY
-        u32 muColor;
-        u32 muRemap;
-        u32 muDepthTextureFunction;
-        u32 muGamma;
-        u32 muState17;
-        u8  mbState15;
-        u8  mbState22;
-        u8  mbState16;
-        u8  mbState11Zero;
-        u8  mbState26;
-    };
-
-    class SamplerState
-    {
-    public:
-        static ResourceDescriptorEntry* GetResourceDescriptor(ResourceDescriptorEntry* lpDescriptor);
-        static SamplerStateData* Initialize(SamplerStateData** lppState,
-                                            const SamplerStateParameters* lpParams);
-    };
-}
-#endif
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.h"
 
 // ==================================================================================================
 // MotionBlurState::Construct
@@ -1042,7 +981,7 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     // ---- the POINT sampler ----------------------------------------------------------------------
     // Clamped on all three axes, unfiltered. This is what unit 0 gets when the source is the scene
     // target at 1:1 -- a linear fetch there would soften every pixel.
-    renderengine::SamplerStateParameters lSamplerStateParams_Point;
+    renderengine::SamplerState::Parameters lSamplerStateParams_Point;
     for (u32 luByte = 0; luByte < sizeof(lSamplerStateParams_Point); ++luByte)
     {
         reinterpret_cast<u8*>(&lSamplerStateParams_Point)[luByte] = 0;
@@ -1050,36 +989,28 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     lSamplerStateParams_Point.muAddressU    = KU_SAMPLER_ADDRESS_CLAMP;
     lSamplerStateParams_Point.muAddressV    = KU_SAMPLER_ADDRESS_CLAMP;
     lSamplerStateParams_Point.muAddressW    = KU_SAMPLER_ADDRESS_CLAMP;
-    lSamplerStateParams_Point.muBias        = KU_SAMPLER_FILTER_POINT;   // MIN filter
-    lSamplerStateParams_Point.muMaxLevel    = KU_SAMPLER_FILTER_POINT;   // MAG filter
-    lSamplerStateParams_Point.muMinLevel    = KU_SAMPLER_MIP_FILTER;     // MIP filter
-    lSamplerStateParams_Point.muConvolution = 1;                         // MAX anisotropy
-    lSamplerStateParams_Point.mbState11Zero = 1;   // `stb r26, var_36D`
-    lSamplerStateParams_Point.mbState26     = 1;   // `stb r26, var_36C`
+    lSamplerStateParams_Point.muMagFilter        = KU_SAMPLER_FILTER_POINT;   // MIN filter
+    lSamplerStateParams_Point.muMinFilter    = KU_SAMPLER_FILTER_POINT;   // MAG filter
+    lSamplerStateParams_Point.muMipFilter    = KU_SAMPLER_MIP_FILTER;     // MIP filter
+    lSamplerStateParams_Point.muMaxAnisotropy = 1;                         // MAX anisotropy
+    lSamplerStateParams_Point.mbPointBorderEnable = 1;   // `stb r26, var_36D`
+    lSamplerStateParams_Point.mbUnidentified44     = 1;   // `stb r26, var_36C`
 
-    renderengine::ResourceDescriptorEntry laSamplerResDesc_Point[5] = {};
-    renderengine::SamplerState::GetResourceDescriptor(laSamplerResDesc_Point);
-    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &mSamplerStateResource_Point,
-                                         laSamplerResDesc_Point);
-    mpSamplerState_Point = renderengine::SamplerState::Initialize(
-        reinterpret_cast<renderengine::SamplerStateData**>(&mSamplerStateResource_Point),
-        &lSamplerStateParams_Point);
+    const rw::ResourceDescriptor laSamplerResDesc_Point = renderengine::SamplerState::GetResourceDescriptor(lSamplerStateParams_Point);
+    mSamplerStateResource_Point = lpAllocator->DoAllocate(laSamplerResDesc_Point, 0);
+    mpSamplerState_Point = renderengine::SamplerState::Initialize(mSamplerStateResource_Point, lSamplerStateParams_Point);
     CGS_ASSERT(mpSamplerState_Point != 0, "NULL != mpSamplerState_Point");   // BrnPostFxShader.cpp:507
 
     // ---- the LINEAR sampler ---------------------------------------------------------------------
     // Identical but bilinear. Bound on units 1 and 2 always, and on unit 0 when the caller supplied an
     // override source texture (i.e. the source is not 1:1 with the target).
-    renderengine::SamplerStateParameters lSamplerStateParams_Linear = lSamplerStateParams_Point;
-    lSamplerStateParams_Linear.muBias     = KU_SAMPLER_FILTER_LINEAR;   // MIN filter
-    lSamplerStateParams_Linear.muMaxLevel = KU_SAMPLER_FILTER_LINEAR;   // MAG filter
+    renderengine::SamplerState::Parameters lSamplerStateParams_Linear = lSamplerStateParams_Point;
+    lSamplerStateParams_Linear.muMagFilter     = KU_SAMPLER_FILTER_LINEAR;   // MIN filter
+    lSamplerStateParams_Linear.muMinFilter = KU_SAMPLER_FILTER_LINEAR;   // MAG filter
 
-    renderengine::ResourceDescriptorEntry laSamplerResDesc_Linear[5] = {};
-    renderengine::SamplerState::GetResourceDescriptor(laSamplerResDesc_Linear);
-    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &mSamplerStateResource_Linear,
-                                         laSamplerResDesc_Linear);
-    mpSamplerState_Linear = renderengine::SamplerState::Initialize(
-        reinterpret_cast<renderengine::SamplerStateData**>(&mSamplerStateResource_Linear),
-        &lSamplerStateParams_Linear);
+    const rw::ResourceDescriptor laSamplerResDesc_Linear = renderengine::SamplerState::GetResourceDescriptor(lSamplerStateParams_Linear);
+    mSamplerStateResource_Linear = lpAllocator->DoAllocate(laSamplerResDesc_Linear, 0);
+    mpSamplerState_Linear = renderengine::SamplerState::Initialize(mSamplerStateResource_Linear, lSamplerStateParams_Linear);
     CGS_ASSERT(mpSamplerState_Linear != 0, "NULL != mpSamplerState_Linear");  // BrnPostFxShader.cpp:526
 
     // ---- the two MOTION-BLUR samplers -----------------------------------------------------------
@@ -1091,25 +1022,21 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     u32 luMaxAnisotropy = 4;
     for (u32 luCount = 0; luCount < MotionBlurState::E_QUALITY_COUNT; ++luCount)
     {
-        renderengine::SamplerStateParameters lSamplerStateParams_MotionBlur = lSamplerStateParams_Point;
-        lSamplerStateParams_MotionBlur.muBias        = KU_SAMPLER_FILTER_LINEAR;
-        lSamplerStateParams_MotionBlur.muMaxLevel    = KU_SAMPLER_FILTER_LINEAR;
-        lSamplerStateParams_MotionBlur.muConvolution = 1;
+        renderengine::SamplerState::Parameters lSamplerStateParams_MotionBlur = lSamplerStateParams_Point;
+        lSamplerStateParams_MotionBlur.muMagFilter        = KU_SAMPLER_FILTER_LINEAR;
+        lSamplerStateParams_MotionBlur.muMinFilter    = KU_SAMPLER_FILTER_LINEAR;
+        lSamplerStateParams_MotionBlur.muMaxAnisotropy = 1;
 
         if (luCount == 0 || luCount == 1)
         {
-            lSamplerStateParams_MotionBlur.muBias        = KU_SAMPLER_FILTER_ANISO;
-            lSamplerStateParams_MotionBlur.muMaxLevel    = KU_SAMPLER_FILTER_ANISO;
-            lSamplerStateParams_MotionBlur.muConvolution = luMaxAnisotropy;
+            lSamplerStateParams_MotionBlur.muMagFilter        = KU_SAMPLER_FILTER_ANISO;
+            lSamplerStateParams_MotionBlur.muMinFilter    = KU_SAMPLER_FILTER_ANISO;
+            lSamplerStateParams_MotionBlur.muMaxAnisotropy = luMaxAnisotropy;
         }
 
-        renderengine::ResourceDescriptorEntry laSamplerResDesc_MotionBlur[5] = {};
-        renderengine::SamplerState::GetResourceDescriptor(laSamplerResDesc_MotionBlur);
-        CgsGraphics::ResourceAllocatorCreate(lpAllocator, &maSamplerStateResource_MotionBlur[luCount],
-                                             laSamplerResDesc_MotionBlur);
-        mapSamplerState_MotionBlur[luCount] = renderengine::SamplerState::Initialize(
-            reinterpret_cast<renderengine::SamplerStateData**>(&maSamplerStateResource_MotionBlur[luCount]),
-            &lSamplerStateParams_MotionBlur);
+        const rw::ResourceDescriptor laSamplerResDesc_MotionBlur = renderengine::SamplerState::GetResourceDescriptor(lSamplerStateParams_MotionBlur);
+    maSamplerStateResource_MotionBlur[luCount] = lpAllocator->DoAllocate(laSamplerResDesc_MotionBlur, 0);
+        mapSamplerState_MotionBlur[luCount] = renderengine::SamplerState::Initialize(maSamplerStateResource_MotionBlur[luCount], lSamplerStateParams_MotionBlur);
         CGS_ASSERT(mapSamplerState_MotionBlur[luCount] != 0,
                    "NULL != mapSamplerState_MotionBlur[luCount]");            // BrnPostFxShader.cpp:565
 
@@ -1495,7 +1422,7 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
     // on, the LINEAR one when the caller overrode the source texture (so the source is not 1:1 with
     // the target), and otherwise POINT -- a 1:1 blit must not be filtered.
     shadow::Device::SetResource(lpSourceTexture, KU_SAMPLER_SOURCE);
-    renderengine::SamplerStateData* lpSourceSampler = 0;
+    renderengine::SamplerState* lpSourceSampler = 0;
     // The min/mag filter word and the MAX ANISOTROPY of whichever sampler this arm picks, carried
     // alongside the object because the object's words never reach D3D9 (see the seam call below).
     // Every value is the one Construct wrote into that very sampler: POINT/LINEAR at
@@ -1520,14 +1447,14 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
         lpSourceSampler = mpSamplerState_Point;
         luSourceFilter  = KU_SAMPLER_FILTER_POINT;
     }
-    shadow::Device::SetState(static_cast<void*>(lpSourceSampler), KU_SAMPLER_SOURCE);
+    shadow::Device::SetState(lpSourceSampler, KU_SAMPLER_SOURCE);
 
     // Units 1 and 2: the bloom buffer and the depth-of-field buffer, both bilinear (they are
     // down-sampled, so filtering them is the point).
     shadow::Device::SetResource(lpBloomTexture, KU_SAMPLER_BLOOM);
-    shadow::Device::SetState(static_cast<void*>(mpSamplerState_Linear), KU_SAMPLER_BLOOM);
+    shadow::Device::SetState(mpSamplerState_Linear, KU_SAMPLER_BLOOM);
     shadow::Device::SetResource(lpDofTexture, KU_SAMPLER_DOF);
-    shadow::Device::SetState(static_cast<void*>(mpSamplerState_Linear), KU_SAMPLER_DOF);
+    shadow::Device::SetState(mpSamplerState_Linear, KU_SAMPLER_DOF);
 
     // Units 3 and 4: the colour-cube volume and the scene depth, each bound as a whole TextureState
     // (texture + its own sampler) rather than as a texture/sampler pair.

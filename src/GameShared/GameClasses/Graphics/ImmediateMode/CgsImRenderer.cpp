@@ -24,15 +24,13 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 #include "rw/rwcore_structs.h"
 
 #include <cstring>   // memset
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
-// The X360 D3D texture-bind intrinsic the low-level SetTexture path issues (binds a texture to a
-// sampler stage on the device). Platform API: declared here so the body links against the X360 /
-// platform D3D layer; no project header homes it.
-extern "C" unsigned int D3DDevice_SetTexture(void* lpDevice, int liSampler, void* lpTexture, unsigned int luFlags);
 
 namespace CgsGraphics
 {
@@ -226,7 +224,7 @@ const DepthStencilState* ImRendererBase::ConstructDepthStencilState(
 // Build the default texture (sampler) state for the supplied texture: bilinear with max-anisotropy 13,
 // clamp addressing on all axes, the trailing state flags (0,0,0,1,1) and the bound raster.
 // ---------------------------------------------------------------------------------------------------
-const TextureState* ImRendererBase::ConstructDefaultTextureState(
+const renderengine::TextureState* ImRendererBase::ConstructDefaultTextureState(
     rw::IResourceAllocator* lpAllocator, renderengine::Texture* lpTexture)
 {
     renderengine::TextureState::Parameters lParameters;
@@ -237,73 +235,65 @@ const TextureState* ImRendererBase::ConstructDefaultTextureState(
     lParameters.muMagFilter     = 1;   // v5[3]
     lParameters.muMinFilter     = 1;   // v5[4]
     lParameters.muMipFilter     = 0;   // v5[5]  (memset 12 from v5[5] -> v5[5..7] = 0)
-    lParameters.muField6        = 0;   // v5[6]
-    lParameters.muField7        = 0;   // v5[7]
-    lParameters.muMaxAnisotropy = 13;  // v5[8]  (0xD)
-    lParameters.muField9        = 0;   // v5[9]
-    lParameters.muField10       = 1;   // v5[10]
+    lParameters.muMagFilterZ        = 0;   // v5[6]
+    lParameters.muMinFilterZ        = 0;   // v5[7]
+    lParameters.muMinMipLevel = 13;  // v5[8]  (0xD)
+    lParameters.muMaxMipLevel        = 0;   // v5[9]
+    lParameters.muMaxAnisotropy       = 1;   // v5[10]
     lParameters.mfMipLodBias    = 0.0f;// v5[11] = 0.0
-    lParameters.mfField12       = 0.0f;// v5[12] = 0.0
-    lParameters.muField13       = 0;   // v5[13]  (memset 12 from v5[13] -> v5[13..15] = 0)
-    lParameters.muField14       = 0;   // v5[14]
-    lParameters.muField15       = 0;   // v5[15]
-    lParameters.mu8Field40 = 0;        // v6
-    lParameters.mu8Field41 = 0;        // v7
-    lParameters.mu8Field42 = 0;        // v8
-    lParameters.mu8Field43 = 1;        // v9
-    lParameters.mu8Field44 = 1;        // v10
+    lParameters.mfAnisotropyBias       = 0.0f;// v5[12] = 0.0
+    lParameters.miHGradientExpBias       = 0;   // v5[13]  (memset 12 from v5[13] -> v5[13..15] = 0)
+    lParameters.miVGradientExpBias       = 0;   // v5[14]
+    lParameters.muTrilinearThreshold       = 0;   // v5[15]
+    lParameters.mbWhiteBorder = 0;        // v6
+    lParameters.mbSeparateZFilterEnable = 0;        // v7
+    lParameters.mbWhiteBorderW = 0;        // v8
+    lParameters.mbPointBorderEnable = 1;        // v9
+    lParameters.mbUnidentified44 = 1;        // v10
     lParameters.mpTexture  = lpTexture;// v11 = a2
 
     rw::ResourceDescriptor lDescriptor;
     renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
     rw::Resource lStateResource = lpAllocator->DoAllocate(lDescriptor, 0);
 
-    return reinterpret_cast<const TextureState*>(
-        renderengine::TextureState::Initialize(&lStateResource, &lParameters));
+    return renderengine::TextureState::Initialize(&lStateResource, &lParameters);
 }
 
 // ---------------------------------------------------------------------------------------------------
 // CgsGraphics::ImRendererBase::ConstructSamplerState  @ 0x827ED538
 // The four caller arguments are carried into the sampler block at offsets +0x0C, +0x10, +0x14 and
-// +0x00/+0x04 exactly as ARTIST stores them. The legacy member names in SamplerStateParameters are
-// not used here to infer meaning; the offsets and constants below follow the X360 stores.
+// +0x00/+0x04 exactly as ARTIST stores them.
 // ---------------------------------------------------------------------------------------------------
 const SamplerState* ImRendererBase::ConstructSamplerState(
     rw::IResourceAllocator* lpAllocator, u32 luArg2, u32 luArg3, u32 luArg4, u32 luArg5)
 {
-    renderengine::SamplerStateParameters lParameters = {};
+    renderengine::SamplerState::Parameters lParameters;
 
     lParameters.muAddressU = luArg4;          // +0x00 = a4
     lParameters.muAddressV = luArg5;          // +0x04 = a5
     lParameters.muAddressW = 0;               // +0x08
-    lParameters.muBias = luArg2;              // +0x0C = a2
-    lParameters.muMaxLevel = luArg2;           // +0x10 = a2
-    lParameters.muMinLevel = luArg3;           // +0x14 = a3
-    lParameters.muMaxAnisotropy = 0;           // +0x18 = ARTIST v7[6]
-    lParameters.muMagFilter = 0;               // +0x1C
-    lParameters.muMinFilter = 13;              // +0x20 = ARTIST v7[8]
-    lParameters.muMipFilter = 0;               // +0x24
-    lParameters.muConvolution = 1;             // +0x28
-    lParameters.muColor = 0;                   // +0x2C
-    lParameters.muRemap = 0;                   // +0x30
-    lParameters.muDepthTextureFunction = 0;    // +0x34
-    lParameters.muGamma = 0;                   // +0x38
-    lParameters.muState17 = 0;                 // +0x3C
-    lParameters.mbState15 = 0;                 // +0x40
-    lParameters.mbState22 = 0;                 // +0x41
-    lParameters.mbState16 = 0;                 // +0x42
-    lParameters.mbState11Zero = 1;             // +0x43
-    lParameters.mbState26 = 1;                 // +0x44
+    lParameters.muMagFilter = luArg2;              // +0x0C = a2
+    lParameters.muMinFilter = luArg2;           // +0x10 = a2
+    lParameters.muMipFilter = luArg3;           // +0x14 = a3
+    lParameters.muMagFilterZ = 0;           // +0x18 = ARTIST v7[6]
+    lParameters.muMinFilterZ = 0;               // +0x1C
+    lParameters.muMinMipLevel = 13;              // +0x20 = ARTIST v7[8]
+    lParameters.muMaxMipLevel = 0;               // +0x24
+    lParameters.muMaxAnisotropy = 1;             // +0x28
+    lParameters.mfMipLodBias = 0;                   // +0x2C
+    lParameters.mfAnisotropyBias = 0;                   // +0x30
+    lParameters.miHGradientExpBias = 0;    // +0x34
+    lParameters.miVGradientExpBias = 0;                   // +0x38
+    lParameters.muTrilinearThreshold = 0;                 // +0x3C
+    lParameters.mbWhiteBorder = 0;                 // +0x40
+    lParameters.mbSeparateZFilterEnable = 0;                 // +0x41
+    lParameters.mbWhiteBorderW = 0;                 // +0x42
+    lParameters.mbPointBorderEnable = 1;             // +0x43
+    lParameters.mbUnidentified44 = 1;                 // +0x44
 
-    renderengine::ResourceDescriptorEntry laDescriptor[5] = {};
-    renderengine::SamplerState::GetResourceDescriptor(laDescriptor);
-
-    renderengine::SamplerStateData* lapStateHandles[5] = {};
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    lpAllocatorIf->Create(lapStateHandles, lpAllocatorIf, laDescriptor, 0);
-
-    return reinterpret_cast<const SamplerState*>(
-        renderengine::SamplerState::Initialize(lapStateHandles, &lParameters));
+    const rw::ResourceDescriptor lDescriptor = renderengine::SamplerState::GetResourceDescriptor(lParameters);
+    const rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
+    return renderengine::SamplerState::Initialize(lResource, lParameters);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -312,31 +302,27 @@ const SamplerState* ImRendererBase::ConstructSamplerState(
 renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAllocator* lpAllocator)
 {
     renderengine::Texture::Parameters lParameters;
-    lParameters.meType = renderengine::Texture::E_TYPE_2D; // +0x00 = 1
-    lParameters.muSysMem = 0;                              // +0x04
-    lParameters.muWidth = 4;                               // +0x08
-    lParameters.muHeight = 4;                              // +0x0C
-    lParameters.muDepth = 1;                               // +0x10
-    lParameters.muNumLevels = 1;                           // +0x14
-    // Preserve the raw X360 word; texture.cpp maps this exact code to D3DFMT_A8R8G8B8 at D3D9 allocation.
-    lParameters.miFormat = 0x18280086;                     // +0x18
-    // +0x1C (muReserved1) is not written by ARTIST; leave this field untouched.
-
-    u32 lauDescriptor[20] = {};
-    renderengine::Texture::GetResourceDescriptor(lauDescriptor, &lParameters);
-
-    rw::Resource lTextureResource = {};
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    lpAllocatorIf->Create(&lTextureResource, lpAllocatorIf, lauDescriptor, 0);
-
-    renderengine::Texture* lpWhiteTexture =
-        renderengine::Texture::Initialize(&lTextureResource, &lParameters);
-
-    renderengine::Texture::Locked lLocked = {};
-    // The console call is Lock(texture, flags=2, level=0, face=0, out). The host API orders these
-    // as (level, face, flags, out) and returns void, so its lock-result assert cannot be represented.
-    renderengine::Texture::Lock(lpWhiteTexture, 0, 0, 0, &lLocked);
-    CGS_ASSERT(lLocked.mpPixelData != 0, "lLocked.pixelData");
+    lParameters.meType = renderengine::Texture::TYPE_2D;
+    lParameters.muFlags = 0;
+    lParameters.muWidth = 4; lParameters.muHeight = 4; lParameters.muDepth = 1;
+    lParameters.muNumLevels = 1; lParameters.meFormat = static_cast<renderengine::PixelFormat>(0x18280086);
+    const rw::ResourceDescriptor lDescriptor = renderengine::Texture::GetResourceDescriptor(lParameters);
+    const rw::Resource lTextureResource = lpAllocator->DoAllocate(lDescriptor, 0);
+    renderengine::Texture* lpWhiteTexture = renderengine::Texture::Initialize(lTextureResource, lParameters);
+    renderengine::Texture::Locked lLocked;
+    const char* const lpcFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\ImmediateMode/CgsImRenderer.cpp";
+    if (!lpWhiteTexture->Lock(renderengine::Texture::LOCK_WRITE, 0, 0, lLocked))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpWhiteTexture->Lock(RwGCore::Texture::LOCK_WRITE, 0, 0, lLocked)", lpcFile, 235);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!lLocked.mpPixelData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lLocked.pixelData", lpcFile, 237);
+        CgsDev::Assert::EndAssert();
+    }
 
     u8* lpPixelRow = static_cast<u8*>(lLocked.mpPixelData);
     const u32 luStrideBytes = lLocked.muStride & 0xFFFFFFFCu;
@@ -350,7 +336,7 @@ renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAlloca
         lpPixelRow += luStrideBytes;
     }
 
-    renderengine::Texture::Unlock(lpWhiteTexture, &lLocked);
+    lpWhiteTexture->Unlock(lLocked);
     return lpWhiteTexture;
 }
 

@@ -125,14 +125,9 @@ void Im3dSkyDome::Construct(rw::IResourceAllocator* lpAllocator)
     lSamplerParameters.mbPointBorderEnable      = 1u;
     lSamplerParameters.mbUnidentified44      = 1u;
 
-    rw::ResourceDescriptor lDescriptor;
-    renderengine::SamplerState::GetResourceDescriptor(
-        reinterpret_cast<renderengine::ResourceDescriptorEntry*>(&lDescriptor));
-    rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
-    mpCloudsSamplerState = reinterpret_cast<const renderengine::SamplerState*>(
-        renderengine::SamplerState::Initialize(
-            reinterpret_cast<renderengine::SamplerStateData**>(&lResource),
-            reinterpret_cast<const renderengine::SamplerStateParameters*>(&lSamplerParameters)));
+    const rw::ResourceDescriptor lDescriptor = renderengine::SamplerState::GetResourceDescriptor(lSamplerParameters);
+    const rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
+    mpCloudsSamplerState = renderengine::SamplerState::Initialize(lResource, lSamplerParameters);
 }
 
 void Im3dSkyDome::SetConstants(Vector3Plus lViewPositionAndSkyScale,
@@ -178,8 +173,7 @@ void Im3dSkyDome::SetConstants(Vector3Plus lViewPositionAndSkyScale,
     PushShaderConstant(&maStateHandles[6], &lCloudDomeRanges);
 
     {
-        void* const lpSamplerState =
-            const_cast<void*>(static_cast<const void*>(mpCloudsSamplerState));
+        const renderengine::SamplerState* const lpSamplerState = mpCloudsSamplerState;
 
         const u32 luDensitySampler = maStateHandles[9].mu8RegisterSet;
         shadow::Device::SetState(lpSamplerState, luDensitySampler);
