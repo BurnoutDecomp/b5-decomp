@@ -22,9 +22,12 @@ namespace CgsGeometric
         CGS_ASSERT(lu8VertexIndex < mu8NumVertices, "lu8VertexIndex < GetNumVertices()");
         u16 lauPacked[3];
         std::memcpy(lauPacked, mpVertices + KI_VERTEX_STRIDE * lu8VertexIndex, sizeof(lauPacked));
-        return {static_cast<f32>(static_cast<s32>(static_cast<u32>(miPosX) + lauPacked[0])) * mfScale,
-                static_cast<f32>(static_cast<s32>(static_cast<u32>(miPosY) + lauPacked[1])) * mfScale,
-                static_cast<f32>(static_cast<s32>(static_cast<u32>(miPosZ) + lauPacked[2])) * mfScale, 0.f};
+        const Vector3 lResult = {
+            static_cast<f32>(static_cast<s32>(static_cast<u32>(miPosX) + lauPacked[0])) * mfScale,
+            static_cast<f32>(static_cast<s32>(static_cast<u32>(miPosY) + lauPacked[1])) * mfScale,
+            static_cast<f32>(static_cast<s32>(static_cast<u32>(miPosZ) + lauPacked[2])) * mfScale,
+            0.f };
+        return lResult;
     }
     // GetPolygon @ 0x8283A978
     // X360: `v3 = a2; if (a2 >= *(this+0x1A)) Assert(...); return 12*v3 + *(this+0x10);`
