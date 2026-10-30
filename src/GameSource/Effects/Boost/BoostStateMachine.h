@@ -3,7 +3,6 @@
 
 #include "types.hpp"
 #include "GameSource/Effects/EffectsStateMachine.h"   // BrnEffects::EffectsStateMachine (base), EffectsState
-#include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44Affine (the host-side nozzle field below)
 
 // ============================================================================
 // GameSource/Effects/Boost/BoostStateMachine.h
@@ -121,32 +120,11 @@ namespace BrnEffects
         u32          muNumBoostTags;                  // +0x0C  live tag count
         TaggedEffect mEffects[KU_MAX_BOOST_EFFECTS];  // +0x10  the 4 boost effect tags
         f32          mfExhaustSmokeBlend;             // +0x20  exhaust-smoke blend value
-
-#if !defined(_XBOX)
-        // ---- ⚠ HOST-SIDE BRING-UP FIELDS. NOT CONSOLE STATE, NOT AT ANY X360 OFFSET. --------
-        // The console positions its boost effects from the DEFORMED per-frame locator table
-        // (DeformationOutputInterface::maLocatorData). That table is empty on this build --
-        // `[deformloc] locatorOutputs=0` -- so OnTick's stand-in needs a nozzle position from
-        // somewhere the data actually attests. It uses the car's BIND-POSE locator: the
-        // FXBOOSTPOINT1..4 LocatorPointSpec::mLocatorMatrix the streamed deformation spec
-        // carries, which ActiveRaceCarData::ExtractTags already walks (and, on the console,
-        // deliberately throws away -- see its own note). Filled there, consumed by OnTick
-        // through the console's own TransformBoostLocator. It is the UNDEFORMED nozzle, so it
-        // does not follow a crumpled bumper; that is the whole difference from the console.
-        // DELETE-WHEN the deformation module publishes VehicleLocatorOutput for race cars.
-        rw::math::vpu::Matrix44Affine maBoostLocatorLocal[KU_MAX_BOOST_EFFECTS];
-        bool                          mbBoostLocatorLocalValid;
-#endif
     };
 
-#if defined(_XBOX)
     CGS_STATIC_ASSERT((sizeof(BoostStateMachine) == 0x24), "native BoostStateMachine layout drift");
-#endif
 
-    // Console sizeof == 0x24 (4-byte vptr + mState + mTime + the four added members).
-    // On the x64 host the vptr widens to 8 bytes, so the byte-exact size differs by
-    // design; members are accessed by name, not raw offset. The derived-member offsets
-    // above are the ARTIST X360 offsets (verified by OnConstruct's stores).
+
 }
 
 #endif // GAMESOURCE_EFFECTS_BOOST_BOOSTSTATEMACHINE_H

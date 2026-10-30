@@ -29,13 +29,7 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h"  // VehicleLocatorData / Output / ETagPointType
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [boost*] witnesses
-#if defined(_XBOX)
 #include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
-#endif
-#include <cmath>                                              // sqrtf
-#include <cstdio>                                             // snprintf (witnesses)
-#include <cstdlib>                                            // std::getenv (the opt-in witness gate)
 
 namespace BrnEffects
 {
@@ -169,9 +163,6 @@ void BoostStateMachine::OnConstruct()
 {
     mTime              = 0.0f;          // +0x08  (base mTime / state timer)
     muNumBoostTags     = 0;             // +0x0C
-#if !defined(_XBOX)
-    mbBoostLocatorLocalValid = false;   // host-side bring-up field; see the header
-#endif
     mState             = EffectsStateAllOff;  // +0x04 (base mState = 0)
     for (u32 lu = 0; lu < KU_MAX_BOOST_EFFECTS; ++lu)
     {
@@ -292,9 +283,6 @@ void BoostStateMachine::Reset(ParticleEffectHelper& lParticleEffectHelper)
     }
 
     muNumBoostTags     = 0;       // +0x0C
-#if !defined(_XBOX)
-    mbBoostLocatorLocalValid = false;   // host-side bring-up field; see the header
-#endif
     mState             = EffectsStateAllOff;  // +0x04
     mfExhaustSmokeBlend = 0.0f;   // +0x20  (rodata flt_82001CC0 == 0.0)
 }
@@ -323,35 +311,6 @@ void BoostStateMachine::StartEffects(ParticleEffectHelper& lParticleEffectHelper
         const u32 luNameHash = BrnParticle::ParticleDescription::HashString(lpcEffectName);
         mEffects[lu].muHandle = lModule.StartLionEffect(luNameHash, lpcEffectName, luWorldIndex);
     }
-
-#if !defined(_XBOX)
-    // ---- [boostfx] witness. NOT console behaviour: ours, bounded, log-only. ---------
-    // PRINTED OUTSIDE THE LOOP, DELIBERATELY. The loop above is bounded by muNumBoostTags,
-    // so with a zero tag count StartEffects is a no-op that leaves NOTHING in the log --
-    // and "the boost effect did not start" then looks identical to "StartEffects was never
-    // called". This line separates the two and names the count that decided it, plus the
-    // handle slot 0 actually got (KU_HANDLE_INVALID == the name did not resolve).
-    // DELETE-WHEN-STABLE.
-    {
-        static u32 suStartWitness = 0;
-        const u32 KU_START_WITNESS_LIMIT = 12;
-        if (suStartWitness < KU_START_WITNESS_LIMIT)
-        {
-            ++suStartWitness;
-            char lacMsg[288];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[boostfx] #%u StartEffects(\"%s\", world=%u) muNumBoostTags=%u handle0=%08X%s\n",
-                suStartWitness, lpcEffectName ? lpcEffectName : "<NULLSTRING>",
-                luWorldIndex, muNumBoostTags,
-                (muNumBoostTags != 0) ? mEffects[0].muHandle : 0u,
-                (muNumBoostTags == 0)
-                    ? "  <-- ZERO: the loop did not execute and no effect started."
-                    : "");
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
-#endif
-
 }
 
 // =============================================================================
@@ -474,11 +433,7 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
                 lfMax = lpDebug->BoostTransitionMax();
             }
 
-#if defined(_XBOX)
             const Vector3 lvParams = { lfMin, BrnParticleMath::ScalarMultiplyAdd(lfMax - lfMin, 0.5f, lfMin), lfMax, 0.0f };
-#else
-            const Vector3 lvParams = { lfMin, std::fma(lfMax - lfMin, 0.5f, lfMin), lfMax, 0.0f };
-#endif
             const Vector2 lvScale  = { 0.0f, 1.0f, 0.0f, 0.0f };
             BrnEffects::Curves::SmoothStep lCurve;
             const f32 lfBlend = 1.0f - lCurve.Evaluate(lvParams, lvScale,
@@ -510,7 +465,6 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             // magnitude (vmsum3fp128 + rsqrt refine) and the running max via fsel.
             const BrnPhysics::Vehicle::RaceCarState& lCar = *lCarState.mpCarState;
             const Vector3& lvVel = lCar.mLinearVelocity;
-#if defined(_XBOX)
             const __vector4 lvV = __lvx(&lvVel, 0);
             const __vector4 lvLengthSquared = __vmsum3fp(lvV, lvV);
             const __vector4 lvZero = XMVectorZero();
@@ -526,9 +480,6 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
             }
             f32 lfMax = __vsel(__vmulfp(lvLengthSquared, lvEstimate), lvZero,
                                __vcmpeqfp(lvZero, lvLengthSquared)).x;
-#else
-            f32 lfMax = std::sqrt(lvVel.x * lvVel.x + lvVel.y * lvVel.y + lvVel.z * lvVel.z);
-#endif
             for (int liWheel = 0; liWheel < 4; ++liWheel)
             {
                 const f32 lfWheelSurfaceSpeed =
@@ -601,29 +552,6 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
 // =============================================================================
 void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper& lHelper)
 {
-    // ---- [DIAG] the SCENE-MATCH stamp. NOT console behaviour: ours, bounded, store-only. -----
-    // Every dumped frame carries the car's world position and whether this car's boost effects
-    // are live, so a before/after pair of RUNS can be chosen by WHERE THE CAR WAS instead of by
-    // frame index -- which a frame-coupled sim makes meaningless. See the banner on
-    // BrnDiag::FilmLatch::mfCarPosX.
-    // ⛔ IT IS AT THE TOP OF THE FUNCTION ON PURPOSE. Placed lower it sat AFTER the no-locator
-    // stand-in arm's `return`, which is the arm this build always takes -- so it wrote nothing
-    // and frames.csv carried a column of zeros while the [boostloc] witness three lines above the
-    // return printed a perfectly good car position. Measured, first run. DELETE-WHEN-STABLE.
-    {
-        const BrnPhysics::Vehicle::RaceCarState* lpCarStamp = lHelper.RaceCarState();
-        if (lpCarStamp != NULL)
-        {
-        }
-        // ⭐ THE STATE, NOT JUST THE TAG COUNT (2026-09-06). muNumBoostTags is 2 for the whole
-        // run on this build, so a column of 2s could not separate a frame that was BOOSTING from
-        // one that was only trailing exhaust smoke -- and those two states start DIFFERENT .lef
-        // files (Boost{Green,Red,Yellow} vs ExhaustSmoke), so a plume filmed without knowing
-        // which one was live cannot be attributed to either. Packed as
-        // (EffectsState << 8) | tagCount: 0x000 AllOff, 0x102 Boosting, 0x202 ExhaustSmokeOn,
-        // 0x302 SmokeStopping, 0x402 BoostStopping, 0x502 PopRestart, 0x602 ExhaustPop.
-    }
-
     // Whether to run the locator update this frame.
     bool lbDoLocatorUpdate = false;
 
@@ -654,48 +582,6 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
 
     if (!lbDoLocatorUpdate)
     {
-#if !defined(_XBOX)
-        if (lpCar != NULL && muNumBoostTags != 0)
-        {
-            for (u32 luBoost = 0; luBoost < muNumBoostTags && luBoost < KU_NUM_BOOST_LOCATORS;
-                 ++luBoost)
-            {
-                // The car's OWN nozzle, when the spec gave us one: the bind-pose FXBOOSTPOINT
-                // matrix through TransformBoostLocator -- the same call the live-locator arm
-                // below makes, with the undeformed locator in place of the deformed one. With
-                // no spec locator at all it degrades to the car origin, which at least keeps the
-                // effect on the car.
-                const Matrix44Affine lWorld =
-                    mbBoostLocatorLocalValid
-                        ? TransformBoostLocator(lpCar->mTransform, maBoostLocatorLocal[luBoost])
-                        : lpCar->mTransform;
-                lHelper.SetEffectTransform(mEffects[luBoost].muHandle, lWorld);
-            }
-
-            static u32 suBoostLocStandInLines = 0u;
-            static s32 siLastCell = 0x7FFFFFFF;
-            const s32 liCell = static_cast<s32>(lpCar->mTransform.wAxis.x * 0.125f)
-                             ^ (static_cast<s32>(lpCar->mTransform.wAxis.z * 0.125f) << 12);
-            if (sbBoostLocDiag && suBoostLocStandInLines < KU_BOOSTLOC_DIAG_MAX_LINES
-                && liCell != siLastCell)
-            {
-                ++suBoostLocStandInLines;
-                siLastCell = liCell;
-                char lacMsg[224];
-                const Matrix44Affine lW0 =
-                    mbBoostLocatorLocalValid
-                        ? TransformBoostLocator(lpCar->mTransform, maBoostLocatorLocal[0])
-                        : lpCar->mTransform;
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[boostloc] STAND-IN: no VehicleLocatorOutput; %u boost effect(s); specNozzle=%d"
-                    " car=(%.2f,%.2f,%.2f) fx0=(%.2f,%.2f,%.2f)\n",
-                    muNumBoostTags, (int)mbBoostLocatorLocalValid,
-                    lpCar->mTransform.wAxis.x, lpCar->mTransform.wAxis.y,
-                    lpCar->mTransform.wAxis.z, lW0.wAxis.x, lW0.wAxis.y, lW0.wAxis.z);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-#endif
         return;
     }
 
