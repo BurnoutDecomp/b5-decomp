@@ -108,8 +108,6 @@ namespace BrnGui
             E_ICONSTATE_COUNT = 53,
         };
 
-        virtual ~MapIconBrnBase() {}
-
         // [H3c] the X360 vtable (image @0x820CEB40 crash-nav / @0x820CEB68 sat-nav) pins the
         // FULL base virtual set + order: Construct, SetPosition, SetRotation, SetAlpha,
         // SetState, SetIconText, GetPosition, GetState, Update (the DWARF's declaration
