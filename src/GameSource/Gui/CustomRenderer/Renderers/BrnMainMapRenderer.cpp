@@ -187,10 +187,9 @@ namespace
         lParams.muMagFilter = 1;
         lParams.muMinFilter = 1;
         lParams.mpTexture = static_cast<renderengine::Texture*>(const_cast<void*>(lpTexture));
-        rw::ResourceDescriptor lDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lParams);
         *lpBacking = lpAllocator->DoAllocate(lDescriptor, 0);
-        return renderengine::TextureState::Initialize(lpBacking, &lParams);
+        return renderengine::TextureState::Initialize(*lpBacking, lParams);
     }
 }
 
@@ -916,11 +915,7 @@ void MainMapRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         for (s32 li = 0; li < 4; ++li)
             laVertices[li].mv4Colour = lColour;
 
-        // The tile's own texture state (SatNavTile::sTexture::mpTextureState is typed
-        // CgsGraphics::TextureState* in BrnSatNavTile.h; the buffer's SetState overload
-        // takes the renderengine state the dispatcher unwraps -- the same handle).
-        lpRenderBuffer->SetState(
-            reinterpret_cast<const renderengine::TextureState*>(lrTexture.mpTextureState));
+        lpRenderBuffer->SetState(lrTexture.mpTextureState);
         lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
     }
 

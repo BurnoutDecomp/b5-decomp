@@ -145,10 +145,9 @@ namespace CgsGui
         lParams.muMinFilter = 1;
         lParams.mpTexture = lpTexture;
         rw::IResourceAllocator* lpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
-        rw::ResourceDescriptor lDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lParams);
         rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
-        renderengine::TextureState* lpState = renderengine::TextureState::Initialize(&lResource, &lParams);
+        renderengine::TextureState* lpState = renderengine::TextureState::Initialize(lResource, lParams);
         AptRenderHandler::TextureStateElement lElement;
         lrElements.Append(lElement);
         AptRenderHandler::TextureStateElement* lpElement = &lrElements[lrElements.GetLength() - 1];

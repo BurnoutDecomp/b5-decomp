@@ -99,9 +99,8 @@ namespace CgsResource
 
         // Build the font's runtime texture state from atlas page 0 (mpapTextures[0]) so the text
         // renderer can bind it. Called once after the font bundle loads (see GamePrepare handoff).
-        // CgsFont.cpp / X360 0x82835658. [PC: the allocator is unused -- the texture state is backed
-        // by mTextureStateResource -- so it is a nullable pointer the bring-up can omit.]
-        void CreateTextureState(rw::IResourceAllocator* lpAllocator = 0);
+        // CgsFont.cpp / X360 0x82835658: the supplied allocator owns the state resource.
+        void CreateTextureState(rw::IResourceAllocator* lpAllocator);
 
         // Find the [start,end) of the next line of lpString that fits lfMaxWidthInEm (word-wrapping
         // when lbWordWrap), returning the line's width (in em). Used by TextRenderer::RenderStringInternal

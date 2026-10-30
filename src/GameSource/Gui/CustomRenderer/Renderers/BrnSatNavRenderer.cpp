@@ -125,10 +125,9 @@ renderengine::TextureState* CreatePayloadTextureState(rw::IResourceAllocator* lp
     lParams.muMagFilter = 1;
     lParams.muMinFilter = 1;
     lParams.mpTexture = static_cast<renderengine::Texture*>(lpTexture);
-    rw::ResourceDescriptor lDescriptor;
-    renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+    rw::ResourceDescriptor lDescriptor = renderengine::TextureState::GetResourceDescriptor(lParams);
     *lpResource = lpAllocator->DoAllocate(lDescriptor, 0);
-    return renderengine::TextureState::Initialize(lpResource, &lParams);
+    return renderengine::TextureState::Initialize(*lpResource, lParams);
 }
 
 // ---------------------------------------------------------------------------
