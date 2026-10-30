@@ -269,7 +269,7 @@ namespace BrnDirector
             mStateContainer.SetCurrentState(ArbitratorStateContainer::E_STATE_ROAMING);
             meState = E_STATE_NORMAL;
             // fall through -- the X360 jumps straight into the NORMAL body this same frame.
-            [[fallthrough]];
+            // Fall through.
 
         // ---- 2: NORMAL ----------------------------------------------------------------
         case E_STATE_NORMAL:
