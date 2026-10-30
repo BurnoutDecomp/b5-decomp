@@ -67,6 +67,9 @@ namespace BrnAI
 {
 namespace
 {
+    // ARTIST section flag test uses bit 0x10.
+    const u8 KX8_SECTION_FLAG_TRACKBACK_STOP = 0x10;
+
     // flt_820C3B70 lane 0 == FLT_EPSILON: the RwMath::IsZero epsilon.
     const f32 KF_ZERO_EPSILON = 1.1920929e-07f;
 
