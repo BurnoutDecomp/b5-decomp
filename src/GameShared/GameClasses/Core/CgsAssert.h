@@ -9,14 +9,11 @@ namespace EA { namespace Thread { class Semaphore; } }
 // CgsDev::Assert::Manager (reconstructed separately in
 // GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.cpp).
 //
-//   BeginAssert @ 0x82817548  -> int  (enters gAssertMutex)
-//   FireAssert  @ 0x82820810  -> int  FireAssert(expr, file, line); forwards to
-//                                Manager::HandleAssert(this, expr, file, line).
-//                                Hex-Rays renders the first arg as `void *`; the
-//                                call sites pass the assertion-expression string,
-//                                so it is a `const char *`.
-//   EndAssert   @ 0x82817558  -> void* (leaves gAssertMutex; returns the mutex's
-//                                DebugCriticalSection::Leave result pointer)
+//   BeginAssert @ 0x82817548 enters the native assert mutex.
+//   FireAssert  @ 0x82820810 captures the first stack, normalizes null strings
+//                           and calls Manager::HandleAssert.
+//   EndAssert   @ 0x82817558 leaves the native assert mutex.
+// DecFIGS declares all three void; incidental r3 values are not return contracts.
 namespace CgsDev
 {
 namespace Assert
@@ -29,17 +26,13 @@ namespace Assert
     extern char* gpcMessageBuffer;
     extern s32 giMessageBufferSize;
 
-    // X360 @0x82820758 — the once-guarded assert-system bring-up (the FIRST call
-    // DebugManager::Construct @0x828332C0 makes): Create gAssertMutex + initialise the
-    // assert-screen state. (The X360 body also sets the assert overlay's vector-font size
-    // — {14,14} at glyph-cell scale 0.125 — and starts Manager::RenderThreadAsserts; in
-    // this tree the font sizing lives with Manager::SetRenderer and the per-thread assert
-    // render is the threading follow-on.)
+    // ARTIST82820758 seeds the actual manager's once flag, mutex and font,
+    // then enters the pending thread-assert render handoff.
     void  Construct();
 
-    int   BeginAssert();
-    int   FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
-    void* EndAssert();
+    void  BeginAssert();
+    void  FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
+    void  EndAssert();
     void  PrintStringed(const char* lpcFile, const char* lpcFunction, const int liLine, const char* lpcMessage);
 
 }
