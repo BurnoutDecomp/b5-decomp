@@ -1,6 +1,8 @@
 #ifndef CGS_MODULE_UTILS_H
 #define CGS_MODULE_UTILS_H
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
 // ============================================================================
 // GameShared/GameClasses/Module/CgsModuleUtils.h  (original-source home: the
 // Feb-2007 tree includes "Module/CgsModuleUtils.h"; the sound-module TU's
@@ -125,6 +127,152 @@ namespace CgsModule
         lpSourceB->UnlockForRead();
         lpSourceA->UnlockForRead();
         lpDestBuffer->UnlockForWrite();
+    }
+
+    // ARTIST 823B7B80 / 823B7D20: resource input with seven producer outputs.
+    template <typename TDest, typename TA, typename TB, typename TC, typename TD,
+              typename TE, typename TF, typename TG>
+    inline void LockBuffersForIO(TDest* lpInputBuffer, TA* lpOutputBuffer0,
+        TB* lpOutputBuffer1, TC* lpOutputBuffer2, TD* lpOutputBuffer3,
+        TE* lpOutputBuffer4, TF* lpOutputBuffer5, TG* lpOutputBuffer6)
+    {
+        if (!lpInputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 511);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 512);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer1",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 513);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer2)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer2",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 514);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer3)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer3",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 515);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer4)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer4",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 516);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer5)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer5",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 517);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer6)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer6",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 518);
+            CgsDev::Assert::EndAssert();
+        }
+        lpInputBuffer->LockForWrite();
+        lpOutputBuffer0->LockForRead();
+        lpOutputBuffer1->LockForRead();
+        lpOutputBuffer2->LockForRead();
+        lpOutputBuffer3->LockForRead();
+        lpOutputBuffer4->LockForRead();
+        lpOutputBuffer5->LockForRead();
+        lpOutputBuffer6->LockForRead();
+    }
+
+    // ARTIST 823B7B80 / 823B7D20: resource input with seven producer outputs.
+    template <typename TDest, typename TA, typename TB, typename TC, typename TD,
+              typename TE, typename TF, typename TG>
+    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TA* lpOutputBuffer0,
+        TB* lpOutputBuffer1, TC* lpOutputBuffer2, TD* lpOutputBuffer3,
+        TE* lpOutputBuffer4, TF* lpOutputBuffer5, TG* lpOutputBuffer6)
+    {
+        if (!lpInputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 542);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 543);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer1",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 544);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer2)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer2",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 545);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer3)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer3",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 546);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer4)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer4",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 547);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer5)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer5",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 548);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!lpOutputBuffer6)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer6",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 549);
+            CgsDev::Assert::EndAssert();
+        }
+        lpOutputBuffer6->UnlockForRead();
+        lpOutputBuffer5->UnlockForRead();
+        lpOutputBuffer4->UnlockForRead();
+        lpOutputBuffer3->UnlockForRead();
+        lpOutputBuffer2->UnlockForRead();
+        lpOutputBuffer1->UnlockForRead();
+        lpOutputBuffer0->UnlockForRead();
+        lpInputBuffer->UnlockForWrite();
     }
 
     // Single-buffer overloads (the X360 also emits the pair against one module
