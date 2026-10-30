@@ -1,17 +1,50 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/rendertargetstate.h"
+#include "rw/rwcore_structs.h"
 
 D3DDevice* gpD3DDevice = 0;
 
 namespace renderengine
 {
     Device::State Device::m_currentState = Device::STATE_COLD;
+    Device::Parameters Device::m_parameterCopy;
+    u32 gDeviceCounter832716A8;
+    u32 gDeviceCounter832716AC;
+    LARGE_INTEGER gDevicePerformanceCounter832716B0;
+    u32 gDeviceCounter832716C8;
     __declspec(align(16)) PixelBuffer gOriginalColorBuffer;
     __declspec(align(16)) PixelBuffer gOriginalDepthStencilBuffer;
     u32 guTilingEnabled = 0;
     u32 gDeviceFrameCounter83271624 = 0;
     PixelBuffer* gpDeviceColorBuffer = 0;
     PixelBuffer* gpDeviceDepthBuffer = 0;
+
+    // ARTIST82B63BA8. InitializeGlobalBuffers owns the real surface/texture setup.
+    bool Device::Start(const Parameters& lrParameters)
+    {
+        if (!lrParameters.Validate()) return false;
+        m_parameterCopy = lrParameters;
+        m_parameterCopy.FixD3DDefaults();
+        D3DPRESENT_PARAMETERS lPresent;
+        InitPresentParameters(lPresent, lrParameters);
+        if (Direct3D_CreateDevice(0, D3DDEVTYPE_HAL, 0, lrParameters.behaviorFlags, &lPresent, &gpD3DDevice) != 0)
+            return false;
+        gDeviceCounter832716A8 = 0;
+        gDeviceCounter832716AC = 0;
+        InitializeGlobalBuffers();
+        D3DDevice_SetVertexDeclaration(gpD3DDevice, 0);
+        RenderTargetState::Parameters lTargetParameters = { { gpDeviceColorBuffer, 0, 0, 0, gpDeviceDepthBuffer } };
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size = 0x18;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+        rw::Resource lResource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->DoAllocate(lDescriptor, 0);
+        m_renderTargetState = RenderTargetState::Initialize(lResource, lTargetParameters);
+        QueryPerformanceCounter(&gDevicePerformanceCounter832716B0);
+        gDeviceCounter832716C8 = 0;
+        m_currentState = STATE_START;
+        return true;
+    }
 
     // ARTIST82B61A48: install the current native depth and colour surfaces.
     void Device::EnsureDefaultRenderTarget()
