@@ -59,9 +59,8 @@ namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 // "dirty disc" error UI for the given signed-in user. ------------------------------------
 extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long dwUserIndex);
 
-// The high-resolution frame timer DebugManagerRender's fps ring reads (defined in
-// CgsTimeUtils.cpp; declared locally by convention -- see that TU's note).
-namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+// Canonical native declaration for the high-resolution frame counter.
+#include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
 namespace BrnGame
 {

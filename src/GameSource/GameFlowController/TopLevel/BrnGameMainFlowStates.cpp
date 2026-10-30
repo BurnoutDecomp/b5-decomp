@@ -29,7 +29,7 @@
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
-namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+#include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
 // The game-data streaming module the loading screen brings up (X360 Update 0x823EF688 case 8:
 // GameDataModule::Prepare via vtable+64). On X360 it lives in the game module; here a file-static
