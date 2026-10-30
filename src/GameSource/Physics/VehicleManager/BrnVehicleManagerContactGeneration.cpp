@@ -46,6 +46,12 @@ namespace Vehicle
 {
     namespace
     {
+        inline EntityId MakeEntityId(u32 luValue)
+        {
+            EntityId lId = { luValue };
+            return lId;
+        }
+
         // Owner byte / 14-bit entity index of a packed entity word (the standard
         // CgsEntityId geometry the asm decodes everywhere in this body).
         inline u32 GetWordOwner(u32 luEntityWord) { return luEntityWord >> 24; }
@@ -348,7 +354,7 @@ namespace Vehicle
                                           mpSphereSphereStreamProducer,
                                           lu16QueueIdx,
                                           lfTimeStep);
-                lpDeformationManager->AddHingedBodyPartPairs(EntityId{ luPhysA }, EntityId{ luPhysB },
+                lpDeformationManager->AddHingedBodyPartPairs(MakeEntityId( luPhysA ), MakeEntityId( luPhysB ),
                                                              &mHingedPartVsVehiclePairBuilder);
                 continue;
             }
@@ -386,7 +392,7 @@ namespace Vehicle
                 }
 
                 lpDeformationManager->AddRaceCarBodyPartPair(
-                    EntityId{ luCarWord },
+                    MakeEntityId( luCarWord ),
                     lbCarIsA ? lrPair.muVolumeInstanceIdB : lrPair.muVolumeInstanceIdA,
                     &mDetachedPartPrimPairBuilder);
             }
@@ -415,7 +421,7 @@ namespace Vehicle
                 }
 
                 lpDeformationManager->AddRaceCarWheelPair(
-                    EntityId{ luCarWord },
+                    MakeEntityId( luCarWord ),
                     lbCarIsA ? lrPair.muVolumeInstanceIdB : lrPair.muVolumeInstanceIdA,
                     &mDetachedWheelPrimPairBuilder);
             }
@@ -428,14 +434,14 @@ namespace Vehicle
             mpContactGenerator->CollidePrimitivePairList(&mTrafficSimpleTrafficPrimPairBuilder,
                                                          KU16_COLLIDE_MAX_RESULTS, KU_COLLIDE_USER_TAG_A,
                                                          KU16_COLLIDE_USER_TAG_B);
-            mpContactGenList->AddEntry(EntityId{ 0x02000000u }, EntityId{ 0x02000000u }, 0, 0);
+            mpContactGenList->AddEntry(MakeEntityId( 0x02000000u ), MakeEntityId( 0x02000000u ), 0, 0);
         }
         if (mRaceCarSimpleTrafficPrimPairBuilder.GetNumTests() != 0)                             // +172570
         {
             mpContactGenerator->CollidePrimitivePairList(&mRaceCarSimpleTrafficPrimPairBuilder,
                                                          KU16_COLLIDE_MAX_RESULTS, KU_COLLIDE_USER_TAG_A,
                                                          KU16_COLLIDE_USER_TAG_B);
-            mpContactGenList->AddEntry(EntityId{ 0x01000000u }, EntityId{ 0x02000000u }, 0, 0);
+            mpContactGenList->AddEntry(MakeEntityId( 0x01000000u ), MakeEntityId( 0x02000000u ), 0, 0);
         }
 
         mpSphereTriangleStreamProducer =
@@ -453,7 +459,7 @@ namespace Vehicle
                        "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");                    // CgsEntityId.h:116
 
             const s32 liModelIndex = lpDeformationManager->FindModelIndexByEntityID(
-                EntityId{ (static_cast<u32>(liCar) << 10) | 0x01000000u });
+                MakeEntityId( (static_cast<u32>(liCar) << 10) | 0x01000000u ));
 
             // Skip frozen cars: the asm reads the model's vehicle-physics frame flag @+112
             // (mbFrozen through the ExternallySimulatedBody base).
@@ -566,11 +572,11 @@ namespace Vehicle
         const bool lbAIsSimpleTraffic =
             (lCarPhysicsIdA.GetOwner() == 2u)                                     // E_ENTITYTYPE_TRAFFIC_VEHICLE
             && mPhysicalTrafficManager.IsTrafficVehicleSimple(
-                   EntityId{ static_cast<u32>(lCarPhysicsIdA) });
+                   MakeEntityId( static_cast<u32>(lCarPhysicsIdA) ));
         const bool lbBIsSimpleTraffic =
             (lCarPhysicsIdB.GetOwner() == 2u)
             && mPhysicalTrafficManager.IsTrafficVehicleSimple(
-                   EntityId{ static_cast<u32>(lCarPhysicsIdB) });
+                   MakeEntityId( static_cast<u32>(lCarPhysicsIdB) ));
 
         // GetVehiclePhysics returns the shared SimpleVehiclePhysics base of both branch types
         // (RaceCarPhysics : VehiclePhysics : SimpleVehiclePhysics, and the traffic manager's own
@@ -578,9 +584,9 @@ namespace Vehicle
         // below can read mbFrozen / mLinearVelocity off either without a per-branch test. The
         // in-tree accessor still returns void* (see BrnVehicleManager.h); the cast is the caller's.
         SimpleVehiclePhysics* lpSimplePhysicsA = static_cast<SimpleVehiclePhysics*>(
-            GetVehiclePhysi(EntityId{ static_cast<u32>(lCarPhysicsIdA) }));
+            GetVehiclePhysi(MakeEntityId( static_cast<u32>(lCarPhysicsIdA) )));
         SimpleVehiclePhysics* lpSimplePhysicsB = static_cast<SimpleVehiclePhysics*>(
-            GetVehiclePhysi(EntityId{ static_cast<u32>(lCarPhysicsIdB) }));
+            GetVehiclePhysi(MakeEntityId( static_cast<u32>(lCarPhysicsIdB) )));
 
         // 0x8261BC34: two frozen bodies cannot generate a contact worth solving. (The asm nests
         // the whole body under `!(A->mbFrozen && B->mbFrozen)`; the early return is the same.)
@@ -595,9 +601,9 @@ namespace Vehicle
             const CgsGeometric::Sphere* lpSpheresA = 0;   // 0x8261BB64 stw 0 -- the callee may not
             const CgsGeometric::Sphere* lpSpheresB = 0;   // 0x8261BB6C stw 0    write these slots
             const s32 liNumSpheresA = lpDefMan->GetSpheresForCar(
-                EntityId{ static_cast<u32>(lCarPhysicsIdA) }, &lpSpheresA);
+                MakeEntityId( static_cast<u32>(lCarPhysicsIdA) ), &lpSpheresA);
             const s32 liNumSpheresB = lpDefMan->GetSpheresForCar(
-                EntityId{ static_cast<u32>(lCarPhysicsIdB) }, &lpSpheresB);
+                MakeEntityId( static_cast<u32>(lCarPhysicsIdB) ), &lpSpheresB);
             CGS_ASSERT(lpSpheresA != 0, "lpSpheresA");                                  // :877
             CGS_ASSERT(lpSpheresB != 0, "lpSpheresB");                                  // :878
 
@@ -638,8 +644,8 @@ namespace Vehicle
 
             // 0x8261BDC4: the pair's marker entry, carrying the ORIGINAL (global) ids -- entry i
             // belongs to result list i, which is the lockstep AddContactResultsToQueue walks.
-            lpContactGenList->AddEntry(EntityId{ static_cast<u32>(lCarIdA) },
-                                       EntityId{ static_cast<u32>(lCarIdB) },
+            lpContactGenList->AddEntry(MakeEntityId( static_cast<u32>(lCarIdA) ),
+                                       MakeEntityId( static_cast<u32>(lCarIdB) ),
                                        KU8_CARCAR_VOL_INST_OFFSET, KU8_CARCAR_VOL_INST_OFFSET);
 
             // ---- [Q7-carcar] bring-up witness, one line PER QUEUE ID ---------------------------
@@ -744,7 +750,7 @@ namespace Vehicle
         CGS_ASSERT(lpCachedTriangles != 0, "lpCachedTriangles");              // :943
 
         const bool lbUseSweptSpheres =
-            lpDeformationManager->IsUsingSweptSpheres(EntityId{ luEntityWord });
+            lpDeformationManager->IsUsingSweptSpheres(MakeEntityId( luEntityWord ));
 
         // ---- [cgen] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide ----
         // OPT-IN (BRN_WALL_PROBE=1), same latch as [cvalid] downstream.
@@ -786,7 +792,7 @@ namespace Vehicle
             // ---- the in-place sphere pass (0x825EB23C..0x825EB2B0) --------------------------
             const CgsGeometric::Sphere* lpSpheres = 0;    // 0x825EB234 stw 0 (the callee may not write it)
             const s32 liNumSpheres =
-                lpDeformationManager->GetSpheresForCar(EntityId{ luEntityWord }, &lpSpheres);
+                lpDeformationManager->GetSpheresForCar(MakeEntityId( luEntityWord ), &lpSpheres);
             CGS_ASSERT(lpSpheres != 0, "lpSpheres");                          // :952
 
             SphereList lSphereList;
@@ -813,7 +819,7 @@ namespace Vehicle
             // ---- the swept (continuous) pass (0x825EB2B8..0x825EB32C) -----------------------
             const CgsGeometric::SweptSphere* lpSweptSpheres = 0;
             const s32 liNumSweptSpheres =
-                lpDeformationManager->GetSweptSpheresForCar(EntityId{ luEntityWord },
+                lpDeformationManager->GetSweptSpheresForCar(MakeEntityId( luEntityWord ),
                                                             &lpSweptSpheres);
             CGS_ASSERT(lpSweptSpheres != 0, "lpSpheres");                     // :979
 
@@ -839,7 +845,7 @@ namespace Vehicle
 
         // 0x825EB330..0x825EB344: the world marker entry — side A owner 0 (E_ENTITYTYPE_WORLD),
         // side B this car, flags (0, 1).
-        lpContactGenList->AddEntry(EntityId{ 0u }, EntityId{ luEntityWord }, 0, 1);
+        lpContactGenList->AddEntry(MakeEntityId( 0u ), MakeEntityId( luEntityWord ), 0, 1);
     }
 
     // ==============================================================================================
@@ -972,33 +978,13 @@ namespace Vehicle
 
                     lTriangleList.CheckAlignment();
                     lTriangleList.ValidateTriangles();
-                    const u16 lu16SweptResultList =
-                        lpContactGenerator->CollideSweptSphereListWithTriangleList(
+                    lpContactGenerator->CollideSweptSphereListWithTriangleList(
                             &lSweptSphereList, &lTriangleList,
                             KU16_COLLIDE_MAX_RESULTS,                 // 200
                             KF_TRAFFIC_SWEPT_CONTACT_PADDING,         // 0.0f
                             luQueueIndex,                             // tag A == the caller's queue (9)
                             1);                                       // tag B
 
-                    static s32        siSweptBatches = 0;
-                    static s32        siSweptLines   = 0;
-                    if (sbSweptDiag && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        ++siSweptBatches;
-                        const s32 liNumResults = static_cast<s32>(
-                            lpContactGenerator->GetResultList(lu16SweptResultList).mu16NumResults);
-                        if (siSweptLines < KI_SWEPT_DIAG_MAX_LINES
-                            && (siSweptBatches <= KI_SWEPT_DIAG_FIRST_BATCHES || liNumResults > 0))
-                        {
-                            ++siSweptLines;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[swept] traffic=" << liTrafficIndex
-                                << " batches=" << siSweptBatches
-                                << " spheres=" << liNumSweptSpheres
-                                << " triBatches=" << liNumTriangleBatches
-                                << " results=" << liNumResults << "\n";
-                        }
-                    }
                 }
             }
             else
@@ -1021,7 +1007,7 @@ namespace Vehicle
 
         // 0x8261C288..0x8261C2A4: the WORLD marker entry, carrying the car's GLOBAL entity id.
         lpContactGenList->AddEntry(
-            EntityId{ 0u },
+            MakeEntityId( 0u ),
             mPhysicalTrafficManager.GetGlobalTrafficEntityId(static_cast<u16>(liTrafficIndex)),
             0, 1);
     }
@@ -1228,15 +1214,16 @@ namespace Vehicle
                 const RaceCarPhysics& lrHiddenPhysics = maRaceCarVehicles[liHiddenCar];
                 const RaceCarPhysics& lrOtherPhysics  = maRaceCarVehicles[liOtherCar];
 
+                const VecFloat lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
                 CgsGeometric::Box lHiddenBox;
                 lHiddenBox.Set(lrHiddenPhysics.GetGraphicsVehicleTransform(),
                                ScaleHalfExtentForUnhideTest(lrHiddenPhysics.GetHalfExtent()),
-                               VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+                               lvZero);
 
                 CgsGeometric::Box lOtherBox;
                 lOtherBox.Set(lrOtherPhysics.GetGraphicsVehicleTransform(),
                               ScaleHalfExtentForUnhideTest(lrOtherPhysics.GetHalfExtent()),
-                              VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+                              lvZero);
 
                 // MaskScalar::GetBool is exactly the lane-compare-against-zero the console folds
                 // in here: any non-zero lane == the six face-axis tests all passed == overlapping.
@@ -1329,8 +1316,8 @@ namespace Vehicle
                                                          KU16_PART_COLLIDE_MAX_RESULTS,
                                                          KU_PART_VS_CAR_USER_TAG_A,
                                                          KU16_PART_COLLIDE_USER_TAG_B);
-            mpContactGenList->AddEntry(EntityId{ KU_ENTITY_WORD_RACECAR_DEFORMABLE_PART },
-                                       EntityId{ KU_ENTITY_WORD_RACECAR }, 0, 0);
+            mpContactGenList->AddEntry(MakeEntityId( KU_ENTITY_WORD_RACECAR_DEFORMABLE_PART ),
+                                       MakeEntityId( KU_ENTITY_WORD_RACECAR ), 0, 0);
         }
         if (mDetachedWheelPrimPairBuilder.GetNumTests() != 0)                    // +172494
         {
@@ -1338,8 +1325,8 @@ namespace Vehicle
                                                          KU16_PART_COLLIDE_MAX_RESULTS,
                                                          KU_WHEEL_VS_CAR_USER_TAG_A,
                                                          KU16_PART_COLLIDE_USER_TAG_B);
-            mpContactGenList->AddEntry(EntityId{ KU_ENTITY_WORD_DETACHED_WHEEL },
-                                       EntityId{ KU_ENTITY_WORD_RACECAR }, 0, 0);
+            mpContactGenList->AddEntry(MakeEntityId( KU_ENTITY_WORD_DETACHED_WHEEL ),
+                                       MakeEntityId( KU_ENTITY_WORD_RACECAR ), 0, 0);
         }
         if (mHingedPartVsVehiclePairBuilder.GetNumTests() != 0)                  // +172506
         {
@@ -1347,8 +1334,8 @@ namespace Vehicle
                                                          KU16_PART_COLLIDE_MAX_RESULTS,
                                                          KU_HINGED_VS_CAR_USER_TAG_A,
                                                          KU16_PART_COLLIDE_USER_TAG_B);
-            mpContactGenList->AddEntry(EntityId{ KU_ENTITY_WORD_RACECAR_DEFORMABLE_PART },
-                                       EntityId{ KU_ENTITY_WORD_RACECAR }, 0, 0);
+            mpContactGenList->AddEntry(MakeEntityId( KU_ENTITY_WORD_RACECAR_DEFORMABLE_PART ),
+                                       MakeEntityId( KU_ENTITY_WORD_RACECAR ), 0, 0);
         }
 
         // ---- (2) the part-vs-WORLD collide stream ------------------------------------------------
