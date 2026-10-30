@@ -443,23 +443,14 @@ void SatNavComponent::Update()
         UpdateFreeRoaming();
     }
 
-    // Post the render payload on the view-state channel (X360 record {48, 212, 16},
-    // ch41, 64 bytes -- native-width here per the PlayAptMovie precedent).
-    CGS_ASSERT(mpStateInterface != 0, " state interface is invalid ");   // :333 (non-gating)
-    {
-        struct GuiEventRenderSatNavRecord : public CgsGui::GuiEvent<212>
-        {
-            GuiEventRenderSatNav mPayload;
-            explicit GuiEventRenderSatNavRecord(const GuiEventRenderSatNav& lrPayload)
-                : CgsGui::GuiEvent<212>(48, 16)
-                , mPayload(lrPayload)
-            {
-            }
-        } lRecord(mRenderSatNavEvent);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord),
-            41 /* KI_CHANNEL_VIEW_STATE */, sizeof(lRecord));
-    }
+    // ARTIST824696A8..D0 boxes the render payload for channel 41. The
+    // wrapper records sizeof(payload) and its native offset: the interpreter
+    // uses that size when it forwards the payload to the view queue.
+    CGS_ASSERT(mpStateInterface != 0, " state interface is invalid ");   // :333
+    CgsGui::GuiEventWrapper<GuiEventRenderSatNav, 41> lRecord(mRenderSatNavEvent);
+    mpStateInterface->GetOutputEventQueue()->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lRecord),
+        41 /* KI_CHANNEL_VIEW_STATE */, static_cast<s32>(sizeof(lRecord)));
 }
 
 // @ 0x8244EEC8 -- build the four corners of the zoomed world window around the car.
