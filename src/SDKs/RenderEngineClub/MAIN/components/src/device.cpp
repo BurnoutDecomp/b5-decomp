@@ -10,6 +10,20 @@ namespace renderengine
     __declspec(align(16)) PixelBuffer gOriginalDepthStencilBuffer;
     u32 guTilingEnabled = 0;
     u32 gDeviceFrameCounter83271624 = 0;
+    PixelBuffer* gpDeviceColorBuffer = 0;
+    PixelBuffer* gpDeviceDepthBuffer = 0;
+
+    // ARTIST82B61A48: install the current native depth and colour surfaces.
+    void Device::EnsureDefaultRenderTarget()
+    {
+        D3DSURFACES lSurfaces;
+        lSurfaces.pDepthStencilSurface = gpDeviceDepthBuffer;
+        lSurfaces.pRenderTarget[0] = gpDeviceColorBuffer;
+        lSurfaces.pRenderTarget[1] = 0;
+        lSurfaces.pRenderTarget[2] = 0;
+        lSurfaces.pRenderTarget[3] = 0;
+        D3DDevice_SetSurfaces(gpD3DDevice, &lSurfaces, 0);
+    }
 
     // ARTIST82B61960: the output is the XDK's 124-byte presentation record.
     void Device::InitPresentParameters(D3DPRESENT_PARAMETERS& lrPresent, const Parameters& lrParameters)
