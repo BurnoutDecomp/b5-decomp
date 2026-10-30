@@ -15,8 +15,9 @@ namespace BrnReplays
         s32 Construct();
         // @0x822A3400 -- returns the static-layout buffer, asserting it is big enough.
         RaceCarEntitySerialiserStaticLayout* GetStaticLayout();
-        // @0x82657A48 -- lazily Clear() both frames on the first frame, mark it done.
-        RaceCarSerialiserFrame* CheckStaticLayoutCleared();
+        // @0x82657A48 -- clear both frames once. Its only original caller
+        // 0x8230DA90 does not consume the incidental value left in r3.
+        void CheckStaticLayoutCleared();
         // @0x8264C518 / @0x8264C618 -- playback / record one frame (top-level dispatch).
         s32 Read();
         s32 Write();

@@ -18,7 +18,9 @@ namespace BrnReplays
         CgsID maRaceCarModelIds[E_ACTIVE_RACE_CAR_INDEX_COUNT];
         CgsID maWheelModelIds[E_ACTIVE_RACE_CAR_INDEX_COUNT];
 
-        RaceCarSerialiserFrame* Clear();
+        // ARTIST normal exit leaves a stack address in r3; the replay caller
+        // does not consume it. The previous pointer return was incidental.
+        void Clear();
     };
 
     // The serialiser allocates 0x1B000 bytes; the two frames occupy 0x1AFC0.
