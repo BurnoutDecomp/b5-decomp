@@ -505,7 +505,7 @@ void PhysicalTrafficManager::ProcessAddAirRamEvent(const CreateAirRamEvent* lpEv
             // The console passes the raw 16-byte mDirectionAndMagnitude register as v1 (its w
             // lane rides along); reproduced lane-for-lane rather than through GetVector3(),
             // which would zero the w lane the console keeps.
-            const Vector3 lvDirection{ lpEvent->mDirectionAndMagnitude.x,
+            const Vector3 lvDirection = { lpEvent->mDirectionAndMagnitude.x,
                                        lpEvent->mDirectionAndMagnitude.y,
                                        lpEvent->mDirectionAndMagnitude.z,
                                        lpEvent->mDirectionAndMagnitude.w };
@@ -731,9 +731,8 @@ void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
             // checker's heading, not through the contact point.
             const Vector3Plus lCheckerVelocity = lpRaceCarPhysics->GetNormLinearVelocityMag();
             const f32 lfHalfCheckerSpeed = lCheckerVelocity.GetPlus() * 0.5f;
-            GetFullTrafficPhysics()->SetCrashingFromCheck(
-                lCheckerVelocity.GetVector3(),
-                VecFloat{ lfHalfCheckerSpeed, lfHalfCheckerSpeed, lfHalfCheckerSpeed, lfHalfCheckerSpeed });
+            const VecFloat lvHalfCheckerSpeed = { lfHalfCheckerSpeed, lfHalfCheckerSpeed, lfHalfCheckerSpeed, lfHalfCheckerSpeed };
+            GetFullTrafficPhysics()->SetCrashingFromCheck(lCheckerVelocity.GetVector3(), lvHalfCheckerSpeed);
             (void)lContactPointOnTraffic;
         }
     }
@@ -764,9 +763,8 @@ void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeS
         //   bl TrafficPhysics::Update(sim, game, camera, controls, impact, forceAdditive, sixaxis)
         TrafficPhysics* const lpFullTraffic = GetFullTrafficPhysics();
 
-        lpFullTraffic->UpdateFreezing(lpControls,
-                                      VecFloat{ lfSimTimerTimeStep, lfSimTimerTimeStep,
-                                                lfSimTimerTimeStep, lfSimTimerTimeStep });
+        const VecFloat lvSimTimerTimeStep = { lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep };
+        lpFullTraffic->UpdateFreezing(lpControls, lvSimTimerTimeStep);
 
         if (!gbAllowTrafficFreezing)
         {
@@ -951,10 +949,9 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
     const f32 KF_GROUND_CONTACT_THRESHOLD = 0.40000001f;
     const f32 KF_UPRIGHT_ON_GROUND_DOT    = 0.80000001f;
 
-    bool lbValid = !lpBody->IsContactBelowWheelPlane(
-                        lpContact->mPointOnB,
-                        VecFloat{ KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD,
-                                  KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD });
+    const VecFloat lvGroundThreshold = { KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD,
+                                         KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD };
+    bool lbValid = !lpBody->IsContactBelowWheelPlane(lpContact->mPointOnB, lvGroundThreshold);
 
     // 0x825CAEAC `lbz r11, 0x715(body)` ; 0x825CAEB4 `bne -> 0x825CAF4C li r3, 1` -- a car with a
     // detached wheel keeps EVERY world contact (it rests on its body, not its wheels). After the
@@ -1111,7 +1108,7 @@ void PhysicalTrafficManager::UpdateTrafficPhysicsPostSimulation(
     const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
     f32 lfTimeStep)
 {
-    const VecFloat lvfTimeStep{lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep};
+    const VecFloat lvfTimeStep = {lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep};
 
     for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
          liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
