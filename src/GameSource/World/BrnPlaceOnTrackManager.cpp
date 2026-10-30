@@ -69,17 +69,17 @@ static bool AreVectorsSimilar(const Vector3& lrA, const Vector3& lrB)
 static const f32 KVF_TWO_PI = 6.2831855f;
 static const Vector3 KA_CAR_SELECT_NORMAL_ADD[3] =
 {
-    Vector3{ 0.0f, 0.0f, 0.0f,  0.0f },
-    Vector3{ 0.0f, 0.0f, 0.2f,  0.0f },
-    Vector3{ 0.0f, 0.0f, 0.55f, 0.0f },
+    { 0.0f, 0.0f, 0.0f,  0.0f },
+    { 0.0f, 0.0f, 0.2f,  0.0f },
+    { 0.0f, 0.0f, 0.55f, 0.0f },
 };
 static const Vector3 KA_CAR_SELECT_NORMAL_RANDOMISE[3] =
 {
-    Vector3{ 0.0f,  0.0f, 0.0f,  0.0f },
-    Vector3{ 0.05f, 0.0f, 0.05f, 0.0f },
-    Vector3{ 0.1f,  0.0f, 0.1f,  0.0f },
+    { 0.0f,  0.0f, 0.0f,  0.0f },
+    { 0.05f, 0.0f, 0.05f, 0.0f },
+    { 0.1f,  0.0f, 0.1f,  0.0f },
 };
-static const Vector3 K_CAR_SELECT_DROP_WORLD_RIGHT = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+static const Vector3 K_CAR_SELECT_DROP_WORLD_RIGHT = { 1.0f, 0.0f, 0.0f, 0.0f };
 
 // ---------------------------------------------------------------------------
 // XMMatrixRotationAxis @0x82203610 (== XMMatrixRotationNormal(Normalize(axis), angle)) followed
@@ -98,9 +98,9 @@ static Vector3 RotateAboutAxis( const Vector3& lrV, const Vector3& lrAxis, f32 l
     const f32 lfT = 1.0f - lfC;
     const f32 lfX = lN.x, lfY = lN.y, lfZ = lN.z;
 
-    const Vector3 lRow0 = Vector3{ lfT * lfX * lfX + lfC,       lfT * lfX * lfY + lfS * lfZ, lfT * lfX * lfZ - lfS * lfY, 0.0f };
-    const Vector3 lRow1 = Vector3{ lfT * lfX * lfY - lfS * lfZ, lfT * lfY * lfY + lfC,       lfT * lfY * lfZ + lfS * lfX, 0.0f };
-    const Vector3 lRow2 = Vector3{ lfT * lfX * lfZ + lfS * lfY, lfT * lfY * lfZ - lfS * lfX, lfT * lfZ * lfZ + lfC,       0.0f };
+    const Vector3 lRow0 = { lfT * lfX * lfX + lfC,       lfT * lfX * lfY + lfS * lfZ, lfT * lfX * lfZ - lfS * lfY, 0.0f };
+    const Vector3 lRow1 = { lfT * lfX * lfY - lfS * lfZ, lfT * lfY * lfY + lfC,       lfT * lfY * lfZ + lfS * lfX, 0.0f };
+    const Vector3 lRow2 = { lfT * lfX * lfZ + lfS * lfY, lfT * lfY * lfZ - lfS * lfX, lfT * lfZ * lfZ + lfC,       0.0f };
 
     { const Vector3 lResult = { lRow0.x * lrV.x + lRow1.x * lrV.y + lRow2.x * lrV.z,
                     lRow0.y * lrV.x + lRow1.y * lrV.y + lRow2.y * lrV.z,
@@ -285,7 +285,7 @@ void PlaceOnTrackManager::PostSceneUpdate( RaceCarEntityModuleIO::OutputBuffer_P
 
         // The console builds both offsets as (0, 50, 0, int 0) and adds / subtracts all four lanes.
         const Vector3& lrPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
-        const Vector3  lOffset    = Vector3{ 0.0f, KF_PLACE_ON_TRACK_LINE_TEST_LENGTH, 0.0f, 0.0f };
+        const Vector3  lOffset    = { 0.0f, KF_PLACE_ON_TRACK_LINE_TEST_LENGTH, 0.0f, 0.0f };
 
         CgsSceneManager::SceneManagerIO::InEventLineTestFine lEvent;
         {
@@ -425,17 +425,18 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
 
             // ARTIST 822F70BC..822F7100: inlined PushLineTestIntersection.
             // Clear even an empty accepted result; retain each complete position vector.
-            auto& lrHistory = mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestIntersections;
+            Array<Vector3, 10>& lrHistory = mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestIntersections;
             lrHistory.Clear();
             for (s32 liIntersection = 0; liIntersection < lpLineTestResult->muNumCandidates; ++liIntersection)
             {
                 const Vector4& lrPosition = lpLineTestResult->maCandidates[liIntersection].mPosition;
-                lrHistory.Append(Vector3{lrPosition.x, lrPosition.y, lrPosition.z, lrPosition.w});
+                const Vector3 lIntersection = {lrPosition.x, lrPosition.y, lrPosition.z, lrPosition.w};
+                lrHistory.Append(lIntersection);
             }
 
             // The console passes the request position in v1 (`lvx128 v1, car, 1952`).
             const Vector3& lrQueryPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
-            const Vector4  lQuery = Vector4{ lrQueryPosition.x, lrQueryPosition.y,
+            const Vector4  lQuery = { lrQueryPosition.x, lrQueryPosition.y,
                                              lrQueryPosition.z, 0.0f };
 
             const PlaceOnTrackCandidate* lpBestIntersection = ComputeBestPlaceOnT(
@@ -631,7 +632,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
     }
 
     // asm: v1 = lResetDirection * splat(mfPlaceOnTrackSpeed).
-    const Vector3 lVelocity = Vector3{ lResetDirection.x * lfSpeed,
+    const Vector3 lVelocity = { lResetDirection.x * lfSpeed,
                                        lResetDirection.y * lfSpeed,
                                        lResetDirection.z * lfSpeed, 0.0f };
 
@@ -679,7 +680,7 @@ void PlaceOnTrackManager::GetValuesForCarSelect(
         const f32 lfAngle = mRandom.RandomVecFloat().GetFloat() * KVF_TWO_PI;
 
         const Vector3 lAxis = *lResetNormal;                       // `lvx128 v1, r0, r30` before the call
-        Vector3 lNormal = Vector3{ lResetNormal->x + KA_CAR_SELECT_NORMAL_ADD[liType].x,
+        Vector3 lNormal = { lResetNormal->x + KA_CAR_SELECT_NORMAL_ADD[liType].x,
                                    lResetNormal->y + KA_CAR_SELECT_NORMAL_ADD[liType].y,
                                    lResetNormal->z + KA_CAR_SELECT_NORMAL_ADD[liType].z, 0.0f };
         lNormal = RotateAboutAxis( lNormal, lAxis, lfAngle );
