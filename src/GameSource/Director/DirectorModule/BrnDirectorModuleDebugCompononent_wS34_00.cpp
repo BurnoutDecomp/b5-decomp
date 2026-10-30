@@ -3,7 +3,6 @@
 
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"
 
-#include <cmath>   // std::fmaf
 
 #include "GameSource/Director/BrnDirectorModule.h"                         // DirectorModule::GetMainDirector
 #include "GameSource/Director/BrnMainDirector.h"                           // MainDirector::CameraDebugInfo
@@ -49,25 +48,33 @@ namespace
         XboxMath::XMVectorSinCos(&lfSinY, &lfCosY, lrAngles.y);
         XboxMath::XMVectorSinCos(&lfSinZ, &lfCosZ, lrAngles.z);
 
-        const f32 lfCosXSinZ = lfCosX * lfSinZ;
-        const f32 lfSinXSinZ = lfSinX * lfSinZ;
-        const f32 lfSinXCosZ = lfSinX * lfCosZ;
-        const f32 lfCosXCosZ = lfCosX * lfCosZ;
+        // ARTIST 0x8221B860..8E0 performs the matrix products in VMX.
+        // Replicated lanes preserve vmulfp/vsubfp/vmaddfp rounding and denormal rules.
+        const XMVECTOR sinX = XMVectorReplicate(lfSinX);
+        const XMVECTOR cosX = XMVectorReplicate(lfCosX);
+        const XMVECTOR sinY = XMVectorReplicate(lfSinY);
+        const XMVECTOR cosY = XMVectorReplicate(lfCosY);
+        const XMVECTOR sinZ = XMVectorReplicate(lfSinZ);
+        const XMVECTOR cosZ = XMVectorReplicate(lfCosZ);
+        const XMVECTOR cosXSinZ = __vmulfp(cosX, sinZ);
+        const XMVECTOR sinXSinZ = __vmulfp(sinX, sinZ);
+        const XMVECTOR sinXCosZ = __vmulfp(sinX, cosZ);
+        const XMVECTOR cosXCosZ = __vmulfp(cosX, cosZ);
 
         Matrix44Affine lResult;
-        lResult.xAxis.x = lfCosY * lfCosZ;
-        lResult.xAxis.y = lfCosY * lfSinZ;
+        lResult.xAxis.x = __vmulfp(cosY, cosZ).x;
+        lResult.xAxis.y = __vmulfp(cosY, sinZ).x;
         lResult.xAxis.z = -lfSinY;
         lResult.xAxis.w = 0.0f;
 
-        lResult.yAxis.x = lfSinY * lfSinXCosZ - lfCosXSinZ;
-        lResult.yAxis.y = std::fmaf(lfSinY, lfSinXSinZ, lfCosXCosZ);
-        lResult.yAxis.z = lfCosY * lfSinX;
+        lResult.yAxis.x = __vsubfp(__vmulfp(sinY, sinXCosZ), cosXSinZ).x;
+        lResult.yAxis.y = __vmaddfp(sinY, sinXSinZ, cosXCosZ).x;
+        lResult.yAxis.z = __vmulfp(cosY, sinX).x;
         lResult.yAxis.w = 0.0f;
 
-        lResult.zAxis.x = std::fmaf(lfSinY, lfCosXCosZ, lfSinXSinZ);
-        lResult.zAxis.y = lfSinY * lfCosXSinZ - lfSinXCosZ;
-        lResult.zAxis.z = lfCosY * lfCosX;
+        lResult.zAxis.x = __vmaddfp(sinY, cosXCosZ, sinXSinZ).x;
+        lResult.zAxis.y = __vsubfp(__vmulfp(sinY, cosXSinZ), sinXCosZ).x;
+        lResult.zAxis.z = __vmulfp(cosY, cosX).x;
         lResult.zAxis.w = 0.0f;
         return lResult;
     }
@@ -141,8 +148,8 @@ void DebugComponent::UpdatePanoramaScreenshots(Camera::Camera* lpCamera)
         return;
     }
 
-    const f32 lfPitch = std::fmaf(-static_cast<f32>(miPanoramaStepPitch), KF_PANORAMA_PITCH_STEP,
-                                  KF_PANORAMA_PITCH_START);
+    const f32 lfPitch = KF_PANORAMA_PITCH_START -
+                        static_cast<f32>(miPanoramaStepPitch) * KF_PANORAMA_PITCH_STEP;
     const f32 lfYaw   = static_cast<f32>(miPanoramaStepYaw) * KF_PANORAMA_YAW_STEP;
 
     Vector3 lAngles;
