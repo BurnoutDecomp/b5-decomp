@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT (string-label buffer assertion)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf
 
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -18,6 +19,27 @@ namespace CgsDev
 {
     namespace DebugUI
     {
+        namespace
+        {
+            void CopyLabel(char* lpcBuffer, s32 liBufferLen, const char* lpcLabel)
+            {
+                const size_t luLabelLen = std::strlen(lpcLabel);
+                if (static_cast<s32>(luLabelLen) >= liBufferLen)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsCore::SPrintf(CgsDev::Assert::gpcMessageBuffer,
+                                     static_cast<u32>(CgsDev::Assert::giMessageBufferSize),
+                                     "String %s is too long. Buffer size = %d, string length = %d\n",
+                                     lpcLabel, liBufferLen, static_cast<s32>(luLabelLen));
+                    CgsDev::Assert::FireAssert(
+                        CgsDev::Assert::gpcMessageBuffer,
+                        "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                    CgsDev::Assert::EndAssert();
+                }
+                std::memcpy(lpcBuffer, lpcLabel, luLabelLen + 1);
+            }
+        }
+
         // X360 Metrics::DEFAULT - the built-in debug-UI screen metrics, carved verbatim from the X360
         // (unk_820DC138, the source DebugUI::Construct memcpy's into the UI). The render layout reads
         // mfScreenWidth/Height + the borders from here.
@@ -139,22 +161,22 @@ namespace CgsDev
 
             switch (meType)
             {
-            case E_TYPE_NONE:       std::snprintf(lpcBuffer, liBufferLen, "%s", "NONE"); break;
-            case E_TYPE_FLOAT:      std::snprintf(lpcBuffer, liBufferLen, "%.3f", mValue.mfFloat); break;
-            case E_TYPE_INT32:      std::snprintf(lpcBuffer, liBufferLen, "%d", mValue.miInt32); break;
-            case E_TYPE_UINT32:     std::snprintf(lpcBuffer, liBufferLen, "%d", static_cast<s32>(mValue.muUInt32)); break;
-            case E_TYPE_BOOL:       std::snprintf(lpcBuffer, liBufferLen, "%s", mValue.mbBool ? "TRUE" : "FALSE"); break;
-            case E_TYPE_PTR_FLOAT:  std::snprintf(lpcBuffer, liBufferLen, "%.3f", *mValue.mpfFloat); break;
-            case E_TYPE_PTR_INT32:  std::snprintf(lpcBuffer, liBufferLen, "%d", *mValue.mpiInt32); break;
-            case E_TYPE_PTR_UINT32: std::snprintf(lpcBuffer, liBufferLen, "%d", static_cast<s32>(*mValue.mpuUInt32)); break;
-            case E_TYPE_PTR_BOOL:   std::snprintf(lpcBuffer, liBufferLen, "%s", *mValue.mpbBool ? "TRUE" : "FALSE"); break;
+            case E_TYPE_NONE:       CopyLabel(lpcBuffer, liBufferLen, "NONE"); break;
+            case E_TYPE_FLOAT:      CgsCore::SPrintf(lpcBuffer, static_cast<u32>(liBufferLen), "%.3f", mValue.mfFloat); break;
+            case E_TYPE_INT32:      CgsCore::SPrintf(lpcBuffer, static_cast<u32>(liBufferLen), "%d", mValue.miInt32); break;
+            case E_TYPE_UINT32:     CgsCore::SPrintf(lpcBuffer, static_cast<u32>(liBufferLen), "%d", static_cast<s32>(mValue.muUInt32)); break;
+            case E_TYPE_BOOL:       CopyLabel(lpcBuffer, liBufferLen, mValue.mbBool ? "TRUE" : "FALSE"); break;
+            case E_TYPE_PTR_FLOAT:  CgsCore::SPrintf(lpcBuffer, static_cast<u32>(liBufferLen), "%.3f", *mValue.mpfFloat); break;
+            case E_TYPE_PTR_INT32:  CgsCore::SPrintf(lpcBuffer, static_cast<u32>(liBufferLen), "%d", *mValue.mpiInt32); break;
+            case E_TYPE_PTR_UINT32: CgsCore::SPrintf(lpcBuffer, static_cast<u32>(liBufferLen), "%d", static_cast<s32>(*mValue.mpuUInt32)); break;
+            case E_TYPE_PTR_BOOL:   CopyLabel(lpcBuffer, liBufferLen, *mValue.mpbBool ? "TRUE" : "FALSE"); break;
             case E_TYPE_PTR_VOID:
             case E_TYPE_UI_STRINGLISTINT32:
             case E_TYPE_UI_VARIABLECALLBACK:
-                std::snprintf(lpcBuffer, liBufferLen, "%s", "INTERNAL");
+                CopyLabel(lpcBuffer, liBufferLen, "INTERNAL");
                 break;
             default:
-                std::snprintf(lpcBuffer, liBufferLen, "%s", "UNKNOWN");
+                CopyLabel(lpcBuffer, liBufferLen, "UNKNOWN");
                 break;
             }
             lpcBuffer[liBufferLen - 1] = '\0';

@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"
 
 #include <cstdarg>
-#include <cstdio>
+#include <stdio.h>  // _vsnprintf (native XDK va_list formatter)
 
 // CgsDev::DebugInterface is deliberately thin: every operation asserts/obtains the UI through
 // GetUI(), then forwards to the owning manager. ARTIST emits these as the small wrappers recovered
@@ -81,7 +81,7 @@ namespace CgsDev
         char lacBuffer[256];
         va_list lArgs;
         va_start(lArgs, lpcFormat);
-        const int liResult = std::vsnprintf(lacBuffer, sizeof(lacBuffer), lpcFormat, lArgs);
+        const int liResult = _vsnprintf(lacBuffer, sizeof(lacBuffer), lpcFormat, lArgs);
         va_end(lArgs);
         if (liResult < 0 || liResult >= static_cast<int>(sizeof(lacBuffer)))
             lacBuffer[sizeof(lacBuffer) - 1] = '\0';
