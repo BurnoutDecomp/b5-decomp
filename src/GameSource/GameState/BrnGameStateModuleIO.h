@@ -746,7 +746,7 @@ namespace GameStateModuleIO
         u8  maPadToGameActionQueue[0x04 - sizeof(CgsModule::IOBuffer)];   // base end -> 0x0004
         u8  mGameActionQueueStorage[0x3414 - 0x04];                       // GameActionQueue              @ +0x0004
         u8  mResourceRequestInterfaceStorage[0x4024 - 0x3414];            // ResourceRequestInterface     @ +0x3414 (RequestInterface<3072>, 3088B -> +0x4024 = 16420)
-        u8  mTimerRequestInterfaceStorage[0x4034 - 0x4024];               // TimerRequestInterface        @ +16420 (16B)
+        CgsSystem::TimerRequestInterface mTimerRequestInterface;         // +0x4024, 16 bytes
         CgsSystem::FrameRateTypeRequestInterface mFrameRateTypeRequestInterface; // +0x4034, 8 bytes
         // ⭐ [challenge-manager mount 2026-09-07] SPLIT. This used to be ONE opaque span
         //     u8 mTakedownEventOutputQueueStorage[0x43AC - 0x4040];   // 876 bytes
@@ -877,6 +877,8 @@ namespace GameStateModuleIO
         // this has to be a member-fn context. NEVER CALLED.
         static void _AssertLayout()
         {
+            CGS_STATIC_ASSERT((sizeof(CgsSystem::TimerRequestInterface) == 16), "timer request native size");
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer, mTimerRequestInterface) == 0x4024), "timer request offset");
             CGS_STATIC_ASSERT((sizeof(CgsSystem::FrameRateTypeRequestInterface) == 8), "frame-rate request native size");
             CGS_STATIC_ASSERT((offsetof(OutputBuffer, mFrameRateTypeRequestInterface) == 0x4034), "frame-rate request offset");
             CGS_STATIC_ASSERT((offsetof(OutputBuffer, mTakedownEventOutputQueue) == 0x4040), "takedown queue offset");
