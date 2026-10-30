@@ -46,6 +46,17 @@ namespace renderengine
         return true;
     }
 
+    // ARTIST82B61AA0: either of the current global surfaces may be bound.
+    bool Device::UsingGlobalRasters()
+    {
+        D3DDevice* const lpDevice = gpD3DDevice;
+        if (!gpDeviceDepthBuffer)
+            return D3DResource_IsSet(gpDeviceColorBuffer, lpDevice) != 0;
+        if (D3DResource_IsSet(gpDeviceColorBuffer, lpDevice))
+            return true;
+        return D3DResource_IsSet(gpDeviceDepthBuffer, lpDevice) != 0;
+    }
+
     // ARTIST82B61A48: install the current native depth and colour surfaces.
     void Device::EnsureDefaultRenderTarget()
     {
