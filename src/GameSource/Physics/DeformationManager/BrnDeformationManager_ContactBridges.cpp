@@ -230,7 +230,7 @@ namespace Deformation
 
         // The model lookup keys off muVolumeInstanceIdA's embedded entity word (the high dword of the
         // packed 64-bit id) -- the asm passes that word to FindModelIndexByGlobalEntityID.
-        const EntityId lEntityA{ static_cast<u32>(lrPotentialContact.muVolumeInstanceIdA.muId >> 32) };
+        const EntityId lEntityA = { static_cast<u32>(lrPotentialContact.muVolumeInstanceIdA.muId >> 32) };
         const s32 liModelIndexA = FindModelIndexByGlobalEntityID(lEntityA);
         if (liModelIndexA == -1)
         {
@@ -363,10 +363,10 @@ namespace Deformation
 
         // PHYSICAL-id model lookups (both entity words are already physics-local here -- the
         // bridge rewrote them upstream).
-        const s32 liModelIndexA = FindModelIndexByEntityID(
-            EntityId{ static_cast<u32>(lrPotentialContact.muVolumeInstanceIdA.muId >> 32) });
-        const s32 liModelIndexB = FindModelIndexByEntityID(
-            EntityId{ static_cast<u32>(lrPotentialContact.muVolumeInstanceIdB.muId >> 32) });
+        const EntityId lEntityA = { static_cast<u32>(lrPotentialContact.muVolumeInstanceIdA.muId >> 32) };
+        const EntityId lEntityB = { static_cast<u32>(lrPotentialContact.muVolumeInstanceIdB.muId >> 32) };
+        const s32 liModelIndexA = FindModelIndexByEntityID(lEntityA);
+        const s32 liModelIndexB = FindModelIndexByEntityID(lEntityB);
 
         CGS_ASSERT(liModelIndexA != -1, "liModelIndexA != -1");   // :1885
         CGS_ASSERT(liModelIndexB != -1, "liModelIndexB != -1");   // :1886
