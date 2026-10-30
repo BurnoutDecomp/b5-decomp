@@ -141,14 +141,6 @@ namespace BrnGui
             u8  mbFlag;      // +0x0C -- 0
         };
 
-        // The event-189 payload view (the committed CrashNavOptions shape): the overlay id
-        // at +0x04 and the answer at +0x08.
-        struct GuiOverlayCompletePayload : public CgsModule::Event
-        {
-            s32 miPad;        // +0x00
-            u32 muOverlayId;  // +0x04
-            s32 miResult;     // +0x08 (1 == the positive answer)
-        };
 
         template <typename T>
         void PostRecord(CgsGui::StateInterface* lpStateInterface, const T& lrRecord)
@@ -473,9 +465,9 @@ namespace BrnGui
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpEvent);
 
-        if (lpComplete->muOverlayId ==
+        if (static_cast<u32>(lpComplete->mOverlayId) ==
                 static_cast<u32>(CgsIDCompress(KAC_CANCEL_CONFIRM_OVERLAY)) &&
-            lpComplete->miResult == 1)
+            lpComplete->meLeaveMethod == 1)
         {
             StateCancelFlow();
         }

@@ -212,14 +212,6 @@ namespace BrnGui
             s32 miButtonId;   // +0x04 (EGameInputActions)
         };
 
-        // The event-189 payload view. HandleOverlayCompleteEvent @0x824D95F0 reads the
-        // overlay id at +0x04 and the answer at +0x08 (`lwz r11, 4(a2)` / `lwz r?, 8(a2)`).
-        struct GuiOverlayCompletePayload : public CgsModule::Event
-        {
-            s32 miPad;        // +0x00
-            u32 muOverlayId;  // +0x04 (a compressed CgsID)
-            s32 miResult;     // +0x08 (1 == the positive answer)
-        };
     }
 
     // The options screen's apt package (read from the image).
@@ -589,9 +581,9 @@ namespace BrnGui
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpEvent);
 
-        if (lpComplete->muOverlayId ==
+        if (static_cast<u32>(lpComplete->mOverlayId) ==
                 static_cast<u32>(CgsIDCompress(KAC_CANCEL_CONFIRM_OVERLAY)) &&
-            lpComplete->miResult == 1)
+            lpComplete->meLeaveMethod == 1)
         {
             RestoreSoundSettings();
             RestoreVoipSettings();

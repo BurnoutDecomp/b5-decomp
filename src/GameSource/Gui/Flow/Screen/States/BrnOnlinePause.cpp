@@ -105,12 +105,6 @@ namespace BrnGui
             s32 miButtonId;   // +0x04
         };
 
-        struct GuiOverlayCompletePayload : public CgsModule::Event
-        {
-            CgsID                                mOverlayId;     // +0x00
-            GuiOverlayCompleteEvent::LeaveMethod meLeaveMethod;  // +0x08
-        };
-
         // ---- out-queue wire records ----------------------------------------------------
         // { 1, N, 12, <one payload byte> }: 16 bytes. The console leaves the byte unwritten on
         // the finish-round / leave-game / screen-closed records; zero here.

@@ -67,13 +67,6 @@ namespace
     // The disconnect reason that has its own popup.
     const s32 KI_DISCONNECT_REASON_DEDICATED_POPUP = 19;
 
-    // Event 189 ("overlay complete") payload view: the compressed overlay id then how the
-    // overlay was left. The queue hands out the header-stripped payload.
-    struct GuiOverlayCompletePayload : public CgsModule::Event
-    {
-        CgsID                                mOverlayId;     // +0x00
-        GuiOverlayCompleteEvent::LeaveMethod meLeaveMethod;  // +0x08
-    };
 
     // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
     struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>

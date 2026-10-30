@@ -169,14 +169,6 @@ namespace BrnGui
         // GuiOverlayCompletePayload.
         typedef GuiEventKeyboardResponse GuiEventKeyboardResponsePayload;
 
-        // Event 189 ("overlay complete") payload view -- the compressed overlay id at
-        // +0x00 then how the overlay was left at +0x08, both read off the stripped
-        // payload.
-        struct GuiOverlayCompletePayload : public CgsModule::Event
-        {
-            CgsID                                mOverlayId;     // +0x00
-            GuiOverlayCompleteEvent::LeaveMethod meLeaveMethod;  // +0x08
-        };
 
         // Event 6 ("controller input pressed") payload view. Only the fenced PC bring-up
         // arm below reads it; the console's own Update never looks at event 6, and this
