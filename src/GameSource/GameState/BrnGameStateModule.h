@@ -92,7 +92,6 @@ namespace GameStateModuleIO
 
 class GameStateModule : public CgsModule::ModuleSingleBuffered
 {
-    void ProcessContacts(const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface);
 public:
     GameStateModule();
 
