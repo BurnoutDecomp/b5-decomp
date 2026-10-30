@@ -181,47 +181,40 @@ namespace BrnGui
         // TRUNCATED it (the PlayAptMovie precedent). Typed + copied by assignment now.
         GuiEventRenderSatNav mRenderSatNavEvent;
         GuiCache* mpGuiCache;                // h:246
-        void* mpHeapAllocator;               // h:248 rw::IResourceAllocator*
+        rw::IResourceAllocator* mpHeapAllocator;               // h:248 rw::IResourceAllocator*
 
         // h:254-272 -- six TextureState/BlendState resource pairs + the icon array. Each
         // "Resource" is the renderengine resource descriptor (5 dwords) the InitResources
         // copy loop fills; modelled as named state blocks. Types uncommitted -> opaque.
-        u32  mMapTextureStateResource[5];    // h:254 Resource
+        rw::Resource mMapTextureStateResource;    // h:254 Resource
         renderengine::TextureState* mpMapTextureState;        // h:255
-        u32  mMapBlendStateResource[5];      // h:256 Resource
+        rw::Resource mMapBlendStateResource;      // h:256 Resource
         renderengine::BlendState*   mpMapBlendState;          // h:257
-        u32  mMaskTextureStateResource[5];   // h:259 Resource
+        rw::Resource mMaskTextureStateResource;   // h:259 Resource
         renderengine::TextureState* mpMaskTextureState;       // h:260
-        u32  mMaskBlendStateResource[5];     // h:261 Resource
+        rw::Resource mMaskBlendStateResource;     // h:261 Resource
         renderengine::BlendState*   mpMaskBlendState;         // h:262
-        u32  mRouteSegmentTextureStateResource[5];  // h:264 Resource
+        rw::Resource mRouteSegmentTextureStateResource;  // h:264 Resource
         renderengine::TextureState* mpRouteSegmentTextureState; // h:265
-        u32  mRouteSegmentBlendStateResource[5];    // h:267 Resource
+        rw::Resource mRouteSegmentBlendStateResource;    // h:267 Resource
         renderengine::BlendState*   mpRouteSegmentBlendState;   // h:268
 
-        u32  maIconResources[2][5];          // h:271 Resource[2]  (InitResources fills these)
+        rw::Resource maIconResources[2];          // h:271 Resource[2]  (InitResources fills these)
         renderengine::TextureState* mapIconTextureStates[2];   // h:272
-
-        // PC fold: backing storage for the runtime-created texture states (the font-path
-        // precedent -- renderengine::TextureState::Initialize(rw::Resource*, Parameters*)).
-        // The console's u32[5] descriptor slots above stay as the documented X360 shape.
-        rw::Resource mMapTextureStateBacking;
-        rw::Resource mMaskTextureStateBacking;
-        rw::Resource maIconTextureStateBacking[2];
 
         GuiEventEnableSatNavIcons::EIconDisplayType meIconDisplayType; // h:275 (Construct=COUNT)
         s32  meGameModeFilter;               // h:278 BrnProgression::RaceEventData::EModeType
 
         // h:281-289 -- per (icon-type-row, event-type-column) UV corner tables. Each entry
         // is a Basic2dColouredVertex::Vector2 (u/v floats). InitEventTypeUvs fills them.
-        Vector2 mav2IconUvTopLeft[2][KU_ICON_EVENT_TYPE_COUNT];     // h:281
-        Vector2 mav2IconUvBottomLeft[2][KU_ICON_EVENT_TYPE_COUNT];  // h:282
-        Vector2 mav2IconUvTopRight[2][KU_ICON_EVENT_TYPE_COUNT];    // h:283
-        Vector2 mav2IconUvBottomRight[2][KU_ICON_EVENT_TYPE_COUNT]; // h:284
-        Vector2 mav2MiniIconUvTopLeft[2][E_SATNAVICON_EVENTTYPE_MINI_INDEX_COUNT];     // h:286
-        Vector2 mav2MiniIconUvBottomLeft[2][E_SATNAVICON_EVENTTYPE_MINI_INDEX_COUNT];  // h:287
-        Vector2 mav2MiniIconUvTopRight[2][E_SATNAVICON_EVENTTYPE_MINI_INDEX_COUNT];    // h:288
-        Vector2 mav2MiniIconUvBottomRight[2][E_SATNAVICON_EVENTTYPE_MINI_INDEX_COUNT]; // h:289
+        CgsGraphics::Vector2 mav2IconUvTopLeft[2][KU_ICON_EVENT_TYPE_COUNT];     // h:281
+        CgsGraphics::Vector2 mav2IconUvBottomLeft[2][KU_ICON_EVENT_TYPE_COUNT];  // h:282
+        CgsGraphics::Vector2 mav2IconUvTopRight[2][KU_ICON_EVENT_TYPE_COUNT];    // h:283
+        CgsGraphics::Vector2 mav2IconUvBottomRight[2][KU_ICON_EVENT_TYPE_COUNT]; // h:284
+        CgsGraphics::Vector2 mav2MiniIconUvTopLeft[2][E_SATNAVICON_EVENTTYPE_MINI_INDEX_COUNT];     // h:286
+        CgsGraphics::Vector2 mav2MiniIconUvBottomLeft[2][E_SATNAVICON_EVENTTYPE_MINI_INDEX_COUNT];  // h:287
+        CgsGraphics::Vector2 mav2MiniIconUvTopRight[2][E_SATNAVICON_EVENTTYPE_MINI_INDEX_COUNT];    // h:288
+        CgsGraphics::Vector2 mav2MiniIconUvBottomRight[2][E_SATNAVICON_EVENTTYPE_MINI_INDEX_COUNT]; // h:289
 
         bool mbRenderEventStarts;            // h:294
         bool mbRefreshSatNavIcons;           // h:297
