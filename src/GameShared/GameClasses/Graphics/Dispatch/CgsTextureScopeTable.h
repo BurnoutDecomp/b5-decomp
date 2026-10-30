@@ -79,6 +79,12 @@ namespace CgsGraphics
     struct TextureScopeTable
     {
         TextureScopeTable();
+        // ARTIST823FC2D0..2F0: only the producer cache is reset.
+        void BeginFrame()
+        {
+            for (u32 i = 0; i != E_MAX_TEXTURE_PURPOSES; ++i)
+                mTextureScopeElements[i].mpMostRecentCopyInDispatchBin[0] = 0;
+        }
         void AddTexturePurpose(TexturePurpose purpose, const char* name, TextureScope scope);
 
         // ARTIST8240BE3C..BEB8, over the single registry at83011A78.
