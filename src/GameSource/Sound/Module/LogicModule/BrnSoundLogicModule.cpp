@@ -247,7 +247,7 @@ void SoundLogicModule::Construct()
     maTriggerActions.Clear();
     muBrnUniqueId = 3;
     mRandomGenerator.Construct();
-    mRandomGenerator.SetSeed(static_cast<u32>(CgsSystem::GetSystemTimerBaseTime64()));
+    mRandomGenerator.SetSeed(static_cast<u32>(CgsSystem::GetSystemTimerBaseTime()));
     mPreUpdateOutput.mGuiOutEventQueue.Construct();
     mPreUpdateOutput.mAudioCarDataLoadedQueue.Construct();
     mPreUpdateOutput.mAudioEffectsMessageQueue.Construct();
