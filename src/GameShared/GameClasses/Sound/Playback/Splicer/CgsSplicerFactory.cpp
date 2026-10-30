@@ -1,6 +1,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // the REAL SplicerFactory : public Factory
 #include "GameShared/GameClasses/Sound/Playback/Splicer/SpliceManager.h"      // the trailing-arena SpliceManager (slice 3)
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerContent.h"
@@ -10,68 +11,23 @@
 
 #include <new>   // placement new (the in-carve constructs)
 
-// ============================================================================
-// GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.cpp
-//
-// CgsSound::Playback::SplicerFactory::SplicerAssertFunc -- the splice factory's
-// assertion sink. Reconstructed from BURNOUT_X360_ARTIST.XEX:
-//
-//   CgsSound::Playback::SplicerFactory::SplicerAssertFunc @ 0x8268ABA0
-//
-// This is the failure path the SplicerFactory routes its assertions through. On
-// X360 it builds a message-stream object on the stack (a StrStream over the global
-// CgsDev::Assert::gpcMessageBuffer), streams the supplied expression text into it,
-// then fires the assert at this file's line 140 (0x8C) via the standard
-// Begin/Fire/End sequence:
-//
-//   CgsDev::Assert::BeginAssert();
-//   StrStream s(gpcMessageBuffer);   // off_82000D00 vtable, Clear, seed buffer+config
-//   *gpcMessageBuffer = 0;
-//   s << (a1 ? a1 : "<NULLSTRING>"); // virtual operator<<(const char*) at vtbl+4
-//   CgsDev::Assert::FireAssert(gpcMessageBuffer,
-//       "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Splicer/CgsSplicerFactory.cpp",
-//       140);
-//   return CgsDev::Assert::EndAssert();
-//
-// The StrStream construct + virtual append is the binary's CgsDev message-streaming
-// machinery; the house CGS_ASSERT front-end (CgsAssert.h) forwards a plain string
-// to FireAssert instead of streaming it (the streamed form is semantically vacuous
-// under the house substitution -- the message that reaches the handler is the same
-// expression text). The reconstruction therefore reproduces the observable
-// behaviour store-for-store at the assert-front-end boundary: enter the assert,
-// fire it with the supplied message (falling back to "<NULLSTRING>" exactly as the
-// X360 does when the argument is null), and leave the assert returning EndAssert's
-// result. The line number (140) and the null-string fallback are reproduced exactly.
-//
-// SplicerAssertFunc is itself the assertion -- it always fires (it is the sink the
-// factory jumps to once a check has already failed), so there is no condition to
-// gate on. The X360 leaves EndAssert's pointer result in r3; that is returned.
-// ============================================================================
-
 namespace CgsSound
 {
 namespace Playback
 {
 
-// SplicerAssertFunc is a member of the REAL SplicerFactory (: public Factory,
-// Splicer/CgsSplicerFactory.h) -- the TU-local rival struct an earlier revision
-// defined here (base-less, member-less) was an ODR violation against that header
-// and was retired 2026-08-25 (audio-faithfulness wave 1).
-void* SplicerFactory::SplicerAssertFunc(const char* lpcExpression)
+// ARTIST 0x8268ABA0. Stream into the shared assertion buffer before firing.
+void SplicerFactory::SplicerAssertFunc(char* lpExpression)
 {
-    // Null-argument fallback, reproduced exactly from the X360 (`<NULLSTRING>`).
-    const char* lpcMessage = (lpcExpression != 0) ? lpcExpression : "<NULLSTRING>";
-
-    // Enter the assert, fire it with the (streamed-then-forwarded) message at this
-    // file's line 140, and leave -- returning the front-end's leave result. This is
-    // the observable behaviour of the X360 Begin/StrStream-append/Fire/End sequence
-    // once the StrStream machinery is folded into the house CGS_ASSERT front-end.
     CgsDev::Assert::BeginAssert();
+    CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer,
+                              CgsDev::Assert::giMessageBufferSize);
+    lStream << (lpExpression ? lpExpression : "<NULLSTRING>");
     CgsDev::Assert::FireAssert(
-        lpcMessage,
+        CgsDev::Assert::gpcMessageBuffer,
         "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Splicer/CgsSplicerFactory.cpp",
         140);
-    return CgsDev::Assert::EndAssert();
+    CgsDev::Assert::EndAssert();
 }
 
 // ===========================================================================
@@ -170,10 +126,7 @@ SplicerFactory::SplicerFactory(Environment& arEnvironment,
         SpliceManager(arEnvironment, 0x40, 0x18);   // mono 64 / stereo 24 (console literals)
 
     // manager+0x610 := the assert sink (the post-construction callback store).
-    // SplicerAssertFunc returns EndAssert's pointer result; the manager's
-    // one-argument sink type discards it -- the console callers do too.
-    mpManager->SetAssertCallbackFunction(
-        reinterpret_cast<SpliceManager::AssertCallbackFunc>(&SplicerFactory::SplicerAssertFunc));
+    mpManager->SetAssertCallbackFunction(&SplicerFactory::SplicerAssertFunc);
 }
 
 GenericRwacFactory& SplicerFactory::GetRwacFactory() const

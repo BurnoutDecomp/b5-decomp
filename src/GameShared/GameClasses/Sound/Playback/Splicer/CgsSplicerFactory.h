@@ -59,13 +59,8 @@ struct SplicerFactory : public Factory
     // @ 0x826DB0E0. Empty out-of-line dtor (Factory base dtor runs implicitly).
     virtual ~SplicerFactory();
 
-    // @ 0x8268ABA0. The splice factory's assertion sink (always fires; returns
-    // the assert front-end's leave result). Bodied in CgsSplicerFactory.cpp.
-    // ⭐ STATIC (ABI corrected, slice 3): the ctor stores this function's RAW
-    // ADDRESS into the manager's +0x610 one-argument callback slot and the
-    // manager call sites pass only the message -- a hidden-this member ABI
-    // cannot match.
-    static void* SplicerAssertFunc(const char* lpcExpression);
+    // ARTIST 0x8268ABA0: one-argument callback stored at manager +0x610.
+    static void SplicerAssertFunc(char* lpExpression);
 
     // The nested registry (console +0x10), by name.
     Registry* GetRegistry() { return mpRegistry; }
