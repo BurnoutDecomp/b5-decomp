@@ -747,6 +747,15 @@ public:
     // (and returns -1) for an unknown mode. Pure index->constant map, no member access.
     static s32 GetEvent(s32 liGameType);
 
+    // DecFIGS BrnProgressionManager.h:592 names this accessor. ARTIST inlines it at
+    // 8236B924, 8239075C, 82390AB0 and 82396F08: only DISABLED (6) uses authored mode.
+    RaceEventData::EModeType GetGameModeForEvent(const RaceEventData* lpEvent) const
+    {
+        return mDebugComponent.meDebugGameModeType == static_cast<RaceEventData::EModeType>(6)
+            ? static_cast<RaceEventData::EModeType>(lpEvent->GetMode())
+            : mDebugComponent.meDebugGameModeType;
+    }
+
     // X360 0x82359960. Map an online game-mode index (0..2) to its event id. Asserts (returns -1) for an
     // unknown mode. Pure index->constant map, no member access.
     s32 GetOnlin(u32 luGameType) const;
