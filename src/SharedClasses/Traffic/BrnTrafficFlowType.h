@@ -27,13 +27,14 @@ namespace BrnTraffic
     struct FlowType
     {
         u16* mpauVehicleTypeIds;   // +0 (:47)  muNumVehicleTypes entries
-        u8*  mpauCumulativeProb;   // +8 (:48)  cumulative spawn probability, same count
+        u8*  mpauCumulativeProb;   // +4 (:48)  cumulative spawn probability, same count
         u8   muNumVehicleTypes;    //    (:49)
 
         void FixUp(const void* lpBaseData);     // (:56)
         void FixDown(const void* lpBaseData);   // (:61)
     };
 
-    CGS_STATIC_ASSERT((offsetof(FlowType, mpauCumulativeProb) == 8), "FlowType::mpauCumulativeProb");
-    CGS_STATIC_ASSERT((offsetof(FlowType, muNumVehicleTypes) == 0x10), "FlowType::muNumVehicleTypes");
+    CGS_STATIC_ASSERT((offsetof(FlowType, mpauCumulativeProb) == 4), "FlowType::mpauCumulativeProb");
+    CGS_STATIC_ASSERT((offsetof(FlowType, muNumVehicleTypes) == 8), "FlowType::muNumVehicleTypes");
+    CGS_STATIC_ASSERT((sizeof(FlowType) == 0xC), "ARTIST FlowType stride");
 }
