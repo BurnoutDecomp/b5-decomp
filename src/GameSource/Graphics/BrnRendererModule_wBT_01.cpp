@@ -1,5 +1,5 @@
 // BrnRendererModule_wBT_01.cpp -- BrnRendererModule bodies landed beside the (upstream-hot)
-// BrnRendererModule.cpp: the debug screenshot trigger and the graphics-memory report.
+// BrnRendererModule.cpp: the debug screenshot trigger.
 
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "GameSource/Resource/BrnResourceAllocator.h"          // BrnResource::LinearResourceAllocator
@@ -27,70 +27,4 @@ void BrnRendererModule::DEBUGTriggerScreenShot(const char* lpcScreenShotText)
     std::strncpy(macScreenShotText, lpcScreenShotText, KU_SCREENSHOT_TEXT_LENGTH);
 }
 
-// -------------------------------------------------------------------------------------------------
-// BrnRendererModule::MemoryUsage
-// Called by Construct and Prepare. Prints the graphics linear allocator's two pools to the debug
-// stream: lane 0 is main memory, lane 2 is physical memory. Each pool reports its start and end
-// address (end = start + capacity) and its usage against capacity. Every line is gated on the
-// global message-filter bit.
-//
-// x64: the pool bases are host pointers, so the two addresses go through the 64-bit overload; the
-// sizes stay u32 (the console streams all six through the u32 "%u" overload).
-// -------------------------------------------------------------------------------------------------
-void BrnRendererModule::MemoryUsage()
-{
-    const rw::Resource           lHeapBase = mpGraphicsAllocator->GetLinearHeapBase();
-    const rw::ResourceDescriptor lUsage    = mpGraphicsAllocator->GetCurrentUsage();
-    const rw::ResourceDescriptor lCapacity = mpGraphicsAllocator->GetCapacity();
-
-    const u8* const lpMainStart     = static_cast<const u8*>(lHeapBase.m_baseResources[0]);
-    const u8* const lpPhysicalStart = static_cast<const u8*>(lHeapBase.m_baseResources[2]);
-    const u32 luMainCapacity        = lCapacity.m_baseResourceDescriptors[0].m_size;
-    const u32 luPhysicalCapacity    = lCapacity.m_baseResourceDescriptors[2].m_size;
-    const u32 luMainUsage           = lUsage.m_baseResourceDescriptors[0].m_size;
-    const u32 luPhysicalUsage       = lUsage.m_baseResourceDescriptors[2].m_size;
-
-    const u32 luMainStart     = static_cast<u32>(reinterpret_cast<uintptr_t>(lpMainStart));
-    const u32 luPhysicalStart = static_cast<u32>(reinterpret_cast<uintptr_t>(lpPhysicalStart));
-    const u32 luMainEnd = luMainStart + luMainCapacity;
-    const u32 luPhysicalEnd   = luPhysicalStart + luPhysicalCapacity;
-
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "===================================================\n";
-    }
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "BrnRendererModule: Memory Usage ";
-    }
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "for XBox360\n";
-    }
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "Main Memory start address " << luMainStart
-                                   << " end address: " << luMainEnd << "\n";
-    }
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "Main Memory total usage " << luMainUsage
-                                   << "b out of " << luMainCapacity
-                                   << "b so " << (luMainCapacity - luMainUsage) << "b free\n";
-    }
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "Physical Memory start address " << luPhysicalStart
-                                   << " end address: " << luPhysicalEnd << "\n";
-    }
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "Physical Memory total usage " << luPhysicalUsage
-                                   << "b out of " << luPhysicalCapacity
-                                   << "b so " << (luPhysicalCapacity - luPhysicalUsage) << "b free\n";
-    }
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "======================================================\n";
-    }
-}
+// MemoryUsage is defined in BrnRendererModule.cpp (ARTIST823FBDE0).
