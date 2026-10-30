@@ -135,6 +135,12 @@ namespace GameDataIO
         return &mbLiveUpdateStatus;
     }
 
+    const u8* OutputBuffer::GetLiveUpdateStatus() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mbLiveUpdateStatus;
+    }
+
     // @ 0x82663E30 -- write-locked mutator. Tests IOBuffer status bit 3 (write-lock); on failure fires
     // the assert. Copies a single status byte from *lpStatus into mbLiveUpdateStatus (this+8; asm
     // `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus.

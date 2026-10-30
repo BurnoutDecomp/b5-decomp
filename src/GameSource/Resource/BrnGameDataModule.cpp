@@ -3693,3 +3693,10 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         lpResourceInput->UnlockForWrite();
     }
 }
+
+void BrnResource::GameDataModule::RenderDebug(const GameDataIO::InputBuffer* lpInputBuffer)
+{
+    lpInputBuffer->LockForRead();
+    mpDebug2dRenderBuffer = lpInputBuffer->GetIm2dDebugRenderBuffer();
+    lpInputBuffer->UnlockForRead();
+}
