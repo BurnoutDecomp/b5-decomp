@@ -52,20 +52,11 @@
 #include "rw/math/vpu/vector3_operation.h"                                        // vpu::{Magnitude, Normalize, Dot, Abs, Add, Mult}
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h" // BrnPhysics::Vehicle::DebugComponent (per-car tick)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // gpDebugPrint ([crash-probe] witness)
 #include "GameSource/GameState/BrnGameEvents.h"                                   // JustBouncedEvent / JustAppliedExtraSpinEvent (events 52 / 53)
 #include <cstddef>                                                                // offsetof (the event 52 layout asserts)
-#include <cstdlib>                                                                // getenv / atoi ([crash-probe] trigger)
 
 namespace BrnPhysics
 {
-    // [crash-response] DIAG -- defined in ExternalPhysicsBody.cpp; see its banner. NOT X360.
-    extern const ExternalPhysicsBody* gpCrashResponseDiagBody;
-
-    // [dv] DIAG -- the one-step velocity witness's watched body, defined in
-    // ExternalPhysicsBody.cpp (see its banner). Armed here because this is the only place that
-    // knows which race-car slot is the player. NOT X360.
-    extern const ExternalPhysicsBody* gpDvWatchBody;
 
 namespace Vehicle
 {
@@ -167,11 +158,12 @@ namespace Vehicle
             // The manager decl's EntityId is BrnCommonTypes' packed-id POD (`{ u32 muValue; }`).
             EntityId lVictimId;
             lVictimId.muValue = luEntityId;
+            const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
             SetRaceCarCrashing(
                 lVictimId,
                 lVictimId,
-                Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },
-                Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },
+                lvZero,
+                lvZero,
                 lpRequestOutputInterface,
                 lpVehicleManagerOutputInterface,
                 lpVehicleOutputInterface,
@@ -237,6 +229,7 @@ namespace Vehicle
             Vector3 lEnd = lStart;
             lEnd.y -= KF_ABOVE_GROUND_RAY_LENGTH;
 
+            CgsSceneManager::SceneManagerIO::InEventLineTestNearest lEvent;
             lEvent.mLineStart          = lStart;
             lEvent.mLineEnd            = lEnd;
             lEvent.mQueryId.mId        = (KU_REQUEST_TYPE_RACE_CAR_ABOVE_GROUND << 16) |
@@ -354,7 +347,7 @@ namespace Vehicle
             // JustBouncedEvent (DWARF BrnGameEvents.h:2782-2790), the one ProcessGameEvents'
             // case 52 @0x823A3D74 reads back; the local RecentBounceEventPayload fork is gone.
             // Same bytes, same order, same 32-byte size (the asserts below the function).
-            BrnGameState::GameStateModuleIO::JustBouncedEvent lBounce = {};
+            BrnGameState::GameStateModuleIO::JustBouncedEvent lBounce;
             if (lrCar.GetRecentBounce(&lBounce.miBounceChain, &lBounce.mbFromStationary,
                                       &lBounce.mbOnCar, &lBounce.mbBoostedBounce,
                                       &lBounce.mbGoodImpact,
@@ -371,10 +364,10 @@ namespace Vehicle
             msPlayerParams.mbSixaxisTiltApplied = false;
             if (lbTiltApplied)
             {
-                // sp+0x50 -- one uninitialised-on-console byte; zeroed here. [FX-SHOWTIME2] the
+                // sp+0x50 -- one uninitialised-on-console byte. [FX-SHOWTIME2] the
                 // header's JustAppliedExtraSpinEvent (DWARF :2801, no members), posted `li r6, 1 ;
                 // li r5, 0x35` @0x82633EE0.
-                const BrnGameState::GameStateModuleIO::JustAppliedExtraSpinEvent lSpin = {};
+                BrnGameState::GameStateModuleIO::JustAppliedExtraSpinEvent lSpin;
                 lpOutputQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSpin),
                                         BrnGameState::GameStateModuleIO::E_EVENT_JUST_APPLIED_EXTRA_SPIN,
                                         static_cast<s32>(sizeof(lSpin)));
@@ -471,30 +464,6 @@ namespace Vehicle
             mfMaxSlamClosingXSpeed   = 16.0f;  // flt_82004000
         }
 
-        // =======================================================================================
-        // [crash-probe] NOT AN X360 MECHANISM -- a TRIGGER, exactly like the BRN_CAR_TELEPORT and
-        // [showtime-probe] precedents. Inert unless BRN_CRASH_PLAYER is set (one getenv on the
-        // first update, one counter test per frame after).
-        //
-        // WHY IT EXISTS. mbCrashPlayerNextUpdate (+172309) is a DEBUG-MENU bool: an image-wide
-        // census over all 30,084 ARTIST exports finds exactly two touches -- Construct writes
-        // false, and the block below reads-and-clears it. NOTHING in the image sets it, because
-        // the thing that set it was the dev menu, which this build has no route to. So the whole
-        // player-crash commit chain below (ForceRaceCarCrash 5-arg -> SetRaceCarCrashing ->
-        // AddRaceCarCrashEvent + RaceCarPhysics::SetCrashing) is real, mounted, bodied -- and
-        // COLD. Setting the flag invents no path: it is the one input the console's own debug
-        // build supplied, and every line after it is the console's.
-        //
-        // ⚠ DELIBERATELY NOT RaceCarPhysics::SetCrashing(true). The existing [showtime-probe]
-        // calls that directly, which is PHYSICS-LOCAL: no crash record is allocated, no
-        // RaceCarCrashEvent is posted, and ActiveRaceCar / the GUI / CrashPlayManager never learn.
-        // That probe is not evidence for this chain. This one drives the real commit.
-        //
-        // BRN_CRASH_PLAYER = the number of UpdateVehiclePhysics calls to wait before firing ONCE
-        // (default 900 ~= 15 s at 60 Hz, i.e. after the drive is under way). Fires once per boot.
-        {
-        }
-
         // Deferred "crash the player next update" request (asm 0x82645224..0x82645298).
         if (mbCrashPlayerNextUpdate)
         {
@@ -506,14 +475,6 @@ namespace Vehicle
                        "Couldn't force player car to crash - this could have nasty consequences.");  // :2499
             mbCrashPlayerNextUpdate = false;
 
-            // [crash-probe] witness. NOT X360. Prints the console's own post-condition so the
-            // chain is proven to have RUN, not merely to have been called.
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[crash-probe] ForceRaceCarCrash returned; IsRaceCarCrashing(player)="
-                    << (IsRaceCarCrashing(mePlayerActiveRaceCarIndex) ? 1 : 0) << "\n";
-            }
         }
 
         UpdateVehicleImpacts(lpInputInterface->GetImpactEventQueue(),   // input+141376
@@ -609,7 +570,8 @@ namespace Vehicle
             lrPlayer.mSlamEffect.mfSlamLife         = 0.0f;    // +0x111C
             lrPlayer.mSlamEffect.mfTotalSlamTime    = 0.0f;    // +0x1120
             lrPlayer.mSlamEffect.mi8SlamNumber      = -1;      // stb @+0x1128
-            lrPlayer.mShuntEffect.mDirectionPlusDesiredSpeed  = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f }; // stvx 0 @+0x1130
+            const Vector3Plus lvZeroShunt = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lrPlayer.mShuntEffect.mDirectionPlusDesiredSpeed = lvZeroShunt; // stvx 0 @+0x1130
             lrPlayer.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;  // vrlimi 8 @+0x1140
             lrPlayer.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;   // vrlimi 4 @+0x1140
         }
@@ -647,34 +609,12 @@ namespace Vehicle
             //      showtime        = (meShowtimeBehaviour == 2) (cntlzw/extrwi idiom, r8)
             //      random          = mRandom (r9 = this+16)
             //      v1/v2           = splat(lfSimTimerTimeStep) / splat(lfGameTimerTimeStep)
-            // ---- [crash-response] PC bring-up instrument -- DELETE WHEN the crash response is
-            // 1:1. OPT-IN (BRN_CRASH_RESPONSE_DIAG=1). NOT IN THE X360 BINARY. Arms the drain
-            // witness in ExternalPhysicsBody::CalculateNewVelocity on the PLAYER's body for the
-            // frames it is crashing; the pose line itself is printed after the update below.
-            static s32 siCrashRespDiag = -1;
-            if (siCrashRespDiag < 0)
-            {
-            }
-            if (siCrashRespDiag == 1 && liCar == mePlayerActiveRaceCarIndex)
-            {
-                gpCrashResponseDiagBody =
-                    maRaceCarVehicles[liCar].IsCrashing() ? &maRaceCarVehicles[liCar] : 0;
-            }
-
-            // ---- [dv] arm the one-step velocity witness on the PLAYER's body (opt-in; the
-            // witness itself no-ops unless BRN_DV_PROBE names a threshold). Unconditional on
-            // crashing, unlike the arm above: the events it hunts happen while DRIVING.
-            if (liCar == mePlayerActiveRaceCarIndex)
-            {
-                gpDvWatchBody = &maRaceCarVehicles[liCar];
-            }
-
             CgsDev::PerfMonCpu::StartMonitor(gs_iUpdateVehiclesPM);
+            const VecFloat lvSimTimeStep = { lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep };
+            const VecFloat lvGameTimeStep = { lfGameTimerTimeStep, lfGameTimerTimeStep, lfGameTimerTimeStep, lfGameTimerTimeStep };
             maRaceCarVehicles[liCar].Update(
-                VecFloat{ lfSimTimerTimeStep, lfSimTimerTimeStep,
-                          lfSimTimerTimeStep, lfSimTimerTimeStep },
-                VecFloat{ lfGameTimerTimeStep, lfGameTimerTimeStep,
-                          lfGameTimerTimeStep, lfGameTimerTimeStep },
+                lvSimTimeStep,
+                lvGameTimeStep,
                 &mCameraMatrix,
                 maRaceCarDrivers[liCar].GetControls(),
                 mbImpactTime,
@@ -682,100 +622,6 @@ namespace Vehicle
                 meShowtimeBehaviour == 2u,
                 mRandom);
             CgsDev::PerfMonCpu::StopMonitor(gs_iUpdateVehiclesPM);
-
-            // ---- [crash-response] pose witness (opt-in, see the arm above). One line per frame
-            // for the player while it is crashing and for 180 frames after; a 16-frame ring of
-            // pre-crash poses is dumped on the crash edge so the approach is on record too, and
-            // the crash edge prints the attribs the response is built from (mass, half extents,
-            // COM, CarAngularImpulseScale, CrashExtraVelocityFactors). Body-frame omega is
-            // (pitch about Right, yaw about Up, roll about At). NOT IN THE X360 BINARY.
-            if (siCrashRespDiag == 1 && liCar == mePlayerActiveRaceCarIndex
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                // ⭐ dtSim/dtGame/aiSlowMo/frozen ADDED 2026-09-05 (momentum wave). Measured in
-                // runs mom_A1/mom_A2: the per-car dt reaching ExternalPhysicsBody::
-                // CalculateNewVelocity is 1.6667e-5 for the first 3-4 crashing frames -- exactly
-                // 1/1000 of the sim step -- while the PUBLISHED sim scale ([slomo]) is still
-                // 1.000000. The car therefore travels ~1 mm per frame at 55-70 m/s and its whole
-                // force integration is scaled to nothing. RaceCarPhysics::Update's AI crash
-                // slow-mo (KVF_AI_CRASH_SLOWMO_FACTOR == 100.0, verified in the image at
-                // 0x8208F9B8) only accounts for 1/100, so these four fields exist to say WHICH
-                // half of the product is wrong: what the module handed in, and whether the AI
-                // slow-mo latch was even set. DELETE-WHEN the crash-entry dt is attributed.
-                struct PoseSample { u32 f; f32 mph, px, py, pz, upy, fwdy, rty, wp, wy, wr, vx, vy, vz,
-                                    dtSim, dtGame; s32 aiSlow, frozen; };
-                static PoseSample saRing[16];
-                static u32 suFrame = 0, suPostCrash = 0, suLines = 0;
-                static bool sbWasCrashing = false;
-                RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
-                const Matrix44Affine& lrT = lrCar.GetTransform();
-                const Vector3 lW = lrCar.GetAngularVelocity();
-                const Vector3 lV = lrCar.GetLinearVelocity();
-                PoseSample lS;
-                lS.f = ++suFrame; lS.mph = lrCar.GetSpeedMPH().x;
-                lS.px = lrT.wAxis.x; lS.py = lrT.wAxis.y; lS.pz = lrT.wAxis.z;
-                lS.upy = lrT.yAxis.y; lS.fwdy = lrT.zAxis.y; lS.rty = lrT.xAxis.y;
-                lS.wp = vpu::Dot(lW, lrT.xAxis); lS.wy = vpu::Dot(lW, lrT.yAxis); lS.wr = vpu::Dot(lW, lrT.zAxis);
-                lS.vx = lV.x; lS.vy = lV.y; lS.vz = lV.z;
-                lS.dtSim = lfSimTimerTimeStep; lS.dtGame = lfGameTimerTimeStep;
-                lS.aiSlow = lrCar.IsInAICrashSlowMo() ? 1 : 0;
-                lS.frozen = lrCar.IsFrozen() ? 1 : 0;
-                const bool lbCrashing = lrCar.IsCrashing();
-                auto lPrint = [&](const PoseSample& lrS, const char* lpcTag)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[crash-response] pose " << lpcTag << " f=" << static_cast<s32>(lrS.f)
-                        << " mph=" << lrS.mph
-                        << " pos=(" << lrS.px << "," << lrS.py << "," << lrS.pz << ")"
-                        << " up.y=" << lrS.upy << " fwd.y=" << lrS.fwdy << " right.y=" << lrS.rty
-                        << " Wbody=(" << lrS.wp << "," << lrS.wy << "," << lrS.wr << ")"
-                        << " v=(" << lrS.vx << "," << lrS.vy << "," << lrS.vz << ")"
-                        << " dtSim=" << lrS.dtSim << " dtGame=" << lrS.dtGame
-                        << " aiSlowMo=" << lrS.aiSlow << " frozen=" << lrS.frozen
-                        << "\n";
-                };
-                if (lbCrashing && !sbWasCrashing)
-                {
-                    for (u32 lu = 1; lu <= 16u; ++lu)
-                    {
-                        const PoseSample& lrOld = saRing[(suFrame + lu) & 15u];
-                        if (lrOld.f != 0) { lPrint(lrOld, "pre"); }
-                    }
-                    const VehicleAttribs* lpA = lrCar.GetAttribs();
-                    const Vector3 lHalf = lrCar.GetHalfExtent();
-                    *CgsDev::Log::gpDebugPrint
-                        << "[crash-response] entry f=" << static_cast<s32>(suFrame)
-                        << " mass=" << lrCar.GetMass().x
-                        << " half=(" << lHalf.x << "," << lHalf.y << "," << lHalf.z << ")"
-                        << " Iinv=(" << lrCar.mLocalInverseInertia.xAxis.x << "," << lrCar.mLocalInverseInertia.yAxis.y << "," << lrCar.mLocalInverseInertia.zAxis.z << ")";
-                    if (lpA != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << " com=(" << lpA->mBaseAttribs.mCOMOffset.x << "," << lpA->mBaseAttribs.mCOMOffset.y << "," << lpA->mBaseAttribs.mCOMOffset.z << ")"
-                            << " carAngScale=" << lpA->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y
-                            << " crashSpeedMPS=" << lpA->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.x
-                            << " crashExtra=(" << lpA->mBaseAttribs.mCrashExtraVelocityFactors.x << "," << lpA->mBaseAttribs.mCrashExtraVelocityFactors.y
-                            << "," << lpA->mBaseAttribs.mCrashExtraVelocityFactors.z << "," << lpA->mBaseAttribs.mCrashExtraVelocityFactors.w << ")"
-                            << " attrMass=" << lpA->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
-                    }
-                    *CgsDev::Log::gpDebugPrint << "\n";
-                    suPostCrash = 0;
-                }
-                if (lbCrashing) { suPostCrash = 0; }
-                else if (sbWasCrashing) { suPostCrash = 1; }
-                else if (suPostCrash > 0) { ++suPostCrash; }
-                if ((lbCrashing || (suPostCrash > 0 && suPostCrash <= 180u)) && ++suLines <= 3000u)
-                {
-                    lPrint(lS, lbCrashing ? "crash" : "post");
-                }
-                else if ((suFrame % 10u) == 0u)
-                {
-                    lPrint(lS, "tick");   // the every-10th-frame baseline, so a NON-crash wall bump
-                                          // (the upright drive-away control) has a pose trace too
-                }
-                saRing[suFrame & 15u] = lS;
-                sbWasCrashing = lbCrashing;
-            }
 
             // Per-car debug component tick (asm 0x82645A68..78; f1 = lfSimTimerTimeStep).
             maRaceCarDebugComponent[liCar].Update(lfSimTimerTimeStep);
@@ -802,7 +648,7 @@ namespace Vehicle
                     2.0f);                                                          // flt_82001D9C
                 const f32 lfMassOverTwelve =
                     lrCar.GetMass().x   /* VecFloat == Vector4 splat; lane 0 */ * (1.0f / 12.0f);                // flt_82094724
-                const Vector3 lInertialTensor = Vector3{                            // lfOne / (m/12 * (b^2+c^2), ...)
+                const Vector3 lInertialTensor = {                            // lfOne / (m/12 * (b^2+c^2), ...)
                     1.0f / (lfMassOverTwelve * (lBoxExtent.y * lBoxExtent.y + lBoxExtent.z * lBoxExtent.z)),
                     1.0f / (lfMassOverTwelve * (lBoxExtent.x * lBoxExtent.x + lBoxExtent.z * lBoxExtent.z)),
                     1.0f / (lfMassOverTwelve * (lBoxExtent.x * lBoxExtent.x + lBoxExtent.y * lBoxExtent.y)),
@@ -861,12 +707,12 @@ namespace Vehicle
         // v1 = the player car's position row (lvx this+5216*player+0x780 == RCP+0x40 ==
         // mTransform.wAxis). As shipped: no player != -1 guard (index -1 reads the tail
         // of the drivers array on the console; reconstructed verbatim).
-        mPhysicalTrafficManager.PassNearbyCrashingTrafficIdsToRaceCarModule(
-            lpVehicleManagerOutputInterface,
-            Vector3{ maRaceCarVehicles[mePlayerActiveRaceCarIndex].GetTransform().wAxis.x,
+        const Vector3 lvPlayerPosition = { maRaceCarVehicles[mePlayerActiveRaceCarIndex].GetTransform().wAxis.x,
                      maRaceCarVehicles[mePlayerActiveRaceCarIndex].GetTransform().wAxis.y,
                      maRaceCarVehicles[mePlayerActiveRaceCarIndex].GetTransform().wAxis.z,
-                     0.0f });
+                     0.0f };
+        mPhysicalTrafficManager.PassNearbyCrashingTrafficIdsToRaceCarModule(
+            lpVehicleManagerOutputInterface, lvPlayerPosition);
         CgsDev::PerfMonCpu::StopMonitor(gs_iUpdatePassBysPM);
 
         // ---- the stationary (car-select) wheel pose (asm 0x82645EDC..0x82645FA0) -------
@@ -881,7 +727,8 @@ namespace Vehicle
             const f32 lfAngle =
                 -lrPlayer.GetMaxSteeringAngle().x * (-KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE) // flt_8209D0D4 == -1.3
                 * KF_DEG_TO_RAD;
-            lrPlayer.OverrideWheelAngle(VecFloat{ lfAngle, lfAngle, lfAngle, lfAngle });
+            const VecFloat lvAngle = { lfAngle, lfAngle, lfAngle, lfAngle };
+            lrPlayer.OverrideWheelAngle(lvAngle);
         }
         else if (meStationaryPlayerWheelAngle == 1)
         {
@@ -889,7 +736,8 @@ namespace Vehicle
             const f32 lfAngle =
                 -lrPlayer.GetMaxSteeringAngle().x * KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE   // flt_8208FA8C == 1.3
                 * KF_DEG_TO_RAD;
-            lrPlayer.OverrideWheelAngle(VecFloat{ lfAngle, lfAngle, lfAngle, lfAngle });
+            const VecFloat lvAngle = { lfAngle, lfAngle, lfAngle, lfAngle };
+            lrPlayer.OverrideWheelAngle(lvAngle);
         }
 
         // ---- publish the player's wheel force-feedback spring (asm 0x82645FA4..C4) -----
@@ -920,7 +768,7 @@ namespace Vehicle
         if (lbPlayerCarUsed)
             DoPlayerTractionLineTestsPostSimulation(lpInputInterface, lfTimeStep);
 
-        const VecFloat lvfTimeStep{lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep};
+        const VecFloat lvfTimeStep = {lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep};
         for (s32 liRaceCar = mUsedRaceCars.GetFirstNonZeroBit();
              liRaceCar != CgsContainers::BitArray<8>::KI_INVALID_BITINDEX;
              liRaceCar = mUsedRaceCars.GetNextNonZeroBit(liRaceCar))
