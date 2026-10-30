@@ -129,6 +129,7 @@ namespace renderengine
             D3DVIDEO_SCALER_PARAMETERS videoScalerParameters;
         };
 
+        static void Clear(const ClearColorParameters& lrColor, RenderTargetState::TargetID leTarget); // ARTIST82B61C88
         static void Clear(const ClearColorParameters& lrColor, const ClearDepthStencilParameters& lrDepthStencil,
                           RenderTargetState::TargetID leTarget); // ARTIST82B61E18
         static void ShowPixelBuffer(PixelBuffer* lpBuffer); // ARTIST82B63298, body pending

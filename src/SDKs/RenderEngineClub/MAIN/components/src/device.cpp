@@ -49,6 +49,31 @@ namespace renderengine
     extern u32 gDeviceTileCount83271620;
     extern D3DRECT gDeviceTileRects83271628[8];
 
+    // ARTIST82B61C88: colour-only clear uses depth 1 and stencil 0 directly.
+    void Device::Clear(const ClearColorParameters& lrColor, RenderTargetState::TargetID leTarget)
+    {
+        if (gDeviceTileCount83271620 && !guTilingEnabled && UsingGlobalRasters())
+        {
+            D3DDevice_BeginTiling(gpD3DDevice, 0, gDeviceTileCount83271620, gDeviceTileRects83271628,
+                                  &lrColor.m_color, 1.0f, 0);
+            guTilingEnabled = 1;
+        }
+        else
+        {
+            u32 flags = 0;
+            switch (leTarget)
+            {
+            case RenderTargetState::TARGETID_COLOR0: flags = 1; break;
+            case RenderTargetState::TARGETID_COLOR1: flags = 2; break;
+            case RenderTargetState::TARGETID_COLOR2: flags = 4; break;
+            case RenderTargetState::TARGETID_COLOR3: flags = 8; break;
+            case RenderTargetState::TARGETID_COLOR_ALL: flags = 15; break;
+            default: break;
+            }
+            D3DDevice_ClearF(gpD3DDevice, flags, 0, &lrColor.m_color, 1.0f, 0);
+        }
+    }
+
     // ARTIST82B61E18: begin the native tile pass or clear selected colour targets.
     void Device::Clear(const ClearColorParameters& lrColor, const ClearDepthStencilParameters& lrDepthStencil,
                        RenderTargetState::TargetID leTarget)
