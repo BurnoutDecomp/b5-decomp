@@ -56,6 +56,17 @@ namespace BrnGame
 {
     // DWARF h:68 -- struct BrnGame::DispatchThreadInputBuffer : public IOBuffer (IOBuffer here is
     // CgsModule::IOBuffer, the committed shared base).
+    // DecFIGS h:49; ARTIST823CBA44..68 stores all four words and flag+16.
+    struct SnapShotRequest
+    {
+        f32 mfStartX;
+        f32 mfStartY;
+        f32 mfWidth;
+        f32 mfHeight;
+        bool mbTakeSnapShot;
+    };
+    CGS_STATIC_ASSERT(sizeof(SnapShotRequest) == 0x14, "ARTIST snapshot request extent");
+
     struct DispatchThreadInputBuffer : public CgsModule::IOBuffer
     {
         // The particle dispatch thread's inter-thread event queue (DWARF h:197). The X360
@@ -64,13 +75,7 @@ namespace BrnGame
         // template's Append<SRCBUF,SRCALIGN> deduces <16384,16> from the source type.
         typedef CgsModule::VariableEventQueue<16384, 16> CappedInterThreadEventQueue;
 
-        // FLAG (ad-hoc opaque): SnapShotRequest has no committed home yet. Modelled as a by-value
-        // opaque so &mSnapShotRequest yields the correct pointer type for GetSnapShotRequest. True
-        // size/layout UNKNOWN; replaced when its canonical home lands.
-        struct SnapShotRequest
-        {
-            u8 maStorage[1];   // FLAG: opaque, true size unknown
-        };
+        typedef BrnGame::SnapShotRequest SnapShotRequest;
 
         // ---- particle data ---------------------------------------------------------------
         // GetParticleData @ 0x8227F4F0 / DWARF h:97 (const) -- assert read-lock, hand back the
