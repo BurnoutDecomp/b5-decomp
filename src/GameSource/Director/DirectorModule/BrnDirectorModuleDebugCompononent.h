@@ -32,6 +32,8 @@ namespace BrnDirector
     class DebugComponent : public CgsDev::DebugComponent
     {
     public:
+        DebugComponent() : CgsDev::DebugComponent(DirectorConstructorTag()) {}
+
         // Sets the owning director module and clears the panorama / camera-pos /
         // crash-shot debug toggles.
         void Construct(DirectorModule* lpDirectorModule);
