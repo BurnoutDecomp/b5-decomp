@@ -13,6 +13,7 @@ namespace BrnResource { class DebugComponent; class DLCDebugComponent; }
 namespace BrnProgression { struct ProgressionDebugComponent; }
 namespace BrnGameState { class CrashScoreDebugComponent; class ModeManagerDebugComponent; class ScoringSystemDebugComponent; class ChallengeManagerDebugComponent; class RoadRulesDebugComponent; class StuntManagerDebugComponent; class TakedownManagerDebugComponent; class PaybackDebugComponent; class TriggerQueryManagerDebugComponent; class StreetManagerDebugComponent; class GameStateDebugComponent; class ResetPlayerDebugComponent; }
 namespace BrnReplays { class DebugComponent; }
+namespace BrnDirector { class DebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -121,6 +122,10 @@ namespace CgsDev
         friend class BrnReplays::DebugComponent;
         struct ReplayConstructorTag {};
         explicit DebugComponent(ReplayConstructorTag) {}
+        // ARTIST DirectorModule ctor 0x827E5048 writes only the derived vtable.
+        friend class BrnDirector::DebugComponent;
+        struct DirectorConstructorTag {};
+        explicit DebugComponent(DirectorConstructorTag) {}
 
     public:
         DebugComponent();
