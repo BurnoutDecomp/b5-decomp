@@ -73,8 +73,8 @@ f32 RaceBalancingRoute::ComputeRaceCompletionRatio(f32 lfDistanceToNextCheckpoin
     // `fsubs ; fsel` 0x8277AE14/0x8277AE18: a NaN (e.g. a checkpoint count of 0) is 1.0.
     // The lerp is 0x8277AE08 `fmadds f13, f13, f12, f11` = (end - start) * ratio + start, ONE rounding
     // (ROUNDING_RULE 3; the fsubs at 0x8277AE00 is rule 4).
-    f32 lfResult = std::fmaf(lfCheckpointEndRatio - lfCheckpointStartRatio, lfCheckpointRatio,
-                             lfCheckpointStartRatio);
+    f32 lfResult = (lfCheckpointEndRatio - lfCheckpointStartRatio) * lfCheckpointRatio
+                   + lfCheckpointStartRatio;
     lfResult = (-lfResult >= 0.0f) ? 0.0f : lfResult;
     return ((1.0f - lfResult) >= 0.0f) ? lfResult : 1.0f;
 }
@@ -112,10 +112,9 @@ f32 RaceBalancingRoute::GetAISectionSpeed(const AISection* lpAISection,
     // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): `fsubs f13, max, min ; fmadds f1, f13,
     // f31 (ratio), f0 (min)` @0x8276980C/0x82769810 -- the rubber band's par-speed lerp is ONE rounding
     // of (max - min) * ratio + min. The PC spelling rounded the product first.
-    return std::fmaf(lpAISectionsData->mafSectionMaxSpeeds[luSpeed]
-                         - lpAISectionsData->mafSectionMinSpeeds[luSpeed],
-                     lfSpeedRatio,
-                     lpAISectionsData->mafSectionMinSpeeds[luSpeed]);
+    return (lpAISectionsData->mafSectionMaxSpeeds[luSpeed]
+            - lpAISectionsData->mafSectionMinSpeeds[luSpeed]) * lfSpeedRatio
+           + lpAISectionsData->mafSectionMinSpeeds[luSpeed];
 }
 
 // @0x82789368
