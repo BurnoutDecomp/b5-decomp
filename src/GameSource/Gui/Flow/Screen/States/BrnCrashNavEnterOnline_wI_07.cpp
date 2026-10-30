@@ -199,11 +199,6 @@ namespace BrnGui
         // an `ld r11, 0(r30)` (0x824D8B50 / 0x824D8B68) -- the pseudocode's 32-bit
         // `*(a2 + 4)` read is a Hex-Rays artifact. The queue hands out the
         // HEADER-STRIPPED payload, so the view starts at the id.
-        struct GuiOverlayCompletePayload : public CgsModule::Event
-        {
-            CgsID                                mOverlayId;     // +0x00
-            GuiOverlayCompleteEvent::LeaveMethod meLeaveMethod;  // +0x08
-        };
 
     }
 

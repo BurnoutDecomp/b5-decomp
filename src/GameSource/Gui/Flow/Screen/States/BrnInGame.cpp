@@ -102,13 +102,6 @@ namespace BrnGui
             BrnProgression::Profile* mpProfile;
         };
 
-        // The GuiOverlayCompleteEvent payload (id @+0, leave method @+8 -- the X360
-        // HandleOverlayComplete `ld 0(r30)` / `lwz 8(r30)` loads).
-        struct GuiOverlayCompletePayload : public CgsModule::Event
-        {
-            CgsID mOverlayId;
-            s32   miLeaveMethod;   // GuiOverlayCompleteEvent::LeaveMethod
-        };
 
         // The GuiEventPerformOnlineMainMenuOption payload (the option word leads).
         struct GuiEventMainMenuOptionPayload : public CgsModule::Event
@@ -553,13 +546,13 @@ namespace BrnGui
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpOverlayCompleteEvent);
 
         if (lpComplete->mOverlayId == CgsIDCompress("CNOnlStrtQn") &&
-            lpComplete->miLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
+            lpComplete->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
         {
             // The "leave the current game?" question was accepted: run the parked option.
             SelectOnlineMenuOption(meSelectedOnlineMainMenuOption);
         }
         else if (lpComplete->mOverlayId == CgsIDCompress("GMSrchFail") &&
-                 lpComplete->miLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
+                 lpComplete->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
         {
             // Search-fail acknowledged: retry as "create your own freeburn".
             GuiEventMainMenuOptionPayload lRetry;
