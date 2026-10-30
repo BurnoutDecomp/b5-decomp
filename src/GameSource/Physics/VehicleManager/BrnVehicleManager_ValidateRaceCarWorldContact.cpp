@@ -488,19 +488,21 @@ namespace Vehicle
         // ARTIST 825C67B0..825C6998: one buffered triangle and three solid
         // spheres for each enabled classification. Only the triangle is offset
         // along the normal (0.05); the spheres stay at the vertices, radius 0.3.
-        const auto lDrawContact = [&](CgsDev::RGBA luColour)
+        if ((mDebugComponent.RenderWallContacts() && lbIsWall)
+            || (mDebugComponent.RenderGroundContacts() && lbIsCurb))
         {
+            const Vector3 lvScale = { 0.05f, 0.05f, 0.05f, 0.05f };
+            const Vector3 lvVertex0 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex0);
+            const Vector3 lvVertex1 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex1);
+            const Vector3 lvVertex2 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex2);
+            const CgsDev::RGBA luColour = lbIsWall ? 0xFF0000FFu : 0xFF00FF00u;
             CgsDev::DebugInterface lDebugInterface;
             CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
             lrRender.DrawTriangle(lvVertex0, lvVertex1, lvVertex2, luColour);
             lrRender.DrawSolidSphere(lTriangle.mVertex0, 0.3f, luColour);
             lrRender.DrawSolidSphere(lTriangle.mVertex1, 0.3f, luColour);
             lrRender.DrawSolidSphere(lTriangle.mVertex2, 0.3f, luColour);
-        };
-        if (mDebugComponent.RenderWallContacts() && lbIsWall)
-            lDrawContact(0xFF0000FFu);
-        if (mDebugComponent.RenderGroundContacts() && lbIsCurb)
-            lDrawContact(0xFF00FF00u);
+        }
 
         // ---- record the wall triangle on the car's debug component (REAL console behaviour,
         //      unconditional on the wall classification -- NOT a draw) --------------------------
@@ -614,7 +616,7 @@ namespace Vehicle
         const f32 lfLocalY = vpu::Dot(lDiff, lrTransform.yAxis);
         const f32 lfLocalZ = vpu::Dot(lDiff, lrTransform.zAxis);
 
-        const Vector3 lDisplacement{ lrCar.mLinearVelocity.x * lfTimeStep,
+        const Vector3 lDisplacement = { lrCar.mLinearVelocity.x * lfTimeStep,
                                      lrCar.mLinearVelocity.y * lfTimeStep,
                                      lrCar.mLinearVelocity.z * lfTimeStep,
                                      lrCar.mLinearVelocity.w * lfTimeStep };
