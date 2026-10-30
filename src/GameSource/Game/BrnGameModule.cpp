@@ -570,6 +570,8 @@ namespace BrnGame
         // latches at gm+10094114, +10094116, and +10094125. Use their owned members here.
         mbDiskError = false;
         mbControllerDisconnected = false;
+        // ARTIST823CAAB0: the virtual Construct owns this latch reset.
+        mbRequestStreamingWait = false;
         mbIsLoadingScreenVisible = false;
 
         // ARTIST823CAA14/7C/AC: both port words start at4; bind state starts at0.
