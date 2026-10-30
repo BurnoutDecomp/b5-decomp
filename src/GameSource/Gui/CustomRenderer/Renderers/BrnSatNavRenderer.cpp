@@ -32,10 +32,12 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h" // Im2dRenderBuffer (SetState/Render)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the Apt 2D command buffer)
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"  // CgsGui::AptIm2dRenderBuffer (set slot 0)
 #include "GameSource/Gui/BrnCustomRendererManager.h"    // BrnGui::SetMaskRect (the mask push helper)
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // vertex
 
+#include <float.h>
 #include <cstring> // memcpy
 #include <cstdlib> // getenv ([DIAG] opt-in gate only)
 
@@ -114,32 +116,19 @@ void FireSatNavAssert(const char* lpcExpression, s32 liLine)
 // PC fold of the X360's lazy texture-state creation in RenderComponent (@0x82466288 /
 // @0x8246645C): descriptor {2,2,0,1,1,2,0,0,13,0,1, lod 0.0, flags 0,0,0,1,1} + the
 // payload texture, through renderengine::TextureState::Initialize (font precedent).
-renderengine::TextureState* CreatePayloadTextureState(rw::Resource* lpBacking, void* lpTexture)
+renderengine::TextureState* CreatePayloadTextureState(rw::IResourceAllocator* lpAllocator,
+    rw::Resource* lpResource, void* lpTexture)
 {
     renderengine::TextureState::Parameters lParams;
-    lParams.muAddressU      = 2u;
-    lParams.muAddressV      = 2u;
-    lParams.muAddressW      = 0u;
-    lParams.muMagFilter     = 1u;
-    lParams.muMinFilter     = 1u;
-    lParams.muMipFilter     = 2u;
-    lParams.muField6        = 0u;
-    lParams.muField7        = 0u;
-    lParams.muMaxAnisotropy = 13u;
-    lParams.muField9        = 0u;
-    lParams.muField10       = 1u;
-    lParams.mfMipLodBias    = 0.0f;
-    lParams.mfField12       = 0.0f;
-    lParams.muField13       = 0u;
-    lParams.muField14       = 0u;
-    lParams.muField15       = 0u;
-    lParams.mu8Field40      = 0u;
-    lParams.mu8Field41      = 0u;
-    lParams.mu8Field42      = 0u;
-    lParams.mu8Field43      = 1u;
-    lParams.mu8Field44      = 1u;
-    lParams.mpTexture       = reinterpret_cast<renderengine::Texture*>(lpTexture);
-    return renderengine::TextureState::Initialize(lpBacking, &lParams);
+    lParams.muAddressU = 2;
+    lParams.muAddressV = 2;
+    lParams.muMagFilter = 1;
+    lParams.muMinFilter = 1;
+    lParams.mpTexture = static_cast<renderengine::Texture*>(lpTexture);
+    rw::ResourceDescriptor lDescriptor;
+    renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+    *lpResource = lpAllocator->DoAllocate(lDescriptor, 0);
+    return renderengine::TextureState::Initialize(lpResource, &lParams);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,8 +139,8 @@ renderengine::TextureState* CreatePayloadTextureState(rw::Resource* lpBacking, v
 // (lfIconWidth x lfIconHeight) cells.
 // ---------------------------------------------------------------------------
 void CalculateUVsForIndex(s32 liFrameNumber,
-                          Vector2& lv2TopLeft, Vector2& lv2BottomLeft,
-                          Vector2& lv2TopRight, Vector2& lv2BottomRight,
+                          CgsGraphics::Vector2& lv2TopLeft, CgsGraphics::Vector2& lv2BottomLeft,
+                          CgsGraphics::Vector2& lv2TopRight, CgsGraphics::Vector2& lv2BottomRight,
                           f32 lfTextureWidth, f32 lfTextureHeight,
                           f32 lfIconWidth, f32 lfIconHeight)
 {
@@ -186,32 +175,7 @@ void CalculateUVsForIndex(s32 liFrameNumber,
 // NOT call Construct(); the manager runs the virtual Construct() as a separate pass afterwards.
 SatNavRenderer::SatNavRenderer()
 {
-    // ⭐ 2026-09-15 (issue #25): read off the ctor's own asm. It zeroes the six RESOURCE
-    // DESCRIPTOR blocks -- +0x98 / +0xB0 / +0xC8 / +0xE0 / +0xF8 / +0x110, five words each
-    // (0x827DD490..0x827DD538) -- and then the 2-entry maIconResources array in a stride-0x14
-    // loop (0x827DD53C..0x827DD560). It does NOT touch the TextureState*/BlendState* slots or
-    // mRenderSatNavEvent: Construct() owns those (see below). The previous body had it exactly
-    // backwards (it zeroed the pointers and left the descriptors alone).
-    u32* const lapResources[7] =
-    {
-        mMapTextureStateResource,          // +0x98
-        mMapBlendStateResource,            // +0xB0
-        mMaskTextureStateResource,         // +0xC8
-        mMaskBlendStateResource,           // +0xE0
-        mRouteSegmentTextureStateResource, // +0xF8
-        mRouteSegmentBlendStateResource,   // +0x110
-        maIconResources[0],                // +0x128 (stride-0x14 loop, 2 entries)
-    };
-    for (u32 luBlock = 0; luBlock < 7; ++luBlock)
-    {
-        for (u32 luWord = 0; luWord < 5; ++luWord)
-            lapResources[luBlock][luWord] = 0;
-    }
-    for (u32 luWord = 0; luWord < 5; ++luWord)
-        maIconResources[1][luWord] = 0;
-
-   // +0x90
-    mpMapBlendState  = 0;   // +0xC4
+    // ARTIST827DD468: the eight Resource members perform the zero stores.
 }
 
 // 0x8245F6C8
@@ -255,7 +219,7 @@ void SatNavRenderer::Construct()
     for (u32 luEntry = 0; luEntry < 2; ++luEntry)
     {
         for (u32 luWord = 0; luWord < 5; ++luWord)
-            maIconResources[luEntry][luWord] = 0;
+            maIconResources[luEntry].m_baseResources[luWord] = 0;
         mapIconTextureStates[luEntry] = 0;
     }
 
@@ -375,11 +339,11 @@ bool SatNavRenderer::Release()
         // mpMapBlendState (+0xC4) is NOT among them (0x824456E0 has no test of 0xC4 at all).
         // This list was shifted one slot: it freed mpMapBlendState and never freed
         // mpRouteSegmentBlendState. Same off-by-one as Construct.
-        if (mpMapTextureState)          mpMapTextureState = 0;
-        if (mpMaskTextureState)         mpMaskTextureState = 0;
-        if (mpMaskBlendState)           mpMaskBlendState = 0;
-        if (mpRouteSegmentTextureState) mpRouteSegmentTextureState = 0;
-        if (mpRouteSegmentBlendState)   mpRouteSegmentBlendState = 0;
+        if (mpMapTextureState) { mpHeapAllocator->Free(mMapTextureStateResource); mpMapTextureState = 0; }
+        if (mpMaskTextureState) { mpHeapAllocator->Free(mMaskTextureStateResource); mpMaskTextureState = 0; }
+        if (mpMaskBlendState) { mpHeapAllocator->Free(mMaskBlendStateResource); mpMaskBlendState = 0; }
+        if (mpRouteSegmentTextureState) { mpHeapAllocator->Free(mRouteSegmentTextureStateResource); mpRouteSegmentTextureState = 0; }
+        if (mpRouteSegmentBlendState) { mpHeapAllocator->Free(mRouteSegmentBlendStateResource); mpRouteSegmentBlendState = 0; }
         break;
 
     case E_RELEASESTAGE_DONE:
@@ -608,41 +572,8 @@ void SatNavRenderer::InitResources()
         if (lpTexture == 0)
             FireSatNavAssert("lpTexture!=NULL", 662);
 
-        // Build the texture-state init parameters from the loaded texture and create the
-        // icon texture state. ⭐ H3b: the old "reduced to a named pointer store" FLAG body
-        // stored the raw texture AS the state -- the PC dispatch reads TextureState::
-        // mpRaster, so that bound garbage. Real renderengine::TextureState::Initialize
-        // now (the CgsFont::CreateTextureState precedent), with the X360's own sampler
-        // words (the @0x82466304-style descriptor: clamp/clamp, linear, aniso 13).
-        {
-            renderengine::TextureState::Parameters lParams;
-            lParams.muAddressU      = 2u;
-            lParams.muAddressV      = 2u;
-            lParams.muAddressW      = 0u;
-            lParams.muMagFilter     = 1u;
-            lParams.muMinFilter     = 1u;
-            lParams.muMipFilter     = 2u;
-            lParams.muField6        = 0u;
-            lParams.muField7        = 0u;
-            lParams.muMaxAnisotropy = 13u;
-            lParams.muField9        = 0u;
-            lParams.muField10       = 1u;
-            lParams.mfMipLodBias    = 0.0f;
-            lParams.mfField12       = 0.0f;
-            lParams.muField13       = 0u;
-            lParams.muField14       = 0u;
-            lParams.muField15       = 0u;
-            lParams.mu8Field40      = 0u;
-            lParams.mu8Field41      = 0u;
-            lParams.mu8Field42      = 0u;
-            lParams.mu8Field43     = 1u;
-            lParams.mu8Field44     = 1u;
-            lParams.mpTexture       = reinterpret_cast<renderengine::Texture*>(
-                                          const_cast<void*>(lpTexture));
-            maIconResources[luTextureIndex][0] = 0;   // the console's 5-dword descriptor slot (documented shape)
-            mapIconTextureStates[luTextureIndex] = renderengine::TextureState::Initialize(
-                &maIconTextureStateBacking[luTextureIndex], &lParams);
-        }
+        mapIconTextureStates[luTextureIndex] = CreatePayloadTextureState(
+            mpHeapAllocator, &maIconResources[luTextureIndex], const_cast<void*>(lpTexture));
 
         if (mapIconTextureStates[luTextureIndex] == 0)
             FireSatNavAssert("mapIconTextureStates[liTextureIndex]", 673);
@@ -900,7 +831,7 @@ void SatNavRenderer::RenderIconsForSatNav(
     u32  luClosestIconIndex = KU_MAX_SATNAV_ICONS; // 150 == "none"
     u32  luCurrentCarRouteIcon   = KU_MAX_SATNAV_ICONS;
     s32  liNumDrawn         = 0;
-    f32  lfClosestDistSq    = 3.4028235e38f;        // FLT_MAX
+    f32  lfClosestDistSq    = FLT_MAX;        // FLT_MAX
     bool lbDrawClosest      = false;
 
     if (muNumberOfSatNavIcons == 0)
@@ -1001,7 +932,7 @@ void SatNavRenderer::RenderIconsForSatNav(
     else
     {
         // Nothing drawn and no current-car route: draw the nearest off-screen icon if one was found.
-        lbDrawClosest = (lfClosestDistSq != 3.4028235e38f);
+        lbDrawClosest = (lfClosestDistSq != FLT_MAX);
     }
 
     if (!lbDrawClosest)
@@ -1097,7 +1028,7 @@ void SatNavRenderer::RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfH
     const bool lbMiniIcons =
         (meIconDisplayType == GuiEventEnableSatNavIcons::E_ICON_DISPLAY_TYPE_OFFLINE_EVENTS);
 
-    Vector2 lv2UvTopLeft, lv2UvBottomLeft, lv2UvTopRight, lv2UvBottomRight;
+    CgsGraphics::Vector2 lv2UvTopLeft, lv2UvBottomLeft, lv2UvTopRight, lv2UvBottomRight;
     if (lbMiniIcons)
     {
         lv2UvTopLeft     = mav2MiniIconUvTopLeft[luRow][luEventTypeIndex];
@@ -1292,7 +1223,7 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     // @0x8246645C; the same real-TextureState fold as InitResources -- see its H3b note).
     if (mpMapTextureState == 0)
         mpMapTextureState = CreatePayloadTextureState(
-            &mMapTextureStateBacking, mRenderSatNavEvent.mpMapTexture);
+            mpHeapAllocator, &mMapTextureStateResource, mRenderSatNavEvent.mpMapTexture);
     lrCmd.SetState(mpMapTextureState);
 
     // The map BLEND state is created here on console (@0x824663A4) but never bound in
@@ -1301,7 +1232,7 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 
     if (mpMaskTextureState == 0)
         mpMaskTextureState = CreatePayloadTextureState(
-            &mMaskTextureStateBacking, mRenderSatNavEvent.mpMaskTexture);
+            mpHeapAllocator, &mMaskTextureStateResource, mRenderSatNavEvent.mpMaskTexture);
 
     // Push the minimap mask over the viewport rect, full mask-texture UV range
     // (X360 builds the {0,0,1,1} uv vector @0x82466524-0x8246654C, then SetMaskRect).
