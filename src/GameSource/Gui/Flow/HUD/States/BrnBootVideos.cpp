@@ -3,14 +3,12 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::VariableEventQueue (the in-queue)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString (resId = name hash)
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                             // BrnGui::GuiEventPlayVideo (508)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::WriteToLog (diagnostics)
 #include "GameSource/Gui/BrnGuiCache.h"                                    // GuiCache::GetTime (the EA-logo dwell)
 #include "GameSource/Game/BrnGameModule.hpp"                          // BrnGame::GetMainGameModule (soft-reboot query)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"               // CgsSound::Playback::Name::MakeHash (the video sound name)
 #include <cstring>                                                         // strcmp (the Criterion sub-name match)
 
-#include <cstdio>                                                         // snprintf (diagnostics)
 
 // BrnGui::BootVideos -- reconstructed from ARTIST (Construct 0x824744B8 / OnEnter 0x824786B8 /
 // Update 0x82478778 / OnLeave 0x82478D38). Plays the boot branding logos in sequence by asking the GUI
@@ -110,15 +108,6 @@ namespace BrnGui
                 CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcName))));
             lPlayEvent.muSoundStreamName  = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcName));
             lPlayEvent.mbKeepMemoryWhenFinished = lbKeepMemoryWhenFinished;
-            {
-                char lac[128];
-                std::snprintf(lac, sizeof(lac),
-                              "[BootVideos] play '%s' (id=0x%016llX sound=0x%08X keep=%d)\n",
-                              lpcName,
-                              static_cast<unsigned long long>(lPlayEvent.muVideoResourceId),
-                              lPlayEvent.muSoundStreamName, (int)lbKeepMemoryWhenFinished);
-                CgsDev::Log::WriteToLog(lac);
-            }
             lpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlayEvent);
         }
 
