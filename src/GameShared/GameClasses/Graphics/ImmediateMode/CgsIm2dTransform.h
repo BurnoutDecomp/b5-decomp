@@ -19,10 +19,15 @@ namespace CgsGraphics
         void TransformByAspectRatio();
         static void SetAspectCorrectionMatrix(const rw::math::fpu::Matrix33Template<float>&);
 
-        // The class-wide aspect-correction matrix (X360 static @0x830110F0, nine floats),
-        // populated at runtime by SetAspectCorrectionMatrix(const Matrix33&) and read by
-        // TransformByAspectRatio. A static member, so it does not change the 64-byte
-        // instance layout (4 x Vector4). Storage homed in CgsIm2dTransform.cpp.
-        static rw::math::fpu::Matrix33Template<float> msAspectCorrectionMatrix;
+        // ARTIST830112D0 and83011090; native callers use these shared transforms.
+        static const Im2dTransform& GetDefault() { return mgDefault; }
+        static const Im2dTransform& GetAspectCorrected() { return mgAspectCorrected; }
+        static const rw::math::fpu::Matrix33Template<float>& GetAspectCorrectionMatrix()
+        { return mgAspectRatioCorrection; }
+
+    protected:
+        static Im2dTransform mgDefault;
+        static Im2dTransform mgAspectCorrected;
+        static rw::math::fpu::Matrix33Template<float> mgAspectRatioCorrection;
     };
 }
