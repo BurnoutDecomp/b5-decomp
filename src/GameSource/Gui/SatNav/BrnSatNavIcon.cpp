@@ -13,7 +13,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"            // [H3c] BrnFlapt::FileRef (Prepare)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // [F3] CgsCore::SPrintf (the Update commit)
 
-#include <limits>    // [H3c] FLT_MAX poison (Construct @0x82448340 stores 3.4028235e38)
+#include <cfloat>    // [H3c] FLT_MAX poison (Construct @0x82448340 stores 3.4028235e38)
 
 namespace BrnGui
 {
@@ -180,7 +180,7 @@ void SatNavMapIcon::Construct(const char* lpcName, CgsGui::StateInterface* lpSta
     lpComponent->FlaptIconComponent::Construct(lpcName, lpStateInterface, lpcParentName);
 
     mIconText.SetInvalid();                       // X360 stw 0 @+0x30/+0x34/+0x38
-    mfRotationInRadians = 3.4028235e38f;          // X360 stfs FLT_MAX @+0x20 (flt_8204F664)
+    mfRotationInRadians = FLT_MAX;          // X360 stfs FLT_MAX @+0x20 (flt_8204F664)
     mfAlpha             = -1.0f;                  // X360 stfs -1.0 @+0x24 (flt_820037C8)
     meState             = E_ICONSTATE_COUNT;      // X360 stw 53 @+0x28
 }
