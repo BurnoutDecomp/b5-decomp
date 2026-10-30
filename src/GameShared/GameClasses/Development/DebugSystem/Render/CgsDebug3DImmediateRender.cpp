@@ -4,7 +4,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
-#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+#include "rw/rwcore_structs.h"
 #if defined(_XBOX)
 #include <vectorintrinsics.h>
 #endif
@@ -27,6 +27,20 @@ namespace
     { const Vector3 value = {x, y, z, w}; return value; }
     rw::math::vpu::Vector2 Make2(f32 x, f32 y, f32 z, f32 w)
     { const rw::math::vpu::Vector2 value = {x, y, z, w}; return value; }
+
+    // Translate the five named descriptor entries to the RenderWare allocator type.
+    // ARTIST 82818B68 passes the whole descriptor to DoAllocate at vtable +0x10.
+    rw::Resource AllocateDebugState(rw::IResourceAllocator* allocator,
+                                    const renderengine::ResourceDescriptor5& descriptor)
+    {
+        rw::ResourceDescriptor rwDescriptor;
+        for (u32 i = 0; i < rw::KU_RESOURCE_LANE_COUNT; ++i)
+        {
+            rwDescriptor.m_baseResourceDescriptors[i].m_size = descriptor.maEntries[i].muSize;
+            rwDescriptor.m_baseResourceDescriptors[i].m_alignment = descriptor.maEntries[i].muAlignment;
+        }
+        return allocator->DoAllocate(rwDescriptor, 0);
+    }
 
     const f32 KF_PI = 3.14159265358979323846f;
     const f32 KF_TWO_PI = KF_PI * 2.0f;
@@ -150,9 +164,11 @@ namespace CgsDev
         lBlend.muState9 = 0xFFFFFFFFu;
         lBlend.mbHasCustomBlendFactors = 1;
         renderengine::ResourceDescriptor5 descriptor;
-        renderengine::BlendMaterialState* blendHandles[5] = {0};
         renderengine::BlendState::GetResourceDescriptor(&descriptor, &lBlend);
-        CgsGraphics::ResourceAllocatorCreate(lpAllocator, blendHandles, &descriptor);
+        const rw::Resource blendResource = AllocateDebugState(lpAllocator, descriptor);
+        renderengine::BlendMaterialState* blendHandles[5];
+        for (u32 i = 0; i < rw::KU_RESOURCE_LANE_COUNT; ++i)
+            blendHandles[i] = static_cast<renderengine::BlendMaterialState*>(blendResource.m_baseResources[i]);
         sgBlend = static_cast<renderengine::BlendMaterialState*>(renderengine::BlendState::Initialize(blendHandles, &lBlend));
 
         renderengine::DepthStencilState::Parameters lDepth = {0};
@@ -160,14 +176,18 @@ namespace CgsDev
         lDepth.muState4 = lDepth.muState8 = 7;
         lDepth.muStencilReadMask = lDepth.muStencilWriteMask = 0xFFFFFFFFu;
         lDepth.muState14 = lDepth.muState15 = 0xFFFFFFFFu;
-        renderengine::DepthStencilState* depth2DHandles[5] = {0};
         renderengine::DepthStencilState::GetResourceDescriptor(&descriptor, &lDepth);
-        CgsGraphics::ResourceAllocatorCreate(lpAllocator, depth2DHandles, &descriptor);
+        const rw::Resource depth2DResource = AllocateDebugState(lpAllocator, descriptor);
+        renderengine::DepthStencilState* depth2DHandles[5];
+        for (u32 i = 0; i < rw::KU_RESOURCE_LANE_COUNT; ++i)
+            depth2DHandles[i] = static_cast<renderengine::DepthStencilState*>(depth2DResource.m_baseResources[i]);
         sgDepth2D = renderengine::DepthStencilState::Initialize(depth2DHandles, &lDepth);
         lDepth.mbDepthTestEnable = 1;
-        renderengine::DepthStencilState* depth3DHandles[5] = {0};
         renderengine::DepthStencilState::GetResourceDescriptor(&descriptor, &lDepth);
-        CgsGraphics::ResourceAllocatorCreate(lpAllocator, depth3DHandles, &descriptor);
+        const rw::Resource depth3DResource = AllocateDebugState(lpAllocator, descriptor);
+        renderengine::DepthStencilState* depth3DHandles[5];
+        for (u32 i = 0; i < rw::KU_RESOURCE_LANE_COUNT; ++i)
+            depth3DHandles[i] = static_cast<renderengine::DepthStencilState*>(depth3DResource.m_baseResources[i]);
         sgDepth3D = renderengine::DepthStencilState::Initialize(depth3DHandles, &lDepth);
 
         renderengine::RasterizerState::Parameters lRasterizer = {0};
@@ -176,11 +196,14 @@ namespace CgsDev
         lRasterizer.muAntialiasedLineEnable = 0xFFFFu;
         lRasterizer.mu8DepthClipEnable = lRasterizer.mu8FrontCounterClockwise = 1;
         lRasterizer.mu8PaddingMode = 1;
-        renderengine::RasterizerState* rasterHandles[5] = {0};
         renderengine::RasterizerState::GetResourceDescriptor(&descriptor, &lRasterizer);
-        CgsGraphics::ResourceAllocatorCreate(lpAllocator, rasterHandles, &descriptor);
-        sgRasterizer = renderengine::RasterizerState::Initialize(rasterHandles, &lRasterizer);
+        const rw::Resource rasterResource = AllocateDebugState(lpAllocator, descriptor);
+        renderengine::RasterizerState* rasterHandles[5];
+        for (u32 i = 0; i < rw::KU_RESOURCE_LANE_COUNT; ++i)
+            rasterHandles[i] = static_cast<renderengine::RasterizerState*>(rasterResource.m_baseResources[i]);
+        renderengine::RasterizerState* rasterizer = renderengine::RasterizerState::Initialize(rasterHandles, &lRasterizer);
         sbCreated = true;
+        sgRasterizer = rasterizer;
     }
 
     void Debug3DImmediateRender::SetDebugFont(
