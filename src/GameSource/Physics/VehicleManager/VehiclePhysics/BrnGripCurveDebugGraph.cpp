@@ -1,5 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnGripCurveDebugGraph.h"
-#include <cmath>
+#include <vectorintrinsics.h>
 #include <cstring>
 
 // BrnPhysics::Vehicle::GripCurveDebugGraph -- the two pure-geometry accessors owned by the
@@ -18,14 +18,23 @@ namespace Vehicle
 {
     namespace
     {
-        f32 GraphFlush(f32 lfValue)
+        // ARTIST 0x825E8D64/70/A4 and 0x825E8E78..8F00 use VMX
+        // arithmetic. Native instructions retain VMX denormal/NaN handling.
+        f32 GraphAdd(f32 a, f32 b)
         {
-            return std::fpclassify(lfValue) == FP_SUBNORMAL
-                ? std::copysign(0.0f, lfValue) : lfValue;
+            const __vector4 va = { a, a, a, a }, vb = { b, b, b, b };
+            return __vaddfp(va, vb).x;
         }
-        f32 GraphAdd(f32 lfA, f32 lfB) { return GraphFlush(GraphFlush(lfA) + GraphFlush(lfB)); }
-        f32 GraphSubtract(f32 lfA, f32 lfB) { return GraphFlush(GraphFlush(lfA) - GraphFlush(lfB)); }
-        f32 GraphMultiply(f32 lfA, f32 lfB) { return GraphFlush(GraphFlush(lfA) * GraphFlush(lfB)); }
+        f32 GraphSubtract(f32 a, f32 b)
+        {
+            const __vector4 va = { a, a, a, a }, vb = { b, b, b, b };
+            return __vsubfp(va, vb).x;
+        }
+        f32 GraphMultiply(f32 a, f32 b)
+        {
+            const __vector4 va = { a, a, a, a }, vb = { b, b, b, b };
+            return __vmulfp(va, vb).x;
+        }
         f32 GraphFlipSign(f32 lfValue)
         {
             u32 luBits;
