@@ -62,26 +62,22 @@ namespace BrnReplays
     // and the static buffer exists, Clear() the live frame (+0xD7E0) then the previous
     // frame (+0) and mark it cleared. The X360 re-fetches GetStaticLayout() before each
     // access (three calls total; each re-runs the size assert).
-    RaceCarSerialiserFrame* RaceCarEntitySerialiser::CheckStaticLayoutCleared()
+    void RaceCarEntitySerialiser::CheckStaticLayoutCleared()
     {
         if (mbStaticLayoutCleared)
         {
-            // asm: the already-cleared early-out leaves `this` in r3 (an incidental return
-            // value the caller does not consume); reproduced verbatim.
-            return reinterpret_cast<RaceCarSerialiserFrame*>(this);
+            return;
         }
 
         if (GetStaticLayout() == 0)
         {
-            return 0;
+            return;
         }
 
-        // Clear the live frame first, then the previous frame (asm order 0x82657A84 then
-        // 0x82657A90). CheckStaticLayoutCleared's result is the second Clear()'s return.
+        // Clear the live frame first, then the previous frame (0x82657A84/90).
         GetStaticLayout()->mLiveFrame.Clear();
-        RaceCarSerialiserFrame* lpResult = GetStaticLayout()->mPreviousFrame.Clear();
+        GetStaticLayout()->mPreviousFrame.Clear();
         mbStaticLayoutCleared = true;
-        return lpResult;
     }
 
     // @0x8264C518
