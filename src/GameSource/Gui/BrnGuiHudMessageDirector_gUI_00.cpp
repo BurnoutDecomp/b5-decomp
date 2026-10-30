@@ -67,7 +67,7 @@ namespace
 // roughly every 7 minutes at a 10 MHz QPC -- after each wrap `last + wait > now` held for
 // minutes and every rate-limited HUD message was silently suppressed. See the banner in
 // CgsTimeUtils.cpp for why the u32 entry points still exist.
-namespace CgsSystem { u64 GetSystemTimerBaseTime64(); u64 GetSystemTimerFrequency64(); }
+namespace CgsSystem { u64 GetSystemTimerBaseTime(); u64 GetSystemTimerFrequency(); }
 
 namespace BrnGui
 {
@@ -275,10 +275,10 @@ bool HudMessageDirector::FilterAndSendOffMessage(const GuiHudMessage* lpMessage,
         // precision then `fctidz` to a 64-bit tick count, and compares unsigned 64-bit).
         const f32 lfTimeToWait = mpController->GetMessageTimeToWaitFromIndex(liIndex);
         const u64 lu64WaitTicks = static_cast<u64>(
-            static_cast<f64>(CgsSystem::GetSystemTimerFrequency64()) * static_cast<f64>(lfTimeToWait));
+            static_cast<f64>(CgsSystem::GetSystemTimerFrequency()) * static_cast<f64>(lfTimeToWait));
 
         // 64-bit throughout, matching the console's ldx/stdx/cmpld at 0x825117E4..0x825117F0.
-        if (mauMessagesLastTriggered[liIndex] + lu64WaitTicks > CgsSystem::GetSystemTimerBaseTime64())
+        if (mauMessagesLastTriggered[liIndex] + lu64WaitTicks > CgsSystem::GetSystemTimerBaseTime())
         {
             return false;
         }
@@ -289,7 +289,7 @@ bool HudMessageDirector::FilterAndSendOffMessage(const GuiHudMessage* lpMessage,
         return false;
     }
 
-    mauMessagesLastTriggered[liIndex] = CgsSystem::GetSystemTimerBaseTime64();
+    mauMessagesLastTriggered[liIndex] = CgsSystem::GetSystemTimerBaseTime();
 
     // `li r5, 0x9A; li r6, 0x348` -- event type 154, size 840 == the X360 sizeof
     // (GuiHudMessage). The host record is wider, so the size rides sizeof rather than the
