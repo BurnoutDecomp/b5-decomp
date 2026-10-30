@@ -548,17 +548,13 @@ private:
     // The world/car/sky pass block of Render (its mid-section), split out
     // for readability; runs between the frame begin and the 2D overlay tail.
 public:
-    // BrnRendererModule::PrepareAgain. The second half of the renderer's
-    // prepare: BrnGameModule::GamePrepare stage 3 hands it the five global textures it just
-    // resolved and it stores them for the passes that sample them (the blobby-shadow
-    // manager, the sky dome's two cloud layers, the corona atlas, the damage-FX glass
-    // fracture). The console writes them at +0xC4E0 / +0xC4E4 (the two cloud slots
-    // BrnSkyDomeManager::Render is handed) and their three siblings.
-    void PrepareAgain(renderengine::Texture* lpBlobbyShadow,
-                      renderengine::Texture* lpCloudDensity,
-                      renderengine::Texture* lpCloudLighting,
-                      renderengine::Texture* lpCoronaAtlas,
-                      renderengine::Texture* lpGlassFracture);
+    // ARTIST823FF8F8 / DecFIGS API: publish the five supplied textures,
+    // allocate the glass sampler and update both glass texture purposes.
+    bool PrepareAgain(const renderengine::Texture* lpBlobbyShadow,
+                      const renderengine::Texture* lpCloudDensity,
+                      const renderengine::Texture* lpCloudLighting,
+                      const renderengine::Texture* lpCoronaAtlas,
+                      const renderengine::Texture* lpGlassFracture);
 
     void DEBUGTriggerScreenShot(const char* lpcScreenShotText);
 
