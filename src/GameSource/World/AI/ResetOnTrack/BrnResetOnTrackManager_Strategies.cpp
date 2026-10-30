@@ -569,9 +569,8 @@ f32 ResetOnTrackManager::GetRoadSideForStartingLine(const RouteNode* lpNextNode,
     // 0x82784488 `fmadds f13, f12, f13, f11` = random * 2.0 + 8.0 / width, ONE rounding (ROUNDING_RULE 3), then
     // 0x82784494 `fsubs` 1.0 (rule 4). The product by 2.0 is exact, so this is the same value the unfused spelling
     // gave for every draw; std::fmaf keeps the console's instruction.
-    f32 lfInterp = std::fmaf(mRandom.RandomFloat(), KF_STARTING_LINE_SPREAD,
-                             KF_STARTING_LINE_CAR_WIDTH / lfRoadWidth)
-                 - 1.0f;
+    f32 lfInterp = mRandom.RandomFloat() * KF_STARTING_LINE_SPREAD
+                 + KF_STARTING_LINE_CAR_WIDTH / lfRoadWidth - 1.0f;
 
     // rw::math::vpu::Clamp, lowered by the console to two `fsubs ; fsel` pairs in this order
     // (0x82784498..0x827844B0): t = (-0.25 - x >= 0) ? -0.25 : x, then (0.25 - t >= 0) ? t : 0.25.
@@ -830,9 +829,10 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
                "!RwMath::IsSimilar( lNextPortal, lPrevPortal )");   // :1199
 
     lpResetData->mPosition  = lPrevPortal;
-    lpResetData->mDirection = Normalise3D(Vector3{ lNextPortal.x - lPrevPortal.x,
-                                                   lNextPortal.y - lPrevPortal.y,
-                                                   lNextPortal.z - lPrevPortal.z, 0.0f });
+    const Vector3 lPortalDelta = { lNextPortal.x - lPrevPortal.x,
+                                   lNextPortal.y - lPrevPortal.y,
+                                   lNextPortal.z - lPrevPortal.z, 0.0f };
+    lpResetData->mDirection = Normalise3D(lPortalDelta);
 
     const Vector3 lPlayerPosition = lpPlayerAICar->GetPosition();
     Vector3 lPlayerRelativePosition = { lpResetData->mPosition.x - lPlayerPosition.x,
@@ -1392,9 +1392,10 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
         lpSideRouteSection = lpNextSideRouteSection;
 
         const Vector3 lPlayerPosition3D = lpPlayerAICar->GetPosition();
-        const Vector2 lExitFromPlayer = BrnMath::Flatten(Vector3{
+        const Vector3 lExitDelta = {
             lExitNodePosition.x - lPlayerPosition3D.x, lExitNodePosition.y - lPlayerPosition3D.y,
-            lExitNodePosition.z - lPlayerPosition3D.z, lExitNodePosition.w - lPlayerPosition3D.w });
+            lExitNodePosition.z - lPlayerPosition3D.z, lExitNodePosition.w - lPlayerPosition3D.w };
+        const Vector2 lExitFromPlayer = BrnMath::Flatten(lExitDelta);
 
         if (!IsZero2D(lExitFromPlayer))
         {
