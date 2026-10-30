@@ -16,9 +16,7 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"  // AllocatorList
 #include "GameSource/Resource/BrnResourceAllocator.h"               // GetDebugAllocator
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"       // CgsMemory::LinearMalloc
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"       // WriteToLog
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
-#include <cstdio>                                                // snprintf
 
 namespace BrnReplays
 {
@@ -83,65 +81,6 @@ namespace BrnReplays
     // =========================================================================================
     void ReplayModule::StoreSerialisers(const ReplayIO::RequestInterface& lrRequestInterface)
     {
-        // ⭐⭐ THE PRECONDITION, AND IT IS THE WHOLE BUG THIS FUNCTION SHIPPED WITH.
-        // On the console StoreSerialisers cannot run before Prepare: it is called from
-        // ReplayModule::Update_PostSim, and the module is prepared during loading. On this build
-        // the effects leg runs from GameMain and reached this function BEFORE the loading
-        // screen's stage 8 had prepared the module. Measured (run 12, `this` printed on both
-        // sides so the two-instance theory could be ruled out -- it was the same object):
-        //     [replays] StoreSerialisers first call: this=00007FF742C5BCC0 linear=0000000000000000
-        //                                            slots=00000000100
-        //     [replays] StoreSerialisers with no linear region -- ... (Prepare has not run)
-        //     [replays] ReplayModule::Prepare:       this=00007FF742C5BCC0 linear=00007FF742A30258
-        // -- the adoption ran FIRST, with no region.
-        //
-        // The first version handled that by storing `mapSerialisers[id] = serialiser` and THEN
-        // skipping the allocation with a `continue`. That is a silent drop of exactly the shape
-        // this project keeps finding: the bookkeeping succeeded, the work did not, and because
-        // the slot now matched, every later call -- including every call after Prepare had a
-        // perfectly good region -- took the `mapSerialisers[id] == serialiser` early-out and
-        // never allocated anything. mpStaticBuffer stayed null for the whole run and
-        // EffectsModule::Update kept returning at its GetStaticLayout() guard.
-        //
-        // So: no region, no adoption. Return, leave the slots untouched, and let the next call
-        // (after Prepare) do the whole job. The console's own invariant, enforced.
-        if (mpLinearMalloc == 0)
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog(
-                    "[replays] StoreSerialisers before ReplayModule::Prepare -- no linear region "
-                    "yet, so NOTHING is adopted this call (adopting now would record the slot and "
-                    "leave its buffers unallocated for ever)\n");
-            }
-            return;
-        }
-
-        // [replays] ONE-SHOT WITNESS. Run 10 adopted nothing with the call in the right place
-        // and the read lock held, so the question is what the eleven slots actually hold when
-        // this runs. Print them once rather than reason about it again. DELETE with the bring-up.
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                char lacMsg[320];
-                s32 liOffset = std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[replays] StoreSerialisers first call: this=%p linear=%p slots=",
-                    static_cast<void*>(this), static_cast<void*>(mpLinearMalloc));
-                for (s32 liSlot = 0; liSlot < KI_NUM_SERIALISERS && liOffset > 0
-                     && liOffset < static_cast<s32>(sizeof(lacMsg)) - 8; ++liSlot)
-                {
-                    liOffset += std::snprintf(lacMsg + liOffset, sizeof(lacMsg) - liOffset,
-                        "%c", lrRequestInterface.mapSerialisers[liSlot] != 0 ? '1' : '0');
-                }
-                std::snprintf(lacMsg + liOffset, sizeof(lacMsg) - liOffset, "\n");
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-
         for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
         {
             BaseSerialiser* lpSerialiser = lrRequestInterface.mapSerialisers[liId];
@@ -150,9 +89,12 @@ namespace BrnReplays
             if (mapSerialisers[liId] == lpSerialiser)
                 continue;
 
-            CGS_ASSERT(mapSerialisers[liId] == 0 || mapSerialisers[liId]->GetBuffer() == 0,
-                       "Don't currently support runtime de-allocation of serialisers - see "
-                       "Chris if you REALLY need this\n");   // BrnReplayModule.cpp:1713
+            if (mapSerialisers[liId] && mapSerialisers[liId]->GetBuffer())
+            {
+                CGS_ASSERT(false, "Don't currently support runtime de-allocation of serialisers - see "
+                           "Chris if you REALLY need this\n");
+                mapSerialisers[liId]->SetBuffer(0);
+            }
 
             mapSerialisers[liId] = lpSerialiser;
 
@@ -181,12 +123,6 @@ namespace BrnReplays
                            "Could not allocate static buffer for serialiser\n");   // :1737
             }
 
-            char lacMsg[224];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[replays] serialiser %d '%s' adopted: stream=%d bytes @%p static=%d bytes @%p\n",
-                liId, lpSerialiser->GetName(), liBufferSize, lpSerialiser->GetBuffer(),
-                liStaticSize, lpSerialiser->GetStaticBufferPtr());
-            CgsDev::Log::WriteToLog(lacMsg);
         }
     }
 }
