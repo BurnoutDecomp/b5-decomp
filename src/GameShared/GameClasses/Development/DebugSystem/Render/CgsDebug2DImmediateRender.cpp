@@ -5,7 +5,6 @@
 #include <math.h>
 #include <cstring>
 
-#include <cstdio>
 #if defined(_XBOX)
 #include <vectorintrinsics.h>
 #endif
@@ -438,8 +437,7 @@ namespace CgsDev
                                             f32 lfScale, RGBA lColour)
     {
         char lacValue[256];
-        _snprintf(lacValue, sizeof(lacValue), "%d", liValue);
-        lacValue[sizeof(lacValue) - 1] = 0;
+        CgsCore::SPrintf(lacValue, sizeof(lacValue), "%d", liValue);
         DrawText(lacValue, lfX, lfY, lfScale, lColour);
     }
 
