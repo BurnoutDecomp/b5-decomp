@@ -46,7 +46,8 @@ namespace Vehicle
     // EntityId packing: (index << 10) | (E_ENTITYTYPE_RACECAR << 24). The index field is 14 bits.
     static inline EntityId PackRaceCarEntityId(u32 luEntityIndex)
     {
-        return EntityId{ (luEntityIndex << 10) | 0x1000000u };
+        EntityId lEntityId = { (luEntityIndex << 10) | 0x1000000u };
+        return lEntityId;
     }
 
     // =============================================================================================
@@ -100,7 +101,7 @@ namespace Vehicle
                     // The remote peer says this car is wrecked. Commit it once.
                     if (!lrCar.mbCrashing)
                     {
-                        EntityId lCrasherEntityId = EntityId{ 0u };
+                        EntityId lCrasherEntityId = { 0u };
                         if (lpControls->meCrasherRaceCarIndex != -1)
                         {
                             CGS_ASSERT(static_cast<u32>(lpControls->meCrasherRaceCarIndex) < (1u << 14),
@@ -127,7 +128,8 @@ namespace Vehicle
                     // pose, drop the deformation model and reset the vehicle physics.
                     lrCar.SetTransform(lpControls->mTransform);
                     lrCar.SetLinearVelocity(lpControls->mLinearVelocity);
-                    lrCar.SetAngularVelocity(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+                    const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    lrCar.SetAngularVelocity(lvZero);
                     lrCar.SetMass(lrCar.GetAttribs()
                                       ->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x);
 
@@ -142,9 +144,9 @@ namespace Vehicle
                     // Both resets run, base first, with the frozen flag cleared between them.
                     // Explicitly qualified: RaceCarPhysics declares its own no-argument Reset, which
                     // would otherwise hide both velocity overloads.
-                    lrCar.SimpleVehiclePhysics::Reset(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+                    lrCar.SimpleVehiclePhysics::Reset(lvZero);
                     lrCar.SetFrozen(false);
-                    lrCar.VehiclePhysics::Reset(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+                    lrCar.VehiclePhysics::Reset(lvZero);
                 }
             }
 
