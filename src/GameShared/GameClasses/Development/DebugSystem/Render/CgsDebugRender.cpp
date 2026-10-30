@@ -11,6 +11,15 @@
 // Reconstructed from the X360 ARTIST build (see CgsDebugRender.h for addresses). The events are POD and
 // passed to the queue as CgsModule::Event* by reinterpret (the queue stores them by byte image).
 
+namespace
+{
+    rw::math::vpu::Vector2 MakeDebugVector2(float x, float y, float z, float w)
+    {
+        const rw::math::vpu::Vector2 value = { x, y, z, w };
+        return value;
+    }
+}
+
 namespace CgsDev
 {
     namespace
@@ -741,8 +750,8 @@ namespace CgsDev
 
     void DebugRender::Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
     {
-        Draw2DBox(Vector2{lfMinX, lfMinY, 0, 0},
-                  Vector2{lfMaxX - lfMinX, lfMaxY - lfMinY, 0, 0}, lColour);
+        Draw2DBox(MakeDebugVector2(lfMinX, lfMinY, 0, 0),
+                  MakeDebugVector2(lfMaxX - lfMinX, lfMaxY - lfMinY, 0, 0), lColour);
     }
 
     void DebugRender::Draw2DFrame(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
@@ -798,8 +807,8 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawBox2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawBox2D*>(lpEvent);
-                    lpRenderer->DrawBox(Vector2{lpEv->mfX, lpEv->mfY, 0, 0},
-                                        Vector2{lpEv->mfWidth, lpEv->mfHeight, 0, 0}, lpEv->mColour);
+                    lpRenderer->DrawBox(MakeDebugVector2(lpEv->mfX, lpEv->mfY, 0, 0),
+                                        MakeDebugVector2(lpEv->mfWidth, lpEv->mfHeight, 0, 0), lpEv->mColour);
                     break;
                 }
 
