@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Development/StackUnpick/CgsStackUnpick.h"   // StackUnpick (AssertData::mStack)
 #include "GameShared/GameClasses/Development/VectorFont/CgsVectorFont.h"     // VectorFont (Manager::mVectorFont) + fwd Debug2DImmediateRender
 
+namespace CgsSystem { struct ThreadLayout; }
+
 namespace CgsDev
 {
     namespace MapFile { struct Reader; }   // the function-map call-stack symbol resolver
@@ -44,6 +46,9 @@ namespace Assert
         void RegisterAssertHandler(AssertHandler* lpHandler);
         void SetRenderer(Debug2DImmediateRender* lpRenderer);   // CgsAssertManager.h:117
         void SetMapFileReader(MapFile::Reader* lpReader, const char* lpcMapFileName);  // CgsAssertManager.h:120
+        // DecFIGS h:123; ARTIST823CA024 stores the actual shared layout home.
+        void SetThreadLayout(CgsSystem::ThreadLayout* lpThreadLayout)
+        { mpThreadLayout = lpThreadLayout; }
         void HandleAssert(const char* lpcMessage, const char* lpcFile, s32 liLine);
 
         // The pending assert (for DebugManager::RenderAssert, the on-screen overlay).
@@ -62,6 +67,7 @@ namespace Assert
         bool CanRenderAssert() const;        // CgsAssertManager.h:171
         void ClearCurrentAssert();           // CgsAssertManager.h:166
 
+        static CgsSystem::ThreadLayout* mpThreadLayout; // ARTIST83018F18, no instance storage.
         Debug2DImmediateRender* mpRender;          // the 2D renderer (X360: static; wired by SetRenderer)
         MapFile::Reader*        mpMapFileReader;   // the call-stack symbol resolver (X360: static)
         const char*             mpcMapFileName;    // the map file the reader opens (X360: static)

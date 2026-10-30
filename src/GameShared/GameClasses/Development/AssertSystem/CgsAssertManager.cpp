@@ -25,6 +25,7 @@ namespace Assert
 {
 
     Manager gAssertManager;
+    CgsSystem::ThreadLayout* Manager::mpThreadLayout;
 
     // The call-stack symbol resolver instance (X360: a static MinimalMemoryReader the bring-up wires via
     // SetMapFileReader). Lazily wired on the first assert below.
