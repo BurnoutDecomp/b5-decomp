@@ -114,7 +114,10 @@ namespace BrnEffects
     // Delete it together with those two casts.
     typedef CgsGeometric::Triangle4 Triangle4;
 
-    struct BrnCrashTriangleCache
+    // DecFIGS declares this cache itself 128-byte aligned (UDT sda=8): its
+    // 48 records and three counters occupy 0x1E0C bytes and the type rounds to
+    // 0x1E80. ARTIST embeds it at EffectsModule+0x2D400 and dispatch+0x3B00.
+    struct CGS_ALIGN(128) BrnCrashTriangleCache
     {
         void Construct();
         // The three-word counter reset EffectsModule stores inline (HandleGameActions
@@ -148,6 +151,9 @@ namespace BrnEffects
         u32 mnNextPackedTriangleToFill;                                                    // h:161  +0x1E04
         u32 mnNextComponentToFill;                                                         // h:162  +0x1E08
     };
+
+    CGS_STATIC_ASSERT((sizeof(BrnCrashTriangleCache) == 0x1E80), "BrnCrashTriangleCache size drift");
+    CGS_STATIC_ASSERT((__alignof(BrnCrashTriangleCache) == 128), "BrnCrashTriangleCache alignment drift");
 }
 
 #endif // GAMESOURCE_EFFECTS_BRNCRASHTRIANGLECACHE_H
