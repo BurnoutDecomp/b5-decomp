@@ -10,6 +10,9 @@
 #include "GameSource/Gui/BrnGuiShared.h"
 #include <cstring>
 #include <cmath>
+#if defined(_XBOX)
+#include <vectorintrinsics.h>
+#endif
 #include "GameSource/Gui/BrnGuiWorldDataController.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
@@ -43,6 +46,37 @@ namespace BrnGui
 {
 namespace
 {
+    // ARTIST 8249E6C4, 8249EA2C and 8249EBC4: dot3 and the two
+    // reciprocal-root refinements are VMX operations, including the zero select.
+    static bool IsWithinRouteExclusion(const void* lpPoint, const void* lpPeer)
+    {
+#if defined(_XBOX)
+        const __vector4 delta = __vsubfp(__lvx(lpPoint, 0), __lvx(lpPeer, 0));
+        const __vector4 squared = __vmsum3fp(delta, delta);
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(squared);
+        for (int i = 0; i < 2; ++i)
+        {
+            const __vector4 square = __vmulfp(estimate, estimate);
+            const __vector4 halfEstimate = __vmulfp(estimate, half);
+            const __vector4 residual = __vnmsubfp(squared, square, one);
+            estimate = __vmaddfp(halfEstimate, residual, estimate);
+        }
+        const __vector4 length = __vsel(__vmulfp(squared, estimate), zero,
+                                         __vcmpeqfp(squared, zero));
+        CGS_ALIGN(16) f32 lanes[4];
+        __stvx(length, lanes, 0);
+        return lanes[0] < 200.0f;
+#else
+        const f32* point = static_cast<const f32*>(lpPoint);
+        const f32* peer = static_cast<const f32*>(lpPeer);
+        const f32 x = point[0] - peer[0], y = point[1] - peer[1], z = point[2] - peer[2];
+        return std::sqrt(x * x + y * y + z * z) < 200.0f;
+#endif
+    }
+
     // The shortest route an online event accepts (rodata 1000.0; the main-option handler
     // tests the route against the same word).
     const f32 KF_MINIMUM_ROUTE_DISTANCE = 1000.0f;
@@ -1575,11 +1609,7 @@ namespace
                 {
                     const SatNavEventDisplayInfo* lpEventStart = mpGuiCache->GetEventStart(luEventStart);
                     CGS_ASSERT(lpEventStart, "lpEventStart");
-                    const f32 lfExclusionX = lpEventStart->mv3Position.x - lFirstCheckpointInfo.GetPositionLane().x;
-                    const f32 lfExclusionY = lpEventStart->mv3Position.y - lFirstCheckpointInfo.GetPositionLane().y;
-                    const f32 lfExclusionZ = lpEventStart->mv3Position.z - lFirstCheckpointInfo.GetPositionLane().z;
-                    if (std::sqrt(lfExclusionX * lfExclusionX + lfExclusionY * lfExclusionY +
-                        lfExclusionZ * lfExclusionZ) < 200.0f)
+                    if (IsWithinRouteExclusion(&lpEventStart->mv3Position, &lFirstCheckpointInfo.GetPositionLane()))
                     {
                         lauIconsToIgnore[liNumIconsToIgnore++] = lpEventStart->muEventInstanceId;
                         CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
@@ -1654,11 +1684,7 @@ namespace
                     {
                         GuiEventUpdateSatNav::SatNavIconInfo lFinishInfo;
                         mpGuiCache->GetOnlineFinishPoint(liFinishPoint, &lFinishInfo);
-                        const f32 lfExclusionX = (lFinishInfo.GetPositionLane()).x - (lpEventStart->mv3Position).x;
-                        const f32 lfExclusionY = (lFinishInfo.GetPositionLane()).y - (lpEventStart->mv3Position).y;
-                        const f32 lfExclusionZ = (lFinishInfo.GetPositionLane()).z - (lpEventStart->mv3Position).z;
-                        if (std::sqrt(lfExclusionX * lfExclusionX + lfExclusionY * lfExclusionY +
-                        lfExclusionZ * lfExclusionZ) < 200.0f)
+                        if (IsWithinRouteExclusion(&lFinishInfo.GetPositionLane(), &lpEventStart->mv3Position))
                         {
                             lauIconsToIgnore[liNumIconsToIgnore++] = static_cast<u32>(static_cast<s32>(lFinishInfo.GetLandmarkIndexHalf()));
                             CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
@@ -1684,11 +1710,7 @@ namespace
                     {
                         GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
                         mpGuiCache->GetLandmarkInfoAtPositionInList(liLandmark, &lLandmarkInfo);
-                        const f32 lfExclusionX = (lLandmarkInfo.GetPositionLane()).x - (lpEventStart->mv3Position).x;
-                        const f32 lfExclusionY = (lLandmarkInfo.GetPositionLane()).y - (lpEventStart->mv3Position).y;
-                        const f32 lfExclusionZ = (lLandmarkInfo.GetPositionLane()).z - (lpEventStart->mv3Position).z;
-                        if (std::sqrt(lfExclusionX * lfExclusionX + lfExclusionY * lfExclusionY +
-                        lfExclusionZ * lfExclusionZ) < 200.0f)
+                        if (IsWithinRouteExclusion(&lLandmarkInfo.GetPositionLane(), &lpEventStart->mv3Position))
                         {
                             lauIconsToIgnore[liNumIconsToIgnore++] = static_cast<u32>(static_cast<s32>(lLandmarkInfo.GetLandmarkIndexHalf()));
                             CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
