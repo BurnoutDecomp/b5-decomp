@@ -160,17 +160,17 @@ namespace BrnGui
         // follows each. The ctor zeroes the six descriptors; Construct() zeroes five of the
         // six pointers (mpPreRaceMaskTextureState is the ONE the guest leaves alone -- the
         // ctor's descriptor clear already covered its slot and Construct never re-stores it).
-        u32                         mBackgroundMaskTextureStateResource[5];  // h:142 guest +0x48
+        rw::Resource                mBackgroundMaskTextureStateResource;  // h:142 guest +0x48
         renderengine::TextureState* mpBackgroundMaskTextureState;            // h:143 guest +0x5C
-        u32                         mPreRaceMaskTextureStateResource[5];     // h:145 guest +0x60
+        rw::Resource                mPreRaceMaskTextureStateResource;     // h:145 guest +0x60
         renderengine::TextureState* mpPreRaceMaskTextureState;               // h:146 guest +0x74
-        u32                         mMapTileBlendStateResource[5];           // h:148 guest +0x78
+        rw::Resource                mMapTileBlendStateResource;           // h:148 guest +0x78
         renderengine::BlendState*   mpMapTileBlendState;                     // h:149 guest +0x8C
-        u32                         mRouteSegmentTextureStateResource[5];    // h:151 guest +0x90
+        rw::Resource                mRouteSegmentTextureStateResource;    // h:151 guest +0x90
         renderengine::TextureState* mpRouteSegmentTextureState;              // h:152 guest +0xA4
-        u32                         mRouteSegmentBlendStateResource[5];      // h:154 guest +0xA8
+        rw::Resource                mRouteSegmentBlendStateResource;      // h:154 guest +0xA8
         renderengine::BlendState*   mpRouteSegmentBlendState;                // h:155 guest +0xBC
-        u32                         mPulseTextureStateResource[5];           // h:157 guest +0xC0
+        rw::Resource                mPulseTextureStateResource;           // h:157 guest +0xC0
         renderengine::TextureState* mpPulseTextureState;                     // h:158 guest +0xD4
 
         EFadeState              meFadeState;            // h:188  guest +0xD8
@@ -182,13 +182,6 @@ namespace BrnGui
         f32                     mfLastProp[KI_MAX_PULSES];        // h:211 guest +0x8770
         bool                    mbDrawRoute;                      // h:213 guest +0x8780
 
-        // PC fold: backing storage for the two texture states RecvEvent creates at runtime
-        // (the font-path / SatNav / CrashNav precedent -- renderengine::TextureState::
-        // Initialize(rw::Resource*, Parameters*)). The console's u32[5] descriptor slots
-        // above stay as the documented X360 shape. The other four descriptors get no
-        // backing: nothing in this build ever creates those states.
-        rw::Resource            mBackgroundMaskTextureStateBacking;
-        rw::Resource            mPreRaceMaskTextureStateBacking;
     };
 }
 
