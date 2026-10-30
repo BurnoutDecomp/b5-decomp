@@ -1,34 +1,26 @@
 #include "GameShared/GameClasses/Development/Log/CgsLogChannelOutput.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
-
-#include <cstdio>
+#include <stdio.h>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x8229FB20
 //   (CgsDev::Log::LogChannelOutput::Append)
 //
-// The X360 pseudocode printf'd the text (channel-prefixed when miChannel != -1) to the
-// console. Routed through the unified game log (WriteToLog -> BrnGame.log + debugger output)
-// so every log sink lands in the one log file. The channel id lives at byte offset 8 of the
-// output object (miChannel); -1 means "unchannelled" (no CHANNEL prefix).
+// The X360 body calls the native CRT printf directly. The channel id lives at byte offset 8
+// (miChannel); -1 selects the unchannelled format.
 
 namespace CgsDev
 {
     namespace Log
     {
-        // X360 0x8229FB20. The StrStreamBase char* sink: write the text to the unified game log,
-        // channel-prefixed when miChannel != -1.
+        // X360 0x8229FB20. The StrStreamBase char* sink writes directly with printf.
         void LogChannelOutput::Append(const char* lpcText)
         {
             if (miChannel == -1)
             {
-                WriteToLog(lpcText);
+                printf("%s", lpcText);
             }
             else
             {
-                char lacPrefix[32];
-                std::snprintf(lacPrefix, sizeof(lacPrefix), "CHANNEL %d: ", miChannel);
-                WriteToLog(lacPrefix);
-                WriteToLog(lpcText);
+                printf("CHANNEL %d: %s", miChannel, lpcText);
             }
         }
     }
