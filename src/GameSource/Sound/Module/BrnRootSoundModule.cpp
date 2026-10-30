@@ -507,14 +507,7 @@ namespace Module
             gPlaybackTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
             gPlaybackTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
 
-            // FLAG (PC seam): the host CreateAllocators Construct()s the audio-stream
-            // linear region but does not Create() it with a backing carve yet, so its
-            // GetSize() is 0 -- hand Prepare a null LinearMalloc so it takes its own
-            // REAL no-linear-region stream path (0x20000 x 4 blocks through the main
-            // allocator) until that region carve lands.
             CgsMemory::LinearMalloc* lpStreamMalloc = lpAllocatorList->GetAudioStreamAllocator();
-            if (lpStreamMalloc != 0 && lpStreamMalloc->GetSize() == 0)
-                lpStreamMalloc = 0;
 
             rw::audio::core::System::Lock(mpSystem);
             const bool lbPlaybackPrepared = mLogicModule.GetPlaybackModule().Prepare(
