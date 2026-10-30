@@ -300,10 +300,8 @@ namespace BrnWorld
         // property that actually encodes the DWARF member order, and it is width-independent.
         static void _AssertLayout()
         {
-#if defined(_XBOX)
             CGS_STATIC_ASSERT((sizeof(CrashPlayManager) == 0x160), "ARTIST CrashPlayManager size");
             CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mbBoostChargePending) == 0x153), "ARTIST CrashPlayManager final byte");
-#endif
             CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mfAftertouchPower)
                           == offsetof(CrashPlayManager, mfBoostPercentage) + 4),
                           "mfAftertouchPower immediately follows mfBoostPercentage (console +0x134/+0x138)");
