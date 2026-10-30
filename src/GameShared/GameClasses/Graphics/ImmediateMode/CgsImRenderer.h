@@ -8,6 +8,7 @@
 #include "types.hpp"
 namespace renderengine
 {
+    class BlendState;
     class Texture;
     class TextureState;
     enum PrimitiveType;   // platform primitive-topology enum (external API)
@@ -23,7 +24,7 @@ namespace CgsGraphics
 {
     struct OcclusionCullManager;
 
-    class BlendState;
+    typedef renderengine::BlendState BlendState;
     class DepthStencilState;
     class RasterizerState;
     class RenderTargetState;
