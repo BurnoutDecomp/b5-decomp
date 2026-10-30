@@ -325,7 +325,8 @@ namespace Deformation
                 // UpdateSkinningOffsets"; the stride and base make it per-SENSOR, and
                 // UpdateSkinningOffsets never clears it -- so the respray re-blended the old scratch.
                 lpPlayerModel->ResetScratching();
-                lpPlayerModel->UpdateIK(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });   // 0x82644F0C vspltisw v1,0
+                const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lpPlayerModel->UpdateIK(lvfZero);   // 0x82644F0C vspltisw v1,0
                 lpPlayerModel->UpdateSkinningOffsets();
             }
         }
@@ -491,7 +492,7 @@ namespace Deformation
             //                   whether or not slot 0 is in use (no GetPart tripwires on console).
             // Only the model-27 arm is observable: OutputState rewrites the CarState rows before any
             // reader, while the part row carries a live part's render offset and hinge velocity.
-            const Vector3 lZeroRow = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lZeroRow = { 0.0f, 0.0f, 0.0f, 0.0f };
             const s32 liSensorsPerCar = static_cast<s32>(CarState::KU_MAX_SENSORS);   // 20
             if (liModelIndex < liSensorsPerCar)
             {
@@ -507,8 +508,8 @@ namespace Deformation
             }
             else
             {
-                mDetachedPartManager.GetPartPool().GetPartSlot(0).SetLocalGraphicsPositionPlusJointVelocity(
-                    Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f });
+                const Vector3Plus lZeroPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mDetachedPartManager.GetPartPool().GetPartSlot(0).SetLocalGraphicsPositionPlusJointVelocity(lZeroPosition);
             }
         }
     }
@@ -613,10 +614,11 @@ namespace Deformation
 
             // Reset the model's deformation in place (keep the slot live). The damage/time + reset
             // type come from the event; mRandom passes as the last arg.
+            const VecFloat lvfDamage = { lrEvent.mfInitialDamageAmount, lrEvent.mfInitialDamageAmount,
+                                         lrEvent.mfInitialDamageAmount, lrEvent.mfInitialDamageAmount };
             mpaModels[liModelIndex].ResetDeformation(
                 lpSimInput, lpSceneInterface, &mDetachedPartManager, &mDetachedWheelManager,
-                VecFloat{ lrEvent.mfInitialDamageAmount, lrEvent.mfInitialDamageAmount,
-                          lrEvent.mfInitialDamageAmount, lrEvent.mfInitialDamageAmount },
+                lvfDamage,
                 lrEvent.meDeformationResetType, lbIsPlayerRaceCar, mRandom);
         }
     }
@@ -669,8 +671,8 @@ namespace Deformation
             const BrnPhysics::Vehicle::ValidateRaceCarEvent& lrEvent = lrQueue.GetEvent(liI);
 
             // The entity word is the HIGH dword of the volume-instance id (0x825DB128 srdi 32).
-            const s32 liModelIndex = FindModelIndexByEntityID(
-                EntityId{ static_cast<u32>(lrEvent.mVolumeInstanceID.muId >> 32) });
+            const EntityId lEntity = { static_cast<u32>(lrEvent.mVolumeInstanceID.muId >> 32) };
+            const s32 liModelIndex = FindModelIndexByEntityID(lEntity);
             if (liModelIndex < 0)
                 continue;                                                  // 0x825DB138
 
@@ -978,8 +980,10 @@ namespace Deformation
             CGS_ASSERT((luTrailerWord >> 24) == 2u,
                        "lTrailerEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");  // :1034
 
-            const s32 liCabModel     = FindModelIndexByEntityID(EntityId{ luCabWord });
-            const s32 liTrailerModel = FindModelIndexByEntityID(EntityId{ luTrailerWord });
+            const EntityId lCabEntity = { luCabWord };
+            const EntityId lTrailerEntity = { luTrailerWord };
+            const s32 liCabModel     = FindModelIndexByEntityID(lCabEntity);
+            const s32 liTrailerModel = FindModelIndexByEntityID(lTrailerEntity);
 
             // :1039/:1040 -- the console STREAMS the failure and adds the contact anyway
             // (fire-and-continue asserts). Reproduced: tripwire, then add.
@@ -987,9 +991,9 @@ namespace Deformation
             CGS_ASSERT(liTrailerModel != -1, "Failed to find deformation model for cab ");   // :1040
 
             const Vector4* lpLanes = reinterpret_cast<const Vector4*>(&lrEvent);
-            const Vector3 lvPointOnA{ lpLanes[0].x, lpLanes[0].y, lpLanes[0].z, 0.0f };
-            const Vector3 lvPointOnB{ lpLanes[1].x, lpLanes[1].y, lpLanes[1].z, 0.0f };
-            const Vector3 lvNormal  { lpLanes[2].x, lpLanes[2].y, lpLanes[2].z, 0.0f };
+            const Vector3 lvPointOnA = { lpLanes[0].x, lpLanes[0].y, lpLanes[0].z, 0.0f };
+            const Vector3 lvPointOnB = { lpLanes[1].x, lpLanes[1].y, lpLanes[1].z, 0.0f };
+            const Vector3 lvNormal = { lpLanes[2].x, lpLanes[2].y, lpLanes[2].z, 0.0f };
 
             lpSolver->AddVehicleContact(lvPointOnA, lvPointOnB, lvNormal,
                                         liCabModel, liTrailerModel);
@@ -1063,9 +1067,10 @@ namespace Deformation
 
         // Zero time vector, the raw -1 reset type the console passes (the enum names only
         // E_DEFORMATION_RESET_NONE == 0), flag clear, the manager's own generator.
+        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
         mpaModels[liModelIndex].ResetDeformation(
             lpSimInput, lpSceneInterface, &mDetachedPartManager, &mDetachedWheelManager,
-            VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f },
+            lvfZero,
             static_cast<DeformationResetType>(-1), false, mRandom);
     }
 
@@ -1081,9 +1086,10 @@ namespace Deformation
         {
             if (mpaModels[liModelIndex].ShouldResetDeformationNextUpdate())
             {
+                const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
                 mpaModels[liModelIndex].ResetDeformation(
                     lpSimInput, lpSceneInterface, &mDetachedPartManager, &mDetachedWheelManager,
-                    VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f },
+                    lvfZero,
                     static_cast<DeformationResetType>(0), false, mRandom);
             }
 
