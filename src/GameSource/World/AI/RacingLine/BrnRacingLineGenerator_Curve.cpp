@@ -49,6 +49,9 @@ namespace BrnAI
 {
 namespace
 {
+    // ARTIST section flag test uses bit 0x10.
+    const u8 KX8_SECTION_FLAG_JUNCTION = 0x10;
+
 // ---- baked constants ---------------------------------------------------------------------
 // The cache is 16 slots addressed by `sectionIndex & 15` (`clrlwi r11, r5, 28` everywhere; here
 // @0x8278F8A0 and @0x8278FE44).
