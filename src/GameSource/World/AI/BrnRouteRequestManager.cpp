@@ -57,10 +57,8 @@ namespace BrnAI
 // 0xB5E330D0_2EC654DA at +0x20 (insrdi at 0x8278A418) and index 0 at +0x28.
 static CgsNumeric::Random mRandom;
 
-static const s32 KI_ROUTE_REQ_WITNESS_TOTAL   = 96;
 // After the opening burst, one further line per car every N eligible frames (600 == about ten
 // seconds at 60 Hz), until the overall cap is reached.
-static const s32 KI_ROUTE_REQ_WITNESS_PERIOD = 600;
 
 // X360 ChooseDistanceFunction (@0x82788CC0): the hardcoded world-X divide that splits the map
 // into the "countryside" half (X < this) and the "city" half. DWARF KF_HACK_CONTRYSIDE_DIVIDE
@@ -188,7 +186,7 @@ u16 RouteRequestManager::ComputeSectionBehind(const AICar* lpAICar, const AISect
     // trio flips the sign bits = negate), v1 = Flatten(GetPosition()). Looking BACKWARDS along
     // the car's heading, the "forward" portal is the one behind the car.
     const Vector3 lDirection = lpAICar->GetDirection();
-    const Vector3 lNegatedDirection = Vector3{ -lDirection.x, -lDirection.y, -lDirection.z };
+    const Vector3 lNegatedDirection = { -lDirection.x, -lDirection.y, -lDirection.z, -lDirection.w };
     const Vector2 lCarDirection2D = BrnMath::Flatten(lNegatedDirection);
     const Vector2 lCarPosition2D  = BrnMath::Flatten(lpAICar->GetPosition());
 
@@ -262,10 +260,7 @@ void RouteRequestManager::GenerateStandardRouteRequest(
         lRouteRequest.AddBlockSectionId(lpAISectionData->GetAISection(luSectionBehind)->mId);
     }
 
-    if (!lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRouteRequest))
-    {
-        WitnessDroppedRequest("race-route(1-slot)", static_cast<s32>(luRaceCarIndex));
-    }
+    lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRouteRequest);
 }
 
 // X360 @0x82788F58. A route biased onto a different line than the player's. Only issued when the
@@ -302,10 +297,7 @@ void RouteRequestManager::GenerateAlternativeRouteRequest(
         static_cast<AStarDistanceFunction>(((liRaceCarIndex & 1) != 0) + E_ASTAR_DISTANCE_MANHATTAN);
     lRouteRequest.SetDistanceFunction(leDistanceFunction);
 
-    if (!lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRouteRequest))
-    {
-        WitnessDroppedRequest("race-route(1-slot)", liRaceCarIndex);
-    }
+    lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRouteRequest);
 }
 
 // X360 @0x82789090. A short look-ahead request that predicts the car forward along its current
@@ -330,10 +322,7 @@ void RouteRequestManager::GenerateExtrapolatedRouteRequest(
     RouteMapModuleIO::ExtrapolatedRouteRequest lRouteRequest;
     lRouteRequest.Construct(lDirection2D, lPosition2D, luBestSectionIndex, luRaceCarIndex);
 
-    if (!lpRouteInputBuffer->GetExtrapolatedRouteRequestQueue()->AddEventSafe(lRouteRequest))
-    {
-        WitnessDroppedRequest("extrapolated(12-slot)", static_cast<s32>(luRaceCarIndex));
-    }
+    lpRouteInputBuffer->GetExtrapolatedRouteRequestQueue()->AddEventSafe(lRouteRequest);
 }
 
 // X360 @0x8277A598. The world-space direction to flee a threat: the AI car's position minus the
@@ -376,10 +365,7 @@ void RouteRequestManager::GenerateRouteFleeingRouteRequest(
     RouteMapModuleIO::ExtrapolatedRouteRequest lRouteRequest;
     lRouteRequest.Construct(lDirection2D, lPosition2D, luBestSectionIndex, luRaceCarIndex);
 
-    if (!lpRouteInputBuffer->GetExtrapolatedRouteRequestQueue()->AddEventSafe(lRouteRequest))
-    {
-        WitnessDroppedRequest("extrapolated(12-slot)", static_cast<s32>(luRaceCarIndex));
-    }
+    lpRouteInputBuffer->GetExtrapolatedRouteRequestQueue()->AddEventSafe(lRouteRequest);
 }
 
 // X360 @0x827695F0. Pick a random destination section for a free-roaming (cruising) car: draw a
@@ -499,10 +485,6 @@ void RouteRequestManager::Update(
     if (lpPlayerCar == 0)
         return;
 
-    static s32 saiRouteReqWitness[35] = { 0 };
-    static s32 saiRouteReqTick[35]    = { 0 };
-    static s32 siRouteReqWitnessTotal = 0;
-
     for (s32 liAICarIndex = 0; liAICarIndex < 35; ++liAICarIndex)
     {
         // The console's `addi r31, r31, 0x1560` roster step is sizeof(AICar) on the console;
@@ -516,43 +498,9 @@ void RouteRequestManager::Update(
         const bool lbStateEligible =
             (leState == E_AI_CAR_STATE_IN_RANGE || leState == E_AI_CAR_STATE_OUT_OF_RANGE);
 
-        // The console evaluates these two IN THIS ORDER and short-circuits on each
-        // (0x8279800C `bl NeedsNewRoute`, then 0x8279801C `lhz 0(r31)` / `lhz -2(r31)` ==
-        // GetBestSectionIndex's best-then-default fallback). NeedsNewRoute @0x82765F80 is a pure
-        // read, and GetBestSectionIndex is two u16 loads, so hoisting both into named locals for
-        // the witness below changes no behaviour -- the guarded call order is unchanged.
-        const bool lbNeedsNewRoute = lbStateEligible && lpAICar->NeedsNewRoute();
-        const u16  luBestSection   = lbStateEligible ? lpAICar->GetBestSectionIndex()
-                                                     : AICar::KI_INVALID_SECTION_INDEX;
-        const bool lbHasSection    = (luBestSection != AICar::KI_INVALID_SECTION_INDEX);
-        const bool lbRequesting    = lbStateEligible && lbNeedsNewRoute && lbHasSection;
-
-        const bool lbWitnessSample =
-            lbStateEligible && ((saiRouteReqTick[liAICarIndex] % KI_ROUTE_REQ_WITNESS_PERIOD) == 0);
-
-        if (lbStateEligible)
-        {
-            ++saiRouteReqTick[liAICarIndex];
-        }
-
-        if ((lbWitnessBurst || lbWitnessSample)
-            && siRouteReqWitnessTotal < KI_ROUTE_REQ_WITNESS_TOTAL
-            && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siRouteReqWitnessTotal;
-            ++saiRouteReqWitness[liAICarIndex];
-
-            const char* lpcVerdict = "REQUEST";
-            if (!lbNeedsNewRoute)
-            {
-                lpcVerdict = "skip: NeedsNewRoute()==false (route still good, or crashing, or no section)";
-            }
-            else if (!lbHasSection)
-            {
-                lpcVerdict = "skip: best AND default section are both 0x7FFF (no road under the car)";
-            }
-
-        }
+        // ARTIST 0x8279800C..20 short-circuits before reading the section.
+        const bool lbRequesting = lbStateEligible && lpAICar->NeedsNewRoute()
+            && lpAICar->GetBestSectionIndex() != AICar::KI_INVALID_SECTION_INDEX;
 
         if (lbRequesting)
         {
