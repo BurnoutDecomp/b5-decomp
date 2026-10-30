@@ -2805,20 +2805,9 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // virtual Update (the environment-settings tuning page).
     mSkyDebugComponent.Update();
 
-    // FLAG cross-home cast: BrnWorldIO models the world buffer's timer block as its own
-    // 48-byte pointer-free POD while the canonical type is CgsSystem::TimerStatusInterface.
-    // Both model the SAME X360 member, the sizes are pinned equal here, and this is the
-    // identical cast the two committed bridges already make (Bridges/
-    // WorldBridgeInputToPhysicsModule.cpp and Bridges/WorldBridgeInputToEntityModules.cpp).
-    // Retire all three together when BrnWorldIO adopts the canonical type.
     {
-        CGS_STATIC_ASSERT(( sizeof( BrnWorldIO::TimerStatusInterface )
-                           == sizeof( CgsSystem::TimerStatusInterface )),
-                       "world timer-status block must be the canonical 48-byte X360 member" );
-
         const CgsSystem::TimerStatusInterface* const lpTimerStatus =
-            reinterpret_cast< const CgsSystem::TimerStatusInterface* >(
-                lpUpdateInputBuffer->GetTimerStatusInterface() );
+            lpUpdateInputBuffer->GetTimerStatusInterface();
         const CgsSystem::TimerStatus* const lpSimTimerStatus =
             lpTimerStatus->GetSimTimerStatus();
 

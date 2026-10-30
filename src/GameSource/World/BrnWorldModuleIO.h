@@ -35,6 +35,7 @@
 //                                            const getter.
 #pragma once
 
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"
 #include "types.hpp"                                              // s8/s16/s32/u8/u16/u32/f32
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT (per-race-car inline getters)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer base
@@ -134,19 +135,8 @@ namespace BrnWorldIO
     // reinterpret_cast it to the real type, so this retype also retires that cross-home cast.)
     typedef BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface TriggerManagementInputInterface;
 
-    // TimerStatusInterface (X360 SetTimerStatusInterface copies 12 words from the source into
-    // this+160900..+160948; modelled as a fixed POD the setter struct-assignment-copies field-
-    // for-field). NOTE: an earlier revision modelled only 11 words (44 bytes); the X360 body
-    // actually stores through offset 0x2C (asm: lfs/stfs f0,0x14(r10/r9) at the tail of the
-    // second 6-field block, i.e. base+0x18+0x14 = base+0x2C), so the 12th word is load-bearing.
-    struct TimerStatusInterface
-    {
-        // X360 UpdateInputBuffer::Construct calls CgsSystem::TimerStatusInterface::Clear on
-        // this member (+160900); the canonical Clear zeroes the two embedded CgsSystem::
-        // TimerStatus records, i.e. the whole 48-byte block.
-        void Clear() { std::memset(maData, 0, sizeof(maData)); }
-        f32 maData[12];      // X360 copies *a2 .. *(a2+48): 12 words
-    };
+    // ARTIST 0x823B487C copies the two real timer status records field by field.
+    typedef CgsSystem::TimerStatusInterface TimerStatusInterface;
 
     // RaceCarRaceDistanceInterface (X360 SetRaceCarRaceDistanceInterface copies 10 words).
     struct RaceCarRaceDistanceInterface
