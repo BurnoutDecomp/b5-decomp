@@ -8,17 +8,17 @@ namespace CgsContainers
 {
 // Fixed-capacity object pool: N inline objects, a LIFO free-index queue, and an occupancy
 // BitArray. Recovered from the X360 spine (CgsObjectPool.h) with member names from DWARF.
-// Template method bodies are inline (shared by every instantiation); per-instantiation ledger
-// TUs are explicit-instantiation .cpps.
+// Empty base carries attested per-instantiation alignment, without storage.
+template <typename T, s32 N> struct ObjectPoolAlignment {};
 template <typename T, s32 N, typename TIndex>
-class ObjectPool
+class ObjectPool : private ObjectPoolAlignment<T, N>
 {
 public:
     static const s32 KI_CAPACITY = N;
 
-    // Every X360 owner that default-constructs an ObjectPool inlines this same
-    // all-free seed: descending free indices, a full free count, and no occupied
-    // bits.  StateManager relies on that post-state immediately when resource
+    // The generic constructor initializes the pool. Callers with an attested
+    // different native constructor can specialize it for their instantiation.
+    // StateManager relies on the all-free post-state when its resource
     // callbacks register their Content objects.
     ObjectPool()
     {
