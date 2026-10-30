@@ -513,6 +513,9 @@ namespace BrnEffects
         u32                                      muSlipStreamEffectHandle;           // +0x2F54C  Construct: -1 (HandleConvoySlipStream / HandleGameActions)
         BrnReplays::EffectsSerialiser            mEffectsSerialiser;                 // +0x2F550  Construct: EffectsSerialiser::Construct
     };
+
+    // ARTIST CheckClassSizes 0x823BD4E0 reports 0x2F600.
+    CGS_STATIC_ASSERT((sizeof(EffectsModule) == 0x2F600), "EffectsModule size drift");
 }
 
 #endif // GAMESOURCE_EFFECTS_EFFECTSMODULE_H
