@@ -1,39 +1,27 @@
-#ifndef RENDERENGINE_BLENDSTATE_H
-#define RENDERENGINE_BLENDSTATE_H
+#pragma once
 
 #include "types.hpp"
+#include <xtl.h>
+#include "rw/rwcore_structs.h"
+#include <cstddef>
 
-// renderengine::BlendState -- the render-engine vendor wrapper around a fixed-function blend state.
-// Declaration surface for the home (states/blendstate.cpp) and its consumers (the post-fx helper,
-// which builds the shared opaque blend state). The bodies + the X360 layout commentary live in
-// blendstate.cpp.
-//
-// LAYOUT (X360 asm authoritative; no DWARF/leak source exists for this vendor TU). The material is a
-// 19-word block; the four leading words are the per-channel blend factors and the rest are the
-// op/mask/flag words GetParameters/Initialize pack and unpack.
 namespace renderengine
 {
+    // Shared sampler descriptor vocabulary; five entries are written by the sizer.
     struct ResourceDescriptorEntry
     {
         u32 muSize;
         u32 muAlignment;
     };
 
-    // The 19-word marshalled block. Every word's meaning is attested by the X360 blend half of
-    // the dispatch state triple, shadow::Device::Xbox2SetStateLowLevelShadowed @0x827E7D10,
-    // which pushes each one through its own D3D fast-set in this order:
-    //
-    //   [0..3]  D3DDevice_SetBlendState(renderTarget 0..3, word)
-    //   [4..7]  ColorWriteEnable / 1 / 2 / 3
-    //   [8]     AlphaToMaskOffsets     [9]  BlendFactor      [10] AlphaToMaskEnable
-    //   [11..14] HighPrecisionBlendEnable / 1 / 2 / 3
-    //   [15]    AlphaFunc              [16] AlphaTestEnable  [17] AlphaRef      [18] initialised
-    //
-    // The maState[i] array form is kept (that is the object's own shape, and BlendState::
-    // Initialize @0x82B627C8 fills it positionally); the enumerators below name the lanes so
-    // consumers index them by meaning rather than by number.
-    struct BlendMaterialState
+    // ARTIST82B627C8 and82B636B8: the actual nineteen-word native blend state.
+    // The enums describe the original Xenos state consumers at827E7D10.
+    class BlendState
     {
+    public:
+        typedef D3DBLEND Input;
+        typedef D3DBLENDOP Operation;
+
         enum EWord
         {
             E_WORD_BLEND_RT0                = 0,   // packed Xenos RB_BLENDCONTROL, render target 0
@@ -54,58 +42,51 @@ namespace renderengine
             E_WORD_ALPHA_FUNC               = 15,
             E_WORD_ALPHA_TEST_ENABLE        = 16,
             E_WORD_ALPHA_REF                = 17,
-            E_WORD_INITIALISED              = 18,
+            E_WORD_INITIALISED              = 18
         };
+
+        struct Parameters
+        {
+            // ARTIST82B64178..41D0, before the first descriptor/allocator call.
+            Parameters()
+                : muState15(7), muState4(15), muState5(15), muState6(15),
+                  muState7(15), muState8(135), muState17(0), muState9(0xFFFFFFFFu),
+                  mbHasCustomBlendFactors(0), mbState10(0), mbState11(0),
+                  mbState12(0), mbState13(0), mbState14(0), mbState16(0)
+            {
+                for (u32 i = 0; i != 4; ++i) maBlendFactor[i] = 0x07060706u;
+            }
+
+            u32 maBlendFactor[4];
+            u32 muState15;
+            u32 muState4;
+            u32 muState5;
+            u32 muState6;
+            u32 muState7;
+            u32 muState8;
+            u32 muState17;
+            u32 muState9;
+            u8 mbHasCustomBlendFactors;
+            u8 mbState10;
+            u8 mbState11;
+            u8 mbState12;
+            u8 mbState13;
+            u8 mbState14;
+            u8 mbState16;
+        };
+
+        static rw::ResourceDescriptor GetResourceDescriptor(const Parameters&);
+        static BlendState* Initialize(const rw::Resource&, const Parameters&);
+        void GetParameters(Parameters&) const;
 
         u32 maState[19];
     };
 
-    // The CONSTRUCTION parameter block. BlendState::Initialize @0x82B627C8 copies it into the
-    // marshalled block above field for field, which is what fixes each member's meaning:
-    //   maBlendFactor[4] -> maState[0..3]  (or the 0x00010001 ONE/ZERO/add default when
-    //                                       mbHasCustomBlendFactors is 0)
-    //   muState15 -> [15] AlphaFunc      muState4  -> [4]  ColorWriteEnable
-    //   muState5  -> [5]  ColorWriteEnable1        muState6  -> [6]  ColorWriteEnable2
-    //   muState7  -> [7]  ColorWriteEnable3        muState8  -> [8]  AlphaToMaskOffsets
-    //   muState17 -> [17] AlphaRef                 muState9  -> [9]  BlendFactor
-    //   mbState10 -> [10] AlphaToMaskEnable        mbState11..14 -> [11..14] HighPrecisionBlend*
-    //   mbState16 -> [16] AlphaTestEnable
-    // The member names are left as written by the TUs that already build these blocks; the
-    // mapping above is the recovered semantics.
-    struct BlendStateParameters
-    {
-        u32 maBlendFactor[4];
-        u32 muState15;
-        u32 muState4;
-        u32 muState5;
-        u32 muState6;
-        u32 muState7;
-        u32 muState8;
-        u32 muState17;
-        u32 muState9;
-        u8  mbHasCustomBlendFactors;
-        u8  mbState10;
-        u8  mbState11;
-        u8  mbState12;
-        u8  mbState13;
-        u8  mbState14;
-        u8  mbState16;
-    };
-
-    class BlendState
-    {
-    public:
-        // Unpack a packed BlendMaterialState into a BlendStateParameters struct.
-        // X360 pseudocode shows 2-arg call (no visible 'this') → static.
-        static void* GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams);
-        static void* GetResourceDescriptor(void* pOut);
-        // X360 the descriptor build is sized from the resource only and ignores the params, but the
-        // immediate-mode state-library builder (CgsGraphics::ImRendererBase::Construct*BlendState)
-        // passes the params block alongside the out buffer. Additive overload so that call compiles;
-        // the params are unused (the descriptor is a fixed { 0x4C, 4 } block).
-        static void* GetResourceDescriptor(void* pOut, const BlendStateParameters* pParams);
-        static void* Initialize(BlendMaterialState** ppMaterial, const BlendStateParameters* pParams);
-    };
+    // Existing caller spellings name the same native object and parameter types.
+    typedef BlendState BlendMaterialState;
+    typedef BlendState::Parameters BlendStateParameters;
+    CGS_STATIC_ASSERT((sizeof(BlendState) == 0x4C), "ARTIST blend state");
+    CGS_STATIC_ASSERT((sizeof(BlendState::Parameters) == 0x38), "ARTIST blend parameters");
+    CGS_STATIC_ASSERT((offsetof(BlendState::Parameters, mbHasCustomBlendFactors) == 0x30), "ARTIST custom blend flag");
+    CGS_STATIC_ASSERT((offsetof(BlendState::Parameters, mbState16) == 0x36), "ARTIST final blend flag");
 }
-
-#endif // RENDERENGINE_BLENDSTATE_H

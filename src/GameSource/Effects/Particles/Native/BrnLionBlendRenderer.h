@@ -87,7 +87,7 @@ namespace renderengine
 {
     class DepthStencilState;
     class MaterialState;            // a material block CONTAINING all three states (renderstates.h:254)
-    struct BlendMaterialState;      // the blend state object every applier consumes (blendstate.h:35)
+    class BlendState; typedef BlendState BlendMaterialState;      // the blend state object every applier consumes (blendstate.h:35)
                                     // ⚠ `struct`, not `class` -- blendstate.h:35 says struct, and MSVC
                                     // mangles the two class-keys differently (U vs V), so a mismatch
                                     // here would fork every SetState/global symbol that names it.

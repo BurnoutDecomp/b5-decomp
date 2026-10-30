@@ -31,7 +31,7 @@
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleBatch.h"   // SimpleParticleBatchArray
 
 namespace CgsMemory { class HeapMalloc; }
-namespace renderengine { class VertexBuffer; struct BlendMaterialState; }
+namespace renderengine { class VertexBuffer; class BlendState; typedef BlendState BlendMaterialState; }
 namespace BrnGraphics { struct Im3dSmokeRenderer; }
 class CgsRenderTarget;
 

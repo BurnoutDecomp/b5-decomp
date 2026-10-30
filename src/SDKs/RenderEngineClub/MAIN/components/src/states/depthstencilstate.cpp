@@ -3,21 +3,18 @@
 namespace renderengine
 {
 // ARTIST 82B636F8: five entries, then native state size/alignment.
-ResourceDescriptor5* DepthStencilState::GetResourceDescriptor(ResourceDescriptor5* lpDescriptor, const Parameters*)
+rw::ResourceDescriptor DepthStencilState::GetResourceDescriptor(const Parameters&)
 {
-    for (int li = 0; li < 5; ++li)
-    {
-        lpDescriptor->maEntries[li].muSize = 0;
-        lpDescriptor->maEntries[li].muAlignment = 1;
-    }
-    lpDescriptor->maEntries[0].muSize = 0x60;
-    lpDescriptor->maEntries[0].muAlignment = 4;
-    return lpDescriptor;
+    rw::ResourceDescriptor descriptor;
+    descriptor.m_baseResourceDescriptors[0].m_size = 0x60;
+    descriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+    return descriptor;
 }
 
-DepthStencilState* DepthStencilState::Initialize(DepthStencilState** ppState, const Parameters* lpParameters)
+DepthStencilState* DepthStencilState::Initialize(const rw::Resource& resource, const Parameters& parameters)
 {
-    DepthStencilState* lpState = *ppState;
+    DepthStencilState* const lpState = static_cast<DepthStencilState*>(resource.m_baseResources[0]);
+    const Parameters* const lpParameters = &parameters;
 
     // The 17 marshalled state words (Parameters +0x00..+0x40 -> object +0x00..+0x40).
     lpState->muZFunc                = lpParameters->muFunction;          // +0x00 -> ZFunc
