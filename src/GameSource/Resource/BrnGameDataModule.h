@@ -115,6 +115,8 @@ namespace BrnResource
         virtual EUpdateResult Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                                      const GameDataIO::InputBuffer* lpInputBuffer, GameDataIO::OutputBuffer* lpOutputBuffer);
 
+        void RenderDebug(const GameDataIO::InputBuffer* lpInputBuffer);
+
     private:
         void ConstructResourceModule(); // ARTIST8266D570
         void RegisterResourceTypes(); // ARTIST82667EA8; native implementation remains unresolved

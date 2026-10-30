@@ -131,6 +131,8 @@ namespace GameDataIO
         // already write-locked while the renderer's debug buffer is published.
         void SetIm2dDebugRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpBuffer)
         { mpDebug2dRenderBuffer = lpBuffer; }
+        CgsGraphics::Im2dRenderBuffer* GetIm2dDebugRenderBuffer() const
+        { return mpDebug2dRenderBuffer; }
 
     private:
         // DWARF h:123 -- lands at this+4 (after the 1-byte IOBuffer base padded to 4-byte queue
@@ -183,6 +185,7 @@ namespace GameDataIO
         // (asm `addi r3,r28,8`; IDA return type unsigned __int8*). X360 symbol GetLive[UpdateStatus];
         // PS3 DWARF drift = GetFileSystemStatusInterface (h:178).
         u8* GetLiveUpdateStatus();
+        const u8* GetLiveUpdateStatus() const;
 
         // @ 0x82663E30 -- write-locked mutator; copies one status byte in
         // (asm `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus; PS3 DWARF drift =
