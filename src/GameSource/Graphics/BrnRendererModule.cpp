@@ -686,12 +686,12 @@ bool BrnRendererModule::PrepareAgain(const renderengine::Texture* blobbyShadow,
         const_cast<renderengine::Texture*>(coronaAtlas));
     mpGlassFractureTexture = const_cast<renderengine::Texture*>(glassFracture);
     mGlassFractureTextureStateParams.mpTexture = const_cast<renderengine::Texture*>(glassFracture);
-    rw::ResourceDescriptor descriptor;
-    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    const rw::ResourceDescriptor descriptor =
+        renderengine::TextureState::GetResourceDescriptor(mGlassFractureTextureStateParams);
     rw::IResourceAllocator* const allocator = mpGraphicsAllocator;
     mGlassFractureTextureStateResource = allocator->DoAllocate(descriptor, 0);
     mpGlassFractureTextureState = renderengine::TextureState::Initialize(
-        &mGlassFractureTextureStateResource, &mGlassFractureTextureStateParams);
+        mGlassFractureTextureStateResource, mGlassFractureTextureStateParams);
     CgsGraphics::gTextureScopeTable.SetTexturePurposeData(
         CgsGraphics::E_TEXTURE_PURPOSE_GLASS_FRACTURE, glassFracture);
     CgsGraphics::gTextureScopeTable.SetTexturePurposeData(
