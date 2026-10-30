@@ -506,7 +506,8 @@ void OutputBuffer::Construct()
         lpRequests->mRequestQueue.Clear();
     }
 
-    // ARTIST8238299C..A0 clears the request flag and resets the requested type.
+    // ARTIST8238298C..A0 resets both timers, then the frame-rate request.
+    mTimerRequestInterface.Clear();
     mFrameRateTypeRequestInterface.Clear();
 
     // ⭐ 2026-09-03 (takedown wave, run 9): the console's
@@ -887,15 +888,27 @@ ResourceRequestInterface* OutputBuffer::GetResourceRequestInterface()
 // X360 0x8231D608 - write-lock accessor for the timer-request interface (this+16420).
 OutputBufferTimerRequestInterface* OutputBuffer::GetTimerRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<OutputBufferTimerRequestInterface*>(&mTimerRequestInterfaceStorage);
+    if (!IsBufferLockedForWriting())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Not locked for writing\n",
+            "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 275);
+        CgsDev::Assert::EndAssert();
+    }
+    return &mTimerRequestInterface;
 }
 
 // X360 0x823B98E8 - read-lock accessor for the timer-request interface (this+16420).
 const OutputBufferTimerRequestInterface* OutputBuffer::GetTimerRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const OutputBufferTimerRequestInterface*>(&mTimerRequestInterfaceStorage);
+    if (!IsBufferLockedForReading())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 274);
+        CgsDev::Assert::EndAssert();
+    }
+    return &mTimerRequestInterface;
 }
 
 // X360 0x8231D6B0 - write-lock accessor for the frame-rate-type request interface (this+16436).
