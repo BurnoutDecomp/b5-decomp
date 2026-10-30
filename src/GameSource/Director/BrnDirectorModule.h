@@ -241,7 +241,7 @@ private:
     // here on the original console layout" -- they are not, and cannot be, claimed to
     // reproduce the true host byte gap (which is unrecoverable/inapplicable on x64).
 
-    u8 mPad_0x008[0x228 - 0x008];                           // +0x008..+0x227 (untouched)
+    // ModuleSingleBuffered itself owns the native +0x000..+0x227 span.
 
     // this+0x228 (552). DebugComponent::Construct(this+0x228, this) -- the module's
     // in-game debug menu component (registered as "Camera"). Real committed type.
