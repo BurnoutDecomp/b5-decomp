@@ -24,7 +24,7 @@ namespace rw
 namespace collision
 {
 
-struct Plane
+struct CGS_ALIGN(16) Plane
 {
     // Packed plane lane: xyz = normal, w = signed offset. Matches the 16-byte
     // register the frustum asm loads/stores.
@@ -33,10 +33,9 @@ struct Plane
     f32 z;
     f32 w;
 
-    Plane()
-        : x(0.0f), y(0.0f), z(0.0f), w(0.0f)
-    {
-    }
+    // ARTIST SceneManager constructor 0x827E1E30 and Frustum debug plane
+    // array construction 0x82845BB8 leave these lanes uninitialized.
+    Plane() {}
 
     // Build a plane straight from a packed 4-lane vector (verbatim lane copy) --
     // this is what VectorToPlane's stvx128 of the (negated) arg vector produces.
