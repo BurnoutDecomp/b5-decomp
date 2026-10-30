@@ -16,7 +16,8 @@
 // their parameter snapshots and physical-request lists at the DWARF position.
 // =============================================================================
 
-#include "types.hpp"        // u8/u16/u32/s8/s32/u64/f32
+#include "types.hpp"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"        // u8/u16/u32/s8/s32/u64/f32
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT (UpdateVehicleStuckSideTime inline)
 #include "BrnCommonTypes.h" // EntityId, Vector2/3/4, Vector3Plus, VecFloat, Matrix44Affine
 #include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
@@ -1747,7 +1748,8 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
 
         // Filled once per UpdateVehicles @0x82744F58 by CacheRaceCarState @0x827185D0, then
         // handed to the vehicle job by const pointer (UpdateVehiclesJobParams).
-        RaceCarStateData      mRaceCarState;                     // :708
+        // ARTIST 0x827E49F4 anchors the 128-byte-aligned race-car state at +0x71480.
+        CGS_ALIGN(128) RaceCarStateData mRaceCarState;                     // :708
 
         Vector3               maEventGridStartPositions[E_ACTIVE_RACE_CAR_INDEX_COUNT]; // :710
         u8                    muNumberOfParticipantsInCurrentEvent;              // :711
@@ -1774,12 +1776,10 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         bool                  mbShowtimePlayerOnGround;             // :725
         bool                  mbAllowDivergentBehaviour;            // :726 (X360 +0x717E7)
 
-        // :728/:729 -- DWARF type RoadRulesRecvData::NetworkPlayerID, which has no home in the
-        // tree and no attested width, so both are stored as the 64-bit EA online id the rest of
-        // the network layer uses. FLAG: width is NOT attested. Retype and re-check the array
-        // extent when RoadRulesRecvData lands. Nothing here serialises them.
-        u64                   maGameModeNetworkPlayerID[E_ACTIVE_RACE_CAR_INDEX_COUNT]; // :728
-        u64                   mNetworkLocalPlayerID;                // :729
+        // DecFIGS NetworkPlayerID is the 32-bit network player handle. ARTIST's
+        // +0x717E7 flag and +0x71840 resource pointer bracket these fields.
+        CgsNetwork::NetworkPlayerID maGameModeNetworkPlayerID[E_ACTIVE_RACE_CAR_INDEX_COUNT];
+        CgsNetwork::NetworkPlayerID mNetworkLocalPlayerID;
 
         bool                  mbAllVehiclesDead;                    // :731
         u8                    muNumFramesBeforeStateChange;         // :732
