@@ -11,6 +11,8 @@
 #include "rw/math/vpu/vector4_operation.h"  // VecFloat splats in the original world draw
 #include "rw/math/vpu/matrix44_operation.h"
 
+#include <vectorintrinsics.h>
+#include <ppcintrinsics.h>
 #include <cstddef>   // offsetof
 #include <cmath>
 #include <cstring>
@@ -36,45 +38,46 @@ namespace Vehicle
             return lColour;
         }
 
-        f32 HandlingFlush(f32 lfValue)
+        f32 HandlingMultiply(f32 a, f32 b)
         {
-            return std::fpclassify(lfValue) == FP_SUBNORMAL
-                ? std::copysign(0.0f, lfValue) : lfValue;
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b};
+            return __vmulfp(va, vb).x;
         }
-
-        f32 HandlingMultiply(f32 lfA, f32 lfB)
+        f32 HandlingAdd(f32 a, f32 b)
         {
-            return HandlingFlush(HandlingFlush(lfA) * HandlingFlush(lfB));
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b};
+            return __vaddfp(va, vb).x;
         }
-
-        f32 HandlingAdd(f32 lfA, f32 lfB)
+        f32 HandlingMultiplyAdd(f32 a, f32 b, f32 c)
         {
-            return HandlingFlush(HandlingFlush(lfA) + HandlingFlush(lfB));
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b}, vc = {c,c,c,c};
+            return __vmaddfp(va, vb, vc).x;
         }
-
-        f32 HandlingMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
+        f32 HandlingNegativeMultiplySubtract(f32 a, f32 b, f32 c)
         {
-            return HandlingFlush(std::fmaf(HandlingFlush(lfA), HandlingFlush(lfC), HandlingFlush(lfB)));
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b}, vc = {c,c,c,c};
+            return __vnmsubfp(va, vb, vc).x;
         }
-
-        f32 HandlingNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
+        f32 HandlingDot3(const Vector3& a, const Vector3& b)
         {
-            const f32 lfDifference = HandlingMultiplyAdd(lfA, lfC, -HandlingFlush(lfB));
-            return lfDifference != lfDifference ? lfDifference : -lfDifference;
+            return __vmsum3fp(__lvx(&a, 0), __lvx(&b, 0)).x;
         }
-
-        f32 HandlingReciprocal(f32 lfValue)
+        f32 HandlingReciprocal(f32 value)
         {
-            lfValue = HandlingFlush(lfValue);
-            // FLAG (estimate model): rounded 1/x models the vrefp seed. Both
-            // original Newton refinements remain unconditional.
-            f32 lfEstimate = HandlingFlush(static_cast<f32>(1.0 / static_cast<f64>(lfValue)));
-            for (s32 liStep = 0; liStep < 2; ++liStep)
+            const __vector4 v = {value,value,value,value};
+            const __vector4 one = {1.0f,1.0f,1.0f,1.0f};
+            __vector4 estimate = __vrefp(v);
+            for (s32 i = 0; i < 2; ++i)
             {
-                const f32 lfResidual = HandlingNegativeMultiplySubtract(lfEstimate, lfValue, 1.0f);
-                lfEstimate = HandlingMultiplyAdd(lfEstimate, lfResidual, lfEstimate);
+                const __vector4 residual = __vnmsubfp(estimate, v, one);
+                estimate = __vmaddfp(estimate, residual, estimate);
             }
-            return lfEstimate;
+            return estimate.x;
+        }
+        Vector3 MakeHandlingVector3(f32 x, f32 y, f32 z, f32 w)
+        {
+            const Vector3 value = {x,y,z,w};
+            return value;
         }
 
         Vector3 HandlingScale(Vector3 lValue, f32 lfScale)
@@ -99,8 +102,8 @@ namespace Vehicle
         {
             u32 laBits[4];
             std::memcpy(laBits, &lValue, sizeof(laBits));
-            for (u32& lrBits : laBits)
-                lrBits ^= 0x80000000u;
+            for (s32 i = 0; i < 4; ++i)
+                laBits[i] ^= 0x80000000u;
             std::memcpy(&lValue, laBits, sizeof(laBits));
             return lValue;
         }
@@ -123,12 +126,12 @@ namespace Vehicle
             const Vector3 lYZ = HandlingCross(lrTransform.yAxis, lrTransform.zAxis);
             const Vector3 lZX = HandlingCross(lrTransform.zAxis, lrTransform.xAxis);
             const Vector3 lXY = HandlingCross(lrTransform.xAxis, lrTransform.yAxis);
-            const f32 lfDeterminant = HandlingFlush(rw::math::vpu::Dot(lrTransform.xAxis, lYZ));
+            const f32 lfDeterminant = HandlingDot3(lrTransform.xAxis, lYZ);
             const f32 lfReciprocal = HandlingReciprocal(lfDeterminant);
             // The original merges duplicate the inverse Y component in W.
-            const Vector3 lRowX = HandlingScale(Vector3{lYZ.x, lZX.x, lXY.x, lZX.x}, lfReciprocal);
-            const Vector3 lRowY = HandlingScale(Vector3{lYZ.y, lZX.y, lXY.y, lZX.y}, lfReciprocal);
-            const Vector3 lRowZ = HandlingScale(Vector3{lYZ.z, lZX.z, lXY.z, lZX.z}, lfReciprocal);
+            const Vector3 lRowX = HandlingScale(MakeHandlingVector3(lYZ.x, lZX.x, lXY.x, lZX.x), lfReciprocal);
+            const Vector3 lRowY = HandlingScale(MakeHandlingVector3(lYZ.y, lZX.y, lXY.y, lZX.y), lfReciprocal);
+            const Vector3 lRowZ = HandlingScale(MakeHandlingVector3(lYZ.z, lZX.z, lXY.z, lZX.z), lfReciprocal);
             return HandlingMultiplyAdd(lRowZ, lDirection.z,
                 HandlingMultiplyAdd(lRowY, lDirection.y, HandlingScale(lRowX, lDirection.x)));
         }
@@ -160,12 +163,30 @@ namespace Vehicle
             }
         }
 
+        void DrawHandlingLine(CgsDev::StrStream& lOutputStream, CgsDev::Debug2DImmediateRender* lpDisplay,
+                              f32& lfY, s32 liOriginalLine)
+        {
+            if (!(std::strlen(lOutputStream.GetBuffer()) < 2000))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "strlen( lOutputStream.GetBuffer() ) < 2000",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.cpp",
+                    liOriginalLine);
+                CgsDev::Assert::EndAssert();
+            }
+            // Original vaddfp followed by a Y-lane-only insert, before draw.
+            lfY = HandlingAdd(lfY, 18.0f);
+            lpDisplay->DrawText(lOutputStream.GetBuffer(), 50.0f, lfY, 15.0f, 0xFFFFFFFFu);
+            lOutputStream.Reset();
+        }
+
         // Scalar fsel lowering used by the original label/current-value clamps.
         // An unordered range subtraction chooses the range, as ARTIST does.
         f32 ClampGripLabel(f32 lfValue, f32 lfRange)
         {
-            const f32 lfNonnegative = -lfValue >= 0.0f ? 0.0f : lfValue;
-            return lfRange - lfNonnegative >= 0.0f ? lfNonnegative : lfRange;
+            const f32 lfNonnegative = static_cast<f32>(__fsel(-lfValue, 0.0f, lfValue));
+            return static_cast<f32>(__fsel(lfRange - lfNonnegative, lfNonnegative, lfRange));
         }
     }
 
@@ -206,8 +227,8 @@ namespace Vehicle
     {
         for (s32 liWheel = 0; liWheel < 4; ++liWheel)
         {
-            Vector3 lStart{};
-            Vector3 lEnd{};
+            Vector3 lStart = {};
+            Vector3 lEnd = {};
             mpRaceCarPhysics->GetTractionLine(static_cast<EVehicleDrivenWheel>(liWheel), lStart, lEnd);
             lpDisplay->DrawArrow(lStart, lEnd, HandlingColour(0xFFFFFFFFu));
             if (maRoadContacts[liWheel].mbIsOnGround)
@@ -301,23 +322,23 @@ namespace Vehicle
         Vector4 lDeterminant;
         const rw::math::vpu::Matrix44 lInverse = rw::math::vpu::Inverse(
             lpDisplay->GetViewProjectionMatrix(), lDeterminant);
-        const auto lScreenSize = lpDisplay->GetVirtualScreenSize();
+        const Vector2 lScreenSize = lpDisplay->GetVirtualScreenSize();
         const f32 lfAspectScale = HandlingMultiply(HandlingReciprocal(lScreenSize.x), lScreenSize.y);
         const Vector3 lCameraRight = HandlingScale(
-            Vector3{lInverse.xAxis.x, lInverse.xAxis.y, lInverse.xAxis.z, lInverse.xAxis.w}, lfAspectScale);
-        const Vector3 lCameraUp{lInverse.yAxis.x, lInverse.yAxis.y, lInverse.yAxis.z, lInverse.yAxis.w};
+            MakeHandlingVector3(lInverse.xAxis.x, lInverse.xAxis.y, lInverse.xAxis.z, lInverse.xAxis.w), lfAspectScale);
+        const Vector3 lCameraUp = {lInverse.yAxis.x, lInverse.yAxis.y, lInverse.yAxis.z, lInverse.yAxis.w};
         const Matrix44Affine lBodyTransform = mpRaceCarPhysics->GetTransform();
         const Vector3 lAngularVelocity = mpRaceCarPhysics->GetAngularVelocity();
         const f32 lafRates[3] = {
-            HandlingFlush(rw::math::vpu::Dot(lAngularVelocity, lBodyTransform.xAxis)) * 2.0f,
-            HandlingFlush(rw::math::vpu::Dot(lAngularVelocity, lBodyTransform.yAxis)) * 2.0f,
-            HandlingFlush(rw::math::vpu::Dot(lAngularVelocity, lBodyTransform.zAxis)) * 2.0f};
+            HandlingDot3(lAngularVelocity, lBodyTransform.xAxis) * 2.0f,
+            HandlingDot3(lAngularVelocity, lBodyTransform.yAxis) * 2.0f,
+            HandlingDot3(lAngularVelocity, lBodyTransform.zAxis) * 2.0f};
         const f32 lafHeights[3] = {2.1f, 1.6f, 1.1f};
         const u32 lauColours[3] = {0xFF0000FFu, 0xFF00FF00u, 0xFFFF0000u};
         const char* const lapcTitles[3] = {"Pitch", "Yaw", "Roll"};
         for (s32 liAxis = 0; liAxis < 3; ++liAxis)
         {
-            const Vector3 lCentre = HandlingMultiplyAdd(Vector3{0.0f, 1.0f, 0.0f, 0.0f},
+            const Vector3 lCentre = HandlingMultiplyAdd(MakeHandlingVector3(0.0f, 1.0f, 0.0f, 0.0f),
                                                          lafHeights[liAxis], lPosition);
             const Vector3 lUpper = HandlingScale(lCameraUp, 0.15f);
             const Vector3 lLower = HandlingScale(lCameraUp, -0.15f);
@@ -401,9 +422,9 @@ namespace Vehicle
             if (lrWheel.mRoadContact.mbIsOnGround)
                 lWheelColour = lrWheel.mbBrokenAdhesiveLimit ? 0xFF0000FFu : 0xFF00FF00u;
             const f32 lfX = (liWheel & 1) ? lfMidX - 100.0f : lfMidX + 100.0f;
-            const f32 lfY = std::fmaf(static_cast<f32>(liWheel >> 1), 250.0f, lfBaseY);
+            const f32 lfY = static_cast<f32>(liWheel >> 1) * 250.0f + lfBaseY;
             lpDisplay->DrawBox(lfX - 5.0f, lfY - 15.0f, lfX + 5.0f, lfY + 15.0f, lWheelColour);
-            const Vector2 lCentre{lfX, lfY, 0.0f, 0.0f};
+            const Vector2 lCentre = {lfX, lfY, 0.0f, 0.0f};
             lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.x),
                                   0xFF000000u);
             const f32 lfNormalLoad = HandlingMultiplyAdd(lrWheel.mSpeedAndMassOnWheelVariables.z,
@@ -457,46 +478,30 @@ namespace Vehicle
         char lacText[KU_STRING_BUFFER_SIZE];
         CgsDev::StrStream lOutputStream(lacText, KU_STRING_BUFFER_SIZE);
         f32 lfY = 50.0f;
-        const auto lDrawLine = [&](s32 liOriginalLine)
-        {
-            if (!(std::strlen(lOutputStream.GetBuffer()) < KU_STRING_BUFFER_SIZE))
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "strlen( lOutputStream.GetBuffer() ) < KU_STRING_BUFFER_SIZE",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.cpp",
-                    liOriginalLine);
-                CgsDev::Assert::EndAssert();
-            }
-            // Original vaddfp followed by a Y-lane-only insert, before draw.
-            lfY = HandlingAdd(lfY, 18.0f);
-            lpDisplay->DrawText(lOutputStream.GetBuffer(), 50.0f, lfY, 15.0f, 0xFFFFFFFFu);
-            lOutputStream.Reset();
-        };
         for (s32 liRow = 0; liRow < 6; ++liRow)
         {
             if (liRow == 0)
             {
                 lOutputStream << "Reverse: \t";
-                lDrawLine(1002);
+                DrawHandlingLine(lOutputStream, lpDisplay, lfY, 1002);
             }
             else
             {
                 lOutputStream << "Gear " << static_cast<u32>(liRow) << ": \t";
-                lDrawLine(1010);
+                DrawHandlingLine(lOutputStream, lpDisplay, lfY, 1010);
             }
             const GearStats& lrRow = mGearStats[liRow];
             lOutputStream << "Time in gear: " << lrRow.mfTimeInGear;
-            lDrawLine(1018);
+            DrawHandlingLine(lOutputStream, lpDisplay, lfY, 1018);
             lOutputStream << "\t\t\tSpeed when changing up: " << lrRow.mfSpeedOutOfGearGoingUp;
-            lDrawLine(1024);
+            DrawHandlingLine(lOutputStream, lpDisplay, lfY, 1024);
             lOutputStream << "\t\t\tRpm when changed in: " << lrRow.mfRpmWhenChangedInGoingUp;
-            lDrawLine(1030);
+            DrawHandlingLine(lOutputStream, lpDisplay, lfY, 1030);
             lOutputStream << "\t\t\tRpm when changed out: " << lrRow.mfRpmWhenChangedOutGoingUp;
-            lDrawLine(1036);
+            DrawHandlingLine(lOutputStream, lpDisplay, lfY, 1036);
         }
         lOutputStream << "Rpm: " << mfLastFrameRpm;
-        lDrawLine(1042);
+        DrawHandlingLine(lOutputStream, lpDisplay, lfY, 1042);
     }
 
     // ARTIST 82621190, vtable slot 820CF990: all three HUD toggle readers.
@@ -516,12 +521,12 @@ namespace Vehicle
     {
         const CgsDev::RGBA lAxisColour = 0xFF000000u;
         const CgsDev::RGBA lCurveColour = 0xFFFF0000u; // dword_82FBA2A4
-        const auto lOrigin = GetPointOnGraph(0.0f, 0.0f);
+        const Vector2 lOrigin = GetPointOnGraph(0.0f, 0.0f);
         lpDisplay->DrawLine(GetPointOnGraph(0.0f, mAxisRanges.y), lOrigin, lAxisColour);
         lpDisplay->DrawLine(lOrigin, GetPointOnGraph(mAxisRanges.x, 0.0f), lAxisColour);
         const Vector4& lrCurve = mpGripCurve->maGripVariables;
-        const auto lPeak = GetPointOnGraph(lrCurve.x, lrCurve.z);
-        const auto lFloor = GetPointOnGraph(lrCurve.y, lrCurve.w);
+        const Vector2 lPeak = GetPointOnGraph(lrCurve.x, lrCurve.z);
+        const Vector2 lFloor = GetPointOnGraph(lrCurve.y, lrCurve.w);
         lpDisplay->DrawLine(lOrigin, lPeak, lCurveColour);
         lpDisplay->DrawLine(lPeak, lFloor, lCurveColour);
         lpDisplay->DrawLine(lFloor, GetPointOnGraph(mAxisRanges.x, lrCurve.w), lCurveColour);
@@ -540,9 +545,9 @@ namespace Vehicle
         lfCoefficient = ClampGripLabel(lfCoefficient, mAxisRanges.y);
         char lacText[32];
         CgsCore::SPrintf(lacText, 16, "%4.1f", static_cast<double>(lfCoefficient));
-        const auto lPoint = GetPointOnGraph(0.0f, lfCoefficient);
-        auto lStart = lPoint;
-        auto lEnd = lPoint;
+        const Vector2 lPoint = GetPointOnGraph(0.0f, lfCoefficient);
+        Vector2 lStart = lPoint;
+        Vector2 lEnd = lPoint;
         lStart.x -= 3.0f;
         lEnd.x += 3.0f;
         lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
@@ -557,9 +562,9 @@ namespace Vehicle
         lfSlipRatio = ClampGripLabel(lfSlipRatio, mAxisRanges.x);
         char lacText[32];
         CgsCore::SPrintf(lacText, 16, "%4.1f", static_cast<double>(lfSlipRatio));
-        const auto lPoint = GetPointOnGraph(lfSlipRatio, 0.0f);
-        auto lStart = lPoint;
-        auto lEnd = lPoint;
+        const Vector2 lPoint = GetPointOnGraph(lfSlipRatio, 0.0f);
+        Vector2 lStart = lPoint;
+        Vector2 lEnd = lPoint;
         lStart.y -= 3.0f;
         lEnd.y += 3.0f;
         lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
@@ -580,20 +585,14 @@ namespace Vehicle
 
     // ---- layout gate ---------------------------------------------------------------------------
     //
-    // The recovered class accounts for all 1024 bytes of the console object with nothing left over.
-    // Its host image is bigger, because six pointer-shaped things widen 4 -> 8 (the base's vptr and
-    // list link, this class's car pointer, each window's vptr and its two wheel pointers) and two
-    // of those widenings force a 16-byte re-alignment behind them. The chain below names each step
-    // where it happens and adds it to a running term, so every member's console offset is pinned by
-    // a host offsetof the compiler checks. Get any member's type, size or order wrong and one of
-    // these fires.
+    // Native Xbox layout: retain every offset and width gate below against
+    // the original 32-bit object; no host pointer-widening adjustment applies.
     void DebugComponent::_AssertLayout()
     {
         typedef DebugComponent D;
 
-        // Step 1: the base. Console 12 bytes (vptr + the active flag + the list link) padded to
-        // 0x10 by the road-contact array's 16-byte alignment; host 24, padded to 0x20.
-        const std::ptrdiff_t KD_AFTER_BASE = 0x10;
+        // The 12-byte base is rounded to 0x10 by the road-contact array.
+        const std::ptrdiff_t KD_AFTER_BASE = 0;
         CGS_STATIC_ASSERT((offsetof(D, maRoadContacts) == 0x010 + KD_AFTER_BASE), "maRoadContacts");
 
         // Step 2: nothing widens across the road-contact mirror -- RoadContact is 0x30 on both
@@ -602,19 +601,15 @@ namespace Vehicle
         CGS_STATIC_ASSERT((offsetof(D, mFrontWheelsGripCurveWindow) == 0x0D0 + KD_AFTER_BASE),
                       "mFrontWheelsGripCurveWindow");
 
-        // Step 3: one grip-curve window apiece. Each is 0xC0 on the console and 0xD0 on the host:
-        // its two wheel pointers widen (+8) and the 16-byte alignment its graphs impose rounds the
-        // tail up (+8). The window's own base is width-identical, so the graphs stay at +0x30/+0x70
-        // inside it.
-        const std::ptrdiff_t KD_WINDOW_STEP = 0x10;
+        // Each native grip-curve window occupies 0xC0 bytes.
+        const std::ptrdiff_t KD_WINDOW_STEP = 0;
         const std::ptrdiff_t KD_AFTER_WINDOWS = KD_AFTER_BASE + 2 * KD_WINDOW_STEP;
         CGS_STATIC_ASSERT((offsetof(D, mRearWheelsGripCurveWindow) == 0x190 + KD_AFTER_BASE + KD_WINDOW_STEP),
                       "mRearWheelsGripCurveWindow");
         CGS_STATIC_ASSERT((offsetof(D, mpRaceCarPhysics) == 0x250 + KD_AFTER_WINDOWS), "mpRaceCarPhysics");
 
-        // Step 4: the car pointer itself widens 4 -> 8. Everything from the inertia triple to the
-        // clutch factor is float- or int-shaped and moves as one block behind it.
-        const std::ptrdiff_t KD_AFTER_CAR_POINTER = KD_AFTER_WINDOWS + 4;
+        // The car pointer and following fields retain their native offsets.
+        const std::ptrdiff_t KD_AFTER_CAR_POINTER = KD_AFTER_WINDOWS;
         CGS_STATIC_ASSERT((offsetof(D, mafInertia)     == 0x254 + KD_AFTER_CAR_POINTER), "mafInertia");
         CGS_STATIC_ASSERT((offsetof(D, miCurrentGear)  == 0x260 + KD_AFTER_CAR_POINTER), "miCurrentGear");
         CGS_STATIC_ASSERT((offsetof(D, mfLastFrameRpm) == 0x264 + KD_AFTER_CAR_POINTER), "mfLastFrameRpm");
@@ -636,11 +631,7 @@ namespace Vehicle
         CGS_STATIC_ASSERT((offsetof(D, mfClutchDelay)              == 0x340 + KD_AFTER_CAR_POINTER), "mfClutchDelay");
         CGS_STATIC_ASSERT((offsetof(D, mfClutchFactor)             == 0x344 + KD_AFTER_CAR_POINTER), "mfClutchFactor");
 
-        // Step 5: the wall triangle is 16-aligned, and the block in front of it ends four bytes
-        // short of a 16-byte boundary on the console. So the +4 the car pointer cost is ABSORBED by
-        // padding the console already had, and the term drops back to what it was before the
-        // pointer -- the one place in this class where a widening costs nothing. From here to the
-        // end of the object it stays constant.
+        // The wall triangle is aligned to 16 bytes.
         const std::ptrdiff_t KD_AFTER_TRIANGLE_ALIGN = KD_AFTER_WINDOWS;
         CGS_STATIC_ASSERT((sizeof(CgsGeometric::Triangle4::AOSTriangle) == 0x50),
                       "AOSTriangle is width-identical (four vectors + three floats, 16-aligned)");
@@ -655,8 +646,7 @@ namespace Vehicle
         CGS_STATIC_ASSERT((offsetof(D, mabSuspensionForceApplied) == 0x3F0 + KD_AFTER_TRIANGLE_ALIGN), "mabSuspensionForceApplied");
         CGS_STATIC_ASSERT((offsetof(D, mfDownForceY)              == 0x3F4 + KD_AFTER_TRIANGLE_ALIGN), "mfDownForceY");
 
-        // And the closure: the console object ends at 1024 with eight bytes of tail pad behind the
-        // down-force mirror, so the host object is 1024 + the accumulated term, rounded to 16.
+        // The native object closes at 1024 bytes.
         CGS_STATIC_ASSERT((sizeof(D) == 1024 + KD_AFTER_TRIANGLE_ALIGN),
                       "the recovered class closes on the console's 1024-byte object -- this is the "
                       "number VehicleManager's drift term is derived from");
