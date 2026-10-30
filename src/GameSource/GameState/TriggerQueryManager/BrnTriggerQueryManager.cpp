@@ -18,10 +18,8 @@
 #include "SharedClasses/Trigger/BrnKillzone.h"           // BrnTrigger::Killzone (trigger/region-id tables)
 #include "SharedClasses/Trigger/BrnRegion.h"             // BrnTrigger::BoxRegion (GetDimensions/GetPosition2D/ComputeDirection)
 
-#include <cmath>                                             // submitted look-ahead normalization
-#if defined(D_PLATFORM_X360)
 #include <xtl.h>
-#endif
+
 
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"          // BrnGameState::RoadRulesManager (OnRoadLimit/IsRoadLimitRegionValid)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"           // BrnGameState::DriveThruManager (HandleDriveThru)
@@ -802,16 +800,9 @@ void TriggerQueryManager::SubmitTriggerQueries(
     {
         const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData& lrCar = lpActiveRaceCarInterface->maCarsInTheRace[--liCar];
         mbCarHasTeleported = true;
-#if defined(D_PLATFORM_X360)
         const __vector4 lvDelta = __vsubfp(__lvx(&lrCar.mPreviousPosition, 0), __lvx(&lrCar.mPosition, 0));
         const f32 lfDistanceSquared = __vmsum3fp(lvDelta, lvDelta).x;
-#else
-        const Vector3 lDelta = lrCar.mPreviousPosition - lrCar.mPosition;
-        // 823927E4 vmsum3fp128: one rounding of the three products' sum.
-        const f32 lfDistanceSquared = static_cast<f32>(
-            static_cast<f64>(lDelta.x) * lDelta.x + static_cast<f64>(lDelta.y) * lDelta.y
-            + static_cast<f64>(lDelta.z) * lDelta.z);
-#endif
+
         // vcmpgtfp(100, distanceSquared): unordered also skips the entire arm.
         if (!(lfDistanceSquared < 100.0f)) continue;
 
@@ -827,7 +818,6 @@ void TriggerQueryManager::SubmitTriggerQueries(
 
         if (lrCar.mbIsPlayer)
         {
-#if defined(D_PLATFORM_X360)
             const __vector4 lvLook = __vmulfp(__lvx(&lrCar.mDirection, 0), XMVectorReplicate(0.25f));
             const __vector4 lvLength = __vmsum3fp(lvLook, lvLook);
             const f32 lfLengthSquared = lvLength.x;
@@ -844,30 +834,7 @@ void TriggerQueryManager::SubmitTriggerQueries(
             Vector3 lLookAheadDist, lForward;
             __stvx(lvLook, &lLookAheadDist, 0);
             __stvx(__vmulfp(lvLook, lvEstimate), &lForward, 0);
-#else
-            Vector3 lLookAheadDist = {lrCar.mDirection.x * 0.25f, lrCar.mDirection.y * 0.25f,
-                                  lrCar.mDirection.z * 0.25f, lrCar.mDirection.w * 0.25f};
-            const f32 lfLengthSquared = static_cast<f32>(
-                static_cast<f64>(lLookAheadDist.x) * lLookAheadDist.x
-                + static_cast<f64>(lLookAheadDist.y) * lLookAheadDist.y
-                + static_cast<f64>(lLookAheadDist.z) * lLookAheadDist.z);
-            // 823928D8..823928F8: vrsqrtefp and TWO Newton steps, with no
-            // zero-vector guard. FLAG (model): correctly rounded initial estimate,
-            // matching the existing console VMX model; denormals are not flushed.
-            f32 lfReciprocalLength = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfLengthSquared)));
-            for (s32 liStep = 0; liStep < 2; ++liStep)
-            {
-                const f32 lfSquared = lfReciprocalLength * lfReciprocalLength;
-                const f32 lfHalf = lfReciprocalLength * 0.5f;
-                const f32 lfDifference = std::fma(lfLengthSquared, lfSquared, -1.0f);
-                const f32 lfResidual = lfDifference != lfDifference ? lfDifference : -lfDifference;
-                lfReciprocalLength = std::fma(lfHalf, lfResidual, lfReciprocalLength);
-            }
-            const Vector3 lForward = {lLookAheadDist.x * lfReciprocalLength,
-                                   lLookAheadDist.y * lfReciprocalLength,
-                                   lLookAheadDist.z * lfReciprocalLength,
-                                   lLookAheadDist.w * lfReciprocalLength};
-#endif
+
             if (lfLengthSquared > 225.0f)
                 {
                     const Vector3 lAggregateValue = {lForward.x * 15.0f, lForward.y * 15.0f,
@@ -885,19 +852,9 @@ void TriggerQueryManager::SubmitTriggerQueries(
             {
                 lEvent.mQueryID.SetIndex(999);
                 lEvent.mLineStart = mPlayerLookAheadPos;
-#if defined(D_PLATFORM_X360)
                 __stvx(__vmaddfp(__lvx(&lForward, 0), XMVectorReplicate(4.0f),
                                    __lvx(&mPlayerLookAheadPos, 0)), &lEvent.mLineEnd, 0);
-#else
-                // 82392990 vmaddfp D,A,B,C = A*C+B.
-                {
-                    const Vector3 lAggregateValue = {std::fma(lForward.x, 4.0f, mPlayerLookAheadPos.x),
-                                          std::fma(lForward.y, 4.0f, mPlayerLookAheadPos.y),
-                                          std::fma(lForward.z, 4.0f, mPlayerLookAheadPos.z),
-                                          std::fma(lForward.w, 4.0f, mPlayerLookAheadPos.w)};
-                    lEvent.mLineEnd = lAggregateValue;
-                }
-#endif
+
                 lpTriggerInterface->AddEvent(&lEvent, 3);
             }
         }
