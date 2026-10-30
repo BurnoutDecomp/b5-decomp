@@ -12,6 +12,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
 #include "GameSource/Sound/Module/SharedIO/BrnSoundRootSharedIO.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface (the replay request member; phase C1)
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera (mDirectorCamera)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h" // BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface (mTrafficOutputInterface)
@@ -625,10 +626,6 @@ namespace Io
     //
     // The opaque *Storage members stay exactly where they are, so no offset moves; these
     // types are the typed view the accessors hand out.
-    template <int N> struct RequestInterface
-    {
-        CgsModule::VariableEventQueue<N, 16> mRequestQueue;   // offset 0, per the siblings
-    };
     template <int N> struct AttribSysRequestInterface
     {
         CgsModule::VariableEventQueue<N, 16> mRequestQueue;   // offset 0, per the siblings
@@ -636,7 +633,7 @@ namespace Io
 
     struct RootOutputBuffer : public CgsModule::IOBuffer
     {
-        typedef RequestInterface<4096>          SoundResourceRequestInterface; // BrnSoundCommonSharedIO.h:37
+        typedef BrnResource::GameDataIO::RequestInterface<4096> SoundResourceRequestInterface;
         typedef AttribSysRequestInterface<2048> AttribSysRequestInterface;     // BrnSoundLogicSharedIO.h:47
         // (2026-08-25, faithful-audio-engine phase C1: the provisional RequestInterface<4096>
         // guess is RETIRED -- BridgeLogicToRoot @0x826EBF18 appends this member through
