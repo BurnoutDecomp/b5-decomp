@@ -55,12 +55,15 @@ private:
     // -1.0 is the value flt_820037C8 carries at eight other committed call sites in this tree
     // (LineSegIntersect, BrnAStar, TriangleVolume, AALineClipper, GPBox, BrnAIDriver, ...); the
     // 0.0f here was the lone dissenter and it was a placeholder, not a reading.
-    // dbl_8210EF58 is a DOUBLE and lies outside the dumped span -- still an unverified guess.
-    static constexpr f32 KF_ONE                     = 1.0f;  // flt_82001C98  (image: 0x3F800000)
-    static constexpr f32 KF_HIST_INTERSECTION_SCALE = 2.0f;  // flt_82001D9C  (image: 0x40000000)
-    static constexpr f32 KF_HIST_DIST_DEFAULT       = -1.0f; // flt_820037C8  (image: 0xBF800000)
-    static constexpr f32 KF_HIST_CHANGED_HIGH       = 0.6f;  // dbl_8210EF58  -- STILL A GUESS
-    static constexpr f32 KF_HIST_CHANGED_LOW        = 0.25f; // flt_82003F40  (image: 0x3E800000)
+    // XDK 14 uses C++03: floating members are declarations here and are
+    // defined once in CHistogram.cpp. The high threshold is a native double
+    // (dbl_8210EF58, 0x3FE3333333333333 = 0.6), compared with fcmpu after
+    // loading the histogram distances as single precision.
+    static const f32 KF_ONE;
+    static const f32 KF_HIST_INTERSECTION_SCALE;
+    static const f32 KF_HIST_DIST_DEFAULT;
+    static const f64 KF_HIST_CHANGED_HIGH;
+    static const f32 KF_HIST_CHANGED_LOW;
 
 public:
     // --- byte-exact layout (total size 0x81C) ---

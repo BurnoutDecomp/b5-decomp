@@ -9,6 +9,12 @@
 
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CHistogram.h"
 
+const f32 CHistogram::KF_ONE                     = 1.0f; // flt_82001C98: 0x3F800000
+const f32 CHistogram::KF_HIST_INTERSECTION_SCALE = 2.0f; // flt_82001D9C: 0x40000000
+const f32 CHistogram::KF_HIST_DIST_DEFAULT       = -1.0f; // flt_820037C8: 0xBF800000
+const f64 CHistogram::KF_HIST_CHANGED_HIGH       = 0.6; // dbl_8210EF58: 0x3FE3333333333333
+const f32 CHistogram::KF_HIST_CHANGED_LOW        = 0.25f; // flt_82003F40: 0x3E800000
+
 void CHistogram::CalcHistogram(const u8* lpauImage, u32 luWidth, u32 luHeight)
 {
     if (lpauImage == 0)
