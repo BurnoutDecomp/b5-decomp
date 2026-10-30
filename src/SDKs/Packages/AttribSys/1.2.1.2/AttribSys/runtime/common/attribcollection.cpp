@@ -319,16 +319,6 @@ void* Attrib::Collection::GetData(u64 luKey, unsigned int luIndex) const
 void Attrib::Collection::Clean()
 {
     ClassPrivate* lpClassPrivate = static_cast<ClassPrivate*>(mpClass->GetPrivates());
-    const auto CleanData = [](ITypeHandler* lpHandler, void* lpData, bool lbArray) {
-        if (lbArray)
-        {
-            Array* lpArray = static_cast<Array*>(lpData);
-            for (u32 luIndex = 0; luIndex < lpArray->muNumElements; ++luIndex)
-                lpHandler->Clean(lpArray->GetData(luIndex));
-        }
-        else
-            lpHandler->Clean(lpData);
-    };
 
     bool lbInLayoutTable = false;
     u64 luKey = ScanForValidKey(*this, 0xFFFFFFFFu);
@@ -346,7 +336,19 @@ void Attrib::Collection::Clean()
         CGS_ASSERT((lpNode->muFlags & 0x80u) != 0, "Invalid node found at valid index.");
         ITypeHandler* lpHandler = lpNode->GetTypeDesc()->mHandler;
         if (lpHandler != NULL)
-            CleanData(lpHandler, lpNode->GetPointer(mpData, this), (lpNode->muFlags & 2u) != 0);
+        {
+            void* lpData = lpNode->GetPointer(mpData, this);
+            if ((lpNode->muFlags & 2u) != 0)
+            {
+                Array* lpArray = static_cast<Array*>(lpData);
+                for (u32 luIndex = 0; luIndex < lpArray->muNumElements; ++luIndex)
+                    lpHandler->Clean(lpArray->GetData(luIndex));
+            }
+            else
+            {
+                lpHandler->Clean(lpData);
+            }
+        }
     }
 
     if (mpData != NULL)
@@ -359,7 +361,19 @@ void Attrib::Collection::Clean()
                 continue;
             ITypeHandler* lpHandler = Database::Get().GetTypeDesc(lrDef.mType).mHandler;
             if (lpHandler != NULL)
-                CleanData(lpHandler, static_cast<u8*>(mpData) + lrDef.mOffset, (lrDef.mFlags & 1u) != 0);
+            {
+                void* lpData = static_cast<u8*>(mpData) + lrDef.mOffset;
+                if ((lrDef.mFlags & 1u) != 0)
+                {
+                    Array* lpArray = static_cast<Array*>(lpData);
+                    for (u32 luIndex = 0; luIndex < lpArray->muNumElements; ++luIndex)
+                        lpHandler->Clean(lpArray->GetData(luIndex));
+                }
+                else
+                {
+                    lpHandler->Clean(lpData);
+                }
+            }
         }
     }
 }

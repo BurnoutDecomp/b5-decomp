@@ -15,6 +15,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h"       // Register/UnregisterVaultRequest
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"  // GetAttribSysAllocator
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysResource.h"      // CgsResource::AttribSysVaultResource
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"              // ResourcePtr (CreateFromHandle binding)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstdlib>   // getenv ([DIAG] BRN_ATTRIB_STALE_DIAG)
@@ -64,7 +65,7 @@ void VaultSlot::DoLoad(const AttribSysIO::RegisterVaultRequest* lpRegisterReques
     // list-linked resource ptr on the stack; the dtor unlinks it exactly as the
     // X360's inline tail does).
     CgsResource::ResourceHandle lVaultResHandle = lpRegisterRequest->mVaultResourceHandle;
-    CgsResource::ResourcePtr<AttribSysVaultResource> lVaultResource(lVaultResHandle);
+    CgsResource::ResourcePtr<CgsResource::AttribSysVaultResource> lVaultResource(lVaultResHandle);
 
     // Carve the vault object from the static AttribSys package allocator
     // (X360 Malloc(88); sizeof-based for the widened x64 object).
@@ -74,7 +75,7 @@ void VaultSlot::DoLoad(const AttribSysIO::RegisterVaultRequest* lpRegisterReques
 
     CGS_ASSERT(mpVault == 0, "mpVault == NULL");                             // .cpp:177
 
-    const AttribSysVaultResource* lpResource = lVaultResource.operator->();
+    const CgsResource::AttribSysVaultResource* lpResource = lVaultResource.operator->();
     if (lpVaultMem != 0)
     {
         // The X360 fetches the export policies through the database accessor
@@ -83,8 +84,8 @@ void VaultSlot::DoLoad(const AttribSysIO::RegisterVaultRequest* lpRegisterReques
         mpVault = new (lpVaultMem) Attrib::Vault(
             lrPolicies,
             /*lAssetId*/ 0,
-            lpResource->GetVltData(),
-            lpResource->muVltSize,
+            lpResource->mpau8VltData,
+            lpResource->muVltSizeInBytes,
             /*lbType*/ 1,
             lpGarbageCollector);
     }
@@ -96,15 +97,15 @@ void VaultSlot::DoLoad(const AttribSysIO::RegisterVaultRequest* lpRegisterReques
 
     if (mpVault->HasUnresolvedDependency())
     {
-        u8* lpBinData = lpResource->GetBinData();
+        u8* lpBinData = lpResource->mpau8BinData;
         if (lpRegisterRequest->meVaultType == AttribSysIO::E_VAULT_TYPE_STREAMED)
         {
             // Streamed vaults stage the bin payload into a streamed-vault slot.
             miStreamedVaultIndex =
-                spVaultAllocator->GetFreeSlot(lpBinData, lpResource->muBinSize);
+                spVaultAllocator->GetFreeSlot(lpBinData, lpResource->muBinSizeInBytes);
             lpBinData = spVaultAllocator->GetSlotMemory(miStreamedVaultIndex);
         }
-        mpVault->ResolveDependency(0, lpBinData, lpResource->muBinSize, 1);
+        mpVault->ResolveDependency(0, lpBinData, lpResource->muBinSizeInBytes, 1);
     }
     CGS_ASSERT(!mpVault->HasUnresolvedDependency(),
                "!mpVault->HasUnresolvedDependency()");                             // .cpp:222

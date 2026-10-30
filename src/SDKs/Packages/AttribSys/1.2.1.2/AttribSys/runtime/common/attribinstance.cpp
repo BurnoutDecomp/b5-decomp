@@ -140,9 +140,9 @@ namespace Attrib
     //     lwz  r11,0x20(r30) ; if (!collection->mpSource) muFlags = 1
     //     lwz  r11,0x1C(r30) ; mpAttributeData = collection->mpData
     //     lhz  r11,8(r30)    ; bounded ++collection->muRefCount  (attribhashmap.h:622)
-    // From 0x8280A264 onward that is INSTRUCTION-FOR-INSTRUCTION the Collection* ctor
-    // @0x82802DCC, so this delegates rather than restating it -- the only thing this
-    // overload adds is the RefSpec resolve in front.
+    // From 0x8280A264 onward the field initialization/refcount sequence matches the
+    // Collection* ctor @0x82802DCC. C++03 has no delegating constructors, so the same
+    // native stores and AddRef are stated here after the one RefSpec resolve.
     //
     // ⚠️ The resolve DOUBLE-COUNTS on purpose, and that is the console's behaviour, not a
     // leak: RefSpec::GetCollection AddRefs when it caches a freshly-resolved collection in
@@ -155,9 +155,19 @@ namespace Attrib
     // `const Attrib::Collection*`. The committed header carries the non-const spellings of
     // both, so the resolve has to be laundered through them here.
     Instance::Instance(const RefSpec& lrRefSpec, void* lpOwner)
-        : Instance(const_cast<Collection*>(const_cast<RefSpec&>(lrRefSpec).GetCollection()),
-                   lpOwner)
+        : mpCollection(const_cast<Collection*>(const_cast<RefSpec&>(lrRefSpec).GetCollection()))
+        , mpAttributeData(0)
+        , mpOwner(lpOwner)
+        , muFlags(0)
     {
+        if (mpCollection)
+        {
+            if (mpCollection->mpSource == 0)
+                muFlags = 1;
+            mpAttributeData = mpCollection->mpData;
+            CGS_ASSERT(mpCollection->muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
+            ++mpCollection->muRefCount;
+        }
     }
 
     // Copy construct. NOT an X360 out-of-line symbol (the console inlines it everywhere);

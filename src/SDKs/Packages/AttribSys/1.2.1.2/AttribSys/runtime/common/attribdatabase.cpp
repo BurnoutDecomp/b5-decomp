@@ -363,16 +363,20 @@ void ClassExportPolicy::PrepareToClean(Vault&)
 // @ 0x8280CB78. Release this vault's registry references; deletion stays deferred.
 void ClassExportPolicy::PrepareToDeinitialize(Vault& lrVault)
 {
-    auto& lrClasses = GetDatabasePrivate()->mClasses;
-    // Inlined ScanForValidKey<ClassTable>: scan after the supplied bucket, -1 starts it.
-    const auto Scan = [&lrClasses](u32 luIndex) -> u64 {
-        if (lrClasses.mpTable != NULL)
-            for (++luIndex; luIndex < lrClasses.muTableSize; ++luIndex)
-                if (lrClasses.mpTable[luIndex].IsValid())
-                    return lrClasses.mpTable[luIndex].mKey;
-        return 0;
-    };
-    for (u64 luKey = Scan(0xFFFFFFFFu); luKey != 0; )
+    ClassTable& lrClasses = GetDatabasePrivate()->mClasses;
+    u64 luKey = 0;
+    if (lrClasses.mpTable != NULL)
+    {
+        for (u32 luScanIndex = 0; luScanIndex < lrClasses.muTableSize; ++luScanIndex)
+        {
+            if (lrClasses.mpTable[luScanIndex].IsValid())
+            {
+                luKey = lrClasses.mpTable[luScanIndex].mKey;
+                break;
+            }
+        }
+    }
+    while (luKey != 0)
     {
         ClassPrivate* lpClass = reinterpret_cast<ClassPrivate*>(lrClasses.Find(luKey));
         if (lpClass->mSource == &lrVault)
@@ -380,7 +384,18 @@ void ClassExportPolicy::PrepareToDeinitialize(Vault& lrVault)
         const u32 luIndex = lrClasses.FindIndex(luKey);
         if (!lrClasses.ValidIndex(luIndex))
             break;
-        luKey = Scan(luIndex);
+        luKey = 0;
+        if (lrClasses.mpTable != NULL)
+        {
+            for (u32 luScanIndex = luIndex + 1; luScanIndex < lrClasses.muTableSize; ++luScanIndex)
+            {
+                if (lrClasses.mpTable[luScanIndex].IsValid())
+                {
+                    luKey = lrClasses.mpTable[luScanIndex].mKey;
+                    break;
+                }
+            }
+        }
     }
 }
 bool CollectionExportPolicy::AnyReferences(const Vault&)
@@ -395,26 +410,36 @@ void CollectionExportPolicy::PrepareToClean(Vault&)
 // @ 0x8280CD80. Clean references in ALL collections before releasing this vault's own.
 void CollectionExportPolicy::PrepareToDeinitialize(Vault& lrVault)
 {
-    auto& lrClasses = GetDatabasePrivate()->mClasses;
-    const auto ScanClasses = [&lrClasses](u32 luIndex) -> u64 {
-        if (lrClasses.mpTable != NULL)
-            for (++luIndex; luIndex < lrClasses.muTableSize; ++luIndex)
-                if (lrClasses.mpTable[luIndex].IsValid())
-                    return lrClasses.mpTable[luIndex].mKey;
-        return 0;
-    };
-    for (u64 luClassKey = ScanClasses(0xFFFFFFFFu); luClassKey != 0; )
+    ClassTable& lrClasses = GetDatabasePrivate()->mClasses;
+    u64 luClassKey = 0;
+    if (lrClasses.mpTable != NULL)
+    {
+        for (u32 luScanIndex = 0; luScanIndex < lrClasses.muTableSize; ++luScanIndex)
+        {
+            if (lrClasses.mpTable[luScanIndex].IsValid())
+            {
+                luClassKey = lrClasses.mpTable[luScanIndex].mKey;
+                break;
+            }
+        }
+    }
+    while (luClassKey != 0)
     {
         Class* lpClass = lrClasses.Find(luClassKey);
-        auto& lrCollections = static_cast<ClassPrivate*>(lpClass->GetPrivates())->mCollections;
-        const auto ScanCollections = [&lrCollections](u32 luIndex) -> u64 {
-            if (lrCollections.mTable != NULL)
-                for (++luIndex; luIndex < lrCollections.mTableSize; ++luIndex)
-                    if (lrCollections.mTable[luIndex].IsValid())
-                        return lrCollections.mTable[luIndex].mKey;
-            return 0;
-        };
-        for (u64 luKey = ScanCollections(0xFFFFFFFFu); luKey != 0; )
+        CollectionHashMap& lrCollections = static_cast<ClassPrivate*>(lpClass->GetPrivates())->mCollections;
+        u64 luKey = 0;
+        if (lrCollections.mTable != NULL)
+        {
+            for (u32 luScanIndex = 0; luScanIndex < lrCollections.mTableSize; ++luScanIndex)
+            {
+                if (lrCollections.mTable[luScanIndex].IsValid())
+                {
+                    luKey = lrCollections.mTable[luScanIndex].mKey;
+                    break;
+                }
+            }
+        }
+        while (luKey != 0)
         {
             Collection* lpCollection = lrCollections.Find(luKey);
             lpCollection->Clean();
@@ -423,12 +448,34 @@ void CollectionExportPolicy::PrepareToDeinitialize(Vault& lrVault)
             const u32 luIndex = lrCollections.FindIndex(luKey);
             if (luIndex >= lrCollections.mTableSize || !lrCollections.mTable[luIndex].IsValid())
                 break;
-            luKey = ScanCollections(luIndex);
+            luKey = 0;
+            if (lrCollections.mTable != NULL)
+            {
+                for (u32 luScanIndex = luIndex + 1; luScanIndex < lrCollections.mTableSize; ++luScanIndex)
+                {
+                    if (lrCollections.mTable[luScanIndex].IsValid())
+                    {
+                        luKey = lrCollections.mTable[luScanIndex].mKey;
+                        break;
+                    }
+                }
+            }
         }
         const u32 luClassIndex = lrClasses.FindIndex(luClassKey);
         if (!lrClasses.ValidIndex(luClassIndex))
             break;
-        luClassKey = ScanClasses(luClassIndex);
+        luClassKey = 0;
+        if (lrClasses.mpTable != NULL)
+        {
+            for (u32 luScanIndex = luClassIndex + 1; luScanIndex < lrClasses.muTableSize; ++luScanIndex)
+            {
+                if (lrClasses.mpTable[luScanIndex].IsValid())
+                {
+                    luClassKey = lrClasses.mpTable[luScanIndex].mKey;
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -447,7 +494,7 @@ unsigned int CollectionExportPolicy::DiagCountCollectionsOwnedBy(const Vault* lp
     unsigned int luCount = 0;
     if (!Database::IsInitialized())
         return 0;
-    auto& lrClasses = GetDatabasePrivate()->mClasses;
+    ClassTable& lrClasses = GetDatabasePrivate()->mClasses;
     if (lrClasses.mpTable == NULL)
         return 0;
     for (u32 luClass = 0; luClass < lrClasses.muTableSize; ++luClass)
@@ -457,7 +504,7 @@ unsigned int CollectionExportPolicy::DiagCountCollectionsOwnedBy(const Vault* lp
         Class* lpClass = lrClasses.Find(lrClasses.mpTable[luClass].mKey);
         if (lpClass == NULL || lpClass->GetPrivates() == NULL)
             continue;
-        auto& lrCollections = static_cast<ClassPrivate*>(lpClass->GetPrivates())->mCollections;
+        CollectionHashMap& lrCollections = static_cast<ClassPrivate*>(lpClass->GetPrivates())->mCollections;
         if (lrCollections.mTable == NULL)
             continue;
         for (u32 luIndex = 0; luIndex < lrCollections.mTableSize; ++luIndex)
