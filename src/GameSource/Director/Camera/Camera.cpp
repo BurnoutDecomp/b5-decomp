@@ -149,10 +149,21 @@ rw::math::vpu::Matrix44Affine* Camera::ValidateTransformWithDebugInfo()
 // loop copies mState (0x18); and the tail copies mfCustomNearClipDistance, the two
 // mShotSelectionInfo words, and the mbHasSubject / mbHasCustomNearClipDistance bytes.
 // That is exactly a memberwise copy of every member, so the de-optimised human form is
-// the implicit memberwise copy. (Console offsets +0x00..+0x15D; member parity is by name
+// a memberwise copy. (Console offsets +0x00..+0x15D; member parity is by name
 // on the x64 gate -- see Camera.h.)
 // ----------------------------------------------------------------------------
-Camera::Camera(const Camera& lrOther) = default;
+Camera::Camera(const Camera& lrOther)
+    : mTransform(lrOther.mTransform), mSubject(lrOther.mSubject),
+      mpDebugInfoBehaviour(lrOther.mpDebugInfoBehaviour), mpSourceShot(lrOther.mpSourceShot),
+      mfFOV(lrOther.mfFOV), mfAspectRatio(lrOther.mfAspectRatio),
+      mfRunningTime(lrOther.mfRunningTime), mpCrashAnalysis(lrOther.mpCrashAnalysis),
+      mEffects(lrOther.mEffects), mDepthOfField(lrOther.mDepthOfField),
+      mfCustomNearClipDistance(lrOther.mfCustomNearClipDistance),
+      mShotSelectionInfo(lrOther.mShotSelectionInfo), mbHasSubject(lrOther.mbHasSubject),
+      mbHasCustomNearClipDistance(lrOther.mbHasCustomNearClipDistance)
+{
+    mState = lrOther.mState;
+}
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::Camera::SetFOV @0x821F26B8

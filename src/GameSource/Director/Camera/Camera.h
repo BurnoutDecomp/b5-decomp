@@ -85,7 +85,7 @@ namespace BrnDirector
 
             // X360-attested @0x821F3B88. The copy constructor -- a flat memberwise copy of
             // the whole camera (body: Camera.cpp). Declared explicitly so the X360-attested
-            // copy has a named home; defaulting it keeps the default ctor available too.
+            // copy has a named home and the default ctor remains available.
             Camera(const Camera& lrOther);
 
             // BrnDirector::Camera::Camera::operator= -- the copy-assignment counterpart of the
