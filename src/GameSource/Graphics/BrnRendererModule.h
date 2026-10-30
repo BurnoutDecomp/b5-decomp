@@ -347,6 +347,9 @@ public:
     virtual bool Release();
     virtual void Destruct();
 
+    // ARTIST823F5568 / DecFIGS: static startup, no renderer receiver.
+    static void DeviceInitialise();
+
     // ARTIST823F5628; native SDK refresh rate rounded to the nearest integer.
     static s32 GetVSynchRate();
 
