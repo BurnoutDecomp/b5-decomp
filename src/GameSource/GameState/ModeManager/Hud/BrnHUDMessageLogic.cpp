@@ -10,7 +10,12 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // CrashingRaceCarInterface (GenerateOnlineTeamChangeMessages)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // gpDebugPrint ([hud-xcrash] witness)
 #include <cstdlib>                                             // getenv (BRN_MODEMGR_DIAG)
-#include <cmath>                                               // truncf (GenerateDistanceToFinishMessage's Modulo)
+#include <cmath>
+#if defined(_XBOX)
+#include <xtl.h>
+#include <xboxmath.h>
+#include <vectorintrinsics.h>
+#endif
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp
@@ -88,9 +93,9 @@ namespace
     // place after flt_82029F1C (0x40F00000, 7.5 s). Prepare seeds the two clocks with the same words.
     const f32 KF_NEW_LEADER_MESSAGE_SECONDS = 1.5f;                                       // flt_82029F18
     const f32 KF_NEW_LAST_MESSAGE_SECONDS   = 7.5f;                                       // flt_82029F1C
-    // GenerateDistanceToFinishMessage: the first mark is the largest multiple of 500 m (the first
-    // word of the vector constant unk_8202AEE0, 0x43FA0000, `vspltw 0` @0x82395B14) at or below the
-    // distance less 100 m (flt_820049E0, 0x42C80000). A distance of FLT_MAX (flt_82CDB9AC,
+    // GenerateDistanceToFinishMessage forms its first mark from distance minus 100 m
+    // and a 500 m modulus (the first word of unk_8202AEE0, 0x43FA0000). The quotient
+    // is rounded toward zero by vrfiz, including for negative inputs. A distance of FLT_MAX (flt_82CDB9AC,
     // 0x7F7FFFFF) means "no distance yet"; -1.0 (flt_820037C8, 0xBF800000) is Prepare's "not set".
     const f32 KF_DISTANCE_MESSAGE_MODULUS_METRES = 500.0f;                                // unk_8202AEE0[0]
     const f32 KF_DISTANCE_MESSAGE_OFFSET_METRES  = 100.0f;                                // flt_820049E0
@@ -618,8 +623,23 @@ void HUDMessageLogic::GenerateDistanceToFinishMessage(ScoringSystem* lpScoringSy
     if (!(mfNextDistanceToFinishMessage > KF_DISTANCE_MESSAGE_UNSET))
     {
         const f32 lfRaceDist               = lfPlayerDistanceToFinish - KF_DISTANCE_MESSAGE_OFFSET_METRES;
-        const f32 lfModRaceDist            =
+#if defined(_XBOX)
+        // ARTIST 0x82395B1C..0x82395B44: two reciprocal refinements, then
+        // round the quotient toward zero and form the remainder with a fused operation.
+        const __vector4 lvDivisor = XMVectorReplicate(KF_DISTANCE_MESSAGE_MODULUS_METRES);
+        const __vector4 lvDistance = XMVectorReplicate(lfRaceDist);
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lvEstimate = __vrefp(lvDivisor);
+        const __vector4 lvResidual1 = __vnmsubfp(lvEstimate, lvDivisor, lvOne);
+        const __vector4 lvRefined1 = __vmaddfp(lvEstimate, lvResidual1, lvEstimate);
+        const __vector4 lvResidual2 = __vnmsubfp(lvRefined1, lvDivisor, lvOne);
+        const __vector4 lvRefined2 = __vmaddfp(lvRefined1, lvResidual2, lvRefined1);
+        const __vector4 lvQuotient = __vrfiz(__vmulfp(lvRefined2, lvDistance));
+        const f32 lfModRaceDist = __vnmsubfp(lvQuotient, lvDivisor, lvDistance).x;
+#else
+        const f32 lfModRaceDist =
             lfRaceDist - truncf(lfRaceDist / KF_DISTANCE_MESSAGE_MODULUS_METRES) * KF_DISTANCE_MESSAGE_MODULUS_METRES;
+#endif
         const f32 lfEarliestMessageDistance = lfRaceDist - lfModRaceDist;
         mfNextDistanceToFinishMessage       = lfEarliestMessageDistance;
     }
