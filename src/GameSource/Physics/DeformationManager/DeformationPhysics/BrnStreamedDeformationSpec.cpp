@@ -2,7 +2,6 @@
 #include "SharedClasses/Physics/Deformation/BrnBodyPartBBoxSpec.h"   // BodyPartBBoxSpec::HackCheckHandedness (FixUp)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint -- the opt-in [com] / [handedness] probes only
 #include <cstdlib>                                                   // getenv/atoi  -- the opt-in [com] / [handedness] probes only
-#include <cmath>                                                     // std::signbit -- the opt-in [handedness] probe only
 
 // BrnPhysics::Deformation::StreamedDeformationSpec.
 //
@@ -100,16 +99,6 @@ namespace Deformation
             lAccum.w -= lDelta.w;
         }
 
-        // ---- [handedness] NOT X360 -- host-side dispatch witness for FixUp's HackCheckHandedness
-        // calls (crash parity G16-D1), opt-in on the BRN_DEFORM_TRACE latch (0/unset == inert).
-        // The mirror arm always XORs the sign bit of basis row 0 (vxor @0x825E6F4C), so a part was
-        // mirrored iff that bit changed across the call -- this measures the shipped body, it does
-        // not re-derive its predicate. One line per FixUp: "[handedness] FixUp ikParts N mirrored M".
-        // DELETE-WHEN a left-handed record is found (or the zero-cost measurement is banked).
-        inline u32 Row0SignBit(const BodyPartBBoxSpec& lrSpec)
-        {
-            return static_cast<u32>( std::signbit( lrSpec.mOrientation.xAxis.x ) ? 1 : 0 );
-        }
     }
 
     // X360 @ 0x825B32D8 (Hex-Rays emitted the symbol with an empty short-name; identified as
@@ -122,7 +111,7 @@ namespace Deformation
     {
         CGS_ASSERT(liIndex < miNumGlassPanes, "liIndex < miNumGlassPanes");   // BrnStreamedDeformationSpec.h:397
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");                             // BrnStreamedDeformationSpec.h:398
-        return &maGlassPaneData[liIndex];
+        return &maGlassPaneData.Get()[liIndex];
     }
 
     // X360 @ 0x822A0328 (GetWheelSpec, BrnStreamedDeformationSpec.h:256). eNumWheels == 4.
@@ -564,7 +553,6 @@ namespace Deformation
         if ( miNumberOfIKParts > 0 )
         {
             s32 liIndex = 0;
-            s32 liMirrored = 0;   // [handedness] witness only (NOT X360)
             char* lpPartBase = reinterpret_cast<char*>(maIKPartData.Get());
             do
             {
@@ -575,9 +563,7 @@ namespace Deformation
                     *lpuJointSlot = static_cast<u32>(*lpuJointSlot + static_cast<u32>(liBase));
 
                 BodyPartBBoxSpec* lpBBoxSpec = reinterpret_cast<BodyPartBBoxSpec*>(lpPart + KU_IK_PART_BBOX_OFFSET);
-                const u32 luSignBefore = Row0SignBit(*lpBBoxSpec);   // [handedness] witness only
                 lpBBoxSpec->HackCheckHandedness();
-                liMirrored += (Row0SignBit(*lpBBoxSpec) != luSignBefore) ? 1 : 0;   // [handedness] witness only
                 ++liIndex;
             }
             while ( liIndex < miNumberOfIKParts );
