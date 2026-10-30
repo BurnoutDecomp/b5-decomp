@@ -343,6 +343,10 @@ public:
 
     BrnRendererModule();
 
+    // ARTIST820CFEB0 slots2/3; genuine engine lifecycle overrides.
+    virtual bool Release();
+    virtual void Destruct();
+
     // ARTIST823F5628; native SDK refresh rate rounded to the nearest integer.
     static s32 GetVSynchRate();
 
