@@ -1648,14 +1648,16 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // [KU_STATIC_TRAFFIC_OFFSET, +KU_MAX_STATIC_TRAFFIC), and the single trailer slot is
         // KU_TRAILER_TRAFFIC_OFFSET. The console accessors differ only by base element index
         // (85 / 485 / 684 at a 128-byte stride), which is 400 / 199 / 1 apart exactly.
-        Vehicle               maVehicles[KU_MAX_TOTAL_TRAFFIC];  // :631
+        // ARTIST 0x82707A7C anchors this 128-byte-aligned pool at +0x2A80.
+        CGS_ALIGN(128) Vehicle maVehicles[KU_MAX_TOTAL_TRAFFIC];  // :631
         VehicleAxles          maVehicleAxles[KU_MAX_TOTAL_TRAFFIC]; // :632
         Matrix44Affine        maVehicleTransforms[KU_MAX_TOTAL_TRAFFIC]; // :633
         CgsContainers::FastBitArray<KU_MAX_TOTAL_TRAFFIC>
                               mVehiclesAddedToCrashModule;       // :634
         VehicleSoaData        mVehicleSoaData;                   // :635
 
-        Param                 maParams[KU_MAX_PARAMS];           // :637
+        // ARTIST 0x82707DD8/0x82707DE4 anchors the pool at +0x28580.
+        CGS_ALIGN(128) Param maParams[KU_MAX_PARAMS];           // :637
         // Console bases close with zero slack across all four pool arrays: maParams +165248
         // (GetParam @0x82707630), maParamNeedToSlowData +216448 == 165248 + 400*128
         // (GetParamNeedToSlowData @0x827077D0), maParamListNodes +222848 == 216448 + 400*16
