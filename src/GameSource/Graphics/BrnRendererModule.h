@@ -750,6 +750,23 @@ inline BrnRendererModule::ERendererPrepareStage operator++(
     return old;
 }
 
+// ARTIST823F5208; DecFIGS BrnRendererModule.h819 postfix increment.
+inline BrnRendererModule::ERendererReleaseStage operator++(
+    BrnRendererModule::ERendererReleaseStage& leEnumIndex, int)
+{
+    const BrnRendererModule::ERendererReleaseStage old = leEnumIndex;
+    leEnumIndex = static_cast<BrnRendererModule::ERendererReleaseStage>(
+        static_cast<u32>(leEnumIndex) + 1u);
+    if (static_cast<s32>(leEnumIndex) > BrnRendererModule::eRendererReleaseDone)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("leEnumIndex <= BrnRendererModule::eRendererReleaseDone",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\graphics\\BrnRendererModule.h", 819);
+        CgsDev::Assert::EndAssert();
+    }
+    return old;
+}
+
 inline void BrnRendererModule::ClearDispatchCounters()
 {
     mu32NumWorldOpaqueObjectTotals = 0;
