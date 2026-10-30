@@ -45,9 +45,8 @@ namespace BrnTraffic
 
 
 // -----------------------------------------------------------------------------
-// * @0x827539A0 -- EXPORT HOLE. No .ida-exports JSON for this address, so neither
-// pseudocode nor assembly can be read; the body below is the leaked Feb-2007
-// TrafficCarStreamer::Construct with one adaptation.
+// * @0x827539A0 -- export hole; the raw ARTIST instructions attest the base
+// arguments, the sentinel handle and each of the 64 slot stores.
 //
 // The call is attested from the caller: TrafficEntityModule::Construct @0x82740220 calls
 // `TrafficCarStreamer::Construct( this + 469848 )`, and UpdateStreaming @0x82748848
@@ -63,16 +62,15 @@ namespace BrnTraffic
 // by WorldGraphicsStreamer::Construct @0x827CA388). lbSlotPoolSystem is false here because
 // InternalBaseStreamer::PostLoadRequest only adds the entry index to the pool id when it is
 // set, and traffic graphics all land in the single E_POOL_TRAFFIC pool.
-// FLAG: this body is an export hole, so `false` for lbSlotPoolSystem and the E_POOL_TRAFFIC
-// value itself (15, DWARF ps3mem.h) are the two facts ARTIST does not directly attest.
-// Revisit this line if a traffic bundle is ever seen requested from pool 15+slot.
+// ARTIST827539AC..DC passes pool 15, slot-pool false, graphics set 0 and
+// allow-failure true to the underlying InternalBaseStreamer::Construct.
 // -----------------------------------------------------------------------------
 void TrafficCarStreamer::Construct()
 {
     BaseClass::Construct( BrnResource::E_POOL_TRAFFIC,
-                          false /*lbSlotPoolSystem -- see the FLAG above*/,
+                          false /*lbSlotPoolSystem*/,
                           BrnResource::E_ASSETSET_GRAPHICS,
-                          false /*lbAllowFailure*/ );
+                          true /*lbAllowFailure*/ );
 
     muNumAssets = 0;
 
@@ -86,11 +84,8 @@ void TrafficCarStreamer::Construct()
         // `((CgsID)0) + (CgsID)40 * (...)` twelve deep, which is CgsIDCompress("") == 0.
         maAssetIds[luAsset]           = 0;
 
-        // Leak: `maGraphicsStubs[luAsset] = CgsResource::NULLResourcePtr;`. The console
-        // spells that as CreateFromHandle(slot, &<sentinel>+0x14), the {mpThis, muThreadId}
-        // pair of the null sentinel, which is the CgsResource::NULLResourceHandle idiom
-        // (RaceCarStreamer::Construct @0x822F7FA0 does the same).
-        maGraphicsStubs[luAsset]      = CgsResource::NULLResourceHandle;
+        // ARTIST827539F8 binds from this translation unit's sentinel handle.
+        maGraphicsStubs[luAsset]      = CgsResource::NULLResourcePtr;
     }
 }
 
@@ -369,7 +364,7 @@ void TrafficCarStreamer::OnLoadBegin( s32 liListIndex )
 //
 // The asm's last instruction is `CreateFromHandle( &maGraphicsStubs[asset],
 // &dword_8300D44C )`, where dword_8300D44C == the null-sentinel + 0x14, i.e. the
-// {mpThis, muThreadId} pair -- the committed NULLResourceHandle idiom.
+// actual handle within this translation unit's NULLResourcePtr sentinel.
 // -----------------------------------------------------------------------------
 void TrafficCarStreamer::OnUnloadBegin( s32 liListIndex )
 {
@@ -385,7 +380,7 @@ void TrafficCarStreamer::OnUnloadBegin( s32 liListIndex )
 
     mauLoadStates[luAsset] = E_LOADSTATE_UNLOAD_STARTED;
 
-    maGraphicsStubs[luAsset] = CgsResource::NULLResourceHandle;
+    maGraphicsStubs[luAsset] = CgsResource::NULLResourcePtr;
 }
 
 

@@ -83,7 +83,4 @@ namespace CgsResource
         mpPrev->mpNext = this;
     }
 
-    // CRT initializer82C4AFD8 constructs this sentinel with the same zero-value,
-    // self-ring and source-handle stores as the native default constructor.
-    const BaseResourcePtr NULLResourcePtr;
 }
