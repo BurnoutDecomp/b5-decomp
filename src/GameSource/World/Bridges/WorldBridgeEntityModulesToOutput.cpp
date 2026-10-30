@@ -46,10 +46,10 @@ void BridgeRaceCarResourceRequestsToOutput_Prepare(
     CGS_ASSERT(lpWorldOutput != 0, "lpWorldOutput != NULL");                                   // :169
     CGS_ASSERT(lpRaceCarOutputBuffer_Prepare != 0, "lpRaceCarOutputBuffer_Prepare != NULL");   // :170
 
-    const auto* lpSourceInterface = lpRaceCarOutputBuffer_Prepare->GetResourceRequestInterface();
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_Prepare::ResourceRequestInterface* lpSourceInterface = lpRaceCarOutputBuffer_Prepare->GetResourceRequestInterface();
 
     lpWorldOutput->GetResourceRequestResourceInterface()->mRequestQueue.Append<8192, 16>(
-        reinterpret_cast<const CgsModule::VariableEventQueue<8192, 16>&>(*lpSourceInterface));
+        lpSourceInterface->mRequestQueue);
 }
 
 // BridgeRaceCarResourceRequestsToOutput (asserts at). The PostPhysics race-car
@@ -70,7 +70,7 @@ void BridgeRaceCarResourceRequestsToOutput(
 
     CgsDev::PerfMonCpu::StartMonitor(lrCpuMonitors.miUT_RaceCar_Bridge);
 
-    const auto* lpSourceInterface = lpRaceCarOutputBuffer_PostPhysics->GetResourceRequestInterface();
+    const BrnWorld::RaceCarEntityModuleIO::ResourceRequestInterface* lpSourceInterface = lpRaceCarOutputBuffer_PostPhysics->GetResourceRequestInterface();
     lpWorldOutput->GetResourceRequestResourceInterface()->mRequestQueue.Append(lpSourceInterface->mRequestQueue);
 
     CgsDev::PerfMonCpu::StopMonitor(lrCpuMonitors.miUT_RaceCar_Bridge);
@@ -87,10 +87,10 @@ void BridgePropResourceRequestsToOutput_Prepare(
     CGS_ASSERT(lpWorldOutput != 0, "lpWorldOutput != NULL");                                 // :247
     CGS_ASSERT(lpPropOutputBuffer_Prepare != 0, "lpPropOutputBuffer_Prepare != NULL");       // :248
 
-    const auto* lpSourceInterface = lpPropOutputBuffer_Prepare->GetResourceRequestInterface();
+    const BrnWorld::PropEntityIO::OutputBuffer_Prepare::ResourceRequestInterfaceStorage* lpSourceInterface = lpPropOutputBuffer_Prepare->GetResourceRequestInterface();
 
     lpWorldOutput->GetResourceRequestResourceInterface()->mRequestQueue.Append<1024, 16>(
-        reinterpret_cast<const CgsModule::VariableEventQueue<1024, 16>&>(*lpSourceInterface));
+        lpSourceInterface->mRequestQueue);
 }
 
 // @ 0x827AEDE0
@@ -156,14 +156,11 @@ void BridgePropToOutput_PreScene(
     CGS_ASSERT(lpOutputBuffer != 0, "lpWorldOutput != NULL");                            // :268
     CGS_ASSERT(lpPropOutput_PreScene != 0, "lpPropOutputBuffer_PreScene != NULL");       // :269
 
-    // The prop streamer's staged GameData requests. Same cross-home reference-cast as the
-    // Prepare twin above: PropEntityIO's resource-request interface is still an opaque,
-    // correctly-sized span whose embedded VariableEventQueue<1024,16> sits at offset 0
-    // (the interface IS its queue), which is exactly what the console passes.
-    const auto* lpSourceInterface = lpPropOutput_PreScene->GetResourceRequestInterface();
+    // Append the actual prop resource request queue, as in ARTIST 0x827AF258.
+    const BrnWorld::PropEntityIO::OutputBuffer_PreScene::ResourceRequestInterfaceStorage* lpSourceInterface = lpPropOutput_PreScene->GetResourceRequestInterface();
 
     lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append<1024, 16>(
-        reinterpret_cast<const CgsModule::VariableEventQueue<1024, 16>&>(*lpSourceInterface));
+        lpSourceInterface->mRequestQueue);
 
     // ARTIST827AF2D8..308: publish a constructed array even when no sign is visible.
     BrnGui::GuiOverheadSignInfoEvent lSigns;
