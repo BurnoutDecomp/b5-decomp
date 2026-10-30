@@ -53,17 +53,8 @@ extern s32 gBrnScriptedLoadStage;
 
 namespace BrnGameMainFlowController
 {
-    // The GameData IO pair the scripted-load spine brackets every frame.
-    //
-    // [PC placement] the X360 keeps this pair as GAME-MODULE members (gm+10055440 =
-    // the input, gm+10055444 = the output; BrnGameModule::GamePrepare @0x823EFBD0 opens
-    // with LockForWrite(gm+10055440) / LockForRead(gm+10055444) and the scripted-load
-    // spine @0x823F22D8 brackets the same pair). The PC host owns one constructed-once
-    // pair here instead. GamePrepare needs the SAME pair -- its LoadBundle requests have
-    // to reach the one GameDataModule pump -- so it is published through these accessors
-    // rather than duplicated. Both accessors bring the pair up on first use (the
-    // construction has to be idempotent because GamePrepare runs on the update thread
-    // BEFORE the first flow-state Update of the boot frame).
+    // The same persistent pair BrnGameModule::Prepare creates on the resource
+    // stacks (ARTIST gm+996F10/14), also used by GamePrepare.
     BrnResource::GameDataIO::InputBuffer*  GetScriptedLoadGameDataInput();
     BrnResource::GameDataIO::OutputBuffer* GetScriptedLoadGameDataOutput();
 }
@@ -103,7 +94,6 @@ struct LoadingScriptedState : public MainGameFlowState
     virtual void FinishLoading();   // vtable +16
 
 protected:
-    // Native host retains the existing loading Update timing pending typed migration.
     friend class BrnGame::BrnGameModule;
     // ARTIST 823CE098; original callers supply these real GUI IO buffers.
     void RenderGUI(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
@@ -120,6 +110,11 @@ protected:
     // (DWARF :43-:74) are reconstructed with the stages that drive them.
     bool LoadSoundModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                          const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
+
+    // ARTIST823E7700, DecFIGS3119A8. The second sound prepare owns a fresh
+    // Root input/output pair and forwards requests while gameplay setup waits.
+    bool LoadSoundModuleAgain(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                              const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
     // X360 0x823E72F0 -- one frame of the world-module load: create a scratch
     // BrnWorldIO::UpdateOutputBuffer on the update output stack, drive WorldModule::
@@ -160,16 +155,6 @@ protected:
     bool LoadGameState2(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                         const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
-    // The per-frame world UPDATE leg of the spine (X360 0x823F22D8's `stage > 5` block,
-    // inlined there): FreeAll the world frame allocator, drive WorldModule::Update
-    // (vtable +76) with the frame's world IO pair and the loading update set, then run
-    // BridgeWorldToResource @0x823E5300 -- the forward that carries the world streamer's
-    // per-frame LoadBundle requests (TRK / PVS / prop graphics) into the GameData pump.
-    // The sound pre-update buffer (phase C4) rides through to DriveWorldUpdateFrame's
-    // BridgeSoundToWorld staging; null keeps the pre-C4 no-sound behaviour.
-    void UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
-                           BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput = 0);
-
     // X360 0x823E74C0 -- the E_LOADINGSTAGE_DIRECTORMODULE leg. Creates this frame's director
     // OUTPUT buffer on the update output stack, runs the module's staged
     // DirectorModule::Prepare @0x822712D8 once with the GameData allocator list, and -- while
@@ -178,6 +163,14 @@ protected:
     // LoadSoundModule/LoadWorldModule.
     bool LoadDirectorModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                             const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
+
+    // ARTIST823EF310: caller-owned GUI buffers across the actual prepare/retry path.
+    bool LoadGUIModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+                      CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                      CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+                      CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+                      CgsGui::ViewIO::InputBuffer* lpViewInput,
+                      const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
 
     bool LoadNetworkModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
@@ -226,11 +219,6 @@ struct MainGameFlowStateInitialLoadingScreen : public LoadingScriptedState
     virtual void OnLeave();
     virtual void Update();
     virtual void FinishLoading();
-
-private:
-    // Advance to + log the next load stage (interim helper; each real LoadXxxModule will call this
-    // on its own completion). Non-virtual; does not affect layout/vtable.
-    void AdvanceLoadingStage(ELoadingScreenStage leNextStage);
 
 protected:
     ELoadingScreenStage                 meLoadingScreenStage;
@@ -303,35 +291,6 @@ struct MainGameFlowStateCompleteLoading : public LoadingScriptedState
 private:
     bool mbIsCollisionWorldPrepared;
 };
-
-// ---------------------------------------------------------------------------------------------
-// KU_INGAME_UPDATE_SET IS DELETED (pause wave, 2026-08-26). It read
-//     const BrnUpdateSet KU_INGAME_UPDATE_SET = 0x88;
-// and its banner made two claims, BOTH FALSE, and the pair of them is why the in-game world
-// could never be paused:
-//   1. "Mirrored here because that method is private to BrnGameModule."
-//      ConstructUpdateSetFromFsm is PUBLIC -- BrnGameModule.hpp:327, inside the public block
-//      that opens at :150. Nothing ever required a mirror.
-//   2. "WorldModule::Update only tests 0x1 / 0x80 / 0x100, so the 0x08 bit is inert there --
-//      this cannot change the world's behaviour."
-//      The reasoning is about the wrong bit. 0x08 is indeed inert; what the frozen constant
-//      actually did was make bit 0x1 -- THE SIM-PAUSE BIT, the one WorldModule::Update very much
-//      does test -- permanently UNREACHABLE in game. ConstructUpdateSetFromFsm ORs 0x1 when
-//      mbSimPaused (BrnGameModule.cpp), so hardcoding 0x88 pinned the game to "never paused"
-//      no matter what the pause FSM decided.
-// A hardcoded mirror of a FUNCTION OF STATE is not a constant. DriveInGameWorldUpdate now calls
-// the method, exactly as the LOADING spine at BrnGameMainFlowStates.cpp:323 already did.
-// ---------------------------------------------------------------------------------------------
-
-// The per-frame world UPDATE leg, shared by the scripted-load spine and the in-game state.
-// See the commentary on DriveWorldUpdateFrame in the .cpp for why the world previously
-// stopped updating the moment the flow left the loading screen.
-void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
-                           BrnUpdateSet lUpdateSet,
-                           BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput = 0);
-// The sound pre-update buffer (phase C4b) rides through to DriveWorldUpdateFrame's
-// BridgeSoundToWorld staging, exactly as on the loading spine; null = no sound this frame.
-void DriveInGameWorldUpdate(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput = 0);
 
 struct MainGameFlowStateInGame : public MainGameFlowState
 {

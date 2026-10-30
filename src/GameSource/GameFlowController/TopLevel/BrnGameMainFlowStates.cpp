@@ -2,8 +2,7 @@
 #include "GameSource/Graphics/BrnRendererModuleIO.h"
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
 
-#include <cstdio>   // std::snprintf (the load-stage witness strings below)
-#include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // gpMainGameFlowController, SendEvent
+#include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // embedded controller and SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"   // DebugManager::Update during load
@@ -27,21 +26,9 @@
 #include "GameSource/Network/BrnNetworkModule.h"              // BrnNetwork::BrnNetworkModule::ProcessBeforeSimulation (the partial spine)
 #include "GameSource/Network/BrnNetworkModuleIO.h"            // BrnNetworkModuleIO::PreSimulationInputBuffer / OutputBuffer
 
-// Engine clock (same source the loading-screen renderer animates from). Defined in
-// CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
-// The game-data streaming module the loading screen brings up (X360 Update 0x823EF688 case 8:
-// GameDataModule::Prepare via vtable+64). On X360 it lives in the game module; here a file-static
-// instance is driven by the load stage until it reports ready. Its Prepare spine runs the REAL
-// resource module-tree bring-up (base + ResourceModule::Prepare chaining Memory/Pool/Bundle/
-// FileSystem). The rw-allocator-gated CreateBanks/CreatePools/CreateAllocators inside it are still
-// stubs that report success, so this exercises the real module lifecycle without yet allocating
-// banks/pools (those fills are step 5a/5b). [NEVER run headless -- the user runs the exe.]
-// The game's one GameDataModule lives in BrnGameModule (gGameModule.mGameDataModule), constructed by
-// BrnGameModule::Construct; the loading flow (case 8) drives THAT instance via GetMainGameDataModule()
-// -- no parallel copy. (gGameModule is a file-scope static -> zero-init BSS + ctor-run, so its stage
-// fields are valid and its vtables are set, no calloc/placement-new needed.)
+// The loading flow uses the actual GameData member and its persistent resource IO pair.
 static bool g_bLoggedGameDataPrepare = false;
 
 namespace
@@ -54,17 +41,6 @@ namespace
         return BrnGame::GetMainGameModule()->GetDispatchThreadInputBufferManager().GetWriteBuffer();
     }
 }
-
-// The boot loading screen is owned by the GUI flow's BF_LOADING state (BrnGui::BootLoading), which
-// shows it (PlayLoadingScreen) and dismisses it (StopLoadingScreen) through its StateInterface -- the
-// faithful path (the X360 GUI flow drives the loading-screen APT movie). When BrnGui::GuiModule has
-// that FSM live it sets gBrnGuiDrivesLoadingScreen, and this game-flow state stops touching
-// the loading-screen command (the GUI drives it); it only does the loading work and, once finished,
-// raises gBrnInitialLoadingComplete so the GUI flow advances BF_LOADING -> BF_VIDEOS. If the GUI FSM
-// is NOT live (gBrnGuiDrivesLoadingScreen false), this state keeps managing the screen itself (the
-// prior behaviour) so the boot never loses its loading screen.
-bool gBrnInitialLoadingComplete = false;
-bool gBrnGuiDrivesLoadingScreen = false;   // set by BrnGui::GuiModule when the BF_LOADING Lua FSM is live
 
 // X360 byte_82FAE28E -- the scripted-load PARK flag. Defined further down with the
 // CheckDiskSpace state (its historical home; it is not that state's private flag).
@@ -140,8 +116,7 @@ void LoadingScriptedState::RenderGUI(
 // was empty, so a dispatch through it silently did nothing (boot audit F-P6-19).
 void LoadingScriptedState::FinishLoading()
 {
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SendEvent(
             BrnGameMainFlowController::E_MGE_STATEEND);
 }
 
@@ -212,29 +187,6 @@ bool LoadingScriptedState::LoadEffectsModule(
 
     const bool lbPrepared = lpGameModule->GetEffectsModule().Prepare(
         lpAllocatorList, lpUpdateOutputStack, lpEffectsOutput);
-
-    // [effects-load] WHERE THE LADDER IS, once per stage change. This stage BLOCKS the whole
-    // scripted load (the console's own `if (!LoadEffectsModule(...)) break;`), so a ladder that
-    // stops advancing stops the boot -- and the first symptom is a null-progression crash three
-    // stages later, not anything that names the effects module. Say it out loud instead.
-    if (!lbPrepared)
-    {
-        static s32 siLastEffectsStage  = -1;
-        static s32 siLastParticleStage = -1;
-        const s32 liEffectsStage  = static_cast<s32>(lpGameModule->GetEffectsModule().GetPrepareStage());
-        const s32 liParticleStage = static_cast<s32>(
-            lpGameModule->GetEffectsModule().ParticleModuleRef().GetInitialLoadStage());
-        if (liEffectsStage != siLastEffectsStage || liParticleStage != siLastParticleStage)
-        {
-            siLastEffectsStage  = liEffectsStage;
-            siLastParticleStage = liParticleStage;
-            char lacMsg[192];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[effects-load] EffectsModule::Prepare stage=%d  ParticleModule FX-load stage=%d "
-                "(19 == DONE)\n", liEffectsStage, liParticleStage);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 
     if (!lbPrepared && lpGameDataInputBuffer != 0)
     {
@@ -404,223 +356,26 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
 //     UnlockForRead(out);
 //     DestroyIOBuffer(out); return 0;
 //
-// ⚠️ FLAG (PC deviation -- ONE persistent buffer instead of a per-pass scratch): identical to the
-// one BrnGameModule::GamePrepare stage 4 already carries for the FIRST-pass Prepare. The console
-// carves a fresh GameStateModuleIO::OutputBuffer off the update-output IOBufferStack every pass
-// (so its request queue starts empty each time and the append moves exactly that pass's
-// requests); the PC module owns ONE persistent buffer, so the queue is CLEARED after the append,
-// which is the state the console's next pass starts in. Using the module's own buffer here also
-// keeps BOTH prepare passes staging onto the SAME queue -- the acquire LoadProgressionData
-// issues has to reach the GameData pump through the identical hop the trigger acquire does.
-// DELETE-WHEN the module's real CreateOutputDataStructure path lands.
+// ARTIST823EF4D8: a fresh GameState output on each second-prepare attempt.
 bool LoadingScriptedState::LoadGameState2(
-        BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
-        const BrnResource::GameDataIO::OutputBuffer* /*lpGameDataOutputBuffer*/)
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+        const BrnResource::GameDataIO::OutputBuffer* /*lpGameDataOutput*/)
 {
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-    if (lpGameModule == 0)
+    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* const lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput = 0;
+    lpOutputStack->CreateIOBuffer(&lpGameStateOutput, "GameState");
+    if (lpGameModule->GetGameStateModule().Prepare2(lpGameStateOutput))
+    {
+        lpOutputStack->DestroyIOBuffer(&lpGameStateOutput);
         return true;
-
-    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-        lpGameModule->GetGameStateModule().GetOutputBuffer();
-    if (lpGameStateOutput == 0)
-        return true;
-
-    const bool lbPrepared = lpGameModule->GetGameStateModule().Prepare2(lpGameStateOutput);
-
-    if (!lbPrepared && lpGameDataInputBuffer != 0)
-    {
-        // The CONST overload is the one the console calls under the read lock (its non-const twin
-        // @0x8231D560 asserts the WRITE lock) -- same const-alias idiom as GamePrepare stage 4.
-        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputRead =
-            lpGameStateOutput;
-        lpGameStateOutput->LockForRead();
-        lpGameDataInputBuffer->AppendRequestInterface<3072>(
-            *lpGameStateOutputRead->GetResourceRequestInterface());
-        lpGameStateOutput->UnlockForRead();
-
-        // [PC deviation, see the FLAG above] the console's per-pass buffer dies here.
-        lpGameStateOutput->LockForWrite();
-        lpGameStateOutput->GetResourceRequestInterface()->mRequestQueue.Clear();
-        lpGameStateOutput->UnlockForWrite();
     }
-
-    return lbPrepared;
-}
-
-// The same leg, callable from ANY flow state.
-//
-//
-// This is the narrow fix: drive the WORLD leg per frame from the in-game state as well. It
-// deliberately does NOT re-run the rest of DoUpdate's cascade -- the PC host loop
-// (EngineUpdate -> DispatchThread) still owns the module walk, and duplicating that here
-// would double-update every module, which is exactly why DoUpdate is a leaf. Fold this back
-// into the real DoUpdate cascade when the module scheduler moves under the game module's own
-// spines.
-void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
-                           BrnUpdateSet lUpdateSet,
-                           BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput)
-{
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-    CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
-    CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
-
-    // ⭐ THE INVENTED WORLD FRAME ALLOCATOR IS GONE, 2026-08-17 (boot audit F-P6-12). This
-    // used to `new` a 512 KiB LinearMalloc behind a file-static bool, because the console's
-    // allocator -- gm+0x9A0630, which LoadingScriptedState::Update FreeAll's before the world
-    // drive and passes as the world virtual's 7th argument -- was never latched here.
-    // It is now: BrnRendererModule::Update lends it (renderer+0xC8FC) through
-    // RendererIO::OutputBuffer and GamePrepare's tail stores it, so the world drive uses the
-    // renderer's allocator the way the console does.
-    // The null fallback covers the frames before GamePrepare's first not-done pass has run.
-    CgsMemory::LinearMalloc* lpWorldFrameAllocator =
-        lpGameModule->GetReusableLoadingScreenAllocator();
-    if (lpWorldFrameAllocator == 0)
-        return;
-
-    BrnWorldIO::UpdateInputBuffer*  lpWorldInput  = 0;
-    lpUpdateInputStack->CreateIOBuffer(&lpWorldInput, "World");
-
-    // ⭐⭐ THE WORLD'S FRAME TIMER, STAGED -- 2026-08-10 (root-cause wave).
-    // The console stages it here (X360 DoUpdate_World @0x823E8BD0:
-    //     UpdateInputBuffer::SetTimerStatusInterface(worldIn, gm+10095372)),
-    // and gm+10095372 is BrnGameModule::mTimerStatusInterface, which is REAL and already live
-    // on this build -- UpdateTimers @0x823BCFD0 ticks mGameTimer/mSimTimer once per sim
-    // sub-step and BridgeTimers @0x823BD150 snapshots the pair into it (it is what makes every
-    // director camera behaviour advance). So this is real data, not a stand-in.
-    //
-    // WorldModule::Update hands this block to WorldModule::BridgeInputToPhysicsModule
-    // @0x827AB830, which copies its 48 bytes into the physics input buffer, and every timestep
-    // PhysicsModule::Update @0x825B0640 uses comes out of that copy. Without this line the block
-    // stays Construct-cleared, GetCurrentTimeStep() reads 0, and the module conducts frames with
-    // a zero timestep. With the timer staged it runs for real.
-    // ⚠️ STALE HALF CORRECTED 2026-08-27: this note used to add that PhysicsModule::Update
-    // "short-circuits ('sim timer not running -- inert this frame') for as long as the block
-    // stays Construct-cleared". IT NO LONGER DOES -- that PC-only early return was an invented
-    // arm with no console counterpart (the X360 body never reads the status block's mbRunning at
-    // all) and it broke the sim-pause RESUME, so it was deleted in the pauseresume wave. Its full
-    // obituary, asm proof and measurement are at the site in
-    // BrnPhysicsModuleUpdateFunctions.cpp. This staging line is now the ONLY thing standing
-    // between the module and a zero-timestep frame, which makes it more load-bearing, not less.
-    //
-    // ⚠️ The vehicle CREATE path is still absent, so the module conducts over an empty body
-    // set -- an empty tick is the expected, honest outcome, not a regression.
-    lpWorldInput->LockForWrite();
-    lpWorldInput->SetTimerStatusInterface(
-        reinterpret_cast<const BrnWorldIO::TimerStatusInterface*>(
-            lpGameModule->GetTimerStatusInterface()));
-    lpWorldInput->UnlockForWrite();
-
-    {
-        CgsInput::InputIO::OutputBuffer* lpInputOutput = lpGameModule->GetPcInputOutputBuffer();
-        lpInputOutput->LockForRead();
-        lpWorldInput->LockForWrite();
-        lpGameModule->BridgeControllerToWorld(lpWorldInput, lpInputOutput);
-        lpWorldInput->UnlockForWrite();
-        lpInputOutput->UnlockForRead();
-    }
-
-    // THE NETWORK -> WORLD BRIDGE, second of DoUpdate_World's source bridges (between the
-    // controller and game-state legs, under a read lock on the network output): the network
-    // event translation into the world input plus the vehicle, crash and traffic network
-    // interfaces. The game module's network output buffer exists only in the sub-steps that run
-    // the full cascade, which are the only ones in which the console calls this bridge (the
-    // loading-scripted states' partial spine does not). DoUpdate_World carries the same call.
-    {
-        BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput = lpGameModule->GetNetworkOutputBuffer();
-        if (lpNetworkOutput != 0)
-        {
-            lpNetworkOutput->LockForRead();
-            lpWorldInput->LockForWrite();
-            lpGameModule->BridgeNetworkToWorld(lpWorldInput, lpNetworkOutput);
-            lpWorldInput->UnlockForWrite();
-            lpNetworkOutput->UnlockForRead();
-        }
-    }
-
-    // ⭐ THE OUTPUT BUFFER IS THE GAME MODULE'S, not this function's (2026-08-01, camera wave).
-    // The console's DoUpdate @0x823F0AF8 creates ONE BrnWorldIO::UpdateOutputBuffer per
-    // sub-step and threads it through DoUpdate_World, DoUpdate_Director and every other leg.
-    // This function used to create AND DESTROY it inside one call, so nothing downstream could
-    // ever read what the world published -- in particular BridgeWorldToDirector, the only
-    // route from a race car's pose to the director's cameras. It now uses the game module's
-    // per-sub-step buffer (CreateStaticIOBuffers), falling back to a local one only if that
-    // has not been created (the flow states are always driven from inside the sub-step, so the
-    // fallback is defensive).
-    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = lpGameModule->GetWorldUpdateOutputBuffer();
-    const bool lbOwnsOutputBuffer = (lpWorldOutput == 0);
-    if (lbOwnsOutputBuffer)
-    {
-        lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
-    }
-
-    // ⭐⭐ THE SOUND -> WORLD BRIDGE (X360 BridgeSoundToWorld @0x823CDC98, staged from the
-    // loading spine @0x823F2818 and from DoUpdate_World's five-source staging on the full
-    // spine -- LAST of the input bridges, immediately before the FreeAll + world dispatch).
-    // One append: the world input's audio-car-loaded queue takes the sound pre-update
-    // block's queue. The console bracket is R(preUpdateOut) + W(worldIn) (spec
-    // progress/scratch_dossiers/spine_sound_leg_0x823F22D8.md section 5), the same
-    // per-source pair this function already uses for the controller and game-state legs.
-    // Null means the caller has no sound pre-update this frame (phase C4 threads it from
-    // the scripted spine; the in-game leg arrives with the DoUpdate_Sound slice).
-    if (lpSoundPreUpdateOutput != 0)
-    {
-        lpSoundPreUpdateOutput->LockForRead();
-        lpWorldInput->LockForWrite();
-        lpGameModule->BridgeSoundToWorld(lpWorldInput, lpSoundPreUpdateOutput);
-        lpWorldInput->UnlockForWrite();
-        lpSoundPreUpdateOutput->UnlockForRead();
-    }
-
-    // X360: LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator) then the vtable+76
-    // dispatch. The loading update set is 0x80 (frustum testing on, nothing else).
-    lpWorldFrameAllocator->FreeAll();   // @0x823F2858 -- once per world drive, as the console does
-    if ((lUpdateSet & 0x20) != 0)
-    {
-        // The boot-video arm (X360 DoUpdate_World @0x823E8BD0: `(updateSet & 0x20) ?
-        // UpdateForBootUpVideo(...)`). Reachable for the first time now that the flow
-        // states write the video byte -- the reconstruction has existed unreached.
-        static bool s_bLoggedBootUpVideoArm = false;
-        if (!s_bLoggedBootUpVideoArm)
-        {
-            s_bLoggedBootUpVideoArm = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "[world] update set has the video bit -- UpdateForBootUpVideo arm entered\n";
-        }
-        lpGameModule->GetWorldModule().UpdateForBootUpVideo(lUpdateSet,
-                                                           lpUpdateInputStack, lpUpdateOutputStack,
-                                                           lpWorldInput, lpWorldOutput);
-    }
-    else
-    {
-        lpGameModule->GetWorldModule().Update(lUpdateSet,
-                                              lpUpdateInputStack, lpUpdateOutputStack,
-                                              lpWorldInput, lpWorldOutput,
-                                              lpWorldFrameAllocator);
-    }
-
-    // BridgeWorldToResource @0x823E5300 -- the streamer's request forward.
-    if (lpGameDataInputBuffer != 0)
-    {
-        // The X360 brackets the bridge with the standard destination-write /
-        // source-read pair; the GameData input's own accessors assert the write lock.
-        lpGameDataInputBuffer->LockForWrite();
-        lpWorldOutput->LockForRead();
-        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
-        lpGameDataInputBuffer->AppendRequestInterface<4096>(
-            *lpWorldOutputRead->GetResourceRequestResourceInterface());
-        lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
-            lpWorldOutputRead->GetAttribSysVaultRequestInterface()->mRequestQueue);
-        lpWorldOutput->UnlockForRead();
-        lpGameDataInputBuffer->UnlockForWrite();
-    }
-
-    if (lbOwnsOutputBuffer)
-    {
-        lpUpdateOutputStack->DestroyIOBuffer(&lpWorldOutput);
-    }
-    lpUpdateInputStack->DestroyIOBuffer(&lpWorldInput);
+    lpGameStateOutput->LockForRead();
+    const BrnGameState::GameStateModuleIO::OutputBuffer* const lpRead = lpGameStateOutput;
+    lpGameDataInput->AppendRequestInterface<3072>(*lpRead->GetResourceRequestInterface());
+    lpGameStateOutput->UnlockForRead();
+    lpOutputStack->DestroyIOBuffer(&lpGameStateOutput);
+    return false;
 }
 
 // @ 0x823E74C0 -- LoadDirectorModule, the E_LOADINGSTAGE_DIRECTORMODULE leg of
@@ -703,104 +458,72 @@ bool LoadingScriptedState::LoadDirectorModule(
     return lbPrepared;
 }
 
-// @ 0x823F22D8 -- the shared scripted-load spine EVERY titled flow state's Update runs
-// first (Marketing/StartScreen/MemoryCard/CompleteLoading on the X360 all open with
-// LoadingScriptedState::Update()). Reconstructed slice: the scripted world-load stage
-// machine + the per-frame GameData IO bracket + the GameDataModule pump. The rest of the
-// X360 spine (the per-module input/sound/network/gamestate/GUI drives + RenderGUI) already
-// runs through BrnGameModule::GameMain's inline hookup on the PC -- running it here too
-// would double-drive those modules, so it is [deferred] to the module-scheduler move.
-// The GameData IO pair.
-//
-// ⭐ DESCRIPTION CORRECTED 2026-08-17 (boot audit F-P6-10 / F-P5-13). This used to say the
-// X360 pair is "created by the update spine each frame". It is not, and the asm is explicit:
-// they are PERSISTENT game-module members at gm+0x996F10/+0x996F14, LOADED each pass
-// (`lwzx` @0x823F2358/5C) and locked across the whole spine -- only the sixteen scratch IO
-// buffers around them are created and destroyed per frame. Our constructed-once pair is
-// therefore the RIGHT lifetime, not a deviation from a per-frame one; what remains a
-// deviation is only that it is a file-static rather than a member of the game module.
-//
-// The distinction matters because "created each frame" invites someone to "fix" this by
-// carving the pair per pass, which would be a regression away from the console, not toward
-// it. Published through BrnGameMainFlowController::GetScriptedLoadGameData* because
-// BrnGameModule::GamePrepare @0x823EFBD0 brackets the SAME pair on the X360.
-namespace
-{
-    BrnResource::GameDataIO::InputBuffer  s_GameDataInput;
-    BrnResource::GameDataIO::OutputBuffer s_GameDataOutput;
-    bool                                  s_bIOConstructed = false;
-
-    void EnsureScriptedLoadGameDataIO()
-    {
-        if (s_bIOConstructed)
-            return;
-        s_bIOConstructed = true;
-        // The IOBuffer base status must be raised before any lock (LockForWrite asserts
-        // eStatusConstructed). GameDataIO's own lifecycle members are still the deferred
-        // slice, so run the base Construct explicitly, then bring up the request queue.
-        s_GameDataInput.CgsModule::IOBuffer::Construct();
-        s_GameDataInput.LockForWrite();
-        s_GameDataInput.GetRequestInterface()->mRequestQueue.Construct();
-        // The AttribSys request queue (DWARF BrnGameDataModuleIO.cpp:53: InputBuffer::
-        // Construct also runs VariableEventQueue<32768,16>::Construct on it).
-        s_GameDataInput.GetAttribSysRequestInterface()->mRequestQueue.Construct();
-        s_GameDataInput.UnlockForWrite();
-        s_GameDataOutput.CgsModule::IOBuffer::Construct();
-        s_GameDataOutput.LockForWrite();
-        s_GameDataOutput.Construct();   // the member-clearing OutputBuffer::Construct
-        s_GameDataOutput.UnlockForWrite();
-    }
-}
-
+// ARTIST823F22D8: the partial loading update owns sixteen temporary IO buffers.
+// The persistent GameData pair is allocated by BrnGameModule::Prepare on the
+// resource stacks (gm+996F10/14). Loading and GamePrepare share that pair.
 namespace BrnGameMainFlowController
 {
     BrnResource::GameDataIO::InputBuffer* GetScriptedLoadGameDataInput()
     {
-        EnsureScriptedLoadGameDataIO();
-        return &s_GameDataInput;
+        return BrnGame::GetMainGameModule()->GetGameDataModuleInputBuffer();
     }
 
     BrnResource::GameDataIO::OutputBuffer* GetScriptedLoadGameDataOutput()
     {
-        EnsureScriptedLoadGameDataIO();
-        return &s_GameDataOutput;
+        return BrnGame::GetMainGameModule()->GetGameDataModuleOutputBuffer();
     }
 }
 
 void LoadingScriptedState::Update()
 {
-    EnsureScriptedLoadGameDataIO();
     BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnResource::GameDataIO::InputBuffer* const lpGameDataInput =
+        lpGameModule->GetGameDataModuleInputBuffer();
+    BrnResource::GameDataIO::OutputBuffer* const lpGameDataOutput =
+        lpGameModule->GetGameDataModuleOutputBuffer();
     // Capture the route before the stage ladder. Reaching8 during a partial call
     // does not run normal DoUpdate or tick its timers again in the same sub-step.
     if (gBrnScriptedLoadStage != 8)
-    // ARTIST823F22D8's below-stage8 branch. This candidate must be paired with the
-    // original input recovery and GUI pre-world resource chain listed in DEPENDENCIES.
-    // Five IO objects are already fresh and frame-owned by the PC host scheduler;
-    // the other eleven are local typed helpers, retired at the same last-use boundary.
+    // ARTIST823F22D8: all sixteen temporary IO objects belong to this partial update.
     {
         CgsModule::IOBufferStack* const lpInputStack = lpGameModule->GetUpdateInputBufferStack();
         CgsModule::IOBufferStack* const lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
-        CgsGui::CgsGuiModuleIO::InputBuffer* const lpGuiInput = lpGameModule->GetGuiInputBuffer();
-        CgsGui::CgsGuiModuleIO::OutputBuffer* const lpGuiOutput = lpGameModule->GetGuiOutputBuffer();
-        CgsGui::ModelIO::OutputBuffer* const lpModelOutput = lpGameModule->GetGuiModelOutputBuffer();
-        BrnWorldIO::UpdateOutputBuffer* const lpWorldOutput = lpGameModule->GetWorldUpdateOutputBuffer();
+        CgsInput::InputIO::OutputBuffer* lInputOutput = 0;
+        BrnGameState::GameStateModuleIO::OutputBuffer* lControllerGameStateOutput = 0;
+        BrnSound::Module::Io::RootInputBuffer* lSoundInput = 0;
+        BrnSound::Module::Io::RootOutputBuffer* lSoundOutput = 0;
+        BrnSound::Module::Io::RootPreUpdateOutputBuffer* lSoundPreOutput = 0;
+        BrnWorldIO::UpdateInputBuffer* lWorldInput = 0;
+        BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput = 0;
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput = 0;
+        CgsGui::ViewIO::InputBuffer* lpViewInput = 0;
+        CgsGui::ModelIO::OutputBuffer* lpModelOutput = 0;
+        BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lGameStatePreInput = 0;
+        BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lGameStatePostInput = 0;
+        BrnGameState::GameStateModuleIO::OutputBuffer* lGameStateOutput = 0;
+        BrnNetwork::BrnNetworkModuleIO::PreSimulationInputBuffer* lNetworkInput = 0;
+        BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lNetworkOutput = 0;
 
-        CgsModule::IOHelper<CgsInput::InputIO::OutputBuffer> lInputOutput(lpOutputStack, "Input");
-        CgsModule::IOHelper<BrnGameState::GameStateModuleIO::OutputBuffer> lControllerGameStateOutput(lpOutputStack, "GameState");
-        CgsModule::IOHelper<BrnSound::Module::Io::RootInputBuffer> lSoundInput(lpInputStack, "Sound");
-        CgsModule::IOHelper<BrnSound::Module::Io::RootOutputBuffer> lSoundOutput(lpOutputStack, "Sound");
-        CgsModule::IOHelper<BrnSound::Module::Io::RootPreUpdateOutputBuffer> lSoundPreOutput(lpOutputStack, "SoundRootPreUpdateOutput");
-        CgsModule::IOHelper<BrnWorldIO::UpdateInputBuffer> lWorldInput(lpInputStack, "World");
-        CgsModule::IOHelper<BrnGameState::GameStateModuleIO::PreWorldInputBuffer> lGameStatePreInput(lpInputStack, "GameStatePreWorld");
-        CgsModule::IOHelper<BrnGameState::GameStateModuleIO::PostWorldInputBuffer> lGameStatePostInput(lpInputStack, "GameStatePostWorld");
-        CgsModule::IOHelper<BrnGameState::GameStateModuleIO::OutputBuffer> lGameStateOutput(lpOutputStack, "GameState");
-        // Original caller deliberately carves NetworkPreSim from the output stack.
-        CgsModule::IOHelper<BrnNetwork::BrnNetworkModuleIO::PreSimulationInputBuffer> lNetworkInput(lpOutputStack, "NetworkPreSim");
-        CgsModule::IOHelper<BrnNetwork::BrnNetworkModuleIO::OutputBuffer> lNetworkOutput(lpOutputStack, "Network");
+        lpOutputStack->CreateIOBuffer(&lInputOutput, "Input");
+        lpOutputStack->CreateIOBuffer(&lControllerGameStateOutput, "GameState");
+        lpInputStack->CreateIOBuffer(&lSoundInput, "Sound");
+        lpOutputStack->CreateIOBuffer(&lSoundOutput, "Sound");
+        lpOutputStack->CreateIOBuffer(&lSoundPreOutput, "SoundRootPreUpdateOutput");
+        lpInputStack->CreateIOBuffer(&lWorldInput, "World");
+        lpOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
+        lpInputStack->CreateIOBuffer(&lpGuiInput, "GUI");
+        lpOutputStack->CreateIOBuffer(&lpGuiOutput, "GUI");
+        lpInputStack->CreateIOBuffer(&lpViewInput, "GUIView");
+        lpOutputStack->CreateIOBuffer(&lpModelOutput, "GUIModel");
+        lpInputStack->CreateIOBuffer(&lGameStatePreInput, "GameStatePreWorld");
+        lpInputStack->CreateIOBuffer(&lGameStatePostInput, "GameStatePostWorld");
+        lpOutputStack->CreateIOBuffer(&lGameStateOutput, "GameState");
+        lpOutputStack->CreateIOBuffer(&lNetworkInput, "NetworkPreSim");
+        lpOutputStack->CreateIOBuffer(&lNetworkOutput, "Network");
 
-        s_GameDataInput.LockForWrite();
-        s_GameDataOutput.LockForRead();
+        lpGameDataInput->LockForWrite();
+        lpGameDataOutput->LockForRead();
 
         // byte_82FAE28E -- the scripted-load PARK flag. Raised by every pre-title OnEnter
         // (loading screen, marketing logos, title) and cleared by the title pre-accept's
@@ -814,9 +537,8 @@ void LoadingScriptedState::Update()
             case 0:
             case 1:
                 gBrnScriptedLoadStage = 1;
-                // X360: LoadSoundModuleAgain -- the sound module's second prepare pass.
-                // [deferred: the first pass already ran in the initial loading; advance]
-                LogScriptedStageOnce(1, "LoadSoundModuleAgain [deferred]");
+                if (!LoadSoundModuleAgain(lpGameDataInput, lpGameDataOutput))
+                    break;
                 // fall through
             case 2:
                 gBrnScriptedLoadStage = 2;
@@ -825,7 +547,7 @@ void LoadingScriptedState::Update()
                 // Was `[deferred: effects module placeholder]` -- and it was, literally: the
                 // module was a 1-byte ODR stub in BrnGameModule.hpp until this change.
                 LogScriptedStageOnce(2, "LoadEffectsModule -- real");
-                if (!LoadEffectsModule(&s_GameDataInput, &s_GameDataOutput))
+                if (!LoadEffectsModule(lpGameDataInput, lpGameDataOutput))
                     break;
                 // fall through
             case 3:
@@ -834,19 +556,20 @@ void LoadingScriptedState::Update()
                 // loaded and OnPlayerCarChange fired "lpProgressionData != NULL"). X360:
                 // `if (!LoadGameState2(this, gameDataIn)) break;`
                 LogScriptedStageOnce(3, "LoadGameState2 -- real");
-                if (!LoadGameState2(&s_GameDataInput, &s_GameDataOutput))
+                if (!LoadGameState2(lpGameDataInput, lpGameDataOutput))
                     break;
                 // fall through
             case 4:
                 gBrnScriptedLoadStage = 4;
-                // X360: the GUI module's second prepare (GuiModule vtable +92).
-                // [deferred: the PC GUI module prepared through the inline hookup]
-                LogScriptedStageOnce(4, "GUI second prepare [deferred]");
+                // ARTIST823F25E0..261C: the existing GameData write lock spans
+                // this real GUI second-prepare call and its retry branch.
+                if (!lpGameModule->GetGuiModule().Prepare2(lpGameDataInput))
+                    break;
                 // fall through
             case 5:
                 gBrnScriptedLoadStage = 5;
                 LogScriptedStageOnce(5, "LoadWorldModule -- real");
-                if (!LoadWorldModule(&s_GameDataInput, &s_GameDataOutput))
+                if (!LoadWorldModule(lpGameDataInput, lpGameDataOutput))
                     break;
                 // fall through
             case 6:
@@ -885,7 +608,7 @@ void LoadingScriptedState::Update()
                 // then EffectsModule::PostWorldPreparePrepare on completion (that last hop
                 // is still deferred; see LoadWorldCollision's own note).
                 LogScriptedStageOnce(7, "LoadWorldCollision -- real");
-                if (!LoadWorldCollision(&s_GameDataInput, &s_GameDataOutput))
+                if (!LoadWorldCollision(lpGameDataInput, lpGameDataOutput))
                     break;
                 gBrnScriptedLoadStage = 8;
                 break;
@@ -946,11 +669,13 @@ void LoadingScriptedState::Update()
             }
         }
 
-        // Existing PC resource boundary: the current GUI port services requests
-        // inside its one Update below. Native updateSet0x20 additionally runs the
-        // resource-only DoUpdate_GuiPreWorld here. That exact body/owner recovery
-        // remains an independent unmounted proposal; do not substitute a second
-        // event/FSM Update or an empty native signature for that resource phase.
+        if ((lUpdateSet & 0x20) != 0)
+        {
+            lpGameDataInput->UnlockForWrite();
+            lpGameModule->DoUpdate_GuiPreWorld(lpInputStack, lpOutputStack,
+                lpGuiOutput, lpModelOutput, lpGameDataInput);
+            lpGameDataInput->LockForWrite();
+        }
 
         // This is deliberately the untouched first GameState output, not the
         // PreWorld producer output that the GUI wrapper has just read.
@@ -977,13 +702,9 @@ void LoadingScriptedState::Update()
         lInputOutput->UnlockForRead();
         lpGuiInput->UnlockForWrite();
 
-        lrGui.GetGuiOutQueue()->Clear();
-        lrGui.SetFrameUpdateSet(lUpdateSet);
-        lrGui.SetGuiEventInputBuffer(lpGuiInput);
-        lrGui.Update(&s_GameDataInput, &s_GameDataOutput);
-        lpGuiOutput->LockForWrite();
-        lpGuiOutput->AddGuiOutEvents(lrGui.GetGuiOutQueue());
-        lpGuiOutput->UnlockForWrite();
+        lpGameModule->GetGuiModule().Update(lUpdateSet, lpInputStack, lpOutputStack,
+            lpGuiInput, lpGuiOutput, lpModelOutput, lpViewInput,
+            lpGameDataInput, lpGameDataOutput, false);
 
         lpGuiOutput->LockForRead();
         lSoundInput->LockForWrite();
@@ -1008,14 +729,14 @@ void LoadingScriptedState::Update()
         lpGuiOutput->LockForRead();
         lpWorldOutput->LockForRead();
         lSoundOutput->LockForRead();
-        lpGameModule->BridgeGuiToResource(&s_GameDataInput, lpModelOutput, lpGuiOutput);
+        lpGameModule->BridgeGuiToResource(lpGameDataInput, lpModelOutput, lpGuiOutput);
         if (gBrnScriptedLoadStage > 5)
-            lpGameModule->BridgeWorldToResource(&s_GameDataInput, lpWorldOutput);
-        lpGameModule->BridgeGuiToGame(lrGui.GetGuiOutQueue());
+            lpGameModule->BridgeWorldToResource(lpGameDataInput, lpWorldOutput);
+        lpGameModule->BridgeGuiToGame(lpGuiOutput);
         const BrnSound::Module::Io::RootOutputBuffer* const lpSoundRead = lSoundOutput;
-        s_GameDataInput.GetAttribSysRequestInterface()->mRequestQueue.Append(
+        lpGameDataInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpSoundRead->GetAttribSysRequestInterface()->mRequestQueue);
-        s_GameDataInput.GetRequestInterface()->mRequestQueue.Append(
+        lpGameDataInput->GetRequestInterface()->mRequestQueue.Append(
             lpSoundRead->GetResourceRequestInterface()->mRequestQueue);
         lSoundOutput->UnlockForRead();
         lpWorldOutput->UnlockForRead();
@@ -1026,21 +747,64 @@ void LoadingScriptedState::Update()
         lpGameModule->BridgeInputToGame(lInputOutput);
         lInputOutput->UnlockForRead();
         if (gBrnScriptedLoadStage != 8)
-            RenderGUI(lpGuiInput, lpGuiOutput, lpModelOutput, lrGui.GetViewInputBuffer(), false);
-        s_GameDataInput.UnlockForWrite();
-        s_GameDataOutput.UnlockForRead();
-        // Eleven helpers retire in reverse order here. The host-owned five retire
-        // at the outer frame boundary, after their original final consumers above.
+            RenderGUI(lpGuiInput, lpGuiOutput, lpModelOutput, lpViewInput, false);
+        lpGameDataInput->UnlockForWrite();
+        lpGameDataOutput->UnlockForRead();
+        lpOutputStack->DestroyIOBuffer(&lNetworkOutput);
+        lpOutputStack->DestroyIOBuffer(&lNetworkInput);
+        lpOutputStack->DestroyIOBuffer(&lGameStateOutput);
+        lpInputStack->DestroyIOBuffer(&lGameStatePostInput);
+        lpInputStack->DestroyIOBuffer(&lGameStatePreInput);
+        lpOutputStack->DestroyIOBuffer(&lpModelOutput);
+        lpInputStack->DestroyIOBuffer(&lpViewInput);
+        lpOutputStack->DestroyIOBuffer(&lpGuiOutput);
+        lpInputStack->DestroyIOBuffer(&lpGuiInput);
+        lpOutputStack->DestroyIOBuffer(&lpWorldOutput);
+        lpInputStack->DestroyIOBuffer(&lWorldInput);
+        lpOutputStack->DestroyIOBuffer(&lSoundPreOutput);
+        lpOutputStack->DestroyIOBuffer(&lSoundOutput);
+        lpInputStack->DestroyIOBuffer(&lSoundInput);
+        lpOutputStack->DestroyIOBuffer(&lControllerGameStateOutput);
+        lpOutputStack->DestroyIOBuffer(&lInputOutput);
+
     }
 
     else
     {
-        // ARTIST uses normal DoUpdate at entry-stage8. Reuse the PC in-game
-        // world/sound owner boundary: Sound remains alive until Main's post-GUI
-        // FinishInGameSoundFramePC, so it consumes this frame's actual GUI output.
-        DriveWorldUpdateFrame(&s_GameDataInput,
-            lpGameModule->ConstructUpdateSetFromFsm(), lpSoundPreOutput);
+        // ARTIST enters the complete native update directly once stage8 is reached.
+        lpGameModule->DoUpdate();
     }
+}
+
+// ARTIST823E7700; DecFIGS3119A8 confirms this bool/two-buffer signature.
+// The caller holds the persistent GameData write/read locks throughout this attempt.
+bool LoadingScriptedState::LoadSoundModuleAgain(
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
+{
+    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* const lpInputStack = lpGameModule->GetUpdateInputBufferStack();
+    CgsModule::IOBufferStack* const lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+    BrnSound::Module::Io::RootInputBuffer* lpSoundInput = 0;
+    BrnSound::Module::Io::RootOutputBuffer* lpSoundOutput = 0;
+    lpInputStack->CreateIOBuffer(&lpSoundInput, "Sound");
+    lpOutputStack->CreateIOBuffer(&lpSoundOutput, "Sound");
+
+    const bool lbPrepared = lpGameModule->GetSoundModule().PrepareOnEnteringGameplay(
+        lpGameDataOutput->GetAllocatorList(), lpInputStack, lpOutputStack,
+        lpSoundInput, lpSoundOutput);
+    if (!lbPrepared)
+    {
+        lpSoundOutput->LockForRead();
+        const BrnSound::Module::Io::RootOutputBuffer* const lpRead = lpSoundOutput;
+        lpGameDataInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
+            lpRead->GetAttribSysRequestInterface()->mRequestQueue);
+        lpGameDataInput->AppendRequestInterface<4096>(*lpRead->GetResourceRequestInterface());
+        lpSoundOutput->UnlockForRead();
+    }
+    lpOutputStack->DestroyIOBuffer(&lpSoundOutput);
+    lpInputStack->DestroyIOBuffer(&lpSoundInput);
+    return lbPrepared;
 }
 
 // @ 0x823E75A8 - one frame of the sound-module load. The X360 body:
@@ -1131,14 +895,12 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
 
     meLoadingScreenStage = E_LOADINGSTAGE_START;
     mbGuiPreloadDone     = false;
-    gBrnInitialLoadingComplete = false;
 
     // @0x823AA9D8 -- mbSaveLoadState = 1. NB the console never EXECUTES this body (SendEvent
     // never targets state 0; Construct seeds it raw), so the initial-load update set stays
     // 0x80 there. The PC no longer calls OnEnter at boot either -- see the removed SetState
     // in BrnGameModule::Construct -- but the body is reproduced faithfully for re-entry.
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(true);
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetSaveLoadState(true);
     // The show command posts from Update each tick (the X360 writes the dispatch write
     // buffer's command every Update @0x823EF688; Update runs this same frame).
 
@@ -1161,298 +923,136 @@ void MainGameFlowStateInitialLoadingScreen::OnLeave()
     // dead as well as unfaithful. The screen lifecycle belongs to the dispatch-input
     // publishes (GamePrepare's tail shows it, BridgeGuiToGame's 19/20 hide it), not to the
     // flow state's transitions.
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(false);
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetSaveLoadState(false);
 }
 
-// @ 0x823EF688 - the scripted module-by-module load. The X360 body loads one module per stage
-// (controller -> GUI -> director -> sound -> network -> juice -> massive -> replays) via the
-// LoadXxxModule helpers, advancing meLoadingScreenStage as each completes. Reconstructed here
-// as the real stage-machine control flow; the per-stage module loads are filled in as each
-// module TU is reconstructed. Advances one stage per update and holds at DONE (the screen
-// stays up until the next flow state is reconstructed).
-namespace
+// ARTIST823EF310: preparation and its same-call GUI retry/resource forward.
+bool LoadingScriptedState::LoadGUIModule(
+    BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+    CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+    CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+    CgsGui::ViewIO::InputBuffer* lpViewInput,
+    const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
 {
-    // The real DWARF/PS3 stage identities (E_LOADINGSTAGE_*). On the X360 ARTIST spine the late
-    // stages (Juice/Massive/Replays) DON'T load those subsystems -- see the per-case notes below.
-    const char* const kapcStageNames[] = {
-        "START", "ControllerModule", "GUIModule", "DirectorModule", "SoundModule",
-        "Network", "Juice", "Massive", "Replays", "DONE",
-    };
-
-    // [INTERIM PACING] The per-stage LoadXxxModule loads are still stubs, so gate each stage on a
-    // short engine-clock dwell (~0.4s) to keep the loading screen visible. The real X360 advances a
-    // stage when its async module load reports complete; this dwell is removed per stage as each real
-    // LoadXxxModule is reconstructed (the real load then provides the natural timing). Resets itself
-    // each time it elapses so the next stage starts a fresh dwell.
-    u32 g_uStageStartTick = 0;
-    bool StageDwellElapsed()
+    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGui::GuiModule& lrGui = lpGameModule->GetGuiModule();
+    if (lrGui.Prepare(lpGuiOutput, lpGameDataInput, lpGameDataOutput))
     {
-        const u32 luNow  = CgsSystem::GetSystemTimerBaseTime();
-        const u32 luFreq = CgsSystem::GetSystemTimerFrequency();
-        if (g_uStageStartTick == 0)
-            g_uStageStartTick = luNow;
-        if (luFreq != 0 && (luNow - g_uStageStartTick) < (luFreq * 4u / 10u))
-            return false;
-        g_uStageStartTick = luNow;
+        if (!lpGuiInput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 238);
+            CgsDev::Assert::EndAssert();
+        }
+        lpGuiInput->LockForWrite();
+        BrnGui::GuiEventRunFsm lEvent;
+        // ARTIST leaves meFsmToRun untouched in these explicit-ID records.
+        lEvent.mInitialStateId = 0;
+        lEvent.mFsmId = CgsIDCompress("BrnBFPreFsm");
+        lEvent.meFlowToUse = BrnGui::E_GUIFLOW_HUD;
+        lpGuiInput->GetGuiEvents()->AddEvent(&lEvent, 144, sizeof(lEvent));
+        lEvent.mFsmId = CgsIDCompress("BrnOverlay");
+        lEvent.meFlowToUse = BrnGui::E_GUIFLOW_OVERLAY;
+        lpGuiInput->GetGuiEvents()->AddEvent(&lEvent, 144, sizeof(lEvent));
+        if (!lpGuiInput)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 248);
+            CgsDev::Assert::EndAssert();
+        }
+        lpGuiInput->UnlockForWrite();
         return true;
     }
+    lrGui.Update(static_cast<BrnUpdateSet>(0x40), lpGameModule->GetUpdateInputBufferStack(),
+        lpGameModule->GetUpdateOutputBufferStack(), lpGuiInput, lpGuiOutput,
+        lpModelOutput, lpViewInput, lpGameDataInput, lpGameDataOutput, false);
+    lpModelOutput->LockForRead();
+    lpGuiOutput->LockForRead();
+    lpGameModule->BridgeGuiToResource(lpGameDataInput, lpModelOutput, lpGuiOutput);
+    lpGuiOutput->UnlockForRead();
+    lpModelOutput->UnlockForRead();
+    return false;
 }
 
-// @ 0x823EF688 - the real boot-load stage machine: load one engine module per stage
-// (Controller -> GUI -> Director -> Sound -> Network), then the GameDataModule prepare, then
-// FinishLoading. The X360 also creates the GUI IO buffers and renders + bridges the GUI each frame
-// while loading (RendererIO + BrnRendererModule::Update + BridgeGameToGui/BridgeGuiToResource/
-// BridgeGuiToGame + RenderGUI + GuiEventTimeInfo). That render/bridge loop needs the per-module IO
-// types (CgsGui::CgsGuiModuleIO / ViewIO / ModelIO / RendererIO) which aren't reconstructed yet, so
-// it is a [follow-on]; for now the GUI + MovieManager keep running through BrnGameModule's inline
-// hookup. The per-stage LoadXxxModule bodies are also [stubs] (interim dwell) until reconstructed.
+// ARTIST823EF688: the four GUI IO objects belong to this loading update.
 void MainGameFlowStateInitialLoadingScreen::Update()
 {
-    // ⭐ THE PER-FRAME GAMEDATA IO BRACKET (X360 @0x823EF688, its first statements).
-    // The console opens this Update by reading the game module's GameData buffer pair
-    // (gm+10055440 input / gm+10055444 output -- the SAME pair GamePrepare and the scripted
-    // spine bracket), taking the input's WRITE lock and the output's READ lock, and holding
-    // both across the whole stage switch. Every LoadXxxModule is then threaded with the pair:
-    // that is how a module's staged resource requests reach the streaming pump while the boot
-    // loading screen is up. Reproduced exactly here.
-    BrnResource::GameDataIO::InputBuffer*  lpGameDataInput =
-        BrnGameMainFlowController::GetScriptedLoadGameDataInput();
-    BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
-        BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
-
-    // ⭐ GATED 2026-08-17 (boot audit F-P5-7). The old note claimed the console "re-posts the
-    // show command every update tick". It does not: the `stw 1 -> +0x9990` lives in the
-    // stage<=2 RENDER leg only (@0x823EFB04), and once the stage machine is past 2 the state
-    // stops posting it -- by then the GUI owns the loading-screen visual through the 19/20
-    // command protocol, and GamePrepare's not-done tail publishes it as well (restored with
-    // F-P2-4). Posting it unconditionally from here on every tick fought both of those for
-    // the slot, on a one-shot word that each end-of-frame swap wipes.
-    if (meLoadingScreenStage <= E_LOADINGSTAGE_GUIMODULE)
-        GetDispatchWriteBuffer()->ShowLoadingScreen();
-
-    // The debug manager updates every frame while loading (X360 gates this on stage > Controller).
-    if (meLoadingScreenStage > E_LOADINGSTAGE_CONTROLLERMODULE)
-    {
-        if (CgsDev::DebugManager* lpDebug = CgsDev::DebugManager::ThreadSafeAquire())
-        {
-            lpDebug->Update(1.0f / 60.0f);
-            CgsDev::DebugManager::ThreadSafeRelease(lpDebug);
-        }
-    }
-
+    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnResource::GameDataIO::InputBuffer* const lpGameDataInput =
+        lpGameModule->GetGameDataModuleInputBuffer();
+    BrnResource::GameDataIO::OutputBuffer* const lpGameDataOutput =
+        lpGameModule->GetGameDataModuleOutputBuffer();
+    CgsModule::IOBufferStack* const lpInputStack = lpGameModule->GetUpdateInputBufferStack();
+    CgsModule::IOBufferStack* const lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+    CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput = 0;
+    CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput = 0;
+    CgsGui::ViewIO::InputBuffer* lpViewInput = 0;
+    CgsGui::ModelIO::OutputBuffer* lpModelOutput = 0;
+    lpInputStack->CreateIOBuffer(&lpGuiInput, "GUI");
+    lpOutputStack->CreateIOBuffer(&lpGuiOutput, "GUI");
+    lpInputStack->CreateIOBuffer(&lpViewInput, "GUIView");
+    lpOutputStack->CreateIOBuffer(&lpModelOutput, "GUIModel");
     lpGameDataInput->LockForWrite();
     lpGameDataOutput->LockForRead();
-
+    if (meLoadingScreenStage > E_LOADINGSTAGE_CONTROLLERMODULE)
+        lpGameModule->GetDebugManager().Update(1.0f / 60.0f);
     switch (meLoadingScreenStage)
     {
     case E_LOADINGSTAGE_START:
     case E_LOADINGSTAGE_CONTROLLERMODULE:
-        // X360: LoadControllerModule (0x823C68C0) -- allocates the Controller module's input
-        // rw::core::GeneralResourceAllocator from the GameData allocator. [stub: interim dwell;
-        // real load = Phase 3]
         meLoadingScreenStage = E_LOADINGSTAGE_CONTROLLERMODULE;
-        if (StageDwellElapsed())
-            AdvanceLoadingStage(E_LOADINGSTAGE_GUIMODULE);
-        break;
+        if (!LoadControllerModule(lpGameDataInput, lpGameDataOutput, &mpInputModuleAllocator))
+            break;
     case E_LOADINGSTAGE_GUIMODULE:
-        // ⭐ THIS IS WHERE THE GUI IS BUILT, 2026-08-16 (boot audit F-P1-1/F-P5-2). X360
-        // LoadGUIModule @0x823EF310:
-        //
-        //     prepared = (gui->vtable+0x58)(gui, ...);          // GuiModule::Prepare
-        //     if (!prepared) {
-        //         (gui->vtable+0x60)(gui, 0x40, updIn, updOut, ...);   // the GUI update leg
-        //         LockForRead(both); BridgeGuiToResource(gm, ...); UnlockForRead(both);
-        //         return 0;                                    // stay in this stage
-        //     }
-        //     LockForWrite(guiIn);
-        //     AddEvent({CgsIDCompress("BrnBFPreFsm"), 0, flow 1}, 0x90, 0x18);
-        //     AddEvent({CgsIDCompress("BrnOverlay"),  0, flow 2}, 0x90, 0x18);
-        //     UnlockForWrite(guiIn); return 1;
-        //
-        // The two RunFsm posts were already here and already carry the console's payloads
-        // (id 0x90, size 0x18, flow words 1 and 2). What was missing was everything they
-        // are supposed to be GATED ON: this stage posted them immediately and advanced,
-        // because the GUI had already been prepared back in BrnGameModule::Construct.
-        //
-        // [FLAG] The retry leg is not reproduced, and does not need to be YET: this build's
-        // GuiModule::Prepare is the one-shot synchronous collapse of the console's 16-stage
-        // resumable ladder (@0x82518D68), so it answers true on the first pump and there is
-        // no not-done pass to service. That makes stage 2 one long frame with the loading
-        // screen up rather than N frames of a live GUI -- the right ORDER, not yet the right
-        // PACING. Adopting the real ladder (and with it this retry leg, the vtable+0x60
-        // update-set-0x40 pump and the BridgeGuiToResource forward) is boot-audit F-P8a-1.
-        {
-            BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-
-            if (!lpGameModule->GetGuiModule().IsPrepared())
-            {
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "InitialLoadingScreen: loading stage 2 (GUIModule) -- preparing\n";
-                lpGameModule->GetGuiModule().Prepare();
-                break;   // do NOT post or advance until it reports done
-            }
-
-            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput = lpGameModule->GetGuiInputBuffer();
-            if (lpGuiInput != 0)
-            {
-                BrnGui::GuiEventRunFsm lEvent;
-                lEvent.mFsmId          = CgsIDCompress("BrnBFPreFsm");
-                lEvent.mInitialStateId = 0;
-                lEvent.meFsmToRun      = BrnGui::E_GUI_HUD_BOOT;
-                lEvent.meFlowToUse     = BrnGui::E_GUIFLOW_HUD;
-                lpGuiInput->LockForWrite();
-                lpGuiInput->GetGuiEvents()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
-                    static_cast<s32>(sizeof(lEvent)));
-
-                // The overlay kick (the X360 posts it back-to-back in the same write
-                // bracket; the state id stays 0 = the script's initial state).
-                lEvent.mFsmId          = CgsIDCompress("BrnOverlay");
-                lEvent.mInitialStateId = 0;
-                lEvent.meFsmToRun      = BrnGui::E_GUI_HUD_BOOT;
-                lEvent.meFlowToUse     = BrnGui::E_GUIFLOW_OVERLAY;
-                lpGuiInput->GetGuiEvents()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
-                    static_cast<s32>(sizeof(lEvent)));
-                lpGuiInput->UnlockForWrite();
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "InitialLoadingScreen: posted RunFsm(BrnBFPreFsm -> HUD) + RunFsm(BrnOverlay -> OVERLAY)\n";
-                AdvanceLoadingStage(E_LOADINGSTAGE_DIRECTORMODULE);
-            }
-        }
-        break;
+        meLoadingScreenStage = E_LOADINGSTAGE_GUIMODULE;
+        if (!LoadGUIModule(lpGameDataInput, lpGuiInput, lpGuiOutput,
+                lpModelOutput, lpViewInput, lpGameDataOutput))
+            break;
     case E_LOADINGSTAGE_DIRECTORMODULE:
-        // X360 0x823E74C0: LoadDirectorModule -- REAL, and now threaded with this frame's
-        // GameData IO pair (2026-07-29). DirectorModule::Prepare's stage 3 is
-        // WorldMap::LoadData, whose TriggerData / traffic-lane / AI-lane requests ride the
-        // director OUTPUT buffer; LoadDirectorModule appends them into the GameData input on
-        // every not-yet-prepared tick, and the resource pump services them.
-        {
-            static bool s_bLoggedDirectorLoad = false;
-            if (!s_bLoggedDirectorLoad)
-            {
-                s_bLoggedDirectorLoad = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "InitialLoadingScreen: loading stage 3 (DirectorModule) -- real load\n";
-            }
-            if (LoadDirectorModule(lpGameDataInput, lpGameDataOutput))
-                AdvanceLoadingStage(E_LOADINGSTAGE_SOUND_MODULE);
-        }
-        break;
+        meLoadingScreenStage = E_LOADINGSTAGE_DIRECTORMODULE;
+        if (!LoadDirectorModule(lpGameDataInput, lpGameDataOutput))
+            break;
     case E_LOADINGSTAGE_SOUND_MODULE:
-        // X360: LoadSoundModule (0x823E75A8) -- the real per-frame load: create the Root sound IO
-        // buffer pair on the update IO stacks, drive RootSoundModule::Prepare (vtable+64) until it
-        // reports prepared, forwarding its resource requests meanwhile, then advance. Now threaded
-        // with this frame's GameData IO pair, exactly as the X360 threads every LoadXxxModule
-        // (the request forward inside LoadSoundModule is still gated on the RootOutputBuffer's
-        // request interfaces -- see that body).
-        {
-            static bool s_bLoggedSoundLoad = false;
-            if (!s_bLoggedSoundLoad)
-            {
-                s_bLoggedSoundLoad = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading stage 4 (SoundModule) -- real load\n";
-            }
-            if (LoadSoundModule(lpGameDataInput, lpGameDataOutput))
-                AdvanceLoadingStage(E_LOADINGSTAGE_NETWORK);
-        }
-        break;
+        meLoadingScreenStage = E_LOADINGSTAGE_SOUND_MODULE;
+        if (!LoadSoundModule(lpGameDataInput, lpGameDataOutput))
+            break;
     case E_LOADINGSTAGE_NETWORK:
-        // LoadNetworkModule: the network module's staged Prepare, pumped once per frame until
-        // it reports prepared, its data requests forwarded into this frame's GameData input
-        // meanwhile. The console then falls through stage 6 into 7 in the same frame; this
-        // ladder advances one stage per frame, as for every other stage here.
-        if (LoadNetworkModule(lpGameDataInput, lpGameDataOutput))
-            AdvanceLoadingStage(E_LOADINGSTAGE_JUICE);
-        break;
+        meLoadingScreenStage = E_LOADINGSTAGE_NETWORK;
+        if (!LoadNetworkModule(lpGameDataInput, lpGameDataOutput))
+            break;
     case E_LOADINGSTAGE_JUICE:
-        // [X360 ARTIST divergence] The PS3 DecFIGS build loads Juice here; the X360 ARTIST Update
-        // does NOT -- stage 6 is a passthrough. (The enum name is the DWARF/PS3 identity.)
-        AdvanceLoadingStage(E_LOADINGSTAGE_MASSIVE);
-        break;
+        meLoadingScreenStage = E_LOADINGSTAGE_JUICE;
     case E_LOADINGSTAGE_MASSIVE:
-        // [X360 ARTIST divergence] No Massive load here; the X360 sets the "engine modules loaded"
-        // flag (off_830102D0 + 10097260 = 1) at this stage. [follow-on: that game-module flag isn't
-        // mapped in this incremental layout]
-        AdvanceLoadingStage(E_LOADINGSTAGE_REPLAYS);
-        break;
+        meLoadingScreenStage = E_LOADINGSTAGE_MASSIVE;
+        lpGameModule->GetSoftRebootData()->mbEngineModulesLoaded = true;
     case E_LOADINGSTAGE_REPLAYS:
-        // ⚠️ CORRECTED 2026-07-29. This case's old note claimed the X360 prepares the
-        // GameDataModule here. It does NOT: the asm is
-        // `(*(*(gm+0x8BD300) + 0x40))(gm+0x8BD300, GetAllocatorList(gameDataOutput))`, and
-        // gm+0x8BD300 is the REPLAYS module (the only other functions that touch that offset
-        // are BrnGameModule::Construct/Destruct/GameRelease and DoUpdate_Replays{Pre,Post}Sim).
-        // So stage 8 really is a Replays prepare taking just the allocator list.
-        // The GameDataModule is prepared MUCH earlier on the console -- BrnGameModule::Prepare
-        // @0x823DB848 stage 3 pumps `(*(gm[1561280]+64))(gm+6245120, inStack, outStack,
-        // gameDataInput, gameDataOutput)` until it returns true, before the flow controller
-        // exists -- and BrnGameModule::GamePrepare already reproduces that on the PC (it drives
-        // mGameDataModule.Prepare to completion before GameMain runs). Keeping the call here is
-        // therefore harmless (the module's own resumable machine reports done immediately) and
-        // it is the Replays prepare that is [deferred].
-        // NO LONGER DEFERRED (2026-09-02, tyre-mark wave). The note above already said what
-        // this stage is -- `(*(*(gm+0x8BD300) + 0x40))(gm+0x8BD300, GetAllocatorList(gameDataOut))`
-        // is ReplayModule::Prepare @0x82652768 -- and it now runs. It is not a replay feature:
-        // Prepare acquires the module's LINEAR REGION, and StoreSerialisers @0x8264B600 is the
-        // ONLY place in the engine that gives any BaseSerialiser its stream and static buffers.
-        // With no region, BrnEffects::EffectsModule::Update @0x8229EC28 returns at its
-        // `GetStaticLayout() == 0` guard before the wheel loop -- so every tyre mark, spark,
-        // piece of debris and Lion effect was behind this one stage. Measured before the change
-        // (BRN_SKID_PROBE): "[skid-gate] EffectsModule::Update RETURNED EARLY at:
-        // mEffectsSerialiser.GetStaticLayout() == 0".
-        if (!g_bLoggedGameDataPrepare)
-        {
-            g_bLoggedGameDataPrepare = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: stage 8 (Replays prepare -- real)\n";
-        }
-        {
-            const BrnResource::GameDataIO::AllocatorList* lpReplayAllocators =
-                lpGameDataOutput ? lpGameDataOutput->GetAllocatorList() : 0;
-            BrnGame::GetMainGameModule()->GetReplayModule().Prepare(lpReplayAllocators);
-        }
-        // The GameDataModule pump keeps its place in the ladder: BrnGameModule::GamePrepare has
-        // already driven it to completion, so it reports done immediately (see the note above).
-        if (BrnGame::GetMainGameDataModule()->Prepare(0, 0))
-            AdvanceLoadingStage(E_LOADINGSTAGE_DONE);
-        break;
+        meLoadingScreenStage = E_LOADINGSTAGE_REPLAYS;
+        if (!lpGameModule->GetReplayModule().Prepare(lpGameDataOutput->GetAllocatorList()))
+            break;
     case E_LOADINGSTAGE_DONE:
-    default:
-        // ⭐ CORRECTED 2026-08-16 (boot audit F-P5-4). The console's stage 9 vcalls
-        // FinishLoading on EVERY frame, unconditionally; FinishLoading @0x823C6AC8 opens
-        // with `lbz r11,0xC(r3); beqlr` and returns straight away until mbGuiPreloadDone is
-        // set. So reaching stage 9 is NOT what ends the loading screen -- the GUI's own
-        // done signal is. We used to fire it once, the instant the stage machine arrived,
-        // which is why LOADING -> MARKETING never waited for anything.
+        meLoadingScreenStage = E_LOADINGSTAGE_DONE;
         FinishLoading();
-
-        // The GUI BF_LOADING state watches gBrnInitialLoadingComplete and dismisses the
-        // loading screen itself (StopLoadingScreen) as it proceeds to BF_VIDEOS; only when
-        // the GUI isn't driving do we drop the screen here.
-        if (mbGuiPreloadDone && !gBrnInitialLoadingComplete)
-        {
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading complete\n";
-            gBrnInitialLoadingComplete = true;
-            if (!gBrnGuiDrivesLoadingScreen)
-                GetDispatchWriteBuffer()->HideLoadingScreen();
-        }
+        break;
+    default:
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowInitialLoadingScreenState.cpp", 268);
+        CgsDev::Assert::EndAssert();
         break;
     }
-
-    // ARTIST823EF8C8..FA48: only the own-stage>GUI path updates GUI.
-    // Its game timer is live; this route never calls BridgeTimers or GameState.
-    if (meLoadingScreenStage > E_LOADINGSTAGE_GUIMODULE)
+    if (meLoadingScreenStage <= E_LOADINGSTAGE_GUIMODULE)
     {
-        BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
-        CgsGui::CgsGuiModuleIO::InputBuffer* const lpGuiInput = lpGameModule->GetGuiInputBuffer();
-        CgsGui::CgsGuiModuleIO::OutputBuffer* const lpGuiOutput = lpGameModule->GetGuiOutputBuffer();
-        CgsGui::ModelIO::OutputBuffer* const lpModelOutput = lpGameModule->GetGuiModelOutputBuffer();
+        CgsModule::IOHelper<RendererIO::InputBuffer> lRendererInput(lpInputStack, "Render");
+        CgsModule::IOHelper<RendererIO::OutputBuffer> lRendererOutput(lpOutputStack, "Render");
+        lpGameModule->GetRenderModule().Update(lpInputStack, lpOutputStack,
+            lRendererInput, lRendererOutput);
+        GetDispatchWriteBuffer()->ShowLoadingScreen();
+    }
+    else
+    {
         lpGameModule->GetGameTimer().Update();
         const CgsSystem::Timer& lrGameTimer = lpGameModule->GetGameTimer();
         CgsGui::GuiEventTimeInfo lTimeInfo;
@@ -1460,67 +1060,29 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             static_cast<f32>(lrGameTimer.GetAccumTicks()) + lrGameTimer.GetAccumulator());
         lpGuiInput->LockForWrite();
         BrnGame::PushGuiEvent(lTimeInfo, lpGuiInput);
+        lpGuiInput->UnlockForWrite();
+        lpGuiInput->LockForWrite();
         lpGameModule->BridgeGameToGui(lpGuiInput);
         lpGuiInput->UnlockForWrite();
-
-        lrGui.SetGuiEventInputBuffer(lpGuiInput);
-        lrGui.SetFrameUpdateSet(static_cast<BrnUpdateSet>(0x40));
-        lrGui.Update(lpGameDataInput, lpGameDataOutput);
-        lpGuiOutput->Clear();
-        lpGuiOutput->LockForWrite();
-        lpGuiOutput->AddGuiOutEvents(lrGui.GetGuiOutQueue());
-        lpGuiOutput->UnlockForWrite();
+        lpGameModule->GetGuiModule().Update(static_cast<BrnUpdateSet>(0x40),
+            lpInputStack, lpOutputStack, lpGuiInput, lpGuiOutput,
+            lpModelOutput, lpViewInput, lpGameDataInput, lpGameDataOutput, false);
         lpModelOutput->LockForRead();
         lpGuiOutput->LockForRead();
         lpGameModule->BridgeGuiToResource(lpGameDataInput, lpModelOutput, lpGuiOutput);
-        lpGameModule->BridgeGuiToGame(lrGui.GetGuiOutQueue());
+        lpGameModule->BridgeGuiToGame(lpGuiOutput);
+        if (!mbGuiPreloadDone && lpGameModule->IsGuiPhaseComplete())
+            mbGuiPreloadDone = true;
         lpGuiOutput->UnlockForRead();
         lpModelOutput->UnlockForRead();
-        RenderGUI(lpGuiInput, lpGuiOutput, lpModelOutput, lrGui.GetViewInputBuffer(), false);
+        RenderGUI(lpGuiInput, lpGuiOutput, lpModelOutput, lpViewInput, false);
     }
-
-    // @0x823EFA48-6C -- the GUI-PRELOAD-DONE LATCH, run every frame right after
-    // BridgeGuiToGame:
-    //     if (!this->mbGuiPreloadDone && gm[0x9A0648]) this->mbGuiPreloadDone = 1;
-    // gm+0x9A0648 is the byte BridgeGuiToGame @0x823CB758 sets from GUI command 70 (the
-    // HUD flow's "phase complete"); on PC that is BrnGameModule::mbGuiPhaseComplete
-    // (+10094152), set by the same command in the same bridge. The member was WRITE-ONLY
-    // before this -- reset in Construct and never read -- so FinishLoading had nothing to
-    // gate on. It is a sticky latch: once set it stays set for the life of the state.
-    // The bridge above supplies this frame's original same-call completion latch.
-    if (!mbGuiPreloadDone)
-    {
-        BrnGame::BrnGameModule* lpGameModuleForLatch = BrnGame::GetMainGameModule();
-        if (lpGameModuleForLatch != 0 && lpGameModuleForLatch->IsGuiPhaseComplete())
-        {
-            mbGuiPreloadDone = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "InitialLoadingScreen: GUI preload done (command 70) -- loading may finish\n";
-        }
-    }
-
-    // Close the frame's GameData IO bracket (X360 @0x823EF688's tail: UnlockForWrite(input),
-    // UnlockForRead(output), then the GUI IO buffer teardown). The resource pump takes its own
-    // locks, so it can only run once these are released -- see BrnGameModule's per-frame
-    // resource tick.
-    lpGameDataOutput->UnlockForRead();
     lpGameDataInput->UnlockForWrite();
-}
-
-// Advance to the next load stage + log it (the X360 stages are visible in BrnGame.log so the real
-// progression can be followed). Kept separate so each stage's real LoadXxxModule (Phase 3+) just
-// calls this on its own completion instead of the interim dwell.
-void MainGameFlowStateInitialLoadingScreen::AdvanceLoadingStage(ELoadingScreenStage leNextStage)
-{
-    meLoadingScreenStage = leNextStage;
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) &&
-        leNextStage >= E_LOADINGSTAGE_START && leNextStage <= E_LOADINGSTAGE_DONE)
-    {
-        *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading stage "
-                                   << (s32)leNextStage << " ("
-                                   << kapcStageNames[leNextStage] << ")\n";
-    }
+    lpGameDataOutput->UnlockForRead();
+    lpOutputStack->DestroyIOBuffer(&lpModelOutput);
+    lpInputStack->DestroyIOBuffer(&lpViewInput);
+    lpOutputStack->DestroyIOBuffer(&lpGuiOutput);
+    lpInputStack->DestroyIOBuffer(&lpGuiInput);
 }
 
 // @ 0x823C6AC8 - the load is complete: advance the flow. Store for store:
@@ -1541,8 +1103,9 @@ void MainGameFlowStateInitialLoadingScreen::FinishLoading()
     if (!mbGuiPreloadDone)
         return;
 
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
+    BrnGame::GetMainGameModule()->GetThreadLayout().SetResourcePercentageOfFrame(5);
+
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
 }
 
 // --- MainGameFlowStateStartScreen (the legal/title screen phase) -------------------------
@@ -1564,8 +1127,7 @@ void MainGameFlowStateStartScreen::OnEnter()
 
     // @0x823AAB94 -- mbVideoState = 1 (the title is still a video-state phase; OnLeave
     // writes none on the console).
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(true);
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "StartScreen: OnEnter -> GUI FSM stage 2 (BrnLegalFsm)\n";
 }
@@ -1575,32 +1137,22 @@ void MainGameFlowStateStartScreen::OnLeave() {}
 // world load while the accept-dwell animation plays; command 70 (accepted) advances the
 // main flow (-> MEMORY_CARD / BF_PROFILE). The per-frame GUI drive itself runs in
 // BrnGameModule::GameMain (the console's LoadingScriptedState::Update shared spine).
+// ARTIST823F2D78: invite bypass precedes pre-accept and phase completion.
 void MainGameFlowStateStartScreen::Update()
 {
-    // X360 0x823F2D78 opens with the shared scripted-load spine.
     LoadingScriptedState::Update();
-
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-    if (lpGameModule->ConsumeGuiPreAccept())
+    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    if (lpGameModule->GetGuiModule().IsPerformingInvite())
+        lpGameModule->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
+    else if (lpGameModule->IsGuiPreAcceptRequested())
     {
-        // LoadingScriptedState::ResumeLoadingWorld @0x823A85B0 -- unpause the scripted
-        // world load during the accept dwell. UNCONDITIONAL, as on the console: OnEnter
-        // above raised the park, so the assert inside holds by construction.
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "StartScreen: pre-accept (71) -> resume world load\n";
         ResumeLoadingWorld();
-
-        // @0x823F2DD0 -- the console RETURNS here: the resume frame never also runs the
-        // phase-complete advance below.
-        return;
+        BrnGame::GetMainGameModule()->ClearGuiPreAccept();
     }
-    if (lpGameModule->IsGuiPhaseComplete())
-    {
-        if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-            BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
-                BrnGameMainFlowController::E_MGE_STATEEND);
-    }
+    else if (lpGameModule->IsGuiPhaseComplete())
+        lpGameModule->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
 }
+
 void MainGameFlowStateStartScreen::Render() { LoadingScriptedState::Render(); }
 
 // --- MainGameFlowStateMarketingScreens (the boot-logo phase) -----------------------------
@@ -1622,16 +1174,14 @@ void MainGameFlowStateMarketingScreens::OnEnter()
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(1);
 
     // @0x823AAA80 -- mbVideoState = 1: the logos run with the world on the boot-video arm.
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(true);
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "MarketingScreens: OnEnter -> GUI FSM stage 1 (BrnVideoFsm)\n";
 }
 
 void MainGameFlowStateMarketingScreens::OnLeave() {
     // @0x823AABC4 -- mbVideoState = 0.
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(false);
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(false);
 }
 
 // @ 0x823F2CD8 -- advance when the GUI posts phase-complete (command 70: the Criterion
@@ -1641,10 +1191,9 @@ void MainGameFlowStateMarketingScreens::Update()
     // X360 0x823F2CD8 opens with the shared scripted-load spine.
     LoadingScriptedState::Update();
 
-    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete() &&
-        BrnGameMainFlowController::gpMainGameFlowController != 0)
+    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete())
     {
-        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SendEvent(
             BrnGameMainFlowController::E_MGE_STATEEND);
     }
 }
@@ -1682,10 +1231,9 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
 
     // @0x823AAC84 / @0x823AAC8C -- mbSaveLoadState = 1, mbVideoState = 1 (the profile phase
     // is the sim-paused save-load window: update set 0xE1).
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
     {
-        BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(true);
-        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(true);
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetSaveLoadState(true);
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(true);
     }
 }
 void MainGameFlowStateCheckDiskSpace::OnLeave() {}
@@ -1710,10 +1258,9 @@ void MainGameFlowStateMemoryCard::OnEnter()
 // @ 0x823AACC8 -- clear the save-load + video bytes on the way out.
 void MainGameFlowStateMemoryCard::OnLeave()
 {
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
     {
-        BrnGameMainFlowController::gpMainGameFlowController->SetSaveLoadState(false);   // @0x823AACE4
-        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(false);      // @0x823AACEC
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetSaveLoadState(false);   // @0x823AACE4
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(false);      // @0x823AACEC
     }
 }
 
@@ -1732,14 +1279,13 @@ void MainGameFlowStateMemoryCard::Update()
     // @0x823F2FB0 -- the world-loaded gate, tested FIRST.
     if (gBrnScriptedLoadStage != 8)
         return;
-    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete() &&
-        BrnGameMainFlowController::gpMainGameFlowController != 0)
+    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete())
     {
         // X360 @0x823F2FD0..D8: `stb r11(=1), 0x9A02F5(gm)` -- gm+10094117, the streaming-wait
         // request DoUpdate_GameStatePreWorld turns into game event 8 (-> WaitForStreaming ->
         // the boot pause), stored right before the STATEEND SendEvent.
         BrnGame::GetMainGameModule()->RequestStreamingWait();
-        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SendEvent(
             BrnGameMainFlowController::E_MGE_STATEEND);
     }
 }
@@ -1759,8 +1305,7 @@ void MainGameFlowStateCompleteLoading::OnEnter()
     mbIsCollisionWorldPrepared = false;
 
     // @0x823AAC04 -- mbVideoState = 1 (the post-title intro is a video phase).
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(true);
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(true);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "CompleteLoading: OnEnter -> GUI FSM stage 3 (BrnCmpLdFsm)\n";
 }
@@ -1769,8 +1314,7 @@ void MainGameFlowStateCompleteLoading::OnEnter()
 // is initialized at82518B88 and read by both original resource validators.
 void MainGameFlowStateCompleteLoading::OnLeave()
 {
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SetVideoState(false);      // @0x823AAC34
+        BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetVideoState(false);      // @0x823AAC34
     BrnGame::GetMainGameModule()->GetGuiModule().SetMovieBootMode(false);                 // @0x823AAC3C
 }
 
@@ -1778,62 +1322,26 @@ void MainGameFlowStateCompleteLoading::OnLeave()
 // the world is loaded: first pass stamps the load-state + latches (X360 sets the global
 // load stage to 7), second pass advances to IN_GAME. (The quit-to-dash branch and the
 // X360 load-state global are platform/world follow-ons.)
+// ARTIST823F2E08: advance the collision stage, then consume game-over.
 void MainGameFlowStateCompleteLoading::Update()
 {
-    // X360 0x823F2E08 opens with the shared scripted-load spine, then -- once the GUI
-    // phase completes with the scripted load DONE -- first pass kicks the world-collision
-    // stage (dword_82FAE4B0 = 7) and latches, second pass advances to IN_GAME.
     LoadingScriptedState::Update();
-
-    // ⭐ 2026-08-16 (boot audit F-P4-6). The return-to-front-end poll at gm+0x9A0626 is read
-    // in BOTH CompleteLoading::Update and InGame::Update on the console -- in states 0-5 it
-    // is consumed AND DISCARDED. Only InGame carried it here, so a front-end request raised
-    // during COMPLETE_LOADING (the console swallows it) survived on PC and would fire the
-    // instant the flow reached IN_GAME. One clear-and-ignore restores parity.
-    if (BrnGameMainFlowController::gBrnReturnToFrontEndRequested)
-        BrnGameMainFlowController::gBrnReturnToFrontEndRequested = false;
-
-    if (!gBrnInitialLoadingComplete)
-        return;
-    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete())
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    if (lpGameModule->IsGuiPhaseComplete() && gBrnScriptedLoadStage == 8)
     {
-        // ⭐ RESTORED 2026-08-10 to the console gate. The X360 @0x823F2E08 tests
-        // `guiPhaseComplete && meLoadingStateStage == 8` on BOTH passes:
-        //     pass 1  stage==8, latch clear  -> stage = 7, latch = 1
-        //     passes 2..N  stage==7          -> the whole `if` is FALSE: the state HOLDS
-        //                                       here while LoadingScriptedState::Update()
-        //                                       (called at the top of this function every
-        //                                       frame) drives the world-collision load
-        //     pass N+1  stage back to 8, latch set -> SendEvent(E_MGE_STATEEND)
-        // The PC had made the gate permissive because stage 7 was a no-op deferral and a
-        // strict gate would have hung the boot. Stage 7 is real now, and the hold is the
-        // whole point: it is the only place the collision load gets its frames (nothing
-        // drives LoadingScriptedState::Update() once the flow reaches IN_GAME).
-        //
-        // ⭐ THE ANTI-WEDGE BOUND IS GONE, 2026-08-16 (boot audit F-P6-9 / F-P4-10). A PC-only
-        // 1800-frame budget used to release the flow if the collision load had not finished,
-        // "so a broken collision load costs the collision, not the session". There is no
-        // console analogue -- @0x823F2E08 holds here indefinitely -- and its own note said to
-        // delete it once the collision stream was proven. It is: the boot log shows stage 7
-        // loading worldcol.bin (21,793,024 bytes, 792 resources into pool 2) and the player
-        // car placed on track, with the bound never firing. A timeout whose only remaining
-        // effect would be to hide a real streaming failure is worse than the hang it prevents.
-        if (gBrnScriptedLoadStage == 8)
+        if (mbIsCollisionWorldPrepared)
+            lpGameModule->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
+        else
         {
-            if (mbIsCollisionWorldPrepared)
-            {
-                if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-                    BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
-                        BrnGameMainFlowController::E_MGE_STATEEND);
-            }
-            else
-            {
-                gBrnScriptedLoadStage = 7;   // kick LoadWorldCollision
-                mbIsCollisionWorldPrepared = true;
-            }
+            gBrnScriptedLoadStage = 7;
+            mbIsCollisionWorldPrepared = true;
         }
-        // (no else: while the stage is 7 the state HOLDS, exactly as @0x823F2E34-7C does,
-        //  and LoadingScriptedState::Update at the top of this function drives the load.)
+        lpGameModule = BrnGame::GetMainGameModule();
+    }
+    if (lpGameModule->IsGameOverRequested())
+    {
+        lpGameModule->ClearGameOver();
+        lpGameModule->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_GAMEOVER);
     }
 }
 // ⭐ 2026-08-16 (boot audit F-P6-11). CompleteLoading::Render IS DoDispatch on the console --
@@ -1849,44 +1357,3 @@ void MainGameFlowStateCompleteLoading::Render()
 MainGameFlowStateInGame::MainGameFlowStateInGame() {}
 // OnEnter/OnLeave/Update/Render are homed in BrnGameMainFlowInGameState.cpp (the DWARF
 // home for the in-game state's per-frame surface); only the ctor stays with this group.
-
-// ---------------------------------------------------------------------------
-// The in-game per-frame world tick, called by MainGameFlowStateInGame::Update.
-// Requests go into the same GameData input the scripted spine uses; the frame-level
-// resource tick (BrnGameModule::ResourceUpdateThread) drains it for every flow state,
-// so no extra pump is needed here.
-// ---------------------------------------------------------------------------
-void DriveInGameWorldUpdate(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput)
-{
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-    if (lpGameModule == 0)
-        return;
-
-    // Console: BrnGameModule::DoUpdate @0x823F0AF8 (pseudocode line 302) and
-    // ConstructUpdateSet @0x823DCB40 both derive the world's update set from the flow state
-    // machine per frame; ConstructUpdateSetFromFsm @0x823BD420 is one call away from each.
-    // This used to pass the frozen KU_INGAME_UPDATE_SET (0x88) -- see the deleted constant's
-    // obituary in the header for why that made the sim-pause bit unreachable in game.
-    //
-    // ORDERING (checked, no extra plumbing needed): MainGameFlowInGameState.cpp:82-89 runs
-    // DoUpdate() -- which runs the game-state pre-world leg and therefore CheckGameActions,
-    // the writer of mbSimPaused -- BEFORE DriveInGameWorldUpdate() in the same frame. So the
-    // set built here is already this frame's value.
-    const BrnUpdateSet lUpdateSet = lpGameModule->ConstructUpdateSetFromFsm();
-
-    // Change-only dev trace, mirroring UpdateWorldModule's at :327-338. Unpaused reads 0x88;
-    // the pause adds bit 0x1 and it reads 0x89.
-    {
-        static u32 s_uLastInGameUpdateSet = 0xFFFFFFFFu;
-        if ((u32)lUpdateSet != s_uLastInGameUpdateSet)
-        {
-            s_uLastInGameUpdateSet = (u32)lUpdateSet;
-            if (CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[flow] in-game update set -> "
-                                           << CgsDev::E_PRINTMODE_HEXONCE
-                                           << (u32)lUpdateSet << "\n";
-        }
-    }
-
-    DriveWorldUpdateFrame(&s_GameDataInput, lUpdateSet, lpSoundPreUpdateOutput);
-}

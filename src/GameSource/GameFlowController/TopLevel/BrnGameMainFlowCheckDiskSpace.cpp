@@ -30,11 +30,7 @@
 void MainGameFlowStateCheckDiskSpace::Update()
 {
     LoadingScriptedState::Update();
-
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-    if (lpGameModule != 0 && lpGameModule->IsGuiPhaseComplete())
-    {
-        if (BrnGameMainFlowController::gpMainGameFlowController != 0)   // Option B null guard (X360 reads the live module global)
-            BrnGameMainFlowController::gpMainGameFlowController->SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
-    }
+    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    if (lpGameModule->IsGuiPhaseComplete())
+        lpGameModule->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
 }

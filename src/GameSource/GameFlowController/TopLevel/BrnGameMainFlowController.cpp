@@ -3,21 +3,17 @@
 
 namespace BrnGameMainFlowController
 {
-    // Option B bridge to the active controller (X360 reaches it via the game-module global).
-    GameMainFlowController* gpMainGameFlowController = 0;
-
     // @ 0x823C6440 - wire the per-state pointer table (indexed by EMainGameFlowState) to the
     // owned state objects, then start with no active state (SetState enters the first one).
     void GameMainFlowController::Construct()
     {
-        gpMainGameFlowController = this;   // register the active controller (X360 game-module global)
         // X360 0x823C6440: store N(7) into maStates' count word (@ +0x4C) BEFORE the per-state
         // assignments -- maStates is a fixed index->state lookup table that is fully populated by
         // index, so its live count is its capacity (the checked GetItem then accepts indices 0..6).
         maStates.SetFullCount();
         maStates.GetItem(E_MGS_INITIAL_LOADING_SCREEN) = &mInitialLoadingScreen;
-        maStates.GetItem(E_MGS_CHECK_DISK_SPACE)       = &mCheckDiskSpace;
         maStates.GetItem(E_MGS_MARKETING_SCREENS)      = &mMarketingScreens;
+        maStates.GetItem(E_MGS_CHECK_DISK_SPACE)       = &mCheckDiskSpace;
         maStates.GetItem(E_MGS_START_SCREEN)           = &mStartScreen;
         maStates.GetItem(E_MGS_MEMORY_CARD)            = &mMemoryCard;
         maStates.GetItem(E_MGS_COMPLETE_LOADING)       = &mCompleteLoading;
@@ -62,8 +58,13 @@ namespace BrnGameMainFlowController
     // the LOADING path.) IN_GAME additionally takes GAMEOVER(0) -> START_SCREEN.
     void GameMainFlowController::SendEvent(EMainGameFlowEvent leEvent)
     {
-        CGS_ASSERT(meCurrentState >= 0 && meCurrentState < E_MGS_COUNT,
-                   "meCurrentState >= 0 && meCurrentState < E_MGS_COUNT");
+        if (meCurrentState < 0 || meCurrentState >= E_MGS_COUNT)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("meCurrentState >= 0 && meCurrentState < E_MGS_COUNT",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowController.cpp", 206);
+            CgsDev::Assert::EndAssert();
+        }
         switch (meCurrentState)
         {
             case E_MGS_INITIAL_LOADING_SCREEN:
@@ -89,7 +90,10 @@ namespace BrnGameMainFlowController
                 else if (leEvent == E_MGE_STATEEND)  SetState(E_MGS_MEMORY_CARD);
                 break;
             default:
-                CGS_ASSERT(false, "Unknown main game state.\n");
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("Unknown main game state.\n",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowController.cpp", 297);
+                CgsDev::Assert::EndAssert();
                 break;
         }
     }

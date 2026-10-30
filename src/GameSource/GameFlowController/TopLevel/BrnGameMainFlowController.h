@@ -13,12 +13,6 @@
 // (GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h).
 namespace BrnGameMainFlowController
 {
-    // The "return to front end" poll byte, gm+0x9A0626. Defined in
-    // BrnGameMainFlowInGameState.cpp. Declared here 2026-08-16 (boot audit F-P4-6) because
-    // the console reads it from TWO states -- CompleteLoading consumes-and-discards it,
-    // InGame acts on it -- and only one of them could see it before.
-    extern bool gBrnReturnToFrontEndRequested;
-
     enum EMainGameFlowState
     {
         E_MGS_INVALID = -1,
@@ -80,8 +74,5 @@ namespace BrnGameMainFlowController
         bool                                  mbInGameState;
     };
 
-    // Option B bridge: the active controller, set in Construct(). The X360 reaches the controller
-    // through the game-module global (off_830102D0 + 0x9A0664); the flow states use this to fire
-    // SendEvent (e.g. the loading screen's FinishLoading -> SendEvent(E_MGE_STATEEND)).
-    extern GameMainFlowController* gpMainGameFlowController;
+
 }
