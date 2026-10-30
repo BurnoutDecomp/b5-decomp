@@ -9,7 +9,7 @@
 //   GetPoolInputQueue() @ 0x828E1A00 -> &mPoolInputQueue (+4), write-lock (bit 3)
 //
 // The X360 body tests the write-lock bit (((*a1 >> 3) & 1)) -- matching CgsModule::IOBuffer's
-// IsBufferLockedForWriting() -- and on failure fires the "Not locked for writing" assert
+// IsBufferLockedForWriting() -- and on failure fires the "Not locked for writing\n" assert
 // (CgsPoolModuleIO.h:234), then returns the member's address (this + 4).
 
 namespace CgsResource
@@ -24,7 +24,7 @@ namespace PoolIO
     // X360 0x828E1A00: write-lock; return this + 4.
     InputBuffer::PoolInputQueue* InputBuffer::GetPoolInputQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mPoolInputQueue;
     }
 }
