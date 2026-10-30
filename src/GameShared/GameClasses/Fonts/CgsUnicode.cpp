@@ -40,9 +40,10 @@ namespace CgsUnicode
         if (!IsValidUtf8String(lpUtf8String))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-            lStream << "Invalid UTF8 Character " << static_cast<u32>(*lpUtf8String) << " at "
-                    << CgsDev::E_PRINTMODE_HEX << static_cast<u64>(reinterpret_cast<uintptr_t>(lpUtf8String));
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Invalid UTF8 Character " << static_cast<u32>(*lpUtf8String) << " at "
+                     << CgsDev::E_PRINTMODE_HEX << static_cast<u64>(reinterpret_cast<uintptr_t>(lpUtf8String));
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(), lpcFile, 802);
             CgsDev::Assert::EndAssert();
         }
@@ -56,9 +57,10 @@ namespace CgsUnicode
             if (luExtraBytes == 255)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
-                lStream << "Character supplied is not a valid start UTF8 character ("
-                        << static_cast<u32>(*lpUtf8String) << ")";
+                CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                           CgsDev::Assert::giMessageBufferSize);
+                lMessage << "Character supplied is not a valid start UTF8 character ("
+                         << static_cast<u32>(*lpUtf8String) << ")";
                 CgsDev::Assert::FireAssert(lMessage.GetBuffer(), lpcFile, 808);
                 CgsDev::Assert::EndAssert();
             }
