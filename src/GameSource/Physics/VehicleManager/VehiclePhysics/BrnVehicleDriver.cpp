@@ -11,6 +11,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"                              // rw::math::vpu::operator* (the affine concat)
 
 #include <cmath>   // std::fabs (the vandc sign-mask lowering)
+#include <vectorintrinsics.h>
 
 namespace BrnPhysics
 {
@@ -233,7 +234,7 @@ namespace Vehicle
     //                   t = xAxis * com.x + t            (vmaddfp v13, v12, v13, v11 0x825FF0E4)
     //                   t = zAxis * com.z + t            (vmaddfp v0, v10, v13, v0   0x825FF0E8)
     //                   wAxis = wAxis + t                (vaddfp v0, v9, v0          0x825FF0EC)
-    //               -- the two vmaddfp are FUSED (one rounding each): std::fma lane by lane
+    //               -- the two vmaddfp are FUSED (one rounding each): native VMX
     //               (crash parity FX-NETCRASH, 2026-09-25; it was three rounded products).
     //   0x825FF0F4  |target.wAxis - vehicle.wAxis|^2 > KVF_MAX_VEHICLE_INTERP_DIST_SQ ->
     //               lbSnapToPosition = true (vmsum3fp128 + `vcmpgtfp.` against the splat at
@@ -298,15 +299,15 @@ namespace Vehicle
         // operator*<VectorAxisX/Y/Z> products, two operator+ and the WAxis() operator+=).
         const Vector3 lComOffset = lpVehicle->GetSimpleAttribs()->mCOMOffset;                // lvx +0x670
         mCatchupTargetTransform = lCatchupTransformGraphicsSpace;
-        const Vector3& lrX = mCatchupTargetTransform.xAxis;
-        const Vector3& lrZ = mCatchupTargetTransform.zAxis;
-        const Vector3 lYCom = vpu::Mult(mCatchupTargetTransform.yAxis, lComOffset.y);       // vmulfp128 0x825FF0C0
-        Vector3 lComMove;                                                                     // vmaddfp x2, fused
-        lComMove.x = std::fma(lrZ.x, lComOffset.z, std::fma(lrX.x, lComOffset.x, lYCom.x));
-        lComMove.y = std::fma(lrZ.y, lComOffset.z, std::fma(lrX.y, lComOffset.x, lYCom.y));
-        lComMove.z = std::fma(lrZ.z, lComOffset.z, std::fma(lrX.z, lComOffset.x, lYCom.z));
-        lComMove.w = std::fma(lrZ.w, lComOffset.z, std::fma(lrX.w, lComOffset.x, lYCom.w));
-        mCatchupTargetTransform.wAxis = mCatchupTargetTransform.wAxis + lComMove;              // vaddfp 0x825FF0EC
+        const __vector4 lvCom = __lvx(&lComOffset, 0);
+        const __vector4 lvX = __lvx(&mCatchupTargetTransform.xAxis, 0);
+        const __vector4 lvY = __lvx(&mCatchupTargetTransform.yAxis, 0);
+        const __vector4 lvZ = __lvx(&mCatchupTargetTransform.zAxis, 0);
+        const __vector4 lvTranslation = __lvx(&mCatchupTargetTransform.wAxis, 0);
+        const __vector4 lvYCom = __vmulfp(lvY, __vspltw(lvCom, 1));
+        const __vector4 lvXYCom = __vmaddfp(lvX, __vspltw(lvCom, 0), lvYCom);
+        const __vector4 lvComMove = __vmaddfp(lvZ, __vspltw(lvCom, 2), lvXYCom);
+        __stvx(__vaddfp(lvTranslation, lvComMove), &mCatchupTargetTransform.wAxis, 0);
 
         // Too far to interpolate: snap instead. (DWARF lvfSquaredInterpDist, a VecFloat on the
         // console; the host MagnitudeSquared is scalar.)
