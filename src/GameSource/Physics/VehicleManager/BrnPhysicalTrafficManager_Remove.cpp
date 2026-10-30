@@ -368,13 +368,17 @@ namespace Vehicle
         PhysicalTrafficVehicle* lpVehicle = GetTrafficVehicle(liIndexToRecycle);
         if (lpVehicle->HasNonBrokenJoint())
         {
-            // GATE ArticulatedJointPool::GetIndexOfOtherHalf @0x825D8490 (304)
-            //    blocker: declare-only on the pool's surface, and its DWARF parameter is
-            //    PhysicalTrafficVehicle::EArticulatedVehicleType -- a nested enum of a class whose
-            //    header INCLUDES the pool's, so it cannot be named there without an include cycle.
-            //    DELETE-WHEN the trailer wave lands. Unreachable today: nothing creates a joint.
-            BRN_T3_REMOVE_GATE("PhysicalTrafficManager::RecycleTrafficVehicle articulated half "
-                               "(ArticulatedJointPool::GetIndexOfOtherHalf @0x825D8490)");
+            const s32 liOtherHalfIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+                lpVehicle->miJointIndex, lpVehicle->GetArticulatedVehicleType());
+            lpManagerOutputInterface->AddTrafficRemovedEvent(
+                maTrafficEntityIDs[liOtherHalfIndex],
+                static_cast<ETrafficType>(GetTrafficVehicle(liOtherHalfIndex)->mePhysicalTrafficState));
+            RemoveTrafficVehicle(static_cast<u8>(liOtherHalfIndex), lpOutputRequestInterface,
+                                 lpDeformationInterface, false);
+            const u32 luOtherEntityIndex = (maTrafficEntityIDs[liOtherHalfIndex].muValue >> 10) & 0x3FFFu;
+            CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[luOtherEntityIndex] != KU8_INVALID_MAP,
+                       "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liOtherHalfIndex].GetEntityIndex()] != KU8_INVALID_MAP");
+            mu8GlobalToPhysicalEntityIndexMap[luOtherEntityIndex] = KU8_INVALID_MAP;
         }
 
         // `lwzx r28, r29, r31` then `lwz r5, 0x20(vehicle)` -- the removed car's own global id and
