@@ -419,7 +419,7 @@ namespace Vehicle
         if (lfCap > 1.2f) lfCap = 1.2f;                        // flt_82009B84
         const f32 lfOneMinusSq = (1.0f - lfCap) * (1.0f - lfCap);                 // fsubs ; fmuls
         // 0x825C7740 `fnmsubs f10, sq, sq, 1.0` == -(sq*sq - 1.0) with ONE rounding (the console fuses it).
-        const f32 lfEase       = -std::fmaf(lfOneMinusSq, lfOneMinusSq, -1.0f);
+        const f32 lfEase       = 1.0f - lfOneMinusSq * lfOneMinusSq;
 
         f32 lfDuration = lfEase * lfMassRatio * KAF_SLAM_SITUATION_SCALE[liSituation];
 
