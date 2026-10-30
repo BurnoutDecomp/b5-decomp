@@ -114,7 +114,8 @@ struct ParamPlan
     };
 };
 
-class Param
+// DecFIGS declares 32-byte alignment; ARTIST 0x82707DD8 indexes this array at 0x80 bytes.
+class CGS_ALIGN(32) Param
 {
 public:
     // Retail mxFlags bit values (X360 asm, NOT the Feb-2007 leak numbering):
