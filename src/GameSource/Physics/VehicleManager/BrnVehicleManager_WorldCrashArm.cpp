@@ -231,7 +231,7 @@ void VehicleManager::HandleRaceCarWorldPotentialContact(
     //      up, and the surface it is touching faces upward (n.y > 0.1) -- it is landing on the world.
     bool lbRolledOntoWorld = false;                                                 // r10
     {
-        const Vector3 lvWorldUp = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };               // unk_82181510
+        const Vector3 lvWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };               // unk_82181510
         if (KF_ROLLED_CRASH_UP_COSINE > rw::math::vpu::Dot(lTransform.yAxis, lvWorldUp))   // flt_82FB914C > up.y
         {
             lbRolledOntoWorld = lContactNormal.y > KF_ROLLED_CRASH_MIN_NORMAL_Y;    // vspltw128 v9, v125, 1 ; > unk_82FB82B0
