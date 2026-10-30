@@ -222,10 +222,6 @@ namespace shadow
         static void ResetProgramShadows();
 
     private:
-        // +0x24 index list (built by MaterialResourceType::PostFixUp) into the material
-        // assembly's own 20-byte sampler array at +0x0C.
-        static void BindTechniqueSamplers(const u8* lpTechnique, const u8* lpMaterialAssembly);
-
         // The X360 build keeps the live vertex-program binding as a small static
         // slot (5 dwords @ dword_83011118) whose first entry points at the real
         // state object (@ unk_83010920); InitializeNoBindX360 dereferences the

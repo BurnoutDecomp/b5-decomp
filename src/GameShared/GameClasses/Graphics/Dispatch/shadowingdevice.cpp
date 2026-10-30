@@ -102,65 +102,6 @@ renderengine::VertexProgramState* gpCurrentVertexProgramState = 0;
 // shadow setter can call it by name. Returns the device/result pointer (X360 r3 passthrough).
 extern "C" void* SetSamplerStateLowLevel(void* lpState, u32 luSamplerId, bool lbWasUnset);
 
-// ---- The PC mesh-dispatch leaf hooks (pc/gcm/renderengine/XenonD3D9Shims.cpp) -----------------
-// The Xenon-side geometry stash + fallback world shader. The dispatch walk binds through these;
-// the shim TU owns the D3D9 objects (shader cache, vertex-declaration cache, draw stash).
-namespace renderengine
-{
-
-    // Bind the FLAGGED fallback world shader (compiled once at first use); returns false when the
-    // device/compiler is unavailable (the draw is skipped rather than issued undefined).
-    bool WorldFallbackShader_Bind();
-    // Retain the row-vector WVP; publish it when a fallback shader consumes it.
-    void WorldFallbackShader_SetWvp(const f32* lpWvpRows16);
-    // Bind a material's own sampler textures (the DATA half of the X360 technique bind --
-    // DispatchAllMeshes' lpaInternalSamplers loop). Returns true when a texture was bound.
-    bool WorldMaterialSamplers_Bind(const void* lpMaterialAssembly);
-    // Pick the fallback pair (flat vs textured) for the mesh whose declaration was just
-    // resolved -- see the note on Vd32Cached::mbHasTexcoord0 in the shim TU.
-    void WorldFallbackShader_SelectForMesh();
-    // Tell the next WorldFallbackShader_SelectForMesh that this mesh is CONSOLE-INSTANCED.
-    // The leaf decides from there: it keeps the technique's real programs when their vertex
-    // program takes a `world` matrix (the expansion publishes the per-instance one through the
-    // technique's own constant channel) and drops to the flagged fallback pair only when it
-    // does not -- see the banner in XenonD3D9Shims.cpp.
-    void WorldFallbackShader_MarkInstancedMesh();
-    // Resolve + cache a D3D9 vertex declaration and the stream-0 stride from the 32-bit
-    // serialised VertexDescriptor image the converted world data carries.
-    void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride);
-    // ---- the REAL per-technique shader path ----
-    // Create-once + bind the technique's two D3D9 programs (each argument is a
-    // ProgramBufferData + 0x14 payload). False = nothing bound, keep the fallback.
-    // lpcTechniqueName is the ShaderTechnique blob's own name (+148), used only by the leaf's
-    // per-technique fallback survey; it may be null.
-    bool  WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload,
-                             const char* lpcTechniqueName, bool lbDepthOnly);
-    // [DIAG] Record in that survey that a technique had no program pair at all.
-    void  WorldShader_ReportTechniqueHasNoPrograms(const char* lpcTechniqueName);
-    // Forget the real programs (the fallback pair owns the device again).
-    void  WorldShader_ClearRealPrograms();
-    // Whether the last technique bind left the real programs on the device.
-    bool  WorldShader_RealProgramsBound();
-    // Upload luNumRegisters float4s at shader-constant register luRegister.
-    void  WorldShaderConstants_Set(bool lbPixel, u32 luRegister, const void* lpData, u32 luNumRegisters);
-    // Bind one texture + the sampler set its TextureState asks for, at a D3D sampler unit.
-    // lpSamplerBlock is that TextureState's own 32-byte sampler block (the object's +0x00, which
-    // the console's sub_827E8950 reads field by field); null when the caller has no state.
-    bool  WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster, const void* lpSamplerBlock);
-    // shader-constant rows staged by RenderEngineDeviceBeginShaderStates.
-    void  ImShaderConstants_Flush();
-    // The draw stash the D3DDevice_* shims fill (index/vertex source for the UP draw path).
-    void  WorldDraw_SetIndexSource(const void* lpIndexBufferHeader);
-    void  WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride);
-    void  WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
-                              u32 luStartIndex, u32 luIndexCount);
-    // [DIAG wheels] mark the next WorldDraw_IndexedUP as a console-instanced mesh's draw so
-    // the shim reports what it actually submitted. DELETE with the wheel bring-up.
-    void  WorldDraw_MarkInstanced();
-    // The rasteriser state's Xenos primitive reset. D3D9 has no such feature, so the shim
-    // re-cuts the strip runs at the marker instead -- see the note in XenonD3D9Shims.cpp.
-    void  WorldDraw_SetPrimitiveReset(bool lbEnabled, u32 luResetIndex);
-}
 
 namespace
 {
@@ -1077,71 +1018,6 @@ namespace shadow
         }
     }
 
-    // The technique's sampler selection (see SetMeshTechniquePC's tail).
-    void Device::BindTechniqueSamplers(const u8* lpTech, const u8* lpAssembly)
-    {
-        if (lpTech == 0 || lpAssembly == 0)
-            return;
-        const u32 luNumBindings = lpTech[0x22];
-        const u8* const lpIndexList = reinterpret_cast<const u8*>(
-            static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpTech + 0x24)));      // serialised blob
-        const s32 liNumSamplers =
-            static_cast<s32>(*reinterpret_cast<const s8*>(lpAssembly + 0x09));          // serialised blob
-        const u8* const lpSamplers = reinterpret_cast<const u8*>(
-            static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpAssembly + 0x0C)));  // serialised blob
-        if (luNumBindings == 0 || lpIndexList == 0 || liNumSamplers <= 0 || lpSamplers == 0)
-            return;
 
-        // [DIAG] one-shot tally over the first 4096 sampler bindings: how many resolve all the
-        // way to a live D3D texture, and where the rest stop.
-        static u32 suSeen = 0u, suBound = 0u, suNoState = 0u, suNoRaster = 0u, suNoTexture = 0u;
-
-        for (u32 luBinding = 0; luBinding < luNumBindings; ++luBinding)
-        {
-            const u32 luSamplerIndex = lpIndexList[luBinding];
-            if (luSamplerIndex >= static_cast<u32>(liNumSamplers))
-                continue;
-            const u8* const lpSampler = lpSamplers + 20 * luSamplerIndex;
-
-            u16 lu16Unit;
-            u32 luStateSlot;
-            std::memcpy(&lu16Unit,    lpSampler + 0x08, 2);
-            std::memcpy(&luStateSlot, lpSampler + 0x10, 4);
-
-            const bool lbTally = (suSeen < 4096u);
-            if (lbTally) ++suSeen;
-
-            if (luStateSlot == 0)
-            {
-                if (lbTally) ++suNoState;
-                continue;
-            }
-            // TextureState +0x20 -> renderengine::Texture* (both console u32 slots).
-            const u8* const lpState = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luStateSlot));
-            u32 luRasterSlot;
-            std::memcpy(&luRasterSlot, lpState + 0x20, 4);
-            if (luRasterSlot == 0 || luRasterSlot == 0xFFFFFFFFu)
-            {
-                if (lbTally) ++suNoRaster;
-                continue;
-            }
-
-        }
-
-        if (suSeen >= 4096u && suSeen != 0xFFFFFFFFu)
-        {
-            const u32 luSeen = suSeen;
-            suSeen = 0xFFFFFFFFu;   // report once
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[WorldSamplers] technique sampler tally: bound=" << suBound
-                    << " no-TextureState=" << suNoState
-                    << " TextureState-with-null-raster=" << suNoRaster
-                    << " raster-with-no-D3D-texture=" << suNoTexture
-                    << " of " << luSeen << "\n";
-            }
-        }
-    }
 
 }
