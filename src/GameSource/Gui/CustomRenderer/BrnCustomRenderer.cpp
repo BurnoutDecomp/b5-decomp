@@ -109,46 +109,7 @@ namespace
             lpComponent->SetRenderEnabled(lbEnabled);
     }
 
-    bool gbHudVisChecked = false;
-    bool gbHudVisEnabled = false;
-    bool gbHudVisSeeded  = false;
-    bool gabHudVisLast[10] = { false, false, false, false, false,
-                               false, false, false, false, false };
-    s32  giHudVisBudget  = 400;   // hard line cap -- a fading component must never flood
 
-    bool HudVisEnabled()
-    {
-        if (!gbHudVisChecked)
-        {
-            gbHudVisChecked = true;
-        }
-        return gbHudVisEnabled;
-    }
-
-    void HudVisReport(CgsGui::CustomRenderComponentInterface* const* lpapComponents,
-                      const char* lpcReason)
-    {
-        if (!HudVisEnabled() || CgsDev::Log::gpDebugPrint == 0 || giHudVisBudget <= 0)
-            return;
-
-        for (s32 liSlot = 0; liSlot < 10; ++liSlot)
-        {
-            const CgsGui::CustomRenderComponentInterface* lpComponent = lpapComponents[liSlot];
-            const bool lbNow = (lpComponent != 0) && lpComponent->GetRenderEnabled();
-            if (gbHudVisSeeded && lbNow == gabHudVisLast[liSlot])
-                continue;
-
-            gabHudVisLast[liSlot] = lbNow;
-            if (giHudVisBudget <= 0)
-                break;
-            --giHudVisBudget;
-            *CgsDev::Log::gpDebugPrint
-                << "[hud-vis] " << kapcHudVisNames[liSlot]
-                << (lpComponent == 0 ? " absent" : (lbNow ? " show" : " hide"))
-                << " by " << lpcReason << "\n";
-        }
-        gbHudVisSeeded = true;
-    }
 }
 
 // ================= ctor @ 0x827E20A8 =================
@@ -157,16 +118,7 @@ namespace
 // with a real ctor; the array itself is seeded by Construct() (as on console -- the ctor
 // does not write +0x101C).
 CustomRendererManager::CustomRendererManager()
-    : mbRenderingEnable(false)
-    , mePrepareStage(E_PREPARESTAGE_START)
-    , meReleaseStage(E_RELEASESTAGE_START)
-    , miHACK_NumberOfRendersWithoutUpdate(0)
-    , mpTextRenderer(0)
-    , mpLanguageManager(0)
-    , mpReplaySerialiser(0)
 {
-    for (s32 liIndex = 0; liIndex < E_CUSTOM_RENDER_TYPES_COUNT; ++liIndex)
-        mapCustomRenderComponents[liIndex] = 0;
 }
 
 // ================= Construct @ 0x82444040 =================
@@ -233,7 +185,7 @@ void CustomRendererManager::Construct()
     // subobject (guest this+0xE520), the in-game boost gauge.
     mapCustomRenderComponents[E_BOOSTBAR]             = &mBoostBarRenderer;
     mapCustomRenderComponents[E_ABOVECAR]             = &mAboveCarRenderer;
-    mapCustomRenderComponents[E_PROGRESSBAR]          = 0;
+    mapCustomRenderComponents[E_PROGRESSBAR]          = &mProgressBarRenderer;
     mapCustomRenderComponents[E_BLACKBAR]             = &mBlackBarRenderer;
     // ⭐ [tut-ticker] slot 8 is LIVE (2026-08-24): the reconstructed InGameMessageRenderer
     // subobject (guest this+0x1E0F0), the bottom-of-screen ticker.
@@ -544,12 +496,7 @@ void CustomRendererManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             break;
     }
 
-    if (HudVisEnabled())
-    {
-        char lacReason[32];
-        std::snprintf(lacReason, sizeof(lacReason), "evt=%d", liEventType);
-        HudVisReport(mapCustomRenderComponents, lacReason);
-    }
+
 }
 
 // ---- RecvEvent case 213: the SatNav/MainMap/CrashNav map toggle. -------------------
@@ -841,7 +788,6 @@ CustomRendererManager* CustomRendererManager::SetFlaptRenderer(BrnFlapt::FlaptRe
 // The extended credits virtual and both embedded renderers receive the same renderer.
 void CustomRendererManager::SetTextRenderer(CgsGraphics::TextRenderer* lpTextRenderer)
 {
-    mpTextRenderer = lpTextRenderer;
     mCreditsTextRenderer.SetTextRenderer(lpTextRenderer);
     mAboveCarRenderer.SetTextRenderer(lpTextRenderer); // ARTIST manager+1BEC4
     mCrashNavIconRenderer.SetTextRenderer(lpTextRenderer); // ARTIST 82445588, manager+E090.
@@ -863,7 +809,6 @@ void CustomRendererManager::SetTextRenderer(CgsGraphics::TextRenderer* lpTextRen
 // The credits virtual, road-name renderer store and ticker tail call are all live.
 void CustomRendererManager::SetLanguageManager(CgsLanguage::LanguageManager* lpLanguageManager)
 {
-    mpLanguageManager = lpLanguageManager;
     mCreditsTextRenderer.SetLanguageManager(lpLanguageManager);
     mAboveCarRenderer.SetLanguageManager(lpLanguageManager); // ARTIST manager+1BEC8
 
