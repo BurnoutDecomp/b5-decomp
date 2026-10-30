@@ -11,7 +11,7 @@ namespace CgsSceneManager { class SceneManagerDebugComponent; class TriangleColl
 namespace CgsGameTalk { class GameTalkDebugComponent; }
 namespace BrnResource { class DebugComponent; class DLCDebugComponent; }
 namespace BrnProgression { struct ProgressionDebugComponent; }
-namespace BrnGameState { class RoadRulesDebugComponent; class StuntManagerDebugComponent; class TakedownManagerDebugComponent; class PaybackDebugComponent; class TriggerQueryManagerDebugComponent; class StreetManagerDebugComponent; class GameStateDebugComponent; class ResetPlayerDebugComponent; }
+namespace BrnGameState { class CrashScoreDebugComponent; class ModeManagerDebugComponent; class ScoringSystemDebugComponent; class ChallengeManagerDebugComponent; class RoadRulesDebugComponent; class StuntManagerDebugComponent; class TakedownManagerDebugComponent; class PaybackDebugComponent; class TriggerQueryManagerDebugComponent; class StreetManagerDebugComponent; class GameStateDebugComponent; class ResetPlayerDebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -105,6 +105,11 @@ namespace CgsDev
         friend class BrnGameState::StreetManagerDebugComponent;
         friend class BrnGameState::GameStateDebugComponent;
         friend class BrnGameState::ResetPlayerDebugComponent;
+        // ARTIST mode/scoring constructors install only these debug vtables.
+        friend class BrnGameState::CrashScoreDebugComponent;
+        friend class BrnGameState::ModeManagerDebugComponent;
+        friend class BrnGameState::ScoringSystemDebugComponent;
+        friend class BrnGameState::ChallengeManagerDebugComponent;
         struct GameStateConstructorTag {};
         explicit DebugComponent(GameStateConstructorTag) {}
 

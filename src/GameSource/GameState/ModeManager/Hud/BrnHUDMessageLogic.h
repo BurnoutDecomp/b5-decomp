@@ -44,6 +44,10 @@ public:
         EActiveRaceCarIndex meActiveRaceCarIndex;   // BrnHUDMessageLogic.h:248 (+12)
     };
 
+    HUDMessageLogic() : mBufferedCrashingCars(
+        CgsContainers::ObjectPool<BufferedCrashingCar, 8, s32>::ModeOwnerNoInitTag())
+    { mActionQueue.MarkUnconstructed(); }
+
     // ------------------------------------------------------------------------
     // HUD notification (action-queue event) types. The X360 queues each record into the
     // action queue with one of these literal type IDs (0x10A..0x10F); each ID selects how
