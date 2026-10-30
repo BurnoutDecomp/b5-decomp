@@ -11,6 +11,30 @@ namespace renderengine
     u32 guTilingEnabled = 0;
     u32 gDeviceFrameCounter83271624 = 0;
 
+    // ARTIST82B61960: the output is the XDK's 124-byte presentation record.
+    void Device::InitPresentParameters(D3DPRESENT_PARAMETERS& lrPresent, const Parameters& lrParameters)
+    {
+        memset(&lrPresent, 0, sizeof(lrPresent));
+        lrPresent.SwapEffect = lrParameters.swapEffect;
+        lrPresent.BackBufferWidth = lrParameters.backBufferWidth;
+        lrPresent.BackBufferHeight = lrParameters.backBufferHeight;
+        lrPresent.BackBufferCount = 1;
+        lrPresent.BackBufferFormat = static_cast<D3DFORMAT>(lrParameters.backBufferFormat);
+        lrPresent.AutoDepthStencilFormat = static_cast<D3DFORMAT>(lrParameters.depthStencilFormat);
+        lrPresent.MultiSampleType = lrParameters.multiSampleType;
+        lrPresent.FullScreen_RefreshRateInHz = lrParameters.refreshRate;
+        lrPresent.Flags = lrParameters.flags;
+        lrPresent.PresentationInterval = lrParameters.numVsyncs;
+        lrPresent.DisableAutoBackBuffer = 1;
+        lrPresent.DisableAutoFrontBuffer = 1;
+        lrPresent.FrontBufferFormat = static_cast<D3DFORMAT>(lrParameters.frontBufferFormat);
+        lrPresent.FrontBufferColorSpace = lrParameters.frontBufferColorSpace;
+        lrPresent.RingBufferParameters.PrimarySize = lrParameters.primaryRingBufferSize;
+        lrPresent.RingBufferParameters.SecondarySize = lrParameters.secondaryRingBufferSize;
+        lrPresent.RingBufferParameters.SegmentCount = lrParameters.ringBufferSegmentCount;
+        lrPresent.VideoScalerParameters = lrParameters.videoScalerParameters;
+    }
+
     // ARTIST82B616B0: accepted native formats and minimum front-buffer dimensions.
     bool Device::Parameters::Validate() const
     {

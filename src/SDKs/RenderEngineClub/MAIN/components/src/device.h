@@ -167,6 +167,7 @@ namespace renderengine
         static void UnSetResource(D3DResource* lpResource);
 
     protected:
+        static void InitPresentParameters(D3DPRESENT_PARAMETERS& lrPresent, const Parameters& lrParameters);
         static State m_currentState; // ARTIST 83271600
         // DecFIGS device.h:1662; ARTIST dword_83271614.
         static RenderTargetState* m_renderTargetState;
