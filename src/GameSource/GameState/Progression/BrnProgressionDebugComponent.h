@@ -49,6 +49,8 @@ namespace BrnProgression
         void OnActivate() override;
 
     private:
+        friend class ProgressionManager; // GetGameModeForEvent reads the registered override.
+
         void DrawRankAsBar(CgsDev::Debug2DImmediateRender* lpDisplay, BrnGameState::GameStateModuleIO::EGameModeType leGameModeType,
                            CgsDev::RGBA lColour, Vector2 lv2Position, const char* lpcName);
         void DrawTextWithOffsets(CgsDev::Debug2DImmediateRender* lpDisplay, CgsDev::StrStream* lpStream,

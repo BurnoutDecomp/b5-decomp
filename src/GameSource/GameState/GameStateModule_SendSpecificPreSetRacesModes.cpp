@@ -67,18 +67,9 @@
 // picks the offline vs the online slot of each junction, and it works precisely because the
 // online ids start at 10.
 //
-// THE OVERRIDE WORD, and it is not a deviation this lane invented. The offline arm reads a
-// game-type word off the module first and only falls back to the event's own mode when that
-// word holds 6:
-//     liGameType = <the module's game-type override>;
-//     if (liGameType == 6) liGameType = lpRaceEvent->GetMode();
-//     liMappedEventType = ProgressionManager::GetEvent(liGameType);
-// That word has no member and no writer anywhere in the image -- this function,
-// CheckIfPlayerIsAtJunctionWithAnEvent and StartModeAtLights are its only appearances, and
-// GameStateModule_gSR_00.cpp already carries the full FLAG for it. Its retail value is the 6
-// sentinel ("no override": RaceEventData::EModeType tops out at 5). Reproduced the same way
-// that TU reproduces it -- the sentinel path taken unconditionally, the expression written out
-// above. DELETE-WHEN ProgressionDebugComponent is reconstructed.
+// The offline mode comes from ProgressionManager::GetGameModeForEvent: the registered
+// Progression debug mode overrides the authored mode unless its value is DISABLED (6).
+// ARTIST 8236B924..8236B940 reads that same debug component field before GetEvent.
 //
 // A SHIPPED QUIRK REPRODUCED, NOT CORRECTED: when the mapped id matches but the event has ZERO
 // checkpoints, the record is still added, with an empty landmark set. The GUI consumer's own
@@ -351,9 +342,9 @@ void GameStateModule::SendSpecificPreSetRacesModesAction(
                 {
                     continue;
                 }
-                // THE OVERRIDE WORD -- see the banner. 6 is the retail sentinel, so the
-                // fallback (the event's own mode byte) is the path taken.
-                const s32 liDataGameType = static_cast<s32>(lpRaceEvent->GetMode());
+                // ARTIST 8236B924..8236B940: registered debug mode, or authored mode if disabled.
+                const s32 liDataGameType = static_cast<s32>(
+                    mProgressionManager.GetGameModeForEvent(lpRaceEvent));
                 liMappedEventType        = mProgressionManager.GetEvent(liDataGameType);
                 if (liMappedEventType != liEventType)
                 {

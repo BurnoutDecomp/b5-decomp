@@ -438,12 +438,11 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
                     lpProfileEvent->EnableFlags(
                         static_cast<u16>(BrnProgression::ProfileEvent::E_FLAG_DISCOVERED));
 
-                    // @0x82390764..0x82390780: the SAME data-mode -> runtime-mode hop the
-                    // action-201 arm below makes, including the +180972 override word whose
-                    // retail value is the 6 sentinel (see that arm's FLAG for the full cite).
+                    // ARTIST 8239075C..82390780: apply the registered debug-mode override.
                     lpProfile->AddGameModeTypeToDiscovered(
                         static_cast<GameStateModuleIO::EGameModeType>(
-                            mProgressionManager.GetEvent(static_cast<s32>(lpRaceEvent->GetMode()))));
+                            mProgressionManager.GetEvent(static_cast<s32>(
+                                mProgressionManager.GetGameModeForEvent(lpRaceEvent)))));
 
                     // @0x82390798: the latch the action-201 record reads as mbIsNewlyDiscovered
                     // (and which the post below clears again).
@@ -580,24 +579,9 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
                 return;   // [GUARD] -- the console falls straight into the deref here.
             }
 
-            // THE DATA MODE -> RUNTIME MODE HOP. The console reads a game-type word first and
-            // only falls back to the event's own mode when it holds 6:
-            //     v59 = *(gsm + 180972); if (v59 == 6) v59 = lpRaceEvent->mu8Mode;
-            //     meGameModeType = ProgressionManager::GetEvent(v59);
-            // (@0x82390AB8..0x82390AC8, and StartModeAtLights repeats it at 0x82396F10.)
-            //
-            // FLAG -- THE OVERRIDE WORD HAS NO MEMBER AND NO WRITER. gsm+180972 is
-            // mProgressionManager + 133052, which lands inside that manager's mDebugComponent
-            // slot (the ProgressionDebugComponent reserved at the X360 +133000 region); that
-            // sub-layout is not modelled in this tree, and a sweep of the export set finds NO
-            // function that writes the word at all -- CheckIfPlayerIsAtJunctionWithAnEvent and
-            // StartModeAtLights are its only two appearances anywhere. Its retail value is the 6
-            // sentinel ("no override"): RaceEventData::EModeType tops out at 5, so 6 is outside
-            // the data enum, and 6 is the ONLY value for which the console consults the event.
-            // Reproduced as the sentinel path taken unconditionally, with the console expression
-            // written out above so the override can be restored the moment
-            // ProgressionDebugComponent is reconstructed. DELETE-WHEN that happens.
-            const s32 liDataGameType = static_cast<s32>(lpRaceEvent->GetMode());
+            // ARTIST 82390AB0..82390AC8: only debug mode DISABLED (6) uses the authored mode.
+            const s32 liDataGameType = static_cast<s32>(
+                mProgressionManager.GetGameModeForEvent(lpRaceEvent));
             lAction.meGameModeType   = static_cast<GameStateModuleIO::EGameModeType>(
                                            mProgressionManager.GetEvent(liDataGameType));
 
@@ -1076,10 +1060,9 @@ void GameStateModule::StartModeAtLights(const GameStateModuleIO::PreWorldInputBu
         return;   // [GUARD] -- the console falls into the deref here; see the file banner.
     }
 
-    // Trap 1. The same +180972 override the junction check reads -- see the FLAG on it in
-    // CheckIfPlayerIsAtJunctionWithAnEvent above; the sentinel path is taken here for the same
-    // reason and carries the same DELETE-WHEN. (@0x82396F10..0x82396F20.)
-    const s32 liDataGameType = static_cast<s32>(lpEventData->GetMode());
+    // ARTIST 82396F08..82396F20: use the same debug-mode override as junction discovery.
+    const s32 liDataGameType = static_cast<s32>(
+        mProgressionManager.GetGameModeForEvent(lpEventData));
     const GameStateModuleIO::EGameModeType leGameModeType =
         static_cast<GameStateModuleIO::EGameModeType>(mProgressionManager.GetEvent(liDataGameType));
 
