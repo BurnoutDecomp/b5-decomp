@@ -78,7 +78,7 @@ namespace
 // BrnCameraValidityAccount.h:169/:172; X360 byte_82FAA5EC / qword_82FAA5D0).
 // Zero-initialised .bss state until SetupFailFlagMask (below) runs.
 bool                         sbFailFlagMaskSet = false;
-CgsContainers::BitArray<32u> sFailFlagMask     = {};
+CgsContainers::BitArray<32u> sFailFlagMask;
 
 // @ 0x82221118 -- one-time mask setup: sanity-check the flag-name table's
 // CONSISTENCY_TEST entry, zero the mask, raise bits [0..E_END_FAILED_FLAG), latch
