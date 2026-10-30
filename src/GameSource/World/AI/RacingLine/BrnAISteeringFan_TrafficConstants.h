@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cfloat>   // FLT_MAX (0x7F7FFFFF)
+
 // BrnAISteeringFan.cpp TRAFFIC-AVOIDANCE TUNABLES, recovered from the image.
 //
 // SteeringFan::IncludeConstantBearing @0x827873A0 (rows eFan_AvoidTraffic /
@@ -122,5 +124,5 @@ namespace BrnAI
     const f32 KF_PASSING_SPACE_SPEED_TERM = 0.0f;                      // flt_82001CC0
 
     // flt_8204F664 == FLT_MAX, the initial "closest collision so far" (0x827874C4).
-    const f32 KF_NO_CLOSEST_COLLISION = 3.40282347e38f;                // flt_8204F664
+    const f32 KF_NO_CLOSEST_COLLISION = FLT_MAX;                         // flt_8204F664 == 0x7F7FFFFF
 }

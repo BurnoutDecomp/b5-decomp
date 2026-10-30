@@ -7,6 +7,8 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"       // CgsNumeric::Random (mRandom.RandomFloat)
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu vector ops
 
+#include <cfloat>                                         // FLT_MAX (0x7F7FFFFF)
+
 #include <cmath>   // std::fabs, std::sqrt where the de-SIMD'd math needs scalar helpers; std::fmaf (rule 3)
 #include <cstdlib>  // [DIAG] getenv -- BRN_MM_DIAG only
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] CgsDev::Log::gpDebugPrint -- BRN_MM_DIAG only
@@ -74,7 +76,7 @@ const f32 KF_MAX_POST_ATTACK_WAIT_TIME = 1.0f; // rodata 0x820C4270 == 0x3F80000
 // CalcSeparationAcrossToTarget uses a small epsilon to reject a degenerate (near-zero) flattened
 // right vector before normalising, and returns FLT_MAX for one.
 const f32 KF_QUERY_POS_EPSILON = 1.1920929e-7f; // rodata 0x820C3B70 == 0x34000000 (read from image.bin) -- guards the degenerate-right-vector branch
-const f32 KF_ACROSS_SEPARATION_DEGENERATE = 3.40282347e+38f; // rodata 0x8204F664 == 0x7F7FFFFF == FLT_MAX (read from image.bin) -- CalcSeparationAcrossToTarget's degenerate return, lfs @0x82771374
+const f32 KF_ACROSS_SEPARATION_DEGENERATE = FLT_MAX; // rodata 0x8204F664 == 0x7F7FFFFF -- CalcSeparationAcrossToTarget's degenerate return, lfs @0x82771374
 
 // --- G3-speedmatch ---
 // --- BrnAIAggression.cpp file-local speed-match tuning constants (group G3-speedmatch) ---
