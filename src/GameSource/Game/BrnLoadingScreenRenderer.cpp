@@ -250,7 +250,7 @@ namespace BrnGame
         // old foreground fade/rotation before returning without an Im2d pass.
         if (!mbVisible)
         {
-            muLastTime = CgsSystem::GetSystemTimerBaseTime64();
+            muLastTime = CgsSystem::GetSystemTimerBaseTime();
             mfArrowRotation = 0.0f;
             mbHiding = false;
             mfFade = 0.0f;
@@ -410,11 +410,11 @@ namespace BrnGame
     // visuals (if not backgrounded and no overlay), then update the black overlay.
     void LoadingScreenRenderer::RenderForeground(CgsGraphics::Im2d* lpIm2d)
     {
-        const u64 luFirstTime = CgsSystem::GetSystemTimerBaseTime64();
-        const u64 luSecondTime = CgsSystem::GetSystemTimerBaseTime64();
+        const u64 luFirstTime = CgsSystem::GetSystemTimerBaseTime();
+        const u64 luSecondTime = CgsSystem::GetSystemTimerBaseTime();
         const u64 luDelta = luSecondTime - muLastTime;
         muLastTime = luFirstTime;
-        const u64 luFrequency = CgsSystem::GetSystemTimerFrequency64();
+        const u64 luFrequency = CgsSystem::GetSystemTimerFrequency();
         f32 lfStep = static_cast<f32>((luDelta * 10000) / luFrequency) * 0.0001f;
         if (lfStep > 0.1f) lfStep = 0.1f;
         mfTimeStep = lfStep;

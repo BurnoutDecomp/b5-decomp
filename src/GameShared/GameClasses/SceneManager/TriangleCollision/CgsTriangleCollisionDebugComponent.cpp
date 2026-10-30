@@ -895,7 +895,7 @@ namespace CgsSceneManager
                 const rw::math::vpu::MaskScalar lvClampPenetration = {
                     0.0f, 0.0f, 0.0f, 0.0f}; // unk_8327F240+0x10, raw initial zero
 
-                const u64 luIntersectionStart = CgsSystem::GetSystemTimerBaseTime64();
+                const u64 luIntersectionStart = CgsSystem::GetSystemTimerBaseTime();
                 (void)CgsGeometric::IntersectTriangleBox(
                     lBox,
                     lTriangle,
@@ -908,7 +908,7 @@ namespace CgsSceneManager
                     &liNumContacts,
                     0x20);
                 luTotalIntersectionTicks +=
-                    CgsSystem::GetSystemTimerBaseTime64() - luIntersectionStart;
+                    CgsSystem::GetSystemTimerBaseTime() - luIntersectionStart;
                 ++miNumBoxTests;
 
                 for (s32 liContact = 0; liContact < liNumContacts; ++liContact)
@@ -941,7 +941,7 @@ namespace CgsSceneManager
             }
         }
 
-        const u64 luTimerFrequency = CgsSystem::GetSystemTimerFrequency64();
+        const u64 luTimerFrequency = CgsSystem::GetSystemTimerFrequency();
         muBoxTestCycles = static_cast<u32>(
             (luTotalIntersectionTicks * 0xCCCCCCCCu) / luTimerFrequency);
         mfBoxTestTime = static_cast<f32>(
