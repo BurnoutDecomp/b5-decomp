@@ -6,7 +6,6 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h" // CgsNumeric::Random (the shared LCG ring)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (UpdateDownForce's attribsys guard)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([tyre] bring-up probe only)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::Start/StopMonitor (Update's stage brackets)
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"        // the car-asset wrapper (SetAttributes' key chase)
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h" // the handling wrapper + its checked copy ctor
@@ -19,13 +18,18 @@
 #include "SDKs/XboxMath/XMVectorSinCos.h"            // XboxMath::XMVectorSinCos (the steering angle's inlined SinCos)
 #include "SDKs/XboxMath/XMVectorSin.h"               // ARTIST's editable wheelie-angle threshold
 
-#include <cstdlib>    // getenv ([tyre] bring-up probe only)
+#include <vectorintrinsics.h>
 #include <algorithm>  // std::min / std::max (the driving spine's vmaxfp/vminfp lowerings)
 #include <cstring>    // std::memcpy (controls/engine state copies)
 #include <cmath>      // speed magnitudes and scalar arithmetic
+#include <cfloat>
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
 
-// [DIAG] the host-side present counter ([air] rows only; FX-WITNESS).
-namespace renderengine { extern u32 guPresentCount; }
 
 // BrnPhysics::Vehicle::VehiclePhysics -- the out-of-line ledger funcs owned by the Vehicle-physics
 // group (class TU). The header-homed leaf methods (GetShowtimeDeformationScale,
@@ -41,72 +45,76 @@ namespace Vehicle
 
     namespace
     {
-        // Scalar lowering of the takeoff ramp's VMX operations. Keep each
-        // binary32 boundary and VMX subnormal flush, including exceptional
-        // inputs from the editable thresholds.
-        f32 TakeoffFlush(f32 lfValue)
+        // Native VMX operations preserve denormal, NaN and fused boundaries.
+        f32 TakeoffMultiply(f32 a, f32 b)
         {
-            return std::fpclassify(lfValue) == FP_SUBNORMAL
-                ? std::copysign(0.0f, lfValue) : lfValue;
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b};
+            return __vmulfp(va, vb).x;
         }
-
-        f32 TakeoffMultiply(f32 lfA, f32 lfB)
+        f32 TakeoffSubtract(f32 a, f32 b)
         {
-            return TakeoffFlush(TakeoffFlush(lfA) * TakeoffFlush(lfB));
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b};
+            return __vsubfp(va, vb).x;
         }
-
-        f32 TakeoffSubtract(f32 lfA, f32 lfB)
+        f32 TakeoffMultiplyAdd(f32 a, f32 b, f32 c)
         {
-            return TakeoffFlush(TakeoffFlush(lfA) - TakeoffFlush(lfB));
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b}, vc = {c,c,c,c};
+            return __vmaddfp(va, vb, vc).x;
         }
-
-        f32 TakeoffMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
+        bool TakeoffGreaterEqual(f32 a, f32 b)
         {
-            return TakeoffFlush(std::fmaf(TakeoffFlush(lfA), TakeoffFlush(lfC), TakeoffFlush(lfB)));
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b};
+            return __vcmpgefp(va, vb).u[0] != 0;
         }
-
-        f32 TakeoffNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
+        bool TakeoffGreater(f32 a, f32 b)
         {
-            const f32 lfDifference = TakeoffMultiplyAdd(lfA, lfC, -TakeoffFlush(lfB));
-            return lfDifference != lfDifference ? lfDifference : -lfDifference;
+            const __vector4 va = {a,a,a,a}, vb = {b,b,b,b};
+            return __vcmpgtfp(va, vb).u[0] != 0;
         }
-
-        f32 TakeoffReciprocal(f32 lfValue)
+        f32 TakeoffReciprocal(f32 value)
         {
-            lfValue = TakeoffFlush(lfValue);
-            // FLAG (estimate model): use the tree's rounded 1/x model for
-            // vrefp. The two ARTIST refinements below are unconditional;
-            // zero/infinite/NaN inputs must not fall back to the estimate.
-            f32 lfEstimate = TakeoffFlush(static_cast<f32>(1.0 / static_cast<f64>(lfValue)));
-            for (s32 liRefinement = 0; liRefinement < 2; ++liRefinement)
+            const __vector4 v = {value,value,value,value};
+            const __vector4 one = {1.0f,1.0f,1.0f,1.0f};
+            __vector4 estimate = __vrefp(v);
+            for (s32 i = 0; i < 2; ++i)
             {
-                const f32 lfResidual = TakeoffNegativeMultiplySubtract(lfEstimate, lfValue, 1.0f);
-                lfEstimate = TakeoffMultiplyAdd(lfEstimate, lfResidual, lfEstimate);
+                const __vector4 residual = __vnmsubfp(estimate, v, one);
+                estimate = __vmaddfp(estimate, residual, estimate);
             }
-            return lfEstimate;
+            return estimate.x;
         }
-
-        // The suspension path uses the same VMX binary32/flush boundaries,
-        // but has its own rsqrt refinement sequence (825D1FD4..825D2024).
         Vector3 SuspensionForce(Vector3 lUp, f32 lfMagnitude)
         {
-            const f32 lfLengthSquared = TakeoffFlush(vpu::MagnitudeSquared(lUp));
-            // FLAG (estimate model): rounded 1/sqrt models vrsqrtefp. Retain
-            // both unconditional refinements, including zero/NaN outcomes.
-            f32 lfEstimate = TakeoffFlush(static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfLengthSquared))));
-            for (s32 liStep = 0; liStep < 2; ++liStep)
+            const __vector4 up = __lvx(&lUp, 0);
+            const __vector4 lengthSquared = __vmsum3fp(up, up);
+            const __vector4 half = {0.5f,0.5f,0.5f,0.5f}, one = {1.0f,1.0f,1.0f,1.0f};
+            __vector4 estimate = __vrsqrtefp(lengthSquared);
+            for (s32 i = 0; i < 2; ++i)
             {
-                const f32 lfSquare = TakeoffMultiply(lfEstimate, lfEstimate);
-                const f32 lfHalf = TakeoffMultiply(lfEstimate, 0.5f);
-                const f32 lfResidual = TakeoffNegativeMultiplySubtract(lfLengthSquared, lfSquare, 1.0f);
-                lfEstimate = TakeoffMultiplyAdd(lfHalf, lfResidual, lfEstimate);
+                const __vector4 square = __vmulfp(estimate, estimate);
+                const __vector4 halfEstimate = __vmulfp(estimate, half);
+                const __vector4 residual = __vnmsubfp(lengthSquared, square, one);
+                estimate = __vmaddfp(halfEstimate, residual, estimate);
             }
-            { const Vector3 lResult = {
-                TakeoffMultiply(TakeoffMultiply(lUp.x, lfEstimate), lfMagnitude),
-                TakeoffMultiply(TakeoffMultiply(lUp.y, lfEstimate), lfMagnitude),
-                TakeoffMultiply(TakeoffMultiply(lUp.z, lfEstimate), lfMagnitude),
-                TakeoffMultiply(TakeoffMultiply(lUp.w, lfEstimate), lfMagnitude)}; return lResult; }
+            const __vector4 magnitude = {lfMagnitude,lfMagnitude,lfMagnitude,lfMagnitude};
+            Vector3 result;
+            __stvx(__vmulfp(__vmulfp(up, estimate), magnitude), &result, 0);
+            return result;
         }
+        Vector3 MakeVehicleVector3(f32 x, f32 y, f32 z, f32 w)
+        {
+            const Vector3 v = {x,y,z,w}; return v;
+        }
+        Vector3Plus MakeVehicleVector3Plus(f32 x, f32 y, f32 z, f32 w)
+        {
+            const Vector3Plus v = {x,y,z,w}; return v;
+        }
+        VecFloat MakeVehicleVecFloat(f32 x, f32 y, f32 z, f32 w)
+        {
+            const VecFloat v = {x,y,z,w}; return v;
+        }
+        // Scalar FPU expression compiles to fmadds at the slam sites.
+        f32 VehicleScalarMadd(f32 a, f32 b, f32 c) { return a * b + c; }
 
         void AssertSuspensionWheelPosition(Vector3 lPosition)
         {
@@ -130,10 +138,10 @@ namespace Vehicle
 
     // DecFIGS VehiclePhysics.cpp:103; Breaker unk_82FB9EC0, initialised by the
     // unmarked thunk at 0x82C5C3C0 from flt_8200473C (0.4f).
-    VecFloat KF_SHOWTIME_GRIP_SCALE{0.4f, 0.4f, 0.4f, 0.4f};
+    VecFloat KF_SHOWTIME_GRIP_SCALE = {0.4f, 0.4f, 0.4f, 0.4f};
     // DecFIGS VehiclePhysics.cpp:104; ARTIST unk_82FB8B10. The initializer
     // 0x82C5C3E8..0x82C5C40C splats flt_82004C68 (0.7f) into this vector.
-    VecFloat KF_SHOWTIME_PLAYER_ANGULAR_IMPULSE_SCALE{0.7f, 0.7f, 0.7f, 0.7f};
+    VecFloat KF_SHOWTIME_PLAYER_ANGULAR_IMPULSE_SCALE = {0.7f, 0.7f, 0.7f, 0.7f};
     bool VehiclePhysics::msbInShowtime = false;
     // @0x825B2FE0  BrnPhysics::Vehicle::VehiclePhysics::GetNumberOfWheelsOnTheGround
     //   The X360 reads the four driven wheels' road-contact on-ground flags at +0x158/+0x238/+0x318/
@@ -240,7 +248,7 @@ namespace Vehicle
         // xyz lanes zeroed at 0x825C003C/0x825C0098 stay 0.
         const Vector3 lvDirection = (std::fabs(lfSpeed) > 1.1920929e-07f)
                                         ? vpu::Mult(mLinearVelocity, 1.0f / lfSpeed)   // 0x825C00DC..00F0
-                                        : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                                        : MakeVehicleVector3( 0.0f, 0.0f, 0.0f, 0.0f );
 
         mNormLinearVelocityMag.SetVector3(lvDirection);   // direction -> xyz lanes
         mNormLinearVelocityMag.SetPlus(lfSpeed);          // speed magnitude -> w / "plus" lane
@@ -609,11 +617,11 @@ namespace Vehicle
             //    mAngularVelocity, added to mLinearVelocity).
             const Vector3& lvBodyPos = mTransform.Pos();
             const Vector3  lvContact = lrWheel.GetRoadContact().mPosition;
-            const Vector3  lvR{ lvContact.x - lvBodyPos.x,
+            const Vector3  lvR = { lvContact.x - lvBodyPos.x,
                                 lvContact.y - lvBodyPos.y,
                                 lvContact.z - lvBodyPos.z, 0.0f };
             const Vector3  lvOmegaXR = vpu::Cross(mAngularVelocity, lvR);
-            const Vector3  lvVel{ mLinearVelocity.x + lvOmegaXR.x,
+            const Vector3  lvVel = { mLinearVelocity.x + lvOmegaXR.x,
                                   mLinearVelocity.y + lvOmegaXR.y,
                                   mLinearVelocity.z + lvOmegaXR.z, 0.0f };
 
@@ -637,9 +645,9 @@ namespace Vehicle
             const Wheel::TireGripCurve& lrLatCurve =
                 (mu8DriftState != 0) ? lrTire.mDriftLatGripCurve : lrTire.mLatGripCurve;
             const f32 lfLongCoef = lrTire.mLongGripCurve.GetCoefficient(
-                                       VecFloat{ lfLongSlip, lfLongSlip, lfLongSlip, lfLongSlip }).x;
+                                       MakeVehicleVecFloat( lfLongSlip, lfLongSlip, lfLongSlip, lfLongSlip )).x;
             const f32 lfLatCoef  = lrLatCurve.GetCoefficient(
-                                       VecFloat{ -lfLatSpeed, -lfLatSpeed, -lfLatSpeed, -lfLatSpeed }).x;
+                                       MakeVehicleVecFloat( -lfLatSpeed, -lfLatSpeed, -lfLatSpeed, -lfLatSpeed )).x;
 
             // 6. the raw forces.
             const f32 lfLongForce = lfLongCoef * lfLoad * std::fabs(lfLongSpeed - lfSurfSpd);
@@ -669,11 +677,11 @@ namespace Vehicle
             {
                 // rebuild, renormalise (rsqrt + Newton), rescale to the dynamic cap, re-project.
                 const f32 lfBiasedLat = lfLatForce * (1.0f - lrTire.maPackedVariables.w);
-                const Vector3 lvF{ lvLong.x * lfLongForce + lvLat.x * lfBiasedLat,
+                const Vector3 lvF = { lvLong.x * lfLongForce + lvLat.x * lfBiasedLat,
                                    lvLong.y * lfLongForce + lvLat.y * lfBiasedLat,
                                    lvLong.z * lfLongForce + lvLat.z * lfBiasedLat, 0.0f };
                 const Vector3 lvFhat = vpu::Normalize(lvF);
-                const Vector3 lvCapped{ lvFhat.x * lfScaleCap,
+                const Vector3 lvCapped = { lvFhat.x * lfScaleCap,
                                         lvFhat.y * lfScaleCap,
                                         lvFhat.z * lfScaleCap, 0.0f };
                 lfLongFinal = vpu::Dot(lvCapped, lvLong);
@@ -735,8 +743,8 @@ namespace Vehicle
 
             // the wheel-spin reaction (inlined for wheel A at 0x825FBE6C, a real `bl` for wheel B).
             lrWheel.ApplyFrictionReaction(
-                VecFloat{ lrIn.mfWheelTorque, lrIn.mfWheelTorque, lrIn.mfWheelTorque, lrIn.mfWheelTorque },
-                VecFloat{ lrIn.mfLongSpeed,   lrIn.mfLongSpeed,   lrIn.mfLongSpeed,   lrIn.mfLongSpeed },
+                MakeVehicleVecFloat( lrIn.mfWheelTorque, lrIn.mfWheelTorque, lrIn.mfWheelTorque, lrIn.mfWheelTorque ),
+                MakeVehicleVecFloat( lrIn.mfLongSpeed,   lrIn.mfLongSpeed,   lrIn.mfLongSpeed,   lrIn.mfLongSpeed ),
                 lvfTimeStep);
 
             // mForceVariables = {longPreCone, latPreCone, longFinal, latFinal}
@@ -798,16 +806,16 @@ namespace Vehicle
             // The two application points: the wheel's streamed x/z with the attrib height offset
             // substituted for y (`vperm128 v123,v3,v19,<gather lane0>` then `vrlimi128 v123,v2,2,2`).
             const Vector3 lavPoint[2] = {
-                Vector3{ lvStreamed.x, lvHeightOffsets.x, lvStreamed.z, 0.0f },   // longitudinal
-                Vector3{ lvStreamed.x, lvHeightOffsets.y, lvStreamed.z, 0.0f }    // lateral
+                MakeVehicleVector3( lvStreamed.x, lvHeightOffsets.x, lvStreamed.z, 0.0f ),   // longitudinal
+                MakeVehicleVector3( lvStreamed.x, lvHeightOffsets.y, lvStreamed.z, 0.0f )    // lateral
             };
             const Vector3 lavForce[2] = {
-                Vector3{ lrIn.mvLongDir.x * lrIn.mfLongFinal,
+                MakeVehicleVector3( lrIn.mvLongDir.x * lrIn.mfLongFinal,
                          lrIn.mvLongDir.y * lrIn.mfLongFinal,
-                         lrIn.mvLongDir.z * lrIn.mfLongFinal, 0.0f },
-                Vector3{ lrIn.mvLatDir.x * lrIn.mfLatFinal,
+                         lrIn.mvLongDir.z * lrIn.mfLongFinal, 0.0f ),
+                MakeVehicleVector3( lrIn.mvLatDir.x * lrIn.mfLatFinal,
                          lrIn.mvLatDir.y * lrIn.mfLatFinal,
-                         lrIn.mvLatDir.z * lrIn.mfLatFinal, 0.0f }
+                         lrIn.mvLatDir.z * lrIn.mfLatFinal, 0.0f )
             };
 
             for (s32 lj = 0; lj < 2; ++lj)
@@ -826,7 +834,7 @@ namespace Vehicle
                 const Vector3& lvRight = mTransform.Right();
                 const Vector3& lvUp    = mTransform.Up();
                 const Vector3& lvAt    = mTransform.At();
-                const Vector3 lvArm{ lvRight.x * lvP.x + lvUp.x * lvP.y + lvAt.x * lvP.z,
+                const Vector3 lvArm = { lvRight.x * lvP.x + lvUp.x * lvP.y + lvAt.x * lvP.z,
                                      lvRight.y * lvP.x + lvUp.y * lvP.y + lvAt.y * lvP.z,
                                      lvRight.z * lvP.x + lvUp.z * lvP.y + lvAt.z * lvP.z, 0.0f };
 
@@ -840,146 +848,6 @@ namespace Vehicle
             }
         }
 
-        // ---- [tyre] PC bring-up instrument -- DELETE WHEN the yaw settles -------------------
-        // OPT-IN (BRN_TYRE_PROBE=1) so a default run is byte-identical to a build without it.
-        // Three aliasing hazards are closed by construction:
-        //   * PER-INSTANCE, not global -- this method runs for EVERY vehicle, so the counter is
-        //     keyed on `this`.
-        //   * PER-PAIR, not per call -- UpdateWheels calls this twice per frame (rear, then
-        //     front), so rear and front get separate counters and print on the SAME frames.
-        //   * IDENTITY IS PRINTED, not assumed: `this`, the driver type, and the body's linear
-        //     velocity, so a probe sitting on the wrong car is visible rather than silent.
-        {
-            static s32 siTyreProbe = -1;
-            if (siTyreProbe < 0)
-            {
-            }
-            if (siTyreProbe == 1 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                const s32 KI_PROBE_SLOTS = 8;
-                static const void* sapInstance[KI_PROBE_SLOTS] = { 0 };
-                static u32         sauCount[KI_PROBE_SLOTS][2] = { { 0 } };
-                s32 liSlot = -1;
-                for (s32 liS = 0; liS < KI_PROBE_SLOTS; ++liS)
-                {
-                    if (sapInstance[liS] == this) { liSlot = liS; break; }
-                    if (sapInstance[liS] == 0) { sapInstance[liS] = this; liSlot = liS; break; }
-                }
-                // The front pair is the one whose A wheel is eFrontLeftWheel (UpdateWheels' own
-                // two call sites); rear and front therefore land in separate counters and print
-                // on the SAME frames.
-                const s32 liPair = (leWheelA == eFrontLeftWheel) ? 1 : 0;
-                if (liSlot >= 0)
-                {
-                    u32& suCount = sauCount[liSlot][liPair];
-                    ++suCount;
-                    if ((suCount % 20u) == 0u)
-                    {
-                        const Vector3& lvUp2 = mTransform.Up();
-                        const Vector3& lvAt2 = mTransform.At();
-                        const f32 lfYawRate = vpu::Dot(mAngularVelocity, lvUp2);
-                        *CgsDev::Log::gpDebugPrint
-                            << "[tyre] n " << static_cast<s32>(suCount)
-                            << (liPair ? " FRONT" : " REAR ")
-                            << " car " << static_cast<u32>(reinterpret_cast<u64>(this))
-                            << " drv " << static_cast<s32>(mPreviousControls.GetType())
-                            << " at " << lvAt2.x << " " << lvAt2.z
-                            << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y
-                            << " " << mLinearVelocity.z
-                            << " yawRate " << lfYawRate
-                            << " steerRad " << mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x
-                            << " steerIn " << mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y
-                            << " drift " << static_cast<s32>(mu8DriftState)
-                            << " mostTrac " << (lbMostWheelsHaveTraction ? 1 : 0)
-                            << " downF " << lvfDownForce.x
-                            << " rollDir " << lvRollDirection.x << " " << lvRollDirection.z
-                            // invYaw = Up . (W * Up): the scalar that turns a yaw torque into a
-                            // yaw acceleration. A too-small yaw INERTIA (too LARGE an invYaw)
-                            // spins a car exactly like the reported defect, so the number that
-                            // would prove or clear suspect 3 is printed beside the torques.
-                            << " invYaw " << (lvUp2.x * (mWorldInverseInertia.xAxis.x * lvUp2.x
-                                                       + mWorldInverseInertia.yAxis.x * lvUp2.y
-                                                       + mWorldInverseInertia.zAxis.x * lvUp2.z)
-                                            + lvUp2.y * (mWorldInverseInertia.xAxis.y * lvUp2.x
-                                                       + mWorldInverseInertia.yAxis.y * lvUp2.y
-                                                       + mWorldInverseInertia.zAxis.y * lvUp2.z)
-                                            + lvUp2.z * (mWorldInverseInertia.xAxis.z * lvUp2.x
-                                                       + mWorldInverseInertia.yAxis.z * lvUp2.y
-                                                       + mWorldInverseInertia.zAxis.z * lvUp2.z))
-                            << " mass " << mfMass.x
-                            << "\n";
-
-                        for (s32 lk = 0; lk < 2; ++lk)
-                        {
-                            const Wheel& lrW = maWheels[laeWheel[lk]];
-                            const WheelSolve& lrS = laSolve[lk];
-                            const Vector3 lvStr = lrW.mStreamedPositionPlusTwistAmount.GetVector3();
-                            const f32 lfN = lrW.mSpeedAndMassOnWheelVariables.z * KF_GRAVITY
-                                          * lrW.GetRoadContact().mNormal.y;
-
-                            // The lateral force's YAW moment about the body Up axis -- the number
-                            // this whole leg is about. Built exactly as phase 3 builds it.
-                            const Vector3 lvP2{ lvStr.x, lvHeightOffsets.y, lvStr.z, 0.0f };
-                            const Vector3& lvRt2 = mTransform.Right();
-                            const Vector3 lvArm2{ lvRt2.x * lvP2.x + lvUp2.x * lvP2.y + lvAt2.x * lvP2.z,
-                                                  lvRt2.y * lvP2.x + lvUp2.y * lvP2.y + lvAt2.y * lvP2.z,
-                                                  lvRt2.z * lvP2.x + lvUp2.z * lvP2.y + lvAt2.z * lvP2.z,
-                                                  0.0f };
-                            const Vector3 lvFl2{ lrS.mvLatDir.x * lrS.mfLatFinal,
-                                                 lrS.mvLatDir.y * lrS.mfLatFinal,
-                                                 lrS.mvLatDir.z * lrS.mfLatFinal, 0.0f };
-                            const f32 lfYawTorque = vpu::Dot(vpu::Cross(lvArm2, lvFl2), lvUp2);
-
-                            // ... and the LONGITUDINAL force's yaw moment, which a left/right
-                            // drive or brake imbalance also feeds. Reported separately so a
-                            // "the tyres are not resisting" reading cannot be confused with a
-                            // "the drive is pushing it round" one.
-                            const Vector3 lvPl2{ lvStr.x, lvHeightOffsets.x, lvStr.z, 0.0f };
-                            const Vector3 lvArmL{ lvRt2.x * lvPl2.x + lvUp2.x * lvPl2.y + lvAt2.x * lvPl2.z,
-                                                  lvRt2.y * lvPl2.x + lvUp2.y * lvPl2.y + lvAt2.y * lvPl2.z,
-                                                  lvRt2.z * lvPl2.x + lvUp2.z * lvPl2.y + lvAt2.z * lvPl2.z,
-                                                  0.0f };
-                            const Vector3 lvFg2{ lrS.mvLongDir.x * lrS.mfLongFinal,
-                                                 lrS.mvLongDir.y * lrS.mfLongFinal,
-                                                 lrS.mvLongDir.z * lrS.mfLongFinal, 0.0f };
-                            const f32 lfYawTorqueL = vpu::Dot(vpu::Cross(lvArmL, lvFg2), lvUp2);
-
-                            *CgsDev::Log::gpDebugPrint
-                                << "[tyre]   w" << static_cast<s32>(laeWheel[lk])
-                                << " en " << (lrS.mbEnabled ? 1 : 0)
-                                << " grnd " << (lrW.GetRoadContact().mbIsCloseToGround ? 1 : 0)
-                                << " nY " << lrW.GetRoadContact().mNormal.y
-                                << " mass " << lrW.mSpeedAndMassOnWheelVariables.z
-                                << " N " << lfN
-                                << " latSpd " << lrS.mfLatSpeed
-                                << " Flat " << lrS.mfLatForce << " -> " << lrS.mfLatFinal
-                                << " lngSlip " << lrS.mfLongSlip
-                                << " Flng " << lrS.mfLongForce << " -> " << lrS.mfLongFinal
-                                << " cone " << (lrS.mbConeExceeded ? 1 : 0)
-                                // THE CONE, printed rather than inferred. `sGrip` is
-                                // GetSurfaceGrip's result for this wheel, `adhCap` the adhesive
-                                // ceiling it scales, `statCap` the load-based one; whichever is
-                                // SMALLER is the cap that binds. Front and rear reading different
-                                // sGrip is the whole defect, so the number is on the line.
-                                << " sGrip " << lafSurfaceGrip[lk]
-                                << " adhCap " << (lrW.mpTireAttribs != 0
-                                        ? lrW.mpTireAttribs->maPackedVariables.z * lafSurfaceGrip[lk]
-                                        : 0.0f)
-                                << " statCap " << (lrW.mpTireAttribs != 0
-                                        ? lrW.mpTireAttribs->maPackedVariables.y
-                                              * (lfN + lvfDownForce.x)
-                                        : 0.0f)
-                                << " arm " << lvStr.x << " " << lvStr.z
-                                << " latDir " << lrS.mvLatDir.x << " " << lrS.mvLatDir.z
-                                << " yawTqLat " << lfYawTorque
-                                << " yawTqLng " << lfYawTorqueL
-                                << "\n";
-                        }
-                    }
-                }
-            }
-        }
-        // ---- end [tyre] ---------------------------------------------------------------------
     }
 
     // ---- [wfc] PC bring-up instrument -- NOT IN THE X360 BINARY. ------------------------------
@@ -998,26 +866,7 @@ namespace Vehicle
     // immediately after it (single-threaded build, no interleave possible); the call site resets
     // them first and prints the block's torque delta, so nothing here accumulates across frames.
     // DELETE-WHEN the crash-scrub lever is banked.
-    namespace
-    {
 
-        // Per-wheel outcome of one HandleWheelFrictionCrashing call.
-        //   0 = no traction / burnout    -> the 0.95 spin-decay leg, no torque
-        //   1 = planar movement <= 0.1   -> early return, no torque
-        //   2 = applied                  -> torque + linear force added
-        struct WfcSlot
-        {
-            s32 miGate;
-            f32 mfMassOnWheel;
-            f32 mfScale;        // min(|v|, speedForMaxRoll) / speedForMaxRoll
-            f32 mfHeightDrop;   // maxHeightOffset * scale  (metres the contact point is pushed DOWN)
-            f32 mfFrictionMag;  // |lFriction|
-            f32 mfTorqueRoll;   // dot(cross(arm, friction), mTransform.zAxis)
-            f32 mfTorqueMag;
-        };
-        WfcSlot s_aWfcSlots[4];
-        bool    s_bWfcCapture = false;
-    }
 
     // ===========================================================================================
     //  @0x825D41A8  BrnPhysics::Vehicle::VehiclePhysics::HandleWheelFrictionCrashing (433 instrs)
@@ -1169,37 +1018,37 @@ namespace Vehicle
         {
             // loc_825D4804: only mIntegrationVariables.x is multiplied by flt_82004FDC.
             lrWheel.mIntegrationVariables.x *= KF_CRASH_SPIN_DECAY;
-            if (s_bWfcCapture) { s_aWfcSlots[leWheel].miGate = 0; }   // [wfc]
+               // [wfc]
             return;
         }
 
         const Wheel::RoadContact& lContact = lrWheel.GetRoadContact();
         const Vector3& lBodyPosition = mTransform.Pos();
-        const Vector3 lWheelPosition{ lContact.mPosition.x - lBodyPosition.x,
+        const Vector3 lWheelPosition = { lContact.mPosition.x - lBodyPosition.x,
                                       lContact.mPosition.y - lBodyPosition.y,
                                       lContact.mPosition.z - lBodyPosition.z, 0.0f };
         const Vector3 lAngularPointVelocity = vpu::Cross(mAngularVelocity, lWheelPosition);
-        const Vector3 lPointVelocityAtWheel{
+        const Vector3 lPointVelocityAtWheel = {
             mLinearVelocity.x + lAngularPointVelocity.x,
             mLinearVelocity.y + lAngularPointVelocity.y,
             mLinearVelocity.z + lAngularPointVelocity.z, 0.0f };
 
         const f32 lfNormalVelocity = vpu::Dot(lPointVelocityAtWheel, lContact.mNormal);
-        const Vector3 lMovementInPlane{
+        const Vector3 lMovementInPlane = {
             lPointVelocityAtWheel.x - lContact.mNormal.x * lfNormalVelocity,
             lPointVelocityAtWheel.y - lContact.mNormal.y * lfNormalVelocity,
             lPointVelocityAtWheel.z - lContact.mNormal.z * lfNormalVelocity, 0.0f };
 
         if (!(vpu::MagnitudeSquared(lMovementInPlane) > KF_MIN_PLANAR_MOVEMENT_SQUARED))
         {
-            if (s_bWfcCapture) { s_aWfcSlots[leWheel].miGate = 1; }   // [wfc]
+               // [wfc]
             return;
         }
 
         const Vector3 lWheelLatDirection =
             vpu::Normalize(vpu::Cross(lContact.mNormal, mTransform.At()));
         const Vector3 lMovementDirection = vpu::NormalizeFast(lMovementInPlane);
-        const Vector3 lFrictionDirection{ -lMovementDirection.x,
+        const Vector3 lFrictionDirection = { -lMovementDirection.x,
                                           -lMovementDirection.y,
                                           -lMovementDirection.z, 0.0f };
 
@@ -1230,7 +1079,7 @@ namespace Vehicle
         const f32 lfLateralProjection = vpu::Dot(lWheelLatDirection, lFrictionDirection);
         const f32 lfFrictionMagnitude =
             lfLateralProjection * lvfWeightOnWheel * lvfLatCrashDynamicFriction;
-        const Vector3 lFriction{ lWheelLatDirection.x * lfFrictionMagnitude,
+        const Vector3 lFriction = { lWheelLatDirection.x * lfFrictionMagnitude,
                                  lWheelLatDirection.y * lfFrictionMagnitude,
                                  lWheelLatDirection.z * lfFrictionMagnitude, 0.0f };
 
@@ -1240,24 +1089,12 @@ namespace Vehicle
                        && lFriction.z == lFriction.z,
                    "RwMathVPU::IsValid( lFriction )");
 
-        const Vector3 lFrictionArm{ lLocalPosition.x - lBodyPosition.x,
+        const Vector3 lFrictionArm = { lLocalPosition.x - lBodyPosition.x,
                                     lLocalPosition.y - lBodyPosition.y,
                                     lLocalPosition.z - lBodyPosition.z, 0.0f };
         const Vector3 lTorque = vpu::Cross(lFrictionArm, lFriction);
         AddWorldSpaceTorque(lTorque);
 
-        // ---- [wfc] (see the banner above the function) ---------------------------------------
-        if (s_bWfcCapture)
-        {
-            WfcSlot& lrSlot = s_aWfcSlots[leWheel];
-            lrSlot.miGate       = 2;
-            lrSlot.mfMassOnWheel = lvfMassOnWheel;
-            lrSlot.mfScale       = lfScaleFactor;
-            lrSlot.mfHeightDrop  = lvfMaxFrictionHeightOffset * lfScaleFactor;
-            lrSlot.mfFrictionMag = vpu::Magnitude(lFriction);
-            lrSlot.mfTorqueRoll  = vpu::Dot(lTorque, mTransform.zAxis);
-            lrSlot.mfTorqueMag   = vpu::Magnitude(lTorque);
-        }
         // ---- end [wfc] -----------------------------------------------------------------------
 
         mTotalLinearForce.x += lFriction.x * lvfLinearForceMultiplier;
@@ -1388,28 +1225,28 @@ namespace Vehicle
         //     row2 = ( tz*ax + sy, tz*ay - sx,  tz*az + c  )     0x8261E750 / 0x8261E74C + 0x8261E758 / 0x8261E734
         //   then, per lane, row0 * At.x (vmulfp128 0x8261E790), + row1 * At.y (vmaddfp 0x8261E798), + row2 * At.z
         //   (vmaddfp 0x8261E79C). The console's w lane comes out equal to x (the rows are packed through the
-        //   unk_82CDA350 vperm); every reader is a three-lane Dot, so w stays 0 here.
+        //   unk_82CDA350 vperm).
         inline Vector3 SteeredDirection(const Vector3& lrUp, const Vector3& lrAt, f32 lfSin, f32 lfCos)
         {
-            const f32 lfT  = 1.0f - lfCos;
-            const f32 lfTx = lfT * lrUp.x;
-            const f32 lfTy = lfT * lrUp.y;
-            const f32 lfTz = lfT * lrUp.z;
-            const f32 lfSx = lfSin * lrUp.x;
-            const f32 lfSy = lfSin * lrUp.y;
-            const f32 lfSz = lfSin * lrUp.z;
+            const f32 lfT  = TakeoffSubtract(1.0f, lfCos);
+            const f32 lfTx = TakeoffMultiply(lfT, lrUp.x);
+            const f32 lfTy = TakeoffMultiply(lfT, lrUp.y);
+            const f32 lfTz = TakeoffMultiply(lfT, lrUp.z);
+            const f32 lfSx = TakeoffMultiply(lfSin, lrUp.x);
+            const f32 lfSy = TakeoffMultiply(lfSin, lrUp.y);
+            const f32 lfSz = TakeoffMultiply(lfSin, lrUp.z);
 
-            const Vector3 lvRow0{ std::fmaf(lfTx, lrUp.x, lfCos), std::fmaf(lfTx, lrUp.y, lfSz), lfTx * lrUp.z - lfSy,
+            const Vector3 lvRow0 = { TakeoffMultiplyAdd(lfTx, lrUp.x, lfCos), TakeoffMultiplyAdd(lfTx, lrUp.y, lfSz), TakeoffSubtract(TakeoffMultiply(lfTx, lrUp.z), lfSy),
                                   0.0f };
-            const Vector3 lvRow1{ lfTy * lrUp.x - lfSz, std::fmaf(lfTy, lrUp.y, lfCos), std::fmaf(lfTy, lrUp.z, lfSx),
+            const Vector3 lvRow1 = { TakeoffSubtract(TakeoffMultiply(lfTy, lrUp.x), lfSz), TakeoffMultiplyAdd(lfTy, lrUp.y, lfCos), TakeoffMultiplyAdd(lfTy, lrUp.z, lfSx),
                                   0.0f };
-            const Vector3 lvRow2{ std::fmaf(lfTz, lrUp.x, lfSy), lfTz * lrUp.y - lfSx, std::fmaf(lfTz, lrUp.z, lfCos),
+            const Vector3 lvRow2 = { TakeoffMultiplyAdd(lfTz, lrUp.x, lfSy), TakeoffSubtract(TakeoffMultiply(lfTz, lrUp.y), lfSx), TakeoffMultiplyAdd(lfTz, lrUp.z, lfCos),
                                   0.0f };
 
-            { const Vector3 lResult = { std::fmaf(lvRow2.x, lrAt.z, std::fmaf(lvRow1.x, lrAt.y, lvRow0.x * lrAt.x)),
-                            std::fmaf(lvRow2.y, lrAt.z, std::fmaf(lvRow1.y, lrAt.y, lvRow0.y * lrAt.x)),
-                            std::fmaf(lvRow2.z, lrAt.z, std::fmaf(lvRow1.z, lrAt.y, lvRow0.z * lrAt.x)),
-                            0.0f }; return lResult; }
+            { Vector3 lResult = { TakeoffMultiplyAdd(lvRow2.x, lrAt.z, TakeoffMultiplyAdd(lvRow1.x, lrAt.y, TakeoffMultiply(lvRow0.x, lrAt.x))),
+                            TakeoffMultiplyAdd(lvRow2.y, lrAt.z, TakeoffMultiplyAdd(lvRow1.y, lrAt.y, TakeoffMultiply(lvRow0.y, lrAt.x))),
+                            TakeoffMultiplyAdd(lvRow2.z, lrAt.z, TakeoffMultiplyAdd(lvRow1.z, lrAt.y, TakeoffMultiply(lvRow0.z, lrAt.x))),
+                            0.0f }; lResult.w = lResult.x; return lResult; }
         }
     }
 
@@ -1557,7 +1394,7 @@ namespace Vehicle
             const f32 lfRz = lvRight.z * lvLocalPos.x + lvUp.z * lvLocalPos.y + lvAt.z * lvLocalPos.z;
 
             // v = omega x r + linearVelocity   (the vpermwi128 yzx lane-rotated cross product)
-            const Vector3 lvPointVelocity{
+            const Vector3 lvPointVelocity = {
                 mLinearVelocity.x + (mAngularVelocity.y * lfRz - mAngularVelocity.z * lfRy),
                 mLinearVelocity.y + (mAngularVelocity.z * lfRx - mAngularVelocity.x * lfRz),
                 mLinearVelocity.z + (mAngularVelocity.x * lfRy - mAngularVelocity.y * lfRx),
@@ -1610,7 +1447,7 @@ namespace Vehicle
         // CgsDev::Assert( rw::math::fpu::IsZero( lfDivWheels ) == false ) -- elided (debug-only;
         // VehiclePhysics.cpp:6504). A car with neither axle driven would divide by zero here.
         const f32 lfAverage = lfSumWheels / lfDivWheels;
-        mEngine.Reset(VecFloat{ lfAverage, lfAverage, lfAverage, lfAverage });
+        mEngine.Reset(MakeVehicleVecFloat( lfAverage, lfAverage, lfAverage, lfAverage ));
     }
 
     // ==============================================================================================
@@ -1649,10 +1486,10 @@ namespace Vehicle
         if (mpAttribs == NULL)
         {
             // No attribs yet: park every wheel and the engine at a dead stop.
-            const Vector3 lvZero{ 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
             for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
                 maWheels[liWheel].Reset(lvZero);
-            mEngine.Reset(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+            mEngine.Reset(MakeVehicleVecFloat( 0.0f, 0.0f, 0.0f, 0.0f ));
         }
         else
         {
@@ -1802,9 +1639,9 @@ namespace Vehicle
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
             maWheels[liWheel].Clear();                                       // +0x130 stride 0xE0
-            maSprings[liWheel].Prepare(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f },   // +0xE10 stride 0x30
-                                       VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f },
-                                       VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+            maSprings[liWheel].Prepare(MakeVehicleVecFloat( 0.0f, 0.0f, 0.0f, 0.0f ),   // +0xE10 stride 0x30
+                                       MakeVehicleVecFloat( 0.0f, 0.0f, 0.0f, 0.0f ),
+                                       MakeVehicleVecFloat( 0.0f, 0.0f, 0.0f, 0.0f ));
         }
 
         mvSpringMassScalers.SetZero();          // +0xED0 (whole register, stvx128 v127)
@@ -1857,7 +1694,7 @@ namespace Vehicle
         // in line.
         SimpleVehiclePhysics::Reset();
 
-        Reset(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+        Reset(MakeVehicleVector3( 0.0f, 0.0f, 0.0f, 0.0f ));
     }
 
     // ==============================================================================================
@@ -1872,7 +1709,7 @@ namespace Vehicle
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             maWheels[liWheel].Clear();
 
-        const VecFloat lvfZero{ 0.0f, 0.0f, 0.0f, 0.0f };
+        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
         mEngine.Reset(lvfZero);
         mpAttribs = NULL;
 
@@ -1892,7 +1729,7 @@ namespace Vehicle
         mUsedSpins.UnSetAll();
 
         SimpleVehiclePhysics::Reset();
-        Reset(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+        Reset(MakeVehicleVector3( 0.0f, 0.0f, 0.0f, 0.0f ));
     }
 
     void VehiclePhysics::Release()
@@ -2200,7 +2037,7 @@ namespace Vehicle
         }
         if (liSlot < 0)
         {
-            f32 lfMinMagSq = 3.4028235e38f;   // FLT_MAX (asm v81 seed)
+            f32 lfMinMagSq = FLT_MAX;   // asm v81 seed
             for (u32 lu = 0; lu < KU_MAX_AIR_RAMS; ++lu)
             {
                 CGS_ASSERT(mUsedAirRams.IsBitSet(lu), "mUsedAirRams.IsBitSet(luCheckIndex)");
@@ -2303,7 +2140,7 @@ namespace Vehicle
 
     // The static-init thunk @0x82C5C5E0 stores {6.5, 6.5, 6.5, 0} here. UpdateCrashing loads the
     // full vector, and the Vehicle Manager menu registers its first three named float lanes.
-    Vector3 gvMaxCrashAngularVelocity{6.5f, 6.5f, 6.5f, 0.0f}; // 0x82FB9DA0
+    Vector3 gvMaxCrashAngularVelocity = {6.5f, 6.5f, 6.5f, 0.0f}; // 0x82FB9DA0
 
     // @0x82FB7E20, written at 0x825D0E34 (`stfs f29, kfRollDampingUsed@l`). A DEV WATCH ONLY:
     // VehicleManagerDebugComponent::OnActivate @0x825B5D90 registers this exact address with
@@ -2381,11 +2218,11 @@ namespace Vehicle
             // ARTIST 825D0CD4..0D90 keeps both reciprocal refinements, each
             // multiply/FMA boundary, and the ordered roll > FULL retest. The
             // latter is not the complement of FULL >= roll for NaN inputs.
-            const f32 lfRollAmount = TakeoffFlush(lvfAbsXAxisY.x);
-            const f32 lfFullThreshold = TakeoffFlush(lvfXAxisYFullDampThreshold.x);
-            const f32 lfNoDampThreshold = TakeoffFlush(lvfXAxisYNoDampThreshold.x);
+            const f32 lfRollAmount = lvfAbsXAxisY.x;
+            const f32 lfFullThreshold = lvfXAxisYFullDampThreshold.x;
+            const f32 lfNoDampThreshold = lvfXAxisYNoDampThreshold.x;
             VecFloat lvfRollFactor;
-            if (lfFullThreshold >= lfRollAmount)
+            if (TakeoffGreaterEqual(lfFullThreshold, lfRollAmount))
             {
                 const f32 lfRange = TakeoffSubtract(lvfMinRollFactor.x, 0.0f);
                 const f32 lfReciprocal = TakeoffReciprocal(lfFullThreshold);
@@ -2393,7 +2230,7 @@ namespace Vehicle
                 const f32 lfInterpParam = TakeoffMultiply(lfRollAmount, lfReciprocalScale);
                 lvfRollFactor = vpu::Splat(TakeoffMultiplyAdd(lfRange, lfInterpParam, 0.0f));
             }
-            else if (lfRollAmount > lfFullThreshold && lfNoDampThreshold >= lfRollAmount)
+            else if (TakeoffGreater(lfRollAmount, lfFullThreshold) && TakeoffGreaterEqual(lfNoDampThreshold, lfRollAmount))
             {
                 const f32 lfThresholdRange = TakeoffSubtract(lfNoDampThreshold, lfFullThreshold);
                 const f32 lfRollOffset = TakeoffSubtract(lfRollAmount, lfFullThreshold);
@@ -2804,7 +2641,7 @@ namespace Vehicle
             // flt_82001CC0 @0x82001CC0 .rdata reads 0x00000000 in the image -- it IS zero. The value
             // was never in doubt here; only its FLAGGED status was, and that is now cleared.
             static const f32 KF_BOOST_POS_SEED = 0.0f;   // flt_82001CC0 (image: 0x00000000)
-            const Vector3 lvLocalPos{ KF_BOOST_POS_SEED, lfHeightOffset, -mHalfExtent.z, 0.0f };
+            const Vector3 lvLocalPos = { KF_BOOST_POS_SEED, lfHeightOffset, -mHalfExtent.z, 0.0f };
 
             // asm @0x825D3160/0x825D3138: r4 = 0 (force WORLD_SPACE -- it is built from
             // mTransform.zAxis, already a world direction), r5 = 1 (position BODY_SPACE).
@@ -2843,7 +2680,7 @@ namespace Vehicle
         const f32 lfHeightOffset = lrBA.mvBoostKickAcceleration_BoostKickHeightOffset.y; // BoostKickHeightOffset
 
         const Vector3 lvForce = mTransform.zAxis * (lfMass * lfAccel);
-        const Vector3 lvLocalPos{ 0.0f, lfHeightOffset, -mHalfExtent.z, 0.0f };
+        const Vector3 lvLocalPos = { 0.0f, lfHeightOffset, -mHalfExtent.z, 0.0f };
         // asm @0x825D3290/0x825D3280: r4 = 0 (WORLD force), r5 = 1 (BODY position).
         AddLocalForce(lvForce, rw::physics::WORLD_SPACE,
                       lvLocalPos, rw::physics::BODY_SPACE);
@@ -3377,7 +3214,7 @@ namespace Vehicle
         const f32 lfSignedTorque = (mu8DriftState == eDriftState_FacingLeft)
                                        ? -lfTorqueMagnitude
                                        :  lfTorqueMagnitude;
-        const Vector3 lTorque{ mTransform.yAxis.x * lfSignedTorque,
+        const Vector3 lTorque = { mTransform.yAxis.x * lfSignedTorque,
                                mTransform.yAxis.y * lfSignedTorque,
                                mTransform.yAxis.z * lfSignedTorque,
                                0.0f };
@@ -3449,12 +3286,12 @@ namespace Vehicle
                 // PRE-damping |v| (f31 @0x8262E268..E2D8 -> f3 @0x8262E6E4) while +0x50 already
                 // holds the sideways-DAMPED velocity (stvx128 @0x8262E6BC), so on the console this
                 // term's length is |v_post|/|v_pre| <= 1. vpu::Normalize made it exactly 1.
-                Vector3 lVelDir{ 0.0f, 0.0f, 0.0f, 0.0f };
+                Vector3 lVelDir = { 0.0f, 0.0f, 0.0f, 0.0f };
                 if (std::fabs(lfSpeed) > 1.1920929e-07f)   // FLT_EPSILON, the asm's gate
                 {
                     lVelDir = vpu::Mult(mLinearVelocity, 1.0f / lfSpeed);   // 0x825D2398..0x825D23C0
                 }
-                Vector3 lDir{ lvDirection.x * lfAlongZ + lVelDir.x * lfAlongVel,
+                Vector3 lDir = { lvDirection.x * lfAlongZ + lVelDir.x * lfAlongVel,
                               lvDirection.y * lfAlongZ + lVelDir.y * lfAlongVel,
                               lvDirection.z * lfAlongZ + lVelDir.z * lfAlongVel,
                               0.0f };
@@ -3462,7 +3299,7 @@ namespace Vehicle
                 // tangent-project against the ground normal (@+0x580) so the impulse never pushes
                 // into/off the road: dir -= normal * dot(dir, normal).
                 const f32 lfN = vpu::Dot(lDir, mAboveGroundTestResult.mIntersectionNormal);
-                Vector3 lImpulse{ (lDir.x - mAboveGroundTestResult.mIntersectionNormal.x * lfN) * lfDeficit * lfPush,
+                Vector3 lImpulse = { (lDir.x - mAboveGroundTestResult.mIntersectionNormal.x * lfN) * lfDeficit * lfPush,
                                   (lDir.y - mAboveGroundTestResult.mIntersectionNormal.y * lfN) * lfDeficit * lfPush,
                                   (lDir.z - mAboveGroundTestResult.mIntersectionNormal.z * lfN) * lfDeficit * lfPush,
                                   0.0f };
@@ -3591,7 +3428,7 @@ namespace Vehicle
         const f32 lfYawSpeed = std::fabs(vpu::Dot(mAngularVelocity, mTransform.yAxis));
 
         const f32 lfRecipSpeed = 1.0f / lfSpeedMPS;
-        const Vector3 lUnitVel{ mLinearVelocity.x * lfRecipSpeed,
+        const Vector3 lUnitVel = { mLinearVelocity.x * lfRecipSpeed,
                                 mLinearVelocity.y * lfRecipSpeed,
                                 mLinearVelocity.z * lfRecipSpeed,
                                 0.0f };
@@ -3647,21 +3484,7 @@ namespace Vehicle
     // steering is past the 0.1 dead zone or a drift is latched (else every 60th frame), plus the
     // guard id of every ExitDrift the battery fires. A verdict-only print has lied to three waves;
     // this one prints the operands. Nothing here is console state.
-    namespace
-    {
-        u32 s_uDriftProbeFrame = 0u;
 
-        // [rollcatch] latch -- NOT IN THE X360 BINARY. Shares BRN_CRASH_RESPONSE_DIAG with the
-        // [crash-response] pose witness so one run answers both questions. See UpdateCrashing.
-        bool RollCatchArmed()
-        {
-            static s32 siArmed = -1;
-            if (siArmed < 0)
-            {
-            }
-            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
-        }
-    }
 
     void VehiclePhysics::UpdateDriftState(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
                                           f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep)
@@ -3669,52 +3492,6 @@ namespace Vehicle
         // CheckForEnteringDrift may latch a NEW drift this frame; every argument is forwarded.
         CheckForEnteringDrift(lpControls, lfAbsSteering, lfAbsDriftScale, lfSpeedMPS, lvfTimeStep);
 
-        // [drift] probe (opt-in, see DriftProbeArmed above). Only the PLAYER car is printed.
-        if (lbDriftProbe)
-        {
-            ++s_uDriftProbeFrame;
-            const f32 lfBrakeIn = (lpControls != NULL) ? lpControls->mfBrake : -1.0f;
-            const f32 lfGasIn   = (lpControls != NULL) ? lpControls->mfGas   : -1.0f;
-            const f32 lfSteerIn = (lpControls != NULL) ? lpControls->mfSteering : -1.0f;
-            const f32 lfHBIn    = (lpControls != NULL) ? lpControls->mfHandBrake : -1.0f;
-            const bool lbActive = (lfBrakeIn > 0.1f) || (lfAbsSteering > 0.1f) || (mu8DriftState != eDriftState_None);
-            if (lbActive || (s_uDriftProbeFrame % 60u) == 0u)
-            {
-                const f32 lfRecip = (lfSpeedMPS != 0.0f) ? (1.0f / lfSpeedMPS) : 0.0f;
-                const Vector3 lUnit{ mLinearVelocity.x * lfRecip, mLinearVelocity.y * lfRecip, mLinearVelocity.z * lfRecip, 0.0f };
-                *CgsDev::Log::gpDebugPrint
-                    << "[drift] n " << static_cast<s32>(s_uDriftProbeFrame)
-                    << " st " << static_cast<s32>(mu8DriftState)
-                    << " in g/b/hb/s " << lfGasIn << " " << lfBrakeIn << " " << lfHBIn << " " << lfSteerIn
-                    << " absS " << lfAbsSteering
-                    << " force " << static_cast<s32>(lpControls != NULL ? lpControls->mbForceDrift : 0)
-                    << " hb " << static_cast<s32>(mbHandBrake)
-                    << " allTr " << static_cast<s32>(mbAllWheelsHaveTraction)
-                    << " agValid " << static_cast<s32>(mAboveGroundTestResult.mbValid)
-                    << " mph " << mfSpeedMPH.x
-                    << " mps " << lfSpeedMPS
-                    << " minDrift " << mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x
-                    << " nWC " << static_cast<s32>(mi8NumWorldCollisions)
-                    << " nC " << miNumCollisions
-                    << " tHBon " << mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.z
-                    << " tHBoff " << mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.w
-                    << " tStatic " << mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.y
-                    << " tDrift " << mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z
-                    << " brkScale " << mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.w
-                    << " tNoTr " << mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z
-                    << " dScale " << mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w
-                    << " broken " << static_cast<s32>(maWheels[eFrontLeftWheel].mbBrokenAdhesiveLimit)
-                    << static_cast<s32>(maWheels[eFrontRightWheel].mbBrokenAdhesiveLimit)
-                    << static_cast<s32>(maWheels[eRearLeftWheel].mbBrokenAdhesiveLimit)
-                    << static_cast<s32>(maWheels[eRearRightWheel].mbBrokenAdhesiveLimit)
-                    << " yaw " << vpu::Dot(mAngularVelocity, mTransform.yAxis)
-                    << " slipX " << vpu::Dot(lUnit, mTransform.xAxis)
-                    << " cosZ " << vpu::Dot(lUnit, mTransform.zAxis)
-                    << " steerReg " << mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x
-                    << " " << mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y
-                    << "\n";
-            }
-        }
 
         // only run the exit battery while drifting and not being HELD in drift. 0x8261F74C:
         // `lbz r11,0x3E(r31)` where r31 == controls -> mbForceDrift.
@@ -3725,12 +3502,12 @@ namespace Vehicle
         // 1. the handbrake has been held down too long to still count as a drift.
         if (mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.z
             > KF_DRIFT_HANDBRAKE_ON_LIMIT)
-        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 1\n"; ExitDrift(); return; }
+        { ExitDrift(); return; }
 
         // 2. the handbrake is down and was released too recently (vcfsx v0,1,1 == 0.5f).
         if (mbHandBrake
             && 0.5f > mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.w)
-        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 2\n"; ExitDrift(); return; }
+        { ExitDrift(); return; }
 
         // 3. NOT an exit test: the static-friction dwell timer. It accumulates by the time-step while
         //    all four wheels still have adhesive grip (wheel+0xD5, stride 0xE0) and resets otherwise.
@@ -3751,28 +3528,28 @@ namespace Vehicle
         if (mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z > 1.0f
             && mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.y
                > 0.0625f)
-        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 3\n"; ExitDrift(); return; }
+        { ExitDrift(); return; }
 
         // 5. exit collision counters.
-        if (mi8NumWorldCollisions > 0) { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 4\n"; ExitDrift(); return; }
-        if (miNumCollisions       > 0) { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 5\n"; ExitDrift(); return; }
+        if (mi8NumWorldCollisions > 0) { ExitDrift(); return; }
+        if (miNumCollisions       > 0) { ExitDrift(); return; }
 
         // 6. below the per-car minimum drift speed. mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x is in MPH, the parameter is in
         //    m/s -- see the KF_MPS_TO_MPH note. This is the same lane, same threshold and same unit
         //    that CheckForEnteringDrift tests the other way round to allow entry.
         if (mpAttribs->mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x > lfSpeedMPS * KF_MPS_TO_MPH)
-        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 6\n"; ExitDrift(); return; }
+        { ExitDrift(); return; }
 
         // 7. off the ground too long (lane .z, and NOT gated on the handbrake).
         if (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > 1.0f)
-        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 7\n"; ExitDrift(); return; }
+        { ExitDrift(); return; }
 
         // 8. above-ground result invalid -> exit.
-        if (!mAboveGroundTestResult.mbValid) { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 8\n"; ExitDrift(); return; }
+        if (!mAboveGroundTestResult.mbValid) { ExitDrift(); return; }
 
         // 9. speed too low (mfSpeedMPH is the splatted body speed at +0x6C0).
         if (KF_DRIFT_SPEED_EXIT_LIMIT > mfSpeedMPH.x)
-        { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 9\n"; ExitDrift(); return; }
+        { ExitDrift(); return; }
 
         // 10. steering crossed centre for the latched direction. The slip term is computed HERE, from
         //     the speed parameter and the body basis -- dot3(mLinearVelocity / speed, mTransform.xAxis)
@@ -3781,7 +3558,7 @@ namespace Vehicle
         if (mu8DriftState == eDriftState_FacingLeft || mu8DriftState == eDriftState_FacingRight)
         {
             const f32 lfRecipSpeed = 1.0f / lfSpeedMPS;
-            const Vector3 lUnitVel{ mLinearVelocity.x * lfRecipSpeed,
+            const Vector3 lUnitVel = { mLinearVelocity.x * lfRecipSpeed,
                                     mLinearVelocity.y * lfRecipSpeed,
                                     mLinearVelocity.z * lfRecipSpeed,
                                     0.0f };
@@ -3794,12 +3571,12 @@ namespace Vehicle
             if (mu8DriftState == eDriftState_FacingRight)
             {
                 if (lfLateralSlip >= -0.0099999998f && lfSteer >= -0.0049999999f)
-                { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 10\n"; ExitDrift(); return; }
+                { ExitDrift(); return; }
             }
             else
             {
                 if (lfLateralSlip <= 0.0099999998f && lfSteer <= 0.0049999999f)
-                { if (lbDriftProbe) *CgsDev::Log::gpDebugPrint << "[drift] EXIT guard 11\n"; ExitDrift(); return; }
+                { ExitDrift(); return; }
             }
         }
 
@@ -3850,12 +3627,12 @@ namespace Vehicle
         if (lfDriftAngle > KF_HALF_TURN_DEG)
             lfDriftAngle -= KF_FULL_TURN_DEG;
 
-        const VecFloat lvfDriftAngle{
+        const VecFloat lvfDriftAngle = {
             lfDriftAngle, lfDriftAngle, lfDriftAngle, lfDriftAngle
         };
-        const VecFloat lvfOne{ 1.0f, 1.0f, 1.0f, 1.0f };
-        const VecFloat lvfGas{ lfGas, lfGas, lfGas, lfGas };
-        const VecFloat lvfBrake{ lfBrake, lfBrake, lfBrake, lfBrake };
+        const VecFloat lvfOne = { 1.0f, 1.0f, 1.0f, 1.0f };
+        const VecFloat lvfGas = { lfGas, lfGas, lfGas, lfGas };
+        const VecFloat lvfBrake = { lfBrake, lfBrake, lfBrake, lfBrake };
 
         const VehicleAttribs::DriftAttribs& lrDriftAttribs = mpAttribs->mDriftAttribs;
         const bool lbAboveMinimumDriftSpeed =
@@ -3920,7 +3697,7 @@ namespace Vehicle
         }
 
         const f32 lfNaturalDecayFactor = std::min(1.0f - lfGas, 1.0f - lfBrake);
-        const VecFloat lvfNaturalDecayFactor{
+        const VecFloat lvfNaturalDecayFactor = {
             lfNaturalDecayFactor, lfNaturalDecayFactor,
             lfNaturalDecayFactor, lfNaturalDecayFactor
         };
@@ -3982,8 +3759,8 @@ namespace Vehicle
             // argument (that is UpdateDrift's pre-update snapshot; the console only reads v2 for the
             // fall-off sqrt below). D4 of the drift-symmetry wave, 2026-09-02.
             lfTorque = lrDriftAttribs.mDriftScaleToYawTorque.GetInterped(
-                VecFloat{ lfAbsCurrentDriftScale, lfAbsCurrentDriftScale,
-                          lfAbsCurrentDriftScale, lfAbsCurrentDriftScale }).x;
+                MakeVehicleVecFloat( lfAbsCurrentDriftScale, lfAbsCurrentDriftScale,
+                          lfAbsCurrentDriftScale, lfAbsCurrentDriftScale )).x;
 
             if (KF_LOW_STEER > lvfAbsSteering.x)
             {
@@ -4035,7 +3812,7 @@ namespace Vehicle
             * lfGas * lrfGasLetOffAmount * -lfSteering * (1.0f - lfGas);
         const f32 lfTotalTorque = lfTorque + lfTorqueFromGas;
 
-        const Vector3 lTorque{ mTransform.yAxis.x * lfTotalTorque,
+        const Vector3 lTorque = { mTransform.yAxis.x * lfTotalTorque,
                                mTransform.yAxis.y * lfTotalTorque,
                                mTransform.yAxis.z * lfTotalTorque,
                                0.0f };
@@ -4140,7 +3917,7 @@ namespace Vehicle
         const f32 lfSignedSideForce = (mu8DriftState == eDriftState_FacingLeft)
                                           ?  lfSideForceMag
                                           : -lfSideForceMag;
-        Vector3 lImpulse{ mTransform.xAxis.x * lfSignedSideForce,
+        Vector3 lImpulse = { mTransform.xAxis.x * lfSignedSideForce,
                           mTransform.xAxis.y * lfSignedSideForce,
                           mTransform.xAxis.z * lfSignedSideForce,
                           0.0f };
@@ -4174,9 +3951,9 @@ namespace Vehicle
         //      ApplyDriftLatForce  v1 = splat(lfAbsDriftScale), v2 = splat(lfSpeedMPS),
         //                          v3 = splat(controls->mfSteering), v4 = splat(controls->mfBrake),
         //                          v5 = splat(controls->mfGas),      v6 = the VecFloat dt
-        const VecFloat lvfSpeed{ lfSpeedMPS, lfSpeedMPS, lfSpeedMPS, lfSpeedMPS };
-        const VecFloat lvfAbsSteer{ lfAbsSteering, lfAbsSteering, lfAbsSteering, lfAbsSteering };
-        const VecFloat lvfAbsScale{ lfAbsDriftScale, lfAbsDriftScale, lfAbsDriftScale, lfAbsDriftScale };
+        const VecFloat lvfSpeed = { lfSpeedMPS, lfSpeedMPS, lfSpeedMPS, lfSpeedMPS };
+        const VecFloat lvfAbsSteer = { lfAbsSteering, lfAbsSteering, lfAbsSteering, lfAbsSteering };
+        const VecFloat lvfAbsScale = { lfAbsDriftScale, lfAbsDriftScale, lfAbsDriftScale, lfAbsDriftScale };
         MaintainDriftSpeed(lpControls, mTransform.zAxis, lvfSpeed);
         UpdateDriftScale(lpControls, lfAbsSteering, lfAbsDriftScale, lvfTimeStep);
         ApplyDriftYaw(lpControls, lvfAbsSteer, lvfAbsScale);
@@ -4186,9 +3963,9 @@ namespace Vehicle
             const f32 lfSteering = (lpControls != NULL) ? lpControls->mfSteering : 0.0f;
             const f32 lfBrake = (lpControls != NULL) ? lpControls->mfBrake : 0.0f;
             const f32 lfGas = (lpControls != NULL) ? lpControls->mfGas : 0.0f;
-            const VecFloat lvfSteering{ lfSteering, lfSteering, lfSteering, lfSteering };
-            const VecFloat lvfBrake{ lfBrake, lfBrake, lfBrake, lfBrake };
-            const VecFloat lvfGas{ lfGas, lfGas, lfGas, lfGas };
+            const VecFloat lvfSteering = { lfSteering, lfSteering, lfSteering, lfSteering };
+            const VecFloat lvfBrake = { lfBrake, lfBrake, lfBrake, lfBrake };
+            const VecFloat lvfGas = { lfGas, lfGas, lfGas, lfGas };
             ApplyDriftLatForce(lvfAbsScale, lvfSpeed, lvfSteering, lvfBrake, lvfGas, lvfTimeStep);
         }
     }
@@ -4324,62 +4101,7 @@ namespace Vehicle
     //   [wsus-attr] every 600 frames: the suspension attribs the maths above consumes
     // Budget-limited and SAYS SO when the budget runs out -- a silent stop reads exactly like
     // "nothing happened". All numbers are the members the console reads, printed unmodified.
-    namespace
-    {
-        const u32 KU_WSUS_BUDGET_LINES = 600000u;
-        u32 guWheelSusFrame = 0u;      // the most recently advanced per-car counter (for the notice)
-        u32 guWheelSusLines = 0u;
 
-        // PER-INSTANCE frame counters. UpdateSuspension/UpdateWheels run per car inside that car's
-        // UpdateDriving, but UpdateSuspensionPostSimulation runs in a LATER pass over all cars, so a
-        // single shared counter mis-labels every post-sim line with the last car's frame (measured
-        // on wsus_r30: parked full-physics traffic carries driver type 0 == PLAYER, three
-        // instances printed, and the post lines landed on the wrong car). Every line carries `car`.
-        struct WheelSusSlot
-        {
-            const void* mpCar;
-            u32         muFrame;
-        };
-        const s32 KI_WSUS_SLOTS = 16;
-        WheelSusSlot gaWheelSusSlots[KI_WSUS_SLOTS] = { { NULL, 0u } };
-        u32 guWheelSusOverflowFrame = 0u;
-
-        u32& WheelSusFrameFor(const void* lpCar)
-        {
-            for (s32 liS = 0; liS < KI_WSUS_SLOTS; ++liS)
-            {
-                if (gaWheelSusSlots[liS].mpCar == lpCar)
-                    return gaWheelSusSlots[liS].muFrame;
-                if (gaWheelSusSlots[liS].mpCar == NULL)
-                {
-                    gaWheelSusSlots[liS].mpCar = lpCar;
-                    gaWheelSusSlots[liS].muFrame = 0u;
-                    return gaWheelSusSlots[liS].muFrame;
-                }
-            }
-            return guWheelSusOverflowFrame;   // a 17th instance shares one counter; visible by `car`
-        }
-
-        // One line of budget. Prints the exhaustion notice exactly once.
-        bool WheelSusTakeLine()
-        {
-            if (guWheelSusLines < KU_WSUS_BUDGET_LINES)
-            {
-                ++guWheelSusLines;
-                return true;
-            }
-            if (guWheelSusLines == KU_WSUS_BUDGET_LINES)
-            {
-                ++guWheelSusLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[wsus] BUDGET EXHAUSTED after " << static_cast<s32>(KU_WSUS_BUDGET_LINES)
-                    << " lines at frame " << static_cast<s32>(guWheelSusFrame)
-                    << " -- every later [wsus*] line is DROPPED, the run is not silent because "
-                       "nothing happened\n";
-            }
-            return false;
-        }
-    }
 
     // ---- [susv] THE POST-SIM VELOCITY LEDGER -- DELETE-WHEN-STABLE -------------------------------
     // OPT-IN (BRN_SUSV_PROBE=<metres per second>, flow_run.ps1 -DiagEnv BRN_SUSV_PROBE=1). NOT
@@ -4402,46 +4124,7 @@ namespace Vehicle
     //
     // Threshold-gated on the WHOLE-FUNCTION |dv| so an ordinary step prints nothing: the value of
     // BRN_SUSV_PROBE is that threshold in m/s (a bare "1" means 1.0 m/s). One line per crossing.
-    namespace
-    {
-        // ⛔⛔⛔ THIS FUNCTION SHIPPED BROKEN ONCE, AND THE BUG IS WORTH THE BANNER (2026-09-03).
-        //   The first cut copied the repo's standard BOOLEAN probe idiom -- `lpcEnv[0] == '0'` means
-        //   off -- into a probe whose value is a THRESHOLD. `BRN_SUSV_PROBE=0.5` and `=0.01` both
-        //   START WITH '0', so both read as DISABLED, and three runs produced zero [susv] lines that
-        //   were about to be published as "UpdateSuspensionPostSimulation moved nothing". The probe
-        //   was never armed. ⭐ Nothing in the log said so: an unarmed probe and a quiet one look
-        //   identical, which is the whole reason a probe must be seen to FIRE before its silence is
-        //   read as a measurement. Parse the number and let the NUMBER decide.
-        // ⭐ AND IT ANNOUNCES ITSELF, ONCE. An unarmed probe and a probe whose threshold was never
-        //   crossed are indistinguishable in a log -- that is how the bug above nearly got
-        //   published as a result. With this line, "[susv] ARMED" present + no [susv] rows IS a
-        //   measurement; its absence says the run never armed the probe at all.
-        bool SusVProbeArmed()
-        {
-            static bool sbAnnounced = false;
-            if (lbArmed && !sbAnnounced)
-            {
-                sbAnnounced = true;
-            }
-            return lbArmed;
-        }
 
-        // Filled by StabiliseAfterHardLanding so the caller's ledger can separate that function's
-        // OWN two halves -- its entry CalculateNewVelocity (which drains the ordinary accumulators)
-        // from its direct overwrite of mLinearVelocity. Without this split the whole of
-        // StabiliseAfterHardLanding reads as one opaque stage and the very distinction the probe
-        // was built to make would be lost.
-        Vector3 gvSusVStabAfterIntegrate = { 0.0f, 0.0f, 0.0f, 0.0f };
-        bool    gbSusVStabDamped         = false;
-        f32     gfSusVStabDampFactor     = 0.0f;
-        f32     gfSusVStabVDotN          = 0.0f;
-
-        f32 SusVMag(const Vector3& lrA, const Vector3& lrB)
-        {
-            const f32 lfX = lrA.x - lrB.x, lfY = lrA.y - lrB.y, lfZ = lrA.z - lrB.z;
-            return static_cast<f32>(std::sqrt(static_cast<double>(lfX * lfX + lfY * lfY + lfZ * lfZ)));
-        }
-    }
     // ---- end [susv] helpers ---------------------------------------------------------------------
     // ---- end [wsus] helpers ---------------------------------------------------------------------
 
@@ -4887,10 +4570,6 @@ namespace Vehicle
 
         // [susv] the split point -- see the helper banner. Everything above this line is the
         // ordinary accumulator drain; everything below is this function's OWN writing.
-        gvSusVStabAfterIntegrate = mLinearVelocity;
-        gbSusVStabDamped         = false;
-        gfSusVStabDampFactor     = 0.0f;
-        gfSusVStabVDotN          = 0.0f;
 
         const VehicleAttribs::SuspensionAttribs& lrSuspension = mpAttribs->mSuspensionAttribs;
         const f32 lfSecondsToDampAfterLanding =
@@ -4937,9 +4616,9 @@ namespace Vehicle
                 .mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.y);
 
         DampPitchYawRoll(
-            VecFloat{ lfPitchDamping, lfPitchDamping, lfPitchDamping, lfPitchDamping },
-            VecFloat{ lfYawDamping,   lfYawDamping,   lfYawDamping,   lfYawDamping },
-            VecFloat{ lfRollDamping,  lfRollDamping,  lfRollDamping,  lfRollDamping },
+            MakeVehicleVecFloat( lfPitchDamping, lfPitchDamping, lfPitchDamping, lfPitchDamping ),
+            MakeVehicleVecFloat( lfYawDamping,   lfYawDamping,   lfYawDamping,   lfYawDamping ),
+            MakeVehicleVecFloat( lfRollDamping,  lfRollDamping,  lfRollDamping,  lfRollDamping ),
             lvfTimeStep);
 
         if (mAboveGroundTestResult.mbValid)
@@ -4959,9 +4638,6 @@ namespace Vehicle
                 vpu::Mult(lrRoadNormal, lfVelocityAlongNormal * lfDampingFactor));
             // [susv] THE DIRECT OVERWRITE FIRED. Recorded, not printed: the caller's ledger owns
             // the print so the whole-function threshold can gate it.
-            gbSusVStabDamped     = true;
-            gfSusVStabDampFactor = lfDampingFactor;
-            gfSusVStabVDotN      = lfVelocityAlongNormal;
         }
     }
 
@@ -5108,9 +4784,9 @@ namespace Vehicle
             const f32 lfSpringMass = lfScaler * lfBodyMass;
             const f32 lfStiffness  = (lfSpringMass * KF_SETUP_SUSPENSION_GRAVITY) / lfRestDisplacement;
 
-            maSprings[liSpring].Prepare(VecFloat{ lfStiffness, lfStiffness, lfStiffness, lfStiffness },
-                                        VecFloat{ lfDampening, lfDampening, lfDampening, lfDampening },
-                                        VecFloat{ lfSpringMass, lfSpringMass, lfSpringMass, lfSpringMass });
+            maSprings[liSpring].Prepare(MakeVehicleVecFloat( lfStiffness, lfStiffness, lfStiffness, lfStiffness ),
+                                        MakeVehicleVecFloat( lfDampening, lfDampening, lfDampening, lfDampening ),
+                                        MakeVehicleVecFloat( lfSpringMass, lfSpringMass, lfSpringMass, lfSpringMass ));
         }
     }
 
@@ -5425,10 +5101,6 @@ namespace Vehicle
 
         // [susv] entry snapshot -- see the helper banner. Player car only; the ledger prints at the
         // bottom, gated on the WHOLE-FUNCTION |dv|.
-        const bool lbSusV = SusVProbeArmed()
-                            && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER;
-        const Vector3 lSusV0 = mLinearVelocity;
-        gbSusVStabDamped = false;
 
         bool labCompressedSpring[eNumDrivenWheels] = { false, false, false, false };
 
@@ -5497,7 +5169,7 @@ namespace Vehicle
         // @0x825F7134..729C: identify springs compressed beyond the configured upward travel,
         // remembering the deepest penetration and that wheel's road normal.
         f32 lfMaximumSuspensionPenetration = 0.0f;
-        Vector3 lMaximumPenetrationNormal{ 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3 lMaximumPenetrationNormal = { 0.0f, 0.0f, 0.0f, 0.0f };
         const f32 lfUpwardMovement =
             mpAttribs->mSuspensionAttribs
                 .mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z;
@@ -5524,26 +5196,7 @@ namespace Vehicle
         }
 
         // ---- [wsus-post] the post-simulation half of the witness (player car only) -----------
-        const u32 luWheelSusF   = lbWheelSusProbe ? WheelSusFrameFor(this) : 0u;
-        const u32 luWheelSusCar = static_cast<u32>(reinterpret_cast<u64>(this));
-        if (lbWheelSusProbe && WheelSusTakeLine())
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[wsus-post] f " << static_cast<s32>(luWheelSusF) << " car " << luWheelSusCar
-                << " comp " << (labCompressedSpring[0] ? 1 : 0) << (labCompressedSpring[1] ? 1 : 0)
-                << (labCompressedSpring[2] ? 1 : 0) << (labCompressedSpring[3] ? 1 : 0)
-                << " upMov " << lfUpwardMovement
-                << " disp " << (maWheels[0].mPosition.y - maWheels[0].mStreamedPositionPlusTwistAmount.y)
-                << " " << (maWheels[1].mPosition.y - maWheels[1].mStreamedPositionPlusTwistAmount.y)
-                << " " << (maWheels[2].mPosition.y - maWheels[2].mStreamedPositionPlusTwistAmount.y)
-                << " " << (maWheels[3].mPosition.y - maWheels[3].mStreamedPositionPlusTwistAmount.y)
-                << " maxPen " << lfMaximumSuspensionPenetration
-                << " penN " << lMaximumPenetrationNormal.x << " " << lMaximumPenetrationNormal.y
-                << " " << lMaximumPenetrationNormal.z
-                << " nwc " << static_cast<s32>(mi8NumWorldCollisions)
-                << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y << " " << mLinearVelocity.z
-                << "\n";
-        }
+
         // ---- end [wsus-post] ------------------------------------------------------------------
 
         // @0x825F72A0..7398: move the body out along the selected contact normal, then pull every
@@ -5594,18 +5247,14 @@ namespace Vehicle
                 mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x = 0.0f;
             }
         }
-
-        const Vector3 lSusV1 = mLinearVelocity;          // [susv] before StabiliseAfterHardLanding
         StabiliseAfterHardLanding(lvfTimeStep);
-        const Vector3 lSusV2 = mLinearVelocity;          // [susv] after it
         CalculateNewVelocity(lvfTimeStep);
-        const Vector3 lSusV3 = mLinearVelocity;          // [susv] after the following integrate
 
         // @0x825F74B8..7654: with no world collision response, compressed traction springs get
         // an inanimate-world recovery impulse at their streamed suspension point.
         if (mi8NumWorldCollisions == 0)
         {
-            const VecFloat lvfRestitution{ -0.7f, -0.7f, -0.7f, -0.7f };
+            const VecFloat lvfRestitution = { -0.7f, -0.7f, -0.7f, -0.7f };
 
             for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             {
@@ -5625,26 +5274,13 @@ namespace Vehicle
 
                 if (vpu::Dot(lPointVelocity, lrCollisionNormal) < 0.0f)
                 {
-                    Vector3 lImpulse{ 0.0f, 0.0f, 0.0f, 0.0f };
-                    VecFloat lvfInvInertia{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    Vector3 lImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    VecFloat lvfInvInertia = { 0.0f, 0.0f, 0.0f, 0.0f };
                     CalculateCollisionImpulseWithInanimateObject(
                         lSusPointWorld, lPointVelocity, lrCollisionNormal, lvfRestitution,
                         &lImpulse, &lvfInvInertia);
                     // ---- [wsus-imp] one line per recovery impulse, both sides -----------------
-                    if (lbWheelSusProbe && WheelSusTakeLine())
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[wsus-imp] f " << static_cast<s32>(luWheelSusF) << " car " << luWheelSusCar
-                            << " w " << liWheel
-                            << " vDotN " << vpu::Dot(lPointVelocity, lrCollisionNormal)
-                            << " n " << lrCollisionNormal.x << " " << lrCollisionNormal.y
-                            << " " << lrCollisionNormal.z
-                            << " pv " << lPointVelocity.x << " " << lPointVelocity.y << " " << lPointVelocity.z
-                            << " J " << lImpulse.x << " " << lImpulse.y << " " << lImpulse.z
-                            << " velBefore " << mLinearVelocity.x << " " << mLinearVelocity.y
-                            << " " << mLinearVelocity.z
-                            << "\n";
-                    }
+
                     // ---- end [wsus-imp] -------------------------------------------------------
                     AddLocalImpulse(lImpulse, rw::physics::WORLD_SPACE,
                                     lSusPointLocal, rw::physics::BODY_SPACE);
@@ -5652,8 +5288,6 @@ namespace Vehicle
                 }
             }
         }
-
-        const Vector3 lSusV4 = mLinearVelocity;          // [susv] after the recovery-impulse arm
 
         // @0x825F7658..7858: an unattached wheel resting on its lower stop contributes its
         // own weight at the wheel's body-space position.
@@ -5666,7 +5300,7 @@ namespace Vehicle
             if (lrWheel.mbHasTraction || lfDistanceFromBottom > 0.05f || lrWheel.mu8State == 2)
                 continue;
 
-            const Vector3 lWheelForce{
+            const Vector3 lWheelForce = {
                 0.0f, -lrWheel.mIntegrationVariables.w * KF_GRAVITY, 0.0f, 0.0f };
             CGS_ASSERT(vpu::IsValid(lrWheel.mPosition),
                        "Invalid wheel position, please tell Graham D.");
@@ -5690,11 +5324,7 @@ namespace Vehicle
         //     wforce the unattached-wheel weight loop plus the tail integrate
         //   `total` is v(exit) - v(entry) for this call. Anything a caller sees beyond `total` in
         //   the same step was written somewhere else and this line says nothing about it.
-        if (lbSusV)
-        {
-            const Vector3 lSusV5 = mLinearVelocity;
-            const f32 lfTotal = SusVMag(lSusV5, lSusV0);
-        }
+
         // ---- end [susv] -------------------------------------------------------------------------
     }
 
@@ -5894,7 +5524,7 @@ namespace Vehicle
 
     // Breaker 0x825FEAC8-0x825FEB38 converts the WORLD contact position to BODY coordinates before
     // calling the base impulse kernel with the literal BODY_SPACE tag.
-    const Vector3 lvDelta{ lvContactPosition.x - mTransform.Pos().x,
+    const Vector3 lvDelta = { lvContactPosition.x - mTransform.Pos().x,
                            lvContactPosition.y - mTransform.Pos().y,
                            lvContactPosition.z - mTransform.Pos().z,
                            0.0f };
@@ -5904,7 +5534,7 @@ namespace Vehicle
     // GetImpulsesFromLocalImpulse receives this with the literal BODY_SPACE tag below, and the
     // BODY_SPACE arm is RotateToWorld = xAxis*p.x + yAxis*p.y + zAxis*p.z -- the .w lane never
     // enters the arithmetic. The 0.0 here is observably identical to the console's R.d.
-    Vector3 lvBodyContactPosition{ vpu::Dot(mTransform.Right(), lvDelta),
+    Vector3 lvBodyContactPosition = { vpu::Dot(mTransform.Right(), lvDelta),
                                    vpu::Dot(mTransform.Up(), lvDelta),
                                    vpu::Dot(mTransform.At(), lvDelta),
                                    0.0f };
@@ -6111,7 +5741,7 @@ namespace Vehicle
     //     velocity-minus-up = mLinearVelocity - up * dot(up, mLinearVelocity)
     const Vector3& lvUp = mTransform.yAxis;
     const f32 lfUpDot = lvUp.x * mLinearVelocity.x + lvUp.y * mLinearVelocity.y + lvUp.z * mLinearVelocity.z;
-    const Vector3 lvVelMinusUp{ mLinearVelocity.x - lvUp.x * lfUpDot,
+    const Vector3 lvVelMinusUp = { mLinearVelocity.x - lvUp.x * lfUpDot,
                                 mLinearVelocity.y - lvUp.y * lfUpDot,
                                 mLinearVelocity.z - lvUp.z * lfUpDot,
                                 0.0f };
@@ -6213,7 +5843,7 @@ namespace Vehicle
     // alive: parabolic envelope env = r - r^2
     const f32 lfR   = lfLife / mSlamEffect.mfTotalSlamTime;
     // 0x825D49B4 `fnmsubs f0, r, r, r` == -(r*r - r) with ONE rounding (the console fuses it).
-    const f32 lfEnv = -std::fmaf(lfR, lfR, -lfR);   // = r - r^2
+    const f32 lfEnv = -(lfR * lfR - lfR);   // = r - r^2
     const f32 lfEnvTerm = lfEnv * (mSlamEffect.mfOriginalSteering * KF_SLAM_AMPLITUDE);
     mSlamEffect.mfSteering = lfEnvTerm;   // +0x1114
 
@@ -6233,7 +5863,7 @@ namespace Vehicle
         // 0x825D4A5C `fmadds gas, 0.1, 0.9` then 0x825D4A60 `fmadds t, envTerm, steer` -- two fused
         // multiply-adds, one rounding each. The clamp (0x825D4A6C..80) and the gas floor
         // (0x825D4A8C/90) are fsel forms: a NaN steer comes back as +0.95 and a NaN gas as 0.9.
-        const f32 lfNewSteer = std::fmaf(std::fmaf(lrGas, KF_SLAM_GAS_BLEND, KF_SLAM_GAS_FLOOR), lfEnvTerm, lrSteer);
+        const f32 lfNewSteer = VehicleScalarMadd(VehicleScalarMadd(lrGas, KF_SLAM_GAS_BLEND, KF_SLAM_GAS_FLOOR), lfEnvTerm, lrSteer);
         lrSteer = rw::math::fpu::Clamp(lfNewSteer, -KF_SLAM_STEER_CLAMP, KF_SLAM_STEER_CLAMP);
         lrGas = rw::math::fpu::Max(lrGas, KF_SLAM_GAS_FLOOR);
     }
@@ -6703,7 +6333,7 @@ namespace Vehicle
         // --- 1. counter-steer traction cut --------------------------------------------------------
         f32 lfDriveScale = 1.0f;                                        // f31 = flt_82001C98
         const f32 lfFwd = vpu::Dot(mTransform.zAxis, mLinearVelocity);
-        if (IsCounterSteeringAtLowSpeed(VecFloat{ lfFwd, lfFwd, lfFwd, lfFwd }, lfSteering, lfGas))
+        if (IsCounterSteeringAtLowSpeed(MakeVehicleVecFloat( lfFwd, lfFwd, lfFwd, lfFwd ), lfSteering, lfGas))
         {
             f32 lfYawTerm = std::fabs(mAngularVelocity.y) * 0.5f;      // |angvel.y| * flt_82001DA0
             if (lfYawTerm > 1.0f)  lfYawTerm = 1.0f;                   // fsel vs 1.0
@@ -6742,14 +6372,14 @@ namespace Vehicle
 
         const f32 lfOmega  = lfWheelAngularVelocity;
         const f32 lfRadius = maWheels[eRearLeftWheel].mSlipVariables.w;   // +0x330 .w
-        mEngine.Update(VecFloat{ lfOmega, lfOmega, lfOmega, lfOmega },
-                       VecFloat{ lfEngineGas, lfEngineGas, lfEngineGas, lfEngineGas },
-                       VecFloat{ lfEngineBrake, lfEngineBrake, lfEngineBrake, lfEngineBrake },
+        mEngine.Update(MakeVehicleVecFloat( lfOmega, lfOmega, lfOmega, lfOmega ),
+                       MakeVehicleVecFloat( lfEngineGas, lfEngineGas, lfEngineGas, lfEngineGas ),
+                       MakeVehicleVecFloat( lfEngineBrake, lfEngineBrake, lfEngineBrake, lfEngineBrake ),
                        lbHandBrake,
-                       VecFloat{ lfSteering, lfSteering, lfSteering, lfSteering },
-                       VecFloat{ lfRadius, lfRadius, lfRadius, lfRadius },
+                       MakeVehicleVecFloat( lfSteering, lfSteering, lfSteering, lfSteering ),
+                       MakeVehicleVecFloat( lfRadius, lfRadius, lfRadius, lfRadius ),
                        lbAllowReverseDrive,
-                       VecFloat{ lfForwardSpeed, lfForwardSpeed, lfForwardSpeed, lfForwardSpeed },
+                       MakeVehicleVecFloat( lfForwardSpeed, lfForwardSpeed, lfForwardSpeed, lfForwardSpeed ),
                        lvfTimeStep);
 
         if (!mbFrozen)                                                 // lbz +0x70 ; bne skip
@@ -6883,8 +6513,8 @@ namespace Vehicle
             const f32 lfForceY = (-lrBase.x * lrBase.w) * lfRatio;
 
             // applied at the centre of mass (v2 stays the zero splat; r4=0 WORLD, r5=1 BODY).
-            AddLocalForce(Vector3{ 0.0f, lfForceY, 0.0f, 0.0f }, rw::physics::WORLD_SPACE,
-                          Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },     rw::physics::BODY_SPACE);
+            AddLocalForce(MakeVehicleVector3( 0.0f, lfForceY, 0.0f, 0.0f ), rw::physics::WORLD_SPACE,
+                          MakeVehicleVector3( 0.0f, 0.0f, 0.0f, 0.0f ),     rw::physics::BODY_SPACE);
             lfAppliedMagnitude = lfForceY;
         }
         else
@@ -6906,7 +6536,7 @@ namespace Vehicle
 
             const VecFloat lvDown = GetDownForce();
             const f32 lfForceY = -lvDown.y * lfScale;
-            AddWorldSpaceForce(Vector3{ 0.0f, lfForceY, 0.0f, 0.0f });   // vperm unk_82CDA350
+            AddWorldSpaceForce(MakeVehicleVector3( 0.0f, lfForceY, 0.0f, 0.0f ));   // vperm unk_82CDA350
             lfAppliedMagnitude = lfForceY;
         }
 
@@ -6914,7 +6544,7 @@ namespace Vehicle
         // straight into the component's down-force field; both arms above built their force as
         // {0, magnitude, 0, 0}, which is the vector the inlined recorder takes.
         if (mpDebugComponent != 0)
-            mpDebugComponent->RecordDownForce(Vector3{ 0.0f, lfAppliedMagnitude, 0.0f, 0.0f });
+            mpDebugComponent->RecordDownForce(MakeVehicleVector3( 0.0f, lfAppliedMagnitude, 0.0f, 0.0f ));
     }
 
 // [clean] SwitchAttribs  @0x8261E498
@@ -7114,7 +6744,7 @@ namespace Vehicle
     {
         static const f32 KF_COLLISION_BRAKE_CAP = 0.2f;   // unk_82FB9280 <- flt_82004744
         static const f32 KF_CREEP_STOP_MPH      = 5.0f;   // unk_82FB9240 <- flt_8200426C
-        static const VecFloat KV_ZERO{ 0.0f, 0.0f, 0.0f, 0.0f };
+        static const VecFloat KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         f32& lrfBrakeScale =
             mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.w;   // +0x1010 .w
@@ -7133,7 +6763,7 @@ namespace Vehicle
             { const f32 lfYawDamp = mpAttribs->mBaseAttribs
                   .mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z;
               DampPitchYawRoll(KV_ZERO,
-                               VecFloat{ lfYawDamp, lfYawDamp, lfYawDamp, lfYawDamp },
+                               MakeVehicleVecFloat( lfYawDamp, lfYawDamp, lfYawDamp, lfYawDamp ),
                                KV_ZERO, lvfTimeStep); }
 
             lfPedal = 1.0f - std::fabs(lpControls->mfSteering);   // vsubfp(1.0, |steer|)
@@ -7190,7 +6820,7 @@ namespace Vehicle
         // the BrakeScaleToFactor curve (attribs +0x60) at the ramped amount -- the inlined
         // InterpedParam3::GetInterped de Casteljau pair.
         return mpAttribs->mBaseAttribs.mBrakeScaleToFactorCurve.GetInterped(
-            VecFloat{ lrfBrakeScale, lrfBrakeScale, lrfBrakeScale, lrfBrakeScale });
+            MakeVehicleVecFloat( lrfBrakeScale, lrfBrakeScale, lrfBrakeScale, lrfBrakeScale ));
     }
 
     // @0x825D0940  BrnPhysics::Vehicle::VehiclePhysics::LimitDifferential  (67 insns, leaf)
@@ -7401,7 +7031,7 @@ namespace Vehicle
             CGS_ASSERT(lfForceZ == lfForceZ,
                        "Invalid brake force: lfBrakeFactor, mfMass, lvfSteeringBrakeFactor, "
                        "lvfSgnSpeedMph");   // the gpcMessageBuffer stream, :1951 -- lowered
-            AddLocalSpaceForce(Vector3{ 0.0f, 0.0f, lfForceZ, 0.0f });   // vrlimi 2 (z) of zero
+            AddLocalSpaceForce(MakeVehicleVector3( 0.0f, 0.0f, lfForceZ, 0.0f ));   // vrlimi 2 (z) of zero
         }
 
         // ---- 0x8261EDF8: the driven-axle brake factor ----------------------------------------
@@ -7443,12 +7073,12 @@ namespace Vehicle
                 .mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y) <= KF_EPSILON)
             lfFrontMax = KF_UNDRIVEN_MAX_SPIN;   // undriven front: effectively unlimited
 
-        const VecFloat lvfFrontMax{ lfFrontMax, lfFrontMax, lfFrontMax, lfFrontMax };
-        const VecFloat lvfFrontFactor{ lfFrontFactor, lfFrontFactor, lfFrontFactor, lfFrontFactor };
-        const VecFloat lvfRearFactor{ lfRearFactor, lfRearFactor, lfRearFactor, lfRearFactor };
-        const VecFloat lvfCapScale{ KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE,
+        const VecFloat lvfFrontMax = { lfFrontMax, lfFrontMax, lfFrontMax, lfFrontMax };
+        const VecFloat lvfFrontFactor = { lfFrontFactor, lfFrontFactor, lfFrontFactor, lfFrontFactor };
+        const VecFloat lvfRearFactor = { lfRearFactor, lfRearFactor, lfRearFactor, lfRearFactor };
+        const VecFloat lvfCapScale = { KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE,
                                     KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE };
-        const VecFloat lvfDecelScale{ KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE,
+        const VecFloat lvfDecelScale = { KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE,
                                       KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE };
 
         maWheels[eFrontRightWheel].UpdateVelocity(lvfTimeStep, lvfFrontMax, lvfFrontFactor,
@@ -7487,7 +7117,7 @@ namespace Vehicle
             f32 lfRearGrip;
             f32 lfFrontGrip;
             if (IsCounterSteeringAtLowSpeed(
-                    VecFloat{ lfFwdSpeed, lfFwdSpeed, lfFwdSpeed, lfFwdSpeed },
+                    MakeVehicleVecFloat( lfFwdSpeed, lfFwdSpeed, lfFwdSpeed, lfFwdSpeed ),
                     lpControls->mfSteering, lpControls->mfGas))
             {
                 // boosted = (|min(yawRate, 3.0)| * LowSpeedTyreFrictionTractionControl + 1.0)
@@ -7512,10 +7142,10 @@ namespace Vehicle
             { const VecFloat lvGripRR = GetSurfaceGrip(eRearRightWheel);
               const VecFloat lvGripRL = GetSurfaceGrip(eRearLeftWheel);
               HandleWheelPairFriction(eRearLeftWheel, eRearRightWheel, lvAt,
-                                      VecFloat{ lfRearGrip, lfRearGrip, lfRearGrip, lfRearGrip },
+                                      MakeVehicleVecFloat( lfRearGrip, lfRearGrip, lfRearGrip, lfRearGrip ),
                                       lvfTimeStep,
-                                      VecFloat{ lvGripRL.x, lvGripRL.y, lvGripRL.z, lvGripRL.w },
-                                      VecFloat{ lvGripRR.x, lvGripRR.y, lvGripRR.z, lvGripRR.w },
+                                      MakeVehicleVecFloat( lvGripRL.x, lvGripRL.y, lvGripRL.z, lvGripRL.w ),
+                                      MakeVehicleVecFloat( lvGripRR.x, lvGripRR.y, lvGripRR.z, lvGripRR.w ),
                                       lbMostWheels, false); }
 
             CalculateNewVelocity(lvfTimeStep);
@@ -7524,10 +7154,10 @@ namespace Vehicle
             { const VecFloat lvGripFR = GetSurfaceGrip(eFrontRightWheel);
               const VecFloat lvGripFL = GetSurfaceGrip(eFrontLeftWheel);
               HandleWheelPairFriction(eFrontLeftWheel, eFrontRightWheel, mSteeringDirection,
-                                      VecFloat{ lfFrontGrip, lfFrontGrip, lfFrontGrip, lfFrontGrip },
+                                      MakeVehicleVecFloat( lfFrontGrip, lfFrontGrip, lfFrontGrip, lfFrontGrip ),
                                       lvfTimeStep,
-                                      VecFloat{ lvGripFL.x, lvGripFL.y, lvGripFL.z, lvGripFL.w },
-                                      VecFloat{ lvGripFR.x, lvGripFR.y, lvGripFR.z, lvGripFR.w },
+                                      MakeVehicleVecFloat( lvGripFL.x, lvGripFL.y, lvGripFL.z, lvGripFL.w ),
+                                      MakeVehicleVecFloat( lvGripFR.x, lvGripFR.y, lvGripFR.z, lvGripFR.w ),
                                       lbMostWheels, false); }
         }
 
@@ -7541,22 +7171,7 @@ namespace Vehicle
         const f32 lfWfcMass = mbCrashing
             ? mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
             : 0.0f;
-        const Vector3 lWfcTorque0 = mTotalTorque;
-        const Vector3 lWfcLinF0   = mTotalLinearForce;
-        if (lbWfcProbe)
-        {
-            for (s32 li = 0; li < 4; ++li)
-            {
-                s_aWfcSlots[li].miGate = -1;
-                s_aWfcSlots[li].mfMassOnWheel = 0.0f;
-                s_aWfcSlots[li].mfScale = 0.0f;
-                s_aWfcSlots[li].mfHeightDrop = 0.0f;
-                s_aWfcSlots[li].mfFrictionMag = 0.0f;
-                s_aWfcSlots[li].mfTorqueRoll = 0.0f;
-                s_aWfcSlots[li].mfTorqueMag = 0.0f;
-            }
-            s_bWfcCapture = true;
-        }
+
 
         if (mbCrashing && KF_CRASH_SCRUB_MASS > lfWfcMass)
         {
@@ -7567,63 +7182,7 @@ namespace Vehicle
         }
 
         // ---- [wfc] the ledger line -----------------------------------------------------------
-        if (lbWfcProbe)
-        {
-            s_bWfcCapture = false;
-            static u32 suWfcLines = 0u;
-            if (++suWfcLines <= 4000u)
-            {
-                const Vector3 lTq{ mTotalTorque.x - lWfcTorque0.x,
-                                   mTotalTorque.y - lWfcTorque0.y,
-                                   mTotalTorque.z - lWfcTorque0.z, 0.0f };
-                // dW = Iinv_world * (tau * dt), the same drain arithmetic CalculateNewVelocity uses.
-                const Vector3 lL{ lTq.x * lvfTimeStep.x, lTq.y * lvfTimeStep.x, lTq.z * lvfTimeStep.x, 0.0f };
-                const Vector3 lDW = vpu::Add(
-                    vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lL.x),
-                             vpu::Mult(mWorldInverseInertia.yAxis, lL.y)),
-                    vpu::Mult(mWorldInverseInertia.zAxis, lL.z));
-                s32 liApplied = 0;
-                f32 lfHeightDropMax = 0.0f;
-                for (s32 li = 0; li < 4; ++li)
-                {
-                    if (s_aWfcSlots[li].miGate == 2) ++liApplied;
-                    if (s_aWfcSlots[li].mfHeightDrop > lfHeightDropMax)
-                        lfHeightDropMax = s_aWfcSlots[li].mfHeightDrop;
-                }
-                *CgsDev::Log::gpDebugPrint
-                    << "[wfc] car " << static_cast<s32>(reinterpret_cast<u64>(this) & 0xFFFFFFu)
-                    << " drv " << static_cast<s32>(mPreviousControls.GetType())
-                    << " mass " << lfWfcMass
-                    << " massGate " << ((KF_CRASH_SCRUB_MASS > lfWfcMass) ? 1 : 0)
-                    << " gates " << s_aWfcSlots[0].miGate << s_aWfcSlots[1].miGate
-                                 << s_aWfcSlots[2].miGate << s_aWfcSlots[3].miGate
-                    << " applied " << liApplied
-                    << " tqRoll " << vpu::Dot(lTq, mTransform.zAxis)
-                    << " tqPitch " << vpu::Dot(lTq, mTransform.xAxis)
-                    << " tqYaw " << vpu::Dot(lTq, mTransform.yAxis)
-                    << " tqMag " << vpu::Magnitude(lTq)
-                    << " dWroll " << vpu::Dot(lDW, mTransform.zAxis)
-                    << " dWpitch " << vpu::Dot(lDW, mTransform.xAxis)
-                    << " dWyaw " << vpu::Dot(lDW, mTransform.yAxis)
-                    << " dLinF " << vpu::Magnitude(Vector3{ mTotalLinearForce.x - lWfcLinF0.x,
-                                                            mTotalLinearForce.y - lWfcLinF0.y,
-                                                            mTotalLinearForce.z - lWfcLinF0.z, 0.0f })
-                    << " hDropMax " << lfHeightDropMax
-                    << " mow " << s_aWfcSlots[0].mfMassOnWheel << " " << s_aWfcSlots[1].mfMassOnWheel
-                        << " " << s_aWfcSlots[2].mfMassOnWheel << " " << s_aWfcSlots[3].mfMassOnWheel
-                    << " tqRollW " << s_aWfcSlots[0].mfTorqueRoll << " " << s_aWfcSlots[1].mfTorqueRoll
-                        << " " << s_aWfcSlots[2].mfTorqueRoll << " " << s_aWfcSlots[3].mfTorqueRoll
-                    << " wog " << (maWheels[0].GetRoadContact().mbIsOnGround ? 1 : 0)
-                               << (maWheels[1].GetRoadContact().mbIsOnGround ? 1 : 0)
-                               << (maWheels[2].GetRoadContact().mbIsOnGround ? 1 : 0)
-                               << (maWheels[3].GetRoadContact().mbIsOnGround ? 1 : 0)
-                    << " upy " << mTransform.yAxis.y
-                    << " rollRate " << vpu::Dot(mAngularVelocity, mTransform.zAxis)
-                    << " spd " << mfSpeedMPH.x
-                    << " dt " << lvfTimeStep.x
-                    << "\n";
-            }
-        }
+
         // ---- end [wfc] -----------------------------------------------------------------------
 
         // ---- 0x8261F494: advance the wheel rotation angles (order 1,0,3,2) -------------------
@@ -8057,7 +7616,7 @@ namespace Vehicle
         //   yAxis <- up
         //   xAxis <- cross(up, old zAxis)        (shifted-permwi idiom: vpermwi128 0x63 +
         //   zAxis <- cross(new xAxis, up)         vnmsubfp, twice; nothing is normalised)
-        const Vector3 lvUp    = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lvUp    = MakeVehicleVector3( 0.0f, 1.0f, 0.0f, 0.0f );
         const Vector3 lvOldAt = mTransform.zAxis;
         mTransform.yAxis = lvUp;                                    // stvx128 -> +0x20
         mTransform.xAxis = vpu::Cross(lvUp, lvOldAt);               // stvx128 -> +0x10
@@ -8099,7 +7658,7 @@ namespace Vehicle
 
         // Shunt clear, the Reset(Vector3) shape: direction+speed zeroed whole; Life = -1
         // (vspltisw -1 + vcfsx), SpeedIncreaseToQuit = 0; z/w lanes untouched.
-        mShuntEffect.mDirectionPlusDesiredSpeed = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
+        mShuntEffect.mDirectionPlusDesiredSpeed = MakeVehicleVector3Plus( 0.0f, 0.0f, 0.0f, 0.0f );
                                                                          // stvx128 0 -> +0x1130
         mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;              // vrlimi(4) -> +0x1140.y
         mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;             // vrlimi(8) -> +0x1140.x
@@ -8290,7 +7849,7 @@ namespace Vehicle
                 lfDrag = mpAttribs->mBaseAttribs
                              .mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x;
 
-            Vector3 lvDrag{ lfDrag, lfDrag, lfDrag, lfDrag };
+            Vector3 lvDrag = { lfDrag, lfDrag, lfDrag, lfDrag };
             if (mbAllWheelsHaveTraction)
             {
                 const VecFloat lvSurface = GetSurfaceLinearDrag();
@@ -8307,9 +7866,9 @@ namespace Vehicle
             {
                 // F = -drag * |v| * v  (asm 0x82638564..0x82638580: vmulfp |v|*|v| is folded
                 // through the refined rsqrt -- the emitted product is unitV * (-drag * |v|^2)).
-                AddWorldSpaceForce(Vector3{ -lvDrag.x * lfSpeed * mLinearVelocity.x,
+                AddWorldSpaceForce(MakeVehicleVector3( -lvDrag.x * lfSpeed * mLinearVelocity.x,
                                             -lvDrag.y * lfSpeed * mLinearVelocity.y,
-                                            -lvDrag.z * lfSpeed * mLinearVelocity.z, 0.0f });
+                                            -lvDrag.z * lfSpeed * mLinearVelocity.z, 0.0f ));
             }
         }
 
@@ -8463,7 +8022,7 @@ namespace Vehicle
         if (lbClear)
         {
             // The ctor's partial clear, store for store (NOT a call -- the console inlines it):
-            mShuntEffect.mDirectionPlusDesiredSpeed = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
+            mShuntEffect.mDirectionPlusDesiredSpeed = MakeVehicleVector3Plus( 0.0f, 0.0f, 0.0f, 0.0f );
             mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;    // vrlimi mask 4
             mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;   // vrlimi mask 8
         }
@@ -8531,7 +8090,7 @@ namespace Vehicle
 
         (void)lbImpactTime;   // DEAD in the body (never read; the caller's register map only)
 
-        const VecFloat lvfTimeStep{ lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
+        const VecFloat lvfTimeStep = { lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
 
         // ---- [rollcatch] NOT IN THE X360 BINARY. OPT-IN on the existing BRN_CRASH_RESPONSE_DIAG
         // latch so it lands in the same log as [crash-response]. THE QUESTION IT ANSWERS: the
@@ -8542,14 +8101,6 @@ namespace Vehicle
         // so the catcher is named by subtraction instead of by argument. mTransform is not
         // integrated inside this function, so the roll axis is fixed across the samples.
         // DELETE-WHEN the roll question is closed and banked.
-        const bool lbRollCatch = RollCatchArmed();
-        f32 lafRoll[9] = { 0,0,0,0,0,0,0,0,0 };
-        s32 liRollStage = 0;
-        #define BRN_ROLLCATCH_SAMPLE() \
-            do { if (lbRollCatch && liRollStage < 9) \
-                 { lafRoll[liRollStage++] = vpu::Dot(mAngularVelocity, mTransform.zAxis); } } while (0)
-        BRN_ROLLCATCH_SAMPLE();   // 0: entry
-
         CheckState("Start of update crashing");
 
         BrnPlayerDriverControls lCopy;
@@ -8576,7 +8127,6 @@ namespace Vehicle
             { const f32 lfF = std::pow(lfAngDamp, lfExponent);
               mAngularVelocity = vpu::Mult(mAngularVelocity, lfF); }   // stvx this+0x60
         }
-        BRN_ROLLCATCH_SAMPLE();   // 1: after the 0.995/0.992 exponential angular damping
 
         // ----- clamp omega per BODY axis (asm 0x82638C60..0x82638CE8) -----
         // ⛔⛔ THE +/-6.5 CLAMP IS **NOT** WHAT STOPS A CRASHING CAR TUMBLING -- REFUTED WITH ITS OWN
@@ -8614,7 +8164,6 @@ namespace Vehicle
                 mAngularVelocity = lAggregateValue;
             }
         }
-        BRN_ROLLCATCH_SAMPLE();   // 2: after the registered per-axis clamp
 
         // ----- the mass regime (asm 0x82638CF4..0x82638DA0) -----
         if (IsCrashingNormally())                  // vcall +0x18, second dispatch
@@ -8653,7 +8202,6 @@ namespace Vehicle
         CheckState("After update air ram");
 
         UpdateSpinEffects(lvfTimeStep);
-        BRN_ROLLCATCH_SAMPLE();   // 3: after UpdateAirRam + UpdateSpinEffects
 
         if (lbPlayerAftertouchForceAdditive)
         {
@@ -8671,8 +8219,8 @@ namespace Vehicle
             // force = {0, -GetDownForce().x, 0}, position = {0,0,0}, both tags `li 1` ==
             // BODY_SPACE).
             const VecFloat lvDown = GetDownForce();
-            AddLocalForce(Vector3{ 0.0f, -lvDown.x, 0.0f, 0.0f }, rw::physics::BODY_SPACE,
-                          Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, rw::physics::BODY_SPACE);
+            AddLocalForce(MakeVehicleVector3( 0.0f, -lvDown.x, 0.0f, 0.0f ), rw::physics::BODY_SPACE,
+                          MakeVehicleVector3( 0.0f, 0.0f, 0.0f, 0.0f ), rw::physics::BODY_SPACE);
         }
         CheckState("After Update down force");
 
@@ -8680,14 +8228,11 @@ namespace Vehicle
         CheckState("After update engine");
 
         CalculateNewVelocity(lvfTimeStep);
-        BRN_ROLLCATCH_SAMPLE();   // 4: after aftertouch / downforce / engine / integrate
 
         UpdateSteering(lCopy.mfSteering, lCopy.mfGas, lvfTimeStep, lCopy.mbIsSteeringWheel);
-        BRN_ROLLCATCH_SAMPLE();   // 5: after UpdateSteering
 
         UpdateSuspension(lvfTimeStep);             // vcall +0x2C; no override in the image ->
                                                    // direct call is dispatch-identical
-        BRN_ROLLCATCH_SAMPLE();   // 6: after UpdateSuspension (contains StabiliseAfterHardLanding)
 
         // mbAllWheelsHaveTraction: the four road-contact bytes AND the NEGATION of the +0x10
         // vcall (IsPlayerVehicleInShowtime).
@@ -8729,10 +8274,8 @@ namespace Vehicle
                                                    // this function does not. As shipped.
         SimpleVehiclePhysics::CalculateNewWheelPlane();
         CheckState("After update wheels");
-        BRN_ROLLCATCH_SAMPLE();   // 7: after UpdateWheels
 
         CalculateNewVelocity(lvfTimeStep);
-        BRN_ROLLCATCH_SAMPLE();   // 8: after the trailing integrate
 
         // ----- per-wheel body-point velocities (asm 0x82639030..0x826391CC, unrolled x4) -----
         // maWheels[i].mBodyPointVelocity = v + omega x (R * streamedLocalPos). The console
@@ -8799,47 +8342,7 @@ namespace Vehicle
         mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y += lfTimeStep;
 
         // ---- [rollcatch] the ledger line (see the banner at the top of this function) --------
-        if (lbRollCatch && liRollStage == 9 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static u32 suRollLines = 0u;
-            // Only print frames where the roll channel is actually carrying something, so a long
-            // low-speed tumble does not bury the frames that matter. 0.5 rad/s is ~29 deg/s.
-            const f32 lfPeak = (lafRoll[0] < 0.0f) ? -lafRoll[0] : lafRoll[0];
-            if (lfPeak > 0.5f && ++suRollLines <= 2000u)
-            {
-                const VehicleAttribs::SuspensionAttribs& lrSus = mpAttribs->mSuspensionAttribs;
-                const f32 lfTimeToDamp =
-                    lrSus.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.w;
-                const f32 lfMaxRollDamp =
-                    lrSus.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.y;
-                const f32 lfTimeSince =
-                    mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x;
-                *CgsDev::Log::gpDebugPrint
-                    << "[rollcatch] roll0 " << lafRoll[0]
-                    << " angDamp " << (lafRoll[1] - lafRoll[0])
-                    << " clamp "   << (lafRoll[2] - lafRoll[1])
-                    << " spin "    << (lafRoll[3] - lafRoll[2])
-                    << " integ1 "  << (lafRoll[4] - lafRoll[3])
-                    << " steer "   << (lafRoll[5] - lafRoll[4])
-                    << " susp "    << (lafRoll[6] - lafRoll[5])
-                    << " wheels "  << (lafRoll[7] - lafRoll[6])
-                    << " integ2 "  << (lafRoll[8] - lafRoll[7])
-                    << " roll8 "   << lafRoll[8]
-                    << " | tSinceLand " << lfTimeSince
-                    << " tToDamp " << lfTimeToDamp
-                    << " maxRollDamp " << lfMaxRollDamp
-                    << " stabArmed " << ((lfTimeSince < lfTimeToDamp) ? 1 : 0)
-                    << " wog " << (maWheels[0].GetRoadContact().mbIsOnGround ? 1 : 0)
-                    << (maWheels[1].GetRoadContact().mbIsOnGround ? 1 : 0)
-                    << (maWheels[2].GetRoadContact().mbIsOnGround ? 1 : 0)
-                    << (maWheels[3].GetRoadContact().mbIsOnGround ? 1 : 0)
-                    << " agValid " << (mAboveGroundTestResult.mbValid ? 1 : 0)
-                    << " upy " << mTransform.yAxis.y
-                    << " dt " << lfTimeStep
-                    << "\n";
-            }
-        }
-        #undef BRN_ROLLCATCH_SAMPLE
+
 
         // No trailing CheckState -- the console body ends here.
     }
@@ -9071,163 +8574,7 @@ namespace Vehicle
     // last printed line, counted not printed). Reads only; hard cap 5000 lines.
     // DELETE-WHEN the airtime table (HINGE_FINAL.md) is banked.
     // ============================================================================================
-    namespace
-    {
-        const s32 KI_AIR_CARS             = 16;
-        const u32 KU_AIR_MAX_LINES        = 5000u;
-        const u32 KU_AIR_MIN_PRINT_STEPS  = 3u;
-        const f32 KF_AIR_JUMP_METRES      = 10.0f;   // no car moves 10 m in one 1/60 s step
 
-        struct AirTrack
-        {
-            const void* mpOwner;      // the VehiclePhysics this slot tracks (nullptr == free)
-            s32  miCarId;             // the last lpControls->miVehicleID >= 0 seen (-1 == none yet)
-            bool mbInAir;
-            bool mbCrashAtStart;
-            u32  muSpan;
-            u32  muStartPresent;
-            u32  muSteps;
-            u32  muShortSkipped;
-            f32  mfSeconds;
-            f32  mfTakeoffY;
-            f32  mfPeakY;
-            f32  mfMinUpY;
-            f32  mfVyTakeoff;
-            f32  mfHSpeedTakeoff;
-            f32  mfStartX;
-            f32  mfStartZ;
-            f32  mfLastX;
-            f32  mfLastY;
-            f32  mfLastZ;
-        };
-        AirTrack gaAirTrack[KI_AIR_CARS] = {};
-        u32 guAirLines = 0u;
-
-        void AirWitnessEnd(s32 liCar, AirTrack& lrTrack, const char* lpcEnd, bool lbCrashingNow)
-        {
-            if ( lrTrack.muSteps >= KU_AIR_MIN_PRINT_STEPS )
-            {
-                if ( guAirLines < KU_AIR_MAX_LINES )
-                {
-                    ++guAirLines;
-                    const f32 lfDx = lrTrack.mfLastX - lrTrack.mfStartX;
-                    const f32 lfDz = lrTrack.mfLastZ - lrTrack.mfStartZ;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[air] car " << lrTrack.miCarId
-                        << " obj " << liCar
-                        << " span " << lrTrack.muSpan
-                        << " startPresent " << lrTrack.muStartPresent
-                        << " endPresent " << renderengine::guPresentCount
-                        << " steps " << lrTrack.muSteps
-                        << " dur " << lrTrack.mfSeconds
-                        << " peak " << ( lrTrack.mfPeakY - lrTrack.mfTakeoffY )
-                        << " upyMin " << lrTrack.mfMinUpY
-                        << " crash " << ( lrTrack.mbCrashAtStart ? 1 : 0 ) << "->" << ( lbCrashingNow ? 1 : 0 )
-                        << " vyTakeoff " << lrTrack.mfVyTakeoff
-                        << " hspdTakeoff " << lrTrack.mfHSpeedTakeoff
-                        << " dist " << std::sqrt(lfDx * lfDx + lfDz * lfDz)
-                        << " startPos (" << lrTrack.mfStartX << ", " << lrTrack.mfTakeoffY << ", "
-                        << lrTrack.mfStartZ << ")"
-                        << " end " << lpcEnd
-                        << " shortSkipped " << lrTrack.muShortSkipped
-                        << "\n";
-                }
-                lrTrack.muShortSkipped = 0u;
-            }
-            else
-            {
-                ++lrTrack.muShortSkipped;
-            }
-            lrTrack.mbInAir = false;
-        }
-
-        void AirWitnessStep(const void* lpOwner, s32 liVehicleId, const Wheel* lpaWheels,
-                            const Matrix44Affine& lrTransform, const Vector3& lrLinearVelocity,
-                            bool lbCrashing, f32 lfDT)
-        {
-            s32 liCar = -1;
-            for ( s32 li = 0; li < KI_AIR_CARS && liCar < 0; ++li )
-            {
-                if ( gaAirTrack[li].mpOwner == lpOwner )
-                {
-                    liCar = li;
-                }
-            }
-            for ( s32 li = 0; li < KI_AIR_CARS && liCar < 0; ++li )
-            {
-                if ( gaAirTrack[li].mpOwner == 0 )
-                {
-                    liCar = li;
-                    gaAirTrack[li].mpOwner = lpOwner;
-                    gaAirTrack[li].miCarId = -1;
-                }
-            }
-            if ( liCar < 0 )
-            {
-                return;   // more than KI_AIR_CARS bodies: not tracked
-            }
-            AirTrack& lrTrack = gaAirTrack[liCar];
-            if ( liVehicleId >= 0 )
-            {
-                lrTrack.miCarId = liVehicleId;
-            }
-            bool lbAllWheelsOff = true;
-            for ( s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel )
-            {
-                if ( lpaWheels[liWheel].GetRoadContact().mbIsOnGround )
-                {
-                    lbAllWheelsOff = false;
-                }
-            }
-            const f32 lfX = lrTransform.wAxis.x;
-            const f32 lfY = lrTransform.wAxis.y;
-            const f32 lfZ = lrTransform.wAxis.z;
-            if ( lrTrack.mbInAir )
-            {
-                const f32 lfDx = lfX - lrTrack.mfLastX;
-                const f32 lfDy = lfY - lrTrack.mfLastY;
-                const f32 lfDz = lfZ - lrTrack.mfLastZ;
-                if ( lfDx * lfDx + lfDy * lfDy + lfDz * lfDz > KF_AIR_JUMP_METRES * KF_AIR_JUMP_METRES )
-                {
-                    AirWitnessEnd(liCar, lrTrack, "jump", lbCrashing);
-                }
-                else if ( !lbAllWheelsOff )
-                {
-                    AirWitnessEnd(liCar, lrTrack, "ground", lbCrashing);
-                }
-                else
-                {
-                    ++lrTrack.muSteps;
-                    lrTrack.mfSeconds += lfDT;
-                    if ( lfY > lrTrack.mfPeakY )                          { lrTrack.mfPeakY = lfY; }
-                    if ( lrTransform.yAxis.y < lrTrack.mfMinUpY )         { lrTrack.mfMinUpY = lrTransform.yAxis.y; }
-                    lrTrack.mfLastX = lfX;
-                    lrTrack.mfLastY = lfY;
-                    lrTrack.mfLastZ = lfZ;
-                }
-            }
-            if ( !lrTrack.mbInAir && lbAllWheelsOff )
-            {
-                lrTrack.mbInAir = true;
-                lrTrack.mbCrashAtStart = lbCrashing;
-                ++lrTrack.muSpan;
-                lrTrack.muStartPresent = renderengine::guPresentCount;
-                lrTrack.muSteps = 1u;
-                lrTrack.mfSeconds = lfDT;
-                lrTrack.mfTakeoffY = lfY;
-                lrTrack.mfPeakY = lfY;
-                lrTrack.mfMinUpY = lrTransform.yAxis.y;
-                lrTrack.mfVyTakeoff = lrLinearVelocity.y;
-                lrTrack.mfHSpeedTakeoff = std::sqrt(lrLinearVelocity.x * lrLinearVelocity.x
-                                                    + lrLinearVelocity.z * lrLinearVelocity.z);
-                lrTrack.mfStartX = lfX;
-                lrTrack.mfStartZ = lfZ;
-                lrTrack.mfLastX = lfX;
-                lrTrack.mfLastY = lfY;
-                lrTrack.mfLastZ = lfZ;
-            }
-        }
-    }
 
 // [clean] Update  @0x826412C0
     // @0x826412C0  BrnPhysics::Vehicle::VehiclePhysics::Update  (200 insns)
@@ -9364,27 +8711,17 @@ namespace Vehicle
         // START is. The type is a printed FIELD now, and that field is what settled issue #21's
         // "the car spins on the start line": drvType=1 (AI), steer=-1.0, donutAttribs=1.
         // getenv is read ONCE (this runs for every vehicle, every step).
-        f32     lfDiagHeadingPre = 0.0f;
-        bool    lbDiagFrozenPre  = false;
-        Vector3 lvDiagAngVelPre  = { 0.0f, 0.0f, 0.0f, 0.0f };
-        if (lbStartLineDiag)
-        {
-            lfDiagHeadingPre = std::atan2(mTransform.zAxis.x, mTransform.zAxis.z) * 57.2957795f;
-            lbDiagFrozenPre  = mbFrozen;
-            lvDiagAngVelPre  = mAngularVelocity;
-        }
+
 
         if (lpControls->mbIsOnStartLine && mAboveGroundTestResult.mbValid)
         {
             mbFrozen = false;                            // stb 0 -> +0x70
-            const Vector3 lvNegNormal{ -mAboveGroundTestResult.mIntersectionNormal.x,
+            const Vector3 lvNegNormal = { -mAboveGroundTestResult.mIntersectionNormal.x,
                                        -mAboveGroundTestResult.mIntersectionNormal.y,
                                        -mAboveGroundTestResult.mIntersectionNormal.z, 0.0f };
             const f32 lfAlong = vpu::Dot(mLinearVelocity, lvNegNormal);
             mLinearVelocity = vpu::Mult(lvNegNormal, lfAlong);
         }
-
-        const bool lbDiagFrozenArmed = mbFrozen;
 
         UpdateHandBrake(lvfTimeStep, lpControls->mfHandBrake);
 
@@ -9443,45 +8780,7 @@ namespace Vehicle
 
         // [DIAG] NOT IN THE X360 BINARY. The second half of the BRN_STARTLINE_DIAG sample --
         // see the capture block next to UpdateFreezing above. One line every 15 physics steps.
-        if (lbStartLineDiag)
-        {
-            static u32 sluStartLineDiagStep = 0;
-            static f32 sfStartLineDiagTime  = 0.0f;
-            sfStartLineDiagTime += lfDT;
-            if ((sluStartLineDiagStep++ % 15u) == 0u && CgsDev::Log::gpDebugPrint != 0)
-            {
-                const f32 lfHeadingPost =
-                    std::atan2(mTransform.zAxis.x, mTransform.zAxis.z) * 57.2957795f;
-                *CgsDev::Log::gpDebugPrint
-                    << "[startline] t=" << sfStartLineDiagTime
-                    << " id=" << lpControls->miVehicleID
-                    << " drvType=" << static_cast<s32>(lpControls->GetType())
-                    << " donutAttribs=" << (mbIsUsingAIDonutAttribs ? 1 : 0)
-                    << " pos=(" << mTransform.wAxis.x << "," << mTransform.wAxis.z << ")"
-                    << " onLine=" << (lpControls->mbIsOnStartLine ? 1 : 0)
-                    << " agValid=" << (mAboveGroundTestResult.mbValid ? 1 : 0)
-                    << " frozenAfterFreeze=" << (lbDiagFrozenPre ? 1 : 0)
-                    << " frozenAfterArm=" << (lbDiagFrozenArmed ? 1 : 0)
-                    << " forceFrozen=" << (mbForceFrozen ? 1 : 0)
-                    << " boost=" << (lpControls->mbBoost ? 1 : 0)
-                    << " showtime=" << (IsPlayerVehicleActuallyInShowtime() ? 1 : 0)
-                    << " hdgPre=" << lfDiagHeadingPre
-                    << " hdgPost=" << lfHeadingPost
-                    << " angVelPre=(" << lvDiagAngVelPre.x << "," << lvDiagAngVelPre.y
-                    << "," << lvDiagAngVelPre.z << ")"
-                    << " angVelPost=(" << mAngularVelocity.x << "," << mAngularVelocity.y
-                    << "," << mAngularVelocity.z << ")"
-                    << " linVel=(" << mLinearVelocity.x << "," << mLinearVelocity.y
-                    << "," << mLinearVelocity.z << ")"
-                    << " gas=" << lpControls->mfGas
-                    << " brake=" << lpControls->mfBrake
-                    << " hbrake=" << lpControls->mfHandBrake
-                    << " steer=" << lpControls->mfSteering
-                    << " crashing=" << (mbCrashing ? 1 : 0)
-                    << " dt=" << lfDT
-                    << "\n";
-            }
-        }
+
 
         {
             static const f32 KF_RACECAR_CONTACT_TIME_CAP = 100.0f;   // unk_82FB9BE0 <- flt_820049E0
