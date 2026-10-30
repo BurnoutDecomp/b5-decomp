@@ -8,13 +8,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"                  // CgsResource::ResourcePtr / NULLResourcePtr
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                               // CgsNumeric::Random
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [boost*] witnesses
-#if defined(_XBOX)
 #include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
-#endif
 #include <cfloat>                                                                   // FLT_MAX
-#include <cmath>                                                                    // std::fma (BurstAccumulator::Update's fmadds)
-#include <cstdio>                                             // snprintf (witnesses)
 
 // =============================================================================
 // BrnEffects::BurstAccumulator / BrnEffects::ActiveRaceCarData (X360 ARTIST)
@@ -90,11 +85,7 @@ u32 BurstAccumulator::Update(f32 lfBurstSize, f32 lfTime, CgsNumeric::Random& lr
         liTruncated = static_cast<s64>(lfSize);
     const u32 luBurstCount = static_cast<u32>(static_cast<u64>(liTruncated));   // stfiwx: the low word
 
-#if defined(_XBOX)
     mfBurstSizeThreshold = BrnParticleMath::ScalarMultiplyAdd(lfRange * lfRandom, lfRandom, mfMinBurstSize);
-#else
-    mfBurstSizeThreshold = std::fma(lfRange * lfRandom, lfRandom, mfMinBurstSize);
-#endif
     mfCurrentBurstSize   = mfCurrentBurstSize - static_cast<f32>(static_cast<f64>(luBurstCount));
 
     return luBurstCount;
@@ -220,34 +211,8 @@ void ActiveRaceCarData::Initialise(CgsID lID,
 void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
                                     const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>& lrPhysicsResource)
 {
-    // ---- [boosttag] witness. NOT console behaviour: ours, bounded, log-only. --------
-    // BoostStateMachine::StartEffects loops `for (lu = 0; lu < muNumBoostTags; ++lu)`, so a
-    // zero tag count starts NOTHING and leaves no trace at all -- the loop body simply never
-    // runs. Every line below therefore prints OUTSIDE any loop and on EVERY exit, including
-    // the early one, so the log distinguishes the four outcomes that look identical
-    // downstream: never called / called with the NULL resource / called with locators but no
-    // FXBOOSTPOINT among them / called and counted N. DELETE-WHEN-STABLE.
-#if !defined(_XBOX)
-    static u32 suExtractWitness = 0;
-    const u32 KU_EXTRACT_WITNESS_LIMIT = 8;
-    const bool lbWitness = (suExtractWitness < KU_EXTRACT_WITNESS_LIMIT);
-    if (lbWitness)
-        ++suExtractWitness;
-
-#endif
     if (CgsResource::NULLResourcePtr.IsEqual(&lrPhysicsResource))
     {
-#if !defined(_XBOX)
-        if (lbWitness)
-        {
-            char lacMsg[192];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[boosttag] #%u ExtractTags EARLY-OUT: the deformation spec is the NULL "
-                "resource, so muNumBoostTags stays %u and no boost effect can start.\n",
-                suExtractWitness, mBoostMachine.muNumBoostTags);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-#endif
         return;
     }
 
@@ -261,28 +226,9 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
 
     BrnParticle::ParticleModule& lrParticleModule = lHelper.ParticleModule();
 
-    // [boosttag] the tag types actually present, so "no FXBOOSTPOINT" is distinguishable
-    // from "no locators at all" and from "the tag enum decodes to something else". The mask
-    // is 64 bits ON PURPOSE: FXBOOSTPOINT1..4 are 41..44, and a 32-bit mask could not have
-    // shown them at all.
-#if !defined(_XBOX)
-    u64 luTagTypeMask = 0;
-    u32 luHighestTag  = 0;
-
-#endif
     for (u32 luTag = 0; luTag < luNumLocators; ++luTag)
     {
         const BrnPhysics::Deformation::LocatorPointSpec lLocator = lrGenericTags.CreateLo(luTag);
-#if !defined(_XBOX)
-        if (lbWitness)
-        {
-            const u32 luTagType = static_cast<u32>(lLocator.meTagPointType);
-            if (luTagType < 64)
-                luTagTypeMask |= (1ull << luTagType);
-            if (luTagType > luHighestTag)
-                luHighestTag = luTagType;
-        }
-#endif
         if (!IsBoostPointTag(lLocator.meTagPointType))
         {
             continue;
@@ -298,39 +244,10 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
             lrParticleModule.StopLionEffect(&lrSlot);
         }
 
-#if !defined(_XBOX)
-        // ⚠ HOST-SIDE BRING-UP CAPTURE, not console behaviour. The console's tag loop really
-        // does throw the locator away (see the note above this function) because the DEFORMED
-        // per-frame table positions the effects. That table is empty on this build, so the
-        // BIND-POSE matrix is kept here for BoostStateMachine::OnTick's stand-in.
-        // DELETE-WHEN the deformation module publishes VehicleLocatorOutput for race cars.
-        if (mBoostMachine.muNumBoostTags < BrnEffects::BoostStateMachine::KU_MAX_BOOST_EFFECTS)
-        {
-            mBoostMachine.maBoostLocatorLocal[mBoostMachine.muNumBoostTags] =
-                lLocator.mLocatorMatrix;
-            mBoostMachine.mbBoostLocatorLocalValid = true;
-        }
-
-#endif
-
         lruHandle = BrnParticle::LionEffect::KU_HANDLE_INVALID;
         ++mBoostMachine.muNumBoostTags;
     }
 
-#if !defined(_XBOX)
-    if (lbWitness)
-    {
-        char lacMsg[384];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-            "[boosttag] #%u ExtractTags RAN: locators=%u boostTags=%u highestTag=%u "
-            "tagTypesSeen(bit n == tag type n, n<64)=%016llX  "
-            "FXBOOSTPOINT1..4 == bits 41..44 == mask 00001E0000000000.\n",
-            suExtractWitness, luNumLocators, mBoostMachine.muNumBoostTags, luHighestTag,
-            static_cast<unsigned long long>(luTagTypeMask));
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
-
-#endif
     mBoostMachine.mState = EffectsStateAllOff;
     mBoostMachine.mTime  = 0.0f;
     mJumpMachine.mState  = EffectsStateAllOff;

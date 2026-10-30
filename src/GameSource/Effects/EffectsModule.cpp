@@ -698,30 +698,7 @@ namespace
 //   Every member constructs itself here.
 // =============================================================================
 EffectsModule::EffectsModule()
-#if !defined(_XBOX)
-    : mEffectInstanceHandle(0xFFFFFFFFu)
-    , mQAEffectHandle(0xFFFFFFFFu)
-    , liEffectInstanceIndex(0)
-    , mResetAttribs(false)
-    , mePrepareStage(E_PREPARESTAGE_START)
-    , meReleaseStage(E_RELEASESTAGE_DONE)
-    , meResourceStage(E_RESOURCESTAGE_START)
-    , mpHeapMalloc(0)
-    , meCurrentGameMode(BrnGameState::GameStateModuleIO::E_MODE_NONE)
-    , mbEventIntroActive(false)
-    , muNextShowtimeBounceEffect(0)
-    , mfLastShowtimeBounceEffectTime(0.0f)
-    , muSlipStreamEffectHandle(0xFFFFFFFFu)
-    , mbUpdateRan2F5A8(false)
-    , mbUpdateRan2F5A9(false)
 {
-    for (u32 lu = 0; lu < KU_MAX_SHOWTIME_BOUNCE_EFFECTS; ++lu)
-        maShowtimeBounceEffectHandles[lu] = 0xFFFFFFFFu;
-    for (u32 lu = 0; lu < KU_MAX_JUNKYARD_VFX; ++lu)
-        maJunkyardEffectHandles[lu] = 0xFFFFFFFFu;
-#else
-{
-#endif
 }
 
 // =============================================================================
