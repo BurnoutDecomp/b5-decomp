@@ -33,7 +33,8 @@ namespace BrnWorld
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
 
         // BrnTrafficCheckManager.h:49 / :53 / :57 / :61 -- declared-only (own TUs).
-        void Construct();
+        // Inlined by RaceCarEntityModule::Construct at 0x822FDA50/54.
+        void Construct() { miCurrentCheckChain = 0; mfTimeSinceLastCheck = 6.0f; }
         bool Prepare();
         bool Release();
         void Destruct();

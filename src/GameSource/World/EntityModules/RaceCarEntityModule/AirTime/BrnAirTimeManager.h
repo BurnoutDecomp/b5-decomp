@@ -36,6 +36,15 @@ namespace BrnWorld
             E_AIR_STATE_COUNT          = 4,
         };
 
+        // Inlined by RaceCarEntityModule::Construct at 0x822FDA2C..0x822FDA3C.
+        void Construct()
+        {
+            meState = E_AIR_STATE_NONE;
+            mfTimeSinceLastAir = 0.0f;
+            mfPreviousAirTime = 0.0f;
+            mfTotalAirTime = 0.0f;
+        }
+
         // @ 0x822F8C88 -- step the air-time state machine for one PostPhysics frame and emit
         // InAir events. (The X360 fold of the OutputAirEvent helper is inlined here.)
         void Update(const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
