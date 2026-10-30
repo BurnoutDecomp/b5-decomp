@@ -28,31 +28,34 @@ char* CGSSTRNLOWER(char* pcString, u32 uMaxLen)
     return pcString;
 }
 
+// DecFIGS declares the wrapper void. ARTIST returns directly after vsnprintf on
+// the success path, leaving its result in r3 incidentally; source callers ignore it.
 void CgsCore::SPrintf(char* buffer, u32 len, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    int result = _vsnprintf(buffer, len, fmt, args);
-    if (result == len || result < 0)
-    {
-        // If the result is equal to len, it means the string was truncated.
-        // If result is negative, it indicates an error occurred.
-        buffer[len - 1] = '\0'; // Ensure null termination
-    }
+    const int lNumBytesCopied = vsnprintf(buffer, len, fmt, args);
     va_end(args);
+
+    // ARTIST @0x821F14F8 uses a signed cmpw against the signed length and
+    // asserts for result >= len. A negative XDK CRT return stays negative and
+    // takes the non-assert path; do not reinterpret it as an unsigned count.
+    if (lNumBytesCopied >= static_cast<s32>(len))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lNumBytesCopied<(int32_t)luBytes",
+            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+            119);
+        CgsDev::Assert::EndAssert();
+    }
 }
 
 void CgsCore::SnPrintf(char* buffer, u32 len, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    int result = _vsnprintf(buffer, len, fmt, args);
-    if (result == len || result < 0)
-    {
-        // If the result is equal to len, it means the string was truncated.
-        // If result is negative, it indicates an error occurred.
-        buffer[len - 1] = '\0'; // Ensure null termination
-    }
+    vsnprintf(buffer, len, fmt, args);
     va_end(args);
 }
 
