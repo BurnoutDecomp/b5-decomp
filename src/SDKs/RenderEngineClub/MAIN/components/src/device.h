@@ -4,6 +4,7 @@
 #include <xtl.h>
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programvariablehandle.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/rendertargetstate.h"
 #include "rw/math/vpu/types.h"
 
 // ARTIST off_83271608. The native SDK owns the D3DDevice declaration and ABI.
@@ -12,6 +13,11 @@ extern D3DDevice* gpD3DDevice;
 namespace renderengine
 {
     class PixelBuffer;
+    extern u32 gDeviceFrameCounter83271624; // ARTIST 83271624
+    struct ClearColorParameters { D3DVECTOR4 m_color; };
+    struct ClearDepthStencilParameters { u32 m_clearFlags; f32 m_depth; u32 m_stencil; };
+    CGS_STATIC_ASSERT((sizeof(ClearColorParameters) == 16), "ARTIST clear colour");
+    CGS_STATIC_ASSERT((sizeof(ClearDepthStencilParameters) == 12), "ARTIST depth/stencil clear");
     // ARTIST Device-owned native surfaces 83271100/83271140 and flag8327161C.
     extern PixelBuffer gOriginalColorBuffer;
     extern PixelBuffer gOriginalDepthStencilBuffer;
@@ -113,6 +119,10 @@ namespace renderengine
             u32 ringBufferSegmentCount;
             D3DVIDEO_SCALER_PARAMETERS videoScalerParameters;
         };
+
+        static void Clear(const ClearColorParameters& lrColor, const ClearDepthStencilParameters& lrDepthStencil,
+                          RenderTargetState::TargetID leTarget); // ARTIST82B61E18, body pending
+        static void ShowPixelBuffer(PixelBuffer* lpBuffer); // ARTIST82B63298, body pending
 
         struct DirectDraw
         {

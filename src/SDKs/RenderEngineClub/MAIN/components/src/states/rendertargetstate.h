@@ -10,6 +10,9 @@ namespace renderengine
     class RenderTargetState
     {
     public:
+        // ARTIST82B61E18 treats 0..3 as colour slots and 4 as all colours.
+        enum TargetID { TARGETID_COLOR0 = 0, TARGETID_COLOR1 = 1, TARGETID_COLOR2 = 2,
+                        TARGETID_COLOR3 = 3, TARGETID_COLOR_ALL = 4 };
         struct Parameters
         {
             PixelBuffer* targets[5];
