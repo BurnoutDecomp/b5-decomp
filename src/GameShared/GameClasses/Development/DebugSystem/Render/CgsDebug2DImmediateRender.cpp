@@ -6,6 +6,18 @@
 #include <cstring>
 
 #include <cstdio>
+#if defined(_XBOX)
+#include <vectorintrinsics.h>
+#endif
+
+namespace
+{
+    rw::math::vpu::Vector2 MakeDebugVector2(float x, float y, float z, float w)
+    {
+        const rw::math::vpu::Vector2 value = { x, y, z, w };
+        return value;
+    }
+}
 
 namespace CgsDev
 {
@@ -18,7 +30,7 @@ namespace CgsDev
         miIm2dVertsHead       = 0;
         mpFont.Clear(); // ARTIST 8281A2D0..8281A2D4: restore the null font handle.
         mVectorFont.Construct();
-        mVectorFont.SetSize(Vector2{10.0f,10.0f,0.0f,0.0f});
+        mVectorFont.SetSize(MakeDebugVector2(10.0f,10.0f,0.0f,0.0f));
         mVectorFont.SetRenderer(this);   // glyph strokes draw through this renderer's DrawLine
         mTextRenderer.Construct(); // ARTIST 8281A304
     }
@@ -154,8 +166,10 @@ namespace CgsDev
             DispatchVertices();
 
         CgsGraphics::Basic2dColouredTexturedVertex& lrVertex = maIm2dVertsArray[miIm2dVertsHead];
-        lrVertex.mv2Pos    = { lfX, lfY };
-        lrVertex.mv2Tex0UV = { 0.0f, 0.0f };
+        lrVertex.mv2Pos.x = lfX;
+        lrVertex.mv2Pos.y = lfY;
+        lrVertex.mv2Tex0UV.x = 0.0f;
+        lrVertex.mv2Tex0UV.y = 0.0f;
         // RGBA is the packed u32 colour; the vertex carries it as RGBA8 (same 4 bytes).
         *reinterpret_cast<u32*>(&lrVertex.mv4Colour) = lColour;
         ++miIm2dVertsHead;
@@ -191,7 +205,7 @@ namespace CgsDev
     {
         const Vector2 lv2End = {lv2Position.x + lv2Size.x, lv2Position.y + lv2Size.y,
                                lv2Position.z + lv2Size.z, lv2Position.w + lv2Size.w};
-        if (!Do2DBoxesIntersect(Vector2{0, 0, 0, 0}, GetVirtualScreenSize(), lv2Position, lv2End))
+        if (!Do2DBoxesIntersect(MakeDebugVector2(0, 0, 0, 0), GetVirtualScreenSize(), lv2Position, lv2End))
             return;
         EmitQuad(lv2Position.x, lv2Position.y, lv2End.x, lv2End.y, lColour);
     }
@@ -199,7 +213,7 @@ namespace CgsDev
     // ARTIST export hole 8281C3E0: f3-f1 and f4-f2 produce the vector size.
     void Debug2DImmediateRender::DrawBox(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour)
     {
-        DrawBox(Vector2{lfX0, lfY0, 0, 0}, Vector2{lfX1 - lfX0, lfY1 - lfY0, 0, 0}, lColour);
+        DrawBox(MakeDebugVector2(lfX0, lfY0, 0, 0), MakeDebugVector2(lfX1 - lfX0, lfY1 - lfY0, 0, 0), lColour);
     }
 
     // X360 @0x8281C960 (the bordered frame around (x0,y0)-(x1,y1)): four DrawBox strips - the
@@ -214,14 +228,14 @@ namespace CgsDev
         const f32 lfOuterX0    = lfX0 - lfBorderSize;
         const f32 lfOuterWidth = (lfX1 + lfBorderSize) - lfOuterX0;
 
-        DrawBox(Vector2{lfOuterX0, lfY0 - lfBorderSize, 0, 0},
-                Vector2{lfOuterWidth, lfBorderSize, 0, 0}, lColour); // top
-        DrawBox(Vector2{lfOuterX0, lfY1, 0, 0},
-                Vector2{lfOuterWidth, lfBorderSize, 0, 0}, lColour); // bottom
-        DrawBox(Vector2{lfOuterX0, lfY0, 0, 0},
-                Vector2{lfBorderSize, lfY1 - lfY0, 0, 0}, lColour); // left
-        DrawBox(Vector2{lfX1, lfY0, 0, 0},
-                Vector2{lfBorderSize, lfY1 - lfY0, 0, 0}, lColour); // right
+        DrawBox(MakeDebugVector2(lfOuterX0, lfY0 - lfBorderSize, 0, 0),
+                MakeDebugVector2(lfOuterWidth, lfBorderSize, 0, 0), lColour); // top
+        DrawBox(MakeDebugVector2(lfOuterX0, lfY1, 0, 0),
+                MakeDebugVector2(lfOuterWidth, lfBorderSize, 0, 0), lColour); // bottom
+        DrawBox(MakeDebugVector2(lfOuterX0, lfY0, 0, 0),
+                MakeDebugVector2(lfBorderSize, lfY1 - lfY0, 0, 0), lColour); // left
+        DrawBox(MakeDebugVector2(lfX1, lfY0, 0, 0),
+                MakeDebugVector2(lfBorderSize, lfY1 - lfY0, 0, 0), lColour); // right
     }
 
     // ARTIST 8281C1F0: line-list mode and the original two screen-space endpoints.
@@ -316,7 +330,17 @@ namespace CgsDev
 
         DrawBox(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lBackColour);
         const f32 lfSpan = (lv2Max.x - lv2Min.x) - 2.0f;
-        const f32 lfRight = fmaf(lfSpan, lfValue / lfMax, lv2Min.x + 1.0f);
+#if defined(_XBOX)
+        // ARTIST 8281CC30: vmaddfp(span, minX + 1, value / max).
+        __declspec(align(16)) f32 laSpan[4] = { lfSpan, lfSpan, lfSpan, lfSpan };
+        __declspec(align(16)) f32 laOrigin[4] = { lv2Min.x + 1.0f, 0, 0, 0 };
+        __declspec(align(16)) f32 laFraction[4] = { lfValue / lfMax, 0, 0, 0 };
+        __declspec(align(16)) f32 laResult[4];
+        __stvx(__vmaddfp(__lvx(laSpan, 0), __lvx(laOrigin, 0), __lvx(laFraction, 0)), laResult, 0);
+        const f32 lfRight = laResult[0];
+#else
+        const f32 lfRight = fmaf(lfSpan, lv2Min.x + 1.0f, lfValue / lfMax);
+#endif
         DrawBox(lv2Min.x, lv2Min.y + 2.0f, lfRight, lv2Max.y - 2.0f, lForeColour);
     }
 
@@ -354,8 +378,10 @@ namespace CgsDev
             // The object remains single-line. Its box is exactly one font-height
             // tall; the cached string width is unscaled (82823F84..82823F88).
             const f32 lfWidth = mpFont->GetStringWidth(lpUtf8) * lfScale;
-            lTextObject.mv2TopLeft     = { lfX, lfY };
-            lTextObject.mv2BottomRight = { lfX + lfWidth, lfY + lfScale };
+            lTextObject.mv2TopLeft.mX = lfX;
+            lTextObject.mv2TopLeft.mY = lfY;
+            lTextObject.mv2BottomRight.mX = lfX + lfWidth;
+            lTextObject.mv2BottomRight.mY = lfY + lfScale;
             lTextObject.mfStringWidth  = mpFont->GetStringWidth(lpUtf8);
 
             if (lTextObject.mbAutosize)
@@ -372,7 +398,7 @@ namespace CgsDev
             meDrawingMode = E_DRAWING_LINES;
             mePrimitiveType = static_cast<renderengine::PrimitiveType>(2);
         }
-        mVectorFont.SetSize(Vector2{ lfScale, lfScale, 0.0f, 0.0f });
+        mVectorFont.SetSize(MakeDebugVector2( lfScale, lfScale, 0.0f, 0.0f ));
         mVectorFont.Print(lfX, lfY, lpcText, lColour);
     }
 
@@ -401,8 +427,8 @@ namespace CgsDev
                                                          f32 lfBorder)
     {
         const Vector2 lExtent = CalcTextExtent(lpcText, lfScale);
-        DrawBox(Vector2{lfX - lfBorder, lfY - lfBorder, 0, 0},
-                Vector2{lExtent.x + lfBorder * 2.0f, lExtent.y + lfBorder * 2.0f, 0, 0},
+        DrawBox(MakeDebugVector2(lfX - lfBorder, lfY - lfBorder, 0, 0),
+                MakeDebugVector2(lExtent.x + lfBorder * 2.0f, lExtent.y + lfBorder * 2.0f, 0, 0),
                 lBackgroundColour);
         DrawText(lpcText, lfX, lfY, lfScale, lTextColour);
     }
@@ -412,7 +438,8 @@ namespace CgsDev
                                             f32 lfScale, RGBA lColour)
     {
         char lacValue[256];
-        std::snprintf(lacValue, sizeof(lacValue), "%d", liValue);
+        _snprintf(lacValue, sizeof(lacValue), "%d", liValue);
+        lacValue[sizeof(lacValue) - 1] = 0;
         DrawText(lacValue, lfX, lfY, lfScale, lColour);
     }
 
@@ -444,7 +471,7 @@ namespace CgsDev
 
     Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const
     {
-        return { mfVirtualScreenWidth, mfVirtualScreenHeight, 0.0f, 0.0f };
+        return MakeDebugVector2(mfVirtualScreenWidth, mfVirtualScreenHeight, 0.0f, 0.0f);
     }
 
     // ARTIST 0x8282C548. This is a fixed-width line splitter (rather than word wrapping): derive
@@ -508,7 +535,7 @@ namespace CgsDev
         }
 
         return VectorFont::ComputeTextExtent(
-            lpcText, Vector2{ lfScale, lfScale, 0.0f, 0.0f }).x;
+            lpcText, MakeDebugVector2( lfScale, lfScale, 0.0f, 0.0f )).x;
     }
 
     // X360 0x82824308. Bitmap-font height is exactly the requested text size; vector-font
@@ -519,10 +546,10 @@ namespace CgsDev
         {
             const CgsResource::CgsUtf8* lpUtf8 =
                 reinterpret_cast<const CgsResource::CgsUtf8*>(lpcText);
-            return { mpFont->GetStringWidth(lpUtf8) * lfScale, lfScale, 0.0f, 0.0f };
+            return MakeDebugVector2(mpFont->GetStringWidth(lpUtf8) * lfScale, lfScale, 0.0f, 0.0f);
         }
 
         return VectorFont::ComputeTextExtent(
-            lpcText, Vector2{ lfScale, lfScale, 0.0f, 0.0f });
+            lpcText, MakeDebugVector2( lfScale, lfScale, 0.0f, 0.0f ));
     }
 }
