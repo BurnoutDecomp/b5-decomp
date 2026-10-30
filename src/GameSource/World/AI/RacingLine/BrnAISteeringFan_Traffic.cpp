@@ -96,7 +96,7 @@ namespace
     // product and the sum separately.
     f32 InterpolateTraffic(f32 lfFrom, f32 lfTo, f32 lfTime)
     {
-        return std::fmaf(lfTo - lfFrom, lfTime, lfFrom);
+        return (lfTo - lfFrom) * lfTime + lfFrom;
     }
 
     // vmsum3fp128 v0, v120, v120 then the two-step rsqrt chain at 0x827878B0..0x827878FC.
