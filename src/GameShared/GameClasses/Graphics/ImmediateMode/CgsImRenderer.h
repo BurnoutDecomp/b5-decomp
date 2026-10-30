@@ -75,6 +75,9 @@ namespace CgsGraphics
             const SamplerState*      mpSamplerState_Nearest_MipNearest_TileUV;
         };
 
+        // DecFIGS h88; ARTIST82854A24 reads the shared white-texture slot.
+        static const StateLibrary& GetStateLibrary() { return mgStateLibrary; }
+
     protected:
         static StateLibrary mgStateLibrary;
         static bool mgbStateLibraryConstructed;
