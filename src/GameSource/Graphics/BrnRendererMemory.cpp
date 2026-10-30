@@ -243,8 +243,18 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
     rw::graphics::postfx::RenderTarget* lpBackBufferTarget = lpBackBuffer->GetRenderTarget();
     rw::graphics::postfx::RenderTarget* lpDownSampleTarget =
         mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE]->GetRenderTarget();
-    lpBackBufferTarget->SetSectionRenderTargetState(4, lpDownSampleTarget->GetSectionRenderTargetState(4));
-    lpBackBufferTarget->SetSectionRenderTargetState(0, rw::graphics::postfx::gpDefaultRenderTargetState);
+    typedef rw::graphics::postfx::RenderTarget NativeRenderTarget;
+    typedef rw::graphics::postfx::Target NativeTarget;
+    CGS_STATIC_ASSERT((offsetof(NativeRenderTarget, maColourTargets) +
+        offsetof(NativeTarget, mpTextureState) == 0x2C), "ARTIST shared colour sampler");
+    CGS_STATIC_ASSERT((offsetof(NativeRenderTarget, mpSection0State) == 0x1C), "ARTIST section-zero state");
+
+    // ARTIST823F7064..7080 aliases the down-sample colour sampling state.
+    // This is a Target member, not a fifth entry in a section-state array.
+    lpBackBufferTarget->maColourTargets[0].mpTextureState =
+        lpDownSampleTarget->maColourTargets[0].mpTextureState;
+    lpBackBufferTarget->mpSection0State = const_cast<renderengine::RenderTargetState*>(
+        renderengine::Device::GetDefaultRenderTargetState());
 
     mapRenderTarget[E_RENDER_TARGET_BACK_BUFFER] = lpBackBuffer;
 }
