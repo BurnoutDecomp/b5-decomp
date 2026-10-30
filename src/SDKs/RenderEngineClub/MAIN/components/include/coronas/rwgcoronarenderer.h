@@ -3,6 +3,7 @@
 #define RENDERENGINE_CORONARENDERER_H
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "BrnCommonTypes.h"                                              // Vector2, Vector4, Matrix44
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // ProgramBufferData, ProgramVariableHandle
 // =================================================================================================

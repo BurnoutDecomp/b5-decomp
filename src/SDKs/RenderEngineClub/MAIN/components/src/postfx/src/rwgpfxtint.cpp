@@ -65,9 +65,10 @@ namespace rw { namespace graphics { namespace postfx {
         tint->m_textureTintMapResource = tint->m_allocator->DoAllocate(textureDescriptor, 0);
         tint->m_textureTintMap = renderengine::Texture::Initialize(tint->m_textureTintMapResource, textureParams);
 
-        renderengine::TextureState::Parameters stateParams = {};
+        renderengine::TextureState::Parameters stateParams;
         stateParams.muAddressU = stateParams.muAddressV = stateParams.muAddressW = 2;
         stateParams.muMagFilter = stateParams.muMinFilter = 1;
+        stateParams.muMipFilter = 0;
         stateParams.muMagFilterZ = stateParams.muMinFilterZ = 1;
         stateParams.muMinMipLevel = 13;
         stateParams.muMaxAnisotropy = 1;
