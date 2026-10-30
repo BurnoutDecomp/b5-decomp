@@ -15,7 +15,6 @@
 #include "rw/core/debug/DebugCriticalSection.h"                                     // gDebugManagerSection (ThreadSafeAquire/Release lock)
 #include "rw/rwcore_structs.h"                                                       // rw::ResourceAllocatorRegistry / rw::core::debug::Manager / rw::BaseResourceDescriptors
 
-#include <cstdio>    // snprintf (RenderMemory/RenderAssert formatting; the X360 used CgsCore::SPrintf)
 #include <cstring>   // strlen (the fps stack-string asserts)
 #include <cstdlib>
 
@@ -527,8 +526,8 @@ namespace CgsDev
         const f32 lfX = lrMetrics.mfScreenWidth * 0.66f;
         const f32 lfY = lrMetrics.mfScreenHeight - lrMetrics.mfScreenBorderBottom;
 
-        char lacText[64];
-        _snprintf(lacText, sizeof(lacText), "%uMB %uKB %uB", luMB, luKB, luB);
+        char lacText[512];
+        CgsCore::SPrintf(lacText, sizeof(lacText), "%uMB %uKB %uB", luMB, luKB, luB);
         mBufferedRenderer.Draw2DText(lacText, lfX, lfY, 16.0f, 0xFFFFFFFFu);
     }
 
@@ -545,9 +544,8 @@ namespace CgsDev
         const u32 luColour = 0xFF32FFFFu;   // carved (dword_82F32268)
         char lacBuffer[1024];
 
-        _snprintf(lacBuffer, sizeof(lacBuffer), "%d:%s",
-                      lpData->miLine, lpData->mpcFile ? lpData->mpcFile : "?");
-        lacBuffer[sizeof(lacBuffer) - 1] = 0;
+        CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "%d:%s",
+                         lpData->miLine, lpData->mpcFile);
         lrRenderer.Draw2DText(lacBuffer, 50.0f, 50.0f, 16.0f, luColour);
 
         lrRenderer.Draw2DText(lpData->macAssertMessage, 50.0f, 68.0f, 16.0f, luColour);
@@ -556,14 +554,12 @@ namespace CgsDev
         const s32 liCount = lpData->mStack.GetNumStackAddresses();
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
+            char lacAddr[16];
+            CgsCore::SPrintf(lacAddr, sizeof(lacAddr), "    0x%08X",
+                             static_cast<u32>(lpData->mStack.GetStackAddress(liIndex)));
             const char* lpcName = lpData->mpMapReader ? lpData->mpMapReader->GetStackEntryName(liIndex) : 0;
-            char lacAddr[24];
             if (!lpcName)
-            {
-                _snprintf(lacAddr, sizeof(lacAddr), "    0x%08X",
-                              static_cast<u32>(lpData->mStack.GetStackAddress(liIndex)));
                 lpcName = lacAddr;
-            }
             lrRenderer.Draw2DText(lpcName, 50.0f, lfY, 16.0f, luColour);
             lfY += 18.0f;
         }
