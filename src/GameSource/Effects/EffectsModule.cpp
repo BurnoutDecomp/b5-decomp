@@ -1594,8 +1594,8 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
     lParams.mPad08[4] = lParams.mPad08[5] = lParams.mPad08[6] = lParams.mPad08[7] = 0;
     lParams.mCameraPosition = lpCamera->GetTransform().wAxis;   // camera +0x30, the transform's position row
 
-    mbUpdateRan2F5A9 = true;
-    mbUpdateRan2F5A8 = true;
+    mEffectsSerialiser.SetDataRestored(true);
+    mEffectsSerialiser.SetDataReady(true);
 
     BrnReplays::EffectsSerialiserStaticLayout* lpLayout = mEffectsSerialiser.GetStaticLayout();
     const BrnReplays::EffectsSerialiser::EMode leMode = mEffectsSerialiser.GetMode();

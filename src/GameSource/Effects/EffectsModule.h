@@ -45,10 +45,9 @@
 // console byte offsets (and, once ParticleModule grew to its real host size, ON TOP
 // OF EACH OTHER). Members are now the DWARF's (DecFIGS EffectsModule.h:552-634), in
 // the DWARF's order, each typed with its committed type; the console byte offset
-// each one was pinned at by the ARTIST asm is given per member. Four members are
-// X360-only (absent from the FIGS DWARF, present in every ARTIST body that touches
-// the object): muSlipStreamEffectHandle, mEffectsSerialiser and the two bools the
-// Update ladder raises at +0x2F5A8/9. Nothing on the host addresses this object by
+// each one was pinned at by the ARTIST asm is given per member. ARTIST also has
+// muSlipStreamEffectHandle and mEffectsSerialiser. The Update stores at +0x2F5A8/9
+// are the serialiser data-ready and data-restored flags, not separate members. Nothing on the host addresses this object by
 // byte offset -- the console layout pins the member SET, not host positions.
 //
 // LAYOUT (X360, 4-byte pointers; the base ModuleSingleBuffered is 0x228 bytes):
@@ -69,8 +68,8 @@
 //   +0x2D400 mCrashTriangleCache        +0x2F280 mGlassSmashManager
 //   +0x2F510 maShowtimeBounceEffectHandles[3]  +0x2F51C muNextShowtimeBounceEffect
 //   +0x2F520 mfLastShowtimeBounceEffectTime    +0x2F524 maJunkyardEffectHandles[10]
-//   +0x2F54C muSlipStreamEffectHandle   +0x2F550 mEffectsSerialiser (0x58)
-//   +0x2F5A8 / +0x2F5A9 the two Update-raised bools
+//   +0x2F54C muSlipStreamEffectHandle   +0x2F550 mEffectsSerialiser (0x5C)
+//   +0x2F5A8 / +0x2F5A9 serialiser data-ready / data-restored flags
 // ============================================================================
 
 namespace CgsMemory   { class HeapMalloc; }
@@ -513,8 +512,6 @@ namespace BrnEffects
         // ---- ARTIST-only tail (not in the FIGS DWARF) --------------------------------------
         u32                                      muSlipStreamEffectHandle;           // +0x2F54C  Construct: -1 (HandleConvoySlipStream / HandleGameActions)
         BrnReplays::EffectsSerialiser            mEffectsSerialiser;                 // +0x2F550  Construct: EffectsSerialiser::Construct
-        bool                                     mbUpdateRan2F5A8;                   // +0x2F5A8  Update: = 1 every non-suspended step (FLAG: name inferred, no reader found)
-        bool                                     mbUpdateRan2F5A9;                   // +0x2F5A9  Update: = 1 (same)
     };
 }
 

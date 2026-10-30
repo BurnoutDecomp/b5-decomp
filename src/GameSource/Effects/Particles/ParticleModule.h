@@ -385,9 +385,8 @@ namespace BrnParticle
         // once mCameraTransform is 16-aligned at +0x20, and +0xA0 is mCgsCamera's own
         // m_projectionMatrix at its +0x40 (CgsCamera.h pins that offset with a static_assert).
         //
-        // FLAG (guest tail): the console places the NEXT member of the enclosing buffer
-        // (mBufferCrashTriangleCache) at +0x3B00 while this layout ends at +0x210 from
-        // +0x38A0 == +0x3AB0. The 0x50-byte gap is NOT accounted for; recorded, not rounded.
+        // DecFIGS declares this type as 0x210/align16. The next dispatch member,
+        // BrnCrashTriangleCache, is itself 128-aligned; it starts at +0x3B00.
         struct ParticleRenderData
         {
             // DWARF ParticleModule.h:579-586 -- the muFlags bits.
