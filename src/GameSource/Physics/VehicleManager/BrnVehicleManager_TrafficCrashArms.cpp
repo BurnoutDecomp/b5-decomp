@@ -178,11 +178,12 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
         // mass scaled by the closing speed, multiplied. v1 = the contact point ON A (arg_20).
         const f32 lfSlamMagnitude =
             lfClosingSpeed * lpBodyB->GetMass().x / lpBodyA->GetMass().x;
+        const VecFloat lvSlamMagnitude = { lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude };
         mPhysicalTrafficManager.SetTrafficVehicleSlammed(
             lTrafficAPhysicsID, lTrafficBPhysicsID, lpBodyB,
             lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface,
             lContact.mPointOnA,
-            VecFloat{ lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude });
+            lvSlamMagnitude);
     }
 
     // ---- the B half (0x8263F00C..0x8263F0DC): B is the victim, A the crasher --------------------
@@ -198,11 +199,12 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
         // v2 = (1 / massB) * (massA * closing); v1 = the contact point ON B (arg_30).
         const f32 lfSlamMagnitude =
             lfClosingSpeed * lpBodyA->GetMass().x / lpBodyB->GetMass().x;
+        const VecFloat lvSlamMagnitude = { lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude };
         mPhysicalTrafficManager.SetTrafficVehicleSlammed(
             lTrafficBPhysicsID, lTrafficAPhysicsID, lpBodyA,
             lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface,
             lContact.mPointOnB,
-            VecFloat{ lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude });
+            lvSlamMagnitude);
     }
 }
 
