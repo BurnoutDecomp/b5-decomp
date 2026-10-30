@@ -265,6 +265,9 @@ public:
     // BOTH because both inline setters are inlined), the RoadRules pointer forwarded as
     // ChallengeManager::Construct's 4th argument, and the AchievementManager forwarded to
     // ScoringSystem::Construct.
+    // ARTIST823274F8: clear challenge collaborators and release scoring.
+    bool Release();
+
     void Construct(GameStateModule*                      lpGameStateModule,
                    BrnProgression::ProgressionManager*   lpProgressionManager,
                    TriggerQueryManager*                  lpTriggerQueryManager,

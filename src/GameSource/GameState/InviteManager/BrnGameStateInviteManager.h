@@ -48,6 +48,7 @@ namespace BrnGameState
 {
     struct GameStateInviteManager
     {
+    friend class GameStateModule;
         // DWARF BrnGameStateInviteManager.h:97 -- the top-level invite state.
         enum EInviteState
         {

@@ -347,6 +347,7 @@ namespace BrnGameState
         friend struct BrnGui::OnlineGameRoomPlayerInfo;
         // GameStateModule::ProcessGameEvents (case 79) calls CountCompletedChallenges directly.
         friend class GameStateModule;
+        friend class ModeManager;
 
         // ---------------- private helpers (DWARF :459-:727) ----------------
         // Both bodied in the .cpp (GetChallengeFromID beside GetChallengeIndex).

@@ -683,6 +683,96 @@ void GameStateModule::Destruct()
     mbIsUpdating = false;
 }
 
+// ARTIST823756A8. Each asynchronous release resumes at the stage that suspended.
+bool GameStateModule::Release(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
+{
+    mbIsUpdating = true;
+    lpOutputBuffer->LockForWrite();
+    bool lbReleased = false;
+    switch (meReleaseStage)
+    {
+    case E_RELEASESTAGE_START:
+    case E_RELEASESTAGE_DEVELOPER_CHALLENGE_MANAGER:
+        meReleaseStage = E_RELEASESTAGE_DEVELOPER_CHALLENGE_MANAGER;
+        mDeveloperChallengeManager.maCollectedBillboards.Clear();
+        mDeveloperChallengeManager.maRoadRageTakedownTimes.Clear();
+        mDeveloperChallengeManager.maCompletedChallenges.UnSetAll();
+        mDeveloperChallengeManager.maTakenDownRaceCars.UnSetAll();
+        // fall through
+    case E_RELEASESTAGE_IMAGE_MANAGER:
+        meReleaseStage = E_RELEASESTAGE_IMAGE_MANAGER;
+        if (!mImageManager.Release()) break;
+        // fall through
+    case E_RELEASESTAGE_STREET_MANAGER:
+        meReleaseStage = E_RELEASESTAGE_STREET_MANAGER;
+        // ARTIST calls the folded 82C296C8 leaf, which returns true without stores.
+        // fall through
+    case E_RELEASESTAGE_ACHIEVEMENT_MANAGER:
+        meReleaseStage = E_RELEASESTAGE_ACHIEVEMENT_MANAGER;
+        if (!mAchievementManager.Release()) break;
+        // fall through
+    case E_RELEASESTAGE_RICH_PRESENCE:
+        meReleaseStage = E_RELEASESTAGE_RICH_PRESENCE;
+        mRichPresenceManager.meOldRichPresenceStatus = static_cast<RichPresenceManagerBase::ERichPresenceStates>(0);
+        mRichPresenceManager.miUserID = -1;
+        mRichPresenceManager.meLobbyType = static_cast<GameStateModuleIO::EGameModeType>(18);
+        mRichPresenceManager.meSetLobbyType = static_cast<GameStateModuleIO::EGameModeType>(18);
+        mRichPresenceManager.miCurrentRound = -1;
+        mRichPresenceManager.miTotalRounds = -1;
+        mRichPresenceManager.mbPlayerIsInLobby = false;
+        mRichPresenceManager.meIsRanked = RichPresenceManagerBase::E_GAME_COUNT;
+        mRichPresenceManager.meOldRankedStatus = RichPresenceManagerBase::E_GAME_COUNT;
+        // fall through
+    case E_RELEASESTAGE_PROGRESSION:
+        meReleaseStage = E_RELEASESTAGE_PROGRESSION;
+        mProgressionManager.mpModeManager = 0;
+        // fall through
+    case E_RELEASESTAGE_NETWORKROUNDMANAGER:
+        meReleaseStage = E_RELEASESTAGE_NETWORKROUNDMANAGER;
+        // fall through
+    case E_RELEASESTAGE_FLYBYMANAGER:
+        meReleaseStage = E_RELEASESTAGE_FLYBYMANAGER;
+        // fall through
+    case E_RELEASESTAGE_INVITEMANAGER:
+        meReleaseStage = E_RELEASESTAGE_INVITEMANAGER;
+        mGameStateInviteManager.mGameEventQueue.Release();
+        mGameStateInviteManager.mModulePreparedBitArray.UnSetAll();
+        // fall through
+    case E_RELEASESTAGE_PAYBACKMANAGER:
+        mPaybackManager.mDirtyTrickOutputQueue.Clear();
+        meReleaseStage = E_RELEASESTAGE_PAYBACKMANAGER;
+        // fall through
+    case E_RELEASESTAGE_MUGSHOTMANAGER:
+        meReleaseStage = E_RELEASESTAGE_MUGSHOTMANAGER;
+        // fall through
+    case E_RELEASESTAGE_TAKEDOWNMANAGER:
+        meReleaseStage = E_RELEASESTAGE_TAKEDOWNMANAGER;
+        // fall through
+    case E_RELEASESTAGE_MODEMANAGER:
+        meReleaseStage = E_RELEASESTAGE_MODEMANAGER;
+        if (!mModeManager.Release()) break;
+        // fall through
+    case E_RELEASESTAGE_MANAGER:
+        meReleaseStage = E_RELEASESTAGE_MANAGER;
+        if (!CgsModule::ModuleSingleBuffered::Release()) break;
+        // fall through
+    case E_RELEASESTAGE_DONE:
+        lbReleased = true;
+        mDriveThruManager.maDriveThroughClosed.UnSetAll();
+        meReleaseStage = E_RELEASESTAGE_MANAGER;
+        mePrepareStage = E_PREPARESTAGE_START;
+        break;
+    default:
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_GSM_FILE, 1092);
+        CgsDev::Assert::EndAssert();
+        break;
+    }
+    lpOutputBuffer->UnlockForWrite();
+    mbIsUpdating = false;
+    return lbReleased;
+}
+
 // ----------------------------------------------------------------------------
 // ⭐ X360 0x8239E578 -- GameStateModule::Prepare (vtable +64), the module's FIRST-pass prepare.
 //

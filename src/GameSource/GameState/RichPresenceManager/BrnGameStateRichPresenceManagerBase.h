@@ -56,6 +56,7 @@ class NetworkRoundManager;
 // ----------------------------------------------------------------------------
 class RichPresenceManagerBase
 {
+    friend class GameStateModule;
 public:
     // DWARF BrnGameStateRichPresenceManagerBase.h:106. The rich-presence state value the platform
     // presence layer displays. KE_GAME_MODES_TO_RICH_PRESENCE_STATES maps EGameModeType -> one of these.
