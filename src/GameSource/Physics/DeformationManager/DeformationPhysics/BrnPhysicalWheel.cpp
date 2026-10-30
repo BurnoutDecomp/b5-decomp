@@ -320,7 +320,7 @@ namespace Deformation
         // static buffer in word 0; Initialize reads only word 0 (`lwz r11, 0(r3)`), so the X360's
         // five-entry BaseResources vs the host's four is inert (the <4>-vs-<5> drift AGENTS.md
         // records). CylinderVolume::Initialize's own DWARF/asm signature takes that slot directly.
-        rw::Resource lVolumeResource = {};
+        rw::Resource lVolumeResource;
         lVolumeResource.m_baseResources[0] = gCylinderInitialiseStorage.maCylinderInitialiseBuffer;
 
         rw::collision::CylinderVolume* lpVolume = rw::collision::CylinderVolume::Initialize(
@@ -358,12 +358,13 @@ namespace Deformation
 
         lpSceneInput->AddVolumeInstance(lVolumeInstanceId, lVolumeId, mRenderTransform);  // mr r6, r31
 
+        const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
         lpSceneInput->AddForCollision(
             lVolumeInstanceId,
             static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(
                 KI_CULLING_GROUP_DETACHED_WHEEL),                                // li r8, 9
             rw::physics::ACTIVE_BODY,                                            // li r8, 4
-            Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },                                   // the zeroed vmx lane
+            lZeroVelocity,                                   // the zeroed vmx lane
             CgsSceneManager::SceneManagerIO::E_DO_NOT_ADD_TO_CACHE_MANAGER);     // li r8, 2
 
         lpSceneInput->SetVolumeInstanceCullingGroup(lVolumeInstanceId,

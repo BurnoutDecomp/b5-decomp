@@ -219,7 +219,7 @@ namespace Deformation
         // the static buffer into word 0; Initialize reads only word 0 (`lwz r3, 0(r3)`), so the
         // X360's five-entry BaseResources vs the host's four is inert here (the same <4>-vs-<5>
         // drift CollisionVolume.hpp:75-81 records).
-        rw::Resource lVolumeResource = {};
+        rw::Resource lVolumeResource;
         lVolumeResource.m_baseResources[0] = gBoxInitialiseStorage.maBoxInitialiseBuffer;
 
         // The ctor spills v1 and re-reads it as three scalar floats, so the 3-float overload is the
@@ -270,12 +270,13 @@ namespace Deformation
         // The volume instance carries the body's four transform rows (part+0x00/0x10/0x20/0x30).
         lpSceneInput->AddVolumeInstance(lVolumeInstanceId, lVolumeId, lBodyTransform);
 
+        const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
         lpSceneInput->AddForCollision(
             lVolumeInstanceId,
             static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(
                 KI_CULLING_GROUP_DEFORMABLE_PART),                           // li r8, 9
             rw::physics::ACTIVE_BODY,                                        // li r8, 4
-            Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },                               // the zeroed vmx lane
+            lZeroVelocity,                               // the zeroed vmx lane
             CgsSceneManager::SceneManagerIO::E_DO_NOT_ADD_TO_CACHE_MANAGER); // li r8, 2
 
         lpSceneInput->SetVolumeInstanceCullingGroup(lVolumeInstanceId,
