@@ -32,7 +32,7 @@ public:
         f32 w;
     };
 
-    Frustum();
+    Frustum() {}
 
     // DecFIGS frustum.h API; each operation addresses one of the six owned lanes.
     void SetPlane(u32 luIndex, const Plane& lrPlane);

@@ -25,13 +25,6 @@ namespace
     }
 }
 
-// DecFIGS rw/collision/frustum.h: the object owns six Plane values. Plane's
-// existing default constructor initializes each lane; ARTIST's Triangle debug
-// Construct does not overwrite mViewFrustum.
-Frustum::Frustum()
-{
-}
-
 void Frustum::SetPlane(u32 luIndex, const Plane& lrPlane)
 {
     m_planes[luIndex] = lrPlane;
