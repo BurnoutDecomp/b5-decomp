@@ -3,14 +3,12 @@
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"    // ValidityAccount::SetFlag
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"      // BrnDirector::SceneQueryInterface::LineTestNearest
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"               // CgsNumeric::Random::RandomInt (the two 20% rolls)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [diag] CgsDev::Log::gpDebugPrint
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "vendor/renderware/collision/CollisionVolume.hpp"          // rw::collision::SphereVolume (the camera-in-geometry sphere)
 #include "rw/rwcore_structs.h"                                      // rw::Resource (SphereVolume::Initialize's block descriptor)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstdio>    // std::snprintf (the streamed ground-constraint assert message)
-#include <cstdlib>   // std::getenv  ([diag] BRN_CRASHCAM_DIAG)
 
 // ============================================================================
 // GameSource/Director/Camera/BrnVisibilityCollisionPolicy.cpp
@@ -206,12 +204,15 @@ void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicyShared
         // the sphere test's radius (0.1, flt_82004014); NaN fires it too.
         if (mbUseGroundConstraint && !(mGroundConstraint.GetDesiredHeight() > KF_SPHERE_TEST_RADIUS))
         {
-            char lacMessage[192];
-            std::snprintf(lacMessage, sizeof(lacMessage),
-                          "VisibilityCollisionPolicy: Ground contraint will conflict with sphere test "
-                          "because the desired height is too low: %f",
-                          static_cast<double>(mGroundConstraint.GetDesiredHeight()));
-            CGS_ASSERT(false, lacMessage);                                           // :845
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "VisibilityCollisionPolicy: Ground contraint will conflict with sphere test "
+                        "because the desired height is too low: "
+                     << mGroundConstraint.GetDesiredHeight();
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                       "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 845);
+            CgsDev::Assert::EndAssert();
         }
 
         // The camera-in-geometry sphere test (0x82240528..0x82240574). A 0.1 m sphere volume
@@ -229,7 +230,7 @@ void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicyShared
         // The producer copies the full 0x80-byte block into its event, as the console's does (its
         // volume slot is 0x80 wide). The SphereVolume record fills the first 0x60 bytes.
         CGS_ALIGN(16) u8 laVolumeMemory[KU_SPHERE_TEST_VOLUME_BLOCK];   // var_B0
-        rw::Resource lVolumeResource = {};                            // var_E0: zeroed, word 0 = the block
+        rw::Resource lVolumeResource;                            // var_E0: zeroed, word 0 = the block
         lVolumeResource.m_baseResources[0] = laVolumeMemory;
         const rw::collision::SphereVolume* lpSphere =
             rw::collision::SphereVolume::Initialize(lVolumeResource, KF_SPHERE_TEST_RADIUS);   // 0x82240550
