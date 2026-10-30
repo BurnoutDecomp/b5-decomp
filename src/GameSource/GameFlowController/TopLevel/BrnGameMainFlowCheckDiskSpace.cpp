@@ -30,7 +30,7 @@
 void MainGameFlowStateCheckDiskSpace::Update()
 {
     LoadingScriptedState::Update();
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     if (lpGameModule->IsGuiPhaseComplete())
         lpGameModule->GetMainFlowStateMachine().SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
 }

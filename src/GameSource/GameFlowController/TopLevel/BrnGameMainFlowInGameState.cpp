@@ -6,7 +6,7 @@
 // ARTIST823AACF8: use the controller embedded in the live main-game object.
 void MainGameFlowStateInGame::OnEnter()
 {
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     lpGameModule->GetMainFlowStateMachine().SetInGameState(true);
     lpGameModule->RequestGuiFsmStage(5);
 }
@@ -14,20 +14,20 @@ void MainGameFlowStateInGame::OnEnter()
 // ARTIST823AAD28.
 void MainGameFlowStateInGame::OnLeave()
 {
-    BrnGame::GetMainGameModule()->GetMainFlowStateMachine().SetInGameState(false);
+    gpBurnoutGame->GetMainFlowStateMachine().SetInGameState(false);
 }
 
 // ARTIST823E79B8.
 void MainGameFlowStateInGame::Render()
 {
-    BrnGame::GetMainGameModule()->DoDispatch();
+    gpBurnoutGame->DoDispatch();
 }
 
 // ARTIST823F3048: DoUpdate owns the complete frame; then consume game-over.
 void MainGameFlowStateInGame::Update()
 {
-    BrnGame::GetMainGameModule()->DoUpdate();
-    BrnGame::BrnGameModule* const lpGameModule = BrnGame::GetMainGameModule();
+    gpBurnoutGame->DoUpdate();
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
     if (!lpGameModule->IsGameOverRequested())
         return;
     lpGameModule->ClearGameOver();

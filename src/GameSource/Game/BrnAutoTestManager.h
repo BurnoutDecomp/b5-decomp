@@ -56,7 +56,8 @@ namespace BrnGame
         // --- LUA C callbacks (DWARF, bodied in other TUs) ---
         s32 LUACBCallDebugFunction(lua_State* lpLua);
         s32 LUACBRecordLog(lua_State* lpLua);
-        s32 LUACBPressButton(lua_State* lpLua);
+        // ARTIST823C6150 / DecFIGS2E7BD8: Lua handle in r3, no receiver.
+        static s32 LUACBPressButton(lua_State* lpLua);
         s32 LUACBAcquirePad(lua_State* lpLua);
         s32 LUACBRelinquishPad(lua_State* lpLua);
         s32 LUACBActivateDebugComponent(lua_State* lpLua);

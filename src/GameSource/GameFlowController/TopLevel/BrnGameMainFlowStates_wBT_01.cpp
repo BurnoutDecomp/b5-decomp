@@ -14,7 +14,7 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc::Malloc
 #include "SharedClasses/Trigger/BrnRoamingLocation.h"                  // BrnTriggerData needs complete record types
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"
-#include "GameSource/Game/BrnGameModule.hpp"                           // BrnGame::GetMainGameModule / GetInputModule
+#include "GameSource/Game/BrnGameModule.hpp"                           // gpBurnoutGame / GetInputModule
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                   // GameDataIO::OutputBuffer::GetAllocatorList
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // AllocatorList::GetHeapAllocator
 #include "rw/rwcore_general_alloc.h"                                   // rw::core::GeneralResourceAllocator
@@ -70,5 +70,5 @@ bool LoadingScriptedState::LoadControllerModule(BrnResource::GameDataIO::InputBu
         *lppInputModuleAllocator = rw::core::GeneralResourceAllocator::Initialize(lResource, lDescriptor);
     }
 
-    return BrnGame::GetMainGameModule()->GetInputModule().Prepare(*lppInputModuleAllocator);
+    return gpBurnoutGame->GetInputModule().Prepare(*lppInputModuleAllocator);
 }

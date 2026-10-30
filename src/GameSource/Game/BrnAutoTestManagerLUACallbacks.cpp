@@ -1,6 +1,6 @@
 #include "GameSource/Game/BrnAutoTestManager.h"
 #include "GameSource/Game/BrnLUACallbackHelper.h"                    // BrnGame::LUACallbackHelper
-#include "GameSource/Game/BrnGameModule.hpp"                         // BrnGame::GetMainGameModule
+#include "GameSource/Game/BrnGameModule.hpp"                         // gpBurnoutGame
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint / gxMessageFilterFlags
 
@@ -13,12 +13,8 @@
 // is a string), then stamps 1.0f into the game-module's pad-action array at the requested
 // action index, and finally clears the Lua stack.
 //
-// The pad-action store is addressed off the X360 game-module singleton
-// (off_830102D0 == BrnGame::GetMainGameModule()): stfsx f0, (GetInt32Param(0)+0x10A6)*4,
-// module -- i.e. byte offset 0x429C8 + GetInt32Param(0)*4. That f32 action array is not
-// mapped in the incremental BrnGameModule layout, so -- mirroring the Option-B absolute-
-// offset access in BrnGameMainFlowInGameState.cpp -- the write is expressed through the
-// module base + the X360-attested byte offset. Intent: set one pad action to "pressed".
+// ARTIST823C6264..6278 addresses gpBurnoutGame + (index+0x10A6)*4.
+// The actual named destination is mAutoTestManager.maActions, at +0x4298.
 
 // lua_gettop / lua_settop are external Lua C API entry points used only here; declare the
 // minimal surface (mirroring BrnLUACall.h). lua_State + the Get* Lua helpers come in via
@@ -26,21 +22,23 @@
 extern "C"
 {
     int lua_gettop(lua_State* lpLuaState);              // top-of-stack index (== param count)
-    int lua_settop(lua_State* lpLuaState, int liIndex); // set/clear the stack
+    void lua_settop(lua_State* lpLuaState, int liIndex); // set/clear the stack
 }
 
 namespace BrnGame
 {
-    // X360-attested byte offset of the pad-action f32 array within the BrnGameModule
-    // singleton: stfsx uses (GetInt32Param(0) + 0x10A6) * 4 == 0x429C8 + index*4.
-    static const u32 KU_PAD_ACTION_ARRAY_BYTE_OFFSET = 0x429C8;
-
     s32 AutoTestManager::LUACBPressButton(lua_State* lpLua)
     {
         // Inlined LUACallbackHelper(lua_State*): miNumParams = lua_gettop(L), miNumResults = 0.
         LUACallbackHelper lHelper(lpLua);
 
-        CGS_ASSERT(lHelper.GetNumParams() == 1, "lHelper.GetNumParams() == 1");
+        if (lHelper.GetNumParams() != 1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 635);
+            CgsDev::Assert::EndAssert();
+        }
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
@@ -54,10 +52,7 @@ namespace BrnGame
             *CgsDev::Log::gpDebugPrint << lHelper.GetStringParam(0) << "\n";
         }
 
-        // ((f32*)module + byteOffset)[GetInt32Param(0)] = 1.0f -- mark the pad action pressed.
-        u8* lpModuleBase = reinterpret_cast<u8*>(BrnGame::GetMainGameModule());
-        f32* lpActions   = reinterpret_cast<f32*>(lpModuleBase + KU_PAD_ACTION_ARRAY_BYTE_OFFSET);
-        lpActions[lHelper.GetInt32Param(0)] = 1.0f;
+        gpBurnoutGame->mAutoTestManager.maActions[lHelper.GetInt32Param(0)] = 1.0f;
 
         lua_settop(lpLua, 0);
         return 0;

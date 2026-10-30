@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString (resId = name hash)
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                             // BrnGui::GuiEventPlayVideo (508)
 #include "GameSource/Gui/BrnGuiCache.h"                                    // GuiCache::GetTime (the EA-logo dwell)
-#include "GameSource/Game/BrnGameModule.hpp"                          // BrnGame::GetMainGameModule (soft-reboot query)
+#include "GameSource/Game/BrnGameModule.hpp"                          // gpBurnoutGame (soft-reboot query)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"               // CgsSound::Playback::Name::MakeHash (the video sound name)
 #include <cstring>                                                         // strcmp (the Criterion sub-name match)
@@ -192,7 +192,7 @@ namespace BrnGui
 
         // ARTIST82478824..880 checks the loading stage before reading its events.
         if (meUpdateStage == E_UPDATE_STAGE_LOADING &&
-            BrnGame::GetMainGameModule()->HasGameBeenSoftRebooted())
+            gpBurnoutGame->HasGameBeenSoftRebooted())
         {
             PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             meUpdateStage = E_UPDATE_STAGE_DONE;
