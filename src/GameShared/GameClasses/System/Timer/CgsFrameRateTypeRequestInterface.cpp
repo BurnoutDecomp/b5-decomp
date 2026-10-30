@@ -8,6 +8,33 @@
 // copied in (the X360 stores the +4 flag byte then the +0 type word).
 namespace CgsSystem
 {
+    // ARTIST's OutputBuffer::Construct @0x8238299C/A0 and UpdateFrameRateType
+    // @0x823BD13C/140 both clear the valid byte first, then write SINGLE (enum 0).
+    void FrameRateTypeRequestInterface::Clear()
+    {
+        mbIsFrameRateTypeChangeRequested = false;
+        meRequestedFrameRateType = E_FRAMERATEMANAGER_SINGLE;
+    }
+
+    bool FrameRateTypeRequestInterface::IsFrameRateTypeChangeRequested() const
+    {
+        return mbIsFrameRateTypeChangeRequested;
+    }
+
+    EFrameRateManagerType FrameRateTypeRequestInterface::GetRequestedFrameRateTypeChange() const
+    {
+        return meRequestedFrameRateType;
+    }
+
+    // ARTIST's ModeManager::StartGameMode stores the requested enum at +0 and the
+    // valid flag at +4. ExitCurrentMode emits the same writes in reverse order; both
+    // sites publish the same request to the output buffer before it is consumed.
+    void FrameRateTypeRequestInterface::RequestFrameRateTypeChange(EFrameRateManagerType leType)
+    {
+        meRequestedFrameRateType = leType;
+        mbIsFrameRateTypeChangeRequested = true;
+    }
+
     void FrameRateTypeRequestInterface::Append(const FrameRateTypeRequestInterface& lrOther)
     {
         CGS_ASSERT(
