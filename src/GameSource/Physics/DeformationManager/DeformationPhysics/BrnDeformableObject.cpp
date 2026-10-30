@@ -206,9 +206,9 @@ namespace Deformation
                 const f32 lfMassFactor = lOtherBody.GetMass().x * KF_BOUNCE_MASS_FACTOR;
                 const f32 lfMassScale = (lfMassFactor < KVF_BOUNCE_CLAMP_MIN.x) ? KVF_BOUNCE_CLAMP_MIN.x
                     : (lfMassFactor > KVF_BOUNCE_CLAMP_MAX.x) ? KVF_BOUNCE_CLAMP_MAX.x : lfMassFactor;
-                lImpulse = vpu::Mult(lImpulse,
-                    Vector3{ KF_BOUNCE_LATERAL_SCALE, lfMassScale, KF_BOUNCE_LATERAL_SCALE,
-                             KF_BOUNCE_LATERAL_SCALE });
+                const Vector3 lvBounceScale = { KF_BOUNCE_LATERAL_SCALE, lfMassScale,
+                                                KF_BOUNCE_LATERAL_SCALE, KF_BOUNCE_LATERAL_SCALE };
+                lImpulse = vpu::Mult(lImpulse, lvBounceScale);
 
                 // 0x82624FD8..0x82625004 keeps all velocity lanes, flooring only Y to zero.
                 Vector3 lLinearVelocity = lThisBody.GetLinearVelocity();
@@ -304,7 +304,7 @@ namespace Deformation
         Vector3   lImpulseUnit;
         const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
         const VecFloat lvfShapedMagnitude =
-            VecFloat{ lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
+            { lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
 
         // [T5-imp] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The two numbers that say
         // whether momentum was actually transferred: the closing speed the solve ran on and the
@@ -524,8 +524,8 @@ namespace Deformation
 
         const VecFloat lvfRestitution = GetVehicleWorldRestitution(lContact);
 
-        Vector3  lImpulse{ 0.0f, 0.0f, 0.0f, 0.0f };
-        VecFloat lvfInvInertia{ 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3  lImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
+        VecFloat lvfInvInertia = { 0.0f, 0.0f, 0.0f, 0.0f };
         VecFloat lvfImpulseMagnitude = GetVehicleBody().CalculateCollisionImpulseWithInanimateObject(
             lContact.mPointOnA, lRelativeMotion, lContact.mNormal, lvfRestitution, &lImpulse, &lvfInvInertia);
 
@@ -551,7 +551,8 @@ namespace Deformation
                     // register window. The old body passed the normal. SetJustBounced stores that
                     // vector into the lbBounceBoosting record at 0x82FB8490 (`stvx128 v127, r11,
                     // 0x10` @0x825B8D9C), so it is a bounce POSITION.
-                    lpRaceCar->SetJustBounced(lContact.mPointOnA, false, false, EntityId{ 0u });
+                    const EntityId lNoEntity = { 0u };
+                    lpRaceCar->SetJustBounced(lContact.mPointOnA, false, false, lNoEntity);
                     if ( lpRaceCar->ShouldBounceBoostNextImpact() )
                     {
                         // ⚠️⚠️ SHAPE CORRECTED 2026-09-05 against ARTIST -- the numbers were right
@@ -663,7 +664,7 @@ namespace Deformation
         Vector3   lImpulseUnit;
         const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
         const VecFloat lvfShapedMagnitude =
-            VecFloat{ lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
+            { lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
 
         // ---- [kerb-imp] one line per world impulse the solver applies (the [kerb] banner in
         //      BrnVehicleManager_ValidateRaceCarWorldContact.cpp). The RESULT the two culls decide:
