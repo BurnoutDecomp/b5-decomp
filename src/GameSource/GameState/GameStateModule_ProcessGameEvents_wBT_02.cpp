@@ -426,14 +426,8 @@ void GameStateModule::ProcessGameEvents_Group2(s32                              
         CGS_ASSERT(lpOutput, "lpOutput");
         CGS_ASSERT(lpOutput->GetFrameRateTypeRequestInterface(), "lpOutput->GetFrameRateTypeRequestInterface()");
         {
-            // FrameRateTypeRequestInterface::RequestFrameRateTypeChange: the request byte (+4),
-            // then the type word (+0). The output buffer still carries this interface as its
-            // 12-byte storage, so the two fields are written through it as ModeManager does.
-            GameStateModuleIO::OutputBufferFrameRateTypeReqInterface* lpFrameRateTypeRequest =
-                lpOutput->GetFrameRateTypeRequestInterface();
-            const s32 liRequestedFrameRateType = static_cast<s32>(CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_CAPPED);
-            lpFrameRateTypeRequest->maOpaque[4] = 1;
-            std::memcpy(&lpFrameRateTypeRequest->maOpaque[0], &liRequestedFrameRateType, sizeof(s32));
+            lpOutput->GetFrameRateTypeRequestInterface()->RequestFrameRateTypeChange(
+                CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_CAPPED);
         }
         break;
     }
