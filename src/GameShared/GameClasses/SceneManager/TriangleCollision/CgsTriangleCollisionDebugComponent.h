@@ -36,7 +36,7 @@ namespace CgsSceneManager
         void*                      mpUserData;
     };
 
-    class TriangleCollisionDebugComponent : public CgsDev::DebugComponent
+    class CGS_ALIGN(16) TriangleCollisionDebugComponent : public CgsDev::DebugComponent
     {
     public:
         TriangleCollisionDebugComponent() : CgsDev::DebugComponent(SceneConstructorTag()) {}

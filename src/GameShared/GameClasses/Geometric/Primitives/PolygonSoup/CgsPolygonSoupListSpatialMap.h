@@ -28,7 +28,7 @@ namespace CgsGeometric
     struct PolygonSoupList;         // forward-decl (GetPolySoupList return type; CgsPolygonSoupList.h)
     struct Line;                    // forward-decl (RunQuery(const Line&) parameter; CgsLine.h)
 
-    struct PolygonSoupListSpatialMap
+    struct CGS_ALIGN(16) PolygonSoupListSpatialMap
     {
         static const s32 KI_MAX_LEVELS = 8;
 
