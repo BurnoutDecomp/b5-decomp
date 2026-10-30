@@ -546,8 +546,9 @@ namespace BrnWorld
     private:
         // ---- DWARF-faithful member layout (see header banner for console offsets) ----
         PropCellManager  mCellManager;                                  // +0
-        PropEntityInstance     maProps[KU_PROPS_POOL_SIZE];             // +2432
-        PropPartEntityInstance maParts[KU_PARTS_POOL_SIZE];            // +435872
+        // ARTIST 0x822F0600/0604: array bases +0x980 and +0x6A700.
+        CGS_ALIGN(128) PropEntityInstance     maProps[KU_PROPS_POOL_SIZE];             // +2432
+        CGS_ALIGN(128) PropPartEntityInstance maParts[KU_PARTS_POOL_SIZE];            // +435872
         CgsContainers::BitArray<KU_NUM_ZONE_SLOTS> maUsedProps;        // which prop slots loaded
         CgsContainers::BitArray<KU_NUM_ZONE_SLOTS> maUsedParts;        // which part slots loaded
         CgsContainers::BitArray<5400u> maDontRespawnProps;
