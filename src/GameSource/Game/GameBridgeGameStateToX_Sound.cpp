@@ -29,9 +29,7 @@ namespace BrnGame
     //   [2] the three interface installs -- game-mode (+176344), scoring
     //       (+173240), online-scoring (+175976), each opaque view cast onto its
     //       root-side twin (same console record, spans match).
-    //   [3] the UpdateInfo byte: the two +1009411x game-module flags OR'd (their
-    //       writers are un-decoded -- both stay false, publishing 0, the
-    //       boot-state value).
+    //   [3] the UpdateInfo byte: actual current/previous stall flags at9A0628/27.
     void BrnGameModule::BridgeGameStateToSound(
         BrnSound::Module::Io::RootInputBuffer* lpSoundInputBuffer,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer)
@@ -52,7 +50,7 @@ namespace BrnGame
                 lpGameStateOutputBuffer->GetOnlineScoringOutputInterface()));
 
         RootIn::UpdateInfo lUpdateInfo;
-        lUpdateInfo.mData[0] = (mbField10094120 || mbField10094119) ? 1 : 0;
+        lUpdateInfo.mData[0] = (mbStalled || mbPrevStalled) ? 1 : 0;
         lpSoundInputBuffer->SetUpdateInfo(&lUpdateInfo);
     }
 }

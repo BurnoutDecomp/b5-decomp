@@ -34,11 +34,8 @@
 //       pressed (NOT 45 -- s3_input.md's guess). Values are unchanged; the addressing is now real.
 //   gaiGuiActionIndexTable / gaiGuiMenuAxisActionTable are untouched recovered console data.
 //
-// ⭐ [D2 gesture-sink, 2026-08-26] BridgeControllerToGameState's PreWorldInputBuffer is NO LONGER
-// a placeholder: it is the module-owned buffer GameStateModule::GetPreWorldInputBuffer() hands
-// back, and its ControllerInput +0x45 gesture byte is readable by consumers for the first time.
-// The banner on GetGameStatePreWorldInputBuffer below carries the console attestation and
-// refutes the "gameStateModule + 0x2BE8" reading this file used to state.
+// BridgeControllerToGameState consumes the actual per-pass PreWorldInputBuffer.
+// Its staging caller owns the write lock and destroys that buffer after the update.
 //
 // ⭐ [crash parity FX-BRIDGES CC-9, 2026-09-24] BridgeControllerToWorld's Showtime-intro override
 // (0x823CDB80..0x823CDBCC) is reconstructed -- it was a comment -- and the controls record is the
@@ -142,30 +139,8 @@ namespace BrnGame
     // runs BridgeNetworkToGameState + BridgeControllerToGameState against it, hands it to
     // GameStateModule::PreWorldUpdate, and DestroyIOBuffer()s it at the tail.
     //
-    // ⚠️ FLAG (PC bring-up seam) -- THE PC SHAPE, STATED RATHER THAN HIDDEN. Nothing on PC runs
-    // DoUpdate_GameStatePreWorld, so no per-frame buffer exists. GameStateModule now owns one
-    // (GameStateModule::GetPreWorldInputBuffer -- same TYPE, same Construct, same accessors, same
-    // write-lock contract; only the allocation SITE and the lifetime move), and this bridge keeps
-    // its `GameStateModule*` parameter and reaches the module's buffer BY NAME. That is the ONE
-    // deviation from the console's `(PreWorldInputBuffer*)` parameter, and it is the honest one
-    // while the module is the buffer's owner. DELETE-WHEN DoUpdate_GameStatePreWorld lands: the
-    // parameter then becomes the staged buffer, exactly as the console's is, and this helper goes.
-    //
-    // ⓘ NO LOCK IS TAKEN HERE, deliberately -- the console does not take one either. The write
-    // lock is the CALLER's (X360 sub_823B7620 == LockBuffersForIO takes it for the whole
-    // pre-world staging pass; the PC call site in BrnGameModule::GameMain brackets this bridge
-    // with LockForWrite/UnlockForWrite the same way DoUpdate_World brackets its sibling). If a
-    // caller forgets, SetButtonPressed's own console assert ("Not locked for writing\n",
-    // BrnGameStateModuleIO.h:393) names it.
-    // ========================================================================================
-    static BrnGameState::GameStateModuleIO::PreWorldInputBuffer*
-    GetGameStatePreWorldInputBuffer(BrnGameState::GameStateModule* lpGameStateModule)
-    {
-        if (lpGameStateModule == 0)
-            return 0;
-        return lpGameStateModule->GetPreWorldInputBuffer();
-    }
-
+    // DoUpdate_GameStatePreWorld now supplies that native staged buffer.
+    // Its LockBuffersForIO bracket owns the write lock used by SetButtonPressed.
     // =========================================================================
     // GetPadInfoForPlayer0  (X360 0x823C0EA0)
     // =========================================================================
@@ -593,7 +568,7 @@ namespace BrnGame
         // Toggle-change-car message: 53 GUI_OPTION2 *pressed* while 55 GUI_RSHOULDER is *held*
         // (X360 0x823E6C94 `lwz r11,0x1AC(r24)` + extrwi 1,30 -> bit1, then 0x823E6CA4
         // `lwz r11,0x1BC(r24)` + clrlwi 31 -> bit0).
-        if (mbGuiAcceptsControllerInput &&
+        if (mMainFlowStateMachine.IsInGameState() &&
             ((lpActions[KI_GUI_ACTION_OPTION2].muStatus >> 1) & 1) != 0 &&
             (lpActions[KI_GUI_ACTION_RSHOULDER].muStatus & 1) != 0)
         {
@@ -621,7 +596,7 @@ namespace BrnGame
         // Every one of those exits is a real `b __restgprlr_18` (LABEL_14 / loc_823E7200): once any
         // of 45/55/54 is down or pressed, NOTHING else in this bridge runs this frame -- no axis
         // events, no scan-table pass, no auto-repeat, no language cycle. Reproduced as `return`.
-        if (!mbGuiSuppressMenuAccept && mbGuiAcceptsControllerInput)
+        if (!mTimerStatusInterface.GetSimTimerStatus()->IsRunning() && mMainFlowStateMachine.IsInGameState())
         {
             const u32 luStatus45 = lpActions[KI_GUI_ACTION_START].muStatus;      // +0x16C(r24)
             if (((luStatus45 >> 1) & 1) != 0)
@@ -726,14 +701,11 @@ namespace BrnGame
                 lbSuppressMenuAxis = true;
         }
 
-        // Menu auto-repeat pass. The X360 time base is the game module's language-cycle clock
-        // pair -- an integer-seconds word widened to double plus a fractional-seconds float
-        // (LODWORD/HIDWORD u32->f64 idiom @0x823E6E30) -- compared against the per-action
-        // repeat deadlines (0.8s initial delay, 0.1s repeat).
-        // X360 keeps this in fp31 as a DOUBLE (0x823E6E30 magic-widen idiom) and compares the
-        // f32 deadlines against it; only the STORES narrow to f32. Reproduced that way.
-        f64 lfNow = static_cast<f64>(static_cast<u32>(miLanguageCycleTimerLo)) +
-                    static_cast<f64>(mfLanguageCycleTimerFrac);
+        // ARTIST823E6E30 uses the published game timer's Time at9A0B1C/20.
+        // Seconds are widened as u32 and the fractional f32 is widened separately.
+        const CgsSystem::Time lGameTime = mTimerStatusInterface.GetGameTimerStatus()->GetTime();
+        const f64 lfNow = static_cast<f64>(static_cast<u32>(lGameTime.GetSeconds())) +
+                          static_cast<f64>(lGameTime.GetFraction());
         for (s32 i = 0; i < 8; ++i)
         {
             s32 liActionId = gaiGuiMenuAxisActionTable[i];

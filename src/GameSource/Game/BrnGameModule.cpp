@@ -1,3 +1,4 @@
+#include <xtl.h>
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
 #ifdef AddMonitor
 #undef AddMonitor
@@ -6,19 +7,21 @@
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                     // BrnGui::GuiPFXHookEnumeration (case 501 size pin)
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "GameSource/Input/GameInputActions.h" // E_GAMEINPUTACTIONS_START (X360 action slot 8)
 #include "GameSource/Resource/BrnResourceAllocator.h"
+#include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
+#include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
 #include "GameSource/Game/GameBridgeGameStateToX.h"  // BrnGame::BridgeGameStateToGui_EventStatus (the GUI-leg status seam)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
 
 #include <cstring>   // memset
 #include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
-#include <chrono>
-#include <cstdlib>   // getenv / strtol -- BridgeGuiToGame's BRN_POSTFX_CALIBRATION_TEST hook
-#include <cstdio>    // snprintf -- BridgeGuiToGame's [calib] change line
 #include <cstddef>   // offsetof -- the 545/546 payload layout pins in BridgeGuiToGame
 #include "rw/math/vpu/matrix44affine_operation.h"
 
@@ -50,16 +53,7 @@
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"       // [DIAG BRN_CAMCOLLIDE_DIAG] Camera::VehicleInfo
 #include "vendor/renderware/collision/CollisionVolume.hpp"          // [DIAG BRN_CAMCOLLIDE_DIAG] rw::collision::SphereVolume
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BrnPhysics::Vehicle::RaceCarState (DoDispatch's TempRaceCarStateCache seam)
-// The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
-// stand-in below keys its loading-complete report on it.
-
-namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
-
-// ---- Xbox 360 XDK entry point (real prototype lives in the XDK). Displays the system
-// "dirty disc" error UI for the given signed-in user. ------------------------------------
-extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long dwUserIndex);
-
-// Canonical native declaration for the high-resolution frame counter.
+// The native timer API returns the complete 64-bit time-base value.
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
 namespace BrnGame
@@ -97,94 +91,136 @@ namespace BrnGame
         { { -1, 43, -1, 32 } }, { { -1, 44, -1, 33 } }
     };
     static bool sbInitialInputMappingPosted = false; // ARTIST byte_82FAE28B, BSS-zeroed.
+    static char sacMapFileName[512]; // ARTIST82FAE990.
+    // The three native data homes below are only named by address in ARTIST.
+    // These exact initialization/store sites have no other exported references.
+    s32 siNativeValue82CDBEB4 = -1;
+    s32 siNativeValue82CDBF28 = -1;
+    u8 suNativeValue82FAE280;
+    static bool sbDiskErrorThreadStarted; // ARTIST byte_82FAE988, set once after Begin.
 
+    // ARTIST827E5F00: only the actual member constructors run here. Construct()
+    // performs the explicit game-state initialization after native allocation.
     BrnGameModule::BrnGameModule()
-        : mpUpdateInputBufferStack(0)
-        , mpUpdateOutputBufferStack(0)
-        , mbSimPaused(false)
-        , mbDiskError(false)
-        , mbControllerDisconnected(false)
-        , mbSkipVideos(false)
-        , mpReusableLoadingScreenAllocator(0)
-        , mbPrevStalled(false)
-        , mbStalled(false)
-        , mbRequestDoStepFrame(false)
-        , mbRequestDoPlayFrame(false)
-        , mbWorldStreamingRequestedStall(false)
-        , mbStreamingStalled(false)
-        , mbIsLoadingScreenVisible(false)
-        // ⭐ SEEDED 2026-08-17 (boot audit F-P1-6). Construct's step 3 stores 7 at
-        // gm+0x9A0650, and E_RELEASESTAGE_DONE is 7 -- the console parks the release ladder
-        // at DONE so a Release() reached before Prepare has armed it answers true and walks
-        // away. Ours was never initialised at all: it only worked because the game module is
-        // a file-scope static and zero-inits to E_RELEASESTAGE_START, which is the OPPOSITE
-        // meaning -- a Release() from there walks straight into releasing unprepared modules.
-        // Same seed BrnBaseFlow::Construct already applies to its own release stage, and the
-        // precondition the teardown loop (F-P0-8) needs before it can ever be wired.
-        , meReleaseStage(E_RELEASESTAGE_DONE)
-        , meGamePrepareStage(E_GAMEPREPARESTAGE_START)
-        , meGameUpdateStage(E_GAMEUPDATESTAGE_PREPARE)
-        , miNumSimFramesRequired(0)
-        // ⭐ CONSOLE SEEDS RESTORED 2026-08-16 (boot audit F-P1-13). Construct @0x823C9EA8's
-        // frame-rate block stores type 1 (MULTIPLE_CAPPED) at gm+0x9A0B88 and the four step
-        // bytes 1, 3, 1, 1 -- i.e. one simulation step minimum, up to THREE per rendered
-        // frame. We seeded SINGLE/max 1, which is a different machine: capped at one sim
-        // step, a frame that overruns its budget makes the SIMULATION run slow instead of
-        // catching up over the next few frames. Everything downstream that reads
-        // GetCurrentTimeStep -- physics, the director's behaviour advance, the streamer's
-        // per-frame budget -- inherits that.
-        , meFrameRateManagerType(CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_CAPPED)
-        //
-        // This single byte is the whole "60 Hz simulation, uncapped renderer" switch, and it
-        // is the ONE deliberate departure from the frame-rate block restored above.
-        //
-        // The console is vsync-locked at the rate its simulation runs at, so demanding at
-        // least one simulation step per rendered frame is not a policy there -- it is a
-        // restatement of the hardware. On a PC it is not: with VSync=0 in config.ini (or any
-        // panel above 60 Hz) the renderer runs as fast as it can, and a mandatory step per
-        // frame made the ENTIRE simulation run at the render rate. Measured on a 144 Hz
-        // panel: 144 ticks a second, i.e. the game, its physics, its timers, its cameras and
-        // its streaming budget all at 2.4x speed.
-        //
-        // A minimum of ZERO lets CgsSystem::FrameRateManager::UpdatePostRenderWait pace the
-        // simulation off the real-time clock instead -- exactly 60 steps per second however
-        // many frames get drawn -- and publish the leftover fraction of a step as the
-        // interpolation alpha the render legs blend with (CgsFrameInterpolation.h). The
-        // maximum of 3 is unchanged and still the console's: that is the catch-up budget for
-        // a frame that overran, and it is what stops a hitch turning into a death spiral.
-        //
-        // Everything else about the machine -- MULTIPLE_CAPPED, the max, the cumulative
-        // accounting, the backlog repair -- is the console's, untouched. Restore 1 here and
-        // the whole build reverts to console-locked pacing with no other change (the alpha
-        // pins at 1.0 and every blend degenerates to "use the current state").
-        , mi8FrameRateMinSteps(1)
-        , mi8FrameRateMaxSteps(3)
-        , mi8ActualFrameRateMinStepsThisFrame(1)
-        , mi8ActualFrameRateMaxStepsThisFrame(1)
-        , mbSteppingFrames(false)
-        , mbDoStep(false)
-        , mbStopStepping(false)
-        , mpGuiInputBuffer(0)
-        , mpGuiViewInputBuffer(0)
-        , mpGuiModelOutputBuffer(0)
-        , mpGuiOutputBuffer(0)
-        , mpDirectorOutputBuffer(0)
-        , mpWorldUpdateOutputBuffer(0)
-        , mpEffectsOutputBuffer(0)
-        , mpNetworkOutputBuffer(0)
-        , mbDispatchCameraPublished(false)
-        , miInputModuleState(0)
-        , miPlayer0ControllerPort(0)
-        , miSecondaryControllerPort(0)
-        , mbGuiAcceptsControllerInput(false)
-        , mbGuiSuppressMenuAccept(false)
-        , miLanguageCycleTimerLo(0)
-        , mfLanguageCycleTimerFrac(0.0f)
-        , mfLookbackHoldTimer(0.0f)
-        , miRenderMetricsRequested(0)
     {
-        // (The X360 ctor does not touch mCpuMonitors -- Construct() sentinel-fills and
-        // registers the monitors, at its X360 position.)
+    }
+
+    // ARTIST823DB848: resumable native startup, consuming main's five stacks.
+    // Full object/member ABI remains guarded by the entry/layout checks.
+    bool BrnGameModule::Prepare(CgsModule::IOBufferStack* lpUpdateInput,
+                                CgsModule::IOBufferStack* lpUpdateOutput,
+                                CgsModule::IOBufferStack* lpResourceInput,
+                                CgsModule::IOBufferStack* lpResourceOutput,
+                                CgsModule::IOBufferStack* lpDispatch)
+    {
+        switch (mePrepareStage)
+        {
+        case E_PREPARESTAGE_START:
+            mbHasGameTerminated = false;
+        case E_PREPARESTAGE_HARDWARE:
+            mePrepareStage = E_PREPARESTAGE_HARDWARE;
+            if (!mHardware.Prepare())
+                return false;
+            mAutoTestManager.Init(this);
+        case E_PREPARESTAGE_MANAGER:
+            mePrepareStage = E_PREPARESTAGE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                break;
+            mpResourceInputBufferStack = lpResourceInput;
+            mpUpdateInputBufferStack = lpUpdateInput;
+            mpUpdateOutputBufferStack = lpUpdateOutput;
+            mpResourceOutputBufferStack = lpResourceOutput;
+            mpResourceInputBufferStack->CreateIOBuffer(&mpGameDataModuleInputBuffer, "GameData");
+            mpResourceOutputBufferStack->CreateIOBuffer(&mpGameDataModuleOutputBuffer, "GameData");
+            mDispatchThreadInputBufferManager.Construct(lpDispatch);
+        case E_PREPARESTAGE_GAMEDATAMODULE:
+            mePrepareStage = E_PREPARESTAGE_GAMEDATAMODULE;
+            if (!mGameDataModule.Prepare(mpResourceInputBufferStack, mpResourceOutputBufferStack,
+                    mpGameDataModuleInputBuffer, mpGameDataModuleOutputBuffer))
+                break;
+        case E_PREPARESTAGE_RENDERMODULE:
+            {
+                mePrepareStage = E_PREPARESTAGE_RENDERMODULE;
+                const BrnResource::GameDataIO::OutputBuffer* const lpOutput = mpGameDataModuleOutputBuffer;
+                lpOutput->LockForRead();
+                const bool lbPrepared = mRenderModule.Prepare(lpOutput->GetAllocatorList());
+                lpOutput->UnlockForRead();
+                if (!lbPrepared)
+                    break;
+                D3DDevice_ReleaseThreadOwnership(gpD3DDevice);
+            }
+        case E_PREPARESTAGE_HARDWAREMEMORY:
+            {
+                mePrepareStage = E_PREPARESTAGE_HARDWAREMEMORY;
+                const BrnResource::GameDataIO::OutputBuffer* const lpOutput = mpGameDataModuleOutputBuffer;
+                lpOutput->LockForRead();
+                const bool lbPrepared = mHardware.PrepareMassiveMemory(lpOutput->GetAllocatorList()) != 0;
+                lpOutput->UnlockForRead();
+                if (!lbPrepared)
+                    break;
+            }
+        case E_PREPARESTAGE_THREADS:
+            mePrepareStage = E_PREPARESTAGE_THREADS;
+            mThreadLayout.Begin(this, mCpuMonitors.miUT_Resource,
+                mCpuMonitors.miUT_ThreadSync, mCpuMonitors.miUT_WaitOnDispatch);
+            mThreadLayout.SetFrameRate(CgsSystem::E_FRAMERATE_60HZ);
+            mThreadLayout.SetResourcePercentageOfFrame(50);
+            mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreen();
+            if (!mFrameRateManager.Prepare())
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mFrameRateManager.Prepare()",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 788);
+                CgsDev::Assert::EndAssert();
+            }
+        case E_PREPARESTAGE_DONE:
+            EA::GameTalk::GameTalkManager::RegisterMessageHandler(
+                EA::GameTalk::GameTalkManager::GetInstance(),
+                reinterpret_cast<void (*)(EA::GameTalk::GameTalkMessage*, void*)>(RenderMetricsMessageHandler),
+                "Camera", this);
+            mePrepareStage = E_PREPARESTAGE_START;
+            meReleaseStage = E_RELEASESTAGE_START;
+            mbIsSysMenuShowing = false;
+            return true;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 808);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+        if (static_cast<s32>(mePrepareStage) >= E_PREPARESTAGE_GAMEDATAMODULE)
+            CheckDiskError(mpGameDataModuleOutputBuffer);
+        return false;
+    }
+
+    bool BrnGameModule::HasGameTerminated()
+    {
+        return mbHasGameTerminated;
+    }
+
+    // ARTIST823BC798. Hold the actual resource output read lock through the
+    // one-shot dirty-disc worker creation, including its original user selection.
+    void BrnGameModule::CheckDiskError(const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput)
+    {
+        lpGameDataOutput->LockForRead();
+        if (lpGameDataOutput->GetFileSystemStatusInterface()->GetDiskErrorOccured())
+        {
+            const u32 luUserIndex = miInputModuleState ? static_cast<u32>(miPlayer0ControllerPort) : 0;
+            if (!sbDiskErrorThreadStarted)
+            {
+                EA::Thread::ThreadParameters lParameters;
+                lParameters.mbSuspended = false;
+                lParameters.mnPriority = 0;
+                lParameters.mnProcessor = 2;
+                lParameters.mpName = "DispatchThread";
+                mErrorThread.Begin(reinterpret_cast<EA::Thread::RunnableFunction>(DiskErrorThreadProc),
+                    reinterpret_cast<void*>(static_cast<uintptr_t>(luUserIndex)), &lParameters,
+                    EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
+                sbDiskErrorThreadStarted = true;
+            }
+        }
+        lpGameDataOutput->UnlockForRead();
     }
 
     BrnGameModule::~BrnGameModule()
@@ -195,712 +231,476 @@ namespace BrnGame
     // systems, the CPU monitor registrations, then EVERY engine module (X360 order), then the
     // flow state machine. Sites the X360 body has that are still gated on unreconstructed
     // members/subsystems are flagged inline.
+    // ARTIST823BD4E0: the75 constant footprint records emitted by that binary.
+    // These original constants do not certify the current C++ class layouts;
+    // Main and DebugMemoryInit retain their strict native size/offset gates.
+    void BrnGameModule::CheckClassSizes()
+    {
+        struct SizeRecord { const char* mpcIndent; const char* mpcType; u32 muSize; };
+        static const SizeRecord kaRecords[] =
+        {
+            {"", "BrnGame::BrnGameModule", 10097408u},
+            {"  ", "WorldModule", 6175872u},
+            {"    ", "BrnWorld::WorldEntityModule", 31216u},
+            {"      ", "BrnWorld::PVSModule", 8128u},
+            {"    ", "BrnTraffic::TrafficEntityModule", 497664u},
+            {"    ", "BrnWorld::RaceCarEntityModule", 100352u},
+            {"      ", "BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface", 10480u},
+            {"      ", "BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface", 2416u},
+            {"      ", "BrnWorld::ActiveRaceCar::RenderParams", 5280u},
+            {"    ", "BrnWorld::PropEntityModule", 865280u},
+            {"    ", "BrnWorld::TriggerEntityModule", 66208u},
+            {"    ", "BrnWorld::CrashModule", 5800u},
+            {"    ", "BrnAI::AIModule", 322848u},
+            {"      ", "BrnAI::RouteMapModule", 26144u},
+            {"      ", "BrnAI::AStar", 25464u},
+            {"    ", "BrnPhysics::PhysicsModule", 433216u},
+            {"      ", "CgsPhysics::PhysicsSimulationModule", 18544u},
+            {"      ", "BrnPhysics::Vehicle::VehicleManager", 172624u},
+            {"      ", "BrnPhysics::MappingManager", 524296u},
+            {"      ", "BrnPhysics::Deformation::DeformationManager", 76752u},
+            {"        ", "BrnPhysics::Deformation::DeformableObject", 26496u},
+            {"        ", "BrnPhysics::Deformation::DeformationInputInterface", 5072u},
+            {"        ", "BrnPhysics::Deformation::DeformationOutputInterface", 10992u},
+            {"      ", "BrnPhysics::Props::PropManager", 25984u},
+            {"    ", "CgsSceneManager::SceneManagerModule", 3835264u},
+            {"      ", "CgsSceneManager::SpatialPartitionManager", 24u},
+            {"      ", "CgsSceneManager::OverlapGenerationModule", 902928u},
+            {"      ", "CgsSceneManager::OverlapCullingModule", 443040u},
+            {"      ", "CgsSceneManager::FineIntersectionTestModule", 366624u},
+            {"      ", "CgsSceneManager::EntityManager", 1201024u},
+            {"      ", "CgsSceneManager::VolumeManager", 915104u},
+            {"        ", "CgsSceneManager::LooseOctree", 592768u},
+            {"        ", "CgsSceneManager::LooseOctreeNode", 96u},
+            {"        ", "CgsSceneManager::SpatialPartitionEntity", 4u},
+            {"  ", "BrnRendererModule", 51840u},
+            {"  ", "BrnResource::GameDataModule", 477696u},
+            {"    ", "BrnResource::ChallengeListEntry", 216u},
+            {"    ", "CgsResource::ResourceModule", 361088u},
+            {"      ", "CgsResource::PoolModule", 107008u},
+            {"        ", "CgsResource::Pool", 464u},
+            {"        ", "CgsResource::Entry", 88u},
+            {"        ", "CgsResource::BaseResourcePtr", 32u},
+            {"      ", "CgsResource::BundleLoaderModule", 180480u},
+            {"    ", "CgsAttribSys::AttribSysModule", 624u},
+            {"  ", "BrnGameState::GameStateModule", 292368u},
+            {"    ", "BrnGameState::TakedownManager", 712u},
+            {"    ", "BrnGameState::MugshotManager", 112u},
+            {"    ", "BrnGameState::PaybackManager", 640u},
+            {"    ", "BrnGameState::GameStateInviteManager", 2096u},
+            {"    ", "BrnGameState::ModeManager", 38192u},
+            {"    ", "BrnGameState::FlybyManager", 672u},
+            {"    ", "BrnGameState::TriggerQueryManager", 1920u},
+            {"    ", "BrnGameState::DriveThruManager", 2400u},
+            {"    ", "BrnGameState::NetworkRoundManager", 312u},
+            {"    ", "BrnProgression::ProgressionManager", 133536u},
+            {"  ", "CgsInput::InputModule", 5096u},
+            {"  ", "BrnGui::GuiModule", 1629392u},
+            {"    ", "CgsGui::ModelModule", 111064u},
+            {"    ", "CgsGui::ViewModule", 167088u},
+            {"    ", "CgsGui::GuiEventQueue", 18448u},
+            {"    ", "BrnFlapt::FlaptManager", 2256u},
+            {"    ", "BrnGui::CustomRendererManager", 128208u},
+            {"    ", "BrnGui::GuiTracker", 413936u},
+            {"    ", "BrnGui::BrnBaseFlow", 66124u},
+            {"    ", "BrnGui::BrnHudFlow", 66180u},
+            {"    ", "BrnGui::BrnOverlayFlow", 66184u},
+            {"    ", "BrnGui::BrnScreenFlow", 66368u},
+            {"  ", "CgsDev::DebugManager", 33176u},
+            {"      ", "CgsSceneManager::SceneManagerDebugComponent", 96u},
+            {"  ", "BrnEffects::EffectsModule", 194048u},
+            {"    ", "BrnParticle::ParticleModule", 178176u},
+            {"  ", "BrnSound::Module::RootSoundModule", 87552u},
+            {"    ", "CgsSound::Playback::Module::Module", 10000u},
+            {"    ", "BrnSound::Module::SoundLogicModule", 79488u},
+            {"  ", "BrnNetwork::BrnNetworkModule", 866560u},
+        };
+        u32 lxFilters = CgsDev::Message::gxMessageFilterFlags;
+        for (u32 luIndex = 0; luIndex < sizeof(kaRecords) / sizeof(kaRecords[0]); ++luIndex)
+        {
+            if ((lxFilters & 1u) != 0)
+            {
+                CgsDev::StrStreamBase& lStream = *CgsDev::Log::gpDebugPrint;
+                lStream << "Size of \t";
+                lStream << kaRecords[luIndex].mpcIndent;
+                lStream << kaRecords[luIndex].mpcType;
+                lStream << "\t\t";
+                lStream << kaRecords[luIndex].muSize << "\n";
+                lxFilters = CgsDev::Message::gxMessageFilterFlags;
+            }
+        }
+    }
+
     void BrnGameModule::Construct()
     {
-        // X360 step 1: the module base (resets the prepare/release stages + constructs the two
-        // DataBuffers -- flag/pointer init only).
         CgsModule::ModuleSingleBuffered::Construct();
-
-        // [gated] X360 steps 2-3: CheckClassSizes, then the game-state field seeds at
-        // +10094156..+10097260 (release stage = 7, module counts 11/4, the engine-modules-loaded
-        // flag = 0) -- those words fall in this layout's omitted member ranges.
-
-        // Per-frame IO buffer stacks the update spine + the scripted module loads allocate their
-        // per-frame IO buffers on. [PC stand-in] On the X360 these five stacks are OWNED BY main()
-        // (0x827E60D8) -- UpdateInput/UpdateOutput 0x780000, ResourceInput 0x40000, ResourceOutput
-        // 0x20000, Dispatch 0x18000 bytes, align 128, carved from the boot allocator -- and handed
-        // to BrnGameModule::Prepare (vtable +64, 0x823DB848), which stores them at +10055424..
-        // Until that Prepare + the allocator layer land, two fixed scratch blocks stand in.
-        static CgsModule::IOBufferStack sUpdateInputStack;
-        static CgsModule::IOBufferStack sUpdateOutputStack;
-        static u8 saUpdateInputMem[0x780000];
-        static u8 saUpdateOutputMem[0x780000];
-        // ⭐ ALIGNMENT CORRECTED 2026-08-16 (boot audit F-P0-5). main @0x827E60D8 prepares ALL
-        // FIVE of its IOBufferStacks with alignment 0x80; this pair passed 16 while the
-        // dispatch stack below already passed 128. Latent -- nothing in the current buffer
-        // set needs more than 16 -- but it is the console's value, and an under-aligned
-        // stack is the kind of thing that only shows up when a vector-typed member lands in
-        // a buffer somewhere downstream.
-        sUpdateInputStack.Construct("UpdateInput");
-        sUpdateInputStack.Prepare(saUpdateInputMem, sizeof(saUpdateInputMem), 128);
-        sUpdateOutputStack.Construct("UpdateOutput");
-        sUpdateOutputStack.Prepare(saUpdateOutputMem, sizeof(saUpdateOutputMem), 128);
-        mpUpdateInputBufferStack = &sUpdateInputStack;
-        mpUpdateOutputBufferStack = &sUpdateOutputStack;
-
-        // The dispatch-thread input pair (X360: DispatchThreadInputBufferManager::Construct
-        // @0x823CBCE0 from Prepare @0x823DB848, on the dedicated Dispatch stack main() carves
-        // -- 0x18000 bytes, see the stack note above). [PC stand-in placement: constructed
-        // here with the other stack scaffolding until the real Prepare stage-machine lands;
-        // the stack size is the documented console value.]
-        static CgsModule::IOBufferStack sDispatchStack;
-        static u8 saDispatchMem[0x18000];
-        sDispatchStack.Construct("Dispatch");
-        sDispatchStack.Prepare(saDispatchMem, sizeof(saDispatchMem), 128);
-        mDispatchThreadInputBufferManager.Construct(&sDispatchStack);
-
-        // The calibration settings BridgeGuiToGame publishes every frame -- Construct @0x823C9EA8
-        // seeds them (`*(v9 + 10096740) = 50; *(v9 + 10096744) = 50; *(v9 + 10096748) = 1;`): the
-        // game's default slider position, i.e. the post-fx composite's NEUTRAL brightness/contrast.
-        miBrightness                        = 50;
-        miContrast                          = 50;
-        mbEnableCalibrationUnfriendlyPostFx = true;
-
-        // X360 step 4: the debug manager (params block seeded from unk_820DC120 = the real
-        // DebugManagerConstructParameters::DEFAULT + the six overrides below +
-        // Allocators::mpInternalDebugAllocator as the RW allocator). Construct runs the console's
-        // full bring-up itself - assert system, rw debug manager, critical section, buffered
-        // renderer, UI, the three built-in components, CalculateBuildDate and ConstructRenderer -
-        // so no separate ConstructRenderer call exists here, exactly as @0x823C9F44-90.
-        // [gated] the "Force Quit to Start Menu" debug toggle + the FOPEN "%sMAP_ARTIST.BIN"
-        // memory-map name globals that follow on the X360.
-        // ⭐ THE REAL CONSTRUCT PARAMS, RECOVERED 2026-08-17 (boot audit F-P1-7). We passed
-        // DebugManagerConstructParameters::DEFAULT straight through. The console does NOT:
-        // @0x823C9F44-84 it copies DEFAULT onto the stack (the bdnz word loop) and then
-        // OVERRIDES six fields before calling Construct. Read off the stores, with the struct
-        // offsets from the declaration:
-        //
-        //   sth 0x300 -> +0    miPerfMonCpuCount          = 768
-        //   stw 0     -> +4    miPerfMonLogBufferSize     = 0
-        //   sth 0x78  -> +12   miFunctionPoolSize         = 120
-        //   sth 0x190 -> +14   miVariablePoolSize         = 400
-        //   sth 0x1F4 -> +16   miVariableMetadataPoolSize = 500
-        //   stb 0xF   -> +18   miConsoleLineCount         = 15
-        //   stw <alloc> -> +20 mpRwAllocator (Allocators::mpInternalDebugAllocator, asserted
-        //                      non-null @0x823C9F8C -- still the allocator follow-on here)
-        //
-        // miMenuWindowPoolSize / miMenuPoolSize are the only two it leaves at DEFAULT.
-        //
-        // The perfmon count is the one that mattered: DEFAULT carried 256, which had already
-        // been raised 64 -> 256 once when the world module's ~60 extra monitors overflowed it
-        // and AddMonitor started returning -1. The console's own figure is 768 -- three times
-        // that headroom -- so the ceiling this build kept bumping into was never the console's.
+        CheckClassSizes();
+        mePrepareStage = E_PREPARESTAGE_START;
+        meReleaseStage = E_RELEASESTAGE_DONE;
+        meGamePrepareStage = E_GAMEPREPARESTAGE_START;
+        meGameReleaseStage = E_GAMERELEASESTAGE_DONE;
+        meGameUpdateStage = E_GAMEUPDATESTAGE_PREPARE;
+        mHardware.mePrepareStage = BrnHW::System360HW::E_PREPARESTAGE_START;
+        mHardware.meReleaseStage = BrnHW::System360HW::E_PREPARESTAGE_DONE;
+        mHardware.mbEngineModulesLoaded = false;
+        CgsDev::DebugManagerConstructParameters lParams = CgsDev::DebugManagerConstructParameters::DEFAULT;
+        lParams.miPerfMonCpuCount = 768;
+        lParams.miPerfMonLogBufferSize = 0;
+        lParams.miFunctionPoolSize = 120;
+        lParams.miVariablePoolSize = 400;
+        lParams.miVariableMetadataPoolSize = 500;
+        lParams.miConsoleLineCount = 15;
+        lParams.mpRwAllocator = BrnResource::GetDebugAllocator();
+        mDebugManager.Construct(&lParams);
         {
-            CgsDev::DebugManagerConstructParameters lParams =
-                CgsDev::DebugManagerConstructParameters::DEFAULT;
-            lParams.miPerfMonCpuCount          = 768;   // 0x300
-            lParams.miPerfMonLogBufferSize     = 0;
-            lParams.miFunctionPoolSize         = 120;   // 0x78
-            lParams.miVariablePoolSize         = 400;   // 0x190
-            lParams.miVariableMetadataPoolSize = 500;   // 0x1F4
-            lParams.miConsoleLineCount         = 15;    // 0xF
-            // ARTIST823C9FC8 supplies the public GlobalDebug allocator wrapper.
-            // It is separate from the temporary default used during memory-map setup.
-            lParams.mpRwAllocator = BrnResource::GetDebugAllocator();
-            mDebugManager.Construct(&lParams);
+            CgsDev::DebugInterface lDebug;
+            lDebug.RegisterVariable(&sbForceQuitToStartMenu, "", "Force Quit to Start Menu");
         }
-
-        // X360 Construct @0x823CA000 registers this mutable bool with an empty path. The raw
-        // path pointer (0x820046A7) is the NUL terminator at the end of "%s%s%s".
-        {
-            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
-            lDebugInterface.RegisterVariable(&sbForceQuitToStartMenu, "", "Force Quit to Start Menu");
-        }
-
-        // X360 step 5: sentinel-fill the CPU monitor handle block (BrnCpuMonitors::Construct
-        // 0x823A90A8), then register all 40 monitors. Rows are (name, page, minimum, budget-ms,
-        // libperf-tagged), transcribed store-for-store from 0x823C9EA8 (the 5-arg AddMonitor:
-        // on PPC the float budget occupies the r6 slot, so r7 is the libperf flag).
+        CgsDev::Assert::gAssertManager.SetThreadLayout(&mThreadLayout);
+        CgsCore::SPrintf(sacMapFileName, sizeof(sacMapFileName), "%sMAP_ARTIST.BIN",
+            CgsSystem::HardwareInit::GetFOPENDirectory());
+        if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+            *CgsDev::Log::gpDebugPrint << "File to open " << sacMapFileName << "\n";
+        mMapFileReader.SetAsyncronousMode(false);
+        CgsDev::Assert::gAssertManager.SetMapFileReader(&mMapFileReader, sacMapFileName);
         mCpuMonitors.Construct();
         {
-            using CgsDev::PerfMonCpu::AddMonitor;
             typedef CgsDev::PerfMonCpuPage EPage;
-            mCpuMonitors.miUT_TotalUpdate      = AddMonitor("UT: Total simulation",          (EPage)0,  false, 210.0f, false);
-            mCpuMonitors.miUT_EachUpdate       = AddMonitor("UT: Each sim step",             (EPage)0,  false,  70.0f, true);
-            mCpuMonitors.miUT_NetworkAIRaceCar = AddMonitor("      Network + AI + Racecar",  (EPage)0,  false,  10.0f, true);
-            mCpuMonitors.miUT_Network          = AddMonitor("         Network",              (EPage)0,  false,   3.0f, true);
-            mCpuMonitors.miUT_AI               = AddMonitor("         AI",                   (EPage)0,  false,   5.0f, true);
-            mCpuMonitors.miUT_RaceCar          = AddMonitor("         RaceCar",              (EPage)0,  false,   3.0f, true);
-            mCpuMonitors.miUT_GameState        = AddMonitor("      GameState",               (EPage)0,  false,   3.0f, true);
-            mCpuMonitors.miUT_Replay           = AddMonitor("      Replay",                  (EPage)0,  false,   3.0f, true);
-            mCpuMonitors.miUT_GUI              = AddMonitor("      GUI",                     (EPage)0,  false,   2.0f, true);
-            mCpuMonitors.miUT_Director         = AddMonitor("      Director",                (EPage)0,  false,   5.0f, true);
-            mCpuMonitors.miUT_Sound            = AddMonitor("      Sound",                   (EPage)0,  false,   5.0f, true);
-            mCpuMonitors.miUT_Effects          = AddMonitor("      Effects",                 (EPage)0,  false,   0.5f, true);
-            mCpuMonitors.miUT_Traffic          = AddMonitor("      Traffic",                 (EPage)0,  false,   8.0f, true);
-            mCpuMonitors.miUT_Triggers         = AddMonitor("      Triggers",                (EPage)0,  false,   0.5f, true);
-            mCpuMonitors.miUT_CrashManager     = AddMonitor("      CrashManager",            (EPage)0,  false,   1.0f, true);
-            mCpuMonitors.miUT_Physics          = AddMonitor("      Physics",                 (EPage)0,  false,  28.0f, true);
-            mCpuMonitors.miUT_World            = AddMonitor("      World",                   (EPage)0,  false,   4.0f, true);
-            mCpuMonitors.miUT_Resource         = AddMonitor("UT: ResourceSystem",            (EPage)0,  false,   5.0f, false);
-            mCpuMonitors.miUT_RenderAll        = AddMonitor("UT: Render",                    (EPage)0,  false,  15.0f, false);
-            mCpuMonitors.miUT_FrustumTesting   = AddMonitor("      FrustumTests",            (EPage)0,  false,   2.0f, false);
-            mCpuMonitors.miUT_RenderMainScreen = AddMonitor("      RenderMainScreen",        (EPage)0,  false,   7.0f, false);
-            mCpuMonitors.miUT_RenderShadowMap  = AddMonitor("      RenderShadows",           (EPage)0,  false,   1.5f, false);
-            mCpuMonitors.miUT_RenderEnvMap     = AddMonitor("      RenderEnvMap",            (EPage)0,  false,   1.5f, false);
-            mCpuMonitors.miUT_RenderFX         = AddMonitor("      RenderEffects",           (EPage)0,  false,   1.0f, false);
-            mCpuMonitors.miUT_RenderGUI        = AddMonitor("      RenderGUI",               (EPage)0,  false,   2.0f, false);
-            mCpuMonitors.miDT_DispatchToGpu    = AddMonitor("DT: DispatchToGPU",             (EPage)0,  false,  95.0f, false);
-            mCpuMonitors.miUT_ThreadSync       = AddMonitor("UT: Thread sync",               (EPage)0,  false,  10.0f, false);
-            mCpuMonitors.miUT_WaitOnDispatch   = AddMonitor("      WaitOnDispatch",          (EPage)0,  false,  10.0f, false);
-            mCpuMonitors.miUT_DebugManager     = AddMonitor("UT: Debug manager",             (EPage)0,  false,   0.0f, false);
-            mCpuMonitors.miUT_RaceCar_SQ       = AddMonitor("RC SceneQueries",               (EPage)12, false,   0.5f, true);
-            mCpuMonitors.miUT_Traffic_SQ       = AddMonitor("Traf SceneQueries",             (EPage)2,  false,   0.5f, true);
-            mCpuMonitors.miUT_Triggers_SQ      = AddMonitor("Trigger SceneQueries",          (EPage)5,  false,   0.5f, true);
-            mCpuMonitors.miUT_GameState_Bridge = AddMonitor("GameState Bridges",             (EPage)11, false,   0.1f, true);
-            mCpuMonitors.miUT_GUI_Bridge       = AddMonitor("GUI Bridges",                   (EPage)11, false,   0.1f, true);
-            mCpuMonitors.miUT_AI_Bridge        = AddMonitor("AI Bridges",                    (EPage)11, false,   0.1f, true);
-            mCpuMonitors.miUT_RaceCar_Bridge   = AddMonitor("RaceCar Bridges",               (EPage)11, false,   0.1f, true);
-            mCpuMonitors.miUT_Traffic_Bridge   = AddMonitor("Traffic Bridges",               (EPage)11, false,   0.1f, true);
-            mCpuMonitors.miUT_Director_Bridge  = AddMonitor("Bridges",                       (EPage)13, false,   0.1f, true);
-            mCpuMonitors.miUT_Director_SQ      = AddMonitor("Scene Queries",                 (EPage)13, false,   1.0f, true);
-            mCpuMonitors.miUT_SoundUpdate      = AddMonitor("Sound",                         (EPage)14, false,  10.0f, true);
+            mCpuMonitors.miUT_TotalUpdate      = CgsDev::PerfMonCpu::AddMonitor("UT: Total simulation",          (EPage)0,  false, 210.0f, false);
+            mCpuMonitors.miUT_EachUpdate       = CgsDev::PerfMonCpu::AddMonitor("UT: Each sim step",             (EPage)0,  false,  70.0f, true);
+            mCpuMonitors.miUT_NetworkAIRaceCar = CgsDev::PerfMonCpu::AddMonitor("      Network + AI + Racecar",  (EPage)0,  false,  10.0f, true);
+            mCpuMonitors.miUT_Network          = CgsDev::PerfMonCpu::AddMonitor("         Network",              (EPage)0,  false,   3.0f, true);
+            mCpuMonitors.miUT_AI               = CgsDev::PerfMonCpu::AddMonitor("         AI",                   (EPage)0,  false,   5.0f, true);
+            mCpuMonitors.miUT_RaceCar          = CgsDev::PerfMonCpu::AddMonitor("         RaceCar",              (EPage)0,  false,   3.0f, true);
+            mCpuMonitors.miUT_GameState        = CgsDev::PerfMonCpu::AddMonitor("      GameState",               (EPage)0,  false,   3.0f, true);
+            mCpuMonitors.miUT_Replay           = CgsDev::PerfMonCpu::AddMonitor("      Replay",                  (EPage)0,  false,   3.0f, true);
+            mCpuMonitors.miUT_GUI              = CgsDev::PerfMonCpu::AddMonitor("      GUI",                     (EPage)0,  false,   2.0f, true);
+            mCpuMonitors.miUT_Director         = CgsDev::PerfMonCpu::AddMonitor("      Director",                (EPage)0,  false,   5.0f, true);
+            mCpuMonitors.miUT_Sound            = CgsDev::PerfMonCpu::AddMonitor("      Sound",                   (EPage)0,  false,   5.0f, true);
+            mCpuMonitors.miUT_Effects          = CgsDev::PerfMonCpu::AddMonitor("      Effects",                 (EPage)0,  false,   0.5f, true);
+            mCpuMonitors.miUT_Traffic          = CgsDev::PerfMonCpu::AddMonitor("      Traffic",                 (EPage)0,  false,   8.0f, true);
+            mCpuMonitors.miUT_Triggers         = CgsDev::PerfMonCpu::AddMonitor("      Triggers",                (EPage)0,  false,   0.5f, true);
+            mCpuMonitors.miUT_CrashManager     = CgsDev::PerfMonCpu::AddMonitor("      CrashManager",            (EPage)0,  false,   1.0f, true);
+            mCpuMonitors.miUT_Physics          = CgsDev::PerfMonCpu::AddMonitor("      Physics",                 (EPage)0,  false,  28.0f, true);
+            mCpuMonitors.miUT_World            = CgsDev::PerfMonCpu::AddMonitor("      World",                   (EPage)0,  false,   4.0f, true);
+            mCpuMonitors.miUT_Resource         = CgsDev::PerfMonCpu::AddMonitor("UT: ResourceSystem",            (EPage)0,  false,   5.0f, false);
+            mCpuMonitors.miUT_RenderAll        = CgsDev::PerfMonCpu::AddMonitor("UT: Render",                    (EPage)0,  false,  15.0f, false);
+            mCpuMonitors.miUT_FrustumTesting   = CgsDev::PerfMonCpu::AddMonitor("      FrustumTests",            (EPage)0,  false,   2.0f, false);
+            mCpuMonitors.miUT_RenderMainScreen = CgsDev::PerfMonCpu::AddMonitor("      RenderMainScreen",        (EPage)0,  false,   7.0f, false);
+            mCpuMonitors.miUT_RenderShadowMap  = CgsDev::PerfMonCpu::AddMonitor("      RenderShadows",           (EPage)0,  false,   1.5f, false);
+            mCpuMonitors.miUT_RenderEnvMap     = CgsDev::PerfMonCpu::AddMonitor("      RenderEnvMap",            (EPage)0,  false,   1.5f, false);
+            mCpuMonitors.miUT_RenderFX         = CgsDev::PerfMonCpu::AddMonitor("      RenderEffects",           (EPage)0,  false,   1.0f, false);
+            mCpuMonitors.miUT_RenderGUI        = CgsDev::PerfMonCpu::AddMonitor("      RenderGUI",               (EPage)0,  false,   2.0f, false);
+            mCpuMonitors.miDT_DispatchToGpu    = CgsDev::PerfMonCpu::AddMonitor("DT: DispatchToGPU",             (EPage)0,  false,  95.0f, false);
+            mCpuMonitors.miUT_ThreadSync       = CgsDev::PerfMonCpu::AddMonitor("UT: Thread sync",               (EPage)0,  false,  10.0f, false);
+            mCpuMonitors.miUT_WaitOnDispatch   = CgsDev::PerfMonCpu::AddMonitor("      WaitOnDispatch",          (EPage)0,  false,  10.0f, false);
+            mCpuMonitors.miUT_DebugManager     = CgsDev::PerfMonCpu::AddMonitor("UT: Debug manager",             (EPage)0,  false,   0.0f, false);
+            mCpuMonitors.miUT_RaceCar_SQ       = CgsDev::PerfMonCpu::AddMonitor("RC SceneQueries",               (EPage)12, false,   0.5f, true);
+            mCpuMonitors.miUT_Traffic_SQ       = CgsDev::PerfMonCpu::AddMonitor("Traf SceneQueries",             (EPage)2,  false,   0.5f, true);
+            mCpuMonitors.miUT_Triggers_SQ      = CgsDev::PerfMonCpu::AddMonitor("Trigger SceneQueries",          (EPage)5,  false,   0.5f, true);
+            mCpuMonitors.miUT_GameState_Bridge = CgsDev::PerfMonCpu::AddMonitor("GameState Bridges",             (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_GUI_Bridge       = CgsDev::PerfMonCpu::AddMonitor("GUI Bridges",                   (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_AI_Bridge        = CgsDev::PerfMonCpu::AddMonitor("AI Bridges",                    (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_RaceCar_Bridge   = CgsDev::PerfMonCpu::AddMonitor("RaceCar Bridges",               (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_Traffic_Bridge   = CgsDev::PerfMonCpu::AddMonitor("Traffic Bridges",               (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_Director_Bridge  = CgsDev::PerfMonCpu::AddMonitor("Bridges",                       (EPage)13, false,   0.1f, true);
+            mCpuMonitors.miUT_Director_SQ      = CgsDev::PerfMonCpu::AddMonitor("Scene Queries",                 (EPage)13, false,   1.0f, true);
+            mCpuMonitors.miUT_SoundUpdate      = CgsDev::PerfMonCpu::AddMonitor("Sound",                         (EPage)14, false,  10.0f, true);
         }
 
-        // X360 step 6: construct EVERY engine module, in the X360 call order. Modules whose real
-        // Construct exists run it; the placeholder modules run the module base's Construct (which
-        // is also what makes their Release/Destruct paths well-defined).
-        //
-        // ⭐ OFFSETS CORRECTED 2026-08-16 (boot audit F-P1-18): NINE of these ten comments were
-        // wrong. They had been inferred from GameRelease @0x823F03C8's typed IO buffers; the
-        // values below are the MEASURED module bases (`*off_830102D0 + <off>` as the console
-        // itself spells them at each call site). They are documentation only -- every access
-        // here is by member name -- but they are the numbers the next reader will trust when
-        // they cross-check a raw offset out of the disassembly, so a wrong one costs an hour.
-        //
-        // ⭐ AND THE DIRECTOR'S ASPECT IS REAL NOW (boot audit F-P1-3). The console's renderer
-        // Construct hands back an ASPECT RATIO (1.7777778) and a video-mode bool, and passes
-        // the aspect straight into DirectorModule::Construct. We passed a fabricated 0.0f --
-        // an invented value, not a marked deferral. 16:9 is what the console computes for
-        // every mode this build renders.
-        mSoundModule.Construct();        // +0x8A7D00  RootSoundModule::Construct 0x826AF350 (slot 0)
-        mRenderModule.Construct();       // +0x004400  BrnRendererModule::Construct (direct call)
-        mGameDataModule.Construct();     // +0x5F4B00  GameDataModule::Construct 0x82671B90 (slot 0, NO args)
-        mWorldModule.Construct(mCpuMonitors); // +0x010E80  WorldModule::Construct 0x827CF540
-                                         //            (slot +64, const BrnCpuMonitors& -- the
-                                         //            handle block filled above). REAL module
-                                         //            mounted 2026-07-26 (world-render campaign).
-        mInputModule.Construct();        // +0x6E9630  InputModule::Construct 0x828F83D0 (slot 0) --
-        const bool lbHighDef = mRenderModule.IsHD();
+        mSoundModule.Construct();
+        f32 lfAspectRatio;
+        bool lbHighDef;
+        mRenderModule.Construct(mCpuMonitors, lfAspectRatio, lbHighDef);
+        mGameDataModule.Construct();
+        mWorldModule.Construct(mCpuMonitors);
+        mInputModule.Construct();
         mGuiModule.Construct(mGameDataModule.GetHudMessageController(),
-                             mGameDataModule.GetPopupController(), lbHighDef);
-        mGameStateModule.Construct();    // +0x669500  (slot 0; placeholder -> base)
-        mEffectsModule.Construct();      // +0x878700  (slot 0; placeholder -> base)
-        // (The interim ValidityAccount::SetupFailFlagMask bridge that used to sit here was
-        // retired 2026-09-07: CameraState::Construct @0x82252348 performs the setup itself
-        // -- BrnCameraState.cpp:133 -- and DirectorModule::Construct reaches it through
-        // mCamera.Construct() (BrnDirectorModule.cpp:108) before anything reads the mask.)
-        mDirectorModule.Construct(1.7777778f); // +0x6B0B10  X360 slot +64 @0x8225C590 (REAL module,
-                                         //            mounted 2026-07-29 -- DJ fly-by campaign).
-        mReplayModule.Construct();       // +0x8BD300  (slot 0; ReplayModule -> base)
-        mNetworkModule.Construct(false);      // +0x8C3600  [gated] X360 slot +64 with arg 0; placeholder -> base.
-
-        // ⭐ 2026-08-16 (boot audit F-P1-11 / F-P2-6). The GamePrepare receiver queue is
-        // Constructed HERE on the console -- it is part of step 7-9's queue setup
-        // (gm+0x9A06BC, capacity 1024, align 16) and it already exists by the time
-        // GamePrepare @0x823EFBD0 first runs, which is why that body contains no construct.
-        // We built it lazily on the first GamePrepare call behind a bool. No observable
-        // difference, but the bool was a member the console does not have, and "constructed
-        // before the frame loop" is the invariant the async seam will rely on.
-        mGamePrepareReceiverQueue.Construct();
-
-        // ⭐ THE PAGE-NAME TABLE, RECOVERED 2026-08-17 (boot audit F-P1-10). Construct
-        // @0x823C9EA8 calls DebugComponentPerfMonCpu::SetPageName twenty-four times; the
-        // names are read out of that body in call order and are reproduced here exactly,
-        // including the two the console repeats (pages 10/11 both "Graphics", 13/14 both
-        // "Director" -- not a transcription slip).
-        //
-        static const char* const KAPC_PERFMON_PAGE_NAMES[24] =
-        {
-            "General",              // 0
-            "Resource",             // 1
-            "Traffic",              // 2
-            "Gui",                  // 3
-            "World",                // 4
-            "GameState",            // 5
-            "Physics",              // 6
-            "AI",                   // 7
-            "Network",              // 8
-            "Network Detail",       // 9
-            "Graphics",             // 10
-            "Graphics",             // 11  (repeated on the console)
-            "Race Car",             // 12
-            "Director",             // 13
-            "Director",             // 14  (repeated on the console)
-            "Deformation",          // 15
-            "SceneManager ContactGen", // 16
-            "SceneManager",         // 17
-            "More Network Detail",  // 18
-            "Sound: Aems Detail",   // 19
-            "Particles",            // 20
-            "Lion",                 // 21
-            "Video",                // 22
-            "Flapt",                // 23
-        };
-        for (s32 liPage = 0; liPage < CgsDev::E_PMP_MAX; ++liPage)
-            mDebugManager.mDebugComponentPerfMonCpu.SetPageName(
-                static_cast<CgsDev::PerfMonCpuPage>(liPage), KAPC_PERFMON_PAGE_NAMES[liPage]);
-
-        // [gated] The event-receiver queue at +10094268 and the two replay serialisers
-        // (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) still need their exact
-        // typed storage. The remaining menu controls are registered after timer setup below;
-        // the Force shutdown and Take screen shots bool readers/backends remain unproven.
-
-        // NOTE: the bitmap debug font is NOT brought up here -- it arrives through GamePrepare's
-        // id-5 AcquireResource reply (the console's own path: Font::CreateTextureState +
-        // DebugManager::SetDebugFont once "Language\Fonts\Default.font" resolves out of pool 0).
-
-        // ---- X360 step 9 (the part that matters to every timed subsystem) -----------------
-        // Construct @0x823C9EA8, verbatim:
-        //     CgsSystem::TimerStatusInterface::Clear(gm + 10095372);
-        //     lfRate = 1.0 / <vsync refresh rate>;               // the 50/60 the step above checks
-        //     CgsSystem::Timer::Prepare(gm + 10095316, lfRate);  // the GAME timer
-        //     CgsSystem::Timer::Prepare(gm + 10095344, lfRate);  // the SIM timer
-        //     *(gm + 10095340) = 1;                              // gameTimer.mbRunning (+24)
-        //     *(gm + 10095368) = 1;                              // simTimer.mbRunning  (+24)
-        // ⭐ THE RATE IS READ, NOT ASSUMED, since 2026-08-16 (boot audit F-P1-9). The console
-        // takes the refresh rate out of the display mode it validated one step earlier
-        // (asserting 50 or 60); we hardcoded 1/60, which is right on a 60Hz panel and
-        // silently wrong on anything else -- and the timer rate is the time base every
-        // simulation sub-step, camera advance and streaming budget is derived from.
-        // renderengine::GetDisplayRefreshRate is the PC's mode query. It answers 0 for some
-        // windowed modes (D3D's "whatever the desktop is doing"), and anything outside the
-        // console's own 50/60 range means we are on hardware the console never saw, so both
-        // fall back to 60 -- the value this build assumed unconditionally until now.
-        //
-        // X360 step 10 (the flow controller) is constructed BEFORE this block, not after:
-        // Construct @0x823C9EA8 runs GameMainFlowController::Construct and then the timer
-        // seeds. Both are pure init so the order was not observable, but it was inverted
-        // (boot audit F-P1-12).
-        mMainFlowStateMachine.Construct();
-
-        // X360 Construct clears the registered bool at gm+10097332 (0x9A12B4) before timer
-        // setup and later exposes it as "Take screen shots". Its reader/backend is unresolved.
-        mbTakeScreenShots = false;
-
-        {
-            const u32 luRateHz    = KU_SIMULATION_RATE_HZ;
-            const f32 lfTimerRate = 1.0f / static_cast<f32>(luRateHz);
-            CgsDev::PerfMonCpu::SetGameFrequency(CgsDev::E_PMF_60HZ);
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "[timers] display refresh " << (s32)luRefreshHz
-                    << "Hz -> simulation rate 1/" << (s32)luRateHz
-                    << " (fixed; render rate is decoupled)\n";
-            mTimerStatusInterface.Clear();
-            mGameTimer.Prepare(lfTimerRate);
-            mSimTimer.Prepare(lfTimerRate);
-            mGameTimer.SetRunning(true);
-            mSimTimer.SetRunning(true);
-
-            // The debug fps-readout state DebugManagerRender keeps (gm+0x9A0B85..0x9A0BC8; on
-            // the console these sit at the static game module's zero-init, which DebugMemoryInit
-            // re-zeroes). Seeded explicitly here because this build's module is not zero-cleared.
-            // [FLAG] mbDebugSimulationIsRealtime's console writer is unrecovered (see the header);
-            // seeded true so the readout shows the plain "%d fps" line.
-            mbDebugSimulationIsRealtime    = true;
-            mu8DebugFpsFrameStampIndex     = 0;
-            mau32DebugFpsFrameStamps[0]    = 0;
-            mau32DebugFpsFrameStamps[1]    = 0;
-            mau32DebugFpsFrameStamps[2]    = 0;
-            mu32DebugFpsAverageWindowStamp = 0;
-            mfDebugFpsAccumulator          = 0.0f;
-            mfDebugFpsAverage              = 0.0f;
-            mfDebugFpsSampleCount          = 0.0f;
-
-            // ⭐ THE FRAME-RATE MANAGER IS CONSTRUCTED, 2026-08-17. It never was on this
-            // build -- the call was listed among the "[gated] rest of steps 7-9" items -- so
-            // every one of its fields sat at the static game module's zero-init and its
-            // UpdatePostRenderWait was a stub that answered "the minimum, at least one"
-            // without ever reading a clock. That stub is what tied the simulation to the
-            // render rate.
-            //
-            // Position and arguments are the console's, verbatim: Construct @0x823C9EA8 runs
-            // it at 0x823CAE68, immediately after the two Timer::Prepare calls above, with
-            // `this = gm + 0x9A0B50` and the two floats formed at 0x823CAE3C-64 as
-            //     a2 = simTimer.mfRate * simTimer.mfScaleCurrent * flt_82009E10 (1000.0)
-            //     a3 = simTimer.mfRate * simTimer.mfScaleCurrent * flt_820049E0 ( 100.0)
-            // i.e. one simulation step in MILLISECONDS, and a framerate tolerance of one
-            // tenth of it. (Both constants read out of the decrypted ARTIST image at
-            // 0x82009E10 / 0x820049E0.) mfScaleCurrent is 1.0 straight out of Timer::Prepare,
-            // so this is the console's own expression, not a simplification of it.
-            {
-                const f32 lfSimulationStepMs = mSimTimer.GetRate() * mSimTimer.GetScaleCurrent() * 1000.0f;
-                const f32 lfToleranceMs      = mSimTimer.GetRate() * mSimTimer.GetScaleCurrent() * 100.0f;
-                mFrameRateManager.Construct(lfSimulationStepMs, lfToleranceMs);
-            }
-
-        }
-
-        // X360 Construct @0x823CAEBC-F48 registers the Framerate variable, its 0..2 range and
-        // options, then the two simulation actions. The option pairs are the raw table at
-        // 0x8203525C: {0,"Single"}, {1,"Multiple Capped"}, {2,"Multiple Uncapped"}.
-        {
-            static const CgsDev::DebugUI::StringList KAC_FRAMERATE_OPTIONS[] = {
-                {0, "Single"},
-                {1, "Multiple Capped"},
-                {2, "Multiple Uncapped"},
-            };
-
-            CgsDev::DebugInterface lDebugInterface(&mDebugManager);
-            s32* const lpiFrameRateType = reinterpret_cast<s32*>(&meFrameRateManagerType);
-            lDebugInterface.RegisterVariable(lpiFrameRateType, "Debug/Framerate", "Framerate type");
-            lDebugInterface.SetRange(lpiFrameRateType, 0, 2);
-            lDebugInterface.SetOptions(lpiFrameRateType, KAC_FRAMERATE_OPTIONS);
-            lDebugInterface.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
-            lDebugInterface.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
-            lDebugInterface.RegisterVariable(&mbForceShutdown, "Debug/Sim", "Force shutdown");
-            lDebugInterface.RegisterVariable(&mbTakeScreenShots,
-                                             "Core/Debug/Performance/CPU Monitors",
-                                             "Take screen shots");
-        }
-
-        // ⭐ CORRECTED 2026-08-16 (boot audit F-P1-2). Construct already leaves the
-        // controller in state 0 by a RAW store (@0x823C6508) and the X360 caller issues no
-        // SetState, so the console never runs state 0's OnLeave OR its OnEnter -- SendEvent's
-        // transition set never targets state 0 either. The PC's explicit SetState fired an
-        // OnLeave+OnEnter pair the console never issues; with the state bytes now wired
-        // (F4) that phantom OnEnter would also have raised mbSaveLoadState, making the
-        // initial-load update set 0xC1 instead of the console's 0x80.
-
-        // ⭐ THE GUI PREPARE IS GONE FROM HERE, 2026-08-16 (boot audit F-P1-1, the S1
-        // exemplar). It used to run `mGuiModule.Prepare()` on this line -- which meant the
-        // whole ~24MB GUI/Apt bring-up (VIDEOLIST, the Apt runtime, PERSISTENTAPT,
-        // GUITEXTURES, the fonts, FLAPTHUD, the profiles, the flow pools, the FSM
-        // controller) completed BEFORE the loading screen existed. The log said so plainly:
-        // every GUI/Apt line came out before "loading screen shown".
-        //
-        // Construct @0x823C9EA8 contains no GuiModule::Prepare at all. The console drives it
-        // from the loading-screen stage machine: InitialLoadingScreen::Update @0x823EF688
-        // stage 2 -> LoadingScriptedState::LoadGUIModule @0x823EF310, which pumps the GUI
-        // module's Prepare (vtable+0x58) once per frame and only posts the two id-144 RunFsm
-        // records when it finally reports done. That is now where ours runs.
-
-        // ARTIST 0x823C9EA8 clears the disk-error, controller-disconnect, and loading-screen
-        // latches at gm+10094114, +10094116, and +10094125. Use their owned members here.
-        mbDiskError = false;
-        mbControllerDisconnected = false;
-        // ARTIST823CAAB0: the virtual Construct owns this latch reset.
-        mbRequestStreamingWait = false;
-        mbIsLoadingScreenVisible = false;
-
-        // ARTIST823CAA14/7C/AC: both port words start at4; bind state starts at0.
-        // BootLegal90 arms state1; only a real START selection advances it to2.
-        miPlayer0ControllerPort   = CgsInput::KU_NUMBER_OF_PADS;
+            mGameDataModule.GetPopupController(), lfAspectRatio, lbHighDef);
+        mGameStateModule.Construct();
+        mEffectsModule.Construct();
+        mDirectorModule.Construct(lfAspectRatio);
+        mReplayModule.Construct();
+        siNativeValue82CDBEB4 = 0;
+        siNativeValue82CDBF28 = 0;
+        mNetworkModule.Construct(0);
+        mDebugFont.mpResourceMemory = 0;
+        mDebugFont.mpSourceEntry = 0;
+        miPlayer0ControllerPort = CgsInput::KU_NUMBER_OF_PADS;
         miSecondaryControllerPort = CgsInput::KU_NUMBER_OF_PADS;
-        miInputModuleState        = 0;
-        mbGuiAcceptsControllerInput = true;
-
-        // ---- the GUI flow-FSM bridge state ------------------------------------------
-        // ⭐ CORRECTED 2026-08-17 (boot audit F-P1-8). The note said "X360 Construct zeroes
-        // the slots; the bridge parks the stage at 6 after the first pass". It does zero the
-        // neighbouring bytes, but NOT this word: @0x823CAAD0-DC it loads `li r11, 6` and
-        // `stwx r11, r30, r24` with r24 = 0x9A0644 -- the stage slot -- so Construct seeds it
-        // to SIX. Our own header already documents 6 as "idle" (BrnGameModule.hpp:738), so
-        // the two sources agree and only the code disagreed.
-        //
-        // Seeding 0 is not merely untidy: the reset just below is `if (miGuiFsmStage != 6)`,
-        // which from 0 is TRUE on the first pass and clears mbGuiPhaseComplete -- and that
-        // byte is what InitialLoadingScreen's preload latch and CheckDiskSpace::Update both
-        // read since F-P5-4/F-P4-8. Starting idle is the console's initial condition.
-        miGuiFsmStage      = 6;
-        mbGuiPhaseComplete = false;
-        mbGuiPreAccept     = false;
-        mbDispatchCameraPublished = false;
-        mbPlayerCarCrashing    = false;
-        mbWorldDataPrepared    = false;
-        mbCarSelectionPublished = false;
-
-        // ARTIST 823CB1C4 / 823CB1D0; DecFIGS BrnGameModule.h:524/525.
+        mbEnableCalibrationUnfriendlyPostFx = true;
+        miContrast = 50;
+        miBrightness = 50;
+        mbSimPaused = false;
+        mbControllerDisconnected = false;
+        miInputModuleState = E_INPUTBINDSTATE_UNBOUND;
+        mbRequestStreamingWait = false;
+        mbWorldStreamingRequestedStall = false;
+        mbStreamingStalled = false;
+        mbPlayerCarCrashing = false;
+        mbIsSysMenuShowing = false;
+        mbTakeScreenShots = false;
+        mbGameOver = false;
+        mbOnline = false;
+        mbGuiPreAccept = false;
+        miGuiFsmStage = E_GUIFLOW_MAX;
+        const s32 liRefreshRate = BrnRendererModule::GetVSynchRate();
+        static const char* const kapcPageNames[24] =
+        {
+            "General", "Resource", "Traffic", "Gui", "World", "GameState", "Physics", "AI",
+            "Network", "Network Detail", "Graphics", "Bridges", "Race Car", "Director", "Sound",
+            "Deformation", "SceneManager ContactGen", "SceneManager", "More Network Detail",
+            "Sound: Aems Detail", "Particles", "Lion", "Video", "Flapt"
+        };
+        for (s32 liPage = 0; liPage < 24; ++liPage)
+            mDebugManager.mDebugComponentPerfMonCpu.SetPageName(
+                static_cast<CgsDev::PerfMonCpuPage>(liPage), kapcPageNames[liPage]);
+        if (liRefreshRate == 50)
+            CgsDev::PerfMonCpu::SetGameFrequency(CgsDev::E_PMF_50HZ);
+        else if (liRefreshRate == 60)
+            CgsDev::PerfMonCpu::SetGameFrequency(CgsDev::E_PMF_60HZ);
+        else
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Refresh rate " << liRefreshRate
+                << " not handled by M_CGS_PERFMON_CPU_SETGAMEFREQUENCY\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 498);
+            CgsDev::Assert::EndAssert();
+        }
+        mGamePrepareReceiverQueue.Construct();
+        mMainFlowStateMachine.Construct();
+        muCatchupStartTime = 0;
+        mTimingValue12C0 = 0;
+        mTimingValue12C8 = 0;
+        mTimerStatusInterface.Clear();
+        const f32 lfRate = 1.0f / static_cast<f32>(liRefreshRate);
+        mGameTimer.Prepare(lfRate);
+        mSimTimer.Prepare(lfRate);
+        mGameTimer.SetRunning(true);
+        mSimTimer.SetRunning(true);
+        mFrameRateManager.Construct(mSimTimer.GetScaleCurrent() * mSimTimer.GetRate() * 1000.0f,
+            mSimTimer.GetScaleCurrent() * mSimTimer.GetRate() * 100.0f);
+        miNumSimFramesRequired = 1;
+        mi8FrameRateMinSteps = 1;
+        mi8FrameRateMaxSteps = 3;
+        mi8ActualFrameRateMinStepsThisFrame = 1;
+        mi8ActualFrameRateMaxStepsThisFrame = 1;
+        meFrameRateManagerType = CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_CAPPED;
+        {
+            static const CgsDev::DebugUI::StringList kaFrameRateOptions[] =
+            {
+                {0, "Single"}, {1, "Multiple Capped"}, {2, "Multiple Uncapped"}
+            };
+            CgsDev::DebugInterface lDebug;
+            s32* const lpType = reinterpret_cast<s32*>(&meFrameRateManagerType);
+            lDebug.RegisterVariable(lpType, "Debug/Framerate", "Framerate type");
+            lDebug.SetRange(lpType, 0, 2);
+            lDebug.SetOptions(lpType, kaFrameRateOptions);
+            lDebug.RegisterFunction(&BrnGameModule::StepFrameCB, this, "Debug/Sim", "Step");
+            lDebug.RegisterFunction(&BrnGameModule::PlayFrameCB, this, "Debug/Sim", "Play");
+            lDebug.RegisterVariable(&mbForceShutdown, "Debug/Sim", "Force shutdown");
+            lDebug.RegisterVariable(&mbTakeScreenShots, "Core/Debug/Performance/CPU Monitors", "Take screen shots");
+        }
+        mFrameRateTypeRequestInterface.Clear();
+        mfDebugFpsAverage = 0.0f;
+        mfDebugFpsAccumulator = 0.0f;
+        mfDebugFpsSampleCount = 0.0f;
+        mbSteppingFrames = false;
+        mbDoStep = false;
+        mbStopStepping = false;
+        mbTakeScreenShots = false;
+        mbForceShutdown = false;
+        mau64DebugFpsFrameStamps[0] = 0;
+        mau64DebugFpsFrameStamps[1] = 0;
+        mau64DebugFpsFrameStamps[2] = 0;
+        mu8DebugFpsFrameStampIndex = 0;
+        mu64DebugFpsAverageWindowStamp = 0;
+        mpUpdateInputBufferStack = 0;
+        mpUpdateOutputBufferStack = 0;
+        mpResourceInputBufferStack = 0;
+        mpResourceOutputBufferStack = 0;
+        mpGuiInputBuffer = 0;
+        mpGuiViewInputBuffer = 0;
+        mpGuiModelOutputBuffer = 0;
+        mpGuiOutputBuffer = 0;
+        mpDirectorOutputBuffer = 0;
+        mbPrevStalled = false;
+        mbStalled = false;
+        mbRequestDoStepFrame = false;
+        mbRequestDoPlayFrame = false;
+        mbTakeMetrics = false;
+        mbSendMetrics = false;
+        muRenderMetricsCount = 0;
         mDirectorBridgeSerialiser.Construct();
         mGameModuleSerialiser.Construct();
+        mbHasGameTerminated = false;
+        suNativeValue82FAE280 = 0;
+        miWorldModuleUpdateTrace = 0;
+        mbIsLoadingScreenVisible = false;
+        mbDiskError = false;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+            *CgsDev::Log::gpDebugPrint << "Hard disk available: "
+                << (CgsSystem::HardwareInit::IsHardDiskAvailable() ? "true" : "false") << "\n";
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
     // pending stage's GuiEventRunFsm record(s) as raw 24-byte event-144 AddEvents (the
     // X360 posts these raw, not through the AddGuiEvent<T> template), then parks the
     // stage and clears the phase-complete flag.
-    void BrnGameModule::BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
+    void BrnGameModule::BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput)
     {
-        if (lpGuiInputBuffer == 0)
-            return;
-
-        struct RunFsmPost
-        {
-            static void Post(CgsGui::CgsGuiModuleIO::InputBuffer* lpBuffer, const char* lpacFsmName,
-                             const char* lpacInitialState, s32 liFsmToRun, s32 liFlowToUse)
-            {
-                BrnGui::GuiEventRunFsm lEvent;
-                lEvent.mFsmId          = CgsIDCompress(lpacFsmName);
-                lEvent.mInitialStateId = (lpacInitialState != 0) ? CgsIDCompress(lpacInitialState)
-                                                                 : static_cast<CgsID>(0);
-                lEvent.meFsmToRun      = static_cast<BrnGui::EHUDFSMs>(liFsmToRun);
-                lEvent.meFlowToUse     = static_cast<BrnGui::GuiFlow>(liFlowToUse);
-                lpBuffer->GetGuiEvents()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEvent), lEvent.GetEventType(),
-                    static_cast<s32>(sizeof(lEvent)));
-            }
-        };
-
+        BrnGui::GuiEventRunFsm lEvent;
+        // ARTIST823DCA10 copies all24 bytes but never writes meFsmToRun at+16.
+        const char* lpcFsmName = 0;
         switch (miGuiFsmStage)
         {
-            case 1:
-                RunFsmPost::Post(lpGuiInputBuffer, "BrnVideoFsm", 0,
-                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
-                break;
-            case 2:
-                RunFsmPost::Post(lpGuiInputBuffer, "BrnLegalFsm", 0,
-                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
-                break;
-            case 3:
-                RunFsmPost::Post(lpGuiInputBuffer, "BrnCmpLdFsm", 0,
-                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
-                break;
-            case 4:
-                RunFsmPost::Post(lpGuiInputBuffer, "BrnBFProFsm", 0,
-                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
-                break;
-            case 5:
-                // The in-game handoff: the front-end SCREEN flow at its LOADING state plus
-                // the freeburn HUD FSM.
-                RunFsmPost::Post(lpGuiInputBuffer, "BrnScreenFsm", "LOADING",
-                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_SCREEN);
-                RunFsmPost::Post(lpGuiInputBuffer, "BrnFBFsm", 0,
-                                 BrnGui::E_GUI_HUD_FREEBURN, BrnGui::E_GUIFLOW_HUD);
-                break;
-            default:
-                break;
+        case E_GUIFLOW_MARKETING: lpcFsmName = "BrnVideoFsm"; break;
+        case E_GUIFLOW_START: lpcFsmName = "BrnLegalFsm"; break;
+        case E_GUIFLOW_COMPLETELOADING: lpcFsmName = "BrnCmpLdFsm"; break;
+        case E_GUIFLOW_MEMCARD: lpcFsmName = "BrnBFProFsm"; break;
+        case E_GUIFLOW_INGAME:
+            lEvent.mFsmId = CgsIDCompress("BrnScreenFsm");
+            lEvent.mInitialStateId = CgsIDCompress("LOADING");
+            lEvent.meFlowToUse = BrnGui::E_GUIFLOW_SCREEN;
+            lpGuiInput->GetGuiEvents()->AddEvent(&lEvent, 144, sizeof(lEvent));
+            lpcFsmName = "BrnFBFsm";
+            break;
         }
-
-        if (miGuiFsmStage != 6)
+        if (lpcFsmName)
         {
-            miGuiFsmStage      = 6;
+            lEvent.mInitialStateId = 0;
+            lEvent.mFsmId = CgsIDCompress(lpcFsmName);
+            lEvent.meFlowToUse = BrnGui::E_GUIFLOW_HUD;
+            lpGuiInput->GetGuiEvents()->AddEvent(&lEvent, 144, sizeof(lEvent));
+        }
+        if (miGuiFsmStage != E_GUIFLOW_MAX)
+        {
+            miGuiFsmStage = E_GUIFLOW_MAX;
             mbGuiPhaseComplete = false;
         }
     }
 
-    // @ 0x823CB758 -- the GUI->game out-event consumer (see BrnGameModule.hpp). The PC
-    // consumers map the console's dispatch-buffer render states onto the renderer's
-    // loading-screen signal; the quit-to-dash (86/87/89 -> XLaunchNewImage) and the
-    // brightness/contrast forwards (545/546) are platform follow-ons.
-    void BrnGameModule::BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
+    // ARTIST823CB758: original GUI event consumer and soft-reboot request.
+    void BrnGameModule::BridgeGuiToGame(const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
     {
-        // The calibration TEXTURE handle the console keeps as a FUNCTION LOCAL, re-seeded from
-        // the null-handle sentinel on every call: @0x823CB764-0x823CB774
-        //     lis r11, qword_82FAE900@ha ; ld r11, qword_82FAE900@l(r11) ; std r11, var_A0(r1)
-        // i.e. `ResourceHandle lTextureHandle = CgsResource::NULLResourceHandle;` (DWARF
-        // BrnGameModule.cpp:3105; qword_82FAE900 is the {NULL,NULL} handle the SetDebugFont
-        // family compares against -- BrnGameModule::Construct @0x823CA970, DebugManagerRender
-        // @0x823BCBD0, CgsDev::DebugManager::SetDebugFont @0x823B14FC all read the same word).
-        // GUI event 546 overwrites it for THIS frame only and the publish tail below stores
-        // whatever it then holds -- so the calibration texture goes away again the moment
-        // ColourCalibrationScreen stops posting. That per-frame reset is the console's, not ours.
-        CgsResource::ResourceHandle lhCalibrationTextureHandle = CgsResource::NULLResourceHandle;
-
-        // The event walk is skipped without a queue (a PC guard: the console always has the GUI
-        // output buffer's queue); the publish tail below runs regardless, as on the console.
+        CgsResource::ResourceHandle lCalibrationTexture = CgsResource::NULLResourceHandle;
+        DispatchThreadInputBuffer* const lpDispatch = mDispatchThreadInputBufferManager.GetWriteBuffer();
+        const CgsModule::VariableEventQueue<18432,16>* const lpQueue = lpGuiOutput->GetOutEventQueue();
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
-        s32 liId = (lpGuiOutQueue != 0) ? lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize) : -1;
-        // X360 BridgeGuiToGame @0x823CB7A8/B8 polls and clears byte_82FAE28C before walking
-        // GUI events, then sets the game-flow return latch at gm+10094118.
+        s32 liType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
         if (sbForceQuitToStartMenu)
         {
             sbForceQuitToStartMenu = false;
-            BrnGameMainFlowController::gBrnReturnToFrontEndRequested = true;
+            mbGameOver = true;
         }
-
-        while (liId >= 0 && lpEvent != 0)
+        while (lpEvent)
         {
-            const s32 liCommand = liId;
-            const u8* const lpuPayload = reinterpret_cast<const u8*>(lpEvent);
-            const s32 liPayloadSize = liSize;
-
-            // ---- the DISPLAY-CALIBRATION events, 545 and 546 -------------------------------
-            // X360 BridgeGuiToGame @0x823CB758 handles these two ids in its one switch:
-            //   case 0x221 (545) BrnGui::GuiOptionsBrightnessContrast          @0x823CB9FC
-            //       assert "NULL != lpBrightnessContrast" (BrnGameModule.cpp:3194), then
-            //         lwz r11,0(r29) ; stwx r11,r31,r15   -> +10096740 == miBrightness
-            //         lwz r11,4(r29) ; stwx r11,r31,r16   -> +10096744 == miContrast
-            //   case 0x222 (546) BrnGui::GuiOptionsBrightnessContrastPostFxControl @0x823CBAAC
-            //       assert "lpBrightnessContrastPostFxControl" (BrnGameModule.cpp:3205), then
-            //         lbz r11,8(r29) ; stbx r11,r31,r17   -> +10096748 ==
-            //                                                mbEnableCalibrationUnfriendlyPostFx
-            //         ld  r11,0(r29) ; std r11,var_A0(r1) -> the local texture handle above
-            // The producers are BrnGui::ScreenLoading::ApplyOptionsDataProfileSettings and
-            // BrnGui::CrashNavColourCalibrate::ApplySettings (545, the saved profile / the
-            // options slider) and BrnGui::ColourCalibrationScreen::Update (546, the calibration
-            // ramp screen showing and hiding).
-            //
-            // ⚠ THE PAYLOAD IS READ BY NAME, NOT AT THE CONSOLE'S BYTE OFFSETS. The 546 payload
-            // leads with a CgsResource::ResourceHandle -- two POINTERS, 8 bytes on the X360 and
-            // 16 bytes here -- so the console's `+8` for the bool is a guest offset and using it
-            // would read the middle of mpSourceEntry. The struct is the tree's own
-            // BrnGui::GuiOptionsBrightnessContrastPostFxControl and the members are reached by
-            // name; the size check below is against the HOST sizeof for the same reason.
+            switch (liType)
             {
-                // Payload layout pins (event payloads are the classic byte-layout trap).
-                // 545: two words, brightness first -- swap them and the frame goes dark
-                // instead of bright, silently. 546: the handle LEADS and the flag follows
-                // it, which on the host means +16, not the console's +8.
-                CGS_STATIC_ASSERT((offsetof(BrnGui::GuiOptionsBrightnessContrast, mBrightness) == 0),
-                              "GUI 545 payload: mBrightness is the X360 payload +0 word");
-                CGS_STATIC_ASSERT((offsetof(BrnGui::GuiOptionsBrightnessContrast, mContrast) == 4),
-                              "GUI 545 payload: mContrast is the X360 payload +4 word");
-                CGS_STATIC_ASSERT((sizeof(BrnGui::GuiOptionsBrightnessContrast) == 8),
-                              "GUI 545 payload is two words (X360 record 20B = 12B header + 8)");
-                CGS_STATIC_ASSERT((offsetof(BrnGui::GuiOptionsBrightnessContrastPostFxControl,
-                                       mColourCalibrationTextureHandle) == 0),
-                              "GUI 546 payload: the calibration handle leads (X360 payload +0)");
-
-                if (liCommand == 545)
+            case 19:
+                lpDispatch->ShowLoadingScreen();
+                mbIsLoadingScreenVisible = true;
+                break;
+            case 20:
+                lpDispatch->HideLoadingScreen();
+                mbIsLoadingScreenVisible = false;
+                break;
+            case 70:
+                mbGuiPhaseComplete = true;
+                break;
+            case 71:
+                mbGuiPreAccept = true;
+                break;
+            case 86:
+            case 87:
+            case 89:
+                mbGameOver = true;
+                break;
+            case 90:
+                if (miInputModuleState == E_INPUTBINDSTATE_UNBOUND)
+                    miInputModuleState = E_INPUTBINDSTATE_PRESS_START;
+                break;
+            case 138:
+                mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreenSaveLoadBG();
+                break;
+            case 189:
                 {
-                    CGS_ASSERT(lpuPayload != 0, "NULL != lpBrightnessContrast");
-                    if (lpuPayload != 0
-                        && liPayloadSize >= static_cast<s32>(
-                               sizeof(BrnGui::GuiOptionsBrightnessContrast)))
-                    {
-                        const BrnGui::GuiOptionsBrightnessContrast* const lpSettings =
-                            reinterpret_cast<const BrnGui::GuiOptionsBrightnessContrast*>(
-                                lpuPayload);
-                        miBrightness = lpSettings->mBrightness;
-                        miContrast   = lpSettings->mContrast;
-                    }
+                    const BrnGui::GuiOverlayCompletePayload* const lpOverlay =
+                        static_cast<const BrnGui::GuiOverlayCompletePayload*>(lpEvent);
+                    if (CgsIDCompress("SignOut") == lpOverlay->mOverlayId &&
+                        lpOverlay->meLeaveMethod == BrnGui::GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK &&
+                        miInputModuleState == E_INPUTBINDSTATE_BOUND)
+                        miInputModuleState = E_INPUTBINDSTATE_GAME_OVER;
                 }
-                else if (liCommand == 546)
+                break;
+            case 362:
                 {
-                    CGS_ASSERT(lpuPayload != 0, "lpBrightnessContrastPostFxControl");
-                    if (lpuPayload != 0
-                        && liPayloadSize >= static_cast<s32>(
-                               sizeof(BrnGui::GuiOptionsBrightnessContrastPostFxControl)))
-                    {
-                        const BrnGui::GuiOptionsBrightnessContrastPostFxControl* const lpControl =
-                            reinterpret_cast<
-                                const BrnGui::GuiOptionsBrightnessContrastPostFxControl*>(
-                                    lpuPayload);
-                        // mbEnablePostFx is the console's byte at payload +8 -- false while
-                        // the calibration ramp is on screen, true when it hides. The game module
-                        // stores it verbatim; BrnRendererModule::Render ANDs
-                        // GetCalibrationUnfriendlyEnablePostFx() into every effect's active flag,
-                        // so the ramp is graded by nothing while you calibrate against it.
-                        // (Renamed from the tree's placeholder mbRestoreDefaults to the DWARF
-                        // name, BrnGuiEventTypeDefs.h:6441 -- step-11 `guiwire`; polarity and
-                        // member order are unchanged.)
-                        mbEnableCalibrationUnfriendlyPostFx = lpControl->mbEnablePostFx;
-                        lhCalibrationTextureHandle =
-                            lpControl->mColourCalibrationTextureHandle;
-                    }
+                    lpDispatch->LockForWrite();
+                    SnapShotRequest* const lpRequest = lpDispatch->GetSnapShotRequest();
+                    const BrnGui::GuiSnapShotRequested* const lpSnapshot =
+                        static_cast<const BrnGui::GuiSnapShotRequested*>(lpEvent);
+                    lpRequest->mfStartX = lpSnapshot->mfStartX;
+                    lpRequest->mfStartY = lpSnapshot->mfStartY;
+                    lpRequest->mfWidth = lpSnapshot->mfWidth;
+                    lpRequest->mbTakeSnapShot = true;
+                    lpRequest->mfHeight = lpSnapshot->mfHeight;
+                    lpDispatch->UnlockForWrite();
                 }
+                break;
+            case 545:
+                {
+                    const BrnGui::GuiOptionsBrightnessContrast* const lpBrightnessContrast =
+                        static_cast<const BrnGui::GuiOptionsBrightnessContrast*>(lpEvent);
+                    if (!lpBrightnessContrast)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert("NULL != lpBrightnessContrast",
+                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3194);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    miBrightness = lpBrightnessContrast->mBrightness;
+                    miContrast = lpBrightnessContrast->mContrast;
+                }
+                break;
+            case 546:
+                {
+                    const BrnGui::GuiOptionsBrightnessContrastPostFxControl* const lpControl =
+                        static_cast<const BrnGui::GuiOptionsBrightnessContrastPostFxControl*>(lpEvent);
+                    if (!lpControl)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert("lpBrightnessContrastPostFxControl",
+                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3205);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    mbEnableCalibrationUnfriendlyPostFx = lpControl->mbEnablePostFx;
+                    lCalibrationTexture = lpControl->mColourCalibrationTextureHandle;
+                }
+                break;
+            case 589:
+                mDispatchThreadInputBufferManager.GetWriteBuffer()->BlackOverlayFadeIn();
+                break;
+            case 590:
+                mDispatchThreadInputBufferManager.GetWriteBuffer()->BlackOverlayFadeOut();
+                break;
             }
-
-            switch (liCommand)
-            {
-                    case 19:   // PlayAptLoadingMovie -> ShowLoadingScreen (X360 write buffer [9828] = 1)
-                        mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreen();
-                        break;
-                    case 20:   // StopAptLoadingMovie -> HideLoadingScreen ([9828] = 2)
-                        mDispatchThreadInputBufferManager.GetWriteBuffer()->HideLoadingScreen();
-                        break;
-                    case 70:   // GUI phase complete -- the main flow advances on it
-                        mbGuiPhaseComplete = true;
-                        break;
-                    case 71:   // pre-accept -- resume the world load during the accept dwell
-                        mbGuiPreAccept = true;
-                        break;
-                    case 90:   // profile-first-boot flag (X360 +10094136: 0 -> 1)
-                        if (miInputModuleState == 0)
-                            miInputModuleState = 1;
-                        break;
-                    case 65:
-                        // The SCREEN flow's in-game entry notice (InGame::OnEnter posts
-                        // {1,65,12,flag=1}). X360: BridgeGuiToGameState @0x823DDB78
-                        // forwards it as GameState action 106; the GameState/world side
-                        // then closes the boot loading-screen lifecycle as its streaming
-                        // settles. [FLAG world-load stand-in: with no world modules on PC
-                        // the "world" is ready the moment gameplay owns the screen, so the
-                        // in-game notice retires the boot loading screen here -- the same
-                        // observable the console produces at this point. The real
-                        // GameState consumer replaces this when the world side lands.]
-                        mDispatchThreadInputBufferManager.GetWriteBuffer()->HideLoadingScreen();
-                        CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
-                                                "loading screen retired (world-load stand-in).\n");
-                        break;
-                    case 405:
-                        // ⭐ THE CAR-SELECT SCREEN'S OWN DATA REQUEST. Every car-select screen
-                        // state posts command 405 from CarSelectMain::OnEnter @0x824C8920 --
-                        // it is the console's "this screen is up, send me the car-select
-                        // data" request, and the 406 / 412 / 413 records are its answers.
-                        // Re-arming the publish latch here is what makes the answers arrive
-                        // ONCE PER SCREEN instead of once per boot.
-                        //
-                        // ⚠️ THIS MATTERS AND IT WAS FOUND BY BOOT: every screen state is its
-                        // OWN object with its OWN mCurrentSetupInfo / car list. Publishing once
-                        // per boot fed CS_VEHICLE and left CS_LIVERY with mCarId == (CgsID)-1
-                        // and an EMPTY livery selector -- five asserts a frame from
-                        // CanCarBePainted and GetHighlighted(). The latch is armed by the
-                        // request now, exactly as the console's producer is.
-                        mbCarSelectionPublished = false;
-                        break;
-                    case 86: case 87: case 89:
-                        CgsDev::Log::WriteToLog("[GameModule] GUI quit-to-dash command (86/87/89) -- "
-                                                "PC platform no-op (FLAG).\n");
-                        break;
-                    // The "render states" ARE the loading-screen commands: the console
-                    // BridgeGuiToGame @0x823CB758 writes the dispatch write buffer's
-                    // meLoadingScreenCommand (+39312 == [9828]) that Render forwards into
-                    // LoadingScreenRenderer::AddCommand. 138 = the save/load prompt
-                    // background (BootProfile posts it right before playing
-                    // SaveLoadComponent: the loading screen renders BEHIND the GUI,
-                    // dimmed); 589/590 = the black-overlay fades BootLegal posts around
-                    // the title screen and the menu accept.
-                    case 138:  // -> ShowLoadingScreenSaveLoadBG ([9828] = 3)
-                        mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreenSaveLoadBG();
-                        break;
-                    case 589:  // -> BlackOverlayFadeIn ([9828] = 4: reveal from black)
-                        mDispatchThreadInputBufferManager.GetWriteBuffer()->BlackOverlayFadeIn();
-                        break;
-                    case 590:  // -> BlackOverlayFadeOut ([9828] = 5: the accept fade to black)
-                        mDispatchThreadInputBufferManager.GetWriteBuffer()->BlackOverlayFadeOut();
-                        break;
-                    default:
-                        break;
-            }
-            const CgsModule::Event* lpNext = 0;
-            liId = lpGuiOutQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
-            lpEvent = lpNext;
+            liType = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
-
+        lpDispatch->LockForWrite();
+        lpDispatch->SetBrightness(miBrightness);
+        lpDispatch->SetContrast(miContrast);
+        lpDispatch->SetCalibrationUnfriendlyEnablePostFx(mbEnableCalibrationUnfriendlyPostFx);
+        lpDispatch->SetCalibrationTextureHandle(lCalibrationTexture);
+        lpDispatch->UnlockForWrite();
+        if (mbGameOver)
         {
-            static bool sbCalibrationLogged   = false;
-            static s32  siLastBrightness      = 0;
-            static s32  siLastContrast        = 0;
-            static bool sbLastEnablePostFx    = false;
-            static const void* spLastCalibTex = 0;
-            if (!sbCalibrationLogged
-                || siLastBrightness   != miBrightness
-                || siLastContrast     != miContrast
-                || sbLastEnablePostFx != mbEnableCalibrationUnfriendlyPostFx
-                || spLastCalibTex     != lhCalibrationTextureHandle.mpResourceMemory)
-            {
-                sbCalibrationLogged = true;
-                siLastBrightness    = miBrightness;
-                siLastContrast      = miContrast;
-                sbLastEnablePostFx  = mbEnableCalibrationUnfriendlyPostFx;
-                spLastCalibTex      = lhCalibrationTextureHandle.mpResourceMemory;
-
-                char lacMsg[192];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                              "[calib] brightness=%d contrast=%d unfriendlyPostFx=%d "
-                              "calibTex=%p\n",
-                              static_cast<int>(miBrightness), static_cast<int>(miContrast),
-                              mbEnableCalibrationUnfriendlyPostFx ? 1 : 0,
-                              lhCalibrationTextureHandle.mpResourceMemory);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-
-        {
-            BrnGame::DispatchThreadInputBuffer* const lpWrite = mDispatchThreadInputBufferManager.GetWriteBuffer();
-            lpWrite->LockForWrite();
-            lpWrite->SetBrightness(miBrightness);
-            lpWrite->SetContrast(miContrast);
-            lpWrite->SetCalibrationUnfriendlyEnablePostFx(mbEnableCalibrationUnfriendlyPostFx);
-            // @0x823CBB58 `ld r4, 0x100+var_A0(r1)` / bl SetCalibrationTextureHandle -- the
-            // console's fourth setter, restored now that event 546 can move the local. Until
-            // this arm existed the handle could only ever be the buffer's own Clear()'d null,
-            // so the call was omitted as a no-op.
-            lpWrite->SetCalibrationTextureHandle(lhCalibrationTextureHandle);
-            lpWrite->UnlockForWrite();
+            XGetLaunchData(&mHardware, 0x98);
+            mHardware.mPad94 = 1;
+            XSetLaunchData(&mHardware, 0x98);
+            XLaunchNewImage(mHardware.macCommandLine, 0);
         }
     }
 
@@ -922,30 +722,18 @@ namespace BrnGame
     // string, and 476/478 fall either side of it in both the DWARF member order and the asm.
     //
     void BrnGameModule::BridgeGuiToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
-                                            CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
+                                            const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
     {
-        if (lpDirectorInput == 0 || lpGuiOutQueue == 0)
-            return;
+        const CgsModule::VariableEventQueue<18432, 16>* const lpGuiOutQueue =
+            lpGuiOutput->GetOutEventQueue();
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liId = lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize);
         while (liId >= 0 && lpEvent != 0)
         {
-            // ---- resolve (command, payload) -- see the PC-ABI FLAG above ------------------
-            const u32* lpuRecord  = reinterpret_cast<const u32*>(lpEvent);
-            s32        liCommand  = liId;
-            const u32* lpuPayload = lpuRecord;
-            if (liId == 40 && liSize >= 12)
-            {
-                liCommand = static_cast<s32>(lpuRecord[1]);
-                const u32 luOffset = lpuRecord[2];
-                if (luOffset >= 12u && static_cast<s32>(luOffset) < liSize)
-                {
-                    lpuPayload = reinterpret_cast<const u32*>(
-                        reinterpret_cast<const u8*>(lpEvent) + luOffset);
-                }
-            }
+            const s32 liCommand = liId;
+            const u32* const lpuPayload = reinterpret_cast<const u32*>(lpEvent);
             const s32 liPayload0 = static_cast<s32>(lpuPayload[0]);
 
             switch (liCommand)
@@ -1159,9 +947,10 @@ namespace BrnGame
         if (mbStreamingStalled && sbShowStreamStallMessage)
         {
             CgsDev::DebugInterface lDebug;
+            const Vector2 lPosition = {200.0f, 40.0f};
             lDebug.Get2dRender().Draw2DText(
                 "STREAM STALL: Stalling game while streaming catches up",
-                Vector2{200.0f, 40.0f}, 16.0f, 0xFF0000FFu);
+                lPosition, 16.0f, 0xFF0000FFu);
         }
 
         lpNetworkOutput->LockForRead();
@@ -1550,7 +1339,7 @@ namespace BrnGame
 
     //
     // X360 order:
-    //   StartMonitor(gm+10055508);
+    //   CgsDev::PerfMonCpu::StartMonitor(gm+10055508);
     //   CreateIOBuffer<BrnWorldIO::UpdateInputBuffer>(inStack, &worldIn, "World")
     //     (asserting "mpStack->CreateIOBuffer( &mpBuffer, lpcName )", CgsModuleIOHelper.h:52);
     //   sub_823B7620(worldIn, controllerOut, gameStateOut, guiOut, replayOut, soundOut)
@@ -1573,62 +1362,54 @@ namespace BrnGame
     void BrnGameModule::DoUpdate_World(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
                                        CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
                                        const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                                       const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutputBuffer,
+                                       const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+                                       const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+                                       const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutputBuffer,
+                                       BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
                                        BrnWorldIO::UpdateOutputBuffer* lpWorldUpdateOutputBuffer,
-                                       CgsMemory::LinearMalloc* lpWorldFrameAllocator,
                                        BrnUpdateSet lUpdateSet)
     {
-        BrnWorldIO::UpdateInputBuffer* lpWorldInput = 0;
-        const bool lbCreated = lpUpdateInputBufferStack->CreateIOBuffer(&lpWorldInput, "World");
-        CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
-        (void)lbCreated;
-
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_World);
+        CgsModule::IOHelper<BrnWorldIO::UpdateInputBuffer> lWorldInput(
+            lpUpdateInputBufferStack, "World");
+        BrnWorldIO::UpdateInputBuffer* const lpWorldInput = lWorldInput;
+        CgsModule::LockBuffersForIO(lpWorldInput, lpInputOutputBuffer,
+            lpGameStateOutputBuffer, lpGuiOutputBuffer, lpReplayOutputBuffer,
+            lpSoundPreUpdateOutputBuffer);
+        lpWorldInput->SetTimerStatusInterface(&mTimerStatusInterface);
+        lpNetworkOutputBuffer->LockForRead();
         BridgeControllerToWorld(lpWorldInput, lpInputOutputBuffer);
-        lpWorldInput->UnlockForWrite();
-
-        // The network -> world bridge, between the controller and game-state bridges under a
-        // read lock on the network output (console order). DriveWorldUpdateFrame carries the
-        // same call; both sites move together.
-        if (mpNetworkOutputBuffer != 0)
-        {
-            mpNetworkOutputBuffer->LockForRead();
-            lpWorldInput->LockForWrite();
-            BridgeNetworkToWorld(lpWorldInput, mpNetworkOutputBuffer);
-            lpWorldInput->UnlockForWrite();
-            mpNetworkOutputBuffer->UnlockForRead();
-        }
-
+        BridgeNetworkToWorld(lpWorldInput, lpNetworkOutputBuffer);
+        BridgeGameStateToWorld(lpWorldInput, lpGameStateOutputBuffer);
+        BridgeGuiToWorld(lpWorldInput, lpGuiOutputBuffer);
+        lpWorldInput->SetReplayStatusInterface(lpReplayOutputBuffer->GetStatusInterface());
+        BridgeSoundToWorld(lpWorldInput, lpSoundPreUpdateOutputBuffer);
+        lpNetworkOutputBuffer->UnlockForRead();
+        CgsModule::UnlockBuffersForIO(lpWorldInput, lpInputOutputBuffer,
+            lpGameStateOutputBuffer, lpGuiOutputBuffer, lpReplayOutputBuffer,
+            lpSoundPreUpdateOutputBuffer);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_World);
         if ((lUpdateSet & 0x20) != 0)
-        {
             mWorldModule.UpdateForBootUpVideo(lUpdateSet, lpUpdateInputBufferStack,
-                                              lpUpdateOutputBufferStack,
-                                              lpWorldInput, lpWorldUpdateOutputBuffer);
-        }
+                lpUpdateOutputBufferStack, lpWorldInput, lpWorldUpdateOutputBuffer);
         else
-        {
             mWorldModule.Update(lUpdateSet, lpUpdateInputBufferStack, lpUpdateOutputBufferStack,
-                                lpWorldInput, lpWorldUpdateOutputBuffer, lpWorldFrameAllocator);
-        }
-
-        // ARTIST 823E8D70..823E8DA0: publish the streaming-stall request for
-        // the following original GameState pre-world pass under the output read lock.
+                lpWorldInput, lpWorldUpdateOutputBuffer, mpReusableLoadingScreenAllocator);
         lpWorldUpdateOutputBuffer->LockForRead();
         mbWorldStreamingRequestedStall =
             !lpWorldUpdateOutputBuffer->GetWorldEntityStatusInterface()->GetImmediateStreamed();
         lpWorldUpdateOutputBuffer->UnlockForRead();
-
-        const bool lbDestroyed = lpUpdateInputBufferStack->DestroyIOBuffer(&lpWorldInput);
-        CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");        // CgsModuleIOHelper.h:57
-        (void)lbDestroyed;
     }
 
     // ------------------------------------------------------------------------------------
     // DoUpdate_GameStatePostWorld -- the game-state post-world leg of the update step.
     //
     // Console order:
-    //   StartMonitor(miUT_GameState);
+    //   CgsDev::PerfMonCpu::StartMonitor(miUT_GameState);
     //   IOHelper<PostWorldInputBuffer>(inStack, "GameStatePostWorld")   (asserting
     //     "mpStack->CreateIOBuffer( &mpBuffer, lpcName )", CgsModuleIOHelper.h:52);
-    //   StartMonitor(miUT_GameState_Bridge);
+    //   CgsDev::PerfMonCpu::StartMonitor(miUT_GameState_Bridge);
     //   LockBuffersForIO(buffer, input, world, gui, replaysPostSim, director);
     //   BridgeGuiToGameState(buffer, gui);
     //   if (!(updateSet & 0x20)) BridgeWorldToGameState(buffer, world);
@@ -1639,10 +1420,10 @@ namespace BrnGame
     //       && updateSet bit 0x4 != mbControllerDisconnected)
     //       latch it into mbControllerDisconnected and post game event 10 { it } (1 byte);
     //   buffer->SetInPictureParadise(the director camera's E_FLAG_IS_PICTURE_PARADISE);
-    //   UnlockBuffersForIO (the same six); StopMonitor(miUT_GameState_Bridge);
+    //   UnlockBuffersForIO (the same six); CgsDev::PerfMonCpu::StopMonitor(miUT_GameState_Bridge);
     //   if (!(updateSet & 0x20) && !mbDiskError)
     //       GameStateModule::PostWorldUpdate(inStack, outStack, buffer, updateSet);
-    //   StopMonitor(miUT_GameState);
+    //   CgsDev::PerfMonCpu::StopMonitor(miUT_GameState);
     //   the helper's DestroyIOBuffer (asserting "mpStack->DestroyIOBuffer( &mpBuffer )",
     //     CgsModuleIOHelper.h:57).
     //
@@ -1682,8 +1463,7 @@ namespace BrnGame
         if (lpReplaysPostSimOutputBuffer != 0) lpReplaysPostSimOutputBuffer->LockForRead();
         lpDirectorOutputBuffer->LockForRead();
 
-        // [PC HARNESS, not console code] scheduled GUI records (BRN_NET_SCRIPT); inert unless set.
-        BridgeGuiToGameState(&mGameStateModule, mGuiModule.GetGuiOutQueue());
+        BridgeGuiToGameState(lpPostWorldInput, lpGuiOutputBuffer);
 
         if ((lUpdateSet & 0x20) == 0)
         {
@@ -1818,93 +1598,32 @@ namespace BrnGame
     // of its third, so the impact frame that takes the car from 197 to 102 mph ran at full dt.
     // The game-state requests were never affected (their legs run before this one either way).
     // ------------------------------------------------------------------------------------
-    void BrnGameModule::UpdateTimers()
+    void BrnGameModule::UpdateTimers(
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        const BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput)
     {
-        BrnGameState::GameStateModuleIO::OutputBuffer* const lpGameStateOutput =
-            mGameStateModule.GetOutputBuffer();
-
-        if (lpGameStateOutput != 0 && mpDirectorOutputBuffer != 0 && mDirectorModule.IsPrepared())
+        lpGameStateOutput->LockForRead();
+        lpDirectorOutput->LockForRead();
+        const CgsSystem::TimerRequestInterface* const lpGameStateRequests =
+            lpGameStateOutput->GetTimerRequestInterface();
+        mTimerRequestInterface.GetGameTimerRequests()->Append(
+            *lpGameStateRequests->GetGameTimerRequests());
+        mTimerRequestInterface.GetSimTimerRequests()->Append(
+            *lpGameStateRequests->GetSimTimerRequests());
+        if (!lpGameStateOutput->GetTimerRequestInterface()->GetSimTimerRequests()->IsMultiplierRequested())
         {
-            lpGameStateOutput->LockForRead();
-            mpDirectorOutputBuffer->LockForRead();
-
-            // Fold the game-state module's game/sim requests into this sub-step's accumulator.
-            // ⚠️ THE CONST OVERLOAD, DELIBERATELY. GetTimerRequestInterface() comes in a pair:
-            // the non-const one (X360 0x8231D608) asserts the WRITE lock, the const one
-            // (X360 0x823B98E8) the READ lock -- and this function holds a READ lock, so the
-            // console's call here is the const half. Measured: taking the non-const overload
-            // fired "Not locked for writing" 7,800 times in one 135 s boot and stalled the flow
-            // before the fly-by. A `const` that is load-bearing, not stylistic.
-            const BrnGameState::GameStateModuleIO::OutputBuffer* const lpcGameStateOutput =
-                lpGameStateOutput;
-            const CgsSystem::TimerRequestInterface* const lpGameStateRequests =
-                lpcGameStateOutput->GetTimerRequestInterface();
-
+            const CgsSystem::TimerRequestInterface* const lpDirectorRequests =
+                lpDirectorOutput->GetTimerRequestInterface();
             mTimerRequestInterface.GetGameTimerRequests()->Append(
-                *lpGameStateRequests->GetGameTimerRequests());
+                *lpDirectorRequests->GetGameTimerRequests());
             mTimerRequestInterface.GetSimTimerRequests()->Append(
-                *lpGameStateRequests->GetSimTimerRequests());
-
-            // ...and the director's, but only when the game state has not already claimed the
-            // sim multiplier this frame (asm @0x823BD02C: test mSimTimer.muFlags bit 2).
-            if (!lpGameStateRequests->GetSimTimerRequests()->IsMultiplierRequested())
-            {
-                CgsSystem::TimerRequestInterface* const lpDirectorRequests =
-                    mpDirectorOutputBuffer->GetTimerRequestIn();
-
-                mTimerRequestInterface.GetGameTimerRequests()->Append(
-                    *lpDirectorRequests->GetGameTimerRequests());
-                mTimerRequestInterface.GetSimTimerRequests()->Append(
-                    *lpDirectorRequests->GetSimTimerRequests());
-            }
-
-            mpDirectorOutputBuffer->UnlockForRead();
-            lpGameStateOutput->UnlockForRead();
-
-            // Drain the accumulator onto the two timers (start/stop/scale target).
-            mTimerRequestInterface.ApplyToTimers(&mGameTimer, &mSimTimer);
+                *lpDirectorRequests->GetSimTimerRequests());
         }
-
+        lpDirectorOutput->UnlockForRead();
+        lpGameStateOutput->UnlockForRead();
+        mTimerRequestInterface.ApplyToTimers(&mGameTimer, &mSimTimer);
         mGameTimer.Update();
         mSimTimer.Update();
-
-        // ---- [DIAG] the time-dilation film latch (see BrnDiagFilmLatch.h) ------------------
-        // Unconditional three-word write, no environment read on the hot path; the READER
-        // (pc/gcm/renderengine/device.cpp) is the side that is gated, and it does nothing unless
-        // BRN_FRAME_DUMP_ARM=slomo. Sticky by design.
-        // ⚠️ IT COUNTS EPISODES, AND THAT IS NOT A LUXURY. Measured 2026-08-28: the FIRST
-        // dilation of a free-burn session is the JUNKYARD-EXIT drive-thru, which fires while
-        // the car is parked -- so an unconditional latch spends the whole 300-frame budget on a
-        // stationary car and films nothing. BRN_SLOMO_LATCH_SKIP=<n> skips the first n episodes
-        // (an episode is one 1.0 -> non-1.0 transition), so a capture can land on the drive-thru
-        // that actually moves the car.
-        {
-            const f32  lfSimScale = mSimTimer.GetScaleCurrent();
-            const bool lbDilated  = (lfSimScale != 1.0f);
-
-            // The LIVE pair the frame writer stamps beside every dumped frame, so a captured
-            // strip carries the timestep each of its frames was rendered under.
-
-            static bool sbWasDilated  = false;
-            static u32  suEpisode     = 0u;
-            static s32  siSkip        = -1;
-            if (siSkip < 0)
-            {
-                if (siSkip < 0) { siSkip = 0; }
-            }
-
-            if (lbDilated && !sbWasDilated)
-            {
-                ++suEpisode;
-            }
-            sbWasDilated = lbDilated;
-        }
-
-        // ---- BRN_SLOMO_DIAG (opt-in, edge-triggered) ---------------------------------------
-        // ⚠️ NOT A CONSOLE ARM. The measurement hook for the time-dilation transport: it prints
-        // the SIM timer's live scale only when it MOVES, so a run either shows the dilation
-        // arriving or it does not. Edge-triggered on purpose -- a per-frame print would be
-        // 60 lines/second of noise and would itself perturb a frame-coupled sim.
     }
 
     // ------------------------------------------------------------------------------------
@@ -2398,393 +2117,466 @@ namespace BrnGame
 
     }
 
-    void BrnGameModule::DoUpdate_Director(bool lbPostGui)
+    // ARTIST 823E8DE0. The caller owns Director input and all producer outputs.
+    // Only the three scene-query buffers below are local to this wrapper.
+    void BrnGameModule::DoUpdate_Director(
+        CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack,
+        BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+        const CgsInput::InputIO::OutputBuffer* lpInputOutput,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput,
+        BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput,
+        BrnUpdateSet lUpdateSet)
     {
-        if (mpDirectorOutputBuffer == 0)
-            return;
-
-        // The console's module scheduler only dispatches a module's per-frame entry points once
-        // its staged Prepare has reported done; the PC drives them by hand, so it asks here.
-        // Skipping this is not cosmetic: DirectorModule::Prepare stage 7 is what carves the
-        // BehaviourManager's helper/behaviour pools, and an arbitrator running before that
-        // allocates out of an un-carved pool (BehaviourManager.h:782 `lHelperID >= 0` fires).
-        if (!mDirectorModule.IsPrepared())
-            return;
-
-        // ARTIST DoUpdate_Director823E8E1C..2C skips the pre-GUI camera
-        // producer during the boot video. PostGuiUpdate still consumes GUI events.
-        if (!lbPostGui && (ConstructUpdateSetFromFsm() & 0x20) != 0)
-            return;
-
-        BrnDirector::DirectorIO::InputBuffer* lpDirectorInput = 0;
-        mpUpdateInputBufferStack->CreateIOBuffer(&lpDirectorInput, "Director");
-        if (lpDirectorInput == 0)
-            return;
-        // RE-Construct after the bring-up memset; the template already Constructed once.
-        // CreateIOBuffer<T> above runs T::Construct itself now (2026-08-15), so this is the
-        // SECOND Construct of this buffer -- and it is deliberate, because the memset in between
-        // wiped what the first one wrote. It re-seeds the -1 sentinels: the buffer's OWN
-        // Construct @0x822393D0 (not just the IOBuffer base) sets mePlayerCarIndex and
-        // miCameraType to -1, and without the re-run the zero-fill would publish camera-type 0
-        // as a live request every single frame. Delete this line together with the memset above,
-        // not before it.
-        lpDirectorInput->Construct();
-
-        // ⭐ THE FRAME TIMESTEP -- the copy half of BridgeTimers @0x823BD150 (0x823BD1AC..
-        // 0x823BD22C). It is the ONLY producer of the director input's timer status, and every
-        // camera behaviour's per-frame advance is `<speed> * GetCurrentTimeStep()`.
-        // CORRECTED 2026-09-25 (FX-DIRECTOR2): the snapshot is the one GameMain took at the START
-        // of this sub-step (BridgeTimers there -- the console's 0x823F0DE4); this used to call
-        // BridgeTimers itself, i.e. snapshot and reset the accumulator HERE, after the mid-step
-        // UpdateTimers. Copied, not re-taken: the pause consumer (CheckGameActions) may have
-        // started or stopped the sim timer since, and the console's director sees the status as
-        // the step began. Staged on the pre-GUI call (the post-GUI pass consumes the same buffer
-        // contents).
-        if (!lbPostGui)
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Director);
+        if ((lUpdateSet & 0x20) == 0)
         {
-            lpDirectorInput->LockForWrite();
-            *lpDirectorInput->GetTimerStatusInterface() = mTimerStatusInterface;
-            lpDirectorInput->UnlockForWrite();
-        }
-
-        // ⭐ THE GUI -> DIRECTOR BRIDGE. X360 DoUpdate_DirectorPostGUI @0x823DCE38 runs it on
-        // the POST-GUI pass, bracketed by the same write lock, immediately before
-        // DirectorModule::PostGuiUpdate consumes what it published. This is the only path by
-        // which BrnGui::Intro's fly-by START/END commands (477 / 478) reach the director.
-        // (the IsPrepared test is the GUI out-queue's existence: it is Constructed by
-        // GuiModule::Prepare, which since 2026-08-16 runs at loading stage 2 rather than at
-        // BrnGameModule::Construct -- boot audit F-P1-1.)
-        if (lbPostGui && mGuiModule.IsPrepared())
-        {
-            lpDirectorInput->LockForWrite();
-            BridgeGuiToDirector(lpDirectorInput, mGuiModule.GetGuiOutQueue());
-            lpDirectorInput->UnlockForWrite();
-        }
-
-        if (!lbPostGui && mpWorldUpdateOutputBuffer != 0)
-        {
-            mpWorldUpdateOutputBuffer->LockForRead();
-            lpDirectorInput->LockForWrite();
-            BridgeWorldToDirector(lpDirectorInput, mpWorldUpdateOutputBuffer);
-            lpDirectorInput->UnlockForWrite();
-            mpWorldUpdateOutputBuffer->UnlockForRead();
-        }
-
-        // ⭐⭐ THE GAME-STATE -> DIRECTOR BRIDGE (X360 BridgeGameStateToDirector @0x823CD170,
-        // run by DoUpdate_Director on the PRE-GUI pass). Its Append is the ONLY producer of
-        // the game actions MainDirector::ProcessInputQueue drains -- the only route by which
-        // the junkyard / car-select ladder can ever start. All three links are real now:
-        //   producer  GameStateModuleIO::OutputBuffer::GetGameActionQueue()  (X360 0x823B96F0)
-        //   bridge    this call
-        //   consumer  MainDirector::ProcessInputQueue                        (cases 62..85)
-        // ⛔ WHAT IS STILL MISSING is a PRODUCER THAT POSTS: CarSelectManager (the TU that
-        // posts entry action 73) is not mounted yet, so this queue is empty every frame today.
-        // See the measured cost at the top of BrnCarSelectManager.cpp.
-        if (!lbPostGui)
-        {
-            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-                mGameStateModule.GetOutputBuffer();
-            // ⭐ RUNTIME-PROVEN 2026-08-01 (PROD_RUN1, 140 s, 0 asserts): a temporary probe that
-            // posted game action 73 (E_ACTION_CAR_SELECT_TRANSITION_IN, payload {1,0}) onto
-            // lpGameStateOutput->GetGameActionQueue() at frame 120 -- i.e. onto the CONSOLE'S OWN
-            // producer surface, not forged into the director -- drove the director's
-            // meJunkyardState 0 -> 2 (E_JY_INTRO_NO_CARS) and held it for 388 trace samples.
-            // The probe was removed; the path it exercised is the code below.
-            if (lpGameStateOutput != 0)
+            CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Director_Bridge);
+            if (mDirectorBridgeSerialiser.IsPlaying())
+                mDirectorBridgeSerialiser.Read();
+            CgsModule::IOHelper<CgsSceneManager::SceneManagerIO::InputBuffer_Query>
+                lExternalQuery(lpInputStack, "SceneQuery");
+            CgsModule::IOHelper<BrnDirector::DirectorIO::SceneQueryInputBuffer>
+                lSceneQueryInput(lpInputStack, "DirectorSQ");
+            CgsModule::LockBuffersForIO(lpDirectorInput, lpInputOutput, lpGameStateOutput,
+                lpWorldOutput, lpReplayOutput);
+            BridgeControllerToDirector(lpDirectorInput, lpInputOutput);
+            BridgeWorldToDirector(lpDirectorInput, lpWorldOutput);
+            BridgeGameStateToDirector(lpDirectorInput, lpGameStateOutput);
+            lpDirectorInput->SetSimPaused((lUpdateSet & 0x100) == 0 && !mbOnline && mbSimPaused);
+            if (mDirectorBridgeSerialiser.IsRecording())
+                mDirectorBridgeSerialiser.Write();
+            CgsModule::UnlockBuffersForIO(lpDirectorInput, lpInputOutput, lpGameStateOutput,
+                lpWorldOutput, lpReplayOutput);
+            CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Director_Bridge);
             {
-                lpGameStateOutput->LockForRead();
-                lpDirectorInput->LockForWrite();
-                BridgeGameStateToDirector(lpDirectorInput, lpGameStateOutput);
-                lpDirectorInput->UnlockForWrite();
-                lpGameStateOutput->UnlockForRead();
+                CgsModule::IOHelper<BrnDirector::DirectorIO::SceneQueryOutputBuffer>
+                    lSceneQueryOutput(lpOutputStack, "DirectorSQ");
+                mDirectorModule.PreSceneQueryUpdate(lpInputStack, lpOutputStack,
+                    lpDirectorInput, lpDirectorOutput, lSceneQueryOutput, lUpdateSet);
+                CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Director_Bridge);
+                CgsSceneManager::SceneManagerIO::InputBuffer_Query* const lpQuery = lExternalQuery;
+                const BrnDirector::DirectorIO::SceneQueryOutputBuffer* const lpOutput = lSceneQueryOutput;
+                CgsModule::LockBuffersForIO(lpQuery, lpOutput);
+                lpQuery->GetSceneQueryInterface()->Append(*lpOutput->GetSceneQueryInterface());
+                CgsModule::UnlockBuffersForIO(lpQuery, lpOutput);
+                CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Director_Bridge);
             }
-        }
-
-        // ARTIST @0x823E8EF8..0x823E8F2C, after BridgeGameStateToDirector:
-        // replay (update set 0x100) or online -> false; otherwise copy mbSimPaused.
-        // The director uses this byte to hold simulation-driven camera behaviours.
-        // FLAG: replay playback is not implemented; ConstructUpdateSetFromFsm does not
-        // yet receive ConstructUpdateSet's replay bit (@0x823DCB40).
-        if (!lbPostGui)
-        {
-            const u32 KU_UPDATE_SET_REPLAY_PLAYBACK = 0x100u;
-            const bool lbReplayPlayback =
-                (static_cast<u32>(ConstructUpdateSetFromFsm()) & KU_UPDATE_SET_REPLAY_PLAYBACK) != 0;
-
-            lpDirectorInput->LockForWrite();
-            lpDirectorInput->SetSimPaused(!lbReplayPlayback && !mbOnline && mbSimPaused);
-            lpDirectorInput->UnlockForWrite();
-        }
-
-        // ------------------------------------------------------------------------------
-        // ⛔ THE INTRO FLY-BY STAND-IN IS RETIRED (2026-08-01).
-        //
-        // What used to be here: the GUI's fly-by request (477) was intercepted and turned into
-        // `Arbitrator::SetDoAttractMode(true)`, running ArbStateAttractMode's BehaviourRoadRunner
-        // -- a real console camera, but the DEBUG one. The X360 image's only writer of
-        // mbDoAttractMode besides Arbitrator::Construct is the debug-menu entry "Do attract mode"
-        // (DebugComponent::OnActivate @0x82275F68), so that camera never ships.
-        //
-        // Its DELETE-WHEN ("ArbStateCarSelect + BehaviourIceAnim + the game-intro shot group are
-        // real") is met, and the last link -- something that actually makes the director's
-        // meJunkyardState non-zero so the roaming ladder hands over to ArbStateCarSelect -- landed
-        // with ProcessGameEvents' case-78 arm (CarSelectManager::ReallyEnterJunkyardAtStartOfGame). The console's own
-        // chain now runs end to end:
-        //   BridgeGuiToDirector 477 -> InputBuffer::mbStartGameIntroFlyby
-        //   MainDirector::PostGuiUpdate  -> GameState::mbGameIntroFlybyActive = true
-        //   ArbStateCarSelect::Update    -> the authored ICE camera movies from the "game intro"
-        //                                   shot group ("606002")
-        //
-
-        if (!lbPostGui)
-        {
-            // The console's scene-query leg (DoUpdate_Director @0x823E8DE0). The
-            // director's cameras ASK during PreSceneQueryUpdate and READ THE ANSWERS in Update; the
-            // world runs their queries in between, synchronously, in this order:
-            //   1. IOHelper<SceneManagerIO::InputBuffer_Query>(input stack, "SceneQuery")   0x823C1A28
-            //      IOHelper<DirectorIO::SceneQueryInputBuffer>(input stack, "DirectorSQ")   0x823C1A90
-            //      (the console makes both at the head of the function; on this build the director
-            //       input is made first, so they sit above it on the same LIFO stack)
-            //      IOHelper<DirectorIO::SceneQueryOutputBuffer>(output stack, "DirectorSQ") 0x823C1AF8
-            //   2. DirectorModule::PreSceneQueryUpdate                                        0x8225C768
-            //   3. under the lock pair sub_823B6FE0 / sub_823B7060 (dest write, source read):
-            //      external->GetSceneQueryInterface()->Append(*sqOutput->GetSceneQueryInterface())
-            //                                         (SceneQueryInterface::Append @0x823C4FF8)
-            //      then the SQ output buffer is destroyed
-            //   4. IOHelper<SceneManagerIO::OutputBuffer>(output stack, "DirectorESQ")       0x823C1B60
-            //      WorldModule::ExternalSceneQueriesUpdate(in stack, out stack, external, results,
-            //                                              update set)                     0x827B06C8
-            //   5. under the same lock pair: sqInput->GetResultsQueue()->Append(*results->GetResultsQueue())
-            //      (VariableEventQueue<4032,16>::Append<32768,16> @0x823DA090), then the results
-            //      buffer is destroyed
-            //   6. a FRESH SceneQueryOutputBuffer ("DirectorSQ"), DirectorModule::Update 0x82275300 on it
-            //      and the SQ input, then that buffer destroyed
-            //   7. the SQ input and the external query buffer destroyed
-            // The PC has no replay playback path; the framework arguments remain unread.
-            CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpExternalQuery   = 0;
-            BrnDirector::DirectorIO::SceneQueryInputBuffer*     lpSceneQueryInput = 0;
-            mpUpdateInputBufferStack->CreateIOBuffer(&lpExternalQuery, "SceneQuery");
-            mpUpdateInputBufferStack->CreateIOBuffer(&lpSceneQueryInput, "DirectorSQ");
-
-            BrnDirector::DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutput = 0;
-            mpUpdateOutputBufferStack->CreateIOBuffer(&lpSceneQueryOutput, "DirectorSQ");
-
-            if (lpExternalQuery != 0 && lpSceneQueryInput != 0 && lpSceneQueryOutput != 0)
             {
-                mDirectorModule.PreSceneQueryUpdate(0, 0, lpDirectorInput, mpDirectorOutputBuffer,
-                                                    lpSceneQueryOutput, false);
-
-                CgsModule::LockBuffersForIO(lpExternalQuery, lpSceneQueryOutput);
-                lpExternalQuery->GetSceneQueryInterface()->Append(
-                    *static_cast<const BrnDirector::DirectorIO::SceneQueryOutputBuffer*>(lpSceneQueryOutput)
-                         ->GetSceneQueryInterface());                              // the read-locked getter 0x823B25F0
-                CgsModule::UnlockBuffersForIO(lpExternalQuery, lpSceneQueryOutput);
-                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpSceneQueryOutput);
-
-                CgsSceneManager::SceneManagerIO::OutputBuffer* lpExternalResults = 0;
-                mpUpdateOutputBufferStack->CreateIOBuffer(&lpExternalResults, "DirectorESQ");
-                if (lpExternalResults != 0)
-                {
-                    mWorldModule.ExternalSceneQueriesUpdate(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
-                                                            lpExternalQuery, lpExternalResults,
-                                                            ConstructUpdateSetFromFsm());
-
-                    CgsModule::LockBuffersForIO(lpSceneQueryInput, lpExternalResults);
-                    lpSceneQueryInput->GetResultsQueue()->Append(
-                        *static_cast<const CgsSceneManager::SceneManagerIO::OutputBuffer*>(lpExternalResults)
-                            ->GetResultsQueue());
-                    CgsModule::UnlockBuffersForIO(lpSceneQueryInput, lpExternalResults);
-                    mpUpdateOutputBufferStack->DestroyIOBuffer(&lpExternalResults);
-                }
-
-                mpUpdateOutputBufferStack->CreateIOBuffer(&lpSceneQueryOutput, "DirectorSQ");
-                if (lpSceneQueryOutput != 0)
-                {
-                    mDirectorModule.Update(0, 0, lpDirectorInput, mpDirectorOutputBuffer,
-                                           lpSceneQueryInput, lpSceneQueryOutput);
-                    mpUpdateOutputBufferStack->DestroyIOBuffer(&lpSceneQueryOutput);
-                }
+                CgsModule::IOHelper<CgsSceneManager::SceneManagerIO::OutputBuffer>
+                    lExternalResults(lpOutputStack, "DirectorESQ");
+                CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Director_SQ);
+                mWorldModule.ExternalSceneQueriesUpdate(lpInputStack, lpOutputStack,
+                    lExternalQuery, lExternalResults, lUpdateSet);
+                CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Director_SQ);
+                CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Director_Bridge);
+                BrnDirector::DirectorIO::SceneQueryInputBuffer* const lpInput = lSceneQueryInput;
+                const CgsSceneManager::SceneManagerIO::OutputBuffer* const lpResults = lExternalResults;
+                CgsModule::LockBuffersForIO(lpInput, lpResults);
+                lpInput->GetResultsQueue()->Append(*lpResults->GetResultsQueue());
+                CgsModule::UnlockBuffersForIO(lpInput, lpResults);
+                CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Director_Bridge);
             }
-            else if (lpSceneQueryOutput != 0)
             {
-                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpSceneQueryOutput);
+                CgsModule::IOHelper<BrnDirector::DirectorIO::SceneQueryOutputBuffer>
+                    lSceneQueryOutput(lpOutputStack, "DirectorSQ");
+                mDirectorModule.Update(lpInputStack, lpOutputStack, lpDirectorInput,
+                    lpDirectorOutput, lSceneQueryInput, lSceneQueryOutput);
             }
-
-            if (lpSceneQueryInput != 0)
-                mpUpdateInputBufferStack->DestroyIOBuffer(&lpSceneQueryInput);
-            if (lpExternalQuery != 0)
-                mpUpdateInputBufferStack->DestroyIOBuffer(&lpExternalQuery);
+            lpDirectorOutput->LockForRead();
+            if (lpDirectorOutput->GetCameraOutput()->GetState().IsFlagSet(
+                    BrnDirector::Camera::CameraState::E_FLAG_RECORD_METRICS))
+            {
+                mbTakeMetrics = true;
+                mRecordMetricsCamMatrix = lpDirectorOutput->GetCameraOutput()->GetTransform();
+            }
+            if (lpDirectorOutput->GetCameraOutput()->GetState().IsFlagSet(
+                    BrnDirector::Camera::CameraState::E_FLAG_SEND_METRICS))
+                mbSendMetrics = true;
+            lpDirectorOutput->UnlockForRead();
         }
-        else
-        {
-            mDirectorModule.PostGuiUpdate(0, 0, lpDirectorInput, mpDirectorOutputBuffer);
-
-            // [DIAG BRN_DIRECTOR_TRACE] Report what the director actually PUBLISHED this
-            // frame. This is the measurement the fly-by campaign needs: whether the director
-            // camera exists, where it is, and whether it MOVES. Off unless the env var is set;
-            // remove with the bring-up path.
-        }
-
-        // [DIAG BRN_CAMCOLLIDE_DIAG] the published eye through the console's world tests (see the witness).
-        if (!lbPostGui)
-        {
-        }
-
-        mpUpdateInputBufferStack->DestroyIOBuffer(&lpDirectorInput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Director);
     }
 
-    // PC retention extends the final completed substep's DirectorOutput lifetime
-    // across render frames with no substep. Completion is the frame boundary,
-    // including original branches that leave a default camera in the output.
-    void BrnGameModule::LatchDispatchCamera()
+    // ARTIST 823DCE38: a separate supplied-IO post-GUI leg.
+    void BrnGameModule::DoUpdate_DirectorPostGUI(
+        CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack,
+        BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+        BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput)
     {
-        if (mpDirectorOutputBuffer == 0)
-            return;
-
-        mpDirectorOutputBuffer->LockForRead();
-        mDispatchCamera = *mpDirectorOutputBuffer->GetCameraOutput();
-        mbDispatchCameraPublished = true;
-        mpDirectorOutputBuffer->UnlockForRead();
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Director);
+        CgsModule::LockBuffersForIO(lpDirectorInput, lpGuiOutput);
+        BridgeGuiToDirector(lpDirectorInput, lpGuiOutput);
+        CgsModule::UnlockBuffersForIO(lpDirectorInput, lpGuiOutput);
+        mDirectorModule.PostGuiUpdate(lpInputStack, lpOutputStack,
+            lpDirectorInput, lpDirectorOutput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Director);
     }
 
-    const BrnDirector::Camera::Camera* BrnGameModule::GetDispatchCamera() const
+    // ARTIST 823F0758. This value is BSS-zeroed at native82FAEBC4 and
+    // advances by0.5 only on frames whose update set does not contain0x80.
+    static f32 sfGuiLoadingPercentage;
+
+    void BrnGameModule::DoUpdate_GUI(
+        CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        CgsGui::ViewIO::InputBuffer* lpViewInput,
+        const CgsInput::InputIO::OutputBuffer* lpInputOutput,
+        const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
+        CgsGui::ModelIO::OutputBuffer* lpModelOutput,
+        BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput,
+        BrnSound::Module::Io::RootOutputBuffer* /*lpSoundOutput*/,
+        BrnResource::GameDataIO::InputBuffer* lpResourceInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpResourceOutput,
+        BrnUpdateSet lUpdateSet, u32 luStartPressedPort)
     {
-        return mbDispatchCameraPublished ? &mDispatchCamera : 0;
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GUI);
+        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miGuiModuleUpdate);
+        lpGuiOutput->Clear();
+        lpModelOutput->Clear();
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GUI_Bridge);
+        const BrnDirector::DirectorIO::OutputBuffer* const lpDirectorRead = lpDirectorOutput;
+        CgsModule::LockBuffersForIO(lpGuiInput, lpInputOutput, lpGameStateOutput,
+            lpWorldOutput, lpReplayOutput, lpDirectorRead);
+        BridgeWorldToGui(lpGuiInput, lpWorldOutput);
+        BridgeControllerToGui(lpGuiInput, lpInputOutput);
+        BridgeGameStateToGui(lpGuiInput, lpGameStateOutput);
+        BridgeDirectorToGui(lpGuiInput, lpDirectorRead);
+        BridgeReplayToGui(lpGuiInput, lpReplayOutput);
+        lpNetworkOutput->LockForRead();
+        BridgeNetworkToGui(lpGuiInput, lpNetworkOutput);
+        lpNetworkOutput->UnlockForRead();
+        f32 lfLoadingPercentage = -1.0f;
+        if ((lUpdateSet & 0x80) == 0)
+        {
+            const XMVECTOR lOne = __vcfsx(__vspltisw(1), 0);
+            const XMVECTOR lHundred = XMVectorReplicate(100.0f);
+            const XMVECTOR lValue = XMVectorReplicate(sfGuiLoadingPercentage + 0.5f);
+            XMVECTOR lInverse = __vrefp(lHundred);
+            lInverse = __vmaddfp(lInverse, __vnmsubfp(lInverse, lHundred, lOne), lInverse);
+            lInverse = __vmaddfp(lInverse, __vnmsubfp(lInverse, lHundred, lOne), lInverse);
+            const XMVECTOR lQuotient = __vrfiz(__vmulfp(lInverse, lValue));
+            sfGuiLoadingPercentage = __vnmsubfp(lQuotient, lHundred, lValue).x;
+            lfLoadingPercentage = sfGuiLoadingPercentage;
+        }
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lfLoadingPercentage), 225, sizeof(lfLoadingPercentage));
+        if (luStartPressedPort != CgsInput::KU_NUMBER_OF_PADS)
+            lpGuiInput->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&luStartPressedPort), 143, sizeof(luStartPressedPort));
+        BridgeGameToGui(lpGuiInput);
+        CgsModule::UnlockBuffersForIO(lpGuiInput, lpInputOutput, lpGameStateOutput,
+            lpWorldOutput, lpReplayOutput, lpDirectorRead);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GUI_Bridge);
+        lpResourceInput->LockForWrite();
+        lpResourceOutput->LockForRead();
+        if (!mbDiskError)
+            mGuiModule.Update(lUpdateSet, lpInputStack, lpOutputStack,
+                lpGuiInput, lpGuiOutput, lpModelOutput, lpViewInput,
+                lpResourceInput, lpResourceOutput, true);
+        lpResourceOutput->UnlockForRead();
+        lpResourceInput->UnlockForWrite();
+        lpGuiOutput->LockForRead();
+        BridgeGuiToGame(lpGuiOutput);
+        lpGuiOutput->UnlockForRead();
+        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miGuiModuleUpdate);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GUI);
+    }
+
+    // ARTIST 823BD0A8. GameState requests override the previous frame type,
+    // after which both fields in the shared request are cleared.
+    void BrnGameModule::UpdateFrameRateType(
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
+    {
+        lpGameStateOutput->LockForRead();
+        mFrameRateTypeRequestInterface.Append(*lpGameStateOutput->GetFrameRateTypeRequestInterface());
+        lpGameStateOutput->UnlockForRead();
+        if (mFrameRateTypeRequestInterface.IsFrameRateTypeChangeRequested())
+        {
+            if (!mFrameRateTypeRequestInterface.IsFrameRateTypeChangeRequested())
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mbIsFrameRateTypeChangeRequested",
+                    "..\\..\\..\\GameShared\\GameClasses\\System\\Timer/CgsFrameRateTypeRequestInterface.h", 113);
+                CgsDev::Assert::EndAssert();
+            }
+            meFrameRateManagerType = mFrameRateTypeRequestInterface.GetRequestedFrameRateTypeChange();
+        }
+        mFrameRateTypeRequestInterface.Clear();
+    }
+
+    // ARTIST 823F0AF8 repeats this exact diagnostic after each module leg.
+    // Keep the original source site numbers even though the expression is shared.
+    static __forceinline void CheckUpdateMemory(u32& lruAvailableMemory, s32 liLine)
+    {
+        const u32 luNow = BrnResource::GetAvailableMemory();
+        if (lruAvailableMemory != luNow)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+                *CgsDev::Log::gpDebugPrint << "[" << liLine << ":"
+                    << "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp"
+                    << "] Available memory changed from " << lruAvailableMemory
+                    << " to " << luNow << "\n";
+            lruAvailableMemory = luNow;
+            if (BrnResource::Allocators::mbAssertOnMemoryChange)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("Memory check failed",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", liLine);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+    }
+
+    // ARTIST 823F0AF8. These ten local buffers live for exactly one simulation
+    // step. The five static GUI/Director buffers belong to GameMain instead.
+    void BrnGameModule::DoUpdate()
+    {
+        u32 luAvailableMemory = BrnResource::GetAvailableMemory();
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Director);
+        CgsSystem::GetSystemTimerBaseTime();
+        const BrnUpdateSet lInitialUpdateSet = ConstructUpdateSetFromFsm();
+        CgsModule::IOHelper<CgsInput::InputIO::OutputBuffer> lInputOutput(mpUpdateInputBufferStack, "Input");
+        CgsModule::IOHelper<BrnNetwork::BrnNetworkModuleIO::OutputBuffer> lNetworkOutput(mpUpdateOutputBufferStack, "Network");
+        CgsModule::IOHelper<BrnGameState::GameStateModuleIO::OutputBuffer> lGameStateOutput(mpUpdateOutputBufferStack, "GameState");
+        CgsModule::IOHelper<BrnWorldIO::UpdateOutputBuffer> lWorldOutput(mpUpdateOutputBufferStack, "World");
+        CgsModule::IOHelper<BrnDirector::DirectorIO::InputBuffer> lDirectorInput(mpUpdateInputBufferStack, "Director");
+        CgsModule::IOHelper<BrnSound::Module::Io::RootOutputBuffer> lSoundOutput(mpUpdateOutputBufferStack, "Sound");
+        CgsModule::IOHelper<BrnReplays::ReplayIO::OutputBuffer_PreSim> lReplayPreOutput(mpUpdateOutputBufferStack, "ReplaysPreSim");
+        CgsModule::IOHelper<BrnReplays::ReplayIO::OutputBuffer_PostSim> lReplayPostOutput(mpUpdateOutputBufferStack, "ReplaysPostSim");
+        CgsModule::IOHelper<BrnEffects::EffectsIO::OutputBuffer> lEffectsOutput(mpUpdateOutputBufferStack, "Effects");
+        CgsModule::IOHelper<BrnSound::Module::Io::RootPreUpdateOutputBuffer> lSoundPreOutput(mpUpdateOutputBufferStack, "SoundPreUpdate");
+        CgsInput::InputIO::OutputBuffer* const lpInputOutput = lInputOutput;
+        BrnNetwork::BrnNetworkModuleIO::OutputBuffer* const lpNetworkOutput = lNetworkOutput;
+        BrnGameState::GameStateModuleIO::OutputBuffer* const lpGameStateOutput = lGameStateOutput;
+        BrnWorldIO::UpdateOutputBuffer* const lpWorldOutput = lWorldOutput;
+        BrnDirector::DirectorIO::InputBuffer* const lpDirectorInput = lDirectorInput;
+        BrnSound::Module::Io::RootOutputBuffer* const lpSoundOutput = lSoundOutput;
+        BrnReplays::ReplayIO::OutputBuffer_PreSim* const lpReplayPreOutput = lReplayPreOutput;
+        BrnReplays::ReplayIO::OutputBuffer_PostSim* const lpReplayPostOutput = lReplayPostOutput;
+        BrnEffects::EffectsIO::OutputBuffer* const lpEffectsOutput = lEffectsOutput;
+        BrnSound::Module::Io::RootPreUpdateOutputBuffer* const lpSoundPreOutput = lSoundPreOutput;
+        BrnResource::GameDataIO::InputBuffer* const lpResourceInput = mpGameDataModuleInputBuffer;
+        const BrnResource::GameDataIO::OutputBuffer* const lpResourceOutput = mpGameDataModuleOutputBuffer;
+        BridgeTimers(lpDirectorInput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Director);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_DebugManager);
+        lpResourceOutput->LockForRead();
+        const bool lbSuspendEffects = *lpResourceOutput->GetLiveUpdateStatus();
+        lpResourceOutput->UnlockForRead();
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_DebugManager);
+        if (!mpReusableLoadingScreenAllocator)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpReusableLoadingScreenAllocator",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 2008);
+            CgsDev::Assert::EndAssert();
+        }
+        mpReusableLoadingScreenAllocator->FreeAll();
+        CheckUpdateMemory(luAvailableMemory, 2013);
+        const u32 luStartPressedPort = DoUpdate_InputPreWorld(mpUpdateInputBufferStack,
+            mpUpdateOutputBufferStack, lpInputOutput);
+        CheckUpdateMemory(luAvailableMemory, 2021);
+        DoUpdate_NetworkPreSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            lpInputOutput, lpNetworkOutput, lInitialUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2033);
+        DoUpdate_GameStatePreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            lpInputOutput, lpNetworkOutput, lpGameStateOutput, lInitialUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2048);
+        DoUpdate_ReplaysPreSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            lpGameStateOutput, lpReplayPreOutput, lInitialUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2059);
+        DoUpdate_GuiPreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            mpGuiOutputBuffer, mpGuiModelOutputBuffer, lpResourceInput);
+        CheckUpdateMemory(luAvailableMemory, 2070);
+        DoPreUpdate_Sound(mpUpdateOutputBufferStack, lpSoundPreOutput, mpGuiInputBuffer);
+        CheckUpdateMemory(luAvailableMemory, 2079);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
+        const BrnUpdateSet lUpdateSet = ConstructUpdateSet(lpGameStateOutput,
+            lpNetworkOutput, lpInputOutput, mpGuiModelOutputBuffer, lpReplayPreOutput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState_Bridge);
+        CheckUpdateMemory(luAvailableMemory, 2094);
+        DoUpdate_World(mpUpdateInputBufferStack, mpUpdateOutputBufferStack, lpInputOutput,
+            lpNetworkOutput, lpGameStateOutput, mpGuiOutputBuffer, lpReplayPreOutput,
+            lpSoundPreOutput, lpWorldOutput, lUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2112);
+        DoUpdate_InputPostWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            lpGameStateOutput, lpWorldOutput, luStartPressedPort);
+        CheckUpdateMemory(luAvailableMemory, 2123);
+        DoUpdate_Director(mpUpdateInputBufferStack, mpUpdateOutputBufferStack, lpDirectorInput,
+            lpInputOutput, lpGameStateOutput, lpWorldOutput, lpReplayPreOutput,
+            mpDirectorOutputBuffer, lUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2138);
+        if (!mbSteppingFrames)
+            DoUpdate_GUI(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                mpGuiInputBuffer, mpGuiViewInputBuffer, lpInputOutput, lpNetworkOutput,
+                lpGameStateOutput, lpWorldOutput, lpReplayPreOutput, mpGuiOutputBuffer,
+                mpGuiModelOutputBuffer, mpDirectorOutputBuffer, lpSoundOutput,
+                lpResourceInput, lpResourceOutput, lUpdateSet, luStartPressedPort);
+        CheckUpdateMemory(luAvailableMemory, 2166);
+        DoUpdate_DirectorPostGUI(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            lpDirectorInput, mpGuiOutputBuffer, mpDirectorOutputBuffer);
+        CheckUpdateMemory(luAvailableMemory, 2177);
+        DoUpdate_Effects(mpUpdateInputBufferStack, mpUpdateOutputBufferStack, lpInputOutput,
+            lpGameStateOutput, lpWorldOutput, mpDirectorOutputBuffer, lpReplayPreOutput,
+            lpSoundPreOutput, lpEffectsOutput, lbSuspendEffects, lUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2194);
+        DoUpdate_Sound(mpUpdateInputBufferStack, mpUpdateOutputBufferStack, lpGameStateOutput,
+            lpWorldOutput, mpDirectorOutputBuffer, lpReplayPreOutput, lpSoundOutput,
+            mpGuiOutputBuffer, lpEffectsOutput, lUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2210);
+        DoUpdate_ReplaysPostSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            lpWorldOutput, lpEffectsOutput, lpSoundOutput, mpDirectorOutputBuffer,
+            mpGuiOutputBuffer, lpReplayPostOutput, lUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2225);
+        DoUpdate_GameStatePostWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            lpInputOutput, lpWorldOutput, mpGuiOutputBuffer, lpReplayPostOutput,
+            mpDirectorOutputBuffer, lUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2239);
+        DoUpdate_NetworkPostSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+            lpGameStateOutput, lpWorldOutput, mpGuiOutputBuffer, lUpdateSet);
+        CheckUpdateMemory(luAvailableMemory, 2253);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
+        UpdateTimers(lpGameStateOutput, mpDirectorOutputBuffer);
+        CheckUpdateMemory(luAvailableMemory, 2260);
+        UpdateFrameRateType(lpGameStateOutput);
+        CheckUpdateMemory(luAvailableMemory, 2266);
+        const BrnGameState::GameStateModuleIO::OutputBuffer* const lpGameStateRead = lpGameStateOutput;
+        const BrnWorldIO::UpdateOutputBuffer* const lpWorldRead = lpWorldOutput;
+        const BrnDirector::DirectorIO::OutputBuffer* const lpDirectorRead = mpDirectorOutputBuffer;
+        const CgsGui::ModelIO::OutputBuffer* const lpModelRead = mpGuiModelOutputBuffer;
+        const BrnSound::Module::Io::RootOutputBuffer* const lpSoundRead = lpSoundOutput;
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* const lpGuiRead = mpGuiOutputBuffer;
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* const lpReplayRead = lpReplayPreOutput;
+        CgsModule::LockBuffersForIO(lpResourceInput, lpGameStateRead, lpWorldRead,
+            lpDirectorRead, lpModelRead, lpSoundRead, lpGuiRead, lpReplayRead);
+        BridgeGuiToResource(lpResourceInput, lpModelRead, lpGuiRead);
+        BridgeWorldToResource(lpResourceInput, lpWorldRead);
+        lpResourceInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
+            lpDirectorRead->GetVaultRequestInterface()->mRequestQueue);
+        lpResourceInput->AppendRequestInterface<512>(*lpDirectorRead->GetResourceRequestInterface());
+        lpResourceInput->AppendRequestInterface<3072>(*lpGameStateRead->GetResourceRequestInterface());
+        lpResourceInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
+            lpSoundRead->GetAttribSysRequestInterface()->mRequestQueue);
+        lpResourceInput->GetRequestInterface()->mRequestQueue.Append(
+            lpSoundRead->GetResourceRequestInterface()->mRequestQueue);
+        lpResourceInput->AppendRequestInterface<1024>(*lpReplayRead->GetGameDataRequestInterface());
+        CgsModule::UnlockBuffersForIO(lpResourceInput, lpGameStateRead, lpWorldRead,
+            lpDirectorRead, lpModelRead, lpSoundRead, lpGuiRead, lpReplayRead);
+        CheckUpdateMemory(luAvailableMemory, 2281);
+        lpInputOutput->LockForRead();
+        BridgeInputToGame(lpInputOutput);
+        lpInputOutput->UnlockForRead();
+        CgsSystem::GetSystemTimerBaseTime();
+        CgsSystem::GetSystemTimerFrequency();
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState_Bridge);
+        CheckUpdateMemory(luAvailableMemory, 2308);
     }
 
     // ARTIST 823DC458: the original RendererIO -> WorldDispatch handoff.
-    int BrnGameModule::DoDispatch()
+    void BrnGameModule::DoDispatch()
     {
-        DispatchThreadInputBuffer* const lpDispatchInput =
-            mDispatchThreadInputBufferManager.GetWriteBuffer();
-        // ARTIST 823DC484..4A0 invokes the original effects PreRenderUpdate
-        // before even the resource-stall branch, through vtable slot 0x48.
-        mEffectsModule.PreRenderUpdate(lpDispatchInput);
-        lpDispatchInput->LockForWrite();
-        lpDispatchInput->SetIsStalled(mbStalled);
-        lpDispatchInput->UnlockForWrite();
+        DispatchThreadInputBuffer* const lpDispatch = mDispatchThreadInputBufferManager.GetWriteBuffer();
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_RenderFX);
+        mEffectsModule.PreRenderUpdate(lpDispatch);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderFX);
+        lpDispatch->LockForWrite();
+        lpDispatch->SetIsStalled(mbStalled);
+        lpDispatch->UnlockForWrite();
         if (mbStalled)
-            return 0;
-
-        // Original cadence uses the final completed substep. Native PC presents
-        // without a substep retain that same output, without pose interpolation.
-        if (mpDirectorOutputBuffer == 0 && GetDispatchCamera() == 0)
-            return 0;
-
+            return;
         BrnUpdateSet lUpdateSet = ConstructUpdateSetFromFsm();
-        CgsModule::IOHelper<BrnWorldIO::DispatchInputBuffer> lWorldInput(
-            mpUpdateInputBufferStack, "WorldDispatch");
-        CgsModule::IOHelper<BrnWorldIO::DispatchOutputBuffer> lWorldOutput(
-            mpUpdateOutputBufferStack, "WorldDispatch");
-        CgsModule::IOHelper<RendererIO::InputBuffer> lRendererInput(
-            mpUpdateInputBufferStack, "Render");
-        CgsModule::IOHelper<RendererIO::OutputBuffer> lRendererOutput(
-            mpUpdateOutputBufferStack, "Render");
-        CgsModule::IOHelper<BrnEffects::EffectsIO::DispatchInputBuffer> lEffectsInput(
-            mpUpdateInputBufferStack, "Effects");
-
-        RendererIO::InputBuffer* const lpRendererInput = lRendererInput;
-        RendererIO::OutputBuffer* const lpRendererOutput = lRendererOutput;
+        BrnResource::GameDataIO::InputBuffer* const lpResourceInput = mpGameDataModuleInputBuffer;
+        const BrnResource::GameDataIO::OutputBuffer* const lpResourceOutput = mpGameDataModuleOutputBuffer;
+        CgsModule::IOHelper<BrnWorldIO::DispatchInputBuffer> lWorldInput(mpUpdateInputBufferStack, "WorldDispatch");
+        CgsModule::IOHelper<BrnWorldIO::DispatchOutputBuffer> lWorldOutput(mpUpdateOutputBufferStack, "WorldDispatch");
+        CgsModule::IOHelper<RendererIO::InputBuffer> lRenderInput(mpUpdateInputBufferStack, "Render");
+        CgsModule::IOHelper<RendererIO::OutputBuffer> lRenderOutput(mpUpdateOutputBufferStack, "Render");
+        CgsModule::IOHelper<BrnEffects::EffectsIO::DispatchInputBuffer> lEffectsInput(mpUpdateInputBufferStack, "EffectsDispatch");
+        RendererIO::InputBuffer* const lpRenderInput = lRenderInput;
+        RendererIO::OutputBuffer* const lpRenderOutput = lRenderOutput;
         BrnWorldIO::DispatchInputBuffer* const lpWorldInput = lWorldInput;
         BrnWorldIO::DispatchOutputBuffer* const lpWorldOutput = lWorldOutput;
         BrnEffects::EffectsIO::DispatchInputBuffer* const lpEffectsInput = lEffectsInput;
-
-        lpRendererInput->LockForWrite();
-        if (mpDirectorOutputBuffer != 0)
-            mpDirectorOutputBuffer->LockForRead();
-        const BrnDirector::Camera::Camera* const lpCamera = mpDirectorOutputBuffer != 0
-            ? mpDirectorOutputBuffer->GetCameraOutput() : GetDispatchCamera();
-        lpRendererInput->SetBrnCamera(*lpCamera);
-        if (mpDirectorOutputBuffer != 0)
-            mpDirectorOutputBuffer->UnlockForRead();
-        lpRendererInput->UnlockForWrite();
-
-        if (mpDirectorOutputBuffer != 0)
-            mpDirectorOutputBuffer->LockForRead();
-        lpDispatchInput->LockForWrite();
-        const BrnDirector::Camera::CameraState& lrState = lpCamera->GetState();
-        lpDispatchInput->SetIsRenderingAtFullFrameRate(
-            lrState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA)
-            || lrState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_ROAD_FOLLOWING_CAM));
-        lpDispatchInput->UnlockForWrite();
-        if (mpDirectorOutputBuffer != 0)
-            mpDirectorOutputBuffer->UnlockForRead();
-
-        mRenderModule.Update(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
-                             lpRendererInput, lpRendererOutput);
-
-        // ARTIST 823DC670..700 locks all bridge destinations before reading
-        // the renderer output, and holds that source through world/effects work.
-        BrnResource::GameDataIO::InputBuffer* const lpGameDataInput =
-            BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+        lpRenderInput->LockForWrite();
+        mpDirectorOutputBuffer->LockForRead();
+        lpRenderInput->SetBrnCamera(*mpDirectorOutputBuffer->GetCameraOutput());
+        mpDirectorOutputBuffer->UnlockForRead();
+        lpRenderInput->UnlockForWrite();
+        mpDirectorOutputBuffer->LockForRead();
+        lpDispatch->LockForWrite();
+        const BrnDirector::Camera::CameraState& lrState = mpDirectorOutputBuffer->GetCameraOutput()->GetState();
+        const bool lbRacingCamera = lrState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA);
+        const bool lbRoadCamera = mpDirectorOutputBuffer->GetCameraOutput()->GetState().IsFlagSet(
+            BrnDirector::Camera::CameraState::E_FLAG_ROAD_FOLLOWING_CAM);
+        lpDispatch->SetIsRenderingAtFullFrameRate(lbRacingCamera || lbRoadCamera);
+        lpDispatch->UnlockForWrite();
+        mpDirectorOutputBuffer->UnlockForRead();
+        mRenderModule.Update(mpUpdateInputBufferStack, mpUpdateOutputBufferStack, lpRenderInput, lpRenderOutput);
         lpEffectsInput->LockForWrite();
         lpWorldInput->LockForWrite();
-        if (lpGameDataInput != 0)
-            lpGameDataInput->LockForWrite();
-        lpRendererOutput->LockForRead();
-        // Zero-substep native presents retain actual completed GUI input.
-        // Refresh all five pointers from this dispatch's current renderer bank.
-        if (lpGuiRenderInput != 0)
-            lpGuiRenderInput->LockForWrite();
-        BridgeRendererToWorld(lpWorldInput, lpRendererOutput);
-        if (lpGuiRenderInput != 0)
-            BridgeRendererToGui(lpGuiRenderInput, lpRendererOutput);
-        BridgeRendererToEffects(lpEffectsInput, lpRendererOutput);
-        if (lpGameDataInput != 0)
-            lpGameDataInput->SetIm2dDebugRenderBuffer(lpRendererOutput->GetIm2dDebugRenderBuffer());
+        lpResourceInput->LockForWrite();
+        lpRenderOutput->LockForRead();
+        mpGuiInputBuffer->LockForWrite();
+        BridgeRendererToWorld(lpWorldInput, lpRenderOutput);
+        BridgeRendererToGui(mpGuiInputBuffer, lpRenderOutput);
+        BridgeRendererToEffects(lpEffectsInput, lpRenderOutput);
+        lpResourceInput->SetIm2dDebugRenderBuffer(lpRenderOutput->GetIm2dDebugRenderBuffer());
         lpEffectsInput->UnlockForWrite();
         lpWorldInput->UnlockForWrite();
-        if (lpGameDataInput != 0)
-            lpGameDataInput->UnlockForWrite();
-        if (lpGuiRenderInput != 0)
-            lpGuiRenderInput->UnlockForWrite();
-
+        lpResourceInput->UnlockForWrite();
+        mpGuiInputBuffer->UnlockForWrite();
         lpWorldInput->LockForWrite();
-        lpWorldInput->SetDispatchThreadInputBuffer(lpDispatchInput);
+        lpWorldInput->SetDispatchThreadInputBuffer(mDispatchThreadInputBufferManager.GetWriteBuffer());
         lpWorldInput->UnlockForWrite();
-        lpEffectsInput->LockForWrite();
-        if (mpDirectorOutputBuffer != 0)
-            mpDirectorOutputBuffer->LockForRead();
-        lpEffectsInput->SetCameraInput(lpCamera);
-        lpEffectsInput->UnlockForWrite();
-        if (mpDirectorOutputBuffer != 0)
-            mpDirectorOutputBuffer->UnlockForRead();
-
-        BrnResource::GameDataIO::OutputBuffer* const lpGameDataOutput =
-            BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
-        if (lpGameDataOutput != 0)
-        {
-            lpGameDataOutput->LockForRead();
-            if (*lpGameDataOutput->GetLiveUpdateStatus())
-                lUpdateSet &= static_cast<BrnUpdateSet>(~0x80u);
-            lpGameDataOutput->UnlockForRead();
-        }
-
+        const BrnDirector::DirectorIO::OutputBuffer* const lpDirectorRead = mpDirectorOutputBuffer;
+        CgsModule::LockBuffersForIO(lpEffectsInput, lpDirectorRead);
+        lpEffectsInput->SetCameraInput(lpDirectorRead->GetCameraOutput());
+        CgsModule::UnlockBuffersForIO(lpEffectsInput, lpDirectorRead);
+        lpResourceOutput->LockForRead();
+        if (*lpResourceOutput->GetLiveUpdateStatus())
+            lUpdateSet &= static_cast<BrnUpdateSet>(~0x80u);
+        lpResourceOutput->UnlockForRead();
         mWorldModule.GenerateFrustumQueries(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
-                                            lpWorldInput, lpWorldOutput, &lUpdateSet);
-
-        if (!mbSteppingFrames && lpGuiRenderInput != 0)
-            mGuiModule.Render(mGuiModule.GetViewInputBuffer(), lpGuiRenderInput, lpRendererOutput);
-
-        lpDispatchInput->LockForWrite();
-        lpDispatchInput->SetIsDiskError(mbDiskError);
-        lpDispatchInput->UnlockForWrite();
-
+            lpWorldInput, lpWorldOutput, &lUpdateSet);
+        if (!mbSteppingFrames)
+        {
+            CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_RenderGUI);
+            mGuiModule.Render(mpGuiViewInputBuffer, mpGuiInputBuffer, lpRenderOutput);
+            CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderGUI);
+        }
+        lpDispatch->LockForWrite();
+        lpDispatch->SetIsDiskError(mbDiskError);
+        lpDispatch->UnlockForWrite();
         mWorldModule.GenerateDispatchLists(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
-                                           lpWorldInput, lpWorldOutput, &lUpdateSet);
-
+            lpWorldInput, lpWorldOutput, &lUpdateSet);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_RenderFX);
         lpWorldOutput->LockForRead();
         lpEffectsInput->LockForWrite();
         BridgeWorldToEffects_Dispatch(lpEffectsInput, lpWorldOutput);
         lpEffectsInput->UnlockForWrite();
         lpWorldOutput->UnlockForRead();
         lpEffectsInput->LockForRead();
-        mEffectsModule.GenerateDispatchLists(mpUpdateInputBufferStack, lpEffectsInput,
-                                             lpDispatchInput);
+        mEffectsModule.GenerateDispatchLists(mpUpdateInputBufferStack, lpEffectsInput, lpDispatch);
         lpEffectsInput->UnlockForRead();
-        DebugManagerRender(lpRendererOutput);
-        lpRendererOutput->UnlockForRead();
-        return 0;
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderFX);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderAll);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_DebugManager);
+        mGameDataModule.RenderDebug(lpResourceInput);
+        DebugManagerRender(lpRenderOutput);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_DebugManager);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_RenderAll);
+        mRendererModulePerfmonsForREADONLYAccess = *lpRenderOutput->GetExternallyVisiblePerformanceMonitors();
+        lpRenderOutput->UnlockForRead();
     }
 
     // @ BrnGameModule.cpp:1047 (X360 0x823BC868) - tear down the owned modules + the module base.
@@ -2795,8 +2587,8 @@ namespace BrnGame
     // are noted, not declared here). Not on the boot/loading path.
     void BrnGameModule::Destruct()
     {
-        // [+10094134 terminated flag = 0; +10095440 CgsCollision::BaseCollisionGenerator::Destruct
-        //  - both off-path in this incremental layout, omitted]
+        mbIsSysMenuShowing = false;
+        mFrameRateManager.Destruct();
         mEffectsModule.Destruct();
         mSoundModule.Destruct();
         mDirectorModule.Destruct();
@@ -2826,48 +2618,45 @@ namespace BrnGame
     {
         switch (meReleaseStage)
         {
-            case E_RELEASESTAGE_START:
-            case E_RELEASESTAGE_GUI:
-                meReleaseStage = E_RELEASESTAGE_GUI;
-                if (!mGuiModule.Release())
-                    return false;
-                // fall through
-            case E_RELEASESTAGE_SOUND:
-                meReleaseStage = E_RELEASESTAGE_SOUND;
-                if (!mSoundModule.Release())
-                    return false;
-                // fall through
-            case E_RELEASESTAGE_HARDWARE:
-                meReleaseStage = E_RELEASESTAGE_HARDWARE;
-                // [+10097088 BrnHW::System360HW::Release(&mHardware): off-path hardware, omitted;
-                //  the X360 also returns false here if the hardware release fails]
-                if (!mInputModule.Release())
-                    return false;
-                // fall through
-            case E_RELEASESTAGE_GAMEDATAMODULE:
-                meReleaseStage = E_RELEASESTAGE_GAMEDATAMODULE;
-                if (!mGameDataModule.Release())
-                    return false;
-                // fall through
-            case E_RELEASESTAGE_MANAGER:
-                meReleaseStage = E_RELEASESTAGE_MANAGER;
-                if (!CgsModule::ModuleSingleBuffered::Release())
-                    return false;
-                // fall through
-            case E_RELEASESTAGE_NETWORK:
-                meReleaseStage = E_RELEASESTAGE_NETWORK;
-                if (!mNetworkModule.Release())
-                    return false;
-                // fall through
-            case E_RELEASESTAGE_DONE:
-                // [+10094134 terminated flag = 0: off-path, omitted]
-                meReleaseStage = E_RELEASESTAGE_DONE;
-                // [+10094156 = 0: off-path, omitted]
-                return true;
-            default:
-                CGS_ASSERT(false, "0");
-                return false;
+        case E_RELEASESTAGE_START:
+        case E_RELEASESTAGE_GUI: goto release_gui;
+        case E_RELEASESTAGE_SOUND: goto release_sound;
+        case E_RELEASESTAGE_GAMEDATAMODULE: goto release_game_data;
+        case E_RELEASESTAGE_MANAGER: goto release_manager;
+        case E_RELEASESTAGE_HARDWARE: goto release_hardware;
+        case E_RELEASESTAGE_NETWORK: goto release_network;
+        case E_RELEASESTAGE_DONE: goto release_done;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1033);
+            CgsDev::Assert::EndAssert();
+            return false;
         }
+    release_gui:
+        meReleaseStage = E_RELEASESTAGE_GUI;
+        if (!mGuiModule.Release()) return false;
+    release_sound:
+        meReleaseStage = E_RELEASESTAGE_SOUND;
+        if (!mSoundModule.Release()) return false;
+    release_hardware:
+        meReleaseStage = E_RELEASESTAGE_HARDWARE;
+        if (!mHardware.Release() || !mInputModule.Release()) return false;
+    release_game_data:
+        meReleaseStage = E_RELEASESTAGE_GAMEDATAMODULE;
+        if (!mGameDataModule.Release()) return false;
+        meReleaseStage++;
+    release_manager:
+        meReleaseStage = E_RELEASESTAGE_MANAGER;
+        if (!CgsModule::ModuleSingleBuffered::Release()) return false;
+        meReleaseStage++;
+    release_network:
+        if (!mNetworkModule.Release()) return false;
+    release_done:
+        mbIsSysMenuShowing = false;
+        meReleaseStage = E_RELEASESTAGE_DONE;
+        mePrepareStage = E_PREPARESTAGE_START;
+        return true;
     }
 
     // operator++(EReleaseStage&, int) @ 0x823A8AD8 - POST-increment for the EReleaseStage stage
@@ -2883,19 +2672,94 @@ namespace BrnGame
     {
         BrnGameModule::EReleaseStage leOld = leStage;
         leStage = static_cast<BrnGameModule::EReleaseStage>(leStage + 1);
-        CGS_ASSERT(leStage <= BrnGameModule::E_RELEASESTAGE_DONE,
-                   "leEnumIndex <= BrnGameModule::E_RELEASESTAGE_DONE");
+        if (leStage > BrnGameModule::E_RELEASESTAGE_DONE)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("leEnumIndex <= BrnGameModule::E_RELEASESTAGE_DONE",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.h", 1443);
+            CgsDev::Assert::EndAssert();
+        }
         return leOld;
     }
 
-    // @ BrnGameModule.cpp:2650 (X360 0x823F03C8) - teardown counterpart of GamePrepare: under the
-    // GameData IO locks, an 11-stage resumable release that drives the per-module game releases
-    // (incl. the World release with a scratch BrnWorldIO::UpdateOutputBuffer and the GameState
-    // release with a scratch GameStateModuleIO::OutputBuffer, both on the update output stack).
-    // [gated] same dependencies as GamePrepare. Returns done.
+    // ARTIST823F03C8: resumable native module game-release sequence.
     bool BrnGameModule::GameRelease()
     {
-        return true;
+        BrnResource::GameDataIO::InputBuffer* const lpResourceInput = mpGameDataModuleInputBuffer;
+        const BrnResource::GameDataIO::OutputBuffer* const lpResourceOutput = mpGameDataModuleOutputBuffer;
+        lpResourceInput->LockForWrite();
+        lpResourceOutput->LockForRead();
+        bool lbReleased = false;
+        switch (meGameReleaseStage)
+        {
+        case E_GAMERELEASESTAGE_START:
+        case E_GAMERELEASESTAGE_NETWORK:
+            meGameReleaseStage = E_GAMERELEASESTAGE_NETWORK;
+            if (!mNetworkModule.Release()) break;
+        case E_GAMERELEASESTAGE_SOUND_MODULE:
+            meGameReleaseStage = E_GAMERELEASESTAGE_SOUND_MODULE;
+            if (!mSoundModule.Release()) break;
+        case E_GAMERELEASESTAGE_DIRECTORMODULE:
+            meGameReleaseStage = E_GAMERELEASESTAGE_DIRECTORMODULE;
+            if (!mDirectorModule.Release()) break;
+        case E_GAMERELEASESTAGE_GUIMODULE:
+            meGameReleaseStage = E_GAMERELEASESTAGE_GUIMODULE;
+            if (!mGuiModule.Release()) break;
+        case E_GAMERELEASESTAGE_CONTROLLERMODULE:
+            meGameReleaseStage = E_GAMERELEASESTAGE_CONTROLLERMODULE;
+            if (!mInputModule.Release()) break;
+        case E_GAMERELEASESTAGE_WORLDMODULE:
+            {
+                meGameReleaseStage = E_GAMERELEASESTAGE_WORLDMODULE;
+                BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
+                mpUpdateOutputBufferStack->CreateIOBuffer(&lpWorldOutput, "World");
+                if (!mWorldModule.Release(mpUpdateOutputBufferStack, lpWorldOutput))
+                {
+                    BridgeWorldToResource(lpResourceInput, lpWorldOutput);
+                    mpUpdateOutputBufferStack->DestroyIOBuffer(&lpWorldOutput);
+                    break;
+                }
+                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpWorldOutput);
+            }
+        case E_GAMERELEASESTAGE_RENDERMODULE:
+            meGameReleaseStage = E_GAMERELEASESTAGE_RENDERMODULE;
+            if (!mRenderModule.Release()) break;
+        case E_GAMERELEASESTAGE_GAMESTATEMODULE:
+            {
+                meGameReleaseStage = E_GAMERELEASESTAGE_GAMESTATEMODULE;
+                BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput = 0;
+                mpUpdateOutputBufferStack->CreateIOBuffer(&lpGameStateOutput, "GameState");
+                if (!mGameStateModule.Release(lpGameStateOutput))
+                {
+                    const BrnGameState::GameStateModuleIO::OutputBuffer* const lpRead = lpGameStateOutput;
+                    lpResourceInput->AppendRequestInterface<3072>(*lpRead->GetResourceRequestInterface());
+                    mpUpdateOutputBufferStack->DestroyIOBuffer(&lpGameStateOutput);
+                    break;
+                }
+                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpGameStateOutput);
+            }
+        case E_GAMERELEASESTAGE_REPLAYMODULE:
+            meGameReleaseStage = E_GAMERELEASESTAGE_REPLAYMODULE;
+            if (!mReplayModule.Release()) break;
+        case E_GAMERELEASESTAGE_DONE:
+            meGamePrepareStage = E_GAMEPREPARESTAGE_START;
+            meGameReleaseStage = E_GAMERELEASESTAGE_DONE;
+            lbReleased = true;
+            break;
+        default:
+            CgsDev::Assert::BeginAssert();
+            {
+                CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+                lMessage << "Invalid game release stage\n";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 2809);
+            }
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+        lpResourceInput->UnlockForWrite();
+        lpResourceOutput->UnlockForRead();
+        return lbReleased;
     }
 
     // @ BrnGameModule.cpp:1253 (X360 0x823A8BB0) - start-of-update-frame hook. The X360 body is
@@ -2957,136 +2821,10 @@ namespace BrnGame
 
     void BrnGameModule::ResourceUpdateThread(Mutex* /*lpMutex*/)
     {
-        BrnResource::GameDataIO::InputBuffer*  lpGameDataInput =
-            BrnGameMainFlowController::GetScriptedLoadGameDataInput();
-        BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
-            BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
-
-        // ---- X360 GuiModule::Prepare stage 14, driven from here -------------------------
-        // BrnGui::WorldDataController::Prepare @0x82516770 stages its resource requests into
-        // the GameData request interface and reads the replies out of its own receiver queue.
-        // The console runs it from BrnGui::GuiModule::Prepare, which the module scheduler
-        // calls with THIS SAME buffer pair; the PC's GuiModule::Prepare runs at Construct
-        // time, long before the GameData IO exists, so the stage is driven here -- the one
-        // place the pair is live and pumped -- immediately BEFORE the pump, so a request
-        // staged this sub-step is serviced in the same call and its reply is waiting on the
-        // next. (Same "stage then pump" order as GamePrepare's own stages.)
-        // Stops re-entering once the machine reports done; while a stage is parked on a
-        // request no PC producer answers it only re-checks its queue (it does not re-issue),
-        // which is the console's own arm -- see the banner in BrnGuiWorldDataController.cpp.
-        //
-        // ⭐⭐ [event-starts wave 2026-08-27] AND THE SECOND MACHINE, WorldDataController::Prepare2
-        // @0x82516CB8 -- the ONLY writer of the controller's mpProgressionData / mpStreetData, and
-        // therefore the thing that makes GetEventInfoFromEventId answer with a real RaceEventData
-        // instead of NULL (the sat-nav's `lpRaceEventData` assert, BrnSatNavRenderer.cpp:1307).
-        //
-        // ⛔ THE TWO MACHINES SHARE ONE RECEIVER QUEUE, so exactly one of them is pumped per
-        // sub-step. THE ORDER IS THE CONSOLE'S OWN AND IS NO LONGER A WORKAROUND (corrected
-        // 2026-08-27, challenge-list wave): Prepare runs to COMPLETION first, then Prepare2.
-        //
-        // ⚠️ WHAT THIS REPLACED, AND WHY IT HAD TO GO. The previous form handed the queue to
-        // Prepare2 the moment Prepare merely PARKED at PREPARING_ACQUIRING_STREET_DATA, because
-        // no PC producer answered its GetFreeburnChallengeList and parking was permanent. That
-        // producer LANDED IN THIS WAVE (GameDataModule Prepare stage 10 +
-        // ProcessGetFreeburnChallengeListRequest, id 53), so Prepare now parks at stage 9 only
-        // until the reply arrives -- and the old "parked" test would have handed the queue away
-        // in exactly that window and let Prepare2's ProgressionData acquire consume the reply
-        // meant for Prepare. Each stage takes "the one event on the queue" WITHOUT checking what
-        // it is, so that is not untidy, it is a cross-bind. Gating on mbWorldDataPrepared instead
-        // makes the hand-off happen once, after Prepare has genuinely finished.
-        //
-        // ⚠️ AND PREPARE2 NEEDS A SECOND, INDEPENDENT PRECONDITION -- the root cause of the
-        // "[GuiWorldData] Prepare2 done: mpProgressionData bound = 0" line this wave inherited.
-        // Prepare2 does not stream anything: it ACQUIRES "ProgressionData" and "StreetData" BY
-        // NAME out of pool 5, and the two bundles that put them there ("Progression.dat",
-        // "STREETDATA.DAT") are loaded by the GAME-STATE lane's own second pass,
-        // GameStateModule::Prepare2, which runs from the scripted-load flow much later than this
-        // thread starts. An acquire for an absent resource is ANSWERED (with a null memory
-        // pointer), not queued -- so running Prepare2 early does not retry: it completes, binds
-        // NOTHING, and latches meState2 == 5 for the rest of the session, which is exactly what
-        // the boot log showed (GUI Prepare2 done at log line 240; ProgressionManager LOADED at
-        // line 518). IsPrepare2Complete() is the PC observer that says both bundles are resident.
-        // DELETE-WHEN the module scheduler's real Prepare2 pass orders the two lanes (the console
-        // has no such gate because the scheduler runs GameState's Prepare2 before the GUI's).
-        if (!mbWorldDataPrepared && lpGameDataInput != 0)
-        {
-            lpGameDataInput->LockForWrite();
-            mbWorldDataPrepared = mGuiModule.PrepareWorldData(lpGameDataInput);
-            lpGameDataInput->UnlockForWrite();
-
-            // [diagnostic, one-shot] the keystone this whole car-select campaign turned on:
-            // print the vehicle list the GUI side ended up holding, from the GUI side.
-            static bool s_bLoggedGuiVehicleList = false;
-            if (!s_bLoggedGuiVehicleList
-                && mGuiModule.GetWorldDataController().GetVehicleList() != 0)
-            {
-                s_bLoggedGuiVehicleList = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[GuiWorldData] mpVehicleList = "
-                    << const_cast<void*>(static_cast<const void*>(
-                           mGuiModule.GetWorldDataController().GetVehicleList()))
-                    << " (" << mGuiModule.GetWorldDataController().GetVehicleList()->GetVehicleCount()
-                    << " entries), state "
-                    << static_cast<s32>(mGuiModule.GetWorldDataController().GetState()) << "\n";
-            }
-
-            // [diagnostic, one-shot] NOT IN THE X360 BINARY. Prepare reaching
-            // WFPLAYERCARCOLOURS (11) is what un-gates the five meState-asserting accessors --
-            // that is the whole point of the challenge-list wave -- but FOUR of them go straight
-            // through mpTriggerData with no null path of their own, and the stage-2/3
-            // "TriggerData" acquire is ANSWERED even when Triggers.dat is not yet resident. So
-            // report which pointers the machine actually ended up holding, not just that it
-            // finished. DELETE-WHEN the acquire reports a miss as a miss.
-            static bool s_bLoggedGuiWorldDataDone = false;
-            if (!s_bLoggedGuiWorldDataDone && mbWorldDataPrepared && CgsDev::Log::gpDebugPrint != 0)
-            {
-                s_bLoggedGuiWorldDataDone = true;
-                const BrnGui::WorldDataController& lrWdc = mGuiModule.GetWorldDataController();
-                *CgsDev::Log::gpDebugPrint
-                    << "[GuiWorldData] Prepare done: state " << static_cast<s32>(lrWdc.GetState())
-                    << ", triggerData bound = " << (lrWdc.HasTriggerData() ? 1 : 0)
-                    << ", carColours bound = " << (lrWdc.HasPlayerCarColours() ? 1 : 0)
-                    << ", challengeList = "
-                    << const_cast<void*>(static_cast<const void*>(lrWdc.GetFreeburnChallengeList()))
-                    << "\n";
-            }
-        }
-        else if (!mbWorldData2Prepared && lpGameDataInput != 0
-                 && mGameStateModule.IsPrepare2Complete())
-        {
-            lpGameDataInput->LockForWrite();
-            mbWorldData2Prepared = mGuiModule.PrepareWorldData2(lpGameDataInput);
-            lpGameDataInput->UnlockForWrite();
-
-            // [diagnostic, one-shot] NOT IN THE X360 BINARY -- the line that proves the GUI lane's
-            // progression binding took, which is the precondition for every event icon on the map.
-            // DELETE-WHEN the sat-nav event-icon path has a regression test behind it.
-            static bool s_bLoggedGuiProgression = false;
-            if (!s_bLoggedGuiProgression && mbWorldData2Prepared
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                s_bLoggedGuiProgression = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[GuiWorldData] Prepare2 done: mpProgressionData bound = "
-                    << (mGuiModule.GetWorldDataController().HasProgressionData() ? 1 : 0)
-                    << ", state2 "
-                    << static_cast<s32>(mGuiModule.GetWorldDataController().GetState2())
-                    << ", state " << static_cast<s32>(mGuiModule.GetWorldDataController().GetState())
-                    << "\n";
-            }
-        }
-
-        // ⭐ THE STALL PUBLISH, restored 2026-08-16 (boot audit F-P3-3). @0x823BCA18-38:
-        //     ret = (gameDataModule->vtable+0x44)(...);          // the Update above
-        //     cmpwi cr6, r3, 1; li r10,1; beq; li r10,0
-        //     stbx r10, r31, 0x99FFE8                            // (gm+1600)+0x99FFE8
-        //                                                        //  == gm+0x9A0628
-        // gm+0x9A0628 is the byte ConstructUpdateSetFromFsm turns into update-set bit 0x400,
-        // the STALL bit. The PC threw the return value away and never wrote the member, so
-        // the whole stall gate was dead: nothing downstream could ever tell that the
-        // streamer had not caught up. The value is "the resource pump is still busy" --
-        // Update returning 1 -- and it is republished every pass, not latched.
-        mbStalled = mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
+        mbStalled = mGameDataModule.Update(mpResourceInputBufferStack, mpResourceOutputBufferStack,
+            mpGameDataModuleInputBuffer, mpGameDataModuleOutputBuffer) ==
+            BrnResource::GameDataModule::E_RESULT_REQUIRE_STALL;
+        CheckDiskError(mpGameDataModuleOutputBuffer);
     }
 
     // @ BrnGameModule.cpp:1221 - the render/dispatch thread body. The threaded D3D
@@ -3095,21 +2833,10 @@ namespace BrnGame
     // module.
     void BrnGameModule::DispatchThread()
     {
-        // X360 DoDispatch @0x823DC458 runs DebugManagerRender between the module dispatch-list
-        // generation and the ExternallyV copy -- i.e. the overlay QUEUEING happens on the
-        // dispatch side, before the renderer consumes the frame. Same order here: queue first,
-        // then render. (The queued text is flushed by DebugManager::Render at the renderer's
-        // overlay point -- see the note at the end of DebugManagerRender.)
-
-        // ARTIST 823A8B6C: Update_Dispatch runs on the dispatch thread before renderer consumption.
+        D3DDevice_AcquireThreadOwnership(gpD3DDevice);
         mReplayModule.Update_Dispatch();
-
-        // The console dispatch thread hands the renderer the manager's READ buffer (the
-        // frame the update side just published via OnEndOfUpdateFrame's swap).
-        const DispatchThreadInputBuffer* lpRead = mDispatchThreadInputBufferManager.GetReadBuffer();
-        // ARTIST 823A8B70..88 supplies the real effects owner. Render invokes
-        // its original callback after GDL conversion/sorting on this control IO.
-        mRenderModule.Render(&mEffectsModule, lpRead);
+        mRenderModule.Render(&mEffectsModule, mDispatchThreadInputBufferManager.GetReadBuffer());
+        D3DDevice_ReleaseThreadOwnership(gpD3DDevice);
     }
 
     // ARTIST 823BCB88. The caller holds fresh RendererIO output for read;
@@ -3128,24 +2855,24 @@ namespace BrnGame
             return;
 
         // 4. the fps state (@0x823BCC24-D44).
-        const u32 lu32Now  = CgsSystem::GetSystemTimerBaseTime();
-        const u32 lu32Freq = CgsSystem::GetSystemTimerFrequency();
+        const u64 luNow  = CgsSystem::GetSystemTimerBaseTime();
+        const u64 luFrequency = CgsSystem::GetSystemTimerFrequency();
 
         const f32 lfThreeFrameSeconds =
-            static_cast<f32>(lu32Now - mau32DebugFpsFrameStamps[mu8DebugFpsFrameStampIndex]) /
-            static_cast<f32>(lu32Freq);
+            static_cast<f32>(luNow - mau64DebugFpsFrameStamps[mu8DebugFpsFrameStampIndex]) /
+            static_cast<f32>(luFrequency);
         const f32 lfCurrentFps = 1.0f / (lfThreeFrameSeconds * 0.33333334f);   // flt_820065E0
 
         mfDebugFpsSampleCount = mfDebugFpsSampleCount + 1.0f;
         mfDebugFpsAccumulator = mfDebugFpsAccumulator + lfCurrentFps;
-        mau32DebugFpsFrameStamps[mu8DebugFpsFrameStampIndex] = lu32Now;
+        mau64DebugFpsFrameStamps[mu8DebugFpsFrameStampIndex] = luNow;
         mu8DebugFpsFrameStampIndex = static_cast<u8>((mu8DebugFpsFrameStampIndex + 1) % 3);
 
         const f32 lfWindowSeconds =
-            static_cast<f32>(lu32Now - mu32DebugFpsAverageWindowStamp) / static_cast<f32>(lu32Freq);
+            static_cast<f32>(luNow - mu64DebugFpsAverageWindowStamp) / static_cast<f32>(luFrequency);
         if (lfWindowSeconds > 60.0f)   // flt_82004C6C
         {
-            mu32DebugFpsAverageWindowStamp = lu32Now;
+            mu64DebugFpsAverageWindowStamp = luNow;
             mfDebugFpsAverage     = mfDebugFpsAccumulator / mfDebugFpsSampleCount;
             mfDebugFpsAccumulator = 0.0f;
             mfDebugFpsSampleCount = 0.0f;
@@ -3166,7 +2893,7 @@ namespace BrnGame
             lfCurrentFps, mfDebugFpsAverage,
             0xFF00FF00u /*high: green*/, 0xFF0000FFu /*low: red*/, 0xFF00FFFFu /*mid: yellow*/,
             60.0f, 30.0f,   // flt_82004C6C / flt_82004F5C
-            "over last minute", lfAverageHighlight, mbDebugSimulationIsRealtime);
+            "over last minute", lfAverageHighlight, mFrameRateManager.mbIsSimulationRunningInRealTime);
 
         lpDebugManager->RenderMemory();
 
@@ -3200,11 +2927,17 @@ namespace BrnGame
 
     // @ BrnGameModule.cpp:3916 - clear the whole game-module object, then stamp each owned
     // module's memory region with 0x7FFFFFFF so any read of un-prepared module memory is caught.
-    // NOTE: the memset uses the FULL X360 object size (0x9A1300); it overflows this
-    // incrementally-populated layout, so it's only safe once the layout is complete - debug-only,
-    // not called on the boot/loading path.
+    // ARTIST main calls this before placement construction. The native target
+    // must recover the actual layout before these original writes can run.
     void BrnGameModule::DebugMemoryInit(BrnGameModule* lpData)
     {
+#if defined(_XBOX)
+        typedef char NativeGameModuleSize[sizeof(BrnGameModule) == 0x9A1300 ? 1 : -1];
+        typedef char NativeGameStateOffset[offsetof(BrnGameModule, mGameStateModule) == 0x669500 ? 1 : -1];
+        typedef char NativeGuiOffset[offsetof(BrnGameModule, mGuiModule) == 0x6EAA20 ? 1 : -1];
+        typedef char NativeNetworkOffset[offsetof(BrnGameModule, mNetworkModule) == 0x8C3600 ? 1 : -1];
+        typedef char NativeInputOffset[offsetof(BrnGameModule, mInputModule) == 0x6E9630 ? 1 : -1];
+#endif
         std::memset(lpData, 0, 0x9A1300);
         DebugSetMemoryToInt(&lpData->mGameStateModule, 292368, 0x7FFFFFFF);
         DebugSetMemoryToInt(&lpData->mGuiModule, 1629392, 0x7FFFFFFF);
@@ -3226,9 +2959,7 @@ namespace BrnGame
     bool BrnGameModule::GameMain()
     {
         using namespace CgsDev;
-
         PerfMonCpu::StartMonitor(mCpuMonitors.miUT_TotalUpdate);
-
         mi8ActualFrameRateMinStepsThisFrame = mi8FrameRateMinSteps;
         mi8ActualFrameRateMaxStepsThisFrame = mi8FrameRateMaxSteps;
         CgsSystem::EFrameRateManagerType leFrameRateType = meFrameRateManagerType;
@@ -3238,510 +2969,50 @@ namespace BrnGame
             mi8ActualFrameRateMinStepsThisFrame = 1;
             mi8ActualFrameRateMaxStepsThisFrame = 1;
         }
-
-        CGS_ASSERT(!_lbForceAssert, "!_lbForceAssert");
-
+        if (_lbForceAssert)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("!_lbForceAssert",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1872);
+            CgsDev::Assert::EndAssert();
+        }
         mFrameRateManager.StartUpdateFrame(leFrameRateType, false);
         UnlockInputForRead();
-
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_TotalUpdate);
-
-        // FLAG: ARTIST 0x823CB498 brackets DebugManager::Update with the monitor at
-        // mCpuMonitors+0x48 (=miUT_DebugManager), not +0x4C (miUT_RenderAll). Fixed.
         PerfMonCpu::StartMonitor(mCpuMonitors.miUT_DebugManager);
+        mDebugManager.Update(mGameTimer.GetScaleCurrent() * mGameTimer.GetRate());
         UpdateRequestDoStepFrame();
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_DebugManager);
-
         PerfMonCpu::StartMonitor(mCpuMonitors.miUT_TotalUpdate);
         PerfMonCpu::SetNumIterationsTaken(miNumSimFramesRequired);
         sbSimUpdateComplete = 0;
-        if (miNumSimFramesRequired > 0)
+        for (s32 liStep = 0; liStep < miNumSimFramesRequired; ++liStep)
         {
-            s32 liStep = 0;
-            do
+            PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+            CreateStaticIOBuffers();
+            mFrameRateManager.miPrevNumSimulationStepsRequired = liStep + 1;
+            PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
+            PerfMonCpu::StartMonitor(mCpuMonitors.miUT_EachUpdate);
+            const BrnGameMainFlowController::EMainGameFlowState leState =
+                mMainFlowStateMachine.GetCurrentState();
+            if (leState != BrnGameMainFlowController::E_MGS_INVALID)
+                mMainFlowStateMachine.GetState(leState)->Update();
+            PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
+            if (liStep != miNumSimFramesRequired - 1)
             {
-                // ARTIST 0x823CB498 brackets Create/DestroyStaticIOBuffers with the monitor at
-                // mCpuMonitors+0x10 -- under the corrected 40-field layout (no +0x08 hole,
-                // miUT_Replay @+0x40) that handle is miUT_GameState.
                 PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
-                CreateStaticIOBuffers();
-
-                mFrameRateManager.miPrevNumSimulationStepsRequired = liStep + 1;
+                DestroyStaticIOBuffers();
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
-
-                PerfMonCpu::StartMonitor(mCpuMonitors.miUT_EachUpdate);
-
-                // ⭐ THE FRAME TIMESTEP SNAPSHOT -- before any leg reads a timestep. The console's
-                // DoUpdate @0x823F0AF8 captures its update-set at 0x823F0B28, then calls BridgeTimers
-                // @0x823BD150 at 0x823F0DE4 before DoUpdate_InputPreWorld (0x823F0F58): the
-                // request accumulator is reset and TimerStatusInterface::StoreTimers @0x828D7518
-                // snapshots both timers into mTimerStatusInterface -- the snapshot the world leg
-                // integrates with (DoUpdate_World 0x823E8C78..0x823E8C84) and the director reads.
-                // The timers were last moved by UpdateTimers at the END of the previous sub-step
-                // (below), so a time-scale request the director made last step reaches the world
-                // this step, as on the console. NULL: the director input does not exist yet on
-                // this build; DoUpdate_Director copies this snapshot into it (see BridgeTimers).
-                // CORRECTED 2026-09-25 (FX-DIRECTOR2) -- this ran inside DoUpdate_Director, after
-                // a mid-step UpdateTimers, which put every director request one step late.
-                const bool lbRunFullModuleCascade = (mpNetworkOutputBuffer != 0);
-                BrnUpdateSet lFullModuleUpdateSet = static_cast<BrnUpdateSet>(0);
-                if (lbRunFullModuleCascade)
-                    lFullModuleUpdateSet = ConstructUpdateSetFromFsm();
-
-                if (lbRunFullModuleCascade)
-                    BridgeTimers(0);
-
-                BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
-                u32 luStartPressedPort = CgsInput::KU_NUMBER_OF_PADS;
-
-                // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] THE INPUT PRE-WORLD LEG -- the first
-                // leg of the console's update step, and the one that carries the game's rumble requests
-                // to the pads. It has exactly two console callers (the dossier's xrefs_to):
-                //   DoUpdate @0x823F0AF8 at 0x823F0F58 -- unconditional, first leg, before NetworkPreSim;
-                //     DoUpdate runs from MainGameFlowStateInGame::Update and from LoadingScriptedState::
-                //     Update once its load stage reads 8 (0x823F22F4 `cmpwi r11,8` -> 0x823F2304);
-                //   LoadingScriptedState::Update @0x823F22D8 at 0x823F26F4 -- the partial spine it runs
-                //     for load stages below 8, first leg after ConstructUpdateSetFromFsm.
-                // So it runs in the in-game state and in every loading-scripted state, whatever the load
-                // stage (the network buffer's gate below additionally needs stage 8). Arguments as the
-                // console loads them: the update input/output buffer stacks and the input module's
-                // output buffer (the PC keeps that one as mPcInputOutputBuffer). Preserve the
-                // actual selected word for the original post-world bind and GUI143 producer.
-                if (lbRunFullModuleCascade)
-                {
-                }
-
-                // THE NETWORK PRE-SIMULATION LEG. Console DoUpdate order: DoUpdate_InputPreWorld,
-                // then this, then DoUpdate_GameStatePreWorld; unconditional whenever DoUpdate runs,
-                // which on this build is exactly when the sub-step has a network output buffer
-                // (CreateStaticIOBuffers). InputPreWorld publishes this sub-step's pad record
-                // before this network leg and the GameState controller bridge.
-                if (lbRunFullModuleCascade)
-                {
-                }
-
-                if (leState != BrnGameMainFlowController::E_MGS_INVALID)
-                {
-                    MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
-                    lpState->Update();
-                    if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
-                    {
-                        // ARTIST823E8D70..823E8DA0, after the selected world's producer.
-                        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = mpWorldUpdateOutputBuffer;
-                        lpWorldOutput->LockForRead();
-                        mbWorldStreamingRequestedStall =
-                            !lpWorldOutput->GetWorldEntityStatusInterface()->GetImmediateStreamed();
-                        lpWorldOutput->UnlockForRead();
-                    }
-                }
-
-                // ARTIST823F1554..156C: the same selected word feeds InputPostWorld
-                // after the world's producer and before GUI. The existing helper owns the
-                // mapping/bind requests; next PreWorld publishes its actual bind result.
-                if (lbRunFullModuleCascade)
-                    DoUpdate_InputPostWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
-                                           mGameStateModule.GetOutputBuffer(), mpWorldUpdateOutputBuffer,
-                                           luStartPressedPort);
-
-                // (The TIMER tick, UpdateTimers @0x823BCFD0, is NOT here any more: it runs at the
-                //  end of the sub-step, after DoUpdate_NetworkPostSim -- the console's 0x823F1CFC.
-                //  Boot audit F-P3-13's position note is retired there, with the measurement.)
-                // ---- the DIRECTOR's pre-GUI passes (X360 module-scheduler order) ----------
-                // PreSceneQueryUpdate + Update. The module publishes its finalised camera into
-                // mpDirectorOutputBuffer, which stays alive through this frame's Render.
-                if (lbRunFullModuleCascade)
-                    DoUpdate_Director(false);
-
-                // ARTIST DoUpdate_GUI823F0758 runs only in the full cascade.
-                // Boot and the below-stage8 partial route own their GUI/time seats.
-                // ⭐ FRAME-STEP GUARD, 2026-08-16 (boot audit F-P3-9). DoUpdate skips the
-                // whole GUI leg while the frame-stepper is engaged (`lbzx` on gm+0x9A0B98);
-                // ours ran it unconditionally, so single-stepping a frame also advanced the
-                // GUI a frame and the two were never actually in step. mbSteppingFrames is
-                // the PC's name for that byte.
-                if (lbRunFullModuleCascade && !mbSteppingFrames)
-                {
-                // ⭐ CLEAR FIRST, 2026-08-16 (boot audit F-P3-8). DoUpdate_GUI @0x823F0758
-                // opens by clearing BOTH out buffers, then runs its bridges; we cleared the
-                // GUI out-queue at the END of the leg instead. Same net emptiness at every
-                // point that reads it today -- which is why the inversion was masked -- but
-                // "the leg starts with an empty queue" is the invariant the console relies
-                // on, and clearing at the end only holds while nothing outside this leg can
-                // post into the queue.
-                mpGuiOutputBuffer->Clear();
-                mpGuiModelOutputBuffer->Clear();
-                if (mGuiModule.IsPrepared())
-                    mGuiModule.GetGuiOutQueue()->Clear();
-
-                // ---- controller -> GUI input pass (the console per-substep bridge) ---------
-                // Fill the player-0 pad record (InputPadsPC, the PC stand-in for the input
-                // module's own fill), then run the REAL BridgeControllerToGui: it synthesises
-                // the GUI controller events from the pad record and pushes them through
-                // CgsGui::GuiModule::AddGuiEvent into this sub-step's GUI input buffer. The
-                // GUI module drains that buffer during its Update below.
-                {
-                    miLanguageCycleTimerLo   = static_cast<s32>(liNowMs / 1000);
-                    mfLanguageCycleTimerFrac = static_cast<f32>(liNowMs % 1000) * 0.001f;
-
-                    // Boot/GUI-only states have not run InputPreWorld. Preserve their fill;
-                    // a normal input update has already polled once, even while single-stepping.
-                    {
-                    }
-
-                    mpGuiInputBuffer->LockForWrite();
-                    // ARTISTDoUpdate_GUI823F0920..0944: publish the actual selection,
-                    // not the no-user sentinel and not a preselected virtual pad index.
-                    if (luStartPressedPort != CgsInput::KU_NUMBER_OF_PADS)
-                        mpGuiInputBuffer->GetGuiEvents()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&luStartPressedPort),
-                            143, sizeof(luStartPressedPort));
-                    // ⭐ [boost-bar 206 wave] the world->GUI vehicle bridge (the console's
-                    // DoUpdate_GUI @0x823F0758 calls BridgeWorldToGui under its own GUI-input
-                    // write bracket) -- the read bracket mirrors the BridgeWorldToDirector
-                    // leg's. Publishes the per-frame boost-info record (206) the HUD boost
-                    // bar keys on.
-                    if (mpWorldUpdateOutputBuffer != 0)
-                    {
-                        mpWorldUpdateOutputBuffer->LockForRead();
-                        BridgeWorldToGui(mpGuiInputBuffer, mpWorldUpdateOutputBuffer);
-                        mpWorldUpdateOutputBuffer->UnlockForRead();
-                    }
-
-                    const BrnGameState::GameStateModuleIO::OutputBuffer* const lpGameStateOutput =
-                        mGameStateModule.GetOutputBuffer();
-                    lpGameStateOutput->LockForRead();
-                    BridgeGameStateToGui(mpGuiInputBuffer, lpGameStateOutput);
-                    lpGameStateOutput->UnlockForRead();
-
-                    // X360 DoUpdate_GUI: BridgeDirectorToGui @0x823DD5C0 -- the camera's
-                    // post-FX hook requests and the hook-enumeration request (495..500).
-                    if (mpDirectorOutputBuffer != 0)
-                    {
-                        mpDirectorOutputBuffer->LockForRead();
-                        BridgeDirectorToGui(mpGuiInputBuffer, mpDirectorOutputBuffer);
-                        mpDirectorOutputBuffer->UnlockForRead();
-                    }
-
-                    // The network -> GUI bridge, under a read lock on the network output (console
-                    // DoUpdate_GUI runs it after the replay bridge, before BridgeGameToGui).
-                    if (mpNetworkOutputBuffer != 0)
-                    {
-                        mpNetworkOutputBuffer->LockForRead();
-                        BridgeNetworkToGui(mpGuiInputBuffer, mpNetworkOutputBuffer);
-                        mpNetworkOutputBuffer->UnlockForRead();
-                    }
-
-                    // The game->GUI flow-FSM bridge (X360 0x823DCA10, run under the same
-                    // write bracket the console's LoadingScriptedState::Update uses): post
-                    // any pending GuiEventRunFsm stage the main flow requested.
-                    BridgeGameToGui(mpGuiInputBuffer);
-
-                    // The wrapper has already posted snapshot time26 in the native order.
-
-                    // FLAG world-load stand-in: the console's GameState side reports the
-                    // world-load status as game action 191, which the game module's
-                    // translator (GameBridgeGameStateToX @0x823E9CE0, case 191) forwards to
-                    // the GUI as GuiEvent<136> (load started) / GuiEvent<137> (load
-                    // complete). The SCREEN flow's LOADING state blocks on 137 before it
-                    // hands the flow to the in-game state. The PC has no world streaming
-                    // yet, so its "world load" completes trivially: report loading-complete
-                    // each sub-step while the in-game flow state is live (delivery is
-                    // registration-filtered, so the event only reaches a state that is
-                    // actually waiting on it). The real action-191 producer replaces this
-                    // when the world-streaming pipeline lands.
-                    if (BrnGameMainFlowController::gBrnInGameStateActive)
-                    {
-                        CgsGui::GuiEvent<137> lWorldLoadComplete;
-                        CgsGui::GuiModule::AddGuiEvent(lWorldLoadComplete, mpGuiInputBuffer);
-                    }
-                    // The real PreWorld action193 -> wrapper -> canonical GUI350 route
-                    // replaces the direct stand-in (requires Traffic checkpoint04).
-                    // Retain the existing read-only profile ownership diagnostic.
-                    {
-                        BrnProgression::ProgressionManager* const lpProgressionManager =
-                            mGameStateModule.GetProgressionManager();
-
-                        BrnGui::GuiEventProgressionProfileData lProgressionProfile;
-                        lProgressionProfile.mpProfile          = lpProgressionManager->GetProfile();
-                        lProgressionProfile.mpProgressionData  = lpProgressionManager->GetProgressionData();
-                        lProgressionProfile.mbRoadRulesAvailable =
-                            lpProgressionManager->AreRoadRulesAvailable();
-                        // [DIAG one-profile] NOT IN THE X360 BINARY. The two candidate owners
-                        // side by side, from the ONE place both are addressable, so the claim
-                        // "there is a single Profile" is settled by POINTER IDENTITY and not by
-                        // two log lines 57 apart. Three payload fields as well, because equal
-                        // isNewProfile bytes can agree by coincidence and an event count of
-                        // 120-vs-0 cannot. Reports only on a change of the tuple.
-                        if (CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            const BrnProgression::Profile* const lpcGameStateProfile =
-                                lProgressionProfile.mpProfile;
-                            const BrnProgression::Profile* const lpcProfileManagerProfile =
-                                mGuiModule.GetProfileManager().GetProgressionProfile();
-
-                            struct OneProfileSample
-                            {
-                                const void* mpGameState;
-                                const void* mpProfileManager;
-                                s32         miNewGs;
-                                s32         miNewPm;
-                                u32         muMedalsGs;
-                                u32         muMedalsPm;
-                                u32         muEventsGs;
-                                u32         muEventsPm;
-                                u64         muSpawnCarGs;
-                                u64         muSpawnCarPm;
-                                s32         miRoadRulesGs;
-                                s32         miMaxCarsGs;
-                            };
-                            OneProfileSample lSample;
-                            lSample.mpGameState       = lpcGameStateProfile;
-                            lSample.mpProfileManager  = lpcProfileManagerProfile;
-                            lSample.miNewGs     = (lpcGameStateProfile != 0)
-                                                  ? (lpcGameStateProfile->GetIsNewProfile() ? 1 : 0) : -1;
-                            lSample.miNewPm     = (lpcProfileManagerProfile != 0)
-                                                  ? (lpcProfileManagerProfile->GetIsNewProfile() ? 1 : 0) : -1;
-                            lSample.muMedalsGs  = (lpcGameStateProfile != 0)
-                                                  ? lpcGameStateProfile->GetMedalCountFromTheStart() : 0xFFFFFFFFu;
-                            lSample.muMedalsPm  = (lpcProfileManagerProfile != 0)
-                                                  ? lpcProfileManagerProfile->GetMedalCountFromTheStart() : 0xFFFFFFFFu;
-                            lSample.muEventsGs  = (lpcGameStateProfile != 0)
-                                                  ? lpcGameStateProfile->GetEventCount() : 0xFFFFFFFFu;
-                            lSample.muEventsPm  = (lpcProfileManagerProfile != 0)
-                                                  ? lpcProfileManagerProfile->GetEventCount() : 0xFFFFFFFFu;
-                            // ⭐ THE SECOND FIELD, chosen because it CANNOT agree by coincidence:
-                            // Profile::Construct leaves mSpawnCarId zero and only
-                            // ProgressionManager::OnPlayerCarChange (car select) or a Deserialise
-                            // writes it, so a returning boot that reads back PUSMC01 read it off
-                            // the save. mbIsNewProfile alone is a single byte with two states.
-                            lSample.muSpawnCarGs = (lpcGameStateProfile != 0)
-                                                   ? static_cast<u64>(lpcGameStateProfile->GetSpawnCarId()) : 0u;
-                            lSample.muSpawnCarPm = (lpcProfileManagerProfile != 0)
-                                                   ? static_cast<u64>(lpcProfileManagerProfile->GetSpawnCarId()) : 0u;
-                            // [L4 boot order 2026-09-28] two more fields, the two a profile load has to
-                            // put back: how many of the profile's 64 road-rule rows hold a score
-                            // (StreetManager::Update copies its own tables INTO the profile every frame,
-                            // so a session that never ran StreetManager::OnProfileLoaded drops this to 0)
-                            // and the "CARS OWNED x/Y" denominator (ProgressionManager::OnLoadProfile).
-                            lSample.miRoadRulesGs = -1;
-                            if (lpcGameStateProfile != 0)
-                            {
-                                lSample.miRoadRulesGs = 0;
-                                for (s32 liRow = 0; liRow < 64; ++liRow)
-                                {
-                                    if (lpcGameStateProfile->GetUserChallengeData(liRow)->ContainsData(
-                                            BrnStreetData::E_SCORE_TYPE_COUNT))
-                                    {
-                                        ++lSample.miRoadRulesGs;
-                                    }
-                                }
-                            }
-                            lSample.miMaxCarsGs =
-                                mGameStateModule.GetProgressionManager()->GetMaxCarCount();
-
-                            static bool             sbHaveLast = false;
-                            static OneProfileSample sLast;
-                            if (!sbHaveLast
-                                || std::memcmp(&sLast, &lSample, sizeof(lSample)) != 0)
-                            {
-                                sbHaveLast = true;
-                                sLast      = lSample;
-                                char lacProbe[448];
-                                std::snprintf(
-                                    lacProbe, sizeof(lacProbe),
-                                    "[one-profile] gameState.mProgressionManager.mProfile=%p"
-                                    " profileManager.mpProgressionProfile=%p same=%d |"
-                                    " isNewProfile gs=%d pm=%d | medalsFromTheStart gs=%d pm=%d |"
-                                    " eventCount gs=%d pm=%d | spawnCarId gs=%016llX pm=%016llX |"
-                                    " roadRules gs=%d | maxCars gs=%d\n",
-                                    lSample.mpGameState, lSample.mpProfileManager,
-                                    (lSample.mpGameState == lSample.mpProfileManager) ? 1 : 0,
-                                    lSample.miNewGs, lSample.miNewPm,
-                                    static_cast<s32>(lSample.muMedalsGs),
-                                    static_cast<s32>(lSample.muMedalsPm),
-                                    static_cast<s32>(lSample.muEventsGs),
-                                    static_cast<s32>(lSample.muEventsPm),
-                                    static_cast<unsigned long long>(lSample.muSpawnCarGs),
-                                    static_cast<unsigned long long>(lSample.muSpawnCarPm),
-                                    lSample.miRoadRulesGs, lSample.miMaxCarsGs);
-                                CgsDev::Log::WriteToLog(lacProbe);
-                            }
-                        }
-                    }
-                    // FLAG GameState stand-in (THE CAR-SELECT CAR LIST -- GUI events 406 + 412).
-                    PublishCarSelectionToGui();
-                    mpGuiInputBuffer->UnlockForWrite();
-
-                    // Hand this sub-step's filled buffer to the GUI drive (FLAG bridge
-                    // stand-in: the console passes it through the module scheduler's IO set).
-                    mGuiModule.SetGuiEventInputBuffer(mpGuiInputBuffer);
-                }
-                // GUI module per-frame tick (drives the FSM controller + the HUD flow + the
-                // MovieManager). The X360 ticks this through the module dispatch.
-                //
-                // ⭐ GATED 2026-08-16 (boot audit F-P1-1). The GUI module is no longer
-                // prepared by the time the frame loop starts -- loading stage 2 builds it,
-                // several frames in, with the loading screen up. Ticking an unprepared
-                // module would drive a null FSM controller, flow and MovieManager. The
-                // console never faces the question: its module scheduler does not dispatch
-                // to a module until the module reports prepared, which is the same test.
-                const bool lbGuiPrepared = mGuiModule.IsPrepared();
-                if (lbGuiPrepared)
-                {
-                    // The scheduler's second argument to GuiModule::Update on the console: this
-                    // frame's update set (bit 8 == in-game).
-                    mGuiModule.SetFrameUpdateSet(ConstructUpdateSetFromFsm());
-                    mGuiModule.Update();
-                    mpGuiOutputBuffer->LockForWrite();
-                    mpGuiOutputBuffer->AddGuiOutEvents(mGuiModule.GetGuiOutQueue());
-                    mpGuiOutputBuffer->UnlockForWrite();
-                    // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
-                    // commands (70/71, the loading screen 19/20, ...) the states posted.
-                    BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
-                }
-                // ---- the DIRECTOR's post-GUI pass (X360 module-scheduler order) -----------
-                // It runs BridgeGuiToDirector over the SAME out-queue, so the queue must still
-                // be intact here -- that is why BridgeGuiToGame no longer clears it.
-                DoUpdate_Director(true);
-                // Both GUI out-event consumers have now run; retire this frame's records.
-                // (The console's queue lifecycle is the module scheduler's IO-buffer teardown;
-                // on PC the queue is a module member, so it is cleared explicitly.)
-                // (the retiring Clear moved to the HEAD of this leg -- see F-P3-8 above.)
-                }   // end of the frame-step guard opened above (boot audit F-P3-9)
-
-                // ARTIST DoUpdate's sound leg follows the final camera publication
-                // and effects update. Complete the capture begun before world update.
-
-                // ---- ADOPT THE SERIALISERS THE EFFECTS LEG JUST REGISTERED ----------------
-                // ReplayModule::StoreSerialisers @0x8264B600 is what hands every registered
-                // BaseSerialiser its stream and STATIC buffers out of the replay module's linear
-                // region. On the console it runs from ReplayModule::Update_PostSim @0x8265F618;
-                // that leg is not reconstructed, so it runs here.
-                //
-                // ⚠ AFTER DoUpdate_Effects, NOT BEFORE -- MEASURED (run 9). The first version ran
-                // it just above and adopted NOTHING across a whole 35-second run: the effects
-                // OUTPUT buffer's replay request interface is rebuilt every frame, so before the
-                // effects leg its eleven slots are all null. EffectsModule::Update @0x8229EC28
-                // registers mEffectsSerialiser at its very first statement, so straight after the
-                // leg is the one point in the frame where the interface is populated. (Run 9 also
-                // proves it is not merely stale-by-a-frame: nothing was ever adopted, on any
-                // frame, which only a per-frame clear explains.)
-                //
-                // ⚠ AND UNDER THE READ LOCK, through the CONST accessor. The first version used
-                // the write-lock accessor @0x8227E280 with no lock at all: 3,895 "Not locked for
-                // writing" assertions in one run. This leg only READS the eleven slots, so the
-                // const overload @0x823BAD40 is the right one -- the same read/write pairing
-                // mistake this file's own DoUpdate_Effects made against the game-action queue,
-                // one commit earlier.
-                //
-                // Idempotent by construction (only slots whose pointer changed are touched), so
-                // running it every frame costs one null compare per slot.
-                // DELETE-WHEN ReplayModule::Update_PostSim lands: the call moves there.
-                if (lbRunFullModuleCascade && mpEffectsOutputBuffer != 0)
-                {
-                    mpEffectsOutputBuffer->LockForRead();
-                    const BrnEffects::EffectsIO::OutputBuffer* lpcEffectsOut = mpEffectsOutputBuffer;
-                    mReplayModule.StoreSerialisers(*lpcEffectsOut->GetReplayRequestInterface());
-                    mpEffectsOutputBuffer->UnlockForRead();
-                }
-
-                // ---- THE GAME-STATE POST-WORLD LEG -------------------------------------------
-                // Console DoUpdate order: ... DoUpdate_Effects, DoUpdate_Sound,
-                // DoUpdate_ReplaysPostSim, **DoUpdate_GameStatePostWorld**, DoUpdate_NetworkPostSim.
-                // This position matters for two of its inputs: the director camera it reads the
-                // picture-paradise flag from is the one this step's DoUpdate_Director published, and
-                // the GUI out-queue BridgeGuiToGameState walks holds this step's GUI records.
-                //
-                // The full cascade runs when this sub-step has its network output: InGame and
-                // scripted-load stage 8. Keep the PostWorld producer paired with the PreWorld
-                // consumer above so stage 8 refreshes the active-car snapshot and drains the GUI
-                // carry queue on the next sub-step, as ARTIST does. The same update-set captured
-                // before NetworkPreSim remains valid even if the flow state advances later here.
-                if (lbRunFullModuleCascade)
-                {
-                }
-
-                // ---- the TIMER tick (X360 BrnGameModule::UpdateTimers @0x823BCFD0) ------------
-                // ⭐⭐ MOVED HERE 2026-09-25 (FX-DIRECTOR2) -- the console's position. DoUpdate
-                // @0x823F0AF8 calls it at 0x823F1CFC, the last module leg of the step, straight after
-                // DoUpdate_NetworkPostSim (0x823F1C44). It folds in this step's game-state requests
-                // and the director request MainDirector::Update published in THIS step's
-                // DoUpdate_Director (SetTimestepMultiplier 0x82275148), applies them
-                // (TimerRequestInterface::ApplyToTimers @0x828D7468) and ticks both timers --
-                // Timer::Update @0x828D7320 makes the scale target current at once (0x828D7340, no
-                // ramp). The NEXT sub-step's BridgeTimers snapshots the result, so a request made in
-                // step N is integrated by the world in step N+1.
-                // ⛔ WHAT THE OLD POSITION COST (boot audit F-P3-13 had flagged it, 2026-08-17, and
-                // deferred the move): it ran mid-step, between the world leg and the director, so a
-                // director request was drained one step late and integrated one step after that.
-                // On the h225 s80 crash cell (fxd2on3) the hard stop's 0.000125 reached the world on
-                // the crash's FOURTH frame (f778) instead of its third (f777) -- the frame that takes
-                // the car from 197 to 102 mph ran at 0.016667 -- and every ImpactSlomoController
-                // burst started a frame late the same way. Game-state requests were not affected.
-                // It runs BEFORE the game-action retire below, which clears the game-state output's
-                // request slot this drains.
-                if (lbRunFullModuleCascade)
-                    UpdateTimers();
-
-                {
-                    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-                        mGameStateModule.GetOutputBuffer();
-                    if (lpGameStateOutput != 0)
-                    {
-                        lpGameStateOutput->LockForWrite();
-                        lpGameStateOutput->GetGameActionQueue()->Clear();
-                        lpGameStateOutput->GetTriggerManagementInputInterface()->GetRemoveTriggerEventQueue().Clear();
-                        lpGameStateOutput->GetTriggerQueryInputInterface()->Clear();
-                        lpGameStateOutput->SetSetUpAllEventStartsInterfaceIsValid(false);
-                        lpGameStateOutput->SetSpecificGameModeEventInterfaceIsValid(false);
-                        lpGameStateOutput->GetGameStateToGuiInterface()->Construct();
-                        lpGameStateOutput->UnlockForWrite();
-                    }
-                }
-
-                // ARTIST823F2010..2028: consume actual bind/unbind replies at the
-                // last input-output use. HandleInputBindResult alone advances3->4.
-                if (lbRunFullModuleCascade)
-                {
-                }
-
-                // Every current-frame GUI consumer has finished. This also drops a
-                // skipped/partial batch at the same boundary as the native IO teardown.
-                if (mGuiModule.IsPrepared())
-                    mGuiModule.GetGuiOutQueue()->Clear();
-
-                if (lbRunFullModuleCascade)
-                    LatchDispatchCamera();
-                PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
-
-                if (liStep != miNumSimFramesRequired - 1)
-                {
-                    PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
-                    DestroyStaticIOBuffers();
-                    PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
-                }
-
-                ++liStep;
             }
-            while (liStep < miNumSimFramesRequired);
         }
-        // The resource callback is requested per simulation step above and
-        // consumed once after the dispatch join. Zero-step frames request none.
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_TotalUpdate);
         sbSimUpdateComplete = 1;
-
-        // FLAG: ARTIST 0x823CB498 brackets the per-frame Render with the monitor at
-        // mCpuMonitors+0x4C (=miUT_RenderAll), not +0x50 (miUT_FrustumTesting). Fixed.
         PerfMonCpu::StartMonitor(mCpuMonitors.miUT_RenderAll);
-        {
-            BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
-            if (leState != BrnGameMainFlowController::E_MGS_INVALID)
-            {
-                MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
-                lpState->Render();
-            }
-        }
-
+        const BrnGameMainFlowController::EMainGameFlowState leState =
+            mMainFlowStateMachine.GetCurrentState();
+        if (leState != BrnGameMainFlowController::E_MGS_INVALID)
+            mMainFlowStateMachine.GetState(leState)->Render();
+        DestroyStaticIOBuffers();
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderAll);
         return false;
     }
@@ -3771,63 +3042,24 @@ namespace BrnGame
         CgsModule::UnlockBuffersForIO(lpGameDataInput, lpModelRead, lpGuiRead);
     }
 
+    // ARTIST823BCA58: five persistent per-frame pointers, created in this order.
     void BrnGameModule::CreateStaticIOBuffers()
     {
-        // CreateIOBuffer<T> runs each buffer's own Construct right after the stack alloc, the
-        // same as the X360 instantiations (e.g. CgsGuiModuleIO::InputBuffer @0x823AC898 ->
-        // InputBuffer::Construct @0x82857378, DirectorIO::OutputBuffer @0x823ACBF8). The hand
-        // Construct calls that used to follow each line here are gone -- they would now run
-        // twice, and DirectorIO::OutputBuffer::Construct re-clears a freshly built buffer.
-        mpUpdateInputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer, "Gui");
-        mpUpdateInputBufferStack->CreateIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer, "GuiView");
-        mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer, "Gui");
-        mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer, "GuiModel");
-        mpUpdateOutputBufferStack->CreateIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer, "Director");
-
-        // ⭐ THIS SUB-STEP'S WORLD UPDATE OUTPUT BUFFER (see the header note on
-        // GetWorldUpdateOutputBuffer). The console's DoUpdate owns it for the whole sub-step
-        // other per-sub-step buffers. The world leg (DriveWorldUpdateFrame) drives the world
-        // INTO it and DoUpdate_Director's BridgeWorldToDirector reads it back out.
-        mpUpdateOutputBufferStack->CreateIOBuffer<BrnWorldIO::UpdateOutputBuffer>(
-            &mpWorldUpdateOutputBuffer, "World");
-
-        // THIS SUB-STEP'S EFFECTS OUTPUT BUFFER (see the header note on the member). The
-        // console's DoUpdate @0x823F0AF8 creates it near the top and destroys it at the very
-        mpUpdateOutputBufferStack->CreateIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(
-            &mpEffectsOutputBuffer, "Effects");
-
-        // THIS SUB-STEP'S NETWORK OUTPUT BUFFER (see the header note on the member). The
-        // console's DoUpdate creates it at its top and destroys it at its bottom, and DoUpdate
-        // runs from exactly two places: MainGameFlowStateInGame::Update, and
-        // LoadingScriptedState::Update once the shared load stage reads 8 (below 8 that Update
-        // runs its partial spine instead, which carves its own network buffers). The initial
-        // loading screen never updates the network module; it loads it. So the buffer, and
-        // with it every network leg of this sub-step, exists only in those states. Created
-        // last so it is destroyed first.
-        const BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
-        const bool lbLoadingScriptedState = (leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE)
-                                         && (leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING);
-        if ((leState == BrnGameMainFlowController::E_MGS_IN_GAME)
-            || (lbLoadingScriptedState && gBrnScriptedLoadStage == 8))
-        {
-            mpUpdateOutputBufferStack->CreateIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(
-                &mpNetworkOutputBuffer, "Network");
-        }
+        mpUpdateInputBufferStack->CreateIOBuffer(&mpGuiInputBuffer, "Gui");
+        mpUpdateInputBufferStack->CreateIOBuffer(&mpGuiViewInputBuffer, "GuiView");
+        mpUpdateOutputBufferStack->CreateIOBuffer(&mpGuiOutputBuffer, "Gui");
+        mpUpdateOutputBufferStack->CreateIOBuffer(&mpGuiModelOutputBuffer, "GuiModel");
+        mpUpdateOutputBufferStack->CreateIOBuffer(&mpDirectorOutputBuffer, "Director");
     }
 
-    // @ BrnGameModule.cpp:2515 - free this sub-step's static GUI/director IO buffers (reverse
-    // order of CreateStaticIOBuffers).
+    // ARTIST823BCAF8: destroy the five objects in reverse creation order.
     void BrnGameModule::DestroyStaticIOBuffers()
     {
-        if (mpNetworkOutputBuffer != 0)
-            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(&mpNetworkOutputBuffer);
-        mpUpdateOutputBufferStack->DestroyIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(&mpEffectsOutputBuffer);
-        mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
-        mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);
-        mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer);
-        mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer);
-        mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer);
-        mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer);
+        mpUpdateOutputBufferStack->DestroyIOBuffer(&mpDirectorOutputBuffer);
+        mpUpdateOutputBufferStack->DestroyIOBuffer(&mpGuiModelOutputBuffer);
+        mpUpdateOutputBufferStack->DestroyIOBuffer(&mpGuiOutputBuffer);
+        mpUpdateInputBufferStack->DestroyIOBuffer(&mpGuiViewInputBuffer);
+        mpUpdateInputBufferStack->DestroyIOBuffer(&mpGuiInputBuffer);
     }
 
     // =========================================================================================
@@ -3836,11 +3068,11 @@ namespace BrnGame
     // `IOHelper<PreWorldInputBuffer> lpInputModulePreWorldInputBuffer`, `uint32_t liStartPressedPort`).
     // The first leg of every update step, and the ONLY place the game's rumble requests reach the
     // pads: until it existed RumbleManager's four queues were filled every frame and never drained.
-    //   0x823C5670  StartMonitor(gm+0x996F28 == mCpuMonitors+0x10, miUT_GameState)
+    //   0x823C5670  CgsDev::PerfMonCpu::StartMonitor(gm+0x996F28 == mCpuMonitors+0x10, miUT_GameState)
     //   0x823C5680  IOHelper: CreateIOBuffer<CgsInput::InputIO::PreWorldInputBuffer>(inStack, "InputPreWorld")
     //               (0x823AEE18: Alloc 920 + PreWorldInputBuffer::Construct), asserting
     //               "mpStack->CreateIOBuffer( &mpBuffer, lpcName )" (CgsModuleIOHelper.h:52)
-    //   0x823C56C8  StartMonitor(gm+0x996F9C == mCpuMonitors+0x84, miUT_GameState_Bridge)
+    //   0x823C56C8  CgsDev::PerfMonCpu::StartMonitor(gm+0x996F9C == mCpuMonitors+0x84, miUT_GameState_Bridge)
     //   0x823C56D8  LockForWrite ; GameStateModule::BridgeRumbleToInput(gm+0x669400, buffer,
     //               gm+0x9A0B0C == &mTimerStatusInterface) ; UnlockForWrite ; StopMonitor
     //   0x823C5720  mInputModule (gm+0x6E9630) vtable+0x44 == InputModule::PreWorldUpdate(inStack,
@@ -3848,7 +3080,7 @@ namespace BrnGame
     //   0x823C5738..0x823C57F8  if (miInputModuleState == 1): select the invite user or first
     //               START-pressed pad, then set miInputModuleState = 2
     //   0x823C5808  QueryRequestDoStepFrame(lpInputModuleOutput)                   -- caller unactivated
-    //   0x823C57F8  StopMonitor(miUT_GameState) ; the IOHelper's DestroyIOBuffer (0x823AEEE8) at scope end
+    //   0x823C57F8  CgsDev::PerfMonCpu::StopMonitor(miUT_GameState) ; the IOHelper's DestroyIOBuffer (0x823AEEE8) at scope end
     // =========================================================================================
     u32 BrnGameModule::DoUpdate_InputPreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
                                               CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -3883,7 +3115,7 @@ namespace BrnGame
                     CgsDev::Assert::EndAssert();
                 }
                 liStartPressedPort = lpLaunchData->mdwUserIndex;
-                miInputModuleState = 2;
+                miInputModuleState = E_INPUTBINDSTATE_START_PRESSED;
             }
             else
             {
@@ -3894,7 +3126,7 @@ namespace BrnGame
                     if (((lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_START].muStatus >> 1) & 1) != 0)
                     {
                         liStartPressedPort = static_cast<u32>(liPort);
-                        miInputModuleState = 2;
+                        miInputModuleState = E_INPUTBINDSTATE_START_PRESSED;
                         break;
                     }
                 }
@@ -3956,14 +3188,14 @@ namespace BrnGame
         if (miInputModuleState == 2)
         {
             BindInputToPort(static_cast<s32>(liStartPressedPort), lpPostWorldInputBuffer);
-            miInputModuleState = 3;
+            miInputModuleState = E_INPUTBINDSTATE_BIND_REQUESTED;
         }
         else if (miInputModuleState == 5)
         {
             lpPostWorldInputBuffer->LockForWrite();
             lpPostWorldInputBuffer->PostUnbindRequest(0);
             lpPostWorldInputBuffer->UnlockForWrite();
-            miInputModuleState = 6;
+            miInputModuleState = E_INPUTBINDSTATE_UNBIND_REQUESTED;
         }
 
         CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
@@ -4038,7 +3270,7 @@ namespace BrnGame
         miSecondaryControllerPort = (miPlayer0ControllerPort == 0) ? 1 : 0;
         mDebugManager.SetGamePad(
             mInputModule.mControllers.GetDebugGamePad(miSecondaryControllerPort));
-        miInputModuleState = 4;
+        miInputModuleState = E_INPUTBINDSTATE_BOUND;
     }
 
     // ARTIST 0x823A8D50. Only player 0 changes the game's active-controller state.
@@ -4056,7 +3288,7 @@ namespace BrnGame
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "Active controller invalidated\n";
         mDebugManager.SetGamePad(0);
-        miInputModuleState = 0;
+        miInputModuleState = E_INPUTBINDSTATE_UNBOUND;
     }
 
     // X360 0x823C5580; BrnGameModule.cpp:4013 (DecFIGS).
@@ -4128,17 +3360,11 @@ namespace BrnGame
             {
                 mbSimPaused = true;
                 mSimTimer.SetRunning(false);
-                // [DIAG] NOT IN THE X360 BINARY -- the pause spine's consumer rung.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                    *CgsDev::Log::gpDebugPrint << "[sim-pause] action 86 -> PAUSED (sim timer stopped)\n";
             }
             else if (liAction == 87)
             {
                 mbSimPaused = false;
                 mSimTimer.SetRunning(true);
-                // [DIAG] NOT IN THE X360 BINARY -- the resume rung.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                    *CgsDev::Log::gpDebugPrint << "[sim-pause] action 87 -> RESUMED (sim timer running)\n";
             }
             const CgsModule::Event* lpCurrent = lpEvent;
             liAction = lpActionQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
@@ -4272,14 +3498,14 @@ namespace BrnGame
     // setup) -> GameMain (per-frame update, repeating) -> GameRelease (teardown). meGameUpdateStage
     // is PREPARE(0)/MAIN(1)/RELEASE(2). Returns true to keep the thread alive.
     // ARTIST 0x823C5480: the public frame entry brackets ThreadLayout::Update.
-    // Massive's console hardware callback has no native PC service.
+    // Massive preparation follows the profiling bracket once native modules are loaded.
     void BrnGameModule::Update()
     {
         CgsDev::PerfMonCpu::StartProfiling();
-        {
-        }
         mThreadLayout.Update();
         CgsDev::PerfMonCpu::StopProfiling();
+        if (mHardware.mbEngineModulesLoaded)
+            mHardware.mMassive.Prepare();
     }
 
     bool BrnGameModule::UpdateThread()
@@ -4305,7 +3531,10 @@ namespace BrnGame
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid update stage\n");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid update stage\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1199);
+            CgsDev::Assert::EndAssert();
             break;
         }
         return true;
@@ -4398,7 +3627,7 @@ namespace BrnGame
         {
             const char* lpcKey = lpMessage->GetKey(liIndex);
             if (_stricmp(lpcKey, "StopRenderMetrics") == 0)
-                lpModule->miRenderMetricsRequested = 0;
+                lpModule->muRenderMetricsCount = 0;
         }
     }
 }
