@@ -21,7 +21,7 @@ namespace renderengine
 {
     // X360 0x82B635C8: build {0x20,4}+{0,1}x4 (the SamplerState descriptor) on the stack, copy it
     // into the out descriptor, then accumulate the trailing-raster addend {4,1}+{0,1}x4 with +=.
-    rw::ResourceDescriptor* TextureState::GetResourceDescriptor(rw::ResourceDescriptor* lpDescriptor)
+    rw::ResourceDescriptor TextureState::GetResourceDescriptor(const Parameters&)
     {
         // The accumulated addend: slot0 = {size=4, align=1} (the raster pointer), slots 1..4 = {0,1}.
         rw::BaseResourceDescriptors<5> lAddend;
@@ -43,21 +43,22 @@ namespace renderengine
         lBase.m_baseResourceDescriptors[0].m_size = 0x20;    // X360 64-bit store: low=0x20 (size), high=4 (align)
         lBase.m_baseResourceDescriptors[0].m_alignment = 4;
 
-        std::memcpy(lpDescriptor, &lBase, sizeof(*lpDescriptor));
-        *lpDescriptor += lAddend;
-        return lpDescriptor;
+        rw::ResourceDescriptor lDescriptor;
+        std::memcpy(&lDescriptor, &lBase, sizeof(lDescriptor));
+        lDescriptor += lAddend;
+        return lDescriptor;
     }
 
     // X360 0x82B62720: result = SamplerState::Initialize(lppState, &params); then the raster pointer
     // at params+0x48 is stored into the state's +0x20 slot (asm: lwz r11,0x48(r4); stw r11,0x20(r3)).
-    TextureState* TextureState::Initialize(const rw::Resource* lpResource, const Parameters* lpParams)
+    TextureState* TextureState::Initialize(const rw::Resource& lrResource, const Parameters& lrParams)
     {
         // The shared sampler declaration retains its earlier member spellings;
         // its 0x48-byte parameter representation is the same native prefix.
         SamplerState* const lpResult = SamplerState::Initialize(
-            *lpResource, *lpParams);
+            lrResource, lrParams);
         TextureState* lpState = static_cast<TextureState*>(lpResult);
-        lpState->mpRaster = lpParams->mpTexture;
+        lpState->mpRaster = lrParams.mpTexture;
         return lpState;
     }
 }

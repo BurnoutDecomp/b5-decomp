@@ -30,8 +30,8 @@ namespace renderengine
             Texture* mpTexture;
         };
 
-        static rw::ResourceDescriptor* GetResourceDescriptor(rw::ResourceDescriptor* lpDescriptor);
-        static TextureState* Initialize(const rw::Resource* lpResource, const Parameters* lpParams);
+        static rw::ResourceDescriptor GetResourceDescriptor(const Parameters& lrParams);
+        static TextureState* Initialize(const rw::Resource& lrResource, const Parameters& lrParams);
 
         Texture* mpRaster;
     };
