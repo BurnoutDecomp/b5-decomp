@@ -54,7 +54,6 @@ void GeometryCollisionPredictor::GenerateSceneQueries(const Camera& lrCamera, f3
                                                       const SceneQueryInterface* lpRequestInterface)
 {
     (void)lfTimestep;
-    (void)lrRandom;
 
     const rw::math::vpu::Vector3& lrStart = lrCamera.mTransform.wAxis;
 
