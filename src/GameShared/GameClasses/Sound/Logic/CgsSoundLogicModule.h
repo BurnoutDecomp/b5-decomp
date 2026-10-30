@@ -131,21 +131,14 @@ public:
             arMessage.GetEventId(), static_cast<s32>(sizeof(arMessage)));
     }
 
-    // @ 0x8268D3F0 / @ 0x8268D400 (DWARF :116/:119, virtual). Bind / clear the
-    // logic IO buffer pointers.
+    // ARTIST vtable +0x48 / +0x4C. The base state count is pure virtual.
+    virtual u32 GetUniqueId();
+    virtual s32 GetNumberOfStates() = 0;
+
+    // ARTIST vtable +0x50 / +0x54, 0x8268D3F0 / 0x8268D400.
     virtual void AttachBuffers(CgsModule::IOBuffer* apInputBuffer,
                                CgsModule::IOBuffer* apOutputBuffer);
     virtual void DetachBuffers();
-
-    // @ 0x827E1078 (DWARF :109). FLAG (DEFER): declared-only -- its own slice.
-    virtual u32 GetUniqueId();
-
-    // DWARF :113 -- the state-manager count the CreateEnvironment stage feeds
-    // into the EnvironmentSpec (the vtbl+0x4C dispatch in the Prepare asm). The
-    // BASE default is un-attested (the GameSource SoundLogicModule overrides it
-    // with its real manager census); FLAG'd 0 default keeps the base
-    // instantiable.
-    virtual s32 GetNumberOfStates() { return 0; }
 
     // The embedded playback engine, reachable for the RootSoundModule wiring
     // (console +0x238; the +0x4B8 the root reads is THIS member at root +0x280
