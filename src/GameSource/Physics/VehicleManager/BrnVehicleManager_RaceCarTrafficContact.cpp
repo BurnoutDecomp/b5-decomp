@@ -281,30 +281,23 @@ namespace
         lvDims.z = lvHalf.z - lfRadius;
         lvDims.w = lvHalf.w - lfRadius;
 
-        rw::Resource lResource = {};
+        rw::Resource lResource;
         lResource.m_baseResources[0] = lrStorage.maBytes;
         rw::collision::BoxVolume* const lpVolume = rw::collision::BoxVolume::Initialize(lResource, lvDims);
 
-        lpVolume->maTransform[0] = rw::collision::Vec4{ 1.0f, 0.0f, 0.0f, 0.0f };
-        lpVolume->maTransform[1] = rw::collision::Vec4{ 0.0f, 1.0f, 0.0f, 0.0f };
-        lpVolume->maTransform[2] = rw::collision::Vec4{ 0.0f, 0.0f, 1.0f, 0.0f };
-        lpVolume->maTransform[3] = rw::collision::Vec4{ (lrBox.mMin.x + lrBox.mMax.x) * 0.5f,
+        const rw::collision::Vec4 lvAxis0 = { 1.0f, 0.0f, 0.0f, 0.0f };
+        lpVolume->maTransform[0] = lvAxis0;
+        const rw::collision::Vec4 lvAxis1 = { 0.0f, 1.0f, 0.0f, 0.0f };
+        lpVolume->maTransform[1] = lvAxis1;
+        const rw::collision::Vec4 lvAxis2 = { 0.0f, 0.0f, 1.0f, 0.0f };
+        lpVolume->maTransform[2] = lvAxis2;
+        const rw::collision::Vec4 lvCentre = { (lrBox.mMin.x + lrBox.mMax.x) * 0.5f,
                                                         (lrBox.mMin.y + lrBox.mMax.y) * 0.5f,
                                                         (lrBox.mMin.z + lrBox.mMax.z) * 0.5f,
                                                         (lrBox.mMin.w + lrBox.mMax.w) * 0.5f };
+        lpVolume->maTransform[3] = lvCentre;
         lpVolume->mfRadius = lfRadius;                   // stfs f0/f13, 0x50(box)
         return lpVolume;
-    }
-
-    // [predict] DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). Running totals of the
-    // prediction's verdicts -- a miss is a near miss for a race car and a dropped pair for two
-    // traffic cars, the two arms the old `return true` gate never let run. First 20 calls, then
-    // every 100th. DELETE-WHEN-STABLE.
-    void NotePrediction(u32 luOutcome)   // 0 miss, 1 hit, 2 memo
-    {
-        static u32 s_auCounts[3] = { 0u, 0u, 0u };
-        ++s_auCounts[luOutcome];
-        const u32 luTotal = s_auCounts[0] + s_auCounts[1] + s_auCounts[2];
     }
 
     // 0x825C5D20..0x825C5DA0 (A) / 0x825C5DA4..0x825C5EAC (B).
@@ -340,14 +333,14 @@ bool VehicleManager::PredictCarCarIntersection(const SimpleVehiclePhysics* lpBod
     {
         CGS_ASSERT(IsUnitLength(mCachedCarCarPredictionNormal),
                    "Bad cached normal in PredictCarCarIntersection: ");          // :0x1835
-        NotePrediction(2u);
+
         return mbCachedCarCarPredictionResult;
     }
     if (luBodyA == muCachedCarBSlot && luBodyB == muCachedCarASlot)
     {
         CGS_ASSERT(IsUnitLength(mCachedCarCarPredictionNormal),
                    "Bad cached normal in PredictCarCarIntersection: ");          // :0x183C
-        NotePrediction(2u);
+
         return mbCachedCarCarPredictionResult;
     }
 
@@ -367,7 +360,7 @@ bool VehicleManager::PredictCarCarIntersection(const SimpleVehiclePhysics* lpBod
     if (lbIntersects == 0 || lResult.distance > 0.0f)
     {
         mbCachedCarCarPredictionResult = false;
-        NotePrediction(0u);
+
         return false;
     }
 
@@ -378,7 +371,7 @@ bool VehicleManager::PredictCarCarIntersection(const SimpleVehiclePhysics* lpBod
     CGS_ASSERT(IsUnitLength(mCachedCarCarPredictionNormal),
                "Bad calculated normal in PredictCarCarIntersection: ");          // :0x18A8
     mbCachedCarCarPredictionResult = true;
-    NotePrediction(1u);
+
     return true;
 }
 
