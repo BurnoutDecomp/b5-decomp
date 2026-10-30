@@ -15,7 +15,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"   // CgsSystem::TimerStatusInterface
 #include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
 
-#include <cstdio>    // std::snprintf (the one formatted assert message, see BridgeAIModuleToPhysicsModule)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 // ============================================================================
 // GameSource/World/Bridges/WorldBridgeAIModule.cpp
@@ -240,11 +240,12 @@ void BridgeAIModuleToPhysicsModule(
 {
     const BrnWorld::WorldModule* const lpModule = static_cast<const BrnWorld::WorldModule*>(lpWorldModule);
 
-    CGS_ASSERT(lpAIOutputBuffer != 0, "lpAIOutputBuffer != NULL");   // :40
-    // [GUARD] the console dereferences it unconditionally at 0x827AAAF0.
-    if (lpAIOutputBuffer == 0)
+    const char* const lpSourceFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/Bridges/WorldBridgeAIToPhysics.cpp";
+    if (!lpAIOutputBuffer)
     {
-        return;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpAIOutputBuffer != NULL", lpSourceFile, 40);
+        CgsDev::Assert::EndAssert();
     }
 
     const BrnPhysics::Vehicle::VehicleDriverInputInterface* const lpSourceDriver =
@@ -259,10 +260,13 @@ void BridgeAIModuleToPhysicsModule(
     // once for the compare, once for the stream). 8 == BrnWorld::KI_MAX_ACTIVE_RACE_CARS.
     if (lpSourceQueue->GetLength() > 8)
     {
-        char lacMessage[96];
-        std::snprintf(lacMessage, sizeof(lacMessage), "AI Driver Queue is too long. %d entries!\n",
-                      static_cast<int>(lpSourceQueue->GetLength()));
-        CGS_ASSERT(false, lacMessage);
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer,
+                                  CgsDev::Assert::giMessageBufferSize);
+        lStream.Reset();
+        lStream << "AI Driver Queue is too long. " << lpSourceQueue->GetLength() << " entries!\n";
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(), lpSourceFile, 49);
+        CgsDev::Assert::EndAssert();
     }
 
     const CgsModule::Event* lpEvent = 0;
