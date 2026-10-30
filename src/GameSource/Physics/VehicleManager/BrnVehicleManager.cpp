@@ -287,16 +287,14 @@ namespace Vehicle
                 liGrindingType = 8;
             if (liGrindingType != -1)
             {
-                ImpactIoEventRecord lEvent = { {}, static_cast<EImpactType>(liGrindingType),
-                    static_cast<EActiveRaceCarIndex>(-1), static_cast<EActiveRaceCarIndex>(-1) };
+                ImpactIoEventRecord lEvent;
+                lEvent.meImpactType = static_cast<EImpactType>(liGrindingType);
+                lEvent.meAggressorIndex = static_cast<EActiveRaceCarIndex>(-1);
+                lEvent.meVictimIndex = static_cast<EActiveRaceCarIndex>(-1);
                 lpVehicleOutputInterface->GetGameEventQueue()->AddEventSafe(&lEvent, 31, sizeof(lEvent));
             }
         }
         CheckForAllTypesOfImpacts(&lInfo);
-        {
-            static s32 saiVerdicts[2] = {};
-            s32& siVerdicts = saiVerdicts[lbPlayerInvolved];
-        }
         if (lInfo.mbCrashRaceCarA)
             SetRaceCarCrashing(lContact.mEntityIdA, lContact.mEntityIdB,
                 lContact.mNormal, lContact.mPointOnA, lpRequestOutputInterface,
@@ -332,23 +330,15 @@ namespace Vehicle
                 lpVehicleOutputInterface->FlagTakedownScoredForDriver(lInfo.mbPlayerWonImpact);
                 if (muTakedownEventsThisFrame < 32)
                 {
-                    ImpactIoEventRecord lEvent = { {}, lInfo.meImpactType,
-                        lInfo.meAggressorActiveRaceCarIndex, lInfo.meVictimActiveRaceCarIndex };
+                    ImpactIoEventRecord lEvent;
+                    lEvent.meImpactType = lInfo.meImpactType;
+                    lEvent.meAggressorIndex = lInfo.meAggressorActiveRaceCarIndex;
+                    lEvent.meVictimIndex = lInfo.meVictimActiveRaceCarIndex;
                     ++muTakedownEventsThisFrame;
                     lpVehicleOutputInterface->GetGameEventQueue()->AddEvent(&lEvent, 31, sizeof(lEvent));
                 }
             }
             GenerateContactSituation(&lInfo);
-
-            f32 lfWPreSlamVictim = 0.0f;
-            f32 lfWPreSlamAggressor = 0.0f;
-            s32 liWPreSlamNumber = 0;
-            if (lbWReact)
-            {
-                lfWPreSlamVictim    = maRaceCarVehicles[lInfo.meVictimActiveRaceCarIndex].mfSlamSteering;
-                lfWPreSlamAggressor = maRaceCarVehicles[lInfo.meAggressorActiveRaceCarIndex].mfSlamSteering;
-                liWPreSlamNumber    = maRaceCarVehicles[lInfo.meVictimActiveRaceCarIndex].mSlamEffect.mi8SlamNumber;
-            }
 
             if (mbAllowSlamsAndShuntsEffectsForRivals)
             {
@@ -901,7 +891,8 @@ namespace Vehicle
     // inline encode in the heavier classifiers.
     static inline EntityId MakeRaceCarEntityId(u32 luEntityIndex)
     {
-        return EntityId{ (luEntityIndex << 10) | 0x1000000u };
+        EntityId lId = { (luEntityIndex << 10) | 0x1000000u };
+        return lId;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -1294,8 +1285,8 @@ namespace Vehicle
 
 
         bool lbFired = false;
-        EntityId lVictimId{};
-        EntityId lAggressorId{};
+        EntityId lVictimId = { 0 };
+        EntityId lAggressorId = { 0 };
 
         // CheckForVerticalTakedownSituation is recovered
         // (@0x825C56D8 -- victim car + CONTACT POINT, the 80%-footprint test) and the two gates
