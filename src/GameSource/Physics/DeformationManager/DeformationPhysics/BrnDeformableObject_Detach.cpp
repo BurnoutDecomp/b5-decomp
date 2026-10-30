@@ -11,13 +11,9 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"     // DeformationOutputInterface::mDetachedPartNotificationQueue
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"                 // DetachedPartNotificationEvent
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags ([detach-probe])
 
 #include <cmath>    // std::exp / std::log -- the vexptefp / vlogefp angular-decay refinement converges here
-#include <cstdlib>  // getenv ([detach-probe] latch)
 
-// [DIAG] the host-side present counter ([jb-exit] lastExhaust rows only).
-namespace renderengine { extern u32 guPresentCount; }
 
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject_Detach.cpp
@@ -246,19 +242,6 @@ namespace Deformation
         // DELETE-WHEN the detach question is closed and banked.
         // =========================================================================================
 
-        // [jb-exit] NOT X360 -- FX-WITNESS 2026-09-24, BRN_JB_EXIT_DIAG=1. The ONE per-hinge refusal
-        // the forwarder's [jb-exit] row cannot see, because TestJointForBreaking is never called: a
-        // hinged exhaust (type 84/85) while it is the last attached one (miNumAttachedExhausts <= 1,
-        // 0x8263ACC8). Printed at the skip with `exit lastExhaust`, capped at 2000 lines.
-        inline bool JbExitDetachOn()
-        {
-            static s32 siOn = -1;
-            if ( siOn < 0 )
-            {
-            }
-            return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
-        }
-        u32 guJbExitExhaustLines = 0u;
     }
 
     // =============================================================================================
@@ -319,8 +302,6 @@ namespace Deformation
         //   lwz  r11, 26232(r31) ;         cmpwi  0 ; ble  -> return   (miNumIKBodyParts > 0)
         // The middle test is a 4-BYTE load of +26460 == meAbsorptionSet, NOT the "is every part
         // already shed" predicate this file used to synthesise. An INVINCIBLE car sheds nothing.
-        // [detach-probe] gate witness -- see the block at the top of this file.
-        s32 liProbeAttached = 0, liProbeHinged = 0, liProbeArmAHits = 0, liProbeJointBreaks = 0;
 
         if ( mi16NumPhysicalParts < KI_MAX_PHYSICAL_PARTS
              && meAbsorptionSet != E_ABSORPTIONSET_INVINCIBLE   // +26460 (asm-proven)
@@ -342,10 +323,8 @@ namespace Deformation
                     // a2 (the accumulated-impulse arg) + a 16-byte scratch out (v17).
                     s32 liDetachJointOut = 0;                          // v17[] scratch
                     const f32 lfImpulse = lfTimeStep;                  // a2 (the impulse arg; see note below)
-                    if ( lbProbe ) { ++liProbeAttached; }
                     if ( maIKParts[li].CheckForDetachment(lfImpulse, liDetachJointOut) )
                     {
-                        if ( lbProbe ) { ++liProbeArmAHits; }
                         // ⭐⭐⭐ CORRECTED 2026-09-05 (detach wave) -- THE HINGE ARGUMENT WAS DROPPED, AND
                         // WITH IT THE CONSOLE'S ENTIRE FIRST STAGE OF SHEDDING A PANEL.
                         // This site used to pass `(/*liJointIndex*/ 0, /*lbHinge*/ false)`, i.e. EVERY
@@ -382,7 +361,6 @@ namespace Deformation
                 }
                 else if ( lu8State == KU_PART_STATE_HINGED )
                 {
-                    if ( lbProbe ) { ++liProbeHinged; }
                     // Structural-part predicate: type == 84 || type == 85 (the asm's v13/v14 latch).
                     const s32 liType = static_cast<s32>(maIKParts[li].GetPartType());   // *(*v9 + 476)
                     const bool lbStructural =
@@ -401,7 +379,6 @@ namespace Deformation
                         const s32 liJointHandle = maIKParts[li].GetPartPoolIndex();   // v9[2]
                         if ( lpPartMgr->TestJointForBreaking(liJointHandle, lpInput, lpOutput) )
                         {
-                            if ( lbProbe ) { ++liProbeJointBreaks; }
                             // The joint broke. There must be a hinged part to consume.
                             CGS_ASSERT(mi16NumHingedParts > 0, "mi16NumHingedParts > 0");
 
@@ -414,20 +391,7 @@ namespace Deformation
                                 --miNumAttachedExhausts;                  // --*(_R31 + 26400) (lhz/sth)
                         }
                     }
-                    else if ( JbExitDetachOn() && guJbExitExhaustLines < 2000u )
-                    {
-                        // [jb-exit] (DIAG) -- the last-exhaust skip; reads only.
-                        ++guJbExitExhaustLines;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[jb-exit] step " << guDiagDeformationStep
-                            << " present " << renderengine::guPresentCount
-                            << " ent " << mGlobalEntityId.muValue
-                            << " ik " << li
-                            << " pool " << static_cast<s32>(maIKParts[li].GetPartPoolIndex())
-                            << " type " << liType
-                            << " exit lastExhaust exhausts " << static_cast<s32>(miNumAttachedExhausts)
-                            << "\n";
-                    }
+
                 }
             }
         }
@@ -440,35 +404,7 @@ namespace Deformation
         // both faithful and observationally inert; it was NOT a fifth kill switch.
         (void)lfTimeStep;
 
-        // [detach-probe] gate witness. Prints EVERY call it is enabled for, including the calls where
-        // nothing happens -- that is the whole point.
-        if ( lbProbe )
-        {
-            static u32 sluProbeCalls = 0;
-            static s32 siLastPhysical = -1;
-            ++sluProbeCalls;
-            const bool lbInteresting = ( liProbeArmAHits > 0 || liProbeJointBreaks > 0
-                                      || static_cast<s32>(mi16NumPhysicalParts) != siLastPhysical );
-            if ( lbInteresting || (sluProbeCalls % 600u) == 0u )
-            {
-                siLastPhysical = static_cast<s32>(mi16NumPhysicalParts);
-                *CgsDev::Log::gpDebugPrint
-                    << "[detach-gate] call " << static_cast<s32>(sluProbeCalls)
-                    << " ent " << static_cast<s32>(mGlobalEntityId.muValue)
-                    << " nPhys " << static_cast<s32>(mi16NumPhysicalParts)
-                    << " nHinged " << static_cast<s32>(mi16NumHingedParts)
-                    << " absorb " << static_cast<s32>(meAbsorptionSet)
-                    << " ikReq " << (mbIKUpdateRequired ? 1 : 0)
-                    << " nIK " << miNumIKBodyParts
-                    << " exhausts " << static_cast<s32>(miNumAttachedExhausts)
-                    << " forceHinge " << static_cast<s32>(mi8NumPartsToForceHinging)
-                    << " attachedSeen " << liProbeAttached
-                    << " hingedSeen " << liProbeHinged
-                    << " armAHits " << liProbeArmAHits
-                    << " jointBreaks " << liProbeJointBreaks
-                    << "\n";
-            }
-        }
+
     }
 
     // =============================================================================================
