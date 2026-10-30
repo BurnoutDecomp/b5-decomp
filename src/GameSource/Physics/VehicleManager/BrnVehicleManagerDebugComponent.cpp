@@ -596,18 +596,18 @@ namespace Vehicle
                        && (lrRearLeft.z == lrRearLeft.z),
                    "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
 
-        const Vector3 lvFrontMidpointCarSpace{
+        const Vector3 lvFrontMidpointCarSpace = {
             (lrFrontRight.x + lrFrontLeft.x) * 0.5f,
             (lrFrontRight.y + lrFrontLeft.y) * 0.5f,
             (lrFrontRight.z + lrFrontLeft.z) * 0.5f,
             (lrFrontRight.w + lrFrontLeft.w) * 0.5f };
-        const Vector3 lvRearMidpointCarSpace{
+        const Vector3 lvRearMidpointCarSpace = {
             (lrRearRight.x + lrRearLeft.x) * 0.5f,
             (lrRearRight.y + lrRearLeft.y) * 0.5f,
             (lrRearRight.z + lrRearLeft.z) * 0.5f,
             (lrRearRight.w + lrRearLeft.w) * 0.5f };
 
-        const Vector3 lvFrontStart{
+        const Vector3 lvFrontStart = {
             lrTransform.wAxis.x + lrTransform.xAxis.x * lvFrontMidpointCarSpace.x
                 + lrTransform.yAxis.x * lvFrontMidpointCarSpace.y + lrTransform.zAxis.x * lvFrontMidpointCarSpace.z,
             lrTransform.wAxis.y + lrTransform.xAxis.y * lvFrontMidpointCarSpace.x
@@ -616,7 +616,7 @@ namespace Vehicle
                 + lrTransform.yAxis.z * lvFrontMidpointCarSpace.y + lrTransform.zAxis.z * lvFrontMidpointCarSpace.z,
             lrTransform.wAxis.w + lrTransform.xAxis.w * lvFrontMidpointCarSpace.x
                 + lrTransform.yAxis.w * lvFrontMidpointCarSpace.y + lrTransform.zAxis.w * lvFrontMidpointCarSpace.z };
-        const Vector3 lvRearStart{
+        const Vector3 lvRearStart = {
             lrTransform.wAxis.x + lrTransform.xAxis.x * lvRearMidpointCarSpace.x
                 + lrTransform.yAxis.x * lvRearMidpointCarSpace.y + lrTransform.zAxis.x * lvRearMidpointCarSpace.z,
             lrTransform.wAxis.y + lrTransform.xAxis.y * lvRearMidpointCarSpace.x
@@ -642,11 +642,13 @@ namespace Vehicle
 
         const Vector3 lvRaceCarHalfExtent = mLastTrafficContact_RaceCarHalfExt;
         const Vector3 lvTrafficHalfExtent = mLastTrafficContact_TrafficHalfExt;
-        lpRender->DrawBox(Vector3{ -lvRaceCarHalfExtent.x, -lvRaceCarHalfExtent.y,
-                                   -lvRaceCarHalfExtent.z, -lvRaceCarHalfExtent.w },
+        const Vector3 lvRaceCarMinimum = { -lvRaceCarHalfExtent.x, -lvRaceCarHalfExtent.y,
+                                           -lvRaceCarHalfExtent.z, -lvRaceCarHalfExtent.w };
+        lpRender->DrawBox(lvRaceCarMinimum,
                           lvRaceCarHalfExtent, mLastTrafficContact_RaceCarTransform, WorldDebugColour(0xFF0000FFu));
-        lpRender->DrawBox(Vector3{ -lvTrafficHalfExtent.x, -lvTrafficHalfExtent.y,
-                                   -lvTrafficHalfExtent.z, -lvTrafficHalfExtent.w },
+        const Vector3 lvTrafficMinimum = { -lvTrafficHalfExtent.x, -lvTrafficHalfExtent.y,
+                                           -lvTrafficHalfExtent.z, -lvTrafficHalfExtent.w };
+        lpRender->DrawBox(lvTrafficMinimum,
                           lvTrafficHalfExtent, mLastTrafficContact_TrafficTransform, WorldDebugColour(0xFF00FF00u));
 
         const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = mLastTrafficContact_Contact;
@@ -664,7 +666,7 @@ namespace Vehicle
                             mLastTrafficContact_TrafficTransform.wAxis + lvTrafficVelocityOffset,
                             WorldDebugColour(0xFF00FF00u));
 
-        const Vector3 lvWorldUp{ 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lvWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
         const Vector3 lvActualTextPosition = lvContactNormalEnd - lvWorldUp * 0.1f;
         lpRender->DrawText(lvActualTextPosition, "actual", 17.0f);
     }
@@ -677,8 +679,8 @@ namespace Vehicle
         CGS_ASSERT(lpRender != 0, "lpDisplay != NULL"); // :1006
 
         const Vector3 lvHalfExtent = mLastCrashContact_RaceCarHalfExt;
-        lpRender->DrawBox(Vector3{ -lvHalfExtent.x, -lvHalfExtent.y,
-                                   -lvHalfExtent.z, -lvHalfExtent.w },
+        const Vector3 lvMinimum = { -lvHalfExtent.x, -lvHalfExtent.y, -lvHalfExtent.z, -lvHalfExtent.w };
+        lpRender->DrawBox(lvMinimum,
                           lvHalfExtent, mLastCrashContact_RaceCarTransform, WorldDebugColour(0xFF0000FFu));
 
         const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = mLastCrashContact_Contact;
@@ -715,7 +717,7 @@ namespace Vehicle
             lTargetTransform.wAxis = lTargetTransform.wAxis - lvTargetCOMOffset;
 
             const Vector3 lvHalfExtent = lrCar.GetHalfExtent();
-            const Vector3 lvBoxMinimum{ -lvHalfExtent.x, -lvHalfExtent.y,
+            const Vector3 lvBoxMinimum = { -lvHalfExtent.x, -lvHalfExtent.y,
                                         -lvHalfExtent.z, -lvHalfExtent.w };
             const Vector3 lvBoxMaximum = lvHalfExtent;
             lpRender->DrawBox(lvBoxMinimum, lvBoxMaximum, lTargetTransform, WorldDebugColour(0xFFFFFFFFu));
@@ -723,7 +725,7 @@ namespace Vehicle
             const Vector3 lvCurrentPosition = lrCar.GetGraphicsVehicleTransform().wAxis;
             lpRender->DrawArrow(lvCurrentPosition, lTargetTransform.wAxis, WorldDebugColour(0xFFFFFFFFu));
 
-            const Vector3 lvWorldUp{ 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector3 lvWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
             const Vector3 lvTextPosition = lTargetTransform.wAxis + lvWorldUp * 1.5f;
             lpRender->DrawText(lvTextPosition, lrCar.IsFrozen() ? "Frozen" : "Not frozen", 20.0f);
         }
@@ -749,7 +751,7 @@ namespace Vehicle
 
         Vector3 lvCacheSphere;
         std::memcpy(&lvCacheSphere, lrManager.mStuckInCollisionTestCacheSphere, sizeof(lvCacheSphere));
-        const Vector3 lvSphereCentre{ lvCacheSphere.x, lvCacheSphere.y, lvCacheSphere.z, 0.0f };
+        const Vector3 lvSphereCentre = { lvCacheSphere.x, lvCacheSphere.y, lvCacheSphere.z, 0.0f };
         lpRender->DrawHollowSphere(lvSphereCentre, lvCacheSphere.w, WorldDebugColour(0xFFFFFFFFu));
 
         for (s32 liLine = 0; liLine < KI_MAX_WORLD_CONTACT_SPIES; ++liLine)
@@ -1109,10 +1111,10 @@ namespace Vehicle
         // from 4 to 8 bytes leaves sizeof(V) at 1296 (the 16-byte tail padding absorbs it), and a
         // tamper test caught exactly that: the sizeof assert below MISSED the wrong array count.
         // The end-of-DATA pin is what catches it -- 1284 - 480 == 804, the loop's own trip count.
-        CGS_STATIC_ASSERT((sizeof(V::mabStuckInCollisionIntersection) == KI_MAX_WORLD_CONTACT_SPIES),
+        CGS_STATIC_ASSERT((sizeof(((V*)0)->mabStuckInCollisionIntersection) == KI_MAX_WORLD_CONTACT_SPIES),
                       "one intersection flag per line test (the tail loop's stbx count)");
         CGS_STATIC_ASSERT((offsetof(V, mabStuckInCollisionIntersection)
-                          + sizeof(V::mabStuckInCollisionIntersection) - KI_HEAD == 804),
+                          + sizeof(((V*)0)->mabStuckInCollisionIntersection) - KI_HEAD == 804),
                       "the class's last DATA byte is X360 +1284");
 
         // The whole tail is 816 bytes (1296 - 480), i.e. the class ends exactly where
