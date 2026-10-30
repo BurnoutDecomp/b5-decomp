@@ -153,18 +153,13 @@ namespace Vehicle
         bool                        mbFullyDrivableFromCrash;        // @1110
         E_DRIVER_TYPE               meDriverType;                    // @1112
 
-        // The array `RaceCarState maRaceCarStates[8]` is default-constructed, but declaring
-        // a copy ctor below would suppress the implicit default ctor -- so provide one. The
-        // X360 default-constructed each element via Clear() (callers Attach/Construct call
-        // Clear()), so route the default ctor through Clear() to reproduce that init (NOT
-        // `= default`, since the X360 default state is the Clear() state: identity
-        // transforms etc., not all-zero).
-        RaceCarState() { Clear(); }
+        // ARTIST827E44B8 leaves the embedded race-car snapshot bytes untouched.
+        // The copy constructor suppresses an implicit default, so provide the empty form.
+        RaceCarState() {}
 
         // Copy ctor @0x8220A4C0: the X360 body is a pure bitwise copy of the whole object
-        // (memcpy 448 + memcpy 48 + VMX 16-byte matrix copies + word loops). RaceCarState is
-        // trivially copyable, so a defaulted copy ctor reproduces it exactly. Defined in the
-        // .cpp via `= default` (kept out-of-line so this ledger func has a definition site).
+        // (memcpy 448 + memcpy 48 + VMX 16-byte matrix copies + word loops).
+        // It leaves the byte before meDriverType and the trailing alignment bytes untouched.
         RaceCarState(const RaceCarState&);
 
         // Ledger func @0x8229FFC8 -- defined in the .cpp.

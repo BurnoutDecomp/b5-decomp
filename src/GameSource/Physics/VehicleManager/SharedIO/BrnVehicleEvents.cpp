@@ -75,17 +75,43 @@ void RaceCarState::Clear()
     mEntityId.muValue = CgsSceneManager::K_INVALID_ENTITY_ID;
 }
 
-// @0x8220A4C0 -- pure bitwise copy of the whole object; trivially copyable => defaulted.
-RaceCarState::RaceCarState(const RaceCarState&) = default;
+// ARTIST8220A4C0 copies through the final bool, then the driver enum. It does
+// not write the intervening alignment byte or the trailing object alignment.
+RaceCarState::RaceCarState(const RaceCarState& lrOther)
+{
+    memcpy(this, &lrOther, offsetof(RaceCarState, mfSpeedMPH));
+    mfSpeedMPH = lrOther.mfSpeedMPH;
+    mfMaxSpeedMPH = lrOther.mfMaxSpeedMPH;
+    mfMaxBoostSpeedMPH = lrOther.mfMaxBoostSpeedMPH;
+    mfRPM = lrOther.mfRPM;
+    mfUpShiftRPM = lrOther.mfUpShiftRPM;
+    mfDownShiftRPM = lrOther.mfDownShiftRPM;
+    mfAbsDriftScale = lrOther.mfAbsDriftScale;
+    mfTimeDrifting = lrOther.mfTimeDrifting;
+    mfTimeInAir = lrOther.mfTimeInAir;
+    mfGas = lrOther.mfGas;
+    mfBrake = lrOther.mfBrake;
+    mfHandBrake = lrOther.mfHandBrake;
+    mfSteering = lrOther.mfSteering;
+    mfTimeBoosting = lrOther.mfTimeBoosting;
+    mfInProgressBarrelRollAngle = lrOther.mfInProgressBarrelRollAngle;
+    mfInProgressAirSpinAngle = lrOther.mfInProgressAirSpinAngle;
+    mfInProgressHandbreakTurnAngle = lrOther.mfInProgressHandbreakTurnAngle;
+    mfInProgressDriftTime = lrOther.mfInProgressDriftTime;
+    mfInProgressDriftDistance = lrOther.mfInProgressDriftDistance;
+    mfTimeSinceLastRaceCarContact = lrOther.mfTimeSinceLastRaceCarContact;
+    mfTimeCrashing = lrOther.mfTimeCrashing;
+    memcpy(mafGearRatios, lrOther.mafGearRatios, sizeof(mafGearRatios));
+    memcpy(&muStuntActionInProgress, &lrOther.muStuntActionInProgress,
+           offsetof(RaceCarState, mbFullyDrivableFromCrash) + sizeof(mbFullyDrivableFromCrash)
+               - offsetof(RaceCarState, muStuntActionInProgress));
+    meDriverType = lrOther.meDriverType;
+}
 
 // ============================================================================
 // operator= (DWARF :214, returns void). No X360 address -- the build inlined every
-// assignment site, and the copy constructor above proves the shape: a pure bitwise copy
-// of the whole 1120-byte object.
-//
-// The member copy is spelled out rather than memcpy'd only where it costs nothing: the
-// whole object is standard-layout scalars/arrays, so the bitwise copy IS the member-wise
-// copy, and it is what the console emits.
+// assignment site. This existing assignment implementation is separate from the
+// X360 copy constructor above; its behavior has not been re-verified in this pass.
 // ============================================================================
 void RaceCarState::operator=(const RaceCarState& lrOther)
 {
