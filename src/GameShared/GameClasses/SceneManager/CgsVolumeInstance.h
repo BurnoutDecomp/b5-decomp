@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                           // Matrix44Affine / Vector3
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"  // VolumeInstanceId
+#include "GameShared/GameClasses/Containers/CgsObjectPool.h"
 
 // CgsSceneManager::VolumeInstance - one live collision-volume placement: the
 // world transform, its owning entity/volume indices and the cached-triangle
@@ -87,7 +88,7 @@ namespace CgsSceneManager
     const u8 KU8_VOLUME_INSTANCE_FLAG_COLLIDABLE = 1;
     const u8 KU8_VOLUME_INSTANCE_FLAG_CACHED     = 2;
 
-    struct VolumeInstance
+    struct CGS_ALIGN(32) VolumeInstance
     {
         Matrix44Affine   mWorldSpaceTransform;       // h:48 (X360 +0x00)
         Vector3          mPadding;                   // h:49 (X360 +0x40; DWARF's own name)
@@ -175,4 +176,12 @@ namespace CgsSceneManager
                   "VolumeInstance::mPadding is one 16-byte lane (X360 stvx128 v127,r3,0x40)");
     CGS_STATIC_ASSERT((sizeof(((VolumeInstance*)0)->mx8Flags) == 1),
                   "VolumeInstance::mx8Flags is a byte (X360 lbz/stb at +0x6A)");
+}
+
+namespace CgsContainers
+{
+    // DecFIGS IDA type metadata declares this pool 64-aligned; ARTIST attests
+    // its offsets and extent. Scene constructor 0x827E1E30 does not clear it.
+    template <> struct CGS_ALIGN(64) ObjectPoolAlignment<CgsSceneManager::VolumeInstance, 5048> {};
+    template <> inline ObjectPool<CgsSceneManager::VolumeInstance, 5048, s32>::ObjectPool() {}
 }

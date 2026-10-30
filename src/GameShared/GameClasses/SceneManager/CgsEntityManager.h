@@ -83,12 +83,11 @@ namespace CgsContainers
 {
     // ARTIST SceneManagerModule constructor 0x827E1E30 does not clear these pools.
     template <> inline ObjectPool<CgsSceneManager::SceneManagerEntity, 10000, s32>::ObjectPool() {}
-    template <> inline ObjectPool<CgsSceneManager::VolumeInstance, 5048, s32>::ObjectPool() {}
 }
 
 namespace CgsSceneManager
 {
-    class EntityManager
+    class CGS_ALIGN(128) EntityManager
     {
     public:
         void Construct(VolumeManager* lpVolumeManager);
