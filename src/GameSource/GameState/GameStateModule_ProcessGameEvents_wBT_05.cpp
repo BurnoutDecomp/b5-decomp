@@ -566,11 +566,10 @@ void GameStateModule::ProcessGameEvents_Group5(s32                              
         const GameStateModuleIO::StuntMultiplierEvent* lpMultiplierEvent =
             reinterpret_cast<const GameStateModuleIO::StuntMultiplierEvent*>(lpEvent);
         CGS_ASSERT(lpMultiplierEvent, "lpMultiplierEvent");
-        // The console hands the whole 64-bit word over; ScoringSystem::SetNetworkStuntMultiplier
-        // declares that parameter as an s32.
+        // ARTIST loads the full event payload into r6 with ld; preserve all 64 bits.
         mModeManager.GetScoringSystem()->SetNetworkStuntMultiplier(lpMultiplierEvent->mNetworkPlayerID,
                                                                    lpMultiplierEvent->miStuntMultiplier,
-                                                                   static_cast<s32>(lpMultiplierEvent->mi64MultiplierData));
+                                                                   lpMultiplierEvent->mi64MultiplierData);
         break;
     }
 
