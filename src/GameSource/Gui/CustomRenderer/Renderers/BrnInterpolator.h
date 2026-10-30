@@ -50,6 +50,10 @@ public:
     {
     }
 
+    struct NoDataInitTag {};
+    explicit Interpolator(NoDataInitTag)
+        : mfStartTime(KF_UnsetSentinel), mfEndTime(KF_UnsetSentinel) {}
+
     // h:54 -- forget the segment (both time keys back to the sentinel).
     void Invalidate()
     {

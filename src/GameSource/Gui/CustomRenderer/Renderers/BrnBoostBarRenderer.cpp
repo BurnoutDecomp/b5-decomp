@@ -1,4 +1,6 @@
 #include "BrnBoostBarRenderer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
+#include <cfloat>
 #include <cstdlib>   // std::getenv (the [boost-bar] 206 witness)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT + the Begin/Fire/EndAssert front-end
@@ -164,8 +166,12 @@ static const Vector3* const KAPV3_OUTER_BY_TYPE[3] =
 // "nothing carved" condition). The one explicit store the members do not cover is the perfmon
 // handle sentinel.
 BoostBarRenderer::BoostBarRenderer()
+    : mChunkGainInterpolator(Interpolator<f32>::NoDataInitTag()),
+      mBoostAmountInterpolator(Interpolator<f32>::NoDataInitTag()),
+      mBoostGainInterpolator(Interpolator<f32>::NoDataInitTag()),
+      mChainedBoostInterpolator(Interpolator<f32>::NoDataInitTag()),
+      mVisibilityInterpolator(Interpolator<f32>::NoDataInitTag())
 {
-    miBoostBarPM = -1;   // guest +53456 -1 store (Construct re-seeds it before AddMonitor)
 }
 
 // Faithful port of X360 Construct @0x8245A9A0 (with the PS3 0x401220 export as the member-name
@@ -179,7 +185,7 @@ void BoostBarRenderer::Construct()
     meReleaseStage      = E_RELEASESTAGE_START;     // guest +12
     meBoostBarStatus    = E_STATUS_INVALID;         // guest +16
     meBoostBarMultiplier = E_MULTIPLIER_1X;         // guest +20
-    mfLastTime          = -3.4028235e38f;           // guest +24
+    mfLastTime          = -FLT_MAX;           // guest +24
 
     // The six colour slots seed straight from the per-type constants (@0x8245A9F4-.. the six
     // lvx128/stvx128 pairs: outer[danger/aggression/stunt] then inner[...]).
@@ -235,14 +241,14 @@ void BoostBarRenderer::Construct()
     mGuiEventBoostInfo.mbIsTailgating          = false;
     mPreviousGuiEventBoostInfo                 = mGuiEventBoostInfo;
 
-    mfIsEarningBoostStartTime = -3.4028235e38f;     // guest +188
+    mfIsEarningBoostStartTime = -FLT_MAX;     // guest +188
     mfIsBoostingProp          = 0.0f;               // guest +192
-    mfSlamGainStartTime       = -3.4028235e38f;     // guest +196
-    mfSlamLossStartTime       = -3.4028235e38f;     // guest +200
+    mfSlamGainStartTime       = -FLT_MAX;     // guest +196
+    mfSlamLossStartTime       = -FLT_MAX;     // guest +200
 
     mChunkGainInterpolator.Invalidate();            // guest +212/+216 sentinel stores
     mfChunkGainPreviousMaxBoost = 0.0f;             // guest +220
-    mfChunkGainShakeStartTime   = -3.4028235e38f;   // guest +224
+    mfChunkGainShakeStartTime   = -FLT_MAX;   // guest +224
 
     mfChunkLossStartTime        = 0.0f;             // guest +228
     mfChunkLossEndTime          = 0.0f;             // guest +232
@@ -267,7 +273,7 @@ void BoostBarRenderer::Construct()
     // The amount interpolator holds a flat zero segment over all time (@ +1396..+1408:
     // {start 0 @ t=0, end 0 @ t=+FLT_MAX}); gain/chained stay ctor-invalidated.
     mBoostAmountInterpolator.SetStart(0.0f, 0.0f);
-    mBoostAmountInterpolator.SetEnd(0.0f, 3.4028235e38f);
+    mBoostAmountInterpolator.SetEnd(0.0f, FLT_MAX);
 
     mVisibilityInterpolator.Invalidate();           // guest +1452/+1456
     meVisibilityFadeState = E_VISIBILITY_FULL;      // guest +1460 = 3
@@ -400,22 +406,6 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
         {
             // The 28-byte payload copied whole (the console's 7-dword loop into +132).
             mGuiEventBoostInfo = *reinterpret_cast<const GuiEventBoostInfo*>(lpEvent);
-
-            if (!sbFirst206Logged && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbFirst206Logged = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[boost-bar] first 206: max=" << mGuiEventBoostInfo.mfMaxBoost
-                    << " amt=" << mGuiEventBoostInfo.mfBoostAmount
-                    << " allowed=" << (mGuiEventBoostInfo.mbAllowedToBoost ? 1 : 0)
-                    << " type=" << static_cast<s32>(mGuiEventBoostInfo.meBoostType) << "\n";
-            }
-            // [DIAG] NOT IN THE X360 BINARY -- BRN_BOOST_TICKER_DIAG: every 30th 206 payload
-            // plus the bar's eased value, so a film of the bar can be read against what the
-            // game-state actually sent it (owner report 2026-09-15: "the boost bar is broken").
-            {
-                static u32 suCount = 0;
-            }
 
             if (mGuiEventBoostInfo.mfMaxBoost <= 0.0f)
             {
@@ -553,35 +543,14 @@ namespace
                                                           u32 luAddressU)
     {
         renderengine::TextureState::Parameters lParams;
-        lParams.muAddressU      = luAddressU;
-        lParams.muAddressV      = 2;
-        lParams.muAddressW      = 0;
-        lParams.muMagFilter     = 1;
-        lParams.muMinFilter     = 1;
-        lParams.muMipFilter     = 2;
-        lParams.muField6        = 0;
-        lParams.muField7        = 0;
-        lParams.muMaxAnisotropy = 13;
-        lParams.muField9        = 0;
-        lParams.muField10       = 1;
-        lParams.mfMipLodBias    = 0.0f;
-        lParams.mfField12       = 0.0f;
-        lParams.muField13       = 0;
-        lParams.muField14       = 0;
-        lParams.muField15       = 0;
-        lParams.mu8Field40      = 0;
-        lParams.mu8Field41      = 0;
-        lParams.mu8Field42      = 0;
-        lParams.mu8Field43      = 1;
-        lParams.mu8Field44      = 1;
-        lParams.mpTexture       = const_cast<renderengine::Texture*>(lpTexture);
-
-        // Size + carve the state's backing memory through the allocator (the console's
-        // GetResourceDescriptor + vtbl DoAllocate pair), then initialise the state over it.
-        renderengine::ResourceDescriptor5 lDescriptor;
-        renderengine::TextureState::GetResourceDescriptor(reinterpret_cast<u32*>(&lDescriptor));
-        lrResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
+        lParams.muAddressU = luAddressU;
+        lParams.muAddressV = 2;
+        lParams.muMagFilter = 1;
+        lParams.muMinFilter = 1;
+        lParams.mpTexture = const_cast<renderengine::Texture*>(lpTexture);
+        rw::ResourceDescriptor lDescriptor;
+        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        lrResource = lpAllocator->DoAllocate(lDescriptor, 0);
         return renderengine::TextureState::Initialize(&lrResource, &lParams);
     }
 }
@@ -590,7 +559,9 @@ void BoostBarRenderer::InitResources()
 {
     CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
-    const renderengine::Texture* lpWhiteTexture = 0;
+    const CgsGraphics::ImRendererBase::StateLibrary& lrStates = CgsGraphics::ImRendererBase::GetStateLibrary();
+    const renderengine::Texture* lpWhiteTexture = lrStates.mpTexture_White;
+    CGS_ASSERT(lpWhiteTexture != 0, "lpTexture!=NULL");
 
     struct SlotBuild
     {
@@ -623,8 +594,6 @@ void BoostBarRenderer::InitResources()
         if (lrBuild.liCacheId < 0)
         {
             lpTexture = lpWhiteTexture;
-            // The console's :726 assert names the white global; the PC fold's null is a
-            // documented deviation (see the banner), so the assert is not reproduced for it.
         }
         else
         {
@@ -634,29 +603,16 @@ void BoostBarRenderer::InitResources()
         }
         *lrBuild.lppState = BuildBoostBarTextureState(mpHeapAllocator, *lrBuild.lpResource,
                                                       lpTexture, lrBuild.luAddressU);
+        switch (luSlot)
+        {
+        case 2: mBillboardRenderer[0].Construct(mpHeapAllocator, 32, *lrBuild.lppState, lrStates.mpBlendState_Standard, 1, 1, 0); break;
+        case 4: mBillboardRenderer[1].Construct(mpHeapAllocator, 32, *lrBuild.lppState, lrStates.mpBlendState_Standard, 4, 8, 0); break;
+        case 5: mBillboardRenderer[2].Construct(mpHeapAllocator, 32, *lrBuild.lppState, lrStates.mpBlendState_Additive, 4, 5, 0); break;
+        case 6: mBillboardRenderer[3].Construct(mpHeapAllocator, 32, *lrBuild.lppState, lrStates.mpBlendState_Standard, 4, 8, 0); break;
+        case 9: mBillboardRenderer[4].Construct(mpHeapAllocator, 32, *lrBuild.lppState, lrStates.mpBlendState_Standard, 4, 4, 0); break;
+        case 10: mBillboardRenderer[5].Construct(mpHeapAllocator, 32, *lrBuild.lppState, lrStates.mpBlendState_Additive, 12, 7, 0); mBillboardRenderer[5].SetAnimMode(CgsGui::BillboardRenderer::E_CLAMP); break;
+        }
     }
-
-    // The six billboard-effect renderers, each Constructed over its texture state as soon as
-    // that state exists on the console (interleaved with the builds above; gathered here after
-    // the loop -- same states, same configs, no observable difference). Configs verbatim from
-    // the six X360 Construct calls (max 32 billboards each; atlas framesX x framesY; the blend
-    // pointers are the state-table entries dword_83010F20/dword_83010F24 -- the additive slot
-    // goes to the fire-overlay and grow-fireball effects):
-    //   [0] background    1x1   standard      [1] fire body     4x8   standard
-    //   [2] fire overlay  4x5   ADDITIVE      [3] end cap       4x8   standard
-    //   [4] boosting flame 4x4  standard      [5] grow fireball 12x7  ADDITIVE
-    mBillboardRenderer[0].Construct(mpHeapAllocator, 32, mpBackgroundTextureState,
-                                    CgsGui::gpGuiBlendStateStandard, 1, 1, 0);
-    mBillboardRenderer[1].Construct(mpHeapAllocator, 32, mpFireBodyTextureState,
-                                    CgsGui::gpGuiBlendStateStandard, 4, 8, 0);
-    mBillboardRenderer[2].Construct(mpHeapAllocator, 32, mpFireOverTextureState,
-                                    CgsGui::gpGuiBlendStateAdditive, 4, 5, 0);
-    mBillboardRenderer[3].Construct(mpHeapAllocator, 32, mpEndCapTextureState,
-                                    CgsGui::gpGuiBlendStateStandard, 4, 8, 0);
-    mBillboardRenderer[4].Construct(mpHeapAllocator, 32, mpBoostingFlameTextureState,
-                                    CgsGui::gpGuiBlendStateStandard, 4, 4, 0);
-    mBillboardRenderer[5].Construct(mpHeapAllocator, 32, mpGrowFireballTextureState,
-                                    CgsGui::gpGuiBlendStateAdditive, 12, 7, 0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1047,14 +1003,16 @@ void BoostBarRenderer::RenderDebugFireBody(const Vector4& lv4FireRect,
         s32 liFrame = static_cast<s32>(lfTimeNow * 30.0f);
         for (s32 liCell = 0; liCell < liCount; ++liCell)
         {
-            CgsGui::BillboardInfo lInfo = {};
-            lInfo.mfPosX         = lfX0 + static_cast<f32>(liCell) *
+            CgsGui::BillboardInfo lInfo;
+            lInfo.mv2Pos.z = lInfo.mv2Pos.w = 0.0f;
+            lInfo.mv2Size.z = lInfo.mv2Size.w = 0.0f;
+            lInfo.mv2Pos.x         = lfX0 + static_cast<f32>(liCell) *
                                           (KF_FIRE_BODY_X_SIZE * 0.80000001f);
-            lInfo.mfPosY         = lfCentreY;
+            lInfo.mv2Pos.y         = lfCentreY;
             lInfo.mfRotation     = 0.0f;
-            lInfo.mfSizeX        = KF_FIRE_BODY_X_SIZE;
-            lInfo.mfSizeY        = lfHeight * KF_FIRE_BODY_Y_SCALE;
-            lInfo.muDiffuse      = PackBillboardDiffuse(lv4FireColour);
+            lInfo.mv2Size.x        = KF_FIRE_BODY_X_SIZE;
+            lInfo.mv2Size.y        = lfHeight * KF_FIRE_BODY_Y_SCALE;
+            lInfo.mcDiffuse.m_rgba      = PackBillboardDiffuse(lv4FireColour);
             lInfo.miTextureFrame = liFrame;
             maBillboards.Append(lInfo);
             liFrame += 7;   // the fire body's per-cell animation stagger
@@ -1102,13 +1060,15 @@ void BoostBarRenderer::RenderDebugFireOverlay(const Vector4& lv4FireRect,
         const s32 liFrame   = static_cast<s32>(lfTimeNow * 30.0f);
         for (s32 liCell = 0; liCell < liCount; ++liCell)
         {
-            CgsGui::BillboardInfo lInfo = {};
-            lInfo.mfPosX         = 0.1f * 0.5f + lv4FireRect.x + static_cast<f32>(liCell) * 0.1f;
-            lInfo.mfPosY         = lfCentreY + 0.004999999888f;
+            CgsGui::BillboardInfo lInfo;
+            lInfo.mv2Pos.z = lInfo.mv2Pos.w = 0.0f;
+            lInfo.mv2Size.z = lInfo.mv2Size.w = 0.0f;
+            lInfo.mv2Pos.x         = 0.1f * 0.5f + lv4FireRect.x + static_cast<f32>(liCell) * 0.1f;
+            lInfo.mv2Pos.y         = lfCentreY + 0.004999999888f;
             lInfo.mfRotation     = 0.0f;
-            lInfo.mfSizeX        = 0.1f;
-            lInfo.mfSizeY        = lfHeight * 0.69999999f;
-            lInfo.muDiffuse      = luDiffuse;
+            lInfo.mv2Size.x        = 0.1f;
+            lInfo.mv2Size.y        = lfHeight * 0.69999999f;
+            lInfo.mcDiffuse.m_rgba      = luDiffuse;
             lInfo.miTextureFrame = liFrame;
             maBillboards.Append(lInfo);
         }
@@ -1143,13 +1103,15 @@ void BoostBarRenderer::RenderDebugFireEndCap(const Vector4& lv4FireRect,
     const f32 lfHeight  = lv4FireRect.w - lv4FireRect.y;
     const f32 lfCentreY = (lv4FireRect.y + lv4FireRect.w) * 0.5f - 0.0080000004f;
 
-    CgsGui::BillboardInfo lInfo = {};
-    lInfo.mfPosX         = lv4FireRect.z + sfEndCapOffset;
-    lInfo.mfPosY         = lfCentreY;
+    CgsGui::BillboardInfo lInfo;
+            lInfo.mv2Pos.z = lInfo.mv2Pos.w = 0.0f;
+            lInfo.mv2Size.z = lInfo.mv2Size.w = 0.0f;
+    lInfo.mv2Pos.x         = lv4FireRect.z + sfEndCapOffset;
+    lInfo.mv2Pos.y         = lfCentreY;
     lInfo.mfRotation     = 0.0f;
-    lInfo.mfSizeX        = KF_FIRE_BODY_ENDCAP_X_SIZE;
-    lInfo.mfSizeY        = lfHeight * KF_FIRE_BODY_Y_SCALE;
-    lInfo.muDiffuse      = PackBillboardDiffuse(lv4FireColour);
+    lInfo.mv2Size.x        = KF_FIRE_BODY_ENDCAP_X_SIZE;
+    lInfo.mv2Size.y        = lfHeight * KF_FIRE_BODY_Y_SCALE;
+    lInfo.mcDiffuse.m_rgba      = PackBillboardDiffuse(lv4FireColour);
     lInfo.miTextureFrame = static_cast<s32>(lfTimeNow * 30.0f);
     maBillboards.Append(lInfo);
 
@@ -1347,13 +1309,15 @@ void BoostBarRenderer::RenderBillboardBar(const Vector4& lv4Rect, f32 lfProporti
 
     const f32 lfHeight = lv4Rect.w - lv4Rect.y;
 
-    CgsGui::BillboardInfo lSeed = {};
-    lSeed.mfPosX         = lv4Rect.x + lfProportion * 0.5f;
-    lSeed.mfPosY         = lv4Rect.y + lfHeight * 0.5f;
+    CgsGui::BillboardInfo lSeed;
+    lSeed.mv2Pos.z = lSeed.mv2Pos.w = 0.0f;
+    lSeed.mv2Size.z = lSeed.mv2Size.w = 0.0f;
+    lSeed.mv2Pos.x         = lv4Rect.x + lfProportion * 0.5f;
+    lSeed.mv2Pos.y         = lv4Rect.y + lfHeight * 0.5f;
     lSeed.mfRotation     = 0.0f;
-    lSeed.mfSizeX        = lfProportion;
-    lSeed.mfSizeY        = lfHeight;
-    lSeed.muDiffuse      = PackBillboardDiffuse(lv4Colour);
+    lSeed.mv2Size.x        = lfProportion;
+    lSeed.mv2Size.y        = lfHeight;
+    lSeed.mcDiffuse.m_rgba      = PackBillboardDiffuse(lv4Colour);
     lSeed.miTextureFrame = static_cast<s32>(lfTime * 30.0f);
     maBillboards.Append(lSeed);
 
@@ -1363,7 +1327,7 @@ void BoostBarRenderer::RenderBillboardBar(const Vector4& lv4Rect, f32 lfProporti
     for (s32 liCell = 0; liCell < liCells; ++liCell)
     {
         CgsGui::BillboardInfo lNext = maBillboards.GetItem(static_cast<u32>(liCell));
-        lNext.mfPosX += lfProportion;
+        lNext.mv2Pos.x += lfProportion;
         maBillboards.Append(lNext);
     }
 
@@ -1425,13 +1389,15 @@ void BoostBarRenderer::RenderFire(const Vector4& lv4Rect, const Vector4& lv4Colo
         s32 liFrame = static_cast<s32>(lfTimeNow * 30.0f);
         for (s32 liCell = 0; liCell < liNumBillboards; ++liCell)
         {
-            CgsGui::BillboardInfo lInfo = {};
-            lInfo.mfPosX         = lfBodyX0 + static_cast<f32>(liCell) * lfPitch;
-            lInfo.mfPosY         = lfBodyY;
+            CgsGui::BillboardInfo lInfo;
+            lInfo.mv2Pos.z = lInfo.mv2Pos.w = 0.0f;
+            lInfo.mv2Size.z = lInfo.mv2Size.w = 0.0f;
+            lInfo.mv2Pos.x         = lfBodyX0 + static_cast<f32>(liCell) * lfPitch;
+            lInfo.mv2Pos.y         = lfBodyY;
             lInfo.mfRotation     = 0.0f;
-            lInfo.mfSizeX        = KF_FIRE_BODY_X_SIZE;
-            lInfo.mfSizeY        = lfBodySizeY;
-            lInfo.muDiffuse      = PackBillboardDiffuse(lv4Colour);
+            lInfo.mv2Size.x        = KF_FIRE_BODY_X_SIZE;
+            lInfo.mv2Size.y        = lfBodySizeY;
+            lInfo.mcDiffuse.m_rgba      = PackBillboardDiffuse(lv4Colour);
             lInfo.miTextureFrame = liFrame;
             maBillboards.Append(lInfo);
             liFrame += 7;
@@ -1448,13 +1414,15 @@ void BoostBarRenderer::RenderFire(const Vector4& lv4Rect, const Vector4& lv4Colo
     // ---- pass 2: the end cap (unconditional) -------------------------------------------
     maBillboards.Clear();
     {
-        CgsGui::BillboardInfo lInfo = {};
-        lInfo.mfPosX         = lv4Rect.z + KF_FIRE_BODY_ENDCAP_OFFSET;
-        lInfo.mfPosY         = lfBodyY;
+        CgsGui::BillboardInfo lInfo;
+            lInfo.mv2Pos.z = lInfo.mv2Pos.w = 0.0f;
+            lInfo.mv2Size.z = lInfo.mv2Size.w = 0.0f;
+        lInfo.mv2Pos.x         = lv4Rect.z + KF_FIRE_BODY_ENDCAP_OFFSET;
+        lInfo.mv2Pos.y         = lfBodyY;
         lInfo.mfRotation     = 0.0f;
-        lInfo.mfSizeX        = KF_FIRE_BODY_ENDCAP_X_SIZE;
-        lInfo.mfSizeY        = lfBodySizeY;
-        lInfo.muDiffuse      = PackBillboardDiffuse(lv4Colour);
+        lInfo.mv2Size.x        = KF_FIRE_BODY_ENDCAP_X_SIZE;
+        lInfo.mv2Size.y        = lfBodySizeY;
+        lInfo.mcDiffuse.m_rgba      = PackBillboardDiffuse(lv4Colour);
         lInfo.miTextureFrame = static_cast<s32>(lfTimeNow * 30.0f);
         maBillboards.Append(lInfo);
     }
@@ -1487,13 +1455,15 @@ void BoostBarRenderer::RenderFire(const Vector4& lv4Rect, const Vector4& lv4Colo
         const f32 lfOverlayY      = lfBodyY + 0.004999999888f;
         for (s32 liCell = 0; liCell < liNumBillboards; ++liCell)
         {
-            CgsGui::BillboardInfo lInfo = {};
-            lInfo.mfPosX         = lfOverlayX0 + static_cast<f32>(liCell) * smv2OverlaySize.x;
-            lInfo.mfPosY         = lfOverlayY;
+            CgsGui::BillboardInfo lInfo;
+            lInfo.mv2Pos.z = lInfo.mv2Pos.w = 0.0f;
+            lInfo.mv2Size.z = lInfo.mv2Size.w = 0.0f;
+            lInfo.mv2Pos.x         = lfOverlayX0 + static_cast<f32>(liCell) * smv2OverlaySize.x;
+            lInfo.mv2Pos.y         = lfOverlayY;
             lInfo.mfRotation     = 0.0f;
-            lInfo.mfSizeX        = smv2OverlaySize.x;
-            lInfo.mfSizeY        = smv2OverlaySize.y;
-            lInfo.muDiffuse      = luDiffuse;
+            lInfo.mv2Size.x        = smv2OverlaySize.x;
+            lInfo.mv2Size.y        = smv2OverlaySize.y;
+            lInfo.mcDiffuse.m_rgba      = luDiffuse;
             lInfo.miTextureFrame = liOverlayFrame;
             maBillboards.Append(lInfo);
         }
@@ -1728,7 +1698,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
 
     // The X360-only first-frame seed (absent from the PS3 build): an unset last-time backfills
     // one frame behind before the latch.
-    if (mfLastTime == -3.4028235e38f)
+    if (mfLastTime == -FLT_MAX)
         mfLastTime = lfTimeNow - mpGuiCache->GetTimeStep();
     mfLastTime = lfTimeNow;
 
@@ -1927,17 +1897,19 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
             if (lfFlameAlpha < 0.0f) lfFlameAlpha = 0.0f;
             if (lfFlameAlpha > 1.0f) lfFlameAlpha = 1.0f;
 
-            CgsGui::BillboardInfo lInfo = {};
-            lInfo.mfPosX     = lv4BoostRect.z - KF_BOOSTING_FLAME_X_SCALE +
+            CgsGui::BillboardInfo lInfo;
+            lInfo.mv2Pos.z = lInfo.mv2Pos.w = 0.0f;
+            lInfo.mv2Size.z = lInfo.mv2Size.w = 0.0f;
+            lInfo.mv2Pos.x     = lv4BoostRect.z - KF_BOOSTING_FLAME_X_SCALE +
                                0.5f * mfIsBoostingProp * KF_BOOSTING_FLAME_X_SCALE +
                                KF_BOOSTING_FLAME_X_OFFSET;
-            lInfo.mfPosY     = lfBarCentreY + KF_BOOSTING_FLAME_Y_OFFSET;
+            lInfo.mv2Pos.y     = lfBarCentreY + KF_BOOSTING_FLAME_Y_OFFSET;
             lInfo.mfRotation = 0.0f;
-            lInfo.mfSizeX    = mfIsBoostingProp * lfFlameSizeX;
-            lInfo.mfSizeY    = mfIsBoostingProp * lfFlameSizeY;
+            lInfo.mv2Size.x    = mfIsBoostingProp * lfFlameSizeX;
+            lInfo.mv2Size.y    = mfIsBoostingProp * lfFlameSizeY;
             Vector4 lv4FlameColour = lv4Colour;
             lv4FlameColour.w *= lfFlameAlpha;
-            lInfo.muDiffuse      = PackBillboardDiffuse(lv4FlameColour);
+            lInfo.mcDiffuse.m_rgba      = PackBillboardDiffuse(lv4FlameColour);
             lInfo.miTextureFrame = static_cast<s32>(lfTimeNow * 30.0f);
             maBillboards.Append(lInfo);
 
@@ -2027,13 +1999,15 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
             const f32 lfX = lv4BoostRect.x + (lfTargetX - lv4BoostRect.x) *
                             mBoostGainInterpolator.GetCurrentValue(lfTimeNow);
 
-            CgsGui::BillboardInfo lInfo = {};
-            lInfo.mfPosX         = lfX;
-            lInfo.mfPosY         = lfBarCentreY;
+            CgsGui::BillboardInfo lInfo;
+            lInfo.mv2Pos.z = lInfo.mv2Pos.w = 0.0f;
+            lInfo.mv2Size.z = lInfo.mv2Size.w = 0.0f;
+            lInfo.mv2Pos.x         = lfX;
+            lInfo.mv2Pos.y         = lfBarCentreY;
             lInfo.mfRotation     = 0.0f;
-            lInfo.mfSizeX        = KF_GROW_FIREBALL_X_SIZE;
-            lInfo.mfSizeY        = KF_GROW_FIREBALL_Y_SCALE * lfBarHeight;
-            lInfo.muDiffuse      = PackBillboardDiffuse(lv4Colour);
+            lInfo.mv2Size.x        = KF_GROW_FIREBALL_X_SIZE;
+            lInfo.mv2Size.y        = KF_GROW_FIREBALL_Y_SCALE * lfBarHeight;
+            lInfo.mcDiffuse.m_rgba      = PackBillboardDiffuse(lv4Colour);
             lInfo.miTextureFrame = static_cast<s32>(lfSlamGainElapsed * 60.0f);
             maBillboards.Append(lInfo);
 

@@ -246,12 +246,12 @@ void BillboardRenderer::Render(
         // next drawn billboard). Stride is six vertices per drawn billboard.
         CgsGraphics::Basic2dColouredTexturedVertex* lpQuad = &maVertexList[6 * liRenderedCount];
 
-        const f32 lfPosX     = lrBillboard.mfPosX;
-        const f32 lfPosY     = lrBillboard.mfPosY;
-        const f32 lfSizeX    = lrBillboard.mfSizeX;
-        const f32 lfSizeY    = lrBillboard.mfSizeY;
+        const f32 lfPosX     = lrBillboard.mv2Pos.x;
+        const f32 lfPosY     = lrBillboard.mv2Pos.y;
+        const f32 lfSizeX    = lrBillboard.mv2Size.x;
+        const f32 lfSizeY    = lrBillboard.mv2Size.y;
         const f32 lfRotation = lrBillboard.mfRotation;
-        const u32 luColour   = PackVertexColour(lrBillboard.muDiffuse);
+        const u32 luColour   = PackVertexColour(lrBillboard.mcDiffuse.m_rgba);
 
         // Half-extents rotated into screen space. The unrotated case skips the trig (and uses exact
         // zeros for the cross terms). lfDx/lfDy are the along-axis half-extents, lfSx/lfSy the
