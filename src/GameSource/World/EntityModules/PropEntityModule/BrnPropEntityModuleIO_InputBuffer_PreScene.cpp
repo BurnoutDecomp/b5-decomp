@@ -173,7 +173,7 @@ InputBuffer_PreScene::_AssertLayout()
 
     // The nine `stvx128` slots Construct zeroes: one position + eight velocities, 16B each.
     CGS_STATIC_ASSERT((sizeof(Vector3) == 16), "one SIMD lane per vector");
-    CGS_STATIC_ASSERT((sizeof(maRaceCarVelocity) == 8 * 16),
+    CGS_STATIC_ASSERT((sizeof(((InputBuffer_PreScene*)0)->maRaceCarVelocity) == 8 * 16),
                   "maRaceCarVelocity[8] -- the 0x700..0x770 stvx128 run");
 
     // 300000 bits == 37504 bytes == the memcpy size PreSceneUpdate uses for the profile's
