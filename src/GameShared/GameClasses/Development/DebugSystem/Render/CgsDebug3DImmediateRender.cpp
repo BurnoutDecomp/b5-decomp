@@ -4,6 +4,10 @@
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
+#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+#if defined(_XBOX)
+#include <vectorintrinsics.h>
+#endif
 
 #include <cmath>
 #include <cstring>
@@ -14,28 +18,32 @@
 
 namespace
 {
-    using rw::math::vpu::Matrix44;
-    using rw::math::vpu::Matrix44Affine;
-    using rw::math::vpu::Vector3;
 
-    Debug3DRenderStates sgDebug3DRenderStates;
+    renderengine::BlendMaterialState* sgBlend;
+    renderengine::DepthStencilState* sgDepth2D;
+    renderengine::DepthStencilState* sgDepth3D;
+    renderengine::RasterizerState* sgRasterizer;
+    Vector3 Make3(f32 x, f32 y, f32 z, f32 w)
+    { const Vector3 value = {x, y, z, w}; return value; }
+    rw::math::vpu::Vector2 Make2(f32 x, f32 y, f32 z, f32 w)
+    { const rw::math::vpu::Vector2 value = {x, y, z, w}; return value; }
 
     const f32 KF_PI = 3.14159265358979323846f;
     const f32 KF_TWO_PI = KF_PI * 2.0f;
 
     Vector3 Add3(Vector3 lA, Vector3 lB)
     {
-        return { lA.x + lB.x, lA.y + lB.y, lA.z + lB.z, 0.0f };
+        const Vector3 value = { lA.x + lB.x, lA.y + lB.y, lA.z + lB.z, 0.0f }; return value;
     }
 
     Vector3 Subtract3(Vector3 lA, Vector3 lB)
     {
-        return { lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f };
+        const Vector3 value = { lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f }; return value;
     }
 
     Vector3 Scale3(Vector3 lValue, f32 lfScale)
     {
-        return { lValue.x * lfScale, lValue.y * lfScale, lValue.z * lfScale, 0.0f };
+        const Vector3 value = { lValue.x * lfScale, lValue.y * lfScale, lValue.z * lfScale, 0.0f }; return value;
     }
 
     f32 Dot3(Vector3 lA, Vector3 lB)
@@ -45,12 +53,12 @@ namespace
 
     Vector3 Cross3(Vector3 lA, Vector3 lB)
     {
-        return {
+        const Vector3 value = {
             lA.y * lB.z - lA.z * lB.y,
             lA.z * lB.x - lA.x * lB.z,
             lA.x * lB.y - lA.y * lB.x,
             0.0f,
-        };
+        }; return value;
     }
 
     f32 Length3(Vector3 lValue)
@@ -62,7 +70,7 @@ namespace
     {
         const f32 lfLength = Length3(lValue);
         return lfLength > 0.000001f ? Scale3(lValue, 1.0f / lfLength)
-                                    : Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+                                    : Make3( 0.0f, 1.0f, 0.0f, 0.0f );
     }
 
     Matrix44Affine IdentityAffine()
@@ -76,8 +84,8 @@ namespace
     {
         lNormal = Normalise(lNormal);
         const Vector3 lReference = std::fabs(lNormal.y) < 0.75f
-            ? Vector3{ 0.0f, 1.0f, 0.0f, 0.0f }
-            : Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+            ? Make3( 0.0f, 1.0f, 0.0f, 0.0f )
+            : Make3( 1.0f, 0.0f, 0.0f, 0.0f );
         lrRight = Normalise(Cross3(lReference, lNormal));
         lrUp = Normalise(Cross3(lNormal, lrRight));
     }
@@ -93,12 +101,12 @@ namespace
         const f32 x = lrVertex.mv3Pos.x;
         const f32 y = lrVertex.mv3Pos.y;
         const f32 z = lrVertex.mv3Pos.z;
-        return {
+        const ClipPoint value = {
             lrMatrix.xAxis.x * x + lrMatrix.yAxis.x * y + lrMatrix.zAxis.x * z + lrMatrix.wAxis.x,
             lrMatrix.xAxis.y * x + lrMatrix.yAxis.y * y + lrMatrix.zAxis.y * z + lrMatrix.wAxis.y,
             lrMatrix.xAxis.z * x + lrMatrix.yAxis.z * y + lrMatrix.zAxis.z * z + lrMatrix.wAxis.z,
             lrMatrix.xAxis.w * x + lrMatrix.yAxis.w * y + lrMatrix.zAxis.w * z + lrMatrix.wAxis.w,
-        };
+        }; return value;
     }
 }
 
@@ -110,14 +118,14 @@ namespace CgsDev
         meProjectionMode = E_PROJECTION_3D;
         meDrawingMode = E_DRAWING_COUNT;
         meZTestEnable = E_ZTEST_ON;
-        mPointBoxRadius = { 0.05f, 0.05f, 0.05f, 0.0f };
+        mPointBoxRadius = Make3(0.05f, 0.05f, 0.05f, 0.0f);
         mfVirtualScreenWidth = lfVirtualScreenWidth;
         mfVirtualScreenHeight = lfVirtualScreenHeight;
         mpRenderBuffer = 0;
         CreateDebugRenderStates(lpAllocator);
         mpFont.Clear();
         mVectorFont.Construct();
-        mVectorFont.SetSize({10.0f, 10.0f, 0.0f, 0.0f});
+        mVectorFont.SetSize(Make2(10.0f, 10.0f, 0.0f, 0.0f));
         mVectorFont.SetRenderer(this);
         mTextRenderer.Construct();
         miIm3dVertsHead = 0;
@@ -128,42 +136,50 @@ namespace CgsDev
     }
 
     // ARTIST 82818B68: construct the same blend, depth-on/write-off,
-    // depth-off and rasterizer states once. Native storage replaces arena handles.
+    // depth-off and rasterizer states once, allocated through the resource allocator.
     void Debug3DImmediateRender::CreateDebugRenderStates(rw::IResourceAllocator* lpAllocator)
     {
-        (void)lpAllocator;
         static bool sbCreated = false;
         if (sbCreated) return;
-        auto& lrStates = sgDebug3DRenderStates;
-        renderengine::BlendStateParameters lBlend = {};
-        for (u32& luFactor : lBlend.maBlendFactor) luFactor = 0x07060706u;
+        renderengine::BlendStateParameters lBlend = {0};
+        for (u32 i = 0; i < 4; ++i) lBlend.maBlendFactor[i] = 0x07060706u;
+        lBlend.maBlendFactor[0] = 0x07060706u | (899u << 1);
         lBlend.muState15 = 7;
         lBlend.muState4 = lBlend.muState5 = lBlend.muState6 = lBlend.muState7 = 15;
         lBlend.muState8 = 135;
         lBlend.muState9 = 0xFFFFFFFFu;
         lBlend.mbHasCustomBlendFactors = 1;
-        auto* lpBlend = &lrStates.mBlend;
-        renderengine::BlendState::Initialize(&lpBlend, &lBlend);
+        renderengine::ResourceDescriptor5 descriptor;
+        renderengine::BlendMaterialState* blendHandles[5] = {0};
+        renderengine::BlendState::GetResourceDescriptor(&descriptor, &lBlend);
+        CgsGraphics::ResourceAllocatorCreate(lpAllocator, blendHandles, &descriptor);
+        sgBlend = static_cast<renderengine::BlendMaterialState*>(renderengine::BlendState::Initialize(blendHandles, &lBlend));
 
-        renderengine::DepthStencilState::Parameters lDepth = {};
+        renderengine::DepthStencilState::Parameters lDepth = {0};
         lDepth.muFunction = 3;
         lDepth.muState4 = lDepth.muState8 = 7;
         lDepth.muStencilReadMask = lDepth.muStencilWriteMask = 0xFFFFFFFFu;
         lDepth.muState14 = lDepth.muState15 = 0xFFFFFFFFu;
-        auto* lpDepth2D = &lrStates.mDepth2D;
-        renderengine::DepthStencilState::Initialize(&lpDepth2D, &lDepth);
+        renderengine::DepthStencilState* depth2DHandles[5] = {0};
+        renderengine::DepthStencilState::GetResourceDescriptor(&descriptor, &lDepth);
+        CgsGraphics::ResourceAllocatorCreate(lpAllocator, depth2DHandles, &descriptor);
+        sgDepth2D = renderengine::DepthStencilState::Initialize(depth2DHandles, &lDepth);
         lDepth.mbDepthTestEnable = 1;
-        auto* lpDepth3D = &lrStates.mDepth3D;
-        renderengine::DepthStencilState::Initialize(&lpDepth3D, &lDepth);
+        renderengine::DepthStencilState* depth3DHandles[5] = {0};
+        renderengine::DepthStencilState::GetResourceDescriptor(&descriptor, &lDepth);
+        CgsGraphics::ResourceAllocatorCreate(lpAllocator, depth3DHandles, &descriptor);
+        sgDepth3D = renderengine::DepthStencilState::Initialize(depth3DHandles, &lDepth);
 
-        renderengine::RasterizerState::Parameters lRasterizer = {};
+        renderengine::RasterizerState::Parameters lRasterizer = {0};
         lRasterizer.muCullMode = 2;
         lRasterizer.muMultisampleEnable = 0xFFFFFFFFu;
         lRasterizer.muAntialiasedLineEnable = 0xFFFFu;
         lRasterizer.mu8DepthClipEnable = lRasterizer.mu8FrontCounterClockwise = 1;
         lRasterizer.mu8PaddingMode = 1;
-        auto* lpRasterizer = &lrStates.mRasterizer;
-        renderengine::RasterizerState::Initialize(&lpRasterizer, &lRasterizer);
+        renderengine::RasterizerState* rasterHandles[5] = {0};
+        renderengine::RasterizerState::GetResourceDescriptor(&descriptor, &lRasterizer);
+        CgsGraphics::ResourceAllocatorCreate(lpAllocator, rasterHandles, &descriptor);
+        sgRasterizer = renderengine::RasterizerState::Initialize(rasterHandles, &lRasterizer);
         sbCreated = true;
     }
 
@@ -182,8 +198,8 @@ namespace CgsDev
         CGS_ASSERT(mpRenderBuffer != 0, "mpRenderBuffer");
         CGS_ASSERT(!mpRenderBuffer->IsInARenderingBlock(), "!mpRenderBuffer->IsInARenderingBlock()");
         mpRenderBuffer->BeginRendering();
-        mpRenderBuffer->SetState(reinterpret_cast<const renderengine::BlendState*>(&sgDebug3DRenderStates.mBlend));
-        mpRenderBuffer->SetState(&sgDebug3DRenderStates.mRasterizer);
+        mpRenderBuffer->SetState(reinterpret_cast<const renderengine::BlendState*>(sgBlend));
+        mpRenderBuffer->SetState(sgRasterizer);
         meZTestEnable = E_ZTEST_ON;
         meProjectionMode = E_PROJECTION_COUNT;
         meDrawingMode = E_DRAWING_COUNT;
@@ -200,7 +216,7 @@ namespace CgsDev
 
     rw::math::vpu::Vector2 Debug3DImmediateRender::GetVirtualScreenSize() const
     {
-        return { mfVirtualScreenWidth, mfVirtualScreenHeight, 0.0f, 0.0f };
+        return Make2(mfVirtualScreenWidth, mfVirtualScreenHeight, 0.0f, 0.0f);
     }
 
     rw::math::vpu::Vector3 Debug3DImmediateRender::GetCameraPosition() const
@@ -223,15 +239,16 @@ namespace CgsDev
             {
                 if (leMode == E_PROJECTION_3D)
                 {
-                    mpRenderBuffer->SetState(&sgDebug3DRenderStates.mDepth3D);
+                    mpRenderBuffer->SetState(sgDepth3D);
                     mpRenderBuffer->SetTransform(mViewProjectionMatrix);
                 }
                 else
                 {
                     Matrix44 lProjection;
                     lProjection.SetIdentity();
-                    lProjection.yAxis = {0.0f, -1.0f, 0.0f, 0.0f};
-                    mpRenderBuffer->SetState(&sgDebug3DRenderStates.mDepth2D);
+                    const Vector4 yAxis = {0.0f, -1.0f, 0.0f, 0.0f};
+                    lProjection.yAxis = yAxis;
+                    mpRenderBuffer->SetState(sgDepth2D);
                     mpRenderBuffer->SetTransform(lProjection);
                 }
             }
@@ -273,7 +290,8 @@ namespace CgsDev
         lrVertex.mv4Colour.g = static_cast<u8>(lColour.m_rgba >> 8);
         lrVertex.mv4Colour.b = static_cast<u8>(lColour.m_rgba >> 16);
         lrVertex.mv4Colour.a = static_cast<u8>(lColour.m_rgba >> 24);
-        lrVertex.mv2Tex0UV = { 0.5f, 0.5f };
+        lrVertex.mv2Tex0UV.x = 0.5f;
+        lrVertex.mv2Tex0UV.y = 0.5f;
     }
 
     void Debug3DImmediateRender::AddLine(rw::math::vpu::Vector3 lA,
@@ -547,8 +565,8 @@ namespace CgsDev
     void Debug3DImmediateRender::GetSphereVertices(Vector3* lpVertexArray,
                                                    Vector3 lPosition, f32 lfRadius)
     {
-        lpVertexArray[0] = {lPosition.x, lPosition.y + lfRadius, lPosition.z, lPosition.w};
-        lpVertexArray[1] = {lPosition.x, lPosition.y - lfRadius, lPosition.z, lPosition.w};
+        lpVertexArray[0] = Make3(lPosition.x, lPosition.y + lfRadius, lPosition.z, lPosition.w);
+        lpVertexArray[1] = Make3(lPosition.x, lPosition.y - lfRadius, lPosition.z, lPosition.w);
         for (s32 liRing = 0; liRing < 4; ++liRing)
         {
             const f32 lfLatitude = static_cast<f32>(liRing + 1) * 0.62831855f;
@@ -559,8 +577,8 @@ namespace CgsDev
                 const f32 lfX = (std::sin(lfLongitude) * lfSinLatitude) * lfRadius;
                 const f32 lfY = std::cos(lfLatitude) * lfRadius;
                 const f32 lfZ = (lfSinLatitude * std::cos(lfLongitude)) * lfRadius;
-                lpVertexArray[2 + 8 * liRing + liIndex] = {
-                    lPosition.x + lfX, lPosition.y + lfY, lPosition.z + lfZ, lPosition.w};
+                lpVertexArray[2 + 8 * liRing + liIndex] = Make3(
+                    lPosition.x + lfX, lPosition.y + lfY, lPosition.z + lfZ, lPosition.w);
             }
         }
     }
@@ -584,18 +602,18 @@ namespace CgsDev
             {
                 const f32 lfLon0 = KF_TWO_PI * static_cast<f32>(x) / KI_SLICES;
                 const f32 lfLon1 = KF_TWO_PI * static_cast<f32>(x + 1) / KI_SLICES;
-                const Vector3 a = Add3(lCentre, { std::cos(lfLat0) * std::cos(lfLon0) * lfRadius,
+                const Vector3 a = Add3(lCentre, Make3( std::cos(lfLat0) * std::cos(lfLon0) * lfRadius,
                                                 std::sin(lfLat0) * lfRadius,
-                                                std::cos(lfLat0) * std::sin(lfLon0) * lfRadius, 0.0f });
-                const Vector3 b = Add3(lCentre, { std::cos(lfLat0) * std::cos(lfLon1) * lfRadius,
+                                                std::cos(lfLat0) * std::sin(lfLon0) * lfRadius, 0.0f ));
+                const Vector3 b = Add3(lCentre, Make3( std::cos(lfLat0) * std::cos(lfLon1) * lfRadius,
                                                 std::sin(lfLat0) * lfRadius,
-                                                std::cos(lfLat0) * std::sin(lfLon1) * lfRadius, 0.0f });
-                const Vector3 c = Add3(lCentre, { std::cos(lfLat1) * std::cos(lfLon1) * lfRadius,
+                                                std::cos(lfLat0) * std::sin(lfLon1) * lfRadius, 0.0f ));
+                const Vector3 c = Add3(lCentre, Make3( std::cos(lfLat1) * std::cos(lfLon1) * lfRadius,
                                                 std::sin(lfLat1) * lfRadius,
-                                                std::cos(lfLat1) * std::sin(lfLon1) * lfRadius, 0.0f });
-                const Vector3 d = Add3(lCentre, { std::cos(lfLat1) * std::cos(lfLon0) * lfRadius,
+                                                std::cos(lfLat1) * std::sin(lfLon1) * lfRadius, 0.0f ));
+                const Vector3 d = Add3(lCentre, Make3( std::cos(lfLat1) * std::cos(lfLon0) * lfRadius,
                                                 std::sin(lfLat1) * lfRadius,
-                                                std::cos(lfLat1) * std::sin(lfLon0) * lfRadius, 0.0f });
+                                                std::cos(lfLat1) * std::sin(lfLon0) * lfRadius, 0.0f ));
                 DrawSolidQuad(a, b, c, d, lColour);
             }
         }
@@ -700,6 +718,34 @@ namespace CgsDev
         // ARTIST 8281FCB8..8281FE78: project to the vector font's normalised
         // coordinates and record its strokes in this renderer's existing block.
         SetProjectionMode(E_PROJECTION_2D);
+#if defined(_XBOX)
+        // ARTIST 8281FCDC..8281FDD8: three VMX fused projection steps and
+        // vrefp followed by two Newton refinements for each projected lane.
+        const __vector4 world = __lvx(&lWorldPosition, 0);
+        const __vector4 x = __vspltw(world, 0);
+        const __vector4 y = __vspltw(world, 1);
+        const __vector4 z = __vspltw(world, 2);
+        const __vector4 row0 = __lvx(&mViewProjectionMatrix.xAxis, 0);
+        const __vector4 row1 = __lvx(&mViewProjectionMatrix.yAxis, 0);
+        const __vector4 row2 = __lvx(&mViewProjectionMatrix.zAxis, 0);
+        const __vector4 row3 = __lvx(&mViewProjectionMatrix.wAxis, 0);
+        const __vector4 clip = __vmaddfp(row2, z, __vmaddfp(row1, y, __vmaddfp(row0, x, row3)));
+        __declspec(align(16)) f32 values[4];
+        __stvx(clip, values, 0);
+        if (values[2] < 0.001f) return;
+        const __vector4 depth = __vspltw(clip, 2);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        __vector4 inv = __vrefp(depth);
+        inv = __vmaddfp(inv, __vnmsubfp(inv, depth, one), inv);
+        inv = __vmaddfp(inv, __vnmsubfp(inv, depth, one), inv);
+        const __vector4 projected = __vmulfp(clip, inv);
+        __stvx(projected, values, 0);
+        const f32 lfProjectedX = values[0];
+        __declspec(align(16)) f32 negative[4] = {-1.0f, -1.0f, -1.0f, -1.0f};
+        __stvx(__vmulfp(projected, __lvx(negative, 0)), values, 0);
+        const f32 lfProjectedY = values[1];
+        const f32 lfTextSize = lfScale / (mfVirtualScreenHeight * 0.5f);
+#else
         const auto Flush = [](f32 lfValue)
         {
             return std::fpclassify(lfValue) == FP_SUBNORMAL
@@ -743,9 +789,12 @@ namespace CgsDev
         const f32 lfInvZForX = RefinedReciprocal(lClip.z);
         const f32 lfInvZForY = RefinedReciprocal(lClip.z);
         const f32 lfTextSize = lfScale / (mfVirtualScreenHeight * 0.5f);
+        const f32 lfProjectedX = Flush(lClip.x * lfInvZForX);
+        const f32 lfProjectedY = -Flush(lClip.y * lfInvZForY);
+#endif
         SetDrawingMode(E_DRAWING_LINES);
-        mVectorFont.SetSize({lfTextSize, lfTextSize, 0.0f, 0.0f});
-        mVectorFont.Print(Flush(lClip.x * lfInvZForX), -Flush(lClip.y * lfInvZForY),
+        mVectorFont.SetSize(Make2(lfTextSize, lfTextSize, 0.0f, 0.0f));
+        mVectorFont.Print(lfProjectedX, lfProjectedY,
                           lpcText, lColour.m_rgba);
     }
 
