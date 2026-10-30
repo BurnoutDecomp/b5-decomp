@@ -91,7 +91,7 @@ namespace Deformation
 		const u32 luOwnerA = luEntityA >> 24;
 		const u32 luOwnerB = luEntityB >> 24;
 		CGS_ASSERT(luOwnerA != 0, "Contact spy A must not be world");
-		const auto& lrContact = lpContacts->GetEvent(ContactId(mSpyContactId));
+		const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = lpContacts->GetEvent(ContactId(mSpyContactId));
 		const u32 luContactA = static_cast<u32>(lrContact.muVolumeInstanceIdA.muId >> 32);
 		const u32 luContactB = static_cast<u32>(lrContact.muVolumeInstanceIdB.muId >> 32);
 		if (luOwnerA == 1 && (luOwnerB == 0 || luOwnerB == 1))
@@ -419,10 +419,10 @@ namespace Deformation
 			                          : lpSpec->maDirectionParams[0].mCompressionLimits;   // spec+0x10
 			const f32 lfDirZ = lpSpec->maDirectionParams[5].mCompressionLimits;            // spec+0x24
 
-			const Vector3 lLimit{ lrHitDir.x * lfDirX, 0.0f, lrHitDir.z * lfDirZ, 0.0f };
+			const Vector3 lLimit = { lrHitDir.x * lfDirX, 0.0f, lrHitDir.z * lfDirZ, 0.0f };
 
 			// displacement = clamp(limit * lDamageScale * weight, lNegLimits, lPosLimits).
-			Vector3 lDisp{ lLimit.x * lDisplacement.x * lfWeight,
+			Vector3 lDisp = { lLimit.x * lDisplacement.x * lfWeight,
 			               lLimit.y * lDisplacement.y * lfWeight,
 			               lLimit.z * lDisplacement.z * lfWeight, 0.0f };
 			lDisp.x = ( lDisp.x > lOffsetB.x ) ? lDisp.x : lOffsetB.x;   // vmaxfp vs lNegLimits
@@ -654,9 +654,10 @@ namespace Deformation
 		if ( mpLocalSpaceSphere && mpSpec )
 		{
 			const Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
-			const Vector3 lDisp = Sub3(Vector3{ lCentre.x, lCentre.y, lCentre.z, 0.0f },
-			                           mpSpec->mInitialOffset);
-			const f32 lfDot = Dot3(Vector3{ lrAxis.x, lrAxis.y, lrAxis.z, 0.0f }, lDisp);
+			const Vector3 lCentre3 = { lCentre.x, lCentre.y, lCentre.z, 0.0f };
+			const Vector3 lAxis3 = { lrAxis.x, lrAxis.y, lrAxis.z, 0.0f };
+			const Vector3 lDisp = Sub3(lCentre3, mpSpec->mInitialOffset);
+			const f32 lfDot = Dot3(lAxis3, lDisp);
 			lfConsumed = lfDot > 0.0f ? lfDot : 0.0f;
 		}
 
@@ -1214,107 +1215,13 @@ namespace Deformation
 		// unconditionally: it is now a real, meaningful test on a field that is really written, and
 		// on the host it is the difference between a located defect and a wild jump if a future
 		// builder ever forgets the store again.
-		// ---- [hop] arm the chain-depth bracket (see the ledger banner above RecievePassedOnImpulse)
-		if ( liHopProbe > 0 )
-		{
-			giHopDepth = 0;
-			++gHop.muHeadApplies;
-			if ( lu8NextSlot == 0u ) { ++gHop.muNextZeroAtHead; }
-			gHop.mfHeadMove += ( lfMove >= 0.0f ? lfMove : -lfMove );
-			if ( liDir >= 0 && liDir < 6 ) { ++gHop.mauDirCount[liDir]; }
-			const f32 lfDt = lpImpulseParams->mvfTimeStep.x;
-			++gHop.muDtSamples;
-			if ( lfDt > gHop.mfDtMax ) { gHop.mfDtMax = lfDt; }
-			const f32 lfDtErr = lfDt - 0.016666668f;
-			if ( lfDtErr > 1.0e-4f || lfDtErr < -1.0e-4f ) { ++gHop.muDtOffConsole; }
-			if ( lfDt > 0.05f ) { ++gHop.muDtBig; }
-		}
-
 		if ( lpImpulseParams->mpImpulsePasser )
 		{
-			lpImpulseParams->mpImpulsePasser->PassOnImpulse(
-				lu8NextSlot, lpImpulseParams,
-				Vector4{ lfPassedOn, lfPassedOn, lfPassedOn, lfPassedOn });
+			const Vector4 lvPassedOn = { lfPassedOn, lfPassedOn, lfPassedOn, lfPassedOn };
+			lpImpulseParams->mpImpulsePasser->PassOnImpulse(lu8NextSlot, lpImpulseParams, lvPassedOn);
 		}
 
-		// ---- [hop] the chain has fully unwound: giHopDepth IS the number of sensor hops --------
-		if ( liHopProbe > 0 )
-		{
-			const s32 liDepth = ( giHopDepth < KI_HOP_BINS - 1 ) ? giHopDepth : KI_HOP_BINS - 1;
-			++gHop.mauDepth[liDepth];
-			gHop.mafDepthMove[liDepth] += ( lfMove >= 0.0f ? lfMove : -lfMove );
-			if ( liDir >= 0 && liDir < 6 )
-			{
-				gHop.mauDirDepthSum[liDir] += static_cast<u32>( giHopDepth );
-			}
 
-			// One cumulative dump per PRESENT window. Every field is a COUNT or a SUM printed with
-			// its present number, so two dumps SUBTRACT into a window -- which is the only honest
-			// way to read a counter that was armed before the ~9.8 s boot catch-up.
-			if ( CgsDev::Log::gpDebugPrint != 0
-			     && ( renderengine::guPresentCount / 60u ) != guHopLastDump )
-			{
-				guHopLastDump = renderengine::guPresentCount / 60u;
-				*CgsDev::Log::gpDebugPrint
-					<< "[hop] present " << static_cast<s32>( renderengine::guPresentCount )
-					<< " heads " << static_cast<s32>( gHop.muHeadApplies )
-					<< " headNext0 " << static_cast<s32>( gHop.muNextZeroAtHead )
-					<< " chain " << static_cast<s32>( gHop.muChainDeposits )
-					<< " chainNext0 " << static_cast<s32>( gHop.muNextZeroAtHop )
-					<< " pos " << static_cast<s32>( gHop.muPositive )
-					<< " zero " << static_cast<s32>( gHop.muZeroMove )
-					<< " neg " << static_cast<s32>( gHop.muNegative )
-					<< " headMove " << gHop.mfHeadMove
-					<< " chainMove " << gHop.mfChainMove
-					<< " dtN " << static_cast<s32>( gHop.muDtSamples )
-					<< " dtOff " << static_cast<s32>( gHop.muDtOffConsole )
-					<< " dtBig " << static_cast<s32>( gHop.muDtBig )
-					<< " dtMax " << gHop.mfDtMax
-					<< " rows " << static_cast<s32>( giHopRows )
-					<< " rowsRefused " << static_cast<s32>( gHop.muRowsRefused )
-					<< " depth";
-				for ( s32 li = 0; li < KI_HOP_BINS; ++li )
-				{
-					*CgsDev::Log::gpDebugPrint << " " << static_cast<s32>( gHop.mauDepth[li] );
-				}
-				*CgsDev::Log::gpDebugPrint << " depthMove";
-				for ( s32 li = 0; li < KI_HOP_BINS; ++li )
-				{
-					*CgsDev::Log::gpDebugPrint << " " << gHop.mafDepthMove[li];
-				}
-				*CgsDev::Log::gpDebugPrint << " dirN";
-				for ( s32 li = 0; li < 6; ++li )
-				{
-					*CgsDev::Log::gpDebugPrint << " " << static_cast<s32>( gHop.mauDirCount[li] );
-				}
-				*CgsDev::Log::gpDebugPrint << " dirDepth";
-				for ( s32 li = 0; li < 6; ++li )
-				{
-					*CgsDev::Log::gpDebugPrint << " " << static_cast<s32>( gHop.mauDirDepthSum[li] );
-				}
-				*CgsDev::Log::gpDebugPrint << "\n";
-
-				// The per-sensor CHAIN pattern: which sensors move only because a neighbour was
-				// hit. A [dent] row exists only where a sensor took a DIRECT hit, so without
-				// these the spread half of the shape is invisible.
-				for ( s32 li = 0; li < giHopRows; ++li )
-				{
-					const HopSensorRow& lrR = gaHopRows[li];
-					if ( lrR.mfChainMove <= 0.0005f ) { continue; }
-					*CgsDev::Log::gpDebugPrint
-						<< "[hopsens] present " << static_cast<s32>( renderengine::guPresentCount )
-						<< " owner " << lrR.miOwner
-						<< " off (" << lrR.mafInitialOffset[0] << "," << lrR.mafInitialOffset[1]
-						<< "," << lrR.mafInitialOffset[2] << ")"
-						<< " dir " << lrR.miDir
-						<< " hits " << static_cast<s32>( lrR.muHits )
-						<< " neg " << static_cast<s32>( lrR.muNegative )
-						<< " chainMove " << lrR.mfChainMove
-						<< " lastDepth " << lrR.miDepth
-						<< "\n";
-				}
-			}
-		}
 	}
 
 	void DeformationSensor::AddContactsToPenetrationSolver(PenetrationSolver* lpSolver,
