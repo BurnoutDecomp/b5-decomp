@@ -24,6 +24,8 @@ namespace renderengine
     extern PixelBuffer gOriginalColorBuffer;
     extern PixelBuffer gOriginalDepthStencilBuffer;
     extern u32 guTilingEnabled;
+    extern PixelBuffer* gpDeviceColorBuffer; // ARTIST 8327160C
+    extern PixelBuffer* gpDeviceDepthBuffer; // ARTIST 83271610
 
 
     class RenderTargetState;
@@ -167,6 +169,7 @@ namespace renderengine
         static void UnSetResource(D3DResource* lpResource);
 
     protected:
+        static void EnsureDefaultRenderTarget();
         static void InitPresentParameters(D3DPRESENT_PARAMETERS& lrPresent, const Parameters& lrParameters);
         static State m_currentState; // ARTIST 83271600
         // DecFIGS device.h:1662; ARTIST dword_83271614.
