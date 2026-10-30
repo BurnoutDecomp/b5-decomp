@@ -12,6 +12,7 @@
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBlackBarRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCreditsTextRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnAboveCarRenderer.h"
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnProgressBarRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"             // [H3b] the live slot-1 component (the minimap)
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.h"            // [map-world] the live slot-2 component (THE MAP WORLD)
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"       // [map-world] the live slot-3 component (the icon layer on top of it)
@@ -165,68 +166,24 @@ private:
     // -- a hollow shell whose zeros look plausible. A null slot is honestly absent: every
     // loop and every dispatch in BrnCustomRenderer.cpp skips it, and the manager reports
     // "no such component" rather than "component says 0".
+    // DecFIGS BrnCustomRenderer.h:210..242; ARTIST827E20A8 and
+    // 82444040 confirm the contained subobject order and slot targets.
     CgsGui::CustomRenderComponentInterface* mapCustomRenderComponents[E_CUSTOM_RENDER_TYPES_COUNT];
-
-    // The by-value subobject for slot 0 (guest this+0x1B660).
-    NetworkPlayerImageRenderer mNetworkPlayerImageRenderer;
-
-    // ⭐ [H3b] the by-value subobject for slot 1 (guest this+0x1050) -- the sat-nav
-    // minimap renderer, reconstructed whole 2026-08-25 (RenderComponent + the zoomed
-    // view chain landed; the hollow-shell caveat in the array banner no longer applies).
     SatNavRenderer mSatNavRenderer;
-
-    // ⭐ [map-world 2026-08-29] the by-value subobject for slot 2 (guest this+0x28D0) --
-    // BrnGui::MainMapRenderer, the full-screen map WORLD. It draws the published
-    // active-texture set (the low-res Paradise City backdrop) inside the map's clip mask,
-    // over its own fade-to-edges background.
     MainMapRenderer mMainMapRenderer;
-
-    // ⭐ [map-world 2026-08-29] the by-value subobject for slot 3 (guest this+0xB060) --
-    // BrnGui::CrashNavIconRenderer, the icon/road-sign/cursor layer that draws INTO the map
-    // world above. Its class had been reconstructed and compiled since 2026-08-29 (FIX2)
-    // but deliberately left unmounted: its RenderComponent opens with the map background
-    // mask over the published view rect, so mounting it while slot 2 was still null put the
-    // icons over the driving scene. The two go live together, in this order.
     CrashNavIconRenderer mCrashNavIconRenderer;
-
-    // ⭐ [tut-ticker] the by-value subobject for slot 8 (guest this+0x1E0F0) -- the
-    // bottom-of-screen ticker, reconstructed whole 2026-08-24. The hollow-shell caveat in
-    // the array banner above no longer applies to it.
-    InGameMessageRenderer mInGameMessageRenderer;
-
-    // ⭐ [boost-bar] the by-value subobject for slot 4 (guest this+0xE520) -- the in-game
-    // boost gauge, reconstructed whole 2026-08-24/25 (lifecycle + state machine + the full
-    // render family). The hollow-shell caveat above no longer applies to it either.
     BoostBarRenderer mBoostBarRenderer;
-
+    NetworkPlayerImageRenderer mNetworkPlayerImageRenderer;
+    AboveCarRenderer mAboveCarRenderer;
+    ProgressBarRenderer mProgressBarRenderer;
     BlackBarRenderer mBlackBarRenderer;
     CreditsTextRenderer mCreditsTextRenderer;
-    AboveCarRenderer mAboveCarRenderer; // ARTIST manager+1B930
-
-    // Guest +0x1F498: the separate master rendering-enable flag written by SetAllRenderingState().
-    bool mbRenderingEnable;
-
-    // ARTIST embeds GuiCustRendererDebugComponent at +0x1F49C. Its controls occupy the
-    // bytes consumed by CustomRendererManager::Update and synchronized by event 213.
-    GuiCustRendererDebugComponent mDebugComponent;
-
-    // Prepare / Release state-machine markers (guest +0x1F490 / +0x1F494).
+    InGameMessageRenderer mInGameMessageRenderer;
     EPrepareStage mePrepareStage;
     EReleaseStage meReleaseStage;
-
-    // Guest +0x1F4CC: per-frame "rendered without an update" HACK counter, zeroed by
-    // Construct() and Update(); Render() increments it and clears the event queue past 10.
+    bool mbRenderingEnable;
+    GuiCustRendererDebugComponent mDebugComponent;
     s32 miHACK_NumberOfRendersWithoutUpdate;
-
-    // Shared sub-system back-pointers the setters store (guest +0x1BEC4 / +0x1BEC8 /
-    // +0x1BED0). The replay serialiser's concrete type is out of scope.
-    // ⛔ There is NO mpFlaptRenderer here. The guest's SetFlaptRenderer store at +0x1B91C is
-    // mNetworkPlayerImageRenderer(+0x1B640) + 0x2DC -- the SUBOBJECT's field, which is the
-    // one SwapBuffers reads. A member of this class stood here until 2026-09-07 and swallowed
-    // the pointer, so the renderer's own copy had no writer at all. See the setter's banner.
-    CgsGraphics::TextRenderer*    mpTextRenderer;      // guest +0x1BEC4
-    CgsLanguage::LanguageManager* mpLanguageManager;   // guest +0x1BEC8
-    void*                         mpReplaySerialiser;  // guest +0x1BED0
 };
 
 // ⭐ [H3b x boost-bar reconcile 2026-08-25] BrnGui::SetMaskRect is an X360 OVERLOAD PAIR:
