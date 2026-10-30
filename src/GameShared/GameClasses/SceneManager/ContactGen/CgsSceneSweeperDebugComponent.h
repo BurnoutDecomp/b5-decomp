@@ -15,6 +15,8 @@ namespace CgsSceneManager
     class SceneSweeperDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        SceneSweeperDebugComponent() : CgsDev::DebugComponent(SceneConstructorTag()) {}
+
         void Construct(SceneSweeper* lpSceneSweeper);
         void Destruct();
         void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) ;
