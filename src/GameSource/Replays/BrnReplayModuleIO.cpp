@@ -120,6 +120,13 @@ namespace ReplayIO
         return &mStatusInterface;
     }
 
+    // X360 0x823BB128: read-lock; ICF-shared accessor called by DoUpdate at 0x823F1F3C.
+    const OutputBuffer_PreSim::GameDataRequestInterface* OutputBuffer_PreSim::GetGameDataRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mGameDataRequestInterface;
+    }
+
     // X360 0x8264E278: write-lock; returns &mGameDataRequestInterface (this+0x61C).
     OutputBuffer_PreSim::GameDataRequestInterface* OutputBuffer_PreSim::GetGameDataRequestInterface()
     {
