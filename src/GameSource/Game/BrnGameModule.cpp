@@ -2682,6 +2682,203 @@ namespace BrnGame
         return leOld;
     }
 
+    // ARTIST823EFBD0; DecFIGS329400 confirms bool GamePrepare().
+    // The original receiver-count gates are three bundle completions, then five
+    // acquire replies. The six acquire ids include the separately retained font.
+    bool BrnGameModule::GamePrepare()
+    {
+        BrnResource::GameDataIO::InputBuffer* const lpResourceInput = mpGameDataModuleInputBuffer;
+        const BrnResource::GameDataIO::OutputBuffer* const lpResourceOutput = mpGameDataModuleOutputBuffer;
+        lpResourceInput->LockForWrite();
+        lpResourceOutput->LockForRead();
+        switch (meGamePrepareStage)
+        {
+        case E_GAMEPREPARESTAGE_START:
+        case E_GAMEPREPARESTAGE_LOADBUNDLES:
+            meGamePrepareStage = E_GAMEPREPARESTAGE_LOADBUNDLES;
+            lpResourceInput->GetRequestInterface()->LoadBundle(
+                &mGamePrepareReceiverQueue, 2, 10, "shaders.bndl", true);
+            lpResourceInput->GetRequestInterface()->LoadBundle(
+                &mGamePrepareReceiverQueue, 1, 10, "GlobalTextureDictionary.bin", false);
+            lpResourceInput->GetRequestInterface()->LoadBundle(
+                &mGamePrepareReceiverQueue, 0, 0, "Language\\Fonts\\Default.font", false);
+        case E_GAMEPREPARESTAGE_WAITBUNDLES:
+            meGamePrepareStage = E_GAMEPREPARESTAGE_WAITBUNDLES;
+            if (mGamePrepareReceiverQueue.GetCount() < 3)
+                break;
+            mGamePrepareReceiverQueue.Clear();
+            {
+                static const char* const kapcResourceNames[] =
+                {
+                    "gamedb://burnout5/Playground/GlobalTextures/blobbyshadow.TextureConfig2d?ID=240931",
+                    "gamedb://burnout5/Playground/GlobalTextures/cloud1density.TextureConfig2d?ID=381388",
+                    "gamedb://burnout5/Playground/GlobalTextures/cloud1quadrant.TextureConfig2d?ID=381382",
+                    "gamedb://burnout5/Playground/GlobalTextures/corona_atlas.TextureConfig2d?ID=297312",
+                    "gamedb://burnout5/Playground/GlobalTextures/glass_fracture.TextureConfig2d?ID=440917",
+                    "default"
+                };
+                CgsResource::Events::AcquireResourceRequest lRequest;
+                for (s32 liEventId = 0; liEventId < 6; ++liEventId)
+                {
+                    BrnResource::GameDataIO::RequestInterface<32768>* const lpRequests =
+                        lpResourceInput->GetRequestInterface();
+                    const u32 luHash = static_cast<u32>(CgsResource::ID::HashString(
+                        reinterpret_cast<const u8*>(kapcResourceNames[liEventId])));
+                    lRequest.mpUser = &mGamePrepareReceiverQueue;
+                    lRequest.miEventId = liEventId;
+                    lRequest.miPoolId = liEventId == 5 ? 0 : 10;
+                    lRequest.mResourceId.SetHash(static_cast<u64>(luHash));
+                    lpRequests->mRequestQueue.AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lRequest), 4, sizeof(lRequest));
+                }
+            }
+        case E_GAMEPREPARESTAGE_WAITACQUIRES:
+            meGamePrepareStage = E_GAMEPREPARESTAGE_WAITACQUIRES;
+            if (mGamePrepareReceiverQueue.GetCount() < 5)
+                break;
+            {
+                const renderengine::Texture* lapTextures[5] = { 0, 0, 0, 0, 0 };
+                const CgsModule::Event* lpEvent;
+                s32 liSize;
+                s32 liType = mGamePrepareReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+                while (lpEvent)
+                {
+                    if (liType == 4)
+                    {
+                        const CgsResource::Events::AcquireResourceResponse* const lpResponse =
+                            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+                        switch (lpResponse->miEventId)
+                        {
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                            lapTextures[lpResponse->miEventId] = static_cast<const renderengine::Texture*>(
+                                static_cast<const CgsResource::SmallResource*>(lpResponse->mpResourceMemory)
+                                    ->GetMemoryResource());
+                            break;
+                        case 5:
+                            {
+                                mDebugFont.mpSourceEntry = lpResponse->mpSourceEntry;
+                                mDebugFont.mpResourceMemory = lpResponse->mpResourceMemory;
+                                rw::IResourceAllocator* const lpAllocator =
+                                    rw::ResourceAllocatorRegistry::GetDefaultAllocator();
+                                mDebugFont->CreateTextureState(lpAllocator);
+                                mDebugManager.SetDebugFont(mDebugFont);
+                            }
+                            break;
+                        default:
+                            CgsDev::Assert::BeginAssert();
+                            CgsDev::Assert::FireAssert("Unexpected Event Id in BrnGameModule::GamePrepare",
+                                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1741);
+                            CgsDev::Assert::EndAssert();
+                            break;
+                        }
+                    }
+                    liType = mGamePrepareReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
+                }
+                static const char* const kapcTextureAssertions[] =
+                {
+                    "lpBlobbyShadow", "lpCloudDensityTexture", "lpCloudLightingTexture",
+                    "lpCoronaAtlas != NULL", "lpGlassFractureTexture != NULL"
+                };
+                for (s32 liTexture = 0; liTexture < 5; ++liTexture)
+                {
+                    if (!lapTextures[liTexture])
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert(kapcTextureAssertions[liTexture],
+                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1751 + liTexture);
+                        CgsDev::Assert::EndAssert();
+                    }
+                }
+                if (!mRenderModule.PrepareAgain(lapTextures[0], lapTextures[1], lapTextures[2],
+                                               lapTextures[3], lapTextures[4]))
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("mRenderModule.PrepareAgain ( lpBlobbyShadow, lpCloudDensityTexture, lpCloudLightingTexture, lpCoronaAtlas, lpGlassFractureTexture )",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1761);
+                    CgsDev::Assert::EndAssert();
+                }
+                mGamePrepareReceiverQueue.Clear();
+            }
+        case E_GAMEPREPARESTAGE_GAMESTATE:
+            {
+                meGamePrepareStage = E_GAMEPREPARESTAGE_GAMESTATE;
+                BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput;
+                mpUpdateOutputBufferStack->CreateIOBuffer(&lpGameStateOutput, "GameState");
+                if (mGameStateModule.Prepare(lpGameStateOutput, mpUpdateOutputBufferStack,
+                                           lpResourceOutput->GetAllocatorList()))
+                {
+                    mpUpdateOutputBufferStack->DestroyIOBuffer(&lpGameStateOutput);
+                    lpResourceInput->UnlockForWrite();
+                    lpResourceOutput->UnlockForRead();
+                    return true;
+                }
+                lpGameStateOutput->LockForRead();
+                const BrnGameState::GameStateModuleIO::OutputBuffer* const lpRead = lpGameStateOutput;
+                lpResourceInput->AppendRequestInterface<3072>(*lpRead->GetResourceRequestInterface());
+                lpGameStateOutput->UnlockForRead();
+                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpGameStateOutput);
+            }
+            break;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Got into an unknown state",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1807);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+
+        // ARTIST823F021C..03B8 is the not-ready path, including the original
+        // IOHelper assertion sites and reverse destruction after CheckDiskError.
+        RendererIO::InputBuffer* lpRendererInput;
+        RendererIO::OutputBuffer* lpRendererOutput;
+        if (!mpUpdateInputBufferStack->CreateIOBuffer(&lpRendererInput, "Render"))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpStack->CreateIOBuffer( &mpBuffer, lpcName )",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 52);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!mpUpdateOutputBufferStack->CreateIOBuffer(&lpRendererOutput, "Render"))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpStack->CreateIOBuffer( &mpBuffer, lpcName )",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 52);
+            CgsDev::Assert::EndAssert();
+        }
+        mRenderModule.Update(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                             lpRendererInput, lpRendererOutput);
+        lpRendererOutput->LockForRead();
+        mpReusableLoadingScreenAllocator = lpRendererOutput->GetReusableLoadingScreenAllocator();
+        lpRendererOutput->UnlockForRead();
+        DispatchThreadInputBuffer* const lpDispatchInput = mDispatchThreadInputBufferManager.GetWriteBuffer();
+        lpDispatchInput->LockForWrite();
+        lpDispatchInput->ShowLoadingScreen();
+        lpDispatchInput->SetIsDiskError(mbDiskError);
+        lpDispatchInput->UnlockForWrite();
+        lpResourceInput->UnlockForWrite();
+        lpResourceOutput->UnlockForRead();
+        CheckDiskError(lpResourceOutput);
+        if (!mpUpdateOutputBufferStack->DestroyIOBuffer(&lpRendererOutput))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpStack->DestroyIOBuffer( &mpBuffer )",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 57);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!mpUpdateInputBufferStack->DestroyIOBuffer(&lpRendererInput))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpStack->DestroyIOBuffer( &mpBuffer )",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 57);
+            CgsDev::Assert::EndAssert();
+        }
+        return false;
+    }
+
     // ARTIST823F03C8: resumable native module game-release sequence.
     bool BrnGameModule::GameRelease()
     {
