@@ -54,9 +54,7 @@ namespace CgsContainers
     public:
         // CgsLinkedList.h:78 - start uninitialised (miCount == sentinel).
         BaseLinkedList()
-            : mpFirst(0)
-            , mpLast(0)
-            , miCount(KI_UNINITIALISED)
+            : miCount(KI_UNINITIALISED)
         {
         }
 
