@@ -1,20 +1,32 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
+#include <cstring>
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-// BrnPhysics::Vehicle::CreateArticulatedTrafficEvent copy assignment  @ 0x8270BF70
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. The X360 body is a pure bitwise copy of the whole
-// object: VMX (lvx128/stvx128) 16-byte block copies across the cab/trailer Matrix44Affine
-// transforms + Vector3 velocity region [0..0xC0), then the scalar tail copied with ld/std and
-// lwz/stw -- the two VolumeInstanceIds, the two Attribute::Keys, the two ResourceHandles, the two
-// CgsIDs and meTrafficType (last store at +256). CreateArticulatedTrafficEvent is trivially
-// copyable, so `= default` reproduces the X360 memberwise copy exactly; kept out-of-line so this
-// ledger func has a definition site.
+// ARTIST8270BF70 copies through meTrafficType; trailing alignment bytes are untouched.
 namespace BrnPhysics
 {
 namespace Vehicle
 {
     CreateArticulatedTrafficEvent&
-    CreateArticulatedTrafficEvent::operator=( const CreateArticulatedTrafficEvent& ) = default;
+    CreateArticulatedTrafficEvent::operator=(const CreateArticulatedTrafficEvent& lrOther)
+    {
+        std::memcpy(&mInitialTransform_Cab, &lrOther.mInitialTransform_Cab, sizeof(mInitialTransform_Cab));
+        std::memcpy(&mInitialTransform_Trailer, &lrOther.mInitialTransform_Trailer, sizeof(mInitialTransform_Trailer));
+        std::memcpy(&mInitialVelocity_Cab, &lrOther.mInitialVelocity_Cab, sizeof(mInitialVelocity_Cab));
+        std::memcpy(&mInitialVelocity_Trailer, &lrOther.mInitialVelocity_Trailer, sizeof(mInitialVelocity_Trailer));
+        std::memcpy(&mAngularVelocity_Cab, &lrOther.mAngularVelocity_Cab, sizeof(mAngularVelocity_Cab));
+        std::memcpy(&mAngularVelocity_Trailer, &lrOther.mAngularVelocity_Trailer, sizeof(mAngularVelocity_Trailer));
+        mVolumeInstanceID_Cab = lrOther.mVolumeInstanceID_Cab;
+        mVolumeInstanceID_Trailer = lrOther.mVolumeInstanceID_Trailer;
+        mAssetAttribKey_Cab = lrOther.mAssetAttribKey_Cab;
+        mAssetAttribKey_Trailer = lrOther.mAssetAttribKey_Trailer;
+        mModelHandle_Cab = lrOther.mModelHandle_Cab;
+        mModelHandle_Trailer = lrOther.mModelHandle_Trailer;
+        mCgsId_Cab = lrOther.mCgsId_Cab;
+        mCgsId_Trailer = lrOther.mCgsId_Trailer;
+        meTrafficType = lrOther.meTrafficType;
+        return *this;
+    }
 
     // BrnPhysics::Vehicle::CreateArticulatedTrafficEvent::GetCreateCabEvent  @ 0x825B3030
     // Projects the CAB half of an articulated-traffic event onto a CreatePhysicalTrafficEvent.
