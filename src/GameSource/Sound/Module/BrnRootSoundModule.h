@@ -218,8 +218,4 @@ namespace Module
 }
 }
 
-// The game's single RootSoundModule (a BrnGameModule member). Mirrors BrnGame::GetMainGameDataModule()
-// so the loading-screen flow can reach the module without the BrnGameModule mega-header.
-namespace BrnGame { BrnSound::Module::RootSoundModule* GetMainSoundModule(); }
-
 #endif // BRN_SOUND_MODULE_BRN_ROOT_SOUND_MODULE_H
