@@ -641,3 +641,31 @@ void BrnRendererModule::SwapBuffers()
     mBlobbyShadowManager.Swap();
     mCoronaManager.Swap();
 }
+
+// ARTIST823FF8F8. Preserve the incoming glass pointer for the nonpersistent
+// purpose; the persistent purpose reads the live member after Initialize.
+bool BrnRendererModule::PrepareAgain(const renderengine::Texture* blobbyShadow,
+    const renderengine::Texture* cloudDensity, const renderengine::Texture* cloudLighting,
+    const renderengine::Texture* coronaAtlas, const renderengine::Texture* glassFracture)
+{
+    mpBlobbyShadowTexture = const_cast<renderengine::Texture*>(blobbyShadow);
+    mpCloudDensity0Texture = cloudDensity;
+    mpCloudLighting0Texture = cloudLighting;
+    mCoronaManager.SetTextureAtlas(*BrnResource::GetGraphicsAllocator(),
+        const_cast<renderengine::Texture*>(coronaAtlas));
+    mpGlassFractureTexture = const_cast<renderengine::Texture*>(glassFracture);
+    mGlassFractureTextureStateParams.mpTexture = const_cast<renderengine::Texture*>(glassFracture);
+    rw::ResourceDescriptor descriptor;
+    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    rw::IResourceAllocator* const allocator = mpGraphicsAllocator;
+    mGlassFractureTextureStateResource = allocator->DoAllocate(descriptor, 0);
+    mpGlassFractureTextureState = renderengine::TextureState::Initialize(
+        &mGlassFractureTextureStateResource, &mGlassFractureTextureStateParams);
+    CgsGraphics::gTextureScopeTable.SetTexturePurposeData(
+        CgsGraphics::E_TEXTURE_PURPOSE_GLASS_FRACTURE, glassFracture);
+    CgsGraphics::gTextureScopeTable.SetTexturePurposeData(
+        CgsGraphics::E_TEXTURE_PURPOSE_GLASS_FRACTURE_PERSISTENT, mpGlassFractureTexture);
+    CgsGraphics::gTextureScopeTable.SetTexturePurposeTextureState(
+        CgsGraphics::E_TEXTURE_PURPOSE_GLASS_FRACTURE_PERSISTENT, mpGlassFractureTextureState);
+    return true;
+}
