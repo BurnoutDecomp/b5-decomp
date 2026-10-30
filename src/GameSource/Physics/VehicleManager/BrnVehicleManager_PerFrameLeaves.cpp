@@ -89,7 +89,7 @@ namespace Vehicle
 
                 // v1 carries the raw mDirectionAndMagnitude register (w = magnitude lane);
                 // reproduced lane-for-lane (GetVector3() would zero the w the console keeps).
-                const Vector3 lvDirection{ lEvent.mDirectionAndMagnitude.x,
+                const Vector3 lvDirection = { lEvent.mDirectionAndMagnitude.x,
                                            lEvent.mDirectionAndMagnitude.y,
                                            lEvent.mDirectionAndMagnitude.z,
                                            lEvent.mDirectionAndMagnitude.w };

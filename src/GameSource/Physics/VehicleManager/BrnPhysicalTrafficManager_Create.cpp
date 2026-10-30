@@ -181,10 +181,10 @@ namespace Vehicle
                        "mpArticulatedJointCreateBuffer != NULL"); // :1045
             const EntityId lCabEntityId = GetPhysicsEntityId(liCab);
             const EntityId lTrailerEntityId = GetPhysicsEntityId(liTrailer);
-            const CgsPhysics::RigidBodyId lCabRigidBodyId{
-                static_cast<u64>(lCabEntityId.muValue) << 32};
-            const CgsPhysics::RigidBodyId lTrailerRigidBodyId{
-                static_cast<u64>(lTrailerEntityId.muValue) << 32};
+            const CgsPhysics::RigidBodyId lCabRigidBodyId(
+                static_cast<u64>(lCabEntityId.muValue) << 32);
+            const CgsPhysics::RigidBodyId lTrailerRigidBodyId(
+                static_cast<u64>(lTrailerEntityId.muValue) << 32);
             const s32 liJoint = mArticulatedJointPool.CreateJoint(
                 mpArticulatedJointCreateBuffer,
                 lCabRigidBodyId, lTrailerRigidBodyId,
