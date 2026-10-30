@@ -1,4 +1,5 @@
 #pragma once
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
@@ -25,8 +26,8 @@ namespace CgsGraphics
     struct OcclusionCullManager;
 
     typedef renderengine::BlendState BlendState;
-    class DepthStencilState;
-    class RasterizerState;
+    typedef renderengine::DepthStencilState DepthStencilState;
+    typedef renderengine::RasterizerState RasterizerState;
     class RenderTargetState;
     using renderengine::SamplerState;
     class ProgramBuffer;
@@ -86,7 +87,9 @@ namespace CgsGraphics
     private:
         static const BlendState* ConstructNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
         static const BlendState* ConstructNoBlendNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
-        const BlendState*        ConstructBlendState(u8 luMode, int liBlendA, int liBlendB);
+        static const BlendState* ConstructBlendState(rw::IResourceAllocator* lpAllocator,
+            renderengine::BlendState::Input leSource, renderengine::BlendState::Input leDestination,
+            renderengine::BlendState::Operation leOperation);
         static const RasterizerState* ConstructRasteriserState(
             rw::IResourceAllocator* lpAllocator, renderengine::RasterizerState::CullMode leCullMode);
         static const DepthStencilState* ConstructDepthStencilState(

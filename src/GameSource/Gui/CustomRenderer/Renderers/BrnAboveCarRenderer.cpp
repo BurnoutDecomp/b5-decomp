@@ -518,8 +518,8 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     lpBuffer->SetState(CgsGui::gpGuiDepthStencilStateZOn);
     if (!mpBlendState)
     {
-        renderengine::BlendStateParameters lParams = {};
-        for (u32& luFactor : lParams.maBlendFactor) luFactor = 0x07060706u;
+        renderengine::BlendStateParameters lParams;
+        for (u32 i = 0; i != 4; ++i) lParams.maBlendFactor[i] = 0x07060706u;
         lParams.muState15 = 4;
         lParams.muState4 = 7;
         lParams.muState5 = lParams.muState6 = lParams.muState7 = 15;
@@ -527,12 +527,9 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         lParams.muState9 = 0xFFFFFFFFu;
         lParams.mbHasCustomBlendFactors = 1;
         lParams.mbState16 = 1;
-        rw::ResourceDescriptor lDescriptor;
-        renderengine::BlendState::GetResourceDescriptor(&lDescriptor, &lParams);
+        const rw::ResourceDescriptor lDescriptor = renderengine::BlendState::GetResourceDescriptor(lParams);
         mBlendStateResource = mpHeapAllocator->DoAllocate(lDescriptor, 0);
-        auto* lpMaterial = static_cast<renderengine::BlendMaterialState*>(mBlendStateResource.m_baseResources[0]);
-        mpBlendState = static_cast<renderengine::BlendMaterialState*>(
-            renderengine::BlendState::Initialize(&lpMaterial, &lParams));
+        mpBlendState = renderengine::BlendState::Initialize(mBlendStateResource, lParams);
     }
     lpBuffer->SetState(reinterpret_cast<const renderengine::BlendState*>(mpBlendState));
     const auto leReplayMode = mpGuiModuleSerialiser->GetMode();

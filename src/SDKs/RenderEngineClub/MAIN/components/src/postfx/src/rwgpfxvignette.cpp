@@ -244,7 +244,6 @@ namespace postfx
 
         // --- the opaque-with-blend BlendState (the shared post-fx blend, with blend-enable set) -------
         renderengine::BlendStateParameters lBlendParams;
-        std::memset(&lBlendParams, 0, sizeof(lBlendParams));
         lBlendParams.maBlendFactor[0] = 0x07060706u;   // 117835526
         lBlendParams.maBlendFactor[1] = 0x07060706u;
         lBlendParams.maBlendFactor[2] = 0x07060706u;
@@ -262,11 +261,10 @@ namespace postfx
         // factor word's low half holds the blend mode/enable; the high half is the factor's high half.
         lBlendParams.maBlendFactor[0] = 0x400u | (lBlendParams.maBlendFactor[0] & 0xFFFF0000u);
 
-        rw::BaseResourceDescriptors<5> lBlendDescriptor;
-        renderengine::BlendState::GetResourceDescriptor(&lBlendDescriptor, &lBlendParams);
-        m_blendStateResource = AllocateStateResource(m_allocator, lBlendDescriptor);
-        m_blendState = renderengine::BlendState::Initialize(
-            reinterpret_cast<renderengine::BlendMaterialState**>(&m_blendStateResource), &lBlendParams);
+        const rw::ResourceDescriptor lBlendDescriptor =
+            renderengine::BlendState::GetResourceDescriptor(lBlendParams);
+        m_blendStateResource = m_allocator->DoAllocate(lBlendDescriptor, 0);
+        m_blendState = renderengine::BlendState::Initialize(m_blendStateResource, lBlendParams);
 
         // --- the Position+UV VertexDescriptor --------------------------------------------------------
         // Parameters() @0x82276870 (`bl` @0x82403F28) seeds the block -- every record's format
@@ -308,30 +306,26 @@ namespace postfx
         lDepthParams.muState14         = static_cast<u32>(-1);  // v44[14] = -1
         lDepthParams.muState15         = static_cast<u32>(-1);  // v44[15] = -1
 
-        rw::BaseResourceDescriptors<5> lDepthDescriptor;
-        renderengine::DepthStencilState::GetResourceDescriptor(
-            reinterpret_cast<renderengine::ResourceDescriptor5*>(&lDepthDescriptor), &lDepthParams);
-        m_depthStencilResource = AllocateStateResource(m_allocator, lDepthDescriptor);
+        const rw::ResourceDescriptor lDepthDescriptor = renderengine::DepthStencilState::GetResourceDescriptor(lDepthParams);
+        m_depthStencilResource = m_allocator->DoAllocate(lDepthDescriptor, 0);
         m_depthStencilState = renderengine::DepthStencilState::Initialize(
-            reinterpret_cast<renderengine::DepthStencilState**>(&m_depthStencilResource), &lDepthParams);
+            m_depthStencilResource, lDepthParams);
 
         // --- the no-cull RasterizerState -------------------------------------------------------------
         renderengine::RasterizerState::Parameters lRasterParams;
         std::memset(&lRasterParams, 0, sizeof(lRasterParams));
         lRasterParams.muFillMode               = 0;     // v30[0] = 0
         lRasterParams.muCullMode               = 0;     // v30[1] = 0
-        lRasterParams.muMultisampleEnable      = static_cast<u32>(-1);     // v30[4] = -1 (asm stw r26 @0x82404088)
-        lRasterParams.muAntialiasedLineEnable  = static_cast<u32>(0xFFFF); // v30[5] = 0xFFFF
-        lRasterParams.mu8DepthClipEnable       = 1;     // v32 = 1
-        lRasterParams.mu8FrontCounterClockwise = 1;     // v33 = 1
-        lRasterParams.mu8PaddingMode           = 1;     // v35 = 1
+        lRasterParams.muMultiSampleMask      = static_cast<u32>(-1);     // v30[4] = -1 (asm stw r26 @0x82404088)
+        lRasterParams.muPrimitiveResetIndex  = static_cast<u32>(0xFFFF); // v30[5] = 0xFFFF
+        lRasterParams.mbMultiSampleAntiAlias       = 1;     // v32 = 1
+        lRasterParams.mbViewportEnable = 1;     // v33 = 1
+        lRasterParams.mbPrimitiveResetEnable           = 1;     // v35 = 1
 
-        rw::BaseResourceDescriptors<5> lRasterDescriptor;
-        renderengine::RasterizerState::GetResourceDescriptor(
-            reinterpret_cast<renderengine::ResourceDescriptor5*>(&lRasterDescriptor), &lRasterParams);
-        m_rasterizerStateResource = AllocateStateResource(m_allocator, lRasterDescriptor);
+        const rw::ResourceDescriptor lRasterDescriptor = renderengine::RasterizerState::GetResourceDescriptor(lRasterParams);
+        m_rasterizerStateResource = m_allocator->DoAllocate(lRasterDescriptor, 0);
         m_rasterizerState = renderengine::RasterizerState::Initialize(
-            reinterpret_cast<renderengine::RasterizerState**>(&m_rasterizerStateResource), &lRasterParams);
+            m_rasterizerStateResource, lRasterParams);
 
         // --- the vignette vertex + pixel programs and their shader-constant handles --------------------
         m_vertexProgram = PfxHelper::CreateProgram(0, gauVignetteVertexProgramMicrocode,

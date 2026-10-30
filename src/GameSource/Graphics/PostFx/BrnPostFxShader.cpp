@@ -932,13 +932,10 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     lBlendStateParams.mbState14               = 0;
     lBlendStateParams.mbState16               = 0;
 
-    u8 lauBlendStateResDesc[48] = {};
-    renderengine::BlendState::GetResourceDescriptor(lauBlendStateResDesc, &lBlendStateParams);
-    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &mBlendStateResource, lauBlendStateResDesc);
-    mpBlendState = reinterpret_cast<renderengine::BlendMaterialState*>(
-        renderengine::BlendState::Initialize(
-            reinterpret_cast<renderengine::BlendMaterialState**>(&mBlendStateResource),
-            &lBlendStateParams));
+    const rw::ResourceDescriptor blendDescriptor =
+        renderengine::BlendState::GetResourceDescriptor(lBlendStateParams);
+    mBlendStateResource = lpAllocator->DoAllocate(blendDescriptor, 0);
+    mpBlendState = renderengine::BlendState::Initialize(mBlendStateResource, lBlendStateParams);
 
     // ---- the depth/stencil state ----------------------------------------------------------------
     // ZFunc 3 (LESSEQUAL in the Xenos zero-based encoding), both stencil funcs 7 (ALWAYS), all four
@@ -969,14 +966,10 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     lDepthStencilParams.mu8Flag4           = 0;
     lDepthStencilParams.mu8Flag5           = 0;
 
-    renderengine::ResourceDescriptor5 lDepthStencilStateResDesc;
-    renderengine::DepthStencilState::GetResourceDescriptor(&lDepthStencilStateResDesc,
-                                                           &lDepthStencilParams);
-    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &mDepthStencilStateResource,
-                                         &lDepthStencilStateResDesc);
-    mpDepthStencilState = renderengine::DepthStencilState::Initialize(
-        reinterpret_cast<renderengine::DepthStencilState**>(&mDepthStencilStateResource),
-        &lDepthStencilParams);
+    const rw::ResourceDescriptor depthDescriptor =
+        renderengine::DepthStencilState::GetResourceDescriptor(lDepthStencilParams);
+    mDepthStencilStateResource = lpAllocator->DoAllocate(depthDescriptor, 0);
+    mpDepthStencilState = renderengine::DepthStencilState::Initialize(mDepthStencilStateResource, lDepthStencilParams);
 
     // ---- the POINT sampler ----------------------------------------------------------------------
     // Clamped on all three axes, unfiltered. This is what unit 0 gets when the source is the scene

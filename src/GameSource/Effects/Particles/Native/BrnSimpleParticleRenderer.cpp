@@ -98,7 +98,7 @@ namespace Native
         {
             if (lpTemplate != 0)
             {
-                renderengine::BlendState::GetParameters(lpTemplate, &lrParameters);
+                lpTemplate->GetParameters(lrParameters);
                 return;
             }
             lrParameters.maBlendFactor[0] =
@@ -122,13 +122,11 @@ namespace Native
             lrParameters.muState17 = 1u;                                 // AlphaRef 1
             lruWord = (lruWord & ~0x001F0000u) | (1u << 16);             // insrwi r11, r29(=1), 5, 11
 
-            renderengine::ResourceDescriptorEntry laDescriptor[5];
-            renderengine::BlendState::GetResourceDescriptor(laDescriptor, &lrParameters);
-
-            renderengine::BlendMaterialState* lapHandles[5] = { 0, 0, 0, 0, 0 };
-            lapHandles[0] = static_cast<renderengine::BlendMaterialState*>(std::malloc(laDescriptor[0].muSize));
-            return static_cast<renderengine::BlendMaterialState*>(
-                renderengine::BlendState::Initialize(lapHandles, &lrParameters));
+            const rw::ResourceDescriptor descriptor =
+                renderengine::BlendState::GetResourceDescriptor(lrParameters);
+            rw::Resource resource;
+            resource.m_baseResources[0] = std::malloc(descriptor.m_baseResourceDescriptors[0].m_size);
+            return renderengine::BlendState::Initialize(resource, lrParameters);
         }
     }
 

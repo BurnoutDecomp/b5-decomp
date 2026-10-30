@@ -259,7 +259,6 @@ namespace postfx
         // (0xF x4), the blend op (7), the flag word (0x87 == 135), and a -1 word; the boolean tail and
         // the remaining state words are zero.
         renderengine::BlendStateParameters lParams;
-        std::memset(&lParams, 0, sizeof(lParams));
         lParams.maBlendFactor[0] = 0x07060706u;  // 117835526
         lParams.maBlendFactor[1] = 0x07060706u;
         lParams.maBlendFactor[2] = 0x07060706u;
@@ -275,13 +274,10 @@ namespace postfx
         lParams.muState17        = 0;            // word10 = v5[10]
         lParams.muState9         = static_cast<u32>(-1); // word11 = v5[11]
 
-        rw::BaseResourceDescriptors<5> lDescriptor;
-        renderengine::BlendState::GetResourceDescriptor(&lDescriptor);
-
-        rw::Resource lResource = AllocateResource(m_allocator, lDescriptor);
-        m_opaqueBlendState = static_cast<renderengine::BlendMaterialState*>(
-            renderengine::BlendState::Initialize(
-                reinterpret_cast<renderengine::BlendMaterialState**>(&lResource), &lParams));
+        const rw::ResourceDescriptor lDescriptor =
+            renderengine::BlendState::GetResourceDescriptor(lParams);
+        const rw::Resource lResource = m_allocator->DoAllocate(lDescriptor, 0);
+        m_opaqueBlendState = renderengine::BlendState::Initialize(lResource, lParams);
     }
 
     // X360 0x823F8E78. 16-tap (4x4) box blur with bilinear sampling: for each of the 4x4 sample
@@ -574,7 +570,7 @@ namespace postfx
         // stencil masks -1, everything else 0, and all six trailing flag bytes 0 -- i.e. depth test
         // OFF, depth write OFF, stencil OFF, which is what a full-screen post-fx pass wants.
         {
-            renderengine::DepthStencilState::Parameters lParameters = {};
+            renderengine::DepthStencilState::Parameters lParameters;
             lParameters.muFunction        = 3u;              // v40[0]
             lParameters.maState1[0]       = 0u;              // v40[1..3]
             lParameters.maState1[1]       = 0u;
@@ -599,13 +595,10 @@ namespace postfx
             lParameters.mu8Flag4 = 0u;                       // v45
             lParameters.mu8Flag5 = 0u;                       // v46
 
-            renderengine::ResourceDescriptor5 lDescriptor;
-            renderengine::DepthStencilState::GetResourceDescriptor(&lDescriptor, &lParameters);
-
-            rw::Resource lResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
-            m_quadDepthStencilState = renderengine::DepthStencilState::Initialize(
-                reinterpret_cast<renderengine::DepthStencilState**>(&lResource), &lParameters);
+            const rw::ResourceDescriptor descriptor =
+                renderengine::DepthStencilState::GetResourceDescriptor(lParameters);
+            const rw::Resource resource = m_allocator->DoAllocate(descriptor, 0);
+            m_quadDepthStencilState = renderengine::DepthStencilState::Initialize(resource, lParameters);
         }
 
         m_quadVertexProgram = CreateProgram(0, kQuadProgram, sizeof(kQuadProgram), m_allocator);
