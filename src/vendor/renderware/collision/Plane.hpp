@@ -24,7 +24,7 @@ namespace rw
 namespace collision
 {
 
-struct CGS_ALIGN(16) Plane
+struct Plane
 {
     // Packed plane lane: xyz = normal, w = signed offset. Matches the 16-byte
     // register the frustum asm loads/stores.
