@@ -103,10 +103,10 @@ namespace BrnWorld
     void CrashModule::HandleNewCrashingTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
         CGS_ASSERT(lpInput, "lpInput != NULL");
-        const auto& events = lpInput->GetTrafficInputInterface()->GetAddCrashingTrafficEventQueue();
+        const CrashIO::TrafficInputInterface::AddCrashingTrafficEventQueue& events = lpInput->GetTrafficInputInterface()->GetAddCrashingTrafficEventQueue();
         for (s32 i = 0; i < events.GetLength(); ++i)
         {
-            const auto& event = events.GetEvent(i);
+            const CrashIO::AddCrashingTrafficEvent& event = events.GetEvent(i);
             AddCrashingTrafficVehicle(event.mVolumeInstanceId, event.mCrasherEntityId, event.meCrashTrafficType);
         }
     }
@@ -115,13 +115,13 @@ namespace BrnWorld
     void CrashModule::ProcessSlammedTrafficEvents(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
         CGS_ASSERT(lpInput, "lpInput != NULL");
-        const auto* output = lpInput->GetVehicleManagerOutputInterface();
+        const CrashIO::InputBuffer_PostPhysics::VehicleManagerOutputInterface* output = lpInput->GetVehicleManagerOutputInterface();
         CGS_ASSERT(output, "lpVehicleManagerOutputInterface != NULL");
-        const auto* events = output->GetSlammedTrafficEventQueue();
+        const BrnPhysics::Vehicle::VehicleManagerOutputInterface::TrafficSlammedEventQueue* events = output->GetSlammedTrafficEventQueue();
         CGS_ASSERT(events, "lpSlammedTrafficEvents");
         for (s32 i = 0; i < events->GetLength(); ++i)
         {
-            const auto& event = events->GetEvent(i);
+            const BrnPhysics::Vehicle::TrafficSlammedEvent& event = events->GetEvent(i);
             CGS_ASSERT((event.mTrafficId.muValue >> 24) == 2, "Slammed traffic event not referring to traffic");
             const u32 vehicle = (event.mTrafficId.muValue >> 10) & 0x3fff;
             CGS_ASSERT(vehicle < 600, "Slammed traffic event referring to invalid traffic vehicle");
@@ -163,7 +163,7 @@ namespace BrnWorld
     void CrashModule::HandleRecoveredSlammedTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
         CGS_ASSERT(lpInput, "lpInput != NULL");
-        const auto* events = lpInput->GetTrafficInputInterface()->GetRemoveSlammedTrafficEventQueue();
+        const CrashIO::TrafficInputInterface::RemoveSlammedTrafficEventQueue* events = lpInput->GetTrafficInputInterface()->GetRemoveSlammedTrafficEventQueue();
         for (s32 i = 0; i < events->GetLength(); ++i)
         {
             const u32 vehicle = events->GetEvent(i).muVehicleId;
@@ -176,8 +176,8 @@ namespace BrnWorld
     void CrashModule::HandleCleanedUpTrafficEvents(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
         CGS_ASSERT(lpInput, "lpInput != NULL");
-        const auto* traffic = lpInput->GetTrafficInputInterface();
-        const auto* events = traffic->GetRemoveCrashedTrafficEventQueue();
+        const CrashIO::TrafficInputInterface* traffic = lpInput->GetTrafficInputInterface();
+        const CrashIO::TrafficInputInterface::RemoveCrashedTrafficEventQueue* events = traffic->GetRemoveCrashedTrafficEventQueue();
         for (s32 i = 0; i < events->GetLength(); ++i)
         {
             const u32 vehicle = events->GetEvent(i).muVehicleId;
@@ -191,16 +191,16 @@ namespace BrnWorld
             }
             OnTrafficCarRemovedFromCrash(vehicle, owner);
         }
-        const auto* physical = traffic->GetPhysicalBits();
+        const CrashIO::TrafficInputInterface::TrafficVehicleBits* physical = traffic->GetPhysicalBits();
         CGS_ASSERT(physical, "lpPhysicalBits != NULL");
         for (u32 i = 0; i < mTrafficCrashes.GetLength();)
         {
-            const auto& crash = mTrafficCrashes.GetItem(i);
+            const TrafficCrash& crash = mTrafficCrashes.GetItem(i);
             const u32 vehicle = crash.GetVehicleIndex();
             CGS_ASSERT(vehicle < 600, "Index is out of range (max bits: 600)");
             if (!physical->IsBitSet(vehicle))
             {
-                const auto owner = crash.GetOwner();
+                const EActiveRaceCarIndex owner = crash.GetOwner();
                 mTrafficCrashes.EraseFast(i);
                 OnTrafficCarRemovedFromCrash(vehicle, owner);
             }
@@ -213,13 +213,13 @@ namespace BrnWorld
     {
         for (s32 i = 0; i < mRecycledTrafficQueue.GetLength(); ++i)
         {
-            const auto id = mRecycledTrafficQueue.GetEvent(i).mRemovedVehicleEntityId;
+            const EntityId id = mRecycledTrafficQueue.GetEvent(i).mRemovedVehicleEntityId;
             CGS_ASSERT((id.muValue >> 24) == 2, "lRemovedVehicleEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
             const u32 vehicle = (id.muValue >> 10) & 0x3fff;
             const u32 index = FindCrashForTrafficVehicle(vehicle);
             if (index != KU_INVALID_CRASH)
             {
-                const auto owner = mTrafficCrashes.GetItem(index).GetOwner();
+                const EActiveRaceCarIndex owner = mTrafficCrashes.GetItem(index).GetOwner();
                 mTrafficCrashes.EraseFast(index);
                 OnTrafficCarRemovedFromCrash(vehicle, owner);
             }

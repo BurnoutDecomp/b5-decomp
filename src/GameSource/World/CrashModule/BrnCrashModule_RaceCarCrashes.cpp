@@ -330,7 +330,7 @@ void CrashModule::ClearupCrashes( const CrashIO::InputBuffer_PreScene* lpInput,
         if (clear)
         {
             CGS_ASSERT(crash.IsAllowedToBeClearedUp(), "lpTrafficCrash->IsAllowedToBeClearedUp()");
-            const auto owner = crash.GetOwner();
+            const EActiveRaceCarIndex owner = crash.GetOwner();
             CGS_ASSERT(vehicle < 0x4000, "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
             CrashIO::CleanupTrafficEvent event;
             event.mVolumeInstanceId.muId = static_cast<u64>(0x02000000u | (vehicle << 10)) << 32;
@@ -896,7 +896,7 @@ void CrashModule::PostPhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferSt
 
         mRecycledTrafficQueue.Clear();
         mRecycledTrafficQueue.Append(*lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue());
-        const auto* traffic = lpInput->GetTrafficInputInterface();
+        const CrashIO::TrafficInputInterface* traffic = lpInput->GetTrafficInputInterface();
         mTrafficRenderedLastFrame = *traffic->GetRenderingBits();
         mTrafficFarFromCameraLastFrame = *traffic->GetFarFromCameraBits();
         ProcessSlammedTrafficEvents(lpInput);
@@ -911,7 +911,7 @@ void CrashModule::PostPhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferSt
         if( mbNeedToSendEndingMessage )
         {
             // ARTIST 827D3CD0..827D3CE8: publish the empty signal, then consume the latch.
-            const BrnGameState::GameStateModuleIO::PlayerCrashEndingEvent lEvent{};
+            BrnGameState::GameStateModuleIO::PlayerCrashEndingEvent lEvent;
             lpOutput->GetGameEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lEvent),
                 BrnGameState::GameStateModuleIO::E_EVENT_PLAYER_CRASH_ENDING, sizeof(lEvent));

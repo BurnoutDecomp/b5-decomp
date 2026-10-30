@@ -24,7 +24,7 @@ namespace BrnWorld
     {
         using namespace BrnGameState::GameStateModuleIO;
         CGS_ASSERT(lpInput, "lpInput");
-        const auto* lpQueue = lpInput->GetGameActionQueue();
+        const CrashIO::InputBuffer_PreScene::GameActionQueue* lpQueue = lpInput->GetGameActionQueue();
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         for (s32 liAction = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
@@ -53,7 +53,7 @@ namespace BrnWorld
                 break;
             case E_ACTION_PREPARE_FOR_MODE:
             {
-                const auto* lpAction = reinterpret_cast<const PrepareForModeAction*>(lpEvent);
+                const PrepareForModeAction* lpAction = reinterpret_cast<const PrepareForModeAction*>(lpEvent);
                 if (!lpAction->IsFirstPrepareForMode())
                     break;
                 const BrnGameState::GameModeParams& lrParams = *lpAction->GetGameModeParams();
