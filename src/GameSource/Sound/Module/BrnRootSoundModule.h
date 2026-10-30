@@ -115,6 +115,12 @@ namespace Module
                              Io::RootInputBuffer* lpSoundModuleInputBuffer,
                              Io::RootOutputBuffer* lpSoundModuleOutputBuffer);
 
+        bool PrepareOnEnteringGameplay(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
+                                       CgsModule::IOBufferStack* lpInputBufferStack,
+                                       CgsModule::IOBufferStack* lpOutputBufferStack,
+                                       Io::RootInputBuffer* lpSoundModuleInputBuffer,
+                                       Io::RootOutputBuffer* lpSoundModuleOutputBuffer);
+
         // @ 0x826EB928 (DWARF BrnRootSoundModule.cpp:827; phase C1). The per-frame
         // PRE-update: create the "SoundLogicPreUpdateOutput" scratch on the output
         // stack, have the logic module publish its pre-update block into it, then
