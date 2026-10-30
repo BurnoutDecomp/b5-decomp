@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsMenuItemVariable.h"
 
-#include <stdio.h>   // snprintf
+#include <stdio.h>   // sprintf (native XDK formatter used by ARTIST)
 #include <string.h>  // strncpy
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
@@ -50,7 +50,7 @@ namespace CgsDev
             mpVariable->GetValueAsString(lacValue, 100);
 
             char lacText[256];
-            snprintf(lacText, sizeof(lacText), "%s: %s", mpVariable->GetName(), lacValue);
+            sprintf(lacText, "%s: %s", mpVariable->GetName(), lacValue);
 
             RenderMenuItemText(lpRender, lacText, lfX, lfY, GetWidth(), GetHeight(), lbSelected, lfAlpha);
         }
@@ -62,7 +62,7 @@ namespace CgsDev
             mpVariable->GetValueAsString(lacValue, 100);
 
             char lacText[256];
-            snprintf(lacText, sizeof(lacText), "%s: %s", mpVariable->GetName(), lacValue);
+            sprintf(lacText, "%s: %s", mpVariable->GetName(), lacValue);
 
             ComputeSizeFromText(lacText);
         }
@@ -82,7 +82,7 @@ namespace CgsDev
             mpVariable->GetValueAsString(lacValue, 100);
 
             char lacText[256];
-            snprintf(lacText, sizeof(lacText), "%s: %s", mpVariable->GetName(), lacValue);
+            sprintf(lacText, "%s: %s", mpVariable->GetName(), lacValue);
 
             if (liBufferLen > 1)
             {
