@@ -2106,36 +2106,6 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
     const f32 lfStepY = 170.0f / static_cast<f32>(luRows);
     const Vector2 lSize = {lfStepX, lfStepY, 0.0f, 0.0f};
 
-    // One non-blocking snapshot copy; scratch is thread-local and outside both game layouts.
-    PvsDiag::Snapshot* lpPvsDiagSnapshot = 0;
-    PvsDiag::DrawSample* lpPvsDiagDraw = 0;
-    if (PvsDiag::Enabled())
-    {
-        static thread_local PvsDiag::Snapshot lPvsDiagSnapshot;
-        static thread_local PvsDiag::DrawSample lPvsDiagDraw;
-        if (PvsDiag::CopyPending(lPvsDiagSnapshot))
-        {
-            lpPvsDiagSnapshot = &lPvsDiagSnapshot;
-            lpPvsDiagDraw = &lPvsDiagDraw;
-            lPvsDiagDraw.mpModule = mpModule;
-            lPvsDiagDraw.mpPvs = lpPvs;
-            lPvsDiagDraw.mbRunningWorstCase = mpModule->mbDEBUGRunningWorstCase;
-            lPvsDiagDraw.mbDrawToggle = mbDrawActiveHulls;
-            lPvsDiagDraw.mbDecisionFrame = mpModule->mbDecisionFrame;
-            lPvsDiagDraw.muFramesSinceDecision = mpModule->muFramesSinceDecision;
-            lPvsDiagDraw.mbDataReady = mpModule->mpData.HasMemoryResource();
-            lPvsDiagDraw.mbPvsPresent = lpPvs != 0;
-            lPvsDiagDraw.mbMappingTruncated = false;
-            lPvsDiagDraw.muCellsX = lpPvs->muNumCells_X;
-            lPvsDiagDraw.muCellsZ = lpPvs->muNumCells_Z;
-            lPvsDiagDraw.muTotalCells = lpPvs->muNumCells;
-            lPvsDiagDraw.muDrawRows = luRows;
-            lPvsDiagDraw.muBoxCalls = 0;
-            lPvsDiagDraw.muMappingCount = 0;
-            lPvsDiagDraw.mfBoxStepX = lfStepX;
-            lPvsDiagDraw.mfBoxStepY = lfStepY;
-        }
-    }
     for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
     {
         const u16 luHull = mpModule->mActiveHulls.GetItem(luActive);
@@ -2146,23 +2116,6 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
             0.0f, 0.0f};
         // Vector DrawBox takes position+size; scalar DrawBox takes min/max.
         lpDisplay->DrawBox(lPosition, lSize, 0x88FFFF00u);
-        if (lpPvsDiagDraw != 0)
-        {
-            ++lpPvsDiagDraw->muBoxCalls;
-            if (lpPvsDiagDraw->muMappingCount < KU_MAX_ACTIVE_HULLS)
-            {
-                PvsDiag::DrawBoxRecord& lrRecord =
-                    lpPvsDiagDraw->maBoxes[lpPvsDiagDraw->muMappingCount++];
-                lrRecord.muHull = luHull;
-                lrRecord.muColumns = luHullColumns;
-                lrRecord.muColumn = static_cast<u32>(luHull) % luHullColumns;
-                lrRecord.muRow = static_cast<u32>(luHull) / luHullColumns;
-            }
-            else
-            {
-                lpPvsDiagDraw->mbMappingTruncated = true;
-            }
-        }
     }
 
     Vector2 lStart = {80.0f, 80.0f, 0.0f, 0.0f};
@@ -2187,14 +2140,6 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
         lEnd.y += lfStepY;
     } while (luLines);
 
-    if (lpPvsDiagSnapshot != 0 && lpPvsDiagDraw != 0)
-    {
-        if (!PvsDiag::ConsumeIfMatching(*lpPvsDiagSnapshot, *lpPvsDiagDraw))
-        {
-            PvsDiag::InvalidateIfToggleMismatch(
-                lpPvsDiagSnapshot->mePhase, mpModule->mbDEBUGRunningWorstCase);
-        }
-    }
 }
 
 // ARTIST 0x8275C938. Even with another local player, this reads car zero and

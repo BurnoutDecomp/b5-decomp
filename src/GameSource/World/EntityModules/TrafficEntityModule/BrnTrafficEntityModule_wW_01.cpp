@@ -18,7 +18,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMathsUtils.h"   // IsPointWithinSquishedCone
-#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTrackWitness.h" // TrafficRemoveReasonTag
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -64,7 +63,6 @@ void TrafficEntityModule::KillTrafficOnStartGridWholeSale(Vector3 lPlayerPositio
     {
 
         {
-            const TrafficRemoveReasonTag lTag("start-grid-wholesale");
             KillAllTrafficInCylinder(lPlayerPosition, KF_START_GRID_WHOLESALE_CLEAR_RADIUS,
                                      KF_START_GRID_WHOLESALE_CLEAR_HEIGHT, true);
         }
