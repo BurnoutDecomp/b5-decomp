@@ -25,7 +25,7 @@
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "SDKs/XboxMath/XMVectorACos.h"   // XboxMath::XMVectorACos (X360 0x821F0980)
 
-#include <algorithm>
+#include <vectorintrinsics.h>
 #include <cmath>
 
 namespace CgsSound
@@ -131,37 +131,80 @@ void Cgs3dEffectControl::UpdateParams(f32 afDeltaTime)
 s32 Cgs3dEffectControl::GetPanningAngle(
     MicrophoneSystem& arMicSystem, MicrophoneSystem::EMicPositions aePosition)
 {
-    const rw::math::vpu::Vector3& lrMicPos =
-        arMicSystem.GetMicrophone(aePosition, MicrophoneSystem::E_PLAYER_1)
-            ->GetMicrophoneMatrix().wAxis;
-    const rw::math::vpu::Vector3& lrMicForward =
-        arMicSystem.GetMicrophone(aePosition, MicrophoneSystem::E_PLAYER_1)
-            ->GetMicrophoneMatrix().zAxis;
-    const f32 lfDx = mpEmitterPosition->x - lrMicPos.x;
-    const f32 lfDz = mpEmitterPosition->z - lrMicPos.z;
-    const f32 lfFx = lrMicForward.x;
-    const f32 lfFz = lrMicForward.z;
-    const f32 lfLength = std::sqrt(lfDx * lfDx + lfDz * lfDz);
-    const f32 lfForwardLength = std::sqrt(lfFx * lfFx + lfFz * lfFz);
-    if (lfLength <= 0.0001f || lfForwardLength <= 0.0001f)
+    // ARTIST 0x826DBEA0: the permute selects x,z,x,x; the two VMX
+    // normalisations have one and two Newton refinements respectively.
+    __declspec(align(16)) static const u8 kauPlanar[16] =
+        {0,1,2,3,24,25,26,27,0,1,2,3,0,1,2,3};
+    const __vector4 lvPermute = __lvx(kauPlanar, 0);
+    const __vector4 lvEmitter = __lvx(mpEmitterPosition, 0);
+    const rw::math::vpu::Vector3 lPosition =
+        arMicSystem.GetMicrophone(aePosition, MicrophoneSystem::E_PLAYER_1)->GetCurPosition();
+    const __vector4 lvPosition = __lvx(&lPosition, 0);
+    const __vector4 lvDelta = __vsubfp(__vperm(lvEmitter, lvEmitter, lvPermute),
+                                       __vperm(lvPosition, lvPosition, lvPermute));
+    const __vector4 lvDeltaSquared = __vmulfp(lvDelta, lvDelta);
+    const __vector4 lvDistanceSquared = __vaddfp(__vspltw(lvDeltaSquared, 0),
+                                                  __vspltw(lvDeltaSquared, 1));
+    const __vector4 lvInRange = __vcmpgefp(lvDistanceSquared, XMVectorReplicate(0.01f));
+    const __vector4 lvNotInRange = __vnor(lvInRange, lvInRange);
+    unsigned int luComparison;
+    __vcmpeqfpR(lvNotInRange, __vspltisw(0), &luComparison);
+    if (!XMComparisonAllTrue(luComparison))
         return 0;
-    const f32 lfDot = std::max(-1.0f, std::min(1.0f,
-        (lfDx * lfFx + lfDz * lfFz) / (lfLength * lfForwardLength)));
-    // The arc-cosine is the console's XMVectorACos (0x826DC068 bl 0x821F0980, the shared
-    // XboxMath::XMVectorACos; crash parity FX-GATE -- std::acos stood in for it before).
-    // FLAG (PC-only domain guard, kept by conductor decision 2026-09-25): the clamp above. The
-    // console passes the raw dot (0x826DC064 vaddfp -> 0x826DC068); a dot > 1 gives NaN there.
-    // REMOVE WHEN the dot feeding it is console-exact AND the PC audio backend is shown to handle a
-    // NaN pan the way the console's platform layer does (sound-pass follow-up).
-    // FLAG: the rest of this body is not the console's shape yet (sound-pass follow-up). 0x826DBEA0
-    // returns 0 unless the planar distance SQUARED passes `vcmpgefp` against the vector at
-    // 0x830084E0 (0x826DBF20..0x826DBF38, a runtime-initialised .bss constant) and normalises the
-    // two planar vectors with vrsqrtefp + Newton (0x826DC02C..0x826DC054); the 0.0001 length
-    // guards above are the PC's.
-    f32 lfDegrees = XboxMath::XMVectorACos(lfDot) * 57.2957795f;
-    if (lfFx * lfDz - lfFz * lfDx < 0.0f)
-        lfDegrees = 360.0f - lfDegrees;
-    return static_cast<s32>(lfDegrees);
+
+    const __vector4 lvOne = XMVectorReplicate(1.0f);
+    const __vector4 lvHalf = XMVectorReplicate(0.5f);
+    __vector4 lvEstimate = __vrsqrtefp(lvDistanceSquared);
+    __vector4 lvSquared = __vmulfp(lvEstimate, lvEstimate);
+    __vector4 lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+    __vector4 lvError = __vnmsubfp(lvDistanceSquared, lvSquared, lvOne);
+    lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+    const __vector4 lvNormalDelta = __vmulfp(lvDelta, lvEstimate);
+
+    const rw::math::vpu::Vector3 lDirection =
+        arMicSystem.GetMicrophone(aePosition, MicrophoneSystem::E_PLAYER_1)->GetDirection();
+    const __vector4 lvRawDirection = __lvx(&lDirection, 0);
+    const __vector4 lvDirection = __vperm(lvRawDirection, lvRawDirection, lvPermute);
+    const __vector4 lvDirectionSquared = __vmulfp(lvDirection, lvDirection);
+    const __vector4 lvDirectionLengthSquared = __vaddfp(__vspltw(lvDirectionSquared, 0),
+                                                         __vspltw(lvDirectionSquared, 1));
+    lvEstimate = __vrsqrtefp(lvDirectionLengthSquared);
+    lvSquared = __vmulfp(lvEstimate, lvEstimate);
+    lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+    lvError = __vnmsubfp(lvDirectionLengthSquared, lvSquared, lvOne);
+    lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+    lvSquared = __vmulfp(lvEstimate, lvEstimate);
+    lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+    lvError = __vnmsubfp(lvDirectionLengthSquared, lvSquared, lvOne);
+    lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+    const __vector4 lvNormalDirection = __vmulfp(lvDirection, lvEstimate);
+
+    // The binary samples direction a second time for the dot-product path.
+    const rw::math::vpu::Vector3 lDotDirection =
+        arMicSystem.GetMicrophone(aePosition, MicrophoneSystem::E_PLAYER_1)->GetDirection();
+    const __vector4 lvDotRaw = __lvx(&lDotDirection, 0);
+    const __vector4 lvDotDirection = __vperm(lvDotRaw, lvDotRaw, lvPermute);
+    const __vector4 lvDotSquared = __vmulfp(lvDotDirection, lvDotDirection);
+    const __vector4 lvDotLengthSquared = __vaddfp(__vspltw(lvDotSquared, 0),
+                                                   __vspltw(lvDotSquared, 1));
+    lvEstimate = __vrsqrtefp(lvDotLengthSquared);
+    lvSquared = __vmulfp(lvEstimate, lvEstimate);
+    lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+    lvError = __vnmsubfp(lvDotLengthSquared, lvSquared, lvOne);
+    lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+    lvSquared = __vmulfp(lvEstimate, lvEstimate);
+    lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+    lvError = __vnmsubfp(lvDotLengthSquared, lvSquared, lvOne);
+    lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+    const __vector4 lvDotProducts = __vmulfp(__vmulfp(lvDotDirection, lvEstimate), lvNormalDelta);
+    const __vector4 lvDot = __vaddfp(__vspltw(lvDotProducts, 0), __vspltw(lvDotProducts, 1));
+    const __vector4 lvAngle = __vmulfp(::XMVectorACos(lvDot), XMVectorReplicate(10430.21875f));
+    const __vector4 lvCross = __vsubfp(
+        __vmulfp(__vspltw(lvNormalDelta, 0), __vspltw(lvNormalDirection, 1)),
+        __vmulfp(__vspltw(lvNormalDelta, 1), __vspltw(lvNormalDirection, 0)));
+    const __vector4 lvResult = __vsel(lvAngle, __vsubfp(XMVectorReplicate(65535.0f), lvAngle),
+                                       __vcmpgtfp(lvCross, __vspltisw(0)));
+    return static_cast<s32>(lvResult.x);
 }
 
 void Cgs3dEffectControl::UpdateDoppler(f32 afDeltaTime, s32 aiPlayer)
