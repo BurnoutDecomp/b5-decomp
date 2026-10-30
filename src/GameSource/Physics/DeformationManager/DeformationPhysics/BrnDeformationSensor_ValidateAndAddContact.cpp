@@ -152,7 +152,7 @@ namespace Deformation
 		const Vector3& lAt = lInverseVehicleTransform.At();
 		const Vector3& lT  = lInverseVehicleTransform.Pos();
 
-		Vector3 lLocalA{
+		Vector3 lLocalA = {
 			lPointOnA.x * lR.x + lPointOnA.y * lU.x + lPointOnA.z * lAt.x + lT.x,
 			lPointOnA.x * lR.y + lPointOnA.y * lU.y + lPointOnA.z * lAt.y + lT.y,
 			lPointOnA.x * lR.z + lPointOnA.y * lU.z + lPointOnA.z * lAt.z + lT.z, 0.0f };
