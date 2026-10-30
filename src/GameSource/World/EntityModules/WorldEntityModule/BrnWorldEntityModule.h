@@ -320,27 +320,6 @@ private:
     void RemoveBackdropEntity( s32 liListIndex, s32 liInstanceIndex,     // @0x822C34B8
                                WorldEntityIO::OutputBuffer_PreScene* lpOutputBuffer );
 
-public:
-    static void BackdropDiagRecord( s32 liListIndex, s32 liInstanceIndex,
-                                    u32 luBackdropZoneNumber,
-                                    const Matrix44Affine& lrTransform,
-                                    const Vector3& lRenderableSphereCentre,
-                                    f32 lfRenderableSphereRadius,
-                                    const Vector3& lEntityCentre, f32 lfEntityRadius,
-                                    f32 lfMaxDrawDistanceSq,
-                                    u32 luEntityFlags );
-    static void BackdropDiagForget( s32 liListIndex, s32 liInstanceIndex );
-    static void BackdropDiagReport( const CgsGeometric::Frustum& lrFrustum,
-                                    const Vector3& lCameraPosition,
-                                    const Vector3& lCameraForward );
-    // The DOWNSTREAM half: the camera pass of GenerateDispatchLists marks every backdrop
-    // id the scene manager handed it (`lbDispatched` == it survived the distance cull and
-    // reached RenderInstance), so the report can say WHICH stage lost a backdrop --
-    // coarse cull, the 4500-id filter cap, the max-draw-distance cull, or nothing at all.
-    static void BackdropDiagNoteVisible( s32 liListIndex, s32 liInstanceIndex,
-                                         f32 lfScaledDistanceSq, bool lbDispatched );
-    static void BackdropDiagBeginDispatch( u32 luNumVisibleEntities );
-
     // ---- collision world ---------------------------------------------------
 public:
     // PUBLIC per the DecFIGS DWARF (BrnWorldEntityModule.h public block :269..:321;
