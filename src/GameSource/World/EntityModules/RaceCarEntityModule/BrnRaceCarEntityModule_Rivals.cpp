@@ -124,9 +124,8 @@ void RaceCarEntityModule::SetUpAIForMode(
         const Vector3 lStartDirection = lpGameModeParams->GetStartDirection(liOpponentIndex);
         const Vector3 lStartPosition  = lpGameModeParams->GetStartPosition(liOpponentIndex);
 
-        Matrix44Affine lGridTransform;
-        BrnMath::BuildTransform(lGridTransform, lStartPosition, lStartDirection,
-                                KV_RIVAL_GRID_UP_AXIS);
+        Matrix44Affine lGridTransform = BrnMath::BuildTransform(lStartPosition, lStartDirection,
+                                                               KV_RIVAL_GRID_UP_AXIS);
 
         // 0x82301878..0x823018D8: the cop-car substitution, the same 1 << 34 mask
         // SetupOpponentData tests (the OpponentData already carries the cop id when the flag

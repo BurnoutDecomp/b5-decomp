@@ -1215,12 +1215,12 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
             // flt_8201BCC4 == 62500.0f == 250 m squared (`vcmpgtfp.` all-true: a NaN stays near).
             const Vector3 lCarPosition    = lpRaceCar->GetPosition();
             const Vector3 lPlayerPosition = lpPlayerCar->GetPosition();
-            const Vector3 lDelta = { lPlayerPosition.x - lCarPosition.x,
-                                     lPlayerPosition.y - lCarPosition.y,
-                                     lPlayerPosition.z - lCarPosition.z,
+            const Vector3 lDelta = { lPlayerPosition.mV.x - lCarPosition.mV.x,
+                                     lPlayerPosition.mV.y - lCarPosition.mV.y,
+                                     lPlayerPosition.mV.z - lCarPosition.mV.z,
                                      0.0f };
             const f32 lfDistanceSquared =
-                lDelta.x * lDelta.x + lDelta.y * lDelta.y + lDelta.z * lDelta.z;
+                lDelta.mV.x * lDelta.mV.x + lDelta.mV.y * lDelta.mV.y + lDelta.mV.z * lDelta.mV.z;
 
             lbDropWhereItIs = ( lfDistanceSquared > KF_BUZZ_BY_PLACEMENT_RANGE_SQUARED );
         }
@@ -1607,9 +1607,9 @@ void RaceCarEntityModule::ResetActiveRaceCar(
             *CgsDev::Log::gpDebugPrint
                 << "[teleport] ResetActiveRaceCar RE-RESET car "
                 << static_cast<s32>( leActiveRaceCarIndex ) << " -> road ("
-                << lrTransform.wAxis.x << ", " << lrTransform.wAxis.y << ", "
-                << lrTransform.wAxis.z << ") vel (" << lrVelocity.x << ", " << lrVelocity.y
-                << ", " << lrVelocity.z << ") resetDeform="
+                << lrTransform.wAxis.mV.x << ", " << lrTransform.wAxis.mV.y << ", "
+                << lrTransform.wAxis.mV.z << ") vel (" << lrVelocity.mV.x << ", " << lrVelocity.mV.y
+                << ", " << lrVelocity.mV.z << ") resetDeform="
                 << ( lbResetDeformation ? 1 : 0 )
                 << " resetType=" << static_cast<s32>( leDeformationResetType )
                 << " amount=" << lfHowCloseToTotalled << "\n";
@@ -1716,8 +1716,8 @@ void RaceCarEntityModule::ResetActiveRaceCar(
     {
         *CgsDev::Log::gpDebugPrint
             << "[PLACEONTRACK] race car " << static_cast<s32>( leActiveRaceCarIndex )
-            << " -> E_STATE_ACTIVE at (" << lrTransform.wAxis.x << ", "
-            << lrTransform.wAxis.y << ", " << lrTransform.wAxis.z << ")\n";
+            << " -> E_STATE_ACTIVE at (" << lrTransform.wAxis.mV.x << ", "
+            << lrTransform.wAxis.mV.y << ", " << lrTransform.wAxis.mV.z << ")\n";
     }
 }
 
@@ -2177,8 +2177,8 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         //      v3 = unk_82181510 (the world UP axis row the identity basis is built from).
         {
             const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
-            BrnMath::BuildTransform( lTransform, lpAction->mPosition, lpAction->mDirection,
-                                 lWorldUp );
+            lTransform = BrnMath::BuildTransform( lpAction->mPosition, lpAction->mDirection,
+                                                lWorldUp );
         }
     }
     else
@@ -2320,8 +2320,8 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         {
             *CgsDev::Log::gpDebugPrint
                 << "*** HandleResetPlayerCarAction: Teleport ["
-                << lTransform.wAxis.x << ", " << lTransform.wAxis.y << ", "
-                << lTransform.wAxis.z << "]\n";
+                << lTransform.wAxis.mV.x << ", " << lTransform.wAxis.mV.y << ", "
+                << lTransform.wAxis.mV.z << "]\n";
         }
     }
 
@@ -2748,7 +2748,7 @@ void RaceCarEntityModule::HandleGameActions(
                 std::memcpy(&lBox, lpAction->maDriveThruBoxRegion, sizeof(lBox));
                 Vector3 lDirection = lBox.ComputeDirection();
                 const Vector3 lVelocity = lpCar->GetVelocity();
-                if (lVelocity.x * lDirection.x + lVelocity.y * lDirection.y + lVelocity.z * lDirection.z < 0.0f)
+                if (lVelocity.mV.x * lDirection.mV.x + lVelocity.mV.y * lDirection.mV.y + lVelocity.mV.z * lDirection.mV.z < 0.0f)
                     lDirection = -lDirection;
                 // G68-D3 (crash parity 2026-09-23): both placements run at KF_DRIVE_THRU_ENTRY_SPEED,
                 // the 60 mph floor this arm used to read as the .bss zero of flt_82FAD3F4.
@@ -4105,15 +4105,15 @@ void RaceCarEntityModule::UpdateActiveRaceCarColours()
         // f31 == flt_82001C98 == 1.0f).
         if( DEBUG_mbOverrideCarColor )
         {
-            lPaintColor.x = DEBUG_mfOverridePaintColorR;
-            lPaintColor.y = DEBUG_mfOverridePaintColorG;
-            lPaintColor.z = DEBUG_mfOverridePaintColorB;
-            lPaintColor.w = 1.0f;
+            lPaintColor.mV.x = DEBUG_mfOverridePaintColorR;
+            lPaintColor.mV.y = DEBUG_mfOverridePaintColorG;
+            lPaintColor.mV.z = DEBUG_mfOverridePaintColorB;
+            lPaintColor.mV.w = 1.0f;
 
-            lPearlColor.x = DEBUG_mfOverridePearlColorR;
-            lPearlColor.y = DEBUG_mfOverridePearlColorG;
-            lPearlColor.z = DEBUG_mfOverridePearlColorB;
-            lPearlColor.w = 1.0f;
+            lPearlColor.mV.x = DEBUG_mfOverridePearlColorR;
+            lPearlColor.mV.y = DEBUG_mfOverridePearlColorG;
+            lPearlColor.mV.z = DEBUG_mfOverridePearlColorB;
+            lPearlColor.mV.w = 1.0f;
         }
 
         lpActiveRaceCar->GetRenderParams()->SetPaintColour( lPaintColor );
@@ -4255,8 +4255,8 @@ bool RaceCarEntityModule::IsCarColourInUse( s32 liPaletteIndex, s32 liColourInde
         }
 
         const Vector4& lrPaint = lpActiveRaceCar->GetRenderParams()->GetPaintColour();
-        const f32 lfColourSpaceDistance = ( std::fabs( lrPaint.y - lColour.y ) + std::fabs( lrPaint.x - lColour.x ) )
-                                          + std::fabs( lrPaint.z - lColour.z );
+        const f32 lfColourSpaceDistance = ( std::fabs( lrPaint.mV.y - lColour.mV.y ) + std::fabs( lrPaint.mV.x - lColour.mV.x ) )
+                                          + std::fabs( lrPaint.mV.z - lColour.mV.z );
         if( lfColourSpaceDistance < KF_MIN_COLOUR_SPACE_DISTANCE )
         {
             return true;
@@ -4429,12 +4429,12 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
                     const Vector3& lP = lpS->mTransform.Pos();
                     const Vector3& lA = lpS->mTransform.At();
                     const Vector3& lV = lpS->mLinearVelocity;
-                    const f32 lfSpeed = sqrtf( lV.x * lV.x + lV.y * lV.y + lV.z * lV.z );
+                    const f32 lfSpeed = sqrtf( lV.mV.x * lV.mV.x + lV.mV.y * lV.mV.y + lV.mV.z * lV.mV.z );
                     *CgsDev::Log::gpDebugPrint
                         << "[motion] n " << static_cast<s32>( suMotionCount )
-                        << " pos " << lP.x << " " << lP.y << " " << lP.z
-                        << " at "  << lA.x << " " << lA.y << " " << lA.z
-                        << " vel " << lV.x << " " << lV.y << " " << lV.z
+                        << " pos " << lP.mV.x << " " << lP.mV.y << " " << lP.mV.z
+                        << " at "  << lA.mV.x << " " << lA.mV.y << " " << lA.mV.z
+                        << " vel " << lV.mV.x << " " << lV.mV.y << " " << lV.mV.z
                         << " |v| " << lfSpeed
                         << " mph " << lpS->mfSpeedMPH
                         << " gear " << static_cast<s32>( lpS->mi8Gear )
@@ -5915,10 +5915,10 @@ void RaceCarEntityModule::UpdateRaceCarContacts(
         const Vector4& lrLeading =
             *static_cast<const Vector4*>( lSurface.GetAttributeData() );
         const bool lbSurfaceListLooksSane =
-               ( ContactsAbsF( lrLeading.x ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
-            || ( ContactsAbsF( lrLeading.y ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
-            || ( ContactsAbsF( lrLeading.z ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
-            || ( ContactsAbsF( lrLeading.w ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE );
+               ( ContactsAbsF( lrLeading.mV.x ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( ContactsAbsF( lrLeading.mV.y ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( ContactsAbsF( lrLeading.mV.z ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( ContactsAbsF( lrLeading.mV.w ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE );
 
         CGS_ASSERT( lbSurfaceListLooksSane, "Surface list appears to be corrupt" );   // :4654
     }
@@ -6267,7 +6267,7 @@ void RaceCarEntityModule::UpdateCurrentWorldRegion(
 
     // The X360 samples the position with a zeroed w lane (the lvx128/vperm staging).
     Vector3 lSamplePosition = lpActiveRaceCar->GetPosition();
-    lSamplePosition.w = 0.0f;
+    lSamplePosition.mV.w = 0.0f;
 
     const u8 luValue = mWorldMap2D.GetValue( lSamplePosition );
     if( luValue == CgsWorld::KU_INVALID_WORLD_MAP_VALUE )
@@ -6507,8 +6507,8 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                 sbLoggedPoseScale = true;
                 const Matrix44Affine& lrB = lpCar->GetRenderParams()->GetBodyTransform();
                 const Matrix44Affine& lrW = lpCar->GetRenderParams()->GetWheelTransform( 0u );
-                #define KI_ROWMAG( r ) sqrtf( ( r ).x * ( r ).x + ( r ).y * ( r ).y + ( r ).z * ( r ).z )
-                #define KI_ROWDOT( a, b ) ( ( a ).x * ( b ).x + ( a ).y * ( b ).y + ( a ).z * ( b ).z )
+                #define KI_ROWMAG( r ) sqrtf( ( r ).mV.x * ( r ).mV.x + ( r ).mV.y * ( r ).mV.y + ( r ).mV.z * ( r ).mV.z )
+                #define KI_ROWDOT( a, b ) ( ( a ).mV.x * ( b ).mV.x + ( a ).mV.y * ( b ).mV.y + ( a ).mV.z * ( b ).mV.z )
                 *CgsDev::Log::gpDebugPrint
                     << "[pose-scale] car " << liCar
                     << " body |x| " << KI_ROWMAG( lrB.xAxis )
@@ -6686,7 +6686,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     const Vector3& lvPlayerPosition = lpPhysicsState->mTransform.wAxis;
 
     CgsCore::SPrintf( lacText, sizeof(lacText), "Pos: %5.1f, %5.1f, %5.1f",
-                      lvPlayerPosition.x, lvPlayerPosition.y, lvPlayerPosition.z );
+                      lvPlayerPosition.mV.x, lvPlayerPosition.mV.y, lvPlayerPosition.mV.z );
     {
         const Vector2 lTextPosition = {lfTextX, 30.0f, 0.0f, 0.0f};
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
@@ -6695,7 +6695,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
 
     const Vector3& lvPlayerForward = lpPhysicsState->mTransform.zAxis;
     CgsCore::SPrintf( lacText, sizeof(lacText), "At: % .3f, % .3f, % .3f",
-                      lvPlayerForward.x, lvPlayerForward.y, lvPlayerForward.z );
+                      lvPlayerForward.mV.x, lvPlayerForward.mV.y, lvPlayerForward.mV.z );
     {
         const Vector2 lTextPosition = {lfTextX, 45.0f, 0.0f, 0.0f};
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
@@ -6704,7 +6704,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
 
     const Vector3& lvLinearVelocity = lpPhysicsState->mLinearVelocity;
     CgsCore::SPrintf( lacText, sizeof(lacText), "Lin Vel: % .1f, % .1f, % .1f",
-                      lvLinearVelocity.x, lvLinearVelocity.y, lvLinearVelocity.z );
+                      lvLinearVelocity.mV.x, lvLinearVelocity.mV.y, lvLinearVelocity.mV.z );
     {
         const Vector2 lTextPosition = {lfTextX, 60.0f, 0.0f, 0.0f};
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
@@ -6713,7 +6713,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
 
     const Vector3& lvAngularVelocity = lpPhysicsState->mAngularVelocity;
     CgsCore::SPrintf( lacText, sizeof(lacText), "Ang Vel: % .1f, % .1f, % .1f",
-                      lvAngularVelocity.x, lvAngularVelocity.y, lvAngularVelocity.z );
+                      lvAngularVelocity.mV.x, lvAngularVelocity.mV.y, lvAngularVelocity.mV.z );
     {
         const Vector2 lTextPosition = {lfTextX, 75.0f, 0.0f, 0.0f};
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
@@ -6779,7 +6779,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
         if( liClosestGlobalCar != -1 )
         {
             CgsCore::SPrintf( lacText, sizeof(lacText), "Closest AI: %5.1f, %5.1f, %5.1f",
-                              lvClosestPosition.x, lvClosestPosition.y, lvClosestPosition.z );
+                              lvClosestPosition.mV.x, lvClosestPosition.mV.y, lvClosestPosition.mV.z );
             {
                 const Vector2 lTextPosition = {lfTextX, 110.0f, 0.0f, 0.0f};
                 lrRender.Draw2DTextJustified( lacText, lTextPosition,
@@ -7121,8 +7121,8 @@ void RaceCarEntityModule::UpdateBoost(
     const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
             lpActiveRaceCar->GetPhysicsState();
     const Vector3& lrRotations = lpActiveRaceCar->GetCurrentInAirRotations();
-    const f32 lfAbsYaw  = std::fabs( lrRotations.y );
-    const f32 lfAbsRoll = std::fabs( lrRotations.z );
+    const f32 lfAbsYaw  = std::fabs( lrRotations.mV.y );
+    const f32 lfAbsRoll = std::fabs( lrRotations.mV.z );
 
     mBoostManager.SetSpinAngle( lfAbsYaw >= lfAbsRoll ? lfAbsYaw : lfAbsRoll );
     mBoostManager.SetCrashing( lpRaceCarState->mbCrashing );

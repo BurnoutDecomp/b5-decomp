@@ -5,7 +5,7 @@
 
 #include <cmath>   // std::sqrt, std::fabs, std::pow
 
-// See BrnMathUtils.h for the SIMD-artifacts-dropped / semantic-parity rationale.
+// See BrnMathUtils.h for the recovered native functions and remaining helper scope.
 // 2D == the X/Z ground plane (vector lanes 0 and 2 = .x and .z) throughout.
 
 namespace BrnMath
@@ -40,7 +40,7 @@ namespace BrnMath
     Vector2 Flatten(Vector3 lVector)
     {
         CGS_ASSERT(rw::math::vpu::IsValid(lVector), "RwMath::IsValid( lVector )");
-        { const Vector2 lResult = { lVector.x, lVector.z }; return lResult; }
+        { const Vector2 lResult = { lVector.mV.x, lVector.mV.z }; return lResult; }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -64,12 +64,28 @@ namespace BrnMath
     // `!(fabs(m - 1) > eps)` and its zero-guarded mag^2 * rsqrt(mag^2) (inf * 0 = NaN, as on the
     // console). Callers that branch on it (BrnAICar.cpp / BrnAICar_Update.cpp) see the console's
     // answer.
-    // FLAG (VMX->portable): the rsqrt estimate + 2 Newton steps -> an exact 1/sqrt.
+    // Retain the native reciprocal-sqrt estimate, two refinements and mask reductions.
     bool IsNormal(Vector3 lVector)
     {
-        const f32 lfMagnitude = UnitLengthMagnitude(lVector.x * lVector.x + lVector.y * lVector.y
-                                                    + lVector.z * lVector.z);   // vmsum3fp128
-        return !(std::fabs(lfMagnitude - 1.0f) > KF_UNIT_LENGTH_EPSILON);
+        const __vector4 lvZero = __vspltisw(0);
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+        const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const __vector4 lvTolerance = { KF_UNIT_LENGTH_EPSILON, KF_UNIT_LENGTH_EPSILON,
+                                         KF_UNIT_LENGTH_EPSILON, KF_UNIT_LENGTH_EPSILON };
+        const __vector4 lvSquared = __vmsum3fp(lVector.mV, lVector.mV);
+        __vector4 lvReciprocal = __vrsqrtefp(lvSquared);
+        for (s32 liStep = 0; liStep < 2; ++liStep)
+        {
+            const __vector4 lvSquare = __vmulfp(lvReciprocal, lvReciprocal);
+            const __vector4 lvHalfEstimate = __vmulfp(lvReciprocal, lvHalf);
+            const __vector4 lvResidual = __vnmsubfp(lvSquared, lvSquare, lvOne);
+            lvReciprocal = __vmaddfp(lvHalfEstimate, lvResidual, lvReciprocal);
+        }
+        const __vector4 lvMagnitude = __vsel(__vmulfp(lvSquared, lvReciprocal), lvZero,
+                                             __vcmpeqfp(lvZero, lvSquared));
+        const __vector4 lvError = __vandc(__vsubfp(lvMagnitude, lvOne), lvSign);
+        return __vcmpgtfp(lvError, lvTolerance).u[0] == 0;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -103,7 +119,7 @@ namespace BrnMath
     f32 Magnitude2D(Vector3 lVector)
     {
         CGS_ASSERT(rw::math::vpu::IsValid(lVector), "RwMath::IsValid( lVector )");
-        return std::sqrt(lVector.x * lVector.x + lVector.z * lVector.z);
+        return std::sqrt(lVector.mV.x * lVector.mV.x + lVector.mV.z * lVector.mV.z);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -116,7 +132,7 @@ namespace BrnMath
     f32 MagnitudeSquared2D(Vector3 lVector)
     {
         CGS_ASSERT(rw::math::vpu::IsValid(lVector), "RwMath::IsValid( lVector )");
-        return lVector.x * lVector.x + lVector.z * lVector.z;
+        return lVector.mV.x * lVector.mV.x + lVector.mV.z * lVector.mV.z;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -253,24 +269,24 @@ namespace BrnMath
         CGS_ASSERT(IsNormal(lBoxTransform.Right()), "IsNormal( lBoxTransform.XAxis() )");       // :86
         CGS_ASSERT(IsNormal(lBoxTransform.Up()),    "IsNormal( lBoxTransform.YAxis() )");       // :87
         CGS_ASSERT(IsNormal(lBoxTransform.At()),    "IsNormal( lBoxTransform.ZAxis() )");       // :88
-        CGS_ASSERT(lHalfExtents.x >= 0.0f, "lBoxDimensions.X() >= 0.0f");                       // :89
-        CGS_ASSERT(lHalfExtents.y >= 0.0f, "lBoxDimensions.Y() >= 0.0f");                       // :90
-        CGS_ASSERT(lHalfExtents.z >= 0.0f, "lBoxDimensions.Z() >= 0.0f");                       // :91
+        CGS_ASSERT(lHalfExtents.mV.x >= 0.0f, "lBoxDimensions.X() >= 0.0f");                       // :89
+        CGS_ASSERT(lHalfExtents.mV.y >= 0.0f, "lBoxDimensions.Y() >= 0.0f");                       // :90
+        CGS_ASSERT(lHalfExtents.mV.z >= 0.0f, "lBoxDimensions.Z() >= 0.0f");                       // :91
 
         // vsubfp128 v13, v126, row3 -- the point in the box's (un-rotated) frame origin.
         const Vector3 lOffset = lPoint - lBoxTransform.Pos();
 
         // Three independent slab tests along the box's own axes. Each early-outs, exactly
         // as the console's two `goto LABEL_23` do.
-        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.Right())) >= lHalfExtents.x)
+        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.Right())) >= lHalfExtents.mV.x)
         {
             return false;
         }
-        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.Up())) >= lHalfExtents.y)
+        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.Up())) >= lHalfExtents.mV.y)
         {
             return false;
         }
-        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.At())) >= lHalfExtents.z)
+        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.At())) >= lHalfExtents.mV.z)
         {
             return false;
         }
@@ -292,57 +308,150 @@ namespace BrnMath
     // refinement steps. out+0x00 is written first, out+0x20 second. It closes with the two
     // matrix sanity asserts (:64 IsOrthogonal3x3, :65 IsNormal3x3).
     //
-    // FLAG (VMX->portable), the same convention as every other function in this TU: the lane
-    // algebra is de-optimised to explicit cross products and an exact std::sqrt normalise (a
-    // touch tighter than the console's rsqrt estimate, never a placeholder). The six input
-    // asserts are reproduced in the console's own order with its own message strings.
-    void BuildTransform(Matrix44Affine& lrTransform, Vector3 lPosition, Vector3 lAt, Vector3 lUp)
+    // Native VMX operations retain the multiply/FMA association, negative-zero lanes,
+    // two reciprocal-square-root refinements and unguarded degenerate normalizations.
+    // The eight assertions retain the original message, file and source-line contract.
+    Matrix44Affine BuildTransform(Vector3 lPosition, Vector3 lAt, Vector3 lUp)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lPosition), "RwMath::IsValid( lPosition )");   // :50
-        CGS_ASSERT(rw::math::vpu::IsValid(lAt),       "RwMath::IsValid( lAt )");         // :51
-        CGS_ASSERT(rw::math::vpu::IsValid(lUp),       "RwMath::IsValid( lUp )");         // :52
-        CGS_ASSERT(IsNormal(lAt), "IsNormal( lAt )");                                    // :53
-        CGS_ASSERT(IsNormal(lUp), "IsNormal( lUp )");                                    // :54
-        CGS_ASSERT(!(lAt.x == lUp.x && lAt.y == lUp.y && lAt.z == lUp.z),
-                   "!RwMath::IsSimilar( lAt, lUp )");                                    // :55
-
-        // right = normalise(cross(up, at))
-        f32 lfRx = lUp.y * lAt.z - lUp.z * lAt.y;
-        f32 lfRy = lUp.z * lAt.x - lUp.x * lAt.z;
-        f32 lfRz = lUp.x * lAt.y - lUp.y * lAt.x;
-        f32 lfLen = std::sqrt(lfRx * lfRx + lfRy * lfRy + lfRz * lfRz);
-        if (lfLen > 0.0f)
+        Matrix44Affine lTransform;
+        const char* const lpcFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Math/BrnMathUtils.cpp";
+        const __vector4 lvPositionEqual = __vcmpeqfp(lPosition.mV, lPosition.mV);
+        if (!(lvPositionEqual.u[0] && lvPositionEqual.u[1] && lvPositionEqual.u[2]))
         {
-            lfRx /= lfLen;
-            lfRy /= lfLen;
-            lfRz /= lfLen;
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("RwMath::IsValid( lPosition )", lpcFile, 50);
+            CgsDev::Assert::EndAssert();
+        }
+        const __vector4 lvAtEqual = __vcmpeqfp(lAt.mV, lAt.mV);
+        if (!(lvAtEqual.u[0] && lvAtEqual.u[1] && lvAtEqual.u[2]))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("RwMath::IsValid( lAt )", lpcFile, 51);
+            CgsDev::Assert::EndAssert();
+        }
+        const __vector4 lvUpEqual = __vcmpeqfp(lUp.mV, lUp.mV);
+        if (!(lvUpEqual.u[0] && lvUpEqual.u[1] && lvUpEqual.u[2]))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("RwMath::IsValid( lUp )", lpcFile, 52);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!IsNormal(lAt))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("IsNormal( lAt )", lpcFile, 53);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!IsNormal(lUp))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("IsNormal( lUp )", lpcFile, 54);
+            CgsDev::Assert::EndAssert();
+        }
+        const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const __vector4 lvSimilarTolerance = { 0.0000152587890625f, 0.0000152587890625f,
+                                                0.0000152587890625f, 0.0000152587890625f };
+        const __vector4 lvDifference = __vandc(__vsubfp(lAt.mV, lUp.mV), lvSign);
+        const __vector4 lvLarger = __vcmpgtfp(lvDifference, lvSimilarTolerance);
+        if (!(lvLarger.u[0] || lvLarger.u[1] || lvLarger.u[2]))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("!RwMath::IsSimilar( lAt, lUp )", lpcFile, 55);
+            CgsDev::Assert::EndAssert();
         }
 
-        // forward = normalise(cross(right, up)) -- at, re-orthogonalised against up.
-        f32 lfFx = lfRy * lUp.z - lfRz * lUp.y;
-        f32 lfFy = lfRz * lUp.x - lfRx * lUp.z;
-        f32 lfFz = lfRx * lUp.y - lfRy * lUp.x;
-        lfLen = std::sqrt(lfFx * lfFx + lfFy * lfFy + lfFz * lfFz);
-        if (lfLen > 0.0f)
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+        const __vector4 lvAtYzx = __vpermwi(lAt.mV, 0x63);
+        const __vector4 lvUpYzx = __vpermwi(lUp.mV, 0x63);
+        const __vector4 lvFirstProduct = __vmulfp(lUp.mV, lvAtYzx);
+        __vector4 lvRight = __vpermwi(__vnmsubfp(lvUpYzx, lAt.mV, lvFirstProduct), 0x63);
+        lTransform.yAxis.mV = lUp.mV;
+        lTransform.wAxis.mV = lPosition.mV;
+        __vector4 lvSquared = __vmsum3fp(lvRight, lvRight);
+        __vector4 lvReciprocal = __vrsqrtefp(lvSquared);
+        for (s32 liStep = 0; liStep < 2; ++liStep)
         {
-            lfFx /= lfLen;
-            lfFy /= lfLen;
-            lfFz /= lfLen;
+            const __vector4 lvSquare = __vmulfp(lvReciprocal, lvReciprocal);
+            const __vector4 lvHalfEstimate = __vmulfp(lvReciprocal, lvHalf);
+            const __vector4 lvResidual = __vnmsubfp(lvSquared, lvSquare, lvOne);
+            lvReciprocal = __vmaddfp(lvHalfEstimate, lvResidual, lvReciprocal);
+        }
+        lvRight = __vmulfp(lvRight, lvReciprocal);
+        lTransform.xAxis.mV = lvRight;
+
+        const __vector4 lvRightYzx = __vpermwi(lvRight, 0x63);
+        const __vector4 lvSecondProduct = __vmulfp(lvRight, lvUpYzx);
+        __vector4 lvForward = __vpermwi(__vnmsubfp(lvRightYzx, lUp.mV, lvSecondProduct), 0x63);
+        lvSquared = __vmsum3fp(lvForward, lvForward);
+        lvReciprocal = __vrsqrtefp(lvSquared);
+        for (s32 liStep = 0; liStep < 2; ++liStep)
+        {
+            const __vector4 lvSquare = __vmulfp(lvReciprocal, lvReciprocal);
+            const __vector4 lvHalfEstimate = __vmulfp(lvReciprocal, lvHalf);
+            const __vector4 lvResidual = __vnmsubfp(lvSquared, lvSquare, lvOne);
+            lvReciprocal = __vmaddfp(lvHalfEstimate, lvResidual, lvReciprocal);
+        }
+        lvForward = __vmulfp(lvForward, lvReciprocal);
+        lTransform.zAxis.mV = lvForward;
+
+        // Original transpose/row-combine/packed-error sequence, including its
+        // second squared reduction. Constants are read from 82CDA350/8207BFC4.
+        static const CGS_ALIGN(16) u32 lauGather[4] = { 0x00010203, 0x14151617, 0x00010203, 0x00010203 };
+        const __vector4 lvGather = __lvx(lauGather, 0);
+        const __vector4 lvTolerance = { 0.00000011920928955078125f, 0.00000011920928955078125f,
+                                         0.00000011920928955078125f, 0.00000011920928955078125f };
+        const __vector4 lvXAxis = { 1.0f, 0.0f, 0.0f, 0.0f };
+        const __vector4 lvYAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const __vector4 lvZAxis = { 0.0f, 0.0f, 1.0f, 0.0f };
+        const __vector4 lvRightForwardHi = __vmrghw(lvRight, lvForward);
+        const __vector4 lvRightForwardLo = __vmrglw(lvRight, lvForward);
+        const __vector4 lvUpHi = __vmrghw(lUp.mV, lUp.mV);
+        const __vector4 lvUpLo = __vmrglw(lUp.mV, lUp.mV);
+        const __vector4 lvColumnX = __vmrghw(lvRightForwardHi, lvUpHi);
+        const __vector4 lvColumnY = __vmrglw(lvRightForwardHi, lvUpHi);
+        const __vector4 lvColumnZ = __vmrghw(lvRightForwardLo, lvUpLo);
+        __vector4 lvRightError = __vmulfp(lvColumnX, __vspltw(lvRight, 0));
+        lvRightError = __vmaddfp(lvColumnY, __vspltw(lvRight, 1), lvRightError);
+        lvRightError = __vmaddfp(lvColumnZ, __vspltw(lvRight, 2), lvRightError);
+        lvRightError = __vsubfp(lvRightError, lvXAxis);
+        __vector4 lvUpError = __vmulfp(lvColumnX, __vspltw(lUp.mV, 0));
+        lvUpError = __vmaddfp(lvColumnY, __vspltw(lUp.mV, 1), lvUpError);
+        lvUpError = __vmaddfp(lvColumnZ, __vspltw(lUp.mV, 2), lvUpError);
+        lvUpError = __vsubfp(lvUpError, lvYAxis);
+        __vector4 lvForwardError = __vmulfp(lvColumnX, __vspltw(lvForward, 0));
+        lvForwardError = __vmaddfp(lvColumnY, __vspltw(lvForward, 1), lvForwardError);
+        lvForwardError = __vmaddfp(lvColumnZ, __vspltw(lvForward, 2), lvForwardError);
+        lvForwardError = __vsubfp(lvForwardError, lvZAxis);
+        const __vector4 lvErrorX = __vmsum3fp(lvRightError, lvRightError);
+        const __vector4 lvErrorY = __vmsum3fp(lvUpError, lvUpError);
+        const __vector4 lvErrorZ = __vmsum3fp(lvForwardError, lvForwardError);
+        __vector4 lvPackedError = __vperm(lvErrorX, lvErrorY, lvGather);
+        lvPackedError = __vrlimi(lvPackedError, lvErrorZ, 2, 0);
+        const __vector4 lvTotalError = __vandc(__vmsum3fp(lvPackedError, lvPackedError), lvSign);
+        if (__vcmpgtfp(lvTotalError, lvTolerance).u[0])
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("RwMath::IsOrthogonal3x3( lTransform )", lpcFile, 64);
+            CgsDev::Assert::EndAssert();
         }
 
+        const __vector4 lvLengthX = __vmsum3fp(lTransform.xAxis.mV, lTransform.xAxis.mV);
+        const __vector4 lvLengthY = __vmsum3fp(lTransform.yAxis.mV, lTransform.yAxis.mV);
+        const __vector4 lvLengthZ = __vmsum3fp(lTransform.zAxis.mV, lTransform.zAxis.mV);
+        const __vector4 lvLengthErrorX = __vsubfp(lvLengthX, lvOne);
+        const __vector4 lvLengthErrorY = __vsubfp(lvLengthY, lvOne);
+        const __vector4 lvLengthErrorZ = __vsubfp(lvLengthZ, lvOne);
+        __vector4 lvPackedLength = __vperm(lvLengthErrorX, lvLengthErrorY, lvGather);
+        lvPackedLength = __vrlimi(lvPackedLength, lvLengthErrorZ, 2, 0);
+        const __vector4 lvTotalLength = __vandc(__vmsum3fp(lvPackedLength, lvPackedLength), lvSign);
+        if (__vcmpgtfp(lvTotalLength, lvTolerance).u[0])
         {
-            const Vector3 lAggregateValue = { lfRx, lfRy, lfRz, 0.0f };
-            lrTransform.xAxis = lAggregateValue;
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("RwMath::IsNormal3x3( lTransform )", lpcFile, 65);
+            CgsDev::Assert::EndAssert();
         }
-        lrTransform.yAxis = lUp;                                   // asm stvx128 out+0x10
-        {
-            const Vector3 lAggregateValue = { lfFx, lfFy, lfFz, 0.0f };
-            lrTransform.zAxis = lAggregateValue;
-        }
-        lrTransform.wAxis = lPosition;                             // asm stvx128 out+0x30
-
-        CGS_ASSERT(rw::math::vpu::IsValid(lrTransform.xAxis), "RwMath::IsOrthogonal3x3( lTransform )"); // :64
-        CGS_ASSERT(rw::math::vpu::IsValid(lrTransform.zAxis), "RwMath::IsNormal3x3( lTransform )");     // :65
+        return lTransform;
     }
 
 }
