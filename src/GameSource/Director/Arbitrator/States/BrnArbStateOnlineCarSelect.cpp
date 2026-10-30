@@ -193,7 +193,7 @@ namespace BrnDirector
                 break;
             }
             meState = E_STATE_SELECTING_CAR;   // +0x1AC = 2
-            [[fallthrough]];
+            // Fall through.
 
         case E_STATE_SELECTING_CAR:
         {

@@ -161,7 +161,7 @@ namespace BrnDirector
             }
             meState = E_STATE_ACTIVE;   // +0x198 = 2
             // fall through into the ACTIVE body
-            [[fallthrough]];
+            // Fall through.
 
         case E_STATE_ACTIVE:
         {
