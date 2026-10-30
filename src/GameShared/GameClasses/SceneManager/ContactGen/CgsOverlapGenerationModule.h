@@ -62,6 +62,8 @@ namespace CgsSceneManager
     class OverlapGenerationModule : public CgsModule::ModuleSingleBuffered
     {
     public:
+        OverlapGenerationModule(); // ARTIST 0x827DF2B0
+
         // Number of distinct culling-group "types" the per-type entity counters track.
         static const s32 KI_NUM_ENTITY_TYPES = 16;
 

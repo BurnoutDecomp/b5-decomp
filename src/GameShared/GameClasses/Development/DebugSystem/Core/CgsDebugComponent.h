@@ -7,7 +7,7 @@
 
 namespace CgsResource { class DebugComponent; }
 namespace BrnAI { class AIDebugComponent; class RaceBalancingDebugComponent; class RouteMapDebugComponent; struct ResetOnTrackDebugComponent; }
-namespace CgsSceneManager { class SceneManagerDebugComponent; class TriangleCollisionDebugComponent; }
+namespace CgsSceneManager { class SceneManagerDebugComponent; class TriangleCollisionDebugComponent; class SceneSweeperDebugComponent; }
 namespace CgsGameTalk { class GameTalkDebugComponent; }
 namespace BrnResource { class DebugComponent; class DLCDebugComponent; }
 namespace BrnProgression { struct ProgressionDebugComponent; }
@@ -89,6 +89,7 @@ namespace CgsDev
         // ARTIST 0x827E1E30 installs these scene debug vtables without base data writes.
         friend class CgsSceneManager::SceneManagerDebugComponent;
         friend class CgsSceneManager::TriangleCollisionDebugComponent;
+        friend class CgsSceneManager::SceneSweeperDebugComponent;
         struct SceneConstructorTag {};
         explicit DebugComponent(SceneConstructorTag) {}
         friend class CgsGameTalk::GameTalkDebugComponent;
