@@ -64,7 +64,7 @@ namespace DirectorIO
     // ---- read-lock-asserted getters ---------------------------------------------------------
 
     // X360 0x823B33B0: return &mResourceInterface (this+0x2E0), read-lock asserted.
-    const BrnResource::GameDataIO::RequestInterface<512>* OutputBuffer::Get()
+    const BrnResource::GameDataIO::RequestInterface<512>* OutputBuffer::Get() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mResourceInterface;
@@ -99,10 +99,30 @@ namespace DirectorIO
     }
 
     // X360 0x823B3500: return &mTimerRequestInterface (this+0x500), read-lock asserted.
-    CgsSystem::TimerRequestInterface* OutputBuffer::GetTimerRequestIn()
+    const CgsSystem::TimerRequestInterface* OutputBuffer::GetTimerRequestIn() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mTimerRequestInterface;
+    }
+
+    const BrnResource::GameDataIO::RequestInterface<512>* OutputBuffer::GetResourceRequestInterface() const
+    {
+        return Get();
+    }
+
+    const CgsSystem::TimerRequestInterface* OutputBuffer::GetTimerRequestInterface() const
+    {
+        return GetTimerRequestIn();
+    }
+
+    BrnResource::GameDataIO::RequestInterface<512>* OutputBuffer::GetResourceRequestInterface()
+    {
+        return GetResour();
+    }
+
+    CgsSystem::TimerRequestInterface* OutputBuffer::GetTimerRequestInterface()
+    {
+        return GetTimerRequestInterfac();
     }
 
     // ---- write-lock-asserted getters --------------------------------------------------------
