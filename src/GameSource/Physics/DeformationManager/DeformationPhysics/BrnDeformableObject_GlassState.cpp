@@ -559,7 +559,7 @@ namespace Deformation
         // it is copied BYTE-FAITHFULLY into the event's id field (not the semantic mGlobalEntityId).
         // v67 == the spec crack/part param (+100 == mePartType), v68 == the new pane state.
         lEvent.mTransform        = lGraphicsTransform;
-        lEvent.mVehicleEntityId  = EntityId{ mu32GameModeState };
+        lEvent.mVehicleEntityId.muValue = mu32GameModeState;
         lEvent.meGlassPart       = lpPaneSpec->mePartType;
         lEvent.meNewState        = leNewState;
 
@@ -657,10 +657,9 @@ namespace Deformation
         for (s32 liPane = 0; liPane < liNumPanes; ++liPane)
         {
             // The 4.0 pre-scale (asm v127) is passed as the time-step-position vfloat arg.
-            if (UpdateGlassSmashedState(liPane, VecFloat{ KF_GLASS_DISPLACEMENT_SCALE,
-                                                          KF_GLASS_DISPLACEMENT_SCALE,
-                                                          KF_GLASS_DISPLACEMENT_SCALE,
-                                                          KF_GLASS_DISPLACEMENT_SCALE }))
+            const VecFloat lvfScale = { KF_GLASS_DISPLACEMENT_SCALE, KF_GLASS_DISPLACEMENT_SCALE,
+                                        KF_GLASS_DISPLACEMENT_SCALE, KF_GLASS_DISPLACEMENT_SCALE };
+            if (UpdateGlassSmashedState(liPane, lvfScale))
             {
                 SendGlassUpdateEvents(liPane, lpOut, lpOutEM);
             }
@@ -1068,7 +1067,7 @@ namespace Deformation
                 // `lvx v0,wheel,160` -> +0x40.
                 const Vehicle::Wheel* lpWheel = lpSimple->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel));
                 const f32      lfWheelSpin    = lpWheel->mIntegrationVariables.x;
-                const VecFloat lvfWheelSpin   = VecFloat{ lfWheelSpin, lfWheelSpin, lfWheelSpin, lfWheelSpin };
+                const VecFloat lvfWheelSpin   = { lfWheelSpin, lfWheelSpin, lfWheelSpin, lfWheelSpin };
                 lWheelStates.maStates[liWheel].mWorldSpaceTransform       = lWheelTransform;
                 lWheelStates.maStates[liWheel].mWorldSpaceVelocity        = lpWheel->mBodyPointVelocity;
                 lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity = vpu::Mult(lWheelTransform.xAxis, lvfWheelSpin);
@@ -1260,8 +1259,8 @@ namespace Deformation
                 CGS_ASSERT(lpIKPart != 0, "lpIKPart != NULL");
 
                 JointedPartStateEvent lEvent;
-                lEvent.mVehicleId = EntityId{ static_cast<u32>(
-                    GetHandlingBodyVolumeInstanceId().muId >> 32) };            // `ld 0x6710; srdi 32`
+                lEvent.mVehicleId.muValue = static_cast<u32>(
+                    GetHandlingBodyVolumeInstanceId().muId >> 32);            // `ld 0x6710; srdi 32`
                 lEvent.meType = lpIKPart->GetPartType();                        // *(ikPart+8) -> spec+0x1DC
                 lEvent.mfCurrentOrientation = lpPart->GetJointRotationProportion().x;
 
