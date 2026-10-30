@@ -200,23 +200,26 @@ namespace CgsGeometric
         const Vector3& lrUp    = lTransform.Up();
         const Vector3& lrAt    = lTransform.At();
 
-        const Vector3 lGramErrorRight = Vector3{ vpu::Dot(lrRight, lrRight),
-                                                 vpu::Dot(lrRight, lrUp),
-                                                 vpu::Dot(lrRight, lrAt),
-                                                 0.0f } - vpu::GetVector3_XAxis();   // - gIVector
-        const Vector3 lGramErrorUp    = Vector3{ vpu::Dot(lrUp, lrRight),
-                                                 vpu::Dot(lrUp, lrUp),
-                                                 vpu::Dot(lrUp, lrAt),
-                                                 0.0f } - vpu::GetVector3_YAxis();   // - 0x82181510
-        const Vector3 lGramErrorAt    = Vector3{ vpu::Dot(lrAt, lrRight),
-                                                 vpu::Dot(lrAt, lrUp),
-                                                 vpu::Dot(lrAt, lrAt),
-                                                 0.0f } - vpu::GetVector3_ZAxis();   // - 0x82181520
+        const Vector3 lGramRowRight = { vpu::Dot(lrRight, lrRight),
+                                        vpu::Dot(lrRight, lrUp),
+                                        vpu::Dot(lrRight, lrAt),
+                                        0.0f };
+        const Vector3 lGramRowUp = { vpu::Dot(lrUp, lrRight),
+                                     vpu::Dot(lrUp, lrUp),
+                                     vpu::Dot(lrUp, lrAt),
+                                     0.0f };
+        const Vector3 lGramRowAt = { vpu::Dot(lrAt, lrRight),
+                                     vpu::Dot(lrAt, lrUp),
+                                     vpu::Dot(lrAt, lrAt),
+                                     0.0f };
+        const Vector3 lGramErrorRight = lGramRowRight - vpu::GetVector3_XAxis(); // - gIVector
+        const Vector3 lGramErrorUp = lGramRowUp - vpu::GetVector3_YAxis();       // - 0x82181510
+        const Vector3 lGramErrorAt = lGramRowAt - vpu::GetVector3_ZAxis();       // - 0x82181520
 
-        const Vector3 lOrthogonalError = Vector3{ vpu::MagnitudeSquared(lGramErrorRight),
-                                                  vpu::MagnitudeSquared(lGramErrorUp),
-                                                  vpu::MagnitudeSquared(lGramErrorAt),
-                                                  0.0f };
+        const Vector3 lOrthogonalError = { vpu::MagnitudeSquared(lGramErrorRight),
+                                           vpu::MagnitudeSquared(lGramErrorUp),
+                                           vpu::MagnitudeSquared(lGramErrorAt),
+                                           0.0f };
         const f32 lfOrthogonalError = vpu::MagnitudeSquared(lOrthogonalError);
         const bool lbOrthogonal = !(std::fabs(lfOrthogonalError) > KF_BOX_VALIDITY_TOLERANCE);
 
@@ -227,10 +230,10 @@ namespace CgsGeometric
         // `vspltisw v10,1 ; vcfsx v10,v10,0` materialises (0x825BEE68/0x825BEE80), gathered by the
         // same permute pair, one more vmsum3fp128, `vandc` (Abs) and `vcmpgtfp v10, v10, v5`
         // against the SAME tolerance loaded a second time.
-        const Vector3 lNormalError = Vector3{ vpu::MagnitudeSquared(lrRight) - 1.0f,
-                                              vpu::MagnitudeSquared(lrUp)    - 1.0f,
-                                              vpu::MagnitudeSquared(lrAt)    - 1.0f,
-                                              0.0f };
+        const Vector3 lNormalError = { vpu::MagnitudeSquared(lrRight) - 1.0f,
+                                       vpu::MagnitudeSquared(lrUp)    - 1.0f,
+                                       vpu::MagnitudeSquared(lrAt)    - 1.0f,
+                                       0.0f };
         const f32 lfNormalError = vpu::MagnitudeSquared(lNormalError);
         const bool lbNormal = !(std::fabs(lfNormalError) > KF_BOX_VALIDITY_TOLERANCE);
 
@@ -330,9 +333,10 @@ namespace CgsGeometric
         lfDistance -= (lBox1Extents.x + lBox2Extents.x);                      // DWARF operator-=
 
         // DWARF lOverlapping :174.
+        const VecFloat lDistanceVector = { lfDistance, lfDistance, lfDistance, lfDistance };
+        const VecFloat lZeroVector = { 0.0f, 0.0f, 0.0f, 0.0f };
         const rw::math::vpu::MaskScalar lOverlapping =
-            vpu::CompLessThan(VecFloat{ lfDistance, lfDistance, lfDistance, lfDistance },
-                              VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+            vpu::CompLessThan(lDistanceVector, lZeroVector);
         return lOverlapping;
     }
 

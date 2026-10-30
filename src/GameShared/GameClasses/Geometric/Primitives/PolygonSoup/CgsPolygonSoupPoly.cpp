@@ -205,5 +205,5 @@ namespace
     typedef char KI_POLYGON_SOUP_POLY_TAG_IS_U32
         [(sizeof(((CgsGeometric::PolygonSoupPoly*)0)->muSurfaceTag) == 4) ? 1 : -1];
     typedef char KI_POLYGON_SOUP_POLY_EDGE_CODES_ARE_4
-        [(sizeof(CgsGeometric::PolygonSoupPoly::mauCompressedEdgeCosines) == 4) ? 1 : -1];
+        [(sizeof(((CgsGeometric::PolygonSoupPoly*)0)->mauCompressedEdgeCosines) == 4) ? 1 : -1];
 }
