@@ -328,19 +328,38 @@ namespace CgsDev
             return;
 
         DrawBox(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lBackColour);
-        const f32 lfSpan = (lv2Max.x - lv2Min.x) - 2.0f;
 #if defined(_XBOX)
-        // ARTIST 8281CC30: vmaddfp(span, minX + 1, value / max).
-        __declspec(align(16)) f32 laSpan[4] = { lfSpan, lfSpan, lfSpan, lfSpan };
-        __declspec(align(16)) f32 laOrigin[4] = { lv2Min.x + 1.0f, 0, 0, 0 };
+        // ARTIST 8281CB48..CC30: splat input lanes; perform each inset
+        // operation in VMX before the fused multiply-add.
+        const __vector4 lMin = __lvx(&lv2Min, 0);
+        const __vector4 lMax = __lvx(&lv2Max, 0);
+        const __vector4 lMinX = __vspltw(lMin, 0);
+        const __vector4 lMinY = __vspltw(lMin, 1);
+        const __vector4 lMaxX = __vspltw(lMax, 0);
+        const __vector4 lMaxY = __vspltw(lMax, 1);
+        const __vector4 lTwo = __vcfsx(__vspltisw(2), 0);
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lSpan = __vsubfp(__vsubfp(lMaxX, lMinX), lTwo);
+        const __vector4 lOrigin = __vaddfp(lMinX, lOne);
+        const __vector4 lTop = __vaddfp(lMinY, lTwo);
+        const __vector4 lBottom = __vsubfp(lMaxY, lTwo);
         __declspec(align(16)) f32 laFraction[4] = { lfValue / lfMax, 0, 0, 0 };
+        const __vector4 lFraction = __vspltw(__lvx(laFraction, 0), 0);
+        const __vector4 lRight = __vmaddfp(lSpan, lOrigin, lFraction);
         __declspec(align(16)) f32 laResult[4];
-        __stvx(__vmaddfp(__lvx(laSpan, 0), __lvx(laOrigin, 0), __lvx(laFraction, 0)), laResult, 0);
+        __stvx(lRight, laResult, 0);
         const f32 lfRight = laResult[0];
+        __stvx(lTop, laResult, 0);
+        const f32 lfTop = laResult[0];
+        __stvx(lBottom, laResult, 0);
+        const f32 lfBottom = laResult[0];
 #else
+        const f32 lfSpan = (lv2Max.x - lv2Min.x) - 2.0f;
         const f32 lfRight = fmaf(lfSpan, lv2Min.x + 1.0f, lfValue / lfMax);
+        const f32 lfTop = lv2Min.y + 2.0f;
+        const f32 lfBottom = lv2Max.y - 2.0f;
 #endif
-        DrawBox(lv2Min.x, lv2Min.y + 2.0f, lfRight, lv2Max.y - 2.0f, lForeColour);
+        DrawBox(lv2Min.x, lfTop, lfRight, lfBottom, lForeColour);
     }
 
     // Faithful port of X360 0x82823DE0 (the pseudocode is VPU-garbled -- the rect setup is reconstructed
