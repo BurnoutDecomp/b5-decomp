@@ -285,6 +285,8 @@ bool InGameMessageRenderer::Release()
         case E_RELEASESTAGE_START:
             meReleaseStage   = E_RELEASESTAGE_START;
             mRoadRulesToShow = CgsContainers::BitArray<64u>();
+            if (mpBlendState)
+                mpHeapAllocator->Free(mBlendStateResource);
             meReleaseStage = E_RELEASESTAGE_DONE;
             return true;
 

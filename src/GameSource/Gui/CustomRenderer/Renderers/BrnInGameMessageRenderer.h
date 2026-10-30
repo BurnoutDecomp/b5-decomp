@@ -38,6 +38,7 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"   // CustomRenderComponentInterface base
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"               // TextObject / TextRenderer
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                      // BitArray<64> (mRoadRulesToShow)
@@ -172,8 +173,8 @@ namespace BrnGui
         s32                         miLastRoadRuleScoreReceived; // +4836 (Road::ChallengeIndex)
         f32                         mfTextStartPosX;             // +4840
         f32                         mfTextPosY;                  // +4844
- // +4848..4867 (Resource, 20B console)
-        void*                       mpBlendState;                // +4868
+        rw::Resource                mBlendStateResource;       // +4848
+        renderengine::BlendState*   mpBlendState;                // +4868
         CgsGraphics::TextObject     mTextObject;                 // +4872
         CgsGraphics::TextRenderer*  mpTextRenderer;              // +4996
         CgsLanguage::LanguageManager* mpLanguageManager;         // +5000
