@@ -12,9 +12,12 @@ namespace CgsResource
     // Native value/link/handle layout. ARTIST copies three resource words at0/4/8,
     // links atC/10 and the source handle at14/18. DecFIGS names the trailing
     // mpThis member; native ResourcePtr arrays and owners require a32-byte stride.
+    template <class Type> struct ResourcePtr;
+
     struct BaseResourcePtr
     {
         friend class Pool;
+        template <class Type> friend struct ResourcePtr;
     public:
         BaseResourcePtr();
         ~BaseResourcePtr();
@@ -57,7 +60,10 @@ namespace CgsResource
     public:
         ResourcePtr() {}
         ResourcePtr(const ResourcePtr<Type>& lrOther);
-        ResourcePtr(const BaseResourcePtr& lrOther);
+        ResourcePtr(const BaseResourcePtr& lrOther)
+        {
+            CreateFromHandle(&lrOther.mHandle);
+        }
         ResourcePtr(const ResourceHandle& lrHandle)
         {
             CreateFromHandle(&lrHandle);
@@ -68,7 +74,11 @@ namespace CgsResource
             CreateFromHandle(&lrOther.mHandle);
             return *this;
         }
-        ResourcePtr<Type>& operator=(const BaseResourcePtr& lrOther);
+        ResourcePtr<Type>& operator=(const BaseResourcePtr& lrOther)
+        {
+            CreateFromHandle(&lrOther.mHandle);
+            return *this;
+        }
         ResourcePtr<Type>& operator=(const ResourceHandle& lrHandle)
         {
             CreateFromHandle(&lrHandle);
@@ -121,6 +131,9 @@ namespace CgsResource
         bool operator!=(const BaseResourcePtr& lrOther) const { return !IsEqual(&lrOther); }
     };
 
-    extern const BaseResourcePtr NULLResourcePtr;
+    // DecFIGS CgsResourcePtr.h:149 defines this namespace-scope const in the
+    // header. Its internal linkage gives each translation unit its own sentinel;
+    // ARTIST TrafficEntity and TrafficCarStreamer use different instances.
+    const BaseResourcePtr NULLResourcePtr;
 }
 #endif
