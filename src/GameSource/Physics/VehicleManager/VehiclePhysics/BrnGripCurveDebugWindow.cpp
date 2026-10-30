@@ -3,7 +3,9 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"   // GetUI().AddWindow/RemoveWindow/IsWindowAdded
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 
-#include <cmath>       // VMX flush, max semantics and scalar ceil
+#include <cmath>
+#include <vectorintrinsics.h>
+#include <ppcintrinsics.h>
 
 // BrnPhysics::Vehicle::GripCurveDebugWindow -- the four ledger functions homed by the Vehicle-physics
 // group. Reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -14,30 +16,16 @@ namespace Vehicle
 {
     namespace
     {
-        f32 GripFlush(f32 lfValue)
+        // ARTIST 825B4C14/18 and 825B94D0..9514 use native VMX.
+        f32 GripMaximum(f32 a, f32 b)
         {
-            return std::fpclassify(lfValue) == FP_SUBNORMAL
-                ? std::copysign(0.0f, lfValue) : lfValue;
+            const __vector4 va = { a, a, a, a }, vb = { b, b, b, b };
+            return __vmaxfp(va, vb).x;
         }
-
-        // ARTIST vmaxfp: flush operands/results, propagate unordered values,
-        // and prefer positive zero when the zero signs differ.
-        f32 GripMaximum(f32 lfA, f32 lfB)
+        f32 GripMultiply(f32 a, f32 b)
         {
-            lfA = GripFlush(lfA);
-            lfB = GripFlush(lfB);
-            if (std::isnan(lfA))
-                return lfA;
-            if (std::isnan(lfB))
-                return lfB;
-            if (lfA == 0.0f && lfB == 0.0f)
-                return std::signbit(lfA) && std::signbit(lfB) ? -0.0f : 0.0f;
-            return GripFlush(lfA > lfB ? lfA : lfB);
-        }
-
-        f32 GripMultiply(f32 lfA, f32 lfB)
-        {
-            return GripFlush(GripFlush(lfA) * GripFlush(lfB));
+            const __vector4 va = { a, a, a, a }, vb = { b, b, b, b };
+            return __vmulfp(va, vb).x;
         }
 
         // Prepare uses scalar fsubs/fsel/fmuls and ceil after each curve's
@@ -45,7 +33,7 @@ namespace Vehicle
         f32 InitialGripRange(f32 lfLongMax, f32 lfLatMax)
         {
             const f32 lfDifference = lfLongMax - lfLatMax;
-            const f32 lfMaximum = lfDifference >= 0.0f ? lfLongMax : lfLatMax;
+            const f32 lfMaximum = static_cast<f32>(__fsel(lfDifference, lfLongMax, lfLatMax));
             return static_cast<f32>(std::ceil(lfMaximum * 1.2f));
         }
     }
@@ -55,8 +43,9 @@ namespace Vehicle
     void GripCurveDebugWindow::Update(f32 lfTimeStep, CgsDev::DebugUI::InputEvent leEvent)
     {
         GripCurveDebugGraph* lapGraphs[] = { &mLongGripCurveGraph, &mLatGripCurveGraph };
-        for (GripCurveDebugGraph* lpGraph : lapGraphs)
+        for (s32 liGraph = 0; liGraph < 2; ++liGraph)
         {
+            GripCurveDebugGraph* lpGraph = lapGraphs[liGraph];
             const Vector4& lrCurve = lpGraph->GetGripCurve()->maGripVariables;
             rw::math::vpu::Vector2 lRange;
             lRange.x = GripMultiply(GripMaximum(lrCurve.x, lrCurve.y), 1.2f);
@@ -88,9 +77,9 @@ namespace Vehicle
         mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.y, 0xFFFF0000u);
         mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.x, 0xFF0000FFu);
         mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.x, 0xFFFF0000u);
-        const auto lLongTitle = mLongGripCurveGraph.GetTitleLocation();
+        const rw::math::vpu::Vector2 lLongTitle = mLongGripCurveGraph.GetTitleLocation();
         lpDisplay->DrawText("Long grip curve", lLongTitle.x, lLongTitle.y, 18.0f, 0xFF000000u);
-        const auto lLatTitle = mLatGripCurveGraph.GetTitleLocation();
+        const rw::math::vpu::Vector2 lLatTitle = mLatGripCurveGraph.GetTitleLocation();
         lpDisplay->DrawText("Lateral grip curve", lLatTitle.x, lLatTitle.y, 18.0f, 0xFF000000u);
     }
 
