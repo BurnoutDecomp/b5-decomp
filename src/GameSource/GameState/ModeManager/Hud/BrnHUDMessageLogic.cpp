@@ -10,12 +10,9 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // CrashingRaceCarInterface (GenerateOnlineTeamChangeMessages)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // gpDebugPrint ([hud-xcrash] witness)
 #include <cstdlib>                                             // getenv (BRN_MODEMGR_DIAG)
-#include <cmath>
-#if defined(_XBOX)
 #include <xtl.h>
 #include <xboxmath.h>
 #include <vectorintrinsics.h>
-#endif
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp
@@ -623,7 +620,6 @@ void HUDMessageLogic::GenerateDistanceToFinishMessage(ScoringSystem* lpScoringSy
     if (!(mfNextDistanceToFinishMessage > KF_DISTANCE_MESSAGE_UNSET))
     {
         const f32 lfRaceDist               = lfPlayerDistanceToFinish - KF_DISTANCE_MESSAGE_OFFSET_METRES;
-#if defined(_XBOX)
         // ARTIST 0x82395B1C..0x82395B44: two reciprocal refinements, then
         // round the quotient toward zero and form the remainder with a fused operation.
         const __vector4 lvDivisor = XMVectorReplicate(KF_DISTANCE_MESSAGE_MODULUS_METRES);
@@ -636,10 +632,6 @@ void HUDMessageLogic::GenerateDistanceToFinishMessage(ScoringSystem* lpScoringSy
         const __vector4 lvRefined2 = __vmaddfp(lvRefined1, lvResidual2, lvRefined1);
         const __vector4 lvQuotient = __vrfiz(__vmulfp(lvRefined2, lvDistance));
         const f32 lfModRaceDist = __vnmsubfp(lvQuotient, lvDivisor, lvDistance).x;
-#else
-        const f32 lfModRaceDist =
-            lfRaceDist - truncf(lfRaceDist / KF_DISTANCE_MESSAGE_MODULUS_METRES) * KF_DISTANCE_MESSAGE_MODULUS_METRES;
-#endif
         const f32 lfEarliestMessageDistance = lfRaceDist - lfModRaceDist;
         mfNextDistanceToFinishMessage       = lfEarliestMessageDistance;
     }
