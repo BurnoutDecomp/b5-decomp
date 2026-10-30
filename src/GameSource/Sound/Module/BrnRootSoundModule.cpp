@@ -1,5 +1,6 @@
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
@@ -615,6 +616,59 @@ namespace Module
         lpInputBufferStack->DestroyIOBuffer<CgsSound::Playback::Module::Io::InputBuffer>(
             &lpPlaybackInputBuffer);
         lpOutputBufferStack->DestroyIOBuffer<Io::LogicOutputBuffer>(&lpLogicOutputBuffer);
+        return lbPrepared;
+    }
+
+    // ARTIST 0x82704188. Both retry and success publish logic and playback output.
+    bool RootSoundModule::PrepareOnEnteringGameplay(
+        const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        Io::RootInputBuffer* lpSoundModuleInputBuffer,
+        Io::RootOutputBuffer* lpSoundModuleOutputBuffer)
+    {
+        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
+        CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
+        CGS_ASSERT(lpSoundModuleInputBuffer != 0, "lpSoundModuleInputBuffer != NULL");
+        CGS_ASSERT(lpSoundModuleOutputBuffer != 0, "lpSoundModuleOutputBuffer != NULL");
+
+        Io::LogicOutputBuffer* lpLogicOutputBuffer = 0;
+        CgsSound::Playback::Module::Io::InputBuffer* lpPlaybackInputBuffer = 0;
+        CgsSound::Playback::Module::Io::OutputBuffer* lpPlaybackOutputBuffer = 0;
+        lpOutputBufferStack->CreateIOBuffer(&lpLogicOutputBuffer, "SoundLogic");
+        lpInputBufferStack->CreateIOBuffer(&lpPlaybackInputBuffer, "SoundPlayback");
+        lpOutputBufferStack->CreateIOBuffer(&lpPlaybackOutputBuffer, "SoundPlayback");
+        lpPlaybackOutputBuffer->Clear();
+
+        rw::core::GeneralResourceAllocator* lpLogicBank =
+            lpAllocatorList->GetRWGeneralResourceAllocator(0x19);
+        lpLogicBank->m_mainAllocator.SetOption(1, 0);
+        gLogicTestBedAlloc.SetAllocator(lpLogicBank);
+        gLogicTestBedAlloc.EnableThreadSafety(false);
+        gLogicTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
+        gLogicTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
+
+        const bool lbPrepared = mLogicModule.PrepareOnEnteringGameplay(
+            &gLogicTestBedAlloc, lpSoundModuleInputBuffer, lpLogicOutputBuffer);
+        lpSoundModuleOutputBuffer->LockForWrite();
+        CgsModule::LockBuffersForIO(lpPlaybackInputBuffer, lpLogicOutputBuffer);
+        BridgeLogicToRoot(lpLogicOutputBuffer, lpSoundModuleOutputBuffer);
+        CgsModule::UnlockBuffersForIO(lpPlaybackInputBuffer, lpLogicOutputBuffer);
+        lpSoundModuleOutputBuffer->UnlockForWrite();
+
+        mLogicModule.GetPlaybackModule().Update(lpPlaybackInputBuffer, lpPlaybackOutputBuffer);
+        lpSoundModuleOutputBuffer->LockForWrite();
+        CgsModule::LockBuffersForIO(lpSoundModuleInputBuffer, lpPlaybackOutputBuffer);
+        lpSoundModuleOutputBuffer->GetResourceRequestInterface()->mRequestQueue.Append(
+            lpPlaybackOutputBuffer->GetResourceRequestQueue());
+        mLogicModule.GetFreedStreamBufferIds().AppendArray(
+            lpPlaybackOutputBuffer->GetStreamBuffersFreed());
+        CgsModule::UnlockBuffersForIO(lpSoundModuleInputBuffer, lpPlaybackOutputBuffer);
+        lpSoundModuleOutputBuffer->UnlockForWrite();
+
+        lpOutputBufferStack->DestroyIOBuffer(&lpPlaybackOutputBuffer);
+        lpInputBufferStack->DestroyIOBuffer(&lpPlaybackInputBuffer);
+        lpOutputBufferStack->DestroyIOBuffer(&lpLogicOutputBuffer);
         return lbPrepared;
     }
 

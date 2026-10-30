@@ -384,6 +384,24 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
     return lbPrepared;
 }
 
+// ARTIST 0x82703F18. Pending requests are bridged on the retry path.
+bool SoundLogicModule::PrepareOnEnteringGameplay(rw::IResourceAllocator* apAllocator,
+                                                  CgsModule::IOBuffer* apInputBuffer,
+                                                  CgsModule::IOBuffer* apOutputBuffer)
+{
+    mpBrnAllocator = apAllocator;
+    CGS_ASSERT(apInputBuffer, "lpInputBuffer");
+    CGS_ASSERT(apOutputBuffer, "lpOutputBuffer");
+    AttachBuffers(apInputBuffer, apOutputBuffer);
+    apOutputBuffer->LockForWrite();
+    const bool lbPrepared = PrepareStateManagersOnEnteringGameplay(4);
+    if (!lbPrepared)
+        ResourceBridging();
+    apOutputBuffer->UnlockForWrite();
+    DetachBuffers();
+    return lbPrepared;
+}
+
 // X360 0x82702E80. Bridge the broker's per-frame resource traffic:
 //   ResourceRegistrar::Update(this+21016);                                    // <- real, runs now
 //   VariableEventQueue<4096,16>::Append(*(this+19608)+2068, this+74952);      // <- grow-in
@@ -1246,14 +1264,6 @@ void SoundLogicModule::UpdateFrameInformation(
 
 void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
                               CgsModule::IOBuffer* apInputBuffer,
-                              CgsModule::IOBuffer* apOutputBuffer)
-{
-    Update(af32GameDt, af32SimDt, apInputBuffer, apOutputBuffer,
-           static_cast<BrnUpdateSet>(0));
-}
-
-void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
-                              CgsModule::IOBuffer* apInputBuffer,
                               CgsModule::IOBuffer* apOutputBuffer,
                               BrnUpdateSet aeUpdateSet)
 {
@@ -1354,12 +1364,9 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
 //
 // [marked deviation -- DRIVER, not body] The console reaches this from
 //   LoadingScriptedState::LoadSoundModuleAgain        @0x823E7700   (no body in this tree)
-//    -> RootSoundModule::PrepareOnEnteringGameplay    @0x82704188   (no body in this tree)
-//       -> SoundLogicModule::PrepareOnEnteringGameplay@0x82703F18   (no body in this tree)
+//    -> RootSoundModule::PrepareOnEnteringGameplay    @0x82704188
+//       -> SoundLogicModule::PrepareOnEnteringGameplay@0x82703F18
 //          -> this(4), inside LockForWrite / [retry: ResourceBridging] / UnlockForWrite.
-// None of those three exists yet, so the poll is driven from Update()'s existing
-// registrar-drain bracket, which is the SAME lock/bridge/unlock shape 0x82703FA8..0x82704000
-// uses. Retire this driver when that chain lands; the body below is the console's own.
 //
 // On success the console holds the music and submix volumes (message 15, true) for one
 // second, restarts the mixer (message 43) and returns true; Update releases the hold.

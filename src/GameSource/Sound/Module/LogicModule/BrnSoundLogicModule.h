@@ -88,7 +88,6 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     };
 
     SoundLogicModule();
-    virtual ~SoundLogicModule() {}
 
     // Bring-up (X360 ctor 0x827E3DA8 + the registrar bring-up 0x826B0470): the engine
     // base Construct (chains ModuleSingleBuffered + the message queue + the embedded
@@ -106,17 +105,17 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // CreateStateManagers (4), PrepareStateManagersOnBoot(4) (5). The console
     // advances ONE chunk per call in the early stages (returns false after 0+1 and
     // after the voice constructs), detaching the buffers at every exit.
-    bool Prepare(rw::IResourceAllocator* apAllocator,
+    virtual bool Prepare(rw::IResourceAllocator* apAllocator,
                  CgsModule::IOBuffer* apInputBuffer,
                  CgsModule::IOBuffer* apOutputBuffer);
 
-    virtual void Update(f32 af32GameDt, f32 af32SimDt,
-                        CgsModule::IOBuffer* apInputBuffer,
-                        CgsModule::IOBuffer* apOutputBuffer) ;
+    bool PrepareOnEnteringGameplay(rw::IResourceAllocator* apAllocator,
+                                   CgsModule::IOBuffer* apInputBuffer,
+                                   CgsModule::IOBuffer* apOutputBuffer);
 
     // BrnSoundLogicModule.cpp:522 (DWARF). The Burnout update carries the
     // frame's update-set in addition to the generic logic-engine arguments.
-    void Update(f32 af32GameDt, f32 af32SimDt,
+    virtual void Update(f32 af32GameDt, f32 af32SimDt,
                 CgsModule::IOBuffer* apInputBuffer,
                 CgsModule::IOBuffer* apOutputBuffer,
                 BrnUpdateSet aeUpdateSet);
