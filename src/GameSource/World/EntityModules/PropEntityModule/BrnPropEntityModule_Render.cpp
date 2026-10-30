@@ -208,28 +208,12 @@ PropEntityModule::RenderModel(
     {
         lfCullDistance = static_cast< f32 >( mauOverrideLodDistances[ luLastLod ] );
     }
-    const f32 lfAuthoredCullDistance = lfCullDistance;
-    if ( lbRenderingEnvironmentMap )
-    {
-    }
-    if ( lfScaledDistanceSq >= lfCullDistance * lfCullDistance )
-    {
+    if ( !(lfScaledDistanceSq < lfCullDistance * lfCullDistance) )
         return false;
-    }
 
-    // ---- LOD-state selection (@0x822C4A68..0x822C4B58) ----------------------
+    // ARTIST 0x822C4A68: debug override first, then fixed LOD 2 for env maps.
     CgsGraphics::Model::State leLodState = CgsGraphics::Model::E_STATE_LOD_0;
-
-    if (lbSmallShadow)
-    {
-        f32 lafNormal[2] = {lfAuthoredCullDistance, lfAuthoredCullDistance};
-        for (u32 luLod = 0; luLod < (std::min)(luNumLods, 2u); ++luLod)
-            lafNormal[luLod] = mbOverrideLodDistances
-                ? static_cast<f32>(mauOverrideLodDistances[luLod]) : lpModel->GetLodDistance(luLod);
-        if (liLod < 0) return false;
-        leLodState = static_cast<CgsGraphics::Model::State>(liLod);
-    }
-    else if ( mbOverrideLod )
+    if ( mbOverrideLod )
     {
         const CgsGraphics::Model::State leOverride =
             static_cast< CgsGraphics::Model::State >( miLodOverrideValue );
@@ -241,9 +225,7 @@ PropEntityModule::RenderModel(
     }
     else if ( lbRenderingEnvironmentMap )
     {
-        if (liRequested < 0 && lrReflectionLod.IsDistanceBased()) return false;
-        const auto leReflectionLod = static_cast<CgsGraphics::Model::State>(
-            liRequested >= 0 && liRequested <= 2 ? liRequested : 2);
+        const CgsGraphics::Model::State leReflectionLod = CgsGraphics::Model::E_STATE_LOD_2;
         if ( !lpModel->DoesStateExist( leReflectionLod ) )
         {
             return false;
@@ -278,13 +260,6 @@ PropEntityModule::RenderModel(
     }
 
     CGS_ASSERT( lpModel->DoesStateExist( leLodState ), "lpModel->DoesStateExist( leLodState )" );
-    if (!lbRenderingEnvironmentMap)
-    {
-    }
-    else
-    {
-    }
-
     // ---- instanced models go to the collector, not to a draw ----------------
     // @0x822C4B90: bit 0 of mu8Flags. The collector batches up to
     // Model::KU_MAX_INSTANCES_PER_GROUP compatible submissions into ONE DrawRenderable.
