@@ -384,26 +384,27 @@ void DirectorModule::ProcessSceneQueryResults(
 //   4. bundle the DirectorInputOutput and run the live director
 //      (MainDirector::PreSceneQueryUpdate) or, while replaying, the replay director (GATED).
 //
-// The 7th X360 argument arrives as a bool in a register (`extrwi r11,r9,8,16; clrlwi r10,
-// r11,31` -- the decompiler widens it to __int16 and takes HIBYTE; the value is masked to
-// one bit either way, so it is a bool).
+// The final argument is the full BrnUpdateSet in r9. ARTIST 0x8225C7B0 extracts
+// bit 0x100 to obtain the replay flag; narrowing the argument to bool loses that bit.
 // ----------------------------------------------------------------------------
-s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
+s32 DirectorModule::PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                                         const DirectorIO::InputBuffer* lpInputBuffer,
                                         DirectorIO::OutputBuffer* lpOutputBuffer,
                                         DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer,
-                                        bool lbIsReplaying)
+                                        BrnUpdateSet lUpdateSet)
 {
     // FLAG: the X360 takes these two arguments and never reads them (the module framework
     // passes the same six-argument shape to every module entry point).
-    (void)liUnusedA;
-    (void)liUnusedB;
+    (void)lpInputStack;
+    (void)lpOutputStack;
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfCount_PreSQUpdate);
 
     lpInputBuffer->LockForRead();
     lpOutputBuffer->LockForWrite();
     lpSceneQueryOutputBuffer->LockForWrite();
+
+    const bool lbIsReplaying = (lUpdateSet & 0x100) != 0; // ARTIST 0x8225C7B0
 
     // ---- 1. the replay-flag latch + its rising edge --------------------------------
     if (lbIsReplaying != mbIsReplaying && lbIsReplaying)
@@ -517,15 +518,15 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
 //      (mCgsCamera = <that director's CgsGraphics::Camera>);
 //   5. the replay RECORD leg + serialiser registration (GATED).
 // ----------------------------------------------------------------------------
-s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
+s32 DirectorModule::Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                            const DirectorIO::InputBuffer* lpInputBuffer,
                            DirectorIO::OutputBuffer* lpOutputBuffer,
                            const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer,
                            DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer)
 {
     // FLAG: taken and never read by the X360 body (see PreSceneQueryUpdate).
-    (void)liUnusedA;
-    (void)liUnusedB;
+    (void)lpInputStack;
+    (void)lpOutputStack;
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfCount_MainUpdate);
 
@@ -634,13 +635,13 @@ s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
 // all seven stores). So the whole post office is inert here and Clear() is a no-op; this
 // pass cannot issue or receive queries. Reproduced verbatim.
 // ----------------------------------------------------------------------------
-s32 DirectorModule::PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
+s32 DirectorModule::PostGuiUpdate(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                                   const DirectorIO::InputBuffer* lpInputBuffer,
                                   DirectorIO::OutputBuffer* lpOutputBuffer)
 {
     // FLAG: taken and never read by the X360 body (see PreSceneQueryUpdate).
-    (void)liUnusedA;
-    (void)liUnusedB;
+    (void)lpInputStack;
+    (void)lpOutputStack;
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfCount_PostGuiUpdate);
 

@@ -2,6 +2,7 @@
 #define BRN_DIRECTOR_MODULE_H
 
 #include "types.hpp"
+#include "SharedClasses/BrnSharedConstants.h" // BrnUpdateSet
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"        // CgsModule::ModuleSingleBuffered base
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"                    // CgsGraphics::Camera (mCgsCamera)
 #include "GameSource/Director/BrnDirectorICEWrapper.h"                    // BrnDirector::ICEWrapper (DirectorResourceManager needs the full type)
@@ -15,6 +16,7 @@
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"         // the six scene-query post offices
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"                   // BrnReplays::BaseSerialiser (mDirectorSerialiser)
 
+namespace CgsModule { struct IOBufferStack; }
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
 
 // ============================================================================
@@ -156,17 +158,17 @@ public:
     // X360 0x8225C768. Pre-scene-query update: latch the replay flag, Clear the per-frame
     // scene-query post office, then run MainDirector::PreSceneQueryUpdate (live leg) or
     // ReplayDirector::PreSceneQueryUpdate (replay leg -- GATED). BODIED.
-    s32 PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
+    s32 PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                             const DirectorIO::InputBuffer* lpInputBuffer,
                             DirectorIO::OutputBuffer* lpOutputBuffer,
                             DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer,
-                            bool lbIsReplaying);
+                            BrnUpdateSet lUpdateSet);
 
     // X360 0x82275300. The per-frame Update spine: drain the scene-query results, run
     // MainDirector::Update (live leg) or ReplayDirector::Update (replay leg -- GATED), copy
     // the produced graphics camera into the module's own, then the replay-serialiser
     // bookkeeping + serialiser registration. BODIED.
-    s32 Update(s32 liUnusedA, s32 liUnusedB,
+    s32 Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                const DirectorIO::InputBuffer* lpInputBuffer,
                DirectorIO::OutputBuffer* lpOutputBuffer,
                const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer,
@@ -174,7 +176,7 @@ public:
 
     // X360 0x82250DD0. Post-GUI update: run MainDirector::PostGuiUpdate when not replaying,
     // then latch the input buffer's post-GUI car index. BODIED.
-    s32 PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
+    s32 PostGuiUpdate(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                       const DirectorIO::InputBuffer* lpInputBuffer,
                       DirectorIO::OutputBuffer* lpOutputBuffer);
 
