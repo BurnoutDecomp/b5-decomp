@@ -254,7 +254,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
         {
             case E_TRIGGERTYPE_PLANE_SEGMENT:   // 0
             {
-                const auto* lpPlane = static_cast<const TriggerEntityModuleIO::InAddPlaneSegmentTriggerEvent*>(lpEvent);
+                const TriggerEntityModuleIO::InAddPlaneSegmentTriggerEvent* lpPlane = static_cast<const TriggerEntityModuleIO::InAddPlaneSegmentTriggerEvent*>(lpEvent);
                 const f32 lfDimX = lpPlane->mDimensions.x;
                 const f32 lfDimY = lpPlane->mDimensions.y;
                 if (!(lfDimX > 0.0f) || !(lfDimY > 0.0f))
@@ -273,7 +273,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 //   addi r3, r1, var_2A0 ; bl rw::collision::BoxVolume::Initialize
                 // The result IS the volume pointer, and it is the console's own
                 // `lpVolume` assert operand below.
-                rw::Resource lResource = {};
+                rw::Resource lResource;
                 lResource.m_baseResources[0] = laVolumeStorage;
                 rw::collision::BoxVolume* lpVolume = rw::collision::BoxVolume::Initialize(
                         lResource, lfDimX, lfDimY, KF_PLANE_SEGMENT_TRIGGER_DEPTH);
@@ -295,7 +295,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                     CgsDev::Assert::EndAssert();
                 }
                 // Same staged rw::Resource as the two box branches (0x822D96C4..0x822D96EC).
-                rw::Resource lResource = {};
+                rw::Resource lResource;
                 lResource.m_baseResources[0] = laVolumeStorage;
                 rw::collision::SphereVolume* lpVolume =
                     rw::collision::SphereVolume::Initialize(lResource, lfRadius);
@@ -308,13 +308,13 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
             case E_TRIGGERTYPE_BOX:             // 2
             {
                 // Box: BoxVolume::Initialize gets the HALVED dims (the asm vmulfp128 by 0.5).
-                const auto* lpBox = static_cast<const TriggerEntityModuleIO::InAddBoxTriggerEvent*>(lpEvent);
+                const TriggerEntityModuleIO::InAddBoxTriggerEvent* lpBox = static_cast<const TriggerEntityModuleIO::InAddBoxTriggerEvent*>(lpEvent);
                 const f32 lfHX = lpBox->mDimensions.x * 0.5f;
                 const f32 lfHY = lpBox->mDimensions.y * 0.5f;
                 const f32 lfHZ = lpBox->mDimensions.z * 0.5f;
                 // Staged rw::Resource, 0x822D9520..0x822D9554 (this is the branch whose
                 // `vmulfp128 v1, v0, 0.5` builds the halved-extent Vector3 in v1).
-                rw::Resource lResource = {};
+                rw::Resource lResource;
                 lResource.m_baseResources[0] = laVolumeStorage;
                 rw::collision::BoxVolume* lpVolume =
                     rw::collision::BoxVolume::Initialize(lResource, lfHX, lfHY, lfHZ);
