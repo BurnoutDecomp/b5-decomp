@@ -19,6 +19,7 @@
 // ============================================================================
 
 #include "GameSource/GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.h"
+#include "GameSource/GameState/BrnGameStateModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"            // ScoringSystem + CarData
