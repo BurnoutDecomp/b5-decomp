@@ -316,7 +316,7 @@ namespace Vehicle
         // arithmetic in the mounted VehiclePhysics_layout_check.cpp (KU_B_CARTYPE), which also names
         // the member in an existence check. What is still checkable HERE is that ApplyPlayerStats is
         // writing a member of the real class at all:
-        CGS_STATIC_ASSERT((sizeof(decltype(VehicleManager::maRaceCarVehicles[0].meCarType)) == 4),
+        CGS_STATIC_ASSERT((sizeof(((RaceCarPhysics*)0)->meCarType) == 4),
                       "VehiclePhysics::meCarType is the 4-byte `stw` seat ApplyPlayerStats writes "
                       "(asm 0x8259BFE8), not the f32 the retired record modelled");
         // RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member, not a
