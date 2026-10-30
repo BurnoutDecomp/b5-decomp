@@ -110,7 +110,7 @@ namespace Vehicle
         // a named getter so the host reads the named member instead of an offset cast.
         f32 GetEngineDrive() const
         {
-            return mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.x;
+            return mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.mV.x;
         }
 
         // @0x825CF130..0x825CF274 (82 items): seed the running-state registers from a wheel
@@ -136,7 +136,7 @@ namespace Vehicle
         // Exposed as a named setter so that write stays on the named member.
         void SetClutchFactor(f32 lfClutchFactor)
         {
-            mvClutchFactor_RPM_CurrentGearChangeTime.x = lfClutchFactor;   // +0xB0 lane 0
+            mvClutchFactor_RPM_CurrentGearChangeTime.mV.x = lfClutchFactor;   // +0xB0 lane 0
         }
 
         // directly off the owner (`lwz rX, 0xFC0(r31)` in UpdateWheels @0x8261E7B4 /
@@ -152,7 +152,7 @@ namespace Vehicle
         // lane .y == RPM), which publishes it as RaceCarState::mfRPM. It is the same value the DWARF
         // spells `float32_t VehiclePhysics::GetRPM() const` (VehiclePhysics.h:1099) -- that owner-side
         // getter is this one's forwarder. Named getter so the host reads the named lane, not an offset.
-        f32 GetRPM() const { return mvClutchFactor_RPM_CurrentGearChangeTime.y; }
+        f32 GetRPM() const { return mvClutchFactor_RPM_CurrentGearChangeTime.mV.y; }
 
         // --- Remaining Engine API: owned by separate future TUs -- declared only (no body). ---
 

@@ -103,7 +103,7 @@ namespace Vehicle
             Vector4        mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff; // +0xC0
             Vector4        mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor; // +0xD0
 
-            void SetMass(VecFloat lValue) { mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x = lValue.x; }
+            void SetMass(VecFloat lValue) { mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.x = lValue.mV.x; }
 
             // DecFIGS VehicleAttribs.h:234/238/242/246 declares these as VecFloat returns,
             // not float returns. Breaker UpdateInAirBehaviour @0x825D0C88-0x825D0C98 and
@@ -111,25 +111,25 @@ namespace Vehicle
             // splats lanes 0/1/2/3 respectively, which is the SDK VecFloat accessor lowering.
             VecFloat GetPitchDampingOnTakeOff() const
             {
-                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x;
+                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.mV.x;
                 { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
             }
 
             VecFloat GetYawDampingOnTakeOff() const
             {
-                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y;
+                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.mV.y;
                 { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
             }
 
             VecFloat GetRollDampingOnTakeOff() const
             {
-                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z;
+                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.mV.z;
                 { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
             }
 
             VecFloat GetRollLimitOnTakeOff() const
             {
-                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.w;
+                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.mV.w;
                 { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
             }
         };
@@ -156,7 +156,7 @@ namespace Vehicle
 
             void SetMinSpeedForDrift(VecFloat lValue)
             {
-                mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x = lValue.x;
+                mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.mV.x = lValue.mV.x;
             }
         };
 
@@ -178,37 +178,37 @@ namespace Vehicle
             // data wrapper into the packed lanes. Bodied in VehicleAttribs.cpp.
             void InitializeFromAttribs(const void* lpSourceWrapper);
 
-            void SetDifferential(VecFloat lValue)             { mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.x = lValue.x; }
-            void SetTransmissionEfficiency(VecFloat lValue)   { mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.y = lValue.x; }
-            void SetEngineResistance(VecFloat lValue)         { mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.z = lValue.x; }
-            void SetGearDownRPM(VecFloat lValue)              { mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.w = lValue.x; }
-            void SetMaxTorque(VecFloat lValue)                { mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.x = lValue.x; }
-            void SetTorqueFallOffRPM(VecFloat lValue)         { mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.y = lValue.x; }
-            void SetMaxRPM(VecFloat lValue)                   { mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.z = lValue.x; }
-            void SetLSDMSpeedToAllowGearChanges(VecFloat lValue) { mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.w = lValue.x; }
-            void SetFlyWheelInertia(VecFloat lValue)          { mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.x = lValue.x; }
-            void SetFlyWheelFriction(VecFloat lValue)         { mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.y = lValue.x; }
-            void SetGearChangeTime(VecFloat lValue)           { mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.z = lValue.x; }
-            void SetGearRatio(s32 liGear, VecFloat lValue)    { mavGearRatios_TorqueScales_GearUpRPMs[liGear].x = lValue.x; }
-            void SetTorqueScale(s32 liGear, VecFloat lValue)  { mavGearRatios_TorqueScales_GearUpRPMs[liGear].y = lValue.x; }
-            void SetGearUpRPM(s32 liGear, VecFloat lValue)    { mavGearRatios_TorqueScales_GearUpRPMs[liGear].z = lValue.x; }
+            void SetDifferential(VecFloat lValue)             { mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.mV.x = lValue.mV.x; }
+            void SetTransmissionEfficiency(VecFloat lValue)   { mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.mV.y = lValue.mV.x; }
+            void SetEngineResistance(VecFloat lValue)         { mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.mV.z = lValue.mV.x; }
+            void SetGearDownRPM(VecFloat lValue)              { mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.mV.w = lValue.mV.x; }
+            void SetMaxTorque(VecFloat lValue)                { mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.mV.x = lValue.mV.x; }
+            void SetTorqueFallOffRPM(VecFloat lValue)         { mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.mV.y = lValue.mV.x; }
+            void SetMaxRPM(VecFloat lValue)                   { mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.mV.z = lValue.mV.x; }
+            void SetLSDMSpeedToAllowGearChanges(VecFloat lValue) { mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.mV.w = lValue.mV.x; }
+            void SetFlyWheelInertia(VecFloat lValue)          { mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.mV.x = lValue.mV.x; }
+            void SetFlyWheelFriction(VecFloat lValue)         { mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.mV.y = lValue.mV.x; }
+            void SetGearChangeTime(VecFloat lValue)           { mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.mV.z = lValue.mV.x; }
+            void SetGearRatio(s32 liGear, VecFloat lValue)    { mavGearRatios_TorqueScales_GearUpRPMs[liGear].mV.x = lValue.mV.x; }
+            void SetTorqueScale(s32 liGear, VecFloat lValue)  { mavGearRatios_TorqueScales_GearUpRPMs[liGear].mV.y = lValue.mV.x; }
+            void SetGearUpRPM(s32 liGear, VecFloat lValue)    { mavGearRatios_TorqueScales_GearUpRPMs[liGear].mV.z = lValue.mV.x; }
 
             // The gearing lanes Engine::ComputeGear / Engine::GetMaxWheelAngularVelocity read.
-            f32 GetDifferential() const        { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.x; }
-            f32 GetMaxRPM() const              { return mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.z; }
-            f32 GetGearRatio(s32 liGear) const { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].x; }
-            f32 GetGearUpRPM(s32 liGear) const { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].z; }
+            f32 GetDifferential() const        { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.mV.x; }
+            f32 GetMaxRPM() const              { return mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.mV.z; }
+            f32 GetGearRatio(s32 liGear) const { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].mV.x; }
+            f32 GetGearUpRPM(s32 liGear) const { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].mV.z; }
 
             // The lanes Engine::Update @0x825CB288 reads (powertrain wave, 2026-08-09). Every
             // accessor name is the DWARF's (the PS3 DecFIGS Engine.cpp dump calls each of these
             // by name inside Update); the lane bindings are the X360 asm's splat indices.
-            f32 GetTransmissionEfficiency() const { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.y; }   // +0x10.y (vspltw .. ,1)
-            f32 GetGearDownRPM() const            { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.w; }   // +0x10.w (vspltw .. ,3)
-            f32 GetTorqueFallOffRPM() const       { return mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.y; }      // +0x20.y
-            f32 GetFlyWheelInertia() const        { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.x; }                    // +0x30.x
-            f32 GetFlyWheelFriction() const       { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.y; }                    // +0x30.y
-            f32 GetGearChangeTime() const         { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.z; }                    // +0x30.z
-            f32 GetTorqueScale(s32 liGear) const  { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].y; }                        // gear[g].y
+            f32 GetTransmissionEfficiency() const { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.mV.y; }   // +0x10.y (vspltw .. ,1)
+            f32 GetGearDownRPM() const            { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.mV.w; }   // +0x10.w (vspltw .. ,3)
+            f32 GetTorqueFallOffRPM() const       { return mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.mV.y; }      // +0x20.y
+            f32 GetFlyWheelInertia() const        { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.mV.x; }                    // +0x30.x
+            f32 GetFlyWheelFriction() const       { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.mV.y; }                    // +0x30.y
+            f32 GetGearChangeTime() const         { return mvFlyWheelInertia_FlyWheelFriction_GearChangeTime.mV.z; }                    // +0x30.z
+            f32 GetTorqueScale(s32 liGear) const  { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].mV.y; }                        // gear[g].y
 
             InterpedParam3 mTorqueCurve;                                                        // +0x00
             Vector4 mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM;          // +0x10
@@ -240,7 +240,7 @@ namespace Vehicle
             VecFloat GetCrashSpeedMPS() const
             {
                 const f32 lfCrashSpeed =
-                    mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.x;
+                    mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.mV.x;
                 { const VecFloat lResult = { lfCrashSpeed, lfCrashSpeed, lfCrashSpeed, lfCrashSpeed }; return lResult; }
             }
 

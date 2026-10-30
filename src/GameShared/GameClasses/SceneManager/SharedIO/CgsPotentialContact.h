@@ -76,10 +76,10 @@ namespace SceneManagerIO
             mu16PrimitiveIndexB = lu16PrimitiveIndexA;
 
             // vxor with the 0x80000000 lane splat == per-lane sign flip (all four lanes).
-            mNormal.x = -mNormal.x;
-            mNormal.y = -mNormal.y;
-            mNormal.z = -mNormal.z;
-            mNormal.w = -mNormal.w;
+            mNormal.mV.x = -mNormal.mV.x;
+            mNormal.mV.y = -mNormal.mV.y;
+            mNormal.mV.z = -mNormal.mV.z;
+            mNormal.mV.w = -mNormal.mV.w;
         }
         u16  GetMaterialTagA() const;           // :39
         u16  GetGroupTagA() const;              // :43

@@ -439,10 +439,10 @@ namespace Vehicle
         {
             static const f32 KF_MPH_TO_MPS = 0.447039992f; // flt_82F31928 / unk_83017FE0
             { const VecFloat lResult = {
-                mfSpeedMPH.x * KF_MPH_TO_MPS,
-                mfSpeedMPH.y * KF_MPH_TO_MPS,
-                mfSpeedMPH.z * KF_MPH_TO_MPS,
-                mfSpeedMPH.w * KF_MPH_TO_MPS
+                mfSpeedMPH.mV.x * KF_MPH_TO_MPS,
+                mfSpeedMPH.mV.y * KF_MPH_TO_MPS,
+                mfSpeedMPH.mV.z * KF_MPH_TO_MPS,
+                mfSpeedMPH.mV.w * KF_MPH_TO_MPS
             }; return lResult; }
         }
         // ADDITIVE GROW, read-only, no layout change.

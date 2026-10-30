@@ -204,8 +204,8 @@ namespace BrnWorld
         {
             // Heading angles in the ground plane: ATan2(dir.z, dir.x) (vspltw128 lanes 2 and 0 of v2 /
             // v119), spilled to var_F0 / var_100 and subtracted at 0x822B2198.
-            const f32 lfPlayerAngle  = PowerParkingDetail::ATan2(lPlayerDir.z, lPlayerDir.x);
-            const f32 lfTrafficAngle = PowerParkingDetail::ATan2(lVehicleDir.z, lVehicleDir.x);
+            const f32 lfPlayerAngle  = PowerParkingDetail::ATan2(lPlayerDir.mV.z, lPlayerDir.mV.x);
+            const f32 lfTrafficAngle = PowerParkingDetail::ATan2(lVehicleDir.mV.z, lVehicleDir.mV.x);
 
             lfClosestAngleDiff = std::fabs(lfPlayerAngle - lfTrafficAngle);   // 0x822B21A8 fabs ; 0x822B21AC stfs
 

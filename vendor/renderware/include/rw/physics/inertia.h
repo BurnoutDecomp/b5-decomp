@@ -85,10 +85,10 @@ namespace physics
             , mLinearDrag(0.0f)
             , mAngularDrag(0.0f)
         {
-            mInvTens.x = 1.0f;      // stack vector lane 0 -> stvx128 to +0x00
-            mInvTens.y = 1.0f;      // lane 1
-            mInvTens.z = 1.0f;      // lane 2
-            mInvTens.w = 0.0f;      // lane 3 (the Vector3 pad; `stw 0`)
+            mInvTens.mV.x = 1.0f;      // stack vector lane 0 -> stvx128 to +0x00
+            mInvTens.mV.y = 1.0f;      // lane 1
+            mInvTens.mV.z = 1.0f;      // lane 2
+            mInvTens.mV.w = 0.0f;      // lane 3 (the Vector3 pad; `stw 0`)
         }
 
         // DWARF accessors (inertia.h:110..134). All of these are inlined away on the
@@ -117,8 +117,8 @@ namespace physics
         void SetInverseInertia(const rw::math::vpu::Vector3& lrV)
         {
             mInvTens   = lrV;                                            // stvx128 -> +0x00
-            mSpherical = (lrV.x < lrV.y) ? lrV.x : lrV.y;                // stfs -> +0x14 (kept: the console stores the intermediate)
-            mSpherical = 1.0f / ((mSpherical < lrV.z) ? mSpherical : lrV.z);   // fdivs; stfs -> +0x14
+            mSpherical = (lrV.mV.x < lrV.mV.y) ? lrV.mV.x : lrV.mV.y;                // stfs -> +0x14 (kept: the console stores the intermediate)
+            mSpherical = 1.0f / ((mSpherical < lrV.mV.z) ? mSpherical : lrV.mV.z);   // fdivs; stfs -> +0x14
         }
         void SetInverseMass(f32 lfV)                              { mInvMass = lfV; }
         void SetMaxLinearVelocity(f32 lfV)                        { mMaxVelocity = lfV; }

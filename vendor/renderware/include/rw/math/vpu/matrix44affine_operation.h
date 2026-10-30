@@ -57,9 +57,9 @@ namespace vpu
         {
             for (s32 liCol = 0; liCol < 3; ++liCol)
             {
-                const f32 lfDot = laRows[liRow].x * laRows[liCol].x
-                                + laRows[liRow].y * laRows[liCol].y
-                                + laRows[liRow].z * laRows[liCol].z;
+                const f32 lfDot = laRows[liRow].mV.x * laRows[liCol].mV.x
+                                + laRows[liRow].mV.y * laRows[liCol].mV.y
+                                + laRows[liRow].mV.z * laRows[liCol].mV.z;
                 const f32 lfDelta = lfDot - ((liRow == liCol) ? 1.0f : 0.0f);
                 lfTotal += lfDelta * lfDelta;
             }
@@ -74,9 +74,9 @@ namespace vpu
         f32 lfTotal = 0.0f;
         for (s32 liRow = 0; liRow < 3; ++liRow)
         {
-            const f32 lfMagSq = laRows[liRow].x * laRows[liRow].x
-                              + laRows[liRow].y * laRows[liRow].y
-                              + laRows[liRow].z * laRows[liRow].z;
+            const f32 lfMagSq = laRows[liRow].mV.x * laRows[liRow].mV.x
+                              + laRows[liRow].mV.y * laRows[liRow].mV.y
+                              + laRows[liRow].mV.z * laRows[liRow].mV.z;
             const f32 lfDelta = lfMagSq - 1.0f;
             lfTotal += lfDelta * lfDelta;
         }
@@ -92,15 +92,15 @@ namespace vpu
     // three rotation rows (xAxis*v.x + yAxis*v.y + zAxis*v.z).
     inline Vector3 TransformVector(const Matrix44Affine& lrMatrix, Vector3 lvVector)
     {
-        const f32 lfX = lvVector.x;
-        const f32 lfY = lvVector.y;
-        const f32 lfZ = lvVector.z;
+        const f32 lfX = lvVector.mV.x;
+        const f32 lfY = lvVector.mV.y;
+        const f32 lfZ = lvVector.mV.z;
 
         Vector3 lvResult;
-        lvResult.x = lrMatrix.xAxis.x * lfX + lrMatrix.yAxis.x * lfY + lrMatrix.zAxis.x * lfZ;
-        lvResult.y = lrMatrix.xAxis.y * lfX + lrMatrix.yAxis.y * lfY + lrMatrix.zAxis.y * lfZ;
-        lvResult.z = lrMatrix.xAxis.z * lfX + lrMatrix.yAxis.z * lfY + lrMatrix.zAxis.z * lfZ;
-        lvResult.w = 0.0f;
+        lvResult.mV.x = lrMatrix.xAxis.mV.x * lfX + lrMatrix.yAxis.mV.x * lfY + lrMatrix.zAxis.mV.x * lfZ;
+        lvResult.mV.y = lrMatrix.xAxis.mV.y * lfX + lrMatrix.yAxis.mV.y * lfY + lrMatrix.zAxis.mV.y * lfZ;
+        lvResult.mV.z = lrMatrix.xAxis.mV.z * lfX + lrMatrix.yAxis.mV.z * lfY + lrMatrix.zAxis.mV.z * lfZ;
+        lvResult.mV.w = 0.0f;
         return lvResult;
     }
 
@@ -110,15 +110,15 @@ namespace vpu
     // (xAxis*p.x + yAxis*p.y + zAxis*p.z + wAxis).
     inline Vector3 TransformPoint(const Matrix44Affine& lrMatrix, Vector3 lvPoint)
     {
-        const f32 lfX = lvPoint.x;
-        const f32 lfY = lvPoint.y;
-        const f32 lfZ = lvPoint.z;
+        const f32 lfX = lvPoint.mV.x;
+        const f32 lfY = lvPoint.mV.y;
+        const f32 lfZ = lvPoint.mV.z;
 
         Vector3 lvResult;
-        lvResult.x = lrMatrix.xAxis.x * lfX + lrMatrix.yAxis.x * lfY + lrMatrix.zAxis.x * lfZ + lrMatrix.wAxis.x;
-        lvResult.y = lrMatrix.xAxis.y * lfX + lrMatrix.yAxis.y * lfY + lrMatrix.zAxis.y * lfZ + lrMatrix.wAxis.y;
-        lvResult.z = lrMatrix.xAxis.z * lfX + lrMatrix.yAxis.z * lfY + lrMatrix.zAxis.z * lfZ + lrMatrix.wAxis.z;
-        lvResult.w = 0.0f;
+        lvResult.mV.x = lrMatrix.xAxis.mV.x * lfX + lrMatrix.yAxis.mV.x * lfY + lrMatrix.zAxis.mV.x * lfZ + lrMatrix.wAxis.mV.x;
+        lvResult.mV.y = lrMatrix.xAxis.mV.y * lfX + lrMatrix.yAxis.mV.y * lfY + lrMatrix.zAxis.mV.y * lfZ + lrMatrix.wAxis.mV.y;
+        lvResult.mV.z = lrMatrix.xAxis.mV.z * lfX + lrMatrix.yAxis.mV.z * lfY + lrMatrix.zAxis.mV.z * lfZ + lrMatrix.wAxis.mV.z;
+        lvResult.mV.w = 0.0f;
         return lvResult;
     }
 
@@ -284,29 +284,29 @@ namespace vpu
     // but nothing new is added to that debt. REPORTED to the conductor as a separate finding.
     inline Matrix44Affine Matrix44AffineFromAxisRotationAngle(Vector3 lvAxis, Vector4 lvfAngle)
     {
-        const float lfSin = std::sin(lvfAngle.x);
-        const float lfCos = std::cos(lvfAngle.x);
+        const float lfSin = std::sin(lvfAngle.mV.x);
+        const float lfCos = std::cos(lvfAngle.mV.x);
         const float lfT   = 1.0f - lfCos;
 
-        const float lfTx = lfT * lvAxis.x;
-        const float lfTy = lfT * lvAxis.y;
-        const float lfTz = lfT * lvAxis.z;
-        const float lfSx = lfSin * lvAxis.x;
-        const float lfSy = lfSin * lvAxis.y;
-        const float lfSz = lfSin * lvAxis.z;
+        const float lfTx = lfT * lvAxis.mV.x;
+        const float lfTy = lfT * lvAxis.mV.y;
+        const float lfTz = lfT * lvAxis.mV.z;
+        const float lfSx = lfSin * lvAxis.mV.x;
+        const float lfSy = lfSin * lvAxis.mV.y;
+        const float lfSz = lfSin * lvAxis.mV.z;
 
         Matrix44Affine lResult;
-        const Vector3 lXAxis = { lfTx * lvAxis.x + lfCos,
-                                 lfTx * lvAxis.y + lfSz,
-                                 lfTx * lvAxis.z - lfSy, 0.0f };
+        const Vector3 lXAxis = { lfTx * lvAxis.mV.x + lfCos,
+                                 lfTx * lvAxis.mV.y + lfSz,
+                                 lfTx * lvAxis.mV.z - lfSy, 0.0f };
         lResult.xAxis = lXAxis;
-        const Vector3 lYAxis = { lfTy * lvAxis.x - lfSz,
-                                 lfTy * lvAxis.y + lfCos,
-                                 lfTy * lvAxis.z + lfSx, 0.0f };
+        const Vector3 lYAxis = { lfTy * lvAxis.mV.x - lfSz,
+                                 lfTy * lvAxis.mV.y + lfCos,
+                                 lfTy * lvAxis.mV.z + lfSx, 0.0f };
         lResult.yAxis = lYAxis;
-        const Vector3 lZAxis = { lfTz * lvAxis.x + lfSy,
-                                 lfTz * lvAxis.y - lfSx,
-                                 lfTz * lvAxis.z + lfCos, 0.0f };
+        const Vector3 lZAxis = { lfTz * lvAxis.mV.x + lfSy,
+                                 lfTz * lvAxis.mV.y - lfSx,
+                                 lfTz * lvAxis.mV.z + lfCos, 0.0f };
         lResult.zAxis = lZAxis;
         const Vector3 lWAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
         lResult.wAxis = lWAxis;
@@ -456,17 +456,17 @@ namespace vpu
         Matrix44Affine lInverse;
 
         // Inverse rotation = transpose of the upper 3x3 (rows become columns).
-        lInverse.xAxis.x = lrMatrix.xAxis.x; lInverse.xAxis.y = lrMatrix.yAxis.x; lInverse.xAxis.z = lrMatrix.zAxis.x; lInverse.xAxis.w = 0.0f;
-        lInverse.yAxis.x = lrMatrix.xAxis.y; lInverse.yAxis.y = lrMatrix.yAxis.y; lInverse.yAxis.z = lrMatrix.zAxis.y; lInverse.yAxis.w = 0.0f;
-        lInverse.zAxis.x = lrMatrix.xAxis.z; lInverse.zAxis.y = lrMatrix.yAxis.z; lInverse.zAxis.z = lrMatrix.zAxis.z; lInverse.zAxis.w = 0.0f;
+        lInverse.xAxis.mV.x = lrMatrix.xAxis.mV.x; lInverse.xAxis.mV.y = lrMatrix.yAxis.mV.x; lInverse.xAxis.mV.z = lrMatrix.zAxis.mV.x; lInverse.xAxis.mV.w = 0.0f;
+        lInverse.yAxis.mV.x = lrMatrix.xAxis.mV.y; lInverse.yAxis.mV.y = lrMatrix.yAxis.mV.y; lInverse.yAxis.mV.z = lrMatrix.zAxis.mV.y; lInverse.yAxis.mV.w = 0.0f;
+        lInverse.zAxis.mV.x = lrMatrix.xAxis.mV.z; lInverse.zAxis.mV.y = lrMatrix.yAxis.mV.z; lInverse.zAxis.mV.z = lrMatrix.zAxis.mV.z; lInverse.zAxis.mV.w = 0.0f;
 
         // Inverse translation = transpose applied to the negated position, i.e. each
         // lane is the negative dot of the original position with the matching axis row.
         const Vector3& lrPos = lrMatrix.wAxis;
-        lInverse.wAxis.x = -(lrPos.x * lrMatrix.xAxis.x + lrPos.y * lrMatrix.xAxis.y + lrPos.z * lrMatrix.xAxis.z);
-        lInverse.wAxis.y = -(lrPos.x * lrMatrix.yAxis.x + lrPos.y * lrMatrix.yAxis.y + lrPos.z * lrMatrix.yAxis.z);
-        lInverse.wAxis.z = -(lrPos.x * lrMatrix.zAxis.x + lrPos.y * lrMatrix.zAxis.y + lrPos.z * lrMatrix.zAxis.z);
-        lInverse.wAxis.w = 0.0f;
+        lInverse.wAxis.mV.x = -(lrPos.mV.x * lrMatrix.xAxis.mV.x + lrPos.mV.y * lrMatrix.xAxis.mV.y + lrPos.mV.z * lrMatrix.xAxis.mV.z);
+        lInverse.wAxis.mV.y = -(lrPos.mV.x * lrMatrix.yAxis.mV.x + lrPos.mV.y * lrMatrix.yAxis.mV.y + lrPos.mV.z * lrMatrix.yAxis.mV.z);
+        lInverse.wAxis.mV.z = -(lrPos.mV.x * lrMatrix.zAxis.mV.x + lrPos.mV.y * lrMatrix.zAxis.mV.y + lrPos.mV.z * lrMatrix.zAxis.mV.z);
+        lInverse.wAxis.mV.w = 0.0f;
         return lInverse;
     }
 
@@ -503,21 +503,21 @@ namespace vpu
 
         Matrix44Affine lInverse;
         {
-            const Vector3 lAggregateValue = { lvCrossYZ.x * lfInverseDeterminant,
-                                  lvCrossZX.x * lfInverseDeterminant,
-                                  lvCrossXY.x * lfInverseDeterminant, 0.0f };
+            const Vector3 lAggregateValue = { lvCrossYZ.mV.x * lfInverseDeterminant,
+                                  lvCrossZX.mV.x * lfInverseDeterminant,
+                                  lvCrossXY.mV.x * lfInverseDeterminant, 0.0f };
             lInverse.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { lvCrossYZ.y * lfInverseDeterminant,
-                                  lvCrossZX.y * lfInverseDeterminant,
-                                  lvCrossXY.y * lfInverseDeterminant, 0.0f };
+            const Vector3 lAggregateValue = { lvCrossYZ.mV.y * lfInverseDeterminant,
+                                  lvCrossZX.mV.y * lfInverseDeterminant,
+                                  lvCrossXY.mV.y * lfInverseDeterminant, 0.0f };
             lInverse.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { lvCrossYZ.z * lfInverseDeterminant,
-                                  lvCrossZX.z * lfInverseDeterminant,
-                                  lvCrossXY.z * lfInverseDeterminant, 0.0f };
+            const Vector3 lAggregateValue = { lvCrossYZ.mV.z * lfInverseDeterminant,
+                                  lvCrossZX.mV.z * lfInverseDeterminant,
+                                  lvCrossXY.mV.z * lfInverseDeterminant, 0.0f };
             lInverse.zAxis = lAggregateValue;
         }
 
@@ -525,9 +525,9 @@ namespace vpu
         const Vector3& lrPos = lrMatrix.wAxis;
         {
             const Vector3 lAggregateValue = {
-            -(lrPos.x * lInverse.xAxis.x + lrPos.y * lInverse.yAxis.x + lrPos.z * lInverse.zAxis.x),
-            -(lrPos.x * lInverse.xAxis.y + lrPos.y * lInverse.yAxis.y + lrPos.z * lInverse.zAxis.y),
-            -(lrPos.x * lInverse.xAxis.z + lrPos.y * lInverse.yAxis.z + lrPos.z * lInverse.zAxis.z),
+            -(lrPos.mV.x * lInverse.xAxis.mV.x + lrPos.mV.y * lInverse.yAxis.mV.x + lrPos.mV.z * lInverse.zAxis.mV.x),
+            -(lrPos.mV.x * lInverse.xAxis.mV.y + lrPos.mV.y * lInverse.yAxis.mV.y + lrPos.mV.z * lInverse.zAxis.mV.y),
+            -(lrPos.mV.x * lInverse.xAxis.mV.z + lrPos.mV.y * lInverse.yAxis.mV.z + lrPos.mV.z * lInverse.zAxis.mV.z),
             0.0f };
             lInverse.wAxis = lAggregateValue;
         }
@@ -648,9 +648,9 @@ namespace vpu
         // The SDK's row transform as a vmaddfp cascade, four lanes: v.x * m.x, then + v.y * m.y, then + v.z * m.z.
         inline Vector3 CascadeTransformVector(const Matrix44Affine& lrMatrix, const Vector3& lrVector)
         {
-            XMVECTOR result = __vmulfp(__lvx(&lrMatrix.xAxis, 0), ::XMVectorReplicate(lrVector.x));
-            result = __vmaddfp(__lvx(&lrMatrix.yAxis, 0), ::XMVectorReplicate(lrVector.y), result);
-            result = __vmaddfp(__lvx(&lrMatrix.zAxis, 0), ::XMVectorReplicate(lrVector.z), result);
+            XMVECTOR result = __vmulfp(__lvx(&lrMatrix.xAxis, 0), ::XMVectorReplicate(lrVector.mV.x));
+            result = __vmaddfp(__lvx(&lrMatrix.yAxis, 0), ::XMVectorReplicate(lrVector.mV.y), result);
+            result = __vmaddfp(__lvx(&lrMatrix.zAxis, 0), ::XMVectorReplicate(lrVector.mV.z), result);
             Vector3 vector;
             __stvx(result, &vector, 0);
             return vector;
@@ -664,32 +664,32 @@ namespace vpu
         // with TWO steps, NO zero guard (0x822038C4..0x822038E8).
         inline Vector3 DegenerateUnitAxis(const Matrix44Affine& lrMatrix)
         {
-            const float lfM00 = lrMatrix.xAxis.x;
-            const float lfM11 = lrMatrix.yAxis.y;
-            const float lfM22 = lrMatrix.zAxis.z;
+            const float lfM00 = lrMatrix.xAxis.mV.x;
+            const float lfM11 = lrMatrix.yAxis.mV.y;
+            const float lfM22 = lrMatrix.zAxis.mV.z;
             Vector3 lAxis;
             if (Greater(lfM00, lfM11) && Greater(lfM00, lfM22))
             {
                 const float lfDominant = 1.0f + lfM00;
-                lAxis.x = lfDominant * lfDominant;
-                lAxis.y = lrMatrix.xAxis.y + lrMatrix.yAxis.x;
-                lAxis.z = lrMatrix.xAxis.z + lrMatrix.zAxis.x;
+                lAxis.mV.x = lfDominant * lfDominant;
+                lAxis.mV.y = lrMatrix.xAxis.mV.y + lrMatrix.yAxis.mV.x;
+                lAxis.mV.z = lrMatrix.xAxis.mV.z + lrMatrix.zAxis.mV.x;
             }
             else if (Greater(lfM11, lfM22))
             {
                 const float lfDominant = 1.0f + lfM11;
-                lAxis.x = lrMatrix.yAxis.x + lrMatrix.xAxis.y;
-                lAxis.y = lfDominant * lfDominant;
-                lAxis.z = lrMatrix.yAxis.z + lrMatrix.zAxis.y;
+                lAxis.mV.x = lrMatrix.yAxis.mV.x + lrMatrix.xAxis.mV.y;
+                lAxis.mV.y = lfDominant * lfDominant;
+                lAxis.mV.z = lrMatrix.yAxis.mV.z + lrMatrix.zAxis.mV.y;
             }
             else
             {
                 const float lfDominant = 1.0f + lfM22;
-                lAxis.x = lrMatrix.zAxis.x + lrMatrix.xAxis.z;
-                lAxis.y = lrMatrix.zAxis.y + lrMatrix.yAxis.z;
-                lAxis.z = lfDominant * lfDominant;
+                lAxis.mV.x = lrMatrix.zAxis.mV.x + lrMatrix.xAxis.mV.z;
+                lAxis.mV.y = lrMatrix.zAxis.mV.y + lrMatrix.yAxis.mV.z;
+                lAxis.mV.z = lfDominant * lfDominant;
             }
-            lAxis.w = lAxis.x;
+            lAxis.mV.w = lAxis.mV.x;
             return Scale(lAxis, RefinedReciprocalSqrt(Dot3(lAxis, lAxis), 2));
         }
 
@@ -706,9 +706,9 @@ namespace vpu
         // flushes to zero, so it is spelled against 0 here (ROUNDING_RULE 6).
         inline void QueryRotation(const Matrix44Affine& lrMatrix, Vector3& lrAxisOut, float& lrfAngleOut)
         {
-            const Vector3 lAntisymmetric = { lrMatrix.yAxis.z - lrMatrix.zAxis.y, lrMatrix.zAxis.x - lrMatrix.xAxis.z,
-                                             lrMatrix.xAxis.y - lrMatrix.yAxis.x, 0.0f };
-            const float lfTraceMinusOne = Subtract(Add(Add(lrMatrix.xAxis.x, lrMatrix.yAxis.y), lrMatrix.zAxis.z), 1.0f);
+            const Vector3 lAntisymmetric = { lrMatrix.yAxis.mV.z - lrMatrix.zAxis.mV.y, lrMatrix.zAxis.mV.x - lrMatrix.xAxis.mV.z,
+                                             lrMatrix.xAxis.mV.y - lrMatrix.yAxis.mV.x, 0.0f };
+            const float lfTraceMinusOne = Subtract(Add(Add(lrMatrix.xAxis.mV.x, lrMatrix.yAxis.mV.y), lrMatrix.zAxis.mV.z), 1.0f);
 
             const float lfLengthSquared = Dot3(lAntisymmetric, lAntisymmetric);
             const float lfRoot = Multiply(lfLengthSquared, RefinedReciprocalSqrt(lfLengthSquared, 2));
@@ -794,18 +794,18 @@ namespace vpu
         }
 
         // rel = transpose(from) * to: row i is to's rows weighted by from's column i.
-        const Vector3 lColumnX = { lrFrom.xAxis.x, lrFrom.yAxis.x, lrFrom.zAxis.x, lrFrom.wAxis.x };
-        const Vector3 lColumnY = { lrFrom.xAxis.y, lrFrom.yAxis.y, lrFrom.zAxis.y, lrFrom.wAxis.y };
-        const Vector3 lColumnZ = { lrFrom.xAxis.z, lrFrom.yAxis.z, lrFrom.zAxis.z, lrFrom.wAxis.z };
+        const Vector3 lColumnX = { lrFrom.xAxis.mV.x, lrFrom.yAxis.mV.x, lrFrom.zAxis.mV.x, lrFrom.wAxis.mV.x };
+        const Vector3 lColumnY = { lrFrom.xAxis.mV.y, lrFrom.yAxis.mV.y, lrFrom.zAxis.mV.y, lrFrom.wAxis.mV.y };
+        const Vector3 lColumnZ = { lrFrom.xAxis.mV.z, lrFrom.yAxis.mV.z, lrFrom.zAxis.mV.z, lrFrom.wAxis.mV.z };
         Matrix44Affine lRelative;
         lRelative.xAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnX);
         lRelative.yAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnY);
         lRelative.zAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnZ);
         {
-            const Vector3 lAggregateValue = { SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.x, lrTo.wAxis.x))),
-                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.y, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.y, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.y, lrTo.wAxis.y))),
-                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.z, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.z, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.z, lrTo.wAxis.z))),
-                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.w, lrTo.wAxis.w))) };
+            const Vector3 lAggregateValue = { SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.x, lrTo.wAxis.mV.x))),
+                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.y, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.y, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.y, lrTo.wAxis.mV.y))),
+                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.z, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.z, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.z, lrTo.wAxis.mV.z))),
+                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.w, lrTo.wAxis.mV.w))) };
             lRelative.wAxis = lAggregateValue;
         }
 
@@ -830,25 +830,25 @@ namespace vpu
             float lfCos;
             XboxMath::XMVectorSinCos(&lfSin, &lfCos, SLerpDetail::Multiply(lfAngle, lfAmount));
             const float lfT = SLerpDetail::Subtract(1.0f, lfCos);
-            const float lfTX = SLerpDetail::Multiply(lfT, lAxis.x);
-            const float lfTY = SLerpDetail::Multiply(lfT, lAxis.y);
-            const float lfTZ = SLerpDetail::Multiply(lfT, lAxis.z);
-            const float lfSX = SLerpDetail::Multiply(lfSin, lAxis.x);
-            const float lfSY = SLerpDetail::Multiply(lfSin, lAxis.y);
-            const float lfSZ = SLerpDetail::Multiply(lfSin, lAxis.z);
+            const float lfTX = SLerpDetail::Multiply(lfT, lAxis.mV.x);
+            const float lfTY = SLerpDetail::Multiply(lfT, lAxis.mV.y);
+            const float lfTZ = SLerpDetail::Multiply(lfT, lAxis.mV.z);
+            const float lfSX = SLerpDetail::Multiply(lfSin, lAxis.mV.x);
+            const float lfSY = SLerpDetail::Multiply(lfSin, lAxis.mV.y);
+            const float lfSZ = SLerpDetail::Multiply(lfSin, lAxis.mV.z);
             Matrix44Affine lRotation;
-            lRotation.xAxis.x = SLerpDetail::MultiplyAdd(lfTX, lAxis.x, lfCos);
-            lRotation.xAxis.y = SLerpDetail::MultiplyAdd(lfTX, lAxis.y, lfSZ);
-            lRotation.xAxis.z = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTX, lAxis.z), lfSY);
-            lRotation.yAxis.x = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTY, lAxis.x), lfSZ);
-            lRotation.yAxis.y = SLerpDetail::MultiplyAdd(lfTY, lAxis.y, lfCos);
-            lRotation.yAxis.z = SLerpDetail::MultiplyAdd(lfTY, lAxis.z, lfSX);
-            lRotation.zAxis.x = SLerpDetail::MultiplyAdd(lfTZ, lAxis.x, lfSY);
-            lRotation.zAxis.y = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTZ, lAxis.y), lfSX);
-            lRotation.zAxis.z = SLerpDetail::MultiplyAdd(lfTZ, lAxis.z, lfCos);
-            lRotation.xAxis.w = lRotation.xAxis.x;   // the packing copies lane x into w
-            lRotation.yAxis.w = lRotation.yAxis.x;
-            lRotation.zAxis.w = lRotation.zAxis.x;
+            lRotation.xAxis.mV.x = SLerpDetail::MultiplyAdd(lfTX, lAxis.mV.x, lfCos);
+            lRotation.xAxis.mV.y = SLerpDetail::MultiplyAdd(lfTX, lAxis.mV.y, lfSZ);
+            lRotation.xAxis.mV.z = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTX, lAxis.mV.z), lfSY);
+            lRotation.yAxis.mV.x = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTY, lAxis.mV.x), lfSZ);
+            lRotation.yAxis.mV.y = SLerpDetail::MultiplyAdd(lfTY, lAxis.mV.y, lfCos);
+            lRotation.yAxis.mV.z = SLerpDetail::MultiplyAdd(lfTY, lAxis.mV.z, lfSX);
+            lRotation.zAxis.mV.x = SLerpDetail::MultiplyAdd(lfTZ, lAxis.mV.x, lfSY);
+            lRotation.zAxis.mV.y = SLerpDetail::Subtract(SLerpDetail::Multiply(lfTZ, lAxis.mV.y), lfSX);
+            lRotation.zAxis.mV.z = SLerpDetail::MultiplyAdd(lfTZ, lAxis.mV.z, lfCos);
+            lRotation.xAxis.mV.w = lRotation.xAxis.mV.x;   // the packing copies lane x into w
+            lRotation.yAxis.mV.w = lRotation.yAxis.mV.x;
+            lRotation.zAxis.mV.w = lRotation.zAxis.mV.x;
             {
                 const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
                 lRotation.wAxis = lAggregateValue;
@@ -857,8 +857,8 @@ namespace vpu
             lResult.yAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.yAxis);
             lResult.zAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.zAxis);
             const Vector3 lDelta = lrTo.wAxis - lrFrom.wAxis;
-            const Vector3 lWAxis = { SLerpDetail::MultiplyAdd(lfAmount, lDelta.x, lrFrom.wAxis.x), SLerpDetail::MultiplyAdd(lfAmount, lDelta.y, lrFrom.wAxis.y),
-                                     SLerpDetail::MultiplyAdd(lfAmount, lDelta.z, lrFrom.wAxis.z), SLerpDetail::MultiplyAdd(lfAmount, lDelta.w, lrFrom.wAxis.w) };
+            const Vector3 lWAxis = { SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.x, lrFrom.wAxis.mV.x), SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.y, lrFrom.wAxis.mV.y),
+                                     SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.z, lrFrom.wAxis.mV.z), SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.w, lrFrom.wAxis.mV.w) };
             lResult.wAxis = lWAxis;
         }
 
@@ -898,33 +898,33 @@ namespace vpu
     // re-reading 0x822037F8 -- that would be a divergence, not a repair.
     inline Vector3 QueryRotateDegenerateUnitAxis(const Matrix44Affine& lrMatrix)
     {
-        const float lfM00 = lrMatrix.xAxis.x;
-        const float lfM11 = lrMatrix.yAxis.y;
-        const float lfM22 = lrMatrix.zAxis.z;
+        const float lfM00 = lrMatrix.xAxis.mV.x;
+        const float lfM11 = lrMatrix.yAxis.mV.y;
+        const float lfM22 = lrMatrix.zAxis.mV.z;
 
         Vector3 lAxis;
         if (lfM00 > lfM11 && lfM00 > lfM22)
         {
             const float lfDominant = 1.0f + lfM00;
-            lAxis.x = lfDominant * lfDominant;
-            lAxis.y = lrMatrix.xAxis.y + lrMatrix.yAxis.x;   // m01 + m10
-            lAxis.z = lrMatrix.xAxis.z + lrMatrix.zAxis.x;   // m02 + m20
+            lAxis.mV.x = lfDominant * lfDominant;
+            lAxis.mV.y = lrMatrix.xAxis.mV.y + lrMatrix.yAxis.mV.x;   // m01 + m10
+            lAxis.mV.z = lrMatrix.xAxis.mV.z + lrMatrix.zAxis.mV.x;   // m02 + m20
         }
         else if (lfM11 > lfM22)
         {
             const float lfDominant = 1.0f + lfM11;
-            lAxis.x = lrMatrix.yAxis.x + lrMatrix.xAxis.y;   // m10 + m01
-            lAxis.y = lfDominant * lfDominant;
-            lAxis.z = lrMatrix.yAxis.z + lrMatrix.zAxis.y;   // m12 + m21
+            lAxis.mV.x = lrMatrix.yAxis.mV.x + lrMatrix.xAxis.mV.y;   // m10 + m01
+            lAxis.mV.y = lfDominant * lfDominant;
+            lAxis.mV.z = lrMatrix.yAxis.mV.z + lrMatrix.zAxis.mV.y;   // m12 + m21
         }
         else
         {
             const float lfDominant = 1.0f + lfM22;
-            lAxis.x = lrMatrix.zAxis.x + lrMatrix.xAxis.z;   // m20 + m02
-            lAxis.y = lrMatrix.zAxis.y + lrMatrix.yAxis.z;   // m21 + m12
-            lAxis.z = lfDominant * lfDominant;
+            lAxis.mV.x = lrMatrix.zAxis.mV.x + lrMatrix.xAxis.mV.z;   // m20 + m02
+            lAxis.mV.y = lrMatrix.zAxis.mV.y + lrMatrix.yAxis.mV.z;   // m21 + m12
+            lAxis.mV.z = lfDominant * lfDominant;
         }
-        lAxis.w = 0.0f;
+        lAxis.mV.w = 0.0f;
 
         return Normalize(lAxis);
     }
@@ -960,13 +960,13 @@ namespace vpu
     {
         // The antisymmetric part: length 2*sin(theta), direction along the rotation axis.
         Vector3 lAntisymmetric;
-        lAntisymmetric.x = lrMatrix.yAxis.z - lrMatrix.zAxis.y;   // m12 - m21
-        lAntisymmetric.y = lrMatrix.zAxis.x - lrMatrix.xAxis.z;   // m20 - m02
-        lAntisymmetric.z = lrMatrix.xAxis.y - lrMatrix.yAxis.x;   // m01 - m10
-        lAntisymmetric.w = 0.0f;
+        lAntisymmetric.mV.x = lrMatrix.yAxis.mV.z - lrMatrix.zAxis.mV.y;   // m12 - m21
+        lAntisymmetric.mV.y = lrMatrix.zAxis.mV.x - lrMatrix.xAxis.mV.z;   // m20 - m02
+        lAntisymmetric.mV.z = lrMatrix.xAxis.mV.y - lrMatrix.yAxis.mV.x;   // m01 - m10
+        lAntisymmetric.mV.w = 0.0f;
 
         const float lfTwoSin = Magnitude(lAntisymmetric);
-        const float lfTwoCos = (lrMatrix.xAxis.x + lrMatrix.yAxis.y + lrMatrix.zAxis.z) - 1.0f;
+        const float lfTwoCos = (lrMatrix.xAxis.mV.x + lrMatrix.yAxis.mV.y + lrMatrix.zAxis.mV.z) - 1.0f;
 
         if (lfTwoSin > 0.0f)
         {

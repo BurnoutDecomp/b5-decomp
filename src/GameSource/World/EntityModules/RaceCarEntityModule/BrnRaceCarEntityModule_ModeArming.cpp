@@ -795,8 +795,8 @@ void RaceCarEntityModule::SetUpPlayerCarForMode(
             // v3 == unk_82181510, the same world UP axis row HandleResetPlayerCarAction feeds
             // BuildTransform (BrnRaceCarEntityModule.cpp:2088).
             Matrix44Affine lGridTransform;
-            BrnMath::BuildTransform(lGridTransform, lStartPosition, lStartDirection,
-                                    Vector3{ 0.0f, 1.0f, 0.0f, 0.0f });
+            const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+            BrnMath::BuildTransform(lGridTransform, lStartPosition, lStartDirection, lWorldUp);
 
             lSeatDirection = lGridTransform.zAxis;   // stack copy read back at 0x82305BAC
             lSeatPosition  = lGridTransform.wAxis;   // ...and at 0x82305BA4
@@ -841,11 +841,11 @@ void RaceCarEntityModule::SetUpPlayerCarForMode(
                 *CgsDev::Log::gpDebugPrint
                     << "[start-grid] SetUpPlayerCarForMode: player car "
                     << static_cast<s32>(leGlobalRaceCarIndex)
-                    << " -> RequestPlaceOnTrack pos (" << lStartPosition.x << ", "
-                    << lStartPosition.y << ", " << lStartPosition.z << ") dir ("
-                    << lStartDirection.x << ", " << lStartDirection.y << ", "
-                    << lStartDirection.z << ") from (" << lSeatPosition.x << ", "
-                    << lSeatPosition.y << ", " << lSeatPosition.z << "); grid slots "
+                    << " -> RequestPlaceOnTrack pos (" << lStartPosition.mV.x << ", "
+                    << lStartPosition.mV.y << ", " << lStartPosition.mV.z << ") dir ("
+                    << lStartDirection.mV.x << ", " << lStartDirection.mV.y << ", "
+                    << lStartDirection.mV.z << ") from (" << lSeatPosition.mV.x << ", "
+                    << lSeatPosition.mV.y << ", " << lSeatPosition.mV.z << "); grid slots "
                     << lpGameModeParams->GetStartLocationCount() << "\n";
             }
         }

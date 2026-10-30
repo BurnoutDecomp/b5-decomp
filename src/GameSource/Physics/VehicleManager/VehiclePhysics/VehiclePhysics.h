@@ -1153,14 +1153,14 @@ namespace Vehicle
         {
             static const f32 KF_LOW_SPEED_GATE = 20.0f;   // unk_82FB9FC0 <- flt_8208F9D4
 
-            if (lvfForwardSpeed.x >= KF_LOW_SPEED_GATE)   // !(gate > fwdSpeed) -> false
+            if (lvfForwardSpeed.mV.x >= KF_LOW_SPEED_GATE)   // !(gate > fwdSpeed) -> false
                 return false;
             if (lfGas <= 0.2f)                            // flt_82004744
                 return false;
 
             // lane 1 of the +0x60 register == base+0x50 == mAngularVelocity.y == the YAW RATE
             // (asm @0x825BFF6C-0x825BFF84: `li r9,0x60 ; lvx128 v0,r3,r9 ; vspltw v0,v0,1`).
-            const f32 lfLateral = mAngularVelocity.y;
+            const f32 lfLateral = mAngularVelocity.mV.y;
 
             if (lfLateral > 0.5f && lfSteering >= -0.1f)
                 return true;
@@ -1506,12 +1506,12 @@ namespace Vehicle
         //   `vrlimi128 v13, v0, 8, 0 ; stvx128`).
         VecFloat GetMaxSteeringAngle() const
         {
-            const f32 lfAngle = mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z;
+            const f32 lfAngle = mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.mV.z;
             { const VecFloat lResult = { lfAngle, lfAngle, lfAngle, lfAngle }; return lResult; }
         }
         void OverrideWheelAngle(VecFloat lvfAngleRadians)
         {
-            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x = lvfAngleRadians.x;
+            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.mV.x = lvfAngleRadians.mV.x;
         }
 
         // @+0x1050 (4176): lane .x = PropSpeedMaintainAlongZ, .y = PropSpeedMaintainAlongVel
@@ -1603,7 +1603,7 @@ namespace Vehicle
         VecFloat GetTimeDrifting() const
         {
             const f32 lfTimeDrifting =
-                mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z;
+                mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.mV.z;
             { const VecFloat lResult = { lfTimeDrifting, lfTimeDrifting,
                              lfTimeDrifting, lfTimeDrifting }; return lResult; }
         }

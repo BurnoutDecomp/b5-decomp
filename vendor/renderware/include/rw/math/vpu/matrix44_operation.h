@@ -49,25 +49,25 @@ namespace vpu
     inline Matrix44 Mult(const Matrix44Affine& lrAffine, const Matrix44& lrMatrix)
     {
         Matrix44 lResult;
-        lResult.xAxis.x = lrAffine.xAxis.x * lrMatrix.xAxis.x + lrAffine.xAxis.y * lrMatrix.yAxis.x + lrAffine.xAxis.z * lrMatrix.zAxis.x;
-        lResult.xAxis.y = lrAffine.xAxis.x * lrMatrix.xAxis.y + lrAffine.xAxis.y * lrMatrix.yAxis.y + lrAffine.xAxis.z * lrMatrix.zAxis.y;
-        lResult.xAxis.z = lrAffine.xAxis.x * lrMatrix.xAxis.z + lrAffine.xAxis.y * lrMatrix.yAxis.z + lrAffine.xAxis.z * lrMatrix.zAxis.z;
-        lResult.xAxis.w = lrAffine.xAxis.x * lrMatrix.xAxis.w + lrAffine.xAxis.y * lrMatrix.yAxis.w + lrAffine.xAxis.z * lrMatrix.zAxis.w;
+        lResult.xAxis.mV.x = lrAffine.xAxis.mV.x * lrMatrix.xAxis.mV.x + lrAffine.xAxis.mV.y * lrMatrix.yAxis.mV.x + lrAffine.xAxis.mV.z * lrMatrix.zAxis.mV.x;
+        lResult.xAxis.mV.y = lrAffine.xAxis.mV.x * lrMatrix.xAxis.mV.y + lrAffine.xAxis.mV.y * lrMatrix.yAxis.mV.y + lrAffine.xAxis.mV.z * lrMatrix.zAxis.mV.y;
+        lResult.xAxis.mV.z = lrAffine.xAxis.mV.x * lrMatrix.xAxis.mV.z + lrAffine.xAxis.mV.y * lrMatrix.yAxis.mV.z + lrAffine.xAxis.mV.z * lrMatrix.zAxis.mV.z;
+        lResult.xAxis.mV.w = lrAffine.xAxis.mV.x * lrMatrix.xAxis.mV.w + lrAffine.xAxis.mV.y * lrMatrix.yAxis.mV.w + lrAffine.xAxis.mV.z * lrMatrix.zAxis.mV.w;
 
-        lResult.yAxis.x = lrAffine.yAxis.x * lrMatrix.xAxis.x + lrAffine.yAxis.y * lrMatrix.yAxis.x + lrAffine.yAxis.z * lrMatrix.zAxis.x;
-        lResult.yAxis.y = lrAffine.yAxis.x * lrMatrix.xAxis.y + lrAffine.yAxis.y * lrMatrix.yAxis.y + lrAffine.yAxis.z * lrMatrix.zAxis.y;
-        lResult.yAxis.z = lrAffine.yAxis.x * lrMatrix.xAxis.z + lrAffine.yAxis.y * lrMatrix.yAxis.z + lrAffine.yAxis.z * lrMatrix.zAxis.z;
-        lResult.yAxis.w = lrAffine.yAxis.x * lrMatrix.xAxis.w + lrAffine.yAxis.y * lrMatrix.yAxis.w + lrAffine.yAxis.z * lrMatrix.zAxis.w;
+        lResult.yAxis.mV.x = lrAffine.yAxis.mV.x * lrMatrix.xAxis.mV.x + lrAffine.yAxis.mV.y * lrMatrix.yAxis.mV.x + lrAffine.yAxis.mV.z * lrMatrix.zAxis.mV.x;
+        lResult.yAxis.mV.y = lrAffine.yAxis.mV.x * lrMatrix.xAxis.mV.y + lrAffine.yAxis.mV.y * lrMatrix.yAxis.mV.y + lrAffine.yAxis.mV.z * lrMatrix.zAxis.mV.y;
+        lResult.yAxis.mV.z = lrAffine.yAxis.mV.x * lrMatrix.xAxis.mV.z + lrAffine.yAxis.mV.y * lrMatrix.yAxis.mV.z + lrAffine.yAxis.mV.z * lrMatrix.zAxis.mV.z;
+        lResult.yAxis.mV.w = lrAffine.yAxis.mV.x * lrMatrix.xAxis.mV.w + lrAffine.yAxis.mV.y * lrMatrix.yAxis.mV.w + lrAffine.yAxis.mV.z * lrMatrix.zAxis.mV.w;
 
-        lResult.zAxis.x = lrAffine.zAxis.x * lrMatrix.xAxis.x + lrAffine.zAxis.y * lrMatrix.yAxis.x + lrAffine.zAxis.z * lrMatrix.zAxis.x;
-        lResult.zAxis.y = lrAffine.zAxis.x * lrMatrix.xAxis.y + lrAffine.zAxis.y * lrMatrix.yAxis.y + lrAffine.zAxis.z * lrMatrix.zAxis.y;
-        lResult.zAxis.z = lrAffine.zAxis.x * lrMatrix.xAxis.z + lrAffine.zAxis.y * lrMatrix.yAxis.z + lrAffine.zAxis.z * lrMatrix.zAxis.z;
-        lResult.zAxis.w = lrAffine.zAxis.x * lrMatrix.xAxis.w + lrAffine.zAxis.y * lrMatrix.yAxis.w + lrAffine.zAxis.z * lrMatrix.zAxis.w;
+        lResult.zAxis.mV.x = lrAffine.zAxis.mV.x * lrMatrix.xAxis.mV.x + lrAffine.zAxis.mV.y * lrMatrix.yAxis.mV.x + lrAffine.zAxis.mV.z * lrMatrix.zAxis.mV.x;
+        lResult.zAxis.mV.y = lrAffine.zAxis.mV.x * lrMatrix.xAxis.mV.y + lrAffine.zAxis.mV.y * lrMatrix.yAxis.mV.y + lrAffine.zAxis.mV.z * lrMatrix.zAxis.mV.y;
+        lResult.zAxis.mV.z = lrAffine.zAxis.mV.x * lrMatrix.xAxis.mV.z + lrAffine.zAxis.mV.y * lrMatrix.yAxis.mV.z + lrAffine.zAxis.mV.z * lrMatrix.zAxis.mV.z;
+        lResult.zAxis.mV.w = lrAffine.zAxis.mV.x * lrMatrix.xAxis.mV.w + lrAffine.zAxis.mV.y * lrMatrix.yAxis.mV.w + lrAffine.zAxis.mV.z * lrMatrix.zAxis.mV.w;
 
-        lResult.wAxis.x = lrAffine.wAxis.x * lrMatrix.xAxis.x + lrAffine.wAxis.y * lrMatrix.yAxis.x + lrAffine.wAxis.z * lrMatrix.zAxis.x + lrMatrix.wAxis.x;
-        lResult.wAxis.y = lrAffine.wAxis.x * lrMatrix.xAxis.y + lrAffine.wAxis.y * lrMatrix.yAxis.y + lrAffine.wAxis.z * lrMatrix.zAxis.y + lrMatrix.wAxis.y;
-        lResult.wAxis.z = lrAffine.wAxis.x * lrMatrix.xAxis.z + lrAffine.wAxis.y * lrMatrix.yAxis.z + lrAffine.wAxis.z * lrMatrix.zAxis.z + lrMatrix.wAxis.z;
-        lResult.wAxis.w = lrAffine.wAxis.x * lrMatrix.xAxis.w + lrAffine.wAxis.y * lrMatrix.yAxis.w + lrAffine.wAxis.z * lrMatrix.zAxis.w + lrMatrix.wAxis.w;
+        lResult.wAxis.mV.x = lrAffine.wAxis.mV.x * lrMatrix.xAxis.mV.x + lrAffine.wAxis.mV.y * lrMatrix.yAxis.mV.x + lrAffine.wAxis.mV.z * lrMatrix.zAxis.mV.x + lrMatrix.wAxis.mV.x;
+        lResult.wAxis.mV.y = lrAffine.wAxis.mV.x * lrMatrix.xAxis.mV.y + lrAffine.wAxis.mV.y * lrMatrix.yAxis.mV.y + lrAffine.wAxis.mV.z * lrMatrix.zAxis.mV.y + lrMatrix.wAxis.mV.y;
+        lResult.wAxis.mV.z = lrAffine.wAxis.mV.x * lrMatrix.xAxis.mV.z + lrAffine.wAxis.mV.y * lrMatrix.yAxis.mV.z + lrAffine.wAxis.mV.z * lrMatrix.zAxis.mV.z + lrMatrix.wAxis.mV.z;
+        lResult.wAxis.mV.w = lrAffine.wAxis.mV.x * lrMatrix.xAxis.mV.w + lrAffine.wAxis.mV.y * lrMatrix.yAxis.mV.w + lrAffine.wAxis.mV.z * lrMatrix.zAxis.mV.w + lrMatrix.wAxis.mV.w;
         return lResult;
     }
     inline Matrix44 operator*(const Matrix44Affine& lrAffine, const Matrix44& lrMatrix)

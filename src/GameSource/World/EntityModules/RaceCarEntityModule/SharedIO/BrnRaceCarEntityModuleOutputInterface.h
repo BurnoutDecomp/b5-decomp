@@ -440,10 +440,10 @@ namespace RaceCarEntityModuleIO
         // until a caller needs them.
         void Clear()                                        // :615
         {
-            mRestPos.x = 0.0f;
-            mRestPos.y = 0.0f;
-            mRestPos.z = 0.0f;
-            mRestPos.w = 0.0f;
+            mRestPos.mV.x = 0.0f;
+            mRestPos.mV.y = 0.0f;
+            mRestPos.mV.z = 0.0f;
+            mRestPos.mV.w = 0.0f;
             mbPlayerResetThisFrame = false;
         }
         // :619 -- BODIED 2026-08-26 (resetpump wave). The console has no out-of-line symbol

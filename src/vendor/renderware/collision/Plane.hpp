@@ -40,7 +40,7 @@ struct Plane
     // Build a plane straight from a packed 4-lane vector (verbatim lane copy) --
     // this is what VectorToPlane's stvx128 of the (negated) arg vector produces.
     explicit Plane(const rw::math::vpu::Vector4& lrPacked)
-        : x(lrPacked.x), y(lrPacked.y), z(lrPacked.z), w(lrPacked.w)
+        : x(lrPacked.mV.x), y(lrPacked.mV.y), z(lrPacked.mV.z), w(lrPacked.mV.w)
     {
     }
 };

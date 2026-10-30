@@ -171,7 +171,7 @@ namespace Vehicle
         bool IsBeingTwisted() const { return mu8State == 1; }
         bool IsDetached() const     { return mu8State == 2; }
         void Attach()               { mu8State = 0; }
-        void Twist()                { mu8State = 1; mIntegrationVariables.x = 0.0f; }
+        void Twist()                { mu8State = 1; mIntegrationVariables.mV.x = 0.0f; }
         void Detach()               { mu8State = 2; }
         void SetTwistAmount(f32 lfAmount) { mStreamedPositionPlusTwistAmount.w = lfAmount; }
         f32  GetTwistAmount() const       { return mStreamedPositionPlusTwistAmount.w; }
@@ -283,7 +283,7 @@ namespace Vehicle
         // dependency; VecFloat/Vector4 already arrive through BrnCommonTypes.h above.
         VecFloat GetRoadLongSpeed() const
         {
-            const f32 lfRoadLongSpeed = mSpeedAndMassOnWheelVariables.x;
+            const f32 lfRoadLongSpeed = mSpeedAndMassOnWheelVariables.mV.x;
             { const VecFloat lResult = { lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed }; return lResult; }
         }
 
