@@ -161,7 +161,8 @@ namespace Deformation
         // identity is exactly those rows (its wAxis is all zero).
         Matrix44Affine lWorldTransform;
         lWorldTransform.SetIdentity();
-        lpSolver->AddObject(KI_MAX_DEFORMATION_MODELS, lWorldTransform, VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+        const VecFloat lvfWorldWeight = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lpSolver->AddObject(KI_MAX_DEFORMATION_MODELS, lWorldTransform, lvfWorldWeight);
 
         for (s32 liModelIndex = mModelsAdded.GetFirstNonZeroBit();
              liModelIndex != -1;
