@@ -192,9 +192,9 @@ void GameStateModule::Construct()
     miProcessEventsPM = CgsDev::PerfMonCpu::AddMonitor("Process events", CgsDev::E_PMP_5, false, 1.0f, true);
     miTakedownPM = CgsDev::PerfMonCpu::AddMonitor("Takedown manager", CgsDev::E_PMP_5, false, 1.0f, true);
     miEmmUpdatePM = CgsDev::PerfMonCpu::AddMonitor("EMM update", CgsDev::E_PMP_5, false, 1.0f, true);
-    miModeManagerPrePM = CgsDev::PerfMonCpu::AddMonitor("Mode manager pre", CgsDev::E_PMP_5, false, 1.0f, true);
-    miModeManagerPostPM = CgsDev::PerfMonCpu::AddMonitor("Mode manager post", CgsDev::E_PMP_5, false, 1.0f, true);
-    miCopyingAndResettingPM = CgsDev::PerfMonCpu::AddMonitor("Copying and Resetting", CgsDev::E_PMP_5, false, 1.0f, true);
+    miModeManagerPrePM = CgsDev::PerfMonCpu::AddMonitor("Mode manager PRE", CgsDev::E_PMP_5, false, 1.0f, true);
+    miModeManagerPostPM = CgsDev::PerfMonCpu::AddMonitor("Mode manager POST", CgsDev::E_PMP_5, false, 1.0f, true);
+    miCopyingAndResettingPM = CgsDev::PerfMonCpu::AddMonitor("Copying and resetting", CgsDev::E_PMP_5, false, 1.0f, true);
     miProcessContactsPM = CgsDev::PerfMonCpu::AddMonitor("Process contacts", CgsDev::E_PMP_5, false, 1.0f, true);
     miStreetManagerPM = CgsDev::PerfMonCpu::AddMonitor("Street manager", CgsDev::E_PMP_5, false, 1.0f, true);
     muCachedJunctionLightTriggerId = 0xFFFFFFFFu;
