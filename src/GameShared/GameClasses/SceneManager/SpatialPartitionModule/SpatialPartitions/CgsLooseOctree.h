@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.h" // SpatialPartition
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsJobCoarseResultBuffer.h"              // JobCoarseResultBuffer
 #include "GameShared/GameClasses/Containers/CgsIndexedPool.h"                          // CgsContainers::IndexedPool (mFreeNodeGroupPool)
+#include "eajobs/job.h"
 #include "vendor/renderware/collision/VolumeQuery.hpp"   // rw::collision::VolumeVolumeQuery + its host size for 100/100
 
 // ============================================================================
@@ -479,6 +480,7 @@ namespace CgsSceneManager
         // node INDEX (host pointers widen; the index is what every reader derives anyway).
         u16              maEntityNodeIndex[KI_MAX_NUM_ENTITIES];
 
+        EA::Jobs::Job         maFrustumTestJobs[KU_NUM_FRUSTUM_TEST_JOBS];
         FrustumTestJobData    maFrustumTestJobData[KU_NUM_FRUSTUM_TEST_JOBS];  // +0x8E700
         JobCoarseResultBuffer maJobResultBuffers[KU_NUM_FRUSTUM_TEST_JOBS];    // +0x90700
         // The 0x4000-byte block each result buffer's mpu16Buffer points at. On the X360
