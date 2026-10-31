@@ -296,12 +296,6 @@ struct CreateArticulatedTrafficEvent;
 struct UpdateNetworkTrafficEvent;    // network transform event -- SharedIO/BrnVehicleEvents.h
                                      // (UpdateNetworkTrafficVehicle arg)
 
-// VecFloat: a single 16-byte VMX float lane (the DWARF spells the members below as VecFloat).
-// Its canonical home is rw::math::vpu; here it is the 16-byte 4-lane vector value used for the
-// per-vehicle world-space lowest point. mavfLowestPointWorldSpace is not touched by this TU's
-// 12 functions.
-typedef rw::math::vpu::Vector4 VecFloat;
-
 // SimpleVehiclePhysics: the per-vehicle physics body, pointed at by mpVehicleBody and by
 // mpaSimpleVehiclePhysics. This manager only takes/returns SimpleVehiclePhysics*
 // (GetVehiclePhysics) and, in ResetAboveGroundTestResults, reaches into its above-ground-test
@@ -331,7 +325,7 @@ const u32 KU_NUM_BITS_FOR_ENTITY_NUM = 14;
 // image and its one writer is the CRT thunk 0x82C5B808 (`lfs flt_8208F834` == 0x3E800000 == 0.25f ;
 // vspltw ; stvx128). Readers: CheckForTrafficHittingWater (0x8261DF64) and the debug
 // DrawResetOnWaterHeight (0x825EE1F4).
-const VecFloat KVF_RESET_ON_WATER_HEIGHT = { 0.25f, 0.25f, 0.25f, 0.25f };
+extern const VecFloat KVF_RESET_ON_WATER_HEIGHT;
 
 // KU_ENTITYTYPE_TRAFFIC_VEHICLE MOVED OUT 2026-08-03 (task #113) to BrnVehicleConstants.h,
 // included above. It was defined here AND, identically, at BrnArticulatedJoint.h:42 -- each
