@@ -673,7 +673,7 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
     void* lpConstantCursor = 0;
 
     // The tail constant both paths share (X360 var_60..var_54, copied at loc_8228230C).
-    Vector4 lvTailConstant = { 0.0f, 0.0f, 0.0f, 0.0f };
+    Vector4 lvTailConstant( 0.0f, 0.0f, 0.0f, 0.0f );
 
     if (abZFadeEnable != 0)
     {
@@ -688,25 +688,25 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
         const f32 lfFadeRange = afZFadeNear - afZFadeFar;                        // fsubs f13
 
         // "gOffset": the viewport half-extents biased by a half pixel, plus the far plane.
-        const Vector4 lvOffset = { afDepthSamplerOffsetU  + 0.5f,                  // flt_82001DA0
+        const Vector4 lvOffset( afDepthSamplerOffsetU  + 0.5f,                  // flt_82001DA0
                                    afDepthSamplerOffsetV + 0.5f,
                                    afZFadeFar,
-                                   0.0f };                                       // flt_82001CC0
+                                   0.0f );                                       // flt_82001CC0
         // "gScale": the half-viewport scale (y flipped) and the fade range.
-        const Vector4 lvScale = { 0.5f, -0.5f, lfFadeRange, 0.0f };              // 82001DA0/82004C78
+        const Vector4 lvScale( 0.5f, -0.5f, lfFadeRange, 0.0f );              // 82001DA0/82004C78
         // "gDepthConversion": the pack-depth-into-RGB triple scaled by the fade range, with the
         // far plane carried in w.
-        const Vector4 lvDepthConversion = { lfFadeRange * 0.99609381f,
+        const Vector4 lvDepthConversion( lfFadeRange * 0.99609381f,
                                             lfFadeRange * 0.0038909914f,
                                             lfFadeRange * 1.5199185e-05f,
-                                            afZFadeFar };
+                                            afZFadeFar );
         // "gDepthFadeConstants": (near * far) / depthRange in x, zero elsewhere.
-        lvTailConstant.x = (afZFadeNear * afZFadeFar) / afDepthRange;
-        lvTailConstant.y = 0.0f;
-        lvTailConstant.z = 0.0f;
-        lvTailConstant.w = 0.0f;
+        lvTailConstant.mV.x = (afZFadeNear * afZFadeFar) / afDepthRange;
+        lvTailConstant.mV.y = 0.0f;
+        lvTailConstant.mV.z = 0.0f;
+        lvTailConstant.mV.w = 0.0f;
 
-        const Vector4 lvColourScale = { afColourScale, afColourScale, afColourScale, 1.0f };
+        const Vector4 lvColourScale( afColourScale, afColourScale, afColourScale, 1.0f );
 
         // +0xC8 "worldViewProj" -- the whole 64-byte matrix (four lvx128/stvx128 pairs).
         RenderEngineDeviceBeginShaderStates(&mViewProjectionMatrixStateHandle_ZFade,
@@ -744,10 +744,10 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
 
         // +0xC4 "colourScale" -- the shared tail below copies it.
         RenderEngineDeviceBeginShaderStates(&mColourScaleStateHandle_Normal, &lpConstantCursor);
-        lvTailConstant.x = afColourScale;
-        lvTailConstant.y = afColourScale;
-        lvTailConstant.z = afColourScale;
-        lvTailConstant.w = 1.0f;                                                 // flt_82001C98
+        lvTailConstant.mV.x = afColourScale;
+        lvTailConstant.mV.y = afColourScale;
+        lvTailConstant.mV.z = afColourScale;
+        lvTailConstant.mV.w = 1.0f;                                                 // flt_82001C98
     }
 
     // loc_8228230C -- the merged tail: one 16-byte copy into the row the last BeginShaderStates
