@@ -15,6 +15,25 @@ namespace math
 namespace vpu
 {
 
+namespace detail
+{
+    // Independent full4-lane witnesses: MainMap82469BD0..C08 and the native
+    // four-component normalization82BC2C5C..8C. Keep both multiply roundings
+    // and the fused residual/correction boundaries of each refinement.
+    __forceinline VectorIntrinsic Vector4NativeReciprocalRoot(VectorIntrinsic squared, int refinements)
+    {
+        const VectorIntrinsic one = __vcfsx(__vspltisw(1), 0);
+        const VectorIntrinsic half = __vcfsx(__vspltisw(1), 1);
+        VectorIntrinsic estimate = __vrsqrtefp(squared);
+        for (int i = 0; i < refinements; ++i)
+        {
+            const VectorIntrinsic error = __vnmsubfp(squared, __vmulfp(estimate, estimate), one);
+            estimate = __vmaddfp(__vmulfp(estimate, half), error, estimate);
+        }
+        return estimate;
+    }
+}
+
 // =====================================================================================
 //  Equality / validity / similarity -- DECLARATION-ONLY + FLAGGED
 // =====================================================================================
@@ -73,12 +92,8 @@ inline Vector4 Abs(Vector4::InParam v)
 
 inline VecFloat Dot(Vector4::InParam a, Vector4::InParam b)
 {
-    // xx_yy_zz_ww = vmaddfp(b,a,0); two vsldoi rotations + vaddfp sum all four lanes.
-    const float lfDot = a.mV.v[0] * b.mV.v[0]
-                      + a.mV.v[1] * b.mV.v[1]
-                      + a.mV.v[2] * b.mV.v[2]
-                      + a.mV.v[3] * b.mV.v[3];
-    return VecFloat(lfDot);
+    // ARTIST825B2768 uses distinct Vector4 rows of the native matrix inverse.
+    return VecFloat(__vmsum4fp(a.mV, b.mV));
 }
 
 inline Vector4 Mult(Vector4::InParam v, VecFloat::InParam s)
@@ -201,30 +216,20 @@ inline Vector4 DivideByW(Vector4::InParam v)
 
 inline VecFloat MagnitudeSquared(Vector4::InParam v)
 {
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2]
-                      + v.mV.v[3] * v.mV.v[3];
-    return VecFloat(lfDot);
+    return Dot(v, v);
 }
 
 inline VecFloat MagnitudeRecip(Vector4::InParam v)
 {
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2]
-                      + v.mV.v[3] * v.mV.v[3];
-    return VecFloat(1.0f / sqrtf(lfDot));
+    return VecFloat(detail::Vector4NativeReciprocalRoot(__vmsum4fp(v.mV, v.mV), 2));
 }
 
 inline VecFloat Magnitude(Vector4::InParam v)
 {
-    // dot * (1/sqrt(dot)) == sqrt(dot); vsel guards a zero dot to zero.
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2]
-                      + v.mV.v[3] * v.mV.v[3];
-    return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * (1.0f / sqrtf(lfDot)));
+    const VectorIntrinsic squared = __vmsum4fp(v.mV, v.mV);
+    const VectorIntrinsic reciprocal = detail::Vector4NativeReciprocalRoot(squared, 2);
+    const VectorIntrinsic zero = __vspltisw(0);
+    return VecFloat(__vsel(__vmulfp(squared, reciprocal), zero, __vcmpeqfp(squared, zero)));
 }
 
 // =====================================================================================
@@ -233,62 +238,36 @@ inline VecFloat Magnitude(Vector4::InParam v)
 
 inline Vector4 NormalizeEstimate(Vector4::InParam v)
 {
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2]
-                      + v.mV.v[3] * v.mV.v[3];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * lfScale;
-    return r;
+    const VectorIntrinsic squared = __vmsum4fp(v.mV, v.mV);
+    return Vector4(__vmulfp(v.mV, detail::Vector4NativeReciprocalRoot(squared, 0)));
 }
 
 inline Vector4 NormalizeFast(Vector4::InParam v)
 {
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2]
-                      + v.mV.v[3] * v.mV.v[3];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * lfScale;
-    return r;
+    const VectorIntrinsic squared = __vmsum4fp(v.mV, v.mV);
+    return Vector4(__vmulfp(v.mV, detail::Vector4NativeReciprocalRoot(squared, 1)));
 }
 
 inline Vector4 Normalize(Vector4::InParam v)
 {
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2]
-                      + v.mV.v[3] * v.mV.v[3];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * lfScale;
-    return r;
+    const VectorIntrinsic squared = __vmsum4fp(v.mV, v.mV);
+    return Vector4(__vmulfp(v.mV, detail::Vector4NativeReciprocalRoot(squared, 2)));
 }
 
 inline Vector4 Normalize(Vector4::InParam v, VecFloat& magnitude)
 {
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2]
-                      + v.mV.v[3] * v.mV.v[3];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * lfScale;
-    magnitude = VecFloat(lfDot == 0.0f ? 0.0f : lfDot * lfScale);
-    return r;
+    const VectorIntrinsic squared = __vmsum4fp(v.mV, v.mV);
+    const VectorIntrinsic reciprocal = detail::Vector4NativeReciprocalRoot(squared, 2);
+    const VectorIntrinsic zero = __vspltisw(0);
+    magnitude = VecFloat(__vsel(__vmulfp(squared, reciprocal), zero, __vcmpeqfp(squared, zero)));
+    return Vector4(__vmulfp(v.mV, reciprocal));
 }
 
 inline VecFloat NormalizeReturnMagnitude(Vector4::InParam v, Vector4& result)
 {
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2]
-                      + v.mV.v[3] * v.mV.v[3];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    for (int k = 0; k < 4; ++k) result.mV.v[k] = v.mV.v[k] * lfScale;
-    return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * lfScale);
+    VecFloat magnitude;
+    result = Normalize(v, magnitude);
+    return magnitude;
 }
 
 // =====================================================================================
