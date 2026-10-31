@@ -111,7 +111,7 @@ namespace Vehicle
         }
         VecFloat MakeVehicleVecFloat(f32 x, f32 y, f32 z, f32 w)
         {
-            const VecFloat v(x,y,z,w); return v;
+            const VecFloat v(Vector4(x,y,z,w).mV); return v;
         }
         // Scalar FPU expression compiles to fmadds at the slam sites.
         f32 VehicleScalarMadd(f32 a, f32 b, f32 c) { return a * b + c; }
@@ -138,10 +138,10 @@ namespace Vehicle
 
     // DecFIGS VehiclePhysics.cpp:103; Breaker unk_82FB9EC0, initialised by the
     // unmarked thunk at 0x82C5C3C0 from flt_8200473C (0.4f).
-    VecFloat KF_SHOWTIME_GRIP_SCALE(0.4f, 0.4f, 0.4f, 0.4f);
+    VecFloat KF_SHOWTIME_GRIP_SCALE(0.4f);
     // DecFIGS VehiclePhysics.cpp:104; ARTIST unk_82FB8B10. The initializer
     // 0x82C5C3E8..0x82C5C40C splats flt_82004C68 (0.7f) into this vector.
-    VecFloat KF_SHOWTIME_PLAYER_ANGULAR_IMPULSE_SCALE(0.7f, 0.7f, 0.7f, 0.7f);
+    VecFloat KF_SHOWTIME_PLAYER_ANGULAR_IMPULSE_SCALE(0.7f);
     bool VehiclePhysics::msbInShowtime = false;
     // @0x825B2FE0  BrnPhysics::Vehicle::VehiclePhysics::GetNumberOfWheelsOnTheGround
     //   The X360 reads the four driven wheels' road-contact on-ground flags at +0x158/+0x238/+0x318/
@@ -287,7 +287,7 @@ namespace Vehicle
 
         const f32 lfDownForce = KF_HALF * KF_AERO_RHO * KF_AERO_CDA * lfSpeedSquared * lfCoeff;
 
-        { const VecFloat lResult( lfDownForce, lfDownForce, lfDownForce, lfDownForce ); return lResult; }
+        { const VecFloat lResult(lfDownForce); return lResult; }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -326,7 +326,7 @@ namespace Vehicle
         f32 lfResult = 1.0f - (1.0f - lfGrip) * lfBlend;
         if (msbInShowtime)
             lfResult *= KF_SHOWTIME_GRIP_SCALE.mV.x;
-        { const VecFloat lResult( lfResult, lfResult, lfResult, lfResult ); return lResult; }
+        { const VecFloat lResult(lfResult); return lResult; }
     }
 
     // @0x825D5328  GetSurfaceRoughness = roughTable[id] * globalRoughScale * blend.z.
@@ -342,7 +342,7 @@ namespace Vehicle
         static const f32 KF_GLOBAL_ROUGHNESS_SCALE = 0.2f;                   // unk_82FB9220
 
         const f32 lfResult = lfRoughness * KF_GLOBAL_ROUGHNESS_SCALE * mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.mV.z;
-        { const VecFloat lResult( lfResult, lfResult, lfResult, lfResult ); return lResult; }
+        { const VecFloat lResult(lfResult); return lResult; }
     }
 
     // @0x825D50A8  GetSurfaceLinearDrag = dragTable[id] * blend.w  (single representative contact).
@@ -358,7 +358,7 @@ namespace Vehicle
         const f32 lfDrag = KAVF_SURFACE_LINEAR_DRAG[liSurfaceId].mV.x;
 
         const f32 lfResult = lfDrag * mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.mV.w;
-        { const VecFloat lResult( lfResult, lfResult, lfResult, lfResult ); return lResult; }
+        { const VecFloat lResult(lfResult); return lResult; }
     }
 
     // =======================================================================================
@@ -1709,7 +1709,7 @@ namespace Vehicle
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             maWheels[liWheel].Clear();
 
-        const VecFloat lvfZero( 0.0f, 0.0f, 0.0f, 0.0f );
+        const VecFloat lvfZero(0.0f);
         mEngine.Reset(lvfZero);
         mpAttribs = NULL;
 
@@ -2120,7 +2120,7 @@ namespace Vehicle
     {
         const f32 lfPositive = (lvfValue.mV.x > 0.0f) ? 1.0f : 0.0f;   // vcmpgtfp . vsel
         const f32 lfSign = (lvfValue.mV.x >= 0.0f) ? lfPositive : -1.0f; // vcmpgefp . vsel
-        return vpu::Splat(lfSign);
+        return VecFloat(lfSign);
     }
 
     // X360 debug-menu storage shared with VehicleManagerDebugComponent::OnActivate. ARTIST's
@@ -2194,8 +2194,8 @@ namespace Vehicle
         // before the mbHadAirLastFrame branch and stashed as full broadcast registers
         // (vmsum3fp128 + stvx128 @0x825D0C44-0x825D0C60), not scalar f32 locals.
         VecFloat lvfPitchVelocity;
-        VecFloat lvfYawVelocity  = vpu::Splat(vpu::Dot(mAngularVelocity, lvUp)); // rotation about UP
-        VecFloat lvfRollVelocity = vpu::Splat(vpu::Dot(mAngularVelocity, lvAt)); // rotation about FORWARD
+        VecFloat lvfYawVelocity  = VecFloat(vpu::Dot(mAngularVelocity, lvUp)); // rotation about UP
+        VecFloat lvfRollVelocity = VecFloat(vpu::Dot(mAngularVelocity, lvAt)); // rotation about FORWARD
 
         if (!mbHadAirLastFrame)
         {
@@ -2207,11 +2207,11 @@ namespace Vehicle
 
             // How rolled the car is at the instant it leaves the ground: |right.y| is 0 when the
             // car is level and 1 when it is on its side.
-            const VecFloat lvfAbsXAxisY = vpu::Splat(std::fabs(lvRight.mV.y)); // `vandc` with sign-mask splat
-            const VecFloat lvfXAxisYFullDampThreshold = vpu::Splat(gfFullDampThreshold);
-            const VecFloat lvfXAxisYNoDampThreshold   = vpu::Splat(gfNoDampThreshold);
-            const VecFloat lvfMinRollFactor           = vpu::Splat(gfMinRollFactor);
-            const VecFloat lvfOne                     = vpu::GetVector4_One();
+            const VecFloat lvfAbsXAxisY = VecFloat(std::fabs(lvRight.mV.y)); // `vandc` with sign-mask splat
+            const VecFloat lvfXAxisYFullDampThreshold = VecFloat(gfFullDampThreshold);
+            const VecFloat lvfXAxisYNoDampThreshold   = VecFloat(gfNoDampThreshold);
+            const VecFloat lvfMinRollFactor           = VecFloat(gfMinRollFactor);
+            const VecFloat lvfOne(1.0f);
 
             // The two-segment ramp (0x825D0CD4 / 0x825D0D1C / 0x825D0D98). Level -> ramp 0 .. 0.3
             // over [0, 0.125]; then 0.3 .. 1.0 over [0.125, 0.25]; then flat 1.0.
@@ -2228,7 +2228,7 @@ namespace Vehicle
                 const f32 lfReciprocal = TakeoffReciprocal(lfFullThreshold);
                 const f32 lfReciprocalScale = TakeoffMultiply(lfReciprocal, 1.0f);
                 const f32 lfInterpParam = TakeoffMultiply(lfRollAmount, lfReciprocalScale);
-                lvfRollFactor = vpu::Splat(TakeoffMultiplyAdd(lfRange, lfInterpParam, 0.0f));
+                lvfRollFactor = VecFloat(TakeoffMultiplyAdd(lfRange, lfInterpParam, 0.0f));
             }
             else if (TakeoffGreater(lfRollAmount, lfFullThreshold) && TakeoffGreaterEqual(lfNoDampThreshold, lfRollAmount))
             {
@@ -2236,7 +2236,7 @@ namespace Vehicle
                 const f32 lfRollOffset = TakeoffSubtract(lfRollAmount, lfFullThreshold);
                 const f32 lfRange = TakeoffSubtract(1.0f, lvfMinRollFactor.mV.x);
                 const f32 lfInterpParam = TakeoffMultiply(TakeoffReciprocal(lfThresholdRange), lfRollOffset);
-                lvfRollFactor = vpu::Splat(TakeoffMultiplyAdd(lfRange, lfInterpParam, lvfMinRollFactor.mV.x));
+                lvfRollFactor = VecFloat(TakeoffMultiplyAdd(lfRange, lfInterpParam, lvfMinRollFactor.mV.x));
             }
             else
             {
@@ -2257,8 +2257,8 @@ namespace Vehicle
             // YAW value is the literal zero splatted in v126. DampPitchYawRoll subtracts
             // axis*dot*pow(damping, 60*dt), so a zero base yields a zero subtraction for positive
             // dt: it PRESERVES yaw on take-off; it does not annihilate it.
-            const VecFloat lvfYawDamping  = vpu::Splat(0.0f); // v126 -- literal, not the yaw attrib
-            const VecFloat lvfRollDamping = vpu::Splat(TakeoffMultiplyAdd(lvfRollFactor.mV.x, -1.0f, 1.0f));
+            const VecFloat lvfYawDamping  = VecFloat(0.0f); // v126 -- literal, not the yaw attrib
+            const VecFloat lvfRollDamping = VecFloat(TakeoffMultiplyAdd(lvfRollFactor.mV.x, -1.0f, 1.0f));
 
             gfRollDampingUsed = lvfRollDamping.mV.x; // dev watch "Roll damping used" (@0x82FB7E20)
 
@@ -2281,18 +2281,19 @@ namespace Vehicle
 
             // ----- snapshot the POST-damp attitude rates (0x825D10E8) -----
             // The roll limit is an attrib in TURNS; x2 x PI converts it to rad/s.
-            const VecFloat lvfMaxRollVelocity = lrBaseAttribs.GetRollLimitOnTakeOff()
-                * vpu::Splat(KF_REVS_TO_HALF_TURNS) * vpu::Splat(KF_PI);
+            const VecFloat lvfMaxRollVelocity(__vmulfp(
+                __vmulfp(lrBaseAttribs.GetRollLimitOnTakeOff().mV, VecFloat(KF_REVS_TO_HALF_TURNS).mV),
+                VecFloat(KF_PI).mV));
 
-            lvfPitchVelocity = vpu::Splat(vpu::Dot(mAngularVelocity, lvRight));
-            lvfYawVelocity   = vpu::Splat(vpu::Dot(mAngularVelocity, lvUp));
-            lvfRollVelocity  = vpu::Splat(vpu::Dot(mAngularVelocity, lvAt));
+            lvfPitchVelocity = VecFloat(vpu::Dot(mAngularVelocity, lvRight));
+            lvfYawVelocity   = VecFloat(vpu::Dot(mAngularVelocity, lvUp));
+            lvfRollVelocity  = VecFloat(vpu::Dot(mAngularVelocity, lvAt));
 
             if (std::fabs(lvfRollVelocity.mV.x) > lvfMaxRollVelocity.mV.x)
             {
                 // Clamp the take-off roll rate by removing the excess along the forward axis.
-                const VecFloat lvfClamped = lvfMaxRollVelocity * InAirSelectSign(lvfRollVelocity);
-                mAngularVelocity = mAngularVelocity - lvAt * (lvfRollVelocity - lvfClamped);
+                const VecFloat lvfClamped(__vmulfp(lvfMaxRollVelocity.mV, InAirSelectSign(lvfRollVelocity).mV));
+                mAngularVelocity = mAngularVelocity - lvAt * VecFloat(__vsubfp(lvfRollVelocity.mV, lvfClamped.mV));
                 lvfRollVelocity  = lvfClamped;
             }
 
@@ -2307,9 +2308,9 @@ namespace Vehicle
             // =============================================================================
             // B) ALREADY AIRBORNE (0x825D1208).
             // =============================================================================
-            const VecFloat lvfXAxisY = vpu::Splat(std::fabs(lvRight.mV.y));
+            const VecFloat lvfXAxisY = VecFloat(std::fabs(lvRight.mV.y));
             const VecFloat lvfMinRollToAllowCorrection =
-                vpu::Splat(gfMinRollToAllowCorrection);
+                VecFloat(gfMinRollToAllowCorrection);
 
             // Latch "the player has rolled this jump" once |right.y| passes the threshold...
             if (lvfXAxisY.mV.x > lvfMinRollToAllowCorrection.mV.x)
@@ -2332,26 +2333,26 @@ namespace Vehicle
 
                 if (InAirSelectSign(lvfRollVelocity).mV.x != lfSteerSign)
                 {
-                    const VecFloat lvfAssist = vpu::Splat(
-                        std::fabs(lfSteering) * gfLandingAssistDamping)
-                        * lvfTimeStep * vpu::Splat(KF_DAMP_RATE_SCALE);
-                    mAngularVelocity = mAngularVelocity - lvAt * (lvfRollVelocity * lvfAssist);
+                    const VecFloat lvfAssist(__vmulfp(
+                        __vmulfp(VecFloat(std::fabs(lfSteering) * gfLandingAssistDamping).mV, lvfTimeStep.mV),
+                        VecFloat(KF_DAMP_RATE_SCALE).mV));
+                    mAngularVelocity = mAngularVelocity - lvAt * VecFloat(__vmulfp(lvfRollVelocity.mV, lvfAssist.mV));
                 }
             }
 
             // ----- roll-limit bleed (0x825D13B0). While the car is STILL rolling the same way it
             //       was at take-off, bleed the roll rate off at the per-frame rate the take-off
             //       frame parked in mvDampRollVel.x, never overshooting past zero. -----
-            const VecFloat lvfCurrentRoll = vpu::Splat(vpu::Dot(mAngularVelocity, lvAt));
-            if (InAirSelectSign(vpu::Splat(mPitchYawRollFromTakeOff.mV.z)).mV.x
+            const VecFloat lvfCurrentRoll = VecFloat(vpu::Dot(mAngularVelocity, lvAt));
+            if (InAirSelectSign(VecFloat(mPitchYawRollFromTakeOff.mV.z)).mV.x
                 == InAirSelectSign(lvfCurrentRoll).mV.x)
             {
-                const VecFloat lvfRate = vpu::Splat(
-                    mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.mV.x)
-                    * lvfTimeStep * vpu::Splat(KF_DAMP_RATE_SCALE);
-                const VecFloat lvfStep = vpu::Splat(
-                    std::min(lvfRate.mV.x, std::fabs(lvfCurrentRoll.mV.x))) // vminfp
-                    * InAirSelectSign(lvfCurrentRoll);
+                const VecFloat lvfRate(__vmulfp(
+                    __vmulfp(VecFloat(mvDampRollVel_TimeInDriftWithStaticFriction_TimeHandbrakeHasBeenOn_TimeSinceLastHandBrake.mV.x).mV, lvfTimeStep.mV),
+                    VecFloat(KF_DAMP_RATE_SCALE).mV));
+                const VecFloat lvfStep(__vmulfp(
+                    VecFloat(std::min(lvfRate.mV.x, std::fabs(lvfCurrentRoll.mV.x))).mV, // vminfp
+                    InAirSelectSign(lvfCurrentRoll).mV));
                 mAngularVelocity = mAngularVelocity - lvAt * lvfStep;
             }
         }
@@ -2366,8 +2367,8 @@ namespace Vehicle
         //     PENDING torque/impulse too, so a force already banked this frame cannot re-inject
         //     the rotation the bleed just removed.
         // =================================================================================
-        const VecFloat lvLinearVelocityDotZAxis = vpu::Splat(vpu::Dot(mLinearVelocity, lvAt));
-        const VecFloat lvLinearVelocityDotXAxis = vpu::Splat(vpu::Dot(mLinearVelocity, lvRight));
+        const VecFloat lvLinearVelocityDotZAxis = VecFloat(vpu::Dot(mLinearVelocity, lvAt));
+        const VecFloat lvLinearVelocityDotXAxis = VecFloat(vpu::Dot(mLinearVelocity, lvRight));
         const Vector3 lvLinearVelocityZAxis = lvAt * lvLinearVelocityDotZAxis;       // var_120
         const Vector3 lvLinearVelocityXAxis = lvRight * lvLinearVelocityDotXAxis;    // var_110
 
@@ -2381,37 +2382,37 @@ namespace Vehicle
             const Vector3 lLinearVelocityUp = mLinearVelocity - lvLinearVelocityXAxis;
             // cross(velInPlane, right) . +-at -- the console's `vpermwi128 0x63` + `vnmsubfp` +
             // `vpermwi128 0x63` cross-product idiom (0x63 == the yzx word permute).
-            const VecFloat lvfAlignment = vpu::Splat(
+            const VecFloat lvfAlignment = VecFloat(
                 vpu::Dot(vpu::Cross(lLinearVelocityUp, lvRight), lvLinearVelocityZAxisDir));
-            const VecFloat lvfPitchVelocity = vpu::Splat(vpu::Dot(mAngularVelocity, lvRight));
+            const VecFloat lvfPitchVelocity = VecFloat(vpu::Dot(mAngularVelocity, lvRight));
 
             // mfMass is itself a VecFloat (DecFIGS ExternalPhysicsBody.h:93); retain that
             // broadcast flow through the two vector products instead of scalarising mfMass.x.
             const Vector3 lTorque = lvRight * lvfAlignment
-                * (mfMass * vpu::Splat(KF_ALIGN_TORQUE_SCALE));
+                * VecFloat(__vmulfp(mfMass.mV, VecFloat(KF_ALIGN_TORQUE_SCALE).mV));
             const Vector3 lTorqueDamp = lvRight * lvfPitchVelocity
-                * (mfMass * vpu::Splat(KF_RATE_TORQUE_SCALE));
+                * VecFloat(__vmulfp(mfMass.mV, VecFloat(KF_RATE_TORQUE_SCALE).mV));
             AddWorldSpaceTorque(lTorque - lTorqueDamp);
         }
         else
         {
             // dt / 0.1 -- the console spells the reciprocal as vrefp + two Newton steps.
-            const VecFloat lvfValue = vpu::Splat(KF_ANG_BLEED_TIME);
+            const VecFloat lvfValue = VecFloat(KF_ANG_BLEED_TIME);
             const VecFloat lvfAirDampWhenTilted =
-                vpu::Splat(lvfTimeStep.mV.x / lvfValue.mV.x);
+                VecFloat(lvfTimeStep.mV.x / lvfValue.mV.x);
 
-            const VecFloat lvfPitchVelocity = vpu::Splat(vpu::Dot(lvRight, mAngularVelocity));
-            if ((lvfPitchVelocity * lvLinearVelocityDotZAxis).mV.x > 0.0f)
-                mAngularVelocity = mAngularVelocity - lvRight * (lvfPitchVelocity * lvfAirDampWhenTilted);
+            const VecFloat lvfPitchVelocity = VecFloat(vpu::Dot(lvRight, mAngularVelocity));
+            if (__vmulfp(lvfPitchVelocity.mV, lvLinearVelocityDotZAxis.mV).x > 0.0f)
+                mAngularVelocity = mAngularVelocity - lvRight * VecFloat(__vmulfp(lvfPitchVelocity.mV, lvfAirDampWhenTilted.mV));
 
-            const VecFloat lvfPitchTorque = vpu::Splat(vpu::Dot(lvRight, mTotalTorque));
-            if ((lvfPitchTorque * lvLinearVelocityDotZAxis).mV.x > 0.0f)
-                mTotalTorque = mTotalTorque - lvRight * (lvfPitchTorque * lvfAirDampWhenTilted);
+            const VecFloat lvfPitchTorque = VecFloat(vpu::Dot(lvRight, mTotalTorque));
+            if (__vmulfp(lvfPitchTorque.mV, lvLinearVelocityDotZAxis.mV).x > 0.0f)
+                mTotalTorque = mTotalTorque - lvRight * VecFloat(__vmulfp(lvfPitchTorque.mV, lvfAirDampWhenTilted.mV));
 
-            const VecFloat lvfPitchImpulse = vpu::Splat(vpu::Dot(lvRight, mTotalAngularImpulse));
-            if ((lvfPitchImpulse * lvLinearVelocityDotZAxis).mV.x > 0.0f)
+            const VecFloat lvfPitchImpulse = VecFloat(vpu::Dot(lvRight, mTotalAngularImpulse));
+            if (__vmulfp(lvfPitchImpulse.mV, lvLinearVelocityDotZAxis.mV).x > 0.0f)
                 mTotalAngularImpulse = mTotalAngularImpulse
-                    - lvRight * (lvfPitchImpulse * lvfAirDampWhenTilted);
+                    - lvRight * VecFloat(__vmulfp(lvfPitchImpulse.mV, lvfAirDampWhenTilted.mV));
         }
 
         // ----- ROLL axis (about the body Z/forward axis), gated on the take-off roll snapshot.
@@ -2424,38 +2425,38 @@ namespace Vehicle
                 const Vector3 lvLinearVelocityXAxisDir =
                     (lvLinearVelocityDotXAxis.mV.x >= 0.0f) ? lvRight : lvRight * -1.0f;
                 const Vector3 lLinearVelocityUp = mLinearVelocity - lvLinearVelocityZAxis;
-                const VecFloat lvfRollVelocity = vpu::Splat(vpu::Dot(mAngularVelocity, lvAt));
-                const VecFloat lvfAlignment = vpu::Splat(
+                const VecFloat lvfRollVelocity = VecFloat(vpu::Dot(mAngularVelocity, lvAt));
+                const VecFloat lvfAlignment = VecFloat(
                     vpu::Dot(vpu::Cross(lLinearVelocityUp, lvAt), lvLinearVelocityXAxisDir));
 
                 const Vector3 lTorque = lvAt * lvfAlignment
-                    * (mfMass * vpu::Splat(KF_ALIGN_TORQUE_SCALE));
+                    * VecFloat(__vmulfp(mfMass.mV, VecFloat(KF_ALIGN_TORQUE_SCALE).mV));
                 const Vector3 lTorqueDamp = lvAt * lvfRollVelocity
-                    * (mfMass * vpu::Splat(KF_RATE_TORQUE_SCALE));
+                    * VecFloat(__vmulfp(mfMass.mV, VecFloat(KF_RATE_TORQUE_SCALE).mV));
                 AddWorldSpaceTorque(lTorque - lTorqueDamp);
             }
             else
             {
-                const VecFloat lvfValue = vpu::Splat(KF_ANG_BLEED_TIME);
+                const VecFloat lvfValue = VecFloat(KF_ANG_BLEED_TIME);
                 const VecFloat lvfAirDampWhenTilted =
-                    vpu::Splat(lvfTimeStep.mV.x / lvfValue.mV.x);
+                    VecFloat(lvfTimeStep.mV.x / lvfValue.mV.x);
 
                 // NOTE THE ASYMMETRY, IT IS THE CONSOLE'S: the roll bleed's three gates test the
                 // roll component against lvLinearVelocityDotZAxis (v125), not the X-axis dot.
-                const VecFloat lvfRollVelocity = vpu::Splat(vpu::Dot(lvAt, mAngularVelocity));
-                if ((lvfRollVelocity * lvLinearVelocityDotZAxis).mV.x > 0.0f)
+                const VecFloat lvfRollVelocity = VecFloat(vpu::Dot(lvAt, mAngularVelocity));
+                if (__vmulfp(lvfRollVelocity.mV, lvLinearVelocityDotZAxis.mV).x > 0.0f)
                     mAngularVelocity = mAngularVelocity
-                        - lvAt * (lvfRollVelocity * lvfAirDampWhenTilted);
+                        - lvAt * VecFloat(__vmulfp(lvfRollVelocity.mV, lvfAirDampWhenTilted.mV));
 
-                const VecFloat lvfRollTorque = vpu::Splat(vpu::Dot(lvAt, mTotalTorque));
-                if ((lvfRollTorque * lvLinearVelocityDotZAxis).mV.x > 0.0f)
+                const VecFloat lvfRollTorque = VecFloat(vpu::Dot(lvAt, mTotalTorque));
+                if (__vmulfp(lvfRollTorque.mV, lvLinearVelocityDotZAxis.mV).x > 0.0f)
                     mTotalTorque = mTotalTorque
-                        - lvAt * (lvfRollTorque * lvfAirDampWhenTilted);
+                        - lvAt * VecFloat(__vmulfp(lvfRollTorque.mV, lvfAirDampWhenTilted.mV));
 
-                const VecFloat lvfRollImpulse = vpu::Splat(vpu::Dot(lvAt, mTotalAngularImpulse));
-                if ((lvfRollImpulse * lvLinearVelocityDotZAxis).mV.x > 0.0f)
+                const VecFloat lvfRollImpulse = VecFloat(vpu::Dot(lvAt, mTotalAngularImpulse));
+                if (__vmulfp(lvfRollImpulse.mV, lvLinearVelocityDotZAxis.mV).x > 0.0f)
                     mTotalAngularImpulse = mTotalAngularImpulse
-                        - lvAt * (lvfRollImpulse * lvfAirDampWhenTilted);
+                        - lvAt * VecFloat(__vmulfp(lvfRollImpulse.mV, lvfAirDampWhenTilted.mV));
             }
         }
 
@@ -2891,7 +2892,7 @@ namespace Vehicle
 
         // NOT drifting -> the cached value (the asm's LABEL_6 fast path).
         if (mu8DriftState == eDriftState_None)
-            { const VecFloat lResult( lfCached, lfCached, lfCached, lfCached ); return lResult; }
+            { const VecFloat lResult(lfCached); return lResult; }
 
         // 0x825D4064..0x825D4094 compares every absolute xyz velocity lane with epsilon and takes
         // the cached path only when all three comparisons are false.  It is not a test of y alone.
@@ -2899,7 +2900,7 @@ namespace Vehicle
             std::max(std::fabs(mLinearVelocity.mV.x),
                      std::max(std::fabs(mLinearVelocity.mV.y), std::fabs(mLinearVelocity.mV.z)));
         if (!(lfMaxAbsVelocity > KF_DRIFT_STEER_EPSILON))
-            { const VecFloat lResult( lfCached, lfCached, lfCached, lfCached ); return lResult; }
+            { const VecFloat lResult(lfCached); return lResult; }
 
         // Recompute the signed world steering angle.
         const Vector3 lUnitVel = vpu::Normalize(mLinearVelocity);   // zero-guarded
@@ -2930,7 +2931,7 @@ namespace Vehicle
         // existed only so a flagged zero would not collapse the angle; the clamp is real now.
         if (lfBlended >  KF_STEER_ANGLE_CLAMP) lfBlended =  KF_STEER_ANGLE_CLAMP;
         if (lfBlended < -KF_STEER_ANGLE_CLAMP) lfBlended = -KF_STEER_ANGLE_CLAMP;
-        { const VecFloat lResult( lfBlended, lfBlended, lfBlended, lfBlended ); return lResult; }
+        { const VecFloat lResult(lfBlended); return lResult; }
     }
 
     // @0x825D34D8  VehiclePhysics::GetMaxSteeringAngleDuringDrift
@@ -3627,12 +3628,10 @@ namespace Vehicle
         if (lfDriftAngle > KF_HALF_TURN_DEG)
             lfDriftAngle -= KF_FULL_TURN_DEG;
 
-        const VecFloat lvfDriftAngle(
-            lfDriftAngle, lfDriftAngle, lfDriftAngle, lfDriftAngle
-        );
-        const VecFloat lvfOne( 1.0f, 1.0f, 1.0f, 1.0f );
-        const VecFloat lvfGas( lfGas, lfGas, lfGas, lfGas );
-        const VecFloat lvfBrake( lfBrake, lfBrake, lfBrake, lfBrake );
+        const VecFloat lvfDriftAngle(lfDriftAngle);
+        const VecFloat lvfOne(1.0f);
+        const VecFloat lvfGas(lfGas);
+        const VecFloat lvfBrake(lfBrake);
 
         const VehicleAttribs::DriftAttribs& lrDriftAttribs = mpAttribs->mDriftAttribs;
         const bool lbAboveMinimumDriftSpeed =
@@ -3697,10 +3696,7 @@ namespace Vehicle
         }
 
         const f32 lfNaturalDecayFactor = std::min(1.0f - lfGas, 1.0f - lfBrake);
-        const VecFloat lvfNaturalDecayFactor(
-            lfNaturalDecayFactor, lfNaturalDecayFactor,
-            lfNaturalDecayFactor, lfNaturalDecayFactor
-        );
+        const VecFloat lvfNaturalDecayFactor(lfNaturalDecayFactor);
         ApplyNaturalDriftForces(
             lvfTimeStep, lvfDriftAngle, lvfNaturalDecayFactor, lvfGas, lvfBrake);
 
@@ -3951,9 +3947,9 @@ namespace Vehicle
         //      ApplyDriftLatForce  v1 = splat(lfAbsDriftScale), v2 = splat(lfSpeedMPS),
         //                          v3 = splat(controls->mfSteering), v4 = splat(controls->mfBrake),
         //                          v5 = splat(controls->mfGas),      v6 = the VecFloat dt
-        const VecFloat lvfSpeed( lfSpeedMPS, lfSpeedMPS, lfSpeedMPS, lfSpeedMPS );
-        const VecFloat lvfAbsSteer( lfAbsSteering, lfAbsSteering, lfAbsSteering, lfAbsSteering );
-        const VecFloat lvfAbsScale( lfAbsDriftScale, lfAbsDriftScale, lfAbsDriftScale, lfAbsDriftScale );
+        const VecFloat lvfSpeed(lfSpeedMPS);
+        const VecFloat lvfAbsSteer(lfAbsSteering);
+        const VecFloat lvfAbsScale(lfAbsDriftScale);
         MaintainDriftSpeed(lpControls, mTransform.zAxis, lvfSpeed);
         UpdateDriftScale(lpControls, lfAbsSteering, lfAbsDriftScale, lvfTimeStep);
         ApplyDriftYaw(lpControls, lvfAbsSteer, lvfAbsScale);
@@ -3963,9 +3959,9 @@ namespace Vehicle
             const f32 lfSteering = (lpControls != NULL) ? lpControls->mfSteering : 0.0f;
             const f32 lfBrake = (lpControls != NULL) ? lpControls->mfBrake : 0.0f;
             const f32 lfGas = (lpControls != NULL) ? lpControls->mfGas : 0.0f;
-            const VecFloat lvfSteering( lfSteering, lfSteering, lfSteering, lfSteering );
-            const VecFloat lvfBrake( lfBrake, lfBrake, lfBrake, lfBrake );
-            const VecFloat lvfGas( lfGas, lfGas, lfGas, lfGas );
+            const VecFloat lvfSteering(lfSteering);
+            const VecFloat lvfBrake(lfBrake);
+            const VecFloat lvfGas(lfGas);
             ApplyDriftLatForce(lvfAbsScale, lvfSpeed, lvfSteering, lvfBrake, lvfGas, lvfTimeStep);
         }
     }
@@ -5254,7 +5250,7 @@ namespace Vehicle
         // an inanimate-world recovery impulse at their streamed suspension point.
         if (mi8NumWorldCollisions == 0)
         {
-            const VecFloat lvfRestitution( -0.7f, -0.7f, -0.7f, -0.7f );
+            const VecFloat lvfRestitution(-0.7f);
 
             for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             {
@@ -5275,7 +5271,7 @@ namespace Vehicle
                 if (vpu::Dot(lPointVelocity, lrCollisionNormal) < 0.0f)
                 {
                     Vector3 lImpulse(Vector4( 0.0f, 0.0f, 0.0f, 0.0f ).mV);
-                    VecFloat lvfInvInertia( 0.0f, 0.0f, 0.0f, 0.0f );
+                    VecFloat lvfInvInertia(0.0f);
                     CalculateCollisionImpulseWithInanimateObject(
                         lSusPointWorld, lPointVelocity, lrCollisionNormal, lvfRestitution,
                         &lImpulse, &lvfInvInertia);
@@ -6744,7 +6740,7 @@ namespace Vehicle
     {
         static const f32 KF_COLLISION_BRAKE_CAP = 0.2f;   // unk_82FB9280 <- flt_82004744
         static const f32 KF_CREEP_STOP_MPH      = 5.0f;   // unk_82FB9240 <- flt_8200426C
-        const VecFloat KV_ZERO(0.0f, 0.0f, 0.0f, 0.0f);
+        const VecFloat KV_ZERO(0.0f);
 
         f32& lrfBrakeScale =
             mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.mV.w;   // +0x1010 .w
@@ -7073,13 +7069,11 @@ namespace Vehicle
                 .mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.mV.y) <= KF_EPSILON)
             lfFrontMax = KF_UNDRIVEN_MAX_SPIN;   // undriven front: effectively unlimited
 
-        const VecFloat lvfFrontMax( lfFrontMax, lfFrontMax, lfFrontMax, lfFrontMax );
-        const VecFloat lvfFrontFactor( lfFrontFactor, lfFrontFactor, lfFrontFactor, lfFrontFactor );
-        const VecFloat lvfRearFactor( lfRearFactor, lfRearFactor, lfRearFactor, lfRearFactor );
-        const VecFloat lvfCapScale( KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE,
-                                    KF_BRAKE_CAPACITY_SCALE, KF_BRAKE_CAPACITY_SCALE );
-        const VecFloat lvfDecelScale( KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE,
-                                      KF_BRAKE_DECEL_SCALE, KF_BRAKE_DECEL_SCALE );
+        const VecFloat lvfFrontMax(lfFrontMax);
+        const VecFloat lvfFrontFactor(lfFrontFactor);
+        const VecFloat lvfRearFactor(lfRearFactor);
+        const VecFloat lvfCapScale(KF_BRAKE_CAPACITY_SCALE);
+        const VecFloat lvfDecelScale(KF_BRAKE_DECEL_SCALE);
 
         maWheels[eFrontRightWheel].UpdateVelocity(lvfTimeStep, lvfFrontMax, lvfFrontFactor,
                                                   lvfCapScale, lvfDecelScale,
@@ -7575,7 +7569,7 @@ namespace Vehicle
         mPreviousTransform             = lTransform;                                   // +0x1370
         meCarType                      = KI_PREPARE_CAR_TYPE;                          // +0x13DC
         {
-            const VecFloat lAggregateValue( 1.0f, 1.0f, 1.0f, 1.0f );
+            const VecFloat lAggregateValue(1.0f);
             mvfWheelFrictionLinearMultiplier = lAggregateValue;
         }         // +0xFD0
 
@@ -7776,12 +7770,12 @@ namespace Vehicle
 
         { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
         {
-            const VecFloat lAggregateValue( lfMPH, lfMPH, lfMPH, lfMPH );
+            const VecFloat lAggregateValue(lfMPH);
             mfSpeedMPH = lAggregateValue;
         } }   // splat
         { const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.x;
           {
-              const VecFloat lAggregateValue( lfM, lfM, lfM, lfM );
+              const VecFloat lAggregateValue(lfM);
               mfMass = lAggregateValue;
           } }   // splat (refreshed per frame)
 
@@ -7880,7 +7874,7 @@ namespace Vehicle
 
         { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
         {
-            const VecFloat lAggregateValue( lfMPH, lfMPH, lfMPH, lfMPH );
+            const VecFloat lAggregateValue(lfMPH);
             mfSpeedMPH = lAggregateValue;
         } }   // splat
         mbCrashedThisFrame = false;   // stb 0 -> +0x713
@@ -8079,7 +8073,7 @@ namespace Vehicle
 
         (void)lbImpactTime;   // DEAD in the body (never read; the caller's register map only)
 
-        const VecFloat lvfTimeStep( lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep );
+        const VecFloat lvfTimeStep(lfTimeStep);
 
         // ---- [rollcatch] NOT IN THE X360 BINARY. OPT-IN on the existing BRN_CRASH_RESPONSE_DIAG
         // latch so it lands in the same log as [crash-response]. THE QUESTION IT ANSWERS: the
@@ -8159,7 +8153,7 @@ namespace Vehicle
         {
             const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.x;
             {
-                const VecFloat lAggregateValue( lfM, lfM, lfM, lfM );
+                const VecFloat lAggregateValue(lfM);
                 mfMass = lAggregateValue;
             }                    // splat, this+0xE0
         }
@@ -8172,7 +8166,7 @@ namespace Vehicle
             const f32 lfMass = lfT * (KF_CRASHMASS_OUT_HI - KF_CRASHMASS_OUT_LO)
                                + KF_CRASHMASS_OUT_LO;                   // vmaddfp lerp
             {
-                const VecFloat lAggregateValue( lfMass, lfMass, lfMass, lfMass );
+                const VecFloat lAggregateValue(lfMass);
                 mfMass = lAggregateValue;
             }
         }
@@ -8289,7 +8283,7 @@ namespace Vehicle
 
         { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
         {
-            const VecFloat lAggregateValue( lfMPH, lfMPH, lfMPH, lfMPH );
+            const VecFloat lAggregateValue(lfMPH);
             mfSpeedMPH = lAggregateValue;
         } }   // splat, KF_MPS_TO_MPH
         mbCrashedThisFrame = false;                              // stb 0 -> +0x713

@@ -195,7 +195,7 @@ namespace Vehicle
                 lfMinHeight = lfHeight;
         }
 
-        { const VecFloat lResult(lfMinHeight, lfMinHeight, lfMinHeight, lfMinHeight); return lResult; }
+        { const VecFloat lResult(lfMinHeight); return lResult; }
     }
 
     // =========================================================================================
@@ -450,9 +450,7 @@ namespace Vehicle
             {
                 const f32 lfScale = 1.0f / KVF_AI_CRASH_SLOWMO_FACTOR;
                 {
-                    const VecFloat lAggregateValue(
-                    lvfSimTimeStep.mV.x * lfScale, lvfSimTimeStep.mV.y * lfScale,
-                    lvfSimTimeStep.mV.z * lfScale, lvfSimTimeStep.mV.w * lfScale);
+                    const VecFloat lAggregateValue(__vmulfp(lvfSimTimeStep.mV, VecFloat(lfScale).mV));
                     lvfSimTimeStep = lAggregateValue;
                 }
             }
@@ -1534,7 +1532,7 @@ namespace Vehicle
                       ? vpu::Mult(lvAim, 1.0f / std::sqrt(lfAimMagSq))
                       : Vector3(0.0f, 0.0f, 0.0f);   // vsel zero guard
 
-                const VecFloat lvfEnable(lfEnable, lfEnable, lfEnable, lfEnable);
+                const VecFloat lvfEnable(lfEnable);
                 UpdateTargetAssist(lpControls, lvfTimeStep, lvfEnable, lvAim);
             }
 
@@ -1587,7 +1585,7 @@ namespace Vehicle
 
         if (lbShowtime)   // lbz +0x140C @0x8262F5D4
         {
-            const VecFloat lvfEnable(lfEnable, lfEnable, lfEnable, lfEnable);
+            const VecFloat lvfEnable(lfEnable);
             UpdateShowtimePhysics(lpControls, lvCameraX, lvCameraZ, lvfTimeStep,
                                   lvfEnable, lbUseSixaxis);
         }
