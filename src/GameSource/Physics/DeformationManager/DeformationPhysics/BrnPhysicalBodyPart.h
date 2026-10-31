@@ -28,6 +28,7 @@
 
 #include "types.hpp"           // s32, u8, s8, u16, f32
 #include <cmath>               // std::sqrt (GetSphereRadius, walls leg 4)
+#include <xtl.h>
 #include "BrnCommonTypes.h"    // Vector3, Vector3Plus, Matrix44Affine, VecFloat, EntityId, RigidBodyId
 
 #include "GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.h"                       // ExternalPhysicsBody (embedded BY VALUE)
@@ -195,9 +196,9 @@ namespace Deformation
         {
             Matrix44Affine lT = mRwBody.GetTransform();
             const Vector3Plus& lrOff = mLocalGraphicsPositionPlusJointVelocity;
-            lT.wAxis.x += lT.xAxis.x * lrOff.x + lT.yAxis.x * lrOff.y + lT.zAxis.x * lrOff.z;
-            lT.wAxis.y += lT.xAxis.y * lrOff.x + lT.yAxis.y * lrOff.y + lT.zAxis.y * lrOff.z;
-            lT.wAxis.z += lT.xAxis.z * lrOff.x + lT.yAxis.z * lrOff.y + lT.zAxis.z * lrOff.z;
+            lT.wAxis.mV.x += lT.xAxis.mV.x * lrOff.mV.x + lT.yAxis.mV.x * lrOff.mV.y + lT.zAxis.mV.x * lrOff.mV.z;
+            lT.wAxis.mV.y += lT.xAxis.mV.y * lrOff.mV.x + lT.yAxis.mV.y * lrOff.mV.y + lT.zAxis.mV.y * lrOff.mV.z;
+            lT.wAxis.mV.z += lT.xAxis.mV.z * lrOff.mV.x + lT.yAxis.mV.z * lrOff.mV.y + lT.zAxis.mV.z * lrOff.mV.z;
             return lT;
         }
 
@@ -214,12 +215,12 @@ namespace Deformation
         Matrix44Affine GetEventRenderTransform() const
         {
             Matrix44Affine lT = mRwBody.GetTransform();
-            const f32 lfOffX = mLocalGraphicsPositionPlusJointVelocity.x - mLocalInitialComPositionPlusMaxJointAngle.x;
-            const f32 lfOffY = mLocalGraphicsPositionPlusJointVelocity.y - mLocalInitialComPositionPlusMaxJointAngle.y;
-            const f32 lfOffZ = mLocalGraphicsPositionPlusJointVelocity.z - mLocalInitialComPositionPlusMaxJointAngle.z;
-            lT.wAxis.x += lT.xAxis.x * lfOffX + lT.yAxis.x * lfOffY + lT.zAxis.x * lfOffZ;
-            lT.wAxis.y += lT.xAxis.y * lfOffX + lT.yAxis.y * lfOffY + lT.zAxis.y * lfOffZ;
-            lT.wAxis.z += lT.xAxis.z * lfOffX + lT.yAxis.z * lfOffY + lT.zAxis.z * lfOffZ;
+            const __vector4 lOffset = __vsubfp(mLocalGraphicsPositionPlusJointVelocity.mV,
+                                              mLocalInitialComPositionPlusMaxJointAngle.mV);
+            __vector4 lRotated = __vmulfp(lT.xAxis.mV, __vspltw(lOffset, 0));
+            lRotated = __vmaddfp(lT.yAxis.mV, __vspltw(lOffset, 1), lRotated);
+            lRotated = __vmaddfp(lT.zAxis.mV, __vspltw(lOffset, 2), lRotated);
+            lT.wAxis.mV = __vaddfp(lT.wAxis.mV, lRotated);
             return lT;
         }
 
@@ -307,14 +308,8 @@ namespace Deformation
         // BrnPhysicalBodyPart.h:208. The embedded externally-simulated physics body.
         ExternalPhysicsBody* GetExternalBody() { return &mRwBody; }   // (inlined walls leg 4)
 
-        // BrnPhysicalBodyPart.h:212. A bounding sphere radius covering the box (broad-phase).
-        // ⭐ INLINED walls leg 4 (console-inline; FLAG role-derived): the broad-phase radius
-        // covering the oriented box == |half extents| (the banner's own description).
-        f32 GetSphereRadius() const
-        {
-            const Vector3& lrH = mBoundingBoxHalfDimensions;
-            return std::sqrt(lrH.x * lrH.x + lrH.y * lrH.y + lrH.z * lrH.z);
-        }
+        // BrnPhysicalBodyPart.h:212; native out-of-line body @ 0x825E7E10.
+        f32 GetSphereRadius() const;
 
         // BrnPhysicalBodyPart.h:215. The part's world position (rigid-body translation).
         Vector3 GetPosition() const;
@@ -421,7 +416,8 @@ namespace Deformation
         // <0,1,2,7> against zeros, same thing).
         void SetJointVelocity(VecFloat lvfJointVelocity)
         {
-            mLocalGraphicsPositionPlusJointVelocity.SetPlus(lvfJointVelocity.x);
+            mLocalGraphicsPositionPlusJointVelocity.mV = __vrlimi(
+                mLocalGraphicsPositionPlusJointVelocity.mV, lvfJointVelocity.mV, 1, 0);
         }
 
         // ⭐ ADDED 2026-09-23 (crash parity G24-D2). The WHOLE 16-byte row at part+0x170 (xyz =
