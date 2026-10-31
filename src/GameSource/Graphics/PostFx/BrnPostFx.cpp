@@ -23,22 +23,22 @@ BrnPostFx::BrnPostFx()
 
     m_enabledFx = 0;
 
-    m_vignetteState.m_gradientScalars.x = 0.0f;
-    m_vignetteState.m_gradientScalars.y = 0.0f;
-    m_vignetteState.m_gradientScalars.z = 0.0f;
-    m_vignetteState.m_gradientScalars.w = 0.0f;
-    m_vignetteState.m_innerColour.x = 1.0f;
-    m_vignetteState.m_innerColour.y = 1.0f;
-    m_vignetteState.m_innerColour.z = 1.0f;
-    m_vignetteState.m_innerColour.w = 1.0f;
-    m_vignetteState.m_outerColour.x = 1.0f;
-    m_vignetteState.m_outerColour.y = 1.0f;
-    m_vignetteState.m_outerColour.z = 1.0f;
-    m_vignetteState.m_outerColour.w = 1.0f;
-    m_vignetteState.m_centerScale.x = 0.5f;
-    m_vignetteState.m_centerScale.y = 0.5f;
-    m_vignetteState.m_centerScale.z = 1.0f;
-    m_vignetteState.m_centerScale.w = 1.0f;
+    m_vignetteState.m_gradientScalars.mV.x = 0.0f;
+    m_vignetteState.m_gradientScalars.mV.y = 0.0f;
+    m_vignetteState.m_gradientScalars.mV.z = 0.0f;
+    m_vignetteState.m_gradientScalars.mV.w = 0.0f;
+    m_vignetteState.m_innerColour.mV.x = 1.0f;
+    m_vignetteState.m_innerColour.mV.y = 1.0f;
+    m_vignetteState.m_innerColour.mV.z = 1.0f;
+    m_vignetteState.m_innerColour.mV.w = 1.0f;
+    m_vignetteState.m_outerColour.mV.x = 1.0f;
+    m_vignetteState.m_outerColour.mV.y = 1.0f;
+    m_vignetteState.m_outerColour.mV.z = 1.0f;
+    m_vignetteState.m_outerColour.mV.w = 1.0f;
+    m_vignetteState.m_centerScale.mV.x = 0.5f;
+    m_vignetteState.m_centerScale.mV.y = 0.5f;
+    m_vignetteState.m_centerScale.mV.z = 1.0f;
+    m_vignetteState.m_centerScale.mV.w = 1.0f;
 
     m_dofState.m_focalPlanes[0] = 0.1f;
     m_dofState.m_focalPlanes[1] = 10.0f;
@@ -285,10 +285,10 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
     const f32 lfInverseHeight = KF_POST_FX_ONE / static_cast<f32>(lpSourceRenderTarget->muHeight);
 
     rw::math::vpu::Vector2 lHalfTexelOffset;
-    lHalfTexelOffset.x = KF_POST_FX_HALF_TEXEL * lfInverseWidth;
-    lHalfTexelOffset.y = KF_POST_FX_HALF_TEXEL * lfInverseHeight;
-    lHalfTexelOffset.z = lHalfTexelOffset.x;
-    lHalfTexelOffset.w = lHalfTexelOffset.x;
+    lHalfTexelOffset.mV.x = KF_POST_FX_HALF_TEXEL * lfInverseWidth;
+    lHalfTexelOffset.mV.y = KF_POST_FX_HALF_TEXEL * lfInverseHeight;
+    lHalfTexelOffset.mV.z = lHalfTexelOffset.mV.x;
+    lHalfTexelOffset.mV.w = lHalfTexelOffset.mV.x;
 
     renderengine::Texture* const lpBloomTexture =
         lrAllocatedMemory.GetBloomBuffer()->GetRenderTarget()->GetTexture(0u);
