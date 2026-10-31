@@ -110,8 +110,7 @@ void Looker::Track(VecFloat lvTimeStep,
 
     // Adjust the look-at by the configured screen offset (target subject X/Y screen offset).
     const Vector2 lScreenOffset =
-        Vector2{ lrParams.mfTargetSubjectXScreenOffset, lrParams.mfTargetSubjectYScreenOffset,
-                 0.0f, 0.0f };
+        Vector2(lrParams.mfTargetSubjectXScreenOffset, lrParams.mfTargetSubjectYScreenOffset);
     // asm 0x822226FC/0x8222270C: both the FOV and aspect args come from the camera's own
     // fields (camera+0x58 / camera+0x5C), not a hardcoded 1.0f aspect.
     const VecFloat lvFOV    = VecFloat(lrCamera.GetFOV());
@@ -123,9 +122,8 @@ void Looker::Track(VecFloat lvTimeStep,
         // Fixed-offset path: rotate the adjusted look-at by the explicit ZXY Euler offsets
         // (the initial X/Y look-offset ranges, converted degrees->radians) and install it.
         const Vector3 lEulerAngles =
-            Vector3{ lrParams.mfInitialXLookOffsetRange * KF_DEGS_TO_RADS,
-                     lrParams.mfInitialYLookOffsetRange * KF_DEGS_TO_RADS,
-                     0.0f, 0.0f };
+            Vector3(lrParams.mfInitialXLookOffsetRange * KF_DEGS_TO_RADS,
+                    lrParams.mfInitialYLookOffsetRange * KF_DEGS_TO_RADS, 0.0f);
         RotateMatrix44AffineByEulerAnglesZXY(lAdjustedLookAt, lEulerAngles);
         lrCamera.SetTransform(lAdjustedLookAt);
     }
@@ -197,11 +195,11 @@ void Looker::Zoom(VecFloat lvTimeStep,
         // asm 0x82222C60..C78: lvDistance is the camera's FOV re-read (camera+0x58), NOT
         // lfDistanceToTarget (that value is only consumed by the perceived-distance case).
         const Vector2 lTargetArea =
-            Vector2{ lrParams.mfTargetSubjectSize, 0.0f, 0.0f, 0.0f };
+            Vector2(lrParams.mfTargetSubjectSize, 0.0f);
         const VecFloat lvFOV =
             GetFOVDegsToFitObjectToScreenArea(VecFloat(lrCamera.GetFOV()),
                                               lSizeOnScreen,
-                                              VecFloat(lTargetArea.x));
+                                              VecFloat(lTargetArea.mV.x));
         lfIdealFOV = lvFOV;
         break;
     }
@@ -216,7 +214,7 @@ void Looker::Zoom(VecFloat lvTimeStep,
                             lTarget, lAABB);
         // asm 0x82222BCC..C04: lvDistance is again the camera's FOV re-read (camera+0x58).
         const Vector2 lTargetSize =
-            Vector2{ lrParams.mfTargetSubjectXSize, lrParams.mfTargetSubjectYSize, 0.0f, 0.0f };
+            Vector2(lrParams.mfTargetSubjectXSize, lrParams.mfTargetSubjectYSize);
         const VecFloat lvFOV =
             GetFOVDegsToFitObjectToScreenSize(VecFloat(lrCamera.GetFOV()),
                                               lSizeOnScreen, lTargetSize);
@@ -381,7 +379,7 @@ void Looker::Zoom(VecFloat lvTimeStep,
     // The single blurriness ramp write (camera+0x134): `fmadds f0, f12, f13, f0` @0x82222F48 -- delta * rate + blur
     // rounded ONCE (ROUNDING_RULE rule 3). The moving branch's delta is its own `fsubs` (1.0 - blur, 0x82222F24, rule 4);
     // the other two negate (`fneg` 0x82222F44, exact).
-    lrCamera.GetDepthOfField().SetBlurriness(std::fmaf(lfDofDelta, lfDofRate, lfBlur));
+    lrCamera.GetDepthOfField().SetBlurriness(lfDofDelta * lfDofRate + lfBlur);
 
     // The static-DOF override path (asm 0x82222F50, gated on mbUseStaticDOF @+0x5C): forward
     // the scaled focal-length / DOF into the camera's DOF parameter block (camera+0x124). The
