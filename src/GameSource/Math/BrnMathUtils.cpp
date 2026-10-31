@@ -25,22 +25,21 @@ namespace BrnMath
     }
 
     // ---------------------------------------------------------------------------------------
-    // Flatten (X360 @ 0x822CB8E8) -> Vector2
-    //
-    // ASM: vspltw/vcmpeqfp. self-equality cascade over lanes 0,1,2 (the inlined IsValid NaN
-    // guard), then on the fall-through `lvx128 v0,&unk_82CDA450; vperm v1,v1,v1,v0` packs the
-    // input vector through a static permute mask into the returned Vector2. The Hex-Rays
-    // `result` (= EndAssert() return) is artifact noise; the real return is the permuted
-    // Vector2 delivered via the hidden sret pointer.
-    //
-    // FLAG (VMX->portable): the assert cascade is reversed to a single CGS_ASSERT(IsValid).
-    // FLAG (Flatten lane mask): the exact vperm mask at unk_82CDA450 is an un-valued .rdata
-    //   blob. XZ (drop Y) is INFERRED from the two sibling 2D functions, both of which use
-    //   lanes 0 and 2. If the mask ever resolves to XY, swap lVector.z -> lVector.y here.
+    // Flatten @822CB8E8 returns the actual raw permuted register in v1.
+    // The original82CDA450 mask selects X,Z,X,X, including the unused lanes.
     Vector2 Flatten(Vector3 lVector)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lVector), "RwMath::IsValid( lVector )");
-        { const Vector2 lResult = { lVector.mV.x, lVector.mV.z }; return lResult; }
+        if (!rw::math::vpu::IsValid(lVector))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("RwMath::IsValid( lVector )", "..\\..\\..\\GameSource\\Math/BrnMathUtils.h", 140);
+            CgsDev::Assert::EndAssert();
+        }
+        static const CGS_ALIGN(16) u32 lauFlattenPermute[4] = {
+            0x00010203, 0x18191A1B, 0x00010203, 0x00010203 };
+        Vector2 lResult;
+        lResult.mV = __vperm(lVector.mV, lVector.mV, __lvx(lauFlattenPermute, 0));
+        return lResult;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -101,7 +100,7 @@ namespace BrnMath
     //   0x8276AD18..AD28  vperm / cntlzw / extrwi -> TRUE unless |m - 1| > 0.01 (NaN reads normal)
     bool IsNormal(Vector2 lVector)
     {
-        const f32 lfMagnitude = UnitLengthMagnitude(lVector.x * lVector.x + lVector.y * lVector.y);
+        const f32 lfMagnitude = UnitLengthMagnitude(lVector.mV.x * lVector.mV.x + lVector.mV.y * lVector.mV.y);
         return !(std::fabs(lfMagnitude - 1.0f) > KF_UNIT_LENGTH_EPSILON);
     }
 

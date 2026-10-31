@@ -97,7 +97,7 @@ BoxRegion::GetPosition() const
 inline Vector2
 BoxRegion::GetPosition2D() const
 {
-    { const Vector2 lResult = { mPositionX, mPositionZ, 0.0f, 0.0f }; return lResult; }
+    { return Vector2(mPositionX, mPositionZ); }
 }
 
 inline Vector3
