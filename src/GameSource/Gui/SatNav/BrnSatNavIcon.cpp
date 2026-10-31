@@ -1,3 +1,4 @@
+#include <float.h>
 // BrnSatNavIcon.cpp
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The out-of-line BrnGui::CrashNavMapIcon
 // members the X360 emits as real functions:
@@ -171,6 +172,15 @@ void CrashNavIconComponent::Construct(const char* lpcName,
     mIcon.mfAlpha             = -1.0f;                                   // stfs flt_820037C8, 0xB4
 }
 
+// ARTIST82448310: a null string becomes empty; localised strings use the ID lookup format.
+void CrashNavMapIcon::SetIconText(const char* lpcText, bool lbAlreadyLocalised)
+{
+    if (lpcText != 0 && lbAlreadyLocalised)
+        mIconText.SetLocalisedText(lpcText, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
+    else
+        mIconText.SetText(lpcText != 0 ? lpcText : "");
+}
+
 // ======================= H3c: the sat-nav icon-pool bind surface =======================
 
 // @ 0x82448340 -- the pool-bind constructor (this = the icon; the X360 constructs the
@@ -209,7 +219,7 @@ void SatNavIconComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& 
     mIcon.SetAlpha(0.0f);
     mIcon.SetState(MapIconBrnBase::E_ICONSTATE_INVISIBLE);
     Vector2 lv2Zero;
-    lv2Zero.x = 0.0f; lv2Zero.y = 0.0f; lv2Zero.z = 0.0f; lv2Zero.w = 0.0f;
+    lv2Zero.SetZero();
     mIcon.SetPosition(lv2Zero);
 }
 
@@ -261,10 +271,10 @@ void CrashNavMapIcon::Update()
     {
         char lacValue[64];
 
-        CgsCore::SPrintf(lacValue, 64, "%3.3f", mv2Position.x);          // icon+0x10
+        CgsCore::SPrintf(lacValue, 64, "%3.3f", mv2Position.mV.x);          // icon+0x10
         lpComponent->AddOutputAptViewState("_x", lacValue, true);
 
-        CgsCore::SPrintf(lacValue, 64, "%3.3f", mv2Position.y);          // icon+0x14
+        CgsCore::SPrintf(lacValue, 64, "%3.3f", mv2Position.mV.y);          // icon+0x14
         lpComponent->AddOutputAptViewState("_y", lacValue, true);
 
         CgsCore::SPrintf(lacValue, 64, "%3.3f",

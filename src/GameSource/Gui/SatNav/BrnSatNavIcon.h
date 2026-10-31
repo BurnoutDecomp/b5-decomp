@@ -145,14 +145,17 @@ namespace BrnGui
         void SetPosition(Vector2 lv2Position)
         {
             unsigned int luCompare;
-        __vcmpeqfpR(__vrlimi(lv2Position.mV, lv2Position.mV, 3, 2),
-                    __vrlimi(mv2Position.mV, mv2Position.mV, 3, 2), &luCompare);
-        if ((luCompare & 0x80) == 0)
+            __vcmpeqfpR(__vrlimi(lv2Position.mV, lv2Position.mV, 3, 2),
+                        __vrlimi(mv2Position.mV, mv2Position.mV, 3, 2), &luCompare);
+            if ((luCompare & 0x80) == 0)
             {
                 mv2Position = lv2Position;
                 mbIsDirty = true;
             }
         }
+
+        // ARTIST82448310: dispatch through the embedded TextField.
+        void SetIconText(const char* lpcText, bool lbAlreadyLocalised);
 
         // @ 0x827DD5B0
         void SetRotation(f32 lfRotationInRadians)
