@@ -84,7 +84,7 @@ namespace Vehicle
         //   maxWheelOmega = MaxRPM / (Differential * gearRatio[mu8CurrentGear])
         // with a div-by-zero guard on the denominator. Returns the magnitude broadcast across a
         // Vector4 (the X360 stores it via stvx128 into the caller's result buffer).
-        Vector4 GetMaxWheelAngularVelocity() const;
+        VecFloat GetMaxWheelAngularVelocity() const;
 
         // @0x825CB288: THE POWERTRAIN TORQUE CORE (throttle -> clutch -> flywheel -> gearbox ->
         // drive force). BODIED 2026-08-09 (powertrain wave) in Engine.cpp -- the trap stub is

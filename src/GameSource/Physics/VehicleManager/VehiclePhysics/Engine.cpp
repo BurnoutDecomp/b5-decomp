@@ -167,7 +167,7 @@ namespace
     void Engine::Construct()
     {
         mAttribs.Construct();
-        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const VecFloat lvfZero(0.0f);
         Reset(lvfZero);
     }
 
@@ -187,10 +187,10 @@ namespace
     {
         std::memcpy(&mAttribs, lpAttribs, sizeof(EngineAttribs));   // 160-byte attribs copy
 
-        mvClutchFactor_RPM_CurrentGearChangeTime.x = 0.0f;          // clutch factor lane -> 0
+        mvClutchFactor_RPM_CurrentGearChangeTime.mV.x = 0.0f;          // clutch factor lane -> 0
         mu8CurrentGear = KU8_FIRST_GEAR;
 
-        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const VecFloat lvfZero(0.0f);
         Reset(lvfZero);
         return true;
     }
@@ -228,7 +228,7 @@ namespace
     // ---------------------------------------------------------------------------------------
     s32 Engine::ComputeGear(VecFloat lvfEngineDrive) const
     {
-        if (!(lvfEngineDrive.x >= KF_REVERSE_DRIVE_THRESHOLD))
+        if (!(lvfEngineDrive.mV.x >= KF_REVERSE_DRIVE_THRESHOLD))
             return KU8_REVERSE_GEAR;
 
         const f32 lfDifferential = mAttribs.GetDifferential();
@@ -236,7 +236,7 @@ namespace
         s32 liGear = KU8_FIRST_GEAR;   // 1
 
         // metric for the first gate uses gear 1's ratio/threshold.
-        f32 lfMetric = std::fabs(lvfEngineDrive.x * mAttribs.GetGearRatio(liGear)
+        f32 lfMetric = std::fabs(lvfEngineDrive.mV.x * mAttribs.GetGearRatio(liGear)
                                  * lfDifferential * KF_RADIANS_PER_SEC_TO_RPM);
 
         if (lfMetric > mAttribs.GetGearUpRPM(liGear))
@@ -246,7 +246,7 @@ namespace
                 if (liGear >= KU8_HIGHEST_GEAR)
                     break;
                 ++liGear;
-                lfMetric = std::fabs(lvfEngineDrive.x * mAttribs.GetGearRatio(liGear)
+                lfMetric = std::fabs(lvfEngineDrive.mV.x * mAttribs.GetGearRatio(liGear)
                                      * lfDifferential * KF_RADIANS_PER_SEC_TO_RPM);
             }
             while (lfMetric > mAttribs.GetGearUpRPM(liGear));
@@ -280,24 +280,24 @@ namespace
     // ---------------------------------------------------------------------------------------
     void Engine::Reset(VecFloat lvfWheelAngularVelocity)
     {
-        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.x = 0.0f;   // EngineDrive
-        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.y = 0.0f;   // ReactionTorque
-        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.w = 0.0f;   // ClutchDelay
-        mvClutchFactor_RPM_CurrentGearChangeTime.x = 0.0f;                           // ClutchFactor
-        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.z =
+        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.mV.x = 0.0f;   // EngineDrive
+        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.mV.y = 0.0f;   // ReactionTorque
+        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.mV.w = 0.0f;   // ClutchDelay
+        mvClutchFactor_RPM_CurrentGearChangeTime.mV.x = 0.0f;                           // ClutchFactor
+        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.mV.z =
             KF_IDLE_FLYWHEEL_ANGULAR_VELOCITY;
 
         const s32 liGear = ComputeGear(lvfWheelAngularVelocity);
         mu8CurrentGear = static_cast<u32>(liGear);
 
-        mvClutchFactor_RPM_CurrentGearChangeTime.y =
-            std::fabs(lvfWheelAngularVelocity.x * mAttribs.GetGearRatio(liGear)
+        mvClutchFactor_RPM_CurrentGearChangeTime.mV.y =
+            std::fabs(lvfWheelAngularVelocity.mV.x * mAttribs.GetGearRatio(liGear)
                       * mAttribs.GetDifferential() * KF_RADIANS_PER_SEC_TO_RPM);
 
         mbAllowToChangeUpGear   = true;
         mbAllowToChangeDownGear = true;
 
-        mvClutchFactor_RPM_CurrentGearChangeTime.z = KF_RESET_CURRENT_GEAR_CHANGE_TIME;
+        mvClutchFactor_RPM_CurrentGearChangeTime.mV.z = KF_RESET_CURRENT_GEAR_CHANGE_TIME;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -322,7 +322,7 @@ namespace
     //   limiter returned a wheel-speed ceiling 9.55x too high. Dividing MaxRPM by it converts RPM
     //   to rad/s before the gearing divide, which is exactly what the member's name asks for.
     // ---------------------------------------------------------------------------------------
-    Vector4 Engine::GetMaxWheelAngularVelocity() const
+    VecFloat Engine::GetMaxWheelAngularVelocity() const
     {
         const f32 lfDifferential = mAttribs.GetDifferential();
         const f32 lfGearRatio    = mAttribs.GetGearRatio(static_cast<s32>(mu8CurrentGear));
@@ -338,7 +338,7 @@ namespace
         const f32 lfDenominator = lfAssertDenom * KF_RADIANS_PER_SEC_TO_RPM;
         const f32 lfResult      = (lfDenominator != 0.0f) ? (lfMaxRPM / lfDenominator) : 0.0f;
 
-        { const Vector4 lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
+        { const VecFloat lResult(lfResult); return lResult; }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -396,11 +396,11 @@ namespace
                         bool lbHandBrake, VecFloat lvfSteering, VecFloat /*lvfRearWheelRadius*/,
                         bool lbAllowReverseDrive, VecFloat lvfForwardSpeed, VecFloat lvfTimeStep)
     {
-        const f32 lfGas          = lvfGas.x;
-        const f32 lfBrake        = lvfBrake.x;
-        const f32 lfSteering     = lvfSteering.x;
-        const f32 lfForwardSpeed = lvfForwardSpeed.x;
-        const f32 lfTimeStep     = lvfTimeStep.x;
+        const f32 lfGas          = lvfGas.mV.x;
+        const f32 lfBrake        = lvfBrake.mV.x;
+        const f32 lfSteering     = lvfSteering.mV.x;
+        const f32 lfForwardSpeed = lvfForwardSpeed.mV.x;
+        const f32 lfTimeStep     = lvfTimeStep.mV.x;
 
         s32  liGear    = static_cast<s32>(mu8CurrentGear);
         bool lbAllowUp = mbAllowToChangeUpGear;
@@ -408,28 +408,28 @@ namespace
 
         // -- Timer: advance and saturate (vaddfp + vminfp vs unk_82FB8420=10.0; the console
         //    stores this to the member immediately, then overwrites it with 0 on a shift).
-        f32 lfTimer = std::min(mvClutchFactor_RPM_CurrentGearChangeTime.z + lfTimeStep,
+        f32 lfTimer = std::min(mvClutchFactor_RPM_CurrentGearChangeTime.mV.z + lfTimeStep,
                                KVF_MAX_CURRENT_GEAR_CHANGE_TIME);
 
         // -- Torque: quadratic torque curve sampled at RPM / (2 * TorqueFallOffRPM), scaled by
         //    the current gear's torque scale and the gas (vrefp+NR of 2*FallOff; De Casteljau
         //    over mTorqueCurve; * gear[g].y ; * v2).
         const f32 lfEngineInvInertia = 1.0f / mAttribs.GetFlyWheelInertia();
-        const f32 lfCurveT = mvClutchFactor_RPM_CurrentGearChangeTime.y
+        const f32 lfCurveT = mvClutchFactor_RPM_CurrentGearChangeTime.mV.y
                              / (2.0f * mAttribs.GetTorqueFallOffRPM());
-        const VecFloat lvfCurveT = { lfCurveT, lfCurveT, lfCurveT, lfCurveT };
+        const VecFloat lvfCurveT(lfCurveT);
         f32 lfTorque = mAttribs.mTorqueCurve
-                           .GetInterped(lvfCurveT).x
+                           .GetInterped(lvfCurveT).mV.x
                        * mAttribs.GetTorqueScale(liGear) * lfGas;
 
         // -- Wheel speed seen through the current gearing (ComputeRpm): |v * ratio * diff| in
         //    RPM (unk_82FB9110 = 9.549296) and in rad/s (unk_82FB8B20 = 0.104719755).
-        const f32 lfWheelRPM = std::fabs(lvfWheelAngularVelocity.x * mAttribs.GetGearRatio(liGear)
+        const f32 lfWheelRPM = std::fabs(lvfWheelAngularVelocity.mV.x * mAttribs.GetGearRatio(liGear)
                                          * mAttribs.GetDifferential() * KF_RADIANS_PER_SEC_TO_RPM);
         const f32 lfWheelAngularVelocity = lfWheelRPM * KF_RPM_TO_RADIANS_PER_SEC;
 
         // -- Clutch cuts, in the console's order. Each state independently zeroes the clutch.
-        f32 lfClutch = mvClutchFactor_RPM_CurrentGearChangeTime.x;
+        f32 lfClutch = mvClutchFactor_RPM_CurrentGearChangeTime.mV.x;
         if (lfWheelAngularVelocity < KF_IDLE_FLYWHEEL_ANGULAR_VELOCITY && liGear == 1
             && lfGas < KVF_UPDATEENGINE_STOP_GAS)
             lfClutch = 0.0f;                                       // idling in neutral
@@ -488,7 +488,7 @@ namespace
         // -- Flywheel: when no gear change is in flight, drag the flywheel toward the wheel
         //    speed through the (burn-weakened) clutch, integrate the engine torque, then bleed
         //    friction without crossing zero. Always clamp to [idle, MaxRPM in rad/s].
-        f32 lfFlyWheel = mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.z;
+        f32 lfFlyWheel = mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.mV.z;
         if (lfTimer >= mAttribs.GetGearChangeTime())
         {
             const f32 lfLerp = (1.0f - lfBurnClutch) * mAttribs.GetTransmissionEfficiency()
@@ -580,13 +580,13 @@ namespace
 
         // -- Writeback (the console epilogue's exact lane set).
         mu8CurrentGear = static_cast<u32>(liGear) & 0xFF;          // stw (clrlwi r20,24)
-        const VecFloat lvfGearDownRPM = { lfGearDownRPM, lfGearDownRPM, lfGearDownRPM, lfGearDownRPM };
+        const VecFloat lvfGearDownRPM(lfGearDownRPM);
         mAttribs.SetGearDownRPM(lvfGearDownRPM);
-        mvClutchFactor_RPM_CurrentGearChangeTime.y = lfRPM;
-        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.x = lfEngineDrive;
-        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.z = lfFlyWheel;
-        mvClutchFactor_RPM_CurrentGearChangeTime.x = lfClutch;
-        mvClutchFactor_RPM_CurrentGearChangeTime.z = lfTimer;
+        mvClutchFactor_RPM_CurrentGearChangeTime.mV.y = lfRPM;
+        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.mV.x = lfEngineDrive;
+        mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.mV.z = lfFlyWheel;
+        mvClutchFactor_RPM_CurrentGearChangeTime.mV.x = lfClutch;
+        mvClutchFactor_RPM_CurrentGearChangeTime.mV.z = lfTimer;
 
         // ---- [powertrain] PC bring-up instrument -- DELETE WHEN the drivetrain is right -------
         // OPT-IN (BRN_ENGINE_PROBE=1) so a default run and every golden gate are byte-identical
@@ -637,7 +637,7 @@ namespace
                     << " gas " << lfGas
                     << " brake " << lfBrake
                     << " allowRev " << (lbAllowReverseDrive ? 1 : 0)
-                    << " wOmega " << lvfWheelAngularVelocity.x
+                    << " wOmega " << lvfWheelAngularVelocity.mV.x
                     << " wRPM " << lfWheelRPM
                     << " fwd " << lfForwardSpeed
                     << " timer " << lfTimer
