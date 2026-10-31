@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsJobCoarseResultBuffer.h"              // JobCoarseResultBuffer
 #include "GameShared/GameClasses/Containers/CgsIndexedPool.h"                          // CgsContainers::IndexedPool (mFreeNodeGroupPool)
 #include "eajobs/job.h"
+#include "GameShared/Jobs/FrustumTest/FrustumTest.h"
 #include "vendor/renderware/collision/VolumeQuery.hpp"   // rw::collision::VolumeVolumeQuery + its host size for 100/100
 
 // ============================================================================
@@ -175,39 +176,6 @@ namespace CgsSceneManager
         u32 mxSubTreeEntityFlags;   // +0x00
     };
     CGS_STATIC_ASSERT((sizeof(LooseOctreeNodeEntityInfo) == 4), "Construct sizes the sub-tree mask array as 4 * (nodes)");
-
-    // ------------------------------------------------------------------
-    // FrustumJobQueryInfo -- the staged query set inside one job's 0x800 data block
-    // (X360 block +0x20; AddJobFrustumTest @0x828AA958 writes it, the job entry
-    // FrustumTestJob::Execute @0x82BE0158 reads the same three arrays back).
-    // ------------------------------------------------------------------
-    struct CGS_ALIGN(16) FrustumJobQueryInfo
-    {
-        CgsGeometric::Frustum maFrustums[KU_MAX_QUERIES_PER_JOB];           // +0x000 (0x80 each)
-        Matrix44              maViewProjections[KU_MAX_QUERIES_PER_JOB];    // +0x500 (0x40 each)
-        u32                   max32EntityTypeMasks[KU_MAX_QUERIES_PER_JOB]; // +0x780
-        u32                   muNumQueries;                                 // +0x7A8
-    };
-
-    // ------------------------------------------------------------------
-    // FrustumTestJobData -- the 0x800 block Job::SetData publishes to the job
-    // (StartFrustumTestJobs @0x828B23E0 fills the header, AddJobFrustumTest the query
-    // info). The leading pointers/counters are what let the job walk the tree without
-    // a `this`; FrustumTestJobData::operator= @0x82BDFC48 copies exactly this set.
-    // ------------------------------------------------------------------
-    struct CGS_ALIGN(64) FrustumTestJobData
-    {
-        LooseOctreeNode*            mpNodes;          // +0x00  <- mpRootNode
-        LooseOctreeNodeEntityInfo*  mpNodeTypeMasks;  // +0x04  <- mpNodesEntityInfo
-        SpatialPartitionEntityLink* mpEntityLinks;    // +0x08  <- &maEntityLinks[0]
-        CgsGeometric::Sphere*       mpEntitySpheres;  // +0x0C  <- &maEntityBoundingSpheres[0]
-        u32                         muNumNodes;       // +0x10  <- capacity << 2
-        u32                         muMaxEntities;    // +0x14  <- KI_MAX_NUM_ENTITIES
-        FrustumJobQueryInfo         mQueryInfo;       // +0x20
-        JobCoarseResultBuffer*      mpResultBuffer;   // +0x7D0
-        u32                         muMaxResults;     // +0x7D4 <- KU_JOB_RESULT_BUFFER_SIZE
-        s32                         miDebugMode;      // +0x7D8
-    };
 
     // ------------------------------------------------------------------
     // LooseOctree.

@@ -55,6 +55,8 @@
 // spheres per leaf where the console tests at most about 32 per node.
 // ===========================================================================
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "rw/rwcore_structs.h"   // rw::IResourceAllocator / rw::Resource / rw::ResourceDescriptor (operator new)
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManager.h" // SpatialPartitionConstructParams
 
@@ -77,8 +79,12 @@
 // includes folded in from the CgsLooseOctree_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 
+void FrustumTestEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
+
 namespace CgsSceneManager
 {
+    s32 giFrustumJobDebugMode;
+
     // The "Octree SphereTest" CPU monitor SphereTest brackets its traversal with. The
     // tree's Construct registers none of the octree's monitors yet, so this stays -1 and
     // PerfMonCpu::Start/StopMonitor no-op on the invalid handle.
@@ -1234,12 +1240,52 @@ namespace CgsSceneManager
             return;
         }
 
-        lrQueryInfo.maFrustums[luQueryIndex]            = *lpFrustum;
-        lrQueryInfo.maViewProjections[luQueryIndex]     = *lpViewProjection;
-        lrQueryInfo.max32EntityTypeMasks[luQueryIndex]  = lx32EntityTypeMask;
+        lrQueryInfo.maFrustum[luQueryIndex]            = *lpFrustum;
+        lrQueryInfo.maViewProjection[luQueryIndex]     = *lpViewProjection;
+        lrQueryInfo.max32EntityTypeFlags[luQueryIndex]  = lx32EntityTypeMask;
         ++lrQueryInfo.muNumQueries;
 
         mabFrustumJobRequested[luJobIndex] = true;
+    }
+
+    // 0x828B23E0: submit each requested job with its persistent data and result buffer.
+    void LooseOctree::StartFrustumTestJobs()
+    {
+        for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
+        {
+            if (!mabFrustumJobRequested[luJob])
+                continue;
+
+            JobCoarseResultBuffer& lrBuffer = maJobResultBuffers[luJob];
+            lrBuffer.muNumQueries = 0;
+            for (u32 luQuery = 0; luQuery < KU_JOB_BUFFER_MAX_NUM_QUERIES; ++luQuery)
+            {
+                lrBuffer.maQueryOffsets[luQuery] = 0;
+                lrBuffer.maQueryNumResults[luQuery] = 0;
+            }
+            lrBuffer.muCurrentWriteOffset = 0;
+
+            FrustumTestJobData& lrData = maFrustumTestJobData[luJob];
+            lrData.mpNodes = mpRootNode;
+            lrData.mpNodeTypeMasks = mpNodesEntityInfo;
+            lrData.mpEntityLinks = &maEntityLinks[0];
+            lrData.mpEntitySpheres = &maEntityBoundingSpheres[0];
+            lrData.muNumNodes = static_cast<u32>(mFreeNodeGroupPool.GetPoolSize()) << 2;
+            lrData.muMaxEntities = KI_MAX_NUM_ENTITIES;
+            lrData.mpResultBuffer = &lrBuffer;
+            lrData.muMaxResults = KU_JOB_RESULT_BUFFER_SIZE;
+            lrData.miDebugMode = giFrustumJobDebugMode;
+
+            EA::Jobs::Job& lrJob = maFrustumTestJobs[luJob];
+            lrJob.Clear();
+            lrJob.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                          reinterpret_cast<const void*>(&FrustumTestEntry), 0);
+            lrJob.SetData(&lrData, sizeof(lrData));
+            lrJob.SetName("FrustumTestJob");
+            mabFrustumJobRequested[luJob] = false;
+            mabFrustumJobActive[luJob] = true;
+            CgsSystem::JobManager()->AddJobs(&lrJob, 1);
+        }
     }
 
     // ===========================================================================
