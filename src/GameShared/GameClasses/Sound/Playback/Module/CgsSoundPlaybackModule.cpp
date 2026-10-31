@@ -323,24 +323,23 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         CGS_ASSERT(mhEnvironment.GetObject(), "mpObject");
         CpuMonitors& lrMonitors = mhEnvironment.GetObject()->GetCpuMonitors();
         {
-            using CgsDev::PerfMonCpu::AddMonitor;
             using CgsDev::PerfMonCpuPage;
 
-            lrMonitors.miModule = AddMonitor(
+            lrMonitors.miModule = CgsDev::PerfMonCpu::AddMonitor(
                 "Playback", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
-            lrMonitors.miEnvironmentUpdate = AddMonitor(
+            lrMonitors.miEnvironmentUpdate = CgsDev::PerfMonCpu::AddMonitor(
                 " Environment", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
-            lrMonitors.miAemsFactoryUpdate = AddMonitor(
+            lrMonitors.miAemsFactoryUpdate = CgsDev::PerfMonCpu::AddMonitor(
                 "  Aems factory", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
-            lrMonitors.miRwacFactoryUpdate = AddMonitor(
+            lrMonitors.miRwacFactoryUpdate = CgsDev::PerfMonCpu::AddMonitor(
                 "  Rwac factory", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
-            lrMonitors.miSplicerFactoryUpdate = AddMonitor(
+            lrMonitors.miSplicerFactoryUpdate = CgsDev::PerfMonCpu::AddMonitor(
                 "  Splicer factory", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
-            lrMonitors.miContentUpdate = AddMonitor(
+            lrMonitors.miContentUpdate = CgsDev::PerfMonCpu::AddMonitor(
                 "  Content update", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
-            lrMonitors.miVoiceUpdate = AddMonitor(
+            lrMonitors.miVoiceUpdate = CgsDev::PerfMonCpu::AddMonitor(
                 "  Voice update", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
-            lrMonitors.miAemsFactoryUpdate2 = AddMonitor(
+            lrMonitors.miAemsFactoryUpdate2 = CgsDev::PerfMonCpu::AddMonitor(
                 "Aems Update", static_cast<PerfMonCpuPage>(19), false, 1.0f, true);
         }
 
@@ -626,22 +625,6 @@ void Module::ConnectVoice(Handle<Voice>* lphVoice, u32 lu32SendName, u32 lu32Sub
     if (lhSubmixLookup.GetObject())
         lhSubmixLookup.GetObject()->Release();
 
-    // [DIAG] NOT IN THE X360 BINARY -- prints ONLY when a lookup actually failed, so it is
-    // silent on a healthy frame. The console streams "Submix ID: <id>" into the assert below;
-    // this tree's CGS_ASSERT text is a fixed literal, so the id (the one thing that identifies
-    // WHICH submix the environment could not resolve) was being thrown away. The owner's
-    // 2026-09-16 session shows this failing once from
-    // DualGinsuExhaustEffect::ProcessUpdate -> VoiceWrapper::Update -> Voice::Connect, and
-    // cascading into the mpObject / lpSubmixVoice / Connect asserts that follow it.
-    if ((!lphVoice->GetObject() || !lpSubmixVoice) && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[voice-connect] FAILED submixId " << lu32SubmixId
-            << " sendName " << lu32SendName
-            << " voice " << (lphVoice->GetObject() ? 1 : 0)
-            << " submixVoice " << (lpSubmixVoice ? 1 : 0)
-            << " environment " << (lpEnvironment ? 1 : 0) << "\n";
-    }
     CGS_ASSERT(lphVoice->GetObject(), "lhVoice");
     CGS_ASSERT(lpSubmixVoice, "lhVoice");  // X360 streams "Submix ID: <id>" here
 
@@ -1032,11 +1015,6 @@ void Module::UpdateStreamBuffers(Io::OutputBuffer::FreedBuffersArray& arFreedBuf
 
             if (lrBuffer.mfGraceWaitTime > 0.0f)
             {
-                // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). The record has
-                // completed the grace period and is going back to E_FREE_BUFFER; its
-                // voice id is appended to the freed list the logic module consumes.
-                CgsSound::Diag::StreamDiagPrintf(
-                    "[sndstream] buffer FREE idx=%u voice=%u\n", lu, lrBuffer.mVoiceId);
                 arFreedBuffers.Append(lrBuffer.mVoiceId);
                 lrBuffer.mfGraceWaitTime  = 0.0f;
                 lrBuffer.mReadStream      = CgsFileSystem::ReadStream();
@@ -1094,7 +1072,7 @@ bool Module::DoServiceContentLoadRequest(u32 lu32Ident, EContentLoadMethod leMet
     if (luUserData > 0xFFFFFFFFull)
         return false;
 
-    CgsResource::Events::AcquireResourceRequest lRequest = {};
+    CgsResource::Events::AcquireResourceRequest lRequest;
     lRequest.mpUser = &mResourceReceiverQueue;
     lRequest.miEventId = static_cast<s32>(static_cast<u32>(luUserData));
     lRequest.miPoolId = mi32PoolId;
@@ -1125,19 +1103,6 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
     }
     if (liIndex < 0)
     {
-        // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). Print WHAT the three
-        // records are holding at the moment of exhaustion -- the status of each and
-        // the voice id it belongs to. Without this the console's assert says only
-        // that none were free, never which stage they are stuck in.
-        CgsSound::Diag::StreamDiagPrintf(
-            "[sndstream] BUFFERS EXHAUSTED: [0]=st%d v%u qc%d [1]=st%d v%u qc%d "
-            "[2]=st%d v%u qc%d\n",
-            static_cast<int>(maStreamBuffers[0].GetStatus()), maStreamBuffers[0].mVoiceId,
-            maStreamBuffers[0].GetQueuedForClose() ? 1 : 0,
-            static_cast<int>(maStreamBuffers[1].GetStatus()), maStreamBuffers[1].mVoiceId,
-            maStreamBuffers[1].GetQueuedForClose() ? 1 : 0,
-            static_cast<int>(maStreamBuffers[2].GetStatus()), maStreamBuffers[2].mVoiceId,
-            maStreamBuffers[2].GetQueuedForClose() ? 1 : 0);
         CGS_ASSERT(false, "We've run out of Audio Stream Buffers.");
         mStreamMutex.Unlock();
         return 0;
@@ -1156,14 +1121,6 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
     lrBuffer.mVoiceId         = lhVoice.GetObject()->GetIdent();
     lrBuffer.mbQueuedForClose = false;
     *lrSpec.mppvBuffer = lrBuffer.mpBuffer;
-
-    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). Which of the 3 records this
-    // stream took, for which voice, and the .SNS filename actually opened -- the
-    // ContentSpec -> file resolution, at the only point the filename is known.
-    CgsSound::Diag::StreamDiagPrintf(
-        "[sndstream] buffer OPEN idx=%d voice=%u file='%s'\n",
-        liIndex, lrBuffer.mVoiceId,
-        lrSpec.mpFilename ? lrSpec.mpFilename : "<null>");
 
     // Build + post the open request (event type 16) into the deferred queue.
     CgsResource::Events::OpenReadStreamRequest lRequest;
