@@ -189,8 +189,8 @@ namespace CgsResource
         lParams.muState17 = 0u;                  // v12[10]
         lParams.mbState16 = 0;                   // v19
 
-        renderengine::BlendState::GetParameters(
-            PointerFromU32<const renderengine::BlendMaterialState>(lpuMaterialState[0]), &lParams);
+        PointerFromU32<const renderengine::BlendMaterialState>(
+            lpuMaterialState[0])->GetParameters(lParams);
 
         // X360 v13 == params byte +48, v19 == params byte +54 (the first and last of the
         // seven trailing flag bytes) -- BlendStateParameters' mbHasCustomBlendFactors and
