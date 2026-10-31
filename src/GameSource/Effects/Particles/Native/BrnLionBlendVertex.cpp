@@ -70,19 +70,19 @@ void LionBlendVertex::VertexIterator::Write(
     u8* lpCur = const_cast<u8*>(GetCurrentAddress()) + 4;
 
     // position Vector4 @ cur+0
-    reinterpret_cast<float*>(lpCur)[0] = lv4Position.x;
-    reinterpret_cast<float*>(lpCur)[1] = lv4Position.y;
-    reinterpret_cast<float*>(lpCur)[2] = lv4Position.z;
-    reinterpret_cast<float*>(lpCur)[3] = lv4Position.w;
+    reinterpret_cast<u32*>(lpCur)[0] = lv4Position.mV.u[0];
+    reinterpret_cast<u32*>(lpCur)[1] = lv4Position.mV.u[1];
+    reinterpret_cast<u32*>(lpCur)[2] = lv4Position.mV.u[2];
+    reinterpret_cast<u32*>(lpCur)[3] = lv4Position.mV.u[3];
 
     // colour RGBA8 @ cur+16
     *reinterpret_cast<renderengine::RGBA8*>(lpCur + 16) = lrColour;
 
     // uv Vector4 @ cur+20
-    reinterpret_cast<float*>(lpCur + 20)[0] = lv4Uv.x;
-    reinterpret_cast<float*>(lpCur + 20)[1] = lv4Uv.y;
-    reinterpret_cast<float*>(lpCur + 20)[2] = lv4Uv.z;
-    reinterpret_cast<float*>(lpCur + 20)[3] = lv4Uv.w;
+    reinterpret_cast<u32*>(lpCur + 20)[0] = lv4Uv.mV.u[0];
+    reinterpret_cast<u32*>(lpCur + 20)[1] = lv4Uv.mV.u[1];
+    reinterpret_cast<u32*>(lpCur + 20)[2] = lv4Uv.mV.u[2];
+    reinterpret_cast<u32*>(lpCur + 20)[3] = lv4Uv.mV.u[3];
 
     // Advance the write cursor by one stride (36 bytes) -- from the CURSOR, not from the
     // write position, so it stays one word behind the next vertex (see the note above).

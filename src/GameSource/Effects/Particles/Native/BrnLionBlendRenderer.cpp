@@ -106,24 +106,24 @@ void LionBlendRenderer::SetCameraData(const rw::math::vpu::Matrix44Affine& arBac
                                       const rw::math::vpu::Matrix44& arViewProjection)
 {
     // --- half 1: the scalar convert into the Lion cMatrix (asm words 4-40) ------------------
-    mCameraTransform.xa.x = arBackMat.xAxis.x;
-    mCameraTransform.xa.y = arBackMat.xAxis.y;
-    mCameraTransform.xa.z = arBackMat.xAxis.z;
+    mCameraTransform.xa.x = arBackMat.xAxis.mV.x;
+    mCameraTransform.xa.y = arBackMat.xAxis.mV.y;
+    mCameraTransform.xa.z = arBackMat.xAxis.mV.z;
     mCameraTransform.xa.w = 0.0f;                 // flt_82001CC0
 
-    mCameraTransform.ya.x = arBackMat.yAxis.x;
-    mCameraTransform.ya.y = arBackMat.yAxis.y;
-    mCameraTransform.ya.z = arBackMat.yAxis.z;
+    mCameraTransform.ya.x = arBackMat.yAxis.mV.x;
+    mCameraTransform.ya.y = arBackMat.yAxis.mV.y;
+    mCameraTransform.ya.z = arBackMat.yAxis.mV.z;
     mCameraTransform.ya.w = 0.0f;
 
-    mCameraTransform.za.x = arBackMat.zAxis.x;
-    mCameraTransform.za.y = arBackMat.zAxis.y;
-    mCameraTransform.za.z = arBackMat.zAxis.z;
+    mCameraTransform.za.x = arBackMat.zAxis.mV.x;
+    mCameraTransform.za.y = arBackMat.zAxis.mV.y;
+    mCameraTransform.za.z = arBackMat.zAxis.mV.z;
     mCameraTransform.za.w = 0.0f;
 
-    mCameraTransform.wa.x = arBackMat.wAxis.x;
-    mCameraTransform.wa.y = arBackMat.wAxis.y;
-    mCameraTransform.wa.z = arBackMat.wAxis.z;
+    mCameraTransform.wa.x = arBackMat.wAxis.mV.x;
+    mCameraTransform.wa.y = arBackMat.wAxis.mV.y;
+    mCameraTransform.wa.z = arBackMat.wAxis.mV.z;
     mCameraTransform.wa.w = 1.0f;                 // flt_82001C98
 
     // --- half 2: the three verbatim 64-byte copies (asm words 43-58) -------------------------
@@ -301,12 +301,12 @@ namespace
     inline renderengine::RGBA8 ConvertVector4ToRwRgbaOverbright(const cVector& arColour)
     {
         const rw::math::vpu::Vector4& lrScale = BrnEffects::Utils::K_VECTOR4_511_511_511_255;
-        const f32 lfMax = BrnEffects::Utils::K_VECFLOAT_255.x;
+        const f32 lfMax = BrnEffects::Utils::K_VECFLOAT_255.mV.x;
 
         const f32 lafScaled[4] =
         {
-            arColour.x * lrScale.x, arColour.y * lrScale.y,
-            arColour.z * lrScale.z, arColour.w * lrScale.w
+            arColour.x * lrScale.mV.x, arColour.y * lrScale.mV.y,
+            arColour.z * lrScale.mV.z, arColour.w * lrScale.mV.w
         };
 
         u8 lauChannel[4];
@@ -337,14 +337,14 @@ namespace
     inline rw::math::vpu::Matrix44Affine MatrixConvert(const cMatrix& arMatIn)
     {
         rw::math::vpu::Matrix44Affine lResult;
-        lResult.xAxis.x = arMatIn.xa.x; lResult.xAxis.y = arMatIn.xa.y;
-        lResult.xAxis.z = arMatIn.xa.z; lResult.xAxis.w = arMatIn.xa.w;
-        lResult.yAxis.x = arMatIn.ya.x; lResult.yAxis.y = arMatIn.ya.y;
-        lResult.yAxis.z = arMatIn.ya.z; lResult.yAxis.w = arMatIn.ya.w;
-        lResult.zAxis.x = arMatIn.za.x; lResult.zAxis.y = arMatIn.za.y;
-        lResult.zAxis.z = arMatIn.za.z; lResult.zAxis.w = arMatIn.za.w;
-        lResult.wAxis.x = arMatIn.wa.x; lResult.wAxis.y = arMatIn.wa.y;
-        lResult.wAxis.z = arMatIn.wa.z; lResult.wAxis.w = arMatIn.wa.w;
+        lResult.xAxis.mV.x = arMatIn.xa.x; lResult.xAxis.mV.y = arMatIn.xa.y;
+        lResult.xAxis.mV.z = arMatIn.xa.z; lResult.xAxis.mV.w = arMatIn.xa.w;
+        lResult.yAxis.mV.x = arMatIn.ya.x; lResult.yAxis.mV.y = arMatIn.ya.y;
+        lResult.yAxis.mV.z = arMatIn.ya.z; lResult.yAxis.mV.w = arMatIn.ya.w;
+        lResult.zAxis.mV.x = arMatIn.za.x; lResult.zAxis.mV.y = arMatIn.za.y;
+        lResult.zAxis.mV.z = arMatIn.za.z; lResult.zAxis.mV.w = arMatIn.za.w;
+        lResult.wAxis.mV.x = arMatIn.wa.x; lResult.wAxis.mV.y = arMatIn.wa.y;
+        lResult.wAxis.mV.z = arMatIn.wa.z; lResult.wAxis.mV.w = arMatIn.wa.w;
         return lResult;
     }
 
@@ -381,8 +381,8 @@ namespace
         rw::math::vpu::Vector4 laUvUv[4];
         VecFloat lvfFrame;
         VecFloat lvfNextFrame;
-        lvfFrame.x = lvfFrame.y = lvfFrame.z = lvfFrame.w = arPart.Frame();
-        lvfNextFrame.x = lvfNextFrame.y = lvfNextFrame.z = lvfNextFrame.w = arPart.NextFrame();
+        lvfFrame.mV.x = lvfFrame.mV.y = lvfFrame.mV.z = lvfFrame.mV.w = arPart.Frame();
+        lvfNextFrame.mV.x = lvfNextFrame.mV.y = lvfNextFrame.mV.z = lvfNextFrame.mV.w = arPart.NextFrame();
         BrnEffects::Utils::BuildUVs(arUVData, lvfFrame, lvfNextFrame, laUvUv);
 
         // asm 0x822823E8..0x82282410 (DWARF: VecFloat lvfWeight, :69). `vspltisw v0, 0` runs
@@ -400,10 +400,10 @@ namespace
         rw::math::vpu::Vector4 laPosPlusWeight[4];
         for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
         {
-            laPosPlusWeight[luCorner].x = apPos[luCorner].x;
-            laPosPlusWeight[luCorner].y = apPos[luCorner].y;
-            laPosPlusWeight[luCorner].z = apPos[luCorner].z;
-            laPosPlusWeight[luCorner].w = lfWeight;
+            laPosPlusWeight[luCorner].mV.x = apPos[luCorner].mV.x;
+            laPosPlusWeight[luCorner].mV.y = apPos[luCorner].mV.y;
+            laPosPlusWeight[luCorner].mV.z = apPos[luCorner].mV.z;
+            laPosPlusWeight[luCorner].mV.w = lfWeight;
         }
 
         arVertexIterator.Write(laPosPlusWeight[0], lColour, laUvUv[0]);
@@ -447,7 +447,7 @@ namespace
             // through it. The z multiply is emitted even though every corner's z is the zero
             // the `vrlimi128 ..., 2, 0` masks in, so it is kept.
             rw::math::vpu::Vector3 lv3Rot;
-            lv3Rot.x = lrRot.x; lv3Rot.y = lrRot.y; lv3Rot.z = lrRot.z; lv3Rot.w = 0.0f;
+            lv3Rot.mV.x = lrRot.x; lv3Rot.mV.y = lrRot.y; lv3Rot.mV.z = lrRot.z; lv3Rot.mV.w = 0.0f;
             const rw::math::vpu::Matrix33 lRotMat =
                 BrnEffects::Utils::FastMatrix33FromEulerXYZ(lv3Rot);
 
@@ -458,13 +458,13 @@ namespace
                 const f32 lfPx = lafCornerX[luCorner];
                 const f32 lfPy = lafCornerY[luCorner];
                 const f32 lfPz = 0.0f;
-                apPointsOut[luCorner].x = lRotMat.xAxis.x * lfPx + lRotMat.yAxis.x * lfPy
-                                        + lRotMat.zAxis.x * lfPz;
-                apPointsOut[luCorner].y = lRotMat.xAxis.y * lfPx + lRotMat.yAxis.y * lfPy
-                                        + lRotMat.zAxis.y * lfPz;
-                apPointsOut[luCorner].z = lRotMat.xAxis.z * lfPx + lRotMat.yAxis.z * lfPy
-                                        + lRotMat.zAxis.z * lfPz;
-                apPointsOut[luCorner].w = 0.0f;
+                apPointsOut[luCorner].mV.x = lRotMat.xAxis.mV.x * lfPx + lRotMat.yAxis.mV.x * lfPy
+                                        + lRotMat.zAxis.mV.x * lfPz;
+                apPointsOut[luCorner].mV.y = lRotMat.xAxis.mV.y * lfPx + lRotMat.yAxis.mV.y * lfPy
+                                        + lRotMat.zAxis.mV.y * lfPz;
+                apPointsOut[luCorner].mV.z = lRotMat.xAxis.mV.z * lfPx + lRotMat.yAxis.mV.z * lfPy
+                                        + lRotMat.zAxis.mV.z * lfPz;
+                apPointsOut[luCorner].mV.w = 0.0f;
             }
         }
         else if (lbRotZ)
@@ -482,12 +482,12 @@ namespace
             const f32 lafCornerY[4] = { lfY0, lfY1, lfY0, lfY1 };
             for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
             {
-                apPointsOut[luCorner].x = lafCornerX[luCorner] * lfCos
+                apPointsOut[luCorner].mV.x = lafCornerX[luCorner] * lfCos
                                         - lafCornerY[luCorner] * lfSin;
-                apPointsOut[luCorner].y = lafCornerX[luCorner] * lfSin
+                apPointsOut[luCorner].mV.y = lafCornerX[luCorner] * lfSin
                                         + lafCornerY[luCorner] * lfCos;
-                apPointsOut[luCorner].z = 0.0f;
-                apPointsOut[luCorner].w = 0.0f;
+                apPointsOut[luCorner].mV.z = 0.0f;
+                apPointsOut[luCorner].mV.w = 0.0f;
             }
         }
         else
@@ -498,10 +498,10 @@ namespace
             const f32 lafCornerY[4] = { lfY0, lfY1, lfY0, lfY1 };
             for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
             {
-                apPointsOut[luCorner].x = lafCornerX[luCorner];
-                apPointsOut[luCorner].y = lafCornerY[luCorner];
-                apPointsOut[luCorner].z = 0.0f;
-                apPointsOut[luCorner].w = 0.0f;
+                apPointsOut[luCorner].mV.x = lafCornerX[luCorner];
+                apPointsOut[luCorner].mV.y = lafCornerY[luCorner];
+                apPointsOut[luCorner].mV.z = 0.0f;
+                apPointsOut[luCorner].mV.w = 0.0f;
             }
         }
     }
@@ -614,8 +614,8 @@ void LionBlendRenderer::RenderSprites(EffectsVertexBufferIterator& arIterator,
         // the billboard transform's translation row (see the note above).
         const rw::math::vpu::Matrix44Affine lConvertedXform = MatrixConvert(apMatrix[luIndex]);
         rw::math::vpu::Vector3 lv3Centre;
-        lv3Centre.x = lrPart.mPos.x; lv3Centre.y = lrPart.mPos.y;
-        lv3Centre.z = lrPart.mPos.z; lv3Centre.w = 0.0f;
+        lv3Centre.mV.x = lrPart.mPos.x; lv3Centre.mV.y = lrPart.mPos.y;
+        lv3Centre.mV.z = lrPart.mPos.z; lv3Centre.mV.w = 0.0f;
         mBackMat.wAxis = rw::math::vpu::TransformPoint(lConvertedXform, lv3Centre);
 
         // asm 0x82282A60..0x82282AFC -- the four corners through the camera basis.
@@ -639,12 +639,12 @@ void LionBlendRenderer::RenderSprites(EffectsVertexBufferIterator& arIterator,
                     " back.xAxis=(%.3f,%.3f,%.3f) corner0=(%.2f,%.2f,%.2f)\n",
                     apMatrix[luIndex].wa.x, apMatrix[luIndex].wa.y, apMatrix[luIndex].wa.z,
                     apMatrix[luIndex].wa.w,
-                    lConvertedXform.wAxis.x, lConvertedXform.wAxis.y, lConvertedXform.wAxis.z,
-                    lConvertedXform.wAxis.w,
+                    lConvertedXform.wAxis.mV.x, lConvertedXform.wAxis.mV.y, lConvertedXform.wAxis.mV.z,
+                    lConvertedXform.wAxis.mV.w,
                     lrPart.mPos.x, lrPart.mPos.y, lrPart.mPos.z,
-                    mBackMat.wAxis.x, mBackMat.wAxis.y, mBackMat.wAxis.z, mBackMat.wAxis.w,
-                    mBackMat.xAxis.x, mBackMat.xAxis.y, mBackMat.xAxis.z,
-                    laPoints[0].x, laPoints[0].y, laPoints[0].z);
+                    mBackMat.wAxis.mV.x, mBackMat.wAxis.mV.y, mBackMat.wAxis.mV.z, mBackMat.wAxis.mV.w,
+                    mBackMat.xAxis.mV.x, mBackMat.xAxis.mV.y, mBackMat.xAxis.mV.z,
+                    laPoints[0].mV.x, laPoints[0].mV.y, laPoints[0].mV.z);
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }
@@ -702,13 +702,13 @@ void LionBlendRenderer::RenderQuads(EffectsVertexBufferIterator& arIterator,
 
         // asm 0x82282EF0..0x82282EFC (DWARF: Vector3 lConvertedPos, :404).
         rw::math::vpu::Vector3 lConvertedPos;
-        lConvertedPos.x = lrPart.mPos.x; lConvertedPos.y = lrPart.mPos.y;
-        lConvertedPos.z = lrPart.mPos.z; lConvertedPos.w = 0.0f;
+        lConvertedPos.mV.x = lrPart.mPos.x; lConvertedPos.mV.y = lrPart.mPos.y;
+        lConvertedPos.mV.z = lrPart.mPos.z; lConvertedPos.mV.w = 0.0f;
         for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
         {
-            laPoints[luCorner].x += lConvertedPos.x;
-            laPoints[luCorner].y += lConvertedPos.y;
-            laPoints[luCorner].z += lConvertedPos.z;
+            laPoints[luCorner].mV.x += lConvertedPos.mV.x;
+            laPoints[luCorner].mV.y += lConvertedPos.mV.y;
+            laPoints[luCorner].mV.z += lConvertedPos.mV.z;
         }
 
         // asm 0x82282F18..0x82282F94 (DWARF: Matrix44Affine lConvertedXform, :410).
@@ -809,10 +809,10 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
     const cVector& lrPivot = lrBehaviour.mPivotPoint;
 
     rw::math::vpu::Vector3 lvCameraPosition;
-    lvCameraPosition.x = mCameraTransform.wa.x;
-    lvCameraPosition.y = mCameraTransform.wa.y;
-    lvCameraPosition.z = mCameraTransform.wa.z;
-    lvCameraPosition.w = mCameraTransform.wa.w;
+    lvCameraPosition.mV.x = mCameraTransform.wa.x;
+    lvCameraPosition.mV.y = mCameraTransform.wa.y;
+    lvCameraPosition.mV.z = mCameraTransform.wa.z;
+    lvCameraPosition.mV.w = mCameraTransform.wa.w;
 
     const f32 lfEndOnStartAngle = lrBehaviour.mEndOnStartAngle;
     const f32 lfEndOnEndAngle   = lrBehaviour.mEndOnEndAngle;
@@ -869,22 +869,22 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
                 BrnEffects::Utils::SinCosCycles(lrPart.mvRotPlusFrame.z, lfSin, lfCos);
                 for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
                 {
-                    laPoints[luCorner].x = lafCornerX[luCorner] * lfCos
+                    laPoints[luCorner].mV.x = lafCornerX[luCorner] * lfCos
                                          + lafCornerY[luCorner] * lfSin;
-                    laPoints[luCorner].y = lafCornerY[luCorner] * lfCos
+                    laPoints[luCorner].mV.y = lafCornerY[luCorner] * lfCos
                                          - lafCornerX[luCorner] * lfSin;
-                    laPoints[luCorner].z = 0.0f;
-                    laPoints[luCorner].w = 0.0f;
+                    laPoints[luCorner].mV.z = 0.0f;
+                    laPoints[luCorner].mV.w = 0.0f;
                 }
             }
             else
             {
                 for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
                 {
-                    laPoints[luCorner].x = lafCornerX[luCorner];
-                    laPoints[luCorner].y = lafCornerY[luCorner];
-                    laPoints[luCorner].z = 0.0f;
-                    laPoints[luCorner].w = 0.0f;
+                    laPoints[luCorner].mV.x = lafCornerX[luCorner];
+                    laPoints[luCorner].mV.y = lafCornerY[luCorner];
+                    laPoints[luCorner].mV.z = 0.0f;
+                    laPoints[luCorner].mV.w = 0.0f;
                 }
             }
 
@@ -905,10 +905,10 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
             // asm 0x82283348..0x822833F8 -- the segment, its unit direction, and the Y-axis
             // fallback when it degenerates.
             rw::math::vpu::Vector3 lv3Pos, lv3Pos1;
-            lv3Pos.x  = lrPart.mPos.x;  lv3Pos.y  = lrPart.mPos.y;
-            lv3Pos.z  = lrPart.mPos.z;  lv3Pos.w  = 0.0f;
-            lv3Pos1.x = lrPart.mPos1.x; lv3Pos1.y = lrPart.mPos1.y;
-            lv3Pos1.z = lrPart.mPos1.z; lv3Pos1.w = 0.0f;
+            lv3Pos.mV.x  = lrPart.mPos.x;  lv3Pos.mV.y  = lrPart.mPos.y;
+            lv3Pos.mV.z  = lrPart.mPos.z;  lv3Pos.mV.w  = 0.0f;
+            lv3Pos1.mV.x = lrPart.mPos1.x; lv3Pos1.mV.y = lrPart.mPos1.y;
+            lv3Pos1.mV.z = lrPart.mPos1.z; lv3Pos1.mV.w = 0.0f;
 
             const rw::math::vpu::Vector3 lvPos0 =
                 rw::math::vpu::TransformPoint(lConvertedXform, lv3Pos);
@@ -916,38 +916,38 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
                 rw::math::vpu::TransformPoint(lConvertedXform, lv3Pos1);
 
             rw::math::vpu::Vector3 lvDirVec;
-            lvDirVec.x = lvPos1.x - lvPos0.x;
-            lvDirVec.y = lvPos1.y - lvPos0.y;
-            lvDirVec.z = lvPos1.z - lvPos0.z;
-            lvDirVec.w = 0.0f;
+            lvDirVec.mV.x = lvPos1.mV.x - lvPos0.mV.x;
+            lvDirVec.mV.y = lvPos1.mV.y - lvPos0.mV.y;
+            lvDirVec.mV.z = lvPos1.mV.z - lvPos0.mV.z;
+            lvDirVec.mV.w = 0.0f;
 
             rw::math::vpu::Vector3 lvNormDirVec = rw::math::vpu::Normalize(lvDirVec);
             if (!(fabsf(rw::math::vpu::MagnitudeSquared(lvNormDirVec)) > KF_IS_ZERO_EPSILON))
             {
-                lvNormDirVec.x = 0.0f; lvNormDirVec.y = 1.0f;
-                lvNormDirVec.z = 0.0f; lvNormDirVec.w = 0.0f;
+                lvNormDirVec.mV.x = 0.0f; lvNormDirVec.mV.y = 1.0f;
+                lvNormDirVec.mV.z = 0.0f; lvNormDirVec.mV.w = 0.0f;
             }
 
             // asm 0x822833FC..0x82283430 -- the span, its two ends and their midpoint.
             // ⚠ THE DOT PRODUCT BELOW USES THE UNIT DIRECTION, NOT THIS SCALED ONE: the asm
             // saves the unit copy in v9 (0x82283400) BEFORE 0x82283414 scales v13 by size.y.
             rw::math::vpu::Vector3 lvMidVec;   // the span vector (DWARF lvMidVec)
-            lvMidVec.x = lvNormDirVec.x * lfSizeY;
-            lvMidVec.y = lvNormDirVec.y * lfSizeY;
-            lvMidVec.z = lvNormDirVec.z * lfSizeY;
-            lvMidVec.w = 0.0f;
+            lvMidVec.mV.x = lvNormDirVec.mV.x * lfSizeY;
+            lvMidVec.mV.y = lvNormDirVec.mV.y * lfSizeY;
+            lvMidVec.mV.z = lvNormDirVec.mV.z * lfSizeY;
+            lvMidVec.mV.w = 0.0f;
 
             rw::math::vpu::Vector3 lvEnd0;
-            lvEnd0.x = lvPos0.x - lvMidVec.x * lrPivot.y;
-            lvEnd0.y = lvPos0.y - lvMidVec.y * lrPivot.y;
-            lvEnd0.z = lvPos0.z - lvMidVec.z * lrPivot.y;
-            lvEnd0.w = 0.0f;
+            lvEnd0.mV.x = lvPos0.mV.x - lvMidVec.mV.x * lrPivot.y;
+            lvEnd0.mV.y = lvPos0.mV.y - lvMidVec.mV.y * lrPivot.y;
+            lvEnd0.mV.z = lvPos0.mV.z - lvMidVec.mV.z * lrPivot.y;
+            lvEnd0.mV.w = 0.0f;
 
             rw::math::vpu::Vector3 lvEnd1;
-            lvEnd1.x = lvEnd0.x + lvMidVec.x;
-            lvEnd1.y = lvEnd0.y + lvMidVec.y;
-            lvEnd1.z = lvEnd0.z + lvMidVec.z;
-            lvEnd1.w = 0.0f;
+            lvEnd1.mV.x = lvEnd0.mV.x + lvMidVec.mV.x;
+            lvEnd1.mV.y = lvEnd0.mV.y + lvMidVec.mV.y;
+            lvEnd1.mV.z = lvEnd0.mV.z + lvMidVec.mV.z;
+            lvEnd1.mV.w = 0.0f;
 
             // `vsubfp` then `vmaddcfp128 v12, <0.5>, v12, v0` == Lerp(lvEnd0, lvEnd1, 0.5).
             const rw::math::vpu::Vector3 lvPartMidPoint =
@@ -955,10 +955,10 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 
             // asm 0x82283434..0x82283474 -- how squarely the segment points at the viewer.
             rw::math::vpu::Vector3 lvCamVec;
-            lvCamVec.x = lvCameraPosition.x - lvPartMidPoint.x;
-            lvCamVec.y = lvCameraPosition.y - lvPartMidPoint.y;
-            lvCamVec.z = lvCameraPosition.z - lvPartMidPoint.z;
-            lvCamVec.w = 0.0f;
+            lvCamVec.mV.x = lvCameraPosition.mV.x - lvPartMidPoint.mV.x;
+            lvCamVec.mV.y = lvCameraPosition.mV.y - lvPartMidPoint.mV.y;
+            lvCamVec.mV.z = lvCameraPosition.mV.z - lvPartMidPoint.mV.z;
+            lvCamVec.mV.w = 0.0f;
             lvCamVec = rw::math::vpu::Normalize(lvCamVec);
 
             f32 lfDotProd = rw::math::vpu::Dot(lvNormDirVec, lvCamVec);
@@ -986,17 +986,17 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
             // translation comes from lvPartMidPoint.
             for (u32 luCorner = 0; luCorner < 4u; ++luCorner)
             {
-                const f32 lfCx = laPoints[luCorner].x;
-                const f32 lfCy = laPoints[luCorner].y;
-                const f32 lfCz = laPoints[luCorner].z;
+                const f32 lfCx = laPoints[luCorner].mV.x;
+                const f32 lfCy = laPoints[luCorner].mV.y;
+                const f32 lfCz = laPoints[luCorner].mV.z;
                 rw::math::vpu::Vector3 lvOut;
-                lvOut.x = mCameraTransform.xa.x * lfCx + mCameraTransform.ya.x * lfCy
-                        + mCameraTransform.za.x * lfCz + lvPartMidPoint.x;
-                lvOut.y = mCameraTransform.xa.y * lfCx + mCameraTransform.ya.y * lfCy
-                        + mCameraTransform.za.y * lfCz + lvPartMidPoint.y;
-                lvOut.z = mCameraTransform.xa.z * lfCx + mCameraTransform.ya.z * lfCy
-                        + mCameraTransform.za.z * lfCz + lvPartMidPoint.z;
-                lvOut.w = 0.0f;
+                lvOut.mV.x = mCameraTransform.xa.x * lfCx + mCameraTransform.ya.x * lfCy
+                        + mCameraTransform.za.x * lfCz + lvPartMidPoint.mV.x;
+                lvOut.mV.y = mCameraTransform.xa.y * lfCx + mCameraTransform.ya.y * lfCy
+                        + mCameraTransform.za.y * lfCz + lvPartMidPoint.mV.y;
+                lvOut.mV.z = mCameraTransform.xa.z * lfCx + mCameraTransform.ya.z * lfCy
+                        + mCameraTransform.za.z * lfCz + lvPartMidPoint.mV.z;
+                lvOut.mV.w = 0.0f;
                 laPoints[luCorner] = lvOut;
             }
 
@@ -1027,10 +1027,10 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 
             // asm 0x82283688..0x8228373C.
             rw::math::vpu::Vector3 lv3Pos, lv3Pos1;
-            lv3Pos.x  = lrPart.mPos.x;  lv3Pos.y  = lrPart.mPos.y;
-            lv3Pos.z  = lrPart.mPos.z;  lv3Pos.w  = 0.0f;
-            lv3Pos1.x = lrPart.mPos1.x; lv3Pos1.y = lrPart.mPos1.y;
-            lv3Pos1.z = lrPart.mPos1.z; lv3Pos1.w = 0.0f;
+            lv3Pos.mV.x  = lrPart.mPos.x;  lv3Pos.mV.y  = lrPart.mPos.y;
+            lv3Pos.mV.z  = lrPart.mPos.z;  lv3Pos.mV.w  = 0.0f;
+            lv3Pos1.mV.x = lrPart.mPos1.x; lv3Pos1.mV.y = lrPart.mPos1.y;
+            lv3Pos1.mV.z = lrPart.mPos1.z; lv3Pos1.mV.w = 0.0f;
 
             const rw::math::vpu::Vector3 lvPos0 =
                 rw::math::vpu::TransformPoint(lConvertedXform, lv3Pos);
@@ -1038,33 +1038,33 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
                 rw::math::vpu::TransformPoint(lConvertedXform, lv3Pos1);
 
             rw::math::vpu::Vector3 lvDirVec;
-            lvDirVec.x = lvPos1.x - lvPos0.x;
-            lvDirVec.y = lvPos1.y - lvPos0.y;
-            lvDirVec.z = lvPos1.z - lvPos0.z;
-            lvDirVec.w = 0.0f;
+            lvDirVec.mV.x = lvPos1.mV.x - lvPos0.mV.x;
+            lvDirVec.mV.y = lvPos1.mV.y - lvPos0.mV.y;
+            lvDirVec.mV.z = lvPos1.mV.z - lvPos0.mV.z;
+            lvDirVec.mV.w = 0.0f;
 
             static const f32 KF_IS_ZERO_EPSILON = 1.1920928955078125e-07f;
             rw::math::vpu::Vector3 lvNormDirVec = rw::math::vpu::Normalize(lvDirVec);
             if (!(fabsf(rw::math::vpu::MagnitudeSquared(lvNormDirVec)) > KF_IS_ZERO_EPSILON))
             {
-                lvNormDirVec.x = 0.0f; lvNormDirVec.y = 1.0f;   // unk_82181510
-                lvNormDirVec.z = 0.0f; lvNormDirVec.w = 0.0f;
+                lvNormDirVec.mV.x = 0.0f; lvNormDirVec.mV.y = 1.0f;   // unk_82181510
+                lvNormDirVec.mV.z = 0.0f; lvNormDirVec.mV.w = 0.0f;
             }
 
             // asm 0x82283740..0x822837AC -- the view ray is taken from the PIVOT point along
             // the segment (the UNNORMALISED direction scaled by pivot.y), and the ribbon's
             // width axis is the cross product of the segment with it.
             rw::math::vpu::Vector3 lvPartMidPoint;
-            lvPartMidPoint.x = lvDirVec.x * lrPivot.y + lvPos0.x;
-            lvPartMidPoint.y = lvDirVec.y * lrPivot.y + lvPos0.y;
-            lvPartMidPoint.z = lvDirVec.z * lrPivot.y + lvPos0.z;
-            lvPartMidPoint.w = 0.0f;
+            lvPartMidPoint.mV.x = lvDirVec.mV.x * lrPivot.y + lvPos0.mV.x;
+            lvPartMidPoint.mV.y = lvDirVec.mV.y * lrPivot.y + lvPos0.mV.y;
+            lvPartMidPoint.mV.z = lvDirVec.mV.z * lrPivot.y + lvPos0.mV.z;
+            lvPartMidPoint.mV.w = 0.0f;
 
             rw::math::vpu::Vector3 lvCamVec;
-            lvCamVec.x = lvCameraPosition.x - lvPartMidPoint.x;
-            lvCamVec.y = lvCameraPosition.y - lvPartMidPoint.y;
-            lvCamVec.z = lvCameraPosition.z - lvPartMidPoint.z;
-            lvCamVec.w = 0.0f;
+            lvCamVec.mV.x = lvCameraPosition.mV.x - lvPartMidPoint.mV.x;
+            lvCamVec.mV.y = lvCameraPosition.mV.y - lvPartMidPoint.mV.y;
+            lvCamVec.mV.z = lvCameraPosition.mV.z - lvPartMidPoint.mV.z;
+            lvCamVec.mV.w = 0.0f;
             lvCamVec = rw::math::vpu::Normalize(lvCamVec);
 
             rw::math::vpu::Vector3 lvWidthVec = rw::math::vpu::Cross(lvNormDirVec, lvCamVec);
@@ -1090,9 +1090,9 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
                 {
                     lfCamVecLength = lfEndOnScale;
                 }
-                lvWidthVec.x *= lfCamVecLength;
-                lvWidthVec.y *= lfCamVecLength;
-                lvWidthVec.z *= lfCamVecLength;
+                lvWidthVec.mV.x *= lfCamVecLength;
+                lvWidthVec.mV.y *= lfCamVecLength;
+                lvWidthVec.mV.z *= lfCamVecLength;
             }
 
             // asm 0x82283840..0x82283860 -- the span along the segment and the half-width
@@ -1101,28 +1101,28 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
             const f32 lfSizeY = lrPart.mvSizePlusNextFrame.y;
 
             rw::math::vpu::Vector3 lvSpan;
-            lvSpan.x = lvNormDirVec.x * lfSizeY;
-            lvSpan.y = lvNormDirVec.y * lfSizeY;
-            lvSpan.z = lvNormDirVec.z * lfSizeY;
-            lvSpan.w = 0.0f;
+            lvSpan.mV.x = lvNormDirVec.mV.x * lfSizeY;
+            lvSpan.mV.y = lvNormDirVec.mV.y * lfSizeY;
+            lvSpan.mV.z = lvNormDirVec.mV.z * lfSizeY;
+            lvSpan.mV.w = 0.0f;
 
             rw::math::vpu::Vector3 lvWidth;
-            lvWidth.x = lvWidthVec.x * lfSizeX;
-            lvWidth.y = lvWidthVec.y * lfSizeX;
-            lvWidth.z = lvWidthVec.z * lfSizeX;
-            lvWidth.w = 0.0f;
+            lvWidth.mV.x = lvWidthVec.mV.x * lfSizeX;
+            lvWidth.mV.y = lvWidthVec.mV.y * lfSizeX;
+            lvWidth.mV.z = lvWidthVec.mV.z * lfSizeX;
+            lvWidth.mV.w = 0.0f;
 
             rw::math::vpu::Vector3 lvEnd0;
-            lvEnd0.x = lvPos0.x - lvSpan.x * lrPivot.y;
-            lvEnd0.y = lvPos0.y - lvSpan.y * lrPivot.y;
-            lvEnd0.z = lvPos0.z - lvSpan.z * lrPivot.y;
-            lvEnd0.w = 0.0f;
+            lvEnd0.mV.x = lvPos0.mV.x - lvSpan.mV.x * lrPivot.y;
+            lvEnd0.mV.y = lvPos0.mV.y - lvSpan.mV.y * lrPivot.y;
+            lvEnd0.mV.z = lvPos0.mV.z - lvSpan.mV.z * lrPivot.y;
+            lvEnd0.mV.w = 0.0f;
 
             rw::math::vpu::Vector3 lvEnd1;
-            lvEnd1.x = lvEnd0.x + lvSpan.x;
-            lvEnd1.y = lvEnd0.y + lvSpan.y;
-            lvEnd1.z = lvEnd0.z + lvSpan.z;
-            lvEnd1.w = 0.0f;
+            lvEnd1.mV.x = lvEnd0.mV.x + lvSpan.mV.x;
+            lvEnd1.mV.y = lvEnd0.mV.y + lvSpan.mV.y;
+            lvEnd1.mV.z = lvEnd0.mV.z + lvSpan.mV.z;
+            lvEnd1.mV.w = 0.0f;
 
             if (lbEndOnActive)
             {
@@ -1135,10 +1135,10 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
                     rw::math::vpu::Lerp(lvEnd0, lvEnd1, 0.5f);
 
                 rw::math::vpu::Vector3 lvMidCamVec;
-                lvMidCamVec.x = lvCameraPosition.x - lvMid.x;
-                lvMidCamVec.y = lvCameraPosition.y - lvMid.y;
-                lvMidCamVec.z = lvCameraPosition.z - lvMid.z;
-                lvMidCamVec.w = 0.0f;
+                lvMidCamVec.mV.x = lvCameraPosition.mV.x - lvMid.mV.x;
+                lvMidCamVec.mV.y = lvCameraPosition.mV.y - lvMid.mV.y;
+                lvMidCamVec.mV.z = lvCameraPosition.mV.z - lvMid.mV.z;
+                lvMidCamVec.mV.w = 0.0f;
                 lvMidCamVec = rw::math::vpu::Normalize(lvMidCamVec);
 
                 f32 lfDotProd = rw::math::vpu::Dot(lvNormDirVec, lvMidCamVec);
@@ -1166,20 +1166,20 @@ void LionBlendRenderer::RenderTilts(EffectsVertexBufferIterator& arIterator,
 
             // asm 0x82283954..0x82283998 -- the four corners, already in world space.
             rw::math::vpu::Vector3 laPoints[4];
-            const f32 lfOffX = lvWidth.x * lrPivot.x;
-            const f32 lfOffY = lvWidth.y * lrPivot.x;
-            const f32 lfOffZ = lvWidth.z * lrPivot.x;
+            const f32 lfOffX = lvWidth.mV.x * lrPivot.x;
+            const f32 lfOffY = lvWidth.mV.y * lrPivot.x;
+            const f32 lfOffZ = lvWidth.mV.z * lrPivot.x;
 
-            laPoints[0].x = lvEnd0.x - lfOffX; laPoints[0].y = lvEnd0.y - lfOffY;
-            laPoints[0].z = lvEnd0.z - lfOffZ; laPoints[0].w = 0.0f;
-            laPoints[1].x = lvEnd1.x - lfOffX; laPoints[1].y = lvEnd1.y - lfOffY;
-            laPoints[1].z = lvEnd1.z - lfOffZ; laPoints[1].w = 0.0f;
-            laPoints[2].x = laPoints[0].x + lvWidth.x;
-            laPoints[2].y = laPoints[0].y + lvWidth.y;
-            laPoints[2].z = laPoints[0].z + lvWidth.z; laPoints[2].w = 0.0f;
-            laPoints[3].x = laPoints[1].x + lvWidth.x;
-            laPoints[3].y = laPoints[1].y + lvWidth.y;
-            laPoints[3].z = laPoints[1].z + lvWidth.z; laPoints[3].w = 0.0f;
+            laPoints[0].mV.x = lvEnd0.mV.x - lfOffX; laPoints[0].mV.y = lvEnd0.mV.y - lfOffY;
+            laPoints[0].mV.z = lvEnd0.mV.z - lfOffZ; laPoints[0].mV.w = 0.0f;
+            laPoints[1].mV.x = lvEnd1.mV.x - lfOffX; laPoints[1].mV.y = lvEnd1.mV.y - lfOffY;
+            laPoints[1].mV.z = lvEnd1.mV.z - lfOffZ; laPoints[1].mV.w = 0.0f;
+            laPoints[2].mV.x = laPoints[0].mV.x + lvWidth.mV.x;
+            laPoints[2].mV.y = laPoints[0].mV.y + lvWidth.mV.y;
+            laPoints[2].mV.z = laPoints[0].mV.z + lvWidth.mV.z; laPoints[2].mV.w = 0.0f;
+            laPoints[3].mV.x = laPoints[1].mV.x + lvWidth.mV.x;
+            laPoints[3].mV.y = laPoints[1].mV.y + lvWidth.mV.y;
+            laPoints[3].mV.z = laPoints[1].mV.z + lvWidth.mV.z; laPoints[3].mV.w = 0.0f;
 
             QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
         }
