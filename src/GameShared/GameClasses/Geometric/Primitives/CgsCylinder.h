@@ -83,16 +83,16 @@ namespace CgsGeometric
         VecFloat GetRadius() const
         {
             VecFloat lvfResult;
-            lvfResult.x = mfRadius; lvfResult.y = mfRadius;
-            lvfResult.z = mfRadius; lvfResult.w = mfRadius;
+            lvfResult.mV.x = mfRadius; lvfResult.mV.y = mfRadius;
+            lvfResult.mV.z = mfRadius; lvfResult.mV.w = mfRadius;
             return lvfResult;
         }
 
         VecFloat GetLength() const
         {
             VecFloat lvfResult;
-            lvfResult.x = mfLength; lvfResult.y = mfLength;
-            lvfResult.z = mfLength; lvfResult.w = mfLength;
+            lvfResult.mV.x = mfLength; lvfResult.mV.y = mfLength;
+            lvfResult.mV.z = mfLength; lvfResult.mV.w = mfLength;
             return lvfResult;
         }
 

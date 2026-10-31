@@ -196,7 +196,7 @@ namespace CgsGeometric
         {
             mTransform = lTransform;                        // rows 0..3, verbatim
             mDimensionsAndFatness.SetVector3(lDimensions);  // vrlimi128 v0,v13,1,0 -> xyz
-            mDimensionsAndFatness.SetPlus(lvfFatness.w);    // vrlimi128 v0,v2,1,0  -> w
+            mDimensionsAndFatness.SetPlus(lvfFatness.mV.w);    // vrlimi128 v0,v2,1,0  -> w
 
             // 0x825E6990 `bl CgsGeometric::Box::IsValid`, then
             // 0x825E6994 `clrlwi r11,r3,24 ; cmplwi cr6,r11,0 ; bne cr6, <epilogue>`.
@@ -213,30 +213,30 @@ namespace CgsGeometric
                 // " Orthogonal: ", read back from var_70 at 0x825E6C44). Transpose +
                 // Mult + SelfSubtract(identity) + three MagnitudeSquared + one more, then
                 // `vandc` (Abs) and `vcmpgtfp` against the broadcast tolerance.
-                const Vector3 lGramRight = { rw::math::vpu::Dot(lrRight, lrRight),
+                const Vector3 lGramRight( rw::math::vpu::Dot(lrRight, lrRight),
                              rw::math::vpu::Dot(lrRight, lrUp),
-                             rw::math::vpu::Dot(lrRight, lrAt), 0.0f };
+                             rw::math::vpu::Dot(lrRight, lrAt));
                 const Vector3 lGramErrorRight = lGramRight - rw::math::vpu::GetVector3_XAxis();
-                const Vector3 lGramUp = { rw::math::vpu::Dot(lrUp, lrRight),
+                const Vector3 lGramUp( rw::math::vpu::Dot(lrUp, lrRight),
                              rw::math::vpu::Dot(lrUp, lrUp),
-                             rw::math::vpu::Dot(lrUp, lrAt), 0.0f };
+                             rw::math::vpu::Dot(lrUp, lrAt));
                 const Vector3 lGramErrorUp = lGramUp - rw::math::vpu::GetVector3_YAxis();
-                const Vector3 lGramAt = { rw::math::vpu::Dot(lrAt, lrRight),
+                const Vector3 lGramAt( rw::math::vpu::Dot(lrAt, lrRight),
                              rw::math::vpu::Dot(lrAt, lrUp),
-                             rw::math::vpu::Dot(lrAt, lrAt), 0.0f };
+                             rw::math::vpu::Dot(lrAt, lrAt));
                 const Vector3 lGramErrorAt = lGramAt - rw::math::vpu::GetVector3_ZAxis();
-                const Vector3 lGramMagnitudes = { rw::math::vpu::MagnitudeSquared(lGramErrorRight),
+                const Vector3 lGramMagnitudes( rw::math::vpu::MagnitudeSquared(lGramErrorRight),
                              rw::math::vpu::MagnitudeSquared(lGramErrorUp),
-                             rw::math::vpu::MagnitudeSquared(lGramErrorAt), 0.0f };
+                             rw::math::vpu::MagnitudeSquared(lGramErrorAt));
                 const f32 lfOrthogonalError = rw::math::vpu::MagnitudeSquared(lGramMagnitudes);
                 const bool lbOrthogonal =
                     !(std::fabs(lfOrthogonalError) > KF_BOX_VALIDITY_TOLERANCE);
 
                 // 0x825E6A30..0x825E6ADC -- the NORMALITY verdict (printed after
                 // " Normal:", read back from var_60 at 0x825E6C94).
-                const Vector3 lNormalMagnitudes = { rw::math::vpu::MagnitudeSquared(lrRight) - 1.0f,
+                const Vector3 lNormalMagnitudes( rw::math::vpu::MagnitudeSquared(lrRight) - 1.0f,
                              rw::math::vpu::MagnitudeSquared(lrUp)    - 1.0f,
-                             rw::math::vpu::MagnitudeSquared(lrAt)    - 1.0f, 0.0f };
+                             rw::math::vpu::MagnitudeSquared(lrAt)    - 1.0f);
                 const f32 lfNormalError = rw::math::vpu::MagnitudeSquared(lNormalMagnitudes);
                 const bool lbNormal =
                     !(std::fabs(lfNormalError) > KF_BOX_VALIDITY_TOLERANCE);
@@ -251,18 +251,18 @@ namespace CgsGeometric
                 lStrStream << "Transform: ";
                 lStrStream.AppendFormat(   // sub_821F0FC0's own format string
                     "\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n",
-                    lTransform.xAxis.x, lTransform.xAxis.y, lTransform.xAxis.z, lTransform.xAxis.w,
-                    lTransform.yAxis.x, lTransform.yAxis.y, lTransform.yAxis.z, lTransform.yAxis.w,
-                    lTransform.zAxis.x, lTransform.zAxis.y, lTransform.zAxis.z, lTransform.zAxis.w,
-                    lTransform.wAxis.x, lTransform.wAxis.y, lTransform.wAxis.z, lTransform.wAxis.w);
+                    lTransform.xAxis.mV.x, lTransform.xAxis.mV.y, lTransform.xAxis.mV.z, lTransform.xAxis.mV.w,
+                    lTransform.yAxis.mV.x, lTransform.yAxis.mV.y, lTransform.yAxis.mV.z, lTransform.yAxis.mV.w,
+                    lTransform.zAxis.mV.x, lTransform.zAxis.mV.y, lTransform.zAxis.mV.z, lTransform.zAxis.mV.w,
+                    lTransform.wAxis.mV.x, lTransform.wAxis.mV.y, lTransform.wAxis.mV.z, lTransform.wAxis.mV.w);
                 lStrStream << " Dimensions: ";
                 lStrStream.AppendFormat(   // sub_82203F70's own format string
-                    "(%f, %f, %f)", lDimensions.x, lDimensions.y, lDimensions.z);
+                    "(%f, %f, %f)", lDimensions.mV.x, lDimensions.mV.y, lDimensions.mV.z);
                 lStrStream << " Fatness: ";
                 // 0x825E6C20 `lfs f1, arg_30(r1)` reads lane 0 of the spilled VecFloat
                 // while the STORE above takes lane 3; identical value, a VecFloat is one
                 // float in every lane. Spelled .w here to match the store.
-                lStrStream << lvfFatness.w;                       // sub_821F0F40
+                lStrStream << lvfFatness.mV.w;                       // sub_821F0F40
                 lStrStream << " Orthogonal: ";
                 lStrStream << (lbOrthogonal  ? "true" : "false"); // off_82F31958/off_82F3195C
                 lStrStream << " Normal:";
@@ -295,10 +295,10 @@ namespace CgsGeometric
             // is the +0x40 row's w lane.
             const f32 lfFatness = mDimensionsAndFatness.GetPlus();
             VecFloat lvfResult;
-            lvfResult.x = lfFatness;
-            lvfResult.y = lfFatness;
-            lvfResult.z = lfFatness;
-            lvfResult.w = lfFatness;
+            lvfResult.mV.x = lfFatness;
+            lvfResult.mV.y = lfFatness;
+            lvfResult.mV.z = lfFatness;
+            lvfResult.mV.w = lfFatness;
             return lvfResult;
         }
 
