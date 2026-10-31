@@ -19,7 +19,7 @@ namespace BrnTraffic
 {
 // X360 .data 0x8300D190. Zero in the image; an unnamed dynamic-initialiser thunk @0x82C67830
 // seeds it: lfs f0, flt_820054CC (= 20.0f); vspltw v0,v0,0; stvx128 -> all four lanes 20.0f.
-const VecFloat KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR = { 20.0f, 20.0f, 20.0f, 20.0f };
+const VecFloat KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR(20.0f);
 
 namespace
 {
@@ -129,7 +129,7 @@ bool Axle::TryIntersectWithLane(const LaneRung& lRung0, const LaneRung& lRung1)
 
     CGS_ASSERT(BrnMath::IsNormal(lNormal),
                "Non unit-length normal returned from line-tri intersection");
-    CGS_ASSERT(lNormal.y > 0.0f,
+    CGS_ASSERT(lNormal.mV.y > 0.0f,
                "Upside-down normal being returned from axle-lane intersection");
     SetUp(lNormal);
     return true;
@@ -175,15 +175,15 @@ void Axle::ForceIntersectWithLane(const LaneRung& lRung0, const LaneRung& lRung1
 void Vehicle::SetSpeed(VecFloat lfSpeed)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(lfSpeed.x == lfSpeed.x, "RwMath::IsValid( lfValue )");
-    mSpeed_DistAcrossLane_SwerveAmount_W.x = lfSpeed.x;
+    CGS_ASSERT(lfSpeed.mV.x == lfSpeed.mV.x, "RwMath::IsValid( lfValue )");
+    mSpeed_DistAcrossLane_SwerveAmount_W.mV.x = lfSpeed.mV.x;
 }
 
 Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRuntime* lpTypeRuntime) const
 {
     (void)lTransform;
     (void)lpTypeRuntime;
-    { const Vector3 lResult = { 0.0f, 0.0f, 0.0f }; return lResult; }
+    { const Vector3 lResult(0.0f, 0.0f, 0.0f); return lResult; }
 }
 
 void VehicleAxles::UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** lpapHulls)
@@ -331,14 +331,14 @@ void Vehicle::InitialiseAsStandard(
 
     mPitch_Roll_Steering_WheelRot.SetZero();
     {
-        const Vector4 lAggregateValue = { lfSpeed, lfDistAcrossLane, 0.0f, 0.0f };
+        const Vector4 lAggregateValue(lfSpeed, lfDistAcrossLane, 0.0f, 0.0f);
         mSpeed_DistAcrossLane_SwerveAmount_W = lAggregateValue;
     }
 
     miManoeuvre      = E_MANOEUVRE_NONE;
     mfSwerveTime     = 0.0f;
     muOtherHalfIndex = luTrailerIndex;
-    mLinearVelocity  = lOutMatrix.At() * mSpeed_DistAcrossLane_SwerveAmount_W.x;
+    mLinearVelocity  = lOutMatrix.At() * mSpeed_DistAcrossLane_SwerveAmount_W.mV.x;
 
     if (luTrailerIndex != KU_INVALID_VEHICLE)
     {
@@ -403,7 +403,7 @@ void Vehicle::InitialiseAsStatic(
     muOtherHalfIndex = static_cast<u16>(KU_INVALID_VEHICLE);
     muCrashTrafficType = static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid);
 
-    mLinearVelocity = lTransform.At() * mSpeed_DistAcrossLane_SwerveAmount_W.x;
+    mLinearVelocity = lTransform.At() * mSpeed_DistAcrossLane_SwerveAmount_W.mV.x;
     mSympCrashTarget.muValue = 0xFFFFFFFF;
 }
 
@@ -488,7 +488,7 @@ void Vehicle::InitialiseAsTrailer(
     miManoeuvre = E_MANOEUVRE_NONE;
     muOtherHalfIndex = luCabIndex;
     mfSwerveTime = 0.0f;
-    mLinearVelocity = lOutMatrix.At() * mSpeed_DistAcrossLane_SwerveAmount_W.x;
+    mLinearVelocity = lOutMatrix.At() * mSpeed_DistAcrossLane_SwerveAmount_W.mV.x;
 
     lVehicleSoaData.mArticulatedVehicles.SetBit(luVehicle);
     muCrashTrafficType = static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid);
@@ -540,7 +540,7 @@ void Vehicle::UpdateMatrix(const VehicleAxles* lpAxles,
 
     const Vector3 lAxleUpSum = lpAxles->mFrontAxle.GetUp() + lpAxles->mBackAxle.GetUp();
     const Vector3 lUp = rw::math::vpu::Normalize(
-        lOldUp * KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR.x + lAxleUpSum);
+        lOldUp * KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR.mV.x + lAxleUpSum);
 
     // X360 streams "Invalid UP calculating traffic matrix: <up> (front axle UP = <v>,
     // rear axle UP = <v> )".
@@ -556,7 +556,7 @@ void Vehicle::UpdateMatrix(const VehicleAxles* lpAxles,
     CGS_ASSERT(rw::math::vpu::IsValid(lOutMatrix), "Invalid traffic vehicle transform");
 
     // The asm calls the checked GetSpeed() accessor here (bl @0x82757E1C).
-    mLinearVelocity = lAt * GetSpeed().x;
+    mLinearVelocity = lAt * GetSpeed().mV.x;
 }
 
 // Front-axle position bridge (X360 @0x82753428): one vmaddfp pushing the articulation point
@@ -687,31 +687,31 @@ void Vehicle::UpdateEffects(f32 lfTimeDelta, s32 liBulbWarmthDelta, CgsNumeric::
 VecFloat Vehicle::GetSpeed() const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    return rw::math::vpu::Splat(mSpeed_DistAcrossLane_SwerveAmount_W.x);
+    return VecFloat(__vspltw(mSpeed_DistAcrossLane_SwerveAmount_W.mV, 0));
 }
 
 VecFloat Vehicle::GetDistAcrossLane() const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    return rw::math::vpu::Splat(mSpeed_DistAcrossLane_SwerveAmount_W.y);
+    return VecFloat(__vspltw(mSpeed_DistAcrossLane_SwerveAmount_W.mV, 1));
 }
 
 VecFloat Vehicle::GetSwerveAmount() const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    return rw::math::vpu::Splat(mSpeed_DistAcrossLane_SwerveAmount_W.z);
+    return VecFloat(__vspltw(mSpeed_DistAcrossLane_SwerveAmount_W.mV, 2));
 }
 
 VecFloat Vehicle::GetSteering() const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    return rw::math::vpu::Splat(mPitch_Roll_Steering_WheelRot.z);
+    return VecFloat(__vspltw(mPitch_Roll_Steering_WheelRot.mV, 2));
 }
 
 VecFloat Vehicle::GetWheelRot() const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    return rw::math::vpu::Splat(mPitch_Roll_Steering_WheelRot.w);
+    return VecFloat(__vspltw(mPitch_Roll_Steering_WheelRot.mV, 3));
 }
 
 Vector4 Vehicle::GetPitch_Roll_Steering_WheelRot() const
@@ -1004,21 +1004,21 @@ void Vehicle::SetSteering(f32 lfValue)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
     CGS_ASSERT(lfValue == lfValue, "RwMath::IsValid( lfValue )");
-    mPitch_Roll_Steering_WheelRot.z = lfValue;
+    mPitch_Roll_Steering_WheelRot.mV.z = lfValue;
 }
 
 void Vehicle::SetWheelRot(f32 lfValue)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
     CGS_ASSERT(lfValue == lfValue, "RwMath::IsValid( lfValue )");
-    mPitch_Roll_Steering_WheelRot.w = lfValue;
+    mPitch_Roll_Steering_WheelRot.mV.w = lfValue;
 }
 
 void Vehicle::SetSwerveAmount(f32 lfValue)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
     CGS_ASSERT(lfValue == lfValue, "RwMath::IsValid( lfValue )");
-    mSpeed_DistAcrossLane_SwerveAmount_W.z = lfValue;
+    mSpeed_DistAcrossLane_SwerveAmount_W.mV.z = lfValue;
 }
 
 void Vehicle::SetSwerveTime(f32 lfValue)
@@ -1044,8 +1044,8 @@ void Vehicle::SetLinearVelocity(Vector3 lLinearVelocity)
 void Vehicle::SetPitch_Roll_Steering_WheelRot(Vector4 lValues)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(lValues.x == lValues.x && lValues.y == lValues.y
-                   && lValues.z == lValues.z && lValues.w == lValues.w,
+    CGS_ASSERT(lValues.mV.x == lValues.mV.x && lValues.mV.y == lValues.mV.y
+                   && lValues.mV.z == lValues.mV.z && lValues.mV.w == lValues.mV.w,
                "RwMath::IsValid( lValues )");
     mPitch_Roll_Steering_WheelRot = lValues;
 }
