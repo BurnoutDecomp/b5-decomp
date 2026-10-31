@@ -1,18 +1,9 @@
 #pragma once
 
-// Portable PC reconstruction of EARenderWare rwmath (1.02.00)
-// rw/math/vpu/detail/vector4_type_inline.h -- the out-of-class inline bodies for the
-// Vector4 construction / component-access surface declared in vector4.h.
-//
-// Lowered to portable lane math exactly as the committed VecFloat lane wrappers and the
-// Vector3 inlines are. The console intrinsic each body replaces is named in a comment.
-//
-// Lane facts of the originals (confirmed against the Feb-2007 source):
-//   * Set(VecFloat x,y,z,w): two vperm temps + vsldoi assemble lane0<-x.X, lane1<-y.Y,
-//     lane2<-z.Z, lane3<-w.W. Args are broadcasts so each lane already equals its X lane.
-//   * Vector4(Vector3 v3, w): mV(v3.mV) copies the three components (v3 carries [X,Y,Z]),
-//     then the W lane is written from w (a single swizzle-store / SetComponent(3,...)).
-//   * SetComponent / SetX/Y/Z/W -> single lane writes; SetZero -> all four lanes 0.
+// VPU Vector4 construction and component access over the genuine VectorIntrinsic mV.
+// Native scalar/raw constructors and implicit copy are object-bound separately.
+// Existing lane/ref/pointer/template overloads below retain their source surface;
+// broader swizzle/NaN behavior requires its own native caller evidence.
 
 #include "SDKs/EATech/include/rw/math/vpu/vector4.h"
 
@@ -261,10 +252,13 @@ inline Vector4::Vector4()
 
 inline Vector4::Vector4(float x, float y, float z, float w)
 {
-    mV.v[0] = x;
-    mV.v[1] = y;
-    mV.v[2] = z;
-    mV.v[3] = w;
+    // ARTIST821F0DD8/821F0E00: scalar inputs assembled, then one raw row copy.
+    VectorIntrinsic lValue;
+    lValue.v[0] = x;
+    lValue.v[1] = y;
+    lValue.v[2] = z;
+    lValue.v[3] = w;
+    mV = lValue;
 }
 
 inline Vector4::Vector4(const float xyzw[4])
@@ -281,20 +275,11 @@ inline Vector4::Vector4(VectorIntrinsicInParam v)
     mV = v;
 }
 
-inline Vector4::Vector4(const Vector4& rhs)
-{
-    mV = rhs.mV;
-}
 
 // =====================================================================================
 //  Assignment / register access
 // =====================================================================================
 
-inline Vector4& Vector4::operator =(Vector4::InParam v)
-{
-    mV = v.mV;
-    return *this;
-}
 
 inline Vector4& Vector4::operator =(VectorIntrinsicInParam v)
 {

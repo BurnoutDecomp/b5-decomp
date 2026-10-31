@@ -1,12 +1,8 @@
 #pragma once
 
-// Portable PC reconstruction of EARenderWare rwmath (1.02.00) rw/math/vpu/vector4.h.
-//
-// Declares rw::math::vpu::Vector4 -- a 4-component vector stored in a single
-// VectorIntrinsic register (lanes [X,Y,Z,W]). Same thin-register-owner design as Vector3;
-// every ctor/getter/setter is a swizzle/permute on `mV`, lowered to portable lane math in
-// detail/vector4_type_inline.h. Only the construction / component access surface declared
-// in the Feb-2007 source's vector4_type_inline.h lives here.
+// Native rwmath VPU Vector4: one real VMX register, shared by SDK and game headers.
+// XDK passinreg plus implicit copy/assignment preserve the by-value/free-return ABI.
+// Default construction is empty; float4/raw-register constructors initialize all128 bits.
 
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"
 #include "SDKs/EATech/include/rw/math/vpu/vector3.h"
@@ -19,15 +15,14 @@ namespace vpu
 {
     namespace fpu { template<class T> class Vector4Template; }
 
-    class Vector4
+    class __declspec(passinreg) Vector4
     {
     public:
-        typedef const Vector4& InParam;
+        typedef const Vector4 InParam;
         typedef Vector4&       OutParam;
         typedef Vector4&       InOutParam;
 
         Vector4();
-        Vector4(const Vector4& rhs);
         Vector4(float x, float y, float z, float w);
         Vector4(VecFloat::InParam x, VecFloat::InParam y, VecFloat::InParam z, VecFloat::InParam w);
         Vector4(VecFloatRefIndex::InParam x, VecFloatRefIndex::InParam y, VecFloatRefIndex::InParam z, VecFloatRefIndex::InParam w);
@@ -42,7 +37,6 @@ namespace vpu
         explicit Vector4(const float xyzw[4]);
         Vector4(VectorIntrinsicInParam v);
 
-        Vector4& operator =(InParam v);
         Vector4& operator =(VectorIntrinsicInParam v);
         operator VectorIntrinsic&();
         operator const VectorIntrinsic&() const;

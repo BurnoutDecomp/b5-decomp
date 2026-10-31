@@ -74,7 +74,7 @@ namespace Deformation
         VecFloat GetCompressionLimit(ENextSensorDirection leDirection) const
         {
             const f32 lfLimit = maDirectionParams[static_cast<s32>(leDirection)].mCompressionLimits;
-            { const VecFloat lResult = { lfLimit, lfLimit, lfLimit, lfLimit }; return lResult; }
+            { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfLimit, lfLimit, lfLimit, lfLimit }; const VecFloat lResult(lResultIntrinsic); return lResult; }
         } // DWARF :98
         void    FixUp(void* lpBaseAddress);                            // DWARF :105
         void    FixDown(void* lpBaseAddress);                          // DWARF :108

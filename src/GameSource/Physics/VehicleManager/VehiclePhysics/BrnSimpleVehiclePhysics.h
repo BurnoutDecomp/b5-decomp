@@ -438,12 +438,12 @@ namespace Vehicle
         VecFloat GetSpeed() const
         {
             static const f32 KF_MPH_TO_MPS = 0.447039992f; // flt_82F31928 / unk_83017FE0
-            { const VecFloat lResult = {
+            { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = {
                 mfSpeedMPH.mV.x * KF_MPH_TO_MPS,
                 mfSpeedMPH.mV.y * KF_MPH_TO_MPS,
                 mfSpeedMPH.mV.z * KF_MPH_TO_MPS,
                 mfSpeedMPH.mV.w * KF_MPH_TO_MPS
-            }; return lResult; }
+            }; const VecFloat lResult(lResultIntrinsic); return lResult; }
         }
         // ADDITIVE GROW, read-only, no layout change.
         // VehicleManager::HandleRaceCarTrafficCarPotentialContact @0x82640518/@0x826405C0 and

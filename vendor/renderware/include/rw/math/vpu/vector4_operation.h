@@ -1,14 +1,9 @@
 #pragma once
 
-// Portable PC reconstruction of the RenderWare rwmath VPU Vector4 / VecFloat operation
-// vocabulary (rw/math/vpu/vector4_operation.h + vec_float_*_inline.h). The console SDK
-// implements these over AltiVec/VMX 128-bit float registers; here every op is the obvious
-// per-lane scalar lowering over the 4 named lanes of `Vector4` (see vpu/types.h). Only the
-// ops actually consumed by reconstructed game code are provided; this is the type-operation
-// vocabulary, not a full SDK port.
-//
-// VecFloat is `Vector4` (a broadcast scalar held in all 4 lanes); the same operators serve
-// both -- a VecFloat is just a Vector4 whose lanes happen to be equal.
+// Shared include spelling for the genuine SDK VPU Vector4 operations.
+// types.h imports the one SDK class and its native primitive bodies.
+// Existing scalar/mask convenience APIs below retain their declarations; the old
+// global VecFloat alias and separate SDK VecFloat remain an explicit identity debt.
 
 #include "rw/math/vpu/types.h"   // Vector4, MaskScalar
 
@@ -22,49 +17,23 @@ namespace math
 namespace vpu
 {
     // -- arithmetic (lane-wise; vaddfp / vsubfp / vmulfp) --------------------------------
-    inline Vector4 operator+(Vector4 lLhs, Vector4 lRhs)
-    {
-        { const Vector4 lResult = { lLhs.mV.x + lRhs.mV.x, lLhs.mV.y + lRhs.mV.y, lLhs.mV.z + lRhs.mV.z, lLhs.mV.w + lRhs.mV.w }; return lResult; }
-    }
-    inline Vector4 operator-(Vector4 lLhs, Vector4 lRhs)
-    {
-        { const Vector4 lResult = { lLhs.mV.x - lRhs.mV.x, lLhs.mV.y - lRhs.mV.y, lLhs.mV.z - lRhs.mV.z, lLhs.mV.w - lRhs.mV.w }; return lResult; }
-    }
+
+
     // Per-lane product (vmulfp128). The broadcast-scalar (VecFloat) case falls out of this:
     // a scalar held in every lane multiplies each lane of the other operand.
-    inline Vector4 operator*(Vector4 lLhs, Vector4 lRhs)
-    {
-        { const Vector4 lResult = { lLhs.mV.x * lRhs.mV.x, lLhs.mV.y * lRhs.mV.y, lLhs.mV.z * lRhs.mV.z, lLhs.mV.w * lRhs.mV.w }; return lResult; }
-    }
+
 
     // -- the all-ones vector (vspltisw v,1 ; vcfsx v,v,0 -> 1.0 per lane) -----------------
-    inline Vector4 GetVector4_One() { { const Vector4 lResult = { 1.0f, 1.0f, 1.0f, 1.0f }; return lResult; } }
+    inline Vector4 GetVector4_One() { { const VectorIntrinsic lResult = { 1.0f, 1.0f, 1.0f, 1.0f }; return Vector4(lResult); } }
 
     // Broadcast one scalar into all four lanes (the VecFloat construction the SDK spells as
     // `VecFloat(float)` / a vspltw of a loaded scalar). A VecFloat *is* such a Vector4.
-    inline Vector4 Splat(float lfScalar) { { const Vector4 lResult = { lfScalar, lfScalar, lfScalar, lfScalar }; return lResult; } }
+    inline Vector4 Splat(float lfScalar) { { const VectorIntrinsic lResult = { lfScalar, lfScalar, lfScalar, lfScalar }; return Vector4(lResult); } }
 
     // -- extrema / clamp (vminfp / vmaxfp; Clamp = max-then-min) --------------------------
-    inline Vector4 Min(Vector4 lLhs, Vector4 lRhs)
-    {
-        { const Vector4 lResult = {
-            lLhs.mV.x < lRhs.mV.x ? lLhs.mV.x : lRhs.mV.x,
-            lLhs.mV.y < lRhs.mV.y ? lLhs.mV.y : lRhs.mV.y,
-            lLhs.mV.z < lRhs.mV.z ? lLhs.mV.z : lRhs.mV.z,
-            lLhs.mV.w < lRhs.mV.w ? lLhs.mV.w : lRhs.mV.w }; return lResult; }
-    }
-    inline Vector4 Max(Vector4 lLhs, Vector4 lRhs)
-    {
-        { const Vector4 lResult = {
-            lLhs.mV.x > lRhs.mV.x ? lLhs.mV.x : lRhs.mV.x,
-            lLhs.mV.y > lRhs.mV.y ? lLhs.mV.y : lRhs.mV.y,
-            lLhs.mV.z > lRhs.mV.z ? lLhs.mV.z : lRhs.mV.z,
-            lLhs.mV.w > lRhs.mV.w ? lLhs.mV.w : lRhs.mV.w }; return lResult; }
-    }
-    inline Vector4 Clamp(Vector4 lrValue, Vector4 lrMin, Vector4 lrMax)
-    {
-        return Min(Max(lrValue, lrMin), lrMax);
-    }
+
+
+
 
     // -- lane accessor (Vector4::operator[]) ---------------------------------------------
     inline float GetComponent(const Vector4& lrVector, int liLane)
@@ -102,11 +71,11 @@ namespace vpu
     //   uses the SDK order, so the two spellings differ until this is done.
     inline Vector4 Select(Vector4 lFalse, Vector4 lTrue, MaskScalar lMask)
     {
-        { const Vector4 lResult = {
+        { const VectorIntrinsic lResult = {
             lMask.x != 0.0f ? lTrue.mV.x : lFalse.mV.x,
             lMask.y != 0.0f ? lTrue.mV.y : lFalse.mV.y,
             lMask.z != 0.0f ? lTrue.mV.z : lFalse.mV.z,
-            lMask.w != 0.0f ? lTrue.mV.w : lFalse.mV.w }; return lResult; }
+            lMask.w != 0.0f ? lTrue.mV.w : lFalse.mV.w }; return Vector4(lResult); }
     }
 
     // ===================================================================================

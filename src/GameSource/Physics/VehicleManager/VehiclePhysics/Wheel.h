@@ -284,7 +284,7 @@ namespace Vehicle
         VecFloat GetRoadLongSpeed() const
         {
             const f32 lfRoadLongSpeed = mSpeedAndMassOnWheelVariables.mV.x;
-            { const VecFloat lResult = { lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed }; return lResult; }
+            { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed }; const VecFloat lResult(lResultIntrinsic); return lResult; }
         }
 
         // DecFIGS Wheel.h:351. Breaker UpdateRoadNoise inlines this setter: its final stvx128 at

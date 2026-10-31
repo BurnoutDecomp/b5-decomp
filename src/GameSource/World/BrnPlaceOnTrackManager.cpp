@@ -69,17 +69,17 @@ static bool AreVectorsSimilar(const Vector3& lrA, const Vector3& lrB)
 static const f32 KVF_TWO_PI = 6.2831855f;
 static const Vector3 KA_CAR_SELECT_NORMAL_ADD[3] =
 {
-    { 0.0f, 0.0f, 0.0f,  0.0f },
-    { 0.0f, 0.0f, 0.2f,  0.0f },
-    { 0.0f, 0.0f, 0.55f, 0.0f },
+    Vector3(0.0f, 0.0f, 0.0f),
+    Vector3(0.0f, 0.0f, 0.2f),
+    Vector3(0.0f, 0.0f, 0.55f),
 };
 static const Vector3 KA_CAR_SELECT_NORMAL_RANDOMISE[3] =
 {
-    { 0.0f,  0.0f, 0.0f,  0.0f },
-    { 0.05f, 0.0f, 0.05f, 0.0f },
-    { 0.1f,  0.0f, 0.1f,  0.0f },
+    Vector3(0.0f, 0.0f, 0.0f),
+    Vector3(0.05f, 0.0f, 0.05f),
+    Vector3(0.1f, 0.0f, 0.1f),
 };
-static const Vector3 K_CAR_SELECT_DROP_WORLD_RIGHT = { 1.0f, 0.0f, 0.0f, 0.0f };
+static const Vector3 K_CAR_SELECT_DROP_WORLD_RIGHT(1.0f, 0.0f, 0.0f);
 
 // ---------------------------------------------------------------------------
 // XMMatrixRotationAxis @0x82203610 (== XMMatrixRotationNormal(Normalize(axis), angle)) followed
@@ -98,13 +98,13 @@ static Vector3 RotateAboutAxis( const Vector3& lrV, const Vector3& lrAxis, f32 l
     const f32 lfT = 1.0f - lfC;
     const f32 lfX = lN.mV.x, lfY = lN.mV.y, lfZ = lN.mV.z;
 
-    const Vector3 lRow0 = { lfT * lfX * lfX + lfC,       lfT * lfX * lfY + lfS * lfZ, lfT * lfX * lfZ - lfS * lfY, 0.0f };
-    const Vector3 lRow1 = { lfT * lfX * lfY - lfS * lfZ, lfT * lfY * lfY + lfC,       lfT * lfY * lfZ + lfS * lfX, 0.0f };
-    const Vector3 lRow2 = { lfT * lfX * lfZ + lfS * lfY, lfT * lfY * lfZ - lfS * lfX, lfT * lfZ * lfZ + lfC,       0.0f };
+    const rw::math::vpu::VectorIntrinsic lRow0Intrinsic = { lfT * lfX * lfX + lfC,       lfT * lfX * lfY + lfS * lfZ, lfT * lfX * lfZ - lfS * lfY, 0.0f }; const Vector3 lRow0(lRow0Intrinsic);
+    const rw::math::vpu::VectorIntrinsic lRow1Intrinsic = { lfT * lfX * lfY - lfS * lfZ, lfT * lfY * lfY + lfC,       lfT * lfY * lfZ + lfS * lfX, 0.0f }; const Vector3 lRow1(lRow1Intrinsic);
+    const rw::math::vpu::VectorIntrinsic lRow2Intrinsic = { lfT * lfX * lfZ + lfS * lfY, lfT * lfY * lfZ - lfS * lfX, lfT * lfZ * lfZ + lfC,       0.0f }; const Vector3 lRow2(lRow2Intrinsic);
 
-    { const Vector3 lResult = { lRow0.mV.x * lrV.mV.x + lRow1.mV.x * lrV.mV.y + lRow2.mV.x * lrV.mV.z,
+    { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lRow0.mV.x * lrV.mV.x + lRow1.mV.x * lrV.mV.y + lRow2.mV.x * lrV.mV.z,
                     lRow0.mV.y * lrV.mV.x + lRow1.mV.y * lrV.mV.y + lRow2.mV.y * lrV.mV.z,
-                    lRow0.mV.z * lrV.mV.x + lRow1.mV.z * lrV.mV.y + lRow2.mV.z * lrV.mV.z, 0.0f }; return lResult; }
+                    lRow0.mV.z * lrV.mV.x + lRow1.mV.z * lrV.mV.y + lRow2.mV.z * lrV.mV.z, 0.0f }; const Vector3 lResult(lResultIntrinsic); return lResult; }
 }
 
 // ---------------------------------------------------------------------------
@@ -285,17 +285,17 @@ void PlaceOnTrackManager::PostSceneUpdate( RaceCarEntityModuleIO::OutputBuffer_P
 
         // The console builds both offsets as (0, 50, 0, int 0) and adds / subtracts all four lanes.
         const Vector3& lrPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
-        const Vector3  lOffset    = { 0.0f, KF_PLACE_ON_TRACK_LINE_TEST_LENGTH, 0.0f, 0.0f };
+        const rw::math::vpu::VectorIntrinsic lOffsetIntrinsic = { 0.0f, KF_PLACE_ON_TRACK_LINE_TEST_LENGTH, 0.0f, 0.0f }; const Vector3 lOffset(lOffsetIntrinsic);
 
         CgsSceneManager::SceneManagerIO::InEventLineTestFine lEvent;
         {
-            const Vector3 lAggregateValue = { lrPosition.mV.x + lOffset.mV.x, lrPosition.mV.y + lOffset.mV.y,
-                                     lrPosition.mV.z + lOffset.mV.z, lrPosition.mV.w + lOffset.mV.w };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { lrPosition.mV.x + lOffset.mV.x, lrPosition.mV.y + lOffset.mV.y,
+                                     lrPosition.mV.z + lOffset.mV.z, lrPosition.mV.w + lOffset.mV.w }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lEvent.mLineStart = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { lrPosition.mV.x - lOffset.mV.x, lrPosition.mV.y - lOffset.mV.y,
-                                     lrPosition.mV.z - lOffset.mV.z, lrPosition.mV.w - lOffset.mV.w };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { lrPosition.mV.x - lOffset.mV.x, lrPosition.mV.y - lOffset.mV.y,
+                                     lrPosition.mV.z - lOffset.mV.z, lrPosition.mV.w - lOffset.mV.w }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lEvent.mLineEnd = lAggregateValue;
         }
         lEvent.mQueryId            = lSceneQueryID;
@@ -430,14 +430,14 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
             for (s32 liIntersection = 0; liIntersection < lpLineTestResult->muNumCandidates; ++liIntersection)
             {
                 const Vector4& lrPosition = lpLineTestResult->maCandidates[liIntersection].mPosition;
-                const Vector3 lIntersection = {lrPosition.mV.x, lrPosition.mV.y, lrPosition.mV.z, lrPosition.mV.w};
+                const rw::math::vpu::VectorIntrinsic lIntersectionIntrinsic = {lrPosition.mV.x, lrPosition.mV.y, lrPosition.mV.z, lrPosition.mV.w}; const Vector3 lIntersection(lIntersectionIntrinsic);
                 lrHistory.Append(lIntersection);
             }
 
             // The console passes the request position in v1 (`lvx128 v1, car, 1952`).
             const Vector3& lrQueryPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
-            const Vector4  lQuery = { lrQueryPosition.mV.x, lrQueryPosition.mV.y,
-                                             lrQueryPosition.mV.z, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lQueryIntrinsic = { lrQueryPosition.mV.x, lrQueryPosition.mV.y,
+                                             lrQueryPosition.mV.z, 0.0f }; const Vector4 lQuery(lQueryIntrinsic);
 
             const PlaceOnTrackCandidate* lpBestIntersection = ComputeBestPlaceOnT(
                 *lpLineTestResult, lQuery, lbIgnoreFatal );
@@ -488,13 +488,13 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
     {
         // asm: intersection+0x00 -> position, intersection+0x10 -> normal.
         {
-            const Vector3 lAggregateValue = { lpBestIntersection->mPosition.mV.x, lpBestIntersection->mPosition.mV.y,
-                                  lpBestIntersection->mPosition.mV.z, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { lpBestIntersection->mPosition.mV.x, lpBestIntersection->mPosition.mV.y,
+                                  lpBestIntersection->mPosition.mV.z, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lResetPosition = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { lpBestIntersection->mNormal.mV.x, lpBestIntersection->mNormal.mV.y,
-                                  lpBestIntersection->mNormal.mV.z, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { lpBestIntersection->mNormal.mV.x, lpBestIntersection->mNormal.mV.y,
+                                  lpBestIntersection->mNormal.mV.z, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lResetNormal = lAggregateValue;
         }
 
@@ -539,7 +539,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         }
         lpActiveRaceCar->GetResetCoords( &lResetPosition, &lResetDirection );   // 0x822F73B0
         {
-            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 1.0f, 0.0f, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lResetNormal = lAggregateValue;
         }                        // unk_82181510
     }
@@ -585,7 +585,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
             *CgsDev::Log::gpDebugPrint
                 << "    Normal and reset direction are too similar - setting normal to y axis\n";
         {
-            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 1.0f, 0.0f, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lResetNormal = lAggregateValue;
         }
 
@@ -596,7 +596,7 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
                     << "    Normal and reset direction are still too similar - setting "
                        "direction to x axis\n";
             {
-                const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+                const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { 1.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
                 lResetDirection = lAggregateValue;
             }
         }
@@ -631,9 +631,9 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
     }
 
     // asm: v1 = lResetDirection * splat(mfPlaceOnTrackSpeed).
-    const Vector3 lVelocity = { lResetDirection.mV.x * lfSpeed,
+    const rw::math::vpu::VectorIntrinsic lVelocityIntrinsic = { lResetDirection.mV.x * lfSpeed,
                                        lResetDirection.mV.y * lfSpeed,
-                                       lResetDirection.mV.z * lfSpeed, 0.0f };
+                                       lResetDirection.mV.z * lfSpeed, 0.0f }; const Vector3 lVelocity(lVelocityIntrinsic);
 
     mpRaceCarEntityModule->ResetActiveRaceCar( leActiveRaceCarIndex, lTransform, lVelocity,
                                                lpOutput->GetVehicleInputInterface() );
@@ -679,9 +679,9 @@ void PlaceOnTrackManager::GetValuesForCarSelect(
         const f32 lfAngle = mRandom.RandomVecFloat().GetFloat() * KVF_TWO_PI;
 
         const Vector3 lAxis = *lResetNormal;                       // `lvx128 v1, r0, r30` before the call
-        Vector3 lNormal = { lResetNormal->mV.x + KA_CAR_SELECT_NORMAL_ADD[liType].mV.x,
+        const rw::math::vpu::VectorIntrinsic lNormalIntrinsic = { lResetNormal->mV.x + KA_CAR_SELECT_NORMAL_ADD[liType].mV.x,
                                    lResetNormal->mV.y + KA_CAR_SELECT_NORMAL_ADD[liType].mV.y,
-                                   lResetNormal->mV.z + KA_CAR_SELECT_NORMAL_ADD[liType].mV.z, 0.0f };
+                                   lResetNormal->mV.z + KA_CAR_SELECT_NORMAL_ADD[liType].mV.z, 0.0f }; Vector3 lNormal(lNormalIntrinsic);
         lNormal = RotateAboutAxis( lNormal, lAxis, lfAngle );
 
         GetRandomVector( mRandom, lNormal, lNormal, KA_CAR_SELECT_NORMAL_RANDOMISE[liType] );
@@ -713,7 +713,7 @@ void GetRandomVector( CgsNumeric::Random& lrRandom, Vector3& lrOut,
     const f32 lfY = lrRandom.RandomFloat( -lrRange.mV.y, lrRange.mV.y );
     const f32 lfX = lrRandom.RandomFloat( -lrRange.mV.x, lrRange.mV.x );
     {
-        const Vector3 lAggregateValue = { lrIn.mV.x + lfX, lrIn.mV.y + lfY, lrIn.mV.z + lfZ, 0.0f };
+        const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { lrIn.mV.x + lfX, lrIn.mV.y + lfY, lrIn.mV.z + lfZ, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
         lrOut = lAggregateValue;
     }
 }

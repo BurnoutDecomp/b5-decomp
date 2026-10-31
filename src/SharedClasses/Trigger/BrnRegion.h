@@ -91,7 +91,7 @@ private:
 inline Vector3
 BoxRegion::GetPosition() const
 {
-    { const Vector3 lResult = { mPositionX, mPositionY, mPositionZ, 0.0f }; return lResult; }
+    { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { mPositionX, mPositionY, mPositionZ, 0.0f }; const Vector3 lResult(lResultIntrinsic); return lResult; }
 }
 
 inline Vector2
@@ -103,13 +103,13 @@ BoxRegion::GetPosition2D() const
 inline Vector3
 BoxRegion::GetRotation() const
 {
-    { const Vector3 lResult = { mRotationX, mRotationY, mRotationZ, 0.0f }; return lResult; }
+    { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { mRotationX, mRotationY, mRotationZ, 0.0f }; const Vector3 lResult(lResultIntrinsic); return lResult; }
 }
 
 inline Vector3
 BoxRegion::GetDimensions() const
 {
-    { const Vector3 lResult = { mDimensionX, mDimensionY, mDimensionZ, 0.0f }; return lResult; }
+    { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { mDimensionX, mDimensionY, mDimensionZ, 0.0f }; const Vector3 lResult(lResultIntrinsic); return lResult; }
 }
 
 inline f32

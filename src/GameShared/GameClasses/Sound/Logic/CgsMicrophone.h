@@ -79,8 +79,8 @@ public:
             rw::math::vpu::Matrix44Affine lIdentity;
             lIdentity.SetIdentity();
             mMicrophoneMatrix.Flush(lIdentity);   // seed both halves (canonical DataPoint::Flush)
-            mDirection = rw::math::vpu::Vector3();
-            mVelocity = rw::math::vpu::Vector3();
+            mDirection = rw::math::vpu::Vector3(__vspltisw(0));
+            mVelocity = rw::math::vpu::Vector3(__vspltisw(0));
         }
 
         // @ 0x826C3C70 (inlined into MicrophoneSystem::UpdateMicrophones). The asm computes

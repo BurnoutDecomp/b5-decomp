@@ -1758,7 +1758,7 @@ namespace BrnGui
         mpLockedIconName         = 0;
         muHoveredEventID         = 0;
         muInspectingEventID      = 0;
-        mLockedIconInfo.SetPositionLane(Vector4());                        // stvx128 zero, +0x6100
+        mLockedIconInfo.SetPositionLane(Vector4(__vspltisw(0)));                        // stvx128 zero, +0x6100
         mHoveredDriveThruID      = 0;
         mHoveringRivalId         = 0;
         mbLocalPlayerSelected    = false;

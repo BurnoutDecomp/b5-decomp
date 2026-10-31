@@ -1,34 +1,8 @@
 #pragma once
 
-// Portable PC reconstruction of EARenderWare rwmath (1.02.00)
-// rw/math/vpu/detail/vector4_operation_inline.h -- the free-function 4-vector algebra
-// (operator +,-,*,/ ; Add/Subtract/Mult/Divide/MultAdd ; Dot/CrossXYZ ; Magnitude(+XYZ)
-// family ; Normalize family ; Lerp/NLerp ; Min/Max/Clamp/Abs/Negate ; DivideByW ;
-// SetXYZ/GetXYZ ; component scaling) declared via vector4.h.
-//
-// Lowered to portable per-lane float math exactly as the committed VecFloat lane wrappers,
-// the Vector3/Vector4 type inlines, the wave-40 matrix44_operation_platform_inline.h and the
-// sibling vector3_operation_inline.h do. The console intrinsic each body wraps is named in a
-// comment. The Feb-2007 partial source is the definitive ground truth for these
-// always-inline bodies.
-//
-// A Vector4 spans all four lanes [X,Y,Z,W]. The full-4 ops (Dot/Magnitude/Normalize/...)
-// reduce over X+Y+Z+W; the *XYZ ops treat the vector as a Vector3 (lanes X,Y,Z only).
-//
-//   * vaddfp/vsubfp(a,b)   per-lane a +/- b      * vmaddfp(a,b,c) per-lane a*b + c
-//   * vnmsubfp(a,b,c)      per-lane c - a*b       * vrefp+Newton   per-lane 1/b
-//   * vrsqrtefp+Newton     per-lane 1/sqrt(b)     * vminfp/vmaxfp  per-lane min/max
-//   * vsel(f,t,mask)       per-lane select (zero-length guard on Magnitude/Normalize)
-//   As in the committed siblings, the reciprocal/rsqrt estimate-plus-Newton sequences are a
-//   hardware-accurate evaluation of the exact 1/x and 1/sqrt(x), so the portable form is the
-//   closed-form scalar they converge to.
-//
-// LEFT DECLARATION-ONLY + FLAGGED (genuinely multi-stage hand-VMX or dependent on types/
-// helpers NOT committed in this cluster):
-//   * operator == / != / IsZero / IsSimilar  -> _asmIsEqualV4 / _asmIsZeroV4 / _asmIsSimilarV4.
-//   * IsValid                                 -> needs IsValid(VecFloat).
-//   * Comp{...} / Select                      -> Mask4 / MaskScalar (not committed here).
-//   * SLerp                                   -> SinCos-driven (not committed here).
+// VPU Vector4 operations on the single SDK class definition.
+// Recovered VMX primitives retain all four lanes; unrecovered scalar algorithms
+// and declaration-only helpers below remain separate native-recovery work.
 
 #include <cmath>
 
@@ -66,31 +40,19 @@ inline bool IsAnyNaN(Vector4::InParam v)
 
 inline Vector4 Negate(Vector4::InParam v)
 {
-    // vxor(v, signMask): flip the sign bit of every lane.
-    Vector4 r;
-    r.mV.v[0] = -v.mV.v[0];
-    r.mV.v[1] = -v.mV.v[1];
-    r.mV.v[2] = -v.mV.v[2];
-    r.mV.v[3] = -v.mV.v[3];
-    return r;
+    const VectorIntrinsic allOnes = __vspltisw(-1);
+    const VectorIntrinsic sign = __vslw(allOnes, allOnes);
+    return Vector4(__vxor(v.mV, sign));
 }
 
 inline Vector4 Min(Vector4::InParam v0, Vector4::InParam v1)
 {
-    // vminfp(v0,v1)
-    Vector4 r;
-    for (int k = 0; k < 4; ++k)
-        r.mV.v[k] = v0.mV.v[k] < v1.mV.v[k] ? v0.mV.v[k] : v1.mV.v[k];
-    return r;
+    return Vector4(__vminfp(v0.mV, v1.mV));
 }
 
 inline Vector4 Max(Vector4::InParam v0, Vector4::InParam v1)
 {
-    // vmaxfp(v0,v1)
-    Vector4 r;
-    for (int k = 0; k < 4; ++k)
-        r.mV.v[k] = v0.mV.v[k] > v1.mV.v[k] ? v0.mV.v[k] : v1.mV.v[k];
-    return r;
+    return Vector4(__vmaxfp(v0.mV, v1.mV));
 }
 
 inline Vector4 Clamp(Vector4::InParam v0, Vector4::InParam v1, Vector4::InParam v2)
@@ -101,11 +63,8 @@ inline Vector4 Clamp(Vector4::InParam v0, Vector4::InParam v1, Vector4::InParam 
 
 inline Vector4 Abs(Vector4::InParam v)
 {
-    // vandc(v, signBitMask): clear the sign bit of every lane.
-    Vector4 r;
-    for (int k = 0; k < 4; ++k)
-        r.mV.v[k] = v.mV.v[k] < 0.0f ? -v.mV.v[k] : v.mV.v[k];
-    return r;
+    const VectorIntrinsic allOnes = __vspltisw(-1);
+    return Vector4(__vandc(v.mV, __vslw(allOnes, allOnes)));
 }
 
 // =====================================================================================
@@ -209,34 +168,22 @@ inline Vector4 Divide(Vector4::InParam v, VecFloatRefIndex::InParam s)
 
 inline Vector4 Add(Vector4::InParam a, Vector4::InParam b)
 {
-    // vaddfp(a,b)
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = a.mV.v[k] + b.mV.v[k];
-    return r;
+    return Vector4(__vaddfp(a.mV, b.mV));
 }
 
 inline Vector4 Subtract(Vector4::InParam a, Vector4::InParam b)
 {
-    // vsubfp(a,b)
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = a.mV.v[k] - b.mV.v[k];
-    return r;
+    return Vector4(__vsubfp(a.mV, b.mV));
 }
 
 inline Vector4 Mult(Vector4::InParam a, Vector4::InParam b)
 {
-    // vmaddfp(a,b,0): per-lane multiply.
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = a.mV.v[k] * b.mV.v[k];
-    return r;
+    return Vector4(__vmulfp(a.mV, b.mV));
 }
 
 inline Vector4 MultAdd(Vector4::InParam a, Vector4::InParam b, Vector4::InParam c)
 {
-    // vmaddfp(a,b,c): per-lane a*b + c.
-    Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.v[k] = a.mV.v[k] * b.mV.v[k] + c.mV.v[k];
-    return r;
+    return Vector4(__vmaddfp(a.mV, b.mV, c.mV));
 }
 
 inline Vector4 DivideByW(Vector4::InParam v)

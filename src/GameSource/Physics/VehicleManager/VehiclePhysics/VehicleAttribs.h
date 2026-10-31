@@ -112,25 +112,25 @@ namespace Vehicle
             VecFloat GetPitchDampingOnTakeOff() const
             {
                 const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.mV.x;
-                { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
+                { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfValue, lfValue, lfValue, lfValue }; const VecFloat lResult(lResultIntrinsic); return lResult; }
             }
 
             VecFloat GetYawDampingOnTakeOff() const
             {
                 const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.mV.y;
-                { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
+                { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfValue, lfValue, lfValue, lfValue }; const VecFloat lResult(lResultIntrinsic); return lResult; }
             }
 
             VecFloat GetRollDampingOnTakeOff() const
             {
                 const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.mV.z;
-                { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
+                { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfValue, lfValue, lfValue, lfValue }; const VecFloat lResult(lResultIntrinsic); return lResult; }
             }
 
             VecFloat GetRollLimitOnTakeOff() const
             {
                 const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.mV.w;
-                { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
+                { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfValue, lfValue, lfValue, lfValue }; const VecFloat lResult(lResultIntrinsic); return lResult; }
             }
         };
 
@@ -241,7 +241,7 @@ namespace Vehicle
             {
                 const f32 lfCrashSpeed =
                     mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.mV.x;
-                { const VecFloat lResult = { lfCrashSpeed, lfCrashSpeed, lfCrashSpeed, lfCrashSpeed }; return lResult; }
+                { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfCrashSpeed, lfCrashSpeed, lfCrashSpeed, lfCrashSpeed }; const VecFloat lResult(lResultIntrinsic); return lResult; }
             }
 
             Vector4 mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare;   // +0x00

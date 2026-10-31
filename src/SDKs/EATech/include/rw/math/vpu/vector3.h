@@ -1,17 +1,9 @@
 #pragma once
 
-// Portable PC reconstruction of EARenderWare rwmath (1.02.00) rw/math/vpu/vector3.h.
-//
-// Declares rw::math::vpu::Vector3 -- a 3-component vector stored in a single
-// VectorIntrinsic register (lanes [X,Y,Z], the W lane unused/garbage). The class is a
-// thin owner of a VectorIntrinsic `mV`; every ctor/getter/setter is a swizzle/permute on
-// that register. On the X360 those are AltiVec/VMX intrinsics; here they are lowered to
-// the equivalent portable lane math (see detail/vector3_type_inline.h), in the same style
-// as the committed VecFloat lane wrappers.
-//
-// Only the construction / component access surface declared in the Feb-2007 source's
-// vector3_type_inline.h lives here. The arithmetic operators (Add/Dot/Cross/Length/...)
-// are declared in separate operation headers, not this TU.
+// Native rwmath VPU Vector3: one real VMX register, shared by SDK and game headers.
+// XDK passinreg plus implicit copy/assignment preserve the by-value/free-return ABI.
+// Default construction is empty; callers requiring zero must request it explicitly.
+// The float3 constructor writes XYZ and zeroW; raw-register construction retains128 bits.
 
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"
 
@@ -23,15 +15,14 @@ namespace vpu
 {
     namespace fpu { template<class T> class Vector3Template; }
 
-    class Vector3
+    class __declspec(passinreg) Vector3
     {
     public:
-        typedef const Vector3& InParam;
+        typedef const Vector3 InParam;
         typedef Vector3&       OutParam;
         typedef Vector3&       InOutParam;
 
         Vector3();
-        Vector3(const Vector3& rhs);
         Vector3(float x, float y, float z);
         Vector3(VecFloat::InParam x, VecFloat::InParam y, VecFloat::InParam z);
         Vector3(VecFloatRefIndex::InParam x, VecFloatRefIndex::InParam y, VecFloatRefIndex::InParam z);
@@ -42,7 +33,6 @@ namespace vpu
         explicit Vector3(const float xyz[3]);
         Vector3(VectorIntrinsicInParam v);
 
-        Vector3& operator =(InParam v);
         Vector3& operator =(VectorIntrinsicInParam v);
         operator VectorIntrinsic&();
         operator const VectorIntrinsic&() const;

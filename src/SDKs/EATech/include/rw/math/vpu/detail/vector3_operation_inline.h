@@ -1,53 +1,9 @@
 #pragma once
 
-// Portable PC reconstruction of EARenderWare rwmath (1.02.00)
-// rw/math/vpu/detail/vector3_operation_inline.h -- the free-function vector algebra
-// (operator +,-,*,/ ; Add/Subtract/Mult/Divide/MultAdd ; Dot/Cross ; Magnitude family ;
-// Normalize family ; Lerp/NLerp ; Min/Max/Clamp/Abs/Negate ; component scaling) declared
-// via vector3.h. Camera behaviours, collision and CgsGraphics::Camera call these.
-//
-// On the X360 every body here is one or more AltiVec/VMX intrinsics on the `vector float`
-// register (`VectorIntrinsic mV`). Per the project's vendor-SIMD rule -- and exactly as the
-// committed VecFloat lane wrappers (vec_float_type_inline.h), the Vector3/Vector4 type
-// inlines, and the wave-40 matrix44_operation_platform_inline.h do -- each is lowered to the
-// equivalent portable per-lane float math (members by name, no raw offset hacks). The console
-// intrinsic each body wraps is named in a comment. The Feb-2007 partial source is the
-// definitive ground truth for these always-inline bodies.
-//
-// A Vector3 occupies lanes [X,Y,Z]; lane W is unused. The console ops compute on all four
-// lanes and the reductions (Dot/Magnitude) explicitly sum only X+Y+Z, so the lowered bodies
-// touch lanes 0..2 and leave lane 3 alone (matching the register-level no-op on W).
-//
-// FAITHFULLY RECONSTRUCTED: all of the arithmetic / Dot / Cross / Magnitude / Normalize /
-//   Lerp/NLerp / Min/Max/Clamp/Abs/Negate surface, every scalar / VecFloat / VecFloatRef<>
-//   / VecFloatRefIndex overload, the void-out-param variants and the compound-assignment
-//   operators. Each maps onto a committed vec_float SIMD op (vaddfp/vsubfp/vmaddfp/
-//   vnmsubfp/vrefp/vrsqrtefp/vminfp/vmaxfp/vsel) lowered to its exact scalar form.
-//
-//   * vaddfp/vsubfp(a,b)      per-lane a +/- b
-//   * vmaddfp(a,b,c)          per-lane a*b + c   (fused multiply-add; addend 0 => multiply)
-//   * vnmsubfp(a,b,c)         per-lane c - a*b
-//   * vrefp + Newton refine   per-lane reciprocal 1/b
-//   * vrsqrtefp + Newton      per-lane reciprocal-sqrt 1/sqrt(b)
-//   * vminfp/vmaxfp(a,b)      per-lane min/max
-//   * vsel(f,t,mask)          per-lane select (used here only for the divide-by-zero guard
-//                             on Magnitude / Normalize: a zero-length input returns zero)
-//   The console builds 1/x and 1/sqrt(x) from an estimate plus Newton-Raphson refinement;
-//   that is a hardware-accurate way to evaluate the exact reciprocal/rsqrt, so the portable
-//   form is the closed-form scalar it converges to (same convention as the committed
-//   VecFloatRef::operator/= and matrix44 reciprocal lowering).
-//
-// LEFT DECLARATION-ONLY + FLAGGED (genuinely multi-stage hand-VMX or dependent on types/
-// helpers NOT committed in this cluster -- a scalar paraphrase would be a fabrication):
-//   * operator == / != / IsZero / IsSimilar      -> _asmIsEqualV3 / _asmIsZeroV3 /
-//                                                    _asmIsSimilarV3 : undecoded asm helpers.
-//   * IsValid                                     -> needs IsValid(VecFloat) (not committed).
-//   * Comp{LessThan,GreaterThan,LessEqual,GreaterEqual,Equal,NotEqual} / Select
-//                                                 -> return/consume Mask3 / MaskScalar, types
-//                                                    not committed in this cluster.
-//   * CosAngleBetweenNormalizedVectors / AngleBetweenVectors / SLerp
-//                                                 -> depend on ACos / SinCos / TWO_PI which
-//                                                    are not committed in this cluster.
+// VPU Vector3 operations on the single SDK class definition.
+// Recovered VMX bodies retain all four stored lanes and native operation order.
+// Scalar/ref overloads and declaration-only helpers that have not been recovered
+// remain existing debt; this header is not an all-operation parity claim.
 
 #include <cmath>
 
@@ -60,16 +16,55 @@ namespace math
 namespace vpu
 {
 
+namespace detail
+{
+    // Native Xenon reciprocal-root operation order: ARTIST82600064..94 and
+    // 822B1D7C..AC. This is private arithmetic, not an alternate value ABI.
+    __forceinline VectorIntrinsic Vector3NativeReciprocalRoot(VectorIntrinsic squared, int refinements)
+    {
+        const VectorIntrinsic one = __vcfsx(__vspltisw(1), 0);
+        const VectorIntrinsic half = __vcfsx(__vspltisw(1), 1);
+        VectorIntrinsic estimate = __vrsqrtefp(squared);
+        for (int i = 0; i < refinements; ++i)
+        {
+            const VectorIntrinsic error = __vnmsubfp(squared, __vmulfp(estimate, estimate), one);
+            estimate = __vmaddfp(__vmulfp(estimate, half), error, estimate);
+        }
+        return estimate;
+    }
+
+    // ARTIST826C3D00..4C: retain the two fused reciprocal refinements.
+    __forceinline VectorIntrinsic Vector3NativeReciprocal(VectorIntrinsic divisor)
+    {
+        const VectorIntrinsic one = __vcfsx(__vspltisw(1), 0);
+        VectorIntrinsic estimate = __vrefp(divisor);
+        for (int i = 0; i < 2; ++i)
+            estimate = __vmaddfp(estimate, __vnmsubfp(estimate, divisor, one), estimate);
+        return estimate;
+    }
+}
+
+
 // =====================================================================================
 //  Equality / validity / similarity -- DECLARATION-ONLY + FLAGGED
 //  (undecoded _asmIsEqualV3/_asmIsZeroV3/_asmIsSimilarV3 ; IsValid needs IsValid(VecFloat))
 // =====================================================================================
 
-bool operator == (Vector3::InParam a, Vector3::InParam b);                 // FLAGGED: _asmIsEqualV3
-bool operator != (Vector3::InParam a, Vector3::InParam b);                 // FLAGGED: _asmIsEqualV3
+inline bool operator == (Vector3::InParam a, Vector3::InParam b)
+{
+    return a.mV.v[0] == b.mV.v[0]
+        && a.mV.v[1] == b.mV.v[1]
+        && a.mV.v[2] == b.mV.v[2];
+}
+inline bool operator != (Vector3::InParam a, Vector3::InParam b) { return !(a == b); }
 bool IsZero(Vector3::InParam v, VecFloat::InParam tolerance);              // FLAGGED: _asmIsZeroV3
 bool IsSimilar(Vector3::InParam a, Vector3::InParam b, VecFloat::InParam epsilon); // FLAGGED: _asmIsSimilarV3
-bool IsValid(Vector3::InParam v);                                         // FLAGGED: needs IsValid(VecFloat)
+inline bool IsValid(Vector3::InParam v)
+{
+    return v.mV.v[0] == v.mV.v[0]
+        && v.mV.v[1] == v.mV.v[1]
+        && v.mV.v[2] == v.mV.v[2];
+}
 
 // IsAnyNaN -- FAITHFUL. The console vcmpeqfp_p predicate tests whether v==v in every lane;
 // a NaN lane fails self-comparison. Lowered to the same per-lane self-compare over [X,Y,Z].
@@ -87,42 +82,22 @@ inline bool IsAnyNaN(Vector3::InParam v)
 
 inline Vector3 Add(Vector3::InParam a, Vector3::InParam b)
 {
-    // vaddfp(a,b)
-    Vector3 r;
-    r.mV.v[0] = a.mV.v[0] + b.mV.v[0];
-    r.mV.v[1] = a.mV.v[1] + b.mV.v[1];
-    r.mV.v[2] = a.mV.v[2] + b.mV.v[2];
-    return r;
+    return Vector3(__vaddfp(a.mV, b.mV));
 }
 
 inline Vector3 Subtract(Vector3::InParam a, Vector3::InParam b)
 {
-    // vsubfp(a,b)
-    Vector3 r;
-    r.mV.v[0] = a.mV.v[0] - b.mV.v[0];
-    r.mV.v[1] = a.mV.v[1] - b.mV.v[1];
-    r.mV.v[2] = a.mV.v[2] - b.mV.v[2];
-    return r;
+    return Vector3(__vsubfp(a.mV, b.mV));
 }
 
 inline Vector3 Mult(Vector3::InParam a, Vector3::InParam b)
 {
-    // vmaddfp(a,b,0): per-lane multiply.
-    Vector3 r;
-    r.mV.v[0] = a.mV.v[0] * b.mV.v[0];
-    r.mV.v[1] = a.mV.v[1] * b.mV.v[1];
-    r.mV.v[2] = a.mV.v[2] * b.mV.v[2];
-    return r;
+    return Vector3(__vmulfp(a.mV, b.mV));
 }
 
 inline Vector3 MultAdd(Vector3::InParam a, Vector3::InParam b, Vector3::InParam c)
 {
-    // vmaddfp(a,b,c): per-lane a*b + c.
-    Vector3 r;
-    r.mV.v[0] = a.mV.v[0] * b.mV.v[0] + c.mV.v[0];
-    r.mV.v[1] = a.mV.v[1] * b.mV.v[1] + c.mV.v[1];
-    r.mV.v[2] = a.mV.v[2] * b.mV.v[2] + c.mV.v[2];
-    return r;
+    return Vector3(__vmaddfp(a.mV, b.mV, c.mV));
 }
 
 inline Vector3 Mult(Vector3::InParam v, VecFloat::InParam s)
@@ -138,12 +113,8 @@ inline Vector3 Mult(Vector3::InParam v, VecFloat::InParam s)
 
 inline Vector3 Mult(Vector3::InParam v, float s)
 {
-    // broadcast(s) then vmaddfp(v, broadcast, 0).
-    Vector3 r;
-    r.mV.v[0] = v.mV.v[0] * s;
-    r.mV.v[1] = v.mV.v[1] * s;
-    r.mV.v[2] = v.mV.v[2] * s;
-    return r;
+    const VectorIntrinsic scalar = __vspltw(__lvlx(&s, 0), 0);
+    return Vector3(__vmulfp(v.mV, scalar));
 }
 
 template<VectorAxis INDEX>
@@ -171,24 +142,14 @@ inline Vector3 Mult(Vector3::InParam v, VecFloatRefIndex::InParam s)
 
 inline Vector3 Divide(Vector3::InParam v, VecFloat::InParam s)
 {
-    // reciprocal = 1/s (vrefp + Newton); vmaddfp(v, reciprocal, 0).
-    const float lfRecip = 1.0f / s.mV.v[VectorAxisX];
-    Vector3 r;
-    r.mV.v[0] = v.mV.v[0] * lfRecip;
-    r.mV.v[1] = v.mV.v[1] * lfRecip;
-    r.mV.v[2] = v.mV.v[2] * lfRecip;
-    return r;
+    return Vector3(__vmulfp(detail::Vector3NativeReciprocal(s.mV), v.mV));
 }
 
 inline Vector3 Divide(Vector3::InParam v, float s)
 {
-    // floatRecip = 1/s; broadcast; vmaddfp(v, reciprocal, 0).
+    // The named scalar overload computes a scalar reciprocal before broadcasting.
     const float lfRecip = 1.0f / s;
-    Vector3 r;
-    r.mV.v[0] = v.mV.v[0] * lfRecip;
-    r.mV.v[1] = v.mV.v[1] * lfRecip;
-    r.mV.v[2] = v.mV.v[2] * lfRecip;
-    return r;
+    return Vector3(__vmulfp(__vspltw(__lvlx(&lfRecip, 0), 0), v.mV));
 }
 
 template<VectorAxis INDEX>
@@ -219,25 +180,16 @@ inline Vector3 Divide(Vector3::InParam v, VecFloatRefIndex::InParam s)
 
 inline VecFloat Dot(Vector3::InParam a, Vector3::InParam b)
 {
-    // xx_yy_zz = vmaddfp(a,b,0); then vsldoi rotates and vaddfp sums X+Y+Z; vspltw lane0.
-    const float lfDot = a.mV.v[0] * b.mV.v[0]
-                      + a.mV.v[1] * b.mV.v[1]
-                      + a.mV.v[2] * b.mV.v[2];
-    return VecFloat(lfDot);
+    return VecFloat(__vmsum3fp(a.mV, b.mV));
 }
 
 inline Vector3 Cross(Vector3::InParam a, Vector3::InParam b)
 {
-    // gCrossProductPermuteConstant rotates lanes to [Y,Z,X]. The console builds
-    //   a*perm(b) - perm(a)*b   then permutes the result back, which is exactly the
-    //   y*z-z*y / z*x-x*z / x*y-y*x cross product.
-    const float ax = a.mV.v[0], ay = a.mV.v[1], az = a.mV.v[2];
-    const float bx = b.mV.v[0], by = b.mV.v[1], bz = b.mV.v[2];
-    Vector3 r;
-    r.mV.v[0] = ay * bz - az * by;
-    r.mV.v[1] = az * bx - ax * bz;
-    r.mV.v[2] = ax * by - ay * bx;
-    return r;
+    // ARTIST8254081C..54: rounded first product, fused subtraction, then YZX.
+    const VectorIntrinsic ayzx = __vpermwi(a.mV, 0x63);
+    const VectorIntrinsic byzx = __vpermwi(b.mV, 0x63);
+    const VectorIntrinsic product = __vmulfp(a.mV, byzx);
+    return Vector3(__vpermwi(__vnmsubfp(ayzx, b.mV, product), 0x63));
 }
 
 // =====================================================================================
@@ -246,11 +198,7 @@ inline Vector3 Cross(Vector3::InParam a, Vector3::InParam b)
 
 inline VecFloat MagnitudeSquared(Vector3::InParam v)
 {
-    // dot(v,v) reduced over X+Y+Z, splatted.
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2];
-    return VecFloat(lfDot);
+    return Dot(v, v);
 }
 
 inline VecFloat MagnitudeRecip(Vector3::InParam v)
@@ -264,12 +212,10 @@ inline VecFloat MagnitudeRecip(Vector3::InParam v)
 
 inline VecFloat Magnitude(Vector3::InParam v)
 {
-    // dotproduct = |v|^2 ; result = dotproduct * (1/sqrt(dotproduct)) == sqrt(dotproduct);
-    // vsel guards: a zero dot yields zero (avoids 0 * inf from the reciprocal estimate).
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2];
-    return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * (1.0f / sqrtf(lfDot)));
+    const VectorIntrinsic squared = __vmsum3fp(v.mV, v.mV);
+    const VectorIntrinsic reciprocal = detail::Vector3NativeReciprocalRoot(squared, 2);
+    const VectorIntrinsic zero = __vspltisw(0);
+    return VecFloat(__vsel(__vmulfp(squared, reciprocal), zero, __vcmpeqfp(squared, zero)));
 }
 
 // =====================================================================================
@@ -278,73 +224,39 @@ inline VecFloat Magnitude(Vector3::InParam v)
 
 inline Vector3 NormalizeEstimate(Vector3::InParam v)
 {
-    // temp = vrsqrtefp(dot) (raw estimate, no Newton refine); vmaddfp(v, temp, 0).
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    Vector3 r;
-    r.mV.v[0] = v.mV.v[0] * lfScale;
-    r.mV.v[1] = v.mV.v[1] * lfScale;
-    r.mV.v[2] = v.mV.v[2] * lfScale;
-    return r;
+    const VectorIntrinsic squared = __vmsum3fp(v.mV, v.mV);
+    const VectorIntrinsic reciprocal = detail::Vector3NativeReciprocalRoot(squared, 0);
+    return Vector3(__vmulfp(v.mV, reciprocal));
 }
 
 inline Vector3 NormalizeFast(Vector3::InParam v)
 {
-    // temp = 1/sqrt(dot) (estimate + one Newton step); vmaddfp(v, temp, 0).
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    Vector3 r;
-    r.mV.v[0] = v.mV.v[0] * lfScale;
-    r.mV.v[1] = v.mV.v[1] * lfScale;
-    r.mV.v[2] = v.mV.v[2] * lfScale;
-    return r;
+    const VectorIntrinsic squared = __vmsum3fp(v.mV, v.mV);
+    const VectorIntrinsic reciprocal = detail::Vector3NativeReciprocalRoot(squared, 1);
+    return Vector3(__vmulfp(v.mV, reciprocal));
 }
 
 inline Vector3 Normalize(Vector3::InParam v)
 {
-    // temp = 1/sqrt(dot) (estimate + two Newton steps); vmaddfp(v, temp, 0).
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    Vector3 r;
-    r.mV.v[0] = v.mV.v[0] * lfScale;
-    r.mV.v[1] = v.mV.v[1] * lfScale;
-    r.mV.v[2] = v.mV.v[2] * lfScale;
-    return r;
+    const VectorIntrinsic squared = __vmsum3fp(v.mV, v.mV);
+    const VectorIntrinsic reciprocal = detail::Vector3NativeReciprocalRoot(squared, 2);
+    return Vector3(__vmulfp(v.mV, reciprocal));
 }
 
 inline Vector3 Normalize(Vector3::InParam v, VecFloat& magnitude)
 {
-    // one_over_rqrt = 1/sqrt(dot); normalized = v * one_over_rqrt;
-    // result_mag = dot * one_over_rqrt == |v| ; vsel guards a zero-length input to mag 0.
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    Vector3 r;
-    r.mV.v[0] = v.mV.v[0] * lfScale;
-    r.mV.v[1] = v.mV.v[1] * lfScale;
-    r.mV.v[2] = v.mV.v[2] * lfScale;
-    magnitude = VecFloat(lfDot == 0.0f ? 0.0f : lfDot * lfScale);
-    return r;
+    const VectorIntrinsic squared = __vmsum3fp(v.mV, v.mV);
+    const VectorIntrinsic reciprocal = detail::Vector3NativeReciprocalRoot(squared, 2);
+    const VectorIntrinsic zero = __vspltisw(0);
+    magnitude = VecFloat(__vsel(__vmulfp(squared, reciprocal), zero, __vcmpeqfp(squared, zero)));
+    return Vector3(__vmulfp(v.mV, reciprocal));
 }
 
 inline VecFloat NormalizeReturnMagnitude(Vector3::InParam v, Vector3& result)
 {
-    // Same as Normalize(v, mag) but returns the magnitude and writes the unit vector out.
-    const float lfDot = v.mV.v[0] * v.mV.v[0]
-                      + v.mV.v[1] * v.mV.v[1]
-                      + v.mV.v[2] * v.mV.v[2];
-    const float lfScale = 1.0f / sqrtf(lfDot);
-    result.mV.v[0] = v.mV.v[0] * lfScale;
-    result.mV.v[1] = v.mV.v[1] * lfScale;
-    result.mV.v[2] = v.mV.v[2] * lfScale;
-    return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * lfScale);
+    VecFloat magnitude;
+    result = Normalize(v, magnitude);
+    return magnitude;
 }
 
 // CosAngleBetweenNormalizedVectors / AngleBetweenVectors -- DECLARATION-ONLY + FLAGGED.
@@ -395,32 +307,19 @@ inline Vector3 NLerp(Vector3::InParam v0, Vector3::InParam v1, VecFloat::InParam
 
 inline Vector3 Negate(Vector3::InParam v)
 {
-    // vxor(v, signMask): flip the sign bit of every lane.
-    Vector3 r;
-    r.mV.v[0] = -v.mV.v[0];
-    r.mV.v[1] = -v.mV.v[1];
-    r.mV.v[2] = -v.mV.v[2];
-    return r;
+    const VectorIntrinsic allOnes = __vspltisw(-1);
+    const VectorIntrinsic sign = __vslw(allOnes, allOnes);
+    return Vector3(__vxor(v.mV, sign));
 }
 
 inline Vector3 Min(Vector3::InParam v0, Vector3::InParam v1)
 {
-    // vminfp(v0,v1)
-    Vector3 r;
-    r.mV.v[0] = v0.mV.v[0] < v1.mV.v[0] ? v0.mV.v[0] : v1.mV.v[0];
-    r.mV.v[1] = v0.mV.v[1] < v1.mV.v[1] ? v0.mV.v[1] : v1.mV.v[1];
-    r.mV.v[2] = v0.mV.v[2] < v1.mV.v[2] ? v0.mV.v[2] : v1.mV.v[2];
-    return r;
+    return Vector3(__vminfp(v0.mV, v1.mV));
 }
 
 inline Vector3 Max(Vector3::InParam v0, Vector3::InParam v1)
 {
-    // vmaxfp(v0,v1)
-    Vector3 r;
-    r.mV.v[0] = v0.mV.v[0] > v1.mV.v[0] ? v0.mV.v[0] : v1.mV.v[0];
-    r.mV.v[1] = v0.mV.v[1] > v1.mV.v[1] ? v0.mV.v[1] : v1.mV.v[1];
-    r.mV.v[2] = v0.mV.v[2] > v1.mV.v[2] ? v0.mV.v[2] : v1.mV.v[2];
-    return r;
+    return Vector3(__vmaxfp(v0.mV, v1.mV));
 }
 
 inline Vector3 Clamp(Vector3::InParam v0, Vector3::InParam v1, Vector3::InParam v2)
@@ -431,12 +330,8 @@ inline Vector3 Clamp(Vector3::InParam v0, Vector3::InParam v1, Vector3::InParam 
 
 inline Vector3 Abs(Vector3::InParam v)
 {
-    // vandc(v, signBitMask): clear the sign bit of every lane.
-    Vector3 r;
-    r.mV.v[0] = v.mV.v[0] < 0.0f ? -v.mV.v[0] : v.mV.v[0];
-    r.mV.v[1] = v.mV.v[1] < 0.0f ? -v.mV.v[1] : v.mV.v[1];
-    r.mV.v[2] = v.mV.v[2] < 0.0f ? -v.mV.v[2] : v.mV.v[2];
-    return r;
+    const VectorIntrinsic allOnes = __vspltisw(-1);
+    return Vector3(__vandc(v.mV, __vslw(allOnes, allOnes)));
 }
 
 // =====================================================================================
@@ -540,7 +435,7 @@ inline Vector3& operator /= (Vector3& v, float s)
 
 inline Vector3 operator * (Vector3::InParam v, float s) { return Mult(v, s); }
 inline Vector3 operator * (float s, Vector3::InParam v) { return Mult(v, s); }
-inline Vector3 operator / (Vector3::InParam v, float s) { return Divide(v, s); }
+inline Vector3 operator / (Vector3::InParam v, float s) { return Divide(v, VecFloat(s)); }
 
 inline Vector3 operator + (Vector3::InParam v, float s)
 {
