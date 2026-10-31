@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"                  // rw::IResourceAllocator
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
 
 // =============================================================================
 // CgsRasterizerStateFactory.h  (GameShared/GameClasses/Graphics)
