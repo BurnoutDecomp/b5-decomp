@@ -330,7 +330,6 @@ namespace BrnGui
         // independently-recovered offsets corroborate each other.
         Array<rw::math::vpu::Vector3, KU_ROUTE_POINT_CAPACITY> mRoutePoints;
 
-        u8  maPostRoutePad[0x65060 - 0x65054];   // +0x65054..+0x6505F
 
         s32 miCurrentlyTrackedIndex; // +0x65060  index into maTrackerRecords of the tracker
                                      //           the player is currently heading for; -1 ==
