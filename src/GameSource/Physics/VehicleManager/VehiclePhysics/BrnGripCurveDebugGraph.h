@@ -43,7 +43,7 @@ namespace Vehicle
         rw::math::vpu::Vector2 GetTitleLocation() const
         {
             rw::math::vpu::Vector2 lLocation = mAxisTopLeft;
-            lLocation.y -= 36.0f;
+            lLocation.mV.y -= 36.0f;
             return lLocation;
         }
 
