@@ -154,9 +154,6 @@ namespace BrnGui
             }
         }
 
-        // ARTIST82448310: dispatch through the embedded TextField.
-        void SetIconText(const char* lpcText, bool lbAlreadyLocalised);
-
         // @ 0x827DD5B0
         void SetRotation(f32 lfRotationInRadians)
         {
