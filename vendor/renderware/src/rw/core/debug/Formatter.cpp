@@ -64,26 +64,26 @@ namespace rw { namespace core { namespace debug {
         if (lbHaveInfo && lPrintOpts.mLine)
         {
             char lacLine[32];
-            std::snprintf(lacLine, sizeof(lacLine), "%d", static_cast<int>(lpChannel->mLine));
+            ::_snprintf(lacLine, sizeof(lacLine), "%d", static_cast<int>(lpChannel->mLine));
             AppendField(lpBuffer, lacLine);
         }
 
         if (lPrintOpts.mDate)
         {
             char lacDate[32];
-            _strdate_s(lacDate, sizeof(lacDate));
+            ::_strdate(lacDate);
             AppendField(lpBuffer, lacDate);
         }
 
         if (lPrintOpts.mTime)
         {
             char lacTime[96];
-            _strtime_s(lacTime, sizeof(lacTime));
+            ::_strtime(lacTime);
             AppendField(lpBuffer, lacTime);
         }
 
         const size_t luUsed = std::strlen(lpBuffer);
-        std::vsnprintf(lpBuffer + luUsed, luBufferLength - luUsed, lpcFormat, lArgs);
+        ::vsnprintf(lpBuffer + luUsed, luBufferLength - luUsed, lpcFormat, lArgs);
 
         if (lPrintOpts.mNewLine)
             std::strcat(lpBuffer, "\n");
