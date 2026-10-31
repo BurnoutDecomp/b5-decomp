@@ -45,6 +45,7 @@
 // game-mode and icon-type literals are resolved to their canonical enumerators (DecFIGS
 // DWARF): EGameModeType (BrnGameStateSharedIO.h) and SatNavIconType (BrnGuiEventTypeDefs.h).
 
+#include "rw/math/vpu/vector2_operation.h"
 #include "GameSource/Gui/SatNav/BrnMapIconManager.h"
 #include "GameSource/Gui/BrnGuiCache.h"               // BrnGui::GuiCache accessors (drive-throughs / team / mode)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // BrnGameState::GameStateModuleIO::EGameModeType
@@ -404,9 +405,7 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
                 li8IconType == SatNavIconInfo::E_SATNAVICON_RIVAL)
             {
                 const Vector4& lv4Pos = lrIcon.GetPositionLane();
-                Vector3 lv3World;
-                lv3World.x = lv4Pos.x; lv3World.y = lv4Pos.y;
-                lv3World.z = lv4Pos.z; lv3World.w = lv4Pos.w;
+                const Vector3 lv3World(lv4Pos.mV);
 
                 lpav2Positions[liNumRivals] = MapTransform::WorldToDevice(lv3World, false);
                 ++liNumRivals;
@@ -440,9 +439,7 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
                     GetDriveThroughOrJunkyardAtIndex(liDriveThrough);
 
                 const Vector4& lv4Pos = lpIcon->GetPositionLane();
-                Vector3 lv3World;
-                lv3World.x = lv4Pos.x; lv3World.y = lv4Pos.y;
-                lv3World.z = lv4Pos.z; lv3World.w = lv4Pos.w;
+                const Vector3 lv3World(lv4Pos.mV);
 
                 lpav2Positions[*lpiNumIcons] = MapTransform::WorldToDevice(lv3World, false);
                 ++(*lpiNumIcons);
@@ -463,9 +460,7 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
     if (mbAllowPlayerSelection)   // +0xA1B1
     {
         const Vector4& lv4Player = mpGuiCache->GetWorldCameraPosition();
-        Vector3 lv3World;
-        lv3World.x = lv4Player.x; lv3World.y = lv4Player.y;
-        lv3World.z = lv4Player.z; lv3World.w = lv4Player.w;
+        const Vector3 lv3World(lv4Player.mV);
 
         lpav2Positions[*lpiNumIcons] = MapTransform::WorldToDevice(lv3World, false);
         ++(*lpiNumIcons);
@@ -605,14 +600,6 @@ MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
                     BrnFlapt::FileRef lFile;
                     lpFlaptManager->GetFile(&lFile, 0);
                     lrComponent.Prepare(lacIconName, lFile);
-                    // [DIAG] NOT IN THE X360 BINARY -- H3c: did the named clip resolve?
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                        *CgsDev::Log::gpDebugPrint
-                            << "[satnav-icon] bind '" << lacIconName << "' clip="
-                            << (lrComponent.GetMovieClipRef().IsValid() ? 1 : 0)
-                            << " xform="
-                            << ((lrComponent.GetMovieClipRef().mpTransform != 0) ? 1 : 0)
-                            << "\n";
                     lrComponent.mIcon.SetState(MapIconBrnBase::E_ICONSTATE_INVISIBLE);
                 }
             }
@@ -777,8 +764,8 @@ void MapIconManager::UpdateSatNavInfo(const GuiEventUpdateSatNav* lpSatNavEvent)
         if (lbBoundsTest)
         {
             const Vector4& lv4Pos = lrIcon.GetPositionLane();
-            if (lv4Bounds.x > lv4Pos.x || lv4Pos.x > lv4Bounds.z ||
-                lv4Pos.z > lv4Bounds.y || lv4Bounds.w > lv4Pos.z)
+            if (lv4Bounds.mV.x > lv4Pos.mV.x || lv4Pos.mV.x > lv4Bounds.mV.z ||
+                lv4Pos.mV.z > lv4Bounds.mV.y || lv4Bounds.mV.w > lv4Pos.mV.z)
                 lbWanted = false;
         }
 
@@ -858,18 +845,40 @@ int MapIconManager::IconDisplaySort(const void* lpA, const void* lpB)
 // @ 0x82502940 -- the small-mode icon alpha by x/z-plane distance from the camera lane
 // (the @0x82CDA450 vperm picks {x, z} from BOTH operands; the two function-local statics
 // 50.0/100.0 collapse to their constants; 0.00046511628897860646 @0x82074AC4 == 1/2150).
-f32 MapIconManager::CalculateAlpha(const Vector4& lv4IconPosition, const Vector4& lv4CameraPosition)
+f32 MapIconManager::CalculateAlpha(Vector3 lv3IconPosition, Vector2 lv2CameraPosition)
 {
-    const f32 lfDx = lv4CameraPosition.x - lv4IconPosition.x;
-    const f32 lfDz = lv4CameraPosition.z - lv4IconPosition.z;
-    const f32 lfDistSq = lfDx * lfDx + lfDz * lfDz;
-    const f32 lfDist = (lfDistSq == 0.0f) ? 0.0f : sqrtf(lfDistSq);   // the vsel zero guard
+    // ARTIST82502940..998 lazily seeds the two function-local alpha values.
+    static f32 sfFarAlpha;
+    static f32 sfNearAlpha;
+    static u32 suAlphaInitialised;
+    if ((suAlphaInitialised & 1) == 0)
+    {
+        sfFarAlpha = 50.0f;
+        suAlphaInitialised |= 1;
+    }
+    if ((suAlphaInitialised & 2) == 0)
+    {
+        sfNearAlpha = 100.0f;
+        suAlphaInitialised |= 2;
+    }
 
-    if (lfDist < 850.0f)
+    Vector2 lv2Delta;
+    lv2Delta.mV = __vsubfp(lv2CameraPosition.mV,
+        __vpermwi(lv3IconPosition.mV, VPERMWI_CONST(0, 2, 0, 0)));
+    const f32 lfDistance = rw::math::vpu::Magnitude(lv2Delta).GetFloat();
+    if (lfDistance < 850.0f)
         return 100.0f;
-    if (lfDist <= 2150.0f)
-        return (50.0f - 100.0f) * ((lfDist - 850.0f) * 0.00046511628897860646f) + 100.0f;
-    return 50.0f;
+    if (lfDistance > 2150.0f)
+        return 50.0f;
+
+    const f32 lfDistanceFromNear = lfDistance - 850.0f;
+    const f32 lfScale = lfDistanceFromNear * 0.00046511628897860646f;
+    const Vector4 lv4FarAlpha(sfFarAlpha, 0.0f, 0.0f, 0.0f);
+    const Vector4 lv4NearAlpha(sfNearAlpha, 0.0f, 0.0f, 0.0f);
+    const Vector4 lv4Scale(lfScale, 0.0f, 0.0f, 0.0f);
+    const __vector4 lvNearAlpha = __vspltw(lv4NearAlpha.mV, 0);
+    const __vector4 lvAlphaDelta = __vsubfp(__vspltw(lv4FarAlpha.mV, 0), lvNearAlpha);
+    return __vmaddfp(lvAlphaDelta, __vspltw(lv4Scale.mV, 0), lvNearAlpha).x;
 }
 
 // @ 0x824FA320 -- the icon state for a rival / network-rival record.
@@ -943,24 +952,36 @@ s32 MapIconManager::GetSatNavIconStateForRival(const GuiEventUpdateSatNav::SatNa
         // 90-degree cone (acos of the heading-dot against half of 90deg-in-radians).
         const Vector4& lv4Icon   = lpIcon->GetPositionLane();
         const Vector4& lv4Player = mPlayerIconInfo.GetPositionLane();
-        const f32 lfDx = lv4Icon.x - lv4Player.x;
-        const f32 lfDy = lv4Icon.y - lv4Player.y;
-        const f32 lfDz = lv4Icon.z - lv4Player.z;
-        const f32 lfDistSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
-        if (lfDistSq > 100.0f * 100.0f)
+        const __vector4 lvDelta = __vsubfp(lv4Icon.mV, lv4Player.mV);
+        const __vector4 lvSquared = __vmsum3fp(lvDelta, lvDelta);
+        if (lvSquared.x > 100.0f * 100.0f)
         {
-            const f32 KF_RIVAL_FOV = 90.0f * 0.017453292f;   // the @0x82FB58E8 guarded static
-            const f32 lfHeading = mPlayerIconInfo.GetRotation();
-            // RotationY(heading) . (0,0,1) == {sin, 0, cos} (the row-2 pick).
-            const f32 lfDirX = sinf(lfHeading);
-            const f32 lfDirZ = cosf(lfHeading);
-            const f32 lfInvLen = 1.0f / sqrtf(lfDistSq);
-            const f32 lfDot = lfDirX * (lfDx * lfInvLen) + lfDirZ * (lfDz * lfInvLen);
+            // ARTIST 824FA640: the original function-local FOV is initialized lazily
+            // by a VMX multiply, before constructing the heading matrix.
+            static const f32 sfRivalFov = __vmulfp(
+                Vector4(90.0f, 90.0f, 90.0f, 90.0f).mV,
+                Vector4(0.01745329238474369f, 0.01745329238474369f,
+                        0.01745329238474369f, 0.01745329238474369f).mV).x;
+            const XMMATRIX lmHeading = XMMatrixRotationY(mPlayerIconInfo.GetRotation());
+            const __vector4 lvZero = __vspltisw(0);
+            const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+            const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+            __vector4 lvDirection = __vmulfp(lmHeading.r[0], lvZero);
+            lvDirection = __vmaddfp(lmHeading.r[1], lvZero, lvDirection);
+            lvDirection = __vmaddfp(lmHeading.r[2], lvOne, lvDirection);
+            __vector4 lvEstimate = __vrsqrtefp(lvSquared);
+            for (s32 liRefinement = 0; liRefinement < 2; ++liRefinement)
+            {
+                const __vector4 lvSquare = __vmulfp(lvEstimate, lvEstimate);
+                const __vector4 lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+                const __vector4 lvResidual = __vnmsubfp(lvSquared, lvSquare, lvOne);
+                lvEstimate = __vmaddfp(lvHalfEstimate, lvResidual, lvEstimate);
+            }
+            const __vector4 lvNormalised = __vmulfp(lvDelta, lvEstimate);
+            const f32 lfDot = __vmsum3fp(lvNormalised, lvDirection).x;
             if (lfDot < 0.0f)
                 return 0;
-            // bl XMVectorACos @0x824FA79C, then `fcmpu ; ble` keep @0x824FA7B8 / 0x824FA7BC
-            // (crash parity FX-GATE: the console's own arc-cosine, not acosf).
-            if (XboxMath::XMVectorACos(lfDot) > KF_RIVAL_FOV * 0.5f)
+            if (!(XboxMath::XMVectorACos(lfDot) <= sfRivalFov * 0.5f))
                 return 0;
         }
     }
@@ -1035,10 +1056,10 @@ void MapIconManager::UpdateFreeburnChallengeIcons()
     mpGuiCache->GetWorldDataController()->GetTriggerVolumeRegion(lTriggerID, &lBox);
     const Vector3 lv3BoxPosition = lBox.GetPosition();
     Vector4 lv4Position;
-    lv4Position.x = lv3BoxPosition.x;
-    lv4Position.y = lv3BoxPosition.y;
-    lv4Position.z = lv3BoxPosition.z;
-    lv4Position.w = 0.0f;
+    lv4Position.mV.x = lv3BoxPosition.mV.x;
+    lv4Position.mV.y = lv3BoxPosition.mV.y;
+    lv4Position.mV.z = lv3BoxPosition.mV.z;
+    lv4Position.mV.w = 0.0f;
 
     SatNavIconInfo& lrIcon = mSatNavIconInfo[miNumUsedIcons];
     lrIcon.SetIconType(SatNavIconInfo::E_SATNAVICON_FREEBURN_CHALLENGE);
@@ -1191,8 +1212,8 @@ bool MapIconManager::ShouldDisplayLandmark(const SatNavIconInfo* lpIcon)
         return true;
     const Vector4& lrBounds = MapTransform::GetZoomedWorldRect();
     const Vector4& lrPos = lpIcon->GetPositionLane();
-    return lrPos.x >= lrBounds.x && lrPos.x <= lrBounds.z &&
-        lrPos.z <= lrBounds.y && lrPos.z >= lrBounds.w;
+    return lrPos.mV.x >= lrBounds.mV.x && lrPos.mV.x <= lrBounds.mV.z &&
+        lrPos.mV.z <= lrBounds.mV.y && lrPos.mV.z >= lrBounds.mV.w;
 }
 
 // @ 0x82511C88 -- refresh the world-derived icons into the used set.
@@ -1264,8 +1285,8 @@ void MapIconManager::UpdateWorldIcons()
                 continue;
 
             const Vector4& lv4Pos = lpDriveThrough->GetPositionLane();
-            const bool lbInView = (lv4Pos.x >= lv4Bounds.x && lv4Bounds.z >= lv4Pos.x &&
-                                   lv4Bounds.y >= lv4Pos.z && lv4Pos.z >= lv4Bounds.w);
+            const bool lbInView = (lv4Pos.mV.x >= lv4Bounds.mV.x && lv4Bounds.mV.z >= lv4Pos.mV.x &&
+                                   lv4Bounds.mV.y >= lv4Pos.mV.z && lv4Pos.mV.z >= lv4Bounds.mV.w);
             if (lbInView)
             {
                 if (li8Type == GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_JUNKYARD)   // 7
@@ -1288,10 +1309,8 @@ void MapIconManager::UpdateWorldIcons()
                      && mpGuiCache->IsCarUnlockPending()
                      && li8Type == GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_JUNKYARD)
             {
-                const f32 lfDx = lv4Pos.x - lv4Player.x;
-                const f32 lfDy = lv4Pos.y - lv4Player.y;
-                const f32 lfDz = lv4Pos.z - lv4Player.z;
-                const f32 lfDistSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
+                const __vector4 lvDelta = __vsubfp(lv4Pos.mV, lv4Player.mV);
+                const f32 lfDistSq = __vmsum3fp(lvDelta, lvDelta).x;
                 if (lfDistSq < lfBestJunkyardDistSq)
                 {
                     lfBestJunkyardDistSq = lfDistSq;
@@ -1306,10 +1325,8 @@ void MapIconManager::UpdateWorldIcons()
                     || lbRoadRageOrMarkedMan;
                 if (lbWantNearestBodyShop)
                 {
-                    const f32 lfDx = lv4Pos.x - lv4Player.x;
-                    const f32 lfDy = lv4Pos.y - lv4Player.y;
-                    const f32 lfDz = lv4Pos.z - lv4Player.z;
-                    const f32 lfDistSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
+                    const __vector4 lvDelta = __vsubfp(lv4Pos.mV, lv4Player.mV);
+                    const f32 lfDistSq = __vmsum3fp(lvDelta, lvDelta).x;
                     if (lfDistSq < lfBestBodyShopDistSq)
                     {
                         lfBestBodyShopDistSq = lfDistSq;
@@ -1344,10 +1361,6 @@ void MapIconManager::UpdateSatNavIcons()
 {
     typedef GuiEventUpdateSatNav::SatNavIconInfo SatNavIconInfo;
 
-    // [DIAG] NOT IN THE X360 BINARY -- see the per-icon print below.
-    static s32 siDiagTick = 0;
-    const bool gbSatNavIconDiag = ((siDiagTick++ % 300) == 0);
-
     s32 liExtraIcons = 0;   // X360 v96 -- the route start-point icon reserves pool slot 0
 
     CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // :1533 (non-gating)
@@ -1365,11 +1378,6 @@ void MapIconManager::UpdateSatNavIcons()
 
     const s32 liNumIcons = (miNumUsedIcons >= miMaxNumberIcons) ? miMaxNumberIcons
                                                                 : miNumUsedIcons;   // X360 v95
-    if (gbSatNavIconDiag && CgsDev::Log::gpDebugPrint != 0)
-        *CgsDev::Log::gpDebugPrint
-            << "[satnav-icon] tick: used=" << miNumUsedIcons << " max=" << miMaxNumberIcons
-            << " draw=" << liNumIcons << " sizeMode=" << static_cast<s32>(meIconSizeMode)
-            << " visible=" << (mbIconsVisible ? 1 : 0) << "\n";
     AddTeamToNetworkRivals();
     qsort(mSatNavIconInfo, static_cast<size_t>(liNumIcons), sizeof(SatNavIconInfo),
           IconDisplaySort);
@@ -1408,6 +1416,8 @@ void MapIconManager::UpdateSatNavIcons()
     // v124: the camera lane the alpha fade measures against (perm {x,z} @0x82CDA450 --
     // CalculateAlpha takes the raw lane and picks x/z itself here).
     const Vector4& lv4Camera = mpGuiCache->GetWorldCameraPosition();   // cache +0x4AE0
+    Vector2 lv2CameraPosition;
+    lv2CameraPosition.mV = __vpermwi(lv4Camera.mV, VPERMWI_CONST(0, 2, 0, 0));
 
     s32 liIcon = 0;
     for (; liIcon < liNumIcons; ++liIcon)
@@ -1417,7 +1427,8 @@ void MapIconManager::UpdateSatNavIcons()
 
         s32 liState = MapIconBrnBase::E_ICONSTATE_INVISIBLE;   // 0
         bool lbNearEventIcon = false;                          // X360 v22
-        f32 lfStackOffsetY = 0.0f;   // the stack offset's y lane; only the case-4
+        Vector2 lv2StackOffset;
+        lv2StackOffset.SetZero();   // the stack offset's y lane; only the case-4
                                      // checkpoint-stacking arms raise it.
 
         SatNavMapIcon& lrIcon = mSatNavMapIcons[liIcon + liExtraIcons].mIcon;
@@ -1455,18 +1466,17 @@ void MapIconManager::UpdateSatNavIcons()
             // The LARGE-map event-icon proximity fade (freeburn big map only).
             if (meIconSizeMode == E_ICONSIZE_LARGE && mpGuiCache->GetGameMode() == -1)
             {
-                Vector3 lv3Camera;
-                lv3Camera.x = lv4Camera.x; lv3Camera.y = lv4Camera.y;
-                lv3Camera.z = lv4Camera.z; lv3Camera.w = lv4Camera.w;
+                const Vector3 lv3Camera(lv4Camera.mV);
                 const Vector2 lv2Player = MapTransform::WorldToDevice(lv3Camera, false);
                 Vector2 lav2EventIcons[EventIconManager::KI_MAX_2DEVENTICONS];
                 s32 liNumEventIcons = 0;
                 mEventIconManager.GetEventIconPositions(lav2EventIcons, &liNumEventIcons);
                 for (s32 liEvent = 0; liEvent < liNumEventIcons; ++liEvent)
                 {
-                    const f32 lfDx = lv2Player.x - lav2EventIcons[liEvent].x;
-                    const f32 lfDy = lv2Player.y - lav2EventIcons[liEvent].y;
-                    if (900.0f > lfDx * lfDx + lfDy * lfDy)
+                    const __vector4 lvDelta = __vsubfp(lv2Player.mV, lav2EventIcons[liEvent].mV);
+                    const __vector4 lvSquared = __vmulfp(lvDelta, lvDelta);
+                    const __vector4 lvDistanceSq = __vaddfp(__vspltw(lvSquared, 0), __vspltw(lvSquared, 1));
+                    if (900.0f > lvDistanceSq.x)
                     {
                         lrIcon.SetAlpha(50.0f);
                         lbNearEventIcon = true;
@@ -1565,7 +1575,7 @@ void MapIconManager::UpdateSatNavIcons()
                     {
                         if (liEarlier || mpGuiCache->mau16ActiveLandmarks[luCount - 1] != luLandmark || lbOnlineRace)
                         {
-                            lfStackOffsetY = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
+                            lv2StackOffset.mV.y = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
                             char lacCheckpoint[128];
                             if (liDuplicates - liEarlier == 1)
                                 CgsCore::SPrintf(lacCheckpoint, sizeof(lacCheckpoint), "%d", liCheckpoint);
@@ -1575,10 +1585,10 @@ void MapIconManager::UpdateSatNavIcons()
                             liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_CHECKPOINT;
                         }
                         else
-                            lfStackOffsetY = static_cast<f32>(liDuplicates - 1) * -4.0f;
+                            lv2StackOffset.mV.y = static_cast<f32>(liDuplicates - 1) * -4.0f;
                     }
                     else
-                        lfStackOffsetY = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
+                        lv2StackOffset.mV.y = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
                 }
                 else if (IsStartIcon(&lrRecord))
                     liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_LANDMARKSTART;
@@ -1663,7 +1673,7 @@ void MapIconManager::UpdateSatNavIcons()
             && liState != MapIconBrnBase::E_ICONSTATE_INVISIBLE
             && meIconSizeMode == E_ICONSIZE_SMALL)
         {
-            lrIcon.SetAlpha(CalculateAlpha(lrRecord.GetPositionLane(), lv4Camera));
+            lrIcon.SetAlpha(CalculateAlpha(Vector3(lrRecord.GetPositionLane().mV), lv2CameraPosition));
         }
         else
         {
@@ -1679,27 +1689,13 @@ void MapIconManager::UpdateSatNavIcons()
         }
 
         {
-            Vector3 lv3Record;
             const Vector4& lv4Pos = lrRecord.GetPositionLane();
-            lv3Record.x = lv4Pos.x; lv3Record.y = lv4Pos.y;
-            lv3Record.z = lv4Pos.z; lv3Record.w = lv4Pos.w;
+            const Vector3 lv3Record(lv4Pos.mV);
             Vector2 lv2Device = MapTransform::WorldToDevice(lv3Record, true);
-            lv2Device.y += lfStackOffsetY;   // the checkpoint-stacking lift
+            lv2Device.mV = __vaddfp(lv2Device.mV, lv2StackOffset.mV);
             lrIcon.SetPosition(lv2Device);
         }
         lrIcon.SetState(static_cast<MapIconBrnBase::IconState>(liState));
-        // [DIAG] NOT IN THE X360 BINARY -- H3c arrow proof: what state + device position
-        // each pool component actually receives. Once per 300 manager ticks, all icons.
-        if (gbSatNavIconDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const Vector2 lv2Now = lrIcon.GetPosition();
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav-icon] slot " << (liIcon + liExtraIcons)
-                << " type " << static_cast<s32>(li8IconType)
-                << " state " << liState
-                << " id=" << static_cast<u32>(lrRecord.GetCgsId())
-                << " dev(" << lv2Now.x << "," << lv2Now.y << ")\n";
-        }
         lrIcon.Update();   // the X360 slot-+0x20 commit -- a folded-empty no-op for sat-nav icons
     }
 
@@ -1812,6 +1808,8 @@ void MapIconManager::UpdateCrashNavIcons()
     // v124: the camera lane the alpha fade measures against (the @0x82CDA450 vperm picks
     // {x, z}; CalculateAlpha takes the raw lane and picks the pair itself).
     const Vector4& lv4Camera = mpGuiCache->GetWorldCameraPosition();   // cache +0x4AE0
+    Vector2 lv2CameraPosition;
+    lv2CameraPosition.mV = __vpermwi(lv4Camera.mV, VPERMWI_CONST(0, 2, 0, 0));
 
     s32 liIcon = 0;
     for (; liIcon < liNumIcons; ++liIcon)
@@ -1825,8 +1823,7 @@ void MapIconManager::UpdateCrashNavIcons()
         // The device-space offset added to the committed position; only the case-4
         // checkpoint-stacking arms raise it.
         Vector2 lv2StackOffset;
-        lv2StackOffset.x = 0.0f; lv2StackOffset.y = 0.0f;
-        lv2StackOffset.z = 0.0f; lv2StackOffset.w = 0.0f;
+        lv2StackOffset.SetZero();
 
         CrashNavMapIcon&      lrIcon   = mCrashNavIcons[liIcon + liExtraIcons].mIcon;
         SatNavIconInfo& lrRecord = mSatNavIconInfo[liIcon];
@@ -1863,9 +1860,7 @@ void MapIconManager::UpdateCrashNavIcons()
             // The LARGE-map event-icon proximity fade (freeburn big map only).
             if (meIconSizeMode == E_ICONSIZE_LARGE && mpGuiCache->GetGameMode() == -1)
             {
-                Vector3 lv3Camera;
-                lv3Camera.x = lv4Camera.x; lv3Camera.y = lv4Camera.y;
-                lv3Camera.z = lv4Camera.z; lv3Camera.w = lv4Camera.w;
+                const Vector3 lv3Camera(lv4Camera.mV);
                 const Vector2 lv2Player = MapTransform::WorldToDevice(lv3Camera, false);
 
                 Vector2 lav2EventIcons[EventIconManager::KI_MAX_2DEVENTICONS];
@@ -1874,9 +1869,10 @@ void MapIconManager::UpdateCrashNavIcons()
 
                 for (s32 liEvent = 0; liEvent < liNumEventIcons; ++liEvent)
                 {
-                    const f32 lfDx = lv2Player.x - lav2EventIcons[liEvent].x;
-                    const f32 lfDy = lv2Player.y - lav2EventIcons[liEvent].y;
-                    if (900.0f > lfDx * lfDx + lfDy * lfDy)
+                    const __vector4 lvDelta = __vsubfp(lv2Player.mV, lav2EventIcons[liEvent].mV);
+                    const __vector4 lvSquared = __vmulfp(lvDelta, lvDelta);
+                    const __vector4 lvDistanceSq = __vaddfp(__vspltw(lvSquared, 0), __vspltw(lvSquared, 1));
+                    if (900.0f > lvDistanceSq.x)
                     {
                         lrIcon.SetAlpha(50.0f);
                         lbNearEventIcon = true;
@@ -1969,7 +1965,7 @@ void MapIconManager::UpdateCrashNavIcons()
                     {
                         if (liEarlier || mpGuiCache->mau16ActiveLandmarks[luCount - 1] != luLandmark || lbOnlineRace)
                         {
-                            lv2StackOffset.y = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
+                            lv2StackOffset.mV.y = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
                             char lacCheckpoint[128];
                             if (liDuplicates - liEarlier == 1)
                                 CgsCore::SPrintf(lacCheckpoint, sizeof(lacCheckpoint), "%d", liCheckpoint);
@@ -1979,10 +1975,10 @@ void MapIconManager::UpdateCrashNavIcons()
                             liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_ONLINE_CHECKPOINT;
                         }
                         else
-                            lv2StackOffset.y = static_cast<f32>(liDuplicates - 1) * -4.0f;
+                            lv2StackOffset.mV.y = static_cast<f32>(liDuplicates - 1) * -4.0f;
                     }
                     else
-                        lv2StackOffset.y = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
+                        lv2StackOffset.mV.y = static_cast<f32>(liDuplicates - liEarlier - 1) * -4.0f;
                 }
                 else if (IsStartIcon(&lrRecord))
                     liState = MapIconBrnBase::E_ICONSTATE_CRASHNAV_LANDMARKSTART;
@@ -2068,7 +2064,7 @@ void MapIconManager::UpdateCrashNavIcons()
             && liState != MapIconBrnBase::E_ICONSTATE_INVISIBLE
             && meIconSizeMode == E_ICONSIZE_SMALL)
         {
-            lrIcon.SetAlpha(CalculateAlpha(lrRecord.GetPositionLane(), lv4Camera));
+            lrIcon.SetAlpha(CalculateAlpha(Vector3(lrRecord.GetPositionLane().mV), lv2CameraPosition));
         }
         else
         {
@@ -2093,15 +2089,12 @@ void MapIconManager::UpdateCrashNavIcons()
         lrIcon.muId = static_cast<u32>(lrRecord.GetCgsId());
 
         {
-            Vector3 lv3Record;
             const Vector4& lv4Pos = lrRecord.GetPositionLane();
-            lv3Record.x = lv4Pos.x; lv3Record.y = lv4Pos.y;
-            lv3Record.z = lv4Pos.z; lv3Record.w = lv4Pos.w;
+            const Vector3 lv3Record(lv4Pos.mV);
 
             // lbClamp = TRUE here (r3 = 1): the drawn icons ARE pulled to the map edge.
             Vector2 lv2Device = MapTransform::WorldToDevice(lv3Record, true);
-            lv2Device.x += lv2StackOffset.x;
-            lv2Device.y += lv2StackOffset.y;
+            lv2Device.mV = __vaddfp(lv2Device.mV, lv2StackOffset.mV);
             lrIcon.SetPosition(lv2Device);
         }
 
@@ -2160,11 +2153,6 @@ void MapIconManager::UpdateCrashNavIcons()
                 mPayload.liNumberOfIcons = liCount;
             }
         } lRecord(&mCrashNavIcons[0], miNumUsedIcons);   // lwz +0x990 / addi +0x9A0
-        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the bank handoff, every 120th post.
-        {
-            static s32 siPostTick = 0;
-            static s32 siBankRows = 0;
-        }
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRecord),
             40 /* KI_CHANNEL_GUI_EVENT_OUT */, static_cast<s32>(sizeof(lRecord)));
