@@ -21,7 +21,7 @@ namespace CgsGui
     // CgsSaveLoad.h:44/:45/:50 -- save/load sizing constants.
     const u32 KI_KB_SIZE_BYTES                  = 1024;
     const u32 KI_FILE_BLOCK_SIZE_BYTES          = 65536;
-    const s32 KI_MAX_IMAGE_FILES_PER_OPERATION  = 7;
+    const s32 KI_MAX_IMAGE_FILES_PER_OPERATION  = 3;
 
     // CgsSaveLoad.h:55 -- the result reported back to a SaveLoadTaskResultHandler.
     enum ESaveLoadTaskResult
