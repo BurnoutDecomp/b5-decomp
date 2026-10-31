@@ -575,6 +575,17 @@ namespace BrnResource
                 // pointer-width units when provisioning its host backing memory.
                 luHeapBytes *= static_cast<u32>(sizeof(void*) / sizeof(u32));
             }
+            else if (lrDef.miBankId == 32)
+            {
+                // FLAG PC-platform leaf: Apt_Heap_Allocator backs every DOGMA pool, whose
+                // objects widen on x64, and DOGMA never returns a pool to the heap. The
+                // ARTIST size (0xD0000) ran dry when the CrashNavMap was closed
+                // (AptAlloc 16384 bytes -> null -> access violation). 8 MB is the size the
+                // PC build ran with before this bank was wired to the memory map.
+                const u32 KU_PC_APT_HEAP_BYTES = 8u * 1024u * 1024u;
+                if (luHeapBytes < KU_PC_APT_HEAP_BYTES)
+                    luHeapBytes = KU_PC_APT_HEAP_BYTES;
+            }
             void* lpMem = LaneAlloc::Carve(lpAllocator, luHeapBytes, lrDef.mauAlign[0],
                                            lrDef.mpcName);
             if (lpMem == 0)
