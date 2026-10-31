@@ -378,7 +378,7 @@ namespace BrnGui
 
         // @ 0x82502940 -- the small-mode icon alpha by x/z distance from the camera
         // lane: <850 -> 100, <=2150 -> 100 - 50*(d-850)/2150, else 50.
-        static f32 CalculateAlpha(const Vector4& lv4IconPosition, const Vector4& lv4CameraPosition);
+        f32 CalculateAlpha(Vector3 lv3IconPosition, Vector2 lv2CameraPosition);
 
         // @ 0x824F4508 -- the qsort comparator over the 48-byte icon records: descending
         // icon type; equal NETWORKRIVAL records order by the player-team byte (team 2 last).
