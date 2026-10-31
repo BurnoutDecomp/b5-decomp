@@ -18,8 +18,8 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_RWAC_VOICE_DIAG
-#include <cstdlib>                                            // [DIAG] getenv
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gxMessageFilterFlags debug stream
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // DoUpdate monitor
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoiceConfig.h"
@@ -664,8 +664,6 @@ void GenericRwacFactory::HandlePluginEvent(
         CGS_ASSERT(luParamCount == 2u,
                    "Single-pointer parameter command word count");
         void* lpParameter = reinterpret_cast<void*>(lauParamWords[1]);
-        if (lauParamWords[0] == E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS)
-            TracePlayer(lpPlugin, lpParameter, 0, "ginsu", "ginsu-mix");
         rw::audio::core::PlugIn::Event(lpPlugin, liEvent, &lpParameter);
         break;
     }
@@ -677,6 +675,9 @@ void GenericRwacFactory::HandlePluginEvent(
 
 void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
 {
+    CgsDev::PerfMonCpu::StartMonitor(
+        GetEnvironment().GetCpuMonitors().miRwacFactoryUpdate);
+
     while (!mCommandQueue.IsEmpty())
     {
         uintptr_t luWordCount = 0;
@@ -715,21 +716,15 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
             if (lppSubmix != 0 && *lpppPlugin != 0)
                 *lppSubmix = (*lpppPlugin)[0];
 
-            // [DIAG] NOT IN THE X360 BINARY (BRN_RWAC_VOICE_DIAG=1). This store is the ONLY
-            // thing that gives a SubmixVoice its rw PlugIn, and a null one is what the engine
-            // audio dies on: GenericRwacVoice::ConnectSend returns false for a null submix, so
-            // Module::ConnectVoice's "lhVoice->Connect(lSendName, lhSubmixVoice)" assert fires,
-            // and Splice's ctor reports "There's no sub mix plugin" for the same null. Both
-            // stormed (46 asserts in one run) the moment a NON-DEFAULT car was selected. So
-            // print what CreateInstance actually handed back, per voice.
+            // The optional submix output receives the chain's first plug-in.
 
             if (lpConfig->GetVoiceType() == E_MASTER_VOICE &&
-                *lppRwacVoice != 0 && lpConfig->GetPluginCount() != 0)
+                *lppRwacVoice != 0)
             {
                 rw::audio::core::PlugIn* lpDac =
                     (*lpppPlugin)[lpConfig->GetPluginCount() - 1u];
-                mEnvironment.SetDacPlugin(lpDac);
                 rw::audio::core::PlugIn::Event(lpDac, 3, 0);
+                mEnvironment.SetDacPlugin(lpDac);
             }
             lpConfig->Release();
             break;
@@ -754,6 +749,9 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
             break;
         }
     }
+
+    CgsDev::PerfMonCpu::StopMonitor(
+        GetEnvironment().GetCpuMonitors().miRwacFactoryUpdate);
 }
 
 // @0x826E9990. Select the concrete content class from the authored ContentType,
