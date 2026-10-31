@@ -58,14 +58,14 @@ struct ShaderLodInfo
             rw::math::vpu::TransformPoint( lrTransform, lCentreAndRadius.GetVector3() );
 
         f32 lfRadius = lCentreAndRadius.GetPlus();
-        if ( lfRadius > mMaxBelievableRadius.x )
+        if ( lfRadius > mMaxBelievableRadius.mV.x )
         {
-            lfRadius = mMaxBelievableRadius.x;
+            lfRadius = mMaxBelievableRadius.mV.x;
         }
 
         const f32 lfDistance = rw::math::vpu::Magnitude( lCentre - lCameraPosition );
 
-        return ( lfDistance - lfRadius >= mShaderLod1NearDistance.x )
+        return ( lfDistance - lfRadius >= mShaderLod1NearDistance.mV.x )
                    ? E_TECHNIQUE_LOD1
                    : E_TECHNIQUE_LOD0;
     }
