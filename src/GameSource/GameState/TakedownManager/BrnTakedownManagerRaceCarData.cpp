@@ -1,4 +1,5 @@
 #include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"
+#include <cfloat>
 
 namespace BrnGameState
 {
@@ -19,7 +20,7 @@ void TakedownManager::RaceCarData::Clear()
     miTakedownChainLength    = 0;
     miMultipleTakedownLength = 0;
 
-    mfTimeSinceLastTakenDown = 3.4028235e38f;   // FLT_MAX
+    mfTimeSinceLastTakenDown = FLT_MAX;   // ARTIST flt_82029B70: 0x7F7FFFFF
     mfTimeSinceVictimCrashed = 0.0f;
     mfTimeSinceLastTakedown  = -1.0f;
 }
