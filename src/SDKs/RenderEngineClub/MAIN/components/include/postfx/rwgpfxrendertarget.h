@@ -55,6 +55,8 @@ namespace postfx
         // host; every member is reached BY NAME.
         struct Parameters
         {
+            Parameters();
+
             rw::IResourceAllocator* mpAllocator;             // +0x00
             u32   mu32Width;                                  // +0x04
             u32   mu32Height;                                 // +0x08
@@ -104,7 +106,7 @@ namespace postfx
             }
         };
 
-        rw::IResourceAllocator*                   mpReserved0;     // +0x00
+        rw::IResourceAllocator*                   mpAllocator;     // +0x00
         renderengine::PixelBuffer*                mpPixelBuffer;   // +0x04  PixelBuffer::Initialize result
         renderengine::Texture*       mpTexture;       // +0x08  AllocateAndInitializeTexture result
         renderengine::TextureState*  mpTextureState;  // +0x0C  TextureState::Initialize result
@@ -129,9 +131,9 @@ namespace postfx
         bool                         mbIsShared;      // +0x15, ARTIST constructor 0x82408A38
 
         // X360 0x824034D0 -- build a colour surface (PixelBuffer + sampleable texture + sampler state).
-        void CreateColor(const Parameters* lpParameters);
+        void CreateColor(const Parameters& lrParameters);
         // X360 0x82403688 -- build a depth/stencil surface (+ a hierarchical-Z companion when asked).
-        void CreateDepth(const Parameters* lpParameters);
+        void CreateDepth(const Parameters& lrParameters);
         // X360 0x823F9118 -- resolve the surface's tiled EDRAM PixelBuffer out to its texture.
         void Resolve();
 
@@ -239,20 +241,7 @@ namespace postfx
         // The resolved depth/stencil texture (the depth target sampled as a texture).
         renderengine::Texture* GetDepthStencilTexture();
 
-        // The DEPTH sampler state -- the whole TextureState (sampler words + raster) a shader
-        // binds to read this target's depth. Null unless the target asked for a sampleable depth
-        // (Parameters::mbUseDepthStencilAsTexture) with a depth mode other than USE_PROVIDED,
-        // which is exactly the gate RenderTarget::CreateStates @0x82403A18 applies.
-        //
-        // WHY IT EXISTS, given the console has no such accessor. The X360 reads the word directly
-        // -- BrnPostFx::Render @0x8240A5E4 `lwz r25, 0x8C(r7)` -> BrnPostFxShader::Render's last
-        // TextureState argument -> sampler unit 4, SamplerDepth. On the 4-byte-pointer image that
-        // +0x8C is BOTH `mDepthTarget.mpTextureState` (mDepthTarget sits at +0x80 and a Target
-        // record is 0x18 bytes) and the `mpColourTextureState` this header names below; the two
-        // cannot overlap once pointers widen, and CreateStates proves which one it is (it binds
-        // mDepthTarget's hi-Z-else-depth texture into the state it stores there). Reaching the
-        // depth state by NAME through this accessor is what stops a caller binding scene colour
-        // to SamplerDepth. Defined in pc/gcm/renderengine/PostFxRenderTarget.cpp.
+        // ARTIST 8240A5E4 reads the depth Target sampler at +0x8C.
         renderengine::TextureState* GetDepthTextureState();
 
         // The per-section D3D surface state to bind (Device::SetState). luSection selects the
@@ -273,28 +262,16 @@ namespace postfx
         //
         // rwgpfxrendertarget.h:744 (DWARF) is the REAL signature: it takes the whole
         // RenderTarget::Parameters block, and that is what CgsRenderTarget::Construct @0x827ECC28
-        // passes. It has no body yet.
+        // passes.
         static RenderTarget* Initialize(const Parameters& lrParameters);
 
-        // SUSPECT (pre-DWARF model, kept because rwgpfxrendertarget.cpp still defines this form):
-        // the same X360 function declared with `const Target::Parameters*`. That TU's body reaches the
-        // colour/depth/provided sub-blocks by memcpy at the raw X360 offsets +0x1C / +0x13C / +0x194
-        // out of the pointer, i.e. it is already treating the argument as a RenderTarget::Parameters -
-        // and those byte offsets do not survive the x64 pointer widening. Reconciling that TU onto the
-        // overload above (and splitting RenderTarget's own conflated +0x18/+0x19 member) is follow-on
-        // work owned by the postfx TU; nothing calls this form.
-        static RenderTarget* Initialize(const Target::Parameters* lpParameters);
-
-        // X360 0x824088B0 -- construct the render-target into `this` from the parameters (the X360
-        // out-of-line constructor body; returns `this`).
-        RenderTarget* Construct(const Target::Parameters* lpParameters);
+        RenderTarget(const Parameters& lrParameters);
 
         // X360 0x823F9338 -- resolve the colour and/or depth surfaces back to their textures.
         void Resolve(bool lbResolveDepthStencil, bool lbResolveColour);
 
-        // X360 0x824037E8 -- build the per-section RenderTargetState and (when the colour surface wants
-        // one) the colour-sampling TextureState.
-        void CreateStates(const Target::Parameters* lpParameters);
+        // X360 0x824037E8 -- build the surface state and optional depth-sampling TextureState.
+        void CreateStates(const Parameters& lrParameters);
 
         // --- layout (X360 4-byte-pointer image; size 0x98). Reached by name; offsets are docs. -------
         rw::IResourceAllocator*          mpAllocator;          // +0x00
@@ -303,7 +280,7 @@ namespace postfx
         u32                              muReserved0C;         // +0x0C
         u32                              muColourMode;         // +0x10  RenderTargetMode
         u32                              muDepthStencilMode;   // +0x14  RenderTargetMode
-        u8                               mu8HasColour;         // +0x18
+        u8                               mu8HasColour;         // +0x18: use depth/stencil as texture
         u8                               mu8NumSections;        // +0x19
         renderengine::RenderTargetState* mpSection0State;      // +0x1C  CreateStates' section-0 state
         Target                           maColourTargets[4];   // +0x20, four 0x18-byte targets
