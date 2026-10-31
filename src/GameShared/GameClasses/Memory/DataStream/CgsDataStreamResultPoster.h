@@ -24,7 +24,7 @@
 // members through it). Member access is by name throughout.
 namespace CgsMemory
 {
-    struct DataStreamResultPoster
+    struct CGS_ALIGN(128) DataStreamResultPoster
     {
         // --- API (CgsDataStreamResultPoster.h:56-83) -------------------------
         // Reconstructed in this pass.
@@ -59,3 +59,6 @@ namespace CgsMemory
         DataStreamResultReader* mpReader;  // +0  the reader this poster feeds
     };
 }
+
+CGS_STATIC_ASSERT(sizeof(CgsMemory::DataStreamResultPoster) == 128, "ARTIST DataStreamResultPoster size");
+CGS_STATIC_ASSERT(__alignof(CgsMemory::DataStreamResultPoster) == 128, "ARTIST DataStreamResultPoster alignment");

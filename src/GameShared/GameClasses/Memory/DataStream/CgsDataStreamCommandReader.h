@@ -30,7 +30,7 @@
 // throughout.
 namespace CgsMemory
 {
-    struct DataStreamCommandReader
+    struct CGS_ALIGN(128) DataStreamCommandReader
     {
         // Reconstructed in this pass (X360 0x82867830). Binds this reader to
         // lpPoster and registers it as a user of the poster's stream: atomically
@@ -63,3 +63,6 @@ namespace CgsMemory
         DataStreamCommandPoster* mpPoster;           // +4  the poster this reader drains
     };
 }
+
+CGS_STATIC_ASSERT(sizeof(CgsMemory::DataStreamCommandReader) == 128, "ARTIST DataStreamCommandReader size");
+CGS_STATIC_ASSERT(__alignof(CgsMemory::DataStreamCommandReader) == 128, "ARTIST DataStreamCommandReader alignment");
