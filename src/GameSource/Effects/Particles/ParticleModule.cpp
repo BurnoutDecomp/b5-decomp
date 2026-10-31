@@ -497,10 +497,10 @@ namespace BrnParticle
     rw::math::vpu::Matrix44Affine RowCopyToAffine(const rw::math::vpu::Matrix44& arM)
     {
         rw::math::vpu::Matrix44Affine lOut;
-        lOut.xAxis.x = arM.xAxis.x; lOut.xAxis.y = arM.xAxis.y; lOut.xAxis.z = arM.xAxis.z; lOut.xAxis.w = arM.xAxis.w;
-        lOut.yAxis.x = arM.yAxis.x; lOut.yAxis.y = arM.yAxis.y; lOut.yAxis.z = arM.yAxis.z; lOut.yAxis.w = arM.yAxis.w;
-        lOut.zAxis.x = arM.zAxis.x; lOut.zAxis.y = arM.zAxis.y; lOut.zAxis.z = arM.zAxis.z; lOut.zAxis.w = arM.zAxis.w;
-        lOut.wAxis.x = arM.wAxis.x; lOut.wAxis.y = arM.wAxis.y; lOut.wAxis.z = arM.wAxis.z; lOut.wAxis.w = arM.wAxis.w;
+        lOut.xAxis.mV = arM.xAxis.mV;
+        lOut.yAxis.mV = arM.yAxis.mV;
+        lOut.zAxis.mV = arM.zAxis.mV;
+        lOut.wAxis.mV = arM.wAxis.mV;
         return lOut;
     }
 
@@ -832,21 +832,21 @@ namespace BrnParticle
             // the console writes v36[3]/[7]/[11] = 0.0 and v36[15] = 1.0 explicitly rather
             // than copying the source's fourth lanes.
             cMatrix lLocatorMat;
-            lLocatorMat.xa.x = lrRecord.mTransform.xAxis.x;
-            lLocatorMat.xa.y = lrRecord.mTransform.xAxis.y;
-            lLocatorMat.xa.z = lrRecord.mTransform.xAxis.z;
+            lLocatorMat.xa.x = lrRecord.mTransform.xAxis.mV.x;
+            lLocatorMat.xa.y = lrRecord.mTransform.xAxis.mV.y;
+            lLocatorMat.xa.z = lrRecord.mTransform.xAxis.mV.z;
             lLocatorMat.xa.w = 0.0f;
-            lLocatorMat.ya.x = lrRecord.mTransform.yAxis.x;
-            lLocatorMat.ya.y = lrRecord.mTransform.yAxis.y;
-            lLocatorMat.ya.z = lrRecord.mTransform.yAxis.z;
+            lLocatorMat.ya.x = lrRecord.mTransform.yAxis.mV.x;
+            lLocatorMat.ya.y = lrRecord.mTransform.yAxis.mV.y;
+            lLocatorMat.ya.z = lrRecord.mTransform.yAxis.mV.z;
             lLocatorMat.ya.w = 0.0f;
-            lLocatorMat.za.x = lrRecord.mTransform.zAxis.x;
-            lLocatorMat.za.y = lrRecord.mTransform.zAxis.y;
-            lLocatorMat.za.z = lrRecord.mTransform.zAxis.z;
+            lLocatorMat.za.x = lrRecord.mTransform.zAxis.mV.x;
+            lLocatorMat.za.y = lrRecord.mTransform.zAxis.mV.y;
+            lLocatorMat.za.z = lrRecord.mTransform.zAxis.mV.z;
             lLocatorMat.za.w = 0.0f;
-            lLocatorMat.wa.x = lrRecord.mTransform.wAxis.x;
-            lLocatorMat.wa.y = lrRecord.mTransform.wAxis.y;
-            lLocatorMat.wa.z = lrRecord.mTransform.wAxis.z;
+            lLocatorMat.wa.x = lrRecord.mTransform.wAxis.mV.x;
+            lLocatorMat.wa.y = lrRecord.mTransform.wAxis.mV.y;
+            lLocatorMat.wa.z = lrRecord.mTransform.wAxis.mV.z;
             lLocatorMat.wa.w = 1.0f;
 
             cParticleLocator* const lpLocator = lrBindings.GetpLocator();
@@ -920,14 +920,14 @@ namespace BrnParticle
             // rather than punned. Same 64 bytes, same order.
             const rw::math::vpu::Matrix44& lrCameraView = lpRenderData->mCgsCamera.mView;
             rw::math::vpu::Matrix44Affine  lView;
-            lView.xAxis.x = lrCameraView.xAxis.x; lView.xAxis.y = lrCameraView.xAxis.y;
-            lView.xAxis.z = lrCameraView.xAxis.z; lView.xAxis.w = lrCameraView.xAxis.w;
-            lView.yAxis.x = lrCameraView.yAxis.x; lView.yAxis.y = lrCameraView.yAxis.y;
-            lView.yAxis.z = lrCameraView.yAxis.z; lView.yAxis.w = lrCameraView.yAxis.w;
-            lView.zAxis.x = lrCameraView.zAxis.x; lView.zAxis.y = lrCameraView.zAxis.y;
-            lView.zAxis.z = lrCameraView.zAxis.z; lView.zAxis.w = lrCameraView.zAxis.w;
-            lView.wAxis.x = lrCameraView.wAxis.x; lView.wAxis.y = lrCameraView.wAxis.y;
-            lView.wAxis.z = lrCameraView.wAxis.z; lView.wAxis.w = lrCameraView.wAxis.w;
+            lView.xAxis.mV.x = lrCameraView.xAxis.mV.x; lView.xAxis.mV.y = lrCameraView.xAxis.mV.y;
+            lView.xAxis.mV.z = lrCameraView.xAxis.mV.z; lView.xAxis.mV.w = lrCameraView.xAxis.mV.w;
+            lView.yAxis.mV.x = lrCameraView.yAxis.mV.x; lView.yAxis.mV.y = lrCameraView.yAxis.mV.y;
+            lView.yAxis.mV.z = lrCameraView.yAxis.mV.z; lView.yAxis.mV.w = lrCameraView.yAxis.mV.w;
+            lView.zAxis.mV.x = lrCameraView.zAxis.mV.x; lView.zAxis.mV.y = lrCameraView.zAxis.mV.y;
+            lView.zAxis.mV.z = lrCameraView.zAxis.mV.z; lView.zAxis.mV.w = lrCameraView.zAxis.mV.w;
+            lView.wAxis.mV.x = lrCameraView.wAxis.mV.x; lView.wAxis.mV.y = lrCameraView.wAxis.mV.y;
+            lView.wAxis.mV.z = lrCameraView.wAxis.mV.z; lView.wAxis.mV.w = lrCameraView.wAxis.mV.w;
 
             const rw::math::vpu::Matrix44Affine& lrView = lView;
             const rw::math::vpu::Matrix44&       lrProj = lpRenderData->mCgsCamera.mProjection;
@@ -1028,16 +1028,16 @@ namespace BrnParticle
                     // They were a couple of centimetres ABOVE THE TOP EDGE. Perfect batch,
                     // vertex and draw counts, hr = S_OK, and off screen by 3 cm.
                     rw::math::vpu::Vector3 lPosition;
-                    lPosition.x = lrCam.wAxis.x + lrCam.zAxis.x * 6.0f + lrCam.xAxis.x * 2.0f;
-                    lPosition.y = lrCam.wAxis.y + lrCam.zAxis.y * 6.0f + lrCam.xAxis.y * 2.0f + 0.6f;
-                    lPosition.z = lrCam.wAxis.z + lrCam.zAxis.z * 6.0f + lrCam.xAxis.z * 2.0f;
-                    lPosition.w = lPosition.y - 3.0f;
+                    lPosition.mV.x = lrCam.wAxis.mV.x + lrCam.zAxis.mV.x * 6.0f + lrCam.xAxis.mV.x * 2.0f;
+                    lPosition.mV.y = lrCam.wAxis.mV.y + lrCam.zAxis.mV.y * 6.0f + lrCam.xAxis.mV.y * 2.0f + 0.6f;
+                    lPosition.mV.z = lrCam.wAxis.mV.z + lrCam.zAxis.mV.z * 6.0f + lrCam.xAxis.mV.z * 2.0f;
+                    lPosition.mV.w = lPosition.mV.y - 3.0f;
 
                     rw::math::vpu::Vector3 lVelocity;
-                    lVelocity.x = std::cos(lfPhase) * 4.0f;
-                    lVelocity.y = 3.0f + static_cast<f32>(luSpark & 3u);
-                    lVelocity.z = std::sin(lfPhase) * 4.0f;
-                    lVelocity.w = lVelocity.y;
+                    lVelocity.mV.x = std::cos(lfPhase) * 4.0f;
+                    lVelocity.mV.y = 3.0f + static_cast<f32>(luSpark & 3u);
+                    lVelocity.mV.z = std::sin(lfPhase) * 4.0f;
+                    lVelocity.mV.w = lVelocity.mV.y;
 
                     maSparks[BrnParticle::Native::eSparkArray_GrindingWorld].SpawnSpark(
                         lPosition, lVelocity,
@@ -1236,14 +1236,14 @@ namespace BrnParticle
             const rw::math::vpu::Vector4& lrBottom = lFrustum.maPlanes[5];
 
             rw::math::vpu::Matrix44 lPackedFrustumLrtb;
-            lPackedFrustumLrtb.xAxis.x = lrLeft.x;  lPackedFrustumLrtb.xAxis.y = lrRight.x;
-            lPackedFrustumLrtb.xAxis.z = lrTop.x;   lPackedFrustumLrtb.xAxis.w = lrBottom.x;
-            lPackedFrustumLrtb.yAxis.x = lrLeft.y;  lPackedFrustumLrtb.yAxis.y = lrRight.y;
-            lPackedFrustumLrtb.yAxis.z = lrTop.y;   lPackedFrustumLrtb.yAxis.w = lrBottom.y;
-            lPackedFrustumLrtb.zAxis.x = lrLeft.z;  lPackedFrustumLrtb.zAxis.y = lrRight.z;
-            lPackedFrustumLrtb.zAxis.z = lrTop.z;   lPackedFrustumLrtb.zAxis.w = lrBottom.z;
-            lPackedFrustumLrtb.wAxis.x = lrLeft.w;  lPackedFrustumLrtb.wAxis.y = lrRight.w;
-            lPackedFrustumLrtb.wAxis.z = lrTop.w;   lPackedFrustumLrtb.wAxis.w = lrBottom.w;
+            lPackedFrustumLrtb.xAxis.mV.x = lrLeft.mV.x;  lPackedFrustumLrtb.xAxis.mV.y = lrRight.mV.x;
+            lPackedFrustumLrtb.xAxis.mV.z = lrTop.mV.x;   lPackedFrustumLrtb.xAxis.mV.w = lrBottom.mV.x;
+            lPackedFrustumLrtb.yAxis.mV.x = lrLeft.mV.y;  lPackedFrustumLrtb.yAxis.mV.y = lrRight.mV.y;
+            lPackedFrustumLrtb.yAxis.mV.z = lrTop.mV.y;   lPackedFrustumLrtb.yAxis.mV.w = lrBottom.mV.y;
+            lPackedFrustumLrtb.zAxis.mV.x = lrLeft.mV.z;  lPackedFrustumLrtb.zAxis.mV.y = lrRight.mV.z;
+            lPackedFrustumLrtb.zAxis.mV.z = lrTop.mV.z;   lPackedFrustumLrtb.zAxis.mV.w = lrBottom.mV.z;
+            lPackedFrustumLrtb.wAxis.mV.x = lrLeft.mV.w;  lPackedFrustumLrtb.wAxis.mV.y = lrRight.mV.w;
+            lPackedFrustumLrtb.wAxis.mV.z = lrTop.mV.w;   lPackedFrustumLrtb.wAxis.mV.w = lrBottom.mV.w;
 
             // The camera publish (X360 `bl LionParticleRender::SetCameraData` @0x8228B1B8 with
             // r3 == module + 21104 == &mLionRenderer, r4 == renderData + 0x20 == the BACK
