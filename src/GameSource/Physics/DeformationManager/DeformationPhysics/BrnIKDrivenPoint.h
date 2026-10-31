@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus
+#include "rw/math/vpu/vector3_operation.h"
 #include "SharedClasses/Physics/Deformation/BrnIKDrivenPointSpec.h"      // IKDrivenPointSpec (committed minimal home)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnTagPoint.h"  // TagPoint
 
@@ -50,11 +51,11 @@ namespace Deformation
         // (the GetMaxSensorImpulse reinterpret precedent).
         const Vector3& GetPosition() const
         {
-            return reinterpret_cast<const Vector3&>(mPositionPlusDistanceToA);
+            return mPositionPlusDistanceToA.GetVector3();
         }
         const Vector3& GetDirection() const
         {
-            return reinterpret_cast<const Vector3&>(mDirectionPlusDistanceToB);
+            return mDirectionPlusDistanceToB.GetVector3();
         }
         const TagPoint* GetTagPointA() const { return mpTagPointA; }
         const TagPoint* GetTagPointB() const { return mpTagPointB; }
@@ -68,10 +69,7 @@ namespace Deformation
         // stored w). Inline so the debug component can rely on the lane-preserving semantics.
         void SetPosition(Vector3 lvNewPosition)
         {
-            mPositionPlusDistanceToA.x = lvNewPosition.x;
-            mPositionPlusDistanceToA.y = lvNewPosition.y;
-            mPositionPlusDistanceToA.z = lvNewPosition.z;
-            // mPositionPlusDistanceToA.w (distance-to-A) deliberately left untouched.
+            mPositionPlusDistanceToA.SetVector3(lvNewPosition);
         }
 
         // ⭐ HEADER-INLINE x3 (2026-08-14, deformation-mount wave): no exports on either console
@@ -81,10 +79,7 @@ namespace Deformation
         // lane, scratch is the member.
         Vector3 GetOffsetFromInitialPosition() const
         {
-            const Vector3& lrInitial = mpSpec->GetInitialPos();
-            { const Vector3 lResult = { mPositionPlusDistanceToA.x - lrInitial.x,
-                            mPositionPlusDistanceToA.y - lrInitial.y,
-                            mPositionPlusDistanceToA.z - lrInitial.z, 0.0f }; return lResult; }
+            return rw::math::vpu::Subtract(mPositionPlusDistanceToA.GetVector3(), mpSpec->GetInitialPos());
         }
         f32     GetScratchAmount() const  { return mfScratchAmount; }
         Vector3 GetOriginalPosition() const { return mpSpec->GetInitialPos(); }
