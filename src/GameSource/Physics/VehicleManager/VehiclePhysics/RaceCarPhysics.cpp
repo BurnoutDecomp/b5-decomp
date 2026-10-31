@@ -131,7 +131,7 @@ namespace Vehicle
         mfBeachedTime                          = 0.0f;                               // stfs 0x1408
         mbWroteIntoRWInSlowMo                  = false;                              // stb  0x1435
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mPropCollisionImpulseSum = lAggregateValue;
         }  // stvx128 0x13F0
         mbAISlowMo                             = false;                              // stb  0x1434
@@ -195,7 +195,7 @@ namespace Vehicle
                 lfMinHeight = lfHeight;
         }
 
-        { const VecFloat lResult = { lfMinHeight, lfMinHeight, lfMinHeight, lfMinHeight }; return lResult; }
+        { const VecFloat lResult(lfMinHeight, lfMinHeight, lfMinHeight, lfMinHeight); return lResult; }
     }
 
     // =========================================================================================
@@ -297,10 +297,9 @@ namespace Vehicle
     static const f32 KF_PITCH_NEAR_GROUND        = 2.0f;         // flt_82001D9C (pitch-up impulse height gate)
     static const f32 KF_LAUNCH_MIN_SPEED2D       = 0.0099999998f;// inline 0.01 (launch direction fallback)
     static const f32 KF_GRAVITY                  = 9.8100004f;   // flt_8208F83C (ballistic arc)
-    // The world up vector both showtime spin/AirRam sites read. TWO console homes, one value:
-    // unk_82181510 (.rdata, {0,1,0,0} raw-byte read) and unk_82FB9050 (.data, init @0x82C5C4B0
-    // building {0.0, 1.0, 0.0, 0} from flt_82001CC0/flt_82001C98).
-    static const Vector3 KV_WORLD_UP             = { 0.0f, 1.0f, 0.0f, 0.0f };
+    // UpdateAftertouch reads the separate CRT-initialized vector at 0x82FB9050.
+    // Its original initializer 0x82C5C4B0 writes the four lanes {0,1,0,0}.
+    static const Vector3 KV_AFTERTOUCH_WORLD_UP(0.0f, 1.0f, 0.0f);
 
     // ---------------------------------------------------------------------------------------
     // PlayerParameters::Reset  @0x825B89B8 -- store-for-store from the asm (offsets confirmed).
@@ -323,7 +322,7 @@ namespace Vehicle
         mbGoodImpactReport   = false;   // +0x0B = 0
         miOtherEntityId      = 0;       // +0x0C = 0  (stw)
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mBounceDirection = lAggregateValue;
         }   // +0x10 stvx128 v0=0
 
@@ -347,7 +346,7 @@ namespace Vehicle
         // the assist force's vertical correction. A 0.0 seed is NOT the identity here -- it
         // kills the vertical intercept pull until the first bounce re-seeds the envelope.
         {
-            const Vector3 lAggregateValue = { 0.01f, 0.01f, 0.01f, 0.01f };
+            const Vector3 lAggregateValue(Vector4(0.01f, 0.01f, 0.01f, 0.01f).mV);
             mAssistStrength = lAggregateValue;
         }   // +0x100 splat(flt_82002138)
     }
@@ -427,7 +426,7 @@ namespace Vehicle
         // is v1 (the SIM timestep, which the AI crash slow-mo branch below scales by 1/100). Only
         // mfCrashTimer integrates v2; every other timer in this function integrates v1, so v1 is
         // read at its use sites (AFTER the possible scaling) rather than snapshotted here.
-        const f32 lfRealDT = lvfRealTimeStep.x;   // v126/v2 lane 0 -- unscaled frame time
+        const f32 lfRealDT = lvfRealTimeStep.mV.x;   // v126/v2 lane 0 -- unscaled frame time
 
         if (mbCrashing)   // asm @0x82641624: `lbz r11, 0x710(r31)` -- see the ⛔ note above
         {
@@ -451,9 +450,9 @@ namespace Vehicle
             {
                 const f32 lfScale = 1.0f / KVF_AI_CRASH_SLOWMO_FACTOR;
                 {
-                    const VecFloat lAggregateValue = {
-                    lvfSimTimeStep.x * lfScale, lvfSimTimeStep.y * lfScale,
-                    lvfSimTimeStep.z * lfScale, lvfSimTimeStep.w * lfScale };
+                    const VecFloat lAggregateValue(
+                    lvfSimTimeStep.mV.x * lfScale, lvfSimTimeStep.mV.y * lfScale,
+                    lvfSimTimeStep.mV.z * lfScale, lvfSimTimeStep.mV.w * lfScale);
                     lvfSimTimeStep = lAggregateValue;
                 }
             }
@@ -478,7 +477,7 @@ namespace Vehicle
             if (lpControls->GetType() == E_DRIVER_TYPE_AI)
             {
                 if (static_cast<const BrnAIDriverControls*>(lpControls)->mbSlamPlayer)
-                    mfSlamSteering += lfSteer * 4.0f * lvfSimTimeStep.x;
+                    mfSlamSteering += lfSteer * 4.0f * lvfSimTimeStep.mV.x;
             }
             else if (lfSteer * mfSlamSteering < -0.30000001f)
             {
@@ -487,7 +486,7 @@ namespace Vehicle
             }
 
             if (std::fabs(lfSteer) >= 0.1f)
-                mfSlamSteering += lfSteer * lvfSimTimeStep.x;
+                mfSlamSteering += lfSteer * lvfSimTimeStep.mV.x;
             else
                 mfSlamSteering = mfSlamSteering * 0.94999999f;   // inside -> decay 0.95/frame
 
@@ -542,7 +541,7 @@ namespace Vehicle
         // v1, NOT v2: asm 0x826418CC stores v127 (the sim timestep, slow-mo scaled) into the
         // scratch it then subtracts at 0x826418D4. Was lfDT (v2) while the scaling was elided.
         if (mbPlayerCarInShowtime && MS.mfUncappedSpeedTimer > 0.0f)
-            MS.mfUncappedSpeedTimer -= lvfSimTimeStep.x;
+            MS.mfUncappedSpeedTimer -= lvfSimTimeStep.mV.x;
 
         // RE-POINTED 2026-08-03. This store is at +0x1400 (asm 0x826418E0: `lfs f0,0x1400(r31)`
         // / 0x826418F8: `stfs f0,0x1400(r31)`), i.e. mfTimeSinceTookDownPlayer -- the post-takedown
@@ -550,7 +549,7 @@ namespace Vehicle
         // member, which is a different timer entirely.
         // v1, NOT v2: asm 0x826418E4 stores v127 (the sim timestep) into the scratch it adds at
         // 0x826418F0. Was lfDT (v2) while the slow-mo scaling that makes the two differ was elided.
-        mfTimeSinceTookDownPlayer += lvfSimTimeStep.x;
+        mfTimeSinceTookDownPlayer += lvfSimTimeStep.mV.x;
 
         // Latch aftertouch-active for this frame: needs the request flag (a5), an aftertouch-enable
         // input ( > 0 ) and the virtual "can use aftertouch" query (vtbl+20).
@@ -574,13 +573,13 @@ namespace Vehicle
             && maWheels[eRearLeftWheel].mbHasTraction
             && maWheels[eRearRightWheel].mbHasTraction;
 
-        if (GetSpeedMPH().x * KF_MPH_TO_MPS < 1.0f
+        if (GetSpeedMPH().mV.x * KF_MPH_TO_MPS < 1.0f
             && !mbHasAir
             && !lbEveryWheelHasTraction
             && mbContactingWall
             && !mbCrashing)
         {
-            mfBeachedTime += lvfSimTimeStep.x;
+            mfBeachedTime += lvfSimTimeStep.mV.x;
         }
         else
         {
@@ -873,16 +872,14 @@ namespace Vehicle
             // horizontal: unit2D(delta) * clampedSpeed. The asm zeroes the y lane (vrlimi mask 4
             // of splat(0)) and normalizes the 3-lane vector -- identical to a 2D normalize.
             Vector3 lvFlat = lvDelta;
-            lvFlat.y = 0.0f;
+            lvFlat.mV.y = 0.0f;
             const f32 lfFlatMagSq = vpu::MagnitudeSquared(lvFlat);
-            Vector3 lvUnit2D = (lfFlatMagSq > 0.0f)
-                             ? vpu::Mult(lvFlat, 1.0f / std::sqrt(lfFlatMagSq))
-                             : Vector3();
+            Vector3 lvUnit2D = vpu::Mult(lvFlat, 1.0f / std::sqrt(lfFlatMagSq));
 
             Vector3 lvIdeal = vpu::Mult(lvUnit2D, lfClampedSpeed);
 
             // vertical: (delta.y * 2.0 + 9.81 * t^2) / (2t)  == h/t + g*t/2.
-            lvIdeal.y = (lvDelta.y * 2.0f + KF_GRAVITY * lfT * lfT) / (lfT * 2.0f);
+            lvIdeal.mV.y = (lvDelta.mV.y * 2.0f + KF_GRAVITY * lfT * lfT) / (lfT * 2.0f);
 
             *lpResult = lvIdeal;
         }
@@ -941,14 +938,14 @@ namespace Vehicle
                     // launch direction: the flattened heading, transform-forward fallback at a
                     // standstill, unit .y forced to flt_82FB7E28 (== 0.0, dev-watch slot).
                     Vector3 lvDir = GetLinearVelocity();
-                    lvDir.y = 0.0f;                                    // vrlimi mask 4, splat(0)
+                    lvDir.mV.y = 0.0f;                                    // vrlimi mask 4, splat(0)
                     const f32 lfMag2DSq = vpu::MagnitudeSquared(lvDir);
                     const f32 lfMag2D   = (lfMag2DSq > 0.0f) ? std::sqrt(lfMag2DSq) : 0.0f;
                     if (KF_LAUNCH_MIN_SPEED2D >= lfMag2D)              // vcmpgefp. 0.01 >= |v2D|
                         lvDir = mTransform.At();                       // lvx128 [this+0x30]
 
                     Vector3 lvPush = vpu::Normalize(lvDir);            // vrsqrte + 2 NR steps
-                    lvPush.y = KF_BOUNCE_AIRRAM_FACTOR_DEV /* flt_82FB7E28 == 0.0 */;
+                    lvPush.mV.y = KF_BOUNCE_AIRRAM_FACTOR_DEV /* flt_82FB7E28 == 0.0 */;
                     CGS_ASSERT(vpu::IsValid(lvPush), "IsValid(lPush)"); // :1310
 
                     lvPush = vpu::Mult(lvPush, KF_LAUNCH_PUSH_SPEED);  // * flt_82F2A2A0 (20.0)
@@ -959,9 +956,9 @@ namespace Vehicle
                     // AddAirRam: input-space 5130 when the ANGULAR velocity's .y is >= 0, 3082
                     // otherwise. 6-arg DWARF form: flags, factor, decay, customImpulse,
                     // customPosition, timerTillFire.
-                    const bool lbRising = !(GetAngularVelocity().y < 0.0f);   // +0x60 lane .y
+                    const bool lbRising = !(GetAngularVelocity().mV.y < 0.0f);   // +0x60 lane .y
                     AddAirRam(lbRising ? 5130u : 3082u, KF_LAUNCH_AIRRAM_FACTOR, KF_LAUNCH_AIRRAM_ARG,
-                              Vector3(), Vector3(), 0.0f);
+                              Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), 0.0f);
 
                     lfTimeUntilPush = KF_TIMEUNTILPUSH_DELAY;   // flt_82F2A2A4 (0.4, image-read)
                     MS.mbLaunchActive = true;                   // byte_82FB84B2 = 1
@@ -1043,9 +1040,9 @@ namespace Vehicle
         if (std::fabs(lfLinMag) > KF_LENGTH_EPSILON && !IsPlayerVehicleWithUncappedShowtimeSpeed())
         {
             const f32 lfUnitYLimit = KF_CAP_VERTICAL_SPEED / lfLinearCap;   // 9 / (8 or 20)
-            if (lvUnit.y > lfUnitYLimit)
+            if (lvUnit.mV.y > lfUnitYLimit)
             {
-                lvUnit.y  = lfUnitYLimit;
+                lvUnit.mV.y  = lfUnitYLimit;
                 lbChanged = true;
             }
         }
@@ -1064,8 +1061,8 @@ namespace Vehicle
             // So the caps only ever slow a falling car horizontally; the fall itself is untouched.
             // (Crash parity G37-D1, 2026-09-23: the tree stored the rebuilt vector whole, so a
             // Showtime car over the cap fell at 8 m/s -- 20 while boosting -- and hung in the air.)
-            if (0.0f > lvLinear.y)
-                lvCapped.y = lvLinear.y;
+            if (0.0f > lvLinear.mV.y)
+                lvCapped.mV.y = lvLinear.mV.y;
             SetLinearVelocity(lvCapped);                       // stvx128 back to +0x50 @0x825D7920
         }
     }
@@ -1108,7 +1105,7 @@ namespace Vehicle
 
         // "bouncing" = the aftertouch enable released (0 >= enable) OR speed below 3.0 m/s.
         bool lbBouncing = false;
-        if (0.0f >= lvfEnable.x)   // vcmpgefp128. splat(0) >= v4 @0x825FFC7C
+        if (0.0f >= lvfEnable.mV.x)   // vcmpgefp128. splat(0) >= v4 @0x825FFC7C
         {
             lbBouncing = true;
         }
@@ -1172,7 +1169,7 @@ namespace Vehicle
 
         if (lbDidBounce)
         {
-            Vector3 lvAirRamDir = KV_WORLD_UP;   // v127 default = unk_82181510
+            Vector3 lvAirRamDir = vpu::GetVector3_YAxis();   // v127 default = unk_82181510
             f32 lfAirRamFactor  = KF_BOUNCE_AIRRAM_FACTOR_DEV;   // flt_82FB7E2C (0.0 -> no ram)
             CGS_ASSERT(mbPlayerCarInShowtime, "mbPlayerCarInShowtime");   // :1499
 
@@ -1186,15 +1183,15 @@ namespace Vehicle
                     // to +0x50 with vrlimi mask 4).
                     Vector3 lvVel = GetLinearVelocity();
                     const f32 lfFloor = KF_BOUNCE_VELOCITY_SCALE + 1.0f;   // flt_82F2A2EC + flt_82001C98
-                    if (lvVel.y < lfFloor)
-                        lvVel.y = lfFloor;
+                    if (lvVel.mV.y < lfFloor)
+                        lvVel.mV.y = lfFloor;
                     SetLinearVelocity(lvVel);
 
                     // spin impulse: cameraX * splat(flt_82F2A2CC = 10000).
                     AddWorldSpaceAngularImpulse(vpu::Mult(lvCameraX, KF_BOUNCE_SPIN_SCALE));
 
                     // the boost AirRam fires along normalize(cameraZ + worldUp).
-                    lvAirRamDir = vpu::Normalize(vpu::Add(lvCameraZ, KV_WORLD_UP));
+                    lvAirRamDir = vpu::Normalize(vpu::Add(lvCameraZ, vpu::GetVector3_YAxis()));
                 }
                 else
                 {
@@ -1203,22 +1200,22 @@ namespace Vehicle
             }
             if (lfAirRamFactor > 0.0f)
                 AddAirRam(1u, lfAirRamFactor, KF_BOUNCE_AIRRAM_DECAY /* flt_82FB9140 = 0.2 */,
-                          lvAirRamDir, Vector3(), 0.0f);
+                          lvAirRamDir, Vector3(0.0f, 0.0f, 0.0f), 0.0f);
         }
 
         // launch-push timer expiry: fire the launch pop + extra spin, then set bounce-boost.
         if (MS.mfTimeUntilPush > 0.0f)
         {
-            MS.mfTimeUntilPush -= lvfTimeStep.x;   // v3/v124 -- the TIMESTEP (asm 0x8260000C-18)
+            MS.mfTimeUntilPush -= lvfTimeStep.mV.x;   // v3/v124 -- the TIMESTEP (asm 0x8260000C-18)
             if (MS.mfTimeUntilPush <= 0.0f)
             {
                 if (MS.mbLaunchActive)   // byte_82FB84B2
                 {
                     // pop: AddAirRam along normalize(worldUp + mAimDirection) -- the +0x20 slot
                     // SetShowtimeAimDirection stores (asm 0x82600030-94).
-                    Vector3 lvDir = vpu::Normalize(vpu::Add(KV_WORLD_UP, MS.mAimDirection));
+                    Vector3 lvDir = vpu::Normalize(vpu::Add(vpu::GetVector3_YAxis(), MS.mAimDirection));
                     AddAirRam(1u, KF_PUSH_AIRRAM_FACTOR, KF_PUSH_AIRRAM_ARG,
-                              lvDir, Vector3(), 0.0f);
+                              lvDir, Vector3(0.0f, 0.0f, 0.0f), 0.0f);
                     // pop spin: cameraX * splat(flt_82F2A2A8 = 500).
                     AddWorldSpaceAngularImpulse(vpu::Mult(lvCameraX, KF_PUSH_SPIN_SCALE));
 
@@ -1272,7 +1269,7 @@ namespace Vehicle
 
 
         // gate: really airborne -- time-without-traction (+0x1060.z) above 0.5 s.
-        if (!(mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > KF_AIRTIME_GATE))
+        if (!(mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV.z > KF_AIRTIME_GATE))
         {
             return;
         }
@@ -1282,12 +1279,12 @@ namespace Vehicle
         for (s32 liT = 0; liT < MS.miNumTargets; ++liT)
         {
             Vector3 lvToTarget = vpu::Subtract(MS.maTargetPositions[liT], lvPosition);
-            lvToTarget.y = 0.0f;   // stfs f11(0.0) -> lane y @0x82620078 (crash parity G37-D3)
+            lvToTarget.mV.y = 0.0f;   // stfs f11(0.0) -> lane y @0x82620078 (crash parity G37-D3)
             const f32 lfDistSq = vpu::MagnitudeSquared(lvToTarget);
             const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
             const Vector3 lvUnit = (lfDist > 0.0f)
                                  ? vpu::Mult(lvToTarget, 1.0f / lfDist)
-                                 : Vector3();   // vsel zero guard
+                                 : Vector3(0.0f, 0.0f, 0.0f);   // vsel zero guard
 
             const f32 lfDot = vpu::Dot(lvAimDirection, lvUnit);   // vmsum3fp128 v127, v11
             if (lfDot > KF_TARGET_SCORE_GATE)   // flt_82F2A328 (0.766) -- the DOT gate
@@ -1316,25 +1313,25 @@ namespace Vehicle
         if (MS.mbJustBounced)   // byte_82FB8481
         {
             {
-                const Vector3 lAggregateValue = { KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED };
+                const Vector3 lAggregateValue(Vector4(KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED).mV);
                 MS.mAssistStrength = lAggregateValue;
             }
         }
         else
         {
-            const f32 lfDecay = lvfTimeStep.x * KF_ASSIST_DECAY_PER_S;
+            const f32 lfDecay = lvfTimeStep.mV.x * KF_ASSIST_DECAY_PER_S;
             Vector3 lvEnv = MS.mAssistStrength;
-            lvEnv.x = std::max(lvEnv.x - lfDecay, KF_ASSIST_FLOOR);   // vmaxfp lane-wise
-            lvEnv.y = std::max(lvEnv.y - lfDecay, KF_ASSIST_FLOOR);
-            lvEnv.z = std::max(lvEnv.z - lfDecay, KF_ASSIST_FLOOR);
-            lvEnv.w = std::max(lvEnv.w - lfDecay, KF_ASSIST_FLOOR);
+            lvEnv.mV.x = std::max(lvEnv.mV.x - lfDecay, KF_ASSIST_FLOOR);   // vmaxfp lane-wise
+            lvEnv.mV.y = std::max(lvEnv.mV.y - lfDecay, KF_ASSIST_FLOOR);
+            lvEnv.mV.z = std::max(lvEnv.mV.z - lfDecay, KF_ASSIST_FLOOR);
+            lvEnv.mV.w = std::max(lvEnv.mV.w - lfDecay, KF_ASSIST_FLOOR);
             MS.mAssistStrength = lvEnv;
         }
 
         if (liBest >= 0)
         {
             Vector3 lvToTarget = vpu::Subtract(MS.maTargetPositions[liBest], lvPosition);
-            lvToTarget.y = 0.0f;   // stfs f11(0.0) -> lane y @0x826201DC (crash parity G37-D3)
+            lvToTarget.mV.y = 0.0f;   // stfs f11(0.0) -> lane y @0x826201DC (crash parity G37-D3)
             const f32 lfDistSq = vpu::MagnitudeSquared(lvToTarget);
             const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
 
@@ -1342,7 +1339,7 @@ namespace Vehicle
             {
                 Vector3 lvUnit = (lfDist > 0.0f)
                                ? vpu::Mult(lvToTarget, 1.0f / lfDist)
-                               : Vector3();
+                               : Vector3(0.0f, 0.0f, 0.0f);
 
                 // the intercept: 2D speed via BrnMath::Magnitude2D(mLinearVelocity).
                 const f32 lfSpeed2D = BrnMath::Magnitude2D(GetLinearVelocity());
@@ -1352,7 +1349,7 @@ namespace Vehicle
                 // 0x826202DC, raw 0x1BC407DC: mask 4 writes direction.y and
                 // rotate 3 takes product.x. The envelope is normally a splat,
                 // but the original lane selection is x even for unequal lanes.
-                lvUnit.y = MS.mAssistStrength.x * (lvIdeal.y - GetLinearVelocity().y);
+                lvUnit.mV.y = MS.mAssistStrength.mV.x * (lvIdeal.mV.y - GetLinearVelocity().mV.y);
 
                 // magnitude: min(dist * 4000, 14000) (the fsel pair @0x826202BC-C4).
                 f32 lfForce = lfDist * KF_ASSIST_FORCE_PER_METRE;
@@ -1413,9 +1410,9 @@ namespace Vehicle
     static bool HasAftertouchImpulse(const Vector3& lrImpulse)
     {
         const f32 lfEpsilon = 1.1920928955078125e-07f;
-        return std::fabs(lrImpulse.x) > lfEpsilon
-            || std::fabs(lrImpulse.y) > lfEpsilon
-            || std::fabs(lrImpulse.z) > lfEpsilon;
+        return std::fabs(lrImpulse.mV.x) > lfEpsilon
+            || std::fabs(lrImpulse.mV.y) > lfEpsilon
+            || std::fabs(lrImpulse.mV.z) > lfEpsilon;
     }
 
     void RaceCarPhysics::UpdateAftertouch(const BrnPlayerDriverControls* lpControls,
@@ -1443,11 +1440,11 @@ namespace Vehicle
         // G37-D2, 2026-09-23: the tree normalised the full 3D axes, so a pitched chase camera gave
         // the aftertouch force a vertical component the console never applies.)
         Vector3 lvCameraX = lpCameraMatrix->xAxis;
-        lvCameraX.y = 0.0f;                                        // @0x8262EC70
+        lvCameraX.mV.y = 0.0f;                                        // @0x8262EC70
         CGS_ASSERT(vpu::MagnitudeSquared(lvCameraX) > 0.0f,
                    "RwMath::MagnitudeSquared(lCameraX) > 0.0f");
         Vector3 lvCameraZ = lpCameraMatrix->zAxis;
-        lvCameraZ.y = 0.0f;                                        // @0x8262ED14
+        lvCameraZ.mV.y = 0.0f;                                        // @0x8262ED14
         CGS_ASSERT(vpu::MagnitudeSquared(lvCameraZ) > 0.0f,
                    "RwMath::MagnitudeSquared(lCameraZ) > 0.0f");
         lvCameraX = vpu::Normalize(lvCameraX);                     // v122 @0x8262ED5C
@@ -1459,7 +1456,7 @@ namespace Vehicle
         // showtime-and-not-boosting: scale the enable by the air-time factor (0x8262EDDC-EE4C).
         if (lbShowtime && !IsBounceBoosting())
         {
-            lfEnable *= (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z
+            lfEnable *= (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV.z
                              > KF_AIRTIME_GATE)             // +0x1060.z > 0.5 (flt_82F2A2F8)
                             ? KF_AT_ENABLE_AIR_FACTOR       // flt_82F2A2D0 (0.4)
                             : KF_AT_ENABLE_GROUND_FACTOR;   // flt_82F2A2D4 (0.1)
@@ -1528,22 +1525,23 @@ namespace Vehicle
                 Vector3 lvAim = vpu::Add(vpu::Mult(lvCameraX, lfYaw),
                                          vpu::Mult(lvCameraZ, lfPitch));
                 {
-                    const Vector3 lAggregateValue = { -lvAim.x, -lvAim.y, -lvAim.z, -lvAim.w };
+                    const __vector4 lSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+                    const Vector3 lAggregateValue(__vxor(lvAim.mV, lSign));
                     lvAim = lAggregateValue;
                 }   // vxor sign flip
                 const f32 lfAimMagSq = vpu::MagnitudeSquared(lvAim);
                 lvAim = (lfAimMagSq > 0.0f)
                       ? vpu::Mult(lvAim, 1.0f / std::sqrt(lfAimMagSq))
-                      : Vector3();   // vsel zero guard
+                      : Vector3(0.0f, 0.0f, 0.0f);   // vsel zero guard
 
-                const VecFloat lvfEnable = { lfEnable, lfEnable, lfEnable, lfEnable };
+                const VecFloat lvfEnable(lfEnable, lfEnable, lfEnable, lfEnable);
                 UpdateTargetAssist(lpControls, lvfTimeStep, lvfEnable, lvAim);
             }
 
             // yaw ANGULAR impulse from the aftertouch scalar (0x8262F2D0-F38C):
             // worldUp * scalar * -2000 * dt * enable.
             Vector3 lvYawImpulse = vpu::Mult(
-                KV_WORLD_UP, lfScalar * KF_AT_ROLL_SCALAR * lvfTimeStep.x * lfEnable);
+                KV_AFTERTOUCH_WORLD_UP, lfScalar * KF_AT_ROLL_SCALAR * lvfTimeStep.mV.x * lfEnable);
             if (HasAftertouchImpulse(lvYawImpulse))
             {
                 AddWorldSpaceAngularImpulse(lvYawImpulse);
@@ -1554,8 +1552,8 @@ namespace Vehicle
             // (`li r5,0 ; li r4,0` at both call sites -- console-exact).
             {
                 Vector3 lvImpulse = vpu::Mult(
-                    KV_WORLD_UP, std::fabs(lfYaw) * KF_AT_LEVER_IMPULSE_YAW
-                                     * lvfTimeStep.x * lfEnable);
+                    KV_AFTERTOUCH_WORLD_UP, std::fabs(lfYaw) * KF_AT_LEVER_IMPULSE_YAW
+                                     * lvfTimeStep.mV.x * lfEnable);
                 const Vector3 lvArm = vpu::Mult(lvCameraX, KF_AT_LEVER_ARM);
                 const Vector3 lvAt  = (lfYaw > 0.0f) ? vpu::Add(mTransform.Pos(), lvArm)
                                                      : vpu::Subtract(mTransform.Pos(), lvArm);
@@ -1574,8 +1572,8 @@ namespace Vehicle
                 || !(lfPitch > 0.0f))
             {
                 Vector3 lvImpulse = vpu::Mult(
-                    KV_WORLD_UP, std::fabs(lfPitch) * KF_AT_LEVER_IMPULSE_PITCH
-                                     * lvfTimeStep.x * lfEnable);
+                    KV_AFTERTOUCH_WORLD_UP, std::fabs(lfPitch) * KF_AT_LEVER_IMPULSE_PITCH
+                                     * lvfTimeStep.mV.x * lfEnable);
                 const Vector3 lvArm = vpu::Mult(lvCameraZ, KF_AT_LEVER_ARM);
                 const Vector3 lvAt  = (lfPitch > 0.0f) ? vpu::Add(mTransform.Pos(), lvArm)
                                                        : vpu::Subtract(mTransform.Pos(), lvArm);
@@ -1589,7 +1587,7 @@ namespace Vehicle
 
         if (lbShowtime)   // lbz +0x140C @0x8262F5D4
         {
-            const VecFloat lvfEnable = { lfEnable, lfEnable, lfEnable, lfEnable };
+            const VecFloat lvfEnable(lfEnable, lfEnable, lfEnable, lfEnable);
             UpdateShowtimePhysics(lpControls, lvCameraX, lvCameraZ, lvfTimeStep,
                                   lvfEnable, lbUseSixaxis);
         }

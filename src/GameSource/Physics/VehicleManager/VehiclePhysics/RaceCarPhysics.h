@@ -454,7 +454,7 @@ namespace Vehicle
             static const f32 KF_SHOWTIME_DEFORM_MAX        = 4.0f;
 
             const f32 lfScaled =
-                GetAttribs()->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+                GetAttribs()->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.x
                 * KF_SHOWTIME_DEFORM_MASS_SCALE;
 
             // vmaxfp then vminfp, in the console's order.
@@ -569,10 +569,10 @@ namespace Vehicle
         // out-of-line. Landed 2026-08-18 (wave Q4) as the inline it is on X360.
         void AddPropCollisionImpulse( Vector3 lImpulse )
         {
-            mPropCollisionImpulseSum.x += lImpulse.x;
-            mPropCollisionImpulseSum.y += lImpulse.y;
-            mPropCollisionImpulseSum.z += lImpulse.z;
-            mPropCollisionImpulseSum.w += lImpulse.w;   // the vmaddfp is a full 4-lane add
+            mPropCollisionImpulseSum.mV.x += lImpulse.mV.x;
+            mPropCollisionImpulseSum.mV.y += lImpulse.mV.y;
+            mPropCollisionImpulseSum.mV.z += lImpulse.mV.z;
+            mPropCollisionImpulseSum.mV.w += lImpulse.mV.w;   // the vmaddfp is a full 4-lane add
         }
 
         // @0x825FFAE8: record a wheel/surface traction point. Chains register-transparently to
@@ -593,7 +593,7 @@ namespace Vehicle
         // it, and stores the result at 0x82FB82A0.
         bool IsReallyInAir() const
         {
-            return mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > 0.2f;
+            return mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV.z > 0.2f;
         }
 
     public:
