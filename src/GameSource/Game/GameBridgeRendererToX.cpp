@@ -73,8 +73,8 @@ void BrnGameModule::BridgeRendererToEffects(
     for (u8 luSlot = 0; luSlot < 2; ++luSlot)
         lpEffectsInput->SetFXEventsEffectsFrame(luSlot,
                                                lpRendererOutput->GetFXEventsEffectsFrame(luSlot));
-    lpEffectsInput->SetEnvironmentMap(static_cast<renderengine::Texture*>(
-        CgsGraphics::gTextureScopeTable.GetTexture(CgsGraphics::E_TEXTURE_PURPOSE_ENVIRONMENT_MAP)));
+    lpEffectsInput->SetEnvironmentMap(
+        CgsGraphics::gTextureScopeTable.GetTexture(CgsGraphics::E_TEXTURE_PURPOSE_ENVIRONMENT_MAP));
 }
 
 // @ 0x823CD6B0. The module setter copies the five typed pointers and preserves
