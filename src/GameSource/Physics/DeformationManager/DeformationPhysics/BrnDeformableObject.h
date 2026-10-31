@@ -694,8 +694,7 @@ namespace Deformation
         // `lvx128 v0, this, 26320 ; vspltw v0, v0, 3` size read + the :1687 tripwire operand).
         VecFloat GetEntitySphereSize() const
         {
-            const f32 lfSize = mLastLinearVelocityPlusEntityRadius.w;
-            { const VecFloat lResult = { lfSize, lfSize, lfSize, lfSize }; return lResult; }
+            return VecFloat(__vspltw(mLastLinearVelocityPlusEntityRadius.mV, 3));
         }
         void ResetSensors(Vector3Plus lA, Vector3 lB, Vector3 lC, Vector3 lD);                  // :713
         void PrepareIKPart(s32 liIndex);                                                        // :717
