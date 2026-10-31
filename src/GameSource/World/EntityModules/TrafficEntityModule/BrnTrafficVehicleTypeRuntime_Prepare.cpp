@@ -9,8 +9,8 @@
 //   lvx v0,r28,64   ; stvx v0,r16,16       mBBoxHalfSize    (this+0x10)  REAL
 //   vrlimi v12,v0,1,3   -> this+0x20 .w    ..._FwdAxle                   REAL
 //   vrlimi v0, v13,2,0  -> this+0x20 .z    ..._BackAxle                  REAL
-//   vrlimi v12,v127,4,0 -> this+0x30 .y    mMass_WheelRadius_Z_W.y       REAL (wheel radius)
-//   vrlimi v12,v13, 8,0 -> this+0x30 .x    mMass_WheelRadius_Z_W.x       REAL
+//   vrlimi v12,v127,4,0 -> this+0x30 .y    mMass_WheelRadius_Z_W.mV.y       REAL (wheel radius)
+//   vrlimi v12,v13, 8,0 -> this+0x30 .x    mMass_WheelRadius_Z_W.mV.x       REAL
 //   stb 0x5C(r16) + 0x48+i                 miNumPaintColours / maiPaint  REAL
 //   vrlimi v13,v0,8,2 @0x82761F24          .x mCabPivot     (tag 29)     GATED (leg 3)
 //   vrlimi v13,v0,4,1 @0x82761F88          .y mTrailerPivot (tag 28)     GATED (leg 3)
@@ -120,7 +120,7 @@ void VehicleTypeRuntime::Prepare(
             lpSpec->GetWheelSpec( liWheel );
 
         laWheelPositions[liWheel] = lpWheel->mPosition;
-        lafWheelRadii[liWheel]    = 0.5f * lpWheel->mScale.y;
+        lafWheelRadii[liWheel]    = 0.5f * lpWheel->mScale.mV.y;
 
         // The wheel-size equality tripwire. The console emits it INSIDE the wheel loop, once
         // per wheel (0x82761C54..0x82761D2C), which is why it sits here and not after:
@@ -134,7 +134,7 @@ void VehicleTypeRuntime::Prepare(
         //
         // BEHAVIOUR: this released assert is LIVE. If a shipped B5TRAFFIC.BNDL vehicle type
         // carries mismatched wheel scales it will fire on the next boot, which is correct --
-        // the console fires there too, and mMass_WheelRadius_Z_W.y below takes wheel 0's
+        // the console fires there too, and mMass_WheelRadius_Z_W.mV.y below takes wheel 0's
         // radius as THE radius for the type. A fire is data news; do not re-gate it.
         CGS_ASSERT( fabsf( lafWheelRadii[0] - lafWheelRadii[liWheel] ) <= KF_WHEEL_SIZE_EPSILON,
                     "Traffic wheels must all be the same size" );   // .cpp:115
@@ -143,15 +143,15 @@ void VehicleTypeRuntime::Prepare(
     // ---- 0x82761E64ff: the wheel radius lane (vrlimi128 v12, v127, 4, 0 -> word 1) -------
     // v127 is the FIRST wheel's radius; the loop leaves it loaded from element 0. Wheel 0's
     // radius is THE radius for the type, which is what the equality assert above justifies.
-    mMass_WheelRadius_Z_W.y = lafWheelRadii[0];
+    mMass_WheelRadius_Z_W.mV.y = lafWheelRadii[0];
 
     // ---- the two axle lanes (see the vrlimi analysis in the file banner) -----------------
     // FwdAxle  (.w, mask 1) <- maWheelSpecs[1].mPosition longitudinal lane   (a FRONT wheel)
     // BackAxle (.z, mask 2) <- maWheelSpecs[3].mPosition longitudinal lane   (a REAR wheel)
     // .x (CabPivot) and .y (TrailerPivot) are written later in the console body, by the
     // mGenericTags locator walk (GATED LEG 3 below).
-    mCabPivot_TrailerPivot_BackAxle_FwdAxle.w = laWheelPositions[1].z;
-    mCabPivot_TrailerPivot_BackAxle_FwdAxle.z = laWheelPositions[3].z;
+    mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV.w = laWheelPositions[1].mV.z;
+    mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV.z = laWheelPositions[3].mV.z;
 
     // ---- 0x82761EA4 / 0x82761EAC: the two box lanes --------------------------------------
     //   lvx128 v0, r28, 1680 ; stvx128 v0, r0,  r16      this+0x00 <- spec + 1680
@@ -167,9 +167,9 @@ void VehicleTypeRuntime::Prepare(
     // stack proves the offset: VehicleAttribs sits at sp+0x190 and the splat loads sp+0x200.
     // This released assert is LIVE; a fire on shipped data is data news, do not re-gate it.
     const f32 lfMass =
-        lVehicleAttribs.mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+        lVehicleAttribs.mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.x;
     CGS_ASSERT( lfMass > 0.0f, "lVehicleAttribs.mBaseAttribs.GetMass() > 0.0f" );   // .cpp:125
-    mMass_WheelRadius_Z_W.x = lfMass;
+    mMass_WheelRadius_Z_W.mV.x = lfMass;
 
     {
         // GATED LEG 3 -- the LOCATOR walk over mGenericTags (0x82761E00..0x82761E60).

@@ -47,7 +47,7 @@ namespace BrnTraffic
             mBBoxOffset.SetZero();
             mBBoxHalfSize.SetZero();
             {
-                const Vector4 lAggregateValue = { -1.5f, 1.5f, -1.1f, 1.1f };
+                const Vector4 lAggregateValue(-1.5f, 1.5f, -1.1f, 1.1f);
                 mCabPivot_TrailerPivot_BackAxle_FwdAxle = lAggregateValue;
             }
         }
@@ -81,20 +81,15 @@ namespace BrnTraffic
         // stage 3 reads mBBoxHalfSize at element+0x10; VehicleAxles::SetFromVehicleTransform
         // @0x82756738 splats lanes 2 and 3 of the pivot vector at element+0x20).
         //
-        // FLAG (host lowering): the DWARF types the four pivot getters and GetMass /
-        // GetWheelRadius as `VecFloat`, the console's broadcast 16-byte lane. They are f32
-        // here, matching this tree's lowering for scalar lane reads and every reconstructed
-        // consumer, which multiplies a Vector3 by the scalar.
         Vector3 GetBBoxOffset() const { return mBBoxOffset; }
         Vector3 GetBBoxHalfSize() const { return mBBoxHalfSize; }
 
-        f32 GetCabPivotDistance() const { return mCabPivot_TrailerPivot_BackAxle_FwdAxle.x; }
-        f32 GetTrailerPivotDistance() const { return mCabPivot_TrailerPivot_BackAxle_FwdAxle.y; }
-        f32 GetBackAxleOffset() const { return mCabPivot_TrailerPivot_BackAxle_FwdAxle.z; }
-        f32 GetForwardAxleOffset() const { return mCabPivot_TrailerPivot_BackAxle_FwdAxle.w; }
-
-        f32 GetMass() const { return mMass_WheelRadius_Z_W.x; }
-        f32 GetWheelRadius() const { return mMass_WheelRadius_Z_W.y; }
+        VecFloat GetCabPivotDistance() const { return VecFloat(__vspltw(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, 0)); }
+        VecFloat GetTrailerPivotDistance() const { return VecFloat(__vspltw(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, 1)); }
+        VecFloat GetBackAxleOffset() const { return VecFloat(__vspltw(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, 2)); }
+        VecFloat GetForwardAxleOffset() const { return VecFloat(__vspltw(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, 3)); }
+        VecFloat GetMass() const { return VecFloat(__vspltw(mMass_WheelRadius_Z_W.mV, 0)); }
+        VecFloat GetWheelRadius() const { return VecFloat(__vspltw(mMass_WheelRadius_Z_W.mV, 1)); }
 
         Vector4 GetCabPivot_TrailerPivot_BackAxle_FwdAxle() const
         {

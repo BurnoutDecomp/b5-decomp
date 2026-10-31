@@ -31,7 +31,7 @@ struct Axle
     void Initialise()
     {
         mPosAndWheelRadius.SetZero();
-        const Vector3Plus lUpAndDebug = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3Plus lUpAndDebug(0.0f, 1.0f, 0.0f, 0.0f);
         mUpAndDebug = lUpAndDebug;
     }
 
