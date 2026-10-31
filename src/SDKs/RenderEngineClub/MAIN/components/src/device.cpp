@@ -1,9 +1,22 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/rendertargetstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "rw/rwcore_structs.h"
 
 D3DDevice* gpD3DDevice = 0;
+
+// ARTIST82B61F90..82B61FD8. Keep the provisional original identity until its
+// declaration name is recovered; this is distinct from Device::UnSetResource.
+void sub_82B61F90(const renderengine::VertexDescriptorData* lpDescriptor)
+{
+    D3DVertexDeclaration* const lpDeclaration = lpDescriptor->mpDeclaration;
+    D3DDevice* const lpDevice = ::gpD3DDevice;
+    if (D3DVertexDeclaration_IsSet(lpDeclaration, lpDevice))
+    {
+        D3DDevice_SetVertexDeclaration(lpDevice, 0);
+    }
+}
 
 namespace renderengine
 {
