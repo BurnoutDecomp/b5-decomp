@@ -69,6 +69,7 @@
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"                     // CgsGraphics::Camera (RenderTrafficLightCoronas)
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"                           // Pvs::GetHullIndexForPoint / ForIndices (the same)
 
+#include <float.h>
 #include <cmath>    // powf / sqrtf
 #include <cstdlib>  // getenv / atoi ([tdef-upload] witness, opt-in)
 #include <cstdio>
@@ -291,10 +292,8 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         // GetVehicleTransform because the console inlines that accessor here (it is a bare
         // indexed read plus a validity assert), and no declaration for it exists in the tree.
         const Vector3& lrPos = maVehicleTransforms[ luVehicle ].Pos();
-        const f32 lfDX = lrPos.x - lCameraPosition.x;
-        const f32 lfDY = lrPos.y - lCameraPosition.y;
-        const f32 lfDZ = lrPos.z - lCameraPosition.z;
-        const f32 lfDistanceSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
+        const __vector4 lvDelta = __vsubfp(lrPos.mV, lCameraPosition.mV);
+        const f32 lfDistanceSq = __vmsum3fp(lvDelta, lvDelta).x;
 
         if ( lfDistanceSq >= mfRenderCullDistanceSq )
         {
@@ -455,6 +454,9 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     BrnWorld::ShadowMap*        lpShadowMap     = lpInput->GetShadowMap();
     BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBlobbyShadowRenderer =
         lpInput->GetBlobbyShadowBuffer();
+    BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface =
+        lpInput->GetCoronaSubmissionInterface();
+    CGS_ASSERT(lpCoronaSubmissionInterface != 0, "lpCoronaSubmissionInterface");
 
     CGS_ASSERT( lpDispatchFrame != 0, "lpDispatchFrame" );
     CGS_ASSERT( lpShadowMap != 0, "lpShadowMap" );
@@ -507,10 +509,7 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     // DELETE-WHEN SubmitCoronasForVehicle lands.
     if ( !lpShadowMap->IsRenderingShadowMap() )
     {
-        if ( lpCoronaSubmissionInterface != 0 && lpCoronaSubmissionInterface->IsReady() )
-        {
-            RenderTrafficLightCoronas( lpCoronaSubmissionInterface, lCameraPosition, lCameraDirection );
-        }
+        RenderTrafficLightCoronas( lpCoronaSubmissionInterface, lCameraPosition, lCameraDirection );
     }
 
     // ---- step 8/9 ----------------------------------------------------------
@@ -594,25 +593,7 @@ namespace
 
     // The frustum bounds' starting values: flt_820BA23C == 3.40282347e+38f (0x7F7FFFFF, FLT_MAX), negated by
     // flt_82035570 (0xFF7FFFFF).
-    const f32 KF_FRUSTRUM_BOUND_START = 3.40282347e+38f;
-
-    // vminfp / vmaxfp lanes (0x8271EF40 / 0x8271EF48): a NaN operand is the result (the running bound first),
-    // and -0 sits below +0.
-    f32 VmxMinLane( f32 lfA, f32 lfB )
-    {
-        if ( lfA != lfA ) { return lfA; }
-        if ( lfB != lfB ) { return lfB; }
-        if ( lfA == lfB ) { return std::signbit( lfA ) ? lfA : lfB; }
-        return ( lfA < lfB ) ? lfA : lfB;
-    }
-
-    f32 VmxMaxLane( f32 lfA, f32 lfB )
-    {
-        if ( lfA != lfA ) { return lfA; }
-        if ( lfB != lfB ) { return lfB; }
-        if ( lfA == lfB ) { return std::signbit( lfA ) ? lfB : lfA; }
-        return ( lfA > lfB ) ? lfA : lfB;
-    }
+    const f32 KF_FRUSTRUM_BOUND_START = FLT_MAX;
 
     u32 guTrafficLightCoronaPassCount     = 0;
     s32 giTrafficLightCoronaPassLinesLeft = 24;
@@ -633,8 +614,9 @@ TrafficEntityModule::RenderTrafficLightCoronas( BrnCoronaManager::BrnSubmissionI
     const ::Set<u16, KU_MAX_ACTIVE_HULLS>& lrActiveHulls = mActiveHullsForLocalPlayer;
     CGS_ASSERT( lpTrafficLightManager != 0, "lpTrafficLightManager" );              // .cpp:3359
 
-    const VecFloat lfCullDistSq = { KF_RENDER_CULL_CORONA_DISTANCE_SQ, KF_RENDER_CULL_CORONA_DISTANCE_SQ,
-                                    KF_RENDER_CULL_CORONA_DISTANCE_SQ, KF_RENDER_CULL_CORONA_DISTANCE_SQ };
+    const Vector4 lvCullDistance(KF_RENDER_CULL_CORONA_DISTANCE_SQ, KF_RENDER_CULL_CORONA_DISTANCE_SQ,
+                                 KF_RENDER_CULL_CORONA_DISTANCE_SQ, KF_RENDER_CULL_CORONA_DISTANCE_SQ);
+    const rw::math::vpu::VecFloat lfCullDistSq(lvCullDistance.mV);
 
     // ---- step 3: the active hulls ------------------------------------------
     for ( u32 luActiveHull = 0; luActiveHull < lrActiveHulls.GetLength(); ++luActiveHull )
@@ -652,19 +634,13 @@ TrafficEntityModule::RenderTrafficLightCoronas( BrnCoronaManager::BrnSubmissionI
     Vector3 laFrustrumPoints[ 8 ];
     lCamera.GetFrustumPerspectiveVertices( laFrustrumPoints );
 
-    Vector3 lFrustrumMin = { KF_FRUSTRUM_BOUND_START, KF_FRUSTRUM_BOUND_START, KF_FRUSTRUM_BOUND_START, 0.0f };
-    Vector3 lFrustrumMax = { -KF_FRUSTRUM_BOUND_START, -KF_FRUSTRUM_BOUND_START, -KF_FRUSTRUM_BOUND_START, 0.0f };
+    Vector3 lFrustrumMin(KF_FRUSTRUM_BOUND_START, KF_FRUSTRUM_BOUND_START, KF_FRUSTRUM_BOUND_START);
+    Vector3 lFrustrumMax(-KF_FRUSTRUM_BOUND_START, -KF_FRUSTRUM_BOUND_START, -KF_FRUSTRUM_BOUND_START);
     for ( u32 luIndex = 0; luIndex < 8; ++luIndex )
     {
         const Vector3& lrPoint = laFrustrumPoints[ luIndex ];
-        lFrustrumMin.x = VmxMinLane( lFrustrumMin.x, lrPoint.x );
-        lFrustrumMin.y = VmxMinLane( lFrustrumMin.y, lrPoint.y );
-        lFrustrumMin.z = VmxMinLane( lFrustrumMin.z, lrPoint.z );
-        lFrustrumMin.w = VmxMinLane( lFrustrumMin.w, lrPoint.w );
-        lFrustrumMax.x = VmxMaxLane( lFrustrumMax.x, lrPoint.x );
-        lFrustrumMax.y = VmxMaxLane( lFrustrumMax.y, lrPoint.y );
-        lFrustrumMax.z = VmxMaxLane( lFrustrumMax.z, lrPoint.z );
-        lFrustrumMax.w = VmxMaxLane( lFrustrumMax.w, lrPoint.w );
+        lFrustrumMin.mV = __vminfp(lFrustrumMin.mV, lrPoint.mV);
+        lFrustrumMax.mV = __vmaxfp(lFrustrumMax.mV, lrPoint.mV);
     }
 
     s32 liHullIndexMinX = 0;
@@ -787,9 +763,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     //   * the main-view blobby producer uses mvRoadTestNormal_HeightAboveRoad when PhysicsInfo
     //     is present; the shadow-map pass is excluded by its separate rendering-byte gate;
     //   * the damaged verlet-offset upload is enabled -- still G3, see that gate.
-    // The accessor landed with the keystone (_wT3_00.cpp) and returns the real
-    // TrafficPhysicsInfo*; the record itself has always been modelled and Constructed
-    // (_wT1_03.cpp). Nothing here is gated any more.
+    // The accessor returns the real TrafficPhysicsInfo*. The replay and wheel paths remain
+    // incomplete in this source; the live shadow path uses the physical record below.
     const bool lbIsPhysical = lpVehicle->IsPhysical();
     const TrafficPhysicsInfo* lpPhysicsInfo = 0;
     if ( lbIsPhysical )
@@ -831,13 +806,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // console CgsResource::ResourcePtr is 32 bytes. That stride is X360 and must not survive: on
     // the host the array is indexed by name and the host ResourcePtr has its own size.
     // FLAG (extent): the DWARF declares this array KU_MAX_VEHICLE_ASSETS (64) long, but the
-    // console indexes it by vehicle type, bounded by KU_MAX_VEHICLE_TYPES (96). The leak and the
-    // asm agree on the index; the extent is still to reconcile. Bounded here so a type past 64
-    // declines to draw rather than reading off the end.
-    if ( luVehicleType >= KU_MAX_VEHICLE_ASSETS )
-    {
-        return;
-    }
+    // console indexes it by vehicle type, bounded by KU_MAX_VEHICLE_TYPES (96). The extent
+    // still needs independent reconciliation against the original declaration and callers.
     const CgsResource::ResourcePtr< BrnPhysics::Deformation::StreamedDeformationSpec >&
         lrPhysicsSpecPtr = maTrafficVehiclePhysicsSpecs[ luVehicleType ];
 
@@ -845,18 +815,15 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     CGS_ASSERT( lpWheelModel != 0, "lpWheelModel" );
 
     // ARTIST 0x82728EF8 retains this runtime record from the paint path through AddShadow. The
-    // recovered producer reads its bbox offset, half-size and axle offsets after the wheel draw.
+    // recovered producer reads its bbox offset, half-size and axle offsets before fog and draw.
     const VehicleTypeRuntime* lpVehicleTypeRuntime = GetVehicleTypeRuntime( luVehicleType );
 
-    const Matrix44Affine lBodyTransform =
-        lrRenderPose.SampleBody(maVehicleTransforms[luEntityIdx], lfRenderAlpha);
-
-    const Vector4 lPitchRollSteerWheel =
-        lrRenderPose.SampleAngles(lpVehicle->GetPitch_Roll_Steering_WheelRot(), lfRenderAlpha);
-    const f32 lfPitch    = lPitchRollSteerWheel.x;
-    const f32 lfRoll     = lPitchRollSteerWheel.y;
-    const f32 lfSteering = lPitchRollSteerWheel.z;
-    const f32 lfWheelRot = lPitchRollSteerWheel.w;
+    const Matrix44Affine lBodyTransform = maVehicleTransforms[luEntityIdx];
+    const Vector4 lPitchRollSteerWheel = lpVehicle->GetPitch_Roll_Steering_WheelRot();
+    const f32 lfPitch    = lPitchRollSteerWheel.mV.x;
+    const f32 lfRoll     = lPitchRollSteerWheel.mV.y;
+    const f32 lfSteering = lPitchRollSteerWheel.mV.z;
+    const f32 lfWheelRot = lPitchRollSteerWheel.mV.w;
 
     const Matrix44Affine lBodyRollTransform =
         rw::math::vpu::Mult(
@@ -868,23 +835,45 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     const bool lbShadowPass = lpShadowMap->IsRenderingShadowMap()
                            && lpShadowMap->IsUsingZOnlyRenderingPath();
 
-    if (sbPoseDiag && !lpShadowMap->IsRenderingShadowMap())
+    // ARTIST 827293B8..82729554: submit the main-view ground shadow.
+    if (!lpShadowMap->IsRenderingShadowMap())
     {
-        static u32 sauLastPresent[KU_MAX_TOTAL_TRAFFIC] = {};
-        static u32 suLines = 0;
-        static u32 suFrame = 0;
-        static u32 suPhysical = 0, suDriving = 0;
-        const u32 luFrame = renderengine::guPresentCount;
-        if (suFrame != luFrame) { suFrame = luFrame; suPhysical = suDriving = 0; }
-        if (suLines < 48000 && sauLastPresent[luEntityIdx] != luFrame
-            && (lbIsPhysical ? suPhysical < 4 : suDriving < 1))
+        const Vector3 lOffset = lpVehicleTypeRuntime->GetBBoxOffset();
+        const Vector3 lHalfSize = lpVehicleTypeRuntime->GetBBoxHalfSize();
+        const Vector4 lAxles = lpVehicleTypeRuntime->GetCabPivot_TrailerPivot_BackAxle_FwdAxle();
+        const __vector4 lOffsetZ = __vspltw(lOffset.mV, 2);
+        const __vector4 lHalfZ = __vspltw(lHalfSize.mV, 2);
+        __vector4 lPacked = __vrlimi(lAxles.mV, __vaddfp(lOffsetZ, lHalfZ), 8, 0);
+        lPacked = __vrlimi(lPacked, __vsubfp(lOffsetZ, lHalfZ), 4, 0);
+        CGS_ASSERT(lOffset.mV.x < 0.1f, "Vehicle has asymmetric bounding box round Z");
+        const Vector4 lExtents(lPacked);
+        const rw::math::vpu::VecFloat lWidth(__vspltw(lHalfSize.mV, 0));
+        if (!lbIsPhysical)
         {
-            sauLastPresent[luEntityIdx] = luFrame;
-            ++suLines;
-            if (lbIsPhysical) ++suPhysical; else ++suDriving;
-            const auto& lrRaw = maVehicleTransforms[luEntityIdx];
-            char lacMessage[512];
-            CgsDev::Log::WriteToLog(lacMessage);
+            const rw::math::vpu::VecFloat lHeight(__vspltisw(0));
+            lpBlobbyShadowRenderer->AddShadow(lBodyTransform, lExtents, lWidth, lHeight);
+        }
+        else if (lpPhysicsInfo != 0)
+        {
+            const __vector4 lNormal = lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.mV;
+            const __vector4 lForward = lBodyTransform.zAxis.mV;
+            const __vector4 lNormalYZX = __vpermwi(lNormal, 0x63);
+            const __vector4 lForwardYZX = __vpermwi(lForward, 0x63);
+            __vector4 lRight = __vmulfp(lForward, lNormalYZX);
+            lRight = __vnmsubfp(lForwardYZX, lNormal, lRight);
+            lRight = __vpermwi(lRight, 0x63);
+            __vector4 lNewForward = __vmulfp(lNormal, __vpermwi(lRight, 0x63));
+            lNewForward = __vnmsubfp(lNormalYZX, lRight, lNewForward);
+            lNewForward = __vpermwi(lNewForward, 0x63);
+            const __vector4 lHeightVector = __vspltw(lNormal, 3);
+            const __vector4 lUp = __vrlimi(__vspltisw(0), __vcfsx(__vspltisw(1), 0), 4, 0);
+            Matrix44Affine lShadowTransform;
+            lShadowTransform.xAxis.mV = lRight;
+            lShadowTransform.yAxis.mV = lNormal;
+            lShadowTransform.zAxis.mV = lNewForward;
+            lShadowTransform.wAxis.mV = __vsubfp(lBodyTransform.wAxis.mV, __vmulfp(lUp, lHeightVector));
+            lpBlobbyShadowRenderer->AddShadow(lShadowTransform, lExtents, lWidth,
+                                               rw::math::vpu::VecFloat(lHeightVector));
         }
     }
 
@@ -913,110 +902,22 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     //
     // The technique index is two bits, exactly the race car's scheme: bit 0 == "not
     // deforming", bit 1 == "shadow pass".
-    const Vector2 lv2NoFractureUVScale   = { 0.0f, 0.0f, 0.0f, 0.0f };
-    const Vector4 lv4NoFractureUVOffsets = { 0.0f, 0.0f, 0.0f, 0.0f };
-    // ---- [tdef-control] NOT X360; opt-in BRN_TDEF_NO_UPLOAD=1 restores the pre-2026-09-02
-    // gate (the deforming arm never taken, constant 22 = the null block) so the same hit can be
-    // filmed WITHOUT the upload. A control that has not been seen to fail is not a control.
-    // DELETE-WHEN the traffic-deformation evidence is banked.
-    static s32 siNoUploadControl = -1;
-    if ( siNoUploadControl < 0 )
-    {
-    }
-    const bool lbDeforming = ( lpPhysicsInfo != 0 )
-                          && lpPhysicsInfo->mbIsDeforming
-                          && ( *lpiUpdatedNumDamagedVehiclesRendered < 5 )
-                          && ( siNoUploadControl == 0 );
+    Vector2 lv2NoFractureUVScale;
+    lv2NoFractureUVScale.mV = __vspltisw(0);
+    const Vector4 lv4NoFractureUVOffsets(__vspltisw(0));
+    const bool lbDeforming = (lpPhysicsInfo != 0)
+        && lpPhysicsInfo->mbIsDeforming
+        && (*lpiUpdatedNumDamagedVehiclesRendered < 5);
     u8 lu8Technique;
     if ( lbDeforming )
     {
         ++*lpiUpdatedNumDamagedVehiclesRendered;
         SetGlassFractureConstants( 0.0f, 1.0f, lv2NoFractureUVScale, lv4NoFractureUVOffsets );
 
-        // ---- [tdef-upload] NOT X360; opt-in on the BRN_DEFORM_TRACE latch (the same one the
-        // race car's [deform-upload] control shares). The statistic the GPU is about to see --
-        // max / sum / non-zero count over the 128 rows -- off the very array handed to
-        // constant 22, printed only when it CHANGES, so a deforming traffic car's upload can
-        // be read against the physics side's [tdef] line for the same car on the same frame.
-        // DELETE-WHEN the traffic-deformation question is banked.
-        {
-            static s32 siUploadOn = -1;
-            if ( siUploadOn < 0 )
-            {
-            }
-            if ( siUploadOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                static f32 sfLastSum = -1.0f;
-                static u32 sluLines  = 0;
-                const Vector3Plus* lpV = lpPhysicsInfo->maSkinningOffsets_Scratch;
-                f32 lfMax = 0.0f;
-                f32 lfSum = 0.0f;
-                s32 liNnz = 0;
-                for ( u32 luRow = 0; luRow < TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS; ++luRow )
-                {
-                    const f32 lfMag = sqrtf( lpV[ luRow ].x * lpV[ luRow ].x
-                                           + lpV[ luRow ].y * lpV[ luRow ].y
-                                           + lpV[ luRow ].z * lpV[ luRow ].z );
-                    if ( lfMag > lfMax ) { lfMax = lfMag; }
-                    if ( lfMag > 0.0f ) { lfSum += lfMag; ++liNnz; }
-                }
-                if ( lfSum != sfLastSum && sluLines < 400u )
-                {
-                    ++sluLines;
-                    sfLastSum = lfSum;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[tdef-upload] frame=" << static_cast< s32 >( renderengine::guPresentCount )
-                        << " veh " << luEntityIdx
-                        << " technique " << ( lbShadowPass ? 3 : 0 )
-                        << " budget " << *lpiUpdatedNumDamagedVehiclesRendered
-                        << " maxVerlet " << lfMax
-                        << " sumVerlet " << lfSum
-                        << " nnz " << liNnz
-                        << " fatal " << ( lpPhysicsInfo->mbIsFatallyCrashing ? 1 : 0 )
-                        << " glassFlags " << static_cast< u32 >( lpPhysicsInfo->mu8RenderDamageFlags )
-                        << "\n";
-                }
-            }
-        }
-
-        // The console's Vector3Plus* overload @0x822B3458 is the same 16-byte-row copy as the
-        // Vector4* one this tree bodies; the race-car render TU passes its Vector3Plus block
-        // through the same cast.
-        //
-        // ---- [tdef-scale] NOT X360; opt-in BRN_TDEF_SCALE=<f> publishes the block with every
-        // row's xyz multiplied by <f> (0 == a published all-zero block). The discriminator for
-        // the panel sail seen in run tdef_r4: if a ZERO block still sails, the vertex stream's
-        // bone indices reach past c127 (the stale-register mechanism the race-car TU measured)
-        // and the values are innocent; if the sail scales with <f>, the values are the cause.
-        // DELETE-WHEN the traffic sail is attributed.
-        static f32 sfUploadScale = -1.0f;
-        if ( sfUploadScale < 0.0f )
-        {
-            if ( sfUploadScale < 0.0f ) { sfUploadScale = 1.0f; }
-        }
-        if ( sfUploadScale != 1.0f )
-        {
-            static Vector3Plus saScaledBlock[ TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS ];
-            for ( u32 luRow = 0; luRow < TrafficPhysicsInfo::KU_NUM_SKINNING_OFFSETS; ++luRow )
-            {
-                const Vector3Plus& lrRow = lpPhysicsInfo->maSkinningOffsets_Scratch[ luRow ];
-                saScaledBlock[ luRow ].x = lrRow.x * sfUploadScale;
-                saScaledBlock[ luRow ].y = lrRow.y * sfUploadScale;
-                saScaledBlock[ luRow ].z = lrRow.z * sfUploadScale;
-                saScaledBlock[ luRow ].w = lrRow.w;
-            }
-            CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
-                22, reinterpret_cast< const Vector4* >( saScaledBlock ) );
-        }
-        else
-        {
-            CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
-                22, reinterpret_cast< const Vector4* >( lpPhysicsInfo->maSkinningOffsets_Scratch ) );
-        }
-        {
-            const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
-            CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
-        }
+        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
+            22, lpPhysicsInfo->maSkinningOffsets_Scratch);
+        const Vector4 lv4DamageConstants(__vspltisw(0));
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData(23, lv4DamageConstants);
         lu8Technique = lbShadowPass ? 3u : 0u;
     }
     else
@@ -1030,14 +931,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // :1284-:1288), unlike the race car, which publishes a separate pearlescent tint. The vector
     // is VehicleTypeRuntime::PickPaintColourForVehicle(luEntityIdx, numColours,
     // mpData->mpaPaintColours), seeded by the vehicle index so a parked car keeps its colour.
-    Vector4 lv4PaintColour = { 1.0f, 1.0f, 1.0f, 1.0f };
-    {
-        if ( lpVehicleTypeRuntime != 0 && lpData->mpaPaintColours != 0 )
-        {
-            lv4PaintColour = lpVehicleTypeRuntime->PickPaintColourForVehicle(
-                luEntityIdx, lpData->GetNumPaintColours(), lpData->mpaPaintColours );
-        }
-    }
+    const Vector4 lv4PaintColour = lpVehicleTypeRuntime->PickPaintColourForVehicle(
+        luEntityIdx, lpData->GetNumPaintColours(), lpData->mpaPaintColours);
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 20, lv4PaintColour );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 21, lv4PaintColour );
 
@@ -1054,58 +949,35 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // the warning.
     (void)lFrontLights;
     {
-        const Vector4 lv4SelfIlluminationMask = {
-            lRearLights.x * KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY,
-            lRearLights.y * KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY,
-            lRearLights.z * KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY,
-            lRearLights.w * KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY };
+        const Vector4 lv4Intensity(KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY, KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY,
+                                  KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY, KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY);
+        const Vector4 lv4SelfIlluminationMask(__vmulfp(lRearLights.mV, lv4Intensity.mV));
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 24, lv4SelfIlluminationMask );
-    }
-
-    // ---- shader constants 22 / 23 on the NON-deforming arm ------------------
-    // The leak publishes g_NullVerletOffsets here unconditionally (:8580) and a zeroed damage
-    // vector as 23 (:8577); the ship folds the live block into the deforming arm above, and
-    // publishes NOTHING for 22/23 on a car that is not deforming.
-    //
-    // DELIBERATE DEVIATION, the same one the race-car render TU carries: leaving the block
-    // unpublished is not neutral on the PC backend. Sixteen vertex programs in SHADERS_PC.BNDL
-    // declare g_verletOffsets at c0 count 128, and an external constant whose source pointer
-    // is null is SKIPPED, not zeroed (shadowingdevice.cpp:847), so the program reads whatever
-    // the preceding draw left in c0..c127 -- the panel-stretch defect. The null block costs one
-    // 2 KB copy per car. It is published ONLY when the deforming arm did not just publish the
-    // live block (2026-09-02: it used to follow unconditionally, which would have overwritten
-    // the live offsets with zeros on the very cars that deform).
-    if ( !lbDeforming )
-    {
-        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData( 22, gaNullVerletOffsets );
-        const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
-        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
     }
 
     // ---- shader constant 26: the per-car FOG blend ------------------------
     // The console inlines a powf (the vlogefp / vexptefp pair plus the polynomial refinement
     // over the .rodata coefficient vectors at 0x82000BD0..0x82000C20, pseudocode :700-:1177);
-    // de-optimised back to the library call, byte-identical in shape to the race car's:
+    // The existing scalar reconstruction below remains unverified against that VMX pipeline:
     //     t = powf( saturate( distance * scattering.x - scattering.y ), scattering.z )
     //         * scattering.w
     //     constant26 = { fogColour.xyz * t, 1 - t }        (`vrlimi128 v1, v13, 1, 0`)
     // The distance is camera -> car, which the race car receives ready-made and traffic
     // computes here from lCameraPosition (that is what v120 is for).
     {
-        const f32 lfDX = lBodyTransform.wAxis.x - lCameraPosition.x;
-        const f32 lfDY = lBodyTransform.wAxis.y - lCameraPosition.y;
-        const f32 lfDZ = lBodyTransform.wAxis.z - lCameraPosition.z;
+        const f32 lfDX = lBodyTransform.wAxis.mV.x - lCameraPosition.mV.x;
+        const f32 lfDY = lBodyTransform.wAxis.mV.y - lCameraPosition.mV.y;
+        const f32 lfDZ = lBodyTransform.wAxis.mV.z - lCameraPosition.mV.z;
         const f32 lfCameraDistance = sqrtf( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ );
 
-        f32 lfBlend = lfCameraDistance * lFogScattering.x - lFogScattering.y;
+        f32 lfBlend = lfCameraDistance * lFogScattering.mV.x - lFogScattering.mV.y;
         if ( lfBlend < 0.0f ) { lfBlend = 0.0f; }
         if ( lfBlend > 1.0f ) { lfBlend = 1.0f; }
-        const f32 lfFog = powf( lfBlend, lFogScattering.z ) * lFogScattering.w;
+        const f32 lfFog = powf( lfBlend, lFogScattering.mV.z ) * lFogScattering.mV.w;
 
-        const Vector4 lv4Fog = { lFogColourPlusWhiteLevel.x * lfFog,
-                                 lFogColourPlusWhiteLevel.y * lfFog,
-                                 lFogColourPlusWhiteLevel.z * lfFog,
-                                 1.0f - lfFog };
+        const Vector4 lv4Fog(lFogColourPlusWhiteLevel.mV.x * lfFog,
+                             lFogColourPlusWhiteLevel.mV.y * lfFog,
+                             lFogColourPlusWhiteLevel.mV.z * lfFog, 1.0f - lfFog);
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 26, lv4Fog );
     }
 
@@ -1132,8 +1004,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             {
                 continue;
             }
-            const auto lePartLod = static_cast<CgsGraphics::Model::State>(liPartLod);
-            if ( liPartLod < 0 || !lpModel->DoesStateExist( lePartLod ) )
+            const CgsGraphics::Model::State lePartLod = lLOD;
+            if ( !lpModel->DoesStateExist( lePartLod ) )
             {
                 continue;
             }
