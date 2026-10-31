@@ -345,22 +345,12 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
         // `clrlwi r30, r11, 16` -- the key is carried to the sampler as a u16.
         const u16 lu16ShakeKey = static_cast<u16>(liShakeKey);
 
-        // The amplitude is broadcast once and used by BOTH triples (the console re-loads
-        // camera +0x114 for each, at 0x8223D690 and 0x8223D858).
-        const rwvpu::Vector4 lvfShakeAmplitude = { lrEffects.GetShakeAmplitude(),
-                                                   lrEffects.GetShakeAmplitude(),
-                                                   lrEffects.GetShakeAmplitude(),
-                                                   lrEffects.GetShakeAmplitude() };
-
-        // ---- the ROTATION triple -> a quaternion ---------------------------------------
-        rwvpu::Vector3 lvRotation =                                             // .cpp:111
-        {
-            mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_QUAT_X, lu16ShakeKey),
-            mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_QUAT_Y, lu16ShakeKey),
-            mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_QUAT_Z, lu16ShakeKey),
-            0.0f
-        };
-        lvRotation = lvRotation * lvfShakeAmplitude;
+        // ARTIST samples Z, Y, X, then reads the camera amplitude.
+        const f32 lfRotZ = mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_QUAT_Z, lu16ShakeKey);
+        const f32 lfRotY = mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_QUAT_Y, lu16ShakeKey);
+        const f32 lfRotX = mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_QUAT_X, lu16ShakeKey);
+        rwvpu::Vector3 lvRotation(lfRotX, lfRotY, lfRotZ);
+        lvRotation.mV = __vmulfp(lvRotation.mV, XMVectorReplicate(lrEffects.GetShakeAmplitude()));
 
         // See the banner: the scalar part is sqrt(1 - MAGNITUDE), and the two vsel guards
         // substitute zero rather than let a degenerate input propagate.
@@ -370,20 +360,17 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
                                                          : 0.0f;
 
         const rwvpu::Quaternion lRotationQuat =                                 // .cpp:117
-            { lvRotation.x, lvRotation.y, lvRotation.z, lfQuatW };
+            { lvRotation.mV.x, lvRotation.mV.y, lvRotation.mV.z, lfQuatW };
 
         rwvpu::Matrix44Affine lShakeMatrix =                                    // .cpp:118
             Matrix44AffineFromQuaternion(lRotationQuat);
 
         // ---- the POSITION triple -> the shake matrix's translation row ------------------
-        rwvpu::Vector3 lvPosition =                                             // .cpp:121
-        {
-            mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_POS_X, lu16ShakeKey),
-            mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_POS_Y, lu16ShakeKey),
-            mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_POS_Z, lu16ShakeKey),
-            0.0f
-        };
-        lvPosition = lvPosition * lvfShakeAmplitude;
+        const f32 lfPosZ = mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_POS_Z, lu16ShakeKey);
+        const f32 lfPosY = mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_POS_Y, lu16ShakeKey);
+        const f32 lfPosX = mShakeTake.GetValueFloat(KI_ICE_ELEMENT_SHAKE_POS_X, lu16ShakeKey);
+        rwvpu::Vector3 lvPosition(lfPosX, lfPosY, lfPosZ);
+        lvPosition.mV = __vmulfp(lvPosition.mV, XMVectorReplicate(lrEffects.GetShakeAmplitude()));
         lShakeMatrix.wAxis = lvPosition;
 
         // ---- compose, in the camera's OWN space, and publish ---------------------------
