@@ -1,6 +1,6 @@
 #include "GameSource/Director/Camera/Utils/BrnVehicleCollisionPredictor.h"
 
-#include <cmath>     // std::fma, std::sqrt
+#include <cmath>     // std::sqrt
 #include <cstring>   // std::memcpy (lane bits)
 
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"                               // AllVehicleData
@@ -65,14 +65,13 @@ namespace
     // a*b + c, ONE rounding per lane.
     inline Lanes Madd(const Lanes& arA, const Lanes& arB, const Lanes& arC)
     {
-        return Make(std::fma(arA.v[0], arB.v[0], arC.v[0]), std::fma(arA.v[1], arB.v[1], arC.v[1]),
-                    std::fma(arA.v[2], arB.v[2], arC.v[2]), std::fma(arA.v[3], arB.v[3], arC.v[3]));
+        return Make(arA.v[0] * arB.v[0] + arC.v[0], arA.v[1] * arB.v[1] + arC.v[1],
+                    arA.v[2] * arB.v[2] + arC.v[2], arA.v[3] * arB.v[3] + arC.v[3]);
     }
-    // -(a*b - c): the difference rounded ONCE, then negated (an exact cancellation is -0; a NaN keeps its sign).
+    // -(a*b - c) = c - a*b, one native fused subtract (VMX vnmsubfp128).
     inline f32 Nmsub1(f32 afA, f32 afB, f32 afC)
     {
-        const f32 lfDifference = std::fma(afA, afB, -afC);
-        return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        return afC - afA * afB;
     }
     inline Lanes Nmsub(const Lanes& arA, const Lanes& arB, const Lanes& arC)
     {
