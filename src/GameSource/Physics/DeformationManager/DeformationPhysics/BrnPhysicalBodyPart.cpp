@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
 
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"           // IKBodyPart, GetActiveJointSpec/Index, CheckSensorForcesForJointDetachment
@@ -24,6 +25,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"   // guDiagDeformationStep ([joint-int] step stamp, DIAG only)
 
 #include <cstring>   // memset (matching the X360 memset of the BBox scratch tail)
+#include <xboxmath.h>
 #include <cmath>     // std::sqrt / std::fabs (the vrsqrtefp magnitude refinements + the skin self-check)
 #include "types.hpp"   // uintptr_t (the console's 16-byte alignment assert on the skin record)
 #include <cstdlib>   // getenv/atoi -- [DIAG] BRN_DEFORM_TRACE only, host-side
@@ -186,7 +188,7 @@ namespace Deformation
     // inverse inertia enormous -- a shed panel would spin up violently on the first contact.
     // 0.2 is what keeps it bounded. FLAG on the NAME only (role-derived from the arithmetic); the
     // VALUE is measured.
-    static const Vector4 KV_PART_INERTIA_FLOOR = { 0.2f, 0.2f, 0.2f, 0.0f };  // RECOVERED 0x82FB95B0
+    static const Vector4 KV_PART_INERTIA_FLOOR(0.2f, 0.2f, 0.2f, 0.0f);  // RECOVERED 0x82FB95B0
 
     // The "Bad inertia: " tripwire's threshold -- stru_8208F620 lane 0, byte-read = 1.1920929e-07
     // (FLT_EPSILON). The asm splats lane 0 and tests CR6 bit 2 (== none of the lanes is greater).
@@ -232,8 +234,8 @@ namespace Deformation
         // on the frame the detach path went live. With the real 0.1 floor the clamp does its job,
         // |extent| = sqrt(3*0.01) = 0.1732, and BOTH tripwires pass -- as they must on the console,
         // whose skinned points are real. The assert is NOT suppressed; it now measures something.
-        const Vector4 KV_MIN_BBOX_SIZE = { 0.1f, 0.1f, 0.1f, 0.0f };        // RECOVERED 0x82FB96E0
-        const Vector4 KV_MIN_BBOX_HALF_SIZE = { 0.05f, 0.05f, 0.05f, 0.0f };// RECOVERED 0x82FB9DD0
+        const Vector4 KV_MIN_BBOX_SIZE(0.1f, 0.1f, 0.1f, 0.0f);        // RECOVERED 0x82FB96E0
+        const Vector4 KV_MIN_BBOX_HALF_SIZE(0.05f, 0.05f, 0.05f, 0.0f);// RECOVERED 0x82FB9DD0
 
         // The asm asserts Magnitude(max-min) > 0.00001f and < KV_BIG_VECTOR.GetX().
         const f32 KF_MIN_BBOX_MAGNITUDE = 0.00001f;                 // recovered (v37[0])
@@ -242,6 +244,10 @@ namespace Deformation
         // ----- LimitVelocities curve constants (recovered from the function's fsel/immediate soup) --
         // The asm computes time-scaled linear/angular velocity caps from a flag-guarded one-shot
         // static init (flt_82FB9FB8/.B4). These literals are the recovered immediates.
+        // Lazy slope state at 0x82FB9FB4..0x82FB9FBC, used by LimitVelocities.
+        f32 sAngularVelocitySlope;
+        f32 sLinearVelocitySlope;
+        u32 sVelocitySlopeFlags;
         const f32 KF_MAX_LIN_VEL_AT_60  = 60.0f;    // 0x82092BC4
         const f32 KF_MAX_ANG_VEL_AT_60  = 5.0f;     // 0x8200426C
         const f32 KF_MAX_LIN_VEL_AT_INF = 120.0f;   // upper assert bound (lfMaxLinVel <= this)
@@ -302,7 +308,7 @@ namespace Deformation
         // DeformationJointSpec accessors below; no raw-offset access needed.
 
         // Broadcast a scalar into all four lanes (the vspltw idiom).
-        inline Vector4 Splat(f32 lfValue) { { const Vector4 lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; } }
+        inline VecFloat Splat(f32 lfValue) { return VecFloat(lfValue); }
 
         // ------------------------------------------------------------------------------------------
         // The sine/cosine pair UpdateJoint's hinge rotation is built from.
@@ -324,17 +330,58 @@ namespace Deformation
         // ⛔ THE OLD BANNER CALLED THESE "the chebyshev/atan polynomial tables". They are neither
         // Chebyshev nor arctangent; corrected 2026-09-05 on the bytes.
         // ------------------------------------------------------------------------------------------
-        inline void JointSinCos(f32 lfAngle, f32& lfSinOut, f32& lfCosOut)
+        inline void JointSinCos(__vector4 vAngle, __vector4& vSinOut, __vector4& vCosOut)
         {
-            const f32 KF_TWO_PI         = 6.2831854820251465f;   // unk_82000C60 lane 1
-            const f32 KF_ONE_OVER_TWO_PI = 0.15915493667125702f; // unk_82000C60 lane 3
+            const __vector4 vTurns = __vrfin(__vmulfp(vAngle, XMVectorReplicate(0.15915493667125702f)));
+            const __vector4 x = __vnmsubfp(XMVectorReplicate(6.2831854820251465f), vTurns, vAngle);
+            const __vector4 x2 = __vmulfp(x, x);
+            const __vector4 x3 = __vmulfp(x2, x);
+            const __vector4 x4 = __vmulfp(x2, x2);
+            const __vector4 x5 = __vmulfp(x3, x2);
+            const __vector4 x6 = __vmulfp(x3, x3);
+            const __vector4 x7 = __vmulfp(x4, x3);
+            const __vector4 x8 = __vmulfp(x4, x4);
+            const __vector4 x9 = __vmulfp(x5, x4);
+            const __vector4 x11 = __vmulfp(x6, x5);
+            const __vector4 x10 = __vmulfp(x5, x5);
+            const __vector4 x13 = __vmulfp(x7, x6);
+            const __vector4 x15 = __vmulfp(x8, x7);
+            const __vector4 x12 = __vmulfp(x6, x6);
+            const __vector4 x19 = __vmulfp(x10, x9);
+            const __vector4 x17 = __vmulfp(x9, x8);
+            const __vector4 x23 = __vmulfp(x12, x11);
+            const __vector4 x21 = __vmulfp(x11, x10);
+            const __vector4 x14 = __vmulfp(x7, x7);
+            const __vector4 x18 = __vmulfp(x9, x9);
+            const __vector4 x20 = __vmulfp(x10, x10);
+            const __vector4 x22 = __vmulfp(x11, x11);
+            const __vector4 x16 = __vmulfp(x8, x8);
 
-            // vrfin == round to nearest floating-point integer (ties to even).
-            const f32 lfTurns   = std::nearbyint(lfAngle * KF_ONE_OVER_TWO_PI);
-            const f32 lfReduced = lfAngle - KF_TWO_PI * lfTurns;
+            __vector4 vSin = __vmaddfp(XMVectorReplicate(-0.1666666716337204f), x3, x);
+            vSin = __vmaddfp(XMVectorReplicate(0.008333333767950535f), x5, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(-0.00019841270113829523f), x7, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(2.7557318844628753e-06f), x9, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(-2.5052107943679403e-08f), x11, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(1.6059044372074283e-10f), x13, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(-7.647163609812713e-13f), x15, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(2.8114573589663704e-15f), x17, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(-8.220635078476521e-18f), x19, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(1.9572941524685808e-20f), x21, vSin);
+            vSin = __vmaddfp(XMVectorReplicate(-3.868170297964731e-23f), x23, vSin);
 
-            lfSinOut = std::sin(lfReduced);
-            lfCosOut = std::cos(lfReduced);
+            __vector4 vCos = __vmaddfp(XMVectorReplicate(-0.5f), x2, XMVectorReplicate(1.0f));
+            vCos = __vmaddfp(XMVectorReplicate(0.0416666679084301f), x4, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(-0.0013888889225199819f), x6, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(2.4801587642286904e-05f), x8, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(-2.755731998149713e-07f), x10, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(2.08767581000302e-09f), x12, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(-1.147074536050896e-11f), x14, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(4.7794772561329454e-14f), x16, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(-1.5619206814541513e-16f), x18, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(4.110317590937049e-19f), x20, vCos);
+            vCos = __vmaddfp(XMVectorReplicate(-8.896790959566848e-22f), x22, vCos);
+            vSinOut = vSin;
+            vCosOut = vCos;
         }
 
         // The skin-blend agreement tolerance CalculateSkinnedPoint's opt-vs-unopt self-check uses:
@@ -529,44 +576,28 @@ namespace Deformation
         mRwBody.Construct();
         mbNeedsWritingIntoRenderware = false;             // +487
 
-        // Build mBBoxOrientation as the AFFINE INVERSE of the IK spec's bbox-skin orientation
-        // (mpIKPart->GetSpec()->GetBBoxSpec().mOrientation): transpose the orthonormal 3x3, then
-        // form the translation as -t.x*X - t.y*Y - t.z*Z through the transposed rows. Lane 3 of
-        // every row is 0 (the merges pull it from the zero register).
+        // ARTIST 82626780..7DC transposes the three rows with word merges,
+        // then transforms the negated translation with native fused operations.
         {
-            const rw::math::vpu::Matrix44Affine& lrSpecOrientation =
-                mpIKPart->GetSpec()->GetBBoxSpec().mOrientation;
+            const Matrix44Affine& lSpec = mpIKPart->GetSpec()->GetBBoxSpec().mOrientation;
+            const __vector4 zero = __vspltisw(0);
+            const __vector4 lo02 = __vmrglw(lSpec.xAxis.mV, lSpec.zAxis.mV);
+            const __vector4 lo10 = __vmrglw(lSpec.yAxis.mV, zero);
+            const __vector4 hi02 = __vmrghw(lSpec.xAxis.mV, lSpec.zAxis.mV);
+            const __vector4 hi10 = __vmrghw(lSpec.yAxis.mV, zero);
+            mBBoxOrientation.zAxis.mV = __vmrghw(lo02, lo10);
+            mBBoxOrientation.yAxis.mV = __vmrglw(hi02, hi10);
+            mBBoxOrientation.xAxis.mV = __vmrghw(hi02, hi10);
+            const __vector4 t = __vsubfp(zero, lSpec.wAxis.mV);
+            __vector4 r = __vmulfp(mBBoxOrientation.zAxis.mV, __vspltw(t, 2));
+            r = __vmaddfp(mBBoxOrientation.yAxis.mV, __vspltw(t, 1), r);
+            mBBoxOrientation.wAxis.mV = __vmaddfp(mBBoxOrientation.xAxis.mV, __vspltw(t, 0), r);
 
-            mBBoxOrientation.xAxis = { lrSpecOrientation.xAxis.x, lrSpecOrientation.yAxis.x,
-                                       lrSpecOrientation.zAxis.x, 0.0f };
-            mBBoxOrientation.yAxis = { lrSpecOrientation.xAxis.y, lrSpecOrientation.yAxis.y,
-                                       lrSpecOrientation.zAxis.y, 0.0f };
-            mBBoxOrientation.zAxis = { lrSpecOrientation.xAxis.z, lrSpecOrientation.yAxis.z,
-                                       lrSpecOrientation.zAxis.z, 0.0f };
-
-            const Vector3& lrTranslation = lrSpecOrientation.wAxis;
-            mBBoxOrientation.wAxis = {
-                -lrTranslation.x * mBBoxOrientation.xAxis.x - lrTranslation.y * mBBoxOrientation.yAxis.x
-                    - lrTranslation.z * mBBoxOrientation.zAxis.x,
-                -lrTranslation.x * mBBoxOrientation.xAxis.y - lrTranslation.y * mBBoxOrientation.yAxis.y
-                    - lrTranslation.z * mBBoxOrientation.zAxis.y,
-                -lrTranslation.x * mBBoxOrientation.xAxis.z - lrTranslation.y * mBBoxOrientation.yAxis.z
-                    - lrTranslation.z * mBBoxOrientation.zAxis.z,
-                0.0f
-            };
-        }
-
-        // CgsNumeric::IsRightHanded(mBBoxOrientation).GetBool() tripwire: cross(x,y).z >= 0 (the asm's
-        // vmsum3fp128 of (x cross y) . z >= 0). Non-gating.
-        {
-            const Vector3& lX = mBBoxOrientation.xAxis;
-            const Vector3& lY = mBBoxOrientation.yAxis;
-            const Vector3& lZ = mBBoxOrientation.zAxis;
-            const f32 lfCrossX = lX.y * lY.z - lX.z * lY.y;
-            const f32 lfCrossY = lX.z * lY.x - lX.x * lY.z;
-            const f32 lfCrossZ = lX.x * lY.y - lX.y * lY.x;
-            const f32 lfHandedness = lfCrossX * lZ.x + lfCrossY * lZ.y + lfCrossZ * lZ.z;
-            CGS_ASSERT(lfHandedness >= 0.0f, "CgsNumeric::IsRightHanded( mBBoxOrientation ).GetBool()");
+            const VecFloat handed = rw::math::vpu::Dot(
+                rw::math::vpu::Cross(mBBoxOrientation.xAxis, mBBoxOrientation.yAxis),
+                mBBoxOrientation.zAxis);
+            const rw::math::vpu::MaskScalar valid(__vcmpgefp(handed.mV, zero));
+            CGS_ASSERT(valid.GetBool(), "CgsNumeric::IsRightHanded( mBBoxOrientation ).GetBool()");
         }
 
         // Seed the local graphics row (+368) from the graphics transform's position relative to the
@@ -585,31 +616,26 @@ namespace Deformation
         // 0x82626894..0x82626938. Row-vector convention throughout this codebase, so each output
         // row is `gfxRow.x*veh.xAxis + gfxRow.y*veh.yAxis + gfxRow.z*veh.zAxis` and the translation
         // additionally picks up veh.wAxis.
-        const auto lTransformDirection = [&lVehicleTransform](const Vector3& lrLocal) -> Vector3
-        {
-            { const Vector3 lResult = {
-                lVehicleTransform.xAxis.x * lrLocal.x + lVehicleTransform.yAxis.x * lrLocal.y
-                    + lVehicleTransform.zAxis.x * lrLocal.z,
-                lVehicleTransform.xAxis.y * lrLocal.x + lVehicleTransform.yAxis.y * lrLocal.y
-                    + lVehicleTransform.zAxis.y * lrLocal.z,
-                lVehicleTransform.xAxis.z * lrLocal.x + lVehicleTransform.yAxis.z * lrLocal.y
-                    + lVehicleTransform.zAxis.z * lrLocal.z,
-                0.0f
-            }; return lResult; }
-        };
-        const auto lTransformPoint = [&lVehicleTransform, &lTransformDirection](const Vector3& lrLocal) -> Vector3
-        {
-            const Vector3 lRotated = lTransformDirection(lrLocal);
-            { const Vector3 lResult = { lRotated.x + lVehicleTransform.wAxis.x,
-                            lRotated.y + lVehicleTransform.wAxis.y,
-                            lRotated.z + lVehicleTransform.wAxis.z, 0.0f }; return lResult; }
-        };
-
         Matrix44Affine lWorldTransform;
-        lWorldTransform.xAxis = lTransformDirection(lGraphicsTransform.xAxis);   // stvx128 this+0x00
-        lWorldTransform.yAxis = lTransformDirection(lGraphicsTransform.yAxis);   // stvx128 this+0x10
-        lWorldTransform.zAxis = lTransformDirection(lGraphicsTransform.zAxis);   // stvx128 this+0x20
-        lWorldTransform.wAxis = lTransformPoint(lGraphicsTransform.wAxis);       // stvx128 this+0x30
+        const __vector4 vx = lVehicleTransform.xAxis.mV;
+        const __vector4 vy = lVehicleTransform.yAxis.mV;
+        const __vector4 vz = lVehicleTransform.zAxis.mV;
+        __vector4 v = lGraphicsTransform.xAxis.mV;
+        __vector4 r = __vmulfp(vx, __vspltw(v, 0));
+        r = __vmaddfp(vy, __vspltw(v, 1), r);
+        lWorldTransform.xAxis.mV = __vmaddfp(vz, __vspltw(v, 2), r);
+        v = lGraphicsTransform.yAxis.mV;
+        r = __vmulfp(vx, __vspltw(v, 0));
+        r = __vmaddfp(vy, __vspltw(v, 1), r);
+        lWorldTransform.yAxis.mV = __vmaddfp(vz, __vspltw(v, 2), r);
+        v = lGraphicsTransform.zAxis.mV;
+        r = __vmulfp(vx, __vspltw(v, 0));
+        r = __vmaddfp(vy, __vspltw(v, 1), r);
+        lWorldTransform.zAxis.mV = __vmaddfp(vz, __vspltw(v, 2), r);
+        v = lGraphicsTransform.wAxis.mV;
+        r = __vmaddfp(vx, __vspltw(v, 0), lVehicleTransform.wAxis.mV);
+        r = __vmaddfp(vy, __vspltw(v, 1), r);
+        lWorldTransform.wAxis.mV = __vmaddfp(vz, __vspltw(v, 2), r);
         mRwBody.SetTransform(lWorldTransform);
 
         // result = CalcBoundingBox(lVehicleTransform) -- the box is built in the vehicle's frame
@@ -620,7 +646,10 @@ namespace Deformation
         // ---- re-pose the body ON its centre of mass (0x82626940..0x82626978) -------------------
         // Same three rotation rows (the asm re-stores v127/v126/v125 unchanged); the translation is
         // replaced by vehicleTransform applied to the local COM CalcBoundingBox just produced.
-        lWorldTransform.wAxis = lTransformPoint(mLocalInitialComPositionPlusMaxJointAngle.GetVector3());
+        v = mLocalInitialComPositionPlusMaxJointAngle.mV;
+        r = __vmaddfp(vx, __vspltw(v, 0), lVehicleTransform.wAxis.mV);
+        r = __vmaddfp(vy, __vspltw(v, 1), r);
+        lWorldTransform.wAxis.mV = __vmaddfp(vz, __vspltw(v, 2), r);
         mRwBody.SetTransform(lWorldTransform);
     }
 
@@ -670,7 +699,7 @@ namespace Deformation
     // =========================================================================================
     VecFloat PhysicalBodyPart::GetJointVelocity() const
     {
-        return Splat(mLocalGraphicsPositionPlusJointVelocity.GetPlus());
+        return VecFloat(__vspltw(mLocalGraphicsPositionPlusJointVelocity.mV, 3));
     }
 
     // =========================================================================================
@@ -818,7 +847,10 @@ namespace Deformation
         // +384 mLocalInitialComPositionPlusMaxJointAngle: xyz is the OLD lane PRESERVED (the local COM
         // CalcBoundingBox wrote); w (max joint angle) = -(v3.w), i.e. the max-angle splat negated
         // (the vxor sign mask).
-        mLocalInitialComPositionPlusMaxJointAngle.SetPlus(-lvfMaxJointAngle.w);
+        const __vector4 lSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const __vector4 lNegativeAngle = __vxor(lvfMaxJointAngle.mV, lSign);
+        mLocalInitialComPositionPlusMaxJointAngle.mV =
+            __vrlimi(mLocalInitialComPositionPlusMaxJointAngle.mV, lNegativeAngle, 1, 0);
 
         // +368 mLocalGraphicsPositionPlusJointVelocity: xyz OLD preserved; w (joint velocity) = 0.
         mLocalGraphicsPositionPlusJointVelocity.SetPlus(0.0f);
@@ -857,20 +889,29 @@ namespace Deformation
         // ARTIST 0x825BA684..0x825BA6C8: fused slopes start at the zero-step
         // ceilings (120 / 100), then fsel clamps them to [60,120] / [5,100].
         // Keep the two selects explicit: an unordered test takes the third operand.
-        const f32 lfTimeStep = lvfTimeStep.x;
-        auto lfFSel = [](f32 lfA, f32 lfB, f32 lfC) { return (lfA >= 0.0f) ? lfB : lfC; };
+        const f32 lfTimeStep = lvfTimeStep.mV.x;
 
-        const f32 lfLinSlope = std::fma(lfTimeStep, -3599.9998f, KF_MAX_LIN_VEL_AT_INF);
-        const f32 lfAngSlope = std::fma(lfTimeStep, -5699.9995f, KF_MAX_ANG_VEL_AT_INF);
+        if (!(sVelocitySlopeFlags & 1))
+        {
+            sLinearVelocitySlope = -3599.9998f;
+            sVelocitySlopeFlags |= 1;
+        }
+        if (!(sVelocitySlopeFlags & 2))
+        {
+            sVelocitySlopeFlags |= 2;
+            sAngularVelocitySlope = -5699.9995f;
+        }
+        const f32 lfLinSlope = lfTimeStep * sLinearVelocitySlope + KF_MAX_LIN_VEL_AT_INF;
+        const f32 lfAngSlope = lfTimeStep * sAngularVelocitySlope + KF_MAX_ANG_VEL_AT_INF;
 
         const f32 lfLinTest  = KF_MAX_LIN_VEL_AT_60 - lfLinSlope;
         const f32 lfAngTest  = KF_MAX_ANG_VEL_AT_60 - lfAngSlope;
 
-        const f32 lfLinSel   = lfFSel(lfLinTest, KF_MAX_LIN_VEL_AT_60, lfLinSlope);   // _FP12
-        const f32 lfAngSel   = lfFSel(lfAngTest, KF_MAX_ANG_VEL_AT_60, lfAngSlope);   // _FP11
+        const f32 lfLinSel   = __fsel(lfLinTest, KF_MAX_LIN_VEL_AT_60, lfLinSlope);   // _FP12
+        const f32 lfAngSel   = __fsel(lfAngTest, KF_MAX_ANG_VEL_AT_60, lfAngSlope);   // _FP11
 
-        const f32 lfMaxLinVel = lfFSel(KF_MAX_LIN_VEL_AT_INF - lfLinSel, lfLinSel, KF_MAX_LIN_VEL_AT_INF);
-        const f32 lfMaxAngVel = lfFSel(KF_MAX_ANG_VEL_AT_INF - lfAngSel, lfAngSel, KF_MAX_ANG_VEL_AT_INF);
+        const f32 lfMaxLinVel = __fsel(KF_MAX_LIN_VEL_AT_INF - lfLinSel, lfLinSel, KF_MAX_LIN_VEL_AT_INF);
+        const f32 lfMaxAngVel = __fsel(KF_MAX_ANG_VEL_AT_INF - lfAngSel, lfAngSel, KF_MAX_ANG_VEL_AT_INF);
 
         // Range tripwires (non-gating).
         CGS_ASSERT(lfMaxLinVel >= 0.0f && lfMaxLinVel <= KF_MAX_LIN_VEL_AT_INF,
@@ -881,41 +922,33 @@ namespace Deformation
         const f32 lfMaxLinVelSquared = lfMaxLinVel * lfMaxLinVel;   // v51 = _FP31 * _FP31
         const f32 lfMaxAngVelSquared = lfMaxAngVel * lfMaxAngVel;   // v55 = _FP29 * _FP29
 
-        // --- linear velocity (mRwBody linear vel row, console this+64) ---
+        // ARTIST 825BA740..8D4 uses vmsum3fp, two reciprocal-root
+        // refinements and three ordered vmulfp operations for each velocity.
         {
-            Vector3 lLinVel = mRwBody.GetLinearVelocity();
-            const f32 lfMagSq = lLinVel.x * lLinVel.x + lLinVel.y * lLinVel.y + lLinVel.z * lLinVel.z;
-            if ( lfMagSq > lfMaxLinVelSquared )   // vcmpgtfp.
+            Vector3 lVelocity = mRwBody.GetLinearVelocity();
+            const VecFloat lSquared = rw::math::vpu::MagnitudeSquared(lVelocity);
+            const rw::math::vpu::MaskScalar lExceeds(
+                __vcmpgtfp(lSquared.mV, XMVectorReplicate(lfMaxLinVelSquared)));
+            if (lExceeds.GetBool())
             {
-                // renormalise to KF_PROPORTION_OF_MAX_TO_CAP_TO * lfMaxLinVel (the vrsqrtefp refine
-                // followed by * 0.8 * lfMaxLinVel). Modelled by the exact scale the refined recip
-                // converges to.
-                const f32 lfMag = (lfMagSq > 0.0f) ? std::sqrt(lfMagSq) : 0.0f;
-                const f32 lfScale = (lfMag > 0.0f)
-                    ? (KF_PROPORTION_OF_MAX_TO_CAP_TO * lfMaxLinVel / lfMag) : 0.0f;
-                lLinVel.x *= lfScale;
-                lLinVel.y *= lfScale;
-                lLinVel.z *= lfScale;
-                lLinVel.w *= lfScale;   // full stvx128 at 0x825BA804
-                mRwBody.SetLinearVelocity(lLinVel);
-                lbRequiresUpdate = true;   // v19 = 1
+                const Vector3 lNormal = rw::math::vpu::Normalize(lVelocity);
+                __vector4 v = __vmulfp(lNormal.mV, XMVectorReplicate(lfMaxLinVel));
+                v = __vmulfp(v, XMVectorReplicate(KF_PROPORTION_OF_MAX_TO_CAP_TO));
+                mRwBody.SetLinearVelocity(Vector3(v));
+                lbRequiresUpdate = true;
             }
         }
-
-        // --- angular velocity (mRwBody angular vel row, console this+80) ---
         {
-            Vector3 lAngVel = mRwBody.GetAngularVelocity();
-            const f32 lfMagSq = lAngVel.x * lAngVel.x + lAngVel.y * lAngVel.y + lAngVel.z * lAngVel.z;
-            if ( lfMagSq > lfMaxAngVelSquared )
+            Vector3 lVelocity = mRwBody.GetAngularVelocity();
+            const VecFloat lSquared = rw::math::vpu::MagnitudeSquared(lVelocity);
+            const rw::math::vpu::MaskScalar lExceeds(
+                __vcmpgtfp(lSquared.mV, XMVectorReplicate(lfMaxAngVelSquared)));
+            if (lExceeds.GetBool())
             {
-                const f32 lfMag = (lfMagSq > 0.0f) ? std::sqrt(lfMagSq) : 0.0f;
-                const f32 lfScale = (lfMag > 0.0f)
-                    ? (KF_PROPORTION_OF_MAX_TO_CAP_TO * lfMaxAngVel / lfMag) : 0.0f;
-                lAngVel.x *= lfScale;
-                lAngVel.y *= lfScale;
-                lAngVel.z *= lfScale;
-                lAngVel.w *= lfScale;   // full stvx128 at 0x825BA8D4
-                mRwBody.SetAngularVelocity(lAngVel);
+                const Vector3 lNormal = rw::math::vpu::Normalize(lVelocity);
+                __vector4 v = __vmulfp(lNormal.mV, XMVectorReplicate(lfMaxAngVel));
+                v = __vmulfp(v, XMVectorReplicate(KF_PROPORTION_OF_MAX_TO_CAP_TO));
+                mRwBody.SetAngularVelocity(Vector3(v));
                 lbRequiresUpdate = true;
             }
         }
@@ -976,68 +1009,35 @@ namespace Deformation
         // v127 = *(this + 0x30) -- the part body's own world position row.
         const Vector3 lPartWorldPosition = mRwBody.GetTransform().wAxis;
 
-        // lNewPointOnA = transformPoint(delta, contact.mPointOnA) -- the three vmaddfp rows.
-        const Vector3& lrPointOnA = lContact.mPointOnA;
-        const Vector3 lNewPointOnA = {
-            lVehicleDeltaTransform.xAxis.x * lrPointOnA.x + lVehicleDeltaTransform.yAxis.x * lrPointOnA.y +
-                lVehicleDeltaTransform.zAxis.x * lrPointOnA.z + lVehicleDeltaTransform.wAxis.x,
-            lVehicleDeltaTransform.xAxis.y * lrPointOnA.x + lVehicleDeltaTransform.yAxis.y * lrPointOnA.y +
-                lVehicleDeltaTransform.zAxis.y * lrPointOnA.z + lVehicleDeltaTransform.wAxis.y,
-            lVehicleDeltaTransform.xAxis.z * lrPointOnA.x + lVehicleDeltaTransform.yAxis.z * lrPointOnA.y +
-                lVehicleDeltaTransform.zAxis.z * lrPointOnA.z + lVehicleDeltaTransform.wAxis.z,
-            0.0f
-        };
+        // ARTIST 825E3040..3124: all four lanes move through the original
+        // fused transform, vector comparisons and lane-preserving selects.
+        const __vector4 pointA = lContact.mPointOnA.mV;
+        const __vector4 pointB = lContact.mPointOnB.mV;
+        const __vector4 normal = lContact.mNormal.mV;
+        const __vector4 zero = __vspltisw(0);
+        __vector4 point = __vmaddfp(lVehicleDeltaTransform.xAxis.mV, __vspltw(pointA, 0),
+                                    lVehicleDeltaTransform.wAxis.mV);
+        point = __vmaddfp(lVehicleDeltaTransform.yAxis.mV, __vspltw(pointA, 1), point);
+        point = __vmaddfp(lVehicleDeltaTransform.zAxis.mV, __vspltw(pointA, 2), point);
+        const __vector4 resolve = __vsubfp(point, pointB);
+        const __vector4 along = __vminfp(__vmsum3fp(resolve, normal), zero);
+        const __vector4 projected = __vmulfp(normal, along);
+        const __vector4 oldPenetration = mWorldPenetrationPlusCollisionMagnitude.mV;
+        const __vector4 deeper = __vcmpgefp(__vmsum3fp(projected, projected),
+                                           __vmsum3fp(oldPenetration, oldPenetration));
+        __vector4 nextPenetration = __vsel(oldPenetration, projected, deeper);
+        mWorldPenetrationPlusCollisionMagnitude.mV = __vrlimi(nextPenetration, oldPenetration, 1, 0);
 
-        // lResolve = newPointOnA - mPointOnB (vsubfp v7, v0, v6).
-        const Vector3& lrPointOnB = lContact.mPointOnB;
-        const Vector3 lResolve = { lNewPointOnA.x - lrPointOnB.x,
-                                   lNewPointOnA.y - lrPointOnB.y,
-                                   lNewPointOnA.z - lrPointOnB.z, 0.0f };
-
-        // The penetration along the contact normal, clamped at zero (vmsum3fp128 / vminfp / vmulfp128).
-        const Vector3& lrNormal = lContact.mNormal;
-        const f32 lfAlongNormal = lResolve.x * lrNormal.x + lResolve.y * lrNormal.y + lResolve.z * lrNormal.z;
-        const f32 lfClamped     = (lfAlongNormal < 0.0f) ? lfAlongNormal : 0.0f;   // vminfp with 0
-        const Vector3 lProjectedPenetration = { lrNormal.x * lfClamped,
-                                                lrNormal.y * lfClamped,
-                                                lrNormal.z * lfClamped, 0.0f };
-
-        // Keep the deeper of (stored, projected) in +432; the w lane (the magnitude) is preserved.
-        const Vector3 lStoredPenetration = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
-        const f32 lfStoredMagSq = lStoredPenetration.x * lStoredPenetration.x
-                                + lStoredPenetration.y * lStoredPenetration.y
-                                + lStoredPenetration.z * lStoredPenetration.z;
-        const f32 lfProjectedMagSq = lProjectedPenetration.x * lProjectedPenetration.x
-                                   + lProjectedPenetration.y * lProjectedPenetration.y
-                                   + lProjectedPenetration.z * lProjectedPenetration.z;
-        if ( lfProjectedMagSq >= lfStoredMagSq )   // vcmpgefp then vsel
-        {
-            mWorldPenetrationPlusCollisionMagnitude.SetVector3(lProjectedPenetration);
-        }
-
-        // +448: keep whichever candidate point is FURTHER from the part body's own position, and
-        // latch the flag lane. First contact (count == 0) always takes the new point.
-        const Vector3 lStoredPoint  = mAverageCollisionPointPlusNumCollisions.GetVector3();
-        const f32 lfCount           = mAverageCollisionPointPlusNumCollisions.GetPlus();
-        const bool lbFirstContact   = (lfCount == 0.0f);                     // vcmpeqfp against 0
-
-        const f32 lfNewDx = lPartWorldPosition.x - lNewPointOnA.x;
-        const f32 lfNewDy = lPartWorldPosition.y - lNewPointOnA.y;
-        const f32 lfNewDz = lPartWorldPosition.z - lNewPointOnA.z;
-        const f32 lfNewDistSq = lfNewDx * lfNewDx + lfNewDy * lfNewDy + lfNewDz * lfNewDz;
-
-        const f32 lfOldDx = lPartWorldPosition.x - lStoredPoint.x;
-        const f32 lfOldDy = lPartWorldPosition.y - lStoredPoint.y;
-        const f32 lfOldDz = lPartWorldPosition.z - lStoredPoint.z;
-        const f32 lfOldDistSq = lfOldDx * lfOldDx + lfOldDy * lfOldDy + lfOldDz * lfOldDz;
-
-        const bool lbTakeNew = (lfNewDistSq >= lfOldDistSq) || lbFirstContact;   // vcmpgefp ; vor
-
-        if ( lbTakeNew )
-        {
-            mAverageCollisionPointPlusNumCollisions.SetVector3(lNewPointOnA);
-            mAverageCollisionPointPlusNumCollisions.SetPlus(1.0f);
-        }
+        const __vector4 oldPoint = mAverageCollisionPointPlusNumCollisions.mV;
+        const __vector4 newDelta = __vsubfp(lPartWorldPosition.mV, point);
+        const __vector4 oldDelta = __vsubfp(lPartWorldPosition.mV, oldPoint);
+        const __vector4 farther = __vcmpgefp(__vmsum3fp(newDelta, newDelta),
+                                            __vmsum3fp(oldDelta, oldDelta));
+        const __vector4 oldCount = __vspltw(oldPoint, 3);
+        const __vector4 take = __vor(farther, __vcmpeqfp(oldCount, zero));
+        __vector4 nextPoint = __vsel(oldPoint, point, take);
+        const __vector4 count = __vsel(oldCount, XMVectorReplicate(1.0f), take);
+        mAverageCollisionPointPlusNumCollisions.mV = __vrlimi(nextPoint, count, 1, 0);
     }
 
     // =========================================================================================
@@ -1108,9 +1108,8 @@ namespace Deformation
             const Vector3 lvBoneOffset = ResolveSkinBoneOffset(mpIKPart, lrPoint.GetBoneIndex(liInfluence));
             const f32     lfWeight     = lrPoint.GetWeight(liInfluence);
 
-            lvUnoptimised.x += lvBoneOffset.x * lfWeight;
-            lvUnoptimised.y += lvBoneOffset.y * lfWeight;
-            lvUnoptimised.z += lvBoneOffset.z * lfWeight;
+            lvUnoptimised.mV = __vmaddfp(lvBoneOffset.mV, XMVectorReplicate(lfWeight),
+                                           lvUnoptimised.mV);
         }
 
         // ---- the hand-vectorised blend: weights fetched ONCE, the three lanes splatted ---------
@@ -1119,30 +1118,22 @@ namespace Deformation
         CGS_ASSERT((reinterpret_cast<uintptr_t>(&lrPoint) & 0xFu) == 0u,
                    "Expected lPoint.mafWeights to be 16 byte aligned\n");
 
-        const f32 lfWeightX = lrPoint.GetWeight(0);   // vspltw128 v127, v0, 0
-        const f32 lfWeightY = lrPoint.GetWeight(1);   // vspltw128 v126, v0, 1
-        const f32 lfWeightZ = lrPoint.GetWeight(2);   // vspltw128 v124, v0, 2
-
+        const __vector4 lWeights = __lvlx(lrPoint.mafWeights, 0);
         const Vector3 lvBoneOffset0 = ResolveSkinBoneOffset(mpIKPart, lrPoint.GetBoneIndex(0));
         const Vector3 lvBoneOffset1 = ResolveSkinBoneOffset(mpIKPart, lrPoint.GetBoneIndex(1));
         const Vector3 lvBoneOffset2 = ResolveSkinBoneOffset(mpIKPart, lrPoint.GetBoneIndex(2));
 
-        // vmaddcfp128 (0x825E2878) then two vmaddfp128 (0x825E295C, 0x825E2A50), accumulating into
-        // the base vertex re-loaded unaligned at 0x825E26F0.
         Vector3 lvOptimised = lrPoint.GetVertex();
-        lvOptimised.x += lvBoneOffset0.x * lfWeightX + lvBoneOffset1.x * lfWeightY + lvBoneOffset2.x * lfWeightZ;
-        lvOptimised.y += lvBoneOffset0.y * lfWeightX + lvBoneOffset1.y * lfWeightY + lvBoneOffset2.y * lfWeightZ;
-        lvOptimised.z += lvBoneOffset0.z * lfWeightX + lvBoneOffset1.z * lfWeightY + lvBoneOffset2.z * lfWeightZ;
+        lvOptimised.mV = __vmaddfp(lvBoneOffset0.mV, __vspltw(lWeights, 0), lvOptimised.mV);
+        lvOptimised.mV = __vmaddfp(lvBoneOffset1.mV, __vspltw(lWeights, 1), lvOptimised.mV);
+        lvOptimised.mV = __vmaddfp(lvBoneOffset2.mV, __vspltw(lWeights, 2), lvOptimised.mV);
 
-        // The self-check: |opt - unopt| must be within 0.01 on every compared lane. The console
-        // masks the w lane out of the comparison by overwriting it with the x lane
-        // (`vrlimi128 v12, v0, 1, 1`), which is why w is not modelled or compared here.
-        const f32 lfDiffX = std::fabs(lvUnoptimised.x - lvOptimised.x);
-        const f32 lfDiffY = std::fabs(lvUnoptimised.y - lvOptimised.y);
-        const f32 lfDiffZ = std::fabs(lvUnoptimised.z - lvOptimised.z);
-        CGS_ASSERT(lfDiffX <= KF_SKIN_BLEND_TOLERANCE && lfDiffY <= KF_SKIN_BLEND_TOLERANCE &&
-                       lfDiffZ <= KF_SKIN_BLEND_TOLERANCE,
-                   "Mismatch Opt/Unopt skinned point");
+        const __vector4 lSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const __vector4 lDifference = __vandc(__vsubfp(lvUnoptimised.mV, lvOptimised.mV), lSign);
+        const __vector4 lCompared = __vrlimi(lDifference, lDifference, 1, 1);
+        const rw::math::vpu::MaskScalar lMismatch(
+            __vcmpgtfp(lCompared, XMVectorReplicate(KF_SKIN_BLEND_TOLERANCE)));
+        CGS_ASSERT(!lMismatch.GetBool(), "Mismatch Opt/Unopt skinned point");
 
         // `stvx128 v127, r0, r3` -- the OPTIMISED vector is the one returned.
         return lvOptimised;
@@ -1169,60 +1160,37 @@ namespace Deformation
     // =========================================================================================
     void PhysicalBodyPart::CalculateBoundingBoxExtents(Vector3& lvBoundingBoxMin, Vector3& lvBoundingBoxMax)
     {
-        // Seed: min = +BIG (the vxor of the all-ones sign mask -> -0x800000.. == -FLT_MAX-ish),
-        //       max = -BIG (the inverted seed). The asm seeds both from &unk_82FB9B00 (a large vector).
-        // Modelled with large finite seeds so the reduction starts wide-open.
-        Vector3 lMin = {  KF_BIG_VECTOR_X,  KF_BIG_VECTOR_X,  KF_BIG_VECTOR_X, 0.0f };
-        Vector3 lMax = { -KF_BIG_VECTOR_X, -KF_BIG_VECTOR_X, -KF_BIG_VECTOR_X, 0.0f };
+        // 82C5DC18 initializes xyz to 100000 and W to zero; 825E2BC8
+        // stores it to min and XORs its sign bits into max.
+        const __vector4 lSeed = XMVectorSet(KF_BIG_VECTOR_X, KF_BIG_VECTOR_X, KF_BIG_VECTOR_X, 0.0f);
+        const __vector4 lSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        lvBoundingBoxMin.mV = lSeed;
+        lvBoundingBoxMax.mV = __vxor(lSeed, lSign);
 
-        // The bbox skin record inside the IK spec: `lwz r10, 0x1DC(this)` (mpIKPart), `lwz r11, 8(r10)`
-        // (its spec), `addi r29, r11, 0x40` (the embedded BodyPartBBoxSpec).
         const BodyPartBBoxSpec& lrBBoxSpec = mpIKPart->GetSpec()->GetBBoxSpec();
-        const Matrix44Affine&   lrOrientation = lrBBoxSpec.mOrientation;
-
-        for ( s32 liPoint = 0; liPoint < BodyPartBBoxSpec::KI_NUM_BBOX_POINTS; ++liPoint )
+        const Matrix44Affine& lrOrientation = lrBBoxSpec.mOrientation;
+        for (s32 i = 0; i < BodyPartBBoxSpec::KI_NUM_BBOX_POINTS; ++i)
         {
-            const Vector3 lSkinnedPoint = CalculateSkinnedPoint(lrBBoxSpec.GetSkinPoint(liPoint));
-
-            // The vmaddfp cascade: transform the skinned point through the spec's orientation.
-            const Vector3 lTransformed = {
-                lrOrientation.xAxis.x * lSkinnedPoint.x + lrOrientation.yAxis.x * lSkinnedPoint.y +
-                    lrOrientation.zAxis.x * lSkinnedPoint.z + lrOrientation.wAxis.x,
-                lrOrientation.xAxis.y * lSkinnedPoint.x + lrOrientation.yAxis.y * lSkinnedPoint.y +
-                    lrOrientation.zAxis.y * lSkinnedPoint.z + lrOrientation.wAxis.y,
-                lrOrientation.xAxis.z * lSkinnedPoint.x + lrOrientation.yAxis.z * lSkinnedPoint.y +
-                    lrOrientation.zAxis.z * lSkinnedPoint.z + lrOrientation.wAxis.z,
-                0.0f
-            };
-
-            // vminfp / vmaxfp reduction.
-            if ( lTransformed.x < lMin.x ) lMin.x = lTransformed.x;
-            if ( lTransformed.y < lMin.y ) lMin.y = lTransformed.y;
-            if ( lTransformed.z < lMin.z ) lMin.z = lTransformed.z;
-            if ( lTransformed.x > lMax.x ) lMax.x = lTransformed.x;
-            if ( lTransformed.y > lMax.y ) lMax.y = lTransformed.y;
-            if ( lTransformed.z > lMax.z ) lMax.z = lTransformed.z;
+            const Vector3 lPoint = CalculateSkinnedPoint(lrBBoxSpec.GetSkinPoint(i));
+            __vector4 v = __vmaddfp(lrOrientation.xAxis.mV, __vspltw(lPoint.mV, 0),
+                                    lrOrientation.wAxis.mV);
+            v = __vmaddfp(lrOrientation.yAxis.mV, __vspltw(lPoint.mV, 1), v);
+            v = __vmaddfp(lrOrientation.zAxis.mV, __vspltw(lPoint.mV, 2), v);
+            lvBoundingBoxMin.mV = __vminfp(lvBoundingBoxMin.mV, v);
+            lvBoundingBoxMax.mV = __vmaxfp(lvBoundingBoxMax.mV, v);
         }
 
-        // The asm clamps (max-min) to a minimum vector (vmaxfp v0,v0,v12 against &unk_82FB96E0) before
-        // re-centring max = min + (max-min). Modelled by max'ing the extent against the min-bbox floor.
-        Vector3 lExtent = { lMax.x - lMin.x, lMax.y - lMin.y, lMax.z - lMin.z, 0.0f };
-        if ( lExtent.x < KV_MIN_BBOX_SIZE.x ) lExtent.x = KV_MIN_BBOX_SIZE.x;
-        if ( lExtent.y < KV_MIN_BBOX_SIZE.y ) lExtent.y = KV_MIN_BBOX_SIZE.y;
-        if ( lExtent.z < KV_MIN_BBOX_SIZE.z ) lExtent.z = KV_MIN_BBOX_SIZE.z;
-        lMax.x = lMin.x + lExtent.x;
-        lMax.y = lMin.y + lExtent.y;
-        lMax.z = lMin.z + lExtent.z;
-
-        // Two non-gating magnitude tripwires on Magnitude(max-min).
-        const f32 lfMagSq =
-            lExtent.x * lExtent.x + lExtent.y * lExtent.y + lExtent.z * lExtent.z;
-        const f32 lfMagnitude = (lfMagSq > 0.0f) ? std::sqrt(lfMagSq) : 0.0f;
-        CGS_ASSERT(lfMagnitude > KF_MIN_BBOX_MAGNITUDE, "Magnitude(lBoundingBoxMax - lBoundingBoxMin) > 0.00001f");
-        CGS_ASSERT(lfMagnitude < KF_BIG_VECTOR_X, "Magnitude(lBoundingBoxMax - lBoundingBoxMin) < KV_BIG_VECTOR.GetX()");
-
-        lvBoundingBoxMin = lMin;
-        lvBoundingBoxMax = lMax;
+        const __vector4 lExtent = __vmaxfp(
+            __vsubfp(lvBoundingBoxMax.mV, lvBoundingBoxMin.mV), KV_MIN_BBOX_SIZE.mV);
+        lvBoundingBoxMax.mV = __vaddfp(lvBoundingBoxMin.mV, lExtent);
+        const VecFloat lMagnitude = rw::math::vpu::Magnitude(
+            Vector3(__vsubfp(lvBoundingBoxMax.mV, lvBoundingBoxMin.mV)));
+        const rw::math::vpu::MaskScalar lAboveMinimum(
+            __vcmpgtfp(lMagnitude.mV, XMVectorReplicate(KF_MIN_BBOX_MAGNITUDE)));
+        CGS_ASSERT(lAboveMinimum.GetBool(), "Magnitude(lBoundingBoxMax - lBoundingBoxMin) > 0.00001f");
+        const rw::math::vpu::MaskScalar lBelowMaximum(
+            __vcmpgtfp(XMVectorReplicate(KF_BIG_VECTOR_X), lMagnitude.mV));
+        CGS_ASSERT(lBelowMaximum.GetBool(), "Magnitude(lBoundingBoxMax - lBoundingBoxMin) < KV_BIG_VECTOR.GetX()");
     }
 
     // =========================================================================================
@@ -1239,131 +1207,28 @@ namespace Deformation
     // =========================================================================================
     void PhysicalBodyPart::CalcBoundingBox(Matrix44Affine lTransform)
     {
-        Vector3 lvBoundingBoxMin, lvBoundingBoxMax;
-        CalculateBoundingBoxExtents(lvBoundingBoxMin, lvBoundingBoxMax);   // v18=min, v19=max
-
-        // half = (max - min) * 0.5  (vsubfp v11 ; vmulfp by 0.5 (vcfsx v0,1,1 == 0.5)).
-        Vector3 lHalf = {
-            (lvBoundingBoxMax.x - lvBoundingBoxMin.x) * 0.5f,
-            (lvBoundingBoxMax.y - lvBoundingBoxMin.y) * 0.5f,
-            (lvBoundingBoxMax.z - lvBoundingBoxMin.z) * 0.5f,
-            0.0f
-        };
-
-        // mBoundingBoxHalfDimensions = max(half, KV_MIN_BBOX_HALF_SIZE) (vmaxfp v13 against
-        // &unk_82FB9DD0). ⭐ 2026-08-27: this is the HALF floor (0.05), a DIFFERENT static from the
-        // full-extent floor (0.1) at &unk_82FB96E0 -- both were zero placeholders, so the two were
-        // indistinguishable and this site used the wrong one.
-        const Vector3 lRawHalf = lHalf;
-        if ( lHalf.x < KV_MIN_BBOX_HALF_SIZE.x ) lHalf.x = KV_MIN_BBOX_HALF_SIZE.x;
-        if ( lHalf.y < KV_MIN_BBOX_HALF_SIZE.y ) lHalf.y = KV_MIN_BBOX_HALF_SIZE.y;
-        if ( lHalf.z < KV_MIN_BBOX_HALF_SIZE.z ) lHalf.z = KV_MIN_BBOX_HALF_SIZE.z;
-        mBoundingBoxHalfDimensions = lHalf;   // +416
-
-        // [DIAG] NOT IN THE X360 BINARY. The before/after witness for CalculateSkinnedPoint: the box
-        // the ten skinned control points actually produce, whether it still lands on the 0.05 half
-        // floor, and -- computed with the CONSOLE'S OWN rule from DoBodyPartWorldContactGeneration
-        // @0x826095E0..0x826096D4 -- the contact padding that box earns. A degenerate box is "thin"
-        // (min half <= 0.15) and takes the full 0.5 m pad, i.e. a ~0.55 m near-cube collider for a
-        // flat panel. DELETE-WHEN the part-box question is closed and banked.
-
-        // centre = (max + min) * 0.5, transformed through the part's OWN mBBoxOrientation rows (the asm
-        // reads this+288/+304/+320 and adds the translation row this+336 -- NOT the passed lTransform;
-        // they coincide for the Prepare call but UpdateJoint passes a different transform), then offset
-        // by the mesh offset (the *(mpDeformableObject ... +6368) rows at +1664/+1632 the asm subtracts).
-        // The dense vmaddfp cascade is that affine transform. The mesh-offset subtrahend is rodata/
-        // spec-derived and not recovered -- carried as zero so the centre lands at the transformed box
-        // centre. lTransform is NOT the centre's frame here (see header note); it remains the caller's
-        // pose for the parallel UpdateJoint store path and is intentionally unused in this store.
         (void)lTransform;
-        const Vector3 lLocalCentre = {
-            (lvBoundingBoxMax.x + lvBoundingBoxMin.x) * 0.5f,
-            (lvBoundingBoxMax.y + lvBoundingBoxMin.y) * 0.5f,
-            (lvBoundingBoxMax.z + lvBoundingBoxMin.z) * 0.5f,
-            0.0f
-        };
+        Vector3 lMin, lMax;
+        CalculateBoundingBoxExtents(lMin, lMax);
+        const __vector4 half = XMVectorReplicate(0.5f);
+        const __vector4 lRawHalf = __vmulfp(__vsubfp(lMax.mV, lMin.mV), half);
+        mBoundingBoxHalfDimensions.mV = __vmaxfp(lRawHalf, KV_MIN_BBOX_HALF_SIZE.mV);
+        __vector4 centre = __vmulfp(__vaddfp(lMin.mV, lMax.mV), half);
 
-        // ⭐⭐⭐ RE-DECODED 2026-09-02 (deform close-out wave). What stood here was ONE affine
-        // transform and a subtrahend "carried as zero" behind a FLAG that called it unrecovered
-        // rodata. Both were wrong, and together they are why a shed panel is DRAWN in mid-air:
-        // this member is the COM term GetEventRenderTransform subtracts, so an error in it is an
-        // error in the drawn position of every detached part, and nothing else.
-        // MEASURED (run wrst_A2, [detach-pose], 16 parts / 2356 samples): the published render
-        // position and the physics body NEVER coincide -- separation min 0.873 m, median 2.101 m,
-        // max 2.517 m, and still 1.13-2.52 m once every part is at rest. A constant floor that
-        // high is the signature of a missing constant term, not of physics noise.
-        //
-        // The asm (0x8260AC48..0x8260ACAC), decoded with the VMX128 raw-field rule
-        // `vmaddfp D,A,B,C  =>  D = A*C + B`:
-        //   lwz    r3, 0x1E0(this)          ; mpDeformableObject
-        //   lwz    r4, 0x1DC(this)          ; mpIKPart
-        //   lwz    r8, 0x18E0(r3)           ; mpDeformableObject->mpDeformationSpec
-        //   lwz    r10, 8(r4)               ; mpIKPart->mpSpec   (IKBodyPart +0x08)
-        //   lvx128 v7, r8, 0x680  / v8, r8, 0x660 ; vsubfp v8, v7, v8
-        //                                  ; == spec.mRigidBodyOffset (+1664)
-        //                                  ;  - spec.mCurrentCOMOffset (+1632)
-        //   (transform 1) rows this+0x120/0x130/0x140 + translation this+0x150  == mBBoxOrientation
-        //   (transform 2) rows r10+0x00/0x10/0x20 + translation r10+0x30
-        //                                  ; == IKBodyPartSpec::mGraphicsTransform, which sits at
-        //                                  ;    OFFSET 0 of the spec -- the panel's rest graphics
-        //                                  ;    transform, already exposed as GetPartGraphicsTransform
-        //   vsubfp v0, v0, v8              ; the offset is subtracted AFTER both transforms
-        //   vrlimi128 v0, v9, 1, 0 ; stvx128 v0, this+0x180   ; w lane preserved
-        //
-        // So there were THREE faults in one expression: the second transform was absent; the
-        // subtrahend was called unrecovered when the asm reads it from two named spec members;
-        // and the old code applied its (zero) offset BEFORE the transform instead of after.
-        // With the subtrahend at zero the sign of the third fault was invisible.
+        __vector4 v = __vmaddfp(mBBoxOrientation.xAxis.mV, __vspltw(centre, 0),
+                                mBBoxOrientation.wAxis.mV);
+        v = __vmaddfp(mBBoxOrientation.yAxis.mV, __vspltw(centre, 1), v);
+        v = __vmaddfp(mBBoxOrientation.zAxis.mV, __vspltw(centre, 2), v);
+        const Matrix44Affine& lGraphics = mpIKPart->GetSpec()->GetPartGraphicsTransform();
+        centre = __vmaddfp(lGraphics.xAxis.mV, __vspltw(v, 0), lGraphics.wAxis.mV);
+        centre = __vmaddfp(lGraphics.yAxis.mV, __vspltw(v, 1), centre);
+        centre = __vmaddfp(lGraphics.zAxis.mV, __vspltw(v, 2), centre);
 
-        // ---- transform 1: the part's own bbox orientation (this+0x120..0x150) ----------------
-        const Vector3 lBBoxSpaceCentre = {
-            mBBoxOrientation.xAxis.x * lLocalCentre.x +
-                mBBoxOrientation.yAxis.x * lLocalCentre.y +
-                mBBoxOrientation.zAxis.x * lLocalCentre.z + mBBoxOrientation.wAxis.x,
-            mBBoxOrientation.xAxis.y * lLocalCentre.x +
-                mBBoxOrientation.yAxis.y * lLocalCentre.y +
-                mBBoxOrientation.zAxis.y * lLocalCentre.z + mBBoxOrientation.wAxis.y,
-            mBBoxOrientation.xAxis.z * lLocalCentre.x +
-                mBBoxOrientation.yAxis.z * lLocalCentre.y +
-                mBBoxOrientation.zAxis.z * lLocalCentre.z + mBBoxOrientation.wAxis.z,
-            0.0f
-        };
-
-        // ---- transform 2: the panel's rest graphics transform (mpIKPart->mpSpec, rows @ +0) ---
-        const rw::math::vpu::Matrix44Affine& lrPartGraphics =
-            mpIKPart->GetSpec()->GetPartGraphicsTransform();
-        const Vector3 lGraphicsSpaceCentre = {
-            lrPartGraphics.xAxis.x * lBBoxSpaceCentre.x +
-                lrPartGraphics.yAxis.x * lBBoxSpaceCentre.y +
-                lrPartGraphics.zAxis.x * lBBoxSpaceCentre.z + lrPartGraphics.wAxis.x,
-            lrPartGraphics.xAxis.y * lBBoxSpaceCentre.x +
-                lrPartGraphics.yAxis.y * lBBoxSpaceCentre.y +
-                lrPartGraphics.zAxis.y * lBBoxSpaceCentre.z + lrPartGraphics.wAxis.y,
-            lrPartGraphics.xAxis.z * lBBoxSpaceCentre.x +
-                lrPartGraphics.yAxis.z * lBBoxSpaceCentre.y +
-                lrPartGraphics.zAxis.z * lBBoxSpaceCentre.z + lrPartGraphics.wAxis.z,
-            0.0f
-        };
-
-        // ---- the COM-space -> rigid-body-space shift, subtracted AFTER both transforms --------
-        const StreamedDeformationSpec* lpVehicleSpec = mpDeformableObject->GetDeformationSpec();
-        const Vector3 lComToRigidBody = {
-            lpVehicleSpec->mRigidBodyOffset.x - lpVehicleSpec->mCurrentCOMOffset.x,
-            lpVehicleSpec->mRigidBodyOffset.y - lpVehicleSpec->mCurrentCOMOffset.y,
-            lpVehicleSpec->mRigidBodyOffset.z - lpVehicleSpec->mCurrentCOMOffset.z,
-            0.0f
-        };
-
-        const Vector3 lTransformedCentre = {
-            lGraphicsSpaceCentre.x - lComToRigidBody.x,
-            lGraphicsSpaceCentre.y - lComToRigidBody.y,
-            lGraphicsSpaceCentre.z - lComToRigidBody.z,
-            0.0f
-        };
-
-        // Store the box centre into mLocalInitialComPositionPlusMaxJointAngle (+384), xyz only --
-        // vrlimi128 v0, v9, 1, 0 preserves the existing w lane (the max-joint-angle scalar).
-        mLocalInitialComPositionPlusMaxJointAngle.SetVector3(lTransformedCentre);
+        const StreamedDeformationSpec* lpSpec = mpDeformableObject->GetDeformationSpec();
+        const __vector4 lOffset = __vsubfp(lpSpec->mRigidBodyOffset.mV, lpSpec->mCurrentCOMOffset.mV);
+        centre = __vsubfp(centre, lOffset);
+        mLocalInitialComPositionPlusMaxJointAngle.mV =
+            __vrlimi(centre, mLocalInitialComPositionPlusMaxJointAngle.mV, 1, 0);
     }
 
     // =========================================================================================
@@ -1374,19 +1239,10 @@ namespace Deformation
     // =========================================================================================
     void PhysicalBodyPart::UpdateBoundingBox()
     {
-        Vector3 lvBoundingBoxMin, lvBoundingBoxMax;
-        CalculateBoundingBoxExtents(lvBoundingBoxMin, lvBoundingBoxMax);   // v8=min, v9=max
-
-        Vector3 lHalf = {
-            (lvBoundingBoxMax.x - lvBoundingBoxMin.x) * 0.5f,
-            (lvBoundingBoxMax.y - lvBoundingBoxMin.y) * 0.5f,
-            (lvBoundingBoxMax.z - lvBoundingBoxMin.z) * 0.5f,
-            0.0f
-        };
-        if ( lHalf.x < KV_MIN_BBOX_HALF_SIZE.x ) lHalf.x = KV_MIN_BBOX_HALF_SIZE.x;   // &unk_82FB9DD0
-        if ( lHalf.y < KV_MIN_BBOX_HALF_SIZE.y ) lHalf.y = KV_MIN_BBOX_HALF_SIZE.y;
-        if ( lHalf.z < KV_MIN_BBOX_HALF_SIZE.z ) lHalf.z = KV_MIN_BBOX_HALF_SIZE.z;
-        mBoundingBoxHalfDimensions = lHalf;   // +416
+        Vector3 lMin, lMax;
+        CalculateBoundingBoxExtents(lMin, lMax);
+        const __vector4 lHalf = __vmulfp(__vsubfp(lMax.mV, lMin.mV), XMVectorReplicate(0.5f));
+        mBoundingBoxHalfDimensions.mV = __vmaxfp(lHalf, KV_MIN_BBOX_HALF_SIZE.mV);
     }
 
     // =========================================================================================
@@ -1400,28 +1256,30 @@ namespace Deformation
     // =========================================================================================
     Vector3 PhysicalBodyPart::CalculateAABBExtents()
     {
-        // The three oriented half-axes: half-dimension scalar * each orientation row. The asm reads the
-        // orientation rows from *(*(mpIKPart->GetSpec()+8)+8)+64.. (the bbox-skin orientation matrix);
-        // modelled via mBBoxOrientation's basis rows (the part's stored oriented-box basis).
-        const Vector3& lHalf = mBoundingBoxHalfDimensions;   // +416 (broadcast per lane in the asm)
-
-        const Vector3 lAxisX = { mBBoxOrientation.xAxis.x * lHalf.x, mBBoxOrientation.xAxis.y * lHalf.x,
-                                 mBBoxOrientation.xAxis.z * lHalf.x, 0.0f };
-        const Vector3 lAxisY = { mBBoxOrientation.yAxis.x * lHalf.y, mBBoxOrientation.yAxis.y * lHalf.y,
-                                 mBBoxOrientation.yAxis.z * lHalf.y, 0.0f };
-        const Vector3 lAxisZ = { mBBoxOrientation.zAxis.x * lHalf.z, mBBoxOrientation.zAxis.y * lHalf.z,
-                                 mBBoxOrientation.zAxis.z * lHalf.z, 0.0f };
-
-        // The AABB half-extent is |axisX| + |axisY| + |axisZ| per lane (the max-reduction over the 8
-        // signed corners collapses to the sum of the per-lane absolute axis contributions).
-        auto lfAbs = [](f32 lf) { return lf < 0.0f ? -lf : lf; };
-        Vector3 lAABBDimensions = {
-            lfAbs(lAxisX.x) + lfAbs(lAxisY.x) + lfAbs(lAxisZ.x),
-            lfAbs(lAxisX.y) + lfAbs(lAxisY.y) + lfAbs(lAxisZ.y),
-            lfAbs(lAxisX.z) + lfAbs(lAxisY.z) + lfAbs(lAxisZ.z),
-            0.0f
-        };
-        return lAABBDimensions;
+        const Matrix44Affine& lOrientation = mpIKPart->GetSpec()->GetBBoxSpec().mOrientation;
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 lo02 = __vmrglw(lOrientation.xAxis.mV, lOrientation.zAxis.mV);
+        const __vector4 lo10 = __vmrglw(lOrientation.yAxis.mV, zero);
+        const __vector4 hi02 = __vmrghw(lOrientation.xAxis.mV, lOrientation.zAxis.mV);
+        const __vector4 hi10 = __vmrghw(lOrientation.yAxis.mV, zero);
+        const __vector4 a = __vmulfp(__vmrghw(hi02, hi10), __vspltw(mBoundingBoxHalfDimensions.mV, 0));
+        const __vector4 b = __vmulfp(__vmrglw(hi02, hi10), __vspltw(mBoundingBoxHalfDimensions.mV, 1));
+        const __vector4 c = __vmulfp(__vmrghw(lo02, lo10), __vspltw(mBoundingBoxHalfDimensions.mV, 2));
+        const __vector4 sign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const __vector4 negA = __vxor(a, sign);
+        const __vector4 ab = __vaddfp(a, b);
+        const __vector4 am = __vsubfp(a, b);
+        const __vector4 nb = __vaddfp(negA, b);
+        const __vector4 nm = __vsubfp(negA, b);
+        __vector4 r = __vmaxfp(zero, __vandc(__vaddfp(ab, c), sign));
+        r = __vmaxfp(r, __vandc(__vsubfp(ab, c), sign));
+        r = __vmaxfp(r, __vandc(__vaddfp(am, c), sign));
+        r = __vmaxfp(r, __vandc(__vsubfp(am, c), sign));
+        r = __vmaxfp(r, __vandc(__vaddfp(nb, c), sign));
+        r = __vmaxfp(r, __vandc(__vsubfp(nb, c), sign));
+        r = __vmaxfp(r, __vandc(__vaddfp(nm, c), sign));
+        r = __vmaxfp(r, __vandc(__vsubfp(nm, c), sign));
+        return Vector3(r);
     }
 
     // =========================================================================================
@@ -1445,41 +1303,40 @@ namespace Deformation
     // =========================================================================================
     void PhysicalBodyPart::GetBoundingBox(CgsGeometric::Box* lpBoxOut) const
     {
-        // Body transform rows (mRwBody.mTransform): row0 @ +0, row1 @ +16, row2 @ +32, pos @ +48.
-        const Matrix44Affine lBodyTransform = mRwBody.GetTransform();
+        const Matrix44Affine lBody = mRwBody.GetTransform();
+        Matrix44Affine lBoxTransform;
+        const __vector4 lx = lBody.xAxis.mV;
+        const __vector4 ly = lBody.yAxis.mV;
+        const __vector4 lz = lBody.zAxis.mV;
+        const __vector4 a = mBBoxOrientation.xAxis.mV;
+        const __vector4 b = mBBoxOrientation.yAxis.mV;
+        const __vector4 c = mBBoxOrientation.zAxis.mV;
+        const __vector4 d = mBBoxOrientation.wAxis.mV;
 
-        // Transform each oriented-basis row + the box centre through the body transform (the vmaddfp
-        // cascade with each mBBoxOrientation row's lanes broadcast through the body rows).
-        auto lTransformDir = [&](const Vector3& lDir) -> Vector3 {
-            { const Vector3 lResult = {
-                lBodyTransform.xAxis.x * lDir.x + lBodyTransform.yAxis.x * lDir.y + lBodyTransform.zAxis.x * lDir.z,
-                lBodyTransform.xAxis.y * lDir.x + lBodyTransform.yAxis.y * lDir.y + lBodyTransform.zAxis.y * lDir.z,
-                lBodyTransform.xAxis.z * lDir.x + lBodyTransform.yAxis.z * lDir.y + lBodyTransform.zAxis.z * lDir.z,
-                0.0f
-            }; return lResult; }
-        };
-        const Vector3 lWorldRight  = lTransformDir(mBBoxOrientation.xAxis);   // v26
-        const Vector3 lWorldUp     = lTransformDir(mBBoxOrientation.yAxis);   // v27
-        const Vector3 lWorldAt     = lTransformDir(mBBoxOrientation.zAxis);   // v28
-        const Vector3 lWorldCentre = {                                        // v29 (full affine of centre)
-            lBodyTransform.xAxis.x * mBBoxOrientation.wAxis.x + lBodyTransform.yAxis.x * mBBoxOrientation.wAxis.y +
-                lBodyTransform.zAxis.x * mBBoxOrientation.wAxis.z + lBodyTransform.wAxis.x,
-            lBodyTransform.xAxis.y * mBBoxOrientation.wAxis.x + lBodyTransform.yAxis.y * mBBoxOrientation.wAxis.y +
-                lBodyTransform.zAxis.y * mBBoxOrientation.wAxis.z + lBodyTransform.wAxis.y,
-            lBodyTransform.xAxis.z * mBBoxOrientation.wAxis.x + lBodyTransform.yAxis.z * mBBoxOrientation.wAxis.y +
-                lBodyTransform.zAxis.z * mBBoxOrientation.wAxis.z + lBodyTransform.wAxis.z,
-            0.0f
-        };
+        __vector4 r = __vmulfp(lx, __vspltw(a, 0));
+        r = __vmaddfp(ly, __vspltw(a, 1), r);
+        lBoxTransform.xAxis.mV = __vmaddfp(lz, __vspltw(a, 2), r);
+        r = __vmulfp(lx, __vspltw(b, 0));
+        r = __vmaddfp(ly, __vspltw(b, 1), r);
+        lBoxTransform.yAxis.mV = __vmaddfp(lz, __vspltw(b, 2), r);
+        r = __vmulfp(lx, __vspltw(c, 0));
+        r = __vmaddfp(ly, __vspltw(c, 1), r);
+        lBoxTransform.zAxis.mV = __vmaddfp(lz, __vspltw(c, 2), r);
+        r = __vmaddfp(lx, __vspltw(d, 0), lBody.wAxis.mV);
+        r = __vmaddfp(ly, __vspltw(d, 1), r);
+        lBoxTransform.wAxis.mV = __vmaddfp(lz, __vspltw(d, 2), r);
 
-        // CgsGeometric::Box::Set(box, {right,up,at,centre}, halfDims). Modelled as a raw-offset write
-        // into the out-box (Matrix44Affine basis @ +0, half-dims @ +64). ✅ CONFIRMED layout, not
-        // provisional -- CgsGeometric::Box is homed at CgsBox.h; see the banner above.
-        char* lpBox = reinterpret_cast<char*>(lpBoxOut);
-        *reinterpret_cast<Vector3*>(lpBox +  0) = lWorldRight;
-        *reinterpret_cast<Vector3*>(lpBox + 16) = lWorldUp;
-        *reinterpret_cast<Vector3*>(lpBox + 32) = lWorldAt;
-        *reinterpret_cast<Vector3*>(lpBox + 48) = lWorldCentre;
-        *reinterpret_cast<Vector3*>(lpBox + 64) = mBoundingBoxHalfDimensions;
+        lpBoxOut->Set(lBoxTransform, mBoundingBoxHalfDimensions, VecFloat(__vspltisw(0)));
+    }
+
+    f32 PhysicalBodyPart::GetSphereRadius() const
+    {
+        CgsGeometric::Box lBox;
+        GetBoundingBox(&lBox);
+        const Vector3 lDimensions = lBox.GetDimensions();
+        const VecFloat lMagnitude = rw::math::vpu::Magnitude(lDimensions);
+        const __vector4 lResult = __vaddfp(lMagnitude.mV, __vspltw(lDimensions.mV, 3));
+        return lResult.x;
     }
 
     // =========================================================================================
@@ -1609,7 +1466,6 @@ namespace Deformation
     // =========================================================================================
     void PhysicalBodyPart::UpdateJoint(VecFloat lvfTimeStep)
     {
-        const f32 lfTimeStep = lvfTimeStep.x;   // `vmr128 v123, v1` -- consumed lane-wise
 
         // ---- (1) tripwires + the active joint's spec --------------------------------------------
         CGS_ASSERT(mpIKPart->GetActiveJointIndex() != IKBodyPart::KU8_NO_ACTIVE_JOINT,
@@ -1621,30 +1477,23 @@ namespace Deformation
         const ExternalPhysicsBody& lrVehicleBody     = mpDeformableObject->GetVehicleBody();
         const Matrix44Affine       lVehicleTransform = lrVehicleBody.GetTransform();
 
-        // Row-vector convention (the file-wide one, see Prepare): local.x*xAxis + local.y*yAxis + ...
-        const auto lVehicleDirection = [&lVehicleTransform](const Vector3& lrLocal) -> Vector3
-        {
-            { const Vector3 lResult = {
-                lVehicleTransform.xAxis.x * lrLocal.x + lVehicleTransform.yAxis.x * lrLocal.y
-                    + lVehicleTransform.zAxis.x * lrLocal.z,
-                lVehicleTransform.xAxis.y * lrLocal.x + lVehicleTransform.yAxis.y * lrLocal.y
-                    + lVehicleTransform.zAxis.y * lrLocal.z,
-                lVehicleTransform.xAxis.z * lrLocal.x + lVehicleTransform.yAxis.z * lrLocal.y
-                    + lVehicleTransform.zAxis.z * lrLocal.z,
-                0.0f }; return lResult; }
-        };
-        // The transposed 3x3 (the six vmrgh/vmrglw): {dot(xAxis,p), dot(yAxis,p), dot(zAxis,p)}.
-        const auto lVehicleInverseDirection = [&lVehicleTransform](const Vector3& lrWorld) -> Vector3
-        {
-            { const Vector3 lResult = {
-                lVehicleTransform.xAxis.x * lrWorld.x + lVehicleTransform.xAxis.y * lrWorld.y
-                    + lVehicleTransform.xAxis.z * lrWorld.z,
-                lVehicleTransform.yAxis.x * lrWorld.x + lVehicleTransform.yAxis.y * lrWorld.y
-                    + lVehicleTransform.yAxis.z * lrWorld.z,
-                lVehicleTransform.zAxis.x * lrWorld.x + lVehicleTransform.zAxis.y * lrWorld.y
-                    + lVehicleTransform.zAxis.z * lrWorld.z,
-                0.0f }; return lResult; }
-        };
+        // ARTIST 8260B1C0..224 loads the vehicle rows and constructs the
+        // transposed inverse and its translation with z/y/x VMX accumulation.
+        const __vector4 vVehicleX = lVehicleTransform.xAxis.mV;
+        const __vector4 vVehicleY = lVehicleTransform.yAxis.mV;
+        const __vector4 vVehicleZ = lVehicleTransform.zAxis.mV;
+        const __vector4 vVehicleW = lVehicleTransform.wAxis.mV;
+        const __vector4 vHi10 = __vmrghw(vVehicleY, XMVectorZero());
+        const __vector4 vHi02 = __vmrghw(vVehicleX, vVehicleZ);
+        const __vector4 vLo10 = __vmrglw(vVehicleY, XMVectorZero());
+        const __vector4 vLo02 = __vmrglw(vVehicleX, vVehicleZ);
+        const __vector4 vInverseX = __vmrghw(vHi02, vHi10);
+        const __vector4 vInverseY = __vmrglw(vHi02, vHi10);
+        const __vector4 vInverseZ = __vmrghw(vLo02, vLo10);
+        const __vector4 vNegativePosition = __vsubfp(XMVectorZero(), vVehicleW);
+        __vector4 vInverseW = __vmulfp(vInverseZ, __vspltw(vNegativePosition, 2));
+        vInverseW = __vmaddfp(vInverseY, __vspltw(vNegativePosition, 1), vInverseW);
+        vInverseW = __vmaddfp(vInverseX, __vspltw(vNegativePosition, 0), vInverseW);
 
         // ---- (3) rebuild the oriented box for the current pose ------------------------------------
         // The asm's `CalcBoundingBox(this, var_160)` where var_160..var_130 are the four vehicle rows
@@ -1655,186 +1504,221 @@ namespace Deformation
         CGS_ASSERT(mi8ActiveJointsTagPointIndex != -1, "mi8ActiveJointsTagPointIndex != -1");
         const TagPoint* lpActiveTagPoint = mpIKPart->GetTagPoint(mi8ActiveJointsTagPointIndex);
         const Vector3   lTagPointOffset  = lpActiveTagPoint->GetOffsetFromInitialPosition();
-        const Vector3   lLocalJointPosition = {
-            mLocalInitialJointPositionPlusLimitStress.x + lTagPointOffset.x,
-            mLocalInitialJointPositionPlusLimitStress.y + lTagPointOffset.y,
-            mLocalInitialJointPositionPlusLimitStress.z + lTagPointOffset.z,
-            0.0f };
+        const Vector3 lLocalJointPosition(__vaddfp(mLocalInitialJointPositionPlusLimitStress.mV, lTagPointOffset.mV));
         mLocalJointPositionPlusRotation.SetVector3(lLocalJointPosition);   // vrlimi128: w preserved
 
         // ---- (5) the panel's rest direction, carried into world by the part's own pose -------------
         const Matrix44Affine lPartTransform         = mRwBody.GetTransform();
         const Vector3        lLocalPanelDirection   = lpActiveJointSpec->GetDefaultDirection();
-        const Vector3        lWorldPanelDirection   = {
-            lPartTransform.xAxis.x * lLocalPanelDirection.x + lPartTransform.yAxis.x * lLocalPanelDirection.y
-                + lPartTransform.zAxis.x * lLocalPanelDirection.z,
-            lPartTransform.xAxis.y * lLocalPanelDirection.x + lPartTransform.yAxis.y * lLocalPanelDirection.y
-                + lPartTransform.zAxis.y * lLocalPanelDirection.z,
-            lPartTransform.xAxis.z * lLocalPanelDirection.x + lPartTransform.yAxis.z * lLocalPanelDirection.y
-                + lPartTransform.zAxis.z * lLocalPanelDirection.z,
-            0.0f };
+        const __vector4 vPanelLocal = lLocalPanelDirection.mV;
+        const __vector4 vPartX = lPartTransform.xAxis.mV;
+        const __vector4 vPartY = lPartTransform.yAxis.mV;
+        const __vector4 vPartZ = lPartTransform.zAxis.mV;
+        __vector4 vPanelWorld = __vmulfp(vPartX, __vspltw(vPanelLocal, 0));
+        vPanelWorld = __vmaddfp(vPartY, __vspltw(vPanelLocal, 1), vPanelWorld);
+        vPanelWorld = __vmaddfp(vPartZ, __vspltw(vPanelLocal, 2), vPanelWorld);
 
-        // ---- (6) the world velocity of the hinge anchor, ON THE CAR --------------------------------
-        const Vector3 lWorldJointArm  = lVehicleDirection(lLocalJointPosition);
-        const Vector3 lAnchorVelocity = lrVehicleBody.GetLinearVelocity()
-                                      + Cross(lrVehicleBody.GetAngularVelocity(), lWorldJointArm);
+        // 8260B2FC..32C starts with the Y term before fusing X and Z.
+        const __vector4 vJointLocal = lLocalJointPosition.mV;
+        __vector4 vJointWorld = __vmulfp(vVehicleY, __vspltw(vJointLocal, 1));
+        vJointWorld = __vmaddfp(vVehicleX, __vspltw(vJointLocal, 0), vJointWorld);
+        vJointWorld = __vmaddfp(vVehicleZ, __vspltw(vJointLocal, 2), vJointWorld);
+        const Vector3 lVehicleLinear = lrVehicleBody.GetLinearVelocity();
+        const Vector3 lVehicleAngular = lrVehicleBody.GetAngularVelocity();
+        const __vector4 vLinear = lVehicleLinear.mV;
+        const __vector4 vAngular = lVehicleAngular.mV;
+        const __vector4 vCrossProduct = __vmulfp(vAngular, __vpermwi(vJointWorld, 0x63));
+        const __vector4 vCross = __vpermwi(__vnmsubfp(__vpermwi(vAngular, 0x63), vJointWorld, vCrossProduct), 0x63);
+        const __vector4 vAnchorVelocity = __vaddfp(vCross, vLinear);
 
-        // ---- (7) the drive term --------------------------------------------------------------------
-        const f32 lfAnchorSpeedAlongPanel   = Dot(lAnchorVelocity, lWorldPanelDirection);
-        const f32 lfPreviousSpeedAlongPanel = Dot(lVehicleDirection(mRwBody.GetLinearVelocity()),
-                                                  lWorldPanelDirection);
+        const Vector3 lPreviousVelocity = mRwBody.GetLinearVelocity();
+        const __vector4 vPrevious = lPreviousVelocity.mV;
+        __vector4 vPreviousWorld = __vmulfp(vVehicleX, __vspltw(vPrevious, 0));
+        vPreviousWorld = __vmaddfp(vVehicleY, __vspltw(vPrevious, 1), vPreviousWorld);
+        vPreviousWorld = __vmaddfp(vVehicleZ, __vspltw(vPrevious, 2), vPreviousWorld);
+        const __vector4 vAnchorSpeed = __vmsum3fp(vAnchorVelocity, vPanelWorld);
+        const __vector4 vPreviousSpeed = __vmsum3fp(vPreviousWorld, vPanelWorld);
 
-        // vmaxfp against -0.5 then vminfp against +0.5, in that order.
-        f32 lfClampedAnchorSpeed = lfAnchorSpeedAlongPanel;
-        if ( lfClampedAnchorSpeed < -KF_JOINT_ANCHOR_VELOCITY_CLAMP )
+        // ARTIST 8260B320..B5E4: reciprocal estimates and refinements,
+        // force, penetration, clamping and restitution stay in VMX lanes.
+        const __vector4 vZero = XMVectorZero();
+        const __vector4 vOne = XMVectorReplicate(1.0f);
+        const __vector4 vHalf = XMVectorReplicate(0.5f);
+        const __vector4 vDt = lvfTimeStep.mV;
+        __vector4 vDtReciprocal = __vrefp(vDt);
+        for (u32 luStep = 0; luStep < 2; ++luStep)
         {
-            lfClampedAnchorSpeed = -KF_JOINT_ANCHOR_VELOCITY_CLAMP;
+            const __vector4 vResidual = __vnmsubfp(vDtReciprocal, vDt, vOne);
+            vDtReciprocal = __vmaddfp(vDtReciprocal, vResidual, vDtReciprocal);
         }
-        if ( lfClampedAnchorSpeed > KF_JOINT_ANCHOR_VELOCITY_CLAMP )
+        vDtReciprocal = __vmulfp(vDtReciprocal, vOne);
+        const __vector4 vClampedAnchor = __vminfp(vHalf, __vmaxfp(XMVectorReplicate(-0.5f), vAnchorSpeed));
+        const __vector4 vPivotAcceleration = __vmulfp(__vsubfp(vAnchorSpeed, vPreviousSpeed), vDtReciprocal);
+        const __vector4 vGravity = __vmaddfp(XMVectorReplicate(KF_HINGED_PART_GRAVITY),
+                                              __vspltw(vPanelWorld, 1), vPivotAcceleration);
+        const __vector4 vAcceleration = __vmaddfp(vClampedAnchor, vClampedAnchor, vGravity);
+        const __vector4 vOldAngle = __vspltw(mLocalJointPositionPlusRotation.mV, 3);
+        const __vector4 vNegatedMax = __vspltw(mLocalInitialComPositionPlusMaxJointAngle.mV, 3);
+        __vector4 vVelocity = __vmaddfp(vAcceleration, vDt,
+                                         __vspltw(mLocalGraphicsPositionPlusJointVelocity.mV, 3));
+        unsigned int luAngleCR = 0;
+        __vcmpgtfpR(vOldAngle, vZero, &luAngleCR);
+        bool lbRestitution = XMComparisonAllTrue(luAngleCR);
+        if (!lbRestitution)
         {
-            lfClampedAnchorSpeed = KF_JOINT_ANCHOR_VELOCITY_CLAMP;
+            __vcmpgtfpR(vNegatedMax, vOldAngle, &luAngleCR);
+            lbRestitution = XMComparisonAllTrue(luAngleCR);
         }
+        const __vector4 vOnes = __vspltisw(-1);
+        const __vector4 vSignMask = __vslw(vOnes, vOnes);
+        if (lbRestitution)
+            vVelocity = __vmulfp(__vxor(vVelocity, vSignMask), XMVectorReplicate(KF_JOINT_RESTITUTION));
+        const __vector4 vIntegratedAngle = __vmaddfp(vVelocity, vDt, vOldAngle);
+        vVelocity = __vmulfp(vVelocity, XMVectorReplicate(KF_JOINT_RELAX));
 
-        // (v_anchor.dir - v_stored.dir) * (1/dt): `vrefp128 v11, v123` + two Newton refinements.
-        const f32 lfPivotAcceleration =
-            (lfAnchorSpeedAlongPanel - lfPreviousSpeedAlongPanel) / lfTimeStep;
-        const f32 lfAngularAcceleration =
-            lfClampedAnchorSpeed * lfClampedAnchorSpeed
-            + (KF_HINGED_PART_GRAVITY * lWorldPanelDirection.y + lfPivotAcceleration);
-
-        const f32 lfJointRotation = mLocalJointPositionPlusRotation.GetPlus();          // +352 w (OLD)
-        f32 lfJointVelocity = mLocalGraphicsPositionPlusJointVelocity.GetPlus()         // +368 w
-                            + lfAngularAcceleration * lfTimeStep;
-
-        // ---- (8a) restitution at either end of the swing --------------------------------------------
-        // SetJoinedToVehicle seeds this lane with -(maxAngle), so the band is [lane, 0].
-        const f32 lfNegatedMaxJointAngle = mLocalInitialComPositionPlusMaxJointAngle.GetPlus();  // +384 w
-        if ( lfJointRotation > 0.0f || lfNegatedMaxJointAngle > lfJointRotation )
-        {
-            lfJointVelocity = -lfJointVelocity * KF_JOINT_RESTITUTION;
-        }
-
-        // ---- (8b) integrate the angle with the PRE-relax velocity, then relax the velocity ----------
-        f32 lfNewJointRotation = lfJointRotation + lfJointVelocity * lfTimeStep;
-        lfJointVelocity *= KF_JOINT_RELAX;
-
-        // ---- (8c) penetration resolve ----------------------------------------------------------------
-        const Vector3 lWorldPenetration       = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
-        const f32     lfPenetrationAlongPanel = Dot(lWorldPenetration, lWorldPanelDirection);
-
-        // The accumulated contact point brought back into vehicle-local space by the affine inverse.
+        const __vector4 vWorldPenetration = mWorldPenetrationPlusCollisionMagnitude.mV;
+        const __vector4 vPenetrationAlongPanel = __vmsum3fp(vWorldPenetration, vPanelWorld);
         const Vector3 lWorldCollisionPoint = mAverageCollisionPointPlusNumCollisions.GetVector3();
-        const Vector3 lLocalCollisionPoint = lVehicleInverseDirection(
-            lWorldCollisionPoint - lVehicleTransform.wAxis);
-        const f32     lfContactDistance    = Magnitude(lLocalCollisionPoint - lLocalJointPosition);
-
-        f32 lfResolveFalloff = lfContactDistance - KF_JOINT_RESOLVE_FALLOFF_RADIUS;
-        if ( lfResolveFalloff < 0.0f )                                    // vmaxfp against zero
+        const __vector4 vCollision = lWorldCollisionPoint.mV;
+        __vector4 vLocalCollision = __vmaddfp(vInverseX, __vspltw(vCollision, 0), vInverseW);
+        vLocalCollision = __vmaddfp(vInverseY, __vspltw(vCollision, 1), vLocalCollision);
+        vLocalCollision = __vmaddfp(vInverseZ, __vspltw(vCollision, 2), vLocalCollision);
+        const __vector4 vContactDelta = __vsubfp(vLocalCollision, vJointLocal);
+        const __vector4 vDistanceSq = __vmsum3fp(vContactDelta, vContactDelta);
+        __vector4 vDistanceReciprocal = __vrsqrtefp(vDistanceSq);
+        for (u32 luStep = 0; luStep < 2; ++luStep)
         {
-            lfResolveFalloff = 0.0f;
+            const __vector4 vSquare = __vmulfp(vDistanceReciprocal, vDistanceReciprocal);
+            const __vector4 vHalfEstimate = __vmulfp(vDistanceReciprocal, vHalf);
+            const __vector4 vResidual = __vnmsubfp(vDistanceSq, vSquare, vOne);
+            vDistanceReciprocal = __vmaddfp(vHalfEstimate, vResidual, vDistanceReciprocal);
         }
-        const f32 lfResolveScale = KF_JOINT_RESOLVE_FALLOFF_SCALE * lfResolveFalloff + 1.0f;
-        const f32 lfJointResolve = (lfPenetrationAlongPanel / lfResolveScale)
-                                 * KF_JOINT_PENETRATION_RESOLUTION;
-        lfNewJointRotation += lfJointResolve;
-
-        // ---- (8d) clamp the angle into the joint's own band ------------------------------------------
-        const f32 lfBelowLimit = (lfNewJointRotation - lfNegatedMaxJointAngle < 0.0f)
-                               ? (lfNewJointRotation - lfNegatedMaxJointAngle) : 0.0f;   // vminfp
-        const f32 lfAboveRest  = (lfNewJointRotation > 0.0f) ? lfNewJointRotation : 0.0f; // vmaxfp
-        lfNewJointRotation -= (lfBelowLimit + lfAboveRest);
-
-        // ---- (8e) the limit stress TestJointForBreaking's penetration arm reads ------------------------
-        mLocalInitialJointPositionPlusLimitStress.SetPlus(Magnitude(lWorldPenetration)
-                                                          * KF_JOINT_LIMIT_STRESS_SCALE);
-
-        // ---- (8f) restitution when the resolve opposes the swing ---------------------------------------
-        if ( lfJointResolve * lfJointVelocity < 0.0f )                    // `vcmpgtfp128. v8, v127, v8`
+        const __vector4 vDistance = __vsel(__vmulfp(vDistanceSq, vDistanceReciprocal), vZero,
+                                           __vcmpeqfp(vZero, vDistanceSq));
+        const __vector4 vFalloff = __vmaxfp(__vsubfp(vDistance, XMVectorReplicate(KF_JOINT_RESOLVE_FALLOFF_RADIUS)), vZero);
+        const __vector4 vDenominator = __vmaddfp(XMVectorReplicate(KF_JOINT_RESOLVE_FALLOFF_SCALE), vFalloff, vOne);
+        __vector4 vDenomReciprocal = __vrefp(vDenominator);
+        for (u32 luStep = 0; luStep < 2; ++luStep)
         {
-            const f32 lfBounce = lfJointVelocity * (1.0f + KF_JOINT_RESTITUTION);
-            mWorldPenetrationPlusCollisionMagnitude.SetPlus(std::fabs(lfBounce));   // vandc == |x|
-            lfJointVelocity -= lfBounce;                                            // == -0.1 * v
+            const __vector4 vResidual = __vnmsubfp(vDenomReciprocal, vDenominator, vOne);
+            vDenomReciprocal = __vmaddfp(vDenomReciprocal, vResidual, vDenomReciprocal);
         }
+        const __vector4 vResolve = __vmulfp(__vmulfp(vDenomReciprocal, vPenetrationAlongPanel),
+                                             XMVectorReplicate(KF_JOINT_PENETRATION_RESOLUTION));
+        const __vector4 vUnclampedAngle = __vaddfp(vIntegratedAngle, vResolve);
+        const __vector4 vBelowLimit = __vminfp(__vsubfp(vUnclampedAngle, vNegatedMax), vZero);
+        const __vector4 vAboveRest = __vmaxfp(vUnclampedAngle, vZero);
+        const __vector4 vAngle = __vsubfp(vUnclampedAngle, __vaddfp(vBelowLimit, vAboveRest));
 
-        // ---- the two joint-state stores (the only writers of either lane in the program) ---------------
-        mLocalJointPositionPlusRotation.SetPlus(lfNewJointRotation);              // +352 w
-        mLocalGraphicsPositionPlusJointVelocity.SetPlus(lfJointVelocity);         // +368 w
+        const __vector4 vPenetrationSq = __vmsum3fp(vWorldPenetration, vWorldPenetration);
+        __vector4 vPenetrationReciprocal = __vrsqrtefp(vPenetrationSq);
+        for (u32 luStep = 0; luStep < 2; ++luStep)
+        {
+            const __vector4 vSquare = __vmulfp(vPenetrationReciprocal, vPenetrationReciprocal);
+            const __vector4 vHalfEstimate = __vmulfp(vPenetrationReciprocal, vHalf);
+            const __vector4 vResidual = __vnmsubfp(vPenetrationSq, vSquare, vOne);
+            vPenetrationReciprocal = __vmaddfp(vHalfEstimate, vResidual, vPenetrationReciprocal);
+        }
+        const __vector4 vPenetrationLength = __vsel(__vmulfp(vPenetrationSq, vPenetrationReciprocal), vZero,
+                                                     __vcmpeqfp(vZero, vPenetrationSq));
+        mLocalInitialJointPositionPlusLimitStress.mV = __vrlimi(mLocalInitialJointPositionPlusLimitStress.mV, __vmulfp(vPenetrationLength, XMVectorReplicate(2.0f)), 1, 0);
+        unsigned int luResolveCR = 0;
+        __vcmpgtfpR(vZero, __vmulfp(vResolve, vVelocity), &luResolveCR);
+        if (XMComparisonAllTrue(luResolveCR))
+        {
+            const __vector4 vBounce = __vmulfp(vVelocity, __vaddfp(vOne, XMVectorReplicate(KF_JOINT_RESTITUTION)));
+            mWorldPenetrationPlusCollisionMagnitude.mV = __vrlimi(mWorldPenetrationPlusCollisionMagnitude.mV, __vandc(vBounce, vSignMask), 1, 0);
+            vVelocity = __vsubfp(vVelocity, vBounce);
+        }
+        mLocalJointPositionPlusRotation.mV = __vrlimi(mLocalJointPositionPlusRotation.mV, vAngle, 1, 0);
+        mLocalGraphicsPositionPlusJointVelocity.mV = __vrlimi(mLocalGraphicsPositionPlusJointVelocity.mV, vVelocity, 1, 0);
 
         // ---- (9) pose the panel on its hinge -------------------------------------------------------------
-        f32 lfSin = 0.0f;
-        f32 lfCos = 1.0f;
-        JointSinCos(lfNewJointRotation, lfSin, lfCos);
-        const f32 lfOneMinusCos = 1.0f - lfCos;
-
+        __vector4 vSin;
+        __vector4 vCos;
+        JointSinCos(vAngle, vSin, vCos);
         const Vector3 lJointAxis = lpActiveJointSpec->GetRotationAxis();
 
-        // Rodrigues about lJointAxis, assembled row-by-row exactly as the three vperm/vrlimi128 do.
+        // ARTIST 8260B7A0..B804: form the three Rodrigues rows with the
+        // original VMX multiplies, fused operations and lane selection.
+        const __vector4 vAxis = lJointAxis.mV;
+        const __vector4 vAxisX = __vspltw(vAxis, 0);
+        const __vector4 vAxisY = __vspltw(vAxis, 1);
+        const __vector4 vAxisZ = __vspltw(vAxis, 2);
+        const __vector4 vSinX = __vmulfp(vSin, vAxisX);
+        const __vector4 vSinY = __vmulfp(vSin, vAxisY);
+        const __vector4 vSinZ = __vmulfp(vSin, vAxisZ);
+        const __vector4 vOneMinusCos = __vsubfp(XMVectorReplicate(1.0f), vCos);
+        const __vector4 vScaleY = __vmulfp(vOneMinusCos, vAxisY);
+        const __vector4 vScaleX = __vmulfp(vOneMinusCos, vAxisX);
+        const __vector4 vScaleZ = __vmulfp(vOneMinusCos, vAxisZ);
+        const __vector4 vYX = __vmulfp(vScaleY, vAxisX);
+        const __vector4 vYZPlusSinX = __vmaddfp(vScaleY, vAxisZ, vSinX);
+        const __vector4 vYY = __vmaddfp(vScaleY, vAxisY, vCos);
+        const __vector4 vXYPlusSinZ = __vmaddfp(vScaleX, vAxisY, vSinZ);
+        const __vector4 vZY = __vmulfp(vScaleZ, vAxisY);
+        const __vector4 vXZ = __vmulfp(vScaleX, vAxisZ);
+        const __vector4 vXX = __vmaddfp(vScaleX, vAxisX, vCos);
+        const __vector4 vZXPlusSinY = __vmaddfp(vScaleZ, vAxisX, vSinY);
+        const __vector4 vZZ = __vmaddfp(vScaleZ, vAxisZ, vCos);
+        const __vector4 vYXMinusSinZ = __vsubfp(vYX, vSinZ);
+        const __vector4 vZYMinusSinX = __vsubfp(vZY, vSinX);
+        const __vector4 vXZMinusSinY = __vsubfp(vXZ, vSinY);
+        // unk_82CDA350: select first lane from A, second lane from B,
+        // then the first lane of A twice. vrlimi inserts each Z lane.
+        CGS_ALIGN(16) static const u32 kauJointPermute[4] = { 0x00010203u, 0x14151617u, 0x00010203u, 0x00010203u };
+        const __vector4 vPermute = __lvx(kauJointPermute, 0);
+        const __vector4 vRowX = __vrlimi(__vperm(vXX, vXYPlusSinZ, vPermute), vXZMinusSinY, 2, 0);
+        const __vector4 vRowY = __vrlimi(__vperm(vYXMinusSinZ, vYY, vPermute), vYZPlusSinX, 2, 0);
+        const __vector4 vRowZ = __vrlimi(__vperm(vZXPlusSinY, vZYMinusSinX, vPermute), vZZ, 2, 0);
+        const Vector3 lRowX(vRowX);
+        const Vector3 lRowY(vRowY);
+        const Vector3 lRowZ(vRowZ);
         Matrix44Affine lJointRotationMatrix;
-        {
-            const Vector3 lAggregateValue = {
-            lfCos + lfOneMinusCos * lJointAxis.x * lJointAxis.x,
-            lfOneMinusCos * lJointAxis.x * lJointAxis.y + lfSin * lJointAxis.z,
-            lfOneMinusCos * lJointAxis.x * lJointAxis.z - lfSin * lJointAxis.y,
-            0.0f };
-            lJointRotationMatrix.xAxis = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = {
-            lfOneMinusCos * lJointAxis.y * lJointAxis.x - lfSin * lJointAxis.z,
-            lfCos + lfOneMinusCos * lJointAxis.y * lJointAxis.y,
-            lfOneMinusCos * lJointAxis.y * lJointAxis.z + lfSin * lJointAxis.x,
-            0.0f };
-            lJointRotationMatrix.yAxis = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = {
-            lfOneMinusCos * lJointAxis.z * lJointAxis.x + lfSin * lJointAxis.y,
-            lfOneMinusCos * lJointAxis.z * lJointAxis.y - lfSin * lJointAxis.x,
-            lfCos + lfOneMinusCos * lJointAxis.z * lJointAxis.z,
-            0.0f };
-            lJointRotationMatrix.zAxis = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
-            lJointRotationMatrix.wAxis = lAggregateValue;
-        }
-
-        const auto lJointDirection = [&lJointRotationMatrix](const Vector3& lrLocal) -> Vector3
-        {
-            { const Vector3 lResult = {
-                lJointRotationMatrix.xAxis.x * lrLocal.x + lJointRotationMatrix.yAxis.x * lrLocal.y
-                    + lJointRotationMatrix.zAxis.x * lrLocal.z,
-                lJointRotationMatrix.xAxis.y * lrLocal.x + lJointRotationMatrix.yAxis.y * lrLocal.y
-                    + lJointRotationMatrix.zAxis.y * lrLocal.z,
-                lJointRotationMatrix.xAxis.z * lrLocal.x + lJointRotationMatrix.yAxis.z * lrLocal.y
-                    + lJointRotationMatrix.zAxis.z * lrLocal.z,
-                0.0f }; return lResult; }
-        };
-
-        // The COM swung about the anchor: com' = joint - R*(joint - com).
+        lJointRotationMatrix.xAxis = lRowX;
+        lJointRotationMatrix.yAxis = lRowY;
+        lJointRotationMatrix.zAxis = lRowZ;
+        // ARTIST 8260B810..B8BC: rotate the COM-to-joint vector in the
+        // reconstructed joint basis, then compose the three rows and COM
+        // with the vehicle frame using the original VMX fused order.
         const Vector3 lLocalComPosition = mLocalInitialComPositionPlusMaxJointAngle.GetVector3();
-        const Vector3 lComToJoint       = lLocalJointPosition - lLocalComPosition;
-        const Vector3 lNewLocalCom      = lLocalJointPosition - lJointDirection(lComToJoint);
-
+        const __vector4 vJoint = lLocalJointPosition.mV;
+        const __vector4 vCom = lLocalComPosition.mV;
+        const __vector4 vComToJoint = __vsubfp(vJoint, vCom);
+        const __vector4 vJointX = lRowX.mV;
+        const __vector4 vJointY = lRowY.mV;
+        const __vector4 vJointZ = lRowZ.mV;
+        __vector4 vRotatedCom = __vmulfp(vJointX, __vspltw(vComToJoint, 0));
+        vRotatedCom = __vmaddfp(vJointY, __vspltw(vComToJoint, 1), vRotatedCom);
+        vRotatedCom = __vmaddfp(vJointZ, __vspltw(vComToJoint, 2), vRotatedCom);
+        const __vector4 vNewLocalCom = __vsubfp(vJoint, vRotatedCom);
+        const __vector4 vVehX = lVehicleTransform.xAxis.mV;
+        const __vector4 vVehY = lVehicleTransform.yAxis.mV;
+        const __vector4 vVehZ = lVehicleTransform.zAxis.mV;
+        const __vector4 vVehW = lVehicleTransform.wAxis.mV;
+        const __vector4 vLocalRows[4] = { vJointX, vJointY, vJointZ, vNewLocalCom };
         Matrix44Affine lNewPartTransform;
-        lNewPartTransform.xAxis = lVehicleDirection(lJointRotationMatrix.xAxis);   // stvx128 this+0x00
-        lNewPartTransform.yAxis = lVehicleDirection(lJointRotationMatrix.yAxis);   // stvx128 this+0x10
-        lNewPartTransform.zAxis = lVehicleDirection(lJointRotationMatrix.zAxis);   // stvx128 this+0x20
+        Vector3* lpRows[4] = { &lNewPartTransform.xAxis, &lNewPartTransform.yAxis,
+                              &lNewPartTransform.zAxis, &lNewPartTransform.wAxis };
+        for (u32 luRow = 0; luRow < 4; ++luRow)
         {
-            const Vector3 lRotatedCom = lVehicleDirection(lNewLocalCom);
-            {
-                const Vector3 lAggregateValue = {
-                lVehicleTransform.wAxis.x + lRotatedCom.x,
-                lVehicleTransform.wAxis.y + lRotatedCom.y,
-                lVehicleTransform.wAxis.z + lRotatedCom.z,
-                0.0f };
-                lNewPartTransform.wAxis = lAggregateValue;
-            }                                                            // stvx128 this+0x30
+            const __vector4 vLocal = vLocalRows[luRow];
+            __vector4 vWorld = (luRow == 3)
+                ? __vmaddfp(vVehX, __vspltw(vLocal, 0), vVehW)
+                : __vmulfp(vVehX, __vspltw(vLocal, 0));
+            vWorld = __vmaddfp(vVehY, __vspltw(vLocal, 1), vWorld);
+            vWorld = __vmaddfp(vVehZ, __vspltw(vLocal, 2), vWorld);
+            const Vector3 lRow(vWorld);
+            *lpRows[luRow] = lRow;
         }
         mRwBody.SetTransform(lNewPartTransform);
 
         // ---- (10) the anchor velocity, kept in VEHICLE-LOCAL axes for next frame's difference --------
-        mRwBody.SetLinearVelocity(lVehicleInverseDirection(lAnchorVelocity));      // stvx128 this+0x40
+        __vector4 vLocalAnchor = __vmulfp(vInverseX, __vspltw(vAnchorVelocity, 0));
+        vLocalAnchor = __vmaddfp(vInverseY, __vspltw(vAnchorVelocity, 1), vLocalAnchor);
+        vLocalAnchor = __vmaddfp(vInverseZ, __vspltw(vAnchorVelocity, 2), vLocalAnchor);
+        const Vector3 lLocalAnchor(vLocalAnchor);
+        mRwBody.SetLinearVelocity(lLocalAnchor);      // stvx128 this+0x40
 
         // [DIAG] NOT IN THE X360 BINARY. The witness for the integrator itself: the hinge angle and
         // its velocity, the band they live in, the drive term that moves them, and the axis/direction
@@ -1949,8 +1833,8 @@ namespace Deformation
         //   a. rotation proportion < gate (STRICT). The asm is vcmpgtfp128(gate, proportion) -> the
         //      early-out fires when gate > proportion, i.e. proportion < gate.
         const VecFloat lJointRotationProportion = GetJointRotationProportion();
-        ++gxJbRotHist[JbDecade(lJointRotationProportion.x / KF_ROTATION_PROPORTION_GATE)];   // [DIAG]
-        if ( lJointRotationProportion.x < KF_ROTATION_PROPORTION_GATE )   // vcmpgtfp gate,proportion
+        ++gxJbRotHist[JbDecade(lJointRotationProportion.mV.x / KF_ROTATION_PROPORTION_GATE)];   // [DIAG]
+        if ( lJointRotationProportion.mV.x < KF_ROTATION_PROPORTION_GATE )   // vcmpgtfp gate,proportion
         {
             ++gxJbRotGate;   // [DIAG]
             return false;
@@ -1997,8 +1881,20 @@ namespace Deformation
         const Matrix44Affine lVehicleTransform = lrVehicleBody.GetTransform();
         const Vector3 lPartPosition = mRwBody.GetTransform().wAxis;
         const Vector3 lVehicleAngularVelocity = lrVehicleBody.GetAngularVelocity();
-        const Vector3 lDetachVelocity = lrVehicleBody.GetLinearVelocity()
-            + rw::math::vpu::Cross(lVehicleAngularVelocity, lPartPosition - lVehicleTransform.wAxis);
+        // ARTIST 8260C22C..290: part offset and angular cross product,
+        // with the original VMX fused negative multiply/subtract.
+        const Vector3 lVehicleLinearVelocity = lrVehicleBody.GetLinearVelocity();
+        const __vector4 vPartPos = lPartPosition.mV;
+        const __vector4 vVehiclePos = lVehicleTransform.wAxis.mV;
+        const __vector4 vAngular = lVehicleAngularVelocity.mV;
+        const __vector4 vLinear = lVehicleLinearVelocity.mV;
+        const __vector4 vOffset = __vsubfp(vPartPos, vVehiclePos);
+        const __vector4 vAngularPermuted = __vpermwi(vAngular, 0x63);
+        const __vector4 vOffsetPermuted = __vpermwi(vOffset, 0x63);
+        const __vector4 vCrossPart = __vmulfp(vAngular, vOffsetPermuted);
+        const __vector4 vCross = __vpermwi(__vnmsubfp(vAngularPermuted, vOffset, vCrossPart), 0x63);
+        const __vector4 vDetach = __vaddfp(vCross, vLinear);
+        const Vector3 lDetachVelocity(vDetach);
 
         // These tripwires precede both stress tests at8260C294..8260C304.
         CGS_ASSERT(mbJoinedToVehicle, "IsJoinedToVehicle()");
@@ -2021,44 +1917,31 @@ namespace Deformation
             // the spec's mJointAxis at spec+0x10).
             const Vector3 lLocalAxis = lpActiveJoint->GetRotationAxis();
             const Matrix44Affine lPartTransform = mRwBody.GetTransform();
-            const Vector3 lWorldAxis = {
-                lPartTransform.xAxis.x * lLocalAxis.x + lPartTransform.yAxis.x * lLocalAxis.y
-                    + lPartTransform.zAxis.x * lLocalAxis.z,
-                lPartTransform.xAxis.y * lLocalAxis.x + lPartTransform.yAxis.y * lLocalAxis.y
-                    + lPartTransform.zAxis.y * lLocalAxis.z,
-                lPartTransform.xAxis.z * lLocalAxis.x + lPartTransform.yAxis.z * lLocalAxis.y
-                    + lPartTransform.zAxis.z * lLocalAxis.z,
-                0.0f
-            };
-
-            // THE GATE (0x8260C364..0x8260C388): |axis * dot(axis, worldPenetration)| must exceed
-            // FLT_EPSILON in at least one lane. CR6 bit 26 is "none true", and the branch skips this
-            // whole arm when it is set.
+            const __vector4 vAxis = lLocalAxis.mV;
+            const __vector4 vRowX = lPartTransform.xAxis.mV;
+            const __vector4 vRowY = lPartTransform.yAxis.mV;
+            const __vector4 vRowZ = lPartTransform.zAxis.mV;
+            __vector4 vWorldAxis = __vmulfp(vRowX, __vspltw(vAxis, 0));
+            vWorldAxis = __vmaddfp(vRowY, __vspltw(vAxis, 1), vWorldAxis);
+            vWorldAxis = __vmaddfp(vRowZ, __vspltw(vAxis, 2), vWorldAxis);
             const Vector3 lWorldPenetration = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
-            const f32 lfPenetrationAlongAxis = lWorldAxis.x * lWorldPenetration.x
-                                             + lWorldAxis.y * lWorldPenetration.y
-                                             + lWorldAxis.z * lWorldPenetration.z;
-            auto lfAbs = [](f32 lf) { return lf < 0.0f ? -lf : lf; };
-            const bool lbAxisEngaged =
-                   lfAbs(lWorldAxis.x * lfPenetrationAlongAxis) > KF_INERTIA_DEGENERATE_EPSILON
-                || lfAbs(lWorldAxis.y * lfPenetrationAlongAxis) > KF_INERTIA_DEGENERATE_EPSILON
-                || lfAbs(lWorldAxis.z * lfPenetrationAlongAxis) > KF_INERTIA_DEGENERATE_EPSILON;
-
-            if ( !lbAxisEngaged ) { ++gxJbAxisIdle; } else { ++gxJbArmA; }   // [DIAG]
-
-            if ( lbAxisEngaged )
+            const __vector4 vPenetration = lWorldPenetration.mV;
+            const __vector4 vOnes = __vspltisw(-1);
+            const __vector4 vSign = __vslw(vOnes, vOnes);
+            const __vector4 vDot = __vmsum3fp(vWorldAxis, vPenetration);
+            __vector4 vProjected = __vandc(__vmulfp(vWorldAxis, vDot), vSign);
+            vProjected = __vrlimi(vProjected, vProjected, 1, 1);
+            unsigned int luAxisCR = 0;
+            __vcmpgtfpR(vProjected, XMVectorReplicate(KF_INERTIA_DEGENERATE_EPSILON), &luAxisCR);
+            const bool lbAxisEngaged = XMComparisonAnyTrue(luAxisCR);
+            if (lbAxisEngaged)
             {
-                // vmsum3fp128 @0x8260C3D4, vandc @0x8260C410 (abs), vmulfp128 @0x8260C414
-                // (* kfJointForceMultiplier), vcmpgtfp. @0x8260C418 (> maxStress).
-                const f32 lfJointForceMagnitude = lDetachVelocity.x * lWorldAxis.x
-                                                + lDetachVelocity.y * lWorldAxis.y
-                                                + lDetachVelocity.z * lWorldAxis.z;
-                const f32 lfScaledForce = lfAbs(lfJointForceMagnitude) * kfJointForceMultiplier;
-                ++gxJbForceHist[JbDecade(lfMaxStress > 0.0f ? (lfScaledForce / lfMaxStress) : 0.0f)];  // [DIAG]
-                if ( lfScaledForce > lfMaxStress )
-                {
+                const __vector4 vForce = __vmsum3fp(vDetach, vWorldAxis);
+                const __vector4 vScaledForce = __vmulfp(__vandc(vForce, vSign), XMVectorReplicate(kfJointForceMultiplier));
+                unsigned int luForceCR = 0;
+                __vcmpgtfpR(vScaledForce, XMVectorReplicate(lfMaxStress), &luForceCR);
+                if (XMComparisonAllTrue(luForceCR))
                     lbBreak = true;
-                }
             }
         }
 
@@ -2275,7 +2158,6 @@ namespace Deformation
     // =============================================================================================
     void PhysicalBodyPart::AddContactSpy(BrnPhysics::ContactSpy::ContactSpyData* lpContactSpyData)
     {
-        auto lfAbs = [](f32 lf) { return lf < 0.0f ? -lf : lf; };
 
         // [DIAG] NOT IN THE X360 BINARY -- see the [spy] banner at the append below. Counters only;
         // no early-out and no store depends on them.
@@ -2290,10 +2172,14 @@ namespace Deformation
 
         // ---- GATE 2: is the collision magnitude non-negligible? (asm 0x8260B934..0x8260B980) ----
         const f32 lfCollisionMagnitude = mWorldPenetrationPlusCollisionMagnitude.GetPlus();
-        if ( !(lfAbs(lfCollisionMagnitude) > KF_CONTACT_SPY_MIN_COLLISION_MAGNITUDE) )
-        {
+        const __vector4 vMaskOnes = __vspltisw(-1);
+        const __vector4 vSignMask = __vslw(vMaskOnes, vMaskOnes);
+        const __vector4 vMagnitude = XMVectorReplicate(lfCollisionMagnitude);
+        const __vector4 vAbsMagnitude = __vandc(vMagnitude, vSignMask);
+        unsigned int luMagnitudeCR = 0;
+        __vcmpgtfpR(vAbsMagnitude, XMVectorReplicate(KF_CONTACT_SPY_MIN_COLLISION_MAGNITUDE), &luMagnitudeCR);
+        if (!XMComparisonAllTrue(luMagnitudeCR))
             return;
-        }
         ++gxSpyGate2;
 
         BrnPhysics::ContactSpy::HingedPartContact lEvent;
@@ -2318,45 +2204,44 @@ namespace Deformation
         lEvent.mCollisionTagB.muValue = 0xFFFF8000u;
 
         // ---- the contact point's world velocity under the vehicle's rigid motion ----
+        // ARTIST 8260B9A4..BA54: the contact and penetration are full
+        // four-lane rows; keep their w lanes through cross and normalisation.
         const Vector3 lContactPoint = mAverageCollisionPointPlusNumCollisions.GetVector3();
-
         const ExternalPhysicsBody& lrVehicleBody = mpDeformableObject->GetVehicleBody();
-        const Vector3 lBodyPos    = lrVehicleBody.GetTransform().wAxis;    // body +0x30
-        const Vector3 lBodyLinVel = lrVehicleBody.GetLinearVelocity();     // body +0x40
-        const Vector3 lBodyAngVel = lrVehicleBody.GetAngularVelocity();    // body +0x50
+        const Vector3 lBodyPos = lrVehicleBody.GetTransform().wAxis;
+        const Vector3 lBodyLinVel = lrVehicleBody.GetLinearVelocity();
+        const Vector3 lBodyAngVel = lrVehicleBody.GetAngularVelocity();
+        const __vector4 vContact = lContactPoint.mV;
+        const __vector4 vPosition = lBodyPos.mV;
+        const __vector4 vLinear = lBodyLinVel.mV;
+        const __vector4 vAngular = lBodyAngVel.mV;
+        const __vector4 vLever = __vsubfp(vContact, vPosition);
+        const __vector4 vProduct = __vmulfp(vAngular, __vpermwi(vLever, 0x63));
+        const __vector4 vCross = __vpermwi(__vnmsubfp(__vpermwi(vAngular, 0x63), vLever, vProduct), 0x63);
+        const __vector4 vPointVelocity = __vaddfp(vCross, vLinear);
 
-        const Vector3 lLever = { lContactPoint.x - lBodyPos.x,
-                                 lContactPoint.y - lBodyPos.y,
-                                 lContactPoint.z - lBodyPos.z, 0.0f };
-
-        const Vector3 lPointVelocity = {
-            lBodyAngVel.y * lLever.z - lBodyAngVel.z * lLever.y + lBodyLinVel.x,
-            lBodyAngVel.z * lLever.x - lBodyAngVel.x * lLever.z + lBodyLinVel.y,
-            lBodyAngVel.x * lLever.y - lBodyAngVel.y * lLever.x + lBodyLinVel.z,
-            0.0f
-        };
-
-        // ---- normalise the accumulated world penetration -> the contact normal ----
-        const Vector3 lPenetration = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
-        const f32 lfPenetrationSq  = lPenetration.x * lPenetration.x
-                                   + lPenetration.y * lPenetration.y
-                                   + lPenetration.z * lPenetration.z;
-        const f32 lfInvLength      = 1.0f / std::sqrt(lfPenetrationSq);   // vrsqrtefp + 2x Newton
-        const Vector3 lNormal = { lPenetration.x * lfInvLength,
-                                  lPenetration.y * lfInvLength,
-                                  lPenetration.z * lfInvLength, 0.0f };
-
-        // ---- the payload ----
-        lEvent.mFrictionStress = lPointVelocity;   // FLAG: a VELOCITY in the friction-stress slot
+        const __vector4 vPenetration = mWorldPenetrationPlusCollisionMagnitude.mV;
+        const __vector4 vPenetrationSq = __vmsum3fp(vPenetration, vPenetration);
+        const __vector4 vOne = XMVectorReplicate(1.0f);
+        const __vector4 vHalf = XMVectorReplicate(0.5f);
+        __vector4 vReciprocal = __vrsqrtefp(vPenetrationSq);
+        for (u32 luStep = 0; luStep < 2; ++luStep)
         {
-            const Vector3 lAggregateValue = { lNormal.x * lfCollisionMagnitude,
-                                          lNormal.y * lfCollisionMagnitude,
-                                          lNormal.z * lfCollisionMagnitude, 0.0f };
-            lEvent.mNormalStress = lAggregateValue;
+            const __vector4 vSquare = __vmulfp(vReciprocal, vReciprocal);
+            const __vector4 vHalfReciprocal = __vmulfp(vReciprocal, vHalf);
+            const __vector4 vResidual = __vnmsubfp(vPenetrationSq, vSquare, vOne);
+            vReciprocal = __vmaddfp(vHalfReciprocal, vResidual, vReciprocal);
         }
-        lEvent.mNormal         = lNormal;
-        lEvent.mPointOnA       = lContactPoint;
-        lEvent.mPointOnB       = lContactPoint;
+        const __vector4 vNormal = __vmulfp(vPenetration, vReciprocal);
+        const __vector4 vNormalStress = __vmulfp(vNormal, vMagnitude);
+        const Vector3 lPointVelocity(vPointVelocity);
+        const Vector3 lNormal(vNormal);
+        const Vector3 lNormalStress(vNormalStress);
+        lEvent.mFrictionStress = lPointVelocity;
+        lEvent.mNormalStress = lNormalStress;
+        lEvent.mNormal = lNormal;
+        lEvent.mPointOnA = lContactPoint;
+        lEvent.mPointOnB = lContactPoint;
         // ⚠️ FLAGGED ENUM FORK, NOT A CONVERSION THE CONSOLE DOES. `lwz 0x1DC ; lwz 8 ; lwz 0x1DC`
         // is one 32-bit word copied straight into the record; there is no conversion in the asm.
         // The cast exists only because this tree carries TWO declarations of the same DWARF enum:
@@ -2375,9 +2260,22 @@ namespace Deformation
         // vector and the :898 one additionally prints the normal stress, the normal and the
         // collision magnitude; the formatted-message construction has no observable side effect,
         // so each is modelled as the plain predicate it gates.
-        CGS_ASSERT(lfAbs(lNormal.x * lNormal.x + lNormal.y * lNormal.y + lNormal.z * lNormal.z - 1.0f)
-                       <= KF_CONTACT_SPY_NORMALISE_TOLERANCE,
-                   "Normalise failed for hinged body part normal");
+        const __vector4 vNormalSq = __vmsum3fp(vNormal, vNormal);
+        __vector4 vNormalReciprocal = __vrsqrtefp(vNormalSq);
+        for (u32 luStep = 0; luStep < 2; ++luStep)
+        {
+            const __vector4 vSquare = __vmulfp(vNormalReciprocal, vNormalReciprocal);
+            const __vector4 vHalfReciprocal = __vmulfp(vNormalReciprocal, vHalf);
+            const __vector4 vResidual = __vnmsubfp(vNormalSq, vSquare, vOne);
+            vNormalReciprocal = __vmaddfp(vHalfReciprocal, vResidual, vNormalReciprocal);
+        }
+        const __vector4 vZero = XMVectorZero();
+        const __vector4 vNormalLength = __vsel(__vmulfp(vNormalSq, vNormalReciprocal), vZero,
+                                                __vcmpeqfp(vZero, vNormalSq));
+        const __vector4 vNormalError = __vandc(__vsubfp(vNormalLength, vOne), vSignMask);
+        unsigned int luNormalCR = 0;
+        __vcmpgtfpR(vNormalError, XMVectorReplicate(KF_CONTACT_SPY_NORMALISE_TOLERANCE), &luNormalCR);
+        CGS_ASSERT(!XMComparisonAllTrue(luNormalCR), "Normalise failed for hinged body part normal");
         CGS_ASSERT(rw::math::vpu::IsValid(lPointVelocity), "rw::math::IsValid( lContactPointVelocity )");
         CGS_ASSERT(rw::math::vpu::IsValid(lNormal),        "rw::math::IsValid( lNormal )");
         CGS_ASSERT(rw::math::vpu::IsValid(lEvent.mNormalStress), "rw::math::IsValid( lNormalStress )");
@@ -2525,34 +2423,27 @@ namespace Deformation
         // The console seeds the out-vector with (1,1,1,0) before the call (three `stfs f31` of the
         // 1.0 it already holds plus a `stw 0`); ComputeFatBoxInertia overwrites all four lanes, so
         // the seed is dead. Reproduced because it is a real store, not because it is load-bearing.
-        Vector4 lInertia = { 1.0f, 1.0f, 1.0f, 0.0f };
-
+        Vector4 lInertia(1.0f, 1.0f, 1.0f, 0.0f);
         const Vector3 lAABBHalfExtents = CalculateAABBExtents();
-        rw::physics::ComputeFatBoxInertia(lAABBHalfExtents.x, lAABBHalfExtents.y,
-                                          lAABBHalfExtents.z, KF_PART_FAT_BOX_MARGIN, &lInertia);
+        rw::physics::ComputeFatBoxInertia(lAABBHalfExtents.mV.x, lAABBHalfExtents.mV.y,
+                                         lAABBHalfExtents.mV.z, KF_PART_FAT_BOX_MARGIN, &lInertia);
+        const __vector4 vMassScaled = __vmulfp(lInertia.mV, XMVectorReplicate(kfPartMass));
+        lInertia.mV = __vmaddfp(vMassScaled, XMVectorReplicate(kfPartInertiaMultiplier),
+                                KV_PART_INERTIA_FLOOR.mV);
+        const __vector4 vOnes = __vspltisw(-1);
+        const __vector4 vSign = __vslw(vOnes, vOnes);
+        const __vector4 vAbs = __vandc(lInertia.mV, vSign);
+        const __vector4 vChecked = __vrlimi(vAbs, vAbs, 1, 1);
+        unsigned int luInertiaCR = 0;
+        __vcmpgtfpR(vChecked, XMVectorReplicate(KF_INERTIA_DEGENERATE_EPSILON), &luInertiaCR);
+        CGS_ASSERT(XMComparisonAnyTrue(luInertiaCR), "Bad inertia: ");
 
-        // lInertia = (fatBox * mass) * splat(multiplier) + the floor vector. Lane 3 is not read.
-        lInertia.x = lInertia.x * kfPartMass * kfPartInertiaMultiplier + KV_PART_INERTIA_FLOOR.x;
-        lInertia.y = lInertia.y * kfPartMass * kfPartInertiaMultiplier + KV_PART_INERTIA_FLOOR.y;
-        lInertia.z = lInertia.z * kfPartMass * kfPartInertiaMultiplier + KV_PART_INERTIA_FLOOR.z;
-
-        // NON-GATING tripwire, exactly as the asm spells it: the abs of the three lanes (the w lane
-        // is replaced by a copy of x by the vrlimi128 so it cannot poison the reduction) compared
-        // against a splat of stru_8208F620 lane 0, testing CR6 bit 2 == "none of the lanes is
-        // greater". Fires on a DEGENERATE inertia and falls straight through.
-        {
-            const f32 lfAbsX = (lInertia.x < 0.0f) ? -lInertia.x : lInertia.x;
-            const f32 lfAbsY = (lInertia.y < 0.0f) ? -lInertia.y : lInertia.y;
-            const f32 lfAbsZ = (lInertia.z < 0.0f) ? -lInertia.z : lInertia.z;
-            CGS_ASSERT(lfAbsX > KF_INERTIA_DEGENERATE_EPSILON
-                       || lfAbsY > KF_INERTIA_DEGENERATE_EPSILON
-                       || lfAbsZ > KF_INERTIA_DEGENERATE_EPSILON,
-                       "Bad inertia: ");
-        }
-
-        // The three `fdivs f31(1.0), lane` reciprocals, reassembled by the vperm/vrlimi128 pair.
-        const Vector3 lInverseInertia = { 1.0f / lInertia.x, 1.0f / lInertia.y,
-                                          1.0f / lInertia.z, 0.0f };
+        const f32 lfX = 1.0f / lInertia.mV.x;
+        const f32 lfY = 1.0f / lInertia.mV.y;
+        const f32 lfZ = 1.0f / lInertia.mV.z;
+        CGS_ALIGN(16) static const u32 kauInversePermute[4] = { 0x00010203u, 0x14151617u, 0x00010203u, 0x00010203u };
+        const __vector4 vXY = __vperm(XMVectorReplicate(lfX), XMVectorReplicate(lfY), __lvx(kauInversePermute, 0));
+        const Vector3 lInverseInertia(__vrlimi(vXY, XMVectorReplicate(lfZ), 2, 0));
 
         // +0x70 mInvTens and +0x84 mSpherical == 1/min(x,y,z) -- Inertia::SetInverseInertia exactly.
         lAddBodyEvent.mRigidBody.mInertia.SetInverseInertia(lInverseInertia);
@@ -2563,9 +2454,9 @@ namespace Deformation
         // the asm makes no store there. See ExternalPhysicsBody::SetInverseInertia's banner.
         {
             Matrix33 lLocalInverseInertia;
-            lLocalInverseInertia.xAxis = { lInverseInertia.x, 0.0f, 0.0f, 0.0f };
-            lLocalInverseInertia.yAxis = { 0.0f, lInverseInertia.y, 0.0f, 0.0f };
-            lLocalInverseInertia.zAxis = { 0.0f, 0.0f, lInverseInertia.z, 0.0f };
+            lLocalInverseInertia.xAxis.mV = __vrlimi(XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), lInverseInertia.mV, 8, 0);
+            lLocalInverseInertia.yAxis.mV = __vrlimi(XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), lInverseInertia.mV, 4, 0);
+            lLocalInverseInertia.zAxis.mV = __vrlimi(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), lInverseInertia.mV, 2, 0);
             mRwBody.SetInverseInertia(&lLocalInverseInertia);
         }
 
