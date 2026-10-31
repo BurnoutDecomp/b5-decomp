@@ -46,8 +46,7 @@ namespace BrnGui
         for (s32 liIndex = 0; liIndex < liNumRecords; ++liIndex)
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpRecord =
-                reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
-                    maPlayerInfo[liIndex]);
+                &maPlayerInfo[liIndex];
 
             if (lpRecord->mNetworkPlayerID == liPlayerId)
             {

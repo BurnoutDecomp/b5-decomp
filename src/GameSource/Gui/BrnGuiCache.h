@@ -10,6 +10,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT (GetCurrentCarSelectType inline)
 #include "GameShared/GameClasses/Language/CgsSku.h" // actual ESku/ELanguage
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
+#include "GameSource/Gui/BrnGuiOptionsDataProfile.h"
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameSource/Gui/BrnGuiOptionsDataProfileDLC1.h" // BrnGui::OptionsDataProfileDLC1 (live DLC1 options block @+0x12BE8; self-contained header, no clashing slices)
 #include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
 #include "BrnCommonTypes.h"                        // Vector3 / Vector4 (event-position / camera accessors)
@@ -2117,7 +2120,8 @@ namespace BrnGui
         // [hud H3b] case-207 flag-D lane (GuiRaceCarInfoEvent maFlagD @0xDC == in-range).
         bool maRaceCarInRange[8];                        // +0xA0FC (41212) case-207 in-range bytes
         bool maRaceCarCrashing[8];                       // +0xA104 (41220) IsRaceCarCrashing @0x824438A8
-        u8  mPad_A10C[36];                               // +0xA10C..+0xA12F
+        u8 mPad_A10C[4];
+        s32 maRivalryStatus[8];                         // ARTIST +0xA110
         s8  maEventPositionOfRaceCar[8];                 // +0xA130 (41264) GetEventPositionOfRaceCar @0x82443D78 (place; gated on @0xA140)
         bool maRaceCarFinished[8];                       // +0xA138 (41272) HasRaceCarFinished @0x824EC4C8 (gated on @0xA140)
         bool maEventPositionValid[8];                    // +0xA140 (41280) validity gate for maEventPositionOfRaceCar / maRaceCarFinished
@@ -2208,10 +2212,10 @@ namespace BrnGui
         // Consumer-named; no DWARF accessor row.
         u32 muChallengeSlotMirror;                       // +0xAC78 (44152)
         u8  mPad_AC7C[4];                                // +0xAC7C..+0xAC7F
-        // One online-player record per player. Byte storage for the fwd-declared 312-byte
+        // One online-player record per player, with the native 312-byte
         // BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData (GetOnlinePlayerInfo @0x8240F890
         // -> 312*idx+44160). ctor field-inits each lane's +0x60(int)/+0x64(float).
-        u8  maPlayerInfo[8][312];                        // +0xAC80 (44160) InGamePlayerStatusData maPlayerInfo[8] (stride 312)
+        BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData maPlayerInfo[8];                        // +0xAC80 (44160) InGamePlayerStatusData maPlayerInfo[8] (stride 312)
         // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the cached lobby
         // player-status mirror (the event-244 payload copied in). Byte storage for the
         // 56-byte BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData stride (home:
@@ -2286,10 +2290,10 @@ namespace BrnGui
         // Updated from GUI event 307, payload halfword +6 (ARTIST 0x8250FEF0).
         u16 mu16LicencePointsToNextRank;                 // +0xB874 (47220)
         u8 mPad_B876[2];                                 // +0xB876..+0xB877
-        u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
+        OptionsDataProfile mOptionsData;                 // ARTIST +0xB878
         // +0x12BE8 (76776) -- the live DLC-pack-1 options block, which the X360 lays
         // immediately after the options profile (47224 + 0x7370 == 76776). Unlike the block
-        // above this type has no clashing includes, so it is modelled by name here.
+        // above, both options blocks use their actual native declarations.
         // GuiCache::Construct @0x82505860 seeds it and ProfileManager::ReadProfileData
         // @0x824FF298 reads its four words (`v5 = cache + 76776; field_2EEE8 = v5[0]; ..
         // = v5[3]`) into the stored image's mOptionsDataProfileDLC1 segment.
@@ -2303,7 +2307,12 @@ namespace BrnGui
         //   BrnGui::CrashNavSettings::HandleControllerInput @0x824D93A4 / Update -- reads it
         //     as the gate on raising the on-screen keyboard for the sponsor product code
         //     (the prompt is deferred to E_STATE_PRODUCT_CODE_INPUT_PENDING while it is set).
-        bool mbAutosaveIconVisible;                      // +0x12F09 (77577)
+        GuiEventRivalryFullInfoResponse mRivalInfo;       // +0x12BF8
+        GuiShowtimeScoreUpdate maShowtimeScoreData[8];    // +0x12EA8
+        bool mbAutoSaveEnabled;                          // +0x12F08
+        bool mbAutosaveIconVisible;                      // +0x12F09
+        bool mbPlayerSignInReported;                     // +0x12F0A
+        bool mbPlayerSignOutReported;                    // +0x12F0B
         // ---- mPreRaceData: fly-by pre-event messages (GetPreEventInfo @0x824827D8) ----
         GuiEventPreRaceMessages mPreRaceData;            // +0x12F0C: three580B rows, count+0x135D8
         // ---- mProfileEventState: offline profile-event CgsArray ----

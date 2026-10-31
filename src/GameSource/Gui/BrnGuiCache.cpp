@@ -1,3 +1,4 @@
+#include <float.h>
 #include "GameSource/Gui/BrnGuiCache.h"
 #include <cstdlib>   // ([cnav-diag])
 #include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"      // [H3b] GuiRaceCarInfoEvent (207)
@@ -142,25 +143,14 @@ namespace BrnGui
         }
     }
 
-    // @ 0x827E05B8 -- the cache constructor: a long per-field init list against the X360
-    // layout (sentinels to -1, counters/times to 0). The PC model names only the members
-    // the recovered accessors touch (the rest is explicit padding), so the faithful PC
-    // form zero-fills the aggregate (the unmodelled fields' X360 init value is 0) and
-    // applies the named non-zero inits: the mEvents array ctor sentinel at +40532 is the
-    // one modelled member the X360 sets to -1 (the other -1 sentinels at +3800/+30560/
-    // +40664/+40704/+41936/+42976 fall inside the reserved padding spans).
+    // ARTIST827E05B8: member constructors provide queue markers, Array
+    // sentinels and Time defaults. Leave every other byte untouched.
     GuiCache::GuiCache()
     {
-        std::memset(this, 0, sizeof(GuiCache));
+        miEventStartsCount = -1;
         mEventsCtorSentinel = -1;
-        mTrafficCarInfo.mScoreTargets.MarkUnconstructed();
-        mVisibleOverheadSignArray.MarkUnconstructed();
-        // NOTE: the X360 ctor's -1 store at +3800 lands on the (now modelled)
-        // mStateLoadingHelper.maRequestDirtyList count word -- the Array's
-        // pre-Construct sentinel. The zero-fill above leaves it 0 (constructed-empty)
-        // instead: the member is private to the helper, and the dirty list is only
-        // consumed after the helper's own lifecycle has run on the console flow, so
-        // the observable behaviour (empty list at first use) is identical.
+        mOfflinePostEventData.miCtorSentinel98 = -1;
+        miProfileEventsCount = -1;
     }
 
     // @ 0x824FD978 (per-slot body inlined there) -- one watched slot to its reset state:
@@ -1340,10 +1330,6 @@ namespace BrnGui
         {
             mPreRaceData = *reinterpret_cast<const GuiEventPreRaceMessages*>(lpEvent);
             mbInEventColouringGate = true;
-            static s32 siPreRaceRows = 0;
-            if (sbPreRaceDiag && siPreRaceRows++ < 8 && CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[cnav-prerace] cache159 messages="
-                    << mPreRaceData.miNumMessages << " inEvent=1\n";
             break;
         }
         case 162:   // ARTIST8250F17C..F188: clear count, retain message rows.
@@ -1723,8 +1709,7 @@ namespace BrnGui
             {
                 for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)                             // +0xAC80, stride 312
                 {
-                    reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
-                        maPlayerInfo[liPlayer])->Clear();
+                    maPlayerInfo[liPlayer].Clear();
                 }
                 muNumActivePlayers    = 0;                                                    // stw 0, +0xAC74
                 muChallengeSlotMirror = 0;                                                    // stw 0, +0xAC78
@@ -1830,7 +1815,7 @@ namespace BrnGui
 
         case 238: // ARTIST0x8250ED20..0x8250EDE4.
         {
-            const auto* positions = reinterpret_cast<const GuiEventRacePositionInfo*>(lpEvent);
+            const GuiEventRacePositionInfo* positions = reinterpret_cast<const GuiEventRacePositionInfo*>(lpEvent);
             std::memcpy(maEventPositionOfRaceCar, positions->maiPositions, sizeof(maEventPositionOfRaceCar));
             std::memcpy(maRaceCarFinished, positions->mabFinished, sizeof(maRaceCarFinished));
             std::memcpy(maEventPositionValid, positions->mabValid, sizeof(maEventPositionValid));
@@ -1892,14 +1877,12 @@ namespace BrnGui
             muChallengeSlotMirror = static_cast<u32>(lpNetworkPlayerList->miTotalNumberPlayers);  // +0xAC78 <- +0xA4
             for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
             {
-                reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
-                    maPlayerInfo[liPlayer])->Clear();
+                maPlayerInfo[liPlayer].Clear();
             }
             for (s32 liPlayer = 0; liPlayer < static_cast<s32>(muNumActivePlayers); ++liPlayer)
             {
                 BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpData =
-                    reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
-                        maPlayerInfo[liPlayer]);
+                    &maPlayerInfo[liPlayer];
                 const GuiEventNetworkPlayerListPayload::PlayerNameInfo& lrInfo =
                     lpNetworkPlayerList->maPlayerNameInfo[liPlayer];
                 std::memcpy(&lpData->mPlayerName, &lrInfo.mPlayerName, sizeof(lpData->mPlayerName));
@@ -1948,8 +1931,7 @@ namespace BrnGui
                 for (s32 liSlot = 0; liSlot < 8; ++liSlot)
                 {
                     BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpSlot =
-                        reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
-                            maPlayerInfo[liSlot]);
+                        &maPlayerInfo[liSlot];
                     if (lpSlot->mNetworkPlayerID == lNetworkPlayerID)
                     {
                         lpData = lpSlot;
@@ -2562,14 +2544,6 @@ namespace BrnGui
                 {
                     maDriveThroughInfo[liDriveThrough].SetHiddenDriveThru(true);
 
-                    static s32 siLinesLeft = 8;
-                    if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        --siLinesLeft;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[freeroam-gui] cache 201 hid drive-thru row " << liDriveThrough
-                            << " id=" << static_cast<u32>(lDriveThruId) << "\n";
-                    }
                     break;
                 }
             }
@@ -2585,6 +2559,36 @@ namespace BrnGui
             // the FLAG stand-in in Construct() above -- but wiring the consumer now means the
             // real producer needs no further change here.
             meCarSelectType = *reinterpret_cast<const s32*>(lpEvent);
+            break;
+        case 396:
+        {
+            const GuiShowtimeScoreUpdate* lpUpdate = reinterpret_cast<const GuiShowtimeScoreUpdate*>(lpEvent);
+            CGS_ASSERT(lpUpdate->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                       "lpShowtimeUpdate->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(lpUpdate->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "lpShowtimeUpdate->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            maShowtimeScoreData[lpUpdate->meActiveRaceCarIndex] = *lpUpdate;
+            break;
+        }
+        case 442:
+        {
+            const GuiEventRivalryFullInfoResponse* lpRival = reinterpret_cast<const GuiEventRivalryFullInfoResponse*>(lpEvent);
+            mRivalInfo = *lpRival;
+            for (s32 liCar = 0; liCar < 8; ++liCar)
+            {
+                if (mePlayerActiveRaceCarIndex != liCar)
+                {
+                    for (s32 liRival = 0; liRival < lpRival->miRivalsReturned; ++liRival)
+                    {
+                        if (lpRival->maRivalIds[liRival] == maRaceCarIdentities[liCar])
+                            maRivalryStatus[liCar] = lpRival->maRivalryStatus[liRival];
+                    }
+                }
+            }
+            break;
+        }
+        case 553:
+            mbAutoSaveEnabled = *reinterpret_cast<const bool*>(lpEvent);
             break;
         default:
             break;
@@ -2638,9 +2642,7 @@ namespace BrnGui
     // can safely see the profile header.
     OptionsDataProfile* GuiCache::GetOptionsDataProfile()
     {
-        CGS_STATIC_ASSERT((sizeof(OptionsDataProfile) <= sizeof(mOptionsDataProfileStorage)),
-                      "OptionsDataProfile outgrew the cache's opaque reservation");
-        return reinterpret_cast<OptionsDataProfile*>(mOptionsDataProfileStorage);
+        return &mOptionsData;
     }
 
     // @ 0x824EC008
@@ -2849,7 +2851,7 @@ namespace BrnGui
     // @ 0x8240F0B0 -- mTimeInfo.mfTimeNow (member at +4); guards the uninitialised sentinel.
     f32 GuiCache::GetTime() const
     {
-        CGS_ASSERT(mfTimeNow != -3.4028235e38f, "mfTimeNow!=-FLT_MAX");
+        CGS_ASSERT(mfTimeNow != -FLT_MAX, "mfTimeNow!=-FLT_MAX");
         return mfTimeNow;
     }
 
@@ -3061,8 +3063,7 @@ namespace BrnGui
         CGS_ASSERT(liIndex >= 0, "liPlayerInfoIndex >= 0");
         CGS_ASSERT(liIndex < 8, "liPlayerInfoIndex < KI_MAX_PLAYERS");
 
-        return reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
-            maPlayerInfo[liIndex]);
+        return &maPlayerInfo[liIndex];
     }
 
     // @ 0x8240F910  ( maCurrentPlayerTeam @+0xB808, 4*(idx+11778)+this )
@@ -3081,8 +3082,7 @@ namespace BrnGui
         for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer =
-                reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
-                    maPlayerInfo[liPlayer]);
+                &maPlayerInfo[liPlayer];
             if (lpPlayer->mNetworkPlayerID == lNetworkPlayerID)
                 return lpPlayer->meActiveRaceCarIndex;
         }
@@ -3393,20 +3393,6 @@ namespace BrnGui
 // mirrors the X360 ARTIST asm store-for-store; the debug asserts are the game's release
 // CGS_ASSERT (a no-op in this build, matching the X360 assert machinery).
 
-extern "C"
-{
-    // Sign-in state for a controller/user index (the committed network managers compare the
-    // same way); 2 == signed in to the online service.
-    u32 XUserGetSigninState(u32 luUserIndex);
-
-    // Query one privilege for a user index. 0 == the query succeeded, and lpbResult is then
-    // filled with 1 when the user holds the privilege.
-    s32 XUserCheckPrivilege(u32 luUserIndex, u32 luPrivilegeType, u32* lpbResult);
-
-    // Fill the sign-in info block for a user index. 0 == success; the only field this caller
-    // reads is the privilege / guest flags word at +0x08.
-    s32 XUserGetSigninInfo(u32 luUserIndex, u32 luFlags, void* lpSigninInfo);
-}
 
 namespace BrnGui
 {
@@ -3422,16 +3408,7 @@ namespace BrnGui
         // The guest bit of the sign-in flags word (the same mask the login manager tests).
         const u32 KU_SIGNIN_INFO_GUEST_FLAG_MASK = 0x02;
 
-        // The sign-in info buffer XUserGetSigninInfo fills. The console builds a 40-byte stack
-        // buffer here and reads only the flags word at +0x08, so only that field is named and
-        // the surrounding bytes stay opaque rather than fabricated. FLAGGED: the full platform
-        // layout is not reproduced.
-        struct XUserSigninInfo
-        {
-            u8  maPad00[0x08];       // +0x00..+0x08 (user id + sign-in state; opaque)
-            u32 muFlags;             // +0x08 -- privilege / guest flags word
-            u8  maPad0C[40 - 0x0C];  // +0x0C..+0x28 (gamertag etc.; opaque)
-        };
+
     }
 
     // @ 0x824EC678 -- scan the player's profile car list for any unlocked car whose
@@ -3520,17 +3497,17 @@ namespace BrnGui
         const u32 luUserIndex = static_cast<u32>(miActiveControllerIndex);   // +0x4B38
 
         bool lbAllowed = true;
-        u32  lauPrivilegeResult[4] = { 0, 0, 0, 0 };
+        BOOL lbPrivilegeResult = FALSE;
         if (XUserGetSigninState(luUserIndex) == KU_SIGNIN_STATE_LIVE
-            && XUserCheckPrivilege(luUserIndex, KU_XPRIVILEGE_MULTIPLAYER_SESSIONS,
-                                   lauPrivilegeResult) == 0)
+            && XUserCheckPrivilege(luUserIndex, XPRIVILEGE_MULTIPLAYER_SESSIONS,
+                                   &lbPrivilegeResult) == 0)
         {
-            lbAllowed = (lauPrivilegeResult[0] == 1);
+            lbAllowed = (lbPrivilegeResult == TRUE);
         }
 
-        XUserSigninInfo lSigninInfo;
+        XUSER_SIGNIN_INFO lSigninInfo;
         if (XUserGetSigninInfo(luUserIndex, 0, &lSigninInfo) != 0
-            || (lSigninInfo.muFlags & KU_SIGNIN_INFO_GUEST_FLAG_MASK)
+            || (lSigninInfo.dwInfoFlags & KU_SIGNIN_INFO_GUEST_FLAG_MASK)
                    != KU_SIGNIN_INFO_GUEST_FLAG_MASK)
         {
             return lbAllowed;
@@ -4138,7 +4115,6 @@ namespace BrnGui
         // for why the deref is behind a test the console does not have.
         if (mpGuiTracker != 0)
         {
-            LogTrackerPublishWitness("GuiCache::UpdateTrackerInfo", lSetTrackerEvent);
             mpGuiTracker->RecEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
                 lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
@@ -4192,8 +4168,6 @@ namespace BrnGui
         // The online twin of the publish above (X360 @0x825071A8, same four registers).
         if (mpGuiTracker != 0)
         {
-            LogTrackerPublishWitness("GuiCache::UpdateTrackerInfoFromOnlineEvent",
-                                     lSetTrackerEvent);
             mpGuiTracker->RecEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
                 lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
@@ -4371,9 +4345,6 @@ namespace BrnGui
         // The map/fly-by publish (X360 @0x82507378, same four registers).
         if (mpGuiTracker != 0)
         {
-            LogTrackerPublishWitness(
-                "GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID",
-                lSetTrackerEvent);
             mpGuiTracker->RecEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
                 lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
