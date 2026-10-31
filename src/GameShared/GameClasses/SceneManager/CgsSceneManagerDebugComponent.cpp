@@ -30,9 +30,10 @@ namespace CgsSceneManager
 
         // The SoA vectors in Triangle4 hold one scalar per lane, matching the target's four
         // explicit lane extracts in DrawCachedObjectTriangles.
-        f32 GetTriangleLane(const rw::math::vpu::Vector4& lrValues, s32 liLane)
+        template <typename TVector>
+        f32 GetTriangleLane(const TVector& lrValues, s32 liLane)
         {
-            return (&lrValues.x)[liLane];
+            return (&lrValues.mV.x)[liLane];
         }
 
         rw::math::vpu::MaskScalar BroadcastMaskLane(const f32& lrLane)
@@ -202,10 +203,10 @@ namespace CgsSceneManager
         lTriangles.mVertex2Z.w = lfTriZ;
 
         const u32 luValidLane = 0xFFFFFFFFu;
-        std::memcpy(&lTriangles.mValidMasks.x, &luValidLane, sizeof(luValidLane));
-        std::memcpy(&lTriangles.mValidMasks.y, &luValidLane, sizeof(luValidLane));
-        std::memcpy(&lTriangles.mValidMasks.z, &luValidLane, sizeof(luValidLane));
-        std::memcpy(&lTriangles.mValidMasks.w, &luValidLane, sizeof(luValidLane));
+        std::memcpy(&lTriangles.mValidMasks.mV.x, &luValidLane, sizeof(luValidLane));
+        std::memcpy(&lTriangles.mValidMasks.mV.y, &luValidLane, sizeof(luValidLane));
+        std::memcpy(&lTriangles.mValidMasks.mV.z, &luValidLane, sizeof(luValidLane));
+        std::memcpy(&lTriangles.mValidMasks.mV.w, &luValidLane, sizeof(luValidLane));
         lTriangles.mSurfaceTags.SetZero();
         lTriangles.mEdge0Cosigns.SetZero();
         lTriangles.mEdge1Cosigns.SetZero();
@@ -257,16 +258,16 @@ namespace CgsSceneManager
             lfTriXPlusScale, lfTriY, lfTriZ, lfTriXPlusScale };
 
         DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
-            BroadcastMaskLane(lIntersectMask.x),
+            BroadcastMaskLane(lIntersectMask.mV.x),
             CopyVector3Plus(laSphereContactPoints[0]), CopyVector3Plus(laTriangleContactPoints[0]));
         DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
-            BroadcastMaskLane(lIntersectMask.y),
+            BroadcastMaskLane(lIntersectMask.mV.y),
             CopyVector3Plus(laSphereContactPoints[1]), CopyVector3Plus(laTriangleContactPoints[1]));
         DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
-            BroadcastMaskLane(lIntersectMask.z),
+            BroadcastMaskLane(lIntersectMask.mV.z),
             CopyVector3Plus(laSphereContactPoints[2]), CopyVector3Plus(laTriangleContactPoints[2]));
         DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
-            BroadcastMaskLane(lIntersectMask.w),
+            BroadcastMaskLane(lIntersectMask.mV.w),
             CopyVector3Plus(laSphereContactPoints[3]), CopyVector3Plus(laTriangleContactPoints[3]));
     }
 

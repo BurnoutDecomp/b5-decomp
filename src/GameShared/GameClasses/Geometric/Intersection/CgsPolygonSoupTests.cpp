@@ -119,7 +119,7 @@ namespace CgsGeometric
         inline Triangle4::Mask4 MakeLeadingLaneMask(s32 liCount)
         {
             Triangle4::Mask4 lMask;
-            lMask.SetZero();
+            lMask.SetFalse();
             const u32 luTrueLane = 0xFFFFFFFFu;
             if (liCount > 0) std::memcpy(&lMask.mV.x, &luTrueLane, sizeof(u32));
             if (liCount > 1) std::memcpy(&lMask.mV.y, &luTrueLane, sizeof(u32));
@@ -414,14 +414,14 @@ namespace CgsGeometric
     // is why it survived shipping. Correcting it would silently diverge from the
     // console's triangle set.
     // ------------------------------------------------------------------------
-    Triangle4::Mask4 TestSphereTriangle4SOA(const Sphere& lSphere,
-                                            Vector4 lVertex0X, Vector4 lVertex0Y, Vector4 lVertex0Z,
-                                            Vector4 lVertex1X, Vector4 lVertex1Y, Vector4 lVertex1Z,
-                                            Vector4 lVertex2X, Vector4 lVertex2Y, Vector4 lVertex2Z)
+    rw::math::vpu::VectorIntrinsic TestSphereTriangle4SOA(const Sphere& lSphere,
+                                            rw::math::vpu::VectorIntrinsicInParam lVertex0X, rw::math::vpu::VectorIntrinsicInParam lVertex0Y, rw::math::vpu::VectorIntrinsicInParam lVertex0Z,
+                                            rw::math::vpu::VectorIntrinsicInParam lVertex1X, rw::math::vpu::VectorIntrinsicInParam lVertex1Y, rw::math::vpu::VectorIntrinsicInParam lVertex1Z,
+                                            rw::math::vpu::VectorIntrinsicInParam lVertex2X, rw::math::vpu::VectorIntrinsicInParam lVertex2Y, rw::math::vpu::VectorIntrinsicInParam lVertex2Z)
     {
-        const f32* const lapP0[3] = { &lVertex0X.mV.x, &lVertex0Y.mV.x, &lVertex0Z.mV.x };
-        const f32* const lapP1[3] = { &lVertex1X.mV.x, &lVertex1Y.mV.x, &lVertex1Z.mV.x };
-        const f32* const lapP2[3] = { &lVertex2X.mV.x, &lVertex2Y.mV.x, &lVertex2Z.mV.x };
+        const f32* const lapP0[3] = { &lVertex0X.x, &lVertex0Y.x, &lVertex0Z.x };
+        const f32* const lapP1[3] = { &lVertex1X.x, &lVertex1Y.x, &lVertex1Z.x };
+        const f32* const lapP2[3] = { &lVertex2X.x, &lVertex2Y.x, &lVertex2Z.x };
 
         // `lvx128 v0, r0, r3` then three vspltw + one for the radius.
         const f32 lfCx = lSphere.mData.mV.x;
@@ -429,9 +429,8 @@ namespace CgsGeometric
         const f32 lfCz = lSphere.mData.mV.z;
         const f32 lfR2 = lSphere.mData.mV.w * lSphere.mData.mV.w;
 
-        Triangle4::Mask4 lResult;
-        lResult.SetZero();
-        f32* const lpaResultLane = &lResult.mV.x;
+        rw::math::vpu::VectorIntrinsic lResult = __vspltisw(0);
+        f32* const lpaResultLane = &lResult.x;
 
         const u32 luTrueLane = 0xFFFFFFFFu;
 
@@ -643,10 +642,10 @@ namespace CgsGeometric
                 (&lP2Z.mV.x)[liLane] = lrBatch.maV2[liSource].mV.z;
             }
 
-            const Triangle4::Mask4 lHitMask =
-                TestSphereTriangle4SOA(lSphere, lP0X, lP0Y, lP0Z,
-                                                lP1X, lP1Y, lP1Z,
-                                                lP2X, lP2Y, lP2Z);
+            const Triangle4::Mask4 lHitMask(
+                TestSphereTriangle4SOA(lSphere, lP0X.mV, lP0Y.mV, lP0Z.mV,
+                                                lP1X.mV, lP1Y.mV, lP1Z.mV,
+                                                lP2X.mV, lP2Y.mV, lP2Z.mV));
 
             for (s32 liLane = 0; liLane < lrBatch.miCount; ++liLane)
             {
@@ -840,9 +839,9 @@ namespace CgsGeometric
                 (&lP2Z.mV.x)[liLane] = lrLane.mpVertex2->mV.z;
             }
 
-            return TestSphereTriangle4SOA(lSphere, lP0X, lP0Y, lP0Z,
-                                                   lP1X, lP1Y, lP1Z,
-                                                   lP2X, lP2Y, lP2Z);
+            return Triangle4::Mask4(TestSphereTriangle4SOA(lSphere, lP0X.mV, lP0Y.mV, lP0Z.mV,
+                                                   lP1X.mV, lP1Y.mV, lP1Z.mV,
+                                                   lP2X.mV, lP2Y.mV, lP2Z.mV));
         }
 
         // `vspltw v0, mask, k ; vcmpeqfp128. v0, v0, zero` -- lane k is a hit unless it compares

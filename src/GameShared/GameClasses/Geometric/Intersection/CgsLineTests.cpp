@@ -223,7 +223,7 @@ namespace CgsGeometric
     namespace
     {
         // A VMX compare-result lane: all ones where the predicate holds, zero where it does not.
-        inline void SetMask4Lane(Vector4& lrMask, s32 liLane, bool lbPassed)
+        inline void SetMask4Lane(rw::math::vpu::Mask4& lrMask, s32 liLane, bool lbPassed)
         {
             const u32 luBits = lbPassed ? 0xFFFFFFFFu : 0u;
             std::memcpy(&(&lrMask.mV.x)[liLane], &luBits, sizeof(u32));
@@ -311,13 +311,13 @@ namespace CgsGeometric
     // perpendicular when that falls on the segment and otherwise at whichever end point is inside.
     // Every squared length is summed y + x first, then z, as the fused multiply-adds do.
     // ------------------------------------------------------------------------
-    const Vector4 TestLineSphere4(const Sphere& lrSphere0, const Sphere& lrSphere1,
+    const rw::math::vpu::Mask4 TestLineSphere4(const Sphere& lrSphere0, const Sphere& lrSphere1,
                                   const Sphere& lrSphere2, const Sphere& lrSphere3,
                                   Vector3 lLineStart, Vector3 lLineDirection, VecFloat lLineLength)
     {
         const Sphere* const lapSpheres[4] = { &lrSphere0, &lrSphere1, &lrSphere2, &lrSphere3 };
 
-        Vector4 lResult;
+        rw::math::vpu::Mask4 lResult;
         for (s32 liLane = 0; liLane < 4; ++liLane)
         {
             SetMask4Lane(lResult, liLane,
@@ -343,7 +343,7 @@ namespace CgsGeometric
         CGS_ASSERT((reinterpret_cast<uintptr_t>(lpiResults) & 15u) == 0,
                    "Results must be 16 byte aligned\n");                                   // :308
 
-        const Vector4 lMask = TestLineSphere4(lrSphere0, lrSphere1, lrSphere2, lrSphere3,
+        const rw::math::vpu::Mask4 lMask = TestLineSphere4(lrSphere0, lrSphere1, lrSphere2, lrSphere3,
                                               lLineStart, lLineDirection, lLineLength);
         std::memcpy(lpiResults, &lMask, 4 * sizeof(s32));                                 // stvx128 v0
     }
@@ -368,7 +368,7 @@ namespace CgsGeometric
     // reach the body; the middle vector is part of the signature and is not read.
     // (vmaxfp / vminfp answer NaN for a NaN operand; SlabFar / SlabNear keep that, so a NaN t fails its axis.)
     // ------------------------------------------------------------------------
-    const Vector4 TestLineBoundingBoxAgainstAxisAlignedBox4(const AxisAlignedBox& lrBox0,
+    const rw::math::vpu::Mask4 TestLineBoundingBoxAgainstAxisAlignedBox4(const AxisAlignedBox& lrBox0,
                                                             const AxisAlignedBox& lrBox1,
                                                             const AxisAlignedBox& lrBox2,
                                                             const AxisAlignedBox& lrBox3,
@@ -383,7 +383,7 @@ namespace CgsGeometric
         const f32 lafStart[3]      = { lLineStart.mV.x, lLineStart.mV.y, lLineStart.mV.z };
         const f32 lafReciprocal[3] = { lLineReciprocal.mV.x, lLineReciprocal.mV.y, lLineReciprocal.mV.z };
 
-        Vector4 lResult;
+        rw::math::vpu::Mask4 lResult;
         for (s32 liLane = 0; liLane < 4; ++liLane)
         {
             const AxisAlignedBox& lrBox = *lapBoxes[liLane];

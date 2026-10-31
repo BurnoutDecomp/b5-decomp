@@ -1865,7 +1865,7 @@ namespace CgsSceneManager
 
         // A VMX compare-result lane reads as set when it is not +0.0 -- the console's
         // `vspltw ; vcmpeqfp128. lane, 0.0` skip, which for an all-ones / zero mask is the bit test.
-        inline bool Mask4LaneSet(const Vector4& lrMask, u32 luLane)
+        inline bool Mask4LaneSet(const rw::math::vpu::Mask4& lrMask, u32 luLane)
         {
             u32 luBits;
             std::memcpy(&luBits, &(&lrMask.mV.x)[luLane], sizeof(u32));
@@ -1996,7 +1996,7 @@ namespace CgsSceneManager
 
                         if (liBatchCount == 4)
                         {
-                            const Vector4 lHits = CgsGeometric::TestLineSphere4(
+                            const rw::math::vpu::Mask4 lHits = CgsGeometric::TestLineSphere4(
                                 laBatch[0], laBatch[1], laBatch[2], laBatch[3],
                                 lpParams->mLineStart, lpParams->mLineDirection, lpParams->mfLineLength);
                             for (u32 luLane = 0; luLane < 4; ++luLane)
@@ -2062,7 +2062,7 @@ namespace CgsSceneManager
             }
         }
 
-        const Vector4 lCrossed = CgsGeometric::TestLineBoundingBoxAgainstAxisAlignedBox4(
+        const rw::math::vpu::Mask4 lCrossed = CgsGeometric::TestLineBoundingBoxAgainstAxisAlignedBox4(
             laChildBoxes[0], laChildBoxes[1], laChildBoxes[2], laChildBoxes[3],
             lpParams->mLineStart, lpParams->mLineEnd, lpParams->mLineReciprocal);
 
