@@ -24,41 +24,46 @@ namespace
     renderengine::DepthStencilState* sgDepth3D;
     renderengine::RasterizerState* sgRasterizer;
     Vector3 Make3(f32 x, f32 y, f32 z, f32 w)
-    { const Vector3 value = {x, y, z, w}; return value; }
+    { const rw::math::vpu::VectorIntrinsic value = {x, y, z, w}; return Vector3(value); }
     rw::math::vpu::Vector2 Make2(f32 x, f32 y, f32 z, f32 w)
-    { const rw::math::vpu::Vector2 value = {x, y, z, w}; return value; }
+    {
+        const rw::math::vpu::VectorIntrinsic raw = {x, y, z, w};
+        rw::math::vpu::Vector2 value;
+        value.mV = raw;
+        return value;
+    }
 
     const f32 KF_PI = 3.14159265358979323846f;
     const f32 KF_TWO_PI = KF_PI * 2.0f;
 
     Vector3 Add3(Vector3 lA, Vector3 lB)
     {
-        const Vector3 value = { lA.x + lB.x, lA.y + lB.y, lA.z + lB.z, 0.0f }; return value;
+        const rw::math::vpu::VectorIntrinsic value = { lA.mV.x + lB.mV.x, lA.mV.y + lB.mV.y, lA.mV.z + lB.mV.z, 0.0f }; return Vector3(value);
     }
 
     Vector3 Subtract3(Vector3 lA, Vector3 lB)
     {
-        const Vector3 value = { lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f }; return value;
+        const rw::math::vpu::VectorIntrinsic value = { lA.mV.x - lB.mV.x, lA.mV.y - lB.mV.y, lA.mV.z - lB.mV.z, 0.0f }; return Vector3(value);
     }
 
     Vector3 Scale3(Vector3 lValue, f32 lfScale)
     {
-        const Vector3 value = { lValue.x * lfScale, lValue.y * lfScale, lValue.z * lfScale, 0.0f }; return value;
+        const rw::math::vpu::VectorIntrinsic value = { lValue.mV.x * lfScale, lValue.mV.y * lfScale, lValue.mV.z * lfScale, 0.0f }; return Vector3(value);
     }
 
     f32 Dot3(Vector3 lA, Vector3 lB)
     {
-        return lA.x * lB.x + lA.y * lB.y + lA.z * lB.z;
+        return lA.mV.x * lB.mV.x + lA.mV.y * lB.mV.y + lA.mV.z * lB.mV.z;
     }
 
     Vector3 Cross3(Vector3 lA, Vector3 lB)
     {
-        const Vector3 value = {
-            lA.y * lB.z - lA.z * lB.y,
-            lA.z * lB.x - lA.x * lB.z,
-            lA.x * lB.y - lA.y * lB.x,
+        const rw::math::vpu::VectorIntrinsic value = {
+            lA.mV.y * lB.mV.z - lA.mV.z * lB.mV.y,
+            lA.mV.z * lB.mV.x - lA.mV.x * lB.mV.z,
+            lA.mV.x * lB.mV.y - lA.mV.y * lB.mV.x,
             0.0f,
-        }; return value;
+        }; return Vector3(value);
     }
 
     f32 Length3(Vector3 lValue)
@@ -83,7 +88,7 @@ namespace
     void MakePerpendicularBasis(Vector3 lNormal, Vector3& lrRight, Vector3& lrUp)
     {
         lNormal = Normalise(lNormal);
-        const Vector3 lReference = std::fabs(lNormal.y) < 0.75f
+        const Vector3 lReference = std::fabs(lNormal.mV.y) < 0.75f
             ? Make3( 0.0f, 1.0f, 0.0f, 0.0f )
             : Make3( 1.0f, 0.0f, 0.0f, 0.0f );
         lrRight = Normalise(Cross3(lReference, lNormal));
@@ -98,14 +103,14 @@ namespace
     ClipPoint TransformToClip(const Matrix44& lrMatrix,
                               const CgsGraphics::BasicColouredTexturedVertex& lrVertex)
     {
-        const f32 x = lrVertex.mv3Pos.x;
-        const f32 y = lrVertex.mv3Pos.y;
-        const f32 z = lrVertex.mv3Pos.z;
+        const f32 x = lrVertex.mv3Pos.mV.x;
+        const f32 y = lrVertex.mv3Pos.mV.y;
+        const f32 z = lrVertex.mv3Pos.mV.z;
         const ClipPoint value = {
-            lrMatrix.xAxis.x * x + lrMatrix.yAxis.x * y + lrMatrix.zAxis.x * z + lrMatrix.wAxis.x,
-            lrMatrix.xAxis.y * x + lrMatrix.yAxis.y * y + lrMatrix.zAxis.y * z + lrMatrix.wAxis.y,
-            lrMatrix.xAxis.z * x + lrMatrix.yAxis.z * y + lrMatrix.zAxis.z * z + lrMatrix.wAxis.z,
-            lrMatrix.xAxis.w * x + lrMatrix.yAxis.w * y + lrMatrix.zAxis.w * z + lrMatrix.wAxis.w,
+            lrMatrix.xAxis.mV.x * x + lrMatrix.yAxis.mV.x * y + lrMatrix.zAxis.mV.x * z + lrMatrix.wAxis.mV.x,
+            lrMatrix.xAxis.mV.y * x + lrMatrix.yAxis.mV.y * y + lrMatrix.zAxis.mV.y * z + lrMatrix.wAxis.mV.y,
+            lrMatrix.xAxis.mV.z * x + lrMatrix.yAxis.mV.z * y + lrMatrix.zAxis.mV.z * z + lrMatrix.wAxis.mV.z,
+            lrMatrix.xAxis.mV.w * x + lrMatrix.yAxis.mV.w * y + lrMatrix.zAxis.mV.w * z + lrMatrix.wAxis.mV.w,
         }; return value;
     }
 }
@@ -233,7 +238,7 @@ namespace CgsDev
                 {
                     Matrix44 lProjection;
                     lProjection.SetIdentity();
-                    const Vector4 yAxis = {0.0f, -1.0f, 0.0f, 0.0f};
+                    const Vector4 yAxis(0.0f, -1.0f, 0.0f, 0.0f);
                     lProjection.yAxis = yAxis;
                     mpRenderBuffer->SetState(sgDepth2D);
                     mpRenderBuffer->SetTransform(lProjection);
@@ -394,9 +399,10 @@ namespace CgsDev
         Vector3 laCorners[8];
         for (s32 i = 0; i < 8; ++i)
         {
-            const Vector3 lLocal = { (i & 1) ? lMax.x : lMin.x,
-                                     (i & 2) ? lMax.y : lMin.y,
-                                     (i & 4) ? lMax.z : lMin.z, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lvLocal = { (i & 1) ? lMax.mV.x : lMin.mV.x,
+                                     (i & 2) ? lMax.mV.y : lMin.mV.y,
+                                     (i & 4) ? lMax.mV.z : lMin.mV.z, 0.0f };
+            const Vector3 lLocal(lvLocal);
             laCorners[i] = rw::math::vpu::TransformPoint(lTransform, lLocal);
         }
 
@@ -421,9 +427,10 @@ namespace CgsDev
         Vector3 c[8];
         for (s32 i = 0; i < 8; ++i)
         {
-            const Vector3 lLocal = { (i & 1) ? lMax.x : lMin.x,
-                                     (i & 2) ? lMax.y : lMin.y,
-                                     (i & 4) ? lMax.z : lMin.z, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lvLocal = { (i & 1) ? lMax.mV.x : lMin.mV.x,
+                                     (i & 2) ? lMax.mV.y : lMin.mV.y,
+                                     (i & 4) ? lMax.mV.z : lMin.mV.z, 0.0f };
+            const Vector3 lLocal(lvLocal);
             c[i] = rw::math::vpu::TransformPoint(lTransform, lLocal);
         }
         DrawSolidQuad(c[0], c[1], c[3], c[2], lColour);
@@ -456,7 +463,8 @@ namespace CgsDev
                                               f32 lfAngle, rw::RGBA lColour)
     {
         // ARTIST 0x8281D620: its inlined SinCos is packed into X/Z as {sin, 0, cos}.
-        const Vector3 lDirection = { std::sin(lfAngle), 0.0f, std::cos(lfAngle), 0.0f };
+        const rw::math::vpu::VectorIntrinsic lvDirection = { std::sin(lfAngle), 0.0f, std::cos(lfAngle), 0.0f };
+        const Vector3 lDirection(lvDirection);
         DrawLine(lPosition, Add3(lPosition, lDirection), lColour);
     }
 
@@ -552,8 +560,8 @@ namespace CgsDev
     void Debug3DImmediateRender::GetSphereVertices(Vector3* lpVertexArray,
                                                    Vector3 lPosition, f32 lfRadius)
     {
-        lpVertexArray[0] = Make3(lPosition.x, lPosition.y + lfRadius, lPosition.z, lPosition.w);
-        lpVertexArray[1] = Make3(lPosition.x, lPosition.y - lfRadius, lPosition.z, lPosition.w);
+        lpVertexArray[0] = Make3(lPosition.mV.x, lPosition.mV.y + lfRadius, lPosition.mV.z, lPosition.mV.w);
+        lpVertexArray[1] = Make3(lPosition.mV.x, lPosition.mV.y - lfRadius, lPosition.mV.z, lPosition.mV.w);
         for (s32 liRing = 0; liRing < 4; ++liRing)
         {
             const f32 lfLatitude = static_cast<f32>(liRing + 1) * 0.62831855f;
@@ -565,7 +573,7 @@ namespace CgsDev
                 const f32 lfY = std::cos(lfLatitude) * lfRadius;
                 const f32 lfZ = (lfSinLatitude * std::cos(lfLongitude)) * lfRadius;
                 lpVertexArray[2 + 8 * liRing + liIndex] = Make3(
-                    lPosition.x + lfX, lPosition.y + lfY, lPosition.z + lfZ, lPosition.w);
+                    lPosition.mV.x + lfX, lPosition.mV.y + lfY, lPosition.mV.z + lfZ, lPosition.mV.w);
             }
         }
     }
