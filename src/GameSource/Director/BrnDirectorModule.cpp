@@ -1,5 +1,6 @@
 #include "types.hpp"
 #include <new>   // placement new (construct owned sub-objects at their byte offsets)
+#include <eathread/eathread_rwmutex.h>
 
 // BrnDirector::DirectorModule::DirectorModule  — constructor.
 //
@@ -37,19 +38,6 @@ namespace BrnDirector
     struct DirectorResourceManager { DirectorResourceManager(); };
     struct MainDirector            { MainDirector(); };
     struct ReplayDirector          { ReplayDirector(); };
-}
-
-namespace EA
-{
-    namespace Thread
-    {
-        // Engine threading primitive (external). The two arguments are the
-        // (lockRecursively, intraProcess)-style construction flags seen at the call site.
-        struct RWMutex
-        {
-            RWMutex(int liArg0, int liArg1);
-        };
-    }
 }
 
 namespace BrnDirector
@@ -96,8 +84,8 @@ namespace BrnDirector
 
         // Base-most vtable, then the two read/write mutexes.
         *reinterpret_cast<void**>(lpBase + 0x000) = gpDirectorModuleBaseVTable;
-        new (reinterpret_cast<void*>(lpBase + 0x010)) EA::Thread::RWMutex(0, 1);   // +0x010
-        new (reinterpret_cast<void*>(lpBase + 0x118)) EA::Thread::RWMutex(0, 1);   // +0x118
+        new (reinterpret_cast<void*>(lpBase + 0x010)) EA::Thread::RWMutex(0, true);   // +0x010
+        new (reinterpret_cast<void*>(lpBase + 0x118)) EA::Thread::RWMutex(0, true);   // +0x118
 
         // Most-derived vtable (+0x000) and secondary-base vtable (+0x228).
         *reinterpret_cast<void**>(lpBase + 0x000) = gpDirectorModuleVTable;
