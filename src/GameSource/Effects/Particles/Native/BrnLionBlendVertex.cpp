@@ -21,7 +21,7 @@
 // ============================================================================
 
 #include "GameSource/Effects/Particles/Native/BrnLionBlendVertex.h"
-#include "SDKs/EATech/include/ps3/gcm/renderengine/stateparams.h" // renderengine::RGBA8
+#include "SDKs/EATech/include/cmn/renderengine/types.h" // renderengine::RGBA8
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
 
 namespace BrnGraphics {

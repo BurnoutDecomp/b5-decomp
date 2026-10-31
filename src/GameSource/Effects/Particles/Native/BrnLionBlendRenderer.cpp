@@ -24,7 +24,8 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleMaterial.h"    // cParticleMaterial (SetupFromMaterial)
 #include "GameSource/Effects/BrnEffectsUtils.h"                 // BuildUVData / BuildUVs / FastMatrix33FromEulerXYZ / K_VECTOR4_*
 #include "GameSource/Effects/Particles/Native/BrnLionBlendVertex.h"  // LionBlendVertex::VertexIterator (the vertex writer)
-#include "SDKs/EATech/include/ps3/gcm/renderengine/stateparams.h"    // renderengine::RGBA8
+#include "SDKs/EATech/include/cmn/renderengine/types.h"    // renderengine::RGBA8
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::TransformPoint
 #include "rw/math/vpu/vector3_operation.h"                      // Normalize / Magnitude / Dot / Cross / Lerp
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -35,8 +36,6 @@
 #include <cstring>  // [lionquad] texture names
 #include <cstdio>   // [lionsprite] witness   // the one-shot CreateInternalMaterial announcement
 #include "GameSource/Effects/Particles/LionParticleRender.h"   // LionParticleRender::CreateInternalMaterial / cParticleMaterial (the Lion trap stubs below)
-
-namespace renderengine { class BlendMaterialState; }
 
 // The process-wide default blend-state template bound at batch end (X360 .data home is the
 // LionParticleRender TU; extern for the compile gate). Same static that
@@ -277,7 +276,7 @@ namespace
     //      saturating a negative lane to 0. The four lanes are then packed into one word as
     //      (A<<24)|(B<<16)|(G<<8)|R, which is rw::RGBA's own byte order (A,B,G,R in memory).
     //   2. asm 0x82282414..0x8228245C rotates that word to (R<<24)|(G<<16)|(B<<8)|A before
-    //      every VertexIterator::Write -- i.e. renderengine::RGBA8's { u8 r, g, b, a; }.
+    //      every VertexIterator::Write -- the packed renderengine::RGBA8 word.
     // The composition of the two is the identity on the channels, so the host writes the
     // RGBA8 directly; the console's intermediate is documented, not reproduced, because
     // reproducing it would mean inventing a packing for rw::RGBA (whose ctor has no body in
