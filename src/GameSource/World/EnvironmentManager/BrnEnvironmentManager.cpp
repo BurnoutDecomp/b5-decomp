@@ -1,4 +1,5 @@
 #include "GameSource/World/EnvironmentManager/BrnEnvironmentManager.h"
+#include <vectorintrinsics.h>
 #include "GameSource/World/EnvironmentSettings/BrnEnvironmentSettings.h"  // ParseEnvironmentFile
 #include "SharedClasses/World/BrnEnvironmentUtil.h"                       // ComputeKeyLightDirection
 #include "SharedClasses/Graphics/BrnEffectsData.h"                        // BrnEffectsFrame + BrnEffects::{Bloom,Vignette,Tint}Data
@@ -43,7 +44,7 @@ namespace
     const f32 KF_JUNKYARD_NEAREST_DISTANCE_SENTINEL = 100000.0f; // flt_820080E8
     // ARTIST CRT initializer 82C6AA08..AA44 writes unk_8300F410.
     // The Y lane comes from 820CBDB0 (BF7D2F1B); the other lanes are zero.
-    const Vector3 K_DEFAULT_JUNKYARD_KEY_LIGHT_DIRECTION = { 0.0f, -0.9890000224113464f, 0.0f, 0.0f };
+    const Vector3 K_DEFAULT_JUNKYARD_KEY_LIGHT_DIRECTION(0.0f, -0.9890000224113464f, 0.0f);
 
     // CalcKeyLightDirection's time-of-day -> elevation-angle mapping.
     const f32 KF_SUN_ELEVATION_ZERO_SECONDS    = 23400.0f;       // flt_820CAA7C  (06:30)
@@ -322,47 +323,53 @@ namespace
     // The X360 builds every 16-byte constant by writing lanes into a stack quad and storing it with
     // one stvx128. These helpers are that quad-build spelled out; they are templates only because
     // rw::math::vpu::Vector2 / Vector3 / Vector4 are distinct types with the same four lanes.
+    inline __vector4 LoadQuad(const f32 lafLanes[4])
+    {
+        __vector4 lValue;
+        memcpy(&lValue, lafLanes, sizeof(lValue));
+        return lValue;
+    }
+
+    inline __vector4 SplatQuad(f32 lfValue)
+    {
+        CGS_ALIGN(16) const f32 lafLanes[4] = { lfValue, lfValue, lfValue, lfValue };
+        return LoadQuad(lafLanes);
+    }
+
     template <typename T>
     inline void SetQuad(T& lrOut, f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
     {
-        lrOut.x = lfX;  lrOut.y = lfY;  lrOut.z = lfZ;  lrOut.w = lfW;
+        CGS_ALIGN(16) const f32 lafLanes[4] = { lfX, lfY, lfZ, lfW };
+        lrOut.mV = LoadQuad(lafLanes);
     }
 
     template <typename T>
     inline void CopyQuad(T& lrOut, const f32 lafLanes[4])
     {
-        lrOut.x = lafLanes[0];  lrOut.y = lafLanes[1];
-        lrOut.z = lafLanes[2];  lrOut.w = lafLanes[3];
+        lrOut.mV = LoadQuad(lafLanes);
     }
 
     inline void StoreQuad(f32 lafLanes[4], const Vector3& lrValue)
     {
-        lafLanes[0] = lrValue.x;  lafLanes[1] = lrValue.y;
-        lafLanes[2] = lrValue.z;  lafLanes[3] = lrValue.w;
+        memcpy(lafLanes, &lrValue.mV, sizeof(lrValue.mV));
     }
 
     inline Vector3 MakeScaledVector3(const f32 lafLanes[4], f32 lfScale)
     {
-        Vector3 lResult;
-        lResult.x = lafLanes[0] * lfScale;  lResult.y = lafLanes[1] * lfScale;
-        lResult.z = lafLanes[2] * lfScale;  lResult.w = lafLanes[3] * lfScale;
-        return lResult;
+        return Vector3(__vmulfp(LoadQuad(lafLanes), SplatQuad(lfScale)));
     }
 
-    // vmulfp128 against a full splat of the white level: all four lanes.
     template <typename T>
     inline void ScaleQuad(T& lrValue, f32 lfScale)
     {
-        lrValue.x *= lfScale;  lrValue.y *= lfScale;
-        lrValue.z *= lfScale;  lrValue.w *= lfScale;
+        lrValue.mV = __vmulfp(lrValue.mV, SplatQuad(lfScale));
     }
 
-    // vmulfp128 against the (w, w, w, 1.0f) vector the vperm/vsldoi trio builds: the .w lane, which
-    // carries an exponent or a darkening scalar rather than a colour, is multiplied by 1.0f.
     template <typename T>
     inline void ScaleQuadRGB(T& lrValue, f32 lfScale)
     {
-        lrValue.x *= lfScale;  lrValue.y *= lfScale;  lrValue.z *= lfScale;
+        CGS_ALIGN(16) const f32 lafScale[4] = { lfScale, lfScale, lfScale, 1.0f };
+        lrValue.mV = __vmulfp(lrValue.mV, LoadQuad(lafScale));
     }
 
     inline void ScaleMatrixRows(Matrix44& lrMatrix, f32 lfScale)
@@ -593,7 +600,7 @@ void EnvironmentManager::GenerateShaderConstants(
     // scale it" constants intact -- an independent check that this mask decode is right.)
     const f32 lfCloud0Scale = mClouds.mafLayerScale[0] * KF_CLOUD_SCALE_TO_UV;
     SetQuad(lOutputCloud0ScaleAndOffset,
-            mCloud0Disp.x, mCloud0Disp.y, lfCloud0Scale, lfCloud0Scale);
+            mCloud0Disp.mV.x, mCloud0Disp.mV.y, lfCloud0Scale, lfCloud0Scale);
 
     // ---- the irradiance rig -------------------------------------------------------------------
     // 0x827D04CC. Also FALSE at Construct (only the debug component flips it), so it is off in the
@@ -814,10 +821,10 @@ void EnvironmentManager::Construct()
     mbOverrideKeyLightDirection = false;
     mfWhiteLevel                = KF_DEF_WHITE_LEVEL;
 
-    mCloud0Disp.x = 0.0f;
-    mCloud0Disp.y = 0.0f;
-    mCloud0Disp.z = 0.0f;
-    mCloud0Disp.w = 0.0f;
+    mCloud0Disp.mV.x = 0.0f;
+    mCloud0Disp.mV.y = 0.0f;
+    mCloud0Disp.mV.z = 0.0f;
+    mCloud0Disp.mV.w = 0.0f;
 
     // ARTIST @0x827CA7DC..0x827CA94C; register the actual engine values.
     CgsDev::DebugInterface lDebugInterface;
@@ -898,9 +905,9 @@ void EnvironmentManager::EnableJunkyardLightingSetup()
         // Magnitude(camera - setupPosition). The X360 does vmsum3fp128 + vrsqrtefp with two
         // Newton-Raphson refinements and a vsel that maps a zero-length difference to 0
         // rather than NaN; lowered here to the equivalent scalar length.
-        const f32 lfDeltaX = mCurrentCameraPosition.x - lrSetup.mJunkyardPosition.x;
-        const f32 lfDeltaY = mCurrentCameraPosition.y - lrSetup.mJunkyardPosition.y;
-        const f32 lfDeltaZ = mCurrentCameraPosition.z - lrSetup.mJunkyardPosition.z;
+        const f32 lfDeltaX = mCurrentCameraPosition.mV.x - lrSetup.mJunkyardPosition.mV.x;
+        const f32 lfDeltaY = mCurrentCameraPosition.mV.y - lrSetup.mJunkyardPosition.mV.y;
+        const f32 lfDeltaZ = mCurrentCameraPosition.mV.z - lrSetup.mJunkyardPosition.mV.z;
         const f32 lfDistanceSquared =
             (lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY) + (lfDeltaZ * lfDeltaZ);
         const f32 lfDistance = (lfDistanceSquared == 0.0f) ? 0.0f : sqrtf(lfDistanceSquared);
@@ -1167,10 +1174,10 @@ void EnvironmentManager::Update( f32 lfPlayerSpeed, BrnWorldIO::UpdateOutputBuff
         // Paused: the clouds do not move, so the published wind is exactly zero
         // (flt_82001CC0 stored into all four lanes, 0x827D6374-0x827D6398).
         Vector2 lWindVelocity;
-        lWindVelocity.x = KF_ZERO;
-        lWindVelocity.y = KF_ZERO;
-        lWindVelocity.z = KF_ZERO;
-        lWindVelocity.w = KF_ZERO;
+        lWindVelocity.mV.x = KF_ZERO;
+        lWindVelocity.mV.y = KF_ZERO;
+        lWindVelocity.mV.z = KF_ZERO;
+        lWindVelocity.mV.w = KF_ZERO;
         lpEffectsEnvironment->SetWindVelocity( lWindVelocity );
     }
     else
@@ -1184,21 +1191,21 @@ void EnvironmentManager::Update( f32 lfPlayerSpeed, BrnWorldIO::UpdateOutputBuff
         const f32 lfLayerSpeed = mClouds.GetLayerSpeed( 0 );
 
         Vector3 lCloudStep;
-        lCloudStep.x = ( ( lfCosAngle * lfLayerSpeed ) * mfCloudDelta ) * mrTimeStep;
-        lCloudStep.y = ( ( lfSinAngle * lfLayerSpeed ) * mfCloudDelta ) * mrTimeStep;
-        lCloudStep.z = lCloudStep.x;   // the vperm control repeats the COSINE in lanes z and w
-        lCloudStep.w = lCloudStep.x;
+        lCloudStep.mV.x = ( ( lfCosAngle * lfLayerSpeed ) * mfCloudDelta ) * mrTimeStep;
+        lCloudStep.mV.y = ( ( lfSinAngle * lfLayerSpeed ) * mfCloudDelta ) * mrTimeStep;
+        lCloudStep.mV.z = lCloudStep.mV.x;   // the vperm control repeats the COSINE in lanes z and w
+        lCloudStep.mV.w = lCloudStep.mV.x;
 
-        mCloud0Disp.x += lCloudStep.x;
-        mCloud0Disp.y += lCloudStep.y;
-        mCloud0Disp.z += lCloudStep.z;
-        mCloud0Disp.w += lCloudStep.w;
+        mCloud0Disp.mV.x += lCloudStep.mV.x;
+        mCloud0Disp.mV.y += lCloudStep.mV.y;
+        mCloud0Disp.mV.z += lCloudStep.mV.z;
+        mCloud0Disp.mV.w += lCloudStep.mV.w;
 
         Vector2 lWindVelocity;
-        lWindVelocity.x = lCloudStep.x / KF_CLOUD_WIND_DIVISOR;
-        lWindVelocity.y = lCloudStep.y / KF_CLOUD_WIND_DIVISOR;
-        lWindVelocity.z = lCloudStep.z / KF_CLOUD_WIND_DIVISOR;
-        lWindVelocity.w = lCloudStep.w / KF_CLOUD_WIND_DIVISOR;
+        lWindVelocity.mV.x = lCloudStep.mV.x / KF_CLOUD_WIND_DIVISOR;
+        lWindVelocity.mV.y = lCloudStep.mV.y / KF_CLOUD_WIND_DIVISOR;
+        lWindVelocity.mV.z = lCloudStep.mV.z / KF_CLOUD_WIND_DIVISOR;
+        lWindVelocity.mV.w = lCloudStep.mV.w / KF_CLOUD_WIND_DIVISOR;
         lpEffectsEnvironment->SetWindVelocity( lWindVelocity );
 
         if ( mbJunkyardLightingSetup )
@@ -1775,16 +1782,7 @@ void EnvironmentManager::ReadJunkyardLightingData( const char* lpcBuffer, u32 lu
     bool lbReadANumber    = false;   // r27
     bool lbExpectPosition = true;    // r25  (initialised to 1 -- the FIRST '}' is the position)
 
-    Vector3 lVector;                 // the accumulating vector (X360: a 16-byte stack slot)
-    lVector.x = 0.0f;
-    lVector.y = 0.0f;
-    lVector.z = 0.0f;
-    // FLAG (documented deviation): the console never initialises this stack slot, so its W lane
-    // carries whatever was there and is normalised along with x/y/z. Nothing reads W of either
-    // vector (EnableJunkyardLightingSetup uses x/y/z of the position and copies the direction
-    // whole into mOverrideKeyLightDirection, whose W the shader path does not consume), so W is
-    // pinned to 0 here instead of reproducing uninitialised stack.
-    lVector.w = 0.0f;
+    Vector3 lVector; // ARTIST leaves the parser stack vector uninitialized.
 
     for ( u32 luIndex = 0u; luIndex < luSize; ++luIndex )
     {
@@ -1839,21 +1837,21 @@ void EnvironmentManager::ReadJunkyardLightingData( const char* lpcBuffer, u32 lu
                 // Normalise (X360: vmsum3fp128 + vrsqrtefp with two Newton-Raphson refinements,
                 // lowered here to the equivalent scalar reciprocal square root).
                 const f32 lfLengthSquared =
-                    ( lVector.x * lVector.x ) + ( lVector.y * lVector.y ) + ( lVector.z * lVector.z );
+                    ( lVector.mV.x * lVector.mV.x ) + ( lVector.mV.y * lVector.mV.y ) + ( lVector.mV.z * lVector.mV.z );
                 const f32 lfInverseLength = 1.0f / sqrtf( lfLengthSquared );
 
                 Vector3 lDirection;
-                lDirection.x = lVector.x * lfInverseLength;
-                lDirection.y = lVector.y * lfInverseLength;
-                lDirection.z = lVector.z * lfInverseLength;
-                lDirection.w = lVector.w * lfInverseLength;
+                lDirection.mV.x = lVector.mV.x * lfInverseLength;
+                lDirection.mV.y = lVector.mV.y * lfInverseLength;
+                lDirection.mV.z = lVector.mV.z * lfInverseLength;
+                lDirection.mV.w = lVector.mV.w * lfInverseLength;
 
                 // Clamp the ELEVATION only (component 1), so a straight-down key light still casts
                 // a shadow. X360: vspltw v13, v0, 1 then the two vcmpgtfp./vsel pairs.
-                if ( lDirection.y > KF_JUNKYARD_MAX_KEY_LIGHT_Y )
-                    lDirection.y = KF_JUNKYARD_MAX_KEY_LIGHT_Y;
-                else if ( lDirection.y < KF_JUNKYARD_MIN_KEY_LIGHT_Y )
-                    lDirection.y = KF_JUNKYARD_MIN_KEY_LIGHT_Y;
+                if ( lDirection.mV.y > KF_JUNKYARD_MAX_KEY_LIGHT_Y )
+                    lDirection.mV.y = KF_JUNKYARD_MAX_KEY_LIGHT_Y;
+                else if ( lDirection.mV.y < KF_JUNKYARD_MIN_KEY_LIGHT_Y )
+                    lDirection.mV.y = KF_JUNKYARD_MIN_KEY_LIGHT_Y;
 
                 maJunkyardLighting[ muNumJunkyardLightingSetupsLoaded ].mKeyLightDirection = lDirection;
 
@@ -1876,10 +1874,8 @@ void EnvironmentManager::ReadJunkyardLightingData( const char* lpcBuffer, u32 lu
 
         const s32 liFloatLength = static_cast<s32>( lpcEnd - &lpcBuffer[ luIndex ] );
         CGS_ASSERT( liFloatLength > 0, "liFloatLength > 0" );
-        if ( liFloatLength <= 0 )
-            continue;   // (PC guard: the console's assert is non-fatal and would spin here)
 
-        ( &lVector.x )[ liComponent ] = lfValue;
+        ( &lVector.mV.x )[ liComponent ] = lfValue;
         luIndex += static_cast<u32>( liFloatLength - 1 );
     }
 }
