@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/EATech/include/cmn/renderengine/types.h"
 
 // renderengine state parameter types.
 // Source: EARenderWare/stable/platform/include/native/ps3-ppu-gcc/ps3/rw/graphics/core/stateparams.h
@@ -19,14 +20,6 @@ typedef float float32_t;
 
 namespace renderengine
 {
-    // RGBA8 packed color (DWARF: stateparams.h:111)
-    struct RGBA8
-    {
-        u8 r, g, b, a;
-        RGBA8() : r(0), g(0), b(0), a(0) {}
-        RGBA8(u8 r_, u8 g_, u8 b_, u8 a_) : r(r_), g(g_), b(b_), a(a_) {}
-    };
-
     // -------------------------------------------------------------------------
     // renderengine::SamplerState::Parameters
     // DWARF source: stateparams.h:44
