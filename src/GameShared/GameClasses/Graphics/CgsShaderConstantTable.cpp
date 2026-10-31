@@ -87,6 +87,22 @@ void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math
     FastNonOverlappedVectorMemcpy(lpDest, lpaValues, maConstants[luIndex].GetNumEntries());
 }
 
+// DecFIGS CgsShaderConstants.h:472; RenderRaceCar822CFE60 calls the same
+// ARTIST822B3458 copy body with its native Vector3Plus array. Preserve all bits
+// in each quad-word, including the Plus lane, through the genuine SDK type.
+void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math::vpu::Vector3Plus* lpaValues)
+{
+    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+
+    Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
+    CGS_ASSERT(lpDest, "lpDest");
+
+    const u32 luNumQw = maConstants[luIndex].GetNumEntries();
+    CGS_ASSERT(luNumQw > 0, "luNumConstants > 0");
+    for (u32 luEntry = 0; luEntry < luNumQw; ++luEntry)
+        lpDest[luEntry].mV = lpaValues[luEntry].mV;
+}
+
 // The Matrix44* overload @ 0x827BAE60 (attested need: the shadow/frustum wave's cascade
 // constant feed). Same slot bookkeeping as the Vector4* overload; the X360 loop copies
 // 64 bytes (four quad-words == one Matrix44) per entry, mu8NumEntries entries, contiguous
@@ -133,10 +149,12 @@ void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math
         const rw::math::vpu::Matrix44Affine& lrSrc = lpaValues[luEntry];
         Vector4* lpRows = lpDest + luEntry * 4u;
 
-        lpRows[0].mV.x = lrSrc.xAxis.mV.x; lpRows[0].mV.y = lrSrc.xAxis.mV.y; lpRows[0].mV.z = lrSrc.xAxis.mV.z; lpRows[0].mV.w = 0.0f;
-        lpRows[1].mV.x = lrSrc.yAxis.mV.x; lpRows[1].mV.y = lrSrc.yAxis.mV.y; lpRows[1].mV.z = lrSrc.yAxis.mV.z; lpRows[1].mV.w = 0.0f;
-        lpRows[2].mV.x = lrSrc.zAxis.mV.x; lpRows[2].mV.y = lrSrc.zAxis.mV.y; lpRows[2].mV.z = lrSrc.zAxis.mV.z; lpRows[2].mV.w = 0.0f;
-        lpRows[3].mV.x = lrSrc.wAxis.mV.x; lpRows[3].mV.y = lrSrc.wAxis.mV.y; lpRows[3].mV.z = lrSrc.wAxis.mV.z; lpRows[3].mV.w = 1.0f;
+        const rw::math::vpu::VectorIntrinsic lZero = __vspltisw(0);
+        const rw::math::vpu::VectorIntrinsic lOne = __vcfsx(__vspltisw(1), 0);
+        lpRows[0].mV = __vrlimi(lrSrc.xAxis.mV, lZero, 1, 0);
+        lpRows[1].mV = __vrlimi(lrSrc.yAxis.mV, lZero, 1, 0);
+        lpRows[2].mV = __vrlimi(lrSrc.zAxis.mV, lZero, 1, 0);
+        lpRows[3].mV = __vrlimi(lrSrc.wAxis.mV, lOne, 1, 0);
     }
 }
 
