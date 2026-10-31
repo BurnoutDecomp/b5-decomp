@@ -8,7 +8,6 @@
 #include "rw/math/vpu/types.h"   // Vector4, MaskScalar
 
 #include <vectorintrinsics.h>
-#include <cmath>                 // std::sqrt (Magnitude)
 
 namespace rw
 {
@@ -130,20 +129,9 @@ namespace vpu
         return CompGreaterThan(lLhs, lRhs);
     }
 
-    // ADDITIVE GROW 2026-08-27 (stunt-race UI wave): the full-4 Magnitude, under its SDK
-    // name. Shipped rwmath bodies it at the EATech reference copy
-    // (src/SDKs/EATech/include/rw/math/vpu/detail/vector4_operation_inline.h:273) as the
-    // 4-lane dot (vmsum4fp128) -> vrsqrtefp + Newton refinement, with a vsel that forces the
-    // result to 0 when the dot is exactly 0 -- i.e. sqrt(dot) with sqrt(0) == 0. Scalar
-    // lowering here per this header's convention (the Vector3 sibling does the same); the
-    // zero-dot guard falls out of std::sqrt(0.0f) == 0.0f. First consumer: the
-    // MainMapComponent::Construct world-rect sanity assert @0x8245E514.
-    inline float Magnitude(const Vector4& lrVector)
-    {
-        const float lfDot = lrVector.mV.x * lrVector.mV.x + lrVector.mV.y * lrVector.mV.y +
-                            lrVector.mV.z * lrVector.mV.z + lrVector.mV.w * lrVector.mV.w;
-        return std::sqrt(lfDot);
-    }
+    // Magnitude is the genuine SDK VecFloat(Vector4::InParam) imported above.
+    // A scalar const-reference overload would make this shared include ambiguous
+    // and would expose the wrong native return convention.
 
     // ADDITIVE GROW 2026-08-04 (task #144): the FOUR-lane sibling of the three-lane
     // `IsValid(const Vector3&)` in vector3_operation.h -- the finite-value ("RwMathVPU::IsValid")
