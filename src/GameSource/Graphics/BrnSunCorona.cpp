@@ -263,10 +263,7 @@ void BrnSunCorona::GenerateOcclusionBuffer(CgsRenderTarget* lpOcclusionRt,
     const f32 lfStartV = mfYPos;
     renderengine::FloatShaderStateIterator lIterator;
     renderengine::Device::BeginShaderStates(mOcclusionPixelVariableHandleUvStartOffset, lIterator);
-    lIterator.m_dest->x = lfStartU;
-    lIterator.m_dest->y = lfStartV;
-    lIterator.m_dest->z = lfStepU;
-    lIterator.m_dest->w = lfStepV;
+    *lIterator.m_dest = Vector4(lfStartU, lfStartV, lfStepU, lfStepV);
     shadow::Device::SetState(lpDepthRenderTarget->mDepthTarget.mpTextureState, 0);
     shadow::Device::SetVertexDescriptor(mpVertexDescriptor);
     shadow::Device::FlushVertexProgramState();
@@ -306,10 +303,7 @@ void BrnSunCorona::RenderOccludedFlare(CgsRenderTarget* lpOcclusionRt,
     const f32 lfPower = mfSunFlarePow;
     renderengine::FloatShaderStateIterator lIterator;
     renderengine::Device::BeginShaderStates(mFlarePixelVariableHandleColourAndPower, lIterator);
-    lIterator.m_dest->x = lfRed;
-    lIterator.m_dest->y = lfGreen;
-    lIterator.m_dest->z = lfBlue;
-    lIterator.m_dest->w = lfPower;
+    *lIterator.m_dest = Vector4(lfRed, lfGreen, lfBlue, lfPower);
     shadow::Device::SetState(lpOcclusionRenderTarget->maColourTargets[0].mpTextureState, 0);
     shadow::Device::SetVertexDescriptor(mpVertexDescriptor);
     shadow::Device::FlushVertexProgramState();
