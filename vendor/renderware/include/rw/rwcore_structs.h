@@ -772,33 +772,13 @@ RW_SIZE_ASSERT(rw::rwDebugPrintHelper, 1024);
 }  // namespace rw
 namespace rw { namespace shared_globals { namespace internal {
 
-struct AutoinitOSGlobalManager {  // sizeof = 1
-    uint8_t _pad0[1];  // +0
-};
-RW_SIZE_ASSERT(rw::shared_globals::internal::AutoinitOSGlobalManager, 1);
-
-struct OSGlobalManager {  // sizeof = 72 on the x64 host
-    uint8_t mOSGlobalList[24];  // +0  was: rw::shared_globals::internal::OSGlobalManager::OSGlobalList
-    uint8_t mRefCount[4];  // +24  was: EA::Thread::AtomicInt<unsigned int>
-    uint8_t _pad0[4];  // +28
-    uint8_t mcsLock[40];  // +32  was: Win32Mutex
-
-    // ADDITIVE (member fn, no storage): the X360 ctor @ 0x82BBC878 that the
-    // boot trace executes. Declaring it does not change sizeof (no data members
-    // added). Body in renderware/src/rw/OSGlobalManager.cpp. The X360 ctor makes
-    // mOSGlobalList an empty circular intrusive list (next=prev=this), zeroes the
-    // atomic mRefCount, then RtlInitializeCriticalSection(&mcsLock).
-    OSGlobalManager();
-};
-RW_SIZE_ASSERT(rw::shared_globals::internal::OSGlobalManager, 72);
-
-struct OSGlobalNode {  // sizeof = 24 on the x64 host
+struct OSGlobalNode {  // ARTIST/DecFIGS native node: 16 bytes
     void* mpNext;  // +0
-    void* mpPrev;  // +8
-    uint32_t mOSGlobalID;  // +16
-    uint32_t mOSGlobalRefCount;  // +20
+    void* mpPrev;  // +4
+    uint32_t mOSGlobalID;  // +8
+    uint32_t mOSGlobalRefCount;  // +12
 };
-RW_SIZE_ASSERT(rw::shared_globals::internal::OSGlobalNode, 24);
+CGS_STATIC_ASSERT(sizeof(OSGlobalNode) == 16, "ARTIST OSGlobalNode size");
 } } }  // namespace rw::shared_globals::internal
 namespace rw {
 
