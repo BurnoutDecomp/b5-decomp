@@ -30,7 +30,6 @@
 
 #include <cmath>
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probe)
-#include <atomic>
 
 // [DIAG] the renderer's present counter. BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp,
 // so stamping the traffic track with it makes a logged number and a dumped pixel come from ONE
@@ -48,19 +47,6 @@ SwerveWatch gSwerveWatch = { 0.0f, 0.0f, 0.0f, -1, -1, 0u, 0u, 0u,
 namespace
 {
 
-    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
-    inline void LogMissingLeg(std::atomic<bool>& lrbAlreadyLogged, const char* lpcLegNameAndReason)
-    {
-        if (lrbAlreadyLogged.load(std::memory_order_relaxed)
-            || lrbAlreadyLogged.exchange(true, std::memory_order_relaxed))
-        {
-            return;
-        }
-
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-        }
-    }
 
     // The consumer this waited for is
     // TrafficEntityModule::SendPhysicalRequests @0x8274C510 (_wT3_01.cpp), live in
@@ -77,7 +63,7 @@ namespace
     const f32 KF_PLUS_1000_1  =  1000.1f;   // flt_820C26D0
 
     // Initialise's eight tuning vectors, lane by lane.
-    const f32 KF_MAX_FLOAT              = 3.40282347e+38f; // flt_821007CC
+    const f32 KF_MAX_FLOAT              = 3.402823466e+38f; // flt_821007CC
     const f32 KF_TWO_PI                 = 6.28318548f;     // flt_821007E0
     const f32 KF_TUNE_LIMITS_Z          = 4.0f;            // flt_82004EF4
     const f32 KF_TUNE_LIMITS_W          = 0.1f;            // flt_82004014
@@ -118,8 +104,8 @@ namespace
     const f32 KF_PARTIAL_UPDATE_RADIUS_SQ = 22500.0f;      // flt_82F36B40
 
     // The default race-car direction FindInterestingRaceCar seeds (unk_82181520 == unit Z).
-    inline Vector3 UnitZ() { { const Vector3 lResult = { 0.0f, 0.0f, 1.0f, 0.0f }; return lResult; } }
-    inline Vector3 ZeroV3() { { const Vector3 lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; } }
+    inline Vector3 UnitZ() { { const Vector3 lResult(0.0f, 0.0f, 1.0f); return lResult; } }
+    inline Vector3 ZeroV3() { { const Vector3 lResult(0.0f, 0.0f, 0.0f); return lResult; } }
     inline bool IsValidF(f32 lfValue) { return lfValue == lfValue; }
 
     inline f32 ClampF(f32 lfValue, f32 lfMin, f32 lfMax)
@@ -304,75 +290,75 @@ void UpdateVehiclesJob::Initialise(UpdateVehiclesJobParams* lpParams)
     // decayStop) -- the four scalars arrive splatted in v1..v4 in that order.
     // 0x82919C48/0x82919CB4/0x82919D20/0x82919D8C -- all four r3 = r29 = this+0xA0 (set 0).
     FuzzyEnvelopeSet4& lrClosingSpeed = maSwerveEnvelopes[E_SWERVE_ENVELOPES_CLOSING_SPEED];
-    lrClosingSpeed.SetEnvelope(0, rw::math::vpu::Splat(-3.0f), rw::math::vpu::Splat(-4.0f), rw::math::vpu::Splat(KF_MINUS_1000_0), rw::math::vpu::Splat(KF_MINUS_1000_1));
-    lrClosingSpeed.SetEnvelope(1, rw::math::vpu::Splat(-3.5f), rw::math::vpu::Splat(-2.0f), rw::math::vpu::Splat(-0.5f), rw::math::vpu::Splat(0.5f));
-    lrClosingSpeed.SetEnvelope(2, rw::math::vpu::Splat(KF_ZERO), rw::math::vpu::Splat(3.0f), rw::math::vpu::Splat(KF_PLUS_1000_0), rw::math::vpu::Splat(KF_PLUS_1000_1));
-    lrClosingSpeed.SetEnvelope(3, rw::math::vpu::Splat(10.0f), rw::math::vpu::Splat(20.0f), rw::math::vpu::Splat(75.0f), rw::math::vpu::Splat(95.0f));
+    lrClosingSpeed.SetEnvelope(0, VecFloat(-3.0f), VecFloat(-4.0f), VecFloat(KF_MINUS_1000_0), VecFloat(KF_MINUS_1000_1));
+    lrClosingSpeed.SetEnvelope(1, VecFloat(-3.5f), VecFloat(-2.0f), VecFloat(-0.5f), VecFloat(0.5f));
+    lrClosingSpeed.SetEnvelope(2, VecFloat(KF_ZERO), VecFloat(3.0f), VecFloat(KF_PLUS_1000_0), VecFloat(KF_PLUS_1000_1));
+    lrClosingSpeed.SetEnvelope(3, VecFloat(10.0f), VecFloat(20.0f), VecFloat(75.0f), VecFloat(95.0f));
 
     FuzzyEnvelopeSet4& lrLanePos = maSwerveEnvelopes[E_SWERVE_ENVELOPES_LANE_POS];
-    lrLanePos.SetEnvelope(0, rw::math::vpu::Splat(-2.5f), rw::math::vpu::Splat(-1.5f), rw::math::vpu::Splat(1.5f), rw::math::vpu::Splat(2.5f));
-    lrLanePos.SetEnvelope(1, rw::math::vpu::Splat(-8.5f), rw::math::vpu::Splat(-7.0f), rw::math::vpu::Splat(7.0f), rw::math::vpu::Splat(8.5f));
-    lrLanePos.SetEnvelope(2, rw::math::vpu::Splat(-3.5f), rw::math::vpu::Splat(-2.0f), rw::math::vpu::Splat(2.0f), rw::math::vpu::Splat(3.5f));
+    lrLanePos.SetEnvelope(0, VecFloat(-2.5f), VecFloat(-1.5f), VecFloat(1.5f), VecFloat(2.5f));
+    lrLanePos.SetEnvelope(1, VecFloat(-8.5f), VecFloat(-7.0f), VecFloat(7.0f), VecFloat(8.5f));
+    lrLanePos.SetEnvelope(2, VecFloat(-3.5f), VecFloat(-2.0f), VecFloat(2.0f), VecFloat(3.5f));
 
     // 0x82919F24/0x82919F80 -- both r3 = r27 = this+0x120 (set 2). Envelope 0 is the whole
     // swerve gate CalcSwerveAmount tests at 0x8291D16C.
     FuzzyEnvelopeSet4& lrDistance = maSwerveEnvelopes[E_SWERVE_ENVELOPES_DISTANCE];
-    lrDistance.SetEnvelope(0, rw::math::vpu::Splat(-25.0f), rw::math::vpu::Splat(-15.0f), rw::math::vpu::Splat(80.0f), rw::math::vpu::Splat(110.0f));
-    lrDistance.SetEnvelope(1, rw::math::vpu::Splat(-3.0f), rw::math::vpu::Splat(KF_ZERO), rw::math::vpu::Splat(50.0f), rw::math::vpu::Splat(65.0f));
+    lrDistance.SetEnvelope(0, VecFloat(-25.0f), VecFloat(-15.0f), VecFloat(80.0f), VecFloat(110.0f));
+    lrDistance.SetEnvelope(1, VecFloat(-3.0f), VecFloat(KF_ZERO), VecFloat(50.0f), VecFloat(65.0f));
 
     maSwerveEnvelopes[E_SWERVE_ENVELOPES_ANGLE]
-        .SetEnvelope(0, rw::math::vpu::Splat(-10.0f), rw::math::vpu::Splat(-1.0f), rw::math::vpu::Splat(-0.96499997f), rw::math::vpu::Splat(-0.90600002f));
+        .SetEnvelope(0, VecFloat(-10.0f), VecFloat(-1.0f), VecFloat(-0.96499997f), VecFloat(-0.90600002f));
 
     // 0x8291A070..0x8291A1BC -- the eight tuning vectors, built in three stack blocks and
     // stored at console +0x1A0..+0x210.
     {
-        const Vector4 lAggregateValue = { KF_MAX_FLOAT, KF_TWO_PI, KF_TUNE_LIMITS_Z, KF_TUNE_LIMITS_W };
+        const Vector4 lAggregateValue( KF_MAX_FLOAT, KF_TWO_PI, KF_TUNE_LIMITS_Z, KF_TUNE_LIMITS_W );
         maTuning[E_TUNE_LIMITS] = lAggregateValue;
     }
     {
-        const Vector4 lAggregateValue = { KF_TUNE_SWERVE_X, KF_TUNE_SWERVE_Y,
-                                      KF_TUNE_SWERVE_Z, KF_TUNE_SWERVE_W };
+        const Vector4 lAggregateValue( KF_TUNE_SWERVE_X, KF_TUNE_SWERVE_Y,
+                                      KF_TUNE_SWERVE_Z, KF_TUNE_SWERVE_W );
         maTuning[E_TUNE_SWERVE] = lAggregateValue;
     }
     {
-        const Vector4 lAggregateValue = { KF_TUNE_LANE_X, KF_TUNE_LANE_Y, KF_APPROX_LANE_WIDTH, KF_ZERO };
+        const Vector4 lAggregateValue( KF_TUNE_LANE_X, KF_TUNE_LANE_Y, KF_APPROX_LANE_WIDTH, KF_ZERO );
         maTuning[E_TUNE_LANE] = lAggregateValue;
     }
 
     // 0x8291A088/0x8291A09C: two runtime sin() calls on the 35 deg / 10 deg doubles.
     {
-        const Vector4 lAggregateValue = { static_cast<f32>(std::sin(KF_SWERVE_ANGLE_NARROW)),
+        const Vector4 lAggregateValue( static_cast<f32>(std::sin(KF_SWERVE_ANGLE_NARROW)),
                                       static_cast<f32>(std::sin(KF_SWERVE_ANGLE_WIDE)),
-                                      KF_TUNE_ANGLES_Z, KF_TUNE_ANGLES_W };
+                                      KF_TUNE_ANGLES_Z, KF_TUNE_ANGLES_W );
         maTuning[E_TUNE_ANGLES] = lAggregateValue;
     }
 
     {
-        const Vector4 lAggregateValue = { KF_MAX_DIST_ACROSS_LANE, KF_STOPLINE_SIDE_SPACE,
+        const Vector4 lAggregateValue( KF_MAX_DIST_ACROSS_LANE, KF_STOPLINE_SIDE_SPACE,
                                            KF_STOPLINE_SIDE_VARIATION,
-                                           KF_MAX_DIST_FROM_LANE_CENTRE };
+                                           KF_MAX_DIST_FROM_LANE_CENTRE );
         maTuning[E_TUNE_LANE_CENTRE] = lAggregateValue;
     }
 
     // Lane z is rebuilt from the params every Initialise: mfSimTimeStep^2 * 360.
     {
-        const Vector4 lAggregateValue = { KF_RECIP_ROLL_SPEED_MIN, KF_TUNE_FILTERS_Y,
+        const Vector4 lAggregateValue( KF_RECIP_ROLL_SPEED_MIN, KF_TUNE_FILTERS_Y,
                                        lpParams->mfSimTimeStep * lpParams->mfSimTimeStep
                                            * KF_SIM_TIMESTEP_SQ_SCALE,
-                                       KF_TUNE_FILTERS_W };
+                                       KF_TUNE_FILTERS_W );
         maTuning[E_TUNE_FILTERS] = lAggregateValue;
     }
 
     {
-        const Vector4 lAggregateValue = { KF_TUNE_TIME_X, KF_TUNE_TIME_Y,
+        const Vector4 lAggregateValue( KF_TUNE_TIME_X, KF_TUNE_TIME_Y,
                                     lpParams->mfSimTimeStep,
-                                    lpParams->mfSimTimeSinceLastDecision };
+                                    lpParams->mfSimTimeSinceLastDecision );
         maTuning[E_TUNE_TIME] = lAggregateValue;
     }
 
     {
-        const Vector4 lAggregateValue = { KF_TUNE_MOVE_X, KF_ZERO,
-                                    KF_RECIP_LANE_CENTRE_SPEED, KF_TUNE_MOVE_W };
+        const Vector4 lAggregateValue( KF_TUNE_MOVE_X, KF_ZERO,
+                                    KF_RECIP_LANE_CENTRE_SPEED, KF_TUNE_MOVE_W );
         maTuning[E_TUNE_MOVE] = lAggregateValue;
     }
 
@@ -489,15 +475,15 @@ void UpdateVehiclesJob::UpdateVehicle()
         // Param+0x14 (mfSpeed) then Param+0x1A bit 0. Bit 0 of mxEffectAndHistoryState has
         // no name in BrnTrafficParam.h's enum (which starts at E_HISTORY_BORN == 0x02); the
         // asm is `lbz r11,26(param) ; clrlwi r11,r11,31`, so the raw mask stands.
-        lpVehicle->SetSpeed(rw::math::vpu::Splat(lpParam->mfSpeed));
+        lpVehicle->SetSpeed(VecFloat(lpParam->mfSpeed));
         lpVehicle->SetBrakelightsOn((lpParam->mxEffectAndHistoryState & 0x01u) != 0);
     }
 
     Vector3  lRaceCarPosition = ZeroV3();
     Vector3  lRaceCarVelocity = ZeroV3();
     Vector3  lRaceCarDirection = UnitZ();
-    VecFloat lfRaceCarSpeed = rw::math::vpu::Splat(0.0f);
-    VecFloat lfNearestRaceCarDistSq = rw::math::vpu::Splat(0.0f);
+    VecFloat lfRaceCarSpeed = VecFloat(0.0f);
+    VecFloat lfNearestRaceCarDistSq = VecFloat(0.0f);
 
     const bool lbFoundRaceCar = FindInterestingRaceCar(lRaceCarPosition, lRaceCarVelocity,
                                                        lRaceCarDirection, lfRaceCarSpeed,
@@ -515,12 +501,6 @@ void UpdateVehiclesJob::UpdateVehicle()
     // and BrnTrafficVehicle.h is not this cluster's file, so no accessor exists to set it.
     // Nothing in the tree reads the bit yet. DELETE-WHEN Vehicle gains the setter.
     {
-        static std::atomic<bool> sbLogged{false};
-        LogMissingLeg(sbLogged,
-            "UpdateVehicle's partial-update latch @0x8291D9E4 -- sets bit 0x80 of Vehicle+4 "
-            "(muSpecies), which is private and has no setter. PARKED because NOTHING IN THE "
-            "TREE READS THE BIT: adding the setter would land a write with no consumer. "
-            "DELETE-WHEN a reader of muSpecies bit 0x80 lands");
     }
 
     f32  lfSwerveAmount = 0.0f;
@@ -534,7 +514,7 @@ void UpdateVehiclesJob::UpdateVehicle()
         {
             lfSwerveAmount = CalcSwerveAmount(lRaceCarPosition, lRaceCarVelocity,
                                               lRaceCarDirection, lfRaceCarSpeed,
-                                              &lbIsExtreme, &lbIsNormalPhysical).x;
+                                              &lbIsExtreme, &lbIsNormalPhysical).mV.x;
             UpdateSwerveState(lRaceCarPosition, &lfSwerveAmount, &lbIsExtreme);
         }
 
@@ -542,47 +522,12 @@ void UpdateVehiclesJob::UpdateVehicle()
         const bool lbSwerveActive = lbIsExtreme || lbIsNormalPhysical;
 
         Vector3 lTargetPos = ZeroV3();
-        CalcTargetPos(rw::math::vpu::Splat(lfSwerveAmount), lTargetPos, lbSwerveActive);
+        CalcTargetPos(VecFloat(lfSwerveAmount), lTargetPos, lbSwerveActive);
         lpVehicle->SetTargetPos(lTargetPos);
 
         if (!lpVehicle->IsPhysical())
         {
-            // [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT. The swerve WITNESS: the position
-            // before MoveToTarget, the position after, and the lateral component of the move
-            // measured against the car's OWN right vector -- which is the number "the car
-            // altered course" means. It also publishes the position for the camera hook (see
-            // BrnTrafficSwerveWatch.h). DELETE-WHEN-STABLE.
-            const Vector3 lPosBefore = lbWitness ? GetCurrentVehicleTransform().Pos() : ZeroV3();
-
             MoveToTarget(lTargetPos, lbPartialUpdate);
-
-            if (lbWitness)
-            {
-                const Matrix44Affine lAfter = GetCurrentVehicleTransform();
-                const Vector3 lPosAfter = lAfter.Pos();
-                const Vector3 lStep = lPosAfter - lPosBefore;
-                const Vector3 lRightAfter = lAfter.Right();
-                const Vector3 lToPlayer = lRaceCarPosition - lPosAfter;
-
-                const s32 liBehaviour = static_cast<s32>(GetCurrentParam()->miBehaviour);
-                gSwerveWatch.mfPosX = lPosAfter.x;
-                gSwerveWatch.mfPosY = lPosAfter.y;
-                gSwerveWatch.mfPosZ = lPosAfter.z;
-                gSwerveWatch.miVehicle = static_cast<s32>(muCurrentVehicle);
-                gSwerveWatch.miBehaviour = liBehaviour;
-                ++gSwerveWatch.muPublishes;
-                if (liBehaviour == Param::KI_BEHAVIOUR_DRIVING_AROUND_OBSTRUCTION)
-                {
-                    ++gSwerveWatch.muBehaviour2;
-                }
-
-                static u32 suSwerveLogged = 0;
-                const u32 KU_SWERVE_LOG_CAP = 4000;
-                if (suSwerveLogged < KU_SWERVE_LOG_CAP)
-                {
-                    ++suSwerveLogged;
-                }
-            }
 
             if (!mpParams->mbDEBUGStopTrafficMoving)
             {
@@ -638,11 +583,11 @@ bool UpdateVehiclesJob::FindInterestingRaceCar(Vector3& lrOutPosition,
 
     // 0x8291B2?? -- the running minimum starts at E_TUNE_LIMITS lane 0 == MAX_FLOAT, and the
     // direction accumulator starts at unk_82181520 == unit Z.
-    f32 lfMinDistSq = maTuning[E_TUNE_LIMITS].x;
+    f32 lfMinDistSq = maTuning[E_TUNE_LIMITS].mV.x;
 
     if (lpRaceCarState->mRaceCarPositions.GetLength() == 0)
     {
-        lrOutDistanceSq = rw::math::vpu::Splat(lfMinDistSq);
+        lrOutDistanceSq = VecFloat(lfMinDistSq);
         return false;
     }
 
@@ -665,7 +610,7 @@ bool UpdateVehiclesJob::FindInterestingRaceCar(Vector3& lrOutPosition,
             lPosition       = lRaceCarPos;
             lLinearVelocity = lpRaceCarState->mRaceCarLinearVelocities.GetItem(luRaceCar);
             lDirection      = lpRaceCarState->mRaceCarXZVelocityDirs.GetItem(luRaceCar);
-            lfSpeed         = lpRaceCarState->mRaceCarSpeeds.GetItem(luRaceCar).x;
+            lfSpeed         = lpRaceCarState->mRaceCarSpeeds.GetItem(luRaceCar).mV.x;
         }
     }
 
@@ -674,8 +619,8 @@ bool UpdateVehiclesJob::FindInterestingRaceCar(Vector3& lrOutPosition,
     lrOutPosition       = lPosition;
     lrOutLinearVelocity = lLinearVelocity;
     lrOutDirection      = lDirection;
-    lrOutSpeed          = rw::math::vpu::Splat(lfSpeed);
-    lrOutDistanceSq     = rw::math::vpu::Splat(lfMinDistSq);
+    lrOutSpeed          = VecFloat(lfSpeed);
+    lrOutDistanceSq     = VecFloat(lfMinDistSq);
     return true;
 }
 
@@ -690,17 +635,17 @@ void UpdateVehiclesJob::CalcTargetPos(VecFloat lfSwerve, Vector3& lrOutTargetPos
                                       bool lbPartialUpdate) const
 {
     CGS_ASSERT(GetCurrentVehicle()->IsAlive(), "GetCurrentVehicle()->IsAlive()");
-    CGS_ASSERT(IsValidF(lfSwerve.x), "IsValid( lfSwerve )");
+    CGS_ASSERT(IsValidF(lfSwerve.mV.x), "IsValid( lfSwerve )");
 
     const Param* lpParam = GetCurrentParam();
     const ParamTransform* lpParamTransform = GetCurrentParamTransform();
     const Vehicle* lpVehicle = GetCurrentVehicle();
 
     const f32 lfRandomVal = lpVehicle->GetRandomVal();
-    const f32 lfSpeed     = lpVehicle->GetSpeed().x;
+    const f32 lfSpeed     = lpVehicle->GetSpeed().mV.x;
 
-    f32 lfDistAcrossLane = lpVehicle->GetDistAcrossLane().x
-                           + lfSwerve.x * maTuning[E_TUNE_LANE].z;   // KF_APPROX_LANE_WIDTH
+    f32 lfDistAcrossLane = lpVehicle->GetDistAcrossLane().mV.x
+                           + lfSwerve.mV.x * maTuning[E_TUNE_LANE].mV.z;   // KF_APPROX_LANE_WIDTH
 
     f32 lfDistAcross;
     if (lbPartialUpdate)
@@ -709,10 +654,10 @@ void UpdateVehiclesJob::CalcTargetPos(VecFloat lfSwerve, Vector3& lrOutTargetPos
     }
     else
     {
-        const f32 lfMaxAcrossLane = maTuning[E_TUNE_LANE_CENTRE].x;
+        const f32 lfMaxAcrossLane = maTuning[E_TUNE_LANE_CENTRE].mV.x;
         lfDistAcrossLane = ClampF(lfDistAcrossLane, -lfMaxAcrossLane, lfMaxAcrossLane);
 
-        const f32 lfSideSpace = maTuning[E_TUNE_LANE_CENTRE].y;
+        const f32 lfSideSpace = maTuning[E_TUNE_LANE_CENTRE].mV.y;
         f32 lfCentreLine = 0.0f;
         // 0x8291A798 / 0x8291A7E8 `cmplwi 0xFFFE ; bge` -- a BAND, so both the 0xFFFE cache
         // sentinel and Section::FindNeighbourForRung's 0xFFFF "none" count as no neighbour.
@@ -725,16 +670,16 @@ void UpdateVehiclesJob::CalcTargetPos(VecFloat lfSwerve, Vector3& lrOutTargetPos
             lfCentreLine = lfSideSpace;
         }
 
-        const f32 lfSideVariation = maTuning[E_TUNE_LANE_CENTRE].z;
+        const f32 lfSideVariation = maTuning[E_TUNE_LANE_CENTRE].mV.z;
         lfCentreLine += (lfRandomVal * lfSideVariation * 2.0f) - lfSideVariation;
 
         const f32 lfSpeedScale =
-            ClampF(lfSpeed * maTuning[E_TUNE_MOVE].z, 0.0f, 1.0f);   // 1/8 m/s per unit
+            ClampF(lfSpeed * maTuning[E_TUNE_MOVE].mV.z, 0.0f, 1.0f);   // 1/8 m/s per unit
 
         lfDistAcross = lfCentreLine
                        + (lfDistAcrossLane - lfCentreLine) * (lfSpeedScale * lfSpeedScale);
 
-        const f32 lfMaxFromCentre = maTuning[E_TUNE_LANE_CENTRE].w;
+        const f32 lfMaxFromCentre = maTuning[E_TUNE_LANE_CENTRE].mV.w;
         lfDistAcross = ClampF(lfDistAcross, -lfMaxFromCentre, lfMaxFromCentre);
     }
 
@@ -805,9 +750,6 @@ void UpdateVehiclesJob::RequestNewPhysicalVehicle(u16 luVehicle, PhysicalReason 
     {
         // Kill switch only (KB_T2_ALLOW_PHYSICAL_PROMOTION above). Flip it to false to take
         // the whole world-side promotion chain out of the frame without unmounting anything.
-        static std::atomic<bool> sbLogged{false};
-        LogMissingLeg(sbLogged,
-            "RequestNewPhysicalVehicle @0x8291CE48 -- KB_T2_ALLOW_PHYSICAL_PROMOTION is off");
         return;
     }
 
@@ -828,12 +770,6 @@ void UpdateVehiclesJob::RequestNewPhysicalVehicle(u16 luVehicle, PhysicalReason 
 // @0x8291A8C0. EXPORT HOLE.
 void UpdateVehiclesJob::UpdateEffects(const Param* lpParam)
 {
-    static std::atomic<bool> sbLogged{false};
-    LogMissingLeg(sbLogged,
-        "UpdateEffects @0x8291A8C0 -- EXPORT HOLE: the ARTIST export set jumps 0x8291A5E0 -> "
-        "0x8291AC60, so no pseudocode or asm exists for it. Cost: no indicator / headlight / "
-        "brakelight warmth animation on driving traffic (mEffectRand and muEffectTickRate are "
-        "seeded and unread)");
     (void)lpParam;
 }
 
@@ -908,13 +844,13 @@ VecFloat UpdateVehiclesJob::GetObjectEstimatedDistanceToLaneCenterAccordingToPar
     Vector3 lEstimatedDirection = ZeroV3();
     Vector3 lEstimatedRight     = ZeroV3();
     lpSection->CalcTransformAtParameter(lpHull->mpaRungs,
-                                        rw::math::vpu::Splat(lfEstimatedObjectParam),
+                                        VecFloat(lfEstimatedObjectParam),
                                         static_cast<u32>(lfEstimatedObjectParam),
                                         lEstimatedPosition, lEstimatedDirection,
                                         lEstimatedRight);
 
     lrOutPredictedPos = lEstimatedPosition;
-    return rw::math::vpu::Splat(
+    return VecFloat(
         rw::math::vpu::Dot(lObjectPos - lEstimatedPosition, lEstimatedRight));
 }
 
@@ -942,25 +878,25 @@ void UpdateVehiclesJob::ProcessSwervingRules(VecFloat* lpafOutputs,
 
     // 0x82918924 / 0x82918950 / 0x8291896C: both selected lanes are set 0 (closing speed) --
     // hardcore takes envelope 2 ("approaching at all"), otherwise envelope 3 ("approaching fast").
-    const f32 lfClosingLane = lbAllowsHardcoreSwerving ? lClosingScores.z : lClosingScores.w;
+    const f32 lfClosingLane = lbAllowsHardcoreSwerving ? lClosingScores.mV.z : lClosingScores.mV.w;
 
     // 0x8291899C: an already-extreme vehicle gets an E_TUNE_LIMITS.w bonus on rule 0.
-    const f32 lfExtremeBonus = lbIsExtremeSwerving ? maTuning[E_TUNE_LIMITS].w : 0.0f;
+    const f32 lfExtremeBonus = lbIsExtremeSwerving ? maTuning[E_TUNE_LIMITS].mV.w : 0.0f;
 
     // 0x82918984 / 0x829189A0 / 0x829189A8, in that order.
-    f32 lfRule0 = lAngleScores.x;
+    f32 lfRule0 = lAngleScores.mV.x;
     lfRule0 = lfRule0 < lfClosingLane     ? lfRule0 : lfClosingLane;
-    lfRule0 = lfRule0 < lLanePosScores.z  ? lfRule0 : lLanePosScores.z;
-    lfRule0 = lfRule0 < lDistanceScores.y ? lfRule0 : lDistanceScores.y;
+    lfRule0 = lfRule0 < lLanePosScores.mV.z  ? lfRule0 : lLanePosScores.mV.z;
+    lfRule0 = lfRule0 < lDistanceScores.mV.y ? lfRule0 : lDistanceScores.mV.y;
     lfRule0 += lfExtremeBonus;
 
     // 0x8291898C: min(set2.x, set1.y).
-    f32 lfRule1 = lDistanceScores.x < lLanePosScores.y ? lDistanceScores.x : lLanePosScores.y;
+    f32 lfRule1 = lDistanceScores.mV.x < lLanePosScores.mV.y ? lDistanceScores.mV.x : lLanePosScores.mV.y;
 
     // 0x829189B4..0x829189FC: both rules are offset by the crash slider.
     const f32 lfCrashSlider = mpParams->mfCrashSliderFinalValue;
-    lpafOutputs[0] = rw::math::vpu::Splat(lfRule0 - lfCrashSlider);
-    lpafOutputs[1] = rw::math::vpu::Splat(lfRule1 - lfCrashSlider);
+    lpafOutputs[0] = VecFloat(lfRule0 - lfCrashSlider);
+    lpafOutputs[1] = VecFloat(lfRule1 - lfCrashSlider);
 }
 
 // @0x8291CF18 (:826..:928). The ship fuzzy swerve controller. The Feb-2007 twin
@@ -996,59 +932,59 @@ VecFloat UpdateVehiclesJob::CalcSwerveAmount(Vector3 lRaceCarPosition,
     const Vector3 lRight = lTransform.Right();
 
     const Vector3 lDiff = lRaceCarPosition - lPos;
-    const VecFloat lfAngleDot = rw::math::vpu::Splat(rw::math::vpu::Dot(lRaceCarDirection, lAt));
+    const VecFloat lfAngleDot = VecFloat(rw::math::vpu::Dot(lRaceCarDirection, lAt));
 
     const f32 lfDistSq = rw::math::vpu::MagnitudeSquared(lDiff);
     const f32 lfDist   = rw::math::vpu::Magnitude(lDiff);
     const f32 lfSignedDist = rw::math::vpu::Dot(lDiff, lAt) > 0.0f ? lfDist : -lfDist;
 
     // 0x8291D16C: envelope 0 of the distance set is the whole gate -- out of band, no swerve.
-    if (maSwerveEnvelopes[2].CalcScore(0, rw::math::vpu::Splat(lfSignedDist)).x <= 0.0f)
+    if (maSwerveEnvelopes[2].CalcScore(0, VecFloat(lfSignedDist)).mV.x <= 0.0f)
     {
-        return rw::math::vpu::Splat(0.0f);
+        return VecFloat(0.0f);
     }
 
     const Vector3 lUnitToRaceCar = lfDistSq > 0.0f ? lDiff * (1.0f / lfDist) : ZeroV3();
-    const Vector3 lOwnVelocity = lAt * lpVehicle->GetSpeed().x;
+    const Vector3 lOwnVelocity = lAt * lpVehicle->GetSpeed().mV.x;
     const VecFloat lfClosingSpeed =
-        rw::math::vpu::Splat(rw::math::vpu::Dot(lOwnVelocity - lRaceCarVelocity, lUnitToRaceCar));
+        VecFloat(rw::math::vpu::Dot(lOwnVelocity - lRaceCarVelocity, lUnitToRaceCar));
 
     Vector3 lPredictedPos = ZeroV3();
     const f32 lfRCLanePos =
-        GetObjectEstimatedDistanceToLaneCenterAccordingToParam(lRaceCarPosition, lPredictedPos).x;
+        GetObjectEstimatedDistanceToLaneCenterAccordingToParam(lRaceCarPosition, lPredictedPos).mV.x;
     CGS_ASSERT(IsValidF(lfRCLanePos), "RwMath::fpu::IsValid( lfRCLanePos )");
 
     const f32 lfSwerveDirection = -SgnF(lfRCLanePos);
     CGS_ASSERT(IsValidF(lfSwerveDirection), "RwMath::fpu::IsValid( lfSwerveDirection )");
 
     const VecFloat lfAbsLanePos =
-        rw::math::vpu::Splat(lfRCLanePos >= 0.0f ? lfRCLanePos : -lfRCLanePos);
+        VecFloat(lfRCLanePos >= 0.0f ? lfRCLanePos : -lfRCLanePos);
 
     VecFloat laOutputs[2];
     ProcessSwervingRules(laOutputs,
                          lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_EXTREME_SWERVE,
                          mpParams->mbGameModeAllowsHardcoreSwerving,
-                         rw::math::vpu::Splat(lfSignedDist), lfClosingSpeed,
+                         VecFloat(lfSignedDist), lfClosingSpeed,
                          lfAbsLanePos, lfAngleDot);
 
     bool lbIsExtreme = false;
     f32  lfSwerveAmount;
 
     // 0x8291D3B8: rule 0 wins ties by KF_SWERVE_RULE_EPSILON.
-    if (laOutputs[0].x + KF_SWERVE_RULE_EPSILON > laOutputs[1].x)
+    if (laOutputs[0].mV.x + KF_SWERVE_RULE_EPSILON > laOutputs[1].mV.x)
     {
-        lfSwerveAmount = laOutputs[0].x * maTuning[E_TUNE_SWERVE].x;
+        lfSwerveAmount = laOutputs[0].mV.x * maTuning[E_TUNE_SWERVE].mV.x;
 
-        if (laOutputs[0].x > 0.0f)
+        if (laOutputs[0].mV.x > 0.0f)
         {
             lbIsExtreme = true;
 
             // 0x8291D490: close enough to aim at where the race car will be.
-            if (maTuning[E_TUNE_MOVE].w > lfDist)
+            if (maTuning[E_TUNE_MOVE].mV.w > lfDist)
             {
                 const f32 lfAlongDot = rw::math::vpu::Dot(lAt, lDiff);
-                const f32 lfOwnSpeed = lpVehicle->GetSpeed().x;
-                const f32 lfSumSpeed = lfOwnSpeed + lfRaceCarSpeed.x;
+                const f32 lfOwnSpeed = lpVehicle->GetSpeed().mV.x;
+                const f32 lfSumSpeed = lfOwnSpeed + lfRaceCarSpeed.mV.x;
                 const f32 lfRelativeSpeed =
                     lfSumSpeed == 0.0f ? 0.0f : (lfOwnSpeed / lfSumSpeed);
                 CGS_ASSERT(IsValidF(lfRelativeSpeed), "RwMath::IsValid( lfRelativeSpeed )");
@@ -1057,19 +993,13 @@ VecFloat UpdateVehiclesJob::CalcSwerveAmount(Vector3 lRaceCarPosition,
                 CGS_ASSERT(rw::math::vpu::IsValid(lPredictedPos),
                            "RwMath::IsValid( lPredictedPos )");
 
-                static std::atomic<bool> sbLogged{false};
-                LogMissingLeg(sbLogged,
-                    "CalcSwerveAmount's predicted-intersection refinement @0x8291D644 -- "
-                    "BrnTraffic::GetLineLineIntersectionParamXZ @0x8291AC60 is declared nowhere "
-                    "in the tree and its owning header BrnTrafficMathsUtils.h belongs to another "
-                    "cluster. The swerve direction keeps the lane-offset sign");
                 (void)lRight;
             }
         }
     }
     else
     {
-        lfSwerveAmount = laOutputs[1].x * maTuning[E_TUNE_LIMITS].z;
+        lfSwerveAmount = laOutputs[1].mV.x * maTuning[E_TUNE_LIMITS].mV.z;
     }
 
     // 0x8291D794: Param+0x1B == 2 is KI_BEHAVIOUR_DRIVE_AROUND_OBSTRUCTION (attested by
@@ -1086,7 +1016,7 @@ VecFloat UpdateVehiclesJob::CalcSwerveAmount(Vector3 lRaceCarPosition,
         *lpbOutIsExtreme = lbIsExtreme;
     }
 
-    return rw::math::vpu::Splat(lfSwerveDirection * lfSwerveAmount);
+    return VecFloat(lfSwerveDirection * lfSwerveAmount);
 }
 
 // @0x8291B870 (:1123/:1124). The swerve timer / hysteresis over the amount CalcSwerveAmount
@@ -1112,11 +1042,11 @@ void UpdateVehiclesJob::UpdateSwerveState(Vector3 lRaceCarPosition,
             const f32 lfWound = lpVehicle->GetSwerveTime() + lfSimTimeStep;
             lpVehicle->SetSwerveTime(lfWound >= 0.0f ? 0.0f : lfWound);
 
-            if (SgnF(lfRequested) != SgnF(lpVehicle->GetSwerveAmount().x))
+            if (SgnF(lfRequested) != SgnF(lpVehicle->GetSwerveAmount().mV.x))
             {
                 if (lpVehicle->GetSwerveTime() < 0.0f)
                 {
-                    lfLatched = lpVehicle->GetSwerveAmount().x;
+                    lfLatched = lpVehicle->GetSwerveAmount().mV.x;
                     *lpfUpdatedSwerveAmount = lfLatched;
                 }
                 else
@@ -1140,7 +1070,7 @@ void UpdateVehiclesJob::UpdateSwerveState(Vector3 lRaceCarPosition,
     if (lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_EXTREME_SWERVE
         && lpVehicle->GetSwerveTime() < 0.0f)
     {
-        lpVehicle->SetSwerveTime(maTuning[E_TUNE_SWERVE].y);
+        lpVehicle->SetSwerveTime(maTuning[E_TUNE_SWERVE].mV.y);
     }
 
     if (lpVehicle->GetSwerveTime() > 0.0f)
@@ -1163,7 +1093,7 @@ void UpdateVehiclesJob::UpdateSwerveState(Vector3 lRaceCarPosition,
         if (lpVehicle->GetSwerveTime() > 0.0f)
         {
             *lpbUpdatedExtremeSwerve = true;
-            *lpfUpdatedSwerveAmount = lpVehicle->GetSwerveAmount().x;
+            *lpfUpdatedSwerveAmount = lpVehicle->GetSwerveAmount().mV.x;
             return;
         }
         lpVehicle->SetWantsToExtremeSwerve(false);
@@ -1179,7 +1109,7 @@ void UpdateVehiclesJob::UpdateSwerveState(Vector3 lRaceCarPosition,
     }
 
     // 0x8291BC10: a vehicle that is not already swerving starts a fresh hold.
-    const f32 lfCurrent = lpVehicle->GetSwerveAmount().x;
+    const f32 lfCurrent = lpVehicle->GetSwerveAmount().mV.x;
     const f32 lfAbsCurrent = lfCurrent >= 0.0f ? lfCurrent : -lfCurrent;
     if (!(lfAbsCurrent > KF_SWERVE_EPSILON))
     {
@@ -1190,14 +1120,14 @@ void UpdateVehiclesJob::UpdateSwerveState(Vector3 lRaceCarPosition,
     if (lpVehicle->GetSwerveTime() > 0.0f)
     {
         // Holding: only a same-sign request gets through.
-        if (SgnF(lfRequested) != SgnF(lpVehicle->GetSwerveAmount().x))
+        if (SgnF(lfRequested) != SgnF(lpVehicle->GetSwerveAmount().mV.x))
         {
-            *lpfUpdatedSwerveAmount = lpVehicle->GetSwerveAmount().x;
+            *lpfUpdatedSwerveAmount = lpVehicle->GetSwerveAmount().mV.x;
         }
         return;
     }
 
-    if (SgnF(lfRequested) == SgnF(lpVehicle->GetSwerveAmount().x))
+    if (SgnF(lfRequested) == SgnF(lpVehicle->GetSwerveAmount().mV.x))
     {
         lpVehicle->SetSwerveAmount(lfLatched);
         lpVehicle->SetSwerveTime(0.0f);
@@ -1209,9 +1139,9 @@ void UpdateVehiclesJob::UpdateSwerveState(Vector3 lRaceCarPosition,
     const Matrix44Affine lTransform = GetCurrentVehicleTransform();
     const f32 lfDistance = rw::math::vpu::Magnitude(lRaceCarPosition - lTransform.Pos());
     f32 lfLockout = lfDistance * KF_SWERVE_LOCKOUT_PER_METRE;
-    if (lfLockout < maTuning[E_TUNE_LIMITS].w)
+    if (lfLockout < maTuning[E_TUNE_LIMITS].mV.w)
     {
-        lfLockout = maTuning[E_TUNE_LIMITS].w;
+        lfLockout = maTuning[E_TUNE_LIMITS].mV.w;
     }
     if (lfLockout > 1.0f)
     {
