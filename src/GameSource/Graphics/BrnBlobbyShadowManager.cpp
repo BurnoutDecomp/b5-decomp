@@ -101,66 +101,37 @@ namespace
 {
     // DWARF :25 -- X360 unk_82FAEFB0 (init @0x82C4ED48). A 3 cm lift on the Y axis, added to
     // the shadow transform's translation row so the quad does not z-fight with the road.
-    const Vector3 kvShadowOffset = { 0.0f, 0.03f, 0.0f, 0.0f };
+    const Vector3 kvShadowOffset(0.0f, 0.03f, 0.0f);
 
     // DWARF :26 -- X360 unk_82FAF0E0 (init @0x82C4ED88), broadcast 1.25f.
     // A car more than 1.25 m off the ground casts no blobby shadow.
-    const VecFloat kfAmbientShadowFadeDistance = { 1.25f, 1.25f, 1.25f, 1.25f };
+    const rw::math::vpu::VecFloat kfAmbientShadowFadeDistance(Vector4(1.25f, 1.25f, 1.25f, 1.25f).mV);
 
     // DWARF :27 -- X360 unk_82FAFBF0 (init @0x82C4EDB0), broadcast 0.4f. Render below
     // multiplies this spread factor by the clamped height fade for the outer shadow edges.
-    const VecFloat kfAmbientShadowScaleFactor = { 0.4f, 0.4f, 0.4f, 0.4f };
+    const rw::math::vpu::VecFloat kfAmbientShadowScaleFactor(Vector4(0.4f, 0.4f, 0.4f, 0.4f).mV);
 }
 
 bool BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow(
     const Matrix44Affine& lShadowTransform,
-    const Vector4&        lvFwdLength_RearLength_BackAxle_FrontAxle,
-    VecFloat              lfWidth,
-    VecFloat              lfHeightOffGround)
+    const Vector4 lvFwdLength_RearLength_BackAxle_FrontAxle,
+    rw::math::vpu::VecFloat lfWidth,
+    rw::math::vpu::VecFloat lfHeightOffGround)
 {
-    // Buffer full -> reject (X360: cmpwi count, 0x40 ; bge -> return 0).
     if (miNumShadows >= KI_MAX_SHADOWS)
-    {
         return false;
-    }
-
-    // Fade-distance reject (vcmpgtfp. v3 > kfAmbientShadowFadeDistance, then CR6[0] ==
-    // "all four lanes greater"). lfHeightOffGround is a broadcast VecFloat so this reduces to
-    // the scalar test height > 1.25 m, but the conjunction is spelled out to match the asm.
-    // The X360 returns TRUE here -- the shadow is skipped, not an error.
-    if (lfHeightOffGround.x > kfAmbientShadowFadeDistance.x &&
-        lfHeightOffGround.y > kfAmbientShadowFadeDistance.y &&
-        lfHeightOffGround.z > kfAmbientShadowFadeDistance.z &&
-        lfHeightOffGround.w > kfAmbientShadowFadeDistance.w)
-    {
+    unsigned int luCompare;
+    __vcmpgtfpR(lfHeightOffGround.mV, kfAmbientShadowFadeDistance.mV, &luCompare);
+    if ((luCompare & 0x80u) != 0)
         return true;
-    }
 
-    // Accepted: fill slot[count] from the incoming transform/extents, then bump the count.
-    // Field order below follows the X360 store order.
     ShadowStruct& lSlot = maShadowPos[miNumShadows];
-
-    // mvPos = the transform's translation row lifted by kvShadowOffset (vaddfp, all four lanes).
-    lSlot.mvPos.x = lShadowTransform.wAxis.x + kvShadowOffset.x;
-    lSlot.mvPos.y = lShadowTransform.wAxis.y + kvShadowOffset.y;
-    lSlot.mvPos.z = lShadowTransform.wAxis.z + kvShadowOffset.z;
-    lSlot.mvPos.w = lShadowTransform.wAxis.w + kvShadowOffset.w;
-
-    // mvAt = the transform's projection ("at") axis, copied whole.
-    lSlot.mvAt = lShadowTransform.zAxis;
-
-    // mvScaledRight_HeightOffGround = right axis scaled by lfWidth (a broadcast, so the lanewise
-    // vmulfp128 is a uniform scale), with the height off ground packed into the w lane
-    // (DWARF SetVector3 + SetPlus == the two vrlimi128 inserts, the first of which is dead).
-    lSlot.mvScaledRight_HeightOffGround.x = lShadowTransform.xAxis.x * lfWidth.x;
-    lSlot.mvScaledRight_HeightOffGround.y = lShadowTransform.xAxis.y * lfWidth.y;
-    lSlot.mvScaledRight_HeightOffGround.z = lShadowTransform.xAxis.z * lfWidth.z;
-    lSlot.mvScaledRight_HeightOffGround.w = lfHeightOffGround.w;
-
-    // mvFront_Rear_BackAxle_FrontAxle = the packed extents, stored VERBATIM (stvx128 v1).
-    lSlot.mvFront_Rear_BackAxle_FrontAxle = lvFwdLength_RearLength_BackAxle_FrontAxle;
-
-    ++miNumShadows;   // *this = count + 1
+    lSlot.mvPos.mV = __vaddfp(lShadowTransform.wAxis.mV, kvShadowOffset.mV);
+    lSlot.mvAt.mV = lShadowTransform.zAxis.mV;
+    lSlot.mvScaledRight_HeightOffGround.mV = __vrlimi(
+        __vmulfp(lShadowTransform.xAxis.mV, lfWidth.mV), lfHeightOffGround.mV, 1, 0);
+    lSlot.mvFront_Rear_BackAxle_FrontAxle.mV = lvFwdLength_RearLength_BackAxle_FrontAxle.mV;
+    ++miNumShadows;
     return true;
 }
 
@@ -209,62 +180,31 @@ void BrnBlobbyShadowManager::Render(Matrix44 lViewProjection,
     for (s32 liShadow = 0; liShadow < lInternalBuffer.miNumShadows; ++liShadow)
     {
         const BrnBlobbyShadowBuffer::ShadowStruct& lShadow = lInternalBuffer.maShadowPos[liShadow];
-        f32 lfFade = lShadow.mvScaledRight_HeightOffGround.w
-                   * (1.0f / kfAmbientShadowFadeDistance.x);
+        f32 lfFade = lShadow.mvScaledRight_HeightOffGround.mV.w
+                   * (1.0f / kfAmbientShadowFadeDistance.mV.x);
         if (lfFade < 0.0f) lfFade = 0.0f;
         if (lfFade > 1.0f) lfFade = 1.0f;
 
         // ARTIST vmadd order: scaled direction * spread + position for outer anchors;
         // axle anchors use the unscaled extents. All four CPU lanes are retained; the existing
         // ImRenderer GPU stream consumes xyz.
-        const f32 lfSpread = 1.0f + kfAmbientShadowScaleFactor.x * lfFade;
-        const Vector3 lFrontDirection = {
-            lShadow.mvAt.x * lShadow.mvFront_Rear_BackAxle_FrontAxle.x,
-            lShadow.mvAt.y * lShadow.mvFront_Rear_BackAxle_FrontAxle.x,
-            lShadow.mvAt.z * lShadow.mvFront_Rear_BackAxle_FrontAxle.x,
-            lShadow.mvAt.w * lShadow.mvFront_Rear_BackAxle_FrontAxle.x,
-        };
-        const Vector3 lRearDirection = {
-            lShadow.mvAt.x * lShadow.mvFront_Rear_BackAxle_FrontAxle.y,
-            lShadow.mvAt.y * lShadow.mvFront_Rear_BackAxle_FrontAxle.y,
-            lShadow.mvAt.z * lShadow.mvFront_Rear_BackAxle_FrontAxle.y,
-            lShadow.mvAt.w * lShadow.mvFront_Rear_BackAxle_FrontAxle.y,
-        };
-        const Vector3 lFrontOuter = {
-            lFrontDirection.x * lfSpread + lShadow.mvPos.x,
-            lFrontDirection.y * lfSpread + lShadow.mvPos.y,
-            lFrontDirection.z * lfSpread + lShadow.mvPos.z,
-            lFrontDirection.w * lfSpread + lShadow.mvPos.w,
-        };
-        const Vector3 lRearOuter = {
-            lRearDirection.x * lfSpread + lShadow.mvPos.x,
-            lRearDirection.y * lfSpread + lShadow.mvPos.y,
-            lRearDirection.z * lfSpread + lShadow.mvPos.z,
-            lRearDirection.w * lfSpread + lShadow.mvPos.w,
-        };
-        const Vector3 lFrontAxle = {
-            lShadow.mvAt.x * lShadow.mvFront_Rear_BackAxle_FrontAxle.w + lShadow.mvPos.x,
-            lShadow.mvAt.y * lShadow.mvFront_Rear_BackAxle_FrontAxle.w + lShadow.mvPos.y,
-            lShadow.mvAt.z * lShadow.mvFront_Rear_BackAxle_FrontAxle.w + lShadow.mvPos.z,
-            lShadow.mvAt.w * lShadow.mvFront_Rear_BackAxle_FrontAxle.w + lShadow.mvPos.w,
-        };
-        const Vector3 lBackAxle = {
-            lShadow.mvAt.x * lShadow.mvFront_Rear_BackAxle_FrontAxle.z + lShadow.mvPos.x,
-            lShadow.mvAt.y * lShadow.mvFront_Rear_BackAxle_FrontAxle.z + lShadow.mvPos.y,
-            lShadow.mvAt.z * lShadow.mvFront_Rear_BackAxle_FrontAxle.z + lShadow.mvPos.z,
-            lShadow.mvAt.w * lShadow.mvFront_Rear_BackAxle_FrontAxle.z + lShadow.mvPos.w,
-        };
-        const Vector3 lScaledRight = {
-            lShadow.mvScaledRight_HeightOffGround.x * lfSpread,
-            lShadow.mvScaledRight_HeightOffGround.y * lfSpread,
-            lShadow.mvScaledRight_HeightOffGround.z * lfSpread,
-            lShadow.mvScaledRight_HeightOffGround.w * lfSpread,
-        };
+        const Vector4 lvFade(lfFade, lfFade, lfFade, lfFade);
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lvSpread = __vmaddfp(kfAmbientShadowScaleFactor.mV, lvFade.mV, lvOne);
+        const __vector4 lvExtents = lShadow.mvFront_Rear_BackAxle_FrontAxle.mV;
+        const __vector4 lvAt = lShadow.mvAt.mV;
+        const __vector4 lvPosition = lShadow.mvPos.mV;
+        const __vector4 lvFrontDirection = __vmulfp(lvAt, __vspltw(lvExtents, 0));
+        const __vector4 lvRearDirection = __vmulfp(lvAt, __vspltw(lvExtents, 1));
+        const Vector3 lFrontOuter(__vmaddfp(lvFrontDirection, lvSpread, lvPosition));
+        const Vector3 lRearOuter(__vmaddfp(lvRearDirection, lvSpread, lvPosition));
+        const Vector3 lFrontAxle(__vmaddfp(lvAt, __vspltw(lvExtents, 3), lvPosition));
+        const Vector3 lBackAxle(__vmaddfp(lvAt, __vspltw(lvExtents, 2), lvPosition));
+        const __vector4 lvScaledRight = __vmulfp(lShadow.mvScaledRight_HeightOffGround.mV, lvSpread);
         const Vector3 laCentres[8] = {
             lFrontOuter, lFrontOuter, lFrontAxle, lFrontAxle,
             lBackAxle, lBackAxle, lRearOuter, lRearOuter,
         };
-        const f32 laSide[8] = {-1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f};
         const s32 liAlpha = static_cast<s32>(lfMaxOpacity - lfMaxOpacity * lfFade); // fctiwz truncation
         const u8 luAlpha = static_cast<u8>(liAlpha);
 
@@ -272,11 +212,9 @@ void BrnBlobbyShadowManager::Render(Matrix44 lViewProjection,
         {
             CgsGraphics::BasicColouredTexturedVertex& lVertex = laVertices[luVertex];
             const Vector3& lCentre = laCentres[luVertex];
-            const f32 lfSide = laSide[luVertex];
-            lVertex.mv3Pos.x = lCentre.x + lfSide * lScaledRight.x;
-            lVertex.mv3Pos.y = lCentre.y + lfSide * lScaledRight.y;
-            lVertex.mv3Pos.z = lCentre.z + lfSide * lScaledRight.z;
-            lVertex.mv3Pos.w = lCentre.w + lfSide * lScaledRight.w;
+            lVertex.mv3Pos.mV = (luVertex & 1)
+                ? __vaddfp(lCentre.mV, lvScaledRight)
+                : __vsubfp(lCentre.mV, lvScaledRight);
             const CgsGraphics::RGBA8 colour = {luWhite, luWhite, luWhite, luAlpha};
             lVertex.mv4Colour = colour;
             lVertex.mv2Tex0UV.x = laTexCoords[luVertex][0];
