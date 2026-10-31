@@ -9,7 +9,6 @@
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"      // BrnGui::GuiEventShowHideSatNav (the 213 payload)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"            // BrnGui::GuiAudioTriggerEvent (SetZoom's zoom cue)
 
-#include "rw/math/vpu/vector4_operation.h"          // rw::math::vpu::Magnitude (the Construct assert)
 #include "rw/math/vpu/vector2_operation.h"          // rw::math::vpu::Magnitude (SnapToLocation cpp:405)
 
 #include <cmath>                                    // ::fabsf (ApplyZoom's zoom-delta test)
@@ -213,15 +212,13 @@ namespace BrnGui
 
         // The padding rect, taken into device space corner by corner (see the banner).
         const Matrix33 lm33DeviceSpace = MapTransform::GetDeviceSpace();
-        const Vector2  lv2PaddingMin   = { mv4PaddingRect.x, mv4PaddingRect.y, 0.0f, 0.0f };
-        const Vector2  lv2PaddingMax   = { mv4PaddingRect.z, mv4PaddingRect.w, 0.0f, 0.0f };
-        const Vector2  lv2DisplayMin   = MapTransform::Transform(lv2PaddingMin, lm33DeviceSpace);
-        const Vector2  lv2DisplayMax   = MapTransform::Transform(lv2PaddingMax, lm33DeviceSpace);
-
-        mv4DisplayRect.x = lv2DisplayMin.x;
-        mv4DisplayRect.y = lv2DisplayMin.y;
-        mv4DisplayRect.z = lv2DisplayMax.x;
-        mv4DisplayRect.w = lv2DisplayMax.y;
+        Vector2 lv2PaddingMin;
+        Vector2 lv2PaddingMax;
+        lv2PaddingMin.mV = __vpermwi(mv4PaddingRect.mV, VPERMWI_CONST(0, 1, 0, 0));
+        lv2PaddingMax.mV = __vpermwi(mv4PaddingRect.mV, VPERMWI_CONST(2, 3, 2, 2));
+        const Vector2 lv2DisplayMin = MapTransform::Transform(lv2PaddingMin, lm33DeviceSpace);
+        const Vector2 lv2DisplayMax = MapTransform::Transform(lv2PaddingMax, lm33DeviceSpace);
+        mv4DisplayRect.mV = __vrlimi(lv2DisplayMin.mV, lv2DisplayMax.mV, 3, 2);
 
         mv4WorldRect = MapTransform::GetWorldRect();
 
@@ -275,13 +272,11 @@ namespace BrnGui
 
         const Vector4& lrv4WorldRect = MapTransform::GetWorldRect();
 
-        const f32 lfCentreX = (lrv4WorldRect.x + lrv4WorldRect.z) * KF_RECT_CENTRE_SCALE;
-        const f32 lfCentreY = (lrv4WorldRect.y + lrv4WorldRect.w) * KF_RECT_CENTRE_SCALE;
-
-        mv2DesiredCentre.x = lfCentreX;
-        mv2DesiredCentre.y = lfCentreY;
-        mv2DesiredCentre.z = lfCentreX;   // vperm lane 2 -- the console's duplicated x
-        mv2DesiredCentre.w = lfCentreX;   // vperm lane 3 -- ditto
+        const __vector4 lvRect = lrv4WorldRect.mV;
+        const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+        const __vector4 lvCentreX = __vmulfp(__vaddfp(__vspltw(lvRect, 0), __vspltw(lvRect, 2)), lvHalf);
+        const __vector4 lvCentreY = __vmulfp(__vaddfp(__vspltw(lvRect, 1), __vspltw(lvRect, 3)), lvHalf);
+        mv2DesiredCentre.mV = __vrlimi(lvCentreX, lvCentreY, 4, 0);
 
         return true;
     }
@@ -449,10 +444,11 @@ namespace BrnGui
 
         // mv4WorldRect = mv4ViewRect * <the still-current scale>, then the z lane alone
         // scaled by the 16:9 aspect (see the vperm note in the banner).
-        mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
-        mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
-        mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * KF_WORLD_RECT_ASPECT;
-        mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
+        const Vector4 lv4Scale(mfWorldZoomScaleFactor, mfWorldZoomScaleFactor,
+                               mfWorldZoomScaleFactor, mfWorldZoomScaleFactor);
+        const Vector4 lv4Aspect(KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT);
+        const __vector4 lvScaledRect = __vmulfp(mv4ViewRect.mV, lv4Scale.mV);
+        mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
         // cpp:461 -- same guard Construct fires, on the rect this function just installed.
         CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
@@ -491,22 +487,15 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     Vector2 MainMapComponent::CalculateViewPaddingOffset()
     {
-        // `lvx128 v13, r0, this+0x620` == mv4ViewRect; `... this+0x630` == mv4PaddingRect.
-        const f32 lfViewCentreX =
-            mv4ViewRect.x + (mv4ViewRect.z - mv4ViewRect.x) * KF_RECT_CENTRE_SCALE;
-        const f32 lfViewCentreY =
-            mv4ViewRect.y + (mv4ViewRect.w - mv4ViewRect.y) * KF_RECT_CENTRE_SCALE;
-
-        const f32 lfPaddingCentreX =
-            mv4PaddingRect.x + (mv4PaddingRect.z - mv4PaddingRect.x) * KF_RECT_CENTRE_SCALE;
-        const f32 lfPaddingCentreY =
-            mv4PaddingRect.y + (mv4PaddingRect.w - mv4PaddingRect.y) * KF_RECT_CENTRE_SCALE;
-
+        const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+        const __vector4 lvViewMin = __vpermwi(mv4ViewRect.mV, VPERMWI_CONST(0, 1, 0, 1));
+        const __vector4 lvViewMax = __vpermwi(mv4ViewRect.mV, VPERMWI_CONST(2, 3, 2, 3));
+        const __vector4 lvPadMin = __vpermwi(mv4PaddingRect.mV, VPERMWI_CONST(0, 1, 0, 1));
+        const __vector4 lvPadMax = __vpermwi(mv4PaddingRect.mV, VPERMWI_CONST(2, 3, 2, 3));
+        const __vector4 lvViewCentre = __vmaddfp(__vsubfp(lvViewMax, lvViewMin), lvHalf, lvViewMin);
+        const __vector4 lvPadCentre = __vmaddfp(__vsubfp(lvPadMax, lvPadMin), lvHalf, lvPadMin);
         Vector2 lv2Offset;
-        lv2Offset.x = lfViewCentreX - lfPaddingCentreX;
-        lv2Offset.y = lfViewCentreY - lfPaddingCentreY;
-        lv2Offset.z = 0.0f;   // the console's explicit `std` of the z/w pair
-        lv2Offset.w = 0.0f;
+        lv2Offset.mV = __vrlimi(__vsubfp(lvViewCentre, lvPadCentre), __vspltisw(0), 3, 0);
         return lv2Offset;
     }
 
@@ -566,46 +555,46 @@ namespace BrnGui
             MapTransform::Transform(lv2Padding, MapTransform::GetNormalisedRect(), mv4WorldRect);
 
         // ---- the X axis ----
-        const f32 lfWidth = mv4WorldRect.z - mv4WorldRect.x;
-        mv4WorldRect.x = lv2Centre.x - lfWidth * KF_RECT_CENTRE_SCALE;
+        const f32 lfWidth = mv4WorldRect.mV.z - mv4WorldRect.mV.x;
+        mv4WorldRect.mV.x = lv2Centre.mV.x - lfWidth * KF_RECT_CENTRE_SCALE;
 
         if (mbStickMapLeft)
         {
-            const f32 lfMinX = lrv4FixedWorldRect.x + lv2PaddingWorld.x;
-            mv4WorldRect.x = (mv4WorldRect.x - lfMinX >= 0.0f) ? mv4WorldRect.x : lfMinX;
+            const f32 lfMinX = lrv4FixedWorldRect.mV.x + lv2PaddingWorld.mV.x;
+            mv4WorldRect.mV.x = static_cast<f32>(__fsel(mv4WorldRect.mV.x - lfMinX, mv4WorldRect.mV.x, lfMinX));
         }
         if (mbStickMapRight)
         {
-            const f32 lfMaxX = lrv4FixedWorldRect.z - lfWidth;
-            mv4WorldRect.x = (mv4WorldRect.x - lfMaxX >= 0.0f) ? lfMaxX : mv4WorldRect.x;
+            const f32 lfMaxX = lrv4FixedWorldRect.mV.z - lfWidth;
+            mv4WorldRect.mV.x = static_cast<f32>(__fsel(mv4WorldRect.mV.x - lfMaxX, lfMaxX, mv4WorldRect.mV.x));
         }
-        mv4WorldRect.z = mv4WorldRect.x + lfWidth;
+        mv4WorldRect.mV.z = mv4WorldRect.mV.x + lfWidth;
 
         // ---- the Y axis (the height is measured after the .z rebuild, as the asm does) ----
-        const f32 lfHeight = mv4WorldRect.w - mv4WorldRect.y;
-        mv4WorldRect.y = lv2Centre.y - lfHeight * KF_RECT_CENTRE_SCALE;
+        const f32 lfHeight = mv4WorldRect.mV.w - mv4WorldRect.mV.y;
+        mv4WorldRect.mV.y = lv2Centre.mV.y - lfHeight * KF_RECT_CENTRE_SCALE;
 
         if (mbStickMapUp)
         {
-            const f32 lfMinY = lrv4FixedWorldRect.y + lv2PaddingWorld.y;
-            mv4WorldRect.y = (mv4WorldRect.y - lfMinY >= 0.0f) ? mv4WorldRect.y : lfMinY;
+            const f32 lfMinY = lrv4FixedWorldRect.mV.y + lv2PaddingWorld.mV.y;
+            mv4WorldRect.mV.y = static_cast<f32>(__fsel(mv4WorldRect.mV.y - lfMinY, mv4WorldRect.mV.y, lfMinY));
         }
         if (mbStickMapDown)
         {
-            const f32 lfMaxY = lrv4FixedWorldRect.w - lfHeight;
-            mv4WorldRect.y = (mv4WorldRect.y - lfMaxY >= 0.0f) ? lfMaxY : mv4WorldRect.y;
+            const f32 lfMaxY = lrv4FixedWorldRect.mV.w - lfHeight;
+            mv4WorldRect.mV.y = static_cast<f32>(__fsel(mv4WorldRect.mV.y - lfMaxY, lfMaxY, mv4WorldRect.mV.y));
         }
-        mv4WorldRect.w = mv4WorldRect.y + lfHeight;
+        mv4WorldRect.mV.w = mv4WorldRect.mV.y + lfHeight;
 
         // cpp:376 -- the same guard Construct / SetZoom fire, on the rect just installed.
         CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
                    "RwMathVPU::Magnitude(mv4WorldRect) < 1000000.0f");
 
         Vector2 lv2NewCentre;
-        lv2NewCentre.x = mv4WorldRect.x + (mv4WorldRect.z - mv4WorldRect.x) * KF_RECT_CENTRE_SCALE;
-        lv2NewCentre.y = mv4WorldRect.y + (mv4WorldRect.w - mv4WorldRect.y) * KF_RECT_CENTRE_SCALE;
-        lv2NewCentre.z = 0.0f;   // the console's explicit `std` of the z/w pair
-        lv2NewCentre.w = 0.0f;
+        lv2NewCentre.mV.x = mv4WorldRect.mV.x + (mv4WorldRect.mV.z - mv4WorldRect.mV.x) * KF_RECT_CENTRE_SCALE;
+        lv2NewCentre.mV.y = mv4WorldRect.mV.y + (mv4WorldRect.mV.w - mv4WorldRect.mV.y) * KF_RECT_CENTRE_SCALE;
+        lv2NewCentre.mV.z = 0.0f;   // the console's explicit `std` of the z/w pair
+        lv2NewCentre.mV.w = 0.0f;
         return lv2NewCentre;
     }
 
@@ -634,17 +623,11 @@ namespace BrnGui
 
         if (lePadding == E_OFFSETPADDING_IN)
         {
-            lv2Normalised.x += lv2Padding.x;
-            lv2Normalised.y += lv2Padding.y;
-            lv2Normalised.z += lv2Padding.z;   // whole-quadword vaddfp128
-            lv2Normalised.w += lv2Padding.w;
+            lv2Normalised.mV = __vaddfp(lv2Normalised.mV, lv2Padding.mV);
         }
         else
         {
-            lv2Normalised.x -= lv2Padding.x;
-            lv2Normalised.y -= lv2Padding.y;
-            lv2Normalised.z -= lv2Padding.z;
-            lv2Normalised.w -= lv2Padding.w;
+            lv2Normalised.mV = __vsubfp(lv2Normalised.mV, lv2Padding.mV);
         }
 
         return MapTransform::Transform(lv2Normalised,
@@ -692,10 +675,11 @@ namespace BrnGui
 
         // mv4WorldRect = mv4ViewRect * <the just-committed scale>, then the z lane alone
         // scaled by the 16:9 aspect (the lane-insert vperm; see the banner).
-        mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
-        mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
-        mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * KF_WORLD_RECT_ASPECT;
-        mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
+        const Vector4 lv4Scale(mfWorldZoomScaleFactor, mfWorldZoomScaleFactor,
+                               mfWorldZoomScaleFactor, mfWorldZoomScaleFactor);
+        const Vector4 lv4Aspect(KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT, KF_WORLD_RECT_ASPECT);
+        const __vector4 lvScaledRect = __vmulfp(mv4ViewRect.mV, lv4Scale.mV);
+        mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
         // cpp:405 -- a TWO-lane magnitude (the asm splats lanes 0 and 1 of the squared
         // register and adds them; z/w are never read), hence the Vector2 overload.
@@ -797,11 +781,13 @@ namespace BrnGui
             // `stb r23, 0x670(r30)` -- stepping the zoom IS a zoom in flight.
             mbIsZooming = true;
 
-            const f32 lfChase = 1.0f / KF_CENTRE_CHASE_DIVISOR_ZOOMING;
-            lv2Result.x = lv2WorldCentre.x + (mv2DesiredCentre.x - lv2WorldCentre.x) * lfChase;
-            lv2Result.y = lv2WorldCentre.y + (mv2DesiredCentre.y - lv2WorldCentre.y) * lfChase;
-            lv2Result.z = lv2WorldCentre.z + (mv2DesiredCentre.z - lv2WorldCentre.z) * lfChase;
-            lv2Result.w = lv2WorldCentre.w + (mv2DesiredCentre.w - lv2WorldCentre.w) * lfChase;
+            const __vector4 lvDivisor = __vcfsx(__vspltisw(4), 0);
+            const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+            __vector4 lvReciprocal = __vrefp(lvDivisor);
+            lvReciprocal = __vmaddfp(lvReciprocal, __vnmsubfp(lvDivisor, lvReciprocal, lvOne), lvReciprocal);
+            lvReciprocal = __vmaddfp(lvReciprocal, __vnmsubfp(lvDivisor, lvReciprocal, lvOne), lvReciprocal);
+            lv2Result.mV = __vmaddfp(__vsubfp(mv2DesiredCentre.mV, lv2WorldCentre.mV),
+                                     lvReciprocal, lv2WorldCentre.mV);
 
             // `b loc_8245F2C4` with r9 == 0: the commit block is SKIPPED while stepping.
             lbCommit = false;
@@ -810,10 +796,7 @@ namespace BrnGui
         {
             // ---- the zoom has settled; only the centre may still need to move ----
             Vector2 lv2ToDesired;
-            lv2ToDesired.x = mv2DesiredCentre.x - lv2WorldCentre.x;
-            lv2ToDesired.y = mv2DesiredCentre.y - lv2WorldCentre.y;
-            lv2ToDesired.z = mv2DesiredCentre.z - lv2WorldCentre.z;
-            lv2ToDesired.w = mv2DesiredCentre.w - lv2WorldCentre.w;
+            lv2ToDesired.mV = __vsubfp(mv2DesiredCentre.mV, lv2WorldCentre.mV);
 
             // The two-lane magnitude (the asm splats lanes 0 and 1 of the squared register
             // and adds them; z/w are never read), with the console's vsel zero-dot guard.
@@ -823,10 +806,11 @@ namespace BrnGui
                 // scaled by lfZoom -- the SAME lane-insert vperm SetZoom / SnapToLocation do
                 // (`lvx128 v7, r25, 0xA0` off the engine table at 0x8327F140 == lane 2 /
                 // source word 2 == "dest.z from src2.z").
-                mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
-                mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
-                mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * lfZoom;
-                mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
+                const Vector4 lv4Scale(mfWorldZoomScaleFactor, mfWorldZoomScaleFactor,
+                                       mfWorldZoomScaleFactor, mfWorldZoomScaleFactor);
+                const Vector4 lv4Aspect(lfZoom, lfZoom, lfZoom, lfZoom);
+                const __vector4 lvScaledRect = __vmulfp(mv4ViewRect.mV, lv4Scale.mV);
+                mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
                 // cpp:579 -- the shared four-lane guard on the rect just installed.
                 CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
@@ -835,11 +819,11 @@ namespace BrnGui
                 // The settled arm's chase divisor is 1.0f, i.e. the centre lands on the
                 // desired centre this frame (see the banner -- the reciprocal chain on a
                 // literal 1.0f is the shared helper being inlined).
-                const f32 lfChase = 1.0f / KF_CENTRE_CHASE_DIVISOR_SETTLED;
-                lv2Result.x = lv2WorldCentre.x + lv2ToDesired.x * lfChase;
-                lv2Result.y = lv2WorldCentre.y + lv2ToDesired.y * lfChase;
-                lv2Result.z = lv2WorldCentre.z + lv2ToDesired.z * lfChase;
-                lv2Result.w = lv2WorldCentre.w + lv2ToDesired.w * lfChase;
+                const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+                __vector4 lvReciprocal = __vrefp(lvOne);
+                lvReciprocal = __vmaddfp(lvReciprocal, __vnmsubfp(lvOne, lvReciprocal, lvOne), lvReciprocal);
+                lvReciprocal = __vmaddfp(lvReciprocal, __vnmsubfp(lvOne, lvReciprocal, lvOne), lvReciprocal);
+                lv2Result.mV = __vmaddfp(lv2ToDesired.mV, lvReciprocal, lv2WorldCentre.mV);
 
                 // The pad-in / reposition / pad-out chain. Its result feeds ONLY the
                 // convergence test below -- see the [FLAG dead-value] note in the banner.
@@ -847,10 +831,7 @@ namespace BrnGui
                 Vector2 lv2Normalised =
                     MapTransform::Transform(lv2Result, mv4WorldRect,
                                             MapTransform::GetNormalisedRect());
-                lv2Normalised.x += lv2PadIn.x;
-                lv2Normalised.y += lv2PadIn.y;
-                lv2Normalised.z += lv2PadIn.z;   // whole-quadword vaddfp128
-                lv2Normalised.w += lv2PadIn.w;
+                lv2Normalised.mV = __vaddfp(lv2Normalised.mV, lv2PadIn.mV);
                 const Vector2 lv2Padded =
                     MapTransform::Transform(lv2Normalised, MapTransform::GetNormalisedRect(),
                                             mv4WorldRect);
@@ -861,10 +842,7 @@ namespace BrnGui
                 Vector2 lv2Unpadded =
                     MapTransform::Transform(lv2Positioned, mv4WorldRect,
                                             MapTransform::GetNormalisedRect());
-                lv2Unpadded.x -= lv2PadOut.x;
-                lv2Unpadded.y -= lv2PadOut.y;
-                lv2Unpadded.z -= lv2PadOut.z;
-                lv2Unpadded.w -= lv2PadOut.w;
+                lv2Unpadded.mV = __vsubfp(lv2Unpadded.mV, lv2PadOut.mV);
                 const Vector2 lv2Settled =
                     MapTransform::Transform(lv2Unpadded, MapTransform::GetNormalisedRect(),
                                             mv4WorldRect);
@@ -872,10 +850,7 @@ namespace BrnGui
                 // `vsubfp128 v0, v1, v124` then the two-lane magnitude: how far the settled
                 // centre still is from the one the caller came in with.
                 Vector2 lv2Remaining;
-                lv2Remaining.x = lv2Settled.x - lv2WorldCentre.x;
-                lv2Remaining.y = lv2Settled.y - lv2WorldCentre.y;
-                lv2Remaining.z = lv2Settled.z - lv2WorldCentre.z;
-                lv2Remaining.w = lv2Settled.w - lv2WorldCentre.w;
+                lv2Remaining.mV = __vsubfp(lv2Settled.mV, lv2WorldCentre.mV);
 
                 // `stb r11, 0x670(r30)` takes the compare result directly, and the commit
                 // flag is its complement (`cntlzw` + `extrwi ...,1,26` @0x8245F2B8).
@@ -892,7 +867,10 @@ namespace BrnGui
             // `vrlimi128 v13, v123, 3, 2` on both operands before `vcmpeqfp.`: lanes 2 and 3
             // are overwritten with a 2-word rotation of the same register, so both sides
             // become {x, y, x, y} and the all-lanes compare is a pure 2D equality.
-            if (mv2DesiredCentre.x != lv2Result.x || mv2DesiredCentre.y != lv2Result.y)
+            unsigned int luEqual = 0;
+            __vcmpeqfpR(__vrlimi(mv2DesiredCentre.mV, mv2DesiredCentre.mV, 3, 2),
+                        __vrlimi(lv2Result.mV, lv2Result.mV, 3, 2), &luEqual);
+            if ((luEqual & 0x80) == 0)
             {
                 // The whole-quadword `stvx128 v123, r0, r26` -- i.e. SetDesiredWorldCentre.
                 SetDesiredWorldCentre(lv2Result);
@@ -927,10 +905,11 @@ namespace BrnGui
         // The unconditional tail: rebuild mv4WorldRect for whatever mfWorldZoomScaleFactor
         // now is (the commit block above may have just replaced it), with the same lane-insert
         // aspect scale on .z. `lfs f0, 0x660(r30)` is a FRESH read -- do not hoist it.
-        mv4WorldRect.x = mv4ViewRect.x * mfWorldZoomScaleFactor;
-        mv4WorldRect.y = mv4ViewRect.y * mfWorldZoomScaleFactor;
-        mv4WorldRect.z = mv4ViewRect.z * mfWorldZoomScaleFactor * lfZoom;
-        mv4WorldRect.w = mv4ViewRect.w * mfWorldZoomScaleFactor;
+        const Vector4 lv4Scale(mfWorldZoomScaleFactor, mfWorldZoomScaleFactor,
+                               mfWorldZoomScaleFactor, mfWorldZoomScaleFactor);
+        const Vector4 lv4Aspect(lfZoom, lfZoom, lfZoom, lfZoom);
+        const __vector4 lvScaledRect = __vmulfp(mv4ViewRect.mV, lv4Scale.mV);
+        mv4WorldRect.mV = __vrlimi(lvScaledRect, __vmulfp(lvScaledRect, lv4Aspect.mV), 2, 0);
 
         // cpp:645
         CGS_ASSERT(rw::math::vpu::Magnitude(mv4WorldRect) < KF_MAX_WORLD_RECT_MAGNITUDE,
@@ -999,10 +978,7 @@ namespace BrnGui
         const Vector2 lv2PadIn = CalculateViewPaddingOffset();
         Vector2 lv2Normalised =
             MapTransform::Transform(lv2Zoomed, mv4WorldRect, MapTransform::GetNormalisedRect());
-        lv2Normalised.x += lv2PadIn.x;
-        lv2Normalised.y += lv2PadIn.y;
-        lv2Normalised.z += lv2PadIn.z;   // whole-quadword vaddfp128
-        lv2Normalised.w += lv2PadIn.w;
+        lv2Normalised.mV = __vaddfp(lv2Normalised.mV, lv2PadIn.mV);
         const Vector2 lv2Padded =
             MapTransform::Transform(lv2Normalised, MapTransform::GetNormalisedRect(), mv4WorldRect);
 
@@ -1013,10 +989,10 @@ namespace BrnGui
         // ---- hand the tile manager the padded on-screen region, in world units ----
         // The padding rect lives in NORMALISED space, so each corner is transformed
         // normalised -> world against the rect CalculatePositionedWorldRect just installed.
-        const Vector2 lv2PaddingMin = { mv4PaddingRect.x, mv4PaddingRect.y,
-                                        mv4PaddingRect.x, mv4PaddingRect.x };
-        const Vector2 lv2PaddingMax = { mv4PaddingRect.z, mv4PaddingRect.w,
-                                        mv4PaddingRect.z, mv4PaddingRect.z };
+        Vector2 lv2PaddingMin;
+        Vector2 lv2PaddingMax;
+        lv2PaddingMin.mV = __vpermwi(mv4PaddingRect.mV, VPERMWI_CONST(0, 1, 0, 0));
+        lv2PaddingMax.mV = __vpermwi(mv4PaddingRect.mV, VPERMWI_CONST(2, 3, 2, 2));
         const Vector2 lv2TileMin = MapTransform::Transform(
             lv2PaddingMin, MapTransform::GetNormalisedRect(), mv4WorldRect);
         const Vector2 lv2TileMax = MapTransform::Transform(
@@ -1024,41 +1000,15 @@ namespace BrnGui
 
         // The {A.x, A.y, B.x, B.y} re-interleave, stored lane by lane through the console's
         // four scalar `stfs` at 0x82469874..0x82469880.
-        mMapManager.mWorldRect.mfLeft   = lv2TileMin.x;
-        mMapManager.mWorldRect.mfTop    = lv2TileMin.y;
-        mMapManager.mWorldRect.mfRight  = lv2TileMax.x;
-        mMapManager.mWorldRect.mfBottom = lv2TileMax.y;
+        mMapManager.mWorldRect.mfLeft   = lv2TileMin.mV.x;
+        mMapManager.mWorldRect.mfTop    = lv2TileMin.mV.y;
+        mMapManager.mWorldRect.mfRight  = lv2TileMax.mV.x;
+        mMapManager.mWorldRect.mfBottom = lv2TileMax.mV.y;
 
         if (mMapManager.mbEnabled)
         {
             mMapManager.CalculateCurrentTileSet();
             mMapManager.RefreshActiveTextureArray();
-        }
-
-        // [DIAG-TEMP] NOT IN THE X360 BINARY -- [map-pump] the per-frame map chain state.
-        {
-            static s32 siLeft = 12;
-            static s32 siFrame = 0;
-            ++siFrame;
-            if (siLeft > 0 && (siFrame % 60) == 1 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                --siLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[map-pump] f=" << siFrame
-                    << " enabled=" << static_cast<s32>(mMapManager.mbEnabled)
-                    << " active=" << static_cast<s32>(mbIsActive)
-                    << " maptype=" << static_cast<s32>(meMapType)
-                    << " lowres=" << (mMapManager.mLowResTexture.mpTextureState != 0 ? 1 : 0)
-                    << " texcount=" << static_cast<s32>(mMapManager.mActiveTextures.muTextureCount)
-                    << " dirs=" << (mMapManager.mapDirectories[0] != 0 ? 1 : 0)
-                    << "/" << (mMapManager.mapDirectories[1] != 0 ? 1 : 0)
-                    << " zoom=" << mfWorldZoomScaleFactor
-                    << " world=(" << mv4WorldRect.x << "," << mv4WorldRect.y
-                    << "," << mv4WorldRect.z << "," << mv4WorldRect.w << ")"
-                    << " view=(" << mv4ViewRect.x << "," << mv4ViewRect.y
-                    << "," << mv4ViewRect.z << "," << mv4ViewRect.w << ")"
-                    << "\n";
-            }
         }
 
         // The console re-reads the same byte rather than reusing the first test's register.
@@ -1081,12 +1031,12 @@ namespace BrnGui
 
         // ---- publish the zoomed spaces the icon / sat-nav layer reads ----
         // The three corners of mv4WorldRect, in MakeCoordSpaceFromPoints order.
-        const Vector2 lv2ZoomOrigin = { mv4WorldRect.x, mv4WorldRect.y,
-                                        mv4WorldRect.x, mv4WorldRect.x };
-        const Vector2 lv2ZoomXPoint = { mv4WorldRect.z, mv4WorldRect.y,
-                                        mv4WorldRect.z, mv4WorldRect.z };
-        const Vector2 lv2ZoomYPoint = { mv4WorldRect.x, mv4WorldRect.w,
-                                        mv4WorldRect.x, mv4WorldRect.x };
+        Vector2 lv2ZoomOrigin;
+        Vector2 lv2ZoomXPoint;
+        Vector2 lv2ZoomYPoint;
+        lv2ZoomOrigin.mV = __vpermwi(mv4WorldRect.mV, VPERMWI_CONST(0, 1, 0, 0));
+        lv2ZoomXPoint.mV = __vpermwi(mv4WorldRect.mV, VPERMWI_CONST(2, 1, 2, 2));
+        lv2ZoomYPoint.mV = __vpermwi(mv4WorldRect.mV, VPERMWI_CONST(0, 3, 0, 0));
         MapTransform::SetZoomedWorldRect(lv2ZoomOrigin, lv2ZoomXPoint, lv2ZoomYPoint);
         MapTransform::SetZoomedViewportRect(mv4ViewRect);
 
@@ -1094,10 +1044,7 @@ namespace BrnGui
         const Vector2 lv2PadOut = CalculateViewPaddingOffset();
         Vector2 lv2Unpadded =
             MapTransform::Transform(lv2Positioned, mv4WorldRect, MapTransform::GetNormalisedRect());
-        lv2Unpadded.x -= lv2PadOut.x;
-        lv2Unpadded.y -= lv2PadOut.y;
-        lv2Unpadded.z -= lv2PadOut.z;
-        lv2Unpadded.w -= lv2PadOut.w;
+        lv2Unpadded.mV = __vsubfp(lv2Unpadded.mV, lv2PadOut.mV);
 
         return MapTransform::Transform(lv2Unpadded, MapTransform::GetNormalisedRect(), mv4WorldRect);
     }
