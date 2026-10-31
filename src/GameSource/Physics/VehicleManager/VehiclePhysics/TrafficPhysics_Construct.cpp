@@ -81,14 +81,14 @@ namespace Vehicle
 
         mbFrozen = false;                       // +0x70  (ExternallySimulatedBody frame +0x60)
 
-        const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lvZero(0.0f, 0.0f, 0.0f);
         Reset(lvZero);
 
         // LANE-Z-ONLY insert, read-modify-write: `lvx128 v0 ; vrlimi128 v0,v127,2,0 ; stvx128 v0`.
         // Mask 2 is lane z under the 8/4/2/1 == x/y/z/w convention, and the PS3 twin does the same
         // lane with `vperm` over VectorPermuteConstant<0,1,6,3> (x, y, SECOND-operand z, w). Every
         // other lane of the register survives.
-        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.z = 0.0f;
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.mV.z = 0.0f;
 
         // +0x1400. The X360 INLINES CgsNumeric::Random::Construct here; the inline is that function
         // statement for statement -- default seed 0xC87CD8C91AD0891B, ring slot 0 set to exactly
@@ -154,13 +154,12 @@ namespace Vehicle
     {
         VehiclePhysics::SetCrashing();                                     // 0x8261E448
 
-        const f32 lfAlong = vpu::Dot(lDirection, mLinearVelocity);         // vmsum3fp128
-        const Vector3 lvPerpendicular =
-            vpu::Subtract(mLinearVelocity, vpu::Mult(lDirection, lfAlong)); // vsubfp
-        mLinearVelocity = lvPerpendicular;                                 // 0x8261E474
+        const __vector4 lvAlong = __vmsum3fp(lDirection.mV, mLinearVelocity.mV);
+        const __vector4 lvPerpendicular = __vsubfp(mLinearVelocity.mV, __vmulfp(lDirection.mV, lvAlong));
+        mLinearVelocity.mV = lvPerpendicular;                              // 0x8261E474
 
-        const f32 lfFloored = (lfAlong > lvfMinSpeedAlong.x) ? lfAlong : lvfMinSpeedAlong.x;   // vmaxfp
-        mLinearVelocity = vpu::Add(vpu::Mult(lDirection, lfFloored), lvPerpendicular);         // vmaddfp128
+        const __vector4 lvFloored = __vmaxfp(lvAlong, lvfMinSpeedAlong.mV);
+        mLinearVelocity.mV = __vmaddfp(lDirection.mV, lvFloored, lvPerpendicular); // 0x8261E478
     }
 
     void TrafficPhysics::SetFreakedOut(f32 lfDirection, f32 lfSeveritySpeedSquared)
@@ -169,7 +168,7 @@ namespace Vehicle
 
         EFreakOutState leState = E_FREAK_OUT_STATE_SPIN_OUT;
         if (lfSeveritySpeedSquared > KF_FREAKOUT_MIN_SEVERITY_SQUARED &&
-            mfSpeedMPH.x > KF_FREAKOUT_TURN_AND_ROLL_MIN_SPEED_MPH)
+            mfSpeedMPH.mV.x > KF_FREAKOUT_TURN_AND_ROLL_MIN_SPEED_MPH)
         {
             leState = E_FREAK_OUT_STATE_TURN_AND_ROLL;
         }
@@ -230,7 +229,7 @@ namespace Vehicle
 
         (void)lfUnused;   // the f2 slot is never read (its first mention is the FSM's own load)
 
-        const VecFloat lvfTimeStep = { lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep };
+        const VecFloat lvfTimeStep(lfTimeStep);
 
         // 0x826395A8..0x826395C8: the 72-byte control block, copied so the FSM's writes do not
         // corrupt the caller's input. The COPY is what feeds UpdateShunt/UpdateCrashing.
@@ -240,7 +239,7 @@ namespace Vehicle
         // --- the heavy-vehicle control halving (asm 0x826395CC..0x82639648) ---
         {
             const f32 lfMass =
-                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.x;
             if (lfMass > KF_TRAFFIC_CONTROL_HALVE_MASS)          // vcmpgtfp vs 5000.0
             {
                 lCopy.mfGas *= 0.5f;                             // flt_82001DA0
@@ -276,7 +275,7 @@ namespace Vehicle
             }
             // Both legs converge on loc_8263989C: full wheel friction + a ZEROED timer.
             {
-                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                const VecFloat lAggregateValue(1.0f);
                 mvfWheelFrictionLinearMultiplier = lAggregateValue;
             }   // +0xFD0
             lfNewFreakOutTime = 0.0f;                            // flt_82001CC0
@@ -286,7 +285,7 @@ namespace Vehicle
             // INITIAL -> SPIN_OUT immediately; if not already crashing, fire the crash virtual.
             mu8FreakOutState = E_FREAK_OUT_STATE_SPIN_OUT;       // stb 3 -> +0x13F4
             {
-                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                const VecFloat lAggregateValue(1.0f);
                 mvfWheelFrictionLinearMultiplier = lAggregateValue;
             }
             if (!IsCrashing())
@@ -300,8 +299,7 @@ namespace Vehicle
             lCopy.mfSteering  = mfFreakOutDirection;             // stfs +0x13F8 -> copy+0x10
             lCopy.mfHandBrake = 1.0f;                            // flt_82001C98 -> copy+0xC
             {
-                const VecFloat lAggregateValue = { KF_TURNROLL_WHEEL_FRICTION, KF_TURNROLL_WHEEL_FRICTION,
-                          KF_TURNROLL_WHEEL_FRICTION, KF_TURNROLL_WHEEL_FRICTION };
+                const VecFloat lAggregateValue(KF_TURNROLL_WHEEL_FRICTION);
                 mvfWheelFrictionLinearMultiplier = lAggregateValue;
             }
             if (mfFreakOutTime < KF_FREAKOUT_TURNROLL_MAX)       // fcmpu vs 2.0 [flt_82001D9C]
@@ -318,7 +316,7 @@ namespace Vehicle
             lCopy.mfBrake    = 1.0f;
             lCopy.mfGas      = 1.0f;
             {
-                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                const VecFloat lAggregateValue(1.0f);
                 mvfWheelFrictionLinearMultiplier = lAggregateValue;
             }
             lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
@@ -342,7 +340,7 @@ namespace Vehicle
         if (IsCrashing())
         {
             const f32 lfMass =
-                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+                mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.x;
             if (lfMass >= KF_TRAFFIC_CRASH_DAMP_MIN_MASS)        // vcmpgefp
             {
                 const f32 lfFactor =
