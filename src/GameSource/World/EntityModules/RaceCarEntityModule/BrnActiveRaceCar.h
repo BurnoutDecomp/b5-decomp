@@ -473,12 +473,11 @@ public:
 
         // --- wheel render transforms (6 wheels) -----------------------------
         // X360 0x822A3220: ((luWheel+33)<<6)+this == &mWheelTransforms[luWheel].
-        Matrix44Affine&       GetWheelTransform(u32 luWheel);
+        const Matrix44Affine& GetWheelTransform(u32 luWheel) const;
+        void                  SetWheelTransform(u32 luWheel, Matrix44Affine lTransform);
         // [DIAG] const read-only view of the same slot, for probes that must not imply a write.
-        const Matrix44Affine& GetWheelTransformConst(u32 luWheel) const
-        { return mWheelTransforms[luWheel]; }
         // X360 0x822A31B8: ((luWheel+39)<<6)+this == &mWheelScaleTransforms[luWheel].
-        Matrix44Affine&       GetWheelScaleMatrix(u32 luWheel);
+        const Matrix44Affine& GetWheelScaleMatrix(u32 luWheel) const;
         // X360 0x822CD170: mWheelScaleTransforms[luWheel] = diag(lrScale.x, .y, .z) with a
         // ZERO wAxis (the template's sp+0x8C slot is `li r10,0 / stw` @0x822CD258, not 1.0f).
         // The console argument is a scale VECTOR in v1, not a matrix -- see the .cpp banner
