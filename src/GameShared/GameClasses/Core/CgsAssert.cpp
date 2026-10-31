@@ -28,7 +28,7 @@ namespace Assert
             gAssertManager.mbInitialised = true;
             gAssertMutex.Create();
             gAssertManager.mVectorFont.Construct();
-            Vector2 lSize = { 14.0f, 14.0f, 0.0f, 0.0f };
+            Vector2 lSize(14.0f, 14.0f);
             gAssertManager.mVectorFont.SetSize(lSize);
             Manager::RenderThreadAsserts();
         }

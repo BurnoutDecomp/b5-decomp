@@ -341,8 +341,8 @@ namespace CgsDev
                 {
                     const f32 lfRight = mfWidth + mfX;
                     const f32 lfBottom = mfHeight + mfY;
-                    const Vector2 lv2Position = {mfX, mfY, 0, 0};
-                    const Vector2 lv2Size = {lfRight - mfX, lfBottom - mfY, 0, 0};
+                    const Vector2 lv2Position(mfX, mfY);
+                    const Vector2 lv2Size(lfRight - mfX, lfBottom - mfY);
                     lpRender->DrawBox(lv2Position, lv2Size, lBackgroundColour);
                 }
                 if ((mxFlags & KX_FLAGNOBORDER) == 0)
@@ -356,8 +356,8 @@ namespace CgsDev
             {
                 const f32 lfRight = mfWidth + mfX;
                 const f32 lfBottom = mfHeight + mfY;
-                const Vector2 lv2Position = {mfX, mfY, 0, 0};
-                const Vector2 lv2Size = {lfRight - mfX, lfBottom - mfY, 0, 0};
+                const Vector2 lv2Position(mfX, mfY);
+                const Vector2 lv2Size(lfRight - mfX, lfBottom - mfY);
                 lpRender->DrawBox(lv2Position, lv2Size, lBackgroundColour);
             }
 
@@ -367,8 +367,8 @@ namespace CgsDev
 
             const f32 lfCaptionTop = mfY - lfCaptionHeight;
             const f32 lfCaptionRight = mfX + mfWidth;
-            const Vector2 lv2CaptionPosition = {mfX, lfCaptionTop, 0, 0};
-            const Vector2 lv2CaptionSize = {lfCaptionRight - mfX, mfY - lfCaptionTop, 0, 0};
+            const Vector2 lv2CaptionPosition(mfX, lfCaptionTop);
+            const Vector2 lv2CaptionSize(lfCaptionRight - mfX, mfY - lfCaptionTop);
             lpRender->DrawBox(lv2CaptionPosition, lv2CaptionSize, lCaptionColour);
             lpRender->DrawText(mpcCaption, mfX,
                                mfY - lfCaptionHeight + lrMetrics.mfWindowBorderSize,
