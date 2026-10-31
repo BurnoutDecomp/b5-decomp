@@ -11,9 +11,9 @@
 //   GetInstanceIndexForInstanceID     @ 0x8274F590
 //   GetInstanceType                   @ 0x8274F438
 //   GetTrafficLightType               @ 0x8274F4A0
-//   BrnTraffic::ExpandPosPlusYRotToTransform @ 0x823610B8  (
-//                                     a FREE function whose DWARF home is a header this
-//                                     tree has no mirror of; see its own banner below)
+//   BrnTraffic::ExpandPosPlusYRotToTransform @ 0x823610B8
+//                                     declared in BrnTrafficSharedMaths.h and defined here
+//                                     (see its own banner below)
 //
 // The type + member offsets are homed in BrnTrafficLightCollection.h. Assert
 // strings are the X360 rodata literals, verbatim (file/line args dropped).
@@ -49,17 +49,17 @@ namespace BrnTraffic
     //    console's own baked assert file literal agrees verbatim:
     //    "..\..\..\SharedClasses\Traffic/BrnTrafficSharedMaths.h" (rodata 0x8202D714),
     //    with the two assert lines 0x53 == 83 and 0x54 == 84 -- i.e. the body is defined
-    //    in that header, two lines below its declaration. THAT HEADER HAS NO MIRROR IN
-    //    THIS TREE. The body lands here instead, beside its only in-tree caller
-    //    (CalcInstanceTransform), and the declaration it satisfies is the one already
-    //    committed in BrnTrafficLightCollection.h. MOVE IT to a real
-    //    SharedClasses/Traffic/BrnTrafficSharedMaths.h the day that header lands.
+    //    in that header, two lines below its declaration. The declaration is homed in
+    //    BrnTrafficSharedMaths.h; this out-of-line body remains beside its collection
+    //    caller. The trigger caller also uses that shared declaration.
     //
-    // ⚠️ SIGNATURE. The committed in-tree declaration takes `const Vector3Plus&`, and so
-    //    does the retail mangled name (`...@@YA?AUMatrix44Affine@vpu@math@rw@@
-    //    AEBUVector3Plus@345@@Z` -- AEB == const reference). The DWARF DIE spells the
-    //    parameter by value. The reference form is the committed one and is kept:
-    //    changing it would change the mangled name and re-open the link hole.
+    //
+    //
+    // SIGNATURE. DecFIGS declares Vector3Plus by value. ARTIST passes that packed value
+    //    in v1 and supplies the Matrix44Affine result pointer in r3. Both real callers
+    //    follow that convention; the genuine SDK Vector3Plus supplies the value ABI.
+    //
+    //
     //
     // WHAT IT DOES: expand a packed (position.xyz, yRotation.w) into the affine that
     // places a traffic-light instance -- a rotation about Y by the packed angle, with the
@@ -90,7 +90,7 @@ namespace BrnTraffic
     // ⚠️ The console ALSO stores a zero vector to +0x30 at 0x82361370, before overwriting
     //    it with the input at 0x82361388 -- a dead store from the row-assembly macro.
     //    Only the surviving value is written here.
-    Matrix44Affine ExpandPosPlusYRotToTransform(const Vector3Plus& lPosPlusYRot)
+    Matrix44Affine ExpandPosPlusYRotToTransform(Vector3Plus lPosPlusYRot)
     {
         CGS_ASSERT(rw::math::vpu::IsValid(lPosPlusYRot.GetVector3()),
                    "RwMath::IsValid( lPosPlusYRot.GetVector3() )");   // baked line 83

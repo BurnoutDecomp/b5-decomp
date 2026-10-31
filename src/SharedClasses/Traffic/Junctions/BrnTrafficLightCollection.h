@@ -33,6 +33,7 @@
 // CalcArbitraryAmberCoronaTransform references it; its body is another TU's.
 // =============================================================================
 
+#include "SharedClasses/Traffic/BrnTrafficSharedMaths.h"
 #include "BrnCommonTypes.h"                             // Vector3, Vector3Plus, Matrix44Affine
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameSource/Graphics/BrnCoronaManager.h"       // BrnCoronaManager::BrnSubmissionInterface, BrnCoronaType, eCoronaTypeTrafficLight*
@@ -62,23 +63,6 @@ namespace BrnTraffic
         u8 muCoronaOffset;  // +0
         u8 muNumCoronas;    // +1
     };
-
-    // ExpandPosPlusYRotToTransform @ 0x823610B8 (183 insns) -- expands a packed Vector3Plus
-    // (xyz = position, w = Y rotation angle) into a full affine. Referenced by
-    // CalcInstanceTransform.
-    //
-    // ⚠️ DWARF homes it in SharedClasses/Traffic/BrnTrafficSharedMaths.h:81, and the
-    //    console's own baked assert file literal agrees ("..\..\..\SharedClasses\Traffic/
-    //    BrnTrafficSharedMaths.h", lines 83/84). That header has no mirror in this tree, so
-    //    the BODY currently lives in BrnTrafficLightCollection.cpp beside its only in-tree
-    //    caller. Move both this declaration and that body to a
-    //    real BrnTrafficSharedMaths.h the day one lands.
-    //
-    // ⚠️ The parameter is `const Vector3Plus&` here and in the retail mangled name (AEB);
-    //    the DWARF DIE spells it by value. The reference form is the committed one -- do not
-    //    "correct" it, it would change the mangled name. The parameter NAME is the console's
-    //    own (`lPosPlusYRot`, from the two assert literals).
-    Matrix44Affine ExpandPosPlusYRotToTransform(const Vector3Plus& lPosPlusYRot);
 
     // DWARF BrnTrafficLightCollection.h:78.
     struct TrafficLightCollection
