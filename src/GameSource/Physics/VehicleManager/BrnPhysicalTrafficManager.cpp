@@ -37,6 +37,7 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+const VecFloat KVF_RESET_ON_WATER_HEIGHT(0.25f);
 
 // byte_82F2A1A6 -- the "Allow traffic freezing" debug toggle
 // (PhysicalTrafficManagerDebugComponent::OnActivate @0x8261C678 registers it by that label).
@@ -502,16 +503,11 @@ void PhysicalTrafficManager::ProcessAddAirRamEvent(const CreateAirRamEvent* lpEv
         const u8 lu8PhysicalIndex = mu8GlobalToPhysicalEntityIndexMap[luGlobalIndex];
         if (lu8PhysicalIndex != KU8_INVALID_MAP)
         {
-            // The console passes the raw 16-byte mDirectionAndMagnitude register as v1 (its w
-            // lane rides along); reproduced lane-for-lane rather than through GetVector3(),
-            // which would zero the w lane the console keeps.
-            const Vector3 lvDirection = { lpEvent->mDirectionAndMagnitude.x,
-                                       lpEvent->mDirectionAndMagnitude.y,
-                                       lpEvent->mDirectionAndMagnitude.z,
-                                       lpEvent->mDirectionAndMagnitude.w };
+            // The console passes all 16 bytes of mDirectionAndMagnitude as v1.
+            const Vector3 lvDirection(lpEvent->mDirectionAndMagnitude.mV);
             GetTrafficVehicle(static_cast<s32>(lu8PhysicalIndex))->AddAirRam(
                 lpEvent->muEffectFlags,
-                lpEvent->mDirectionAndMagnitude.w,   // lfFactor == the packed magnitude lane (asm f1 <- +0x1C)
+                lpEvent->mDirectionAndMagnitude.mV.w,   // lfFactor == the packed magnitude lane (asm f1 <- +0x1C)
                 lpEvent->mfDecay,
                 lvDirection,
                 lpEvent->mPosition,
@@ -731,7 +727,7 @@ void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
             // checker's heading, not through the contact point.
             const Vector3Plus lCheckerVelocity = lpRaceCarPhysics->GetNormLinearVelocityMag();
             const f32 lfHalfCheckerSpeed = lCheckerVelocity.GetPlus() * 0.5f;
-            const VecFloat lvHalfCheckerSpeed = { lfHalfCheckerSpeed, lfHalfCheckerSpeed, lfHalfCheckerSpeed, lfHalfCheckerSpeed };
+            const VecFloat lvHalfCheckerSpeed(lfHalfCheckerSpeed);
             GetFullTrafficPhysics()->SetCrashingFromCheck(lCheckerVelocity.GetVector3(), lvHalfCheckerSpeed);
             (void)lContactPointOnTraffic;
         }
@@ -763,12 +759,12 @@ void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeS
         //   bl TrafficPhysics::Update(sim, game, camera, controls, impact, forceAdditive, sixaxis)
         TrafficPhysics* const lpFullTraffic = GetFullTrafficPhysics();
 
-        const VecFloat lvSimTimerTimeStep = { lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep };
+        const VecFloat lvSimTimerTimeStep(lfSimTimerTimeStep);
         lpFullTraffic->UpdateFreezing(lpControls, lvSimTimerTimeStep);
 
         if (!gbAllowTrafficFreezing)
         {
-            lpFullTraffic->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;
+            lpFullTraffic->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV.y = 0.0f;
         }
 
         if (!lpFullTraffic->IsFrozen())
@@ -870,7 +866,7 @@ void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lr
     if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
     {
         GetFullTrafficPhysics()
-            ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.w =
+            ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.mV.w =
             KF_ARTICULATED_SOLVE_PENETRATION_WEIGHT_FACTOR;
     }
 }
@@ -949,8 +945,7 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
     const f32 KF_GROUND_CONTACT_THRESHOLD = 0.40000001f;
     const f32 KF_UPRIGHT_ON_GROUND_DOT    = 0.80000001f;
 
-    const VecFloat lvGroundThreshold = { KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD,
-                                         KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD };
+    const VecFloat lvGroundThreshold(KF_GROUND_CONTACT_THRESHOLD);
     bool lbValid = !lpBody->IsContactBelowWheelPlane(lpContact->mPointOnB, lvGroundThreshold);
 
     // 0x825CAEAC `lbz r11, 0x715(body)` ; 0x825CAEB4 `bne -> 0x825CAF4C li r3, 1` -- a car with a
@@ -971,19 +966,15 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
     const Vector3 lvUp           = lBodyTransform.yAxis;                        // body +0x20
     const Vector3 lvGroundNormal = lpGround->mIntersectionNormal;               // body +0x580
 
-    const f32 lfUprightness = lvUp.x * lvGroundNormal.x
-                            + lvUp.y * lvGroundNormal.y
-                            + lvUp.z * lvGroundNormal.z;
-    if (lfUprightness > KF_UPRIGHT_ON_GROUND_DOT)
+    const __vector4 lvUprightness = __vmsum3fp(lvUp.mV, lvGroundNormal.mV);
+    const Vector4 lvUprightThreshold(KF_UPRIGHT_ON_GROUND_DOT, KF_UPRIGHT_ON_GROUND_DOT,
+                                     KF_UPRIGHT_ON_GROUND_DOT, KF_UPRIGHT_ON_GROUND_DOT);
+    if (__vcmpgtfp(lvUprightness, lvUprightThreshold.mV).u[0] != 0)
     {
-        const Vector3 lvToContact = { lpContact->mPointOnB.x - lpGround->mIntersectionPosition.x,
-                                      lpContact->mPointOnB.y - lpGround->mIntersectionPosition.y,
-                                      lpContact->mPointOnB.z - lpGround->mIntersectionPosition.z,
-                                      lpContact->mPointOnB.w - lpGround->mIntersectionPosition.w };
-        const f32 lfHeightAboveGround = lvToContact.x * lvGroundNormal.x
-                                      + lvToContact.y * lvGroundNormal.y
-                                      + lvToContact.z * lvGroundNormal.z;
-        if (KF_GROUND_CONTACT_THRESHOLD > lfHeightAboveGround)
+        const __vector4 lvToContact = __vsubfp(lpContact->mPointOnB.mV,
+                                               lpGround->mIntersectionPosition.mV);
+        const __vector4 lvHeightAboveGround = __vmsum3fp(lvToContact, lvGroundNormal.mV);
+        if (__vcmpgtfp(lvGroundThreshold.mV, lvHeightAboveGround).u[0] != 0)
         {
             lbValid = false;
         }
@@ -1079,20 +1070,27 @@ void PhysicalTrafficManager::UpdateTriangleCache(
         const SimpleVehiclePhysics* const lpBody = mpaTrafficVehicles[liVehicle].mpVehicleBody;
 
         const Vector3 lvHalfExtent = lpBody->GetHalfExtent();
-        const Vector3 lvPadded = { lvHalfExtent.x + KVF_VEHICLE_TRIANGLE_CACHE_PADDING,     // 0x825EE7E8 vaddfp
-                                   lvHalfExtent.y + KVF_VEHICLE_TRIANGLE_CACHE_PADDING,
-                                   lvHalfExtent.z + KVF_VEHICLE_TRIANGLE_CACHE_PADDING, 0.0f };
-        const f32 lfRadiusSq = rw::math::vpu::MagnitudeSquared(lvPadded);               // vmsum3fp128: xyz
-        const f32 lfRadius   = (lfRadiusSq != 0.0f) ? std::sqrt(lfRadiusSq) : 0.0f;
+        const Vector4 lvPadding(KVF_VEHICLE_TRIANGLE_CACHE_PADDING, KVF_VEHICLE_TRIANGLE_CACHE_PADDING,
+                                KVF_VEHICLE_TRIANGLE_CACHE_PADDING, KVF_VEHICLE_TRIANGLE_CACHE_PADDING);
+        const Vector3 lvPadded(__vaddfp(lvHalfExtent.mV, lvPadding.mV));
+        const __vector4 lvRadiusSq = __vmsum3fp(lvPadded.mV, lvPadded.mV);
+        const __vector4 lvZero = __vspltisw(0);
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+        __vector4 lvEstimate = __vrsqrtefp(lvRadiusSq);
+        __vector4 lvError = __vnmsubfp(lvRadiusSq, __vmulfp(lvEstimate, lvEstimate), lvOne);
+        lvEstimate = __vmaddfp(__vmulfp(lvEstimate, lvHalf), lvError, lvEstimate);
+        lvError = __vnmsubfp(lvRadiusSq, __vmulfp(lvEstimate, lvEstimate), lvOne);
+        lvEstimate = __vmaddfp(__vmulfp(lvEstimate, lvHalf), lvError, lvEstimate);
+        const __vector4 lvRadius = __vsel(__vmulfp(lvRadiusSq, lvEstimate), lvZero,
+                                         __vcmpeqfp(lvZero, lvRadiusSq));
 
         const Vector3& lrPosition = lpBody->GetPosition();
 
         CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition lEvent;
         lEvent.miCacheSlot             = liVehicle + VehicleManager::KI_MAX_ACTIVE_RACE_CARS;
-        lEvent.mNewPositionAndRadius.x = lrPosition.x;
-        lEvent.mNewPositionAndRadius.y = lrPosition.y;
-        lEvent.mNewPositionAndRadius.z = lrPosition.z;
-        lEvent.mNewPositionAndRadius.w = lfRadius;
+        lEvent.mNewPositionAndRadius.mV = lrPosition.mV;
+        lEvent.mNewPositionAndRadius.mV.w = lvRadius.x;
         lpSceneUpdate->mUpdateCachedPositionQueue.AddEvent(lEvent);
     }
 }
@@ -1108,7 +1106,7 @@ void PhysicalTrafficManager::UpdateTrafficPhysicsPostSimulation(
     const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
     f32 lfTimeStep)
 {
-    const VecFloat lvfTimeStep = {lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep};
+    const VecFloat lvfTimeStep(lfTimeStep);
 
     for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
          liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
@@ -1340,10 +1338,8 @@ void PhysicalTrafficManager::AddArticulatedJointContacts(
         CgsSceneManager::SceneManagerIO::PotentialContact lContact;
 
         // The cab's backward axis: the "at" row, sign-flipped in all four lanes.
-        lContact.mNormal.x = -lCabTransform.zAxis.x;
-        lContact.mNormal.y = -lCabTransform.zAxis.y;
-        lContact.mNormal.z = -lCabTransform.zAxis.z;
-        lContact.mNormal.w = -lCabTransform.zAxis.w;
+        const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        lContact.mNormal.mV = __vxor(lCabTransform.zAxis.mV, lvSign);
 
         lContact.mPointOnA = lpCab->GetArticulationPointLocalSpace();
 
