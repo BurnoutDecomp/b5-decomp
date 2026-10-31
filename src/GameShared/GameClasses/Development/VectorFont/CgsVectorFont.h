@@ -34,7 +34,7 @@ namespace CgsDev
         static Vector2 ComputeTextExtent(const char* lpcText, Vector2 lTextSize);
         static f32 ComputeTextWidth(const char* lpcText, Vector2 lTextSize)
         {
-            return ComputeTextExtent(lpcText, lTextSize).x;
+            return ComputeTextExtent(lpcText, lTextSize).mV.x;
         }
 
     private:
