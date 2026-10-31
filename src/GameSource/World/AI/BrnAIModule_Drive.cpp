@@ -185,6 +185,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"                    // BrnAI::AISectionsData
 #include "GameSource/Math/BrnMathUtils.h"                               // [PC HARNESS] BrnMath::Flatten (the pursuit geometry)
@@ -260,19 +261,18 @@ namespace
 }
 
 // =================================================================================================
-// GetAIDriver @0x82765B90 -- `if (index >= 8) assert("Invalid driver index: " << index)` (the
-// streamed StrStream form, BrnAIModule.h:453), then `return 7536 * index + this + 192080`, i.e.
-// &maAIDrivers[index]. The console assert is NON-GATING and the return walks off the array; the
-// bail below is the PC deviation for the same reason GetAICar's is (an out-of-range index would
-// land inside the RaceBalancingManager on this host instead of the console's tail).
+// GetAIDriver @0x82765B90: the bounds assertion does not gate the array address.
 // =================================================================================================
 AIDriver* AIModule::GetAIDriver(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    CGS_ASSERT(static_cast<u32>(leActiveRaceCarIndex) < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS),
-               "Invalid driver index: ");   // BrnAIModule.h:453
     if (static_cast<u32>(leActiveRaceCarIndex) >= static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS))
     {
-        return 0;   // [GUARD] host-only; see the banner
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lMessage << "Invalid driver index: " << static_cast<s32>(leActiveRaceCarIndex);
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                  "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModule.h", 453);
+        CgsDev::Assert::EndAssert();
     }
     return &maAIDrivers[static_cast<s32>(leActiveRaceCarIndex)];
 }
