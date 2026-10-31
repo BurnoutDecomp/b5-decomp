@@ -1,6 +1,7 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnPlayerPositionSingle.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include <cfloat>
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf/SnPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // GetLanguageManager
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // FormatSecondsAndHundredsString + formats
@@ -50,15 +51,15 @@ namespace
 const f32 PlayerPositionSingleComponent::KAF_CHALLENGE_WOW_LIMITS[24] =
 {
     100.0f, 1000.0f, 205920.0f, 88000.0f, 3600.0f, 109120.0f, 1000.0f, 36000.0f,
-    100.0f, 3.4028235e38f, 3.4028235e38f, 1000.0f, 1000.0f, 3.4028235e38f,
-    3.4028235e38f, 100.0f, 1000.0f, 3600.0f, 205920.0f, 205920.0f, 42.0f, 1000.0f,
-    3.4028235e38f, 1000.0f,
+    100.0f, FLT_MAX, FLT_MAX, 1000.0f, 1000.0f, FLT_MAX,
+    FLT_MAX, 100.0f, 1000.0f, 3600.0f, 205920.0f, 205920.0f, 42.0f, 1000.0f,
+    FLT_MAX, 1000.0f,
 };
 
 const f32 PlayerPositionSingleComponent::KAF_TODAYS_BEST_WOW_LIMITS[12] =
 {
     3600.0f, 1000.0f, 1000.0f, 88000.0f, 36000.0f, 109120.0f, 1000.0f, 205920.0f,
-    3.4028235e38f, 3.4028235e38f, 3.4028235e38f, 3.4028235e38f,
+    FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX,
 };
 
 // DWARF cpp:868 -- recovered from the inline instance @0x8242212C.

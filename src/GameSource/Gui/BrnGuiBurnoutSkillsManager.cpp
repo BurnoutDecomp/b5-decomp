@@ -26,6 +26,7 @@
 #include "GameSource/Gui/BrnGuiBurnoutSkillsManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <cfloat>
 
 namespace BrnGui
 {
@@ -37,11 +38,10 @@ namespace BrnGui
 const f32 BurnoutSkillsManager::KF_ROTATION_TIME  = 5.0f;
 const f32 BurnoutSkillsManager::KF_NEW_PAUSE_TIME = 5.0f;
 
-// flt_8206F11C: the lowest-wins record search seed (FLT_MAX). The X360 baked the literal
-// in low .rodata; mirrored here as a named constant (project idiom avoids <cfloat>).
+// ARTIST flt_8206F11C: 0x7F7FFFFF, the lowest-wins record search seed.
 namespace
 {
-    const f32 KF_FLT_MAX = 3.4028235e38f;
+    const f32 KF_FLT_MAX = FLT_MAX;
 }
 //
 // ----------------------------------------------------------------------------
@@ -51,19 +51,14 @@ namespace
 //   new score `>=` against it. Now ODR-used in this TU (SetSkillsData folded in), so it
 //   must be DEFINED here.
 //
-//   *** UNRECOVERED VALUES -- CONSOLIDATOR MUST FILL ***  The 14 float constants live
-//   in X360 low .rodata at flt_8206F7B0; the dossier does not carry the bytes. Placeholder
-//   zeros below keep the TU self-consistent but the numbers are NOT attested and
-//   behaviourally wrong (all-zero thresholds make the `>=` HUD-message gate always pass).
-//   Read the 14 little-endian f32 at 0x8206F7B0 and replace them. Index space is
-//   EBurnoutSkillType, count 14.
+//   Fourteen big-endian f32 values read from ARTIST flt_8206F7B0. SetSkillsData
+//   forms this table's address at 8251197C/80 and indexes it by EBurnoutSkillType.
 // ----------------------------------------------------------------------------
 const f32 BurnoutSkillsManager::KAF_MINIMUM_HUD_MESSAGE_SKILLS_LEVEL
     [BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT] =
 {
-    // TODO(consolidator): 14 f32 from rodata flt_8206F7B0 -- values UNRECOVERED.
-    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    1.0f, 0.0f, 0.0f, 25.0f, 10.0f, 25.0f, 0.0f,
+    100.0f, 10.0f, 20000000.0f, 10000000.0f, 0.0f, 0.0f, 0.0f,
 };
 
 // ----------------------------------------------------------------------------
