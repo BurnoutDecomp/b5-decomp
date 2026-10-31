@@ -75,7 +75,7 @@ void TrafficLaneTruck::CalcTransformFromLanePosition(const BrnDirector::WorldMap
     // `VecFloat` in this namespace would bind to BrnDirector::VecFloat (the Timestep register),
     // which is a different type.
     const f32        lfParam = mLanePosition.mfParamAlongSection;
-    const ::VecFloat lParam  = { lfParam, lfParam, lfParam, lfParam };
+    const ::VecFloat lParam (lfParam, lfParam, lfParam, lfParam);
 
     rw::math::vpu::Vector3 lDirection;
     lpSection->CalcDirectionAtParameter(lpHull->mpaRungs, lParam, mLanePosition.muRung, lDirection);
@@ -99,13 +99,13 @@ void TrafficLaneTruck::CalcTransformFromLanePosition(const BrnDirector::WorldMap
                     << "[RoadRunner] lane seated: hull=" << (s32)mLanePosition.muHullIndex
                     << " section=" << (s32)mLanePosition.muSection
                     << " rung=" << (s32)mLanePosition.muRung
-                    << " pos=(" << mLanePosition.mPosition.x << "," << mLanePosition.mPosition.y
-                    << "," << mLanePosition.mPosition.z << ")"
-                    << " dir=(" << lDirection.x << "," << lDirection.y << "," << lDirection.z << ")"
-                    << " frameX=(" << mTransform.xAxis.x << "," << mTransform.xAxis.y
-                    << "," << mTransform.xAxis.z << ")"
-                    << " frameY=(" << mTransform.yAxis.x << "," << mTransform.yAxis.y
-                    << "," << mTransform.yAxis.z << ")\n";
+                    << " pos=(" << mLanePosition.mPosition.mV.x << "," << mLanePosition.mPosition.mV.y
+                    << "," << mLanePosition.mPosition.mV.z << ")"
+                    << " dir=(" << lDirection.mV.x << "," << lDirection.mV.y << "," << lDirection.mV.z << ")"
+                    << " frameX=(" << mTransform.xAxis.mV.x << "," << mTransform.xAxis.mV.y
+                    << "," << mTransform.xAxis.mV.z << ")"
+                    << " frameY=(" << mTransform.yAxis.mV.x << "," << mTransform.yAxis.mV.y
+                    << "," << mTransform.yAxis.mV.z << ")\n";
             }
         }
     }
@@ -429,7 +429,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
     rw::math::vpu::Vector3 lNewAt;
     rw::math::vpu::Vector3 lNewRight;
     {
-        const ::VecFloat lParam = { lfNewParam, lfNewParam, lfNewParam, lfNewParam };
+        const ::VecFloat lParam(lfNewParam, lfNewParam, lfNewParam, lfNewParam);
         lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, luCurrentRung,
                                             lNewPosition, lNewAt, lNewRight);
     }
@@ -571,7 +571,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
     rw::math::vpu::Vector3 lNewAt;
     rw::math::vpu::Vector3 lNewRight;
     {
-        const ::VecFloat lParam = { lfNewParam, lfNewParam, lfNewParam, lfNewParam };
+        const ::VecFloat lParam(lfNewParam, lfNewParam, lfNewParam, lfNewParam);
         lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, luCurrentRung,
                                             lNewPosition, lNewAt, lNewRight);
     }
@@ -674,12 +674,12 @@ void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTim
     MoveAlongTrafficLane(BrnTraffic::E_DIR_LEFT, lrWorldMap, lfDistToMove + lfBlendDistance,
                          &lLanePositionB, &lTransformB);
 
-    ::VecFloat lUnusedAngle = { 0.0f, 0.0f, 0.0f, 0.0f };
+    rw::math::vpu::Vector3 lUnusedAngle;
     const rw::math::vpu::Matrix44Affine lNewTransform =
         rw::math::vpu::SLerp(mTransform,
                              Utils::CreateLookAt(lTransformA.wAxis, lTransformB.wAxis),
                              mfTransformBlendAmount,
-                             reinterpret_cast<rw::math::vpu::Vector3*>(&lUnusedAngle));
+                             &lUnusedAngle);
 
     if (!rw::math::fpu::IsZero(lfTimestep))
     {
@@ -1002,8 +1002,8 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     //  than on it.)
     {
         rw::math::vpu::Matrix44Affine lCameraTransform = mTrafficLaneTruck.GetTransform();
-        const rw::math::vpu::Vector3 lHeight = { lfHeight, lfHeight, lfHeight, lfHeight };
-        const rw::math::vpu::Vector3 lLateralOffset = { 2.25f, 2.25f, 2.25f, 2.25f };
+        const rw::math::vpu::Vector3 lHeight(XMVectorReplicate(lfHeight));
+        const rw::math::vpu::Vector3 lLateralOffset(XMVectorReplicate(2.25f));
         lCameraTransform.wAxis = rw::math::vpu::MultAdd(
             lCameraTransform.yAxis, lHeight, lCameraTransform.wAxis);
         lCameraTransform.wAxis = rw::math::vpu::MultAdd(
@@ -1044,15 +1044,15 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     // rows as residue; TransformVector reads xyz only, so they are written 0 here.
     {
         const f32 lfBankRads =
-            -mTrafficLaneTruck.GetLocalAngularVelocity().y * mfBankingScale;
+            -mTrafficLaneTruck.GetLocalAngularVelocity().mV.y * mfBankingScale;
         const f32 lfSin = std::sin(lfBankRads);
         const f32 lfCos = std::cos(lfBankRads);
 
         rw::math::vpu::Matrix44Affine lBank;
-        const rw::math::vpu::Vector3 lXAxis = {  lfCos, lfSin, 0.0f, 0.0f };
-        const rw::math::vpu::Vector3 lYAxis = { -lfSin, lfCos, 0.0f, 0.0f };
-        const rw::math::vpu::Vector3 lZAxis = {   0.0f,  0.0f, 1.0f, 0.0f };
-        const rw::math::vpu::Vector3 lWAxis = {   0.0f,  0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::Vector3 lXAxis(lfCos, lfSin, 0.0f);
+        const rw::math::vpu::Vector3 lYAxis(-lfSin, lfCos, 0.0f);
+        const rw::math::vpu::Vector3 lZAxis(0.0f, 0.0f, 1.0f);
+        const rw::math::vpu::Vector3 lWAxis(0.0f, 0.0f, 0.0f);
         lBank.xAxis = lXAxis;
         lBank.yAxis = lYAxis;
         lBank.zAxis = lZAxis;
@@ -1073,11 +1073,11 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
             *CgsDev::Log::gpDebugPrint
                 << "[flyby] f" << siFlybyFrame << " dt " << lfTimestep
                 << " speed " << mTrafficLaneTruck.GetSpeed()
-                << " eye (" << lrX.wAxis.x << ", " << lrX.wAxis.y << ", " << lrX.wAxis.z << ")"
-                << " at (" << lrX.zAxis.x << ", " << lrX.zAxis.y << ", " << lrX.zAxis.z << ")"
-                << " up (" << lrX.yAxis.x << ", " << lrX.yAxis.y << ", " << lrX.yAxis.z << ")"
-                << " angvel (" << lAngVel.x << ", " << lAngVel.y << ", " << lAngVel.z << ")"
-                << " bank " << (-lAngVel.y * mfBankingScale) << "\n";
+                << " eye (" << lrX.wAxis.mV.x << ", " << lrX.wAxis.mV.y << ", " << lrX.wAxis.mV.z << ")"
+                << " at (" << lrX.zAxis.mV.x << ", " << lrX.zAxis.mV.y << ", " << lrX.zAxis.mV.z << ")"
+                << " up (" << lrX.yAxis.mV.x << ", " << lrX.yAxis.mV.y << ", " << lrX.yAxis.mV.z << ")"
+                << " angvel (" << lAngVel.mV.x << ", " << lAngVel.mV.y << ", " << lAngVel.mV.z << ")"
+                << " bank " << (-lAngVel.mV.y * mfBankingScale) << "\n";
         }
         ++siFlybyFrame;
     }
