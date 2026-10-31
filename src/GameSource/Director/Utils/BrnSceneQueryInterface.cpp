@@ -65,16 +65,12 @@ namespace BrnDirector
     //   assert mpLineTestNearestPostOffice != NULL    (h:217, 0xD9)
     //   id = mpLineTestNearestPostOffice->AddPostBox(lrPostBox)   (0x8222D288)
     //   producer->LineTestNearest((id & 0xFFFF) | 0x10000, ...)   (0x82216FD0)
-    // The producer's exclusion-mode parameter is spelled ENearestExclusionMode on this host (the
-    // tree keeps the nearest event's enum distinct to avoid a redefinition); its two values are the
-    // EExclusionMode values (E_EXCLUDE_ENTITY_ONLY 0, E_EXCLUDE_ALL_CHILD_PARTS 1), so the console's
-    // single register is passed through unchanged.
     // -------------------------------------------------------------------------
     void SceneQueryInterface::LineTestNearest(LineTestNearestPostBox&                          lrPostBox,
                                               u32                                              lx32EntityTypeFlags,
                                               u8                                               lxVolumeTypeFlags,
-                                              const Vector3&                                   lLineStart,
-                                              const Vector3&                                   lLineEnd,
+                                              Vector3                                          lLineStart,
+                                              Vector3                                          lLineEnd,
                                               CgsSceneManager::EntityId                        lExcludeEntityId,
                                               CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
@@ -85,8 +81,8 @@ namespace BrnDirector
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestNearestPostOffice->AddPostBox(lrPostBox));
 
         mpSceneQueryInterface->LineTestNearest(
-            lLineStart, lLineEnd, lQueryId, lx32EntityTypeFlags, lxVolumeTypeFlags, lExcludeEntityId,
-            static_cast<CgsSceneManager::SceneManagerIO::ENearestExclusionMode>(leExclusionMode));
+            lQueryId, lx32EntityTypeFlags, lxVolumeTypeFlags, lLineStart, lLineEnd, lExcludeEntityId,
+            leExclusionMode);
     }
 
     // -------------------------------------------------------------------------
