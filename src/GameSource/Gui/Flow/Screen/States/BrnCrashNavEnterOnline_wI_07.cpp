@@ -307,19 +307,7 @@ namespace BrnGui
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes. All
         // three handlers post it for the "OnConnecting" overlay to tear the connecting
         // spinner down before they act.
-        // The "show / hide the in-race HUD" record: { 1, 148, 12, <one payload byte> },
-        // channel 40, 16 bytes. HandleShowLoginQuestion posts it with the byte clear
-        // (hide the HUD) once the no-title sign-in has taken the screen over. The X360
-        // stack-builds it inline at 0x824CADC4..0x824CADF4 (stb of 0 at record+0x0C).
-        struct GuiEventShowHideHud : public CgsGui::GuiEvent<148>
-        {
-            u8 mu8Show;   // +0x0C payload byte: 0 = hide the HUD
-
-            explicit GuiEventShowHideHud(bool lbShow)
-                : CgsGui::GuiEvent<148>(1, 12), mu8Show(lbShow ? 1u : 0u)
-            {
-            }
-        };
+        typedef CgsGui::GuiEventWrapper<GuiEventShowHideHud, KI_CHANNEL_GUI_OUT> GuiShowHideHudWire;
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> record: { 288, 184, 16, <pad>,
         // the 288-byte request }, channel 40, 304 bytes -- the shape the out-of-line
@@ -330,7 +318,7 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "wait-finish record is 24 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventNetworkSuspension) == 16), "suspension record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHud) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
 
         // ---- in-queue payload views (the queue hands out the HEADER-STRIPPED payload,
@@ -405,11 +393,12 @@ namespace BrnGui
                 reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
                 static_cast<s32>(sizeof(lDeactivateCrashNav)));
 
-            GuiEventShowHideHud lHideHud(false);
-
+            GuiEventShowHideHud lHideHud;
+            lHideHud.maData[0] = 0;
+            GuiShowHideHudWire lHideHudWire(lHideHud);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lHideHud)));
+                reinterpret_cast<const CgsModule::Event*>(&lHideHudWire), lHideHudWire.GetChannel(),
+                static_cast<s32>(sizeof(lHideHudWire)));
         }
     }
 }

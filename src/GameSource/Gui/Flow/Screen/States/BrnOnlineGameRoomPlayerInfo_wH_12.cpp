@@ -24,10 +24,7 @@
 // the header words fall out as sizeof(T) / T::GetEventType() / offsetof(mOutEvent) and the
 // console's 4 / 8 / 12 / 16 / 24 literals (32-bit sizes/offsets) are never reproduced.
 //
-// BrnGui::GuiEventNetworkSplashEvent is homed only in BrnGuiDemangledEventTypes.h, which
-// this TU does not include, so its payload shape is carried as a file-local view -- the
-// accommodation BrnInGame.cpp, BrnCarSelectMain_wG_02.cpp and the sibling wave-H
-// partfiles all make.
+// The shared splash event is the four-byte payload in both queue directions.
 //
 // HandleGuiCacheEvent @0x824A3DD8 was assigned to this group too, but was blocked on a
 // missing declaration at the time; it is now bodied in BrnOnlineGameRoomPlayerInfo_wH_18.cpp.
@@ -57,28 +54,6 @@ namespace BrnGui
         // BrnGameStateSharedIO.h enum is the Dec-2007 DecFIGS one and still says 17, so
         // the bound is carried here as the attested literal rather than the stale enum.
         const s32 KI_ARTIST_MODE_COUNT = 18;
-
-        // ---- the splash request/response states (the event's leading word) ------------
-        // Same three values BrnInGame.cpp's splash handler names.
-        const u32 KU_SPLASH_STATE_SHOW     = 0;
-        const u32 KU_SPLASH_STATE_STOP     = 1;
-        const u32 KU_SPLASH_STATE_FINISHED = 2;
-
-        // ---- the splash event ----------------------------------------------------------
-        // BrnGui::GuiEventNetworkSplashEvent, carried as a file-local view (its home header
-        // collides -- see the file banner). One state word, and the GetEventType() that
-        // feeds the record's type field: OutputGuiEvent<GuiEventNetworkSplashEvent>
-        // @0x82493880 writes 269 there (`li r11, 0x10D`).
-        //
-        // The same view serves BOTH directions: the in-queue hands the state the
-        // HEADER-STRIPPED payload, so the handler's read is this struct's first word
-        // (`lwz r11, 0(r31)`), and the out-queue boxes the identical 4 bytes.
-        struct GuiEventNetworkSplashEvent : public CgsModule::Event
-        {
-            u32 muSplashState;   // +0x00
-
-            s32 GetEventType() const { return 269; }
-        };
 
         // ---- out-queue wire records ---------------------------------------------------
         // OutputGuiEvent<BrnGui::GuiEventNetworkSplashEvent> @0x82493880: sizeof 4 /
@@ -123,7 +98,7 @@ namespace BrnGui
                 lpOverlayCompleteEvent->miLeaveMethod == 0)
             {
                 GuiEventNetworkSplashEvent lFinished;
-                lFinished.muSplashState = KU_SPLASH_STATE_FINISHED;
+                lFinished.meSplashState = GuiEventNetworkSplashEvent::E_SPLASH_STATE_FINISHED;
 
                 GuiEventNetworkSplashWire lWire(lFinished);
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
@@ -149,15 +124,15 @@ namespace BrnGui
     // Any other state word is ignored (the X360 `cmplwi 1` / `blt` / `bne` pair).
     //
     // DWARF param type is const GuiEventNetworkSplashEvent*; the in-queue delivers the
-    // header-stripped payload, hence the file-local view.
+    // header-stripped shared payload.
     void OnlineGameRoomPlayerInfo::HandleSplashScreenRequests(const CgsModule::Event* lpNetworkSplashEvent)
     {
         CGS_ASSERT(lpNetworkSplashEvent != 0, "lpNetworkSplashEvent");   // cpp:2770
 
         const u32 luSplashState =
-            reinterpret_cast<const GuiEventNetworkSplashEvent*>(lpNetworkSplashEvent)->muSplashState;
+            reinterpret_cast<const GuiEventNetworkSplashEvent*>(lpNetworkSplashEvent)->meSplashState;
 
-        if (luSplashState == KU_SPLASH_STATE_SHOW)
+        if (luSplashState == GuiEventNetworkSplashEvent::E_SPLASH_STATE_SHOW)
         {
             // The free-burn-lobby test is the compiler-inlined
             // GameStateModuleIO::IsOnlineFreeBurnLobby predicate (the asm compares the
@@ -193,14 +168,14 @@ namespace BrnGui
                 ShowSplashScreen();
             }
         }
-        else if (luSplashState == KU_SPLASH_STATE_STOP)
+        else if (luSplashState == GuiEventNetworkSplashEvent::E_SPLASH_STATE_STOP)
         {
             if (mbShowSplashScreen)
             {
                 mbShowSplashScreen = false;
 
                 GuiEventNetworkSplashEvent lFinished;
-                lFinished.muSplashState = KU_SPLASH_STATE_FINISHED;
+                lFinished.meSplashState = GuiEventNetworkSplashEvent::E_SPLASH_STATE_FINISHED;
 
                 GuiEventNetworkSplashWire lWire(lFinished);
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
