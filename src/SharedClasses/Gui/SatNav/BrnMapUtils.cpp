@@ -1,11 +1,9 @@
 // BrnMapUtils.cpp
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. BrnGui::MapTransform's out-of-line
-// 2D map-space functions. The X360 implements these as hand-vectorised VMX128 (dot
-// products via vmsum3fp128, matrix-inverse reciprocals via vrefp + two Newton-Raphson
-// refinement steps vnmsubfp/vmaddfp, lane shuffles via vperm/vpermwi128). Those
-// intrinsics have no portable PC equivalent, so the bodies below are SEMANTIC
-// reconstructions in named-member scalar/lane C++ that produce the same result, per
-// the policy stated in rw/math/vpu/types.h. The 3x3 transforms are row-major affine:
+// 2D map-space functions. MakeTransform, MakeCoordSpaceFromRect and the matrix
+// Transform overloads retain the original VMX operations and all four row lanes.
+// Other scalar helpers below retain their existing reconstruction and need separate
+// native verification. The 3x3 transforms are row-major affine:
 // a 2D point p is transformed as (p.x, p.y, 1) . M, i.e.
 //   out = p.x * M.xAxis + p.y * M.yAxis + M.zAxis.
 //
@@ -37,86 +35,90 @@ namespace
         Matrix33 lm33Out;
         // Each output basis row is lhs's row run through rhs (homogeneous, w treated as 1
         // only for the translation row zAxis).
-        lm33Out.xAxis = {
-            lm33Lhs.xAxis.x * lm33Rhs.xAxis.x + lm33Lhs.xAxis.y * lm33Rhs.yAxis.x,
-            lm33Lhs.xAxis.x * lm33Rhs.xAxis.y + lm33Lhs.xAxis.y * lm33Rhs.yAxis.y,
-            0.0f, 0.0f };
-        lm33Out.yAxis = {
-            lm33Lhs.yAxis.x * lm33Rhs.xAxis.x + lm33Lhs.yAxis.y * lm33Rhs.yAxis.x,
-            lm33Lhs.yAxis.x * lm33Rhs.xAxis.y + lm33Lhs.yAxis.y * lm33Rhs.yAxis.y,
-            0.0f, 0.0f };
-        lm33Out.zAxis = {
-            lm33Lhs.zAxis.x * lm33Rhs.xAxis.x + lm33Lhs.zAxis.y * lm33Rhs.yAxis.x + lm33Rhs.zAxis.x,
-            lm33Lhs.zAxis.x * lm33Rhs.xAxis.y + lm33Lhs.zAxis.y * lm33Rhs.yAxis.y + lm33Rhs.zAxis.y,
-            1.0f, 0.0f };
+        { const rw::math::vpu::VectorIntrinsic lvRow = {
+            lm33Lhs.xAxis.mV.x * lm33Rhs.xAxis.mV.x + lm33Lhs.xAxis.mV.y * lm33Rhs.yAxis.mV.x,
+            lm33Lhs.xAxis.mV.x * lm33Rhs.xAxis.mV.y + lm33Lhs.xAxis.mV.y * lm33Rhs.yAxis.mV.y,
+            0.0f, 0.0f }; lm33Out.xAxis.mV = lvRow; }
+        { const rw::math::vpu::VectorIntrinsic lvRow = {
+            lm33Lhs.yAxis.mV.x * lm33Rhs.xAxis.mV.x + lm33Lhs.yAxis.mV.y * lm33Rhs.yAxis.mV.x,
+            lm33Lhs.yAxis.mV.x * lm33Rhs.xAxis.mV.y + lm33Lhs.yAxis.mV.y * lm33Rhs.yAxis.mV.y,
+            0.0f, 0.0f }; lm33Out.yAxis.mV = lvRow; }
+        { const rw::math::vpu::VectorIntrinsic lvRow = {
+            lm33Lhs.zAxis.mV.x * lm33Rhs.xAxis.mV.x + lm33Lhs.zAxis.mV.y * lm33Rhs.yAxis.mV.x + lm33Rhs.zAxis.mV.x,
+            lm33Lhs.zAxis.mV.x * lm33Rhs.xAxis.mV.y + lm33Lhs.zAxis.mV.y * lm33Rhs.yAxis.mV.y + lm33Rhs.zAxis.mV.y,
+            1.0f, 0.0f }; lm33Out.zAxis.mV = lvRow; }
         return lm33Out;
     }
 
-    // Invert a row-major affine 3x3 (2x2 linear part + translation). The X360 path uses
-    // vrefp + two Newton-Raphson steps to form the reciprocal determinant; here we use
-    // the C++ reciprocal directly (same value).
+    // Existing scalar 2x2 affine reconstruction. The original uses a full3x3 inverse
+    // and VMX reciprocal refinements; this helper remains a separate parity debt.
     Matrix33 Invert33( const Matrix33& lm33In )
     {
-        const f32 lfA = lm33In.xAxis.x, lfB = lm33In.xAxis.y;
-        const f32 lfC = lm33In.yAxis.x, lfD = lm33In.yAxis.y;
-        const f32 lfTx = lm33In.zAxis.x, lfTy = lm33In.zAxis.y;
+        const f32 lfA = lm33In.xAxis.mV.x, lfB = lm33In.xAxis.mV.y;
+        const f32 lfC = lm33In.yAxis.mV.x, lfD = lm33In.yAxis.mV.y;
+        const f32 lfTx = lm33In.zAxis.mV.x, lfTy = lm33In.zAxis.mV.y;
 
         const f32 lfDet = lfA * lfD - lfB * lfC;
         const f32 lfInvDet = ( lfDet != 0.0f ) ? ( 1.0f / lfDet ) : 0.0f;
 
         Matrix33 lm33Out;
-        lm33Out.xAxis = {  lfD * lfInvDet, -lfB * lfInvDet, 0.0f, 0.0f };
-        lm33Out.yAxis = { -lfC * lfInvDet,  lfA * lfInvDet, 0.0f, 0.0f };
+        { const rw::math::vpu::VectorIntrinsic lvRow = {  lfD * lfInvDet, -lfB * lfInvDet, 0.0f, 0.0f }; lm33Out.xAxis.mV = lvRow; }
+        { const rw::math::vpu::VectorIntrinsic lvRow = { -lfC * lfInvDet,  lfA * lfInvDet, 0.0f, 0.0f }; lm33Out.yAxis.mV = lvRow; }
         // Inverse translation: -T . inverse(linear).
-        lm33Out.zAxis = {
-            -( lfTx * lm33Out.xAxis.x + lfTy * lm33Out.yAxis.x ),
-            -( lfTx * lm33Out.xAxis.y + lfTy * lm33Out.yAxis.y ),
-            1.0f, 0.0f };
+        { const rw::math::vpu::VectorIntrinsic lvRow = {
+            -( lfTx * lm33Out.xAxis.mV.x + lfTy * lm33Out.yAxis.mV.x ),
+            -( lfTx * lm33Out.xAxis.mV.y + lfTy * lm33Out.yAxis.mV.y ),
+            1.0f, 0.0f }; lm33Out.zAxis.mV = lvRow; }
         return lm33Out;
     }
 }
 
 // ---- static map-space state -------------------------------------------------
-// Values are the image's own (cinit thunk region 0x82C51F90..0x82C52480; exact f32
-// bit patterns quoted). The coord-space matrices are built from their rects exactly
-// as the thunks do (MakeCoordSpaceFromRect); within this TU the definition order
-// guarantees the rects initialise first.
-const Vector4  MapTransform::smv4WorldRect      = { -4375.419921875f, -5842.419921875f, 5363.14990234375f, 3904.739990234375f }; // 0xC588BB5C/0xC5B6935C/0x45A79933/0x45740BD7
-const Vector4  MapTransform::smv4NormalizedRect = { 0.0f, 0.0f, 1.0f, 1.0f };
-const Vector4  MapTransform::smv4DeviceRect     = { 0.0f, 0.0f, 1280.0f, 720.0f };
+// ARTIST registered callbacks82C52010..82C52530. Preserve the original definition
+// order: each rectangle is initialized immediately before its coordinate space.
+const Vector4  MapTransform::smv4WorldRect(-4375.419921875f, -5842.419921875f, 5363.14990234375f, 3904.739990234375f); // 0xC588BB5C/0xC5B6935C/0x45A79933/0x45740BD7
 const Matrix33 MapTransform::smm33WorldSpace      = MapTransform::MakeCoordSpaceFromRect( MapTransform::smv4WorldRect );
+const Vector4  MapTransform::smv4NormalizedRect(0.0f, 0.0f, 1.0f, 1.0f);
 const Matrix33 MapTransform::smm33NormalisedSpace = MapTransform::MakeCoordSpaceFromRect( MapTransform::smv4NormalizedRect );
+const Vector4  MapTransform::smv4DeviceRect(0.0f, 0.0f, 1280.0f, 720.0f);
 const Matrix33 MapTransform::smm33DeviceSpace     = MapTransform::MakeCoordSpaceFromRect( MapTransform::smv4DeviceRect );
 
-// The two authored sat-nav viewport rects. HD @0x82FB30A0; SD @0x82FB3130 (the x pair read
-// off the image in the H3b dump: 0.750781238079071 / 0.9039062261581421 -- the SD strip is
-// wider because the 4:3 composite is letterboxed; FLAG: its y pair is carried over from the
-// HD rect, the dump recorded the y's as "y0, y1" without values).
-const Vector4 MapTransform::smv4SatNavViewRectHD = { 0.778124988079071f, 0.6652777791023254f, 0.9312499761581421f, 0.8666666746139526f };
-const Vector4 MapTransform::smv4SatNavViewRectSD = { 0.750781238079071f, 0.6652777791023254f, 0.9039062261581421f, 0.8666666746139526f };
+// Authored HD82FB30A0 and SD82FB3130 values: all128bits are written by the original
+// registered callbacks82C522B0 and82C522F8, including the equal Y components.
+const Vector4 MapTransform::smv4SatNavViewRectHD(0.778124988079071f, 0.6652777791023254f, 0.9312499761581421f, 0.8666666746139526f);
+const Vector4 MapTransform::smv4SatNavViewRectSD(0.750781238079071f, 0.6652777791023254f, 0.9039062261581421f, 0.8666666746139526f);
 
 // The live sat-nav viewport rect (@0x82FB36A0). Default = the HD rect @0x82FB30A0
 // (the cinit copy thunk @0x82C52340); GuiModule::Construct re-installs the HD/SD pick
 // through SetSatNavRect by its high-definition argument (issue #11).
-Vector4  MapTransform::smv4SatNavViewRect = { 0.778124988079071f, 0.6652777791023254f, 0.9312499761581421f, 0.8666666746139526f };
+Vector4 MapTransform::smv4SatNavViewRect = MapTransform::smv4SatNavViewRectHD;
 
-Vector4  MapTransform::smv4ZoomedWorldRect                = { 0.0f, 0.0f, 0.0f, 0.0f };
-Matrix33 MapTransform::smm33ZoomedWorldTransform          = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
-Matrix33 MapTransform::smm33ZoomedViewportTransform       = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
-Matrix33 MapTransform::smm33ZoomedViewportScreenTransform = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
+Vector4 MapTransform::smv4ZoomedWorldRect; // Native default construction performs no store.
+Matrix33 MapTransform::smm33ZoomedWorldTransform = MapTransform::MakeCoordSpaceFromRect(MapTransform::smv4NormalizedRect);
+Matrix33 MapTransform::smm33ZoomedViewportTransform = MapTransform::MakeCoordSpaceFromRect(MapTransform::smv4NormalizedRect);
+Matrix33 MapTransform::smm33ZoomedViewportScreenTransform = MapTransform::MakeCoordSpaceFromRect(MapTransform::smv4NormalizedRect);
 
 // @ 0x82450460 — build the coord-space matrix that maps the unit square onto lv4Rect
 // (lv4Rect = minX, minY, maxX, maxY). Scale = (maxX-minX, maxY-minY), translate = (minX, minY).
 Matrix33 MapTransform::MakeCoordSpaceFromRect( Vector4 lv4Rect )
 {
-    const f32 lfWidth  = lv4Rect.z - lv4Rect.x;   // maxX - minX
-    const f32 lfHeight = lv4Rect.w - lv4Rect.y;   // maxY - minY
-
-    Matrix33 lm33Out;
-    lm33Out.xAxis = { lfWidth,    0.0f,     0.0f, 0.0f };
-    lm33Out.yAxis = { 0.0f,       lfHeight, 0.0f, 0.0f };
-    lm33Out.zAxis = { lv4Rect.x,  lv4Rect.y, 1.0f, 0.0f };
-    return lm33Out;
+    // ARTIST82450460..E0 retains the otherwise-unused fourth row lanes.
+    static const CGS_ALIGN(16) u32 lauXYXX[4] = {0x00010203, 0x14151617, 0x00010203, 0x00010203};
+    const __vector4 lvGather = __lvx(lauXYXX, 0);
+    const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+    const __vector4 lvZero = __vspltisw(0);
+    const __vector4 lvWidth = __vsubfp(__vspltw(lv4Rect.mV, 2), __vspltw(lv4Rect.mV, 0));
+    const __vector4 lvHeight = __vsubfp(__vspltw(lv4Rect.mV, 3), __vspltw(lv4Rect.mV, 1));
+    __vector4 lvOrigin = __vperm(lv4Rect.mV, lv4Rect.mV, lvGather);
+    lvOrigin = __vperm(__vspltw(lvOrigin, 0), __vspltw(lvOrigin, 1), lvGather);
+    lvOrigin = __vrlimi(lvOrigin, lvOne, 2, 0);
+    __vector4 lvX = __vperm(lvWidth, lvZero, lvGather);
+    __vector4 lvY = __vperm(lvZero, lvHeight, lvGather);
+    lvX = __vperm(__vspltw(lvX, 0), __vspltw(lvX, 1), lvGather);
+    lvY = __vperm(__vspltw(lvY, 0), __vspltw(lvY, 1), lvGather);
+    lvX = __vrlimi(lvX, lvZero, 2, 0);
+    lvY = __vrlimi(lvY, lvZero, 2, 0);
+    return Matrix33(lvX, lvY, lvOrigin);
 }
 
 // (X360 inlines this; the layout is attested by SetZoomedWorldRect @0x824504E8 and
@@ -126,9 +128,9 @@ Matrix33 MapTransform::MakeCoordSpaceFromRect( Vector4 lv4Rect )
 Matrix33 MapTransform::MakeCoordSpaceFromPoints( Vector2 lv2Origin, Vector2 lv2XPoint, Vector2 lv2YPoint )
 {
     Matrix33 lm33Out;
-    lm33Out.xAxis = { lv2XPoint.x - lv2Origin.x, lv2XPoint.y - lv2Origin.y, 0.0f, 0.0f };
-    lm33Out.yAxis = { lv2YPoint.x - lv2Origin.x, lv2YPoint.y - lv2Origin.y, 0.0f, 0.0f };
-    lm33Out.zAxis = { lv2Origin.x,               lv2Origin.y,               1.0f, 0.0f };
+    { const rw::math::vpu::VectorIntrinsic lvRow = { lv2XPoint.mV.x - lv2Origin.mV.x, lv2XPoint.mV.y - lv2Origin.mV.y, 0.0f, 0.0f }; lm33Out.xAxis.mV = lvRow; }
+    { const rw::math::vpu::VectorIntrinsic lvRow = { lv2YPoint.mV.x - lv2Origin.mV.x, lv2YPoint.mV.y - lv2Origin.mV.y, 0.0f, 0.0f }; lm33Out.yAxis.mV = lvRow; }
+    { const rw::math::vpu::VectorIntrinsic lvRow = { lv2Origin.mV.x,               lv2Origin.mV.y,               1.0f, 0.0f }; lm33Out.zAxis.mV = lvRow; }
     return lm33Out;
 }
 
@@ -136,16 +138,16 @@ Matrix33 MapTransform::MakeCoordSpaceFromPoints( Vector2 lv2Origin, Vector2 lv2X
 // to a 2D point: out = p.x * xAxis + p.y * yAxis + zAxis.
 Vector2 MapTransform::Transform( Vector2 lv2Point, Matrix33 lm33Transform )
 {
-    Vector2 lv2Out;
-    lv2Out.x = lv2Point.x * lm33Transform.xAxis.x
-             + lv2Point.y * lm33Transform.yAxis.x
-             + lm33Transform.zAxis.x;
-    lv2Out.y = lv2Point.x * lm33Transform.xAxis.y
-             + lv2Point.y * lm33Transform.yAxis.y
-             + lm33Transform.zAxis.y;
-    lv2Out.z = 0.0f;
-    lv2Out.w = 0.0f;
-    return lv2Out;
+    static const CGS_ALIGN(16) u32 lauXYXX[4] = {0x00010203, 0x14151617, 0x00010203, 0x00010203};
+    const __vector4 lvGather = __lvx(lauXYXX, 0);
+    __vector4 lvPoint = __vperm(__vspltw(lv2Point.mV, 0), __vspltw(lv2Point.mV, 1), lvGather);
+    lvPoint = __vrlimi(lvPoint, __vcfsx(__vspltisw(1), 0), 2, 0);
+    __vector4 lvValue = __vmulfp(lm33Transform.xAxis.mV, __vspltw(lvPoint, 0));
+    lvValue = __vmaddfp(lm33Transform.yAxis.mV, __vspltw(lvPoint, 1), lvValue);
+    lvValue = __vmaddfp(lm33Transform.zAxis.mV, __vspltw(lvPoint, 2), lvValue);
+    Vector2 lvResult;
+    lvResult.mV = __vperm(lvValue, lvValue, lvGather);
+    return lvResult;
 }
 
 // @ 0x824503C0 — the two-matrix overload: take the point out of `lm33From` space into
@@ -180,7 +182,41 @@ Vector2 MapTransform::Transform( Vector2 lv2Point, Vector4 lv4From, Vector4 lv4T
 // `lm33To` space: inverse(from) composed with to.
 Matrix33 MapTransform::MakeTransform( Matrix33 lm33From, Matrix33 lm33To )
 {
-    return Multiply33( Invert33( lm33From ), lm33To );
+    // ARTIST824435C8..6CC: full3x3 cofactors, reciprocal refinements and fused rows.
+    const __vector4 lvX = lm33From.xAxis.mV;
+    const __vector4 lvY = lm33From.yAxis.mV;
+    const __vector4 lvZ = lm33From.zAxis.mV;
+    const __vector4 lvXyz = __vpermwi(lvX, 0x63);
+    const __vector4 lvYyz = __vpermwi(lvY, 0x63);
+    const __vector4 lvZyz = __vpermwi(lvZ, 0x63);
+    const __vector4 lvCofY = __vpermwi(__vnmsubfp(lvZyz, lvX, __vmulfp(lvZ, lvXyz)), 0x63);
+    const __vector4 lvCofX = __vpermwi(__vnmsubfp(lvYyz, lvZ, __vmulfp(lvY, lvZyz)), 0x63);
+    const __vector4 lvCofZ = __vpermwi(__vnmsubfp(lvXyz, lvY, __vmulfp(lvX, lvYyz)), 0x63);
+    const __vector4 lvYHi = __vmrghw(lvCofY, lvCofY);
+    const __vector4 lvXZHi = __vmrghw(lvCofX, lvCofZ);
+    const __vector4 lvXZLo = __vmrglw(lvCofX, lvCofZ);
+    const __vector4 lvYLo = __vmrglw(lvCofY, lvCofY);
+    const __vector4 lvRow0 = __vmrghw(lvXZHi, lvYHi);
+    const __vector4 lvRow1 = __vmrglw(lvXZHi, lvYHi);
+    const __vector4 lvRow2 = __vmrghw(lvXZLo, lvYLo);
+    const __vector4 lvDet = __vspltw(__vmsum3fp(lvX, lvCofX), 0);
+    const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+    __vector4 lvReciprocal = __vrefp(lvDet);
+    lvReciprocal = __vmaddfp(lvReciprocal, __vnmsubfp(lvReciprocal, lvDet, lvOne), lvReciprocal);
+    lvReciprocal = __vmaddfp(lvReciprocal, __vnmsubfp(lvReciprocal, lvDet, lvOne), lvReciprocal);
+    const __vector4 lvInv0 = __vmulfp(lvRow0, lvReciprocal);
+    const __vector4 lvInv1 = __vmulfp(lvRow1, lvReciprocal);
+    const __vector4 lvInv2 = __vmulfp(lvRow2, lvReciprocal);
+    __vector4 lvOut0 = __vmulfp(lm33To.xAxis.mV, __vspltw(lvInv0, 0));
+    lvOut0 = __vmaddfp(lm33To.yAxis.mV, __vspltw(lvInv0, 1), lvOut0);
+    lvOut0 = __vmaddfp(lm33To.zAxis.mV, __vspltw(lvInv0, 2), lvOut0);
+    __vector4 lvOut1 = __vmulfp(lm33To.xAxis.mV, __vspltw(lvInv1, 0));
+    lvOut1 = __vmaddfp(lm33To.yAxis.mV, __vspltw(lvInv1, 1), lvOut1);
+    lvOut1 = __vmaddfp(lm33To.zAxis.mV, __vspltw(lvInv1, 2), lvOut1);
+    __vector4 lvOut2 = __vmulfp(lm33To.xAxis.mV, __vspltw(lvInv2, 0));
+    lvOut2 = __vmaddfp(lm33To.yAxis.mV, __vspltw(lvInv2, 1), lvOut2);
+    lvOut2 = __vmaddfp(lm33To.zAxis.mV, __vspltw(lvInv2, 2), lvOut2);
+    return Matrix33(lvOut0, lvOut1, lvOut2);
 }
 
 // @ 0x824504E8 — install the zoomed world window from THREE CORNERS of the (possibly
@@ -210,7 +246,11 @@ Matrix33 MapTransform::MakeTransform( Matrix33 lm33From, Matrix33 lm33To )
 //      asm-pinned smm33WorldSpace rect above); (A, C, B) drew it transposed.
 void MapTransform::SetZoomedWorldRect( Vector2 lv2CornerA, Vector2 lv2CornerB, Vector2 lv2CornerC )
 {
-    smv4ZoomedWorldRect = { lv2CornerC.x, lv2CornerC.y, lv2CornerB.x, lv2CornerB.y };
+    static const CGS_ALIGN(16) u32 lauXYXX[4] = {0x00010203, 0x14151617, 0x00010203, 0x00010203};
+    static const CGS_ALIGN(16) u32 lauXXXY[4] = {0x00010203, 0x00010203, 0x00010203, 0x14151617};
+    smv4ZoomedWorldRect.mV = __vsldoi(
+        __vperm(lv2CornerC.mV, lv2CornerC.mV, __lvx(lauXXXY, 0)),
+        __vperm(lv2CornerB.mV, lv2CornerB.mV, __lvx(lauXYXX, 0)), 8);
     smm33ZoomedWorldTransform =
         Invert33( MakeCoordSpaceFromPoints( lv2CornerA, lv2CornerB, lv2CornerC ) );
 }
@@ -239,17 +279,17 @@ Vector2 MapTransform::WorldToDevice( Vector3 lv3World, bool lbClamp )
 {
     // The map plane is world (x, z) (the asm perms lanes 0/2 of the input vector).
     Vector2 lv2World;
-    lv2World.x = lv3World.x;
-    lv2World.y = lv3World.z;
-    lv2World.z = 0.0f;
-    lv2World.w = 0.0f;
+    lv2World.mV.x = lv3World.mV.x;
+    lv2World.mV.y = lv3World.mV.z;
+    lv2World.mV.z = 0.0f;
+    lv2World.mV.w = 0.0f;
 
     Vector2 lv2Unit = Transform( lv2World, smm33ZoomedWorldTransform );
 
     if ( lbClamp )
     {
-        f32 lfX = lv2Unit.x;
-        f32 lfY = lv2Unit.y;
+        f32 lfX = lv2Unit.mV.x;
+        f32 lfY = lv2Unit.mV.y;
 
         // The asm guards the slope on x == 0.5 exactly (vcmpeqfp against the 0.5 splat).
         if ( lfX != 0.5f )
@@ -276,13 +316,13 @@ Vector2 MapTransform::WorldToDevice( Vector3 lv3World, bool lbClamp )
         }
 
         // Final plain clamp01 of both lanes (always applied on the clamp path).
-        lv2Unit.x = ( lfX < 0.0f ) ? 0.0f : ( lfX > 1.0f ? 1.0f : lfX );
-        lv2Unit.y = ( lfY < 0.0f ) ? 0.0f : ( lfY > 1.0f ? 1.0f : lfY );
+        lv2Unit.mV.x = ( lfX < 0.0f ) ? 0.0f : ( lfX > 1.0f ? 1.0f : lfX );
+        lv2Unit.mV.y = ( lfY < 0.0f ) ? 0.0f : ( lfY > 1.0f ? 1.0f : lfY );
     }
 
     Vector2 lv2Out = Transform( lv2Unit, smm33ZoomedViewportScreenTransform );
-    lv2Out.z = 0.0f;
-    lv2Out.w = 0.0f;
+    lv2Out.mV.z = 0.0f;
+    lv2Out.mV.w = 0.0f;
     return lv2Out;
 }
 
@@ -312,10 +352,10 @@ Vector2 MapTransform::WorldToDevice( Vector3 lv3World, bool lbClamp )
 Vector2 MapTransform::Flatten( Vector3 lv3In )
 {
     Vector2 lv2Out;
-    lv2Out.x = lv3In.x;
-    lv2Out.y = lv3In.z;
-    lv2Out.z = 0.0f;
-    lv2Out.w = 0.0f;
+    lv2Out.mV.x = lv3In.mV.x;
+    lv2Out.mV.y = lv3In.mV.z;
+    lv2Out.mV.z = 0.0f;
+    lv2Out.mV.w = 0.0f;
     return lv2Out;
 }
 
@@ -326,10 +366,10 @@ Vector2 MapTransform::Flatten( Vector3 lv3In )
 Vector3 MapTransform::Unflatten( Vector2 lv2In )
 {
     Vector3 lv3Out;
-    lv3Out.x = lv2In.x;
-    lv3Out.y = 0.0f;
-    lv3Out.z = lv2In.y;
-    lv3Out.w = 0.0f;
+    lv3Out.mV.x = lv2In.mV.x;
+    lv3Out.mV.y = 0.0f;
+    lv3Out.mV.z = lv2In.mV.y;
+    lv3Out.mV.w = 0.0f;
     return lv3Out;
 }
 
@@ -358,17 +398,17 @@ Vector3 MapTransform::DeviceToWorld( Vector2 lv2Device )
     const Vector2 lv2World = Transform( lv2Unit,   Invert33( smm33ZoomedWorldTransform ) );
 
     Vector3 lv3Out;
-    lv3Out.x = lv2World.x;
-    lv3Out.y = 0.0f;
-    lv3Out.z = lv2World.y;
-    lv3Out.w = 0.0f;
+    lv3Out.mV.x = lv2World.mV.x;
+    lv3Out.mV.y = 0.0f;
+    lv3Out.mV.z = lv2World.mV.y;
+    lv3Out.mV.w = 0.0f;
     return lv3Out;
 }
 
 // @ 0x8244F318 — BrnGui::MapTransform::CalculateZoomFactor.
 //
 // The world-space zoom scale that makes the axis-aligned box spanned by lv2A/lv2B fit a
-// viewport whose normalised width/height are lv2C.x / lv2C.y, at aspect lfBase. Callers:
+// viewport whose normalised width/height are lv2C.mV.x / lv2C.mV.y, at aspect lfBase. Callers:
 // PreRaceFlyByState::CalculateZoomFactor @0x824BE8F0, CrashNavMap::CalculateEventZoomFactor
 // @0x824BF4B0, OnlineSelectRoute::CalculateZoomFactor @0x8248F398,
 // GuiNetworkRouteInfo::CalculateZoomFactor @0x8242C6C0.
@@ -395,10 +435,10 @@ Vector3 MapTransform::DeviceToWorld( Vector2 lv2Device )
 f32 MapTransform::CalculateZoomFactor( Vector2 lv2A, Vector2 lv2B, Vector2 lv2C, f32 lfBase )
 {
     // vminfp / vmaxfp, then the lane-0 / lane-1 splats and subtracts.
-    const f32 lfMinX = ( lv2A.x < lv2B.x ) ? lv2A.x : lv2B.x;
-    const f32 lfMinY = ( lv2A.y < lv2B.y ) ? lv2A.y : lv2B.y;
-    const f32 lfMaxX = ( lv2A.x > lv2B.x ) ? lv2A.x : lv2B.x;
-    const f32 lfMaxY = ( lv2A.y > lv2B.y ) ? lv2A.y : lv2B.y;
+    const f32 lfMinX = ( lv2A.mV.x < lv2B.mV.x ) ? lv2A.mV.x : lv2B.mV.x;
+    const f32 lfMinY = ( lv2A.mV.y < lv2B.mV.y ) ? lv2A.mV.y : lv2B.mV.y;
+    const f32 lfMaxX = ( lv2A.mV.x > lv2B.mV.x ) ? lv2A.mV.x : lv2B.mV.x;
+    const f32 lfMaxY = ( lv2A.mV.y > lv2B.mV.y ) ? lv2A.mV.y : lv2B.mV.y;
 
     const f32 lfWidth  = lfMaxX - lfMinX;
     const f32 lfHeight = lfMaxY - lfMinY;
@@ -410,12 +450,12 @@ f32 MapTransform::CalculateZoomFactor( Vector2 lv2A, Vector2 lv2B, Vector2 lv2C,
 
     // smv4DeviceRect lanes 2/3 (1280 / 720); the console forms both reciprocals with
     // vrefp + two Newton-Raphson refinements, which is the C++ divide's value.
-    const f32 lfDeviceWidth  = smv4DeviceRect.z;
-    const f32 lfDeviceHeight = smv4DeviceRect.w;
+    const f32 lfDeviceWidth  = smv4DeviceRect.mV.z;
+    const f32 lfDeviceHeight = smv4DeviceRect.mV.w;
 
     // The usable viewport extents, back in device units.
-    const f32 lfViewportX = ( lv2C.x * KF_VIEWPORT_USABLE_FRACTION ) / lfDeviceWidth;
-    const f32 lfViewportY = ( lv2C.y * KF_VIEWPORT_USABLE_FRACTION ) / lfDeviceHeight;
+    const f32 lfViewportX = ( lv2C.mV.x * KF_VIEWPORT_USABLE_FRACTION ) / lfDeviceWidth;
+    const f32 lfViewportY = ( lv2C.mV.y * KF_VIEWPORT_USABLE_FRACTION ) / lfDeviceHeight;
 
     const f32 lfAspectScale = KF_ONE / lfBase;                 // X axis only (see banner)
     const f32 lfZoomX       = lfAspectScale * ( lfWidth / lfViewportX );
@@ -434,9 +474,9 @@ namespace BrnGui
 // Preserve those early-outs, including their disjunction, rather than correcting the game.
 bool MapTransform::IsWithinViewport(Vector3 lv3World, f32 lfMarginX, f32 lfMarginY)
 {
-    const Vector2 lv2World = { lv3World.x, lv3World.z, 0.0f, 0.0f };
+    const Vector2 lv2World(lv3World.mV.x, lv3World.mV.z);
     const Vector2 lv2Unit = Transform(lv2World, smm33ZoomedWorldTransform);
-    return !(-lfMarginX > lv2Unit.x) || !(lv2Unit.x > lfMarginX + 1.0f) ||
-        !(-lfMarginY > lv2Unit.y) || !(lv2Unit.y > lfMarginY + 1.0f);
+    return !(-lfMarginX > lv2Unit.mV.x) || !(lv2Unit.mV.x > lfMarginX + 1.0f) ||
+        !(-lfMarginY > lv2Unit.mV.y) || !(lv2Unit.mV.y > lfMarginY + 1.0f);
 }
 }

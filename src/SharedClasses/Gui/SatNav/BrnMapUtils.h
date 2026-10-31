@@ -21,13 +21,10 @@
 //   DeviceToWorld          @ 0x824BAB78  Vector3 = device-point -> world-space point
 //
 // Sources:
-//   * X360 BURNOUT_X360_ARTIST.XEX (binary). These functions are hand-vectorised
-//     VMX128 (vmsum3fp128 dot products, vrefp + Newton-Raphson reciprocal, vperm
-//     lane shuffles). Those intrinsics have NO portable PC equivalent, so the bodies
-//     are reconstructed at the SEMANTIC level (faithful named-member matrix math that
-//     produces the same result), not store-for-store -- consistent with the policy
-//     already stated in rw/math/vpu/types.h ("the SIMD operations ... are not
-//     reproduced here"). The project target is faithful, compilable C++, not a byte match.
+//   * X360 BURNOUT_X360_ARTIST.XEX (binary). Matrix33 has three full vector rows and
+//     explicit copy semantics: by-value matrix inputs arrive as pointers. The native
+//     MakeTransform/MakeCoordSpaceFromRect/matrix Transform implementations preserve
+//     VMX arithmetic and fourth-row lanes. Other methods need separate verification.
 //   * The static map-space VALUES are read off the image's static-init thunks
 //     (H3b scratch h3b_dump.txt, cinit region 0x82C51F90..0x82C52480):
 //       smv4WorldRect       @0x82FB31F0 = {-4375.42, -5842.42, 5363.15, 3904.74}

@@ -3,6 +3,7 @@
 #include <vectorintrinsics.h>
 #include "SDKs/EATech/include/rw/math/vpu/vector3.h"
 #include "SDKs/EATech/include/rw/math/vpu/vector4.h"
+#include "SDKs/EATech/include/rw/math/vpu/matrix33.h"
 
 // Shared rwmath type entry point. Vector3/4 use their genuine SDK class homes above.
 // Vector2 remains the separately recovered VPU16 type; packed FPU/Basic2D pairs
@@ -97,23 +98,6 @@ namespace vpu
         const Vector3& Up() const { return yAxis; }
         const Vector3& At() const { return zAxis; }
         const Vector3& Pos() const { return wAxis; }
-    };
-
-    // ADDITIVE GROW (flagged by BrnPhysics-bodies group): a 3x3 rotation/inertia matrix,
-    // stored as three 16-byte rows (each a Vector3 lane register), matching the console
-    // `rw::math::vpu::Matrix33` layout (48 bytes, 16-aligned). Needed as the storage type
-    // for BrnPhysics::ExternalPhysicsBody::m{Local,World}InverseInertia (DWARF spells those
-    // members `Matrix33`). No existing user; purely a new type-vocabulary entry in the
-    // canonical RW math home. SetIdentity sets the upper-3x3 to the identity basis.
-    struct CGS_ALIGN(16) Matrix33
-    {
-        Vector3 xAxis, yAxis, zAxis;
-        void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); }
-        void SetIdentity()
-        {
-            const Vector3 lxAxis(1.0f, 0.0f, 0.0f); xAxis = lxAxis; const Vector3 lyAxis(0.0f, 1.0f, 0.0f); yAxis = lyAxis;
-            const Vector3 lzAxis(0.0f, 0.0f, 1.0f); zAxis = lzAxis;
-        }
     };
 
     // ADDITIVE GROW (class:rw::math::vpu::MaskScalar): the SDK's 128-bit per-lane
