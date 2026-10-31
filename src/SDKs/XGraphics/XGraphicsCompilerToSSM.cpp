@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstring> // memcpy
+#include <cfloat>
 
 // ===========================================================================
 // XGRAPHICS CompilerToSSM -- bodies reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -606,7 +607,7 @@ int CompileGetFogScale(AS_Object* apObject, int aiStage, f32* apOut, CompilePrin
         f32 lfEnd   = AS_GetStateF(apObject, 167);
         if ((lfEnd - lfStart) == 0.0f)
         {
-            *apOut = 3.4028235e38f; // FLT_MAX
+            *apOut = FLT_MAX; // ARTIST 82C25488/8C stores 0x7F7FFFFF
             CGS_ASSERT(AS_GetStateI(apObject, 170) == 1,
                        "CompileGetFogScale -- why are we calculating a scale for Z-fog?");
             TraceText(apfnPrint, aiChannel, 27, aiStage, 0);

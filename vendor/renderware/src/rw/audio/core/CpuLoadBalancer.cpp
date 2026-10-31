@@ -14,6 +14,7 @@
 #include "rw/audio/core/CpuLoadBalancer.h"
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::System (voice array + CPU-load fields)
 #include "rw/audio/core/Voice.h"  // rw::audio::core::Voice / VoiceActiveNode
+#include <cfloat>
 
 namespace rw
 {
@@ -35,7 +36,7 @@ static const f32 KF_VOICE_COST_SCALE    = 64.0f;         // flt_8214AED8 -- per-
 static const f32 KF_BUDGET_SCALE        = 170666.67f;    // flt_8214B280 -- load% -> cycle-budget scale
 static const f32 KF_ZERO                = 0.0f;          // flt_82001CC0
 static const f32 KF_CPU_CLOCK_RATE      = 3200000000.0f; // flt_820AA80C -- 3.2 GHz (Init seed)
-static const f32 KF_FLT_MAX             = 3.4028235e38f; // flt_8204F664 -- FindLowest best-seed
+static const f32 KF_FLT_MAX             = FLT_MAX; // ARTIST flt_8204F664: 0x7F7FFFFF
 
 // -------------------------------------------------------------------------------------
 // Init @0x82B6C6F0 -- bind the balancer to its owning System, clear the frame accumulator
