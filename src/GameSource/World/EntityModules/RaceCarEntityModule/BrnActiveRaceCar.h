@@ -492,6 +492,7 @@ public:
         // CarState wheel tag points with bare `stvx128` at this+0xB40+16*wheel (0x822D4BE4).
         // Exists so that leg writes the member BY NAME.
         void SetAxlePosition(u32 luWheel, const Vector3& lrPos) { maAxlePositions[luWheel] = lrPos; }
+        const Vector3* GetAxlePosition(u32 luWheel) const;
 
         // ADDITIVE (wheel-render wave): the console has no accessor symbol for the
         // angular-velocity array either -- RenderRaceCar @0x822D1110 emits a bare
