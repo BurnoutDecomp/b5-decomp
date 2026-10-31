@@ -98,6 +98,12 @@ void ActiveRaceCar::RenderParams::SetWheelTransform(u32 luWheel, Matrix44Affine 
     mWheelTransforms[luWheel] = lTransform;
 }
 
+// ARTIST 822E7ED8/7EE0 read axle 0 and 3 at +0xB40 with a 16-byte stride.
+const Vector3* ActiveRaceCar::RenderParams::GetAxlePosition(u32 luWheel) const
+{
+    return &maAxlePositions[luWheel];
+}
+
 // X360 0x822A31B8: &maWheelScaleMatrices[luWheel] via ((luWheel+39)<<6)+this.
 const Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel) const
 {
