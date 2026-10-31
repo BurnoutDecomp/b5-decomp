@@ -533,30 +533,29 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     //     mYaw.Update(angle)
     // Its consumer is BrnSkidEffect.cpp:163, which had been reading a constant 0
     // because nothing in this tree ever wrote mYaw.
-    // The arc-cosine is the console's own XMVectorACos (0x826CBC44 bl 0x821F0980, the shared
-    // XboxMath::XMVectorACos; crash parity FX-GATE -- std::acos stood in for it before).
-    // FLAG (PC-only domain guard, kept by conductor decision 2026-09-25): the console passes the
-    // raw dot (0x826CBC2C vmsum3fp128 -> 0x826CBC44); a dot > 1 gives NaN there (XMVectorACos of
-    // 1.00000012 is NaN). The clamp below was added for the host libm's domain; for a normalized
-    // vector the dot only leaves [-1,1] by float rounding. REMOVE WHEN the dot feeding it is
-    // console-exact AND the PC audio backend is shown to handle a NaN yaw the way the console's
-    // platform layer does (sound-pass follow-up).
+    // The console passes its raw VMX dot to XMVectorACos, including out-of-domain values.
     {
         f32 lfYawDegrees = 0.0f;
         if (std::fabs(lrData.mVelocityMagnitude.GetCurrent()) > 0.15f)
         {
-            const Vector3& lrVelocity = lrRaw.mLinearVelocity;
-            const f32 lfLengthSquared = lrVelocity.x * lrVelocity.x
-                                      + lrVelocity.y * lrVelocity.y
-                                      + lrVelocity.z * lrVelocity.z;
-            const f32 lfInverseLength = lfLengthSquared > 0.0f
-                ? 1.0f / std::sqrt(lfLengthSquared) : 0.0f;
-            const Vector3& lrForward = lrRaw.mTransform.At();
-            f32 lfDot = (lrForward.x * lrVelocity.x
-                       + lrForward.y * lrVelocity.y
-                       + lrForward.z * lrVelocity.z) * lfInverseLength;
-            lfDot = (std::max)(-1.0f, (std::min)(1.0f, lfDot));
-            lfYawDegrees = XboxMath::XMVectorACos(lfDot) * 57.29578f;
+            const __vector4 lvVelocity = __lvx(&lrRaw.mLinearVelocity, 0);
+            const __vector4 lvLengthSquared = __vmsum3fp(lvVelocity, lvVelocity);
+            const __vector4 lvOne = XMVectorReplicate(1.0f);
+            const __vector4 lvHalf = XMVectorReplicate(0.5f);
+            __vector4 lvEstimate = __vrsqrtefp(lvLengthSquared);
+            __vector4 lvSquared = __vmulfp(lvEstimate, lvEstimate);
+            __vector4 lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+            __vector4 lvError = __vnmsubfp(lvLengthSquared, lvSquared, lvOne);
+            lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+            lvSquared = __vmulfp(lvEstimate, lvEstimate);
+            lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+            lvError = __vnmsubfp(lvLengthSquared, lvSquared, lvOne);
+            lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+            const __vector4 lvDirection = __vmulfp(lvVelocity, lvEstimate);
+            const __vector4 lvForward = __lvx(&lrRaw.mTransform.At(), 0);
+            const __vector4 lvDot = __vmsum3fp(lvForward, lvDirection);
+            const __vector4 lvAngle = ::XMVectorACos(XMVectorReplicate(lvDot.x));
+            lfYawDegrees = __vmulfp(lvAngle, XMVectorReplicate(57.29578f)).x;
             if (lfYawDegrees > 90.0f)
                 lfYawDegrees = 180.0f - lfYawDegrees;
         }
