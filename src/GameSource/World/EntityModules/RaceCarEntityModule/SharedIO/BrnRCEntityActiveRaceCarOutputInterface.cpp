@@ -515,7 +515,8 @@ void RCEntityActiveRaceCarOutputInterface::AddCarToRace(BrnWorld::RaceCar* lpRac
     CGS_ASSERT(lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
                "muType < E_RACE_CAR_TYPE_COUNT");
     lCachedCar.mbIsPlayer = lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER;
-    lCachedCar.mDirection = lCachedCar.mbIsPlayer ? lpRaceCar->GetVelocity() : Vector3{};
+    lCachedCar.mDirection = lCachedCar.mbIsPlayer
+        ? lpRaceCar->GetVelocity() : Vector3(__vspltisw(0));
     maCarsInTheRace.Append(lCachedCar);
 }
 
