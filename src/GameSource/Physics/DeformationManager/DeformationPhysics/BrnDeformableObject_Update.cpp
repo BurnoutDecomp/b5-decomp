@@ -857,7 +857,7 @@ namespace Deformation
             const CgsGeometric::Sphere* lpLocalSphere =
                 ( lpSensor != 0 ) ? lpSensor->GetLocalSpaceSphere() : 0;
             const f32 lfSphereRadius = ( lpLocalSphere != 0 )
-                                     ? lpLocalSphere->mPositionRadius.w : 0.0f;
+                                     ? lpLocalSphere->mData.mV.w : 0.0f;
             const f32 lfPad    = lbCrashed ? 0.5f : 0.0f;          // vcfsx(vspltisw 1,1) == 0.5
             const f32 lfRadius = lfSphereRadius + lfPad;
             const Vector3& lrDriveMin = GetDriveTimeLimitsMin();   // this + 0x66F0
@@ -1360,14 +1360,14 @@ namespace Deformation
         for ( s32 li = 0; li < static_cast<s32>(mpDeformationSpec->mu8NumDeformationSensors); ++li )
         {
             const DeformationSensor& lrSensor     = maDeformationSensors[li];
-            const Vector4&           lrLocalSphere = lrSensor.mpLocalSpaceSphere->mPositionRadius;
+            const Vector3Plus&           lrLocalSphere = lrSensor.mpLocalSpaceSphere->mData;
 
             Matrix44Affine lBox = lBodyTransform;
-            lBox.wAxis.x = lBodyTransform.zAxis.x * lrLocalSphere.z + (lBodyTransform.xAxis.x * lrLocalSphere.x + lBodyTransform.yAxis.x * lrLocalSphere.y) + lBodyTransform.wAxis.x;
-            lBox.wAxis.y = lBodyTransform.zAxis.y * lrLocalSphere.z + (lBodyTransform.xAxis.y * lrLocalSphere.x + lBodyTransform.yAxis.y * lrLocalSphere.y) + lBodyTransform.wAxis.y;
-            lBox.wAxis.z = lBodyTransform.zAxis.z * lrLocalSphere.z + (lBodyTransform.xAxis.z * lrLocalSphere.x + lBodyTransform.yAxis.z * lrLocalSphere.y) + lBodyTransform.wAxis.z;
-            lBox.wAxis.w = lBodyTransform.zAxis.w * lrLocalSphere.z + (lBodyTransform.xAxis.w * lrLocalSphere.x + lBodyTransform.yAxis.w * lrLocalSphere.y) + lBodyTransform.wAxis.w;
-            const f32 lfRadius = lrLocalSphere.w;   // vspltw 3 @0x825E09B8
+            lBox.wAxis.x = lBodyTransform.zAxis.x * lrLocalSphere.mV.z + (lBodyTransform.xAxis.x * lrLocalSphere.mV.x + lBodyTransform.yAxis.x * lrLocalSphere.mV.y) + lBodyTransform.wAxis.x;
+            lBox.wAxis.y = lBodyTransform.zAxis.y * lrLocalSphere.mV.z + (lBodyTransform.xAxis.y * lrLocalSphere.mV.x + lBodyTransform.yAxis.y * lrLocalSphere.mV.y) + lBodyTransform.wAxis.y;
+            lBox.wAxis.z = lBodyTransform.zAxis.z * lrLocalSphere.mV.z + (lBodyTransform.xAxis.z * lrLocalSphere.mV.x + lBodyTransform.yAxis.z * lrLocalSphere.mV.y) + lBodyTransform.wAxis.z;
+            lBox.wAxis.w = lBodyTransform.zAxis.w * lrLocalSphere.mV.z + (lBodyTransform.xAxis.w * lrLocalSphere.mV.x + lBodyTransform.yAxis.w * lrLocalSphere.mV.y) + lBodyTransform.wAxis.w;
+            const f32 lfRadius = lrLocalSphere.mV.w;   // vspltw 3 @0x825E09B8
             const Vector3 lBoxMin = { -lfRadius, -lfRadius, -lfRadius, 0.0f };
             const Vector3 lBoxMax = {  lfRadius,  lfRadius,  lfRadius, 0.0f };
 
@@ -1380,9 +1380,9 @@ namespace Deformation
                     {
                         const DeformationSensor& lrNext =
                             maDeformationSensors[lu8NextSensor - mpDeformationSpec->mu8NumVehicleBodies];
-                        const Vector4& lrNextSphere = lrNext.mpWorldSpaceSphere->mPositionRadius;
+                        const Vector3Plus& lrNextSphere = lrNext.mpWorldSpaceSphere->mData;
                         const Vector3 lNextSpherePoint = {
-                            lrNextSphere.x, lrNextSphere.y, lrNextSphere.z, lrNextSphere.w
+                            lrNextSphere.mV.x, lrNextSphere.mV.y, lrNextSphere.mV.z, lrNextSphere.mV.w
                         };
                         lpRender->DrawLine(lBox.wAxis, lNextSpherePoint, KRGBA_SELECTED_SENSOR);
                     }
@@ -1392,10 +1392,10 @@ namespace Deformation
             else
             {
                 const SensorSpec* lpSensorSpec = mpDeformationSpec->GetDeformationSensorSpec(li);
-                const Vector3 lDisplacement = { lrLocalSphere.x - lpSensorSpec->mInitialOffset.x,
-                                                       lrLocalSphere.y - lpSensorSpec->mInitialOffset.y,
-                                                       lrLocalSphere.z - lpSensorSpec->mInitialOffset.z,
-                                                       lrLocalSphere.w - lpSensorSpec->mInitialOffset.w };
+                const Vector3 lDisplacement = { lrLocalSphere.mV.x - lpSensorSpec->mInitialOffset.x,
+                                                       lrLocalSphere.mV.y - lpSensorSpec->mInitialOffset.y,
+                                                       lrLocalSphere.mV.z - lpSensorSpec->mInitialOffset.z,
+                                                       lrLocalSphere.mV.w - lpSensorSpec->mInitialOffset.w };
                 const f32 lfDisplacement = vpu::Magnitude(lDisplacement);   // |0| == 0: the vsel guard
                 f32 lfRamp = ( -lfDisplacement >= 0.0f ) ? KF_SENSOR_RAMP_FLOOR : lfDisplacement;   // fsel @0x825E0B24
                 lfRamp = ( KF_SENSOR_RAMP_CEILING - lfRamp >= 0.0f ) ? lfRamp : KF_SENSOR_RAMP_CEILING;  // fsel @0x825E0B2C
@@ -1406,22 +1406,22 @@ namespace Deformation
 
         for ( s32 lj = 0; lj < 4; ++lj )
         {
-            const Vector4& lrWheelSphere =
-                maWorldSensorSpheres[mpDeformationSpec->mu8NumDeformationSensors + lj].mPositionRadius;
+            const Vector3Plus& lrWheelSphere =
+                maWorldSensorSpheres[mpDeformationSpec->mu8NumDeformationSensors + lj].mData;
             Matrix44Affine lBox = lBodyTransform;
             {
-                const Vector3 lAggregateValue = { lrWheelSphere.x, lrWheelSphere.y, lrWheelSphere.z, lrWheelSphere.w };
+                const Vector3 lAggregateValue = { lrWheelSphere.mV.x, lrWheelSphere.mV.y, lrWheelSphere.mV.z, lrWheelSphere.mV.w };
                 lBox.wAxis = lAggregateValue;
             }
-            const f32 lfRadius = lrWheelSphere.w;
+            const f32 lfRadius = lrWheelSphere.mV.w;
             const Vector3 lWheelBoxMin = {-lfRadius, -lfRadius, -lfRadius, 0.0f};
             const Vector3 lWheelBoxMax = { lfRadius,  lfRadius,  lfRadius, 0.0f};
             lpRender->DrawBox(lWheelBoxMin, lWheelBoxMax, lBox, KRGBA_WHEEL_SENSOR);
 
-            const Vector4& lrMappedSphere =
-                maDeformationSensors[mau8WheelToSensorMap[lj]].mpWorldSpaceSphere->mPositionRadius;
+            const Vector3Plus& lrMappedSphere =
+                maDeformationSensors[mau8WheelToSensorMap[lj]].mpWorldSpaceSphere->mData;
             const Vector3 lMappedSpherePoint = {
-                lrMappedSphere.x, lrMappedSphere.y, lrMappedSphere.z, lrMappedSphere.w
+                lrMappedSphere.mV.x, lrMappedSphere.mV.y, lrMappedSphere.mV.z, lrMappedSphere.mV.w
             };
             lpRender->DrawLine(lBox.wAxis, lMappedSpherePoint, KRGBA_WHEEL_SENSOR);
         }
@@ -1545,18 +1545,18 @@ namespace Deformation
             TagPoint& lrTag = maTagPoints[liTag];
             const TagPointSpec* lpSpec = lrTag.GetSpec();
 
-            const Vector4& lrPosA =
-                lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mPositionRadius;
-            const Vector4& lrPosB =
-                lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mPositionRadius;
+            const Vector3Plus& lrPosA =
+                lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mData;
+            const Vector3Plus& lrPosB =
+                lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mData;
             const Vector3Plus& lrOffA = lpSpec->GetOffsetAndWeightA();
             const Vector3Plus& lrOffB = lpSpec->GetOffsetAndWeightB();
 
             // target = (posA + offA)*wA + (posB + offB)*wB, per xyz lane (the .w weights splat).
             Vector3 lTarget;
-            lTarget.x = (lrPosA.x + lrOffA.x) * lrOffA.w + (lrPosB.x + lrOffB.x) * lrOffB.w;
-            lTarget.y = (lrPosA.y + lrOffA.y) * lrOffA.w + (lrPosB.y + lrOffB.y) * lrOffB.w;
-            lTarget.z = (lrPosA.z + lrOffA.z) * lrOffA.w + (lrPosB.z + lrOffB.z) * lrOffB.w;
+            lTarget.x = (lrPosA.mV.x + lrOffA.x) * lrOffA.w + (lrPosB.mV.x + lrOffB.x) * lrOffB.w;
+            lTarget.y = (lrPosA.mV.y + lrOffA.y) * lrOffA.w + (lrPosB.mV.y + lrOffB.y) * lrOffB.w;
+            lTarget.z = (lrPosA.mV.z + lrOffA.z) * lrOffA.w + (lrPosB.mV.z + lrOffB.z) * lrOffB.w;
 
             // mPos += (target - mPos) * time  (vsubfp then vmaddfp on the broadcast time lane).
             const Vector3& lrPos = lrTag.GetPosition();
@@ -1906,18 +1906,18 @@ namespace Deformation
             TagPoint& lrTag = maTagPoints[lu8Tag];
             const TagPointSpec* lpSpec = lrTag.GetSpec();
 
-            const Vector4& lrPosA =
-                lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mPositionRadius;
-            const Vector4& lrPosB =
-                lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mPositionRadius;
+            const Vector3Plus& lrPosA =
+                lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mData;
+            const Vector3Plus& lrPosB =
+                lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mData;
             const Vector3Plus& lrOffA = lpSpec->GetOffsetAndWeightA();
             const Vector3Plus& lrOffB = lpSpec->GetOffsetAndWeightB();
 
             // target = (posA + offA)*wA + (posB + offB)*wB; SNAP (rate 1.0 -- vcfsx v7 is 1.0).
             Vector3 lTarget;
-            lTarget.x = (lrPosA.x + lrOffA.x) * lrOffA.w + (lrPosB.x + lrOffB.x) * lrOffB.w;
-            lTarget.y = (lrPosA.y + lrOffA.y) * lrOffA.w + (lrPosB.y + lrOffB.y) * lrOffB.w;
-            lTarget.z = (lrPosA.z + lrOffA.z) * lrOffA.w + (lrPosB.z + lrOffB.z) * lrOffB.w;
+            lTarget.x = (lrPosA.mV.x + lrOffA.x) * lrOffA.w + (lrPosB.mV.x + lrOffB.x) * lrOffB.w;
+            lTarget.y = (lrPosA.mV.y + lrOffA.y) * lrOffA.w + (lrPosB.mV.y + lrOffB.y) * lrOffB.w;
+            lTarget.z = (lrPosA.mV.z + lrOffA.z) * lrOffA.w + (lrPosB.mV.z + lrOffB.z) * lrOffB.w;
             lTarget.w = lrTag.GetPosition().w;
             lrTag.SetPosition(lTarget);
 
@@ -2477,15 +2477,15 @@ namespace Deformation
         // ---- (1) world spheres from the solved transform + biggest-impulse magnitude reset -----
         for ( s32 li = 0; li < liNumSensors; ++li )
         {
-            const Vector4& lrLocal = maLocalSensorSpheres[li].mPositionRadius;
-            Vector4&       lrWorld = maWorldSensorSpheres[li].mPositionRadius;
+            const Vector3Plus& lrLocal = maLocalSensorSpheres[li].mData;
+            Vector3Plus&       lrWorld = maWorldSensorSpheres[li].mData;
 
-            lrWorld.x = lrT.xAxis.x * lrLocal.x + lrT.yAxis.x * lrLocal.y
-                      + lrT.zAxis.x * lrLocal.z + lrT.wAxis.x;
-            lrWorld.y = lrT.xAxis.y * lrLocal.x + lrT.yAxis.y * lrLocal.y
-                      + lrT.zAxis.y * lrLocal.z + lrT.wAxis.y;
-            lrWorld.z = lrT.xAxis.z * lrLocal.x + lrT.yAxis.z * lrLocal.y
-                      + lrT.zAxis.z * lrLocal.z + lrT.wAxis.z;
+            lrWorld.mV.x = lrT.xAxis.x * lrLocal.mV.x + lrT.yAxis.x * lrLocal.mV.y
+                      + lrT.zAxis.x * lrLocal.mV.z + lrT.wAxis.x;
+            lrWorld.mV.y = lrT.xAxis.y * lrLocal.mV.x + lrT.yAxis.y * lrLocal.mV.y
+                      + lrT.zAxis.y * lrLocal.mV.z + lrT.wAxis.y;
+            lrWorld.mV.z = lrT.xAxis.z * lrLocal.mV.x + lrT.yAxis.z * lrLocal.mV.y
+                      + lrT.zAxis.z * lrLocal.mV.z + lrT.wAxis.z;
             // w (radius) preserved (vrlimi keep-w).
 
             maDeformationSensors[li].mPointDisplacement_BiggestImpulseThisFrame.w = 0.0f;   // vrlimi mask-1 zero
@@ -2520,14 +2520,14 @@ namespace Deformation
                 lrWheel.mStreamedPositionPlusTwistAmount.y + (lfScale * 0.5f) * 0.5f,
                 lrWheel.mPosition.z, 0.0f };
 
-            Vector4& lrSphere = maWorldSensorSpheres[liNumSensors + liWheel].mPositionRadius;
-            lrSphere.x = lrT.xAxis.x * lvLocal.x + lrT.yAxis.x * lvLocal.y
+            Vector3Plus& lrSphere = maWorldSensorSpheres[liNumSensors + liWheel].mData;
+            lrSphere.mV.x = lrT.xAxis.x * lvLocal.x + lrT.yAxis.x * lvLocal.y
                        + lrT.zAxis.x * lvLocal.z + lrT.wAxis.x;
-            lrSphere.y = lrT.xAxis.y * lvLocal.x + lrT.yAxis.y * lvLocal.y
+            lrSphere.mV.y = lrT.xAxis.y * lvLocal.x + lrT.yAxis.y * lvLocal.y
                        + lrT.zAxis.y * lvLocal.z + lrT.wAxis.y;
-            lrSphere.z = lrT.xAxis.z * lvLocal.x + lrT.yAxis.z * lvLocal.y
+            lrSphere.mV.z = lrT.xAxis.z * lvLocal.x + lrT.yAxis.z * lvLocal.y
                        + lrT.zAxis.z * lvLocal.z + lrT.wAxis.z;
-            lrSphere.w = lfScale * 0.5f;   // the second vrlimi w write wins
+            lrSphere.mV.w = lfScale * 0.5f;   // the second vrlimi w write wins
         }
 
         if ( mbDoSweptSphereTests )
@@ -2540,16 +2540,16 @@ namespace Deformation
 
             for ( s32 liSphere = 0; liSphere < liNumSensors + 4; ++liSphere )
             {
-                const Vector4& lrSphere = maWorldSensorSpheres[liSphere].mPositionRadius;
+                const Vector3Plus& lrSphere = maWorldSensorSpheres[liSphere].mData;
 
-                const Vector3 lvR = { lrSphere.x - lvCarPos.x, lrSphere.y - lvCarPos.y,
-                                   lrSphere.z - lvCarPos.z, 0.0f };
+                const Vector3 lvR = { lrSphere.mV.x - lvCarPos.x, lrSphere.mV.y - lvCarPos.y,
+                                   lrSphere.mV.z - lvCarPos.z, 0.0f };
                 const Vector3 lvPointVel = vpu::Add(lvLinearVel, vpu::Cross(lvAngularVel, lvR));
 
                 const f32     lfSpeed = vpu::Magnitude(lvPointVel);
                 const Vector3 lvDir   = vpu::Normalize(lvPointVel);
 
-                const Vector3Plus lSweptPosition = {lrSphere.x, lrSphere.y, lrSphere.z, lrSphere.w};
+                const Vector3Plus lSweptPosition = lrSphere;
                 const Vector3Plus lSweptVelocity = {lvDir.x, lvDir.y, lvDir.z, lfSpeed * KF_CONSOLE_TIMESTEP};
                 maSweptSpheres[liSphere].Set(lSweptPosition, lSweptVelocity);
             }

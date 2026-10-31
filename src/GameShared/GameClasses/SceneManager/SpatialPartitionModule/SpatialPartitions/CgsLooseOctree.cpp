@@ -504,8 +504,8 @@ namespace CgsSceneManager
         const CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16EntityIndex);
         const f32 lfHalfBaseSize = lpNode->GetHalfBaseSize();
 
-        const f32 lfDx = lrSphere.mPositionRadius.mV.x - lpNode->mPosition.mV.x;
-        const f32 lfDz = lrSphere.mPositionRadius.mV.z - lpNode->mPosition.mV.z;
+        const f32 lfDx = lrSphere.mData.mV.x - lpNode->mPosition.mV.x;
+        const f32 lfDz = lrSphere.mData.mV.z - lpNode->mPosition.mV.z;
 
         if (std::fabs(lfDx) > lfHalfBaseSize || std::fabs(lfDz) > lfHalfBaseSize)
         {
@@ -577,8 +577,8 @@ namespace CgsSceneManager
         CGS_ASSERT(lu16EntityIndex < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
 
         const CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16EntityIndex);
-        const f32 lfEntityY = lrSphere.mPositionRadius.mV.y;
-        const f32 lfRadius  = lrSphere.mPositionRadius.mV.w;
+        const f32 lfEntityY = lrSphere.mData.mV.y;
+        const f32 lfRadius  = lrSphere.mData.mV.w;
 
         if (lfEntityY + lfRadius > lpNode->GetMaxY())
         {
@@ -620,8 +620,8 @@ namespace CgsSceneManager
         {
             const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Entity);
             const CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphereConst(lu16Entity);
-            const f32 lfY = lrSphere.mPositionRadius.mV.y;
-            const f32 lfR = lrSphere.mPositionRadius.mV.w;
+            const f32 lfY = lrSphere.mData.mV.y;
+            const f32 lfR = lrSphere.mData.mV.w;
 
             if (lfR > lrNode.GetMaxEntityRadius()) { lrNode.SetMaxEntityRadius(lfR); }
 
@@ -773,7 +773,7 @@ namespace CgsSceneManager
         }
 
         const CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16EntityIndex);
-        const f32 lfDiameter = lrSphere.mPositionRadius.mV.w * 2.0f;
+        const f32 lfDiameter = lrSphere.mData.mV.w * 2.0f;
 
         // Descend from the root. Every node on the path takes the NEEDS_UPDATE flag and a
         // sub-tree count bump ON THE WAY DOWN (which is why this never needs
@@ -788,7 +788,7 @@ namespace CgsSceneManager
         {
             const LooseOctreeNode& lrNode = mpNodes[lu16NodeIndex];
             lu16NodeIndex = static_cast<u16>(
-                lrNode.muFirstChildIndex + CalcNextSubNode(&lrNode, lrSphere.mPositionRadius));
+                lrNode.muFirstChildIndex + CalcNextSubNode(&lrNode, Vector4(lrSphere.mData.mV)));
 
             mpNodes[lu16NodeIndex].muFlags |= KU_OCTREE_NODE_FLAG_NEEDS_UPDATE;
             ++mpNodes[lu16NodeIndex].muSubTreeEntityCount;
@@ -862,9 +862,9 @@ namespace CgsSceneManager
 
         // Keep the radius (the X360 vrlimi128 copies lane w of the old sphere).
         CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16Id);
-        lrSphere.mPositionRadius.mV.x = lPosition.mV.x;
-        lrSphere.mPositionRadius.mV.y = lPosition.mV.y;
-        lrSphere.mPositionRadius.mV.z = lPosition.mV.z;
+        lrSphere.mData.mV.x = lPosition.mV.x;
+        lrSphere.mData.mV.y = lPosition.mV.y;
+        lrSphere.mData.mV.z = lPosition.mV.z;
 
         if (lpOwner == 0)
         {
@@ -903,18 +903,18 @@ namespace CgsSceneManager
         LooseOctreeNode* lpOldNode = reinterpret_cast<LooseOctreeNode*>(maEntityInfo[lu16Id].muSpatialPartitionNodeID);
         if (lpOldNode == 0)
         {
-            GetEntityBoundingSphere(lu16Id).mPositionRadius.mV.w = lfRadius;
+            GetEntityBoundingSphere(lu16Id).mData.mV.w = lfRadius;
             return;   // not in the graph
         }
 
         CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16Id);
-        const f32 lfOldRadius = lrSphere.mPositionRadius.mV.w;
+        const f32 lfOldRadius = lrSphere.mData.mV.w;
 
         // Still inside this node's admissible band -> stay put.
         if (!(lfRadius > lpOldNode->GetMaxRadiusThreshold()) &&
             !(lpOldNode->GetMaxRadiusThreshold() * 0.5f >= lfRadius))
         {
-            lrSphere.mPositionRadius.mV.w = lfRadius;
+            lrSphere.mData.mV.w = lfRadius;
             if (lfRadius > lpOldNode->GetMaxEntityRadius())
             {
                 FlagBranchForUpdate(lpOldNode);
@@ -955,7 +955,7 @@ namespace CgsSceneManager
                     break;
                 }
                 lpNewNode = &mpNodes[lpNewNode->muFirstChildIndex +
-                                     CalcNextSubNode(lpNewNode, lrSphere.mPositionRadius)];
+                                     CalcNextSubNode(lpNewNode, Vector4(lrSphere.mData.mV))];
                 ++lpNewNode->muSubTreeEntityCount;
             }
             FlagBranchForUpdate(lpNewNode);
@@ -969,7 +969,7 @@ namespace CgsSceneManager
             maEntityInfo[lu16Id].muSpatialPartitionNodeID = reinterpret_cast<u32>(lpNewNode);
         }
 
-        lrSphere.mPositionRadius.mV.w = lfRadius;
+        lrSphere.mData.mV.w = lfRadius;
     }
 
     // ===========================================================================
@@ -1125,10 +1125,10 @@ namespace CgsSceneManager
 
                 const u16 lu16EntityIndex = CalcEntityIndex(lrLink);
                 const CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16EntityIndex);
-                if (lfChildMaxRadius >= lrSphere.mPositionRadius.mV.w)
+                if (lfChildMaxRadius >= lrSphere.mData.mV.w)
                 {
                     LooseOctreeNode* lpChild = &mpNodes[lpNode->GetFirstChildIndex() +
-                                                        CalcNextSubNode(lpNode, lrSphere.mPositionRadius)];
+                                                        CalcNextSubNode(lpNode, Vector4(lrSphere.mData.mV))];
                     UnlinkEntityFromNode(lpNode, lu16EntityIndex);
                     LinkEntityToNode(lpChild, lu16EntityIndex);
                     CGS_ASSERT(lpChild != 0, "lpNode");
@@ -1426,8 +1426,8 @@ namespace CgsSceneManager
 
             CGS_ASSERT(lu16Entity < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
 
-            const Vector4& lrSphere =
-                GetEntityBoundingSphereConst(lu16Entity).mPositionRadius;
+            const Vector3Plus& lrSphere =
+                GetEntityBoundingSphereConst(lu16Entity).mData;
             const f32 lfCx = lrSphere.mV.x, lfCy = lrSphere.mV.y;
             const f32 lfCz = lrSphere.mV.z, lfR  = lrSphere.mV.w;
 
@@ -1561,8 +1561,8 @@ namespace CgsSceneManager
             const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Entity);
             if ((lrLink.mx32TypeFlags & lpParams->mx32EntityTypeMask) != 0)
             {
-                const Vector4& lrSphere =
-                    GetEntityBoundingSphereConst(lu16Entity).mPositionRadius;
+                const Vector3Plus& lrSphere =
+                    GetEntityBoundingSphereConst(lu16Entity).mData;
                 const f32 lfCx = lrSphere.mV.x, lfCy = lrSphere.mV.y;
                 const f32 lfCz = lrSphere.mV.z, lfR  = lrSphere.mV.w;
 
@@ -1736,8 +1736,8 @@ namespace CgsSceneManager
                 const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Entity);
                 if ((lrLink.mx32TypeFlags & lpParams->mx32EntityTypeFlags) != 0)
                 {
-                    const Vector4& lrSphere =
-                        GetEntityBoundingSphereConst(lu16Entity).mPositionRadius;
+                    const Vector3Plus& lrSphere =
+                        GetEntityBoundingSphereConst(lu16Entity).mData;
 
                     const f32 lfEx = lpParams->mCentre.mV.x - lrSphere.mV.x;
                     const f32 lfEy = lpParams->mCentre.mV.y - lrSphere.mV.y;
@@ -2182,11 +2182,11 @@ namespace CgsSceneManager
                     const u16 lu16Entity = CalcEntityIndex(lrLink);
                     const CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16Entity);
 
-                    mpEntityVolume->mfRadius = lrSphere.mPositionRadius.mV.w;                // stfs +0x50
-                    mEntityTransform.wAxis.mV.x = lrSphere.mPositionRadius.mV.x;                // stvx128 +0x8D940
-                    mEntityTransform.wAxis.mV.y = lrSphere.mPositionRadius.mV.y;
-                    mEntityTransform.wAxis.mV.z = lrSphere.mPositionRadius.mV.z;
-                    mEntityTransform.wAxis.mV.w = lrSphere.mPositionRadius.mV.w;
+                    mpEntityVolume->mfRadius = lrSphere.mData.mV.w;                // stfs +0x50
+                    mEntityTransform.wAxis.mV.x = lrSphere.mData.mV.x;                // stvx128 +0x8D940
+                    mEntityTransform.wAxis.mV.y = lrSphere.mData.mV.y;
+                    mEntityTransform.wAxis.mV.z = lrSphere.mData.mV.z;
+                    mEntityTransform.wAxis.mV.w = lrSphere.mData.mV.w;
 
                     PrimeOctreeVolumeQuery(mpVolumeVolumeQuery, lpParams, mpEntityVolume, &mEntityTransform);
                     if (mpVolumeVolumeQuery->GetPrimitiveIntersections() != 0)

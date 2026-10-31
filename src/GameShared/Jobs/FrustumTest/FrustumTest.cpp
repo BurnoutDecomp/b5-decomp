@@ -264,7 +264,7 @@ namespace CgsSceneManager
     // multiply-add, subtract and ordered greater-than; any set lane rejects.
     bool FrustumTestJob::SphereInsideCurrentFrustum(const CgsGeometric::Sphere* lpSphere) const
     {
-        const __vector4 lvSphere = __lvx(&lpSphere->mPositionRadius, 0);
+        const __vector4 lvSphere = __lvx(&lpSphere->mData, 0);
         const __vector4 lvX = __vspltw(lvSphere, 0);
         const __vector4 lvY = __vspltw(lvSphere, 1);
         const __vector4 lvZ = __vspltw(lvSphere, 2);

@@ -3,7 +3,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"         // DeformableObject + debug accessors
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"        // DeformationSensor
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // StreamedDeformationSpec
-#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                                // CgsGeometric::Sphere (GetLocalSphereCentre)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                                // CgsGeometric::Sphere
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                                // CGS_ASSERT
 
 // ==================================================================================================
@@ -27,16 +27,6 @@ namespace Deformation
 
     // Out-of-line bodies for two accessors declared (but not defined) in headers that keep their operand
     // types opaque/forward-declared. Bodied here, where the full layouts are in scope.
-
-    // The sensor's local-space sphere is the opaque BrnPhysics::Deformation::Sphere (forward-declared in
-    // BrnDeformationSensor.h -- its real home is the collision code). Its leading 16 bytes are the
-    // centre.xyz + radius.w Vector4 (documented in CgsSphere.h / the sensor header). Read that leading
-    // Vector4 via the homed CgsGeometric::Sphere shape -- the only allowed cross-type view of an
-    // un-homed object whose leading layout is known (same pattern as the sensor's GetMaxSensorImpulse).
-    const Vector4& DeformationSensor::GetLocalSphereCentre() const
-    {
-        return reinterpret_cast<const CgsGeometric::Sphere*>( GetLocalSpaceSphere() )->mPositionRadius;
-    }
 
     // The manager's model-slot accessor (declared-only in BrnDeformationManager.h, which keeps
     // DeformableObject forward-declared). &mpaModels[liIndex] from the pool base.
@@ -165,10 +155,10 @@ namespace Deformation
         DeformationSensor& lrSensor = lpRig->GetSensorDebug( liSensor );
         lpThis->mpSelectedSensor = &lrSensor;
 
-        const Vector4& lvCentre = lrSensor.GetLocalSphereCentre();
-        lpThis->mfSensorX       = lvCentre.x;
-        lpThis->mfSensorY       = lvCentre.y;
-        lpThis->mfSensorZ       = lvCentre.z;
+        const Vector3Plus& lvCentre = lrSensor.GetLocalSpaceSphere()->mData;
+        lpThis->mfSensorX       = lvCentre.mV.x;
+        lpThis->mfSensorY       = lvCentre.mV.y;
+        lpThis->mfSensorZ       = lvCentre.mV.z;
         lpThis->mfSensorScratch = lrSensor.GetScratchAmount();
 
         lpThis->SetReadOnly( &lpThis->miSelectedSensor, false );

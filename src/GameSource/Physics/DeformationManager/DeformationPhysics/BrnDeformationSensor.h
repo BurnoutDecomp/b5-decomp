@@ -238,11 +238,6 @@ namespace Deformation
 		const Sphere* GetWorldSpaceSphere() const { return mpWorldSpaceSphere; }
 		f32           GetScratchAmount()   const { return mfScratchAmount; }
 
-		// The local-space sensor sphere's centre (xyz of mpLocalSpaceSphere->mPositionRadius). The
-		// deformation debug component reads this into its sensor-position sliders (asm OnSelectedSensorChange
-		// loads the leading Vector4 of *(sensor+412)). Declared-only here because Sphere is only
-		// forward-declared in this header; bodied where the full Sphere layout is in scope.
-		const Vector4& GetLocalSphereCentre() const;
 		void SetLocalPosition(Vector3 lPosition);
 		void UpdateWorldPosition(Matrix44Affine lVehicleTransform);
 		void SetScratchAmount(f32 lfAmount) { mfScratchAmount = lfAmount; }
