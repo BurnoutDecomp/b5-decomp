@@ -1,7 +1,6 @@
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // CgsDev::Log::gpDebugPrint ([tricache] probe)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                 // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"   // DebugInterface (overflow overlay)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"          // DebugManager::ThreadSafeRelease
@@ -13,9 +12,7 @@
 
 #include "SDKs/EATech/eajobs/job.h"   // EA::Jobs::Job::WaitOn
 
-#include <cstdio>   // std::snprintf -- the console's sprintf @0x82C0CB70 (overflow overlay)
-#include <cstdlib>  // getenv  -- the [tricache] probe's opt-in latch
-#include <cmath>    // sqrtf   -- the [tricache] probe's car-vs-cached lag
+#include <stdio.h>  // sprintf -- the console's CRT formatter @0x82C0CB70 (overflow overlay)
 
 // =================================================================================================
 // GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager_Update.cpp
@@ -112,53 +109,6 @@ namespace CgsSceneManager
     static s32 s_miDispatchCacheFillPerfMon  = -1;  // dword_82F33F4C
     static s32 s_miReadCacheResultsPerfMon   = -1;  // dword_82F33F50
 
-    // ---------------------------------------------------------------------------------------------
-    // ---- [tricache] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide ----
-    //
-    // OPT-IN (BRN_TRICACHE_PROBE=1) so a DEFAULT run and every golden gate stay byte-identical to a
-    // build without it: the latch below reads 0 on its first call and every print is unreachable
-    // thereafter. Same discipline as [motion] in BrnRaceCarEntityModule and [wall] in
-    // BrnDeformationManager_Contacts.
-    //
-    // ⭐ WHY THIS INSTRUMENT AND NOT ANOTHER. The player reports collision only near the Junkyard.
-    // A read-only audit already proved the world DATA is complete map-wide (23,645 soups, 396
-    // zones, 25 simulated probes across the map all returning geometry), so the remaining question
-    // is a RUNTIME one that only a DRIVEN car can answer: does the per-object triangle cache follow
-    // the car? The slot already carries both numbers and nothing else has to be computed --
-    //   mInnerSpherePositionAndRadius is where the car IS (written every frame by
-    //   CacheSlot::UpdateCachedObject, unconditionally), and
-    //   mLastCachedSphere is where the triangles WERE CACHED (moved only when the dirty test trips).
-    // Printing the pair plus the fill's own answers splits the fault four ways in one run:
-    //   car frozen                    -> the position leg (VehicleManager::UpdateTriangleCache /
-    //                                    mUsedRaceCars / RaceCarPhysics::GetPosition) is dead;
-    //   car moves, cached does not    -> UpdateCachedObject's dirty test or the Start/End pairing;
-    //   cached tracks, batches -> 0   -> the spatial map/query fails at runtime, not in the data;
-    //   cached tracks, batches > 0    -> the cache is healthy and the fault is downstream.
-    //
-    // ⚠️ `lag` and the two counts are DERIVED FOR THE PROBE, not console state: lag is
-    // |car - cached| (healthy steady state is under KF_TRIANGLE_CACHE_SPHERE_RADIUS minus the car's
-    // own radius), and the used/dirty counts are re-scanned here rather than accumulated in the
-    // shipped loop above so that loop stays exactly as the X360 emits it. The re-scan is EXACT:
-    // nothing between the loop and here writes mbIsDirty, so `dirty` == the number of commands
-    // Start posted this frame.
-    // ⚠️ `batches`/`ovf` are read at START, so they are the PREVIOUS frame's fold -- End is what
-    // writes them. That is deliberate (Start is the only site that knows the posted count and still
-    // sees mbIsDirty before End clears it) and it is stated here so nobody reads a one-frame-old
-    // number as this frame's answer. At a 60-frame period the distinction cannot matter.
-    // ---------------------------------------------------------------------------------------------
-
-    // The sampling period, in entries into StartUpdateTriangleCaches. BRN_TRICACHE_PROBE=1 keeps
-    // the default 60 (~once a second); BRN_TRICACHE_PROBE=<n> sets it to n.
-    // ⚠️⚠️ 60 IS TOO COARSE ONCE THE CAR IS ACTUALLY DRIVING, and that is not a preference -- it is
-    // a measured miss. At the 29.7 m/s this build reaches, 60 frames is 29 METRES, so the whole
-    // approach to the obstacle the car fell through (~10 frames) fell between two samples and the
-    // trace could not say whether the cache held the wall face at the moment of contact. A period
-    // that cannot resolve the event is a probe that answers a different question than the one asked.
-
-    // The counter is shared by both call sites below so the two lines interleave in frame order and
-    // a frame that took the spatial-map early-out is visible as a GAP, not as silence.
-    static u32 s_uTriCacheProbeFrame = 0u;
-
     // =============================================================================================
     // TriangleCacheManager::StartUpdateTriangleCaches @0x828BECF8 (278 insns)
     // =============================================================================================
@@ -171,16 +121,10 @@ namespace CgsSceneManager
         CGS_ASSERT(lpCollisionGenerator != NULL, "lpCollisionGenerator != NULL");
         CGS_ASSERT(lpPolySoupListSpacialMap != NULL, "lpPolySoupListSpacialMap != NULL");
 
-        ++s_uTriCacheProbeFrame;   // [tricache]: counted before the early-out, so a gap is visible.
-
         // 0x828BED68: no spatial partition built -> nothing to query against, so no stream is
         // created and no command is posted. The matching End then takes ITS null guard.
         if (lpPolySoupListSpacialMap->GetLeafNodes() == NULL)
         {
-            // ---- [tricache] ----------------------------------------------------------------
-            // The one branch that silently fills nothing. If the map is present at spawn and
-            // absent later, the whole bug is here and no other line in this file would say so.
-            // ---- end [tricache] ------------------------------------------------------------
             return;
         }
 
@@ -241,9 +185,6 @@ namespace CgsSceneManager
             // 0x828BEEC8/0x828BEEDC: `li r10, 0x2C ; sth r10, 0x14(cmd)`.
             lpCommand->mu16MaxNumTriangleBatches = KU_TRIANGLE_BATCHES_PER_CACHED_OBJECT;
         }
-
-        // ---- [tricache] the four-way discriminator; see the block above the perfmon handles ----
-        // ---- end [tricache] --------------------------------------------------------------------
 
         if (s_miBuildCacheCommandsPerfMon > -1)
         {
@@ -358,17 +299,16 @@ namespace CgsSceneManager
             // this idiom already carries).
             CgsDev::DebugInterface lDebugInterface;
 
-            // ⚠️ FLAG: the console's scratch buffer size is not determinable from the asm (nothing
-            // bounds it); 256 is this tree's convention for a formatted debug line, and snprintf
-            // is used where the console used the CRT sprintf @0x82C0CB70.
+            // The console uses the native CRT sprintf at 0x82C0CB70. Its register arguments are
+            // this buffer, the format, four promoted doubles from the sphere, then the overflow int.
             char lacMessage[256];
-            std::snprintf(lacMessage, sizeof(lacMessage),
-                          "TRI CACHE OVERFLOW WITH SPHERE AT %.2f, %.2f, %.2f, RADIUS %.2f, OVERFLOW %d",
-                          static_cast<double>(lrSlot.mLastCachedSphere.x),
-                          static_cast<double>(lrSlot.mLastCachedSphere.y),
-                          static_cast<double>(lrSlot.mLastCachedSphere.z),
-                          static_cast<double>(lrSlot.mLastCachedSphere.w),
-                          static_cast<int>(lrSlot.miOverflow));
+            ::sprintf(lacMessage,
+                      "TRI CACHE OVERFLOW WITH SPHERE AT %.2f, %.2f, %.2f, RADIUS %.2f, OVERFLOW %d",
+                      static_cast<double>(lrSlot.mLastCachedSphere.x),
+                      static_cast<double>(lrSlot.mLastCachedSphere.y),
+                      static_cast<double>(lrSlot.mLastCachedSphere.z),
+                      static_cast<double>(lrSlot.mLastCachedSphere.w),
+                      static_cast<int>(lrSlot.miOverflow));
 
             lDebugInterface.Get2dRender().Draw2DText(lacMessage, 100.0f, lfTextY, 20.0f,
                                                      0xFF0000FFu);
