@@ -1,7 +1,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                              // Vector3 alias
+#include "BrnCommonTypes.h"
+#include "rw/math/vpu/vector3_operation.h"                              // Vector3 alias
 #include "SharedClasses/Physics/Deformation/BrnTagPointSpec.h"
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"
 
@@ -63,13 +64,7 @@ namespace Deformation
         Vector3 GetInitialPosition() const { return mpSpec->GetInitialPosition(); }
         Vector3 GetOffsetFromInitialPosition() const
         {
-            const Vector3& lrInitial = mpSpec->GetInitialPosition();
-            Vector3 lOffset;
-            lOffset.x = mPos.x - lrInitial.x;
-            lOffset.y = mPos.y - lrInitial.y;
-            lOffset.z = mPos.z - lrInitial.z;
-            lOffset.w = 0.0f;
-            return lOffset;
+            return rw::math::vpu::Subtract(mPos, mpSpec->GetInitialPosition());
         }
 
         // ⭐ ADDITIVE named seat write (walls wave): DeformableObject::UpdateIK @0x826088F0 stores

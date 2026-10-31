@@ -53,15 +53,15 @@ namespace Deformation
 
         const Vector3& GetOffsetFromDeformationSensorA() const
         {
-            return reinterpret_cast<const Vector3&>(mOffsetFromAAndWeightA);
+            return mOffsetFromAAndWeightA.GetVector3();
         }
         const Vector3& GetOffsetFromDeformationSensorB() const
         {
-            return reinterpret_cast<const Vector3&>(mOffsetFromBAndWeightB);
+            return mOffsetFromBAndWeightB.GetVector3();
         }
         const Vector3& GetInitialPosition() const
         {
-            return reinterpret_cast<const Vector3&>(mInitialPositionAndDetachThreshold);
+            return mInitialPositionAndDetachThreshold.GetVector3();
         }
 
         s8  GetJointIndex() const { return miJointIndex; }   // (walls leg 4: spec +64)
