@@ -79,14 +79,10 @@ void BehaviourSpirallingDeathcam::Construct()
     mCollisionPolicy.SetTestAgainstWorldOnly(true);     // policy +0x24C
     mCollisionPolicy.SetUseFrustrumResolver(true);      // policy +0x24D
 
-    // The console inserts 0.0 into lanes X and Z of both vectors (YRotationDegs / Height,
-    // Radius / LookOffsetAmount) and leaves the other lanes as the pool handed them: every one
-    // of those is WRITTEN by the first Update (the +8 seed block) before it is read, so a zero
-    // seed here is invisible to the console's arithmetic and keeps the object deterministic.
-    mVectorData.mVector1.x = 0.0f; mVectorData.mVector1.y = 0.0f;
-    mVectorData.mVector1.z = 0.0f; mVectorData.mVector1.w = 0.0f;
-    mVectorData.mVector2.x = 0.0f; mVectorData.mVector2.y = 0.0f;
-    mVectorData.mVector2.z = 0.0f; mVectorData.mVector2.w = 0.0f;
+    // The native constructor clears X and Z while preserving Y and W.
+    const __vector4 lvZero = __vspltisw(0);
+    mVectorData.mVector1.mV = __vrlimi(mVectorData.mVector1.mV, lvZero, 10, 0);
+    mVectorData.mVector2.mV = __vrlimi(mVectorData.mVector2.mV, lvZero, 10, 0);
     // mAttachmentPos (+0x290) is not written by Construct; the first Update seeds it from the car.
 
     mLooker.Construct();                                // +0x2A0: 0.0 / 0.2 / 1,1,1,0
@@ -173,13 +169,13 @@ bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourShared
         mVectorData.RadiusIncreaseSpeed()  = lrParams.mfRadiusIncreaseSpeed;         // +0x84 -> lane Y
 
         const Vector3& lrHalfExtent = lpVehicle->mRaceCarState.mHalfExtent;          // car +0x350
-        mVectorData.Height() = lrHalfExtent.y * lrParams.mfInitialHeight;            // +0x88 x extent.y
+        mVectorData.Height() = lrHalfExtent.mV.y * lrParams.mfInitialHeight;            // +0x88 x extent.y
 
         // vmsum3fp128 + vrsqrtefp + two Newton steps, `vcmpeqfp v12, 0, |v|^2` / `vsel` -> a
         // zero-length extent yields 0 rather than 0 x inf.
-        const f32 lfLengthSq = lrHalfExtent.x * lrHalfExtent.x
-                             + lrHalfExtent.y * lrHalfExtent.y
-                             + lrHalfExtent.z * lrHalfExtent.z;
+        const f32 lfLengthSq = lrHalfExtent.mV.x * lrHalfExtent.mV.x
+                             + lrHalfExtent.mV.y * lrHalfExtent.mV.y
+                             + lrHalfExtent.mV.z * lrHalfExtent.mV.z;
         const f32 lfLength   = (lfLengthSq == 0.0f) ? 0.0f : std::sqrt(lfLengthSq);
         mVectorData.Radius() = lfLength * lrParams.mfInitialRadius;                  // +0x8C x |extent|
 
@@ -195,10 +191,8 @@ bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourShared
                              ? lrParams.mfMinAttachAmount : lfDecay;                 // fsel f31
     {
         const Vector3& lrCarPos = lpVehicle->mRaceCarState.mTransform.wAxis;
-        mAttachmentPos.x += lfAttach * (lrCarPos.x - mAttachmentPos.x);              // vmaddcfp128
-        mAttachmentPos.y += lfAttach * (lrCarPos.y - mAttachmentPos.y);
-        mAttachmentPos.z += lfAttach * (lrCarPos.z - mAttachmentPos.z);
-        mAttachmentPos.w += lfAttach * (lrCarPos.w - mAttachmentPos.w);
+        const __vector4 lvDelta = __vsubfp(lrCarPos.mV, mAttachmentPos.mV);
+        mAttachmentPos.mV = __vmaddfp(XMVectorReplicate(lfAttach), lvDelta, mAttachmentPos.mV);
     }
 
     // 5. the orbit position -> the camera's translation row.
@@ -207,10 +201,10 @@ bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourShared
         const f32 lfSin       = std::sin(lfAngleRads);                               // the VMX odd series
         const f32 lfCos       = std::cos(lfAngleRads);                               // the VMX even series
         Vector3 lPosition;
-        lPosition.x = mVectorData.Radius() * lfSin + mAttachmentPos.x;               // row (sin, 0, cos) x r
-        lPosition.y = mVectorData.Height()         + mAttachmentPos.y;               // + (0, h, 0)
-        lPosition.z = mVectorData.Radius() * lfCos + mAttachmentPos.z;
-        lPosition.w = mAttachmentPos.w;
+        lPosition.mV.x = mVectorData.Radius() * lfSin + mAttachmentPos.mV.x;               // row (sin, 0, cos) x r
+        lPosition.mV.y = mVectorData.Height()         + mAttachmentPos.mV.y;               // + (0, h, 0)
+        lPosition.mV.z = mVectorData.Radius() * lfCos + mAttachmentPos.mV.z;
+        lPosition.mV.w = mAttachmentPos.mV.w;
         lrCamera.mTransform.wAxis = lPosition;                                       // stvx128 camera+0x30
     }
 
