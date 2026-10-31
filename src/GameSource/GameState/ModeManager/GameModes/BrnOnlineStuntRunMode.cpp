@@ -1,6 +1,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.h"
 
 #include <cmath>   // std::fabs (the |angle| vandc128)
+#include <cfloat>
 
 #include "SDKs/XboxMath/XMVectorACos.h"                                        // XboxMath::XMVectorACos (X360 0x821F0980)
 
@@ -47,7 +48,7 @@ namespace
     const f32 KF_STUNT_RUN_TRAFFIC_DENSITY = 0.40000001f;
 
     // flt_82020AFC: the min-angle search seed (FLT_MAX). Low-region .rodata, asm-resolved.
-    const f32 KF_FLT_MAX = 3.4028235e38f;
+    const f32 KF_FLT_MAX = FLT_MAX; // ARTIST flt_82020AFC: 0x7F7FFFFF
 
     // The online start flag the X360 build ORs into GameModeParams::muFlags (asm: `li r12,1;
     // extldi r12,r12,64,36` -> bit 36). Bit 36 is one past the committed KU_FLAG_* table (which
@@ -271,9 +272,10 @@ void OnlineStuntRunMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // the zero vector, matching the call's `vspltisw v1, 0`.
     const GameStateModuleIO::StartNetworkRoundEvent* lpStartNetworkRoundEvent =
         lpNetworkRoundManager->GetNetworkRoundEvent();
+    const Vector3 lvReferenceDirection = { 0.0f, 0.0f, 0.0f, 0.0f };
     lpGameModeParams->SetTrafficLightTriggerId(
         GetBestStartGridID(lpStartNetworkRoundEvent->mLightTriggerID, lpStartGameModeParams,
-                           Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }));
+                           lvReferenceDirection));
 
     // Traffic off -> density 0; traffic-checking off -> disable traffic checking.
     if (!lpStartNetworkGameEvent->mbIsTrafficOn)
