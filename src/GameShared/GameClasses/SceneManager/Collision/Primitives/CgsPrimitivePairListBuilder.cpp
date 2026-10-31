@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] block only)
 #include "SDKs/EATech/rwcollision/volume_debug_access.h"     // rw::collision::Volume + EVolumeType
 
+#include "rw/math/vpu/vector3_operation.h"
 #include <cmath>     // std::sqrt
 #include <stdlib.h>  // [DIAG] getenv -- BRN_PROP_DIAG latch only
 
@@ -259,9 +260,7 @@ namespace CgsCollision
         case ::rw::collision::E_VOLUMETYPE_SPHERE:
         {
             CgsGeometric::Sphere lSphere;
-            lSphere.mData.mV.x = lTransform.Pos().x;   // SetPosition(transform.wAxis)
-            lSphere.mData.mV.y = lTransform.Pos().y;
-            lSphere.mData.mV.z = lTransform.Pos().z;
+            lSphere.mData.mV = lTransform.Pos().mV;       // preserve all position lane bits
             lSphere.mData.mV.w = lpVolume->GetRadius();// SetRadius(volume->radius)
 
             AddPrimitive(&lSphere, lfPadding, lu16PrimitiveTag);
@@ -280,13 +279,13 @@ namespace CgsCollision
             // scalars are broadcast to all four lanes before the w-lane insert, which is
             // what makes Capsule::Set's two scalars VecFloat and not f32.
             VecFloat lvfRadius;
-            lvfRadius.x = lvfRadius.y = lvfRadius.z = lvfRadius.w = lpVolume->GetRadius();
+            lvfRadius.mV.x = lvfRadius.mV.y = lvfRadius.mV.z = lvfRadius.mV.w = lpVolume->GetRadius();
 
             // The +0x44 union lane: CapsuleSpecificData::mfHalfHeight (volume_debug_access.h
             // names the 12-byte arm GetExtent(); its x lane IS the capsule half-height).
-            const f32 lfHalfHeight = lpVolume->GetExtent().x;
+            const f32 lfHalfHeight = lpVolume->GetExtent().mV.x;
             VecFloat lvfLength;
-            lvfLength.x = lvfLength.y = lvfLength.z = lvfLength.w = lfHalfHeight;
+            lvfLength.mV.x = lvfLength.mV.y = lvfLength.mV.z = lvfLength.mV.w = lfHalfHeight;
 
             CgsGeometric::Capsule lCapsule;
             lCapsule.Set(lTransform.Pos(),   // 0x82814BBC lvx128 v9,[transform+0x30]
@@ -322,13 +321,12 @@ namespace CgsCollision
             // dimensions are built lane by lane rather than copied as a vector.
             const Vector3& lrExtent = lpVolume->GetExtent();
             Vector3 lvDimensions;
-            lvDimensions.x = lrExtent.x;
-            lvDimensions.y = lrExtent.y;
-            lvDimensions.z = lrExtent.z;
-            lvDimensions.w = 0.0f;              // `stw r8,[var_84]`, r8 == 0
+            lvDimensions.mV.x = lrExtent.mV.x;
+            lvDimensions.mV.y = lrExtent.mV.y;
+            lvDimensions.mV.z = lrExtent.mV.z;
+            lvDimensions.mV.w = 0.0f;              // `stw r8,[var_84]`, r8 == 0
 
-            VecFloat lvfFatness;
-            lvfFatness.SetZero();               // flt_82001CC0 == 0.0f, broadcast
+            VecFloat lvfFatness(0.0f);               // flt_82001CC0 == 0.0f, broadcast
 
             CgsGeometric::Box lBox;
             lBox.Set(lTransform, lvDimensions, lvfFatness);
@@ -350,7 +348,7 @@ namespace CgsCollision
             CgsGeometric::Cylinder lCylinder;
             lCylinder.Set(lTransform,
                           lpVolume->GetRadius(),        // 0x82814C48 lfs [volume+0x50]
-                          lpVolume->GetExtent().x);     // 0x82814C58 lfs [volume+0x44]
+                          lpVolume->GetExtent().mV.x);     // 0x82814C58 lfs [volume+0x44]
 
             AddPrimitive(&lCylinder, lfPadding, lu16PrimitiveTag);
             break;
@@ -535,19 +533,6 @@ namespace CgsCollision
         // below, which are the asm's own operand order, not a stylistic choice.
         static const f32 KF_BOX_NEAR_IDENTICAL_DISTANCE = 0.1f;  // flt_82004014
 
-        const auto Dot3 = [](const Vector3& lvA, const Vector3& lvB) -> f32
-        {
-            return lvA.x * lvB.x + lvA.y * lvB.y + lvA.z * lvB.z;   // vmsum3fp128
-        };
-        const auto Length3 = [](const Vector3& lvA, const Vector3& lvB) -> f32
-        {
-            const f32 lfDx = lvA.x - lvB.x;
-            const f32 lfDy = lvA.y - lvB.y;
-            const f32 lfDz = lvA.z - lvB.z;
-            const f32 lfLenSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
-            return std::sqrt(lfLenSq); // vrsqrtefp + Newton refine -> length; 0 -> 0
-        };
-
         // The five rows, read through the DWARF accessors now that Box lives in CgsBox.h.
         const Matrix44Affine lFrameA = lpBoxA->GetTransform();
         const Matrix44Affine lFrameB = lpBoxB->GetTransform();
@@ -555,13 +540,13 @@ namespace CgsCollision
         const Vector3        lvDimsB = lpBoxB->GetDimensions();
 
         // Rows 0/16/32 (the right/up/at basis): aligned when dot(rowA,rowB) > threshold.
-        const bool lbAxis0 = Dot3(lFrameA.Right(), lFrameB.Right()) > KF_BOX_AXIS_ALIGNED_THRESHOLD;
-        const bool lbAxis1 = Dot3(lFrameA.Up(),    lFrameB.Up())    > KF_BOX_AXIS_ALIGNED_THRESHOLD;
-        const bool lbAxis2 = Dot3(lFrameA.At(),    lFrameB.At())    > KF_BOX_AXIS_ALIGNED_THRESHOLD;
+        const bool lbAxis0 = rw::math::vpu::Dot(lFrameA.Right(), lFrameB.Right()).GetFloat() > KF_BOX_AXIS_ALIGNED_THRESHOLD;
+        const bool lbAxis1 = rw::math::vpu::Dot(lFrameA.Up(), lFrameB.Up()).GetFloat()    > KF_BOX_AXIS_ALIGNED_THRESHOLD;
+        const bool lbAxis2 = rw::math::vpu::Dot(lFrameA.At(), lFrameB.At()).GetFloat()    > KF_BOX_AXIS_ALIGNED_THRESHOLD;
         // Row 64 (half-dimensions, X360 boxA/boxB +0x40) and row 48 (the centre row,
         // +0x30): near when |A - B| < 0.1.
-        const bool lbDims  = KF_BOX_NEAR_IDENTICAL_DISTANCE > Length3(lvDimsA, lvDimsB);
-        const bool lbPos   = KF_BOX_NEAR_IDENTICAL_DISTANCE > Length3(lFrameA.Pos(), lFrameB.Pos());
+        const bool lbDims  = KF_BOX_NEAR_IDENTICAL_DISTANCE > rw::math::vpu::Magnitude(rw::math::vpu::Subtract(lvDimsA, lvDimsB)).GetFloat();
+        const bool lbPos   = KF_BOX_NEAR_IDENTICAL_DISTANCE > rw::math::vpu::Magnitude(rw::math::vpu::Subtract(lFrameA.Pos(), lFrameB.Pos())).GetFloat();
 
         CGS_ASSERT(!(lbAxis0 && lbAxis1 && lbAxis2 && lbDims && lbPos),
                    "Attempting to collide two near-identical boxes\n");
