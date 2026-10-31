@@ -79,8 +79,8 @@ namespace BrnDirector
         void LineTestNearest(LineTestNearestPostBox&                           lrPostBox,
                              u32                                               lx32EntityTypeFlags,
                              u8                                                lxVolumeTypeFlags,
-                             const Vector3&                                    lLineStart,
-                             const Vector3&                                    lLineEnd,
+                             Vector3                                          lLineStart,
+                             Vector3                                          lLineEnd,
                              CgsSceneManager::EntityId                         lExcludeEntityId,
                              CgsSceneManager::SceneManagerIO::EExclusionMode  leExclusionMode) const;
 
