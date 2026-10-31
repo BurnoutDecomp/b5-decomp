@@ -200,6 +200,43 @@ int Semaphore::Wait(const u32* pTimeoutAbsolute)
     }
 }
 
+// ARTIST 0x82B42B70. Publish permits and, where needed, wake kernel waiters.
+int Semaphore::Post(int iCount)
+{
+    volatile long* const lpCount = reinterpret_cast<volatile long*>(&mSemaphoreData.mnCount);
+    if (iCount <= 0)
+        return mSemaphoreData.mnCount;
+
+    if (mSemaphoreData.mbIntraProcess)
+    {
+        MemoryBarrier();
+        if (mSemaphoreData.mnCancelCount > 0 && mSemaphoreData.mnCount < 0)
+        {
+            const long lCancelled = _InterlockedExchange(
+                reinterpret_cast<volatile long*>(&mSemaphoreData.mnCancelCount), 0);
+            mSemaphoreData.UpdateCancelCount(lCancelled);
+        }
+
+        const long lPrevious = _InterlockedExchangeAdd(lpCount, iCount);
+        if (lPrevious < 0)
+        {
+            const long lWaiting = -lPrevious;
+            const long lWake = iCount < lWaiting ? iCount : lWaiting;
+            ::ReleaseSemaphore(mSemaphoreData.mhSemaphore, lWake, 0);
+        }
+        const long lResult = mSemaphoreData.mnCount;
+        return lResult > 0 ? static_cast<int>(lResult) : 0;
+    }
+
+    _InterlockedExchangeAdd(lpCount, iCount);
+    if (!::ReleaseSemaphore(mSemaphoreData.mhSemaphore, iCount, 0))
+    {
+        _InterlockedExchangeAdd(lpCount, -iCount);
+        return -1;
+    }
+    return mSemaphoreData.mnCount;
+}
+
 // ---------------------------------------------------------------------------
 // Semaphore::GetCount @ 0x82B42CB0
 //
