@@ -23,7 +23,7 @@ namespace CgsDev
         void SetRenderer(Debug2DImmediateRender* lpRenderer) { mp2DRenderer = lpRenderer; mp3DRenderer = 0; }
         void SetRenderer(Debug3DImmediateRender* lpRenderer) { mp2DRenderer = 0; mp3DRenderer = lpRenderer; }
 
-        // Draw lpcString at (lfX, lfY) in luColour; returns the pen X after the string.
+        // Draw lpcString at (lfX, lfY) in luColour; returns the final baseline plus one font-height step.
         f32 Print(f32 lfX, f32 lfY, const char* lpcString, u32 luColour);
         // DecFIGS h79; ARTIST8281FEC0 forwards this exact stored colour.
         f32 Print(f32 lfX, f32 lfY, const char* lpcString)
