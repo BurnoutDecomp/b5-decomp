@@ -155,21 +155,22 @@ inline void Average<9u, Vector3>::Record(Vector3 aSample)
     maPoints[muNextPoint] = aSample;
     muNextPoint = static_cast<u8>(static_cast<u8>(muNextPoint + 1) % 9u);
 
-    Vector3 lSum = { 0.0f, 0.0f, 0.0f, 0.0f };
+    Vector3 lSum;
+    lSum.mV = __vspltisw(0);
     mfAverage = lSum;
     for (u32 lu = 0; lu < 9u; ++lu)
     {
-        lSum.x += maPoints[lu].x;
-        lSum.y += maPoints[lu].y;
-        lSum.z += maPoints[lu].z;
-        lSum.w += maPoints[lu].w;
+        lSum.mV = __vaddfp(lSum.mV, maPoints[lu].mV);
         mfAverage = lSum;   // faithful in-loop member store (stvx128 each pass)
     }
-    const f32 lfReciprocal = 1.0f / 9.0f;
-    mfAverage.x = lSum.x * lfReciprocal;
-    mfAverage.y = lSum.y * lfReciprocal;
-    mfAverage.z = lSum.z * lfReciprocal;
-    mfAverage.w = lSum.w * lfReciprocal;
+    const __vector4 lvNine = __vcfsx(__vspltisw(9), 0);
+    const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+    __vector4 lvReciprocal = __vrefp(lvNine);
+    __vector4 lvError = __vnmsubfp(lvReciprocal, lvNine, lvOne);
+    lvReciprocal = __vmaddfp(lvReciprocal, lvError, lvReciprocal);
+    lvError = __vnmsubfp(lvReciprocal, lvNine, lvOne);
+    lvReciprocal = __vmaddfp(lvReciprocal, lvError, lvReciprocal);
+    mfAverage.mV = __vmulfp(lvReciprocal, lSum.mV);
 }
 
 // ===== ADDITIVE GROW (Wave 5: RoadnoiseEffect::TransitionEnvelope) =====
