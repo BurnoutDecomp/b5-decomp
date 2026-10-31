@@ -19,14 +19,9 @@
 // The float streaming in the receiver goes through CgsDev::StrStreamBase::operator<<(f32) and the
 // virtual char* sink for the separator strings, exactly the committed CgsLog surface.
 
-// The title network-address query. Its PC body lives in the platform layer
-// (GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp); it fills a 36-byte address record whose
-// leading four bytes are the title's IP address.
-extern "C" u32 XNetGetTitleXnAddr(void* lpXnAddr);
 
 namespace
 {
-    using rw::math::vpu::Vector3;
 
     const f32 KF_CAMERA_HEIGHT_ABOVE_GROUND = 2.0f;     // the camera sits this far above the hit
     const f32 KF_LINE_TEST_LENGTH           = 100.0f;   // the ground probe reaches this far down
@@ -36,22 +31,14 @@ namespace
     const u32 KU_GROUND_ENTITY_TYPE_FLAGS   = 2u;       // the entity types the ground probe hits
     const u8  KU_ALL_VOLUME_TYPES           = 0xFFu;
 
-    const u32 KU_XNADDR_SIZE                = 36u;
-
-    // rw::math::vpu::Cross as the console expands it: the (y, z, x) permutes, one vmulfp128 and a
-    // fused vnmsubfp, then the (y, z, x) permute of the difference -- lLhs x lRhs, rounded the
-    // console's way.
+    // The original cross product permutes (y,z,x,w), then uses VMX multiply and
+    // negative multiply-subtract before the final permutation.
     Vector3 CrossConsole(const Vector3& lLhs, const Vector3& lRhs)
     {
-        using BrnDirector::Camera::Utils::ConsoleVpu::NegativeMultiplySubtract;
-
-        const Vector3 lProduct = { lLhs.x * lRhs.y, lLhs.y * lRhs.z, lLhs.z * lRhs.x, lLhs.w * lRhs.w };
-        const Vector3 lDifference = {
-            NegativeMultiplySubtract(lLhs.y, lRhs.x, lProduct.x),
-            NegativeMultiplySubtract(lLhs.z, lRhs.y, lProduct.y),
-            NegativeMultiplySubtract(lLhs.x, lRhs.z, lProduct.z),
-            NegativeMultiplySubtract(lLhs.w, lRhs.w, lProduct.w) };
-        { const Vector3 lResult = { lDifference.y, lDifference.z, lDifference.x, lDifference.w }; return lResult; }
+        const __vector4 lvLhsPermuted = __vpermwi(lLhs.mV, 0x63);
+        const __vector4 lvRhsPermuted = __vpermwi(lRhs.mV, 0x63);
+        const __vector4 lvProduct = __vmulfp(lLhs.mV, lvRhsPermuted);
+        return Vector3(__vpermwi(__vnmsubfp(lvLhsPermuted, lRhs.mV, lvProduct), 0x63));
     }
 }
 
@@ -65,14 +52,14 @@ const f32 BehaviourRenderMetrics::KF_MOVE_WAIT     = 1.0f;
 
 Vector3 BehaviourRenderMetrics::saAngles[BehaviourRenderMetrics::KU_NUM_ANGLES] =
 {
-    {  0.0f, 0.0f,  1.0f, 0.0f },
-    {  0.7f, 0.0f,  0.7f, 0.0f },
-    {  1.0f, 0.0f,  0.0f, 0.0f },
-    {  0.7f, 0.0f, -0.7f, 0.0f },
-    {  0.0f, 0.0f, -1.0f, 0.0f },
-    { -0.7f, 0.0f, -0.7f, 0.0f },
-    { -1.0f, 0.0f,  0.0f, 0.0f },
-    { -0.7f, 0.0f,  0.7f, 0.0f },
+    rw::math::vpu::Vector3(0.0f, 0.0f, 1.0f),
+    rw::math::vpu::Vector3(0.7f, 0.0f, 0.7f),
+    rw::math::vpu::Vector3(1.0f, 0.0f, 0.0f),
+    rw::math::vpu::Vector3(0.7f, 0.0f, -0.7f),
+    rw::math::vpu::Vector3(0.0f, 0.0f, -1.0f),
+    rw::math::vpu::Vector3(-0.7f, 0.0f, -0.7f),
+    rw::math::vpu::Vector3(-1.0f, 0.0f, 0.0f),
+    rw::math::vpu::Vector3(-0.7f, 0.0f, 0.7f),
 };
 
 // ----------------------------------------------------------------------------
@@ -138,8 +125,9 @@ void BehaviourRenderMetrics::SendReadyMessage(const BehaviourSharedInfo& lrShare
     char lacPlatform[8];
     CgsCore::SPrintf(lacPlatform, sizeof(lacPlatform), "X360");
 
-    u8 lauTitleAddress[KU_XNADDR_SIZE];
-    XNetGetTitleXnAddr(lauTitleAddress);
+    XNADDR lTitleAddress;
+    XNetGetTitleXnAddr(&lTitleAddress);
+    const u8* lauTitleAddress = reinterpret_cast<const u8*>(&lTitleAddress.ina);
 
     char lacAddress[20];
     CgsCore::SPrintf(lacAddress, sizeof(lacAddress), "%u.%u.%u.%u",
@@ -219,12 +207,12 @@ bool BehaviourRenderMetrics::Update(Camera& lrCamera, const BehaviourSharedInfo&
             const CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult& lrResult =
                 mLineTest.GetPackage();
 
-            if (lrResult.mbIntersection && lrResult.mPosition.y > 0.0f)
+            if (lrResult.mbIntersection && lrResult.mPosition.mV.y > 0.0f)
             {
                 {
-                    const Vector3 lAggregateValue = { lrResult.mPosition.x,
-                                        lrResult.mPosition.y + KF_CAMERA_HEIGHT_ABOVE_GROUND,
-                                        lrResult.mPosition.z, 0.0f };
+                    const Vector3 lAggregateValue(lrResult.mPosition.mV.x,
+                                                  lrResult.mPosition.mV.y + KF_CAMERA_HEIGHT_ABOVE_GROUND,
+                                                  lrResult.mPosition.mV.z);
                     mCamPosition = lAggregateValue;
                 }
                 mbWaitingForLineTest = false;
@@ -247,7 +235,7 @@ bool BehaviourRenderMetrics::Update(Camera& lrCamera, const BehaviourSharedInfo&
                 mbWaitingForLineTest = false;
                 mCamPosition  = mInitialPosition;
                 {
-                    const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+                    const Vector3 lAggregateValue(0.0f, 1.0f, 0.0f);
                     mGroundNormal = lAggregateValue;
                 }
             }
@@ -328,11 +316,11 @@ void BehaviourRenderMetrics::SetToGetMetrics(Vector3 lPosition)
     {
         CgsDev::StrStreamBase& lrPrint = *CgsDev::Log::gpDebugPrint;
         lrPrint << "Request to get metrics at ";
-        lrPrint << lPosition.x;
+        lrPrint << lPosition.mV.x;
         lrPrint << ",";
-        lrPrint << lPosition.y;
+        lrPrint << lPosition.mV.y;
         lrPrint << ",";
-        lrPrint << lPosition.z;
+        lrPrint << lPosition.mV.z;
         lrPrint << "\n.";
     }
 
@@ -363,7 +351,7 @@ void BehaviourRenderMetrics::GameTalkMessageReceiver(EA::GameTalk::GameTalkMessa
         if (_stricmp(lpcKey, "GetMetrics") == 0)
         {
             const f32* lpfContent = static_cast<const f32*>(lpMessage->GetContent(liIndex));
-            lpBehaviour->SetToGetMetrics(Vector3{ lpfContent[0], lpfContent[1], lpfContent[2], 0.0f });
+            lpBehaviour->SetToGetMetrics(Vector3(lpfContent[0], lpfContent[1], lpfContent[2]));
         }
         else if (_stricmp(lpcKey, "SetIdleMetricsCamera") == 0)
         {
@@ -372,12 +360,12 @@ void BehaviourRenderMetrics::GameTalkMessageReceiver(EA::GameTalk::GameTalkMessa
                        "lpMessage->GetSize(luIndex) >= (int)(6 * sizeof(float32_t))");
 
             {
-                const Vector3 lAggregateValue = { lpfContent[0], lpfContent[1], lpfContent[2], 0.0f };
+                const Vector3 lAggregateValue(lpfContent[0], lpfContent[1], lpfContent[2]);
                 lpBehaviour->mIdlePosition = lAggregateValue;
             }
             lpBehaviour->mbIdleCamOn    = true;
             {
-                const Vector3 lAggregateValue = { lpfContent[3], lpfContent[4], lpfContent[5], 0.0f };
+                const Vector3 lAggregateValue(lpfContent[3], lpfContent[4], lpfContent[5]);
                 lpBehaviour->mIdleDirection = lAggregateValue;
             }
         }
