@@ -28,65 +28,10 @@
 
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"
 
-#include <type_traits>                                      // std::is_polymorphic (uncalled _AssertLayout)
-
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
-// X360 (Xenon) D3D9 viewport / scissor entry points. These are platform externals (XDK intrinsics);
-// declared with their X360 ABI so the body compiles store-for-store against the same calls the image
-// makes. On a non-X360 build they resolve to the platform shim layer.
-extern "C" void D3DDevice_SetViewportF(void* lpDevice, const void* lpViewport);
-extern "C" void D3DDevice_SetScissorRect(void* lpDevice, const void* lpRect);
-
-// The X360 D3D device the image reads from off_83271608 (the engine's single device global; defined
-// in the renderengine VertexBuffer/device TUs as renderengine::gpD3DDevice).
-namespace renderengine { extern void* gpD3DDevice; }
-
-namespace
-{
-    // The X360 float viewport descriptor D3DDevice_SetViewportF consumes (D3DVIEWPORT9 with float
-    // X/Y/Width/Height; the X360 GPU takes the viewport in floats). Matches the SetRenderTargetState
-    // store layout exactly.
-    struct ViewportF
-    {
-        f32 mfX;       // +0x00
-        f32 mfY;       // +0x04
-        f32 mfWidth;   // +0x08
-        f32 mfHeight;  // +0x0C
-        f32 mfMinZ;    // +0x10
-        f32 mfMaxZ;    // +0x14
-        u32 mu32Pad;   // +0x18 (the trailing zero word the X360 asm writes)
-    };
-
-    // The integer scissor rectangle (RECT) D3DDevice_SetScissorRect consumes.
-    struct ScissorRect
-    {
-        s32 miLeft;    // +0x00
-        s32 miTop;     // +0x04
-        s32 miRight;   // +0x08
-        s32 miBottom;  // +0x0C
-    };
-
-    // ⚠ REMOVED 2026-08-12 (shadow-fetch wave). The "last render-target state installed on the
-    // device" shadow (X360 dword_83010A30) used to be a FILE-LOCAL copy here -- a second,
-    // independent copy of the same console global that rw::graphics::postfx::RenderTarget::Begin
-    // also keeps. On the console that duplication would merely be redundant; on this build it was
-    // a live bug, because the PC-only PCSurfaceBracket_Restore puts the scene surfaces back with
-    // raw D3D9 calls instead of through Device::SetState. The copy here therefore stayed stuck at
-    // "the shadow-map state is installed" and SetRenderTargetState below skipped its bind on every
-    // frame after the first, sending the shadow cascades into the BACK BUFFER.
-    // There is now ONE definition, renderengine::gpLastRenderTargetState (declared in
-    // pc/gcm/renderengine/ShadowPass.h, defined in PostFxRenderTarget.cpp beside the
-    // only Device::SetState that writes it), and PCSurfaceBracket_Restore invalidates it.
-
-    // NOTE (2026-08-12): the default render-target state (X360 dword_83271614) used to be defined
-    // HERE as a file-local `const renderengine::RenderTargetState*` -- a duplicate of the one in
-    // rwgpfxrendertarget.cpp and a const-mismatch against the `extern renderengine::RenderTargetState*`
-    // the postfx header declares. Both file-local copies were dead by construction: nothing outside
-    // their own TU could ever assign to them, so the fallback below always fell back to null.
-    // The single canonical definition now lives with the rest of the postfx render-target surface
-    // (pc/gcm/renderengine/PostFxRenderTarget.cpp) and is reached through the header's
-    // declaration, rw::graphics::postfx::gpDefaultRenderTargetState.
-}
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 // One surface record's default state, as the X360 ctor (0x823F47A0) seeds it: "unused, no
 // compression, no ZCull" - filter mode 1, not-in-use, no system memory, texture type 1, and all of
@@ -272,14 +217,14 @@ void CgsRenderTarget::End()
 renderengine::Texture* CgsRenderTarget::GetTexture(u32 luIndex)
 {
     CGS_ASSERT(mpRenderTarget != 0, "mpRenderTarget");
-    return mpRenderTarget->GetTexture(luIndex);
+    return mpRenderTarget->maColourTargets[luIndex].mpTextureState->mpRaster;
 }
 
 // The resolved depth/stencil texture.
 renderengine::Texture* CgsRenderTarget::GetDepthTexture()
 {
     CGS_ASSERT(mpRenderTarget != 0, "mpRenderTarget");
-    return mpRenderTarget->GetDepthStencilTexture();
+    return mpRenderTarget->mDepthTarget.mpTexture;
 }
 
 // Bind this render target's surface state on the device and set the viewport + scissor to its full
@@ -287,88 +232,39 @@ renderengine::Texture* CgsRenderTarget::GetDepthTexture()
 // selects the conceptual section but the bound state is always slot 0).
 void CgsRenderTarget::SetRenderTargetState(u32 luSection)
 {
-
     (void)luSection;
-
-    const renderengine::RenderTargetState* lpState = mpRenderTarget->GetRenderTargetState(0);
-    if (lpState == 0)
-    {
-        lpState = rw::graphics::postfx::gpDefaultRenderTargetState;
-    }
-
-    // Skip the device call when the same surface state is already bound (the shared X360
-    // dword_83010A30 shadow -- see the note where the old file-local copy used to live).
-    if (renderengine::gpLastRenderTargetState != lpState)
-    {
-        renderengine::Device::SetState(lpState);
-        renderengine::gpLastRenderTargetState = lpState;
-    }
-
-    // Viewport: the target's full extent, depth range [0, 1]. Width/height come from the stored
-    // dimensions, converted u32 -> float (the X360 fcfid/frsp the asm emits).
-    ViewportF lViewport;
-    lViewport.mfX      = 0.0f;
-    lViewport.mfY      = 0.0f;
-    lViewport.mfWidth  = static_cast<f32>(mu32MaxWidth);
-    lViewport.mfHeight = static_cast<f32>(mu32MaxHeight);
-    lViewport.mfMinZ   = 0.0f;
-    lViewport.mfMaxZ   = 1.0f;
-    lViewport.mu32Pad  = 0;
-    D3DDevice_SetViewportF(renderengine::gpD3DDevice, &lViewport);
-
-    // Scissor: the same full extent.
-    ScissorRect lScissor;
-    lScissor.miLeft   = 0;
-    lScissor.miTop    = 0;
-    lScissor.miRight  = static_cast<s32>(mu32MaxWidth);
-    lScissor.miBottom = static_cast<s32>(mu32MaxHeight);
-    D3DDevice_SetScissorRect(renderengine::gpD3DDevice, &lScissor);
+    const renderengine::RenderTargetState* state = mpRenderTarget->mpSection0State;
+    if (!state) state = renderengine::Device::GetDefaultRenderTargetState();
+    shadow::Device::SetState(state);
+    D3DVIEWPORTF9 viewport;
+    viewport.X = 0.0f; viewport.Y = 0.0f;
+    viewport.Width = static_cast<f32>(mu32MaxWidth);
+    viewport.Height = static_cast<f32>(mu32MaxHeight);
+    viewport.MinZ = 0.0f; viewport.MaxZ = 1.0f; viewport.Flags = 0;
+    D3DDevice_SetViewportF(gpD3DDevice, &viewport);
+    RECT scissor;
+    scissor.left = 0; scissor.top = 0;
+    scissor.right = mu32MaxWidth; scissor.bottom = mu32MaxHeight;
+    D3DDevice_SetScissorRect(gpD3DDevice, &scissor);
 }
 
-// As SetRenderTargetState, but the viewport depth range is INVERTED: MinZ = 1, MaxZ = 0. The X360 body
-// (0x827E7668) is otherwise identical store-for-store to SetRenderTargetState - it binds section-0's
-// render-target state (falling back to the engine default + skipping a redundant Device::SetState via
-// the same dword_83010A30 / dword_83271614 globals) and sets the scissor to the full extent. Only the
-// two depth-range floats are swapped (X360 flt_82001C98 = 1.0 into MinZ, flt_82001CC0 = 0.0 into X / Y
-// / MaxZ). Called by BrnRendererModule::BeginRenderEnvironmentMapFace.
+// ARTIST 827E7668 uses the same state and rectangle with inverted depth.
 void CgsRenderTarget::SetRenderTargetStateInvertDepth(u32 luSection)
 {
-
     (void)luSection;
-
-    const renderengine::RenderTargetState* lpState = mpRenderTarget->GetRenderTargetState(0);
-    if (lpState == 0)
-    {
-        lpState = rw::graphics::postfx::gpDefaultRenderTargetState;
-    }
-
-    // Skip the device call when the same surface state is already bound (the shared X360
-    // dword_83010A30 shadow -- see the note where the old file-local copy used to live).
-    if (renderengine::gpLastRenderTargetState != lpState)
-    {
-        renderengine::Device::SetState(lpState);
-        renderengine::gpLastRenderTargetState = lpState;
-    }
-
-    // Viewport: the target's full extent, inverted depth range [1, 0]. Width/height come from the
-    // stored dimensions, converted u32 -> float (the X360 fcfid/frsp the asm emits).
-    ViewportF lViewport;
-    lViewport.mfX      = 0.0f;
-    lViewport.mfY      = 0.0f;
-    lViewport.mfWidth  = static_cast<f32>(mu32MaxWidth);
-    lViewport.mfHeight = static_cast<f32>(mu32MaxHeight);
-    lViewport.mfMinZ   = 1.0f;
-    lViewport.mfMaxZ   = 0.0f;
-    lViewport.mu32Pad  = 0;
-    D3DDevice_SetViewportF(renderengine::gpD3DDevice, &lViewport);
-
-    // Scissor: the same full extent.
-    ScissorRect lScissor;
-    lScissor.miLeft   = 0;
-    lScissor.miTop    = 0;
-    lScissor.miRight  = static_cast<s32>(mu32MaxWidth);
-    lScissor.miBottom = static_cast<s32>(mu32MaxHeight);
-    D3DDevice_SetScissorRect(renderengine::gpD3DDevice, &lScissor);
+    const renderengine::RenderTargetState* state = mpRenderTarget->mpSection0State;
+    if (!state) state = renderengine::Device::GetDefaultRenderTargetState();
+    shadow::Device::SetState(state);
+    D3DVIEWPORTF9 viewport;
+    viewport.X = 0.0f; viewport.Y = 0.0f;
+    viewport.Width = static_cast<f32>(mu32MaxWidth);
+    viewport.Height = static_cast<f32>(mu32MaxHeight);
+    viewport.MinZ = 1.0f; viewport.MaxZ = 0.0f; viewport.Flags = 0;
+    D3DDevice_SetViewportF(gpD3DDevice, &viewport);
+    RECT scissor;
+    scissor.left = 0; scissor.top = 0;
+    scissor.right = mu32MaxWidth; scissor.bottom = mu32MaxHeight;
+    D3DDevice_SetScissorRect(gpD3DDevice, &scissor);
 }
 
 // Pointer-invariant layout facts (uncalled; a member so it can reach the private data). The X360 byte
@@ -379,8 +275,11 @@ void CgsRenderTarget::SetRenderTargetStateInvertDepth(u32 luSection)
 // sentinels the ctor writes are single signed bytes.
 void CgsRenderTarget::_AssertLayout()
 {
-    CGS_STATIC_ASSERT((std::is_polymorphic<CgsRenderTarget>::value),
-                  "CgsRenderTarget must be polymorphic - the X360 ctor installs a vptr at +0x00");
+    CGS_STATIC_ASSERT((sizeof(CgsRenderTargetSurface) == 0x30), "ARTIST surface size");
+    CGS_STATIC_ASSERT((sizeof(CgsRenderTarget) == 0x110), "ARTIST render target size");
+    CGS_STATIC_ASSERT((offsetof(CgsRenderTarget, maRenderTargets) == 0x18), "ARTIST colour records");
+    CGS_STATIC_ASSERT((offsetof(CgsRenderTarget, mDepthTarget) == 0xD8), "ARTIST depth record");
+    CGS_STATIC_ASSERT((offsetof(CgsRenderTarget, mpRenderTarget) == 0x108), "ARTIST target pointer");
 
     // The X360 record count: five 0x30-byte surfaces in total, of which four are colour. Derived in
     // the header's COLOUR-SECTION COUNT note from sizeof 0x110 / mpRenderTarget @ +0x108 / the ctor's
