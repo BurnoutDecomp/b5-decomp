@@ -26,7 +26,7 @@ namespace Camera
 
 // ARTIST 821F9F10 / 8220EE08. The truck carries a fixed heading, a smoothed
 // speed and a desired fraction of the subject's velocity along that heading.
-void AttachmentTruck::Set(VecFloat lRatio, Vector3 lVelocity, Vector3 lPosition)
+void AttachmentTruck::Set(VecFloat lRatio, rw::math::vpu::Vector3 lVelocity, rw::math::vpu::Vector3 lPosition)
 {
     using namespace rw::math::vpu;
     mPosition = lPosition;
@@ -46,12 +46,12 @@ void AttachmentTruck::Set(VecFloat lRatio, Vector3 lVelocity, Vector3 lPosition)
     }
 }
 
-Vector3 AttachmentTruck::GetVelocity() const
+rw::math::vpu::Vector3 AttachmentTruck::GetVelocity() const
 {
     return rw::math::vpu::Mult(mDirection, static_cast<f32>(mSpeed));
 }
 
-void AttachmentTruck::Update(Vector3 lPosition, Vector3 lVelocity,
+void AttachmentTruck::Update(rw::math::vpu::Vector3 lPosition, rw::math::vpu::Vector3 lVelocity,
                              VecFloat lTimestep, const Parameters& lrParams)
 {
     using namespace rw::math::vpu;
@@ -59,14 +59,14 @@ void AttachmentTruck::Update(Vector3 lPosition, Vector3 lVelocity,
                "!rw::math::fpu::IsZero(lParams.mfConvergenceTimeSecs)");
     if (mbFirstFrame)
     {
-        Set(VecFloat{}, lVelocity, lPosition);
+        Set(VecFloat(0.0f), lVelocity, lPosition);
         if (!IsZero(lVelocity, 1.1920929e-7f))
         {
             const f32 speed = static_cast<f32>(mSpeed) - lrParams.mfInitialOffsetDist / lrParams.mfConvergenceTimeSecs;
             // The original clamps the ratio to [0, 1.25] (0.5 * 0.5 + 1.0, built from the splatted
             // 1.0 and 0.5). Only a negative initial offset (the drive-by blocks, -4 m over 0.125 s)
             // reaches the upper bound: that truck settles at 1.25x the car's speed and passes it.
-            const f32 ratio = std::min(1.25f, std::max(0.0f, speed / static_cast<f32>(mSpeed)));
+            const f32 ratio = (std::min)(1.25f, (std::max)(0.0f, speed / static_cast<f32>(mSpeed)));
             mSpeed = VecFloat(speed);
             mDesiredSpeedRatio = VecFloat(ratio);
             mPosition = lPosition + mDirection * lrParams.mfInitialOffsetDist;
@@ -75,7 +75,7 @@ void AttachmentTruck::Update(Vector3 lPosition, Vector3 lVelocity,
     const f32 speed = static_cast<f32>(mSpeed) + 0.1f * (Dot(lVelocity, mDirection) * static_cast<f32>(mDesiredSpeedRatio) - static_cast<f32>(mSpeed));
     mSpeed = VecFloat(speed);
     mPosition = mPosition + GetVelocity() * static_cast<f32>(lTimestep);
-    mPosition.y = lPosition.y;
+    mPosition.mV.y = lPosition.mV.y;
 }
 
 // ARTIST 82244E40. Camera output is produced on every valid frame, even while
@@ -91,14 +91,14 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     }
     if (!HasFailed()) lrCamera.mState_uFlags |= 2;
     const VehicleInfo& vehicle = *mAttachedTo.Get(lrInfo.GetWorld());
-    Matrix44Affine target = vehicle.mRaceCarState.mTransform;
+    rw::math::vpu::Matrix44Affine target = vehicle.mRaceCarState.mTransform;
     if (mbIsPlanted && mbIsFirstFrameOfPlanted)
     {
         mAttachmentTruck.Construct();
         mAttachmentTruck.Set(VecFloat(0.5f), vehicle.mRaceCarState.mLinearVelocity, target.Pos());
         mbIsFirstFrameOfPlanted = false;
     }
-    Vector3 velocity = mAttachedTo.meType == BrnDirector::VehicleRef::E_PLAYER_CAR
+    rw::math::vpu::Vector3 velocity = mAttachedTo.meType == BrnDirector::VehicleRef::E_PLAYER_CAR
         ? lrInfo.GetPlayerTracker()->GetImplicitVelocity() : vehicle.mRaceCarState.mLinearVelocity;
     const f32 speed = Magnitude(velocity);
     if (mpParameters->mbUseTruck || mbIsPlanted)
@@ -115,14 +115,14 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     mVehicleAttachmentCollisionPolicy.SetVehicleRef(mAttachedTo);
     CGS_ASSERT(std::fabs(mpParameters->mfHeightDistanceVelocityRange) > 1.1920929e-7f,
                "!rw::math::fpu::IsZero(mpParameters->mfHeightDistanceVelocityRange)");
-    const f32 ratio = std::min(speed / mpParameters->mfHeightDistanceVelocityRange, 1.0f);
+    const f32 ratio = (std::min)(speed / mpParameters->mfHeightDistanceVelocityRange, 1.0f);
     if (!mbIsWorldSpaceVectorSet)
     {
-        Vector3 flat = velocity;
-        flat.y = 0;
+        rw::math::vpu::Vector3 flat = velocity;
+        flat.mV.y = 0;
         mDesiredWorldSpaceNormalizedVectorFromCar = IsZero(flat, 1.1920929e-7f) ? target.zAxis : Normalize(flat);
         if (mpParameters->mbUseSideVector)
-            mDesiredWorldSpaceNormalizedVectorFromCar = Normalize(Cross(Vector3{0,1,0,0}, mDesiredWorldSpaceNormalizedVectorFromCar));
+            mDesiredWorldSpaceNormalizedVectorFromCar = Normalize(Cross(rw::math::vpu::Vector3(0.0f, 1.0f, 0.0f), mDesiredWorldSpaceNormalizedVectorFromCar));
         if (mpParameters->mbInvertVector) mDesiredWorldSpaceNormalizedVectorFromCar = -mDesiredWorldSpaceNormalizedVectorFromCar;
         CGS_ASSERT(IsValid(mDesiredWorldSpaceNormalizedVectorFromCar), "IsValid(mDesiredWorldSpaceNormalizedVectorFromCar)");
         mWorldSpaceNormalizedVectorFromCar = mDesiredWorldSpaceNormalizedVectorFromCar;
@@ -133,10 +133,10 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     const f32 distance = mpParameters->mfSlowDistance + ratio * (mpParameters->mfFastDistance - mpParameters->mfSlowDistance);
     if (!IsPrepared())
     {
-        mOriginalPoint = mCurrentTargetPos = target.Pos() + Vector3{0,-1,0,0};
+        mOriginalPoint = mCurrentTargetPos = target.Pos() + rw::math::vpu::Vector3(0.0f, -1.0f, 0.0f);
         mfPitch = pitch; mfHeight = height; mfDistance = distance;
     }
-    const Vector3 previousDesired = mDesiredWorldSpaceNormalizedVectorFromCar;
+    const rw::math::vpu::Vector3 previousDesired = mDesiredWorldSpaceNormalizedVectorFromCar;
     if (speed > 1.0f) mDesiredWorldSpaceNormalizedVectorFromCar = Normalize(previousDesired);
     mfPitch += (pitch - mfPitch) * mpParameters->mfHeightDistanceBlendFactor;
     mfHeight += (height - mfHeight) * mpParameters->mfHeightDistanceBlendFactor;
@@ -155,14 +155,17 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     }
     CGS_ASSERT(!IsZero(mWorldSpaceNormalizedVectorFromCar), "!IsZero(mWorldSpaceNormalizedVectorFromCar)");
     CGS_ASSERT(std::fabs(mfDistance) > 1.1920929e-7f, "!rw::math::fpu::IsZero(mfDistance)");
-    const Vector3 eye = target.Pos() + mWorldSpaceNormalizedVectorFromCar * mfDistance;
+    const rw::math::vpu::Vector3 eye = target.Pos() + mWorldSpaceNormalizedVectorFromCar * mfDistance;
     if (IsPrepared()) mTransform.Pos() = eye;
     else { mTransform = Utils::CreateLookAt(eye, target.Pos()); lrCamera.mTransform = mTransform; }
-    if (mpParameters->mbStickToGround) mTransform.Pos().y = lrCamera.mTransform.Pos().y;
-    else mTransform.Pos().y += mfHeight;
+    if (mpParameters->mbStickToGround) mTransform.Pos().mV.y = lrCamera.mTransform.Pos().mV.y;
+    else mTransform.Pos().mV.y += mfHeight;
     lrCamera.mTransform = mTransform;
+    AABBox lEmptyBounds;
+    lEmptyBounds.mMin = rw::math::vpu::Vector3(__vspltisw(0));
+    lEmptyBounds.mMax = rw::math::vpu::Vector3(__vspltisw(0));
     mLooker.Update(VecFloat(dt), mRandom, mpParameters->mLookerParams,
-                   lrCamera, target, velocity, AABBox{});
+                   lrCamera, target, velocity, lEmptyBounds);
     mTransform = lrCamera.mTransform;
     mShake.Update(lrCamera.mTransform, mpParameters->mShakeParams, mRandom, dt, 1.0f);
     lrCamera.SetFOV(mpParameters->mfField_B0);
@@ -186,20 +189,6 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
         if (mVisibilityCollisionPolicy.IsVisibilityInterrupted()) { lrCamera.mState.mHeadFlags.SetBit(16); mbCanSwitchToMeNow = false; }
     }
     SetPrepared();
-    static u32 lines = 0;
-    static u32 truckingLines = 0;
-    if (trace && (trucking ? truckingLines++ < 120 : lines++ < 240) && CgsDev::Log::gpDebugPrint)
-        *CgsDev::Log::gpDebugPrint << "[camera-rig] gyro car=" << mAttachedTo.miRaceCarIndex
-            << " eye=" << lrCamera.mTransform.Pos().x << "," << lrCamera.mTransform.Pos().y << "," << lrCamera.mTransform.Pos().z
-            << " target=" << target.Pos().x << "," << target.Pos().y << "," << target.Pos().z
-            << " fov=" << lrCamera.mfFOV << " dt=" << dt
-            << " car=" << vehicle.mRaceCarState.mTransform.Pos().x << ","
-            << vehicle.mRaceCarState.mTransform.Pos().y << "," << vehicle.mRaceCarState.mTransform.Pos().z
-            << " worldDt=" << lrInfo.GetTimestep(Timestep::E_WORLD)
-            << " noSlomoDt=" << lrInfo.GetTimestep(Timestep::E_WORLD_NO_SLOMO)
-            << " truck=" << (mpParameters->mbUseTruck ? 1 : 0)
-            << " planted=" << (mbIsPlanted ? 1 : 0)
-            << " speedSq=" << static_cast<f32>(rw::math::vpu::Dot(velocity, velocity)) << "\n";
     return true;
 }
 
