@@ -77,9 +77,9 @@ public:
         //             VecFloat lfWidth, VecFloat lfHeightOffGround)
         // and that is reproduced here.
         bool AddShadow(const Matrix44Affine& lShadowTransform,
-                       const Vector4& lvFwdLength_RearLength_BackAxle_FrontAxle,
-                       VecFloat lfWidth,
-                       VecFloat lfHeightOffGround);
+                       const Vector4 lvFwdLength_RearLength_BackAxle_FrontAxle,
+                       rw::math::vpu::VecFloat lfWidth,
+                       rw::math::vpu::VecFloat lfHeightOffGround);
 
         s32         miNumShadows;            // +0x00 : count read/written by AddShadow (lwz/stw 0(this))
         ShadowStruct maShadowPos[KI_MAX_SHADOWS];
