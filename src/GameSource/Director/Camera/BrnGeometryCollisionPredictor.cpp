@@ -57,11 +57,8 @@ void GeometryCollisionPredictor::GenerateSceneQueries(const Camera& lrCamera, f3
 
     const rw::math::vpu::Vector3& lrStart = lrCamera.mTransform.wAxis;
 
-    rw::math::vpu::Vector3 lEnd;
-    lEnd.x = mVelocity.x * KF_LOOKAHEAD_TIME_FLOAT + lrStart.x;
-    lEnd.y = mVelocity.y * KF_LOOKAHEAD_TIME_FLOAT + lrStart.y;
-    lEnd.z = mVelocity.z * KF_LOOKAHEAD_TIME_FLOAT + lrStart.z;
-    lEnd.w = mVelocity.w * KF_LOOKAHEAD_TIME_FLOAT + lrStart.w;
+    const __vector4 lvLookahead = __vspltw(__lvlx(&KF_LOOKAHEAD_TIME_FLOAT, 0), 0);
+    const rw::math::vpu::Vector3 lEnd(__vmaddfp(mVelocity.mV, lvLookahead, lrStart.mV));
 
     lpRequestInterface->LineTestNearest(mLineTest, 2u, 0xFFu, lrStart, lEnd,
                                         CgsSceneManager::EntityId(0xFFFFFFFFu),
