@@ -144,8 +144,10 @@ namespace BrnGui
         // @ 0x827DD568 - only flags dirty when the position actually changes.
         void SetPosition(Vector2 lv2Position)
         {
-            if (lv2Position.x != mv2Position.x || lv2Position.y != mv2Position.y ||
-                lv2Position.z != mv2Position.z || lv2Position.w != mv2Position.w)
+            unsigned int luCompare;
+        __vcmpeqfpR(__vrlimi(lv2Position.mV, lv2Position.mV, 3, 2),
+                    __vrlimi(mv2Position.mV, mv2Position.mV, 3, 2), &luCompare);
+        if ((luCompare & 0x80) == 0)
             {
                 mv2Position = lv2Position;
                 mbIsDirty = true;
@@ -361,7 +363,10 @@ namespace BrnGui
     // the {x,y} lane pair (lanes 2/3 are replaced by rotated copies of 0/1 on BOTH sides).
     inline void SatNavMapIcon::SetPosition(Vector2 lv2Position)
     {
-        if (lv2Position.x != mv2Position.x || lv2Position.y != mv2Position.y)
+        unsigned int luCompare;
+        __vcmpeqfpR(__vrlimi(lv2Position.mV, lv2Position.mV, 3, 2),
+                    __vrlimi(mv2Position.mV, mv2Position.mV, 3, 2), &luCompare);
+        if ((luCompare & 0x80) == 0)
         {
             mv2Position = lv2Position;
             SatNavIconComponent* lpComponent = reinterpret_cast<SatNavIconComponent*>(
