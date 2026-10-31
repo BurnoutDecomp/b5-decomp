@@ -620,7 +620,7 @@ bool ShaderConstantsCPU::ShouldSerialise() const
         return false;
     }
 
-    if (lValue.x == 0.0f)
+    if (lValue.mV.x == 0.0f)
     {
         return false;
     }

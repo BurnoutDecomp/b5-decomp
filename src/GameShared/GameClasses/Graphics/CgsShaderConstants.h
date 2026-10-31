@@ -56,14 +56,6 @@ namespace CgsGraphics
     struct DispatchObjectContext;
 }
 
-// VecFloat / Matrix33 used by the (out-of-scope) SetShaderConstantData overloads are
-// already aliased canonically in BrnCommonTypes.h (included above): the project-wide
-// committed decision (flagged by the BrnPhysics-bodies group) is VecFloat == Vector4 and
-// Matrix33 == rw::math::vpu::Matrix33. Re-typedef'ing them locally to a distinct
-// forward-declared rw::math::vpu::VecFloat struct collided with that alias (C2371) and made
-// the SetShaderConstantData(VecFloat) overload a duplicate of the Vector4 one (C2535), which
-// broke compilation of this header for every includer. Reuse the committed aliases instead.
-
 // CgsShaderConstants.h:97
 const u32 KU_INSTANCING_MATRIX_ARRAY_MAX = 5;
 
@@ -150,9 +142,6 @@ struct ShaderConstantTable
     void AddShaderConstantArray(u32 luIndex, const char* lpcName, u8 lu8SizeOfEachEntryInBytes, u8 lu8NumEntries);
 
     // CgsShaderConstants.h:325-441 - the SetShaderConstantData overload family.
-    // (The leak's separate SetShaderConstantData(VecFloat) overload is omitted: the project
-    // committed VecFloat == Vector4 in BrnCommonTypes.h, so it would duplicate the Vector4
-    // overload below. The original VecFloat scalar-broadcast distinction is not modelled.)
     void SetShaderConstantData(u32 luIndex, const float& lfValue);
     void SetShaderConstantData(u32 luIndex, Vector2 lValue);
     void SetShaderConstantData(u32 luIndex, Vector3 lValue);
