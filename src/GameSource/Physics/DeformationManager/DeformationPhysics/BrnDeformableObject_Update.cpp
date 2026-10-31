@@ -109,29 +109,21 @@ namespace Deformation
         // per-direction unit vector (the switch at 0x82607BAC). KI_NUM_APPLY_DIRECTIONS == 6.
         const s32 KI_NUM_APPLY_DIRECTIONS = 6;
 
-        // ⭐⭐ TABLE RETIRED 2026-08-14 (walls leg 4): the flagged-zero KsaApplyDirection placeholder
-        // is the shared BrnPhysics::Deformation::KA_IMPULSE_DIRECTIONS (BrnCollidableBody.cpp) --
-        // the PS3 exports name the global, its accessor AND the initializer that writes the six
-        // signed unit body axes in ENextSensorDirection order. With the zero rows every projection
-        // in the six-direction loop was 0 -> the loop never fired and the banked vehicle impulse
-        // was identically zero (the silent-drop shape). The reference below aliases the real table.
-        const Vector3 (&KsaApplyDirection)[KI_NUM_APPLY_DIRECTIONS] = KA_IMPULSE_DIRECTIONS;
-
         // FLAGGED-0 PLACEHOLDERS for the friction / limit / scale rows the resolved world impulse is
         // shaped by after GetImpulsesFromLocalImpulse (&unk_82FB95C0 / &unk_82FB8330 / &unk_82FB9D30).
         // Honest zeros (NEVER fabricated); the per-lane clamp/scale SHAPE is exact, the values inert.
         // ⭐ RECOVERED 2026-08-03 (static-init splats). The friction scale is tiny (1.5e-4) and the
         // clamp is 1000, which is why the pair reads as "scale hard down, then bound".
-        const Vector3 KVF_APPLY_FRICTION_SCALE = { 0.000150000007f, 0.000150000007f, 0.000150000007f, 0.000150000007f };  // unk_82FB8330 @82C5D688 <- flt_8209D738
-        const Vector3 KVF_APPLY_FRICTION_CLAMP = { 1000.0f, 1000.0f, 1000.0f, 1000.0f };  // unk_82FB95C0 @82C5D868 <- flt_82009E10
-        const Vector3 KVF_APPLY_SHOWTIME_SCALE = { 5.0f, 5.0f, 5.0f, 5.0f };  // unk_82FB9D30 @82C5D890 <- flt_8200426C
+        const Vector3 KVF_APPLY_FRICTION_SCALE(__vspltw(Vector3(0.000150000007f, 0.0f, 0.0f).mV, 0));  // unk_82FB8330 @82C5D688 <- flt_8209D738
+        const Vector3 KVF_APPLY_FRICTION_CLAMP(__vspltw(Vector3(1000.0f, 0.0f, 0.0f).mV, 0));  // unk_82FB95C0 @82C5D868 <- flt_82009E10
+        const Vector3 KVF_APPLY_SHOWTIME_SCALE(__vspltw(Vector3(5.0f, 0.0f, 0.0f).mV, 0));  // unk_82FB9D30 @82C5D890 <- flt_8200426C
 
         // ⭐ RECOVERED 2026-08-24 (deform-land wave, P4) -- the ApplySensorImpulse block-5 scale
         // rows, each from its static-init writer (headless idat decode):
-        const Vector3 KVF_APPLY_WORLD_CRASH_SCALE   = { 5.0f, 5.0f, 5.0f, 5.0f };     // unk_82FB8060 @82C5D610 <- flt_8200426C
-        const Vector3 KVF_APPLY_CARCAR_CRASH_SCALE  = { 20.0f, 20.0f, 20.0f, 20.0f }; // unk_82FB8300 @82C5D638 <- flt_8208F9D4
-        const Vector3 KVF_APPLY_LOCAL_FORCE_SCALE   = { 0.899999976f, 0.899999976f, 0.899999976f, 0.899999976f }; // unk_82FB7F50 @82C5D5E8 <- flt_82005450
-        const Vector3 KVF_APPLY_MIN_TANGENTIAL_SQ   = { 9.999999747e-05f, 9.999999747e-05f, 9.999999747e-05f, 9.999999747e-05f }; // unk_82FB9720 @82C5D840 <- flt_82002540
+        const Vector3 KVF_APPLY_WORLD_CRASH_SCALE(__vspltw(Vector3(5.0f, 0.0f, 0.0f).mV, 0));     // unk_82FB8060 @82C5D610 <- flt_8200426C
+        const Vector3 KVF_APPLY_CARCAR_CRASH_SCALE(__vspltw(Vector3(20.0f, 0.0f, 0.0f).mV, 0)); // unk_82FB8300 @82C5D638 <- flt_8208F9D4
+        const Vector3 KVF_APPLY_LOCAL_FORCE_SCALE(__vspltw(Vector3(0.899999976f, 0.0f, 0.0f).mV, 0)); // unk_82FB7F50 @82C5D5E8 <- flt_82005450
+        const Vector3 KVF_APPLY_MIN_TANGENTIAL_SQ(__vspltw(Vector3(9.999999747e-05f, 0.0f, 0.0f).mV, 0)); // unk_82FB9720 @82C5D840 <- flt_82002540
         // (unk_82FB9D40 -- the not-showtime bank row -- initialises to splat(0.0) @82C5D5C0;
         //  spelled as a zero literal at the select site.)
 
@@ -154,7 +146,7 @@ namespace Deformation
         // (3) writes it into BOTH mvfAllowedCompressionFactor (+0x90) and mvfMaximumAllowedAbsorption
         // (+0xA0) for an ordinary, non-crash contact. See the long note at the select below: carrying
         // this as a zero was what made an ordinary world contact bank no momentum at all.
-        const VecFloat KVF_DRIVE_TIME_DEFORMATION = { 0.2f, 0.2f, 0.2f, 0.2f };
+        const VecFloat KVF_DRIVE_TIME_DEFORMATION(0.2f);
 
         // The `kbAllowDriveTimeDeformation` byte the select tests (`lbz r10, 0x82F2A346` @0x826079E4).
         // ⭐ The shipped X360 image has it SET (byte == 0x01), so the live console path is the row
@@ -197,7 +189,11 @@ namespace Deformation
         // ⭐ RECOVERED 2026-08-03. Note this one is NOT a splat: the initialiser @82C5D97C builds
         // {flt_82004014 (0.1), 0, 0, 0}, i.e. only the X lane carries the margin. A splat would have
         // inflated all three axes; the console inflates one.
-        const Vector3 KVF_SKINNING_CLAMP_MARGIN = { 0.100000001f, 0.0f, 0.0f, 0.0f };  // unk_82FB9550
+        const Vector3 KVF_SKINNING_CLAMP_MARGIN(0.100000001f, 0.0f, 0.0f);  // unk_82FB9550
+        // Lazy runtime vectors at 0x82FBA240, 0x82FBA230 and flag word 0x82FBA250.
+        Vector3 sTangentialScale;
+        Vector3 sTangentialReciprocalScale;
+        u32 sTangentialScaleFlags;
     }
 
     // =============================================================================================
@@ -231,79 +227,22 @@ namespace Deformation
             return;
         }
 
-        // The body transform rows the sensor offset is rotated through (mVehicleBody body
-        // sub-object +16 == the attached vehicle's world transform). Reached through GetTransform.
-        Matrix44Affine lBodyTransform;
-        GetTransform(lBodyTransform);
-        const Vector3& lR  = lBodyTransform.Right();
-        const Vector3& lU  = lBodyTransform.Up();
-        const Vector3& lAt = lBodyTransform.At();
-
-        // ⭐⭐⭐ RESTORED 2026-08-16 (walls leg 10) -- THE TWO VELOCITY TERMS. The asm's `r11` is
-        // `*(this+0x194C) + 0x10`, i.e. the attached VehiclePhysics' TRANSFORM base, and it loads
-        // FIVE vectors off it, not three:
-        //   0x825DF934  lvx128 v9, r0,  r11        ; +0x00  transform Right
-        //   0x825DF930  lvx128 v0, r11, 0x10       ; +0x10  transform Up
-        //   0x825DF93C  lvx128 v8, r11, 0x20       ; +0x20  transform At
-        //   0x825DF944  lvx128 v7, r11, 0x40       ; +0x40  mLinearVelocity   <- WAS DROPPED
-        //   0x825DF940  lvx128 v0, r11, 0x50       ; +0x50  mAngularVelocity  <- WAS DROPPED
-        // Those last two offsets are already attested by name in the tree: ExternallySimulatedBody.h
-        // pins mTransform @+0x10, mLinearVelocity @+0x40 and mAngularVelocity @+0x50 RELATIVE TO
-        // THE TRANSFORM BASE (object +0x50 / +0x60), which is exactly what VehiclePhysics'
-        // GetLinearVelocity / GetAngularVelocity return.
-        const Vehicle::VehiclePhysics* const lpBody = GetVehiclePhysics();
-        const Vector3 lLinearVelocity  = lpBody->GetLinearVelocity();
-        const Vector3 lAngularVelocity = lpBody->GetAngularVelocity();
-
-        const f32 lfStep = lvfTimeStep.x;   // v127 broadcast time-step lane
-
-        for ( s32 li = 0; li < liNumSensors; ++li )
+        for (s32 li = 0; li < liNumSensors; ++li)
         {
             DeformationSensor& lrSensor = maDeformationSensors[li];
-
-            // Source vector = the sensor's LOCAL-SPACE sphere centre, read through *(sensor+412) ==
-            // mpLocalSpaceSphere (asm: _R4 = _R10[99]; lvx v0,[r4] loads the sphere's packed
-            // position/radius vector and the transform uses its xyz centre). The destination is the
-            // displacement member, whose original w lane (the biggest-impulse magnitude) v12 keeps and
-            // vrlimi128 re-installs after the transform.
-            Vector3Plus& lrDisplacement = lrSensor.mPointDisplacement_BiggestImpulseThisFrame;
-            // The sensor's mpLocalSpaceSphere is the forward-declared BrnPhysics::Deformation::Sphere
-            // (incomplete here); its leading 16 bytes are centre.xyz + radius.w, so read the centre as
-            // the leading Vector4 -- the same house idiom BrnTagPoint.cpp / BrnDeformationSensor.cpp use.
-            const Vector4& lSphereCentre = *reinterpret_cast<const Vector4*>(lrSensor.GetLocalSpaceSphere());
-            const Vector3 lSrc = { lSphereCentre.x, lSphereCentre.y, lSphereCentre.z, 0.0f };
-
-            // (a) Rotate the sensor's local sphere centre into world space: p = R * c
-            //     (0x825DF938/948/950, three vmaddfp against splat(c.x/y/z)).
-            const Vector3 lP = { lSrc.x * lR.x + lSrc.y * lU.x + lSrc.z * lAt.x,
-                                 lSrc.x * lR.y + lSrc.y * lU.y + lSrc.z * lAt.y,
-                                 lSrc.x * lR.z + lSrc.y * lU.z + lSrc.z * lAt.z, 0.0f };
-
-            // (b) ⭐⭐⭐ THE POINT VELOCITY: v + omega x p, then the time step.
-            // ⛔ WHAT WAS HERE, and why it mattered. This wrote `(R * c) * dt` -- the rotated
-            // sensor OFFSET scaled by the time step. That has no velocity in it at all: it is a
-            // position times a time, ~1e-3 for a 60 Hz step, and it does not change when the car
-            // moves. ValidateAndAddContact divides the contact's penetration depth by the
-            // projection of THIS vector on the contact normal to get an impact time in [0,1], so
-            // a displacement that is not a swept motion makes that quotient meaningless.
-            // The cross product is the two-permute idiom the asm spells out:
-            //   0x825DF94C  vpermwi128 v11, v0(omega), 0x63    ; 0x63 == the yzx word rotate
-            //   0x825DF958  vpermwi128 v13, v13(p),    0x63
-            //   0x825DF95C  vmulfp128  v0,  v0(omega), v13     ; omega * p_yzx
-            //   0x825DF960  vnmsubfp   v0,  v11, v0, v10       ; - omega_yzx * p
-            //   0x825DF964  vpermwi128 v0,  v0, 0x63           ; and rotate the result back
-            // which expands lane-by-lane to exactly the cross product written below. The same
-            // formula is already spelled in the tree for the wheels (VehiclePhysics.h:737,
-            // "v_contact = mLinearVelocity + mAngularVelocity x (r_contact - bodyPos)").
-            const Vector3 lPointVelocity = {
-                lLinearVelocity.x + (lAngularVelocity.y * lP.z - lAngularVelocity.z * lP.y),
-                lLinearVelocity.y + (lAngularVelocity.z * lP.x - lAngularVelocity.x * lP.z),
-                lLinearVelocity.z + (lAngularVelocity.x * lP.y - lAngularVelocity.y * lP.x), 0.0f };
-
-            // vrlimi128 v0,v12,1,0 -- write xyz, keep the original w (the biggest-impulse lane).
-            lrDisplacement.x = lPointVelocity.x * lfStep;
-            lrDisplacement.y = lPointVelocity.y * lfStep;
-            lrDisplacement.z = lPointVelocity.z * lfStep;
+            const Vehicle::VehiclePhysics* lpBody = mVehicleBody.GetVehiclePhysics();
+            const Matrix44Affine& lBodyTransform = lpBody->GetTransform();
+            const __vector4 vSource = lrSensor.GetLocalSpaceSphere()->mData.mV;
+            __vector4 vPosition = __vmulfp(lBodyTransform.yAxis.mV, __vspltw(vSource, 1));
+            vPosition = __vmaddfp(lBodyTransform.xAxis.mV, __vspltw(vSource, 0), vPosition);
+            vPosition = __vmaddfp(lBodyTransform.zAxis.mV, __vspltw(vSource, 2), vPosition);
+            const __vector4 vAngular = lpBody->GetAngularVelocity().mV;
+            const __vector4 vProduct = __vmulfp(vAngular, __vpermwi(vPosition, 0x63));
+            const __vector4 vCross = __vpermwi(__vnmsubfp(__vpermwi(vAngular, 0x63), vPosition, vProduct), 0x63);
+            const __vector4 vPointVelocity = __vaddfp(lpBody->GetLinearVelocity().mV, vCross);
+            const __vector4 vDisplacement = __vmulfp(vPointVelocity, lvfTimeStep.mV);
+            lrSensor.mPointDisplacement_BiggestImpulseThisFrame.mV =
+                __vrlimi(vDisplacement, lrSensor.mPointDisplacement_BiggestImpulseThisFrame.mV, 1, 0);
         }
     }
 
@@ -364,17 +303,11 @@ namespace Deformation
         //   0x825DFB00  vaddfp v0, v12, v0        ; box.max = aabb.max + row
         // The console reads the vehicle unconditionally (Prepare binds it before any reset).
         const BrnPhysics::Vehicle::VehiclePhysics* lpClampVehicle = mVehicleBody.GetVehiclePhysics();
-        const Vector4& lBodyExtentMin = lpClampVehicle->GetDeformableAABB().mMin;   // vehicle + 0x6D0
-        const Vector4& lBodyExtentMax = lpClampVehicle->GetDeformableAABB().mMax;   // vehicle + 0x6E0
+        const Vector3& lBodyExtentMin = lpClampVehicle->GetDeformableAABB().mMin;
+        const Vector3& lBodyExtentMax = lpClampVehicle->GetDeformableAABB().mMax;
         CgsGeometric::AxisAlignedBox lClampBox;
-        lClampBox.mMin.x = lBodyExtentMin.x - KVF_SKINNING_CLAMP_MARGIN.x;
-        lClampBox.mMin.y = lBodyExtentMin.y - KVF_SKINNING_CLAMP_MARGIN.y;
-        lClampBox.mMin.z = lBodyExtentMin.z - KVF_SKINNING_CLAMP_MARGIN.z;
-        lClampBox.mMin.w = 0.0f;
-        lClampBox.mMax.x = lBodyExtentMax.x + KVF_SKINNING_CLAMP_MARGIN.x;
-        lClampBox.mMax.y = lBodyExtentMax.y + KVF_SKINNING_CLAMP_MARGIN.y;
-        lClampBox.mMax.z = lBodyExtentMax.z + KVF_SKINNING_CLAMP_MARGIN.z;
-        lClampBox.mMax.w = 0.0f;
+        lClampBox.mMin.mV = __vsubfp(lBodyExtentMin.mV, KVF_SKINNING_CLAMP_MARGIN.mV);
+        lClampBox.mMax.mV = __vaddfp(lBodyExtentMax.mV, KVF_SKINNING_CLAMP_MARGIN.mV);
 
         // --- (2) gather the skinned tag-point offsets into the Verlet scratch (0x825DFB10..0x825DFB88)
         // `lwz r9, 0x4B10(r31)` is miNumTagPoints (this+0x4B10 -- the tag pool's count word, stored by
@@ -412,10 +345,8 @@ namespace Deformation
                     TagPoint& lrTagPoint = maTagPoints[li];                // r10: the loop index's tag supplies the data
                     const Vector3 lOffset = lrTagPoint.GetOffsetFromInitialPosition();  // mPos - initialPos
                     Vector3Plus& lrScratch = maVerletOffsets_Scratch[liScratchBase];
-                    lrScratch.x = lOffset.x;
-                    lrScratch.y = lOffset.y;
-                    lrScratch.z = lOffset.z;
-                    lrScratch.w = lrTagPoint.GetScratchAmount();      // w lane = _R10[7] (mfScratchAmount)
+                    const Vector3 vScratch(lrTagPoint.GetScratchAmount(), 0.0f, 0.0f);
+                    lrScratch.mV = __vrlimi(lOffset.mV, __vspltw(vScratch.mV, 0), 1, 0);      // w lane = _R10[7] (mfScratchAmount)
                     ++liScratchBase;                                  // _R11 += 16B only when flag set
                 }
             }
@@ -593,7 +524,6 @@ namespace Deformation
         // bytes into the block. Worked on a local copy so the caller's block is untouched.
         ImpulseParams lParams = lImpulseParams;
         lParams.mWorldImpulseDirection = lImpulseDir;
-        lParams.mvfTimeStep            = lvfTimeStep;
         lParams.mvfImpulseMagnitude    = lvfImpulseMagnitude;   // stvx128 v120 -> params+0x10 (RAW)
 
         // ⭐⭐ CORRECTED 2026-08-24 (deform-land wave, P4): the vmaxfp at 0x82607944..54 is NOT a
@@ -605,14 +535,9 @@ namespace Deformation
         // i.e. mPointDisplacement_BiggestImpulseThisFrame.w = max(.w, magnitude). This is the
         // exact value CheckSensorForcesForJointDetachment @0x825C17F8 splats to decide panel/door
         // detach -- with the old local-copy fold no hit could ever detach a part.
-        if ( lpSensor != 0 )
-        {
-            f32& lrLatch = lpSensor->mPointDisplacement_BiggestImpulseThisFrame.w;
-            if ( lvfImpulseMagnitude.x > lrLatch )
-            {
-                lrLatch = lvfImpulseMagnitude.x;
-            }
-        }
+        const __vector4 vLatch = lpSensor->mPointDisplacement_BiggestImpulseThisFrame.mV;
+        lpSensor->mPointDisplacement_BiggestImpulseThisFrame.mV =
+            __vrlimi(vLatch, __vmaxfp(lvfImpulseMagnitude.mV, __vspltw(vLatch, 3)), 1, 0);
 
         // ⭐ 2026-08-16 (walls leg 9) -- THE +0xB4 STORE, AND THE FLAG THAT HID IT IS RETIRED.
         //     0x8260793C  lwz r10, 0x675C(r17)          ; r17 == this, 0x675C == 26460
@@ -663,11 +588,11 @@ namespace Deformation
         //                                           == the two fields' spacing in ImpulseParams)
         //     r6 = lbz 0xB8(params)              -> mbWorldContact (+0xB8 == its console seat; the
         //                                           PS3 wrapper's arg is even NAMED lbIsWorldImpulse)
-        const bool lbIgnoringPassedOn = (lpVehicle != 0) && lpVehicle->IsPlayerVehicleInShowtime();
+        const bool lbIgnoringPassedOn = lpVehicle->IsPlayerVehicleInShowtime();
         if ( lbIgnoringPassedOn )
         {
             // 0x8260798C  vmulfp128 v1, v116, v120  ==  lImpulseDir * lvfImpulseMagnitude
-            const Vector3 lShowtimeImpulse = vpu::Mult(lImpulseDir, lvfImpulseMagnitude.x);
+            const Vector3 lShowtimeImpulse = Vector3(__vmulfp(lImpulseDir.mV, lvfImpulseMagnitude.mV));
             lpVehicle->ApplyShowtimeContactImpulse(lShowtimeImpulse,
                                                    rw::physics::WORLD_SPACE,
                                                    lParams.mImpulsePosition,
@@ -678,7 +603,7 @@ namespace Deformation
         // The vehicle's crashed byte (asm: `*(vehicle + 1808)`), read separately from the vtable+0x10
         // predicate above -- it selects both the budget branch and the suspension-limit displacement
         // source. IsCrashing() is the homed +1808 accessor.
-        const bool lbCrashed = (lpVehicle != 0) && lpVehicle->IsCrashing();
+        const bool lbCrashed = lpVehicle->IsCrashing();
 
         // (3) allowed-compression budget. The game-mode selector reads HIBYTE(*(this+26384)) == the
         // handling-body-id high byte (asm 1606), NOT the +26392 game-mode word -- use
@@ -788,11 +713,11 @@ namespace Deformation
             // vcfsx(vspltisw 1, 0) == 1.0 @0x82607A20 -- crash / showtime / bounce-eligible gets the
             // whole budget.
             {
-                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                const VecFloat lAggregateValue(1.0f);
                 lParams.mvfAllowedCompressionFactor = lAggregateValue;
             }
             {
-                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                const VecFloat lAggregateValue(1.0f);
                 lParams.mvfMaximumAllowedAbsorption = lAggregateValue;
             }
         }
@@ -805,11 +730,11 @@ namespace Deformation
         {
             // v125 == vspltisw128 0 (@0x82607918) -- drive-time deformation disabled.
             {
-                const VecFloat lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const VecFloat lAggregateValue(0.0f);
                 lParams.mvfAllowedCompressionFactor = lAggregateValue;
             }
             {
-                const VecFloat lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const VecFloat lAggregateValue(0.0f);
                 lParams.mvfMaximumAllowedAbsorption = lAggregateValue;
             }
         }
@@ -852,37 +777,19 @@ namespace Deformation
         //     0x82607AA4  vaddfp v13, v11, v13                  ; min + (r + 0.5)  (EVEN rows)
         Vector3 laLimitRows[KI_NUM_APPLY_DIRECTIONS];
         {
-            // `lwz r11, 0x19C(lpSensor) ; lvx v0, r11 ; vspltw v13, v0, 3` -- the sensor's LOCAL
-            // sphere, w lane == the radius.
-            const CgsGeometric::Sphere* lpLocalSphere =
-                ( lpSensor != 0 ) ? lpSensor->GetLocalSpaceSphere() : 0;
-            const f32 lfSphereRadius = ( lpLocalSphere != 0 )
-                                     ? lpLocalSphere->mData.mV.w : 0.0f;
-            const f32 lfPad    = lbCrashed ? 0.5f : 0.0f;          // vcfsx(vspltisw 1,1) == 0.5
-            const f32 lfRadius = lfSphereRadius + lfPad;
-            const Vector3& lrDriveMin = GetDriveTimeLimitsMin();   // this + 0x66F0
-            const Vector3& lrDriveMax = GetDriveTimeLimitsMax();   // this + 0x6700
-            Vector3 lDeformedMin = lrDriveMin;
-            Vector3 lDeformedMax = lrDriveMax;
-            if (lbCrashed && lpVehicle != 0)
+            __vector4 vRadius = __vspltw(lpSensor->GetLocalSpaceSphere()->mData.mV, 3);
+            Vector3 lMin = GetDriveTimeLimitsMin();
+            Vector3 lMax = GetDriveTimeLimitsMax();
+            if (lbCrashed)
             {
-                const Vector4& lMin = lpVehicle->GetDeformableAABB().mMin;
-                const Vector4& lMax = lpVehicle->GetDeformableAABB().mMax;
-                const Vector3 lMinValue = {lMin.x, lMin.y, lMin.z, lMin.w};
-                const Vector3 lMaxValue = {lMax.x, lMax.y, lMax.z, lMax.w};
-                lDeformedMin = lMinValue;
-                lDeformedMax = lMaxValue;
+                vRadius = __vaddfp(vRadius, __vcfsx(__vspltisw(1), 1));
+                lMin = lpVehicle->GetDeformableAABB().mMin;
+                lMax = lpVehicle->GetDeformableAABB().mMax;
             }
-            const Vector3& lrMin = lDeformedMin;
-            const Vector3& lrMax = lDeformedMax;
-            const Vector3 lPositive = { lrMin.x + lfRadius, lrMin.y + lfRadius,
-                                        lrMin.z + lfRadius, lrMin.w + lfRadius };   // vaddfp v13
-            const Vector3 lNegative = { lrMax.x - lfRadius, lrMax.y - lfRadius,
-                                        lrMax.z - lfRadius, lrMax.w - lfRadius };   // vsubfp v0
-            for ( s32 liRow = 0; liRow < KI_NUM_APPLY_DIRECTIONS; ++liRow )
-            {
-                laLimitRows[liRow] = ( (liRow & 1) == 0 ) ? lPositive : lNegative;
-            }
+            const Vector3 lPositive(__vaddfp(lMin.mV, vRadius));
+            const Vector3 lNegative(__vsubfp(lMax.mV, vRadius));
+            for (s32 liRow = 0; liRow < KI_NUM_APPLY_DIRECTIONS; ++liRow)
+                laLimitRows[liRow] = (liRow & 1) ? lNegative : lPositive;
         }
 
         // ⭐ The world-space body axes the projection below is taken against: the console loads the
@@ -893,24 +800,25 @@ namespace Deformation
         //   0x82607930  lvx128 v124, r0,  r10   ; row 0 (+0x10)
         //   0x82607928  lvx128 v123, r10, 0x10  ; row 1 (+0x20)
         //   0x82607938  lvx128 v122, r10, 0x20  ; row 2 (+0x30)
-        Matrix44Affine lBodyTransform;
-        if ( lpVehicle != 0 ) { lBodyTransform = lpVehicle->GetTransform(); }
-        else                       { lBodyTransform.SetIdentity(); }
+        const Matrix44Affine lBodyTransform = lpVehicle->GetTransform();
 
         // ⭐ v126 == the IMPULSE VECTOR: `vmulfp128 v126, v116, v120` @0x82607AB4, where the prologue
         // pinned v116 == lImpulseDir (arg 5) and v120 == lvfImpulseMagnitude (arg 6). Same product
         // leg 7 recovered for the showtime pre-apply -- a direction times a magnitude.
-        const Vector3 lImpulseVector = vpu::Mult(lImpulseDir, lvfImpulseMagnitude.x);
+        const Vector3 lImpulseVector = Vector3(__vmulfp(lImpulseDir.mV, lvfImpulseMagnitude.mV));
 
 
         // (4) the six-direction apply loop. Accumulates the local impulse the body banks in (5).
-        Vector3 lAccumulatedLocalImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
         for ( s32 liDir = 0; liDir < KI_NUM_APPLY_DIRECTIONS; ++liDir )
         {
             // direction vector (the switch 0x82607BAC): the six signed unit BODY axes, verbatim the
             // shared KA_IMPULSE_DIRECTIONS table (case 0/2/4 load a row, case 1/3/5 load it and xor
             // the sign bit -- `vspltisw v0,-1 ; vslw v0,v0,v0 ; vxor`).
-            const Vector3 lDirVec = KsaApplyDirection[liDir];
+            const Vector3 lBaseAxis = (liDir < 2) ? Vector3(1.0f, 0.0f, 0.0f)
+                                    : (liDir < 4) ? Vector3(0.0f, 1.0f, 0.0f)
+                                                  : Vector3(0.0f, 0.0f, 1.0f);
+            const __vector4 vDirectionSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+            const Vector3 lDirVec((liDir & 1) ? __vxor(lBaseAxis.mV, vDirectionSign) : lBaseAxis.mV);
 
             // ⭐⭐⭐ 2026-08-16 (walls leg 9) -- THE PROJECTION IS MAGNITUDE-BEARING, AND IT IS WRITTEN
             // BACK INTO THE PARAMS BLOCK. The console:
@@ -937,17 +845,14 @@ namespace Deformation
             //   destructive accumulate. That is NOT leg 8's plain-`vmaddfp` rule ("print position 2
             //   is the addend"), which still holds for the four-distinct-operand form; read the two
             //   separately. Here only the accumulate reading yields a matrix rotation at all.
-            const Vector3 lWorldAxis = vpu::TransformVector(lBodyTransform, lDirVec);
-            const f32 lfProjection = vpu::Dot(lImpulseVector, lWorldAxis);
-            {
-                const VecFloat lAggregateValue = { lfProjection, lfProjection, lfProjection, lfProjection };
-                lParams.mvfImpulseMagnitude = lAggregateValue;
-            }   // 0x82607C70
-
-            if ( lfProjection <= 0.0f )   // vcmpgtfp against zero -- skip non-positive directions
-            {
+            __vector4 vWorldAxis = __vmaddfp(lBodyTransform.xAxis.mV, __vspltw(lDirVec.mV, 0), __vspltisw(0));
+            vWorldAxis = __vmaddfp(lBodyTransform.yAxis.mV, __vspltw(lDirVec.mV, 1), vWorldAxis);
+            vWorldAxis = __vmaddfp(lBodyTransform.zAxis.mV, __vspltw(lDirVec.mV, 2), vWorldAxis);
+            const __vector4 vProjection = __vmsum3fp(lImpulseVector.mV, vWorldAxis);
+            lParams.mvfImpulseMagnitude.mV = vProjection;
+            if (!rw::math::vpu::MaskScalar(__vcmpgtfp(vProjection, __vspltisw(0))).GetBool())
                 continue;
-            }
+            const f32 lfProjection = vProjection.x;
 
             // per-direction params: the direction index (`stw r30, var_290` @0x82607C8C) and this
             // direction's limit row (`lvx128 v11, dir*16(var_1D0) ; stvx128 v11, var_250`
@@ -1002,55 +907,34 @@ namespace Deformation
             // (its only other readers are the three stores in this block), so the accumulate runs
             // on the register-held projection.
             {
-                f32 lfShapedMagnitude = lfProjection;
-
-                const bool lbSelfInShowtime =
-                    ( lpVehicle != 0 && lpVehicle->IsPlayerVehicleInShowtime() );  // vtbl +0x10
-
-                if ( lbSelfInShowtime )
+                __vector4 vShaped = vProjection;
+                if (lpVehicle->IsPlayerVehicleInShowtime())
                 {
-                    const f32 lfShowtimeScale = lpVehicle->GetShowtimeDeformationScale();  // vtbl +0x1C
-                    lfShapedMagnitude *= lfShowtimeScale;
-
-                    if ( lContact.mpOtherVehicle != 0 )
+                    const Vector3 vScale(lpVehicle->GetShowtimeDeformationScale(), 0.0f, 0.0f);
+                    vShaped = __vmulfp(vShaped, __vspltw(vScale.mV, 0));
+                    if (lContact.mpOtherVehicle != 0)
                     {
-                        lfShapedMagnitude *= KF_SHOWTIME_MAG_CARCAR_DAMP;               // 0.1
+                        const Vector3 vDamp(KF_SHOWTIME_MAG_CARCAR_DAMP, 0.0f, 0.0f);
+                        vShaped = __vmulfp(vShaped, __vspltw(vDamp.mV, 0));
                     }
-
-                    // fade = min(max(1.5 - strength, 0.5), 1.5)   -- the two fsel at 0x82607D40/D48
-                    f32 lfFade = KF_SHOWTIME_STRENGTH_FADE_MAX
-                                 - lpVehicle->GetShowtimePlayerCarStrength();           // vtbl +0x20
-                    if ( lfFade < KF_SHOWTIME_STRENGTH_FADE_MIN )
-                    {
-                        lfFade = KF_SHOWTIME_STRENGTH_FADE_MIN;
-                    }
-                    if ( lfFade > KF_SHOWTIME_STRENGTH_FADE_MAX )
-                    {
-                        lfFade = KF_SHOWTIME_STRENGTH_FADE_MAX;
-                    }
-                    lfShapedMagnitude *= lfFade;
+                    const f32 lfRawFade = KF_SHOWTIME_STRENGTH_FADE_MAX - lpVehicle->GetShowtimePlayerCarStrength();
+                    const f32 lfLower = __fsel(KF_SHOWTIME_STRENGTH_FADE_MIN - lfRawFade, KF_SHOWTIME_STRENGTH_FADE_MIN, lfRawFade);
+                    const f32 lfFade = __fsel(KF_SHOWTIME_STRENGTH_FADE_MAX - lfLower, lfLower, KF_SHOWTIME_STRENGTH_FADE_MAX);
+                    const Vector3 vFade(lfFade, 0.0f, 0.0f);
+                    vShaped = __vmulfp(vShaped, __vspltw(vFade.mV, 0));
                 }
-                else if ( lContact.mpOtherVehicle != 0 )
+                else if (lContact.mpOtherVehicle != 0)
                 {
-                    const BrnPhysics::Vehicle::VehiclePhysics* lpOtherVehicle =
-                        lContact.mpOtherVehicle->GetVehiclePhysics();
-                    const bool lbOtherInShowtime = lpOtherVehicle->IsPlayerVehicleInShowtime();
-                    if ( lbOtherInShowtime                                              // vtbl +0x10
-                         || lContact.mpOtherVehicle->HasBouncedThisFrame() )                                            // other +0x672E
+                    const BrnPhysics::Vehicle::VehiclePhysics* lpOther = lContact.mpOtherVehicle->GetVehiclePhysics();
+                    if (lpOther->IsPlayerVehicleInShowtime() || lContact.mpOtherVehicle->HasBouncedThisFrame())
                     {
-                        lfShapedMagnitude *= KF_SHOWTIME_MAG_VICTIM_GAIN;               // 15.0
-
+                        const Vector3 vGain(KF_SHOWTIME_MAG_VICTIM_GAIN, 0.0f, 0.0f);
+                        vShaped = __vmulfp(vShaped, __vspltw(vGain.mV, 0));
                     }
                 }
-
-                {
-                    const VecFloat lAggregateValue = { lfShapedMagnitude, lfShapedMagnitude,
-                                                        lfShapedMagnitude, lfShapedMagnitude };
-                    lParams.mvfImpulseMagnitude = lAggregateValue;
-                }
-
-                CGS_ASSERT(lfShapedMagnitude == lfShapedMagnitude,
-                           "Invalid sensor impulse magnitude:\nlfImpulseMagnitude = ");   // line 1430
+                lParams.mvfImpulseMagnitude.mV = vShaped;
+                CGS_ASSERT(rw::math::vpu::MaskScalar(__vcmpeqfp(vShaped, vShaped)).GetBool(),
+                           "Invalid sensor impulse magnitude:\nlfImpulseMagnitude = ");
             }
 
             // latch the deformation flags (0x82607F1C..0x82607F44): this deformed this frame
@@ -1072,15 +956,7 @@ namespace Deformation
 
             // dispatch into the sensor body: lpSensor->ApplyLocalImpulse(&v215). CollidableBody vtable
             // slot 0 (the `(**a37)(a37, v215)` indirect call).
-            if ( lpSensor != 0 )
-            {
-                lpSensor->ApplyLocalImpulse(&lParams);
-            }
-
-            // accumulate the applied local impulse (the body banks the sum in (5)).
-            lAccumulatedLocalImpulse.x += lDirVec.x * lfProjection;
-            lAccumulatedLocalImpulse.y += lDirVec.y * lfProjection;
-            lAccumulatedLocalImpulse.z += lDirVec.z * lfProjection;
+            lpSensor->ApplyLocalImpulse(&lParams);
         }
 
         // (5) ⭐⭐ REWRITTEN 1:1 2026-08-24 (deform-land wave, P4) from the asm
@@ -1154,157 +1030,93 @@ namespace Deformation
         //     add = |tangential| * timestep * 1.5e-4 (unk_82FB8330) * min(scaledMag, 1000
         //           (unk_82FB95C0)) [* 5.0 (unk_82FB9D30) when crashed]
         //     scratch = min( max(0, scratch + add), max(0.75, scratch) )       (the fsel ladder)
-        if ( lpVehicle != 0 )
+        const __vector4 vZero = __vspltisw(0);
+        const __vector4 vOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 vHalf = __vcfsx(__vspltisw(1), 1);
+        const __vector4 vSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        __vector4 vImpulseRow = vZero;
+        __vector4 vForceRow = vZero;
+        if (!(lpVehicle->IsUsingAftertouch() && !lpVehicle->IsPlayerVehicleActuallyInShowtime()) && lbCrashed)
         {
-            // scale-row select -- the AFTERTOUCH-OUTSIDE-SHOWTIME guard, then the crash ladder.
-            // See the banner: 0x82607F7C dispatches vtable +0x24 (IsUsingAftertouch) and
-            // 0x82607F9C dispatches +0x14 (IsPlayerVehicleActuallyInShowtime). This is NOT the
-            // +0x10 IsPlayerVehicleInShowtime the (2) pre-apply and the (3) budget select consult.
-            Vector3 lImpulseRow = { 0.0f, 0.0f, 0.0f, 0.0f };   // unk_82FB9D40 == splat(0.0)
-            Vector3 lForceRow   = { 0.0f, 0.0f, 0.0f, 0.0f };
-            const bool lbAftertouchOutsideShowtime =
-                lpVehicle->IsUsingAftertouch() && !lpVehicle->IsPlayerVehicleActuallyInShowtime();
-            if ( !lbAftertouchOutsideShowtime && lbCrashed )
+            vForceRow = KVF_APPLY_LOCAL_FORCE_SCALE.mV;
+            if (lParams.mbWorldContact)
+                vImpulseRow = KVF_APPLY_WORLD_CRASH_SCALE.mV;
+            else if (lContact.mpOtherVehicle->GetVehiclePhysics()->IsCrashing())
+                vImpulseRow = KVF_APPLY_CARCAR_CRASH_SCALE.mV;
+        }
+        const __vector4 vNormal = lContact.mNormal.mV;
+        const __vector4 vTangential = __vsubfp(lRelativeMotion.mV, __vmulfp(vNormal, __vmsum3fp(lRelativeMotion.mV, vNormal)));
+        const __vector4 vTangentialSq = __vmsum3fp(vTangential, vTangential);
+        __vector4 vBankLocal = vZero;
+        __vector4 vLocalForce = vZero;
+        __vector4 vMagnitude = lvfImpulseMagnitude.mV;
+        if (rw::math::vpu::MaskScalar(__vcmpgefp(__vandc(vTangentialSq, vSign), KVF_APPLY_MIN_TANGENTIAL_SQ.mV)).GetBool())
+        {
+            if (!(sTangentialScaleFlags & 1))
             {
-                lForceRow = KVF_APPLY_LOCAL_FORCE_SCALE;   // unk_82FB7F50 = splat(0.9)
-                if ( lParams.mbWorldContact )
-                {
-                    lImpulseRow = KVF_APPLY_WORLD_CRASH_SCALE;      // unk_82FB8060 = splat(5.0)
-                }
-                else if ( lContact.mpOtherVehicle != 0
-                          && lContact.mpOtherVehicle->GetVehiclePhysics() != 0
-                          && lContact.mpOtherVehicle->GetVehiclePhysics()->IsCrashing() )
-                {
-                    lImpulseRow = KVF_APPLY_CARCAR_CRASH_SCALE;     // unk_82FB8300 = splat(20.0)
-                }
+                sTangentialScaleFlags |= 1;
+                sTangentialScale.mV = vOne;
             }
-
-            // tangential relative motion (vsubfp v123).
-            const f32     lfAlongNormal = vpu::Dot(lRelativeMotion, lContact.mNormal);
-            const Vector3 lNormalComponent = {
-                lContact.mNormal.x * lfAlongNormal, lContact.mNormal.y * lfAlongNormal,
-                lContact.mNormal.z * lfAlongNormal, 0.0f
-            };
-            const Vector3 lTangential = vpu::Subtract(lRelativeMotion, lNormalComponent);
-            const f32 lfTangentialSq = vpu::Dot(lTangential, lTangential);
-
-            Vector3 lBankLocal  = { 0.0f, 0.0f, 0.0f, 0.0f };   // v118 (0 when the gate skips)
-            Vector3 lLocalForce = { 0.0f, 0.0f, 0.0f, 0.0f };   // v125 on the skip / non-force paths
-            f32     lfScaledMag = lvfImpulseMagnitude.x;        // v120 (raw when the gate skips)
-
-            if ( lfTangentialSq >= KVF_APPLY_MIN_TANGENTIAL_SQ.x )   // unk_82FB9720 = splat(1e-4)
+            if (!(sTangentialScaleFlags & 2))
             {
-                const f32 lfTangentialLen = std::sqrt(lfTangentialSq);   // zero-guarded by the gate
-                const Vector3 lNegDir = { -lTangential.x / lfTangentialLen,
-                                          -lTangential.y / lfTangentialLen,
-                                          -lTangential.z / lfTangentialLen, 0.0f };
-
-                // scaledMag = magnitude * clamp(|tangential|, 0, 1)  (the lazy-cache 1.0 factors fold).
-                f32 lfClamp = lfTangentialLen;
-                if ( lfClamp > 1.0f ) { lfClamp = 1.0f; }
-                if ( lfClamp < 0.0f ) { lfClamp = 0.0f; }
-                lfScaledMag = lvfImpulseMagnitude.x * lfClamp;
-
-                lBankLocal = vpu::Mult(lNegDir, lfScaledMag);
-                {
-                    const Vector3 lAggregateValue = { lBankLocal.x * lImpulseRow.x, lBankLocal.y * lImpulseRow.y,
-                                      lBankLocal.z * lImpulseRow.z, 0.0f };
-                    lBankLocal = lAggregateValue;
-                }
-
-                const Vector3 lBankImpulse = vpu::Mult(lBankLocal, lvfTimeStep.x);   // v1 = v118 * v117
-
-                Vector3 lWorldImpulse        = { 0.0f, 0.0f, 0.0f, 0.0f };
-                Vector3 lWorldAngularImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
-                lpVehicle->GetImpulsesFromLocalImpulse(lBankImpulse,
-                                                       static_cast<rw::physics::InputSpace>(0),
-                                                       lContact.mPointOnA,
-                                                       static_cast<rw::physics::InputSpace>(0),
-                                                       &lWorldImpulse, &lWorldAngularImpulse);
-
-                // car-car attrib scale (previously missing).
-                if ( !lParams.mbWorldContact && lpVehicle->GetAttribs() != 0 )
-                {
-                    const f32 lfCarScale = lpVehicle->GetAttribs()->mCollisionAttribs
-                        .mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y;
-                    lWorldImpulse        = vpu::Mult(lWorldImpulse, lfCarScale);
-                    lWorldAngularImpulse = vpu::Mult(lWorldAngularImpulse, lfCarScale);
-                }
-
-                ExternalPhysicsBody& lBody = GetVehicleBody();
-                lBody.AddWorldSpaceImpulse(lWorldImpulse);
-                lBody.AddWorldSpaceAngularImpulse(lWorldAngularImpulse);
-
-                // ---- [tanbank] NOT IN THE X360 BINARY -- opt-in (BRN_CRASH_RESPONSE_DIAG=1, the
-                // env the crash sweep already arms). DELETE-WHEN the angular residual is banked.
-                // ⭐⭐ THIS IS THE CENSUS THE CAMPAIGN NEVER HAD. Every published "the contacts
-                // deposit X" figure counts RecievePassedOnImpulse arrivals only; this path bypasses
-                // ImpulsePasser entirely, so it was invisible. The line prints exactly what the
-                // hidden term banks, per apply, so `dW_observed - dW_from_arrivals` can be closed
-                // against it instead of guessed at.
-                // ---- end [tanbank] --------------------------------------------------------------
-
-                // AddLocalForce leg (previously missing): world contacts shove the body along
-                // -tangential, scaled by the body mass row and the 0.9 force row. The asm's call
-                // carries the same `li r4,0 ; li r5,0` space pair + mPointOnA as the impulse
-                // resolve above (0x82608254..0x826082C0).
-                if ( lParams.mbWorldContact )
-                {
-                    const f32 lfMass = lBody.GetMass().x;   // vehicle+0xE0 row (body mfMass)
-                    {
-                        const Vector3 lAggregateValue = {
-                        lNegDir.x * lfTangentialLen * lfMass * lForceRow.x,
-                        lNegDir.y * lfTangentialLen * lfMass * lForceRow.y,
-                        lNegDir.z * lfTangentialLen * lfMass * lForceRow.z, 0.0f };
-                        lLocalForce = lAggregateValue;
-                    }
-                    lBody.AddLocalForce(lLocalForce,
-                                        static_cast<rw::physics::InputSpace>(0),
-                                        lContact.mPointOnA,
-                                        static_cast<rw::physics::InputSpace>(0));
-                }
-
-                // the sensor scratch ladder -- THE home of the 1.5e-4 / 1000 / 5.0 rows.
-                if ( lpSensor != 0 )
-                {
-                    f32 lfMagClamped = lfScaledMag;
-                    if ( lfMagClamped > KVF_APPLY_FRICTION_CLAMP.x )   // unk_82FB95C0 = 1000
-                    {
-                        lfMagClamped = KVF_APPLY_FRICTION_CLAMP.x;
-                    }
-                    f32 lfAdd = lfTangentialLen * lvfTimeStep.x
-                              * KVF_APPLY_FRICTION_SCALE.x            // unk_82FB8330 = 1.5e-4
-                              * lfMagClamped;
-                    if ( lbCrashed )
-                    {
-                        lfAdd *= KVF_APPLY_SHOWTIME_SCALE.x;          // unk_82FB9D30 = 5.0
-                    }
-                    const f32 lfScratch = lpSensor->mfScratchAmount;
-                    f32 lfNew = lfScratch + lfAdd;
-                    if ( lfNew < 0.0f ) { lfNew = 0.0f; }                       // fsel vs -f0
-                    const f32 lfCap = (lfScratch > 0.75f) ? lfScratch : 0.75f;  // max(0.75, scratch)
-                    lpSensor->mfScratchAmount = (lfNew < lfCap) ? lfNew : lfCap;
-                }
+                __vector4 vEstimate = __vrefp(sTangentialScale.mV);
+                for (u32 step = 0; step < 2; ++step)
+                    vEstimate = __vmaddfp(vEstimate, __vnmsubfp(vEstimate, sTangentialScale.mV, vOne), vEstimate);
+                sTangentialScaleFlags |= 2;
+                sTangentialReciprocalScale.mV = __vmulfp(vEstimate, vOne);
             }
-
-            // (6) spy accumulation (runs on the gate-skip path too, with zero bank/force --
-            // 0x82608360 falls into this block).
-            if ( lbAddToSpy && lpSensor != 0 )
+            const __vector4 vNegative = __vxor(vTangential, vSign);
+            const __vector4 vSquared = __vmsum3fp(vNegative, vNegative);
+            __vector4 vReciprocal = __vrsqrtefp(vSquared);
+            for (u32 step = 0; step < 2; ++step)
             {
-                lpSensor->maPostPhysicsVec0[0] += lLocalForce.x + lBankLocal.x;   // v125 + v118
-                lpSensor->maPostPhysicsVec0[1] += lLocalForce.y + lBankLocal.y;
-                lpSensor->maPostPhysicsVec0[2] += lLocalForce.z + lBankLocal.z;
-
-                // sensor +0x130 += impulseDir * (scaled) magnitude (vmaddfp v116 * v120).
-                lpSensor->maPostPhysicsVec1[0] += lImpulseDir.x * lfScaledMag;
-                lpSensor->maPostPhysicsVec1[1] += lImpulseDir.y * lfScaledMag;
-                lpSensor->maPostPhysicsVec1[2] += lImpulseDir.z * lfScaledMag;
+                const __vector4 vSquare = __vmulfp(vReciprocal, vReciprocal);
+                const __vector4 vHalfEstimate = __vmulfp(vReciprocal, vHalf);
+                vReciprocal = __vmaddfp(vHalfEstimate, __vnmsubfp(vSquared, vSquare, vOne), vReciprocal);
             }
+            const __vector4 vLength = __vsel(__vmulfp(vSquared, vReciprocal), vZero, __vcmpeqfp(vSquared, vZero));
+            const __vector4 vDirection = __vmulfp(vNegative, vReciprocal);
+            vMagnitude = __vmulfp(vMagnitude, __vminfp(vOne, __vmaxfp(vZero, __vmulfp(vLength, sTangentialReciprocalScale.mV))));
+            vBankLocal = __vmulfp(__vmulfp(vDirection, vMagnitude), vImpulseRow);
+            const Vector3 lBankImpulse(__vmulfp(vBankLocal, lvfTimeStep.mV));
+            Vector3 lWorldImpulse;
+            Vector3 lWorldAngularImpulse;
+            lpVehicle->GetImpulsesFromLocalImpulse(lBankImpulse, static_cast<rw::physics::InputSpace>(0),
+                                                   lContact.mPointOnA, static_cast<rw::physics::InputSpace>(0),
+                                                   &lWorldImpulse, &lWorldAngularImpulse);
+            if (!lParams.mbWorldContact)
+            {
+                const __vector4 vCarScale = __vspltw(lpVehicle->GetAttribs()->mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.mV, 1);
+                lWorldImpulse.mV = __vmulfp(lWorldImpulse.mV, vCarScale);
+                lWorldAngularImpulse.mV = __vmulfp(lWorldAngularImpulse.mV, vCarScale);
+            }
+            ExternalPhysicsBody& lBody = GetVehicleBody();
+            lBody.AddWorldSpaceImpulse(lWorldImpulse);
+            lBody.AddWorldSpaceAngularImpulse(lWorldAngularImpulse);
+            if (lParams.mbWorldContact)
+            {
+                vLocalForce = __vmulfp(__vmulfp(__vmulfp(vDirection, vLength), lBody.GetMass().mV), vForceRow);
+                lBody.AddLocalForce(Vector3(vLocalForce), static_cast<rw::physics::InputSpace>(0),
+                                    lContact.mPointOnA, static_cast<rw::physics::InputSpace>(0));
+            }
+            __vector4 vAdd = __vmulfp(__vmulfp(vLength, lvfTimeStep.mV), KVF_APPLY_FRICTION_SCALE.mV);
+            vAdd = __vmulfp(vAdd, __vminfp(vMagnitude, KVF_APPLY_FRICTION_CLAMP.mV));
+            if (lpVehicle->IsCrashing())
+                vAdd = __vmulfp(vAdd, KVF_APPLY_SHOWTIME_SCALE.mV);
+            const f32 lfScratch = lpSensor->mfScratchAmount;
+            const f32 lfSum = vAdd.x + lfScratch;
+            const f32 lfNonnegative = __fsel(-lfSum, 0.0f, lfSum);
+            const f32 lfCap = __fsel(0.75f - lfScratch, 0.75f, lfScratch);
+            lpSensor->mfScratchAmount = __fsel(lfCap - lfNonnegative, lfNonnegative, lfCap);
+        }
+        if (lbAddToSpy)
+        {
+            const __vector4 vOld0 = __lvx(lpSensor->maPostPhysicsVec0, 0);
+            const __vector4 vOld1 = __lvx(lpSensor->maPostPhysicsVec1, 0);
+            __stvx(__vaddfp(vOld0, __vaddfp(vLocalForce, vBankLocal)), lpSensor->maPostPhysicsVec0, 0);
+            __stvx(__vmaddfp(lImpulseDir.mV, vMagnitude, vOld1), lpSensor->maPostPhysicsVec1, 0);
         }
 
-        (void)lAccumulatedLocalImpulse;    // the loop's accumulator: consumed only through the
-                                           // per-direction sensor dispatch above (the old bank
-                                           // of this sum was the P4 mis-placement)
         (void)lbUseNormalScaledFriction;
         (void)KF_APPLY_EPSILON;
     }
@@ -1363,13 +1175,14 @@ namespace Deformation
             const Vector3Plus&           lrLocalSphere = lrSensor.mpLocalSpaceSphere->mData;
 
             Matrix44Affine lBox = lBodyTransform;
-            lBox.wAxis.x = lBodyTransform.zAxis.x * lrLocalSphere.mV.z + (lBodyTransform.xAxis.x * lrLocalSphere.mV.x + lBodyTransform.yAxis.x * lrLocalSphere.mV.y) + lBodyTransform.wAxis.x;
-            lBox.wAxis.y = lBodyTransform.zAxis.y * lrLocalSphere.mV.z + (lBodyTransform.xAxis.y * lrLocalSphere.mV.x + lBodyTransform.yAxis.y * lrLocalSphere.mV.y) + lBodyTransform.wAxis.y;
-            lBox.wAxis.z = lBodyTransform.zAxis.z * lrLocalSphere.mV.z + (lBodyTransform.xAxis.z * lrLocalSphere.mV.x + lBodyTransform.yAxis.z * lrLocalSphere.mV.y) + lBodyTransform.wAxis.z;
-            lBox.wAxis.w = lBodyTransform.zAxis.w * lrLocalSphere.mV.z + (lBodyTransform.xAxis.w * lrLocalSphere.mV.x + lBodyTransform.yAxis.w * lrLocalSphere.mV.y) + lBodyTransform.wAxis.w;
-            const f32 lfRadius = lrLocalSphere.mV.w;   // vspltw 3 @0x825E09B8
-            const Vector3 lBoxMin = { -lfRadius, -lfRadius, -lfRadius, 0.0f };
-            const Vector3 lBoxMax = {  lfRadius,  lfRadius,  lfRadius, 0.0f };
+            __vector4 vPosition = __vmulfp(lBodyTransform.yAxis.mV, __vspltw(lrLocalSphere.mV, 1));
+            vPosition = __vmaddfp(lBodyTransform.xAxis.mV, __vspltw(lrLocalSphere.mV, 0), vPosition);
+            vPosition = __vmaddfp(lBodyTransform.zAxis.mV, __vspltw(lrLocalSphere.mV, 2), vPosition);
+            lBox.wAxis.mV = __vaddfp(lBodyTransform.wAxis.mV, vPosition);
+            const __vector4 vRadius = __vspltw(lrLocalSphere.mV, 3);
+            const __vector4 vSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+            const Vector3 lBoxMin(__vrlimi(__vxor(vRadius, vSign), __vspltisw(0), 1, 0));
+            const Vector3 lBoxMax(__vrlimi(vRadius, __vspltisw(0), 1, 0));
 
             if ( li == liSelectedSensor )
             {
@@ -1381,9 +1194,7 @@ namespace Deformation
                         const DeformationSensor& lrNext =
                             maDeformationSensors[lu8NextSensor - mpDeformationSpec->mu8NumVehicleBodies];
                         const Vector3Plus& lrNextSphere = lrNext.mpWorldSpaceSphere->mData;
-                        const Vector3 lNextSpherePoint = {
-                            lrNextSphere.mV.x, lrNextSphere.mV.y, lrNextSphere.mV.z, lrNextSphere.mV.w
-                        };
+                        const Vector3 lNextSpherePoint(lrNextSphere.mV);
                         lpRender->DrawLine(lBox.wAxis, lNextSpherePoint, KRGBA_SELECTED_SENSOR);
                     }
                 }
@@ -1392,10 +1203,7 @@ namespace Deformation
             else
             {
                 const SensorSpec* lpSensorSpec = mpDeformationSpec->GetDeformationSensorSpec(li);
-                const Vector3 lDisplacement = { lrLocalSphere.mV.x - lpSensorSpec->mInitialOffset.x,
-                                                       lrLocalSphere.mV.y - lpSensorSpec->mInitialOffset.y,
-                                                       lrLocalSphere.mV.z - lpSensorSpec->mInitialOffset.z,
-                                                       lrLocalSphere.mV.w - lpSensorSpec->mInitialOffset.w };
+                const Vector3 lDisplacement(__vsubfp(lrLocalSphere.mV, lpSensorSpec->mInitialOffset.mV));
                 const f32 lfDisplacement = vpu::Magnitude(lDisplacement);   // |0| == 0: the vsel guard
                 f32 lfRamp = ( -lfDisplacement >= 0.0f ) ? KF_SENSOR_RAMP_FLOOR : lfDisplacement;   // fsel @0x825E0B24
                 lfRamp = ( KF_SENSOR_RAMP_CEILING - lfRamp >= 0.0f ) ? lfRamp : KF_SENSOR_RAMP_CEILING;  // fsel @0x825E0B2C
@@ -1409,20 +1217,16 @@ namespace Deformation
             const Vector3Plus& lrWheelSphere =
                 maWorldSensorSpheres[mpDeformationSpec->mu8NumDeformationSensors + lj].mData;
             Matrix44Affine lBox = lBodyTransform;
-            {
-                const Vector3 lAggregateValue = { lrWheelSphere.mV.x, lrWheelSphere.mV.y, lrWheelSphere.mV.z, lrWheelSphere.mV.w };
-                lBox.wAxis = lAggregateValue;
-            }
-            const f32 lfRadius = lrWheelSphere.mV.w;
-            const Vector3 lWheelBoxMin = {-lfRadius, -lfRadius, -lfRadius, 0.0f};
-            const Vector3 lWheelBoxMax = { lfRadius,  lfRadius,  lfRadius, 0.0f};
+            lBox.wAxis.mV = lrWheelSphere.mV;
+            const __vector4 vRadius = __vspltw(lrWheelSphere.mV, 3);
+            const __vector4 vSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+            const Vector3 lWheelBoxMin(__vrlimi(__vxor(vRadius, vSign), __vspltisw(0), 1, 0));
+            const Vector3 lWheelBoxMax(__vrlimi(vRadius, __vspltisw(0), 1, 0));
             lpRender->DrawBox(lWheelBoxMin, lWheelBoxMax, lBox, KRGBA_WHEEL_SENSOR);
 
             const Vector3Plus& lrMappedSphere =
                 maDeformationSensors[mau8WheelToSensorMap[lj]].mpWorldSpaceSphere->mData;
-            const Vector3 lMappedSpherePoint = {
-                lrMappedSphere.mV.x, lrMappedSphere.mV.y, lrMappedSphere.mV.z, lrMappedSphere.mV.w
-            };
+            const Vector3 lMappedSpherePoint(lrMappedSphere.mV);
             lpRender->DrawLine(lBox.wAxis, lMappedSpherePoint, KRGBA_WHEEL_SENSOR);
         }
     }
@@ -1552,25 +1356,16 @@ namespace Deformation
             const Vector3Plus& lrOffA = lpSpec->GetOffsetAndWeightA();
             const Vector3Plus& lrOffB = lpSpec->GetOffsetAndWeightB();
 
-            // target = (posA + offA)*wA + (posB + offB)*wB, per xyz lane (the .w weights splat).
-            Vector3 lTarget;
-            lTarget.x = (lrPosA.mV.x + lrOffA.x) * lrOffA.w + (lrPosB.mV.x + lrOffB.x) * lrOffB.w;
-            lTarget.y = (lrPosA.mV.y + lrOffA.y) * lrOffA.w + (lrPosB.mV.y + lrOffB.y) * lrOffB.w;
-            lTarget.z = (lrPosA.mV.z + lrOffA.z) * lrOffA.w + (lrPosB.mV.z + lrOffB.z) * lrOffB.w;
-
-            // mPos += (target - mPos) * time  (vsubfp then vmaddfp on the broadcast time lane).
-            const Vector3& lrPos = lrTag.GetPosition();
-            Vector3 lNewPos;
-            lNewPos.x = lrPos.x + (lTarget.x - lrPos.x) * lvfTime.x;
-            lNewPos.y = lrPos.y + (lTarget.y - lrPos.y) * lvfTime.x;
-            lNewPos.z = lrPos.z + (lTarget.z - lrPos.z) * lvfTime.x;
-            lNewPos.w = lrPos.w;
-            lrTag.SetPosition(lNewPos);
+            const __vector4 vA = __vaddfp(lrPosA.mV, lrOffA.mV);
+            const __vector4 vB = __vaddfp(lrPosB.mV, lrOffB.mV);
+            const __vector4 vTarget = __vmaddfp(vA, __vspltw(lrOffA.mV, 3),
+                                                __vmulfp(vB, __vspltw(lrOffB.mV, 3)));
+            const __vector4 vPosition = lrTag.GetPosition().mV;
+            lrTag.SetPosition(Vector3(__vmaddfp(__vsubfp(vTarget, vPosition), lvfTime.mV, vPosition)));
 
             // Scratch re-blend, SCALAR weight pair (spec +48/+52; sensors' +420 accumulators).
-            lrTag.SetScratchAmount(
-                lrTag.GetDeformationSensorA()->GetScratchAmount() * lpSpec->GetWeightA() +
-                lrTag.GetDeformationSensorB()->GetScratchAmount() * lpSpec->GetWeightB());
+            volatile f32 lfScratchA = lrTag.GetDeformationSensorA()->GetScratchAmount() * lpSpec->GetWeightA();
+            lrTag.SetScratchAmount(lrTag.GetDeformationSensorB()->GetScratchAmount() * lpSpec->GetWeightB() + lfScratchA);
         }
 
         // ---- (2) the IK-part update (skip detached/physical parts) -----------------------------
@@ -1619,9 +1414,8 @@ namespace Deformation
     // ---------------------------------------------------------------------------------------------
     VecFloat DeformableObject::GetWeightFactor()
     {
-        const f32 lfW = mVehicleBody.GetVehiclePhysics()
-            ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.w;
-        { const VecFloat lResult = { lfW, lfW, lfW, lfW }; return lResult; }   // vspltw lane-3 broadcast
+        return VecFloat(__vspltw(mVehicleBody.GetVehiclePhysics()
+            ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.mV, 3));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -1829,7 +1623,7 @@ namespace Deformation
 
         mVehicleBody.GetVehiclePhysics()->mi8NumWorldCollisions = 0;   // *(vp+4947) = 0
 
-        const VecFloat lvfIterationZero = { 0.0f, 0.0f, 0.0f, 0.0f };  // vspltisw128 v126, 0
+        const VecFloat lvfIterationZero(0.0f);  // vspltisw128 v126, 0
 
         // [wedge-contacts] (FX-WEDGEVEL) -- the watched body's per-step contact census inside an
         // open [wedge] window: how many sorted contacts, how many the world / car-car arm applied,
@@ -1913,18 +1707,17 @@ namespace Deformation
             const Vector3Plus& lrOffA = lpSpec->GetOffsetAndWeightA();
             const Vector3Plus& lrOffB = lpSpec->GetOffsetAndWeightB();
 
-            // target = (posA + offA)*wA + (posB + offB)*wB; SNAP (rate 1.0 -- vcfsx v7 is 1.0).
-            Vector3 lTarget;
-            lTarget.x = (lrPosA.mV.x + lrOffA.x) * lrOffA.w + (lrPosB.mV.x + lrOffB.x) * lrOffB.w;
-            lTarget.y = (lrPosA.mV.y + lrOffA.y) * lrOffA.w + (lrPosB.mV.y + lrOffB.y) * lrOffB.w;
-            lTarget.z = (lrPosA.mV.z + lrOffA.z) * lrOffA.w + (lrPosB.mV.z + lrOffB.z) * lrOffB.w;
-            lTarget.w = lrTag.GetPosition().w;
+            const __vector4 vA = __vaddfp(lrPosA.mV, lrOffA.mV);
+            const __vector4 vB = __vaddfp(lrPosB.mV, lrOffB.mV);
+            const __vector4 vTarget = __vmaddfp(vA, __vspltw(lrOffA.mV, 3), __vmulfp(vB, __vspltw(lrOffB.mV, 3)));
+            const __vector4 vOld = lrTag.GetPosition().mV;
+            const Vector3 lTarget(__vmaddfp(__vsubfp(vTarget, vOld), __vcfsx(__vspltisw(1), 0), vOld));
             lrTag.SetPosition(lTarget);
 
             // Scratch re-blend (scalar weight pair spec+48/+52 over the sensors' +420 accumulators).
             lrTag.SetScratchAmount(
-                lrTag.GetDeformationSensorA()->GetScratchAmount() * lpSpec->GetWeightA() +
-                lrTag.GetDeformationSensorB()->GetScratchAmount() * lpSpec->GetWeightB());
+                lrTag.GetDeformationSensorB()->GetScratchAmount() * lpSpec->GetWeightB() +
+                lrTag.GetDeformationSensorA()->GetScratchAmount() * lpSpec->GetWeightA());
 
             // Skinned wheel tag: fold the live suspension compression into the Y lane and hand the
             // corrected offset to the skinning scratch row.
@@ -1933,21 +1726,12 @@ namespace Deformation
                 const BrnPhysics::Vehicle::Wheel& lrWheel =
                     lpVehicle->GetWheel(static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel));
 
-                const Vector3& lrInitial = lpSpec->GetInitialPosition();
-                const f32 lfSuspensionY  = lrWheel.mPosition.y
-                                         - lrWheel.mStreamedPositionPlusTwistAmount.y;
-
-                Vector3Plus& lrScratch = maVerletOffsets_Scratch[lu8Tag];
-                lrScratch.x = lTarget.x - lrInitial.x;
-                lrScratch.y = (lTarget.y - lrInitial.y) + lfSuspensionY;   // vperm<0,5,2,3> Y swap
-                lrScratch.z = lTarget.z - lrInitial.z;
-                // w lane = the tag's re-blended scratch amount. ⭐ CORRECTED 2026-09-02 (rest-rows
-                // wave): the old note said "w preserved (vperm<0,1,2,7>)" -- that perm only builds
-                // the STACK temp; both consoles then overwrite its w with tag+0x1C and store the
-                // temp over the row (X360 0x826084C0 `lfs f0, 0x3B2C(r5)` / 0x826084C8 `stfs f0,
-                // -0x24(r1)` / 0x826084D4 stvx128; PS3 0x6D7670 `v23 = *(tag+28)`), exactly as the
-                // gather in UpdateSkinningOffsets does.
-                lrScratch.w = lrTag.GetScratchAmount();
+                const __vector4 vOffset = __vsubfp(lTarget.mV, lpSpec->GetInitialPosition().mV);
+                const __vector4 vSuspension = __vsubfp(__vspltw(lrWheel.mPosition.mV, 1),
+                                                       __vspltw(lrWheel.mStreamedPositionPlusTwistAmount.mV, 1));
+                const __vector4 vCorrected = __vrlimi(vOffset, __vaddfp(vOffset, vSuspension), 4, 0);
+                const Vector3 vScratch(lrTag.GetScratchAmount(), 0.0f, 0.0f);
+                maVerletOffsets_Scratch[lu8Tag].mV = __vrlimi(vCorrected, __vspltw(vScratch.mV, 0), 1, 0);
 
                 // ---- [restrow-wheel] NOT X360; opt-in BRN_RESTROW_PROBE=1. DELETE-WHEN attributed.
             }
@@ -1967,8 +1751,8 @@ namespace Deformation
     // 20 mph * 0.44704. PS3 second witness: DecFIGS __static_initialization_and_destruction_0
     // @0x6C2CCC stores both from the same vector pair (0x6C5C74 / 0x6C5C8C).
     // =============================================================================================
-    static const VecFloat KVF_MAX_TWIST_ANGLE            = { 1.57f, 1.57f, 1.57f, 1.57f };        // :2765
-    static const VecFloat KVF_MIN_SPEED_FOR_WHEEL_DETACH = { 8.9408f, 8.9408f, 8.9408f, 8.9408f }; // :2766
+    static const VecFloat KVF_MAX_TWIST_ANGLE(1.57f);        // :2765
+    static const VecFloat KVF_MIN_SPEED_FOR_WHEEL_DETACH(8.9408f); // :2766
 
     // =============================================================================================
     // ShouldDetachWheel (DWARF BrnDeformableObject.h:814). No X360 emission -- UpdateWheels
@@ -2074,7 +1858,7 @@ namespace Deformation
             // :2798 -- the tag point's xz with the wheel's own y (SetY<VectorAxisY> in the DWARF;
             // vrlimi128 mask 4 on the X360).
             Vector3 lWheelPos = lpTagPoint->GetPosition();
-            lWheelPos.y = lpWheel->GetPosition().y;
+            lWheelPos.mV = __vrlimi(lWheelPos.mV, lpWheel->GetPosition().mV, 4, 0);
             lpWheel->SetPosition(lWheelPos);
 
             if (!lpVehiclePhysics->IsCrashing())   // lbz 0x710
@@ -2089,13 +1873,13 @@ namespace Deformation
                     // 0x82626580..0x826265E0: the inlined RandomVecFloat -- slot = (cursor+3)&4,
                     // ring[slot] - 1.0, refill ring[slot], cursor = slot+1 -- times 1.57 (unk_82FB9740).
                     // NOT RandomFloat's scalar cursor (crash parity G19-D2, 2026-09-23).
-                    const f32 lfTwistLimit = lpRandom->RandomVecFloat().GetFloat() * KVF_MAX_TWIST_ANGLE.x;
+                    const __vector4 vTwistLimit = __vmulfp(lpRandom->RandomVecFloat().mV, KVF_MAX_TWIST_ANGLE.mV);
                     switch (liWheel)   // vperm lane-insert (unk_8327F140 + 64*i) into +0x6760
                     {
-                        case 0:  mWheelTwistLimits.x = lfTwistLimit; break;
-                        case 1:  mWheelTwistLimits.y = lfTwistLimit; break;
-                        case 2:  mWheelTwistLimits.z = lfTwistLimit; break;
-                        default: mWheelTwistLimits.w = lfTwistLimit; break;
+                        case 0:  mWheelTwistLimits.mV = __vrlimi(mWheelTwistLimits.mV, vTwistLimit, 8, 0); break;
+                        case 1:  mWheelTwistLimits.mV = __vrlimi(mWheelTwistLimits.mV, vTwistLimit, 4, 0); break;
+                        case 2:  mWheelTwistLimits.mV = __vrlimi(mWheelTwistLimits.mV, vTwistLimit, 2, 0); break;
+                        default: mWheelTwistLimits.mV = __vrlimi(mWheelTwistLimits.mV, vTwistLimit, 1, 0); break;
                     }
                     ++miNumBrokenWheels;   // +0x6770
                 }
@@ -2103,31 +1887,26 @@ namespace Deformation
             }
 
             // ---- TWISTING arm (0x82625CB4..0x82625DF4) ----
-            f32 lfTwistLimit;   // :2815
-            switch (liWheel)     // vperm lane-select (lvsl 4*i) out of +0x6760
+            __vector4 vLimit;
+            switch (liWheel)
             {
-                case 0:  lfTwistLimit = mWheelTwistLimits.x; break;
-                case 1:  lfTwistLimit = mWheelTwistLimits.y; break;
-                case 2:  lfTwistLimit = mWheelTwistLimits.z; break;
-                default: lfTwistLimit = mWheelTwistLimits.w; break;
+                case 0: vLimit = __vspltw(mWheelTwistLimits.mV, 0); break;
+                case 1: vLimit = __vspltw(mWheelTwistLimits.mV, 1); break;
+                case 2: vLimit = __vspltw(mWheelTwistLimits.mV, 2); break;
+                default: vLimit = __vspltw(mWheelTwistLimits.mV, 3); break;
             }
-
-            const f32 lfDistanceFromLimitSq =
-                rw::math::vpu::MagnitudeSquared(lpTagPoint->GetOffsetFromInitialPosition())
-                - lpTagPoint->GetDetachThresholdSquared();                                 // :2808
-            const f32 lfTwistAmount = lfDistanceFromLimitSq * 2.0f * 2.0f * 2.0f;          // :2809
-
-            // Clamp(twist, 0, limit): vmaxfp128 vs zero, then vminfp vs the limit.
-            f32 lfClampedTwist = (lfTwistAmount > 0.0f) ? lfTwistAmount : 0.0f;
-            if (lfClampedTwist > lfTwistLimit) { lfClampedTwist = lfTwistLimit; }
-            lpWheel->SetTwistAmount(lfClampedTwist);
-
+            const __vector4 vOffset = lpTagPoint->GetOffsetFromInitialPosition().mV;
+            const Vector3 vThreshold(lpTagPoint->GetDetachThresholdSquared(), 0.0f, 0.0f);
+            __vector4 vTwist = __vsubfp(__vmsum3fp(vOffset, vOffset), __vspltw(vThreshold.mV, 0));
+            const __vector4 vTwo = __vcfsx(__vspltisw(2), 0);
+            vTwist = __vmulfp(__vmulfp(__vmulfp(vTwist, vTwo), vTwo), vTwo);
+            const __vector4 vClamped = __vminfp(vLimit, __vmaxfp(__vspltisw(0), vTwist));
+            lpWheel->mStreamedPositionPlusTwistAmount.mV = __vrlimi(lpWheel->mStreamedPositionPlusTwistAmount.mV, vClamped, 1, 0);
             bool lbDetach = false;
-            if (lfTwistAmount > lfTwistLimit)                                              // vcmpgtfp. 0x82625D28
+            if (rw::math::vpu::MaskScalar(__vcmpgtfp(vTwist, vLimit)).GetBool())
             {
-                // +0x1340 w lane == |v| against the .bss splat unk_82FB9530.
-                const f32 lfSpeed = lpVehiclePhysics->GetNormLinearVelocityMag().GetPlus();
-                if (lfSpeed > KVF_MIN_SPEED_FOR_WHEEL_DETACH.x)
+                const __vector4 vSpeed = __vspltw(lpVehiclePhysics->GetNormLinearVelocityMag().mV, 3);
+                if (rw::math::vpu::MaskScalar(__vcmpgtfp(vSpeed, KVF_MIN_SPEED_FOR_WHEEL_DETACH.mV)).GetBool())
                     lbDetach = true;
             }
             if (!lbDetach && lpVehiclePhysics->IsPlayerVehicleInShowtime())               // vtbl +0x10
@@ -2167,12 +1946,12 @@ namespace Deformation
             const Vector3 lLinVel = lpVehiclePhysics->GetLinearVelocity();                  // :2845 (+0x50)
 
             // :2846 -- the wheel spins about the car's x axis; the side flips the sign.
-            const f32 lfSpin = lpWheel->mIntegrationVariables.x;
-            const Vector3 lLocalSpin = { (lpWheel->GetPosition().x > 0.0f) ? lfSpin : -lfSpin, 0.0f, 0.0f, 0.0f };
+            const f32 lfSpin = lpWheel->mIntegrationVariables.mV.x;
+            const Vector3 lLocalSpin((lpWheel->GetPosition().mV.x > 0.0f) ? lfSpin : -lfSpin, 0.0f, 0.0f);
             const Vector3 lAngVel = rw::math::vpu::TransformVector(lVehicleTransform, lLocalSpin);
 
-            const f32 lfHalfHeight = lpWheelSpec->mScale.x * 0.5f;   // :2861  GetW(i)+0x10 lane 0
-            const f32 lfRadius     = lpWheelSpec->mScale.y * 0.5f;   // :2862  GetW(i)+0x10 lane 1
+            const f32 lfHalfHeight = lpWheelSpec->mScale.mV.x * 0.5f;   // :2861  GetW(i)+0x10 lane 0
+            const f32 lfRadius     = lpWheelSpec->mScale.mV.y * 0.5f;   // :2862  GetW(i)+0x10 lane 1
 
             lpWheelMgr->DetachWheel(lpInput, mHandlingBodyID, mu16DeformableObjectIndex, liWheel,
                                     lfHalfHeight, lfRadius, lPartRenderTransform, lVehicleTransform,
@@ -2237,17 +2016,17 @@ namespace Deformation
         // [ik-cadence] (DIAG, BRN_IK_CADENCE_DIAG): this step's model was IK'd. The outer-gate reads
         // are the three members CheckForDetachment tests at 0x8263ABE4..0x8263AC08 (cmpwi 20 / 4 / 0).
 
-        CheckForDetachment(lpInput, lpOutput, lpPartMgr, lvfTimeStep.x);
+        CheckForDetachment(lpInput, lpOutput, lpPartMgr, lvfTimeStep.mV.x);
 
-        { const VecFloat lIKStep = { 0.05f, 0.05f, 0.05f, 0.05f }; UpdateIK(lIKStep); }   // v44[0] = 0.050000001
-        { const VecFloat lIKStep = { 0.1f, 0.1f, 0.1f, 0.1f }; UpdateIK(lIKStep); }       // v44[0] = 0.1
-        { const VecFloat lIKStep = { 0.5f, 0.5f, 0.5f, 0.5f }; UpdateIK(lIKStep); }       // vcsxwfp128(1,1) == 0.5
-        { const VecFloat lIKStep = { 1.0f, 1.0f, 1.0f, 1.0f }; UpdateIK(lIKStep); }       // vcsxwfp128(1,0) == 1.0
+        { const VecFloat lIKStep(0.05f); UpdateIK(lIKStep); }   // v44[0] = 0.050000001
+        { const VecFloat lIKStep(0.1f); UpdateIK(lIKStep); }       // v44[0] = 0.1
+        { const VecFloat lIKStep(0.5f); UpdateIK(lIKStep); }       // vcsxwfp128(1,1) == 0.5
+        { const VecFloat lIKStep(1.0f); UpdateIK(lIKStep); }       // vcsxwfp128(1,0) == 1.0
 
         UpdateSkinningOffsets();
 
         // 0x82642290..0x826422A8: r4 = simIn, r5 = wheelMgr, f1 = timestep lane, r7 = random.
-        UpdateWheels(lpInput, lpWheelMgr, lvfTimeStep.x, lpRandom);
+        UpdateWheels(lpInput, lpWheelMgr, lvfTimeStep.mV.x, lpRandom);
 
         // ⭐ THE GLASS GATE IS GONE 2026-09-06 (contact-spy wave), and BOTH halves of its reason
         // were STALE. It said "module-output deformation interfaces not homed" and "glass pane
@@ -2295,7 +2074,7 @@ namespace Deformation
         // 0x05D20DB0, with all four table slots rebased and sizeof(spec) == 1712. The 402 rigged
         // cars in the staged VEHICLES set all carry a non-zero on-disc glass slot; not one carries
         // a zero slot behind a non-zero count.
-        UpdateGlass(lvfTimeStep.x,
+        UpdateGlass(lvfTimeStep.mV.x,
                     lpOutput->GetDeformationOutputInterface(),
                     lpOutput->GetDeformationOutputInterfaceForEntityModules());
 
@@ -2352,26 +2131,26 @@ namespace Deformation
         if ( ((mGlobalEntityId.muValue >> 24) & 0xFFu) == 1u )   // HIBYTE(+26392) == E_ENTITYTYPE_RACECAR
         {
             BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
-            if ( lpRaceCar != 0 && lpRaceCar->IsInAICrashSlowMo() )
+            if ( lpRaceCar->IsInAICrashSlowMo() )
             {
-                lvfStep.x *= 0.01f; lvfStep.y *= 0.01f; lvfStep.z *= 0.01f; lvfStep.w *= 0.01f;
+                const Vector3 vScale(0.01f, 0.0f, 0.0f);
+                lvfStep.mV = __vmulfp(lvfStep.mV, __vspltw(vScale.mV, 0));
             }
         }
 
         // ARTIST 0x8264924C..0x82649258 appends this scene update unconditionally.
         {
             CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpScene =
-                reinterpret_cast<CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*>(
-                    lpModuleOutput->GetSceneInputInterface());
+                lpModuleOutput->GetSceneInputInterface();
             lpScene->SetEntityRadius(CgsSceneManager::EntityId(mGlobalEntityId.muValue),
-                                     GetEntitySphereSize().x);
+                                     GetEntitySphereSize().mV.x);
         }
-        CGS_ASSERT(GetEntitySphereSize().x <= 100.0f + 1.0f,
+        CGS_ASSERT(GetEntitySphereSize().mV.x <= 100.0f + 1.0f,
                    "GetEntitySphereSize() <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f)");  // :1687
 
         if ( static_cast<s32>(meAbsorptionSet) == 4 )   // *(this+26460) == 4
         {
-            mfNoDamageTimer -= lvfStep.x;               // *(this+26396) -= step
+            mfNoDamageTimer -= lvfStep.mV.x;               // *(this+26396) -= step
         }
 
         UpdateAbsorptionSet(liGameMode);
@@ -2399,7 +2178,7 @@ namespace Deformation
         }
 
         GetVehicleBody().CalculateNewVelocity(lvfStep);
-        CheckForForcedDetachment(lpInput, lpModuleOutput, lpPartMgr, &lrRandom, lvfStep.x);
+        CheckForForcedDetachment(lpInput, lpModuleOutput, lpPartMgr, &lrRandom, lvfStep.mV.x);
 
         mbIKUpdateRequired = mbIKUpdateRequired || mbHasDeformedThisFrame;   // +26409 |= +26408
         lpVehicle->mbDeformedThisFrame = mbHasDeformedThisFrame;             // *(vp+4954)
@@ -2412,18 +2191,18 @@ namespace Deformation
         const f32 KF_ROAD_RAGE_WHEEL_MIN_TIME = 0.5f;
         const f32 KF_ROAD_RAGE_WHEEL_MAX_TIME = 1.0f;
         const f32 KF_ROAD_RAGE_WHEEL_MIN_SPEED = 0.0f;
-        const f32 lfCrashTime = lpVehicle->mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y;
+        const f32 lfCrashTime = lpVehicle->mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.mV.y;
         const VecFloat lvfSpeed = lpVehicle->GetSpeedMPH();
         if (GetHandlingBodyIdHighByte() == 1u
             && liGameMode == BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE
             && miNumBrokenWheels == 0
             && lfCrashTime > KF_ROAD_RAGE_WHEEL_MIN_TIME
             && lfCrashTime < KF_ROAD_RAGE_WHEEL_MAX_TIME
-            && lvfSpeed.x > KF_ROAD_RAGE_WHEEL_MIN_SPEED
-            && lvfSpeed.y > KF_ROAD_RAGE_WHEEL_MIN_SPEED
-            && lvfSpeed.z > KF_ROAD_RAGE_WHEEL_MIN_SPEED
-            && lvfSpeed.w > KF_ROAD_RAGE_WHEEL_MIN_SPEED
-            && lpVehicle->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.w > KF_ROAD_RAGE_WHEEL_MIN_TIME
+            && lvfSpeed.mV.x > KF_ROAD_RAGE_WHEEL_MIN_SPEED
+            && lvfSpeed.mV.y > KF_ROAD_RAGE_WHEEL_MIN_SPEED
+            && lvfSpeed.mV.z > KF_ROAD_RAGE_WHEEL_MIN_SPEED
+            && lvfSpeed.mV.w > KF_ROAD_RAGE_WHEEL_MIN_SPEED
+            && lpVehicle->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV.w > KF_ROAD_RAGE_WHEEL_MIN_TIME
             && lpVehicle->IsCrashing())
         {
             //826494DC..82649570 is RandomVecFloat's one-lane buffered draw.
@@ -2480,15 +2259,12 @@ namespace Deformation
             const Vector3Plus& lrLocal = maLocalSensorSpheres[li].mData;
             Vector3Plus&       lrWorld = maWorldSensorSpheres[li].mData;
 
-            lrWorld.mV.x = lrT.xAxis.x * lrLocal.mV.x + lrT.yAxis.x * lrLocal.mV.y
-                      + lrT.zAxis.x * lrLocal.mV.z + lrT.wAxis.x;
-            lrWorld.mV.y = lrT.xAxis.y * lrLocal.mV.x + lrT.yAxis.y * lrLocal.mV.y
-                      + lrT.zAxis.y * lrLocal.mV.z + lrT.wAxis.y;
-            lrWorld.mV.z = lrT.xAxis.z * lrLocal.mV.x + lrT.yAxis.z * lrLocal.mV.y
-                      + lrT.zAxis.z * lrLocal.mV.z + lrT.wAxis.z;
-            // w (radius) preserved (vrlimi keep-w).
-
-            maDeformationSensors[li].mPointDisplacement_BiggestImpulseThisFrame.w = 0.0f;   // vrlimi mask-1 zero
+            __vector4 vWorld = __vmaddfp(lrT.xAxis.mV, __vspltw(lrLocal.mV, 0), lrT.wAxis.mV);
+            vWorld = __vmaddfp(lrT.yAxis.mV, __vspltw(lrLocal.mV, 1), vWorld);
+            vWorld = __vmaddfp(lrT.zAxis.mV, __vspltw(lrLocal.mV, 2), vWorld);
+            lrWorld.mV = __vrlimi(vWorld, lrWorld.mV, 1, 0);
+            maDeformationSensors[li].mPointDisplacement_BiggestImpulseThisFrame.mV =
+                __vrlimi(maDeformationSensors[li].mPointDisplacement_BiggestImpulseThisFrame.mV, __vspltisw(0), 1, 0);
         }
 
         // ---- (2) contact-scratch reset ----------------------------------------------------------
@@ -2512,22 +2288,16 @@ namespace Deformation
 
             // ":3151 !IsZero(...GetStreamedPosition())" + the two "Invalid wheel position" NaN
             // screeds are fire-and-continue tripwires; conditions carried, screeds omitted.
-            const f32 lfScale = mpDeformationSpec->GetWheelSpec(liWheel)->mScale.x;
-
-            // local = { pos.x, STREAMED.y (vrlimi mask-4 insert) + scale/4, pos.z }
-            const Vector3 lvLocal = {
-                lrWheel.mPosition.x,
-                lrWheel.mStreamedPositionPlusTwistAmount.y + (lfScale * 0.5f) * 0.5f,
-                lrWheel.mPosition.z, 0.0f };
-
-            Vector3Plus& lrSphere = maWorldSensorSpheres[liNumSensors + liWheel].mData;
-            lrSphere.mV.x = lrT.xAxis.x * lvLocal.x + lrT.yAxis.x * lvLocal.y
-                       + lrT.zAxis.x * lvLocal.z + lrT.wAxis.x;
-            lrSphere.mV.y = lrT.xAxis.y * lvLocal.x + lrT.yAxis.y * lvLocal.y
-                       + lrT.zAxis.y * lvLocal.z + lrT.wAxis.y;
-            lrSphere.mV.z = lrT.xAxis.z * lvLocal.x + lrT.yAxis.z * lvLocal.y
-                       + lrT.zAxis.z * lvLocal.z + lrT.wAxis.z;
-            lrSphere.mV.w = lfScale * 0.5f;   // the second vrlimi w write wins
+            const __vector4 vScale = __vspltw(mpDeformationSpec->GetWheelSpec(liWheel)->mScale.mV, 0);
+            const __vector4 vHalf = __vcfsx(__vspltisw(1), 1);
+            const __vector4 vRadius = __vmulfp(vScale, vHalf);
+            const Vector3 vUp(0.0f, 1.0f, 0.0f);
+            const __vector4 vLift = __vmulfp(__vmulfp(vUp.mV, vRadius), vHalf);
+            const __vector4 vLocal = __vaddfp(__vrlimi(lrWheel.mPosition.mV, lrWheel.mStreamedPositionPlusTwistAmount.mV, 4, 0), vLift);
+            __vector4 vWorld = __vmaddfp(lrT.xAxis.mV, __vspltw(vLocal, 0), lrT.wAxis.mV);
+            vWorld = __vmaddfp(lrT.yAxis.mV, __vspltw(vLocal, 1), vWorld);
+            vWorld = __vmaddfp(lrT.zAxis.mV, __vspltw(vLocal, 2), vWorld);
+            maWorldSensorSpheres[liNumSensors + liWheel].mData.mV = __vrlimi(vWorld, vRadius, 1, 0);
         }
 
         if ( mbDoSweptSphereTests )
@@ -2542,15 +2312,27 @@ namespace Deformation
             {
                 const Vector3Plus& lrSphere = maWorldSensorSpheres[liSphere].mData;
 
-                const Vector3 lvR = { lrSphere.mV.x - lvCarPos.x, lrSphere.mV.y - lvCarPos.y,
-                                   lrSphere.mV.z - lvCarPos.z, 0.0f };
-                const Vector3 lvPointVel = vpu::Add(lvLinearVel, vpu::Cross(lvAngularVel, lvR));
-
-                const f32     lfSpeed = vpu::Magnitude(lvPointVel);
-                const Vector3 lvDir   = vpu::Normalize(lvPointVel);
-
+                const __vector4 vR = __vsubfp(lrSphere.mV, lvCarPos.mV);
+                const __vector4 vAngular = lvAngularVel.mV;
+                const __vector4 vProduct = __vmulfp(vAngular, __vpermwi(vR, 0x63));
+                const __vector4 vCross = __vpermwi(__vnmsubfp(__vpermwi(vAngular, 0x63), vR, vProduct), 0x63);
+                const __vector4 vPointVel = __vaddfp(vCross, lvLinearVel.mV);
+                const __vector4 vSquared = __vmsum3fp(vPointVel, vPointVel);
+                const __vector4 vOne = __vcfsx(__vspltisw(1), 0);
+                const __vector4 vHalf = __vcfsx(__vspltisw(1), 1);
+                __vector4 vReciprocal = __vrsqrtefp(vSquared);
+                for (u32 step = 0; step < 2; ++step)
+                {
+                    const __vector4 vSquare = __vmulfp(vReciprocal, vReciprocal);
+                    const __vector4 vHalfEstimate = __vmulfp(vReciprocal, vHalf);
+                    vReciprocal = __vmaddfp(vHalfEstimate, __vnmsubfp(vSquared, vSquare, vOne), vReciprocal);
+                }
+                const __vector4 vSpeed = __vsel(__vmulfp(vSquared, vReciprocal), __vspltisw(0), __vcmpeqfp(vSquared, __vspltisw(0)));
+                const __vector4 vDirection = __vmulfp(vPointVel, vReciprocal);
+                const Vector3 vStep(KF_CONSOLE_TIMESTEP, 0.0f, 0.0f);
+                const __vector4 vDistance = __vmulfp(vSpeed, __vspltw(vStep.mV, 0));
                 const Vector3Plus lSweptPosition = lrSphere;
-                const Vector3Plus lSweptVelocity = {lvDir.x, lvDir.y, lvDir.z, lfSpeed * KF_CONSOLE_TIMESTEP};
+                const Vector3Plus lSweptVelocity(__vrlimi(vDirection, vDistance, 1, 0));
                 maSweptSpheres[liSphere].Set(lSweptPosition, lSweptVelocity);
             }
         }
