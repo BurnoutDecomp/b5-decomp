@@ -17,14 +17,11 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"      // Push/PopStaticData (the call register frame)
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"         // AptGetAnimationAtLevel (root-scope object resolve)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                     // AptGetAnimationAtLevel's AptCIH -> AptValue
-#include "SDKs/EATech/include/Apt/AptLoader.h"                  // AptLifeDiagEnabled ([aptlife] opt-in witness)
-#include "GameShared/GameClasses/Core/CgsStringUtils.h"        // CgsCore::SnPrintf ([aptlife] witness)
 
 extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8324E760)
 
 #include <cstring>   // strncpy
 #include <cstdlib>   // atof
-#include <cstdio>    // snprintf (FLAG bring-up probes)
 
 // ============================================================================
 // CgsGui::AptCommunicator - reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -369,32 +366,6 @@ namespace CgsGui
 
         mAptComponentList.SetName(liNew, lpacName);
         ++muNumActivecomponents;
-        // FLAG (bring-up probe): surface each real registration in the boot log.
-        // ⚠️ [results wave 2026-08-29] THE 40-LINE BUDGET IS EXHAUSTED BY THE CAR-SELECT
-        // SCREEN, ~1,700 log lines before the offline results screen even mounts -- so for
-        // every screen after the junkyard this probe is silent by construction and its
-        // silence says nothing. Kept at 40 for the boot flow (nothing that reads this log
-        // changes), with an opt-in wide budget on the same env knob as the UpdateComponent
-        // probe above so a late screen can be watched without editing the source.
-        static s32 siAddBudget = -1;
-        if (siAddBudget < 0)
-        {
-        }
-        static s32 siAddLogs = 0;
-        if (siAddLogs < siAddBudget)
-        {
-            ++siAddLogs;
-            char lacProbe[192];
-            std::snprintf(lacProbe, sizeof(lacProbe),
-                          "[AptComm] AddNewAptComponent #%u: '%s'\n",
-                          muNumActivecomponents, lpacName ? lpacName : "<null>");
-            CgsDev::Log::WriteToLog(lacProbe);
-        }
-        // [aptlife] opt-in HIGH-WATER witness (BRN_APT_LIFE=1). NOT X360. The probe above
-        // stops at 40 lines, so it can never show the failure -- the table is a hard 256
-        // and the question is whether repeated pause cycles ratchet toward it or settle.
-        // This prints only when the count reaches a NEW maximum, so a stable cycle is a
-        // handful of lines and a leaking one is a visible staircase.
         // lRefText's internal refcount drops here (X360 DecreaseInternalRefCount).
     }
 
@@ -492,9 +463,6 @@ namespace CgsGui
         CGS_ASSERT(lbValid, "Invalid Communicator sent to SetCommunicationObject");
 
         mpAptInternalCommunicator = lpCommunicator;
-        // FLAG (bring-up probe): the AS framework movie calling this native IS the
-        // proof its bootstrap classes executed -- surface it in the boot log.
-        CgsDev::Log::WriteToLog("[AptComm] SetCommunicationObject: AS framework bound the communicator.\n");
         return AptInteger::Create(0);
     }
 
@@ -564,12 +532,6 @@ namespace CgsGui
             {
                 mAptComponentList.MoveComponent(static_cast<s32>(muNumActivecomponents) - 1, liComponent);
                 --muNumActivecomponents;
-                // [aptlife] opt-in witness (BRN_APT_LIFE=1). The component table is a
-                // HARD 256 and the second entry into a screen overflowed it, so the one
-                // fact that matters is whether this drain fires at all -- and how far
-                // the table actually falls. Rate-limited (the unload hook fires for every
-                // destroyed clip, not just registered ones), so it prints the first few
-                // and then only every 32nd.
                 return;
             }
         }
@@ -592,81 +554,6 @@ namespace CgsGui
         CGS_ASSERT(lpacValue != 0, "Invalid value sent to AptCommunicator::UpdateComponent");
 
         const s32 liComponent = FindAptComponent(lpacName);
-        // FLAG (bring-up probe): surface the licence card's model->view pushes AND the
-        // two silent early-outs (unknown name / undefined bound reference).
-        //
-        // ⚠️⚠️ [results wave 2026-08-29] THIS PROBE WAS HARD-GATED TO NAMES BEGINNING
-        // "License" AND NOTHING ELSE, AND THAT MADE IT A DIAGNOSTIC THAT LIES BY OMISSION.
-        // The results-screen handoff was briefed with "no component of this state has ever
-        // produced an UpdateComponent line, not one, across all five runs" as evidence that
-        // component binding had failed. It was not evidence of anything: none of that
-        // screen's components is named License*, so the probe was structurally incapable of
-        // printing for them. Same shape as the apt mount instrument that was wired to level 1
-        // while this screen plays at level 3. ([[diagnostics-that-lie]],
-        // [[harness-answers-the-wrong-question]])
-        //
-        // ⇒ Opt-in wildcard: BRN_APT_COMPUPD=<prefix> widens the probe to any component whose
-        // name starts with <prefix> ("*" or an empty value = every component), on its own
-        // budget. The License arm keeps its own budget so nothing that already reads this log
-        // changes. ⭐ AND IT DISCRIMINATES: liComponent is printed, so a name the table does
-        // not hold prints comp=-1 -- the probe can FAIL, visibly, which is the whole point.
-        static const s32   KI_APT_COMPUPD_BUDGET = 4000;
-        static const char* spacUpdPrefix  = 0;
-        static s32         siUpdPrefixLen = -1;
-        if (siUpdPrefixLen < 0)
-        {
-        }
-        if (spacUpdPrefix != 0)
-        {
-            const bool lbMatch = (siUpdPrefixLen == 0)
-                || (std::strncmp(lpacName, spacUpdPrefix,
-                                 static_cast<size_t>(siUpdPrefixLen)) == 0);
-            static s32 siWideLogs = 0;
-            if (lbMatch && siWideLogs <= KI_APT_COMPUPD_BUDGET)
-            {
-                ++siWideLogs;
-                char lacWide[256];
-                if (siWideLogs > KI_APT_COMPUPD_BUDGET)
-                {
-                    // ⭐⭐ THE ONE LINE THAT MAKES A CAPPED PROBE HONEST. A budget that runs
-                    // out silently is indistinguishable from a probe that never fires -- that
-                    // is precisely how the 40-line AddNewAptComponent cap and the level-1 apt
-                    // mount instrument each produced a confident wrong conclusion. This says
-                    // out loud where the instrument went blind, so a later silence can be
-                    // read correctly. ([[diagnostics-that-lie]])
-                    std::snprintf(lacWide, sizeof(lacWide),
-                                  "[AptComm] UpdateComponent probe BUDGET EXHAUSTED after %d lines "
-                                  "(prefix='%s') -- SILENCE BELOW THIS POINT MEANS NOTHING. "
-                                  "Narrow BRN_APT_COMPUPD to the component you care about.\n",
-                                  KI_APT_COMPUPD_BUDGET, spacUpdPrefix);
-                }
-                else
-                {
-                    std::snprintf(lacWide, sizeof(lacWide),
-                                  "[AptComm] UpdateComponent '%s' key='%s' val='%s' comp=%d\n",
-                                  lpacName, lpacKey, lpacValue, liComponent);
-                }
-                CgsDev::Log::WriteToLog(lacWide);
-            }
-        }
-        const bool lbLicenseUpdateProbe =
-            (std::strncmp(lpacName, "License", 7) == 0);
-        if (lbLicenseUpdateProbe)
-        {
-            static s32 siUpdLogs = 0;
-            if (siUpdLogs < 400)
-            {
-                ++siUpdLogs;
-                const bool lbDefined = (liComponent >= 0) &&
-                    ((mAptComponentList.GetAptValue(liComponent)->mnValueData &
-                      KU_APT_DEFINED_FLAG_MASK) != 0);
-                char lacProbe[224];
-                std::snprintf(lacProbe, sizeof(lacProbe),
-                              "[AptComm] UpdateComponent '%s' key='%s' val='%s' comp=%d defined=%d\n",
-                              lpacName, lpacKey, lpacValue, liComponent, lbDefined ? 1 : 0);
-                CgsDev::Log::WriteToLog(lacProbe);
-            }
-        }
         if (liComponent < 0)
         {
             return;
@@ -983,55 +870,6 @@ namespace CgsGui
             ++liData;
         }
 
-        // FLAG (bring-up probe): surface the AS-side component-data queries.
-        {
-            static s32 siGetLogs = 0;
-            const char* lpacCompName = (liComponent >= 0)
-                ? mAptComponentList.GetName(liComponent) : "<invalid>";
-            static s32 siLicenseGetLogs = 0;
-            const bool lbLicenseProbe =
-                (lpacCompName != 0 && std::strncmp(lpacCompName, "License", 7) == 0 &&
-                 siLicenseGetLogs < 400);
-            if (lbLicenseProbe)
-                ++siLicenseGetLogs;
-            // ⚠️⚠️ [hud reveal gate 2026-08-25] WHY THIS SECOND BUDGET EXISTS. The generic
-            // probe above stops at 60 lines -- which it reaches by ~line 2500 of BrnGame.log,
-            // during the title/licence flow. Every AS query after that is INVISIBLE. A whole
-            // verification pass was nearly scored on "'transin' never appears in the log",
-            // which was true and meant NOTHING: the HUD reveal fires around line 5200, three
-            // thousand lines after this probe went silent. The absence of a capped
-            // diagnostic is not evidence of absence. ([[diagnostics-that-lie]])
-            // So the HUD's master animator gets its own budget, the same way "License" does.
-            static s32 siEventHudGetLogs = 0;
-            const bool lbEventHudProbe =
-                (lpacCompName != 0 && std::strncmp(lpacCompName, "EventHud", 8) == 0 &&
-                 siEventHudGetLogs < 200);
-            if (lbEventHudProbe)
-                ++siEventHudGetLogs;
-            static s32 siPromptGetLogs = 0;
-            const bool lbPromptProbe = sbPromptProbe && lpacCompName != 0 &&
-                // Map button animators have their own budget. Boot car-selection
-                // HelpItem and per-frame minimap queries must not spend it first.
-                std::strstr(lpacCompName, "ButtonsAnimation") != 0;
-            const bool lbPromptWithinBudget = lbPromptProbe && siPromptGetLogs < 1024;
-            if (lbPromptProbe && siPromptGetLogs <= 1024)
-            {
-                if (siPromptGetLogs == 1024)
-                    CgsDev::Log::WriteToLog("[apt-prompt] component query BUDGET EXHAUSTED; later silence is unobserved.\n");
-                ++siPromptGetLogs;
-            }
-            if (siGetLogs < 60 || lbLicenseProbe || lbEventHudProbe || lbPromptWithinBudget)
-            {
-                ++siGetLogs;
-                char lacProbe[224];
-                std::snprintf(lacProbe, sizeof(lacProbe),
-                              "[AptComm] GetComponentData comp=%d ('%s') key='%s' -> '%s'\n",
-                              liComponent, lpacCompName ? lpacCompName : "<null>",
-                              lpacKey ? lpacKey : "<null>", lpacResult);
-                CgsDev::Log::WriteToLog(lacProbe);
-            }
-        }
-
         AptValue* lpReturn = AptString::Create(lpacResult);
         // lKeyText's internal refcount drops here (X360 DecreaseInternalRefCount).
         return lpReturn;
@@ -1074,27 +912,6 @@ namespace CgsGui
         // the onLoad `this`/msName context is faithful.
         if (!lbEventOk || !lbUniqueOk || !lbNameOk)
         {
-            // FLAG (bring-up probe): surface the rejected registration in the boot log.
-            static s32 siRejectLogs = 0;
-            if (siRejectLogs < 20)
-            {
-                ++siRejectLogs;
-                AptValue* lpClip = AptExtObject::GetParam(3);
-                const char* lpacClip = "<n/a>";
-                if (lpClip != 0 && (lpClip->getVtblIndex() == AptVFT_CharacterInstHandle))
-                    lpacClip = static_cast<AptCIH*>(lpClip)->GetInstanceName().GetBuffer();
-                char lacProbe[224];
-                std::snprintf(lacProbe, sizeof(lacProbe),
-                              "[AptComm] SendAptEvent REJECTED (evOk=%d uidOk=%d nameOk=%d) "
-                              "vfts p0=%d p1=%d p2=%d p3=%d clip='%s'\n",
-                              lbEventOk ? 1 : 0, lbUniqueOk ? 1 : 0, lbNameOk ? 1 : 0,
-                              lpEventId ? (int)lpEventId->getVtblIndex() : -1,
-                              lpUniqueId ? (int)lpUniqueId->getVtblIndex() : -1,
-                              lpNameVal ? (int)lpNameVal->getVtblIndex() : -1,
-                              lpClip ? (int)lpClip->getVtblIndex() : -1,
-                              lpacClip ? lpacClip : "<null>");
-                CgsDev::Log::WriteToLog(lacProbe);
-            }
             return AptInteger::Create(0);
         }
 
