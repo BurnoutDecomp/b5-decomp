@@ -50,11 +50,11 @@ namespace CgsGeometric
     // single all-true predicate. A NaN coordinate makes its VMX compare false,
     // matching the scalar >= here. The w lane is unused.
     // ------------------------------------------------------------------------
-    bool TestAxisAlignedBoxAxisAlignedBox(const AxisAlignedBox& lrBoxA, const AxisAlignedBox& lrBoxB)
+    rw::math::vpu::MaskScalar TestAxisAlignedBoxAxisAlignedBox(const AxisAlignedBox& lrBoxA, const AxisAlignedBox& lrBoxB)
     {
-        return lrBoxA.mMax.x >= lrBoxB.mMin.x && lrBoxB.mMax.x >= lrBoxA.mMin.x    // x axis
-            && lrBoxA.mMax.y >= lrBoxB.mMin.y && lrBoxB.mMax.y >= lrBoxA.mMin.y    // y axis
-            && lrBoxA.mMax.z >= lrBoxB.mMin.z && lrBoxB.mMax.z >= lrBoxA.mMin.z;   // z axis
+        return rw::math::vpu::MaskScalar(lrBoxA.mMax.mV.x >= lrBoxB.mMin.mV.x && lrBoxB.mMax.mV.x >= lrBoxA.mMin.mV.x    // x axis
+            && lrBoxA.mMax.mV.y >= lrBoxB.mMin.mV.y && lrBoxB.mMax.mV.y >= lrBoxA.mMin.mV.y    // y axis
+            && lrBoxA.mMax.mV.z >= lrBoxB.mMin.mV.z && lrBoxB.mMax.mV.z >= lrBoxA.mMin.mV.z);   // z axis
     }
 
     namespace
@@ -156,12 +156,12 @@ namespace CgsGeometric
     // exactly where the asm's compare fails, not one compare later).
     // FireAssert's file/line are dropped per convention; the messages carry their trailing \n.
     // ------------------------------------------------------------------------
-    bool TestLineStartEndAxisAlignedBox(const Vector4& lvStart, const Vector4& lvEnd, const AxisAlignedBox& lrBox)
+    rw::math::vpu::MaskScalar TestLineStartEndAxisAlignedBox(const AxisAlignedBox& lrBox, Vector3 lvStart, Vector3 lvEnd)
     {
-        const f32 lafStart[3] = { lvStart.x, lvStart.y, lvStart.z };
-        const f32 lafEnd[3]   = { lvEnd.x, lvEnd.y, lvEnd.z };
-        const f32 lafMin[3]   = { lrBox.mMin.x, lrBox.mMin.y, lrBox.mMin.z };
-        const f32 lafMax[3]   = { lrBox.mMax.x, lrBox.mMax.y, lrBox.mMax.z };
+        const f32 lafStart[3] = { lvStart.mV.x, lvStart.mV.y, lvStart.mV.z };
+        const f32 lafEnd[3]   = { lvEnd.mV.x, lvEnd.mV.y, lvEnd.mV.z };
+        const f32 lafMin[3]   = { lrBox.mMin.mV.x, lrBox.mMin.mV.y, lrBox.mMin.mV.z };
+        const f32 lafMax[3]   = { lrBox.mMax.mV.x, lrBox.mMax.mV.y, lrBox.mMax.mV.z };
 
         f32 lafDirection[3];
         f32 lafReciprocal[3];
@@ -212,7 +212,7 @@ namespace CgsGeometric
             }
         }
 
-        return lbStartInside || lbEndInside || lbFaceHit;
+        return rw::math::vpu::MaskScalar(lbStartInside || lbEndInside || lbFaceHit);
     }
 
     // ============================================================================================
@@ -226,7 +226,7 @@ namespace CgsGeometric
         inline void SetMask4Lane(Vector4& lrMask, s32 liLane, bool lbPassed)
         {
             const u32 luBits = lbPassed ? 0xFFFFFFFFu : 0u;
-            std::memcpy(&(&lrMask.x)[liLane], &luBits, sizeof(u32));
+            std::memcpy(&(&lrMask.mV.x)[liLane], &luBits, sizeof(u32));
         }
 
         // One lane of TestLineSphere4 (the banner below has the addresses).
@@ -242,24 +242,24 @@ namespace CgsGeometric
             // change each was written a*b + c, rounding the product first.
 
             // The far end of the segment, e = L * d + s.
-            const f32 lfEndX = LineVmxMadd(lfLength, lrDirection.x, lrStart.x);
-            const f32 lfEndY = LineVmxMadd(lfLength, lrDirection.y, lrStart.y);
-            const f32 lfEndZ = LineVmxMadd(lfLength, lrDirection.z, lrStart.z);
+            const f32 lfEndX = LineVmxMadd(lfLength, lrDirection.mV.x, lrStart.mV.x);
+            const f32 lfEndY = LineVmxMadd(lfLength, lrDirection.mV.y, lrStart.mV.y);
+            const f32 lfEndZ = LineVmxMadd(lfLength, lrDirection.mV.z, lrStart.mV.z);
 
             // The centre relative to the start, and its projection on the unit direction.
-            const f32 lfDx = LineVmxSub(lrCentre.mV.x, lrStart.x);
-            const f32 lfDy = LineVmxSub(lrCentre.mV.y, lrStart.y);
-            const f32 lfDz = LineVmxSub(lrCentre.mV.z, lrStart.z);
-            const f32 lfT  = LineVmxMadd(lrDirection.z, lfDz,
-                             LineVmxMadd(lrDirection.x, lfDx,
-                                         LineVmxMul(lrDirection.y, lfDy)));
+            const f32 lfDx = LineVmxSub(lrCentre.mV.x, lrStart.mV.x);
+            const f32 lfDy = LineVmxSub(lrCentre.mV.y, lrStart.mV.y);
+            const f32 lfDz = LineVmxSub(lrCentre.mV.z, lrStart.mV.z);
+            const f32 lfT  = LineVmxMadd(lrDirection.mV.z, lfDz,
+                             LineVmxMadd(lrDirection.mV.x, lfDx,
+                                         LineVmxMul(lrDirection.mV.y, lfDy)));
 
             // The perpendicular offset (C - s) - t * d (vmulfp128 0x828BD1D0..0x828BD1D8, then vsubfp
             // 0x828BD1E4 / 0x828BD1EC / 0x828BD1F0 -- NOT fused), and the three squared distances, each
             // y*y (vmulfp128) then x*x + that, then z*z + that (two vmaddfp).
-            const f32 lfTx = LineVmxMul(lfT, lrDirection.x);
-            const f32 lfTy = LineVmxMul(lfT, lrDirection.y);
-            const f32 lfTz = LineVmxMul(lfT, lrDirection.z);
+            const f32 lfTx = LineVmxMul(lfT, lrDirection.mV.x);
+            const f32 lfTy = LineVmxMul(lfT, lrDirection.mV.y);
+            const f32 lfTz = LineVmxMul(lfT, lrDirection.mV.z);
             const f32 lfPx = LineVmxSub(lfDx, lfTx);
             const f32 lfPy = LineVmxSub(lfDy, lfTy);
             const f32 lfPz = LineVmxSub(lfDz, lfTz);
@@ -322,7 +322,7 @@ namespace CgsGeometric
         {
             SetMask4Lane(lResult, liLane,
                          LineSphereLaneHit(*lapSpheres[liLane], lLineStart, lLineDirection,
-                                           (&lLineLength.x)[liLane]));
+                                           (&lLineLength.mV.x)[liLane]));
         }
         return lResult;
     }
@@ -375,20 +375,20 @@ namespace CgsGeometric
                                                             Vector3 lLineStart, Vector3 /*lLineEnd*/,
                                                             Vector3 lLineReciprocal)
     {
-        CGS_ASSERT(!(lLineReciprocal.x == 0.0f), "Line reciprocal X is 0\n");   // :769
-        CGS_ASSERT(!(lLineReciprocal.y == 0.0f), "Line reciprocal Y is 0\n");   // :770
-        CGS_ASSERT(!(lLineReciprocal.z == 0.0f), "Line reciprocal Z is 0\n");   // :771
+        CGS_ASSERT(!(lLineReciprocal.mV.x == 0.0f), "Line reciprocal X is 0\n");   // :769
+        CGS_ASSERT(!(lLineReciprocal.mV.y == 0.0f), "Line reciprocal Y is 0\n");   // :770
+        CGS_ASSERT(!(lLineReciprocal.mV.z == 0.0f), "Line reciprocal Z is 0\n");   // :771
 
         const AxisAlignedBox* const lapBoxes[4] = { &lrBox0, &lrBox1, &lrBox2, &lrBox3 };
-        const f32 lafStart[3]      = { lLineStart.x, lLineStart.y, lLineStart.z };
-        const f32 lafReciprocal[3] = { lLineReciprocal.x, lLineReciprocal.y, lLineReciprocal.z };
+        const f32 lafStart[3]      = { lLineStart.mV.x, lLineStart.mV.y, lLineStart.mV.z };
+        const f32 lafReciprocal[3] = { lLineReciprocal.mV.x, lLineReciprocal.mV.y, lLineReciprocal.mV.z };
 
         Vector4 lResult;
         for (s32 liLane = 0; liLane < 4; ++liLane)
         {
             const AxisAlignedBox& lrBox = *lapBoxes[liLane];
-            const f32 lafMin[3] = { lrBox.mMin.x, lrBox.mMin.y, lrBox.mMin.z };
-            const f32 lafMax[3] = { lrBox.mMax.x, lrBox.mMax.y, lrBox.mMax.z };
+            const f32 lafMin[3] = { lrBox.mMin.mV.x, lrBox.mMin.mV.y, lrBox.mMin.mV.z };
+            const f32 lafMax[3] = { lrBox.mMax.mV.x, lrBox.mMax.mV.y, lrBox.mMax.mV.z };
 
             bool lbCrosses = true;
             for (s32 liAxis = 0; liAxis < 3; ++liAxis)

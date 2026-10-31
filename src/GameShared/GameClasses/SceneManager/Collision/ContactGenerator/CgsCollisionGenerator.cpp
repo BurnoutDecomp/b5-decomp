@@ -561,26 +561,26 @@ namespace CgsCollision
 
         // v127 / v123: the two 16-byte lanes of the line, w included (the soup test's +0x40
         // position lane multiplies all four).
-        const Vector3& lrStart = reinterpret_cast<const Vector3&>(lrLine.mStart);
-        const Vector3& lrEnd   = reinterpret_cast<const Vector3&>(lrLine.mEnd);
+        const Vector3& lrStart = lrLine.mStart.GetVector3();
+        const Vector3& lrEnd   = lrLine.mEnd.GetVector3();
 
-        const f32 lfDx = lrEnd.x - lrStart.x;
-        const f32 lfDy = lrEnd.y - lrStart.y;
-        const f32 lfDz = lrEnd.z - lrStart.z;
+        const f32 lfDx = lrEnd.mV.x - lrStart.mV.x;
+        const f32 lfDy = lrEnd.mV.y - lrStart.mV.y;
+        const f32 lfDz = lrEnd.mV.z - lrStart.mV.z;
         const f32 lfLengthSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
 
         if (KF_SHORT_LINE_LENGTH_SQ > lfLengthSq)
         {
             // 0x82813318 / 0x82813320: the line's box, all four lanes -- vmaxfp128 / vminfp128 (v127 start, v123 end).
             CgsGeometric::AxisAlignedBox lBox;
-            lBox.mMin.x = VmxMinFp(lrStart.x, lrEnd.x);
-            lBox.mMin.y = VmxMinFp(lrStart.y, lrEnd.y);
-            lBox.mMin.z = VmxMinFp(lrStart.z, lrEnd.z);
-            lBox.mMin.w = VmxMinFp(lrStart.w, lrEnd.w);
-            lBox.mMax.x = VmxMaxFp(lrStart.x, lrEnd.x);
-            lBox.mMax.y = VmxMaxFp(lrStart.y, lrEnd.y);
-            lBox.mMax.z = VmxMaxFp(lrStart.z, lrEnd.z);
-            lBox.mMax.w = VmxMaxFp(lrStart.w, lrEnd.w);
+            lBox.mMin.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMin.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMin.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMin.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMax.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMax.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMax.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMax.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
 
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);   // 0x828132C8
 
@@ -627,8 +627,8 @@ namespace CgsCollision
 
             if (liNumLeaves > 0)
             {
-                const Vector4 lLineStart = { lrStart.x, lrStart.y, lrStart.z, lrStart.w };   // v127
-                const Vector4 lLineEnd   = { lrEnd.x,   lrEnd.y,   lrEnd.z,   lrEnd.w };     // v123
+                const Vector3 lLineStart = lrStart;   // v127
+                const Vector3 lLineEnd = lrEnd;     // v123
 
                 const u16*                               lpau16Leaves = lpPolySoupListSpacialMap->GetOutputQueryBuffer();
                 const CgsGeometric::PolygonSoupLeafNode* lpaLeafNodes = lpPolySoupListSpacialMap->GetLeafNodes();
@@ -639,7 +639,7 @@ namespace CgsCollision
                 {
                     const CgsGeometric::PolygonSoupLeafNode& lrLeaf = lpaLeafNodes[lpau16Leaves[liLeaf]];
 
-                    if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lrLeaf.mBox))
+                    if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lrLeaf.mBox, lLineStart, lLineEnd).GetBool())
                     {
                         continue;   // 0x82813884 `bne` on an all-zero mask
                     }
@@ -697,25 +697,25 @@ namespace CgsCollision
         lpRecord->mLineParam.z = KF_LINE_PARAM_NO_HIT;
         lpRecord->mLineParam.w = KF_LINE_PARAM_NO_HIT;
 
-        const Vector3& lrStart = reinterpret_cast<const Vector3&>(lrLine.mStart);
-        const Vector3& lrEnd   = reinterpret_cast<const Vector3&>(lrLine.mEnd);
+        const Vector3& lrStart = lrLine.mStart.GetVector3();
+        const Vector3& lrEnd   = lrLine.mEnd.GetVector3();
 
-        const f32 lfDx = lrEnd.x - lrStart.x;
-        const f32 lfDy = lrEnd.y - lrStart.y;
-        const f32 lfDz = lrEnd.z - lrStart.z;
+        const f32 lfDx = lrEnd.mV.x - lrStart.mV.x;
+        const f32 lfDy = lrEnd.mV.y - lrStart.mV.y;
+        const f32 lfDz = lrEnd.mV.z - lrStart.mV.z;
         const f32 lfLengthSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
 
         if (KF_SHORT_LINE_LENGTH_SQ > lfLengthSq)
         {
             CgsGeometric::AxisAlignedBox lBox;
-            lBox.mMin.x = VmxMinFp(lrStart.x, lrEnd.x);
-            lBox.mMin.y = VmxMinFp(lrStart.y, lrEnd.y);
-            lBox.mMin.z = VmxMinFp(lrStart.z, lrEnd.z);
-            lBox.mMin.w = VmxMinFp(lrStart.w, lrEnd.w);
-            lBox.mMax.x = VmxMaxFp(lrStart.x, lrEnd.x);
-            lBox.mMax.y = VmxMaxFp(lrStart.y, lrEnd.y);
-            lBox.mMax.z = VmxMaxFp(lrStart.z, lrEnd.z);
-            lBox.mMax.w = VmxMaxFp(lrStart.w, lrEnd.w);
+            lBox.mMin.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMin.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMin.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMin.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMax.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMax.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMax.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMax.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
 
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);
 
@@ -740,15 +740,15 @@ namespace CgsCollision
         {
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lrLine);
 
-            const Vector4 lLineStart = { lrStart.x, lrStart.y, lrStart.z, lrStart.w };
-            const Vector4 lLineEnd   = { lrEnd.x,   lrEnd.y,   lrEnd.z,   lrEnd.w };
+            const Vector3 lLineStart = lrStart;
+            const Vector3 lLineEnd = lrEnd;
 
             for (s32 liLeaf = 0; liLeaf < liNumLeaves; ++liLeaf)
             {
                 const CgsGeometric::PolygonSoupLeafNode& lrLeaf =
                     lpPolySoupListSpacialMap->GetLeafNodes()[lpPolySoupListSpacialMap->GetOutputQueryBuffer()[liLeaf]];
 
-                if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lrLeaf.mBox))
+                if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lrLeaf.mBox, lLineStart, lLineEnd).GetBool())
                 {
                     continue;
                 }
@@ -823,17 +823,17 @@ namespace CgsCollision
             PrepareNewPrimitiveTestResultsList(lu16MaxNumResults, lu32UserTagA, lu16UserTagB);
         CollisionResultList* lpList = mapCollisionResultLists[static_cast<u16>(liResultListIndex)];
 
-        const Vector3& lrStart = reinterpret_cast<const Vector3&>(lrLine.mStart);
-        const Vector3& lrEnd   = reinterpret_cast<const Vector3&>(lrLine.mEnd);
+        const Vector3& lrStart = lrLine.mStart.GetVector3();
+        const Vector3& lrEnd   = lrLine.mEnd.GetVector3();
 
         // r28 / r15: the list's 112-byte record array (the kernel writes IntersectLinePolygonSoupResult
         // records; the tree names that record PolySoupLineNearestResult -- see CgsPolygonSoupTests.h).
         CgsGeometric::PolySoupLineNearestResult* lpaResults =
             reinterpret_cast<CgsGeometric::PolySoupLineNearestResult*>(lpList->mpResults);
 
-        const f32 lfDx = lrEnd.x - lrStart.x;
-        const f32 lfDy = lrEnd.y - lrStart.y;
-        const f32 lfDz = lrEnd.z - lrStart.z;
+        const f32 lfDx = lrEnd.mV.x - lrStart.mV.x;
+        const f32 lfDy = lrEnd.mV.y - lrStart.mV.y;
+        const f32 lfDz = lrEnd.mV.z - lrStart.mV.z;
         const f32 lfLengthSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
 
         s32 liNumFound = 0;   // r25
@@ -842,14 +842,14 @@ namespace CgsCollision
         {
             // 0x82812C20..0x82812C40: the line's box, all four lanes -- vmaxfp128 / vminfp128 (v127 start, v123 end).
             CgsGeometric::AxisAlignedBox lBox;
-            lBox.mMin.x = VmxMinFp(lrStart.x, lrEnd.x);
-            lBox.mMin.y = VmxMinFp(lrStart.y, lrEnd.y);
-            lBox.mMin.z = VmxMinFp(lrStart.z, lrEnd.z);
-            lBox.mMin.w = VmxMinFp(lrStart.w, lrEnd.w);
-            lBox.mMax.x = VmxMaxFp(lrStart.x, lrEnd.x);
-            lBox.mMax.y = VmxMaxFp(lrStart.y, lrEnd.y);
-            lBox.mMax.z = VmxMaxFp(lrStart.z, lrEnd.z);
-            lBox.mMax.w = VmxMaxFp(lrStart.w, lrEnd.w);
+            lBox.mMin.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMin.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMin.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMin.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMax.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMax.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMax.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMax.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
 
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);   // 0x82812C4C
 
@@ -882,8 +882,8 @@ namespace CgsCollision
 
             if (liNumLeaves > 0)
             {
-                const Vector4 lLineStart = { lrStart.x, lrStart.y, lrStart.z, lrStart.w };   // v127
-                const Vector4 lLineEnd   = { lrEnd.x,   lrEnd.y,   lrEnd.z,   lrEnd.w };     // v123
+                const Vector3 lLineStart = lrStart;   // v127
+                const Vector3 lLineEnd = lrEnd;     // v123
 
                 const u16*                               lpau16Leaves = lpPolySoupListSpacialMap->GetOutputQueryBuffer();
                 const CgsGeometric::PolygonSoupLeafNode* lpaLeafNodes = lpPolySoupListSpacialMap->GetLeafNodes();
@@ -892,7 +892,7 @@ namespace CgsCollision
                 {
                     const CgsGeometric::PolygonSoupLeafNode& lrLeaf = lpaLeafNodes[lpau16Leaves[liLeaf]];
 
-                    if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lrLeaf.mBox))
+                    if (!CgsGeometric::TestLineStartEndAxisAlignedBox(lrLeaf.mBox, lLineStart, lLineEnd).GetBool())
                     {
                         continue;   // 0x82813160 `bne` on an all-zero mask
                     }

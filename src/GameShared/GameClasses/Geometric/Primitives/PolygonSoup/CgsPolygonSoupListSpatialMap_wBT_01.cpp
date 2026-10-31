@@ -51,8 +51,8 @@ namespace CgsGeometric
         u16* lpuDestNodeIndices = lpParams->mpaQueryBufferB;
 
         // The segment's two 16-byte lanes, w included.
-        const Vector4 lLineStart = { lrLine.mStart.x, lrLine.mStart.y, lrLine.mStart.z, lrLine.mStart.w };
-        const Vector4 lLineEnd   = { lrLine.mEnd.x,   lrLine.mEnd.y,   lrLine.mEnd.z,   lrLine.mEnd.w };
+        const Vector3 lLineStart = lrLine.mStart.GetVector3();
+        const Vector3 lLineEnd = lrLine.mEnd.GetVector3();
 
         // Seed: the single root node of level 0.
         lpuSrcNodeIndices[0] = 0;
@@ -70,7 +70,7 @@ namespace CgsGeometric
                 const PolygonSoupSpacialNode* lpNode =
                     lpSpacialNodeCache->Get(static_cast<s32>(lpuSrcNodeIndices[luNodeIndexEntry]));
 
-                if (!TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lpNode->mBox))
+                if (!TestLineStartEndAxisAlignedBox(lpNode->mBox, lLineStart, lLineEnd).GetBool())
                 {
                     continue;
                 }
