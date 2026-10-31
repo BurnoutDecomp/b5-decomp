@@ -111,7 +111,7 @@ namespace CgsGeometric
         const f32 lfReach = lfRadius + lInPadding.x;
 
         Triangle4::Mask4 lResult;
-        lResult.SetZero();
+        lResult.SetFalse();
 
         for (s32 liLane = 0; liLane < 4; ++liLane)
         {
@@ -248,9 +248,9 @@ namespace CgsGeometric
             // vand with mValidMasks: the producer writes full-word lane masks, so
             // the bitwise AND is reproduced on the exact bit patterns.
             u32 luEnableBits = 0;
-            std::memcpy(&luEnableBits, &(&lTriangles.mValidMasks.x)[liLane], sizeof(u32));
+            std::memcpy(&luEnableBits, &(&lTriangles.mValidMasks.mV.x)[liLane], sizeof(u32));
             const u32 luLaneMask = (lbAccept ? 0xFFFFFFFFu : 0u) & luEnableBits;
-            std::memcpy(&(&lResult.x)[liLane], &luLaneMask, sizeof(u32));
+            std::memcpy(&(&lResult.mV.x)[liLane], &luLaneMask, sizeof(u32));
         }
 
         return lResult;
@@ -503,7 +503,7 @@ namespace CgsGeometric
         const f32 lfDz = lDirectionAndLength.z * lDirectionAndLength.w;
 
         Triangle4::Mask4 lResult;
-        lResult.SetZero();
+        lResult.SetFalse();
 
         for (s32 liLane = 0; liLane < 4; ++liLane)
         {
@@ -783,9 +783,9 @@ namespace CgsGeometric
                 && (0.0f > lfNormalAgainstFace);
 
             u32 luEnableBits = 0;
-            std::memcpy(&luEnableBits, &(&lTriangles.mValidMasks.x)[liLane], sizeof(u32));
+            std::memcpy(&luEnableBits, &(&lTriangles.mValidMasks.mV.x)[liLane], sizeof(u32));
             const u32 luLaneMask = (lbAccept ? 0xFFFFFFFFu : 0u) & luEnableBits;
-            std::memcpy(&(&lResult.x)[liLane], &luLaneMask, sizeof(u32));
+            std::memcpy(&(&lResult.mV.x)[liLane], &luLaneMask, sizeof(u32));
         }
 
         return lResult;

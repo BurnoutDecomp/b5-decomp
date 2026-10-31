@@ -196,10 +196,10 @@ namespace
     // ANDed into the hit mask at 0x82921F88 (`vand v12, v12, v6`). The producer side writes
     // 0xFFFFFFFF or 0x00000000 per lane (CgsPolygonSoupTests.cpp builds them exactly that way),
     // so a non-zero pattern means "this lane holds a real triangle".
-    inline bool IsLaneEnabled(const Vector4& lrMasks, s32 liLane)
+    inline bool IsLaneEnabled(const rw::math::vpu::Mask4& lrMasks, s32 liLane)
     {
         u32 luBits = 0;
-        std::memcpy(&luBits, &(&lrMasks.x)[liLane], sizeof(u32));
+        std::memcpy(&luBits, &(&lrMasks.mV.x)[liLane], sizeof(u32));
         return luBits != 0u;
     }
 
@@ -209,10 +209,11 @@ namespace
     // (0x829221E0 -- "all four lanes are equal, so take lane 0"). Reading it as a bit pattern
     // rather than a float is what keeps a tag whose encoding happens to be a NaN or a denormal
     // intact; the console never touches it with an FP operation either, only vsel and vspltw.
-    inline u32 LaneBits(const Vector4& lrV, s32 liLane)
+    template <typename TVector>
+    inline u32 LaneBits(const TVector& lrV, s32 liLane)
     {
         u32 luBits = 0;
-        std::memcpy(&luBits, &(&lrV.x)[liLane], sizeof(u32));
+        std::memcpy(&luBits, &(&lrV.mV.x)[liLane], sizeof(u32));
         return luBits;
     }
 

@@ -36,12 +36,12 @@ namespace CgsGeometric
     // has no out-of-line copy). The PS3 keeps them out of line (DecFIGS CgsGeometric::TestLineSphere4
     // @0xCA6DDC, TestLineBoundingBoxAgainstAxisAlignedBox4 @0xCAE954), which fixes the names and the
     // argument lists; the DWARF places them at CgsLineTests.cpp:172 / :305 / :766. A DWARF `Mask4` is the
-    // VMX compare result -- one 32-bit mask per lane, all ones where the lane passed -- carried here in a
-    // Vector4, the convention Triangle4::Mask4 already uses (CgsTriangle4.h).
+    // VMX compare result -- one 32-bit mask per lane, all ones where the lane passed -- carried by
+    // the genuine Mask4 value type (CgsTriangle4.h).
 
     // TestLineSphere4 (CgsLineTests.cpp:172). Lane k: does the segment start + t * direction, t in
     // [0, length] (direction a unit vector, length lane k of lLineLength), touch sphere k?
-    const Vector4 TestLineSphere4(const Sphere& lrSphere0, const Sphere& lrSphere1,
+    const rw::math::vpu::Mask4 TestLineSphere4(const Sphere& lrSphere0, const Sphere& lrSphere1,
                                   const Sphere& lrSphere2, const Sphere& lrSphere3,
                                   Vector3 lLineStart, Vector3 lLineDirection, VecFloat lLineLength);
 
@@ -56,7 +56,7 @@ namespace CgsGeometric
     // segment from lLineStart (per-axis reciprocal direction lLineReciprocal, t in [0, 1]) reach box k's
     // slab? The three axes are tested independently -- their t ranges need not overlap -- so this is the
     // segment's bounding box against box k. The middle vector is not read by the inlined body.
-    const Vector4 TestLineBoundingBoxAgainstAxisAlignedBox4(const AxisAlignedBox& lrBox0,
+    const rw::math::vpu::Mask4 TestLineBoundingBoxAgainstAxisAlignedBox4(const AxisAlignedBox& lrBox0,
                                                             const AxisAlignedBox& lrBox1,
                                                             const AxisAlignedBox& lrBox2,
                                                             const AxisAlignedBox& lrBox3,

@@ -686,7 +686,7 @@ namespace CgsSceneManager
                             laSphereContactPoints[3], laTriangleContactPoints[3]);
 
                     const f32 lafContactMask[4] = {
-                        lContactMask.x, lContactMask.y, lContactMask.z, lContactMask.w
+                        lContactMask.mV.x, lContactMask.mV.y, lContactMask.mV.z, lContactMask.mV.w
                     };
                     for (s32 liLane = 0; liLane < 4; ++liLane)
                     {
@@ -702,10 +702,10 @@ namespace CgsSceneManager
                     }
 
                     const f32 lafValidMask[4] = {
-                        laTriangle4s[liTriangle4].mValidMasks.x,
-                        laTriangle4s[liTriangle4].mValidMasks.y,
-                        laTriangle4s[liTriangle4].mValidMasks.z,
-                        laTriangle4s[liTriangle4].mValidMasks.w
+                        laTriangle4s[liTriangle4].mValidMasks.mV.x,
+                        laTriangle4s[liTriangle4].mValidMasks.mV.y,
+                        laTriangle4s[liTriangle4].mValidMasks.mV.z,
+                        laTriangle4s[liTriangle4].mValidMasks.mV.w
                     };
                     for (s32 liLane = 0; liLane < 4; ++liLane)
                     {
@@ -865,7 +865,7 @@ namespace CgsSceneManager
         for (s32 liTriangle4 = 0; liTriangle4 < liNumTriangle4s; ++liTriangle4)
         {
             const CgsGeometric::Triangle4& lrTriangle4 = laTriangles[liTriangle4];
-            const f32* lapValidMaskLanes = &lrTriangle4.mValidMasks.x;
+            const f32* lapValidMaskLanes = &lrTriangle4.mValidMasks.mV.x;
             for (s32 liLane = 0; liLane < 4; ++liLane)
             {
                 CGS_ASSERT(liLane < 4, "liIndex < 4");
@@ -1109,8 +1109,8 @@ namespace CgsSceneManager
         {
             const CgsGeometric::Triangle4& lrTriangle4 = laTriangle4s[liTriangle4];
             const f32 lafValidMask[4] = {
-                lrTriangle4.mValidMasks.x, lrTriangle4.mValidMasks.y,
-                lrTriangle4.mValidMasks.z, lrTriangle4.mValidMasks.w
+                lrTriangle4.mValidMasks.mV.x, lrTriangle4.mValidMasks.mV.y,
+                lrTriangle4.mValidMasks.mV.z, lrTriangle4.mValidMasks.mV.w
             };
             for (s32 liLane = 0; liLane < 4; ++liLane)
             {
