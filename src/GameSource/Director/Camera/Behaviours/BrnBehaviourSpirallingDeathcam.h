@@ -135,20 +135,20 @@ public:
     // ------------------------------------------------------------------------
     struct VectorData
     {
-        f32&       YRotationDegs()             { return mVector1.x; }   // :109  lane X of mVector1
-        f32&       YRotationSpeedDegsPS()      { return mVector1.y; }   // :112  lane Y
-        f32&       Height()                    { return mVector1.z; }   // :115  lane Z
-        f32&       HeightIncreaseSpeed()       { return mVector1.w; }   // :118  lane W
-        f32&       Radius()                    { return mVector2.x; }   // :121  lane X of mVector2
-        f32&       RadiusIncreaseSpeed()       { return mVector2.y; }   // :124  lane Y
-        f32&       LookOffsetAmount()          { return mVector2.z; }   // :127  lane Z
-        const f32& YRotationDegs()       const { return mVector1.x; }
-        const f32& YRotationSpeedDegsPS() const { return mVector1.y; }
-        const f32& Height()              const { return mVector1.z; }
-        const f32& HeightIncreaseSpeed() const { return mVector1.w; }
-        const f32& Radius()              const { return mVector2.x; }
-        const f32& RadiusIncreaseSpeed() const { return mVector2.y; }
-        const f32& LookOffsetAmount()    const { return mVector2.z; }
+        rw::math::vpu::VecFloatRefX YRotationDegs() { return mVector1.X(); }
+        rw::math::vpu::VecFloatRefY YRotationSpeedDegsPS() { return mVector1.Y(); }
+        rw::math::vpu::VecFloatRefZ Height() { return mVector1.Z(); }
+        rw::math::vpu::VecFloatRefW HeightIncreaseSpeed() { return mVector1.W(); }
+        rw::math::vpu::VecFloatRefX Radius() { return mVector2.X(); }
+        rw::math::vpu::VecFloatRefY RadiusIncreaseSpeed() { return mVector2.Y(); }
+        rw::math::vpu::VecFloatRefZ LookOffsetAmount() { return mVector2.Z(); }
+        const rw::math::vpu::VecFloatRefX YRotationDegs() const { return mVector1.X(); }
+        const rw::math::vpu::VecFloatRefY YRotationSpeedDegsPS() const { return mVector1.Y(); }
+        const rw::math::vpu::VecFloatRefZ Height() const { return mVector1.Z(); }
+        const rw::math::vpu::VecFloatRefW HeightIncreaseSpeed() const { return mVector1.W(); }
+        const rw::math::vpu::VecFloatRefX Radius() const { return mVector2.X(); }
+        const rw::math::vpu::VecFloatRefY RadiusIncreaseSpeed() const { return mVector2.Y(); }
+        const rw::math::vpu::VecFloatRefZ LookOffsetAmount() const { return mVector2.Z(); }
 
         Vector4 mVector1;   // :131  console +0x270
         Vector4 mVector2;   // :132  console +0x280
