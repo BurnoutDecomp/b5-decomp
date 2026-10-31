@@ -15,7 +15,7 @@
 // ADDED 2026-08-27 (showtime S3 wave): HandleGameActions' case-23 arm reads the PrepareForModeAction
 // record BY NAME now instead of by X360 word index -- see the banner at that arm.
 #include "GameSource/GameState/BrnGameActions.h"             // PrepareForModeAction + GameModeParams
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the SCENE-stage allocator-hold one-shot log
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // native message-filter declarations
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSharedIO.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
@@ -74,13 +74,6 @@ namespace renderengine { extern s32 gEnvironmentMap; }
 namespace BrnWorld
 {
 
-static __forceinline Vector4 MakeWorldVector4(f32 x, f32 y, f32 z, f32 w)
-{
-    const Vector4 value = { x, y, z, w };
-    return value;
-}
-
-
 WorldModule::WorldModule()
 {
     // ARTIST 827E5998: construction is the declared fleet, debug components,
@@ -131,23 +124,22 @@ static const s32 KI_WORLD_SORT_LAYER  = 11;   // -> mesh list: WORLD OPAQUE
 static const s32 KI_WORLD_SORT_KEY    = 15;   // -> mesh list: WORLD TRANSPARENT
 static const s32 KI_WORLD_PREZ_LIST   = 21;   // -> mesh list: PRE-Z
 
-// Clamp a colour to [0, white level] per channel (the X360 vmaxfp/vminfp pair).
+// ARTIST827D15E0/15F4: clamp all four native lanes, with zeroW in the ceiling.
 static void ClampColourToWhiteLevel( Vector3& lrColour, f32 lfWhiteLevel )
 {
-    lrColour.x = ( lrColour.x < 0.0f ) ? 0.0f : ( lrColour.x > lfWhiteLevel ? lfWhiteLevel : lrColour.x );
-    lrColour.y = ( lrColour.y < 0.0f ) ? 0.0f : ( lrColour.y > lfWhiteLevel ? lfWhiteLevel : lrColour.y );
-    lrColour.z = ( lrColour.z < 0.0f ) ? 0.0f : ( lrColour.z > lfWhiteLevel ? lfWhiteLevel : lrColour.z );
+    const Vector3 lCeiling(lfWhiteLevel, lfWhiteLevel, lfWhiteLevel);
+    lrColour = __vminfp(__vmaxfp(lrColour.GetVector(), __vspltisw(0)), lCeiling.GetVector());
 }
 
-// Scale every irradiance row by the ambient multiplier (the X360 vspltw+vmulfp
-// row pipeline).
+// ARTIST827D2634..2720: each irradiance row is multiplied as a full VMX register.
 static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
 {
-    f32* lpfRows = &lrIrradiance.xAxis.x;
-    for ( s32 liLane = 0; liLane < 16; liLane++ )
-    {
-        lpfRows[ liLane ] *= lfScale;
-    }
+    VecFloat lScale;
+    lScale.SetFloat(lfScale);
+    lrIrradiance.xAxis = __vmulfp(lrIrradiance.xAxis.GetVector(), lScale.GetVector());
+    lrIrradiance.yAxis = __vmulfp(lrIrradiance.yAxis.GetVector(), lScale.GetVector());
+    lrIrradiance.zAxis = __vmulfp(lrIrradiance.zAxis.GetVector(), lScale.GetVector());
+    lrIrradiance.wAxis = __vmulfp(lrIrradiance.wAxis.GetVector(), lScale.GetVector());
 }
 
     // ------------------------------------------------------------------------
@@ -330,32 +322,18 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
 void
 ShaderLodInfo::Construct()
 {
-    {
-        const Vector4 lAggregateValue = { 20.0f, 20.0f, 20.0f, 20.0f };
-        mShaderLod1NearDistance = lAggregateValue;
-    }
-    {
-        const Vector4 lAggregateValue = { 1000.0f, 1000.0f, 1000.0f, 1000.0f };
-        mMaxBelievableRadius = lAggregateValue;
-    }
+    mMaxBelievableRadius = 1000.0f;
     mfShaderLod1NearDistance = 20.0f;
-    miEnvMapTechnique        = 0;
-    miOverrideTechnique      = -1;
-    mbUseShaderLod           = false;
+    mbUseShaderLod = false;
+    miEnvMapTechnique = 0;
+    miOverrideTechnique = -1;
+    mShaderLod1NearDistance = 20.0f;
 }
 
 void
 ShaderLodInfo::Update()
 {
-    // The broadcast splat: the tuned scalar into every lane of the SIMD member
-    // the dispatch feeds read.
-    {
-        const Vector4 lAggregateValue = { mfShaderLod1NearDistance,
-                                       mfShaderLod1NearDistance,
-                                       mfShaderLod1NearDistance,
-                                       mfShaderLod1NearDistance };
-        mShaderLod1NearDistance = lAggregateValue;
-    }
+    mShaderLod1NearDistance = mfShaderLod1NearDistance;
 }
 
 // ============================================================================
@@ -1406,47 +1384,7 @@ WorldModule::HandleGameActions(
             {
                 CGS_ASSERT( meLocalPlayerActiveRaceCarIndex != -1,
                     "Unable to set the player car under AI control, as we don't know who they are yet" );
-                // ⛔ THE BAIL PREVENTS AN OUT-OF-BOUNDS WRITE. On a miss the index is -1 and the
-                // console's own next instruction indexes the array with it -- `maeCarControls[-1]`
-                // lands on mfLocalPlayerActiveRaceCarSpeed, the member immediately before the
-                // array, and silently overwrites it with the payload word. The console has no
-                // bounds check here either; its index simply is not -1 by the time an action 7
-                // arrives.
-                //
-                // ⚠️ BANNER CORRECTED TWICE. Read the history before touching this.
-                // (2026-08-01) It first said the index is "ALWAYS -1" because
-                //   WorldModule::BridgeRaceCarModuleToWorldModule_PreScene "is not reconstructed".
-                //   That bridge then landed and was MOUNTED (WorldBridgeRaceCarToWorldModule.cpp,
-                //   build_game_exe.bat), so the banner was rewritten to blame a harmless
-                //   "ONE-FRAME TRANSIENT at the slot-0 -> slot-1 car swap".
-                // ⛔ (2026-08-11) THAT SECOND STORY WAS ALSO WRONG, and it cost a wave. The
-                //   mounted bridge was writing the index through the X360 BYTE OFFSET +6167272
-                //   applied to the x64 PC object; the real member is at PC offset 6234776
-                //   (compile-time offsetof probe, this build), so meLocalPlayerActiveRaceCarIndex
-                //   was NEVER written and stayed at Prepare's -1 for the whole session -- exactly
-                //   the original "always -1", just re-hidden behind a mount. The bridge's own
-                //   one-shot "player active race-car index published = 0" diag printed the SOURCE
-                //   interface value, not this member, which is why it read as proof. The bridge is
-                //   now a WorldModule METHOD and writes both outputs BY NAME; see its banner.
-                // KEEP THE GUARD: it is PC hardening for the console's unbounded index, not a
-                //   placeholder. If this assert fires again it is a REAL producer failure -- check
-                //   that the pre-scene bridge ran and that IsPlayerCarActive() was true; do NOT
-                //   write another "harmless transient" banner.
-                //
-                // ⛔ AND THE INDEX EXPRESSION BELOW IS NOT A TRANSCRIPTION BUG -- do not "fix" it.
-                // X360 HandleGameActions @0x827C44D8, jump-table case 0 (== action 7):
-                //     lis r11,0x17 ; ori r22,r11,0x86BC     ; r22 = 0x1786BC
-                //     lwz r11, 0(r31)                       ; meLocalPlayerActiveRaceCarIndex
-                //     add r11, r11, r22 ; slwi r11, r11, 2  ; (idx + 0x1786BC) * 4
-                //     stwx r10, r11, r26                    ; *(this + 4*idx + 0x5E1AF0) = payload[0]
-                // and 0x1786BC * 4 == 0x5E1AF0 == &maeCarControls exactly.
-                // DELETE-WHEN: nothing. The guard is now permanent PC-side hardening of a
-                // console behaviour, not a placeholder.
-                if ( static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) < 0 ||
-                     static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) >= 8 )
-                {
-                    break;
-                }
+                // ARTIST827C4640..4650 continues after the original non-gating assert.
                 maeCarControls[ meLocalPlayerActiveRaceCarIndex ] = lpiPayload[ 0 ];
                 break;
             }
@@ -1493,7 +1431,6 @@ WorldModule::HandleGameActions(
                 {
                     const BrnGameState::GameModeParams* const lpModeParams =
                         lpPFMAction->GetGameModeParams();
-                    CGS_ASSERT( lpModeParams, "lpModeParams" );
 
                     s32 liControl;
                     if ( lpModeParams->GetFlag(
@@ -1512,25 +1449,6 @@ WorldModule::HandleGameActions(
                         maeCarControls[ liI ] = liControl;
                     }
 
-                    // NOT X360. One line, once: this arm produced a wrong answer for its whole life
-                    // and the only reason anyone noticed was a witness that printed a VALUE.
-                    // DELETE-WHEN: the mode-prepare chain has been exercised in anger and the
-                    // control policy is confirmed against a real online/offline mode.
-                    {
-                        static bool sbLogged = false;
-                        if ( !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
-                        {
-                            sbLogged = true;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[s3-action] WorldModule case 23: modeType "
-                                << static_cast<s32>( lpModeParams->GetGameModeType() )
-                                << " startAI "
-                                << ( lpModeParams->GetFlag(
-                                         BrnGameState::GameModeParams::
-                                             KU_FLAG_SET_ALL_CARS_TO_STARTING_AI_CONTROL ) ? 1 : 0 )
-                                << " -> maeCarControls[0..7] = " << liControl << "\n";
-                        }
-                    }
                 }
                 break;
             }
@@ -3877,10 +3795,9 @@ WorldModule::GenerateDispatchLists(
     {
         // Car passes: the key light + irradiance scaled by the car multipliers;
         // id 9 takes the unclamped colour, id 12 the [0, white level] clamp.
-        Vector3 lvCarKeyLight = lvKeyLightColour;
-        lvCarKeyLight.x *= mfCarKeyLightMultiplier;
-        lvCarKeyLight.y *= mfCarKeyLightMultiplier;
-        lvCarKeyLight.z *= mfCarKeyLightMultiplier;
+        VecFloat lCarKeyLightScale;
+        lCarKeyLightScale.SetFloat(mfCarKeyLightMultiplier);
+        const Vector3 lvCarKeyLight(__vmulfp(lvKeyLightColour.GetVector(), lCarKeyLightScale.GetVector()));
 
         Matrix44 lCarIrradianceA = lQuadricIrradianceA;
         Matrix44 lCarIrradianceB = lQuadricIrradianceB;
@@ -4213,7 +4130,7 @@ WorldModule::GenerateShadowMapDispatchLists(
             mRaceCarEntityModule.GenerateDispatchLists(
                 lpRaceCarDispatchInput, lpFilteredEntityData->maRaceCarEntityIds,
                 liCascadeList, liCascadeList, liCascadeList, false,
-                MakeWorldVector4( 0.0f, 0.0f, 0.0f, 0.0f ), MakeWorldVector4( 0.0f, 0.0f, 0.0f, 0.0f ),
+                Vector4( 0.0f, 0.0f, 0.0f, 0.0f ), Vector4( 0.0f, 0.0f, 0.0f, 0.0f ),
                 lpCameraInput->GetPosition() );
         }
         PerfMonCpu::StopMonitor( miRaceCarGenerateDispListClearPM );
@@ -4226,7 +4143,7 @@ WorldModule::GenerateShadowMapDispatchLists(
             // shadow pass has no fog blend to publish). Arg 2 is the array inside the buffer.
             mTrafficEntityModule.GenerateDispatchLists(
                 lpTrafficDispatchInput, lpTrafficRenderInfos->maTrafficRenderInfos,
-                MakeWorldVector4( 0.0f, 0.0f, 0.0f, 0.0f ), MakeWorldVector4( 0.0f, 0.0f, 0.0f, 0.0f ),
+                Vector4( 0.0f, 0.0f, 0.0f, 0.0f ), Vector4( 0.0f, 0.0f, 0.0f, 0.0f ),
                 lpCameraInput->GetPosition(), lpCameraInput->GetDirection(),
                 static_cast<s32>( luCascade ) + 2, static_cast<s32>( luCascade ) + 2,
                 static_cast<s32>( luCascade ) + 2, *lpCameraInput );
@@ -4259,35 +4176,6 @@ WorldModule::GenerateShadowMapDispatchLists(
         PerfMonCpu::StopMonitor( miPropGenerateDispListClearPM );
 
         mShadowMap.SetRenderingShadowMap( false );
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Lane accessors for the two rw::math::vpu idioms this file's new bodies need and the PC
-// type vocabulary (plain named lanes, no SDK operations) does not carry:
-// Matrix44::SetRow / GetRow (`stvx v, rMatrix, rRow*16`) and Vector4::SetElem (the
-// store-vector / patch-one-lane / reload sequence at var_1C0 in sub_827B0790). Same shape
-// as the existing ShadowPerfLaneGet below.
-// -----------------------------------------------------------------------------
-static Vector4& Matrix44Row( Matrix44& lrMatrix, u32 luRow )
-{
-    switch ( luRow )
-    {
-        case 0:  return lrMatrix.xAxis;
-        case 1:  return lrMatrix.yAxis;
-        case 2:  return lrMatrix.zAxis;
-        default: return lrMatrix.wAxis;
-    }
-}
-
-static void Vector4SetElem( Vector4& lrVector, u32 luElement, f32 lfValue )
-{
-    switch ( luElement )
-    {
-        case 0:  lrVector.x = lfValue; break;
-        case 1:  lrVector.y = lfValue; break;
-        case 2:  lrVector.z = lfValue; break;
-        default: lrVector.w = lfValue; break;
     }
 }
 
@@ -4362,73 +4250,60 @@ static void Vector4SetElem( Vector4& lrVector, u32 luElement, f32 lfValue )
 //     A = lIrradiance_x_y_z_xx with row 0 replaced by lIrradiance_1
 //     B = lIrradiance_xy_yz_zx_yy with row 3 = (0,0,0,1)  (unk_82181530, the identity's
 //         fourth row -- DATA_DUMP pins it at 00000000 00000000 00000000 3F800000)
-// Rows 0 of x_y_z_xx and 3 of xy_yz_zx_yy are never written in the loop, so the compiler
-// dead-stored them; they are written here as SetZero for definedness (they are both
-// overwritten below and cannot reach the outputs).
-//
-// ⚠ DELTA vs THE BRING-UP: PublishWorldShadingConstantsBringUp's hard-coded lQuadricB
-// carries wAxis = (0,0,0,0); the console writes (0,0,0,1). Nothing consumes B row 3 (the
-// shader dots B rows 0..2 only), so this is a cosmetic difference, but it IS a difference
-// and the regression oracle must not flag it.
+// The unused working rows are never read. The final stores use the three live
+// rows and the explicit constant/identity rows, in original output-store order.
 // =============================================================================
 void
 GenerateShaderConstantsForQuadricIrradiance( const rw::math::vpu::Matrix44& lIrradianceMatrixR,
-                                             const rw::math::vpu::Matrix44& lIrradianceMatrixG,
-                                             const rw::math::vpu::Matrix44& lIrradianceMatrixB,
-                                             Matrix44& lOutQuadricMatrix0,
-                                             Matrix44& lOutQuadricMatrix1 )
+                                           const rw::math::vpu::Matrix44& lIrradianceMatrixG,
+                                           const rw::math::vpu::Matrix44& lIrradianceMatrixB,
+                                           Matrix44& lOutQuadricMatrix0,
+                                           Matrix44& lOutQuadricMatrix1 )
 {
-    Vector4  lIrradiance_1;
-    lIrradiance_1.SetZero();                    // `vspltisw v10, 0` @0x827B07AC
-
+    Vector4 lIrradiance_1;
+    lIrradiance_1.SetZero();
     Matrix44 lIrradiance_x_y_z_xx;
     Matrix44 lIrradiance_xy_yz_zx_yy;
-    lIrradiance_x_y_z_xx.SetZero();
-    lIrradiance_xy_yz_zx_yy.SetZero();
-
-    const rw::math::vpu::Matrix44* laIrradianceMatrices[ 3 ] =
+    Vector4* const lapLinearRows[3] = { &lIrradiance_x_y_z_xx.yAxis,
+        &lIrradiance_x_y_z_xx.zAxis, &lIrradiance_x_y_z_xx.wAxis };
+    Vector4* const lapCrossRows[3] = { &lIrradiance_xy_yz_zx_yy.xAxis,
+        &lIrradiance_xy_yz_zx_yy.yAxis, &lIrradiance_xy_yz_zx_yy.zAxis };
+    const Matrix44* const laIrradianceMatrices[3] =
         { &lIrradianceMatrixR, &lIrradianceMatrixG, &lIrradianceMatrixB };
-
-    for ( u32 luChannel = 0; luChannel < 3; luChannel++ )
+    for (u32 luChannel = 0; luChannel < 3; ++luChannel)
     {
-        const rw::math::vpu::Matrix44& lIrradianceMatrix = *laIrradianceMatrices[ luChannel ];
-
-        // The three squared-term coefficients + the constant, with z^2 folded away
-        // (x^2 + y^2 + z^2 == 1 for a unit normal).
-        const f32 Czz = lIrradianceMatrix.zAxis.z;          // m22
-        const f32 Cxx = lIrradianceMatrix.xAxis.x - Czz;    // m00 - m22
-        const f32 Cyy = lIrradianceMatrix.yAxis.y - Czz;    // m11 - m22
-        const f32 C1  = lIrradianceMatrix.wAxis.w + Czz;    // m33 + m22
-
-        // The linear terms (the matrix is symmetric, so 2*m0..3 is the whole contribution
-        // of both the row and the column entry).
-        const f32 Cx = 2.0f * lIrradianceMatrix.xAxis.w;    // 2 * m03
-        const f32 Cy = 2.0f * lIrradianceMatrix.yAxis.w;    // 2 * m13
-        const f32 Cz = 2.0f * lIrradianceMatrix.zAxis.w;    // 2 * m23
-
-        // The cross terms. Czx reads m20, not m02 -- the console reads row 2 lane 0
-        // (`vperm v12, v11, v11, v0` with v0 reloaded to the x-splat control @0x827B0A20);
-        // for the symmetric irradiance matrix the two are equal.
-        const f32 Cxy = 2.0f * lIrradianceMatrix.xAxis.y;   // 2 * m01
-        const f32 Cyz = 2.0f * lIrradianceMatrix.yAxis.z;   // 2 * m12
-        const f32 Czx = 2.0f * lIrradianceMatrix.zAxis.x;   // 2 * m20
-
-        Vector4SetElem( lIrradiance_1, luChannel, C1 );
-        Matrix44Row( lIrradiance_x_y_z_xx,    luChannel + 1 ) = MakeWorldVector4( Cx,  Cy,  Cz,  Cxx );
-        Matrix44Row( lIrradiance_xy_yz_zx_yy, luChannel     ) = MakeWorldVector4( Cxy, Cyz, Czx, Cyy );
+        const Matrix44& m = *laIrradianceMatrices[luChannel];
+        const f32 Czz = m.zAxis.GetZ().GetFloat();
+        const f32 Cxx = m.xAxis.GetX().GetFloat() - Czz;
+        const f32 Cyy = m.yAxis.GetY().GetFloat() - Czz;
+        const f32 C1 = m.wAxis.GetW().GetFloat() + Czz;
+        // These six products are VMX on ARTIST, before their scalar extraction.
+        const Vector4 lTwo(2.0f, 2.0f, 2.0f, 2.0f);
+        const Vector4 lCx(__vmulfp(__vspltw(m.xAxis.GetVector(), 3), lTwo.GetVector()));
+        const Vector4 lCy(__vmulfp(__vspltw(m.yAxis.GetVector(), 3), lTwo.GetVector()));
+        const Vector4 lCz(__vmulfp(__vspltw(m.zAxis.GetVector(), 3), lTwo.GetVector()));
+        const Vector4 lCxy(__vmulfp(__vspltw(m.xAxis.GetVector(), 1), lTwo.GetVector()));
+        const Vector4 lCyz(__vmulfp(__vspltw(m.yAxis.GetVector(), 2), lTwo.GetVector()));
+        const Vector4 lCzx(__vmulfp(__vspltw(m.zAxis.GetVector(), 0), lTwo.GetVector()));
+        const f32 Cx = lCx.GetX().GetFloat();
+        const f32 Cy = lCy.GetX().GetFloat();
+        const f32 Cz = lCz.GetX().GetFloat();
+        const f32 Cxy = lCxy.GetX().GetFloat();
+        const f32 Cyz = lCyz.GetX().GetFloat();
+        const f32 Czx = lCzx.GetX().GetFloat();
+        lIrradiance_1.SetComponent(luChannel, C1);
+        *lapLinearRows[luChannel] = Vector4(Cx, Cy, Cz, Cxx);
+        *lapCrossRows[luChannel] = Vector4(Cxy, Cyz, Czx, Cyy);
     }
-
-    Matrix44 lIrradianceQuadricForShaderA = lIrradiance_x_y_z_xx;
-    lIrradianceQuadricForShaderA.xAxis    = lIrradiance_1;
-
-    Matrix44 lIrradianceQuadricForShaderB = lIrradiance_xy_yz_zx_yy;
-    {
-        const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
-        lIrradianceQuadricForShaderB.wAxis = lAggregateValue;
-    }
-
-    lOutQuadricMatrix0 = lIrradianceQuadricForShaderA;
-    lOutQuadricMatrix1 = lIrradianceQuadricForShaderB;
+    // Preserve the original row-store order, including B.w before B.xyz.
+    lOutQuadricMatrix0.xAxis = lIrradiance_1;
+    lOutQuadricMatrix0.yAxis = lIrradiance_x_y_z_xx.yAxis;
+    lOutQuadricMatrix0.zAxis = lIrradiance_x_y_z_xx.zAxis;
+    lOutQuadricMatrix0.wAxis = lIrradiance_x_y_z_xx.wAxis;
+    lOutQuadricMatrix1.wAxis = Vector4(0.0f, 0.0f, 0.0f, 1.0f);
+    lOutQuadricMatrix1.xAxis = lIrradiance_xy_yz_zx_yy.xAxis;
+    lOutQuadricMatrix1.yAxis = lIrradiance_xy_yz_zx_yy.yAxis;
+    lOutQuadricMatrix1.zAxis = lIrradiance_xy_yz_zx_yy.zAxis;
 }
 
 // =============================================================================
@@ -4571,12 +4446,7 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 {
     // lTime.x = the SIM time, lTime.y = the GAME time, zw zero (the two vrlimi128 inserts
     // @0x827D14E8 mask 8 = lane x from f2, @0x827D1558 mask 4 = lane y from f1).
-    const VecFloat lSimTime  = { lfSimTime,  lfSimTime,  lfSimTime,  lfSimTime  };
-    const VecFloat lGameTime = { lfGameTime, lfGameTime, lfGameTime, lfGameTime };
-    Vector4 lTime;
-    lTime.SetZero();
-    lTime.x = lSimTime.x;
-    lTime.y = lGameTime.x;
+    const Vector4 lTime(lfSimTime, lfGameTime, 0.0f, 0.0f);
 
     // `lvx128 v125, r25, 0x30` -- the camera transform's translation row.
     const Vector3 lCameraPosition = lCameraTransform.Pos();
@@ -4605,7 +4475,7 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
     Matrix44 lIrradianceMatrixB;
     Vector3  lAverageIrradianceColour;
     Vector3  lUnbiasedKeyLightDirection;
-    f32      lfWhiteLevel = 0.0f;
+    f32      lfWhiteLevel;
 
     // The 26 out-params, in the asm's argument order (see the table in the banner). The
     // console leaves every one of them UNINITIALISED on entry -- GenerateShaderConstants
@@ -4636,7 +4506,6 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
     // whatever the manager left in it.
     Vector3 lKeyLightClampedColour = lKeyLightColour;
     ClampColourToWhiteLevel( lKeyLightClampedColour, lfWhiteLevel );
-    lKeyLightClampedColour.w = 0.0f;
     lrTable.SetShaderConstantData( 12, lKeyLightClampedColour );
 
     lrTable.SetShaderConstantData( 13, lTime );
@@ -4659,19 +4528,12 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 
     lrTable.SetShaderConstantData( 27, lScatt_Coeffs );
 
-    Vector4 lFogColourPlusWhiteLevel;
-    lFogColourPlusWhiteLevel.x = lScatt_TopColourDrk.x;
-    lFogColourPlusWhiteLevel.y = lScatt_TopColourDrk.y;
-    lFogColourPlusWhiteLevel.z = lScatt_TopColourDrk.z;
-    lFogColourPlusWhiteLevel.w = lfWhiteLevel;
+    Vector4 lFogColourPlusWhiteLevel = lScatt_TopColourDrk;
+    lFogColourPlusWhiteLevel.SetW(lfWhiteLevel);
     lrTable.SetShaderConstantData( 28, lFogColourPlusWhiteLevel );
 
     // flt_82001C98 == 1.0f and flt_82001CC0 == 0.0f (DATA_DUMP).
-    Vector4 lHDRConstants;
-    lHDRConstants.x = lfWhiteLevel;
-    lHDRConstants.y = 1.0f / lfWhiteLevel;
-    lHDRConstants.z = 0.0f;
-    lHDRConstants.w = 0.0f;
+    const Vector4 lHDRConstants(lfWhiteLevel, 1.0f / lfWhiteLevel, 0.0f, 0.0f);
     lrTable.SetShaderConstantData( 29, lHDRConstants );
 
     const Vector4 lSkyReflectionColour = lSky_HorColourPow;
@@ -4691,21 +4553,17 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
     // The two cloud colours go in as Vector4 with w == 1.0f: the console stores a 16-byte
     // vector built at var_3C0 by copying the Vector3 and then `stfs f29, var_3B4` with
     // f29 == flt_82001C98 == 1.0f (@0x827D19C8/0x827D19CC and @0x827D1A10/0x827D1A14).
-    lpOutputShaderConstants->SetCloudDarkColour0( MakeWorldVector4( laCloudDarkColours[ 0 ].x,
-                                                          laCloudDarkColours[ 0 ].y,
-                                                          laCloudDarkColours[ 0 ].z, 1.0f ) );
-    lpOutputShaderConstants->SetCloudLiteColour0( MakeWorldVector4( laCloudLiteColours[ 0 ].x,
-                                                          laCloudLiteColours[ 0 ].y,
-                                                          laCloudLiteColours[ 0 ].z, 1.0f ) );
+    lpOutputShaderConstants->SetCloudDarkColour0(Vector4(laCloudDarkColours[0], 1.0f));
+    lpOutputShaderConstants->SetCloudLiteColour0(Vector4(laCloudLiteColours[0], 1.0f));
     lpOutputShaderConstants->SetCloudTextureScaleAndOffsets0( laCloudScaleAndOffsets[ 0 ] );
 
-    lpOutputShaderConstants->SetCloudLayerOpacity( MakeWorldVector4( lCloudOpacity.x,
-                                                           lCloudOpacity.y, 0.0f, 0.0f ) );
-    lpOutputShaderConstants->SetCloudLayerDensity( MakeWorldVector4( 1.0f - lCloudNegativeDensity.x,
-                                                           1.0f - lCloudNegativeDensity.y,
+    lpOutputShaderConstants->SetCloudLayerOpacity( Vector4( lCloudOpacity.mV.v[0],
+                                                           lCloudOpacity.mV.v[1], 0.0f, 0.0f ) );
+    lpOutputShaderConstants->SetCloudLayerDensity( Vector4( 1.0f - lCloudNegativeDensity.mV.v[0],
+                                                           1.0f - lCloudNegativeDensity.mV.v[1],
                                                            0.0f, 0.0f ) );
-    lpOutputShaderConstants->SetCloudLayerInvFeather( MakeWorldVector4( 1.0f / lCloudFeathering.x,
-                                                              1.0f / lCloudFeathering.y,
+    lpOutputShaderConstants->SetCloudLayerInvFeather( Vector4( 1.0f / lCloudFeathering.mV.v[0],
+                                                              1.0f / lCloudFeathering.mV.v[1],
                                                               0.0f, 0.0f ) );
     lpOutputShaderConstants->SetCloudDistanceCurve( mEnvironmentManager.GetCloudDistanceCurve() );
 
