@@ -88,12 +88,7 @@ namespace
     // `vmulfp128 vD, splat(lfScale), lrColumn` -- the first term of an accumulation chain.
     rw::math::vpu::Vector3 ScaleVector(f32 lfScale, const rw::math::vpu::Vector3& lrColumn)
     {
-        rw::math::vpu::Vector3 lResult;
-        lResult.x = lfScale * lrColumn.x;
-        lResult.y = lfScale * lrColumn.y;
-        lResult.z = lfScale * lrColumn.z;
-        lResult.w = lfScale * lrColumn.w;
-        return lResult;
+        return rw::math::vpu::Vector3(__vmulfp(XMVectorReplicate(lfScale), lrColumn.mV));
     }
 
     // `vmaddfp vD, splat(lfScale), vD, lrColumn` -- IDA prints vmaddfp in RAW FIELD ORDER
@@ -102,10 +97,7 @@ namespace
     void ScaleAndAdd(rw::math::vpu::Vector3& lrAccumulator, f32 lfScale,
                      const rw::math::vpu::Vector3& lrColumn)
     {
-        lrAccumulator.x += lfScale * lrColumn.x;
-        lrAccumulator.y += lfScale * lrColumn.y;
-        lrAccumulator.z += lfScale * lrColumn.z;
-        lrAccumulator.w += lfScale * lrColumn.w;
+        lrAccumulator.mV = __vmaddfp(XMVectorReplicate(lfScale), lrColumn.mV, lrAccumulator.mV);
     }
 
     // `vcmpeqfp. v0, v0, v0` + the CR6 "all four lanes compared equal" bit: a float compares
@@ -139,9 +131,9 @@ namespace
                          const rw::math::vpu::Vector3& lrCurrent,
                          f32 lfEpsilon)
     {
-        return fabsf(lrLast.x - lrCurrent.x) <= lfEpsilon
-            && fabsf(lrLast.y - lrCurrent.y) <= lfEpsilon
-            && fabsf(lrLast.z - lrCurrent.z) <= lfEpsilon;
+        return fabsf(lrLast.mV.x - lrCurrent.mV.x) <= lfEpsilon
+            && fabsf(lrLast.mV.y - lrCurrent.mV.y) <= lfEpsilon
+            && fabsf(lrLast.mV.z - lrCurrent.mV.z) <= lfEpsilon;
     }
 
     // ------------------------------------------------------------------------
@@ -265,14 +257,14 @@ void BehaviourRotateAboutVehicle::Construct()
     // a Y rotation. (Only the DIRECTION matters -- every reader normalises again.)
     mNormalisedOffsetDir = XMMatrixRotationY(-1.5707964f * 0.5f * 0.5f).zAxis;
 
-    mLastShakeTransform.xAxis.x = 1.0f; mLastShakeTransform.xAxis.y = 0.0f;
-    mLastShakeTransform.xAxis.z = 0.0f; mLastShakeTransform.xAxis.w = 0.0f;
-    mLastShakeTransform.yAxis.x = 0.0f; mLastShakeTransform.yAxis.y = 1.0f;
-    mLastShakeTransform.yAxis.z = 0.0f; mLastShakeTransform.yAxis.w = 0.0f;
-    mLastShakeTransform.zAxis.x = 0.0f; mLastShakeTransform.zAxis.y = 0.0f;
-    mLastShakeTransform.zAxis.z = 1.0f; mLastShakeTransform.zAxis.w = 0.0f;
-    mLastShakeTransform.wAxis.x = 0.0f; mLastShakeTransform.wAxis.y = 0.0f;
-    mLastShakeTransform.wAxis.z = 0.0f; mLastShakeTransform.wAxis.w = 0.0f;
+    mLastShakeTransform.xAxis.mV.x = 1.0f; mLastShakeTransform.xAxis.mV.y = 0.0f;
+    mLastShakeTransform.xAxis.mV.z = 0.0f; mLastShakeTransform.xAxis.mV.w = 0.0f;
+    mLastShakeTransform.yAxis.mV.x = 0.0f; mLastShakeTransform.yAxis.mV.y = 1.0f;
+    mLastShakeTransform.yAxis.mV.z = 0.0f; mLastShakeTransform.yAxis.mV.w = 0.0f;
+    mLastShakeTransform.zAxis.mV.x = 0.0f; mLastShakeTransform.zAxis.mV.y = 0.0f;
+    mLastShakeTransform.zAxis.mV.z = 1.0f; mLastShakeTransform.zAxis.mV.w = 0.0f;
+    mLastShakeTransform.wAxis.mV.x = 0.0f; mLastShakeTransform.wAxis.mV.y = 0.0f;
+    mLastShakeTransform.wAxis.mV.z = 0.0f; mLastShakeTransform.wAxis.mV.w = 0.0f;
 
     mpParameters = 0;
 }
@@ -357,7 +349,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
     //   `vcfsx`, adds them and runs a vrsqrtefp+2x-Newton reciprocal-square-root, i.e.
     //   `Sqrt(1.0f + 2.0f)`); it is transcribed as that, literally, rather than guessed at.
     static const f32 KF_ORBIT_SEED_MAGNITUDE = sqrtf(1.0f + 2.0f);
-    const Vector3 lSeedDirection = { 0.0f, 0.0f, -KF_ORBIT_SEED_MAGNITUDE, 0.0f };
+    const Vector3 lSeedDirection(XMVectorSet( 0.0f, 0.0f, -KF_ORBIT_SEED_MAGNITUDE, 0.0f ));
 
     const bool lbLookback   = mRotationController.IsLookback();
     const f32  lfPitchDegs  = lbLookback ? 0.0f : mRotationController.GetPitchRotationAngleDegs();
@@ -374,7 +366,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
     // The frame the orbit is expressed in: a look-at built from the re-seated offset direction
     // against the origin, so only its ROTATION is meaningful (CreateLookAt normalises the eye
     // internally, which is why BecomeSimilarTo's un-normalised store is harmless).
-    const Vector3 lOrigin = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lOrigin(XMVectorSet( 0.0f, 0.0f, 0.0f, 0.0f ));
     lOffsetDirection =
         rw::math::vpu::TransformVector(Utils::CreateLookAt(mNormalisedOffsetDir, lOrigin),
                                        lOffsetDirection);
@@ -399,33 +391,33 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[orbit-extent] read #" << static_cast<s32>(suExtentReadCount)
-                    << " halfExtent (" << lrHalfExtent.x << ", " << lrHalfExtent.y
-                    << ", " << lrHalfExtent.z << ") carPos ("
-                    << lrVehicleTransform.wAxis.x << ", " << lrVehicleTransform.wAxis.y
-                    << ", " << lrVehicleTransform.wAxis.z << ")\n";
+                    << " halfExtent (" << lrHalfExtent.mV.x << ", " << lrHalfExtent.mV.y
+                    << ", " << lrHalfExtent.mV.z << ") carPos ("
+                    << lrVehicleTransform.wAxis.mV.x << ", " << lrVehicleTransform.wAxis.mV.y
+                    << ", " << lrVehicleTransform.wAxis.mV.z << ")\n";
             }
         }
     }
 
     // `vrefp128` + three Newton-Raphson refinements == the reciprocal of the half-extent,
     // folded here to the divide it converges to (the tree's rw vpu reconstruction precedent).
-    const Vector3 lInEllipsoidSpace = { lOffsetDirection.x / lrHalfExtent.x,
-                                        lOffsetDirection.y / lrHalfExtent.y,
-                                        lOffsetDirection.z / lrHalfExtent.z,
-                                        0.0f };
+    const Vector3 lInEllipsoidSpace(XMVectorSet( lOffsetDirection.mV.x / lrHalfExtent.mV.x,
+                                        lOffsetDirection.mV.y / lrHalfExtent.mV.y,
+                                        lOffsetDirection.mV.z / lrHalfExtent.mV.z,
+                                        0.0f ));
 
     // vmsum3fp128 + vrsqrtefp128 + two Newton-Raphson steps.
-    const f32 lfLengthSquared    = lInEllipsoidSpace.x * lInEllipsoidSpace.x
-                                 + lInEllipsoidSpace.y * lInEllipsoidSpace.y
-                                 + lInEllipsoidSpace.z * lInEllipsoidSpace.z;
+    const f32 lfLengthSquared    = lInEllipsoidSpace.mV.x * lInEllipsoidSpace.mV.x
+                                 + lInEllipsoidSpace.mV.y * lInEllipsoidSpace.mV.y
+                                 + lInEllipsoidSpace.mV.z * lInEllipsoidSpace.mV.z;
     const f32 lfReciprocalLength = 1.0f / sqrtf(lfLengthSquared);
 
     // ...normalised there, then scaled BACK by the same half-extent: the eye lands exactly on
     // the car's bounding ellipsoid in whichever direction the orbit currently points.
-    const Vector3 lEllipsoidOffset = { lInEllipsoidSpace.x * lfReciprocalLength * lrHalfExtent.x,
-                                       lInEllipsoidSpace.y * lfReciprocalLength * lrHalfExtent.y,
-                                       lInEllipsoidSpace.z * lfReciprocalLength * lrHalfExtent.z,
-                                       0.0f };
+    const Vector3 lEllipsoidOffset(XMVectorSet( lInEllipsoidSpace.mV.x * lfReciprocalLength * lrHalfExtent.mV.x,
+                                       lInEllipsoidSpace.mV.y * lfReciprocalLength * lrHalfExtent.mV.y,
+                                       lInEllipsoidSpace.mV.z * lfReciprocalLength * lrHalfExtent.mV.z,
+                                       0.0f ));
 
     const Vector3 lEyePosition = rw::math::vpu::TransformPoint(lrVehicleTransform,
                                                                lEllipsoidOffset);
@@ -434,11 +426,11 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
     // eye-to-car vector, so this pushes the eye AWAY from the car by four times the ellipsoid
     // radius it is currently sitting at -- a five-radius orbit in total.
     const Vector3& lrVehiclePosition = lrVehicleTransform.wAxis;
-    const Vector3  lMovedBackPos = {
-        lEyePosition.x - (lrVehiclePosition.x - lEyePosition.x) * KF_STEP_BACK_DISTANCE,
-        lEyePosition.y - (lrVehiclePosition.y - lEyePosition.y) * KF_STEP_BACK_DISTANCE,
-        lEyePosition.z - (lrVehiclePosition.z - lEyePosition.z) * KF_STEP_BACK_DISTANCE,
-        0.0f };
+    const Vector3  lMovedBackPos(XMVectorSet(
+        lEyePosition.mV.x - (lrVehiclePosition.mV.x - lEyePosition.mV.x) * KF_STEP_BACK_DISTANCE,
+        lEyePosition.mV.y - (lrVehiclePosition.mV.y - lEyePosition.mV.y) * KF_STEP_BACK_DISTANCE,
+        lEyePosition.mV.z - (lrVehiclePosition.mV.z - lEyePosition.mV.z) * KF_STEP_BACK_DISTANCE,
+        0.0f ));
 
     CGS_ASSERT(IsValid(lMovedBackPos), "IsValid(lMovedBackPos)");                   // .cpp:171
     lrCamera.mTransform.wAxis = lMovedBackPos;   // stvx128 v127, r0, r19 (camera +0x30)
@@ -461,9 +453,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
                                mAttachedTo.Get(lrInfo.GetWorld())->mRaceCarState.mTransform,
                                mAttachedTo.Get(lrInfo.GetWorld())->mAABB);
 
-    const Vector2 lTargetScreenSize = { mpParameters->mLookerParams.mfTargetSubjectXSize,
-                                        mpParameters->mLookerParams.mfTargetSubjectYSize,
-                                        0.0f, 0.0f };
+    const Vector2 lTargetScreenSize(mpParameters->mLookerParams.mfTargetSubjectXSize, mpParameters->mLookerParams.mfTargetSubjectYSize);
 
     const f32 lfFittedFOVDegs = Utils::GetFOVDegsToFitObjectToScreenSize(lrCamera.mfFOV,
                                                                         lSizeOnScreen,
@@ -474,10 +464,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
                     + lrCamera.mfFOV);
 
     // ---- 6. apply the authored screen offset and re-fit -----------------------
-    const Vector2 lTargetScreenOffset = {
-        mpParameters->mLookerParams.mfTargetSubjectXScreenOffset,
-        mpParameters->mLookerParams.mfTargetSubjectYScreenOffset,
-        0.0f, 0.0f };
+    const Vector2 lTargetScreenOffset(mpParameters->mLookerParams.mfTargetSubjectXScreenOffset, mpParameters->mLookerParams.mfTargetSubjectYScreenOffset);
 
     const Matrix44Affine lAdjustedLookAt = Utils::CreateAdjustedLookAt(lrCamera.mTransform,
                                                                       lrCamera.mfFOV,
@@ -512,14 +499,14 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
     // builds one on its stack from gIVector / (0,1,0,0) / (0,0,1,0) / zero and hands its
     // address to CameraShake::Update.
     Matrix44Affine lShakeTransform;
-    lShakeTransform.xAxis.x = 1.0f; lShakeTransform.xAxis.y = 0.0f;
-    lShakeTransform.xAxis.z = 0.0f; lShakeTransform.xAxis.w = 0.0f;
-    lShakeTransform.yAxis.x = 0.0f; lShakeTransform.yAxis.y = 1.0f;
-    lShakeTransform.yAxis.z = 0.0f; lShakeTransform.yAxis.w = 0.0f;
-    lShakeTransform.zAxis.x = 0.0f; lShakeTransform.zAxis.y = 0.0f;
-    lShakeTransform.zAxis.z = 1.0f; lShakeTransform.zAxis.w = 0.0f;
-    lShakeTransform.wAxis.x = 0.0f; lShakeTransform.wAxis.y = 0.0f;
-    lShakeTransform.wAxis.z = 0.0f; lShakeTransform.wAxis.w = 0.0f;
+    lShakeTransform.xAxis.mV.x = 1.0f; lShakeTransform.xAxis.mV.y = 0.0f;
+    lShakeTransform.xAxis.mV.z = 0.0f; lShakeTransform.xAxis.mV.w = 0.0f;
+    lShakeTransform.yAxis.mV.x = 0.0f; lShakeTransform.yAxis.mV.y = 1.0f;
+    lShakeTransform.yAxis.mV.z = 0.0f; lShakeTransform.yAxis.mV.w = 0.0f;
+    lShakeTransform.zAxis.mV.x = 0.0f; lShakeTransform.zAxis.mV.y = 0.0f;
+    lShakeTransform.zAxis.mV.z = 1.0f; lShakeTransform.zAxis.mV.w = 0.0f;
+    lShakeTransform.wAxis.mV.x = 0.0f; lShakeTransform.wAxis.mV.y = 0.0f;
+    lShakeTransform.wAxis.mV.z = 0.0f; lShakeTransform.wAxis.mV.w = 0.0f;
 
     // ⚠️ THE SHAKE RUNS ON *THIS BEHAVIOUR'S DECLARED* TIMESTEP FLAVOUR (`lwz r29, 4(this)`
     //   then `lfsx f1, (r29 + 0x160)*4, info`), not on the E_GAME one step 2 used. That is
@@ -542,7 +529,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
     //   returns those four and nothing else. mfShakeBlending0to1 stays 0.0f on the console
     //   too, so THIS CAMERA HAS NO SHAKE BY DESIGN and the SLerp is a no-op on the shipped
     //   path. The code stays because the console runs it.
-    Vector3 lUnusedAngle = { 0.0f, 0.0f, 0.0f, 0.0f };
+    Vector3 lUnusedAngle(XMVectorSet( 0.0f, 0.0f, 0.0f, 0.0f ));
     mLastShakeTransform = rw::math::vpu::SLerp(mLastShakeTransform,
                                                lShakeTransform,
                                                mpParameters->mfShakeBlending0to1,
@@ -659,9 +646,9 @@ void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
     // Columns of the vehicle basis, i.e. the rows of its transpose. Lane 3 is zero in all
     // three (the six vmrghw/vmrglw merge the basis rows against a zeroed register), which is
     // what keeps the w lane out of the accumulation below.
-    const Vector3 lColumn0 = { lrVehicleSpace.xAxis.x, lrVehicleSpace.yAxis.x, lrVehicleSpace.zAxis.x, 0.0f };
-    const Vector3 lColumn1 = { lrVehicleSpace.xAxis.y, lrVehicleSpace.yAxis.y, lrVehicleSpace.zAxis.y, 0.0f };
-    const Vector3 lColumn2 = { lrVehicleSpace.xAxis.z, lrVehicleSpace.yAxis.z, lrVehicleSpace.zAxis.z, 0.0f };
+    const Vector3 lColumn0(XMVectorSet( lrVehicleSpace.xAxis.mV.x, lrVehicleSpace.yAxis.mV.x, lrVehicleSpace.zAxis.mV.x, 0.0f ));
+    const Vector3 lColumn1(XMVectorSet( lrVehicleSpace.xAxis.mV.y, lrVehicleSpace.yAxis.mV.y, lrVehicleSpace.zAxis.mV.y, 0.0f ));
+    const Vector3 lColumn2(XMVectorSet( lrVehicleSpace.xAxis.mV.z, lrVehicleSpace.yAxis.mV.z, lrVehicleSpace.zAxis.mV.z, 0.0f ));
 
     const Vector3& lrVehiclePosition = lrVehicleSpace.wAxis;
     const Vector3& lrCameraPosition  = lrSourceCamera.mTransform.wAxis;   // camera +0x30
@@ -670,21 +657,19 @@ void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
     // Kept as the console's TWO accumulation groups (inverse translation first, then the
     // camera term) rather than folded to `transpose * (camera - vehicle)`, so the order of
     // operations matches the asm.
-    Vector3 lLocalOffset = ScaleVector(-lrVehiclePosition.z, lColumn2);   // vmulfp128 v0, v8, v10
-    ScaleAndAdd(lLocalOffset, -lrVehiclePosition.y, lColumn1);            // vmaddfp   v0, v4, v0, v9
-    ScaleAndAdd(lLocalOffset, -lrVehiclePosition.x, lColumn0);            // vmaddfp   v0, v11, v0, v12
-    ScaleAndAdd(lLocalOffset,  lrCameraPosition.x,  lColumn0);            // vmaddfp   v0, v12, v0, v7
-    ScaleAndAdd(lLocalOffset,  lrCameraPosition.y,  lColumn1);            // vmaddfp   v0, v9, v0, v6
-    ScaleAndAdd(lLocalOffset,  lrCameraPosition.z,  lColumn2);            // vmaddfp   v0, v10, v0, v5
+    Vector3 lLocalOffset = ScaleVector(-lrVehiclePosition.mV.z, lColumn2);   // vmulfp128 v0, v8, v10
+    ScaleAndAdd(lLocalOffset, -lrVehiclePosition.mV.y, lColumn1);            // vmaddfp   v0, v4, v0, v9
+    ScaleAndAdd(lLocalOffset, -lrVehiclePosition.mV.x, lColumn0);            // vmaddfp   v0, v11, v0, v12
+    ScaleAndAdd(lLocalOffset,  lrCameraPosition.mV.x,  lColumn0);            // vmaddfp   v0, v12, v0, v7
+    ScaleAndAdd(lLocalOffset,  lrCameraPosition.mV.y,  lColumn1);            // vmaddfp   v0, v9, v0, v6
+    ScaleAndAdd(lLocalOffset,  lrCameraPosition.mV.z,  lColumn2);            // vmaddfp   v0, v10, v0, v5
 
     // ---- flatten onto the car's horizontal plane ----------------------------
     // Lane 1 of the local offset is the component along the car's UP axis; dropping it keeps
-    // the orbit level with the car. The console leaves lLocalOffset.x in the w lane (the
+    // the orbit level with the car. The console leaves lLocalOffset.mV.x in the w lane (the
     // vperm mask @0x82CDA350 broadcasts lane 0 into lanes 0/2/3 before the vrlimi128 overwrites
-    // lane 2) -- that is Vector3's undefined 4th lane, written 0.0f here to match the tree's
-    // established Vector3(x,y,z) reconstruction (Camera::CreateHeadingSpaceLookAt uses the
-    // identical codegen with the identical mask).
-    const Vector3 lFlatOffset = { lLocalOffset.x, 0.0f, lLocalOffset.z, 0.0f };
+    // lane 2). Preserve the copied X value in the fourth lane.
+    const Vector3 lFlatOffset(XMVectorSet(lLocalOffset.mV.x, 0.0f, lLocalOffset.mV.z, lLocalOffset.mV.x));
 
     // ---- normalise, purely to detect the degenerate case --------------------
     // The console runs vrsqrtefp + two Newton-Raphson steps, which converges to the true
@@ -692,24 +677,24 @@ void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
     // precedent. The DEGENERATE behaviour is preserved: a zero-length offset (the camera
     // exactly above/below the car) yields an infinite scale, and the y lane's 0 * inf is a NaN
     // on both targets, so the test below fails identically.
-    const f32 lfLengthSquared = lFlatOffset.x * lFlatOffset.x
-                              + lFlatOffset.y * lFlatOffset.y
-                              + lFlatOffset.z * lFlatOffset.z;         // vmsum3fp128 v0, v12, v12
+    const f32 lfLengthSquared = lFlatOffset.mV.x * lFlatOffset.mV.x
+                              + lFlatOffset.mV.y * lFlatOffset.mV.y
+                              + lFlatOffset.mV.z * lFlatOffset.mV.z;         // vmsum3fp128 v0, v12, v12
     const f32 lfReciprocalLength = 1.0f / sqrtf(lfLengthSquared);
 
-    const Vector3 lNormalised = { lFlatOffset.x * lfReciprocalLength,   // vmulfp128 v11, v12, v0
-                                  lFlatOffset.y * lfReciprocalLength,
-                                  lFlatOffset.z * lfReciprocalLength,
-                                  lFlatOffset.w * lfReciprocalLength };
+    const Vector3 lNormalised(XMVectorSet( lFlatOffset.mV.x * lfReciprocalLength,   // vmulfp128 v11, v12, v0
+                                  lFlatOffset.mV.y * lfReciprocalLength,
+                                  lFlatOffset.mV.z * lfReciprocalLength,
+                                  lFlatOffset.mV.w * lfReciprocalLength ));
 
-    if (IsNotNaN(lNormalised.x) && IsNotNaN(lNormalised.y) && IsNotNaN(lNormalised.z))
+    if (IsNotNaN(lNormalised.mV.x) && IsNotNaN(lNormalised.mV.y) && IsNotNaN(lNormalised.mV.z))
     {
         // ⚠️ the RAW flattened offset, NOT lNormalised -- see the SHIPPED-CONSOLE QUIRK banner.
         mNormalisedOffsetDir = lFlatOffset;                                 // stvx128 v12, r31, 0x360
     }
     else
     {
-        mNormalisedOffsetDir = { 0.0f, 0.0f, 1.0f, 0.0f };                  // .rdata @0x82181520
+        mNormalisedOffsetDir = Vector3(0.0f, 0.0f, 1.0f);                  // .rdata @0x82181520
     }
 
     // ---- wipe the free-look rotation state ----------------------------------
