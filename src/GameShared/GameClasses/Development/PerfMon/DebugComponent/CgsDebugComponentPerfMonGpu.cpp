@@ -9,7 +9,6 @@
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdlib>
-#include <cmath>  // std::fma preserves the X360 fused scale-bar endpoint
 
 // CgsDev::DebugComponentPerfMonGpu - the GPU performance overlay bodies. RenderHUD picks the table or
 // graph view; both walk the PerfMonGpu registry via ReportMonitors, drawing one row/bar per monitor
@@ -113,8 +112,7 @@ namespace CgsDev
 
         // The title sits 1.5 text rows above the first monitor row (fnmsubs, flt_82004D04).
         const Vector2 lv2TitlePos = { lrMetrics.mfScreenBorderLeft,
-                                     std::fma( -lfRowHeight, KF_TABLETITLEHEIGHT,
-                                               lrMetrics.mfScreenBorderTop ),
+                                     lrMetrics.mfScreenBorderTop - lfRowHeight * KF_TABLETITLEHEIGHT,
                                      0.0f, 0.0f };
         lpDebug2DRender->DrawText( "GPU Render Cost", lv2TitlePos, lfRowHeight, 0xFFFFFFFFu, false );
 
@@ -145,8 +143,7 @@ namespace CgsDev
         // Five 10-pixel-wide grid bars. Their y span is (originY+4) through (originY+7).
         for ( u32 luLine = 0; luLine < 5u; ++luLine )
         {
-            const f32 lfGridX = std::fma( static_cast<f32>( luLine ), KF_GRAPHCOLUMNPITCH,
-                                          KF_GRAPHORIGINX );
+            const f32 lfGridX = static_cast<f32>( luLine ) * KF_GRAPHCOLUMNPITCH + KF_GRAPHORIGINX;
             const f32 lfGridY = KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT;
             const Vector2 lv2Min = { lfGridX - KF_GRAPHGRIDHALF, lfGridY, 0.0f, 0.0f };
             const Vector2 lv2Size = { (lfGridX + KF_GRAPHGRIDHALF) - lv2Min.x,
@@ -173,8 +170,7 @@ namespace CgsDev
 
         // The translucent reference bar showing the current vertical scale (mfMaxGpu).
         {
-            const f32 lfBarRight = std::fma( mfMaxGpu, KF_GRAPHREFERENCEBARSCALE,
-                                             KF_GRAPHORIGINX ); // fmadds, flt_820DD6F4
+            const f32 lfBarRight = mfMaxGpu * KF_GRAPHREFERENCEBARSCALE + KF_GRAPHORIGINX; // fmadds, flt_820DD6F4
             const Vector2 lv2Min = { KF_GRAPHORIGINX, KF_GRAPHORIGINY,                     0.0f, 0.0f };
             const Vector2 lv2Size = { lfBarRight - lv2Min.x,
                                       (KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT) - lv2Min.y, 0.0f, 0.0f };
