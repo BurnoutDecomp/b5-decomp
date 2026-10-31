@@ -88,10 +88,10 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     // CompareRaceCarDistances  --  X360 0x823125B8  (BrnScoringSystem.cpp:533)
     // ------------------------------------------------------------------------
-    // qsort(3) comparator over the maRaceCarPositioningData[8] scratch (the X360
-    // call site is `qsort(&maRaceCarPositioningData, 8, sizeof(RaceCarPositioningData),
-    // &CompareRaceCarDistances)`). It never touches `this`, so it is usable as a
-    // C comparator even though the DWARF declares it as an ordinary member.
+    // qsort(3) comparator over the maRaceCarPositioningData[8] scratch. ARTIST
+    // passes this function address in r6 and the two record pointers in r3/r4;
+    // DecFIGS' rendered declaration does not retain static annotations, so the
+    // native call ABI determines the declaration shape here.
     //
     // Ordering (return >0 => lpA sorts AFTER lpB, the qsort convention):
     //   1. an unset slot (meActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID,
@@ -100,7 +100,10 @@ namespace BrnGameState
     //   3. greater finish position sorts last;
     //   4. fewer checkpoints reached sorts last;
     //   5. greater distance-to-next-checkpoint sorts last;
-    //   6. otherwise equal.
+    //   6. otherwise equal. The ordered early-outs intentionally return 1 when
+    // both records are invalid or both disconnected. The final floating-point
+    // comparisons also intentionally treat unordered (NaN) distances as equal,
+    // matching ARTIST's fcmpu branches.
     int ScoringSystem::CompareRaceCarDistances(const void* lpA, const void* lpB)
     {
         const RaceCarPositioningData* lpPosDataA = static_cast<const RaceCarPositioningData*>(lpA);
