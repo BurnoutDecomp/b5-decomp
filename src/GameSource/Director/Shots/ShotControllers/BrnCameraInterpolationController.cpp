@@ -114,7 +114,7 @@ namespace
         lResult.yAxis = lrMatrix.yAxis;
         lResult.zAxis = lrMatrix.zAxis;
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(__vspltisw(0));
             lResult.wAxis = lAggregateValue;
         }
         return lResult;
@@ -205,7 +205,7 @@ void CameraInterpolationController::ExtractRotateAboutPivotParams(
 
     // The look-at basis for that eye position, aimed at the pivot -- which is the origin of
     // this space. (Utils::CreateLookAt's two-argument overload, @0x8220C4F8.)
-    const Vector3 lOrigin = { KF_ZERO, KF_ZERO, KF_ZERO, KF_ZERO };
+    const Vector3 lOrigin(__vspltisw(0));
     const Matrix44Affine lLookAt =
         Camera::Utils::CreateLookAt(lCameraInPivotSpace.wAxis, lOrigin);
 
