@@ -352,19 +352,14 @@ void GroundConstraint::GenerateSceneQueries(const Camera& lrCamera, f32 lfTimest
 
     const rw::math::vpu::Vector3& lrCameraPosition = lrCamera.mTransform.wAxis;
 
-    rw::math::vpu::Vector3 lStart;
-    lStart.x = 0.0f * KF_MIN_TEST_ABOVE_LENGTH + lrCameraPosition.x;
-    lStart.y = 1.0f * KF_MIN_TEST_ABOVE_LENGTH + lrCameraPosition.y;
-    lStart.z = 0.0f * KF_MIN_TEST_ABOVE_LENGTH + lrCameraPosition.z;
-    lStart.w = 0.0f * KF_MIN_TEST_ABOVE_LENGTH + lrCameraPosition.w;
+    const rw::math::vpu::Vector3 lvUp(0.0f, 1.0f, 0.0f);
+    const __vector4 lvAbove = __vspltw(__lvlx(&KF_MIN_TEST_ABOVE_LENGTH, 0), 0);
+    const rw::math::vpu::Vector3 lStart(__vmaddfp(lvUp.mV, lvAbove, lrCameraPosition.mV));
 
     const f32 lfBelow = ((KF_MIN_TEST_BELOW_LENGTH - mfDesiredHeight) >= 0.0f) ? KF_MIN_TEST_BELOW_LENGTH
                                                                               : mfDesiredHeight;
-    rw::math::vpu::Vector3 lEnd;
-    lEnd.x = lStart.x - 0.0f * lfBelow;
-    lEnd.y = lStart.y - 1.0f * lfBelow;
-    lEnd.z = lStart.z - 0.0f * lfBelow;
-    lEnd.w = lStart.w - 0.0f * lfBelow;
+    const __vector4 lvBelow = __vspltw(__lvlx(&lfBelow, 0), 0);
+    const rw::math::vpu::Vector3 lEnd(__vsubfp(lStart.mV, __vmulfp(lvUp.mV, lvBelow)));
 
     lpRequestInterface->LineTestNearest(mLineTest, 2u, 0xFFu, lStart, lEnd,
                                         CgsSceneManager::EntityId(0xFFFFFFFFu),
@@ -385,7 +380,12 @@ bool GroundConstraint::ProcessSceneQueryResults(f32 lfTimestep, Camera& lrCamera
 
     const bool lbFoundGround = mLineTest.GetPackage().mbIntersection;
     if (lbFoundGround)
-        lrCamera.mTransform.wAxis.y = mLineTest.GetPackage().mPosition.y + mfDesiredHeight;
+    {
+        const __vector4 lvHeight = __vspltw(__lvlx(&mfDesiredHeight, 0), 0);
+        const __vector4 lvHitY = __vspltw(mLineTest.GetPackage().mPosition.mV, 1);
+        lrCamera.mTransform.wAxis.mV = __vrlimi(lrCamera.mTransform.wAxis.mV,
+                                                __vaddfp(lvHitY, lvHeight), 4, 3);
+    }
 
     mLineTest.Clear();
     return lbFoundGround;
