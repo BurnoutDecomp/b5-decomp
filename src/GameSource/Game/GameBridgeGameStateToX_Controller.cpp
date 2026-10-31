@@ -45,7 +45,7 @@ namespace BrnGame
             lpPostWorldInput->PostBindRequest(lrEvent.miPlayer, lrEvent.miPort);
         }
         if (liNumBind > 0)
-            miInputModuleState = 3;
+            miInputModuleState = E_INPUTBINDSTATE_BIND_REQUESTED;
 
         // Unbind requests: element j carries a single request word (asm *v12 -> PostUnbindRequest).
         const s32 liNumUnbind = lpUnbindQueue->GetLength();
@@ -55,7 +55,7 @@ namespace BrnGame
             lpPostWorldInput->PostUnbindRequest(lrEvent.miPlayer);
         }
         if (liNumUnbind > 0)
-            miInputModuleState = 6;
+            miInputModuleState = E_INPUTBINDSTATE_UNBIND_REQUESTED;
     }
 
 } // namespace BrnGame
