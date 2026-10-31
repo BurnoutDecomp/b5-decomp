@@ -447,7 +447,7 @@ void ActiveRaceCar::RenderParams::DEBUG_OverrideScratchAmount(f32 lfScratchAmoun
     for (u32 luVector = 0; luVector < 128; ++luVector)
     {
         Vector3Plus lvValue = maVerletOffsets[luVector];  // lvx128: whole register
-        lvValue.w = lfScratchAmount;                     // stfs f1 -> byte 12 (lane W)
+        lvValue.mV.w = lfScratchAmount;                     // stfs f1 -> byte 12 (lane W)
         maVerletOffsets[luVector] = lvValue;             // stvx128: all 16 bytes back
     }
 }
