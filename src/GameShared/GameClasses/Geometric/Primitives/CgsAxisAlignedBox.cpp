@@ -26,7 +26,7 @@ namespace CgsGeometric
     // and the max corner to mMax (+0x10). Each stvx128 writes a full 16 bytes,
     // so all four lanes (xyzw) are copied.
     // ------------------------------------------------------------------------
-    void AxisAlignedBox::Set(const Vector4& lvMin, const Vector4& lvMax)
+    void AxisAlignedBox::Set(Vector3 lvMin, Vector3 lvMax)
     {
         mMin = lvMin;   // stvx128 v1 -> this+0x00
         mMax = lvMax;   // stvx128 v2 -> this+0x10
@@ -53,10 +53,10 @@ namespace CgsGeometric
     // makes both VMX compares false, so a NaN coordinate yields false here too,
     // exactly as the scalar `>` / `<` do. The w lane is unused.
     // ------------------------------------------------------------------------
-    bool AxisAlignedBox::ContainsPoint(const Vector4& lvPoint) const
+    bool AxisAlignedBox::ContainsPoint(Vector3 lvPoint) const
     {
-        return lvPoint.x > mMin.x && lvPoint.x < mMax.x    // vcmpgtfp / !vcmpgefp, x lane
-            && lvPoint.y > mMin.y && lvPoint.y < mMax.y    // y lane
-            && lvPoint.z > mMin.z && lvPoint.z < mMax.z;   // z lane
+        return lvPoint.mV.x > mMin.mV.x && lvPoint.mV.x < mMax.mV.x    // vcmpgtfp / !vcmpgefp, x lane
+            && lvPoint.mV.y > mMin.mV.y && lvPoint.mV.y < mMax.mV.y    // y lane
+            && lvPoint.mV.z > mMin.mV.z && lvPoint.mV.z < mMax.mV.z;   // z lane
     }
 }
