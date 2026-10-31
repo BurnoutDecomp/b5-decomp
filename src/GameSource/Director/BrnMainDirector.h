@@ -404,12 +404,10 @@ namespace BrnDirector
         ShotSelector   mShotSelector;                                       // +0x121F0 .. +0x1245C (0x26C)
         CrashAnalyser  mCrashAnalyser;                                      // +0x1245C .. +0x12474
 
-        // +0x12480  the camera finaliser (inertia + key-anim shake). Console span to +0x124F0;
-        //           the KeyAnimShakeController Construct builds at +0x124D0 is its own member.
+        // ARTIST 827E4AF0 constructs the take at +0x124F0 inside the key-anim
+        // shake controller: finaliser +0x50, controller take +0x20.
+        // The entire finaliser spans +0x12480..+0x12C7F.
         CameraFinaliser mCameraFinaliser;
-
-        // +0x124F0 .. +0x12C80  the embedded ICE take. FLAG: un-homed; named opaque span.
-        u8 maICETake[0x12C80 - 0x124F0];
 
         // ⭐ +0x12C80 .. +0x12DC0  BrnDirector::AllVehicleData -- NO LONGER AN OPAQUE SPAN
         // (2026-08-01, junkyard-fire wave). The class IS homed (BrnDirectorAllVehicleData.h has
