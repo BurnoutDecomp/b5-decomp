@@ -123,8 +123,8 @@ namespace
     // The +/-1 clamp band EulerAnglesZXYFromMatrix44Affine puts every source row through.
     // DUMPED as flt_820037C8 == -1 and flt_82001C98 == +1; the console's vmaxfp/vminfp
     // operands carry 0 in the fourth lane, which is why the w lane is pinned to 0 here.
-    const Vector3 KV_MINUS_ONE = { -1.0f, -1.0f, -1.0f, 0.0f };
-    const Vector3 KV_PLUS_ONE  = {  1.0f,  1.0f,  1.0f, 0.0f };
+    CGS_ALIGN(16) const f32 KA_KV_MINUS_ONE[4] = { -1.0f, -1.0f, -1.0f, 0.0f };
+    CGS_ALIGN(16) const f32 KA_KV_PLUS_ONE[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
 
     // ---- the identity-basis rodata block, DUMPED from the shipped image -----------------
     // Headless IDA 9.3 over BURNOUT_X360_ARTIST.XEX read 0x82181500..0x8218153F as four
@@ -139,15 +139,23 @@ namespace
     // CreateLookAt reads exactly two of them: unk_82181510 lands where the three-argument
     // overload takes its explicit lUpVector (so it IS the default up axis), and unk_82181520
     // is the Z axis substituted when the eye->target direction is degenerate.
-    const Vector3 KV_AXIS_X = { 1.0f, 0.0f, 0.0f, 0.0f };   // gIVector      @0x82181500
-    const Vector3 KV_AXIS_Y = { 0.0f, 1.0f, 0.0f, 0.0f };   // unk_82181510  @0x82181510
-    const Vector3 KV_AXIS_Z = { 0.0f, 0.0f, 1.0f, 0.0f };   // unk_82181520  @0x82181520
+    CGS_ALIGN(16) const f32 KA_KV_AXIS_X[4] = { 1.0f, 0.0f, 0.0f, 0.0f };   // gIVector      @0x82181500
+    CGS_ALIGN(16) const f32 KA_KV_AXIS_Y[4] = { 0.0f, 1.0f, 0.0f, 0.0f };   // unk_82181510  @0x82181510
+    CGS_ALIGN(16) const f32 KA_KV_AXIS_Z[4] = { 0.0f, 0.0f, 1.0f, 0.0f };   // unk_82181520  @0x82181520
 
     // The tolerance every rw::math::vpu IsZero in this family is called with: the shipped
     // splat source flt_82001770 == 0x34000000 == 2^-23 == FLT_EPSILON. (The vendor header's
     // own default parameter is a looser 1e-6 placeholder, so the calls below pass this
     // explicitly rather than silently widening the degenerate band by ten times.)
     const f32 KF_VPU_EPSILON = 1.1920929e-07f;
+
+    // ARTIST transplants the sign bit with VMX vand/vor.
+    f32 CopyNativeSign(f32 lfMagnitude, f32 lfSign)
+    {
+        const __vector4 lvOnes = __vspltisw(-1);
+        const __vector4 lvSignMask = __vslw(lvOnes, lvOnes);
+        return __vsel(XMVectorReplicate(lfMagnitude), XMVectorReplicate(lfSign), lvSignMask).x;
+    }
 
     // ---- the console's inlined vector atan2 --------------------------------------------
     // EulerAnglesZXYFromMatrix44Affine evaluates two quadrant-correct arctangents inline;
@@ -175,12 +183,12 @@ namespace
     f32 ATan2(f32 lfNumerator, f32 lfDenominator)
     {
         if (lfDenominator == 0.0f)
-            return std::copysign(KF_HALF_PI, lfNumerator);
+            return CopyNativeSign(KF_HALF_PI, lfNumerator);
 
         const f32 lfAngle = std::atan(lfNumerator / lfDenominator);
 
         if (lfDenominator < 0.0f)
-            return lfAngle + std::copysign(KF_PI, lfNumerator);
+            return lfAngle + CopyNativeSign(KF_PI, lfNumerator);
 
         return lfAngle;
     }
@@ -278,7 +286,7 @@ f32 GetPitchAboutPointRads(Vector3 lCentre, Vector3 lPoint)
     CGS_ASSERT(!rw::math::vpu::IsZero(lCentreToPoint), "!IsZero(lCentreToPoint)");
 
     const Vector3 lDir = rw::math::vpu::Normalize(lCentreToPoint);
-    return KF_HALF_PI - std::acos(lDir.y);
+    return KF_HALF_PI - std::acos(lDir.mV.y);
 }
 
 // ----------------------------------------------------------------------------------------
@@ -333,7 +341,7 @@ Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition)
 
     const Vector3 lDirection = rw::math::vpu::Subtract(lTargetPosition, lEyePosition);
 
-    Vector3 lZaxis = KV_AXIS_Z;
+    Vector3 lZaxis = Vector3(__lvx(KA_KV_AXIS_Z, 0));
     if (!rw::math::vpu::IsZero(lDirection, KF_VPU_EPSILON))
     {
         const Vector3 lNormalisedDirection = rw::math::vpu::Normalize(lDirection);
@@ -341,9 +349,9 @@ Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition)
             lZaxis = lNormalisedDirection;
     }
 
-    Vector3 lXaxis = rw::math::vpu::Cross(KV_AXIS_Y, lZaxis);
+    Vector3 lXaxis = rw::math::vpu::Cross(Vector3(__lvx(KA_KV_AXIS_Y, 0)), lZaxis);
     if (rw::math::vpu::IsZero(lXaxis, KF_VPU_EPSILON))
-        lXaxis = KV_AXIS_X;
+        lXaxis = Vector3(__lvx(KA_KV_AXIS_X, 0));
     else
         lXaxis = rw::math::vpu::Normalize(lXaxis);
 
@@ -391,7 +399,7 @@ Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition, Vecto
 {
     const Vector3 lDirection = rw::math::vpu::Subtract(lTargetPosition, lEyePosition);
 
-    Vector3 lZaxis = KV_AXIS_Z;
+    Vector3 lZaxis = Vector3(__lvx(KA_KV_AXIS_Z, 0));
     if (!rw::math::vpu::IsZero(lDirection, KF_VPU_EPSILON))
         lZaxis = rw::math::vpu::Normalize(lDirection);
 
@@ -400,7 +408,7 @@ Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition, Vecto
 
     Vector3 lXaxis = rw::math::vpu::Cross(lUpVector, lZaxis);
     if (rw::math::vpu::IsZero(lXaxis, KF_VPU_EPSILON))
-        lXaxis = KV_AXIS_X;
+        lXaxis = Vector3(__lvx(KA_KV_AXIS_X, 0));
     else
         lXaxis = rw::math::vpu::Normalize(lXaxis);
 
@@ -463,32 +471,32 @@ Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition, Vecto
 Vector3 EulerAnglesZXYFromMatrix44Affine(Matrix44Affine lIn, Vector3* lpLastAngles,
                                          f32 lfVerticalComparisonEpsilon)
 {
-    const Vector3 lXaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.xAxis, KV_MINUS_ONE),
-                                              KV_PLUS_ONE);
-    const Vector3 lYaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.yAxis, KV_MINUS_ONE),
-                                              KV_PLUS_ONE);
-    const Vector3 lZaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.zAxis, KV_MINUS_ONE),
-                                              KV_PLUS_ONE);
+    const Vector3 lXaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.xAxis, Vector3(__lvx(KA_KV_MINUS_ONE, 0))),
+                                              Vector3(__lvx(KA_KV_PLUS_ONE, 0)));
+    const Vector3 lYaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.yAxis, Vector3(__lvx(KA_KV_MINUS_ONE, 0))),
+                                              Vector3(__lvx(KA_KV_PLUS_ONE, 0)));
+    const Vector3 lZaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.zAxis, Vector3(__lvx(KA_KV_MINUS_ONE, 0))),
+                                              Vector3(__lvx(KA_KV_PLUS_ONE, 0)));
 
     if (lpLastAngles != 0
-        && std::fabs(std::fabs(lZaxis.y) - 1.0f) < lfVerticalComparisonEpsilon)
+        && std::fabs(std::fabs(lZaxis.mV.y) - 1.0f) < lfVerticalComparisonEpsilon)
     {
         return *lpLastAngles;
     }
 
     Vector3 lEulerAngles;
-    lEulerAngles.x = std::asin(-lZaxis.y);
-    lEulerAngles.w = 0.0f;
+    lEulerAngles.mV.x = std::asin(-lZaxis.mV.y);
+    lEulerAngles.mV.w = 0.0f;
 
-    if (KF_HALF_PI > lEulerAngles.x && lEulerAngles.x > -KF_HALF_PI)
+    if (KF_HALF_PI > lEulerAngles.mV.x && lEulerAngles.mV.x > -KF_HALF_PI)
     {
-        lEulerAngles.y = ATan2(lZaxis.x, lZaxis.z);
-        lEulerAngles.z = ATan2(lXaxis.y, lYaxis.y);
+        lEulerAngles.mV.y = ATan2(lZaxis.mV.x, lZaxis.mV.z);
+        lEulerAngles.mV.z = ATan2(lXaxis.mV.y, lYaxis.mV.y);
     }
     else
     {
-        lEulerAngles.y = ATan2(lXaxis.z, lXaxis.x);
-        lEulerAngles.z = 0.0f;
+        lEulerAngles.mV.y = ATan2(lXaxis.mV.z, lXaxis.mV.x);
+        lEulerAngles.mV.z = 0.0f;
     }
 
     return lEulerAngles;
@@ -556,25 +564,78 @@ Vector3 EulerAnglesZXYFromMatrix44Affine(Matrix44Affine lIn, Vector3* lpLastAngl
 //   console's own behaviour, and Looker's fixed-look-offset path depends on whatever it
 //   produces.
 //
-// FLAG (PC-platform, numeric): the console's SinCos is a shared minimax polynomial over a
-//   2pi-reduced argument; std::sin / std::cos are the exact forms. Tighter than the console,
-//   never looser -- the same de-optimisation the rest of this file already applies.
+// The implementation below uses the original SDK VMX SinCos and full four-lane row operations.
 // ----------------------------------------------------------------------------
+namespace
+{
+    struct NativeAffineRows { __vector4 x, y, z, w; };
+
+    __vector4 RotateDirectionRow(__vector4 row, const NativeAffineRows& right)
+    {
+        __vector4 v = __vmulfp(__vspltw(row, 0), right.x);
+        v = __vmaddfp(__vspltw(row, 1), right.y, v);
+        return __vmaddfp(__vspltw(row, 2), right.z, v);
+    }
+
+    NativeAffineRows MultiplyNativeRows(const NativeAffineRows& left, const NativeAffineRows& right)
+    {
+        NativeAffineRows out;
+        out.x = RotateDirectionRow(left.x, right);
+        out.y = RotateDirectionRow(left.y, right);
+        out.z = RotateDirectionRow(left.z, right);
+        __vector4 v = __vmaddfp(__vspltw(left.w, 0), right.x, right.w);
+        v = __vmaddfp(__vspltw(left.w, 1), right.y, v);
+        out.w = __vmaddfp(__vspltw(left.w, 2), right.z, v);
+        return out;
+    }
+}
+
+// ARTIST 0x82204F98 uses three SDK VMX SinCos kernels, then multiplies
+// the Y, X and Z rotation rows and the input in the observed fused order.
 void RotateMatrix44AffineByEulerAnglesZXY(Matrix44Affine& lrMatrix, Vector3 lEulerAngles)
 {
-    // The console evaluates SinCos in the order Y, X, Z and hands each pair to the SDK's own
-    // elementary builder (matrix44affine_operation_platform_inline.h :253 / :239-:240 / :269
-    // respectively -- see the note at MakeRotationX in matrix44affine_operation.h for how
-    // those three line numbers were pinned to their axes).
-    const Matrix44Affine lRotateAboutY = rw::math::vpu::MakeRotationY(lEulerAngles.y);
-    const Matrix44Affine lRotateAboutX = rw::math::vpu::MakeRotationX(lEulerAngles.x);
-    const Matrix44Affine lRotateAboutZ = rw::math::vpu::MakeRotationZ(lEulerAngles.z);
+    __vector4 sy, cy, sx, cx, sz, cz;
+    XMVectorSinCos(&sy, &cy, __vspltw(lEulerAngles.mV, 1));
+    XMVectorSinCos(&sx, &cx, __vspltw(lEulerAngles.mV, 0));
+    XMVectorSinCos(&sz, &cz, __vspltw(lEulerAngles.mV, 2));
+    const __vector4 zero = __vspltisw(0);
+    const __vector4 ones = __vspltisw(-1);
+    const __vector4 sign = __vslw(ones, ones);
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    CGS_ALIGN(16) static const u32 sMask[4] = {
+        0x00010203u, 0x14151617u, 0x00010203u, 0x00010203u
+    };
+    const __vector4 mask = __lvx(sMask, 0);
 
-    const Matrix44Affine lRotation =
-        rw::math::vpu::Mult(lRotateAboutZ,
-                            rw::math::vpu::Mult(lRotateAboutX, lRotateAboutY));
+    NativeAffineRows y;
+    y.x = __vrlimi(__vperm(cy, zero, mask), __vxor(sy, sign), 2, 0);
+    y.y = __vrlimi(__vperm(zero, one, mask), zero, 2, 0);
+    y.z = __vrlimi(__vperm(sy, zero, mask), cy, 2, 0);
+    y.w = zero;
 
-    lrMatrix = rw::math::vpu::Mult(lrMatrix, lRotation);
+    NativeAffineRows x;
+    x.x = __vrlimi(__vperm(one, zero, mask), zero, 2, 0);
+    x.y = __vrlimi(__vperm(zero, cx, mask), sx, 2, 0);
+    x.z = __vrlimi(__vperm(zero, __vxor(sx, sign), mask), cx, 2, 0);
+    x.w = zero;
+
+    NativeAffineRows z;
+    z.x = __vrlimi(__vperm(cz, sz, mask), zero, 2, 0);
+    z.y = __vrlimi(__vperm(__vxor(sz, sign), cz, mask), zero, 2, 0);
+    z.z = __vrlimi(__vperm(zero, zero, mask), one, 2, 0);
+    z.w = zero;
+
+    const NativeAffineRows rotation = MultiplyNativeRows(z, MultiplyNativeRows(x, y));
+    NativeAffineRows input;
+    input.x = lrMatrix.xAxis.mV;
+    input.y = lrMatrix.yAxis.mV;
+    input.z = lrMatrix.zAxis.mV;
+    input.w = lrMatrix.wAxis.mV;
+    const NativeAffineRows out = MultiplyNativeRows(input, rotation);
+    lrMatrix.xAxis.mV = out.x;
+    lrMatrix.yAxis.mV = out.y;
+    lrMatrix.zAxis.mV = out.z;
+    lrMatrix.wAxis.mV = out.w;
 }
 
 // ============================================================================
@@ -733,9 +794,9 @@ f32 GetSmallestDifferenceBetweenRadAngles(f32 lfFromRads, f32 lfToRads)
 Vector3 GetSmallestDifferenceBetweenRadAngles(Vector3 lFromRads, Vector3 lToRads)
 {
     Vector3 lResult;
-    lResult.x = GetSmallestDifferenceBetweenRadAngles(lFromRads.x, lToRads.x);
-    lResult.y = GetSmallestDifferenceBetweenRadAngles(lFromRads.y, lToRads.y);
-    lResult.z = GetSmallestDifferenceBetweenRadAngles(lFromRads.z, lToRads.z);
+    lResult.mV.x = GetSmallestDifferenceBetweenRadAngles(lFromRads.mV.x, lToRads.mV.x);
+    lResult.mV.y = GetSmallestDifferenceBetweenRadAngles(lFromRads.mV.y, lToRads.mV.y);
+    lResult.mV.z = GetSmallestDifferenceBetweenRadAngles(lFromRads.mV.z, lToRads.mV.z);
     return lResult;
 }
 
@@ -969,8 +1030,7 @@ Matrix33 DirectionPreservingSLerp(const Matrix33& lrFrom, const Matrix33& lrTo,
 
     CGS_ASSERT(&lrbWasInvertedLastTime != 0, "lpbWasInvertedLastTime != NULL");   // h:742
 
-    // BrnDirector::VecFloat (NOT the global rw Vector4 alias -- see CameraUtils.h's
-    // load-bearing-include note) exposes the broadcast scalar through operator f32().
+    // The genuine SDK VecFloat exposes the broadcast scalar through operator f32().
     const f32 lfT = lvT;
 
     // 0x822055D8 / 0x82205618 -- the two early-outs, both plain three-row copies.
@@ -989,7 +1049,7 @@ Matrix33 DirectionPreservingSLerp(const Matrix33& lrFrom, const Matrix33& lrTo,
     lFromAffine.yAxis = lrFrom.yAxis;
     lFromAffine.zAxis = lrFrom.zAxis;
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         lFromAffine.wAxis = lAggregateValue;
     }
 
@@ -998,7 +1058,7 @@ Matrix33 DirectionPreservingSLerp(const Matrix33& lrFrom, const Matrix33& lrTo,
     lToAffine.yAxis = lrTo.yAxis;
     lToAffine.zAxis = lrTo.zAxis;
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         lToAffine.wAxis = lAggregateValue;
     }
 
@@ -1049,7 +1109,7 @@ Matrix33 DirectionPreservingSLerp(const Matrix33& lrFrom, const Matrix33& lrTo,
     }
 
     const Matrix44Affine lStep = rw::math::vpu::Matrix44AffineFromAxisRotationAngle(
-        lAxis, Vector4{ lfBlendedAngle, lfBlendedAngle, lfBlendedAngle, lfBlendedAngle });
+        lAxis, Vector4(lfBlendedAngle, lfBlendedAngle, lfBlendedAngle, lfBlendedAngle));
 
     const Matrix44Affine lRotated = rw::math::vpu::Mult(lFromAffine, lStep);
 
@@ -1147,7 +1207,7 @@ Matrix44Affine DirectionPreservingSLerp(const Matrix44Affine& lrFrom, const Matr
     }
 
     const Matrix44Affine lStep = rw::math::vpu::Matrix44AffineFromAxisRotationAngle(
-        lAxis, Vector4{ lfBlendedAngle, lfBlendedAngle, lfBlendedAngle, lfBlendedAngle });
+        lAxis, Vector4(lfBlendedAngle, lfBlendedAngle, lfBlendedAngle, lfBlendedAngle));
 
     Matrix44Affine lResult = rw::math::vpu::Mult(lrFrom, lStep);
 
@@ -1215,14 +1275,14 @@ Vector2 GetSizeOnScreen(Matrix44Affine lCameraTransform,
     Vector3 laCorners[8];
     for (s32 liCorner = 0; liCorner < 8; ++liCorner)
     {
-        laCorners[liCorner].x = ((liCorner & 1) != 0) ? lAABB.mMax.x : lAABB.mMin.x;
-        laCorners[liCorner].y = ((liCorner & 2) != 0) ? lAABB.mMax.y : lAABB.mMin.y;
-        laCorners[liCorner].z = ((liCorner & 4) != 0) ? lAABB.mMax.z : lAABB.mMin.z;
-        laCorners[liCorner].w = 0.0f;
+        laCorners[liCorner].mV.x = ((liCorner & 1) != 0) ? lAABB.mMax.mV.x : lAABB.mMin.mV.x;
+        laCorners[liCorner].mV.y = ((liCorner & 2) != 0) ? lAABB.mMax.mV.y : lAABB.mMin.mV.y;
+        laCorners[liCorner].mV.z = ((liCorner & 4) != 0) ? lAABB.mMax.mV.z : lAABB.mMin.mV.z;
+        laCorners[liCorner].mV.w = 0.0f;
     }
 
     // The screen-space bounds. See the ⚠️⚠️ banner for the max seed.
-    const f32 KF_FLT_MAX     = 3.4028235e+38f;   // flt_8200173C
+    const f32 KF_FLT_MAX     = 3.4028234663852886e+38f;   // flt_8200173C
     const f32 KF_FLT_MIN     = 1.1754944e-38f;   // flt_82001738
     const f32 KF_FLT_EPSILON = 1.1920929e-07f;   // flt_82001770
 
@@ -1236,7 +1296,7 @@ Vector2 GetSizeOnScreen(Matrix44Affine lCameraTransform,
         const Vector3 lCornerInCameraSpace =
             rw::math::vpu::TransformPoint(lTargetInCameraSpace, laCorners[liCorner]);
 
-        if (!(std::fabs(lCornerInCameraSpace.z) > KF_FLT_EPSILON))
+        if (!(std::fabs(lCornerInCameraSpace.mV.z) > KF_FLT_EPSILON))
         {
             continue;
         }
@@ -1245,9 +1305,9 @@ Vector2 GetSizeOnScreen(Matrix44Affine lCameraTransform,
         // the screen the corner sits at, so the returned size is directly comparable with the
         // authored mfTargetSubjectXSize/YSize (both are 0..1 screen fractions).
         const f32 lfScreenX =
-            (lCornerInCameraSpace.x / (lCornerInCameraSpace.z * lfTanHalfFOV)) * 0.5f;
+            (lCornerInCameraSpace.mV.x / (lCornerInCameraSpace.mV.z * lfTanHalfFOV)) * 0.5f;
         const f32 lfScreenY =
-            (lCornerInCameraSpace.y / (lCornerInCameraSpace.z * lfTanHalfFOVPerAspect)) * 0.5f;
+            (lCornerInCameraSpace.mV.y / (lCornerInCameraSpace.mV.z * lfTanHalfFOVPerAspect)) * 0.5f;
 
         if (lfMinX > lfScreenX) { lfMinX = lfScreenX; }
         if (lfMinY > lfScreenY) { lfMinY = lfScreenY; }
@@ -1256,10 +1316,10 @@ Vector2 GetSizeOnScreen(Matrix44Affine lCameraTransform,
     }
 
     Vector2 lSize;
-    lSize.x = lfMaxX - lfMinX;
-    lSize.y = lfMaxY - lfMinY;
-    lSize.z = 0.0f;
-    lSize.w = 0.0f;
+    lSize.mV.x = lfMaxX - lfMinX;
+    lSize.mV.y = lfMaxY - lfMinY;
+    lSize.mV.z = 0.0f;
+    lSize.mV.w = 0.0f;
     return lSize;
 }
 
@@ -1294,7 +1354,7 @@ VecFloat GetFOVDegsToFitObjectToScreenArea(VecFloat lvDistance,
                                            Vector2 lSizeOnScreen,
                                            VecFloat lvTargetArea)
 {
-    const f32 lfAreaOnScreen = lSizeOnScreen.x * lSizeOnScreen.y;
+    const f32 lfAreaOnScreen = lSizeOnScreen.mV.x * lSizeOnScreen.mV.y;
     const f32 lfSizeOnScreen = (lfAreaOnScreen == 0.0f)
                                    ? 0.0f
                                    : std::sqrt(lfAreaOnScreen);   // the zero-area select
@@ -1338,8 +1398,8 @@ VecFloat GetFOVDegsToFitObjectToScreenSize(VecFloat lvDistance,
 {
     const f32 lfZoom = GetZoomFromFOVDegs(lvDistance);
 
-    const f32 lfRatioX = lTargetSize.x / lSizeOnScreen.x;
-    const f32 lfRatioY = lTargetSize.y / lSizeOnScreen.y;
+    const f32 lfRatioX = lTargetSize.mV.x / lSizeOnScreen.mV.x;
+    const f32 lfRatioY = lTargetSize.mV.y / lSizeOnScreen.mV.y;
     const f32 lfRatio  = (lfRatioX < lfRatioY) ? lfRatioX : lfRatioY;   // vminfp
 
     const f32 lfRequiredFOV = GetFOVDegsFromZoom(lfZoom * lfRatio);
@@ -1370,12 +1430,10 @@ Matrix44Affine CreateAdjustedLookAt(Matrix44Affine lLookAt,
 {
     const f32 lfPlaneWidthAtUnitDepth = 2.0f * rw::math::fpu::Tan(lvFOV * KF_HALF_DEGS_TO_RADS);
 
-    const Vector3 lOffsetTarget = { lScreenOffset.x * lfPlaneWidthAtUnitDepth,
-                                    lScreenOffset.y * (lfPlaneWidthAtUnitDepth / lvAspect),
-                                    1.0f,
-                                    0.0f };
+    const Vector3 lOffsetTarget(lScreenOffset.mV.x * lfPlaneWidthAtUnitDepth,
+                                lScreenOffset.mV.y * (lfPlaneWidthAtUnitDepth / lvAspect), 1.0f);
 
-    const Vector3 lOrigin = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lOrigin(0.0f, 0.0f, 0.0f);
 
     return rw::math::vpu::Mult(CreateLookAt(lOrigin, lOffsetTarget), lLookAt);
 }
@@ -1384,7 +1442,7 @@ Matrix44Affine CreateAdjustedLookAt(Matrix44Affine lLookAt,
 // spherical quadratic curve through a perpendicular direction.
 Vector3 FindNonParallelNormalisedVectorTo(Vector3 lVector)
 {
-    return std::fabs(lVector.y) > std::fabs(lVector.x) ? Vector3{1,0,0,0} : Vector3{0,1,0,0};
+    return std::fabs(lVector.mV.y) > std::fabs(lVector.mV.x) ? Vector3(1.0f,0.0f,0.0f) : Vector3(0.0f,1.0f,0.0f);
 }
 
 namespace {
@@ -1404,12 +1462,12 @@ Vector3 SafeSLerp(Vector3 lV0, Vector3 lV1, VecFloat lAmount)
     using namespace rw::math::vpu;
     CGS_ASSERT(std::fabs(MagnitudeSquared(lV0) - 1.0f) <= 1.5258789e-5f, "lV0 is not of unit length");
     CGS_ASSERT(std::fabs(MagnitudeSquared(lV1) - 1.0f) <= 1.5258789e-5f, "lV1 is not of unit length");
-    const f32 t = std::fmin(1.0f, std::fmax(0.0f, static_cast<f32>(lAmount)));
+    const f32 t = __vminfp(XMVectorReplicate(1.0f), __vmaxfp(XMVectorReplicate(static_cast<f32>(lAmount)), XMVectorReplicate(0.0f))).x;
     if (Dot(lV0, lV1) > std::cos(3.0543263f)) return SphericalBlend(lV0, lV1, t);
-    const Vector3 perpendicular = Normalize(Cross(lV0, FindNonParallelNormalisedVectorTo(lV0)));
+    const ::Vector3 perpendicular = Normalize(Cross(lV0, FindNonParallelNormalisedVectorTo(lV0)));
     const f32 bend = std::cos(2.0f * 0.087266468f);
-    const Vector3 fromControl = SphericalBlend(lV0, perpendicular, bend);
-    const Vector3 toControl = SphericalBlend(lV1, perpendicular, bend);
+    const ::Vector3 fromControl = SphericalBlend(lV0, perpendicular, bend);
+    const ::Vector3 toControl = SphericalBlend(lV1, perpendicular, bend);
     return SphericalBlend(SphericalBlend(lV0, toControl, t), SphericalBlend(fromControl, lV1, t), t);
 }
 
@@ -1422,24 +1480,24 @@ bool PointWillLeaveFrustrum(const Matrix44Affine& lTransform, Vector3 lPoint,
     using namespace rw::math::vpu;
     CGS_ASSERT(lpfTimeBeforeLeavingSecs != 0, "lpfTimeBeforeLeavingSecs != NULL");
     CGS_ASSERT(IsOrthogonal3x3(lTransform, 1.1920929e-7f), "IsOrthogonal3x3(lFustrumTransform)");
-    const Vector3 offset = lPoint - lTransform.Pos();
-    const Vector3 point = {Dot(offset,lTransform.xAxis), Dot(offset,lTransform.yAxis), Dot(offset,lTransform.zAxis),0};
-    const Vector3 vel = {Dot(lVelocity,lTransform.xAxis), Dot(lVelocity,lTransform.yAxis), Dot(lVelocity,lTransform.zAxis),0};
-    const f32 width = std::tan(lfHorizontalFOV * 0.0087266462f) * point.z;
-    const f32 height = std::tan(lfVerticalFOV * 0.0087266462f) * point.z;
-    if (std::fabs(point.x) >= width || std::fabs(point.y) >= height)
+    const ::Vector3 offset = lPoint - lTransform.Pos();
+    const ::Vector3 point(Dot(offset,lTransform.xAxis), Dot(offset,lTransform.yAxis), Dot(offset,lTransform.zAxis));
+    const ::Vector3 vel(Dot(lVelocity,lTransform.xAxis), Dot(lVelocity,lTransform.yAxis), Dot(lVelocity,lTransform.zAxis));
+    const f32 width = std::tan(lfHorizontalFOV * 0.0087266462f) * point.mV.z;
+    const f32 height = std::tan(lfVerticalFOV * 0.0087266462f) * point.mV.z;
+    if (std::fabs(point.mV.x) >= width || std::fabs(point.mV.y) >= height)
     {
         *lpfTimeBeforeLeavingSecs = 0.0f;
         return true;
     }
-    if (std::fabs(vel.x) <= 1.1920929e-7f && std::fabs(vel.y) <= 1.1920929e-7f)
+    if (std::fabs(vel.mV.x) <= 1.1920929e-7f && std::fabs(vel.mV.y) <= 1.1920929e-7f)
         return false;
     f32 xTime = 10000.0f, yTime = 10000.0f;
-    if (vel.x > 0.0f) xTime = (width - point.x) / vel.x;
-    else if (vel.x < 0.0f) xTime = (-width - point.x) / vel.x;
-    if (vel.y > 0.0f) yTime = (height - point.y) / vel.y;
-    else if (vel.y < 0.0f) yTime = (-height - point.y) / vel.y;
-    *lpfTimeBeforeLeavingSecs = std::fmin(xTime, yTime);
+    if (vel.mV.x > 0.0f) xTime = (width - point.mV.x) / vel.mV.x;
+    else if (vel.mV.x < 0.0f) xTime = (-width - point.mV.x) / vel.mV.x;
+    if (vel.mV.y > 0.0f) yTime = (height - point.mV.y) / vel.mV.y;
+    else if (vel.mV.y < 0.0f) yTime = (-height - point.mV.y) / vel.mV.y;
+    *lpfTimeBeforeLeavingSecs = __vminfp(XMVectorReplicate(xTime), XMVectorReplicate(yTime)).x;
     return true;
 }
 
@@ -1459,10 +1517,8 @@ bool PointsWillPassEachOther(Vector3 lPointA, Vector3 lVelocityA, Vector3 lPoint
 {
     const f32 KF_MIN_CLOSING_SPEED = 9.99999975e-06f;   // 0x3727C5AC
 
-    const Vector3 lRelativeVelocity = { lVelocityA.x - lVelocityB.x, lVelocityA.y - lVelocityB.y,
-                                        lVelocityA.z - lVelocityB.z, lVelocityA.w - lVelocityB.w };
-    const Vector3 lGap = { lPointB.x - lPointA.x, lPointB.y - lPointA.y,
-                           lPointB.z - lPointA.z, lPointB.w - lPointA.w };
+    const Vector3 lRelativeVelocity(__vsubfp(lVelocityA.mV, lVelocityB.mV));
+    const Vector3 lGap(__vsubfp(lPointB.mV, lPointA.mV));
 
     if (!(ConsoleVpu::Dot3(lGap, lRelativeVelocity) > 0.0f))
     {
@@ -1478,7 +1534,7 @@ bool PointsWillPassEachOther(Vector3 lPointA, Vector3 lVelocityA, Vector3 lPoint
         const f32 lfResidual = ConsoleVpu::NegativeMultiplySubtract(lfGapSquared, lfEstimateSquared, 1.0f);
         lfEstimate = ConsoleVpu::MultiplyAdd(lfHalfEstimate, lfResidual, lfEstimate);
     }
-    const Vector3 lDirection = { lGap.x * lfEstimate, lGap.y * lfEstimate, lGap.z * lfEstimate, lGap.w * lfEstimate };
+    const Vector3 lDirection(__vmulfp(lGap.mV, XMVectorReplicate(lfEstimate)));
     const f32 lfDistance = (lfGapSquared == 0.0f) ? 0.0f : lfGapSquared * lfEstimate;
 
     const f32 lfClosingSpeed = ConsoleVpu::Dot3(lRelativeVelocity, lDirection);
@@ -1499,65 +1555,31 @@ bool PointsWillPassEachOther(Vector3 lPointA, Vector3 lVelocityA, Vector3 lPoint
 // (scratch/CRASHPARITY_0922/ROUNDING_RULE.md): vmulfp / vsubfp / vaddfp round on their own (rule 4), vmaddfp /
 // vmaddfp128 round ONCE (rule 3), vmsum3fp128 is one rounding of the f64 sum (rule 1). IDA prints the classic
 // vmaddfp in field order D, A, B, C, which computes D = A * C + B.
-// FLAG (PC-platform, rule 6): the VMX flush of denormal operands / results is not modelled.
+// Native VMX operations retain their hardware rounding and non-Java behavior.
 // ============================================================================
 namespace
 {
-    Vector3 LaneVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    Vector3 LaneVector(f32 x, f32 y, f32 z, f32 w)
     {
-        Vector3 l;
-        l.x = lfX;
-        l.y = lfY;
-        l.z = lfZ;
-        l.w = lfW;
-        return l;
+        return Vector3(XMVectorSet(x, y, z, w));
     }
 
-    // vspltw: one lane broadcast.
-    Vector3 LaneSplat(const Vector3& lrV, u32 luLane)
+    Vector3 LaneSplat(const Vector3& v, u32 lane)
     {
-        const f32 lf = (luLane == 0u) ? lrV.x : (luLane == 1u) ? lrV.y : (luLane == 2u) ? lrV.z : lrV.w;
-        return LaneVector(lf, lf, lf, lf);
+        if (lane == 0u) return Vector3(__vspltw(v.mV, 0));
+        if (lane == 1u) return Vector3(__vspltw(v.mV, 1));
+        if (lane == 2u) return Vector3(__vspltw(v.mV, 2));
+        return Vector3(__vspltw(v.mV, 3));
     }
 
-    Vector3 LaneMul(const Vector3& lrA, const Vector3& lrB)            // vmulfp128
-    {
-        return LaneVector(lrA.x * lrB.x, lrA.y * lrB.y, lrA.z * lrB.z, lrA.w * lrB.w);
-    }
-
-    Vector3 LaneSub(const Vector3& lrA, const Vector3& lrB)            // vsubfp128
-    {
-        return LaneVector(lrA.x - lrB.x, lrA.y - lrB.y, lrA.z - lrB.z, lrA.w - lrB.w);
-    }
-
-    Vector3 LaneAdd(const Vector3& lrA, const Vector3& lrB)            // vaddfp128
-    {
-        return LaneVector(lrA.x + lrB.x, lrA.y + lrB.y, lrA.z + lrB.z, lrA.w + lrB.w);
-    }
-
-    // vmaddfp / vmaddfp128: lrA * lrC + lrB, each lane rounded ONCE.
-    Vector3 LaneMadd(const Vector3& lrA, const Vector3& lrC, const Vector3& lrB)
-    {
-        return LaneVector(std::fma(lrA.x, lrC.x, lrB.x), std::fma(lrA.y, lrC.y, lrB.y),
-                          std::fma(lrA.z, lrC.z, lrB.z), std::fma(lrA.w, lrC.w, lrB.w));
-    }
-
-    Vector3 MergeHigh(const Vector3& lrA, const Vector3& lrB)          // vmrghw: a.x b.x a.y b.y
-    {
-        return LaneVector(lrA.x, lrB.x, lrA.y, lrB.y);
-    }
-
-    Vector3 MergeLow(const Vector3& lrA, const Vector3& lrB)           // vmrglw: a.z b.z a.w b.w
-    {
-        return LaneVector(lrA.z, lrB.z, lrA.w, lrB.w);
-    }
-
-    // vmsum3fp128: the three-lane dot as ONE rounding of the f64 sum (rule 1).
-    f32 Dot3OneRounding(const Vector3& lrA, const Vector3& lrB)
-    {
-        return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
-                                + static_cast<f64>(lrA.z) * lrB.z);
-    }
+    Vector3 LaneMul(const Vector3& a, const Vector3& b) { return Vector3(__vmulfp(a.mV, b.mV)); }
+    Vector3 LaneSub(const Vector3& a, const Vector3& b) { return Vector3(__vsubfp(a.mV, b.mV)); }
+    Vector3 LaneAdd(const Vector3& a, const Vector3& b) { return Vector3(__vaddfp(a.mV, b.mV)); }
+    Vector3 LaneMadd(const Vector3& a, const Vector3& c, const Vector3& b)
+    { return Vector3(__vmaddfp(a.mV, c.mV, b.mV)); }
+    Vector3 MergeHigh(const Vector3& a, const Vector3& b) { return Vector3(__vmrghw(a.mV, b.mV)); }
+    Vector3 MergeLow(const Vector3& a, const Vector3& b) { return Vector3(__vmrglw(a.mV, b.mV)); }
+    f32 Dot3OneRounding(const Vector3& a, const Vector3& b) { return __vmsum3fp(a.mV, b.mV).x; }
 
     // A row times the three direction rows of a basis (the row's w lane unread), the console's chain:
     //   vmulfp128 r.x * b0 ; vmaddfp r.y * b1 + . ; vmaddfp r.z * b2 + .
@@ -1607,7 +1629,7 @@ void ApplyPitchAboutPointRads(Matrix44Affine& lTransformInOut, Vector3 lCentreOf
     lTransformInOut.wAxis = LaneSub(lTransformInOut.wAxis, lCentreOfRotation);  // 0x82218424
 
     const Vector3& lrRelative = lTransformInOut.wAxis;
-    const Vector3 lFlatForward = LaneVector(-lrRelative.x, -0.0f, -lrRelative.z, -lrRelative.x);   // 0x82218448
+    const Vector3 lFlatForward = LaneVector(-lrRelative.mV.x, -0.0f, -lrRelative.mV.z, -lrRelative.mV.x);   // 0x82218448
 
     const Matrix44Affine lWorldYRotation = CreateLookAt(lvZero, lFlatForward);   // 0x8221844C
 
@@ -1715,14 +1737,13 @@ bool ResolveLineTestNearestUsingNormalStrict(LineTestNearestPostBox& lPostBox, V
 //               else lPosition += lAlongTest (vaddfp) -> true
 // The VecFloat is taken lane by lane (its callers pass a splat, so the all / any lane tests are the scalar tests).
 // FLAG (estimate model, rule 5): vrefp is the correctly rounded 1 / x (the tree's convention). FLAG (rule 6): the VMX
-// flush of denormal operands / results is not modelled (distances in metres).
+// Native VMX operations retain their hardware denormal behavior.
 // ----------------------------------------------------------------------------------------
 bool ResolveLineTestNearestUsingDisplacementAndVector(LineTestNearestPostBox& lPostBox, Vector3 lTestPoint,
                                                       Vector3& lPosition, Vector3 lVector, VecFloat lvMinDistance)
 {
     const f32 KF_ON_PLANE_EPSILON = 1.1920929e-07f;       // flt_82001770 == 0x34000000 (FLT_EPSILON)
-    const Vector3 lvMin = LaneVector(lvMinDistance.maLanes[0], lvMinDistance.maLanes[1], lvMinDistance.maLanes[2],
-                                     lvMinDistance.maLanes[3]);
+    const Vector3 lvMin(lvMinDistance.mV);
 
     if (!lPostBox.GetPackage().mbIntersection)                                                   // #1
         return false;
@@ -1738,24 +1759,26 @@ bool ResolveLineTestNearestUsingDisplacementAndVector(LineTestNearestPostBox& lP
         return true;
     }
 
-    if (!(lvMin.x > lfDistance && lvMin.y > lfDistance && lvMin.z > lfDistance && lvMin.w > lfDistance))
+    if (!(lvMin.mV.x > lfDistance && lvMin.mV.y > lfDistance && lvMin.mV.z > lfDistance && lvMin.mV.w > lfDistance))
         return false;
 
     const f32 lfNormalDotVector = Dot3OneRounding(lVector, lPostBox.GetPackage().mNormal);       // #5
 
-    // The refined reciprocals: vrefp (modelled), then e' = e * (1 - x e) + e twice.
-    const auto RefinedReciprocal = [](f32 lfValue) -> f32
+    // ARTIST 0x8220D030..D098: hardware reciprocal estimate and two VMX refinements.
+    __vector4 lvDistance = XMVectorReplicate(lfDistance);
+    __vector4 lvDot = XMVectorReplicate(lfNormalDotVector);
+    __vector4 lvInverseDistance = __vrefp(lvDistance);
+    __vector4 lvInverseDot = __vrefp(lvDot);
+    const __vector4 lvOne = XMVectorReplicate(1.0f);
+    for (s32 li = 0; li < 2; ++li)
     {
-        f32 lfEstimate = static_cast<f32>(1.0 / static_cast<f64>(lfValue));
-        for (s32 liStep = 0; liStep < 2; ++liStep)
-        {
-            const f32 lfResidual = std::fma(-lfEstimate, lfValue, 1.0f);
-            lfEstimate = std::fma(lfEstimate, lfResidual, lfEstimate);
-        }
-        return lfEstimate;
-    };
-    const f32 lfInverseDistance = RefinedReciprocal(lfDistance);
-    const f32 lfInverseDot      = RefinedReciprocal(lfNormalDotVector);
+        lvInverseDistance = __vmaddfp(lvInverseDistance,
+            __vnmsubfp(lvInverseDistance, lvDistance, lvOne), lvInverseDistance);
+        lvInverseDot = __vmaddfp(lvInverseDot,
+            __vnmsubfp(lvInverseDot, lvDot, lvOne), lvInverseDot);
+    }
+    const f32 lfInverseDistance = lvInverseDistance.x;
+    const f32 lfInverseDot = lvInverseDot.x;
 
     const Vector3 lvShortfall   = LaneSub(lvMin, LaneVector(lfDistance, lfDistance, lfDistance, lfDistance));
     const Vector3 lvTestScale   = LaneMul(LaneVector(lfInverseDistance, lfInverseDistance, lfInverseDistance,
@@ -1808,29 +1831,20 @@ bool TargetWillExceedRangeInXSecs(Vector3 lPosition, Vector3 lTarget, Vector3 lT
 bool BrnDirector::Camera::Utils::ProjectWorldSpacePointToScreen(
     const Matrix44& lViewProjMatrix, Vector3 lWorldSpacePosition, Vector2& lv2OutScreenSpacePosition)
 {
-    const auto& lx = lViewProjMatrix.xAxis;
-    const auto& ly = lViewProjMatrix.yAxis;
-    const auto& lz = lViewProjMatrix.zAxis;
-    const auto& lw = lViewProjMatrix.wAxis;
-    Vector4 lProjectedPoint = {
-        std::fma(lx.x,lWorldSpacePosition.x,lw.x),
-        std::fma(lx.y,lWorldSpacePosition.x,lw.y),
-        std::fma(lx.z,lWorldSpacePosition.x,lw.z),
-        std::fma(lx.w,lWorldSpacePosition.x,lw.w)};
-    lProjectedPoint = {
-        std::fma(ly.x,lWorldSpacePosition.y,lProjectedPoint.x),
-        std::fma(ly.y,lWorldSpacePosition.y,lProjectedPoint.y),
-        std::fma(ly.z,lWorldSpacePosition.y,lProjectedPoint.z),
-        std::fma(ly.w,lWorldSpacePosition.y,lProjectedPoint.w)};
-    lProjectedPoint = {
-        std::fma(lz.x,lWorldSpacePosition.z,lProjectedPoint.x),
-        std::fma(lz.y,lWorldSpacePosition.z,lProjectedPoint.y),
-        std::fma(lz.z,lWorldSpacePosition.z,lProjectedPoint.z),
-        std::fma(lz.w,lWorldSpacePosition.z,lProjectedPoint.w)};
-    if (!(lProjectedPoint.w > 0.01f)) //82002138, unordered also returns false
+    const ::Vector4& lx = lViewProjMatrix.xAxis;
+    const ::Vector4& ly = lViewProjMatrix.yAxis;
+    const ::Vector4& lz = lViewProjMatrix.zAxis;
+    const ::Vector4& lw = lViewProjMatrix.wAxis;
+    __vector4 lvProjected = __vmaddfp(__vspltw(lWorldSpacePosition.mV, 0), lx.mV, lw.mV);
+    lvProjected = __vmaddfp(__vspltw(lWorldSpacePosition.mV, 1), ly.mV, lvProjected);
+    lvProjected = __vmaddfp(__vspltw(lWorldSpacePosition.mV, 2), lz.mV, lvProjected);
+    if (!(lvProjected.w > 0.01f))
         return false;
-    const f32 lfInvZ = 1.0f/lProjectedPoint.w; //fdivs, followed by separately-rounded mul
-    lv2OutScreenSpacePosition.x = lProjectedPoint.x*lfInvZ;
-    lv2OutScreenSpacePosition.y = lProjectedPoint.y*lfInvZ;
+    const f32 lfInvZ = 1.0f / lvProjected.w;
+    const __vector4 lvInverse = XMVectorReplicate(lfInvZ);
+    const __vector4 lvX = __vmulfp(__vspltw(lvProjected, 0), lvInverse);
+    const __vector4 lvY = __vmulfp(__vspltw(lvProjected, 1), lvInverse);
+    __vector4 lvOut = __vrlimi(lv2OutScreenSpacePosition.mV, lvX, 8, 0);
+    lv2OutScreenSpacePosition.mV = __vrlimi(lvOut, lvY, 4, 0);
     return true;
 }

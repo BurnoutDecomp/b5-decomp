@@ -17,6 +17,8 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"      // Utils::RotateMatrix44AffineByEulerAnglesZXY
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"          // Random::RandomFloat / ::RandomVector
 #include "rw/math/vpu/types.h"                                 // Vector3 / Matrix44Affine (complete)
+#include <xtl.h>
+#include <xboxmath.h>
 
 namespace BrnDirector
 {
@@ -27,8 +29,7 @@ namespace Utils
 namespace
 {
     // ------------------------------------------------------------------------
-    // rw::math::vpu has no operators (project rule), so the lane-wise primitives the shake's
-    // VMX block reduces to are spelled out here.
+    // The shake's lane primitives use the original VMX operations directly.
     // ------------------------------------------------------------------------
     typedef rw::math::vpu::Vector3     Vector3;
     typedef rw::math::vpu::Matrix44Affine Matrix44Affine;
@@ -38,48 +39,35 @@ namespace
     // RotateMatrix44AffineByEulerAnglesZXY takes RADIANS.
     const f32 KF_DEGREES_TO_RADIANS = 0.017453292f;
 
-    Vector3 Add(const Vector3& lrA, const Vector3& lrB)          // vaddfp
+    Vector3 ShakeAdd(const Vector3& a, const Vector3& b)
     {
-        Vector3 lResult;
-        lResult.x = lrA.x + lrB.x;
-        lResult.y = lrA.y + lrB.y;
-        lResult.z = lrA.z + lrB.z;
-        lResult.w = lrA.w + lrB.w;
-        return lResult;
+        return Vector3(__vaddfp(a.mV, b.mV));
     }
 
-    Vector3 Scale(const Vector3& lrV, f32 lfScale)               // vmulfp128 by a splat
+    Vector3 ShakeScale(const Vector3& v, f32 scale)
     {
-        Vector3 lResult;
-        lResult.x = lrV.x * lfScale;
-        lResult.y = lrV.y * lfScale;
-        lResult.z = lrV.z * lfScale;
-        lResult.w = lrV.w * lfScale;
-        return lResult;
+        return Vector3(__vmulfp(v.mV, XMVectorReplicate(scale)));
     }
 
-    // `vmaddfp vD, splat(lfScale), vD, lrV` -- IDA prints vmaddfp in RAW FIELD ORDER
-    // (VD, VA, VB, VC) with the semantic VD = VA * VC + VB.
-    Vector3 ScaleAdd(const Vector3& lrV, f32 lfScale, const Vector3& lrAddend)
+    Vector3 ShakeScaleAdd(const Vector3& v, f32 scale, const Vector3& addend)
     {
-        Vector3 lResult;
-        lResult.x = lrV.x * lfScale + lrAddend.x;
-        lResult.y = lrV.y * lfScale + lrAddend.y;
-        lResult.z = lrV.z * lfScale + lrAddend.z;
-        lResult.w = lrV.w * lfScale + lrAddend.w;
-        return lResult;
+        return Vector3(__vmaddfp(v.mV, XMVectorReplicate(scale), addend.mV));
     }
 
-    // One row of the row-vector affine product `lrRow * lrRight` (no translation term).
-    Vector3 TransformRow(const Vector3& lrRow, const Matrix44Affine& lrRight)
+    Vector3 TransformRow(const Vector3& row, const Matrix44Affine& right)
     {
-        Vector3 lResult;
-        lResult.x = lrRow.x * lrRight.xAxis.x + lrRow.y * lrRight.yAxis.x + lrRow.z * lrRight.zAxis.x;
-        lResult.y = lrRow.x * lrRight.xAxis.y + lrRow.y * lrRight.yAxis.y + lrRow.z * lrRight.zAxis.y;
-        lResult.z = lrRow.x * lrRight.xAxis.z + lrRow.y * lrRight.yAxis.z + lrRow.z * lrRight.zAxis.z;
-        lResult.w = lrRow.x * lrRight.xAxis.w + lrRow.y * lrRight.yAxis.w + lrRow.z * lrRight.zAxis.w;
-        return lResult;
+        __vector4 result = __vmulfp(__vspltw(row.mV, 0), right.xAxis.mV);
+        result = __vmaddfp(__vspltw(row.mV, 1), right.yAxis.mV, result);
+        return Vector3(__vmaddfp(__vspltw(row.mV, 2), right.zAxis.mV, result));
     }
+
+    Vector3 TransformPosition(const Vector3& row, const Matrix44Affine& right)
+    {
+        __vector4 result = __vmaddfp(__vspltw(row.mV, 0), right.xAxis.mV, right.wAxis.mV);
+        result = __vmaddfp(__vspltw(row.mV, 1), right.yAxis.mV, result);
+        return Vector3(__vmaddfp(__vspltw(row.mV, 2), right.zAxis.mV, result));
+    }
+
 }
 // ============================================================================
 // CameraShake::Update @0x82221310   (300 asm lines)
@@ -132,44 +120,39 @@ void CameraShake::Update(Matrix44Affine& lrTransform, const Parameters& lrParams
     // Three independent draws; the vrlimi128 masks put them in Euler lanes 0, 1 and 2 (the
     // ZXY convention's pitch, yaw and roll). The w lane is Vector3's don't-care.
     Vector3 lShakeAngles;
-    lShakeAngles.x = lrRandom.RandomFloat(-lrParams.mfXYShakeMagnitudeDegs,   // vrlimi128 v13, v0,  8, 0
+    lShakeAngles.mV.x = lrRandom.RandomFloat(-lrParams.mfXYShakeMagnitudeDegs,   // vrlimi128 v13, v0,  8, 0
                                            lrParams.mfXYShakeMagnitudeDegs);
-    lShakeAngles.y = lrRandom.RandomFloat(-lrParams.mfXYShakeMagnitudeDegs,   // vrlimi128 v13, v12, 4, 3
+    lShakeAngles.mV.y = lrRandom.RandomFloat(-lrParams.mfXYShakeMagnitudeDegs,   // vrlimi128 v13, v12, 4, 3
                                            lrParams.mfXYShakeMagnitudeDegs);
-    lShakeAngles.z = lrRandom.RandomFloat(-lrParams.mfZShakeMagnitudeDegs,    // vrlimi128 v13, v10, 2, 2
+    lShakeAngles.mV.z = lrRandom.RandomFloat(-lrParams.mfZShakeMagnitudeDegs,    // vrlimi128 v13, v10, 2, 2
                                            lrParams.mfZShakeMagnitudeDegs);
-    lShakeAngles.w = 0.0f;
 
     // ---- the carried wobble: a critically-ish damped random walk ------------
     // The four live f32 are lifted into two Vector3 temporaries with the z/w lanes zeroed
     // (the asm's stfs 0.0 into the third slot of each 16-byte stack block) -- the wobble only
     // ever has pitch and yaw, never roll.
-    const Vector3 lWobble    = { mfCurrentWobbleX,    mfCurrentWobbleY,    0.0f, 0.0f };
-    const Vector3 lWobbleVel = { mfCurrentWobbleXVel, mfCurrentWobbleYVel, 0.0f, 0.0f };
+    const Vector3 lWobble(mfCurrentWobbleX, mfCurrentWobbleY, 0.0f);
+    const Vector3 lWobbleVel(mfCurrentWobbleXVel, mfCurrentWobbleYVel, 0.0f);
 
-    // The impulse range: the XY wobble magnitude in x and y, ZERO in z, negated for the
-    // minimum by a sign-bit vxor.
-    const Vector3 lWobbleMax = {  lrParams.mfXYWobbleMagnitudeDegs,  lrParams.mfXYWobbleMagnitudeDegs, 0.0f, 0.0f };
-    const Vector3 lWobbleMin = { -lrParams.mfXYWobbleMagnitudeDegs, -lrParams.mfXYWobbleMagnitudeDegs, 0.0f, 0.0f };
-    const Vector3 lImpulse   = lrRandom.RandomVector(lWobbleMin, lWobbleMax);   // vmaddfp v12, v8, v12, v6
-
-    // acceleration = centeringFactor * (-wobble - wobbleVelocity) + impulse
-    //   vxor v0, v9, v0 (sign flip) ; vsubfp v0, v0, v10 ; vmaddfp v0, v0, v12, v8
-    const Vector3 lRestoring = { -lWobble.x - lWobbleVel.x,
-                                 -lWobble.y - lWobbleVel.y,
-                                 -lWobble.z - lWobbleVel.z,
-                                 -lWobble.w - lWobbleVel.w };
-    const Vector3 lAcceleration = ScaleAdd(lRestoring, lrParams.mfWobbleCenteringFactor, lImpulse);
+    // ARTIST flips all four sign bits, including the zero lanes.
+    const Vector3 lWobbleMax(lrParams.mfXYWobbleMagnitudeDegs,
+                             lrParams.mfXYWobbleMagnitudeDegs, 0.0f);
+    const __vector4 lvOnes = __vspltisw(-1);
+    const __vector4 lvSign = __vslw(lvOnes, lvOnes);
+    const Vector3 lWobbleMin(__vxor(lWobbleMax.mV, lvSign));
+    const Vector3 lImpulse = lrRandom.RandomVector(lWobbleMin, lWobbleMax);
+    const Vector3 lRestoring(__vsubfp(__vxor(lWobble.mV, lvSign), lWobbleVel.mV));
+    const Vector3 lAcceleration = ShakeScaleAdd(lRestoring, lrParams.mfWobbleCenteringFactor, lImpulse);
 
     // The velocity takes the acceleration WHOLE (no timestep on this edge -- the console's
     // `vaddfp v0, v10, v0`); only the position integrates over lfTimestep.
-    const Vector3 lNewWobbleVel = Add(lWobbleVel, lAcceleration);
-    const Vector3 lNewWobble    = ScaleAdd(lNewWobbleVel, lfTimestep, lWobble);   // vmaddfp v0, v0, v9, v5
+    const Vector3 lNewWobbleVel = ShakeAdd(lWobbleVel, lAcceleration);
+    const Vector3 lNewWobble    = ShakeScaleAdd(lNewWobbleVel, lfTimestep, lWobble);   // vmaddfp v0, v0, v9, v5
 
-    mfCurrentWobbleXVel = lNewWobbleVel.x;   // stfs f13, 8(r10)
-    mfCurrentWobbleYVel = lNewWobbleVel.y;   // stfs f0, 0xC(r10)
-    mfCurrentWobbleX    = lNewWobble.x;      // stfs f0, 0(r10)
-    mfCurrentWobbleY    = lNewWobble.y;      // stfs f0, 4(r10)
+    mfCurrentWobbleXVel = lNewWobbleVel.mV.x;   // stfs f13, 8(r10)
+    mfCurrentWobbleYVel = lNewWobbleVel.mV.y;   // stfs f0, 0xC(r10)
+    mfCurrentWobbleX    = lNewWobble.mV.x;      // stfs f0, 0(r10)
+    mfCurrentWobbleY    = lNewWobble.mV.y;      // stfs f0, 4(r10)
 
     // ---- degrees -> radians, scaled by the caller's amount ------------------
     // ⚠️ lfSpeedRatio is the COMMITTED parameter name and is INFERRED, not attested: the asm
@@ -177,7 +160,7 @@ void CameraShake::Update(Matrix44Affine& lrTransform, const Parameters& lrParams
     // (BehaviourGameplayBumper::Update @0x82227134 passes a behaviour f32 * 3.0f;
     // ImpactShakeController::Update @0x822438AC passes *this * 15.0f) both read as a shake
     // AMOUNT rather than a speed ratio. Left alone rather than churned.
-    const Vector3 lEulerAnglesRads = Scale(Add(lShakeAngles, lNewWobble),
+    const Vector3 lEulerAnglesRads = ShakeScale(ShakeAdd(lShakeAngles, lNewWobble),
                                            KF_DEGREES_TO_RADIANS * lfSpeedRatio);
 
     // ---- build the rotation and pre-multiply --------------------------------
@@ -195,7 +178,7 @@ void CameraShake::Update(Matrix44Affine& lrTransform, const Parameters& lrParams
     lrTransform.xAxis = TransformRow(lShakeRotation.xAxis, lOriginal);
     lrTransform.yAxis = TransformRow(lShakeRotation.yAxis, lOriginal);
     lrTransform.zAxis = TransformRow(lShakeRotation.zAxis, lOriginal);
-    lrTransform.wAxis = Add(TransformRow(lShakeRotation.wAxis, lOriginal), lOriginal.wAxis);
+    lrTransform.wAxis = TransformPosition(lShakeRotation.wAxis, lOriginal);
 }
 }
 }

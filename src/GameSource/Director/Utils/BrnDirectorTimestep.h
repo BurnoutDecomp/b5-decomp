@@ -29,24 +29,8 @@
 namespace BrnDirector
 {
 
-// FLAG: minimal slice of rw::math::VecFloat -- the SDK's broadcast scalar register (one
-//   16-byte SIMD lane register holding the same scalar in all four lanes). The reconstructed
-//   rw math home (rw/math/vpu) de-models VecFloat to a plain f32 for arithmetic, but Timestep
-//   STORES a VecFloat register by value (its layout pins mafTimestep at +0x30), so the storage
-//   type must be 16 bytes wide. Modelled here as a 16-byte, 16-aligned broadcast register
-//   constructed from / convertible to a scalar f32. Replace with the real VecFloat when the
-//   rw math VecFloat type TU lands; the storage width and the scalar conversions are stable.
-struct CGS_ALIGN(16) VecFloat
-{
-    f32 maLanes[4];
-
-    // ARTIST 0x822598B4..0x822598D4 leaves embedded vector storage uninitialized.
-    VecFloat() {}
-    VecFloat(f32 lfScalar) { for (int li = 0; li < 4; ++li) maLanes[li] = lfScalar; }
-
-    // The scalar value the register broadcasts (lane 0).
-    operator f32() const { return maLanes[0]; }
-};
+// Use the genuine SDK value type for the native vector-register ABI.
+using rw::math::vpu::VecFloat;
 
 class Timestep
 {
