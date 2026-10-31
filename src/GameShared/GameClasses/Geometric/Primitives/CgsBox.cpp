@@ -103,8 +103,8 @@
 // NOT a divergence, spelled literally on purpose (AGENTS.md gotcha 4 -- NaN polarity):
 //   * the overlap verdict is written `!(lDistance >= 0)` (the console's `vcmpgefp` + `vnot`), NOT
 //     `lDistance < 0`. On a NaN lane the console returns TRUE (overlapping); a host `<` would
-//     return false. The vendor `CompLessThan(Vector4,Vector4)` is bodied as exactly that negation
-//     (vector4_operation.h:136), which is why it is the call used.
+//     return false. The genuine `CompLessThan(VecFloat,VecFloat)` is bodied as exactly that negation
+//     in the SDK scalar operations, which is why it is the call used.
 //   * the orthogonality / normality verdicts are written `!(fabs(error) > tolerance)` (the
 //     console's `vcmpgtfp` then the `cntlzw`-of-the-stored-mask inversion), so a NaN error reads
 //     as "within tolerance". The PS3 SDK spells its IsZero the other way round
@@ -172,7 +172,7 @@ namespace CgsGeometric
         // The fatness lane. The DWARF names `VecFloat<VectorAxisW>` immediately beside an IsValid,
         // i.e. IsValid(VecFloat(mDimensionsAndFatness.W())); there is no IsValid(VecFloat) in this
         // tree, so the one-lane self-compare it reduces to is written out.
-        const f32 lfFatness = GetFatness().w;
+        const f32 lfFatness = GetFatness().mV.w;
         const bool lbFatnessValid = (lfFatness == lfFatness);              // vspltw v0,v0,3 + vcmpeqfp.
 
         const Matrix44Affine lTransform = GetTransform();                  // DWARF Matrix44Affine ctor
@@ -200,26 +200,22 @@ namespace CgsGeometric
         const Vector3& lrUp    = lTransform.Up();
         const Vector3& lrAt    = lTransform.At();
 
-        const Vector3 lGramRowRight = { vpu::Dot(lrRight, lrRight),
+        const Vector3 lGramRowRight( vpu::Dot(lrRight, lrRight),
                                         vpu::Dot(lrRight, lrUp),
-                                        vpu::Dot(lrRight, lrAt),
-                                        0.0f };
-        const Vector3 lGramRowUp = { vpu::Dot(lrUp, lrRight),
+                                        vpu::Dot(lrRight, lrAt));
+        const Vector3 lGramRowUp( vpu::Dot(lrUp, lrRight),
                                      vpu::Dot(lrUp, lrUp),
-                                     vpu::Dot(lrUp, lrAt),
-                                     0.0f };
-        const Vector3 lGramRowAt = { vpu::Dot(lrAt, lrRight),
+                                     vpu::Dot(lrUp, lrAt));
+        const Vector3 lGramRowAt( vpu::Dot(lrAt, lrRight),
                                      vpu::Dot(lrAt, lrUp),
-                                     vpu::Dot(lrAt, lrAt),
-                                     0.0f };
+                                     vpu::Dot(lrAt, lrAt));
         const Vector3 lGramErrorRight = lGramRowRight - vpu::GetVector3_XAxis(); // - gIVector
         const Vector3 lGramErrorUp = lGramRowUp - vpu::GetVector3_YAxis();       // - 0x82181510
         const Vector3 lGramErrorAt = lGramRowAt - vpu::GetVector3_ZAxis();       // - 0x82181520
 
-        const Vector3 lOrthogonalError = { vpu::MagnitudeSquared(lGramErrorRight),
+        const Vector3 lOrthogonalError( vpu::MagnitudeSquared(lGramErrorRight),
                                            vpu::MagnitudeSquared(lGramErrorUp),
-                                           vpu::MagnitudeSquared(lGramErrorAt),
-                                           0.0f };
+                                           vpu::MagnitudeSquared(lGramErrorAt));
         const f32 lfOrthogonalError = vpu::MagnitudeSquared(lOrthogonalError);
         const bool lbOrthogonal = !(std::fabs(lfOrthogonalError) > KF_BOX_VALIDITY_TOLERANCE);
 
@@ -230,10 +226,9 @@ namespace CgsGeometric
         // `vspltisw v10,1 ; vcfsx v10,v10,0` materialises (0x825BEE68/0x825BEE80), gathered by the
         // same permute pair, one more vmsum3fp128, `vandc` (Abs) and `vcmpgtfp v10, v10, v5`
         // against the SAME tolerance loaded a second time.
-        const Vector3 lNormalError = { vpu::MagnitudeSquared(lrRight) - 1.0f,
+        const Vector3 lNormalError( vpu::MagnitudeSquared(lrRight) - 1.0f,
                                        vpu::MagnitudeSquared(lrUp)    - 1.0f,
-                                       vpu::MagnitudeSquared(lrAt)    - 1.0f,
-                                       0.0f };
+                                       vpu::MagnitudeSquared(lrAt)    - 1.0f);
         const f32 lfNormalError = vpu::MagnitudeSquared(lNormalError);
         const bool lbNormal = !(std::fabs(lfNormalError) > KF_BOX_VALIDITY_TOLERANCE);
 
@@ -287,9 +282,9 @@ namespace CgsGeometric
         const Vector3        lDimensions = lrBox.GetDimensions();
 
         // `vmsum3fp128 v,axis,row` -> `vandc v,v,0x80000000` (Abs) -> `vmulfp128 v,v,splat(dim.?)`
-        const f32 lfRightExtent = std::fabs(vpu::Dot(lAxis, lTransform.Right())) * lDimensions.x;
-        const f32 lfUpExtent    = std::fabs(vpu::Dot(lAxis, lTransform.Up()))    * lDimensions.y;
-        const f32 lfAtExtent    = std::fabs(vpu::Dot(lAxis, lTransform.At()))    * lDimensions.z;
+        const f32 lfRightExtent = std::fabs(vpu::Dot(lAxis, lTransform.Right())) * lDimensions.mV.x;
+        const f32 lfUpExtent    = std::fabs(vpu::Dot(lAxis, lTransform.Up()))    * lDimensions.mV.y;
+        const f32 lfAtExtent    = std::fabs(vpu::Dot(lAxis, lTransform.At()))    * lDimensions.mV.z;
 
         f32 lfMaxExtent = lfRightExtent;                                        // seed
         lfMaxExtent = (lfUpExtent > lfMaxExtent) ? lfUpExtent : lfMaxExtent;    // vmaxfp
@@ -297,7 +292,7 @@ namespace CgsGeometric
 
         // The console leaves the result broadcast in a VMX register (every producer here is a
         // vmsum3fp128/vmaxfp, all four lanes equal); the DWARF types it VecFloat.
-        { const VecFloat lResult = { lfMaxExtent, lfMaxExtent, lfMaxExtent, lfMaxExtent }; return lResult; }
+        { VecFloat lResult; lResult.mV.x = lResult.mV.y = lResult.mV.z = lResult.mV.w = lfMaxExtent; return lResult; }
     }
 
     // ==============================================================================================
@@ -315,8 +310,8 @@ namespace CgsGeometric
     //     vsubfp   v0,  v0,  v13   ; lDistance -= (extents1 + extents2)      <- DWARF operator-=
     //     vcmpgefp v0,  v0,  v4    ; v4 == vspltisw 0 -> (lDistance >= 0) == SEPARATED
     //     vnot     v1,  v0         ; overlapping = NOT separated
-    // `vcmpgefp` followed by `vnot` IS the SDK's CompLessThan (vendor vector4_operation.h:136,
-    // bodied as the literal `!(a >= b)`), so that is the call used rather than a bare `<`.
+    // `vcmpgefp` followed by `vnot` is the SDK scalar CompLessThan
+    // (literal `!(a >= b)`), so that is the call used rather than a bare `<`.
     // ==============================================================================================
     rw::math::vpu::MaskScalar BoxOverlappingTest(const Box& lrBox1, const Box& lrBox2, Vector3 lAxis)
     {
@@ -330,11 +325,13 @@ namespace CgsGeometric
 
         // `vsubfp` then `vandc` (Abs) at 0x825BF070/0x825BF078.
         f32 lfDistance = std::fabs(lfBox1Pos - lfBox2Pos);                    // DWARF lDistance :172
-        lfDistance -= (lBox1Extents.x + lBox2Extents.x);                      // DWARF operator-=
+        lfDistance -= (lBox1Extents.mV.x + lBox2Extents.mV.x);                      // DWARF operator-=
 
         // DWARF lOverlapping :174.
-        const VecFloat lDistanceVector = { lfDistance, lfDistance, lfDistance, lfDistance };
-        const VecFloat lZeroVector = { 0.0f, 0.0f, 0.0f, 0.0f };
+        VecFloat lDistanceVector;
+        lDistanceVector.mV.x = lDistanceVector.mV.y = lDistanceVector.mV.z = lDistanceVector.mV.w = lfDistance;
+        VecFloat lZeroVector;
+        lZeroVector.mV.x = lZeroVector.mV.y = lZeroVector.mV.z = lZeroVector.mV.w = 0.0f;
         const rw::math::vpu::MaskScalar lOverlapping =
             vpu::CompLessThan(lDistanceVector, lZeroVector);
         return lOverlapping;
