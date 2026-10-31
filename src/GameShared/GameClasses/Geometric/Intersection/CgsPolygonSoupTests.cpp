@@ -121,10 +121,10 @@ namespace CgsGeometric
             Triangle4::Mask4 lMask;
             lMask.SetZero();
             const u32 luTrueLane = 0xFFFFFFFFu;
-            if (liCount > 0) std::memcpy(&lMask.x, &luTrueLane, sizeof(u32));
-            if (liCount > 1) std::memcpy(&lMask.y, &luTrueLane, sizeof(u32));
-            if (liCount > 2) std::memcpy(&lMask.z, &luTrueLane, sizeof(u32));
-            if (liCount > 3) std::memcpy(&lMask.w, &luTrueLane, sizeof(u32));
+            if (liCount > 0) std::memcpy(&lMask.mV.x, &luTrueLane, sizeof(u32));
+            if (liCount > 1) std::memcpy(&lMask.mV.y, &luTrueLane, sizeof(u32));
+            if (liCount > 2) std::memcpy(&lMask.mV.z, &luTrueLane, sizeof(u32));
+            if (liCount > 3) std::memcpy(&lMask.mV.w, &luTrueLane, sizeof(u32));
             return lMask;
         }
     }
@@ -244,9 +244,9 @@ namespace CgsGeometric
     {
         Triangle4& lrDest = lpOutTriangles[liWriteIndex];
 
-        f32* const lapV0[3] = { &lrDest.mVertex0X.x, &lrDest.mVertex0Y.x, &lrDest.mVertex0Z.x };
-        f32* const lapV1[3] = { &lrDest.mVertex1X.x, &lrDest.mVertex1Y.x, &lrDest.mVertex1Z.x };
-        f32* const lapV2[3] = { &lrDest.mVertex2X.x, &lrDest.mVertex2Y.x, &lrDest.mVertex2Z.x };
+        f32* const lapV0[3] = { &lrDest.mVertex0X.mV.x, &lrDest.mVertex0Y.mV.x, &lrDest.mVertex0Z.mV.x };
+        f32* const lapV1[3] = { &lrDest.mVertex1X.mV.x, &lrDest.mVertex1Y.mV.x, &lrDest.mVertex1Z.mV.x };
+        f32* const lapV2[3] = { &lrDest.mVertex2X.mV.x, &lrDest.mVertex2Y.mV.x, &lrDest.mVertex2Z.mV.x };
 
         for (s32 liLane = 0; liLane < 4; ++liLane)
         {
@@ -254,13 +254,13 @@ namespace CgsGeometric
             const Vector3& lrB = lpBuffer->mVertex1[liLane];
             const Vector3& lrC = lpBuffer->mVertex2[liLane];
 
-            lapV0[0][liLane] = lrA.x;  lapV0[1][liLane] = lrA.y;  lapV0[2][liLane] = lrA.z;
-            lapV1[0][liLane] = lrB.x;  lapV1[1][liLane] = lrB.y;  lapV1[2][liLane] = lrB.z;
-            lapV2[0][liLane] = lrC.x;  lapV2[1][liLane] = lrC.y;  lapV2[2][liLane] = lrC.z;
+            lapV0[0][liLane] = lrA.mV.x;  lapV0[1][liLane] = lrA.mV.y;  lapV0[2][liLane] = lrA.mV.z;
+            lapV1[0][liLane] = lrB.mV.x;  lapV1[1][liLane] = lrB.mV.y;  lapV1[2][liLane] = lrB.mV.z;
+            lapV2[0][liLane] = lrC.mV.x;  lapV2[1][liLane] = lrC.mV.y;  lapV2[2][liLane] = lrC.mV.z;
 
-            (&lrDest.mEdge0Cosigns.x)[liLane] = lpBuffer->mEdgeCosine0[liLane].x;
-            (&lrDest.mEdge1Cosigns.x)[liLane] = lpBuffer->mEdgeCosine1[liLane].x;
-            (&lrDest.mEdge2Cosigns.x)[liLane] = lpBuffer->mEdgeCosine2[liLane].x;
+            (&lrDest.mEdge0Cosigns.mV.x)[liLane] = lpBuffer->mEdgeCosine0[liLane].mV.x;
+            (&lrDest.mEdge1Cosigns.mV.x)[liLane] = lpBuffer->mEdgeCosine1[liLane].mV.x;
+            (&lrDest.mEdge2Cosigns.mV.x)[liLane] = lpBuffer->mEdgeCosine2[liLane].mV.x;
         }
 
         // The tag row is moved as one 16-byte register; the destination is typed
@@ -345,13 +345,13 @@ namespace CgsGeometric
             Vector3& lrOut = lpOutVertexPositions[luIndex];
 
             // vadduwm (wrapping 32-bit add), vcfsx (SIGNED convert), vmulfp.
-            lrOut.x = static_cast<f32>(static_cast<s32>(
+            lrOut.mV.x = static_cast<f32>(static_cast<s32>(
                           static_cast<u32>(laiOrigin[0]) + lau32Packed[0])) * lfScale;
-            lrOut.y = static_cast<f32>(static_cast<s32>(
+            lrOut.mV.y = static_cast<f32>(static_cast<s32>(
                           static_cast<u32>(laiOrigin[1]) + lau32Packed[1])) * lfScale;
-            lrOut.z = static_cast<f32>(static_cast<s32>(
+            lrOut.mV.z = static_cast<f32>(static_cast<s32>(
                           static_cast<u32>(laiOrigin[2]) + lau32Packed[2])) * lfScale;
-            lrOut.w = static_cast<f32>(static_cast<s32>(
+            lrOut.mV.w = static_cast<f32>(static_cast<s32>(
                           static_cast<u32>(laiOrigin[3]) + lau32Packed[3])) * lfScale;
 
             lpVertex += KI_VERTEX_STRIDE;   // `addi r3, r3, 6`
@@ -419,9 +419,9 @@ namespace CgsGeometric
                                             Vector4 lVertex1X, Vector4 lVertex1Y, Vector4 lVertex1Z,
                                             Vector4 lVertex2X, Vector4 lVertex2Y, Vector4 lVertex2Z)
     {
-        const f32* const lapP0[3] = { &lVertex0X.x, &lVertex0Y.x, &lVertex0Z.x };
-        const f32* const lapP1[3] = { &lVertex1X.x, &lVertex1Y.x, &lVertex1Z.x };
-        const f32* const lapP2[3] = { &lVertex2X.x, &lVertex2Y.x, &lVertex2Z.x };
+        const f32* const lapP0[3] = { &lVertex0X.mV.x, &lVertex0Y.mV.x, &lVertex0Z.mV.x };
+        const f32* const lapP1[3] = { &lVertex1X.mV.x, &lVertex1Y.mV.x, &lVertex1Z.mV.x };
+        const f32* const lapP2[3] = { &lVertex2X.mV.x, &lVertex2Y.mV.x, &lVertex2Z.mV.x };
 
         // `lvx128 v0, r0, r3` then three vspltw + one for the radius.
         const f32 lfCx = lSphere.mData.mV.x;
@@ -431,7 +431,7 @@ namespace CgsGeometric
 
         Triangle4::Mask4 lResult;
         lResult.SetZero();
-        f32* const lpaResultLane = &lResult.x;
+        f32* const lpaResultLane = &lResult.mV.x;
 
         const u32 luTrueLane = 0xFFFFFFFFu;
 
@@ -575,8 +575,8 @@ namespace CgsGeometric
         inline VecFloat SplatVecFloat(f32 lfValue)
         {
             VecFloat lValue;
-            lValue.x = lfValue; lValue.y = lfValue;
-            lValue.z = lfValue; lValue.w = lfValue;
+            lValue.mV.x = lfValue; lValue.mV.y = lfValue;
+            lValue.mV.z = lfValue; lValue.mV.w = lfValue;
             return lValue;
         }
 
@@ -632,15 +632,15 @@ namespace CgsGeometric
                 // Lanes beyond miCount replay the last triangle, matching the
                 // console's self-merge duplication; their result is discarded.
                 const s32 liSource = (liLane < lrBatch.miCount) ? liLane : (lrBatch.miCount - 1);
-                (&lP0X.x)[liLane] = lrBatch.maV0[liSource].x;
-                (&lP0Y.x)[liLane] = lrBatch.maV0[liSource].y;
-                (&lP0Z.x)[liLane] = lrBatch.maV0[liSource].z;
-                (&lP1X.x)[liLane] = lrBatch.maV1[liSource].x;
-                (&lP1Y.x)[liLane] = lrBatch.maV1[liSource].y;
-                (&lP1Z.x)[liLane] = lrBatch.maV1[liSource].z;
-                (&lP2X.x)[liLane] = lrBatch.maV2[liSource].x;
-                (&lP2Y.x)[liLane] = lrBatch.maV2[liSource].y;
-                (&lP2Z.x)[liLane] = lrBatch.maV2[liSource].z;
+                (&lP0X.mV.x)[liLane] = lrBatch.maV0[liSource].mV.x;
+                (&lP0Y.mV.x)[liLane] = lrBatch.maV0[liSource].mV.y;
+                (&lP0Z.mV.x)[liLane] = lrBatch.maV0[liSource].mV.z;
+                (&lP1X.mV.x)[liLane] = lrBatch.maV1[liSource].mV.x;
+                (&lP1Y.mV.x)[liLane] = lrBatch.maV1[liSource].mV.y;
+                (&lP1Z.mV.x)[liLane] = lrBatch.maV1[liSource].mV.z;
+                (&lP2X.mV.x)[liLane] = lrBatch.maV2[liSource].mV.x;
+                (&lP2Y.mV.x)[liLane] = lrBatch.maV2[liSource].mV.y;
+                (&lP2Z.mV.x)[liLane] = lrBatch.maV2[liSource].mV.z;
             }
 
             const Triangle4::Mask4 lHitMask =
@@ -652,7 +652,7 @@ namespace CgsGeometric
             {
                 // `vspltw v0, mask, lane ; vcmpeqfp. v0, v0, 0 ; mfocrf ; bne`
                 // -- a lane that compares equal to zero is a miss and is skipped.
-                if ((&lHitMask.x)[liLane] == 0.0f)
+                if ((&lHitMask.mV.x)[liLane] == 0.0f)
                 {
                     continue;
                 }
@@ -829,15 +829,15 @@ namespace CgsGeometric
             for (s32 liLane = 0; liLane < 4; ++liLane)
             {
                 const SphereSoupLane& lrLane = laLanes[liLane];
-                (&lP0X.x)[liLane] = lrLane.mpVertex0->x;
-                (&lP0Y.x)[liLane] = lrLane.mpVertex0->y;
-                (&lP0Z.x)[liLane] = lrLane.mpVertex0->z;
-                (&lP1X.x)[liLane] = lrLane.mpVertex1->x;
-                (&lP1Y.x)[liLane] = lrLane.mpVertex1->y;
-                (&lP1Z.x)[liLane] = lrLane.mpVertex1->z;
-                (&lP2X.x)[liLane] = lrLane.mpVertex2->x;
-                (&lP2Y.x)[liLane] = lrLane.mpVertex2->y;
-                (&lP2Z.x)[liLane] = lrLane.mpVertex2->z;
+                (&lP0X.mV.x)[liLane] = lrLane.mpVertex0->mV.x;
+                (&lP0Y.mV.x)[liLane] = lrLane.mpVertex0->mV.y;
+                (&lP0Z.mV.x)[liLane] = lrLane.mpVertex0->mV.z;
+                (&lP1X.mV.x)[liLane] = lrLane.mpVertex1->mV.x;
+                (&lP1Y.mV.x)[liLane] = lrLane.mpVertex1->mV.y;
+                (&lP1Z.mV.x)[liLane] = lrLane.mpVertex1->mV.z;
+                (&lP2X.mV.x)[liLane] = lrLane.mpVertex2->mV.x;
+                (&lP2Y.mV.x)[liLane] = lrLane.mpVertex2->mV.y;
+                (&lP2Z.mV.x)[liLane] = lrLane.mpVertex2->mV.z;
             }
 
             return TestSphereTriangle4SOA(lSphere, lP0X, lP0Y, lP0Z,
@@ -849,7 +849,7 @@ namespace CgsGeometric
         // equal to zero (a hit lane is 0xFFFFFFFF, which reads as NaN and is != 0.0).
         inline bool SphereSoupLaneHit(const Triangle4::Mask4& lrMask, s32 liLane)
         {
-            return (&lrMask.x)[liLane] != 0.0f;
+            return (&lrMask.mV.x)[liLane] != 0.0f;
         }
 
         // The two answers: v126 (`vnot` of zero, every lane all-ones) and v127 (every lane zero).
@@ -857,10 +857,10 @@ namespace CgsGeometric
         {
             rw::math::vpu::MaskScalar lAnswer;
             const u32 luLane = lbHit ? 0xFFFFFFFFu : 0u;
-            std::memcpy(&lAnswer.x, &luLane, sizeof(u32));
-            std::memcpy(&lAnswer.y, &luLane, sizeof(u32));
-            std::memcpy(&lAnswer.z, &luLane, sizeof(u32));
-            std::memcpy(&lAnswer.w, &luLane, sizeof(u32));
+            std::memcpy(&lAnswer.mV.x, &luLane, sizeof(u32));
+            std::memcpy(&lAnswer.mV.y, &luLane, sizeof(u32));
+            std::memcpy(&lAnswer.mV.z, &luLane, sizeof(u32));
+            std::memcpy(&lAnswer.mV.w, &luLane, sizeof(u32));
             return lAnswer;
         }
     }
@@ -995,10 +995,10 @@ namespace CgsGeometric
         {
             rw::math::vpu::MaskScalar lMask;
             const u32 luLane = lbHit ? 0xFFFFFFFFu : 0u;
-            std::memcpy(&lMask.x, &luLane, sizeof(u32));
-            std::memcpy(&lMask.y, &luLane, sizeof(u32));
-            std::memcpy(&lMask.z, &luLane, sizeof(u32));
-            std::memcpy(&lMask.w, &luLane, sizeof(u32));
+            std::memcpy(&lMask.mV.x, &luLane, sizeof(u32));
+            std::memcpy(&lMask.mV.y, &luLane, sizeof(u32));
+            std::memcpy(&lMask.mV.z, &luLane, sizeof(u32));
+            std::memcpy(&lMask.mV.w, &luLane, sizeof(u32));
             return lMask;
         }
 
@@ -1085,7 +1085,7 @@ namespace CgsGeometric
             {
                 lu32HitMask |= (1u << liLane);
             }
-            lafOutT[liLane] = lParam.x;
+            lafOutT[liLane] = lParam.mV.x;
         }
         return lu32HitMask;
     }
