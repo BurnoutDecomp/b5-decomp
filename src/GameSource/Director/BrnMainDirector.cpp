@@ -74,7 +74,8 @@
 #include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h"   // JunctionLogicBox::GetNumLights / GetLight (CalcTrafficLightSpace)
 #include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"         // ConsoleVpu::Dot3 -- vmsum3fp128, rule 1 (CalcTrafficLightSpace)
 
-#include <cmath>     // std::fmaf (the outlined camera-name position)
+#include <cmath>
+#include <cfloat>
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
 #include <cstdlib>   // [diag] getenv -- BRN_SLOMO_DIAG
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint
@@ -190,7 +191,7 @@ namespace BrnDirector
             f32     mfPeak;
             f32     mfLast;
         };
-        GameCameraBlendDiag gGameCameraBlendDiag = { 0.0f, 0u, 0u, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0, 0.0f, 0.0f };
+        GameCameraBlendDiag gGameCameraBlendDiag = { 0.0f, 0u, 0u, { 0.0f, 0.0f, 0.0f, 0.0f }, 0, 0.0f, 0.0f };
 
         f32 GameCameraBlendDiagDistance(const Vector3& lrA, const Vector3& lrB)
         {
@@ -1341,7 +1342,7 @@ namespace BrnDirector
     namespace
     {
         // flt_8200173C == 0x7F7FFFFF (x360rd), splatted into lClosestLight: no light is nearer yet.
-        const f32 KF_TRAFFIC_LIGHT_SPACE_NO_LIGHT_YET = 3.40282347e+38f;
+        const f32 KF_TRAFFIC_LIGHT_SPACE_NO_LIGHT_YET = FLT_MAX;
 
     }
 
@@ -1707,17 +1708,17 @@ namespace BrnDirector
                 Matrix44Affine& lrBase = maGameState.mBaseDriveThruTransform;
                 if (lbGasStation)
                 {
-                    lrBase.Right() = Vector3{ -0.24346f,    0.0f,  -0.96991098f, 0.0f };
-                    lrBase.Up()    = Vector3{  0.0f,        1.0f,   0.0f,        0.0f };
-                    lrBase.At()    = Vector3{  0.96991098f, 0.0f,  -0.24346f,    0.0f };
-                    lrBase.Pos()   = Vector3{  2624.5f,     2.99f, -641.42999f,  0.0f };
+                    { const Vector3 lAxis = { -0.24346f,    0.0f,  -0.96991098f, 0.0f }; lrBase.Right() = lAxis; }
+                    { const Vector3 lAxis = {  0.0f,        1.0f,   0.0f,        0.0f }; lrBase.Up() = lAxis; }
+                    { const Vector3 lAxis = {  0.96991098f, 0.0f,  -0.24346f,    0.0f }; lrBase.At() = lAxis; }
+                    { const Vector3 lAxis = {  2624.5f,     2.99f, -641.42999f,  0.0f }; lrBase.Pos() = lAxis; }
                 }
                 else
                 {
-                    lrBase.Right() = Vector3{ 0.61846203f, 0.0f,       -0.785815f,   0.0f };
-                    lrBase.Up()    = Vector3{ 0.0f,        1.0f,        0.0f,        0.0f };
-                    lrBase.At()    = Vector3{ 0.785815f,   0.0f,        0.61846203f, 0.0f };
-                    lrBase.Pos()   = Vector3{ 2915.99f,    2.6198201f, -1590.3199f,  0.0f };
+                    { const Vector3 lAxis = { 0.61846203f, 0.0f,       -0.785815f,   0.0f }; lrBase.Right() = lAxis; }
+                    { const Vector3 lAxis = { 0.0f,        1.0f,        0.0f,        0.0f }; lrBase.Up() = lAxis; }
+                    { const Vector3 lAxis = { 0.785815f,   0.0f,        0.61846203f, 0.0f }; lrBase.At() = lAxis; }
+                    { const Vector3 lAxis = { 2915.99f,    2.6198201f, -1590.3199f,  0.0f }; lrBase.Pos() = lAxis; }
                 }
 
                 if (liActionType == 100)
@@ -3119,7 +3120,8 @@ namespace BrnDirector
             CgsCore::SPrintf(lacMessage, sizeof(lacMessage), "Unknown");
         }
 
-        const f32 lfX = std::fmaf(-0.1f, lrMetrics.mfScreenWidth, lrMetrics.mfScreenWidth);
+        // ARTIST 0x821F67EC uses scalar fnmsubs.
+        const f32 lfX = lrMetrics.mfScreenWidth - lrMetrics.mfScreenWidth * 0.1f;
         const f32 lfY = lrMetrics.mfScreenHeight * 0.125f;
         Vector2 lv2Position = { lfX, lfY, 0.0f, 0.0f };
         lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
@@ -3328,9 +3330,19 @@ namespace BrnDirector
                 CgsDev::DebugRender& lrDebugRender = lDebugInterface.GetRender();
                 if (lbHasSafePosition)
                 {
+                    const Vector3 lPosition = mVehicleTracker.GetPositionJournal()[0];
+                    const Vector3 lVelocity = mVehicleTracker.GetLinearVelocityLastFrame();
+                    Vector3 lPredictedPosition;
+                    __stvx(__vaddfp(__lvx(&lPosition, 0), __lvx(&lVelocity, 0)),
+                            &lPredictedPosition, 0);
                     lrDebugRender.DrawArrow(lPredictedPosition, lSafePosition, 0xFF00FF00u);
                 }
 
+                const Vector3 lPosition = mVehicleTracker.GetPositionJournal()[0];
+                const Vector3 lVelocity = mVehicleTracker.GetLinearVelocityLastFrame();
+                Vector3 lPredictedPosition;
+                __stvx(__vaddfp(__lvx(&lPosition, 0), __lvx(&lVelocity, 0)),
+                        &lPredictedPosition, 0);
                 const Vector3 lCurrentPositionForArrow = mVehicleTracker.GetPositionJournal()[0];
                 lrDebugRender.DrawArrow(lCurrentPositionForArrow, lPredictedPosition,
                                         lbHasSafePosition ? 0xFF00FF00u : 0xFF0000FFu);
