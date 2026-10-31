@@ -41,10 +41,10 @@ namespace CgsGraphics
     {
         CGS_ASSERT(leState < mu8NumStates, "leState < mu8NumStates");
 
-        const u32 luIndex = mpu8StateRenderableIndices[leState];
+        const u32 luIndex = mpu8StateRenderableIndices[static_cast<u32>(leState)];
         CGS_ASSERT(!(luIndex == 255u || luIndex >= mu8NumRenderables), "State does not exist");
 
-        return mppRenderables[mpu8StateRenderableIndices[leState]];
+        return mppRenderables[static_cast<u32>(mpu8StateRenderableIndices[static_cast<u32>(leState)])];
     }
 
     // DoesStateExist @ 0x822A0B60
@@ -142,8 +142,11 @@ namespace CgsGraphics
     static const rw::math::vpu::Vector4
     gaTheFirstFewIntegersAsVectors[Model::KU_MAX_INSTANCES_PER_GROUP] =
     {
-        { 0.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 2.0f },
-        { 0.0f, 0.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f, 4.0f },
+        rw::math::vpu::Vector4(0.0f, 0.0f, 0.0f, 0.0f),
+        rw::math::vpu::Vector4(0.0f, 0.0f, 0.0f, 1.0f),
+        rw::math::vpu::Vector4(0.0f, 0.0f, 0.0f, 2.0f),
+        rw::math::vpu::Vector4(0.0f, 0.0f, 0.0f, 3.0f),
+        rw::math::vpu::Vector4(0.0f, 0.0f, 0.0f, 4.0f),
     };
 
     // ========================================================================
@@ -184,10 +187,8 @@ namespace CgsGraphics
 
         for (u32 luEntry = 0; luEntry < KU_MAX_INSTANCES_PER_GROUP; ++luEntry)
         {
-            laIndexArray[luEntry].x = lpaModelInstancingIndexArray[luEntry].x;
-            laIndexArray[luEntry].y = lpaModelInstancingIndexArray[luEntry].y;
-            laIndexArray[luEntry].z = lpaModelInstancingIndexArray[luEntry].z;
-            laIndexArray[luEntry].w = gaTheFirstFewIntegersAsVectors[luEntry].w;
+            laIndexArray[luEntry].mV = __vrlimi(lpaModelInstancingIndexArray[luEntry].mV,
+                                                gaTheFirstFewIntegersAsVectors[luEntry].mV, 1, 0);
         }
 
         for (s32 liInstance = 0; liInstance < liModelInstanceCount; ++liInstance)
