@@ -2,10 +2,11 @@
 
 // Shared include spelling for the genuine SDK VPU Vector4 operations.
 // types.h imports the one SDK class and its native primitive bodies.
-// Existing scalar/mask convenience APIs below retain their declarations; the old
-// global VecFloat alias and separate SDK VecFloat remain an explicit identity debt.
+// Scalar comparison and mask primitives use their genuine SDK declarations.
+// Remaining legacy convenience functions below require their separate recovery.
 
 #include "rw/math/vpu/types.h"   // Vector4, MaskScalar
+#include "SDKs/EATech/include/rw/math/vpu/scalar.h"
 
 #include <vectorintrinsics.h>
 
@@ -40,15 +41,6 @@ namespace vpu
         return (&lrVector.mV.x)[liLane];
     }
 
-    // -- mask ops ------------------------------------------------------------------------
-    // And(a,b) = vand, lane-wise over the 0x00000000 / 0xFFFFFFFF compare masks.
-    __forceinline MaskScalar And(MaskScalar lLhs, MaskScalar lRhs)
-    {
-        MaskScalar lResult;
-        __stvx(__vand(__lvx(&lLhs, 0), __lvx(&lRhs, 0)), &lResult, 0);
-        return lResult;
-    }
-
     // Select(falseVal, trueVal, mask) = vsel: per-lane mask ? trueVal : falseVal.
     //
     // ⚠️⚠️ FLAG (argument order, 2026-08-19 / wave Q6) -- NOT a behaviour bug today, but a
@@ -71,62 +63,10 @@ namespace vpu
     inline Vector4 Select(Vector4 lFalse, Vector4 lTrue, MaskScalar lMask)
     {
         { const VectorIntrinsic lResult = {
-            lMask.x != 0.0f ? lTrue.mV.x : lFalse.mV.x,
-            lMask.y != 0.0f ? lTrue.mV.y : lFalse.mV.y,
-            lMask.z != 0.0f ? lTrue.mV.z : lFalse.mV.z,
-            lMask.w != 0.0f ? lTrue.mV.w : lFalse.mV.w }; return Vector4(lResult); }
-    }
-
-    // ===================================================================================
-    // ADDITIVE GROW 2026-08-19 (wave Q6 / the jointed lean+tilt prop response): the two
-    // VecFloat compare-to-mask primitives, under their SDK names.
-    //
-    // The shipped rwmath public header declares them at
-    // references/Feb-2007/.../rwmath/1.02.00/include/rw/math/vpu/scalar.h:134-135 as
-    //     MaskScalar CompLessThan(VecFloat::InParam a, VecFloat::InParam b);
-    //     MaskScalar CompGreaterThan(VecFloat::InParam a, VecFloat::InParam b);
-    // and bodies them at detail/scalar_operation_inline.h:242-255. VecFloat is Vector4 in
-    // this tree (BrnCommonTypes.h:23), which is why they are typed Vector4 here. The DecFIGS
-    // DWARF names both in the consumers (BrnPropManager.cpp:1502 / :1547 / :1791).
-    //
-    // ⚠️ THE TWO ARE NOT SYMMETRIC, and this is AGENTS.md gotcha 4:
-    //     CompLessThan    = vcmpgefp + vnor  -> the NEGATED >=, so a NaN lane is TRUE
-    //     CompGreaterThan = vcmpgtfp (bare)  -> a NaN lane is FALSE
-    // Spelled below as the literal `!(a >= b)` and `a > b` so the polarity is reproduced,
-    // not paraphrased. MEASURED in HandleContactWithLeanProp: `vcmpgefp v0, v0, v11`
-    // @0x8260FC9C followed by `vnot128 v114, v0` @0x8260FCAC (the lean-limit test), against
-    // HandleContactWithTiltProp's bare `vcmpgtfp128 v126, v12, v127` @0x82610ACC (the
-    // "normal points along +Z" test).
-    // ===================================================================================
-    inline MaskScalar CompLessThan(Vector4 lA, Vector4 lB)
-    {
-        { const MaskScalar lResult = {
-            !(lA.mV.x >= lB.mV.x) ? 1.0f : 0.0f,
-            !(lA.mV.y >= lB.mV.y) ? 1.0f : 0.0f,
-            !(lA.mV.z >= lB.mV.z) ? 1.0f : 0.0f,
-            !(lA.mV.w >= lB.mV.w) ? 1.0f : 0.0f }; return lResult; }
-    }
-
-    inline MaskScalar CompGreaterThan(Vector4 lA, Vector4 lB)
-    {
-        { const MaskScalar lResult = {
-            lA.mV.x > lB.mV.x ? 1.0f : 0.0f,
-            lA.mV.y > lB.mV.y ? 1.0f : 0.0f,
-            lA.mV.z > lB.mV.z ? 1.0f : 0.0f,
-            lA.mV.w > lB.mV.w ? 1.0f : 0.0f }; return lResult; }
-    }
-
-    // Greater-than compare producing a per-lane mask (vcmpgtfp): 1.0 where lLhs>lRhs.
-    // ⚠️ `IsGreater` IS NOT AN SDK NAME -- it was this tree's stand-in for CompGreaterThan
-    // before that one had a home (the census in PropManager_wQ2_01.cpp:495-496 says so in
-    // as many words: "CompGreaterThan does NOT exist under that name; the tree's home for
-    // it is IsGreater"). Now that the SDK spelling is committed above, this is kept ONLY as
-    // a forwarder so its two existing callers (BrnTrafficFuzzyLogicBehaviours.cpp:273/:274)
-    // keep compiling -- it is deliberately NOT a second copy of the logic. New code must
-    // call CompGreaterThan. DELETE-WHEN those two call sites are re-spelled.
-    inline MaskScalar IsGreater(Vector4 lLhs, Vector4 lRhs)
-    {
-        return CompGreaterThan(lLhs, lRhs);
+            lMask.mV.x != 0.0f ? lTrue.mV.x : lFalse.mV.x,
+            lMask.mV.y != 0.0f ? lTrue.mV.y : lFalse.mV.y,
+            lMask.mV.z != 0.0f ? lTrue.mV.z : lFalse.mV.z,
+            lMask.mV.w != 0.0f ? lTrue.mV.w : lFalse.mV.w }; return Vector4(lResult); }
     }
 
     // Magnitude is the genuine SDK VecFloat(Vector4::InParam) imported above.

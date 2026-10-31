@@ -230,9 +230,9 @@ namespace vpu
         // the lane broadcast into all four lanes of a MaskScalar. HandleContactWithLeanProp
         // inlines exactly these six broadcasts at 0x82610018/0x8261001C/0x82610020 (the
         // less-than mask) and 0x82610028/0x8261002C/0x82610034 (the greater-than mask).
-        MaskScalar GetX() const { { const MaskScalar lResult = { x, x, x, x }; return lResult; } }
-        MaskScalar GetY() const { { const MaskScalar lResult = { y, y, y, y }; return lResult; } }
-        MaskScalar GetZ() const { { const MaskScalar lResult = { z, z, z, z }; return lResult; } }
+        MaskScalar GetX() const { return MaskScalar(__vspltw(__lvx(this, 0), 0)); }
+        MaskScalar GetY() const { return MaskScalar(__vspltw(__lvx(this, 0), 1)); }
+        MaskScalar GetZ() const { return MaskScalar(__vspltw(__lvx(this, 0), 2)); }
     };
 
     // CompLessThan(a, b) -- Feb-2007 vector3_operation_inline.h:693-699. ⚠️ THE SDK DOES NOT
@@ -276,10 +276,10 @@ namespace vpu
     inline Vector3 Select(MaskScalar lMask, Vector3 lTrueValue, Vector3 lFalseValue)
     {
         { const VectorIntrinsic lResult = {
-            lMask.x != 0.0f ? lTrueValue.mV.x : lFalseValue.mV.x,
-            lMask.y != 0.0f ? lTrueValue.mV.y : lFalseValue.mV.y,
-            lMask.z != 0.0f ? lTrueValue.mV.z : lFalseValue.mV.z,
-            lMask.w != 0.0f ? lTrueValue.mV.w : lFalseValue.mV.w }; return Vector3(lResult); }
+            lMask.mV.x != 0.0f ? lTrueValue.mV.x : lFalseValue.mV.x,
+            lMask.mV.y != 0.0f ? lTrueValue.mV.y : lFalseValue.mV.y,
+            lMask.mV.z != 0.0f ? lTrueValue.mV.z : lFalseValue.mV.z,
+            lMask.mV.w != 0.0f ? lTrueValue.mV.w : lFalseValue.mV.w }; return Vector3(lResult); }
     }
 
     // The three world basis vectors -- Feb-2007 constants_operation.h:42-44, whose bodies
