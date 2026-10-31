@@ -23,7 +23,7 @@
 // remembered crashes against.
 // =================================================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
-#include "SDKs/XboxMath/XMVectorCos.h"
+#include <xboxmath.h>
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"  // InputBuffer_PostPhysics / OutputBuffer_PostPhysics accessors
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"         // VehicleManagerOutputInterface::FineTrafficCrashedEventQueue
@@ -31,10 +31,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                      // VolumeInstanceId packed-field accessors
 #include "GameSource/BurnoutConstants.h"                                                  // EActiveRaceCarIndex + its range-guarded operator++
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint (the BRN_TRAFFIC_DIAG witness)
 #include "rw/math/vpu/vector3_operation.h"                                                // Dot / Normalize / operator-
-#include <cmath>                                                                          // std::cos (the console cosines the cone angle per candidate)
-#include <cstdlib>                                                                        // getenv (BRN_TRAFFIC_DIAG)
 
 namespace BrnWorld
 {
@@ -48,46 +45,7 @@ namespace
     // An ordinary rodata zero: a crashing player loses the chain timeout outright.
     const f32 KF_NEAR_MISS_TIMEOUT_WHEN_CRASHING = 0.0f;
 
-    // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. A BUDGET rather than a single
-    // latch: the drain runs every post-scene tick, so one line would only prove the first
-    // non-empty batch, while unbounded printing would flood a lane drive.
-    s32 s_iNearMissDrainBudget = 24;
 
-    void PowerParkDiagReport( const PowerParkingManager& lrManager, bool lbWasParking,
-                              f32 lfCountdownBefore, s32 liEventsAppended, f32 lfHandBrake )
-    {
-        static u32 suLines = 0u;
-        if( suLines >= 96u )
-            return;
-
-        if( !lbWasParking && lrManager.IsPowerParking() )
-        {
-            ++suLines;
-            *CgsDev::Log::gpDebugPrint << "[power-park] start: park in progress (speed "
-                                       << lrManager.mfLowestSpeedThisPark << " m/s, handbrake "
-                                       << lfHandBrake << ")\n";
-        }
-        else if( lbWasParking && !lrManager.IsPowerParking() )
-        {
-            ++suLines;
-            *CgsDev::Log::gpDebugPrint << "[power-park] end: outcome " << static_cast<s32>( lrManager.mePowerParkOutcome )
-                                       << " rating " << lrManager.miOverallRating
-                                       << " nearby parked " << lrManager.muNearbyParkedCarCount
-                                       << " players " << lrManager.muNearbyParkedPlayerCount
-                                       << " closestSq " << lrManager.mfClosestDistanceSq
-                                       << " perp " << lrManager.mfClosestPerpendicularDist
-                                       << " countdown " << lrManager.mfTimeUntilDisplayOutcome << "\n";
-        }
-
-        if( lfCountdownBefore > 0.0f && !( lrManager.mfTimeUntilDisplayOutcome > 0.0f ) )
-        {
-            ++suLines;
-            *CgsDev::Log::gpDebugPrint << "[power-park] result countdown over: outcome "
-                                       << static_cast<s32>( lrManager.mePowerParkOutcome )
-                                       << " rating " << lrManager.miOverallRating
-                                       << " events appended " << liEventsAppended << "\n";
-        }
-    }
 }
 
 // =================================================================================================
@@ -145,12 +103,37 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
         const Vector3 lOtherDirection = lpOtherCar->GetDirection();
         const Vector3 lOtherPosition  = lpOtherCar->GetPosition();
 
-        const Vector3 lReversedHeading = -lOtherDirection;
+        // ARTIST822CE350..3B8: retain the VMX fused apex calculation and
+        // sign-bit negation, including the unused stored W lane.
+        const rw::math::vpu::VectorIntrinsic lSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const rw::math::vpu::VectorIntrinsic lReversedHeading = __vxor(lOtherDirection.mV, lSign);
+        const rw::math::vpu::VectorIntrinsic lApexOffset = {
+            KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::VectorIntrinsic lApex = __vmaddfp(lOtherDirection.mV,
+            __vspltw(lApexOffset, 0), lOtherPosition.mV);
+        const rw::math::vpu::VectorIntrinsic lSeparation = __vsubfp(lPlayerPosition.mV, lApex);
+        const rw::math::vpu::VectorIntrinsic lProjection = __vmsum3fp(lReversedHeading, lSeparation);
+        const rw::math::vpu::VectorIntrinsic lProjectionSquared = __vmulfp(lProjection, lProjection);
+        if (lProjectionSquared.v[0] > KF_TAILGATING_CONE_DEPTH * KF_TAILGATING_CONE_DEPTH)
+        {
+            continue;
+        }
 
-        // Written as the same `>` the console's skip branch is, so an unordered compare falls
-        // through instead of skipping. Do not rewrite this as a negated `<=`.
-
-        // 822CE3BC..410 has no zero fallback after either refinement.
+        // ARTIST822CE3BC..448: two reciprocal-root refinements, with no
+        // zero-length fallback, followed by the native replicated cosine test.
+        const rw::math::vpu::VectorIntrinsic lLengthSquared = __vmsum3fp(lSeparation, lSeparation);
+        const rw::math::vpu::VectorIntrinsic lInverseLength =
+            rw::math::vpu::detail::Vector3NativeReciprocalRoot(lLengthSquared, 2);
+        const rw::math::vpu::VectorIntrinsic lUnitSeparation = __vmulfp(lSeparation, lInverseLength);
+        const rw::math::vpu::VectorIntrinsic lAlignment = __vmsum3fp(lUnitSeparation, lReversedHeading);
+        const rw::math::vpu::VectorIntrinsic lConeAngle = {
+            KF_TAILGATING_CONE_HALF_ANGLE_RADS, 0.0f, 0.0f, 0.0f };
+        unsigned int luComparison;
+        __vcmpgtfpR(::XMVectorCos(__vspltw(lConeAngle, 0)), lAlignment, &luComparison);
+        if (luComparison & XM_CRMASK_CR6TRUE)
+        {
+            continue;
+        }
 
         const BrnPhysics::Vehicle::RaceCarState* lpOtherPhysicsState =
                 lpOtherCar->GetPhysicsState();
@@ -160,8 +143,14 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
             continue;
         }
 
+        // ARTIST822CE468..480: subtract the physics snapshots in this order.
+        const rw::math::vpu::VectorIntrinsic lVelocityDifference = __vsubfp(
+            lpOtherPhysicsState->mLinearVelocity.mV, lPlayerVelocity.mV);
+        const rw::math::vpu::VectorIntrinsic lVelocityDifferenceSquared = __vmsum3fp(
+            lVelocityDifference, lVelocityDifference);
+
         // ARTIST 822CE48C: ble also takes the unordered arm of fcmpu.
-        if( !( lfVelocityDifferenceSquared
+        if( !( lVelocityDifferenceSquared.v[0]
                 > KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE
                   * KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE ) )
         {
@@ -283,24 +272,14 @@ void RaceCarEntityModule::UpdatePowerParking(
 {
     (void)lpInput;
 
-    // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE ORIGINAL BINARY: the pre-step state the witness
-    // compares against (see PowerParkDiagReport).
-    const bool lbDiagWasParking  = mPowerParkingManager.IsPowerParking();
-    const f32  lfDiagCountdown   = mPowerParkingManager.mfTimeUntilDisplayOutcome;
-    const s32  liDiagEventsFirst = lbDiag ? lpOutput->GetGameEventQueue()->GetLength() : 0;
-
+    // ARTIST822FF5CC..5DC fetches the active car before the queue accessor.
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
     mPowerParkingManager.Update( meGameModeType,
                                  mfTimeStep,
-                                 GetActiveRaceCar( mePlayerActiveRaceCarIndex ),
+                                 lpActiveRaceCar,
                                  &mPlayerVehicleControls,
                                  lpOutput->GetGameEventQueue() );
 
-    if( lbDiag )
-    {
-        PowerParkDiagReport( mPowerParkingManager, lbDiagWasParking, lfDiagCountdown,
-                             lpOutput->GetGameEventQueue()->GetLength() - liDiagEventsFirst,
-                             mPlayerVehicleControls.mfHandBrake );
-    }
 }
 
 // =================================================================================================
@@ -323,8 +302,7 @@ void RaceCarEntityModule::UpdatePowerParking(
 //
 // The producer side is live: ProcessNearbyTrafficSceneQueryResults fills the two collections on
 // the post-physics tick and GenerateNearMissOutput copies them into the pre-scene interface this
-// body reads, so the drain carries real records. The [T9-nm] witness below reports the two
-// lengths whenever either is non-zero, which is the only proof that the bridge is carrying.
+// body reads, so the drain carries real records.
 // =================================================================================================
 void RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses(
         RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput )

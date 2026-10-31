@@ -63,7 +63,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // gpDebugPrint
 #include <cmath>                                                                          // std::fabs (the vandc sign-mask ABS at 0x822E9FFC)
-#include <cstdlib>                                                                        // [DIAG] getenv -- BRN_MM_DIAG only
 #include "rw/math/vpu/vector3_operation.h"                                               // Dot / Cross / Normalize / Magnitude / IsValid / GetVector3_*Axis
 
 namespace BrnWorld
@@ -514,15 +513,6 @@ void RaceCarEntityModule::UpdateInAndOutOfRangeCars(
 {
     s32 liAttachedCars = 0;
 
-    // ---- [DIAG] NOT IN THE X360 BINARY -- the RIVAL CENSUS for issue #24, BRN_MM_DIAG=1 ------
-    // This function already runs at 1 Hz on the console (PreSceneUpdate's frame-count gate), so
-    // one line per call IS a one-second sample.  It is placed BEFORE every early-out and names
-    // which early-out fired, because "barely any enemies are here" has to be able to distinguish
-    // "the rivals were never spawned" from "the range loop never ran".
-    // DELETE-WHEN issue #24 is closed.
-    {
-    }
-    // ---- end [DIAG] --------------------------------------------------------------------------
 
     if (mbIsInOnlineGameMode)                                       // +0x18345
     {
@@ -618,11 +608,6 @@ void RaceCarEntityModule::UpdateInAndOutOfRangeCars(
                         lpActiveRaceCar->GetGlobalRaceCar()->RequestResetOnTrack(
                             lfResetSpeed, leResetType, lfResetDistance);
 
-                        WitnessRangeTransition(liSlot, "wrap",
-                                               rw::math::vpu::Magnitude(
-                                                   lpRaceCar->GetPosition() -
-                                                   lpPlayerActiveRaceCar->GetPosition()),
-                                               lfResetSpeed);
                     }
                 }
                 else
@@ -644,11 +629,6 @@ void RaceCarEntityModule::UpdateInAndOutOfRangeCars(
                         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface =
                             lpOutput->GetVehicleInputInterface();
 
-                        WitnessRangeTransition(liSlot, "in->out",
-                                               rw::math::vpu::Magnitude(
-                                                   lpRaceCar->GetPosition() -
-                                                   lpPlayerRaceCar->GetPosition()),
-                                               KF_ZERO);
 
                         DetachActiveRaceCar(lpRaceCar, lpVehicleInputInterface,
                                             lpRaceCarAIInterface, lpSceneInputInterface);
@@ -703,13 +683,6 @@ void RaceCarEntityModule::UpdateInAndOutOfRangeCars(
 
         if (lbBringIn)
         {
-            WitnessRangeTransition(
-                liGlobalSlot, "out->in",
-                (lpPlayerRaceCar != 0)
-                    ? rw::math::vpu::Magnitude(lpRaceCar->GetPosition() -
-                                               lpPlayerRaceCar->GetPosition())
-                    : KF_ZERO,
-                KF_ZERO);
 
             AttachActiveRaceCar(lpRaceCar, E_ACTIVE_RACE_CAR_INDEX_INVALID);   // li r5, -1
 
