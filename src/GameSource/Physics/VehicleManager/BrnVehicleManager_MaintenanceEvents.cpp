@@ -624,8 +624,7 @@ namespace Vehicle
         const CgsPhysics::RigidBodyId lHandlingBodyId(maRaceCarHandlingBodyIDs[liVehicleIndex]);
         const EntityId lGlobalEntityId = GetEntityId(lHandlingBodyId);   // BrnVehicleManager.h:1985 lives inside
 
-        Vector3 lvZero;
-        lvZero.x = 0.0f; lvZero.y = 0.0f; lvZero.z = 0.0f; lvZero.w = 0.0f;
+        Vector3 lvZero(0.0f, 0.0f, 0.0f);
 
         // THE MODEL-HANDLE PARK IS RETIRED (2026-08-11, handle-widening wave).
         // It used to read: "THE MODEL-HANDLE ARGUMENT IS A LOUD PARK ... there is no honest
@@ -867,21 +866,20 @@ namespace Vehicle
 
                     const Vector3 lvHalfDimensions = lTrafficBox.GetDimensions();
                     Matrix44Affine lHalfExtentsWorld = lTrafficBox.GetTransform();
-                    lHalfExtentsWorld.xAxis = lHalfExtentsWorld.xAxis * lvHalfDimensions.x;
-                    lHalfExtentsWorld.yAxis = lHalfExtentsWorld.yAxis * lvHalfDimensions.y;
-                    lHalfExtentsWorld.zAxis = lHalfExtentsWorld.zAxis * lvHalfDimensions.z;
+                    lHalfExtentsWorld.xAxis = lHalfExtentsWorld.xAxis * lvHalfDimensions.mV.x;
+                    lHalfExtentsWorld.yAxis = lHalfExtentsWorld.yAxis * lvHalfDimensions.mV.y;
+                    lHalfExtentsWorld.zAxis = lHalfExtentsWorld.zAxis * lvHalfDimensions.mV.z;
 
-                    f32 lfLowestPointY = lTrafficBox.GetTransform().wAxis.y;
-                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.xAxis.y);
-                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.yAxis.y);
-                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.zAxis.y);
-                    const VecFloat lvfLowestPointWorldSpace = { lfLowestPointY, lfLowestPointY,
-                                                                lfLowestPointY, lfLowestPointY };
+                    f32 lfLowestPointY = lTrafficBox.GetTransform().wAxis.mV.y;
+                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.xAxis.mV.y);
+                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.yAxis.mV.y);
+                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.zAxis.mV.y);
+                    const VecFloat lvfLowestPointWorldSpace(lfLowestPointY);
 
                     mavfLowestPointWorldSpace[liTraffic] = lvfLowestPointWorldSpace;
 
-                    lbHitWater = lpAboveGroundTest->mIntersectionPosition.y
-                                 >= lvfLowestPointWorldSpace.y - KVF_RESET_ON_WATER_HEIGHT.y;
+                    lbHitWater = lpAboveGroundTest->mIntersectionPosition.mV.y
+                                 >= lvfLowestPointWorldSpace.mV.y - KVF_RESET_ON_WATER_HEIGHT.mV.y;
                 }
             }
 
