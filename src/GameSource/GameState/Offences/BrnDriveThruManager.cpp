@@ -165,11 +165,8 @@ static inline GameActionQueueImpl* AsActionQueue(GameStateModuleIO::GameActionQu
 //   action  98 (paint) +128 u32  colour index                 `stw r7,  var_130`  @0x8239BD8C
 //                      +132 u32  palette index (forced 2)     `stw r11, var_12C`  @0x8239BCF8
 //                      +136 u8   (lbIsOnline == false)        `stb r11, var_128`  @0x8239BCE8
-// Everything past each action's last written field is UNTOUCHED on the console -- the buffer is
-// never memset. Reproducing that faithfully would publish uninitialised stack bytes, so the
-// buffer IS zeroed here; that is a deliberate, stated deviation (it cannot change behaviour,
-// because no reader reads past its own last written field -- verified against all 11 consumers of
-// the queue) and it is the safer of the two, not a convenience.
+// The console leaves every byte outside those stores untouched. Preserve that
+// behavior when posting the complete 144-byte record.
 //
 // ⛔ THE OLD BODY WAS WRONG IN THREE WAYS AT ONCE, and each would have been invisible to every
 // gate we run: it wrote only ONE matrix (so payload+0x40, the identity block MainDirector copies,
@@ -183,7 +180,6 @@ static void PostShopAction(GameActionQueueImpl* lpQueue, const BrnTrigger::BoxRe
                            u32 luEntityId, s32 liColourIndex, s32 liPaletteIndex)
 {
     u8 lacPayload[144];
-    std::memset(lacPayload, 0, sizeof(lacPayload));
 
     // +0x00: the cached region transform.
     const Matrix44Affine lTransform = lrCache.ComputeTransform();
@@ -242,17 +238,9 @@ static void TryPlayTrainingTip(TrainingManager* lpTrainingManager, s32 liTrainin
 }
 
 // ----------------------------------------------------------------------------
-// Layout pins (never called). PARITY-BY-NAMED-MEMBER (the stunt-manager / BrnGameActions
-// PrepareForModeAction precedent): the X360 byte offsets in the header (0x8A0..0x950) are exact
-// for the CONSOLE, but on the x64 gate every raw pointer is 8 bytes (not 4) and the embedded
-// DriveThruTriggerData / BoxRegionCache carry pointers + an alignas(16) Vector3, so an ABSOLUTE
-// `offsetof(...) == 0x950` static_assert CANNOT hold on x64 -- the pointer-width delta shifts every
-// trailing member. We therefore reproduce the DWARF member ORDER + TYPES (semantic parity, all body
-// access is by name) and do NOT bake the absolute byte offsets. The RELATIVE asserts below survive
-// the ABI difference and still pin the structural facts the verifier fixes established:
-//   * the two CgsID members are CONTIGUOUS (the deleted maPad93C/maPad944 fix -- CgsID is 8 bytes),
-//   * mDriveThruToTurnOffId immediately follows mRepairedCarID,
-//   * mpProgressionManager is the last member and sits after the seven trailing bool flags.
+// Native layout pins. Construct 8236E2E8 stores the pointer at +0x950 and
+// advances trigger entries by 0x30. CheckClassSizes 823BF4EC reports sizeof 0x960;
+// the final pointer is followed by the class's natural alignment padding.
 // ----------------------------------------------------------------------------
 void DriveThruManager::_AssertLayout()
 {
@@ -272,9 +260,20 @@ void DriveThruManager::_AssertLayout()
     CGS_STATIC_ASSERT((offsetof(DriveThruManager, mpProgressionManager)
                       > offsetof(DriveThruManager, mbNeedToSendMustFixMessage)),
                   "mpProgressionManager follows the trailing bool flag block");
-    CGS_STATIC_ASSERT((offsetof(DriveThruManager, mpProgressionManager) + sizeof(void*)
-                      == sizeof(DriveThruManager)),
-                  "mpProgressionManager is the last member");
+    CGS_STATIC_ASSERT((sizeof(DriveThruTriggerData) == 0x30),
+                  "ARTIST drive-thru trigger stride");
+    CGS_STATIC_ASSERT((offsetof(DriveThruTriggerData, mPosition) == 0x10),
+                  "ARTIST drive-thru trigger position");
+    CGS_STATIC_ASSERT((offsetof(DriveThruTriggerData, mfTimeToActiveation) == 0x20),
+                  "ARTIST drive-thru trigger timer");
+    CGS_STATIC_ASSERT((offsetof(DriveThruManager, maDriveThroughClosed) == 0x8A0),
+                  "ARTIST drive-thru closed flags");
+    CGS_STATIC_ASSERT((offsetof(DriveThruManager, mBoxRegionCache) == 0x8F0),
+                  "ARTIST drive-thru box cache");
+    CGS_STATIC_ASSERT((offsetof(DriveThruManager, mpProgressionManager) == 0x950),
+                  "ARTIST drive-thru progression manager");
+    CGS_STATIC_ASSERT((sizeof(DriveThruManager) == 0x960),
+                  "ARTIST DriveThruManager size");
 }
 
 // ============================================================================
@@ -1054,7 +1053,6 @@ void DriveThruManager::SetPlayerCarDriver(GameStateModuleIO::GameActionQueue* lp
     // Kept TU-local, exactly like BrnModeManager_Prepare.cpp's ModeLandmarkAction does for the
     // other size-48 9-dword-copy action (id 24) -- BrnGameActions.h does not include BrnRegion.h.
     u8 lacPayload[48];
-    std::memset(lacPayload, 0, sizeof(lacPayload));
     std::memcpy(lacPayload + 0x00, &liDriverSelector, sizeof(liDriverSelector));
     std::memcpy(lacPayload + 0x04, lpBoxRegion, 36);   // 9 dwords, the console's own copy count
     std::memcpy(lacPayload + 0x28, &lfMaxSpeed, sizeof(lfMaxSpeed));
@@ -1222,11 +1220,8 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
         // mSpecialEventCarId, and left muEventJunctionID itself at zero. The GUI arm
         // @0x823EA810 reads muEventJunctionID into GuiEventJunctionInfo::miEventID, so the
         // event this posts identified itself as event 0.
-        // ⚠️ FLAG (ours, not the console's): the X360 does NOT clear the frame -- the eleven
-        // never-stored bytes are whatever the stack held. Value-initialising is the only
-        // reproducible choice on the host and is strictly safer; it is called out because it is
-        // behaviour the binary does not have.
-        GameStateModuleIO::JunctionInfoAction lJunctionInfo = {};
+        // ARTIST leaves the other record bytes untouched; initialize only its stores.
+        GameStateModuleIO::JunctionInfoAction lJunctionInfo;
         lJunctionInfo.muEventJunctionID        = lpEventJunction->GetID();
         lJunctionInfo.meGameModeType           = GameStateModuleIO::E_MODE_BURNING_ROUTE;  // 5
         lJunctionInfo.mbOnEntry                = false;
