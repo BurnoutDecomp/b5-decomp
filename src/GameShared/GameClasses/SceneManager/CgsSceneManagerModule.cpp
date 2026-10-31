@@ -3125,7 +3125,7 @@ namespace CgsSceneManager
         lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
 
         // ---- 3. the exclude entity ------------------------------------------------------------
-        const bool lbExcludeParts = (lpQuery->meExclusionMode == SceneManagerIO::E_NEAREST_EXCLUDE_ALL_CHILD_PARTS);
+        const bool lbExcludeParts = (lpQuery->meExclusionMode == SceneManagerIO::E_EXCLUDE_ALL_CHILD_PARTS);
         u16 lu16ExcludeEntityIndex = 0xFFFF;
         if (lpQuery->mExcludeEntityId != InvalidEntityId())
         {

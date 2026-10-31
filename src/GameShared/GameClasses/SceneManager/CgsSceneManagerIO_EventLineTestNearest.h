@@ -35,6 +35,7 @@
 #include "BrnCommonTypes.h"                                      // Vector3 (16-byte SIMD lane)
 #include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h" // CgsSceneManager::SceneQueryId
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"     // CgsSceneManager::EntityId
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h" // EExclusionMode
 
 namespace CgsSceneManager
 {
@@ -46,14 +47,6 @@ namespace SceneManagerIO
     // queue homes.
     struct EventBaseLineTestNearest {};
 
-    // Which entities a nearest line test excludes from its hits. Single 4-byte enum slot
-    // (matches the line-test query family's meExclusionMode).
-    enum ENearestExclusionMode
-    {
-        E_NEAREST_EXCLUDE_ENTITY_ONLY     = 0,
-        E_NEAREST_EXCLUDE_ALL_CHILD_PARTS = 1,
-    };
-
     // EventQueue<InEventLineTestNearest, N> element. 16-byte aligned (carries two Vector3
     // lanes), sizeof 0x40 (64). Field set mirrors the Fine/FastDoubleSided line-test events.
     struct CGS_ALIGN(16) InEventLineTestNearest : public EventBaseLineTestNearest
@@ -63,7 +56,7 @@ namespace SceneManagerIO
         SceneQueryId         mQueryId;            // +0x20
         u32                  mx32EntityTypeFlags; // +0x24
         EntityId             mExcludeEntityId;    // +0x28
-        ENearestExclusionMode meExclusionMode;    // +0x2C (4B enum slot)
+        EExclusionMode        meExclusionMode;    // +0x2C (4B enum slot)
         u8                   mxVolumeTypeFlags;   // +0x30
         // +0x31..0x3F trailing pad to the 16-byte alignment forced by the Vector3 lanes
         // -> sizeof == 0x40.

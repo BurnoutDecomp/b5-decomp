@@ -40,7 +40,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"                  // CgsSceneManager::SceneQueryId
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                      // CgsSceneManager::EntityId
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h"          // InEventLineTestFine + EExclusionMode
-#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h"   // InEventLineTestNearest + ENearestExclusionMode
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h"   // InEventLineTestNearest
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h" // InEventVolumeTestDeepest
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventSphereTest.h"                        // InEventSphereTestFast
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestFine.h"                    // InEventVolumeTestFine
@@ -79,13 +79,13 @@ namespace SceneManagerIO
                           EExclusionMode  leExclusionMode);
 
         // @ 0x82216FD0 -- stages an InEventLineTestNearest and pushes it onto mpFineLineTestNearestQueue.
-        bool LineTestNearest(const Vector3&        lLineStart,
-                             const Vector3&        lLineEnd,
-                             SceneQueryId          lQueryId,
-                             u32                   lx32EntityTypeFlags,
-                             u8                    lxVolumeTypeFlags,
-                             EntityId              lExcludeEntityId,
-                             ENearestExclusionMode leExclusionMode);
+        void LineTestNearest(SceneQueryId    lQueryId,
+                             u32             lx32EntityTypeFlags,
+                             u8              lxVolumeTypeFlags,
+                             Vector3         lLineStart,
+                             Vector3         lLineEnd,
+                             EntityId        lExcludeEntityId,
+                             EExclusionMode  leExclusionMode);
 
         // @ 0x822170B0 -- stages an InEventVolumeTestDeepest and pushes it onto mpFineVolumeTestDeepestQueue.
         // Returns int (Hex-Rays shape; AddEvent's bool widened back to r3).
