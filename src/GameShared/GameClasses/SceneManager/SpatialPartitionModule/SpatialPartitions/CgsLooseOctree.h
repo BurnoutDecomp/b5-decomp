@@ -138,17 +138,17 @@ namespace CgsSceneManager
         u32 muPad5C;                // +0x5C
 
         Vector3 GetPosition()      const { return mPosition; }
-        f32 GetMaxEntityRadius()   const { return mParams0.x; }
-        f32 GetHalfBaseSize()      const { return mParams0.y; }
-        f32 GetMaxRadiusThreshold()const { return mParams0.z; }
-        f32 GetHalfSize()          const { return mParams0.w; }
-        f32 GetMinY()              const { return mParams1.x; }
-        f32 GetMaxY()              const { return mParams1.y; }
-        f32 GetHalfHeight()        const { return mParams1.z; }
-        void SetMaxEntityRadius(f32 lf) { mParams0.x = lf; }
-        void SetMinY(f32 lf)            { mParams1.x = lf; }
-        void SetMaxY(f32 lf)            { mParams1.y = lf; }
-        void SetHalfHeight(f32 lf)      { mParams1.z = lf; }
+        f32 GetMaxEntityRadius()   const { return mParams0.mV.x; }
+        f32 GetHalfBaseSize()      const { return mParams0.mV.y; }
+        f32 GetMaxRadiusThreshold()const { return mParams0.mV.z; }
+        f32 GetHalfSize()          const { return mParams0.mV.w; }
+        f32 GetMinY()              const { return mParams1.mV.x; }
+        f32 GetMaxY()              const { return mParams1.mV.y; }
+        f32 GetHalfHeight()        const { return mParams1.mV.z; }
+        void SetMaxEntityRadius(f32 lf) { mParams0.mV.x = lf; }
+        void SetMinY(f32 lf)            { mParams1.mV.x = lf; }
+        void SetMaxY(f32 lf)            { mParams1.mV.y = lf; }
+        void SetHalfHeight(f32 lf)      { mParams1.mV.z = lf; }
 
         u16  GetParentIndex()     const { return muParentIndex; }
         bool HasParent()          const { return muParentIndex != KU_INVALID_NODE; }
@@ -350,10 +350,10 @@ namespace CgsSceneManager
                     const Vector4& lrNy = mpFrustum->maSwizzledPlanes[luBatch * 4 + 1];
                     const Vector4& lrNz = mpFrustum->maSwizzledPlanes[luBatch * 4 + 2];
                     const Vector4& lrD  = mpFrustum->maSwizzledPlanes[luBatch * 4 + 3];
-                    const f32 laNx[4] = { lrNx.x, lrNx.y, lrNx.z, lrNx.w };
-                    const f32 laNy[4] = { lrNy.x, lrNy.y, lrNy.z, lrNy.w };
-                    const f32 laNz[4] = { lrNz.x, lrNz.y, lrNz.z, lrNz.w };
-                    const f32 laD [4] = { lrD.x,  lrD.y,  lrD.z,  lrD.w  };
+                    const f32 laNx[4] = { lrNx.mV.x, lrNx.mV.y, lrNx.mV.z, lrNx.mV.w };
+                    const f32 laNy[4] = { lrNy.mV.x, lrNy.mV.y, lrNy.mV.z, lrNy.mV.w };
+                    const f32 laNz[4] = { lrNz.mV.x, lrNz.mV.y, lrNz.mV.z, lrNz.mV.w };
+                    const f32 laD [4] = { lrD.mV.x,  lrD.mV.y,  lrD.mV.z,  lrD.mV.w  };
                     for (u32 luLane = 0; luLane < 4; ++luLane)
                     {
                         const u32 luPlane = luBatch * 4 + luLane;
