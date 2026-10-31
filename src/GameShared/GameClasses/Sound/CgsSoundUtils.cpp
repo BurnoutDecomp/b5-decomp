@@ -152,10 +152,10 @@ f32 Curve::GetOutput(f32 lfFraction, ECurveType leCurve)
 
         case E_ONE_MINUS_EQPWR:
             // Its own lookup, not a call into E_POWER (0x82689780..0x826897B0): fmsubs
-            // lfFraction * 511 - 511 rounded ONCE (std::fma -- bit-exact to it for every float in
+            // lfFraction * 511 - 511 rounded ONCE (native fmsubs -- bit-exact to it for every float in
             // [0, 1]), fctiwz -- entry trunc(511 * (1 - lfFraction)) -- then 1 - the entry.
-            return 1.0f - ReadSinTable(static_cast<s32>(std::fma(
-                lfFraction, KF_LAST_ELEMENT_IN_ARRAY, -KF_LAST_ELEMENT_IN_ARRAY)));
+            return 1.0f - ReadSinTable(static_cast<s32>(
+                lfFraction * KF_LAST_ELEMENT_IN_ARRAY - KF_LAST_ELEMENT_IN_ARRAY));
 
         case E_ONE_MINUS_EQPWR_SQ:
         {
@@ -270,15 +270,15 @@ Slope::~Slope()
 //   0x8268983C             Curve::GetOutput(f, leCurve) -- the curve rides r5, because the f32 input
 //                          takes f1 and EATS the r4 slot (`mr r4, r5` before the call)
 //   0x82689840..0x8268984C  `fsubs f13, mfMaxOutput, mfMinOutput ; fmadds f1, f13, f1(out), f0(mfMinOutput)`
-//                          -- ONE rounding: std::fmaf with the console's operands
+//                          -- ONE rounding: native fmadds with the console's operands
 // Its one caller is PassbyEffect::UpdateParams @0x826D5068 (the pass-by pitch and volume scales).
 // ---------------------------------------------------------------------------
 f32 Slope::GetValue(f32 lfInput, Curve::ECurveType leCurve) const
 {
     const f32 lfFraction = rw::math::fpu::Clamp(
         (lfInput - mParams.mfMinInput) / (mParams.mfMaxInput - mParams.mfMinInput), 0.0f, 1.0f);
-    return std::fmaf(mParams.mfMaxOutput - mParams.mfMinOutput, Curve::GetOutput(lfFraction, leCurve),
-                     mParams.mfMinOutput);
+    return (mParams.mfMaxOutput - mParams.mfMinOutput) * Curve::GetOutput(lfFraction, leCurve) +
+           mParams.mfMinOutput;
 }
 
 // ============================================================================================
@@ -433,8 +433,8 @@ void PathLine<2>::Update(f32 lfDeltaTime)
 
         // `fmadds f0, f1(GetOutput), f31(range), f0(maStart[mnCurrentStage])` @0x8268F428: ONE rounding
         // (FX-AIBUZZ, crash parity 2026-09-25; the PC multiplied, rounded, then added).
-        mfCurrentValue = std::fmaf(Curve::GetOutput(lfFraction, maCurveTypes[lnStage]), lfRange,
-                                   maStart[mnCurrentStage]);
+        mfCurrentValue = Curve::GetOutput(lfFraction, maCurveTypes[lnStage]) * lfRange +
+                         maStart[mnCurrentStage];
     }
 }
 
@@ -537,8 +537,9 @@ void PathLine<tuNumStages>::Update(f32 lfDeltaTime)
         lfFraction = (std::max)(0.0f, (std::min)(1.0f, lfFraction));
         // `fmadds f0, f1(GetOutput), f31(finish - start), f0(maStart[mnCurrentStage])` @0x8268F178: ONE
         // rounding (FX-AIBUZZ, crash parity 2026-09-25; the PC multiplied, rounded, then added).
-        mfCurrentValue = std::fmaf(Curve::GetOutput(lfFraction, maCurveTypes[lnStage]),
-                                   maFinish[lnStage] - maStart[lnStage], maStart[lnStage]);
+        mfCurrentValue = Curve::GetOutput(lfFraction, maCurveTypes[lnStage]) *
+                             (maFinish[lnStage] - maStart[lnStage]) +
+                         maStart[lnStage];
     }
 }
 
