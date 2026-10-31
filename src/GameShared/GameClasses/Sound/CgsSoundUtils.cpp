@@ -229,21 +229,21 @@ f32 Graph::GetYValue(f32 lfX) const
 {
     if (!maPoints || muNumOfPoints == 0)
         return 0.0f;
-    if (lfX <= maPoints[0].x)
-        return maPoints[0].y;
+    if (lfX <= maPoints[0].mV.x)
+        return maPoints[0].mV.y;
 
     for (u8 luPoint = 1; luPoint < muNumOfPoints; ++luPoint)
     {
-        if (lfX <= maPoints[luPoint].x)
+        if (lfX <= maPoints[luPoint].mV.x)
         {
             const Vector2& lrLeft = maPoints[luPoint - 1];
             const Vector2& lrRight = maPoints[luPoint];
-            const f32 lfWidth = lrRight.x - lrLeft.x;
-            const f32 lfFraction = lfWidth != 0.0f ? (lfX - lrLeft.x) / lfWidth : 0.0f;
-            return lrLeft.y + (lrRight.y - lrLeft.y) * lfFraction;
+            const f32 lfWidth = lrRight.mV.x - lrLeft.mV.x;
+            const f32 lfFraction = lfWidth != 0.0f ? (lfX - lrLeft.mV.x) / lfWidth : 0.0f;
+            return lrLeft.mV.y + (lrRight.mV.y - lrLeft.mV.y) * lfFraction;
         }
     }
-    return maPoints[muNumOfPoints - 1].y;
+    return maPoints[muNumOfPoints - 1].mV.y;
 }
 
 Slope::Slope(const SlopeParams& params)
