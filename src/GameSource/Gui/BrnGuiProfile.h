@@ -50,7 +50,7 @@ namespace CgsMemory   { class HeapMalloc; class LinearMalloc; }
 namespace CgsLanguage { class LanguageManager; }
 namespace CgsModule   { class BaseEventReceiverQueue; }
 namespace CgsGui      { namespace CgsGuiModuleIO { struct OutputBuffer; } }
-namespace BrnProgression { class Profile; struct ProgressionData; }
+namespace BrnProgression { class Profile; struct ProgressionData; struct ProfileUpgradeTable; }
 namespace BrnNetwork  { struct LiveRevengeProfile; }
 
 namespace BrnGui
@@ -412,7 +412,7 @@ namespace BrnGui
 
         // X360-only pair (no PS3 DWARF twin; named from the @0x825135C8 assert text).
         s32 meProfileUpgradeLoadStage;                    // X360 +16  (Construct zeroes)
-        CgsResource::BaseResourcePtr mProfileUpgradeResourcePtr; // X360 +20..+47 (PROFILEUPG handle)
+        CgsResource::ResourcePtr<BrnProgression::ProfileUpgradeTable> mProfileUpgradeResourcePtr; // X360 +20..+47 (PROFILEUPG handle)
 
         GuiCache* mpGuiCache;                             // h:426  X360 +52
         CgsGui::SystemUserProfile* mpSystemUserProfile;   // h:427  X360 +56
