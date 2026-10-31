@@ -120,8 +120,7 @@ namespace BrnTraffic
             CGS_ASSERT(mpaPosAndYRotations, "mpaPosAndYRotations");
 
             const Vector3Plus& lrPosAndYRotation = mpaPosAndYRotations[luInstance];
-            const Vector3 lInstancePos = { lrPosAndYRotation.x, lrPosAndYRotation.y,
-                                           lrPosAndYRotation.z, lrPosAndYRotation.w };
+            const Vector3 lInstancePos(__lvx(&lrPosAndYRotation, 0));
             return lInstancePos;
         }
         void FixUp(const void* lpBaseData);

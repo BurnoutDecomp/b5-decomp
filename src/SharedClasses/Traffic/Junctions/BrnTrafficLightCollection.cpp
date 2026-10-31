@@ -31,91 +31,15 @@ namespace BrnTraffic
 {
     namespace
     {
-        // ====================================================================
-        // The console's shared VMX SinCos kernel, de-SIMD'd.
-        //
-        // ExpandPosPlusYRotToTransform inlines the X360 SDK's XMVectorSinCos: a
-        // 2*pi range reduction followed by two twelve-term series over the reduced
-        // angle, all four-lane-splatted so every lane carries the same scalar. The
-        // coefficient rows live in the image at 0x82000BD0/BE0/BF0 (sin) and
-        // 0x82000C00/C10/C20 (cos), with 0x82000C60 = { pi, 2*pi, 1/pi, 1/(2*pi) };
-        // the function splats 0x82000C64 (2*pi) and 0x82000C6C (1/(2*pi)).
-        // EVERY VALUE BELOW WAS DUMPED FROM THE IMAGE (headless idat on a private
-        // .i64 copy, scratchpad/waveQ7/ida_q7t/out_expand.json) -- the hex word is
-        // quoted beside each float so the decimal spelling cannot drift.
-        //
-        // ⚠️ THIS IS THE SECOND COPY OF THIS KERNEL IN THE TREE. The first is
-        //    `SvpSinCos` in GameSource/Physics/VehicleManager/VehiclePhysics/
-        //    BrnSimpleVehiclePhysics.cpp, TU-static for the same reason: the
-        //    committed rw::math::vpu headers do not home SinCos, and neither this
-        //    TU (SharedClasses) nor that one (GameSource) may grow the vendor
-        //    header. The two tables are bit-identical by construction -- both are
-        //    the same image rows. FOLD THEM into a single rw::math::vpu home the
-        //    day someone owns that header.
-        //
-        // DIVERGENCES, both inherited from the sibling and both stated on purpose:
-        //   * the console's range reduction is `vrfin` (round-to-nearest, ties to
-        //     even); this is `floor(x + 0.5f)`, which differs only on an exact .5
-        //     tie of an already-inexact quotient;
-        //   * the console evaluates each series as a splat-and-madd lattice of
-        //     independent powers (x^3, x^5, ... x^23 built by vmulfp128 pairs);
-        //     this is Horner over x^2. Same terms, same coefficients,
-        //     float-rounding-equivalent order.
-        // Not sinf/cosf: reproducing the console's own polynomial keeps the traffic
-        // light transforms numerically on the console's curve, not the CRT's.
-        // ====================================================================
-        const f32 KAF_SIN_COEFFS[12] =
-        {
-            1.0f,             // 0x3F800000
-            -1.66666672e-1f,  // 0xBE2AAAAB   -1/3!
-            8.33333377e-3f,   // 0x3C088889    1/5!
-            -1.98412701e-4f,  // 0xB9500D01   -1/7!
-            2.75573188e-6f,   // 0x3638EF1D    1/9!
-            -2.50521079e-8f,  // 0xB2D7322B   -1/11!
-            1.60590444e-10f,  // 0x2F309231    1/13!
-            -7.64716361e-13f, // 0xAB573F9F   -1/15!
-            2.81145736e-15f,  // 0x274A963C    1/17!
-            -8.22063508e-18f, // 0xA317A4DA   -1/19!
-            1.95729415e-20f,  // 0x1EB8DC78    1/21!
-            -3.86817030e-23f  // 0x9A3B0DA1   -1/23!
-        };
-        const f32 KAF_COS_COEFFS[12] =
-        {
-            1.0f,             // 0x3F800000
-            -5.0e-1f,         // 0xBF000000   -1/2!
-            4.16666679e-2f,   // 0x3D2AAAAB    1/4!
-            -1.38888892e-3f,  // 0xBAB60B61   -1/6!
-            2.48015876e-5f,   // 0x37D00D01    1/8!
-            -2.75573200e-7f,  // 0xB493F27E   -1/10!
-            2.08767581e-9f,   // 0x310F76C8    1/12!
-            -1.14707454e-11f, // 0xAD49CBA5   -1/14!
-            4.77947726e-14f,  // 0x29573F9F    1/16!
-            -1.56192068e-16f, // 0xA53413C3   -1/18!
-            4.11031759e-19f,  // 0x20F2A15D    1/20!
-            -8.89679096e-22f  // 0x9C8671CB   -1/22!
-        };
-        const f32 KF_TWO_PI     = 6.28318548f;   // 0x40C90FDB @0x82000C64
-        const f32 KF_INV_TWO_PI = 0.159154937f;  // 0x3E22F983 @0x82000C6C
-
+        // ARTIST 0x823611A8..0x8236135C uses the SDK VMX SinCos kernel.
         void TrafficSinCos(f32 lfAngle, f32& lrfSin, f32& lrfCos)
         {
-            // XMVectorModAngles: r = angle - 2*pi * round(angle / (2*pi)).
-            // asm: `vmulfp128 v0,v12,v11` (angle * 1/2pi), `vrfin v0,v0`,
-            //      `vnmsubfp v8,<2pi>,<round>,<angle>` at 0x823611E0..0x82361200.
-            const f32 lfR  = lfAngle - KF_TWO_PI * std::floor(lfAngle * KF_INV_TWO_PI + 0.5f);
-            const f32 lfR2 = lfR * lfR;
-
-            f32 lfSinPoly = KAF_SIN_COEFFS[11];
-            f32 lfCosPoly = KAF_COS_COEFFS[11];
-            for (s32 li = 10; li >= 0; --li)
-            {
-                lfSinPoly = lfSinPoly * lfR2 + KAF_SIN_COEFFS[li];
-                lfCosPoly = lfCosPoly * lfR2 + KAF_COS_COEFFS[li];
-            }
-
-            lrfSin = lfR * lfSinPoly;
-            lrfCos = lfCosPoly;
+            XMVECTOR lSin, lCos;
+            XMVectorSinCos(&lSin, &lCos, XMVectorReplicate(lfAngle));
+            lrfSin = lSin.x;
+            lrfCos = lCos.x;
         }
+
     }
 
     // -- BrnTraffic::ExpandPosPlusYRotToTransform @ 0x823610B8 (183 insns) ---------
@@ -182,10 +106,10 @@ namespace BrnTraffic
         TrafficSinCos(lPosPlusYRot.GetPlus(), lfSin, lfCos);
 
         Matrix44Affine lResult;
-        lResult.xAxis = { lfCos, 0.0f, -lfSin, lfCos };
-        lResult.yAxis = {  0.0f, 1.0f,   0.0f,  0.0f };
-        lResult.zAxis = { lfSin, 0.0f,  lfCos, lfSin };
-        lResult.wAxis = { lPosPlusYRot.x, lPosPlusYRot.y, lPosPlusYRot.z, lPosPlusYRot.w };
+        lResult.xAxis = Vector3(XMVectorSet(lfCos, 0.0f, -lfSin, lfCos));
+        lResult.yAxis = Vector3(XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+        lResult.zAxis = Vector3(XMVectorSet(lfSin, 0.0f, lfCos, lfSin));
+        lResult.wAxis = Vector3(__lvx(&lPosPlusYRot, 0));
         return lResult;
     }
 
@@ -358,7 +282,7 @@ namespace BrnTraffic
             return;
 
         // Distance cull.
-        if (rw::math::vpu::MagnitudeSquared(lDir) > static_cast<f32>(lfCullDistSq.x))
+        if (rw::math::vpu::MagnitudeSquared(lDir) > static_cast<f32>(lfCullDistSq.mV.x))
             return;
 
         // Distance-based size boost: scale = Lerp(1, 2, max(dist - 8, 0) * K).

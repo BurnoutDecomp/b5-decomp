@@ -165,9 +165,9 @@ namespace BrnDirector
                 const Vector3& lrPlayerPos = GetPlayer().mRaceCarState.mTransform.wAxis;
 
                 // `vsubfp` (player - car) then `vmsum3fp128` -- the SQUARED distance over x/y/z.
-                const f32 lfDx = lrPlayerPos.x - lrCarPos.x;
-                const f32 lfDy = lrPlayerPos.y - lrCarPos.y;
-                const f32 lfDz = lrPlayerPos.z - lrCarPos.z;
+                const f32 lfDx = lrPlayerPos.mV.x - lrCarPos.mV.x;
+                const f32 lfDy = lrPlayerPos.mV.y - lrCarPos.mV.y;
+                const f32 lfDz = lrPlayerPos.mV.z - lrCarPos.mV.z;
 
                 NearestCarInfo lRow;
                 lRow.meRaceCarIndex = static_cast<EActiveRaceCarIndex>(luCar);
@@ -289,13 +289,17 @@ namespace BrnDirector
 
             // ---- mPlayerHeadingSpace / mPlayerLooseHeadingSpace --------------------------
             const Vector3 lvCarPosition = lrCarToWorld.wAxis;
-            const Vector3 lvFlattenedTarget =
-            {
-                lvCarPosition.x + lrCarToWorld.zAxis.x,
-                lvCarPosition.y,
-                lvCarPosition.z + lrCarToWorld.zAxis.z,
-                0.0f
+            // ARTIST 0x8221DCF8..0x8221DD14: the forward contribution is
+            // {zAxis.x, 0, zAxis.z, zAxis.x}; vaddfp updates all four lanes.
+            CGS_ALIGN(16) static const u32 sForwardMask[4] = {
+                0x00010203u, 0x14151617u, 0x00010203u, 0x00010203u
             };
+            const __vector4 lvZero = __vspltisw(0);
+            const __vector4 lvForwardX = __vspltw(lrCarToWorld.zAxis.mV, 0);
+            const __vector4 lvForwardZ = __vspltw(lrCarToWorld.zAxis.mV, 2);
+            __vector4 lvForward = __vperm(lvForwardX, lvZero, __lvx(sForwardMask, 0));
+            lvForward = __vrlimi(lvForward, lvForwardZ, 2, 0);
+            const Vector3 lvFlattenedTarget(__vaddfp(lvCarPosition.mV, lvForward));
             const Matrix44Affine lHeadingLookAt =
                 Camera::Utils::CreateLookAt(lvCarPosition, lvFlattenedTarget);
 
