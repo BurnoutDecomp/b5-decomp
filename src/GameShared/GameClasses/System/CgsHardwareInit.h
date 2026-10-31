@@ -4,11 +4,6 @@
 namespace EA { namespace Jobs { class JobScheduler; } }
 namespace CgsMemory { class HeapMallocCoreAllocator; }
 
-// CGS_PLATFORM_X360 selects the X360 hardware-init surface even when the PC
-// toolchain (which defines WIN32) is building the X360 translation unit. The X360
-// .cpp defines it before including this header; the PC build never does, so the
-// WIN32 branch below is unchanged for PC.
-
 namespace CgsSystem
 {
     // CgsHardwareInit.h:135; ARTIST loader Construct passes the shared
@@ -29,7 +24,8 @@ namespace CgsSystem
         static void EnableJobThread();
 
         static char* GetWorkingDirectory() { return macRootPath; }
-        static char* GetFOPENDirectory() { return macFOPENPath; }
+        // ARTIST828D60F8 returns the native DVD root literal at82046464.
+        static char* GetFOPENDirectory();
 
         static void ReleaseHardware();
 
@@ -50,7 +46,6 @@ namespace CgsSystem
     private:
         friend EA::Jobs::JobScheduler* JobManager();
         static char macRootPath[knHardwarePathMaxLength];
-        static char macFOPENPath[knHardwarePathMaxLength];
 
         static char macAutoTestScriptToRun[64];
 
