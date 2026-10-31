@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"   // CgsGraphics::Im2dRenderBuffer (RenderString arg)
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include <vectorintrinsics.h>
 #include <cstdlib>   // bsearch
@@ -178,7 +179,7 @@ namespace CgsGui
         // AptRenderHandler::Render @0x82859300 reads the same row at +0xC (the fourth float).
         // CORRECTED 2026-07-30 -- this read .x, so the text path skipped any batch that merely
         // had no RED as though it were invisible.
-        if (lrHandler.GetVertexTransform().mColourScale.w == 0.0f)
+        if (lrHandler.GetVertexTransform().mColourScale.mV.w == 0.0f)
             return;
 
         Im2dCommandBuffer* lpBuffer = lrHandler.GetCommandBuffer();
@@ -290,47 +291,74 @@ namespace CgsGui
     }
 
     // -------------------------------------------------------------------------
-    // SetVertexMatrix - PS3 0x5BDF54. Fold the apt 2x2 matrix (a,b,c,d at +0..+0xC; tx,ty at
-    // +0x10/+0x14) into the batch transform's screen-space basis. The guest:
-    //   right/up basis (transform+0x10) = (matrix.tx, matrix.ty - originBias) ... add originBias
-    //   origin       (transform+0x20)   = (matrix.a, matrix.b, matrix.c, matrix.d) ... add base
-    // with the bias/base vectors loaded from a module-static (dword_8DB150). The VPU multiply uses
-    // a zeroed scale lane (vspltisw v12, 0), so the multiply-add reduces to the additive bias.
-    // Reconstructed as the observable in-place stores: the right/up basis takes (tx,ty) and the
-    // origin row takes (a,b,c,d), each offset by the static bias the guest adds.
-    // FLAG: the module-static bias vector (dword_8DB150) is not recovered from rodata here; it is
-    // modelled as zero (the natural identity bias), so the basis/origin take the raw apt-matrix
-    // components. The exact bias is a follow-on rodata dump (see Rodata-extraction memory).
+    // ARTIST 0x8284B974..0x8284B9EC: subtract the handler's origin from
+    // (tx, ty, 0, 0), then multiply it and (a, b, c, d) by its platform transform.
     // -------------------------------------------------------------------------
     void AptCallbackRender::SetVertexMatrix(AptMatrix* lpAptMatrix)
     {
-        CgsGraphics::Im2dTransform& lrTransform =
-            AptAuxPointer::mpAptAuxInst->mRenderHandler.GetVertexTransform();
-
-        // transform+0x10 (mOriginXYZ here) <- the translation (tx, ty) + bias (0).
-        lrTransform.mOriginXYZ.x = lpAptMatrix->tx;
-        lrTransform.mOriginXYZ.y = lpAptMatrix->ty;
-
-        // transform+0x20 (mRightUp here) <- the 2x2 (a, b, c, d) + base (0).
-        lrTransform.mRightUp.x = lpAptMatrix->a;
-        lrTransform.mRightUp.y = lpAptMatrix->b;
-        lrTransform.mRightUp.z = lpAptMatrix->c;
-        lrTransform.mRightUp.w = lpAptMatrix->d;
+        const char* lpcFile = "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptRender.cpp";
+        if (lpAptMatrix == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Invalid pointer to AptMatrix in AptCallbackRender::SetVertexMatrix";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 368);
+            CgsDev::Assert::EndAssert();
+        }
+        if (!(lpAptMatrix->a == lpAptMatrix->a))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("RwMath::IsValid(lpAptMatrix->a)", lpcFile, 370);
+            CgsDev::Assert::EndAssert();
+        }
+        AptRenderHandler* lpHandler = &AptAuxPointer::mpAptAuxInst->mRenderHandler;
+        if (lpHandler == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Invalid pointer to apt render handler in AptCallbackRender::SetVertexMatrix";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 378);
+            CgsDev::Assert::EndAssert();
+        }
+        AptRenderHandler& lrHandler = *lpHandler;
+        CgsGraphics::Im2dTransform& lrTransform = lrHandler.GetVertexTransform();
+        const __vector4 lvOrigin = XMVectorSet(lpAptMatrix->tx, lpAptMatrix->ty, 0.0f, 0.0f);
+        const __vector4 lvBasis = XMVectorSet(lpAptMatrix->a, lpAptMatrix->b,
+                                              lpAptMatrix->c, lpAptMatrix->d);
+        lrTransform.mOriginXYZ.mV = __vmulfp(
+            __vsubfp(lvOrigin, lrHandler.mOriginTransform.mV), lrHandler.mPlatformTransform.mV);
+        lrTransform.mRightUp.mV = __vmulfp(lvBasis, lrHandler.mPlatformTransform.mV);
     }
 
     // -------------------------------------------------------------------------
-    // SetColourTransform - PS3 0x5BE228. Fold the apt colour transform into the batch transform's
-    // colour shift (transform+0x30 == mColourShift) and colour scale (transform+0x40 ==
-    // mColourScale). The guest copies the CXForm's translate ARGB (the four floats at CXForm+0x14:
-    // skipping the helper vptr, the AdditiveColorHelper channels at +0x18..+0x24) into mColourShift,
-    // the scale ARGB (CXForm+0x04..+0x10) into mColourScale, and multiply-adds them by a zeroed scale
-    // lane against a splatted constant (vspltw of a module-static 1.0). Reconstructed as the
-    // observable copy: mColourShift <- the translate channels, mColourScale <- the scale channels.
+    // SetColourTransform - ARTIST 0x82851CB8. Convert Apt's ARGB channel
+    // order and 0..255 values into the batch's RGBA unit vectors.
     // -------------------------------------------------------------------------
     void AptCallbackRender::SetColourTransform(AptCXForm* lpAptColourTransform)
     {
-        CgsGraphics::Im2dTransform& lrTransform =
-            AptAuxPointer::mpAptAuxInst->mRenderHandler.GetVertexTransform();
+        const char* lpcFile = "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptRender.cpp";
+        if (lpAptColourTransform == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Invalid pointer to AptColourTransform in AptCallbackRender::SetColourTransform";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 411);
+            CgsDev::Assert::EndAssert();
+        }
+        AptRenderHandler* lpHandler = &AptAuxPointer::mpAptAuxInst->mRenderHandler;
+        if (lpHandler == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Invalid pointer to apt render handler in AptCallbackRender::SetColourTransform";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 414);
+            CgsDev::Assert::EndAssert();
+        }
+        CgsGraphics::Im2dTransform& lrTransform = lpHandler->GetVertexTransform();
 
         // LANE ORDER (corrected 2026-07-30): the Im2dTransform colour rows are
         // (R, G, B, A) -- alpha is .w -- NOT the CXForm's own (A,R,G,B) order. The guest
@@ -343,17 +371,21 @@ namespace CgsGui
         // with a consumer that also read .x, so pixels came out right for the wrong
         // reason. Both ends are now on the real console convention.
 
-        // mColourShift <- the additive (translate) channels, rotated to (R,G,B,A).
-        lrTransform.mColourShift.x = lpAptColourTransform->translate.GetValuef(AptColorHelper::Red);
-        lrTransform.mColourShift.y = lpAptColourTransform->translate.GetValuef(AptColorHelper::Green);
-        lrTransform.mColourShift.z = lpAptColourTransform->translate.GetValuef(AptColorHelper::Blue);
-        lrTransform.mColourShift.w = lpAptColourTransform->translate.GetValuef(AptColorHelper::Alpha);
-
-        // mColourScale <- the multiplicative (scale) channels, rotated to (R,G,B,A).
-        lrTransform.mColourScale.x = lpAptColourTransform->scale.GetValuef(AptColorHelper::Red);
-        lrTransform.mColourScale.y = lpAptColourTransform->scale.GetValuef(AptColorHelper::Green);
-        lrTransform.mColourScale.z = lpAptColourTransform->scale.GetValuef(AptColorHelper::Blue);
-        lrTransform.mColourScale.w = lpAptColourTransform->scale.GetValuef(AptColorHelper::Alpha);
+        // ARTIST 0x82851DB8..0x82851E44 rotates ARGB to RGBA, then
+        // multiplies both complete vectors by the image's float 1/255.
+        const __vector4 lvTranslate = XMVectorSet(
+            lpAptColourTransform->translate.GetValuef(AptColorHelper::Red),
+            lpAptColourTransform->translate.GetValuef(AptColorHelper::Green),
+            lpAptColourTransform->translate.GetValuef(AptColorHelper::Blue),
+            lpAptColourTransform->translate.GetValuef(AptColorHelper::Alpha));
+        const __vector4 lvScale = XMVectorSet(
+            lpAptColourTransform->scale.GetValuef(AptColorHelper::Red),
+            lpAptColourTransform->scale.GetValuef(AptColorHelper::Green),
+            lpAptColourTransform->scale.GetValuef(AptColorHelper::Blue),
+            lpAptColourTransform->scale.GetValuef(AptColorHelper::Alpha));
+        const __vector4 lvToUnit = XMVectorReplicate(0.003921568859368563f);
+        lrTransform.mColourShift.mV = __vmulfp(lvTranslate, lvToUnit);
+        lrTransform.mColourScale.mV = __vmulfp(lvScale, lvToUnit);
     }
 
     // -------------------------------------------------------------------------
