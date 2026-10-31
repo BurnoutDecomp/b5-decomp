@@ -615,8 +615,8 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
             {
                 mDistrictMapResourceHandle = lrDistrictMapHandle;
 
-                const Vector2 KV_DISTRICT_MAP_WORLD_ORIGIN = { -4208.0f, -3846.0f, 0.0f, 0.0f }; // unk_82FAD520
-                const Vector2 KV_DISTRICT_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 0.0f }; // unk_82FAD8E0
+                const Vector2 KV_DISTRICT_MAP_WORLD_ORIGIN(-4208.0f, -3846.0f); // unk_82FAD520
+                const Vector2 KV_DISTRICT_MAP_WORLD_SIZE(8270.0f, 6101.0f); // unk_82FAD8E0
 
                 const u8* lpResourceMemoryBase =
                     *reinterpret_cast<u8* const*>( mDistrictMapResourceHandle.mpResourceMemory );
@@ -5300,7 +5300,7 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                 CGS_ASSERT( liPane >= 0 && liPane < 8,
                             "( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )" );   // :372, baked shape
                 {
-                    const Vector2 lGlassScale = { lfWidth, lfWidth, 0.0f, 0.0f };
+                    const Vector2 lGlassScale(lfWidth, lfWidth);
                     lpRenderParams->SetCrackedGlassScaleFactorsN(
                     static_cast<u32>( liPane ), lGlassScale );
                 }
@@ -5312,7 +5312,7 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                 lpRenderParams->SetCrackedGlassEqualisationFactorN( static_cast<u32>( liPane ),
                                                                     lfEqualisation );
                 {
-                    const Vector2 lGlassScale = { lfWidth, lfWidth, 0.0f, 0.0f };
+                    const Vector2 lGlassScale(lfWidth, lfWidth);
                     lpRenderParams->SetCrackedGlassScaleFactorsN(
                     static_cast<u32>( liPane ), lGlassScale );
                 }
@@ -6688,7 +6688,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     CgsCore::SPrintf( lacText, sizeof(lacText), "Pos: %5.1f, %5.1f, %5.1f",
                       lvPlayerPosition.mV.x, lvPlayerPosition.mV.y, lvPlayerPosition.mV.z );
     {
-        const Vector2 lTextPosition = {lfTextX, 30.0f, 0.0f, 0.0f};
+        const Vector2 lTextPosition(lfTextX, 30.0f);
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                   CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
     }
@@ -6697,7 +6697,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     CgsCore::SPrintf( lacText, sizeof(lacText), "At: % .3f, % .3f, % .3f",
                       lvPlayerForward.mV.x, lvPlayerForward.mV.y, lvPlayerForward.mV.z );
     {
-        const Vector2 lTextPosition = {lfTextX, 45.0f, 0.0f, 0.0f};
+        const Vector2 lTextPosition(lfTextX, 45.0f);
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                   CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
     }
@@ -6706,7 +6706,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     CgsCore::SPrintf( lacText, sizeof(lacText), "Lin Vel: % .1f, % .1f, % .1f",
                       lvLinearVelocity.mV.x, lvLinearVelocity.mV.y, lvLinearVelocity.mV.z );
     {
-        const Vector2 lTextPosition = {lfTextX, 60.0f, 0.0f, 0.0f};
+        const Vector2 lTextPosition(lfTextX, 60.0f);
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                   CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
     }
@@ -6715,7 +6715,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
     CgsCore::SPrintf( lacText, sizeof(lacText), "Ang Vel: % .1f, % .1f, % .1f",
                       lvAngularVelocity.mV.x, lvAngularVelocity.mV.y, lvAngularVelocity.mV.z );
     {
-        const Vector2 lTextPosition = {lfTextX, 75.0f, 0.0f, 0.0f};
+        const Vector2 lTextPosition(lfTextX, 75.0f);
         lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                   CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
     }
@@ -6743,7 +6743,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
         CgsCore::SPrintf( lacText, sizeof(lacText), "AIs in range: %u/%u",
                           static_cast<u32>(luInRangeRivalCount), static_cast<u32>(luAICount) );
         {
-            const Vector2 lTextPosition = {lfTextX, 90.0f, 0.0f, 0.0f};
+            const Vector2 lTextPosition(lfTextX, 90.0f);
             lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                       CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
         }
@@ -6781,7 +6781,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
             CgsCore::SPrintf( lacText, sizeof(lacText), "Closest AI: %5.1f, %5.1f, %5.1f",
                               lvClosestPosition.mV.x, lvClosestPosition.mV.y, lvClosestPosition.mV.z );
             {
-                const Vector2 lTextPosition = {lfTextX, 110.0f, 0.0f, 0.0f};
+                const Vector2 lTextPosition(lfTextX, 110.0f);
                 lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                           CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
             }

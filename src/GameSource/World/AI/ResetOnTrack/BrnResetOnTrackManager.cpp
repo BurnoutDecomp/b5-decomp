@@ -1,3 +1,4 @@
+#include <xtl.h>
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackDebugComponent.h"
 #include "GameSource/World/AI/BrnAICar.h"                                 // AICar (the array element)
@@ -7,6 +8,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/AI/BrnAIPortal.h"
 #include "GameSource/World/AI/Route/BrnRoute.h"
+#include "GameSource/Math/BrnMathUtils.h"
 #include "rw/math/vpu/vector3_operation.h"
 #include <cmath>
 
@@ -19,9 +21,9 @@ namespace BrnAI
     Vector3 ResetOnTrackManager::ComputeNearestPositionInSegment(Vector3 lPosition, Vector3 lStart, Vector3 lEnd)
     {
         using namespace rw::math::vpu;
-        const Vector3 segment = lEnd - lStart;
+        const ::Vector3 segment = lEnd - lStart;
         CGS_ASSERT(!IsZero(segment, 1.5258789e-5f), "!RwMath::IsSimilar( lLineStart, lLineEnd )");
-        const Vector3 direction = Normalize(segment);
+        const ::Vector3 direction = Normalize(segment);
         const f32 distance = Dot(direction, lPosition - lStart);
         // NaN polarity (FX-AINAN2): `fcmpu distance, 0.0 ; ble -> return lStart` @0x82768A08/
         // 0x82768A0C is TAKEN on an unordered compare, so a NaN distance (a NaN position, or the
@@ -33,19 +35,69 @@ namespace BrnAI
         return lStart + direction * distance;
     }
 
-    // ARTIST 82778250: choose the pair of opposite footprint edges across the
-    // travel direction and average their lengths. The corners are packed XZ pairs.
+    namespace
+    {
+        XMVECTOR WidthDot(XMVECTOR value)
+        {
+            XMVECTOR square = __vmulfp(value, value);
+            return __vaddfp(__vspltw(square, 0), __vspltw(square, 1));
+        }
+
+        XMVECTOR WidthReciprocalRoot(XMVECTOR value)
+        {
+            const XMVECTOR one = XMVectorReplicate(1.0f);
+            const XMVECTOR half = XMVectorReplicate(0.5f);
+            XMVECTOR estimate = __vrsqrtefp(value);
+            for (s32 i = 0; i < 2; ++i)
+            {
+                XMVECTOR square = __vmulfp(estimate, estimate);
+                XMVECTOR scaled = __vmulfp(estimate, half);
+                estimate = __vmaddfp(scaled, __vnmsubfp(value, square, one), estimate);
+            }
+            return estimate;
+        }
+
+        f32 WidthLength(XMVECTOR edge)
+        {
+            XMVECTOR dot = WidthDot(edge);
+            XMVECTOR zero = XMVectorZero();
+            return __vsel(__vmulfp(dot, WidthReciprocalRoot(dot)), zero, __vcmpeqfp(zero, dot)).x;
+        }
+
+        f32 WidthDirectionDot(XMVECTOR direction, XMVECTOR edge)
+        {
+            XMVECTOR normal = __vmulfp(edge, WidthReciprocalRoot(WidthDot(edge)));
+            XMVECTOR product = __vmulfp(direction, normal);
+            return __vaddfp(__vspltw(product, 0), __vspltw(product, 1)).x;
+        }
+    }
+
+    // ARTIST 82778250: the packed XZ corners form four oriented edges.
     f32 ResetOnTrackManager::ComputeAISectionWidth(const AISection* lpSection, Vector2 lDirection)
     {
-        const auto* c = lpSection->mpaCorners;
-        auto length = [](f32 x, f32 y) { return std::sqrt(x*x + y*y); };
-        const f32 ax = c[1].x-c[0].x, ay = c[1].y-c[0].y;
-        const f32 bx = c[2].x-c[1].x, by = c[2].y-c[1].y;
-        const f32 a = length(ax, ay), b = length(bx, by);
-        const f32 da = std::fabs((lDirection.x*ax + lDirection.y*ay) / a);
-        const f32 db = std::fabs((lDirection.x*bx + lDirection.y*by) / b);
-        return da > db ? 0.5f * (b + length(c[0].x-c[3].x, c[0].y-c[3].y))
-                       : 0.5f * (a + length(c[3].x-c[2].x, c[3].y-c[2].y));
+        const AISection::Vector2* corners = lpSection->mpaCorners;
+        const Vector2 c0(corners[0].x, corners[0].y);
+        const Vector2 c1(corners[1].x, corners[1].y);
+        const Vector2 c2(corners[2].x, corners[2].y);
+        const Vector2 c3(corners[3].x, corners[3].y);
+        XMVECTOR v0 = __lvx(&c0, 0), v1 = __lvx(&c1, 0);
+        XMVECTOR v2 = __lvx(&c2, 0), v3 = __lvx(&c3, 0);
+        XMVECTOR a = __vsubfp(v1, v0), b = __vsubfp(v2, v1);
+        XMVECTOR direction = lDirection.mV;
+        f32 da = std::fabs(WidthDirectionDot(direction, a));
+        f32 db = std::fabs(WidthDirectionDot(direction, b));
+        f32 first, second;
+        if (da > db)
+        {
+            first = WidthLength(b);
+            second = WidthLength(__vsubfp(v0, v3));
+        }
+        else
+        {
+            first = WidthLength(a);
+            second = WidthLength(__vsubfp(v3, v2));
+        }
+        return (first + second) * 0.5f;
     }
 
     bool ResetOnTrackManager::UpdateResetOnTrackSectionUsingRoute(AICar* lpCar)
@@ -64,8 +116,8 @@ namespace BrnAI
         for (u8 p = 0; p < section->mu8NumPortals; ++p)
             if (section->GetPortal(p)->GetLinkSectionIndex() == previous->muSectionIndex) { start = p; break; }
         if (start == 255 || start == end) return false;
-        const Vector3 from = section->GetPortal(start)->GetPosition();
-        const Vector3 to = section->GetPortal(end)->GetPosition();
+        const ::Vector3 from = section->GetPortal(start)->GetPosition();
+        const ::Vector3 to = section->GetPortal(end)->GetPosition();
         if (lpCar->mbIsPlayer && !(Dot(to-from, lpCar->GetVelocityDirection()) > -std::cos(1.919862151145935f))) return false;
         lpCar->UpdateResetOnTrackSection(static_cast<EResetSpeedType>(0), current->muSectionIndex, start, end);
         return true;
@@ -109,10 +161,10 @@ namespace BrnAI
             }
         }
         if (!usePair && !(count == 2 && (lpCar->mbIsInShowtime || !(section->mx8Flags & 6)))) return;
-        const Vector3 from = section->GetPortal(first)->GetPosition();
-        const Vector3 to = section->GetPortal(second)->GetPosition();
+        const ::Vector3 from = section->GetPortal(first)->GetPosition();
+        const ::Vector3 to = section->GetPortal(second)->GetPosition();
         CGS_ASSERT(first != second, "luFirstGoodPortalIndex != luSecondGoodPortalIndex");
-        const Vector3 direction = usePair ? Normalize(lpCar->GetPosition() - section->GetMiddle()) : lpCar->GetVelocityDirection();
+        const ::Vector3 direction = usePair ? Normalize(lpCar->GetPosition() - section->GetMiddle()) : lpCar->GetVelocityDirection();
         const EResetSpeedType resetSpeed = static_cast<EResetSpeedType>(usePair ? pair->meResetSpeed : 0);
         if (Dot(to-from, direction) > 0.0f) lpCar->UpdateResetOnTrackSection(resetSpeed, sectionIndex, first, second);
         else lpCar->UpdateResetOnTrackSection(resetSpeed, sectionIndex, second, first);
@@ -348,19 +400,21 @@ namespace BrnAI
         if (lpAICar->muResetOnTrackSectionIndex == AICar::KI_INVALID_SECTION_INDEX) return false;
         using namespace rw::math::vpu;
         const AISection* section = mpAISectionData->GetAISection(lpAICar->muResetOnTrackSectionIndex);
-        const Vector3 start = section->GetPortal(lpAICar->muResetOnTrackStartPortal)->GetPosition();
-        const Vector3 end = section->GetPortal(lpAICar->muResetOnTrackEndPortal)->GetPosition();
+        const ::Vector3 start = section->GetPortal(lpAICar->muResetOnTrackStartPortal)->GetPosition();
+        const ::Vector3 end = section->GetPortal(lpAICar->muResetOnTrackEndPortal)->GetPosition();
         CGS_ASSERT(!IsZero(start-end, 1.5258789e-5f), "!RwMath::IsSimilar( lStartPortalPosition, lEndPortalPosition )");
-        const Vector3 direction = Normalize(end-start);
+        const ::Vector3 direction = Normalize(end-start);
         CGS_ASSERT(IsValid(direction), "RwMath::IsValid( lDirection )");
-        Vector3 position = ComputeNearestPositionInSegment(lpAICar->GetLastGoodPosition(), start, end);
+        ::Vector3 position = ComputeNearestPositionInSegment(lpAICar->GetLastGoodPosition(), start, end);
         if (section->mx8Flags & 8)
         {
-            const f32 width = ComputeAISectionWidth(section, Vector2{direction.x,direction.z,0,0});
-            position = position + Cross(direction, Vector3{0,1,0,0}) * (0.3f * width);
+            const ::Vector2 flatDirection = BrnMath::Flatten(direction);
+            const ::Vector3 up = {0, 1, 0, 0};
+            const f32 width = ComputeAISectionWidth(section, flatDirection);
+            position = position + Cross(direction, up) * (0.3f * width);
         }
-        const Vector3 delta = lpAICar->GetLastGoodPosition() - position;
-        if (delta.x*delta.x + delta.z*delta.z > 40000.0f) return false;
+        const ::Vector3 delta = lpAICar->GetLastGoodPosition() - position;
+        if (delta.mV.x*delta.mV.x + delta.mV.z*delta.mV.z > 40000.0f) return false;
         lpOutCoords->mpAISection = section;
         lpOutCoords->mPosition = position;
         lpOutCoords->mDirection = direction;
@@ -549,11 +603,11 @@ namespace BrnAI
         ResetOnTrackCoords lCoords;
         lCoords.mpAISection = 0;
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const ::Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
             lCoords.mPosition = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const ::Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
             lCoords.mDirection = lAggregateValue;
         }
 
@@ -566,26 +620,29 @@ namespace BrnAI
             // ARTIST 82799D84 jump table; speed constants initialized at 82C692B0/D0.
             const f32 slow = 60.0f * 0.44704f;
             const f32 fast = 140.0f * 0.44704f;
+            const Vector3 north = {0, 0, -1, 0}, south = {0, 0, 1, 0};
+            const Vector3 east = {-1, 0, 0, 0}, west = {1, 0, 0, 0};
+            const Vector3 northEast = {-0.707f, 0, 0.707f, 0}, southWest = {0.707f, 0, -0.707f, 0};
             switch (car->meResetSpeedType)
             {
             case E_RESET_SPEED_TYPE_NONE: case E_RESET_SPEED_TYPE_NONE_AND_IGNORE: speed = 0; break;
             case E_RESET_SPEED_TYPE_SLOW: speed = slow; break;
             case E_RESET_SPEED_TYPE_FAST: speed = fast; break;
-            case E_RESET_SPEED_TYPE_SLOW_NORTH_FACE: speed = slow; lCoords.mDirection = {0,0,-1,0}; break;
-            case E_RESET_SPEED_TYPE_SLOW_SOUTH_FACE: speed = slow; lCoords.mDirection = {0,0,1,0}; break;
-            case E_RESET_SPEED_TYPE_SLOW_EAST_FACE: speed = slow; lCoords.mDirection = {-1,0,0,0}; break;
-            case E_RESET_SPEED_TYPE_SLOW_WEST_FACE: speed = slow; lCoords.mDirection = {1,0,0,0}; break;
+            case E_RESET_SPEED_TYPE_SLOW_NORTH_FACE: speed = slow; lCoords.mDirection = north; break;
+            case E_RESET_SPEED_TYPE_SLOW_SOUTH_FACE: speed = slow; lCoords.mDirection = south; break;
+            case E_RESET_SPEED_TYPE_SLOW_EAST_FACE: speed = slow; lCoords.mDirection = east; break;
+            case E_RESET_SPEED_TYPE_SLOW_WEST_FACE: speed = slow; lCoords.mDirection = west; break;
             case E_RESET_SPEED_TYPE_SLOW_REVERSE: case E_RESET_SPEED_TYPE_REVERSE_AND_IGNORE_SLOW:
                 speed = slow; lCoords.mDirection = rw::math::vpu::Negate(lCoords.mDirection); break;
             case E_RESET_SPEED_TYPE_STOP_REVERSE: case E_RESET_SPEED_TYPE_REVERSE_AND_IGNORE:
                 speed = 0; lCoords.mDirection = rw::math::vpu::Negate(lCoords.mDirection); break;
-            case E_RESET_SPEED_TYPE_STOP_NORTH_FACE: speed = 0; lCoords.mDirection = {0,0,-1,0}; break;
-            case E_RESET_SPEED_TYPE_STOP_SOUTH_FACE: speed = 0; lCoords.mDirection = {0,0,1,0}; break;
-            case E_RESET_SPEED_TYPE_STOP_EAST_FACE: speed = 0; lCoords.mDirection = {-1,0,0,0}; break;
+            case E_RESET_SPEED_TYPE_STOP_NORTH_FACE: speed = 0; lCoords.mDirection = north; break;
+            case E_RESET_SPEED_TYPE_STOP_SOUTH_FACE: speed = 0; lCoords.mDirection = south; break;
+            case E_RESET_SPEED_TYPE_STOP_EAST_FACE: speed = 0; lCoords.mDirection = east; break;
             case E_RESET_SPEED_TYPE_STOP_WEST_FACE: case E_RESET_SPEED_TYPE_WEST_AND_IGNORE:
-                speed = 0; lCoords.mDirection = {1,0,0,0}; break;
-            case E_RESET_SPEED_TYPE_STOP_NORTH_EAST_FACE: speed = 0; lCoords.mDirection = {-0.707f,0,0.707f,0}; break;
-            case E_RESET_SPEED_TYPE_STOP_SOUTH_WEST_FACE: speed = 0; lCoords.mDirection = {0.707f,0,-0.707f,0}; break;
+                speed = 0; lCoords.mDirection = west; break;
+            case E_RESET_SPEED_TYPE_STOP_NORTH_EAST_FACE: speed = 0; lCoords.mDirection = northEast; break;
+            case E_RESET_SPEED_TYPE_STOP_SOUTH_WEST_FACE: speed = 0; lCoords.mDirection = southWest; break;
             default: break;
             }
             lResult.Construct(AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS,
@@ -616,11 +673,11 @@ namespace BrnAI
             // ActiveRaceCar::GetResetCoords instead), but they are written because the console
             // writes them -- an uninitialised 32 bytes on a queue is how a plausible-looking
             // wrong pose gets read as data.
+            const Vector3 zero = {0.0f, 0.0f, 0.0f, 0.0f};
             lResult.Construct(AIModuleIO::ResetOnTrackResult::E_STATE_FAILURE,
                               lpRequest->GetGlobalRaceCarIndex(),
                               lpRequest->GetResetSpeed(),
-                              Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },
-                              Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+                              zero, zero);
             lpResults->GetResetOnTrackResultQueue()->AddEvent(lResult);
         }
 

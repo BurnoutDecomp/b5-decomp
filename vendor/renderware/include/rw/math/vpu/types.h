@@ -22,7 +22,16 @@ namespace vpu
     // The complex SIMD math (add/mul/transform) stays in the *_operation headers; only
     // the trivial initialisers the SDK exposes as type methods (SetZero/SetIdentity,
     // spelled `v.SetZero()` / `m.SetIdentity()` at the call sites) are provided here.
-    struct CGS_ALIGN(16) Vector2 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
+    // ARTIST821F0DB0 / DecFIGS vector2.h:45/49/130: genuine VPU register.
+    // Copy construction and assignment stay implicit for the native value ABI.
+    struct CGS_ALIGN(16) __declspec(passinreg) Vector2
+    {
+        __vector4 mV;
+        typedef const Vector2 InParam;
+        Vector2() {}
+        Vector2(float lfX, float lfY);
+        void SetZero() { mV = __vspltisw(0); }
+    };
     struct CGS_ALIGN(16) __declspec(passinreg) Vector3 { __vector4 mV; void SetZero() { mV = __vspltisw(0); }
                                  typedef const Vector3 InParam; };   // w: unused 4th lane
     struct CGS_ALIGN(16) __declspec(passinreg) Vector4 { __vector4 mV; void SetZero() { mV = __vspltisw(0); }
