@@ -1118,4 +1118,3 @@ int main()
     std::printf("FxDirector2PlayerJumping: %u checks, %u failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
 }
-
