@@ -167,9 +167,9 @@ namespace BrnParticle
         // `ori r11, r11, 0x24` -- CHANGED | OVERRIDE_VELOCITY.
         void SetVelocity(const rw::math::vpu::Vector3& lrVelocity)
         {
-            mfVelocityX = lrVelocity.x;
-            mfVelocityY = lrVelocity.y;
-            mfVelocityZ = lrVelocity.z;
+            mfVelocityX = lrVelocity.mV.x;
+            mfVelocityY = lrVelocity.mV.y;
+            mfVelocityZ = lrVelocity.mV.z;
             muFlags    |= static_cast<u16>(EPPE_FLAG_CHANGED | EPPE_FLAG_OVERRIDE_VELOCITY);
         }
 
