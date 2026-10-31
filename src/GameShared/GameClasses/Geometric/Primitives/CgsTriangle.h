@@ -14,6 +14,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3
+#include "rw/math/vpu/vector3_operation.h"
 
 namespace CgsGeometric
 {
@@ -34,23 +35,13 @@ namespace CgsGeometric
         // Vertex 1 minus vertex 0, all four lanes.
         Vector3 CalcEdge01() const
         {
-            Vector3 lEdge;
-            lEdge.x = maVertices[1].x - maVertices[0].x;
-            lEdge.y = maVertices[1].y - maVertices[0].y;
-            lEdge.z = maVertices[1].z - maVertices[0].z;
-            lEdge.w = maVertices[1].w - maVertices[0].w;
-            return lEdge;
+            return rw::math::vpu::Subtract(maVertices[1], maVertices[0]);
         }
 
         // Vertex 2 minus vertex 1, all four lanes.
         Vector3 CalcEdge12() const
         {
-            Vector3 lEdge;
-            lEdge.x = maVertices[2].x - maVertices[1].x;
-            lEdge.y = maVertices[2].y - maVertices[1].y;
-            lEdge.z = maVertices[2].z - maVertices[1].z;
-            lEdge.w = maVertices[2].w - maVertices[1].w;
-            return lEdge;
+            return rw::math::vpu::Subtract(maVertices[2], maVertices[1]);
         }
 
     private:
