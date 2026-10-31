@@ -51,12 +51,12 @@ namespace CgsGeometric
         // `vcmpgefp v0, nodeMax, queryMin`, ANDed, then reduced over x/y/z.
         inline bool BoxesOverlapXYZ(const AxisAlignedBox& lrA, const AxisAlignedBox& lrB)
         {
-            if (!(lrA.mMax.x >= lrB.mMin.x)) return false;
-            if (!(lrA.mMax.y >= lrB.mMin.y)) return false;
-            if (!(lrA.mMax.z >= lrB.mMin.z)) return false;
-            if (!(lrB.mMax.x >= lrA.mMin.x)) return false;
-            if (!(lrB.mMax.y >= lrA.mMin.y)) return false;
-            if (!(lrB.mMax.z >= lrA.mMin.z)) return false;
+            if (!(lrA.mMax.mV.x >= lrB.mMin.mV.x)) return false;
+            if (!(lrA.mMax.mV.y >= lrB.mMin.mV.y)) return false;
+            if (!(lrA.mMax.mV.z >= lrB.mMin.mV.z)) return false;
+            if (!(lrB.mMax.mV.x >= lrA.mMin.mV.x)) return false;
+            if (!(lrB.mMax.mV.y >= lrA.mMin.mV.y)) return false;
+            if (!(lrB.mMax.mV.z >= lrA.mMin.mV.z)) return false;
             return true;
         }
     }
@@ -303,8 +303,8 @@ namespace CgsGeometric
         u16* lpuDestNodeIndices = mapQueryBuffers[1];   // +0x54
 
         // v127 / v123: the segment's two 16-byte lanes, w included.
-        const Vector4 lLineStart = { lrLine.mStart.x, lrLine.mStart.y, lrLine.mStart.z, lrLine.mStart.w };
-        const Vector4 lLineEnd   = { lrLine.mEnd.x,   lrLine.mEnd.y,   lrLine.mEnd.z,   lrLine.mEnd.w };
+        const Vector4 lLineStart(lrLine.mStart.GetVector3().mV);
+        const Vector4 lLineEnd(lrLine.mEnd.GetVector3().mV);
 
         // Seed: the single root node of level 0.
         lpuSrcNodeIndices[0] = 0;
