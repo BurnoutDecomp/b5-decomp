@@ -113,14 +113,13 @@
 #include "vendor/renderware/collision/GPInstance.hpp"   // GPInstance + g_aGPVolumeMethods
 
 #include <cmath>     // std::sqrt (the vrsqrtefp lowering) / std::fabs (the vandc sign clear)
-#include <cstdlib>   // std::getenv (the BRN_PROP_DIAG latch)
 #include <cstring>   // std::memcpy (reading a lane's raw bit pattern)
+#include <cfloat>
 
 // includes folded in from the ContactGeneratorJob_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"               // CgsGeometric::Box
 #include "GameShared/GameClasses/Geometric/Primitives/CgsCapsule.h"           // CgsGeometric::Capsule
 #include "GameShared/GameClasses/Geometric/Primitives/CgsCylinder.h"          // CgsGeometric::Cylinder
-#include <stdlib.h>   // getenv (the [DIAG] latch, host only)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsSphereList.h"
 
 // The six per-job-thread contexts. X360 base unk_831BBF80, stride 0x10300, bound 6 --
@@ -191,7 +190,7 @@ namespace
 
     // flt_8210168C == 0x7F7FFFFF. Splatted into the per-line "nearest hit so far" array at
     // 0x82921B98..0x82921BCC before every command.
-    const f32 KF_NO_HIT_DISTANCE = 3.4028235e38f;
+    const f32 KF_NO_HIT_DISTANCE = FLT_MAX; // ARTIST flt_8210168C: 0x7F7FFFFF
 
     // A Triangle4 lane's enable bit. Triangle4::mValidMasks (+0x90) is a four-lane bit mask,
     // ANDed into the hit mask at 0x82921F88 (`vand v12, v12, v6`). The producer side writes
@@ -1459,18 +1458,6 @@ void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList(
         while (lIterator.MoveToNextHeader());
     }
 
-    // ⭐ [DIAG] NOT IN THE X360 BINARY -- wave Q6, behind BRN_PROP_DIAG, one-shot. The latch is
-    // evaluated ONCE (a getenv per command would be a syscall on the job thread's hot path) and
-    // it fires on the first call that actually had a triangle batch to run, so the counts
-    // describe real work rather than an empty command. Read it together with
-    // [Q6-worldc] (the producer side) and "prop fell out of the world": prims/tris non-zero
-    // with results == 0 means the pair list is arriving EMPTY, which is the
-    // PrimitivePairListBuilder::AddPrimitive leg, not this one.
-    if (lu16NumTriangleBatches != 0)
-    {
-        static bool       sbFirstPass = true;
-    }
-
     // 0x829265FC..0x82926620 -- the unconditional 16-byte header write-back.
     *lpDesc->mpResultsList = lResultsList;
 }
@@ -1681,21 +1668,6 @@ void ContactGeneratorJob::ExecutePrimitivePairList()
                            &lResultsList);
     }
     while (lIterator.MoveToNextHeader());
-
-    // ⭐ [DIAG] NOT IN THE X360 BINARY -- wave Q7, behind BRN_PROP_DIAG, one-shot. The latch is
-    // evaluated ONCE (a getenv per job would be a syscall on the job thread) and it fires on the
-    // FIRST call of all, empty list included: a type-10 job that arrives with pairs=0 is itself
-    // the finding, so this is deliberately not gated on having done work.
-    // Reading it: `headers` is how many records the Itterator actually walked
-    // (GetCurrentTestIndex() + 1 -- MoveToNextHeader leaves the cursor on the last record), and
-    // it reads 1 even for an EMPTY list because of the do-while above; `pairs` is what the
-    // poster declared in the list header. pairs=0 headers=1 therefore means "an empty pair list
-    // was posted", which is a VehicleManager::StartVehicleContactGeneration / DoCarCar
-    // ContactGeneration problem, not this arm's. results=0 with pairs>0 means the two GP
-    // instances never overlapped, which is normal for most frames.
-    {
-        static bool       sbFirstPass = true;
-    }
 
     // 0x829258D8..0x829258FC -- the unconditional 16-byte header write-back.
     *lpDesc->mpResultsList = lResultsList;
@@ -2024,7 +1996,7 @@ namespace
     // The console's assert bound, spelled as the assert string spells it (ContactGeneratorJob.cpp
     // :1279): sizeof(pointPairs) / sizeof(PointPair). `cmplwi cr6, r31, 0x10 ; ble` -> 16.
     const u32 KU_MAX_CONTACT_POINT_PAIRS =
-        static_cast<u32>(sizeof(GPInstance::ContactPoints::pointPairs)
+        static_cast<u32>(sizeof(((GPInstance::ContactPoints*)0)->pointPairs)
                          / sizeof(GPInstance::ContactPoints::PointPair));
 }
 
@@ -2262,19 +2234,6 @@ void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpGPInstance0,
         }
         lpResultsList->mu16NumResults = lu16Next;
 
-        // ---------------------------------------------------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY -- ONE-SHOT, behind BRN_PROP_DIAG, getenv latched once
-        // (a getenv per contact would be a syscall on the hot path).
-        //
-        // This is the line that says the prop NARROW PHASE produced geometry. Read it as a pair
-        // with "[Q6-worldc] first prop-vs-world contact pass" (the poster) and with
-        // "Warning!! prop fell out of the world": worldc firing and this one NOT firing means
-        // pairs are being posted but no primitive ever collides; both firing while parts still
-        // fall means the contact is generated but not consumed downstream.
-        // ---------------------------------------------------------------------------------
-        {
-            static bool       sbFirstContact = true;
-        }
     }
 }
 
@@ -2608,18 +2567,6 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereList(
             lu16NumResults = lu16Next;
             lResultsList.mu16NumResults = lu16NumResults;
         }
-    }
-
-    // ⭐ [DIAG] NOT IN THE X360 BINARY — wave Q7, behind BRN_PROP_DIAG, one-shot. The getenv is
-    // latched ONCE (a getenv per command would be a syscall on the job thread's hot path) and the
-    // line fires on the first call that actually had a sphere list to walk, so the counts describe
-    // real work rather than an empty command. THERE IS NO SECOND LINE to read it against — the
-    // stream arm emits no diag of its own. The honest reading: this line never firing while the
-    // car-car poster is live points at DoCarCarContactGeneration /
-    // AddSphereListWithSphereListToStream, not at this arm.
-    if (lu16NumSpheresA != 0)
-    {
-        static bool       sbFirstPass = true;
     }
 
     // 0x8292187C..0x829218A0 — the unconditional 16-byte header write-back. This is what publishes
