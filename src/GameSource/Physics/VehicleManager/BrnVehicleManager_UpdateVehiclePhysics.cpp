@@ -237,7 +237,7 @@ namespace Vehicle
             lEvent.mx32EntityTypeFlags = 2u;
             lEvent.mExcludeEntityId.SetInvalid();
             lEvent.meExclusionMode     =
-                CgsSceneManager::SceneManagerIO::E_NEAREST_EXCLUDE_ENTITY_ONLY;
+                CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY;
             lEvent.mxVolumeTypeFlags   = 2u;
 
             lpRequestInterface->GetRequestFineLineQueue()

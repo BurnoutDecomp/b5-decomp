@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryInterface.h"  // CgsSceneManager::SceneManagerIO::SceneQueryInterface
-#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h" // InEventLineTestNearest + ENearestExclusionMode
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h" // InEventLineTestNearest
 
 // CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestNearest  @ X360 0x82216FD0
 //
@@ -28,18 +28,18 @@
 //   stw     r25(=a5)   -> +0x28  mExcludeEntityId    (var_78)
 //   stw     r31(=a6)   -> +0x2C  meExclusionMode     (var_74)
 //   stb     r26(=a4)   -> +0x30  mxVolumeTypeFlags   (var_70)
-//   lwz r3,4(r29); bl ...InEventLineTestNearest_::AddEvent  -> result in r3, returned straight through.
-bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestNearest(
-    const Vector3&                lLineStart,
-    const Vector3&                lLineEnd,
+//   lwz r3,4(r29); bl ...InEventLineTestNearest_::AddEvent  -> AddEvent result remains in r3 (the declared function returns void).
+void CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestNearest(
     CgsSceneManager::SceneQueryId lQueryId,
     u32                           lx32EntityTypeFlags,
     u8                            lxVolumeTypeFlags,
+    Vector3                       lLineStart,
+    Vector3                       lLineEnd,
     CgsSceneManager::EntityId     lExcludeEntityId,
-    ENearestExclusionMode         leExclusionMode)
+    EExclusionMode                leExclusionMode)
 {
     CGS_ASSERT(
-        leExclusionMode == E_NEAREST_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_NEAREST_EXCLUDE_ENTITY_ONLY,
+        leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
         "leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY");
     CGS_ASSERT(mpFineLineTestNearestQueue != 0, "mpFineLineTestNearestQueue");
 
@@ -52,5 +52,5 @@ bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestNearest(
     lEvent.meExclusionMode     = leExclusionMode;       // +0x2C  (a6 / r31)
     lEvent.mxVolumeTypeFlags   = lxVolumeTypeFlags;     // +0x30  (a4 / r26, byte)
 
-    return mpFineLineTestNearestQueue->AddEvent(lEvent);
+    mpFineLineTestNearestQueue->AddEvent(lEvent);
 }
