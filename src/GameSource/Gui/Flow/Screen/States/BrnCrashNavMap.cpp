@@ -330,7 +330,8 @@ namespace BrnGui
 
         // Park the cursor. The X360 assembles a zero quad on the stack and passes it in v1
         // with r4 == 0, i.e. SetPosition({0,0,0,0}, /*clamp*/false).
-        const Vector2 lv2CursorOrigin = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector2 lv2CursorOrigin;
+        lv2CursorOrigin.SetZero();
         mCursor.SetPosition(lv2CursorOrigin, false);
 
         if (mpGuiCache != 0)
@@ -450,18 +451,42 @@ namespace BrnGui
             // header-inline on the console and body-less here, and which member each reads
             // is not attested (BrnMainMap.h says so at their declarations).
             // -----------------------------------------------------------------
-            const Vector2 lv2PlayerMapPoint = { lrv4PlayerWorldPos.x, lrv4PlayerWorldPos.z,
-                                                0.0f, 0.0f };
+            Vector2 lv2PlayerMapPoint;
+            lv2PlayerMapPoint.mV = __vpermwi(lrv4PlayerWorldPos.mV, VPERMWI_CONST(0, 2, 0, 0));
 
-            const Matrix33 lm33MapSpace =
-                MapTransform::MakeCoordSpaceFromRect(mMainMapComponent.mv4WorldRect);
-            const Matrix33 lm33ViewSpace =
-                MapTransform::MakeCoordSpaceFromRect(mMainMapComponent.mv4ViewRect);
+            // ARTIST824BF744..908 constructs the two coordinate spaces in VMX,
+            // composes the view rows with device space, then makes one Transform call.
+            const __vector4 lvZero = __vspltisw(0);
+            const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+            const __vector4 lvWorldRect = mMainMapComponent.mv4WorldRect.mV;
+            const __vector4 lvViewRect = mMainMapComponent.mv4ViewRect.mV;
+            const __vector4 lvWorldWidth = __vsubfp(__vspltw(lvWorldRect, 2), __vspltw(lvWorldRect, 0));
+            const __vector4 lvWorldHeight = __vsubfp(__vspltw(lvWorldRect, 3), __vspltw(lvWorldRect, 1));
+            Matrix33 lm33MapSpace;
+            lm33MapSpace.xAxis.mV = __vrlimi(lvWorldWidth, lvZero, 6, 0);
+            lm33MapSpace.yAxis.mV = __vrlimi(lvZero, lvWorldHeight, 4, 0);
+            lm33MapSpace.zAxis.mV = __vrlimi(__vpermwi(lvWorldRect, VPERMWI_CONST(0, 1, 0, 0)), lvOne, 2, 0);
 
-            const Vector2 lv2ViewPoint =
-                MapTransform::Transform(lv2PlayerMapPoint, lm33MapSpace, lm33ViewSpace);
-            const Vector2 lv2DevicePoint =
-                MapTransform::Transform(lv2ViewPoint, MapTransform::GetDeviceSpace());
+            const __vector4 lvViewWidth = __vsubfp(__vspltw(lvViewRect, 2), __vspltw(lvViewRect, 0));
+            const __vector4 lvViewHeight = __vsubfp(__vspltw(lvViewRect, 3), __vspltw(lvViewRect, 1));
+            const __vector4 lavViewRows[3] = {
+                __vrlimi(lvViewWidth, lvZero, 6, 0),
+                __vrlimi(lvZero, lvViewHeight, 4, 0),
+                __vrlimi(__vpermwi(lvViewRect, VPERMWI_CONST(0, 1, 0, 0)), lvOne, 2, 0)
+            };
+            const Matrix33& lrDevice = MapTransform::GetDeviceSpace();
+            Matrix33 lm33To;
+            __vector4 lavToRows[3];
+            for (s32 liRow = 0; liRow < 3; ++liRow)
+            {
+                __vector4 lvRow = __vmulfp(lrDevice.xAxis.mV, __vspltw(lavViewRows[liRow], 0));
+                lvRow = __vmaddfp(lrDevice.yAxis.mV, __vspltw(lavViewRows[liRow], 1), lvRow);
+                lavToRows[liRow] = __vmaddfp(lrDevice.zAxis.mV, __vspltw(lavViewRows[liRow], 2), lvRow);
+            }
+            lm33To.xAxis.mV = lavToRows[0];
+            lm33To.yAxis.mV = lavToRows[1];
+            lm33To.zAxis.mV = lavToRows[2];
+            const Vector2 lv2DevicePoint = MapTransform::Transform(lv2PlayerMapPoint, lm33MapSpace, lm33To);
 
             mCursor.SetPosition(lv2DevicePoint, true);
 
@@ -472,8 +497,7 @@ namespace BrnGui
                 GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PLAYER_CAR);
             mLockedIconInfo.SetPositionLane(lrv4PlayerWorldPos);
             {
-                const Vector3 lAggregateValue = { lrv4PlayerWorldPos.x, lrv4PlayerWorldPos.y,
-                                              lrv4PlayerWorldPos.z, lrv4PlayerWorldPos.w };
+                const Vector3 lAggregateValue(lrv4PlayerWorldPos.mV);
                 mSoundData.mPrevCurPos = lAggregateValue;
             }
 
@@ -1661,17 +1685,9 @@ namespace BrnGui
         const f32 KF_CURSOR_START_X         = 0.0f;  // flt_82001CC0, f31
         const f32 KF_CURSOR_START_Y         = 0.0f;  // flt_82001CC0, f31
 
-        // Out-queue payload view for the wire event this state posts on entry. Wire id 555
-        // has no homed type; the record is {payload size 1, id 555, payload offset 12} and
-        // the single payload byte is never written by the X360 (no stb targets it), so it
-        // is modelled zero-initialised. FLAG consumer-named: neither the field's role nor
-        // the event's name is recovered.
-        struct GuiEventUnnamed555Payload
+        // ARTIST824CB248..284 posts the one-byte empty tag without writing its payload.
+        struct GuiEventUnnamed555Payload : CgsModule::Event
         {
-            bool mbFlag;   // +0x00 -- left as stack garbage by the X360; posted zeroed here
-
-            GuiEventUnnamed555Payload() : mbFlag(false) {}
-
             s32 GetEventType() const { return 555; }
         };
     }
@@ -1686,14 +1702,14 @@ namespace BrnGui
         // The X360 assembles this bundle in three stack quads at 0xF0+var_70 and passes
         // its address in r5.
         MainMapComponent::MainMapParameterBundle lParameters;
-        lParameters.mv4ViewRect.x    = 0.0f;
-        lParameters.mv4ViewRect.y    = 0.16972221f;
-        lParameters.mv4ViewRect.z    = 1.0f;
-        lParameters.mv4ViewRect.w    = 0.83888888f;
-        lParameters.mv4PaddingRect.x = 0.4f;
-        lParameters.mv4PaddingRect.y = 0.22805555f;
-        lParameters.mv4PaddingRect.z = 0.9375f;
-        lParameters.mv4PaddingRect.w = 0.78333336f;
+        lParameters.mv4ViewRect.mV.x    = 0.0f;
+        lParameters.mv4ViewRect.mV.y    = 0.16972221f;
+        lParameters.mv4ViewRect.mV.z    = 1.0f;
+        lParameters.mv4ViewRect.mV.w    = 0.83888888f;
+        lParameters.mv4PaddingRect.mV.x = 0.4f;
+        lParameters.mv4PaddingRect.mV.y = 0.22805555f;
+        lParameters.mv4PaddingRect.mV.z = 0.9375f;
+        lParameters.mv4PaddingRect.mV.w = 0.78333336f;
         lParameters.meMapType        = GuiEventRenderMainMap::E_MAPTYPE_MAINMAP;
 
         mMainMapComponent.Construct(mpStateInterface, &lParameters);
@@ -1721,8 +1737,8 @@ namespace BrnGui
         // 0x824CB198..0x824CB214 with {flt_82001CC0, flt_82001CC0, flt_82066040,
         // flt_8201A7A4} == {0, 0, 1280, 720}, i.e. {left, top, right, bottom}.
         // SetBounds is the DWARF's own name for that writer (BrnCursor.h:212).
-        const Vector4 lv4CursorBounds = { KF_CURSOR_RECT_LEFT, KF_CURSOR_RECT_TOP,
-                                          KF_CURSOR_RECT_RIGHT, KF_CURSOR_RECT_BOTTOM };
+        const Vector4 lv4CursorBounds(KF_CURSOR_RECT_LEFT, KF_CURSOR_RECT_TOP,
+                                     KF_CURSOR_RECT_RIGHT, KF_CURSOR_RECT_BOTTOM);
         mCursor.SetBounds(lv4CursorBounds);
         mCursor.SetAlwaysSnap(true);
 
@@ -2369,8 +2385,8 @@ namespace BrnGui
         // @0x82FB4D10, both written by the same runtime static initialiser shape
         // (0x82C54D20 / 0x82C54D60) from flt_8206B494 == 638.0 and flt_8206B490 ==
         // 349.79999 with lanes 2/3 zeroed. They hold the SAME value in the shipped build.
-        const Vector2 K_CRASHNAV_LONG_DISPLAY_RECT = { 638.0f, 349.8f, 0.0f, 0.0f };
-        const Vector2 K_CRASHNAV_TALL_DISPLAY_RECT = { 638.0f, 349.8f, 0.0f, 0.0f };
+        const Vector2 K_CRASHNAV_LONG_DISPLAY_RECT(638.0f, 349.8f);
+        const Vector2 K_CRASHNAV_TALL_DISPLAY_RECT(638.0f, 349.8f);
     }
 
     // ================================================================================
@@ -2400,11 +2416,7 @@ namespace BrnGui
         // world -> map-plane swizzle with one vperm (see the mask note in the banner);
         // lanes 2/3 are the redundant copy of lane 0 that mask produces.
         Vector2 lv2Min;
-        lv2Min.x = lpEventStart->mv3Position.x;
-        lv2Min.y = lpEventStart->mv3Position.z;
-        lv2Min.z = lpEventStart->mv3Position.x;
-        lv2Min.w = lpEventStart->mv3Position.x;
-
+        lv2Min.mV = __vpermwi(lpEventStart->mv3Position.mV, VPERMWI_CONST(0, 2, 0, 0));
         Vector2 lv2Max = lv2Min;
 
         // The count is re-read every pass on the console; GetCheckpointCount() in the
@@ -2421,34 +2433,24 @@ namespace BrnGui
             const Vector4& lrv4IconPosition = lIconInfo.GetPositionLane();
 
             Vector2 lv2Point;
-            lv2Point.x = lrv4IconPosition.x;
-            lv2Point.y = lrv4IconPosition.z;
-            lv2Point.z = lrv4IconPosition.x;
-            lv2Point.w = lrv4IconPosition.x;
-
-            // vminfp / vmaxfp, written out per lane.
-            lv2Min.x = (lv2Min.x < lv2Point.x) ? lv2Min.x : lv2Point.x;
-            lv2Min.y = (lv2Min.y < lv2Point.y) ? lv2Min.y : lv2Point.y;
-            lv2Min.z = (lv2Min.z < lv2Point.z) ? lv2Min.z : lv2Point.z;
-            lv2Min.w = (lv2Min.w < lv2Point.w) ? lv2Min.w : lv2Point.w;
-
-            lv2Max.x = (lv2Max.x > lv2Point.x) ? lv2Max.x : lv2Point.x;
-            lv2Max.y = (lv2Max.y > lv2Point.y) ? lv2Max.y : lv2Point.y;
-            lv2Max.z = (lv2Max.z > lv2Point.z) ? lv2Max.z : lv2Point.z;
-            lv2Max.w = (lv2Max.w > lv2Point.w) ? lv2Max.w : lv2Point.w;
+            lv2Point.mV = __vpermwi(lrv4IconPosition.mV, VPERMWI_CONST(0, 2, 0, 0));
+            lv2Min.mV = __vminfp(lv2Min.mV, lv2Point.mV);
+            lv2Max.mV = __vmaxfp(lv2Max.mV, lv2Point.mV);
         }
 
         // (max + min) * 0.5 -- see the vrefp note in the banner.
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lTwo = __vcfsx(__vspltisw(2), 0);
+        __vector4 lHalf = __vrefp(lTwo);
+        lHalf = __vmaddfp(lHalf, __vnmsubfp(lHalf, lTwo, lOne), lHalf);
+        lHalf = __vmaddfp(lHalf, __vnmsubfp(lHalf, lTwo, lOne), lHalf);
         Vector2 lv2Centre;
-        lv2Centre.x = (lv2Max.x + lv2Min.x) * 0.5f;
-        lv2Centre.y = (lv2Max.y + lv2Min.y) * 0.5f;
-        lv2Centre.z = (lv2Max.z + lv2Min.z) * 0.5f;
-        lv2Centre.w = (lv2Max.w + lv2Min.w) * 0.5f;
+        lv2Centre.mV = __vmulfp(__vaddfp(lv2Max.mV, lv2Min.mV), lHalf);
         mMainMapComponent.SetDesiredWorldCentre(lv2Centre);
 
         // A box that is taller than it is wide gets framed against the tall rect.
-        const f32 lfWidth  = lv2Max.x - lv2Min.x;
-        const f32 lfHeight = lv2Max.y - lv2Min.y;
+        const f32 lfWidth  = lv2Max.mV.x - lv2Min.mV.x;
+        const f32 lfHeight = lv2Max.mV.y - lv2Min.mV.y;
         const Vector2 lv2DisplayRect = (lfHeight > lfWidth) ? K_CRASHNAV_TALL_DISPLAY_RECT
                                                             : K_CRASHNAV_LONG_DISPLAY_RECT;
 
@@ -2741,13 +2743,14 @@ namespace BrnGui
                     // being reachable in practice. Do not "fix" it without evidence.
                     const Vector2 lv2CursorPos = mCursor.GetPosition();
                     Vector2 lv2ToSnapLocation;
-                    lv2ToSnapLocation.x = lSnapList[luNearestIcon].x - lv2CursorPos.x;
-                    lv2ToSnapLocation.y = lSnapList[luNearestIcon].y - lv2CursorPos.y;
-                    lv2ToSnapLocation.z = 0.0f;   // vsubfp is all-lane; z/w are Vector2 padding
-                    lv2ToSnapLocation.w = 0.0f;
+                    lv2ToSnapLocation.mV = __vsubfp(lSnapList[luNearestIcon].mV, lv2CursorPos.mV);
 
-                    lbStopPanning = KF_MAX_SNAP_SCREEN_DISTANCE >
-                                    rw::math::vpu::Dot(lv2ToSnapLocation, lv2ToSnapLocation);
+                    const rw::math::vpu::VecFloat lDistanceSquared =
+                        rw::math::vpu::Dot(lv2ToSnapLocation, lv2ToSnapLocation);
+                    const Vector4 lv4Limit(KF_MAX_SNAP_SCREEN_DISTANCE, 0.0f, 0.0f, 0.0f);
+                    unsigned int luComparison;
+                    __vcmpgtfpR(__vspltw(lv4Limit.mV, 0), lDistanceSquared.mV, &luComparison);
+                    lbStopPanning = (luComparison & 0x80) != 0;
                 }
 
                 if (lbStopPanning)
@@ -2802,24 +2805,20 @@ namespace BrnGui
                 // cpp:1494. The Y axis is inverted (`fmuls f0, f13, -1.0f`) because device
                 // space grows downward.
                 Vector2 lv2ControllerOffset;
-                lv2ControllerOffset.x = lpAxisData->mfXAxis;
-                lv2ControllerOffset.y = lpAxisData->mfYAxis * -1.0f;
-                lv2ControllerOffset.z = 0.0f;
-                lv2ControllerOffset.w = 0.0f;
+                lv2ControllerOffset.mV.x = lpAxisData->mfXAxis;
+                lv2ControllerOffset.mV.y = lpAxisData->mfYAxis * -1.0f;
+                lv2ControllerOffset.mV.z = 0.0f;
+                lv2ControllerOffset.mV.w = 0.0f;
 
-                // cpp:1495. The cursor chases a point FK_PAN_CURSOR_MOVEMENT_RADIUS device
-                // units from the map centre in the stick's direction, with a first-order
-                // filter so the motion eases instead of snapping.
+                // The original performs both interpolation steps on all four VMX lanes.
                 const Vector2 lv2CursorPos = mCursor.GetPosition();
+                const Vector4 lv4Radius(FK_PAN_CURSOR_MOVEMENT_RADIUS, 0.0f, 0.0f, 0.0f);
+                const Vector4 lv4Filter(KF_PAN_INPUT_FILTER_FACTOR, 0.0f, 0.0f, 0.0f);
+                const __vector4 lvTarget = __vmaddfp(lv2ControllerOffset.mV,
+                    __vspltw(lv4Radius.mV, 0), lv2MapCentre.mV);
                 Vector2 lv2CursorPosToMoveTo;
-                lv2CursorPosToMoveTo.x =
-                    (lv2ControllerOffset.x * FK_PAN_CURSOR_MOVEMENT_RADIUS + lv2MapCentre.x -
-                     lv2CursorPos.x) * KF_PAN_INPUT_FILTER_FACTOR + lv2CursorPos.x;
-                lv2CursorPosToMoveTo.y =
-                    (lv2ControllerOffset.y * FK_PAN_CURSOR_MOVEMENT_RADIUS + lv2MapCentre.y -
-                     lv2CursorPos.y) * KF_PAN_INPUT_FILTER_FACTOR + lv2CursorPos.y;
-                lv2CursorPosToMoveTo.z = 0.0f;
-                lv2CursorPosToMoveTo.w = 0.0f;
+                lv2CursorPosToMoveTo.mV = __vmaddfp(__vsubfp(lvTarget, lv2CursorPos.mV),
+                    __vspltw(lv4Filter.mV, 0), lv2CursorPos.mV);
 
                 // cpp:1501/1502. Round-trip through world space so the cursor can be held
                 // inside the map's own bounds: x against the rect outright, z inset by
@@ -2831,24 +2830,20 @@ namespace BrnGui
                 // the moving/zoomed view and cannot bound a pan across the city.
                 const Vector4 lv4WorldRect = MapTransform::GetWorldRect();
 
-                // Four `fsel`s, transcribed sign for sign (see the NaN note in the banner).
-                // fsel(a, b, c) == (a >= 0.0f) ? b : c.
-                f32 lfClampedX =
-                    (lv4WorldRect.x - lv3CursorWorldPos.x >= 0.0f) ? lv4WorldRect.x
-                                                                   : lv3CursorWorldPos.x;
-                f32 lfClampedZ =
-                    ((lv4WorldRect.y + KF_PAN_Y_BORDER) - lv3CursorWorldPos.z >= 0.0f)
-                        ? (lv4WorldRect.y + KF_PAN_Y_BORDER)
-                        : lv3CursorWorldPos.z;
+                // ARTIST824BF32C..36C uses single-precision add/sub then fsel.
+                const f32 lfLowerZ = lv4WorldRect.mV.y + KF_PAN_Y_BORDER;
+                const f32 lfUpperZ = lv4WorldRect.mV.w - KF_PAN_Y_BORDER;
+                const f32 lfXLowerTest = lv4WorldRect.mV.x - lv3CursorWorldPos.mV.x;
+                const f32 lfZLowerTest = lfLowerZ - lv3CursorWorldPos.mV.z;
+                f32 lfClampedX = static_cast<f32>(__fsel(lfXLowerTest, lv4WorldRect.mV.x, lv3CursorWorldPos.mV.x));
+                f32 lfClampedZ = static_cast<f32>(__fsel(lfZLowerTest, lfLowerZ, lv3CursorWorldPos.mV.z));
+                const f32 lfXUpperTest = lv4WorldRect.mV.z - lfClampedX;
+                const f32 lfZUpperTest = lfUpperZ - lfClampedZ;
+                lfClampedX = static_cast<f32>(__fsel(lfXUpperTest, lfClampedX, lv4WorldRect.mV.z));
+                lfClampedZ = static_cast<f32>(__fsel(lfZUpperTest, lfClampedZ, lfUpperZ));
 
-                lfClampedX = (lv4WorldRect.z - lfClampedX >= 0.0f) ? lfClampedX
-                                                                   : lv4WorldRect.z;
-                lfClampedZ = ((lv4WorldRect.w - KF_PAN_Y_BORDER) - lfClampedZ >= 0.0f)
-                                 ? lfClampedZ
-                                 : (lv4WorldRect.w - KF_PAN_Y_BORDER);
-
-                lv3CursorWorldPos.x = lfClampedX;
-                lv3CursorWorldPos.z = lfClampedZ;
+                lv3CursorWorldPos.mV.x = lfClampedX;
+                lv3CursorWorldPos.mV.z = lfClampedZ;
 
                 // `li r4, 0` -- second argument false; the vector goes in v1.
                 mCursor.SetPosition(MapTransform::WorldToDevice(lv3CursorWorldPos, false), false);
@@ -2908,51 +2903,25 @@ namespace BrnGui
             const Vector2 lv2CursorWorld = MapTransform::Flatten(MapTransform::DeviceToWorld(lv2CursorPos));
 
             Vector2 lv2MapCentreToCursorWorld;
-            lv2MapCentreToCursorWorld.x = lv2CursorWorld.x - mv2WorldCentrePoint.x;
-            lv2MapCentreToCursorWorld.y = lv2CursorWorld.y - mv2WorldCentrePoint.y;
-            lv2MapCentreToCursorWorld.z = 0.0f;   // vsubfp is all-lane; z/w are Vector2 padding
-            lv2MapCentreToCursorWorld.w = 0.0f;   // and are never read back (types.h)
+            lv2MapCentreToCursorWorld.mV = __vsubfp(lv2CursorWorld.mV, mv2WorldCentrePoint.mV);
+            const rw::math::vpu::VecFloat lMagnitude = rw::math::vpu::Magnitude(lv2MapCentreToCursorWorld);
+            const Vector4 lv4Tolerance(KF_MAP_SCROLL_TOLERANCE, 0.0f, 0.0f, 0.0f);
+            unsigned int luComparison;
+            __vcmpgtfpR(lMagnitude.mV, __vspltw(lv4Tolerance.mV, 0), &luComparison);
 
-            // cpp:616. The X360 spells this vrsqrtefp + two Newton-Raphson steps + a
-            // zero-length vsel; sqrtf of the 2-lane dot product is the sanctioned scalar
-            // de-optimisation and yields the same value (including 0 for a zero delta).
-            const f32 lfMagnitude =
-                sqrtf(rw::math::vpu::Dot(lv2MapCentreToCursorWorld, lv2MapCentreToCursorWorld));
-
-            if (lfMagnitude > KF_MAP_SCROLL_TOLERANCE)
+            if ((luComparison & 0x80) != 0)
             {
-                // `vmaddfp v0, v9, v13, v0` -- velocity += delta * accel, then stored back
-                // BEFORE the clamp (@0x824D8DF4), so the magnitude below is taken from the
-                // freshly accumulated velocity.
-                mv2MapScrollVelocity.x += lv2MapCentreToCursorWorld.x * KF_MAP_SCROLL_ACCEL;
-                mv2MapScrollVelocity.y += lv2MapCentreToCursorWorld.y * KF_MAP_SCROLL_ACCEL;
-
-                // cpp:617. vmaxfp(a,b) = a > b ? a : b, vminfp(a,b) = a < b ? a : b -- kept in
-                // the console's operand order. The lower bound can never bite (a magnitude is
-                // non-negative) but the X360 emits it, so it stays.
-                f32 lfClampedMagnitude =
-                    sqrtf(rw::math::vpu::Dot(mv2MapScrollVelocity, mv2MapScrollVelocity));
-                if (-KF_MAX_SCROLL_SPEED > lfClampedMagnitude)
-                {
-                    lfClampedMagnitude = -KF_MAX_SCROLL_SPEED;
-                }
-                if (KF_MAX_SCROLL_SPEED < lfClampedMagnitude)
-                {
-                    lfClampedMagnitude = KF_MAX_SCROLL_SPEED;
-                }
-
-                // See the banner: the velocity is scaled BY the clamped magnitude, not by
-                // clamped/magnitude. Measured, not inferred.
-                mv2MapScrollVelocity.x *= lfClampedMagnitude;
-                mv2MapScrollVelocity.y *= lfClampedMagnitude;
-
-                // `stvx128 v0, r31, 0x6B0` -- the store lands on mMainMapComponent's own
-                // mv2DesiredCentre (component-relative +1616), i.e. the inlined setter.
+                const Vector4 lv4Accel(KF_MAP_SCROLL_ACCEL, 0.0f, 0.0f, 0.0f);
+                mv2MapScrollVelocity.mV = __vmaddfp(lv2MapCentreToCursorWorld.mV,
+                    __vspltw(lv4Accel.mV, 0), mv2MapScrollVelocity.mV);
+                const rw::math::vpu::VecFloat lVelocityMagnitude = rw::math::vpu::Magnitude(mv2MapScrollVelocity);
+                const Vector4 lv4Min(-KF_MAX_SCROLL_SPEED, 0.0f, 0.0f, 0.0f);
+                const Vector4 lv4Max(KF_MAX_SCROLL_SPEED, 0.0f, 0.0f, 0.0f);
+                const __vector4 lvClamped = __vminfp(__vspltw(lv4Max.mV, 0),
+                    __vmaxfp(__vspltw(lv4Min.mV, 0), lVelocityMagnitude.mV));
+                mv2MapScrollVelocity.mV = __vmulfp(mv2MapScrollVelocity.mV, lvClamped);
                 Vector2 lv2DesiredCentre;
-                lv2DesiredCentre.x = mv2WorldCentrePoint.x + mv2MapScrollVelocity.x;
-                lv2DesiredCentre.y = mv2WorldCentrePoint.y + mv2MapScrollVelocity.y;
-                lv2DesiredCentre.z = 0.0f;
-                lv2DesiredCentre.w = 0.0f;
+                lv2DesiredCentre.mV = __vaddfp(mv2WorldCentrePoint.mV, mv2MapScrollVelocity.mV);
                 mMainMapComponent.SetDesiredWorldCentre(lv2DesiredCentre);
 
                 lbMapIsScrolling = true;
@@ -3229,13 +3198,13 @@ namespace BrnGui
         // are transliteration plumbing, not recovered functions.
         inline Vector3 LaneAsVector3(const Vector4& lv4Lane)
         {
-            const Vector3 lv3Lane = { lv4Lane.x, lv4Lane.y, lv4Lane.z, lv4Lane.w };
+            const Vector3 lv3Lane(lv4Lane.mV);
             return lv3Lane;
         }
 
         inline Vector4 LaneAsVector4(const Vector3& lv3Lane)
         {
-            const Vector4 lv4Lane = { lv3Lane.x, lv3Lane.y, lv3Lane.z, lv3Lane.w };
+            const Vector4 lv4Lane(lv3Lane.mV);
             return lv4Lane;
         }
 
