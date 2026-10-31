@@ -57,6 +57,7 @@
 #include "GameSource/GameState/BrnGameActions.h"        // GameStateModuleIO action types (TU family)
 #include "GameSource/GameState/BrnGameStateTypes.h"     // EStuntType, E_STUNT_TYPE_INVALID
 #include <cmath>                                        // std::floor (TidyStuntScore)
+#include <cfloat>
 // (no CGS_ASSERT in any recovered query body -- none of these X360 functions assert.)
 
 namespace BrnGameState
@@ -314,7 +315,7 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void StuntModeScoring::OutputStuntsToDisplay(s32 liCount, StuntToDisplay* lpStunts)
     {
-        const f32 lfFloatMax = 3.4028235e38f;   // flt_82020AFC: initial ceiling (FLT_MAX)
+        const f32 lfFloatMax = FLT_MAX;   // ARTIST flt_82020AFC: 0x7F7FFFFF
 
         f32 lfBestThisPass = 0.0f;              // v6: running best (init 0.0 == flt_82001CC0)
         f32 lfCeiling = lfFloatMax;             // v7: each pass must beat this strictly downward

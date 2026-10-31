@@ -141,6 +141,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 #include <stdlib.h>   // qsort (sorts the maRaceCarPositioningData[8] scratch best-first)
+#include <cfloat>
 
 namespace BrnGameState
 {
@@ -152,7 +153,7 @@ namespace BrnGameState
         // from the PS3 DecFIGS ScoringSystem::ClearData (0x1E364C, same source): flt_82CDB7D0 == FLT_MAX
         // (3.4028235e38). The X360 0x8232A4A8 stores the same flt_82CDB7D0 along this path. The sibling
         // BrnScoringSystem_Lookup.cpp uses the identical literal so the seed/equality test is consistent.
-        const f32 KF_INVALID_RACE_DISTANCE = 3.4028235e38f;   // flt_82CDB7D0 == FLT_MAX (PS3 0x1E364C)
+        const f32 KF_INVALID_RACE_DISTANCE = FLT_MAX;   // ARTIST flt_82CDB7D0: 0x7F7FFFFF
 
         // qsort(3) comparator trampoline. The X360 build passes the address of
         // ScoringSystem::CompareRaceCarDistances straight to qsort -- the function provably never
