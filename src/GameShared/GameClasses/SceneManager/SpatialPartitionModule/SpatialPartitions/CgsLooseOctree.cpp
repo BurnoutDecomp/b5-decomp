@@ -66,15 +66,11 @@
 #endif
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsCoarseQueryResultBuffer.h" // CoarseQueryResultBuffer<16384>
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG culling wave]
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"      // TestLineSphere4 / TestLineBoundingBoxAgainstAxisAlignedBox4
 #include "vendor/renderware/collision/CollisionVolume.hpp"                    // rw::collision::Volume / BoxVolume / SphereVolume
 
-#include <chrono>    // std::chrono::steady_clock ([DIAG] BRN_OCTREE_HIST_DIAG timing witness)
 #include <cmath>     // std::fabs
-#include <cstdio>    // std::snprintf ([DIAG] BRN_OCTREE_LINE_DIAG)
-#include <cstdlib>   // std::getenv ([DIAG] BRN_CULL_OFF / BRN_OCTREE_LINE_DIAG / BRN_OCTREE_HIST_DIAG / BRN_OCTREE_ADAPTIVE_OFF)
 #include <cstring>   // std::memcpy
 
 // includes folded in from the CgsLooseOctree_w*.cpp partfiles (2026-09-15)
@@ -117,153 +113,6 @@ namespace CgsSceneManager
             lPosition.z = std::fma(KAF_LOOSE_OCTREE_CHILD_OFFSETS[luChild][2], lfSize, lrCentre.z);
             lPosition.w = std::fma(KAF_LOOSE_OCTREE_CHILD_OFFSETS[luChild][3], lfSize, lrCentre.w);
             return lPosition;
-        }
-    }
-
-    namespace
-    {
-        // [DIAG] NOT IN THE X360 BINARY (crash parity FX-OCTREE, 2026-09-25). Opt-in BRN_OCTREE_ADAPTIVE_OFF=1 makes
-        // LooseOctree::Update skip the two adaptive-depth passes, so the tree keeps its static depth as the PC's did
-        // before b4cc6341, and one exe can A/B a live cell with and without the refinement (as BRN_CULL_OFF does for
-        // the frustum test). The console always runs both passes. Unset, it costs one static bool test per flagged
-        // Update and changes nothing.
-
-        struct OctreeTimingWitness
-        {
-            u64 mu64MergePassNs;
-            u64 mu64SplitPassNs;
-            u64 mu64BoundsNs;
-            u64 mu64FrustumNs;
-            u32 muFlaggedUpdates;
-            u32 muGroupsMerged;
-            u32 muGroupsSplit;
-            u32 muFrustumWalks;
-            u32 muFrustumNodes;
-        };
-        OctreeTimingWitness gOctreeTimingWitness;   // zero-initialised (namespace scope)
-
-        // Adds the wall time of its scope to *lpu64Sink when the witness is armed; a no-op otherwise.
-        class OctreeStageTimer
-        {
-        public:
-            ~OctreeStageTimer()
-            {
-                if (mpu64Sink != 0)
-                {
-                    *mpu64Sink += OctreeDiagNowNs() - mu64Start;
-                }
-            }
-
-        private:
-            u64* mpu64Sink;
-            u64  mu64Start;
-        };
-
-        const s32 KI_OCTREE_HIST_PERIOD      = 300;
-        const s32 KI_OCTREE_HIST_MAX_REPORTS = 40;
-        const u32 KU_OCTREE_HIST_MAX_DEPTH   = 16;
-        const u32 KU_OCTREE_HIST_NUM_BUCKETS = 11;
-        // Own-chain length buckets: 0, 1-8, 9-16, 17-32, 33-64, 65-128, 129-256, 257-512, 513-1024, 1025-2048, 2049+.
-        const u32 KAU_OCTREE_HIST_BUCKET_TOP[KU_OCTREE_HIST_NUM_BUCKETS - 1] = { 0, 8, 16, 32, 64, 128, 256, 512,
-                                                                                 1024, 2048 };
-        const char* const KAPC_OCTREE_HIST_BUCKET_NAME[KU_OCTREE_HIST_NUM_BUCKETS] = {
-            "0", "1-8", "9-16", "17-32", "33-64", "65-128", "129-256", "257-512", "513-1024", "1025-2048", "2049+" };
-
-        struct OctreeHistogram
-        {
-            u32 mauNodes[KU_OCTREE_HIST_MAX_DEPTH];
-            u32 mauEntities[KU_OCTREE_HIST_MAX_DEPTH];
-            u32 mauFullest[KU_OCTREE_HIST_MAX_DEPTH];
-            u32 mauOverThreshold[KU_OCTREE_HIST_MAX_DEPTH];
-            u32 mauBuckets[KU_OCTREE_HIST_NUM_BUCKETS];
-            u32 muDeepest;
-        };
-
-        void CollectOctreeHistogram(const LooseOctreeNode* lpNodes, u16 lu16NodeIndex, u32 luDepth,
-                                    u32 luSplitThreshold, OctreeHistogram& lrHistogram)
-        {
-            const LooseOctreeNode& lrNode = lpNodes[lu16NodeIndex];
-            const u32 luSlot  = (luDepth < KU_OCTREE_HIST_MAX_DEPTH) ? luDepth : KU_OCTREE_HIST_MAX_DEPTH - 1;
-            const u32 luCount = lrNode.muNumElements;
-
-            ++lrHistogram.mauNodes[luSlot];
-            lrHistogram.mauEntities[luSlot] += luCount;
-            if (luCount > lrHistogram.mauFullest[luSlot])  { lrHistogram.mauFullest[luSlot] = luCount; }
-            if (luCount > luSplitThreshold)                 { ++lrHistogram.mauOverThreshold[luSlot]; }
-            if (luDepth > lrHistogram.muDeepest)            { lrHistogram.muDeepest = luDepth; }
-
-            u32 luBucket = 0;
-            while (luBucket < KU_OCTREE_HIST_NUM_BUCKETS - 1 && luCount > KAU_OCTREE_HIST_BUCKET_TOP[luBucket])
-            {
-                ++luBucket;
-            }
-            ++lrHistogram.mauBuckets[luBucket];
-
-            if (lrNode.muFirstChildIndex != KU_INVALID_NODE)
-            {
-                for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
-                {
-                    CollectOctreeHistogram(lpNodes, static_cast<u16>(lrNode.muFirstChildIndex + luChild), luDepth + 1,
-                                           luSplitThreshold, lrHistogram);
-                }
-            }
-        }
-
-        void NoteOctreeHistogram(const LooseOctreeNode* lpNodes, u32 luSplitThreshold, u32 luUsedGroups,
-                                 u32 luFreeGroups, s32 liStaticGroups)
-        {
-            static s32 siUpdates = 0;
-            static s32 siReports = 0;
-            const s32 liUpdate = siUpdates++;
-            if ((liUpdate % KI_OCTREE_HIST_PERIOD) != 0 || siReports >= KI_OCTREE_HIST_MAX_REPORTS)
-            {
-                return;
-            }
-            ++siReports;
-
-            OctreeHistogram lHistogram;
-            std::memset(&lHistogram, 0, sizeof(lHistogram));
-            CollectOctreeHistogram(lpNodes, 0, 0, luSplitThreshold, lHistogram);
-
-            u32 luNodes = 0, luEntities = 0, luFullest = 0, luFullestDepth = 0, luOver = 0;
-            for (u32 luDepth = 0; luDepth <= lHistogram.muDeepest && luDepth < KU_OCTREE_HIST_MAX_DEPTH; ++luDepth)
-            {
-                luNodes    += lHistogram.mauNodes[luDepth];
-                luEntities += lHistogram.mauEntities[luDepth];
-                luOver     += lHistogram.mauOverThreshold[luDepth];
-                if (lHistogram.mauFullest[luDepth] > luFullest)
-                {
-                    luFullest      = lHistogram.mauFullest[luDepth];
-                    luFullestDepth = luDepth;
-                }
-            }
-
-            char lacLine[640];
-            s32 liLength = std::snprintf(lacLine, sizeof(lacLine),
-                "[octree-hist] #%d update %d: %u nodes, deepest %u, root subtree %u, %u entities on chains, fullest "
-                "chain %u (depth %u), %u chain(s) > %u; pool groups used %u (static %d) free %u; own-chain buckets",
-                siReports, liUpdate, luNodes, lHistogram.muDeepest, lpNodes[0].muSubTreeEntityCount, luEntities,
-                luFullest, luFullestDepth, luOver, luSplitThreshold, luUsedGroups, liStaticGroups, luFreeGroups);
-            for (u32 luBucket = 0; luBucket < KU_OCTREE_HIST_NUM_BUCKETS && liLength > 0 &&
-                                   liLength < static_cast<s32>(sizeof(lacLine)); ++luBucket)
-            {
-                liLength += std::snprintf(lacLine + liLength, sizeof(lacLine) - static_cast<size_t>(liLength), " %s:%u",
-                                          KAPC_OCTREE_HIST_BUCKET_NAME[luBucket], lHistogram.mauBuckets[luBucket]);
-            }
-            *CgsDev::Log::gpDebugPrint << lacLine << "\n";
-
-            for (u32 luDepth = 0; luDepth <= lHistogram.muDeepest && luDepth < KU_OCTREE_HIST_MAX_DEPTH; ++luDepth)
-            {
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[octree-hist] #%d   depth %u: %u nodes, %u entities, fullest %u, %u > %u\n",
-                              siReports, luDepth, lHistogram.mauNodes[luDepth], lHistogram.mauEntities[luDepth],
-                              lHistogram.mauFullest[luDepth], lHistogram.mauOverThreshold[luDepth], luSplitThreshold);
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-
-            const OctreeTimingWitness& lrWitness = gOctreeTimingWitness;
-            *CgsDev::Log::gpDebugPrint << lacLine;
-            std::memset(&gOctreeTimingWitness, 0, sizeof(gOctreeTimingWitness));
         }
     }
 
@@ -1165,38 +1014,10 @@ namespace CgsSceneManager
     {
         if ((mpRootNode->muFlags & KU_OCTREE_NODE_FLAG_NEEDS_UPDATE) != 0)
         {
-            // The OctreeStageTimer scopes and the used-count deltas are the [DIAG] BRN_OCTREE_HIST_DIAG timing
-            // witness (no-ops when it is unset); the three calls are the console's.
-            const u32 luUsedAtStart = mFreeNodeGroupPool.GetNumUsed();
-            u32 luUsedAfterMerge    = luUsedAtStart;
-            {
-                OctreeStageTimer lTimer(&gOctreeTimingWitness.mu64BoundsNs);
-                UpdateRecursive(0);
-            }
+            AdaptiveDepthUpdateRemoveNodesRecursive(0, 0);
+            AdaptiveDepthUpdateAddNodesRecursive(0, 0);
+            UpdateRecursive(0);
         }
-
-        // [DIAG culling wave]
-        {
-            static s32 siDiag = 0;
-            if ((siDiag++ % 240) == 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[culling-diag] octree root subtree=" << static_cast<s32>(mpRootNode->muSubTreeEntityCount)
-                    << " own=" << static_cast<s32>(mpRootNode->muNumElements)
-                    << " mask=" << static_cast<s32>(mpNodesEntityInfo[0].mxSubTreeEntityFlags)
-                    << " halfBase=" << mpRootNode->GetHalfBaseSize()
-                    << " halfSize=" << mpRootNode->GetHalfSize()
-                    << " minY=" << mpRootNode->GetMinY() << " maxY=" << mpRootNode->GetMaxY()
-                    << " child0mask=" << static_cast<s32>(
-                           mpRootNode->muFirstChildIndex == KU_INVALID_NODE
-                               ? 0u : mpNodesEntityInfo[mpRootNode->muFirstChildIndex].mxSubTreeEntityFlags)
-                    << " nodes=" << ((static_cast<s32>(mFreeNodeGroupPool.GetPoolSize()) << 2) + 1)
-                    << " staticGroups=" << miNumStaticNodes << "\n";
-            }
-        }
-
-        NoteOctreeHistogram(mpNodes, muAdaptiveNodeSplitThreshold, mFreeNodeGroupPool.GetNumUsed(),
-                            mFreeNodeGroupPool.GetNumFree(), miNumStaticNodes);   // [DIAG] BRN_OCTREE_HIST_DIAG
     }
 
     // ===========================================================================
@@ -2059,12 +1880,6 @@ namespace CgsSceneManager
             return lfEstimate;
         }
 
-        // [DIAG] NOT IN THE X360 BINARY (2026-09-25, crash parity FX-FOLLOWUPS). Opt-in
-        // BRN_OCTREE_LINE_DIAG=1: one `[octree-line]` line per LineTestOptimized query, capped at 64 --
-        // the flags, the segment, its length, the arm taken (sphere / gated / walked) and the results
-        // attempted. It proves the walk is dispatched; with the variable unset the cost is one static
-        // bool test.
-
         // A VMX compare-result lane reads as set when it is not +0.0 -- the console's
         // `vspltw ; vcmpeqfp128. lane, 0.0` skip, which for an all-ones / zero mask is the bit test.
         inline bool Mask4LaneSet(const Vector4& lrMask, u32 luLane)
@@ -2120,8 +1935,6 @@ namespace CgsSceneManager
         {
             const bool lbSphereAnswer =
                 SphereTest(lx32EntityTypeFlags, lLineStart, KF_LINE_TEST_MIN_LENGTH, lpResultBufferOut);
-            NoteOctreeLineTest(lx32EntityTypeFlags, lLineStart, lLineEnd, lfLength, "sphere",
-                               lpResultBufferOut->GetNumResultsAttempted());               // [DIAG]
             return lbSphereAnswer;
         }
 
@@ -2143,9 +1956,6 @@ namespace CgsSceneManager
         {
             LineTestRecursive(0, &lParams);
         }
-        NoteOctreeLineTest(lx32EntityTypeFlags, lLineStart, lLineEnd, lfLength,
-                           lbRootCrossed ? "walked" : "gated",
-                           lpResultBufferOut->GetNumResultsAttempted());                   // [DIAG]
         return lpResultBufferOut->GetNumResultsAttempted() > 0;
     }
 
