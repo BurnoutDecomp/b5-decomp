@@ -26,8 +26,6 @@
 #include <cstdlib>
 namespace
 {
-    using rw::math::vpu::Matrix44Affine;
-    using rw::math::vpu::Vector3;
 
     const f32 KF_EPSILON      = 1.1920929e-07f;      // the vector IsZero tolerance (0x34000000)
     const f32 KF_SMALL_FLOAT  = 1.52587890625e-05f;  // the IsSimilar tolerance (0x37800000)
@@ -37,9 +35,9 @@ namespace
     // vcmpgtfp. (x copied into w), true when no lane is above it -- a NaN lane counts as zero.
     bool IsZeroVmx(const Vector3& lrVector, f32 lfTolerance)
     {
-        return !(std::fabs(lrVector.x) > lfTolerance
-                 || std::fabs(lrVector.y) > lfTolerance
-                 || std::fabs(lrVector.z) > lfTolerance);
+        return !(std::fabs(lrVector.mV.x) > lfTolerance
+                 || std::fabs(lrVector.mV.y) > lfTolerance
+                 || std::fabs(lrVector.mV.z) > lfTolerance);
     }
 
     // The same test on a Vector2 taken from lanes x and z (a vperm of x and z), one lane at a time.
@@ -74,7 +72,7 @@ namespace
     // vmulfp of every lane by one scalar.
     Vector3 Scale(const Vector3& lrVector, f32 lfScalar)
     {
-        { const Vector3 lResult = { lrVector.x * lfScalar, lrVector.y * lfScalar, lrVector.z * lfScalar, lrVector.w * lfScalar }; return lResult; }
+        return Vector3(__vmulfp(lrVector.mV, XMVectorReplicate(lfScalar)));
     }
 
     // rw::math::vpu::Matrix44AffineFromXRotationAngle with the XDK sine and cosine: rows
@@ -87,19 +85,19 @@ namespace
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
         Matrix44Affine lResult;
         {
-            const Vector3 lAggregateValue = { 1.0f,   0.0f,  0.0f, 0.0f };
+            const Vector3 lAggregateValue(1.0f, 0.0f, 0.0f);
             lResult.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f,  lfCos, lfSin, 0.0f };
+            const Vector3 lAggregateValue(0.0f, lfCos, lfSin);
             lResult.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, -lfSin, lfCos, 0.0f };
+            const Vector3 lAggregateValue(0.0f, -lfSin, lfCos);
             lResult.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f,   0.0f,  0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             lResult.wAxis = lAggregateValue;
         }
         return lResult;
@@ -193,6 +191,7 @@ void BehaviourAftertouchCam::AssignIfBetterRival(const BehaviourSharedInfo& lrSh
     const f32 lfImpactWindow = mpParameters->mfTimeToRivalImpactUncertaintyPadding
                              + lrSharedInfo.mfCrashTimeRemaining;
 
+    f32 lfTimeToPassing;
     const bool lbPointsWillPassEachOther =
         Utils::PointsWillPassEachOther(lPlayerPos, lPlayerVel, lRivalPos, lRivalVel, lfTimeToPassing);
     const bool lbWillPass = lbPointsWillPassEachOther && lfTimeToPassing < lfImpactWindow;
@@ -340,7 +339,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
         mDesiredWorldSpaceNormalizedVectorFromCar = lPlayerTransform.zAxis;
         mWorldSpaceNormalizedVectorFromCar        = lPlayerTransform.zAxis;
 
-        const Vector3 lOneMetreDown = { 0.0f, -1.0f, 0.0f, 0.0f };
+        const Vector3 lOneMetreDown(0.0f, -1.0f, 0.0f);
         mCrashPoint       = lCarPosition + lOneMetreDown;
         mCurrentTargetPos = lCarPosition + lOneMetreDown;
 
@@ -357,7 +356,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
     Vector3 lDesiredVector = mCurrentTargetPos - lCarPosition;
     mfTimeSinceLastDecision = lrSharedInfo.GetTimestep(BrnDirector::Timestep::E_WORLD_NO_SLOMO)
                             + mfTimeSinceLastDecision;
-    lDesiredVector.y = std::fabs(lDesiredVector.y);
+    lDesiredVector.mV.y = std::fabs(lDesiredVector.mV.y);
 
     if (!IsZeroVmx(lDesiredVector, KF_EPSILON))
     {
@@ -399,8 +398,8 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
         const Vector3 lCameraSpaceCarVelocity = Utils::ConsoleVpu::TransformVector(
             Utils::ConsoleVpu::InverseOfMatrixWithOrthonormal3x3(lrCamera.GetTransform()), lrCarState.mLinearVelocity);
 
-        if (IsZeroXZ(lCameraSpaceCarVelocity.x, lCameraSpaceCarVelocity.z, KF_EPSILON)
-            || IsZeroXZ(lrCarState.mLinearVelocity.x, lrCarState.mLinearVelocity.z, KF_EPSILON))
+        if (IsZeroXZ(lCameraSpaceCarVelocity.mV.x, lCameraSpaceCarVelocity.mV.z, KF_EPSILON)
+            || IsZeroXZ(lrCarState.mLinearVelocity.mV.x, lrCarState.mLinearVelocity.mV.z, KF_EPSILON))
         {
             mWorldSpaceNormalizedVectorFromCar = Utils::SafeSLerp(
                 mWorldSpaceNormalizedVectorFromCar, mDesiredWorldSpaceNormalizedVectorFromCar, VecFloat(lfT));
@@ -410,13 +409,13 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
         else
         {
             // Normalize(Vector2): x * x + z * z (two vmulfp, one vaddfp), the refined estimate.
-            const f32 lfLengthSquared = lCameraSpaceCarVelocity.x * lCameraSpaceCarVelocity.x
-                                      + lCameraSpaceCarVelocity.z * lCameraSpaceCarVelocity.z;
+            const f32 lfLengthSquared = lCameraSpaceCarVelocity.mV.x * lCameraSpaceCarVelocity.mV.x
+                                      + lCameraSpaceCarVelocity.mV.z * lCameraSpaceCarVelocity.mV.z;
             const f32 lfRecip  = RefinedReciprocalSqrt(lfLengthSquared);
-            const f32 lfNormX  = lCameraSpaceCarVelocity.x * lfRecip;
-            const f32 lfNormZ  = lCameraSpaceCarVelocity.z * lfRecip;
-            const f32 lfControlAgreementWithCamera = lrSharedInfo.mCarModifier.x * lfNormX
-                                                   + lrSharedInfo.mCarModifier.y * lfNormZ;
+            const f32 lfNormX  = lCameraSpaceCarVelocity.mV.x * lfRecip;
+            const f32 lfNormZ  = lCameraSpaceCarVelocity.mV.z * lfRecip;
+            const f32 lfControlAgreementWithCamera = lrSharedInfo.mCarModifier.mV.x * lfNormX
+                                                   + lrSharedInfo.mCarModifier.mV.y * lfNormZ;
 
             if (lfControlAgreementWithCamera > 0.0f)
             {
@@ -454,7 +453,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
 
     Matrix44Affine lTransform = Utils::CreateLookAt(
         Utils::ConsoleVpu::MultiplyAdd(mWorldSpaceNormalizedVectorFromCar, mfDistance, lCarPosition), lCarPosition);
-    lTransform.wAxis.y += mfHeight;
+    lTransform.wAxis.mV.y += mfHeight;
     lTransform = Utils::ConsoleVpu::Mult(RotationX(mSourceShot.Pitch() * KF_DEGS_TO_RADS), lTransform);
 
     mShake.Update(lTransform, mpParameters->mShakeParams, mRandom, lfTimestep, 1.0f);
