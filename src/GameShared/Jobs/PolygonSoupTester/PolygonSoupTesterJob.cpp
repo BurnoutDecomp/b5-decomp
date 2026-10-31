@@ -34,6 +34,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithPolySoupListJobDesc.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsLine.h"                                    // Line (the line arm's command)
 
+#include <xtl.h>
 #include <cstring>   // std::memcpy (the line arm's 14-qword hit copy)
 
 // The six per-job-thread contexts (X360 unk_83123940, stride 0x19040).
@@ -216,17 +217,8 @@ u16 PolygonSoupTesterJob::FillTriangleCache(
     const Vector4  lvPosition = lQuerySphere.GetPosition();
     const VecFloat lvRadius   = lQuerySphere.GetRadius();
 
-    Vector4 lvBoxMax;
-    lvBoxMax.x = lvPosition.x + lvRadius.x;
-    lvBoxMax.y = lvPosition.y + lvRadius.y;
-    lvBoxMax.z = lvPosition.z + lvRadius.z;
-    lvBoxMax.w = lvPosition.w + lvRadius.w;
-
-    Vector4 lvBoxMin;
-    lvBoxMin.x = lvPosition.x - lvRadius.x;
-    lvBoxMin.y = lvPosition.y - lvRadius.y;
-    lvBoxMin.z = lvPosition.z - lvRadius.z;
-    lvBoxMin.w = lvPosition.w - lvRadius.w;
+    const Vector3 lvBoxMax(__vaddfp(lvPosition.mV, lvRadius.mV));
+    const Vector3 lvBoxMin(__vsubfp(lvPosition.mV, lvRadius.mV));
 
     CgsGeometric::AxisAlignedBox lQueryBox;
     lQueryBox.Set(lvBoxMin, lvBoxMax);
@@ -522,10 +514,10 @@ void PolygonSoupTesterJob::LineTestNearestSS(CgsMemory::SimpleDataStreamConsumer
 
     // The line's two 16-byte lanes, w included (the kernel's position lane multiplies all four).
     const CgsGeometric::Line& lrLine = lpCommand->mLine;
-    const Vector4 lLineStart  = { lrLine.mStart.x, lrLine.mStart.y, lrLine.mStart.z, lrLine.mStart.w };
-    const Vector4 lLineEnd    = { lrLine.mEnd.x,   lrLine.mEnd.y,   lrLine.mEnd.z,   lrLine.mEnd.w };
-    const Vector3 lLineStart3 = { lrLine.mStart.x, lrLine.mStart.y, lrLine.mStart.z, lrLine.mStart.w };
-    const Vector3 lLineEnd3   = { lrLine.mEnd.x,   lrLine.mEnd.y,   lrLine.mEnd.z,   lrLine.mEnd.w };
+    const Vector4 lLineStart(lrLine.mStart.GetVector3().mV);
+    const Vector4 lLineEnd(lrLine.mEnd.GetVector3().mV);
+    const Vector3 lLineStart3 = lrLine.mStart.GetVector3();
+    const Vector3 lLineEnd3 = lrLine.mEnd.GetVector3();
 
     u16* lpaLeafIndices   = NULL;
     s32  liNumLeafIndices = 0;
@@ -541,10 +533,10 @@ void PolygonSoupTesterJob::LineTestNearestSS(CgsMemory::SimpleDataStreamConsumer
     lpResult->muNumResults = 0;
 
     CgsGeometric::PolySoupLineNearestResult* lpBest = &lpResult->maResults[0];
-    lpBest->mLineParam.x = KF_LINE_PARAM_NO_HIT;
-    lpBest->mLineParam.y = KF_LINE_PARAM_NO_HIT;
-    lpBest->mLineParam.z = KF_LINE_PARAM_NO_HIT;
-    lpBest->mLineParam.w = KF_LINE_PARAM_NO_HIT;
+    lpBest->mLineParam.mV.x = KF_LINE_PARAM_NO_HIT;
+    lpBest->mLineParam.mV.y = KF_LINE_PARAM_NO_HIT;
+    lpBest->mLineParam.mV.z = KF_LINE_PARAM_NO_HIT;
+    lpBest->mLineParam.mV.w = KF_LINE_PARAM_NO_HIT;
 
     if (liNumLeafIndices > 0 && lpSpatialMap->GetPolygonSoup(0) != NULL)
     {
@@ -558,7 +550,7 @@ void PolygonSoupTesterJob::LineTestNearestSS(CgsMemory::SimpleDataStreamConsumer
             if (CgsGeometric::TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lpLeaf->mBox)
                 && CgsGeometric::IntersectLinePolygonSoupNearestSingleSided(*lpLeaf->mpPolygonSoup, lpScratch,
                                                                             lLineStart3, lLineEnd3)
-                && lpBest->mLineParam.x > lpScratch->mLineParam.x)
+                && lpBest->mLineParam.mV.x > lpScratch->mLineParam.mV.x)
             {
                 lpResult->muNumResults = 1;
                 std::memcpy(lpBest, lpScratch, sizeof(CgsGeometric::PolySoupLineNearestResult));   // 14 qwords
