@@ -1490,8 +1490,8 @@ namespace BrnGui
                                     sbLogged = true;
                                     *CgsDev::Log::gpDebugPrint
                                         << "[satnav-diag] cache 199 player store: pos=("
-                                        << lrIcon.GetPositionLane().x << ","
-                                        << lrIcon.GetPositionLane().z << ") rot="
+                                        << lrIcon.GetPositionLane().mV.x << ","
+                                        << lrIcon.GetPositionLane().mV.z << ") rot="
                                         << lrIcon.GetRotation() << "\n";
                                 }
                             }
@@ -1539,10 +1539,10 @@ namespace BrnGui
                             if (KAU_DRIVE_THRU_ICON_POSITION_IDS[liEntry] == lrIcon.GetCgsId())
                             {
                                 Vector4 lv4Canned;
-                                lv4Canned.x = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][0];
-                                lv4Canned.y = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][1];
-                                lv4Canned.z = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][2];
-                                lv4Canned.w = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][3];
+                                lv4Canned.mV.x = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][0];
+                                lv4Canned.mV.y = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][1];
+                                lv4Canned.mV.z = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][2];
+                                lv4Canned.mV.w = KAAF_DRIVE_THRU_ICON_POSITIONS[liEntry][3];
                                 lrStored.SetPositionLane(lv4Canned);
                             }
                         }
@@ -1558,8 +1558,8 @@ namespace BrnGui
                                 << "[satnav-diag] cache 199 drive-thru row " << (miNumDriveThroughs - 1)
                                 << " id=" << static_cast<u32>(lrIcon.GetCgsId())
                                 << " type=" << static_cast<s32>(lrIcon.GetIconTypeByte())
-                                << " pos=(" << lrStored.GetPositionLane().x << ","
-                                << lrStored.GetPositionLane().z << ")\n";
+                                << " pos=(" << lrStored.GetPositionLane().mV.x << ","
+                                << lrStored.GetPositionLane().mV.z << ")\n";
                         }
                         break;
                     }
@@ -3648,8 +3648,8 @@ void GuiCache::GetOnlineLandmarkInfoAtPositionInList(
     }
 
     const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
-    const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
-                                      lv3LandmarkPosition.z, 0.0f };
+    const Vector4 lv4PositionLane(lv3LandmarkPosition.mV.x, lv3LandmarkPosition.mV.y,
+                                      lv3LandmarkPosition.mV.z, 0.0f);
     lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // -> +0x00
     lpOutIconInfo->SetRotation(0.0f);                                   // -> +0x18
     lpOutIconInfo->SetSpeedMph(0.0f);                                   // -> +0x1C
@@ -3938,8 +3938,8 @@ namespace BrnGui
         // The three `lfs` off the landmark's BoxRegion position + `stw 0` for the w lane,
         // then one `stvx128` -- the whole 16-byte lane in one store.
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
-        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
-                                          lv3LandmarkPosition.z, 0.0f };
+        const Vector4 lv4PositionLane(lv3LandmarkPosition.mV.x, lv3LandmarkPosition.mV.y,
+                                      lv3LandmarkPosition.mV.z, 0.0f);
         lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // stvx128 -> +0x00
         lpOutIconInfo->SetRotation(0.0f);                                   // stfs    -> +0x18
         lpOutIconInfo->SetSpeedMph(0.0f);                                   // stfs    -> +0x1C
@@ -3982,8 +3982,8 @@ namespace BrnGui
         CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3657
 
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
-        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
-                                          lv3LandmarkPosition.z, 0.0f };
+        const Vector4 lv4PositionLane(lv3LandmarkPosition.mV.x, lv3LandmarkPosition.mV.y,
+                                      lv3LandmarkPosition.mV.z, 0.0f);
         lpOutIconInfo->SetPositionLane(lv4PositionLane);
         lpOutIconInfo->SetRotation(0.0f);
         lpOutIconInfo->SetSpeedMph(0.0f);
@@ -4098,10 +4098,7 @@ namespace BrnGui
             // `lvx128 v0, r0, <icon> ; stvx128 v0, <item>, -0x18` -- the WHOLE 16-byte
             // lane, w included, not a three-component narrow.
             const Vector4& lrv4Lane = lLandmarkInfo.GetPositionLane();
-            lrItem.mv3Position.x = lrv4Lane.x;
-            lrItem.mv3Position.y = lrv4Lane.y;
-            lrItem.mv3Position.z = lrv4Lane.z;
-            lrItem.mv3Position.w = lrv4Lane.w;
+            lrItem.mv3Position.mV = lrv4Lane.mV;
             lrItem.mTargetLandmarkIndex =
                 static_cast<u16>(lLandmarkInfo.GetLandmarkIndexHalf());
         }
@@ -4153,10 +4150,7 @@ namespace BrnGui
             // `lvx128 v0, r0, <icon> ; stvx128 v0, <item>, -0x18` -- the WHOLE 16-byte
             // lane, w included, not a three-component narrow.
             const Vector4& lrv4Lane = lLandmarkInfo.GetPositionLane();
-            lrItem.mv3Position.x = lrv4Lane.x;
-            lrItem.mv3Position.y = lrv4Lane.y;
-            lrItem.mv3Position.z = lrv4Lane.z;
-            lrItem.mv3Position.w = lrv4Lane.w;
+            lrItem.mv3Position.mV = lrv4Lane.mV;
             lrItem.mTargetLandmarkIndex =
                 static_cast<u16>(lLandmarkInfo.GetLandmarkIndexHalf());
         }
@@ -4324,10 +4318,7 @@ namespace BrnGui
                 lrItem.meIconType = GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK;
                 // The whole 16-byte lane (lvx128/stvx128), w included.
                 const Vector4& lrv4Lane = lLandmarkInfo.GetPositionLane();
-                lrItem.mv3Position.x = lrv4Lane.x;
-                lrItem.mv3Position.y = lrv4Lane.y;
-                lrItem.mv3Position.z = lrv4Lane.z;
-                lrItem.mv3Position.w = lrv4Lane.w;
+                lrItem.mv3Position.mV = lrv4Lane.mV;
 
                 // The SAME half-word lands in both records (`sth r11, 0(r29)` into the
                 // active-landmark list and `sth r11, 0(r31)` into the tracker item).
@@ -4587,8 +4578,8 @@ namespace BrnGui
         }
 
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
-        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
-                                          lv3LandmarkPosition.z, 0.0f };
+        const Vector4 lv4PositionLane(lv3LandmarkPosition.mV.x, lv3LandmarkPosition.mV.y,
+                                      lv3LandmarkPosition.mV.z, 0.0f);
         lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // -> +0x00
         lpOutIconInfo->SetRotation(0.0f);                                   // -> +0x18
         lpOutIconInfo->SetSpeedMph(0.0f);                                   // -> +0x1C
@@ -4619,8 +4610,8 @@ void GuiCache::GetLandmarkInfoAtPositionInList(s32 liIndex,
         // The three `lfs` off the landmark's BoxRegion position + `stw 0` for the w lane,
         // then one `stvx128` -- the whole 16-byte lane in one store.
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
-        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
-                                          lv3LandmarkPosition.z, 0.0f };
+        const Vector4 lv4PositionLane(lv3LandmarkPosition.mV.x, lv3LandmarkPosition.mV.y,
+                                      lv3LandmarkPosition.mV.z, 0.0f);
         lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // stvx128 -> +0x00
         lpOutIconInfo->SetRotation(0.0f);                                   // stfs    -> +0x18
         lpOutIconInfo->SetSpeedMph(0.0f);                                   // stfs    -> +0x1C
