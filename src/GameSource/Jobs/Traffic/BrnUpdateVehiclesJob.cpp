@@ -506,9 +506,7 @@ void UpdateVehiclesJob::UpdateVehicle()
     // 0x8291D9AC..0x8291D9E0: the partial-update test, distance squared from mBehaviourCentre
     // to this vehicle's transform Pos() against 150 m squared.
     const Matrix44Affine lVehicleTransform = GetCurrentVehicleTransform();
-    const Vector4& lrCentre = mpParams->mBehaviourCentre;
-    const Vector3 lToCentre =
-        Vector3{ lrCentre.x, lrCentre.y, lrCentre.z, 0.0f } - lVehicleTransform.Pos();
+    const Vector3 lToCentre(__vsubfp(mpParams->mBehaviourCentre, lVehicleTransform.Pos().mV));
     const bool lbPartialUpdate =
         rw::math::vpu::MagnitudeSquared(lToCentre) >= KF_PARTIAL_UPDATE_RADIUS_SQ;
 

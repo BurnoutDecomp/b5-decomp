@@ -68,10 +68,7 @@ void BrnTraffic::UpdateVehiclesJobParams::Construct(
     // The X360 stores the whole 16-byte VMX register (stvx128 v127 @ +0x80); the source
     // behaviour-centre arrives in a vector register. Copy all four lanes (Vector3 and
     // Vector4 are both the 16-byte {x,y,z,w} VPU slot).
-    mBehaviourCentre.x               = lvBehaviourCentre.x;
-    mBehaviourCentre.y               = lvBehaviourCentre.y;
-    mBehaviourCentre.z               = lvBehaviourCentre.z;
-    mBehaviourCentre.w               = lvBehaviourCentre.w;
+    mBehaviourCentre                 = lvBehaviourCentre.mV;
     mbGameModeAllowsHardcoreSwerving = lbGameModeAllowsHardcoreSwerving;
     mbGameModeAllowsSwerving         = lbGameModeAllowsSwerving;
     mbDEBUGStopTrafficMoving         = lbDEBUGStopTrafficMoving;
