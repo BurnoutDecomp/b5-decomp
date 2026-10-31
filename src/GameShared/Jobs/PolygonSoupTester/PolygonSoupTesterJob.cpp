@@ -248,7 +248,7 @@ u16 PolygonSoupTesterJob::FillTriangleCache(
         const CgsGeometric::PolygonSoupLeafNode* lpLeaf =
             lpLeafCache->Get(static_cast<s32>(lpaLeafIndices[liResult]));
 
-        if (CgsGeometric::TestAxisAlignedBoxAxisAlignedBox(lpLeaf->mBox, lQueryBox))
+        if (CgsGeometric::TestAxisAlignedBoxAxisAlignedBox(lpLeaf->mBox, lQueryBox).GetBool())
         {
             // ⭐⭐⭐ 2026-08-11: THE GATE IS GONE AND THE EXTRACTOR IS REAL.
             //   0x829162A0  subf r6, r10, r11       ; liBufferSize = max - written
@@ -547,7 +547,7 @@ void PolygonSoupTesterJob::LineTestNearestSS(CgsMemory::SimpleDataStreamConsumer
             const CgsGeometric::PolygonSoupLeafNode* lpLeaf =
                 lpLeafCache->Get(static_cast<s32>(lpaLeafIndices[liResult]));
 
-            if (CgsGeometric::TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lpLeaf->mBox)
+            if (CgsGeometric::TestLineStartEndAxisAlignedBox(lpLeaf->mBox, lLineStart3, lLineEnd3).GetBool()
                 && CgsGeometric::IntersectLinePolygonSoupNearestSingleSided(*lpLeaf->mpPolygonSoup, lpScratch,
                                                                             lLineStart3, lLineEnd3)
                 && lpBest->mLineParam.mV.x > lpScratch->mLineParam.mV.x)

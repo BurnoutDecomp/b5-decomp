@@ -20,7 +20,7 @@ namespace CgsGeometric
 {
     // TestAxisAlignedBoxAxisAlignedBox @ 0x82812460 -- separating-axis
     // AABB/AABB overlap test (non-strict edges; touching counts as overlap).
-    bool TestAxisAlignedBoxAxisAlignedBox(const AxisAlignedBox& lrBoxA,
+    rw::math::vpu::MaskScalar TestAxisAlignedBoxAxisAlignedBox(const AxisAlignedBox& lrBoxA,
                                           const AxisAlignedBox& lrBoxB);
 
     // TestLineStartEndAxisAlignedBox @ 0x82812498 -- segment(start,end)-vs-AABB
@@ -28,9 +28,8 @@ namespace CgsGeometric
     // endpoint inside). Asserts each direction reciprocal is non-zero. Inlined on
     // the console into PolygonSoupListSpatialMap::RunQuery(const Line&) and the
     // long arm of BaseCollisionGenerator::CollideLineAgainstPolySoupList.
-    bool TestLineStartEndAxisAlignedBox(const Vector4& lvStart,
-                                        const Vector4& lvEnd,
-                                        const AxisAlignedBox& lrBox);
+    rw::math::vpu::MaskScalar TestLineStartEndAxisAlignedBox(const AxisAlignedBox& lrBox,
+                                                             Vector3 lvStart, Vector3 lvEnd);
 
     // ---- the loose octree's four-lane line tests (2026-09-25, crash parity FX-FOLLOWUPS) ----------------
     // All three are INLINED on the X360 into LooseOctree::LineTestRecursive @0x828BCF50 (the ARTIST image

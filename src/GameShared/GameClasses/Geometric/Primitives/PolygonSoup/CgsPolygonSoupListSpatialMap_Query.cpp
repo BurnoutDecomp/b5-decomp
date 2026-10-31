@@ -319,7 +319,7 @@ namespace CgsGeometric
             {
                 const PolygonSoupSpacialNode& lrNode = lpNodes[lpuSrcNodeIndices[luNodeIndexEntry]];
 
-                if (!TestLineStartEndAxisAlignedBox(lLineStart, lLineEnd, lrNode.mBox))
+                if (!TestLineStartEndAxisAlignedBox(lrNode.mBox, Vector3(lLineStart.mV), Vector3(lLineEnd.mV)).GetBool())
                 {
                     continue;
                 }
