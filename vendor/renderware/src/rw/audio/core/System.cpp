@@ -35,20 +35,11 @@
 #include <eathread/eathread_mutex.h>    // EA::Thread::Mutex / MutexParameters (vendor)
 #include "SDKs/Csis/CsisSystem.h"       // Csis::System::Lock/Unlock (the CsisMutex thunk targets)
 #include <xtl.h>
-#include <intrin.h>                     // overflow-safe 128-bit multiply/divide
+#include <ppcintrinsics.h>             // native timebase intrinsic
 
 #include <cstddef> // offsetof
 #include "types.hpp" // uintptr_t (the allocation-tail carve)
 #include <cstring> // memset (the X360 XMemSet)
-
-// -------------------------------------------------------------------------------------
-// Xbox 360 physical-memory API (XAM/xtl). Platform primitives; declared here rather than
-// pulled from the SDK so the default physical hooks link. XPhysicalAlloc's second argument
-// is the physical-address hint (MAXULONG_PTR = "any").
-// -------------------------------------------------------------------------------------
-extern "C" void *XPhysicalAlloc(unsigned long dwSize, unsigned long ulPhysicalAddress,
-                                unsigned long dwAlignment, unsigned long flProtect);
-extern "C" void XPhysicalFree(void *lpAddress);
 
 // The X360-aligned sleep overload (home: SDKs/EATech/eathread/BrnEAThreadX360.{h,cpp});
 // declared locally -- see the vendor-mutex include note above.
@@ -76,6 +67,13 @@ extern "C" System *off_83271928 = 0;
 // signature drops r3.
 void CsisMutexLock()   { Csis::System::Lock(); }
 void CsisMutexUnlock() { Csis::System::Unlock(); }
+
+// ARTIST82B64558: native timebase, consumed modulo2^32. The original
+// profiling sites call this out of line; retain that sampling boundary.
+__declspec(noinline) u32 GetCpuCycle()
+{
+    return static_cast<u32>(__mftb());
+}
 
 // The shared object table the constructor points mpObjectTable at (dword_83271930..0x3C):
 // the static StackAllocator (rwaudio PDB name; TYPED with the phase-D Mixer slice
@@ -151,13 +149,25 @@ System *System::CreateInstance(EA::Allocator::ICoreAllocator *allocator, u32 com
     // asm: MutexParameters(&stack, r4 = 1, r5 = 0).
     EA::Thread::MutexParameters lMutexParams(true, 0);
 
-    // X360-LITERAL TRAP: the immediate here is 0x1174 == the X360 sizeof(System) (0x1108)
-    // + two 0x30-byte EA::Thread::Mutex objects + the 8-byte lock-thread-id block + the
-    // 4-byte rwaudio thread-id word, i.e. a console sizeof sum. Every one of those widens on
-    // the host, so the size is COMPUTED from host sizeofs; the trailing +7 covers the align8
-    // round-up of the first carved base so the carve below can never overrun.
+    // ARTIST82B6F464 allocates1174 bytes. The constructor carves two30-byte
+    // mutex slots after System1108, then an8-byte lock-id slot and one4-byte id.
+    // Keep the actual typed representation pinned before using that native span.
+    typedef char NativeSystemSize[sizeof(System) == 0x1108 ? 1 : -1];
+    typedef char NativeSystemAlignment[__alignof(System) == 8 ? 1 : -1];
+    typedef char NativeMutexSlot[sizeof(EA::Thread::Mutex) == 0x30 ? 1 : -1];
+    typedef char NativeThreadIdWord[sizeof(EA::Thread::ThreadId) == 4 ? 1 : -1];
+    typedef char NativeCommandMutex[offsetof(System, mpCommandMutex) == 0x48 ? 1 : -1];
+    typedef char NativeSystemMutex[offsetof(System, mpSystemMutex) == 0x4C ? 1 : -1];
+    typedef char NativeLockThreadId[offsetof(System, mpLockThreadId) == 0x50 ? 1 : -1];
+    typedef char NativeAudioThreadId[offsetof(System, mppThreadId) == 0x54 ? 1 : -1];
+    typedef char NativeTimerOffset[offsetof(System, mTimerManager) == 0x60 ? 1 : -1];
+    typedef char NativeTimerSize[sizeof(TimerManager) == 0x48 ? 1 : -1];
+    typedef char NativeVoiceNode[sizeof(VoiceActiveNode) == 8 ? 1 : -1];
+    typedef char NativeDebugFlags[offsetof(System, maucDebugFeatures) == 0x10FB ? 1 : -1];
     const size_t luBlockSize =
-        sizeof(System) + 2 * sizeof(EA::Thread::Mutex) + 8 + sizeof(u32) + 7;
+        sizeof(System) + 2 * sizeof(EA::Thread::Mutex) + 8 + sizeof(u32);
+    typedef char NativeCreationBlock[
+        sizeof(System) + 2 * sizeof(EA::Thread::Mutex) + 8 + sizeof(u32) == 0x1174 ? 1 : -1];
 
     void *lpBlock = allocator->Alloc(luBlockSize, "rw::audio::core::System", 1, 16, 0);
     if (!lpBlock)
@@ -255,7 +265,7 @@ System *System::CreateInstance(EA::Allocator::ICoreAllocator *allocator, u32 com
 // -------------------------------------------------------------------------------------
 void *System::DefaultPhysicalAlloc(u32 size, u32 align, u32 protect, const char * /*pName*/)
 {
-    return XPhysicalAlloc(size, 0xFFFFFFFFUL, align, protect);
+    return XPhysicalAlloc(size, MAXULONG_PTR, align, protect);
 }
 
 // -------------------------------------------------------------------------------------
