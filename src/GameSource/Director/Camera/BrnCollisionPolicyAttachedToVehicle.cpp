@@ -106,9 +106,9 @@ namespace
 
     // A VMX result in the denormal range reads as zero (the console's non-Java mode flushes denormal VMX operands and
     // results, sign kept -- ROUNDING_RULE 6).
-    f32 FlushDenormal(f32 lfValue)
+    f32 FlushDenormal(f32 value)
     {
-        return (std::fpclassify(lfValue) == FP_SUBNORMAL) ? std::copysign(0.0f, lfValue) : lfValue;
+        return __vmulfp(XMVectorReplicate(value), XMVectorReplicate(1.0f)).x;
     }
 
     // The refined vrsqrtefp of a squared length, as both |v| (ProcessSceneQueryResults 0x82252904..0x822529A8) and
@@ -117,15 +117,18 @@ namespace
     //   twice: e = vmaddfp(e * 0.5, vnmsubfp(d, e * e, 1), e)    rule 3: each fused, the products rounded (vmulfp128)
     f32 RefinedReciprocalSquareRoot(f32 lfSquared)
     {
-        f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfSquared)));
-        for (s32 liStep = 0; liStep < 2; ++liStep)
+        const __vector4 value = XMVectorReplicate(lfSquared);
+        const __vector4 one = XMVectorReplicate(1.0f);
+        const __vector4 half = XMVectorReplicate(0.5f);
+        __vector4 estimate = __vrsqrtefp(value);
+        for (s32 i = 0; i < 2; ++i)
         {
-            const f32 lfEstimateSquared = lfEstimate * lfEstimate;
-            const f32 lfHalfEstimate    = lfEstimate * KF_VPU_HALF;
-            const f32 lfResidual = Utils::ConsoleVpu::NegativeMultiplySubtract(lfSquared, lfEstimateSquared, KF_VPU_ONE);
-            lfEstimate = Utils::ConsoleVpu::MultiplyAdd(lfHalfEstimate, lfResidual, lfEstimate);
+            const __vector4 square = __vmulfp(estimate, estimate);
+            const __vector4 halfEstimate = __vmulfp(estimate, half);
+            const __vector4 residual = __vnmsubfp(value, square, one);
+            estimate = __vmaddfp(halfEstimate, residual, estimate);
         }
-        return lfEstimate;
+        return estimate.x;
     }
 
     // |lV| as ProcessSceneQueryResults computes both radii (0x82252904..0x822529A8, one lane of each):
@@ -140,36 +143,9 @@ namespace
     }
 
     // vsubfp / vaddfp over four lanes, each rounded once.
-    Vector3 LaneSubtract(const Vector3& lrA, const Vector3& lrB)
-    {
-        Vector3 lResult;
-        lResult.x = lrA.x - lrB.x;
-        lResult.y = lrA.y - lrB.y;
-        lResult.z = lrA.z - lrB.z;
-        lResult.w = lrA.w - lrB.w;
-        return lResult;
-    }
-
-    Vector3 LaneAdd(const Vector3& lrA, const Vector3& lrB)
-    {
-        Vector3 lResult;
-        lResult.x = lrA.x + lrB.x;
-        lResult.y = lrA.y + lrB.y;
-        lResult.z = lrA.z + lrB.z;
-        lResult.w = lrA.w + lrB.w;
-        return lResult;
-    }
-
-    // vmulfp128 of four lanes by a splat, each rounded once.
-    Vector3 LaneScale(const Vector3& lrV, f32 lfScale)
-    {
-        Vector3 lResult;
-        lResult.x = lrV.x * lfScale;
-        lResult.y = lrV.y * lfScale;
-        lResult.z = lrV.z * lfScale;
-        lResult.w = lrV.w * lfScale;
-        return lResult;
-    }
+    Vector3 LaneSubtract(const Vector3& a, const Vector3& b) { return Vector3(__vsubfp(a.mV, b.mV)); }
+    Vector3 LaneAdd(const Vector3& a, const Vector3& b) { return Vector3(__vaddfp(a.mV, b.mV)); }
+    Vector3 LaneScale(const Vector3& v, f32 scale) { return Vector3(__vmulfp(v.mV, XMVectorReplicate(scale))); }
 
     // rw::math::vpu::Normalize as RequestFrustumLineTests runs it, eight times (e.g. 0x8223FDEC..0x8223FE6C):
     // d = vmsum3fp128(v, v) (flushed), the refined estimate above, then v * e (vmulfp128). NO zero guard: a zero v
@@ -186,61 +162,25 @@ namespace
     {
         const Vector3* const lapRows[4] = { &lrTransform.xAxis, &lrTransform.yAxis, &lrTransform.zAxis,
                                             &lrTransform.wAxis };
-        for (const Vector3* lpRow : lapRows)
+        for (u32 i = 0; i < 4; ++i)
         {
-            if (lpRow->x != lpRow->x || lpRow->y != lpRow->y || lpRow->z != lpRow->z)
+            const Vector3* lpRow = lapRows[i];
+            if (lpRow->mV.x != lpRow->mV.x || lpRow->mV.y != lpRow->mV.y || lpRow->mV.z != lpRow->mV.z)
                 return false;
         }
         return true;
     }
 
-    Vector3 LaneAbs(const Vector3& lrV)   // vandc of the sign mask: the sign bit cleared (a NaN's too)
+    Vector3 LaneAbs(const Vector3& v)
     {
-        Vector3 lResult;
-        lResult.x = std::fabs(lrV.x);
-        lResult.y = std::fabs(lrV.y);
-        lResult.z = std::fabs(lrV.z);
-        lResult.w = std::fabs(lrV.w);
-        return lResult;
+        const __vector4 ones = __vspltisw(-1);
+        return Vector3(__vandc(v.mV, __vslw(ones, ones)));
     }
 
-    // vmaxfp / vminfp lanes as the AltiVec PEM defines them: the larger (smaller) value, +0 above -0, and a NaN
-    // operand gives a NaN (the first one met is returned).
-    // FLAG (model): the emulator's vmax / vmin return the SECOND operand of two equal zeros; the PEM's +0 / -0 rule is
-    // taken here. Its callers below do not meet two zeros of opposite sign: a length against +0 (itself +0 or
-    // positive), a cosine against 0, a camera height against a roof, a lift against 0 (a difference of positions
-    // is never -0 unless an operand is).
-    f32 VmxMax(f32 lfA, f32 lfB)
-    {
-        if (lfA != lfA)
-            return lfA;
-        if (lfB != lfB)
-            return lfB;
-        if (lfA == 0.0f && lfB == 0.0f)
-            return std::signbit(lfA) ? lfB : lfA;
-        return (lfA > lfB) ? lfA : lfB;
-    }
-
-    f32 VmxMin(f32 lfA, f32 lfB)
-    {
-        if (lfA != lfA)
-            return lfA;
-        if (lfB != lfB)
-            return lfB;
-        if (lfA == 0.0f && lfB == 0.0f)
-            return std::signbit(lfA) ? lfA : lfB;
-        return (lfA < lfB) ? lfA : lfB;
-    }
-
-    Vector3 LaneMax(const Vector3& lrV, f32 lfFloor)
-    {
-        Vector3 lResult;
-        lResult.x = VmxMax(lrV.x, lfFloor);
-        lResult.y = VmxMax(lrV.y, lfFloor);
-        lResult.z = VmxMax(lrV.z, lfFloor);
-        lResult.w = VmxMax(lrV.w, lfFloor);
-        return lResult;
-    }
+    f32 VmxMax(f32 a, f32 b) { return __vmaxfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
+    f32 VmxMin(f32 a, f32 b) { return __vminfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
+    Vector3 LaneMax(const Vector3& v, f32 floor)
+    { return Vector3(__vmaxfp(v.mV, XMVectorReplicate(floor))); }
 
     // rw::math::vpu::Matrix44AffineFromXRotationAngle as ResolveVehicleCollisions inlines it (0x82223ECC..
     // 0x822240AC): the XMVectorSinCos inline (SDKs/XboxMath/XMVectorSinCos.h -- the same tables, the same powers
@@ -253,10 +193,10 @@ namespace
         f32 lfCos = 0.0f;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngle);
         rw::math::vpu::Matrix44Affine lRotation;
-        lRotation.xAxis.x = 1.0f;  lRotation.xAxis.y = 0.0f;    lRotation.xAxis.z = 0.0f;   lRotation.xAxis.w = 1.0f;
-        lRotation.yAxis.x = 0.0f;  lRotation.yAxis.y = lfCos;   lRotation.yAxis.z = lfSin;  lRotation.yAxis.w = 0.0f;
-        lRotation.zAxis.x = 0.0f;  lRotation.zAxis.y = -lfSin;  lRotation.zAxis.z = lfCos;  lRotation.zAxis.w = 0.0f;
-        lRotation.wAxis.x = 0.0f;  lRotation.wAxis.y = 0.0f;    lRotation.wAxis.z = 0.0f;   lRotation.wAxis.w = 0.0f;
+        lRotation.xAxis.mV.x = 1.0f;  lRotation.xAxis.mV.y = 0.0f;    lRotation.xAxis.mV.z = 0.0f;   lRotation.xAxis.mV.w = 1.0f;
+        lRotation.yAxis.mV.x = 0.0f;  lRotation.yAxis.mV.y = lfCos;   lRotation.yAxis.mV.z = lfSin;  lRotation.yAxis.mV.w = 0.0f;
+        lRotation.zAxis.mV.x = 0.0f;  lRotation.zAxis.mV.y = -lfSin;  lRotation.zAxis.mV.z = lfCos;  lRotation.zAxis.mV.w = 0.0f;
+        lRotation.wAxis.mV.x = 0.0f;  lRotation.wAxis.mV.y = 0.0f;    lRotation.wAxis.mV.z = 0.0f;   lRotation.wAxis.mV.w = 0.0f;
         return lRotation;
     }
 
@@ -677,30 +617,38 @@ void FrustrumCollisionResolver::CalculateFrustumLineTests(VecFloat lDesiredNearC
 //                     dword_82CDA790 == 0xFFFFFFFF (K_INVALID_ENTITY_ID), 0 (E_EXCLUDE_ENTITY_ONLY))
 //   at 0x8223FE74 / 0x8223FF30 / 0x8223FFE4 / 0x82240098.
 // ----------------------------------------------------------------------------
+namespace
+{
+    void RequestFrustumCorner(const SceneQueryInterface* request, LineTestNearestPostBox& box,
+                              const Vector3& start, const Vector3& lineStart, const Vector3& lineEnd,
+                              f32 startPadding, f32 endPadding)
+    {
+        const Vector3 paddedStart = Utils::ConsoleVpu::MultiplyAdd(
+            NormalizeRefined(LaneSubtract(lineStart, start)), startPadding, lineStart);
+        const Vector3 paddedEnd = Utils::ConsoleVpu::MultiplyAdd(
+            NormalizeRefined(LaneSubtract(lineEnd, lineStart)), endPadding, lineEnd);
+        request->LineTestNearest(box, KU_FRUSTUM_TEST_ENTITY_TYPES, 0xFFu, paddedStart, paddedEnd,
+            CgsSceneManager::K_INVALID_ENTITY_ID, CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY);
+    }
+}
+
 void FrustrumCollisionResolver::RequestFrustumLineTests(const SceneQueryInterface* lpRequestInterface, Vector3 lStart,
                                                         Vector3 lLeft, Vector3 lUp, Vector3 lEnd, Vector3 lForward)
 {
     const Vector3 lNearPlaneCentre = LaneAdd(lEnd, lForward);
 
-    const auto RequestCorner = [&](LineTestNearestPostBox& lrBox, const Vector3& lLineStart, const Vector3& lLineEnd)
-    {
-        const Vector3 lPaddedStart = Utils::ConsoleVpu::MultiplyAdd(NormalizeRefined(LaneSubtract(lLineStart, lStart)),
-                                                                    sTestStartWidthPadding, lLineStart);
-        const Vector3 lPaddedEnd   = Utils::ConsoleVpu::MultiplyAdd(
-            NormalizeRefined(LaneSubtract(lLineEnd, lLineStart)), sTestLengthPadding, lLineEnd);
-        lpRequestInterface->LineTestNearest(lrBox, KU_FRUSTUM_TEST_ENTITY_TYPES, 0xFFu, lPaddedStart, lPaddedEnd,
-                                            CgsSceneManager::K_INVALID_ENTITY_ID,
-                                            CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY);
-    };
-
-    RequestCorner(mTopLeft,     LaneAdd(LaneAdd(lStart, lLeft), lUp),
-                                LaneAdd(LaneAdd(lNearPlaneCentre, lLeft), lUp));
-    RequestCorner(mTopRight,    LaneAdd(LaneSubtract(lStart, lLeft), lUp),
-                                LaneAdd(LaneSubtract(lNearPlaneCentre, lLeft), lUp));
-    RequestCorner(mBottomLeft,  LaneSubtract(LaneAdd(lStart, lLeft), lUp),
-                                LaneSubtract(LaneAdd(lNearPlaneCentre, lLeft), lUp));
-    RequestCorner(mBottomRight, LaneSubtract(LaneSubtract(lStart, lLeft), lUp),
-                                LaneSubtract(LaneSubtract(lNearPlaneCentre, lLeft), lUp));
+    RequestFrustumCorner(lpRequestInterface, mTopLeft, lStart,
+        LaneAdd(LaneAdd(lStart, lLeft), lUp), LaneAdd(LaneAdd(lNearPlaneCentre, lLeft), lUp),
+        static_cast<f32>(sTestStartWidthPadding), static_cast<f32>(sTestLengthPadding));
+    RequestFrustumCorner(lpRequestInterface, mTopRight, lStart,
+        LaneAdd(LaneSubtract(lStart, lLeft), lUp), LaneAdd(LaneSubtract(lNearPlaneCentre, lLeft), lUp),
+        static_cast<f32>(sTestStartWidthPadding), static_cast<f32>(sTestLengthPadding));
+    RequestFrustumCorner(lpRequestInterface, mBottomLeft, lStart,
+        LaneSubtract(LaneAdd(lStart, lLeft), lUp), LaneSubtract(LaneAdd(lNearPlaneCentre, lLeft), lUp),
+        static_cast<f32>(sTestStartWidthPadding), static_cast<f32>(sTestLengthPadding));
+    RequestFrustumCorner(lpRequestInterface, mBottomRight, lStart,
+        LaneSubtract(LaneSubtract(lStart, lLeft), lUp), LaneSubtract(LaneSubtract(lNearPlaneCentre, lLeft), lUp),
+        static_cast<f32>(sTestStartWidthPadding), static_cast<f32>(sTestLengthPadding));
 }
 
 // ----------------------------------------------------------------------------
@@ -835,7 +783,7 @@ void FrustrumCollisionResolver::ResolveVehicleCollisions(const AllVehicleData* l
     const f32 lfDist = VmxMax(FlushDenormal(Utils::ConsoleVpu::Dot3(lCamera.mTransform.zAxis,
                                                                     LaneSubtract(lTarget, lCamera.mTransform.wAxis))),
                               KVF_MIN_CAMERA_DIST);
-    const f32 lfAngle = XboxMath::XMVectorATan(Utils::ConsoleVpu::Divide(mVehicleResolveVector.y, lfDist));
+    const f32 lfAngle = XboxMath::XMVectorATan(Utils::ConsoleVpu::Divide(mVehicleResolveVector.mV.y, lfDist));
     CGS_ASSERT(lfAngle == lfAngle, "IsValid(lvfAngle)");                                   // BrnCollisionPolicy.cpp:207
     CGS_ASSERT(lfAngle == lfAngle, "IsValid(lvfAngle)");                                   // :208
     CGS_ASSERT(lfAngle == lfAngle, "IsValid(lvfAngle)");                                   // :209
@@ -872,28 +820,28 @@ void FrustrumCollisionResolver::ResolveVehicleCollision(const Matrix44Affine& lT
                                                         Vector3 lTrafficExtentsIn, Vector3& lCurrentCameraPos)
 {
     const Vector3& lTrafficPos = lTrafficTransform.wAxis;
-    if ((lTrafficPos.y - lTrafficExtentsIn.y) - static_cast<f32>(kvfDistBelowCarToIgnoreCollision) > lCurrentCameraPos.y)
+    if ((lTrafficPos.mV.y - lTrafficExtentsIn.mV.y) - static_cast<f32>(kvfDistBelowCarToIgnoreCollision) > lCurrentCameraPos.mV.y)
         return;
 
     Vector3 lTrafficAxisUp;
-    lTrafficAxisUp.x = lTrafficTransform.xAxis.y;
-    lTrafficAxisUp.y = lTrafficTransform.yAxis.y;
-    lTrafficAxisUp.z = lTrafficTransform.zAxis.y;
-    lTrafficAxisUp.w = lTrafficTransform.wAxis.y;
+    lTrafficAxisUp.mV.x = lTrafficTransform.xAxis.mV.y;
+    lTrafficAxisUp.mV.y = lTrafficTransform.yAxis.mV.y;
+    lTrafficAxisUp.mV.z = lTrafficTransform.zAxis.mV.y;
+    lTrafficAxisUp.mV.w = lTrafficTransform.wAxis.mV.y;
 
     const Vector3 lToTraffic   = LaneSubtract(lTrafficPos, lCurrentCameraPos);
     const f32     lfDistanceSq = FlushDenormal(Utils::ConsoleVpu::Dot3(lToTraffic, lToTraffic));
 
     const f32 lfHorizontalScale = kvfHorizontalExtentsScale;
     Vector3 lTrafficExtents;
-    lTrafficExtents.x = lTrafficExtentsIn.x
-                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.x, lfHorizontalScale, KF_VPU_ONE);
-    lTrafficExtents.y = lTrafficExtentsIn.y
-                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.y, lfHorizontalScale, KF_VPU_ONE);
-    lTrafficExtents.z = lTrafficExtentsIn.z
-                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.z, lfHorizontalScale, KF_VPU_ONE);
-    lTrafficExtents.w = lTrafficExtentsIn.w
-                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.w, lfHorizontalScale, KF_VPU_ONE);
+    lTrafficExtents.mV.x = lTrafficExtentsIn.mV.x
+                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.mV.x, lfHorizontalScale, KF_VPU_ONE);
+    lTrafficExtents.mV.y = lTrafficExtentsIn.mV.y
+                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.mV.y, lfHorizontalScale, KF_VPU_ONE);
+    lTrafficExtents.mV.z = lTrafficExtentsIn.mV.z
+                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.mV.z, lfHorizontalScale, KF_VPU_ONE);
+    lTrafficExtents.mV.w = lTrafficExtentsIn.mV.w
+                      * Utils::ConsoleVpu::MultiplyAdd(KF_VPU_ONE - lTrafficAxisUp.mV.w, lfHorizontalScale, KF_VPU_ONE);
 
     const Vector3 lTwiceExtents      = LaneScale(lTrafficExtents, KF_VPU_TWO);
     const f32     lfTrafficRadiusSq  = FlushDenormal(Utils::ConsoleVpu::Dot3(lTwiceExtents, lTwiceExtents));
@@ -901,15 +849,15 @@ void FrustrumCollisionResolver::ResolveVehicleCollision(const Matrix44Affine& lT
         return;
 
     Vector3 lCameraPosFlattened = lCurrentCameraPos;
-    lCameraPosFlattened.y = lTrafficPos.y;
+    lCameraPosFlattened.mV.y = lTrafficPos.mV.y;
     const rw::math::vpu::Matrix44Affine lInverseTrafficTransform =
         Utils::ConsoleVpu::InverseOfMatrixWithOrthonormal3x3(lTrafficTransform);
     const Vector3 lLocal = Utils::ConsoleVpu::TransformPoint(lInverseTrafficTransform, lCameraPosFlattened);
     Vector3 lLocalCameraPosFlattened;
-    lLocalCameraPosFlattened.x = Utils::ConsoleVpu::Divide(lLocal.x, lTrafficExtents.x);
-    lLocalCameraPosFlattened.y = Utils::ConsoleVpu::Divide(lLocal.y, lTrafficExtents.y);
-    lLocalCameraPosFlattened.z = Utils::ConsoleVpu::Divide(lLocal.z, lTrafficExtents.z);
-    lLocalCameraPosFlattened.w = Utils::ConsoleVpu::Divide(lLocal.w, lTrafficExtents.w);
+    lLocalCameraPosFlattened.mV.x = Utils::ConsoleVpu::Divide(lLocal.mV.x, lTrafficExtents.mV.x);
+    lLocalCameraPosFlattened.mV.y = Utils::ConsoleVpu::Divide(lLocal.mV.y, lTrafficExtents.mV.y);
+    lLocalCameraPosFlattened.mV.z = Utils::ConsoleVpu::Divide(lLocal.mV.z, lTrafficExtents.mV.z);
+    lLocalCameraPosFlattened.mV.w = Utils::ConsoleVpu::Divide(lLocal.mV.w, lTrafficExtents.mV.w);
     const f32 lfDist = ConsoleLength(lLocalCameraPosFlattened);
 
     const f32 lfTrafficExtentAlongY =
@@ -917,7 +865,7 @@ void FrustrumCollisionResolver::ResolveVehicleCollision(const Matrix44Affine& lT
     const f32 lfHeight = GetHeightAboveTraffic(lfTrafficExtentAlongY * static_cast<f32>(kvfVehicleCollisionCurveTopScale),
                                                lfTrafficExtentAlongY * static_cast<f32>(kvfVehicleCollisionCurveBottomScale),
                                                lfDist);
-    lCurrentCameraPos.y = VmxMax(lCurrentCameraPos.y, lTrafficPos.y + lfHeight);
+    lCurrentCameraPos.mV.y = VmxMax(lCurrentCameraPos.mV.y, lTrafficPos.mV.y + lfHeight);
 }
 
 // ----------------------------------------------------------------------------
