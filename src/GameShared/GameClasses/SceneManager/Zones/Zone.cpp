@@ -138,53 +138,41 @@ namespace CgsSceneManager
         }
     }
 
-    // X360 0x822BACE8. Centroid of the zone polygon: the average of all corner points.
-    // The X360 build hand-vectorises this over VMX -- it sums the full 16-byte point vectors
-    // (all four lanes) into an accumulator, then multiplies by a Newton-refined reciprocal of
-    // the point count (1/miNumPoints). For the exactly-4-point case it tail-calls the branch-free
-    // CalculateCentre4. This is the semantic-parity scalar reconstruction: the same per-lane
-    // sum-then-scale on the named Vector2 lanes, not the VMX reciprocal-refinement permute.
+    // ARTIST 822BACE8: full-register accumulation and two reciprocal refinements.
     rw::math::vpu::Vector2 Zone::CalculateCentre() const
     {
         if (miNumPoints == 4)
-        {
             return CalculateCentre4();
-        }
-
-        rw::math::vpu::Vector2 lCentre;
-        lCentre.SetZero();
-
+        __vector4 lvCentre = __vspltisw(0);
         for (s16 liIndex = 0; liIndex < miNumPoints; ++liIndex)
-        {
-            lCentre.x += mpPoints[liIndex].x;
-            lCentre.y += mpPoints[liIndex].y;
-            lCentre.z += mpPoints[liIndex].z;
-            lCentre.w += mpPoints[liIndex].w;
-        }
-
-        const f32 lfInvCount = 1.0f / static_cast<f32>(miNumPoints);
-        lCentre.x *= lfInvCount;
-        lCentre.y *= lfInvCount;
-        lCentre.z *= lfInvCount;
-        lCentre.w *= lfInvCount;
-
-        return lCentre;
+            lvCentre = __vaddfp(lvCentre, mpPoints[liIndex].mV);
+        const f32 lfCount = static_cast<f32>(miNumPoints);
+        CGS_ALIGN(16) const f32 lafCount[4] = { lfCount, lfCount, lfCount, lfCount };
+        const __vector4 lvCount = __lvx(lafCount, 0);
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        __vector4 lvReciprocal = __vrefp(lvCount);
+        __vector4 lvError = __vnmsubfp(lvReciprocal, lvCount, lvOne);
+        lvReciprocal = __vmaddfp(lvReciprocal, lvError, lvReciprocal);
+        lvError = __vnmsubfp(lvReciprocal, lvCount, lvOne);
+        lvReciprocal = __vmaddfp(lvReciprocal, lvError, lvReciprocal);
+        rw::math::vpu::Vector2 lResult;
+        lResult.mV = __vmulfp(lvCentre, lvReciprocal);
+        return lResult;
     }
 
-    // X360 0x822A3CA0. Branch-free centroid for the 4-point case: (p0+p1+p2+p3) * 0.25.
-    // Asserts the zone has exactly 4 points. The X360 forms 1/4 as (-0.5)^2 rather than a literal
-    // and sums the four full 16-byte point vectors (all lanes). Semantic-parity scalar form.
+    // ARTIST 822A3CA0: retain initial +zero and the four ordered vector adds.
     rw::math::vpu::Vector2 Zone::CalculateCentre4() const
     {
         CGS_ASSERT(miNumPoints == 4,
                    "This optimised calc centre function only works for 4 point units\n");
-
-        rw::math::vpu::Vector2 lCentre;
-        lCentre.x = (mpPoints[0].x + mpPoints[1].x + mpPoints[2].x + mpPoints[3].x) * 0.25f;
-        lCentre.y = (mpPoints[0].y + mpPoints[1].y + mpPoints[2].y + mpPoints[3].y) * 0.25f;
-        lCentre.z = (mpPoints[0].z + mpPoints[1].z + mpPoints[2].z + mpPoints[3].z) * 0.25f;
-        lCentre.w = (mpPoints[0].w + mpPoints[1].w + mpPoints[2].w + mpPoints[3].w) * 0.25f;
-
-        return lCentre;
+        __vector4 lvCentre = __vspltisw(0);
+        for (u32 i = 0; i < 4; ++i)
+            lvCentre = __vaddfp(lvCentre, mpPoints[i].mV);
+        const __vector4 lvHalfNegative = __vcfsx(__vspltisw(-1), 1);
+        const __vector4 lvQuarter = __vmulfp(lvHalfNegative, lvHalfNegative);
+        rw::math::vpu::Vector2 lResult;
+        lResult.mV = __vmulfp(lvCentre, lvQuarter);
+        return lResult;
     }
+
 }

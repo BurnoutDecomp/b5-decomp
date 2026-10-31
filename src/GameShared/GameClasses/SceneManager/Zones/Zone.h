@@ -3,19 +3,9 @@
 // Zone.h — canonical home for CgsSceneManager::Zone (a convex zone polygon used by the
 // scene manager's ZoneList for point-in-zone queries) and its Neighbour edge record.
 //
-// SOURCES: the DecFIGS DWARF Zone.h is GROUND TRUTH for the inline accessor + query
-// bodies; the X360 ARTIST DWARF/pseudocode are authority where they disagree.
-//   - Zone::IsPointInZone @ 0x822BAB60 (the boot-trace ledger function for this TU):
-//     the X360 build hand-vectorises the half-plane test over VMX registers (the test
-//     point arrives in a vector register). This reconstruction is SEMANTIC-PARITY to the
-//     ground-truth scalar algorithm (and to the asm's per-edge logic): for every polygon
-//     edge it forms the edge orthogonal, dots it with (point - corner0), and counts how
-//     many edges put the point on the left vs the right; the point is inside iff it is on
-//     one consistent side of every edge (countLeft==0 || countRight==0). The math runs on
-//     the committed rw::math::vpu::Vector2 lanes BY NAME (.x/.y) rather than reproducing
-//     the VMX permute sequence. (This is the platform-faithful scalar form of the asm; the
-//     dossier flagged the VMX vector-ABI form as out of reach — this delivers the function
-//     by behaviour, not by VMX byte-shape.)
+// ARTIST 822BAB60 supplies the by-value VMX point query. DecFIGS Zone.h
+// supplies the declarations; native point and neighbour records retain their layout.
+// The query uses the original signed edge test, separate products/add and CR6 result.
 //
 // FLAGGED SUBSTITUTION: the DWARF setters/getters guard their preconditions with the
 // rich CgsDev::StrStream + CgsDev::Assert::PrintStringed path. Per the project rule that
@@ -78,39 +68,38 @@ namespace CgsSceneManager
         void FixUp(void* lpBaseAddress);
         void FixDown(void* lpBaseAddress);
 
-        // @0x822BAB60. Convex point-in-polygon: inside iff the point is on one consistent
-        // side of every edge. Semantic-parity scalar reconstruction (see file header).
-        inline bool IsPointInZone(const rw::math::vpu::Vector2& lPoint) const
+        // ARTIST 822BAB60: native point in v1 and full VMX edge arithmetic.
+        inline bool IsPointInZone(rw::math::vpu::Vector2::InParam lPoint) const
         {
-            s32 liCountLeft  = 0;
+            CGS_STATIC_ASSERT(offsetof(Zone, miNumPoints) == 0x1A, "ARTIST zone point count");
+            s32 liCountLeft = 0;
             s32 liCountRight = 0;
-
+            const __vector4 lvZero = __vspltisw(0);
+            const __vector4 lvOnes = __vspltisw(-1);
+            const __vector4 lvSign = __vslw(lvOnes, lvOnes);
             for (s16 liIndex = 0; liIndex < miNumPoints; ++liIndex)
             {
-                const rw::math::vpu::Vector2& lCorner0 = mpPoints[liIndex % miNumPoints];
-                const rw::math::vpu::Vector2& lCorner1 = mpPoints[(liIndex + 1) % miNumPoints];
-
-                // Edge vector and offset of the test point from corner0.
-                const f32 lfEdgeX   = lCorner1.x - lCorner0.x;
-                const f32 lfEdgeY   = lCorner1.y - lCorner0.y;
-                const f32 lfOffsetX = lPoint.x - lCorner0.x;
-                const f32 lfOffsetY = lPoint.y - lCorner0.y;
-
-                // Dot of the offset with the edge orthogonal (-edgeY, edgeX) == the 2D
-                // cross product; its sign tells which side of the edge the point is on.
-                const f32 lfDotProduct = lfOffsetX * (-lfEdgeY) + lfOffsetY * lfEdgeX;
-
-                if (lfDotProduct < 0.0f)
-                {
+                const __vector4 lvCorner0 = mpPoints[liIndex % miNumPoints].mV;
+                const __vector4 lvCorner1 = mpPoints[(liIndex + 1) % miNumPoints].mV;
+                const __vector4 lvEdge = __vsubfp(lvCorner1, lvCorner0);
+                const __vector4 lvOffset = __vsubfp(lPoint.mV, lvCorner0);
+                const __vector4 lvNegativeY = __vxor(__vspltw(lvEdge, 1), lvSign);
+                __vector4 lvOrthogonal = __vrlimi(lvZero, lvNegativeY, 8, 0);
+                lvOrthogonal = __vrlimi(lvOrthogonal, lvEdge, 4, 3);
+                const __vector4 lvProduct = __vmulfp(lvOffset, lvOrthogonal);
+                const __vector4 lvDot = __vaddfp(__vspltw(lvProduct, 0), __vspltw(lvProduct, 1));
+                u32 luComparison;
+                __vcmpgtfpR(lvZero, lvDot, &luComparison);
+                if ((luComparison & 0x80u) != 0)
                     ++liCountLeft;
-                }
-                else if (lfDotProduct > 0.0f)
+                else
                 {
-                    ++liCountRight;
+                    __vcmpgtfpR(lvDot, lvZero, &luComparison);
+                    if ((luComparison & 0x80u) != 0)
+                        ++liCountRight;
                 }
             }
-
-            return (liCountLeft == 0) || (liCountRight == 0);
+            return liCountLeft == 0 || liCountRight == 0;
         }
 
         inline void SetPoints(rw::math::vpu::Vector2* lpPoints, s16 liNumPoints)
