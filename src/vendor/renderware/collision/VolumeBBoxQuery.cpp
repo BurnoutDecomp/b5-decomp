@@ -151,10 +151,10 @@ namespace
     // inline row storage (straight block move, no lane math).
     void CopyRow(VolRef::Vec4& lrDst, const math::vpu::VectorIntrinsic& arSrc)
     {
-        lrDst.x = arSrc.mafLane[0];
-        lrDst.y = arSrc.mafLane[1];
-        lrDst.z = arSrc.mafLane[2];
-        lrDst.w = arSrc.mafLane[3];
+        lrDst.x = arSrc.v[0];
+        lrDst.y = arSrc.v[1];
+        lrDst.z = arSrc.v[2];
+        lrDst.w = arSrc.v[3];
     }
 
     // -----------------------------------------------------------------------
@@ -179,16 +179,16 @@ namespace
         math::vpu::VectorIntrinsic* lapRowOut[4] =
             { &lrOut.xAxis.mV, &lrOut.yAxis.mV, &lrOut.zAxis.mV, &lrOut.wAxis.mV };
 
-        const f32* lafB0 = arParent.xAxis.mV.mafLane;
-        const f32* lafB1 = arParent.yAxis.mV.mafLane;
-        const f32* lafB2 = arParent.zAxis.mV.mafLane;
-        const f32* lafB3 = arParent.wAxis.mV.mafLane;
+        const f32* lafB0 = arParent.xAxis.mV.v;
+        const f32* lafB1 = arParent.yAxis.mV.v;
+        const f32* lafB2 = arParent.zAxis.mV.v;
+        const f32* lafB3 = arParent.wAxis.mV.v;
 
         for (int liRow = 0; liRow < 4; ++liRow)
         {
-            const f32 lfAx = lapRowA[liRow]->mafLane[0];   // vspltw row, 0
-            const f32 lfAy = lapRowA[liRow]->mafLane[1];   // vspltw row, 1
-            const f32 lfAz = lapRowA[liRow]->mafLane[2];   // vspltw row, 2
+            const f32 lfAx = lapRowA[liRow]->v[0];   // vspltw row, 0
+            const f32 lfAy = lapRowA[liRow]->v[1];   // vspltw row, 1
+            const f32 lfAz = lapRowA[liRow]->v[2];   // vspltw row, 2
             for (int liLane = 0; liLane < 4; ++liLane)
             {
                 // Rows 0-2: vmulfp128 x*B0; row 3: vmaddfp x*B0 + B3.
@@ -198,7 +198,7 @@ namespace
                     lfAcc = lfAx * lafB0[liLane] + lafB3[liLane];
                 }
                 lfAcc = lfAy * lafB1[liLane] + lfAcc;      // vmaddfp y*B1 + acc
-                lapRowOut[liRow]->mafLane[liLane] =
+                lapRowOut[liRow]->v[liLane] =
                     lfAz * lafB2[liLane] + lfAcc;          // vmaddfp z*B2 + acc
             }
         }
@@ -585,10 +585,10 @@ int VolumeBBoxQuery::GetOverlaps(VolumeBBoxQuery* lpThis)
             // VMX overlap mask (see banner): separated iff volMin > queryMax
             // or queryMin > volMax on any of the x/y/z lanes; the vsldoi-by-12
             // drops the W lane from the test.
-            const f32* lafVolMin   = lVolBBox.mMin.mV.mafLane;
-            const f32* lafVolMax   = lVolBBox.mMax.mV.mafLane;
-            const f32* lafQueryMin = lpThis->m_aabb.mMin.mV.mafLane;
-            const f32* lafQueryMax = lpThis->m_aabb.mMax.mV.mafLane;
+            const f32* lafVolMin   = lVolBBox.mMin.mV.v;
+            const f32* lafVolMax   = lVolBBox.mMax.mV.v;
+            const f32* lafQueryMin = lpThis->m_aabb.mMin.mV.v;
+            const f32* lafQueryMax = lpThis->m_aabb.mMax.mV.v;
 
             bool lbSeparated = false;
             for (int li = 0; li < 3; ++li)
@@ -678,9 +678,9 @@ int VolumeBBoxQuery::GetOverlaps(VolumeBBoxQuery* lpThis)
             const math::vpu::Matrix44Affine* lpVolTm = VolumeTransform(lpCurVol);
             lpAggTm = lpVolTm;
 
-            const f32* lafRow0 = lpVolTm->xAxis.mV.mafLane;
-            const f32* lafRow1 = lpVolTm->yAxis.mV.mafLane;
-            const f32* lafRow3 = lpVolTm->wAxis.mV.mafLane;
+            const f32* lafRow0 = lpVolTm->xAxis.mV.v;
+            const f32* lafRow1 = lpVolTm->yAxis.mV.v;
+            const f32* lafRow3 = lpVolTm->wAxis.mV.v;
 
             if (std::fabs(lafRow0[0] - 1.0f) < KF_IDENTITY_LANE_EPSILON &&  // lfs 0(r5)
                 std::fabs(lafRow1[1] - 1.0f) < KF_IDENTITY_LANE_EPSILON)    // lfs 0x14(r5)

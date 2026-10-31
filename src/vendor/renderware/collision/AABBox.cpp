@@ -62,14 +62,14 @@ AABBox AABBox::Transform(const math::vpu::Matrix44Affine* lpTransform) const
         return lResult;
     }
 
-    const f32* lafMin = mMin.mV.mafLane;
-    const f32* lafMax = mMax.mV.mafLane;
+    const f32* lafMin = mMin.mV.v;
+    const f32* lafMax = mMax.mV.v;
 
     // Matrix rows: lvx128 [r5+0x00/0x10/0x20/0x30] = xAxis/yAxis/zAxis/wAxis.
-    const f32* lafRowX = lpTransform->xAxis.mV.mafLane;
-    const f32* lafRowY = lpTransform->yAxis.mV.mafLane;
-    const f32* lafRowZ = lpTransform->zAxis.mV.mafLane;
-    const f32* lafRowW = lpTransform->wAxis.mV.mafLane;
+    const f32* lafRowX = lpTransform->xAxis.mV.v;
+    const f32* lafRowY = lpTransform->yAxis.mV.v;
+    const f32* lafRowZ = lpTransform->zAxis.mV.v;
+    const f32* lafRowW = lpTransform->wAxis.mV.v;
 
     // centre = (max+min)*0.5 (vaddfp+vmulfp128); half = (max-min)*0.5
     // (vsubfp+vmulfp128); KF_HALF splatted from flt_820F2708 via lvlx+vspltw.
@@ -110,8 +110,8 @@ AABBox AABBox::Transform(const math::vpu::Matrix44Affine* lpTransform) const
     // stvx128 min row then max row into the return slot.
     for (int i = 0; i < 4; ++i)
     {
-        lResult.mMin.mV.mafLane[i] = lNewMin[i];
-        lResult.mMax.mV.mafLane[i] = lNewMax[i];
+        lResult.mMin.mV.v[i] = lNewMin[i];
+        lResult.mMax.mV.v[i] = lNewMax[i];
     }
 
     return lResult;

@@ -1,21 +1,12 @@
-#include "types.hpp"
+#include "SDKs/EATech/include/rw/math/vpu/vec_float.h"
 
 namespace rw { namespace math { namespace vpu {
-class VecFloat
-{
-public:
-    explicit VecFloat(const float* pfValue);
 
-private:
-    float mafLane[4];
-};
-
-VecFloat::VecFloat(const float* pfValue)
+// ARTIST821F0DA0: referenced scalar in r4; load its raw bits without an FPU
+// conversion, broadcast word0 and store the native register at this in r3.
+VecFloat::VecFloat(const float& lfValue)
 {
-    const float lfValue = *pfValue;
-    mafLane[0] = lfValue;
-    mafLane[1] = lfValue;
-    mafLane[2] = lfValue;
-    mafLane[3] = lfValue;
+    mV = __vspltw(__lvlx(&lfValue, 0), 0);
 }
+
 } } }

@@ -34,7 +34,7 @@ namespace vpu
     typedef VecFloatRef<VectorAxisZ> VecFloatRefZ;
     typedef VecFloatRef<VectorAxisW> VecFloatRefW;
 
-    class VecFloat
+    class __declspec(passinreg) VecFloat
     {
     public:
         typedef const VecFloat InParam;
@@ -45,7 +45,6 @@ namespace vpu
         VecFloat(VecFloatRef<INDEX> v);
         VecFloat(VecFloatRefIndex v);
         VecFloat();
-        VecFloat(const VecFloat& v);
         explicit VecFloat(VectorIntrinsicInParam v);
         VecFloat(VectorIntrinsicInParam v, int index);
         VecFloat(const float& f);
@@ -57,7 +56,6 @@ namespace vpu
 
         template<VectorAxis INDEX>
         VecFloat& operator =(const VecFloatRef<INDEX>& v);
-        VecFloat& operator =(const VecFloat& f);
         VecFloat& operator =(const float& f);
         VecFloat& operator =(const VecFloatRefIndex& v);
 

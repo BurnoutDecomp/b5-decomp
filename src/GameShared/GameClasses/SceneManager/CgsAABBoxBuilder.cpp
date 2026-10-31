@@ -71,7 +71,7 @@ void AABBoxBuilder::CreateFromTriangle(rw::collision::AABBox* lpBBox,
     ReadLanes(lpTriangle->mFaceNormals[2], lafV2);   // r4+0x30  Vertex2
     for (u32 luLane = 0; luLane < 4; ++luLane)
     {
-        lpBBox->mMin.mV.mafLane[luLane] =
+        lpBBox->mMin.mV.v[luLane] =
             LaneMin(lafV0[luLane], LaneMin(lafV1[luLane], lafV2[luLane]));
     }
 
@@ -83,7 +83,7 @@ void AABBoxBuilder::CreateFromTriangle(rw::collision::AABBox* lpBBox,
     ReadLanes(lpTriangle->mPos,            lafV0);
     for (u32 luLane = 0; luLane < 4; ++luLane)
     {
-        lpBBox->mMax.mV.mafLane[luLane] =
+        lpBBox->mMax.mV.v[luLane] =
             LaneMax(lafV0[luLane], LaneMax(lafV1[luLane], lafV2[luLane]));
     }
 }
@@ -153,20 +153,20 @@ void AABBoxBuilder::CreateFromBox(rw::collision::AABBox* lpBBox,
     // min row @ bbox+0x00: vperm(unk_82CDA350)(i0.min, i1.min) then
     // vrlimi128 ...,2,0 inserts z from i2.min. Interval bounds are broadcast
     // VecFloats, so each pick below reads that interval's scalar.
-    lpBBox->mMin.mV.mafLane[0] = laIntervals[0].min.x;
-    lpBBox->mMin.mV.mafLane[1] = laIntervals[1].min.y;
-    lpBBox->mMin.mV.mafLane[2] = laIntervals[2].min.z;
-    lpBBox->mMin.mV.mafLane[3] = laIntervals[1].min.w;   // FLAGGED: w-lane source
+    lpBBox->mMin.mV.v[0] = laIntervals[0].min.x;
+    lpBBox->mMin.mV.v[1] = laIntervals[1].min.y;
+    lpBBox->mMin.mV.v[2] = laIntervals[2].min.z;
+    lpBBox->mMin.mV.v[3] = laIntervals[1].min.w;   // FLAGGED: w-lane source
                                                          // (i1 per the canonical
                                                          // control; i0 the only
                                                          // alternative -- both
                                                          // broadcast duplicates)
 
     // max row @ bbox+0x10: same shuffle over the interval maxima.
-    lpBBox->mMax.mV.mafLane[0] = laIntervals[0].max.x;
-    lpBBox->mMax.mV.mafLane[1] = laIntervals[1].max.y;
-    lpBBox->mMax.mV.mafLane[2] = laIntervals[2].max.z;
-    lpBBox->mMax.mV.mafLane[3] = laIntervals[1].max.w;   // FLAGGED: as above
+    lpBBox->mMax.mV.v[0] = laIntervals[0].max.x;
+    lpBBox->mMax.mV.v[1] = laIntervals[1].max.y;
+    lpBBox->mMax.mV.v[2] = laIntervals[2].max.z;
+    lpBBox->mMax.mV.v[3] = laIntervals[1].max.w;   // FLAGGED: as above
 }
 
 // ===========================================================================

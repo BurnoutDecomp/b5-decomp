@@ -76,9 +76,9 @@ bool IsValid(Vector3::InParam v);                                         // FLA
 inline bool IsAnyNaN(Vector3::InParam v)
 {
     // equal = vcmpeqfp_p(v,v) (all-lanes-equal predicate); return !equal.
-    return !( v.mV.mafLane[0] == v.mV.mafLane[0]
-           && v.mV.mafLane[1] == v.mV.mafLane[1]
-           && v.mV.mafLane[2] == v.mV.mafLane[2] );
+    return !( v.mV.v[0] == v.mV.v[0]
+           && v.mV.v[1] == v.mV.v[1]
+           && v.mV.v[2] == v.mV.v[2] );
 }
 
 // =====================================================================================
@@ -89,9 +89,9 @@ inline Vector3 Add(Vector3::InParam a, Vector3::InParam b)
 {
     // vaddfp(a,b)
     Vector3 r;
-    r.mV.mafLane[0] = a.mV.mafLane[0] + b.mV.mafLane[0];
-    r.mV.mafLane[1] = a.mV.mafLane[1] + b.mV.mafLane[1];
-    r.mV.mafLane[2] = a.mV.mafLane[2] + b.mV.mafLane[2];
+    r.mV.v[0] = a.mV.v[0] + b.mV.v[0];
+    r.mV.v[1] = a.mV.v[1] + b.mV.v[1];
+    r.mV.v[2] = a.mV.v[2] + b.mV.v[2];
     return r;
 }
 
@@ -99,9 +99,9 @@ inline Vector3 Subtract(Vector3::InParam a, Vector3::InParam b)
 {
     // vsubfp(a,b)
     Vector3 r;
-    r.mV.mafLane[0] = a.mV.mafLane[0] - b.mV.mafLane[0];
-    r.mV.mafLane[1] = a.mV.mafLane[1] - b.mV.mafLane[1];
-    r.mV.mafLane[2] = a.mV.mafLane[2] - b.mV.mafLane[2];
+    r.mV.v[0] = a.mV.v[0] - b.mV.v[0];
+    r.mV.v[1] = a.mV.v[1] - b.mV.v[1];
+    r.mV.v[2] = a.mV.v[2] - b.mV.v[2];
     return r;
 }
 
@@ -109,9 +109,9 @@ inline Vector3 Mult(Vector3::InParam a, Vector3::InParam b)
 {
     // vmaddfp(a,b,0): per-lane multiply.
     Vector3 r;
-    r.mV.mafLane[0] = a.mV.mafLane[0] * b.mV.mafLane[0];
-    r.mV.mafLane[1] = a.mV.mafLane[1] * b.mV.mafLane[1];
-    r.mV.mafLane[2] = a.mV.mafLane[2] * b.mV.mafLane[2];
+    r.mV.v[0] = a.mV.v[0] * b.mV.v[0];
+    r.mV.v[1] = a.mV.v[1] * b.mV.v[1];
+    r.mV.v[2] = a.mV.v[2] * b.mV.v[2];
     return r;
 }
 
@@ -119,20 +119,20 @@ inline Vector3 MultAdd(Vector3::InParam a, Vector3::InParam b, Vector3::InParam 
 {
     // vmaddfp(a,b,c): per-lane a*b + c.
     Vector3 r;
-    r.mV.mafLane[0] = a.mV.mafLane[0] * b.mV.mafLane[0] + c.mV.mafLane[0];
-    r.mV.mafLane[1] = a.mV.mafLane[1] * b.mV.mafLane[1] + c.mV.mafLane[1];
-    r.mV.mafLane[2] = a.mV.mafLane[2] * b.mV.mafLane[2] + c.mV.mafLane[2];
+    r.mV.v[0] = a.mV.v[0] * b.mV.v[0] + c.mV.v[0];
+    r.mV.v[1] = a.mV.v[1] * b.mV.v[1] + c.mV.v[1];
+    r.mV.v[2] = a.mV.v[2] * b.mV.v[2] + c.mV.v[2];
     return r;
 }
 
 inline Vector3 Mult(Vector3::InParam v, VecFloat::InParam s)
 {
     // vmaddfp(v, s, 0): s is a broadcast, so every lane multiplies by s.X.
-    const float lfScale = s.mV.mafLane[VectorAxisX];
+    const float lfScale = s.mV.v[VectorAxisX];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfScale;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfScale;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfScale;
+    r.mV.v[0] = v.mV.v[0] * lfScale;
+    r.mV.v[1] = v.mV.v[1] * lfScale;
+    r.mV.v[2] = v.mV.v[2] * lfScale;
     return r;
 }
 
@@ -140,9 +140,9 @@ inline Vector3 Mult(Vector3::InParam v, float s)
 {
     // broadcast(s) then vmaddfp(v, broadcast, 0).
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * s;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * s;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * s;
+    r.mV.v[0] = v.mV.v[0] * s;
+    r.mV.v[1] = v.mV.v[1] * s;
+    r.mV.v[2] = v.mV.v[2] * s;
     return r;
 }
 
@@ -150,33 +150,33 @@ template<VectorAxis INDEX>
 inline Vector3 Mult(Vector3::InParam v, VecFloatRef<INDEX> s)
 {
     // splattedAxis = vspltw(s.mV, INDEX); vmaddfp(v, splattedAxis, 0).
-    const float lfScale = s.mV.mafLane[INDEX];
+    const float lfScale = s.mV.v[INDEX];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfScale;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfScale;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfScale;
+    r.mV.v[0] = v.mV.v[0] * lfScale;
+    r.mV.v[1] = v.mV.v[1] * lfScale;
+    r.mV.v[2] = v.mV.v[2] * lfScale;
     return r;
 }
 
 inline Vector3 Mult(Vector3::InParam v, VecFloatRefIndex::InParam s)
 {
     // permute the referenced lane across, then vmaddfp(v, sVI, 0).
-    const float lfScale = s.mV.mafLane[s.mIndex];
+    const float lfScale = s.mV.v[s.mIndex];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfScale;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfScale;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfScale;
+    r.mV.v[0] = v.mV.v[0] * lfScale;
+    r.mV.v[1] = v.mV.v[1] * lfScale;
+    r.mV.v[2] = v.mV.v[2] * lfScale;
     return r;
 }
 
 inline Vector3 Divide(Vector3::InParam v, VecFloat::InParam s)
 {
     // reciprocal = 1/s (vrefp + Newton); vmaddfp(v, reciprocal, 0).
-    const float lfRecip = 1.0f / s.mV.mafLane[VectorAxisX];
+    const float lfRecip = 1.0f / s.mV.v[VectorAxisX];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfRecip;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfRecip;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfRecip;
+    r.mV.v[0] = v.mV.v[0] * lfRecip;
+    r.mV.v[1] = v.mV.v[1] * lfRecip;
+    r.mV.v[2] = v.mV.v[2] * lfRecip;
     return r;
 }
 
@@ -185,9 +185,9 @@ inline Vector3 Divide(Vector3::InParam v, float s)
     // floatRecip = 1/s; broadcast; vmaddfp(v, reciprocal, 0).
     const float lfRecip = 1.0f / s;
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfRecip;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfRecip;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfRecip;
+    r.mV.v[0] = v.mV.v[0] * lfRecip;
+    r.mV.v[1] = v.mV.v[1] * lfRecip;
+    r.mV.v[2] = v.mV.v[2] * lfRecip;
     return r;
 }
 
@@ -195,21 +195,21 @@ template<VectorAxis INDEX>
 inline Vector3 Divide(Vector3::InParam v, VecFloatRef<INDEX> s)
 {
     // splattedAxis = vspltw(s.mV, INDEX); reciprocal = 1/splattedAxis; vmaddfp(v, recip, 0).
-    const float lfRecip = 1.0f / s.mV.mafLane[INDEX];
+    const float lfRecip = 1.0f / s.mV.v[INDEX];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfRecip;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfRecip;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfRecip;
+    r.mV.v[0] = v.mV.v[0] * lfRecip;
+    r.mV.v[1] = v.mV.v[1] * lfRecip;
+    r.mV.v[2] = v.mV.v[2] * lfRecip;
     return r;
 }
 
 inline Vector3 Divide(Vector3::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float lfRecip = 1.0f / s.mV.mafLane[s.mIndex];
+    const float lfRecip = 1.0f / s.mV.v[s.mIndex];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfRecip;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfRecip;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfRecip;
+    r.mV.v[0] = v.mV.v[0] * lfRecip;
+    r.mV.v[1] = v.mV.v[1] * lfRecip;
+    r.mV.v[2] = v.mV.v[2] * lfRecip;
     return r;
 }
 
@@ -220,9 +220,9 @@ inline Vector3 Divide(Vector3::InParam v, VecFloatRefIndex::InParam s)
 inline VecFloat Dot(Vector3::InParam a, Vector3::InParam b)
 {
     // xx_yy_zz = vmaddfp(a,b,0); then vsldoi rotates and vaddfp sums X+Y+Z; vspltw lane0.
-    const float lfDot = a.mV.mafLane[0] * b.mV.mafLane[0]
-                      + a.mV.mafLane[1] * b.mV.mafLane[1]
-                      + a.mV.mafLane[2] * b.mV.mafLane[2];
+    const float lfDot = a.mV.v[0] * b.mV.v[0]
+                      + a.mV.v[1] * b.mV.v[1]
+                      + a.mV.v[2] * b.mV.v[2];
     return VecFloat(lfDot);
 }
 
@@ -231,12 +231,12 @@ inline Vector3 Cross(Vector3::InParam a, Vector3::InParam b)
     // gCrossProductPermuteConstant rotates lanes to [Y,Z,X]. The console builds
     //   a*perm(b) - perm(a)*b   then permutes the result back, which is exactly the
     //   y*z-z*y / z*x-x*z / x*y-y*x cross product.
-    const float ax = a.mV.mafLane[0], ay = a.mV.mafLane[1], az = a.mV.mafLane[2];
-    const float bx = b.mV.mafLane[0], by = b.mV.mafLane[1], bz = b.mV.mafLane[2];
+    const float ax = a.mV.v[0], ay = a.mV.v[1], az = a.mV.v[2];
+    const float bx = b.mV.v[0], by = b.mV.v[1], bz = b.mV.v[2];
     Vector3 r;
-    r.mV.mafLane[0] = ay * bz - az * by;
-    r.mV.mafLane[1] = az * bx - ax * bz;
-    r.mV.mafLane[2] = ax * by - ay * bx;
+    r.mV.v[0] = ay * bz - az * by;
+    r.mV.v[1] = az * bx - ax * bz;
+    r.mV.v[2] = ax * by - ay * bx;
     return r;
 }
 
@@ -247,18 +247,18 @@ inline Vector3 Cross(Vector3::InParam a, Vector3::InParam b)
 inline VecFloat MagnitudeSquared(Vector3::InParam v)
 {
     // dot(v,v) reduced over X+Y+Z, splatted.
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     return VecFloat(lfDot);
 }
 
 inline VecFloat MagnitudeRecip(Vector3::InParam v)
 {
     // dotproduct = |v|^2 ; recipSqrt = 1/sqrt(dotproduct) (vrsqrtefp + Newton).
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     return VecFloat(1.0f / sqrtf(lfDot));
 }
 
@@ -266,9 +266,9 @@ inline VecFloat Magnitude(Vector3::InParam v)
 {
     // dotproduct = |v|^2 ; result = dotproduct * (1/sqrt(dotproduct)) == sqrt(dotproduct);
     // vsel guards: a zero dot yields zero (avoids 0 * inf from the reciprocal estimate).
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * (1.0f / sqrtf(lfDot)));
 }
 
@@ -279,42 +279,42 @@ inline VecFloat Magnitude(Vector3::InParam v)
 inline Vector3 NormalizeEstimate(Vector3::InParam v)
 {
     // temp = vrsqrtefp(dot) (raw estimate, no Newton refine); vmaddfp(v, temp, 0).
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     const float lfScale = 1.0f / sqrtf(lfDot);
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfScale;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfScale;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfScale;
+    r.mV.v[0] = v.mV.v[0] * lfScale;
+    r.mV.v[1] = v.mV.v[1] * lfScale;
+    r.mV.v[2] = v.mV.v[2] * lfScale;
     return r;
 }
 
 inline Vector3 NormalizeFast(Vector3::InParam v)
 {
     // temp = 1/sqrt(dot) (estimate + one Newton step); vmaddfp(v, temp, 0).
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     const float lfScale = 1.0f / sqrtf(lfDot);
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfScale;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfScale;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfScale;
+    r.mV.v[0] = v.mV.v[0] * lfScale;
+    r.mV.v[1] = v.mV.v[1] * lfScale;
+    r.mV.v[2] = v.mV.v[2] * lfScale;
     return r;
 }
 
 inline Vector3 Normalize(Vector3::InParam v)
 {
     // temp = 1/sqrt(dot) (estimate + two Newton steps); vmaddfp(v, temp, 0).
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     const float lfScale = 1.0f / sqrtf(lfDot);
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfScale;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfScale;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfScale;
+    r.mV.v[0] = v.mV.v[0] * lfScale;
+    r.mV.v[1] = v.mV.v[1] * lfScale;
+    r.mV.v[2] = v.mV.v[2] * lfScale;
     return r;
 }
 
@@ -322,14 +322,14 @@ inline Vector3 Normalize(Vector3::InParam v, VecFloat& magnitude)
 {
     // one_over_rqrt = 1/sqrt(dot); normalized = v * one_over_rqrt;
     // result_mag = dot * one_over_rqrt == |v| ; vsel guards a zero-length input to mag 0.
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     const float lfScale = 1.0f / sqrtf(lfDot);
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] * lfScale;
-    r.mV.mafLane[1] = v.mV.mafLane[1] * lfScale;
-    r.mV.mafLane[2] = v.mV.mafLane[2] * lfScale;
+    r.mV.v[0] = v.mV.v[0] * lfScale;
+    r.mV.v[1] = v.mV.v[1] * lfScale;
+    r.mV.v[2] = v.mV.v[2] * lfScale;
     magnitude = VecFloat(lfDot == 0.0f ? 0.0f : lfDot * lfScale);
     return r;
 }
@@ -337,13 +337,13 @@ inline Vector3 Normalize(Vector3::InParam v, VecFloat& magnitude)
 inline VecFloat NormalizeReturnMagnitude(Vector3::InParam v, Vector3& result)
 {
     // Same as Normalize(v, mag) but returns the magnitude and writes the unit vector out.
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     const float lfScale = 1.0f / sqrtf(lfDot);
-    result.mV.mafLane[0] = v.mV.mafLane[0] * lfScale;
-    result.mV.mafLane[1] = v.mV.mafLane[1] * lfScale;
-    result.mV.mafLane[2] = v.mV.mafLane[2] * lfScale;
+    result.mV.v[0] = v.mV.v[0] * lfScale;
+    result.mV.v[1] = v.mV.v[1] * lfScale;
+    result.mV.v[2] = v.mV.v[2] * lfScale;
     return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * lfScale);
 }
 
@@ -363,11 +363,11 @@ VecFloat AngleBetweenVectors(Vector3::InParam v0, Vector3::InParam v1, Vector3::
 inline Vector3 Lerp(Vector3::InParam v0, Vector3::InParam v1, VecFloat::InParam t)
 {
     // temp = vsubfp(v1,v0); ret = vmaddfp(temp, t, v0) == v0 + (v1-v0)*t.
-    const float lfT = t.mV.mafLane[VectorAxisX];
+    const float lfT = t.mV.v[VectorAxisX];
     Vector3 r;
-    r.mV.mafLane[0] = (v1.mV.mafLane[0] - v0.mV.mafLane[0]) * lfT + v0.mV.mafLane[0];
-    r.mV.mafLane[1] = (v1.mV.mafLane[1] - v0.mV.mafLane[1]) * lfT + v0.mV.mafLane[1];
-    r.mV.mafLane[2] = (v1.mV.mafLane[2] - v0.mV.mafLane[2]) * lfT + v0.mV.mafLane[2];
+    r.mV.v[0] = (v1.mV.v[0] - v0.mV.v[0]) * lfT + v0.mV.v[0];
+    r.mV.v[1] = (v1.mV.v[1] - v0.mV.v[1]) * lfT + v0.mV.v[1];
+    r.mV.v[2] = (v1.mV.v[2] - v0.mV.v[2]) * lfT + v0.mV.v[2];
     return r;
 }
 
@@ -397,9 +397,9 @@ inline Vector3 Negate(Vector3::InParam v)
 {
     // vxor(v, signMask): flip the sign bit of every lane.
     Vector3 r;
-    r.mV.mafLane[0] = -v.mV.mafLane[0];
-    r.mV.mafLane[1] = -v.mV.mafLane[1];
-    r.mV.mafLane[2] = -v.mV.mafLane[2];
+    r.mV.v[0] = -v.mV.v[0];
+    r.mV.v[1] = -v.mV.v[1];
+    r.mV.v[2] = -v.mV.v[2];
     return r;
 }
 
@@ -407,9 +407,9 @@ inline Vector3 Min(Vector3::InParam v0, Vector3::InParam v1)
 {
     // vminfp(v0,v1)
     Vector3 r;
-    r.mV.mafLane[0] = v0.mV.mafLane[0] < v1.mV.mafLane[0] ? v0.mV.mafLane[0] : v1.mV.mafLane[0];
-    r.mV.mafLane[1] = v0.mV.mafLane[1] < v1.mV.mafLane[1] ? v0.mV.mafLane[1] : v1.mV.mafLane[1];
-    r.mV.mafLane[2] = v0.mV.mafLane[2] < v1.mV.mafLane[2] ? v0.mV.mafLane[2] : v1.mV.mafLane[2];
+    r.mV.v[0] = v0.mV.v[0] < v1.mV.v[0] ? v0.mV.v[0] : v1.mV.v[0];
+    r.mV.v[1] = v0.mV.v[1] < v1.mV.v[1] ? v0.mV.v[1] : v1.mV.v[1];
+    r.mV.v[2] = v0.mV.v[2] < v1.mV.v[2] ? v0.mV.v[2] : v1.mV.v[2];
     return r;
 }
 
@@ -417,9 +417,9 @@ inline Vector3 Max(Vector3::InParam v0, Vector3::InParam v1)
 {
     // vmaxfp(v0,v1)
     Vector3 r;
-    r.mV.mafLane[0] = v0.mV.mafLane[0] > v1.mV.mafLane[0] ? v0.mV.mafLane[0] : v1.mV.mafLane[0];
-    r.mV.mafLane[1] = v0.mV.mafLane[1] > v1.mV.mafLane[1] ? v0.mV.mafLane[1] : v1.mV.mafLane[1];
-    r.mV.mafLane[2] = v0.mV.mafLane[2] > v1.mV.mafLane[2] ? v0.mV.mafLane[2] : v1.mV.mafLane[2];
+    r.mV.v[0] = v0.mV.v[0] > v1.mV.v[0] ? v0.mV.v[0] : v1.mV.v[0];
+    r.mV.v[1] = v0.mV.v[1] > v1.mV.v[1] ? v0.mV.v[1] : v1.mV.v[1];
+    r.mV.v[2] = v0.mV.v[2] > v1.mV.v[2] ? v0.mV.v[2] : v1.mV.v[2];
     return r;
 }
 
@@ -433,9 +433,9 @@ inline Vector3 Abs(Vector3::InParam v)
 {
     // vandc(v, signBitMask): clear the sign bit of every lane.
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] < 0.0f ? -v.mV.mafLane[0] : v.mV.mafLane[0];
-    r.mV.mafLane[1] = v.mV.mafLane[1] < 0.0f ? -v.mV.mafLane[1] : v.mV.mafLane[1];
-    r.mV.mafLane[2] = v.mV.mafLane[2] < 0.0f ? -v.mV.mafLane[2] : v.mV.mafLane[2];
+    r.mV.v[0] = v.mV.v[0] < 0.0f ? -v.mV.v[0] : v.mV.v[0];
+    r.mV.v[1] = v.mV.v[1] < 0.0f ? -v.mV.v[1] : v.mV.v[1];
+    r.mV.v[2] = v.mV.v[2] < 0.0f ? -v.mV.v[2] : v.mV.v[2];
     return r;
 }
 
@@ -459,30 +459,30 @@ inline Vector3 Abs(Vector3::InParam v)
 
 inline Vector3& operator *= (Vector3& v, VecFloat::InParam a)
 {
-    const float s = a.mV.mafLane[VectorAxisX];
-    v.mV.mafLane[0] *= s; v.mV.mafLane[1] *= s; v.mV.mafLane[2] *= s;
+    const float s = a.mV.v[VectorAxisX];
+    v.mV.v[0] *= s; v.mV.v[1] *= s; v.mV.v[2] *= s;
     return v;
 }
 
 inline Vector3& operator /= (Vector3& v, VecFloat::InParam a)
 {
-    const float recip = 1.0f / a.mV.mafLane[VectorAxisX];
-    v.mV.mafLane[0] *= recip; v.mV.mafLane[1] *= recip; v.mV.mafLane[2] *= recip;
+    const float recip = 1.0f / a.mV.v[VectorAxisX];
+    v.mV.v[0] *= recip; v.mV.v[1] *= recip; v.mV.v[2] *= recip;
     return v;
 }
 
 inline Vector3& operator += (Vector3& v, VecFloat::InParam a)
 {
     // vaddfp(v, a): a is a broadcast so the same scalar is added to every lane.
-    const float s = a.mV.mafLane[VectorAxisX];
-    v.mV.mafLane[0] += s; v.mV.mafLane[1] += s; v.mV.mafLane[2] += s;
+    const float s = a.mV.v[VectorAxisX];
+    v.mV.v[0] += s; v.mV.v[1] += s; v.mV.v[2] += s;
     return v;
 }
 
 inline Vector3& operator -= (Vector3& v, VecFloat::InParam a)
 {
-    const float s = a.mV.mafLane[VectorAxisX];
-    v.mV.mafLane[0] -= s; v.mV.mafLane[1] -= s; v.mV.mafLane[2] -= s;
+    const float s = a.mV.v[VectorAxisX];
+    v.mV.v[0] -= s; v.mV.v[1] -= s; v.mV.v[2] -= s;
     return v;
 }
 
@@ -492,21 +492,21 @@ inline Vector3 operator / (Vector3::InParam v, VecFloat::InParam s) { return Div
 
 inline Vector3 operator + (Vector3::InParam v, VecFloat::InParam s)
 {
-    const float a = s.mV.mafLane[VectorAxisX];
+    const float a = s.mV.v[VectorAxisX];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] + a;
-    r.mV.mafLane[1] = v.mV.mafLane[1] + a;
-    r.mV.mafLane[2] = v.mV.mafLane[2] + a;
+    r.mV.v[0] = v.mV.v[0] + a;
+    r.mV.v[1] = v.mV.v[1] + a;
+    r.mV.v[2] = v.mV.v[2] + a;
     return r;
 }
 
 inline Vector3 operator - (Vector3::InParam v, VecFloat::InParam s)
 {
-    const float a = s.mV.mafLane[VectorAxisX];
+    const float a = s.mV.v[VectorAxisX];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] - a;
-    r.mV.mafLane[1] = v.mV.mafLane[1] - a;
-    r.mV.mafLane[2] = v.mV.mafLane[2] - a;
+    r.mV.v[0] = v.mV.v[0] - a;
+    r.mV.v[1] = v.mV.v[1] - a;
+    r.mV.v[2] = v.mV.v[2] - a;
     return r;
 }
 
@@ -515,11 +515,11 @@ inline Vector3 operator + (VecFloat::InParam s, Vector3::InParam v) { return v +
 inline Vector3 operator - (VecFloat::InParam s, Vector3::InParam v)
 {
     // vsubfp(s, v): scalar minus each lane.
-    const float a = s.mV.mafLane[VectorAxisX];
+    const float a = s.mV.v[VectorAxisX];
     Vector3 r;
-    r.mV.mafLane[0] = a - v.mV.mafLane[0];
-    r.mV.mafLane[1] = a - v.mV.mafLane[1];
-    r.mV.mafLane[2] = a - v.mV.mafLane[2];
+    r.mV.v[0] = a - v.mV.v[0];
+    r.mV.v[1] = a - v.mV.v[1];
+    r.mV.v[2] = a - v.mV.v[2];
     return r;
 }
 
@@ -527,14 +527,14 @@ inline Vector3 operator - (VecFloat::InParam s, Vector3::InParam v)
 
 inline Vector3& operator *= (Vector3& v, float s)
 {
-    v.mV.mafLane[0] *= s; v.mV.mafLane[1] *= s; v.mV.mafLane[2] *= s;
+    v.mV.v[0] *= s; v.mV.v[1] *= s; v.mV.v[2] *= s;
     return v;
 }
 
 inline Vector3& operator /= (Vector3& v, float s)
 {
     const float recip = 1.0f / s;
-    v.mV.mafLane[0] *= recip; v.mV.mafLane[1] *= recip; v.mV.mafLane[2] *= recip;
+    v.mV.v[0] *= recip; v.mV.v[1] *= recip; v.mV.v[2] *= recip;
     return v;
 }
 
@@ -545,18 +545,18 @@ inline Vector3 operator / (Vector3::InParam v, float s) { return Divide(v, s); }
 inline Vector3 operator + (Vector3::InParam v, float s)
 {
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] + s;
-    r.mV.mafLane[1] = v.mV.mafLane[1] + s;
-    r.mV.mafLane[2] = v.mV.mafLane[2] + s;
+    r.mV.v[0] = v.mV.v[0] + s;
+    r.mV.v[1] = v.mV.v[1] + s;
+    r.mV.v[2] = v.mV.v[2] + s;
     return r;
 }
 
 inline Vector3 operator - (Vector3::InParam v, float s)
 {
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] - s;
-    r.mV.mafLane[1] = v.mV.mafLane[1] - s;
-    r.mV.mafLane[2] = v.mV.mafLane[2] - s;
+    r.mV.v[0] = v.mV.v[0] - s;
+    r.mV.v[1] = v.mV.v[1] - s;
+    r.mV.v[2] = v.mV.v[2] - s;
     return r;
 }
 
@@ -565,9 +565,9 @@ inline Vector3 operator + (float s, Vector3::InParam v) { return v + s; }
 inline Vector3 operator - (float s, Vector3::InParam v)
 {
     Vector3 r;
-    r.mV.mafLane[0] = s - v.mV.mafLane[0];
-    r.mV.mafLane[1] = s - v.mV.mafLane[1];
-    r.mV.mafLane[2] = s - v.mV.mafLane[2];
+    r.mV.v[0] = s - v.mV.v[0];
+    r.mV.v[1] = s - v.mV.v[1];
+    r.mV.v[2] = s - v.mV.v[2];
     return r;
 }
 
@@ -576,32 +576,32 @@ inline Vector3 operator - (float s, Vector3::InParam v)
 template<VectorAxis INDEX>
 inline Vector3& operator *= (Vector3& v, VecFloatRef<INDEX> a)
 {
-    const float s = a.mV.mafLane[INDEX];
-    v.mV.mafLane[0] *= s; v.mV.mafLane[1] *= s; v.mV.mafLane[2] *= s;
+    const float s = a.mV.v[INDEX];
+    v.mV.v[0] *= s; v.mV.v[1] *= s; v.mV.v[2] *= s;
     return v;
 }
 
 template<VectorAxis INDEX>
 inline Vector3& operator /= (Vector3& v, VecFloatRef<INDEX> a)
 {
-    const float recip = 1.0f / a.mV.mafLane[INDEX];
-    v.mV.mafLane[0] *= recip; v.mV.mafLane[1] *= recip; v.mV.mafLane[2] *= recip;
+    const float recip = 1.0f / a.mV.v[INDEX];
+    v.mV.v[0] *= recip; v.mV.v[1] *= recip; v.mV.v[2] *= recip;
     return v;
 }
 
 template<VectorAxis INDEX>
 inline Vector3& operator += (Vector3& v, VecFloatRef<INDEX> a)
 {
-    const float s = a.mV.mafLane[INDEX];
-    v.mV.mafLane[0] += s; v.mV.mafLane[1] += s; v.mV.mafLane[2] += s;
+    const float s = a.mV.v[INDEX];
+    v.mV.v[0] += s; v.mV.v[1] += s; v.mV.v[2] += s;
     return v;
 }
 
 template<VectorAxis INDEX>
 inline Vector3& operator -= (Vector3& v, VecFloatRef<INDEX> a)
 {
-    const float s = a.mV.mafLane[INDEX];
-    v.mV.mafLane[0] -= s; v.mV.mafLane[1] -= s; v.mV.mafLane[2] -= s;
+    const float s = a.mV.v[INDEX];
+    v.mV.v[0] -= s; v.mV.v[1] -= s; v.mV.v[2] -= s;
     return v;
 }
 
@@ -615,22 +615,22 @@ inline Vector3 operator / (Vector3::InParam v, VecFloatRef<INDEX> s) { return Di
 template<VectorAxis INDEX>
 inline Vector3 operator + (Vector3::InParam v, VecFloatRef<INDEX> s)
 {
-    const float a = s.mV.mafLane[INDEX];
+    const float a = s.mV.v[INDEX];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] + a;
-    r.mV.mafLane[1] = v.mV.mafLane[1] + a;
-    r.mV.mafLane[2] = v.mV.mafLane[2] + a;
+    r.mV.v[0] = v.mV.v[0] + a;
+    r.mV.v[1] = v.mV.v[1] + a;
+    r.mV.v[2] = v.mV.v[2] + a;
     return r;
 }
 
 template<VectorAxis INDEX>
 inline Vector3 operator - (Vector3::InParam v, VecFloatRef<INDEX> s)
 {
-    const float a = s.mV.mafLane[INDEX];
+    const float a = s.mV.v[INDEX];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] - a;
-    r.mV.mafLane[1] = v.mV.mafLane[1] - a;
-    r.mV.mafLane[2] = v.mV.mafLane[2] - a;
+    r.mV.v[0] = v.mV.v[0] - a;
+    r.mV.v[1] = v.mV.v[1] - a;
+    r.mV.v[2] = v.mV.v[2] - a;
     return r;
 }
 
@@ -640,11 +640,11 @@ inline Vector3 operator + (VecFloatRef<INDEX> s, Vector3::InParam v) { return v 
 template<VectorAxis INDEX>
 inline Vector3 operator - (VecFloatRef<INDEX> s, Vector3::InParam v)
 {
-    const float a = s.mV.mafLane[INDEX];
+    const float a = s.mV.v[INDEX];
     Vector3 r;
-    r.mV.mafLane[0] = a - v.mV.mafLane[0];
-    r.mV.mafLane[1] = a - v.mV.mafLane[1];
-    r.mV.mafLane[2] = a - v.mV.mafLane[2];
+    r.mV.v[0] = a - v.mV.v[0];
+    r.mV.v[1] = a - v.mV.v[1];
+    r.mV.v[2] = a - v.mV.v[2];
     return r;
 }
 
@@ -652,29 +652,29 @@ inline Vector3 operator - (VecFloatRef<INDEX> s, Vector3::InParam v)
 
 inline Vector3& operator *= (Vector3& v, VecFloatRefIndex::InParam a)
 {
-    const float s = a.mV.mafLane[a.mIndex];
-    v.mV.mafLane[0] *= s; v.mV.mafLane[1] *= s; v.mV.mafLane[2] *= s;
+    const float s = a.mV.v[a.mIndex];
+    v.mV.v[0] *= s; v.mV.v[1] *= s; v.mV.v[2] *= s;
     return v;
 }
 
 inline Vector3& operator /= (Vector3& v, VecFloatRefIndex::InParam a)
 {
-    const float recip = 1.0f / a.mV.mafLane[a.mIndex];
-    v.mV.mafLane[0] *= recip; v.mV.mafLane[1] *= recip; v.mV.mafLane[2] *= recip;
+    const float recip = 1.0f / a.mV.v[a.mIndex];
+    v.mV.v[0] *= recip; v.mV.v[1] *= recip; v.mV.v[2] *= recip;
     return v;
 }
 
 inline Vector3& operator += (Vector3& v, VecFloatRefIndex::InParam a)
 {
-    const float s = a.mV.mafLane[a.mIndex];
-    v.mV.mafLane[0] += s; v.mV.mafLane[1] += s; v.mV.mafLane[2] += s;
+    const float s = a.mV.v[a.mIndex];
+    v.mV.v[0] += s; v.mV.v[1] += s; v.mV.v[2] += s;
     return v;
 }
 
 inline Vector3& operator -= (Vector3& v, VecFloatRefIndex::InParam a)
 {
-    const float s = a.mV.mafLane[a.mIndex];
-    v.mV.mafLane[0] -= s; v.mV.mafLane[1] -= s; v.mV.mafLane[2] -= s;
+    const float s = a.mV.v[a.mIndex];
+    v.mV.v[0] -= s; v.mV.v[1] -= s; v.mV.v[2] -= s;
     return v;
 }
 
@@ -684,21 +684,21 @@ inline Vector3 operator / (Vector3::InParam v, VecFloatRefIndex::InParam s) { re
 
 inline Vector3 operator + (Vector3::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float a = s.mV.mafLane[s.mIndex];
+    const float a = s.mV.v[s.mIndex];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] + a;
-    r.mV.mafLane[1] = v.mV.mafLane[1] + a;
-    r.mV.mafLane[2] = v.mV.mafLane[2] + a;
+    r.mV.v[0] = v.mV.v[0] + a;
+    r.mV.v[1] = v.mV.v[1] + a;
+    r.mV.v[2] = v.mV.v[2] + a;
     return r;
 }
 
 inline Vector3 operator - (Vector3::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float a = s.mV.mafLane[s.mIndex];
+    const float a = s.mV.v[s.mIndex];
     Vector3 r;
-    r.mV.mafLane[0] = v.mV.mafLane[0] - a;
-    r.mV.mafLane[1] = v.mV.mafLane[1] - a;
-    r.mV.mafLane[2] = v.mV.mafLane[2] - a;
+    r.mV.v[0] = v.mV.v[0] - a;
+    r.mV.v[1] = v.mV.v[1] - a;
+    r.mV.v[2] = v.mV.v[2] - a;
     return r;
 }
 
@@ -706,11 +706,11 @@ inline Vector3 operator + (VecFloatRefIndex::InParam s, Vector3::InParam v) { re
 
 inline Vector3 operator - (VecFloatRefIndex::InParam s, Vector3::InParam v)
 {
-    const float a = s.mV.mafLane[s.mIndex];
+    const float a = s.mV.v[s.mIndex];
     Vector3 r;
-    r.mV.mafLane[0] = a - v.mV.mafLane[0];
-    r.mV.mafLane[1] = a - v.mV.mafLane[1];
-    r.mV.mafLane[2] = a - v.mV.mafLane[2];
+    r.mV.v[0] = a - v.mV.v[0];
+    r.mV.v[1] = a - v.mV.v[1];
+    r.mV.v[2] = a - v.mV.v[2];
     return r;
 }
 
@@ -722,33 +722,33 @@ inline Vector3 operator - (Vector3::InParam v) { return Negate(v); }
 
 inline Vector3& operator += (Vector3& v, Vector3::InParam b)
 {
-    v.mV.mafLane[0] += b.mV.mafLane[0];
-    v.mV.mafLane[1] += b.mV.mafLane[1];
-    v.mV.mafLane[2] += b.mV.mafLane[2];
+    v.mV.v[0] += b.mV.v[0];
+    v.mV.v[1] += b.mV.v[1];
+    v.mV.v[2] += b.mV.v[2];
     return v;
 }
 
 inline Vector3& operator -= (Vector3& v, Vector3::InParam b)
 {
-    v.mV.mafLane[0] -= b.mV.mafLane[0];
-    v.mV.mafLane[1] -= b.mV.mafLane[1];
-    v.mV.mafLane[2] -= b.mV.mafLane[2];
+    v.mV.v[0] -= b.mV.v[0];
+    v.mV.v[1] -= b.mV.v[1];
+    v.mV.v[2] -= b.mV.v[2];
     return v;
 }
 
 inline Vector3& operator *= (Vector3& v, Vector3::InParam b)
 {
-    v.mV.mafLane[0] *= b.mV.mafLane[0];
-    v.mV.mafLane[1] *= b.mV.mafLane[1];
-    v.mV.mafLane[2] *= b.mV.mafLane[2];
+    v.mV.v[0] *= b.mV.v[0];
+    v.mV.v[1] *= b.mV.v[1];
+    v.mV.v[2] *= b.mV.v[2];
     return v;
 }
 
 inline Vector3& operator /= (Vector3& v, Vector3::InParam b)
 {
-    v.mV.mafLane[0] /= b.mV.mafLane[0];
-    v.mV.mafLane[1] /= b.mV.mafLane[1];
-    v.mV.mafLane[2] /= b.mV.mafLane[2];
+    v.mV.v[0] /= b.mV.v[0];
+    v.mV.v[1] /= b.mV.v[1];
+    v.mV.v[2] /= b.mV.v[2];
     return v;
 }
 
@@ -756,9 +756,9 @@ inline Vector3 operator * (Vector3::InParam a, Vector3::InParam b) { return Mult
 inline Vector3 operator / (Vector3::InParam a, Vector3::InParam b)
 {
     Vector3 r;
-    r.mV.mafLane[0] = a.mV.mafLane[0] / b.mV.mafLane[0];
-    r.mV.mafLane[1] = a.mV.mafLane[1] / b.mV.mafLane[1];
-    r.mV.mafLane[2] = a.mV.mafLane[2] / b.mV.mafLane[2];
+    r.mV.v[0] = a.mV.v[0] / b.mV.v[0];
+    r.mV.v[1] = a.mV.v[1] / b.mV.v[1];
+    r.mV.v[2] = a.mV.v[2] / b.mV.v[2];
     return r;
 }
 inline Vector3 operator - (Vector3::InParam a, Vector3::InParam b) { return Subtract(a, b); }

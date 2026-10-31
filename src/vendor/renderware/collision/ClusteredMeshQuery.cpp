@@ -177,8 +177,8 @@ AABBox AA(const ClusteredMesh* lpMesh, u32 auClusterIndex, u32 auUnitOffset)
     const f32 lfGranularity = lpMesh->mfVertexCompressionGranularity;
 
     AABBox lResult;
-    f32* lafResultMin = lResult.mMin.mV.mafLane;
-    f32* lafResultMax = lResult.mMax.mV.mafLane;
+    f32* lafResultMin = lResult.mMin.mV.v;
+    f32* lafResultMax = lResult.mMax.mV.v;
 
     if ((lpUnit[0] & 0xFu) == KU_UNIT_TYPE_QUAD)
     {
