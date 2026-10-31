@@ -4,6 +4,7 @@
 #include "SDKs/EATech/include/rw/math/vpu/vector3.h"
 #include "SDKs/EATech/include/rw/math/vpu/vector4.h"
 #include "SDKs/EATech/include/rw/math/vpu/matrix33.h"
+#include "SDKs/EATech/include/rw/math/vpu/vector3plus.h"
 
 // Shared rwmath type entry point. Vector3/4 use their genuine SDK class homes above.
 // Vector2 remains the separately recovered VPU16 type; packed FPU/Basic2D pairs
@@ -41,17 +42,6 @@ namespace vpu
         float x, y, z, w;
         void SetIdentity() { x = y = z = 0.0f; w = 1.0f; }
     };
-    struct CGS_ALIGN(16) Vector3Plus
-    {
-        float x, y, z, w;
-
-        void SetZero() { x = y = z = w = 0.0f; }
-        Vector3 GetVector3() const { return Vector3(x, y, z); }
-        void SetVector3(Vector3 lVector) { x = lVector.mV.x; y = lVector.mV.y; z = lVector.mV.z; }
-        float GetPlus() const { return w; }
-        void SetPlus(float lfValue) { w = lfValue; }
-    }; // w: the "plus" lane
-
     // Row-major; the last row of an affine is implicit (0,0,0,1) but still stored.
     struct CGS_ALIGN(16) Matrix44
     {

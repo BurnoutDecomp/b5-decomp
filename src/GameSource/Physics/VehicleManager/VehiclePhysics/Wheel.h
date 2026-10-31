@@ -173,8 +173,8 @@ namespace Vehicle
         void Attach()               { mu8State = 0; }
         void Twist()                { mu8State = 1; mIntegrationVariables.mV.x = 0.0f; }
         void Detach()               { mu8State = 2; }
-        void SetTwistAmount(f32 lfAmount) { mStreamedPositionPlusTwistAmount.w = lfAmount; }
-        f32  GetTwistAmount() const       { return mStreamedPositionPlusTwistAmount.w; }
+        void SetTwistAmount(f32 lfAmount) { mStreamedPositionPlusTwistAmount.mV.w = lfAmount; }
+        f32  GetTwistAmount() const       { return mStreamedPositionPlusTwistAmount.mV.w; }
 
         // @0x825D6C08: stamp this frame's road-contact result (on-ground / close-to-ground flags,
         // position, normal, two collision-tag halfwords, line distance) and derive mbHasTraction
