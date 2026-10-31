@@ -47,7 +47,7 @@ namespace Vehicle
         CGS_ASSERT(lpafWheelRadii != 0,   "lpafWheelRadii != NULL");
 
         // Sum the four streamed wheel positions (the `do { v12 += lvx128 } while (v15<4)` loop).
-        Vector3 lvWheelPosSum = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3 lvWheelPosSum(0.0f, 0.0f, 0.0f);
         for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             lvWheelPosSum = vpu::Add(lvWheelPosSum, lpWheelPositions[liWheel]);
 
