@@ -30,39 +30,39 @@ namespace vpu
 inline void Vector4::Set(float x, float y, float z, float w)
 {
     // VectorIntrinsicUnion u; u.scalarFloat[0..3] = x,y,z,w; mV = u.vector;
-    mV.mafLane[0] = x;
-    mV.mafLane[1] = y;
-    mV.mafLane[2] = z;
-    mV.mafLane[3] = w;
+    mV.v[0] = x;
+    mV.v[1] = y;
+    mV.v[2] = z;
+    mV.v[3] = w;
 }
 
 inline void Vector4::Set(VecFloat::InParam x, VecFloat::InParam y, VecFloat::InParam z, VecFloat::InParam w)
 {
     // 2x vperm + vsldoi assemble: lane0<-x.X, lane1<-y.Y, lane2<-z.Z, lane3<-w.W.
-    mV.mafLane[0] = x.mV.mafLane[VectorAxisX];
-    mV.mafLane[1] = y.mV.mafLane[VectorAxisY];
-    mV.mafLane[2] = z.mV.mafLane[VectorAxisZ];
-    mV.mafLane[3] = w.mV.mafLane[VectorAxisW];
+    mV.v[0] = x.mV.v[VectorAxisX];
+    mV.v[1] = y.mV.v[VectorAxisY];
+    mV.v[2] = z.mV.v[VectorAxisZ];
+    mV.v[3] = w.mV.v[VectorAxisW];
 }
 
 inline void Vector4::Set(VecFloatRefIndex::InParam x, VecFloatRefIndex::InParam y,
                          VecFloatRefIndex::InParam z, VecFloatRefIndex::InParam w)
 {
     // broadcast each referenced lane then the same assemble.
-    mV.mafLane[0] = x.mV.mafLane[x.mIndex];
-    mV.mafLane[1] = y.mV.mafLane[y.mIndex];
-    mV.mafLane[2] = z.mV.mafLane[z.mIndex];
-    mV.mafLane[3] = w.mV.mafLane[w.mIndex];
+    mV.v[0] = x.mV.v[x.mIndex];
+    mV.v[1] = y.mV.v[y.mIndex];
+    mV.v[2] = z.mV.v[z.mIndex];
+    mV.v[3] = w.mV.v[w.mIndex];
 }
 
 template<VectorAxis XSRC_INDEX, VectorAxis YSRC_INDEX, VectorAxis ZSRC_INDEX, VectorAxis WSRC_INDEX>
 inline void Vector4::Set(VecFloatRef<XSRC_INDEX> x, VecFloatRef<YSRC_INDEX> y,
                          VecFloatRef<ZSRC_INDEX> z, VecFloatRef<WSRC_INDEX> w)
 {
-    mV.mafLane[0] = x.mV.mafLane[XSRC_INDEX];
-    mV.mafLane[1] = y.mV.mafLane[YSRC_INDEX];
-    mV.mafLane[2] = z.mV.mafLane[ZSRC_INDEX];
-    mV.mafLane[3] = w.mV.mafLane[WSRC_INDEX];
+    mV.v[0] = x.mV.v[XSRC_INDEX];
+    mV.v[1] = y.mV.v[YSRC_INDEX];
+    mV.v[2] = z.mV.v[ZSRC_INDEX];
+    mV.v[3] = w.mV.v[WSRC_INDEX];
 }
 
 // =====================================================================================
@@ -71,24 +71,24 @@ inline void Vector4::Set(VecFloatRef<XSRC_INDEX> x, VecFloatRef<YSRC_INDEX> y,
 
 inline void Vector4::SetComponent(int i, float value)
 {
-    mV.mafLane[i] = value;
+    mV.v[i] = value;
 }
 
 inline void Vector4::SetComponent(int i, VecFloat::InParam value)
 {
     // vperm gSwizzleStoreConstants[i*4 + X].
-    mV.mafLane[i] = value.mV.mafLane[VectorAxisX];
+    mV.v[i] = value.mV.v[VectorAxisX];
 }
 
 inline void Vector4::SetComponent(int i, VecFloatRefIndex::InParam value)
 {
-    mV.mafLane[i] = value.mV.mafLane[value.mIndex];
+    mV.v[i] = value.mV.v[value.mIndex];
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetComponent(int i, VecFloatRef<INDEX> value)
 {
-    mV.mafLane[i] = value.mV.mafLane[INDEX];
+    mV.v[i] = value.mV.v[INDEX];
 }
 
 inline void Vector4::SetX(float x)
@@ -98,18 +98,18 @@ inline void Vector4::SetX(float x)
 
 inline void Vector4::SetX(VecFloat::InParam x)
 {
-    mV.mafLane[VectorAxisX] = x.mV.mafLane[VectorAxisX];
+    mV.v[VectorAxisX] = x.mV.v[VectorAxisX];
 }
 
 inline void Vector4::SetX(VecFloatRefIndex::InParam x)
 {
-    mV.mafLane[VectorAxisX] = x.mV.mafLane[x.mIndex];
+    mV.v[VectorAxisX] = x.mV.v[x.mIndex];
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetX(VecFloatRef<INDEX> x)
 {
-    mV.mafLane[VectorAxisX] = x.mV.mafLane[INDEX];
+    mV.v[VectorAxisX] = x.mV.v[INDEX];
 }
 
 inline void Vector4::SetY(float y)
@@ -119,18 +119,18 @@ inline void Vector4::SetY(float y)
 
 inline void Vector4::SetY(VecFloat::InParam y)
 {
-    mV.mafLane[VectorAxisY] = y.mV.mafLane[VectorAxisX];
+    mV.v[VectorAxisY] = y.mV.v[VectorAxisX];
 }
 
 inline void Vector4::SetY(VecFloatRefIndex::InParam y)
 {
-    mV.mafLane[VectorAxisY] = y.mV.mafLane[y.mIndex];
+    mV.v[VectorAxisY] = y.mV.v[y.mIndex];
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetY(VecFloatRef<INDEX> y)
 {
-    mV.mafLane[VectorAxisY] = y.mV.mafLane[INDEX];
+    mV.v[VectorAxisY] = y.mV.v[INDEX];
 }
 
 inline void Vector4::SetZ(float z)
@@ -140,18 +140,18 @@ inline void Vector4::SetZ(float z)
 
 inline void Vector4::SetZ(VecFloat::InParam z)
 {
-    mV.mafLane[VectorAxisZ] = z.mV.mafLane[VectorAxisX];
+    mV.v[VectorAxisZ] = z.mV.v[VectorAxisX];
 }
 
 inline void Vector4::SetZ(VecFloatRefIndex::InParam z)
 {
-    mV.mafLane[VectorAxisZ] = z.mV.mafLane[z.mIndex];
+    mV.v[VectorAxisZ] = z.mV.v[z.mIndex];
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetZ(VecFloatRef<INDEX> z)
 {
-    mV.mafLane[VectorAxisZ] = z.mV.mafLane[INDEX];
+    mV.v[VectorAxisZ] = z.mV.v[INDEX];
 }
 
 inline void Vector4::SetW(float w)
@@ -161,27 +161,27 @@ inline void Vector4::SetW(float w)
 
 inline void Vector4::SetW(VecFloat::InParam w)
 {
-    mV.mafLane[VectorAxisW] = w.mV.mafLane[VectorAxisX];
+    mV.v[VectorAxisW] = w.mV.v[VectorAxisX];
 }
 
 inline void Vector4::SetW(VecFloatRefIndex::InParam w)
 {
-    mV.mafLane[VectorAxisW] = w.mV.mafLane[w.mIndex];
+    mV.v[VectorAxisW] = w.mV.v[w.mIndex];
 }
 
 template<VectorAxis INDEX>
 inline void Vector4::SetW(VecFloatRef<INDEX> w)
 {
-    mV.mafLane[VectorAxisW] = w.mV.mafLane[INDEX];
+    mV.v[VectorAxisW] = w.mV.v[INDEX];
 }
 
 inline void Vector4::SetZero()
 {
     // vspltisw(0).
-    mV.mafLane[0] = 0.0f;
-    mV.mafLane[1] = 0.0f;
-    mV.mafLane[2] = 0.0f;
-    mV.mafLane[3] = 0.0f;
+    mV.v[0] = 0.0f;
+    mV.v[1] = 0.0f;
+    mV.v[2] = 0.0f;
+    mV.v[3] = 0.0f;
 }
 
 // =====================================================================================
@@ -191,50 +191,50 @@ inline void Vector4::SetZero()
 inline Vector4::Vector4(VecFloat::InParam x, VecFloat::InParam y, VecFloat::InParam z, VecFloat::InParam w)
 {
     // mV(_asmCreateVectorAxis<X,Y,Z,W>(x.mV,y.mV,z.mV,w.mV)).
-    mV.mafLane[0] = x.mV.mafLane[VectorAxisX];
-    mV.mafLane[1] = y.mV.mafLane[VectorAxisY];
-    mV.mafLane[2] = z.mV.mafLane[VectorAxisZ];
-    mV.mafLane[3] = w.mV.mafLane[VectorAxisW];
+    mV.v[0] = x.mV.v[VectorAxisX];
+    mV.v[1] = y.mV.v[VectorAxisY];
+    mV.v[2] = z.mV.v[VectorAxisZ];
+    mV.v[3] = w.mV.v[VectorAxisW];
 }
 
 inline Vector4::Vector4(VecFloatRefIndex::InParam x, VecFloatRefIndex::InParam y,
                         VecFloatRefIndex::InParam z, VecFloatRefIndex::InParam w)
 {
-    mV.mafLane[0] = x.mV.mafLane[x.mIndex];
-    mV.mafLane[1] = y.mV.mafLane[y.mIndex];
-    mV.mafLane[2] = z.mV.mafLane[z.mIndex];
-    mV.mafLane[3] = w.mV.mafLane[w.mIndex];
+    mV.v[0] = x.mV.v[x.mIndex];
+    mV.v[1] = y.mV.v[y.mIndex];
+    mV.v[2] = z.mV.v[z.mIndex];
+    mV.v[3] = w.mV.v[w.mIndex];
 }
 
 template<VectorAxis XSRC_INDEX, VectorAxis YSRC_INDEX, VectorAxis ZSRC_INDEX, VectorAxis WSRC_INDEX>
 inline Vector4::Vector4(VecFloatRef<XSRC_INDEX> x, VecFloatRef<YSRC_INDEX> y,
                         VecFloatRef<ZSRC_INDEX> z, VecFloatRef<WSRC_INDEX> w)
 {
-    mV.mafLane[0] = x.mV.mafLane[XSRC_INDEX];
-    mV.mafLane[1] = y.mV.mafLane[YSRC_INDEX];
-    mV.mafLane[2] = z.mV.mafLane[ZSRC_INDEX];
-    mV.mafLane[3] = w.mV.mafLane[WSRC_INDEX];
+    mV.v[0] = x.mV.v[XSRC_INDEX];
+    mV.v[1] = y.mV.v[YSRC_INDEX];
+    mV.v[2] = z.mV.v[ZSRC_INDEX];
+    mV.v[3] = w.mV.v[WSRC_INDEX];
 }
 
 inline Vector4::Vector4(Vector3::InParam v3, VecFloatRefW::InParam w)
 {
     // mV(v3.mV); then VectorPermuteConstant copies w lane W into lane W.
     mV = v3.mV;
-    mV.mafLane[VectorAxisW] = w.mV.mafLane[VectorAxisW];
+    mV.v[VectorAxisW] = w.mV.v[VectorAxisW];
 }
 
 inline Vector4::Vector4(Vector3::InParam v3, VecFloatRefIndex::InParam w)
 {
     // mV(v3.mV); then vperm gSwizzleStoreConstants[W*4 + w.mIndex].
     mV = v3.mV;
-    mV.mafLane[VectorAxisW] = w.mV.mafLane[w.mIndex];
+    mV.v[VectorAxisW] = w.mV.v[w.mIndex];
 }
 
 inline Vector4::Vector4(Vector3::InParam v3, VecFloat::InParam w)
 {
     // mV(v3.mV); then VectorPermuteConstant copies w X lane into lane W.
     mV = v3.mV;
-    mV.mafLane[VectorAxisW] = w.mV.mafLane[VectorAxisX];
+    mV.v[VectorAxisW] = w.mV.v[VectorAxisX];
 }
 
 inline Vector4::Vector4(Vector3::InParam v3, const float w)
@@ -261,19 +261,19 @@ inline Vector4::Vector4()
 
 inline Vector4::Vector4(float x, float y, float z, float w)
 {
-    mV.mafLane[0] = x;
-    mV.mafLane[1] = y;
-    mV.mafLane[2] = z;
-    mV.mafLane[3] = w;
+    mV.v[0] = x;
+    mV.v[1] = y;
+    mV.v[2] = z;
+    mV.v[3] = w;
 }
 
 inline Vector4::Vector4(const float xyzw[4])
 {
     // mV(lvx(xyzw)): load 16 bytes.
-    mV.mafLane[0] = xyzw[0];
-    mV.mafLane[1] = xyzw[1];
-    mV.mafLane[2] = xyzw[2];
-    mV.mafLane[3] = xyzw[3];
+    mV.v[0] = xyzw[0];
+    mV.v[1] = xyzw[1];
+    mV.v[2] = xyzw[2];
+    mV.v[3] = xyzw[3];
 }
 
 inline Vector4::Vector4(VectorIntrinsicInParam v)

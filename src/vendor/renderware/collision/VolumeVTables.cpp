@@ -221,8 +221,8 @@ namespace
     // is a lane-for-lane copy and not a reinterpretation.
     Vec4 AsVec4(const math::vpu::Vector3& arVector)
     {
-        const Vec4 lvOut = { arVector.mV.mafLane[0], arVector.mV.mafLane[1],
-                             arVector.mV.mafLane[2], arVector.mV.mafLane[3] };
+        const Vec4 lvOut = { arVector.mV.v[0], arVector.mV.v[1],
+                             arVector.mV.v[2], arVector.mV.v[3] };
         return lvOut;
     }
 

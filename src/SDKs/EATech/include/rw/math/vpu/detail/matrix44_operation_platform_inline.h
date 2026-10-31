@@ -45,11 +45,11 @@ inline Vector4 Mult(Vector4::InParam v, Matrix44::InParam m)
     VectorIntrinsic result;
     for (int k = 0; k < 4; ++k)
     {
-        result.mafLane[k] =
-              m.xAxis.mV.mafLane[k] * v.mV.mafLane[VectorAxisX]
-            + m.yAxis.mV.mafLane[k] * v.mV.mafLane[VectorAxisY]
-            + m.zAxis.mV.mafLane[k] * v.mV.mafLane[VectorAxisZ]
-            + m.wAxis.mV.mafLane[k] * v.mV.mafLane[VectorAxisW];
+        result.v[k] =
+              m.xAxis.mV.v[k] * v.mV.v[VectorAxisX]
+            + m.yAxis.mV.v[k] * v.mV.v[VectorAxisY]
+            + m.zAxis.mV.v[k] * v.mV.v[VectorAxisZ]
+            + m.wAxis.mV.v[k] * v.mV.v[VectorAxisW];
     }
     return Vector4(result);
 }
@@ -76,16 +76,16 @@ inline Matrix44 Mult(Matrix44Affine::InParam m, Matrix44::InParam b)
 
     for (int i = 0; i < 4; ++i)
     {
-        const float mx = mRows[i]->mafLane[VectorAxisX];
-        const float my = mRows[i]->mafLane[VectorAxisY];
-        const float mz = mRows[i]->mafLane[VectorAxisZ];
+        const float mx = mRows[i]->v[VectorAxisX];
+        const float my = mRows[i]->v[VectorAxisY];
+        const float mz = mRows[i]->v[VectorAxisZ];
         for (int k = 0; k < 4; ++k)
         {
-            float acc = (i == 3) ? b.wAxis.mV.mafLane[k] : 0.0f;
-            acc += mx * b.xAxis.mV.mafLane[k];
-            acc += my * b.yAxis.mV.mafLane[k];
-            acc += mz * b.zAxis.mV.mafLane[k];
-            result[i].mafLane[k] = acc;
+            float acc = (i == 3) ? b.wAxis.mV.v[k] : 0.0f;
+            acc += mx * b.xAxis.mV.v[k];
+            acc += my * b.yAxis.mV.v[k];
+            acc += mz * b.zAxis.mV.v[k];
+            result[i].v[k] = acc;
         }
     }
     return Matrix44(result[0], result[1], result[2], result[3]);
@@ -102,7 +102,7 @@ inline Matrix44 Transpose(Matrix44::InParam m)
     {
         for (int i = 0; i < 4; ++i)    // output lane
         {
-            result[j].mafLane[i] = mRows[i]->mafLane[j];
+            result[j].v[i] = mRows[i]->v[j];
         }
     }
     return Matrix44(result[0], result[1], result[2], result[3]);

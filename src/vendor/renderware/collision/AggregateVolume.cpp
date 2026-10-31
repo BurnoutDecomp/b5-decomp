@@ -90,13 +90,13 @@ math::vpu::Vector3 AggregateVolume::GetBBoxDiag() const
     const AABBox lBox = lAggBox.Transform(&mTransform);
 
     // vsubfp: per-lane (max - min) of the transformed box, all four lanes.
-    const f32* lafMin = lBox.mMin.mV.mafLane;
-    const f32* lafMax = lBox.mMax.mV.mafLane;
+    const f32* lafMin = lBox.mMin.mV.v;
+    const f32* lafMax = lBox.mMax.mV.v;
 
     math::vpu::Vector3 lDiag;
     for (int i = 0; i < 4; ++i)
     {
-        lDiag.mV.mafLane[i] = lafMax[i] - lafMin[i];
+        lDiag.mV.v[i] = lafMax[i] - lafMin[i];
     }
     return lDiag;
 }

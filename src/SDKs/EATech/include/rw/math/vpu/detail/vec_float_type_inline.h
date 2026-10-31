@@ -52,14 +52,14 @@ inline VecFloatRefIndex::VecFloatRefIndex(const VecFloatRefIndex& v)
 inline float VecFloatRefIndex::GetFloat() const
 {
     // VectorIntrinsicUnion temp; temp.vector = mV; return temp.scalarFloat[mIndex];
-    return mV.mafLane[mIndex];
+    return mV.v[mIndex];
 }
 
 inline void VecFloatRefIndex::SetFloat(float f)
 {
     // build broadcast(f), then vperm gSwizzleStoreConstants[mIndex*4 + X]:
     //   store vf's X lane into mV's mIndex lane.  vf.x == f.
-    mV.mafLane[mIndex] = f;
+    mV.v[mIndex] = f;
 }
 
 inline const VectorIntrinsic& VecFloatRefIndex::GetVector() const
@@ -76,7 +76,7 @@ inline VecFloatRefIndex& VecFloatRefIndex::operator =(VecFloatRefIndex rhs)
 {
     // vperm gSwizzleStoreConstants[mIndex*4 + rhs.mIndex]:
     //   mV.lane[mIndex] = rhs.mV.lane[rhs.mIndex]
-    mV.mafLane[mIndex] = rhs.mV.mafLane[rhs.mIndex];
+    mV.v[mIndex] = rhs.mV.v[rhs.mIndex];
     return *this;
 }
 
@@ -84,27 +84,27 @@ template<VectorAxis INDEX>
 VecFloatRefIndex& VecFloatRefIndex::operator =(VecFloatRef<INDEX> rhs)
 {
     // vperm gSwizzleStoreConstants[mIndex*4 + INDEX]
-    mV.mafLane[mIndex] = rhs.mV.mafLane[INDEX];
+    mV.v[mIndex] = rhs.mV.v[INDEX];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator =(VecFloat::InParam rhs)
 {
     // vperm gSwizzleStoreConstants[mIndex*4 + X]:  mV.lane[mIndex] = rhs X lane
-    mV.mafLane[mIndex] = rhs.mV.mafLane[VectorAxisX];
+    mV.v[mIndex] = rhs.mV.v[VectorAxisX];
     return *this;
 }
 
 inline VecFloatRefIndex::operator float() const
 {
     // VectorIntrinsicUnion temp; temp.vector = mV; return temp.scalarFloat[mIndex];
-    return mV.mafLane[mIndex];
+    return mV.v[mIndex];
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator =(float f)
 {
     // broadcast(f) then store X lane into mV.lane[mIndex]
-    mV.mafLane[mIndex] = f;
+    mV.v[mIndex] = f;
     return *this;
 }
 
@@ -117,75 +117,55 @@ inline VecFloat::VecFloat()
     // uninitialised on the console (no body); leave mV uninitialised.
 }
 
-inline VecFloat::VecFloat(const float& v)
-{
-    // lvlx(&v) then vspltw lane0 -> broadcast scalar v to all four lanes
-    mV.mafLane[0] = v;
-    mV.mafLane[1] = v;
-    mV.mafLane[2] = v;
-    mV.mafLane[3] = v;
-}
-
 inline VecFloat::VecFloat(VectorIntrinsicInParam v, int index)
 {
     // vspltw(v, index): broadcast lane `index` of v to all four lanes.
-    const float lfValue = v.mafLane[index];
-    mV.mafLane[0] = lfValue;
-    mV.mafLane[1] = lfValue;
-    mV.mafLane[2] = lfValue;
-    mV.mafLane[3] = lfValue;
+    const float lfValue = v.v[index];
+    mV.v[0] = lfValue;
+    mV.v[1] = lfValue;
+    mV.v[2] = lfValue;
+    mV.v[3] = lfValue;
 }
 
 inline VecFloat::VecFloat(VecFloatRefIndex v)
 {
     // vspltw(v.mV, v.mIndex): broadcast the referenced lane to all four lanes.
-    const float lfValue = v.mV.mafLane[v.mIndex];
-    mV.mafLane[0] = lfValue;
-    mV.mafLane[1] = lfValue;
-    mV.mafLane[2] = lfValue;
-    mV.mafLane[3] = lfValue;
+    const float lfValue = v.mV.v[v.mIndex];
+    mV.v[0] = lfValue;
+    mV.v[1] = lfValue;
+    mV.v[2] = lfValue;
+    mV.v[3] = lfValue;
 }
 
 template<VectorAxis INDEX>
 inline VecFloat::VecFloat(VecFloatRef<INDEX> v)
 {
     // vspltw(v.mV, INDEX): broadcast the referenced lane to all four lanes.
-    const float lfValue = v.mV.mafLane[INDEX];
-    mV.mafLane[0] = lfValue;
-    mV.mafLane[1] = lfValue;
-    mV.mafLane[2] = lfValue;
-    mV.mafLane[3] = lfValue;
-}
-
-inline VecFloat::VecFloat(const VecFloat& v)
-{
-    mV = v.mV;
+    const float lfValue = v.mV.v[INDEX];
+    mV.v[0] = lfValue;
+    mV.v[1] = lfValue;
+    mV.v[2] = lfValue;
+    mV.v[3] = lfValue;
 }
 
 inline void VecFloat::SetFloat(float v)
 {
     // VectorIntrinsicUnion u; u.scalarFloat[0..3] = v; mV = u.vector  -> broadcast.
-    mV.mafLane[0] = v;
-    mV.mafLane[1] = v;
-    mV.mafLane[2] = v;
-    mV.mafLane[3] = v;
+    mV.v[0] = v;
+    mV.v[1] = v;
+    mV.v[2] = v;
+    mV.v[3] = v;
 }
 
 inline float VecFloat::GetFloat() const
 {
     // VectorIntrinsicUnion vecUnion; vecUnion.vector = mV; return scalarFloat[X];
-    return mV.mafLane[VectorAxisX];
-}
-
-inline VecFloat& VecFloat::operator =(const VecFloat& f)
-{
-    mV = f.mV;
-    return *this;
+    return mV.v[VectorAxisX];
 }
 
 inline VecFloat::operator float() const
 {
-    return mV.mafLane[VectorAxisX];
+    return mV.v[VectorAxisX];
 }
 
 inline VecFloat& VecFloat::operator =(const float& f)
@@ -227,14 +207,14 @@ template<VectorAxis INDEX>
 inline float VecFloatRef<INDEX>::GetFloat() const
 {
     // VectorIntrinsicUnion vecUnion; vecUnion.vector = mV; return scalarFloat[INDEX];
-    return mV.mafLane[INDEX];
+    return mV.v[INDEX];
 }
 
 template<VectorAxis INDEX>
 inline void VecFloatRef<INDEX>::SetFloat(float f)
 {
     // build broadcast(f); VectorPermuteConstant copies that vec's X lane into lane INDEX.
-    mV.mafLane[INDEX] = f;
+    mV.v[INDEX] = f;
 }
 
 template<VectorAxis INDEX>
@@ -253,28 +233,28 @@ template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefX rhs)
 {
     // VectorPermuteConstant: lane INDEX <- rhs lane X
-    mV.mafLane[INDEX] = rhs.mV.mafLane[VectorAxisX];
+    mV.v[INDEX] = rhs.mV.v[VectorAxisX];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefY rhs)
 {
-    mV.mafLane[INDEX] = rhs.mV.mafLane[VectorAxisY];
+    mV.v[INDEX] = rhs.mV.v[VectorAxisY];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefZ rhs)
 {
-    mV.mafLane[INDEX] = rhs.mV.mafLane[VectorAxisZ];
+    mV.v[INDEX] = rhs.mV.v[VectorAxisZ];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefW rhs)
 {
-    mV.mafLane[INDEX] = rhs.mV.mafLane[VectorAxisW];
+    mV.v[INDEX] = rhs.mV.v[VectorAxisW];
     return *this;
 }
 
@@ -282,7 +262,7 @@ template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloatRefIndex rhs)
 {
     // vperm gSwizzleStoreConstants[INDEX*4 + rhs.mIndex]
-    mV.mafLane[INDEX] = rhs.mV.mafLane[rhs.mIndex];
+    mV.v[INDEX] = rhs.mV.v[rhs.mIndex];
     return *this;
 }
 
@@ -290,7 +270,7 @@ template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator =(VecFloat::InParam rhs)
 {
     // VectorPermuteConstant: lane INDEX <- rhs lane X
-    mV.mafLane[INDEX] = rhs.mV.mafLane[VectorAxisX];
+    mV.v[INDEX] = rhs.mV.v[VectorAxisX];
     return *this;
 }
 
@@ -314,7 +294,7 @@ inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (VecFloat::InParam b)
 {
     // r = vaddfp(mV, b.mV); store r lane INDEX back into mV lane INDEX.
     // b broadcast => b.lane[INDEX] == b.x.
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] + b.mV.mafLane[INDEX];
+    mV.v[INDEX] = mV.v[INDEX] + b.mV.v[INDEX];
     return *this;
 }
 
@@ -324,7 +304,7 @@ inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (VecFloatRef<INDEX_OT
 {
     // bVI = vspltw(b.mV, INDEX_OTHER) (broadcast b's lane); r = vaddfp(mV, bVI);
     // store r lane INDEX.
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] + b.mV.mafLane[INDEX_OTHER];
+    mV.v[INDEX] = mV.v[INDEX] + b.mV.v[INDEX_OTHER];
     return *this;
 }
 
@@ -332,14 +312,14 @@ template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (const VecFloatRefIndex& b)
 {
     // bVI = broadcast(b.mV lane b.mIndex); r = vaddfp(mV, bVI); store r lane INDEX.
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] + b.mV.mafLane[b.mIndex];
+    mV.v[INDEX] = mV.v[INDEX] + b.mV.v[b.mIndex];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (const float& b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] + b;
+    mV.v[INDEX] = mV.v[INDEX] + b;
     return *this;
 }
 
@@ -348,7 +328,7 @@ inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator += (const float& b)
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (VecFloat::InParam b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] - b.mV.mafLane[INDEX];
+    mV.v[INDEX] = mV.v[INDEX] - b.mV.v[INDEX];
     return *this;
 }
 
@@ -356,21 +336,21 @@ template<VectorAxis INDEX>
 template<VectorAxis INDEX_OTHER>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (VecFloatRef<INDEX_OTHER> b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] - b.mV.mafLane[INDEX_OTHER];
+    mV.v[INDEX] = mV.v[INDEX] - b.mV.v[INDEX_OTHER];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (const VecFloatRefIndex& b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] - b.mV.mafLane[b.mIndex];
+    mV.v[INDEX] = mV.v[INDEX] - b.mV.v[b.mIndex];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator -= (const float& b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] - b;
+    mV.v[INDEX] = mV.v[INDEX] - b;
     return *this;
 }
 
@@ -380,7 +360,7 @@ template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (VecFloat::InParam b)
 {
     // r = vmaddfp(mV, b.mV, 0): per-lane multiply.
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] * b.mV.mafLane[INDEX];
+    mV.v[INDEX] = mV.v[INDEX] * b.mV.v[INDEX];
     return *this;
 }
 
@@ -388,21 +368,21 @@ template<VectorAxis INDEX>
 template<VectorAxis INDEX_OTHER>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (VecFloatRef<INDEX_OTHER> b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] * b.mV.mafLane[INDEX_OTHER];
+    mV.v[INDEX] = mV.v[INDEX] * b.mV.v[INDEX_OTHER];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (const VecFloatRefIndex& b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] * b.mV.mafLane[b.mIndex];
+    mV.v[INDEX] = mV.v[INDEX] * b.mV.v[b.mIndex];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (const float& b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] * b;
+    mV.v[INDEX] = mV.v[INDEX] * b;
     return *this;
 }
 
@@ -414,7 +394,7 @@ inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator *= (const float& b)
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (VecFloat::InParam b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] / b.mV.mafLane[INDEX];
+    mV.v[INDEX] = mV.v[INDEX] / b.mV.v[INDEX];
     return *this;
 }
 
@@ -422,21 +402,21 @@ template<VectorAxis INDEX>
 template<VectorAxis INDEX_OTHER>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (VecFloatRef<INDEX_OTHER> b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] / b.mV.mafLane[INDEX_OTHER];
+    mV.v[INDEX] = mV.v[INDEX] / b.mV.v[INDEX_OTHER];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (const VecFloatRefIndex& b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] / b.mV.mafLane[b.mIndex];
+    mV.v[INDEX] = mV.v[INDEX] / b.mV.v[b.mIndex];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (const float& b)
 {
-    mV.mafLane[INDEX] = mV.mafLane[INDEX] / b;
+    mV.v[INDEX] = mV.v[INDEX] / b;
     return *this;
 }
 
@@ -450,26 +430,26 @@ inline VecFloatRef<INDEX>& VecFloatRef<INDEX>::operator /= (const float& b)
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloat::InParam b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] + b.mV.mafLane[VectorAxisX];
+    mV.v[mIndex] = mV.v[mIndex] + b.mV.v[VectorAxisX];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloatRef<INDEX> b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] + b.mV.mafLane[INDEX];
+    mV.v[mIndex] = mV.v[mIndex] + b.mV.v[INDEX];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator += (VecFloatRefIndex::InParam b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] + b.mV.mafLane[b.mIndex];
+    mV.v[mIndex] = mV.v[mIndex] + b.mV.v[b.mIndex];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator += (const float& b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] + b;
+    mV.v[mIndex] = mV.v[mIndex] + b;
     return *this;
 }
 
@@ -477,26 +457,26 @@ inline VecFloatRefIndex& VecFloatRefIndex::operator += (const float& b)
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloat::InParam b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] - b.mV.mafLane[VectorAxisX];
+    mV.v[mIndex] = mV.v[mIndex] - b.mV.v[VectorAxisX];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloatRef<INDEX> b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] - b.mV.mafLane[INDEX];
+    mV.v[mIndex] = mV.v[mIndex] - b.mV.v[INDEX];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator -= (VecFloatRefIndex::InParam b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] - b.mV.mafLane[b.mIndex];
+    mV.v[mIndex] = mV.v[mIndex] - b.mV.v[b.mIndex];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator -= (const float& b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] - b;
+    mV.v[mIndex] = mV.v[mIndex] - b;
     return *this;
 }
 
@@ -504,26 +484,26 @@ inline VecFloatRefIndex& VecFloatRefIndex::operator -= (const float& b)
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloat::InParam b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] * b.mV.mafLane[VectorAxisX];
+    mV.v[mIndex] = mV.v[mIndex] * b.mV.v[VectorAxisX];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloatRef<INDEX> b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] * b.mV.mafLane[INDEX];
+    mV.v[mIndex] = mV.v[mIndex] * b.mV.v[INDEX];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator *= (VecFloatRefIndex::InParam b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] * b.mV.mafLane[b.mIndex];
+    mV.v[mIndex] = mV.v[mIndex] * b.mV.v[b.mIndex];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator *= (const float& b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] * b;
+    mV.v[mIndex] = mV.v[mIndex] * b;
     return *this;
 }
 
@@ -531,26 +511,26 @@ inline VecFloatRefIndex& VecFloatRefIndex::operator *= (const float& b)
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloat::InParam b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] / b.mV.mafLane[VectorAxisX];
+    mV.v[mIndex] = mV.v[mIndex] / b.mV.v[VectorAxisX];
     return *this;
 }
 
 template<VectorAxis INDEX>
 inline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloatRef<INDEX> b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] / b.mV.mafLane[INDEX];
+    mV.v[mIndex] = mV.v[mIndex] / b.mV.v[INDEX];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator /= (VecFloatRefIndex::InParam b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] / b.mV.mafLane[b.mIndex];
+    mV.v[mIndex] = mV.v[mIndex] / b.mV.v[b.mIndex];
     return *this;
 }
 
 inline VecFloatRefIndex& VecFloatRefIndex::operator /= (const float& b)
 {
-    mV.mafLane[mIndex] = mV.mafLane[mIndex] / b;
+    mV.v[mIndex] = mV.v[mIndex] / b;
     return *this;
 }
 

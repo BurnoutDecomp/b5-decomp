@@ -54,10 +54,10 @@ bool IsValid(Vector4::InParam v);                                         // FLA
 // IsAnyNaN -- FAITHFUL. vcmpeqfp_p(v,v): a NaN lane fails self-comparison.
 inline bool IsAnyNaN(Vector4::InParam v)
 {
-    return !( v.mV.mafLane[0] == v.mV.mafLane[0]
-           && v.mV.mafLane[1] == v.mV.mafLane[1]
-           && v.mV.mafLane[2] == v.mV.mafLane[2]
-           && v.mV.mafLane[3] == v.mV.mafLane[3] );
+    return !( v.mV.v[0] == v.mV.v[0]
+           && v.mV.v[1] == v.mV.v[1]
+           && v.mV.v[2] == v.mV.v[2]
+           && v.mV.v[3] == v.mV.v[3] );
 }
 
 // =====================================================================================
@@ -68,10 +68,10 @@ inline Vector4 Negate(Vector4::InParam v)
 {
     // vxor(v, signMask): flip the sign bit of every lane.
     Vector4 r;
-    r.mV.mafLane[0] = -v.mV.mafLane[0];
-    r.mV.mafLane[1] = -v.mV.mafLane[1];
-    r.mV.mafLane[2] = -v.mV.mafLane[2];
-    r.mV.mafLane[3] = -v.mV.mafLane[3];
+    r.mV.v[0] = -v.mV.v[0];
+    r.mV.v[1] = -v.mV.v[1];
+    r.mV.v[2] = -v.mV.v[2];
+    r.mV.v[3] = -v.mV.v[3];
     return r;
 }
 
@@ -80,7 +80,7 @@ inline Vector4 Min(Vector4::InParam v0, Vector4::InParam v1)
     // vminfp(v0,v1)
     Vector4 r;
     for (int k = 0; k < 4; ++k)
-        r.mV.mafLane[k] = v0.mV.mafLane[k] < v1.mV.mafLane[k] ? v0.mV.mafLane[k] : v1.mV.mafLane[k];
+        r.mV.v[k] = v0.mV.v[k] < v1.mV.v[k] ? v0.mV.v[k] : v1.mV.v[k];
     return r;
 }
 
@@ -89,7 +89,7 @@ inline Vector4 Max(Vector4::InParam v0, Vector4::InParam v1)
     // vmaxfp(v0,v1)
     Vector4 r;
     for (int k = 0; k < 4; ++k)
-        r.mV.mafLane[k] = v0.mV.mafLane[k] > v1.mV.mafLane[k] ? v0.mV.mafLane[k] : v1.mV.mafLane[k];
+        r.mV.v[k] = v0.mV.v[k] > v1.mV.v[k] ? v0.mV.v[k] : v1.mV.v[k];
     return r;
 }
 
@@ -104,7 +104,7 @@ inline Vector4 Abs(Vector4::InParam v)
     // vandc(v, signBitMask): clear the sign bit of every lane.
     Vector4 r;
     for (int k = 0; k < 4; ++k)
-        r.mV.mafLane[k] = v.mV.mafLane[k] < 0.0f ? -v.mV.mafLane[k] : v.mV.mafLane[k];
+        r.mV.v[k] = v.mV.v[k] < 0.0f ? -v.mV.v[k] : v.mV.v[k];
     return r;
 }
 
@@ -115,18 +115,18 @@ inline Vector4 Abs(Vector4::InParam v)
 inline VecFloat Dot(Vector4::InParam a, Vector4::InParam b)
 {
     // xx_yy_zz_ww = vmaddfp(b,a,0); two vsldoi rotations + vaddfp sum all four lanes.
-    const float lfDot = a.mV.mafLane[0] * b.mV.mafLane[0]
-                      + a.mV.mafLane[1] * b.mV.mafLane[1]
-                      + a.mV.mafLane[2] * b.mV.mafLane[2]
-                      + a.mV.mafLane[3] * b.mV.mafLane[3];
+    const float lfDot = a.mV.v[0] * b.mV.v[0]
+                      + a.mV.v[1] * b.mV.v[1]
+                      + a.mV.v[2] * b.mV.v[2]
+                      + a.mV.v[3] * b.mV.v[3];
     return VecFloat(lfDot);
 }
 
 inline Vector4 Mult(Vector4::InParam v, VecFloat::InParam s)
 {
-    const float a = s.mV.mafLane[VectorAxisX];
+    const float a = s.mV.v[VectorAxisX];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * a;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * a;
     return r;
 }
 
@@ -134,7 +134,7 @@ inline Vector4 operator * (Vector4::InParam v, Vector4::InParam s)
 {
     // vmaddfp(v,s,0): per-lane multiply (component-wise).
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * s.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * s.mV.v[k];
     return r;
 }
 
@@ -142,39 +142,39 @@ inline Vector4 operator / (Vector4::InParam v, Vector4::InParam s)
 {
     // reciprocal of s (vrefp + Newton) then vmaddfp(reciprocal, v, 0): per-lane divide.
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] / s.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] / s.mV.v[k];
     return r;
 }
 
 inline Vector4 Mult(Vector4::InParam v, float s)
 {
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * s;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * s;
     return r;
 }
 
 template<VectorAxis INDEX>
 inline Vector4 Mult(Vector4::InParam v, VecFloatRef<INDEX> s)
 {
-    const float a = s.mV.mafLane[INDEX];
+    const float a = s.mV.v[INDEX];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * a;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * a;
     return r;
 }
 
 inline Vector4 Mult(Vector4::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float a = s.mV.mafLane[s.mIndex];
+    const float a = s.mV.v[s.mIndex];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * a;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * a;
     return r;
 }
 
 inline Vector4 Divide(Vector4::InParam v, VecFloat::InParam s)
 {
-    const float recip = 1.0f / s.mV.mafLane[VectorAxisX];
+    const float recip = 1.0f / s.mV.v[VectorAxisX];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * recip;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
     return r;
 }
 
@@ -182,24 +182,24 @@ inline Vector4 Divide(Vector4::InParam v, float s)
 {
     const float recip = 1.0f / s;
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * recip;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
     return r;
 }
 
 template<VectorAxis INDEX>
 inline Vector4 Divide(Vector4::InParam v, VecFloatRef<INDEX> s)
 {
-    const float recip = 1.0f / s.mV.mafLane[INDEX];
+    const float recip = 1.0f / s.mV.v[INDEX];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * recip;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
     return r;
 }
 
 inline Vector4 Divide(Vector4::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float recip = 1.0f / s.mV.mafLane[s.mIndex];
+    const float recip = 1.0f / s.mV.v[s.mIndex];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * recip;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
     return r;
 }
 
@@ -211,7 +211,7 @@ inline Vector4 Add(Vector4::InParam a, Vector4::InParam b)
 {
     // vaddfp(a,b)
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = a.mV.mafLane[k] + b.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = a.mV.v[k] + b.mV.v[k];
     return r;
 }
 
@@ -219,7 +219,7 @@ inline Vector4 Subtract(Vector4::InParam a, Vector4::InParam b)
 {
     // vsubfp(a,b)
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = a.mV.mafLane[k] - b.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = a.mV.v[k] - b.mV.v[k];
     return r;
 }
 
@@ -227,7 +227,7 @@ inline Vector4 Mult(Vector4::InParam a, Vector4::InParam b)
 {
     // vmaddfp(a,b,0): per-lane multiply.
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = a.mV.mafLane[k] * b.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = a.mV.v[k] * b.mV.v[k];
     return r;
 }
 
@@ -235,16 +235,16 @@ inline Vector4 MultAdd(Vector4::InParam a, Vector4::InParam b, Vector4::InParam 
 {
     // vmaddfp(a,b,c): per-lane a*b + c.
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = a.mV.mafLane[k] * b.mV.mafLane[k] + c.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = a.mV.v[k] * b.mV.v[k] + c.mV.v[k];
     return r;
 }
 
 inline Vector4 DivideByW(Vector4::InParam v)
 {
     // splattedAxis = vspltw(v, W); reciprocal = 1/W (vrefp + Newton); vmaddfp(reciprocal,v,0).
-    const float recip = 1.0f / v.mV.mafLane[VectorAxisW];
+    const float recip = 1.0f / v.mV.v[VectorAxisW];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * recip;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * recip;
     return r;
 }
 
@@ -254,29 +254,29 @@ inline Vector4 DivideByW(Vector4::InParam v)
 
 inline VecFloat MagnitudeSquared(Vector4::InParam v)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2]
-                      + v.mV.mafLane[3] * v.mV.mafLane[3];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2]
+                      + v.mV.v[3] * v.mV.v[3];
     return VecFloat(lfDot);
 }
 
 inline VecFloat MagnitudeRecip(Vector4::InParam v)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2]
-                      + v.mV.mafLane[3] * v.mV.mafLane[3];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2]
+                      + v.mV.v[3] * v.mV.v[3];
     return VecFloat(1.0f / sqrtf(lfDot));
 }
 
 inline VecFloat Magnitude(Vector4::InParam v)
 {
     // dot * (1/sqrt(dot)) == sqrt(dot); vsel guards a zero dot to zero.
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2]
-                      + v.mV.mafLane[3] * v.mV.mafLane[3];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2]
+                      + v.mV.v[3] * v.mV.v[3];
     return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * (1.0f / sqrtf(lfDot)));
 }
 
@@ -286,61 +286,61 @@ inline VecFloat Magnitude(Vector4::InParam v)
 
 inline Vector4 NormalizeEstimate(Vector4::InParam v)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2]
-                      + v.mV.mafLane[3] * v.mV.mafLane[3];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2]
+                      + v.mV.v[3] * v.mV.v[3];
     const float lfScale = 1.0f / sqrtf(lfDot);
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * lfScale;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * lfScale;
     return r;
 }
 
 inline Vector4 NormalizeFast(Vector4::InParam v)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2]
-                      + v.mV.mafLane[3] * v.mV.mafLane[3];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2]
+                      + v.mV.v[3] * v.mV.v[3];
     const float lfScale = 1.0f / sqrtf(lfDot);
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * lfScale;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * lfScale;
     return r;
 }
 
 inline Vector4 Normalize(Vector4::InParam v)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2]
-                      + v.mV.mafLane[3] * v.mV.mafLane[3];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2]
+                      + v.mV.v[3] * v.mV.v[3];
     const float lfScale = 1.0f / sqrtf(lfDot);
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * lfScale;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * lfScale;
     return r;
 }
 
 inline Vector4 Normalize(Vector4::InParam v, VecFloat& magnitude)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2]
-                      + v.mV.mafLane[3] * v.mV.mafLane[3];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2]
+                      + v.mV.v[3] * v.mV.v[3];
     const float lfScale = 1.0f / sqrtf(lfDot);
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] * lfScale;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] * lfScale;
     magnitude = VecFloat(lfDot == 0.0f ? 0.0f : lfDot * lfScale);
     return r;
 }
 
 inline VecFloat NormalizeReturnMagnitude(Vector4::InParam v, Vector4& result)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2]
-                      + v.mV.mafLane[3] * v.mV.mafLane[3];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2]
+                      + v.mV.v[3] * v.mV.v[3];
     const float lfScale = 1.0f / sqrtf(lfDot);
-    for (int k = 0; k < 4; ++k) result.mV.mafLane[k] = v.mV.mafLane[k] * lfScale;
+    for (int k = 0; k < 4; ++k) result.mV.v[k] = v.mV.v[k] * lfScale;
     return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * lfScale);
 }
 
@@ -351,9 +351,9 @@ inline VecFloat NormalizeReturnMagnitude(Vector4::InParam v, Vector4& result)
 inline Vector4 Lerp(Vector4::InParam v0, Vector4::InParam v1, VecFloat::InParam t)
 {
     // temp = vsubfp(v1,v0); ret = vmaddfp(temp, t, v0).
-    const float lfT = t.mV.mafLane[VectorAxisX];
+    const float lfT = t.mV.v[VectorAxisX];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = (v1.mV.mafLane[k] - v0.mV.mafLane[k]) * lfT + v0.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = (v1.mV.v[k] - v0.mV.v[k]) * lfT + v0.mV.v[k];
     return r;
 }
 
@@ -379,25 +379,25 @@ inline Vector4 NLerp(Vector4::InParam v0, Vector4::InParam v1, VecFloat::InParam
 inline void SetXYZ(Vector4& v, VecFloat::InParam x, VecFloat::InParam y, VecFloat::InParam z)
 {
     // vperm assemble of x.X / y.Y / z.Z into lanes 0/1/2 (vsldoi keeps the existing W lane).
-    v.mV.mafLane[0] = x.mV.mafLane[VectorAxisX];
-    v.mV.mafLane[1] = y.mV.mafLane[VectorAxisY];
-    v.mV.mafLane[2] = z.mV.mafLane[VectorAxisZ];
+    v.mV.v[0] = x.mV.v[VectorAxisX];
+    v.mV.v[1] = y.mV.v[VectorAxisY];
+    v.mV.v[2] = z.mV.v[VectorAxisZ];
 }
 
 template<VectorAxis INDEX0, VectorAxis INDEX1, VectorAxis INDEX2>
 inline void SetXYZ(Vector4& v, VecFloatRef<INDEX0> x, VecFloatRef<INDEX1> y, VecFloatRef<INDEX2> z)
 {
-    v.mV.mafLane[0] = x.mV.mafLane[INDEX0];
-    v.mV.mafLane[1] = y.mV.mafLane[INDEX1];
-    v.mV.mafLane[2] = z.mV.mafLane[INDEX2];
+    v.mV.v[0] = x.mV.v[INDEX0];
+    v.mV.v[1] = y.mV.v[INDEX1];
+    v.mV.v[2] = z.mV.v[INDEX2];
 }
 
 inline void SetXYZ(Vector4& v, VecFloatRefIndex::InParam x, VecFloatRefIndex::InParam y, VecFloatRefIndex::InParam z)
 {
     // Three single-lane swizzle-stores into lanes X/Y/Z; W preserved.
-    v.mV.mafLane[VectorAxisX] = x.mV.mafLane[x.mIndex];
-    v.mV.mafLane[VectorAxisY] = y.mV.mafLane[y.mIndex];
-    v.mV.mafLane[VectorAxisZ] = z.mV.mafLane[z.mIndex];
+    v.mV.v[VectorAxisX] = x.mV.v[x.mIndex];
+    v.mV.v[VectorAxisY] = y.mV.v[y.mIndex];
+    v.mV.v[VectorAxisZ] = z.mV.v[z.mIndex];
 }
 
 inline const Vector3& GetXYZ(const Vector4& v)
@@ -413,33 +413,33 @@ inline const Vector3& GetXYZ(const Vector4& v)
 
 inline VecFloat MagnitudeSquaredXYZ(Vector4::InParam v)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     return VecFloat(lfDot);
 }
 
 inline VecFloat MagnitudeRecipXYZ(Vector4::InParam v)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     return VecFloat(1.0f / sqrtf(lfDot));
 }
 
 inline VecFloat MagnitudeXYZ(Vector4::InParam v)
 {
-    const float lfDot = v.mV.mafLane[0] * v.mV.mafLane[0]
-                      + v.mV.mafLane[1] * v.mV.mafLane[1]
-                      + v.mV.mafLane[2] * v.mV.mafLane[2];
+    const float lfDot = v.mV.v[0] * v.mV.v[0]
+                      + v.mV.v[1] * v.mV.v[1]
+                      + v.mV.v[2] * v.mV.v[2];
     return VecFloat(lfDot == 0.0f ? 0.0f : lfDot * (1.0f / sqrtf(lfDot)));
 }
 
 inline VecFloat DotXYZ(Vector4::InParam v0, Vector4::InParam v1)
 {
-    const float lfDot = v0.mV.mafLane[0] * v1.mV.mafLane[0]
-                      + v0.mV.mafLane[1] * v1.mV.mafLane[1]
-                      + v0.mV.mafLane[2] * v1.mV.mafLane[2];
+    const float lfDot = v0.mV.v[0] * v1.mV.v[0]
+                      + v0.mV.v[1] * v1.mV.v[1]
+                      + v0.mV.v[2] * v1.mV.v[2];
     return VecFloat(lfDot);
 }
 
@@ -449,13 +449,13 @@ inline Vector4 CrossXYZ(Vector4::InParam v0, Vector4::InParam v1)
     // y*z-z*y / z*x-x*z / x*y-y*x. The W lane is left as the permuted residue; callers of
     // CrossXYZ consume only lanes X,Y,Z. We write the three meaningful lanes and leave W
     // untouched (uninitialised, matching the console's don't-care W).
-    const float ax = v0.mV.mafLane[0], ay = v0.mV.mafLane[1], az = v0.mV.mafLane[2];
-    const float bx = v1.mV.mafLane[0], by = v1.mV.mafLane[1], bz = v1.mV.mafLane[2];
+    const float ax = v0.mV.v[0], ay = v0.mV.v[1], az = v0.mV.v[2];
+    const float bx = v1.mV.v[0], by = v1.mV.v[1], bz = v1.mV.v[2];
     Vector4 r;
-    r.mV.mafLane[0] = ay * bz - az * by;
-    r.mV.mafLane[1] = az * bx - ax * bz;
-    r.mV.mafLane[2] = ax * by - ay * bx;
-    r.mV.mafLane[3] = 0.0f;
+    r.mV.v[0] = ay * bz - az * by;
+    r.mV.v[1] = az * bx - ax * bz;
+    r.mV.v[2] = ax * by - ay * bx;
+    r.mV.v[3] = 0.0f;
     return r;
 }
 
@@ -477,28 +477,28 @@ inline Vector4 CrossXYZ(Vector4::InParam v0, Vector4::InParam v1)
 
 inline Vector4& operator *= (Vector4& v, VecFloat::InParam a)
 {
-    const float s = a.mV.mafLane[VectorAxisX];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= s;
+    const float s = a.mV.v[VectorAxisX];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= s;
     return v;
 }
 
 inline Vector4& operator /= (Vector4& v, VecFloat::InParam a)
 {
-    const float recip = 1.0f / a.mV.mafLane[VectorAxisX];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= recip;
+    const float recip = 1.0f / a.mV.v[VectorAxisX];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= recip;
     return v;
 }
 
 inline Vector4& operator += (Vector4& v, VecFloat::InParam a)
 {
     // vaddfp(v, a): a is a broadcast register, so every lane adds the same scalar.
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] += a.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] += a.mV.v[k];
     return v;
 }
 
 inline Vector4& operator -= (Vector4& v, VecFloat::InParam a)
 {
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] -= a.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] -= a.mV.v[k];
     return v;
 }
 
@@ -510,21 +510,21 @@ inline Vector4 operator + (Vector4::InParam v, VecFloat::InParam s)
 {
     // vaddfp(v, s): broadcast register, every lane adds s.
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] + s.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + s.mV.v[k];
     return r;
 }
 
 inline Vector4 operator - (Vector4::InParam v, VecFloat::InParam s)
 {
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] - s.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] - s.mV.v[k];
     return r;
 }
 
 inline Vector4 operator + (VecFloat::InParam s, Vector4::InParam v)
 {
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] + s.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + s.mV.v[k];
     return r;
 }
 
@@ -532,7 +532,7 @@ inline Vector4 operator - (VecFloat::InParam s, Vector4::InParam v)
 {
     // vsubfp(s, v): scalar register minus each lane.
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = s.mV.mafLane[k] - v.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = s.mV.v[k] - v.mV.v[k];
     return r;
 }
 
@@ -540,14 +540,14 @@ inline Vector4 operator - (VecFloat::InParam s, Vector4::InParam v)
 
 inline Vector4& operator *= (Vector4& v, float a)
 {
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= a;
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= a;
     return v;
 }
 
 inline Vector4& operator /= (Vector4& v, float a)
 {
     const float recip = 1.0f / a;
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= recip;
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= recip;
     return v;
 }
 
@@ -559,14 +559,14 @@ inline Vector4 operator + (Vector4::InParam v, float s)
 {
     // broadcast(s) then vaddfp.
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] + s;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + s;
     return r;
 }
 
 inline Vector4 operator - (Vector4::InParam v, float s)
 {
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] - s;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] - s;
     return r;
 }
 
@@ -575,7 +575,7 @@ inline Vector4 operator + (float s, Vector4::InParam v) { return v + s; }
 inline Vector4 operator - (float s, Vector4::InParam v)
 {
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = s - v.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = s - v.mV.v[k];
     return r;
 }
 
@@ -584,32 +584,32 @@ inline Vector4 operator - (float s, Vector4::InParam v)
 template<VectorAxis INDEX>
 inline Vector4& operator *= (Vector4& v, VecFloatRef<INDEX> a)
 {
-    const float s = a.mV.mafLane[INDEX];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= s;
+    const float s = a.mV.v[INDEX];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= s;
     return v;
 }
 
 template<VectorAxis INDEX>
 inline Vector4& operator /= (Vector4& v, VecFloatRef<INDEX> a)
 {
-    const float recip = 1.0f / a.mV.mafLane[INDEX];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= recip;
+    const float recip = 1.0f / a.mV.v[INDEX];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= recip;
     return v;
 }
 
 template<VectorAxis INDEX>
 inline Vector4& operator += (Vector4& v, VecFloatRef<INDEX> a)
 {
-    const float s = a.mV.mafLane[INDEX];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] += s;
+    const float s = a.mV.v[INDEX];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] += s;
     return v;
 }
 
 template<VectorAxis INDEX>
 inline Vector4& operator -= (Vector4& v, VecFloatRef<INDEX> a)
 {
-    const float s = a.mV.mafLane[INDEX];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] -= s;
+    const float s = a.mV.v[INDEX];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] -= s;
     return v;
 }
 
@@ -623,18 +623,18 @@ inline Vector4 operator / (Vector4::InParam v, VecFloatRef<INDEX> s) { return Di
 template<VectorAxis INDEX>
 inline Vector4 operator + (Vector4::InParam v, VecFloatRef<INDEX> s)
 {
-    const float a = s.mV.mafLane[INDEX];
+    const float a = s.mV.v[INDEX];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] + a;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + a;
     return r;
 }
 
 template<VectorAxis INDEX>
 inline Vector4 operator - (Vector4::InParam v, VecFloatRef<INDEX> s)
 {
-    const float a = s.mV.mafLane[INDEX];
+    const float a = s.mV.v[INDEX];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] - a;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] - a;
     return r;
 }
 
@@ -644,9 +644,9 @@ inline Vector4 operator + (VecFloatRef<INDEX> s, Vector4::InParam v) { return v 
 template<VectorAxis INDEX>
 inline Vector4 operator - (VecFloatRef<INDEX> s, Vector4::InParam v)
 {
-    const float a = s.mV.mafLane[INDEX];
+    const float a = s.mV.v[INDEX];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = a - v.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = a - v.mV.v[k];
     return r;
 }
 
@@ -654,29 +654,29 @@ inline Vector4 operator - (VecFloatRef<INDEX> s, Vector4::InParam v)
 
 inline Vector4& operator *= (Vector4& v, VecFloatRefIndex::InParam a)
 {
-    const float s = a.mV.mafLane[a.mIndex];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= s;
+    const float s = a.mV.v[a.mIndex];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= s;
     return v;
 }
 
 inline Vector4& operator /= (Vector4& v, VecFloatRefIndex::InParam a)
 {
-    const float recip = 1.0f / a.mV.mafLane[a.mIndex];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= recip;
+    const float recip = 1.0f / a.mV.v[a.mIndex];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= recip;
     return v;
 }
 
 inline Vector4& operator += (Vector4& v, VecFloatRefIndex::InParam a)
 {
-    const float s = a.mV.mafLane[a.mIndex];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] += s;
+    const float s = a.mV.v[a.mIndex];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] += s;
     return v;
 }
 
 inline Vector4& operator -= (Vector4& v, VecFloatRefIndex::InParam a)
 {
-    const float s = a.mV.mafLane[a.mIndex];
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] -= s;
+    const float s = a.mV.v[a.mIndex];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] -= s;
     return v;
 }
 
@@ -686,17 +686,17 @@ inline Vector4 operator / (Vector4::InParam v, VecFloatRefIndex::InParam s) { re
 
 inline Vector4 operator + (Vector4::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float a = s.mV.mafLane[s.mIndex];
+    const float a = s.mV.v[s.mIndex];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] + a;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] + a;
     return r;
 }
 
 inline Vector4 operator - (Vector4::InParam v, VecFloatRefIndex::InParam s)
 {
-    const float a = s.mV.mafLane[s.mIndex];
+    const float a = s.mV.v[s.mIndex];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = v.mV.mafLane[k] - a;
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = v.mV.v[k] - a;
     return r;
 }
 
@@ -704,9 +704,9 @@ inline Vector4 operator + (VecFloatRefIndex::InParam s, Vector4::InParam v) { re
 
 inline Vector4 operator - (VecFloatRefIndex::InParam s, Vector4::InParam v)
 {
-    const float a = s.mV.mafLane[s.mIndex];
+    const float a = s.mV.v[s.mIndex];
     Vector4 r;
-    for (int k = 0; k < 4; ++k) r.mV.mafLane[k] = a - v.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) r.mV.v[k] = a - v.mV.v[k];
     return r;
 }
 
@@ -718,25 +718,25 @@ inline Vector4 operator - (Vector4::InParam v) { return Negate(v); }
 
 inline Vector4& operator += (Vector4& v, Vector4::InParam b)
 {
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] += b.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] += b.mV.v[k];
     return v;
 }
 
 inline Vector4& operator -= (Vector4& v, Vector4::InParam b)
 {
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] -= b.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] -= b.mV.v[k];
     return v;
 }
 
 inline Vector4& operator *= (Vector4& v, Vector4::InParam b)
 {
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] *= b.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] *= b.mV.v[k];
     return v;
 }
 
 inline Vector4& operator /= (Vector4& v, Vector4::InParam b)
 {
-    for (int k = 0; k < 4; ++k) v.mV.mafLane[k] /= b.mV.mafLane[k];
+    for (int k = 0; k < 4; ++k) v.mV.v[k] /= b.mV.v[k];
     return v;
 }
 
