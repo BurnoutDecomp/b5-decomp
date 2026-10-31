@@ -64,27 +64,16 @@ namespace Deformation
     // the host header deliberately keeps Sphere incomplete at DeformationSensor's declaration.
     void DeformationSensor::SetLocalPosition(Vector3 lPosition)
     {
-        const f32 lfRadius = mpLocalSpaceSphere->mData.mV.w;
-        {
-            const Vector4 lAggregateValue = { lPosition.x, lPosition.y, lPosition.z, lfRadius };
-            mpLocalSpaceSphere->mData.mV = lAggregateValue.mV;
-        }
+        mpLocalSpaceSphere->mData.SetVector3(lPosition);
     }
 
     void DeformationSensor::UpdateWorldPosition(Matrix44Affine lVehicleTransform)
     {
-        const Vector3 lLocal = {
-            mpLocalSpaceSphere->mData.mV.x,
-            mpLocalSpaceSphere->mData.mV.y,
-            mpLocalSpaceSphere->mData.mV.z,
-            0.0f
-        };
-        const Vector3 lWorld = rw::math::vpu::TransformPoint(lVehicleTransform, lLocal);
-        const f32 lfRadius = mpWorldSpaceSphere->mData.mV.w;
-        {
-            const Vector4 lAggregateValue = { lWorld.x, lWorld.y, lWorld.z, lfRadius };
-            mpWorldSpaceSphere->mData.mV = lAggregateValue.mV;
-        }
+        const __vector4 vLocal = mpLocalSpaceSphere->mData.mV;
+        __vector4 vWorld = __vmaddfp(lVehicleTransform.xAxis.mV, __vspltw(vLocal, 0), lVehicleTransform.wAxis.mV);
+        vWorld = __vmaddfp(lVehicleTransform.yAxis.mV, __vspltw(vLocal, 1), vWorld);
+        vWorld = __vmaddfp(lVehicleTransform.zAxis.mV, __vspltw(vLocal, 2), vWorld);
+        mpWorldSpaceSphere->mData.SetVector3(Vector3(vWorld));
     }
 
     // ==============================================================================================
@@ -208,20 +197,19 @@ namespace Deformation
     //
     // Return the box's signed extent along one of the six ENextSensorDirection axes. The X360 body is a
     // 6-case jump table: the even (POS_*) cases read the min corner (this+0), the odd (NEG_*) cases read
-    // the max corner (this+16); the lane (x/y/z) follows the axis pair. The default returns the min
-    // corner's x lane (vspltisw 0 then the back_chain reload == mMin.x).
+    // the max corner (this+16); the lane (x/y/z) follows the axis pair. The default returns zero.
     // =============================================================================================
     f32 DeformationAxisAlignedBox::GetExtent(ENextSensorDirection leAxis) const
     {
         switch ( leAxis )
         {
-            case E_NSD_POS_XAXIS: return mMin.x;
-            case E_NSD_NEG_XAXIS: return mMax.x;
-            case E_NSD_POS_YAXIS: return mMin.y;
-            case E_NSD_NEG_YAXIS: return mMax.y;
-            case E_NSD_POS_ZAXIS: return mMin.z;
-            case E_NSD_NEG_ZAXIS: return mMax.z;
-            default:              return mMin.x;
+            case E_NSD_POS_XAXIS: return mMin.mV.x;
+            case E_NSD_NEG_XAXIS: return mMax.mV.x;
+            case E_NSD_POS_YAXIS: return mMin.mV.y;
+            case E_NSD_NEG_YAXIS: return mMax.mV.y;
+            case E_NSD_POS_ZAXIS: return mMin.mV.z;
+            case E_NSD_NEG_ZAXIS: return mMax.mV.z;
+            default:              return 0.0f;
         }
     }
 
@@ -259,16 +247,16 @@ namespace Deformation
         if ( liPoint >= liNumTagPoints )
         {
             const Vector3 lvPos = lpRig->GetDrivenPointDebug( liPoint - liNumTagPoints ).GetPosition();
-            lpThis->mfPointX = lvPos.x;
-            lpThis->mfPointY = lvPos.y;
-            lpThis->mfPointZ = lvPos.z;
+            lpThis->mfPointX = lvPos.mV.x;
+            lpThis->mfPointY = lvPos.mV.y;
+            lpThis->mfPointZ = lvPos.mV.z;
         }
         else
         {
             const Vector3& lvPos = lpRig->GetTagPointDebug( liPoint ).GetPosition();
-            lpThis->mfPointX = lvPos.x;
-            lpThis->mfPointY = lvPos.y;
-            lpThis->mfPointZ = lvPos.z;
+            lpThis->mfPointX = lvPos.mV.x;
+            lpThis->mfPointY = lvPos.mV.y;
+            lpThis->mfPointZ = lvPos.mV.z;
         }
     }
 
@@ -286,7 +274,7 @@ namespace Deformation
         const s32 liPoint        = lpThis->miSelectedPoint;
         const s32 liNumTagPoints = lpRig->GetNumTagPointsDebug();
 
-        const Vector3 lvNewPos = { lpThis->mfPointX, lpThis->mfPointY, lpThis->mfPointZ, 0.0f };
+        const Vector3 lvNewPos(lpThis->mfPointX, lpThis->mfPointY, lpThis->mfPointZ);
 
         if ( liPoint >= liNumTagPoints )
         {
@@ -307,12 +295,7 @@ namespace Deformation
     void DeformationDebugComponent::OnSensorPositionChange(void* /*lpValue*/, void* lpUserData)
     {
         DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
-        if ( lpThis->mpSelectedSensor == 0 || lpThis->mpSelectedRig == 0 )
-        {
-            return;
-        }
-
-        const Vector3 lSensorPosition = { lpThis->mfSensorX, lpThis->mfSensorY, lpThis->mfSensorZ, 0.0f };
+        const Vector3 lSensorPosition(lpThis->mfSensorX, lpThis->mfSensorY, lpThis->mfSensorZ);
         lpThis->mpSelectedSensor->SetLocalPosition(lSensorPosition);
         lpThis->mpSelectedSensor->SetScratchAmount(lpThis->mfSensorScratch);
         lpThis->mpSelectedRig->SetDeformedThisFrameDebug();
@@ -396,9 +379,6 @@ namespace Deformation
             return;
         }
 
-        Matrix44Affine lVehicleTransform;
-        lpRig->GetTransform(lVehicleTransform);
-
         const s32 liNumSensors = lpRig->GetDeformationSpec()->GetNumDeformationSensors();
         for ( s32 liSensor = 0; liSensor < liNumSensors; ++liSensor )
         {
@@ -406,15 +386,23 @@ namespace Deformation
             const SensorSpec* lpSpec = lrSensor.mpSpec;
             Vector3 lPosition = lpSpec->GetInitialOffset();
 
-            lPosition.x += lpSpec->GetCompressionLimit(E_NSD_POS_XAXIS).x * lfRightSide;
-            lPosition.x -= lpSpec->GetCompressionLimit(E_NSD_NEG_XAXIS).x * lfLeftSide;
-            lPosition.y += lpSpec->GetCompressionLimit(E_NSD_POS_YAXIS).x * lfFloor;
-            lPosition.y -= lpSpec->GetCompressionLimit(E_NSD_NEG_YAXIS).x * lfRoof;
-            lPosition.z += lpSpec->GetCompressionLimit(E_NSD_POS_ZAXIS).x * lfRear;
-            lPosition.z -= lpSpec->GetCompressionLimit(E_NSD_NEG_ZAXIS).x * lfFront;
+            __vector4 vPosition = lPosition.mV;
+            const f32 lfScales[6] = { lfRightSide, lfLeftSide, lfFloor, lfRoof, lfRear, lfFront };
+            const u32 luMasks[3] = { 8, 4, 2 };
+            for (u32 axis = 0; axis < 3; ++axis)
+            {
+                const __vector4 vCurrent = __vspltw(vPosition, axis);
+                const __vector4 vPositive = __vmaddfp(lpSpec->GetCompressionLimit(static_cast<ENextSensorDirection>(axis * 2)).mV,
+                                                       XMVectorReplicate(lfScales[axis * 2]), vCurrent);
+                vPosition = __vrlimi(vPosition, vPositive, luMasks[axis], 0);
+                const __vector4 vNegative = __vmulfp(lpSpec->GetCompressionLimit(static_cast<ENextSensorDirection>(axis * 2 + 1)).mV,
+                                                     XMVectorReplicate(lfScales[axis * 2 + 1]));
+                vPosition = __vrlimi(vPosition, __vsubfp(__vspltw(vPosition, axis), vNegative), luMasks[axis], 0);
+            }
+            lPosition.mV = vPosition;
 
             lrSensor.SetLocalPosition(lPosition);
-            lrSensor.UpdateWorldPosition(lVehicleTransform);
+            lrSensor.UpdateWorldPosition(lpRig->GetVehicleBody().GetTransform());
         }
     }
 
@@ -449,14 +437,8 @@ namespace Deformation
             // The current deformed box.
             lpRig->GetDeformedBoundingBox( &lScratch );
             DeformationAxisAlignedBox lDeformedBox;
-            {
-                const Vector3 lAggregateValue = { lScratch.mMin.x, lScratch.mMin.y, lScratch.mMin.z, 0.0f };
-                lDeformedBox.mMin = lAggregateValue;
-            }
-            {
-                const Vector3 lAggregateValue = { lScratch.mMax.x, lScratch.mMax.y, lScratch.mMax.z, 0.0f };
-                lDeformedBox.mMax = lAggregateValue;
-            }
+            lDeformedBox.mMin = lScratch.mMin;
+            lDeformedBox.mMax = lScratch.mMax;
 
             f32 lfBestExtent = KF_DRIVETIME_EXTENT_LIMIT;
             const f32 lfLimitExtent = std::fabs( lLimitBox.GetExtent( leAxis ) );
@@ -481,14 +463,8 @@ namespace Deformation
                 lpRig->UpdateDeformedBBoxDebug();
 
                 lpRig->GetDeformedBoundingBox( &lScratch );
-                {
-                    const Vector3 lAggregateValue = { lScratch.mMin.x, lScratch.mMin.y, lScratch.mMin.z, 0.0f };
-                    lDeformedBox.mMin = lAggregateValue;
-                }
-                {
-                    const Vector3 lAggregateValue = { lScratch.mMax.x, lScratch.mMax.y, lScratch.mMax.z, 0.0f };
-                    lDeformedBox.mMax = lAggregateValue;
-                }
+                lDeformedBox.mMin = lScratch.mMin;
+                lDeformedBox.mMax = lScratch.mMax;
                 const f32 lfExtent = std::fabs( lDeformedBox.GetExtent( leAxis ) );
                 if ( lfExtent >= lfBestExtent )
                 {
@@ -808,8 +784,7 @@ namespace Deformation
 
             // The wheel position must be finite (the X360 vcmpeqfp. self-compare across xyz). Skip NaNs.
             const Vector3& lvWheelPos = lrWheel.mPosition;
-            const bool lbFinite = ( lvWheelPos.x == lvWheelPos.x ) && ( lvWheelPos.y == lvWheelPos.y )
-                                  && ( lvWheelPos.z == lvWheelPos.z );
+            const bool lbFinite = rw::math::vpu::IsValid(lvWheelPos);
             CGS_ASSERT( lbFinite, "Invalid wheel position: , please tell Graham D." );   // Wheel.h:412
 
             const Vector3 lvWorld = TransformPointToWorld( lrXform, lvWheelPos );
@@ -958,8 +933,8 @@ namespace Deformation
 
                     // A small marker triangle at each tag point (green). The X360 corners are
                     // A=lvWorld, B=lvWorld+{0,+r,0}, C=lvWorld+{0,0,+r} (in that order).
-                    const Vector3 lvB = { lvWorld.x, lvWorld.y + KF_DEBUG_TRIANGLE_RADIUS, lvWorld.z,                         0.0f };
-                    const Vector3 lvC = { lvWorld.x, lvWorld.y,                         lvWorld.z + KF_DEBUG_TRIANGLE_RADIUS, 0.0f };
+                    const Vector3 lvB(__vaddfp(lvWorld.mV, XMVectorSet(0.0f, KF_DEBUG_TRIANGLE_RADIUS, 0.0f, 0.0f)));
+                    const Vector3 lvC(__vaddfp(lvWorld.mV, XMVectorSet(0.0f, 0.0f, KF_DEBUG_TRIANGLE_RADIUS, 0.0f)));
                     lpRender->DrawHollowTriangle( lvWorld, lvB, lvC, KRGBA_GREEN );
 
                     // The skinning offset (tag world pos -> rotated initial-position offset), drawn as
@@ -1001,16 +976,15 @@ namespace Deformation
                         lpRender->DrawHollowSphere( lvWorld, KF_DEBUG_SPHERE_RADIUS, KRGBA_WHITE );
                     }
 
-                    const Vector3 lvB = { lvWorld.x, lvWorld.y + KF_DEBUG_TRIANGLE_RADIUS, lvWorld.z,                         0.0f };
-                    const Vector3 lvC = { lvWorld.x, lvWorld.y,                         lvWorld.z + KF_DEBUG_TRIANGLE_RADIUS, 0.0f };
+                    const Vector3 lvB(__vaddfp(lvWorld.mV, XMVectorSet(0.0f, KF_DEBUG_TRIANGLE_RADIUS, 0.0f, 0.0f)));
+                    const Vector3 lvC(__vaddfp(lvWorld.mV, XMVectorSet(0.0f, 0.0f, KF_DEBUG_TRIANGLE_RADIUS, 0.0f)));
                     lpRender->DrawHollowTriangle( lvWorld, lvB, lvC, KRGBA_RED );
 
                     // The IK direction arrow: from the driven point to (point + rotated constraint
                     // direction). The X360 splats the driven point's direction lane (mDirection,
                     // driven+16) and rotates it by the car transform (no translation).
                     const Vector3 lvArrowTip = TransformDirectionToWorld( lrXform, lrDriven.GetDirection() );
-                    const Vector3 lvArrowEnd = { lvWorld.x + lvArrowTip.x, lvWorld.y + lvArrowTip.y,
-                                                 lvWorld.z + lvArrowTip.z, 0.0f };
+                    const Vector3 lvArrowEnd(__vaddfp(lvWorld.mV, lvArrowTip.mV));
                     lpRender->DrawArrow( lvWorld, lvArrowEnd, KRGBA_WHITE );
 
                     // The two connection lines to the driven point's driving tag points (A and B): each
@@ -1098,8 +1072,8 @@ namespace Deformation
             const Matrix44Affine& lrXform = mpSelectedRig->GetVehiclePhysicsDebug()->GetTransform();
             CgsGeometric::AxisAlignedBox lBox;
             mpSelectedRig->GetDeformedBoundingBox( &lBox );
-            const Vector3 lvMin = { lBox.mMin.x, lBox.mMin.y, lBox.mMin.z, 0.0f };
-            const Vector3 lvMax = { lBox.mMax.x, lBox.mMax.y, lBox.mMax.z, 0.0f };
+            const Vector3 lvMin = lBox.mMin;
+            const Vector3 lvMax = lBox.mMax;
             lpRender->DrawBox( lvMin, lvMax, lrXform, KRGBA_BLUE );
         }
 
