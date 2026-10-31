@@ -76,9 +76,9 @@ namespace CgsGeometric
         void Set(Vector3 lPosition, Vector3 lDirection, VecFloat lvfRadius, VecFloat lvfLength)
         {
             mPositionAndRadius.SetVector3(lPosition);
-            mPositionAndRadius.SetPlus(lvfRadius.w);      // vrlimi128 -> word 3
+            mPositionAndRadius.SetPlus(lvfRadius.mV.w);      // vrlimi128 -> word 3
             mDirectionAndLength.SetVector3(lDirection);
-            mDirectionAndLength.SetPlus(lvfLength.w);     // vrlimi128 -> word 3
+            mDirectionAndLength.SetPlus(lvfLength.mV.w);     // vrlimi128 -> word 3
         }
 
         // --------------------------------------------------------------------
@@ -105,8 +105,8 @@ namespace CgsGeometric
         {
             const f32 lfRadius = mPositionAndRadius.GetPlus();
             VecFloat lvfResult;
-            lvfResult.x = lfRadius; lvfResult.y = lfRadius;
-            lvfResult.z = lfRadius; lvfResult.w = lfRadius;
+            lvfResult.mV.x = lfRadius; lvfResult.mV.y = lfRadius;
+            lvfResult.mV.z = lfRadius; lvfResult.mV.w = lfRadius;
             return lvfResult;
         }
 
@@ -114,8 +114,8 @@ namespace CgsGeometric
         {
             const f32 lfLength = mDirectionAndLength.GetPlus();
             VecFloat lvfResult;
-            lvfResult.x = lfLength; lvfResult.y = lfLength;
-            lvfResult.z = lfLength; lvfResult.w = lfLength;
+            lvfResult.mV.x = lfLength; lvfResult.mV.y = lfLength;
+            lvfResult.mV.z = lfLength; lvfResult.mV.w = lfLength;
             return lvfResult;
         }
 
