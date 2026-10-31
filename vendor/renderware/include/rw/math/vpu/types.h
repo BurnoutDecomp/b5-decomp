@@ -76,6 +76,14 @@ namespace vpu
     {
         typedef const Matrix44Affine& InParam;
         Vector3 xAxis, yAxis, zAxis, wAxis;
+        // DecFIGS matrix44affine.h:61/63/64. ARTIST 822B33B8 receives
+        // this value through r5; the explicit copy preserves all four raw rows.
+        Matrix44Affine() {}
+        Matrix44Affine(const Matrix44Affine& lrMatrix)
+            : xAxis(lrMatrix.xAxis), yAxis(lrMatrix.yAxis),
+              zAxis(lrMatrix.zAxis), wAxis(lrMatrix.wAxis) {}
+        Matrix44Affine(Vector3 lxAxis, Vector3 lyAxis, Vector3 lzAxis, Vector3 lwAxis)
+            : xAxis(lxAxis), yAxis(lyAxis), zAxis(lzAxis), wAxis(lwAxis) {}
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
         {

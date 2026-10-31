@@ -133,10 +133,10 @@ void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math
         const rw::math::vpu::Matrix44Affine& lrSrc = lpaValues[luEntry];
         Vector4* lpRows = lpDest + luEntry * 4u;
 
-        lpRows[0].x = lrSrc.xAxis.x; lpRows[0].y = lrSrc.xAxis.y; lpRows[0].z = lrSrc.xAxis.z; lpRows[0].w = 0.0f;
-        lpRows[1].x = lrSrc.yAxis.x; lpRows[1].y = lrSrc.yAxis.y; lpRows[1].z = lrSrc.yAxis.z; lpRows[1].w = 0.0f;
-        lpRows[2].x = lrSrc.zAxis.x; lpRows[2].y = lrSrc.zAxis.y; lpRows[2].z = lrSrc.zAxis.z; lpRows[2].w = 0.0f;
-        lpRows[3].x = lrSrc.wAxis.x; lpRows[3].y = lrSrc.wAxis.y; lpRows[3].z = lrSrc.wAxis.z; lpRows[3].w = 1.0f;
+        lpRows[0].mV.x = lrSrc.xAxis.mV.x; lpRows[0].mV.y = lrSrc.xAxis.mV.y; lpRows[0].mV.z = lrSrc.xAxis.mV.z; lpRows[0].mV.w = 0.0f;
+        lpRows[1].mV.x = lrSrc.yAxis.mV.x; lpRows[1].mV.y = lrSrc.yAxis.mV.y; lpRows[1].mV.z = lrSrc.yAxis.mV.z; lpRows[1].mV.w = 0.0f;
+        lpRows[2].mV.x = lrSrc.zAxis.mV.x; lpRows[2].mV.y = lrSrc.zAxis.mV.y; lpRows[2].mV.z = lrSrc.zAxis.mV.z; lpRows[2].mV.w = 0.0f;
+        lpRows[3].mV.x = lrSrc.wAxis.mV.x; lpRows[3].mV.y = lrSrc.wAxis.mV.y; lpRows[3].mV.z = lrSrc.wAxis.mV.z; lpRows[3].mV.w = 1.0f;
     }
 }
 
@@ -147,11 +147,20 @@ void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math
 // count @ 0x580, latest-copy array @ 600 == mapLatestCopyInDispatchBin, used-count @ 0x578.)
 Vector4* ShaderConstantTable::UpdateShaderChangeTableAndGetConstantDestination(u32 luIndex)
 {
-    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+    if (!(luIndex < mu8NumUsedConstants))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("luIndex < mu8NumUsedConstants", "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h", 670);
+        CgsDev::Assert::EndAssert();
+    }
 
     const u8 lu8NumDirtyConstants = mu8NumDirtyConstants;
-    CGS_ASSERT(lu8NumDirtyConstants < KU_MAX_SHADER_CONSTANTS_DIRTY_LIST,
-               "mu8NumDirtyConstants < KU_MAX_SHADER_CONSTANTS_DIRTY_LIST");
+    if (!(lu8NumDirtyConstants < KU_MAX_SHADER_CONSTANTS_DIRTY_LIST))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mu8NumDirtyConstants < KU_MAX_SHADER_CONSTANTS_DIRTY_LIST", "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h", 678);
+        CgsDev::Assert::EndAssert();
+    }
 
     const u32 luNumQuadWords = maConstants[luIndex].GetSizeOfArrayInQw();
     mau8DirtyConstants[lu8NumDirtyConstants] = static_cast<u8>(luIndex);
@@ -229,10 +238,10 @@ void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Vector3 lValue)
     CGS_ASSERT(maConstants[luIndex].GetSizeInBytes() == 16u,
                "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()");
 
-    lpDest->x = lValue.x;
-    lpDest->y = lValue.y;
-    lpDest->z = lValue.z;
-    lpDest->w = lValue.w;
+    lpDest->mV.x = lValue.mV.x;
+    lpDest->mV.y = lValue.mV.y;
+    lpDest->mV.z = lValue.mV.z;
+    lpDest->mV.w = lValue.mV.w;
 }
 
 // The Matrix44 overload: four quad-words stored verbatim (declared size 64).
@@ -258,12 +267,19 @@ void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Matrix44 lValue)
 // vrlimi128 inserts (a zero vector into rows 0..2, vcfsx-produced 1.0f into row 3).
 void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Matrix44Affine lValue)
 {
-    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+    if (!(luIndex < mu8NumUsedConstants))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("luIndex < mu8NumUsedConstants", "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h", 443);
+        CgsDev::Assert::EndAssert();
+    }
 
     Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
 
-    lpDest[0].x = lValue.xAxis.x; lpDest[0].y = lValue.xAxis.y; lpDest[0].z = lValue.xAxis.z; lpDest[0].w = 0.0f;
-    lpDest[1].x = lValue.yAxis.x; lpDest[1].y = lValue.yAxis.y; lpDest[1].z = lValue.yAxis.z; lpDest[1].w = 0.0f;
-    lpDest[2].x = lValue.zAxis.x; lpDest[2].y = lValue.zAxis.y; lpDest[2].z = lValue.zAxis.z; lpDest[2].w = 0.0f;
-    lpDest[3].x = lValue.wAxis.x; lpDest[3].y = lValue.wAxis.y; lpDest[3].z = lValue.wAxis.z; lpDest[3].w = 1.0f;
+    const __vector4 lZero = __vspltisw(0);
+    const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+    lpDest[0].mV = __vrlimi(lValue.xAxis.mV, lZero, 1, 0);
+    lpDest[1].mV = __vrlimi(lValue.yAxis.mV, lZero, 1, 0);
+    lpDest[2].mV = __vrlimi(lValue.zAxis.mV, lZero, 1, 0);
+    lpDest[3].mV = __vrlimi(lValue.wAxis.mV, lOne, 1, 0);
 }

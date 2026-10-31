@@ -40,8 +40,7 @@ namespace vpu
         Vector4 wAxis;
     };
 
-    // Affine 4x4 -- same four-row storage; the affine-specialised Mult treats the wAxis as a
-    // translation (its xAxis/yAxis/zAxis lanes used as scale-rotation broadcasts).
+    // DecFIGS matrix44affine.h:61/63/64 and :152..155: four Vector3 rows.
     class Matrix44Affine
     {
     public:
@@ -50,14 +49,16 @@ namespace vpu
         typedef Matrix44Affine&       InOutParam;
 
         Matrix44Affine() {}
-        Matrix44Affine(Vector4::InParam x, Vector4::InParam y, Vector4::InParam z, Vector4::InParam w)
+        Matrix44Affine(const Matrix44Affine& m)
+            : xAxis(m.xAxis), yAxis(m.yAxis), zAxis(m.zAxis), wAxis(m.wAxis) {}
+        Matrix44Affine(Vector3 x, Vector3 y, Vector3 z, Vector3 w)
             : xAxis(x), yAxis(y), zAxis(z), wAxis(w) {}
 
     public:
-        Vector4 xAxis;
-        Vector4 yAxis;
-        Vector4 zAxis;
-        Vector4 wAxis;
+        Vector3 xAxis;
+        Vector3 yAxis;
+        Vector3 zAxis;
+        Vector3 wAxis;
     };
 }
 }

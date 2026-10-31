@@ -624,7 +624,7 @@ namespace BrnWorld
         // Consumers should prefer this over spelling `GetRaceCarVelocity( i ).w`: the SDK
         // reconstruction at SDKs/EATech/include/rw/math/vpu/vector3.h documents Vector3's w as
         // unused, so the raw `.w` read is structurally fragile as well as unfaithful.
-        f32     GetRaceCarSpeed( s32 liCarIndex ) const                 { return maRaceCarVelocity[liCarIndex].w; }
+        f32     GetRaceCarSpeed( s32 liCarIndex ) const                 { return maRaceCarVelocity[liCarIndex].mV.w; }
 
         // ====================================================================
         // AGENT B3 (render) -- bodies land in BrnPropEntityModule.cpp.
