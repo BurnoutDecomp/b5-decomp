@@ -6,6 +6,7 @@
 #include "SDKs/EATech/include/rw/math/vpu/matrix33.h"
 #include "SDKs/EATech/include/rw/math/vpu/vector3plus.h"
 #include "SDKs/EATech/include/rw/math/vpu/maskscalar.h"
+#include "SDKs/EATech/include/rw/math/vpu/mask4_operation.h"
 
 // Shared rwmath type entry point. Vector3/4 use their genuine SDK class homes above.
 // Vector2 remains the separately recovered VPU16 type; packed FPU/Basic2D pairs

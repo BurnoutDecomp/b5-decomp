@@ -36,9 +36,8 @@
 //   +0xD0  Vector4 mEdge2Cosigns  per-lane edge-2 cosine
 //   sizeof == 0xE0 (224)
 //
-// The DWARF spells the mask type `Mask4`; on this PC reconstruction a lane mask
-// is just another 16-byte register, so Mask4 is aliased to Vector4 (same layout
-// and alignment) to keep member offsets exact.
+// The validity register uses the genuine SDK Mask4 class. All fourteen rows
+// retain their16-byte storage and the complete batch retains its0xE0 stride.
 // ============================================================================
 
 namespace CgsGeometric
@@ -49,7 +48,7 @@ namespace CgsGeometric
     // mVertex2 @+0x20, mNormal @+0x30, then three trailing floats @+0x40/+0x44/+0x48.
     struct Triangle4
     {
-        typedef Vector4 Mask4;   // a per-lane boolean mask register (Vector4 layout)
+        typedef rw::math::vpu::Mask4 Mask4;
 
         struct AOSTriangle
         {
