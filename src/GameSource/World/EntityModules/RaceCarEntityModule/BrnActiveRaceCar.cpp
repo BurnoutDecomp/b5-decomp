@@ -920,7 +920,7 @@ void ActiveRaceCar::UpdatePhysicsState(const BrnPhysics::Vehicle::RaceCarState* 
     // The four road wheels: render transform + existence flag.
     for (u32 luWheel = 0; luWheel < 4u; ++luWheel)
     {
-        mRenderParams.GetWheelTransform(luWheel) = lpState->maWheelTransforms[luWheel];
+        mRenderParams.SetWheelTransform(luWheel, lpState->maWheelTransforms[luWheel]);
         mRenderParams.SetWheelExists(luWheel, lpState->mabWheelExists[luWheel]);
     }
 
@@ -1733,7 +1733,7 @@ void ActiveRaceCar::UpdateWheelPhysicsState(const void* lpPhysicsWheelData)
         CGS_ASSERT(luWheel < 6,
                    "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
 
-        mRenderParams.GetWheelTransform(luWheel) = mPhysicsState.maWheelTransforms[luWheel];
+        mRenderParams.SetWheelTransform(luWheel, mPhysicsState.maWheelTransforms[luWheel]);
         mRenderParams.SetWheelExists(luWheel, lpSnapshot->mau8OnGround[luWheel] != 0);
     }
 }

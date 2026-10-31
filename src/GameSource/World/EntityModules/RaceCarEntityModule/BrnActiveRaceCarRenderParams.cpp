@@ -85,14 +85,21 @@ namespace BrnWorld
 // ----------------------------------------------------------------------------
 
 // X360 0x822A3220: &maWheelTransforms[luWheel] via ((luWheel+33)<<6)+this.
-Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelTransform(u32 luWheel)
+const Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelTransform(u32 luWheel) const
 {
     CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
     return mWheelTransforms[luWheel];
 }
 
+// ARTIST 822B87DC..880C copies all four rows; the setter is inlined there.
+void ActiveRaceCar::RenderParams::SetWheelTransform(u32 luWheel, Matrix44Affine lTransform)
+{
+    CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
+    mWheelTransforms[luWheel] = lTransform;
+}
+
 // X360 0x822A31B8: &maWheelScaleMatrices[luWheel] via ((luWheel+39)<<6)+this.
-Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel)
+const Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel) const
 {
     CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
     return mWheelScaleTransforms[luWheel];
