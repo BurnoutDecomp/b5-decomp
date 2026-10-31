@@ -1,6 +1,7 @@
 #include "types.hpp"
 #include "GameSource/Gui/PFX/BrnPfxHookBlender.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <vectorintrinsics.h>
 #include <cstring>                                    // memcpy
 
 // =============================================================================
@@ -27,10 +28,11 @@ namespace BrnGui
 template <typename V>
 static inline void Blend2Lanes(V& lrOut, const V& lSrc, f32 lfWeight, f32 lfInvWeight)
 {
-    lrOut.x = lSrc.x * lfWeight + lrOut.x * lfInvWeight;
-    lrOut.y = lSrc.y * lfWeight + lrOut.y * lfInvWeight;
-    lrOut.z = lSrc.z * lfWeight + lrOut.z * lfInvWeight;
-    lrOut.w = lSrc.w * lfWeight + lrOut.w * lfInvWeight;
+    CGS_ALIGN(16) const f32 lafWeight[4] = { lfWeight, lfWeight, lfWeight, lfWeight };
+    CGS_ALIGN(16) const f32 lafInvWeight[4] = { lfInvWeight, lfInvWeight, lfInvWeight, lfInvWeight };
+    const __vector4 lvSource = __vmulfp(lSrc.mV, __lvx(lafWeight, 0));
+    // ARTIST 824F6940/824F6E50: source multiply, then fused old*inverse+source.
+    lrOut.mV = __vmaddfp(lrOut.mV, __lvx(lafInvWeight, 0), lvSource);
 }
 
 // ---- BloomBlend::Add @ 0x824F6810 ----------------------------------------
@@ -50,9 +52,9 @@ BloomBlend* BloomBlend::Add(const BrnEffects::BloomData* lpSrc, f32 lfWeight)
 
     if (mfCount == 1.0f)
     {
-        mData.mfLuminance = lpSrc->mfLuminance;
-        mData.mfThreshold = lpSrc->mfThreshold;
-        mData.mv4Scale    = lpSrc->mv4Scale;
+        // The original copy also moves the eight bytes between the scalars
+        // and the aligned scale vector (824F6888..68B8).
+        memcpy(&mData, lpSrc, sizeof(mData));
     }
     else
     {
