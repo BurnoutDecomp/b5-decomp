@@ -59,11 +59,7 @@ namespace CgsSceneManager
     // `uint8_t macVolumeVolumeQueryBuffer[299008]`, X360 +0x446C0). LooseOctree::Construct @0x828C99D8 builds a
     // 100-volume / 100-result query in it and asserts the descriptor fits (0x828C9F8C `ori r11, r11, 0x9000`,
     // "VolumeVolumeQueryMem is too small").
-    // NOT X360: host GPInstance / VolRef widths; the console buffer is macVolumeVolumeQueryBuffer[299008] = 0x49000.
-    // The host query needs rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 (0x495D8: the 1xN staging at
-    // 16 bytes per result and the GPInstance scratch at 0xC8 per instance -- VolumeQueryHostLayout.hpp), rounded
-    // up to 0x100 here.
-    static const u32 KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE = 0x49600;
+    static const u32 KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE = 0x49000;
 
     // LooseOctree::Construct's two counts for that query (0x828C9FBC `li r5, 0x64` / 0x828C9FC4 `li r4, 0x64`,
     // and the same pair into GetResourceDescriptor at 0x828C9F38 / 0x828C9F48).
@@ -131,8 +127,7 @@ namespace CgsSceneManager
 
         // +0x44 IndexedLinkedList<SpatialPartitionEntity,u16> mEntityList
         u32 muNumElements;          // +0x44
-        u32 muListElementsPad;      // +0x48 (X360 mpElements -- the entity-link pool base;
-                                    //        the host reaches the pool by name instead)
+        SpatialPartitionEntityLink* mpListElements; // +0x48: entity-link pool base
         u16 muHeadIndex;            // +0x4C
         u16 muTailIndex;            // +0x4E
 
@@ -169,8 +164,8 @@ namespace CgsSceneManager
 
     // The node is 0x60 bytes on the host too: every console reader indexes the node array as
     // `mpNodes + 96 * index` (e.g. SplitAndPropogateRecursive @0x828BBD84 `rotlwi 1 ; add ; slwi 5`), and
-    // Construct @0x828C99D8 sizes the array as 96 * (nodes). The one console pointer in it (the entity
-    // list's mpElements at +0x48) is modelled as a 32-bit pad, so no member widens.
+    // Construct @0x828C99D8 sizes the array as 96 * (nodes); the list's
+    // mpElements at +0x48 is the entity-link pool pointer.
 
     // CgsLooseOctreeNode.h:158 (DWARF) -- the per-node sub-tree type mask
     // (mpNodesEntityInfo @ X360 +0x446B8); FrustumTestRecursive gates each child
@@ -192,7 +187,6 @@ namespace CgsSceneManager
         Matrix44              maViewProjections[KU_MAX_QUERIES_PER_JOB];    // +0x500 (0x40 each)
         u32                   max32EntityTypeMasks[KU_MAX_QUERIES_PER_JOB]; // +0x780
         u32                   muNumQueries;                                 // +0x7A8
-        u32                   muPad7AC;                                     // +0x7AC
     };
 
     // ------------------------------------------------------------------
@@ -201,7 +195,7 @@ namespace CgsSceneManager
     // info). The leading pointers/counters are what let the job walk the tree without
     // a `this`; FrustumTestJobData::operator= @0x82BDFC48 copies exactly this set.
     // ------------------------------------------------------------------
-    struct CGS_ALIGN(16) FrustumTestJobData
+    struct CGS_ALIGN(64) FrustumTestJobData
     {
         LooseOctreeNode*            mpNodes;          // +0x00  <- mpRootNode
         LooseOctreeNodeEntityInfo*  mpNodeTypeMasks;  // +0x04  <- mpNodesEntityInfo
@@ -209,13 +203,10 @@ namespace CgsSceneManager
         CgsGeometric::Sphere*       mpEntitySpheres;  // +0x0C  <- &maEntityBoundingSpheres[0]
         u32                         muNumNodes;       // +0x10  <- capacity << 2
         u32                         muMaxEntities;    // +0x14  <- KI_MAX_NUM_ENTITIES
-        u32                         muPad18;          // +0x18
-        u32                         muPad1C;          // +0x1C
         FrustumJobQueryInfo         mQueryInfo;       // +0x20
         JobCoarseResultBuffer*      mpResultBuffer;   // +0x7D0
         u32                         muMaxResults;     // +0x7D4 <- KU_JOB_RESULT_BUFFER_SIZE
-        u32                         muPad7D8;         // +0x7D8
-        u32                         muPad7DC;         // +0x7DC
+        s32                         miDebugMode;      // +0x7D8
     };
 
     // ------------------------------------------------------------------
@@ -456,9 +447,6 @@ namespace CgsSceneManager
         LooseOctreeNode* mpNodes;                       // +0x446A4
         NodeGroupPool    mFreeNodeGroupPool;            // +0x446A8 (DWARF CgsLooseOctree.h:581)
         LooseOctreeNodeEntityInfo* mpNodesEntityInfo;   // +0x446B8
-        u32              muAdaptiveNodeSplitThreshold;  // +0x8D950
-        u32              muAdaptiveMaxDepth;            // +0x8D954
-
         // The entity arm's volume query (DWARF CgsLooseOctree.h:586 / :592; X360 +0x446C0 / +0x8D8C8): the buffer
         // Construct builds it in, and the handle Initialize returns. See KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE.
         CGS_ALIGN(16) u8                     macVolumeVolumeQueryBuffer[KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE];
@@ -475,18 +463,13 @@ namespace CgsSceneManager
         Matrix44Affine                     mNodeTransform;
         Matrix44Affine                     mEntityTransform;
 
-        // The per-entity owning-node back pointer (X360 SpatialPartition::maEntityInfo
-        // @ +0x3AA00, one u32 per entity holding a raw LooseOctreeNode*). Modelled as the
-        // node INDEX (host pointers widen; the index is what every reader derives anyway).
-        u16              maEntityNodeIndex[KI_MAX_NUM_ENTITIES];
+        u32 muAdaptiveNodeSplitThreshold; // +0x8D950
+        u32 muAdaptiveMaxDepth;           // +0x8D954
+        SpatialPartitionEntityLink* mpEntityListNodes; // +0x8D958
 
         EA::Jobs::Job         maFrustumTestJobs[KU_NUM_FRUSTUM_TEST_JOBS];
-        FrustumTestJobData    maFrustumTestJobData[KU_NUM_FRUSTUM_TEST_JOBS];  // +0x8E700
+        CGS_ALIGN(128) FrustumTestJobData maFrustumTestJobData[KU_NUM_FRUSTUM_TEST_JOBS];  // +0x8E700
         JobCoarseResultBuffer maJobResultBuffers[KU_NUM_FRUSTUM_TEST_JOBS];    // +0x90700
-        // The 0x4000-byte block each result buffer's mpu16Buffer points at. On the X360
-        // JobCoarseResultBuffer::Construct @0x828BB128 carves it from the same allocator;
-        // held inline here so the buffer needs no second allocation.
-        u16  maJobResultStorage[KU_NUM_FRUSTUM_TEST_JOBS][KU_JOB_RESULT_BUFFER_SIZE];
         bool mabFrustumJobActive[KU_NUM_FRUSTUM_TEST_JOBS];      // +0x90B00
         bool mabFrustumJobRequested[KU_NUM_FRUSTUM_TEST_JOBS];   // +0x90B04
     };

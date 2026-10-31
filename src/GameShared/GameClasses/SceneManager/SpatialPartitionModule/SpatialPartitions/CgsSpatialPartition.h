@@ -16,10 +16,12 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // X360 LAYOUT (byte offsets, all asm-attested):
-//   +0x00000  vtable + per-partition bookkeeping (0x80 opaque prefix)
+//   +0x00000  vtable; the entity-link array begins at +0x80
 //   +0x00080  SpatialPartitionEntityLink maEntityLinks[KI_MAX_NUM_ENTITIES]  (8-byte stride)
 //   +0x13900  CgsGeometric::Sphere maEntityBoundingSpheres[KI_MAX_NUM_ENTITIES] (16-byte)
-// (0x80 + 10000*8 == 0x13900, so the two pools are back to back.)
+//   +0x3AA00  SpatialPartitionEntityInfo maEntityInfo[10000] (4-byte stride)
+// The first array's 128-byte effective alignment is recorded by DecFIGS IDA;
+// ARTIST independently uses all three bases above.
 //
 // PER-PROJECT x64 RULE: this header models the pools as NAMED members rather than
 // preserving the X360 byte offsets (pointers widen on the host). Every X360 site that
@@ -67,6 +69,12 @@ namespace CgsSceneManager
         u32 mx32TypeFlags;      // +0x00  (AllocEntity writes ONLY this word)
         u16 mu16NextEntity;     // +0x04
         u16 mu16PrevEntity;     // +0x06
+    };
+
+    // DecFIGS CgsSpatialPartition.h:110; ARTIST stores the owning node address here.
+    struct SpatialPartitionEntityInfo
+    {
+        u32 muSpatialPartitionNodeID;
     };
 
     struct SpatialPartition
@@ -207,8 +215,10 @@ namespace CgsSceneManager
         const SpatialPartitionEntityLink& GetEntityLink(u16 lu16Index) const { return maEntityLinks[lu16Index]; }
 
     protected:
-        SpatialPartitionEntityLink maEntityLinks[KI_MAX_NUM_ENTITIES];             // X360 +0x00080
+        // DecFIGS member effective alignment 128; ARTIST addresses maEntityLinks at +0x80.
+        CGS_ALIGN(128) SpatialPartitionEntityLink maEntityLinks[KI_MAX_NUM_ENTITIES];             // X360 +0x00080
         CgsGeometric::Sphere       maEntityBoundingSpheres[KI_MAX_NUM_ENTITIES];   // X360 +0x13900
+        SpatialPartitionEntityInfo  maEntityInfo[KI_MAX_NUM_ENTITIES];               // X360 +0x3AA00
     };
 
     // The line walk's parameter block keeps the console offsets its readers use (LineTestOptimized
