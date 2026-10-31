@@ -65,14 +65,7 @@ namespace BrnNetwork
 // (BrnGameState::GameStateModuleIO::EGameModeType arrives from the REAL
 //  BrnGameStateSharedIO.h included above.)
 
-namespace BrnDirector
-{
-    struct GameState
-    {
-        // 12-byte opaque block (matches BrnDirectorGameState.h's reconstruction).
-        struct DirectorProfileData { u8 maOpaque[0x0C]; };
-    };
-}
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 
 namespace BrnGui
 {
