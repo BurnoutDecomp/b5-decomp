@@ -1,4 +1,5 @@
 #include "GameShared/Jobs/DecompressionJob/CgsDecompressor.h"
+#include "GameShared/Jobs/CgsJobAssertBuffer.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"   // CgsMemory::HeapMalloc::Malloc/Free
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT (DecompressionJobEntry range check)
 
@@ -9,14 +10,15 @@
 // Native EAThread id is the32-bit XDK thread handle (ARTIST82B42560).
 namespace EA { namespace Thread { void* GetThreadId(); } }
 
+// ARTIST byte_83015F20 is shared by native job assertion paths.
+char byte_83015F20[8192];
+
 namespace CgsResource
 {
     namespace
     {
         // ARTIST83248280, six contexts at0x180-byte strides.
         Decompressor gaDecompressors[6];
-        // ARTIST83015F20: original PrintStringed formatting storage,8192 bytes.
-        char gacDecompressionJobAssertText[8192];
     }
     CGS_STATIC_ASSERT(sizeof(Decompressor) == 0x180, "native decompressor context stride");
     // 0x82ACC9C0 -- zlib zalloc trampoline. zlib passes the z_stream::opaque (our `this`) and the
@@ -148,7 +150,7 @@ namespace CgsResource
         const u64 luJobThreadIndex = (luThreadId - 0xF8000088ull) >> 2;
         if (luJobThreadIndex >= 6)
         {
-            CgsDev::StrStream lMessage(gacDecompressionJobAssertText, sizeof(gacDecompressionJobAssertText));
+            CgsDev::StrStream lMessage(byte_83015F20, sizeof(byte_83015F20));
             const u64 luReportedThreadId = static_cast<u64>(reinterpret_cast<u32>(EA::Thread::GetThreadId()));
             lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
             const char* lpcSource =

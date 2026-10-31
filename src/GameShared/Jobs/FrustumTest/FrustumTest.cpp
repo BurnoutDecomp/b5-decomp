@@ -1,7 +1,12 @@
 #include "GameShared/Jobs/FrustumTest/FrustumTest.h"
+#include "GameShared/Jobs/CgsJobAssertBuffer.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "SDKs/EATech/eajobs/job_types.h"
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.h"
 
 #include <cstddef>  // offsetof
 #include <cstring>  // std::memcpy (models the Xbox XMemCpy / VMX block copies)
+#include <vectorintrinsics.h>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"  // CgsGeometric::Sphere
 
@@ -19,8 +24,8 @@ namespace
     // FrustumTestJobData pins (operator= @0x82BDFC48 attests these exact region boundaries).
     CGS_STATIC_ASSERT((offsetof(CgsSceneManager::FrustumTestJobData, mQueryInfo) == 0x20),
                   "mQueryInfo must be at +0x20");
-    CGS_STATIC_ASSERT((offsetof(CgsSceneManager::FrustumTestJobData, mau32Trailer) == 0x7D0),
-                  "mau32Trailer must be at +0x7D0");
+    CGS_STATIC_ASSERT((offsetof(CgsSceneManager::FrustumTestJobData, mpResultBuffer) == 0x7D0),
+                  "mpResultBuffer must be at +0x7D0");
 }
 
 // CgsSceneManager::FrustumJobQueryInfo::operator= @ 0x82BDF950
@@ -59,37 +64,56 @@ namespace CgsSceneManager
 
     // CgsSceneManager::FrustumTestJobData::operator= @ 0x82BDFC48
     //
-    // Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity). The X360 body copies, in
-    // order and store-for-store:
-    //   +0x00..+0x14  six lwz/stw word copies                     -> mau32Header[0..5]
-    //   +0x20         bl FrustumJobQueryInfo::operator=(this+0x20) -> mQueryInfo (delegated)
-    //   +0x7D0..+0x7D8 three lwz/stw word copies                  -> mau32Trailer[0..2]
-    // then `mr r3, r31` / blr (return *this). The +0x18 alignment gap is NOT touched.
+    // ARTIST copies the six typed header members, the query info, and three trailer members.
     FrustumTestJobData& FrustumTestJobData::operator=(const FrustumTestJobData& lrSource)
     {
         // +0x00..+0x14: the six job-control header words (6 lwz/stw).
-        mau32Header[0] = lrSource.mau32Header[0];
-        mau32Header[1] = lrSource.mau32Header[1];
-        mau32Header[2] = lrSource.mau32Header[2];
-        mau32Header[3] = lrSource.mau32Header[3];
-        mau32Header[4] = lrSource.mau32Header[4];
-        mau32Header[5] = lrSource.mau32Header[5];
-        // +0x20: the embedded per-frame query batch (delegated to its own operator=).
+        mpNodes = lrSource.mpNodes;
+        mpNodeTypeMasks = lrSource.mpNodeTypeMasks;
+        mpEntityLinks = lrSource.mpEntityLinks;
+        mpEntitySpheres = lrSource.mpEntitySpheres;
+        muNumNodes = lrSource.muNumNodes;
+        muMaxEntities = lrSource.muMaxEntities;
         mQueryInfo = lrSource.mQueryInfo;
-        // +0x7D0..+0x7D8: the three trailing result/state words (3 lwz/stw).
-        mau32Trailer[0] = lrSource.mau32Trailer[0];
-        mau32Trailer[1] = lrSource.mau32Trailer[1];
-        mau32Trailer[2] = lrSource.mau32Trailer[2];
+        mpResultBuffer = lrSource.mpResultBuffer;
+        muMaxResults = lrSource.muMaxResults;
+        miDebugMode = lrSource.miDebugMode;
         return *this;
     }
 
-    // ------------------------------------------------------------------------
-    // File-local entity-node accessor (X360 sub_82BDF7B8): resolves an entity index to its
-    // entity-node record, whose word[0] is the entity type-flags and whose u16 at byte +4 is
-    // the intrusive entity-list "next" index. Its own reconstruction is a sibling ledger
-    // function; declared-not-defined here (the compile gate does not link).
-    // ------------------------------------------------------------------------
-    u32* FrustumTestJob_EntityNode(FrustumTestJob* lpJob, u16 lu16Entity);
+    // Worker assertions use PrintStringed followed by the native MSR break twice.
+    static void FrustumJobAssert(const char* lpFile, int liLine, const char* lpMessage)
+    {
+        CgsDev::Assert::PrintStringed(lpFile, 0, liLine, lpMessage);
+        __asm { mfmsr r12 }
+        __asm { ori r12, r12, 0x400 }
+        __asm { mtmsr r12 }
+        CgsDev::Assert::PrintStringed(lpFile, 0, liLine, lpMessage);
+        __asm { mfmsr r12 }
+        __asm { ori r12, r12, 0x400 }
+        __asm { mtmsr r12 }
+    }
+
+    // 0x82BDF7B8 and 0x82BDF848: resolve and enqueue entity indices.
+    SpatialPartitionEntityLink& FrustumTestJob::GetEntityNode(u16 lu16Entity)
+    {
+        if (lu16Entity >= SpatialPartition::KI_MAX_NUM_ENTITIES)
+            FrustumJobAssert("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\frustumtest\\FrustumTestJob.h",
+                             317, "luIndex < KI_MAX_NUM_ENTITIES");
+        return mpEntityArray[lu16Entity];
+    }
+
+    void FrustumTestJob::PushEntityForTesting(u16 lu16Entity)
+    {
+        if (lu16Entity >= SpatialPartition::KI_MAX_NUM_ENTITIES)
+            FrustumJobAssert("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\frustumtest\\FrustumTestJob.h",
+                             329, "lu16Index<KI_MAX_NUM_ENTITIES");
+        if (muNumEntitiesToTest >= SpatialPartition::KI_MAX_NUM_ENTITIES)
+            FrustumJobAssert("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\frustumtest\\FrustumTestJob.h",
+                             330, "muNumEntitiesToTest<KI_MAX_NUM_ENTITIES");
+        mau16EntitiesToTest[muNumEntitiesToTest] = lu16Entity;
+        ++muNumEntitiesToTest;
+    }
 
     // CgsSceneManager::FrustumTestJob::Execute @ 0x82BE0158
     //
@@ -98,41 +122,84 @@ namespace CgsSceneManager
     // open a result-buffer slot, descend the octree, run the narrow sphere test, then advance
     // the buffer to the next query slot. The X360 caches mpRootNodeInfo(header[1]) and
     // mpEntityArray(header[2]) into +0x5680/+0x5684 once before the loop.
-    void* FrustumTestJob::Execute()
+    void* FrustumTestJob::Execute(const FrustumTestJobData& lrJobData)
     {
-        // X360 FrustumTestJobData::operator=(&mJobData) @0x82BE016C -- the job snapshots its
-        // own payload (self-assignment; the operator copies the live regions in place).
-        mJobData = mJobData;  // NOLINT: models the in-place FrustumTestJobData::operator= call
-
-        mpNodeEntityInfoArray = reinterpret_cast<void*>(mJobData.mau32Header[1]); // 0x4E84 -> 0x5680
-        mpEntityArray         = reinterpret_cast<void*>(mJobData.mau32Header[2]); // 0x4E88 -> 0x5684
+        mJobData = lrJobData;
+        mpNodeEntityInfoArray = mJobData.mpNodeTypeMasks;
+        mpEntityArray = mJobData.mpEntityLinks;
 
         for (u32 luQuery = 0; luQuery < mJobData.mQueryInfo.muNumQueries; ++luQuery)
         {
             std::memcpy(&mCurrentViewProjection, &mJobData.mQueryInfo.maViewProjection[luQuery],
                         sizeof(Matrix44));
-            std::memcpy(macCurrentFrustum, &mJobData.mQueryInfo.maFrustum[luQuery], 0x80);
+            std::memcpy(&mCurrentFrustum, &mJobData.mQueryInfo.maFrustum[luQuery], 0x80);
 
             muNumEntitiesToTest = 0;
             mxCurrentEntityTypeFlags = mJobData.mQueryInfo.max32EntityTypeFlags[luQuery];
 
-            CGS_ASSERT(KU_MAX_OCTREE_NODES >= mJobData.mau32Header[4],
-                       "KU_MAX_OCTREE_NODES >= mFrustumTestJobData.muNumNodes");
+            if (mJobData.muNumNodes > KU_MAX_OCTREE_NODES)
+                FrustumJobAssert("D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\FrustumTest\\FrustumTestJob.cpp",
+                                 212, "KU_MAX_OCTREE_NODES >= mFrustumTestJobData.muNumNodes");
 
-            u32* lpResultBuffer = reinterpret_cast<u32*>(mJobData.mau32Trailer[0]);
-            lpResultBuffer[lpResultBuffer[0] + 2] = lpResultBuffer[1]; // (numQueries+2)*4
+            JobCoarseResultBuffer* lpResultBuffer = mJobData.mpResultBuffer;
+            lpResultBuffer->maQueryOffsets[lpResultBuffer->muNumQueries] = lpResultBuffer->muCurrentWriteOffset;
 
             FrustumTestRecursive(0);
             TestEntitiesBulk();
 
-            lpResultBuffer = reinterpret_cast<u32*>(mJobData.mau32Trailer[0]);
-            CGS_ASSERT(lpResultBuffer[0] < 0x10u,
-                       "muNumQueries < KU_JOB_BUFFER_MAX_NUM_QUERIES");
+            lpResultBuffer = mJobData.mpResultBuffer;
+            if (lpResultBuffer->muNumQueries >= KU_JOB_BUFFER_MAX_NUM_QUERIES)
+                FrustumJobAssert("..\\..\\GameClasses\\SceneManager/SpatialPartitionModule/CgsJobCoarseResultBuffer.h",
+                                 113, "muNumQueries < KU_JOB_BUFFER_MAX_NUM_QUERIES");
 
-            ++lpResultBuffer[0]; // ++muNumQueries
+            ++lpResultBuffer->muNumQueries;
         }
 
-        return reinterpret_cast<void*>(mJobData.mau32Trailer[0]);
+        return mJobData.mpResultBuffer;
+    }
+
+    // 0x828B19E8: classify a node's box in homogeneous view-projection space.
+    int FrustumTestJob::NodeInsideFrustumVp(const LooseOctreeNode* lpNode, const Matrix44* lpViewProjection)
+    {
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lvPosition = __vrlimi(__lvx(&lpNode->mPosition, 0), lvOne, 1, 0);
+        const __vector4 lvHalf = __lvx(&lpNode->mHalfDimensions, 0);
+        const __vector4 lvRow0 = __lvx(lpViewProjection, 0);
+        const __vector4 lvRow1 = __lvx(lpViewProjection, 16);
+        const __vector4 lvRow2 = __lvx(lpViewProjection, 32);
+        const __vector4 lvRow3 = __lvx(lpViewProjection, 48);
+        const __vector4 lvExtent0 = __vmulfp(lvRow0, __vspltw(lvHalf, 0));
+        const __vector4 lvExtent1 = __vmulfp(lvRow1, __vspltw(lvHalf, 1));
+        const __vector4 lvExtent2 = __vmulfp(lvRow2, __vspltw(lvHalf, 2));
+        __vector4 lvCentre = __vmulfp(lvRow0, __vspltw(lvPosition, 0));
+        lvCentre = __vmaddfp(lvRow1, __vspltw(lvPosition, 1), lvCentre);
+        lvCentre = __vmaddfp(lvRow2, __vspltw(lvPosition, 2), lvCentre);
+        lvCentre = __vmaddfp(lvRow3, __vspltw(lvPosition, 3), lvCentre);
+        __vector4 lvSign = __vspltisw(-1);
+        lvSign = __vslw(lvSign, lvSign);
+        const __vector4 lvMin0 = __vandc(__vsubfp(lvExtent0, __vspltw(lvExtent0, 3)), lvSign);
+        const __vector4 lvMin1 = __vandc(__vsubfp(lvExtent1, __vspltw(lvExtent1, 3)), lvSign);
+        const __vector4 lvMin2 = __vandc(__vsubfp(lvExtent2, __vspltw(lvExtent2, 3)), lvSign);
+        const __vector4 lvMax0 = __vandc(__vaddfp(lvExtent0, __vspltw(lvExtent0, 3)), lvSign);
+        const __vector4 lvMax1 = __vandc(__vaddfp(lvExtent1, __vspltw(lvExtent1, 3)), lvSign);
+        const __vector4 lvMax2 = __vandc(__vaddfp(lvExtent2, __vspltw(lvExtent2, 3)), lvSign);
+        const __vector4 lvMinRadius = __vaddfp(__vaddfp(lvMin2, lvMin1), lvMin0);
+        const __vector4 lvMaxRadius = __vaddfp(__vaddfp(lvMax0, lvMax1), lvMax2);
+        const __vector4 lvLow = __vsubfp(lvCentre, __vspltw(lvCentre, 3));
+        const __vector4 lvHigh = __vaddfp(lvCentre, __vspltw(lvCentre, 3));
+        const __vector4 lvOutside = __vor(__vcmpgtfp(lvLow, lvMinRadius),
+                                          __vnor(__vcmpgefp(lvHigh, __vxor(lvMaxRadius, lvSign)),
+                                                 __vcmpgefp(lvHigh, __vxor(lvMaxRadius, lvSign))));
+        const __vector4 lvPartial = __vor(__vcmpgtfp(lvLow, __vxor(lvMinRadius, lvSign)),
+                                          __vnor(__vcmpgefp(lvHigh, lvMaxRadius),
+                                                 __vcmpgefp(lvHigh, lvMaxRadius)));
+        CGS_ALIGN(16) u32 lauOutside[4];
+        CGS_ALIGN(16) u32 lauPartial[4];
+        __stvx(lvOutside, lauOutside, 0);
+        __stvx(lvPartial, lauPartial, 0);
+        if ((lauOutside[0] | lauOutside[1] | lauOutside[2] | lauOutside[3]) != 0)
+            return 0;
+        return (lauPartial[0] | lauPartial[1] | lauPartial[2] | lauPartial[3]) == 0 ? 1 : 2;
     }
 
     // CgsSceneManager::FrustumTestJob::FrustumTestRecursive @ 0x82BDFFC8
@@ -143,8 +210,8 @@ namespace CgsSceneManager
     // -> 0 prunes. The +3 octant is folded into the outer loop.
     int FrustumTestJob::FrustumTestRecursive(u16 lu16NodeIndex)
     {
-        const u8* lpRootNode = reinterpret_cast<const u8*>(mJobData.mau32Header[0]);
-        const u8* lpNode = lpRootNode + 96 * lu16NodeIndex;
+        const LooseOctreeNode* lpRootNode = mJobData.mpNodes;
+        const LooseOctreeNode* lpNode = lpRootNode + lu16NodeIndex;
 
         int liResult = NodeInsideFrustumVp(lpNode, &mCurrentViewProjection);
 
@@ -153,37 +220,35 @@ namespace CgsSceneManager
             if (liResult != 2)
                 return liResult;
 
-            const u32 lxNodeEntityFlags = *reinterpret_cast<const u32*>(lpNode + 0x54);
-            const int liEntityCount     = *reinterpret_cast<const int*>(lpNode + 0x44);
+            const u32 lxNodeEntityFlags = lpNode->mxNodeEntityFlags;
+            const int liEntityCount     = static_cast<s32>(lpNode->muNumElements);
             if ((lxNodeEntityFlags & mxCurrentEntityTypeFlags) != 0 && liEntityCount > 0)
             {
-                for (u16 lu16Entity = *reinterpret_cast<const u16*>(lpNode + 0x4C);
+                for (u16 lu16Entity = lpNode->muHeadIndex;
                      lu16Entity != 0xFFFF;)
                 {
-                    u32* lpEntityNode = FrustumTestJob_EntityNode(this, lu16Entity);
-                    if ((lpEntityNode[0] & mxCurrentEntityTypeFlags) != 0)
+                    SpatialPartitionEntityLink& lrEntityNode = GetEntityNode(lu16Entity);
+                    if ((lrEntityNode.mx32TypeFlags & mxCurrentEntityTypeFlags) != 0)
                         PushEntityForTesting(lu16Entity);
-                    lu16Entity = *reinterpret_cast<const u16*>(
-                        reinterpret_cast<const u8*>(lpEntityNode) + 4);
+                    lu16Entity = lrEntityNode.mu16NextEntity;
                 }
             }
 
-            const u16 lu16FirstChild = *reinterpret_cast<const u16*>(lpNode + 0x42);
+            const u16 lu16FirstChild = lpNode->muFirstChildIndex;
             if (lu16FirstChild == 0xFFFF)
                 return liResult;
 
-            const u32* lpChildInfo =
-                reinterpret_cast<const u32*>(mpNodeEntityInfoArray) + lu16FirstChild;
-            if ((mxCurrentEntityTypeFlags & lpChildInfo[0]) != 0)
+            const LooseOctreeNodeEntityInfo* lpChildInfo = mpNodeEntityInfoArray + lu16FirstChild;
+            if ((mxCurrentEntityTypeFlags & lpChildInfo[0].mxSubTreeEntityFlags) != 0)
                 liResult = FrustumTestRecursive(lu16FirstChild);
-            if ((lpChildInfo[1] & mxCurrentEntityTypeFlags) != 0)
+            if ((lpChildInfo[1].mxSubTreeEntityFlags & mxCurrentEntityTypeFlags) != 0)
                 liResult = FrustumTestRecursive(static_cast<u16>(lu16FirstChild + 1));
-            if ((lpChildInfo[2] & mxCurrentEntityTypeFlags) != 0)
+            if ((lpChildInfo[2].mxSubTreeEntityFlags & mxCurrentEntityTypeFlags) != 0)
                 liResult = FrustumTestRecursive(static_cast<u16>(lu16FirstChild + 2));
-            if ((lpChildInfo[3] & mxCurrentEntityTypeFlags) == 0)
+            if ((lpChildInfo[3].mxSubTreeEntityFlags & mxCurrentEntityTypeFlags) == 0)
                 return liResult;
 
-            lpNode = lpRootNode + 96 * (lu16FirstChild + 3);
+            lpNode = lpRootNode + (lu16FirstChild + 3);
             liResult = NodeInsideFrustumVp(lpNode, &mCurrentViewProjection);
         }
 
@@ -195,18 +260,41 @@ namespace CgsSceneManager
         return liResult;
     }
 
+    // The two swizzled plane batches in 0x82BDFE70 use VMX multiply, fused
+    // multiply-add, subtract and ordered greater-than; any set lane rejects.
+    bool FrustumTestJob::SphereInsideCurrentFrustum(const CgsGeometric::Sphere* lpSphere) const
+    {
+        const __vector4 lvSphere = __lvx(&lpSphere->mPositionRadius, 0);
+        const __vector4 lvX = __vspltw(lvSphere, 0);
+        const __vector4 lvY = __vspltw(lvSphere, 1);
+        const __vector4 lvZ = __vspltw(lvSphere, 2);
+        const __vector4 lvRadius = __vspltw(lvSphere, 3);
+        const Vector4* lpPlanes = mCurrentFrustum.maSwizzledPlanes;
+        __vector4 lv0 = __vmulfp(__lvx(&lpPlanes[1], 0), lvY);
+        __vector4 lv1 = __vmulfp(__lvx(&lpPlanes[5], 0), lvY);
+        lv0 = __vmaddfp(__lvx(&lpPlanes[0], 0), lvX, lv0);
+        lv1 = __vmaddfp(__lvx(&lpPlanes[4], 0), lvX, lv1);
+        lv0 = __vmaddfp(__lvx(&lpPlanes[2], 0), lvZ, lv0);
+        lv1 = __vmaddfp(__lvx(&lpPlanes[6], 0), lvZ, lv1);
+        lv0 = __vsubfp(lv0, __lvx(&lpPlanes[3], 0));
+        lv1 = __vsubfp(lv1, __lvx(&lpPlanes[7], 0));
+        const __vector4 lvOutside = __vor(__vcmpgtfp(lv0, lvRadius), __vcmpgtfp(lv1, lvRadius));
+        CGS_ALIGN(16) u32 lauOutside[4];
+        __stvx(lvOutside, lauOutside, 0);
+        return (lauOutside[0] | lauOutside[1] | lauOutside[2] | lauOutside[3]) == 0;
+    }
+
     // CgsSceneManager::FrustumTestJob::TestEntitiesBulk @ 0x82BDFE70
     //
     // Narrow sphere-vs-frustum test over the candidate list gathered by the recursive descent.
-    // The VMX plane math is reproduced by the portable SphereInsideCurrentFrustum() stand-in
-    // (semantic parity, NOT byte-exact -- FLAGGED). The result-buffer bookkeeping is byte-exact.
+    // The sphere comparison uses the original swizzled VMX plane operations.
     // A debug bit (mJobData trailer[2] & 1) suppresses the whole pass.
     void* FrustumTestJob::TestEntitiesBulk()
     {
-        if ((mJobData.mau32Trailer[2] & 1) == 0) // miDebugMode @ 0x5658
+        if ((mJobData.miDebugMode & 1) == 0) // miDebugMode @ 0x5658
         {
             const CgsGeometric::Sphere* lpSpheres =
-                reinterpret_cast<const CgsGeometric::Sphere*>(mJobData.mau32Header[3]); // 0x4E8C
+                mJobData.mpEntitySpheres; // 0x4E8C
             for (u32 lu = 0; lu < muNumEntitiesToTest; ++lu)
             {
                 const u16 lu16Entity = mau16EntitiesToTest[lu];
@@ -214,11 +302,10 @@ namespace CgsSceneManager
 
                 if (SphereInsideCurrentFrustum(lpSphere))
                 {
-                    u32* lpBuf = reinterpret_cast<u32*>(mJobData.mau32Trailer[0]); // 0x5650
-                    u16* lpu16Buffer = reinterpret_cast<u16*>(lpBuf[34]);          // +0x88
-                    lpu16Buffer[lpBuf[1]] = lu16Entity;                            // [muCurrentWriteOffset]
-                    ++lpBuf[lpBuf[0] + 18];                                        // maQueryNumResults[muNumQueries]
-                    ++lpBuf[1];                                                    // ++muCurrentWriteOffset
+                    JobCoarseResultBuffer* lpBuf = mJobData.mpResultBuffer;
+                    lpBuf->mpu16Buffer[lpBuf->muCurrentWriteOffset] = lu16Entity;
+                    ++lpBuf->maQueryNumResults[lpBuf->muNumQueries];
+                    ++lpBuf->muCurrentWriteOffset;
                 }
             }
             muNumEntitiesToTest = 0;
@@ -232,52 +319,75 @@ namespace CgsSceneManager
     // frustum test, so no per-sphere narrow test runs -- each entity that also passes the type
     // filter is written straight into the current query's result slot. Recurses into every
     // child octant whose subtree flags intersect the mask; the +3 octant is the tail loop.
-    void* FrustumTestJob::TrivialAcceptRecursive(const u8* lpNodeIn)
+    void* FrustumTestJob::TrivialAcceptRecursive(const LooseOctreeNode* lpNodeIn)
     {
         void* lpResult = this;
-        const u8* lpRootNode = reinterpret_cast<const u8*>(mJobData.mau32Header[0]);
-        const u8* lpNode = lpNodeIn;
+        const LooseOctreeNode* lpRootNode = mJobData.mpNodes;
+        const LooseOctreeNode* lpNode = lpNodeIn;
 
         for (;;)
         {
-            const u32 lxNodeEntityFlags = *reinterpret_cast<const u32*>(lpNode + 0x54);
-            const int liEntityCount     = *reinterpret_cast<const int*>(lpNode + 0x44);
+            const u32 lxNodeEntityFlags = lpNode->mxNodeEntityFlags;
+            const int liEntityCount     = static_cast<s32>(lpNode->muNumElements);
             if ((lxNodeEntityFlags & mxCurrentEntityTypeFlags) != 0 && liEntityCount > 0)
             {
-                for (u16 lu16Entity = *reinterpret_cast<const u16*>(lpNode + 0x4C);
+                for (u16 lu16Entity = lpNode->muHeadIndex;
                      lu16Entity != 0xFFFF;)
                 {
-                    u32* lpEntityNode = FrustumTestJob_EntityNode(this, lu16Entity);
-                    lpResult = lpEntityNode;
-                    if ((lpEntityNode[0] & mxCurrentEntityTypeFlags) != 0)
+                    SpatialPartitionEntityLink& lrEntityNode = GetEntityNode(lu16Entity);
+                    lpResult = &lrEntityNode;
+                    if ((lrEntityNode.mx32TypeFlags & mxCurrentEntityTypeFlags) != 0)
                     {
-                        u32* lpBuf = reinterpret_cast<u32*>(mJobData.mau32Trailer[0]);
-                        u16* lpu16Buffer = reinterpret_cast<u16*>(lpBuf[34]); // +0x88
-                        lpu16Buffer[lpBuf[1]] = lu16Entity;
-                        ++lpBuf[lpBuf[0] + 18];
-                        ++lpBuf[1];
+                        JobCoarseResultBuffer* lpBuf = mJobData.mpResultBuffer;
+                        lpBuf->mpu16Buffer[lpBuf->muCurrentWriteOffset] = lu16Entity;
+                        ++lpBuf->maQueryNumResults[lpBuf->muNumQueries];
+                        ++lpBuf->muCurrentWriteOffset;
                     }
-                    lu16Entity = *reinterpret_cast<const u16*>(
-                        reinterpret_cast<const u8*>(lpEntityNode) + 4);
+                    lu16Entity = lrEntityNode.mu16NextEntity;
                 }
             }
 
-            const u16 lu16FirstChild = *reinterpret_cast<const u16*>(lpNode + 0x42);
+            const u16 lu16FirstChild = lpNode->muFirstChildIndex;
             if (lu16FirstChild == 0xFFFF)
                 return lpResult;
 
-            const u32* lpChildInfo =
-                reinterpret_cast<const u32*>(mpNodeEntityInfoArray) + lu16FirstChild;
-            if ((lpChildInfo[0] & mxCurrentEntityTypeFlags) != 0)
-                lpResult = TrivialAcceptRecursive(lpRootNode + 96 * lu16FirstChild);
-            if ((lpChildInfo[1] & mxCurrentEntityTypeFlags) != 0)
-                lpResult = TrivialAcceptRecursive(lpRootNode + 96 * (lu16FirstChild + 1));
-            if ((lpChildInfo[2] & mxCurrentEntityTypeFlags) != 0)
-                lpResult = TrivialAcceptRecursive(lpRootNode + 96 * (lu16FirstChild + 2));
-            if ((lpChildInfo[3] & mxCurrentEntityTypeFlags) == 0)
+            const LooseOctreeNodeEntityInfo* lpChildInfo = mpNodeEntityInfoArray + lu16FirstChild;
+            if ((lpChildInfo[0].mxSubTreeEntityFlags & mxCurrentEntityTypeFlags) != 0)
+                lpResult = TrivialAcceptRecursive(lpRootNode + lu16FirstChild);
+            if ((lpChildInfo[1].mxSubTreeEntityFlags & mxCurrentEntityTypeFlags) != 0)
+                lpResult = TrivialAcceptRecursive(lpRootNode + (lu16FirstChild + 1));
+            if ((lpChildInfo[2].mxSubTreeEntityFlags & mxCurrentEntityTypeFlags) != 0)
+                lpResult = TrivialAcceptRecursive(lpRootNode + (lu16FirstChild + 2));
+            if ((lpChildInfo[3].mxSubTreeEntityFlags & mxCurrentEntityTypeFlags) == 0)
                 return lpResult;
 
-            lpNode = lpRootNode + 96 * (lu16FirstChild + 3);
+            lpNode = lpRootNode + (lu16FirstChild + 3);
         }
     }
+}
+
+// ARTIST 0x82BDF680: the second local-job parameter is the persistent payload.
+namespace EA { namespace Thread { void* GetThreadId(); } }
+namespace CgsSceneManager
+{
+    // ARTIST 0x83299F80: six worker contexts, selected by the native job thread ID.
+    FrustumTestJob gaFrustumTestJobs[6];
+}
+
+void FrustumTestEntry(EA::Jobs::Param, EA::Jobs::Param lData,
+                      EA::Jobs::Param, EA::Jobs::Param)
+{
+    const u64 luThreadId = static_cast<u64>(reinterpret_cast<u32>(EA::Thread::GetThreadId()));
+    const u64 luIndex = (luThreadId - 0xF8000088ull) >> 2;
+    if (luIndex >= 6)
+    {
+        CgsDev::StrStream lMessage(byte_83015F20, sizeof(byte_83015F20));
+        const u64 luReportedThreadId = static_cast<u64>(reinterpret_cast<u32>(EA::Thread::GetThreadId()));
+        lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
+        CgsSceneManager::FrustumJobAssert(
+            "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\FrustumTest\\FrustumTest.cpp",
+            58, lMessage.GetBuffer());
+    }
+    CgsSceneManager::gaFrustumTestJobs[static_cast<u32>(luIndex)].Execute(
+        *static_cast<const CgsSceneManager::FrustumTestJobData*>(lData.mpValue));
 }
