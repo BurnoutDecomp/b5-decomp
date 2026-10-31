@@ -75,7 +75,7 @@ void TrafficLaneTruck::CalcTransformFromLanePosition(const BrnDirector::WorldMap
     // `VecFloat` in this namespace would bind to BrnDirector::VecFloat (the Timestep register),
     // which is a different type.
     const f32        lfParam = mLanePosition.mfParamAlongSection;
-    const ::VecFloat lParam (lfParam, lfParam, lfParam, lfParam);
+    const ::VecFloat lParam (lfParam);
 
     rw::math::vpu::Vector3 lDirection;
     lpSection->CalcDirectionAtParameter(lpHull->mpaRungs, lParam, mLanePosition.muRung, lDirection);
@@ -429,7 +429,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
     rw::math::vpu::Vector3 lNewAt;
     rw::math::vpu::Vector3 lNewRight;
     {
-        const ::VecFloat lParam(lfNewParam, lfNewParam, lfNewParam, lfNewParam);
+        const ::VecFloat lParam(lfNewParam);
         lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, luCurrentRung,
                                             lNewPosition, lNewAt, lNewRight);
     }
@@ -571,7 +571,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
     rw::math::vpu::Vector3 lNewAt;
     rw::math::vpu::Vector3 lNewRight;
     {
-        const ::VecFloat lParam(lfNewParam, lfNewParam, lfNewParam, lfNewParam);
+        const ::VecFloat lParam(lfNewParam);
         lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, luCurrentRung,
                                             lNewPosition, lNewAt, lNewRight);
     }
