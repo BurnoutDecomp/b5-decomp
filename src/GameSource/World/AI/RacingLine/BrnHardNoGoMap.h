@@ -139,13 +139,12 @@ public:
     s32  GetSectionIndex()                   { return miSectionIndex; }           // :116
     void SetSectionIndex(s32 liSectionIndex) { miSectionIndex = liSectionIndex; } // :120
 
-    // :139 / :142 / :145 / :148 -- the four packed corners. The X360 unpacks the "previous"
-    // pair with `vpermwi128 v, v, 0xBF` (lanes z,w -> x,y); only lanes x/y are ever read, so
-    // the z/w lanes (which the console leaves as a copy of w) are published as zero here.
-    Vector2 GetPreviousLeft()  { { const Vector2 lResult = { mCurrentAndPreviousLeft.z,  mCurrentAndPreviousLeft.w,  0.0f, 0.0f }; return lResult; } }
-    Vector2 GetPreviousRight() { { const Vector2 lResult = { mCurrentAndPreviousRight.z, mCurrentAndPreviousRight.w, 0.0f, 0.0f }; return lResult; } }
-    Vector2 GetCurrentLeft()   { { const Vector2 lResult = { mCurrentAndPreviousLeft.x,  mCurrentAndPreviousLeft.y,  0.0f, 0.0f }; return lResult; } }
-    Vector2 GetCurrentRight()  { { const Vector2 lResult = { mCurrentAndPreviousRight.x, mCurrentAndPreviousRight.y, 0.0f, 0.0f }; return lResult; } }
+    // The current pair retains all four packed lanes. The previous pair is the
+    // original word permutation {z, w, w, w}, including its upper lanes.
+    Vector2 GetPreviousLeft()  { Vector2 lResult; lResult.mV = __vpermwi(mCurrentAndPreviousLeft.mV, 0xBF); return lResult; }
+    Vector2 GetPreviousRight() { Vector2 lResult; lResult.mV = __vpermwi(mCurrentAndPreviousRight.mV, 0xBF); return lResult; }
+    Vector2 GetCurrentLeft()   { Vector2 lResult; lResult.mV = mCurrentAndPreviousLeft.mV; return lResult; }
+    Vector2 GetCurrentRight()  { Vector2 lResult; lResult.mV = mCurrentAndPreviousRight.mV; return lResult; }
 
     f32 GetAverageRoadWidth()  { return mfAverageWidth; }                         // :151
 
