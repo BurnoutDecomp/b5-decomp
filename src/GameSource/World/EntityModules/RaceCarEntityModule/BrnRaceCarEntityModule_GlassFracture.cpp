@@ -23,9 +23,9 @@
 //   * constant 31: lvUVOffsets verbatim (the incoming Vector4, held in v127).
 //   * constant 32: {uv.x, uv.x*equalisation, uv.y, uv.y*equalisation}
 //     (0x822BD314..0x822BD344; uv = lvUVScale).
-#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
+#include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // ShaderConstantTable
-#include "BrnCommonTypes.h"                                       // Vector2, Vector4
+#include "BrnCommonTypes.h"                                       // Vector4
 
 // The global runtime shader-constant register (console symbol mShaderConstantTable, inside
 // namespace CgsGraphics; its storage is GameShared/GameClasses/Graphics/CgsShaderConstants.cpp).
@@ -42,7 +42,7 @@ namespace BrnWorld
 
 void SetGlassFractureConstants(float lfFractureStrength,
                                float lfEqualisationFactor,
-                               const Vector2& lvUVScale,
+                               const rw::math::fpu::Vector2Template<float>& lvUVScale,
                                Vector4 lvUVOffsets)
 {
     // inv = strength > 0 ? 1/strength : 0  (0x822BD2B4 fcmpu vs 0.0f -> fdivs / fmr 0.0f)
@@ -50,20 +50,20 @@ void SetGlassFractureConstants(float lfFractureStrength,
         (lfFractureStrength > 0.0f) ? (1.0f / lfFractureStrength) : 0.0f;
 
     // Constant 30: {(1 - strength) * inv, inv, 0, 0}.
-    const Vector4 lv4Fracture = { (1.0f - lfFractureStrength) * lfInverseStrength,
+    const Vector4 lv4Fracture( (1.0f - lfFractureStrength) * lfInverseStrength,
                                lfInverseStrength,
                                0.0f,
-                               0.0f };
+                               0.0f );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData(30, lv4Fracture);
 
     // Constant 31: the incoming UV-offsets vector, verbatim (held in v127 across the call).
     CgsGraphics::mShaderConstantTable.SetShaderConstantData(31, lvUVOffsets);
 
     // Constant 32: {uv.x, uv.x * equalisation, uv.y, uv.y * equalisation}.
-    const Vector4 lv4UVScale = { lvUVScale.x,
-                              lvUVScale.x * lfEqualisationFactor,
-                              lvUVScale.y,
-                              lvUVScale.y * lfEqualisationFactor };
+    const Vector4 lv4UVScale( lvUVScale.X(),
+                              lvUVScale.X() * lfEqualisationFactor,
+                              lvUVScale.Y(),
+                              lvUVScale.Y() * lfEqualisationFactor );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData(32, lv4UVScale);
 }
 

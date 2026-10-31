@@ -76,6 +76,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
+#include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // InputBuffer_GenerateDispatchLists
 
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                    // CgsGraphics::Model / Renderable
@@ -225,7 +226,7 @@ namespace BrnWorld
 {
     void SetGlassFractureConstants(float lfFractureStrength,
                                    float lfEqualisationFactor,
-                                   const Vector2& lvUVScale,
+                                   const rw::math::fpu::Vector2Template<float>& lvUVScale,
                                    Vector4 lvUVOffsets);
 }
 
@@ -441,8 +442,8 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // SetGlassFractureConstants lives in BrnRaceCarEntityModule_GlassFracture.cpp, which was
     // absent from tools/build/build_game_exe.bat. That mount lands with this change.
     {
-        const Vector2 lv2NoFractureScale   = { 0.0f, 0.0f, 0.0f, 0.0f };
-        const Vector4 lv4NoFractureOffsets = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::fpu::Vector2Template<float> lv2NoFractureScale(0.0f, 0.0f);
+        const Vector4 lv4NoFractureOffsets(0.0f, 0.0f, 0.0f, 0.0f);
         SetGlassFractureConstants( 0.0f, 1.0f, lv2NoFractureScale, lv4NoFractureOffsets );
     }
 
