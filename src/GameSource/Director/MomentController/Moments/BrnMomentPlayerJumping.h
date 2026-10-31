@@ -12,16 +12,14 @@
 // sequences (ICE rig / dropped rig / bystander / attached rig). Class shape /
 // member names / method set / enums verbatim from the declarations
 // (BrnMomentPlayerJumping.h plus the BehaviourCollection template).
-// [FX-DIRECTOR2 2026-09-25] Allocated (NewMoment case 7) and INERT ON RETAIL: the
-// SEARCHING arm's third gate, MainDirector::mbAllowJumpMoment, is seeded false and
-// never written. The .cpp bodies the retail path and LOUD-traps the camera side
-// retail never reaches (see its banner).
+// Allocated by NewMoment case 7. MainDirector::mbAllowJumpMoment defaults false;
+// its original debug control enables the filming path implemented in the .cpp.
 //
 namespace Attrib { struct RefSpec; }   // the ice collection's TParameters (Camera.h fwd-declares it too)
 
 namespace BrnDirector
 {
-    namespace Camera { class BehaviourIceAnim; }   // template arg only (real home BrnBehaviourIceAnim.h is mutually exclusive with BehaviourRig.h's Behaviour slice)
+    namespace Camera { class BehaviourIceAnim; }
 
     // BehaviourCollection<TBehaviour, TParameters, N> -- a small bank of up to N
     // authored "shots" (a typed behaviour handle + its parameter block each) an
@@ -29,11 +27,9 @@ namespace BrnDirector
     // home:  (members, methods).
     // The method bodies are template definitions in BrnMomentPlayerJumping.cpp (the
     // console's asserts carry that path; each per-type instantiation is its own
-    // console function). Construct / AddShot / Release are bodied there; Prepare /
-    // HasFailed / CanSwitchToMeNow are [PC TRAP, NOT X360] -- only the jump moment's
-    // filming path calls them, and retail never takes it. GetCamera is the header
-    // inline below; GetNumShots / CanSwitchFromMeNow / GetBehaviourHandle /
-    // GetBehaviour have no caller in this build.
+    // console function). The filming members are defined there. GetCamera is the
+    // header inline below; GetNumShots / CanSwitchFromMeNow / GetBehaviourHandle
+    // have no caller in this build.
     template <typename TBehaviour, typename TParameters, u32 N>
     class BehaviourCollection
     {
@@ -166,8 +162,7 @@ namespace BrnDirector
         EStatus GetCameraStatus();
 
         //  Fill the frame's camera from the active collection. @0x8223AB78 (the ICF
-        // dump misattributes the folded body to CgsArray.h). [PC TRAP, NOT X360] in the
-        // .cpp: only the VALID body calls it, and retail never gets there.
+        // dump misattributes the folded body to CgsArray.h).
         bool UpdateCamera(Camera::Camera& lrCamera);
 
         // Member layout (console offsets in comments; access BY NAME).
