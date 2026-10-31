@@ -1721,6 +1721,23 @@ namespace BrnTraffic
         {
             const Vehicle* vehicle=GetVehicle(luVehicle);
             if((vehicle->GetFlags()&Vehicle::E_FLAG_HASENTITY)==0) return;
+            // FLAG PC-platform leaf: SetDead clears ALIVE while the scene entity stays registered until
+            // KillDyingVehicleEntities, and the render list is filtered on the PARAM (the cab's, for a
+            // trailer), so a dying vehicle can reach this point. The console's own RenderTrafficCar
+            // @0x82728B08 gates on ALIVE && HASENTITY (result[5] & 1 and & 2) and skips it; the
+            // IsAlive() asserts in the warmth/indicator/brake/alarm getters below fire otherwise.
+            if(!vehicle->IsAlive())
+            {
+                static s32 siWitnessLinesLeft=8;
+                if(siWitnessLinesLeft>0 && CgsDev::Log::gpDebugPrint!=0)
+                {
+                    --siWitnessLinesLeft;
+                    *CgsDev::Log::gpDebugPrint<<"[traffic-corona] skipped dying vehicle id="<<luVehicle
+                        <<" species="<<static_cast<s32>(GetVehicleSpecies(luVehicle))
+                        <<" flags=0x"<<static_cast<s32>(vehicle->GetFlags())<<"\n";
+                }
+                return;
+            }
             if(vehicle->IsPhysical())
             {
                 physics=GetTrafficPhysicsInfoForVehicl(luVehicle);
