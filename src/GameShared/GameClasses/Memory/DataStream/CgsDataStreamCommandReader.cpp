@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamCommandReader.h"
 
+#include <xtl.h>
 #include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 
 namespace CgsMemory
@@ -154,7 +155,7 @@ namespace CgsMemory
                 break;
         }
         const u32 luSize = static_cast<u32>(lpPoster->miCommandSize);
-        std::memcpy(lpDest, lpPoster->mpcCommandBuffer + luSize * luIndex, luSize * luCount);
+        XMemCpy(lpDest, lpPoster->mpcCommandBuffer + luSize * luIndex, luSize * luCount);
         *lpiReadCount = static_cast<s32>(luCount);
         if (lpiFirstIndex)
             *lpiFirstIndex = static_cast<s32>(luIndex);
