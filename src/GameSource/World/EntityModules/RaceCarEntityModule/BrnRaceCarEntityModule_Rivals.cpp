@@ -71,7 +71,7 @@ static const u8 KU_RIVAL_MEDALS_TO_UNLOCK = 0;
 
 // unk_82181510, dumped from the ARTIST image (16 bytes @ file offset 0x181510):
 // 00000000 3F800000 00000000 00000000 == {0, 1, 0, 0}. The world UP axis BuildTransform takes.
-static const Vector3 KV_RIVAL_GRID_UP_AXIS = { 0.0f, 1.0f, 0.0f, 0.0f };
+// The caller obtains this native basis row through GetVector3_YAxis().
 
 // ============================================================================================
 // SetUpAIForMode @0x82301620
@@ -125,7 +125,7 @@ void RaceCarEntityModule::SetUpAIForMode(
         const Vector3 lStartPosition  = lpGameModeParams->GetStartPosition(liOpponentIndex);
 
         Matrix44Affine lGridTransform = BrnMath::BuildTransform(lStartPosition, lStartDirection,
-                                                               KV_RIVAL_GRID_UP_AXIS);
+                                                               rw::math::vpu::GetVector3_YAxis());
 
         // 0x82301878..0x823018D8: the cop-car substitution, the same 1 << 34 mask
         // SetupOpponentData tests (the OpponentData already carries the cop id when the flag

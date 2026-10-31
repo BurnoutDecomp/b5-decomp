@@ -409,7 +409,7 @@ namespace BrnAI
         if (section->mx8Flags & 8)
         {
             const ::Vector2 flatDirection = BrnMath::Flatten(direction);
-            const ::Vector3 up = {0, 1, 0, 0};
+            const rw::math::vpu::VectorIntrinsic upIntrinsic = {0, 1, 0, 0}; const ::Vector3 up(upIntrinsic);
             const f32 width = ComputeAISectionWidth(section, flatDirection);
             position = position + Cross(direction, up) * (0.3f * width);
         }
@@ -603,11 +603,11 @@ namespace BrnAI
         ResetOnTrackCoords lCoords;
         lCoords.mpAISection = 0;
         {
-            const ::Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const ::Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lCoords.mPosition = lAggregateValue;
         }
         {
-            const ::Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const ::Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lCoords.mDirection = lAggregateValue;
         }
 
@@ -620,9 +620,9 @@ namespace BrnAI
             // ARTIST 82799D84 jump table; speed constants initialized at 82C692B0/D0.
             const f32 slow = 60.0f * 0.44704f;
             const f32 fast = 140.0f * 0.44704f;
-            const Vector3 north = {0, 0, -1, 0}, south = {0, 0, 1, 0};
-            const Vector3 east = {-1, 0, 0, 0}, west = {1, 0, 0, 0};
-            const Vector3 northEast = {-0.707f, 0, 0.707f, 0}, southWest = {0.707f, 0, -0.707f, 0};
+            const rw::math::vpu::VectorIntrinsic northIntrinsic = {0, 0, -1, 0}; const Vector3 north(northIntrinsic); const rw::math::vpu::VectorIntrinsic southIntrinsic = {0, 0, 1, 0}; const Vector3 south(southIntrinsic);
+            const rw::math::vpu::VectorIntrinsic eastIntrinsic = {-1, 0, 0, 0}; const Vector3 east(eastIntrinsic); const rw::math::vpu::VectorIntrinsic westIntrinsic = {1, 0, 0, 0}; const Vector3 west(westIntrinsic);
+            const rw::math::vpu::VectorIntrinsic northEastIntrinsic = {-0.707f, 0, 0.707f, 0}; const Vector3 northEast(northEastIntrinsic); const rw::math::vpu::VectorIntrinsic southWestIntrinsic = {0.707f, 0, -0.707f, 0}; const Vector3 southWest(southWestIntrinsic);
             switch (car->meResetSpeedType)
             {
             case E_RESET_SPEED_TYPE_NONE: case E_RESET_SPEED_TYPE_NONE_AND_IGNORE: speed = 0; break;
@@ -673,7 +673,7 @@ namespace BrnAI
             // ActiveRaceCar::GetResetCoords instead), but they are written because the console
             // writes them -- an uninitialised 32 bytes on a queue is how a plausible-looking
             // wrong pose gets read as data.
-            const Vector3 zero = {0.0f, 0.0f, 0.0f, 0.0f};
+            const rw::math::vpu::VectorIntrinsic zeroIntrinsic = {0.0f, 0.0f, 0.0f, 0.0f}; const Vector3 zero(zeroIntrinsic);
             lResult.Construct(AIModuleIO::ResetOnTrackResult::E_STATE_FAILURE,
                               lpRequest->GetGlobalRaceCarIndex(),
                               lpRequest->GetResetSpeed(),

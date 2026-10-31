@@ -878,7 +878,7 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
         mpVehicleList->GetVehicleData( liModelIndex );
     CGS_ASSERT( lpListEntry != 0, "lpListEntry != NULL" );                     // X360 :2217
 
-    const Vector3 lInitialVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const rw::math::vpu::VectorIntrinsic lInitialVelocityIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lInitialVelocity(lInitialVelocityIntrinsic);
 
     lpActiveRaceCar->OnResourcesLoaded(
         mRaceCarStreamer.GetPhysicsResource( static_cast<s32>( leActiveRaceCarIndex ) ),
@@ -1215,10 +1215,10 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
             // flt_8201BCC4 == 62500.0f == 250 m squared (`vcmpgtfp.` all-true: a NaN stays near).
             const Vector3 lCarPosition    = lpRaceCar->GetPosition();
             const Vector3 lPlayerPosition = lpPlayerCar->GetPosition();
-            const Vector3 lDelta = { lPlayerPosition.mV.x - lCarPosition.mV.x,
+            const rw::math::vpu::VectorIntrinsic lDeltaIntrinsic = { lPlayerPosition.mV.x - lCarPosition.mV.x,
                                      lPlayerPosition.mV.y - lCarPosition.mV.y,
                                      lPlayerPosition.mV.z - lCarPosition.mV.z,
-                                     0.0f };
+                                     0.0f }; const Vector3 lDelta(lDeltaIntrinsic);
             const f32 lfDistanceSquared =
                 lDelta.mV.x * lDelta.mV.x + lDelta.mV.y * lDelta.mV.y + lDelta.mV.z * lDelta.mV.z;
 
@@ -1592,7 +1592,7 @@ void RaceCarEntityModule::ResetActiveRaceCar(
 
         // 0x822F4B0C `vspltisw v2, 0` -- the ANGULAR velocity argument is a hard zero; only the
         // linear velocity this call was handed travels through.
-        const Vector3 lZeroAngularVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::VectorIntrinsic lZeroAngularVelocityIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lZeroAngularVelocity(lZeroAngularVelocityIntrinsic);
 
         lpVehicleInputInterface->ResetRaceCar(
             static_cast<u32>( leActiveRaceCarIndex ),
@@ -2115,7 +2115,7 @@ EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
                            static_cast<s8>( liGlobal ),   // asm `extsb r9, r29`
                            liOpponentIndex );
     {
-        const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::VectorIntrinsic lZeroVelocityIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lZeroVelocity(lZeroVelocityIntrinsic);
         lpRaceCar->UpdateVelocity( lZeroVelocity );
     }   // asm `vmr128 v1, v127` (zero)
 
@@ -2176,7 +2176,7 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         // asm: v1 = action+0x00 (position), v2 = action+0x10 (direction),
         //      v3 = unk_82181510 (the world UP axis row the identity basis is built from).
         {
-            const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lWorldUpIntrinsic = { 0.0f, 1.0f, 0.0f, 0.0f }; const Vector3 lWorldUp(lWorldUpIntrinsic);
             lTransform = BrnMath::BuildTransform( lpAction->mPosition, lpAction->mDirection,
                                                 lWorldUp );
         }
@@ -2785,7 +2785,7 @@ void RaceCarEntityModule::HandleGameActions(
             CGS_ASSERT(lpPlayerAddedAction != 0, "lpPlayerAddedAction");
 
             BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface = lpOutput->GetRaceCarAIInterface();
-            const Vector3 lOrigin    = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lOriginIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lOrigin(lOriginIntrinsic);
             const Vector3 lDirection = GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetDirection();
             const Matrix44Affine lTransform =
                 BrnDirector::Camera::Utils::CreateLookAt(lOrigin, rw::math::vpu::Add(lOrigin, lDirection));
@@ -3889,7 +3889,7 @@ void RaceCarEntityModule::HandleSetupNetworkCarAction(
     Matrix44Affine lTransform;
     lTransform.zAxis = rw::math::vpu::Normalize( lpSNCAction->mAt );
     {
-        const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 1.0f, 0.0f, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
         lTransform.yAxis = lAggregateValue;
     }
     lTransform.xAxis = rw::math::vpu::Cross( lTransform.yAxis, lTransform.zAxis );
@@ -6750,7 +6750,7 @@ void RaceCarEntityModule::DebugRenderPosition() const
 
         f32 lfClosestDistanceSquared = (std::numeric_limits<f32>::max)();
         s32 liClosestGlobalCar = -1;
-        Vector3 lvClosestPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::VectorIntrinsic lvClosestPositionIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; Vector3 lvClosestPosition(lvClosestPositionIntrinsic);
         for( s32 liGlobal = 0; liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liGlobal )
         {
             const RaceCar& lrRaceCar = maRaceCars[liGlobal];

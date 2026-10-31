@@ -28,6 +28,10 @@ namespace vpu
         typedef Matrix44&       InOutParam;
 
         Matrix44() {}
+        // DecFIGS matrix44.h:48; preserve native indirect values independently
+        // of Vector4's required implicit register-copy constructor.
+        Matrix44(const Matrix44& m)
+            : xAxis(m.xAxis), yAxis(m.yAxis), zAxis(m.zAxis), wAxis(m.wAxis) {}
         Matrix44(Vector4::InParam x, Vector4::InParam y, Vector4::InParam z, Vector4::InParam w)
             : xAxis(x), yAxis(y), zAxis(z), wAxis(w) {}
         Matrix44(VectorIntrinsicInParam x, VectorIntrinsicInParam y, VectorIntrinsicInParam z, VectorIntrinsicInParam w)

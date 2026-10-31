@@ -30,7 +30,7 @@ struct RouteNode
     f32 GetPositionX() const { return mfPositionX; }
     f32 GetPositionZ() const { return mfPositionZ; }
     Vector2 GetPosition() const { return Vector2(mfPositionX, mfPositionZ); }
-    Vector3 GetPositionWithZeroY() const { { const Vector3 lResult = {mfPositionX, 0.0f, mfPositionZ, 0.0f}; return lResult; } }
+    Vector3 GetPositionWithZeroY() const { { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = {mfPositionX, 0.0f, mfPositionZ, 0.0f}; const Vector3 lResult(lResultIntrinsic); return lResult; } }
     u16 GetSectionIndex() const { return muSectionIndex; }
     u8 GetPortalIndex() const { return muPortalIndex; }
     f32 GetDistanceLeft() const { return mfDistanceLeft; }

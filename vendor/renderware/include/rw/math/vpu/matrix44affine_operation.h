@@ -177,13 +177,13 @@ namespace vpu
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
 
         Matrix44Affine lResult;
-        const Vector3 lXAxis = { 1.0f,    0.0f,   0.0f, 0.0f };
+        const VectorIntrinsic lXAxisIntrinsic = { 1.0f,    0.0f,   0.0f, 0.0f }; const Vector3 lXAxis(lXAxisIntrinsic);
         lResult.xAxis = lXAxis;
-        const Vector3 lYAxis = { 0.0f,  lfCos, lfSin, 0.0f };
+        const VectorIntrinsic lYAxisIntrinsic = { 0.0f,  lfCos, lfSin, 0.0f }; const Vector3 lYAxis(lYAxisIntrinsic);
         lResult.yAxis = lYAxis;
-        const Vector3 lZAxis = { 0.0f, -lfSin, lfCos, 0.0f };
+        const VectorIntrinsic lZAxisIntrinsic = { 0.0f, -lfSin, lfCos, 0.0f }; const Vector3 lZAxis(lZAxisIntrinsic);
         lResult.zAxis = lZAxis;
-        const Vector3 lWAxis = { 0.0f,    0.0f,   0.0f, 0.0f };
+        const VectorIntrinsic lWAxisIntrinsic = { 0.0f,    0.0f,   0.0f, 0.0f }; const Vector3 lWAxis(lWAxisIntrinsic);
         lResult.wAxis = lWAxis;
         return lResult;
     }
@@ -194,13 +194,13 @@ namespace vpu
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
 
         Matrix44Affine lResult;
-        const Vector3 lXAxis = { lfCos, 0.0f, -lfSin, 0.0f };
+        const VectorIntrinsic lXAxisIntrinsic = { lfCos, 0.0f, -lfSin, 0.0f }; const Vector3 lXAxis(lXAxisIntrinsic);
         lResult.xAxis = lXAxis;
-        const Vector3 lYAxis = {  0.0f, 1.0f,    0.0f, 0.0f };
+        const VectorIntrinsic lYAxisIntrinsic = {  0.0f, 1.0f,    0.0f, 0.0f }; const Vector3 lYAxis(lYAxisIntrinsic);
         lResult.yAxis = lYAxis;
-        const Vector3 lZAxis = { lfSin, 0.0f,  lfCos, 0.0f };
+        const VectorIntrinsic lZAxisIntrinsic = { lfSin, 0.0f,  lfCos, 0.0f }; const Vector3 lZAxis(lZAxisIntrinsic);
         lResult.zAxis = lZAxis;
-        const Vector3 lWAxis = {  0.0f, 0.0f,    0.0f, 0.0f };
+        const VectorIntrinsic lWAxisIntrinsic = {  0.0f, 0.0f,    0.0f, 0.0f }; const Vector3 lWAxis(lWAxisIntrinsic);
         lResult.wAxis = lWAxis;
         return lResult;
     }
@@ -211,13 +211,13 @@ namespace vpu
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
 
         Matrix44Affine lResult;
-        const Vector3 lXAxis = {  lfCos, lfSin, 0.0f, 0.0f };
+        const VectorIntrinsic lXAxisIntrinsic = {  lfCos, lfSin, 0.0f, 0.0f }; const Vector3 lXAxis(lXAxisIntrinsic);
         lResult.xAxis = lXAxis;
-        const Vector3 lYAxis = { -lfSin, lfCos, 0.0f, 0.0f };
+        const VectorIntrinsic lYAxisIntrinsic = { -lfSin, lfCos, 0.0f, 0.0f }; const Vector3 lYAxis(lYAxisIntrinsic);
         lResult.yAxis = lYAxis;
-        const Vector3 lZAxis = {   0.0f,  0.0f, 1.0f, 0.0f };
+        const VectorIntrinsic lZAxisIntrinsic = {   0.0f,  0.0f, 1.0f, 0.0f }; const Vector3 lZAxis(lZAxisIntrinsic);
         lResult.zAxis = lZAxis;
-        const Vector3 lWAxis = {   0.0f,  0.0f, 0.0f, 0.0f };
+        const VectorIntrinsic lWAxisIntrinsic = {   0.0f,  0.0f, 0.0f, 0.0f }; const Vector3 lWAxis(lWAxisIntrinsic);
         lResult.wAxis = lWAxis;
         return lResult;
     }
@@ -296,19 +296,19 @@ namespace vpu
         const float lfSz = lfSin * lvAxis.mV.z;
 
         Matrix44Affine lResult;
-        const Vector3 lXAxis = { lfTx * lvAxis.mV.x + lfCos,
+        const VectorIntrinsic lXAxisIntrinsic = { lfTx * lvAxis.mV.x + lfCos,
                                  lfTx * lvAxis.mV.y + lfSz,
-                                 lfTx * lvAxis.mV.z - lfSy, 0.0f };
+                                 lfTx * lvAxis.mV.z - lfSy, 0.0f }; const Vector3 lXAxis(lXAxisIntrinsic);
         lResult.xAxis = lXAxis;
-        const Vector3 lYAxis = { lfTy * lvAxis.mV.x - lfSz,
+        const VectorIntrinsic lYAxisIntrinsic = { lfTy * lvAxis.mV.x - lfSz,
                                  lfTy * lvAxis.mV.y + lfCos,
-                                 lfTy * lvAxis.mV.z + lfSx, 0.0f };
+                                 lfTy * lvAxis.mV.z + lfSx, 0.0f }; const Vector3 lYAxis(lYAxisIntrinsic);
         lResult.yAxis = lYAxis;
-        const Vector3 lZAxis = { lfTz * lvAxis.mV.x + lfSy,
+        const VectorIntrinsic lZAxisIntrinsic = { lfTz * lvAxis.mV.x + lfSy,
                                  lfTz * lvAxis.mV.y - lfSx,
-                                 lfTz * lvAxis.mV.z + lfCos, 0.0f };
+                                 lfTz * lvAxis.mV.z + lfCos, 0.0f }; const Vector3 lZAxis(lZAxisIntrinsic);
         lResult.zAxis = lZAxis;
-        const Vector3 lWAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const VectorIntrinsic lWAxisIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lWAxis(lWAxisIntrinsic);
         lResult.wAxis = lWAxis;
         return lResult;
     }
@@ -503,32 +503,32 @@ namespace vpu
 
         Matrix44Affine lInverse;
         {
-            const Vector3 lAggregateValue = { lvCrossYZ.mV.x * lfInverseDeterminant,
+            const VectorIntrinsic lAggregateValueIntrinsic = { lvCrossYZ.mV.x * lfInverseDeterminant,
                                   lvCrossZX.mV.x * lfInverseDeterminant,
-                                  lvCrossXY.mV.x * lfInverseDeterminant, 0.0f };
+                                  lvCrossXY.mV.x * lfInverseDeterminant, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lInverse.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { lvCrossYZ.mV.y * lfInverseDeterminant,
+            const VectorIntrinsic lAggregateValueIntrinsic = { lvCrossYZ.mV.y * lfInverseDeterminant,
                                   lvCrossZX.mV.y * lfInverseDeterminant,
-                                  lvCrossXY.mV.y * lfInverseDeterminant, 0.0f };
+                                  lvCrossXY.mV.y * lfInverseDeterminant, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lInverse.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { lvCrossYZ.mV.z * lfInverseDeterminant,
+            const VectorIntrinsic lAggregateValueIntrinsic = { lvCrossYZ.mV.z * lfInverseDeterminant,
                                   lvCrossZX.mV.z * lfInverseDeterminant,
-                                  lvCrossXY.mV.z * lfInverseDeterminant, 0.0f };
+                                  lvCrossXY.mV.z * lfInverseDeterminant, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lInverse.zAxis = lAggregateValue;
         }
 
         // The inverse translation: -Pos transformed by the inverse rotation just built.
         const Vector3& lrPos = lrMatrix.wAxis;
         {
-            const Vector3 lAggregateValue = {
+            const VectorIntrinsic lAggregateValueIntrinsic = {
             -(lrPos.mV.x * lInverse.xAxis.mV.x + lrPos.mV.y * lInverse.yAxis.mV.x + lrPos.mV.z * lInverse.zAxis.mV.x),
             -(lrPos.mV.x * lInverse.xAxis.mV.y + lrPos.mV.y * lInverse.yAxis.mV.y + lrPos.mV.z * lInverse.zAxis.mV.y),
             -(lrPos.mV.x * lInverse.xAxis.mV.z + lrPos.mV.y * lInverse.yAxis.mV.z + lrPos.mV.z * lInverse.zAxis.mV.z),
-            0.0f };
+            0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lInverse.wAxis = lAggregateValue;
         }
         return lInverse;
@@ -706,8 +706,8 @@ namespace vpu
         // flushes to zero, so it is spelled against 0 here (ROUNDING_RULE 6).
         inline void QueryRotation(const Matrix44Affine& lrMatrix, Vector3& lrAxisOut, float& lrfAngleOut)
         {
-            const Vector3 lAntisymmetric = { lrMatrix.yAxis.mV.z - lrMatrix.zAxis.mV.y, lrMatrix.zAxis.mV.x - lrMatrix.xAxis.mV.z,
-                                             lrMatrix.xAxis.mV.y - lrMatrix.yAxis.mV.x, 0.0f };
+            const VectorIntrinsic lAntisymmetricIntrinsic = { lrMatrix.yAxis.mV.z - lrMatrix.zAxis.mV.y, lrMatrix.zAxis.mV.x - lrMatrix.xAxis.mV.z,
+                                             lrMatrix.xAxis.mV.y - lrMatrix.yAxis.mV.x, 0.0f }; const Vector3 lAntisymmetric(lAntisymmetricIntrinsic);
             const float lfTraceMinusOne = Subtract(Add(Add(lrMatrix.xAxis.mV.x, lrMatrix.yAxis.mV.y), lrMatrix.zAxis.mV.z), 1.0f);
 
             const float lfLengthSquared = Dot3(lAntisymmetric, lAntisymmetric);
@@ -721,7 +721,7 @@ namespace vpu
             else
             {
                 {
-                    const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    const VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
                     lrAxisOut = lAggregateValue;
                 }
             }
@@ -778,7 +778,7 @@ namespace vpu
             const float lfCos = SLerpDetail::VectorMin(SLerpDetail::VectorMax(SLerpDetail::Dot3(lFromAt, lToAt), -1.0f), 1.0f);
             const float lfAngle = XboxMath::XMVectorACos(lfCos);
             {
-            const Vector3 lAngles = { lfAngle, lfAngle, lfAngle, lfAngle };
+            const VectorIntrinsic lAnglesIntrinsic = { lfAngle, lfAngle, lfAngle, lfAngle }; const Vector3 lAngles(lAnglesIntrinsic);
             *lpvAngleOut = lAngles;
         }
             return lrFrom;
@@ -787,25 +787,25 @@ namespace vpu
         if (SLerpDetail::GreaterOrEqual(lfAmount, 1.0f))
         {
             {
-            const Vector3 lAngles = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const VectorIntrinsic lAnglesIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lAngles(lAnglesIntrinsic);
             *lpvAngleOut = lAngles;
         }
             return lrTo;
         }
 
         // rel = transpose(from) * to: row i is to's rows weighted by from's column i.
-        const Vector3 lColumnX = { lrFrom.xAxis.mV.x, lrFrom.yAxis.mV.x, lrFrom.zAxis.mV.x, lrFrom.wAxis.mV.x };
-        const Vector3 lColumnY = { lrFrom.xAxis.mV.y, lrFrom.yAxis.mV.y, lrFrom.zAxis.mV.y, lrFrom.wAxis.mV.y };
-        const Vector3 lColumnZ = { lrFrom.xAxis.mV.z, lrFrom.yAxis.mV.z, lrFrom.zAxis.mV.z, lrFrom.wAxis.mV.z };
+        const VectorIntrinsic lColumnXIntrinsic = { lrFrom.xAxis.mV.x, lrFrom.yAxis.mV.x, lrFrom.zAxis.mV.x, lrFrom.wAxis.mV.x }; const Vector3 lColumnX(lColumnXIntrinsic);
+        const VectorIntrinsic lColumnYIntrinsic = { lrFrom.xAxis.mV.y, lrFrom.yAxis.mV.y, lrFrom.zAxis.mV.y, lrFrom.wAxis.mV.y }; const Vector3 lColumnY(lColumnYIntrinsic);
+        const VectorIntrinsic lColumnZIntrinsic = { lrFrom.xAxis.mV.z, lrFrom.yAxis.mV.z, lrFrom.zAxis.mV.z, lrFrom.wAxis.mV.z }; const Vector3 lColumnZ(lColumnZIntrinsic);
         Matrix44Affine lRelative;
         lRelative.xAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnX);
         lRelative.yAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnY);
         lRelative.zAxis = SLerpDetail::CascadeTransformVector(lrTo, lColumnZ);
         {
-            const Vector3 lAggregateValue = { SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.x, lrTo.wAxis.mV.x))),
+            const VectorIntrinsic lAggregateValueIntrinsic = { SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.x, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.x, lrTo.wAxis.mV.x))),
                                    SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.y, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.y, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.y, lrTo.wAxis.mV.y))),
                                    SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.z, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.z, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.z, lrTo.wAxis.mV.z))),
-                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.w, lrTo.wAxis.mV.w))) };
+                                   SLerpDetail::MultiplyAdd(0.0f, lrTo.zAxis.mV.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.yAxis.mV.w, SLerpDetail::MultiplyAdd(0.0f, lrTo.xAxis.mV.w, lrTo.wAxis.mV.w))) }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
             lRelative.wAxis = lAggregateValue;
         }
 
@@ -850,21 +850,21 @@ namespace vpu
             lRotation.yAxis.mV.w = lRotation.yAxis.mV.x;
             lRotation.zAxis.mV.w = lRotation.zAxis.mV.x;
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
                 lRotation.wAxis = lAggregateValue;
             }
             lResult.xAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.xAxis);
             lResult.yAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.yAxis);
             lResult.zAxis = SLerpDetail::CascadeTransformVector(lRotation, lrFrom.zAxis);
             const Vector3 lDelta = lrTo.wAxis - lrFrom.wAxis;
-            const Vector3 lWAxis = { SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.x, lrFrom.wAxis.mV.x), SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.y, lrFrom.wAxis.mV.y),
-                                     SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.z, lrFrom.wAxis.mV.z), SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.w, lrFrom.wAxis.mV.w) };
+            const VectorIntrinsic lWAxisIntrinsic = { SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.x, lrFrom.wAxis.mV.x), SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.y, lrFrom.wAxis.mV.y),
+                                     SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.z, lrFrom.wAxis.mV.z), SLerpDetail::MultiplyAdd(lfAmount, lDelta.mV.w, lrFrom.wAxis.mV.w) }; const Vector3 lWAxis(lWAxisIntrinsic);
             lResult.wAxis = lWAxis;
         }
 
         const float lfRemaining = SLerpDetail::Subtract(lfAngle, SLerpDetail::Multiply(lfAngle, lfAmount));
         {
-            const Vector3 lAngles = { lfRemaining, lfRemaining, lfRemaining, lfRemaining };
+            const VectorIntrinsic lAnglesIntrinsic = { lfRemaining, lfRemaining, lfRemaining, lfRemaining }; const Vector3 lAngles(lAnglesIntrinsic);
             *lpvAngleOut = lAngles;
         }
         return lResult;
@@ -975,7 +975,7 @@ namespace vpu
         else
         {
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
                 lrOutAxis = lAggregateValue;
             }
         }
@@ -1016,21 +1016,21 @@ namespace vpu
         const float lfWZ = lrQuat.w * lrQuat.z;
 
         Matrix44Affine lResult;
-        const Vector3 lXAxis = { 1.0f - 2.0f * (lfYY + lfZZ),
+        const VectorIntrinsic lXAxisIntrinsic = { 1.0f - 2.0f * (lfYY + lfZZ),
                                                2.0f * (lfXY + lfWZ),
-                                               2.0f * (lfXZ - lfWY), 0.0f };
+                                               2.0f * (lfXZ - lfWY), 0.0f }; const Vector3 lXAxis(lXAxisIntrinsic);
         lResult.xAxis = lXAxis;
-        const Vector3 lYAxis = {        2.0f * (lfXY - lfWZ),
+        const VectorIntrinsic lYAxisIntrinsic = {        2.0f * (lfXY - lfWZ),
                                         1.0f - 2.0f * (lfXX + lfZZ),
-                                               2.0f * (lfYZ + lfWX), 0.0f };
+                                               2.0f * (lfYZ + lfWX), 0.0f }; const Vector3 lYAxis(lYAxisIntrinsic);
         lResult.yAxis = lYAxis;
-        const Vector3 lZAxis = {        2.0f * (lfXZ + lfWY),
+        const VectorIntrinsic lZAxisIntrinsic = {        2.0f * (lfXZ + lfWY),
                                                2.0f * (lfYZ - lfWX),
-                                        1.0f - 2.0f * (lfXX + lfYY), 0.0f };
+                                        1.0f - 2.0f * (lfXX + lfYY), 0.0f }; const Vector3 lZAxis(lZAxisIntrinsic);
         lResult.zAxis = lZAxis;
         // The SDK leaves the translation row ZERO (the console's `vspltisw 0`); ::Update
         // overwrites it with the sampled take position before it composes.
-        const Vector3 lWAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const VectorIntrinsic lWAxisIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lWAxis(lWAxisIntrinsic);
         lResult.wAxis = lWAxis;
         return lResult;
     }

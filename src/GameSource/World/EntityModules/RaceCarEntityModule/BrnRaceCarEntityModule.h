@@ -819,9 +819,9 @@ public:
         bool lbIsFreeburnLobby,
         bool lbRespawnLocalCar,
         s32 liGridPosition,
-        EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex,
         Vector3 lLocalPosition,
-        Vector3 lLocalDirection);
+        Vector3 lLocalDirection,
+        EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex);
 
     // X360 0x823058F8. Put the PLAYER's car on start-grid slot 0 (offline: a place-on-track
     // request; online: a remove/respawn at the built transform), carry its colour across,

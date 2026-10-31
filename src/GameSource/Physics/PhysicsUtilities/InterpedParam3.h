@@ -47,7 +47,7 @@ namespace BrnPhysics
             const f32 lfAB = mvParams.mV.x + (mvParams.mV.y - mvParams.mV.x) * lfT;   // lerp(A, B, t)
             const f32 lfBC = mvParams.mV.y + (mvParams.mV.z - mvParams.mV.y) * lfT;   // lerp(B, C, t)
             const f32 lfResult = lfAB + (lfBC - lfAB) * lfT;                 // lerp(AB, BC, t)
-            { const VecFloat lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
+            { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfResult, lfResult, lfResult, lfResult }; const VecFloat lResult(lResultIntrinsic); return lResult; }
         }
 
     private:

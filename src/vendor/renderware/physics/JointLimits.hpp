@@ -94,7 +94,7 @@ namespace physics
 
         // jointlimits.h:194 -- the SDK's own accessor, and the one that names the lanes.
         rw::math::vpu::Vector3 GetAngularVelocityLimit() const
-        { rw::math::vpu::Vector3 r = { mVtwist, mVswing, mVswing, 0.0f }; return r; }
+        { const rw::math::vpu::VectorIntrinsic rIntrinsic = { mVtwist, mVswing, mVswing, 0.0f }; rw::math::vpu::Vector3 r(rIntrinsic); return r; }
 
     private:
         friend void _rw_physics_JointLimits_AssertLayout();

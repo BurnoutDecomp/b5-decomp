@@ -1507,7 +1507,7 @@ namespace Vehicle
         VecFloat GetMaxSteeringAngle() const
         {
             const f32 lfAngle = mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.mV.z;
-            { const VecFloat lResult = { lfAngle, lfAngle, lfAngle, lfAngle }; return lResult; }
+            { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfAngle, lfAngle, lfAngle, lfAngle }; const VecFloat lResult(lResultIntrinsic); return lResult; }
         }
         void OverrideWheelAngle(VecFloat lvfAngleRadians)
         {
@@ -1604,8 +1604,8 @@ namespace Vehicle
         {
             const f32 lfTimeDrifting =
                 mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.mV.z;
-            { const VecFloat lResult = { lfTimeDrifting, lfTimeDrifting,
-                             lfTimeDrifting, lfTimeDrifting }; return lResult; }
+            { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { lfTimeDrifting, lfTimeDrifting,
+                             lfTimeDrifting, lfTimeDrifting }; const VecFloat lResult(lResultIntrinsic); return lResult; }
         }
 
         Vector3 GetLinearVelocityDirection() const

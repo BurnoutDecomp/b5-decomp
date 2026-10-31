@@ -392,8 +392,8 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
 
         AddRaceCarToStartingGridOrFreeburnLobby(lpPFMAction, lpOutput->GetRaceCarAIInterface(),
                                                 lpGameModeParams, lbIsFreeburnLobby, lbRespawnLocalCar,
-                                                liLocalPlayerGridPosition, leLocalPlayerActiveRaceCarIndex,
-                                                lLocalPosition, lLocalDirection);
+                                                liLocalPlayerGridPosition,
+                                                lLocalPosition, lLocalDirection, leLocalPlayerActiveRaceCarIndex);
 
         for (s32 liGrid = 0; liGrid < liGridCount; ++liGrid)
         {
@@ -405,8 +405,8 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
                        "( liGridPosition > -1 ) && ( liGridPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS )");
             AddRaceCarToStartingGridOrFreeburnLobby(lpPFMAction, lpOutput->GetRaceCarAIInterface(),
                                                     lpGameModeParams, lbIsFreeburnLobby, lbRespawnLocalCar,
-                                                    liGrid, leLocalPlayerActiveRaceCarIndex,
-                                                    lLocalPosition, lLocalDirection);
+                                                    liGrid,
+                                                    lLocalPosition, lLocalDirection, leLocalPlayerActiveRaceCarIndex);
         }
     }
     else if (!lbMovingBetweenLobbyModes)
@@ -784,8 +784,8 @@ void RaceCarEntityModule::SetUpPlayerCarForMode(
         const Vector3 lStartDirection = lpGameModeParams->GetStartDirection(KI_PLAYER_START_GRID_SLOT);
 
         // The pair the online SetUpOutOfRangeRaceCar consumes (see the banner).
-        Vector3 lSeatPosition  = { 0.0f, 0.0f, 0.0f, 0.0f };
-        Vector3 lSeatDirection = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::VectorIntrinsic lSeatPositionIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; Vector3 lSeatPosition(lSeatPositionIntrinsic);
+        const rw::math::vpu::VectorIntrinsic lSeatDirectionIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; Vector3 lSeatDirection(lSeatDirectionIntrinsic);
 
         EGlobalRaceCarIndex leGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_INVALID;
 
@@ -794,7 +794,7 @@ void RaceCarEntityModule::SetUpPlayerCarForMode(
             // ---- 0x82305AA8..0x82305BB0 : ONLINE -- respawn the car ON the grid slot --------
             // v3 == unk_82181510, the same world UP axis row HandleResetPlayerCarAction feeds
             // BuildTransform (BrnRaceCarEntityModule.cpp:2088).
-            const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lWorldUpIntrinsic = { 0.0f, 1.0f, 0.0f, 0.0f }; const Vector3 lWorldUp(lWorldUpIntrinsic);
             Matrix44Affine lGridTransform = BrnMath::BuildTransform(lStartPosition, lStartDirection, lWorldUp);
 
             lSeatDirection = lGridTransform.zAxis;   // stack copy read back at 0x82305BAC
@@ -953,18 +953,7 @@ void RaceCarEntityModule::RemoveAllRaceCars(RaceCarEntityModuleIO::OutputBuffer_
 // ============================================================================================
 namespace
 {
-    // The free-burn lobby spawn table (rodata floats, big-endian bit patterns in brackets).
-    const Vector3 KAV_FREEBURN_LOBBY_SPAWN_POSITIONS[E_ACTIVE_RACE_CAR_INDEX_COUNT] =
-    {
-        { 3008.169921875f,  -1.159999966621399f, -1874.300048828125f,  0.0f },   // [453C02B8 BF947AE1 C4EA499A]
-        { 3172.3798828125f, -3.359999895095825f, -2006.1700439453125f, 0.0f },   // [45464614 C0570A3D C4FAC571]
-        { 3248.090087890625f, -3.0f,             -1900.8699951171875f, 0.0f },   // [454B0171 C0400000 C4ED9BD7]
-        { 3053.64990234375f, -0.9399999976158142f, -1764.550048828125f, 0.0f },  // [453EDA66 BF70A3D7 C4DC919A]
-        { 3014.389892578125f, -4.130000114440918f, -2100.0400390625f,  0.0f },   // [453C663D C08428F6 C50340A4]
-        { 3103.840087890625f, -2.140000104904175f, -1906.3599853515625f, 0.0f }, // [4541FD71 C008F5C3 C4EE4B85]
-        { 3007.97607421875f, -2.490000009536743f, -1945.1099853515625f, 0.0f },  // [453BFF9E C01F5C29 C4F32385]
-        { 3057.06005859375f, -3.6500000953674316f, -1990.1800537109375f, 0.0f }, // [453F10F6 C069999A C4F8C5C3]
-    };
+
 
     // Team -> colour index (rodata u16 table): NONE 6, RED 0, BLUE 1.
     const u16 KAU16_TEAM_COLOUR_INDEX[3] = { 6u, 0u, 1u };
@@ -983,10 +972,23 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
         bool lbIsFreeburnLobby,
         bool lbRespawnLocalCar,
         s32 liGridPosition,
-        EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex,
         Vector3 lLocalPosition,
-        Vector3 lLocalDirection)
+        Vector3 lLocalDirection,
+        EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
 {
+    // ARTIST82300B84..D6C constructs this eight-row table in the local stack frame.
+    const Vector3 KAV_FREEBURN_LOBBY_SPAWN_POSITIONS[E_ACTIVE_RACE_CAR_INDEX_COUNT] =
+    {
+        Vector3(3008.169921875f, -1.159999966621399f, -1874.300048828125f),   // [453C02B8 BF947AE1 C4EA499A]
+        Vector3(3172.3798828125f, -3.359999895095825f, -2006.1700439453125f),   // [45464614 C0570A3D C4FAC571]
+        Vector3(3248.090087890625f, -3.0f, -1900.8699951171875f),   // [454B0171 C0400000 C4ED9BD7]
+        Vector3(3053.64990234375f, -0.9399999976158142f, -1764.550048828125f),  // [453EDA66 BF70A3D7 C4DC919A]
+        Vector3(3014.389892578125f, -4.130000114440918f, -2100.0400390625f),   // [453C663D C08428F6 C50340A4]
+        Vector3(3103.840087890625f, -2.140000104904175f, -1906.3599853515625f), // [4541FD71 C008F5C3 C4EE4B85]
+        Vector3(3007.97607421875f, -2.490000009536743f, -1945.1099853515625f),  // [453BFF9E C01F5C29 C4F32385]
+        Vector3(3057.06005859375f, -3.6500000953674316f, -1990.1800537109375f), // [453F10F6 C069999A C4F8C5C3]
+    };
+
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                    leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "( leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
@@ -1017,7 +1019,7 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
         else
         {
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const rw::math::vpu::VectorIntrinsic lAggregateValueIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lAggregateValue(lAggregateValueIntrinsic);
                 lPosition = lAggregateValue;
             }
         }

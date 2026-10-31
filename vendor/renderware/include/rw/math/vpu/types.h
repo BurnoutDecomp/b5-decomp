@@ -1,15 +1,12 @@
 #pragma once
 
 #include <vectorintrinsics.h>
+#include "SDKs/EATech/include/rw/math/vpu/vector3.h"
+#include "SDKs/EATech/include/rw/math/vpu/vector4.h"
 
-// Portable PC reconstruction of the RenderWare rwmath VPU vector/matrix TYPES
-// (EARenderWare rwmath 1.02.00, rw/math/vpu/*). The console SDK implements these
-// over hardware SIMD (a 16-byte `vector float` register held in `VectorIntrinsic mV`,
-// operated on with AltiVec/VMX intrinsics that do not exist on PC). We keep the
-// memory *layout* exact — one 16-byte, 16-aligned register per vector (4 named lanes);
-// matrices are 4 rows — so game structs that embed these match the console layout and
-// compile on x64. The SIMD operations live in the SDK's *_operation headers and are
-// not reproduced here (not needed for the type vocabulary).
+// Shared rwmath type entry point. Vector3/4 use their genuine SDK class homes above.
+// Vector2 remains the separately recovered VPU16 type; packed FPU/Basic2D pairs
+// and the existing matrix/quaternion declarations retain their distinct contracts.
 
 namespace rw
 {
@@ -17,11 +14,6 @@ namespace math
 {
 namespace vpu
 {
-    // One SIMD register: 4 lanes, 16-byte aligned. The SDK wraps this as a
-    // `VectorIntrinsic mV` member; here the lanes are named directly for PC access.
-    // The complex SIMD math (add/mul/transform) stays in the *_operation headers; only
-    // the trivial initialisers the SDK exposes as type methods (SetZero/SetIdentity,
-    // spelled `v.SetZero()` / `m.SetIdentity()` at the call sites) are provided here.
     // ARTIST821F0DB0 / DecFIGS vector2.h:45/49/130: genuine VPU register.
     // Copy construction and assignment stay implicit for the native value ABI.
     struct CGS_ALIGN(16) __declspec(passinreg) Vector2
@@ -32,10 +24,6 @@ namespace vpu
         Vector2(float lfX, float lfY);
         void SetZero() { mV = __vspltisw(0); }
     };
-    struct CGS_ALIGN(16) __declspec(passinreg) Vector3 { __vector4 mV; void SetZero() { mV = __vspltisw(0); }
-                                 typedef const Vector3 InParam; };   // w: unused 4th lane
-    struct CGS_ALIGN(16) __declspec(passinreg) Vector4 { __vector4 mV; void SetZero() { mV = __vspltisw(0); }
-                                 typedef const Vector4 InParam; };
 
     // ADDITIVE GROW (rw-physics solver group): the SDK quaternion -- one 16-byte lane
     // register, (x, y, z, w) with w the scalar part. The DWARF spells
@@ -57,7 +45,7 @@ namespace vpu
         float x, y, z, w;
 
         void SetZero() { x = y = z = w = 0.0f; }
-        Vector3 GetVector3() const { const Vector3 lResult = { x, y, z, 0.0f }; return lResult; }
+        Vector3 GetVector3() const { return Vector3(x, y, z); }
         void SetVector3(Vector3 lVector) { x = lVector.mV.x; y = lVector.mV.y; z = lVector.mV.z; }
         float GetPlus() const { return w; }
         void SetPlus(float lfValue) { w = lfValue; }
@@ -77,8 +65,8 @@ namespace vpu
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
         {
-            const Vector4 lxAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; xAxis = lxAxis; const Vector4 lyAxis = { 0.0f, 1.0f, 0.0f, 0.0f }; yAxis = lyAxis;
-            const Vector4 lzAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; zAxis = lzAxis; const Vector4 lwAxis = { 0.0f, 0.0f, 0.0f, 1.0f }; wAxis = lwAxis;
+            const Vector4 lxAxis(1.0f, 0.0f, 0.0f, 0.0f); xAxis = lxAxis; const Vector4 lyAxis(0.0f, 1.0f, 0.0f, 0.0f); yAxis = lyAxis;
+            const Vector4 lzAxis(0.0f, 0.0f, 1.0f, 0.0f); zAxis = lzAxis; const Vector4 lwAxis(0.0f, 0.0f, 0.0f, 1.0f); wAxis = lwAxis;
         }
     };
     struct CGS_ALIGN(16) Matrix44Affine
@@ -96,8 +84,8 @@ namespace vpu
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
         {
-            const Vector3 lxAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; xAxis = lxAxis; const Vector3 lyAxis = { 0.0f, 1.0f, 0.0f, 0.0f }; yAxis = lyAxis;
-            const Vector3 lzAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; zAxis = lzAxis; const Vector3 lwAxis = { 0.0f, 0.0f, 0.0f, 0.0f }; wAxis = lwAxis;
+            const Vector3 lxAxis(1.0f, 0.0f, 0.0f); xAxis = lxAxis; const Vector3 lyAxis(0.0f, 1.0f, 0.0f); yAxis = lyAxis;
+            const Vector3 lzAxis(0.0f, 0.0f, 1.0f); zAxis = lzAxis; const Vector3 lwAxis(0.0f, 0.0f, 0.0f); wAxis = lwAxis;
         }
 
         Vector3& Right() { return xAxis; }
@@ -123,8 +111,8 @@ namespace vpu
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); }
         void SetIdentity()
         {
-            const Vector3 lxAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; xAxis = lxAxis; const Vector3 lyAxis = { 0.0f, 1.0f, 0.0f, 0.0f }; yAxis = lyAxis;
-            const Vector3 lzAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; zAxis = lzAxis;
+            const Vector3 lxAxis(1.0f, 0.0f, 0.0f); xAxis = lxAxis; const Vector3 lyAxis(0.0f, 1.0f, 0.0f); yAxis = lyAxis;
+            const Vector3 lzAxis(0.0f, 0.0f, 1.0f); zAxis = lzAxis;
         }
     };
 

@@ -139,8 +139,8 @@ bool TrafficLaneTruck::Prepare(const BrnDirector::WorldMap& lrWorldMap,
 
     CalcTransformFromLanePosition(lrWorldMap);
 
-    mLocalAngularVelocity  = rw::math::vpu::Vector3();
-    mLinearVelocity        = rw::math::vpu::Vector3();
+    mLocalAngularVelocity  = rw::math::vpu::Vector3(__vspltisw(0));
+    mLinearVelocity        = rw::math::vpu::Vector3(__vspltisw(0));
     mfSpeed                = 20.0f;
     mfBlendDistance        = 20.0f;
     mfTransformBlendAmount = 0.1f;
