@@ -18,10 +18,11 @@
 
 namespace
 {
-    // [hudmsg] PC witness (BRN_HUDMSG_DIAG): the damage-critical / crash-boundary chain.
-    // [harness lever, PC only] BRN_DEBUG_RR_DAMCRIT=1: every crash bar arms the road-rage
-    // "one more crash to totalled" message, so a free-burn crash fires RRDamCrit through the
-    // production path (348 cannot be posted outside a Road Rage / Marked Man).
+    const char* ResolveStuntString(CgsLanguage::LanguageManager* lpManager, const char* lpcKey)
+    {
+        const u8* lpString = lpManager->FindString(lpcKey);
+        return lpString ? reinterpret_cast<const char*>(lpString) : lpcKey;
+    }
 }
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrCpy (the parked-name copy)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"              // GuiDirtyTrick* payloads + GuiHudMessage
@@ -1866,13 +1867,6 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                         reinterpret_cast<const GuiPlayerCrashingStateChangeEvent*>(lpEvent);
                     mbCrashBoundaryMessagePending = true;
                     meCrashEntryState = static_cast<s32>(lpCrashEvent->meCurrentState);
-                    // [harness lever] BRN_DEBUG_RR_DAMCRIT=1: a start-crash record arms the
-                    // road-rage pending flag exactly where a real 348 would have set it.
-                    if (DebugForceDamCrit() && lpCrashEvent->meCurrentState ==
-                            GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_START_CRASHED)
-                    {
-                        mbRoadOneMoreCrashToTotalledPending = true;
-                    }
                     if (lpCrashEvent->meCurrentState != 0)
                         mbShowDrivableMessage = true;
                     break;
@@ -3093,14 +3087,6 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
     lacBuffer[0] = 0;
     std::memset(&lacBuffer[1], 0, 127);
 
-    // Resolve a localisation key to its stored text, falling back to the raw key when
-    // the database has no entry (FindString returns NULL).
-    auto lResolveString = [lpLanguageManager](const char* lpcKey) -> const char*
-    {
-        const u8* lpcString = lpLanguageManager->FindString(lpcKey);
-        return lpcString ? reinterpret_cast<const char*>(lpcString) : lpcKey;
-    };
-
     GuiHudMessage lMessage;
 
     // ---- failure lane (repetition / crashed / plain fail) ----
@@ -3108,16 +3094,16 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
     {
         lMessage.Construct("GenericBad");
 
-        const char* lpcTitle = lResolveString("STUNT_RUN_MULTIPLIER_STUNT_FAILED");
+        const char* lpcTitle = ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_STUNT_FAILED");
 
         const char* lpcReason = lacBuffer;   // empty fragment unless a reason bit is set
         if ((lpEvent->mStuntInfo.muStuntTypes & 0x40000) != 0)
         {
-            lpcReason = lResolveString("STUNT_RUN_MULTIPLIER_REPETITION");
+            lpcReason = ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_REPETITION");
         }
         else if ((lpEvent->mStuntInfo.muStuntTypes & 0x80000) != 0)
         {
-            lpcReason = lResolveString("STUNT_RUN_MULTIPLIER_CRASHED");
+            lpcReason = ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_CRASHED");
         }
 
         lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0, lpcTitle);
@@ -3138,9 +3124,9 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
         // air (awesome bit 0x4) -- a single fragment, reversed variant swaps the key
         if ((lpEvent->mStuntInfo.muAwesomeStuntTypes & 0x4) != 0)
         {
-            CgsCore::StrCat(lacBuffer, 0x80,
-                            lResolveString(lbReverse ? "STUNT_RUN_MULTIPLIER_REVERSE_AIR"
-                                                     : "STUNT_RUN_MULTIPLIER_AIR"));
+            std::strncat(lacBuffer,
+                            ResolveStuntString(lpLanguageManager, lbReverse ? "STUNT_RUN_MULTIPLIER_REVERSE_AIR"
+                                                     : "STUNT_RUN_MULTIPLIER_AIR"), 0x80);
         }
 
         // spin (awesome bit 0x1) -- optional REVERSE prefix + singular/plural count
@@ -3148,12 +3134,12 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
         {
             if (lbReverse)
             {
-                CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_REVERSE"));
+                std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_REVERSE"), 0x80);
             }
 
             if (lpEvent->mStuntInfo.muFlatSpins <= 1)
             {
-                CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_SPIN_SINGLE"));
+                std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_SPIN_SINGLE"), 0x80);
             }
             else
             {
@@ -3171,12 +3157,12 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
         {
             if (lbReverse)
             {
-                CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_REVERSE"));
+                std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_REVERSE"), 0x80);
             }
 
             if (lpEvent->mStuntInfo.muBarrelRolls <= 1)
             {
-                CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_BARREL_ROLL_SINGLE"));
+                std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_BARREL_ROLL_SINGLE"), 0x80);
             }
             else
             {
@@ -3194,12 +3180,12 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
         {
             if (lbReverse)
             {
-                CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_REVERSE"));
+                std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_REVERSE"), 0x80);
             }
 
             if (lpEvent->mStuntInfo.mu16X360Tail16 <= 1)
             {
-                CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_LEAP_CAR_SINGLE"));
+                std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_LEAP_CAR_SINGLE"), 0x80);
             }
             else
             {
@@ -3215,31 +3201,31 @@ void HudMessageAnalyzer::HandleStuntPerformed(const GuiHUDMessageStuntPerformed*
         // super jump (awesome bit 0x10)
         if ((lpEvent->mStuntInfo.muAwesomeStuntTypes & 0x10) != 0)
         {
-            CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_SUPER_JUMP"));
+            std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_SUPER_JUMP"), 0x80);
         }
 
         // smash (awesome bit 0x20)
         if ((lpEvent->mStuntInfo.muAwesomeStuntTypes & 0x20) != 0)
         {
-            CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_SMASH"));
+            std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_SMASH"), 0x80);
         }
 
         // billboard (awesome bit 0x40)
         if ((lpEvent->mStuntInfo.muAwesomeStuntTypes & 0x40) != 0)
         {
-            CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_BILLBOARD"));
+            std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_BILLBOARD"), 0x80);
         }
 
         // burnout (awesome bit 0x80)
         if ((lpEvent->mStuntInfo.muAwesomeStuntTypes & 0x80) != 0)
         {
-            CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_BURNOUT"));
+            std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_BURNOUT"), 0x80);
         }
 
         // takedown (awesome bit 0x8000)
         if ((lpEvent->mStuntInfo.muAwesomeStuntTypes & 0x8000) != 0)
         {
-            CgsCore::StrCat(lacBuffer, 0x80, lResolveString("STUNT_RUN_MULTIPLIER_TAKEDOWN"));
+            std::strncat(lacBuffer, ResolveStuntString(lpLanguageManager, "STUNT_RUN_MULTIPLIER_TAKEDOWN"), 0x80);
         }
 
         // chain (the tail count) -- always plural-formatted
