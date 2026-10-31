@@ -1,5 +1,8 @@
 #include "GameShared/Jobs/Relocator/RelocatorJob.h"
 #include <xtl.h>
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/Jobs/CgsJobAssertBuffer.h"
 
 RelocatorJob gaRelocatorJobs[KI_NUM_RELOCATOR_JOBS];
 
@@ -42,4 +45,51 @@ void RelocatorJob::Execute(void* lpvJobData, u32 luJobId)
             }
         }
     }
+}
+
+// ARTIST 82AD29F8: stream commands through the worker's real aligned buffers.
+void RelocatorJob::ExecuteTestHijacks(CgsMemory::RelocationTestParams* lpParams, u32 luJobId)
+{
+    mTestParams = *lpParams;
+    mCommandReader.Construct(mTestParams.mpCommandPoster);
+    mResultPoster.Construct(mTestParams.mpResultReader);
+    s32 liBatches = 0;
+    s32 liCount;
+    while (mCommandReader.ReadCommands(mCommands, static_cast<s32>(luJobId), &liCount, 0) == 0)
+    {
+        for (s32 i = 0; i < liCount; ++i)
+        {
+            CgsMemory::RelocationTestParams::Command& command = mCommands[i];
+            CgsMemory::RelocationTestParams::Result& result = mResults[i];
+            result.muGetCommandUS = 0;
+            result.muExecuteCommandUS = 0;
+            result.muAddResultUS = 0;
+            result.miNumber = command.miNumber;
+            for (s32 j = 0; j < mTestParams.miCounter; ++j)
+            {
+                const char* lpSource = command.macString;
+                char* lpDest = result.macInputSting;
+                char lcValue;
+                do { lcValue = *lpSource++; *lpDest++ = lcValue; } while (lcValue != 0);
+                result.miJobId = static_cast<s32>(luJobId);
+            }
+        }
+        mResultPoster.AddResults(mResults, liCount);
+        if (++liBatches >= 2000)
+        {
+            CgsDev::StrStream lMessage(byte_83015F20, 8192);
+            lMessage << "Added crazy number of results\n";
+            const char* lpcFile = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\Relocator\\RelocatorJob.cpp";
+            CgsDev::Assert::PrintStringed(lpcFile, 0, 252, lMessage.GetBuffer());
+            __asm { mfmsr r12 }
+            __asm { ori r12, r12, 0x400 }
+            __asm { mtmsr r12 }
+            CgsDev::Assert::PrintStringed(lpcFile, 0, 252, lMessage.GetBuffer());
+            __asm { mfmsr r12 }
+            __asm { ori r12, r12, 0x400 }
+            __asm { mtmsr r12 }
+        }
+    }
+    mCommandReader.Destruct();
+    mResultPoster.Destruct();
 }
