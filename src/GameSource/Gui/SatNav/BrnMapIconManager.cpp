@@ -1,4 +1,5 @@
 #include "GameSource/Gui/BrnGuiWorldDataController.h"
+#include <float.h>
 #include <cstddef>   // offsetof (the 561 wrapper header)
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"
 #include "SharedClasses/Progression/BrnRace.h"
@@ -690,15 +691,6 @@ void MapIconManager::Update()
 // count and re-runs the owner's icon pass so the components latch the hidden state.
 void MapIconManager::SetIconsVisible(bool lbVisible)
 {
-    static u32 suVisibilityRows = 0;
-    if (sbTraceVisibility && CgsDev::Log::gpDebugPrint != 0 &&
-        mbIconsVisible != lbVisible && suVisibilityRows < 128)
-    {
-        ++suVisibilityRows;
-        *CgsDev::Log::gpDebugPrint << "[cnav-visible] owner=" << static_cast<s32>(mOwnerId)
-            << " old=" << (mbIconsVisible ? 1 : 0) << " new=" << (lbVisible ? 1 : 0)
-            << " used=" << miNumUsedIcons << "\n";
-    }
     mbIconsVisible = lbVisible;   // +0xAA1E
     if (!lbVisible)
     {
@@ -993,7 +985,7 @@ MapIconBrnBase::IconState MapIconManager::GetCrashNavIconStateForRival(
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = 0;
     for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
     {
-        const auto* const lpCandidate = mpGuiCache->GetOnlinePlayerInfo(liPlayer);
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* const lpCandidate = mpGuiCache->GetOnlinePlayerInfo(liPlayer);
         if (lpCandidate->meActiveRaceCarIndex == leCar)
         {
             lpPlayer = lpCandidate;
@@ -1077,7 +1069,7 @@ bool MapIconManager::IsTrackedIcon(const SatNavIconInfo* lpIcon)
         }
         else if (lpTracker->IsTrackingActive())
         {
-            const auto* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
+            const GuiTracker::TrackerInformation* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
             lbTracked = lpInfo->meIconType == lpIcon->GetIconType() &&
                 lpInfo->mTargetLandmarkIndex == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
         }
@@ -1093,7 +1085,7 @@ bool MapIconManager::IsStartIcon(const SatNavIconInfo* lpIcon)
     if ((mbIsDisplayingEventInfo || mpGuiCache->GetInEventColouringGate()) && mpGuiCache->GetNumPresetRaces() > 0)
     {
         CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), "Invalid preset race index");
-        const auto* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
+        const PresetRace* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
         CGS_ASSERT(lpRace != 0, "lpPresetRace");
         return static_cast<s32>(lpRace->GetStartLandmarkIndex()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
     }
@@ -1113,7 +1105,7 @@ bool MapIconManager::IsPendingRaceLandmark(const SatNavIconInfo* lpIcon) const
     const s32 liCurrent = lpTracker->GetCurrentlyTrackedIndex();
     if (liCurrent >= lpTracker->GetNumTracked() - 1)
         return false;
-    const auto* lpInfo = lpTracker->GetTrackerInformation(liCurrent + 1);
+    const GuiTracker::TrackerInformation* lpInfo = lpTracker->GetTrackerInformation(liCurrent + 1);
     CGS_ASSERT(lpInfo != 0, "lpTrackerInfo");
     return lpInfo->mTargetLandmarkIndex == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
 }
@@ -1127,7 +1119,7 @@ bool MapIconManager::IsFinishIcon(const SatNavIconInfo* lpIcon)
     if (mbIsDisplayingEventInfo && mpGuiCache->GetNumPresetRaces() > 0)
     {
         CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), "Invalid preset race index");
-        const auto* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
+        const PresetRace* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
         CGS_ASSERT(lpRace != 0, "lpPresetRace");
         return static_cast<s32>(lpRace->GetFinishLandmarkIndex()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
     }
@@ -1156,7 +1148,7 @@ bool MapIconManager::IsActiveLandmark(const SatNavIconInfo* lpIcon)
             CGS_ASSERT(lpTracker != 0, "lpGuiTracker");
             const s32 liCurrent = lpTracker->GetCurrentlyTrackedIndex();
             luCount = liCurrent == -1 ? 0 : static_cast<u8>(lpTracker->GetNumTracked() - liCurrent);
-            const auto* lpTracked = lpTracker->GetActivelyTrackedLandmarks();
+            const BrnGameState::LandmarkIndex* lpTracked = lpTracker->GetActivelyTrackedLandmarks();
             for (u8 li = 0; li < luCount; ++li)
                 laBuiltLandmarks[li] = static_cast<u16>(static_cast<s32>(lpTracked[li]));
             lpLandmarks = laBuiltLandmarks;
@@ -1250,8 +1242,8 @@ void MapIconManager::UpdateWorldIcons()
     // ---- the drive-through pass: in-view appends + the nearest volunteers ----
     s32 liNearestJunkyard = -1;
     s32 liNearestBodyShop = -1;
-    f32 lfBestJunkyardDistSq = 3.4028235e38f;
-    f32 lfBestBodyShopDistSq = 3.4028235e38f;
+    f32 lfBestJunkyardDistSq = FLT_MAX;
+    f32 lfBestBodyShopDistSq = FLT_MAX;
 
     if (!mbShowingOnlineRoute && !mbShowingPreRaceRoute && mbShowingDriveThrus)
     {
@@ -1602,7 +1594,7 @@ void MapIconManager::UpdateSatNavIcons()
                 {
                     GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
                     CGS_ASSERT(lpTracker != 0, "lpGuiTracker");
-                    const auto* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
+                    const GuiTracker::TrackerInformation* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
                     CGS_ASSERT(lpInfo != 0, "lpTrackerInfo");
                     if (MapTransform::IsWithinViewport(lpInfo->mv3Position, 0.0f, 0.0f))
                         liState = IsFinishIcon(&lrRecord) ? MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKFINISH_PENDING :
@@ -2006,7 +1998,7 @@ void MapIconManager::UpdateCrashNavIcons()
                 {
                     GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
                     CGS_ASSERT(lpTracker != 0, "lpGuiTracker");
-                    const auto* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
+                    const GuiTracker::TrackerInformation* lpInfo = lpTracker->GetTrackerInformation(lpTracker->GetCurrentlyTrackedIndex());
                     CGS_ASSERT(lpInfo != 0, "lpTrackerInfo");
                     if (MapTransform::IsWithinViewport(lpInfo->mv3Position, 0.0f, 0.0f))
                         liState = IsFinishIcon(&lrRecord) ? MapIconBrnBase::E_ICONSTATE_SATNAV_LANDMARKFINISH_PENDING :
