@@ -132,4 +132,33 @@ namespace CgsMemory
 
         return 0;
     }
+    // ARTIST 0x82867A00: reserve one contiguous batch before copying records.
+    s32 DataStreamCommandReader::ReadCommands(void* lpDest, s32 liMaxCommands,
+                                               s32* lpiReadCount, s32* lpiFirstIndex)
+    {
+        DataStreamCommandPoster* lpPoster = mpPoster;
+        u32 luIndex, luCount;
+        for (;;)
+        {
+            const u64 luCurrent = lpPoster->mEncodedStatus.GetValue();
+            luIndex = static_cast<u32>(luCurrent & DataStreamCommandPoster::KU_NEXT_COMMAND_MASK);
+            const u32 luPosted = static_cast<u32>(lpPoster->miNumCommands);
+            if (luIndex >= luPosted)
+                return 1;
+            luCount = luPosted - luIndex;
+            if (luCount > static_cast<u32>(liMaxCommands))
+                luCount = static_cast<u32>(liMaxCommands);
+            const u64 luNext = (luCurrent & DataStreamCommandPoster::KU_NUM_USERS_MASK) |
+                               (static_cast<u64>(luIndex + luCount) & DataStreamCommandPoster::KU_NEXT_COMMAND_MASK);
+            if (lpPoster->mEncodedStatus.SetValueConditional(luNext, luCurrent))
+                break;
+        }
+        const u32 luSize = static_cast<u32>(lpPoster->miCommandSize);
+        std::memcpy(lpDest, lpPoster->mpcCommandBuffer + luSize * luIndex, luSize * luCount);
+        *lpiReadCount = static_cast<s32>(luCount);
+        if (lpiFirstIndex)
+            *lpiFirstIndex = static_cast<s32>(luIndex);
+        return 0;
+    }
+
 }
