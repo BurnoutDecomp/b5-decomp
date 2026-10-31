@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the Update sub-pass monitors (phase B4)
 #include "rw/audio/core/PlugIn.h"                                  // rw::audio::core::System (muDeferredRingHighWater)
 #include "rw/rwcore_structs.h"                                     // rw::Resource / ResourceDescriptor / IResourceAllocator
+#include <xauddefs.h>                                                // XAudioGetSpeakerConfig
 
 #include <new>                                                     // placement new (the co-located carve)
 
@@ -45,6 +46,15 @@ namespace Playback
 Environment::eAudioMode Environment::GetAudioMode() const
 {
     CGS_ASSERT(mpDacPlugin != 0, "mpDacPlugin");
+
+    XAUDIOSPEAKERCONFIG lXAudioSpeakerConfig;
+    const HRESULT lhr = XAudioGetSpeakerConfig(&lXAudioSpeakerConfig);
+    CGS_ASSERT(lhr == S_OK,
+               "XAudioGetSpeakerConfig( &lXAudioSpeakerConfig ) == S_OK");
+
+    return (lXAudioSpeakerConfig & XAUDIOSPEAKERCONFIG_DIGITAL_MASK)
+            == XAUDIOSPEAKERCONFIG_DIGITAL_DOLBYDIGITAL
+        ? E_AUDIO_MODE_SURROUND : E_AUDIO_MODE_STEREO;
 }
 
 // Header-inline in the X360 callers: allocate one resource block through the
@@ -614,22 +624,6 @@ void Environment::Update(f32 af32TimeStep)
 
     UpdateVoices(lpSystem, af32TimeStep);
     UpdateFactories(af32TimeStep);
-
-    // Snapshot after the full producer pass while the existing System lock is
-    // held. The default-off path performs no ring reads or extra locking.
-    const void* lpRing = 0;
-    unsigned luCursor = 0;
-    unsigned luCapacity = 0;
-    unsigned luHighWater = 0;
-    unsigned luSystemFrame = 0;
-    if (lbTraceEnabled)
-    {
-        lpRing = lpSystem->mpDeferredRingBase;
-        luCursor = lpSystem->muDeferredRingCursor;
-        luCapacity = lpSystem->muCommandBufferSize;
-        luHighWater = lpSystem->muDeferredRingHighWater;
-        luSystemFrame = lpSystem->muFrameCounter;
-    }
 
     CGS_ASSERT(lpSystem->muDeferredRingHighWater < 157286u,
                "Command buffer high water mark.");
