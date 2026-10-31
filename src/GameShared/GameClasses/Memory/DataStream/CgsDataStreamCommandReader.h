@@ -32,6 +32,8 @@ namespace CgsMemory
 {
     struct CGS_ALIGN(128) DataStreamCommandReader
     {
+        enum EReadCommandStatus { E_READ_SUCCESS = 0, E_READ_FINISHED = 1, E_READ_COUNT = 2 };
+
         // Reconstructed in this pass (X360 0x82867830). Binds this reader to
         // lpPoster and registers it as a user of the poster's stream: atomically
         // increments the poster's packed numUsers nibble (bits 24-27 of
@@ -51,7 +53,7 @@ namespace CgsMemory
         s32 ReadCom(void* lpDest, u32* lpuOutIndex);
 
         // ARTIST 0x82867A00; DecFIGS CgsDataStreamCommandReader.h:84.
-        s32 ReadCommands(void* lpDest, s32 liMaxCommands, s32* lpiReadCount, s32* lpiFirstIndex);
+        EReadCommandStatus ReadCommands(void* lpDest, s32 liMaxCommands, s32* lpiReadCount, s32* lpiFirstIndex);
 
     private:
         // --- members ---------------------------------------------------------
