@@ -1,10 +1,7 @@
 #include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"       // cLionFX
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"   // cLionEffectDefinition
-
-#include <cstdio>   // snprintf (the BinLoad-failure diagnostic)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnParticle::ParticleDescriptionCollectionResourceType::FixUp            @ 0x8267DF40
@@ -129,46 +126,13 @@ namespace BrnParticle
     // there); BinLoad rebases the effect graph inside it and hands back the blob itself
     // as a cLionEffectDefinition*, which is stored straight back over the word.
     //
-    // ⭐ THIS WAS THE STUB, AND IT IS NOT ANY MORE (2026-09-03). It used to announce
-    // "NOT RECONSTRUCTED ... no Lion effect can start from it" and leave the word as a
-    // file offset. Both reasons it gave are paid: cLionFX::BinLoad @0x82914388 is
-    // reconstructed, and the .lef payloads are byte-order-ported so its `mVersion ==
-    // 65539` test can pass at all. The path runs the moment particles.bundle is fixed up
-    // (CgsResource::Pool::FixUpEntry, stage 2 of ParticleModule::LoadFXBundle), i.e.
-    // every boot.
-    //
-    // BinLoad returning NULL is the console's own outcome for a blob that is not a LION
-    // effect, and it stores that NULL. Announced once here so a bad port shows up as a
-    // named line rather than as descriptions that quietly never resolve.
+    // BinLoad returning NULL is the native outcome for an invalid LION effect.
+    // Store it unchanged and take the same successful post-load tail.
     bool ParticleDescriptionResourceType::DeSerialise(void* lpResource) const
     {
         ParticleDescription* lpDescription = static_cast<ParticleDescription*>(lpResource);
         void* lpBlobIn = lpDescription->GetDefinition();
         lpDescription->SetDefinition(cLionFX::BinLoad(lpBlobIn));
-
-        if (lpDescription->GetDefinition() == 0)
-        {
-            // The message names WHICH of BinLoad's two exits was taken and prints the
-            // bytes that decided it -- a "rejected" line that cannot tell a null input
-            // from a wrong magic is the kind of diagnostic this project keeps being
-            // burned by.
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                const u32* lpWords = reinterpret_cast<const u32*>(lpResource);
-                char lacMsg[512];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[particles] cLionFX::BinLoad returned NULL for a .lef: resource=%p "
-                    "word0(hash)=%08X word1(blob)=%08X word2=%08X word3=%08X blobPtr=%p "
-                    "magic=%08X -- no effect can start from this description. If the magic is "
-                    "byte-reversed, tools/assets/bundles/lef_transcode.py has not run over "
-                    "PARTICLES.BUNDLE.\n",
-                    lpResource, lpWords[0], lpWords[1], lpWords[2], lpWords[3], lpBlobIn,
-                    lpBlobIn ? *reinterpret_cast<const u32*>(lpBlobIn) : 0u);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
 
         // The tail is the ICF thunk `li r3,1; blr` -- see VFXPropsResourceType.cpp's note.
         return true;
