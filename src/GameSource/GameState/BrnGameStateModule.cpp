@@ -1278,9 +1278,9 @@ CgsID GameStateModule::FindNearestJunkyardID(Vector3 lPosition) const
             continue;
 
         const Vector3 lRegionPosition = lpRegion->GetBoxRegion()->GetPosition();
-        const f32 lfDeltaX = lRegionPosition.x - lPosition.x;
-        const f32 lfDeltaY = lRegionPosition.y - lPosition.y;
-        const f32 lfDeltaZ = lRegionPosition.z - lPosition.z;
+        const f32 lfDeltaX = lRegionPosition.mV.x - lPosition.mV.x;
+        const f32 lfDeltaY = lRegionPosition.mV.y - lPosition.mV.y;
+        const f32 lfDeltaZ = lRegionPosition.mV.z - lPosition.mV.z;
         const f32 lfSqDistance =
             lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
         const f32 lfDistance = (lfSqDistance != 0.0f) ? std::sqrt(lfSqDistance) : 0.0f;
@@ -2038,8 +2038,8 @@ void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue
             << " car=" << static_cast<u64>(lCarModelId)
             << " wheel=" << static_cast<u64>(lWheelId)
             << " scoringIdx=" << static_cast<s32>(leScoringIndex)
-            << " playerStart=(" << lPlayerStart.x << ", " << lPlayerStart.y << ", "
-            << lPlayerStart.z << ")\n";
+            << " playerStart=(" << lPlayerStart.mV.x << ", " << lPlayerStart.mV.y << ", "
+            << lPlayerStart.mV.z << ")\n";
     }
 
     mCarSelectManager.EnterJunkyardAtStartOfGame(lpActionQueue, lJunkyardId, lCarModelId, lWheelId,
@@ -2191,7 +2191,7 @@ void GameStateModule::OnProfileLoaded(GameStateModuleIO::OutputBuffer* lpOutput,
             << " profileCar=" << lacProfileCarName
             << " rank=" << static_cast<s32>(static_cast<s8>(mProgressionManager.GetProgressionRank()))
             << " maxCars=" << mProgressionManager.GetMaxCarCount()
-            << " savedPos=(" << lSavedPosition.x << ", " << lSavedPosition.y << ", " << lSavedPosition.z
+            << " savedPos=(" << lSavedPosition.mV.x << ", " << lSavedPosition.mV.y << ", " << lSavedPosition.mV.z
             << ")\n";
     }
 }
@@ -2828,9 +2828,9 @@ u16 FindNearestAISectionWithoutPointMap(const BrnAI::AISectionsData* lpAISection
             continue;
         }
         const Vector3 lMiddle = lpSection->GetMiddle();
-        const f32 lfDx = lMiddle.x - lPosition.x;
-        const f32 lfDy = lMiddle.y - lPosition.y;
-        const f32 lfDz = lMiddle.z - lPosition.z;
+        const f32 lfDx = lMiddle.mV.x - lPosition.mV.x;
+        const f32 lfDy = lMiddle.mV.y - lPosition.mV.y;
+        const f32 lfDz = lMiddle.mV.z - lPosition.mV.z;
         const f32 lfDistanceSquared = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
         if (lfDistanceSquared < lfNearestDistanceSquared)
         {
