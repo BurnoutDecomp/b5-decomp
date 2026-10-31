@@ -12,15 +12,6 @@
 #include "SDKs/EATech/rwcore/filesys/stream.h" // rw::core::filesys::Stream::Kill
 
 #include <cstddef> // offsetof
-#include <cstdlib> // abort
-
-namespace
-{
-    [[noreturn]] void UnreachableRwCoreStreamPath()
-    {
-        std::abort();
-    }
-}
 
 namespace rw
 {
@@ -187,29 +178,7 @@ void StreamPool::ReleaseStream(StreamHandle apStreamHandle)
     StreamDesc *lpStreamDesc = static_cast<StreamDesc *>(apStreamHandle);
     if (--lpStreamDesc->refCount == 0)
     {
-        // FLAG [ONE CALL OMITTED -- rw::core::filesys::Stream::Kill @0x82BBFFD8]
-        //
-        // The console calls it here (@0x82B6BC70..0x82B6BC74). It is fully DECODED AND
-        // BODIED in this tree, at src/SDKs/EATech/rwcore/filesys/stream.cpp -- but that TU
-        // is deliberately NOT MOUNTED. Two independent reasons, neither of which this
-        // slice may paper over:
-        //   1. rw::core::filesys is a documented PC simplification here. The PC build's
-        //      real async I/O runs through the DeviceManager engine; the rw filesys bundle
-        //      path was consciously left unmounted, so pulling it in is a subsystem
-        //      decision, not a link fix.
-        //   2. Mounting stream.cpp immediately exposes Stream::startnextrequest, which its
-        //      own header records as "owned by its own (not-yet-homed) TU". That is a new
-        //      decode front, and it belongs to the stream-content phase, not to this one.
-        //
-        // ⚠️ This omission has NO runtime effect, and the reason is exact rather than
-        // hopeful: ReleaseStream is reachable only through a handle that AcquireStream
-        // returned, AcquireStream is reachable only through a non-null pool, and
-        // StreamPool::GetInstance CANNOT return non-null in this image (the registry list
-        // head is a .bss global with no writer -- see the header banner). So this branch
-        // is unreachable for the same reason the console's stream path is.
-        //
-        // DELETE-WHEN: Stream::startnextrequest is homed and stream.cpp is mounted. Then
-        // restore the call -- it is one line: lpStreamDesc->pRwCoreStream->Kill();
+        lpStreamDesc->pRwCoreStream->Kill(); // lwz +0x14; bl Stream::Kill @0x82B6BC70..74
         lpStreamDesc->allocated = 0;           // @0x82B6BC7C
     }
 }
@@ -231,34 +200,3 @@ rw::core::filesys::Stream *StreamPool::GetRwCoreStream(StreamHandle apStreamHand
 } // namespace core
 } // namespace audio
 } // namespace rw
-
-namespace rw { namespace core { namespace filesys {
-
-s32 Stream::QueueFile(const char* /*apPath*/, Handle* /*apPreOpenHandle*/,
-                      u64 /*auSize*/, ChunkParseCallback /*apParse*/,
-                      void* /*apParseContext*/)
-{
-    UnreachableRwCoreStreamPath();
-}
-
-Chunk* Stream::GetChunk()
-{
-    UnreachableRwCoreStreamPath();
-}
-
-s32 Stream::ReleaseChunk(Chunk* /*apChunk*/)
-{
-    UnreachableRwCoreStreamPath();
-}
-
-s32 Stream::GetRequestState(u32 /*auRequestId*/) const
-{
-    UnreachableRwCoreStreamPath();
-}
-
-s32 Stream::GetState() const
-{
-    UnreachableRwCoreStreamPath();
-}
-
-}}}
