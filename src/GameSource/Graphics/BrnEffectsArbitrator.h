@@ -7,7 +7,7 @@
 namespace rw { struct IResourceAllocator; }
 
 // rw::graphics::postfx::ColourCube - EvalTint outputs an array of these (pointer-only here).
-namespace rw { namespace graphics { namespace postfx { class ColourCube; } } }
+namespace rw { namespace graphics { namespace postfx { struct ColourCube; } } }
 
 // BrnGraphics::EffectsArbitrator - owns the renderer's double-buffered post-FX effects
 // frames (per layer/slot) and arbitrates which effects are active each frame.

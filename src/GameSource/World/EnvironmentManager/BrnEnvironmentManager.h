@@ -21,7 +21,7 @@ class BrnEffectsFrame;
 // the complete types live in their own headers (owned by this wave's `envdata` group)
 // and are included by BrnEnvironmentManager.cpp, which walks them by name.
 namespace BrnWorld { namespace EnvironmentSettings { struct Dictionary; struct TimeLine; } }
-namespace rw { namespace graphics { namespace postfx { class ColourCube; } } }
+namespace rw { namespace graphics { namespace postfx { struct ColourCube; } } }
 
 namespace BrnWorld
 {

@@ -7,7 +7,7 @@
 // sits at BrnEffectsData.h:40 in the same dump). Pointer-only here; the complete type lives in
 // SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxcolourcube.h, which declares it a
 // `class` -- matched here so no translation unit sees a struct/class mismatch (C4099).
-namespace rw { namespace graphics { namespace postfx { class ColourCube; } } }
+namespace rw { namespace graphics { namespace postfx { struct ColourCube; } } }
 
 // Declaration shape for the six data structs and BrnEffectsFrame: the DecFIGS DWARF
 // (references/DecFIGS/dwarfdump/SharedClasses/Graphics/BrnEffectsData.h:84..321) and, for
