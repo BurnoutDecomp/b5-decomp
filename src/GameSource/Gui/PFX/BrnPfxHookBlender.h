@@ -6,7 +6,7 @@
 #include "GameSource/Gui/PFX/BrnGuiPFXHooks.h"                     // BrnGui::PFXHook / PFXHookNode / PFXGroup / PFXHookBundle
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h" // CgsResource::ResourcePtr<ColourCube>
 
-namespace rw { namespace graphics { namespace postfx { class ColourCube; } } }
+namespace rw { namespace graphics { namespace postfx { struct ColourCube; } } }
 
 // =============================================================================
 // BrnPfxHookBlender.h
