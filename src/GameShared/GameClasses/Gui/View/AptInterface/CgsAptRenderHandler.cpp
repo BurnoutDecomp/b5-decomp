@@ -84,13 +84,13 @@ namespace CgsGui
         const __vector4 lvA = __vperm(lvInvWidth, lvNegHeight, __lvx(kauMaskA, 0));
         const __vector4 lvB = __vperm(lvInvWidth, lvNegHeight, __lvx(kauMaskB, 0));
         __stvx(__vmulfp(__vsldoi(lvB, lvA, 8), __vspltw(lvInputs, 3)), &mPlatformTransform, 0);
-        CGS_ASSERT(mPlatformTransform.x == mPlatformTransform.x && mPlatformTransform.y == mPlatformTransform.y &&
-                   mPlatformTransform.z == mPlatformTransform.z && mPlatformTransform.w == mPlatformTransform.w,
+        CGS_ASSERT(mPlatformTransform.mV.x == mPlatformTransform.mV.x && mPlatformTransform.mV.y == mPlatformTransform.mV.y &&
+                   mPlatformTransform.mV.z == mPlatformTransform.mV.z && mPlatformTransform.mV.w == mPlatformTransform.mV.w,
                    "IsValid(mPlatformTransform)");
         const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
         __stvx(__vmulfp(lvResolution, lvHalf), &mOriginTransform, 0);
-        CGS_ASSERT(mOriginTransform.x == mOriginTransform.x && mOriginTransform.y == mOriginTransform.y &&
-                   mOriginTransform.z == mOriginTransform.z && mOriginTransform.w == mOriginTransform.w,
+        CGS_ASSERT(mOriginTransform.mV.x == mOriginTransform.mV.x && mOriginTransform.mV.y == mOriginTransform.mV.y &&
+                   mOriginTransform.mV.z == mOriginTransform.mV.z && mOriginTransform.mV.w == mOriginTransform.mV.w,
                    "IsValid(mOriginTransform)");
         for (u32 i = 0; i < KU_NUM_APT_STRINGS; ++i)
         {
@@ -181,7 +181,7 @@ namespace CgsGui
         // ROTATES them into (R,G,B,A). The X360 original reads +0xC here, i.e. the fourth
         // lane, which is the direct attestation. Full evidence: CgsIm2d.cpp's
         // FoldIm2dColourChannel note.
-        if (!(std::fabs(mVertexTransform.mColourScale.w) >= 0.00000011920929f))
+        if (!(std::fabs(mVertexTransform.mColourScale.mV.w) >= 0.00000011920929f))
         {
             CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptFlashRender);
             return;

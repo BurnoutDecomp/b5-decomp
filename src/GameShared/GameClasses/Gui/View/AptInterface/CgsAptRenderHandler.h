@@ -62,6 +62,7 @@ namespace CgsGui
         // The original AptAux debug operations update the existing text-layout
         // inputs consumed by AllocateString; no separate debug state is stored.
         friend class AptAux;
+        friend class AptCallbackRender;
     public:
         // X360 0x827DFBD8. Brings the two per-shape texture-state caches up empty, clears the
         // batch transform, marks every AptString slot free, and seeds the renderer/white-texture
@@ -147,8 +148,8 @@ namespace CgsGui
         rw::RGBA&                   GetBackgroundColour() { return mBackgroundColour; }
         // mAptResolution.mV.body[0] is the stage HEIGHT (lfs 0(+0x470)); [1] is the WIDTH
         // (lfs 4(+0x470)). Named getters mirror GetStageHeight @0x5BE010 / GetStageWidth @0x5BE028.
-        f32 GetStageHeight() const { return mAptResolution.x; }
-        f32 GetStageWidth()  const { return mAptResolution.y; }
+        f32 GetStageHeight() const { return mAptResolution.mV.x; }
+        f32 GetStageWidth()  const { return mAptResolution.mV.y; }
 
         // The white fallback texture the mask/draw path binds (guest +128). Read-only accessor
         // for the callbacks (the cache + transform members stay private).
