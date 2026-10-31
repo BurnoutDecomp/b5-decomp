@@ -569,7 +569,7 @@ namespace BrnGameState
         void UpdateCrashes(const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpQueue); // :791 / 0x8231F9B8
         void UpdateNetworkPlayerResults(const PlayerResultsInterface* lpResults, bool lbFinal); // :797 / 0x8231FA90
         void UpdateCumulativeResults(u32 luRound, s32 liNumCars, bool lbFinal);               // :804 / 0x8231FCA0
-        int  CompareRaceCarDistances(const void* lpA, const void* lpB);                       // :810 / 0x823125B8
+        static int CompareRaceCarDistances(const void* lpA, const void* lpB);                 // :810 / 0x823125B8
         void UpdateDistanceToPlayer(const ActiveRaceCarOutputInterface* lpOutput);            // :815 / 0x8232B408
         void DetectPlayerDrivingWrongWay(const ActiveRaceCarOutputInterface* lpOutput, f32 lfDeltaTime); // :821 / 0x8232B6B8
         void DetectPlayerStationary(const ActiveRaceCarOutputInterface* lpOutput, f32 lfDeltaTime);      // :827 / 0x82320008

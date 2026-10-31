@@ -155,20 +155,6 @@ namespace BrnGameState
         // BrnScoringSystem_Lookup.cpp uses the identical literal so the seed/equality test is consistent.
         const f32 KF_INVALID_RACE_DISTANCE = FLT_MAX;   // ARTIST flt_82CDB7D0: 0x7F7FFFFF
 
-        // qsort(3) comparator trampoline. The X360 build passes the address of
-        // ScoringSystem::CompareRaceCarDistances straight to qsort -- the function provably never
-        // touches `this` (see BrnScoringSystem_UpdateB.cpp), so it is a C comparator in all but its
-        // DWARF declaration. A non-static member-function pointer cannot be converted to a plain
-        // function pointer in standard C++ (MSVC C2440), so this file-local free function forwards to
-        // it. `this` is never read inside the comparator, so the null instance is never dereferenced;
-        // this preserves the single source of the ordering logic (no duplicated comparison) while
-        // matching the binary's free-function call. (Keystone surface untouched -- the member stays a
-        // member; this trampoline lives only in this TU.)
-        int CompareRaceCarDistancesTrampoline(const void* lpA, const void* lpB)
-        {
-            ScoringSystem* lpNullThis = NULL;
-            return (lpNullThis->*&ScoringSystem::CompareRaceCarDistances)(lpA, lpB);
-        }
     }
 
     // ------------------------------------------------------------------------
@@ -419,10 +405,10 @@ namespace BrnGameState
 
         // --- SORT: best (closest-to-finish) car first ---
         // X360 qsort(&maRaceCarPositioningData, 8, sizeof(RaceCarPositioningData),
-        //            &ScoringSystem::CompareRaceCarDistances). Routed through the file-local trampoline
-        // (the member comparator never reads `this`) -- see CompareRaceCarDistancesTrampoline above.
+        //            &ScoringSystem::CompareRaceCarDistances); the comparator is static and takes
+        // exactly the two record pointers passed in r3/r4 by qsort.
         qsort(maRaceCarPositioningData, 8, sizeof(RaceCarPositioningData),
-              CompareRaceCarDistancesTrampoline);
+              &ScoringSystem::CompareRaceCarDistances);
 
         // --- PASS 2: assign 1-based positions over the sorted scratch ---
         mbNewLeader    = false;                       // X360 stb 0,0x4EF8
