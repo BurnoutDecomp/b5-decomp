@@ -31,10 +31,10 @@ namespace
     void SetScreenTransform(CgsGraphics::Im2d* renderer)
     {
         CgsGraphics::Im2dTransform transform;
-        const rw::math::vpu::Vector4 origin = { -1.0f, 1.0f, 0.0f, 0.0f };
-        const rw::math::vpu::Vector4 rightUp = { 0.0015625f, 0.0f, 0.0f, -0.0027777778f };
-        const rw::math::vpu::Vector4 shift = { 0.0f, 0.0f, 0.0f, 0.0f };
-        const rw::math::vpu::Vector4 scale = { 1.0f, 1.0f, 1.0f, 1.0f };
+        const rw::math::vpu::Vector4 origin(-1.0f, 1.0f, 0.0f, 0.0f);
+        const rw::math::vpu::Vector4 rightUp(0.0015625f, 0.0f, -0.0f, -0.0027777778f);
+        const rw::math::vpu::Vector4 shift(0.0f, 0.0f, 0.0f, 0.0f);
+        const rw::math::vpu::Vector4 scale(1.0f, 1.0f, 1.0f, 1.0f);
         transform.mOriginXYZ = origin;
         transform.mRightUp = rightUp;
         transform.mColourShift = shift;
