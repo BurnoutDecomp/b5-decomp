@@ -1833,7 +1833,7 @@ void ContactGeneratorJob::ExecutePrimitivePairList()
 //     up to its type's size and no further: 16 / 32 / 80 / 0x48-of-80.
 //  3. The CgsGeometric primitive layouts landed by round 2's `addprim` cluster from the OTHER
 //     end of the pipe (PrimitivePairListBuilder::AddPrimitive's per-type packers) match slot for
-//     slot: Sphere{Vector4 mPositionRadius}, Capsule{Vector3Plus mPositionAndRadius,
+//     slot: Sphere{Vector3Plus mData}, Capsule{Vector3Plus mPositionAndRadius,
 //     mDirectionAndLength}, Box{Matrix44Affine mTransform, Vector3Plus mDimensionsAndFatness},
 //     Cylinder{Matrix44Affine mTransform, f32 mfRadius @+0x40, f32 mfLength @+0x44}.
 //
@@ -2023,14 +2023,14 @@ void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolum
             const CgsGeometric::Sphere* lpSphere =
                 static_cast<const CgsGeometric::Sphere*>(lpcPrimitiveData);
 
-            lpInstance->mPos               = AsVec4(lpSphere->mPositionRadius);
+            std::memcpy(&lpInstance->mPos, &lpSphere->mData, sizeof(lpInstance->mPos));
             lpInstance->mVolumeTag         = lu16Tag;
             lpInstance->mUserTag           = lu16Tag;
             lpInstance->mNumFaceNormals    = 0;
             lpInstance->mNumEdgeDirections = 0;
             lpInstance->mFlags             = 0;
             lpInstance->mVolumeType        = GPInstance::SPHERE;
-            lpInstance->mFatness           = lpSphere->mPositionRadius.w;   // vspltw lane 3
+            lpInstance->mFatness           = lpSphere->mData.mV.w;   // vspltw lane 3
             lpInstance->mMethods           = rw::collision::g_aGPVolumeMethods[GPInstance::SPHERE];
             break;
         }
@@ -2459,20 +2459,20 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereList(
         // (two ld/std), then loaded as a vector; sphere B is read straight out of its array.
         const Sphere lSphereA = lpaSpheresA[lu16SphereA];
 
-        const f32 lfRadiusA = lSphereA.mPositionRadius.w;      // vspltw v9, v10, 3
+        const f32 lfRadiusA = lSphereA.mData.mV.w;      // vspltw v9, v10, 3
 
         for (u16 lu16SphereB = 0; lu16SphereB < lu16NumSpheresB; ++lu16SphereB)
         {
             const Sphere& lrSphereB = lpaSpheresB[lu16SphereB];
 
-            const f32 lfRadiusB = lrSphereB.mPositionRadius.w; // vspltw v8, v12, 3
+            const f32 lfRadiusB = lrSphereB.mData.mV.w; // vspltw v8, v12, 3
 
             // 0x829216C4 `vsubfp v11, v12, v10` — a WHOLE-VECTOR subtract, so the w lane carries
             // (rB - rA) and rides through every multiply below exactly as it does on the console.
-            const f32 lfDeltaX = lrSphereB.mPositionRadius.x - lSphereA.mPositionRadius.x;
-            const f32 lfDeltaY = lrSphereB.mPositionRadius.y - lSphereA.mPositionRadius.y;
-            const f32 lfDeltaZ = lrSphereB.mPositionRadius.z - lSphereA.mPositionRadius.z;
-            const f32 lfDeltaW = lrSphereB.mPositionRadius.w - lSphereA.mPositionRadius.w;
+            const f32 lfDeltaX = lrSphereB.mData.mV.x - lSphereA.mData.mV.x;
+            const f32 lfDeltaY = lrSphereB.mData.mV.y - lSphereA.mData.mV.y;
+            const f32 lfDeltaZ = lrSphereB.mData.mV.z - lSphereA.mData.mV.z;
+            const f32 lfDeltaW = lrSphereB.mData.mV.w - lSphereA.mData.mV.w;
 
             // 0x829216CC / 0x829216D4 — the reach this pair is tested against.
             const f32 lfReach = (lfRadiusA + lfRadiusB) + lfPadding;
@@ -2508,14 +2508,14 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereList(
             // v127 == 0 and the immediate mask selecting the w lane, right before the store. The
             // vrlimi that PRECEDES each of those (0x82921728 / 0x82921734) inserts the PREVIOUS
             // iteration's w and is immediately overwritten by the zero — dead, and not reproduced.
-            lRecord.mPrimitive0Contact.x = lSphereA.mPositionRadius.x + (lfDirectionX * lfRadiusA);
-            lRecord.mPrimitive0Contact.y = lSphereA.mPositionRadius.y + (lfDirectionY * lfRadiusA);
-            lRecord.mPrimitive0Contact.z = lSphereA.mPositionRadius.z + (lfDirectionZ * lfRadiusA);
+            lRecord.mPrimitive0Contact.x = lSphereA.mData.mV.x + (lfDirectionX * lfRadiusA);
+            lRecord.mPrimitive0Contact.y = lSphereA.mData.mV.y + (lfDirectionY * lfRadiusA);
+            lRecord.mPrimitive0Contact.z = lSphereA.mData.mV.z + (lfDirectionZ * lfRadiusA);
             lRecord.mPrimitive0Contact.w = 0.0f;
 
-            lRecord.mPrimitive1Contact.x = lrSphereB.mPositionRadius.x - (lfDirectionX * lfRadiusB);
-            lRecord.mPrimitive1Contact.y = lrSphereB.mPositionRadius.y - (lfDirectionY * lfRadiusB);
-            lRecord.mPrimitive1Contact.z = lrSphereB.mPositionRadius.z - (lfDirectionZ * lfRadiusB);
+            lRecord.mPrimitive1Contact.x = lrSphereB.mData.mV.x - (lfDirectionX * lfRadiusB);
+            lRecord.mPrimitive1Contact.y = lrSphereB.mData.mV.y - (lfDirectionY * lfRadiusB);
+            lRecord.mPrimitive1Contact.z = lrSphereB.mData.mV.z - (lfDirectionZ * lfRadiusB);
             lRecord.mPrimitive1Contact.w = 0.0f;
 
             // 0x82921710 + the vsel at 0x82921750: the separation is `dot3 * invLen` (== sqrt of

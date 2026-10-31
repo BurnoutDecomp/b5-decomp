@@ -646,7 +646,7 @@ namespace CgsSceneManager
                 MakeVector4(
                     lapOverallAabb[4], lapOverallAabb[5], lapOverallAabb[6], lapOverallAabb[7]
                 ));
-            if (!lOverallAabb.ContainsPoint(lSphere.mPositionRadius))
+            if (!lOverallAabb.ContainsPoint(lSphere.mData.GetVector3()))
                 continue;
 
             const CgsGeometric::PolygonSoup* const* lpapPolySoups =
@@ -663,7 +663,7 @@ namespace CgsSceneManager
                 // ARTIST temporarily writes 5.0 into sphere W for extraction,
                 // then restores the selected radius before the contact tests.
                 CgsGeometric::Sphere lExtractionSphere = lSphere;
-                lExtractionSphere.mPositionRadius.w = KF_EXTRACTIONRADIUS;
+                lExtractionSphere.mData.mV.w = KF_EXTRACTIONRADIUS;
                 const s32 liNumTriangle4s =
                     CgsGeometric::ExtractTriangle4ListIntersectingSphere(
                         lrPolySoup, lExtractionSphere, laTriangle4s, 0x400, 0);
@@ -788,10 +788,10 @@ namespace CgsSceneManager
         const f32 lfRadius = lfMaxSize * 0.5f;
 
         CgsGeometric::Sphere lBoundingSphere;
-        lBoundingSphere.mPositionRadius.x = lvBoxPosition.x;
-        lBoundingSphere.mPositionRadius.y = lvBoxPosition.y;
-        lBoundingSphere.mPositionRadius.z = lvBoxPosition.z;
-        lBoundingSphere.mPositionRadius.w = lfRadius;
+        lBoundingSphere.mData.mV.x = lvBoxPosition.x;
+        lBoundingSphere.mData.mV.y = lvBoxPosition.y;
+        lBoundingSphere.mData.mV.z = lvBoxPosition.z;
+        lBoundingSphere.mData.mV.w = lfRadius;
 
         CgsGeometric::AxisAlignedBox lBoundingBox;
         {
@@ -1002,7 +1002,7 @@ namespace CgsSceneManager
             const rw::math::vpu::Vector4 lAggregateValue = {
             lvStartPosition.x, lvStartPosition.y, lvStartPosition.z, lfBroadPhaseRadius
         };
-            lBroadPhaseSphere.mPositionRadius = lAggregateValue;
+            lBroadPhaseSphere.mData.mV = lAggregateValue.mV;
         }
 
         CgsGeometric::AxisAlignedBox lQueryBox;

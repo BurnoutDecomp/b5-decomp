@@ -806,8 +806,8 @@ namespace Deformation
                     const TagPointSpec* lpTS = mpDeformationSpec->GetTagPointSpec(liTag);
                     const s32 liA = static_cast<s32>(lrTag.GetDeformationSensorA() - &maDeformationSensors[0]);
                     const s32 liB = static_cast<s32>(lrTag.GetDeformationSensorB() - &maDeformationSensors[0]);
-                    const Vector4& lCA = lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mPositionRadius;
-                    const Vector4& lCB = lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mPositionRadius;
+                    const Vector3Plus& lCA = lrTag.GetDeformationSensorA()->GetLocalSpaceSphere()->mData;
+                    const Vector3Plus& lCB = lrTag.GetDeformationSensorB()->GetLocalSpaceSphere()->mData;
                     const Vector3& lSA = mpDeformationSpec->GetDeformationSensorSpec(liA)->mInitialOffset;
                     const Vector3& lSB = mpDeformationSpec->GetDeformationSensorSpec(liB)->mInitialOffset;
                     const Vector3& lInit = lpTS->GetInitialPosition();
@@ -822,11 +822,11 @@ namespace Deformation
                         *CgsDev::Log::gpDebugPrint
                             << "[restrow] tag " << liTag << (lbWheel ? " WHEEL" : "")
                             << " skinned " << (lpTS->IsSkinned() ? 1 : 0)
-                            << " A " << liA << " live (" << lCA.x << "," << lCA.y << "," << lCA.z << ")"
+                            << " A " << liA << " live (" << lCA.mV.x << "," << lCA.mV.y << "," << lCA.mV.z << ")"
                             << " spec (" << lSA.x << "," << lSA.y << "," << lSA.z << ")"
                             << " offA (" << lpTS->GetOffsetAndWeightA().x << "," << lpTS->GetOffsetAndWeightA().y
                             << "," << lpTS->GetOffsetAndWeightA().z << " w " << lpTS->GetOffsetAndWeightA().w << ")"
-                            << " | B " << liB << " live (" << lCB.x << "," << lCB.y << "," << lCB.z << ")"
+                            << " | B " << liB << " live (" << lCB.mV.x << "," << lCB.mV.y << "," << lCB.mV.z << ")"
                             << " spec (" << lSB.x << "," << lSB.y << "," << lSB.z << ")"
                             << " offB (" << lpTS->GetOffsetAndWeightB().x << "," << lpTS->GetOffsetAndWeightB().y
                             << "," << lpTS->GetOffsetAndWeightB().z << " w " << lpTS->GetOffsetAndWeightB().w << ")"
@@ -1282,9 +1282,9 @@ namespace Deformation
             for (s32 liSensor = 0; liSensor < liNumSensors; ++liSensor)
             {
                 const Sphere* lpWorldSphere = maDeformationSensors[liSensor].GetWorldSpaceSphere();
-                const Vector4& lrCentre = lpWorldSphere->mPositionRadius;
-                const Vector3 lvDelta = { lrCentre.x - lvWheelWorld.x, lrCentre.y - lvWheelWorld.y,
-                                       lrCentre.z - lvWheelWorld.z, 0.0f };
+                const Vector3Plus& lrCentre = lpWorldSphere->mData;
+                const Vector3 lvDelta = { lrCentre.mV.x - lvWheelWorld.x, lrCentre.mV.y - lvWheelWorld.y,
+                                       lrCentre.mV.z - lvWheelWorld.z, 0.0f };
                 // vmsum3fp128 + vrsqrtefp/2xNewton + vsel zero-guard == the guarded Magnitude.
                 const f32 lfDistance = vpu::Magnitude(lvDelta);
                 if (lfDistance < lfMinDistance)
@@ -1310,11 +1310,11 @@ namespace Deformation
             // The appended wheel sphere: centre raised along KV_UP (unk_82181510 == (0,1,0,0),
             // image-read) by (scale*0.5)*0.5; radius = scale*0.5 (the two vrlimi w-lane writes,
             // second wins).
-            Vector4& lrWheelSphere = maWorldSensorSpheres[liNumSensors + liWheel].mPositionRadius;
-            lrWheelSphere.x = lvWheelWorld.x;
-            lrWheelSphere.y = lvWheelWorld.y + (lfScale * 0.5f) * 0.5f;
-            lrWheelSphere.z = lvWheelWorld.z;
-            lrWheelSphere.w = lfScale * 0.5f;
+            Vector3Plus& lrWheelSphere = maWorldSensorSpheres[liNumSensors + liWheel].mData;
+            lrWheelSphere.mV.x = lvWheelWorld.x;
+            lrWheelSphere.mV.y = lvWheelWorld.y + (lfScale * 0.5f) * 0.5f;
+            lrWheelSphere.mV.z = lvWheelWorld.z;
+            lrWheelSphere.mV.w = lfScale * 0.5f;
         }
 
         // ---- phase 3: swept-sphere seeding (gated on mbDoSweptSphereTests, `lbz +0x672A`) -------
@@ -1331,12 +1331,12 @@ namespace Deformation
             // contiguous index range over maWorldSensorSpheres / maSweptSpheres.
             for (s32 liSphere = 0; liSphere < liNumSensors + 4; ++liSphere)
             {
-                const Vector4& lrSphere = maWorldSensorSpheres[liSphere].mPositionRadius;
+                const Vector3Plus& lrSphere = maWorldSensorSpheres[liSphere].mData;
 
                 // r = centre - carPos; v = linVel + cross(angVel, r) (the vpermwi-0x63 cross pair;
                 // PS3 names gCrossProductPermuteConstant).
-                const Vector3 lvR = { lrSphere.x - lvCarPos.x, lrSphere.y - lvCarPos.y,
-                                   lrSphere.z - lvCarPos.z, 0.0f };
+                const Vector3 lvR = { lrSphere.mV.x - lvCarPos.x, lrSphere.mV.y - lvCarPos.y,
+                                   lrSphere.mV.z - lvCarPos.z, 0.0f };
                 const Vector3 lvPointVel = vpu::Add(lvLinearVel, vpu::Cross(lvAngularVel, lvR));
 
                 // vmsum3fp128 + vrsqrtefp/2xNewton: speed (vsel zero-guarded) + direction (the
@@ -1347,7 +1347,7 @@ namespace Deformation
                 // The two packed 16-byte stores (inlined SweptSphere::Set): the world sphere
                 // verbatim, then (dir.xyz, speed * timestep) -- the vperm/vsldoi component
                 // assembly over unk_82CDA3C0/82CDA400, image-verified as exactly this packing.
-                const Vector3Plus lSphere = { lrSphere.x, lrSphere.y, lrSphere.z, lrSphere.w };
+                const Vector3Plus lSphere = lrSphere;
                 const Vector3Plus lSweep = { lvDir.x, lvDir.y, lvDir.z, lfSpeed * KF_CONSOLE_TIMESTEP };
                 maSweptSpheres[liSphere].Set(lSphere, lSweep);
             }
@@ -1416,8 +1416,8 @@ namespace Deformation
                 }
                 for ( s32 liSphere = 0; liSphere < liNumSensors + 4; ++liSphere )
                 {
-                    const Vector4& lrL = maLocalSensorSpheres[liSphere].mPositionRadius;
-                    const Vector4& lrW = maWorldSensorSpheres[liSphere].mPositionRadius;
+                    const Vector3Plus& lrL = maLocalSensorSpheres[liSphere].mData;
+                    const Vector3Plus& lrW = maWorldSensorSpheres[liSphere].mData;
                     const Vector3 lZeroOffset = { 0.0f, 0.0f, 0.0f, 0.0f };
                     const Vector3 lSpecOff = ( liSphere < liNumSensors )
                         ? mpDeformationSpec->GetDeformationSensorSpec(liSphere)->mInitialOffset
@@ -1427,8 +1427,8 @@ namespace Deformation
                         : 0.0f;
                     *CgsDev::Log::gpDebugPrint
                         << "[sphere] " << liSphere
-                        << " local " << lrL.x << " " << lrL.y << " " << lrL.z << " r " << lrL.w
-                        << " | world " << lrW.x << " " << lrW.y << " " << lrW.z << " r " << lrW.w
+                        << " local " << lrL.mV.x << " " << lrL.mV.y << " " << lrL.mV.z << " r " << lrL.mV.w
+                        << " | world " << lrW.mV.x << " " << lrW.mV.y << " " << lrW.mV.z << " r " << lrW.mV.w
                         << " | SPEC off " << lSpecOff.x << " " << lSpecOff.y << " " << lSpecOff.z
                         << " r " << lfSpecRad
                         << "\n";

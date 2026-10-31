@@ -19,6 +19,7 @@
 // de-optimised into a helper + a scoped guard.
 // ===========================================================================
 
+#include <xtl.h>
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
@@ -144,8 +145,6 @@ s32 siProcessTriCollisionLineTestNearestsPerfMon = -1;   // (file-external since
 //  a private .i64 copy: 0x82006D70 == 0xC0000000 == -2.0f, 0x82001D9C == 0x40000000 == +2.0f
 //  (big-endian). The zero w lanes are why the clamped padding's w lane is always 0.
 // ---------------------------------------------------------------------------
-static const Vector3 KV_MIN_SWEPT_PADDING = { -2.0f, -2.0f, -2.0f, 0.0f };
-static const Vector3 KV_MAX_SWEPT_PADDING = {  2.0f,  2.0f,  2.0f, 0.0f };
 
 // The source path the X360 asserts cite (the build's absolute file path).
 static const char* const KPC_SOURCE_FILE =
@@ -1173,9 +1172,11 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
             const s32 liVolumeInstanceIndex =
                 mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolumeInstanceId);
 
+            const Vector3 lMinSweptPadding(-2.0f, -2.0f, -2.0f);
+            const Vector3 lMaxSweptPadding(2.0f, 2.0f, 2.0f);
             mEntityManager.SetVolumePadding(
                 liVolumeInstanceIndex,
-                rw::math::vpu::Clamp(lPositionDelta, KV_MIN_SWEPT_PADDING, KV_MAX_SWEPT_PADDING));
+                rw::math::vpu::Clamp(lPositionDelta, lMinSweptPadding, lMaxSweptPadding));
 
             UpdateCollisionBody(liVolumeInstanceIndex, lrEvent.mVolumeInstanceId,
                                 lpOverlapGenerationInput);
@@ -1771,15 +1772,15 @@ void SceneManagerModule::ProcessAddForCollisionEvent(
         rw::math::vpu::IsValid(lrTransform.zAxis) && rw::math::vpu::IsValid(lrTransform.wAxis);
     CGS_ASSERT(lbTransformValid, "Invalid transform for volume instance id ");               // :955
 
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.x - lBox.mMin.x),
+    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.x - lBox.mMin.mV.x),
                "Bounding box with zero width for volume instance id ");                      // :956
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.y - lBox.mMin.y),
+    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.y - lBox.mMin.mV.y),
                "Bounding box with zero height for volume instance id ");                     // :957
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.z - lBox.mMin.z),
+    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.z - lBox.mMin.mV.z),
                "Bounding box with zero depth for volume instance id ");                      // :958
-    CGS_ASSERT(lBox.mMin.x <= lBox.mMax.x, "Inside out bounding box for volume instance id ");// :959
-    CGS_ASSERT(lBox.mMin.z <= lBox.mMax.z, "Inside out bounding box for volume instance id ");// :960
-    CGS_ASSERT(lBox.mMin.y <= lBox.mMax.y, "Inside out bounding box for volume instance id ");// :961
+    CGS_ASSERT(lBox.mMin.mV.x <= lBox.mMax.mV.x, "Inside out bounding box for volume instance id ");// :959
+    CGS_ASSERT(lBox.mMin.mV.z <= lBox.mMax.mV.z, "Inside out bounding box for volume instance id ");// :960
+    CGS_ASSERT(lBox.mMin.mV.y <= lBox.mMax.mV.y, "Inside out bounding box for volume instance id ");// :961
 
     AddBody(lpOverlapGenerationInput,
             static_cast<u32>(liVolumeInstanceIndex),
@@ -1842,15 +1843,15 @@ void SceneManagerModule::ProcessAddVolumeInstanceForCachingEvent(
         rw::math::vpu::IsValid(lrTransform.zAxis) && rw::math::vpu::IsValid(lrTransform.wAxis);
     CGS_ASSERT(lbTransformValid, "Invalid transform for volume instance id ");
 
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.x - lBox.mMin.x),
+    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.x - lBox.mMin.mV.x),
                "Bounding box with zero width for volume instance id ");
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.y - lBox.mMin.y),
+    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.y - lBox.mMin.mV.y),
                "Bounding box with zero height for volume instance id ");
-    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.z - lBox.mMin.z),
+    CGS_ASSERT(!rw::math::fpu::IsZero(lBox.mMax.mV.z - lBox.mMin.mV.z),
                "Bounding box with zero depth for volume instance id ");
-    CGS_ASSERT(lBox.mMin.x <= lBox.mMax.x, "Inside out bounding box for volume instance id ");
-    CGS_ASSERT(lBox.mMin.z <= lBox.mMax.z, "Inside out bounding box for volume instance id ");
-    CGS_ASSERT(lBox.mMin.y <= lBox.mMax.y, "Inside out bounding box for volume instance id ");
+    CGS_ASSERT(lBox.mMin.mV.x <= lBox.mMax.mV.x, "Inside out bounding box for volume instance id ");
+    CGS_ASSERT(lBox.mMin.mV.z <= lBox.mMax.mV.z, "Inside out bounding box for volume instance id ");
+    CGS_ASSERT(lBox.mMin.mV.y <= lBox.mMax.mV.y, "Inside out bounding box for volume instance id ");
 
     CGS_ASSERT(lrEvent.meCacheOptions < SceneManagerIO::E_NUM_CACHE_OPTIONS,
                "lEvent.meCacheOptions < SceneManagerIO::E_NUM_CACHE_OPTIONS");
@@ -2629,7 +2630,7 @@ namespace CgsSceneManager
         inline Vector3Plus LaneCopy(const Vector3& lrLane)
         {
             Vector3Plus lOut;
-            lOut.x = lrLane.x; lOut.y = lrLane.y; lOut.z = lrLane.z; lOut.w = lrLane.w;
+            lOut.mV = lrLane.mV;
             return lOut;
         }
         inline Vector3 ZeroLane() { Vector3 lZero; lZero.SetZero(); return lZero; }   // vspltisw v0, 0
@@ -3201,10 +3202,10 @@ namespace CgsSceneManager
                     const Vector4& lrWorldParamLane =
                         *reinterpret_cast<const Vector4*>(reinterpret_cast<const u8*>(lpWorldResult) + 0x50);
                     const f32 lfFineParam = lpFineResult->mfLineParam;
-                    const bool lbWorldIsNearer = (lfFineParam > lrWorldParamLane.x) &&
-                                                 (lfFineParam > lrWorldParamLane.y) &&
-                                                 (lfFineParam > lrWorldParamLane.z) &&
-                                                 (lfFineParam > lrWorldParamLane.w);
+                    const bool lbWorldIsNearer = (lfFineParam > lrWorldParamLane.mV.x) &&
+                                                 (lfFineParam > lrWorldParamLane.mV.y) &&
+                                                 (lfFineParam > lrWorldParamLane.mV.z) &&
+                                                 (lfFineParam > lrWorldParamLane.mV.w);
                     if (lbWorldIsNearer)
                     {
                         // 0x828D3C44..0x828D3C90: the world hit wins.
@@ -3794,7 +3795,7 @@ namespace CgsSceneManager
             lrRecord.mNormal           = lrSource.mNormal;                             // src+0x30 -> +0x10
             lrRecord.mVolumeInstanceId = InvalidVolumeInstanceId();                    // qword_82F33F70 -> +0x20
             lrRecord.mEntityId         = InvalidEntityId();                            // dword_82F33F64 -> +0x28
-            lrRecord.mfLineParam       = lrSource.mLineParam.x;                        // src+0x50 -> +0x2C
+            lrRecord.mfLineParam       = lrSource.mLineParam.mV.x;                        // src+0x50 -> +0x2C
             lrRecord.mu16MaterialTag   = static_cast<u16>(lrSource.mau32Tag[0] >> 16); // lhz src+0x60 -> +0x30
             lrRecord.mu16GroupTag      = static_cast<u16>(lrSource.mau32Tag[0]);       // lwz src+0x60 -> sth +0x32
         }
@@ -4001,10 +4002,8 @@ namespace CgsSceneManager
 
             const Matrix44Affine& lrVolumeTransform = lpVolume->GetRelativeTransform();
             CgsGeometric::Sphere lSphere;                                                              // var_170
-            lSphere.mPositionRadius.x = lrTransform.wAxis.x + lrVolumeTransform.wAxis.x;             // vaddfp
-            lSphere.mPositionRadius.y = lrTransform.wAxis.y + lrVolumeTransform.wAxis.y;
-            lSphere.mPositionRadius.z = lrTransform.wAxis.z + lrVolumeTransform.wAxis.z;
-            lSphere.mPositionRadius.w = lpVolume->GetRadius();                                       // lvlx +0x50 ; vspltw
+            lSphere.mData.mV = __vaddfp(lrTransform.wAxis.mV, lrVolumeTransform.wAxis.mV); // 828D4534
+            lSphere.mData.mV.w = lpVolume->GetRadius();                                       // lvlx +0x50 ; vspltw
 
             const u16 lu16ResultList = lpCollisionGenerator->TestSphereAgainstPolySoupList(
                 &lSphere, mTriangleCollisionManager.GetPolySoupListSpacialMap(), 0, 0);                // 0x828D4560

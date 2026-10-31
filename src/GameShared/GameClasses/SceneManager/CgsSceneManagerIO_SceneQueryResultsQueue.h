@@ -183,7 +183,7 @@ namespace SceneManagerIO
             lrRecord.mVolumeInstanceId = lVolumeInstanceId;
             lrRecord.mPosition         = lrSource.mPosition;
             lrRecord.mNormal           = lrSource.mNormal;
-            lrRecord.mfLineParam       = lrSource.mLineParam.x;
+            lrRecord.mfLineParam       = lrSource.mLineParam.mV.x;
             lrRecord.mu16MaterialTag   = static_cast<u16>(lrSource.mau32Tag[0] >> 16);
             lrRecord.mu16GroupTag      = static_cast<u16>(lrSource.mau32Tag[0]);
         }

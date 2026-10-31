@@ -657,7 +657,7 @@ namespace Deformation
 		// forward-declared BrnPhysics::Deformation::Sphere for the body branch) and the returned
 		// CgsGeometric::Sphere share the leading centre.xyz/radius.w Vector4 layout, copied through it.
 		CgsGeometric::Sphere lResult;
-		lResult.mPositionRadius = SphereVec(lpSource);
+		lResult.mData.mV = SphereVec(lpSource).mV;
 		return lResult;
 	}
 }

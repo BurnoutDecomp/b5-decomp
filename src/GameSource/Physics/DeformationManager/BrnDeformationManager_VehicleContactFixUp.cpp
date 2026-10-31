@@ -100,7 +100,7 @@ namespace Deformation
 
         inline Vector3 SphereCentre(const Vector4& lrPosRadius)
         {
-            { const Vector3 lResult = { lrPosRadius.x, lrPosRadius.y, lrPosRadius.z, 0.0f }; return lResult; }
+            return Vector3(lrPosRadius.mV.x, lrPosRadius.mV.y, lrPosRadius.mV.z);
         }
 
         inline bool IsValid3(const Vector3& lrV)   // per-lane self-compare NaN tripwire
@@ -145,8 +145,8 @@ namespace Deformation
                                                             Matrix44Affine lBoxTransform,
                                                             Vector3* lpNormalOut) const
     {
-        const Vector3 lSpherePos = SphereCentre(lWorldSphere.mPositionRadius);
-        const f32     lfRadius   = lWorldSphere.mPositionRadius.w;
+        const Vector3 lSpherePos = SphereCentre(Vector4(lWorldSphere.mData.mV));
+        const f32     lfRadius   = lWorldSphere.mData.mV.w;
 
         CGS_ASSERT(rw::math::vpu::Dot(lNormal, lContactPoint - lSpherePos) > 0.0f,
                    "RwMathVPU::Dot( lNormal, lContactPoint - lWorldSphere.GetPosition() ) > RwMathVPU::GetVecFloat_Zero()");   // BrnDeformationManager.h:771
@@ -211,11 +211,11 @@ namespace Deformation
                                                     Vector3* lpResultB, Vector3* lpOutNormal)
     {
         // Flatten both centres to the average height (vrefp(2.0) reciprocal -> * 0.5).
-        const f32 lfAverageY = (lSphereAIn.mPositionRadius.y + lSphereBIn.mPositionRadius.y) * 0.5f;
-        const f32 lfRadiusA  = lSphereAIn.mPositionRadius.w;
-        const f32 lfRadiusB  = lSphereBIn.mPositionRadius.w;
-        const Vector3 lCentreA = { lSphereAIn.mPositionRadius.x, lfAverageY, lSphereAIn.mPositionRadius.z, 0.0f };
-        const Vector3 lCentreB = { lSphereBIn.mPositionRadius.x, lfAverageY, lSphereBIn.mPositionRadius.z, 0.0f };
+        const f32 lfAverageY = (lSphereAIn.mData.mV.y + lSphereBIn.mData.mV.y) * 0.5f;
+        const f32 lfRadiusA  = lSphereAIn.mData.mV.w;
+        const f32 lfRadiusB  = lSphereBIn.mData.mV.w;
+        const Vector3 lCentreA = { lSphereAIn.mData.mV.x, lfAverageY, lSphereAIn.mData.mV.z, 0.0f };
+        const Vector3 lCentreB = { lSphereBIn.mData.mV.x, lfAverageY, lSphereBIn.mData.mV.z, 0.0f };
 
         const Vector3 lAToB     = lCentreB - lCentreA;
         const f32     lfAToBDistSq = rw::math::vpu::Dot(lAToB, lAToB);
@@ -355,12 +355,12 @@ namespace Deformation
                 CgsGeometric::Sphere lSphereA;
                 {
                     const Vector4 lAggregateValue = { lLocalCentre.x, lLocalCentre.y, lLocalCentre.z, lLocalSphere.w };
-                    lSphereA.mPositionRadius = lAggregateValue;
+                    lSphereA.mData.mV = lAggregateValue.mV;
                 }
                 CgsGeometric::Sphere lSphereB;
                 {
                     const Vector4 lAggregateValue = { lNeighbourCentre.x, lNeighbourCentre.y, lNeighbourCentre.z, lNeighbourSphere.w };
-                    lSphereB.mPositionRadius = lAggregateValue;
+                    lSphereB.mData.mV = lAggregateValue.mV;
                 }
 
                 Vector3 lResultB;   // the neighbour-sphere touch point -- computed, unused (console keeps it stack-only)
@@ -448,7 +448,7 @@ namespace Deformation
                 lbUseBoxes = false;
                 if (!GetInterpolatedContactPointAndNormal(lpTrafficModel, liTrafficSensorIndex,
                                                           lrContact.mPointOnB,
-                                                          SphereCentre(lRaceCarSphere.mPositionRadius),
+                                                          SphereCentre(Vector4(lRaceCarSphere.mData.mV)),
                                                           &lTrafficPoint, &lTrafficNormal))
                 {
                     lTrafficNormal = NormalizeFlattened(lTrafficNormal);
@@ -469,7 +469,7 @@ namespace Deformation
                 lbUseBoxes = false;
                 if (!GetInterpolatedContactPointAndNormal(lpRaceCarModel, liRaceCarSensorIndex,
                                                           lrContact.mPointOnA,
-                                                          SphereCentre(lTrafficSphere.mPositionRadius),
+                                                          SphereCentre(Vector4(lTrafficSphere.mData.mV)),
                                                           &lRaceCarPoint, &lRaceCarNormal))
                 {
                     lRaceCarNormal = NormalizeFlattened(lRaceCarNormal);
@@ -486,10 +486,10 @@ namespace Deformation
         }
 
         // ---- commit: pick the deeper side, then re-project both points ---------------------
-        const Vector3 lRaceCarCentre = SphereCentre(lRaceCarSphere.mPositionRadius);
-        const Vector3 lTrafficCentre = SphereCentre(lTrafficSphere.mPositionRadius);
-        const f32     lfRaceCarRadius = lRaceCarSphere.mPositionRadius.w;
-        const f32     lfTrafficRadius = lTrafficSphere.mPositionRadius.w;
+        const Vector3 lRaceCarCentre = SphereCentre(Vector4(lRaceCarSphere.mData.mV));
+        const Vector3 lTrafficCentre = SphereCentre(Vector4(lTrafficSphere.mData.mV));
+        const f32     lfRaceCarRadius = lRaceCarSphere.mData.mV.w;
+        const f32     lfTrafficRadius = lTrafficSphere.mData.mV.w;
 
         lrContact.mPointOnB = lTrafficPoint;
         lrContact.mPointOnA = lRaceCarPoint;

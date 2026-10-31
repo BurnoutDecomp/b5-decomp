@@ -214,7 +214,7 @@ u16 PolygonSoupTesterJob::FillTriangleCache(
     // sphere -> AABB. GetRadius broadcasts the w lane across all four; the two vpu
     // operators are whole-vector, so the w lane of the box is pos.w +/- radius and is
     // never read (CgsAxisAlignedBox.h: "xyz used, w lane spare").
-    const Vector4  lvPosition = lQuerySphere.GetPosition();
+    const Vector3  lvPosition = lQuerySphere.GetPosition();
     const VecFloat lvRadius   = lQuerySphere.GetRadius();
 
     const Vector3 lvBoxMax(__vaddfp(lvPosition.mV, lvRadius.mV));

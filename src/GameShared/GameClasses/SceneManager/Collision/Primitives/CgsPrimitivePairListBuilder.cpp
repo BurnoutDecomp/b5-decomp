@@ -259,10 +259,10 @@ namespace CgsCollision
         case ::rw::collision::E_VOLUMETYPE_SPHERE:
         {
             CgsGeometric::Sphere lSphere;
-            lSphere.mPositionRadius.x = lTransform.Pos().x;   // SetPosition(transform.wAxis)
-            lSphere.mPositionRadius.y = lTransform.Pos().y;
-            lSphere.mPositionRadius.z = lTransform.Pos().z;
-            lSphere.mPositionRadius.w = lpVolume->GetRadius();// SetRadius(volume->radius)
+            lSphere.mData.mV.x = lTransform.Pos().x;   // SetPosition(transform.wAxis)
+            lSphere.mData.mV.y = lTransform.Pos().y;
+            lSphere.mData.mV.z = lTransform.Pos().z;
+            lSphere.mData.mV.w = lpVolume->GetRadius();// SetRadius(volume->radius)
 
             AddPrimitive(&lSphere, lfPadding, lu16PrimitiveTag);
             break;

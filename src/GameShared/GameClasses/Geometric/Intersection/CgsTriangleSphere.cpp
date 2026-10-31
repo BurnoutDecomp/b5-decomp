@@ -102,10 +102,10 @@ namespace CgsGeometric
                                                    &lTriangleContactPoint2, &lTriangleContactPoint3 };
 
         // lvx128 v11, r0, r3 + four vspltw: centre xyz and radius.
-        const f32 lfCx = lSphere.mPositionRadius.x;
-        const f32 lfCy = lSphere.mPositionRadius.y;
-        const f32 lfCz = lSphere.mPositionRadius.z;
-        const f32 lfRadius = lSphere.mPositionRadius.w;
+        const f32 lfCx = lSphere.mData.mV.x;
+        const f32 lfCy = lSphere.mData.mV.y;
+        const f32 lfCz = lSphere.mData.mV.z;
+        const f32 lfRadius = lSphere.mData.mV.w;
 
         // vaddfp v2, v21, v2 -- the reach of the test is radius + padding.
         const f32 lfReach = lfRadius + lInPadding.x;

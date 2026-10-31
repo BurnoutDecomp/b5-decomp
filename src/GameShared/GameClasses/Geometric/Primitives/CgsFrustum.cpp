@@ -399,10 +399,10 @@ namespace CgsGeometric
     // ------------------------------------------------------------------------
     bool Frustum::IsSphereInFrustum(const Sphere& lrSphere) const
     {
-        const f32 lfCx     = lrSphere.mPositionRadius.x;
-        const f32 lfCy     = lrSphere.mPositionRadius.y;
-        const f32 lfCz     = lrSphere.mPositionRadius.z;
-        const f32 lfRadius = lrSphere.mPositionRadius.w;
+        const f32 lfCx     = lrSphere.mData.mV.x;
+        const f32 lfCy     = lrSphere.mData.mV.y;
+        const f32 lfCz     = lrSphere.mData.mV.z;
+        const f32 lfRadius = lrSphere.mData.mV.w;
 
         for (u32 luLane = 0; luLane < 4; ++luLane)   // 4 lanes x 2 batches = 8 planes
         {

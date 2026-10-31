@@ -424,10 +424,10 @@ namespace CgsGeometric
         const f32* const lapP2[3] = { &lVertex2X.x, &lVertex2Y.x, &lVertex2Z.x };
 
         // `lvx128 v0, r0, r3` then three vspltw + one for the radius.
-        const f32 lfCx = lSphere.mPositionRadius.x;
-        const f32 lfCy = lSphere.mPositionRadius.y;
-        const f32 lfCz = lSphere.mPositionRadius.z;
-        const f32 lfR2 = lSphere.mPositionRadius.w * lSphere.mPositionRadius.w;
+        const f32 lfCx = lSphere.mData.mV.x;
+        const f32 lfCy = lSphere.mData.mV.y;
+        const f32 lfCz = lSphere.mData.mV.z;
+        const f32 lfR2 = lSphere.mData.mV.w * lSphere.mData.mV.w;
 
         Triangle4::Mask4 lResult;
         lResult.SetZero();

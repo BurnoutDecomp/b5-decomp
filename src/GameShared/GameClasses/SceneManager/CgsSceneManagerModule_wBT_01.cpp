@@ -76,10 +76,7 @@ namespace CgsSceneManager
         if ((lpQuery->mx32EntityTypeFlags & KU_ENTITY_TYPE_FLAG_WORLD) != 0)
         {
             CgsGeometric::Sphere lSphere;                                   // the whole lane
-            lSphere.mPositionRadius.x = lpQuery->mSpherePosPlusRadius.x;
-            lSphere.mPositionRadius.y = lpQuery->mSpherePosPlusRadius.y;
-            lSphere.mPositionRadius.z = lpQuery->mSpherePosPlusRadius.z;
-            lSphere.mPositionRadius.w = lpQuery->mSpherePosPlusRadius.w;
+            lSphere.mData.mV = lpQuery->mSpherePosPlusRadius.mV;
             const u16 lu16ResultList = lpCollisionGenerator->TestSphereAgainstPolySoupList(
                 &lSphere, mTriangleCollisionManager.GetPolySoupListSpacialMap(), 0, 0);
             lpCollisionGenerator->Finish();
@@ -105,16 +102,16 @@ namespace CgsSceneManager
         rw::Resource lVolumeResource;                                       // zeroed lanes
         lVolumeResource.m_baseResources[0] = laVolumeMemory;
         const rw::collision::SphereVolume* lpVolume =
-            rw::collision::SphereVolume::Initialize(lVolumeResource, lpQuery->mSpherePosPlusRadius.w);
+            rw::collision::SphereVolume::Initialize(lVolumeResource, lpQuery->mSpherePosPlusRadius.mV.w);
 
         Matrix44Affine lTransform;
-        lTransform.xAxis.x = 1.0f; lTransform.xAxis.y = 0.0f; lTransform.xAxis.z = 0.0f; lTransform.xAxis.w = 0.0f;
-        lTransform.yAxis.x = 0.0f; lTransform.yAxis.y = 1.0f; lTransform.yAxis.z = 0.0f; lTransform.yAxis.w = 0.0f;
-        lTransform.zAxis.x = 0.0f; lTransform.zAxis.y = 0.0f; lTransform.zAxis.z = 1.0f; lTransform.zAxis.w = 0.0f;
-        lTransform.wAxis.x = lpQuery->mSpherePosPlusRadius.x;
-        lTransform.wAxis.y = lpQuery->mSpherePosPlusRadius.y;
-        lTransform.wAxis.z = lpQuery->mSpherePosPlusRadius.z;
-        lTransform.wAxis.w = lpQuery->mSpherePosPlusRadius.w;
+        lTransform.xAxis.mV.x = 1.0f; lTransform.xAxis.mV.y = 0.0f; lTransform.xAxis.mV.z = 0.0f; lTransform.xAxis.mV.w = 0.0f;
+        lTransform.yAxis.mV.x = 0.0f; lTransform.yAxis.mV.y = 1.0f; lTransform.yAxis.mV.z = 0.0f; lTransform.yAxis.mV.w = 0.0f;
+        lTransform.zAxis.mV.x = 0.0f; lTransform.zAxis.mV.y = 0.0f; lTransform.zAxis.mV.z = 1.0f; lTransform.zAxis.mV.w = 0.0f;
+        lTransform.wAxis.mV.x = lpQuery->mSpherePosPlusRadius.mV.x;
+        lTransform.wAxis.mV.y = lpQuery->mSpherePosPlusRadius.mV.y;
+        lTransform.wAxis.mV.z = lpQuery->mSpherePosPlusRadius.mV.z;
+        lTransform.wAxis.mV.w = lpQuery->mSpherePosPlusRadius.mV.w;
 
         CGS_ASSERT(lpVolume != 0, "lpVolume != NULL");
 
@@ -165,9 +162,9 @@ namespace CgsSceneManager
             lFineQuery.mxVolumeTypeFlags       = lpQuery->mxVolumeTypeFlags;                            // +0xCC
             lFineQuery.mbExcludeParts          = lbExcludeParts;                                        // +0xCD
 
-            // As in ProcessVolumeTestDeepest, the host record starts at zero: the module writes the
-            // depth only on a hit, and this handler reads the hit byte alone.
-            FineIntersectionTestIO::OutEventVolumeTestDeepestResult lFineResult = {};
+            // ARTIST 828D43CC..442C passes the stack result without initializing it;
+            // the fine query writes the hit byte that this handler reads.
+            FineIntersectionTestIO::OutEventVolumeTestDeepestResult lFineResult;
             mFineIntersectionTestModule.ComputeVolumeTestDeepest(&lFineQuery, &lFineResult);
             lbIntersection = lFineResult.mbIntersection;
         }

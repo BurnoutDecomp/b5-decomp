@@ -53,10 +53,10 @@ SpatialPartition::AllocEntity(u16 lu16Id, u32 lxTypeFlags, Vector3 lPosition, fl
     lrLink.mu16PrevEntity = KU_INVALID_ENTITY_LINK;
 
     CgsGeometric::Sphere& lrSphere = maEntityBoundingSpheres[lu16Id];
-    lrSphere.mPositionRadius.mV.x = lPosition.mV.x;
-    lrSphere.mPositionRadius.mV.y = lPosition.mV.y;
-    lrSphere.mPositionRadius.mV.z = lPosition.mV.z;
-    lrSphere.mPositionRadius.mV.w = lfRadius;
+    lrSphere.mData.mV.x = lPosition.mV.x;
+    lrSphere.mData.mV.y = lPosition.mV.y;
+    lrSphere.mData.mV.z = lPosition.mV.z;
+    lrSphere.mData.mV.w = lfRadius;
 
     return &lrLink;
 }

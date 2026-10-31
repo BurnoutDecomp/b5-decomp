@@ -64,26 +64,26 @@ namespace Deformation
     // the host header deliberately keeps Sphere incomplete at DeformationSensor's declaration.
     void DeformationSensor::SetLocalPosition(Vector3 lPosition)
     {
-        const f32 lfRadius = mpLocalSpaceSphere->mPositionRadius.w;
+        const f32 lfRadius = mpLocalSpaceSphere->mData.mV.w;
         {
             const Vector4 lAggregateValue = { lPosition.x, lPosition.y, lPosition.z, lfRadius };
-            mpLocalSpaceSphere->mPositionRadius = lAggregateValue;
+            mpLocalSpaceSphere->mData.mV = lAggregateValue.mV;
         }
     }
 
     void DeformationSensor::UpdateWorldPosition(Matrix44Affine lVehicleTransform)
     {
         const Vector3 lLocal = {
-            mpLocalSpaceSphere->mPositionRadius.x,
-            mpLocalSpaceSphere->mPositionRadius.y,
-            mpLocalSpaceSphere->mPositionRadius.z,
+            mpLocalSpaceSphere->mData.mV.x,
+            mpLocalSpaceSphere->mData.mV.y,
+            mpLocalSpaceSphere->mData.mV.z,
             0.0f
         };
         const Vector3 lWorld = rw::math::vpu::TransformPoint(lVehicleTransform, lLocal);
-        const f32 lfRadius = mpWorldSpaceSphere->mPositionRadius.w;
+        const f32 lfRadius = mpWorldSpaceSphere->mData.mV.w;
         {
             const Vector4 lAggregateValue = { lWorld.x, lWorld.y, lWorld.z, lfRadius };
-            mpWorldSpaceSphere->mPositionRadius = lAggregateValue;
+            mpWorldSpaceSphere->mData.mV = lAggregateValue.mV;
         }
     }
 

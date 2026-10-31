@@ -233,8 +233,8 @@ namespace CgsGeometric
         inline bool LineSphereLaneHit(const Sphere& lrSphere, const Vector3& lrStart,
                                       const Vector3& lrDirection, f32 lfLength)
         {
-            const Vector4& lrCentre  = lrSphere.mPositionRadius;
-            const f32      lfRadius2 = LineVmxMul(lrCentre.w, lrCentre.w);
+            const Vector3Plus& lrCentre = lrSphere.mData;
+            const f32      lfRadius2 = LineVmxMul(lrCentre.mV.w, lrCentre.mV.w);
 
             // ROUNDING (ROUNDING_RULE.md rule 3, 2026-09-25 -- REVIEW-J on 335639ce): every `vmaddfp` here rounds
             // ONCE; the native VMX intrinsics retain this while vmulfp128/vsubfp round separately. All eleven fused sites
@@ -247,9 +247,9 @@ namespace CgsGeometric
             const f32 lfEndZ = LineVmxMadd(lfLength, lrDirection.z, lrStart.z);
 
             // The centre relative to the start, and its projection on the unit direction.
-            const f32 lfDx = LineVmxSub(lrCentre.x, lrStart.x);
-            const f32 lfDy = LineVmxSub(lrCentre.y, lrStart.y);
-            const f32 lfDz = LineVmxSub(lrCentre.z, lrStart.z);
+            const f32 lfDx = LineVmxSub(lrCentre.mV.x, lrStart.x);
+            const f32 lfDy = LineVmxSub(lrCentre.mV.y, lrStart.y);
+            const f32 lfDz = LineVmxSub(lrCentre.mV.z, lrStart.z);
             const f32 lfT  = LineVmxMadd(lrDirection.z, lfDz,
                              LineVmxMadd(lrDirection.x, lfDx,
                                          LineVmxMul(lrDirection.y, lfDy)));
@@ -265,9 +265,9 @@ namespace CgsGeometric
             const f32 lfPz = LineVmxSub(lfDz, lfTz);
             const f32 lfPerpendicular2 = LineVmxMadd(lfPz, lfPz, LineVmxMadd(lfPx, lfPx, LineVmxMul(lfPy, lfPy)));
             const f32 lfStart2 = LineVmxMadd(lfDz, lfDz, LineVmxMadd(lfDx, lfDx, LineVmxMul(lfDy, lfDy)));
-            const f32 lfEx = LineVmxSub(lrCentre.x, lfEndX);
-            const f32 lfEy = LineVmxSub(lrCentre.y, lfEndY);
-            const f32 lfEz = LineVmxSub(lrCentre.z, lfEndZ);
+            const f32 lfEx = LineVmxSub(lrCentre.mV.x, lfEndX);
+            const f32 lfEy = LineVmxSub(lrCentre.mV.y, lfEndY);
+            const f32 lfEz = LineVmxSub(lrCentre.mV.z, lfEndZ);
             const f32 lfEnd2 = LineVmxMadd(lfEz, lfEz, LineVmxMadd(lfEx, lfEx, LineVmxMul(lfEy, lfEy)));
 
             // vcmpgefp128 (t >= 0) AND vnot(vcmpgtfp t > L): the foot of the perpendicular lies on the
