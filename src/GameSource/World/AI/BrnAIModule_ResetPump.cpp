@@ -56,25 +56,24 @@
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"           // CgsModule::IOHelper<T>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // the game-event queue (event 113)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 namespace BrnAI
 {
 
 // =================================================================================================
-// GetAICar @0x82765AD0 -- `assert(index <= 0x22)` then `return 5472 * index + this + 560`, i.e.
-// &maAICars[index]. The console's baked 5472 IS sizeof(AICar) on this host too (static_asserted
-// in BrnAICar.h), so the subscript below and the console's arithmetic are the same address.
-// The assert is the console's own streamed "Invalid AI car index: " tripwire (BrnAIModule.h:445),
-// lowered to a static-message CGS_ASSERT per the standing rule. NON-GATING on the console; the
-// bail below is the PC deviation, because on the host an out-of-range index walks off a 191,520
-// byte array instead of into the module's own tail.
+// GetAICar @0x82765AD0: the bounds assertion does not gate the array address.
 // =================================================================================================
 AICar* AIModule::GetAICar(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < 35u, "Invalid AI car index: ");   // BrnAIModule.h:445
     if (luIndex >= 35u)
     {
-        return 0;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lMessage << "Invalid AI car index: " << static_cast<s32>(luIndex);
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                  "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModule.h", 445);
+        CgsDev::Assert::EndAssert();
     }
     return const_cast<AICar*>(&maAICars[luIndex]);
 }
