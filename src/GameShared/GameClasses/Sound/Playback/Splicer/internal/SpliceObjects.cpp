@@ -322,8 +322,42 @@ void StereoSpliceSample::StartVoice()
 
 Splice::Splice( SPLICE_TYPE aeType, int aiIndex,
                 rw::audio::core::PlugIn* apSubMix )
-    : Splice( gpSpliceManager->FindSplice( aeType, aiIndex ), apSubMix )
+    : mpData( gpSpliceManager->FindSplice( aeType, aiIndex ) )
 {
+    // C++03 spelling of the data-pointer constructor path: keep FindSplice in the
+    // initializer, then preserve its slot initialization, assert callback and allocation order.
+    for ( u32 lu = 0; lu < 15; ++lu )
+        mSampleRefs[lu] = 0;
+
+    if ( !apSubMix || !mpData )
+    {
+        SpliceManager::AssertCallbackFunc lpfnAssert =
+            gpSpliceManager->GetAssertCallbackFunction();
+        if ( lpfnAssert )
+            lpfnAssert( !apSubMix ? "There's no sub mix plugin" : "There's no data" );
+    }
+    if ( !mpData )
+        return;
+
+    for ( u32 lu = 0; lu < mpData->mucNumSampleRefs && lu < 15; ++lu )
+    {
+        SPLICE_SampleRef* lpRef = mpData->mpSampleRefList + lu;
+        if ( fabsf( lpRef->mfAzimuth - KI_STEREO_SAMPLE_AZIMUTH ) < 0.000015258789f )
+        {
+            void* lpMemory = gpSpliceManager->Allocate(
+                static_cast<u32>(sizeof(StereoSpliceSample)), "StereoSpliceSample" );
+            if ( lpMemory )
+                mSampleRefs[lu] = ::new (lpMemory)
+                    StereoSpliceSample( lpRef, apSubMix );
+        }
+        else
+        {
+            void* lpMemory = gpSpliceManager->Allocate(
+                static_cast<u32>(sizeof(SpliceSample)), "SpliceSample" );
+            if ( lpMemory )
+                mSampleRefs[lu] = ::new (lpMemory) SpliceSample( lpRef, apSubMix );
+        }
+    }
 }
 
 // @ 0x826DB208. Materialize one SpliceSample per serialized sample reference,
