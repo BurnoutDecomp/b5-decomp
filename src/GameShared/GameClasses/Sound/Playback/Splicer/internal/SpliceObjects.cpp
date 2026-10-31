@@ -324,24 +324,25 @@ Splice::Splice( SPLICE_TYPE aeType, int aiIndex,
                 rw::audio::core::PlugIn* apSubMix )
     : mpData( gpSpliceManager->FindSplice( aeType, aiIndex ) )
 {
+    SPLICE_Data* const lpData = mpData;
     // C++03 spelling of the data-pointer constructor path: keep FindSplice in the
     // initializer, then preserve its slot initialization, assert callback and allocation order.
     for ( u32 lu = 0; lu < 15; ++lu )
         mSampleRefs[lu] = 0;
 
-    if ( !apSubMix || !mpData )
+    if ( !apSubMix || !lpData )
     {
         SpliceManager::AssertCallbackFunc lpfnAssert =
             gpSpliceManager->GetAssertCallbackFunction();
         if ( lpfnAssert )
             lpfnAssert( !apSubMix ? "There's no sub mix plugin" : "There's no data" );
     }
-    if ( !mpData )
+    if ( !lpData )
         return;
 
-    for ( u32 lu = 0; lu < mpData->mucNumSampleRefs && lu < 15; ++lu )
+    for ( u32 lu = 0; lu < lpData->mucNumSampleRefs && lu < 15; ++lu )
     {
-        SPLICE_SampleRef* lpRef = mpData->mpSampleRefList + lu;
+        SPLICE_SampleRef* lpRef = lpData->mpSampleRefList + lu;
         if ( fabsf( lpRef->mfAzimuth - KI_STEREO_SAMPLE_AZIMUTH ) < 0.000015258789f )
         {
             void* lpMemory = gpSpliceManager->Allocate(
