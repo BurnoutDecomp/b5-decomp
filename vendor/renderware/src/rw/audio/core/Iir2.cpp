@@ -28,6 +28,17 @@ namespace audio
 namespace core
 {
 
+namespace
+{
+// XDK has no scalar FMA intrinsic. Keep this helper out of line so each ordered
+// f32 product-plus-add is contracted by the target compiler without re-associating
+// adjacent filter taps across their intermediate rounding point.
+__declspec(noinline) f32 Iir2MulAdd(f32 a, f32 b, f32 c)
+{
+    return a * b + c;
+}
+}
+
 void Iir2::Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *coeffs)
 {
     const f32 KF_DENORMAL_FLUSH = 1.0e-18f; // flt_8214B108
@@ -52,16 +63,23 @@ void Iir2::Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *
             laInput[j] = src[i + j];
 
         f32 laFeedForward[8];
-        const f32 lfFirst = laInput[0] * c2;
-        laFeedForward[0] = x1 * c3 + (x2 * c4 + lfFirst);
-        const f32 lfSecond = laInput[1] * c2;
-        laFeedForward[1] = x1 * c4 + (laInput[0] * c3 + lfSecond);
+        // Keep each source-order rounding point explicit. The compiler may contract
+        // each product-plus-accumulator to fmadds, but must not move the standalone
+        // first product across the following fused stages.
+        f32 lfFirst = laInput[0] * c2;
+        lfFirst = Iir2MulAdd(x2, c4, lfFirst);
+        laFeedForward[0] = x1 * c3 + lfFirst;
+
+        f32 lfSecond = laInput[1] * c2;
+        lfSecond = Iir2MulAdd(laInput[0], c3, lfSecond);
+        laFeedForward[1] = x1 * c4 + lfSecond;
         // Slots 2..7 begin with b1*x[n-1], then fuse b2*x[n-2],
         // then b0*x[n]. Slots 0 and 1 above have a different ordering.
         for (int j = 2; j < 8; ++j)
         {
-            const f32 lfMiddle = laInput[j - 1] * c3;
-            laFeedForward[j] = laInput[j] * c2 + (laInput[j - 2] * c4 + lfMiddle);
+            f32 lfMiddle = laInput[j - 1] * c3;
+            lfMiddle = Iir2MulAdd(laInput[j - 2], c4, lfMiddle);
+            laFeedForward[j] = laInput[j] * c2 + lfMiddle;
         }
 
         for (int j = 0; j < 8; ++j)
