@@ -933,8 +933,10 @@ struct GuiEventEnableSatNavIcons
 // the s32 overload @0x824EB508). X360 sizeof 840 (the analyzer's delayed-message
 // memcpy length @0x8251E3xx).
 // ===================================================================================
-struct GuiHudMessage : public CgsGui::GuiEvent<152>
+struct GuiHudMessage : public CgsModule::Event
 {
+    s32 GetEventType() const { return 154; }
+
     static const s32 KI_NUMBER_OF_STRINGS     = 3;   // DWARF h:5613
     static const s32 KI_MAX_PARAMS_PER_STRING = 4;   // DWARF h:5614
 
