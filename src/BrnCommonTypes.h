@@ -18,9 +18,10 @@ typedef rw::math::vpu::Matrix44Affine Matrix44Affine;
 // ADDITIVE GROW (flagged by BrnPhysics-bodies group): the two math aliases the physics
 // bodies spell unqualified. Matrix33 is the 3x3 inverse-inertia tensor type; VecFloat is a
 // single broadcast 16-byte float lane (the DWARF types many physics scalars as `VecFloat`).
-// VecFloat == Vector4 here, matching the existing BrnPhysicalTrafficManager.h convention.
+// VecFloat is the genuine SDK scalar class, distinct from Vector4. Its native
+// referenced-float constructor and register convention are supplied by that class.
 typedef rw::math::vpu::Matrix33       Matrix33;
-typedef rw::math::vpu::Vector4        VecFloat;
+typedef rw::math::vpu::VecFloat       VecFloat;
 
 // 32-bit packed identity handles (CgsSceneManager::EntityId and friends pack an
 // owner/index into a single word; here we only need the storage word).
