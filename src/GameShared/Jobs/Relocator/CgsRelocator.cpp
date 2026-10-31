@@ -40,7 +40,7 @@ namespace CgsMemory
         // The snapshot: the job reads this block, not the caller's params.
         mJobData.mpOps              = lpParams->mpOps;
         mJobData.miNumOps           = lpParams->miNumOps;
-        mJobData.muTestHijacks      = 0;
+        mJobData.mpTestParams       = 0;
         mJobData.mpBounceBuffer     = lpParams->mpBounceBuffer;
         mJobData.miBounceBufferSize = lpParams->miBounceBufferSize;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/Jobs/Relocator/RelocatorCommon.h"
 #include <cstddef>
 #include "SDKs/EATech/eajobs/job.h"   // EA::Jobs::Job (mJob, embedded by value)
 
@@ -47,7 +48,7 @@ namespace CgsMemory
         s32         miNumOps;            // +0x04
         void*       mpBounceBuffer;      // +0x08
         s32         miBounceBufferSize;  // +0x0C
-        u32         muTestHijacks;       // +0x10
+        RelocationTestParams* mpTestParams; // +0x10
         u8          mPad_0014[108];      // +0x14  to the 128-byte block Job::SetData attaches
     };
 
