@@ -1247,9 +1247,7 @@ void ProfileManager::ReportTaskCompleted()
                 const void* lpUpgradeData = 0;
                 if (ProfileUpgradeFeatureIsEnabled())
                 {
-                    void* lpResource = 0;
-                    mProfileUpgradeResourcePtr.GetResource(&lpResource);
-                    lpUpgradeData = lpResource;
+                    lpUpgradeData = mProfileUpgradeResourcePtr.GetMemoryResource();
                 }
                 ProgressionProfile_Deserialise(mpProgressionProfile,
                                                mStoredData.mProgressionProfile.maData,
@@ -1405,9 +1403,7 @@ void ProfileManager::ReadProfileData()
     const void* lpUpgradeData = 0;
     if (ProfileUpgradeFeatureIsEnabled())
     {
-        void* lpResource = 0;
-        mProfileUpgradeResourcePtr.GetResource(&lpResource);
-        lpUpgradeData = lpResource;
+        lpUpgradeData = mProfileUpgradeResourcePtr.GetMemoryResource();
     }
 
     ProgressionProfile_Serialise(mpProgressionProfile, mStoredData.mProgressionProfile.maData,
