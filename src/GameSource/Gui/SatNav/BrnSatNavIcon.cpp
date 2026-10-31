@@ -172,15 +172,6 @@ void CrashNavIconComponent::Construct(const char* lpcName,
     mIcon.mfAlpha             = -1.0f;                                   // stfs flt_820037C8, 0xB4
 }
 
-// ARTIST82448310: a null string becomes empty; localised strings use the ID lookup format.
-void CrashNavMapIcon::SetIconText(const char* lpcText, bool lbAlreadyLocalised)
-{
-    if (lpcText != 0 && lbAlreadyLocalised)
-        mIconText.SetLocalisedText(lpcText, CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
-    else
-        mIconText.SetText(lpcText != 0 ? lpcText : "");
-}
-
 // ======================= H3c: the sat-nav icon-pool bind surface =======================
 
 // @ 0x82448340 -- the pool-bind constructor (this = the icon; the X360 constructs the
