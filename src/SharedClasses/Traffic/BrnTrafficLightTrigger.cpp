@@ -1,7 +1,7 @@
 #include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::IsValid (per-lane NaN test) -- canonical home
-#include "SharedClasses/Traffic/Junctions/BrnTrafficLightCollection.h" // BrnTraffic::ExpandPosPlusYRotToTransform (its current home)
+#include "SharedClasses/Traffic/BrnTrafficSharedMaths.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnTraffic::LightTriggerStartData::GetStartPosition  @ 0x8231BB50
@@ -27,9 +27,8 @@ namespace BrnTraffic
 //   0x82747800  bl     BrnTraffic::ExpandPosPlusYRotToTransform
 // i.e. the accessor IS that call, with the record's own packed lane as the argument. The callee
 // (a rotation about Y by the packed w, with the packed xyz as the translation row) is
-// reconstructed in Junctions/BrnTrafficLightCollection.cpp -- read its banner before touching the
-// row assembly; the DWARF home for BOTH is SharedClasses/Traffic/BrnTrafficSharedMaths.h:81,
-// which this tree has no mirror of yet.
+// reconstructed in Junctions/BrnTrafficLightCollection.cpp. Its declaration is homed at
+// SharedClasses/Traffic/BrnTrafficSharedMaths.h:81.
 // =============================================================================================
 Matrix44Affine LightTrigger::GetTransform() const
 {
