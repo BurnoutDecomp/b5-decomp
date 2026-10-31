@@ -80,12 +80,12 @@ void AllPassFilterFunc(s32 count, f32 g1, f32 g2, f32 *base, f32 *work,
         // ARTIST 82B64560: preserve both bias round trips and each fused site.
         const f32 biased = work[n] + KF_DENORMAL_FLUSH;
         work[n] = biased - KF_DENORMAL_FLUSH;
-        const f32 y = std::fmaf(-g1, work[n], base[n]);
+        const f32 y = base[n] - g1 * work[n];
         feedforwardA[n] = y;
         const f32 yBiased = y + KF_DENORMAL_FLUSH;
         feedforwardA[n] = yBiased - KF_DENORMAL_FLUSH;
-        const f32 tap = std::fmaf(feedforwardA[n], g1, work[n]);
-        feedforwardB[n] = lowPass ? std::fmaf(tap, g2, feedforwardB[n]) : tap * g2;
+        const f32 tap = feedforwardA[n] * g1 + work[n];
+        feedforwardB[n] = lowPass ? tap * g2 + feedforwardB[n] : tap * g2;
     }
 }
 
@@ -181,9 +181,9 @@ f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
     {
         for (s32 n = 0; n < count; ++n)
         {
-            const f32 out = std::fmaf(-work[n + 1], g2, std::fmaf(-state, g1, base[n])); // fnmsubs pair
+            const f32 out = (base[n] - state * g1) - work[n + 1] * g2; // fnmsubs pair
             accum[n] = out;
-            feedforward[n] = std::fmaf(std::fmaf(work[n], g3, work[n + 1]), g4, feedforward[n]);                            // fmadds onto prior
+            feedforward[n] = (work[n] * g3 + work[n + 1]) * g4 + feedforward[n]; // fmadds onto prior
             state = accum[n];                                             // lfsx reload
         }
     }
@@ -191,9 +191,9 @@ f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
     {
         for (s32 n = 0; n < count; ++n)
         {
-            const f32 out = std::fmaf(-work[n + 1], g2, std::fmaf(-state, g1, base[n])); // fnmsubs pair
+            const f32 out = (base[n] - state * g1) - work[n + 1] * g2; // fnmsubs pair
             accum[n] = out;
-            feedforward[n] = std::fmaf(work[n], g3, work[n + 1]) * g4;        // fmuls (overwrite)
+            feedforward[n] = (work[n] * g3 + work[n + 1]) * g4; // fmuls (overwrite)
             state = accum[n];                                             // lfs reload
         }
     }
