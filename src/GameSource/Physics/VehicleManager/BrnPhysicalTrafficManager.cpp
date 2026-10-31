@@ -726,8 +726,8 @@ void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
             // lContactPointOnTraffic (v3 on entry) is NOT read by the body -- the fold is along the
             // checker's heading, not through the contact point.
             const Vector3Plus lCheckerVelocity = lpRaceCarPhysics->GetNormLinearVelocityMag();
-            const f32 lfHalfCheckerSpeed = lCheckerVelocity.GetPlus() * 0.5f;
-            const VecFloat lvHalfCheckerSpeed(lfHalfCheckerSpeed);
+            const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+            const VecFloat lvHalfCheckerSpeed(__vmulfp(__vspltw(lCheckerVelocity.mV, 3), lvHalf));
             GetFullTrafficPhysics()->SetCrashingFromCheck(lCheckerVelocity.GetVector3(), lvHalfCheckerSpeed);
             (void)lContactPointOnTraffic;
         }
