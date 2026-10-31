@@ -87,10 +87,8 @@ void VisibilityTest::GenerateSceneQueries(const Camera& lrCamera, f32 lfTimestep
         if (IsLookingAtTarget(lrCamera, lrTargetTransform, lrTargetAABB))
         {
             const f32 lfZoom = Utils::GetZoomFromFOVDegs(lrCamera.mfFOV);
-            const f32 lfDX = lrCameraPosition.x - lrTargetPosition.x;
-            const f32 lfDY = lrCameraPosition.y - lrTargetPosition.y;
-            const f32 lfDZ = lrCameraPosition.z - lrTargetPosition.z;
-            const f32 lfDistanceSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
+            const __vector4 lvDelta = __vsubfp(lrCameraPosition.mV, lrTargetPosition.mV);
+            const f32 lfDistanceSq = __vmsum3fp(lvDelta, lvDelta).x;
             lbOnScreen = !(lfDistanceSq > lfMaxDistanceSq * lfZoom);
         }
 
