@@ -37,10 +37,6 @@
 //   +0x19024   maiFetchTags[7]         `a1[25609..25615] = -1` in Execute
 //   sizeof     0x19040 == 102464       == PolygonSoupTesterEntry's `spuId * 0x19040`
 //
-// ⚠️ mpJobDescription WIDENS 4->8 on x64. This object is a runtime-carved static, not a
-// serialized record, so the standing rule says widen -- and nothing reads it through a
-// console byte offset (AllocateMemory reaches the arena and the cursor by NAME here,
-// where the console reaches them as `this + 32` and `this + 102432`).
 // ============================================================================
 
 #include "types.hpp"
@@ -140,23 +136,12 @@ struct PolygonSoupTesterJob
     CgsSceneManager::CgsCollision::CollisionJobDescription* mpJobDescription; // X360 +0x10
     u8   mauUnattested14[0x0C];                       // X360 +0x14      [UNATTESTED]
 
-    // ⚠️⚠️ THE `alignas` IS LOad-BEARING, AND ITS ABSENCE WAS AN ACCESS VIOLATION.
-    // Everything AllocateMemory hands out is carved from here, and the first thing the
-    // fill stream does with a slice is `movaps xmm0, [rdi]` -- the 16-byte copy of the
-    // command record's Sphere (Sphere/AxisAlignedBox/Vector4/Triangle4 are all
-    // alignas(16)). On the X360 that came free: the arena sits at `this + 0x20`, a
-    // 16-aligned offset. On x64 mpJobDescription WIDENS 4 -> 8, which pushes the arena
-    // to +0x24 and takes it OFF 16 -- and a plain global array of this struct has no
-    // reason to be aligned either. The result was an AV inside FillTriangleCache at
-    // +0xA1, resolved from `Get-WinEvent 'Application Error'` (fault offset 0x103001)
-    // through Burnout_PC.map before any log was read.
-    //
-    // 128 rather than 16 because 128 is the alignment EVERY AllocateMemory call site
-    // asks for (`AllocateMemory(a1, n, 128)` at all five of them); pinning the base to
-    // that makes the cursor's alignment arithmetic mean on the host what it means on
-    // the console. This is a runtime-carved static, never a serialized record, so
-    // growing sizeof is free.
-    CGS_ALIGN(128) u8 maArena[KI_ARENA_BYTES];          // X360 +0x20
+    // The native arena begins at +0x20. The former PC-only 128-byte member
+    // alignment moved it to +0x80 and changed every context stride. Keep the
+    // byte arena's natural field placement; the sole global array supplies
+    // its independently observed storage alignment. Original declarations
+    // of worker/member alignment remain unrecovered.
+    u8 maArena[KI_ARENA_BYTES];                       // X360 +0x20
     s32  miAllocCursor;                               // X360 +0x19020
     s32  maiFetchTags[7];                             // X360 +0x19024
 };
@@ -165,3 +150,9 @@ struct PolygonSoupTesterJob
 // (`unk_83123940 + spuId * 0x19040`, spuId asserted < 6).
 const s32 KI_NUM_POLYGON_SOUP_TESTER_JOBS = 6;
 extern PolygonSoupTesterJob gaPolygonSoupTesterJobs[KI_NUM_POLYGON_SOUP_TESTER_JOBS];
+
+CGS_STATIC_ASSERT(offsetof(PolygonSoupTesterJob, mpJobDescription) == 0x10, "ARTIST soup job descriptor");
+CGS_STATIC_ASSERT(offsetof(PolygonSoupTesterJob, maArena) == 0x20, "ARTIST soup arena");
+CGS_STATIC_ASSERT(offsetof(PolygonSoupTesterJob, miAllocCursor) == 0x19020, "ARTIST soup arena cursor");
+CGS_STATIC_ASSERT(offsetof(PolygonSoupTesterJob, maiFetchTags) == 0x19024, "ARTIST soup fetch tags");
+CGS_STATIC_ASSERT(sizeof(PolygonSoupTesterJob) == 0x19040, "ARTIST soup worker stride");

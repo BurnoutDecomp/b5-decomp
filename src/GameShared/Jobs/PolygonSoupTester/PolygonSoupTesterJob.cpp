@@ -37,7 +37,9 @@
 #include <cstring>   // std::memcpy (the line arm's 14-qword hit copy)
 
 // The six per-job-thread contexts (X360 unk_83123940, stride 0x19040).
-PolygonSoupTesterJob gaPolygonSoupTesterJobs[KI_NUM_POLYGON_SOUP_TESTER_JOBS];
+// All six original context addresses (83123940 + i*19040) are 64-byte aligned.
+// This preserves observed ARRAY STORAGE alignment, not an original type/member declaration.
+CGS_ALIGN(64) PolygonSoupTesterJob gaPolygonSoupTesterJobs[KI_NUM_POLYGON_SOUP_TESTER_JOBS];
 
 using CgsSceneManager::CgsCollision::CollisionJobDescription;
 using CgsSceneManager::CgsCollision::FillTriangleCacheStreamJobDesc;
