@@ -95,11 +95,8 @@ public:
     // are waiters, which GetCount reports as 0 available permits).
     int GetCount() const;
 
-    // Release permits: increment the available count by iCount and wake waiters as
-    // needed (via the data half's UpdateCancelCount). Declared here as the canonical
-    // home; the body is its own (not-yet-reconstructed) X360 TU and is resolved at link
-    // time. Callers (e.g. CgsFileSystem::OperationPool::AddOperation @0x828E9828) post a
-    // single permit per queued item.
+    // ARTIST 82B42B70: atomically publish permits, handle cancellations and
+    // release the native semaphore when waiters or inter-process users need it.
     int Post(int iCount = 1);
 
 private:
