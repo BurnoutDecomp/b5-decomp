@@ -47,8 +47,6 @@
 
 #include "GameSource/Effects/BrnEffectsDebrisColourRandomiser.h"
 
-#include <cmath>   // std::fma -- the two vmaddfp combines
-
 namespace BrnEffects
 {
 namespace Utils
@@ -84,13 +82,13 @@ void DebrisColourRandomiser::Randomise(Vector4& lrOut, CgsNumeric::Random& lrRan
     const f32 lfB = DrawNextRingSplat(lrRandom);
 
     // lvScaledB = mVecBase + mVecRange * lfB (vmaddfp v11 @0x8227E788) -- only its w is read.
-    const f32 lfScale = std::fma(mVecRange.w, lfB, mVecBase.w);
+    const f32 lfScale = mVecRange.w * lfB + mVecBase.w;
 
     // lvScaledA = mVecBase + mVecRange * lfA (vmaddfp v13 @0x8227E78C), times lvScaledB.w
     // (vspltw v12, v11, 3; vmulfp128 @0x8227E794).
-    lrOut.x = std::fma(mVecRange.x, lfA, mVecBase.x) * lfScale;
-    lrOut.y = std::fma(mVecRange.y, lfA, mVecBase.y) * lfScale;
-    lrOut.z = std::fma(mVecRange.z, lfA, mVecBase.z) * lfScale;
+    lrOut.x = (mVecRange.x * lfA + mVecBase.x) * lfScale;
+    lrOut.y = (mVecRange.y * lfA + mVecBase.y) * lfScale;
+    lrOut.z = (mVecRange.z * lfA + mVecBase.z) * lfScale;
 
     // Force the alpha lane to 1.0f (vrlimi128 of the all-ones splat into lane w, @0x8227E798).
     lrOut.w = 1.0f;
