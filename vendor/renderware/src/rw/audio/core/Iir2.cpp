@@ -53,16 +53,15 @@ void Iir2::Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *
 
         f32 laFeedForward[8];
         const f32 lfFirst = laInput[0] * c2;
-        laFeedForward[0] = std::fmaf(x1, c3, std::fmaf(x2, c4, lfFirst));
+        laFeedForward[0] = x1 * c3 + (x2 * c4 + lfFirst);
         const f32 lfSecond = laInput[1] * c2;
-        laFeedForward[1] = std::fmaf(x1, c4, std::fmaf(laInput[0], c3, lfSecond));
+        laFeedForward[1] = x1 * c4 + (laInput[0] * c3 + lfSecond);
         // Slots 2..7 begin with b1*x[n-1], then fuse b2*x[n-2],
         // then b0*x[n]. Slots 0 and 1 above have a different ordering.
         for (int j = 2; j < 8; ++j)
         {
             const f32 lfMiddle = laInput[j - 1] * c3;
-            laFeedForward[j] = std::fmaf(laInput[j], c2,
-                std::fmaf(laInput[j - 2], c4, lfMiddle));
+            laFeedForward[j] = laInput[j] * c2 + (laInput[j - 2] * c4 + lfMiddle);
         }
 
         for (int j = 0; j < 8; ++j)
@@ -70,8 +69,8 @@ void Iir2::Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *
             const f32 lfBiased = laFeedForward[j] + KF_DENORMAL_FLUSH;
             // fnmsubs is the negated fused multiply-subtract, with a single
             // rounding before negation (82B69E98/EA4 and each following pair).
-            const f32 lfFirstFeedback = -std::fmaf(y1, c0, -lfBiased);
-            const f32 y0 = -std::fmaf(y2, c1, -lfFirstFeedback);
+            const f32 lfFirstFeedback = lfBiased - y1 * c0;
+            const f32 y0 = lfFirstFeedback - y2 * c1;
             dst[i + j] = y0;
 
             y2 = y1;
