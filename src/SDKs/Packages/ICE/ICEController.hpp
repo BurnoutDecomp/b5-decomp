@@ -51,8 +51,15 @@ struct ICEController : public ICEAuthor
     ICEWidgetWideScrMarker mWideScrMarker;       // native +71E0
     ICEWidgetLogo mLogo;                         // native +71E4
 
+    // ConstructMenus writes the rectangle at native +0x71F0..+0x71FC.
+    // Its owning widget/name is not yet recovered; these are four real float lanes.
+    f32 mfHudRectX;
+    f32 mfHudRectY;
+    f32 mfHudRectWidth;
+    f32 mfHudRectHeight;
+
     // Incomplete tail: fields below are in native order, but their absolute
-    // offsets are still early. The four geometry floats at71F0..71FC, the
+    // offsets are still early. The word at7200, the
     // status-string capacity and7390..73B7 need further native evidence.
     // No filler is introduced to force this tail or the overall extent to fit.
     s32 miStatusCount;                           // native +7204
@@ -126,6 +133,8 @@ CGS_STATIC_ASSERT((offsetof(ICEController, mWideScrMarker) - offsetof(ICEControl
                   "native target-to-wide-screen widget delta");
 CGS_STATIC_ASSERT((offsetof(ICEController, mLogo) - offsetof(ICEController, mTargetBox) == 0x74),
                   "native target-to-logo widget delta");
+CGS_STATIC_ASSERT((offsetof(ICEController, mfHudRectX) == 0x71F0), "native HUD rectangle X");
+CGS_STATIC_ASSERT((offsetof(ICEController, mfHudRectHeight) == 0x71FC), "native HUD rectangle height");
 CGS_STATIC_ASSERT((offsetof(ICEController, maRampAccum) == offsetof(ICEController, maChangeBuffer) +
                   sizeof(((ICEController*)0)->maChangeBuffer)), "distinct adjacent native velocity banks");
 CGS_STATIC_ASSERT((sizeof(((ICEController*)0)->miShowUi) == 1), "native UI flag width");

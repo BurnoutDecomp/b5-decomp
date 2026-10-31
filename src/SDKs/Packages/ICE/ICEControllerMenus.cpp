@@ -203,6 +203,12 @@ void ICEController::ConstructMenus()
     // X/Y globals82FB6910/82FB643C are zero in the calibrated native image.
     mColorPicker.Construct(0.0f, 0.0f, 50.0f);
 
+    // ARTIST 82532170-AC constructs the four-float HUD rectangle.
+    mfHudRectX = KF_ICE_TIMEBAR_X + 2.0f;
+    mfHudRectY = KF_ICE_TIMEBAR_Y - 34.0f;
+    mfHudRectWidth = 28.0f;
+    mfHudRectHeight = 28.0f;
+
     // Seed the logo / wide-screen-marker / info-list geometry the editor HUD draws.
     // The source spine writes a block of fixed layout floats into the target-box /
     // logo / info-list head region (the +0x713C..+0x71E4 lanes). Those lanes live
