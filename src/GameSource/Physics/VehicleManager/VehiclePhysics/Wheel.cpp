@@ -56,11 +56,11 @@ namespace Vehicle
     // the code below was needed -- it was right; only the doubt was wrong.
     VecFloat Wheel::TireGripCurve::GetCoefficient(VecFloat lvfSlip) const
     {
-        const f32 lfS  = lvfSlip.x;                 // the slip is splatted across all lanes on console
-        const f32 lfG0 = maGripVariables.x;         // peakSlipRatio
-        const f32 lfG1 = maGripVariables.y;         // floorSlipRatio
-        const f32 lfG2 = maGripVariables.z;         // peakCoefficient
-        const f32 lfG3 = maGripVariables.w;         // fallCoefficient
+        const f32 lfS  = lvfSlip.mV.x;                 // the slip is splatted across all lanes on console
+        const f32 lfG0 = maGripVariables.mV.x;         // peakSlipRatio
+        const f32 lfG1 = maGripVariables.mV.y;         // floorSlipRatio
+        const f32 lfG2 = maGripVariables.mV.z;         // peakCoefficient
+        const f32 lfG3 = maGripVariables.mV.w;         // fallCoefficient
 
         const f32 lfSign = (lfS >= 0.0f) ? 1.0f : -1.0f;   // vcmpgefp vs 0 -> +1 / -1 select
         const f32 lfAbs  = std::fabs(lfS);
@@ -85,7 +85,7 @@ namespace Vehicle
         }
 
         const f32 lfResult = lfSign * lfCoeff;
-        { const VecFloat lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
+        { const VecFloat lResult(lfResult); return lResult; }
     }
 
     // ===========================================================================================
@@ -159,7 +159,7 @@ namespace Vehicle
         // Traction: only when on the ground AND the contact normal points up enough (Y > 0.5). A
         // steep wall (low normal.Y) breaks traction. 0.5 is the asm's vcfsx(1, scale 1) immediate.
         if (lbIsOnGround)
-            mbHasTraction = (lNormal.y > 0.5f);
+            mbHasTraction = (lNormal.mV.y > 0.5f);
         else
             mbHasTraction = false;
     }
@@ -176,8 +176,8 @@ namespace Vehicle
     //     0x825D71BC  lvx128 v8,[r3+0x30] ; vrlimi 8,0 ; vrlimi 4,3 ; vrlimi 2,2 ; stvx128
     //     0x825D71E0  lvx128 v8,[r3+0x40] ; vrlimi 8,0 ; vrlimi 4,3 ; vrlimi 2,2 ; stvx128
     //     0x825D7204  lvx128 v8,[r3+0x70] ; vrlimi 2,2 ONLY            ; stvx128
-    // So `mIntegrationVariables.w` (the UNSPRUNG WHEEL MASS, 30 kg, seeded by Wheel::Prepare) and
-    // `mSlipVariables.w` (THE WHEEL RADIUS) both SURVIVE a Reset on console. The old body wiped
+    // So `mIntegrationVariables.mV.w` (the UNSPRUNG WHEEL MASS, 30 kg, seeded by Wheel::Prepare) and
+    // `mSlipVariables.mV.w` (THE WHEEL RADIUS) both SURVIVE a Reset on console. The old body wiped
     // both, and wiped all four lanes of the +0x70 register instead of just .z.
     //
     // WHAT THAT COST, MEASURED: with the unsprung mass gone, the airborne arm of
@@ -193,12 +193,12 @@ namespace Vehicle
     //     0x825D7254  v13 = |v|^2 * (1/|v|)            == |v|
     //     0x825D725C  vsel against vcmpeqfp(0,|v|^2)   -- zero input stays zero
     //     0x825D7260  v13 = |v| * KF_RESET_SCALE
-    //     0x825D7264  v0  = vrefp(mSlipVariables.w) + 2 Newton     == 1 / wheel radius
+    //     0x825D7264  v0  = vrefp(mSlipVariables.mV.w) + 2 Newton     == 1 / wheel radius
     //     0x825D7278  v0  = v0 * v13
-    //     0x825D727C  mIntegrationVariables.x = v0     (mask 8, lane 0 -- .y/.z/.w untouched)
+    //     0x825D727C  mIntegrationVariables.mV.x = v0     (mask 8, lane 0 -- .y/.z/.w untouched)
     // `speed / radius` is rad/s: this seeds the WHEEL SPIN so a placed car's wheels are already
-    // turning at road speed. That is the identical `mIntegrationVariables.x = target /
-    // mSlipVariables.w` idiom this tree already documents at VehiclePhysics.cpp:575 -- which is
+    // turning at road speed. That is the identical `mIntegrationVariables.mV.x = target /
+    // mSlipVariables.mV.w` idiom this tree already documents at VehiclePhysics.cpp:575 -- which is
     // what names the lane, and it is why the old body's "normalize into a direction and store a
     // whole vector" could never have been right: a direction divided by nothing is not rad/s.
     // The parameter keeps its committed spelling so no caller changes; the comment names it.
@@ -217,15 +217,15 @@ namespace Vehicle
 
         // +0x30 / +0x40: lanes x, y, z only. .w is the unsprung mass / the wheel radius --
         // the console preserves both and so must this.
-        mIntegrationVariables.x = 0.0f;
-        mIntegrationVariables.y = 0.0f;
-        mIntegrationVariables.z = 0.0f;
-        mSlipVariables.x = 0.0f;
-        mSlipVariables.y = 0.0f;
-        mSlipVariables.z = 0.0f;
+        mIntegrationVariables.mV.x = 0.0f;
+        mIntegrationVariables.mV.y = 0.0f;
+        mIntegrationVariables.mV.z = 0.0f;
+        mSlipVariables.mV.x = 0.0f;
+        mSlipVariables.mV.y = 0.0f;
+        mSlipVariables.mV.z = 0.0f;
 
         // +0x70: lane z ONLY (a single `vrlimi128 v8, v0, 2, 2`).
-        mSpeedAndMassOnWheelVariables.z = 0.0f;
+        mSpeedAndMassOnWheelVariables.mV.z = 0.0f;
 
         // 0x825D7214/18/20: the three trailing flag bytes.
         mi8NumContacts          = 0;
@@ -233,17 +233,17 @@ namespace Vehicle
         mbBrokenAdhesiveLimit   = false;
 
         // |lvPosition| -- the magnitude, zero-guarded exactly as the vsel does.
-        const f32 lfMagSq = lvPosition.x * lvPosition.x
-                          + lvPosition.y * lvPosition.y
-                          + lvPosition.z * lvPosition.z;
+        const f32 lfMagSq = lvPosition.mV.x * lvPosition.mV.x
+                          + lvPosition.mV.y * lvPosition.mV.y
+                          + lvPosition.mV.z * lvPosition.mV.z;
         const f32 lfMagnitude = (lfMagSq > 0.0f) ? std::sqrt(lfMagSq) : 0.0f;
 
         // spin (rad/s) = speed / wheel radius. The radius is the lane the clear above preserved;
         // if a caller ever Resets a wheel that was never Prepared it is 0, and the console's
         // vrefp(0) would go to infinity here just the same -- not guarded, because the console
         // does not guard it.
-        const f32 lfWheelRadius = mSlipVariables.w;
-        mIntegrationVariables.x = (lfMagnitude * KF_RESET_SCALE) / lfWheelRadius;
+        const f32 lfWheelRadius = mSlipVariables.mV.w;
+        mIntegrationVariables.mV.x = (lfMagnitude * KF_RESET_SCALE) / lfWheelRadius;
 
         // 0x825D7284/88: tail call with the +0x90 register.
         SetPosition(mStreamedPositionPlusTwistAmount.GetVector3());
@@ -260,7 +260,7 @@ namespace Vehicle
     // SwitchAttribs sibling" -- was wrong on every lane: it put (radius ± min/max) into the +0x30/
     // +0x40 Y lanes and invented a twist store into the +0x90 w lane. The raw asm (dossier,
     // 0x825FEC48..0x825FED10) does none of that:
-    //   0x825FECCC  vsubfp v10, v0, v10   ; v0 = splat(lStreamedPosition.y), v10 = splat(f4)
+    //   0x825FECCC  vsubfp v10, v0, v10   ; v0 = splat(lStreamedPosition.mV.y), v10 = splat(f4)
     //   0x825FECD8  vrlimi128 v9, v10, 8, 0    -> +0x60 lane x = pos.y - f4
     //   0x825FECD0  vaddfp v0, v0, v9          ; v9 = splat(f3)
     //   0x825FECE4  vrlimi128 v10, v0, 4, 3    -> +0x60 lane y = pos.y + f3
@@ -283,12 +283,12 @@ namespace Vehicle
         mpTireAttribs = lpTireAttribs;                                  // stw r30, 0xD0(r31)
 
         // +0x60: the suspension bounds around the streamed hub height (see the asm quote above).
-        mSuspensionAndInertiaVariables.x = lStreamedPosition.y - lfSuspensionTravelDown;
-        mSuspensionAndInertiaVariables.y = lStreamedPosition.y + lfSuspensionTravelUp;
+        mSuspensionAndInertiaVariables.mV.x = lStreamedPosition.mV.y - lfSuspensionTravelDown;
+        mSuspensionAndInertiaVariables.mV.y = lStreamedPosition.mV.y + lfSuspensionTravelUp;
 
         // +0x30 lane w / +0x40 lane w.
-        mIntegrationVariables.w = lfIntegrationSeed;                    // vrlimi128 (+0x30), 1, 1
-        mSlipVariables.w        = lfWheelRadius;                        // vrlimi128 (+0x40), 1, 1  ⭐ seat input
+        mIntegrationVariables.mV.w = lfIntegrationSeed;                    // vrlimi128 (+0x30), 1, 1
+        mSlipVariables.mV.w        = lfWheelRadius;                        // vrlimi128 (+0x40), 1, 1  ⭐ seat input
 
         // +0x90: xyz replaced with the streamed position, the w lane PRESERVED (vrlimi128 v11, v0,
         // 1, 0 re-inserts the OLD w -- SetVector3 writes only xyz, which is exactly that). The
@@ -305,7 +305,7 @@ namespace Vehicle
     // REBODIED 2026-08-09 (attribs-setup wave) from its OWN asm -- the standing FLAG on the
     // old body ("inherits Prepare's disproven scatter, re-verify before anything consumes it")
     // was right to demand it: every derived lane was wrong. The real scatter MIRRORS Prepare's
-    // PROVEN map (f1 -> mSlipVariables.w == radius; f2 -> mIntegrationVariables.w;
+    // PROVEN map (f1 -> mSlipVariables.mV.w == radius; f2 -> mIntegrationVariables.mV.w;
     // f3/f4 -> mSuspensionAndInertiaVariables .y/.x travel bounds), and v1 is NOT an absolute
     // position: it is a POSITION DELTA that is SUBTRACTED from both +0x90 and +0x80 (the sole
     // caller, SimpleVehiclePhysics::SwitchAttribs @0x82601978, builds it as
@@ -322,25 +322,25 @@ namespace Vehicle
         mpTireAttribs = lpTireAttribs;                                  // stw r30, 0xD0(r31)
 
         // The new streamed hub height, from the running +0x90 register minus the delta.
-        const f32 lfNewHubY = mStreamedPositionPlusTwistAmount.y - lPositionDelta.y;
+        const f32 lfNewHubY = mStreamedPositionPlusTwistAmount.mV.y - lPositionDelta.mV.y;
 
         // +0x60: the suspension bounds around the new hub height (same lanes as Prepare).
-        mSuspensionAndInertiaVariables.x = lfNewHubY - lfSuspensionTravelDown;  // vrlimi(8)
-        mSuspensionAndInertiaVariables.y = lfNewHubY + lfSuspensionTravelUp;    // vrlimi(4)
+        mSuspensionAndInertiaVariables.mV.x = lfNewHubY - lfSuspensionTravelDown;  // vrlimi(8)
+        mSuspensionAndInertiaVariables.mV.y = lfNewHubY + lfSuspensionTravelUp;    // vrlimi(4)
 
         // +0x30 lane w / +0x40 lane w -- exactly Prepare's scatter.
-        mIntegrationVariables.w = lfIntegrationSeed;                    // vrlimi128 (+0x30), 1, 1
-        mSlipVariables.w        = lfWheelRadius;                        // vrlimi128 (+0x40), 1, 1
+        mIntegrationVariables.mV.w = lfIntegrationSeed;                    // vrlimi128 (+0x30), 1, 1
+        mSlipVariables.mV.w        = lfWheelRadius;                        // vrlimi128 (+0x40), 1, 1
 
         // +0x90: xyz -= delta, w (twist amount) PRESERVED.
-        mStreamedPositionPlusTwistAmount.x -= lPositionDelta.x;
-        mStreamedPositionPlusTwistAmount.y -= lPositionDelta.y;
-        mStreamedPositionPlusTwistAmount.z -= lPositionDelta.z;
+        mStreamedPositionPlusTwistAmount.mV.x -= lPositionDelta.mV.x;
+        mStreamedPositionPlusTwistAmount.mV.y -= lPositionDelta.mV.y;
+        mStreamedPositionPlusTwistAmount.mV.z -= lPositionDelta.mV.z;
 
         // +0x80: the running position, decremented whole (vsubfp128 v0,v0,v127).
-        mPosition.x -= lPositionDelta.x;
-        mPosition.y -= lPositionDelta.y;
-        mPosition.z -= lPositionDelta.z;
+        mPosition.mV.x -= lPositionDelta.mV.x;
+        mPosition.mV.y -= lPositionDelta.mV.y;
+        mPosition.mV.z -= lPositionDelta.mV.z;
     }
 
     // ===========================================================================================
@@ -370,11 +370,11 @@ namespace Vehicle
     //   @0x82C74368) -- the bool->vector-mask idiom (cntlzw/rlwinm row select), NOT a data table.
     //
     // The asm, in order (register-traced):
-    //   1. candidate = mIntegrationVariables.x + mIntegrationVariables.y * dt *
-    //      mSuspensionAndInertiaVariables.w        (torque -> velocity integrate, invInertia lane)
+    //   1. candidate = mIntegrationVariables.mV.x + mIntegrationVariables.mV.y * dt *
+    //      mSuspensionAndInertiaVariables.mV.w        (torque -> velocity integrate, invInertia lane)
     //   2. candidate = clamp(candidate, +/-9000.0)          (vmaxfp/vminfp vs unk_82FB9CF0)
     //   3. sign = {+1, 0, -1}(candidate)                    (the two-vsel sign select)
-    //   4. momentum  = |candidate * mSuspensionAndInertiaVariables.z|   (inertia lane)
+    //   4. momentum  = |candidate * mSuspensionAndInertiaVariables.mV.z|   (inertia lane)
     //      keepSpin  = momentum > brakeFactor * 100.0       (vcmpgtfp v8 > v7)
     //   5. decel = brakeFactor > 0 ? 1000.0 * brakeFactor   (braking)
     //            : (gasReleased ? 500.0 : 0.0)              (engine-off freewheel drag)
@@ -383,9 +383,9 @@ namespace Vehicle
     //   7. if (!inReverse) result = max(result, 0)          (no backwards spin in forward gear)
     //   8. rev limit: maxAngVel >= 0 ? min(result, maxAngVel) : max(result, maxAngVel)
     //   9. mu8State == eWheelInertiaTypeLocked -> result = 0
-    //  10. mIntegrationVariables.x = result; .y = 0         (vrlimi 8,0 then vrlimi 4,3)
+    //  10. mIntegrationVariables.mV.x = result; .y = 0         (vrlimi 8,0 then vrlimi 4,3)
     //  11. lockInertia = !(keepSpin || |candidate| < unk_82FB8BC0):
-    //      mSuspensionAndInertiaVariables.z/.w are KEPT when the wheel keeps spinning or is
+    //      mSuspensionAndInertiaVariables.mV.z/.w are KEPT when the wheel keeps spinning or is
     //      STOPPED, and ZEROED otherwise (the braked wheel stops accepting torque until
     //      UpdateWheelInertia re-seeds the lanes next frame)
     //      (0x825D70C0 `vcmpgefp v10, |cand|, v8` ; 0x825D70E4 `vnot v10, v10` ;
@@ -408,13 +408,14 @@ namespace Vehicle
         // epsilon, NOT a slow-spin band.
         static const f32 KF_STOPPED_SPIN_EPSILON = 1.1920928955078125e-07f;   // unk_82FB8BC0
 
-        const f32 lfDt         = lvfTimeStep.x;
-        const f32 lfInertia    = mSuspensionAndInertiaVariables.z;
-        const f32 lfInvInertia = mSuspensionAndInertiaVariables.w;
+        const f32 lfDt         = lvfTimeStep.mV.x;
+        const f32 lfInertia    = mSuspensionAndInertiaVariables.mV.z;
+        const f32 lfInvInertia = mSuspensionAndInertiaVariables.mV.w;
 
         // 1-2. integrate the accumulated torque, hard-clamp the candidate spin.
-        f32 lfCandidate = mIntegrationVariables.x
-                        + mIntegrationVariables.y * lfDt * lfInvInertia;
+        f32 lfCandidate = __vmaddfp(
+            __vmulfp(VecFloat(mIntegrationVariables.mV.y).mV, lvfTimeStep.mV),
+            VecFloat(lfInvInertia).mV, VecFloat(mIntegrationVariables.mV.x).mV).x;
         if (lfCandidate >  KF_SPIN_HARD_CLAMP) lfCandidate =  KF_SPIN_HARD_CLAMP;
         if (lfCandidate < -KF_SPIN_HARD_CLAMP) lfCandidate = -KF_SPIN_HARD_CLAMP;
 
@@ -422,27 +423,28 @@ namespace Vehicle
         const f32 lfSign = (lfCandidate > 0.0f) ? 1.0f : ((lfCandidate >= 0.0f) ? 0.0f : -1.0f);
 
         // 4. does the wheel's angular momentum exceed what the brakes can absorb this frame?
-        const f32 lfMomentum      = std::fabs(lfCandidate * lfInertia);
-        const f32 lfBrakeCapacity = lvfBrakeFactor.x * lvfBrakeCapacityScale.x;   // * 100.0
+        const f32 lfMomentum      = std::fabs(__vmulfp(VecFloat(lfCandidate).mV, VecFloat(lfInertia).mV).x);
+        const f32 lfBrakeCapacity = __vmulfp(lvfBrakeFactor.mV, lvfBrakeCapacityScale.mV).x;   // * 100.0
         const bool lbKeepSpinning = lfMomentum > lfBrakeCapacity;
 
         // 5. deceleration: braking beats freewheeling beats driven.
-        const f32 lfDecel = (lvfBrakeFactor.x > 0.0f)
-                                ? lvfBrakeDecelScale.x * lvfBrakeFactor.x     // 1000.0 * factor
+        const f32 lfDecel = (lvfBrakeFactor.mV.x > 0.0f)
+                                ? __vmulfp(lvfBrakeDecelScale.mV, lvfBrakeFactor.mV).x     // 1000.0 * factor
                                 : (lbGasReleased ? KF_FREEWHEEL_DECEL : 0.0f);
-        f32 lfSlowed = std::fabs(lfCandidate) - lfDecel * lfDt * lfInvInertia;
-        if (lfSlowed < 0.0f) lfSlowed = 0.0f;
-        lfSlowed *= lfSign;
+        const __vector4 lvDecel = __vmulfp(
+            __vmulfp(VecFloat(lfDecel).mV, lvfTimeStep.mV), VecFloat(lfInvInertia).mV);
+        const __vector4 lvSlowed = __vsubfp(VecFloat(std::fabs(lfCandidate)).mV, lvDecel);
+        const f32 lfSlowed = __vmulfp(__vmaxfp(lvSlowed, __vspltisw(0)), VecFloat(lfSign).mV).x;
 
         // 6. within brake capacity the wheel stops dead this frame.
         f32 lfResult = lbKeepSpinning ? lfSlowed : 0.0f;
 
         // 7. forward gear cannot spin the wheel backwards.
-        if (!lbInReverse && lfResult < 0.0f)
-            lfResult = 0.0f;
+        if (!lbInReverse)
+            lfResult = __vmaxfp(VecFloat(lfResult).mV, __vspltisw(0)).x;
 
         // 8. the engine rev limit, sign-aware (maxAngVel is negative in reverse gear).
-        const f32 lfMax = lvfMaxAngularVelocity.x;
+        const f32 lfMax = lvfMaxAngularVelocity.mV.x;
         if (lfMax >= 0.0f) { if (lfResult > lfMax) lfResult = lfMax; }
         else               { if (lfResult < lfMax) lfResult = lfMax; }
 
@@ -451,15 +453,16 @@ namespace Vehicle
             lfResult = 0.0f;
 
         // 10. writeback: velocity lane .x, torque accumulator .y cleared.
-        mIntegrationVariables.x = lfResult;   // vrlimi128 mask 8 (x)
-        mIntegrationVariables.y = 0.0f;       // vrlimi128 mask 4 (y)
+        mIntegrationVariables.mV.x = lfResult;   // vrlimi128 mask 8 (x)
+        mIntegrationVariables.mV.y = 0.0f;       // vrlimi128 mask 4 (y)
 
         // 11. the lock-up latch: a fast wheel fully absorbed by the brakes loses its inertia
         // lanes (stops integrating torque) until UpdateWheelInertia re-seeds them next frame.
-        const bool lbKeepInertia = lbKeepSpinning
-                                || std::fabs(lfCandidate) < KF_STOPPED_SPIN_EPSILON;
-        mSuspensionAndInertiaVariables.z = lbKeepInertia ? lfInertia    : 0.0f;   // vrlimi 2 (z)
-        mSuspensionAndInertiaVariables.w = lbKeepInertia ? lfInvInertia : 0.0f;   // vrlimi 1 (w)
+        const __vector4 lvStoppedMask = __vcmpgefp(
+            VecFloat(std::fabs(lfCandidate)).mV, VecFloat(KF_STOPPED_SPIN_EPSILON).mV);
+        const bool lbKeepInertia = lbKeepSpinning || lvStoppedMask.u[0] == 0;
+        mSuspensionAndInertiaVariables.mV.z = lbKeepInertia ? lfInertia    : 0.0f;   // vrlimi 2 (z)
+        mSuspensionAndInertiaVariables.mV.w = lbKeepInertia ? lfInvInertia : 0.0f;   // vrlimi 1 (w)
 
         // ---- [wheellock] the measurement that made the epsilon a DEFECT, not a nicety ---------
         // OPT-IN (BRN_WHEEL_LOCK_DIAG=1); a default run never evaluates the second predicate, so
@@ -523,34 +526,34 @@ namespace Vehicle
     // `sub_B90DB0(&torque, &longSpeed, dt)`) confirms the same three arguments.
     //
     // asm, in order:
-    //   lvx128 v0,[wheel+0x40]; vspltw 3      -> radius        (mSlipVariables.w)
-    //   lvx128 v9,[wheel+0x60]; vspltw 3      -> invInertia    (mSuspensionAndInertiaVariables.w)
+    //   lvx128 v0,[wheel+0x40]; vspltw 3      -> radius        (mSlipVariables.mV.w)
+    //   lvx128 v9,[wheel+0x60]; vspltw 3      -> invInertia    (mSuspensionAndInertiaVariables.mV.w)
     //   lbz    r9,[wheel+0xD7]                -> mu8State
-    //   lvx128 v13,[wheel+0x30]; vspltw 0     -> omega         (mIntegrationVariables.x)
+    //   lvx128 v13,[wheel+0x30]; vspltw 0     -> omega         (mIntegrationVariables.mV.x)
     //   vrefp+Newton(radius)                  -> 1/radius
     //   vmaddfp128 v6, v9, v119(dt), v6       -> omegaNew = omega + (torque*invInertia)*dt
     //   v0 = roadLongSpeed * (1/radius)       -> the FREE-ROLLING angular velocity
     //   vcmpgefp(omega-v0, 0) XOR vcmpgefp(omegaNew-v0, 0) -> "the step crossed the rolling speed"
     //   vsel  -> crossed ? rollingSpeed : omegaNew
     //   vsel against unk_8327F240[(mu8State==1) ? 0x10 : 0]  -> a LOCKED wheel is forced to 0
-    //   vrlimi128 mask 8 + stvx128            -> mIntegrationVariables.x
+    //   vrlimi128 mask 8 + stvx128            -> mIntegrationVariables.mV.x
     // (unk_8327F240 is the shared {FALSE, TRUE} vsel mask pair already homed above, so the select
     // needs no constant -- it is a plain `mu8State == eWheelInertiaTypeLocked` test.)
     void Wheel::ApplyFrictionReaction(VecFloat lvfWheelTorque, VecFloat lvfRoadLongSpeed,
                                       VecFloat lvfTimeStep)
     {
-        const f32 lfRadius     = mSlipVariables.w;                     // +0x40 .w
-        const f32 lfInvInertia = mSuspensionAndInertiaVariables.w;     // +0x60 .w
-        const f32 lfOmega      = mIntegrationVariables.x;              // +0x30 .x
+        const f32 lfRadius     = mSlipVariables.mV.w;                     // +0x40 .w
+        const f32 lfInvInertia = mSuspensionAndInertiaVariables.mV.w;     // +0x60 .w
+        const f32 lfOmega      = mIntegrationVariables.mV.x;              // +0x30 .x
 
         // The angular velocity at which the tyre would roll without slipping. The console forms
         // 1/radius with vrefp + one Newton step; written as the exact divide (see the same note on
         // TireGripCurve::GetCoefficient). A zero radius cannot happen after Wheel::Prepare, but a
         // vrefp of zero would be +inf, so the guard keeps a mis-seeded wheel from poisoning the
         // integrator with a NaN rather than inventing a value.
-        const f32 lfRollingSpeed = (lfRadius != 0.0f) ? (lvfRoadLongSpeed.x / lfRadius) : 0.0f;
+        const f32 lfRollingSpeed = (lfRadius != 0.0f) ? (lvfRoadLongSpeed.mV.x / lfRadius) : 0.0f;
 
-        f32 lfNewOmega = lfOmega + lvfWheelTorque.x * lfInvInertia * lvfTimeStep.x;
+        f32 lfNewOmega = lfOmega + lvfWheelTorque.mV.x * lfInvInertia * lvfTimeStep.mV.x;
 
         // The overshoot guard: if this step carried the wheel ACROSS the free-rolling speed, the
         // friction can only have brought it TO that speed, so land exactly on it.
@@ -563,7 +566,7 @@ namespace Vehicle
         if (mu8State == eWheelInertiaTypeLocked)
             lfNewOmega = 0.0f;
 
-        mIntegrationVariables.x = lfNewOmega;   // vrlimi128 mask 8 (x)
+        mIntegrationVariables.mV.x = lfNewOmega;   // vrlimi128 mask 8 (x)
     }
 
     // ===========================================================================================
@@ -593,7 +596,7 @@ namespace Vehicle
     //     record (through the wrapper's data pointer, `lwz +4` == GetLayoutPointer);
     //   * the Default/AI/DonutAI presets source .rdata tuning constants (each spelled with its
     //     image address at its use);
-    // * the DonutAI pair runs 15 vperms, not 16: maPackedVariables.w (the long-force-bias
+    // * the DonutAI pair runs 15 vperms, not 16: maPackedVariables.mV.w (the long-force-bias
     //     lane) is DELIBERATELY PRESERVED, not written. See the note on the pair.
 
     // The attrib-driven pair read the record as a byte-addressed float array, same convention as
@@ -604,49 +607,49 @@ namespace Vehicle
     // @0x825D5500  Wheel::TireAttribs::PrepareDefaultFrontTire
     void Wheel::TireAttribs::PrepareDefaultFrontTire()
     {
-        mLongGripCurve.maGripVariables.x = 0.2f;       // peakSlipRatio    flt_82004744
-        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.w = 1.0f;       // fallCoefficient
+        mLongGripCurve.maGripVariables.mV.x = 0.2f;       // peakSlipRatio    flt_82004744
+        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.mV.w = 1.0f;       // fallCoefficient
 
-        mLatGripCurve.maGripVariables.x = 1.0f;        // peakSlipRatio
-        mLatGripCurve.maGripVariables.y = 1.0f;        // floorSlipRatio
-        mLatGripCurve.maGripVariables.z = 1.5f;        // peakCoefficient  flt_820945DC
-        mLatGripCurve.maGripVariables.w = 1.5f;        // fallCoefficient
+        mLatGripCurve.maGripVariables.mV.x = 1.0f;        // peakSlipRatio
+        mLatGripCurve.maGripVariables.mV.y = 1.0f;        // floorSlipRatio
+        mLatGripCurve.maGripVariables.mV.z = 1.5f;        // peakCoefficient  flt_820945DC
+        mLatGripCurve.maGripVariables.mV.w = 1.5f;        // fallCoefficient
 
-        mDriftLatGripCurve.maGripVariables.x = 1.0f;   // peakSlipRatio
-        mDriftLatGripCurve.maGripVariables.y = 1.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.z = 1.5f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.w = 1.5f;   // fallCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.x = 1.0f;   // peakSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.y = 1.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.z = 1.5f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.w = 1.5f;   // fallCoefficient
 
-        maPackedVariables.x = 4.0f;                    // staticFrictionCo  flt_8208FA0C
-        maPackedVariables.y = 4.0f;                    // dynamicFrictionCo
-        maPackedVariables.z = 14000.0f;                // adhesiveLimit     flt_82094C74
-        maPackedVariables.w = 0.0f;                    // longForceBias     flt_82001CC0
+        maPackedVariables.mV.x = 4.0f;                    // staticFrictionCo  flt_8208FA0C
+        maPackedVariables.mV.y = 4.0f;                    // dynamicFrictionCo
+        maPackedVariables.mV.z = 14000.0f;                // adhesiveLimit     flt_82094C74
+        maPackedVariables.mV.w = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
     // @0x825D57D8  Wheel::TireAttribs::PrepareDefaultRearTire
     void Wheel::TireAttribs::PrepareDefaultRearTire()
     {
-        mLongGripCurve.maGripVariables.x = 0.2f;       // peakSlipRatio    flt_82004744
-        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.w = 0.7f;       // fallCoefficient  flt_82004C68
+        mLongGripCurve.maGripVariables.mV.x = 0.2f;       // peakSlipRatio    flt_82004744
+        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.mV.w = 0.7f;       // fallCoefficient  flt_82004C68
 
-        mLatGripCurve.maGripVariables.x = 0.5f;        // peakSlipRatio    flt_82001DA0
-        mLatGripCurve.maGripVariables.y = 3.0f;        // floorSlipRatio   flt_82004270
-        mLatGripCurve.maGripVariables.z = 4.0f;        // peakCoefficient  flt_8208FA0C
-        mLatGripCurve.maGripVariables.w = 0.9f;        // fallCoefficient  flt_82005450
+        mLatGripCurve.maGripVariables.mV.x = 0.5f;        // peakSlipRatio    flt_82001DA0
+        mLatGripCurve.maGripVariables.mV.y = 3.0f;        // floorSlipRatio   flt_82004270
+        mLatGripCurve.maGripVariables.mV.z = 4.0f;        // peakCoefficient  flt_8208FA0C
+        mLatGripCurve.maGripVariables.mV.w = 0.9f;        // fallCoefficient  flt_82005450
 
-        mDriftLatGripCurve.maGripVariables.x = 1.0f;   // peakSlipRatio (own value; rest shared with lat)
-        mDriftLatGripCurve.maGripVariables.y = 3.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.z = 4.0f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.w = 0.9f;   // fallCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.x = 1.0f;   // peakSlipRatio (own value; rest shared with lat)
+        mDriftLatGripCurve.maGripVariables.mV.y = 3.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.z = 4.0f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.w = 0.9f;   // fallCoefficient
 
-        maPackedVariables.x = 4.0f;                    // staticFrictionCo
-        maPackedVariables.y = 3.0f;                    // dynamicFrictionCo
-        maPackedVariables.z = 14000.0f;                // adhesiveLimit     flt_82094C74
-        maPackedVariables.w = 0.1f;                    // longForceBias     flt_82004014
+        maPackedVariables.mV.x = 4.0f;                    // staticFrictionCo
+        maPackedVariables.mV.y = 3.0f;                    // dynamicFrictionCo
+        maPackedVariables.mV.z = 14000.0f;                // adhesiveLimit     flt_82094C74
+        maPackedVariables.mV.w = 0.1f;                    // longForceBias     flt_82004014
     }
 
     // @0x825D5AC8  Wheel::TireAttribs::PrepareFrontTire
@@ -656,26 +659,26 @@ namespace Vehicle
     {
         const f32* lpData = static_cast<const f32*>(lrAttribs.GetLayoutPointer());
 
-        mLongGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0xE0);       // FrontLongGripCurvePeakSlipRatio
-        mLongGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0xE8);       // FrontLongGripCurveFloorSlipRatio
-        mLongGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0xE4);       // FrontLongGripCurvePeakCoefficient
-        mLongGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0xEC);       // FrontLongGripCurveFallCoefficient
+        mLongGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0xE0);       // FrontLongGripCurvePeakSlipRatio
+        mLongGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0xE8);       // FrontLongGripCurveFloorSlipRatio
+        mLongGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0xE4);       // FrontLongGripCurvePeakCoefficient
+        mLongGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0xEC);       // FrontLongGripCurveFallCoefficient
 
-        mLatGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0xF0);        // FrontLatGripCurvePeakSlipRatio
-        mLatGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0xF8);        // FrontLatGripCurveFloorSlipRatio
-        mLatGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0xF4);        // FrontLatGripCurvePeakCoefficient
-        mLatGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0xFC);        // FrontLatGripCurveFallCoefficient
+        mLatGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0xF0);        // FrontLatGripCurvePeakSlipRatio
+        mLatGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0xF8);        // FrontLatGripCurveFloorSlipRatio
+        mLatGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0xF4);        // FrontLatGripCurvePeakCoefficient
+        mLatGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0xFC);        // FrontLatGripCurveFallCoefficient
 
         // The drift curve has its own peak slip ratio and shares the lat curve's other three lanes.
-        mDriftLatGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0x100);  // FrontLatGripCurveDriftPeakSlipRatio
-        mDriftLatGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0xF8);   // FrontLatGripCurveFloorSlipRatio
-        mDriftLatGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0xF4);   // FrontLatGripCurvePeakCoefficient
-        mDriftLatGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0xFC);   // FrontLatGripCurveFallCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x100);  // FrontLatGripCurveDriftPeakSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0xF8);   // FrontLatGripCurveFloorSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0xF4);   // FrontLatGripCurvePeakCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0xFC);   // FrontLatGripCurveFallCoefficient
 
-        maPackedVariables.x = BP_TIRE_SRC_F(lpData, 0xD0);                    // FrontTireStaticFrictionCoefficient
-        maPackedVariables.y = BP_TIRE_SRC_F(lpData, 0xD8);                    // FrontTireDynamicFrictionCoefficient
-        maPackedVariables.z = BP_TIRE_SRC_F(lpData, 0xDC);                    // FrontTireAdhesiveLimit
-        maPackedVariables.w = BP_TIRE_SRC_F(lpData, 0xD4);                    // FrontTireLongForceBias
+        maPackedVariables.mV.x = BP_TIRE_SRC_F(lpData, 0xD0);                    // FrontTireStaticFrictionCoefficient
+        maPackedVariables.mV.y = BP_TIRE_SRC_F(lpData, 0xD8);                    // FrontTireDynamicFrictionCoefficient
+        maPackedVariables.mV.z = BP_TIRE_SRC_F(lpData, 0xDC);                    // FrontTireAdhesiveLimit
+        maPackedVariables.mV.w = BP_TIRE_SRC_F(lpData, 0xD4);                    // FrontTireLongForceBias
     }
 
     // @0x825D5DC8  Wheel::TireAttribs::PrepareRearTire
@@ -683,127 +686,127 @@ namespace Vehicle
     {
         const f32* lpData = static_cast<const f32*>(lrAttribs.GetLayoutPointer());
 
-        mLongGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0x78);       // RearLongGripCurvePeakSlipRatio
-        mLongGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0x80);       // RearLongGripCurveFloorSlipRatio
-        mLongGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0x7C);       // RearLongGripCurvePeakCoefficient
-        mLongGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0x84);       // RearLongGripCurveFallCoefficient
+        mLongGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x78);       // RearLongGripCurvePeakSlipRatio
+        mLongGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0x80);       // RearLongGripCurveFloorSlipRatio
+        mLongGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0x7C);       // RearLongGripCurvePeakCoefficient
+        mLongGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0x84);       // RearLongGripCurveFallCoefficient
 
-        mLatGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0x88);        // RearLatGripCurvePeakSlipRatio
-        mLatGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0x90);        // RearLatGripCurveFloorSlipRatio
-        mLatGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0x8C);        // RearLatGripCurvePeakCoefficient
-        mLatGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0x94);        // RearLatGripCurveFallCoefficient
+        mLatGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x88);        // RearLatGripCurvePeakSlipRatio
+        mLatGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0x90);        // RearLatGripCurveFloorSlipRatio
+        mLatGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0x8C);        // RearLatGripCurvePeakCoefficient
+        mLatGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0x94);        // RearLatGripCurveFallCoefficient
 
-        mDriftLatGripCurve.maGripVariables.x = BP_TIRE_SRC_F(lpData, 0x98);   // RearLatGripCurveDriftPeakSlipRatio
-        mDriftLatGripCurve.maGripVariables.y = BP_TIRE_SRC_F(lpData, 0x90);   // RearLatGripCurveFloorSlipRatio
-        mDriftLatGripCurve.maGripVariables.z = BP_TIRE_SRC_F(lpData, 0x8C);   // RearLatGripCurvePeakCoefficient
-        mDriftLatGripCurve.maGripVariables.w = BP_TIRE_SRC_F(lpData, 0x94);   // RearLatGripCurveFallCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x98);   // RearLatGripCurveDriftPeakSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0x90);   // RearLatGripCurveFloorSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0x8C);   // RearLatGripCurvePeakCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0x94);   // RearLatGripCurveFallCoefficient
 
-        maPackedVariables.x = BP_TIRE_SRC_F(lpData, 0x68);                    // RearTireStaticFrictionCoefficient
-        maPackedVariables.y = BP_TIRE_SRC_F(lpData, 0x70);                    // RearTireDynamicFrictionCoefficient
-        maPackedVariables.z = BP_TIRE_SRC_F(lpData, 0x74);                    // RearTireAdhesiveLimit
-        maPackedVariables.w = BP_TIRE_SRC_F(lpData, 0x6C);                    // RearTireLongForceBias
+        maPackedVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x68);                    // RearTireStaticFrictionCoefficient
+        maPackedVariables.mV.y = BP_TIRE_SRC_F(lpData, 0x70);                    // RearTireDynamicFrictionCoefficient
+        maPackedVariables.mV.z = BP_TIRE_SRC_F(lpData, 0x74);                    // RearTireAdhesiveLimit
+        maPackedVariables.mV.w = BP_TIRE_SRC_F(lpData, 0x6C);                    // RearTireLongForceBias
     }
 
     // @0x825D60C8  Wheel::TireAttribs::PrepareFrontTireForAI
     void Wheel::TireAttribs::PrepareFrontTireForAI()
     {
-        mLongGripCurve.maGripVariables.x = 0.2f;       // peakSlipRatio    flt_82004744
-        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.w = 0.2f;       // fallCoefficient
+        mLongGripCurve.maGripVariables.mV.x = 0.2f;       // peakSlipRatio    flt_82004744
+        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.mV.w = 0.2f;       // fallCoefficient
 
-        mLatGripCurve.maGripVariables.x = 0.5f;        // peakSlipRatio    flt_82001DA0
-        mLatGripCurve.maGripVariables.y = 3.0f;        // floorSlipRatio   flt_82004270
-        mLatGripCurve.maGripVariables.z = 2.0f;        // peakCoefficient  flt_82001D9C
-        mLatGripCurve.maGripVariables.w = 1.0f;        // fallCoefficient
+        mLatGripCurve.maGripVariables.mV.x = 0.5f;        // peakSlipRatio    flt_82001DA0
+        mLatGripCurve.maGripVariables.mV.y = 3.0f;        // floorSlipRatio   flt_82004270
+        mLatGripCurve.maGripVariables.mV.z = 2.0f;        // peakCoefficient  flt_82001D9C
+        mLatGripCurve.maGripVariables.mV.w = 1.0f;        // fallCoefficient
 
-        mDriftLatGripCurve.maGripVariables.x = 0.5f;   // peakSlipRatio
-        mDriftLatGripCurve.maGripVariables.y = 3.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.z = 2.0f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.w = 1.0f;   // fallCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.x = 0.5f;   // peakSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.y = 3.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.z = 2.0f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.w = 1.0f;   // fallCoefficient
 
-        maPackedVariables.x = 20.0f;                   // staticFrictionCo  flt_8208F9D4
-        maPackedVariables.y = 5.0f;                    // dynamicFrictionCo flt_8200426C
-        maPackedVariables.z = 100000.0f;               // adhesiveLimit     flt_820080E8
-        maPackedVariables.w = 0.0f;                    // longForceBias     flt_82001CC0
+        maPackedVariables.mV.x = 20.0f;                   // staticFrictionCo  flt_8208F9D4
+        maPackedVariables.mV.y = 5.0f;                    // dynamicFrictionCo flt_8200426C
+        maPackedVariables.mV.z = 100000.0f;               // adhesiveLimit     flt_820080E8
+        maPackedVariables.mV.w = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
     // @0x825D63B8  Wheel::TireAttribs::PrepareRearTireForAI
     void Wheel::TireAttribs::PrepareRearTireForAI()
     {
-        mLongGripCurve.maGripVariables.x = 0.4f;       // peakSlipRatio    flt_8200473C
-        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.w = 0.2f;       // fallCoefficient  flt_82004744
+        mLongGripCurve.maGripVariables.mV.x = 0.4f;       // peakSlipRatio    flt_8200473C
+        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.mV.w = 0.2f;       // fallCoefficient  flt_82004744
 
-        mLatGripCurve.maGripVariables.x = 0.5f;        // peakSlipRatio    flt_82001DA0
-        mLatGripCurve.maGripVariables.y = 3.0f;        // floorSlipRatio   flt_82004270
-        mLatGripCurve.maGripVariables.z = 4.0f;        // peakCoefficient  flt_8208FA0C
-        mLatGripCurve.maGripVariables.w = 2.5f;        // fallCoefficient  flt_82005548
+        mLatGripCurve.maGripVariables.mV.x = 0.5f;        // peakSlipRatio    flt_82001DA0
+        mLatGripCurve.maGripVariables.mV.y = 3.0f;        // floorSlipRatio   flt_82004270
+        mLatGripCurve.maGripVariables.mV.z = 4.0f;        // peakCoefficient  flt_8208FA0C
+        mLatGripCurve.maGripVariables.mV.w = 2.5f;        // fallCoefficient  flt_82005548
 
-        mDriftLatGripCurve.maGripVariables.x = 0.5f;   // peakSlipRatio
-        mDriftLatGripCurve.maGripVariables.y = 3.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.z = 4.0f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.w = 2.5f;   // fallCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.x = 0.5f;   // peakSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.y = 3.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.z = 4.0f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.w = 2.5f;   // fallCoefficient
 
-        maPackedVariables.x = 20.0f;                   // staticFrictionCo  flt_8208F9D4
-        maPackedVariables.y = 4.5f;                    // dynamicFrictionCo flt_820139F0
-        maPackedVariables.z = 100000.0f;               // adhesiveLimit     flt_820080E8
-        maPackedVariables.w = 0.0f;                    // longForceBias     flt_82001CC0
+        maPackedVariables.mV.x = 20.0f;                   // staticFrictionCo  flt_8208F9D4
+        maPackedVariables.mV.y = 4.5f;                    // dynamicFrictionCo flt_820139F0
+        maPackedVariables.mV.z = 100000.0f;               // adhesiveLimit     flt_820080E8
+        maPackedVariables.mV.w = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
     // @0x825D66B8  Wheel::TireAttribs::PrepareFrontTireForDonutAI
     //
     // FIDELITY: the DonutAI pair is 15 vperms, NOT 16 -- there is no insert into
-    // maPackedVariables.w. The long-force-bias lane KEEPS whatever the tire already carried
+    // maPackedVariables.mV.w. The long-force-bias lane KEEPS whatever the tire already carried
     // (image-proven: the dest tag survives full emulation of both bodies). DO NOT "complete"
     // the scatter by writing w; the preservation is the shipped behaviour.
     void Wheel::TireAttribs::PrepareFrontTireForDonutAI()
     {
-        mLongGripCurve.maGripVariables.x = 0.2f;       // peakSlipRatio    flt_82004744
-        mLongGripCurve.maGripVariables.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.w = 1.0f;       // fallCoefficient
+        mLongGripCurve.maGripVariables.mV.x = 0.2f;       // peakSlipRatio    flt_82004744
+        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
+        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
+        mLongGripCurve.maGripVariables.mV.w = 1.0f;       // fallCoefficient
 
-        mLatGripCurve.maGripVariables.x = 1.0f;        // peakSlipRatio
-        mLatGripCurve.maGripVariables.y = 1.0f;        // floorSlipRatio
-        mLatGripCurve.maGripVariables.z = 1.5f;        // peakCoefficient  flt_820945DC
-        mLatGripCurve.maGripVariables.w = 1.5f;        // fallCoefficient
+        mLatGripCurve.maGripVariables.mV.x = 1.0f;        // peakSlipRatio
+        mLatGripCurve.maGripVariables.mV.y = 1.0f;        // floorSlipRatio
+        mLatGripCurve.maGripVariables.mV.z = 1.5f;        // peakCoefficient  flt_820945DC
+        mLatGripCurve.maGripVariables.mV.w = 1.5f;        // fallCoefficient
 
-        mDriftLatGripCurve.maGripVariables.x = 1.0f;   // peakSlipRatio
-        mDriftLatGripCurve.maGripVariables.y = 1.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.z = 1.5f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.w = 1.5f;   // fallCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.x = 1.0f;   // peakSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.y = 1.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.z = 1.5f;   // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.w = 1.5f;   // fallCoefficient
 
-        maPackedVariables.x = 2.0f;                    // staticFrictionCo  flt_82001D9C
-        maPackedVariables.y = 2.0f;                    // dynamicFrictionCo
-        maPackedVariables.z = 10000.0f;                // adhesiveLimit     flt_82005D9C
-        // maPackedVariables.w (longForceBias) DELIBERATELY NOT WRITTEN -- see the banner above.
+        maPackedVariables.mV.x = 2.0f;                    // staticFrictionCo  flt_82001D9C
+        maPackedVariables.mV.y = 2.0f;                    // dynamicFrictionCo
+        maPackedVariables.mV.z = 10000.0f;                // adhesiveLimit     flt_82005D9C
+        // maPackedVariables.mV.w (longForceBias) DELIBERATELY NOT WRITTEN -- see the banner above.
     }
 
     // @0x825D6958  Wheel::TireAttribs::PrepareRearTireForDonutAI
     // Same w-lane preservation as the front variant -- see the note above.
     void Wheel::TireAttribs::PrepareRearTireForDonutAI()
     {
-        mLongGripCurve.maGripVariables.x = 0.3f;       // peakSlipRatio    flt_82004740
-        mLongGripCurve.maGripVariables.y = 1.5f;       // floorSlipRatio   flt_820945DC
-        mLongGripCurve.maGripVariables.z = 3.0f;       // peakCoefficient  flt_82004270
-        mLongGripCurve.maGripVariables.w = 2.25f;      // fallCoefficient  flt_82009A74
+        mLongGripCurve.maGripVariables.mV.x = 0.3f;       // peakSlipRatio    flt_82004740
+        mLongGripCurve.maGripVariables.mV.y = 1.5f;       // floorSlipRatio   flt_820945DC
+        mLongGripCurve.maGripVariables.mV.z = 3.0f;       // peakCoefficient  flt_82004270
+        mLongGripCurve.maGripVariables.mV.w = 2.25f;      // fallCoefficient  flt_82009A74
 
-        mLatGripCurve.maGripVariables.x = 0.3f;        // peakSlipRatio
-        mLatGripCurve.maGripVariables.y = 3.0f;        // floorSlipRatio
-        mLatGripCurve.maGripVariables.z = 2.25f;       // peakCoefficient
-        mLatGripCurve.maGripVariables.w = 1.5f;        // fallCoefficient
+        mLatGripCurve.maGripVariables.mV.x = 0.3f;        // peakSlipRatio
+        mLatGripCurve.maGripVariables.mV.y = 3.0f;        // floorSlipRatio
+        mLatGripCurve.maGripVariables.mV.z = 2.25f;       // peakCoefficient
+        mLatGripCurve.maGripVariables.mV.w = 1.5f;        // fallCoefficient
 
-        mDriftLatGripCurve.maGripVariables.x = 1.0f;   // peakSlipRatio (own value; rest shared with lat)  flt_82001C98
-        mDriftLatGripCurve.maGripVariables.y = 3.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.z = 2.25f;  // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.w = 1.5f;   // fallCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.x = 1.0f;   // peakSlipRatio (own value; rest shared with lat)  flt_82001C98
+        mDriftLatGripCurve.maGripVariables.mV.y = 3.0f;   // floorSlipRatio
+        mDriftLatGripCurve.maGripVariables.mV.z = 2.25f;  // peakCoefficient
+        mDriftLatGripCurve.maGripVariables.mV.w = 1.5f;   // fallCoefficient
 
-        maPackedVariables.x = 2.0f;                    // staticFrictionCo  flt_82001D9C
-        maPackedVariables.y = 2.0f;                    // dynamicFrictionCo
-        maPackedVariables.z = 10000.0f;                // adhesiveLimit     flt_82005D9C
-        // maPackedVariables.w (longForceBias) DELIBERATELY NOT WRITTEN -- see the banner above.
+        maPackedVariables.mV.x = 2.0f;                    // staticFrictionCo  flt_82001D9C
+        maPackedVariables.mV.y = 2.0f;                    // dynamicFrictionCo
+        maPackedVariables.mV.z = 10000.0f;                // adhesiveLimit     flt_82005D9C
+        // maPackedVariables.mV.w (longForceBias) DELIBERATELY NOT WRITTEN -- see the banner above.
     }
 
     #undef BP_TIRE_SRC_F
