@@ -18,15 +18,14 @@
 // the 16-byte register layout matches the console); Dot therefore reads x and y ONLY, which
 // is what the two `vspltw`s attest.
 //
-// Same de-modelling rules as vector3_operation.h: the SDK returns a broadcast VecFloat and
-// every call site here reads one lane, so this is de-modelled to a scalar `float`.
+// DecFIGS vector2_operation_inline.h:143/173 declares by-value Vector2 inputs
+// and a broadcast VecFloat result; X360 performs these operations in VMX.
 //
 // gen-tool note: tools/renderware/generate_headers.py never touches rw/math/vpu/, so this
 // hand-maintained header is immune to regeneration (same as types.h / vector3_operation.h).
 
 #include "rw/math/vpu/types.h"    // rw::math::vpu::Vector2
 
-#include <cmath>                  // std::sqrt (Magnitude)
 
 namespace rw
 {
@@ -35,9 +34,10 @@ namespace math
 namespace vpu
 {
     // SDK Dot(Vector2, Vector2) -- detail/vector2_operation_inline.h:108. x and y lanes only.
-    inline float Dot(const Vector2& lLhs, const Vector2& lRhs)
+    inline VecFloat Dot(Vector2 lLhs, Vector2 lRhs)
     {
-        return lLhs.x * lRhs.x + lLhs.y * lRhs.y;
+        const __vector4 lProduct = __vmulfp(lLhs.mV, lRhs.mV);
+        return VecFloat(__vaddfp(__vspltw(lProduct, 0), __vspltw(lProduct, 1)));
     }
 
     // ADDITIVE GROW 2026-08-27 (main-map slice): the TWO-lane Magnitude, under its SDK
@@ -52,11 +52,20 @@ namespace vpu
     // -- MainMapComponent::SnapToLocation @0x8245ECC4..0x8245ED0C (the console's own
     // assert text names it: "RwMathVPU::Magnitude(mv2DesiredCentre) < 1000000.0f") and
     // twice more in MainMapComponent::ApplyZoom @0x8245EFF0 / @0x8245F25C. Scalar
-    // lowering per this header's convention; the zero-dot vsel guard falls out of
-    // std::sqrt(0.0f) == 0.0f.
-    inline float Magnitude(const Vector2& lrVector)
+    // result is a broadcast VecFloat; the VMX zero-dot select remains explicit.
+    inline VecFloat Magnitude(Vector2 lrVector)
     {
-        return std::sqrt(lrVector.x * lrVector.x + lrVector.y * lrVector.y);
+        const __vector4 lProduct = __vmulfp(lrVector.mV, lrVector.mV);
+        const __vector4 lDot = __vaddfp(__vspltw(lProduct, 0), __vspltw(lProduct, 1));
+        const __vector4 lZero = __vspltisw(0);
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        __vector4 lEstimate = __vrsqrtefp(lDot);
+        __vector4 lCorrection = __vnmsubfp(lDot, __vmulfp(lEstimate, lEstimate), lOne);
+        lEstimate = __vmaddfp(__vmulfp(lEstimate, lHalf), lCorrection, lEstimate);
+        lCorrection = __vnmsubfp(lDot, __vmulfp(lEstimate, lEstimate), lOne);
+        lEstimate = __vmaddfp(__vmulfp(lEstimate, lHalf), lCorrection, lEstimate);
+        return VecFloat(__vsel(__vmulfp(lDot, lEstimate), lZero, __vcmpeqfp(lZero, lDot)));
     }
 }
 }
