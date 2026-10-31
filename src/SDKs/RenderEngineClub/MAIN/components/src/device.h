@@ -14,6 +14,7 @@ class BrnRendererModule;
 
 namespace renderengine
 {
+    struct VertexDescriptorData;
     class PixelBuffer;
     extern u32 gDeviceFrameCounter83271624; // ARTIST 83271624
     struct ClearColorParameters { D3DVECTOR4 m_color; };
@@ -185,3 +186,7 @@ namespace renderengine
     CGS_STATIC_ASSERT((sizeof(Device::Parameters) == 0x64), "ARTIST device creation parameters");
     CGS_STATIC_ASSERT((sizeof(D3DVIDEO_SCALER_PARAMETERS) == 0x1C), "ARTIST SDK video scaler");
 }
+
+// ARTIST82B61F90 has no recovered debug name or namespace. It unbinds the
+// descriptor's D3D declaration when that resource is set on the captured device.
+void sub_82B61F90(const renderengine::VertexDescriptorData* lpDescriptor);

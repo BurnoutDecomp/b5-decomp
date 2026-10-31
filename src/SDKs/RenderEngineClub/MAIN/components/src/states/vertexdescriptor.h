@@ -75,7 +75,7 @@ namespace renderengine
         static void GetResourceDescriptor(void* lpDescriptorOut, const Parameters* lpParameters);
         static VertexDescriptorData* Initialize(rw::Resource* lpResource, const Parameters* lpParameters);
         static D3DVertexDeclaration* CreateD3DObject(VertexDescriptorData* lpData);
-        static VertexDescriptorData* Release(VertexDescriptorData* lpData);
+        static void Release(VertexDescriptorData* lpData);
     };
 
     CGS_STATIC_ASSERT((sizeof(VertexElement) == 0x10), "X360 parsed vertex element");
@@ -86,5 +86,5 @@ namespace renderengine
     CGS_STATIC_ASSERT((sizeof(VertexDescriptor::Parameters) == 0x110), "X360 vertex parameters");
     CGS_STATIC_ASSERT((offsetof(VertexDescriptor::Parameters, maElementFlags) == 0x100), "X360 vertex stride overrides");
 
-    extern const u8 gauVertexFormatDefaults[256];
+    extern const u8 gauVertexFormatDefaults[16 * 2];
 }
