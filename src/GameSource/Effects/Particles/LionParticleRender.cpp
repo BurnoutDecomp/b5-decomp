@@ -1038,24 +1038,24 @@ void LionParticleRender::SetCameraData(const rw::math::vpu::Matrix44Affine& arBa
                                        const rw::math::vpu::Matrix44& arPackedFrustumLrtb)
 {
     // --- half 1: the scalar convert into the Lion cMatrix (asm words 3-40) --------------------
-    mCameraTransform.xa.x = arBackMat.xAxis.x;
-    mCameraTransform.xa.y = arBackMat.xAxis.y;
-    mCameraTransform.xa.z = arBackMat.xAxis.z;
+    mCameraTransform.xa.x = arBackMat.xAxis.mV.x;
+    mCameraTransform.xa.y = arBackMat.xAxis.mV.y;
+    mCameraTransform.xa.z = arBackMat.xAxis.mV.z;
     mCameraTransform.xa.w = 0.0f;                 // flt_82001CC0
 
-    mCameraTransform.ya.x = arBackMat.yAxis.x;
-    mCameraTransform.ya.y = arBackMat.yAxis.y;
-    mCameraTransform.ya.z = arBackMat.yAxis.z;
+    mCameraTransform.ya.x = arBackMat.yAxis.mV.x;
+    mCameraTransform.ya.y = arBackMat.yAxis.mV.y;
+    mCameraTransform.ya.z = arBackMat.yAxis.mV.z;
     mCameraTransform.ya.w = 0.0f;
 
-    mCameraTransform.za.x = arBackMat.zAxis.x;
-    mCameraTransform.za.y = arBackMat.zAxis.y;
-    mCameraTransform.za.z = arBackMat.zAxis.z;
+    mCameraTransform.za.x = arBackMat.zAxis.mV.x;
+    mCameraTransform.za.y = arBackMat.zAxis.mV.y;
+    mCameraTransform.za.z = arBackMat.zAxis.mV.z;
     mCameraTransform.za.w = 0.0f;
 
-    mCameraTransform.wa.x = arBackMat.wAxis.x;
-    mCameraTransform.wa.y = arBackMat.wAxis.y;
-    mCameraTransform.wa.z = arBackMat.wAxis.z;
+    mCameraTransform.wa.x = arBackMat.wAxis.mV.x;
+    mCameraTransform.wa.y = arBackMat.wAxis.mV.y;
+    mCameraTransform.wa.z = arBackMat.wAxis.mV.z;
     mCameraTransform.wa.w = 1.0f;                 // flt_82001C98
 
     // --- half 2: the four verbatim 64-byte copies (asm words 41-76) ---------------------------

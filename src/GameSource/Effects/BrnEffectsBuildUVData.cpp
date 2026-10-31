@@ -47,10 +47,10 @@ static const f32 KF_ONE = 1.0f;
 
 static void BroadcastVecFloat(VecFloat& lrTarget, f32 lfValue)
 {
-    lrTarget.x = lfValue;
-    lrTarget.y = lfValue;
-    lrTarget.z = lfValue;
-    lrTarget.w = lfValue;
+    lrTarget.mV.x = lfValue;
+    lrTarget.mV.y = lfValue;
+    lrTarget.mV.z = lfValue;
+    lrTarget.mV.w = lfValue;
 }
 
 // @ 0x822780C8   (DWARF BrnEffectsUtils.h:398)
