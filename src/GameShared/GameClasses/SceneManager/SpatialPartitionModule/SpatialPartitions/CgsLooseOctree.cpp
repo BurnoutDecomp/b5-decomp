@@ -116,27 +116,9 @@ namespace CgsSceneManager
         }
     }
 
+    // ARTIST 0x828C9718 installs the vtable and constructs the four Job members.
     LooseOctree::LooseOctree()
-        : muDepth(0)
-        , miNumStaticNodes(0)
-        , mfBaseSize(0.0f)
-        , mfLooseness(0.0f)
-        , mpRootNode(0)
-        , mpNodes(0)
-        , mpNodesEntityInfo(0)
-        , muAdaptiveNodeSplitThreshold(0)
-        , muAdaptiveMaxDepth(0)
-        , mpEntityVolume(0)
-        , mpNodeVolume(0)
-        , mpVolumeVolumeQuery(0)
     {
-        mCentrePos.x = mCentrePos.y = mCentrePos.z = mCentrePos.w = 0.0f;
-
-        for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
-        {
-            mabFrustumJobActive[luJob]    = false;
-            mabFrustumJobRequested[luJob] = false;
-        }
     }
 
     // 0x828BADD8 -- placement-new that carves a LooseOctree out of a RenderWare resource
@@ -209,6 +191,7 @@ namespace CgsSceneManager
         mCentrePos                   = lpParams->mCentrePos;
         mfBaseSize                   = lpParams->mfBaseSize;
         mfLooseness                  = lpParams->mfLooseness;
+        mpEntityListNodes = &maEntityLinks[0];
         muAdaptiveNodeSplitThreshold = static_cast<u32>(lpParams->muAdaptiveNodeSplitThreshold);
         muAdaptiveMaxDepth           = static_cast<u32>(lpParams->muAdaptiveMaxDepth);
 
@@ -278,8 +261,6 @@ namespace CgsSceneManager
         // macVolumeVolumeQueryBuffer (+0x446C0) for 100 volumes / 100 results: the descriptor, its size
         // assert (:208, `li r5, 0xD0`), then Initialize with the buffer table {buffer, 0, 0, 0, 0}
         // (var_1E0); the returned handle is stored at +0x8D8C8 (`stwx r8, r30, r7`).
-        // NOT X360: host GPInstance / VolRef widths -- the console compares against 0x49000
-        // (0x828C9F8C); the host buffer is KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE (0x49600).
         {
             u32 lauDescriptor[10];
             rw::collision::VolumeVolumeQuery::GetResourceDescriptor(lauDescriptor, KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES,
@@ -310,18 +291,7 @@ namespace CgsSceneManager
 
         for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
         {
-            // JobCoarseResultBuffer::Construct @0x828BB128 -- clear the counters and
-            // publish the run pool (the console carves 0x4000 bytes out of the same
-            // allocator; the block is held inline here, see the header).
-            JobCoarseResultBuffer& lrBuffer = maJobResultBuffers[luJob];
-            lrBuffer.muNumQueries         = 0;
-            lrBuffer.muCurrentWriteOffset = 0;
-            for (u32 luQuery = 0; luQuery < KU_JOB_BUFFER_MAX_NUM_QUERIES; ++luQuery)
-            {
-                lrBuffer.maQueryOffsets[luQuery]    = 0;
-                lrBuffer.maQueryNumResults[luQuery] = 0;
-            }
-            lrBuffer.mpu16Buffer = maJobResultStorage[luJob];
+            maJobResultBuffers[luJob].Construct(lpAllocator);
 
             mabFrustumJobActive[luJob]    = false;
             mabFrustumJobRequested[luJob] = false;
@@ -405,7 +375,7 @@ namespace CgsSceneManager
         lrNode.muSubTreeEntityCount = 0;
         lrNode.mxNodeEntityFlags    = 0;
         lrNode.muNumElements        = 0;
-        lrNode.muListElementsPad    = 0;
+        lrNode.mpListElements       = mpEntityListNodes;
         lrNode.muHeadIndex          = KU_INVALID_NODE;
         lrNode.muTailIndex          = KU_INVALID_NODE;
         lrNode.muFlags              = 0;
@@ -461,11 +431,6 @@ namespace CgsSceneManager
         // can never reject at the root and an entity outside the authored world still
         // files somewhere. (The pseudocode drops this fmuls entirely; only the asm has it.)
         mpRootNode->mParams0.y = mfBaseSize * 4.0f;
-
-        for (u32 luEntity = 0; luEntity < static_cast<u32>(KI_MAX_NUM_ENTITIES); ++luEntity)
-        {
-            maEntityNodeIndex[luEntity] = KU_INVALID_NODE;
-        }
 
         return true;
     }
@@ -824,7 +789,7 @@ namespace CgsSceneManager
         }
 
         LinkEntityToNode(&mpNodes[lu16NodeIndex], lu16EntityIndex);
-        maEntityNodeIndex[lu16EntityIndex] = lu16NodeIndex;
+        maEntityInfo[lu16EntityIndex].muSpatialPartitionNodeID = reinterpret_cast<u32>(&mpNodes[lu16NodeIndex]);
     }
 
     // ===========================================================================
@@ -843,14 +808,15 @@ namespace CgsSceneManager
             return;
         }
 
-        const u16 lu16NodeIndex = maEntityNodeIndex[lu16EntityIndex];
-        if (lu16NodeIndex == KU_INVALID_NODE)
+        LooseOctreeNode* lpOwner = reinterpret_cast<LooseOctreeNode*>(maEntityInfo[lu16EntityIndex].muSpatialPartitionNodeID);
+        if (lpOwner == 0)
         {
             return;   // not in the graph (already removed, or never added)
         }
 
-        UnlinkEntityFromNode(&mpNodes[lu16NodeIndex], lu16EntityIndex);
-        maEntityNodeIndex[lu16EntityIndex] = KU_INVALID_NODE;
+        const u16 lu16NodeIndex = GetNodeIndex(lpOwner);
+        UnlinkEntityFromNode(lpOwner, lu16EntityIndex);
+        maEntityInfo[lu16EntityIndex].muSpatialPartitionNodeID = 0;
 
         // Walk UP flagging + decrementing (the mirror of the add descent; this is
         // FlagBranchForUpdate with the extra sub-tree count step).
@@ -886,7 +852,7 @@ namespace CgsSceneManager
             return;
         }
 
-        const u16 lu16NodeIndex = maEntityNodeIndex[lu16Id];
+        LooseOctreeNode* lpOwner = reinterpret_cast<LooseOctreeNode*>(maEntityInfo[lu16Id].muSpatialPartitionNodeID);
 
         // Keep the radius (the X360 vrlimi128 copies lane w of the old sphere).
         CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16Id);
@@ -894,12 +860,12 @@ namespace CgsSceneManager
         lrSphere.mPositionRadius.y = lPosition.y;
         lrSphere.mPositionRadius.z = lPosition.z;
 
-        if (lu16NodeIndex == KU_INVALID_NODE)
+        if (lpOwner == 0)
         {
             return;   // not in the graph
         }
 
-        LooseOctreeNode& lrNode = mpNodes[lu16NodeIndex];
+        LooseOctreeNode& lrNode = *lpOwner;
         if (!EntityInsideNodeBounds(lu16Id, &lrNode))
         {
             RemoveEntityInternal(lu16Id);
@@ -928,8 +894,8 @@ namespace CgsSceneManager
             return;
         }
 
-        const u16 lu16OldNodeIndex = maEntityNodeIndex[lu16Id];
-        if (lu16OldNodeIndex == KU_INVALID_NODE)
+        LooseOctreeNode* lpOldNode = reinterpret_cast<LooseOctreeNode*>(maEntityInfo[lu16Id].muSpatialPartitionNodeID);
+        if (lpOldNode == 0)
         {
             GetEntityBoundingSphere(lu16Id).mPositionRadius.w = lfRadius;
             return;   // not in the graph
@@ -937,7 +903,6 @@ namespace CgsSceneManager
 
         CgsGeometric::Sphere& lrSphere = GetEntityBoundingSphere(lu16Id);
         const f32 lfOldRadius = lrSphere.mPositionRadius.w;
-        LooseOctreeNode* lpOldNode = &mpNodes[lu16OldNodeIndex];
 
         // Still inside this node's admissible band -> stay put.
         if (!(lfRadius > lpOldNode->GetMaxRadiusThreshold()) &&
@@ -995,7 +960,7 @@ namespace CgsSceneManager
             UnlinkEntityFromNode(lpOldNode, lu16Id);
             LinkEntityToNode(lpNewNode, lu16Id);
             CGS_ASSERT(lpNewNode != 0, "lpNode");
-            maEntityNodeIndex[lu16Id] = GetNodeIndex(lpNewNode);
+            maEntityInfo[lu16Id].muSpatialPartitionNodeID = reinterpret_cast<u32>(lpNewNode);
         }
 
         lrSphere.mPositionRadius.w = lfRadius;
@@ -1161,7 +1126,7 @@ namespace CgsSceneManager
                     UnlinkEntityFromNode(lpNode, lu16EntityIndex);
                     LinkEntityToNode(lpChild, lu16EntityIndex);
                     CGS_ASSERT(lpChild != 0, "lpNode");
-                    maEntityNodeIndex[lu16EntityIndex] = GetNodeIndex(lpChild);
+                    maEntityInfo[lu16EntityIndex].muSpatialPartitionNodeID = reinterpret_cast<u32>(lpChild);
                     ++lpChild->muSubTreeEntityCount;
                     FlagBranchForUpdate(lpChild);
                 }
@@ -1215,7 +1180,7 @@ namespace CgsSceneManager
 
                 const u16 lu16EntityIndex = CalcEntityIndex(lrLink);
                 CGS_ASSERT(lpTargetNode != 0, "lpNode");
-                maEntityNodeIndex[lu16EntityIndex] = GetNodeIndex(lpTargetNode);
+                maEntityInfo[lu16EntityIndex].muSpatialPartitionNodeID = reinterpret_cast<u32>(lpTargetNode);
                 UnlinkEntityFromNode(lpNode, lu16EntityIndex);
                 LinkEntityToNode(lpTargetNode, lu16EntityIndex);
 

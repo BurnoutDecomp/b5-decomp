@@ -8,7 +8,7 @@
 // pool. Reconstructed from BURNOUT_X360_ARTIST.XEX + DecFIGS DWARF
 // (CgsJobCoarseResultBuffer.h:47/82-86 + :28/29).
 //
-// LAYOUT (DWARF-authoritative; size == 140 (0x8C), stride 0x100 inside
+// LAYOUT (DecFIGS declares 128-byte alignment and size 0x100, matching the native stride inside
 // LooseOctree::maJobResultBuffers -- proven by the WaitForFrustumTestJobResults @0x828B2558
 // anchors: r27 = &maQueryOffsets[0] (buffer+0x08); lwz 0x80(r27) == mpu16Buffer (+0x88);
 // lwz 0x40(r30) == maQueryNumResults[q] (0x48 base)):
@@ -30,7 +30,7 @@ namespace CgsSceneManager
     static const u32 KU_JOB_BUFFER_MAX_NUM_QUERIES = 16;
 
     // CgsJobCoarseResultBuffer.h:47 (DWARF).
-    struct JobCoarseResultBuffer
+    struct CGS_ALIGN(128) JobCoarseResultBuffer
     {
         u32  muNumQueries;                                     // +0x00
         u32  muCurrentWriteOffset;                             // +0x04
