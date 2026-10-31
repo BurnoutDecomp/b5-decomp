@@ -30,8 +30,6 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"
 #include "GameSource/Director/Camera/Camera.h"   // Camera::mTransform (Update shakes it in place)
 
-#include <cmath>                                 // std::fmaf (Update's decay, one fmadds)
-
 namespace BrnDirector
 {
 namespace Camera
@@ -88,7 +86,7 @@ void CameraImpactEffect::Update(Camera& lrCamera, const Parameters& lrParameters
                         lrParameters.mfShakeFrequencyScale * lfTimestep,
                         mfImpactFactor * lrParameters.mfShakeMagnitude);
 
-    mfImpactFactor = std::fmaf(-mfImpactFactor, lrParameters.mfShakeDecayFactor, mfImpactFactor);
+    mfImpactFactor = (-mfImpactFactor) * lrParameters.mfShakeDecayFactor + mfImpactFactor;
 }
 
 } // namespace Utils
