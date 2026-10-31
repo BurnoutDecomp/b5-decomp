@@ -381,8 +381,8 @@ namespace
         rw::math::vpu::Vector4 laUvUv[4];
         VecFloat lvfFrame;
         VecFloat lvfNextFrame;
-        lvfFrame.mV.x = lvfFrame.mV.y = lvfFrame.mV.z = lvfFrame.mV.w = arPart.Frame();
-        lvfNextFrame.mV.x = lvfNextFrame.mV.y = lvfNextFrame.mV.z = lvfNextFrame.mV.w = arPart.NextFrame();
+        lvfFrame.mV = __vspltw(__lvx(&arPart.mvRotPlusFrame, 0), 3);
+        lvfNextFrame.mV = __vspltw(__lvx(&arPart.mvSizePlusNextFrame, 0), 3);
         BrnEffects::Utils::BuildUVs(arUVData, lvfFrame, lvfNextFrame, laUvUv);
 
         // asm 0x822823E8..0x82282410 (DWARF: VecFloat lvfWeight, :69). `vspltisw v0, 0` runs
