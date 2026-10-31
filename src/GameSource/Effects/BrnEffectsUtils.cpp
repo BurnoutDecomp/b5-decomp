@@ -44,10 +44,7 @@ Vector3 Vector3Randomiser::RandomiseXYZ(CgsNumeric::Random &lrRandom)
     // Load the slot's PREVIOUS contents (the draw primed last call) before we
     // overwrite it. Subtract 1.0 to map each [1, 2) component into [0, 1).
     Vector3 lvPrev;
-    lvPrev.x = lrRandom.mafFloatBuffer[luSlot + 0] - 1.0f;
-    lvPrev.y = lrRandom.mafFloatBuffer[luSlot + 1] - 1.0f;
-    lvPrev.z = lrRandom.mafFloatBuffer[luSlot + 2] - 1.0f;
-    lvPrev.w = lrRandom.mafFloatBuffer[luSlot + 3] - 1.0f;
+    lvPrev.mV = __vsubfp(__lvx(&lrRandom.mafFloatBuffer[luSlot], 0), __vcfsx(__vspltisw(1), 0));
 
     // Commit the advanced seed.
     lrRandom.muSeed = luSeed2;
@@ -77,12 +74,9 @@ Vector3 Vector3Randomiser::RandomiseXYZ(CgsNumeric::Random &lrRandom)
     // which is base+range and is only meaningful under this reading.
     Vector3 lvResult;
     // FX-CRASHVFX 2026-09-24: the combine is ONE `vmaddfp` -- FUSED, rounded once -- so it is
-    // std::fma, not `a + b * r` (MSVC rounds the product first; that differs from the console in
+    // native VMX, not `a + b * r` (MSVC rounds the product first; that differs from the console in
     // the last bit of 28 of the 192 lanes tests/run_fxcrashvfx_randomisers.py draws).
-    lvResult.x = std::fma(mVecB.x, lvPrev.x, mVecA.x);
-    lvResult.y = std::fma(mVecB.y, lvPrev.y, mVecA.y);
-    lvResult.z = std::fma(mVecB.z, lvPrev.z, mVecA.z);
-    lvResult.w = std::fma(mVecB.w, lvPrev.w, mVecA.w);
+    lvResult.mV = __vmaddfp(mVecB.mV, lvPrev.mV, mVecA.mV);
     return lvResult;
 }
 
@@ -120,10 +114,10 @@ Vector3 Vector3Randomiser::RandomiseXYZ(CgsNumeric::Random &lrRandom)
 void Vector3Randomiser::Prepare(Vector3 lvA, Vector3 lvB)
 {
     mVecA = lvA;
-    mVecB.x = lvB.x - lvA.x;
-    mVecB.y = lvB.y - lvA.y;
-    mVecB.z = lvB.z - lvA.z;
-    mVecB.w = lvB.w - lvA.w;
+    mVecB.mV.x = lvB.mV.x - lvA.mV.x;
+    mVecB.mV.y = lvB.mV.y - lvA.mV.y;
+    mVecB.mV.z = lvB.mV.z - lvA.mV.z;
+    mVecB.mV.w = lvB.mV.w - lvA.mV.w;
 }
 
 // The Vector-slot draw on its own: one float, refilled in place, index bumped past it.
@@ -148,10 +142,7 @@ Vector3 Vector3Randomiser::RandomInterpolate(CgsNumeric::Random &lrRandom)
 
     Vector3 lvResult;
     // `vmaddfp128 v13, v122, v0, v13` (0x8229A50C..0x8229A520): fused, as in RandomiseXYZ.
-    lvResult.x = std::fma(mVecB.x, lfT, mVecA.x);
-    lvResult.y = std::fma(mVecB.y, lfT, mVecA.y);
-    lvResult.z = std::fma(mVecB.z, lfT, mVecA.z);
-    lvResult.w = std::fma(mVecB.w, lfT, mVecA.w);
+    lvResult.mV = __vmaddfp(mVecB.mV, VecFloat(lfT).mV, mVecA.mV);
     return lvResult;
 }
 
@@ -164,10 +155,10 @@ Vector3 Vector3Randomiser::RandomInterpolate(CgsNumeric::Random &lrRandom)
 void Vector4Randomiser::Prepare(Vector4 lvA, Vector4 lvB)
 {
     mVecA = lvA;
-    mVecB.x = lvB.x - lvA.x;
-    mVecB.y = lvB.y - lvA.y;
-    mVecB.z = lvB.z - lvA.z;
-    mVecB.w = lvB.w - lvA.w;
+    mVecB.mV.x = lvB.mV.x - lvA.mV.x;
+    mVecB.mV.y = lvB.mV.y - lvA.mV.y;
+    mVecB.mV.z = lvB.mV.z - lvA.mV.z;
+    mVecB.mV.w = lvB.mV.w - lvA.mV.w;
 }
 
 // @ 0x82277FB8
@@ -187,10 +178,7 @@ Vector4 Vector4Randomiser::RandomiseXYZW(CgsNumeric::Random &lrRandom)
     lrRandom.muOldestBufferIndex = luSlot;
 
     Vector4 lvPrev;
-    lvPrev.x = lrRandom.mafFloatBuffer[luSlot + 0] - 1.0f;
-    lvPrev.y = lrRandom.mafFloatBuffer[luSlot + 1] - 1.0f;
-    lvPrev.z = lrRandom.mafFloatBuffer[luSlot + 2] - 1.0f;
-    lvPrev.w = lrRandom.mafFloatBuffer[luSlot + 3] - 1.0f;
+    lvPrev.mV = __vsubfp(__lvx(&lrRandom.mafFloatBuffer[luSlot], 0), __vcfsx(__vspltisw(1), 0));
 
     lrRandom.muSeed = luSeed3;
 
@@ -208,12 +196,9 @@ Vector4 Vector4Randomiser::RandomiseXYZW(CgsNumeric::Random &lrRandom)
     // => mVecB * (prev - 1.0) + mVecA.
     Vector4 lvResult;
     // FX-CRASHVFX 2026-09-24: the combine is ONE `vmaddfp` -- FUSED, rounded once -- so it is
-    // std::fma, not `a + b * r` (MSVC rounds the product first; that differs from the console in
+    // native VMX, not `a + b * r` (MSVC rounds the product first; that differs from the console in
     // the last bit of 28 of the 192 lanes tests/run_fxcrashvfx_randomisers.py draws).
-    lvResult.x = std::fma(mVecB.x, lvPrev.x, mVecA.x);
-    lvResult.y = std::fma(mVecB.y, lvPrev.y, mVecA.y);
-    lvResult.z = std::fma(mVecB.z, lvPrev.z, mVecA.z);
-    lvResult.w = std::fma(mVecB.w, lvPrev.w, mVecA.w);
+    lvResult.mV = __vmaddfp(mVecB.mV, lvPrev.mV, mVecA.mV);
     return lvResult;
 }
 
@@ -222,10 +207,9 @@ Vector4 Vector4Randomiser::RandomiseXYZW(CgsNumeric::Random &lrRandom)
 // dynamically-initialised .bss splat on the console, recovered through its CRT init thunk --
 // see the header for the address chain. Written as the image's exact floats.
 // =============================================================================
-const VecFloat K_VECFLOAT_255            = { 255.0f, 255.0f, 255.0f, 255.0f };
-const Vector4  K_VECTOR4_511_511_511_255 = { 511.0f, 511.0f, 511.0f, 255.0f };
-const VecFloat K_VECFLOAT_ONEOVER255     = { 0.003921568859368563f, 0.003921568859368563f,
-                                             0.003921568859368563f, 0.003921568859368563f };
+const VecFloat K_VECFLOAT_255(255.0f);
+const Vector4  K_VECTOR4_511_511_511_255(511.0f, 511.0f, 511.0f, 255.0f);
+const VecFloat K_VECFLOAT_ONEOVER255(0.003921568859368563f);
 
 // =================================================================================================
 // BrnEffects::Utils::BuildUVs  @ 0x822781E0    (DWARF BrnEffectsUtils.h:453)
@@ -273,38 +257,38 @@ void BuildUVs(const BuildUVData& arUVData, VecFloat lvfFrame, VecFloat lvfNextFr
         // asm 0x822782DC..0x82278318. Both frame slots hold the same pair, so the shader's
         // cross-fade is a no-op whatever weight it is given.
         {
-            const Vector4 lAggregateValue = { 0.0f, 1.0f, 0.0f, 1.0f };
+            const Vector4 lAggregateValue( 0.0f, 1.0f, 0.0f, 1.0f );
             lpaUVsOut[0] = lAggregateValue;
         }   // unk_82FABA60
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue( 0.0f, 0.0f, 0.0f, 0.0f );
             lpaUVsOut[1] = lAggregateValue;
         }   // vspltisw v12, 0
         {
-            const Vector4 lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+            const Vector4 lAggregateValue( 1.0f, 1.0f, 1.0f, 1.0f );
             lpaUVsOut[2] = lAggregateValue;
         }   // vcfsx(vspltisw 1, 0)
         {
-            const Vector4 lAggregateValue = { 1.0f, 0.0f, 1.0f, 0.0f };
+            const Vector4 lAggregateValue( 1.0f, 0.0f, 1.0f, 0.0f );
             lpaUVsOut[3] = lAggregateValue;
         }   // unk_82FAB880
         return;
     }
 
     // asm 0x822781F4..0x8227822C -- the atlas description.
-    const f32 lfFrameCount = arUVData.mvfMaterialFrameCount.x;
-    const f32 lfNumXFrames = arUVData.mvfMaterialNumXFrames.x;
-    const f32 lfInvNumX    = arUVData.mvfMaterialOneOverNumXFrames.x;
-    const f32 lfInvNumY    = arUVData.mvfMaterialOneOverNumYFrames.x;
+    const f32 lfFrameCount = arUVData.mvfMaterialFrameCount.mV.x;
+    const f32 lfNumXFrames = arUVData.mvfMaterialNumXFrames.mV.x;
+    const f32 lfInvNumX    = arUVData.mvfMaterialOneOverNumXFrames.mV.x;
+    const f32 lfInvNumY    = arUVData.mvfMaterialOneOverNumYFrames.mV.x;
 
     // asm 0x822781F8..0x8227823C -- floor, then snap a past-the-end index back to frame 0.
-    f32 lfFrame0 = floorf(lvfFrame.x);
-    if (lvfFrame.x >= lfFrameCount)
+    f32 lfFrame0 = floorf(lvfFrame.mV.x);
+    if (lvfFrame.mV.x >= lfFrameCount)
     {
         lfFrame0 = 0.0f;
     }
-    f32 lfFrame1 = floorf(lvfNextFrame.x);
-    if (lvfNextFrame.x >= lfFrameCount)
+    f32 lfFrame1 = floorf(lvfNextFrame.mV.x);
+    if (lvfNextFrame.mV.x >= lfFrameCount)
     {
         lfFrame1 = 0.0f;
     }
@@ -329,19 +313,19 @@ void BuildUVs(const BuildUVData& arUVData, VecFloat lvfFrame, VecFloat lvfNextFr
 
     // asm 0x82278280..0x822782D4 -- the four (u, v, u', v') corners.
     {
-        const Vector4 lAggregateValue = { lfU0Left,  lfV0Bottom, lfU1Left,  lfV1Bottom };
+        const Vector4 lAggregateValue( lfU0Left,  lfV0Bottom, lfU1Left,  lfV1Bottom );
         lpaUVsOut[0] = lAggregateValue;
     }
     {
-        const Vector4 lAggregateValue = { lfU0Left,  lfV0Top,    lfU1Left,  lfV1Top    };
+        const Vector4 lAggregateValue( lfU0Left,  lfV0Top,    lfU1Left,  lfV1Top    );
         lpaUVsOut[1] = lAggregateValue;
     }
     {
-        const Vector4 lAggregateValue = { lfU0Right, lfV0Bottom, lfU1Right, lfV1Bottom };
+        const Vector4 lAggregateValue( lfU0Right, lfV0Bottom, lfU1Right, lfV1Bottom );
         lpaUVsOut[2] = lAggregateValue;
     }
     {
-        const Vector4 lAggregateValue = { lfU0Right, lfV0Top,    lfU1Right, lfV1Top    };
+        const Vector4 lAggregateValue( lfU0Right, lfV0Top,    lfU1Right, lfV1Top    );
         lpaUVsOut[3] = lAggregateValue;
     }
 }
@@ -413,7 +397,7 @@ namespace
     // CgsNumeric::TrigBaseFunctions5::Cos4_UnitCycles, one lane. lfCycles is in TURNS.
     // ⚠ CORRECTED 2026-09-25 (FX-CRASHVFX, glass): the two polynomial steps are `vmaddfp` -- FUSED,
     // rounded once (0x8227E850..0x8227E85C here, 0x82282870/74 in the draw half, 0x82297B68/6C in
-    // HandleGlassSmashEventsForAllCars) -- so they are std::fma; the old `a * b + c` rounded the product
+    // HandleGlassSmashEventsForAllCars) -- so they use native VMX; the old `a * b + c` rounded the product
     // first. The fold's `vminfp` keeps a NaN fraction a NaN (the comparison below is false for it).
     inline f32 Cos4_UnitCycles(f32 lfCycles)
     {
@@ -426,7 +410,10 @@ namespace
         }
         const f32 lfT  = lfFolded + KF_FOLD_BIAS;                                 // vaddfp
         const f32 lfT2 = lfT * lfT;                                               // vmulfp128
-        return std::fma(lfT2, std::fma(lfT2, KF_POLY_C5, KF_POLY_C3), KF_POLY_C1) * lfT;   // 2x vmaddfp, vmulfp128
+        const __vector4 lvT2 = VecFloat(lfT2).mV;
+        const __vector4 lvInner = __vmaddfp(lvT2, VecFloat(KF_POLY_C5).mV, VecFloat(KF_POLY_C3).mV);
+        const __vector4 lvPolynomial = __vmaddfp(lvT2, lvInner, VecFloat(KF_POLY_C1).mV);
+        return __vmulfp(lvPolynomial, VecFloat(lfT).mV).x;
     }
 
 }
@@ -438,8 +425,10 @@ namespace
 void SinCosCycles(f32 lfRadians, f32& arSin, f32& arCos)
 {
     // ONE `vmaddfp` per lane: angle * (1/2pi) + the lane's phase, rounded once (see Cos4_UnitCycles).
-    arSin = Cos4_UnitCycles(std::fma(lfRadians, KF_ONE_OVER_TWO_PI, KF_SIN_PHASE));
-    arCos = Cos4_UnitCycles(std::fma(lfRadians, KF_ONE_OVER_TWO_PI, KF_COS_PHASE));
+    const __vector4 lvRadians = VecFloat(lfRadians).mV;
+    const __vector4 lvScale = VecFloat(KF_ONE_OVER_TWO_PI).mV;
+    arSin = Cos4_UnitCycles(__vmaddfp(lvRadians, lvScale, VecFloat(KF_SIN_PHASE).mV).x);
+    arCos = Cos4_UnitCycles(__vmaddfp(lvRadians, lvScale, VecFloat(KF_COS_PHASE).mV).x);
 }
 
 Matrix33 FastMatrix33FromEulerXYZ(Vector3 lv3EulerAngles)
@@ -447,29 +436,29 @@ Matrix33 FastMatrix33FromEulerXYZ(Vector3 lv3EulerAngles)
     // vmrghw(v1,v1) puts (x, x, y, y) in one register and vspltw(v1,2) puts (z, z, z, z) in
     // another, so the console evaluates all six sines and cosines in two polynomial passes.
     f32 lfSinX, lfCosX, lfSinY, lfCosY, lfSinZ, lfCosZ;
-    SinCosCycles(lv3EulerAngles.x, lfSinX, lfCosX);
-    SinCosCycles(lv3EulerAngles.y, lfSinY, lfCosY);
-    SinCosCycles(lv3EulerAngles.z, lfSinZ, lfCosZ);
+    SinCosCycles(lv3EulerAngles.mV.x, lfSinX, lfCosX);
+    SinCosCycles(lv3EulerAngles.mV.y, lfSinY, lfCosY);
+    SinCosCycles(lv3EulerAngles.mV.z, lfSinZ, lfCosZ);
 
     Matrix33 lResult;
 
     // row 0 -- 0x8227E8F0..0x8227E8FC gather (cy*cz, cy*sz) and 0x8227E944 the negated sy.
-    lResult.xAxis.x = lfCosY * lfCosZ;
-    lResult.xAxis.y = lfCosY * lfSinZ;
-    lResult.xAxis.z = -lfSinY;
-    lResult.xAxis.w = 0.0f;
+    lResult.xAxis.mV.x = lfCosY * lfCosZ;
+    lResult.xAxis.mV.y = lfCosY * lfSinZ;
+    lResult.xAxis.mV.z = -lfSinY;
+    lResult.xAxis.mV.w = 0.0f;
 
     // row 1 -- the three vsubfp/vaddfp at 0x8227E8DC..0x8227E8E4 plus sx*cy from 0x8227E8B0.
-    lResult.yAxis.x = lfSinY * lfSinX * lfCosZ - lfCosX * lfSinZ;
-    lResult.yAxis.y = lfSinY * lfSinX * lfSinZ + lfCosX * lfCosZ;
-    lResult.yAxis.z = lfSinX * lfCosY;
-    lResult.yAxis.w = 0.0f;
+    lResult.yAxis.mV.x = lfSinY * lfSinX * lfCosZ - lfCosX * lfSinZ;
+    lResult.yAxis.mV.y = lfSinY * lfSinX * lfSinZ + lfCosX * lfCosZ;
+    lResult.yAxis.mV.z = lfSinX * lfCosY;
+    lResult.yAxis.mV.w = 0.0f;
 
     // row 2 -- the remaining pair at 0x8227E8E0/0x8227E8E8 plus cx*cy from 0x8227E8B4.
-    lResult.zAxis.x = lfSinY * lfCosX * lfCosZ + lfSinX * lfSinZ;
-    lResult.zAxis.y = lfSinY * lfCosX * lfSinZ - lfSinX * lfCosZ;
-    lResult.zAxis.z = lfCosX * lfCosY;
-    lResult.zAxis.w = 0.0f;
+    lResult.zAxis.mV.x = lfSinY * lfCosX * lfCosZ + lfSinX * lfSinZ;
+    lResult.zAxis.mV.y = lfSinY * lfCosX * lfSinZ - lfSinX * lfCosZ;
+    lResult.zAxis.mV.z = lfCosX * lfCosY;
+    lResult.zAxis.mV.w = 0.0f;
 
     return lResult;
 }

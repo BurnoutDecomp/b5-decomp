@@ -50,7 +50,7 @@ namespace Utils
 // their addresses returns 0x00000000 BY DEFINITION; each value below was recovered through
 // its CRT init thunk (tools/re/findinit.py -> tools/re/ppcdis.py -> tools/re/x360rd.py):
 //
-//   unk_82FAC220 <- 0x82C4A0C0 : splat4(flt_82010C20)                     == 255.0f
+//   unk_82FAC220 <- 0x82C4A0B0 : splat4(flt_82010C20)                     == 255.0f
 //   unk_82FAC210 <- 0x82C4A0D8 : (flt_82013F98 x3, flt_82010C20)          == (511,511,511,255)
 //   unk_82FAC100 <- 0x82C4A110 : splat4(flt_82010C1C) == 0x3B808081       == 1/255
 //
