@@ -50,6 +50,9 @@ namespace CgsMemory
         // stream is drained (nextCommand has reached the poster's posted count).
         s32 ReadCom(void* lpDest, u32* lpuOutIndex);
 
+        // ARTIST 0x82867A00; DecFIGS CgsDataStreamCommandReader.h:84.
+        s32 ReadCommands(void* lpDest, s32 liMaxCommands, s32* lpiReadCount, s32* lpiFirstIndex);
+
     private:
         // --- members ---------------------------------------------------------
         // +0: DWARF name (CgsDataStreamCommandReader.h:98); not referenced by
