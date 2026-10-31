@@ -1,27 +1,7 @@
 #pragma once
 
-// ============================================================================
-// BrnWorld::RaceCarEntityModule -- the race-car entity module.
-//
-// This MINIMAL owning header carries only the surface needed to compile this
-// TU's two ledgered accessor bodies:
-//   RaceCarEntityModule::GetActiveRaceCar(EActiveRaceCarIndex)  X360 0x822A34A8
-//   RaceCarEntityModule::GetGlobalRaceCar(EGlobalRaceCarIndex)  X360 0x822A3568
-// Both are simple in-range-checked &array[index] accessors. The full
-// RaceCarEntityModule class (~50 module
-// dependencies: ModuleSingleBuffered base, the streamer/boost/near-miss/crash-play
-// managers, WorldMap2D, replay serialiser, etc.) is far larger and is NOT
-// reconstructed here -- only the layout slice the accessors touch.
-//
-// Member access is BY NAME at the X360-asm-proven byte offsets; the two array
-// offsets are locked with static_assert(offsetof(...)) in the .cpp:
-//   maRaceCars        +0x250  (== 592)   stride 0xB0   (176B RaceCar,      35 wide)
-//   maActiveRaceCars  +0x1A60 (== 6752)  stride 0x1CD0 (7376B ActiveRaceCar, 8 wide)
-// The global array runs 0x250 .. 0x250+35*176 = 0x1A60, i.e. the active array
-// starts immediately after it (no gap). X360 asm:
-//   GetGlobalRaceCar:  return 176 * a2 + this + 592;   // &maRaceCars[a2]
-//   GetActiveRaceCar:  return 7376 * a2 + this + 6752; // &maActiveRaceCars[a2]
-// ============================================================================
+// Native RaceCar module containment; ARTIST supplies offsets and DecFIGS
+// supplies declaration order. Replay-tail extent remains a private open gate.
 
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
@@ -33,6 +13,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h" // BrnProgression::ETrainingType
 
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"
+#include "GameSource/Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<N,A>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"           // CgsContainers::BitArray<8u> (mabResetThisFrame)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::BaseResourcePtr
@@ -174,7 +156,7 @@ struct RaceCarNeedsHidingEventRecord
 // offsetof pins below drop to the members whose offsets are still meaningful.
 // Nothing reads this module by offset -- parity is by named member.
 
-class RaceCarEntityModule
+class RaceCarEntityModule : public CgsModule::ModuleSingleBuffered
 {
     friend class WorldDebugComponent;
     friend class BoostDebugComponent;
@@ -1032,738 +1014,152 @@ private:
     // X360 0x822BA068. The global RaceCar behind the local player's active slot.
     RaceCar* GetPlayerRaceCar();
 
-    // FLAG: opaque leading state. In the full class this span is the
-    // ModuleSingleBuffered base plus the early stage/handle/region members; here
-    // it exists only to land maRaceCars at the X360-proven +0x250 offset.
-    u8 maPrecedingState[0x250];
-
-    // Global race-car slots (player + up to 34 rivals/traffic). +0x250, stride 0xB0.
-    RaceCar maRaceCars[E_GLOBAL_RACE_CAR_INDEX_COUNT];
-
-    // Active race-car slots (local player + rivals). +0x1A60, stride 0x1CD0.
-    ActiveRaceCar maActiveRaceCars[E_ACTIVE_RACE_CAR_INDEX_COUNT];
-    // (maActiveRaceCars ends at +0x1A60 + 8*0x1CD0 == +0x100E0 == 65760)
-
-    // FLAG: opaque mid-object state. The full class carries the streamer/boost/near-miss/
-    // crash-play managers, timers, RNGs, etc. between the active-car array and the
-    // game-mode/scoring tail below; here it is honest padding that lands the named
-    // members at their X360-asm-proven byte offsets. The bodied tail functions
-    // (scoring map, GetGameModeFlag, AddTrainingRequest, UpdateTailgateTimer) are the
-    // only ones in this TU that touch the tail.
-    // ⛔ X360 +0x1823D (98877) IS NOT A MEMBER OF ITS OWN: it is mCrashPlayManager (+0x180F0) .
-    // mbIsInShowtime (+0x14D) -- CrashPlayManager::Activate's `this` is module + 0x180F0
-    // (0x8230994C..0x82309954) and ProcessPlayerVehicleInput reads the byte both ways (`lbz
-    // 0x14D(module+0x180F0)` @0x823000D8, `lbzx module+0x1823D` @0x823001A4). Read it through the
-    // manager: mCrashPlayManager.IsInShowtime(). A phantom `bool mbIsInShowtimeMode` carved here
-    // (2026-08-26) had no writer while the real set/clear (ModeArming.cpp / Rivals.cpp) landed
-    // on the manager, so WriteUpdatedAIData and CheckForResetOnTrackConditions read showtime as
-    // false for good; retired 2026-09-22 (crash-parity FX-RCEM), the pad's span unchanged.
-    u8 maTailPadA0[0x182F0 - 0x100E0];   // +0x100E0 (65760) .. +0x182F0 (99056)
-
-    // X360 +0x182F0 (99056). Seconds the player has been continuously tailgating another
-    // race car; UpdateTailgateTimer accumulates dt into it while tailgating, else zeroes
-    // it. DWARF BrnRaceCarEntityModule.h:357 -> float32_t.
-    f32 mfCurrentTailgateDuration;      // +0x182F0 (99056) .. +0x182F4 (99060)
-
-    // X360 +0x182F4 (99060). UpdateBoost loads this exact 32-bit enum for
-    // BoostStrategy::SetTailgating at 0x82304B50..0x82304B64.
-    EActiveRaceCarIndex meIndexOfCarPlayerIsTailgating;
-                                        // +0x182F4 (99060) .. +0x182F8 (99064)
-
-    // X360 +0x182F8 (99064). The active-race-car slot the local player is driving, or
-    // E_ACTIVE_RACE_CAR_INDEX_INVALID. UpdateTailgateTimer reads it (asm `lwzx` at 0x182F8)
-    // to pick the player car. DWARF BrnRaceCarEntityModule.h:360 -> EActiveRaceCarIndex.
-    // Native Construct stores INVALID at 0x822FDB70, before any car is attached.
-    // Keep the initialization in Construct so reused modules get the same reset.
-    EActiveRaceCarIndex mePlayerActiveRaceCarIndex;
-                                        // +0x182F8 (99064) .. +0x182FC (99068)
-
-    u8 maTailPadA1b[0x18358 - 0x182FC]; // +0x182FC (99068) .. +0x18358 (99160)
-
-    // X360 +0x18358 (99160). GetGameModeFlag reads it with a 64-bit load (`ldx`) and ANDs
-    // it with the caller's mask. DWARF BrnRaceCarEntityModule.h:388 -> uint64_t.
-    u64 mxGameModeFlags;                // +0x18358 (99160) .. +0x18360 (99168)
-
-    // X360 +0x18330 (99120). DWARF BrnRaceCarEntityModule.h:365 -> `surfacelist mSurfaceList`.
-    // ⭐ OFFSET-CLOSED, not guessed: CheckForResetOnTrackConditions @0x822CE9E0 computes the
-    // member address as `addis r31, r21, 2 ; addi r31, r31, -0x7CD0` == module + 99120, and the
-    // next DWARF member (miOpponentCount :367) is already pinned at +0x18340 (99136) by
-    // HandlePrepareForModeAction -- 16 bytes, exactly one Attrib::Instance.
-    // The console re-resolves it every frame from the surfacelist class's DEFAULT collection.
-    Attrib::Gen::surfacelist mSurfaceList;   // +0x18330 (99120) .. +0x18340 (99136)
-
-    // X360 +0x184CC (99532). DWARF BrnRaceCarEntityModule.h:424 -> float32_t.
-    // ⭐ OFFSET-CLOSED by its two DWARF predecessors, both already committed above:
-    // mfRandomBoostTime :422 @+0x184C4 and mbRandomBoostOn :423 @+0x184C8, so :424 lands on
-    // the next f32 slot, +0x184CC -- which is the exact displacement
-    // CheckForResetOnTrackConditions loads (`lfsx f0, r21, 0x184CC`).
-    // WHAT IT DOES: the watchdog subtracts it from the car's mvfLowestPointWorldSpace before
-    // testing the above-ground intersection height, i.e. it is the slack allowed between the
-    // car's lowest point and the surface it is standing on before that surface's WATER /
-    // SUPER-FATAL properties are consulted.
-    f32 mfResetOnWaterHeight;           // +0x184CC (99532)
-
-    bool mabCarSelectWaitForStreaming[8]; // Construct clears all eight (ARTIST 0x822FE1AC).
-    u8 maTailPadB0[0x18374 - 0x18368];  // +0x18368 (99176) .. +0x18374 (99188)
-
-    // X360 +0x18374 (99188). Ring of training requests queued this frame, drained by the
-    // progression handler. AddTrainingRequest appends at miPendingRequestCount; each cell
-    // is a 4-byte ETrainingType (the asm `stwx` stores the 32-bit enum). DWARF
-    // BrnRaceCarEntityModule.h:401 -> BrnProgression::ETrainingType[8].
-    BrnProgression::ETrainingType mePendingTrainingRequestQueue[KI_TRAINING_REQUEST_QUEUE_SIZE];
-                                        // +0x18374 (99188) .. +0x18394 (99220)
-
-    // X360 +0x18394 (99220). Number of valid entries in mePendingTrainingRequestQueue.
-    // DWARF BrnRaceCarEntityModule.h:402 -> int32_t.
-    s32 miPendingRequestCount;          // +0x18394 (99220) .. +0x18398 (99224)
-
-    // ⭐ 2026-08-24 (deform-land wave): the pad is SPLIT to name the module-level base-deform
-    // mirror pair. HandleResetPlayerCarAction @0x82304FE8 (arm 4) stores the action's
-    // (+0x34 amount, +0x38 type) into the player ActiveRaceCar's +0x7CC/+0x7C8 AND into this
-    // pair (+99536 type / +99544 amount); AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38
-    // (0x823011D0..0x823011D8) writes the same two module seats on the mode-start path.
-    // 2026-09-02 (crash wave): the pad is split again to name mfSimTime. DWARF :405-:408 run
-    // mfSimTimerTimeStep / mfIntroTimer / mfSimTime / mfTimeStepMultiplier from +0x18398; the
-    // first is the trailing `mfTimeStep` below (same seat, kept where it is), and
-    // ProcessRaceCarCrashEvents_PostPhysics @0x822BDA68 reads the third (`lfs f31, 0(r16)`,
-    // r16 == this + 0x183A0) to hand ActiveRaceCar::OnCrash its f1. Nothing in this build
-    // writes it yet (the console's PreSceneUpdate accumulator is not landed), so it reads 0.0f.
-    // 2026-09-23 (crash parity G68-D5): split once more to name the SECOND float, mfIntroTimer
-    // (DWARF :406). Its three console references, found by an image-wide scan of +0x1839C:
-    //   Construct @0x822FE2B0            stfsx f30 (flt_820037C8 == -1.0f)   -- "not counting"
-    //   HandleGameActions case 29 @0x8230C798  <- StartModeIntroAction::mfDurationSeconds - 1.4f
-    //                                           (flt_820148A0), only under mbSpawnAIBehindStartGrid
-    //   UpdateRaceCars_PreScene @0x822F561C..0x822F5658  the countdown (the only reader)
-    u8  maTailPadB1a0[0x1839C - 0x18398];  // +0x18398 (99224) .. +0x1839C  the mfSimTimerTimeStep seat (== mfTimeStep below)
-    f32 mfIntroTimer;                       // +0x1839C (99228)  DWARF :406
-    f32 mfSimTime;                          // +0x183A0 (99232)  DWARF :407
-
-    // 2026-09-12 (wheel-blur wave): the pad is split once more to name the FOURTH float of
-    // that four-float run (:408). PreSceneUpdate latches it in the same breath as mfTimeStep --
-    // mfTimeStep is `simStatus->mfBaseTimeStep * simStatus->mfTimeStepMultiplier`, and this
-    // seat is the bare multiplier -- and PrePhysicsUpdate forwards it, through
-    // UpdateActiveCars, to ActiveRaceCar::CalculateWheelAngularVelocities, whose only job is
-    // to scale each wheel's |rad/s| by it before the renderer picks a wheel-blur technique.
-    // In normal play it is 1.0f; slow motion drops it, and the wheels stop smearing with it.
-    f32 mfTimeStepMultiplier;               // +0x183A4 (99236)  :408
-    u8  maTailPadB1a[0x184C0 - 0x183A8];
-    f32 mfLastPlayerCarSpeed; // DWARF :421; ARTIST action 7, +0x184C0 (m/s)
-    u8  maTailPadB1aSpeed[0x184D0 - 0x184C4];
-    // ⭐⭐⭐ 2026-09-07 (measurement-guard wave): the pad is split again, because this is not one
-    // mirror pair, it is TWO PAIRS AND A ONE-SHOT, and reading it as one pair is how a wave loses
-    // an afternoon. Every writer and reader in the image was enumerated by OFFSET (a name-grep
-    // finds none of them -- see the note on `liInCarSelect` in HandleResetPlayerCarAction):
-    //   LIVE pair   +0x184D0 type / +0x184D8 amount
-    //     Construct   @0x822FD898  0x822FE284 / 0x822FE274   -> -1 / 0.0f
-    //     HandleResetPlayerCarAction @0x82304FE8  0x82305638 / 0x82305630  <- action +0x38/+0x34
-    //     AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38  0x823011D8 / 0x823011D4
-    //     HandleStopModeAction @0x82307A30  0x82307AB4 / 0x82307AB0   <- RESTORED from the saved pair
-    //     ResetActiveRaceCar   @0x822F4880  0x822F4A70 / 0x822F4A74   -- THE ONLY READER
-    //   SAVED pair  +0x184D4 type / +0x184E0 amount
-    //     Construct   @0x822FE2A4 / 0x822FE2A8                        -> -1 / 0.0f
-    //     HandlePrepareForModeAction @0x823092F0  0x82309568 / ...    <- SAVED from the live pair
-    //     HandleGameActions case 97   @0x8230C6CC / 0x8230C6A8        -> -1 / 0.0f
-    //   ONE-SHOT    +0x184DC  (a byte)
-    //     Construct   @0x822FE2AC                                     -> 0
-    //     HandleGameActions case 97 @0x8230C6C8                       -> 1   (the ONLY arm site)
-    //     ResetActiveRaceCar @0x822F4A58                              -> 0   (consumed)
-    // The saved pair is the mode-change stash: PrepareForMode pushes the live pair into it and
-    // StopModeAction (mode 0x10) pops it back, so a mode that overwrites the player's base
-    // deformation does not lose the free-burn value.
-    s32  miPlayerBaseDeformationTypeMirror; // +0x184D0 (99536) LIVE reset-type mirror (-1 == none)
-    s32  miPlayerBaseDeformationTypeSaved;  // +0x184D4 (99540) mode-change stash of the above
-    f32  mfPlayerBaseDeformAmountMirror;    // +0x184D8 (99544) LIVE amount mirror
-    // ARMED ONLY BY GAME ACTION 97, E_ACTION_BODY_SHOP_DRIVE_THRU (the repair shop; an earlier
-    // banner here misnamed it a network add/remove arm) -- HandleGameActions case 97 @0x8230C6C8,
-    // landed 2026-09-23 (crash parity G68-D7). Consumed by ResetActiveRaceCar's player arm.
-    bool mbPlayerBaseDeformRequestPending;  // +0x184DC (99548) one-shot: force mbResetDeformation
-    u8   maTailPadB1c0[0x184E0 - 0x184DD];  // +0x184DD (99549) .. +0x184E0 (99552)
-    f32  mfPlayerBaseDeformAmountSaved;     // +0x184E0 (99552) mode-change stash of the amount
-    u8   maTailPadB1c[0x18718 - 0x184E4];
-    bool mbOncomingTimerActive; // DWARF :453; ARTIST +0x18718
-    u8   maOncomingPadding[3];
-    f32  mfOncomingNoClueTimer; // DWARF :454; ARTIST +0x1871C
-    u8   maTailPadAfterOncoming[0x187BC - 0x18720];
-
-    // X360 +0x187BC (100284). Player-scoring-slot -> active-race-car-slot map. The X360
-    // DWORD index is 0x61EF (25071). Indexed by EPlayerScoringIndex (0..7); each cell is
-    // E_ACTIVE_RACE_CAR_INDEX_COUNT (8) when no active car is mapped to that player.
-    EActiveRaceCarIndex maActiveRaceCarForPlayerScoringIndex
-        [BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT];
-
-    // ========================================================================
-    // MODELLED members (global-resource wave).
-    //
-    // These five are real, named members carrying state that on the console lives
-    // INSIDE the opaque spans above. They are APPENDED rather than carved out of
-    // those spans deliberately: the pads are a 32-bit-console fiction that only
-    // holds while every byte in them is anonymous, and carving would move every
-    // following member and break the (still-useful) offset locks on the array
-    // strides. Per the project's named-member parity rule the x64 byte offsets are
-    // not load-bearing -- the console offsets are recorded per member so the next
-    // wave can fold the pads down when the rest of the interior is modelled.
-    // ========================================================================
-
-    // X360 +0x22C (556). Prepare's own resumable stage (0..3, `lwz r10,0x22C(r30)`).
-    s32 mePrepareStage;
-
-    // X360 +0x230 (560). Cleared to 0 by Prepare stage 3.
-    s32 miPrepareCarIndex;
-
-    // X360 +0x234 (564). LoadGlobalResources' resumable stage (an 18-case jump table;
-    // only 0..6, 9, 10 and 0x11 are live).
-    s32 meLoadGlobalResourcesStage;
-
-    // X360 +0x238 (568). The number of receiver-queue responses the current
-    // LoadGlobalResources step is waiting for (always 1 in the shipped path); the
-    // stage compares mReceiverQueue's event count against it and yields while short.
-    s32 miExpectedResponseCount;
-
-    // X360 +0x100E0 (65760). DWARF BrnRaceCarEntityModule.h:339 `BitArray<8u>
-    // mabResetThisFrame` -- ADDED 2026-08-18 (wave Q5, cluster G1). Three-point pin: the
-    // ActiveRaceCar[8] array ends at +0x100E0 (see maTailPadA0's own comment above),
-    // mReceiverQueue starts at +0x100E8, and SetPaddingForResetRaceCars @0x822CEEA8
-    // addresses exactly that 8-byte gap (`addis r19,r3,1 ; addi r19,r19,0xE0`), iterating
-    // it as ONE 64-bit BitArray word (`ld r9,0(r10)` with the word count fixed at 1) and
-    // clearing it whole at the tail (`std r22,0(r19)` with r22 == 0).
-    // ⭐ PRODUCER LANDED 2026-09-23 (crash parity G67-D4): ResetActiveRaceCar's live-car arm
-    // sets the slot's bit right after VehicleInputInterface::ResetRaceCar (0x822F4B30..
-    // 0x822F4C10), the console's only writer of a 1 here.
-    CgsContainers::BitArray<8u> mabResetThisFrame;
-
-    // X360 +0x100E8 (65768). The module's own reply queue: every request
-    // LoadGlobalResources publishes names it as mpUser, so the GameData module posts
-    // the completions straight back here. Capacity 4096 is the console gap
-    // (mStreamer @+0x11100 - queue @+0x100E8 == 4120 == 4096 + the queue header).
-    CgsModule::EventReceiverQueue<4096, 16> mReceiverQueue;
-
-    // X360 +0x18434 / +0x18438 (99380 / 99384). The two resident data tables, taken
-    // from the GetVehicleList / GetWheelList replies (the console stores the reply's
-    // +0x20 payload word). Prepare stage 3 hands mpVehicleList to the streamer.
-    const BrnResource::VehicleList* mpVehicleList;
-    const BrnResource::WheelList*   mpWheelList;
-
-    // X360 +0x1843C (99388). The acquired "CarColours" palette resource
-    // (BaseResourcePtr::CreateFromHandle off the AcquireResource reply). The payload type
-    // is BrnWorld::GlobalColourPalette -- the same resource BrnDriveThruManager and
-    // BrnGuiWorldDataController already hold as ResourcePtr<GlobalColourPalette>.
-    CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette> mCarColoursResource;
-
-    // [PC diagnostic] whether the CarColours acquire actually resolved. The console has no
-    // such flag (it never inspects the ptr); BaseResourcePtr exposes no null query --
-    // IsEqual(0) DEREFERENCES its argument -- so the answer is recorded at bind time.
-    bool mbCarColoursBound;
-
-    // ========================================================================
-    // MODELLED members (pose wave 2026-07-31): the three module flags
-    // AttachActiveRaceCar reads. All three are named + placed by the SAME DWARF bool run
-    // the render wave fitted (BrnRaceCarEntityModule.h:370..386): mbRenderCarsDuringCrash
-    // is DWARF entry :377 at +99147, so entry :370 -- the first bool of the run -- is at
-    // 99147 - 7 == +99140, which is exactly the byte AttachActiveRaceCar copies into
-    // ActiveRaceCar::mbIsInGameMode. That makes the render wave's two-point fit a
-    // three-point fit anchored at both ends of the run.
-    // ========================================================================
-
-    // X360 +0x18344 (99140). DWARF BrnRaceCarEntityModule.h:370.
-    bool mbIsInGameMode;
-    // ARTIST +99144 / +99185; DWARF :374 / :400. Streaming completion edge.
-    bool mbWaitingForStreaming;
-    bool mbSendStreamingComplete;
-
-    // X360 +0x186C9 (100041) / +0x186D0 (100048). DWARF BrnRaceCarEntityModule.h:444/:447
-    // (mbInCarSelectScreen, mbInCarModScreen, meCarSelectResetType(4),
-    // mbCarSelectDontStreamAudio -- 100041 + 1 + 2 pad + 4 == 100048, an exact fit).
-    // AttachActiveRaceCar forwards mbCarSelectDontStreamAudio into ActiveRaceCar::Attach
-    // and uses `(!mbInCarSelectScreen || !mbCarSelectDontStreamAudio) && IsPlayerDriven()`
-    // as RaceCarStreamer::AddVehicleData's "stream this car's audio" flag.
-    bool mbInCarSelectScreen;
-    // X360 +0x186CA (100042). DWARF :445. HandleGameActions case 76 (0x8230C260) writes it from
-    // the payload's +4 byte (CarSelectModificationScreen::mbEntering), case 77 clears it
-    // (clear landed 2026-09-18 with the junkyard drop; the case-76 writer and the
-    // ResetActiveRaceCar reader -- AddHandlingModel's physics-state-reset gate, lbzx @0x822F4D48 --
-    // landed 2026-09-23, crash parity G67-D6).
-    bool mbInCarModScreen;
-    // X360 +0x186CC (100044). DWARF :446, type ResetPlayerCarAction::CarSelectType -- held as
-    // the s32 the console stores (`stw`) so this header does not pull BrnGameActions.h in.
-    // HandleResetPlayerCarAction copies the action's +0x3C here; HandleGameActions case 73
-    // clears it. Read by PlaceOnTrackManager::GetValuesForCarSelect (the junkyard drop).
-    s32  meCarSelectResetType;
-    bool mbCarSelectDontStreamAudio;
-    // X360 +0x186D1 (100049). DWARF :448 mbHACK_ExitingCarSelectWaitForAudio. Set by HandleGameActions
-    // case 74 (the junkyard exit's audio wait, 0x8230C508), cleared by Construct (0x822FDBC0) and by
-    // UpdateStreaming once the streamer's own audio wait has cleared -- which holds back the
-    // streaming-complete edge until then (crash parity G68-D11, 2026-09-23).
-    bool mbHACK_ExitingCarSelectWaitForAudio;
-
-    // ========================================================================
-    // MODELLED members (race-car streamer wave 2026-07-31). Same additive rule as the
-    // block above: the console offsets are recorded per member, the x64 offsets are not
-    // load-bearing (named-member parity).
-    // ========================================================================
-
-    // X360 +0x11100 (69888). The per-car asset director. Every function that reaches it
-    // in the console asm uses `this + 0x11100` as the receiver -- AttachActiveRaceCar,
-    // DetachActiveRaceCar, UpdateStreaming, SendStreamerEvents, OnRaceCarResourcesLoaded.
-    // The recovered type information names it mRaceCarStreamer (mStreamer is drift). The receiver queue's 4096 capacity above was derived from the console
-    // gap 0x11100 - 0x100E8 == 4120, so these two are the same layout fact.
-    RaceCarStreamer mRaceCarStreamer;
-
-    // X360 +0x17850 (96336). Every console call site uses `this + 96336` as the receiver
-    // (RaceCarEntityModule::PostSceneUpdate @0x822FE3F0 and PrePhysicsUpdate @0x82307160).
-    // DWARF BrnRaceCarEntityModule.h names it mPlaceOnTrackManager; it owns the
-    // request -> line test -> ResetActiveRaceCar walk.
-    PlaceOnTrackManager mPlaceOnTrackManager;
-
-    // ARTIST +0x17CF0, DecFIGS BrnRaceCarEntityModule.h:349. The menu renderer
-    // and the reset producers share the original embedded diagnostic owner.
-    RaceCarEntityModuleDebugComponent mRCEntityModuleDebugComponent;
-
-    // ========================================================================
-    // MODELLED members (render wave 2026-07-31): the three render debug switches the
-    // dispatch leg reads. Their console offsets are pinned by a TWO-POINT fit against
-    // the DWARF bool run (BrnRaceCarEntityModule.h:370..386 -- 17 bools ending just
-    // before the 8-byte-aligned mxGameModeFlags @+0x18358):
-    //   +99148 mbRenderWheels        -- `if (*(this+99148) && lbRenderAttachedGeometry)`
-    //                                   gates RenderRaceCar's wheel block
-    //   +99151 mbRenderRaceCarCoronas-- `if (*(this+99151) && ...)` gates
-    //                                   SubmitCoronasForRaceCar in GenerateDispatchLists
-    // Both land exactly, and the DWARF's spacing between them (+3) matches, so the
-    // member one slot before mbRenderWheels is mbRenderCarsDuringCrash -- which is the
-    // switch RenderRaceCar tests to gate its whole BODY-PART loop (`if (*(this+99147))`).
-    // (The name reads oddly for that role; the offsets are what is attested, so the
-    // DWARF name is kept and the role recorded here.)
-    bool mbRenderCarsDuringCrash;   // X360 +0x1834B (99147)
-    bool mbRenderWheels;            // X360 +0x1834C (99148)
-    bool mbRenderRaceCarCoronas;    // X360 +0x1834F (99151)
-
-    // ========================================================================
-    // MODELLED members (car-lights wave 2026-08-17): the SEVEN DEBUG DAMAGE /
-    // SELF-ILLUMINATION overrides RenderRaceCar @0x822CF6A0 reads at its top
-    // (@0x822CFAB4..0x822CFBA4), i.e. the DWARF run that sits IMMEDIATELY BEFORE the
-    // paint block below. Same additive rule as every block in this header: the console
-    // offset is recorded per member, the x64 offset is not load-bearing.
-    //
-    // NAMES: the DecFIGS DWARF's own, in its own declaration order
-    // (references/DecFIGS/dwarfdump/.../BrnRaceCarEntityModule.h entries :378..:396):
-    //     :378 bool      DEBUG_mbOverrideDamage
-    //     :381 float32_t DEBUG_mfVehicleScratchAmount
-    //     :384 float32_t DEBUG_mfVehicleDustAmount
-    //     :387 float32_t DEBUG_mfVehicleCrumpleAmount
-    //     :390 float32_t DEBUG_mfSelfIlluminationR
-    //     :393 float32_t DEBUG_mfSelfIlluminationG
-    //     :396 float32_t DEBUG_mfSelfIlluminationB
-    // and :399 is DEBUG_mbOverrideCarColor, which THIS HEADER ALREADY PINS at +100244.
-    //
-    // OFFSETS: a SEVEN-POINT ASM FIT, every one an address RenderRaceCar bakes in as a
-    // literal, and the run closes exactly onto the already-pinned +100244:
-    //     0x822CFAB4  addis r29, r20, 2 ; addi r29, r29, -0x7888 ; lbz r11, 0(r29)
-    //                                     -> module + 0x18778 == +100216  the bool
-    //     0x822CFAEC  ori r9,  r11, 0x877C -> +0x1877C == +100220  scratch  (the
-    //                                        RenderParams::DEBUG_OverrideScratchAmount arg)
-    //     0x822CFAE0  ori r10, r11, 0x8780 -> +0x18780 == +100224  dust     (lane Z of c23)
-    //     0x822CFADC  ori r11, r11, 0x8784 -> +0x18784 == +100228  crumple  (lane X of c23)
-    //     0x822CFB74  ori r10, r11, 0x8788 -> +0x18788 == +100232  selfIllumination R
-    //     0x822CFB7C  ori r9,  r11, 0x878C -> +0x1878C == +100236  selfIllumination G
-    //     0x822CFB88  ori r8,  r11, 0x8790 -> +0x18790 == +100240  selfIllumination B
-    //     (next member) DEBUG_mbOverrideCarColor       +0x18794 == +100244  ALREADY PINNED
-    // The bool->float alignment pad (100216 + 1 + 3 == 100220) falls exactly where the
-    // console offsets say it must, which is what makes this a fit and not a placement.
-    //
-    // Construct resets these dev switches; the debug menu can edit them later.
-    // DEBUG_mbOverrideDamage false means the max() in the
-    // self-illumination vector is a no-op and the scratch override never runs. They are
-    // MODELLED rather than dropped so RenderRaceCar's constant-24 block is the console's
-    // whole block, not a slice.
-    // ========================================================================
-    bool DEBUG_mbOverrideDamage;  // +0x18778 (100216)
-    f32  DEBUG_mfVehicleScratchAmount;   // +0x1877C (100220)
-    f32  DEBUG_mfVehicleDustAmount;   // +0x18780 (100224)
-    f32  DEBUG_mfVehicleCrumpleAmount;   // +0x18784 (100228)
-    f32  DEBUG_mfSelfIlluminationR;   // +0x18788 (100232)
-    f32  DEBUG_mfSelfIlluminationG;   // +0x1878C (100236)
-    f32  DEBUG_mfSelfIlluminationB;   // +0x18790 (100240)
-
-    // X360 +0x18740..+0x18770. These are the named vehicle-cannon request
-    // members initialised by RaceCarEntityModule::Construct/Destruct and written
-    // by WorldDebugComponent. ARTIST contains no reader for the request in the
-    // final image; they remain represented because the debug component publishes
-    // them exactly.
-    bool    DEBUG_mbSpawnDebugRaceCarThisFrame; // +0x18740 (100160)
-    bool    DEBUG_mbCleanDebugRaceCarThisFrame; // +0x18741 (100161)
-    bool    DEBUG_mbDebugRaceCarIsActive;       // +0x18742 (100162)
-    Vector3 DEBUG_mDebugRaceCarPosition; // +0x18750
-    Vector3 DEBUG_mDebugRaceCarDirection; // +0x18760
-    f32     DEBUG_mfDebugRaceCarVelocity;        // +0x18770 (100208)
-    RaceCar* DEBUG_mpDebugRaceCar;            // DWARF :469
-
-    // ========================================================================
-    // MODELLED members (paint wave 2026-08-02): the two DEBUG COLOUR OVERRIDES
-    // UpdateActiveRaceCarColours reads. Every one is NAMED BY THE DWARF
-    // (references/DecFIGS/.../BrnRaceCarEntityModule.h entries :480..:489) and every one
-    // lands on an offset the asm of 0x822CF208 bakes in, with no fudging:
-    //   +0x18794 (100244) DEBUG_mbOverrideCarColor   `lbzx r11, r27, r20`, r20 = 0x18794
-    //   +0x18798 (100248) DEBUG_mfOverridePaintColorR `lfsx f0, r27, 0x18798`
-    //   +0x1879C (100252) DEBUG_mfOverridePaintColorG
-    //   +0x187A0 (100256) DEBUG_mfOverridePaintColorB
-    //   +0x187A4 (100260) DEBUG_mfOverridePearlColorR
-    //   +0x187A8 (100264) DEBUG_mfOverridePearlColorG
-    //   +0x187AC (100268) DEBUG_mfOverridePearlColorB
-    //   +0x187B0 (100272) DEBUG_mbOverrideCarPalette `lbzx r11, r27, 0x187B0`
-    //   +0x187B4 (100276) DEBUG_miPaletteIndex       `addis r11,r27,2 ; addi r11,r11,-0x784C`
-    //   +0x187B8 (100280) DEBUG_miColourIndex        `addis r31,r27,2 ; addi r31,r31,-0x7848`
-    // The DWARF run is contiguous and the two bool->float alignment pads fall exactly where
-    // the console offsets say they must (100244 + 4 == 100248; 100268 + 4 == 100272), so this
-    // is a ten-point fit, not a placement.
-    //
-    // They are dev switches with NO writer on this build (nothing outside the debug menu
-    // ever set them on the console either), so both blocks are inert and the palette path
-    // runs. They are modelled rather than dropped so the reconstruction is the console's
-    // whole function: dropping them would have made the body a partial slice for two
-    // branches that cost nothing.
-    // ========================================================================
-    bool DEBUG_mbOverrideCarColor;   // +0x18794 (100244)
-    f32  DEBUG_mfOverridePaintColorR;    // +0x18798 (100248)
-    f32  DEBUG_mfOverridePaintColorG;    // +0x1879C (100252)
-    f32  DEBUG_mfOverridePaintColorB;    // +0x187A0 (100256)
-    f32  DEBUG_mfOverridePearlColorR;    // +0x187A4 (100260)
-    f32  DEBUG_mfOverridePearlColorG;    // +0x187A8 (100264)
-    f32  DEBUG_mfOverridePearlColorB;    // +0x187AC (100268)
-    bool DEBUG_mbOverrideCarPalette;   // +0x187B0 (100272)
-    s32  DEBUG_miPaletteIndex;       // +0x187B4 (100276)
-    s32  DEBUG_miColourIndex;       // +0x187B8 (100280)
-
-    // ========================================================================
-    // MODELLED member (physics-return-path wave 2026-08-11). Same additive rule as the
-    // blocks above -- the console offset is recorded, the x64 offset is not load-bearing.
-    // ========================================================================
-
-    // ========================================================================
-    // MODELLED members (HUD H1 district wave, 2026-08-25). Console offsets recorded, x64
-    // offsets not load-bearing (named-member parity; both used to sit inside
-    // maPrecedingState as anonymous filler).
-    // ========================================================================
-
-    // X360 +0x23C (572). The Districts.dat resource handle Prepare stage 0 stores
-    // (`*(a1+572) = lrDistrictMapHandle` @0x82303F70-ish; WorldModule::Prepare passes it).
-    // UpdateCurrentWorldRegion @0x822F5718 re-fires its two readiness asserts (:3075/:3076)
-    // every call.
-    CgsResource::ResourceHandle mDistrictMapResourceHandle;
-
-    // X360 +0x244 (580). The local player's current world region. UpdateCurrentWorldRegion
-    // compares each frame's sampled district against its meDistrict (the +584 word load)
-    // and, on change, stores the whole pair here before posting game event 115.
-    BrnWorld::WorldRegion mCurrentWorldRegion;
-
-    // X360 +0x18300 (99072). The module's own district map. Every console call site reaches
-    // it as a bare `this + 0x18300`: ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8
-    // computes it into r25 (`lis r11,1 ; ori r28,r11,0x8300 ; add r25,r26,r28`) and passes
-    // it as ActiveRaceCar::UpdatePhysicsState's third argument, which forwards it untouched
-    // to RaceCar::UpdatePositioningData -> WorldMap2D::GetValue -> the car's EDistrict.
-    // UpdateOutputInterfaces @0x822F5CF8 copies the same 48-byte span into both active
-    // output interfaces. It used to fall inside maTailPadA1b as anonymous filler, which is
-    // exactly why UpdateOutputInterfaces' step 1 is recorded there as "nothing to copy FROM".
-    //
-    // ⚠️ [H1 district wave 2026-08-25] Prepare stage 0's WorldMap2D::Construct against the
-    // district-map resource IS now reproduced (the readiness-guarded bind in Prepare case 0);
-    // on the give-up arm this member still holds the module's zeroed storage. That is SAFE
-    // and it is checked, not assumed:
-    // WorldMap2D::GetValue bounds-tests `liX >= muWidth` BEFORE it dereferences mpValues, so
-    // a zero-width map returns KU_INVALID_WORLD_MAP_VALUE and UpdatePositioningData maps that
-    // to E_DISTRICT_INVALID without touching the null grid pointer. The consequence is real
-    // but bounded: every car reports district INVALID until stage 0 lands.
-    // DELETE-WHEN Prepare stage 0's WorldMap2D::Construct against the district-map resource
-    // lands -- then this member is simply the thing it constructs.
-    CgsWorld::WorldMap2D mWorldMap2D;
-
-    // ========================================================================
-    // MODELLED members + the one private method of the PLAYER-INPUT wave (2026-08-11), for
-    // ProcessPlayerVehicleInput @0x822FFE30 -- the hop that turns the pre-scene pad state into
-    // the BrnPlayerDriverControls event the vehicle sim consumes.
-    //
-    // Same additive rule as every block above: the CONSOLE offset is recorded per member, the
-    // x64 offset is not load-bearing (named-member parity). Every name below is the DecFIGS
-    // DWARF's own (references/DecFIGS/.../BrnRaceCarEntityModule.h, decl lines noted) and every
-    // console offset is one the ARTIST asm of 0x822FFE30 (or a corroborating sibling) bakes in.
-    // ========================================================================
-
-    // X360 0x822FFE30. Build this frame's player driver-controls record from the latched pad
-    // state + the car/mode state, and AddEvent it into the output buffer's driver queue.
-    // ⚠️ SIGNATURE FROM THE ASM, NOT THE PSEUDOCODE (the PPC float-arg trap): the caller
-    // PrePhysicsUpdate @0x8230732C sets up `lfs f1, 0(r31) ; mr r5, r24 ; mr r6, r26 ; mr r3,
-    // r29` -- the float takes f1 and SKIPS r4, so the parameter list is
-    // (f32 lfTimeStep, InputBuffer_PrePhysics*, OutputBuffer_PrePhysics*), NOT the eight ints
-    // Hex-Rays prints. lfTimeStep is passed and never read by the callee (no `f1` reference
-    // anywhere in the 572-instruction body); it is kept in the signature because it is what the
-    // call site passes.
-    void ProcessPlayerVehicleInput( f32 lfTimeStep,
-                                    const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
-                                    RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput );
-
-    // X360 0x82304690. ABI is r3=this, f1=time step, r5=input and r6=event queue;
-    // the scalar float consumes the skipped r4 GPR argument position on PPC.
-    void UpdateBoost( f32 lfTimeStep,
-                      const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
-                      RaceCarEntityModuleIO::GameEventQueue* lpEventQueue );
-
-    // ARTIST 822A4958 / 822F6CF8; DecFIGS declaration shapes.
+    void ProcessPlayerVehicleInput(f32 lfTimeStep,
+        const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput);
+    void UpdateBoost(f32 lfTimeStep,
+        const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+        RaceCarEntityModuleIO::GameEventQueue* lpEventQueue);
     s32 GetDamagedCarCount() const;
     void ProcessTakedownEvents(const RaceCarEntityModuleIO::TakedownEventQueue* lpQueue);
-
-    // ⭐ X360 0x822FF250 (73 insns) -- PARTIAL SLICE (engine wave 2026-08-12). The eight-slot
-    // active-car tick: `for (i = 0; i < 8; ++i) if (maActiveRaceCars[i].IsActive())
-    // maActiveRaceCars[i].Update(...)`, then SendAddedForCollisionStateToPhysics.
-    // It is the ONLY caller of ActiveRaceCar::Update, which is the ONLY caller of
-    // ActiveRaceCar::UpdateEngineState -- i.e. this is the frame slot the ignition hangs off.
-    // The two bools Update forwards to UpdateEngineState are loaded HERE, from `this`:
-    //     0x822FF318  lbzx r10, r31, 0x18345  ->  mbIsInOnlineGameMode
-    //     0x822FF304  lbzx r8,  r31, 0x186C9  ->  mbInCarSelectScreen
-    // so they are read from the members directly rather than threaded through the signature.
-    // Only the four floats this slice forwards are declared; see the .cpp banner for the
-    // console's other four arguments and for SendAddedForCollisionStateToPhysics.
-    void UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultiplier,
-                           f32 lfAcceleration, f32 lfBraking,
-                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
-                           BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput );
-    // UpdateActiveCars' tail: tell the physics which active cars are currently added for
-    // collision (the per-slot mbAddedForCollision byte of every active car). The physics copies
-    // the set each frame; its only reader is the network-car un-hide gate.
-    void SendAddedForCollisionStateToPhysics( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput );
+    void UpdateActiveCars(f32 lfTimeStep, f32 lfTimeStepMultiplier,
+        f32 lfAcceleration, f32 lfBraking,
+        RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput);
+    void SendAddedForCollisionStateToPhysics(BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput);
     void StorePlayerRoutePortalPositions(const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput);
 
-    // X360 +0x17890 (96400). DWARF :347. The receiver of
-    // `BoostManager::SetBoostEarningEnabled(module + 96400, 1)` in this TU's dirty-trick arm; it
-    // also owns the BoostStrategy* at +0x450 (module+97504) that the same body virtual-dispatches
-    // IsBoosting() through.
-    BoostManager mBoostManager;
-
-    // ARTIST embeds the boost debug page beside the manager and registers it during stage 0
-    // of Prepare. Its original console seat is +0x17E50.
-    BoostDebugComponent mBoostDebugComponent;
-
-    // X360 +0x17E68 (97896). DWARF :348 (the run between mBoostManager :347 and
-    // mCrashPlayManager :355). ADDITIVE CARVE (boost-bar 206 wave): the near-miss chain
-    // tracker UpdateOutputBoostInfo @0x822D1BD0 reads (`NearMissManager::
-    // HasThereBeenARecentNearMiss(module + 97896)`) for the player's BoostOutputInfo
-    // near-miss bit. Its producers (Update/AddNear*) have no reconstructed caller yet, so
-    // the lists stay empty and the bit reads false -- honest state, not a stub.
-    NearMissManager mNearMissManager;
-
-    // ⭐⭐ +0x180D8 (98520), :351. ADDITIVE CARVE.
-    // The console's PostPhysicsUpdate @0x82307538 ticks it at 0x82307... --
-    // `AirTimeManager::Update(module + 98520, playerCar->GetPhysicsState(), mfTimeStep,
-    // lpOutput->GetGameEventQueue())` -- inside the second sim-paused skip, right after the
-    // NearMisses / PowerParking pair. BrnAirTimeManager.cpp has been committed and complete
-    // for a long time; it had NO OWNER AND NO CALLER, so game event 69 (in air) was never
-    // produced and the boost ticker's AIR line could not exist. This member is the seat.
-    AirTimeManager mAirTimeManager;
-
-    // X360 +0x180E8 (98536). DWARF :354 -- the run between mAirTimeManager :353 and
-    // mCrashPlayManager :355, and the asm pins it exactly: PostPhysicsUpdate @0x82307918..
-    // 0x8230792C builds `addis r3, r31, 2 ; addi r3, r3, -0x7F18` == module + 0x180E8 and hands
-    // it to TrafficCheckManager::Update.
-    // ADDITIVE CARVE (boost-wave2 2026-09-14), for exactly the reason mAirTimeManager was one
-    // wave earlier: BrnTrafficCheckManager.cpp is a complete committed reconstruction that had
-    // NO MEMBER and NO CALLER, so game event 74 (the traffic-check CHAIN) was produced nowhere
-    // in the build and the ticker's TRAFFICCHECK line could not draw -- even though the world
-    // event 73 it counts HAS had a live producer all along (VehicleManager::
-    // HandleRaceCarTrafficCarPotentialContact @0x8263FA50, post site 0x82640268).
-    TrafficCheckManager mTrafficCheckManager;
-
-    // X360 +0x1836C (99180), five bytes. PostPhysicsUpdate @0x82307628..0x8230764C copies them
-    // out of the physics readback with a literal `mtctr 5` byte loop:
-    //     r10 = module + 0x1836C ; r11 = InputBuffer_PostPhysics::GetVehicleOutputInterface()
-    //                                    + 0x6C00 ; 5 x (lbz/stb)
-    // and +0x6C00 IS BrnPhysics::Vehicle::VehicleOutputInterface::mAggressiveDrivingFlags, so
-    // this member is that record, by name, at the console's own seat.
-    // ⛔ WHY IT MATTERS: UpdateBoost @0x82304CA4..0x82304CE0 reads bytes +1 and +3 of this
-    // record -- mbPlayerLostSlamThisFrame / mbPlayerLostGrindingThisFrame -- and dispatches
-    // BoostStrategy::OnSlammed (vtable slot 9, +0x24) when either is set. That is the ONLY call
-    // site of OnSlammed in the whole image. The copy used to be a named-but-dropped leg of
-    // PostPhysicsUpdate ("its destination is still inside maTailPadB0"), so the gate read two
-    // bytes nothing ever wrote and being slammed by a rival paid nothing.
-    BrnPhysics::Vehicle::AggressiveDrivingFlags mAggressiveDrivingFlags;
-
-    // X360 +0x180F0 (98544). DWARF :355. Asm-literal base:
-    // HandlePrepareForModeAction @0x823092F0 calls `CrashPlayManager::Activate(module + 98544,
-    // lpActiveRaceCar, lfDifficulty)`. ProcessPlayerVehicleInput reads three of its members
-    // through this base (see the manager's own re-seated banner).
-    CrashPlayManager mCrashPlayManager;
-
-    // X360 +0x18250 (98896). DWARF :356, the member right after mCrashPlayManager (0x180F0 + 0x160).
-    // Embedded (crash parity FX-SCENEMGR item 4, 2026-09-24); every console reference is asm-literal:
-    //   Construct       0x822FDADC  r10 = module + 0x18250; 0x822FDB14 / 0x822FDB1C the inlined
-    //                               PowerParkingManager::Construct (+0x94 byte, +0x90 back pointer)
-    //   Prepare         0x82303FE8  `addi r3, r3, -0x7DB0` ; 0x82304048 bl PowerParkingManager::Prepare
-    //   ProcessPowerParking 0x822CE104  lbz +0 (IsPowerParking) ; stw/stfs +0x6C..+0x80
-    //   UpdatePowerParking  0x822FF608  r3 = module + 0x18250 ; bl PowerParkingManager::Update
-    //   UpdateRaceCarContacts / UpdateTrafficAndRaceCarNearMisses  +0x64 / +0x68 (the two tallies)
-    //   Destruct        0x822F3DC0  module + 0x182E0 (the debug component's back pointer)
-    PowerParkingManager mPowerParkingManager;
-
-    // X360 +0x18345/+0x18346 (99141/99142) and +0x1834D/+0x1834E (99149/99150). DWARF :371/:372
-    // and :379/:380 -- four more entries of the SAME seventeen-bool run this header already
-    // fitted at both ends (mbIsInGameMode :370 @+99140 ... mbRenderRaceCarCoronas :381 @+99151).
-    // Each lands on a byte 0x822FFE30 reads:
-    //   +99141 mbIsInOnlineGameMode     gates the whole online catch-up / dirty-trick block
-    //   +99142 mbOnlineModeJustFinished forces the "park the car" controls (gas 0, handbrake 1,
-    //                                   steering hard to +/-1)
-    //   +99149 mbSixaxisSteeringEnabled \ together they arm the tilt-steering remap
-    //   +99150 mbPaybackSixaxisSteering / (and +99150 is what the SIX_AXIS payback arm clears)
-    bool mbIsInOnlineGameMode;          // +0x18345 (99141)
-    bool mbOnlineModeJustFinished;      // +0x18346 (99142)
-    bool mbCarSelectAllowedInGameMode;  // +0x18347 (99143)
-    bool mbDisplayPlayerCarPosition;  // +0x18349 (99145), Construct seeds the registered switch to 1
-    bool mbRivalDebug;               // +0x1834A (99146), Construct seed / DebugRenderPosition reader
-    bool mbSixaxisSteeringEnabled;      // +0x1834D (99149)
-    bool mbPaybackSixaxisSteering;      // +0x1834E (99150)
-
-    // ========================================================================
-    // ADDITIVE (aiwave lane A9, 2026-09-03) -- the FOUR members PlaceRaceCarOnLoad
-    // @0x822CE588 reads on its NON-PLAYER arms, i.e. on every rival. They were the reason
-    // those arms were parked ("three unnamed module members"); all four are now pinned, and
-    // the pin is a four-point fit, not a guess:
-    //
-    //   * +0x18340 (99136)  miOpponentCount            DWARF :367 -- the ONLY int32 member
-    //     between mSurfaceList (:365) and mbIsInGameMode (:370 @+99140), and +99136 is
-    //     exactly the four bytes in front of +99140. HandlePrepareForModeAction @0x823092F0
-    //     writes it at 0x8230947C (`lbz r11, 0(r25); extsb r11, r11; stwx r11, r31, 0x18340`
-    //     -- GameModeParams+0 == the rival/opponent count byte), one instruction BEFORE the
-    //     `stdx` into mxGameModeFlags this header already names. That store is the one the
-    //     ModeArming banner listed as "NOT reproduced: +0x18340 lands inside maTailPadA1b
-    //     and this header names no member there" -- it does now.
-    //   * +0x18350 (99152)  mbSpawnAIBehindStartGrid   DWARF :382
-    //   * +0x18351 (99153)  mbPlayerRollsOnEventStart  DWARF :383
-    //   * +0x18352 (99154)  mbPlayerDonutsOnEventStart DWARF :384
-    //     -- entries 13/14/15 of the SAME seventeen-bool run this header already fits at both
-    //     ends (:370 @+99140 ... mbRenderRaceCarCoronas :381 @+99151). HandlePrepareForModeAction
-    //     writes all three from GameModeParams::muFlags, and each `rlwinm` names its own bit:
-    //       0x823094A8  rlwinm r11, r11, 0,17,17 -> 1 << 14 == KU_FLAG_AI_DRIVE_BY_START
-    //                   0x823094C4  stbx -> +0x18350
-    //       0x823094CC  rlwinm r11, r11, 0, 4, 4 -> 1 << 27 == KU_FLAG_DONUT_START
-    //                   0x823094EC  stbx -> +0x18352
-    //       0x823094F4  rlwinm r11, r11, 0, 5, 5 -> 1 << 26 == KU_FLAG_ROLLING_START, then
-    //                   0x8230950C..0x82309524  `rolling || donut`
-    //                   0x82309534  stbx -> +0x18351
-    //     Three consecutive DWARF entries landing on three consecutive asm-literal offsets in
-    //     the DWARF's own order, each carrying the flag whose NAME matches the member's --
-    //     that is what pins them.
-    //
-    // Same additive rule as the block above: console offsets recorded per member, the x64
-    // offsets are not load-bearing (named-member parity).
-    // ========================================================================
-    s32  miOpponentCount;               // +0x18340 (99136)   DWARF :367
-    bool mbSpawnAIBehindStartGrid;      // +0x18350 (99152)   DWARF :382
-    bool mbPlayerRollsOnEventStart;     // +0x18351 (99153)   DWARF :383
-    bool mbPlayerDonutsOnEventStart;    // +0x18352 (99154)   DWARF :384
-
-    // X360 +0x18368 (99176). DWARF :395. Read as `lwzx r11, r28, 0x18368` and compared against
-    // 0xA / 0xD -- E_MODE_ONLINE_RACE / E_MODE_ONLINE_BURNING_HOME_RUN, which is what identifies
-    // the member (the two online modes with per-mode control tweaks).
-    BrnGameState::GameStateModuleIO::EGameModeType meGameModeType;
-
-    // X360 +0x183A8 (99240). DWARF :409. The module's latched copy of this frame's pad state --
-    // PreSceneUpdate @0x8230D928 fills it with `memcpy(module + 99240, <pre-scene controls>, 60)`
-    // (the memcpy itself is at 0x8230E278) -- ⚠ this citation used to read "@0x822FE3F0", which is
-    // PostSceneUpdate's address (see :621), not PreSceneUpdate's; corrected 2026-08-11 --
-    // which is BOTH the base and the 60-byte size proof. Eleven of its thirteen floats and three
-    // of its eight bools are read by name in ProcessPlayerVehicleInput and every one lands
-    // exactly (mfXSensor +16 -> 99256, mfAcceleration +32 -> 99272, mfSteering +44 -> 99284,
-    // mbHorn +52 -> 99292, mbReset +55 -> 99295, mbToggle +56 -> 99296, mbIsWheel +58 -> 99298).
-    PlayerVehicleControls mPlayerVehicleControls;
-
-    // X360 +0x183F0 (99312). The frame's CAMERA TRANSFORM, latched by PreSceneUpdate step 2 and
-    // read by exactly one consumer: PrePhysicsUpdate passes it to CrashPlayManager::Update, which
-    // flattens its X and Z rows into the ground plane and normalises them for the traffic-stomp
-    // air ram. THREE pins, all asm-literal:
-    //   * PreSceneUpdate @0x8230DA44 calls InputBuffer_PreScene::GetCam...() and copies FOUR
-    //     16-byte quads out of the returned pointer (`lvx128/stvx128` at +0, +0x10, +0x20, +0x30)
-    //     into `module + 99312` -- i.e. a whole 64-byte Matrix44Affine, not a Vector3;
-    //   * PrePhysicsUpdate @0x82307274 hands `module + 99312` to CrashPlayManager::Update as r4;
-    //   * CrashPlayManager::Update reads it at +0x00 and +0x20, which are xAxis and zAxis.
-    // It sits immediately after the 60-byte mPlayerVehicleControls (99240 + 60 == 99300, rounded
-    // up to the next 16-byte boundary == 99312), which is also why nothing could live between.
-    Matrix44Affine mCameraTransform;    // +0x183F0 (99312)
-
-    // X360 +0x183E4 / +0x183E8 (99300 / 99304). DWARF :410 / :411. PreSceneUpdate seeds both from
-    // the pre-scene input buffer (GetActivePaybackType / GetActivePaybackAggressor) and Prepare
-    // seeds them to 3 / -1; ProcessPlayerVehicleInput switches on the type and, for
-    // E_PAYBACK_TYPE_AGGRESSORS_CONTROLS_AFFECTS_VICTIM, publishes the aggressor as the driver
-    // record's miVehicleIDToMerge.
-    BrnNetwork::EPaybackType meActivePaybackType;
-    EActiveRaceCarIndex      meActivePaybackAggressor;
-
-    // X360 +0x184C4 / +0x184C8 (99524 / 99528). DWARF :422 / :423. Prepare, Release and Destruct
-    // all seed the pair to (-1.0f, false), and the SIX_AXIS payback arm re-seeds them to exactly
-    // that alongside `mBoostManager.SetBoostEarningEnabled(true)` -- i.e. "cancel the random
-    // boost and let the car earn boost again".
-    // ⚠️ FLAG: these two NAMES are a DWARF-ORDER FIT, not a direct attestation. What IS attested
-    // is the shape (a f32 seeded -1.0f at 99524 with a `stb`-width flag seeded 0 at 99528 -- the
-    // asm is `stfsx f28` / `stbx r26`) and that the DWARF's :421..:431 run closes on
-    // mStoredStompees @+99568 with exactly one 12-byte alignment gap when the pair is placed
-    // here. No single X360 site names them. Revisit if a body turns up that does.
-    f32  mfRandomBoostTime;             // +0x184C4 (99524)
-    bool mbRandomBoostOn;               // +0x184C8 (99528)
-
-    // X360 +0x184F0 / +0x185F0 (99568 / 99824). DWARF :433 / :434. The frame's stomped/leaped
-    // car list ProcessPlayerVehicleInput forwards to the physics side one entry at a time
-    // (VehicleDriverInputInterface::AddTargetAssist). THREE independent pins:
-    //   * the loop stride is 0x20 with the id at +0x10 -- exactly StoredStompeeData's
-    //     {Vector3 @0, EntityId @16} with the Vector3's 16-byte alignment;
-    //   * 99568 + 8 * 32 == 99824, so the count sits immediately after an EIGHT-entry array
-    //     (KI_MAX_TARGET_ASSIST_CARS == E_ACTIVE_RACE_CAR_INDEX_COUNT == 8, which is also the
-    //     bound AddTargetAssist asserts);
-    //   * ProcessLeapedAndStompedCars @0x822BD5B8 -- the producer -- writes `module + 99584`,
-    //     i.e. mStoredStompees[0].mEntityId.
-    StoredStompeeData mStoredStompees[E_ACTIVE_RACE_CAR_INDEX_COUNT];  // +0x184F0 (99568)
-    s32               miStoredStompeeCount;                            // +0x185F0 (99824)
-
-    // X360 +0x18398 (99224). The SIM time step latched once per frame by PreSceneUpdate
-    // (`mfTimeStep = lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->
-    //  GetCurrentTimeStep()`, asm `*(v52+28) * *(v52+32)`), zeroed when the update set's
-    // bit 0 says the sim is paused. UpdateStreaming accumulates it into the streamer's
-    // mfTimeSinceLastLoad.
-    f32 mfTimeStep;
-
-    // ========================================================================
-    // MODELLED members (rival range-loop wave, lane W1, 2026-09-05). Same additive rule as
-    // the blocks above: console offsets recorded per member, x64 offsets not load-bearing.
-    // ========================================================================
-
-    // X360 +0x228 (552). DWARF BrnRaceCarEntityModule.h:283 -> `float32_t mfClippedTime`, and
-    // the offset is CLOSED, not guessed: the four DWARF members between it and the already
-    // pinned mDistrictMapResourceHandle (:331 @+0x23C) are mePrepareStage / meReleaseStage /
-    // meInitialLoadStage / miResourceCount, four 4-byte slots == +0x22C..+0x23C, so :283 lands
-    // exactly on +0x228. IsRaceCarWrappable @0x822E9E18 is its only reader/writer: it counts
-    // FRAMES (`fadds f0, f13, 1.0` @0x822EA018) for which the car sits more than 30 degrees off
-    // the player's heading axis, hides the car once the count passes 120.0f, and zeroes it the
-    // moment the car comes back onto the axis (`stfs flt_82001CC0, 0x228(r31)` @0x822E9F2C).
-    f32 mfClippedTime;
-
+    // Native containment follows DecFIGS declaration order, with ARTIST accesses
+    // closing each constituent boundary. Existing source spellings are retained.
+    // The leading ModuleSingleBuffered base is the actual native owner (0x228).
+    f32 mfClippedTime;                              // ARTIST +0x228
+    s32 mePrepareStage;                             // +0x22C
+    s32 miPrepareCarIndex;                          // +0x230, meReleaseStage in DWARF
+    s32 meLoadGlobalResourcesStage;                 // +0x234, meInitialLoadStage
+    s32 miExpectedResponseCount;                    // +0x238, miResourceCount
+    CgsResource::ResourceHandle mDistrictMapResourceHandle; // +0x23C
+    BrnWorld::WorldRegion mCurrentWorldRegion;       // +0x244
+    RaceCar maRaceCars[E_GLOBAL_RACE_CAR_INDEX_COUNT];       // +0x250
+    ActiveRaceCar maActiveRaceCars[E_ACTIVE_RACE_CAR_INDEX_COUNT]; // +0x1A60
+    CgsContainers::BitArray<8u> mabResetThisFrame;    // +0x100E0
+    CgsModule::EventReceiverQueue<4096, 16> mReceiverQueue; // +0x100E8
+    RaceCarStreamer mRaceCarStreamer;               // +0x11100
+    PlaceOnTrackManager mPlaceOnTrackManager;       // +0x17850
+    BoostManager mBoostManager;                    // +0x17890
+    RaceCarEntityModuleDebugComponent mRCEntityModuleDebugComponent; // +0x17CF0
+    BoostDebugComponent mBoostDebugComponent;       // +0x17E50
+    NearMissManager mNearMissManager;               // +0x17E68
+    AirTimeManager mAirTimeManager;                 // +0x180D8
+    TrafficCheckManager mTrafficCheckManager;       // +0x180E8
+    CrashPlayManager mCrashPlayManager;             // +0x180F0
+    PowerParkingManager mPowerParkingManager;       // +0x18250
+    f32 mfCurrentTailgateDuration;                  // +0x182F0
+    EActiveRaceCarIndex meIndexOfCarPlayerIsTailgating; // +0x182F4
+    EActiveRaceCarIndex mePlayerActiveRaceCarIndex;  // +0x182F8
+    CgsWorld::WorldMap2D mWorldMap2D;                // +0x18300
+    Attrib::Gen::surfacelist mSurfaceList;           // +0x18330
+    s32 miOpponentCount;                           // +0x18340
+    bool mbIsInGameMode;
+    bool mbIsInOnlineGameMode;
+    bool mbOnlineModeJustFinished;
+    bool mbCarSelectAllowedInGameMode;
+    bool mbWaitingForStreaming;
+    bool mbDisplayPlayerCarPosition;
+    bool mbRivalDebug;
+    bool mbRenderCarsDuringCrash;
+    bool mbRenderWheels;
+    bool mbSixaxisSteeringEnabled;
+    bool mbPaybackSixaxisSteering;
+    bool mbRenderRaceCarCoronas;
+    bool mbSpawnAIBehindStartGrid;
+    bool mbPlayerRollsOnEventStart;
+    bool mbPlayerDonutsOnEventStart;
+    bool mbUseRankUpAISpawnSeparation;
     bool mbModeStartedPlaying;
+    u64 mxGameModeFlags;                           // +0x18358
+    bool mabCarSelectWaitForStreaming[8];           // +0x18360
+    BrnGameState::GameStateModuleIO::EGameModeType meGameModeType; // +0x18368
+    BrnPhysics::Vehicle::AggressiveDrivingFlags mAggressiveDrivingFlags; // +0x1836C
+    bool mbSendStreamingComplete;
+    BrnProgression::ETrainingType mePendingTrainingRequestQueue[KI_TRAINING_REQUEST_QUEUE_SIZE];
+    s32 miPendingRequestCount;
+    f32 mfTimeStep;                                // +0x18398, mfSimTimerTimeStep
+    f32 mfIntroTimer;
+    f32 mfSimTime;
+    f32 mfTimeStepMultiplier;
+    PlayerVehicleControls mPlayerVehicleControls;   // +0x183A8
+    BrnNetwork::EPaybackType meActivePaybackType;
+    EActiveRaceCarIndex meActivePaybackAggressor;
+    Matrix44Affine mCameraTransform;               // +0x183F0
+    bool mbDEBUGPlayerUsingReset;
+    const BrnResource::VehicleList* mpVehicleList;
+    const BrnResource::WheelList* mpWheelList;
+    CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette> mCarColoursResource;
+    CgsNumeric::Random mDeterministicRandom;        // +0x18460
+    CgsNumeric::Random mNonDeterministicRandom;     // +0x18490
+    f32 mfLastPlayerCarSpeed;
+    f32 mfRandomBoostTime;
+    bool mbRandomBoostOn;
+    f32 mfResetOnWaterHeight;
+    s32 miPlayerBaseDeformationTypeMirror;
+    s32 miPlayerBaseDeformationTypeSaved;
+    f32 mfPlayerBaseDeformAmountMirror;
+    bool mbPlayerBaseDeformRequestPending;
+    f32 mfPlayerBaseDeformAmountSaved;
+    StoredStompeeData mStoredStompees[E_ACTIVE_RACE_CAR_INDEX_COUNT]; // +0x184F0
+    s32 miStoredStompeeCount;                       // +0x185F0
+    bool mbInReplay;                               // +0x185F4
+    bool mbReplayRestored;                         // +0x185F5
 
-    // X360 +0x186D4 (100052) / +0x18714 (100116). DWARF BrnRaceCarEntityModule.h:450/:451.
-    // The frame's pending "this rival needs hiding" records: SetHiddenDelay @0x822D2988
-    // appends (asserting the count is < 8 first), UpdateHidingEvents @0x822F5830 posts them
-    // all as game event 40 and resets the count to zero.
+    // These are genuine declarations, not an accepted replay layout. The native
+    // serialiser starts at 0x18600; its extent/alignment is still under recovery.
+    BrnReplays::RaceCarEntitySerialiser mReplaySerialiser;
+    Matrix44Affine mReplayTransform;
+    bool mbInvalidatedRaceCars;
+    bool mabRaceCarsRendered[E_ACTIVE_RACE_CAR_INDEX_COUNT];
+    bool mbInCarSelectScreen;
+    bool mbInCarModScreen;
+    s32 meCarSelectResetType;
+    bool mbCarSelectDontStreamAudio;
+    bool mbHACK_ExitingCarSelectWaitForAudio;
     RaceCarNeedsHidingEventRecord mHidingEvents[8];
-    s32                           miHidingEvents;
-    Vector2 mPlayersCurrentRouteNodePosition; // ARTIST +0x18720; DecFIGS named member.
-    Vector2 mPlayersNextRouteNodePosition;    // ARTIST +0x18730.
+    s32 miHidingEvents;
+    bool mbOncomingTimerActive;
+    f32 mfOncomingNoClueTimer;
+    Vector2 mPlayersCurrentRouteNodePosition;
+    Vector2 mPlayersNextRouteNodePosition;
+    bool DEBUG_mbSpawnDebugRaceCarThisFrame;
+    bool DEBUG_mbCleanDebugRaceCarThisFrame;
+    bool DEBUG_mbDebugRaceCarIsActive;
+    Vector3 DEBUG_mDebugRaceCarPosition;
+    Vector3 DEBUG_mDebugRaceCarDirection;
+    f32 DEBUG_mfDebugRaceCarVelocity;
+    RaceCar* DEBUG_mpDebugRaceCar;
+    bool DEBUG_mbOverrideDamage;
+    f32 DEBUG_mfVehicleScratchAmount;
+    f32 DEBUG_mfVehicleDustAmount;
+    f32 DEBUG_mfVehicleCrumpleAmount;
+    f32 DEBUG_mfSelfIlluminationR;
+    f32 DEBUG_mfSelfIlluminationG;
+    f32 DEBUG_mfSelfIlluminationB;
+    bool DEBUG_mbOverrideCarColor;
+    f32 DEBUG_mfOverridePaintColorR;
+    f32 DEBUG_mfOverridePaintColorG;
+    f32 DEBUG_mfOverridePaintColorB;
+    f32 DEBUG_mfOverridePearlColorR;
+    f32 DEBUG_mfOverridePearlColorG;
+    f32 DEBUG_mfOverridePearlColorB;
+    bool DEBUG_mbOverrideCarPalette;
+    s32 DEBUG_miPaletteIndex;
+    s32 DEBUG_miColourIndex;
+    EActiveRaceCarIndex maActiveRaceCarForPlayerScoringIndex[BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT];
+    bool mbSetRaceCarEliminated;
+    EActiveRaceCarIndex mCarToCrashActiveIndex;
+    s32 miPreSceneUpdatePM;
+    s32 miPostSceneUpdatePM;
+    s32 miPrePhysicsUpdatePM;
+    s32 miPostPhysicsUpdatePM;
 
-    // (The two MODELLED power-parking tally seats that stood here -- miPowerParkingNearTrafficCount
-    // and miPowerParkingContactTrafficCount -- are RETIRED: their DELETE-WHEN fired when
-    // mPowerParkingManager was embedded (crash parity FX-SCENEMGR item 4, 2026-09-24). The writes
-    // are PowerParkingManager::AddNearTraffic / AddContactTraffic on the manager's own +0x68 / +0x64.)
-
-    // MODELLED member (crash parity G61-D4, 2026-09-24). DWARF BrnRaceCarEntityModule.h:420
-    // `Random mNonDeterministicRandom`, X360 +0x18490 (48 bytes, ending at mfLastPlayerCarSpeed
-    // +0x184C0) -- appended per the named-member rule above, the console seat is inside maTailPadB1a.
-    // Construct seeds it (the inlined Random::Construct, default seed 0xC87CD8C91AD0891B, around
-    // 0x822FDC18..0x822FE024), PreSceneUpdate steps it once a frame (0x8230D9D8..0x8230DA10, the
-    // DWARF's RandomUInt with its result unused), and UpdateActiveCars hands its address to every
-    // ActiveRaceCar::Update (the console's stack slot at 0x822FF300/0x822FF330) for the start-line
-    // boost flame.
-    CgsNumeric::Random mNonDeterministicRandom;
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,
@@ -1813,14 +1209,48 @@ RaceCarEntityModule::GetGlobalRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
 // accessor asm bakes in (this + 592 / this + 6752).
 inline void RaceCarEntityModule::LockLayout_()
 {
-    // Native array boundaries and the first scalar tail are directly attested.
-    // Later declaration-order/layout recovery remains separate work.
+    // ARTIST closes the genuine base and each pre-replay constituent. The
+    // replay/end bounds below intentionally fail until their native cause is
+    // recovered; this private declaration is not an accepted product layout.
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mfClippedTime) == 0x228), "ARTIST clipped time");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mDistrictMapResourceHandle) == 0x23C), "ARTIST district handle");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mCurrentWorldRegion) == 0x244), "ARTIST world region");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mabResetThisFrame) == 0x100E0), "ARTIST reset bits");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mReceiverQueue) == 0x100E8), "ARTIST receiver queue");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mRaceCarStreamer) == 0x11100), "ARTIST streamer");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mPlaceOnTrackManager) == 0x17850), "ARTIST placement manager");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mBoostManager) == 0x17890), "ARTIST boost manager");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mRCEntityModuleDebugComponent) == 0x17CF0), "ARTIST debug component");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mBoostDebugComponent) == 0x17E50), "ARTIST boost debug component");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mNearMissManager) == 0x17E68), "ARTIST near-miss manager");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mAirTimeManager) == 0x180D8), "ARTIST air-time manager");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mTrafficCheckManager) == 0x180E8), "ARTIST traffic-check manager");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mCrashPlayManager) == 0x180F0), "ARTIST crash-play manager");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mPowerParkingManager) == 0x18250), "ARTIST power-parking manager");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mWorldMap2D) == 0x18300), "ARTIST district map");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mSurfaceList) == 0x18330), "ARTIST surface list");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, meGameModeType) == 0x18368), "ARTIST game mode");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mfTimeStep) == 0x18398), "ARTIST time step");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mPlayerVehicleControls) == 0x183A8), "ARTIST controls");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mCameraTransform) == 0x183F0), "ARTIST camera transform");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mCarColoursResource) == 0x1843C), "ARTIST palette resource");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mDeterministicRandom) == 0x18460), "ARTIST deterministic random");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mNonDeterministicRandom) == 0x18490), "ARTIST nondeterministic random");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mStoredStompees) == 0x184F0), "ARTIST stored stompees");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, miStoredStompeeCount) == 0x185F0), "ARTIST stompee count");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mbInReplay) == 0x185F4), "ARTIST replay flag");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mbReplayRestored) == 0x185F5), "ARTIST restored flag");
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, maActiveRaceCars) == 0x1A60), "ARTIST active slots");
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mfCurrentTailgateDuration) == 0x182F0), "ARTIST tailgate duration");
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, meIndexOfCarPlayerIsTailgating) == 0x182F4), "ARTIST tailgate index");
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mePlayerActiveRaceCarIndex) == 0x182F8), "ARTIST player index");
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, maRaceCars) == 0x250),
                   "maRaceCars @+0x250 (== 592)");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mReplaySerialiser) == 0x18600), "ARTIST replay serialiser");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mbInvalidatedRaceCars) == 0x186C0), "ARTIST invalidated cars");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mabRaceCarsRendered) == 0x186C1), "ARTIST rendered flags");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, DEBUG_mbOverrideDamage) == 0x18778), "ARTIST damage override");
+    CGS_STATIC_ASSERT((sizeof(RaceCarEntityModule) == 0x18800), "ARTIST module size");
 }
 
 }
