@@ -5300,9 +5300,9 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                 CGS_ASSERT( liPane >= 0 && liPane < 8,
                             "( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )" );   // :372, baked shape
                 {
-                    const Vector2 lGlassScale(lfWidth, lfWidth);
+                    const rw::math::fpu::Vector2Template<float> lGlassScale(lfWidth, lfWidth);
                     lpRenderParams->SetCrackedGlassScaleFactorsN(
-                    static_cast<u32>( liPane ), lGlassScale );
+                    liPane, lGlassScale );
                 }
             }
             else if( lrEvent.meNewState == BrnPhysics::Deformation::E_GLASS_STATE_SMASHED )
@@ -5312,9 +5312,9 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                 lpRenderParams->SetCrackedGlassEqualisationFactorN( static_cast<u32>( liPane ),
                                                                     lfEqualisation );
                 {
-                    const Vector2 lGlassScale(lfWidth, lfWidth);
+                    const rw::math::fpu::Vector2Template<float> lGlassScale(lfWidth, lfWidth);
                     lpRenderParams->SetCrackedGlassScaleFactorsN(
-                    static_cast<u32>( liPane ), lGlassScale );
+                    liPane, lGlassScale );
                 }
             }
             else

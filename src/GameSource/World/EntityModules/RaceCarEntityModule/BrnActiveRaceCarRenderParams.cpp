@@ -124,17 +124,17 @@ Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel)
 // lane x of row 0, lane y of row 1 and lane z of row 2; row 3 is never permuted. So the
 // console result is diag(scale.x, scale.y, scale.z) with a ZERO wAxis -- the same zero-wAxis
 // identity Matrix44Affine::SetIdentity writes -- not diag(..., 1) as this banner used to say.
-// lrScale.w is never read. (No reader of the wAxis lane exists on either build: RenderRaceCar's
+// lrScale.mV.w is never read. (No reader of the wAxis lane exists on either build: RenderRaceCar's
 // vpu::Mult reads x/y/z only. The fix is layout parity, not a visible change.)
 void ActiveRaceCar::RenderParams::SetWheelScale(u32 luWheel, const Vector3& lrScale)
 {
     CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
 
     Matrix44Affine& lrDest = mWheelScaleTransforms[luWheel];
-    lrDest.xAxis.x = lrScale.x; lrDest.xAxis.y = 0.0f;      lrDest.xAxis.z = 0.0f;      lrDest.xAxis.w = 0.0f;
-    lrDest.yAxis.x = 0.0f;      lrDest.yAxis.y = lrScale.y; lrDest.yAxis.z = 0.0f;      lrDest.yAxis.w = 0.0f;
-    lrDest.zAxis.x = 0.0f;      lrDest.zAxis.y = 0.0f;      lrDest.zAxis.z = lrScale.z; lrDest.zAxis.w = 0.0f;
-    lrDest.wAxis.x = 0.0f;      lrDest.wAxis.y = 0.0f;      lrDest.wAxis.z = 0.0f;      lrDest.wAxis.w = 0.0f; // sp+0x8C: li r10,0 / stw @0x822CD258
+    lrDest.xAxis.mV.x = lrScale.mV.x; lrDest.xAxis.mV.y = 0.0f;      lrDest.xAxis.mV.z = 0.0f;      lrDest.xAxis.mV.w = 0.0f;
+    lrDest.yAxis.mV.x = 0.0f;      lrDest.yAxis.mV.y = lrScale.mV.y; lrDest.yAxis.mV.z = 0.0f;      lrDest.yAxis.mV.w = 0.0f;
+    lrDest.zAxis.mV.x = 0.0f;      lrDest.zAxis.mV.y = 0.0f;      lrDest.zAxis.mV.z = lrScale.mV.z; lrDest.zAxis.mV.w = 0.0f;
+    lrDest.wAxis.mV.x = 0.0f;      lrDest.wAxis.mV.y = 0.0f;      lrDest.wAxis.mV.z = 0.0f;      lrDest.wAxis.mV.w = 0.0f; // sp+0x8C: li r10,0 / stw @0x822CD258
 }
 
 // ----------------------------------------------------------------------------
@@ -204,26 +204,34 @@ void ActiveRaceCar::RenderParams::SetCrackedGlassEqualisationFactorN(u32 n, f32 
     mafCrackedGlassEqualisationFactor[n] = lfValue;
 }
 
-// X360 0x822B8410: 8*(n+651)+this == byte 5208 + 8n == &mavCrackedGlassScaleFactors[n]. The
-// console returns the 2-float pair through a hidden out-pointer (copies *v7 then v7[1]);
-// clean C++ returns a Vector2 by value built from the packed pair.
-Vector2 ActiveRaceCar::RenderParams::GetCrackedGlassScale(u32 n) const
+// ARTIST 0x822B8410 returns the FPU pair through hidden result pointer r3.
+rw::math::fpu::Vector2Template<float>
+ActiveRaceCar::RenderParams::GetCrackedGlassScaleFactorsN(s32 n) const
 {
-    CGS_ASSERT(n < 8, "( 0 <= n ) && ( 8 > n )");
-    Vector2 lScale;
-    lScale.x = mavCrackedGlassScaleFactors[n].x;
-    lScale.y = mavCrackedGlassScaleFactors[n].y;
-    lScale.z = 0.0f;
-    lScale.w = 0.0f;
-    return lScale;
+    if (n < 0 || n >= 8)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h", 393);
+        CgsDev::Assert::EndAssert();
+    }
+    return rw::math::fpu::Vector2Template<float>(mavCrackedGlassScaleFactors[n].x,
+                                                  mavCrackedGlassScaleFactors[n].y);
 }
 
-// X360 0x822B83A0: store two floats at 2*n+1302 (the packed 8-byte pair).
-void ActiveRaceCar::RenderParams::SetCrackedGlassScaleFactorsN(u32 n, const Vector2& lrScale)
+// ARTIST 0x822B83A0 loads the two input floats from r5+0/+4.
+void ActiveRaceCar::RenderParams::SetCrackedGlassScaleFactorsN(
+    s32 n, const rw::math::fpu::Vector2Template<float>& lrScale)
 {
-    CGS_ASSERT(n < 8, "( 0 <= n ) && ( 8 > n )");
-    mavCrackedGlassScaleFactors[n].x = lrScale.x;
-    mavCrackedGlassScaleFactors[n].y = lrScale.y;
+    if (n < 0 || n >= 8)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h", 372);
+        CgsDev::Assert::EndAssert();
+    }
+    mavCrackedGlassScaleFactors[n].x = lrScale.X();
+    mavCrackedGlassScaleFactors[n].y = lrScale.Y();
 }
 
 // ----------------------------------------------------------------------------
@@ -358,8 +366,8 @@ void ActiveRaceCar::RenderParams::Reset()
     }
 
     // The two colour vectors seed to white (the paint / pearlescent shader tints).
-    mPaintColour.x = mPaintColour.y = mPaintColour.z = mPaintColour.w = 1.0f;
-    mPearlescentColour.x = mPearlescentColour.y = mPearlescentColour.z = mPearlescentColour.w = 1.0f;
+    mPaintColour.mV.x = mPaintColour.mV.y = mPaintColour.mV.z = mPaintColour.mV.w = 1.0f;
+    mPearlescentColour.mV.x = mPearlescentColour.mV.y = mPearlescentColour.mV.z = mPearlescentColour.mV.w = 1.0f;
 
     // Six wheel-exists bytes cleared (the console clears one per wheel inside the
     // matrix loop above).

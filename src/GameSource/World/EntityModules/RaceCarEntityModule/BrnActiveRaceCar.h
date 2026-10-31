@@ -63,6 +63,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // ERaceCarType (IsPlayer)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // EActiveRaceCarEngineState
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h" // CgsGeometric::AxisAlignedBox (mDeformedBBox, named 2026-08-24)
+#include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
 
 namespace BrnPhysics { namespace Deformation { struct DeformationState; struct StreamedDeformationSpec; } }  // UpdateDeformationState's source
 
@@ -591,9 +592,9 @@ public:
         f32             GetCrackedGlassEqualisationFactorN(u32 n) const;
         void            SetCrackedGlassEqualisationFactorN(u32 n, f32 lfValue);
         // X360 0x822B8410 / 0x822B83A0. Storage is a packed 2-float pair (8-byte
-        // stride, asm-proven); the API speaks Vector2 by value.
-        Vector2         GetCrackedGlassScale(u32 n) const;
-        void            SetCrackedGlassScaleFactorsN(u32 n, const Vector2& lrScale);
+        // stride, asm-proven); the getter returns the FPU pair by value.
+        rw::math::fpu::Vector2Template<float> GetCrackedGlassScaleFactorsN(s32 n) const;
+        void SetCrackedGlassScaleFactorsN(s32 n, const rw::math::fpu::Vector2Template<float>& lrScale);
 
         // --- blues-and-twos (police strobe) state machine -------------------
         // X360 0x822A1C90: accumulate dt into the two light timers, wrap each, and
