@@ -15,6 +15,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlinePlay.h"
 
+#include <xtl.h>
 #include <cstddef>                                                        // offsetof (overlay wire)
 #include <cstring>                                                        // std::strncpy
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
@@ -25,21 +26,6 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache, GuiFlow
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest, GuiEventActivateCrashNav
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                      // OptionsDataProfile::IsThereUnreadNews
-
-// The Xbox XNotify listener plumbing OnEnter/OnLeave key on. The XNotify* / XUser* / XShow*
-// entry points are the Xbox 360 XDK C-API; declared extern "C" at file scope with plain
-// types (mirroring the committed BrnOnlineQuickCustomCreate precedent -- the Xbox HANDLE /
-// DWORD typedefs are NOT modelled in types.hpp). CloseHandle comes from the Windows header
-// CgsHardwareInit.h includes.
-extern "C"
-{
-    void* XNotifyCreateListener(unsigned long long luqwAreas);
-    int   XNotifyGetNext(void* lhListener, unsigned long ludwMsgFilter,
-                         unsigned long* lpdwId, unsigned long* lpParam);
-    u32   XUserGetSigninState(u32 luUserIndex);
-    u32   XShowSigninUI(u32 luPanes, u32 luFlags);
-    u32   XShowFriendsUI(u32 luUserIndex);
-}
 
 namespace BrnGui
 {
@@ -58,9 +44,6 @@ namespace
     const s32 KI_CHANNEL_GUI_OUT = 40;
 
     // XNotify ids and the sign-in state Update / ShowFriendsMenu test.
-    const unsigned long KU_XN_SYS_SIGNINCHANGED   = 9;
-    const unsigned long KU_XN_LIVE_INVITE_ACCEPTED = 0x2000002;
-    const u32 KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE    = 2;
     const u32 KU_SIGNIN_UI_PANES                   = 1;
     const u32 KU_SIGNIN_UI_ONLINE_ENABLED          = 2;
 
@@ -587,24 +570,24 @@ void OnlinePlay::Update()
     // Waiting on the sign-in guide ShowFriendsMenu opened.
     if (meSubState == E_SUBSTATE_WAIT_SIGN_IN_FINISH)
     {
-        unsigned long luNotificationId    = 0;
-        unsigned long luNotificationParam = 0;
+        DWORD luNotificationId    = 0;
+        ULONG_PTR luNotificationParam = 0;
         if (XNotifyGetNext(mpNotifyListenerHandle, 0, &luNotificationId, &luNotificationParam))
         {
-            if (luNotificationId == KU_XN_SYS_SIGNINCHANGED)
+            if (luNotificationId == XN_SYS_UI)
             {
                 if (luNotificationParam == 0)
                 {
                     CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
                     if (XUserGetSigninState(mpGuiCache->GetActiveControllerIndex()) ==
-                        KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE)
+                        eXUserSigninState_SignedInToLive)
                     {
                         XShowFriendsUI(mpGuiCache->GetActiveControllerIndex());
                     }
                     meSubState = E_SUBSTATE_MAIN;
                 }
             }
-            else if (luNotificationId == KU_XN_LIVE_INVITE_ACCEPTED)
+            else if (luNotificationId == XN_LIVE_INVITE_ACCEPTED)
             {
                 CGS_ASSERT(false, "Invite notification processed by Online main menu screen. "
                                   "This could break cross game invites\n");
@@ -707,7 +690,7 @@ void OnlinePlay::ShowFriendsMenu()
         return;
 
     if (XUserGetSigninState(mpGuiCache->GetActiveControllerIndex()) ==
-        KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE)
+        eXUserSigninState_SignedInToLive)
     {
         XShowFriendsUI(mpGuiCache->GetActiveControllerIndex());
     }
