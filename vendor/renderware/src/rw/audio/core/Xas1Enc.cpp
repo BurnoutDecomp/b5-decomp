@@ -5,8 +5,8 @@
 // authoritative for every store, branch and rounding point. See Xas1Enc.h / Encoder.h.
 //
 // Floating-point notes, kept exact because the residuals are quantised from them:
-//   * single precision throughout; the console's fused multiply-adds are written as
-//     std::fma (one rounding) and every other product/sum as a plain f32 operation (the
+//   * single precision throughout; the console contracts multiply-add expressions
+//     to fused operations (one rounding) and every other product/sum as a plain f32 operation (the
 //     closed-loop prediction here is two products and a sum, NOT fused);
 //   * the float-to-int conversions truncate toward zero;
 //   * the comparisons keep the console's NaN behaviour (a NaN error magnitude is negated
@@ -16,7 +16,6 @@
 #include "rw/audio/core/Xas1Enc.h"
 #include "rw/audio/core/PlugIn.h" // System::Alloc
 
-#include <cmath>   // std::fma
 #include <cstring> // std::memcpy (the console's XMemCpy / memcpy)
 #include <new>     // placement new (the v-table install over the System allocation)
 
@@ -60,7 +59,7 @@ enum
 // from above only.
 s32 HeaderSample(f32 afSample)
 {
-    s32 liValue = static_cast<s32>(std::fma(afSample, KF_FULL_SCALE, KF_HEADER_ROUND)) & ~0xF;
+    s32 liValue = static_cast<s32>((afSample * KF_FULL_SCALE + KF_HEADER_ROUND)) & ~0xF;
     if (liValue > 0x7FF0)
         liValue = 0x7FF0;
     return liValue;
@@ -180,8 +179,8 @@ void Xas1Enc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
                 {
                     const f32 lfScaled = *lpIn * KF_FULL_SCALE;
                     lafScaled[liK][liN] = lfScaled;
-                    f32 lfError = std::fma(static_cast<f32>(liPrev1), lfC0,
-                                           static_cast<f32>(liPrev2) * lfC1) + lfScaled;
+                    f32 lfError = (static_cast<f32>(liPrev1) * lfC0 +
+                                   static_cast<f32>(liPrev2) * lfC1) + lfScaled;
                     if (!(lfError > KF_ZERO))
                         lfError = -lfError;
                     if (!(lfPeak >= lfError))
@@ -223,7 +222,10 @@ void Xas1Enc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
 
             for (s32 liJ = 0; liJ < KI_RESIDUALS; ++liJ)
             {
-                const f32 lfPrediction = lfC1 * lfHist2 + lfC0 * lfHist1;
+                // ARTIST rounds both products before the add (82BA777C..778C).
+                volatile f32 lfPrevious2Product = lfC1 * lfHist2;
+                volatile f32 lfPrevious1Product = lfC0 * lfHist1;
+                const f32 lfPrediction = lfPrevious2Product + lfPrevious1Product;
                 s32 liCode = QuantiseResidual((lfPrediction + lafScaled[liPredictor][liJ]) * lfScale);
                 if (liJ & 1)
                 {
