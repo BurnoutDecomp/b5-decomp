@@ -34,7 +34,7 @@ namespace CgsDev
 
         const s32 liMonitorId = miMaxMonitor;
         PerfMonGpuInstance& lrMonitor = maMonitors[liMonitorId];
-        lrMonitor = PerfMonGpuInstance();
+        std::memset(&lrMonitor, 0, sizeof(lrMonitor));
         std::strcpy(lrMonitor.macName, lpcString);
         lrMonitor.mColour = lrColour;
         lrMonitor.mfGPUBudget = lfGPUBudget;
