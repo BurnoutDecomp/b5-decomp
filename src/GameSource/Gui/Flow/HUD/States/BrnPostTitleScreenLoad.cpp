@@ -142,7 +142,7 @@ namespace BrnGui
     }
 
     // ---- the GuiCache boundary this state touches (X360 far members; same FLAG'd
-    // boundary discipline as BrnBootLegalBoundary.cpp) --------------------------------
+    // pending the native cache methods) ------------------------------------------------
     namespace
     {
         void CacheSetPostTitlePhase(GuiCache* /*lpCache*/) {}

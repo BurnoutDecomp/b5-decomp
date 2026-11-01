@@ -2,7 +2,6 @@ target_sources(${PROJECT_NAME}
     PRIVATE
         BrnBootAttract.cpp
         BrnBootLegal.cpp
-        BrnBootLegalBoundary.cpp
         BrnBootLoading.cpp
         BrnBootPreload.cpp
         BrnBootProfile.cpp
