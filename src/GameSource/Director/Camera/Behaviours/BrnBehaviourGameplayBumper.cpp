@@ -241,7 +241,8 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     const BrnPhysics::Vehicle::Wheel::RoadContact& lrFrontL = lrCar.maWheels[0].mRoadContact;
     const BrnPhysics::Vehicle::Wheel::RoadContact& lrFrontR = lrCar.maWheels[1].mRoadContact;
 
-    Vector3 lSurfaceUp = { 0.0f, 0.0f, 0.0f, 0.0f };
+    Vector3 lSurfaceUp;
+    lSurfaceUp.SetZero();
     if (lrFrontL.mbIsOnGround)
         lSurfaceUp = lSurfaceUp + lrFrontL.mNormal;
     if (lrFrontR.mbIsOnGround)
@@ -255,16 +256,16 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // exceeds it. The fallback is world up, built on the stack as {0, 1, 0}.
     const f32 KF_DEGENERATE_EPSILON = 1.1920928955078125e-07f;   // flt_82001770, dumped
     Vector3 lBlendedUp;
-    if (rw::math::fpu::Abs(lSurfaceUp.x) > KF_DEGENERATE_EPSILON
-        || rw::math::fpu::Abs(lSurfaceUp.y) > KF_DEGENERATE_EPSILON
-        || rw::math::fpu::Abs(lSurfaceUp.z) > KF_DEGENERATE_EPSILON)
+    if (rw::math::fpu::Abs(lSurfaceUp.mV.x) > KF_DEGENERATE_EPSILON
+        || rw::math::fpu::Abs(lSurfaceUp.mV.y) > KF_DEGENERATE_EPSILON
+        || rw::math::fpu::Abs(lSurfaceUp.mV.z) > KF_DEGENERATE_EPSILON)
     {
         lBlendedUp = rw::math::vpu::Normalize(lSurfaceUp);   // vrsqrtefp + two Newton steps
     }
     else
     {
         {
-            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 1.0f, 0.0f);
             lBlendedUp = lAggregateValue;
         }
     }
@@ -301,19 +302,20 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // owner reported.)
     Matrix44Affine lCameraFrame;
     {
-        const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(1.0f, 0.0f, 0.0f);
         lCameraFrame.xAxis = lAggregateValue;
     }
     {
-        const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 1.0f, 0.0f);
         lCameraFrame.yAxis = lAggregateValue;
     }
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 1.0f);
         lCameraFrame.zAxis = lAggregateValue;
     }
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+        const rw::math::vpu::VectorIntrinsic lAggregateValueLanes = { 0.0f, 0.0f, 0.0f, 1.0f };
+        const Vector3 lAggregateValue(lAggregateValueLanes);
         lCameraFrame.wAxis = lAggregateValue;
     }
 
@@ -339,21 +341,20 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     if (lrCar.mbResetCarTransform)                                 // sharedInfo +0x4AE
     {
         {
-            const Vector3 lAggregateValue = { 1.0f, 1.0f, 1.0f, 0.0f };
+            const Vector3 lAggregateValue(1.0f, 1.0f, 1.0f);
             lSprings = lAggregateValue;
         }
     }
     else
     {
         {
-            const Vector3 lAggregateValue = { mpParameters->mfPitchSpring,
-                            mpParameters->mfYawSpring,
-                            mpParameters->mfRollSpring * KF_ROLL_SPRING_SCALE,
-                            0.0f };
+            const Vector3 lAggregateValue(mpParameters->mfPitchSpring,
+                                                  mpParameters->mfYawSpring,
+                                                  mpParameters->mfRollSpring * KF_ROLL_SPRING_SCALE);
             lSprings = lAggregateValue;
         }
     }
-    const Vector3 lOneMinusSprings = Vector3{ 1.0f, 1.0f, 1.0f, 0.0f } - lSprings;
+    const Vector3 lOneMinusSprings = Vector3(1.0f, 1.0f, 1.0f) - lSprings;
 
     // @0x82226B64 -- sub_82222598, which splats three lanes through the scalar
     // Utils::GetSmallestDifferenceBetweenRadAngles @0x821F8988.
@@ -371,7 +372,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
 
     // @0x82226C40..0x82226C50: the response lands on the PITCH lane only (`vrlimi128 v0, v13,
     // 8, 0` inserts lane 0 of the broadcast into the diff angles).
-    lCameraDiffAngles.x += mpParameters->mfAccelerationResponse * mfDampenedAcceleration;
+    lCameraDiffAngles.mV.x += mpParameters->mfAccelerationResponse * mfDampenedAcceleration;
 
     // ---- 7. LOOKBACK: swing the frame through half a turn -----------------------------------
     // @0x82226C54..0x82226E14, gated on sharedInfo +0x26 == mRotationController.mbIsLookback.
@@ -397,12 +398,13 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // @0x82226E18..0x82226EB8. The Z reach is (mHalfExtent.z - mfZOffset), measured from the
     // REAR corner of the car's AABB while looking back and from the FRONT corner otherwise --
     // so the rear view rides the back bumper. Y is the authored offset; X is zero.
-    const f32 lfZReach = lrCar.mHalfExtent.z - mpParameters->mfZOffset;
-    const f32 lfEyeZ = lbLookback ? (lrInfo.mPlayerInfo.mAABB.mMin.z + lfZReach)
-                                  : (lrInfo.mPlayerInfo.mAABB.mMax.z - lfZReach);
+    const f32 lfZReach = lrCar.mHalfExtent.mV.z - mpParameters->mfZOffset;
+    const f32 lfEyeZ = lbLookback ? (lrInfo.mPlayerInfo.mAABB.mMin.mV.z + lfZReach)
+                                  : (lrInfo.mPlayerInfo.mAABB.mMax.mV.z - lfZReach);
 
     {
-        const Vector3 lAggregateValue = { 0.0f, mpParameters->mfYOffset, lfEyeZ, 1.0f };
+        const rw::math::vpu::VectorIntrinsic lAggregateValueLanes = { 0.0f, mpParameters->mfYOffset, lfEyeZ, 1.0f };
+        const Vector3 lAggregateValue(lAggregateValueLanes);
         lCameraFrame.wAxis = lAggregateValue;
     }
 
@@ -415,7 +417,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // back by the UNsprung remainder (`vxor` against the sign mask is the negation).
     mLastCameraAngles = mLastCameraAngles + rw::math::vpu::Mult(lCameraDiffAngles, lSprings);
     const Vector3 lResidualAngles = rw::math::vpu::Mult(
-        Vector3{ 0.0f, 0.0f, 0.0f, 0.0f } - lCameraDiffAngles, lOneMinusSprings);
+        Vector3(0.0f, 0.0f, 0.0f) - lCameraDiffAngles, lOneMinusSprings);
 
     // @0x82226EC0
     Utils::RotateMatrix44AffineByEulerAnglesZXY(lCameraFrame, lResidualAngles);
