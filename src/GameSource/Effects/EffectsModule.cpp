@@ -25,6 +25,7 @@
 #include "GameSource/AttribSys/Generated/classes/physicssurface.h"                 // [diag] Attrib::Gen::physicssurface (the [skid-bind] material line)
 #include "GameSource/AttribSys/Generated/classes/nativeparticleparams.h"           // Attrib::Gen::nativeparticleparams (LoadNativeParticleParams)
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"                  // Attrib::FindCollection
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attriblivelink.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"                                  // msPostFx (the colour-cube seed)
 #include "SharedClasses/Graphics/BrnEffectsData.h"
@@ -32,6 +33,7 @@
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"                           // gBrnWorldShaderConstantsFrameBringUp -- the live world white level
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"                          // BrnGame::DispatchThreadInputBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // CgsDev::Log::WriteToLog
 #include "rw/math/vpu/vector3_operation.h"                                         // rw::math::vpu::{operator-, Dot}
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"                             // rw::math::vpu::VecFloat (Random::RandomVecFloat)
@@ -64,27 +66,6 @@
 // prepare ladder (PrepareResources, ParticleModule::Prepare / LoadFXBundle) that makes the
 // trail system READY and PostWorldPreparePrepare that gives every surface its skid colours.
 //
-// ⚠ NOT RECONSTRUCTED ON THIS BUILD, EACH ONE LOUD (logs once when first reached, then
-// returns) -- the junkyard editor session and the post-fx effects frames
-// (GenerateRenderRequests -- the renderer's base-frame bring-up producer still stands in
-// for it).
-// ✅ UPDATED 2026-09-25 (FX-CRASHVFX): "and the prop-locator VFX" left this list with item 6b
-// (bd16ec8d: Update runs PropCollisions::UpdateLocatorVfx), and the jump-landing sparks
-// (FireJumpSparks, under DoSparkShower) are bodied with C2.
-// ✅ UPDATED 2026-09-25 (FX-CRASHVFX): this list used to open "the crash sparks / debris / glass /
-// crashing trail" and end with "the native simple-particle parameter push". All of those are
-// bodied now, each under its own banner below: the contact sparks and showers
-// (ProcessRaceCarContacts and its callees), the debris burst (HandleBurstDebris ->
-// ParticleModule::HandleFireDebrisBurstEvent), the glass smash (HandleGlassSmashEventsForAllCars),
-// the crashing trail (HandleCrashingTrail), BrnSimpleParticleArray::UpdateParams @0x8228C6E0 and the
-// showtime bounce (HandleShowtimeTrafficBounce).
-// ⚠️ CORRECTED 2026-09-06: this list used to end "...and the spark parameter copies into the
-// particle module's (placeholder) spark arrays". Both halves went stale in this wave --
-// maSparks[4] is no longer a placeholder (ParticleModule.h:668) and PushSparkParams below is
-// bodied, calling maSparks[i].UpdateParams for all four banks. None of the arms still
-// announcing is a trap: a CGS_ASSERT in JunkyardVfxStart would kill every junkyard boot on the
-// shared box; none is silent either -- each writes ONE `[effects] NOT RECONSTRUCTED: ...` line
-// to BrnGame.log so a run that needed the arm says so.
 // ============================================================================
 
 namespace BrnEffects
@@ -339,37 +320,37 @@ namespace
     // gSparkShowerControllerShowtimeBounce (:209) -- unk_82CDB020 <- thunk 0x82C4A260.
     const SparkShowerController gSparkShowerControllerShowtimeBounce =
     {
-        { { -45.0f, 45.0f, -45.0f, 45.0f }, { 8.0f, 16.0f, 0.800000012f, 1.20000005f }, { 0.5f,  1.25f, 0.100000001f, 0.100000001f } },
-        { { -80.0f, 80.0f, -80.0f, 80.0f }, { 8.0f, 32.0f, 0.800000012f, 1.20000005f }, { 0.75f, 1.75f, 0.5f,         0.5f } },
+        { Vector4(-45.0f, 45.0f, -45.0f, 45.0f), Vector4(8.0f, 16.0f, 0.800000012f, 1.20000005f), Vector4(0.5f, 1.25f, 0.100000001f, 0.100000001f) },
+        { Vector4(-80.0f, 80.0f, -80.0f, 80.0f), Vector4(8.0f, 32.0f, 0.800000012f, 1.20000005f), Vector4(0.75f, 1.75f, 0.5f, 0.5f) },
         0.0f, 44.6944427f, BrnParticle::Native::eSparkArray_Crashing
     };
     // gSparkShowerControllerWorldGrinding (:229) -- unk_82CDB090 <- thunk 0x82C4A398.
     const SparkShowerController gSparkShowerControllerWorldGrinding =
     {
-        { { 2.0f, 15.0f, -10.0f, 5.0f }, { 4.0f,  6.0f, 0.800000012f, 1.20000005f }, { 0.5f,  1.25f, 0.0f, 0.100000001f } },
-        { { 2.0f, 15.0f, -10.0f, 5.0f }, { 8.0f, 12.0f, 0.800000012f, 1.20000005f }, { 0.75f, 1.75f, 0.0f, 0.600000024f } },
+        { Vector4(2.0f, 15.0f, -10.0f, 5.0f), Vector4(4.0f, 6.0f, 0.800000012f, 1.20000005f), Vector4(0.5f, 1.25f, 0.0f, 0.100000001f) },
+        { Vector4(2.0f, 15.0f, -10.0f, 5.0f), Vector4(8.0f, 12.0f, 0.800000012f, 1.20000005f), Vector4(0.75f, 1.75f, 0.0f, 0.600000024f) },
         0.899999976f, 44.6944427f, BrnParticle::Native::eSparkArray_GrindingWorld
     };
     // gSparkShowerControllerVehicleGrinding (:249) -- unk_82CDB100 <- thunk 0x82C4A4E8.
     const SparkShowerController gSparkShowerControllerVehicleGrinding =
     {
-        { { -15.0f, 15.0f, -10.0f, 5.0f }, { 4.0f,  6.0f, 0.800000012f, 1.20000005f }, { 0.5f,  1.25f, 0.100000001f, 0.100000001f } },
-        { { -15.0f, 15.0f, -10.0f, 5.0f }, { 8.0f, 12.0f, 0.800000012f, 1.20000005f }, { 0.75f, 1.75f, 0.100000001f, 0.300000012f } },
+        { Vector4(-15.0f, 15.0f, -10.0f, 5.0f), Vector4(4.0f, 6.0f, 0.800000012f, 1.20000005f), Vector4(0.5f, 1.25f, 0.100000001f, 0.100000001f) },
+        { Vector4(-15.0f, 15.0f, -10.0f, 5.0f), Vector4(8.0f, 12.0f, 0.800000012f, 1.20000005f), Vector4(0.75f, 1.75f, 0.100000001f, 0.300000012f) },
         0.0f, 44.6944427f, BrnParticle::Native::eSparkArray_GrindingRaceCars
     };
     // gSparkShowerControllerCrashing (:269) -- unk_82CDB170 <- thunk 0x82C4A630.
     const SparkShowerController gSparkShowerControllerCrashing =
     {
-        { { 2.0f, 10.0f, -180.0f, 180.0f }, { 5.0f, 12.0f, 0.600000024f, 1.0f },         { 0.5f,  1.25f, 0.0f, 0.100000001f } },
-        { { 2.0f, 15.0f, -180.0f, 180.0f }, { 8.0f, 20.0f, 0.600000024f, 1.20000005f }, { 0.75f, 1.75f, 0.0f, 0.200000003f } },
+        { Vector4(2.0f, 10.0f, -180.0f, 180.0f), Vector4(5.0f, 12.0f, 0.600000024f, 1.0f),         Vector4(0.5f, 1.25f, 0.0f, 0.100000001f) },
+        { Vector4(2.0f, 15.0f, -180.0f, 180.0f), Vector4(8.0f, 20.0f, 0.600000024f, 1.20000005f), Vector4(0.75f, 1.75f, 0.0f, 0.200000003f) },
         2.0f, 44.6944427f, BrnParticle::Native::eSparkArray_Crashing
     };
     // gSparkShowerControllerJumpSparks (:289) -- unk_82CDB1E0 <- thunk 0x82C4A790 (FireJumpSparks' `addi r4, r10,
     // -0x4E20` at 0x82296BAC). The thunk leaves the array id at +0x68 zero: the world-grinding sparks.
     const SparkShowerController gSparkShowerControllerJumpSparks =
     {
-        { { 2.0f, 10.0f, 150.0f, 210.0f }, { 5.0f, 12.0f, 0.800000012f, 1.20000005f }, { 0.5f,  1.25f, 0.0f, 0.200000003f } },
-        { { 2.0f, 15.0f, 140.0f, 220.0f }, { 8.0f, 20.0f, 0.800000012f, 1.20000005f }, { 0.75f, 1.75f, 0.0f, 0.300000012f } },
+        { Vector4(2.0f, 10.0f, 150.0f, 210.0f), Vector4(5.0f, 12.0f, 0.800000012f, 1.20000005f), Vector4(0.5f, 1.25f, 0.0f, 0.200000003f) },
+        { Vector4(2.0f, 15.0f, 140.0f, 220.0f), Vector4(8.0f, 20.0f, 0.800000012f, 1.20000005f), Vector4(0.75f, 1.75f, 0.0f, 0.300000012f) },
         2.0f, 44.6944427f, BrnParticle::Native::eSparkArray_GrindingWorld
     };
 
@@ -402,7 +383,7 @@ namespace
             if (lfVelocity < mrInputVelocityMax)
             {
                 const f32 lfT = (lfVelocity - mrInputVelocityMin) / (mrInputVelocityMax - mrInputVelocityMin);
-                lfPerSecond = std::fma(lfT, mrSpawnCountPerSecMax - mrSpawnCountPerSecMin, mrSpawnCountPerSecMin);
+                lfPerSecond = lfT * (mrSpawnCountPerSecMax - mrSpawnCountPerSecMin) + mrSpawnCountPerSecMin;
             }
             return lfPerSecond * lfDt;
         }
@@ -421,125 +402,66 @@ namespace
     // dropped the call. The body below is still the console's, bit for bit; it just never runs.
     const bool KB_RACE_CAR_SPARKS_DISABLED = true;
 
-    // The vector idioms these bodies are built from, spelled the console's way so the results are
-    // its results to the bit (tests/run_fxcrashvfx_race_car_contacts.py runs them against the real
-    // words):
-    //   Dot3            `vmsum3fp128` -- FLAG (model): taken as ONE rounding of the exact sum. Two
-    //                   f32 products are exact in f64 and their f64 sum rounds far below f32's ulp.
-    //   Vnmsub          `vnmsubfp` / `vnmsubfp128`: -(a*c - b), rounded ONCE and then NEGATED --
-    //                   zeros included, so an exact cancellation is -0 where std::fma(-a, c, b)
-    //                   gives +0 (PowerPC: the fmsub result, negated; a QNaN keeps its sign).
-    //   RefinedRsqrt    `vrsqrtefp` + two Newton-Raphson steps, each `vmulfp` est*est, `vmulfp`
-    //                   est*0.5, `vnmsubfp` 1 - x*est^2 (fused), `vmaddfp` est + half*r (fused).
-    //                   FLAG (model): the hardware estimate is modelled as its correctly rounded
-    //                   value; the two refinements then pin the result.
-    //   RefinedRecip    `vrefp` + two steps of `vnmsubfp` 1 - est*x / `vmaddfp` est + est*r.
-    //   GuardedLength3  x * RefinedRsqrt(x) with the `vcmpeqfp`/`vsel` that maps x == 0 to 0.
-    f32 Dot3(const Vector3& lrA, const Vector3& lrB)
+    // ARTIST VMX dot, reciprocal-estimate refinements, and lane operations.
+    f32 Dot3(const Vector3& a, const Vector3& b)
     {
-        return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
-                              + static_cast<f64>(lrA.z) * lrB.z);
+        return __vmsum3fp(a.mV, b.mV).x;
     }
 
-    f32 Vnmsub(f32 lfA, f32 lfC, f32 lfB)
+    f32 RefinedRsqrt(f32 x)
     {
-        const f32 lfDifference = std::fma(lfA, lfC, -lfB);
-        return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        const __vector4 value = VecFloat(x).mV;
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(value);
+        __vector4 error = __vnmsubfp(value, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), error, estimate);
+        error = __vnmsubfp(value, __vmulfp(estimate, estimate), one);
+        return __vmaddfp(__vmulfp(estimate, half), error, estimate).x;
     }
 
-    f32 RefinedRsqrt(f32 lfX)
+    f32 RefinedRecip(f32 x)
     {
-        f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfX)));
-        for (u32 luStep = 0; luStep < 2u; ++luStep)
-        {
-            const f32 lfSquared  = lfEstimate * lfEstimate;
-            const f32 lfHalf     = lfEstimate * 0.5f;
-            const f32 lfResidual = Vnmsub(lfX, lfSquared, 1.0f);
-            lfEstimate = std::fma(lfHalf, lfResidual, lfEstimate);
-        }
-        return lfEstimate;
+        const __vector4 value = VecFloat(x).mV;
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        __vector4 estimate = __vrefp(value);
+        estimate = __vmaddfp(estimate, __vnmsubfp(estimate, value, one), estimate);
+        return __vmaddfp(estimate, __vnmsubfp(estimate, value, one), estimate).x;
     }
 
-    f32 RefinedRecip(f32 lfX)
+    f32 GuardedLength3(const Vector3& v)
     {
-        f32 lfEstimate = static_cast<f32>(1.0 / static_cast<f64>(lfX));
-        for (u32 luStep = 0; luStep < 2u; ++luStep)
-        {
-            const f32 lfResidual = Vnmsub(lfEstimate, lfX, 1.0f);
-            lfEstimate = std::fma(lfEstimate, lfResidual, lfEstimate);
-        }
-        return lfEstimate;
+        const __vector4 squared = __vmsum3fp(v.mV, v.mV);
+        const __vector4 zero = __vspltisw(0);
+        return __vsel(__vmulfp(squared, VecFloat(RefinedRsqrt(squared.x)).mV), zero, __vcmpeqfp(squared, zero)).x;
     }
 
-    f32 GuardedLength3(const Vector3& lrv)
+    Vector3 Scale4(const Vector3& v, f32 scale)
     {
-        const f32 lfSquared = Dot3(lrv, lrv);
-        return (lfSquared == 0.0f) ? 0.0f : lfSquared * RefinedRsqrt(lfSquared);
+        return Vector3(__vmulfp(v.mV, VecFloat(scale).mV));
     }
 
-    Vector3 Scale4(const Vector3& lrv, f32 lfScale)   // `vmulfp` by a splat, all four lanes
+    Vector3 Negate4(const Vector3& v)
     {
-        Vector3 lvResult;
-        lvResult.x = lrv.x * lfScale;
-        lvResult.y = lrv.y * lfScale;
-        lvResult.z = lrv.z * lfScale;
-        lvResult.w = lrv.w * lfScale;
-        return lvResult;
+        const __vector4 sign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        return Vector3(__vxor(v.mV, sign));
     }
 
-    Vector3 Negate4(const Vector3& lrv)                // `vxor` with splat(0x80000000): a sign flip
-    {
-        Vector3 lvResult;
-        lvResult.x = -lrv.x;
-        lvResult.y = -lrv.y;
-        lvResult.z = -lrv.z;
-        lvResult.w = -lrv.w;
-        return lvResult;
-    }
-
-    VecFloat Splat(f32 lf)
-    {
-        VecFloat lv;
-        lv.x = lf;
-        lv.y = lf;
-        lv.z = lf;
-        lv.w = lf;
-        return lv;
-    }
+    VecFloat Splat(f32 value) { return VecFloat(value); }
 
     // `fctidz` + `stfiwx`: the LOW WORD of a 64-bit truncation (NaN -> 0x8000000000000000 -> 0).
-    u32 FctidzLowWord(f32 lfValue)
+    u32 FctidzLowWord(f32 value)
     {
-        const f64 lfWide = static_cast<f64>(lfValue);
-        s64 liTruncated;
-        if (lfWide != lfWide)
-            liTruncated = static_cast<s64>(0x8000000000000000ULL);
-        else if (lfWide >= 9223372036854775808.0)
-            liTruncated = static_cast<s64>(0x7FFFFFFFFFFFFFFFULL);
-        else if (lfWide < -9223372036854775808.0)
-            liTruncated = static_cast<s64>(0x8000000000000000ULL);
-        else
-            liTruncated = static_cast<s64>(lfWide);
-        return static_cast<u32>(static_cast<u64>(liTruncated));
+        u32 result;
+        __stfiwx(__fctidz(value), 0, &result);
+        return result;
     }
 
-    // `lhs x rhs` spelled the console's way: P(a * P(b) - P(a) * b) with P = vpermwi 0x63 (y, z, x)
-    // -- one `vmulfp` m = a * P(b), then ONE `vnmsubfp` per lane, -(P(a) * b - m), then the permute
-    // back. w is P's w lane: -(a.w * b.w - a.w * b.w), which for finite w is an exact zero NEGATED:
-    // -0, as the console writes it (the crash shower frame's zAxis.w).
-    Vector3 CrossPermuted(const Vector3& lrA, const Vector3& lrB)
+    Vector3 CrossPermuted(const Vector3& a, const Vector3& b)
     {
-        // u = -(P(a) * b - m), m = a * P(b) rounded first.
-        const f32 lfU0 = Vnmsub(lrA.y, lrB.x, lrA.x * lrB.y);
-        const f32 lfU1 = Vnmsub(lrA.z, lrB.y, lrA.y * lrB.z);
-        const f32 lfU2 = Vnmsub(lrA.x, lrB.z, lrA.z * lrB.x);
-        const f32 lfU3 = Vnmsub(lrA.w, lrB.w, lrA.w * lrB.w);
-        Vector3 lvResult;
-        lvResult.x = lfU1;   // P(u) = (u.y, u.z, u.x, u.w)
-        lvResult.y = lfU2;
-        lvResult.z = lfU0;
-        lvResult.w = lfU3;
-        return lvResult;
+        const __vector4 ayzx = __vpermwi(a.mV, 0x63);
+        const __vector4 byzx = __vpermwi(b.mV, 0x63);
+        return Vector3(__vpermwi(__vnmsubfp(ayzx, b.mV, __vmulfp(a.mV, byzx)), 0x63));
     }
 
     // The debrisparams layout block. debrisparams inherits Attrib::Instance PRIVATELY and exposes no
@@ -570,17 +492,6 @@ namespace
             reinterpret_cast<const u8*>(lpSurfaceLayout) + KU_VFX_SURFACE_REF_OFFSET);
     }
 
-    // One line, once, for an arm this build does not carry. Never an assert: see the banner.
-    void LogNotReconstructed(bool& lrbLogged, const char* lpcWhat)
-    {
-        if (lrbLogged)
-            return;
-        lrbLogged = true;
-        char lacMsg[256];
-        std::snprintf(lacMsg, sizeof(lacMsg), "[effects] NOT RECONSTRUCTED: %s\n", lpcWhat);
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
-
     // =========================================================================================
     // [skid] THE HANDLE-WHEELS GATE PROBE  (BRN_SKID_PROBE=1)
     //
@@ -606,24 +517,7 @@ namespace
     // system READY, which says only that the wheel loop was never reached; it does not say
     // WHERE. Every early return in Update now names itself, so one run turns a guess into a
     // measurement. DELETE with the tyre-mark bring-up.
-    void SkidGateExit(const char* lpcWhere)
-    {
-        static const char* sapcSeen[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-        for (int li = 0; li < 8; ++li)
-        {
-            if (sapcSeen[li] == lpcWhere)
-                return;
-            if (sapcSeen[li] == 0)
-            {
-                sapcSeen[li] = lpcWhere;
-                char lacMsg[224];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[skid-gate] EffectsModule::Update RETURNED EARLY at: %s\n", lpcWhere);
-                CgsDev::Log::WriteToLog(lacMsg);
-                return;
-            }
-        }
-    }
+
 
     u32 gauSkidProbeFrame = 0;
 
@@ -845,53 +739,23 @@ bool EffectsModule::PrepareResources(EffectsIO::OutputBuffer* lpOutputBuffer)
             mSchemaResourceHandle.mpResourceMemory = lpVaultReply->mpResourceMemory;
             mSchemaResourceHandle.mpSourceEntry    = lpVaultReply->mpSourceEntry;
 
-            if (lbVaultResourceValid)
-            {
-                CgsResource::ResourceHandle lVaultHandle;
-                lVaultHandle.mpResourceMemory = lpVaultReply->mpResourceMemory;
-                lVaultHandle.mpSourceEntry    = lpVaultReply->mpSourceEntry;
-                lpOutputBuffer->GetVaultRequestInterface()->RegisterVault(
-                    &mReceiverQueue, lVaultHandle, 1, CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT);
-            }
-            else
-            {
-                static bool sbLogged = false;
-                LogNotReconstructed(sbLogged,
-                    "EffectsModule::PrepareResources' RegisterVault -- SKIPPED because "
-                    "'PostFx/postfxvault.bin' failed to load (the loader logs 'pool 7: -1 "
-                    "resources'), so the acquire reply carries a null resource. ASSET/LOADER "
-                    "defect, not an effects one");
-            }
+            CgsResource::ResourceHandle lVaultHandle;
+            lVaultHandle.mpResourceMemory = lpVaultReply->mpResourceMemory;
+            lVaultHandle.mpSourceEntry = lpVaultReply->mpSourceEntry;
+            lpOutputBuffer->GetVaultRequestInterface()->RegisterVault(
+                &mReceiverQueue, lVaultHandle, 1, CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT);
 
-            // The second reply: its main-memory pointer IS the default colour cube
-            // (`**(reply + 24)` -- the resource's main-memory lane). Same tolerance, same
-            // reason: a failed dictionary load double-dereferences a null here.
             const AcquireResponse* lpCubeReply = GetNextAcquireResourceResponse(lpVaultReply);
-            if (lpCubeReply != 0 && lpCubeReply->mpResourceMemory != 0)
+            rw::graphics::postfx::ColourCube* lpDefaultCube =
+                *reinterpret_cast<rw::graphics::postfx::ColourCube* const*>(lpCubeReply->mpResourceMemory);
+            msPostFx.SetTintBlendNumber(KI_DEFAULT_TINT_BLEND_NUMBER);
+            for (int li = 0; li < KI_DEFAULT_TINT_BLEND_NUMBER; ++li)
             {
-                rw::graphics::postfx::ColourCube* lpDefaultCube =
-                    *reinterpret_cast<rw::graphics::postfx::ColourCube* const*>(lpCubeReply->mpResourceMemory);
-                // dword_82FAF6E8 = 5; flt_82FAF6D0..E0 = 0.2f; dword_82FAF6BC..CC = the cube.
-                msPostFx.SetTintBlendNumber(KI_DEFAULT_TINT_BLEND_NUMBER);
-                for (int li = 0; li < KI_DEFAULT_TINT_BLEND_NUMBER; ++li)
-                {
-                    msPostFx.SetTintBlendFactor(li, KF_DEFAULT_TINT_FACTOR);
-                    msPostFx.SetColourCube(li, lpDefaultCube);
-                }
+                msPostFx.SetTintBlendFactor(li, KF_DEFAULT_TINT_FACTOR);
+                msPostFx.SetColourCube(li, lpDefaultCube);
             }
-            else
-            {
-                static bool sbLogged = false;
-                LogNotReconstructed(sbLogged,
-                    "EffectsModule::PrepareResources' default colour-cube seed -- SKIPPED "
-                    "(the colourcubedictionary acquire reply carries no resource)");
-            }
-
             mReceiverQueue.Clear();
-            // If RegisterVault was skipped there is no reply to wait for, so the next stage
-            // would park for ever -- go straight to DONE in that case.
-            meResourceStage = lbVaultResourceValid ? E_RESOURCESTAGE_REGISTERING_VAULT
-                                                   : E_RESOURCESTAGE_DONE;
+            meResourceStage = E_RESOURCESTAGE_REGISTERING_VAULT;
         }
         break;
     case E_RESOURCESTAGE_REGISTERING_VAULT:
@@ -993,10 +857,7 @@ bool EffectsModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllo
         // 2026-09-06 -- SparkArray is a real type now, so this has a named destination.
         PushSparkParams();
 
-        // Attrib::SetEditNotifier(sub_822793C8): the attrib live-edit hook that raises
-        // mResetAttribs on the module. NOT RECONSTRUCTED: there is no attrib editor on
-        // this build (SetEditNotifier has no PC body); nothing can raise the flag, so
-        // Update's LoadNativeParticleParams re-push never fires. Recorded, not faked.
+        Attrib::SetEditNotifier(&EffectsModule::OnAttribEdit);
     }
         // fall through
     case E_PREPARESTAGE_POST_PREPARE_PREPARE:
@@ -1054,23 +915,6 @@ bool EffectsModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllo
 // =============================================================================
 void EffectsModule::PushSparkParams()
 {
-    // [DIAG] BRN_SPARK_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Says ONCE
-    // whether each of the four sparkeffect collections actually RESOLVED. Every one of the
-    // thirteen values below is a divisor or a gate downstream, and a collection that did not
-    // resolve hands back Attrib::DefaultDataArea(0x90) -- 144 bytes of zeros that read as a
-    // perfectly plausible "the parameters are all zero" rather than as a load failure.
-    //
-    // CHANGE-GATED, NOT ONCE-ONLY. A once-only line here LIED: PushSparkParams runs
-    // from Prepare BEFORE 'PostFx/postfxvault.bin' registers and again from Update
-    // after it has, so the first call legitimately reads four zeros and a once-only
-    // print freezes that reading for the whole run. It printed "376835=0 ... 554431=0"
-    // on the very run in which the vault had just been ported and every value WAS
-    // live. It now prints whenever the validity word CHANGES, and prints the numbers,
-    // so "resolved" is checkable against the vault's own bytes rather than asserted.
-    {
-        static u32 suLastSparkValidity = 0xFFFFFFFFu;
-    }
-
     for (u32 luArray = 0; luArray < KU_NUM_SPARK_PARAMS; ++luArray)
     {
         const Attrib::Gen::sparkeffect& lrParams = mSparkParams[luArray];
@@ -1089,52 +933,7 @@ void EffectsModule::PushSparkParams()
             lrParams.SparkTextureName());           // attrib +0x50 -> array +0x8C
     }
 
-    // =====================================================================================
-    // [DIAG] BRN_SPARK_FORCE=1 -- NOT IN THE X360 BINARY. OFF BY DEFAULT. DELETE-WHEN the
-    // sparkeffect collections resolve.
-    //
-    // The same shape and the same purpose as BRN_CRUMPLE_FORCE: when every input measures
-    // zero, the honest next question is whether the code downstream has any authority at
-    // all, and the only way to ask it is to force the input and look. MEASURED on this
-    // build (see the "[spark] sparkeffect collections" line above): all four collections
-    // report 0, i.e. Attrib::DefaultDataArea handed back 144 bytes of zeros, so every array
-    // runs with a ZERO lifetime, ZERO radius, ZERO motion-blur time and a NULL texture name.
-    // A zero lifetime alone empties the banks on the frame after the spark is born and makes
-    // RenderBank's own age gate reject every sample, so nothing downstream can ever be
-    // exercised while it stands.
-    //
-    // ⚠ EVERY NUMBER BELOW IS THIS INSTRUMENT'S, NOT THE CONSOLE'S. They are not a guess at
-    // the authored values and must never be shipped as one: they exist so the geometry half
-    // can be measured, and they go away with the collection load.
-    {
-        static bool sbProbed = false;
-        static bool sbForce  = false;
-        if (!sbProbed)
-        {
-            sbProbed = true;
-            if (sbForce)
-                CgsDev::Log::WriteToLog("[spark] PARAMETER FORCE ARMED (BRN_SPARK_FORCE) -- "
-                                        "the values below are the INSTRUMENT'S, not the console's\n");
-        }
-        if (sbForce)
-        {
-            const rw::math::vpu::Vector4 lColour    = { 1.0f, 0.75f, 0.30f, 1.0f };
-            const rw::math::vpu::Vector4 lLifetimes = { 1.20f, 1.00f, 0.80f, 0.60f };
-            for (u32 luArray = 0; luArray < KU_NUM_SPARK_PARAMS; ++luArray)
-            {
-                mParticleModule.maSparks[luArray].UpdateParams(
-                    -9.81f,   // gravity
-                    0.35f,    // bounce
-                    0.10f,    // motion-blur window, seconds
-                    0.05f,    // spark radius, metres
-                    1.00f,    // drag initial velocity scale
-                    0.20f,    // drag terminal velocity scale
-                    0.50f,    // drag duration, seconds
-                    lColour, lColour, lColour, lColour, lLifetimes,
-                    "fxspark");
-            }
-        }
-    }
+
 }
 
 // =============================================================================
@@ -1159,39 +958,13 @@ void EffectsModule::LoadNativeParticleParams()
         {  9, "561870" }, { 10, "561869" }, { 11, "561872" }, { 12, "561871" },
     };
 
-    const bool lbWitness = !sbWitnessed && BrnParticle::Native::SimpleFxDiagArmed();
-    u32 luValidMask = 0;
-
     for (u32 luEntry = 0; luEntry < 12u; ++luEntry)
     {
         const NativeParticleParamEntry& lrEntry = KAA_NATIVE_PARTICLE_PARAMS[luEntry];
         const Attrib::Gen::nativeparticleparams lParams(Attrib::StringToKey(lrEntry.lpcCollectionKey), 0);
-        if (lParams.IsValid())
-            luValidMask |= (1u << lrEntry.muArrayIndex);
-        if (lbWitness)
-        {
-            char lacMsg[224];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[simplefx] nativeparticleparams %s -> array %u: valid=%d tex=%s life=%.3f blend=%u "
-                "tiles=%ux%u\n",
-                lrEntry.lpcCollectionKey, lrEntry.muArrayIndex, lParams.IsValid() ? 1 : 0,
-                (lParams.TextureName() != 0) ? lParams.TextureName() : "(null)",
-                static_cast<double>(lParams.LifeTime()), lParams.BlendMode(),
-                lParams.TilesWide(), lParams.TilesHigh());
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
         mParticleModule.maSimpleParticles[lrEntry.muArrayIndex].UpdateParams(lParams);
     }
 
-    if (lbWitness)
-    {
-        sbWitnessed = true;
-        char lacMsg[128];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-            "[simplefx] LoadNativeParticleParams: valid mask=0x%04X (0x1FFE == arrays 1..12)\n",
-            luValidMask);
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
 }
 
 // =============================================================================
@@ -1247,34 +1020,6 @@ void EffectsModule::PostWorldPreparePrepare()
     // The real fault was the visualfxsurface constructor in the loop below taking an
     // Attrib::Collection* where the console passes an Attrib::RefSpec -- see visualfxsurface.h.
     //
-    // [skid-bind] BOTH SIDES OF THE RESOLVE, once. Never control flow: the console has no
-    // guard here, and an invented early-out is what hid the real defect for two runs.
-    {
-        static bool sbLoggedBind = false;
-        if (!sbLoggedBind)
-        {
-            sbLoggedBind = true;
-            void* const lpSurface1 = mSurfaceList.Surfaces(1);
-            const Attrib::RefSpec* const lpRef1 =
-                static_cast<const Attrib::RefSpec*>(lpSurface1);
-            char lacMsg[400];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[skid-bind] PostWorldPreparePrepare: key=%016llX prevCollection=%p "
-                "boundCollectionKey=%016llX Num_Surfaces=%d Surfaces(1)=%p "
-                "ref1{class=%016llX collection=%016llX resolved=%d}\n",
-                static_cast<unsigned long long>(
-                    Attrib::StringToKey(KAC_WORLD_SURFACELIST_COLLECTION)),
-                static_cast<const void*>(lpSurfaceCollection),
-                static_cast<unsigned long long>(mSurfaceList.GetCollection()),
-                mSurfaceList.Num_Surfaces(),
-                lpSurface1,
-                lpRef1 ? static_cast<unsigned long long>(lpRef1->GetClassKey()) : 0ull,
-                lpRef1 ? static_cast<unsigned long long>(lpRef1->GetCollectionKey()) : 0ull,
-                lpRef1 ? (lpRef1->HasResolvedCollection() ? 1 : 0) : -1);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
-
     {
         // Surface element 1's leading 4-vector must carry a magnitude: |lane| > epsilon in
         // at least one lane (vandc sign-clear, vcmpgtfp against unk_8200D990, CR6 "all
@@ -1308,7 +1053,7 @@ void EffectsModule::PostWorldPreparePrepare()
     // or (b) all 20 resolving to ONE shared block (the class's default layout), which would
     // make every surface read identically whatever the data says. DISTINCT vfxLayout pointers
     // settle it in favour of (a); identical ones convict the resolve.
-    static bool sbLoggedSurfaces = false;
+
 
     for (u32 luSurface = 0; luSurface < static_cast<u32>(mSurfaceList.Num_Surfaces()); ++luSurface)
     {
@@ -1325,65 +1070,14 @@ void EffectsModule::PostWorldPreparePrepare()
         Attrib::Gen::visualfxsurface lVfx(lrVfxRef, 0);
         const void* lpVfxData = lVfx.GetAttributeData();
 
-        if (!sbLoggedSurfaces)
-        {
-            const u8* lpBytes = static_cast<const u8*>(lpVfxData);
-            // Name the MATERIAL as well as the record: a surface whose SkidMarksEnabled is
-            // false is only believable once you can see what kind of surface it is. Grip /
-            // roughness / drag come off the same surface's physicssurface ref, which
-            // VehicleManager::ReadSurfaceProperties already reads the same way.
-            Attrib::Gen::physicssurface lPhysics(lSurface.PhysicsSurface(), 0);
-            char lacMsg[460];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[skid-bind] surf %2u: surfCol=%016llX surfLayout=%p "
-                "vfxRef{class=%016llX col=%016llX res=%d} vfxCol=%016llX vfxLayout=%p "
-                "thr=%.4f en=%d smoke=%d/%d type=%d grip=%.3f rough=%.3f drag=%.3f\n",
-                luSurface,
-                static_cast<unsigned long long>(lSurface.GetCollection()),
-                lSurface.GetAttributeData(),
-                static_cast<unsigned long long>(lrVfxRef.GetClassKey()),
-                static_cast<unsigned long long>(lrVfxRef.GetCollectionKey()),
-                lrVfxRef.HasResolvedCollection() ? 1 : 0,
-                static_cast<unsigned long long>(lVfx.GetCollection()),
-                lpVfxData,
-                static_cast<double>(ReadF32(lpVfxData, KU_VFX_SKID_MARK_THRESHOLD)),
-                lpBytes ? lpBytes[KU_VFX_SKID_MARKS_ENABLED] : -1,
-                lpBytes ? lpBytes[0x4C] : -1,
-                lpBytes ? lpBytes[0x4D] : -1,
-                static_cast<int>(ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID)),
-                static_cast<double>(lPhysics.Grip()),
-                static_cast<double>(lPhysics.Roughness()),
-                static_cast<double>(lPhysics.LinearDrag()));
-            CgsDev::Log::WriteToLog(lacMsg);
 
-            // ⭐ AND THE WHOLE RECORD, as raw words. The four fields above are read at
-            // CONSOLE byte offsets into a serialised layout block (0x48 threshold, 0x4C/0x4D
-            // smoke, 0x4E skid-marks, 0x58 type -- from HandleWheels @0x82296C80 and
-            // WheelStateMachine::Update @0x82293EB8). Believing "en is authored false" means
-            // believing those offsets land where they are supposed to, so print the block and
-            // let the next reader check the placement instead of taking it on trust: words 0-3
-            // and 4-7 are the two skid-mark colours, so plausible 0..1 floats there vouch for
-            // the whole record's alignment.
-            if (lpBytes != 0)
-            {
-                char lacDump[420];
-                int liLen = std::snprintf(lacDump, sizeof(lacDump), "[skid-bind] surf %2u raw:", luSurface);
-                for (u32 luWord = 0; luWord < 24u && liLen > 0 && liLen < static_cast<int>(sizeof(lacDump)) - 12; ++luWord)
-                {
-                    liLen += std::snprintf(lacDump + liLen, sizeof(lacDump) - static_cast<size_t>(liLen),
-                                           " %08X", ReadU32(lpVfxData, luWord * 4u));
-                }
-                std::snprintf(lacDump + liLen, sizeof(lacDump) - static_cast<size_t>(liLen), "\n");
-                CgsDev::Log::WriteToLog(lacDump);
-            }
-        }
 
         mParticleModule.TrailSystem().UpdateTrailType(
             ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID),
             ReadVector4(lpVfxData, KU_VFX_SKID_MARK_START_COLOUR),
             ReadVector4(lpVfxData, KU_VFX_SKID_MARK_END_COLOUR));
     }
-    sbLoggedSurfaces = true;
+
 }
 
 // =============================================================================
@@ -1463,14 +1157,12 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
     // +0x2C340 -- the debug component's "bypass all VFX processing" byte.
     if (mDebugComponent.BypassAllVFXProcessing())
     {
-        SkidGateExit("mDebugComponent.BypassAllVFXProcessing()");
         return;
     }
     // ARTIST 0x8229EC60..0x8229EC8C computes this+0x2C351 using addis/addi, reads the
     // "Dump running Lion effects" latch, clears it when set, and returns before either IO lock.
     if (mDebugComponent.ConsumeDumpRunningLionEffects())
     {
-        SkidGateExit("mDebugComponent.ConsumeDumpRunningLionEffects()");
         return;
     }
     lpOutputBuffer->LockForWrite();
@@ -1538,7 +1230,6 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
 
     if (!lbRunStep)
     {
-        SkidGateExit("the suspend/resume ladder (siEffectsSuspendState != 0)");
         lpInputBuffer->UnlockForRead();
         lpOutputBuffer->UnlockForWrite();
         return;
@@ -1563,8 +1254,6 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
 
     if (mEffectsSerialiser.GetStaticLayout() == 0)
     {
-        SkidGateExit("mEffectsSerialiser.GetStaticLayout() == 0 -- the replay module never "
-                     "gave the effects serialiser its static buffer");
         lpInputBuffer->UnlockForRead();
         lpOutputBuffer->UnlockForWrite();
         return;
@@ -1755,7 +1444,7 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
     ActiveRaceCarData&  lrData  = *lrHelper.ActiveRaceCar();
     const RaceCarState* lpState = lrHelper.RaceCarState();
 
-    ++gauSkidProbeFrame;   // [skid probe] one tick per HandleWheels entry
+
 
     for (u32 luWheel = 0; luWheel < ActiveRaceCarData::KU_NUM_WHEELS; ++luWheel)
         lrData.mWheelStateMachine[luWheel].Update(lrCarState, lrHelper);
@@ -1882,7 +1571,7 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
         // [skid probe] the edge latch, at the ONE point where lbTrailEnded is final for this
         // wheel this frame (every arm above has run, including the two that never look a
         // surface up). See gabSkidProbeWasLaying's banner. Costs one byte-store when unarmed.
-        gabSkidProbeWasLaying[luWheel & 3u] = !lbTrailEnded;
+
 
         lrMachine.SetPreviousPosition(lrWheel.mRoadContact.mPosition);
     }
@@ -2152,6 +1841,7 @@ void EffectsModule::GenerateRenderRequests(const EffectsIO::DispatchInputBuffer*
     const BrnDirector::Camera::CameraEffects& lrCameraFx = lrCamera.GetEffects();
     const BrnDirector::Camera::MotionBlurData& lrCameraBlur = lrCameraFx.mMotionBlurData;
     const BrnDirector::Camera::DepthOfField& lrCameraDof = lrCamera.GetDepthOfField();
+    const EffectsDebugComponent& lDebug = mDebugComponent;
 
     const bool lbUseBlur = lrCameraBlur.IsActive()
         || (lDebug.mbMotionBlurEnableUserSettings && lDebug.mbMotionBlur);
@@ -2313,19 +2003,15 @@ void EffectsModule::HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContac
     if (sbSparkContactsDisabled)
         return;
 
-    ++BrnParticle::gauSparkContactCalls;   // [DIAG] DELETE-WHEN-STABLE
 
     // The console computes Length(mFrictionStress) with vrsqrtefp + two Newton steps and a vsel
     // that maps a zero vector to 0 rather than NaN; sqrtf does the same on both counts.
     const Vector3& lrFriction = lrContact.mFrictionStress;      // contact + 0x10
-    const f32 lfFrictionLength = sqrtf(lrFriction.x * lrFriction.x
-                                     + lrFriction.y * lrFriction.y
-                                     + lrFriction.z * lrFriction.z);
+    const f32 lfFrictionLength = GuardedLength3(lrFriction);
 
     // `vcmpgtfp. v0, v9, v0` -- threshold > length rejects. Note the sense: EQUAL passes.
     if (lfMinFrictionStress > lfFrictionLength)
     {
-        ++BrnParticle::gauSparkContactRejected;   // [DIAG] DELETE-WHEN-STABLE
         return;
     }
 
@@ -2337,19 +2023,15 @@ void EffectsModule::HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContac
     // wall while the car runs along x) has x == y == 0 and z != 0 and must NOT fire. Written as
     // `!(|lane| > eps)` so a NaN lane counts as "not greater", the way the vector compare's
     // all-false bit counts it.
-    const bool lbFrictionIsZero = !(std::fabs(lrFriction.x) > KF_RWMATH_IS_ZERO_EPSILON)
-                               && !(std::fabs(lrFriction.y) > KF_RWMATH_IS_ZERO_EPSILON)
-                               && !(std::fabs(lrFriction.z) > KF_RWMATH_IS_ZERO_EPSILON);
-    const bool lbNormalIsZero   = !(std::fabs(lrContact.mNormalStress.x) > KF_RWMATH_IS_ZERO_EPSILON)
-                               && !(std::fabs(lrContact.mNormalStress.y) > KF_RWMATH_IS_ZERO_EPSILON)
-                               && !(std::fabs(lrContact.mNormalStress.z) > KF_RWMATH_IS_ZERO_EPSILON);
-
-    // [DIAG] BRN_EFFECTS_DIAG=1 -- NOT IN THE CONSOLE BINARY. DELETE-WHEN-STABLE. Prints the two
-    // stress vectors for every contact whose x and y lanes are both zero, so a run can attest
-    // which lane carried the stress on the contacts that used to trip the assert above, and
-    // whether any contact reaches here with a genuinely all-zero stress.
-    {
-    }
+    const __vector4 sign = __vslw(__vspltisw(-1), __vspltisw(-1));
+    const __vector4 epsilon = VecFloat(KF_RWMATH_IS_ZERO_EPSILON).mV;
+    const __vector4 frictionXYZ = __vpermwi(__vandc(lrFriction.mV, sign), VPERMWI_CONST(0, 1, 2, 0));
+    const __vector4 normalXYZ = __vpermwi(__vandc(lrContact.mNormalStress.mV, sign), VPERMWI_CONST(0, 1, 2, 0));
+    unsigned int frictionCR, normalCR;
+    __vcmpgtfpR(frictionXYZ, epsilon, &frictionCR);
+    __vcmpgtfpR(normalXYZ, epsilon, &normalCR);
+    const bool lbFrictionIsZero = (frictionCR & 0x20u) != 0;
+    const bool lbNormalIsZero = (normalCR & 0x20u) != 0;
 
     CGS_ASSERT(!lbFrictionIsZero, "RwMathVPU::IsZero( lContact.mFrictionStress ) == false");
     CGS_ASSERT(!lbNormalIsZero,   "RwMathVPU::IsZero( lContact.mNormalStress ) == false");
@@ -2372,14 +2054,11 @@ void EffectsModule::HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContac
     // produce a NaN segment. It cannot: the threshold test three lines up already rejected that
     // case for every caller (both pass a positive threshold, 7.5 and 0.005). Adding a guard here
     // would be a defensive arm the binary does not have.
-    const f32 lfInvLength = 1.0f / lfFrictionLength;
-
+    const __vector4 squared = __vmsum3fp(lrFriction.mV, lrFriction.mV);
+    const __vector4 direction = __vmulfp(lrFriction.mV, VecFloat(RefinedRsqrt(squared.x)).mV);
     BrnParticle::SpawnSparksAlongLineEvent lEvent;
-    lEvent.mvStartPos = lrContact.mPointOnA;                                  // contact + 0x40
-    lEvent.mvEndPos.x = lrContact.mPointOnA.x + lrFriction.x * lfInvLength * lfLineLength;
-    lEvent.mvEndPos.y = lrContact.mPointOnA.y + lrFriction.y * lfInvLength * lfLineLength;
-    lEvent.mvEndPos.z = lrContact.mPointOnA.z + lrFriction.z * lfInvLength * lfLineLength;
-    lEvent.mvEndPos.w = lrContact.mPointOnA.w + lrFriction.w * lfInvLength * lfLineLength;
+    lEvent.mvStartPos = lrContact.mPointOnA;
+    lEvent.mvEndPos = Vector3(__vmaddfp(direction, VecFloat(lfLineLength).mV, lrContact.mPointOnA.mV));
     lEvent.mvVelocity = lvVelocity;                                           // the v1 argument
     lEvent.mfCurrentTime                 = lfTime;                            // f2
     lEvent.mfNumSparks                   = lfNumSparks;
@@ -2387,17 +2066,16 @@ void EffectsModule::HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContac
     // start above whatever plane the caller nominated. BOTH current callers pass the contact
     // point's OWN y, so this is 0 for them; it is not hard-coded to 0 because the parameter is
     // real and the race-car drain (not landed here) has a genuine ground plane to pass.
-    lEvent.mfHeightAboveGroundOfStartPos = lrContact.mPointOnA.y - lfGroundPositionY;
+    lEvent.mfHeightAboveGroundOfStartPos = lrContact.mPointOnA.mV.y - lfGroundPositionY;
     lEvent.mfVelocityInheritanceMin      = lrParams.VelocityInheritanceMin();
     lEvent.mfVelocityInheritanceMax      = lrParams.VelocityInheritanceMax();
     lEvent.meSparkType                   = leSparkType;
     lEvent.mbIsCrashing                  = lbIsCrashing;
 
-    const bool lbPosted = mParticleModule.mInterThreadEventQueue.AddEventSafe(
+    mParticleModule.mInterThreadEventQueue.AddEventSafe(
         &lEvent, BrnParticle::eParticleEvent_SpawnSparksAlongLine,
-        static_cast<s32>(sizeof(BrnParticle::SpawnSparksAlongLineEvent)));   // li r6, 0x50
-    if (lbPosted)
-        ++BrnParticle::gauSparkContactPosted;   // [DIAG] DELETE-WHEN-STABLE
+        static_cast<s32>(sizeof(BrnParticle::SpawnSparksAlongLineEvent)));
+
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -2414,7 +2092,6 @@ void EffectsModule::ProcessHingedPartContacts(
          const EffectsModuleParams& lrParams)
 {
     const s32 liLength = lpQueue->GetLength();          // `lwz r24, 8(r27)`
-    BrnParticle::gauSparkHingedSeen += static_cast<u32>(liLength > 0 ? liLength : 0);   // [DIAG]
 
     for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
     {
@@ -2425,18 +2102,14 @@ void EffectsModule::ProcessHingedPartContacts(
         // Only the two EXHAUST part ids spark here (84 / 85 -- see the constants' note).
         if (lContact.meType != KI_HINGED_SPARK_PART_EXHAUST_A && lContact.meType != KI_HINGED_SPARK_PART_EXHAUST_B)
             continue;
-        ++BrnParticle::gauSparkHingedTyped;   // [DIAG] DELETE-WHEN-STABLE
 
         const Vector3& lrFriction = lContact.mFrictionStress;
-        const f32 lfFrictionLength = sqrtf(lrFriction.x * lrFriction.x
-                                         + lrFriction.y * lrFriction.y
-                                         + lrFriction.z * lrFriction.z);
+        const f32 lfFrictionLength = GuardedLength3(lrFriction);
 
         // `vcmpgtfp. v0, v0, v9` -- the caller-side pre-filter, the same 7.5 it then hands
         // HandleSparkContacts as its own threshold (flt_8200DD18).
         if (!(lfFrictionLength > KF_HINGED_MIN_FRICTION_STRESS))
             continue;
-        ++BrnParticle::gauSparkHingedStress;   // [DIAG] DELETE-WHEN-STABLE
 
         // The surface lookup: (mCollisionTagB's low half >> 4) & 0x3F indexes mSurfaceList's
         // "Surfaces" array; the surface's layout carries the visualfxsurface RefSpec at +0x10.
@@ -2460,7 +2133,7 @@ void EffectsModule::ProcessHingedPartContacts(
                             BrnParticle::Native::eSparkArray_BodyPart_Contact,  // r5 == 3
                             lrParams.mDt,                                 // f1
                             lrParams.mTime,                               // f2
-                            lContact.mPointOnA.y,                         // f3 (=> height 0)
+                            lContact.mPointOnA.mV.y,                         // f3 (=> height 0)
                             KF_HINGED_MIN_FRICTION_STRESS,                // f4
                             lfSurfaceSparkScale,                          // f5
                             false);                                       // the stack byte
@@ -2486,7 +2159,6 @@ void EffectsModule::ProcessCarContactQueues(const EffectsModuleParams& lrParams,
                                             const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpy,
                                             const BrnDirector::Camera::Camera* lpCamera)
 {
-    ++BrnParticle::gauSparkContactQueueCalls;   // [DIAG] DELETE-WHEN-STABLE
 
     const BrnReplays::BaseSerialiser::EMode leReplayMode = mEffectsSerialiser.GetMode();
     const bool lbForceRaceCarPass =
@@ -2545,12 +2217,7 @@ namespace
     // 0x82292108..0x82292140).
     Vector4 LerpShowerArgs(const Vector4& lrSmall, const Vector4& lrLarge, const VecFloat& lrvSize)
     {
-        Vector4 lv;
-        lv.x = std::fma(lrLarge.x - lrSmall.x, lrvSize.x, lrSmall.x);
-        lv.y = std::fma(lrLarge.y - lrSmall.y, lrvSize.y, lrSmall.y);
-        lv.z = std::fma(lrLarge.z - lrSmall.z, lrvSize.z, lrSmall.z);
-        lv.w = std::fma(lrLarge.w - lrSmall.w, lrvSize.w, lrSmall.w);
-        return lv;
+        return Vector4(__vmaddfp(__vsubfp(lrLarge.mV, lrSmall.mV), lrvSize.mV, lrSmall.mV));
     }
 
     bool IsReplayPlayback(BrnReplays::BaseSerialiser::EMode leMode)     // `cmpwi 4 / 5 / 6`
@@ -2571,64 +2238,45 @@ namespace
     // playback) and appends to (while recording) INLINE -- the layout class publishes these offsets
     // and has no accessor for either. 0x82297C80 `lwz r10, 0x34(r3)`; 0x82297F4C..0x82297FC4.
     typedef BrnReplays::EffectsSerialiserStaticLayout EffectsStaticLayout;
+    CGS_STATIC_ASSERT((sizeof(EffectsStaticLayout) == 0x12B0), "Effects replay layout size");
+    CGS_STATIC_ASSERT((offsetof(EffectsStaticLayout, mShowtimeBouncePosition) == 0x10), "Bounce position offset");
+    CGS_STATIC_ASSERT((offsetof(EffectsStaticLayout, mNumGlassEvents) == 0x30), "Glass count offset");
+    CGS_STATIC_ASSERT((offsetof(EffectsStaticLayout, mNumCarContacts) == 0x34), "Contact count offset");
+    CGS_STATIC_ASSERT((offsetof(EffectsStaticLayout, maContactEntityA) == 0xD30), "Contact entity A offset");
+    CGS_STATIC_ASSERT((offsetof(EffectsStaticLayout, maContactNormals) == 0xEB0), "Contact normals offset");
+    CGS_STATIC_ASSERT((offsetof(EffectsStaticLayout, maContactPoints) == 0x10B0), "Contact points offset");
 
-    s32 NumRecordedCarContacts(const EffectsStaticLayout* lpLayout)
+
+    s32 NumRecordedCarContacts(const EffectsStaticLayout* layout)
     {
-        return *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpLayout)
-                                             + EffectsStaticLayout::KI_OFF_NUM_CONTACTS);
+        return layout->mNumCarContacts;
     }
 
-    void RecordCarContact(EffectsStaticLayout* lpLayout, const BrnPhysics::ContactSpy::RaceCarContact& lrContact)
+    void RecordCarContact(EffectsStaticLayout* layout, const BrnPhysics::ContactSpy::RaceCarContact& contact)
     {
-        u8* const lpBase = reinterpret_cast<u8*>(lpLayout);
-        s32& lriCount = *reinterpret_cast<s32*>(lpBase + EffectsStaticLayout::KI_OFF_NUM_CONTACTS);
-        if (lriCount == 32)                    // `cmpwi cr6, r11, 0x20 ; beq` -- a full table drops it
+        const s32 slot = layout->mNumCarContacts;
+        if (slot == 32)
             return;
-        const s32 liSlot = lriCount;
-        *reinterpret_cast<u32*>(lpBase + EffectsStaticLayout::KI_OFF_CONTACT_FIELD1 + 4 * liSlot) = lrContact.mEntityIdA.muValue;
-        *reinterpret_cast<u32*>(lpBase + EffectsStaticLayout::KI_OFF_CONTACT_FIELD2 + 4 * liSlot) = lrContact.mEntityIdB.muValue;
-        *reinterpret_cast<u32*>(lpBase + EffectsStaticLayout::KI_OFF_CONTACT_FIELD3 + 4 * liSlot) = lrContact.mCollisionTagB.muValue;
-        std::memcpy(lpBase + EffectsStaticLayout::KI_OFF_CONTACT_VEC_A + 16 * liSlot, &lrContact.mNormal, 16);
-        // `vrlimi128 v0, v13, 1, 0`: the point's x, y, z over the slot's own w (the active flag
-        // UpdateCarContact sets and GetCarContact reads back).
-        f32* const lpSlotB = reinterpret_cast<f32*>(lpBase + EffectsStaticLayout::KI_OFF_CONTACT_VEC_B + 16 * liSlot);
-        lpSlotB[0] = lrContact.mPointOnA.x;
-        lpSlotB[1] = lrContact.mPointOnA.y;
-        lpSlotB[2] = lrContact.mPointOnA.z;
-        lriCount = liSlot + 1;
+        layout->maContactEntityA[slot] = contact.mEntityIdA.muValue;
+        layout->maContactEntityB[slot] = contact.mEntityIdB.muValue;
+        layout->maContactTagB[slot] = contact.mCollisionTagB.muValue;
+        layout->maContactNormals[slot].mV = contact.mNormal.mV;
+        layout->maContactPoints[slot].mV = __vrlimi(layout->maContactPoints[slot].mV, contact.mPointOnA.mV, 0xE, 0);
+        layout->mNumCarContacts = slot + 1;
     }
 
     // The two identity rows (0x82181500 / 0x82181510) the world-grinding frame crosses the normal with.
-    Vector3 AxisX()
-    {
-        Vector3 lv;
-        lv.x = 1.0f; lv.y = 0.0f; lv.z = 0.0f; lv.w = 0.0f;
-        return lv;
-    }
-    Vector3 AxisY()
-    {
-        Vector3 lv;
-        lv.x = 0.0f; lv.y = 1.0f; lv.z = 0.0f; lv.w = 0.0f;
-        return lv;
-    }
+    Vector3 AxisX() { return Vector3(1.0f, 0.0f, 0.0f); }
+    Vector3 AxisY() { return Vector3(0.0f, 1.0f, 0.0f); }
 
-    // [DIAG] BRN_SIMPLEFX_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Capped lines naming
-    // each shower / burst / dust spawn the drain fires, so a live run can say which contact made what.
-    bool RaceCarContactDiagArmed()
-    {
-        return BrnParticle::Native::SimpleFxDiagArmed();
-    }
-    u32 guRaceCarContactDiagLines = 0;
+
 }
 
 Vector4 SparkShowerController::GetLateralAngleMinMaxForwardAngleMinMax(VecFloat lvSize) const
 {
     Vector4 lv = LerpShowerArgs(mSmallArgs.mLateralAngleMinMaxForwardAngleMinMax,
                                 mLargeArgs.mLateralAngleMinMaxForwardAngleMinMax, lvSize);
-    lv.x *= KF_DEGREES_TO_RADIANS;
-    lv.y *= KF_DEGREES_TO_RADIANS;
-    lv.z *= KF_DEGREES_TO_RADIANS;
-    lv.w *= KF_DEGREES_TO_RADIANS;
+    lv.mV = __vmulfp(lv.mV, VecFloat(KF_DEGREES_TO_RADIANS).mV);
     return lv;
 }
 
@@ -2701,7 +2349,7 @@ void EffectsModule::HandleRaceCarRaceCarSparks(f32 lfDt,
     lEvent.meSparkType          = BrnParticle::Native::eSparkArray_GrindingRaceCars;    // `li r8, 1`
     lEvent.mfCurrentTime        = lfTime;
     lEvent.mfNumSparks          = gSparkSpawnParamsRaceCarVehicle.VelocityToSpawnCount(lfSpeed, lfDt);
-    lEvent.mfHeightAboveGround  = lvPosition.y - lfGroundPositionY;     // splat(y) - splat(ground)
+    lEvent.mfHeightAboveGround  = lvPosition.mV.y - lfGroundPositionY;     // splat(y) - splat(ground)
     lEvent.mfVelocityInheritMin = lrSparkParams.VelocityInheritanceMin();
     lEvent.mfVelocityInheritMax = lrSparkParams.VelocityInheritanceMax();
     lEvent.mbIsCrashRelated     = false;                                // `stb r10 (0)`
@@ -2733,23 +2381,17 @@ void EffectsModule::HandleVehicleVehicleSparks(Vector3 lvPosition,
         return;
 
     const f32 lfWobble = static_cast<f32>(std::cos(static_cast<f64>(lfTime * KF_GRINDING_WOBBLE_FREQUENCY)));
-    const f32 lfRate   = std::fma(lfWobble, KF_GRINDING_WOBBLE_AMPLITUDE, KF_GRINDING_WOBBLE_CENTRE);
+    const f32 lfRate   = lfWobble * KF_GRINDING_WOBBLE_AMPLITUDE + KF_GRINDING_WOBBLE_CENTRE;
     BurstAccumulator& lrBurst = lrActiveRaceCar.GetBurstAccumulatorWorldGrinding();
     const u32 luNumSparks = lrBurst.Update((lfRate * lfSpeed) * lfDt, lfTime, mRandom);
     if (luNumSparks == 0u)
         return;
 
     // (v + other) * 0.5, then * K_VECTOR3_1_0_1 (unk_82FAC200) -- the horizontal part.
-    Vector3 lvMean;
-    lvMean.x = (lrVelocity.x + lvOtherVelocity.x) * 0.5f;
-    lvMean.y = (lrVelocity.y + lvOtherVelocity.y) * 0.5f;
-    lvMean.z = (lrVelocity.z + lvOtherVelocity.z) * 0.5f;
-    lvMean.w = (lrVelocity.w + lvOtherVelocity.w) * 0.5f;
-    Vector3 lvHorizontal;
-    lvHorizontal.x = lvMean.x * 1.0f;
-    lvHorizontal.y = lvMean.y * 0.0f;
-    lvHorizontal.z = lvMean.z * 1.0f;
-    lvHorizontal.w = lvMean.w * 0.0f;
+    const __vector4 half = __vcfsx(__vspltisw(1), 1);
+    const Vector3 lvMean(__vmulfp(__vaddfp(lrVelocity.mV, lvOtherVelocity.mV), half));
+    const Vector4 horizontalMask(1.0f, 0.0f, 1.0f, 0.0f);
+    const Vector3 lvHorizontal(__vmulfp(lvMean.mV, horizontalMask.mV));
 
     const f32 lfT = lrBurst.GetBurstSizeAsInterpolatorBetweenMinAndMax(luNumSparks);
     const f32 lfSize = (lfT * lfT) * lfT;
@@ -2757,10 +2399,7 @@ void EffectsModule::HandleVehicleVehicleSparks(Vector3 lvPosition,
     const Vector3 lvHorizontalHat = Scale4(lvHorizontal, RefinedRsqrt(Dot3(lvHorizontal, lvHorizontal)));
 
     Matrix44Affine lFrame;
-    lFrame.xAxis.x = lvHorizontalHat.z;
-    lFrame.xAxis.y = 0.0f;
-    lFrame.xAxis.z = lvHorizontalHat.x;
-    lFrame.xAxis.w = lvHorizontalHat.z;
+    lFrame.xAxis.mV = __vrlimi(__vpermwi(lvHorizontalHat.mV, VPERMWI_CONST(2, 1, 0, 2)), __vspltisw(0), 4, 0);
     lFrame.yAxis   = AxisY();
     lFrame.zAxis   = lvHorizontalHat;
     lFrame.wAxis   = lvPosition;
@@ -2801,30 +2440,21 @@ void EffectsModule::HandleBurstDebris(const RCEntityActiveRaceCarOutputInterface
     {
         const f32 lfScaleMin = LayoutFloat(lpLayout, KU_DEBRIS_SCALE_AT_MIN_SPEED);
         const f32 lfT = (lfSpeed - lfMinSpeed) / (lfMidSpeed - lfMinSpeed);
-        lfScale = std::fma(lfT, LayoutFloat(lpLayout, KU_DEBRIS_SCALE_AT_MID_SPEED) - lfScaleMin, lfScaleMin);
+        lfScale = lfT * (LayoutFloat(lpLayout, KU_DEBRIS_SCALE_AT_MID_SPEED) - lfScaleMin) + lfScaleMin;
     }
     else
     {
         const f32 lfMaxSpeed = LayoutFloat(lpLayout, KU_DEBRIS_MAX_SPEED);
         const f32 lfScaleMid = LayoutFloat(lpLayout, KU_DEBRIS_SCALE_AT_MID_SPEED);
-        const f32 lfClamped  = (lfSpeed - lfMaxSpeed >= 0.0f) ? lfMaxSpeed : lfSpeed;     // fsel
+        const f32 lfClamped  = static_cast<f32>(__fsel(lfSpeed - lfMaxSpeed, lfMaxSpeed, lfSpeed));     // fsel
         const f32 lfT = (lfClamped - lfMidSpeed) / (lfMaxSpeed - lfMidSpeed);
-        lfScale = std::fma(lfT, LayoutFloat(lpLayout, KU_DEBRIS_SCALE_AT_MAX_SPEED) - lfScaleMid, lfScaleMid);
+        lfScale = lfT * (LayoutFloat(lpLayout, KU_DEBRIS_SCALE_AT_MAX_SPEED) - lfScaleMid) + lfScaleMid;
     }
     if (!(lfScale > KF_MIN_EFFECT_SCALE))
         return;
 
-    Vector3 lvSpawnPosition;
-    lvSpawnPosition.x = std::fma(lvNormal.x, KF_DEBRIS_BURST_NORMAL_OFFSET, lvPosition.x);
-    lvSpawnPosition.y = std::fma(lvNormal.y, KF_DEBRIS_BURST_NORMAL_OFFSET, lvPosition.y);
-    lvSpawnPosition.z = std::fma(lvNormal.z, KF_DEBRIS_BURST_NORMAL_OFFSET, lvPosition.z);
-    lvSpawnPosition.w = std::fma(lvNormal.w, KF_DEBRIS_BURST_NORMAL_OFFSET, lvPosition.w);
-
-    Vector4 lvColour;
-    lvColour.x = lrColour.red;
-    lvColour.y = lrColour.green;
-    lvColour.z = lrColour.blue;
-    lvColour.w = lrColour.alpha;
+    const Vector3 lvSpawnPosition(__vmaddfp(lvNormal.mV, VecFloat(KF_DEBRIS_BURST_NORMAL_OFFSET).mV, lvPosition.mV));
+    const Vector4 lvColour(lrColour.red, lrColour.green, lrColour.blue, lrColour.alpha);
 
     Vector3 lvHalfExtents;
     std::memcpy(&lvHalfExtents, lpLayout + KU_DEBRIS_EMITTER_HALF_EXTENTS, sizeof(lvHalfExtents));
@@ -2928,7 +2558,7 @@ void EffectsModule::ProcessRaceCarContacts(
 
                 const f32 lfTime   = lrParams.mTime;
                 const f32 lfWobble = static_cast<f32>(std::cos(static_cast<f64>(lfTime * KF_GRINDING_WOBBLE_FREQUENCY)));
-                const f32 lfRate   = std::fma(lfWobble, KF_GRINDING_WOBBLE_AMPLITUDE, KF_GRINDING_WOBBLE_CENTRE);
+                const f32 lfRate   = ((lfWobble) * (KF_GRINDING_WOBBLE_AMPLITUDE) + (KF_GRINDING_WOBBLE_CENTRE));
                 BurstAccumulator& lrBurst = lrCarA.GetBurstAccumulatorWorldGrinding();
                 const u32 luNumSparks = lrBurst.Update(((lfSpeed * lrParams.mDt) * lfRate) * lfSurfaceScale,
                                                        lfTime, mRandom);
@@ -2954,16 +2584,7 @@ void EffectsModule::ProcessRaceCarContacts(
 
                 DoSparkShower(gSparkShowerControllerWorldGrinding, Splat(lfSize), lFrame, lrVelocity,
                               lfTime, lrCarA.GetGroundPositionY(), luNumSparks);
-                if (RaceCarContactDiagArmed() && guRaceCarContactDiagLines < KU_EFFECTS_DIAG_MAX_LINES)
-                {
-                    ++guRaceCarContactDiagLines;
-                    char lacMsg[200];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[racecar-contact] world-grinding shower car=%d sparks=%u size=%.3f speed=%.2f t=%.3f\n",
-                        static_cast<int>(leIndexA), static_cast<unsigned>(luNumSparks),
-                        static_cast<double>(lfSize), static_cast<double>(lfSpeed), static_cast<double>(lfTime));
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
+
             }
             else if (luOwnerB == 1u)
             {
@@ -3040,11 +2661,7 @@ void EffectsModule::ProcessRaceCarContacts(
             // surface (the normal component taken out), normalised through `vrefp` with no guard.
             const Vector3& lrVelocity = lpStateA->mLinearVelocity;
             const Vector3 lvNormalPart = Scale4(lvNormal, Dot3(lvNormal, lrVelocity));
-            Vector3 lvTangential;
-            lvTangential.x = lrVelocity.x - lvNormalPart.x;
-            lvTangential.y = lrVelocity.y - lvNormalPart.y;
-            lvTangential.z = lrVelocity.z - lvNormalPart.z;
-            lvTangential.w = lrVelocity.w - lvNormalPart.w;
+            const Vector3 lvTangential(__vsubfp(lrVelocity.mV, lvNormalPart.mV));
             const f32 lfTangentialSpeed = GuardedLength3(lvTangential);
             const Vector3 lvTangentialHat = Scale4(lvTangential, RefinedRecip(lfTangentialSpeed));
 
@@ -3072,23 +2689,13 @@ void EffectsModule::ProcessRaceCarContacts(
                 const f32 lfFloored   = (-lfRamp >= 0.0f) ? 0.0f : lfRamp;
                 const f32 lfSaturated = (1.0f - lfFloored >= 0.0f) ? lfFloored : 1.0f;
                 mafTimeUntilNextSparksBurst[leIndexA] =
-                    std::fma(mRandom.RandomFloat(), KF_CRASH_SHOWER_INTERVAL_RANGE, KF_CRASH_SHOWER_INTERVAL_MIN);
+                    ((mRandom.RandomFloat()) * (KF_CRASH_SHOWER_INTERVAL_RANGE) + (KF_CRASH_SHOWER_INTERVAL_MIN));
                 const f32 lfSize  = (lfSaturated * (mRandom.RandomFloat() + 1.0f)) * 0.5f;
-                const u32 luCount = FctidzLowWord(std::fma(lfSize, KF_CRASH_SHOWER_COUNT_RANGE, KF_CRASH_SHOWER_COUNT_BASE));
+                const u32 luCount = FctidzLowWord(((lfSize) * (KF_CRASH_SHOWER_COUNT_RANGE) + (KF_CRASH_SHOWER_COUNT_BASE)));
 
                 DoSparkShower(gSparkShowerControllerCrashing, Splat(lfSize * lfSize), lFrame, lvTangential,
                               lrParams.mTime, lrCarA.GetGroundPositionY(), luCount);
-                if (RaceCarContactDiagArmed() && guRaceCarContactDiagLines < KU_EFFECTS_DIAG_MAX_LINES)
-                {
-                    ++guRaceCarContactDiagLines;
-                    char lacMsg[200];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[racecar-contact] crash shower car=%d owner=%u sparks=%u size=%.3f vt=%.2f t=%.3f\n",
-                        static_cast<int>(leIndexA), static_cast<unsigned>(luOwnerB), static_cast<unsigned>(luCount),
-                        static_cast<double>(lfSize), static_cast<double>(lfTangentialSpeed),
-                        static_cast<double>(lrParams.mTime));
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
+
             }
         }
 
@@ -3107,32 +2714,20 @@ void EffectsModule::ProcessRaceCarContacts(
             continue;
 
         f32& lrfAccumulated = mafAccumulatedParticleCountCrash[leIndexA];
-        lrfAccumulated = std::fma(lfSpeed * lrParams.mDt, KF_CRASH_DUST_PER_METRE, lrfAccumulated);
+        lrfAccumulated = ((lfSpeed * lrParams.mDt) * (KF_CRASH_DUST_PER_METRE) + (lrfAccumulated));
         const u32 luNumParticles = FctidzLowWord(lrfAccumulated);
 
-        Vector3 lvBoxLow;
-        lvBoxLow.x = lvPoint.x - KF_CRASH_DUST_BOX_BELOW_X;
-        lvBoxLow.y = lvPoint.y - KF_CRASH_DUST_BOX_BELOW_Y;
-        lvBoxLow.z = lvPoint.z - KF_CRASH_DUST_BOX_BELOW_Z;
-        lvBoxLow.w = lvPoint.w - 0.0f;
-        Vector3 lvBoxHigh;
-        lvBoxHigh.x = lvPoint.x + KF_CRASH_DUST_BOX_ABOVE;
-        lvBoxHigh.y = lvPoint.y + KF_CRASH_DUST_BOX_ABOVE;
-        lvBoxHigh.z = lvPoint.z + KF_CRASH_DUST_BOX_ABOVE;
-        lvBoxHigh.w = lvPoint.w + 0.0f;
+        const Vector3 boxBelow(KF_CRASH_DUST_BOX_BELOW_X, KF_CRASH_DUST_BOX_BELOW_Y, KF_CRASH_DUST_BOX_BELOW_Z);
+        const Vector3 boxAbove(KF_CRASH_DUST_BOX_ABOVE, KF_CRASH_DUST_BOX_ABOVE, KF_CRASH_DUST_BOX_ABOVE);
+        const Vector3 lvBoxLow(__vsubfp(lvPoint.mV, boxBelow.mV));
+        const Vector3 lvBoxHigh(__vaddfp(lvPoint.mV, boxAbove.mV));
         Utils::Vector3Randomiser lPositionRandomiser;
         lPositionRandomiser.Prepare(lvBoxLow, lvBoxHigh);
 
-        Vector4 lvVelocityLow;
-        lvVelocityLow.x = KF_CRASH_DUST_VELOCITY_MIN_XZ;
-        lvVelocityLow.y = KF_CRASH_DUST_VELOCITY_MIN_Y;
-        lvVelocityLow.z = KF_CRASH_DUST_VELOCITY_MIN_XZ;
-        lvVelocityLow.w = KF_CRASH_DUST_INHERIT_MIN;
-        Vector4 lvVelocityHigh;
-        lvVelocityHigh.x = KF_CRASH_DUST_VELOCITY_MAX_XZ;
-        lvVelocityHigh.y = KF_CRASH_DUST_VELOCITY_MAX_Y;
-        lvVelocityHigh.z = KF_CRASH_DUST_VELOCITY_MAX_XZ;
-        lvVelocityHigh.w = KF_CRASH_DUST_INHERIT_MAX;
+        const Vector4 lvVelocityLow(KF_CRASH_DUST_VELOCITY_MIN_XZ, KF_CRASH_DUST_VELOCITY_MIN_Y,
+                                    KF_CRASH_DUST_VELOCITY_MIN_XZ, KF_CRASH_DUST_INHERIT_MIN);
+        const Vector4 lvVelocityHigh(KF_CRASH_DUST_VELOCITY_MAX_XZ, KF_CRASH_DUST_VELOCITY_MAX_Y,
+                                     KF_CRASH_DUST_VELOCITY_MAX_XZ, KF_CRASH_DUST_INHERIT_MAX);
         Utils::Vector4Randomiser lVelocityRandomiser;
         lVelocityRandomiser.Prepare(lvVelocityLow, lvVelocityHigh);
 
@@ -3140,17 +2735,7 @@ void EffectsModule::ProcessRaceCarContacts(
         if (luNumParticles == 0u)
             continue;
 
-        if (RaceCarContactDiagArmed() && guRaceCarContactDiagLines < KU_EFFECTS_DIAG_MAX_LINES)
-        {
-            ++guRaceCarContactDiagLines;
-            char lacMsg[200];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[racecar-contact] crash dust car=%d n=%u speed=%.2f carry=%.3f t=%.3f at (%.2f,%.2f,%.2f)\n",
-                static_cast<int>(leIndexA), static_cast<unsigned>(luNumParticles), static_cast<double>(lfSpeed),
-                static_cast<double>(lrfAccumulated), static_cast<double>(lrParams.mTime),
-                static_cast<double>(lvPoint.x), static_cast<double>(lvPoint.y), static_cast<double>(lvPoint.z));
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
+
 
         for (u32 luParticle = luNumParticles; luParticle != 0u; --luParticle)
         {
@@ -3160,13 +2745,9 @@ void EffectsModule::ProcessRaceCarContacts(
             const Vector4 lvVelocity4 = lVelocityRandomiser.RandomiseXYZW(mRandom);
             // `vmaddcfp128 v2, v127, v2, v0`: the car's velocity * the draw's w (the inherited share)
             // + the draw, all four lanes, fused.
-            Vector3 lvVelocity;
-            lvVelocity.x = std::fma(lrVelocity.x, lvVelocity4.w, lvVelocity4.x);
-            lvVelocity.y = std::fma(lrVelocity.y, lvVelocity4.w, lvVelocity4.y);
-            lvVelocity.z = std::fma(lrVelocity.z, lvVelocity4.w, lvVelocity4.z);
-            lvVelocity.w = std::fma(lrVelocity.w, lvVelocity4.w, lvVelocity4.w);
+            const Vector3 lvVelocity(__vmaddfp(lrVelocity.mV, __vspltw(lvVelocity4.mV, 3), lvVelocity4.mV));
             mParticleModule.SpawnSimple(lvPosition, lvVelocity, BrnParticle::Native::eParticleArray_CrashImpactDust,
-                                        std::fma(lfSizeFraction, KF_CRASH_DUST_SIZE_RANGE, KF_CRASH_DUST_SIZE_MIN),
+                                        ((lfSizeFraction) * (KF_CRASH_DUST_SIZE_RANGE) + (KF_CRASH_DUST_SIZE_MIN)),
                                         lrParams.mTime, KF_CRASH_DUST_ALPHA);
         }
     }
@@ -3186,7 +2767,7 @@ void EffectsModule::ProcessRaceCarContacts(
 //            (`vmsum3fp128` / `vrsqrtefp` + two steps / `vcmpeqfp` + `vsel`); z = x cross y (the permute
 //            idiom); w = the contact point -- the crash shower's frame, built the same way
 //   gate     the guarded length (lfSpeedAlongGround) must be above flt_82013720 (4.4694443 m/s): `fcmpu ;
-//            ble` 0x82296B70 -- a NaN speed returns, before the draw
+//            ble` 0x82296B70 -- unordered speed also returns
 //   shower   ONE RandomFloat() t (0x82296BB0..0x82296C04): the controller lerp t * t (`fmuls`, splatted
 //            by `lvlx` + `vspltw`), the rate fma(t, 40, 50.5) per metre, times the speed, times the step
 //            (two `fmuls`), the count the fctidz low word; then DoSparkShower(gSparkShowerControllerJumpSparks,
@@ -3201,10 +2782,6 @@ void EffectsModule::FireJumpSparks(f32 lfCurrentTimeStep,
                                    f32 lfGroundPositionY,
                                    const CollisionTag& lCollisionTag)
 {
-    // [DIAG] BRN_JUMP_DIAG=1 -- NOT IN THE X360 BINARY, 32 lines. DELETE-WHEN-STABLE. The live witness of the
-    // jump-landing sparks (FX-CRASHVFX C2): each call's verdict -- the surface gate, the speed gate or the shower.
-    static u32 suDiagLines = 0;
-
     const u8 lSurfaceID = static_cast<u8>(
         (static_cast<u16>(lCollisionTag.muValue) >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK);
     void* lpSurfaceRef = mSurfaceList.Surfaces(lSurfaceID);
@@ -3216,27 +2793,14 @@ void EffectsModule::FireJumpSparks(f32 lfCurrentTimeStep,
         LayoutFloat(static_cast<const u8*>(lVFXSurface.GetAttributeData()), KU_VFX_SPARK_SCALE);
     if (lfGrindingRate < KF_MIN_EFFECT_SCALE)
     {
-        if (lbDiag)
-        {
-            ++suDiagLines;
-            char lacMsg[160];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[jump-sparks] t=%.3f surface %u spark scale %.4f below 0.01: no shower\n",
-                          static_cast<double>(lfCurrentTime), static_cast<unsigned>(lSurfaceID),
-                          static_cast<double>(lfGrindingRate));
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
+
         return;
     }
 
     const Vector3  lXAxis           = lWSContactNormal;
     const Vector3& lRaceCarVelocity = lpRaceCarState->mLinearVelocity;                  // +0x330
     const Vector3  lvNormalPart     = Scale4(lXAxis, Dot3(lXAxis, lRaceCarVelocity));
-    Vector3 lVelocityProjectedOntoPlane;
-    lVelocityProjectedOntoPlane.x = lRaceCarVelocity.x - lvNormalPart.x;
-    lVelocityProjectedOntoPlane.y = lRaceCarVelocity.y - lvNormalPart.y;
-    lVelocityProjectedOntoPlane.z = lRaceCarVelocity.z - lvNormalPart.z;
-    lVelocityProjectedOntoPlane.w = lRaceCarVelocity.w - lvNormalPart.w;
+    const Vector3 lVelocityProjectedOntoPlane(__vsubfp(lRaceCarVelocity.mV, lvNormalPart.mV));
     const f32 lfSpeedAlongGround = GuardedLength3(lVelocityProjectedOntoPlane);         // lVelocityMagnitude, lane 0
     const Vector3 lYAxis = Scale4(lVelocityProjectedOntoPlane, RefinedRecip(lfSpeedAlongGround));
 
@@ -3248,36 +2812,15 @@ void EffectsModule::FireJumpSparks(f32 lfCurrentTimeStep,
 
     if (!(lfSpeedAlongGround > KF_JUMP_SPARKS_MIN_SPEED))
     {
-        if (lbDiag)
-        {
-            ++suDiagLines;
-            char lacMsg[160];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[jump-sparks] t=%.3f surface %u speed along the ground %.3f not above 4.4694: no shower\n",
-                          static_cast<double>(lfCurrentTime), static_cast<unsigned>(lSurfaceID),
-                          static_cast<double>(lfSpeedAlongGround));
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
+
         return;
     }
 
     const f32 lfRandom      = mRandom.RandomFloat();
-    const f32 lfNumPerMetre = std::fma(lfRandom, KF_JUMP_SPARKS_PER_METRE_RANGE, KF_JUMP_SPARKS_PER_METRE_MIN);
+    const f32 lfNumPerMetre = lfRandom * KF_JUMP_SPARKS_PER_METRE_RANGE + KF_JUMP_SPARKS_PER_METRE_MIN;
     const f32 lfNumToSpawn  = (lfNumPerMetre * lfSpeedAlongGround) * lfCurrentTimeStep;
     const u32 luNumToSpawn  = FctidzLowWord(lfNumToSpawn);
-    if (lbDiag)
-    {
-        ++suDiagLines;
-        char lacMsg[224];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-                      "[jump-sparks] t=%.3f surface %u scale %.3f speed %.2f -> DoSparkShower count %u lerp %.3f "
-                      "at (%.2f, %.2f, %.2f)\n",
-                      static_cast<double>(lfCurrentTime), static_cast<unsigned>(lSurfaceID),
-                      static_cast<double>(lfGrindingRate), static_cast<double>(lfSpeedAlongGround), luNumToSpawn,
-                      static_cast<double>(lfRandom * lfRandom), static_cast<double>(lWSContactPoint.x),
-                      static_cast<double>(lWSContactPoint.y), static_cast<double>(lWSContactPoint.z));
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
+
     DoSparkShower(gSparkShowerControllerJumpSparks, Splat(lfRandom * lfRandom), lEmitterTransform,
                   lVelocityProjectedOntoPlane, lfCurrentTime, lfGroundPositionY, luNumToSpawn);
 }
@@ -3341,38 +2884,11 @@ void EffectsModule::ProcessCarDetatchedPartContacts(
         }
 
         const Vector3& lrVelocity = lContact.mVelocity;                       // copy + 0x60
-        const f32 lfSpeed = sqrtf(lrVelocity.x * lrVelocity.x
-                                + lrVelocity.y * lrVelocity.y
-                                + lrVelocity.z * lrVelocity.z);
+        const f32 lfSpeed = GuardedLength3(lrVelocity);
 
         if (lContact.meType == KI_DETACHED_DUST_PART_TYPE)
         {
             // ---- the dust arm (0x822930E8..0x8229333C) ----
-            // [DIAG] BRN_SIMPLEFX_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The gate
-            // census: every eWHEEL contact this drain sees and how many of them move faster than
-            // the gate below, logged at each power-of-two count (bounded). On retail data
-            // `moving` stays 0 -- see the banner -- and this line is how a live run shows it.
-            {
-                static const bool sbDustGateDiag = BrnParticle::Native::SimpleFxDiagArmed();
-                static u32 suDustGateSeen = 0, suDustGateMoving = 0, suDustGateLines = 0;
-                if (sbDustGateDiag)
-                {
-                    ++suDustGateSeen;
-                    if (lfSpeed > KF_DETACHED_DUST_MIN_SPEED)
-                        ++suDustGateMoving;
-                    if (suDustGateLines < KU_EFFECTS_DIAG_MAX_LINES
-                        && (suDustGateSeen & (suDustGateSeen - 1u)) == 0u)
-                    {
-                        ++suDustGateLines;
-                        char lacMsg[192];
-                        std::snprintf(lacMsg, sizeof(lacMsg),
-                            "[simplefx] dust gate: eWHEEL contacts=%u moving=%u (this one: slot=%u speed=%.3f)\n",
-                            suDustGateSeen, suDustGateMoving, static_cast<unsigned>(luAccumulatorSlot),
-                            static_cast<double>(lfSpeed));
-                        CgsDev::Log::WriteToLog(lacMsg);
-                    }
-                }
-            }
             // `vcmpgtfp.` against splat(flt_82001DA0) and a branch on the ALL-TRUE bit: a NaN
             // speed fails, like any speed at or under 0.5.
             if (!(lfSpeed > KF_DETACHED_DUST_MIN_SPEED))
@@ -3382,33 +2898,12 @@ void EffectsModule::ProcessCarDetatchedPartContacts(
             // the count is taken (`stfsx` at 0x8229316C), so a frame that does not reach a whole
             // particle still banks its fraction.
             f32& lrfAccumulated = mafAccumulatedParticleCountTyres[luAccumulatorSlot];   // +0x2D014
-            lrfAccumulated = std::fma(lrParams.mDt, KF_DETACHED_DUST_PER_SECOND, lrfAccumulated);
+            lrfAccumulated = ((lrParams.mDt) * (KF_DETACHED_DUST_PER_SECOND) + (lrfAccumulated));
 
             const s32 liNumParticles = FloorToS32Fctiwz(lrfAccumulated);
             if (liNumParticles <= 0)                                          // `ble cr6`
                 continue;
             lrfAccumulated -= static_cast<f32>(liNumParticles);              // fcfid, frsp, fsubs
-
-            // [DIAG] BRN_SIMPLEFX_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One line
-            // per burst, capped, so a live run can name the frame a scraping part shed its dust.
-            {
-                static const bool sbDustDiag = BrnParticle::Native::SimpleFxDiagArmed();
-                static u32 suDustDiagLines = 0;
-                if (sbDustDiag && suDustDiagLines < KU_EFFECTS_DIAG_MAX_LINES)
-                {
-                    ++suDustDiagLines;
-                    char lacMsg[256];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[simplefx] dust burst slot=%u n=%d speed=%.3f carry=%.4f t=%.3f at (%.2f,%.2f,%.2f)\n",
-                        static_cast<unsigned>(luAccumulatorSlot), static_cast<int>(liNumParticles),
-                        static_cast<double>(lfSpeed), static_cast<double>(lrfAccumulated),
-                        static_cast<double>(lrParams.mTime),
-                        static_cast<double>(lContact.mPointOnA.x),
-                        static_cast<double>(lContact.mPointOnA.y),
-                        static_cast<double>(lContact.mPointOnA.z));
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
 
             for (s32 liParticle = liNumParticles; liParticle != 0; --liParticle)
             {
@@ -3416,24 +2911,17 @@ void EffectsModule::ProcessCarDetatchedPartContacts(
                 // jitter's z, y and x lanes (stored to +0x88, +0x84, +0x80 of the quad the `vaddfp`
                 // at 0x82293328 adds to the normal; its w lane is the `stw r27, 0x8C` zero).
                 const f32 lfSizeFraction = mRandom.RandomFloat();
-                const f32 lfJitterZ = std::fma(mRandom.RandomFloat(), KF_DETACHED_DUST_JITTER_SPAN,
-                                               -KF_DETACHED_DUST_JITTER_HALF);
-                const f32 lfJitterY = std::fma(mRandom.RandomFloat(), KF_DETACHED_DUST_JITTER_SPAN,
-                                               -KF_DETACHED_DUST_JITTER_HALF);
-                const f32 lfJitterX = std::fma(mRandom.RandomFloat(), KF_DETACHED_DUST_JITTER_SPAN,
-                                               -KF_DETACHED_DUST_JITTER_HALF);
+                const f32 lfJitterZ = ((mRandom.RandomFloat()) * (KF_DETACHED_DUST_JITTER_SPAN) + (-KF_DETACHED_DUST_JITTER_HALF));
+                const f32 lfJitterY = ((mRandom.RandomFloat()) * (KF_DETACHED_DUST_JITTER_SPAN) + (-KF_DETACHED_DUST_JITTER_HALF));
+                const f32 lfJitterX = ((mRandom.RandomFloat()) * (KF_DETACHED_DUST_JITTER_SPAN) + (-KF_DETACHED_DUST_JITTER_HALF));
 
-                Vector3 lvVelocity = lContact.mNormal;                         // copy + 0x30
-                lvVelocity.x += lfJitterX;
-                lvVelocity.y += lfJitterY;
-                lvVelocity.z += lfJitterZ;
-                lvVelocity.w += 0.0f;
+                const __vector4 jitter = { lfJitterX, lfJitterY, lfJitterZ, 0.0f };
+                const Vector3 lvVelocity(__vaddfp(lContact.mNormal.mV, jitter));
 
                 mParticleModule.SpawnSimple(lContact.mPointOnA,                // v1: copy + 0x40
                                             lvVelocity,                        // v2
                                             BrnParticle::Native::eParticleArray_CrashImpactDust,  // `li r4, 2`
-                                            std::fma(lfSizeFraction, KF_DETACHED_DUST_SIZE_RANGE,
-                                                     KF_DETACHED_DUST_SIZE_MIN),               // f1
+                                            ((lfSizeFraction) * (KF_DETACHED_DUST_SIZE_RANGE) + (KF_DETACHED_DUST_SIZE_MIN)),               // f1
                                             lrParams.mTime,                    // f2: params + 4
                                             KF_DETACHED_DUST_ALPHA);           // f3
             }
@@ -3465,7 +2953,7 @@ void EffectsModule::ProcessCarDetatchedPartContacts(
                             BrnParticle::Native::eSparkArray_BodyPart_Contact,  // r5 == 3
                             lrParams.mDt,                                 // f1
                             lrParams.mTime,                               // f2
-                            lContact.mPointOnA.y,                         // f3 (=> height 0)
+                            lContact.mPointOnA.mV.y,                         // f3 (=> height 0)
                             KF_DETACHED_MIN_FRICTION_STRESS,              // f4 == 0.005
                             *reinterpret_cast<const f32*>(lpVfxData + KU_VFX_SPARK_SCALE),  // f5
                             false);                                       // the stack byte
@@ -3521,43 +3009,17 @@ namespace
     const f32 KF_GLASS_SHATTER_ANGLE_RANGE  = 6.28f;    // flt_820137D8
     const f32 KF_GLASS_SHATTER_ANGLE_OFFSET = 3.14f;    // flt_820137DC
 
-    // Four-lane VMX arithmetic, w included (vaddfp / vsubfp / vmulfp, and the fused vmaddfp by a splat).
-    Vector3 Add4(const Vector3& lrA, const Vector3& lrB)
+    Vector3 Add4(const Vector3& a, const Vector3& b) { return Vector3(__vaddfp(a.mV, b.mV)); }
+    Vector3 Sub4(const Vector3& a, const Vector3& b) { return Vector3(__vsubfp(a.mV, b.mV)); }
+    Vector3 Mul4(const Vector3& a, const Vector3& b) { return Vector3(__vmulfp(a.mV, b.mV)); }
+    Vector3 MaddSplat4(const Vector3& a, f32 b, const Vector3& c)
     {
-        Vector3 lv;
-        lv.x = lrA.x + lrB.x; lv.y = lrA.y + lrB.y; lv.z = lrA.z + lrB.z; lv.w = lrA.w + lrB.w;
-        return lv;
+        return Vector3(__vmaddfp(a.mV, VecFloat(b).mV, c.mV));
     }
-
-    Vector3 Sub4(const Vector3& lrA, const Vector3& lrB)
+    Vector3 MakeVector3(f32 x, f32 y, f32 z, f32 w)
     {
-        Vector3 lv;
-        lv.x = lrA.x - lrB.x; lv.y = lrA.y - lrB.y; lv.z = lrA.z - lrB.z; lv.w = lrA.w - lrB.w;
-        return lv;
-    }
-
-    Vector3 Mul4(const Vector3& lrA, const Vector3& lrB)
-    {
-        Vector3 lv;
-        lv.x = lrA.x * lrB.x; lv.y = lrA.y * lrB.y; lv.z = lrA.z * lrB.z; lv.w = lrA.w * lrB.w;
-        return lv;
-    }
-
-    Vector3 MaddSplat4(const Vector3& lrA, f32 lfB, const Vector3& lrC)   // a * splat(b) + c, rounded ONCE
-    {
-        Vector3 lv;
-        lv.x = std::fma(lrA.x, lfB, lrC.x);
-        lv.y = std::fma(lrA.y, lfB, lrC.y);
-        lv.z = std::fma(lrA.z, lfB, lrC.z);
-        lv.w = std::fma(lrA.w, lfB, lrC.w);
-        return lv;
-    }
-
-    Vector3 MakeVector3(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
-    {
-        Vector3 lv;
-        lv.x = lfX; lv.y = lfY; lv.z = lfZ; lv.w = lfW;
-        return lv;
+        const __vector4 lanes = { x, y, z, w };
+        return Vector3(lanes);
     }
 
     // CgsNumeric::Random::RandomUnitVector, which the console inlines at 0x822925AC..0x82292688 (no symbol of
@@ -3573,21 +3035,20 @@ namespace
         f32 lfX, lfY, lfLengthSquared;
         do
         {
-            lfX = std::fma(lrRandom.RandomFloat(), 2.0f, -1.0f);
+            lfX = ((lrRandom.RandomFloat()) * (2.0f) + (-1.0f));
             const f32 lfXSquared = lfX * lfX;
-            lfY = std::fma(lrRandom.RandomFloat(), 2.0f, -1.0f);
-            lfLengthSquared = std::fma(lfY, lfY, lfXSquared);
+            lfY = ((lrRandom.RandomFloat()) * (2.0f) + (-1.0f));
+            lfLengthSquared = ((lfY) * (lfY) + (lfXSquared));
         } while (!(lfLengthSquared < 1.0f));   // `fcmpu ; bge`: a NaN retries
         const f32 lfScale = std::sqrt(1.0f - lfLengthSquared) * 2.0f;
-        return MakeVector3(lfScale * lfX, lfScale * lfY, std::fma(lfLengthSquared, 2.0f, -1.0f), 0.0f);
+        return MakeVector3(lfScale * lfX, lfScale * lfY, ((lfLengthSquared) * (2.0f) + (-1.0f)), 0.0f);
     }
 
     // The replay layout's glass-event count (+0x30), which the drain reads INLINE while playing back
     // (`lwz r15, 0x30(r3)` at 0x822974B0) -- the layout class publishes the offset and has no accessor.
-    s32 NumRecordedGlassEvents(const EffectsStaticLayout* lpLayout)
+    s32 NumRecordedGlassEvents(const EffectsStaticLayout* layout)
     {
-        return *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpLayout)
-                                             + EffectsStaticLayout::KI_OFF_NUM_GLASS_EVENTS);
+        return layout->mNumGlassEvents;
     }
 
     // [DIAG] BRN_GLASS_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One capped line per glass event
@@ -3659,9 +3120,9 @@ void EffectsModule::BurstAreaEmitParticles(Vector3* lpCorners,
 
     Utils::Vector3Randomiser lRandomiserA;
     lRandomiserA.Prepare(
-        MakeVector3(std::fma(lfInheritedVelocityMagnitudeClamped, KF_BURST_AREA_SPEED_MIN_PER_MPS, KF_BURST_AREA_SPEED_MIN_BASE),
+        MakeVector3(((lfInheritedVelocityMagnitudeClamped) * (KF_BURST_AREA_SPEED_MIN_PER_MPS) + (KF_BURST_AREA_SPEED_MIN_BASE)),
                     KF_BURST_AREA_INHERIT_MIN, KF_BURST_AREA_RADIAL_MIN, 0.0f),
-        MakeVector3(std::fma(lfInheritedVelocityMagnitudeClamped, KF_BURST_AREA_SPEED_MAX_PER_MPS, KF_BURST_AREA_SPEED_MAX_BASE),
+        MakeVector3(((lfInheritedVelocityMagnitudeClamped) * (KF_BURST_AREA_SPEED_MAX_PER_MPS) + (KF_BURST_AREA_SPEED_MAX_BASE)),
                     KF_BURST_AREA_INHERIT_MAX, KF_BURST_AREA_RADIAL_MAX, 0.0f));
     // Vector3(x, y, z) is built with the vperm mask unk_82CDA350 {x, y', x, x} and a vrlimi of z, so its w lane
     // is its x: (0, 0, sqrt min, 0) and (1, 1, sqrt max, 1).
@@ -3673,8 +3134,8 @@ void EffectsModule::BurstAreaEmitParticles(Vector3* lpCorners,
     {
         const Vector3 lParamsA = lRandomiserA.RandomiseXYZ(mRandom);
         const Vector3 lParamsB = lRandomiserB.RandomiseXYZ(mRandom);
-        const f32 lfU = lParamsB.x;
-        const f32 lfV = lParamsB.y;
+        const f32 lfU = lParamsB.mV.x;
+        const f32 lfV = lParamsB.mV.y;
 
         // P(u, v) as three vmaddfp: (A + (D - A) v) + ((B - A) + (A - B + C - D) v) u.
         const Vector3 lSpawnPos = MaddSplat4(MaddSplat4(lAminusBplusCminusB, lfV, lBminusA), lfU,
@@ -3682,17 +3143,16 @@ void EffectsModule::BurstAreaEmitParticles(Vector3* lpCorners,
 
         // (lParamsB - lParamsB^2) * 4 per lane: x and y are 4u(1-u) and 4v(1-v).
         const Vector3 lOutVelScale = Scale4(Sub4(lParamsB, Mul4(lParamsB, lParamsB)), 4.0f);
-        const f32 lfOutwardsSpeed = (lOutVelScale.x * lOutVelScale.y) * lParamsA.x;
+        const f32 lfOutwardsSpeed = __vmulfp(__vmulfp(__vspltw(lOutVelScale.mV, 0), __vspltw(lOutVelScale.mV, 1)), __vspltw(lParamsA.mV, 0)).x;
 
-        const Vector3 lInheritedVelocity = Scale4(lvInheritedVelocity, lParamsA.y);
+        const Vector3 lInheritedVelocity = Scale4(lvInheritedVelocity, lParamsA.mV.y);
         // normal * outward speed + inherited (one vmaddfp128), + (P - centre) * radial (one vmaddfp).
-        const Vector3 lSpawnVelocity = MaddSplat4(Sub4(lSpawnPos, lCentrePos), lParamsA.z,
+        const Vector3 lSpawnVelocity = MaddSplat4(Sub4(lSpawnPos, lCentrePos), lParamsA.mV.z,
                                                   MaddSplat4(lvNormal, lfOutwardsSpeed, lInheritedVelocity));
-        const f32 lfSizeScale = lParamsB.z * lParamsB.z;
+        const f32 lfSizeScale = __vmulfp(__vspltw(lParamsB.mV, 2), __vspltw(lParamsB.mV, 2)).x;
 
         const Vector3 lRotationAxis = RandomUnitVector(mRandom);
-        Vector4 lvWhite;
-        lvWhite.x = 1.0f; lvWhite.y = 1.0f; lvWhite.z = 1.0f; lvWhite.w = 1.0f;   // v4 = v127, the 1.0 splat
+        const Vector4 lvWhite(1.0f, 1.0f, 1.0f, 1.0f);   // v4 = v127, the 1.0 splat
         mParticleModule.SpawnDebris(leDebrisType, lSpawnPos, lSpawnVelocity, lRotationAxis, lvWhite,
                                     lfSizeScale, lfCurrentTime);
     }
@@ -3731,7 +3191,6 @@ void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffe
             lEvent = lrQueue.GetEvent(liEvent);
             if (lEvent.meNewState != BrnPhysics::Deformation::E_GLASS_STATE_SMASHED || lEvent.mbDontPlaySmashEffect)
             {
-   // [DIAG]
                 continue;
             }
             if (IsReplayRecording(mEffectsSerialiser.GetMode()))
@@ -3769,7 +3228,6 @@ void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffe
         const f32 lfScaled = lfArea * KF_GLASS_SHATTER_PER_AREA;
         const f32 lfCapped = (lfScaled > KF_GLASS_SHATTER_MAX) ? KF_GLASS_SHATTER_MAX : lfScaled;
         f32 lfNumEffects = std::floor(lfCapped + 0.5f);                           // vrfim128
-   // [DIAG]
         if (!(lfNumEffects >= 1.0f))                                              // vcmpgefp128.
             continue;
 
@@ -3793,8 +3251,7 @@ void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffe
 
         do
         {
-            const f32 lfAngle = std::fma(mRandom.RandomFloat(), KF_GLASS_SHATTER_ANGLE_RANGE,
-                                         -KF_GLASS_SHATTER_ANGLE_OFFSET);          // fmsubs
+            const f32 lfAngle = ((mRandom.RandomFloat()) * (KF_GLASS_SHATTER_ANGLE_RANGE) + (-KF_GLASS_SHATTER_ANGLE_OFFSET));          // fmsubs
             f32 lfSin, lfCos;
             Utils::SinCosCycles(lfAngle, lfSin, lfCos);
 
@@ -3833,47 +3290,47 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
     {
         guQADebugEffectPointInitFlags |= 1u;
         {
-            const rw::math::vpu::Vector4 lAggregateValue = { -1.0f, -0.5f,  1.4f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(-1.0f, -0.5f,  1.4f, 0.0f );
             gaQADebugEffectPoints[0] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  1.0f, -0.5f,  1.4f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(1.0f, -0.5f,  1.4f, 0.0f );
             gaQADebugEffectPoints[1] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = { -1.0f, -0.5f, -1.25f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(-1.0f, -0.5f, -1.25f, 0.0f );
             gaQADebugEffectPoints[2] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  1.0f, -0.5f, -1.25f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(1.0f, -0.5f, -1.25f, 0.0f );
             gaQADebugEffectPoints[3] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f, -0.5f,  2.0f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(0.0f, -0.5f,  2.0f, 0.0f );
             gaQADebugEffectPoints[4] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f,  0.0f,  0.0f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(0.0f,  0.0f,  0.0f, 0.0f );
             gaQADebugEffectPoints[5] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f,  0.0f,  0.0f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(0.0f,  0.0f,  0.0f, 0.0f );
             gaQADebugEffectPoints[6] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f,  0.0f,  0.0f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(0.0f,  0.0f,  0.0f, 0.0f );
             gaQADebugEffectPoints[7] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f, -0.4f,  1.4f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(0.0f, -0.4f,  1.4f, 0.0f );
             gaQADebugEffectPoints[8] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f, -0.4f, -1.75f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(0.0f, -0.4f, -1.75f, 0.0f );
             gaQADebugEffectPoints[9] = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {  0.0f, -0.5f,  0.0f, 0.0f };
+            const rw::math::vpu::Vector4 lAggregateValue(0.0f, -0.5f,  0.0f, 0.0f );
             gaQADebugEffectPoints[10] = lAggregateValue;
         }
     }
@@ -3997,11 +3454,11 @@ namespace
         const Vector3 lvOffset = Mul4(lrRandom.RandomVector(MakeVector3(-1.0f, -1.0f, -1.0f, -1.0f),
                                                             MakeVector3(1.0f, 1.0f, 1.0f, 1.0f)),
                                       lrHalfExtent);
-        Vector3 lvPosition = MaddSplat4(lrLastTransform.xAxis, lvOffset.x, lrCentre);
-        lvPosition = MaddSplat4(lrLastTransform.yAxis, lvOffset.y, lvPosition);
-        lvPosition = MaddSplat4(lrLastTransform.zAxis, lvOffset.z, lvPosition);
+        Vector3 lvPosition = MaddSplat4(lrLastTransform.xAxis, lvOffset.mV.x, lrCentre);
+        lvPosition = MaddSplat4(lrLastTransform.yAxis, lvOffset.mV.y, lvPosition);
+        lvPosition = MaddSplat4(lrLastTransform.zAxis, lvOffset.mV.z, lvPosition);
         const f32 lfVelocityScale = lrRandom.RandomFloat(lfVelocityMin, lfVelocityMax);
-        const f32 lfInherit       = std::fma(lrRandom.RandomFloat(), KF_CRASH_TRAIL_INHERIT_RANGE, KF_CRASH_TRAIL_INHERIT_MIN);
+        const f32 lfInherit       = ((lrRandom.RandomFloat()) * (KF_CRASH_TRAIL_INHERIT_RANGE) + (KF_CRASH_TRAIL_INHERIT_MIN));
         lrVelocity = MaddSplat4(Sub4(lvPosition, lrCentre), lfVelocityScale, Scale4(lrInheritedVelocity, lfInherit));
         lrPosition = lvPosition;
     }
@@ -4037,25 +3494,18 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
     const f32 lfAtLeastZero        = (-lfRatio >= 0.0f) ? 0.0f : lfRatio;
     const f32 lfEmissionRateFactor = ((1.0f - lfAtLeastZero) >= 0.0f) ? lfAtLeastZero : 1.0f;
 
-    u32     lauDiagPieces[6] = { 0u, 0u, 0u, 0u, 0u, 0u };   // [DIAG]
-    Vector3 lvDiagFirst = MakeVector3(0.0f, 0.0f, 0.0f, 0.0f); // [DIAG]
-    bool    lbDiagFirst = false;                              // [DIAG]
 
     // ---- the five debris types (the jump table 0x82290F64) ----
     for (s32 lnDebrisTypeLoop = 0; lnDebrisTypeLoop <= 4; ++lnDebrisTypeLoop)
     {
-        Vector4 lParticleColour;   // Vector4::One (v127), the car's colour for Coloured
-        lParticleColour.x = 1.0f; lParticleColour.y = 1.0f; lParticleColour.z = 1.0f; lParticleColour.w = 1.0f;
+        Vector4 lParticleColour(1.0f, 1.0f, 1.0f, 1.0f);
         f32 lfParticleSizeMin, lfParticleSizeMax, lfEmissionRate, lfEmissionThreshold;
         if (lnDebrisTypeLoop >= 0 && lnDebrisTypeLoop <= 4)
         {
             const CrashTrailTypeFields& lrFields = KA_CRASH_TRAIL_TYPE_FIELDS[lnDebrisTypeLoop];
             if (lnDebrisTypeLoop == BrnParticle::Native::eDebrisArray_Coloured)
             {
-                lParticleColour.x = lrCarColour.red;
-                lParticleColour.y = lrCarColour.green;
-                lParticleColour.z = lrCarColour.blue;
-                lParticleColour.w = lrCarColour.alpha;
+                lParticleColour = Vector4(lrCarColour.red, lrCarColour.green, lrCarColour.blue, lrCarColour.alpha);
             }
             lfParticleSizeMin   = LayoutFloat(lpLayout, lrFields.muSizeMin);
             lfParticleSizeMax   = LayoutFloat(lpLayout, lrFields.muSizeMax);
@@ -4069,7 +3519,7 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
         }
 
         f32& lrAccumulator = mafCrashingTrailAccumulators[luCar][lnDebrisTypeLoop];
-        const f32 lfNumParticlesToEmit = std::fma(lfDistanceTravelled, lfEmissionRate, lrAccumulator);
+        const f32 lfNumParticlesToEmit = ((lfDistanceTravelled) * (lfEmissionRate) + (lrAccumulator));
         const f32 lfReciprocal         = 1.0f / lfNumParticlesToEmit;                           // fdivs
         const Vector3 lPosStep         = Scale4(lvStep, lfReciprocal);
         u32 luNumberOfParticlesToEmit  = 0u;
@@ -4094,8 +3544,6 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
             const f32 lfRandomSize = mRandom.RandomFloat(lfParticleSizeMin, lfParticleSizeMax);
             mParticleModule.SpawnDebris(static_cast<BrnParticle::Native::EDebrisArrayID>(lnDebrisTypeLoop), lvPosition,
                                         lvVelocity, lvRotationAxis, lParticleColour, lfRandomSize, lfLastEmissionTime);
-            if (!lbDiagFirst) { lbDiagFirst = true; lvDiagFirst = lvPosition; }   // [DIAG]
-            ++lauDiagPieces[lnDebrisTypeLoop];                                     // [DIAG]
             lfLastEmissionTime = lfTimeDelta + lfLastEmissionTime;
             lvCentre = Add4(lvCentre, lPosStep);
         }
@@ -4105,7 +3553,7 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
     {
         f32& lrAccumulator = mafCrashingTrailAccumulators[luCar][KU_CRASH_TRAIL_SMOKE_ACCUMULATOR];
         const f32 lfEmissionRate       = LayoutFloat(lpLayout, KU_TRAIL_SMOKE_RATE) * lfEmissionRateFactor;
-        const f32 lfNumParticlesToEmit = std::fma(lfEmissionRate, lfDistanceTravelled, lrAccumulator);
+        const f32 lfNumParticlesToEmit = ((lfEmissionRate) * (lfDistanceTravelled) + (lrAccumulator));
         const f32 lfReciprocal         = 1.0f / lfNumParticlesToEmit;
         const Vector3 lPosStep         = Scale4(lvStep, lfReciprocal);
         u32 luNumberOfParticlesToEmit  = 0u;
@@ -4130,15 +3578,12 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
                 const f32 lfRandomSize = mRandom.RandomFloat(lfSizeMin, lfSizeMax);
                 mParticleModule.SpawnSimple(lvPosition, lvVelocity, BrnParticle::Native::eParticleArray_ImpactSmoke,
                                             lfRandomSize, lfLastEmissionTime, KF_CRASH_TRAIL_SMOKE_ALPHA);
-                if (!lbDiagFirst) { lbDiagFirst = true; lvDiagFirst = lvPosition; }   // [DIAG]
-                ++lauDiagPieces[5];                                                   // [DIAG]
                 lfLastEmissionTime = lfTimeDelta + lfLastEmissionTime;
                 lvCentre = Add4(lvCentre, lPosStep);
             }
         }
     }
 
-   // [DIAG]
 }
 
 // =================================================================================================
@@ -4192,12 +3637,7 @@ namespace
     // verdict -- `too-soon`, `no-vehicle-impact`, or `fired` with the contact point, the angle, the spark count and
     // the LION slot, its handle and whether it resolved.
 
-    void BounceVfxDiagLine(const char* lpcLine)
-    {
-        static u32 suLines = 0;
-        ++suLines;
-        CgsDev::Log::WriteToLog(lpcLine);
-    }
+
 }
 
 void EffectsModule::HandleShowtimeTrafficBounce(
@@ -4222,8 +3662,6 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     // (f32)seconds + fraction (`fcfid ; frsp ; fadds` 0x8229296C..0x8229297C).
     const f32 lfCurrentTime = lpTimerStatus->GetTime().GetFloatVal();
     const bool lbPlaying    = IsReplayPlayback(mEffectsSerialiser.GetMode());
-    const s32 liDiagOnCar   = (lpJustBouncedAction != 0) ? (lpJustBouncedAction->mbOnCar ? 1 : 0) : -1;    // [DIAG]
-    const s32 liDiagGood    = (lpJustBouncedAction != 0) ? static_cast<s32>(lpJustBouncedAction->mu8EventByte7) : -1;   // [DIAG]
 
     // `fabs ; fcmpu ; blt` to the exit (0x82292984..0x82292990): only a gap BELOW 0.5 s skips, so a NaN gap goes on.
     if (std::fabs(lfCurrentTime - mfLastShowtimeBounceEffectTime) < KF_SHOWTIME_BOUNCE_MIN_INTERVAL)
@@ -4246,13 +3684,13 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     const Vector3& lrVelocity = lpRaceCarState->mLinearVelocity;                                                // +0x330
 
     // :2700 / :2701 -- the contact point and the angle: recorded (playback) or the record's and a fresh draw.
-    u8* const lpLayout = reinterpret_cast<u8*>(mEffectsSerialiser.GetStaticLayout());
+    EffectsStaticLayout* const lpLayout = mEffectsSerialiser.GetStaticLayout();
     Vector3 lContactPosition;
     Vector3 lAngle;
     if (lbPlaying)
     {
-        std::memcpy(&lContactPosition, lpLayout + KU_SHOWTIME_BOUNCE_LAYOUT_POSITION, sizeof(lContactPosition));
-        std::memcpy(&lAngle, lpLayout + KU_SHOWTIME_BOUNCE_LAYOUT_ANGLE, sizeof(lAngle));
+        lContactPosition = lpLayout->mShowtimeBouncePosition;
+        lAngle = lpLayout->mShowtimeBounceAngle;
     }
     else
     {
@@ -4262,9 +3700,9 @@ void EffectsModule::HandleShowtimeTrafficBounce(
         lAngle = MakeVector3(lfAngle, lfAngle, lfAngle, lfAngle);
         if (IsReplayRecording(mEffectsSerialiser.GetMode()))
         {
-            std::memcpy(lpLayout + KU_SHOWTIME_BOUNCE_LAYOUT_POSITION, &lContactPosition, sizeof(lContactPosition));
-            std::memcpy(lpLayout + KU_SHOWTIME_BOUNCE_LAYOUT_ANGLE, &lAngle, sizeof(lAngle));
-            lpLayout[BrnReplays::EffectsSerialiserStaticLayout::KI_OFF_SHOWTIME_BOUNCE] = 1;
+            lpLayout->mShowtimeBouncePosition = lContactPosition;
+            lpLayout->mShowtimeBounceAngle = lAngle;
+            lpLayout->mbShowtimeBouncePending = true;
         }
     }
 
@@ -4272,8 +3710,8 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     // (unk_8307A590) makes lanes 0 / 2 the sine and 1 / 3 the cosine; the frame takes lane 0 (`vspltw v0, v0, 0`) and
     // lane 1 (`vspltw v11, v0, 1`), so the sine is of the angle's x and the cosine of its y.
     f32 lfSin = 0.0f, lfCos = 0.0f, lfUnusedLane = 0.0f;
-    Utils::SinCosCycles(lAngle.x, lfSin, lfUnusedLane);
-    Utils::SinCosCycles(lAngle.y, lfUnusedLane, lfCos);
+    Utils::SinCosCycles(lAngle.mV.x, lfSin, lfUnusedLane);
+    Utils::SinCosCycles(lAngle.mV.y, lfUnusedLane, lfCos);
 
     // :2703 lContactTransform (0x82292C64..0x82292C74): x = X sin + Z cos (`vmulfp128 v125, Z, cos` then ONE
     // `vmaddfp128 v125, X, sin, v125`), y = unk_82181510, z = Z sin - X cos, w = the contact point.
@@ -4287,11 +3725,7 @@ void EffectsModule::HandleShowtimeTrafficBounce(
 
     // :2711 / :2712 -- the burst of the car's debris, in the player's paint.
     const RwRGBAReal& lCarColourRGBA = lpActiveRaceCarInterface->GetRaceCarColour(lePlayerCarIndex);
-    Vector4 lCarColour;
-    lCarColour.x = lCarColourRGBA.red;
-    lCarColour.y = lCarColourRGBA.green;
-    lCarColour.z = lCarColourRGBA.blue;
-    lCarColour.w = lCarColourRGBA.alpha;
+    const Vector4 lCarColour(lCarColourRGBA.red, lCarColourRGBA.green, lCarColourRGBA.blue, lCarColourRGBA.alpha);
     Vector3 lvEmitterHalfExtents;
     std::memcpy(&lvEmitterHalfExtents, DebrisParamsLayout(mCrashingDebrisParams) + KU_DEBRIS_EMITTER_HALF_EXTENTS,
                 sizeof(lvEmitterHalfExtents));                          // `lwzx r10 (this + 0x2D38C) ; lvx128 v3`
@@ -4338,16 +3772,169 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     mfLastShowtimeBounceEffectTime = lfCurrentTime;                   // `stfs f31, 0(r20)` 0x82292F80
 }
 
-void EffectsModule::JunkyardVfxStart(Vector3 /*lvCameraPosition*/)
+void EffectsModule::OnAttribEdit(const Attrib::Collection*, u64)
 {
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged, "EffectsModule::JunkyardVfxStart @0x82291AE8 (the junkyard VFX editor session)");
+    gpEffectsModule->mResetAttribs = true;
+}
+
+bool EffectsModule::JunkyardVfxReadLine(const char* label, char* output, s32 capacity, const char** cursor)
+{
+    CGS_ASSERT(label != NULL && label[0] != '\0', "( lpacLabel != NULL ) && ( lpacLabel[0] != '\\0' )");
+    const s32 labelLength = static_cast<s32>(strlen(label));
+    for (;;)
+    {
+        while (**cursor == '\n' || **cursor == '\r' || **cursor == ' ')
+            ++*cursor;
+        if (**cursor == '\0')
+            return false;
+        if (_strnicmp(label, *cursor, labelLength) == 0)
+            break;
+        if ((*cursor)[0] != '/' || (*cursor)[1] != '/')
+            return false;
+        while (**cursor != '\n' && **cursor != '\r' && **cursor != '\0')
+            ++*cursor;
+    }
+    *cursor += labelLength;
+    while (**cursor == ' ')
+        ++*cursor;
+    if (**cursor != '=')
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        stream << "Found label \"" << label << "\" but no '='";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, 2484);
+        CgsDev::Assert::EndAssert();
+        return false;
+    }
+    do { ++*cursor; } while (**cursor == ' ');
+    char* out = output;
+    u32 length = 0;
+    do
+    {
+        if (**cursor == '\0' || **cursor == '\n' || **cursor == '\r')
+            break;
+        if (length >= static_cast<u32>(capacity - 1))
+        {
+            output[capacity - 1] = '\0';
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            stream << "Parameter is too long\n" << output;
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, 2501);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+        ++length;
+        *out++ = *(*cursor)++;
+    } while (**cursor != ' ');
+    if (out == output)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        stream << "Missing parameter \"" << label << "\"";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, 2508);
+        CgsDev::Assert::EndAssert();
+        return false;
+    }
+    *out = '\0';
+    return true;
+}
+
+f32 EffectsModule::JunkyardVfxStringToFloat(const char* text)
+{
+    f32 sign = 1.0f;
+    if (*text == '-') { ++text; sign = -1.0f; }
+    f32 result = 0.0f;
+    while (*text >= '0' && *text <= '9')
+        result = result * 10.0f + static_cast<f32>(*text++ - '0');
+    if (*text == '.')
+    {
+        ++text;
+        f32 factor = 0.1f;
+        while (*text >= '0' && *text <= '9')
+        {
+            result = static_cast<f32>(*text++ - '0') * factor + result;
+            factor *= 0.1f;
+        }
+    }
+    CGS_ASSERT(*text == '\0', "*lpcChar == '\\0'");
+    return result * sign;
+}
+
+void EffectsModule::JunkyardVfxStart(Vector3 cameraPosition)
+{
+    for (u32 i = 0; i < KU_MAX_JUNKYARD_VFX; ++i)
+        CGS_ASSERT(maJunkyardEffectHandles[i] == BrnParticle::LionEffect::KU_HANDLE_INVALID,
+                   "maJunkyardEffectHandles[luCount] == BrnParticle::LionEffect::KU_HANDLE_INVALID");
+
+    const void* layout = ((const Attrib::Instance&)mJunkYardLocatorsData).GetLayoutPointer();
+    const char* cursor = *static_cast<const char* const*>(layout);
+    char value[200];
+    u32 count = 0;
+    while (JunkyardVfxReadLine("x", value, sizeof(value), &cursor))
+    {
+        const f32 x = JunkyardVfxStringToFloat(value);
+        if (!JunkyardVfxReadLine("y", value, sizeof(value), &cursor))
+        {
+            CGS_ASSERT(false, "Missing parameter 'y'.");
+            return;
+        }
+        const f32 y = JunkyardVfxStringToFloat(value);
+        if (!JunkyardVfxReadLine("z", value, sizeof(value), &cursor))
+        {
+            CGS_ASSERT(false, "Missing parameter 'z'.");
+            return;
+        }
+        const f32 z = JunkyardVfxStringToFloat(value);
+        __vector4 angle;
+        if (JunkyardVfxReadLine("angle", value, sizeof(value), &cursor))
+            angle = VecFloat(JunkyardVfxStringToFloat(value) * 0.017453292f).mV;
+        else
+            angle = __vmulfp(mRandom.RandomVecFloat().mV, VecFloat(6.28318548f).mV);
+        if (!JunkyardVfxReadLine("name", value, sizeof(value), &cursor))
+        {
+            CGS_ASSERT(false, "Missing parameter 'name'.");
+            return;
+        }
+        const Vector3 position(x, y, z);
+        const __vector4 delta = __vsubfp(position.mV, cameraPosition.mV);
+        unsigned int withinCR;
+        __vcmpgtfpR(VecFloat(10000.0f).mV, __vmsum3fp(delta, delta), &withinCR);
+        if ((withinCR & 0x80u) == 0)
+            continue;
+        if (count == KU_MAX_JUNKYARD_VFX)
+        {
+            CGS_ASSERT(false, "Too many effects in junkyard. Ask Tom or Tad to increase KU_MAX_JUNKYARD_VFX.");
+            return;
+        }
+        const u32 handle = mParticleModule.StartLionEffect(BrnParticle::ParticleDescription::HashString(value), value, 0);
+        BrnParticle::LionEffect* effect = mParticleModule.GetLionEffect(handle);
+        if (effect != NULL)
+        {
+            f32 sine, cosine;
+            Utils::SinCosCycles(angle.x, sine, cosine);
+            const Vector3 axisX(1.0f, 0.0f, 0.0f);
+            const Vector3 axisZ(0.0f, 0.0f, 1.0f);
+            Matrix44Affine transform;
+            transform.xAxis.mV = __vmaddfp(axisX.mV, VecFloat(sine).mV, __vmulfp(axisZ.mV, VecFloat(cosine).mV));
+            transform.yAxis = AxisY();
+            transform.zAxis.mV = __vsubfp(__vmulfp(axisZ.mV, VecFloat(sine).mV), __vmulfp(axisX.mV, VecFloat(cosine).mV));
+            transform.wAxis = position;
+            effect->SetTransform(transform);
+            effect->SetStateBlendFactor(mRandom.RandomFloat());
+            maJunkyardEffectHandles[count++] = handle;
+        }
+    }
 }
 
 void EffectsModule::JunkyardVfxStop()
 {
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged, "EffectsModule::JunkyardVfxStop @0x82292028 (the junkyard VFX editor session)");
+    for (u32 i = 0; i < KU_MAX_JUNKYARD_VFX; ++i)
+    {
+        BrnParticle::LionEffect* effect = mParticleModule.GetLionEffect(maJunkyardEffectHandles[i]);
+        if (effect != NULL)
+            mParticleModule.StopLionEffect(effect);
+        maJunkyardEffectHandles[i] = BrnParticle::LionEffect::KU_HANDLE_INVALID;
+    }
 }
 
 } // namespace BrnEffects

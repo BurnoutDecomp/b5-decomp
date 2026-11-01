@@ -33,6 +33,32 @@ namespace BrnReplays
     class EffectsSerialiserStaticLayout
     {
     public:
+        // ARTIST Clear 0x82278738 and the glass, boost and contact accessors
+        // attest these serialized arrays and their order. Offsets are PPC32.
+        s32 mGameMode;
+        bool mbEventIntroActive;
+        bool mbInJunkyardCamera;
+        bool mbWasInJunkyard;
+        bool mbShowtimeBouncePending;
+        Vector3 mShowtimeBouncePosition;
+        Vector3 mShowtimeBounceAngle;
+        s32 mNumGlassEvents;
+        s32 mNumCarContacts;
+        u32 maGlassEventIds[8];
+        Matrix44Affine maGlassEventTransforms[8];
+        Vector4 maGlassEventVectors[8];
+        Vector4 maGlassEventData[8][4];
+        u8 maBoostActive[8];
+        s32 maBoostType[8];
+        f32 maBoostValue[8];
+        u8 maBoostLocatorCounts[8];
+        Matrix44Affine maBoostLocators[8][4];
+        u32 maContactEntityA[32];
+        u32 maContactEntityB[32];
+        u32 maContactTagB[32];
+        Vector4 maContactNormals[32];
+        Vector4 maContactPoints[32];
+
         // ---- Buffer geometry (X360-attested) -------------------------------
         // The static layout is an opaque 4784-byte (0x12B0) serialised buffer addressed by
         // these X360-attested byte offsets; no field names are invented (no DWARF for this TU).
