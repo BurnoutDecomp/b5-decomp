@@ -28,6 +28,13 @@ namespace CgsDev
         f32 mfGPUBudget;
     };
 
+    // ARTIST Construct82825BEC clears33 records; StartMonitor82825F60 uses38 stride.
+    CGS_STATIC_ASSERT((sizeof(PerfMonGpuInstance) == 0x38), "ARTIST GPU monitor record");
+    CGS_STATIC_ASSERT((offsetof(PerfMonGpuInstance, macName) == 0), "ARTIST GPU monitor name");
+    CGS_STATIC_ASSERT((offsetof(PerfMonGpuInstance, mColour) == 0x20), "ARTIST GPU monitor colour");
+    CGS_STATIC_ASSERT((offsetof(PerfMonGpuInstance, mu64Counter) == 0x28), "ARTIST GPU monitor counter");
+    CGS_STATIC_ASSERT((offsetof(PerfMonGpuInstance, mfGPUBudget) == 0x30), "ARTIST GPU monitor budget");
+
     class PerfMonGpu
     {
     public:
