@@ -3,8 +3,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"       // CgsNumeric::Random
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{Dot, Cross, Subtract, ...}
-#include <cstdlib>                                          // getenv -- the opt-in [worldimp] probe only
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- the opt-in [worldimp] probe only
 
 // BrnPhysics::Deformation::DeformableObject::ApplyCarCarImpulse  @0x82624C08
 //
@@ -26,45 +24,17 @@
 
 namespace BrnPhysics
 {
-// [T5-imp] DIAG counters, DEFINED in
-// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
-// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-namespace Vehicle
-{
-    extern u32 gT5CarCarCalls;
-    extern u32 gT5CarCarApplied;
-    extern f32 gT5LastImpulseMag;
-    extern f32 gT5LastClosing;
-    extern f32 gT5MaxImpulseMag;
-    extern f32 gT5SumImpulseMag;
-    extern f32 gT5MaxClosing;
-    extern s32 gT5RamFramesLeft;
-
-    // [kerb] PC bring-up instrument -- DELETE-WHEN the kerb response is proven 1:1. Owned by
-    // BrnVehicleManager_ValidateRaceCarWorldContact.cpp (banner + definitions there); this TU only
-    // prints the [kerb-imp] leg. NOT IN THE X360 BINARY.
-    extern u32 guKerbProbeFrame;
-    bool KerbProbeArmed();
-    bool KerbProbeTake(u32& lruUsed, const char* lpcTag);
-}
-
-// [wedge] PC bring-up instrument (FX-WEDGEVEL) -- DEFINED in ExternalPhysicsBody.cpp, banner at
-// WedgeWindowSteps() there. NOT IN THE X360 BINARY; every print is gated on an open window.
-extern const ExternalPhysicsBody* gpDvWatchBody;
-bool DvWedgeStepRecording();
-u32  DvWitnessStepIndex();
-
 namespace Deformation
 {
     namespace vpu = rw::math::vpu;
 
     // ARTIST bounce constants, recovered from the CRT initializers named below.
     static const f32     KF_MIN_BOUNCE_STRESS_SQ   = 2000000.0f;                  // unk_82FB81F0 @82C5D598 <- flt_8209D734
-    static const Vector3 KVF_BOUNCE_BOOST_SCALE     = { 2.79999995f, 2.79999995f, 2.79999995f, 2.79999995f }; // unk_82FB8210 @82C5D4A8 <- flt_8200C6B8
-    static const Vector3 KVF_BOUNCE_NOBOOST_SCALE   = { 1.5f, 1.5f, 1.5f, 1.5f }; // unk_82FB9E40 @82C5D480 <- flt_820945DC
-    static const Vector3 KVF_BOUNCE_CLAMP_MIN       = { 0.75f, 0.75f, 0.75f, 0.75f }; // unk_82FB7F70 @82C5D548 <- flt_82004018
-    static const Vector3 KVF_BOUNCE_CLAMP_MAX       = { 1.5f, 1.5f, 1.5f, 1.5f }; // unk_82FB8040 @82C5D570 <- flt_820945DC
-    static const Vector3 KVF_DOUBLE_BOUNCE_DAMP     = { 30.0f, 30.0f, 30.0f, 30.0f }; // unk_82FB82F0 @82C5D430 <- flt_82004F5C
+    static const Vector3 KVF_BOUNCE_BOOST_SCALE(VecFloat(2.79999995f).mV); // unk_82FB8210 @82C5D4A8 <- flt_8200C6B8
+    static const Vector3 KVF_BOUNCE_NOBOOST_SCALE(VecFloat(1.5f).mV); // unk_82FB9E40 @82C5D480 <- flt_820945DC
+    static const Vector3 KVF_BOUNCE_CLAMP_MIN(VecFloat(0.75f).mV); // unk_82FB7F70 @82C5D548 <- flt_82004018
+    static const Vector3 KVF_BOUNCE_CLAMP_MAX(VecFloat(1.5f).mV); // unk_82FB8040 @82C5D570 <- flt_820945DC
+    static const Vector3 KVF_DOUBLE_BOUNCE_DAMP(VecFloat(30.0f).mV); // unk_82FB82F0 @82C5D430 <- flt_82004F5C
 
     static const f32 KF_BOUNCE_MASS_FACTOR = 0.00066666666f; // flt_8209AF58 = 1/1500
     static const f32 KF_BOUNCE_LATERAL_SCALE = 0.1f; // unk_82FB9B90 @82C5D520 <- flt_82004014
@@ -85,9 +55,6 @@ namespace Deformation
         DeformableObject&          lOtherCar  = *lContact.mpOtherVehicle;
         ExternalPhysicsBody&       lOtherBody = lOtherCar.GetVehicleBody();
 
-        // [T5-imp] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-        ++BrnPhysics::Vehicle::gT5CarCarCalls;
-
         // The contact wakes THIS body (asm 0x82624CAC `stb r29(0), 0x70(vehiclePhysics)` == mbFrozen).
         // ⚠️ ONLY this one: the console never clears the OTHER car's frozen byte here, and the
         // banner that used to read "wakes both bodies" was wrong about the console, not about the
@@ -105,7 +72,7 @@ namespace Deformation
             BrnPhysics::Vehicle::VehiclePhysics* const lpThisVehicle = mVehicleBody.GetVehiclePhysics();
             if (lpThisVehicle != 0)
             {
-                lpThisVehicle->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;
+                lpThisVehicle->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV.y = 0.0f;
             }
         }
 
@@ -132,12 +99,6 @@ namespace Deformation
         const Vector3 lNegatedNormal  = vpu::Negate(lContact.mNormal);          // 0x82624CEC / 0x82624D8C
         const f32     lfClosingSpeed  = vpu::Dot(lRelativeMotion, lNegatedNormal);
 
-        // [T5-imp] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Recorded BEFORE the gate so a
-        // rejected contact still prints the number it was rejected on.
-        BrnPhysics::Vehicle::gT5LastClosing = lfClosingSpeed;
-        if (lfClosingSpeed > BrnPhysics::Vehicle::gT5MaxClosing)
-            BrnPhysics::Vehicle::gT5MaxClosing = lfClosingSpeed;
-
         // Separating (or at rest): nothing to do (asm: the `0 >= closingSpeed` early `_restvmx_122(0)`).
         if (lfClosingSpeed <= 0.0f)
             return false;
@@ -151,7 +112,7 @@ namespace Deformation
         // call that stood here was imported from the WORLD sibling, where the PS3 body really does
         // consult it. A car-on-car shunt in Burnout is perfectly inelastic; cars do not bounce off
         // each other.
-        const VecFloat lvfRestitution = { 0.0f, 0.0f, 0.0f, 0.0f };   // v5 == v126 == 0
+        const VecFloat lvfRestitution(0.0f);   // v5 == v126 == 0
 
         Vector3  lImpulse;        // j * n  (the impulse vector the solver writes)
         VecFloat lvfInvInertiaA;  // this car's inverse effective-mass term
@@ -160,27 +121,6 @@ namespace Deformation
             lOtherBody, lContact.mPointOnA, lContact.mPointOnB, lRelativeMotion, lNegatedNormal,
             lvfRestitution, &lImpulse, &lvfInvInertiaA, &lvfInvInertiaB);
 
-        // [T5-solve] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The two-body solve's
-        // operands while a [T5-ram] window is open: both inverse effective-mass terms (what each
-        // sensor's displacement is multiplied by) beside the masses and the closing speed.
-        {
-            static s32 s_iT5SolveBudget = 240;
-            if (BrnPhysics::Vehicle::gT5RamFramesLeft > 0 && s_iT5SolveBudget > 0
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                --s_iT5SolveBudget;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T5-solve] thisOwner=" << static_cast<s32>(GetHandlingBodyIdHighByte())
-                    << " otherOwner=" << static_cast<s32>(lOtherCar.GetHandlingBodyIdHighByte())
-                    << " closing=" << lfClosingSpeed
-                    << " j=" << lvfImpulseMagnitude.x
-                    << " |imp|=" << vpu::Magnitude(lImpulse)
-                    << " invA=" << lvfInvInertiaA.x << " invB=" << lvfInvInertiaB.x
-                    << " mA=" << lThisBody.GetMass().x << " mB=" << lOtherBody.GetMass().x
-                    << " sensor=" << liSensorIndex
-                    << "\n";
-            }
-        }
 
         // -------- Showtime / bounce-boost shaping (0x82624DB4..0x82625040) --------
         Vehicle::RaceCarPhysics* lpRaceCarPhysics = AsRaceCarPhysics();
@@ -196,23 +136,24 @@ namespace Deformation
 
                 // Floor only the Y impulse using THIS car's mass and the bounce power.
                 // 0x82624EC4 loads VehiclePhysics+0xE0 (mass), not accumulated impulse.
-                const f32 lfMinBouncePower = lThisBody.GetMass().x *
-                    (lpRaceCarPhysics->IsBounceBoosting() ? KVF_BOUNCE_BOOST_SCALE.x
-                                                         : KVF_BOUNCE_NOBOOST_SCALE.x);
-                lImpulse.y = (lImpulse.y > lfMinBouncePower) ? lImpulse.y : lfMinBouncePower;
+                const f32 lfMinBouncePower = lThisBody.GetMass().mV.x *
+                    (lpRaceCarPhysics->IsBounceBoosting() ? KVF_BOUNCE_BOOST_SCALE.mV.x
+                                                         : KVF_BOUNCE_NOBOOST_SCALE.mV.x);
+                lImpulse.mV.y = (lImpulse.mV.y > lfMinBouncePower) ? lImpulse.mV.y : lfMinBouncePower;
 
                 // 0x82624FB4..FCC: traffic mass / 1500 clamped to [.75,1.5] affects Y.
                 // vperm mask 82CDA350 selects {lateral, massScale, lateral, lateral}.
-                const f32 lfMassFactor = lOtherBody.GetMass().x * KF_BOUNCE_MASS_FACTOR;
-                const f32 lfMassScale = (lfMassFactor < KVF_BOUNCE_CLAMP_MIN.x) ? KVF_BOUNCE_CLAMP_MIN.x
-                    : (lfMassFactor > KVF_BOUNCE_CLAMP_MAX.x) ? KVF_BOUNCE_CLAMP_MAX.x : lfMassFactor;
-                const Vector3 lvBounceScale = { KF_BOUNCE_LATERAL_SCALE, lfMassScale,
-                                                KF_BOUNCE_LATERAL_SCALE, KF_BOUNCE_LATERAL_SCALE };
+                const f32 lfMassFactor = lOtherBody.GetMass().mV.x * KF_BOUNCE_MASS_FACTOR;
+                const f32 lfMassScale = (lfMassFactor < KVF_BOUNCE_CLAMP_MIN.mV.x) ? KVF_BOUNCE_CLAMP_MIN.mV.x
+                    : (lfMassFactor > KVF_BOUNCE_CLAMP_MAX.mV.x) ? KVF_BOUNCE_CLAMP_MAX.mV.x : lfMassFactor;
+                const rw::math::vpu::VectorIntrinsic lBounceScale = {
+                    KF_BOUNCE_LATERAL_SCALE, lfMassScale, KF_BOUNCE_LATERAL_SCALE, KF_BOUNCE_LATERAL_SCALE };
+                const Vector3 lvBounceScale(lBounceScale);
                 lImpulse = vpu::Mult(lImpulse, lvBounceScale);
 
                 // 0x82624FD8..0x82625004 keeps all velocity lanes, flooring only Y to zero.
                 Vector3 lLinearVelocity = lThisBody.GetLinearVelocity();
-                lLinearVelocity.y = lLinearVelocity.y >= 0.0f ? lLinearVelocity.y : 0.0f;
+                lLinearVelocity.mV.y = lLinearVelocity.mV.y >= 0.0f ? lLinearVelocity.mV.y : 0.0f;
                 lThisBody.SetLinearVelocity(lLinearVelocity);
 
                 // 0x82625008..0x82625040: one LCG step, (old seed hi % 3 == 0), then
@@ -227,7 +168,7 @@ namespace Deformation
         }
         else
         {
-            const f32 lfBareShapeFactor = (lvfIteration.x + 1.0f) * 0.5f;
+            const f32 lfBareShapeFactor = (lvfIteration.mV.x + 1.0f) * 0.5f;
             lImpulse = vpu::Mult(lImpulse, lfBareShapeFactor);
             if ((GetGlobalEntityId().muValue >> 24) == KU_TRAFFIC_ENTITY_OWNER)
             {
@@ -269,8 +210,7 @@ namespace Deformation
         // function has already early-returned when it is <= 0), which is exactly why the head's
         // `ASSERT(mvfVelocityAlongNormal >= 0)` (line 319) never fires on console.
         {
-            const VecFloat lAggregateValue = { lfClosingSpeed, lfClosingSpeed,
-                                                   lfClosingSpeed, lfClosingSpeed };
+            const VecFloat lAggregateValue(lfClosingSpeed);
             lParams.mvfVelocityAlongNormal = lAggregateValue;
         }
         // +0xB0 mpImpulsePasser <- `addi r11, r30, 0x18E4 ; stw r11, var_D0(r1)` @0x82625118/28.
@@ -303,56 +243,8 @@ namespace Deformation
         // impossible number, which is exactly how it was caught.
         Vector3   lImpulseUnit;
         const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
-        const VecFloat lvfShapedMagnitude =
-            { lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
+        const VecFloat lvfShapedMagnitude(lfImpulseLength);
 
-        // [T5-imp] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The two numbers that say
-        // whether momentum was actually transferred: the closing speed the solve ran on and the
-        // shaped impulse LENGTH both halves are about to receive.
-        ++BrnPhysics::Vehicle::gT5CarCarApplied;
-        BrnPhysics::Vehicle::gT5LastImpulseMag = lfImpulseLength;
-        // The sample-period trap, closed: the T5 line samples every 10th frame and the impact
-        // impulse lands between samples. MAX and SUM since the window was armed survive that.
-        if (lfImpulseLength > BrnPhysics::Vehicle::gT5MaxImpulseMag)
-            BrnPhysics::Vehicle::gT5MaxImpulseMag = lfImpulseLength;
-        BrnPhysics::Vehicle::gT5SumImpulseMag += lfImpulseLength;
-
-        // ---- [kerb-imp] THE CAR-CAR LEG. ⭐⭐⭐ ADDED 2026-09-03, AND ITS ABSENCE COST FOUR WAVES A
-        //      WRONG CONCLUSION. The tag's banner (BrnVehicleManager_ValidateRaceCarWorldContact.cpp)
-        //      said "one line per WORLD impulse the solver applies", which is literally true and was
-        //      read as "one line per impulse the solver applies". UpdateContacts @0x826478B0 routes
-        //      each sorted contact to ONE OF TWO arms -- ApplyCarWorldImpulse (instrumented) and this
-        //      one (silent) -- and both end in the same CalculateNewVelocity. So a car-car hit moved
-        //      the car with [kerb-imp] EMPTY, and "the losing step had zero impulses" was inferred
-        //      from a probe that only ever watched half the solver.
-        //      MEASURED THE DAY THIS LANDED (run dv_r8, [dv] witness): at f6386 a SINGLE drain at
-        //      DeformableObject::UpdateContacts +0x4bd banked J = (5592.9, -115.1, -10519.6) N.s and
-        //      took 7.50 m/s out of the car in one step -- and that frame has ZERO [kerb-imp] lines,
-        //      while f6355 / f6473 / f7094 have exactly one per drain. Same function, same drain
-        //      site, opposite visibility. [[diagnostics-that-lie]], textbook.
-        //      The line is deliberately the SAME SHAPE as the world leg's, with `other` naming the
-        //      second car, so one grep covers both arms.
-        if ( BrnPhysics::Vehicle::KerbProbeArmed() )
-        {
-            static u32 suKerbCarCarLines = 0u;
-            if ( BrnPhysics::Vehicle::KerbProbeTake( suKerbCarCarLines, "[kerb-imp]" ) )
-            {
-                const Vector3 lPos = lThisBody.GetPosition();
-                *CgsDev::Log::gpDebugPrint
-                    << "[kerb-imp] f " << BrnPhysics::Vehicle::guKerbProbeFrame
-                    << " CARCAR sensor " << liSensorIndex
-                    << " other " << static_cast<u32>( reinterpret_cast<u64>( lContact.mpOtherVehicle ) )
-                    << " iter " << lvfIteration.x
-                    << " n " << lContact.mNormal.x << " " << lContact.mNormal.y << " " << lContact.mNormal.z
-                    << " pA " << lContact.mPointOnA.x << " " << lContact.mPointOnA.y << " " << lContact.mPointOnA.z
-                    << " closing " << lfClosingSpeed
-                    << " shapedMag " << lfImpulseLength
-                    << " dir " << lImpulseUnit.x << " " << lImpulseUnit.y << " " << lImpulseUnit.z
-                    << " carPos " << lPos.x << " " << lPos.y << " " << lPos.z
-                    << "\n";
-            }
-        }
-        // ---- end [kerb-imp] car-car leg ------------------------------------------------------------
 
         // This car: apply the impulse as-is at the contact (sensor liSensorIndex), adding to the spy.
         DeformationSensor* lpSensor = GetDeformationSensor(liSensorIndex);
@@ -524,8 +416,8 @@ namespace Deformation
 
         const VecFloat lvfRestitution = GetVehicleWorldRestitution(lContact);
 
-        Vector3  lImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
-        VecFloat lvfInvInertia = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3 lImpulse(__vspltisw(0));
+        VecFloat lvfInvInertia(0.0f);
         VecFloat lvfImpulseMagnitude = GetVehicleBody().CalculateCollisionImpulseWithInanimateObject(
             lContact.mPointOnA, lRelativeMotion, lContact.mNormal, lvfRestitution, &lImpulse, &lvfInvInertia);
 
@@ -539,8 +431,8 @@ namespace Deformation
             // form is transcribed rather than re-derived as `n.y > 0 && ...`, because those two
             // spellings differ on a degenerate all-zero normal.
             const Vector3& lrN = lContact.mNormal;
-            const f32 lfSignY  = (lrN.y > 0.0f) ? 1.0f : ((lrN.y < 0.0f) ? -1.0f : 0.0f);
-            if ( (lfSignY * lrN.y) * lrN.y >= (lrN.x * lrN.x + lrN.z * lrN.z) )
+            const f32 lfSignY  = (lrN.mV.y > 0.0f) ? 1.0f : ((lrN.mV.y < 0.0f) ? -1.0f : 0.0f);
+            if ( (lfSignY * lrN.mV.y) * lrN.mV.y >= (lrN.mV.x * lrN.mV.x + lrN.mV.z * lrN.mV.z) )
             {
                 BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
                 if ( lpRaceCar != 0 )
@@ -571,10 +463,10 @@ namespace Deformation
                         // (~8 N.s instead of ~11,200 N.s on a 1400 kg car).
                         lImpulse = vpu::Mult(lImpulse, KF_SHOWTIME_BOUNCE_BOOST_SCALE);
                         const f32 lfMinBounce =
-                            KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER * GetVehicleBody().GetMass().x;
-                        if ( lImpulse.y < lfMinBounce )
+                            KF_SHOWTIME_MIN_WORLD_BOUNCE_POWER * GetVehicleBody().GetMass().mV.x;
+                        if ( lImpulse.mV.y < lfMinBounce )
                         {
-                            lImpulse.y = lfMinBounce;   // the fsel
+                            lImpulse.mV.y = lfMinBounce;   // the fsel
                         }
                     }
                 }
@@ -592,7 +484,7 @@ namespace Deformation
             //     vmulfp128  v10, v0(impulse), v13
             // UpdateContacts feeds iteration == 0 unconditionally (9225f00e: `vspltisw128 v126,0`
             // hoisted out of the apply loop), so this is exactly x0.5 on every world contact.
-            const f32 lfShape = (lvfIteration.x + 1.0f) * 0.5f;
+            const f32 lfShape = (lvfIteration.mV.x + 1.0f) * 0.5f;
             lImpulse = vpu::Mult(lImpulse, lfShape);
         }
 
@@ -639,7 +531,7 @@ namespace Deformation
             const f32 lfClosing    = vpu::Dot(lRelativeMotion, lContact.mNormal);
             const f32 lfAbsClosing = (lfClosing < 0.0f) ? -lfClosing : lfClosing;
             {
-                const VecFloat lAggregateValue = { lfAbsClosing, lfAbsClosing, lfAbsClosing, lfAbsClosing };
+                const VecFloat lAggregateValue(lfAbsClosing);
                 lParams.mvfVelocityAlongNormal = lAggregateValue;
             }
         }
@@ -663,112 +555,10 @@ namespace Deformation
         // reaches the sensor through this magnitude and not only through the direction.
         Vector3   lImpulseUnit;
         const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
-        const VecFloat lvfShapedMagnitude =
-            { lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
+        const VecFloat lvfShapedMagnitude(lfImpulseLength);
 
-        // ---- [kerb-imp] one line per world impulse the solver applies (the [kerb] banner in
-        //      BrnVehicleManager_ValidateRaceCarWorldContact.cpp). The RESULT the two culls decide:
-        //      the contact normal the sensor stored (rewritten or not), the point, the closing
-        //      speed, the solved magnitude, the shaped magnitude/direction handed to the sensor.
-        if ( BrnPhysics::Vehicle::KerbProbeArmed() )
-        {
-            static u32 suKerbImpLines = 0u;
-            if ( BrnPhysics::Vehicle::KerbProbeTake( suKerbImpLines, "[kerb-imp]" ) )
-            {
-                // ⭐ 2026-09-05: `m` and `k` added so the line carries EVERY term of the console's
-                // own closed form and the reader can check the identity instead of trusting it:
-                //     solved == -(1 + rest) * closing / k          (k == the CalculateCollision...
-                //                                                   denominator, i.e. `invI` here,
-                //                                                   which is 1/m + n.((I^-1(rxn))xr))
-                //     shapedMag == |solved| * 0.5                  (the (iter+1)*0.5 shaping)
-                // A row where those two identities hold is a row where the magnitude IS ARTIST's
-                // arithmetic; a row where they fail names which input diverged.
-                const Vector3 lPos = lpVehicle->GetPosition();
-                const f32 lfKerbClosing = vpu::Dot( lRelativeMotion, lContact.mNormal );
-                const f32 lfKerbMass    = GetVehicleBody().GetMass().x;
-                *CgsDev::Log::gpDebugPrint
-                    << "[kerb-imp] f " << BrnPhysics::Vehicle::guKerbProbeFrame
-                    << " sensor " << liSensorIndex
-                    << " iter " << lvfIteration.x
-                    << " n " << lContact.mNormal.x << " " << lContact.mNormal.y << " " << lContact.mNormal.z
-                    << " pA " << lContact.mPointOnA.x << " " << lContact.mPointOnA.y << " " << lContact.mPointOnA.z
-                    << " closing " << lfKerbClosing
-                    << " rest " << lvfRestitution.x
-                    << " m " << lfKerbMass
-                    << " k " << lvfInvInertia.x
-                    << " solved " << lvfImpulseMagnitude.x
-                    << " predicted " << ( -( 1.0f + lvfRestitution.x ) * lfKerbClosing / lvfInvInertia.x )
-                    << " invI " << lvfInvInertia.x
-                    << " shapedMag " << lfImpulseLength
-                    << " dir " << lImpulseUnit.x << " " << lImpulseUnit.y << " " << lImpulseUnit.z
-                    << " carPos " << lPos.x << " " << lPos.y << " " << lPos.z
-                    << "\n";
-            }
-        }
-        // ---- end [kerb-imp] ---------------------------------------------------------------------
 
-        // ---- [wedge-imp] (FX-WEDGEVEL) -- one line per world impulse applied to the WATCHED body
-        // inside an open [wedge] window: every term of the console's closed form plus the shaped
-        // magnitude handed to the sensor. The [dv] drain that follows this line in UpdateContacts
-        // is what actually reached the chassis after the sensor's absorption and the pass-on chain
-        // (ApplyWallContactImpulse's x0.25), so shaped-vs-drained is read off two adjacent lines.
-        if ( DvWedgeStepRecording() && &GetVehicleBody() == gpDvWatchBody
-             && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            const f32 lfWedgeClosing = vpu::Dot( lRelativeMotion, lContact.mNormal );
-            *CgsDev::Log::gpDebugPrint
-                << "[wedge-imp] step " << static_cast<s32>( DvWitnessStepIndex() )
-                << " sensor " << liSensorIndex
-                << " n " << lContact.mNormal.x << " " << lContact.mNormal.y << " " << lContact.mNormal.z
-                << " pA " << lContact.mPointOnA.x << " " << lContact.mPointOnA.y << " " << lContact.mPointOnA.z
-                << " r " << lvR.x << " " << lvR.y << " " << lvR.z
-                << " closing " << lfWedgeClosing
-                << " rest " << lvfRestitution.x
-                << " k " << lvfInvInertia.x
-                << " solved " << lvfImpulseMagnitude.x
-                << " shaped " << lfImpulseLength
-                << " dir " << lImpulseUnit.x << " " << lImpulseUnit.y << " " << lImpulseUnit.z
-                << " showtime " << ( lpVehicle->IsPlayerVehicleInShowtime() ? 1 : 0 )
-                << "\n";
-        }
 
-        // ---- [worldimp] PC bring-up instrument -- DELETE WHEN the wall test is banked -----------
-        // OPT-IN (BRN_IMPULSE_PROBE=1). The UPSTREAM question the downstream probes cannot answer:
-        // does the world-contact impulse orchestrator run AT ALL for a vertical wall face, or only
-        // for the ground? One line per world contact that reaches the solver, with the contact
-        // NORMAL (the floor's is ~+Y, a wall's is horizontal) and the solved magnitude.
-        // Two windows, same discipline as the others: an opening window plus horizontal normals.
-        // ⚠️ SCOPE OF THE EVIDENCE THIS GIVES: the probe sits AFTER the separating-contact early-out
-        // and after the solve, so "no WALLFACE line" proves no wall-normal contact reached HERE --
-        // it does not by itself prove none ENTERED the function. (For the campaign's wall run the
-        // distinction is moot: the car arrives at -30 m/s into a normal with |n.z| == 0.86, which
-        // cannot be classified separating. Stated anyway so the next leg does not over-read it.)
-        {
-            static s32 siWorldProbe = -1;
-            if ( siWorldProbe < 0 )
-            {
-            }
-            static u32 suWorld      = 0;
-            static u32 suHorizontal = 0;
-            ++suWorld;
-            const f32  lfAbsNY  = ( lContact.mNormal.y < 0.0f ) ? -lContact.mNormal.y
-                                                                : lContact.mNormal.y;
-            const bool lbWallish = ( lfAbsNY < 0.6f );   // the [wall] probe's own discriminator
-            if ( siWorldProbe == 1 && CgsDev::Log::gpDebugPrint != 0
-                 && ( suWorld <= 30u || ( lbWallish && ++suHorizontal <= 600u ) ) )
-            {
-                const Vector3 lPos = lpVehicle->GetPosition();
-                *CgsDev::Log::gpDebugPrint
-                    << "[worldimp] n " << static_cast<s32>(suWorld)
-                    << ( lbWallish ? " WALLFACE" : " floor" )
-                    << " sensor " << liSensorIndex
-                    << " n " << lContact.mNormal.x << " " << lContact.mNormal.y
-                    << " " << lContact.mNormal.z
-                    << " mag " << lfImpulseLength
-                    << " pos " << lPos.x << " " << lPos.y << " " << lPos.z
-                    << "\n";
-            }
-        }
 
         // 0x82624BF0. The GPR argument list is pinned by the asm and by the sibling: r7 and r8 are
         // `li r7, 1` @0x82624B2C and `li r8, 0` @0x82624B0C here, while ApplyCarCarImpulse's

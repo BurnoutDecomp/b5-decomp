@@ -36,21 +36,10 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"         // PhysicalBodyPart
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"            // PhysicalWheel
 #include "rw/math/vpu/vector3_operation.h"                                                        // rw::math::vpu::IsValid(Vector3)
-#include <cstdlib>   // getenv  ([wall] bring-up probe only)
-#include <cmath>     // sqrtf   ([wall] bring-up probe only)
 
 // ---- the part/wheel world-contact-generation forwarders (2026-08-27, detach-3 wave) ------------
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"  // CollisionGenerator (the real one)
 #include "GameSource/Physics/BrnContactGenerationList.h"                                           // ContactGenList
-
-// [wedge] (FX-WEDGEVEL) -- DEFINED in ExternalPhysicsBody.cpp, banner at WedgeWindowSteps() there.
-// NOT IN THE X360 BINARY; the [wedge-pen] lines in SolvePenetration print only inside an open window.
-namespace BrnPhysics
-{
-    extern const ExternalPhysicsBody* gpDvWatchBody;
-    bool DvWedgeStepRecording();
-    u32  DvWitnessStepIndex();
-}
 
 namespace BrnPhysics
 {
@@ -161,7 +150,7 @@ namespace Deformation
         // identity is exactly those rows (its wAxis is all zero).
         Matrix44Affine lWorldTransform;
         lWorldTransform.SetIdentity();
-        const VecFloat lvfWorldWeight = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const VecFloat lvfWorldWeight(0.0f);
         lpSolver->AddObject(KI_MAX_DEFORMATION_MODELS, lWorldTransform, lvfWorldWeight);
 
         for (s32 liModelIndex = mModelsAdded.GetFirstNonZeroBit();
@@ -219,223 +208,7 @@ namespace Deformation
             const Matrix44Affine* lpSolvedTransform = lpSolver->GetUpdatedTransform(liModelIndex);
             CGS_ASSERT(IsValidMatrix(*lpSolvedTransform), "RwMathVPU::IsValid( *lpTransform )");
 
-            // ⭐ BOOT WITNESS (log-once): the first frame the solver runs with live world
-            // contacts. At rest the correction must be ~ZERO -- the at-rest invariant this wave
-            // was gated on (probe-verified: nW=22 every frame, pre == post to print precision).
-            {
-                static bool sbLoggedSolveWitness = false;
-                if ( !sbLoggedSolveWitness && lpSolver->GetNumWorldContacts() > 0 )
-                {
-                    sbLoggedSolveWitness = true;
-                    Matrix44Affine lPre; mpaModels[liModelIndex].GetTransform(lPre);
-                }
-            }
 
-            // ---- [wall] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------
-            // OPT-IN (BRN_WALL_PROBE=1) so a default run and every golden gate are byte-identical
-            // to a build without it.
-            //
-            // ⭐ WHY A SEPARATE PROBE AT ALL. The boot witness above fires ONCE and only proves the
-            // solver ran. "The car stopped against a wall" needs three things the witness cannot
-            // give: that the contacts under the car are WALL contacts and not just the 22 floor
-            // ones (a car parked on the floor also has contacts > 0), how deep the solver had to
-            // push, and WHEN the wall was first touched. A world contact is classified by its
-            // separating normal: the junkyard floor's normal is ~+Y, a wall's is ~horizontal, so
-            // |mNormal.y| < KF_WALL_NORMAL_Y splits them with a wide margin either side.
-            {
-                static s32 siWallProbe = -1;
-                if ( siWallProbe < 0 )
-                {
-                }
-                if ( siWallProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    // ⚠️ PER-MODEL COUNTERS. A single shared counter incremented once per model
-                    // per solve ALIASES against the live model count: with 3 models, only the
-                    // model whose turn lands on a multiple of 30 is ever sampled, and the others
-                    // look absent. That artifact had me reading "the driven car has no
-                    // deformation model this boot" off two different runs. The touch latch has to
-                    // be per-model for the same reason -- one shared latch makes one model's
-                    // EDGE-TOUCH cancel another's.
-                    const f32 KF_WALL_NORMAL_Y = 0.6f;
-                    const s32 KI_PROBE_SLOTS = 32;   // >= KI_MAX_PENETRATION_BODIES (29)
-                    static u32  sauWallCount[KI_PROBE_SLOTS]   = { 0 };
-                    static bool sabWasTouching[KI_PROBE_SLOTS] = { false };
-                    const s32 liSlot = ( liModelIndex >= 0 && liModelIndex < KI_PROBE_SLOTS )
-                                     ? liModelIndex : 0;
-                    u32&  suWallCount   = sauWallCount[liSlot];
-                    bool& sbWasTouching = sabWasTouching[liSlot];
-                    ++suWallCount;
-
-                    // ⚠️⚠️ PER-MODEL, NOT GLOBAL. GetWorldContacts() is the solver's ONE array for
-                    // every body in the solve, so counting all of it attributed the parked
-                    // staging car's 19 wall contacts to the car the player was driving -- both
-                    // models printed the identical nWall/wallN, which is how the aliasing was
-                    // caught. AddWorldContact is fed (indexA = liWorldIndex = the model index,
-                    // indexB = liBodyIndex = KI_MAX_DEFORMATION_MODELS, the world sentinel), so
-                    // miIndexA selects the contacts that belong to THIS model.
-                    // ⛔ No penetration DEPTH is printed: mPointOnA is model-local (plus the
-                    // sensor sphere centre) while mPointOnB comes in as mLocalPointOnB, and I
-                    // could not establish they share a space -- the first cut printed ~3000, i.e.
-                    // a world coordinate, so any "depth" here would be a fabricated number.
-                    const s32 liNumWorld = lpSolver->GetNumWorldContacts();
-                    const PenetrationContact* lpWC = lpSolver->GetWorldContacts();
-                    s32 liMine = 0;
-                    s32 liNumWall = 0;
-                    Vector3 lWallN; lWallN.x = 0.0f; lWallN.y = 0.0f; lWallN.z = 0.0f;
-                    for ( s32 liC = 0; liC < liNumWorld; ++liC )
-                    {
-                        if ( lpWC[liC].miIndexA != liModelIndex ) { continue; }
-                        ++liMine;
-                        const Vector3& lN = lpWC[liC].mNormal;
-                        const f32 lfAbsNY = ( lN.y < 0.0f ) ? -lN.y : lN.y;
-                        if ( lfAbsNY < KF_WALL_NORMAL_Y )
-                        {
-                            ++liNumWall;
-                            lWallN.x += lN.x; lWallN.y += lN.y; lWallN.z += lN.z;
-                        }
-                    }
-
-                    Matrix44Affine lNow; mpaModels[liModelIndex].GetTransform(lNow);
-                    const f32 lfDX = lpSolvedTransform->wAxis.x - lNow.wAxis.x;
-                    const f32 lfDY = lpSolvedTransform->wAxis.y - lNow.wAxis.y;
-                    const f32 lfDZ = lpSolvedTransform->wAxis.z - lNow.wAxis.z;
-                    const f32 lfCorr = sqrtf( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ );
-
-                    // EDGE lines mark the exact solve the car first touched / last left a wall;
-                    // the periodic line is the position-vs-time trace between them.
-                    const bool lbTouching = ( liNumWall > 0 );
-                    const bool lbEdge     = ( lbTouching != sbWasTouching );
-                    sbWasTouching = lbTouching;
-
-                    // ⚠️ THE BINDING, printed with the pose. 2026-08-15: the pose above was
-                    // measured FROZEN at the spawn point for a whole 190 s drive while the car
-                    // reached x=3056 -- so the question "is this model even looking at the car
-                    // the player is driving?" has to be answerable from the same line. The
-                    // attached-vehicle POINTER discriminates a stale/other bind from a live one,
-                    // and its LINEAR VELOCITY discriminates "bound to a parked car" from "bound
-                    // to the right car but reading the transform through a bad view".
-                    Vector3 lVel; mpaModels[liModelIndex].GetLinearVelocity(lVel);
-                    const void* lpVeh = mpaModels[liModelIndex].GetVehiclePhysics();
-
-                    if ( lbEdge || ( suWallCount % 30u ) == 0u )
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[wall] n " << static_cast<s32>( suWallCount )
-                            << ( lbEdge ? ( lbTouching ? " EDGE-TOUCH" : " EDGE-CLEAR" ) : "" )
-                            << " model " << liModelIndex
-                            << " veh " << static_cast<u32>( reinterpret_cast<u64>( lpVeh ) )
-                            << " nWtot " << liNumWorld << " mine " << liMine
-                            << " wall " << liNumWall
-                            << " pos " << lNow.wAxis.x << " " << lNow.wAxis.y << " " << lNow.wAxis.z
-                            << " vel " << lVel.x << " " << lVel.y << " " << lVel.z
-                            << " corr " << lfCorr
-                            << " wallN " << lWallN.x << " " << lWallN.y << " " << lWallN.z
-                            << "\n";
-                    }
-
-                    // [wall] JUMP -- one solve moved this model by more than a metre. Dump the
-                    // world contacts that did it, in the solver's own terms (A = this model's
-                    // point in world space through the PRE-solve transform, B = the world point,
-                    // depth = (B - A) . n, which is exactly what Solve() adds along n). Written
-                    // for issue #14 (a crashed traffic car teleporting out of the highway tunnel);
-                    // same opt-in as the rest of this probe.
-                    if ( lfCorr > 1.0f )
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[wall] JUMP model " << liModelIndex
-                            << " veh " << static_cast<u32>( reinterpret_cast<u64>( lpVeh ) )
-                            << " pos " << lNow.wAxis.x << " " << lNow.wAxis.y << " " << lNow.wAxis.z
-                            << " -> " << lpSolvedTransform->wAxis.x << " "
-                            << lpSolvedTransform->wAxis.y << " " << lpSolvedTransform->wAxis.z
-                            << " corr " << lfCorr << " mine " << liMine << " nWtot " << liNumWorld
-                            << "\n";
-                        s32 liDumped = 0;
-                        for ( s32 liC = 0; liC < liNumWorld && liDumped < 16; ++liC )
-                        {
-                            if ( lpWC[liC].miIndexA != liModelIndex ) { continue; }
-                            const Vector3& lA = lpWC[liC].mPointOnA;
-                            const Vector3& lB = lpWC[liC].mPointOnB;
-                            const Vector3& lN = lpWC[liC].mNormal;
-                            Vector3 lWorldA;
-                            lWorldA.x = lNow.xAxis.x * lA.x + lNow.yAxis.x * lA.y + lNow.zAxis.x * lA.z + lNow.wAxis.x;
-                            lWorldA.y = lNow.xAxis.y * lA.x + lNow.yAxis.y * lA.y + lNow.zAxis.y * lA.z + lNow.wAxis.y;
-                            lWorldA.z = lNow.xAxis.z * lA.x + lNow.yAxis.z * lA.y + lNow.zAxis.z * lA.z + lNow.wAxis.z;
-                            const f32 lfDepth = ( lB.x - lWorldA.x ) * lN.x
-                                              + ( lB.y - lWorldA.y ) * lN.y
-                                              + ( lB.z - lWorldA.z ) * lN.z;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[wall]   c" << liC
-                                << " localA " << lA.x << " " << lA.y << " " << lA.z
-                                << " A " << lWorldA.x << " " << lWorldA.y << " " << lWorldA.z
-                                << " B " << lB.x << " " << lB.y << " " << lB.z
-                                << " n " << lN.x << " " << lN.y << " " << lN.z
-                                << " depth " << lfDepth << "\n";
-                            ++liDumped;
-                        }
-                    }
-                }
-            }
-            // ---- end [wall] -------------------------------------------------------------------
-
-            // ---- [wedge-pen] (FX-WEDGEVEL) -- the WATCHED body's position push-out, inside an open
-            // [wedge] window only (banner at WedgeWindowSteps() in ExternalPhysicsBody.cpp). NOT
-            // X360. The pre-solve pose, the solved pose, the correction, and each of this model's
-            // world contacts in the solver's own terms (depth = (B - T.A) . n, the amount Solve()
-            // adds along n, evaluated on the PRE-solve transform; Solve() runs twice).
-            if ( DvWedgeStepRecording() && CgsDev::Log::gpDebugPrint != 0
-                 && &mpaModels[liModelIndex].GetVehicleBody() == gpDvWatchBody )
-            {
-                Matrix44Affine lPre; mpaModels[liModelIndex].GetTransform(lPre);
-                const s32 liNumWorld = lpSolver->GetNumWorldContacts();
-                const PenetrationContact* lpWC = lpSolver->GetWorldContacts();
-                s32 liMine = 0;
-                for ( s32 liC = 0; liC < liNumWorld; ++liC )
-                {
-                    if ( lpWC[liC].miIndexA == liModelIndex ) { ++liMine; }
-                }
-                s32 liMineVehicle = 0;
-                const s32 liNumVehicle = lpSolver->GetNumVehicleContacts();
-                const PenetrationContact* lpVC = lpSolver->GetVehicleContacts();
-                for ( s32 liC = 0; liC < liNumVehicle; ++liC )
-                {
-                    if ( lpVC[liC].miIndexA == liModelIndex || lpVC[liC].miIndexB == liModelIndex ) { ++liMineVehicle; }
-                }
-                *CgsDev::Log::gpDebugPrint
-                    << "[wedge-pen] step " << static_cast<s32>( DvWitnessStepIndex() )
-                    << " model " << liModelIndex
-                    << " world " << liMine << " vehicle " << liMineVehicle
-                    << " weight " << mpaModels[liModelIndex].GetWeightFactor().x
-                    << " pre " << lPre.wAxis.x << " " << lPre.wAxis.y << " " << lPre.wAxis.z
-                    << " post " << lpSolvedTransform->wAxis.x << " " << lpSolvedTransform->wAxis.y
-                    << " " << lpSolvedTransform->wAxis.z
-                    << " corr " << ( lpSolvedTransform->wAxis.x - lPre.wAxis.x )
-                    << " " << ( lpSolvedTransform->wAxis.y - lPre.wAxis.y )
-                    << " " << ( lpSolvedTransform->wAxis.z - lPre.wAxis.z )
-                    << "\n";
-                s32 liDumped = 0;
-                for ( s32 liC = 0; liC < liNumWorld && liDumped < 16; ++liC )
-                {
-                    if ( lpWC[liC].miIndexA != liModelIndex ) { continue; }
-                    const Vector3& lA = lpWC[liC].mPointOnA;
-                    const Vector3& lB = lpWC[liC].mPointOnB;
-                    const Vector3& lN = lpWC[liC].mNormal;
-                    Vector3 lWorldA;
-                    lWorldA.x = lPre.xAxis.x * lA.x + lPre.yAxis.x * lA.y + lPre.zAxis.x * lA.z + lPre.wAxis.x;
-                    lWorldA.y = lPre.xAxis.y * lA.x + lPre.yAxis.y * lA.y + lPre.zAxis.y * lA.z + lPre.wAxis.y;
-                    lWorldA.z = lPre.xAxis.z * lA.x + lPre.yAxis.z * lA.y + lPre.zAxis.z * lA.z + lPre.wAxis.z;
-                    const f32 lfDepth = ( lB.x - lWorldA.x ) * lN.x + ( lB.y - lWorldA.y ) * lN.y
-                                      + ( lB.z - lWorldA.z ) * lN.z;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[wedge-pen]   c" << liC
-                        << " n " << lN.x << " " << lN.y << " " << lN.z
-                        << " depth " << lfDepth
-                        << " A " << lWorldA.x << " " << lWorldA.y << " " << lWorldA.z
-                        << " localA " << lA.x << " " << lA.y << " " << lA.z
-                        << "\n";
-                    ++liDumped;
-                }
-            }
-            // ---- end [wedge-pen] -------------------------------------------------------------
 
             mpaModels[liModelIndex].SetTransform(lpSolvedTransform);
         }

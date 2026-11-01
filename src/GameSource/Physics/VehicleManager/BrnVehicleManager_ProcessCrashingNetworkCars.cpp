@@ -128,10 +128,10 @@ namespace Vehicle
                     // pose, drop the deformation model and reset the vehicle physics.
                     lrCar.SetTransform(lpControls->mTransform);
                     lrCar.SetLinearVelocity(lpControls->mLinearVelocity);
-                    const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    const Vector3 lvZero(__vspltisw(0));
                     lrCar.SetAngularVelocity(lvZero);
-                    lrCar.SetMass(lrCar.GetAttribs()
-                                      ->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x);
+                    lrCar.SetMass(VecFloat(__vspltw(lrCar.GetAttribs()
+                                      ->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV, 0)));
 
                     const EActiveRaceCarIndex leRaceCarIndex =
                         static_cast<EActiveRaceCarIndex>(liDriverActiveRaceCarIndex);
@@ -252,7 +252,7 @@ namespace Vehicle
                 lbCrashingAfterLatch,
                 /*lbCarIsAI=*/false,
                 /*lbCarIsNetwork=*/true,
-                lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x,
+                lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.mV.x,
                 BrnGameState::E_TAKEDOWN_NONE);
 
             RaceCarCrashIoEventRecord lEventRecord;

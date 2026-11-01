@@ -1,45 +1,13 @@
 #include "GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/math/vpu/vector3_operation.h"
+#include "rw/math/vpu/matrix44affine_operation.h"
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
-#include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{IsValid, operator+, Dot, Cross, Mult, ...}
-#include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::OrthoNormalize3x3
-#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // InChangeRigidBodyInertia (ReadPropertiesFromChangeInertiaEvent)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (CheckState's failure print)
-#include <cmath>   // std::pow (models the VMX exp2/log2 pow-curve in the damp funcs)
-#include <cstdlib> // getenv / atof -- the opt-in [bank] and [dv] bring-up probes only
-#ifdef _MSC_VER
-#include <intrin.h>          // _ReturnAddress -- the [dv] drain witness's call-site tag
-#pragma intrinsic(_ReturnAddress)
-// The linker-provided image base, so the [dv] witness can print an ASLR-independent RVA instead
-// of a raw pointer. Declared as a byte rather than pulling <windows.h> into a physics TU (only
-// its ADDRESS is ever taken); this is the same base GetModuleHandleA(nullptr) returns, which is
-// what CgsCrashHandlerPC.cpp uses for the identical purpose.
-extern "C" char __ImageBase;
-#endif
-
-// BrnPhysics::ExternalPhysicsBody -- the 7 functions owned by the BrnPhysics-bodies group.
-//
-// The X360 build implements every one of these with VMX128/AltiVec inline assembly that does
-// not exist on the x64 host. Per project convention (cf. BrnTagPoint.cpp) the bodies below are
-// the DE-SIMD'd scalar/vector equivalents written against the reconstructed members BY NAME --
-// no __asm. The four AddWorldSpace* accumulators and the two transform-space details are
-// recovered store-for-store; the collision-impulse solver and the two angular-velocity dampers
-// are reconstructed from their recovered DATA FLOW (the VMX poly-approximation internals -- the
-// exp2/log2 pow curve and the per-lane select machinery -- are MODELLED, see the flags below).
-
-// The console frame of ExternalPhysicsBody. Every offset below was read out of the X360 asm of
-// a DIFFERENT function than the one next to it, so they corroborate rather than repeat:
-//   +0x70  mLocalInverseInertia   ReadPropertiesFromRenderware @0x825A2280 / CalculateWorldIntertia
-//   +0xA0  mWorldInverseInertia   CalculateNewVelocity's `addi r11,this,0xA0` + its three row loads
-//   +0xD0  mfMass                 CalculateNewVelocity's `li r11,0xD0` -> the vrefp reciprocal
-//   +0xE0  mTotalLinearForce      AddWorldSpaceForce / AddLocalForce / Construct
-//   +0xF0  mTotalTorque           AddWorldSpaceTorque / AddLocalForce / Construct
-//   +0x100 mTotalLinearImpulse    AddWorldSpaceImpulse / AddLocalImpulse / Construct
-//   +0x110 mTotalAngularImpulse   AddWorldSpaceAngularImpulse / AddLocalImpulse / Construct
-// This whole base chain is pointer-free (see the ExternallySimulatedBody LAYOUT note), so the
-// console offsets reproduce exactly on x64.
-// (the members are protected, so the offsets are taken through an empty derived probe, which
-// adds nothing and therefore shares the class's frame exactly).
+// Native ARTIST ExternalPhysicsBody. Real XDK VMX operations retain all
+// lanes, ordered fused arithmetic, reciprocal refinements and store order.
+// Root's PC-only state removal and the native120-byte class gates remain.
 #include <cstddef>   // offsetof
 
 CGS_STATIC_ASSERT((sizeof(BrnPhysics::ExternalPhysicsBody) == 0x120),
@@ -80,1532 +48,443 @@ namespace BrnPhysics
 {
     namespace vpu = rw::math::vpu;
 
-    // ---------------------------------------------------------------------------------------
-    // AddWorldSpace{Force,Torque,Impulse,AngularImpulse}  @0x825BE710 / .9D0 / .8F8 / .EAA8
-    //
-    // Each is the same shape: assert the incoming world-space vector is finite, then add it
-    // (vaddfp the stored accumulator by the argument and store back). The asm self-compares
-    // each of the x/y/z lanes (`vspltw`+`vcmpeqfp.`) to detect NaN -- i.e. RwMathVPU::IsValid
-    // -- and fires the matching "Bad <kind> added " assert on failure, but the add then runs
-    // UNCONDITIONALLY (the assert is a non-gating tripwire). Store target confirmed by asm
-    // `addi r11,this,0x{E0,F0,100,110}` -> mTotalLinearForce/mTotalTorque/mTotalLinearImpulse/
-    // mTotalAngularImpulse. The accumulators carry xyz (force/torque/impulse have no w term).
-    // ---------------------------------------------------------------------------------------
-    void ExternalPhysicsBody::AddWorldSpaceForce(Vector3 lvForce)
-    {
-        CGS_ASSERT(vpu::IsValid(lvForce), "Bad force added ");
-        mTotalLinearForce = vpu::Add(mTotalLinearForce, lvForce);
-    }
-
-    void ExternalPhysicsBody::AddWorldSpaceTorque(Vector3 lvTorque)
-    {
-        CGS_ASSERT(vpu::IsValid(lvTorque), "Bad torque added ");
-        mTotalTorque = vpu::Add(mTotalTorque, lvTorque);
-    }
-
-    void ExternalPhysicsBody::AddWorldSpaceImpulse(Vector3 lvImpulse)
-    {
-        CGS_ASSERT(vpu::IsValid(lvImpulse), "Bad impulse added ");
-        mTotalLinearImpulse = vpu::Add(mTotalLinearImpulse, lvImpulse);
-
-        // ---- [bank] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------------
-        // OPT-IN (BRN_BANK_PROBE=1, a probe of its own so it can be armed WITHOUT the deformation
-        // probes and vice versa). This is the momentum bank itself: every world-space linear impulse
-        // any subsystem hands the body, with the running total it accumulates into.
-        // ⚠️ Read it TOGETHER with [chainarrive] -- this function has several callers (the sensor
-        // apply's own block (5), the wheels, the wall handler), so a line here on its own attributes
-        // nothing. The pair does: a [chainarrive] route WALL immediately followed by a [bank] delta
-        // is the impulse-passing chain reaching the momentum bank, in one run, in order.
-        {
-            static s32 siBankProbe = -1;
-            if ( siBankProbe < 0 )
-            {
-            }
-            // ⚠️ COUNT ONLY THE NON-ZERO BANKS. The first cut counted every call and capped at 4000:
-            // the wheels call this every frame with a zero impulse, so the cap was exhausted during
-            // the boot menus and the probe printed NOTHING for a whole 275 s run while the chain was
-            // demonstrably delivering. A cap has to be on the events you are counting.
-            static u32 suBanks      = 0;
-            static u32 suBigBanks   = 0;
-            const f32 lfMagSq = lvImpulse.x * lvImpulse.x + lvImpulse.y * lvImpulse.y
-                              + lvImpulse.z * lvImpulse.z;
-            const f32 lfHorizontalSq = lvImpulse.x * lvImpulse.x + lvImpulse.z * lvImpulse.z;
-            // Same two-window shape as [chainarrive]: a short opening window that proves the bank is
-            // being fed at all, then only HORIZONTAL-dominant banks, which is what a wall response
-            // looks like and what the ground's +Y support does not.
-            const bool lbInteresting = ( lfMagSq > 0.0f && ++suBanks <= 30u )
-                                     || ( lfHorizontalSq > 1.0f && ++suBigBanks <= 600u );
-            if ( siBankProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbInteresting )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[bank] n " << static_cast<s32>(suBanks)
-                    << " J " << lvImpulse.x << " " << lvImpulse.y << " " << lvImpulse.z
-                    << " total " << mTotalLinearImpulse.x << " " << mTotalLinearImpulse.y
-                    << " " << mTotalLinearImpulse.z << "\n";
-            }
-        }
-    }
-
-    void ExternalPhysicsBody::AddWorldSpaceAngularImpulse(Vector3 lvImpulse)
-    {
-        CGS_ASSERT(vpu::IsValid(lvImpulse), "Bad angular impulse added ");
-        mTotalAngularImpulse = vpu::Add(mTotalAngularImpulse, lvImpulse);
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // AddLocalSpaceForce  @0x825BE7E8  (67 insns)
-    // ⭐ BODIED 2026-08-07 (wheel-cluster wave; was DECLARE-ONLY, and its .ida-exports JSON is
-    // a hole -- pulled fresh from the .i64). Same tripwire shape as the world-space adders
-    // (the NaN sweep fires "Bad force added " @ExternalPhysicsBody.h:457 and the add runs
-    // unconditionally), but the force arrives in the body's LOCAL frame and is rotated out
-    // first: world = xAxis*F.x + yAxis*F.y + zAxis*F.z (the two-vmaddfp cascade over the
-    // mTransform rows at this+0x00/0x10/0x20), then mTotalLinearForce (+0xE0) += world.
-    // ---------------------------------------------------------------------------------------
-    void ExternalPhysicsBody::AddLocalSpaceForce(Vector3 lvForce)
-    {
-        CGS_ASSERT(vpu::IsValid(lvForce), "Bad force added ");
-
-        const Vector3 lvWorld{
-            mTransform.xAxis.x * lvForce.x + mTransform.yAxis.x * lvForce.y
-                + mTransform.zAxis.x * lvForce.z,
-            mTransform.xAxis.y * lvForce.x + mTransform.yAxis.y * lvForce.y
-                + mTransform.zAxis.y * lvForce.z,
-            mTransform.xAxis.z * lvForce.x + mTransform.yAxis.z * lvForce.y
-                + mTransform.zAxis.z * lvForce.z,
-            0.0f };
-
-        mTotalLinearForce = vpu::Add(mTotalLinearForce, lvWorld);
-    }
-
-    // =======================================================================================
-    // ⭐ THE INTEGRATOR
-    //
-    // Everything below this banner was ABSENT from the tree. `IntegrateTransform` and
-    // `CalculateNewVelocity` are the two functions every force leaf in VehiclePhysics
-    // ultimately pushes into: the leaves fill the four accumulators, CalculateNewVelocity turns
-    // them into a velocity change and clears them, IntegrateTransform advances the pose.
-    //
-    // ⚠️ Both take the timestep in the incoming VECTOR register v1, not an FPU register --
-    // recovered from the ASM, not from a PC declaration (see the header note on the dropped
-    // `dt` argument). The de-SIMD convention is the file's existing one: the VMX128 lane
-    // machinery is lowered to named scalar/Vector3 math, no __asm, stores in the asm's order.
-    // =======================================================================================
-
-    // ---------------------------------------------------------------------------------------
-    // CalculateNewVelocity  @0x825A1B10
-    //
-    //     invMass = 1 / mfMass
-    //     mLinearVelocity  += (mTotalLinearForce * dt + mTotalLinearImpulse) * invMass
-    //     mAngularVelocity += mWorldInverseInertia * (mTotalTorque * dt + mTotalAngularImpulse)
-    //     mTotalLinearImpulse = mTotalAngularImpulse = mTotalLinearForce = mTotalTorque = 0
-    //
-    // FIDELITY: CLEAN on the data flow, the store set and the store ORDER (the asm writes the
-    // new linear velocity to this+0x40 before it touches the angular register at this+0x50, and
-    // clears the four accumulators last, in the order +0x100, +0x110, +0xE0, +0xF0).
-    //
-    // The four dev asserts are reproduced with their console text and in the console's order --
-    // they are the same non-gating `rw::math::IsValid` tripwires used elsewhere in this file,
-    // fired BEFORE the integrate (ExternalPhysicsBody.cpp:279/280 == asm 0x117/0x118) and again
-    // AFTER it (:291/:292 == 0x123/0x124). They pin the two velocity members by NAME: the asm
-    // fires "rw::math::IsValid(mAngularVelocity)" on the register at this+0x50 and
-    // "rw::math::IsValid(mLinearVelocity)" on this+0x40.
-    //
-    // FLAG (modelled, not bit-verified): 1/mfMass is the VMX `vrefp` reciprocal estimate plus TWO
-    // Newton-Raphson refinement steps (vnmsubfp/vmaddfp/vmaddcfp128 against a vcfsx-materialised
-    // 1.0). It is written as a plain divide here, the same modelling the two collision solvers
-    // below already use. Deliberately NOT guarded against a zero mass: the console does not guard
-    // either, and a guarded 0 would silently freeze a mass-less body instead of tripping the two
-    // trailing IsValid asserts that exist precisely to catch it.
-    // ---------------------------------------------------------------------------------------
-    // ---- [crash-response] PC bring-up instrument -- DELETE WHEN the crash response is 1:1 -------
-    // NOT IN THE X360 BINARY. The body the crash-response witness is watching (the player's car
-    // while it is crashing), set per frame by VehicleManager::UpdateVehiclePhysics and read by
-    // CalculateNewVelocity below so every accumulator drain of THAT body prints what it drained:
-    // the banked linear/angular impulse, the torque*dt, and the resulting change of angular
-    // velocity in the car's own axes. Null == nobody is watched (the default, and every run
-    // without BRN_CRASH_RESPONSE_DIAG=1).
-    const ExternalPhysicsBody* gpCrashResponseDiagBody = 0;
-
-    // ---- [dv] THE ONE-STEP VELOCITY WITNESS -- PC bring-up instrument ---------------------------
-    // OPT-IN (BRN_DV_PROBE=<threshold m/s>, e.g. 2). NOT IN THE X360 BINARY. Off by default: the
-    // latch reads 0 once and every print is unreachable thereafter, so a default run and every
-    // golden gate stay byte-identical to a build without it.
-    //
-    // WHY THIS EXISTS, AND WHY IT IS NOT ANOTHER PER-FRAME DUMP. Two measured events survive four
-    // kerb waves: a one-physics-step loss of ~9.5 m/s on flat tarmac (st_scoutB f1011->f1012) and a
-    // 6.2 mph loss at 106 mph with a DIAGONAL delta and zero body impulses. Both were found by
-    // reading a log after the fact; neither has ever been reproduced on purpose. Every existing
-    // probe answers a DIFFERENT question -- [kerb] prints contact classification, [kerb-imp] prints
-    // world impulses the deformation solver applies, [wsus] prints the suspension state -- and the
-    // st_scoutB event fired with [kerb-imp] SILENT for the whole losing step, i.e. the mechanism is
-    // not on any instrumented path. So instead of another sampler, this arms a witness ON THE EVENT
-    // ITSELF: it samples the watched body's velocity at each named stage boundary of
-    // PhysicsModule::Update, records EVERY accumulator drain in between, and prints the whole
-    // ledger for a step ONLY when that step's |dv| crosses the threshold. A quiet run means the
-    // event did not happen; it does not mean the probe saw nothing.
-    //
-    // WHAT IT CAN AND CANNOT SEE.
-    //   * CAN: every velocity change made through CalculateNewVelocity -- the ONE funnel that turns
-    //     the four accumulators (mTotalLinearForce/-Torque/-LinearImpulse/-AngularImpulse) into
-    //     velocity -- with the banked J and F*dt that produced it and the caller's return address.
-    //   * CAN: any velocity change made by anything else, as a gap between two stage marks (a
-    //     direct SetLinearVelocity write, e.g. the showtime launch/cap arms, shows up as a mark-to-
-    //     mark delta with no drain between the two marks).
-    //   * CANNOT: name the writer inside such a gap. The stage marks bracket it; they do not
-    //     identify it. Narrowing a gap is a matter of adding a mark, not of reading harder.
-    //   * The position is carried alongside the velocity for exactly one reason: the post-sim
-    //     bump-stop translation (VehiclePhysics::UpdateSuspensionPostSimulation @0x825F6BB0) moves
-    //     mTransform.wAxis WITHOUT touching velocity, so a pose jump with no velocity change is a
-    //     different mechanism and must be visible as such.
-    //
-    // ✅ THE PROBE WORKS, AND IT IS DISCRIMINATING (run dv_r8, 2026-09-03: 571 m driven, 13 step
-    // dumps at threshold 2 m/s). Every return address it recorded resolves to a real
-    // CalculateNewVelocity caller, and each one matches the accumulator type observed -- which is
-    // what makes the resolution trustworthy rather than a plausible-looking lookup. Resolved
-    // against build/game/Burnout_PC.map (the image base is 64 KB aligned, so a candidate sweep
-    // pins it; only one base puts ALL SIX inside functions that call CalculateNewVelocity):
-    //     UpdateSuspension +0x1d6                  force drain, Fdt ~ (0, +500, 0)   -- the
-    //                                              inlined ApplySuspensionForces tail, the up-axis
-    //                                              spring push
-    //     UpdateWheels +0x11e7 / +0x1392           force drains, Fdt horizontal      -- the tyres
-    //     UpdateDriving +0xacb                     force drain, Fdt ~ (0, -44, 0)
-    //     UpdateContacts +0x4bd                    IMPULSE drain, J in the thousands -- the
-    //                                              deformation contact solver
-    //     UpdateSuspensionPostSimulation +0xe5e    IMPULSE drain, J ~ (10, +1935, -34), up to
-    //                                              4 per step -- ⭐ the -0.7 inanimate-world
-    //                                              RECOVERY arm, confirmed live and confirmed
-    //                                              capable of ~1.5 m/s per wheel per step
-    // ⭐ WHAT IT PROVED ON ITS FIRST RUN: at f6386 a single UpdateContacts drain took 7.50 m/s out
-    // of the car (J = (5592.9, -115.1, -10519.6) N.s) with ZERO [kerb-imp] lines that frame, while
-    // f6355 / f6473 / f7094 printed exactly one per drain. That is the CAR-CAR arm of the same
-    // solver, which was uninstrumented -- see the (F2b) paragraph in
-    // BrnVehicleManager_ValidateRaceCarWorldContact.cpp and the new CARCAR leg in
-    // BrnDeformableObject.cpp.
-    // ⚠️ STILL MAKE IT FAIL BEFORE YOU TRUST A QUIET RUN. A [dv]-silent run means the threshold was
-    // never crossed; it does not mean the probe was armed. Confirm a "[dv] STEP" line appears at
-    // all before reading anything into silence.
-    //
-    // ⭐⭐⭐ WHAT IT ANSWERED (kerb wave 6, 2026-09-03; runs kw6_dv1 / kw6_dv2, plain -Drive,
-    // BRN_DV_PROBE=4, 216 m and 470 m driven). THREE THINGS, and the third is the one nobody was
-    // looking for:
-    //   1. THE ONE-STEP LOSSES ARE CONTACTS, AND THE PROBE NOW NAMES WHICH KIND. Every drain
-    //      carries `site carcar|world` (see gpcDvDrainTag below). kw6_dv1 f6798 is five `carcar`
-    //      drains taking 19.4 m/s out in one step; kw6_dv2 f6991..f6993 is twelve of them,
-    //      58.6 -> 18.5 m/s; kw6_dv1 f8351/f8352 is `world` at 147 mph. Every tag is matched
-    //      line-for-line by a [kerb-imp] CARCAR / world line at the same frame, from a different
-    //      instrument. THE FILM AGREES: the frames dumped by the new BRN_FRAME_DUMP_ARM=dv show
-    //      the player's nose against an orange traffic sedan. So the class of event is the
-    //      player REAR-ENDING TRAFFIC, which is console behaviour.
-    //   2. THE `ra` FIELD CANNOT DO THAT ON ITS OWN, and the earlier attribution rested on a
-    //      silence. UpdateContacts drains BOTH arms through ONE CalculateNewVelocity line, so
-    //      both print the same `UpdateContacts +0x4bd`. `site` is the positive statement.
-    //   3. ⭐⭐⭐ THE CAR ALSO GAINS SPEED IN ONE STEP -- +30%, ON PURPOSE, BY THE CONSOLE.
-    //      On the step the crash flag goes 0 -> 1 the horizontal velocity is multiplied by
-    //      EXACTLY 1.3 (x and z, y bit-identical, no drain): 105.3 -> 137.0 mph at kw6_dv2 f6988,
-    //      113 -> 147 mph at kw6_dv1 f8348. The four stage marks added this wave
-    //      (ctcorder/fixup/crashpred/slowmo) pin it to DoCrashPrediction @0x82645FE0, and the
-    //      code is VehiclePhysics::SetCrashing's mCrashExtraVelocityFactors block (asm
-    //      0x825FD164..0x825FD1FC) -- read its banner. Half the shock in a "the car lost
-    //      enormous speed" report is momentum the game added one step earlier.
-    //   Also explained in passing: a [dv] step with `dt 0.000017` is not a glitch, it is the
-    //   console's own post-crash slow motion (lfSimTimerTimeStep *= 0.001f, three frames,
-    //   BrnPhysicsModuleUpdateFunctions.cpp).
-    // ⛔ WHAT IT DID NOT ANSWER: the ORIGINAL st_scoutB f1011->f1012 event (9.45 m/s lost at
-    // 28 mph with `crash 0` and no impulse on either arm) was NOT reproduced -- the -Teleport
-    // recipe that reaches it does not drive at all on this build (see (2) below; a third run,
-    // kw6_st2, died the same way, with `gas 0.000000` from the FIRST [motion] sample, i.e. the
-    // throttle never reached the car, teleport or not). That event's mechanism is still unnamed.
-    //
-    // ⚠️⚠️ AND HERE IS WHY THOSE RUNS DIED -- written down because it cost this wave its whole
-    // measurement budget and NONE of it was the physics. Everything below is in an isolated
-    // worktree (D:\wt1) driving tools/diagnostics/flow_run.ps1.
-    //
-    //   (1) A REAL, NOW-FIXED BOOT BUG ATE FOUR RUNS. EffectsModule::UpdateActiveRaceCars fired
-    //       "Not Constructed" (CgsVariableEventQueue.h:367) on a zero-filled VariableEventQueue,
-    //       5838 times in one run and 21380 in another, and the flow wedged at CARSELECT. Another
-    //       wave fixed it mid-session in b5 7290e837 ("fix(effects): construct the audio-effects
-    //       queue the sound bridge would have written"). With that commit in, the very next run
-    //       booted at the ORIGINAL timings -- newprof 16.7 s, car select 22.3 s, DRIVING 37.7 s,
-    //       against 74 s / never before it. ⇒ If a physics run will not reach DRIVING, check the
-    //       assert HISTOGRAM by source file before blaming data, hardware or the recipe: one
-    //       repeated assert from a module you are not working on is the likeliest single cause.
-    //
-    //   (2) ⭐ AND THEN THE TELEPORT RECIPE STILL WOULD NOT DRIVE, which is a SEPARATE harness
-    //       finding worth more than the runs it cost. With -Teleport armed, the car drives the 8 m
-    //       that arms the placement, is placed at the destination -- and then sits there with the
-    //       throttle HELD: [motion] reads `gas 0.000000` for the rest of the run, and the DRIVE
-    //       verdict measures "from sample N, after the last >20m placement jump" and correctly
-    //       reports 0.1 m. Two runs (dv_r5, dv_r6) died this way at DRIVING phase. The marks also
-    //       show the input applied at `t+54.16s` despite `delay=6,0s`, so the harness's own drive
-    //       clock is suspect as well. ⇒ A -Teleport run that reaches DRIVING is NOT evidence the
-    //       car can be driven; read the DRIVE line, and prefer a plain -Drive run when what you
-    //       need is motion rather than a specific place.
-    //
-    //   (3) ⛔ MY OWN ERROR, recorded so it is not repeated: a Stop-Process that did not actually
-    //       kill the previous run's Burnout_PC left TWO game instances writing one BrnGame.log for
-    //       16 minutes, voiding both that run and the next. _box_lock.ps1 serialises HARNESSES, not
-    //       orphaned game processes -- verify the kill (`Get-Process Burnout_PC` returns nothing)
-    //       before launching the next run.
-    //
-    //   ⚠️ ONE ANOMALY IS LEFT UNEXPLAINED, deliberately. Run 4 used b5 08b7c3fd + this probe with
-    //   the matching parent mount set -- the EXACT base the st_scoutB run drove on, which logged
-    //   asserts=0 -- and it fired 21380 of the (1) assert. Same commit, same mounts, same recipe,
-    //   opposite outcome. Do not build on either reading of that until someone reproduces it.
-    //   ⇒ AND DO NOT READ ANY OF THIS AS "another wave broke the build". That exact claim was
-    //     made and withdrawn INSIDE this wave: the first run's 3967 "Not locked for writing"
-    //     asserts were filed against the effects wave, and a rerun of the same binary with the
-    //     main tree's complete converted data fired 17. Reproducible was not attributable.
-    const ExternalPhysicsBody* gpDvWatchBody = 0;
-
-    // ⭐⭐⭐ THE CALL-SITE TAG, AND WHY A RETURN ADDRESS IS NOT ENOUGH (added 2026-09-03, kerb
-    // wave 6). DeformableObject::UpdateContacts routes each sorted contact to ApplyCarCarImpulse
-    // or ApplyCarWorldImpulse and then calls CalculateNewVelocity from ONE shared line
-    // (BrnDeformableObject_Update.cpp:1420). So BOTH arms drain at the SAME return address, and
-    // the `ra` field -- which is what named `UpdateContacts +0x4bd` for the 7.5 m/s f6386 event --
-    // is CONSTITUTIONALLY UNABLE to say which arm ran. That is the same "a probe can watch half a
-    // solver" shape that cost four waves a wrong conclusion, one level down: the fix there was to
-    // give the silent arm a print, the fix here is to let the drain name its own arm.
-    // Set by the caller immediately before the drain, cleared immediately after; "" == untagged.
-    const char* gpcDvDrainTag = "";
+    // DecFIGS ExternalPhysicsBody.h:40; ARTIST82C5B030 initializes
+    // the full row82FB9AF0 from the60.0f word82092BC4.
+    const VecFloat kvfSixty(60.0f);
 
     namespace
     {
-        // The [kerb]/[kerb-car] frame counter, so a [dv] step number lines up with the contact
-        // lines for the same step without a second correlation pass.
-        const s32 KI_DV_MAX_ENTRIES = 256;
-
-        struct DvEntry
+        inline __vector4 One() { return __vcfsx(__vspltisw(1), 0); }
+        inline __vector4 SignMask()
         {
-            const char* mpcPhase;
-            const char* mpcTag;            // the drain's call-site tag (see gpcDvDrainTag)
-            const void* mpReturnAddress;   // 0 for a stage mark
-            bool        mbDrain;
-            Vector3     mV;                // velocity AFTER this entry
-            Vector3     mP;                // position  AFTER this entry
-            Vector3     mDv;               // change this entry made (drains only)
-            Vector3     mJ;                // banked linear impulse   (drains only)
-            Vector3     mFdt;              // banked force * dt       (drains only)
-            f32         mfInvMass;
-        };
+            const __vector4 bits = __vspltisw(-1);
+            return __vslw(bits, bits);
+        }
+        inline __vector4 FlipSigns(__vector4 value) { return __vxor(value, SignMask()); }
+        inline __vector4 SplatValue(f32 value) { return __vspltw(__lvlx(&value, 0), 0); }
 
-        DvEntry     gaDvRing[KI_DV_MAX_ENTRIES];
-        s32         giDvUsed        = 0;
-        s32         giDvDropped     = 0;
-        u32         guDvStep        = 0;
-        u32         guDvDumps       = 0;
-        bool        gbDvStepOpen    = false;
-        Vector3     gDvStartV       = { 0.0f, 0.0f, 0.0f, 0.0f };
-        Vector3     gDvStartP       = { 0.0f, 0.0f, 0.0f, 0.0f };
-        const char* gpcDvPhase      = "-";
-        const u32   KU_DV_MAX_DUMPS = 400u;
-
-        // -1 == not yet read; 0 == disarmed; otherwise the threshold in m/s scaled by 1000.
-        f32 DvThreshold()
+        inline bool IsValid3(__vector4 value)
         {
-            static f32  sfThreshold = -1.0f;
-            if ( sfThreshold < 0.0f )
-            {
-                sfThreshold = 0.0f;
-            }
-            return sfThreshold;
+            unsigned int comparison = 0;
+            __vector4 lane = __vspltw(value, 0);
+            __vcmpeqfpR(lane, lane, &comparison);
+            if (!(comparison & 0x80u)) return false;
+            lane = __vspltw(value, 1);
+            __vcmpeqfpR(lane, lane, &comparison);
+            if (!(comparison & 0x80u)) return false;
+            lane = __vspltw(value, 2);
+            __vcmpeqfpR(lane, lane, &comparison);
+            return (comparison & 0x80u) != 0;
         }
 
-        // ---- [wedge] THE WEDGED-CAR WINDOW (FX-WEDGEVEL, 2026-09-24) -- PC bring-up instrument ----
-        // OPT-IN (BRN_WEDGE_PROBE=<steps per window>; "1" == 240). NOT IN THE X360 BINARY; the
-        // latch reads 0 once and nothing below runs, so a default run is byte-identical.
-        //
-        // WHAT IT IS FOR. Two banked runs (fxgeometric/20260924_164556 [motion] n 5880..10470,
-        // rcem_takedown_flow/20260922_214835 n 4200..5190) show the player car held against geometry
-        // with the throttle on: its position does not move for 90 s while RaceCarState::
-        // mLinearVelocity reads ~0.9 m/s. The question is WHERE in the step that velocity survives:
-        // which writer adds it, which contact response fails to remove it, and whether a
-        // position-level push-out is what pins the pose. The [dv] ledger already samples the
-        // watched (player) body at every stage boundary of PhysicsModule::Update and records every
-        // CalculateNewVelocity drain in between -- but it prints only a step whose |dv| crosses a
-        // threshold, and a steady wedge has |dv| ~ 0 by definition. This arms the same ledger on
-        // THE SIGNATURE instead: |v_end| > KF_WEDGE_MIN_SPEED while |p_end - p_start| stays below
-        // KF_WEDGE_MAX_DISPLACEMENT_FRACTION * |v_end| * dt, for KI_WEDGE_CONFIRM_STEPS steps in a
-        // row. The window then prints the FULL ledger for its next N steps, and the contact-side
-        // lines ([wedge-imp] in the world-impulse arm, [wedge-pen] in the penetration solver's
-        // read-back) print for exactly the same steps (DvWedgeStepRecording()).
-        // CAPPED: KU_WEDGE_MAX_WINDOWS windows, and a new one only after the signature has been
-        // ABSENT for KI_WEDGE_REARM_STEPS (so one wedge is one window, not four; 45 steps is
-        // shorter than a re-placed car's approach to its next wedge, so a sweep's shots each get one).
-        // ⛔ A silent run is not "no wedge": check for the "[wedge] ARMED" line first.
-        //
-        // ⭐ WHAT IT MEASURED (fxwedgevel_wedge/20260924_175219, the 2927-ramp site, 240 steps):
-        // per step the rear tyres add dv 0.184 m/s into the wall (UpdateWheels' rear-pair drain,
-        // Fdt (-259.9, 0.5, -133.7) N.s), the world contacts take back 0.188 m/s (3 drains through
-        // UpdateContacts, each EXACTLY 0.2x the shaped impulse over all 535 contacts: the sensor
-        // passes 0.8 on and ApplyWallContactImpulse @0x825FEA18 applies x0.25 of that, after
-        // ApplyCarWorldImpulse's x0.5 -- 10% of the fully inelastic impulse), gravity is the only
-        // non-drain change, IntegrateTransform moves the car 13.4 mm into the wall and
-        // SolvePenetration pushes 13.2 mm back with NO velocity change (@postphys segDv 0 on every
-        // step). All five legs are the console's (addresses in fixes/FX-WEDGEVEL.md): the residual
-        // velocity is the console's own balance, not a PC divergence.
-        const f32 KF_WEDGE_MIN_SPEED                 = 0.3f;    // m/s
-        const f32 KF_WEDGE_MAX_DISPLACEMENT_FRACTION = 0.25f;   // of |v| * dt
-        const s32 KI_WEDGE_CONFIRM_STEPS             = 30;
-        const s32 KI_WEDGE_REARM_STEPS               = 45;
-        const u32 KU_WEDGE_MAX_WINDOWS               = 4u;
-
-        s32  giWedgeRun       = 0;      // consecutive steps showing the signature
-        s32  giWedgeClear     = 0;      // consecutive steps NOT showing it
-        s32  giWedgeLeft      = 0;      // steps left in the open window
-        u32  guWedgeWindows   = 0u;     // windows opened so far
-        bool gbWedgeRearmed   = true;   // may a new window open?
-        bool gbWedgeRecording = false;  // is the CURRENT step inside a window?
-        bool gbWedgeArmedSaid = false;
-
-        // -1 == not yet read; 0 == off; otherwise the window length in steps.
-        s32 WedgeWindowSteps()
+        inline bool IsValid4(__vector4 value)
         {
-            static s32 siSteps = -1;
-            if ( siSteps < 0 )
-            {
-                siSteps = 0;
-            }
-            return siSteps;
+            unsigned int comparison = 0;
+            __vcmpeqfpR(value, value, &comparison);
+            return (comparison & 0x80u) != 0;
         }
 
-        bool DvArmed()
+        inline __vector4 ReciprocalTwice(__vector4 value)
         {
-            return ( DvThreshold() > 0.0f || WedgeWindowSteps() > 0 )
-                && gpDvWatchBody != 0 && CgsDev::Log::gpDebugPrint != 0;
+            const __vector4 one = One();
+            __vector4 estimate = __vrefp(value);
+            estimate = __vmaddfp(estimate, __vnmsubfp(estimate, value, one), estimate);
+            return __vmaddfp(estimate, __vnmsubfp(estimate, value, one), estimate);
         }
 
-        f32 DvMagnitude( const Vector3& lrV )
+        inline __vector4 CrossNative(__vector4 a, __vector4 b)
         {
-            return std::sqrt( lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z );
+            const __vector4 product = __vmulfp(a, __vpermwi(b, 0x63));
+            return __vpermwi(__vnmsubfp(__vpermwi(a, 0x63), b, product), 0x63);
         }
 
-
-        DvEntry* DvPush()
+        inline __vector4 RowProduct(__vector4 x, __vector4 y, __vector4 z, __vector4 value)
         {
-            if ( giDvUsed >= KI_DV_MAX_ENTRIES )
-            {
-                ++giDvDropped;
-                return 0;
-            }
-            return &gaDvRing[giDvUsed++];
+            __vector4 result = __vmulfp(x, __vspltw(value, 0));
+            result = __vmaddfp(y, __vspltw(value, 1), result);
+            return __vmaddfp(z, __vspltw(value, 2), result);
         }
-    }
 
-    // Open a step: latch the watched body's velocity/position as the step's zero.
-    void DvWitnessBeginStep()
-    {
-        if ( !DvArmed() )
+        inline __vector4 RotateToWorld(const Matrix44Affine& transform, __vector4 value)
         {
-            gbDvStepOpen     = false;
-            gbWedgeRecording = false;
-            return;
+            return RowProduct(transform.xAxis.mV, transform.yAxis.mV, transform.zAxis.mV, value);
         }
-        ++guDvStep;
-        giDvUsed     = 0;
-        giDvDropped  = 0;
-        gbDvStepOpen = true;
-        gpcDvPhase   = "begin";
-        gDvStartV    = gpDvWatchBody->GetLinearVelocity();
-        gDvStartP    = gpDvWatchBody->GetPosition();
 
-        // [wedge] -- see the banner at WedgeWindowSteps(). The ARMED line is the control: a run
-        // with BRN_WEDGE_PROBE set and no such line never reached a physics step with a watched body.
-        gbWedgeRecording = ( WedgeWindowSteps() > 0 && giWedgeLeft > 0 );
-        if ( WedgeWindowSteps() > 0 && !gbWedgeArmedSaid )
+        // Tagged local-force/impulse helpers: ARTIST825A17EC/19F4/1AA4
+        // start with Y's rounded product, then fuse X and Z in that order.
+        inline __vector4 RotateTaggedToWorld(const Matrix44Affine& transform, __vector4 value)
         {
-            gbWedgeArmedSaid = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[wedge] ARMED -- window " << WedgeWindowSteps() << " steps, signature |v| > "
-                << KF_WEDGE_MIN_SPEED << " m/s with |dp| < " << KF_WEDGE_MAX_DISPLACEMENT_FRACTION
-                << " * |v| * dt for " << KI_WEDGE_CONFIRM_STEPS << " steps, at most "
-                << static_cast<s32>( KU_WEDGE_MAX_WINDOWS ) << " windows [NOT IN THE X360 BINARY]\n";
+            __vector4 result = __vmulfp(transform.yAxis.mV, __vspltw(value, 1));
+            result = __vmaddfp(transform.xAxis.mV, __vspltw(value, 0), result);
+            return __vmaddfp(transform.zAxis.mV, __vspltw(value, 2), result);
+        }
+
+        // Primary image words82014AF0/AE0/AD0/AC0, in the original order.
+        static const __vector4 kLogLow = {1.44268966f, -0.721165776f, 0.478684813f, -0.347305417f};
+        static const __vector4 kLogHigh = {0.241873696f, -0.137531206f, 0.0520646796f, -0.00931049418f};
+        static const __vector4 kExpLow = {1.0f, -0.693147182f, 0.240226462f, -0.055503644f};
+        static const __vector4 kExpHigh = {0.00961597636f, -0.00132823968f, 0.000147491097f, -1.08635004e-05f};
+
+        inline __vector4 Polynomial7(__vector4 x, __vector4 low, __vector4 high)
+        {
+            __vector4 lo = __vmaddfp(x, __vspltw(low, 1), __vspltw(low, 0));
+            __vector4 hi = __vmaddfp(x, __vspltw(high, 1), __vspltw(high, 0));
+            const __vector4 x2 = __vmulfp(x, x);
+            const __vector4 x3 = __vmulfp(x, x2);
+            lo = __vmaddfp(x2, __vspltw(low, 2), lo);
+            hi = __vmaddfp(x2, __vspltw(high, 2), hi);
+            const __vector4 x4 = __vmulfp(x2, x2);
+            lo = __vmaddfp(x3, __vspltw(low, 3), lo);
+            hi = __vmaddfp(x3, __vspltw(high, 3), hi);
+            return __vmaddfp(x4, hi, lo);
+        }
+
+        // ARTIST825B2CD8..2E74 and the three inlined825BE210 pipelines.
+        // Preserve estimate, polynomial rounding boundaries and bit fixups.
+        inline __vector4 PowerNative(__vector4 base, __vector4 exponent)
+        {
+            const __vector4 zero = __vspltisw(0);
+            const __vector4 bits = __vspltisw(-1);
+            const __vector4 sign = __vslw(bits, bits);
+            const __vector4 exponentMask = __vslw(bits, __vspltisw(-9));
+            const __vector4 one = One();
+            const __vector4 absolute = __vandc(base, sign);
+            const __vector4 mantissa = __vsel(absolute, one, exponentMask);
+            const __vector4 x = __vsubfp(mantissa, one);
+            const __vector4 integralLog = __vrfim(__vlogefp(absolute));
+            const __vector4 xTimesExponent = __vmulfp(x, exponent);
+            const __vector4 integerTimesExponent = __vmulfp(integralLog, exponent);
+            const __vector4 logPolynomial = Polynomial7(x, kLogLow, kLogHigh);
+            const __vector4 argument = __vmaddfp(xTimesExponent, logPolynomial, integerTimesExponent);
+            const __vector4 integerPart = __vrfim(argument);
+            const __vector4 fraction = __vsubfp(argument, integerPart);
+            const __vector4 integralPower = __vexptefp(integerPart);
+            const __vector4 expPolynomial = Polynomial7(fraction, kExpLow, kExpHigh);
+            const __vector4 initial = __vrefp(expPolynomial);
+            const __vector4 first = __vmaddfp(initial, __vnmsubfp(expPolynomial, initial, one), initial);
+            const __vector4 second = __vmaddfp(first, __vnmsubfp(expPolynomial, first, one), first);
+            const __vector4 reciprocal = __vsel(initial, second, __vcmpeqfp(first, first));
+
+            const __vector4 integerBits = __vctsxs(exponent, 0);
+            const __vector4 odd = __vand(integerBits, __vspltisw(1));
+            const __vector4 oddSign = __vand(__vand(base, sign), __vslw(odd, bits));
+            const __vector4 zeroExponent = __vcmpeqfp(exponent, zero);
+            const __vector4 negativeExponent = __vcmpgtfp(zero, exponent);
+            const __vector4 zeroBase = __vcmpeqfp(base, zero);
+            const __vector4 negativeBase = __vcmpgtfp(zero, base);
+            const __vector4 integerExponent = __vcmpeqfp(exponent, __vrfiz(exponent));
+            const __vector4 invalidNegative = __vandc(negativeBase, integerExponent);
+            const __vector4 zeroOrZeroExponent = __vor(zeroBase, zeroExponent);
+            const __vector4 fixMask = __vor(invalidNegative, zeroOrZeroExponent);
+            const __vector4 nanBits = __vsrw(exponentMask, __vspltisw(1));
+            __vector4 special = __vsel(nanBits, __vor(zero, oddSign), __vandc(zeroBase, negativeExponent));
+            special = __vsel(special, one, zeroExponent);
+            const __vector4 approximate = __vor(__vmulfp(integralPower, reciprocal), oddSign);
+            return __vsel(approximate, special, fixMask);
         }
     }
 
-    // [wedge] Is the current physics step inside an open window? The contact-side lines
-    // ([wedge-imp], [wedge-pen]) print only while this is true, so they cover exactly the steps
-    // whose [dv] ledger is printed. False whenever BRN_WEDGE_PROBE is unset.
-    bool DvWedgeStepRecording()
+    void ExternalPhysicsBody::AddWorldSpaceForce(Vector3 value)
     {
-        return gbWedgeRecording && gbDvStepOpen;
+        CGS_ASSERT(IsValid3(value.mV), "Bad force added ");
+        mTotalLinearForce.mV = __vaddfp(mTotalLinearForce.mV, value.mV);
     }
 
-    // [wedge] The step number the contact-side lines carry (== the [dv] STEP number).
-    u32 DvWitnessStepIndex()
+    void ExternalPhysicsBody::AddWorldSpaceTorque(Vector3 value)
     {
-        return guDvStep;
+        CGS_ASSERT(IsValid3(value.mV), "Bad torque added ");
+        mTotalTorque.mV = __vaddfp(mTotalTorque.mV, value.mV);
     }
 
-    // Record a stage boundary. The phase name also tags every drain that follows it.
-    void DvWitnessMark( const char* lpcPhase )
+    void ExternalPhysicsBody::AddWorldSpaceImpulse(Vector3 value)
     {
-        if ( !gbDvStepOpen || !DvArmed() )
-        {
-            return;
-        }
-        gpcDvPhase = lpcPhase;
-        DvEntry* lpEntry = DvPush();
-        if ( lpEntry == 0 )
-        {
-            return;
-        }
-        lpEntry->mpcPhase        = lpcPhase;
-        lpEntry->mpcTag          = "";
-        lpEntry->mpReturnAddress = 0;
-        lpEntry->mbDrain         = false;
-        lpEntry->mV              = gpDvWatchBody->GetLinearVelocity();
-        lpEntry->mP              = gpDvWatchBody->GetPosition();
-        {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
-            lpEntry->mDv = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
-            lpEntry->mJ = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
-            lpEntry->mFdt = lAggregateValue;
-        }
-        lpEntry->mfInvMass       = 0.0f;
+        CGS_ASSERT(IsValid3(value.mV), "Bad impulse added ");
+        mTotalLinearImpulse.mV = __vaddfp(mTotalLinearImpulse.mV, value.mV);
     }
 
-    // Close a step. Prints the whole ledger only when the step's |dv| crosses the threshold.
-    void DvWitnessEndStep( f32 lfTimeStep, u32 luFrame )
+    void ExternalPhysicsBody::AddWorldSpaceAngularImpulse(Vector3 value)
     {
-        if ( !gbDvStepOpen || !DvArmed() )
-        {
-            gbDvStepOpen = false;
-            return;
-        }
-        gbDvStepOpen = false;
-
-        const Vector3 lEndV = gpDvWatchBody->GetLinearVelocity();
-        const Vector3 lEndP = gpDvWatchBody->GetPosition();
-        const Vector3 lStepDv{ lEndV.x - gDvStartV.x, lEndV.y - gDvStartV.y,
-                               lEndV.z - gDvStartV.z, 0.0f };
-        const f32 lfStepDv = DvMagnitude( lStepDv );
-
-        // ---- [wedge] close this step's window slot, then test the signature for the NEXT ----
-        const bool lbWedgeStep = gbWedgeRecording;
-        gbWedgeRecording = false;
-        f32 lfWedgeDisp  = 0.0f;
-        f32 lfWedgeSpeed = 0.0f;
-        if ( WedgeWindowSteps() > 0 )
-        {
-            if ( lbWedgeStep && giWedgeLeft > 0 )
-            {
-                --giWedgeLeft;
-                if ( giWedgeLeft == 0 )
-                {
-                    gbWedgeRearmed = false;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[wedge] CLOSE window " << static_cast<s32>( guWedgeWindows )
-                        << " at step " << static_cast<s32>( guDvStep ) << "\n";
-                }
-            }
-
-            const Vector3 lDp{ lEndP.x - gDvStartP.x, lEndP.y - gDvStartP.y,
-                               lEndP.z - gDvStartP.z, 0.0f };
-            lfWedgeDisp  = DvMagnitude( lDp );
-            lfWedgeSpeed = DvMagnitude( lEndV );
-            const bool lbSignature = ( lfTimeStep > 0.0f ) && ( lfWedgeSpeed > KF_WEDGE_MIN_SPEED )
-                && ( lfWedgeDisp < KF_WEDGE_MAX_DISPLACEMENT_FRACTION * lfWedgeSpeed * lfTimeStep );
-            if ( lbSignature )
-            {
-                ++giWedgeRun;
-                giWedgeClear = 0;
-            }
-            else
-            {
-                giWedgeRun = 0;
-                ++giWedgeClear;
-                if ( !gbWedgeRearmed && giWedgeLeft == 0 && giWedgeClear >= KI_WEDGE_REARM_STEPS )
-                {
-                    gbWedgeRearmed = true;
-                }
-            }
-
-            if ( giWedgeLeft == 0 && gbWedgeRearmed && lbSignature
-                 && giWedgeRun >= KI_WEDGE_CONFIRM_STEPS && guWedgeWindows < KU_WEDGE_MAX_WINDOWS )
-            {
-                ++guWedgeWindows;
-                giWedgeLeft    = WedgeWindowSteps();
-                gbWedgeRearmed = false;
-                *CgsDev::Log::gpDebugPrint
-                    << "[wedge] OPEN window " << static_cast<s32>( guWedgeWindows )
-                    << " after step " << static_cast<s32>( guDvStep ) << " f " << static_cast<s32>( luFrame )
-                    << " -- " << giWedgeRun << " steps with |v| " << lfWedgeSpeed
-                    << " and |dp| " << lfWedgeDisp << " (|v|*dt " << lfWedgeSpeed * lfTimeStep << ")"
-                    << " pos " << lEndP.x << " " << lEndP.y << " " << lEndP.z
-                    << " v " << lEndV.x << " " << lEndV.y << " " << lEndV.z
-                    << "; the next " << giWedgeLeft << " steps print the full ledger\n";
-            }
-        }
-
-        const bool lbThresholdStep = ( DvThreshold() > 0.0f ) && !( lfStepDv < DvThreshold() );
-        if ( !lbThresholdStep && !lbWedgeStep )
-        {
-            return;
-        }
-        if ( lbThresholdStep && !lbWedgeStep )
-        {
-            if ( guDvDumps >= KU_DV_MAX_DUMPS )
-            {
-                if ( guDvDumps == KU_DV_MAX_DUMPS )
-                {
-                    ++guDvDumps;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[dv] BUDGET EXHAUSTED (" << static_cast<s32>( KU_DV_MAX_DUMPS )
-                        << " dumps) at step " << static_cast<s32>( guDvStep )
-                        << " -- every later [dv] step is DROPPED; a later silence is the budget, "
-                           "not the physics\n";
-                }
-                return;
-            }
-            ++guDvDumps;
-
-            // Raise the film latch on the FIRST step that crosses the threshold, and record which
-            // one it was. BRN_FRAME_DUMP_ARM=dv holds the back-buffer writer until this is non-zero,
-            // so the strip starts at the drain instead of at boot. Sticky: never cleared.
-        }
-
-        *CgsDev::Log::gpDebugPrint
-            << "[dv] STEP " << static_cast<s32>( guDvStep ) << " f " << static_cast<s32>( luFrame )
-            << ( lbWedgeStep ? " wedge 1" : "" )
-            << " dt " << lfTimeStep
-            << " |dv| " << lfStepDv
-            << " v0 " << gDvStartV.x << " " << gDvStartV.y << " " << gDvStartV.z
-            << " v1 " << lEndV.x << " " << lEndV.y << " " << lEndV.z
-            << " p0 " << gDvStartP.x << " " << gDvStartP.y << " " << gDvStartP.z
-            << " p1 " << lEndP.x << " " << lEndP.y << " " << lEndP.z
-            << " entries " << giDvUsed << " dropped " << giDvDropped << "\n";
-
-        Vector3 lPrevV = gDvStartV;
-        Vector3 lPrevP = gDvStartP;
-        for ( s32 liEntry = 0; liEntry < giDvUsed; ++liEntry )
-        {
-            const DvEntry& lrE = gaDvRing[liEntry];
-            const Vector3 lSegDv{ lrE.mV.x - lPrevV.x, lrE.mV.y - lPrevV.y, lrE.mV.z - lPrevV.z, 0.0f };
-            const Vector3 lSegDp{ lrE.mP.x - lPrevP.x, lrE.mP.y - lPrevP.y, lrE.mP.z - lPrevP.z, 0.0f };
-            if ( lrE.mbDrain )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[dv]   drain  @" << lrE.mpcPhase
-                    << " site " << ( lrE.mpcTag[0] != '\0' ? lrE.mpcTag : "-" )
-                    << " rva " << DvRva( lrE.mpReturnAddress )
-                    << " ra " << reinterpret_cast<u64>( lrE.mpReturnAddress )
-                    << " J " << lrE.mJ.x << " " << lrE.mJ.y << " " << lrE.mJ.z
-                    << " Fdt " << lrE.mFdt.x << " " << lrE.mFdt.y << " " << lrE.mFdt.z
-                    << " invM " << lrE.mfInvMass
-                    << " dv " << lrE.mDv.x << " " << lrE.mDv.y << " " << lrE.mDv.z
-                    << " |dv| " << DvMagnitude( lrE.mDv )
-                    << " v " << lrE.mV.x << " " << lrE.mV.y << " " << lrE.mV.z
-                    << "\n";
-            }
-            else
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[dv]   mark   @" << lrE.mpcPhase
-                    << " v " << lrE.mV.x << " " << lrE.mV.y << " " << lrE.mV.z
-                    << " segDv " << lSegDv.x << " " << lSegDv.y << " " << lSegDv.z
-                    << " |segDv| " << DvMagnitude( lSegDv )
-                    << " p " << lrE.mP.x << " " << lrE.mP.y << " " << lrE.mP.z
-                    << " segDp " << lSegDp.x << " " << lSegDp.y << " " << lSegDp.z
-                    << "\n";
-            }
-            lPrevV = lrE.mV;
-            lPrevP = lrE.mP;
-        }
-
-        // ⭐ THE TAIL SEGMENT -- the last unwatched gap, now printed rather than left to
-        // arithmetic. The final mark is `postphys` (after DeformationManager::UpdatePostPhysics,
-        // i.e. SolvePenetration -- added 2026-09-24 by FX-WEDGEVEL; the post-physics leg used to
-        // fall in this tail), but the step does not END there: OutputData,
-        // ProcessDeformationStates and ProcessCrashingNetworkCars all run between that mark and
-        // DvWitnessEndStep. Before
-        // this line, a velocity written in that window showed up ONLY as the step's |dv|
-        // failing to equal the sum of the printed segments -- i.e. it was visible only to a
-        // reader who added the columns up, which is the same "the probe technically had the
-        // information" trap the missing car-car print was. Zero on every step where nothing
-        // wrote after `postsim`, which is what makes a non-zero one worth reading.
-        {
-            const Vector3 lTailDv{ lEndV.x - lPrevV.x, lEndV.y - lPrevV.y, lEndV.z - lPrevV.z, 0.0f };
-            const Vector3 lTailDp{ lEndP.x - lPrevP.x, lEndP.y - lPrevP.y, lEndP.z - lPrevP.z, 0.0f };
-            *CgsDev::Log::gpDebugPrint
-                << "[dv]   mark   @end"
-                << " v " << lEndV.x << " " << lEndV.y << " " << lEndV.z
-                << " segDv " << lTailDv.x << " " << lTailDv.y << " " << lTailDv.z
-                << " |segDv| " << DvMagnitude( lTailDv )
-                << " p " << lEndP.x << " " << lEndP.y << " " << lEndP.z
-                << " segDp " << lTailDp.x << " " << lTailDp.y << " " << lTailDp.z
-                << "\n";
-        }
-    }
-    // ---- end [dv] -------------------------------------------------------------------------------
-
-    void ExternalPhysicsBody::CalculateNewVelocity(VecFloat lvfDeltaTime)
-    {
-        const f32 lfDt      = lvfDeltaTime.x;   // broadcast VecFloat -> scalar (de-modelled lane)
-        const f32 lfInvMass = 1.0f / mfMass.x;
-
-        // [crash-response] -- see the banner on gpCrashResponseDiagBody. Prints BEFORE the drain,
-        // from the same operands the drain uses, so the numbers are the ones integrated.
-        if ( this == gpCrashResponseDiagBody && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            static u32 suDrains = 0;
-            if ( ++suDrains <= 4000u )
-            {
-                const Vector3 lL = vpu::Add(vpu::Mult(mTotalTorque, lfDt), mTotalAngularImpulse);
-                const Vector3 lDW = vpu::Add(
-                    vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lL.x),
-                             vpu::Mult(mWorldInverseInertia.yAxis, lL.y)),
-                    vpu::Mult(mWorldInverseInertia.zAxis, lL.z));
-                const Vector3& lR0 = mTransform.xAxis;
-                const Vector3& lR1 = mTransform.yAxis;
-                const Vector3& lR2 = mTransform.zAxis;
-                *CgsDev::Log::gpDebugPrint
-                    << "[crash-response] drain n=" << static_cast<s32>(suDrains)
-                    << " dt=" << lfDt
-                    << " J=(" << mTotalLinearImpulse.x << "," << mTotalLinearImpulse.y << "," << mTotalLinearImpulse.z << ")"
-                    << " Fdt=(" << mTotalLinearForce.x * lfDt << "," << mTotalLinearForce.y * lfDt << "," << mTotalLinearForce.z * lfDt << ")"
-                    << " Lang=(" << mTotalAngularImpulse.x << "," << mTotalAngularImpulse.y << "," << mTotalAngularImpulse.z << ")"
-                    << " Tdt=(" << mTotalTorque.x * lfDt << "," << mTotalTorque.y * lfDt << "," << mTotalTorque.z * lfDt << ")"
-                    << " dWbody=(" << vpu::Dot(lDW, lR0) << "," << vpu::Dot(lDW, lR1) << "," << vpu::Dot(lDW, lR2) << ")"
-                    << " Wbody=(" << vpu::Dot(mAngularVelocity, lR0) << "," << vpu::Dot(mAngularVelocity, lR1) << "," << vpu::Dot(mAngularVelocity, lR2) << ")"
-                    << " m=" << mfMass.x
-                    << " Iinv=(" << mLocalInverseInertia.xAxis.x << "," << mLocalInverseInertia.yAxis.y << "," << mLocalInverseInertia.zAxis.z << ")"
-                    << "\n";
-            }
-        }
-
-        CGS_ASSERT(vpu::IsValid(mAngularVelocity), "rw::math::IsValid(mAngularVelocity)");
-        CGS_ASSERT(vpu::IsValid(mLinearVelocity),  "rw::math::IsValid(mLinearVelocity)");
-
-        // [dv] the drain witness -- see the banner on gpDvWatchBody. Captures the operands the
-        // drain below is about to use, and the caller's return address, so a step dump names WHICH
-        // of the seven CalculateNewVelocity call sites moved the velocity.
-        const bool    lbDvDrain  = ( this == gpDvWatchBody ) && gbDvStepOpen && DvArmed();
-        const Vector3 lDvBefore  = mLinearVelocity;
-#ifdef _MSC_VER
-        const void*   lpDvCaller = lbDvDrain ? _ReturnAddress() : 0;
-#else
-        const void*   lpDvCaller = 0;
-#endif
-
-        // Linear: the force accumulator becomes an impulse over the step, joins the impulse
-        // accumulator, and divides by mass.
-        const Vector3 lvLinearImpulse =
-            vpu::Add(vpu::Mult(mTotalLinearForce, lfDt), mTotalLinearImpulse);
-        mLinearVelocity = vpu::Add(mLinearVelocity, vpu::Mult(lvLinearImpulse, lfInvMass));
-
-        if ( lbDvDrain )
-        {
-            DvEntry* lpDvEntry = DvPush();
-            if ( lpDvEntry != 0 )
-            {
-                lpDvEntry->mpcPhase        = gpcDvPhase;
-                lpDvEntry->mpcTag          = gpcDvDrainTag;
-                lpDvEntry->mpReturnAddress = lpDvCaller;
-                lpDvEntry->mbDrain         = true;
-                lpDvEntry->mV              = mLinearVelocity;
-                lpDvEntry->mP              = mTransform.wAxis;
-                {
-                    const Vector3 lAggregateValue = { mLinearVelocity.x - lDvBefore.x,
-                                                      mLinearVelocity.y - lDvBefore.y,
-                                                      mLinearVelocity.z - lDvBefore.z, 0.0f };
-                    lpDvEntry->mDv = lAggregateValue;
-                }
-                lpDvEntry->mJ              = mTotalLinearImpulse;
-                {
-                    const Vector3 lAggregateValue = { mTotalLinearForce.x * lfDt,
-                                                      mTotalLinearForce.y * lfDt,
-                                                      mTotalLinearForce.z * lfDt, 0.0f };
-                    lpDvEntry->mFdt = lAggregateValue;
-                }
-                lpDvEntry->mfInvMass       = lfInvMass;
-            }
-        }
-
-        // Angular: same shape, but through the world inverse-inertia tensor rather than 1/m.
-        // (asm: splat the three lanes of the angular impulse and combine the three tensor rows.)
-        const Vector3 lvAngularImpulse =
-            vpu::Add(vpu::Mult(mTotalTorque, lfDt), mTotalAngularImpulse);
-        const Vector3 lvDeltaOmega = vpu::Add(
-            vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lvAngularImpulse.x),
-                     vpu::Mult(mWorldInverseInertia.yAxis, lvAngularImpulse.y)),
-            vpu::Mult(mWorldInverseInertia.zAxis, lvAngularImpulse.z));
-        mAngularVelocity = vpu::Add(mAngularVelocity, lvDeltaOmega);
-
-        CGS_ASSERT(vpu::IsValid(mAngularVelocity), "rw::math::IsValid(mAngularVelocity)");
-        CGS_ASSERT(vpu::IsValid(mLinearVelocity),  "rw::math::IsValid(mLinearVelocity)");
-
-        // Consume the accumulators (asm store order: +0x100, +0x110, +0xE0, +0xF0).
-        mTotalLinearImpulse.SetZero();
-        mTotalAngularImpulse.SetZero();
-        mTotalLinearForce.SetZero();
-        mTotalTorque.SetZero();
+        CGS_ASSERT(IsValid3(value.mV), "Bad angular impulse added ");
+        mTotalAngularImpulse.mV = __vaddfp(mTotalAngularImpulse.mV, value.mV);
     }
 
-    // ---------------------------------------------------------------------------------------
-    // IntegrateTransform  @0x825A7930   (63 asm instructions -- the literal integrator)
-    //
-    //     mTransform.wAxis += mLinearVelocity * dt
-    //     for each rotation row r:  r -= cross(r, mAngularVelocity * dt)      [ == r + omega x r ]
-    //     mTransform = OrthoNormalize3x3(mTransform)
-    //     CalculateWorldIntertia()
-    //
-    // FIDELITY: CLEAN, recovered instruction by instruction.
-    //   * `vmaddfp v0, v0(this+0x40), v13(this+0x30), v1` -> wAxis = linearVelocity*dt + wAxis.
-    //   * `vmulfp128 v0, v0(this+0x50), v1` -> the spin vector omega*dt, then, per row, the VMX
-    //     shifted-cross idiom `row*permwi(w,0x63) - permwi(row,0x63)*w` followed by one more
-    //     permwi -- permwi mask 0x63 is the lane rotation {y,z,x,w}, and the pair of rotations
-    //     around the products is exactly cross(row, w). The row order in the asm is zAxis,
-    //     yAxis, xAxis; each row is computed from the ORIGINAL rows, so the order is cosmetic.
-    //   * `bl rw__math__vpu__OrthoNormalize3x3(&temp, this)` then four `lvx128/stvx128` pairs
-    //     copying temp's rows back over this+0x00/0x10/0x20/0x30 -- all FOUR rows, position
-    //     included, which is why the position update above has to happen first.
-    //   * `bl BrnPhysics__ExternalPhysicsBody__CalculateWorldIntertia` with this in r3.
-    //
-    // The first-order `r + (omega x r) dt` step is the console's own approximation, not a
-    // simplification introduced here -- there is no quaternion, no matrix exponential and no
-    // sub-stepping in this function; the re-orthonormalisation is what keeps it stable.
-    //
-    // ⭐⭐⭐ AND THAT LAST CLAUSE IS LOAD-BEARING (issue #15, 2026-09-07). The step leaves rows
-    // a,b with a.b == (omega x a).(omega x b) dt^2 exactly -- a SHEAR proportional to the product
-    // of two DIFFERENT angular-velocity components, so zero for the single-axis yaw of ordinary
-    // driving and largest for a car tumbling in the air. Until 2026-09-07 the OrthoNormalize3x3
-    // this line calls only NORMALISED the three rows; normalisation cannot remove a shear, so the
-    // vehicle basis sheared without bound and was repaired only by a path that overwrote
-    // mTransform outright (PlaceCarOnTrack after a crash, or HackedResetAndFlyAround @0x825D0008
-    // -- the console's own "flydebug"). Measured on the jump ladder BEFORE the fix: |cos| between
-    // rows grew monotonically through every airborne episode (worst +0.054 over 36 frames), mean
-    // 0.0380 airborne against 0.0090 on the ground, peak 0.1057 -- against the console's own
-    // shipped tolerance for this matrix, IsOrthogonal3x3(mTransform, 0.01f) in
-    // DeformableObject::UpdateWheels (BrnDeformableObject.cpp:2832), which a single |cos| of
-    // 0.0707 already fails. The fix is in the callee; see its banner.
-    // ---------------------------------------------------------------------------------------
-    void ExternalPhysicsBody::IntegrateTransform(VecFloat lvfDeltaTime)
+    void ExternalPhysicsBody::AddLocalSpaceForce(Vector3 value)
     {
-        const f32 lfDt = lvfDeltaTime.x;
+        CGS_ASSERT(IsValid3(value.mV), "Bad force added ");
+        const __vector4 world = RotateToWorld(mTransform, value.mV);
+        mTotalLinearForce.mV = __vaddfp(mTotalLinearForce.mV, world);
+    }
 
-        // Position: p += v * dt.
-        mTransform.wAxis = vpu::Add(vpu::Mult(mLinearVelocity, lfDt), mTransform.wAxis);
+    // ARTIST825A1B10: all lanes of dt/mass/impulses participate.
+    void ExternalPhysicsBody::CalculateNewVelocity(VecFloat deltaTime)
+    {
+        const __vector4 inverseMass = ReciprocalTwice(mfMass.mV);
+        CGS_ASSERT(IsValid3(mAngularVelocity.mV), "rw::math::IsValid(mAngularVelocity)");
+        CGS_ASSERT(IsValid3(mLinearVelocity.mV), "rw::math::IsValid(mLinearVelocity)");
+        const __vector4 impulse = __vmaddfp(mTotalLinearForce.mV, deltaTime.mV, mTotalLinearImpulse.mV);
+        mLinearVelocity.mV = __vmaddfp(impulse, inverseMass, mLinearVelocity.mV);
+        const __vector4 angularImpulse = __vmaddfp(mTotalTorque.mV, deltaTime.mV, mTotalAngularImpulse.mV);
+        const __vector4 deltaAngular = RowProduct(mWorldInverseInertia.xAxis.mV,
+            mWorldInverseInertia.yAxis.mV, mWorldInverseInertia.zAxis.mV, angularImpulse);
+        mAngularVelocity.mV = __vaddfp(mAngularVelocity.mV, deltaAngular);
+        CGS_ASSERT(IsValid3(mAngularVelocity.mV), "rw::math::IsValid(mAngularVelocity)");
+        CGS_ASSERT(IsValid3(mLinearVelocity.mV), "rw::math::IsValid(mLinearVelocity)");
+        const __vector4 zero = __vspltisw(0);
+        mTotalLinearImpulse.mV = zero;
+        mTotalAngularImpulse.mV = zero;
+        mTotalLinearForce.mV = zero;
+        mTotalTorque.mV = zero;
+    }
 
-        // Orientation: spin each basis row by omega*dt (first order).
-        const Vector3 lvSpin = vpu::Mult(mAngularVelocity, lfDt);
-        mTransform.zAxis = vpu::Subtract(mTransform.zAxis, vpu::Cross(mTransform.zAxis, lvSpin));
-        mTransform.yAxis = vpu::Subtract(mTransform.yAxis, vpu::Cross(mTransform.yAxis, lvSpin));
-        mTransform.xAxis = vpu::Subtract(mTransform.xAxis, vpu::Cross(mTransform.xAxis, lvSpin));
-
-        // Re-orthonormalise the 3x3 (the position row rides through untouched).
+    void ExternalPhysicsBody::IntegrateTransform(VecFloat deltaTime)
+    {
+        mTransform.wAxis.mV = __vmaddfp(mLinearVelocity.mV, deltaTime.mV, mTransform.wAxis.mV);
+        const __vector4 spin = __vmulfp(mAngularVelocity.mV, deltaTime.mV);
+        mTransform.zAxis.mV = __vsubfp(mTransform.zAxis.mV, CrossNative(mTransform.zAxis.mV, spin));
+        mTransform.yAxis.mV = __vsubfp(mTransform.yAxis.mV, CrossNative(mTransform.yAxis.mV, spin));
+        mTransform.xAxis.mV = __vsubfp(mTransform.xAxis.mV, CrossNative(mTransform.xAxis.mV, spin));
         mTransform = vpu::OrthoNormalize3x3(mTransform);
-
-        // The inertia tensor follows the new orientation.
         CalculateWorldIntertia();
     }
 
-    // ---------------------------------------------------------------------------------------
-    // CalculateWorldIntertia  @0x825A1E30
-    //
-    //     mWorldInverseInertia = R^T * mLocalInverseInertia * R,   R = mTransform's 3x3
-    //
-    // (row-vector convention: a world vector is taken into body space by R^T, scaled by the
-    // local inverse inertia, and returned to world space by R.)
-    //
-    // FIDELITY: CLEAN on the data flow and on the two-stage structure. The X360 builds R^T with
-    // the classic vmrghw/vmrglw lane-merge transpose (against a zero register for the missing
-    // fourth row), computes T = R^T * L, STORES T into mWorldInverseInertia (+0xA0/+0xB0/+0xC0),
-    // reloads it and computes W = T * R into the same three rows -- the intermediate store is
-    // reproduced faithfully below rather than folded away, because it is observable.
-    // Two dev asserts bracket it: the transform is checked on entry (ExternalPhysicsBody.cpp:353
-    // == asm 0x161) and the produced tensor on exit (:367 == 0x16F).
-    // ---------------------------------------------------------------------------------------
     void ExternalPhysicsBody::CalculateWorldIntertia()
     {
-        const Vector3& lR0 = mTransform.xAxis;
-        const Vector3& lR1 = mTransform.yAxis;
-        const Vector3& lR2 = mTransform.zAxis;
-
-        CGS_ASSERT(vpu::IsValid(lR0) && vpu::IsValid(lR1) && vpu::IsValid(lR2),
-                   "rw::math::IsValid(mTransform)");
-
-        // R^T (the vmrghw/vmrglw transpose; the fourth lane merges against zero).
-        const Vector3 lRt0{ lR0.x, lR1.x, lR2.x, 0.0f };
-        const Vector3 lRt1{ lR0.y, lR1.y, lR2.y, 0.0f };
-        const Vector3 lRt2{ lR0.z, lR1.z, lR2.z, 0.0f };
-
-        const Vector3& lL0 = mLocalInverseInertia.xAxis;
-        const Vector3& lL1 = mLocalInverseInertia.yAxis;
-        const Vector3& lL2 = mLocalInverseInertia.zAxis;
-
-        // Stage 1: T = R^T * L, written straight into the destination rows (the asm's stores).
-        mWorldInverseInertia.xAxis = vpu::Add(vpu::Add(vpu::Mult(lL0, lRt0.x), vpu::Mult(lL1, lRt0.y)),
-                                              vpu::Mult(lL2, lRt0.z));
-        mWorldInverseInertia.yAxis = vpu::Add(vpu::Add(vpu::Mult(lL0, lRt1.x), vpu::Mult(lL1, lRt1.y)),
-                                              vpu::Mult(lL2, lRt1.z));
-        mWorldInverseInertia.zAxis = vpu::Add(vpu::Add(vpu::Mult(lL0, lRt2.x), vpu::Mult(lL1, lRt2.y)),
-                                              vpu::Mult(lL2, lRt2.z));
-
-        // Stage 2: W = T * R, over the rows just stored (the asm reloads them).
-        const Vector3 lT0 = mWorldInverseInertia.xAxis;
-        const Vector3 lT1 = mWorldInverseInertia.yAxis;
-        const Vector3 lT2 = mWorldInverseInertia.zAxis;
-
-        mWorldInverseInertia.zAxis = vpu::Add(vpu::Add(vpu::Mult(lR0, lT2.x), vpu::Mult(lR1, lT2.y)),
-                                              vpu::Mult(lR2, lT2.z));
-        mWorldInverseInertia.yAxis = vpu::Add(vpu::Add(vpu::Mult(lR0, lT1.x), vpu::Mult(lR1, lT1.y)),
-                                              vpu::Mult(lR2, lT1.z));
-        mWorldInverseInertia.xAxis = vpu::Add(vpu::Add(vpu::Mult(lR0, lT0.x), vpu::Mult(lR1, lT0.y)),
-                                              vpu::Mult(lR2, lT0.z));
-
-        CGS_ASSERT(vpu::IsValid(mWorldInverseInertia.xAxis) &&
-                   vpu::IsValid(mWorldInverseInertia.yAxis) &&
-                   vpu::IsValid(mWorldInverseInertia.zAxis),
-                   "rw::math::IsValid(mWorldInverseInertia)");
+        CGS_ASSERT(IsValid3(mTransform.xAxis.mV) && IsValid3(mTransform.yAxis.mV)
+            && IsValid3(mTransform.zAxis.mV) && IsValid3(mTransform.wAxis.mV),
+            "rw::math::IsValid( mTransform )");
+        const __vector4 r0 = mTransform.xAxis.mV;
+        const __vector4 r1 = mTransform.yAxis.mV;
+        const __vector4 r2 = mTransform.zAxis.mV;
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 xzHigh = __vmrghw(r0, r2);
+        const __vector4 yHigh = __vmrghw(r1, zero);
+        const __vector4 xzLow = __vmrglw(r0, r2);
+        const __vector4 yLow = __vmrglw(r1, zero);
+        const __vector4 rt0 = __vmrghw(xzHigh, yHigh);
+        const __vector4 rt1 = __vmrglw(xzHigh, yHigh);
+        const __vector4 rt2 = __vmrghw(xzLow, yLow);
+        const __vector4 l0 = mLocalInverseInertia.xAxis.mV;
+        const __vector4 l1 = mLocalInverseInertia.yAxis.mV;
+        const __vector4 l2 = mLocalInverseInertia.zAxis.mV;
+        mWorldInverseInertia.xAxis.mV = RowProduct(l0, l1, l2, rt0);
+        mWorldInverseInertia.yAxis.mV = RowProduct(l0, l1, l2, rt1);
+        mWorldInverseInertia.zAxis.mV = RowProduct(l0, l1, l2, rt2);
+        const __vector4 t0 = mWorldInverseInertia.xAxis.mV;
+        const __vector4 t1 = mWorldInverseInertia.yAxis.mV;
+        const __vector4 t2 = mWorldInverseInertia.zAxis.mV;
+        mWorldInverseInertia.zAxis.mV = RowProduct(r0, r1, r2, t2);
+        mWorldInverseInertia.yAxis.mV = RowProduct(r0, r1, r2, t1);
+        mWorldInverseInertia.xAxis.mV = RowProduct(r0, r1, r2, t0);
+        CGS_ASSERT(IsValid3(mWorldInverseInertia.xAxis.mV) && IsValid3(mWorldInverseInertia.yAxis.mV)
+            && IsValid3(mWorldInverseInertia.zAxis.mV), "rw::math::IsValid( mWorldInverseInertia )");
     }
 
-    // ---------------------------------------------------------------------------------------
-    // The three space-resolving helpers: AddLocalForce @0x825A1670, AddLocalImpulse @0x825A1878
-    // and GetImpulsesFromLocalImpulse @0x825A1A80.
-    //
-    // All three share ONE body shape, verified against GetImpulsesFromLocalImpulse (whose 36
-    // instructions are the shape with no assert noise around it):
-    //
-    //   if (vectorSpace == BODY_SPACE)      v = R0*v.x + R1*v.y + R2*v.z      // rotate to world
-    //   if (positionSpace == WORLD_SPACE)   r = position - mTransform.wAxis   // relative to COM
-    //   else                                r = R0*p.x + R1*p.y + R2*p.z      // rotate the offset
-    //   linear  += v                        (or *lpLinearImpulseOut  = v)
-    //   angular += cross(r, v)              (or *lpAngularImpulseOut = cross(r, v))
-    //
-    // (rw::physics::InputSpace is DWARF-authoritative: WORLD_SPACE = 0, BODY_SPACE = 1, and the
-    // asm's two compares are `cmpwi r4,1` for the vector and `cmpwi r5,0` for the position --
-    // i.e. the two tags are tested against OPPOSITE values, which is why a two-argument
-    // stand-in that drops them cannot be right for both.)
-    //
-    // The cross product is the same shifted-permwi idiom decoded in IntegrateTransform.
-    // FIDELITY: CLEAN. AddLocalForce's two dev asserts are ExternalPhysicsBody.cpp:134/135
-    // ("Bad positioned force added" / "Force applied at a bad position") and AddLocalImpulse's
-    // are :184/:185 ("Bad positioned impulse added" / "Impulse applied at a bad position"), both
-    // non-gating -- the accumulate runs regardless, exactly as in the four AddWorldSpace* funcs.
-    // ---------------------------------------------------------------------------------------
-    namespace
+    void ExternalPhysicsBody::AddLocalForce(Vector3 force, rw::physics::InputSpace forceSpace,
+        Vector3 position, rw::physics::InputSpace positionSpace)
     {
-        // Rotate a body-space vector into world space by the transform's 3x3 (row-vector form).
-        inline Vector3 RotateToWorld(const Matrix44Affine& lrTransform, Vector3 lVector)
-        {
-            return vpu::Add(vpu::Add(vpu::Mult(lrTransform.xAxis, lVector.x),
-                                     vpu::Mult(lrTransform.yAxis, lVector.y)),
-                            vpu::Mult(lrTransform.zAxis, lVector.z));
-        }
+        CGS_ASSERT(IsValid3(force.mV), "Bad positioned force added");
+        CGS_ASSERT(IsValid3(position.mV), "Force applied at a bad position");
+        const __vector4 worldForce = forceSpace == rw::physics::BODY_SPACE ? RotateTaggedToWorld(mTransform, force.mV) : force.mV;
+        const __vector4 arm = positionSpace == rw::physics::WORLD_SPACE ? __vsubfp(position.mV, mTransform.wAxis.mV) : RotateTaggedToWorld(mTransform, position.mV);
+        mTotalLinearForce.mV = __vaddfp(mTotalLinearForce.mV, worldForce);
+        mTotalTorque.mV = __vaddfp(mTotalTorque.mV, CrossNative(arm, worldForce));
     }
 
-    void ExternalPhysicsBody::AddLocalForce(Vector3 lForce, rw::physics::InputSpace leForceSpace,
-                                            Vector3 lPosition, rw::physics::InputSpace lePositionSpace)
+    void ExternalPhysicsBody::AddLocalImpulse(Vector3 impulse, rw::physics::InputSpace impulseSpace,
+        Vector3 position, rw::physics::InputSpace positionSpace)
     {
-        CGS_ASSERT(vpu::IsValid(lForce),    "Bad positioned force added");
-        CGS_ASSERT(vpu::IsValid(lPosition), "Force applied at a bad position");
-
-        const Vector3 lvForce = (leForceSpace == rw::physics::BODY_SPACE)
-                              ? RotateToWorld(mTransform, lForce) : lForce;
-        const Vector3 lvArm   = (lePositionSpace == rw::physics::WORLD_SPACE)
-                              ? vpu::Subtract(lPosition, mTransform.wAxis)
-                              : RotateToWorld(mTransform, lPosition);
-
-        mTotalLinearForce = vpu::Add(mTotalLinearForce, lvForce);
-        mTotalTorque      = vpu::Add(mTotalTorque, vpu::Cross(lvArm, lvForce));
+        CGS_ASSERT(IsValid3(impulse.mV), "Bad positioned impulse added");
+        CGS_ASSERT(IsValid3(position.mV), "Impulse applied at a bad position");
+        const __vector4 worldImpulse = impulseSpace == rw::physics::BODY_SPACE ? RotateTaggedToWorld(mTransform, impulse.mV) : impulse.mV;
+        const __vector4 arm = positionSpace == rw::physics::WORLD_SPACE ? __vsubfp(position.mV, mTransform.wAxis.mV) : RotateTaggedToWorld(mTransform, position.mV);
+        mTotalLinearImpulse.mV = __vaddfp(mTotalLinearImpulse.mV, worldImpulse);
+        mTotalAngularImpulse.mV = __vaddfp(mTotalAngularImpulse.mV, CrossNative(arm, worldImpulse));
     }
 
-    void ExternalPhysicsBody::AddLocalImpulse(Vector3 lImpulse, rw::physics::InputSpace leImpulseSpace,
-                                              Vector3 lPosition, rw::physics::InputSpace lePositionSpace)
+    void ExternalPhysicsBody::GetImpulsesFromLocalImpulse(Vector3 impulse, rw::physics::InputSpace impulseSpace,
+        Vector3 position, rw::physics::InputSpace positionSpace, Vector3* linearOut, Vector3* angularOut) const
     {
-        CGS_ASSERT(vpu::IsValid(lImpulse),  "Bad positioned impulse added");
-        CGS_ASSERT(vpu::IsValid(lPosition), "Impulse applied at a bad position");
-
-        const Vector3 lvImpulse = (leImpulseSpace == rw::physics::BODY_SPACE)
-                                ? RotateToWorld(mTransform, lImpulse) : lImpulse;
-        const Vector3 lvArm     = (lePositionSpace == rw::physics::WORLD_SPACE)
-                                ? vpu::Subtract(lPosition, mTransform.wAxis)
-                                : RotateToWorld(mTransform, lPosition);
-
-        mTotalLinearImpulse  = vpu::Add(mTotalLinearImpulse, lvImpulse);
-        mTotalAngularImpulse = vpu::Add(mTotalAngularImpulse, vpu::Cross(lvArm, lvImpulse));
+        const __vector4 worldImpulse = impulseSpace == rw::physics::BODY_SPACE ? RotateTaggedToWorld(mTransform, impulse.mV) : impulse.mV;
+        const __vector4 arm = positionSpace == rw::physics::WORLD_SPACE ? __vsubfp(position.mV, mTransform.wAxis.mV) : RotateTaggedToWorld(mTransform, position.mV);
+        linearOut->mV = worldImpulse;
+        angularOut->mV = CrossNative(arm, worldImpulse);
     }
 
-    void ExternalPhysicsBody::GetImpulsesFromLocalImpulse(
-        Vector3 lImpulse, rw::physics::InputSpace leImpulseSpace,
-        Vector3 lPosition, rw::physics::InputSpace lePositionSpace,
-        Vector3* lpLinearImpulseOut, Vector3* lpAngularImpulseOut) const
-    {
-        const Vector3 lvImpulse = (leImpulseSpace == rw::physics::BODY_SPACE)
-                                ? RotateToWorld(mTransform, lImpulse) : lImpulse;
-        const Vector3 lvArm     = (lePositionSpace == rw::physics::WORLD_SPACE)
-                                ? vpu::Subtract(lPosition, mTransform.wAxis)
-                                : RotateToWorld(mTransform, lPosition);
-
-        // (the X360 stores the linear result BEFORE it computes the cross product)
-        *lpLinearImpulseOut  = lvImpulse;
-        *lpAngularImpulseOut = vpu::Cross(lvArm, lvImpulse);
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // The lifecycle quartet -- Construct @0x825A1598, Destruct @0x825A15E0, Release @0x825A1628,
-    // Prepare @0x825A78D0.
-    //
-    // FIDELITY: CLEAN, store-for-store. Each is 17 instructions (Prepare 23): a `bl` to the
-    // ExternallySimulatedBody function of the same name, then `stvx128 zero` into the four
-    // accumulators (asm offset order: +0x100, +0x110, +0xE0, +0xF0). Prepare additionally calls
-    // CalculateWorldIntertia and returns 1.
-    //
-    // Note what these do NOT do: none of them touches mLocalInverseInertia, mWorldInverseInertia
-    // or mfMass. A freshly Constructed body has a zero mass and a zero inertia tensor until
-    // SetMass / ReadPropertiesFromRenderware / ReadPropertiesFromChangeInertiaEvent fills them
-    // in -- which is exactly why Prepare's CalculateWorldIntertia is the last step of bring-up
-    // and not the first.
-    // ---------------------------------------------------------------------------------------
     void ExternalPhysicsBody::Construct()
     {
         ExternallySimulatedBody::Construct();
-        mTotalLinearImpulse.SetZero();
-        mTotalAngularImpulse.SetZero();
-        mTotalLinearForce.SetZero();
-        mTotalTorque.SetZero();
+        const __vector4 zero = __vspltisw(0);
+        mTotalLinearImpulse.mV = zero; mTotalAngularImpulse.mV = zero;
+        mTotalLinearForce.mV = zero; mTotalTorque.mV = zero;
     }
 
-    // ---------------------------------------------------------------------------------------
-    // SetMass -- the mass setter the header has carried as DECLARE-ONLY ("ADDITIVE GROW",
-    // ExternalPhysicsBody.h:178) since the deformation wave. Bodied here 2026-08-03 (task #116),
-    // in the authoritative home the header names, because it was the ONE symbol on
-    // PhysicalBodyPart::Construct's link path that had no definition anywhere in the tree -- and
-    // PhysicalBodyPart::Construct is reached from PhysicsModule::Construct @0x825AE308, which had
-    // been a live empty stub.
-    //
-    // SHAPE FROM THE ASM, not invented. The only call site in either build is
-    // PhysicalBodyPart::Construct @0x825B4178, which materialises 5.0f on the stack, loads it with
-    // `lvlx`, BROADCASTS it with `vspltw`, and stores the whole 16-byte vector to the body's +0xD0
-    // (mfMass). So the setter splats its scalar across all four lanes rather than writing .x and
-    // leaving the other three lanes stale -- which matters, because every consumer in this file
-    // reads mfMass.x while CalculateWorldIntertia-style vector maths would see the rest.
-    // ---------------------------------------------------------------------------------------
-    void ExternalPhysicsBody::SetMass(f32 lfMass)
-    {
-        mfMass.x = lfMass;
-        mfMass.y = lfMass;
-        mfMass.z = lfMass;
-        mfMass.w = lfMass;
-    }
+    void ExternalPhysicsBody::SetMass(VecFloat mass) { mfMass.mV = mass.mV; }
 
     void ExternalPhysicsBody::Destruct()
     {
         ExternallySimulatedBody::Destruct();
-        mTotalLinearImpulse.SetZero();
-        mTotalAngularImpulse.SetZero();
-        mTotalLinearForce.SetZero();
-        mTotalTorque.SetZero();
+        const __vector4 zero = __vspltisw(0);
+        mTotalLinearImpulse.mV = zero; mTotalAngularImpulse.mV = zero;
+        mTotalLinearForce.mV = zero; mTotalTorque.mV = zero;
     }
 
     void ExternalPhysicsBody::Release()
     {
         ExternallySimulatedBody::Release();
-        mTotalLinearImpulse.SetZero();
-        mTotalAngularImpulse.SetZero();
-        mTotalLinearForce.SetZero();
-        mTotalTorque.SetZero();
+        const __vector4 zero = __vspltisw(0);
+        mTotalLinearImpulse.mV = zero; mTotalAngularImpulse.mV = zero;
+        mTotalLinearForce.mV = zero; mTotalTorque.mV = zero;
     }
 
     bool ExternalPhysicsBody::Prepare()
     {
         ExternallySimulatedBody::Prepare();
-        mTotalLinearImpulse.SetZero();
-        mTotalAngularImpulse.SetZero();
-        mTotalLinearForce.SetZero();
-        mTotalTorque.SetZero();
+        const __vector4 zero = __vspltisw(0);
+        mTotalLinearImpulse.mV = zero; mTotalAngularImpulse.mV = zero;
+        mTotalLinearForce.mV = zero; mTotalTorque.mV = zero;
         CalculateWorldIntertia();
-        return true;   // asm: `li r3, 1`
+        return true;
     }
 
-    // ---------------------------------------------------------------------------------------
-    // CalculateCollisionImpulseWithInanimateObject  @0x8259C978
-    //
-    // The textbook impulse magnitude for a body striking an immovable object at world contact
-    // point p (with r = p - centre-of-mass), surface normal n, point velocity vRel and
-    // restitution e:
-    //
-    //     j = -(1 + e) (vRel . n) / ( 1/m + n . ( (I^-1 (r x n)) x r ) )
-    //
-    // The recovered asm computes exactly this shape: a vmsum3fp dot of the normal with a
-    // velocity vector, the cross/inverse-inertia/cross chain assembled through the vpermwi +
-    // vnmsubfp sequence, a vrefp reciprocal of the effective mass, and three stores:
-    //   * the effective inverse-mass denominator -> *lpvfInvInertiaOut (first store, asm r6)
-    //   * the signed impulse magnitude           -> the VecFloat return (hidden result r3)
-    //   * normal * abs(magnitude)                 -> *lpvImpulseOut      (asm r5)
-    // and asserts `lpvfInvInertiaOut != NULL` before writing it.
-    //
-    // FLAG (modelled, not bit-verified): the X360 Hex-Rays dropped the argument list (rendered
-    // `int(...)`), so the arg->register threading was recovered from the PS3 DecFIGS DWARF
-    // prototype (PS3 0x68B130): (Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
-    // VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut). The PS3 asm
-    // prototype supplies the declaration shape. Breaker supplies the argument semantics:
-    // @0x8259C9B0 loads mTransform.wAxis and @0x8259C9B8 subtracts it from v1, proving lPoint is
-    // the absolute world point rather than an already-relative arm. The inverse inertia used is
-    // this body's mWorldInverseInertia. The precise VMX reciprocal refinement is lowered to C
-    // division; the data flow and all three stores follow the assembly.
-    // ---------------------------------------------------------------------------------------
-    VecFloat ExternalPhysicsBody::CalculateCollisionImpulseWithInanimateObject(
-        Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
-        VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut)
+    VecFloat ExternalPhysicsBody::CalculateCollisionImpulseWithInanimateObject(Vector3 point,
+        Vector3 pointVelocity, Vector3 normal, VecFloat restitution, Vector3* impulseOut, VecFloat* inverseOut)
     {
-        CGS_ASSERT(lpvfInvInertiaOut != 0, "lpvfInvInertiaOut != NULL");
-
-        const f32 lfRestitution = lvfRestitution.x;   // broadcast VecFloat -> scalar (de-modelled lane)
-
-        // @0x8259C9B0..C9B8: the source argument is a WORLD point; derive r here.
-        const Vector3 lvPointArm = vpu::Subtract(lPoint, mTransform.wAxis);
-
-        // Angular term: I^-1 ( r x n ), then ( I^-1(rxn) ) x r, projected onto n.
-        const Vector3 lvRxN = vpu::Cross(lvPointArm, lCollisionNormal);
-        const Vector3 lvAngular = vpu::Add(
-            vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lvRxN.x),
-                     vpu::Mult(mWorldInverseInertia.yAxis, lvRxN.y)),
-            vpu::Mult(mWorldInverseInertia.zAxis, lvRxN.z));
-        const Vector3 lvAngularAtContact = vpu::Cross(lvAngular, lvPointArm);
-
-        // Effective inverse mass: 1/m + n . (angular term). m is stored as VecFloat (broadcast).
-        const f32 lfInvMass = 1.0f / mfMass.x;
-        const f32 lfDenominator = lfInvMass + vpu::Dot(lCollisionNormal, lvAngularAtContact);
-        const f32 lfInvDenominator = 1.0f / lfDenominator;
-
-        // Impulse magnitude and the impulse vector j*n.
-        const f32 lfRelativeNormalSpeed = vpu::Dot(lPointVel, lCollisionNormal);
-        const f32 lfImpulse = -(1.0f + lfRestitution) * lfRelativeNormalSpeed * lfInvDenominator;
-        const Vector3 lvImpulse = vpu::Mult(lCollisionNormal, std::fabs(lfImpulse));
-
-        // @0x8259CA94 stores v124 BEFORE the reciprocal refinement: the out-value is the
-        // denominator, not its reciprocal. @0x8259CAC4/CAD0 strips the return's sign for the
-        // impulse-vector store, while @0x8259CAC8 preserves the signed hidden return.
-        VecFloat lvfInvInertia; lvfInvInertia.x = lvfInvInertia.y = lvfInvInertia.z = lvfInvInertia.w = lfDenominator;
-        *lpvfInvInertiaOut = lvfInvInertia;
-        *lpImpulseOut = lvImpulse;
-
-        VecFloat lvfResult; lvfResult.x = lvfResult.y = lvfResult.z = lvfResult.w = lfImpulse;
-        return lvfResult;
+        const __vector4 one = One();
+        const __vector4 arm = __vsubfp(point.mV, mTransform.wAxis.mV);
+        const __vector4 cross = CrossNative(arm, normal.mV);
+        const __vector4 angular = RowProduct(mWorldInverseInertia.xAxis.mV,
+            mWorldInverseInertia.yAxis.mV, mWorldInverseInertia.zAxis.mV, cross);
+        const __vector4 atContact = CrossNative(angular, arm);
+        const __vector4 inverseMass = ReciprocalTwice(mfMass.mV);
+        const __vector4 denominator = __vmaddfp(inverseMass, one, __vmsum3fp(atContact, normal.mV));
+        const __vector4 numerator = __vmulfp(FlipSigns(__vaddfp(one, restitution.mV)), __vmsum3fp(normal.mV, pointVelocity.mV));
+        CGS_ASSERT(inverseOut != 0, "lpvfInvInertiaOut != NULL");
+        __vector4 reciprocal = __vrefp(denominator);
+        inverseOut->mV = denominator;
+        reciprocal = __vmaddfp(reciprocal, __vnmsubfp(reciprocal, denominator, one), reciprocal);
+        reciprocal = __vmaddfp(reciprocal, __vnmsubfp(reciprocal, denominator, one), reciprocal);
+        const __vector4 magnitude = __vmulfp(reciprocal, numerator);
+        VecFloat result(magnitude);
+        impulseOut->mV = __vmulfp(normal.mV, __vandc(magnitude, SignMask()));
+        return result;
     }
 
-    // ---------------------------------------------------------------------------------------
-    // CalculateCollisionImpulseWithBody  @0x8259CAE8
-    //
-    // The two-body collision impulse (the car-on-car shunt solver). Identical in shape to the
-    // inanimate version above, but the effective inverse mass in the denominator sums BOTH
-    // bodies' linear (1/m) and angular (n.((I^-1(r x n)) x r)) terms. The recovered asm computes,
-    // per body, the I^-1 row-combination of (r x n), crosses it back with r, dots with n, adds
-    // the two reciprocal masses, takes the reciprocal of the sum (vrefp + a Newton refinement)
-    // and multiplies by the numerator -(1+e)(vRel.n). It stores each body's inverse
-    // effective-mass term separately (asm: `1/mA + (lApart.n)` -> lpfInvInertiaAOut at r31,
-    // `1/mB + (lBpart.n)` -> lpfInvInertiaBOut at r29) so the caller (ApplyCarCarImpulse) can
-    // split the impulse application between the two cars; j*n -> lpImpulseOut (r27); and returns
-    // the impulse magnitude (r28). The DecFIGS body hint (ExternalPhysicsBody.cpp:585-618) names
-    // lvfNumerator/lvfDenominator/lvfMassA/lvfMassB/lvfOneOverMassA/lvfOneOverMassB/lApart/lBpart.
-    //
-    // FLAG (modelled, not bit-verified): the VMX `vrefp` reciprocal + its Newton-Raphson
-    // refinement (vnmsubfp/vmaddfp) is reproduced as a plain `1.0f / x` (same modelling as the
-    // inanimate solver above); the per-lane permute/select machinery is de-SIMD'd to scalar/
-    // Vector3 arithmetic. The data flow, output set and the two asserts match the asm.
-    // ---------------------------------------------------------------------------------------
-    VecFloat ExternalPhysicsBody::CalculateCollisionImpulseWithBody(
-        const ExternalPhysicsBody& lBody2, Vector3 lPoint1, Vector3 lPoint2,
-        Vector3 lImpactVel, Vector3 lCollisionNormal, VecFloat lvfRestitution,
-        Vector3* lpImpulseOut, VecFloat* lpfInvInertiaAOut, VecFloat* lpfInvInertiaBOut) const
+    VecFloat ExternalPhysicsBody::CalculateCollisionImpulseWithBody(const ExternalPhysicsBody& body,
+        Vector3 pointA, Vector3 pointB, Vector3 impactVelocity, Vector3 normal, VecFloat restitution,
+        Vector3* impulseOut, VecFloat* inverseAOut, VecFloat* inverseBOut) const
     {
-        CGS_ASSERT(lpfInvInertiaAOut != 0, "lpfInvInertiaAOut != NULL");
-        CGS_ASSERT(lpfInvInertiaBOut != 0, "lpfInvInertiaBOut != NULL");
-
-        const f32 lfRestitution = lvfRestitution.x;   // broadcast VecFloat -> scalar
-
-        // Numerator: -(1 + e)(vRel . n).
-        const f32 lfClosingSpeed = vpu::Dot(lImpactVel, lCollisionNormal);
-        const f32 lfNumerator    = -(1.0f + lfRestitution) * lfClosingSpeed;
-
-        // ⭐⭐⭐ 2026-08-23 (traffic wave 5) -- THE LEVER ARMS ARE BODY-RELATIVE, AND THIS FUNCTION
-        // DERIVES THEM ITSELF. Both contact points arrive in WORLD space (ApplyCarCarImpulse hands
-        // over lContact.mPointOnA / mPointOnB raw: X360 0x82624CE0/0x82624CE4 are bare `lvx128`
-        // loads of contact+0x00 / contact+0x10), and this body subtracts each object's own position
-        // before using them as moment arms:
-        //     0x8259CB20  lvx128 v0,  r4, 0x30    ; bodyA base + 0x30 == mTransform.wAxis
-        //     0x8259CB28  vsubfp v0,  v1, v0      ; rA = lPoint1 - bodyA position
-        //     0x8259CB2C  lvx128 v13, r5, 0x30    ; bodyB position
-        //     0x8259CB30  vsubfp v13, v2, v13     ; rB = lPoint2 - bodyB position
-        // (The same +0x30 / +0xA0 / +0xD0 body-relative seats the rest of this function uses:
-        //  0x8259CB08 `addi r11, r4, 0xA0` == mWorldInverseInertia, 0x8259CBE0/CBF4 `0xD0` == mfMass.)
-        // ⛔ WHY IT MATTERED: the tree used the raw WORLD points as the arms. At the junkyard the
-        // contact point is ~3,800 m from the origin, so `r x n` was ~3.8e3 instead of ~1.5, the
-        // angular terms grew by ~1e7, and the denominator swamped the numerator. MEASURED on the
-        // rear-end ram (scratch/flow_run/20260823_135317, closing speed 15.6 m/s, masses 1150 kg
-        // and ~1200 kg): the shaped impulse LENGTH came out at 0.0017 where the two inverse masses
-        // alone bound it near 4.8e3. The INANIMATE sibling above never had this bug -- it has done
-        // the same subtraction since it landed, which is why walls take momentum and cars do not.
-        const Vector3 lvArmA = vpu::Subtract(lPoint1, mTransform.wAxis);          // 0x8259CB28
-        const Vector3 lvArmB = vpu::Subtract(lPoint2, lBody2.mTransform.wAxis);   // 0x8259CB30
-
-        // Body A angular coupling: n . ( (Ia^-1 (rA x n)) x rA ),  Ia^-1 = this body.
-        const Vector3 lvRAxN = vpu::Cross(lvArmA, lCollisionNormal);
-        const Vector3 lvAngularA = vpu::Add(
-            vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lvRAxN.x),
-                     vpu::Mult(mWorldInverseInertia.yAxis, lvRAxN.y)),
-            vpu::Mult(mWorldInverseInertia.zAxis, lvRAxN.z));
-        const Vector3 lApart = vpu::Cross(lvAngularA, lvArmA);
-        const f32 lfAngularA = vpu::Dot(lCollisionNormal, lApart);
-
-        // Body B angular coupling: Ib^-1 = lBody2's world inverse inertia.
-        const Vector3 lvRBxN = vpu::Cross(lvArmB, lCollisionNormal);
-        const Vector3 lvAngularB = vpu::Add(
-            vpu::Add(vpu::Mult(lBody2.mWorldInverseInertia.xAxis, lvRBxN.x),
-                     vpu::Mult(lBody2.mWorldInverseInertia.yAxis, lvRBxN.y)),
-            vpu::Mult(lBody2.mWorldInverseInertia.zAxis, lvRBxN.z));
-        const Vector3 lBpart = vpu::Cross(lvAngularB, lvArmB);
-        const f32 lfAngularB = vpu::Dot(lCollisionNormal, lBpart);
-
-        // Inverse masses (m stored as VecFloat, broadcast).
-        const f32 lfOneOverMassA = (mfMass.x != 0.0f)        ? (1.0f / mfMass.x)        : 0.0f;
-        const f32 lfOneOverMassB = (lBody2.mfMass.x != 0.0f) ? (1.0f / lBody2.mfMass.x) : 0.0f;
-
-        // Effective inverse mass (both bodies) -> impulse magnitude.
-        const f32 lfDenominator    = lfOneOverMassA + lfOneOverMassB + lfAngularA + lfAngularB;
-        const f32 lfInvDenominator = (lfDenominator != 0.0f) ? (1.0f / lfDenominator) : 0.0f;
-        const f32 lfImpVal         = lfNumerator * lfInvDenominator;
-
-        // Outputs: each body's inverse effective-mass term, then the impulse vector j*n.
-        const f32 lfInvInertiaA = lfOneOverMassA + lfAngularA;
-        const f32 lfInvInertiaB = lfOneOverMassB + lfAngularB;
-        VecFloat lvfInvInertiaA; lvfInvInertiaA.x = lvfInvInertiaA.y = lvfInvInertiaA.z = lvfInvInertiaA.w = lfInvInertiaA;
-        VecFloat lvfInvInertiaB; lvfInvInertiaB.x = lvfInvInertiaB.y = lvfInvInertiaB.z = lvfInvInertiaB.w = lfInvInertiaB;
-        *lpfInvInertiaAOut = lvfInvInertiaA;
-        *lpfInvInertiaBOut = lvfInvInertiaB;
-        // ⭐ 2026-08-23 (traffic wave 5): the impulse VECTOR carries a forced NEGATIVE magnitude,
-        // while the hidden return keeps the signed value:
-        //     0x8259CD04  vmulfp128 v0,  v0, v119        ; j == numerator / denominator
-        //     0x8259CD08  vandc     v13, v0, v12(sign)   ; |j|      (clear the sign bit)
-        //     0x8259CD10  vxor      v0,  v13, v11(sign)  ; -|j|     (set it)
-        //     0x8259CD14  vmulfp128 v0,  v126(n), v0     ; impulse == n * -|j|
-        //     0x8259CD18  stvx128   v0,  r0, r27         ; -> lpImpulseOut
-        //     0x8259CD0C  stvx128   v0(the SIGNED j), r0, r28  ; -> the sret return
-        // With the caller's negated normal and a positive closing speed j is negative anyway, so
-        // this is the same vector either way on the live path; the INANIMATE sibling's twin store
-        // uses +|j| because its caller passes the un-negated normal. Reproduced as shipped rather
-        // than folded, so a separating contact that somehow reached here keeps the console's sign.
-        if (lpImpulseOut != 0)
-        {
-            const f32 lfNegativeMagnitude = -std::fabs(lfImpVal);
-            *lpImpulseOut = vpu::Mult(lCollisionNormal, lfNegativeMagnitude);
-        }
-
-        VecFloat lvfResult; lvfResult.x = lvfResult.y = lvfResult.z = lvfResult.w = lfImpVal;
-        return lvfResult;
+        const __vector4 one = One();
+        const __vector4 armA = __vsubfp(pointA.mV, mTransform.wAxis.mV);
+        const __vector4 armB = __vsubfp(pointB.mV, body.mTransform.wAxis.mV);
+        const __vector4 a = RowProduct(mWorldInverseInertia.xAxis.mV, mWorldInverseInertia.yAxis.mV,
+            mWorldInverseInertia.zAxis.mV, CrossNative(armA, normal.mV));
+        const __vector4 b = RowProduct(body.mWorldInverseInertia.xAxis.mV, body.mWorldInverseInertia.yAxis.mV,
+            body.mWorldInverseInertia.zAxis.mV, CrossNative(armB, normal.mV));
+        const __vector4 apart = CrossNative(a, armA);
+        const __vector4 bpart = CrossNative(b, armB);
+        const __vector4 inverseA = __vmulfp(ReciprocalTwice(mfMass.mV), one);
+        const __vector4 inverseB = __vmulfp(ReciprocalTwice(body.mfMass.mV), one);
+        const __vector4 denominator = __vaddfp(__vaddfp(inverseA, inverseB), __vmsum3fp(__vaddfp(apart, bpart), normal.mV));
+        const __vector4 numerator = __vmulfp(FlipSigns(__vaddfp(one, restitution.mV)), __vmsum3fp(normal.mV, impactVelocity.mV));
+        CGS_ASSERT(inverseAOut != 0, "lpfInvInertiaAOut != NULL");
+        inverseAOut->mV = __vaddfp(inverseA, __vmsum3fp(apart, normal.mV));
+        CGS_ASSERT(inverseBOut != 0, "lpfInvInertiaBOut != NULL");
+        __vector4 reciprocal = __vrefp(denominator);
+        reciprocal = __vmaddfp(reciprocal, __vnmsubfp(reciprocal, denominator, one), reciprocal);
+        inverseBOut->mV = __vaddfp(inverseB, __vmsum3fp(bpart, normal.mV));
+        reciprocal = __vmaddfp(reciprocal, __vnmsubfp(reciprocal, denominator, one), reciprocal);
+        const __vector4 magnitude = __vmulfp(reciprocal, numerator);
+        VecFloat result(magnitude);
+        const __vector4 negativeMagnitude = FlipSigns(__vandc(magnitude, SignMask()));
+        impulseOut->mV = __vmulfp(normal.mV, negativeMagnitude);
+        return result;
     }
 
-    // ---------------------------------------------------------------------------------------
-    // DampenAngularVelocity  @0x825B2CD8   /   DampPitchYawRoll  @0x825BE210
-    //
-    // Both damp mAngularVelocity in place. The poly chain is the EARenderWare VMX pow(base, exp)
-    // lane
-    // approximation: vlogefp (log2) + a Chebyshev-style polynomial (coefficient tables at
-    // 0x82014AC0..0x82014AF0) + vexptefp (exp2), combined per axis. The net effect is a
-    // frame-rate-correct exponential decay of the angular velocity. The exponent is measured
-    // in 60-Hz reference frames, not seconds:
-    //
-    // DampenAngularVelocity scales omega isotropically. DampPitchYawRoll instead loads the body
-    // axes at this+0/+0x10/+0x20, and sequentially removes each projected component:
-    //
-    //     omega -= axis * dot(omega, axis) * pow(dampingPerFrameAt60Hz, dt * 60)
-    //
-    // DampPitchYawRoll uses a separate coefficient per body axis (pitch=x, yaw=y, roll=z),
-    // and each later projection observes the result of the previous removal.
-    //
-    // ⭐⭐ FLAG RETIRED 2026-09-03 (drive-spine 1:1 audit) -- THE POLYNOMIAL TABLES ARE NOW READ,
-    // AND std::pow IS A FAITHFUL MODEL. The standing text said the unk_82014A* coefficients were
-    // "not bit-verified" and treated that as a permanent gap. They are plain .rdata, and
-    // tools/re/x360rd.py reads them straight out of the image:
-    //
-    //   0x82014AF0  1.4426896, -0.72116578, 0.47868481, -0.34730542   log2(1+x), c1..c4
-    //   0x82014AE0  0.24187370, -0.13753121, 0.05206468, -0.00931049   log2(1+x), c5..c8
-    //   0x82014AD0  1.0, -0.69314718, 0.24022646, -0.05550364          2^-f, c0..c3
-    //   0x82014AC0  0.00961598, -0.00132824, 0.00014749, -1.08635e-05  2^-f, c4..c7
-    //
-    // c1 == 1/ln2 == log2(e) pins the first pair as the degree-8 minimax for log2(1+x); the second
-    // pair is Sum (-f*ln2)^k/k! -- exactly (ln2)^2/2 == 0.2402265 and (ln2)^3/6 == 0.0555041 at
-    // c2/c3 -- i.e. 2^-f, and the code takes its RECIPROCAL (vrefp + two Newton steps) before
-    // multiplying by the vexptefp'd integer part. Read against the inlined copy in
-    // VehiclePhysics::UpdateCrashing @0x82638810 (0x826388D4..0x82638AE0): mantissa-normalise via
-    // the vsel over the 0xFF800000 mask, vrfim the exponent, evaluate x*P(x)+e, multiply by the
-    // exponent argument, split into vrfim integer + fraction, vexptefp the integer, reciprocal of
-    // the fraction polynomial, multiply -- then a full special-case fixup tail
-    // (0x82638A54..0x82638AD0): base<0 with a non-integer exponent -> QNaN, base==0 -> signed zero
-    // or infinity, exponent==0 -> 1.0, and an odd-integer exponent re-applies the base's sign bit.
-    //
-    // That is a textbook base-2 log/exp pow with IEEE special cases and no hidden clamp, no other
-    // base and no restricted range -- so std::pow reproduces it to within float rounding, and the
-    // "we are modelling something we cannot see" caveat is refuted rather than carried. What is
-    // still NOT claimed is bit-exactness: the console's estimate+Newton chain and the CRT's
-    // correctly-rounded double path differ in the last ulp or two.
-    //
-    // DecFIGS' static initializer @0x12DF24 writes the literal 60.0 splat to BrnPhysics::kvfSixty;
-    // Breaker names that slot unk_82FB9AF0 and multiplies it by the incoming dt.
-    // ---------------------------------------------------------------------------------------
-    void ExternalPhysicsBody::DampenAngularVelocity(VecFloat lvfDampingPerSecond, VecFloat lvfDeltaTime)
+    void ExternalPhysicsBody::DampenAngularVelocity(VecFloat damping, VecFloat deltaTime)
     {
-        const f32 lfFactor = std::pow(lvfDampingPerSecond.x, lvfDeltaTime.x * 60.0f);
-        mAngularVelocity = vpu::Mult(mAngularVelocity, lfFactor);
+        const __vector4 exponent = __vmulfp(kvfSixty.mV, deltaTime.mV);
+        mAngularVelocity.mV = __vmulfp(mAngularVelocity.mV, PowerNative(damping.mV, exponent));
     }
 
-    void ExternalPhysicsBody::DampPitchYawRoll(VecFloat lvfPitchDamping, VecFloat lvfYawDamping,
-                                               VecFloat lvfRollDamping, VecFloat lvfDeltaTime)
+    void ExternalPhysicsBody::DampPitchYawRoll(VecFloat pitch, VecFloat yaw, VecFloat roll, VecFloat deltaTime)
     {
-        // @0x825BE210..E264: no projection is touched for a zero-sized simulation step.
-        static const f32 KF_TIME_STEP_EPSILON = 1.1920928955078125e-07f; // stru_8208F620.x
-        if (std::fabs(lvfDeltaTime.x) <= KF_TIME_STEP_EPSILON)
-            return;
-
-        const f32 lfDt = lvfDeltaTime.x * 60.0f;
-
-        // @0x825BE398..E424: pitch about the body's x axis.
-        const f32 lfPitchFactor = std::pow(lvfPitchDamping.x, lfDt);
-        const f32 lfPitchVelocity = vpu::Dot(mAngularVelocity, mTransform.xAxis);
-        mAngularVelocity = vpu::Subtract(
-            mAngularVelocity,
-            vpu::Mult(mTransform.xAxis, lfPitchVelocity * lfPitchFactor));
-
-        // @0x825BE4A0..E5A8: yaw uses the velocity left by the pitch pass.
-        const f32 lfYawFactor = std::pow(lvfYawDamping.x, lfDt);
-        const f32 lfYawVelocity = vpu::Dot(mAngularVelocity, mTransform.yAxis);
-        mAngularVelocity = vpu::Subtract(
-            mAngularVelocity,
-            vpu::Mult(mTransform.yAxis, lfYawVelocity * lfYawFactor));
-
-        // @0x825BE66C..E704: roll uses the velocity left by both earlier passes.
-        const f32 lfRollFactor = std::pow(lvfRollDamping.x, lfDt);
-        const f32 lfRollVelocity = vpu::Dot(mAngularVelocity, mTransform.zAxis);
-        mAngularVelocity = vpu::Subtract(
-            mAngularVelocity,
-            vpu::Mult(mTransform.zAxis, lfRollVelocity * lfRollFactor));
+        unsigned int comparison = 0;
+        __vcmpgtfpR(__vandc(deltaTime.mV, SignMask()), SplatValue(1.1920928955078125e-07f), &comparison);
+        if (comparison & 0x20u) return;
+        const __vector4 exponent = __vmulfp(kvfSixty.mV, deltaTime.mV);
+        const __vector4 pitchFactor = PowerNative(pitch.mV, exponent);
+        const __vector4 pitchVelocity = __vmsum3fp(mTransform.xAxis.mV, mAngularVelocity.mV);
+        const __vector4 pitchScale = __vmulfp(pitchVelocity, pitchFactor);
+        mAngularVelocity.mV = __vsubfp(mAngularVelocity.mV, __vmulfp(mTransform.xAxis.mV, pitchScale));
+        const __vector4 yawFactor = PowerNative(yaw.mV, exponent);
+        const __vector4 yawVelocity = __vmsum3fp(mTransform.yAxis.mV, mAngularVelocity.mV);
+        const __vector4 yawScale = __vmulfp(yawVelocity, yawFactor);
+        mAngularVelocity.mV = __vsubfp(mAngularVelocity.mV, __vmulfp(mTransform.yAxis.mV, yawScale));
+        const __vector4 rollFactor = PowerNative(roll.mV, exponent);
+        const __vector4 rollVelocity = __vmsum3fp(mTransform.zAxis.mV, mAngularVelocity.mV);
+        const __vector4 rollScale = __vmulfp(rollVelocity, rollFactor);
+        mAngularVelocity.mV = __vsubfp(mAngularVelocity.mV, __vmulfp(mTransform.zAxis.mV, rollScale));
     }
 
-    // ---------------------------------------------------------------------------------------
-    // ReadPropertiesFromChangeInertiaEvent  @0x825A2388   (74 instructions, read line by line)
-    //
-    // Reseat mass + local inertia from a queued sim InChangeRigidBodyInertia event, then
-    // re-derive the world tensor. The asm, in order:
-    //   * `lwz 0x40(event)` -> mu32Flags; `rlwinm ..,29,29` / `..,30,30` -- BOTH bit 2 (0x4,
-    //     the mInvMass flag) AND bit 1 (0x2, the mInvTens flag) must be set or the function is
-    //     a no-op. (Bit map per the ProcessChangeRigidBodyInertiaQueue drain, quoted in
-    //     CgsPhysicsSimulationIO_Events.h.)
-    //   * three identity rows stored into mLocalInverseInertia (+0x70/+0x80/+0x90):
-    //     gIVector {1,0,0,0}, unk_82181510 {0,1,0,0}, unk_82181520 {0,0,1,0} -- the settled
-    //     identity-basis constants -- then each row is vmulfp128'd by the vspltw'd x/y/z lane
-    //     of the event's mInertia.mInvTens vector (event+0x10). Net effect: the local inverse
-    //     inertia becomes diag(invTens.x, invTens.y, invTens.z), written below directly (the
-    //     store-identity-then-scale staging is register scheduling, not observable state).
-    //   * `lfs f13, <event+0x20>` == mInertia.mInvMass; `fdivs f0, 1.0f, f13`; vspltw ->
-    //     `stvx128` to +0xD0 == mfMass = splat(1 / inverse mass) -- the event carries the
-    //     INVERSE mass, the body stores the mass (all consumers here divide by mfMass.x).
-    //     Deliberately NOT guarded against a zero inverse mass: the console does not guard,
-    //     and the same modelling note as CalculateNewVelocity's divide applies.
-    //   * `bl CalculateWorldIntertia`.
-    // (The 32-byte stack copy of event+0x20..0x40 the asm makes is a dead by-value staging --
-    // only the +0x20 float is ever read back out of it. The Hex-Rays for this function fails
-    // variable allocation; every claim above is from the asm.)
-    // ---------------------------------------------------------------------------------------
     void ExternalPhysicsBody::ReadPropertiesFromChangeInertiaEvent(
-        const CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia* lpEvent)
+        const CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia* event)
     {
-        const u32 luFlags = lpEvent->mu32Flags;
-        if ((luFlags & 0x4u) != 0 && (luFlags & 0x2u) != 0)   // mInvMass AND mInvTens present
+        if ((event->mu32Flags & 4u) && (event->mu32Flags & 2u))
         {
-            const Vector3 lvInvTens = lpEvent->mInertia.GetInverseInertia();
-
-            // diag(invTens) -- the identity rows scaled per-lane (see the banner).
-            {
-                const Vector3 lAggregateValue = { lvInvTens.x, 0.0f, 0.0f, 0.0f };
-                mLocalInverseInertia.xAxis = lAggregateValue;
-            }
-            {
-                const Vector3 lAggregateValue = { 0.0f, lvInvTens.y, 0.0f, 0.0f };
-                mLocalInverseInertia.yAxis = lAggregateValue;
-            }
-            {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, lvInvTens.z, 0.0f };
-                mLocalInverseInertia.zAxis = lAggregateValue;
-            }
-
-            const f32 lfMass = 1.0f / lpEvent->mInertia.GetInverseMass();
-            mfMass.x = lfMass;
-            mfMass.y = lfMass;
-            mfMass.z = lfMass;
-            mfMass.w = lfMass;   // vspltw -- all four lanes, same as SetMass
-
+            const Vector3 inverse = event->mInertia.GetInverseInertia();
+            const __vector4 x = {1.0f, 0.0f, 0.0f, 0.0f};
+            const __vector4 y = {0.0f, 1.0f, 0.0f, 0.0f};
+            const __vector4 z = {0.0f, 0.0f, 1.0f, 0.0f};
+            mLocalInverseInertia.xAxis.mV = x;
+            mLocalInverseInertia.yAxis.mV = y;
+            mLocalInverseInertia.zAxis.mV = z;
+            mLocalInverseInertia.xAxis.mV = __vmulfp(mLocalInverseInertia.xAxis.mV, __vspltw(inverse.mV, 0));
+            // This one scalar division is the actual ARTIST825A245C fdivs.
+            const f32 mass = 1.0f / event->mInertia.GetInverseMass();
+            mLocalInverseInertia.yAxis.mV = __vmulfp(mLocalInverseInertia.yAxis.mV, __vspltw(inverse.mV, 1));
+            mLocalInverseInertia.zAxis.mV = __vmulfp(mLocalInverseInertia.zAxis.mV, __vspltw(inverse.mV, 2));
+            mfMass.mV = SplatValue(mass);
             CalculateWorldIntertia();
         }
     }
 
-    // ---------------------------------------------------------------------------------------
-    // ReadPropertiesFromRenderware @0x825A2280 lives in its own TU,
-    // ExternalPhysicsBody_ReadPropertiesFromRenderware.cpp -- SPLIT 2026-08-02 (physics wave 3).
-    //
-    // WHY THE SPLIT: it is the only function in this class that calls
-    // rw::physics::RigidBody::GetLocalInvInertiaDiagonal(), whose console storage is a POINTER
-    // packed into the rigid body's mUp.w float lane and therefore cannot be bodied against the
-    // committed 64-bit rigidbody.h layout (see that header and RigidBody.cpp). Leaving it here
-    // made the whole of ExternalPhysicsBody -- the four accumulators, AddLocalForce/Impulse,
-    // GetImpulsesFromLocalImpulse, CalculateWorldIntertia, IntegrateTransform,
-    // CalculateNewVelocity, the lifecycle quartet, i.e. THE INTEGRATOR -- unlinkable for the sake
-    // of one function that is not on the vehicle path at all (its only caller is
-    // Deformation::PhysicalBodyPart::Update). The split is a BUILD-MECHANICS split only: the code
-    // is byte-identical and its declared home is unchanged. Re-merge when the packed lane gets its
-    // PC-side storage answer in the SDK reconstruction. (Same idiom as ICEFileClose.cpp.)
-    // ---------------------------------------------------------------------------------------
-
-    // @0x825A24B0  BrnPhysics::ExternalPhysicsBody::CheckState  (607 insns; bodied 2026-08-07,
-    // orchestrator wave -- the driving spine brackets every stage with it)
-    //
-    // Ten NaN sweeps over the body state, in the console's exact member order (each `li rN` /
-    // `addi rN` below is the asm's own offset, rel. the EPB base):
-    //   +0x00..0x30  mTransform, 4 rows, xyz lanes    -> "Bad transform"            (:679)
-    //   +0x70        mLocalInverseInertia, 3 rows xyz -> "Bad local inverse inertia"
-    //   +0xA0        mWorldInverseInertia, 3 rows xyz -> "Bad world inverse inertia" (:0x2B3)
-    //   +0xD0        mfMass          (whole register) -> "Bad mass"
-    //   +0xE0        mTotalLinearForce,    xyz lanes  -> "Bad total linear force"
-    //   +0xF0        mTotalTorque,         xyz lanes  -> "Bad total torque"
-    //   +0x100       mTotalLinearImpulse,  xyz lanes  -> "Bad total linear impulse"
-    //   +0x110       mTotalAngularImpulse, xyz lanes  -> "Bad total angular impulse"
-    //   +0x40        mLinearVelocity,      xyz lanes  -> "Bad linear velocity"
-    //   +0x50        mAngularVelocity,     xyz lanes  -> "Bad angular velocity"
-    // The console's test is `vcmpeqfp. v, v` -- a lane self-compare that fails only on NaN.
-    // ONLY mfMass is tested as a whole register (0x825A29E4 lvx128 +0xD0, 0x825A29E8
-    // `vcmpeqfp. v0,v0,v0`, CR6 all-true -- all four lanes). Every other member is tested per
-    // xyz lane: the matrix rows, and the six Vector3s too -- e.g. +0xE0 at 0x825A2A3C lvx128,
-    // then 0x825A2A40/2A58/2A74 `vspltw v,v0,0/1/2` each followed by `vcmpeqfp.`; lane 3 (w) is
-    // never splatted. The same three-lane ladder repeats for +0xF0 (0x825A2AE8..2B24), +0x100
-    // (0x825A2B90..2BCC), +0x110 (0x825A2C38..2C74), +0x40 (0x825A2CE0..2D1C) and +0x50
-    // (0x825A2D88..2DC4). So a NaN only in a Vector3's w lane asserts nothing on the console
-    // (G31-D1, crash parity 2026-09-23). On a failure the caller's stage string goes through
-    // gpDebugPrint (gated on gxMessageFilterFlags bit 0) and the console's own assert text fires.
     namespace
     {
-        inline bool IsLaneNaN(f32 lfValue) { return !(lfValue == lfValue); }   // vcmpeqfp self-test
-
-        template <typename TRow>
-        inline bool AnyNaN3(const TRow& lrRow)
+        void CheckStateFail(const char* context, const char* message)
         {
-            return IsLaneNaN(lrRow.x) || IsLaneNaN(lrRow.y) || IsLaneNaN(lrRow.z);
-        }
-
-        template <typename TRow>
-        inline bool AnyNaN4(const TRow& lrRow)
-        {
-            return AnyNaN3(lrRow) || IsLaneNaN(lrRow.w);
-        }
-
-        void CheckStateFail(const char* lpcContext, const char* lpcWhat)
-        {
-            // the console's failure path: print the stage string, then assert.
             if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << lpcContext;
-            CGS_ASSERT(false, lpcWhat);
+                *CgsDev::Log::gpDebugPrint << context;
+            CGS_ASSERT(false, message);
         }
     }
 
-    void ExternalPhysicsBody::CheckState(const char* lpcContext) const
+    void ExternalPhysicsBody::CheckState(const char* context) const
     {
-        // mTransform -- four rows, xyz lanes each.
-        if (AnyNaN3(mTransform.xAxis) || AnyNaN3(mTransform.yAxis) ||
-            AnyNaN3(mTransform.zAxis) || AnyNaN3(mTransform.wAxis))
-            CheckStateFail(lpcContext, "Bad transform");
-
-        if (AnyNaN3(mLocalInverseInertia.xAxis) || AnyNaN3(mLocalInverseInertia.yAxis) ||
-            AnyNaN3(mLocalInverseInertia.zAxis))
-            CheckStateFail(lpcContext, "Bad local inverse inertia");
-
-        if (AnyNaN3(mWorldInverseInertia.xAxis) || AnyNaN3(mWorldInverseInertia.yAxis) ||
-            AnyNaN3(mWorldInverseInertia.zAxis))
-            CheckStateFail(lpcContext, "Bad world inverse inertia");
-
-        // mfMass -- the one whole-register test (0x825A29E8 vcmpeqfp. v0,v0,v0: all four lanes).
-        if (AnyNaN4(mfMass))
-            CheckStateFail(lpcContext, "Bad mass");
-
-        // The six Vector3 members -- xyz lanes only (vspltw 0/1/2, never lane 3).
-        if (AnyNaN3(mTotalLinearForce))
-            CheckStateFail(lpcContext, "Bad total linear force");
-
-        if (AnyNaN3(mTotalTorque))
-            CheckStateFail(lpcContext, "Bad total torque");
-
-        if (AnyNaN3(mTotalLinearImpulse))
-            CheckStateFail(lpcContext, "Bad total linear impulse");
-
-        if (AnyNaN3(mTotalAngularImpulse))
-            CheckStateFail(lpcContext, "Bad total angular impulse");
-
-        if (AnyNaN3(mLinearVelocity))
-            CheckStateFail(lpcContext, "Bad linear velocity");
-
-        if (AnyNaN3(mAngularVelocity))
-            CheckStateFail(lpcContext, "Bad angular velocity");
+        if (!IsValid3(mTransform.xAxis.mV) || !IsValid3(mTransform.yAxis.mV)
+            || !IsValid3(mTransform.zAxis.mV) || !IsValid3(mTransform.wAxis.mV)) CheckStateFail(context, "Bad transform");
+        if (!IsValid3(mLocalInverseInertia.xAxis.mV) || !IsValid3(mLocalInverseInertia.yAxis.mV)
+            || !IsValid3(mLocalInverseInertia.zAxis.mV)) CheckStateFail(context, "Bad local inverse inertia");
+        if (!IsValid3(mWorldInverseInertia.xAxis.mV) || !IsValid3(mWorldInverseInertia.yAxis.mV)
+            || !IsValid3(mWorldInverseInertia.zAxis.mV)) CheckStateFail(context, "Bad world inverse inertia");
+        if (!IsValid4(mfMass.mV)) CheckStateFail(context, "Bad mass");
+        if (!IsValid3(mTotalLinearForce.mV)) CheckStateFail(context, "Bad total linear force");
+        if (!IsValid3(mTotalTorque.mV)) CheckStateFail(context, "Bad total torque");
+        if (!IsValid3(mTotalLinearImpulse.mV)) CheckStateFail(context, "Bad total linear impulse");
+        if (!IsValid3(mTotalAngularImpulse.mV)) CheckStateFail(context, "Bad total angular impulse");
+        if (!IsValid3(mLinearVelocity.mV)) CheckStateFail(context, "Bad linear velocity");
+        if (!IsValid3(mAngularVelocity.mV)) CheckStateFail(context, "Bad angular velocity");
     }
 
-    // ---------------------------------------------------------------------------------------
-    // GetLocalVelocity -- ⭐ 2026-08-14 (walls leg 4). Console-inline (no export on either
-    // console); the header's own gloss is the body: the velocity of a point on this body
-    // (= mLinearVelocity + mAngularVelocity x r). The InputSpace selects how the point maps to
-    // the moment arm r: WORLD_SPACE points subtract the body position (both mounted callers,
-    // ApplyCarCarImpulse's closing-velocity pair, pass world points); BODY_SPACE points rotate
-    // through the transform rows first (no translation).
-    // ---------------------------------------------------------------------------------------
-    Vector3 ExternalPhysicsBody::GetLocalVelocity(Vector3 lPoint, rw::physics::InputSpace leSpace) const
+    Vector3 ExternalPhysicsBody::GetLocalVelocity(Vector3 point, rw::physics::InputSpace space) const
     {
-        Vector3 lvR;
-        if ( leSpace == rw::physics::WORLD_SPACE )
-        {
-            lvR = vpu::Subtract(lPoint, mTransform.wAxis);
-        }
-        else
-        {
-            {
-                const Vector3 lAggregateValue = {
-                mTransform.xAxis.x * lPoint.x + mTransform.yAxis.x * lPoint.y + mTransform.zAxis.x * lPoint.z,
-                mTransform.xAxis.y * lPoint.x + mTransform.yAxis.y * lPoint.y + mTransform.zAxis.y * lPoint.z,
-                mTransform.xAxis.z * lPoint.x + mTransform.yAxis.z * lPoint.y + mTransform.zAxis.z * lPoint.z,
-                0.0f };
-                lvR = lAggregateValue;
-            }
-        }
-        return vpu::Add(mLinearVelocity, vpu::Cross(mAngularVelocity, lvR));
+        const __vector4 arm = space == rw::physics::WORLD_SPACE ? __vsubfp(point.mV, mTransform.wAxis.mV) : RotateToWorld(mTransform, point.mV);
+        return Vector3(__vaddfp(mLinearVelocity.mV, CrossNative(mAngularVelocity.mV, arm)));
     }
 
-    // ---------------------------------------------------------------------------------------
-    // GetLinearMomentum -- ⭐ 2026-08-19 (wave Q6 / the jointed lean+tilt prop response).
-    // Console-inline (no address of its own on either console); the header's block comment
-    // above the declaration carries the store-for-store recovery out of
-    // HandleContactWithLeanProp @0x8260FCA4..0x8260FCBC and its corroborating twin in
-    // HandleContactWithTiltProp @0x82610A08..0x82610A18, and is not repeated here.
-    //
-    //     v*m + F*dt + J
-    //
-    // ⚠️ ALL FOUR LANES, not xyz. Every one of the console's five instructions is a full
-    // 4-lane VMX op (vmulfp128 / vmaddfp / vaddfp), and the caller immediately feeds the
-    // result to a `vmsum3fp128` dot that ignores .w anyway -- so the w lane is carried, not
-    // cleared, exactly as the register does. `vpu::Mult(Vector3, float)` and `vpu::Add` are
-    // both 4-lane in this tree, so the spelling below reproduces that without comment.
-    //
-    // ⚠️ mfMass is a broadcast VecFloat (`stvx128` of a splat -- see the +0xD0 note at the
-    // head of this file); its .x lane IS the mass. Same for the incoming timestep, which the
-    // console builds with a `vspltw` before the multiply.
-    // ---------------------------------------------------------------------------------------
-    Vector3 ExternalPhysicsBody::GetLinearMomentum(VecFloat lvfTimeStep) const
+    Vector3 ExternalPhysicsBody::GetLinearMomentum(VecFloat deltaTime) const
     {
-        const Vector3 lvMomentumFromVelocity = vpu::Mult(mLinearVelocity, mfMass.x);
-        const Vector3 lvMomentumFromForce    = vpu::Mult(mTotalLinearForce, lvfTimeStep.x);
-
-        return vpu::Add(vpu::Add(lvMomentumFromVelocity, lvMomentumFromForce),
-                        mTotalLinearImpulse);
+        const __vector4 force = __vmulfp(mTotalLinearForce.mV, deltaTime.mV);
+        const __vector4 momentum = __vmaddfp(mLinearVelocity.mV, mfMass.mV, force);
+        return Vector3(__vaddfp(momentum, mTotalLinearImpulse.mV));
     }
-
 }

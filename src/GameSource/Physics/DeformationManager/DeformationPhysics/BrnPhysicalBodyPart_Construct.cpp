@@ -65,7 +65,7 @@ namespace Deformation
         // mfMass lives inside mRwBody (+208 in the console layout). The asm stores 5.0 BETWEEN
         // ExternalPhysicsBody::Construct() (above) and ::Prepare() (below). It is the recovered
         // literal flt_8200426C, not a placeholder -- and not kfPartMass (100.0), see the rename note.
-        mRwBody.SetMass(KF_PART_CONSTRUCT_MASS);
+        mRwBody.SetMass(VecFloat(KF_PART_CONSTRUCT_MASS));
 
         // BrnPhysics::ExternalPhysicsBody::Prepare().
         mRwBody.Prepare();
