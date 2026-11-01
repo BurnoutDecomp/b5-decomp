@@ -64,10 +64,7 @@
 #include <cstddef> // offsetof
 #include <cstdio>   // std::snprintf (the one-shot parked-leaf logs)
 
-// The XDK sign-in query the profile row gates on (X360 `lwz r3, 0x4B38(cache) ; bl
-// XUserGetSigninState`). Declared locally, exactly as the sibling consumers do
-// in GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp (1 == local user offline, 2 on LAN).
-extern "C" u32 XUserGetSigninState(u32 luUserIndex);
+#include <xtl.h>   // XUserGetSigninState and XUSER_SIGNIN_STATE
 
 namespace BrnGui
 {
@@ -511,7 +508,7 @@ namespace BrnGui
                 {
                 case KI_MENU_ROW_PROFILE:
                     if (XUserGetSigninState(
-                            static_cast<u32>(mpGuiCache->GetActiveControllerIndex())) != 0)
+                            static_cast<DWORD>(mpGuiCache->GetActiveControllerIndex())) != eXUserSigninState_NotSignedIn)
                     {
                         SendStateEvent("TO_PROFILE");
                     }
