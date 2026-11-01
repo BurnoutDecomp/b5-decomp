@@ -667,10 +667,49 @@ namespace BrnWorld
 
         void LockNativeLayout_()
         {
+            // ARTIST CheckClassSizes 823BD62C/634 supplies the independent extent.
+            // Constructor 827E5998, Construct 827CF540 and original users supply the starts.
+            // Parent boundaries do not establish each child's independent sizeof.
+            CGS_STATIC_ASSERT((sizeof(WorldModule) == 0x5E3C80), "ARTIST world extent");
             CGS_STATIC_ASSERT((offsetof(WorldModule, mePrepareStage) == 0x228), "ARTIST world prepare stage");
             CGS_STATIC_ASSERT((offsetof(WorldModule, meReleaseStage) == 0x22C), "ARTIST world release stage");
             CGS_STATIC_ASSERT((offsetof(WorldModule, meVaultResourceStage) == 0x230), "ARTIST world vault stage");
             CGS_STATIC_ASSERT((offsetof(WorldModule, meDistrictMapLoadStage) == 0x234), "ARTIST world district stage");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mRaceCarEntityModule) == 0x280), "ARTIST world race cars");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mTrafficEntityModule) == 0x18A80), "ARTIST world traffic");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mWorldEntityModule) == 0x92280), "ARTIST world entities");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mPropEntityModule) == 0x99C80), "ARTIST world props");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mTriggerEntityModule) == 0x16D080), "ARTIST world triggers");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mPhysicsModule) == 0x17D320), "ARTIST world physics");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mEnvironmentManager) == 0x1E6F60), "ARTIST world environment");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mSkyDebugComponent) == 0x1E8BD0), "ARTIST world sky debug");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mSceneModule) == 0x1E8D80), "ARTIST world scene");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mAIModule) == 0x591300), "ARTIST world AI");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mCrashModule) == 0x5E0020), "ARTIST world crash");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mReceiverQueue) == 0x5E16C8), "ARTIST world receiver queue");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mbResourcesLoaded) == 0x5E1AE0), "ARTIST world resources loaded");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, meResourceState) == 0x5E1AE4), "ARTIST world resource state");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, meLocalPlayerActiveRaceCarIndex) == 0x5E1AE8), "ARTIST world player index");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mfLocalPlayerActiveRaceCarSpeed) == 0x5E1AEC), "ARTIST world player speed");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, maeCarControls) == 0x5E1AF0), "ARTIST world car controls");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mbDEBUGPlayerCarAlwaysUnderAIControl) == 0x5E1B10), "ARTIST world debug AI control");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mnDEBUGKBToStoreEachFrame) == 0x5E1B14), "ARTIST world stored KB count");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mbStoreKBEachFrame) == 0x5E1B18), "ARTIST world store each frame");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mabEnvMapFaceRender) == 0x5E1B19), "ARTIST world environment faces");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mbRenderFirstEnvMapFaces) == 0x5E1B1F), "ARTIST world first environment faces");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mb30hzEnvironmentMap) == 0x5E1B20), "ARTIST world environment rate");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mbFirstRenderFrame) == 0x5E1B21), "ARTIST world first render frame");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mbForceOnlyBackdrops) == 0x5E1B22), "ARTIST world force backdrops");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mbRenderBackdrops) == 0x5E1B23), "ARTIST world render backdrops");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mfCarKeyLightMultiplier) == 0x5E1B24), "ARTIST world car key multiplier");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mfCarAmbientLightMultiplier) == 0x5E1B28), "ARTIST world car ambient multiplier");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mDebugComponent) == 0x5E1B30), "ARTIST world debug component");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mGlobalCpuMonitors) == 0x5E1C18), "ARTIST world CPU monitors");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mLastCameraInput) == 0x5E1CC0), "ARTIST world camera");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mEnvironmentMap) == 0x5E1E20), "ARTIST world environment map");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mShadowMap) == 0x5E26E0), "ARTIST world shadow map");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mShaderLodInfo) == 0x5E3C10), "ARTIST world shader LOD");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mbIsInJunkyard) == 0x5E3C40), "ARTIST world junkyard flag");
         }
     };
 }
