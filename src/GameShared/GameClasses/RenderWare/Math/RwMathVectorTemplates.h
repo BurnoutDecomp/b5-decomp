@@ -24,6 +24,8 @@ public:
     // constructed lazily by AStarNodePool::NewNode), so leaving the lanes uninitialised
     // is faithful. Layout is unchanged (mX@+0, mY@+4; no vtable).
     Vector2Template() {}
+    // DecFIGS vector2.h:38/44 and the SDK scalar copy constructor.
+    Vector2Template(const Vector2Template& lrOther) : mX(lrOther.mX), mY(lrOther.mY) {}
     Vector2Template(Type lX, Type lY) : mX(lX), mY(lY) {}   // (defined inline 2026-09-03: the two-lane init the X360 emits as two stfs; was declared-only -> LNK2019)
 
     // Additive grow (World-AI group): the canonical rwmath component readers.
@@ -31,8 +33,10 @@ public:
     // on X360 these are direct loads of the two leading lanes (lfs 0(rN)/4(rN)).
     // Inline accessors keep member access by-name and do not change the layout
     // (mX at +0, mY at +4 preserved).
-    Type X() const { return mX; }
-    Type Y() const { return mY; }
+    const Type& X() const { return mX; }
+    const Type& Y() const { return mY; }
+    Type& X() { return mX; }
+    Type& Y() { return mY; }
 
 private:
     Type mX;
@@ -43,7 +47,10 @@ template <typename Type>
 class Vector3Template
 {
 public:
-    Vector3Template(Type lX, Type lY, Type lZ);
+    // DecFIGS vector3.h:38/45; preserve the genuine scalar copy operation.
+    Vector3Template(const Vector3Template& lrOther)
+        : mX(lrOther.mX), mY(lrOther.mY), mZ(lrOther.mZ) {}
+    Vector3Template(Type lX, Type lY, Type lZ) : mX(lX), mY(lY), mZ(lZ) {}
 
     // Additive grow (StreetManager keystone, wave B): a trivial default ctor so the
     // type can be a value member of a Construct()-initialised aggregate
@@ -59,9 +66,9 @@ public:
     // (StreetManager::Construct hint calls rw::math::fpu::Vector3Template<float>::
     // SetZero four times) and a whole-vector setter for the X360's three-lane
     // stfs store idiom. Layout unchanged.
-    Type X() const { return mX; }
-    Type Y() const { return mY; }
-    Type Z() const { return mZ; }
+    const Type& X() const { return mX; }
+    const Type& Y() const { return mY; }
+    const Type& Z() const { return mZ; }
     // DecFIGS vector3.h:108-110. The debug UI binds these mutable scalar lanes
     // by address; references preserve the three-float member layout.
     Type& X() { return mX; }

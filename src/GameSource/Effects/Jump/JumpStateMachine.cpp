@@ -175,18 +175,16 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
                                         + lfVapourDelay;
 
                 // Ramp 1: alignment dot -> [0,1] over [0.707, 1.0] (mid 0.8535).
-                const Vector3 lvDirParams = { KF_VAPOUR_DIR_LOW, KF_VAPOUR_DIR_MID, 1.0f, 0.0f };
-                const Vector2 lvDirScale  = { 0.0f, 1.0f, 0.0f, 0.0f };
+                const rw::math::fpu::Vector3Template<f32> lvDirParams(KF_VAPOUR_DIR_LOW, KF_VAPOUR_DIR_MID, 1.0f);
+                const rw::math::fpu::Vector2Template<f32> lvDirScale(0.0f, 1.0f);
 
                 // Ramp 2: fade time -> [0,0.5] over [delay, delay+ramp] (mid midpoint).
-                const Vector3 lvTimeParams = { lfVapourDelay,
-                                               std::fma(lfVapourEnd - lfVapourDelay, 0.5f, lfVapourDelay),
-                                               lfVapourEnd, 0.0f };
-                const Vector2 lvTimeScale  = { 0.0f, 0.5f, 0.0f, 0.0f };
+                const rw::math::fpu::Vector3Template<f32> lvTimeParams(lfVapourDelay,
+                    (lfVapourEnd - lfVapourDelay) * 0.5f + lfVapourDelay, lfVapourEnd);
+                const rw::math::fpu::Vector2Template<f32> lvTimeScale(0.0f, 0.5f);
 
-                BrnEffects::Curves::SmoothStep lCurve;
-                const f32 lfDirBlend  = lCurve.Evaluate(lvDirParams, lvDirScale, lfDot);
-                const f32 lfTimeBlend = lCurve.Evaluate(lvTimeParams, lvTimeScale, lfFadeTime);
+                const f32 lfDirBlend  = BrnEffects::Curves::SmoothStep::Evaluate(lvDirParams, lvDirScale, lfDot);
+                const f32 lfTimeBlend = BrnEffects::Curves::SmoothStep::Evaluate(lvTimeParams, lvTimeScale, lfFadeTime);
                 lfBlend = lfDirBlend * lfTimeBlend;
             }
         }

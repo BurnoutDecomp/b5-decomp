@@ -25,7 +25,16 @@ namespace vpu
         __vector4 mV;
         typedef const Vector2 InParam;
         Vector2() {}
-        Vector2(float lfX, float lfY);
+        // ARTIST821F0DB0 body; the SDK declares this constructor inline.
+        Vector2(float lfX, float lfY)
+        {
+            __vector4 lValue;
+            lValue.x = lfX;
+            lValue.y = lfY;
+            lValue.u[2] = 0;
+            lValue.u[3] = 0;
+            mV = lValue;
+        }
         void SetZero() { mV = __vspltisw(0); }
     };
 

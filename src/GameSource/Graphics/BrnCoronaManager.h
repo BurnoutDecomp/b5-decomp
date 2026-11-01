@@ -3,116 +3,14 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"          // Vector2, Vector3, Vector4, Matrix44
 #include "GameSource/Effects/Curves.h"  // BrnEffects::Curves::SmoothStep
+#include "SDKs/RenderEngineClub/MAIN/components/include/coronas/rwgcoronabuffer.h"
 #include "rw/rwcore_structs.h"       // rw::RGBA, rw::Resource, rw::IResourceAllocator
 
 // Pointer/reference-only uses below; forward-declared to avoid pulling in the full renderer /
 // resource-allocator header cascades (AGENTS.md forward-declaration exception (b)).
 namespace renderengine { class Texture; class TextureState; }
 
-namespace renderengine
-{
-// ---- renderengine::Corona -- THE 64-BYTE CORONA RECORD (DWARF rwgcorona.h:12-18) ---------------
-// Pinned at BOTH ends of the console pipeline and confirmed a third time by the DWARF:
-//   WRITER  CoronaBuffer::Iterator::Write @0x823F3350 -- three 128-bit stores at +0x00/+0x10/+0x20,
-//           `stfs f1,0x30`, `stw r9,0x34` (the colour), `stw r6,0x38` (the texture id), stride 64.
-//   READER  CoronaRenderer::Dispatch @0x82404F30 -- position at +0x00 (w overwritten with +0x30),
-//           direction at +0x10, size x/y at +0x20/+0x24, the bias at +0x30, the RGBA8 at +0x34, and
-//           `*(rec+0x38) << 6` as the atlas UV row index.
-//
-// The host layout REPRODUCES THE CONSOLE'S EXACTLY, because rw::math::vpu::Vector2/Vector3 are
-// 16-byte alignas(16) registers here just as they are VMX registers there:
-//   +0x00 mvPosition (16) +0x10 mvDirection (16) +0x20 mvSize (16) +0x30 mfDistance +0x34 muColour
-//   +0x38 miTextureID +0x3C (padding; never written by Write, never read by Dispatch)
-// -- so the static_assert below is a real check, not a coincidence.
-//
-// (The previous float-array spelling `mafPosition[4] / mafDirection[4] / mafSize[2] / mafSizePad[2]`
-// produced the same bytes but invented two members: the 1a verifier's F1 records that DWARF's
-// `size` is ONE 16-byte Vector2 covering +0x20..+0x2F, and that there is no member at +0x3C.)
-struct Corona
-{
-    Vector3 mvPosition;    // +0x00  rwgcorona.h:13  world position (w unused by the writer)
-    Vector3 mvDirection;   // +0x10  rwgcorona.h:14  facing direction (w unused)
-    Vector2 mvSize;        // +0x20  rwgcorona.h:15  quad half-extents (x, y)
-    f32     mfDistance;    // +0x30  rwgcorona.h:16  the depth bias, spliced into position.w
-    u32     muColour;      // +0x34  rwgcorona.h:17  DWARF types it RGBA8; the attested writer lays
-                           //                        down a 4-byte word, so the record carries the word
-    s32     miTextureID;   // +0x38  rwgcorona.h:18  atlas page; row = miTextureID * 4 in s_atlasUVs
-};
 
-CGS_STATIC_ASSERT((sizeof(Corona) == 64), "renderengine::Corona must match the 64-byte runtime buffer stride");
-
-// ---- renderengine::CoronaBuffer (DWARF rwgcoronabuffer.h:10) -----------------------------------
-// A header plus `m_numCoronas` 64-byte records; GetResourceDescriptor sizes the pair as one block.
-// Bodies: SDKs/RenderEngineClub/MAIN/components/src/coronas/rwgcoronabuffer.cpp (the two statics)
-// and .../rwgcoronabufferiterator.cpp (the attested Iterator::Write @0x823F3350).
-class CoronaBuffer
-{
-public:
-    // The five {size, alignment} entries the rw resource allocator consumes
-    // (rw::BaseResourceDescriptors<5>, the X360 five-entry form).
-    struct ResourceDescriptor5
-    {
-        struct Entry
-        {
-            u32 muSize;
-            u32 muAlignment;
-        };
-
-        Entry maEntries[5];
-    };
-
-    // DWARF rwgcoronabuffer.h:13
-    struct Parameters
-    {
-        void SetNumCoronas(int liNumCoronas) { miNumCoronas = liNumCoronas; }   // :14
-
-        int miNumCoronas;   // :16
-    };
-
-    // DWARF rwgcoronabuffer.h:20. THREE members (:37/:38/:39) -- the third is load-bearing and was
-    // missing from the previous declaration: BrnCoronaManager::Clear (recovered from
-    // BrnRendererModule::StartOfFrame @0x823FC160) writes all three,
-    //     v11[2] = 0; v11[1] = mpBuffer->m_data; v11[3] = mpBuffer->m_numCoronas;
-    // i.e. iterator +0x04 data / +0x08 index / +0x0C count. Without muNumCoronas the class was one
-    // word short of what the console's own rewind writes.
-    struct Iterator
-    {
-        // 0x823F3350 -- write one 64-byte corona record and advance the cursor. The DWARF
-        // signature (rwgcoronabuffer.h:28) is the PPC ABI's own shape: three vector registers
-        // (v1/v2/v3), one FPR (f1) and two GPRs, which is exactly what the asm uses -- Hex-Rays
-        // renders it as (const void* 48-byte payload, double, u32, int) because it cannot see the
-        // by-value vector parameters.
-        void Write(Vector3 lvPosition, Vector3 lvDirection, Vector2 lvSize,
-                   f32 lfDistance, rw::RGBA lColour, int liTextureID);
-
-        void SetPosition(u32 luIndex) { muIndex = luIndex; }          // :30
-        Corona& operator*()           { return mpData[muIndex]; }     // :32
-        void operator++()             { ++muIndex; }                  // :33
-
-        Corona* mpData;        // +0x00 :37
-        u32     muIndex;       // +0x04 :38
-        u32     muNumCoronas;  // +0x08 :39
-    };
-
-    static ResourceDescriptor5* GetResourceDescriptor(ResourceDescriptor5* pDescriptor,
-                                                      Parameters* pParameters);   // :42
-    static CoronaBuffer* Initialize(CoronaBuffer** ppBuffer, Parameters* pParameters);   // :43
-
-    void Release() {}                                                             // :44
-    u32 GetNumCoronas() const { return muNumCoronas; }                            // :46
-    const Corona* GetCoronas() const { return mpData; }                           // :47
-    void Lock(Iterator& rIterator)                                                // :49
-    {
-        rIterator.mpData       = mpData;
-        rIterator.muIndex      = 0;
-        rIterator.muNumCoronas = muNumCoronas;
-    }
-    void Unlock() {}                                                              // :50
-
-    u32     muNumCoronas;   // :53
-    Corona* mpData;         // :54
-};
-}
 
 // BrnCoronaManager.h:39 (DWARF) -- the corona archetype table index. Traffic / race-car / player-car
 // lighting + PS3-only Blu-Ray accent lights.
@@ -166,13 +64,13 @@ struct BrnCoronaTypeParams
     // BrnCoronaManager.h:80. Attested through sub_823FD428, which indexes the table at a 48-byte
     // console stride and tail-calls AddCorona. HOMED BY GROUP `coronadata` (SEAM S2) in
     // GameSource/Graphics/BrnCoronaTypeParams.cpp, together with the table itself.
-    static const BrnCoronaTypeParams& GetCoronaTypeParams(BrnCoronaType leType);
+    static const BrnCoronaTypeParams& GetCoronaTypeParams(BrnCoronaType leType) { return mParams[leType]; }
 
 private:
     // BrnCoronaManager.h:94 (the DWARF member name is `mParams`; this tree's committed spelling is
-    // smParams -- kept, and recorded here so the two are not mistaken for different members).
+    // mParams -- kept, and recorded here so the two are not mistaken for different members).
     // Defined where GetCoronaTypeParams is bodied (group `coronadata`).
-    static BrnCoronaTypeParams smParams[eCoronaTypeCount];
+    static BrnCoronaTypeParams mParams[eCoronaTypeCount];
 };
 
 // BrnCoronaManager.h:98 (DWARF) -- the world corona system: an atlas texture/sampler state, two
@@ -200,19 +98,20 @@ public:
 
         // BrnCoronaManager.h:113. INLINED on the console -- recovered from BrnRendererModule::Update
         // @0x82405EC4-0x82405FA0 (see the .cpp).
-        void SetCameraInfo(const Matrix44& lViewProj, const Vector3& lCameraPosition, const Vector4& lViewXyScale);
+        void SetCameraInfo(Matrix44 lViewProj, Vector3 lCameraPosition, Vector4 lViewXyScale);
 
         // BrnCoronaManager.h:126 / asm @ 0x823FD138. Bodied in the .cpp.
-        void AddPropCorona(const Vector3& lvPosition, const Vector3& lvDirection, const Vector2& lvSize,
+        void AddPropCorona(Vector3 lvPosition, Vector3 lvDirection,
+                           const rw::math::fpu::Vector2Template<f32>& lvSize,
                             f32 lfAlpha, int32_t liTextureID);
 
         // BrnCoronaManager.h:134 / asm @ 0x823FD270. Bodied in the .cpp.
-        void AddCorona(const Vector3& lvPosition, const Vector3& lvDirection, f32 lfScale,
+        void AddCorona(Vector3 lvPosition, Vector3 lvDirection, f32 lfScale,
                         f32 lfOpacity, const BrnCoronaTypeParams& lCoronaTypeParams);
 
         // BrnCoronaManager.h:142 / asm @ sub_823FD428 -- the one-line forwarder that indexes the
         // archetype table by type. Bodied in the .cpp.
-        void AddCorona(const Vector3& lvPosition, const Vector3& lvDirection, f32 lfScale,
+        void AddCorona(Vector3 lvPosition, Vector3 lvDirection, f32 lfScale,
                         f32 lfOpacity, const BrnCoronaType& leCoronaType);
 
         // BrnCoronaManager.h:159. Not X360-attested for this TU -- declared only.
@@ -296,3 +195,8 @@ protected:
     BrnSubmissionInterface      mSubmissionInterface[2];         // BrnCoronaManager.h:231
     uint8_t                     mu8SubmissionSwapIndex;          // BrnCoronaManager.h:232
 };
+
+CGS_STATIC_ASSERT((sizeof(BrnCoronaTypeParams) == 0x30), "ARTIST corona type stride");
+CGS_STATIC_ASSERT((offsetof(BrnCoronaTypeParams, mScaleCurve) == 0x18), "ARTIST packed curve offset");
+CGS_STATIC_ASSERT((sizeof(BrnCoronaManager::BrnSubmissionInterface) == 0x70), "ARTIST submission interface");
+CGS_STATIC_ASSERT((sizeof(BrnCoronaManager) == 0x140), "ARTIST corona manager");

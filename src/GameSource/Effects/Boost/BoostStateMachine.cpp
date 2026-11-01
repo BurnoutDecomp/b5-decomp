@@ -433,10 +433,10 @@ EffectsState BoostStateMachine::OnDetermineNextState(CarState& lCarState,
                 lfMax = lpDebug->BoostTransitionMax();
             }
 
-            const Vector3 lvParams = { lfMin, BrnParticleMath::ScalarMultiplyAdd(lfMax - lfMin, 0.5f, lfMin), lfMax, 0.0f };
-            const Vector2 lvScale  = { 0.0f, 1.0f, 0.0f, 0.0f };
-            BrnEffects::Curves::SmoothStep lCurve;
-            const f32 lfBlend = 1.0f - lCurve.Evaluate(lvParams, lvScale,
+            const rw::math::fpu::Vector3Template<f32> lvParams(lfMin,
+                BrnParticleMath::ScalarMultiplyAdd(lfMax - lfMin, 0.5f, lfMin), lfMax);
+            const rw::math::fpu::Vector2Template<f32> lvScale(0.0f, 1.0f);
+            const f32 lfBlend = 1.0f - BrnEffects::Curves::SmoothStep::Evaluate(lvParams, lvScale,
                                                        lCarState.mfBoostAmount);   // CarState +0x3C (`v14 = *(a2 + 60)`)
             SetBlendValue(lHelper, lfBlend);
             return leCurrentState;
