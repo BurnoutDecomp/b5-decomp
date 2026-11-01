@@ -13,7 +13,7 @@
 // FAITHFULLY RECONSTRUCTED (simple vec_float-op wrappers):
 //   * Mult(Vector4, Matrix44)          row-combine via vspltw + vmaddfp chain.
 //   * Mult(Matrix44, Matrix44)         four Mult(Vector4,Matrix44) row applications.
-//   * Mult(Matrix44Affine, Matrix44)   affine row-combine (wAxis carries translation).
+//   * Mult(Matrix44Affine, Matrix44)   provided by the shared matrix44_operation.h.
 //
 // LEFT DECLARATION-ONLY + FLAGGED (genuinely multi-stage hand-VMX that does NOT map onto
 // the committed vec_float ops -- a scalar paraphrase would be a fabrication):
@@ -25,6 +25,7 @@
 //                                      cluster, plus the 16-VecFloat Matrix44 ctor.
 
 #include "SDKs/EATech/include/rw/math/vpu/matrix44.h"
+#include "rw/math/vpu/matrix44_operation.h"
 
 namespace rw
 {
@@ -61,34 +62,6 @@ inline Matrix44 Mult(Matrix44::InParam m, Matrix44::InParam b)
         Mult(m.yAxis, b),
         Mult(m.zAxis, b),
         Mult(m.wAxis, b));
-}
-
-inline Matrix44 Mult(Matrix44Affine::InParam m, Matrix44::InParam b)
-{
-    // Affine: each row i of m has its X/Y/Z lanes broadcast (vspltw) against b's
-    // xAxis/yAxis/zAxis rows; the wAxis combine seeds its accumulator with b.wAxis
-    // (the homogeneous translation) instead of zero.
-    //   temp_i = vspltw(m.row_i, X) * b.xAxis  (+ b.wAxis for row 3)
-    //   temp_i += vspltw(m.row_i, Y) * b.yAxis
-    //   result_i = temp_i + vspltw(m.row_i, Z) * b.zAxis
-    VectorIntrinsic result[4];
-    const VectorIntrinsic* mRows[4] = { &m.xAxis.mV, &m.yAxis.mV, &m.zAxis.mV, &m.wAxis.mV };
-
-    for (int i = 0; i < 4; ++i)
-    {
-        const float mx = mRows[i]->v[VectorAxisX];
-        const float my = mRows[i]->v[VectorAxisY];
-        const float mz = mRows[i]->v[VectorAxisZ];
-        for (int k = 0; k < 4; ++k)
-        {
-            float acc = (i == 3) ? b.wAxis.mV.v[k] : 0.0f;
-            acc += mx * b.xAxis.mV.v[k];
-            acc += my * b.yAxis.mV.v[k];
-            acc += mz * b.zAxis.mV.v[k];
-            result[i].v[k] = acc;
-        }
-    }
-    return Matrix44(result[0], result[1], result[2], result[3]);
 }
 
 // Transpose -- FAITHFUL. The X360 vmrghw/vmrglw 4x4 word-interleave cascade is the standard
