@@ -220,8 +220,8 @@ s32 GuiEventUpdateSatNav::SatNavI(const GuiEventUpdateSatNav* lpThis)
 //      county/district, an incrementing per-icon index, and a ring position offset by
 //      the phase/step. Finally set the icon count to 8.
 //
-// The X360 used VMX (lvx128/stvx128) to move the 16-byte position lanes; reproduced
-// here as scalar Vector4 lane assignments (semantic parity, endian-independent).
+// The initial Z subtraction uses the original VMX operation; each completed position
+// is stored as the original four-lane vector.
 // ---------------------------------------------------------------------------
 void GuiEventUpdateSatNav::DoWorstCase()
 {
@@ -261,7 +261,9 @@ void GuiEventUpdateSatNav::DoWorstCase()
     // lfs f31, var_A0), NOT the bare constant 100.0. Each entry then does f31 += 50
     // before the store, giving icon[i].z = player.z - 100 + 50*i. The earlier
     // "starts at 100.0" reading was a misread of the vsubfp pre-step.
-    f32 lfRingZ = lPlayer.mv4Position.z - KF_WORST_CASE_PHASE_LIMIT;
+    const Vector4 lPhaseLimit(KF_WORST_CASE_PHASE_LIMIT, KF_WORST_CASE_PHASE_LIMIT,
+                              KF_WORST_CASE_PHASE_LIMIT, KF_WORST_CASE_PHASE_LIMIT);
+    f32 lfRingZ = __vsubfp(__vspltw(lPlayer.mv4Position.mV, 2), lPhaseLimit.mV).x;
     for ( s32 liIndex = 1; liIndex < 8; ++liIndex )
     {
         SatNavIconInfo& lIcon = maIconInfo[liIndex];
@@ -279,10 +281,9 @@ void GuiEventUpdateSatNav::DoWorstCase()
         lIcon.mi8ActiveRaceCarIndex = static_cast<s8>( liIndex );      // _R31[1] = v12++
 
         // position = { player.x + 50 - phase, player.y, ringZ, 0 }
-        lIcon.mv4Position.x = ( lPlayer.mv4Position.x + KF_WORST_CASE_RING_STEP ) - sfWorstCasePhase;
-        lIcon.mv4Position.y = lPlayer.mv4Position.y;
-        lIcon.mv4Position.z = lfRingZ;
-        lIcon.mv4Position.w = 0.0f;
+        lIcon.mv4Position = Vector4(
+            (lPlayer.mv4Position.mV.x + KF_WORST_CASE_RING_STEP) - sfWorstCasePhase,
+            lPlayer.mv4Position.mV.y, lfRingZ, 0.0f);
     }
 
     miNumIcons = 8;
@@ -296,25 +297,10 @@ void GuiEventUpdateSatNav::DoWorstCase()
 // (output+0x04), then copies the parameter id into the output's leading dword
 // (output+0x00, in that order, matching the X360 store sequence).
 //
-// RETURN-VALUE NOTE: the X360 functions return r3 == the char-count result of
-// CgsCore::SPrintf. The committed CgsCore::SPrintf is declared `void` (it does not
-// surface the printf char-count), so the count is not propagated here; the accessors
-// return 0. The load-bearing behaviour is the copy side-effect, which is reproduced
-// exactly. (See flagged_type_changes re: CgsCore::SPrintf's return type.)
+// The request stores the real CgsID followed by four GuiPopupParameter records.
+// ARTIST Construct and accessors establish the ID, count, and guard offsets.
 // ===================================================================================
 
-// @0x823B1CC8 -- initialise the request from an overlay-id string.
-//   guard: a2 == 0 -> "Invalid Overlay Id" (BrnGuiEventTypeDefs.h:7404)
-//   result = CgsIDCompress(a2)
-//   std r3, 0(this)        -> the 8-byte CgsID over the leading param record head (+0x00)
-//   stw 0,   0x118(this)   -> miNumMessages = 0
-//   stb 0,   0x11C(this)   -> mbButton1Used = 0
-//   stb 0,   0x11D(this)   -> mbButton2Used = 0
-//   return result
-//
-// The X360 stores the compressed id at this+0x00 (`std r3,0(r27)`), i.e. over the first
-// 8 bytes of maMessages[0] (its 8-byte maHead). Reproduced as an 8-byte block write to the
-// head so the on-object id sits at the proven offset; sizeof(CgsID) == 8 matches the std.
 void GuiOverlayRequest::Construct(const char* lpcOverlayId)
 {
     CGS_ASSERT(lpcOverlayId != 0, "Invalid Overlay Id");
