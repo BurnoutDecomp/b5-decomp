@@ -209,13 +209,15 @@ namespace BrnNetwork
     void BrnNetworkPlayer::OnRoundStart()
     {
         {
-            const rw::math::vpu::Vector3 lAggregateValue = { -KF_DEFAULT_WORLD_HALF_EXTENT_XZ, -KF_DEFAULT_WORLD_HALF_EXTENT_Y,
-                                               -KF_DEFAULT_WORLD_HALF_EXTENT_XZ, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueLanes = { -KF_DEFAULT_WORLD_HALF_EXTENT_XZ, -KF_DEFAULT_WORLD_HALF_EXTENT_Y,
+                                                                            -KF_DEFAULT_WORLD_HALF_EXTENT_XZ, 0.0f };
+            const rw::math::vpu::Vector3 lAggregateValue(lAggregateValueLanes);
             mWorldMinPos = lAggregateValue;
         }
         {
-            const rw::math::vpu::Vector3 lAggregateValue = { KF_DEFAULT_WORLD_HALF_EXTENT_XZ, KF_DEFAULT_WORLD_HALF_EXTENT_Y,
-                                               KF_DEFAULT_WORLD_HALF_EXTENT_XZ, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lAggregateValueLanes = { KF_DEFAULT_WORLD_HALF_EXTENT_XZ, KF_DEFAULT_WORLD_HALF_EXTENT_Y,
+                                                                            KF_DEFAULT_WORLD_HALF_EXTENT_XZ, 0.0f };
+            const rw::math::vpu::Vector3 lAggregateValue(lAggregateValueLanes);
             mWorldMaxPos = lAggregateValue;
         }
 

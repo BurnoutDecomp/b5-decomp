@@ -171,17 +171,17 @@ namespace CgsNetwork
         const f32 lfCosYawSinPitch = lfCosYaw * lfSinPitch;
         const f32 lfSinYawSinPitch = lfSinYaw * lfSinPitch;
 
-        lpMatrix->xAxis.x = MultiplyAdd(lfSinYawSinPitch, lfSinRoll, lfCosYaw * lfCosRoll);
-        lpMatrix->xAxis.y = lfCosPitch * lfSinRoll;
-        lpMatrix->xAxis.z = MultiplyAdd(lfCosYawSinPitch, lfSinRoll, -(lfSinYaw * lfCosRoll));
+        lpMatrix->xAxis.mV.x = MultiplyAdd(lfSinYawSinPitch, lfSinRoll, lfCosYaw * lfCosRoll);
+        lpMatrix->xAxis.mV.y = lfCosPitch * lfSinRoll;
+        lpMatrix->xAxis.mV.z = MultiplyAdd(lfCosYawSinPitch, lfSinRoll, -(lfSinYaw * lfCosRoll));
 
-        lpMatrix->yAxis.x = MultiplyAdd(lfSinYawSinPitch, lfCosRoll, -(lfCosYaw * lfSinRoll));
-        lpMatrix->yAxis.y = lfCosPitch * lfCosRoll;
-        lpMatrix->yAxis.z = MultiplyAdd(lfCosYawSinPitch, lfCosRoll, lfSinYaw * lfSinRoll);
+        lpMatrix->yAxis.mV.x = MultiplyAdd(lfSinYawSinPitch, lfCosRoll, -(lfCosYaw * lfSinRoll));
+        lpMatrix->yAxis.mV.y = lfCosPitch * lfCosRoll;
+        lpMatrix->yAxis.mV.z = MultiplyAdd(lfCosYawSinPitch, lfCosRoll, lfSinYaw * lfSinRoll);
 
-        lpMatrix->zAxis.x = lfSinYaw * lfCosPitch;
-        lpMatrix->zAxis.y = -lfSinPitch;
-        lpMatrix->zAxis.z = lfCosYaw * lfCosPitch;
+        lpMatrix->zAxis.mV.x = lfSinYaw * lfCosPitch;
+        lpMatrix->zAxis.mV.y = -lfSinPitch;
+        lpMatrix->zAxis.mV.z = lfCosYaw * lfCosPitch;
     }
 
     // ---- sub_828800F0 (quantised-int unpack helper) ----------------------------
