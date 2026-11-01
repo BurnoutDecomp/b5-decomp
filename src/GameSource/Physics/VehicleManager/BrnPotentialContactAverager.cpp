@@ -42,18 +42,18 @@ namespace Vehicle
         inline Vector3 FallbackContactNormal()
         {
             Vector3 lvNormal;
-            lvNormal.x = 0.0f;
-            lvNormal.y = 1.0f;
-            lvNormal.z = 0.0f;
-            lvNormal.w = 0.0f;
+            lvNormal.mV.x = 0.0f;
+            lvNormal.mV.y = 1.0f;
+            lvNormal.mV.z = 0.0f;
+            lvNormal.mV.w = 0.0f;
             return lvNormal;
         }
 
         inline bool IsUnitLength(const Vector3& lrVector)
         {
-            const f32 lfLengthSq = lrVector.x * lrVector.x
-                                 + lrVector.y * lrVector.y
-                                 + lrVector.z * lrVector.z;
+            const f32 lfLengthSq = lrVector.mV.x * lrVector.mV.x
+                                 + lrVector.mV.y * lrVector.mV.y
+                                 + lrVector.mV.z * lrVector.mV.z;
             const f32 lfLength   = (lfLengthSq == 0.0f) ? 0.0f : lfLengthSq / sqrtf(lfLengthSq);
             const f32 lfError    = (lfLength < 1.0f) ? (1.0f - lfLength) : (lfLength - 1.0f);
             return !(lfError > KF_UNIT_NORMAL_TOLERANCE);
@@ -62,20 +62,20 @@ namespace Vehicle
         inline Vector3 AddVectors(const Vector3& lrA, const Vector3& lrB)
         {
             Vector3 lvResult;
-            lvResult.x = lrA.x + lrB.x;
-            lvResult.y = lrA.y + lrB.y;
-            lvResult.z = lrA.z + lrB.z;
-            lvResult.w = lrA.w + lrB.w;
+            lvResult.mV.x = lrA.mV.x + lrB.mV.x;
+            lvResult.mV.y = lrA.mV.y + lrB.mV.y;
+            lvResult.mV.z = lrA.mV.z + lrB.mV.z;
+            lvResult.mV.w = lrA.mV.w + lrB.mV.w;
             return lvResult;
         }
 
         inline Vector3 ScaleVector(const Vector3& lrV, f32 lfScale)
         {
             Vector3 lvResult;
-            lvResult.x = lrV.x * lfScale;
-            lvResult.y = lrV.y * lfScale;
-            lvResult.z = lrV.z * lfScale;
-            lvResult.w = lrV.w * lfScale;
+            lvResult.mV.x = lrV.mV.x * lfScale;
+            lvResult.mV.y = lrV.mV.y * lfScale;
+            lvResult.mV.z = lrV.mV.z * lfScale;
+            lvResult.mV.w = lrV.mV.w * lfScale;
             return lvResult;
         }
 
@@ -159,9 +159,9 @@ namespace Vehicle
 
         // BrnVehicleManager.cpp:422 -- a per-lane vcmpeqfp(n,n) finite test on the ACCUMULATED
         // normal. Console streams the offending vector; lowered to the static prefix.
-        CGS_ASSERT(lrSlot.mNormal.x == lrSlot.mNormal.x
-                       && lrSlot.mNormal.y == lrSlot.mNormal.y
-                       && lrSlot.mNormal.z == lrSlot.mNormal.z,
+        CGS_ASSERT(lrSlot.mNormal.mV.x == lrSlot.mNormal.mV.x
+                       && lrSlot.mNormal.mV.y == lrSlot.mNormal.mV.y
+                       && lrSlot.mNormal.mV.z == lrSlot.mNormal.mV.z,
                    "Invalid contact added to averager: ");
 
         mafContactPairsCounts[liSlot] += 1.0f;
@@ -194,9 +194,9 @@ namespace Vehicle
         Vector3 lvNormal = ScaleVector(lrOutContact.mNormal, lfRecipWeight);
         lrOutContact.mNormal = lvNormal;
 
-        const f32 lfLengthSq = lvNormal.x * lvNormal.x
-                             + lvNormal.y * lvNormal.y
-                             + lvNormal.z * lvNormal.z;
+        const f32 lfLengthSq = lvNormal.mV.x * lvNormal.mV.x
+                             + lvNormal.mV.y * lvNormal.mV.y
+                             + lvNormal.mV.z * lvNormal.mV.z;
         if (lfLengthSq != 0.0f)
             lvNormal = ScaleVector(lvNormal, 1.0f / sqrtf(lfLengthSq));
         lrOutContact.mNormal = lvNormal;
