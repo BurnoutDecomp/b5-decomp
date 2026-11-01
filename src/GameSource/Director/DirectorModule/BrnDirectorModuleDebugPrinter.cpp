@@ -56,7 +56,7 @@ namespace BrnDirector
 
         CgsDev::DebugInterface lDebugInterface;
 
-        const Vector2 lv2Position = { mDebugPrinterInfo.mfX, mDebugPrinterInfo.mfY, 0.0f, 0.0f };
+        const Vector2 lv2Position(mDebugPrinterInfo.mfX, mDebugPrinterInfo.mfY);
 
         lDebugInterface.Get2dRender().Draw2DTextJustified(
             lpcMessage,

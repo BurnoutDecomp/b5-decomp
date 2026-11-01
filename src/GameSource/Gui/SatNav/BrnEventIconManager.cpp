@@ -144,8 +144,8 @@ namespace BrnGui
         for (s32 liIconIndex = 0; liIconIndex < miNumEventIcons; ++liIconIndex)
         {
             {
-                const Vector2 lAggregateValue = { ma2DEventIcons[liIconIndex].mfEventIconPosX,
-                         ma2DEventIcons[liIconIndex].mfEventIconPosY, 0.0f, 0.0f };
+                const Vector2 lAggregateValue(ma2DEventIcons[liIconIndex].mfEventIconPosX,
+                                              ma2DEventIcons[liIconIndex].mfEventIconPosY);
                 lv2IconPositions[liIconIndex] = lAggregateValue;
             }
         }

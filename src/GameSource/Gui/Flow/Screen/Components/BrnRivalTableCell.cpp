@@ -90,7 +90,7 @@ void RivalTableCell::SetScreenPosition(Vector2 lv2ScreenPosition)
     if (mCarID != 0)
     {
         char lacPosition[32];
-        CgsCore::SPrintf(lacPosition, 32, "%3.3f", lv2ScreenPosition.x);
+        CgsCore::SPrintf(lacPosition, 32, "%3.3f", lv2ScreenPosition.mV.x);
         AddOutputAptViewState("_x", lacPosition, true);
         SetDirty();
     }
