@@ -301,26 +301,9 @@ namespace BrnGui
         // of logging "Options Data Profile version mismatch, expected 1, got 0".
         mOptionsDataProfileDLC1.Construct();
 
-        // ⛔ FLAG GameState stand-in (2026-08-02, car-select wave).
-        // CONSOLE CHAIN: meCarSelectType is latched by RecEvent's `case 77` (see the switch
-        // below) from a 4-byte GAME-STATE event that carries the running car-select flavour;
-        // the game-state module raises it when CarSelectManager::StartCarSelectState
-        // @0x823872D0 enters E_STATE_CAR_SELECT.
-        // WHY A STAND-IN: that action -> GUI-event bridge does not exist on this build
-        // (BrnGameModule's GameState bridge is still a placeholder -- see the event-137 /
-        // event-350 stand-ins in BrnGameModule.cpp), so the field stayed at
-        // E_CAR_SELECT_TYPE_NONE (0) and the console's own
-        // GetCurrentCarSelectType() assert -- "meCarSelectType >
-        // GsmIO::E_CAR_SELECT_TYPE_NONE", inlined into CarSelectMain::OnEnter @0x824C8B34
-        // and ExitCarSelection @0x824C8CF4 -- fired the moment BrnGui::CarSelectVehicle was
-        // re-homed onto CarSelectMain and its OnEnter started running. A dev assert BLOCKS
-        // the sim, so it would stall the very screen this wave brings up.
-        // WHY JUNKYARD: E_CAR_SELECT_TYPE_JUNKYARD is the only value this build can reach --
-        // the sibling E_CAR_SELECT_TYPE_ONLINE_EVENT_START needs an online lobby, and it is
-        // the value ExitCarSelection's `== 1` branch tests for when it posts the junkyard
-        // GuiEventActivateCarSelect. Replace this seed with the real event when the
-        // GameState->Gui bridge lands (RecEvent's case 77 already consumes it).
-        meCarSelectType = 1;   // BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD
+        // ARTIST 0x82506038 seeds the junkyard type (1). Subsequent
+        // GuiCarSelectStartEvent (81) notifications carry the active flow type.
+        meCarSelectType = 1;
 
         // [profile-save] X360 GuiCache::Construct @0x82505AF0: `stb r11, 0x4B78(r31)` with
         // r11 == 1 -- the post-title intro video plays by default, and only a LOADED profile
@@ -2650,14 +2633,10 @@ namespace BrnGui
             break;
         }
 
-        case 77:
-            // ADDITIVE (car-select wave 2026-08-02). The X360 switch (rebased by -4) reaches
-            // `jumptable 8250DE3C case 77` at 0x8250EE20 and does exactly this: one
-            // `lwz r11, 0(payload)` / `stw r11, 0x4B70(this)`. +0x4B70 is meCarSelectType,
-            // which CarSelectMain::OnEnter and CarSelectVehicle read through
-            // GetCurrentCarSelectType(). No producer for this event exists on PC yet -- see
-            // the FLAG stand-in in Construct() above -- but wiring the consumer now means the
-            // real producer needs no further change here.
+        case 81:
+            // ARTIST 0x8250DE1C subtracts four from the incoming event id before
+            // indexing the jump table: index 77 at 0x8250EE20 is event 81.
+            // Event 77 is the unrelated one-byte ticker-closed notification.
             meCarSelectType = *reinterpret_cast<const s32*>(lpEvent);
             break;
         default:
