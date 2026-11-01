@@ -356,6 +356,11 @@ void RaceCarEntityModule::Construct()
     mpVehicleList        = 0;
     mpWheelList          = 0;
 
+    // ARTIST 822FE0B4/B8: reset the replay lifecycle and construct the genuine
+    // embedded serialiser. mbReplayRestored is reset by EnterReplay, not here.
+    mbInReplay = false;
+    mReplaySerialiser.Construct();
+
     // ARTIST 0x822FE1AC clears the eight car-select wait flags. The debug-car
     // request state follows at 0x822FE1B0..0x822FE1E4, including all four lanes
     // of both vectors. These are lifecycle resets, not C++ object defaults.
