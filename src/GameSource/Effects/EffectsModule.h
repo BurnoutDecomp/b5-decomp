@@ -468,7 +468,9 @@ namespace BrnEffects
         // QA LION effect and restart-latch path, X360 0x82291700. The uninitialised stack
         // vector copied into QA point row 8 remains explicitly unresolved in the .cpp.
         void HandleQADebugTests(f32 lfDt, f32 lfTime, const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState);
-        // ---- still NOT RECONSTRUCTED on this build: the junkyard VFX editor session ----
+        static void OnAttribEdit(const Attrib::Collection*, u64);
+        static bool JunkyardVfxReadLine(const char* label, char* output, s32 capacity, const char** cursor);
+        static f32 JunkyardVfxStringToFloat(const char* text);
         void JunkyardVfxStart(Vector3 lvCameraPosition);
         void JunkyardVfxStop();
 

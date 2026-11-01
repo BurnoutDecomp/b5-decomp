@@ -72,6 +72,7 @@ namespace BrnEffects
     // --- EffectsDebugComponent ---------------------------------------------------
     class EffectsDebugComponent : public CgsDev::DebugComponent
     {
+        friend class EffectsModule;
     public:
         // X360 0x82278C98. Wires the owning module and resets every debug value to
         // its default (asserts lpEffectsModule != NULL).
