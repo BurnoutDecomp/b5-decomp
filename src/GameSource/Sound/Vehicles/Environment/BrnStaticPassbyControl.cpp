@@ -88,8 +88,6 @@ StaticPassbyControl::~StaticPassbyControl()
 // append a fresh record at lvPosition with its countdown seeded to
 // KF_TIME_TO_WAIT_FOR_RETRIGGER, and return true.
 //
-// FLAG: Vector3 is the vendor POD {x,y,z,w}; the X360 VMX componentwise |delta| vs the
-// broadcast threshold is expressed here on the plain x/y/z floats.
 // ---------------------------------------------------------------------------
 bool StaticPassbyControl::PassbyHistory::Record( rw::math::vpu::Vector3 lvPosition )
 {
@@ -97,16 +95,17 @@ bool StaticPassbyControl::PassbyHistory::Record( rw::math::vpu::Vector3 lvPositi
     {
         const PassbyRecord& lrRecord = mPassbyRecords[luIndex];
 
-        const f32 lfDeltaX = lrRecord.mvPosition.x - lvPosition.x;
-        const f32 lfDeltaY = lrRecord.mvPosition.y - lvPosition.y;
-        const f32 lfDeltaZ = lrRecord.mvPosition.z - lvPosition.z;
-        const f32 lfAbsX = lfDeltaX < 0.0f ? -lfDeltaX : lfDeltaX;
-        const f32 lfAbsY = lfDeltaY < 0.0f ? -lfDeltaY : lfDeltaY;
-        const f32 lfAbsZ = lfDeltaZ < 0.0f ? -lfDeltaZ : lfDeltaZ;
-
-        const bool lbAnyGreater = (lfAbsX > KF_POSITION_TOLERANCE) ||
-                                  (lfAbsY > KF_POSITION_TOLERANCE) ||
-                                  (lfAbsZ > KF_POSITION_TOLERANCE);
+        const rw::math::vpu::VectorIntrinsic lDelta =
+            __vsubfp(lrRecord.mvPosition.mV, lvPosition.mV);
+        const rw::math::vpu::VectorIntrinsic lSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const rw::math::vpu::VectorIntrinsic lAbsolute = __vandc(lDelta, lSign);
+        // ARTIST8269B86C duplicates X into W before testing XYZ.
+        const rw::math::vpu::VectorIntrinsic lXYZ = __vrlimi(lAbsolute, lAbsolute, 1, 1);
+        const rw::math::vpu::VectorIntrinsic lTolerance = {
+            KF_POSITION_TOLERANCE, 0.0f, 0.0f, 0.0f };
+        unsigned int luComparison;
+        __vcmpgtfpR(lXYZ, __vspltw(lTolerance, 0), &luComparison);
+        const bool lbAnyGreater = (luComparison & 0x20u) == 0;
         if ( !lbAnyGreater )
         {
             return false;
@@ -210,8 +209,7 @@ void StaticPassbyControl::TriggerPassby(const BrnSound::World::StaticSoundEntity
 {
     const s32 liType = arEntity.GetType();
     CGS_ASSERT(liType < 19, "lePassbyType < ePassbyTypes::MaxPassbyTypes");
-    const Vector3Plus& lrPackedPos = arEntity.GetPosPlus();
-    const Vector3 lPosition = {lrPackedPos.x, lrPackedPos.y, lrPackedPos.z, lrPackedPos.w};
+    const Vector3 lPosition = arEntity.GetPos();
     if (mafHistoryTimeouts[liType].Record(lPosition))
     {
         BrnSound::Module::SoundLogicModule* lpModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);

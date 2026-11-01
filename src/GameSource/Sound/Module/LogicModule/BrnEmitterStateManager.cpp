@@ -316,6 +316,7 @@ void EmitterStateManager::UpdateParams(f32 lfDeltaTime)
 
 CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)
 {
+    CGS_STATIC_ASSERT((offsetof(EmitterStateManager, mCameraPos) == 0x430), "ARTIST emitter camera");
     CgsSound::Logic::State* lpFree =
         BrnSound::Logic::BrnStateManager::GetFreeState(lpvAttachment);
     if (lpFree)
@@ -325,11 +326,9 @@ CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)
     const BrnSound::World::StaticSoundEntity* lpNewEntity =
         static_cast<const BrnSound::World::StaticSoundEntity*>(lpvAttachment);
     const Vector3 lNewPos = lpNewEntity->GetPos();
-    const f32 lfNewDx = mCameraPos.x - lNewPos.x;
-    const f32 lfNewDy = mCameraPos.y - lNewPos.y;
-    const f32 lfNewDz = mCameraPos.z - lNewPos.z;
-    const f32 lfNewDistance =
-        lfNewDx * lfNewDx + lfNewDy * lfNewDy + lfNewDz * lfNewDz;
+    const rw::math::vpu::VectorIntrinsic lNewDelta = __vsubfp(mCameraPos.mV, lNewPos.mV);
+    const rw::math::vpu::VectorIntrinsic lNewSquared = __vmsum3fp(lNewDelta, lNewDelta);
+    const f32 lfNewDistance = lNewSquared.v[0];
 
     for (CgsSound::Logic::State* lpState = mpHeadState;
          lpState; lpState = lpState->GetNextState())
@@ -337,11 +336,9 @@ CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)
         EmitterState* lpEmitterState = static_cast<EmitterState*>(lpState);
         CGS_ASSERT(lpEmitterState->IsAttached(), "lpEmitterState->IsAttached()");   // l.220
         const Vector3 lOldPos = lpEmitterState->GetSoundEntity().GetPos();
-        const f32 lfOldDx = mCameraPos.x - lOldPos.x;
-        const f32 lfOldDy = mCameraPos.y - lOldPos.y;
-        const f32 lfOldDz = mCameraPos.z - lOldPos.z;
-        const f32 lfOldDistance =
-            lfOldDx * lfOldDx + lfOldDy * lfOldDy + lfOldDz * lfOldDz;
+        const rw::math::vpu::VectorIntrinsic lOldDelta = __vsubfp(mCameraPos.mV, lOldPos.mV);
+        const rw::math::vpu::VectorIntrinsic lOldSquared = __vmsum3fp(lOldDelta, lOldDelta);
+        const f32 lfOldDistance = lOldSquared.v[0];
         if (lfOldDistance > lfNewDistance && lpState->Detach())
             return lpState;
     }

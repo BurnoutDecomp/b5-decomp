@@ -1,11 +1,10 @@
 #include "SharedClasses/Sound/World/BrnStaticSoundMapResourceType.h"
 
-#include <cstddef>   // offsetof (porter-contract asserts)
+#include <cstddef>   // native field offsets
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> complete for the descriptor body
 #include "SharedClasses/Sound/World/BrnStaticSoundMap.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"  // CgsResource::GetLoadBase
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnSound
@@ -29,11 +28,7 @@ uint32_t StaticSoundMapResourceType::GetTypeID() const
 //   r8 = miNumSubRegionsX (+0x28), r7 = miNumSubRegionsZ (+0x2C), r9 = miNumEntities (+0x34)
 // and computes  size = 4 * ( miNumSubRegionsX * miNumSubRegionsZ + 4 * (miNumEntities + 4) )
 //             ==  0x40 (the console header) + 16*miNumEntities + 4*gridCells.
-// The x64 serialised header is the host StaticSoundMap (0x50 -- the porter
-// contract asserted in FixUp below), so the header term is sizeof-derived; the
-// entity/grid terms are unchanged (both records are pointer-free).
-// entry0 align = 0x10; entries 1..4 = {0,1}. Members are read BY NAME (private;
-// StaticSoundMapResourceType is a friend struct).
+// Native header size is pinned below; the records keep their original strides.
 CgsResource::ResourceDescriptor
 StaticSoundMapResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
 {
@@ -56,35 +51,27 @@ StaticSoundMapResourceType::GetSerialisedResourceDescriptor(const void* lpResour
     return lDescriptor;
 }
 
-// FixUp @ 0x826775C8. A relocation fix-up: the two on-disk pointers (mpSubRegions,
-// mpEntities) are stored as load-relative offsets and are rebased by the resource
-// load base (X360 *a3 = the 32-bit load base; the x64 heap base needs the full-width
-// form). The X360 accessed the resource by dword index (a2[9]=mpSubRegions,
-// a2[12]=mpEntities, a2[13]=miNumEntities under the console 16-byte Vector2); NAMED
-// member access here relocates the right fields over the x64 layout (semantic
-// parity, not byte parity). Then a per-entity validation loop.
+// ARTIST826775C8 adds resource segment0 to both stored offsets, then validates entities.
 void StaticSoundMapResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
 {
-    // Porter-contract pins (world_type_transcode.py transcode_staticsoundmap): the host
-    // layout below is the platform-4 serialised header form.
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mMin)             == 0x00), "StaticSoundMap::mMin @ +0");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mMax)             == 0x10), "StaticSoundMap::mMax @ +0x10");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mfSubRegionSize)  == 0x20), "StaticSoundMap::mfSubRegionSize @ +0x20");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpSubRegions)     == (sizeof(void*) == 4 ? 0x24 : 0x28)), "StaticSoundMap::mpSubRegions @ +0x28");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumSubRegionsX) == (sizeof(void*) == 4 ? 0x28 : 0x30)), "StaticSoundMap::miNumSubRegionsX @ +0x30");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpEntities)       == (sizeof(void*) == 4 ? 0x30 : 0x38)), "StaticSoundMap::mpEntities @ +0x38");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumEntities)    == (sizeof(void*) == 4 ? 0x34 : 0x40)), "StaticSoundMap::miNumEntities @ +0x40");
-    CGS_STATIC_ASSERT((sizeof(StaticSoundMap) == (sizeof(void*) == 4 ? 0x40 : 0x50)), "StaticSoundMap header 0x50 (porter contract)");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mMin) == 0x00), "ARTIST min");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mMax) == 0x10), "ARTIST max");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mfSubRegionSize) == 0x20), "ARTIST cell size");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpSubRegions) == 0x24), "ARTIST cells");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumSubRegionsX) == 0x28), "ARTIST grid X");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumSubRegionsZ) == 0x2c), "ARTIST grid Z");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpEntities) == 0x30), "ARTIST entities");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumEntities) == 0x34), "ARTIST entity count");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, meRootType) == 0x38), "ARTIST root type");
+    CGS_STATIC_ASSERT((sizeof(StaticSoundMap) == 0x40), "ARTIST map extent");
 
     StaticSoundMap* lpMap = static_cast<StaticSoundMap*>(lpResource);
 
-    const uintptr_t luBase = CgsResource::GetLoadBase64(lrResource);
-
-    // Relocate the two serialised pointers by the load base.
-    lpMap->mpSubRegions = reinterpret_cast<const SubRegionDescriptor*>(
-        reinterpret_cast<uintptr_t>(lpMap->mpSubRegions) + luBase);
+    const u32 luBase = reinterpret_cast<u32>(lrResource.m_baseResources[0]);
     lpMap->mpEntities = reinterpret_cast<const StaticSoundEntity*>(
-        reinterpret_cast<uintptr_t>(lpMap->mpEntities) + luBase);
+        reinterpret_cast<u32>(lpMap->mpEntities) + luBase);
+    lpMap->mpSubRegions = reinterpret_cast<const SubRegionDescriptor*>(
+        reinterpret_cast<u32>(lpMap->mpSubRegions) + luBase);
 
     // Per-entity validation. The X360 loop body is just the inlined Array-access
     // null + bounds asserts (per-entity work inlined away), so in retail it is a
