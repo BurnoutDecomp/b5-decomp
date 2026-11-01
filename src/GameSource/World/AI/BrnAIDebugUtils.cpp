@@ -113,15 +113,15 @@ namespace BrnAIDebugUtils
         Vector3 laBottom[2];
         for (u32 lu = 0; lu < 2; ++lu)
         {
-            laTop[lu].x = lafX[lu];
-            laTop[lu].y = lapfTopY[lu];
-            laTop[lu].z = lafZ[lu];
-            laTop[lu].w = 0.0f;
+            laTop[lu].mV.x = lafX[lu];
+            laTop[lu].mV.y = lapfTopY[lu];
+            laTop[lu].mV.z = lafZ[lu];
+            laTop[lu].mV.w = 0.0f;
 
-            laBottom[lu].x = lafX[lu];
-            laBottom[lu].y = lapfBottomY[lu];
-            laBottom[lu].z = lafZ[lu];
-            laBottom[lu].w = 0.0f;
+            laBottom[lu].mV.x = lafX[lu];
+            laBottom[lu].mV.y = lapfBottomY[lu];
+            laBottom[lu].mV.z = lafZ[lu];
+            laBottom[lu].mV.w = 0.0f;
         }
 
         lpRenderer->DrawQuad(laTop[0], laTop[1], laBottom[1], laBottom[0], lColour);

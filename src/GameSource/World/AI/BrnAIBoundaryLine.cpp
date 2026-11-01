@@ -18,9 +18,8 @@
 //   - vmaddfp v0, v13, v0, v12 fuses v0 = v13*v12 + v0 == delta*t + start (the multiplier
 //     is the LAST listed operand, the addend the THIRD -- the documented IDA field order);
 //   - stvx128 writes all 16 bytes to the out pointer, unconditionally (no null guard).
-// Lanes 2,3 are structurally (0-0)*t+0 == +0.0f for all finite t, written as literal zeros
-// (the same simplification the sibling GetLength body already applies to its structurally-
-// zero lanes). No rodata constant is consumed (only vspltisw-zero immediates).
+// Lanes 2,3 retain the same full-vector fused computation, including its behavior for
+// non-finite t. No rodata constant is consumed (only vspltisw-zero immediates).
 //
 // BrnAI::BoundaryLine::GetLength @ 0x82676BE8.
 //
@@ -37,16 +36,11 @@ namespace BrnAI
 {
     void BoundaryLine::GetInterp(Vector2* lpv2Out, f32 lfT) const
     {
-        // vsubfp lanes 0,1: delta = end - start.
-        const f32 lfDeltaX = mfEndX - mfStartX;
-        const f32 lfDeltaY = mfEndY - mfStartY;
-
-        // vmaddfp: result = delta*t + start; stvx128 writes all four lanes (the console
-        // stores through r3 with no null check -- kept unconditional to match).
-        lpv2Out->x = (lfDeltaX * lfT) + mfStartX;
-        lpv2Out->y = (lfDeltaY * lfT) + mfStartY;
-        lpv2Out->z = 0.0f;   // lane 2: (0-0)*t + 0 on console
-        lpv2Out->w = 0.0f;   // lane 3: (0-0)*t + 0 on console
+        // ARTIST 82676C78 performs all four lanes and stores one VMX register.
+        const Vector4 lvStart(mfStartX, mfStartY, 0.0f, 0.0f);
+        const Vector4 lvEnd(mfEndX, mfEndY, 0.0f, 0.0f);
+        const __vector4 lvT = __vspltw(__lvlx(&lfT, 0), 0);
+        lpv2Out->mV = __vmaddfp(__vsubfp(lvEnd.mV, lvStart.mV), lvT, lvStart.mV);
     }
 
     f32 BoundaryLine::GetLength() const

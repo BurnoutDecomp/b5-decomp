@@ -25,7 +25,7 @@ namespace BrnAI
     f32 FindUnsignedAngleBetween2DVectors(Vector2 lA, Vector2 lB)
     {
         // vmulfp128 v0=v1*v2 ; vspltw/vaddfp lanes 0+1 -> dot over (x,y) only.
-        const f32 lfDot = lA.x * lB.x + lA.y * lB.y;
+        const f32 lfDot = lA.mV.x * lB.mV.x + lA.mV.y * lB.mV.y;
 
         // ⛔⛔ ISSUE #31 -- THE BRANCH SENSE FOR THE **UNORDERED** CASE WAS INVERTED, AND THAT ONE
         // BIT IS THE WHOLE ASSERT STORM. This used to read `if (fabs(dot) >= 1.0f) return 0.0f;`,
@@ -65,7 +65,7 @@ namespace BrnAI
 
         // 2D cross product a.x*b.y - a.y*b.x (@0x827716F8..1718: splat a.y / b.x / b.y / a.x,
         // vmulfp a.y*b.x, vmulfp a.x*b.y, vsubfp) ; assert it is not NaN (BrnAIUtils.cpp:65).
-        const f32 lfCross = lA.x * lB.y - lA.y * lB.x;
+        const f32 lfCross = lA.mV.x * lB.mV.y - lA.mV.y * lB.mV.x;
         // ⛔ PREDICATE FIXED (issue #31): this read `std::isfinite(lfCross)`, which ALSO rejects
         // +-Inf. The console's test is a NaN SELF-COMPARE and nothing else --
         //   0x8277172C vspltw v0,v0,0 ; 0x82771730 vcmpeqfp. v0,v0,v0 ; 0x82771734 mfocrf ;

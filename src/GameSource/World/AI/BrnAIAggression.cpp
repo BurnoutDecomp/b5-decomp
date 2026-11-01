@@ -217,10 +217,10 @@ f32 AIAggression::CalcSeparationAcrossToTarget()
 
     Vector3 lvDiff = mpCar->GetPosition() - mpTargetCar->GetPosition();
     Vector3 lvRight = mpCar->GetRight();
-    lvRight.y = 0.0f;
-    lvDiff.y = 0.0f;
+    lvRight.mV.y = 0.0f;
+    lvDiff.mV.y = 0.0f;
 
-    if (!(std::fabs(lvRight.x) > KF_QUERY_POS_EPSILON || std::fabs(lvRight.z) > KF_QUERY_POS_EPSILON))
+    if (!(std::fabs(lvRight.mV.x) > KF_QUERY_POS_EPSILON || std::fabs(lvRight.mV.z) > KF_QUERY_POS_EPSILON))
     {
         return KF_ACROSS_SEPARATION_DEGENERATE;
     }
@@ -491,7 +491,7 @@ f32 AIAggression::GetAcrossSeparation(const AICar* lpThisCar, const AICar* lpOth
     CGS_ASSERT(lpOtherCar != NULL, "lpOtherCar != NULL");
 
     Vector3 lvAcross = lpOtherCar->GetPosition() - lpThisCar->GetPosition();
-    lvAcross.y = 0.0f;
+    lvAcross.mV.y = 0.0f;
 
     const f32 lfAcross = rw::math::vpu::Dot(lvAcross, rw::math::vpu::Normalize(lpThisCar->GetRight()));
     return std::fabs(lfAcross);
@@ -517,7 +517,7 @@ f32 AIAggression::GetAheadness(const AICar* lpPlayerCar, Vector3 lPosition)
     CGS_ASSERT(lpPlayerCar != NULL, "lpPlayerCar != NULL");
 
     Vector3 lvOffset = lPosition - lpPlayerCar->GetPosition();
-    lvOffset.y = 0.0f;
+    lvOffset.mV.y = 0.0f;
 
     return rw::math::vpu::Dot(lvOffset, rw::math::vpu::Normalize(lpPlayerCar->GetDirection()));
 }
@@ -540,11 +540,11 @@ f32 AIAggression::GetLeadingSeparation(const AICar* lpThisCar, const AICar* lpOt
 
     // Ground-plane (XZ) separation between the two cars.
     Vector3 lvSeparation = lpOtherCar->GetPosition() - lpThisCar->GetPosition();
-    lvSeparation.y = 0.0f;
+    lvSeparation.mV.y = 0.0f;
 
     // Ground-plane forward direction of the reference car, normalised.
     Vector3 lvForward = lpThisCar->GetUsefulDirection();
-    lvForward.y = 0.0f;
+    lvForward.mV.y = 0.0f;
     lvForward = rw::math::vpu::Normalize(lvForward);
 
     return rw::math::vpu::Dot(lvSeparation, lvForward);
