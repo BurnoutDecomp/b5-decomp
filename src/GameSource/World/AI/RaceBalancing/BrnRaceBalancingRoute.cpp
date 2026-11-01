@@ -156,8 +156,8 @@ bool RaceBalancingRoute::Prepare(Vector3 lPosition,
     // (lPosition.x, lPosition.y) -- world HEIGHT against a node's world Z -- so the first
     // segment was ~|Z| metres long and every par time of the race carried that bogus offset.
     const Vector2 lFlatPosition = BrnMath::Flatten(lPosition);
-    f32 lfPrevX = lFlatPosition.x;
-    f32 lfPrevY = lFlatPosition.y;
+    f32 lfPrevX = lFlatPosition.mV.x;
+    f32 lfPrevY = lFlatPosition.mV.y;
 
     const s32 liNodeCount = lpRoute->GetNodeCount();
     for (s32 liNode = 0; liNode < liNodeCount; ++liNode)

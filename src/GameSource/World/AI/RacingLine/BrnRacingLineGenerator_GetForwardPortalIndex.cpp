@@ -80,15 +80,15 @@ u8 RacingLineGenerator::GetForwardPortalIndex(const AISectionsData* lpAISectionD
 {
     (void)lpAISectionData;   // r3: passed by every caller, read by nothing in the body
 
-    CGS_ASSERT(!IsZero2D(lCarDirection.x, lCarDirection.y),
+    CGS_ASSERT(!IsZero2D(lCarDirection.mV.x, lCarDirection.mV.y),
                "!RwMath::IsZero(lCarDirection)");   // BrnRacingLineGenerator.cpp:2640
 
     // The console normalises unconditionally after the (non-gating) assert; a zero direction
     // yields NaN lanes, every dot compare then fails and portal 0 is returned. Same here.
     const f32 lfDirectionInvLength =
-        1.0f / sqrtf((lCarDirection.x * lCarDirection.x) + (lCarDirection.y * lCarDirection.y));
-    const f32 lfDirectionX = lCarDirection.x * lfDirectionInvLength;
-    const f32 lfDirectionY = lCarDirection.y * lfDirectionInvLength;
+        1.0f / sqrtf((lCarDirection.mV.x * lCarDirection.mV.x) + (lCarDirection.mV.y * lCarDirection.mV.y));
+    const f32 lfDirectionX = lCarDirection.mV.x * lfDirectionInvLength;
+    const f32 lfDirectionY = lCarDirection.mV.y * lfDirectionInvLength;
 
     u8  luBestPortalIndex = 0;
     f32 lfBestDot         = KF_BEST_DOT_SEED;
@@ -99,8 +99,8 @@ u8 RacingLineGenerator::GetForwardPortalIndex(const AISectionsData* lpAISectionD
         const Portal* lpPortal = lpAISection->GetPortal(luPortalIndex);
 
         // Flattened portal position (x, z) minus the car's flattened position.
-        const f32 lfDeltaX = lpPortal->GetPositionX() - lCarPosition.x;
-        const f32 lfDeltaY = lpPortal->GetPositionZ() - lCarPosition.y;
+        const f32 lfDeltaX = lpPortal->GetPositionX() - lCarPosition.mV.x;
+        const f32 lfDeltaY = lpPortal->GetPositionZ() - lCarPosition.mV.y;
 
         if (IsZero2D(lfDeltaX, lfDeltaY))
         {

@@ -210,8 +210,8 @@ void RouteMapModule::ProcessRaceRoute(const RouteMapModuleIO::RaceRouteRequest* 
 
         const Vector3 lStartPosition = lpRouteRequest->GetStartPosition();
         const Vector3 lEndPosition   = lpRouteRequest->GetEndPosition();
-        const AStarVector2 lStart2D(lStartPosition.x, lStartPosition.z);
-        const AStarVector2 lEnd2D(lEndPosition.x, lEndPosition.z);
+        const AStarVector2 lStart2D(lStartPosition.mV.x, lStartPosition.mV.z);
+        const AStarVector2 lEnd2D(lEndPosition.mV.x, lEndPosition.mV.z);
 
         mAStar.Prepare(lStart2D, lEnd2D,
                        lpRouteRequest->GetStartSectionIndex(),
