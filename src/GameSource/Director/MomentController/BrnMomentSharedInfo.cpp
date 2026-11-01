@@ -303,7 +303,7 @@ namespace detail
     // the hard-stop moment's single-lane compare tests. Nothing to do with speed.
     f32 MomentSharedInfo_GetCrashSpeedDiff(const void* lpSharedInfo)
     {
-        return Record(lpSharedInfo).mpPlayerCar->mRaceCarState.mTransform.yAxis.y;
+        return Record(lpSharedInfo).mpPlayerCar->mRaceCarState.mTransform.yAxis.mV.y;
     }
 
     // The above-ground probe's distance and its valid flag. Neither is about the crash; the
