@@ -357,27 +357,20 @@ namespace BrnTraffic
         return false;
     }
 
-    // @ 0x827081D8 -- on entering replay, clear the byte at +0x72521 and, when
-    // CgsDev::Message::gxMessageFilterFlags & 1, print.
-    //
-    // PARKED: +0x72521 has no name. It is not mbInReplay (:757, pinned at +465714 by Prepare
-    // @0x8274A578 stage 0), and both replay hooks store ZERO there, which no in/out flag would
-    // do. It lands in the :776/:777 gap the DecFIGS dwarfdump skips, so naming it would be
-    // fabrication. Recover those two members from the X360 Construct @0x82740220 field-init
-    // walk, then restore the store. DELETE THIS WHEN the member is named.
+    // 0x827081D8: optional debug message, then clear the replay asset-ready byte.
     void TrafficEntityModule::EnterReplay()
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             (*CgsDev::Log::gpDebugPrint) << "TRAF: Enter Replay\n";
-        // PARKED STORE: `*(this + 0x72521) = 0` -- member unnamed, see the FLAG above.
+        mbReplayAssetsReady = false;
     }
 
-    // @ 0x82708248 -- symmetric to EnterReplay (same parked store).
+    // 0x82708248: symmetric to EnterReplay.
     void TrafficEntityModule::LeaveReplay()
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             (*CgsDev::Log::gpDebugPrint) << "TRAF: Leave Replay\n";
-        // PARKED STORE: `*(this + 0x72521) = 0` -- member unnamed, see EnterReplay's FLAG.
+        mbReplayAssetsReady = false;
     }
 
     // @ 0x82708F98 --
@@ -4639,6 +4632,7 @@ void TrafficEntityModule::Construct()
     mReceiverQueue.Construct();
 
     mStreamer.Construct();
+    mTrafficEntitySerialiser.Construct();
 
     // 0x8274087C..0x8274088C -- FuzzyBehaviourLogic::Construct(this+0x71860, this+0x72710),
     // i.e. mFuzzyBehaviours.Construct(&mTweakValues). Without this call every fuzzy envelope
@@ -4646,6 +4640,8 @@ void TrafficEntityModule::Construct()
     // six zero scores, and the action pick (@0x827180FC, seeds best 0.0 / index 0 and replaces
     // only on `>`) elects action 0 == DRIVE_AROUND_OBSTRUCTION for every param.
     mFuzzyBehaviours.Construct(&mTweakValues);
+    mbReplayPlayback = false;
+    mbReplayAssetsReady = true;
 
     {
 
@@ -4936,15 +4932,6 @@ void TrafficEntityModule::Construct()
     mbDontCreateVehiclesNearAnyPlayers       = false; // 0x725E9
     mbDontCreateStaticVehiclesNearAnyPlayers = false; // 0x725EA
     mbInPictureParadise                      = false; // 0x725EB
-
-    {
-        // GATE: two stores inside the un-emitted DWARF :776/:777 window, i.e. the
-        // BrnReplays::TrafficEntitySerialiser member the console registers at `this + 468160`.
-        // Construct writes zero to +0x72520 and ONE to +0x72521, while EnterReplay @0x827081D8
-        // and LeaveReplay @0x82708248 both write zero to +0x72521. A flag that constructs to 1
-        // and clears on entering AND leaving replay is not mbInReplay, so it stays unnamed.
-
-    }
 
     // 0x82741450..0x82741460. mLocalPlayerDirection @+0x713E0 is NOT written here; the console
     // leaves it to PostPhysicsUpdate's tail.
