@@ -89,8 +89,7 @@ namespace ICE
 
         // The X360 carries the radians scalar broadcast through a SIMD vector
         // (vspltw lane 0); model it as the VecFloat with the value in every lane.
-        VecFloat lvfRadians;
-        lvfRadians.x = lvfRadians.y = lvfRadians.z = lvfRadians.w = lfRadians;
+        const VecFloat lvfRadians(lfRadians, lfRadians, lfRadians, lfRadians);
 
         Angle leAngle;
         leAngle.SetFromVecFloat(lvfRadians);         // radians (x lane) -> u16 unit

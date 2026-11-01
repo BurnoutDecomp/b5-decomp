@@ -35,17 +35,10 @@ namespace ICE
         // The two world-space corner offsets relative to the box centre: a +/-0.05
         // cube (w lane zero). The X360 builds these as two stack vectors and passes
         // them in the SIMD arg registers (v1 = min, v2 = max).
-        Vector4 lv4MinCorner;
-        lv4MinCorner.x = -KF_TARGET_BOX_HALF_EXTENT;
-        lv4MinCorner.y = -KF_TARGET_BOX_HALF_EXTENT;
-        lv4MinCorner.z = -KF_TARGET_BOX_HALF_EXTENT;
-        lv4MinCorner.w = 0.0f;
-
-        Vector4 lv4MaxCorner;
-        lv4MaxCorner.x = KF_TARGET_BOX_HALF_EXTENT;
-        lv4MaxCorner.y = KF_TARGET_BOX_HALF_EXTENT;
-        lv4MaxCorner.z = KF_TARGET_BOX_HALF_EXTENT;
-        lv4MaxCorner.w = 0.0f;
+        const Vector4 lv4MinCorner(-KF_TARGET_BOX_HALF_EXTENT, -KF_TARGET_BOX_HALF_EXTENT,
+                                   -KF_TARGET_BOX_HALF_EXTENT, 0.0f);
+        const Vector4 lv4MaxCorner(KF_TARGET_BOX_HALF_EXTENT, KF_TARGET_BOX_HALF_EXTENT,
+                                   KF_TARGET_BOX_HALF_EXTENT, 0.0f);
 
         // Acquire the debug system through a stack interface and draw the box in the
         // widget's world transform through the 3D renderer in white. The X360 passes

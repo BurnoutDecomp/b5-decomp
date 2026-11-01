@@ -79,10 +79,7 @@ namespace ICE
         rw::math::vpu::Vector3* const lapRows[4] = { &lCamera.xAxis, &lCamera.yAxis, &lCamera.zAxis, &lCamera.wAxis };
         for (s32 liRow = 0; liRow < 4; ++liRow)
         {
-            lapRows[liRow]->x = lpMatrix->maRows[liRow].x;
-            lapRows[liRow]->y = lpMatrix->maRows[liRow].y;
-            lapRows[liRow]->z = lpMatrix->maRows[liRow].z;
-            lapRows[liRow]->w = lpMatrix->maRows[liRow].w;
+            lapRows[liRow]->mV = lpMatrix->maRows[liRow].mV;
         }
         mCamera.mTransform = lCamera;
 
