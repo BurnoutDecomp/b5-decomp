@@ -148,14 +148,14 @@ void Butterworth::Filter(AudioProcessContext *ctx)
 
                 // Feedback A1*y[n-1] + A2*y[n-2] + A3*y[n-3] + A4*y[n-4]
                 // (asm accumulates A2*f9, then A1*f8, A3*f10, A4*f7).
-                f32 fb = mCoefficients.a[2] * y2;
+                volatile f32 fb = mCoefficients.a[2] * y2;
                 fb = mCoefficients.a[1] * y1 + fb;
                 fb = mCoefficients.a[3] * y3 + fb;
                 fb = mCoefficients.a[4] * y4 + fb;
 
                 // Feedforward B0*x[n] + B1*x[n-1] + B2*x[n-2] + B3*x[n-3] + B4*x[n-4]
                 // (asm: B1*f12, +B0*f11, +B2*f13, +B3*f0, +B4*f6).
-                f32 ff = mCoefficients.b[1] * x1;
+                volatile f32 ff = mCoefficients.b[1] * x1;
                 ff = mCoefficients.b[0] * x0 + ff;
                 ff = mCoefficients.b[2] * x2 + ff;
                 ff = mCoefficients.b[3] * x3 + ff;
