@@ -162,7 +162,7 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
     const __vector4 speed = __vsel(__vmulfp(squared, inverseSpeed), zero, __vcmpeqfp(squared, zero));
     const f32 lfSpeed = speed.x;
 
-    if (!(lfSpeed <= KF_VAPOUR_MIN_SPEED))
+    if (lfSpeed > KF_VAPOUR_MIN_SPEED)
     {
         unsigned int risingCR;
         __vcmpgefpR(__vspltw(lvVel.mV, 1), zero, &risingCR);
@@ -171,7 +171,7 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
             const Vector3& lvForward = lpCar->mTransform.zAxis;
             const f32 lfDot = __vmsum3fp(__vmulfp(lvVel.mV, inverseSpeed), lvForward.mV).x;
 
-            if (!(lfDot <= 0.0f))
+            if (lfDot > 0.0f)
             {
                 const f32 lfVapourDelay = lpDebug->JumpParams().VapourStartDelay();   // +0x70
                 const f32 lfVapourEnd   = lpDebug->JumpParams().VapourRampEndTime()   // +0x74
