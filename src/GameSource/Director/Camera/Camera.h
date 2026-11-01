@@ -19,13 +19,9 @@
 // ICECamera +0x10, flags at +0x150. Also embedded by value in the RaceCar IO headers
 // (a complete sized blob suffices there).
 //
-// COMPAT: ICE::ICECamera::SetCameraMatrix (committed) OR-pokes the dirty-flags word
-// as `mCamera.mState_uFlags |= 2`. That word is the low 32 bits of the camera-state
-// current-flag set (CameraState +0x08 == camera +0x140). It is exposed here, without
-// duplicating storage, via an anonymous union that overlays the real `CameraState
-// mState` sub-object with a `mState_uFlags` alias at the same +0x140 -- so both the
-// named sub-object (Construct calls `mState.Construct()`) and the committed
-// `mState_uFlags` access resolve to the same memory.
+// The current flag set is the 64-bit CameraState field at camera +0x140.
+// The existing mState_uFlags alias overlays that same field for direct users;
+// ARTIST ICECamera::SetCameraMatrix uses ld/ori/std on the complete field.
 //
 // alignas(16): the camera carries Matrix44Affine + Vector3 (SIMD).
 // ============================================================================
@@ -260,10 +256,8 @@ namespace BrnDirector
             CameraEffects                 mEffects;          // +0x68  (0xBC -> ends +0x124)
             DepthOfField                  mDepthOfField;     // +0x124 (0x14 -> ends +0x138)
 
-            // +0x138: the dirty-flag double buffer. Overlaid with the committed
-            // `mState_uFlags` alias (== mState's current-flag low word @ camera +0x140)
-            // so ICECamera's `mCamera.mState_uFlags |= 2` keeps resolving to the same
-            // storage.
+            // +0x138: the CameraState sets. The direct alias is the complete
+            // 64-bit current flag field at camera +0x140.
             union
             {
                 CameraState mState;                          // +0x138 (0x18)
@@ -277,8 +271,8 @@ namespace BrnDirector
                 ValidityAccount mValidityAccount;            // +0x138 (== mState.mHeadFlags)
                 struct
                 {
-                    u8  maStateHead[0x08];                   // +0x138 (CameraState head)
-                    s32 mState_uFlags;                       // +0x140 (current-flag low word)
+                    CgsContainers::BitArray<CameraState::KU_NUM_FLAGS> mStateHeadFlags;
+                    u64 mState_uFlags;                       // +0x140 (current flags)
                 };
             };
 
@@ -294,8 +288,8 @@ namespace BrnDirector
         // x64 compile-gate host the pointer members (mpDebugInfoBehaviour / mpSourceShot /
         // mpCrashAnalysis) widen to 8 bytes, so those interior offsets shift -- parity here
         // is BY NAMED MEMBER, not by byte offset (the x64-gate rule). The transform stays at
-        // +0x00 on both, and the dirty-flags word stays NAMED `mState_uFlags` (== the low
-        // word of mState's current-flag set) for the committed ICECamera consumer.
+        // +0x00 on both. The direct mState_uFlags alias covers the same 64-bit
+        // current-flag field as mState.mCurrentFlags.
         CGS_STATIC_ASSERT((offsetof(Camera, mTransform) == 0x00),
                       "BrnDirector::Camera::Camera transform must be at +0x00");
     }
