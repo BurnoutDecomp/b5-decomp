@@ -10,12 +10,10 @@
 // the four longitudinal pivots, mass, wheel radius, the attribute key, and the paint palette.
 // Member list and names: DecFIGS DWARF BrnTrafficVehicleTypeRuntime.h:94..:112.
 //
-// FLAG -- X360 STRIDE 128 vs. HOST FOOTPRINT 96. TrafficEntityModule::Construct @0x82740220
-// walks this array with `addi r26, r26, 0x80` for 0x60 == 96 iterations from this+0x76380, so
-// the console sizeof is 128. The DWARF member list sums to 0x5D and rounds to 0x60 == 96 at
-// Vector3 alignment; nothing in the ARTIST asm touches a byte at or above 0x5D, so the 35-byte
-// tail is dead and this header invents no members to fill it. If a consumer turns up that
-// reads past 0x5C, the missing member is a merge-window addition and it lands here.
+// ARTIST Construct walks 96 records at a 0x80 stride from TrafficEntityModule +0x76380.
+// A 128-byte class alignment produces the measured native stride and all observed member
+// offsets. The alignment is inferred: 64-byte alignment gives the same observed layout in
+// this owner, and the original C++ declaration spelling has not been recovered.
 // ============================================================================
 
 #include "types.hpp"
@@ -27,7 +25,7 @@ namespace BrnPhysics { namespace Deformation { class StreamedDeformationSpec; } 
 
 namespace BrnTraffic
 {
-    class VehicleTypeRuntime
+    class CGS_ALIGN(128) VehicleTypeRuntime
     {
     public:
         // DWARF BrnTrafficVehicleTypeRuntime.h:110.
@@ -109,12 +107,12 @@ namespace BrnTraffic
         Vector4 mMass_WheelRadius_Z_W;                    // :99   +0x30
         // :104  +0x40. The console's real EIGHT-byte key (`std r4, 0x40(r16)`, DWARF
         // `KU_ATTRIB_KEY_SIZE = 8` at :102). _AssertLayout pins only the four leading 16-byte
-        // members by OFFSET and the rest by ORDER, since the host record does not have to
-        // match the console's 128-byte stride (see the header banner).
+        // members by OFFSET and the rest by ORDER; see the inferred stride note above.
         AttribKey mAttribKey;
         s8 maiPaintColours[KU_NUM_PAINT_COLOURS_PER_VEHICLE];  // :111 +0x48
         s8 miNumPaintColours;                             // :112  +0x5C
     };
+    CGS_STATIC_ASSERT((sizeof(VehicleTypeRuntime) == 0x80), "VehicleTypeRuntime stride");
 }
 
 #endif // BRN_TRAFFIC_VEHICLE_TYPE_RUNTIME_H
