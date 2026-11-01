@@ -60,10 +60,10 @@ Vector3 ComputeKeyLightDirection( f32 lfSunAngleRad,
     // The base direction, in the sun rig's own frame: the light travels TOWARD the scene,
     // so it is the negation of the direction to the sun.
     Vector3 lDirection;
-    lDirection.x = -std::cos(lfSunAngleRad);
-    lDirection.y = -std::sin(lfSunAngleRad);
-    lDirection.z = KF_ZERO;
-    lDirection.w = KF_ZERO;
+    lDirection.mV.x = -std::cos(lfSunAngleRad);
+    lDirection.mV.y = -std::sin(lfSunAngleRad);
+    lDirection.mV.z = KF_ZERO;
+    lDirection.mV.w = KF_ZERO;
 
     // Rotate about X by the tilt, then about Y by the rig heading. The X360 emits the two
     // row-vector * matrix products as vmulfp128 / vmaddfp ladders (0x82678BDC..0x82678C08);
@@ -77,18 +77,18 @@ Vector3 ComputeKeyLightDirection( f32 lfSunAngleRad,
     //   row0 (1, 0, 0, 0) / row1 (0, cos, sin, 0) / row2 (0, -sin, cos, 0)
     // (decoded from the vpermwi128 immediates 0xEA / 0xE3 / 0xDB at 0x8220352C..0x82203540),
     // and the caller's ladder forms x*row0 + y*row1 + z*row2 -- a ROW-vector * matrix product.
-    const f32 lfTiltedX = lDirection.x;
-    const f32 lfTiltedY = (lDirection.y * lfCosTilt) - (lDirection.z * lfSinTilt);
-    const f32 lfTiltedZ = (lDirection.y * lfSinTilt) + (lDirection.z * lfCosTilt);
+    const f32 lfTiltedX = lDirection.mV.x;
+    const f32 lfTiltedY = (lDirection.mV.y * lfCosTilt) - (lDirection.mV.z * lfSinTilt);
+    const f32 lfTiltedZ = (lDirection.mV.y * lfSinTilt) + (lDirection.mV.z * lfCosTilt);
 
     // (v * RotationX) * RotationY(rig).  XMMatrixRotationY @0x82203560 stores
     //   row0 (cos, 0, -sin, 0) / row1 (0, 1, 0, 0) / row2 (sin, 0, cos, 0)
     // (vpermwi128 0xB7 / 0xBA / 0x3B at 0x822035DC..0x822035F0), again applied as a row vector.
     Vector3 lResult;
-    lResult.x = (lfTiltedX * lfCosRig) + (lfTiltedZ * lfSinRig);
-    lResult.y = lfTiltedY;
-    lResult.z = (lfTiltedZ * lfCosRig) - (lfTiltedX * lfSinRig);
-    lResult.w = KF_ZERO;
+    lResult.mV.x = (lfTiltedX * lfCosRig) + (lfTiltedZ * lfSinRig);
+    lResult.mV.y = lfTiltedY;
+    lResult.mV.z = (lfTiltedZ * lfCosRig) - (lfTiltedX * lfSinRig);
+    lResult.mV.w = KF_ZERO;
     return lResult;
 }
 
@@ -222,7 +222,7 @@ namespace
     // the explicit zero test preserves the console's exact-zero arm.
     f32 ComputeXZLength( Vector3::InParam lVector )
     {
-        const f32 lfLengthSquared = (lVector.x * lVector.x) + (lVector.z * lVector.z);
+        const f32 lfLengthSquared = (lVector.mV.x * lVector.mV.x) + (lVector.mV.z * lVector.mV.z);
         return (lfLengthSquared == KF_ZERO) ? KF_ZERO : std::sqrt(lfLengthSquared);
     }
 
@@ -248,10 +248,10 @@ namespace
     // as the X360 emits it at 0x8267C884/0x8267C8BC, 0x8267C8EC/0x8267C900 and 0x8267C918/0x8267C91C.
     Vector4 LerpVector4( Vector4::InParam lFrom, Vector4::InParam lTo, f32 lfBlend )
     {
-        { const Vector4 lResult = { ((lTo.x - lFrom.x) * lfBlend) + lFrom.x,
-                        ((lTo.y - lFrom.y) * lfBlend) + lFrom.y,
-                        ((lTo.z - lFrom.z) * lfBlend) + lFrom.z,
-                        ((lTo.w - lFrom.w) * lfBlend) + lFrom.w }; return lResult; }
+        { const Vector4 lResult( ((lTo.mV.x - lFrom.mV.x) * lfBlend) + lFrom.mV.x,
+                        ((lTo.mV.y - lFrom.mV.y) * lfBlend) + lFrom.mV.y,
+                        ((lTo.mV.z - lFrom.mV.z) * lfBlend) + lFrom.mV.z,
+                        ((lTo.mV.w - lFrom.mV.w) * lfBlend) + lFrom.mV.w ); return lResult; }
     }
 }
 
@@ -279,34 +279,34 @@ Vector3 ComputeSkyColour( Vector4::InParam lTopColourDrk,
     f32 lfCosAzimuth = KF_ZERO;
     if ( lfXZLengthProduct >= KF_MIN_XZ_LENGTH_PRODUCT )
     {
-        lfCosAzimuth = ((lDir.x * lSunDir.x) + (lDir.z * lSunDir.z)) / lfXZLengthProduct;
+        lfCosAzimuth = ((lDir.mV.x * lSunDir.mV.x) + (lDir.mV.z * lSunDir.mV.z)) / lfXZLengthProduct;
     }
 
     // (cos + 1) * 0.5 maps [-1, 1] to [0, 1] -- 1 at the sun's azimuth, 0 opposite it. NOT clamped:
     // the X360 goes straight from fdivs (0x8267C714) into `bl sub_82C09970` (0x8267C740) with no
     // fsel/vmaxfp in between, so at the exact anti-sun azimuth the quotient's last-bit error makes
     // this base a small NEGATIVE and pow takes the CRT's domain arm. See the warning in the banner.
-    const f32 lfHorBleed = PowF32( (lfCosAzimuth + KF_ONE) * KF_HALF, lHorBleedSclPow.y );
+    const f32 lfHorBleed = PowF32( (lfCosAzimuth + KF_ONE) * KF_HALF, lHorBleedSclPow.mV.y );
 
     // --- the vertical horizon -> zenith ramp, widened toward the sun's azimuth ---------------------
     // A LOW exponent lifts the horizon colour high up the dome; the bleed term lowers the exponent's
     // effect near the sun and is itself scaled down as the sun climbs (1 - lSunDir.y), so a midday
     // sun barely bleeds at all.
-    const f32 lfHorPow = lHorColourPow.w *
-                         ( KF_ONE + (lHorBleedSclPow.x * (KF_ONE - lSunDir.y) * lfHorBleed) );
-    const f32 lfTopBlend = PowF32( MaxWithZero( lDir.y ), lfHorPow );
+    const f32 lfHorPow = lHorColourPow.mV.w *
+                         ( KF_ONE + (lHorBleedSclPow.mV.x * (KF_ONE - lSunDir.mV.y) * lfHorBleed) );
+    const f32 lfTopBlend = PowF32( MaxWithZero( lDir.mV.y ), lfHorPow );
 
     // --- the two sun lobes ------------------------------------------------------------------------
-    const f32 lfSunDot    = (lSunDir.x * lDir.x) + (lSunDir.y * lDir.y) + (lSunDir.z * lDir.z);
+    const f32 lfSunDot    = (lSunDir.mV.x * lDir.mV.x) + (lSunDir.mV.y * lDir.mV.y) + (lSunDir.mV.z * lDir.mV.z);
     const f32 lfSunDotSat = MaxWithZero( lfSunDot );
-    const f32 lfSunCore   = PowF32( lfSunDotSat, lSunColourPow.w );      // tight: the sun itself
-    const f32 lfSunBleed  = PowF32( lfSunDotSat, lHorBleedSclPow.z );    // wide: the sky around it
+    const f32 lfSunCore   = PowF32( lfSunDotSat, lSunColourPow.mV.w );      // tight: the sun itself
+    const f32 lfSunBleed  = PowF32( lfSunDotSat, lHorBleedSclPow.mV.z );    // wide: the sky around it
 
     // --- darkening away from the sun (the keyframe's mfSkyDrk) ------------------------------------
     // Uses the RAW dot, not the saturated one, so it keeps falling through the anti-solar hemisphere:
     // 1.0 looking at the sun, (1 - Drk) looking directly away.
-    const f32 lfDarkening = (lTopColourDrk.w * ((lfSunDot + KF_ONE) * KF_HALF)) +
-                            (KF_ONE - lTopColourDrk.w);
+    const f32 lfDarkening = (lTopColourDrk.mV.w * ((lfSunDot + KF_ONE) * KF_HALF)) +
+                            (KF_ONE - lTopColourDrk.mV.w);
 
     // --- composite: horizon -> sun-widened, then up into the zenith, then the sun core ------------
     Vector4 lColour = LerpVector4( lHorColourPow, lSunColourPow, lfSunBleed );
@@ -315,10 +315,10 @@ Vector3 ComputeSkyColour( Vector4::InParam lTopColourDrk,
 
     // The w lane is the console's incidental by-product of lerping whole registers (see the banner);
     // it is carried, not read.
-    { const Vector3 lResult = { lColour.x * lfDarkening,
-                    lColour.y * lfDarkening,
-                    lColour.z * lfDarkening,
-                    lColour.w * lfDarkening }; return lResult; }
+    { const Vector3 lResult(Vector4( lColour.mV.x * lfDarkening,
+                    lColour.mV.y * lfDarkening,
+                    lColour.mV.z * lfDarkening,
+                    lColour.mV.w * lfDarkening ).mV); return lResult; }
 }
 
 }
@@ -450,8 +450,8 @@ void ComputeIrradianceRigFromSky( Vector3& lKeyFillColour,
     // (0, 1, 0, 0) at 0x8267CB24-0x8267CB68 and again at 0x8267CCB0-0x8267CCCC, and (0, -1, 0, 0)
     // at 0x8267CD00-0x8267CD20 (the -1.0f is flt_820037C8). Function-local so this block adds no
     // file-scope name to the shared TU.
-    const Vector3 KV_WORLD_UP   = { 0.0f,  1.0f, 0.0f, 0.0f };
-    const Vector3 KV_WORLD_DOWN = { 0.0f, -1.0f, 0.0f, 0.0f };
+    const Vector3 KV_WORLD_UP(Vector4(0.0f, 1.0f, 0.0f, 0.0f).mV);
+    const Vector3 KV_WORLD_DOWN(Vector4(0.0f, -1.0f, 0.0f, 0.0f).mV);
 
     // ComputeSkyColour wants the direction TOWARD the sun; the key light direction is the direction
     // the light TRAVELS (sun -> scene), so every one of the six calls passes its negation.
@@ -460,13 +460,13 @@ void ComputeIrradianceRigFromSky( Vector3& lKeyFillColour,
     // --- 1. key fill: the horizon in the sun's own azimuth ------------------------------ (+0x610)
     // The sunward direction flattened onto the ground plane. This is the brightest, warmest tap.
     const Vector3 lKeyFillDir =
-        rw::math::vpu::Normalize( Vector3{ -lKeyLightDir.x, 0.0f, -lKeyLightDir.z, 0.0f } );
+        rw::math::vpu::Normalize( Vector3(Vector4(-lKeyLightDir.mV.x, 0.0f, -lKeyLightDir.mV.z, 0.0f).mV) );
     lKeyFillColour = ComputeSkyColour( lTopColourDrk, lHorColourPow, lSunColourPow,
                                        lHorBleedSclPow, lSunDir, lKeyFillDir );
 
     // --- 2. shadow fill: the horizon directly opposite the sun -------------------------- (+0x620)
     const Vector3 lShadowFillDir =
-        rw::math::vpu::Normalize( Vector3{ lKeyLightDir.x, 0.0f, lKeyLightDir.z, 0.0f } );
+        rw::math::vpu::Normalize( Vector3(Vector4(lKeyLightDir.mV.x, 0.0f, lKeyLightDir.mV.z, 0.0f).mV) );
     lShadowFillColour = ComputeSkyColour( lTopColourDrk, lHorColourPow, lSunColourPow,
                                           lHorBleedSclPow, lSunDir, lShadowFillDir );
 
@@ -482,8 +482,8 @@ void ComputeIrradianceRigFromSky( Vector3& lKeyFillColour,
     // The asm negates the x/z/w lanes and copies the ORIGINAL y lane back in
     // (`vrlimi128 v13, splat(+R.y), 4, 0` @0x8267CC8C, mask 4 = word 1). R.y is identically zero for
     // a cross with world up, but the lane-wise mirror is what the source wrote, so it is kept.
-    const Vector3 lLeftFillDir = { -lRightFillDir.x,  lRightFillDir.y,
-                                   -lRightFillDir.z, -lRightFillDir.w };
+    const Vector3 lLeftFillDir(Vector4(-lRightFillDir.mV.x, lRightFillDir.mV.y,
+                                      -lRightFillDir.mV.z, -lRightFillDir.mV.w).mV);
     lLeftFillColour = ComputeSkyColour( lTopColourDrk, lHorColourPow, lSunColourPow,
                                         lHorBleedSclPow, lSunDir, lLeftFillDir );
 
