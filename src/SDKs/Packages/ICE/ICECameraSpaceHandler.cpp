@@ -273,8 +273,8 @@ const Matrix44Affine CameraSpaceHandler::GetTransformToWorld(eICESpace leSpace) 
 // that vendor free function is not present in our reconstructed rwmath type header
 // (which carries the layout/vocabulary only -- see vendor/renderware/include/rw/math/
 // vpu/types.h), so we reproduce its semantics here by the named-lane affine transform
-// rather than forking the vendor header. Per-lane f32 math gives exact semantic parity
-// with the vspltw128 + vmaddfp accumulation.
+// rather than forking the vendor header. The native vector intrinsics preserve
+// the three fused operations and all four lanes.
 //
 // ⚠️ The FOURTH LANE is part of the accumulation, not a pass-through. The console's
 // three vmaddfp are full 128-bit ops and the result is stored with a single stvx128, so
@@ -287,17 +287,12 @@ Vector3 CameraSpaceHandler::TransformToWorld(Vector3 lvPoint, eICESpace leSpace)
     // The reference-space-to-world affine for the requested space (by value).
     const Matrix44Affine lMatrix = GetTransformToWorld(leSpace);
 
-    const f32 lfX = lvPoint.x;
-    const f32 lfY = lvPoint.y;
-    const f32 lfZ = lvPoint.z;
-
-    Vector3 lvWorld;
-    lvWorld.x = lMatrix.xAxis.x * lfX + lMatrix.yAxis.x * lfY + lMatrix.zAxis.x * lfZ + lMatrix.wAxis.x;
-    lvWorld.y = lMatrix.xAxis.y * lfX + lMatrix.yAxis.y * lfY + lMatrix.zAxis.y * lfZ + lMatrix.wAxis.y;
-    lvWorld.z = lMatrix.xAxis.z * lfX + lMatrix.yAxis.z * lfY + lMatrix.zAxis.z * lfZ + lMatrix.wAxis.z;
-    lvWorld.w = lMatrix.xAxis.w * lfX + lMatrix.yAxis.w * lfY + lMatrix.zAxis.w * lfZ + lMatrix.wAxis.w;
-
-    return lvWorld;
+    const __vector4 lvX = __vspltw(lvPoint.mV, 0);
+    const __vector4 lvY = __vspltw(lvPoint.mV, 1);
+    const __vector4 lvZ = __vspltw(lvPoint.mV, 2);
+    const __vector4 lvFirst = __vmaddfp(lMatrix.xAxis.mV, lvX, lMatrix.wAxis.mV);
+    const __vector4 lvSecond = __vmaddfp(lMatrix.yAxis.mV, lvY, lvFirst);
+    return Vector3(__vmaddfp(lMatrix.zAxis.mV, lvZ, lvSecond));
 }
 
 } // namespace ICE
