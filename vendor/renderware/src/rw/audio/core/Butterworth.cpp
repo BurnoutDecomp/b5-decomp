@@ -15,7 +15,7 @@
 #include "rw/audio/core/Butterworth.h"
 
 #include <cstring> // memset (the X360 XMemSet)
-#include <cmath>   // std::tan / std::pow / std::fma (the design maths)
+#include <cmath>   // std::tan / std::pow (the design maths)
 
 namespace rw
 {
@@ -230,9 +230,8 @@ void Butterworth::Filter(AudioProcessContext *ctx)
 // is unity at DC (low-pass) or Nyquist (high-pass).
 //
 // FLOATING-POINT FIDELITY NOTE: the console evaluates this in single precision with one
-// fused multiply-add per accumulation step (fmadds). The host expresses those as explicit
-// std::fma calls; do NOT let a build enable reassociation or implicit contraction around
-// the non-FMA operations, or the designed coefficients will drift from the target's.
+// fused multiply-add per accumulation step (fmadds). Native XDK compilation contracts
+// the multiply-add expressions below; keep the other operations in their original order.
 // The `shape` attribute is exponentiated as pow(2/3/4, shape) and then used as an exponent
 // on the warp -- deliberately NOT collapsed to integer powers, because shape is a live
 // float attribute and the nesting is what the console computes.
@@ -319,7 +318,7 @@ int Butterworth::CalculateFilterCoefficients(Butterworth *self, f32 afCutoff,
                                 * KAF_BUTTERWORTH_POLYNOMIALS[liRow][liJ])
                              * lafPowers[liJ];
             self->mCoefficients.a[liK] =
-                std::fma(lfTerm, lfSign, self->mCoefficients.a[liK]);   // fmadds
+                lfTerm * lfSign + self->mCoefficients.a[liK];   // fmadds
         }
     }
 
@@ -339,8 +338,8 @@ int Butterworth::CalculateFilterCoefficients(Butterworth *self, f32 afCutoff,
     for (int liK = 0; liK <= aiOrder; ++liK)
     {
         const f32 lfSign = (aiType != 0 && (liK & 1)) ? -1.0f : 1.0f;
-        lfSumA = std::fma(self->mCoefficients.a[liK], lfSign, lfSumA);
-        lfSumB = std::fma(self->mCoefficients.b[liK], lfSign, lfSumB);
+        lfSumA = self->mCoefficients.a[liK] * lfSign + lfSumA;
+        lfSumB = self->mCoefficients.b[liK] * lfSign + lfSumB;
     }
     const f32 lfGain = lfSumA / lfSumB;
     for (int liK = 0; liK <= aiOrder; ++liK)

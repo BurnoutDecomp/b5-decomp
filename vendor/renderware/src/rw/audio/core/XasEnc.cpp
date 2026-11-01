@@ -5,8 +5,8 @@
 // authoritative for every store, branch and rounding point. See XasEnc.h / Encoder.h.
 //
 // Floating-point notes, kept exact because the residuals are quantised from them:
-//   * single precision throughout; the console's fused multiply-adds are written as
-//     std::fma (one rounding) and every other product/sum as a plain f32 operation;
+//   * single precision throughout; the console contracts multiply-add expressions
+//     to fused operations (one rounding) and every other product/sum as a plain f32 operation;
 //   * the float-to-int conversions truncate toward zero;
 //   * the comparisons keep the console's NaN behaviour (a NaN error magnitude is negated
 //     and then replaces the running maximum).
@@ -15,7 +15,6 @@
 #include "rw/audio/core/XasEnc.h"
 #include "rw/audio/core/PlugIn.h" // System::Alloc
 
-#include <cmath>   // std::fma
 #include <cstring> // std::memcpy
 #include <new>     // placement new (the v-table install over the System allocation)
 
@@ -56,7 +55,7 @@ enum
 // from above only.
 s32 HeaderSample(f32 afSample)
 {
-    s32 liValue = static_cast<s32>(std::fma(afSample, KF_FULL_SCALE, KF_HEADER_ROUND)) & ~0xF;
+    s32 liValue = static_cast<s32>((afSample * KF_FULL_SCALE + KF_HEADER_ROUND)) & ~0xF;
     if (liValue > 0x7FF0)
         liValue = 0x7FF0;
     return liValue;
@@ -151,8 +150,8 @@ void XasEnc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
             for (s32 liN = 0; liN < KI_RESIDUALS; ++liN)
             {
                 const f32 lfScaled = *lpIn * KF_FULL_SCALE;
-                f32 lfError = std::fma(static_cast<f32>(liPrev1), lfC0,
-                                       static_cast<f32>(liPrev2) * lfC1) + lfScaled;
+                f32 lfError = (static_cast<f32>(liPrev1) * lfC0 +
+                               static_cast<f32>(liPrev2) * lfC1) + lfScaled;
                 lafError[liK][liN] = lfError;
                 if (!(lfError > KF_ZERO))
                     lfError = -lfError;
@@ -195,7 +194,7 @@ void XasEnc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
 
         for (s32 liJ = 0; liJ < KI_RESIDUALS; ++liJ)
         {
-            const f32 lfTarget = std::fma(lfC1, lfHist2, lfHist1 * lfC0) + lafError[liPredictor][liJ];
+            const f32 lfTarget = (lfC1 * lfHist2 + lfHist1 * lfC0) + lafError[liPredictor][liJ];
             s32 liCode = QuantiseResidual(lfScale * lfTarget);
             if (liJ & 1)
             {
