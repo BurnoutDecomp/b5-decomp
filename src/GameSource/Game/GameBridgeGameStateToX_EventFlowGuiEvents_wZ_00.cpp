@@ -21,8 +21,6 @@
 #include "SharedClasses/Trigger/BrnTriggerBase.h"                   // TriggerRegion::E_TYPE_LANDMARK
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                      // CgsID
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // CgsDev::Log::gpDebugPrint
-#include <stdlib.h>                                                 // getenv (the diag guard)
 #include <cstring>                                                  // memcpy
 
 namespace BrnGame
@@ -103,9 +101,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         std::memcpy(lEvent.maData, &lDriveThruId, sizeof(lDriveThruId));
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(),
-                           static_cast<s32>(static_cast<u32>(lDriveThruId)), siLinesLeft);
+
         return true;
     }
 
@@ -121,8 +117,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         std::memcpy(lEvent.maData, &lJumpKey, sizeof(lJumpKey));
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), 0, siLinesLeft);
+
         return true;
     }
 
@@ -137,8 +132,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         lEvent.maData[0] = lpJunkYard->mbIsInJunkYard ? 1u : 0u;
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), lEvent.maData[0], siLinesLeft);
+
         return true;
     }
 
@@ -155,8 +149,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         lEvent.miNumDiscovered = lpDiscovered->miNumDriveThrusOfThisTypeFound;
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), lEvent.meDriveThruType, siLinesLeft);
+
         return true;
     }
 
@@ -168,8 +161,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         lEvent.mu8Unused = 0;
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), 0, siLinesLeft);
+
         return true;
     }
 
@@ -190,14 +182,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
             std::memcpy(lEvent.maData, &lu16LandmarkIndex, sizeof(lu16LandmarkIndex));
             PushGuiEvent(lEvent, lpGuiInput);
 
-            // The action repeats every frame the car is in the region: one line per new index.
-            static s32 siLinesLeft     = 8;
-            static s32 siLastLandmark  = -1;
-            if (static_cast<s32>(lu16LandmarkIndex) != siLastLandmark)
-            {
-                siLastLandmark = static_cast<s32>(lu16LandmarkIndex);
-                FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), siLastLandmark, siLinesLeft);
-            }
+
         }
         return true;
     }
@@ -210,8 +195,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         lEvent.maData[0] = *reinterpret_cast<const u8*>(lpAction);
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), lEvent.maData[0], siLinesLeft);
+
         return true;
     }
 
@@ -225,8 +209,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         lEvent.maData[0] = 0;
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), 0, siLinesLeft);
+
         return true;
     }
     case 264:
@@ -235,8 +218,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         lEvent.maData[0] = 0;
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), 0, siLinesLeft);
+
         return true;
     }
     case 265:
@@ -245,8 +227,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         lEvent.maData[0] = 0;
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), 0, siLinesLeft);
+
         return true;
     }
 
@@ -258,10 +239,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         std::memcpy(lEvent.maData, lpAction, sizeof(lEvent.maData));
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        s32 liDistrict = 0;
-        std::memcpy(&liDistrict, lEvent.maData + 4, sizeof(liDistrict));
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), liDistrict, siLinesLeft);
+
         return true;
     }
 
@@ -273,8 +251,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         lEvent.mu8Unused = 0;
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), 0, siLinesLeft);
+
         return true;
     }
 
@@ -290,8 +267,7 @@ bool TranslateFreeRoamGameActionToGuiEvent(
         std::memcpy(lEvent.maData, &liGameModeType, sizeof(liGameModeType));
         PushGuiEvent(lEvent, lpGuiInput);
 
-        static s32 siLinesLeft = 8;
-        FreeRoamGuiWitness(liActionType, lEvent.GetEventType(), liGameModeType, siLinesLeft);
+
         return true;
     }
 
