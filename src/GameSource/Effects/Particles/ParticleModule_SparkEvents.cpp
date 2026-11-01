@@ -937,7 +937,7 @@ namespace BrnParticle
                 const Vector3 lvAxis = BurstRandomUnitVector(mRandom);
                 const f32 lfSpin     = mRandom.RandomFloat();   // `lfsx f30` -- drawn BEFORE the colour's two
                 Vector4 lvColour;
-                lColourRandomiser.Randomise(lvColour, mRandom);
+                lvColour = lColourRandomiser.Randomise(mRandom);
                 lrArray.SpawnDebris(lvPosition, lvVelocity, lvAxis, lvColour,
                                     BrnParticleMath::VpuMultiplyAdd(lfSpin, KF_DEBRIS_BURST_SPIN_RANGE, KF_DEBRIS_BURST_SPIN_MIN),
                                     lfSize, lpEvent->mfCurrentTime);
