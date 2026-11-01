@@ -40,7 +40,8 @@ namespace CgsDev
     public:
         static bool Construct();
         static void Destruct();
-        static void SetGameFrequency(PerfMonGameFrequency leFrequency);
+        // Inlined by ARTIST Main Construct823CAD74/78 into the83018258 store.
+        static void SetGameFrequency(PerfMonGameFrequency leFrequency) { meGameFrequency = leFrequency; }
         static void Swap();
         static void StartProfiling();
         static void StopProfiling();

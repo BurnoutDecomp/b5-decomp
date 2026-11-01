@@ -456,9 +456,15 @@ namespace BrnGame
             mDebugManager.mDebugComponentPerfMonCpu.SetPageName(
                 static_cast<CgsDev::PerfMonCpuPage>(liPage), kapcPageNames[liPage]);
         if (liRefreshRate == 50)
+        {
             CgsDev::PerfMonCpu::SetGameFrequency(CgsDev::E_PMF_50HZ);
+            CgsDev::PerfMonGpu::SetGameFrequency(CgsDev::E_PMF_50HZ);
+        }
         else if (liRefreshRate == 60)
+        {
             CgsDev::PerfMonCpu::SetGameFrequency(CgsDev::E_PMF_60HZ);
+            CgsDev::PerfMonGpu::SetGameFrequency(CgsDev::E_PMF_60HZ);
+        }
         else
         {
             CgsDev::Assert::BeginAssert();
