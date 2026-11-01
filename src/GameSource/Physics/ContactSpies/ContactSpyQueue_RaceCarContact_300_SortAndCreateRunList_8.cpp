@@ -51,10 +51,10 @@ namespace
     // whole register including the unused w lane, so all four lanes are summed here for byte-fidelity.
     inline void AccumulateVec4(Vector3& lrAccum, const Vector3& lrValue)
     {
-        lrAccum.x += lrValue.x;
-        lrAccum.y += lrValue.y;
-        lrAccum.z += lrValue.z;
-        lrAccum.w += lrValue.w;
+        lrAccum.mV.x += lrValue.mV.x;
+        lrAccum.mV.y += lrValue.mV.y;
+        lrAccum.mV.z += lrValue.mV.z;
+        lrAccum.mV.w += lrValue.mV.w;
     }
 
     // De-optimisation of the VMX vmulfp128 by the broadcast reciprocal (the asm computes 1/liRunLength
@@ -63,10 +63,10 @@ namespace
     inline Vector3 ScaleVec4(const Vector3& lrValue, f32 lfScale)
     {
         Vector3 lResult;
-        lResult.x = lrValue.x * lfScale;
-        lResult.y = lrValue.y * lfScale;
-        lResult.z = lrValue.z * lfScale;
-        lResult.w = lrValue.w * lfScale;
+        lResult.mV.x = lrValue.mV.x * lfScale;
+        lResult.mV.y = lrValue.mV.y * lfScale;
+        lResult.mV.z = lrValue.mV.z * lfScale;
+        lResult.mV.w = lrValue.mV.w * lfScale;
         return lResult;
     }
 
@@ -78,6 +78,46 @@ namespace
     {
         return lrLhs.mEntityIdA.muValue < lrRhs.mEntityIdA.muValue;
     }
+
+    template <typename T, s32 N, s32 OutMaxLength>
+    void EmitContactSpyRun(ContactSpyQueue<T, N>* lpQueue,
+                           ContactSpyRunList<OutMaxLength>* lpOutRunList,
+                           const EntityId& lrCurrentEntityId,
+                           const Vector3& lrTotalFrictionStress,
+                           const Vector3& lrTotalNormalStress,
+                           const Vector3& lrTotalContactPoint,
+                           s32 liRunStartIndex,
+                           s32 liRunLength,
+                           const char* lpcWarnSuffix)
+    {
+        if (lpOutRunList->GetLength() + 1 >= lpOutRunList->GetMaxLength())
+        {
+            const char* lpcTypeName = lpQueue->DebugGetEntityTypeName();
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                if (lpcTypeName == 0)
+                {
+                    lpcTypeName = "<NULLSTRING>";
+                }
+                *CgsDev::Log::gpDebugPrint << "WARNING: queue overflow in " << lpcTypeName << lpcWarnSuffix;
+            }
+        }
+
+        const f32 lfInvRunLength = 1.0f / static_cast<f32>(liRunLength);
+        Vector3 lAverageStress       = ScaleVec4(lrTotalNormalStress, lfInvRunLength);
+        Vector3 lAverageContactPoint = ScaleVec4(lrTotalContactPoint, lfInvRunLength);
+
+        ContactSpyRunData lRunData;
+        ContactSpyRunData::Construct(&lRunData,
+                                     lrCurrentEntityId,
+                                     lrTotalFrictionStress,
+                                     lAverageStress,
+                                     lAverageContactPoint,
+                                     liRunStartIndex,
+                                     liRunLength);
+        lpOutRunList->AddEvent(lRunData);
+    }
+
 }
 
 template <typename T, s32 N>
@@ -116,37 +156,7 @@ void ContactSpyQueue<T, N>::SortAndCreateRunList(ContactSpyRunList<OutMaxLength>
     s32 liRunStartIndex = 0;
     s32 liRunLength     = 1;
 
-    // Appends one accumulated run to the output list. lpcWarnSuffix distinguishes the two X360 emit
-    // sites (the in-loop warning names BrnContactSpyInterface.h, the trailing one does not).
-    auto lEmitRun = [&](const char* lpcWarnSuffix)
-    {
-        if (lpOutRunList->GetLength() + 1 >= lpOutRunList->GetMaxLength())
-        {
-            const char* lpcTypeName = this->DebugGetEntityTypeName();
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-            {
-                if (lpcTypeName == 0)
-                {
-                    lpcTypeName = "<NULLSTRING>";
-                }
-                *CgsDev::Log::gpDebugPrint << "WARNING: queue overflow in " << lpcTypeName << lpcWarnSuffix;
-            }
-        }
-
-        const f32 lfInvRunLength = 1.0f / static_cast<f32>(liRunLength);
-        Vector3 lAverageStress       = ScaleVec4(lTotalNormalStress, lfInvRunLength);
-        Vector3 lAverageContactPoint = ScaleVec4(lTotalContactPoint, lfInvRunLength);
-
-        ContactSpyRunData lRunData;
-        ContactSpyRunData::Construct(&lRunData,
-                                     lCurrentEntityId,
-                                     lTotalFrictionStress,
-                                     lAverageStress,
-                                     lAverageContactPoint,
-                                     liRunStartIndex,
-                                     liRunLength);
-        lpOutRunList->AddEvent(lRunData);
-    };
+    // Appends one accumulated run at each of the same two X360 emit sites.
 
     // Single-contact queues skip the loop and emit their one run directly (X360 `goto LABEL_29`),
     // bypassing the post-loop liRunLength > 0 guard.
@@ -168,7 +178,9 @@ void ContactSpyQueue<T, N>::SortAndCreateRunList(ContactSpyRunList<OutMaxLength>
             else
             {
                 // Close the current run.
-                lEmitRun(" entity contact spy run list - increase the constants in BrnContactSpyInterface.h\n");
+                EmitContactSpyRun(this, lpOutRunList, lCurrentEntityId,
+                                    lTotalFrictionStress, lTotalNormalStress, lTotalContactPoint,
+                                    liRunStartIndex, liRunLength, " entity contact spy run list - increase the constants in BrnContactSpyInterface.h\n");
                 CGS_ASSERT(liRunLength > 0, "liRunLength > 0");   // BrnContactSpyQueue.cpp:180
 
                 // Start the next run at this boundary contact. FAITHFUL QUIRK: the accumulators are
@@ -189,7 +201,9 @@ void ContactSpyQueue<T, N>::SortAndCreateRunList(ContactSpyRunList<OutMaxLength>
 
     if (lbEmitFinalRun)
     {
-        lEmitRun(" entity contact spy run list");
+        EmitContactSpyRun(this, lpOutRunList, lCurrentEntityId,
+                                    lTotalFrictionStress, lTotalNormalStress, lTotalContactPoint,
+                                    liRunStartIndex, liRunLength, " entity contact spy run list");
     }
 
     CGS_ASSERT(lpOutRunList->GetLength() == this->GetNumUniqueEntities(),
