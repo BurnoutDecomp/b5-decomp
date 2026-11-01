@@ -1,8 +1,6 @@
 #include "SDKs/XCam/XCamCameraConnector.h"
 
-#include <intrin.h> // _InterlockedIncrement -- portable stand-in for the X360
-                    // interrupt-masked (mfmsr/mtmsree) lwarx/stwcx reservation
-                    // increment on this+0.
+#include <xtl.h>
 
 // ===========================================================================
 // XCAM::CCameraConnector -- reconstructed store-for-store from
@@ -95,7 +93,7 @@ u32 CCameraConnector::DoWork()
                 maSlotState[i] = (uResult == 0) ? 2u : 0u;
                 if (uResult == 0)
                 {
-                    _InterlockedIncrement(
+                    InterlockedIncrement(
                         reinterpret_cast<volatile long*>(&muCompletedFrameCount));
                 }
             }

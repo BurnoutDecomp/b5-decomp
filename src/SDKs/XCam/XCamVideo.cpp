@@ -1,6 +1,6 @@
 #include "SDKs/XCam/XCamVideo.h"
 
-#include <intrin.h> // _InterlockedDecrement (MSVC atomic intrinsic)
+#include <xtl.h>
 
 // ===========================================================================
 // XCAM::CXCamVideo -- bodies reconstructed store-for-store from
@@ -18,7 +18,7 @@ namespace XCAM
 // the atomic counter drop and the shutdown call.
 CXCamVideo::~CXCamVideo()
 {
-    _InterlockedDecrement(&gXCamActiveInstanceCount); // interrupt-masked --unk_83222CEC
+    InterlockedDecrement(&gXCamActiveInstanceCount); // interrupt-masked --unk_83222CEC
     XCamShutdown();
 }
 
