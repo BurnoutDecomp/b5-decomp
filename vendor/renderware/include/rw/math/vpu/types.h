@@ -48,6 +48,8 @@ namespace vpu
     struct CGS_ALIGN(16) Matrix44
     {
         typedef const Matrix44& InParam;
+        typedef Matrix44& OutParam;
+        typedef Matrix44& InOutParam;
         Vector4 xAxis, yAxis, zAxis, wAxis;
         // DecFIGS matrix44.h:28/31; the nontrivial copy is also required by
         // ARTIST's pointer ABI for Matrix44 values (for example 8227B8A0).
@@ -55,6 +57,10 @@ namespace vpu
         Matrix44(const Matrix44& lrMatrix)
             : xAxis(lrMatrix.xAxis), yAxis(lrMatrix.yAxis),
               zAxis(lrMatrix.zAxis), wAxis(lrMatrix.wAxis) {}
+        Matrix44(Vector4::InParam x, Vector4::InParam y, Vector4::InParam z, Vector4::InParam w)
+            : xAxis(x), yAxis(y), zAxis(z), wAxis(w) {}
+        Matrix44(VectorIntrinsicInParam x, VectorIntrinsicInParam y, VectorIntrinsicInParam z, VectorIntrinsicInParam w)
+            : xAxis(x), yAxis(y), zAxis(z), wAxis(w) {}
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
         {
@@ -65,6 +71,8 @@ namespace vpu
     struct CGS_ALIGN(16) Matrix44Affine
     {
         typedef const Matrix44Affine& InParam;
+        typedef Matrix44Affine& OutParam;
+        typedef Matrix44Affine& InOutParam;
         Vector3 xAxis, yAxis, zAxis, wAxis;
         // DecFIGS matrix44affine.h:61/63/64. ARTIST 822B33B8 receives
         // this value through r5; the explicit copy preserves all four raw rows.

@@ -49,25 +49,22 @@ namespace vpu
     inline Matrix44 Mult(const Matrix44Affine& lrAffine, const Matrix44& lrMatrix)
     {
         Matrix44 lResult;
-        lResult.xAxis.mV.x = lrAffine.xAxis.mV.x * lrMatrix.xAxis.mV.x + lrAffine.xAxis.mV.y * lrMatrix.yAxis.mV.x + lrAffine.xAxis.mV.z * lrMatrix.zAxis.mV.x;
-        lResult.xAxis.mV.y = lrAffine.xAxis.mV.x * lrMatrix.xAxis.mV.y + lrAffine.xAxis.mV.y * lrMatrix.yAxis.mV.y + lrAffine.xAxis.mV.z * lrMatrix.zAxis.mV.y;
-        lResult.xAxis.mV.z = lrAffine.xAxis.mV.x * lrMatrix.xAxis.mV.z + lrAffine.xAxis.mV.y * lrMatrix.yAxis.mV.z + lrAffine.xAxis.mV.z * lrMatrix.zAxis.mV.z;
-        lResult.xAxis.mV.w = lrAffine.xAxis.mV.x * lrMatrix.xAxis.mV.w + lrAffine.xAxis.mV.y * lrMatrix.yAxis.mV.w + lrAffine.xAxis.mV.z * lrMatrix.zAxis.mV.w;
-
-        lResult.yAxis.mV.x = lrAffine.yAxis.mV.x * lrMatrix.xAxis.mV.x + lrAffine.yAxis.mV.y * lrMatrix.yAxis.mV.x + lrAffine.yAxis.mV.z * lrMatrix.zAxis.mV.x;
-        lResult.yAxis.mV.y = lrAffine.yAxis.mV.x * lrMatrix.xAxis.mV.y + lrAffine.yAxis.mV.y * lrMatrix.yAxis.mV.y + lrAffine.yAxis.mV.z * lrMatrix.zAxis.mV.y;
-        lResult.yAxis.mV.z = lrAffine.yAxis.mV.x * lrMatrix.xAxis.mV.z + lrAffine.yAxis.mV.y * lrMatrix.yAxis.mV.z + lrAffine.yAxis.mV.z * lrMatrix.zAxis.mV.z;
-        lResult.yAxis.mV.w = lrAffine.yAxis.mV.x * lrMatrix.xAxis.mV.w + lrAffine.yAxis.mV.y * lrMatrix.yAxis.mV.w + lrAffine.yAxis.mV.z * lrMatrix.zAxis.mV.w;
-
-        lResult.zAxis.mV.x = lrAffine.zAxis.mV.x * lrMatrix.xAxis.mV.x + lrAffine.zAxis.mV.y * lrMatrix.yAxis.mV.x + lrAffine.zAxis.mV.z * lrMatrix.zAxis.mV.x;
-        lResult.zAxis.mV.y = lrAffine.zAxis.mV.x * lrMatrix.xAxis.mV.y + lrAffine.zAxis.mV.y * lrMatrix.yAxis.mV.y + lrAffine.zAxis.mV.z * lrMatrix.zAxis.mV.y;
-        lResult.zAxis.mV.z = lrAffine.zAxis.mV.x * lrMatrix.xAxis.mV.z + lrAffine.zAxis.mV.y * lrMatrix.yAxis.mV.z + lrAffine.zAxis.mV.z * lrMatrix.zAxis.mV.z;
-        lResult.zAxis.mV.w = lrAffine.zAxis.mV.x * lrMatrix.xAxis.mV.w + lrAffine.zAxis.mV.y * lrMatrix.yAxis.mV.w + lrAffine.zAxis.mV.z * lrMatrix.zAxis.mV.w;
-
-        lResult.wAxis.mV.x = lrAffine.wAxis.mV.x * lrMatrix.xAxis.mV.x + lrAffine.wAxis.mV.y * lrMatrix.yAxis.mV.x + lrAffine.wAxis.mV.z * lrMatrix.zAxis.mV.x + lrMatrix.wAxis.mV.x;
-        lResult.wAxis.mV.y = lrAffine.wAxis.mV.x * lrMatrix.xAxis.mV.y + lrAffine.wAxis.mV.y * lrMatrix.yAxis.mV.y + lrAffine.wAxis.mV.z * lrMatrix.zAxis.mV.y + lrMatrix.wAxis.mV.y;
-        lResult.wAxis.mV.z = lrAffine.wAxis.mV.x * lrMatrix.xAxis.mV.z + lrAffine.wAxis.mV.y * lrMatrix.yAxis.mV.z + lrAffine.wAxis.mV.z * lrMatrix.zAxis.mV.z + lrMatrix.wAxis.mV.z;
-        lResult.wAxis.mV.w = lrAffine.wAxis.mV.x * lrMatrix.xAxis.mV.w + lrAffine.wAxis.mV.y * lrMatrix.yAxis.mV.w + lrAffine.wAxis.mV.z * lrMatrix.zAxis.mV.w + lrMatrix.wAxis.mV.w;
+        const __vector4 lvRow0 = lrMatrix.xAxis.mV;
+        const __vector4 lvRow1 = lrMatrix.yAxis.mV;
+        const __vector4 lvRow2 = lrMatrix.zAxis.mV;
+        const __vector4 lvRow3 = lrMatrix.wAxis.mV;
+        __vector4 lvResult = __vmulfp(__vspltw(lrAffine.xAxis.mV, 0), lvRow0);
+        lvResult = __vmaddfp(__vspltw(lrAffine.xAxis.mV, 1), lvRow1, lvResult);
+        lResult.xAxis.mV = __vmaddfp(__vspltw(lrAffine.xAxis.mV, 2), lvRow2, lvResult);
+        lvResult = __vmulfp(__vspltw(lrAffine.yAxis.mV, 0), lvRow0);
+        lvResult = __vmaddfp(__vspltw(lrAffine.yAxis.mV, 1), lvRow1, lvResult);
+        lResult.yAxis.mV = __vmaddfp(__vspltw(lrAffine.yAxis.mV, 2), lvRow2, lvResult);
+        lvResult = __vmulfp(__vspltw(lrAffine.zAxis.mV, 0), lvRow0);
+        lvResult = __vmaddfp(__vspltw(lrAffine.zAxis.mV, 1), lvRow1, lvResult);
+        lResult.zAxis.mV = __vmaddfp(__vspltw(lrAffine.zAxis.mV, 2), lvRow2, lvResult);
+        lvResult = __vmaddfp(__vspltw(lrAffine.wAxis.mV, 0), lvRow0, lvRow3);
+        lvResult = __vmaddfp(__vspltw(lrAffine.wAxis.mV, 1), lvRow1, lvResult);
+        lResult.wAxis.mV = __vmaddfp(__vspltw(lrAffine.wAxis.mV, 2), lvRow2, lvResult);
         return lResult;
     }
     inline Matrix44 operator*(const Matrix44Affine& lrAffine, const Matrix44& lrMatrix)
