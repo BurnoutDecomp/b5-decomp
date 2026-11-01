@@ -201,16 +201,16 @@ void CollisionEffect::GetSizeSpecificSettings(const OutputCollision& arCollision
     switch (arCollision.meSize)
     {
     case E_SIZE_LARGE:
-        arSettings.mfVolume = arBin.Volumes().z;
-        arSettings.mfPitch = arBin.Pitch().z;
+        arSettings.mfVolume = arBin.Volumes().mV.z;
+        arSettings.mfPitch = arBin.Pitch().mV.z;
         break;
     case E_SIZE_MEDIUM:
-        arSettings.mfVolume = arBin.Volumes().y;
-        arSettings.mfPitch = arBin.Pitch().y;
+        arSettings.mfVolume = arBin.Volumes().mV.y;
+        arSettings.mfPitch = arBin.Pitch().mV.y;
         break;
     case E_SIZE_SMALL:
-        arSettings.mfVolume = arBin.Volumes().x;
-        arSettings.mfPitch = arBin.Pitch().x;
+        arSettings.mfVolume = arBin.Volumes().mV.x;
+        arSettings.mfPitch = arBin.Pitch().mV.x;
         break;
     default:
         CGS_ASSERT(false, "Bad Size");
@@ -277,7 +277,7 @@ f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
     const f32 KF_RACECAR_VS_WORLD = 100.0f;       // flt_82F2CED0
     const f32 KF_VERSUS_TRAFFIC = 100.0f;         // flt_82F2CED4
 
-    const f32 lfImpulse = arCollision.mNormalizedImpulse.x;
+    const f32 lfImpulse = arCollision.mNormalizedImpulse.mV.x;
     if (arCollision.meAction != AttribSys::Enums::eAction::Collision)
         return 0.0f;
 
@@ -449,12 +449,12 @@ void CollisionEffect::ProcessUpdate()
                   << " EntityB: " << CgsDev::E_PRINTMODE_HEXONCE << lrCollision.maEntityID[1].muValue << "\t"
                   << " From bin: " << static_cast<s32>(lrCollision.miBinIndex) << "\t"
                   << " SampleID:" << lrCollision.miSampleID << "\t"
-                  << " Impulse:" << lrCollision.maParameter[0].x
-                  << " Normalized: " << lrCollision.mNormalizedImpulse.x << "\t"
+                  << " Impulse:" << lrCollision.maParameter[0].mV.x
+                  << " Normalized: " << lrCollision.mNormalizedImpulse.mV.x << "\t"
                   << " Volume: " << lfGain << "\t Pitch: " << lfPitch << "\t Azimuth: " << lfAzimuth << "\t"
                   << " Orientation:" << KAPC_ORIENTATION_NAMES[DebugFlagIndex(lrCollision.meOrientation)] << "\t"
                   << " Action: " << KAPC_ACTION_NAMES[DebugFlagIndex(lrCollision.meAction)] << "\t"
-                  << " Distance: " << std::sqrt(lrCollision.maParameter[1].x) << "\t"
+                  << " Distance: " << std::sqrt(lrCollision.maParameter[1].mV.x) << "\t"
                   << " Fatal:" << KAPC_FATALITY_NAMES[lrCollision.meFatality]
                   << " ImpT:" << KAPC_IMPACT_TIME_NAMES[DebugFlagIndex(lrCollision.meImpactTime)] << "\t\n";
         }

@@ -104,9 +104,9 @@ static const rw::math::vpu::Vector3& AIListenerPosition( CgsSound::Logic::Module
 // vmsum3fp128 of (a - b) -- the three-lane squared distance.
 static f32 DistanceSquared3( const rw::math::vpu::Vector3& arA, const rw::math::vpu::Vector3& arB )
 {
-    const f32 lfX = arA.x - arB.x;
-    const f32 lfY = arA.y - arB.y;
-    const f32 lfZ = arA.z - arB.z;
+    const f32 lfX = arA.mV.x - arB.mV.x;
+    const f32 lfY = arA.mV.y - arB.mV.y;
+    const f32 lfZ = arA.mV.z - arB.mV.z;
     return lfX * lfX + lfY * lfY + lfZ * lfZ;
 }
 
@@ -523,7 +523,7 @@ void AIVehicleStateManager::UpdateParams( f32 /*af32DeltaTime*/ )
                     static_cast<const VehicleState*>(lpClosestState);
                 rw::math::vpu::Vector3 lDrawPosition =
                     lpVehicleState->GetVehicleData()->mTransform.Pos();
-                lDrawPosition.y += 3.0f;
+                lDrawPosition.mV.y += 3.0f;
                 const rw::RGBA lColour(0x00, 0xFF, 0x00, 0xFF); // ARTIST -16711776
                 CgsDev::DebugInterface lDebugInterface;
                 lDebugInterface.GetRender().DrawSphere(

@@ -577,9 +577,9 @@ namespace
 // `vcmpeqfp / vsel` guard that makes a zero vector 0 instead of 0 * infinity.
 f32 DistanceBetween( const Vector3& lrA, const Vector3& lrB )
 {
-    const f32 lfX = lrA.x - lrB.x;
-    const f32 lfY = lrA.y - lrB.y;
-    const f32 lfZ = lrA.z - lrB.z;
+    const f32 lfX = lrA.mV.x - lrB.mV.x;
+    const f32 lfY = lrA.mV.y - lrB.mV.y;
+    const f32 lfZ = lrA.mV.z - lrB.mV.z;
     const f32 lfSquared = lfX * lfX + lfY * lfY + lfZ * lfZ;
     return lfSquared == 0.0f ? 0.0f : std::sqrt( lfSquared );
 }

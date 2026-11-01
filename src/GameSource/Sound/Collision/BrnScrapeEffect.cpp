@@ -209,8 +209,8 @@ f32 ScrapeEffect::GetGain() const
 f32 ScrapeEffect::GetIntensity(CollisionState* apState, const ScrapeInfo& arScrapeInfo)
 {
     const Vector3& lrVelocity = arScrapeInfo.mRelativeVelocity;
-    f32 lfIntensity = std::sqrt(lrVelocity.x * lrVelocity.x + lrVelocity.y * lrVelocity.y +
-                                lrVelocity.z * lrVelocity.z) * KF_AEMS_FRICTION_SCALE_UP;
+    f32 lfIntensity = std::sqrt(lrVelocity.mV.x * lrVelocity.mV.x + lrVelocity.mV.y * lrVelocity.mV.y +
+                                lrVelocity.mV.z * lrVelocity.mV.z) * KF_AEMS_FRICTION_SCALE_UP;
     const CollisionStateManager* lpManager =
         static_cast<const CollisionStateManager*>(apState->GetStateManager());
     if (miParam_AEMS_material_b == KI_MATERIAL_AI || miParam_AEMS_material_b == KI_MATERIAL_TRAFFIC)
