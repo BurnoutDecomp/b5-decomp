@@ -272,7 +272,7 @@ void OnlineStuntRunMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // the zero vector, matching the call's `vspltisw v1, 0`.
     const GameStateModuleIO::StartNetworkRoundEvent* lpStartNetworkRoundEvent =
         lpNetworkRoundManager->GetNetworkRoundEvent();
-    const Vector3 lvReferenceDirection = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lvReferenceDirection(__vspltisw(0));
     lpGameModeParams->SetTrafficLightTriggerId(
         GetBestStartGridID(lpStartNetworkRoundEvent->mLightTriggerID, lpStartGameModeParams,
                            lvReferenceDirection));

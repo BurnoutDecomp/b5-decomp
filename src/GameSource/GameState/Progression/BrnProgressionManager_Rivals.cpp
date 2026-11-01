@@ -634,10 +634,9 @@ void ProgressionManager::AddRivalToWorld(const Rival* lpRival, s32 liRivalIndex,
     // unk_82181520, read out of the image at file offset 0x181520:
     //   00000000 00000000 3F800000 00000000 == (0.0f, 0.0f, 1.0f, 0.0f)
     // i.e. +Z -- the spawn heading every rival is dropped into the world with.
-    // The host Vector3 is the four-lane POD (x, y, z, w), so the aggregate carries the console's
-    // w lane (0.0f) as well -- all sixteen bytes the stvx writes.
+    // The native three-float constructor sets all four lanes, including w = 0.
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 1.0f);
         lAction.mSpawnHeading = lAggregateValue;
     }      // stvx -> record +0x10
 
