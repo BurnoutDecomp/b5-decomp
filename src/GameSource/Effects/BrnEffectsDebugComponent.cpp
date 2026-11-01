@@ -55,7 +55,7 @@ namespace BrnEffects
     // and the table is `unk_82F24310`, 25 records of 48 bytes. (addr - 0x82F24310) / 48 gives
     // 16, 21, 22, 23, 24 -- exactly eCoronaTypePlayerCarHeadLight, ...BluesTwosRed,
     // ...BluesTwosBlue, ...Spotlights, ...PS3BluRayLights; the intra-record offsets are +0x00/
-    // +0x04 (mvSize.x/y) and +0x18/+0x1C/+0x20/+0x24/+0x28 (mScaleCurve's mCurveParams.xyz and
+    // +0x04 (mvSize.mV.x/y) and +0x18/+0x1C/+0x20/+0x24/+0x28 (mScaleCurve's mCurveParams.xyz and
     // mScaleFactors.xy). So the debug menu edits THE LIVE ARCHETYPE, which is the whole point of
     // it -- 35 separate globals would have edited copies nothing renders from, and would have
     // left the link short by 35 symbols (measured: it did).
@@ -66,33 +66,63 @@ namespace BrnEffects
         // routines82C6EB00/EBC8/F100/F128/F150 from the cited rodata words.
         f32 JunkyardSinCosLane(f32 lfRadians, f32 lfPhase)
         {
-            const f32 lfCycle = vmx::MultiplyAdd(lfRadians, 0.15915493667125702f, lfPhase); //3E22F983
-            const f32 lfFraction = vmx::Subtract(lfCycle, vmx::Flush(std::floor(lfCycle)));
-            const f32 lfMirror = vmx::Subtract(1.0f, lfFraction);
-            const f32 lfFolded = vmx::Add(lfFraction < lfMirror ? lfFraction : lfMirror, -0.25f);
-            const f32 lfSquare = vmx::Multiply(lfFolded, lfFolded);
-            f32 lfPolynomial = vmx::MultiplyAdd(lfSquare, -71.17897033691406f, 40.897369384765625f); //C28E5BA2/422396E8
-            lfPolynomial = vmx::MultiplyAdd(lfSquare, lfPolynomial, -6.278042793273926f); //C0C8E5BA
-            return vmx::Multiply(lfPolynomial, lfFolded);
+            // ARTIST 0x82287D38..0x82287DEC, in instruction order. Replicate the
+            // scalar inputs so each VMX intrinsic performs the original four-lane op.
+            const rw::math::vpu::VectorIntrinsic lRadians = { lfRadians, lfRadians, lfRadians, lfRadians };
+            const rw::math::vpu::VectorIntrinsic lScale = { 0.15915493667125702f, 0.15915493667125702f,
+                                                            0.15915493667125702f, 0.15915493667125702f };
+            const rw::math::vpu::VectorIntrinsic lPhaseVector = { lfPhase, lfPhase, lfPhase, lfPhase };
+            const rw::math::vpu::VectorIntrinsic lCycle = __vmaddfp(lRadians, lScale, lPhaseVector);
+            const rw::math::vpu::VectorIntrinsic lFraction = __vsubfp(lCycle, __vrfim(lCycle));
+            const rw::math::vpu::VectorIntrinsic lOne = { 1.0f, 1.0f, 1.0f, 1.0f };
+            const rw::math::vpu::VectorIntrinsic lMirror = __vsubfp(lOne, lFraction);
+            const rw::math::vpu::VectorIntrinsic lQuarter = { -0.25f, -0.25f, -0.25f, -0.25f };
+            const rw::math::vpu::VectorIntrinsic lFolded = __vaddfp(__vminfp(lFraction, lMirror), lQuarter);
+            const rw::math::vpu::VectorIntrinsic lSquare = __vmulfp(lFolded, lFolded);
+            const rw::math::vpu::VectorIntrinsic lPolynomialHigh = { 40.897369384765625f, 40.897369384765625f,
+                                                                     40.897369384765625f, 40.897369384765625f };
+            const rw::math::vpu::VectorIntrinsic lPolynomialMiddle = { -71.17897033691406f, -71.17897033691406f,
+                                                                       -71.17897033691406f, -71.17897033691406f };
+            const rw::math::vpu::VectorIntrinsic lPolynomialLow = { -6.278042793273926f, -6.278042793273926f,
+                                                                    -6.278042793273926f, -6.278042793273926f };
+            const rw::math::vpu::VectorIntrinsic lPolynomial = __vmaddfp(lSquare, lPolynomialMiddle, lPolynomialHigh);
+            const rw::math::vpu::VectorIntrinsic lPolynomial2 = __vmaddfp(lSquare, lPolynomial, lPolynomialLow);
+            return __vmulfp(lPolynomial2, lFolded).x;
         }
 
-        // ARTIST8227F37C..3CC: one unconditional reciprocal refinement, ATan,
-        // signed-pi quadrant correction and an explicit z==0 signed-pi/2 select.
+        // ARTIST 0x8227F37C..0x8227F3D0: vrefp, one reciprocal refinement,
+        // XMVectorATan, sign-bit OR and the negative/zero Z selects.
         f32 JunkyardHeadingRadians(f32 lfX, f32 lfZ)
         {
-            lfZ = vmx::Flush(lfZ);
-            f32 lfReciprocal = vmx::Flush(static_cast<f32>(1.0 / static_cast<f64>(lfZ)));
-            const f32 lfError = vmx::NegativeMultiplySubtract(lfReciprocal, lfZ, 1.0f);
-            lfReciprocal = vmx::MultiplyAdd(lfReciprocal, lfError, lfReciprocal);
-            const f32 lfRatio = vmx::MultiplyAdd(lfX, lfReciprocal, 0.0f);
-            f32 lfAngle = XboxMath::XMVectorATan(lfRatio);
+            const rw::math::vpu::VectorIntrinsic lX = { lfX, lfX, lfX, lfX };
+            const rw::math::vpu::VectorIntrinsic lZ = { lfZ, lfZ, lfZ, lfZ };
+            const rw::math::vpu::VectorIntrinsic lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const rw::math::vpu::VectorIntrinsic lOne = { 1.0f, 1.0f, 1.0f, 1.0f };
+            const rw::math::vpu::VectorIntrinsic lReciprocal = __vrefp(lZ);
+            const rw::math::vpu::VectorIntrinsic lError = __vnmsubfp(lReciprocal, lZ, lOne);
+            const rw::math::vpu::VectorIntrinsic lRefinedReciprocal = __vmaddfp(lReciprocal, lError, lReciprocal);
+            const rw::math::vpu::VectorIntrinsic lRatio = __vmaddfp(lX, lRefinedReciprocal, lZero);
+            f32 lfAngle = XboxMath::XMVectorATan(lRatio.x);
+
+            const rw::math::vpu::VectorIntrinsic lAllBits = __vspltisw(-1);
+            const rw::math::vpu::VectorIntrinsic lSignMask = __vslw(lAllBits, lAllBits);
+            const rw::math::vpu::VectorIntrinsic lSignBits = __vand(lX, lSignMask);
+            const rw::math::vpu::VectorIntrinsic lPi = { 3.1415927410125732f, 3.1415927410125732f,
+                                                         3.1415927410125732f, 3.1415927410125732f };
+            const rw::math::vpu::VectorIntrinsic lHalfPi = { 1.5707963705062866f, 1.5707963705062866f,
+                                                             1.5707963705062866f, 1.5707963705062866f };
+            const f32 lfSignedPi = __vor(lPi, lSignBits).x;
+            const f32 lfSignedHalfPi = __vor(lHalfPi, lSignBits).x;
             if (lfZ < 0.0f)
-                lfAngle = vmx::Add(std::copysign(3.1415927410125732f, lfX), lfAngle);
+            {
+                const rw::math::vpu::VectorIntrinsic lAngle = { lfAngle, lfAngle, lfAngle, lfAngle };
+                const rw::math::vpu::VectorIntrinsic lSignedPiVector = { lfSignedPi, lfSignedPi, lfSignedPi, lfSignedPi };
+                lfAngle = __vaddfp(lSignedPiVector, lAngle).x;
+            }
             if (lfZ == 0.0f)
-                lfAngle = std::copysign(1.5707963705062866f, lfX);
+                lfAngle = lfSignedHalfPi;
             return lfAngle;
         }
-
         BrnCoronaTypeParams& CoronaParams(BrnCoronaType leType)
         {
             // GetCoronaTypeParams is the table's own accessor (smParams is private); the debug
@@ -245,10 +275,10 @@ namespace BrnEffects
         SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mScaleFactors.X(), 0.025f);
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mScaleFactors.Y(), "Coronas\\Player RaceCar", "SpotLightsScale Factor Max");
         SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mScaleCurve.mScaleFactors.Y(), 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.x,          "Coronas\\Player RaceCar", "SpotLightsSize X");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.x, 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.y,          "Coronas\\Player RaceCar", "SpotLightsSize Y");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.mV.x,          "Coronas\\Player RaceCar", "SpotLightsSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.mV.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.mV.y,          "Coronas\\Player RaceCar", "SpotLightsSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarSpotlights).mvSize.mV.y, 0.025f);
 
         // HeadLights.
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mCurveParams.X(),  "Coronas\\Player RaceCar", "HeadLightsSmooth Step Min");
@@ -261,10 +291,10 @@ namespace BrnEffects
         SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mScaleFactors.X(), 0.025f);
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mScaleFactors.Y(), "Coronas\\Player RaceCar", "HeadLightsScale Factor Max");
         SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mScaleCurve.mScaleFactors.Y(), 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.x,          "Coronas\\Player RaceCar", "HeadLightsSize X");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.x, 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.y,          "Coronas\\Player RaceCar", "HeadLightsSize Y");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.mV.x,          "Coronas\\Player RaceCar", "HeadLightsSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.mV.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.mV.y,          "Coronas\\Player RaceCar", "HeadLightsSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarHeadLight).mvSize.mV.y, 0.025f);
 
         // Blues2s Red.
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mCurveParams.X(),  "Coronas\\Player RaceCar", "Blues2s RedSmooth Step Min");
@@ -277,10 +307,10 @@ namespace BrnEffects
         SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mScaleFactors.X(), 0.025f);
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mScaleFactors.Y(), "Coronas\\Player RaceCar", "Blues2s RedScale Factor Max");
         SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mScaleCurve.mScaleFactors.Y(), 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.x,          "Coronas\\Player RaceCar", "Blues2s RedSize X");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.x, 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.y,          "Coronas\\Player RaceCar", "Blues2s RedSize Y");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.mV.x,          "Coronas\\Player RaceCar", "Blues2s RedSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.mV.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.mV.y,          "Coronas\\Player RaceCar", "Blues2s RedSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosRed).mvSize.mV.y, 0.025f);
 
         // Blues2s Blue.
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mCurveParams.X(),  "Coronas\\Player RaceCar", "Blues2s BlueSmooth Step Min");
@@ -293,10 +323,10 @@ namespace BrnEffects
         SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mScaleFactors.X(), 0.025f);
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mScaleFactors.Y(), "Coronas\\Player RaceCar", "Blues2s BlueScale Factor Max");
         SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mScaleCurve.mScaleFactors.Y(), 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.x,          "Coronas\\Player RaceCar", "Blues2s BlueSize X");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.x, 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.y,          "Coronas\\Player RaceCar", "Blues2s BlueSize Y");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.mV.x,          "Coronas\\Player RaceCar", "Blues2s BlueSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.mV.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.mV.y,          "Coronas\\Player RaceCar", "Blues2s BlueSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarBluesTwosBlue).mvSize.mV.y, 0.025f);
 
         // PS3Lights.
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mCurveParams.X(),  "Coronas\\Player RaceCar", "PS3LightsSmooth Step Min");
@@ -309,10 +339,10 @@ namespace BrnEffects
         SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mScaleFactors.X(), 0.025f);
         RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mScaleFactors.Y(), "Coronas\\Player RaceCar", "PS3LightsScale Factor Max");
         SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mScaleCurve.mScaleFactors.Y(), 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.x,          "Coronas\\Player RaceCar", "PS3LightsSize X");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.x, 0.025f);
-        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.y,          "Coronas\\Player RaceCar", "PS3LightsSize Y");
-        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.y, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.mV.x,          "Coronas\\Player RaceCar", "PS3LightsSize X");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.mV.x, 0.025f);
+        RegisterVariable(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.mV.y,          "Coronas\\Player RaceCar", "PS3LightsSize Y");
+        SetStep(&CoronaParams(eCoronaTypePlayerCarPS3BluRayLights).mvSize.mV.y, 0.025f);
 
         // Feature sub-menus.
         SetupLionMenu();
@@ -492,14 +522,14 @@ namespace BrnEffects
 
         // Snapshot its translation (the affine transform's position row) into the editor.
         const rw::math::vpu::Matrix44Affine& lrTransform = lpActive->GetTransform();
-        lpThis->mfJunkyardVfxPosX = lrTransform.Pos().x;
-        lpThis->mfJunkyardVfxPosY = lrTransform.Pos().y;
-        lpThis->mfJunkyardVfxPosZ = lrTransform.Pos().z;
+        lpThis->mfJunkyardVfxPosX = lrTransform.Pos().mV.x;
+        lpThis->mfJunkyardVfxPosY = lrTransform.Pos().mV.y;
+        lpThis->mfJunkyardVfxPosZ = lrTransform.Pos().mV.z;
 
         // Recover the effect's heading from the first row (Right()/xAxis).
         // ARTIST reads LionEffect+0x10, applies the reciprocal/ATan selections
         // above, then converts to degrees and corrects a negative result.
-        f32 lfHeadingRadians = JunkyardHeadingRadians(lrTransform.Right().x, lrTransform.Right().z);
+        f32 lfHeadingRadians = JunkyardHeadingRadians(lrTransform.Right().mV.x, lrTransform.Right().mV.z);
         f32 lfHeadingDegrees = lfHeadingRadians * 57.295776f; // rad -> deg
         if (lfHeadingDegrees < 0.0f)
             lfHeadingDegrees += 360.0f;
@@ -572,12 +602,12 @@ namespace BrnEffects
             f32 lfCos = JunkyardSinCosLane(lfHeadingRadians, 0.0f);
 
             rw::math::vpu::Matrix44Affine lTransform;
-            const Vector3 lI = {1.0f, 0.0f, 0.0f, 0.0f};
-            const Vector3 lK = {0.0f, 0.0f, 1.0f, 0.0f};
-            lTransform.Up()    = rw::math::vpu::Vector3 {  0.0f,  1.0f,  0.0f,  0.0f };
-            lTransform.Pos()   = rw::math::vpu::Vector3 {  lpThis->mfJunkyardVfxPosX,
+            const Vector3 lI(1.0f, 0.0f, 0.0f);
+            const Vector3 lK(0.0f, 0.0f, 1.0f);
+            lTransform.Up()    = rw::math::vpu::Vector3(0.0f, 1.0f, 0.0f);
+            lTransform.Pos()   = rw::math::vpu::Vector3(lpThis->mfJunkyardVfxPosX,
                                                            lpThis->mfJunkyardVfxPosY,
-                                                           lpThis->mfJunkyardVfxPosZ, 0.0f };
+                                                           lpThis->mfJunkyardVfxPosZ);
             lpLionEffect->mTransform = lTransform;
 
             lpLionEffect->muFlags |= BrnParticle::LionEffect::EPPE_FLAG_CHANGED;
