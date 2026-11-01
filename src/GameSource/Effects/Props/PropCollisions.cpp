@@ -26,13 +26,8 @@
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"               // BrnPhysics::Props::PropPhysicsDataHeader
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [DIAG] CgsDev::Log::WriteToLog
 
-#include <cmath>     // std::fma / std::sqrt
-#include <cstdarg>   // [DIAG] va_list
 #include "types.hpp"   // uintptr_t
-#include <cstdio>    // [DIAG] vsnprintf
-#include <cstdlib>   // [DIAG] getenv
 
 // Static storage for the effect ring (one definition per TU).
 namespace BrnEffects
@@ -63,125 +58,26 @@ namespace
     const f32 KF_PROP_VFX_VISIBLE_DISTANCE_SQR = 2500.0f;   // flt_8200D510 (`fcmpu f0, f29 ; blt` at 0x82299438): 50 m
     const f32 KF_PROP_VFX_SMASH_SPEED_MPH      = 50.0f;     // flt_820138DC (`fcmpu f0, f28 ; ble` at 0x82299484)
 
-    // ---- the console's vector idioms (the same models EffectsModule.cpp names) ----
-    // vmsum3fp128: the three products summed, then rounded once.
-    f32 Dot3(const Vector3& lrA, const Vector3& lrB)
+    Vector3 NormalizeNative(const Vector3& v)
     {
-        return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
-                              + static_cast<f64>(lrA.z) * lrB.z);
+        const __vector4 squared = __vmsum3fp(v.mV, v.mV);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(squared);
+        __vector4 error = __vnmsubfp(squared, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), error, estimate);
+        error = __vnmsubfp(squared, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), error, estimate);
+        return Vector3(__vmulfp(v.mV, estimate));
     }
 
-    // `vnmsubfp`: -(a * c - b), fused, a NaN keeping its sign.
-    f32 Vnmsub(f32 lfA, f32 lfC, f32 lfB)
+    Vector3 CrossPermuted(const Vector3& a, const Vector3& b)
     {
-        const f32 lfDifference = std::fma(lfA, lfC, -lfB);
-        return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        const __vector4 ayzx = __vpermwi(a.mV, 0x63);
+        const __vector4 byzx = __vpermwi(b.mV, 0x63);
+        return Vector3(__vpermwi(__vnmsubfp(ayzx, b.mV, __vmulfp(a.mV, byzx)), 0x63));
     }
 
-    // `vrsqrtefp` and two Newton-Raphson refinements: est * est, est * 0.5, `vnmsubfp` 1 - x est^2 (fused),
-    // `vmaddfp` est + half * r (fused). FLAG (model): the hardware estimate is modelled as its correctly rounded
-    // value; the two refinements then pin the result.
-    f32 RefinedRsqrt(f32 lfX)
-    {
-        f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfX)));
-        for (u32 luStep = 0; luStep < 2u; ++luStep)
-        {
-            const f32 lfSquared  = lfEstimate * lfEstimate;
-            const f32 lfHalf     = lfEstimate * 0.5f;
-            const f32 lfResidual = Vnmsub(lfX, lfSquared, 1.0f);
-            lfEstimate = std::fma(lfHalf, lfResidual, lfEstimate);
-        }
-        return lfEstimate;
-    }
-
-    // `vmulfp128` by a splat, all four lanes.
-    Vector3 Scale4(const Vector3& lrv, f32 lfScale)
-    {
-        Vector3 lvResult;
-        lvResult.x = lrv.x * lfScale;
-        lvResult.y = lrv.y * lfScale;
-        lvResult.z = lrv.z * lfScale;
-        lvResult.w = lrv.w * lfScale;
-        return lvResult;
-    }
-
-    // `vmaddfp` a * splat(b) + c, each lane rounded once.
-    Vector3 MaddSplat4(const Vector3& lrA, f32 lfB, const Vector3& lrC)
-    {
-        Vector3 lv;
-        lv.x = std::fma(lrA.x, lfB, lrC.x);
-        lv.y = std::fma(lrA.y, lfB, lrC.y);
-        lv.z = std::fma(lrA.z, lfB, lrC.z);
-        lv.w = std::fma(lrA.w, lfB, lrC.w);
-        return lv;
-    }
-
-    // `lhs x rhs` spelled the console's way: P(a * P(b) - P(a) * b) with P = vpermwi 0x63 (y, z, x, w) -- one
-    // `vmulfp128` m = a * P(b), then ONE `vnmsubfp` per lane, then the permute back.
-    Vector3 CrossPermuted(const Vector3& lrA, const Vector3& lrB)
-    {
-        const f32 lfU0 = Vnmsub(lrA.y, lrB.x, lrA.x * lrB.y);
-        const f32 lfU1 = Vnmsub(lrA.z, lrB.y, lrA.y * lrB.z);
-        const f32 lfU2 = Vnmsub(lrA.x, lrB.z, lrA.z * lrB.x);
-        const f32 lfU3 = Vnmsub(lrA.w, lrB.w, lrA.w * lrB.w);
-        Vector3 lvResult;
-        lvResult.x = lfU1;
-        lvResult.y = lfU2;
-        lvResult.z = lfU0;
-        lvResult.w = lfU3;
-        return lvResult;
-    }
-
-    // rw::math::vpu::GetVector3_YAxis() -- unk_82181510 (0, 1, 0, 0).
-    Vector3 AxisY()
-    {
-        Vector3 lv;
-        lv.x = 0.0f; lv.y = 1.0f; lv.z = 0.0f; lv.w = 0.0f;
-        return lv;
-    }
-
-    Vector3 Sub4(const Vector3& lrA, const Vector3& lrB)
-    {
-        Vector3 lv;
-        lv.x = lrA.x - lrB.x; lv.y = lrA.y - lrB.y; lv.z = lrA.z - lrB.z; lv.w = lrA.w - lrB.w;
-        return lv;
-    }
-
-    // [DIAG] BRN_PROP_VFX_DIAG=1 -- NOT IN THE X360 BINARY, default off, DELETE-WHEN-STABLE; capped at
-    // KU_PROP_VFX_DIAG_MAX_LINES lines. Initialise: what the table was built from. UpdateLocatorVfx: one line per
-    // locator event (type, the car's speed, the verdict). TriggerLocators: one line per locator (its name and
-    // hash, the LION slot's handle and whether its description resolved, where it was placed). It only reads.
-    const u32 KU_PROP_VFX_DIAG_MAX_LINES = 64;
-
-    void PropVfxDiagLine(const char* lpcFormat, ...)
-    {
-        static u32 suLines = 0;
-        ++suLines;
-        char lacLine[320];
-        va_list lArgs;
-        va_start(lArgs, lpcFormat);
-        std::vsnprintf(lacLine, sizeof(lacLine), lpcFormat, lArgs);
-        va_end(lArgs);
-        CgsDev::Log::WriteToLog(lacLine);
-    }
-
-    // [DIAG] one UpdateLocatorVfx verdict for a visible event: its own type, the type the speed test left (the
-    // material it picks), the car's speed, where it was, what happened.
-    void PropVfxEventLine(f32 lfTime, u32 luEvent, u32 luCount,
-                          const BrnWorld::PropEntityIO::PropVFXLocatorEvent& lrEvent,
-                          BrnWorld::PropEntityIO::PropVFXLocatorEvent::EEventType leChosenType,
-                          const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState, u32 luLocators,
-                          const char* lpcVerdict)
-    {
-        typedef BrnWorld::PropEntityIO::PropVFXLocatorEvent PropVFXLocatorEvent;
-        const Vector3& lrPosition = lrEvent.GetTransform().wAxis;
-        PropVfxDiagLine("[prop-vfx] t=%.3f event %u/%u type=%u %s speed=%.1f mph at (%.3f,%.3f,%.3f) -> %s material: "
-                        "%s (%u locator(s))\n", lfTime, luEvent, luCount, lrEvent.GetPropType(),
-                        (lrEvent.GetEventType() == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH) ? "SMASH" : "HIT",
-                        lpRaceCarState->mfSpeedMPH, lrPosition.x, lrPosition.y, lrPosition.z,
-                        (leChosenType == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH) ? "smashing" : "unbroken",
-                        lpcVerdict, luLocators);
-    }
 }
 
     // -----------------------------------------------------------------------
@@ -247,7 +143,7 @@ namespace
     void VFXRuntimeMaterialLef::TriggerLocators(
         BrnParticle::ParticleModule&                lParticleModule,
         f32                                         /*lfCurrentTimeStep*/,
-        f32                                         lfCurrentTime,   // read by the [DIAG] line only
+        f32                                         /*lfCurrentTime*/,
         const rw::math::vpu::Matrix44Affine&        lPropTransform,
         const BrnParticle::VFXLocator*              lpLocatorArray,
         u32                                         lNumLocators,
@@ -264,20 +160,19 @@ namespace
             BrnParticle::LionEffect* const lpEffect = CreateEffect(lParticleModule, lLocator.GetHash());   // `lwz r4, 0x10(r26)`
             if (lpEffect == NULL)
             {
-                PropVfxDiagLine("[prop-vfx]   t=%.3f locator %u/%u \"%.40s\" hash=%08X -> no LION effect (unresolved)\n",
-                                lfCurrentTime, luLocator, lNumLocators, lLocator.macName, lLocator.GetHash());   // [DIAG]
                 continue;
             }
 
             const Vector3& lVelocity = lpRaceCarState->mLinearVelocity;
-            const Vector3 lForward   = Scale4(lVelocity, RefinedRsqrt(Dot3(lVelocity, lVelocity)));
-            const Vector3 lRightRaw  = CrossPermuted(AxisY(), lForward);
-            const Vector3 lRight     = Scale4(lRightRaw, RefinedRsqrt(Dot3(lRightRaw, lRightRaw)));
+            const Vector3 lForward   = NormalizeNative(lVelocity);
+            const Vector3 lRightRaw  = CrossPermuted(Vector3(0.0f, 1.0f, 0.0f), lForward);
+            const Vector3 lRight     = NormalizeNative(lRightRaw);
             const Vector3 lUp        = CrossPermuted(lForward, lRight);
 
-            Vector3 lPosition = MaddSplat4(lPropTransform.xAxis, lLocator.mPosition.x, lPropTransform.wAxis);
-            lPosition = MaddSplat4(lPropTransform.yAxis, lLocator.mPosition.y, lPosition);
-            lPosition = MaddSplat4(lPropTransform.zAxis, lLocator.mPosition.z, lPosition);
+            __vector4 position = __vmaddfp(lPropTransform.xAxis.mV, __vspltw(lLocator.mPosition.mV, 0), lPropTransform.wAxis.mV);
+            position = __vmaddfp(lPropTransform.yAxis.mV, __vspltw(lLocator.mPosition.mV, 1), position);
+            position = __vmaddfp(lPropTransform.zAxis.mV, __vspltw(lLocator.mPosition.mV, 2), position);
+            const Vector3 lPosition(position);
 
             Matrix44Affine lTransform;
             lTransform.xAxis = lRight;      // +0x10
@@ -287,11 +182,6 @@ namespace
             lpEffect->SetTransform(lTransform);
             lpEffect->SetVelocity(lVelocity);
             lpEffect->SetStateBlendFactor(lRandom.RandomFloat());
-            PropVfxDiagLine("[prop-vfx]   t=%.3f locator %u/%u \"%.40s\" hash=%08X -> LION handle=0x%08X "
-                            "description=%s at (%.3f,%.3f,%.3f) blend=%.4f\n",
-                            lfCurrentTime, luLocator, lNumLocators, lLocator.macName, lLocator.GetHash(),
-                            lpEffect->muHandle, (lpEffect->mpDescription != 0) ? "resolved" : "null",
-                            lPosition.x, lPosition.y, lPosition.z, lpEffect->mfStateBlend);   // [DIAG]
         }
     }
 
@@ -391,8 +281,8 @@ namespace
     // -----------------------------------------------------------------------
     bool PropCollisions::ContactVisible(Vector3 lPoint, const BrnDirector::Camera::Camera* lpCamera)
     {
-        const Vector3 lViewVec = Sub4(lPoint, lpCamera->GetTransform().wAxis);   // :349 `vsubfp v0, v13, v0`
-        const f32 lViewDistSqr = Dot3(lViewVec, lViewVec);                      // :351 `vmsum3fp128`
+        const Vector3 lViewVec(__vsubfp(lPoint.mV, lpCamera->GetTransform().wAxis.mV));   // :349 `vsubfp v0, v13, v0`
+        const f32 lViewDistSqr = __vmsum3fp(lViewVec.mV, lViewVec.mV).x;                      // :351 `vmsum3fp128`
         return lViewDistSqr < KF_PROP_VFX_VISIBLE_DISTANCE_SQR;
     }
 
@@ -421,10 +311,6 @@ namespace
             const Vector3 lPropPosition = lPropTransform.wAxis;                          // :220 event +0x30
             if (!ContactVisible(lPropPosition, lpCamera))
             {
-                PropVfxDiagLine("[prop-vfx] t=%.3f event %u/%u type=%u %s at (%.3f,%.3f,%.3f) -> not visible "
-                                "(50 m from the camera)\n", lfCurrentTime, lu32I, lCount, lEvent.GetPropType(),
-                                (lEvent.GetEventType() == PropVFXLocatorEvent::E_EVENTTYPE_PROPSMASH) ? "SMASH" : "HIT",
-                                lPropPosition.x, lPropPosition.y, lPropPosition.z);   // [DIAG]
                 continue;
             }
 
@@ -441,8 +327,6 @@ namespace
             const PropToVFXMaterialMapping* const lpMaterialMapping = MapPropTypeToMaterial(luPropType);   // :239
             if (lpMaterialMapping == 0)
             {
-                PropVfxEventLine(lfCurrentTime, lu32I, lCount, lEvent, leEventType, lpRaceCarState, 0,
-                                 "type >= 500: no mapping");   // [DIAG]
                 continue;
             }
             const BrnParticle::VFXMaterial* const lpMaterial =                           // :242
@@ -450,19 +334,13 @@ namespace
                                                                             : lpMaterialMapping->mpUnBrokenVFXMaterial;
             if (lpMaterial == 0)
             {
-                PropVfxEventLine(lfCurrentTime, lu32I, lCount, lEvent, leEventType, lpRaceCarState, 0,
-                                 "no material");   // [DIAG]
                 continue;
             }
             const u32 lNumLocators = lpMaterial->mNumLocators;                            // :248 +0x04
             if (lNumLocators == 0)
             {
-                PropVfxEventLine(lfCurrentTime, lu32I, lCount, lEvent, leEventType, lpRaceCarState, 0,
-                                 "no locators");   // [DIAG]
                 continue;
             }
-            PropVfxEventLine(lfCurrentTime, lu32I, lCount, lEvent, leEventType, lpRaceCarState, lNumLocators,
-                             "TriggerLocators");   // [DIAG]
             VFXRuntimeMaterialLef::TriggerLocators(lParticleModule, lfCurrentTimeStep, lfCurrentTime, lPropTransform,
                                                    lpMaterial->GetLocators(), lNumLocators, lpRaceCarState, mRandom);
         }
