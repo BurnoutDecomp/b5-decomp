@@ -99,15 +99,16 @@ namespace BrnGui
             if (lpStateInterface == 0)
                 return;
             BrnGui::GuiEventPlayVideo lPlayEvent;
+            lPlayEvent.mVideo.Prepare();
             // ⚠️ ZERO-extend, never sign-extend: the console's HashString ends
             // `clrldi r3,r11,32`, so the 64-bit id's top half is always 0. Our hasher
             // returns s32, and letting that widen directly turns every hash with bit 31 set
             // into 0xFFFFFFFF........ -- which matches nothing in the pool. (EAFranchise,
             // 0xF4DE3E5C, is exactly such a hash.)
-            lPlayEvent.muVideoResourceId = static_cast<u64>(static_cast<u32>(
+            lPlayEvent.mVideo.mVideoResourceId = static_cast<u64>(static_cast<u32>(
                 CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcName))));
-            lPlayEvent.muSoundStreamName  = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcName));
-            lPlayEvent.mbKeepMemoryWhenFinished = lbKeepMemoryWhenFinished;
+            lPlayEvent.mVideo.mSoundStreamName  = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcName));
+            lPlayEvent.mVideo.mbKeepMemoryWhenFinished = lbKeepMemoryWhenFinished;
             lpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlayEvent);
         }
 
@@ -119,6 +120,7 @@ namespace BrnGui
             if (lpStateInterface == 0)
                 return;
             BrnGui::GuiEventStopVideo lStopEvent;
+            lStopEvent.mVideo.Prepare();
             lpStateInterface->OutputGuiEvent<BrnGui::GuiEventStopVideo>(lStopEvent);
         }
     }

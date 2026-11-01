@@ -91,6 +91,7 @@ void Video::HandleControllerInput(const CgsModule::Event* lpEvent)
     if (liAction == KI_ACTION_SKIP_VIDEO)
     {
         GuiEventStopVideo lStopVideo;
+            lStopVideo.mVideo.Prepare();
         mpStateInterface->OutputGuiEvent<GuiEventStopVideo>(lStopVideo);
     }
 }
@@ -107,10 +108,11 @@ void Video::Update()
         case E_SUBSTATE_ENTERED:
         {
             GuiEventPlayVideo lPlayVideo;
-            lPlayVideo.muVideoResourceId = static_cast<u64>(static_cast<u32>(
+            lPlayVideo.mVideo.Prepare();
+            lPlayVideo.mVideo.mVideoResourceId = static_cast<u64>(static_cast<u32>(
                 CgsResource::ID::HashString(reinterpret_cast<const u8*>(KPC_VIDEO_NAME))));
-            lPlayVideo.muSoundStreamName = static_cast<u32>(CgsSound::Playback::Name::MakeHash(KPC_VIDEO_NAME));
-            lPlayVideo.mbKeepMemoryWhenFinished = false;
+            lPlayVideo.mVideo.mSoundStreamName = static_cast<u32>(CgsSound::Playback::Name::MakeHash(KPC_VIDEO_NAME));
+            lPlayVideo.mVideo.mbKeepMemoryWhenFinished = false;
             mpStateInterface->OutputGuiEvent<GuiEventPlayVideo>(lPlayVideo);
             meSubState = E_SUBSTATE_VIDEO_PLAYING;
             break;

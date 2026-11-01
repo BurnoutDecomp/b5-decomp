@@ -77,6 +77,7 @@ namespace BrnGui
                 if (meState == E_PLAYING_VIDEO)
                 {
                     GuiEventStopVideo lStopVideoEvent;
+                    lStopVideoEvent.mVideo.Prepare();
                     mpStateInterface->OutputGuiEvent(lStopVideoEvent);
                 }
                 break;
@@ -184,13 +185,14 @@ namespace BrnGui
             if (CacheShouldPlayIntroVideo(mpGuiCache))
             {
                 BrnGui::GuiEventPlayVideo lPlayEvent;
-                lPlayEvent.muVideoResourceId = static_cast<u32>(
+                lPlayEvent.mVideo.Prepare();
+                lPlayEvent.mVideo.mVideoResourceId = static_cast<u32>(
                     CgsResource::ID::HashString(reinterpret_cast<const u8*>("intro")));
                 // X360 @0x8247E430..438 stores MakeHash("intro") into the
                 // VideoDefinition sound-stream slot before posting event 508.
-                lPlayEvent.muSoundStreamName = static_cast<u32>(
+                lPlayEvent.mVideo.mSoundStreamName = static_cast<u32>(
                     CgsSound::Playback::Name::MakeHash("intro"));
-                lPlayEvent.mbDisableCustomSoundtracks = true;
+                lPlayEvent.mVideo.mbDisableCustomSoundtracks = true;
 
                 PostCommand16<20>(mpStateInterface, KI_CHANNEL_GUI_OUT);   // loading screen down
                 // X360 @0x8247E474..490 posts dword_830082A8. Its sole dynamic

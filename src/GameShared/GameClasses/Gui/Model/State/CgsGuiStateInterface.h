@@ -8,7 +8,7 @@
 
 namespace rw { struct IResourceAllocator; }
 namespace CgsLanguage { class LanguageManager; }
-namespace BrnGui { struct GuiAudioTriggerEvent; }
+namespace BrnGui { struct GuiAudioTriggerEvent; class GuiEventPlayVideo; class GuiEventStopVideo; }
 
 // CgsGui::StateInterface - the channel a GUI state uses to reach the rest of the
 // game: it owns the large output event queue the state writes to, plus the access
@@ -76,8 +76,9 @@ namespace CgsGui
     // { muHeader0 = 8, muEventType = 23, muHeader2 = 12 } + { the sound-name hash,
     // two flag bytes }, channel 40, 20 bytes. (BrnGui::Credits posts it with
     // CgsSound::Playback::Name::MakeHash("Credits") and both flags clear.)
-    struct GuiEventPlayMusicOnMenuStream : public CgsModule::Event
+    class GuiEventPlayMusicOnMenuStream : public CgsModule::Event
     {
+    public:
         u32  muStreamNameHash;   // +0x0C  (CgsSound::Playback::Name::MakeHash result)
         bool mbFlagA;            // +0x10  (roles not recovered; Credits passes false/false)
         bool mbFlagB;            // +0x11
@@ -281,6 +282,8 @@ namespace CgsGui
     // Actual native raw payload specializations, defined in the original
     // instantiation TU. These two publish the genuine channel40 wrapper.
     template <> void StateInterface::OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(BrnGui::GuiAudioTriggerEvent& lrEvent);
+    template <> void StateInterface::OutputGuiEvent<BrnGui::GuiEventPlayVideo>(BrnGui::GuiEventPlayVideo& lrEvent);
+    template <> void StateInterface::OutputGuiEvent<BrnGui::GuiEventStopVideo>(BrnGui::GuiEventStopVideo& lrEvent);
     template <> void StateInterface::OutputGuiEvent<GuiEventPlayMusicOnMenuStream>(GuiEventPlayMusicOnMenuStream& lrEvent);
 
     // ARTIST OutputGuiEvent<GuiEventNetworkSuspension> 0x82493A88 sends

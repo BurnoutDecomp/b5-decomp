@@ -440,6 +440,9 @@ namespace BrnGui
         // DecFIGS BrnGuiCache.h:1487/1491; ARTIST owns the enum words and
         // primary Prepare825193D8 reads this language for its font table.
         const CgsLanguage::ESku GetSku() const { return mSku; }
+        // DecFIGS BrnGuiCache.h:1499/1503; ARTIST BootLegal reads these bytes directly.
+        bool GetPlayerSignInReported() const { return mbPlayerSignInReported; }
+        bool GetPlayerSignOutReported() const { return mbPlayerSignOutReported; }
         const CgsLanguage::ELanguage GetLanguage() const { return mLanguage; }
 
         // Request the unload of every watched resource of the given type. X360

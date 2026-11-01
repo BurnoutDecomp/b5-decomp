@@ -10,7 +10,9 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayRequest
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                             // BrnGui::GuiEventPlayVideo/StopVideo (508/509, the attract loop)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (diag probe)
-#include <cstdio>                                                         // std::snprintf (diag probe)
+#include "GameSource/Game/BrnGameModule.hpp"
+#include "GameSource/Game/X360/BrnSystemHWX360.h"
+#include "GameSource/Resource/BrnDLCManager.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString (the attract video resource id)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"             // CgsSound::Playback::Name::MakeHash
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
@@ -43,10 +45,6 @@
 
 namespace BrnGui
 {
-    // The menu-facade highlighted-row accessor (BrnBootLegalBoundary.cpp; FLAG -- the
-    // real SelectableGroup writes the byte back into this state directly).
-    s32 BootLegalMenuFacade_GetHighlightedIndex();
-
 namespace
 {
     // ---- The state IN-queue is an 18KB variable event queue (X360 VariableEventQueue<18432,16>). ----
@@ -168,18 +166,6 @@ namespace
     // the rest. (Same modelling discipline as BrnPausedHudState's GuiEventPausedHudEnter.)
     // ----------------------------------------------------------------------------------
 
-    // CgsGui::GuiEventPlayMusicOnMenuStream -- carries a sound-name hash + two flag bytes.
-    struct MusicOnMenuStreamEvent : public CgsGui::GuiEvent<155>
-    {
-        s32 miHash;     // +0x0C (the MakeHash result, or dword_830082A8)
-        u8  mu8FlagA;   // +0x10
-        u8  mu8FlagB;   // +0x11
-        u8  maPad[2];
-        explicit MusicOnMenuStreamEvent(s32 liHash)
-            : CgsGui::GuiEvent<155>(0, 12), miHash(liHash), mu8FlagA(0), mu8FlagB(0)
-        { maPad[0] = maPad[1] = 0; }
-    };
-
     // BrnGui::GuiMuteDac's X360 payload is one byte, event id 88.
     struct MuteDacPayload
     {
@@ -191,21 +177,6 @@ namespace
                   "ARTIST event 88 payload is one byte");
     CGS_STATIC_ASSERT((offsetof(MuteDacRecord40, mOutEvent) == 12 && sizeof(MuteDacRecord40) == 16),
                   "ARTIST event 88 channel-40 record is {1,88,12}+1");
-
-    // BrnGui::GuiEventPlayVideo / GuiEventStopVideo -- carry a 112-byte MovieManager
-    // VideoDefinition the boot path Prepare()s on the stack; modelled by value here.
-    struct PlayVideoEvent : public CgsGui::GuiEvent<508>
-    {
-        u8 maVideoDefinition[112];
-        explicit PlayVideoEvent(const void* lpVideoDef) : CgsGui::GuiEvent<508>(0, 12)
-        { for (s32 i = 0; i < 112; ++i) maVideoDefinition[i] = reinterpret_cast<const u8*>(lpVideoDef)[i]; }
-    };
-    struct StopVideoEvent : public CgsGui::GuiEvent<509>
-    {
-        u8 maVideoDefinition[112];
-        explicit StopVideoEvent(const void* lpVideoDef) : CgsGui::GuiEvent<509>(0, 12)
-        { for (s32 i = 0; i < 112; ++i) maVideoDefinition[i] = reinterpret_cast<const u8*>(lpVideoDef)[i]; }
-    };
 
     // ARTIST event143 payload: the saved player-0 controller port word.
     struct SetPlayer0ControllerPortPayload
@@ -226,71 +197,6 @@ namespace
 }   // namespace BrnGui
 
 // ==================================================================================
-// FLAG -- out-of-scope engine boundaries. These are real X360 callees the boot-legal
-// flow drives; their bodies live in subsystems not reconstructed here (the GUI cache
-// component/apt machinery, the movie manager, the sound name hasher, the soft-reboot
-// data on BrnGameModule and the DLC manager). Declared so this state compiles and links
-// against them; do NOT body the engines from here.
-// ==================================================================================
-// External-linkage FLAG declarations (their addresses are taken / they are odr-used, so
-// they must be declared with external linkage; the definitions link from their owning TUs).
-namespace BootLegalFlag
-{
-    // --- BrnGameModule soft-reboot state (off_830102D0 is the module singleton). ---
-    // The X360 passes the module pointer; modelled here as opaque-pointer queries.
-    extern void* gpBrnGameModule;                                       // off_830102D0
-    bool  HasGameBeenSoftRebooted(void* lpModule);                       // 0x823C0278  // FLAG
-    bool  HasGameBeenRebootedDueToInvite(void* lpModule);               // 0x823C0288  // FLAG
-    const s32* GetSoftRebootData(void* lpModule);                        // GetSoftRebootData      // FLAG
-
-    // --- The movie-manager video definition the attract path prepares/plays. ---
-    void  MovieVideoDefinition_Prepare(void* lpDefinition);             // BrnGui::MovieManager::VideoDefinition::Prepare  // FLAG
-
-    // --- The sound-playback name hasher (returns the music/sound name hash). ---
-    s32   SoundPlaybackNameMakeHash(const char* lpacName);             // CgsSound::Playback::Name::MakeHash  // FLAG
-
-    // --- The DLC "beat the team" game enable flag (byte_82FFA7F0). ---
-    extern u8 gu8BeatTheTeamDlcEnabled;                                 // byte_82FFA7F0  // FLAG
-    void  DLCBeatTheTeamGame_SetEnabledState(u8* lpFlag, s32 liState); // BrnResource::DLCBeatTheTeamGame::SetEnabledState  // FLAG
-}
-using namespace BootLegalFlag;
-
-// --- GuiCache helpers the X360 reaches that are not on the committed BrnGui::GuiCache API. ---
-// FLAG: the apt-component watcher half of the cache (ClearExpectedAptComponentList /
-// AppendExpectedAptComponent (sub_824F87C0) / AreAllAptComponentsInitialised) and the
-// resource (un)load entry the X360 uses (UnloadResources). Declared as free helpers taking
-// the cache pointer so this state stays off raw cache offsets; bodies link from the GuiCache TU.
-namespace BrnGui
-{
-namespace BootLegalCacheBoundary  // FLAG boundary helpers
-{
-    void ClearExpectedAptComponentList(GuiCache* lpCache, s32 liFlow);                    // FLAG
-    void AppendExpectedAptComponent(GuiCache* lpCache, s32 liFlow, CgsGui::GuiComponent* lpComponent); // sub_824F87C0  // FLAG
-    bool AreAllAptComponentsInitialised(const GuiCache* lpCache, s32 liFlow);             // FLAG
-    bool EnsureResourcesAreLoaded(GuiCache* lpCache);                                     // FLAG
-    void EnsureBootResourceIsLoaded(GuiCache* lpCache);                                   // FLAG (v43={127,4})
-    void UnloadResources(GuiCache* lpCache, const CgsGui::sResourceTuple* lpResources, u32 luCount); // FLAG
-    f32  GetTime(const GuiCache* lpCache);                                                // FLAG
-
-    // X360 *(cache+19273) (byte) == GuiCache +0x4B49, the cache's HIGH-DEFINITION flag
-    // (written by GuiModule::Construct from the video mode). E_STAGE_FADE_IN (0x824778D8)
-    // reveals the "HD compatible" composite only when it is CLEAR -- the logo is an advert
-    // to standard-definition players. Forwards to GuiCache::IsHighDefinition() (issue #11;
-    // the old name "IsHDCompAlreadyTransitioned" misread the byte as a one-shot latch).
-    bool IsHighDefinition(const GuiCache* lpCache);
-    // X360 *(cache+42996) (word): non-zero -> "visible", zero -> "invisible" for the ESRB
-    // panel in E_STAGE_FADE_IN (0x8247790C). FLAG: no named accessor on the committed GuiCache API.
-    bool IsEsrbVisible(const GuiCache* lpCache);                                          // FLAG
-    // X360 *(cache+77578) / *(cache+77579) (bytes): either non-zero forces the
-    // "start message" transin + advance-to-menu path in E_STAGE_PRESTART_OR_IDLE, the same
-    // as mbWaitForStartPressed (0x82477A1C / 0x82477A2C). FLAG: no named accessor on the
-    // committed GuiCache API.
-    bool IsStartMessageForced(const GuiCache* lpCache);                                   // FLAG
-}
-}
-
-// ==================================================================================
-
 namespace BrnGui
 {
     // ⭐ RECOVERED 2026-08-16 (boot audit F-P8b-13). The legal-screen static resource list
@@ -312,7 +218,6 @@ namespace BrnGui
         , mfStageStartTime(0.0f)
         , mbSignOutPending(false)
         , mfAcceptTime(0.0f)
-        , mu8SelectedMenuIndex(0)
     {
     }
 
@@ -355,19 +260,14 @@ namespace BrnGui
 
         // A soft reboot that is NOT an invite reboot pops the "you were signed out" overlay and
         // posts a sign-out command (GuiEvent<88> { 1, 88, 12 } flag 1, ch 40).
-        if (HasGameBeenSoftRebooted(gpBrnGameModule) &&
-            !HasGameBeenRebootedDueToInvite(gpBrnGameModule))
+        if (gpBurnoutGame->HasGameBeenSoftRebooted() &&
+            !gpBurnoutGame->HasGameBeenRebootedDueToInvite())
         {
             GuiOverlayRequest lOverlay;
             lOverlay.Construct("SignOut");
-            // The X360 emits this via the specialised CgsGui::StateInterface::OutputGuiEvent<
-            // BrnGui::GuiOverlayRequest> (0x82436BE0), which pushes the overlay record onto the
-            // out-queue. GuiOverlayRequest is not a GuiEvent<N> (it has no GetEventType), so post
-            // it directly onto the queue -- the faithful effect of that specialisation. The
-            // overlay's GUI event type id is the channel; the record is the full request struct.
+            CgsGui::GuiEventWrapper<GuiOverlayRequest, 40> lOverlayRecord(lOverlay);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOverlay),
-                /*overlay event channel*/ KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(GuiOverlayRequest)));
+                reinterpret_cast<const CgsModule::Event*>(&lOverlayRecord), 40, sizeof(lOverlayRecord));
             PostCommand16<88>(mpStateInterface, KI_CHANNEL_GUI_OUT, 1);
         }
     }
@@ -402,9 +302,9 @@ namespace BrnGui
 
         // Unload the legal screen's resources from the cache and clear its expected apt list.
         if (mpGuiCache != 0)
-            BootLegalCacheBoundary::UnloadResources(mpGuiCache, maResourcesToLoad, muNumResourcesToLoad);
+            mpGuiCache->UnloadResources(maResourcesToLoad, muNumResourcesToLoad);
         if (mpGuiCache != 0)
-            BootLegalCacheBoundary::ClearExpectedAptComponentList(mpGuiCache, 1);
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
     }
 
     // ------------------------------------------------ DisplaySelectionMenu @ 0x82475C20
@@ -438,23 +338,18 @@ namespace BrnGui
 
         // Read the highlighted row straight off the menu's SelectableGroup (the X360 reads its
         // cached +0x3BD copy of this).
-        mu8SelectedMenuIndex = static_cast<u8>(mSelectionMenu.miHighlightedIndex);
-
         mSelectionMenu.Update();                        // (*(*menu + 0x14))(menu) == slot 5
 
         // Re-add the background's apt view state for the now-selected entry ("Normal"/"BeatTheTeam").
         // FLAG: the apt-view boundary (see DisplaySelectionMenu).
         mBackgroundAnimator.AddOutputAptViewState(           // this+0x1FC
-            "apt_Transition", KAAC_MENU_VIEW_STATE[mu8SelectedMenuIndex], false);
+            "apt_Transition", KAAC_MENU_VIEW_STATE[static_cast<u8>(mSelectionMenu.GetHighlightedIndex())], false);
     }
 
     // ------------------------------------------------------------------ Update @ 0x82477270
     void BootLegal::Update()
     {
         BootInQueue* lpInQueue = reinterpret_cast<BootInQueue*>(mpInGuiEventQueue);
-        if (lpInQueue == 0)
-            return;
-
 
         bool lbVideoFinished = false;   // v2:  a 510 (video-finished) event arrived this frame
         bool lbBackRequested = false;   // v39: a 45/49 (back/stop) action arrived this frame
@@ -465,7 +360,7 @@ namespace BrnGui
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (liEventId >= 0 && lpEvent != 0)
+        while (lpEvent != 0)
         {
             const u8* lpPayload = reinterpret_cast<const u8*>(lpEvent);
             const s32 liSubId   = *reinterpret_cast<const s32*>(lpPayload + 4);
@@ -492,10 +387,12 @@ namespace BrnGui
                 if (meUpdateStage == E_STAGE_WAIT_CACHE)
                 {
                     GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpPayload);
+                    CGS_ASSERT(lpCache != 0, "Invalid cache in BootLegal::Update");
                     mpGuiCache = lpCache;
-                    if (BootLegalCacheBoundary::EnsureResourcesAreLoaded(lpCache))
+                    if (lpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
                     {
-                        BootLegalCacheBoundary::EnsureBootResourceIsLoaded(mpGuiCache);  // v43={127,4}
+                        const CgsGui::sResourceTuple lBootResource = {127u, CgsGui::E_GUI_RESOURCETYPE_APT};
+                        mpGuiCache->EnsureResourceIsLoaded(lBootResource);
                         lbCacheLoaded = true;
                     }
                 }
@@ -527,7 +424,7 @@ namespace BrnGui
                     *reinterpret_cast<const s32*>(lpPayload + 8) == 1)
                 {
                     mbSignOutPending = false;
-                    mfStageStartTime = BootLegalCacheBoundary::GetTime(mpGuiCache);
+                    mfStageStartTime = mpGuiCache->GetTime();
                 }
                 break;
 
@@ -562,25 +459,24 @@ namespace BrnGui
         case E_STAGE_START_MOVIE:
             // Register the 5 apt components as "expected" with the cache, play the title-screen
             // apt movie + the menu-stream music, and (on a non-invite soft reboot) mute the DAC.
-            BootLegalCacheBoundary::ClearExpectedAptComponentList(mpGuiCache, 1);
-            BootLegalCacheBoundary::AppendExpectedAptComponent(mpGuiCache, 1, &mHDCompAnimator);
-            BootLegalCacheBoundary::AppendExpectedAptComponent(mpGuiCache, 1, &mEsrbAnimator);
-            BootLegalCacheBoundary::AppendExpectedAptComponent(mpGuiCache, 1, &mStartMessageAnimator);
-            BootLegalCacheBoundary::AppendExpectedAptComponent(mpGuiCache, 1, &mBackgroundAnimator);
-            BootLegalCacheBoundary::AppendExpectedAptComponent(mpGuiCache, 1, &mSelectionMenuAnimator);
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mHDCompAnimator.GetName());
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mEsrbAnimator.GetName());
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mStartMessageAnimator.GetName());
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mBackgroundAnimator.GetName());
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mSelectionMenuAnimator.GetName());
 
             PostCommand16<589>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             mpStateInterface->PlayAptMovie(KAC_TITLE_MOVIE, 1);
 
             {
                 // GuiEventPlayMusicOnMenuStream { hash = MakeHash("GunsAndRoses") } (ch via OutputGuiEvent).
-                s32 liHash = SoundPlaybackNameMakeHash("GunsAndRoses");
-                MusicOnMenuStreamEvent lMusic(liHash);
-                mpStateInterface->OutputGuiEvent<MusicOnMenuStreamEvent>(lMusic);
+                CgsGui::GuiEventPlayMusicOnMenuStream lMusic(CgsSound::Playback::Name::MakeHash("Guns_And_Roses"));
+                mpStateInterface->OutputGuiEvent(lMusic);
             }
 
-            if (HasGameBeenSoftRebooted(gpBrnGameModule) &&
-                !HasGameBeenRebootedDueToInvite(gpBrnGameModule))
+            if (gpBurnoutGame->HasGameBeenSoftRebooted() &&
+                !gpBurnoutGame->HasGameBeenRebootedDueToInvite())
             {
                 MuteDacPayload lMute;
                 lMute.mu8Mute = 0;
@@ -594,47 +490,51 @@ namespace BrnGui
             break;
 
         case E_STAGE_FADE_IN:
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
             // Wait until every expected apt component has initialised, then fade the HD composite
             // in (unless already faded) and show/hide the ESRB panel.
-            if (!BootLegalCacheBoundary::AreAllAptComponentsInitialised(mpGuiCache, 1))
+            if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD))
                 break;
 
-            // FLAG: the two AddOutputAptViewState calls below are the apt-view boundary.
-            // *(cache+19273) is the cache's high-definition byte (SD => reveal the "HD
-            // compatible" composite, 0x824778D8); *(cache+42996) is the ESRB force-visible
-            // word (0x8247790C) -- the latter still via the cache boundary helper.
-            if (!BootLegalCacheBoundary::IsHighDefinition(mpGuiCache))
+            // ARTIST selects the ESRB panel from the actual SKU, and the HD composite
+            // from the cache video-mode flag.
+            if (!mpGuiCache->IsHighDefinition())
                 mHDCompAnimator.AddOutputAptViewState("apt_Transition", "transin", false);  // this+0x58
             mEsrbAnimator.AddOutputAptViewState("apt_Transition",
-                BootLegalCacheBoundary::IsEsrbVisible(mpGuiCache) ? "visible" : "invisible", false); // this+0xE4
+                mpGuiCache->GetSku() != CgsLanguage::E_SKU_US ? "invisible" : "visible", false); // this+0xE4
 
-            mfStageStartTime = BootLegalCacheBoundary::GetTime(mpGuiCache);
+            mfStageStartTime = mpGuiCache->GetTime();
             meUpdateStage    = E_STAGE_WAIT_START;
             break;
 
         case E_STAGE_WAIT_START:
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
             // Hold for the wait-start dwell unless a sign-out is up, then post the
             // GuiEvent<90> command and advance.
             if (mbSignOutPending ||
-                BootLegalCacheBoundary::GetTime(mpGuiCache) <= (mfStageStartTime + KF_WAIT_START_DWELL))
+                mpGuiCache->GetTime() <= (mfStageStartTime + KF_WAIT_START_DWELL))
                 break;
             PostCommand16<90>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             meUpdateStage = E_STAGE_PRESTART_OR_IDLE;
             break;
 
         case E_STAGE_PRESTART_OR_IDLE:
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
             // If start was already pressed -- or the cache forces it via *(cache+77578)/
             // *(cache+77579) (0x82477A1C / 0x82477A2C) -- transin the start message and jump
             // to the menu path; otherwise idle until the attract timeout, then play the attract loop.
-            if (mbWaitForStartPressed || BootLegalCacheBoundary::IsStartMessageForced(mpGuiCache))
+            if (mbWaitForStartPressed || mpGuiCache->GetPlayerSignInReported() ||
+                mpGuiCache->GetPlayerSignOutReported())
             {
                 mStartMessageAnimator.AddOutputAptViewState("apt_Transition", "transin", false); // this+0x170  // FLAG apt-view
                 meUpdateStage = E_STAGE_START_PRESSED;
                 break;
             }
-            if (BootLegalCacheBoundary::GetTime(mpGuiCache) > (mfStageStartTime + KF_ATTRACT_IDLE_TIMEOUT))
+            if (mbWaitForStartPressed &&
+                mpGuiCache->GetTime() > (mfStageStartTime + KF_ATTRACT_IDLE_TIMEOUT))
             {
                 // -> begin the attract loop (LABEL_64): play the empty-name apt + reset the idx.
+                CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");
                 mpStateInterface->PlayAptMovie("", 1);
                 muCurrentAttractMovieIdx = 0;
                 meUpdateStage = E_STAGE_ATTRACT_PREPARE;
@@ -644,8 +544,8 @@ namespace BrnGui
         case E_STAGE_ATTRACT_PREPARE:
             // Prepare + play the attract video, then wait for it to finish.
             {
-                MusicOnMenuStreamEvent lMusic(0);   // X360 uses dword_830082A8 (the boot music id)
-                mpStateInterface->OutputGuiEvent<MusicOnMenuStreamEvent>(lMusic);
+                CgsGui::GuiEventPlayMusicOnMenuStream lMusic(0);   // dword_830082A8
+                mpStateInterface->OutputGuiEvent(lMusic);
 
                 // The X360 Prepare()s a MovieManager VideoDefinition and fills its video
                 // resource id (CgsResource::ID::HashString(attractName)) + sound name
@@ -656,13 +556,16 @@ namespace BrnGui
                 // same follow-on as BootVideos. (The prior raw 112-byte def was never filled
                 // -- a garbage id that hung the manager, killing press-start after the 25s
                 // attract timeout.)
+                CGS_ASSERT(muCurrentAttractMovieIdx < 1u, "muCurrentAttractMovieIdx<ATTRACT_MOVIE_COUNT");
                 BrnGui::GuiEventPlayVideo lPlay;
-                lPlay.muVideoResourceId = static_cast<u32>(CgsResource::ID::HashString(
+                lPlay.mVideo.Prepare();
+                lPlay.mVideo.mVideoResourceId = static_cast<u32>(CgsResource::ID::HashString(
                     reinterpret_cast<const u8*>(KAAC_ATTRACT_MOVIE[muCurrentAttractMovieIdx])));
                 // ARTIST 0x82477B48..50 stores the sound-name hash alongside the
                 // resource id. A null sound name requests a stop instead of audio.
-                lPlay.muSoundStreamName = static_cast<u32>(CgsSound::Playback::Name::MakeHash(
+                lPlay.mVideo.mSoundStreamName = static_cast<u32>(CgsSound::Playback::Name::MakeHash(
                     KAAC_ATTRACT_MOVIE[muCurrentAttractMovieIdx]));
+                lPlay.mVideo.mbKeepMemoryWhenFinished = false;
                 mpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlay);
             }
             meUpdateStage = E_STAGE_ATTRACT_PLAYING;
@@ -682,6 +585,7 @@ namespace BrnGui
                 // 509 record is the typed BrnGui::GuiEventStopVideo (immediate-stop flag clear,
                 // the def-stop default).
                 BrnGui::GuiEventStopVideo lStop;
+                lStop.mVideo.Prepare();
                 mpStateInterface->OutputGuiEvent<BrnGui::GuiEventStopVideo>(lStop);
                 lpInQueue->Clear();
                 return;
@@ -694,7 +598,7 @@ namespace BrnGui
             if (lbStartPressed)
             {
                 meUpdateStage = E_STAGE_MENU_ACTIVE;
-                if (gu8BeatTheTeamDlcEnabled)
+                if (BrnResource::g_DLCFeatureAvailability.mBeatTheTeamGame.IsAvailable())
                 {
                     DisplaySelectionMenu();
                     lpInQueue->Clear();
@@ -702,18 +606,20 @@ namespace BrnGui
                 }
             }
             else if (mbWaitForStartPressed &&
-                     BootLegalCacheBoundary::GetTime(mpGuiCache) > (mfStageStartTime + KF_ATTRACT_IDLE_TIMEOUT))
+                     mpGuiCache->GetTime() > (mfStageStartTime + KF_ATTRACT_IDLE_TIMEOUT))
             {
+                CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");
                 mpStateInterface->PlayAptMovie("", 1);
                 muCurrentAttractMovieIdx = 0;
                 meUpdateStage = E_STAGE_ATTRACT_PREPARE;
                 break;
             }
             // An invite reboot routes the saved player-0 controller port back out, then clears.
-            if (HasGameBeenRebootedDueToInvite(gpBrnGameModule))
+            if (gpBurnoutGame->HasGameBeenRebootedDueToInvite())
             {
-                const s32* lpSoftRebootData = GetSoftRebootData(gpBrnGameModule);
-                SetPlayer0ControllerPortPayload lPort(*lpSoftRebootData);
+                const BrnHW::System360HW* lpSoftRebootData = gpBurnoutGame->GetSoftRebootData();
+                CGS_ASSERT(lpSoftRebootData != 0, "lpLaunchData");
+                SetPlayer0ControllerPortPayload lPort(lpSoftRebootData->mdwUserIndex);
                 SetPlayer0ControllerPortRecord40 lPortRecord(lPort);
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lPortRecord), 40,
@@ -730,7 +636,7 @@ namespace BrnGui
             if (lbBackRequested)
             {
                 PostCommand16<590>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-                mfAcceptTime = BootLegalCacheBoundary::GetTime(mpGuiCache);
+                mfAcceptTime = mpGuiCache->GetTime();
 
                 {
                     BrnGui::GuiAudioTriggerEvent lAudio;
@@ -738,8 +644,8 @@ namespace BrnGui
                     mpStateInterface->OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(lAudio);
                 }
 
-                if (gu8BeatTheTeamDlcEnabled && mu8SelectedMenuIndex == 1)
-                    DLCBeatTheTeamGame_SetEnabledState(&gu8BeatTheTeamDlcEnabled, 1);
+                if (BrnResource::g_DLCFeatureAvailability.mBeatTheTeamGame.IsAvailable() && mSelectionMenu.GetHighlightedIndex() == 1)
+                    BrnResource::g_DLCFeatureAvailability.mBeatTheTeamGame.SetEnabledState(true);
 
                 meUpdateStage = E_STAGE_ACCEPT_DWELL;
                 PostCommand16<71>(mpStateInterface, KI_CHANNEL_GUI_OUT);
@@ -751,7 +657,7 @@ namespace BrnGui
 
         case E_STAGE_ACCEPT_DWELL:
             // After the accept dwell, post the final load command and advance to ACCEPTED.
-            if ((BootLegalCacheBoundary::GetTime(mpGuiCache) - mfAcceptTime) <= KF_ACCEPT_DWELL)
+            if ((mpGuiCache->GetTime() - mfAcceptTime) <= KF_ACCEPT_DWELL)
                 break;
             PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             meUpdateStage = E_STAGE_ACCEPTED;

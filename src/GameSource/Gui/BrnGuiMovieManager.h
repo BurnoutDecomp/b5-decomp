@@ -8,7 +8,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"           // CgsResource::ResourcePtr
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"          // CgsResource::Pool (holds VIDEOLIST.BUNDLE)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"             // CgsModule::Event, VariableEventQueue
-#include "GameSource/Gui/BrnGuiVideoEvents.h"                                // BrnGui::GuiEventPlayVideo/StopVideo (508/509)
 #include "GameSource/Gui/BrnGuiMovieAllocator.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // original reply receiver
 #include "GameShared/GameClasses/Language/CgsSku.h" // original CgsLanguage::ELanguage
@@ -26,6 +25,8 @@ namespace BrnResource { namespace GameDataIO { struct SwapOutCollisionWorldRespo
 
 namespace BrnGui
 {
+    class GuiEventPlayVideo;
+    class GuiEventStopVideo;
     class MovieManager
     {
     public:
@@ -221,7 +222,6 @@ namespace BrnGui
 
     private:
         bool QueueNextMovie();                          // VideoDataResource -> GetVideoFile(lang) -> player name
-        void HandlePlayVideoEvent(const GuiEventPlayVideo* lpPlayVideoEvent);
         void HandleStopVideoEvent(const GuiEventStopVideo* lpStopVideoEvent);
 
         // ---- [STUBBED SUBSYSTEMS] reconstructed as marked stubs (see .cpp) -------------------------
