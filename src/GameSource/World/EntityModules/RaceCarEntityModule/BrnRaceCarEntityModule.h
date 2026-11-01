@@ -1,7 +1,7 @@
 #pragma once
 
-// Native RaceCar module containment; ARTIST supplies offsets and DecFIGS
-// supplies declaration order. Replay-tail extent remains a private open gate.
+// Native RaceCar containment: ARTIST bounds and DecFIGS declaration order.
+// Replay serialiser alignment is a constrained reconstruction; see its home.
 
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
@@ -1111,8 +1111,8 @@ private:
     bool mbInReplay;                               // +0x185F4
     bool mbReplayRestored;                         // +0x185F5
 
-    // These are genuine declarations, not an accepted replay layout. The native
-    // serialiser starts at 0x18600; its extent/alignment is still under recovery.
+    // ARTIST calls the serialiser at 0x18600. Its constrained class alignment
+    // closes the replay tail while preserving the genuine 64-byte matrix type.
     BrnReplays::RaceCarEntitySerialiser mReplaySerialiser;
     Matrix44Affine mReplayTransform;
     bool mbInvalidatedRaceCars;
@@ -1209,9 +1209,9 @@ RaceCarEntityModule::GetGlobalRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
 // accessor asm bakes in (this + 592 / this + 6752).
 inline void RaceCarEntityModule::LockLayout_()
 {
-    // ARTIST closes the genuine base and each pre-replay constituent. The
-    // replay/end bounds below intentionally fail until their native cause is
-    // recovered; this private declaration is not an accepted product layout.
+    // ARTIST closes the genuine base and the named constituent boundaries.
+    // All replay/end bounds remain hard requirements of the constrained
+    // declaration; preserve them when extending the module.
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mfClippedTime) == 0x228), "ARTIST clipped time");
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mDistrictMapResourceHandle) == 0x23C), "ARTIST district handle");
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mCurrentWorldRegion) == 0x244), "ARTIST world region");

@@ -8,7 +8,10 @@ namespace BrnReplays
     struct RaceCarSerialiserFrame;
 
     // DWARF home: GameSource/Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h.
-    class RaceCarEntitySerialiser : public BaseSerialiser
+    // Reconstructed 128-byte alignment closes ARTIST's module serialiser+0x18600,
+    // invalidation byte+0x186C0 and World embedding+0x280 with one annotation.
+    // The exact original C++ attribute spelling is not independently retained.
+    class CGS_ALIGN(128) RaceCarEntitySerialiser : public BaseSerialiser
     {
     public:
         // @0x8264C4C0
