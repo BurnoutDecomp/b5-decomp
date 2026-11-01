@@ -3,12 +3,94 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 
-#include <array>
 #include <cmath>
 #include <cstring>   // std::memcpy (ClipBoxEdgeAgainstTriangle's mask bit pattern)
 #include <limits>    // std::numeric_limits (ClipBoxEdgeAgainstTriangle's refined reciprocal)
+
+namespace CgsGeometric
+{
+    namespace
+    {
+        const char* const klpTriangleBoxOriginalFile =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\Intersection/CgsTriangleBox.cpp";
+
+        inline f32 Reciprocal3(f32 lfValue)
+        {
+            f32 lfReciprocal = 1.0f / lfValue;
+            for (s32 liStep = 0; liStep < 3; ++liStep)
+            {
+                const f32 lfError = (-lfValue) * lfReciprocal + 1.0f;
+                lfReciprocal = lfReciprocal * lfError + lfReciprocal;
+            }
+            return lfReciprocal;
+        }
+
+        inline bool IsFiniteFloat(f32 lfValue)
+        {
+            u32 luBits;
+            std::memcpy(&luBits, &lfValue, sizeof(luBits));
+            return (luBits & 0x7F800000u) != 0x7F800000u;
+        }
+
+        inline __vector4 SplatFloat(f32 lfValue)
+        {
+            return __vspltw(__lvlx(&lfValue, 0), 0);
+        }
+
+        inline Vector3 MakeZeroVector3()
+        {
+            return Vector3(__vspltisw(0));
+        }
+
+        inline Vector3 MakeVector3W(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+        {
+            Vector3 lValue(lfX, lfY, lfZ);
+            lValue.mV.v[3] = lfW;
+            return lValue;
+        }
+
+        inline Vector3 PointAtLine(const Vector3& lrStart, const f32* lpDirection, f32 lfParam)
+        {
+            Vector3 lPoint;
+            lPoint.mV.v[0] = lpDirection[0] * lfParam + lrStart.mV.v[0];
+            lPoint.mV.v[1] = lpDirection[1] * lfParam + lrStart.mV.v[1];
+            lPoint.mV.v[2] = lpDirection[2] * lfParam + lrStart.mV.v[2];
+            lPoint.mV.v[3] = lpDirection[3] * lfParam + lrStart.mV.v[3];
+            return lPoint;
+        }
+
+        inline rw::math::vpu::MaskScalar MakeTriangleBoxMask(bool lbValue)
+        {
+            return rw::math::vpu::MaskScalar(lbValue);
+        }
+
+        inline VecFloat MakeSplat(f32 lfValue)
+        {
+            VecFloat lResult;
+            lResult.mV = SplatFloat(lfValue);
+            return lResult;
+        }
+
+        inline bool IsValid3(const Vector3& lrVector)
+        {
+            // X360's vcmpeqfp x,x test rejects NaNs but permits infinities.
+            return (lrVector.mV.v[0] == lrVector.mV.v[0])
+                && (lrVector.mV.v[1] == lrVector.mV.v[1])
+                && (lrVector.mV.v[2] == lrVector.mV.v[2]);
+        }
+
+        inline void ReportTriangleBoxAssert(const char* lpcExpression, s32 liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lpcExpression, klpTriangleBoxOriginalFile, liLine);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+}
 
 // ============================================================================
 // CgsGeometric::BT::TriangleData::Construct -- reconstructed from
@@ -79,10 +161,10 @@ namespace CgsGeometric
             {
                 // vsubfp
                 Vector3 lResult;
-                lResult.x = lrA.x - lrB.x;
-                lResult.y = lrA.y - lrB.y;
-                lResult.z = lrA.z - lrB.z;
-                lResult.w = 0.0f;
+                lResult.mV.v[0] = lrA.mV.v[0] - lrB.mV.v[0];
+                lResult.mV.v[1] = lrA.mV.v[1] - lrB.mV.v[1];
+                lResult.mV.v[2] = lrA.mV.v[2] - lrB.mV.v[2];
+                lResult.mV.v[3] = 0.0f;
                 return lResult;
             }
 
@@ -92,10 +174,10 @@ namespace CgsGeometric
             inline Vector3 EdgeCross(const Vector3& lrA, const Vector3& lrB)
             {
                 Vector3 lResult;
-                lResult.x = lrA.y * lrB.z - lrA.z * lrB.y;
-                lResult.y = lrA.z * lrB.x - lrA.x * lrB.z;
-                lResult.z = lrA.x * lrB.y - lrA.y * lrB.x;
-                lResult.w = 0.0f;
+                lResult.mV.v[0] = lrA.mV.v[1] * lrB.mV.v[2] - lrA.mV.v[2] * lrB.mV.v[1];
+                lResult.mV.v[1] = lrA.mV.v[2] * lrB.mV.v[0] - lrA.mV.v[0] * lrB.mV.v[2];
+                lResult.mV.v[2] = lrA.mV.v[0] * lrB.mV.v[1] - lrA.mV.v[1] * lrB.mV.v[0];
+                lResult.mV.v[3] = 0.0f;
                 return lResult;
             }
 
@@ -105,22 +187,24 @@ namespace CgsGeometric
             // reconstruction in this project (CgsTriangle4/CgsPackedOobb).
             inline Vector3 EdgeNormalize(const Vector3& lrV)
             {
-                const f32 lfLenSq = lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z;
+                const f32 lfLenSq = lrV.mV.v[0] * lrV.mV.v[0] + lrV.mV.v[1] * lrV.mV.v[1] + lrV.mV.v[2] * lrV.mV.v[2];
                 const f32 lfInv = (lfLenSq > 0.0f) ? (1.0f / std::sqrt(lfLenSq)) : 0.0f;
 
                 Vector3 lResult;
-                lResult.x = lrV.x * lfInv;
-                lResult.y = lrV.y * lfInv;
-                lResult.z = lrV.z * lfInv;
-                lResult.w = 0.0f;
+                lResult.mV.v[0] = lrV.mV.v[0] * lfInv;
+                lResult.mV.v[1] = lrV.mV.v[1] * lfInv;
+                lResult.mV.v[2] = lrV.mV.v[2] * lfInv;
+                lResult.mV.v[3] = 0.0f;
                 return lResult;
             }
 
             inline VecFloat EdgeDot(const Vector3& lrA, const Vector3& lrB)
             {
                 // vmsum3fp128
-                const f32 lfDot = lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
-                { const VecFloat lResult = { lfDot, lfDot, lfDot, lfDot }; return lResult; }
+                const f32 lfDot = lrA.mV.v[0] * lrB.mV.v[0] + lrA.mV.v[1] * lrB.mV.v[1] + lrA.mV.v[2] * lrB.mV.v[2];
+                VecFloat lResult;
+                lResult.SetFloat(lfDot);
+                return lResult;
             }
         }
 
@@ -175,21 +259,21 @@ namespace CgsGeometric
         const Vector3& lLineStart = lLineStartVertex.mPosition;
         const Vector3& lLineEnd   = lLineEndVertex.mPosition;
 
-        const f32 lfStartPlaneOffset = lLineStartVertex.mPlaneOffset.x;
-        const f32 lfEndPlaneOffset   = lLineEndVertex.mPlaneOffset.x;
-        const f32 lfStartTriOffset   = lLineStartVertex.mPlaneOffsetFromTriangle.x;
+        const f32 lfStartPlaneOffset = lLineStartVertex.mPlaneOffset.mV.v[0];
+        const f32 lfEndPlaneOffset   = lLineEndVertex.mPlaneOffset.mV.v[0];
+        const f32 lfStartTriOffset   = lLineStartVertex.mPlaneOffsetFromTriangle.mV.v[0];
 
         const f32 lfPlaneLength = lfEndPlaneOffset - lfStartPlaneOffset;
         const f32 lfReciprocal  = 1.0f / lfPlaneLength;
         const f32 lfParam       = lfStartTriOffset
-                                * ((std::isfinite(lfReciprocal) && lfReciprocal != 0.0f)
+                                * ((IsFiniteFloat(lfReciprocal) && lfReciprocal != 0.0f)
                                        ? lfReciprocal : std::numeric_limits<f32>::quiet_NaN());
 
         Vector3 lPosition;
-        lPosition.x = (lLineEnd.x - lLineStart.x) * lfParam + lLineStart.x;
-        lPosition.y = (lLineEnd.y - lLineStart.y) * lfParam + lLineStart.y;
-        lPosition.z = (lLineEnd.z - lLineStart.z) * lfParam + lLineStart.z;
-        lPosition.w = (lLineEnd.w - lLineStart.w) * lfParam + lLineStart.w;
+        lPosition.mV.v[0] = (lLineEnd.mV.v[0] - lLineStart.mV.v[0]) * lfParam + lLineStart.mV.v[0];
+        lPosition.mV.v[1] = (lLineEnd.mV.v[1] - lLineStart.mV.v[1]) * lfParam + lLineStart.mV.v[1];
+        lPosition.mV.v[2] = (lLineEnd.mV.v[2] - lLineStart.mV.v[2]) * lfParam + lLineStart.mV.v[2];
+        lPosition.mV.v[3] = (lLineEnd.mV.v[3] - lLineStart.mV.v[3]) * lfParam + lLineStart.mV.v[3];
         lPoint = lPosition;
 
         const Vector3& lVert0 = lTriangleData.mVertex0;
@@ -199,9 +283,9 @@ namespace CgsGeometric
         const Vector3& lOut1  = lTriangleData.mOuter12;
         const Vector3& lOut2  = lTriangleData.mOuter20;
 
-        const f32 lfU = (lPosition.x - lVert0.x) * lOut0.x + (lPosition.y - lVert0.y) * lOut0.y + (lPosition.z - lVert0.z) * lOut0.z;
-        const f32 lfV = (lPosition.x - lVert1.x) * lOut1.x + (lPosition.y - lVert1.y) * lOut1.y + (lPosition.z - lVert1.z) * lOut1.z;
-        const f32 lfW = (lPosition.x - lVert2.x) * lOut2.x + (lPosition.y - lVert2.y) * lOut2.y + (lPosition.z - lVert2.z) * lOut2.z;
+        const f32 lfU = (lPosition.mV.v[0] - lVert0.mV.v[0]) * lOut0.mV.v[0] + (lPosition.mV.v[1] - lVert0.mV.v[1]) * lOut0.mV.v[1] + (lPosition.mV.v[2] - lVert0.mV.v[2]) * lOut0.mV.v[2];
+        const f32 lfV = (lPosition.mV.v[0] - lVert1.mV.v[0]) * lOut1.mV.v[0] + (lPosition.mV.v[1] - lVert1.mV.v[1]) * lOut1.mV.v[1] + (lPosition.mV.v[2] - lVert1.mV.v[2]) * lOut1.mV.v[2];
+        const f32 lfW = (lPosition.mV.v[0] - lVert2.mV.v[0]) * lOut2.mV.v[0] + (lPosition.mV.v[1] - lVert2.mV.v[1]) * lOut2.mV.v[1] + (lPosition.mV.v[2] - lVert2.mV.v[2]) * lOut2.mV.v[2];
 
         const bool lbU = (0.0f >= lfU);
         const bool lbV = (0.0f >= lfV);
@@ -215,13 +299,7 @@ namespace CgsGeometric
 
         const bool lbResult = lbRayIntersects && lbNoneParallel && lbLinePlaneIntersects;
 
-        rw::math::vpu::MaskScalar lResult;
-        const u32 luLane = lbResult ? 0xFFFFFFFFu : 0u;
-        std::memcpy(&lResult.x, &luLane, sizeof(u32));
-        std::memcpy(&lResult.y, &luLane, sizeof(u32));
-        std::memcpy(&lResult.z, &luLane, sizeof(u32));
-        std::memcpy(&lResult.w, &luLane, sizeof(u32));
-        return lResult;
+        return MakeTriangleBoxMask(lbResult);
     }
 }
 
@@ -244,60 +322,16 @@ namespace CgsGeometric
                                Vector3                          lLineStart,
                                Vector3                          lLineEnd)
     {
-        const f32 lafStart[3] = { lLineStart.x, lLineStart.y, lLineStart.z };
-        const f32 lafEnd[3]   = { lLineEnd.x, lLineEnd.y, lLineEnd.z };
-        const f32 lafMin[3]   = { lBox.mMin.x, lBox.mMin.y, lBox.mMin.z };
-        const f32 lafMax[3]   = { lBox.mMax.x, lBox.mMax.y, lBox.mMax.z };
+        const f32 lafStart[3] = { lLineStart.mV.v[0], lLineStart.mV.v[1], lLineStart.mV.v[2] };
+        const f32 lafEnd[3]   = { lLineEnd.mV.v[0], lLineEnd.mV.v[1], lLineEnd.mV.v[2] };
+        const f32 lafMin[3]   = { lBox.mMin.mV.v[0], lBox.mMin.mV.v[1], lBox.mMin.mV.v[2] };
+        const f32 lafMax[3]   = { lBox.mMax.mV.v[0], lBox.mMax.mV.v[1], lBox.mMax.mV.v[2] };
 
-        // vrefp followed by the same three Newton-Raphson rounds used by the
-        // other recovered X360 reciprocal paths. In particular, a zero input
-        // refines to NaN; the parallel-axis branch below uses the raw slab test.
-        const auto Reciprocal3 = [](f32 lfValue)
-        {
-            f32 lfReciprocal = 1.0f / lfValue;
-            for (s32 liStep = 0; liStep < 3; ++liStep)
-            {
-                const f32 lfError = std::fma(-lfValue, lfReciprocal, 1.0f);
-                lfReciprocal      = std::fma(lfReciprocal, lfError, lfReciprocal);
-            }
-            return lfReciprocal;
-        };
-
-        const auto MakeMask = [](bool lbValid)
-        {
-            rw::math::vpu::MaskScalar lMask;
-            const u32 luLane = lbValid ? 0xFFFFFFFFu : 0u;
-            std::memcpy(&lMask.x, &luLane, sizeof(luLane));
-            std::memcpy(&lMask.y, &luLane, sizeof(luLane));
-            std::memcpy(&lMask.z, &luLane, sizeof(luLane));
-            std::memcpy(&lMask.w, &luLane, sizeof(luLane));
-            return lMask;
-        };
-
-        const auto MakeZero = []()
-        {
-            Vector3 lZero;
-            lZero.x = 0.0f;
-            lZero.y = 0.0f;
-            lZero.z = 0.0f;
-            lZero.w = 0.0f;
-            return lZero;
-        };
         const f32 lafDirection[4] = {
-            lLineEnd.x - lLineStart.x,
-            lLineEnd.y - lLineStart.y,
-            lLineEnd.z - lLineStart.z,
-            lLineEnd.w - lLineStart.w
-        };
-
-        const auto PointAt = [&](f32 lfParam)
-        {
-            Vector3 lPoint;
-            lPoint.x = std::fma(lafDirection[0], lfParam, lLineStart.x);
-            lPoint.y = std::fma(lafDirection[1], lfParam, lLineStart.y);
-            lPoint.z = std::fma(lafDirection[2], lfParam, lLineStart.z);
-            lPoint.w = std::fma(lafDirection[3], lfParam, lLineStart.w);
-            return lPoint;
+            lLineEnd.mV.v[0] - lLineStart.mV.v[0],
+            lLineEnd.mV.v[1] - lLineStart.mV.v[1],
+            lLineEnd.mV.v[2] - lLineStart.mV.v[2],
+            lLineEnd.mV.v[3] - lLineStart.mV.v[3]
         };
 
         const f32 lafReciprocal[3] = {
@@ -324,8 +358,8 @@ namespace CgsGeometric
                 }
 
                 const s32 liCandidate = liAxis * 2 + liSide;
-                const Vector3 lPoint = PointAt(lfParam);
-                const f32 lafPoint[3] = { lPoint.x, lPoint.y, lPoint.z };
+                const Vector3 lPoint = PointAtLine(lLineStart, lafDirection, lfParam);
+                const f32 lafPoint[3] = { lPoint.mV.v[0], lPoint.mV.v[1], lPoint.mV.v[2] };
                 bool lbInside = true;
                 for (s32 liOtherAxis = 0; liOtherAxis < 3; ++liOtherAxis)
                 {
@@ -342,10 +376,10 @@ namespace CgsGeometric
             }
         }
 
-        lpaDest[0] = MakeZero();
-        lpaDest[1] = MakeZero();
-        lpaDestValid[0] = MakeMask(false);
-        lpaDestValid[1] = MakeMask(false);
+        lpaDest[0] = MakeZeroVector3();
+        lpaDest[1] = MakeZeroVector3();
+        lpaDestValid[0] = MakeTriangleBoxMask(false);
+        lpaDestValid[1] = MakeTriangleBoxMask(false);
         s32 liStored = 0;
         for (s32 liCandidate = 0; liCandidate < 6 && liStored < 2; ++liCandidate)
         {
@@ -355,7 +389,7 @@ namespace CgsGeometric
             }
 
             lpaDest[liStored] = laCandidates[liCandidate];
-            lpaDestValid[liStored] = MakeMask(true);
+            lpaDestValid[liStored] = MakeTriangleBoxMask(true);
             ++liStored;
         }
     }
@@ -381,46 +415,36 @@ namespace CgsGeometric
         BT::TriangleData lTriangleData;
         lTriangleData.Construct(lTriangleV0, lTriangleV1, lTriangleV2);
 
-        const f32 lfMinX = lAABox.mMin.x;
-        const f32 lfMinY = lAABox.mMin.y;
-        const f32 lfMinZ = lAABox.mMin.z;
-        const f32 lfMaxX = lAABox.mMax.x;
-        const f32 lfMaxY = lAABox.mMax.y;
-        const f32 lfMaxZ = lAABox.mMax.z;
+        const f32 lfMinX = lAABox.mMin.mV.v[0];
+        const f32 lfMinY = lAABox.mMin.mV.v[1];
+        const f32 lfMinZ = lAABox.mMin.mV.v[2];
+        const f32 lfMaxX = lAABox.mMax.mV.v[0];
+        const f32 lfMaxY = lAABox.mMax.mV.v[1];
+        const f32 lfMaxZ = lAABox.mMax.mV.v[2];
 
-        const std::array<Vector3, 8> laCorners = {{
-            { lfMinX, lfMinY, lfMaxZ, lfMinX }, // var_400, slot 0
-            { lfMaxX, lfMinY, lfMinZ, lfMaxX }, // var_3D0, slot 1
-            { lfMinX, lfMaxY, lfMaxZ, lfMinX }, // var_3A0, slot 2
-            { lfMaxX, lfMaxY, lfMinZ, lfMaxX }, // var_370, slot 3
-            { lfMaxX, lfMinY, lfMaxZ, lfMaxX }, // var_340, slot 4
-            { lfMinX, lfMaxY, lfMinZ, lfMinX }, // var_310, slot 5
-            { lfMinX, lfMinY, lfMinZ, lfMinX }, // var_2E0, slot 6
-            { lfMaxX, lfMaxY, lfMaxZ, lfMaxX }  // var_2B0, slot 7
-        }};
-
-        const auto MakeSplat = [](f32 lfValue)
-        {
-            VecFloat lValue;
-            lValue.x = lfValue;
-            lValue.y = lfValue;
-            lValue.z = lfValue;
-            lValue.w = lfValue;
-            return lValue;
+        const Vector3 laCorners[8] = {
+            MakeVector3W(lfMinX, lfMinY, lfMaxZ, lfMinX), // var_400, slot 0
+            MakeVector3W(lfMaxX, lfMinY, lfMinZ, lfMaxX), // var_3D0, slot 1
+            MakeVector3W(lfMinX, lfMaxY, lfMaxZ, lfMinX), // var_3A0, slot 2
+            MakeVector3W(lfMaxX, lfMaxY, lfMinZ, lfMaxX), // var_370, slot 3
+            MakeVector3W(lfMaxX, lfMinY, lfMaxZ, lfMaxX), // var_340, slot 4
+            MakeVector3W(lfMinX, lfMaxY, lfMinZ, lfMinX), // var_310, slot 5
+            MakeVector3W(lfMinX, lfMinY, lfMinZ, lfMinX), // var_2E0, slot 6
+            MakeVector3W(lfMaxX, lfMaxY, lfMaxZ, lfMaxX)  // var_2B0, slot 7
         };
 
-        std::array<BT::BoxVertexData, 8> laBoxVertices;
-        for (s32 liCorner = 0; liCorner < static_cast<s32>(laCorners.size()); ++liCorner)
+        BT::BoxVertexData laBoxVertices[8];
+        for (s32 liCorner = 0; liCorner < 8; ++liCorner)
         {
-            const Vector3& lrPosition = laCorners[static_cast<std::size_t>(liCorner)];
-            const f32 lfPlaneOffset = lrPosition.x * lTriangleData.mNormal.x
-                                    + lrPosition.y * lTriangleData.mNormal.y
-                                    + lrPosition.z * lTriangleData.mNormal.z;
+            const Vector3& lrPosition = laCorners[liCorner];
+            const f32 lfPlaneOffset = lrPosition.mV.v[0] * lTriangleData.mNormal.mV.v[0]
+                                    + lrPosition.mV.v[1] * lTriangleData.mNormal.mV.v[1]
+                                    + lrPosition.mV.v[2] * lTriangleData.mNormal.mV.v[2];
 
-            laBoxVertices[static_cast<std::size_t>(liCorner)].mPosition = lrPosition;
-            laBoxVertices[static_cast<std::size_t>(liCorner)].mPlaneOffset = MakeSplat(lfPlaneOffset);
-            laBoxVertices[static_cast<std::size_t>(liCorner)].mPlaneOffsetFromTriangle =
-                MakeSplat(lTriangleData.mPlaneOffset.x - lfPlaneOffset);
+            laBoxVertices[liCorner].mPosition = lrPosition;
+            laBoxVertices[liCorner].mPlaneOffset = MakeSplat(lfPlaneOffset);
+            laBoxVertices[liCorner].mPlaneOffsetFromTriangle =
+                MakeSplat(lTriangleData.mPlaneOffset.mV.v[0] - lfPlaneOffset);
         }
 
         // BoxVertexData stack slots from the X360 caller, in call order.
@@ -432,10 +456,8 @@ namespace CgsGeometric
 
         for (s32 liEdge = 0; liEdge < 12; ++liEdge)
         {
-            const BT::BoxVertexData& lrStart =
-                laBoxVertices[static_cast<std::size_t>(laBoxEdgePairs[liEdge][0])];
-            const BT::BoxVertexData& lrEnd =
-                laBoxVertices[static_cast<std::size_t>(laBoxEdgePairs[liEdge][1])];
+            const BT::BoxVertexData& lrStart = laBoxVertices[laBoxEdgePairs[liEdge][0]];
+            const BT::BoxVertexData& lrEnd = laBoxVertices[laBoxEdgePairs[liEdge][1]];
             lpaDestValid[liEdge] = ClipBoxEdgeAgainstTriangle(
                 lTriangleData, lrStart, lrEnd, lpaDest[liEdge]);
         }
@@ -458,35 +480,9 @@ namespace CgsGeometric
         Vector3* lpOutTrianglePoints, Vector3* lpOutContactPoints,
         s32* lpOutNumContacts, s32 liMaxContacts)
     {
-        static const char* const klpOriginalFile =
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\Intersection/CgsTriangleBox.cpp";
-        const auto ReportAssert = [&](const char* lpcExpression, s32 liLine)
+        if (!(lPadding.mV.v[0] >= 0.0f))
         {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lpcExpression, klpOriginalFile, liLine);
-            CgsDev::Assert::EndAssert();
-        };
-        const auto IsValid3 = [](const Vector3& lrVector)
-        {
-            // X360's vcmpeqfp x,x test rejects NaNs but permits infinities.
-            return (lrVector.x == lrVector.x)
-                && (lrVector.y == lrVector.y)
-                && (lrVector.z == lrVector.z);
-        };
-        const auto MakeMask = [](bool lbValue)
-        {
-            rw::math::vpu::MaskScalar lMask;
-            const u32 luLane = lbValue ? 0xFFFFFFFFu : 0u;
-            std::memcpy(&lMask.x, &luLane, sizeof(luLane));
-            std::memcpy(&lMask.y, &luLane, sizeof(luLane));
-            std::memcpy(&lMask.z, &luLane, sizeof(luLane));
-            std::memcpy(&lMask.w, &luLane, sizeof(luLane));
-            return lMask;
-        };
-
-        if (!(lPadding.x >= 0.0f))
-        {
-            ReportAssert("lPadding >= 0.0f", 955);
+            ReportTriangleBoxAssert("lPadding >= 0.0f", 955);
         }
 
         const Matrix44Affine lBoxTransform = lBox.GetTransform();
@@ -496,14 +492,14 @@ namespace CgsGeometric
         const Vector3 lBoxDimensions = lBox.GetDimensions();
         const VecFloat lBoxFatness = lBox.GetFatness();
         AxisAlignedBox lAABox;
-        lAABox.mMin.x = -lBoxDimensions.x;
-        lAABox.mMin.y = -lBoxDimensions.y;
-        lAABox.mMin.z = -lBoxDimensions.z;
-        lAABox.mMin.w = -lBoxFatness.x;
-        lAABox.mMax.x =  lBoxDimensions.x;
-        lAABox.mMax.y =  lBoxDimensions.y;
-        lAABox.mMax.z =  lBoxDimensions.z;
-        lAABox.mMax.w =  lBoxFatness.x;
+        lAABox.mMin.mV.v[0] = -lBoxDimensions.mV.v[0];
+        lAABox.mMin.mV.v[1] = -lBoxDimensions.mV.v[1];
+        lAABox.mMin.mV.v[2] = -lBoxDimensions.mV.v[2];
+        lAABox.mMin.mV.v[3] = -lBoxFatness.mV.v[0];
+        lAABox.mMax.mV.v[0] =  lBoxDimensions.mV.v[0];
+        lAABox.mMax.mV.v[1] =  lBoxDimensions.mV.v[1];
+        lAABox.mMax.mV.v[2] =  lBoxDimensions.mV.v[2];
+        lAABox.mMax.mV.v[3] =  lBoxFatness.mV.v[0];
 
         Vector3 lTriangleV0 = rw::math::vpu::TransformPoint(
             lBoxInverseTransform, lTriangle.Get(0));
@@ -523,32 +519,32 @@ namespace CgsGeometric
         const f32 lfTriangleNormalInverseLength =
             1.0f / std::sqrt(lfTriangleNormalLengthSq);
         Vector3 lTriangleNormal;
-        lTriangleNormal.x = lTriangleNormalRaw.x * lfTriangleNormalInverseLength;
-        lTriangleNormal.y = lTriangleNormalRaw.y * lfTriangleNormalInverseLength;
-        lTriangleNormal.z = lTriangleNormalRaw.z * lfTriangleNormalInverseLength;
-        lTriangleNormal.w = lTriangleNormalRaw.w * lfTriangleNormalInverseLength;
+        lTriangleNormal.mV.v[0] = lTriangleNormalRaw.mV.v[0] * lfTriangleNormalInverseLength;
+        lTriangleNormal.mV.v[1] = lTriangleNormalRaw.mV.v[1] * lfTriangleNormalInverseLength;
+        lTriangleNormal.mV.v[2] = lTriangleNormalRaw.mV.v[2] * lfTriangleNormalInverseLength;
+        lTriangleNormal.mV.v[3] = lTriangleNormalRaw.mV.v[3] * lfTriangleNormalInverseLength;
         if (!IsValid3(lTriangleNormal))
         {
-            ReportAssert("rw::math::IsValid(lTriangleNormal)", 986);
+            ReportTriangleBoxAssert("rw::math::IsValid(lTriangleNormal)", 986);
         }
 
         Vector3 lPaddingOffset;
-        lPaddingOffset.x = lTriangleNormal.x * lPadding.x;
-        lPaddingOffset.y = lTriangleNormal.y * lPadding.y;
-        lPaddingOffset.z = lTriangleNormal.z * lPadding.z;
-        lPaddingOffset.w = lTriangleNormal.w * lPadding.w;
-        lTriangleV0.x += lPaddingOffset.x;
-        lTriangleV0.y += lPaddingOffset.y;
-        lTriangleV0.z += lPaddingOffset.z;
-        lTriangleV0.w += lPaddingOffset.w;
-        lTriangleV1.x += lPaddingOffset.x;
-        lTriangleV1.y += lPaddingOffset.y;
-        lTriangleV1.z += lPaddingOffset.z;
-        lTriangleV1.w += lPaddingOffset.w;
-        lTriangleV2.x += lPaddingOffset.x;
-        lTriangleV2.y += lPaddingOffset.y;
-        lTriangleV2.z += lPaddingOffset.z;
-        lTriangleV2.w += lPaddingOffset.w;
+        lPaddingOffset.mV.v[0] = lTriangleNormal.mV.v[0] * lPadding.mV.v[0];
+        lPaddingOffset.mV.v[1] = lTriangleNormal.mV.v[1] * lPadding.mV.v[1];
+        lPaddingOffset.mV.v[2] = lTriangleNormal.mV.v[2] * lPadding.mV.v[2];
+        lPaddingOffset.mV.v[3] = lTriangleNormal.mV.v[3] * lPadding.mV.v[3];
+        lTriangleV0.mV.v[0] += lPaddingOffset.mV.v[0];
+        lTriangleV0.mV.v[1] += lPaddingOffset.mV.v[1];
+        lTriangleV0.mV.v[2] += lPaddingOffset.mV.v[2];
+        lTriangleV0.mV.v[3] += lPaddingOffset.mV.v[3];
+        lTriangleV1.mV.v[0] += lPaddingOffset.mV.v[0];
+        lTriangleV1.mV.v[1] += lPaddingOffset.mV.v[1];
+        lTriangleV1.mV.v[2] += lPaddingOffset.mV.v[2];
+        lTriangleV1.mV.v[3] += lPaddingOffset.mV.v[3];
+        lTriangleV2.mV.v[0] += lPaddingOffset.mV.v[0];
+        lTriangleV2.mV.v[1] += lPaddingOffset.mV.v[1];
+        lTriangleV2.mV.v[2] += lPaddingOffset.mV.v[2];
+        lTriangleV2.mV.v[3] += lPaddingOffset.mV.v[3];
 
         Vector3 laClippedPoints[18];
         rw::math::vpu::MaskScalar laClippedPointsValid[18];
@@ -575,7 +571,7 @@ namespace CgsGeometric
         for (s32 liPoint = 0; liPoint < 18; ++liPoint)
         {
             u32 luPointValid = 0;
-            std::memcpy(&luPointValid, &laClippedPointsValid[liPoint].x,
+            std::memcpy(&luPointValid, &laClippedPointsValid[liPoint].mV.u[0],
                         sizeof(luPointValid));
             if (luPointValid == 0u)
             {
@@ -592,28 +588,28 @@ namespace CgsGeometric
                     lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStrStream.Reset();
                 lStrStream << "Overrun contacts buffer - pass in a larger buffer\n";
-                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), klpOriginalFile, 1004);
+                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), klpTriangleBoxOriginalFile, 1004);
                 CgsDev::Assert::EndAssert();
             }
 
             const Vector3 lClippedPoint = laClippedPoints[liPoint];
             Vector3 lTrianglePointLocal;
-            lTrianglePointLocal.x = lClippedPoint.x - lPaddingOffset.x;
-            lTrianglePointLocal.y = lClippedPoint.y - lPaddingOffset.y;
-            lTrianglePointLocal.z = lClippedPoint.z - lPaddingOffset.z;
-            lTrianglePointLocal.w = lClippedPoint.w - lPaddingOffset.w;
+            lTrianglePointLocal.mV.v[0] = lClippedPoint.mV.v[0] - lPaddingOffset.mV.v[0];
+            lTrianglePointLocal.mV.v[1] = lClippedPoint.mV.v[1] - lPaddingOffset.mV.v[1];
+            lTrianglePointLocal.mV.v[2] = lClippedPoint.mV.v[2] - lPaddingOffset.mV.v[2];
+            lTrianglePointLocal.mV.v[3] = lClippedPoint.mV.v[3] - lPaddingOffset.mV.v[3];
 
             Vector3 lNormalDirection;
-            lNormalDirection.x = (lTriangleNormal.x >= 0.0f) ? -1.0f : 1.0f;
-            lNormalDirection.y = (lTriangleNormal.y >= 0.0f) ? -1.0f : 1.0f;
-            lNormalDirection.z = (lTriangleNormal.z >= 0.0f) ? -1.0f : 1.0f;
-            lNormalDirection.w = (lTriangleNormal.w >= 0.0f) ? -1.0f : 1.0f;
+            lNormalDirection.mV.v[0] = (lTriangleNormal.mV.v[0] >= 0.0f) ? -1.0f : 1.0f;
+            lNormalDirection.mV.v[1] = (lTriangleNormal.mV.v[1] >= 0.0f) ? -1.0f : 1.0f;
+            lNormalDirection.mV.v[2] = (lTriangleNormal.mV.v[2] >= 0.0f) ? -1.0f : 1.0f;
+            lNormalDirection.mV.v[3] = (lTriangleNormal.mV.v[3] >= 0.0f) ? -1.0f : 1.0f;
 
             Vector3 lBoxExtent;
-            lBoxExtent.x = lBoxDimensions.x * lNormalDirection.x;
-            lBoxExtent.y = lBoxDimensions.y * lNormalDirection.y;
-            lBoxExtent.z = lBoxDimensions.z * lNormalDirection.z;
-            lBoxExtent.w = lBoxFatness.x * lNormalDirection.w;
+            lBoxExtent.mV.v[0] = lBoxDimensions.mV.v[0] * lNormalDirection.mV.v[0];
+            lBoxExtent.mV.v[1] = lBoxDimensions.mV.v[1] * lNormalDirection.mV.v[1];
+            lBoxExtent.mV.v[2] = lBoxDimensions.mV.v[2] * lNormalDirection.mV.v[2];
+            lBoxExtent.mV.v[3] = lBoxFatness.mV.v[0] * lNormalDirection.mV.v[3];
 
             const f32 lfPlaneOffset =
                 rw::math::vpu::Dot(lTrianglePointLocal, lTriangleNormal)
@@ -623,10 +619,10 @@ namespace CgsGeometric
                 : lfPlaneOffset;
 
             Vector3 lBoxPointLocal;
-            lBoxPointLocal.x = lTrianglePointLocal.x - lTriangleNormal.x * lfSelectedOffset;
-            lBoxPointLocal.y = lTrianglePointLocal.y - lTriangleNormal.y * lfSelectedOffset;
-            lBoxPointLocal.z = lTrianglePointLocal.z - lTriangleNormal.z * lfSelectedOffset;
-            lBoxPointLocal.w = lTrianglePointLocal.w - lTriangleNormal.w * lfSelectedOffset;
+            lBoxPointLocal.mV.v[0] = lTrianglePointLocal.mV.v[0] - lTriangleNormal.mV.v[0] * lfSelectedOffset;
+            lBoxPointLocal.mV.v[1] = lTrianglePointLocal.mV.v[1] - lTriangleNormal.mV.v[1] * lfSelectedOffset;
+            lBoxPointLocal.mV.v[2] = lTrianglePointLocal.mV.v[2] - lTriangleNormal.mV.v[2] * lfSelectedOffset;
+            lBoxPointLocal.mV.v[3] = lTrianglePointLocal.mV.v[3] - lTriangleNormal.mV.v[3] * lfSelectedOffset;
 
             const Vector3 lBoxPointWorld =
                 rw::math::vpu::TransformPoint(lBoxTransform, lBoxPointLocal);
@@ -635,19 +631,19 @@ namespace CgsGeometric
 
             if (!IsValid3(lBoxPointWorld))
             {
-                ReportAssert("Box point is invalid", 1031);
+                ReportTriangleBoxAssert("Box point is invalid", 1031);
             }
             if (!IsValid3(lTrianglePointWorld))
             {
-                ReportAssert("Triangle point is invalid", 1032);
+                ReportTriangleBoxAssert("Triangle point is invalid", 1032);
             }
             if (!IsValid3(lNormalWorldSpace))
             {
-                ReportAssert("Box normal is invalid", 1033);
+                ReportTriangleBoxAssert("Box normal is invalid", 1033);
             }
             if (!IsValid3(lNormalWorldSpace))
             {
-                ReportAssert("Triangle normal is invalid", 1034);
+                ReportTriangleBoxAssert("Triangle normal is invalid", 1034);
             }
 
             lpOutTriangleNormals[liNumContacts] = lNormalWorldSpace;
@@ -658,6 +654,6 @@ namespace CgsGeometric
         }
 
         *lpOutNumContacts = liNumContacts;
-        return MakeMask(liNumContacts > 0);
+        return MakeTriangleBoxMask(liNumContacts > 0);
     }
 }
