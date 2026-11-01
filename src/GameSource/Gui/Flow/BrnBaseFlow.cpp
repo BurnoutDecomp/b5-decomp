@@ -116,7 +116,7 @@ namespace BrnGui
     // next-state resource streaming.
     void BrnBaseFlow::Update()
     {
-        mStateMachine.CgsFsm::Fsm::Update();   // base FSM tick: current state PreUpdate/Update/PostUpdate
+        static_cast<CgsFsm::Fsm&>(mStateMachine).Update();   // base FSM tick: current state PreUpdate/Update/PostUpdate
         if (mStateMachine.IsLuaResourceValid())
         {
             const u32 luSequence = mStateMachine.GetSequenceNumber();

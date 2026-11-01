@@ -1,7 +1,4 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnInGame.h"
-#include <cstdlib>
-#include <cstring>   // std::strcmp (the BRN_LOSE_DIAG witness)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventNetworkSuspension / GuiEventPlayAptMovie
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
@@ -401,9 +398,6 @@ namespace BrnGui
     {
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        if (LoseDiagLine())
-        {
-        }
     }
 
     // @ the ICF fold 0x825011B0 (== BrnGui::Video::GetResourcesToLoad): only the count
@@ -921,7 +915,6 @@ namespace BrnGui
                     liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
                     liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
                 SendStateEvent(lbShowtime ? "TO_ST_POST" : "TO_OFF_POST");
-                lpacPostEventStateEvent = lbShowtime ? "TO_ST_POST" : "TO_OFF_POST";
 
                 break;
             }
@@ -1025,7 +1018,7 @@ namespace BrnGui
 
         // ---- the event-map gate: standing at an event start location? ---------------
         mbIsInEventStartLocation =
-            (CacheGetCurrentLandmarkIndex(mpGuiCache) != KI_NO_EVENT_START_LANDMARK);
+            (static_cast<s32>(mpGuiCache->GetCurrentLandmarkIndex()) != KI_NO_EVENT_START_LANDMARK);
 
         // ---- the EA-TRAX next-track debounce ----------------------------------------
         if (mfTimeToDisableNextEATrack > 0.0f)

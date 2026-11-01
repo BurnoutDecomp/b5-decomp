@@ -20,14 +20,12 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.h"
 
-#include <cstdlib>                                                        // getenv (the opt-in witness)
 #include <cstring>                                                        // strcmp
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // GuiEvent<N>
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"               // GuiEventControllerInputPressed
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
@@ -184,7 +182,6 @@ void OfflineTrophyCarUnlock::OnEnter()
 
     PostCarbonCarSequence(mpStateInterface, true);
 
-    TrophyScreenWitness("enter", 0);
 }
 
 // ---- OnLeave ------------------------------------------------------------------------------
@@ -215,7 +212,6 @@ void OfflineTrophyCarUnlock::OnLeave()
         mpGuiCache = 0;
     }
 
-    TrophyScreenWitness("leave", 0);
 }
 
 // ---- Update -------------------------------------------------------------------------------
@@ -247,7 +243,7 @@ void OfflineTrophyCarUnlock::Update()
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
             AppendExpectedComponents();
             meOfflineTrophyCarUnlockState = E_OFFLINETROPHYCARUNLOCKSTATE_WAITINGFORCOMPONENTS;
-            TrophyScreenWitness("movie", static_cast<s32>(KU_TROPHY_CAR_UNLOCK_MOVIE_RESOURCE));
+
         }
         break;
 
@@ -292,7 +288,7 @@ void OfflineTrophyCarUnlock::Update()
     case E_OFFLINETROPHYCARUNLOCKSTATE_TRANSOUT_COMPLETE:
         SendStateEvent("ADVANCE");
         meOfflineTrophyCarUnlockState = E_OFFLINETROPHYCARUNLOCKSTATE_FINISH;
-        TrophyScreenWitness("advance", 0);
+
         break;
 
     default:
