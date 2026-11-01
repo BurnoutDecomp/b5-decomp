@@ -26,11 +26,9 @@
 // The callee genuinely ignores the trailing bool; this body does too, explicitly.
 #include "GameSource/GameState/Offences/BrnStuntManager.h"
 
-#include <stdlib.h>                                         // getenv ([UI-gate] diag ladder)
 #include <cstring>                                          // std::memset (the action-58 record)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CgsDev::Assert::Begin/Fire/EndAssert (verbatim X360 strings)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint ([UI-gate] diag ladder)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16>::AddEvent
 
 #include "GameSource/GameState/BrnGameActions.h"            // WorldStuntAction / OnStuntElementCompleteAction / the three siblings
@@ -69,21 +67,6 @@ namespace
     // BrnDriveThruManager.cpp and GameStateModule_gRR_00.cpp name the same way).
     const f32 KF_TRAINING_TIP_SETTLE_TIME = 5.0f;
 
-    // [DIAG] NOT IN THE X360 BINARY. Same env guard + logger as the `[prop-diag] BREAK` rung this
-    // ladder hangs off (PropEntityModule_wQ_04.cpp). Evaluated once per process.
-
-    // [DIAG] NOT IN THE X360 BINARY. First-N latch (the wQ_04 pattern) so a multi-element burst
-    // cannot flood the log. Mirrors the same helper in BrnStuntManager.cpp; each TU keeps its own
-    // counter, exactly as the wQ partfiles do.
-    const s32 KI_UI_GATE_DIAG_FIRST_N = 16;
-
-    bool UIGateDiagFirstN(s32* lpiCounter)
-    {
-        if (*lpiCounter >= KI_UI_GATE_DIAG_FIRST_N)
-            return false;
-        ++(*lpiCounter);
-        return true;
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -237,28 +220,6 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     ScoringSystem* lpScoringSystem = mpModeManager->GetScoringSystem();
     lpScoringSystem->DealWithStunt(&lWorldStuntAction, lbIsOnline);
 
-    // [DIAG] NOT IN THE X360 BINARY. The [stunt-boost] rung's twin, on the other producer: it
-    // reads the scorer's OWN score/multiplier straight back out after the hop, so the log proves
-    // the gate moved the number rather than merely proving the call was made. Read off
-    // GetStuntScorer() (== the OFFLINE scorer, ScoringSystem this+0x350) and therefore printed
-    // only on the offline path -- on the online path DealWithStunt selects a DIFFERENT object
-    // (mOnlineStuntModeScoring, this+0x2620) and these fields would be the wrong scorer's.
-    // First-N capped through this file's own BRN_PROP_DIAG helper.
-    if (!lbIsOnline)
-    {
-        static s32 siScoreDiagCount = 0;
-        if (UIGateDiagFirstN(&siScoreDiagCount))
-        {
-            const StuntModeScoring* lpStuntScorer = lpScoringSystem->GetStuntScorer();
-            *CgsDev::Log::gpDebugPrint
-                << "[stunt-score] world stunt -> scorer type=" << static_cast<s32>(leElementType)
-                << " score=" << lpStuntScorer->GetCurrentScore()
-                << "/" << lpStuntScorer->GetTargetScore()
-                << " combo=" << lpStuntScorer->GetComboScore()
-                << " mult=" << lpStuntScorer->GetComboMultiplier()
-                << " inProgress=" << (lpStuntScorer->IsComboInProgress() ? 1 : 0) << "\n";
-        }
-    }
 
     // ---- 5) the training-tip arm ----------------------------------------------------------
     // One inlined tip-request guard per element type, each with its own tutorial tip:
@@ -306,14 +267,6 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
         {
             mpTrainingManager->RequestTip(leTrainingType);
 
-            static s32        siTipDiagLines = 0;
-            if (sbCollectDiag && siTipDiagLines < 16 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siTipDiagLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[collect] training tip requested type=" << static_cast<s32>(leTrainingType)
-                    << " element=" << static_cast<s32>(leElementType) << "\n";
-            }
         }
     }
 
@@ -381,14 +334,6 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     // ---- 11) the first-completion block ----------------------------------------------------
     if (lbAlreadyDone)
     {
-        static s32 siRepeatDiagCount = 0;
-        if (UIGateDiagFirstN(&siRepeatDiagCount))
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] stunt-element type=" << static_cast<s32>(leElementType)
-                << " action=127" << (lbPostedBoostAction ? "+61" : "")
-                << " (repeat -- already collected)\n";
-        }
         return;
     }
 
@@ -431,17 +376,6 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     mpProgressionManager->CheckForSpecialCarUnlocks();                    // X360 0x82396058
     mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);   // X360 0x82395C28
 
-    // [DIAG] NOT IN THE X360 BINARY. Same env guard + first-N budget as this TU's other rungs.
-    // This is the REACHABLE witness that the un-parked unlock path ran: it prints on every FIRST
-    // completion of any stunt element, unlike CheckForTrophyUnlocks' own line which needs a whole
-    // element type to be finished.
-    static s32 siUnlockDiagCount = 0;
-    if (UIGateDiagFirstN(&siUnlockDiagCount))
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[UI-gate] special-car unlock check + completion results posted (type="
-            << static_cast<s32>(leElementType) << ")\n";
-    }
 
     // ---- the action-58 record: THE HUD POPUP ----------------------------------------------
     // Both counts are read AFTER AddStuntElement above, so `current` already includes this
@@ -474,16 +408,6 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCompleteAction),
                                 GameStateModuleIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE, 24);
 
-    static s32 siCompleteDiagCount = 0;
-    if (UIGateDiagFirstN(&siCompleteDiagCount))
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[UI-gate] stunt-element type=" << static_cast<s32>(leElementType)
-            << " action=58 count=" << lCompleteAction.miCurrentCount
-            << "/" << lCompleteAction.miTotalCount
-            << " county=" << static_cast<s32>(leCounty)
-            << " mode=" << static_cast<s32>(lCompleteAction.meCurrentGameMode) << "\n";
-    }
 
     // ---- action 59: every element of this type in this county is collected -----------------
     // X360 total: `*(this + 2*(5*type + county + 741))` == this + 1482 + 2*(5*type + county) ==
@@ -511,13 +435,6 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
                 reinterpret_cast<const CgsModule::Event*>(&lCountyAction),
                 GameStateModuleIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE_FOR_COUNTY, 8);
 
-            static s32 siCountyDiagCount = 0;
-            if (UIGateDiagFirstN(&siCountyDiagCount))
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] stunt-element type=" << static_cast<s32>(leElementType)
-                    << " action=59 county=" << static_cast<s32>(leCounty) << "\n";
-            }
         }
     }
 
@@ -533,13 +450,6 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
 
         mpProgressionManager->GetAchievementManager()->OnCollectAllStunts(leElementType);
 
-        static s32 siAllDiagCount = 0;
-        if (UIGateDiagFirstN(&siAllDiagCount))
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] stunt-element type=" << static_cast<s32>(leElementType)
-                << " action=60 (all collected)\n";
-        }
     }
 }
 

@@ -18,10 +18,8 @@
 // second producer of the HUD popup this wave proves.
 #include "GameSource/GameState/Offences/BrnStuntManager.h"
 
-#include <stdlib.h>                                         // getenv ([collect] witness)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CgsDev::Assert::Begin/Fire/EndAssert (verbatim X360 strings)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint ([collect] witness)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16>::AddEvent
 
 #include "GameSource/GameState/BrnGameActions.h"            // OnStuntElementCompleteByTypeAction / E_ACTION_..._BY_TYPE
@@ -135,16 +133,6 @@ void StuntManager::CompleteAllStuntType(StuntElementType                    leSt
     mpProgressionManager->CheckForSpecialCarUnlocks();
     mpProgressionManager->SendGameCompletionResults(lpActionQueueImpl);
 
-    static s32        siCompleteAllDiagLines = 0;
-    if (sbCollectDiag && siCompleteAllDiagLines < 8 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        ++siCompleteAllDiagLines;
-        *CgsDev::Log::gpDebugPrint
-            << "[collect] complete-all type=" << static_cast<s32>(leStuntElementType)
-            << " trophy=" << liTrophyId
-            << " collected=" << mpProgressionManager->GetCollectedStuntElementCount(leStuntElementType)
-            << "\n";
-    }
 }
 
 }
