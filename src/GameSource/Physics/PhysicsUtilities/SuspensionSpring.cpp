@@ -21,42 +21,42 @@ namespace BrnPhysics
     void SuspensionSpring::SetStiffness(f32 lfStiffness)
     {
         CGS_ASSERT(lfStiffness == lfStiffness, "SuspensionSpring: setting invalid (NaN) stiffness");
-        mvStiffness_Damping_Mass_Position.x = lfStiffness;
+        mvStiffness_Damping_Mass_Position.SetX(lfStiffness);
     }
 
     // @0x8259F410 -- base+0, mask 4 -> .y
     void SuspensionSpring::SetDamping(f32 lfDamping)
     {
         CGS_ASSERT(lfDamping == lfDamping, "SuspensionSpring: setting invalid (NaN) damping");
-        mvStiffness_Damping_Mass_Position.y = lfDamping;
+        mvStiffness_Damping_Mass_Position.SetY(lfDamping);
     }
 
     // @0x8259F508 -- base+0, mask 2 -> .z
     void SuspensionSpring::SetMass(f32 lfMass)
     {
         CGS_ASSERT(lfMass == lfMass, "SuspensionSpring: setting invalid (NaN) mass");
-        mvStiffness_Damping_Mass_Position.z = lfMass;
+        mvStiffness_Damping_Mass_Position.SetZ(lfMass);
     }
 
     // @0x8259F600 -- base+0, mask 1 -> .w
     void SuspensionSpring::SetPosition(f32 lfPosition)
     {
         CGS_ASSERT(lfPosition == lfPosition, "SuspensionSpring: setting invalid (NaN) position");
-        mvStiffness_Damping_Mass_Position.w = lfPosition;
+        mvStiffness_Damping_Mass_Position.SetW(lfPosition);
     }
 
     // @0x825BF8C8 -- base+16, mask 8 -> .x
     void SuspensionSpring::SetVelocity(f32 lfVelocity)
     {
         CGS_ASSERT(lfVelocity == lfVelocity, "SuspensionSpring: setting invalid (NaN) velocity");
-        mvVelocity_Acceleration_DampingForce_SpringForce.x = lfVelocity;
+        mvVelocity_Acceleration_DampingForce_SpringForce.SetX(lfVelocity);
     }
 
     // @0x825BF9C0 -- base+16, mask 4 -> .y
     void SuspensionSpring::SetAcceleration(f32 lfAcceleration)
     {
         CGS_ASSERT(lfAcceleration == lfAcceleration, "SuspensionSpring: setting invalid (NaN) acceleration");
-        mvVelocity_Acceleration_DampingForce_SpringForce.y = lfAcceleration;
+        mvVelocity_Acceleration_DampingForce_SpringForce.SetY(lfAcceleration);
     }
 
     // @0x825BFAB8 -- base+16, mask 2 -> .z
@@ -79,21 +79,21 @@ namespace BrnPhysics
     void SuspensionSpring::SetDampingForce(f32 lfDampingForce)
     {
         CGS_ASSERT(lfDampingForce == lfDampingForce, "SuspensionSpring: setting invalid (NaN) damping force");
-        mvVelocity_Acceleration_DampingForce_SpringForce.z = lfDampingForce;
+        mvVelocity_Acceleration_DampingForce_SpringForce.SetZ(lfDampingForce);
     }
 
     // @0x825BFBB0 -- base+16, mask 1 -> .w
     void SuspensionSpring::SetSpringForce(f32 lfSpringForce)
     {
         CGS_ASSERT(lfSpringForce == lfSpringForce, "SuspensionSpring: setting invalid (NaN) force");
-        mvVelocity_Acceleration_DampingForce_SpringForce.w = lfSpringForce;
+        mvVelocity_Acceleration_DampingForce_SpringForce.SetW(lfSpringForce);
     }
 
     // @0x825BFCA8 -- base+32, mask 8 -> .x
     void SuspensionSpring::SetExternalForce(f32 lfExternalForce)
     {
         CGS_ASSERT(lfExternalForce == lfExternalForce, "SuspensionSpring: setting invalid (NaN) external force");
-        mvExternalForce.x = lfExternalForce;
+        mvExternalForce.SetX(lfExternalForce);
     }
 
     // @0x825A7A28 (35 instrs) -- seed stiffness/damping/mass, zero the position, and clear the two
@@ -113,9 +113,9 @@ namespace BrnPhysics
     // @0x8262DBD0 (the latter passes 0/0/0 -- SetupSuspension installs the real values later).
     void SuspensionSpring::Prepare(VecFloat lvStiffness, VecFloat lvDamping, VecFloat lvMass)
     {
-        SetStiffness(lvStiffness.x);                            // 0x825A7A54
-        SetDamping(lvDamping.x);                                // 0x825A7A60  (v1 <- v127 == v2)
-        SetMass(lvMass.x);                                      // 0x825A7A6C  (v1 <- v126 == v3)
+        SetStiffness(lvStiffness.GetFloat());                    // 0x825A7A54
+        SetDamping(lvDamping.GetFloat());                        // 0x825A7A60  (v1 <- v127 == v2)
+        SetMass(lvMass.GetFloat());                              // 0x825A7A6C  (v1 <- v126 == v3)
         SetPosition(0.0f);                                      // 0x825A7A7C  (vspltisw128 v127,0)
         mvVelocity_Acceleration_DampingForce_SpringForce.SetZero();   // 0x825A7A88  stvx128 base+0x10
         mvExternalForce.SetZero();                                    // 0x825A7A8C  stvx128 base+0x20
