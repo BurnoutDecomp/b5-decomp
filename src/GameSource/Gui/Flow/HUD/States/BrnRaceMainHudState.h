@@ -33,31 +33,16 @@
 //  Reconstructed from BURNOUT_X360_ARTIST.XEX; class shape / member names / member ORDER
 //  from the DecFIGS DWARF (BrnRaceMainHudState.h, 661 lines) verbatim.
 //
-//  WHY THIS HEADER CARRIES THE MEMBERS (E1 wave 2026-08-26): until this wave the header
-//  was a bare `: public CgsGui::State` shell while BrnRaceMainHudState.cpp declared its
-//  OWN 0x7910-byte `struct RaceMainHudState` in the same namespace -- a genuine ODR fork.
-//  BrnHudFlow::Prepare does `NewPoolState<RaceMainHudState>` (sizeof(T) malloc + placement
-//  new), so with the shell header the pool carved a State-sized block while the fork's
-//  constructor zero-filled 0x7910 bytes off the end of it. The fork is DELETED and this
-//  header is the single definition; NewPoolState now carves the full object.
-//
-//  X360 OFFSETS. The console object is 0x7940 bytes -- pinned, not inferred:
-//  BrnHudFlow::Prepare @0x8251A620 loads `li r4, 0x7940` into the LinearMalloc size
-//  argument immediately before the RACE_MAIN slot's Malloc/ctor pair (0x8251A854).
-//  Each member below carries its X360 byte displacement. Offsets marked PINNED are read
-//  straight out of an X360 body (the citing function is named); offsets marked derived
-//  are chained from two pinned neighbours plus the DWARF declaration order and the
-//  component's own span, and are documentation only.
-//
-//  HOST LAYOUT IS NOT BYTE-EXACT, BY DESIGN. Per the x64 gate (and the sibling
-//  BrnFBurnMainHudState.h precedent) parity here is semantic-by-named-member: every
-//  component whose class is reconstructed is embedded BY VALUE and reached by name, and
-//  pointer widening is allowed to move the host offsets. Nothing in this class is
-//  addressed by numeric offset.
+//  The native member offsets below are guarded against ARTIST. BrnHudFlow::Prepare
+//  @0x8251A854 requests 0x7940 bytes, while the currently declared native extent and
+//  last observed member end at 0x7920. That difference remains unresolved; allocation
+//  rounding alone does not establish an additional member or alignment requirement.
+//  PINNED offsets cite original instructions; derived offsets remain documentation.
 // ===========================================================================
 namespace BrnGui
 {
     class GuiCache;   // stored by pointer only (BrnGuiCache.h)
+    struct GuiMugshotControlEvent;
 
     struct RaceMainHudState : public CgsGui::State
     {
@@ -190,19 +175,17 @@ namespace BrnGui
         void StartFreeburnChallengeTicker();                      // (DWARF .cpp:4085)
         void StartFreeburnChallengeNotActiveTicker();             // (DWARF .cpp:4185)
         void AddFakeEvents();                                     // (DWARF .cpp:4244)
-        // RESIDUE -- five more DWARF methods are NOT declared here because their parameter
+        void HandleMugshotEvent(const GuiMugshotControlEvent* lpEvent); // ARTIST82475CD0
+        void DoMugshot(const GuiMugshotControlEvent* lpEvent);          // ARTIST82474B20
+        void DoRoadRuleShot(const GuiMugshotControlEvent* lpEvent);     // ARTIST82474D10
+        // RESIDUE -- three more DWARF methods are NOT declared here because their parameter
         // types have no committed home in the tree yet, and declaring them against a
         // stand-in type would fork the signature the way the struct forked the class:
         //   SendLocaliseEvent(const char*, const char*, f32, CgsGui::LocaliseFormat)  .cpp:3491
         //   RunReplayState(BrnGui::GuiEventChangeReplayState::ReplayState)            .cpp:3850
-        //   HandleMugshotEvent(const GuiMugshotControlEvent*) / DoMugshot(...)        .cpp:3890/3916
-        //   DoRoadRuleShot(const GuiMugshotControlEvent*)                             .cpp:3983
         //   AddCrashCombo(BrnWorld::EComboEntryType, f32)                             .cpp:4058
-        // (CgsGui::LocaliseFormat, GuiEventChangeReplayState and BrnWorld::EComboEntryType
-        // are absent; GuiMugshotControlEvent's one home, BrnGuiDemangledEventTypes.h, is an
-        // opaque GuiEvent<325> header plus `u8 maPayload[12]`, while its producer writes a
-        // 24-byte payload from the record's own address: +0x00 road CgsID, +0x08 response,
-        // +0x0C image type, +0x10 opponent race-car index, +0x14 local-aggressor bool.)
+        // CgsGui::LocaliseFormat, GuiEventChangeReplayState and BrnWorld::EComboEntryType
+        // still need their native declaration homes.
 
         // ---- the static .rdata tables (DWARF BrnRaceMainHudState.h:217..221) ----------
         // 76 entries; values read from the XEX image at 0x8205AC08 and landed in the .cpp.

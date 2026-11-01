@@ -1152,10 +1152,9 @@ namespace BrnGui
         // +0xAC48/44104). s32-typed per this header's ARCI house style.
         s32 GetRoadRuleShotOpponentARCI() const;
 
-        // The shot "captured-for line" gate byte (X360 +0xAC5A/44122). FLAG: no
-        // PS3-DWARF member lands on this X360 offset (the DWARF's shot bools sit
-        // at +0xAC44..46 / +0xAC58) -- an X360-side addition, named from its one
-        // consumer (Snap fills the "CAPTURED_FOR <ruler>" line only when set).
+        // The +0xAC5A local-new-ruler flag also gates Snap's "CAPTURED_FOR" line.
+        // Keep this accessor used by the existing component; the member name is
+        // corroborated by DecFIGS BrnGuiCache.h:1815.
         bool GetRoadRuleShotCapturedLineGate() const;
 
         // One online player record (DWARF h:1836 maPlayerInfo[8]; X360
@@ -2187,9 +2186,11 @@ namespace BrnGui
         u8  mPad_AC46[2];                                // +0xAC46..+0xAC47
         // ---- road-rule-shot block (RoadRuleShotComponent::Snap @0x82415620) ----
         s32 meRoadRuleShotOpponentARCI;                  // +0xAC48 (44104) GetRoadRuleShotOpponentARCI (DWARF h:1817)
-        u8  mPad_AC4C[14];                               // +0xAC4C..+0xAC59
-        bool mbRoadRuleShotCapturedLineGate;             // +0xAC5A (44122) GetRoadRuleShotCapturedLineGate ("CAPTURED_FOR" line gate)
-        u8  mPad_AC5B[1];                                // +0xAC5B
+        CgsID mRoadRuleShotRoadId;                       // +0xAC50, naturally 8-aligned (ARTIST8247A3C4)
+        bool mbIsRoadRuleShotTime;                       // +0xAC58 (ARTIST8247A3C0)
+        bool mbRoadRuleShotActive;                       // +0xAC59 (ARTIST8247A318)
+        bool mbRoadRuleShotLocalPlayerNewRuler;           // +0xAC5A (ARTIST8247A3B8)
+        bool mbRoadRuleShotTaken;                        // +0xAC5B (ARTIST8247A3E0)
         // ⚠️ CORRECTED BOUND (E1 event-status wave 2026-08-26). This member used to read
         // `maStuntToDisplay[3]`, an unattested space-filler chosen to reach +0xAC74. The
         // console DISAGREES about everything past the first entry: GuiCache::RecEvent

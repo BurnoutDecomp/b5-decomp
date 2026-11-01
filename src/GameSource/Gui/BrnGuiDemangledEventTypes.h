@@ -33,6 +33,7 @@
 // exactly one type, no ODR fork). See the deleted shell's tombstone below.
 #include "GameSource/Gui/Events/BrnGuiEventStatsResponse.h"
 #include "GameSource/Gui/Events/BrnGuiEventReplayStatus.h"   // BrnGui::GuiReplayStatusEvent (id 524)
+#include "GameSource/Gui/Events/BrnGuiMugshotControlEvent.h"
 // [p0 map-event wave] the custom-event trio below carries a whole BrnProgression::Race by
 // value (ids 172 / 174) and the race's landmark list (id 167), so both need COMPLETE types.
 #include "SharedClasses/Progression/BrnRace.h"        // BrnProgression::Race
@@ -619,7 +620,6 @@ namespace BrnGui
     // { EActiveRaceCarIndex, f32 metres } (DWARF :6136 / :6126).
     struct GuiLeaptVehicleEvent { u8 maData[1]; s32 GetEventType() const { return 393; } };  // id 393 size 1 (raw; size not GuiEvent-shaped)
     struct GuiLocalPlayerEliminatedEvent { u8 maData[1]; s32 GetEventType() const { return 451; } };  // id 451 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiMugshotControlEvent : public CgsGui::GuiEvent<325> { u8 maPayload[12]; };  // id 325 size 24 (12B GuiEvent header + opaque payload)
     // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4392 {miCount,
     // meNearMissType}. The manager's RecvEvent case 384 reads both words and treats
     // NEAR_MISS_TYPE 2/3 (the two crash-escape flavours) as "crash escape" (@0x82420BF0).

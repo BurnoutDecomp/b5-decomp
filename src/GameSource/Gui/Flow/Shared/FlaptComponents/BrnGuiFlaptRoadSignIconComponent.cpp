@@ -98,10 +98,7 @@ namespace BrnGui
         mAptRef.mpMovieClipInst = 0;
         mAptRef.mpTransform     = 0;
 
-        mv2WorldPos.x = 0.0f;
-        mv2WorldPos.y = 0.0f;
-        mv2WorldPos.z = 0.0f;
-        mv2WorldPos.w = 0.0f;
+        mv2WorldPos.SetZero();
 
         mRoadId       = 0;
         meIconType    = E_ICON_TYPE_COUNT;
@@ -196,11 +193,7 @@ namespace BrnGui
 
             BrnFlapt::MovieClipRef lRoadTextClip;
             mAptRef.FindChildMovieClipOnFrame(&lRoadTextClip, "RoadText");
-            Vector4 lv4TextColour;
-            lv4TextColour.x = KAF_SIGN_TEXT_COLOURS[meSignColour][0];
-            lv4TextColour.y = KAF_SIGN_TEXT_COLOURS[meSignColour][1];
-            lv4TextColour.z = KAF_SIGN_TEXT_COLOURS[meSignColour][2];
-            lv4TextColour.w = KAF_SIGN_TEXT_COLOURS[meSignColour][3];
+            const Vector4 lv4TextColour(KAF_SIGN_TEXT_COLOURS[meSignColour]);
             lRoadTextClip.SetColour(lv4TextColour);
         }
     }

@@ -80,6 +80,8 @@
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h"   // FlaptAnimatorComponent
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptInterpolatorComponent.h" // FlaptInterpolatorComponent
 
+namespace CgsGui { struct GuiEventAptTrigger; }
+
 namespace BrnGui
 {
     class GuiCache;   // pointer-held
@@ -108,6 +110,9 @@ namespace BrnGui
         // mAptRef (NOT mEventMovieClip), reset that clip's timeline and remember the
         // name + file handle for the per-animator Prepare calls.
         void Prepare(const char* lacFullName, const BrnFlapt::FileRef& lFile);
+
+        // ARTIST8284CB38 is the shared single-blr body; DecFIGS h:429 names it.
+        void HandleTrigger(const CgsGui::GuiEventAptTrigger*, GuiCache*) {}
 
         // PrepareComponentsForGameMode @0x82429150 -- bind the 7 KAPC_TEXTFIELD_NAMES
         // fields out of mEventMovieClip, then per-mode bind the mode's own text fields

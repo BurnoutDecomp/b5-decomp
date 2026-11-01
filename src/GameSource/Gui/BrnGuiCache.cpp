@@ -4868,7 +4868,7 @@ namespace BrnGui
     // the return). The whole "CAPTURED_FOR <ruler>" gamertag line hangs off this byte.
     bool GuiCache::GetRoadRuleShotCapturedLineGate() const
     {
-        return mbRoadRuleShotCapturedLineGate;
+        return mbRoadRuleShotLocalPlayerNewRuler;
     }
 }
 
