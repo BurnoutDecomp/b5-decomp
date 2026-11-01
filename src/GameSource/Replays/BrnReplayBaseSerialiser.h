@@ -15,8 +15,8 @@
 //   +0x0C miBufferSize       int32_t             (Write: lwz 0xC -> size)
 //   +0x10 miBufferUsed       int32_t             (Write: lwz 0x10; Read: lwz 0x10)
 //   +0x14 miBufferRead       int32_t             (Read:  lwz 0x14 read cursor)
-//   +0x18 mpStaticBuffer     void*
-//   +0x1C .. +0x24 : see the X360-extension note below
+//   +0x18 / +0x1C           two Xbox-only words (semantic names unrecovered)
+//   +0x20 mpStaticBuffer     void*
 //   +0x24 miStaticBufferSize int32_t
 //   +0x28 meId               ESerialiserId       (RegisterSerialiser reads this)
 //   +0x2C meContext          ESerialiserContext
@@ -31,29 +31,25 @@
 // [2026-08-18 CORRECTED, wave Q round 2 -- the tail offsets above are now MEASURED, not
 // inferred.] BaseSerialiser::Construct @0x8264C280 has NO per-address JSON export, so earlier
 // passes could only guess this half. I disassembled it headless (idat.exe over a scratch copy of
-// the .i64; the function extent is 0x8264C280..0x8264C470, 124 insns) and its prologue writes
-// EVERY field, which pins the whole tail:
+// the .i64; the function extent is 0x8264C280..0x8264C470, 124 insns). Its prologue's
+// listed stores pin the written fields; time/readiness/streaming state is untouched:
 //     8264C29C  stw r4,  0x28(this)   meId              <- Construct arg 1
 //     8264C2A0  stw r5,  0x2C(this)   meContext         <- arg 2
 //     8264C2A4  stw r30, 8(this)      mpBuffer     = 0
 //     8264C2A8  stw r6,  0xC(this)    miBufferSize      <- arg 3
 //     8264C2AC  stw r30, 0x10(this)   miBufferUsed = 0
-//     8264C2B0  stw r30, 0x20(this)   <X360 extension word> = 0
+//     8264C2B0  stw r30, 0x20(this)   mpStaticBuffer = 0
 //     8264C2B4  stw r7,  0x24(this)   miStaticBufferSize <- arg 4
 //     8264C2B8  stw r30, 0(this)      meMode       = 0
 //     8264C2BC  stb r30, 4(this)      mbLocked     = false
 //     8264C2C0  stw r30, 0x14(this)   miBufferRead = 0
 //     8264C2C4  stb r30, 0x50(this)   mbIsKeyFrame = false
 //     8264C2C8  stb r9,  0x5B(this)   mbSkipModuleSerialise <- arg 6   (see below)
-//     8264C2CC  stw r30, 0x18(this)   mpStaticBuffer = 0
+//     8264C2CC  stw r30, 0x18(this)   first Xbox-only word = 0
 //     8264C2D0  stw r30, 0x1C(this)   <X360 extension word> = 0
 //     8264C41C  <macName copy loop into this+0x30>
-// So the X360 SKU's two extra words sit at +0x1C/+0x20, i.e. BETWEEN mpStaticBuffer and
-// miStaticBufferSize -- not after miStaticBufferSize where wave 1's placeholder put them. The
-// old comment already flagged the contradiction ("PreUpdateRecord reads the static-buffer-size
-// at live+0x24, 8 bytes past the DWARF +0x1C placement") and left it unresolved; Construct
-// resolves it. Nothing behavioural changes -- every access is by name -- but a wrong layout
-// comment is a real defect, so the placeholder moved to where the asm puts it.
+// The two extra words precede mpStaticBuffer, at +0x18/+0x1C. Native getters and
+// ReplayModule::StoreSerialisers independently place that pointer at +0x20.
 // meId at +0x28 (not the DWARF's +0x20) is the same X360-extension shift, and is corroborated
 // twice: RegisterSerialiser @0x821F34A0 reads `lwz 0x28(r31)`, and Construct stores arg 1 there.
 
@@ -258,8 +254,11 @@ namespace BrnReplays
         //       *(serialiser + 32) = LinearMalloc::Malloc(module linear, v14)
         // -- pointer immediately followed by its size, exactly like mpBuffer(+0x08) /
         // miBufferSize(+0x0C). So the two X360-extension words are at +0x18/+0x1C and the
-        // Construct listing's label was on the wrong store. The pad moves; nothing else does.
-        u8                 maX360Extension18[8]; // @0x18 (unmodeled X360-extension fields)
+        // Construct listing's old label was on the wrong store. Both native word
+        // stores are real data initialization. Their semantic names/roles are not
+        // retained in the PS3 type; keep the existing honest name without inventing
+        // a bit-buffer/pointer interpretation. No storage or alignment is added.
+        u32                maX360Extension18[2]; // @0x18 / @0x1C
         void*              mpStaticBuffer;     // @0x20 -- GetStaticLayout's `*(a1 + 32)`
         s32                miStaticBufferSize; // @0x24 -- Construct `stw r7, 0x24(r31)`
         ESerialiserId      meId;               // @0x28 -- read by RegisterSerialiser (lwz 0x28)
@@ -324,14 +323,7 @@ namespace BrnReplays
         // label for the observed effect, not as a recovered concept.
         // ================================================================================
         bool               mbSkipModuleSerialise; // @0x5B
-        // NOTE: the @0xNN offsets above are X360 byte offsets (4-byte pointers). On the 64-bit
-        // host mpBuffer/mpStaticBuffer are 8 bytes, so absolute host offsets differ -- all access
-        // is BY NAME, so this is immaterial; the maX360Extension1C[8] placeholder keeps the X360
-        // field SEQUENCE faithful, which is what matters. [round-3 correction: this note still
-        // named the placeholder maX360Extension20 and put it AFTER miStaticBufferSize. It was
-        // renamed and MOVED -- it sits at +0x1C, BETWEEN mpStaticBuffer and miStaticBufferSize,
-        // per Construct's `stw r30,0x1C` / `stw r30,0x20` / `stw r7,0x24` -- so it is two
-        // unnamed X360 words BEFORE miStaticBufferSize, not eight words before meId.]
+        // Native Xbox pointers and words are four bytes; the base extent remains0x5C.
     };
 
     // -------- ReadVariableQueue<BUFSIZE,ALIGN> @ X360 0x82653A60 (<13312,16>) / 0x82656CF0 (<512,16>) --------

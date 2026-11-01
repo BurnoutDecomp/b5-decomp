@@ -188,9 +188,9 @@ namespace BrnReplays
     template s32 BaseSerialiser::WriteVariableQueue<13312, 16>(CgsModule::VariableEventQueue<13312, 16>*);
 
     // @ 0x8264C280 -- the shared leaf-serialiser initialiser: stamp the id/context
-    // and buffer sizes, zero every live-state member, latch the streaming flag and
-    // copy the debug name (32-byte cap with the CgsStringUtils.h:65 length tripwire
-    // carried by CgsCore::StrCpy; "<NoName>" when none is given). X360 stores, by
+    // and buffer sizes, initialize the written state and latch the skip flag.
+    // Current StrCpy covers actual names up to31 bytes; its missing original
+    // overflow assertion/continuation remains separate debt. X360 stores, by
     // name: meId = liId (+0x28) / meContext = liContext (+0x2C) -- the second
     // parameter feeds the CONTEXT word, not the mode; meMode / mbLocked / mpBuffer /
     // miBufferUsed / miBufferRead / mpStaticBuffer / mbIsKeyFrame all zeroed;
@@ -220,18 +220,28 @@ namespace BrnReplays
                                   s32 liStaticBufferSize, const char* lpcName,
                                   s32 liSkipModuleSerialise)
     {
+        CGS_STATIC_ASSERT((sizeof(BaseSerialiser) == 0x5C), "ARTIST BaseSerialiser extent");
+        CGS_STATIC_ASSERT((__alignof(BaseSerialiser) == 4), "native BaseSerialiser alignment");
+        CGS_STATIC_ASSERT((offsetof(BaseSerialiser, maX360Extension18) == 0x18), "ARTIST first Xbox word");
+        CGS_STATIC_ASSERT((offsetof(BaseSerialiser, maX360Extension18) + sizeof(u32) == 0x1C), "ARTIST second Xbox word");
+        CGS_STATIC_ASSERT((sizeof(maX360Extension18) == 8), "two native word stores");
+        CGS_STATIC_ASSERT((offsetof(BaseSerialiser, mpStaticBuffer) == 0x20), "ARTIST static buffer pointer");
+        CGS_STATIC_ASSERT((offsetof(BaseSerialiser, mbSkipModuleSerialise) == 0x5B), "ARTIST skip byte");
+
         meId                  = static_cast<ESerialiserId>(liId);
         meContext             = static_cast<ESerialiserContext>(liContext);
         mpBuffer              = 0;
         miBufferSize          = liBufferSize;
         miBufferUsed          = 0;
+        mpStaticBuffer        = 0;
         miStaticBufferSize    = liStaticBufferSize;
         meMode                = E_MODE_IDLE;
         mbLocked              = false;
         miBufferRead          = 0;
         mbIsKeyFrame          = false;
         mbSkipModuleSerialise = (liSkipModuleSerialise != 0);
-        mpStaticBuffer        = 0;
+        maX360Extension18[0]   = 0;
+        maX360Extension18[1]   = 0;
 
         if (lpcName)
         {
