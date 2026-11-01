@@ -26,31 +26,23 @@ namespace Utils
 struct DebrisColourRandomiser
 {
 public:
-    // Store the LOW bound and the SPAN, which is what Randomise's `base + range * r`
-    // wants and what the caller's own stores build (SpawnDebris writes the low bound
-    // into +0x00 and `high - low` into +0x10 before the call). The same base/range
-    // contract Vector3Randomiser::Prepare carries.
+    // Store the minimum colour and high-minus-low span consumed by ARTIST's
+    // `minimum + span * draw` fused vector operation.
     void Prepare(Vector4 lvLow, Vector4 lvHigh)
     {
-        mVecBase  = lvLow;
-        mVecRange.x = lvHigh.x - lvLow.x;
-        mVecRange.y = lvHigh.y - lvLow.y;
-        mVecRange.z = lvHigh.z - lvLow.z;
-        mVecRange.w = lvHigh.w - lvLow.w;
+        mMinSaturationBrightness = lvLow;
+        mDiffSaturationBrightness.mV = __vsubfp(lvHigh.mV, lvLow.mV);
     }
 
-    // Draws a randomised colour into lrOut.
-    void Randomise(Vector4& lrOut, CgsNumeric::Random& lrRandom);
+    // Returns the native Vector4 result; X360 passes the hidden result pointer in r3.
+    Vector4 Randomise(CgsNumeric::Random& lrRandom);
 
 private:
-    // The base/range pair the body reads (+0x00 / +0x10).
-    Vector4 mVecBase;   // +0x00
-    Vector4 mVecRange;  // +0x10
+    // DecFIGS BrnEffectsUtils.h:221; ARTIST reads this vector at this+0x00.
+    Vector4 mMinSaturationBrightness;
+    // DecFIGS BrnEffectsUtils.h:222; ARTIST reads this vector at this+0x10.
+    Vector4 mDiffSaturationBrightness;
 
-    // One VECTOR-SLOT draw from the Random ring -- word 0 of the slot's quad, splatted
-    // (reused BY NAME via the friend grant in CgsRandom.h). A member so the friendship
-    // reaches muSeed / the ring / index.
-    static f32 DrawNextRingSplat(CgsNumeric::Random& lrRandom);
 };
 
 } // namespace Utils
