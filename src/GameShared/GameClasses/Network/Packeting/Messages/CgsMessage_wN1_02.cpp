@@ -70,17 +70,17 @@ namespace CgsNetwork
                        "it which it is doing\n");
         }
 
-        f32 lfPosition = lpMatrix->wAxis.x;
-        PackOrUnpackResult lxResult = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.x, lPosMax.x, liPosXBits);
-        lpMatrix->wAxis.x = lfPosition;
+        f32 lfPosition = lpMatrix->wAxis.mV.x;
+        PackOrUnpackResult lxResult = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.mV.x, lPosMax.mV.x, liPosXBits);
+        lpMatrix->wAxis.mV.x = lfPosition;
 
-        lfPosition = lpMatrix->wAxis.y;
-        lxResult   = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.y, lPosMax.y, liPosYBits) | lxResult;
-        lpMatrix->wAxis.y = lfPosition;
+        lfPosition = lpMatrix->wAxis.mV.y;
+        lxResult   = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.mV.y, lPosMax.mV.y, liPosYBits) | lxResult;
+        lpMatrix->wAxis.mV.y = lfPosition;
 
-        lfPosition = lpMatrix->wAxis.z;
-        lxResult   = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.z, lPosMax.z, liPosZBits) | lxResult;
-        lpMatrix->wAxis.z = lfPosition;
+        lfPosition = lpMatrix->wAxis.mV.z;
+        lxResult   = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.mV.z, lPosMax.mV.z, liPosZBits) | lxResult;
+        lpMatrix->wAxis.mV.z = lfPosition;
 
         return lxResult;
     }

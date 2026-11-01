@@ -33,8 +33,10 @@ namespace BrnNetwork
 
     static const s32 KI_CRASHING_TRAFFIC_MESSAGE_TYPE = 16;        // li r4,0x10 in PrepareForSend
 
-    static const rw::math::vpu::Vector3 KV_CRASHING_TRAFFIC_POS_MIN = { -20000, -2000, -20000, 0 };
-    static const rw::math::vpu::Vector3 KV_CRASHING_TRAFFIC_POS_MAX = {  20000,  2000,  20000, 0 };
+    static const rw::math::vpu::VectorIntrinsic KV_CRASHING_TRAFFIC_POS_MIN_LANES = { -20000.0f, -2000.0f, -20000.0f, 0.0f };
+    static const rw::math::vpu::Vector3 KV_CRASHING_TRAFFIC_POS_MIN(KV_CRASHING_TRAFFIC_POS_MIN_LANES);
+    static const rw::math::vpu::VectorIntrinsic KV_CRASHING_TRAFFIC_POS_MAX_LANES = { 20000.0f, 2000.0f, 20000.0f, 0.0f };
+    static const rw::math::vpu::Vector3 KV_CRASHING_TRAFFIC_POS_MAX(KV_CRASHING_TRAFFIC_POS_MAX_LANES);
 
     s32 CrashingTrafficMessage::GetPackedMessageSize()
     {

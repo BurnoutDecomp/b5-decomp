@@ -69,9 +69,9 @@ namespace BrnNetwork
         const CgsDev::RGBA KU_TRAFFIC_DIVERGENCE_TEXT_COLOUR    = 0xFF0000E6u;
         const CgsDev::RGBA KU_IN_THE_PAST_TEXT_COLOUR           = 0xFF0064C8u;
         const CgsDev::RGBA KU_RESTART_PENDING_TEXT_COLOUR       = 0xFFC86400u;
-        const Vector2      KV2_TRAFFIC_DIVERGENCE_TEXT_POSITION = { 251.3f, 158.0f, 0.0f, 0.0f };
-        const Vector2      KV2_IN_THE_PAST_TEXT_POSITION        = { 586.9f, 158.0f, 0.0f, 0.0f };
-        const Vector2      KV2_RESTART_PENDING_TEXT_POSITION    = { 536.85f, 133.0f, 0.0f, 0.0f };
+        const Vector2      KV2_TRAFFIC_DIVERGENCE_TEXT_POSITION(251.3f, 158.0f);
+        const Vector2      KV2_IN_THE_PAST_TEXT_POSITION(586.9f, 158.0f);
+        const Vector2      KV2_RESTART_PENDING_TEXT_POSITION(536.85f, 133.0f);
     }
 
     // =========================================================================
