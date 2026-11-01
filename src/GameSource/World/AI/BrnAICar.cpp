@@ -806,7 +806,7 @@ namespace BrnAI
         {
             char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStream << "Right is  (" << lRight.x << "," << lRight.y << "," << lRight.z << "\n";
+            lStream << "Right is  (" << lRight.mV.x << "," << lRight.mV.y << "," << lRight.mV.z << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer,
                                        "..\\..\\..\\GameSource\\World/AI/BrnAICar.h", 1312);
