@@ -58,12 +58,7 @@ namespace CgsGeometric
     // "Hacky" part: internal-edge filtering so a wall's tessellation seams do
     // not emit ghost-edge contacts.
     //
-    // Derivation provenance (walls leg 2): the 497 straight-line VMX128
-    // instructions were decoded from the image words (78 IDA "+32" source-field
-    // misprints corrected) and executed numerically; this scalar lowering was
-    // then fuzz-compared against that execution -- 600 single-lane + 2000
-    // distinct-triangle lane trials, 0 mismatches (scratchpad sim_kernel.py /
-    // fuzz_kernel.py, wallsleg2_log.md).
+    // The ARTIST VMX sequence determines the four-lane outputs and mask.
     Triangle4::Mask4 IntersectTriangle4Sphere_HackyBurnoutVersion(
         const Sphere&    lSphere,
         const Triangle4& lTriangles,
@@ -117,30 +112,38 @@ namespace CgsGeometric
         Vector3Plus& lSphereContactPoint3, Vector3Plus& lTriangleContactPoint3);
 
     // =========================================================================
+    // Original 2D SoA helper used by the Triangle4 swept kernel.
+    rw::math::vpu::VectorIntrinsic Intersect2DCircleWithTriangleSOA(
+        rw::math::vpu::VectorIntrinsic a1, rw::math::vpu::VectorIntrinsic a2,
+        rw::math::vpu::VectorIntrinsic a3, rw::math::vpu::VectorIntrinsic a4,
+        rw::math::vpu::VectorIntrinsic a5, rw::math::vpu::VectorIntrinsic a6,
+        rw::math::vpu::VectorIntrinsic a7, rw::math::vpu::VectorIntrinsic a8,
+        rw::math::vpu::VectorIntrinsic a9, rw::math::vpu::VectorIntrinsic a10,
+        rw::math::vpu::VectorIntrinsic a11, rw::math::vpu::VectorIntrinsic a12,
+        rw::math::vpu::VectorIntrinsic a13, rw::math::vpu::VectorIntrinsic a14,
+        rw::math::vpu::VectorIntrinsic a15, rw::math::vpu::VectorIntrinsic a16,
+        rw::math::vpu::VectorIntrinsic a17, rw::math::vpu::VectorIntrinsic a18,
+        rw::math::vpu::VectorIntrinsic& out0, rw::math::vpu::VectorIntrinsic& out1);
+
     // The SINGLE-triangle swept kernel and its 2D circle test (bodies in
     // CgsTriangleSphere.cpp, beside the four-wide kernel above). Signatures are the
     // declaration's, with the 16-byte vectors by const reference.
     // =========================================================================
     struct Triangle;
 
-    // Does a circle (centre, squared radius) reach a triangle given in 2D, and where?
-    // Candidates in order: the three vertices (each only when the centre lies behind
-    // that vertex's outgoing edge), then the three edges (only when the foot of the
-    // perpendicular lies on the segment); a candidate is taken when it is not farther
-    // than the best so far, the first best being the squared radius. A centre inside
-    // the triangle reports itself. Returns all-ones when anything was taken or the
-    // centre is inside.
-    rw::math::vpu::MaskScalar Intersect2DCircleWithTriangle(const Vector2&  lCentre,
-                                                            const VecFloat& lRadiusSquared,
-                                                            const Vector2&  lVert0,
-                                                            const Vector2&  lVert1,
-                                                            const Vector2&  lVert2,
-                                                            const Vector2&  lEdge01Dir,
-                                                            const Vector2&  lEdge12Dir,
-                                                            const Vector2&  lEdge20Dir,
-                                                            const VecFloat& lfEdge01Magnitude,
-                                                            const VecFloat& lfEdge12Magnitude,
-                                                            const VecFloat& lfEdge20Magnitude,
+    // Circle/triangle test; the original passes the first eleven VPU values
+    // in vector registers and writes the full intersection point.
+    rw::math::vpu::MaskScalar Intersect2DCircleWithTriangle(Vector2  lCentre,
+                                                            VecFloat lRadiusSquared,
+                                                            Vector2  lVert0,
+                                                            Vector2  lVert1,
+                                                            Vector2  lVert2,
+                                                            Vector2  lEdge01Dir,
+                                                            Vector2  lEdge12Dir,
+                                                            Vector2  lEdge20Dir,
+                                                            VecFloat lfEdge01Magnitude,
+                                                            VecFloat lfEdge12Magnitude,
+                                                            VecFloat lfEdge20Magnitude,
                                                             Vector2&        lIntersectPoint);
 
     // Swept sphere against one triangle: the face test at the entry time of the sweep into
