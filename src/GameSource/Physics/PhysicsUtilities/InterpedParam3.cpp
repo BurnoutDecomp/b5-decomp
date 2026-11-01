@@ -33,9 +33,9 @@ namespace BrnPhysics
     // ---------------------------------------------------------------------------------------
     void InterpedParam3::Construct()
     {
-        mvParams.x = 0.0f;   // vperm control unk_8327F140 + 0x00 -> lane 0
-        mvParams.y = 0.0f;   // vperm control unk_8327F140 + 0x40 -> lane 1
-        mvParams.z = 0.0f;   // vperm control unk_8327F140 + 0x80 -> lane 2
+        mvParams.SetX(0.0f);   // vperm control unk_8327F140 + 0x00 -> lane 0
+        mvParams.SetY(0.0f);   // vperm control unk_8327F140 + 0x40 -> lane 1
+        mvParams.SetZ(0.0f);   // vperm control unk_8327F140 + 0x80 -> lane 2
     }
 
     // ---------------------------------------------------------------------------------------
@@ -46,8 +46,8 @@ namespace BrnPhysics
     // ---------------------------------------------------------------------------------------
     void InterpedParam3::Prepare(f32 lParamA, f32 lParamB, f32 lParamC)
     {
-        mvParams.x = lParamA;
-        mvParams.y = lParamB;
-        mvParams.z = lParamC;
+        mvParams.SetX(lParamA);
+        mvParams.SetY(lParamB);
+        mvParams.SetZ(lParamC);
     }
 }

@@ -237,8 +237,8 @@ namespace Deformation
 
                 // Shared correction split by the two bodies' weight sum (vrefp + Newton refinement
                 // -> exact reciprocal here). lDisp is the depth-scaled normal divided by (wA+wB).
-                const f32 lfWeightA        = mavfBodyWeighting[lContact.miIndexA].x;
-                const f32 lfWeightB        = mavfBodyWeighting[lContact.miIndexB].x;
+                const f32 lfWeightA        = mavfBodyWeighting[lContact.miIndexA].GetFloat();
+                const f32 lfWeightB        = mavfBodyWeighting[lContact.miIndexB].GetFloat();
                 const f32 lfWeightSumRecip = 1.0f / (lfWeightA + lfWeightB);
 
                 const Vector3 lDisp = vpu::Mult(lContact.mNormal, lvfAToBDotN * lfWeightSumRecip);

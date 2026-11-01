@@ -42,9 +42,8 @@ namespace Deformation
                 maIKParts[liPartIndex].GetSpec()->GetPartGraphicsTransform().wAxis;
             const Vector3& lrCOMOffset =
                 GetVehiclePhysics()->GetAttribs()->mBaseAttribs.mCOMOffset;
-            lrTransform.wAxis.x += (lrMeshOffset.x - lrCOMOffset.x) - lrPartGraphicsPosition.x;
-            lrTransform.wAxis.y += (lrMeshOffset.y - lrCOMOffset.y) - lrPartGraphicsPosition.y;
-            lrTransform.wAxis.z += (lrMeshOffset.z - lrCOMOffset.z) - lrPartGraphicsPosition.z;
+            lrTransform.wAxis.mV = __vaddfp(lrTransform.wAxis.mV,
+                __vsubfp(__vsubfp(lrMeshOffset.mV, lrCOMOffset.mV), lrPartGraphicsPosition.mV));
 
             const PhysicalBodyPart* lpPart =
                 lpPartMgr->GetPartFromIndex(static_cast<u16>(maIKParts[liPartIndex].GetPartPoolIndex()));

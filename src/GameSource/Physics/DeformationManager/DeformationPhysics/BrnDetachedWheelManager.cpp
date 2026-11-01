@@ -392,9 +392,9 @@ namespace Deformation
             // Velocity-based swept distance over one frame. It feeds the RADIUS only (see the
             // banner's correction (1)); the |v|==0 vsel arm makes it exactly 0 for a still wheel.
             const Vector3 lvVelocity = lpWheel->GetLinearVelocity();
-            const f32 lfSpeedSquared = lvVelocity.x * lvVelocity.x
-                                     + lvVelocity.y * lvVelocity.y
-                                     + lvVelocity.z * lvVelocity.z;   // vmsum3fp128
+            const f32 lfSpeedSquared = static_cast<f32>(lvVelocity.GetX()) * static_cast<f32>(lvVelocity.GetX())
+                                     + static_cast<f32>(lvVelocity.GetY()) * static_cast<f32>(lvVelocity.GetY())
+                                     + static_cast<f32>(lvVelocity.GetZ()) * static_cast<f32>(lvVelocity.GetZ());   // vmsum3fp128
             const f32 lfSpeed = std::sqrt(lfSpeedSquared);            // 1/vrsqrtefp refined -> |v|
             const f32 lfSweptDistance = lfSpeed * KF_FRAME_TIMESTEP;
 
@@ -402,7 +402,7 @@ namespace Deformation
             // (`vrlimi128 v9, v12, 1, 0`) because that lane carries the radius in the event.
             const Matrix44Affine* lpRenderTransform = lpWheel->GetRenderTransform();
             Vector3 lvPosition = lpRenderTransform->wAxis;
-            lvPosition.w = 0.0f;
+            lvPosition.mV.v[3] = 0.0f;
 
             // Padded collision sphere radius: wheel radius + the 0.1 cache padding + the swept term
             // (`fadds f0, f0, f30` then `fadds f0, f0, f13`).
