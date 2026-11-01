@@ -34,7 +34,7 @@ bool SpewStaticMapInfo()
 void StaticSoundMapZone::Construct(u16 lu16Zone)
 {
     mHandle.Clear();
-    mPackedMinAndMax.SetZero();
+    mPackedMinAndMax.Set(0.0f, 0.0f, 0.0f, 0.0f);
     mu16Zone = lu16Zone;
     mbPackedMinAndMax = false;
 }
@@ -42,12 +42,12 @@ void StaticSoundMapZone::Construct(u16 lu16Zone)
 bool StaticSoundMapZone::Prepare(const CgsResource::ResourceHandle& lrHandle)
 {
     mHandle = lrHandle;
-    mPackedMinAndMax.SetZero();
+    mPackedMinAndMax.Set(0.0f, 0.0f, 0.0f, 0.0f);
     mbPackedMinAndMax = false;
     return true;
 }
 
-void StaticSoundMapZone::SetPackedMinAndMax(const Vector4& lrBounds)
+void StaticSoundMapZone::SetPackedMinAndMax(const rw::math::fpu::Vector4Template<float>& lrBounds)
 {
     CGS_ASSERT(!HasPackedMinAndMax(), "!HasPackedMinAndMax()");
     mPackedMinAndMax = lrBounds;
@@ -217,7 +217,8 @@ void SoundWorldScene::Update()
             CGS_ASSERT(lpMap != 0, "lpMap");   // l.273, then used as it stands
             const Vector2& lrMin = lpMap->GetMin();
             const Vector2& lrMax = lpMap->GetMax();
-            Vector4 lBounds = { lrMin.x, lrMin.y, lrMax.x, lrMax.y };
+            rw::math::fpu::Vector4Template<float> lBounds(
+                lrMin.mV.x, lrMin.mV.y, lrMax.mV.x, lrMax.mV.y);
             lrZone.SetPackedMinAndMax(lBounds);
         }
     }
@@ -263,7 +264,7 @@ const BrnSound::World::StaticSoundMap* SoundWorldScene::GetZoneMap(s32 liIndex) 
         lrHandle.mpResourceMemory);
 }
 
-s32 SoundWorldScene::Query(const Vector3& lrPosition, f32 lfRadius,
+s32 SoundWorldScene::Query(Vector3 lPosition, f32 lfRadius,
                            BrnSound::World::StaticSoundEntity* lpEntitiesOut,
                            s32 liMaxEntities, bool lbDrawDebug) const
 {
@@ -271,7 +272,8 @@ s32 SoundWorldScene::Query(const Vector3& lrPosition, f32 lfRadius,
                "( lpEntitiesOut ) && ( liMaxEntities > 0 )");
     CGS_ASSERT(lfRadius > 0.0f,
                "SoundWorldScene : You must supply a positive radius.");
-    QueryInfo lQuery(lrPosition, lfRadius, lpEntitiesOut, liMaxEntities, lbDrawDebug);
+    QueryInfo lQuery;
+    lQuery.Construct(lPosition, lfRadius, lpEntitiesOut, liMaxEntities, lbDrawDebug);
     CGS_ASSERT(mpLogicModule != 0, "mpLogicModule");   // l.478
     const BrnSound::Module::Io::RootInputBuffer::UpdateInfo* lpUpdateInfo =
         mpLogicModule->GetBrnInputStructure()->GetUpdateInfo();
@@ -295,7 +297,8 @@ s32 SoundWorldScene::Query(const Vector3& lrPosition, f32 lfRadius,
                        static_cast<u32>(BrnSound::World::StaticSoundMap::E_ROOT_TYPE_COUNT),
                    "Index");
         CGS_ASSERT(lrZone.HasPackedMinAndMax(), "HasPackedMinAndMax()");
-        if (lpMap->IsInRange(lrPosition, lfRadius, lrZone.GetPackedMinAndMax()))
+        if (BrnSound::World::StaticSoundMap::IsInRange(
+                lQuery.mQueryPos, lfRadius, lrZone.GetPackedMinAndMax()))
             QuerySoundMap(lQuery, GetZoneMap(liZone));
     }
     return lQuery.miEntitiesWritten;
@@ -306,19 +309,22 @@ void SoundWorldScene::QuerySoundMap(QueryInfo& lrQuery,
 {
     CGS_ASSERT(lpMap != 0, "lpMap");
     const f32 lfSubRegionSize = lpMap->GetSubRegionSize();
-    const s32 liRegionRadius =
-        static_cast<s32>(std::ceil(lrQuery.mfRadius / lfSubRegionSize));
+    const f32 lfRegionRadius =
+        static_cast<f32>(std::ceil(lrQuery.mfRadius / lfSubRegionSize));
+    const s32 liRegionRadius = static_cast<s32>(lfRegionRadius);
     const s32 liRegionSpan = 2 * liRegionRadius + 1;
-    const f32 lfFirstOffset =
-        -static_cast<f32>(liRegionRadius) * lfSubRegionSize;
+    const f32 lfFirstOffset = -(lfRegionRadius * lfSubRegionSize);
 
-    for (s32 liZ = 0; liZ < liRegionSpan; ++liZ)
+    f32 lfOffsetZ = lfFirstOffset;
+    for (s32 liZ = 0; liZ < liRegionSpan; ++liZ, lfOffsetZ += lfSubRegionSize)
     {
-        for (s32 liX = 0; liX < liRegionSpan; ++liX)
+        f32 lfOffsetX = lfFirstOffset;
+        for (s32 liX = 0; liX < liRegionSpan; ++liX, lfOffsetX += lfSubRegionSize)
         {
-            Vector3 lCellPosition = lrQuery.mQueryPos;
-            lCellPosition.x += lfFirstOffset + liX * lfSubRegionSize;
-            lCellPosition.z += lfFirstOffset + liZ * lfSubRegionSize;
+            rw::math::fpu::Vector3Template<float> lCellPosition;
+            lCellPosition.Set(lrQuery.mQueryPos.X() + lfOffsetX,
+                              lrQuery.mQueryPos.Y(),
+                              lrQuery.mQueryPos.Z() + lfOffsetZ);
             const BrnSound::World::SubRegionDescriptor* lpRegion =
                 lpMap->GetSubRegionDescrip(lCellPosition);
             if (!lpRegion)
@@ -331,32 +337,36 @@ void SoundWorldScene::QuerySoundMap(QueryInfo& lrQuery,
                 const BrnSound::World::StaticSoundEntity& lrEntity =
                     lpMap->GetEntity(liFirst + liEntity);
                 const Vector3 lPos = lrEntity.GetPos();
-                const f32 lfDx = lPos.x - lrQuery.mQueryPos.x;
-                const f32 lfDy = lPos.y - lrQuery.mQueryPos.y;
-                const f32 lfDz = lPos.z - lrQuery.mQueryPos.z;
-                const f32 lfRadius = lrEntity.GetRadius();
+                const f32 lfDx = lPos.mV.x - lrQuery.mQueryPos.X();
+                const f32 lfDy = lPos.mV.y - lrQuery.mQueryPos.Y();
+                const f32 lfDz = lPos.mV.z - lrQuery.mQueryPos.Z();
+                // ARTIST826D1A40..50/1B2C..40: Y product, then fused Z and X.
+                const f32 lfDistanceSquared =
+                    lfDx * lfDx + (lfDz * lfDz + lfDy * lfDy);
 
                 // ARTIST 0x826D1A10-0x826D1AD0: mbDrawDebug gates a sphere for each
                 // entity within the query radius, independently of the entity-radius test
                 // below. The automatic DebugInterface brackets GetRender with the existing
                 // manager critical-section acquire/release path.
                 if (lrQuery.mbDrawDebug &&
-                    lfDx * lfDx + lfDy * lfDy + lfDz * lfDz <=
-                        lrQuery.mfRadius * lrQuery.mfRadius)
+                    !(lfDistanceSquared > lrQuery.mfRadius * lrQuery.mfRadius))
                 {
                     CgsDev::DebugInterface lDebugInterface;
                     // dword_82F2F818 = 0xFF00FFA0. rw::RGBA packs red into the low byte.
                     const rw::RGBA lColour(0xA0, 0xFF, 0x00, 0xFF);
-                    lDebugInterface.GetRender().DrawSphere(
-                        lPos, lfRadius, lColour.m_rgba);
+                    CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
+                    const Vector3 lDebugPosition = lrEntity.GetPos();
+                    const f32 lfDebugRadius = lrEntity.GetRadius();
+                    lrRender.DrawSphere(lDebugPosition, lfDebugRadius, lColour.m_rgba);
                 }
 
                 // ARTIST checks output capacity after the optional debug draw, so a full
                 // result buffer still emits nearby entity spheres for this map query.
                 if (lrQuery.miEntitiesWritten >= lrQuery.miMaxEntities)
                     return;
-                if (lfDx * lfDx + lfDy * lfDy + lfDz * lfDz <=
-                    lfRadius * lfRadius)
+                // ARTIST826D1B20 reloads the radius after the optional debug service.
+                const f32 lfEntityRadius = lrEntity.GetRadius();
+                if (!(lfDistanceSquared > lfEntityRadius * lfEntityRadius))
                 {
                     lrQuery.mpEntitiesOut[lrQuery.miEntitiesWritten++] = lrEntity;
                 }

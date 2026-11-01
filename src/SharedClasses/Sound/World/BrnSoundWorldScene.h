@@ -23,15 +23,15 @@ struct StaticSoundMapZone
     void Construct(u16 lu16Zone);
     bool Prepare(const CgsResource::ResourceHandle& lrHandle);
     const CgsResource::ResourceHandle& GetResourceHandle() const { return mHandle; }
-    const Vector4& GetPackedMinAndMax() const { return mPackedMinAndMax; }
+    const rw::math::fpu::Vector4Template<float>& GetPackedMinAndMax() const { return mPackedMinAndMax; }
     u16 GetZone() const { return mu16Zone; }
-    void SetPackedMinAndMax(const Vector4& lrBounds);
+    void SetPackedMinAndMax(const rw::math::fpu::Vector4Template<float>& lrBounds);
     bool IsPrepared() const { return mHandle.mpResourceMemory != 0; }
     bool HasPackedMinAndMax() const { return mbPackedMinAndMax; }
 
 private:
     CgsResource::ResourceHandle mHandle;
-    Vector4 mPackedMinAndMax;
+    rw::math::fpu::Vector4Template<float> mPackedMinAndMax;
     u16 mu16Zone;
     bool mbPackedMinAndMax;
 };
@@ -42,19 +42,32 @@ struct SoundWorldScene : public BrnSound::Logic::IResourceRequester
 
     struct QueryInfo
     {
-        Vector3 mQueryPos;
+        rw::math::fpu::Vector3Template<float> mQueryPos;
         f32 mfRadius;
         BrnSound::World::StaticSoundEntity* mpEntitiesOut;
         s32 miMaxEntities;
         s32 miEntitiesWritten;
         bool mbDrawDebug;
 
-        QueryInfo(const Vector3& lrPos, f32 lfRadius,
-                  BrnSound::World::StaticSoundEntity* lpEntities, s32 liMax,
-                  bool lbDebug)
-            : mQueryPos(lrPos), mfRadius(lfRadius), mpEntitiesOut(lpEntities),
-              miMaxEntities(liMax), miEntitiesWritten(0), mbDrawDebug(lbDebug) {}
+        void Construct(Vector3 lPos, f32 lfRadius,
+                       BrnSound::World::StaticSoundEntity* lpEntities, s32 liMax,
+                       bool lbDebug)
+        {
+            mQueryPos.Set(lPos.mV.x, lPos.mV.y, lPos.mV.z);
+            mfRadius = lfRadius;
+            mpEntitiesOut = lpEntities;
+            miMaxEntities = liMax;
+            miEntitiesWritten = 0;
+            mbDrawDebug = lbDebug;
+        }
     };
+
+    CGS_STATIC_ASSERT((sizeof(QueryInfo) == 0x20), "ARTIST sound query info");
+    CGS_STATIC_ASSERT((offsetof(QueryInfo, mfRadius) == 0x0c), "ARTIST query radius");
+    CGS_STATIC_ASSERT((offsetof(QueryInfo, mpEntitiesOut) == 0x10), "ARTIST query output");
+    CGS_STATIC_ASSERT((offsetof(QueryInfo, miMaxEntities) == 0x14), "ARTIST query capacity");
+    CGS_STATIC_ASSERT((offsetof(QueryInfo, miEntitiesWritten) == 0x18), "ARTIST query count");
+    CGS_STATIC_ASSERT((offsetof(QueryInfo, mbDrawDebug) == 0x1c), "ARTIST query debug flag");
 
     SoundWorldScene();
     void Construct();
@@ -63,7 +76,7 @@ struct SoundWorldScene : public BrnSound::Logic::IResourceRequester
     bool Release();
     void Destruct();
     void Update();
-    s32 Query(const Vector3& lrPosition, f32 lfRadius,
+    s32 Query(Vector3 lPosition, f32 lfRadius,
               BrnSound::World::StaticSoundEntity* lpEntitiesOut,
               s32 liMaxEntities, bool lbDrawDebug) const;
 

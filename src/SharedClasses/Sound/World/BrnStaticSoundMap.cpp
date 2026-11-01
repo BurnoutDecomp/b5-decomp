@@ -15,11 +15,11 @@ namespace World
 // descriptor, or nullptr when out of range. Recovered store-for-store from the
 // X360 asm:
 //
-//   x = pos.x; if (x <  mMin.x) return 0; if (x >= mMax.x) return 0;
-//   z = pos.z; if (z <  mMin.y) return 0; if (z >= mMax.y) return 0;
+//   x = pos.x; if (x <  mMin.mV.x) return 0; if (x >= mMax.mV.x) return 0;
+//   z = pos.z; if (z <  mMin.mV.y) return 0; if (z >= mMax.mV.y) return 0;
 //   numX = miNumSubRegionsX;
-//   ix = (int)((pos.x - mMin.x) * (1.0f / mfSubRegionSize));
-//   iz = (int)((pos.z - mMin.y) * (1.0f / mfSubRegionSize));
+//   ix = (int)((pos.x - mMin.mV.x) * (1.0f / mfSubRegionSize));
+//   iz = (int)((pos.z - mMin.mV.y) * (1.0f / mfSubRegionSize));
 //   if (ix >= numX || iz >= miNumSubRegionsZ) return 0;
 //   return &mpSubRegions[numX * iz + ix];
 //
@@ -37,24 +37,24 @@ namespace World
 //    the `blt`/`bge` branches; ix/iz are only upper-bounded (`>= count`), so a
 //    truncated-negative index cannot arise because the `< min` test already
 //    rejected sub-minimum coordinates.
-const SubRegionDescriptor* StaticSoundMap::GetSubRegionDescrip(const Vector3& lrPosition) const
+const SubRegionDescriptor* StaticSoundMap::GetSubRegionDescrip(const rw::math::fpu::Vector3Template<float>& lrPosition) const
 {
-    const f32 lfX = lrPosition.x;
-    if (lfX < mMin.x)
+    const f32 lfX = lrPosition.X();
+    if (lfX < mMin.mV.x)
     {
         return 0;
     }
-    if (lfX >= mMax.x)
+    if (!(lfX < mMax.mV.x))
     {
         return 0;
     }
 
-    const f32 lfZ = lrPosition.z;
-    if (lfZ < mMin.y)
+    const f32 lfZ = lrPosition.Z();
+    if (lfZ < mMin.mV.y)
     {
         return 0;
     }
-    if (lfZ >= mMax.y)
+    if (!(lfZ < mMax.mV.y))
     {
         return 0;
     }
@@ -62,8 +62,8 @@ const SubRegionDescriptor* StaticSoundMap::GetSubRegionDescrip(const Vector3& lr
     const s32 liNumX = miNumSubRegionsX;
 
     const f32 lfInvCell = 1.0f / mfSubRegionSize;
-    const s32 liX = static_cast<s32>((lfX - mMin.x) * lfInvCell);
-    const s32 liZ = static_cast<s32>((lfZ - mMin.y) * lfInvCell);
+    const s32 liX = static_cast<s32>((lfX - mMin.mV.x) * lfInvCell);
+    const s32 liZ = static_cast<s32>((lfZ - mMin.mV.y) * lfInvCell);
 
     if (liX >= liNumX || liZ >= miNumSubRegionsZ)
     {
@@ -103,25 +103,25 @@ const StaticSoundEntity& StaticSoundMap::GetEntity(s32 liEntityIndex) const
 //   if (pos.z >= packed.w + radius) return false;   // maxZ
 //   return true;
 // The X360 body never touches `this`; it works purely on its arguments.
-bool StaticSoundMap::IsInRange(const Vector3& lrPosition, f32 lfRadius,
-                               const Vector4& lrPackedMinAndMax) const
+bool StaticSoundMap::IsInRange(const rw::math::fpu::Vector3Template<float>& lrPosition, f32 lfRadius,
+                               const rw::math::fpu::Vector4Template<float>& lrPackedMinAndMax)
 {
-    const f32 lfX = lrPosition.x;
-    if (lfX < (lrPackedMinAndMax.x - lfRadius))
+    const f32 lfX = lrPosition.X();
+    if (lfX < (lrPackedMinAndMax.X() - lfRadius))
     {
         return false;
     }
-    if (lfX >= (lrPackedMinAndMax.z + lfRadius))
+    if (!(lfX < (lrPackedMinAndMax.Z() + lfRadius)))
     {
         return false;
     }
 
-    const f32 lfZ = lrPosition.z;
-    if (lfZ < (lrPackedMinAndMax.y - lfRadius))
+    const f32 lfZ = lrPosition.Z();
+    if (lfZ < (lrPackedMinAndMax.Y() - lfRadius))
     {
         return false;
     }
-    if (lfZ >= (lrPackedMinAndMax.w + lfRadius))
+    if (!(lfZ < (lrPackedMinAndMax.W() + lfRadius)))
     {
         return false;
     }
