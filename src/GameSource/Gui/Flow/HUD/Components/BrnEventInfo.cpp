@@ -435,13 +435,13 @@ namespace
     // the unexported init range, or a live-memory dump of those six VAs on console)
     // and the real lanes are pasted in.
     // ------------------------------------------------------------------------
-    const Vector4 KV4_SAFECOLOUR   = { 1.0f, 1.0f, 1.0f, 1.0f };   // [FLAG] unk_82FB29E0
-    const Vector4 KV4_DANGERCOLOUR = { 1.0f, 0.0f, 0.0f, 1.0f };   // [FLAG] unk_82FB2AC0
+    const Vector4 KV4_SAFECOLOUR(1.0f, 1.0f, 1.0f, 1.0f);   // [FLAG] unk_82FB29E0
+    const Vector4 KV4_DANGERCOLOUR(1.0f, 0.0f, 0.0f, 1.0f);   // [FLAG] unk_82FB2AC0
 
-    const Vector4 KV4_RACE_DISTANCE_START_COLOUR = { 1.0f, 1.0f, 1.0f, 1.0f };  // [FLAG] unk_82FB2A00 (vector arg v1)
-    const Vector4 KV4_RACE_DISTANCE_END_COLOUR   = { 1.0f, 1.0f, 1.0f, 1.0f };  // [FLAG] unk_82FB2A90 (vector arg v2)
-    const Vector2 KV2_RACE_DISTANCE_START_SCALE  = { 1.0f, 1.0f, 0.0f, 0.0f };  // [FLAG] unk_82FB2BE0 (vector arg v3)
-    const Vector2 KV2_RACE_DISTANCE_END_SCALE    = { 1.0f, 1.0f, 0.0f, 0.0f };  // [FLAG] unk_82FB2D70 (vector arg v4)
+    const Vector4 KV4_RACE_DISTANCE_START_COLOUR(1.0f, 1.0f, 1.0f, 1.0f);  // [FLAG] unk_82FB2A00 (vector arg v1)
+    const Vector4 KV4_RACE_DISTANCE_END_COLOUR(1.0f, 1.0f, 1.0f, 1.0f);  // [FLAG] unk_82FB2A90 (vector arg v2)
+    const Vector2 KV2_RACE_DISTANCE_START_SCALE(1.0f, 1.0f);  // [FLAG] unk_82FB2BE0 (vector arg v3)
+    const Vector2 KV2_RACE_DISTANCE_END_SCALE(1.0f, 1.0f);  // [FLAG] unk_82FB2D70 (vector arg v4)
 }
 
 // ---------------------------------------------------------------------------
@@ -704,13 +704,13 @@ void EventInfoComponent::SetTextFieldDangerColour(TextFieldComponentType* lpText
 
     // vsubfp v13, DANGER, SAFE ; vspltw v12, progression ; vmaddfp v1, v13, v12, v0
     // == SAFE + (DANGER - SAFE) * progression, per RGBA lane. Written lane-by-lane in
-    // the house style (this tree's Vector4 is the plain four-float rw::math::vpu POD,
+    // the house style (this tree's Vector4 stores a native VPU mV register,
     // and FlaptInterpolatorComponent::SetProportion lerps the same way).
     Vector4 lv4NewColour;
-    lv4NewColour.x = KV4_SAFECOLOUR.x + (KV4_DANGERCOLOUR.x - KV4_SAFECOLOUR.x) * lfProgression;
-    lv4NewColour.y = KV4_SAFECOLOUR.y + (KV4_DANGERCOLOUR.y - KV4_SAFECOLOUR.y) * lfProgression;
-    lv4NewColour.z = KV4_SAFECOLOUR.z + (KV4_DANGERCOLOUR.z - KV4_SAFECOLOUR.z) * lfProgression;
-    lv4NewColour.w = KV4_SAFECOLOUR.w + (KV4_DANGERCOLOUR.w - KV4_SAFECOLOUR.w) * lfProgression;
+    lv4NewColour.mV.x = KV4_SAFECOLOUR.mV.x + (KV4_DANGERCOLOUR.mV.x - KV4_SAFECOLOUR.mV.x) * lfProgression;
+    lv4NewColour.mV.y = KV4_SAFECOLOUR.mV.y + (KV4_DANGERCOLOUR.mV.y - KV4_SAFECOLOUR.mV.y) * lfProgression;
+    lv4NewColour.mV.z = KV4_SAFECOLOUR.mV.z + (KV4_DANGERCOLOUR.mV.z - KV4_SAFECOLOUR.mV.z) * lfProgression;
+    lv4NewColour.mV.w = KV4_SAFECOLOUR.mV.w + (KV4_DANGERCOLOUR.mV.w - KV4_SAFECOLOUR.mV.w) * lfProgression;
 
     lpTextField->SetColour(lv4NewColour);
 }
