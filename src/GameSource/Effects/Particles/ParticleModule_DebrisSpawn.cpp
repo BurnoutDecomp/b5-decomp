@@ -144,7 +144,8 @@ namespace BrnParticle
 
             BrnEffects::Utils::DebrisColourRandomiser lRandomiser;
             lRandomiser.Prepare(lvLow, lvHigh);
-            lRandomiser.Randomise(lpRecord->mvColour, mRandom);
+            Vector4 lvDebrisColour = lRandomiser.Randomise(mRandom);
+            lpRecord->mvColour = lvDebrisColour;
         }
 
         mu16SpawnBufferCount = static_cast<u16>(mu16SpawnBufferCount + 1);
