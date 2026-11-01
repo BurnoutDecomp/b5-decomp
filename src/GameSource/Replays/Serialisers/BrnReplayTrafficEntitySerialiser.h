@@ -12,7 +12,7 @@ namespace BrnReplays
     {
     public:
         // @0x8264C978
-        s32 Construct();
+        void Construct();
         // @0x8264C710 -- returns the static-layout buffer, asserting it is big enough.
         TrafficEntitySerialiserStaticLayout* GetStaticLayout();
 
