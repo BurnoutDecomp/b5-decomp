@@ -517,20 +517,10 @@ WorldEntityModule::PreSceneUpdate(
 
         PVSIO::GetZoneRequest lRequest;
         lRequest.miPlayerIndex = 0;
-        lRequest.miPad04 = 0;
-        {
-            const Vector4 lAggregateValue = { mPositionUsedForPVS.x, mPositionUsedForPVS.y,
-                                      mPositionUsedForPVS.z, 0.0f };
-            lRequest.mPosition = lAggregateValue;
-        }
+        lRequest.mPosition = Vector4( mPositionUsedForPVS.mV );
         lRequest.miLookupIndex = mPlayerZoneResponse.GetLookupIndex();
         lRequest.mbUseVelocity = 1;
-        {
-            const Vector4 lAggregateValue = { lpRaceCarState->mLinearVelocity.x,
-                                      lpRaceCarState->mLinearVelocity.y,
-                                      lpRaceCarState->mLinearVelocity.z, 0.0f };
-            lRequest.mVelocity = lAggregateValue;
-        }
+        lRequest.mVelocity = Vector4( lpRaceCarState->mLinearVelocity.mV );
 
         mPVSModule.GetInputInterface()->mZoneRequestQueue.AddEvent( lRequest );
     }
@@ -540,12 +530,7 @@ WorldEntityModule::PreSceneUpdate(
 
         PVSIO::GetZoneRequest lRequest;
         lRequest.miPlayerIndex = 0;
-        lRequest.miPad04 = 0;
-        {
-            const Vector4 lAggregateValue = { mPositionUsedForPVS.x, mPositionUsedForPVS.y,
-                                      mPositionUsedForPVS.z, 0.0f };
-            lRequest.mPosition = lAggregateValue;
-        }
+        lRequest.mPosition = Vector4( mPositionUsedForPVS.mV );
         lRequest.miLookupIndex = mPlayerZoneResponse.GetLookupIndex();
         lRequest.mbUseVelocity = 0;
         lRequest.mVelocity.SetZero();
@@ -1822,7 +1807,7 @@ WorldEntityModule::GenerateDispatchLists(
 
     if ( lbShadowPass )
     {
-        const f32 lfShadowLodModifier = lpShadowMap->CalcLodDistanceModifier().x;
+        const f32 lfShadowLodModifier = lpShadowMap->CalcLodDistanceModifier().mV.x;
 
         for ( u32 luEntity = 0; luEntity < luNumEntities; luEntity++ )
         {
