@@ -32,20 +32,21 @@ ICPUShader* MaterialAnimationFactory::Create(f32 lfPeriod, f32 lfStepsU, f32 lfS
 
 MaterialAnimationFactory& MaterialAnimationFactory::Instance()
 {
-    return *spInstance;
+    extern MaterialAnimationFactory mInstance;
+    return mInstance;
 }
 
 void ShaderConstantsCPU::SetCPUShader(ICPUShader* lpShader,
                                      const CgsGraphics::MaterialAssembly* lpMaterial)
 {
-    mpCPUShader.muSlot = static_cast<u32>(reinterpret_cast<uintptr_t>(lpShader));
+    mpCPUShader = lpShader;
     lpShader->Attach(lpMaterial);
 }
 
 void ShaderConstantsCPU::Dispatch(f32 lfTime, const CgsGraphics::MaterialAssembly* lpMaterial,
                                  CgsGraphics::MaterialTechnique* lpTechnique) const
 {
-    if (mpCPUShader.Get()) mpCPUShader->Execute(lfTime, lpMaterial, lpTechnique);
+    if (mpCPUShader) mpCPUShader->Execute(lfTime, lpMaterial, lpTechnique);
 }
 
 // ARTIST 827E9740..97FC: search the technique's VERTEX bindings by the
@@ -86,9 +87,9 @@ void SmoothLoopAnimation::OnCalculateOffset(const CgsGraphics::MaterialAssembly*
     Vector4 lValue;
     lpMaterial->GetCPUShaderConstants()->GetValue("AnimDuration", lValue);
     const f32 lfRemainder = static_cast<f32>(std::fmod(static_cast<double>(lfTime),
-                                                     static_cast<double>(lValue.x)));
+                                                     static_cast<double>(lValue.mV.x)));
     {
-        const Vector4 lAggregateValue = {lfRemainder / lValue.x, 0.0f, 0.0f, 0.0f};
+        const Vector4 lAggregateValue(lfRemainder / lValue.mV.x, 0.0f, 0.0f, 0.0f);
         lrOffset = lAggregateValue;
     }
 }
@@ -100,15 +101,15 @@ void SteppedLoopAnimation::OnCalculateOffset(const CgsGraphics::MaterialAssembly
     Vector4 lValue;
     const ShaderConstantsCPU* lpConstants = lpMaterial->GetCPUShaderConstants();
     lpConstants->GetValue("AnimDuration", lValue);
-    const f32 lfDuration = lValue.x;
+    const f32 lfDuration = lValue.mV.x;
     lpConstants->GetValue("AnimNumberOfFramesU", lValue);
-    const f32 lfInvSteps = 1.0f / lValue.x;
+    const f32 lfInvSteps = 1.0f / lValue.mV.x;
     const f32 lfRemainder = static_cast<f32>(std::fmod(static_cast<double>(lfTime),
                                                      static_cast<double>(lfDuration)));
     const f32 lfFrame = static_cast<f32>(std::floor(static_cast<double>(
         lfRemainder / (lfInvSteps * lfDuration))));
     {
-        const Vector4 lAggregateValue = {lfFrame * lfInvSteps, 0.0f, 0.0f, 0.0f};
+        const Vector4 lAggregateValue(lfFrame * lfInvSteps, 0.0f, 0.0f, 0.0f);
         lrOffset = lAggregateValue;
     }
 }
@@ -121,11 +122,11 @@ void SteppedGridLoopAnimation::OnCalculateOffset(const CgsGraphics::MaterialAsse
     Vector4 lValue;
     const ShaderConstantsCPU* lpConstants = lpMaterial->GetCPUShaderConstants();
     lpConstants->GetValue("AnimDuration", lValue);
-    const f32 lfDuration = lValue.x;
+    const f32 lfDuration = lValue.mV.x;
     lpConstants->GetValue("AnimNumberOfFramesU", lValue);
-    const f32 lfInvU = 1.0f / lValue.x;
+    const f32 lfInvU = 1.0f / lValue.mV.x;
     lpConstants->GetValue("AnimNumberOfFramesV", lValue);
-    const f32 lfFramesV = lValue.x;
+    const f32 lfFramesV = lValue.mV.x;
     const f32 lfRemainderU = static_cast<f32>(std::fmod(static_cast<double>(lfTime),
                                                       static_cast<double>(lfDuration)));
     const f32 lfFrameU = static_cast<f32>(std::floor(static_cast<double>(
@@ -138,7 +139,7 @@ void SteppedGridLoopAnimation::OnCalculateOffset(const CgsGraphics::MaterialAsse
     const f32 lfFrameV = static_cast<f32>(std::floor(static_cast<double>(
         lfRemainderV / (lfInvV * lfDurationV))));
     {
-        const Vector4 lAggregateValue = {lfOffsetU, lfFrameV * lfInvV, 0.0f, 0.0f};
+        const Vector4 lAggregateValue(lfOffsetU, lfFrameV * lfInvV, 0.0f, 0.0f);
         lrOffset = lAggregateValue;
     }
 }
