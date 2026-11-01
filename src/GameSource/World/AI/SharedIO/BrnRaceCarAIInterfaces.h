@@ -177,7 +177,7 @@ namespace BrnAI
             // BitArray<8> == CgsContainers::BitArray<8> (single 64-bit field, 8 bytes).
             typedef CgsContainers::BitArray<8u> ActiveRaceCarBitArray;   // DWARF :44
 
-            // ---- interface (this batch's 17 methods; remaining DWARF methods live in sibling TUs) ----
+            // ---- interface (this batch's 19 methods; remaining DWARF methods live in sibling TUs) ----
             void ActivateRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex, EActiveRaceCarIndex leActiveRaceCarIndex);   // :79
             void DeactivateRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex, bool lbIsInAMode);                          // :85
             void DetachAIControl(EGlobalRaceCarIndex leGlobalRaceCarIndex);                                              // :90
@@ -220,6 +220,8 @@ namespace BrnAI
             Vector3               GetPlayerCarDirection() const;                                   // :171
             EActiveRaceCarIndex   GetPlayerActiveRaceCarIndex() const;                             // :172
             const Matrix44Affine& GetActiveRaceCarMatrix(EActiveRaceCarIndex leActiveRaceCarIndex) const;   // :173
+            Vector3               GetActiveRaceCarVelocity(EActiveRaceCarIndex leActiveRaceCarIndex) const; // :174
+            f32                   GetActiveRaceCarSpeed(EActiveRaceCarIndex leActiveRaceCarIndex) const;    // :175
             u16                   GetActiveRaceCarSection(EActiveRaceCarIndex leActiveRaceCarIndex) const;   // :176
             bool                  IsActiveRaceCarInAir(EActiveRaceCarIndex leActiveRaceCarIndex) const;      // :177
             bool                  IsActiveRaceCarCrashing(EActiveRaceCarIndex leActiveRaceCarIndex) const;   // :178
