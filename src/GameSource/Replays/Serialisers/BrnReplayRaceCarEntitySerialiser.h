@@ -15,7 +15,7 @@ namespace BrnReplays
     {
     public:
         // @0x8264C4C0
-        s32 Construct();
+        void Construct();
         // @0x822A3400 -- returns the static-layout buffer, asserting it is big enough.
         RaceCarEntitySerialiserStaticLayout* GetStaticLayout();
         // @0x82657A48 -- clear both frames once. Its only original caller

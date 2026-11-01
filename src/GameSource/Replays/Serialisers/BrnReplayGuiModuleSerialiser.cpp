@@ -3,11 +3,11 @@
 
 namespace BrnReplays
 {
-    int GuiModuleSerialiser::Construct()
+    void GuiModuleSerialiser::Construct()
     {
-        int liResult = BaseSerialiser::Construct(10, 0, 2048, 992, "GuiModule", 0);
+        BaseSerialiser::Construct(static_cast<ESerialiserId>(10), E_CONTEXT_NORMAL,
+                                 2048, 992, "GuiModule", false);
         mbStaticLayoutReset = false;
-        return liResult;
     }
 
     GuiModuleStaticLayout* GuiModuleSerialiser::GetStaticLayout()

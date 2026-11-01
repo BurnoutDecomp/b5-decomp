@@ -24,7 +24,7 @@ namespace BrnReplays
     {
     public:
         // @0x8264C6C0
-        s32 Construct();
+        void Construct();
         // @0x822A4090 -- returns the static-layout buffer, asserting it is big enough.
         PropSerialiserStaticLayout* GetStaticLayout();
 

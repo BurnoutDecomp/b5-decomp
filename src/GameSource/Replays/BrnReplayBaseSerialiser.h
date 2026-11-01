@@ -88,8 +88,11 @@ namespace BrnReplays
         // here (home of BaseSerialiser); the body lives in the BaseSerialiser TU.
         // The 6th argument (r9) is the one that lands in mbSkipModuleSerialise -- named for it
         // now that `stb r9, 0x5B(r31)` is measured (see the layout note at the top of this file).
-        s32 Construct(s32 liId, s32 liContext, s32 liBufferSize, s32 liStaticBufferSize,
-                      const char* lpcName, s32 liSkipModuleSerialise);
+        // DWARF supplies the void return and enum formals. Xbox adds the final
+        // canonical0/1 skip input, stored directly in its bool member.
+        void Construct(ESerialiserId leId, ESerialiserContext leContext,
+                       s32 liBufferSize, s32 liStaticBufferSize,
+                       const char* lpcName, bool lbSkipModuleSerialise);
 
         // --- read/write/seek primitives owned by THIS TU ---
 

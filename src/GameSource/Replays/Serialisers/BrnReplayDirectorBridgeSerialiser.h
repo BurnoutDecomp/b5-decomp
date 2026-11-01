@@ -58,7 +58,7 @@ namespace BrnReplays
         // @0x8264C498 (this file's earlier slice, de-forked onto the real base) --
         // parameterise the shared BaseSerialiser::Construct with this stream's id
         // (3), the 0x8000 buffer pair and the channel name.
-        s32 Construct();
+        void Construct();
 
         // The static-buffer view with its size tripwire, and the game-action-queue
         // stream step both Read and Write chain after the ten spans (both bodied in

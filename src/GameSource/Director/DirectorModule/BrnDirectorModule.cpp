@@ -116,12 +116,12 @@ void DirectorModule::Construct(f32 lfTime)
     mMainDirector.Construct(&mDirectorResourceManager, lfTime);
 
     mDirectorSerialiser.Construct(
-        /* liId               */ 4,
-        /* liMode             */ 0,
+        /* leId               */ static_cast<BrnReplays::ESerialiserId>(4),
+        /* leContext          */ BrnReplays::E_CONTEXT_NORMAL,
         /* liBufferSize       */ 1024,
         /* liStaticBufferSize */ 384,
         /* lpcName            */ "DirectorModule",
-        /* liFlag             */ 0);
+        /* lbSkipModuleSerialise */ false);
 
     // Budget literals are the X360 rodata floats flt_82004014 (Pre SQ / Post Gui) and
     // flt_82001C98 (Main) -- both cross-confirmed elsewhere in this codebase as 0.1f and

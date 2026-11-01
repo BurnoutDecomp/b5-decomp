@@ -4,7 +4,7 @@
 //   (BrnReplays::GameModuleSerialiser)
 //
 //   Construct @ 0x8264C6A0:
-//       return BrnReplays::BaseSerialiser::Construct(
+//       BrnReplays::BaseSerialiser::Construct(
 //                  this, 5, 0, 1024, 1024, "GameModule", 0);
 //
 // Parameterises the real shared BaseSerialiser with channel id 5, 1 KiB stream
@@ -14,6 +14,7 @@ namespace BrnReplays
 {
     void GameModuleSerialiser::Construct()
     {
-        BaseSerialiser::Construct(5, 0, 1024, 1024, "GameModule", false);
+        BaseSerialiser::Construct(static_cast<ESerialiserId>(5), E_CONTEXT_NORMAL,
+                                 1024, 1024, "GameModule", false);
     }
 }

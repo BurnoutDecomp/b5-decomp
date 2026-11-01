@@ -33,11 +33,11 @@ namespace BrnReplays
 {
     // -------------------------------------------------------------------------
 
-    s32 PropEntitySerialiser::Construct()
+    void PropEntitySerialiser::Construct()
     {
-        s32 liResult = BaseSerialiser::Construct(6, 0, 0x4000, 0x7480, "PropEntity", 1);
+        BaseSerialiser::Construct(static_cast<ESerialiserId>(6), E_CONTEXT_NORMAL,
+                                 0x4000, 0x7480, "PropEntity", true);
         mbPreviousFrameInitialized = false;
-        return liResult;
     }
 
     PropSerialiserStaticLayout* PropEntitySerialiser::GetStaticLayout()

@@ -38,14 +38,14 @@ namespace BrnReplays
 {
     // -------------------------------------------------------------------------
 
-    s32 TrafficEntitySerialiser::Construct()
+    void TrafficEntitySerialiser::Construct()
     {
         // X360: ori r7,0xD480 over `lis 3` -> 0x3D480 static; `lis 1`|0x4000 -> 0x14000
         // dynamic; id 7; mode 0; "TrafficEntity"; flag 1.
-        s32 liResult = BaseSerialiser::Construct(7, 0, 0x14000, 0x3D480, "TrafficEntity", 1);
+        BaseSerialiser::Construct(static_cast<ESerialiserId>(7), E_CONTEXT_NORMAL,
+                                 0x14000, 0x3D480, "TrafficEntity", true);
         mbStaticLayoutCleared = false;
         mbDeltaActive         = false;
-        return liResult;
     }
 
     TrafficEntitySerialiserStaticLayout* TrafficEntitySerialiser::GetStaticLayout()

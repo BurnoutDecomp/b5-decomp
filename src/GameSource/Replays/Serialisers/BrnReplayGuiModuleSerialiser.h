@@ -9,7 +9,7 @@ namespace BrnReplays
 class GuiModuleSerialiser : public BaseSerialiser
 {
 public:
-    s32 Construct();
+        void Construct();
     GuiModuleStaticLayout* GetStaticLayout();
     s32 Read();
     s32 Write();
