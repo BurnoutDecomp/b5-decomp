@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "rw/rwcore_structs.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 
 // The post-fx render target the bloom chain draws through. Pointer-only here (the documented
 // cascade-avoidance forward declaration); defined in
@@ -24,8 +25,6 @@ public:
                 f32 lfThreshold, f32 lfWhiteLevel);
 
 private:
-    renderengine::ProgramBufferData* CreateProgram(const void* lpMicrocode,
-                                                   u32 luSize, bool lbPixelProgram);
     // Parameter names are the DecFIGS DWARF's own (BrnPostFxBloom.cpp:285 / :310 / :446), and they
     // are not cosmetic. In the two blur passes NEITHER argument is purely a destination: the two-pass
     // blur PING-PONGS -- it samples lpBloomRt into lpWorkRt, resolves, then samples lpWorkRt back into
