@@ -86,7 +86,7 @@ namespace Vehicle
                 }
 
                 const VecFloat lvfImpactTime = PredictCarWorldContactTime(lContact);
-                lOrderer.AddContact(&lContact, lvfImpactTime.x);
+                lOrderer.AddContact(&lContact, lvfImpactTime.GetFloat());
             }
 
             // Dispatch the final group.
