@@ -48,7 +48,6 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"                // ScoringSystem::GetCrashScorer (case 279)
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"  // CrashModeScoring (case 279)
 #include "GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h"                  // HUDMessageLogic::ComboPerformedMessage (case 133)
-#include <stdlib.h>                                               // getenv (the [UI-gate] diag guard)
 #include <cstring>                                                 // memset/strncpy (the 537 ticker record)
 
 namespace BrnGame
@@ -221,9 +220,6 @@ namespace
     };
     CGS_STATIC_ASSERT((sizeof(NeckAndNeckEventWire421) == 1), "GUI 421 size 1");
 
-    // [DIAG] NOT IN THE X360 BINARY -- the race-mode HUD message rung (BRN_MODEMGR_DIAG, first 24
-    // lines): which HUDMessageLogic action became which GUI event, with its car slot and value
-    // (the split seconds for 245, the finish place for 247).
 
     // The free-burn challenge GUI records the 152..160 arms post, TU-local (their canonical
     // opaque homes are in BrnGuiDemangledEventTypes.h). Member
@@ -335,17 +331,11 @@ namespace
             return;
         }
 
-        // [DIAG] the `[UI-gate]` ladder's Gui-event rung. NOT IN THE X360 BINARY. Same logger,
-        // same env guard (BRN_PROP_DIAG) and same first-N latch as the rest of the ladder.
-        static s32        siDiagLinesLeft = 8;
 
         // ⭐ [minimap blips, issue #9, 2026-09-07] THE PENDING SAT-NAV RECORD. The console keeps ONE
         // GuiEventUpdateSatNav (2320 bytes) on its frame across the whole drain, with its icon count
-        // zeroed at entry; the case-45 arm APPENDS into it and the tail posts it ONCE, after the
-        // loop, when the count is > 0. Static, not stack: the single-threaded build's oversized-
-        // event-local convention (the world bridge's own per-frame 199 record does the same). Its
-        // never-written tail bytes stay zero here where the console's frame local carried junk.
-        static BrnGui::GuiEventUpdateSatNav lPendingSatNavEvent;
+        // zeroed at entry; case45 appends into it and the tail posts it once when nonempty.
+        BrnGui::GuiEventUpdateSatNav lPendingSatNavEvent;
         s32 liPendingSatNavIcons = 0;
 
         const CgsModule::Event* lpAction     = 0;
@@ -373,7 +363,7 @@ namespace
             // selected model from ResetPlayerCarAction+0x20.
             case BrnGameState::GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR:
             {
-                const auto& lrReset = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::ResetPlayerCarAction& lrReset = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::ResetPlayerCarAction*>(lpAction);
                 CGS_ASSERT(lrReset.mCarModelId != 0,
                            "lChangeCarEvent.mCarId != kCGSID_NULL");
@@ -409,7 +399,7 @@ namespace
             // event types widen their pointers together on PC; no second profile producer is added.
             case BrnGameState::GameStateModuleIO::E_ACTION_PROGRESSION_PROFILE_DATA:
             {
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::ProgressionProfileDataAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::ProgressionProfileDataAction*>(lpAction);
                 BrnGui::GuiEventProgressionProfileData lEvent;
                 lEvent.mpProfile = lrAction.mpProgressionProfile;
@@ -429,9 +419,9 @@ namespace
             case BrnGameState::GameStateModuleIO::E_ACTION_REMOTE_PLAYER_DISCONNECTED:
             {
                 CGS_ASSERT(lpAction != 0, "lpNetworkRemotePlayerDisconnectAction");
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction*>(lpAction);
-                BrnGui::GuiNetworkRemotePlayerDisconnectEvent lEvent = {};
+                BrnGui::GuiNetworkRemotePlayerDisconnectEvent lEvent = BrnGui::GuiNetworkRemotePlayerDisconnectEvent();
                 lEvent.SetNetworkPlayerID(lrAction.mPlayerID);
                 lEvent.SetActiveRaceCarIndex(lrAction.meActiveRaceCarIndex);
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -444,9 +434,9 @@ namespace
             case 15:
             {
                 CGS_ASSERT(lpAction != 0, "lpCompletedStuntAction != NULL");
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::CompletedStuntAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::CompletedStuntAction*>(lpAction);
-                BrnGui::GuiCompletedStuntEvent lEvent = {};
+                BrnGui::GuiCompletedStuntEvent lEvent = BrnGui::GuiCompletedStuntEvent();
                 lEvent.muStuntActionComplete = lrAction.muStuntActionComplete;
                 lEvent.mfCompletedBarrelRollAngle = lrAction.mfCompletedBarrelRollAngle;
                 lEvent.mfCompletedAirSpinAngle = lrAction.mfCompletedAirSpinAngle;
@@ -465,9 +455,9 @@ namespace
             case 16:
             {
                 CGS_ASSERT(lpAction != 0, "lpInProgressStuntAction != NULL");
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::InProgressStuntAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::InProgressStuntAction*>(lpAction);
-                BrnGui::GuiInProgressStuntEvent lEvent = {};
+                BrnGui::GuiInProgressStuntEvent lEvent = BrnGui::GuiInProgressStuntEvent();
                 lEvent.muStuntActionInProgress = lrAction.muStuntActionInProgress;
                 lEvent.mfInProgressBarrelRollAngle = lrAction.mfInProgressBarrelRollAngle;
                 lEvent.mfInProgressAirSpinAngle = lrAction.mfInProgressAirSpinAngle;
@@ -500,7 +490,7 @@ namespace
                 const s32* lpActionWords = reinterpret_cast<const s32*>(lpAction);
                 if ((lpActionWords[0] == 2 || lpActionWords[0] == 16) && lpActionWords[1] != 10)
                 {
-                    BrnGui::GuiEventRunFsm lEvent = {};
+                    BrnGui::GuiEventRunFsm lEvent = BrnGui::GuiEventRunFsm();
                     lEvent.mFsmId = CgsIDCompress("BRNEVENTFSM");
                     lEvent.mInitialStateId = 0;
                     lEvent.meFsmToRun = BrnGui::E_GUI_HUD_EVENT;
@@ -514,7 +504,7 @@ namespace
             // E_SPLASH_STATE_STOP (1), then posts GUI 269 / 4 bytes.
             case 32:
             {
-                BrnGui::GuiEventNetworkSplashEvent lEvent = {};
+                BrnGui::GuiEventNetworkSplashEvent lEvent = BrnGui::GuiEventNetworkSplashEvent();
                 lEvent.meSplashState = BrnGui::GuiEventNetworkSplashEvent::E_SPLASH_STATE_STOP;
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -527,7 +517,7 @@ namespace
                 const u8* lpActionBytes = reinterpret_cast<const u8*>(lpAction);
                 if (lpActionBytes[4] != 0)
                 {
-                    BrnGui::GuiEventRunFsm lEvent = {};
+                    BrnGui::GuiEventRunFsm lEvent = BrnGui::GuiEventRunFsm();
                     lEvent.mFsmId = CgsIDCompress("BRNFBFSM");
                     lEvent.mInitialStateId = 0;
                     if (lpActionBytes[5] == 1)
@@ -556,9 +546,9 @@ namespace
             // words to the raw 8-byte GUI 347 record. No downstream case-347 reader was found.
             case BrnGameState::GameStateModuleIO::E_ACTION_CRASH_COMBO:
             {
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::CrashComboAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::CrashComboAction*>(lpAction);
-                BrnGui::GuiCrashComboEvent lEvent = {};
+                BrnGui::GuiCrashComboEvent lEvent = BrnGui::GuiCrashComboEvent();
                 std::memcpy(lEvent.maData, &lrAction.meEntryType, sizeof(lrAction.meEntryType));
                 std::memcpy(lEvent.maData + sizeof(lrAction.meEntryType), &lrAction.mfValue,
                             sizeof(lrAction.mfValue));
@@ -571,8 +561,8 @@ namespace
             {
                 typedef BrnGameState::HUDMessageLogic::StuntPerformedMessage StuntPerformedAction;
                 CGS_STATIC_ASSERT((sizeof(StuntPerformedAction) == 24), "X360 action 132 payload size");
-                const auto& lrAction = *reinterpret_cast<const StuntPerformedAction*>(lpAction);
-                BrnGui::GuiHUDMessageStuntPerformed lEvent = {};
+                const StuntPerformedAction& lrAction = *reinterpret_cast<const StuntPerformedAction*>(lpAction);
+                BrnGui::GuiHUDMessageStuntPerformed lEvent = BrnGui::GuiHUDMessageStuntPerformed();
                 lEvent.mStuntInfo = lrAction.mStuntInfo;
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -589,8 +579,8 @@ namespace
                 CGS_STATIC_ASSERT((offsetof(ComboPerformedAction, mfComboTime) == 0), "X360 action 133 float");
                 CGS_STATIC_ASSERT((offsetof(ComboPerformedAction, miComboScore) == 4), "X360 action 133 score");
                 CGS_STATIC_ASSERT((offsetof(ComboPerformedAction, mbValidCombo) == 8), "X360 action 133 validity");
-                const auto& lrAction = *reinterpret_cast<const ComboPerformedAction*>(lpAction);
-                BrnGui::GuiHUDMessageComboPerformed lEvent = {};
+                const ComboPerformedAction& lrAction = *reinterpret_cast<const ComboPerformedAction*>(lpAction);
+                BrnGui::GuiHUDMessageComboPerformed lEvent = BrnGui::GuiHUDMessageComboPerformed();
                 lEvent.miScore = lrAction.miComboScore;
                 lEvent.mbBestScore = lrAction.mbValidCombo;
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -603,7 +593,7 @@ namespace
             // unwritten; HudMessageAnalyzer's case 431 ignores the byte and triggers a fixed tag.
             case 134:
             {
-                BrnGui::GuiHUDMessageStuntTimeUp lEvent = {};
+                BrnGui::GuiHUDMessageStuntTimeUp lEvent = BrnGui::GuiHUDMessageStuntTimeUp();
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }
@@ -612,9 +602,9 @@ namespace
             // GUI 392 / 1 byte; copy the field representation rather than converting bool.
             case BrnGameState::GameStateModuleIO::E_ACTION_SHOWTIME_INTRO_START:
             {
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::ShowtimeIntroAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::ShowtimeIntroAction*>(lpAction);
-                BrnGui::GuiShowtimeTriggered lEvent = {};
+                BrnGui::GuiShowtimeTriggered lEvent = BrnGui::GuiShowtimeTriggered();
                 std::memcpy(lEvent.maData, &lrAction.mbStart, sizeof(lEvent.maData));
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -624,9 +614,9 @@ namespace
             // the online or offline stunt scorer from current GameMode::mbIsOnline (+172).
             case BrnGameState::GameStateModuleIO::E_ACTION_POWER_PARK_RESULT:
             {
-                const auto* const lpcAction = reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::PowerParkResultAction* const lpcAction = reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::PowerParkResultAction*>(lpAction);
-                BrnGui::GuiPowerParkResult lEvent = {};
+                BrnGui::GuiPowerParkResult lEvent = BrnGui::GuiPowerParkResult();
                 lEvent.meOutcome = lpcAction->meOutcome;
                 lEvent.miOverallRating = lpcAction->miOverallRating;
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -655,9 +645,9 @@ namespace
             // ARTIST 0x823ED854..0x823ED86C: online car id -> GUI 566 (8 bytes).
             case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_ONLINE:
             {
-                const auto* lpChanged = reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::CarSelectionChangedOnlineAction* lpChanged = reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::CarSelectionChangedOnlineAction*>(lpAction);
-                BrnGui::GuiCarSelectionChangedOnline lEvent = {};
+                BrnGui::GuiCarSelectionChangedOnline lEvent = BrnGui::GuiCarSelectionChangedOnline();
                 std::memcpy(lEvent.maData, &lpChanged->mCarId, sizeof(lpChanged->mCarId));
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -666,7 +656,7 @@ namespace
             // ARTIST 0x823EA6E8..0x823EA6FC: start junkyard car select with word 1.
             case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECT_START_GUI_ON_GAME_START:
             {
-                BrnGui::GuiCarSelectStartEvent lEvent = {};
+                BrnGui::GuiCarSelectStartEvent lEvent = BrnGui::GuiCarSelectStartEvent();
                 const s32 liCarSelectFlow = 1;
                 std::memcpy(lEvent.maData, &liCarSelectFlow, sizeof(liCarSelectFlow));
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -677,7 +667,7 @@ namespace
             case 74:
                 if (*reinterpret_cast<const u8*>(lpAction) == 0)
                 {
-                    BrnGui::GuiCarSelectReadyToExitEvent lEvent = {};
+                    BrnGui::GuiCarSelectReadyToExitEvent lEvent = BrnGui::GuiCarSelectReadyToExitEvent();
                     PushGuiEvent(lEvent, lpGuiInput);
                 }
                 break;
@@ -685,7 +675,7 @@ namespace
             // ARTIST 0x823ED870..0x823ED888: forward the action byte as GUI 84.
             case 78:
             {
-                BrnGui::GuiCarSelectAbortEvent lEvent = {};
+                BrnGui::GuiCarSelectAbortEvent lEvent = BrnGui::GuiCarSelectAbortEvent();
                 lEvent.maData[0] = *reinterpret_cast<const u8*>(lpAction);
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -724,7 +714,7 @@ namespace
             // statically compared with the named action types in that producer TU.
             case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_RENDER_IMAGE:
             {
-                const auto* lpRenderImageAction =
+                const BrnGameState::GameStateModuleIO::ImageGalleryRenderImageAction* lpRenderImageAction =
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageGalleryRenderImageAction*>(
                         lpAction);
                 CGS_ASSERT(lpRenderImageAction != 0, "lpRenderImageAction");
@@ -737,7 +727,7 @@ namespace
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_IMAGE_INFO:
             {
-                const auto* lpImageInfoAction =
+                const BrnGameState::GameStateModuleIO::ImageGalleryImageInfoAction* lpImageInfoAction =
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageGalleryImageInfoAction*>(
                         lpAction);
                 CGS_ASSERT(lpImageInfoAction != 0, "lpImageInfoAction");
@@ -755,7 +745,7 @@ namespace
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_COUNT_ACTION:
             {
-                const auto* lpCountAction =
+                const BrnGameState::GameStateModuleIO::ImageGalleryCountAction* lpCountAction =
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageGalleryCountAction*>(
                         lpAction);
                 BrnGui::GuiImageGalleryCollectedCountEvent lEvent;
@@ -766,7 +756,7 @@ namespace
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_IMAGE_GALLERY_DATA_ACTION:
             {
-                const auto* lpDataAction =
+                const BrnGameState::GameStateModuleIO::ImageGalleryDataAction* lpDataAction =
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::ImageGalleryDataAction*>(
                         lpAction);
                 BrnGui::GuiImageGalleryCollectedDataEvent lEvent;
@@ -791,7 +781,7 @@ namespace
             // ARTIST 0x823EA730..0x823EA748: copy the time word as GUI 82 (four bytes).
             case 82:
             {
-                BrnGui::GuiCarSelectOnlineTimeLeftEvent lEvent = {};
+                BrnGui::GuiCarSelectOnlineTimeLeftEvent lEvent = BrnGui::GuiCarSelectOnlineTimeLeftEvent();
                 std::memcpy(lEvent.maData, lpAction, sizeof(lEvent.maData));
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -804,7 +794,7 @@ namespace
 
             case 183:
             {
-                const auto& lrCars =
+                const Array<CgsID, 8>& lrCars =
                     *reinterpret_cast<const Array<CgsID, 8>*>(lpAction);
                 Array<CgsID, 8> lReply;
                 lReply.Clear();
@@ -821,7 +811,7 @@ namespace
             {
                 typedef BrnGameState::GameStateModuleIO::CarSelectionResponseAction CarSelectionAction;
                 CGS_STATIC_ASSERT((sizeof(CarSelectionAction) == 1072), "X360 action 184 payload size");
-                const auto& lrAction = *reinterpret_cast<const CarSelectionAction*>(lpAction);
+                const CarSelectionAction& lrAction = *reinterpret_cast<const CarSelectionAction*>(lpAction);
                 BrnGui::GuiCarSelectionEvent lEvent;
                 lEvent.maCars.Clear();
 
@@ -864,10 +854,10 @@ namespace
             {
                 typedef BrnGameState::GameStateModuleIO::LeaderReachedBoundaryAction LeaderBoundaryAction;
                 CGS_STATIC_ASSERT((sizeof(LeaderBoundaryAction) == 12), "X360 action 164 payload size");
-                const auto& lrAction = *reinterpret_cast<const LeaderBoundaryAction*>(lpAction);
+                const LeaderBoundaryAction& lrAction = *reinterpret_cast<const LeaderBoundaryAction*>(lpAction);
                 if (lrAction.mbIsBoundaryInMiles)
                 {
-                    BrnGui::GuiLeaderPassedMileBoundaryEvent lEvent = {};
+                    BrnGui::GuiLeaderPassedMileBoundaryEvent lEvent = BrnGui::GuiLeaderPassedMileBoundaryEvent();
                     lEvent.meActiveRaceCarIndex = lrAction.meRaceCarIndex;
                     lEvent.mfDistanceToFinishInMetres = lrAction.mfDistanceInMetres;
                     PushGuiEvent(lEvent, lpGuiInput);
@@ -880,7 +870,7 @@ namespace
                 }
                 else
                 {
-                    BrnGui::GuiLeaderPassedKMBoundaryEvent lEvent = {};
+                    BrnGui::GuiLeaderPassedKMBoundaryEvent lEvent = BrnGui::GuiLeaderPassedKMBoundaryEvent();
                     lEvent.meActiveRaceCarIndex = lrAction.meRaceCarIndex;
                     lEvent.mfDistanceToFinishInMetres = lrAction.mfDistanceInMetres;
                     PushGuiEvent(lEvent, lpGuiInput);
@@ -898,7 +888,7 @@ namespace
             // optional last-blue-team-member tag. Preserve its order and unwritten tag bytes.
             case BrnGameState::GameStateModuleIO::E_ACTION_PLAYER_ELIMINATED:
             {
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::PlayerEliminatedAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::PlayerEliminatedAction*>(lpAction);
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                 {
@@ -912,7 +902,7 @@ namespace
                 }
                 else
                 {
-                    BrnGui::GuiPlayerEliminatedEvent lEvent = {};
+                    BrnGui::GuiPlayerEliminatedEvent lEvent = BrnGui::GuiPlayerEliminatedEvent();
                     std::memcpy(lEvent.maData, &lrAction.meActiveRaceCarIndex,
                                 sizeof(lrAction.meActiveRaceCarIndex));
                     PushGuiEvent(lEvent, lpGuiInput);
@@ -943,9 +933,9 @@ namespace
                         2219);
                     CgsDev::Assert::EndAssert();
                 }
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::TraitorousTakedownAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::TraitorousTakedownAction*>(lpAction);
-                BrnGui::GuiTraitorousTakedownEvent lEvent = {};
+                BrnGui::GuiTraitorousTakedownEvent lEvent = BrnGui::GuiTraitorousTakedownEvent();
                 lEvent.meAggActiveRaceCarIndex = lrAction.meAggrActiveRaceCarIndex;
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -968,7 +958,7 @@ namespace
                 CGS_STATIC_ASSERT((sizeof(BurnoutSkillzAction) == 68 &&
                               offsetof(BurnoutSkillzAction, meActiveRaceCarIndex) == 0x40),
                               "X360 action 168 input layout");
-                const auto& lrAction = *reinterpret_cast<const BurnoutSkillzAction*>(lpAction);
+                const BurnoutSkillzAction& lrAction = *reinterpret_cast<const BurnoutSkillzAction*>(lpAction);
                 if ((lrAction.miActionFlags & BurnoutSkillzAction::KI_ACTION_TYPE_UPDATED_VALUE) !=
                     BurnoutSkillzAction::KI_ACTION_TYPE_UPDATED_VALUE)
                 {
@@ -1010,9 +1000,9 @@ namespace
                               offsetof(NewBurnoutHudMessageActionView, meSkill) == 0x0C &&
                               offsetof(NewBurnoutHudMessageActionView, meNewOwner) == 0x10),
                               "ARTIST action 169 consumed input offsets");
-                const auto& lrAction =
+                const NewBurnoutHudMessageActionView& lrAction =
                     *reinterpret_cast<const NewBurnoutHudMessageActionView*>(lpAction);
-                BrnGui::GuiNewBurnoutHudMessageEvent lEvent = {};
+                BrnGui::GuiNewBurnoutHudMessageEvent lEvent = BrnGui::GuiNewBurnoutHudMessageEvent();
                 lEvent.mRoadID = lrAction.mRoadID;
                 if (lrAction.muActionValue == 0)
                     lEvent.meMessageType = BrnGui::GuiNewBurnoutHudMessageEvent::E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_BEAT_YOUR;
@@ -1048,7 +1038,7 @@ namespace
             // image type, selected car index and local-aggressor byte into GUI 325.
             case BrnGameState::GameStateModuleIO::E_ACTION_PAYBACK_MUGSHOT:
             {
-                const auto* lpPaybackMugshotAction =
+                const BrnGameState::GameStateModuleIO::PaybackMugshotAction* lpPaybackMugshotAction =
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::PaybackMugshotAction*>(
                         lpAction);
                 if (lpPaybackMugshotAction->meMugshotResponse ==
@@ -1064,14 +1054,11 @@ namespace
                                      : lpPaybackMugshotAction->meTakedownAggressorIndex;
 
                 BrnGui::GuiMugshotControlEvent lEvent;
-                u8* lpEventBytes = reinterpret_cast<u8*>(&lEvent);
-                std::memcpy(lpEventBytes, &lpPaybackMugshotAction->mRoadRuleBeatenRoadID, sizeof(CgsID));
-                std::memcpy(lpEventBytes + 8, &lpPaybackMugshotAction->meMugshotResponse,
-                            sizeof(lpPaybackMugshotAction->meMugshotResponse));
-                std::memcpy(lpEventBytes + 12, &lpPaybackMugshotAction->meImageType,
-                            sizeof(lpPaybackMugshotAction->meImageType));
-                std::memcpy(lpEventBytes + 16, &liAggressorCarIndex, sizeof(liAggressorCarIndex));
-                lpEventBytes[20] = static_cast<u8>(lbLocalAggressor);
+                lEvent.mRoadId = lpPaybackMugshotAction->mRoadRuleBeatenRoadID;
+                lEvent.meResponse = lpPaybackMugshotAction->meMugshotResponse;
+                lEvent.meImageType = lpPaybackMugshotAction->meImageType;
+                lEvent.meOpponentARCI = static_cast<EActiveRaceCarIndex>(liAggressorCarIndex);
+                lEvent.mbLocalAggressor = lbLocalAggressor;
 
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                     *CgsDev::Log::gpDebugPrint << "MUGSHOT EVENT : BRIDGE GAME STATE TO X (1)\n";
@@ -1099,7 +1086,7 @@ namespace
             // zero register writes the first qword; response 4 and the action fields follow.
             case BrnGameState::GameStateModuleIO::E_ACTION_ABORT_MUGSHOT_CAPTURE:
             {
-                const auto* lpAbortCaptureAction =
+                const BrnGameState::GameStateModuleIO::AbortMugshotCaptureAction* lpAbortCaptureAction =
                     reinterpret_cast<const
                         BrnGameState::GameStateModuleIO::AbortMugshotCaptureAction*>(lpAction);
                 CGS_ASSERT(lpAbortCaptureAction != 0, "lpAbortCaptureAction");
@@ -1113,13 +1100,11 @@ namespace
                     BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT);
 
                 BrnGui::GuiMugshotControlEvent lEvent;
-                u8* lpEventBytes = reinterpret_cast<u8*>(&lEvent);
-                std::memset(lpEventBytes, 0, sizeof(CgsID));
-                std::memcpy(lpEventBytes + 8, &liResponse, sizeof(liResponse));
-                std::memcpy(lpEventBytes + 12, &lpAbortCaptureAction->meImageType,
-                            sizeof(lpAbortCaptureAction->meImageType));
-                std::memcpy(lpEventBytes + 16, &liAggressorCarIndex, sizeof(liAggressorCarIndex));
-                lpEventBytes[20] = static_cast<u8>(lbLocalAggressor);
+                lEvent.mRoadId = 0;
+                lEvent.meResponse = static_cast<BrnGameState::GameStateModuleIO::EMugshotResponse>(liResponse);
+                lEvent.meImageType = lpAbortCaptureAction->meImageType;
+                lEvent.meOpponentARCI = static_cast<EActiveRaceCarIndex>(liAggressorCarIndex);
+                lEvent.mbLocalAggressor = lbLocalAggressor;
 
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                     *CgsDev::Log::gpDebugPrint << "MUGSHOT EVENT : BRIDGE GAME STATE TO X (2)\n";
@@ -1144,8 +1129,8 @@ namespace
             {
                 typedef BrnGameState::GameStateModuleIO::PaybackActivatedAction PaybackAction;
                 CGS_STATIC_ASSERT((sizeof(PaybackAction) == 12), "X360 action 215 payload size");
-                const auto& lrAction = *reinterpret_cast<const PaybackAction*>(lpAction);
-                BrnGui::GuiPaybackReceivedEvent lEvent = {};
+                const PaybackAction& lrAction = *reinterpret_cast<const PaybackAction*>(lpAction);
+                BrnGui::GuiPaybackReceivedEvent lEvent = BrnGui::GuiPaybackReceivedEvent();
                 std::memcpy(lEvent.maData, &lrAction.mePaybackType, sizeof(lrAction.mePaybackType));
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -1162,7 +1147,7 @@ namespace
             // ARTIST 0x823ED1AC..0x823ED1C4: online player added -> lobby-join chatter.
             case BrnGameState::GameStateModuleIO::E_ACTION_ONLINE_PLAYER_ADDED:
             {
-                const auto& lrAction = *reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::OnlinePlayerAddedAction& lrAction = *reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::OnlinePlayerAddedAction*>(lpAction);
                 BrnGui::GuiEventNetworkPlayerJoinedLobby lEvent;
                 lEvent.mNetworkPlayerID = lrAction.mAddedPlayerNetworkID;
@@ -1183,7 +1168,7 @@ namespace
             case 86:
             case 87:
             {
-                BrnGui::GuiGamePausedEvent lEvent = {};
+                BrnGui::GuiGamePausedEvent lEvent = BrnGui::GuiGamePausedEvent();
                 lEvent.maData[4] = (liActionType == 86) ? 1u : 0u;
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -1192,7 +1177,7 @@ namespace
             // ARTIST 0x823EA8AC..0x823EA8C0: literal true -> GUI show-HUD event 148.
             case 89:
             {
-                BrnGui::GuiEventShowHideHud lEvent = {};
+                BrnGui::GuiEventShowHideHud lEvent = BrnGui::GuiEventShowHideHud();
                 lEvent.maData[0] = 1;
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -1221,9 +1206,9 @@ namespace
             // Its real producer copies that same 0x9C-byte record from mInviteOrJoinParams.
             case 92:
             {
-                const auto* lpParams = reinterpret_cast<const
+                const BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams* lpParams = reinterpret_cast<const
                     BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams*>(lpAction);
-                BrnGui::GuiEventPrepareForInvite lEvent = {};
+                BrnGui::GuiEventPrepareForInvite lEvent = BrnGui::GuiEventPrepareForInvite();
                 std::memcpy(lEvent.maData, &lpParams->mbIsLocalUserChangeNeeded,
                             sizeof(lEvent.maData));
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -1244,7 +1229,7 @@ namespace
             case BrnGameState::GameStateModuleIO::E_ACTION_INVITE_COMPLETE:
             {
                 CGS_ASSERT(lpAction != 0, "lpInviteCompleteAction");
-                BrnGui::GuiEventInviteComplete lEvent = {};
+                BrnGui::GuiEventInviteComplete lEvent = BrnGui::GuiEventInviteComplete();
                 std::memcpy(lEvent.maData, lpAction, sizeof(lEvent.maData));
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
@@ -1314,11 +1299,7 @@ namespace
                         break;
                     }
 
-                    Vector4 lv4Position;
-                    lv4Position.x = lrInfo.mfXCoord;
-                    lv4Position.y = 0.0f;
-                    lv4Position.z = lrInfo.mfZCoord;
-                    lv4Position.w = 0.0f;
+                    const Vector4 lv4Position(lrInfo.mfXCoord, 0.0f, lrInfo.mfZCoord, 0.0f);
                     lrIcon.SetPositionLane(lv4Position);
                     lrIcon.SetCgsId(lrInfo.mDriveThruId);
                     lrIcon.SetRotation(0.0f);
@@ -1389,14 +1370,13 @@ namespace
                     break;
                 }
 
-                s32 liPostedGuiEventId;
                 if (lbBoostBarPresentation)
                 {
                     BrnGui::GuiEventBoostBarStuntInfo lEvent;           // id 218, 12 bytes
                     lEvent.miCurrentCount = lpStunt->miCurrentCount;
                     lEvent.miTotalCount   = lpStunt->miTotalCount;
                     lEvent.meStuntType    = leGuiStuntType;
-                    liPostedGuiEventId    = lEvent.GetEventType();
+
                     PushGuiEvent(lEvent, lpGuiInput);
                     PushGuiEvent(lAutosaveRequest, lpGuiInput);
                 }
@@ -1406,20 +1386,11 @@ namespace
                     lEvent.miCurrentCount = lpStunt->miCurrentCount;
                     lEvent.miTotalCount   = lpStunt->miTotalCount;
                     lEvent.meStuntType    = leGuiStuntType;
-                    liPostedGuiEventId    = lEvent.GetEventType();
+
                     PushGuiEvent(lEvent, lpGuiInput);
                     PushGuiEvent(lAutosaveRequest, lpGuiInput);
                 }
 
-                static s32        siDiscoLinesLeft = 16;
-                if (sbDiscoDiag && siDiscoLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siDiscoLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[disco] action 58 -> gui " << liPostedGuiEventId
-                        << " + gui 356 autosave request (type " << static_cast<s32>(leGuiStuntType)
-                        << " count " << lpStunt->miCurrentCount << "/" << lpStunt->miTotalCount << ")\n";
-                }
 
                 break;
             }
@@ -1645,15 +1616,6 @@ namespace
                         : BrnGui::GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_LEAVE_TAKEDOWN;
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                // [DIAG] NOT IN THE BINARY -- the takedown HUD chain's bridge rung.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[takedown-hud] action 6 -> gui 377 state "
-                        << static_cast<s32>(lEvent.meCurrentState)
-                        << (lpTakedownCamera->mbActive ? " (START_TAKEDOWN)" : " (LEAVE_TAKEDOWN)")
-                        << "\n";
-                }
                 break;
             }
 
@@ -1678,7 +1640,6 @@ namespace
                 lEvent.mVictimCarID = lpShutdownAction->mVictimCarID;   // `ld 0(r31)` -> `std`
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY.
                 break;
             }
 
@@ -1700,7 +1661,6 @@ namespace
                 lEvent.mu8Unwritten = 0;
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY.
                 break;
             }
 
@@ -1822,7 +1782,7 @@ namespace
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_BHR_CHECKPOINT:
             {
                 CGS_ASSERT(lpAction != 0, "lpHUDMessageBHRCheckpoint");
-                const auto* lpBHRAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageBHRCheckpointAction*>(lpAction);
+                const BrnGameState::GameStateModuleIO::HUDMessageBHRCheckpointAction* lpBHRAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageBHRCheckpointAction*>(lpAction);
                 BrnGui::GuiBHRCheckpointReachedEvent lEvent;
                 std::memcpy(&lEvent, lpBHRAction, sizeof(lEvent));
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -1831,7 +1791,7 @@ namespace
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_BHR_RUNNER_CRASHED:
             {
                 CGS_ASSERT(lpAction != 0, "lpHUDMessageBHRRunnerCrashesEvent");
-                const auto* lpBHRAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageBHRRunnerCrashedAction*>(lpAction);
+                const BrnGameState::GameStateModuleIO::HUDMessageBHRRunnerCrashedAction* lpBHRAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageBHRRunnerCrashedAction*>(lpAction);
                 BrnGui::GuiHUDMessageBHRRunnerCrashed lEvent;
                 std::memcpy(&lEvent, lpBHRAction, sizeof(lEvent));
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -1840,7 +1800,7 @@ namespace
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_ONLINE_TEAM_CHANGE:
             {
                 CGS_ASSERT(lpAction != 0, "lpHUDMessageOnlineTeamChangeAction");
-                const auto* lpTeamChangeAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageOnlineTeamChangeAction*>(lpAction);
+                const BrnGameState::GameStateModuleIO::HUDMessageOnlineTeamChangeAction* lpTeamChangeAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageOnlineTeamChangeAction*>(lpAction);
                 BrnGui::GuiOnlineTeamChangeEvent lEvent;
                 std::memcpy(&lEvent, lpTeamChangeAction, sizeof(lEvent));
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -1852,7 +1812,7 @@ namespace
             // the fleeing case forwards the same pair to GUI 440 without an added status word.
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_FIRST_HIT:
             {
-                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageFirstHitOnRivalAction*>(lpAction);
+                const BrnGameState::GameStateModuleIO::HUDMessageFirstHitOnRivalAction* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageFirstHitOnRivalAction*>(lpAction);
                 BrnGui::GuiRivalryStatusChange lEvent;
                 lEvent.mRivalID = lpRivalAction->mRivalID;
                 lEvent.mCarID = lpRivalAction->mCarID;
@@ -1862,7 +1822,7 @@ namespace
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_A_RIVAL:
             {
-                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsARivalAction*>(lpAction);
+                const BrnGameState::GameStateModuleIO::HUDMessageRivalIsARivalAction* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsARivalAction*>(lpAction);
                 BrnGui::GuiRivalryStatusChange lEvent;
                 lEvent.mRivalID = lpRivalAction->mRivalID;
                 lEvent.mCarID = lpRivalAction->mCarID;
@@ -1872,7 +1832,7 @@ namespace
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_A_TARGET:
             {
-                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsATargetAction*>(lpAction);
+                const BrnGameState::GameStateModuleIO::HUDMessageRivalIsATargetAction* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsATargetAction*>(lpAction);
                 BrnGui::GuiRivalryStatusChange lEvent;
                 lEvent.mRivalID = lpRivalAction->mRivalID;
                 lEvent.mCarID = lpRivalAction->mCarID;
@@ -1882,7 +1842,7 @@ namespace
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_FLEEING:
             {
-                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsFleeingAction*>(lpAction);
+                const BrnGameState::GameStateModuleIO::HUDMessageRivalIsFleeingAction* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsFleeingAction*>(lpAction);
                 BrnGui::GuiRivalIsFleeing lEvent;
                 lEvent.mRivalID = lpRivalAction->mRivalID;
                 lEvent.mCarID = lpRivalAction->mCarID;
@@ -1891,7 +1851,7 @@ namespace
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_RIVAL_IS_WRECKED:
             {
-                const auto* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsWreckedAction*>(lpAction);
+                const BrnGameState::GameStateModuleIO::HUDMessageRivalIsWreckedAction* lpRivalAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::HUDMessageRivalIsWreckedAction*>(lpAction);
                 BrnGui::GuiRivalryStatusChange lEvent;
                 lEvent.mRivalID = lpRivalAction->mRivalID;
                 lEvent.mCarID = lpRivalAction->mCarID;
@@ -1907,7 +1867,7 @@ namespace
             case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_ELIMINATION:
             {
                 CGS_ASSERT(lpAction != 0, "lpEliminationAction");
-                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                const BrnGameState::HUDMessageLogic::StuntRunTeamMessage* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
                 BrnGui::GuiNetworkStuntRunEliminationEvent lEvent;
                 lEvent.mbIsLocalPlayer = lpMessage->miTeam;
                 lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
@@ -1919,7 +1879,7 @@ namespace
             case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_LEADING:
             {
                 CGS_ASSERT(lpAction != 0, "lpLeadingAction");
-                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                const BrnGameState::HUDMessageLogic::StuntRunTeamMessage* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
                 BrnGui::GuiNetworkStuntRunLeadingEvent lEvent;
                 lEvent.mbIsLocalPlayer = lpMessage->miTeam;
                 lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
@@ -1931,7 +1891,7 @@ namespace
             case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_VICTORY:
             {
                 CGS_ASSERT(lpAction != 0, "lpVictoryAction");
-                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
+                const BrnGameState::HUDMessageLogic::StuntRunTeamMessage* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTeamMessage*>(lpAction);
                 BrnGui::GuiNetworkStuntRunVictoryEvent lEvent;
                 lEvent.mbIsLocalPlayer = lpMessage->miTeam;
                 lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
@@ -1950,7 +1910,7 @@ namespace
             case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_SCORE:
             {
                 CGS_ASSERT(lpAction != 0, "lpMessageAction");
-                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunScoreMessage*>(lpAction);
+                const BrnGameState::HUDMessageLogic::StuntRunScoreMessage* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunScoreMessage*>(lpAction);
                 BrnGui::GuiNetworkSuntRunInfoMessageEvent lEvent;
                 lEvent.mPlayerId = lpMessage->mNetworkPlayerID;
                 lEvent.meMessageType = BrnGui::GuiOnlineStuntRunMessageEvent::E_ONLINE_STUNT_RUN_MESSAGE_SCORE;
@@ -1961,7 +1921,7 @@ namespace
             case BrnGameState::HUDMessageLogic::E_HUD_MESSAGE_STUNT_RUN_TIME:
             {
                 CGS_ASSERT(lpAction != 0, "lpMessageAction");
-                const auto* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTimeMessage*>(lpAction);
+                const BrnGameState::HUDMessageLogic::StuntRunTimeMessage* lpMessage = reinterpret_cast<const BrnGameState::HUDMessageLogic::StuntRunTimeMessage*>(lpAction);
                 BrnGui::GuiNetworkSuntRunInfoMessageEvent lEvent;
                 lEvent.mPlayerId = -1;
                 lEvent.meMessageType = BrnGui::GuiOnlineStuntRunMessageEvent::E_ONLINE_STUNT_RUN_MESSAGE_TIME;
@@ -1987,13 +1947,6 @@ namespace
                 lEvent.maPad[0] = lEvent.maPad[1] = lEvent.maPad[2] = 0;
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                // [DIAG] NOT IN THE X360 BINARY -- the district chain's bridge rung.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[district] action 112 -> gui 169 (county " << lpiRegion[0]
-                        << " district " << lpiRegion[1] << ")\n";
-                }
                 break;
             }
 
@@ -2023,17 +1976,6 @@ namespace
                         lEvent.AddString(lpcStringId, 2);
                         PushGuiEvent(lEvent, lpGuiInput);
 
-                        // [DIAG] NOT IN THE X360 BINARY -- the [tut-ticker] bridge rung
-                        // (same first-N latch idiom as the [UI-gate] ladder, unconditional
-                        // because this fires a handful of times per session at most).
-                        static s32 siTickerDiagLeft = 8;
-                        if (siTickerDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            --siTickerDiagLeft;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[tut-ticker] action 148 type=" << liTrainingType
-                                << " -> gui 537 id='" << lpcStringId << "'\n";
-                        }
                     }
                 }
                 break;
@@ -2112,19 +2054,6 @@ namespace
 
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                // [DIAG] NOT IN THE X360 BINARY. Unconditional (a handful of lines per session
-                // at most) and deliberately on the SAME `[drivethru]` tag as the producer's
-                // GATE/ENTER/POST/GAS REFILL rungs, so one grep reads the whole ladder end to
-                // end: an action that is posted but never bridged, and a bridged event whose
-                // message never appears, are otherwise indistinguishable
-                // [[diagnostics-that-lie]]. Delete with the rest of the drive-thru bring-up.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[drivethru] BRIDGE action=" << liActionType
-                        << " -> gui 366 type=" << static_cast<s32>(lEvent.meDriveThroughType)
-                        << " effective=" << (lEvent.mbEffective ? 1 : 0) << "\n";
-                }
                 break;
             }
 
@@ -2303,19 +2232,6 @@ namespace
 
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                // [DIAG] NOT IN THE X360 BINARY -- the stat panel's bridge rung, same
-                // change-only idiom as the [ddetails] rank rung below. One line per screen entry.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[ddetails] action 180 -> gui 436 (cars " << lEvent.miCarsCollected
-                        << "/" << lEvent.miCarsTotal
-                        << " events " << lEvent.miEventsFound << "/" << lEvent.miTotalEvents
-                        << " drivethrus " << lEvent.miTotalDriveThrusFound << "/" << lEvent.miTotalDriveThrus
-                        << " roads " << lEvent.mRoadsRuledComplete << "/" << lEvent.mNumberOfRoads
-                        << " pct " << lEvent.miPercentageComplete
-                        << " td " << lEvent.miTotalTakedowns << ")\n";
-                }
                 break;
             }
 
@@ -2367,17 +2283,6 @@ namespace
                 lEvent.Construct(lpRankInfo);
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                // [DIAG] NOT IN THE X360 BINARY -- the licence ladder's bridge rung, same
-                // change-only idiom as the [district] rung above.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[ddetails] action 181 -> gui 438 (rank "
-                        << lpRankInfo->miPlayerRank << " race " << lpRankInfo->miOfflineRace
-                        << " rage " << lpRankInfo->miRoadRage
-                        << " stunt " << lpRankInfo->miStuntAttack
-                        << " marked " << lpRankInfo->miMarkedMan << ")\n";
-                }
                 break;
             }
 
@@ -2390,7 +2295,7 @@ namespace
                 CGS_STATIC_ASSERT((sizeof(PlayerInfoAction) == 64), "X360 action 182 payload size");
                 CGS_STATIC_ASSERT((sizeof(BrnGui::GuiPlayerInfoResponse) == 64),
                               "X360 GUI 406 payload size");
-                const auto& lrAction = *reinterpret_cast<const PlayerInfoAction*>(lpAction);
+                const PlayerInfoAction& lrAction = *reinterpret_cast<const PlayerInfoAction*>(lpAction);
                 BrnGui::GuiPlayerInfoResponse lEvent;
                 std::memcpy(&lEvent, &lrAction.mPlayerInfo, sizeof(lrAction.mPlayerInfo));
                 std::memcpy(reinterpret_cast<u8*>(&lEvent) + 0x38,
@@ -2547,16 +2452,6 @@ namespace
                     (liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
                      liGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
 
-                // [DIAG] NOT IN THE X360 BINARY. BRN_SHOWTIME_SCORE_DIAG, first-N latched.
-                // ⭐ IT PRINTS ON BOTH SIDES OF THE GATE ON PURPOSE. A probe that only speaks
-                // when the gate PASSES cannot tell "the action never arrived" from "the gate
-                // refused it", and those two have completely different fixes -- one is an
-                // unbodied producer upstream, the other is a wrong mode read here. The first
-                // cut of this instrument printed only inside the arms and returned a zero that
-                // meant nothing.
-                {
-                    static s32        siGateLines = 16;
-                }
 
                 if (lbShowtime)
                 {
@@ -2667,7 +2562,7 @@ namespace
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::FreeburnChallengeUpdateAction*>(lpAction);
                 CGS_STATIC_ASSERT((sizeof(BrnGui::GuiChallengeUpdateEvent) == 144), "GUI 577 size 144");
 
-                BrnGui::GuiChallengeUpdateEvent lUpdateEvent = {};
+                BrnGui::GuiChallengeUpdateEvent lUpdateEvent = BrnGui::GuiChallengeUpdateEvent();
                 lUpdateEvent.miCurrentAction = lpUpdateAction->miCurrentActionIndex;
                 CGS_ASSERT(lUpdateEvent.miCurrentAction < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
                            "lUpdateEvent.miCurrentActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE");
@@ -2741,18 +2636,6 @@ namespace
                 }
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                static s32        siRoadRulesDiagLeft  = 48;
-                static s32        siRoadRulesDiagFrame = 0;
-                ++siRoadRulesDiagFrame;
-                if (sbRoadRulesDiag && siRoadRulesDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0 &&
-                    (siRoadRulesDiagFrame <= 8 || (siRoadRulesDiagFrame % 60) == 0))
-                {
-                    --siRoadRulesDiagLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[roadrules] action 279 -> gui 338 (time " << lEvent.mfCurrentTimeElapsed
-                        << " crash " << lEvent.mfCurrentCrash
-                        << " x" << lEvent.miCrashMultiplier << ")\n";
-                }
                 break;
             }
 
@@ -2774,7 +2657,7 @@ namespace
             case BrnGameState::GameStateModuleIO::TargetEventScoreChangedResponse::KI_GAME_ACTION_TYPE:
             {
                 CGS_ASSERT(lpAction != 0, "lpTargetScoreAction");
-                const auto* lpResponse = reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::TargetEventScoreChangedResponse* lpResponse = reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::TargetEventScoreChangedResponse*>(lpAction);
                 BrnGui::GuiEventScoreboardResponseEvScoreTarget lEvent;
                 std::memcpy(lEvent.maData, &lpResponse->mPlayerName, sizeof(lpResponse->mPlayerName));
@@ -2788,7 +2671,7 @@ namespace
             case BrnGameState::GameStateModuleIO::DldScoreboardResponse::KI_GAME_ACTION_TYPE:
             {
                 CGS_ASSERT(lpAction != 0, "lpDldChallengeableAction");
-                const auto* lpResponse = reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::DldScoreboardResponse* lpResponse = reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::DldScoreboardResponse*>(lpAction);
                 BrnGui::GuiEventScoreboardDownloadedChallengeable lEvent;
                 CGS_STATIC_ASSERT((sizeof(lEvent) == sizeof(*lpResponse)),
@@ -2804,7 +2687,7 @@ namespace
             case BrnGameState::GameStateModuleIO::TargetEventDataResponse::KI_GAME_ACTION_TYPE:
             {
                 CGS_ASSERT(lpAction != 0, "lpChallengeEventDataAction");
-                const auto* lpResponse = reinterpret_cast<const
+                const BrnGameState::GameStateModuleIO::TargetEventDataResponse* lpResponse = reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::TargetEventDataResponse*>(lpAction);
                 BrnGui::GuiEventChallengedEventDataResponse lEvent;
                 std::memcpy(&lEvent, &lpResponse->mEventId, sizeof(lpResponse->mEventId));
@@ -2836,7 +2719,7 @@ namespace
         // independent.) The count is written into the record's own +0x900 word, which is what
         // the cache's case-199 arm reads.
         // ARTIST0x823EDCE0..0x823EDD1C: publish standings even on frames with no actions.
-        const auto* scoring = lpGameStateOutput->GetScoringOutputInterface();
+        const BrnGameState::GameStateModuleIO::ScoringOutputInterface* scoring = lpGameStateOutput->GetScoringOutputInterface();
         BrnGui::GuiEventRacePositionInfo positions;
         for (s32 i = 0; i < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++i)
         {
@@ -2851,14 +2734,6 @@ namespace
             lPendingSatNavEvent.miNumIcons = liPendingSatNavIcons;
             PushGuiEvent(lPendingSatNavEvent, lpGuiInput);
 
-            // [DIAG] NOT IN THE X360 BINARY -- one line per publish (boot / discovery / junkyard
-            // exit), same `[drivethru]` tag as the producer's SETUP line.
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[drivethru] BRIDGE: action 45 -> gui 199 with " << liPendingSatNavIcons
-                    << " drive-thru icon record(s)\n";
-            }
         }
     }
 } // namespace BrnGame
