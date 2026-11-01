@@ -1754,8 +1754,8 @@ namespace
 
         GuiOverlayRequestWire lWire;
         lWire.mRequest.Construct("OnRouteShort");
-        lWire.mRequest.AddMessageParam(2, "ONLINE_ROUTE_DISTANCE");
-        lWire.mRequest.AddMessageParam(2, "ONLINE_ROUTE_MINIMUM_DISTANCE");
+        lWire.mRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING_ID, "ONLINE_ROUTE_DISTANCE");
+        lWire.mRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING_ID, "ONLINE_ROUTE_MINIMUM_DISTANCE");
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
             static_cast<s32>(sizeof(GuiOverlayRequestWire)));

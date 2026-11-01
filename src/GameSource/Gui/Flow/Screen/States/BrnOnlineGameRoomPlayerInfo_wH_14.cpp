@@ -153,7 +153,7 @@ namespace BrnGui
         const s32 KI_KICK_REASON_COUNT = 5;
 
         // The launch-failed message parameter slot AddMessageParam is called with.
-        const u32 KU_LAUNCH_FAILED_MESSAGE_PARAM = 2;
+        const CgsGui::PopupParamTypes KU_LAUNCH_FAILED_MESSAGE_PARAM = CgsGui::E_POPUPPARAMTYPES_STRING_ID;
     }
 
     // ---- HandleLeftGameEvent @ 0x82498358 (cpp:2392) --------------------------------

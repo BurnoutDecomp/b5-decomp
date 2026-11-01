@@ -101,8 +101,8 @@ namespace BrnGui
 
         // The launch overlay's two message parameters: the launching player's name, then
         // the game mode's string id.
-        const u32 KU_LAUNCH_PARAM_PLAYER_NAME = 1;
-        const u32 KU_LAUNCH_PARAM_GAME_MODE   = 2;
+        const CgsGui::PopupParamTypes KU_LAUNCH_PARAM_PLAYER_NAME = CgsGui::E_POPUPPARAMTYPES_STRING;
+        const CgsGui::PopupParamTypes KU_LAUNCH_PARAM_GAME_MODE = CgsGui::E_POPUPPARAMTYPES_STRING_ID;
 
         // ---- in-queue payload view ----------------------------------------------------
         // Event 57 ("launching"): the mode being launched, then the launching player.
