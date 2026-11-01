@@ -412,36 +412,19 @@ namespace
     const f32 KF_DANGER_PROGRESSION_MAX       = 1.0f;      // flt_82001C98
 
     // ------------------------------------------------------------------------
-    // [FLAG placeholder constants -- SIX dynamically-initialised Vector4/Vector2s]
-    //
-    // KV4_SAFECOLOUR @0x82FB29E0 and KV4_DANGERCOLOUR @0x82FB2AC0 (read by
-    // SetTextFieldDangerColour), and the four SetInterpValues endpoints
-    // @0x82FB2A00 / @0x82FB2A90 / @0x82FB2BE0 / @0x82FB2D70 (read by
-    // PrepareComponentsForGameMode's race arm), CANNOT be read out of the image:
-    // 0x82FB0000..0x82FB8000 is 32 KiB of zeroes in image.bin and every reference to
-    // that range across the whole .ida-exports set is a READ -- these are file-scope
-    // objects with Vector4 constructors, filled by a static initialiser that IDA never
-    // exported. A zero read there is NOT the console value (see the 2026-08-23 tooling
-    // note: ".bss zero does not mean the console value is zero").
-    //
-    // The values below are therefore STAND-INS, chosen to be honest about being wrong:
-    //   * the colour pair is white -> red, the conventional apt "safe/danger" text ramp;
-    //   * the four interpolator endpoints are IDENTITY at both ends, which makes the
-    //     race-distance tween a deliberate no-op rather than a plausible-looking lie.
-    // Nothing on the stunt-run path (mode 7) reads the interpolator four.
-    //
-    // DELETE-WHEN the static-initialiser that writes 0x82FB29E0 / 0x82FB2AC0 /
-    // 0x82FB2A00 / 0x82FB2A90 / 0x82FB2BE0 / 0x82FB2D70 is located (a `stvx` sweep of
-    // the unexported init range, or a live-memory dump of those six VAs on console)
-    // and the real lanes are pasted in.
-    // ------------------------------------------------------------------------
-    const Vector4 KV4_SAFECOLOUR(1.0f, 1.0f, 1.0f, 1.0f);   // [FLAG] unk_82FB29E0
-    const Vector4 KV4_DANGERCOLOUR(1.0f, 0.0f, 0.0f, 1.0f);   // [FLAG] unk_82FB2AC0
+    // Recovered runtime constructor values from ARTIST's six registered CRT initializer
+    // entries at 0x82CD0954..0x82CD0968. Each entry writes its full 16-byte target row;
+    // the Vector2 constructor also explicitly initializes Z/W to positive zero. Values are
+    // confirmed from the referenced RDATA words and poisoned actual-thunk executions, not
+    // from the zeroed raw BSS image bytes. The old placeholders are preserved in the prior
+    // a363 delivery receipt; this source now carries the recovered runtime components.
+    const Vector4 KV4_SAFECOLOUR(1.0f, 0.8f, 0.0f, 1.0f);  // CRT thunk 0x82C504C8 -> 0x82FB29E0
+    const Vector4 KV4_DANGERCOLOUR(0.6f, 0.06f, 0.06f, 1.0f);   // CRT thunk 0x82C50508 -> 0x82FB2AC0
 
-    const Vector4 KV4_RACE_DISTANCE_START_COLOUR(1.0f, 1.0f, 1.0f, 1.0f);  // [FLAG] unk_82FB2A00 (vector arg v1)
-    const Vector4 KV4_RACE_DISTANCE_END_COLOUR(1.0f, 1.0f, 1.0f, 1.0f);  // [FLAG] unk_82FB2A90 (vector arg v2)
-    const Vector2 KV2_RACE_DISTANCE_START_SCALE(1.0f, 1.0f);  // [FLAG] unk_82FB2BE0 (vector arg v3)
-    const Vector2 KV2_RACE_DISTANCE_END_SCALE(1.0f, 1.0f);  // [FLAG] unk_82FB2D70 (vector arg v4)
+    const Vector4 KV4_RACE_DISTANCE_START_COLOUR(0.85f, 0.55f, 0.02f, 1.0f);  // CRT thunk 0x82C503D0 -> 0x82FB2A00 (vector arg v1)
+    const Vector4 KV4_RACE_DISTANCE_END_COLOUR(0.64f, 0.0f, 0.0f, 1.0f);  // CRT thunk 0x82C50418 -> 0x82FB2A90 (vector arg v2)
+    const Vector2 KV2_RACE_DISTANCE_START_SCALE(1.0f, 1.0f);  // CRT thunk 0x82C50458 -> 0x82FB2BE0 (vector arg v3)
+    const Vector2 KV2_RACE_DISTANCE_END_SCALE(1.3f, 1.3f);  // CRT thunk 0x82C50490 -> 0x82FB2D70 (vector arg v4)
 }
 
 // ---------------------------------------------------------------------------
