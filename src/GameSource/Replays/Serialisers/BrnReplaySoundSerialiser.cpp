@@ -20,7 +20,8 @@ namespace BrnReplays
     // then reset only the two genuine derived fields.
     void SoundSerialiser::Construct()
     {
-        BaseSerialiser::Construct(9, 0, 0xF00, 0xF00, "Sound", 1);
+        BaseSerialiser::Construct(static_cast<ESerialiserId>(9), E_CONTEXT_NORMAL,
+                                 0xF00, 0xF00, "Sound", true);
         mfAccumulatedFrameTime = 0.0f;
         mbExtraFlag = false;
     }

@@ -6,7 +6,7 @@
 //   (BrnReplays::EffectsSerialiser)
 //
 //   Construct       @ 0x8264C9D8:
-//       return BrnReplays::BaseSerialiser::Construct(
+//       BrnReplays::BaseSerialiser::Construct(
 //                  this, 8, 0, 4816, 4784, "Effects", 0);
 //   GetStaticLayout @ 0x82278698:
 //       asserts miStaticBufferSize >= 4784, then returns mpStaticBuffer.
@@ -31,9 +31,10 @@
 // class the header declares; nothing else changed.
 namespace BrnReplays
 {
-    s32 EffectsSerialiser::Construct()
+    void EffectsSerialiser::Construct()
     {
-        return BaseSerialiser::Construct(8, 0, 4816, 4784, "Effects", 0);
+        BaseSerialiser::Construct(static_cast<ESerialiserId>(8), E_CONTEXT_NORMAL,
+                                 4816, 4784, "Effects", false);
     }
 
     EffectsSerialiserStaticLayout* EffectsSerialiser::GetStaticLayout()

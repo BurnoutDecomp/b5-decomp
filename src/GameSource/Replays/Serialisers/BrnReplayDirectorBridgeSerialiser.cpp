@@ -52,9 +52,10 @@ static void DirectorBridgeSerialiser_StreamSpan(BaseSerialiser* lpSerialiser,
 
 // @ 0x8264C498 -- the leaf forwarder: id 3, mode 0, the 0x8000 buffer pair,
 // the channel name, flag 0.
-s32 DirectorBridgeSerialiser::Construct()
+void DirectorBridgeSerialiser::Construct()
 {
-    return BaseSerialiser::Construct(3, 0, 0x8000, 0x8000, "DirectorBridge", 0);
+    BaseSerialiser::Construct(E_ID_DIRECTOR_BRIDGE, E_CONTEXT_NORMAL,
+                             0x8000, 0x8000, "DirectorBridge", false);
 }
 
 // @ 0x82657478 -- cpp:149. Lock, resolve the snapshot, run the mode-skip ladder

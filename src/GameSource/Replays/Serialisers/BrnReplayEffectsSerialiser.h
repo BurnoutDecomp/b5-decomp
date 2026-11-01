@@ -142,7 +142,7 @@ namespace BrnReplays
     {
     public:
         // X360 0x8264C9D8: BaseSerialiser::Construct(8, 0, 4816, 4784, "Effects", 0).
-        s32 Construct();
+        void Construct();
 
         // X360 0x82278698. The serialiser's per-frame static buffer, viewed as the
         // structured boost-locator layout (asserts the buffer is large enough).

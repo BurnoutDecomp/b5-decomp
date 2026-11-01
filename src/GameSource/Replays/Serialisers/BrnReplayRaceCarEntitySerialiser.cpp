@@ -37,12 +37,12 @@ namespace BrnReplays
     // @0x8264C4C0 (already homed in a prior wave; re-based here onto the real
     // BaseSerialiser home). id 0; mode 0; 0x1B000 dynamic + 0x1B000 static;
     // "RaceCarEntity"; flag 1; then clears the +0x5C byte.
-    s32 RaceCarEntitySerialiser::Construct()
+    void RaceCarEntitySerialiser::Construct()
     {
-        s32 liResult = BaseSerialiser::Construct(0, 0, KI_STATIC_BUFFER_SIZE,
-                                                 KI_STATIC_BUFFER_SIZE, "RaceCarEntity", 1);
+        BaseSerialiser::Construct(E_ID_RACECAR_ENTITY, E_CONTEXT_NORMAL,
+                                 KI_STATIC_BUFFER_SIZE, KI_STATIC_BUFFER_SIZE,
+                                 "RaceCarEntity", true);
         mbStaticLayoutCleared = false;
-        return liResult;
     }
 
     // @0x822A3400

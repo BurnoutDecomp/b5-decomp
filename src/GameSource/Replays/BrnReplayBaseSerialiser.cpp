@@ -2,7 +2,7 @@
 
 #include "GameSource/Replays/BrnReplayShared.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrCpy (Construct's bounded name copy)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstring>
 #include <cstddef>  // offsetof
@@ -189,9 +189,9 @@ namespace BrnReplays
 
     // @ 0x8264C280 -- the shared leaf-serialiser initialiser: stamp the id/context
     // and buffer sizes, initialize the written state and latch the skip flag.
-    // Current StrCpy covers actual names up to31 bytes; its missing original
-    // overflow assertion/continuation remains separate debt. X360 stores, by
-    // name: meId = liId (+0x28) / meContext = liContext (+0x2C) -- the second
+    // The original inlined name-copy guard reports length>=32, then continues
+    // the complete terminator copy if the assertion returns. X360 stores, by
+    // name: meId = leId (+0x28) / meContext = leContext (+0x2C) -- the second
     // parameter feeds the CONTEXT word, not the mode; meMode / mbLocked / mpBuffer /
     // miBufferUsed / miBufferRead / mpStaticBuffer / mbIsKeyFrame all zeroed;
     // miBufferSize / miStaticBufferSize from the args.
@@ -215,10 +215,10 @@ namespace BrnReplays
     // this project fails a TU for. (mbDataReady / mbDataRestored are written by the owning module
     // before anything reads them; see BaseSerialiser::SetDataReady / SetDataRestored.)
     //
-    // The X360's r3 at exit is a dead this-derived tail value; 0 here.
-    s32 BaseSerialiser::Construct(s32 liId, s32 liContext, s32 liBufferSize,
-                                  s32 liStaticBufferSize, const char* lpcName,
-                                  s32 liSkipModuleSerialise)
+    // No constructor return value is consumed; DWARF declares void.
+    void BaseSerialiser::Construct(ESerialiserId leId, ESerialiserContext leContext,
+                                   s32 liBufferSize, s32 liStaticBufferSize,
+                                   const char* lpcName, bool lbSkipModuleSerialise)
     {
         CGS_STATIC_ASSERT((sizeof(BaseSerialiser) == 0x5C), "ARTIST BaseSerialiser extent");
         CGS_STATIC_ASSERT((__alignof(BaseSerialiser) == 4), "native BaseSerialiser alignment");
@@ -228,8 +228,8 @@ namespace BrnReplays
         CGS_STATIC_ASSERT((offsetof(BaseSerialiser, mpStaticBuffer) == 0x20), "ARTIST static buffer pointer");
         CGS_STATIC_ASSERT((offsetof(BaseSerialiser, mbSkipModuleSerialise) == 0x5B), "ARTIST skip byte");
 
-        meId                  = static_cast<ESerialiserId>(liId);
-        meContext             = static_cast<ESerialiserContext>(liContext);
+        meId                  = leId;
+        meContext             = leContext;
         mpBuffer              = 0;
         miBufferSize          = liBufferSize;
         miBufferUsed          = 0;
@@ -239,19 +239,36 @@ namespace BrnReplays
         mbLocked              = false;
         miBufferRead          = 0;
         mbIsKeyFrame          = false;
-        mbSkipModuleSerialise = (liSkipModuleSerialise != 0);
+        mbSkipModuleSerialise = lbSkipModuleSerialise;
         maX360Extension18[0]   = 0;
         maX360Extension18[1]   = 0;
 
         if (lpcName)
         {
-            CgsCore::StrCpy(macName, KI_MAX_NAME_LENGTH, lpcName);
-        }
-        else
-        {
-            CgsCore::StrCpy(macName, KI_MAX_NAME_LENGTH, "<NoName>");
+            const char* lpcEnd = lpcName;
+            while (*lpcEnd)
+                ++lpcEnd;
+            const u32 luLength = static_cast<u32>(lpcEnd - lpcName);
+            if (luLength >= static_cast<u32>(KI_MAX_NAME_LENGTH))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer,
+                                          CgsDev::Assert::giMessageBufferSize);
+                lStream << "String " << lpcName << " is too long. Buffer size = "
+                        << static_cast<u32>(KI_MAX_NAME_LENGTH)
+                        << ", string length = " << luLength << "\n";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                CgsDev::Assert::EndAssert();
+            }
         }
 
-        return 0;
+        const char* lpcSource = lpcName ? lpcName : "<NoName>";
+        char* lpcDestination = macName;
+        do
+        {
+            *lpcDestination++ = *lpcSource;
+        }
+        while (*lpcSource++);
     }
 }
