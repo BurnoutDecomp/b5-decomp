@@ -66,11 +66,10 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     lVertexParams.muFunction          = static_cast<u32>(reinterpret_cast<uintptr_t>(lpVertexProgramBinary));
     lVertexParams.muReserved8         = luVertexProgramSize;
 
-    rw::BaseResourceDescriptors<5> lVertexDescriptor;
+    rw::ResourceDescriptor lVertexDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
 
-    renderengine::ProgramResourceLayout lVertexLayout = {};
-    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lVertexLayout, &lVertexDescriptor);
+    rw::Resource lVertexLayout = lpAllocator->DoAllocate(lVertexDescriptor, 0);
     mapVertexProgramBuffer[li8ProgramIndex] =
         reinterpret_cast<renderengine::ProgramBuffer*>(
             renderengine::ProgramBuffer::Initialize(&lVertexLayout, &lVertexParams));
@@ -84,11 +83,10 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     lPixelParams.muReserved8         = luPixelProgramSize;
     lPixelParams.muShaderType        = 1;
 
-    rw::BaseResourceDescriptors<5> lPixelDescriptor;
+    rw::ResourceDescriptor lPixelDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);
 
-    renderengine::ProgramResourceLayout lPixelLayout = {};
-    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lPixelLayout, &lPixelDescriptor);
+    rw::Resource lPixelLayout = lpAllocator->DoAllocate(lPixelDescriptor, 0);
     mapPixelProgramBuffer[li8ProgramIndex] =
         reinterpret_cast<renderengine::ProgramBuffer*>(
             renderengine::ProgramBuffer::Initialize(&lPixelLayout, &lPixelParams));

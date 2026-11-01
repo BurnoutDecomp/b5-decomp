@@ -142,7 +142,7 @@ renderengine::ProgramBufferData* CreateBlitProgram(rw::IResourceAllocator* alloc
     renderengine::ProgramBuffer::GetResourceDescriptor(&descriptor, &parameters);
     rw::Resource resource = allocator->DoAllocate(descriptor, 0);
     return renderengine::ProgramBuffer::Initialize(
-        reinterpret_cast<renderengine::ProgramResourceLayout*>(&resource), &parameters);
+        &resource, &parameters);
 }
 }
 

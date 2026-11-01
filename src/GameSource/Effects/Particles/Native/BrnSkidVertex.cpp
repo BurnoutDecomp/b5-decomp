@@ -153,8 +153,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
 
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-
     // ---- vertex program (muFunction = binary, muReserved8 = size, muShaderType = 0 -> vertex) ----
     renderengine::ProgramBufferParameters lVertexParams;
     lVertexParams.muShaderType        = 0;
@@ -165,11 +163,10 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     lVertexParams.muFunction          = static_cast<u32>(reinterpret_cast<uintptr_t>(lpVertexProgramBinary));
     lVertexParams.muReserved8         = luVertexProgramSize;
 
-    rw::BaseResourceDescriptors<5> lVertexDescriptor;
+    rw::ResourceDescriptor lVertexDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
 
-    renderengine::ProgramResourceLayout lVertexLayout = {};
-    lpAllocatorIf->Create(&lVertexLayout, lpAllocatorIf, &lVertexDescriptor, 0);
+    rw::Resource lVertexLayout = lpAllocator->DoAllocate(lVertexDescriptor, 0);
     mapVertexProgramBuffer[li8ProgramIndex] =
         reinterpret_cast<renderengine::ProgramBuffer*>(
             renderengine::ProgramBuffer::Initialize(&lVertexLayout, &lVertexParams));
@@ -184,11 +181,10 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     lPixelParams.muReserved8         = luPixelProgramSize;
     lPixelParams.muShaderType        = 1;
 
-    rw::BaseResourceDescriptors<5> lPixelDescriptor;
+    rw::ResourceDescriptor lPixelDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);
 
-    renderengine::ProgramResourceLayout lPixelLayout = {};
-    lpAllocatorIf->Create(&lPixelLayout, lpAllocatorIf, &lPixelDescriptor, 0);
+    rw::Resource lPixelLayout = lpAllocator->DoAllocate(lPixelDescriptor, 0);
     mapPixelProgramBuffer[li8ProgramIndex] =
         reinterpret_cast<renderengine::ProgramBuffer*>(
             renderengine::ProgramBuffer::Initialize(&lPixelLayout, &lPixelParams));

@@ -60,13 +60,6 @@ namespace renderengine
         u32 muNumVariables;      // +0x24
     };
 
-    struct ProgramResourceLayout
-    {
-        ProgramBufferData* mpData;          // +0x00
-        u32                muReserved4;     // +0x04
-        void*              mpPhysicalBlock; // +0x08
-    };
-
     CGS_STATIC_ASSERT((sizeof(ProgramVariableDescriptor) == 8), "ProgramVariableDescriptor must be 8 bytes");
     CGS_STATIC_ASSERT((sizeof(ProgramMicrocodeParts) == 16), "ProgramMicrocodeParts must be 16 bytes");
 
@@ -77,7 +70,7 @@ namespace renderengine
                                                                      const ProgramBufferParameters* lpParams);
         static u32  GetVariableHandleByName(const ProgramBufferData* lpData, const u8* lpName,
                                             ProgramVariableHandle* lpHandle);
-        static ProgramBufferData* Initialize(ProgramResourceLayout* lpLayout, const ProgramBufferParameters* lpParams);
+        static ProgramBufferData* Initialize(rw::Resource* lpResource, const ProgramBufferParameters* lpParams);
         static void Release(ProgramBufferData* lpData);
         static u32  Xbox2CreateConstantTable(const void* lpFunction, void* lpDestTable, u32* lpTotalSize);
     };
