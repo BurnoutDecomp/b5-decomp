@@ -71,10 +71,8 @@
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                                 // BrnGui::GuiEventStopVideo
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // CgsDev::Log::WriteToLog (the state-transition diagnostic)
 
 #include <cstring>   // std::strcmp (the X360 inlines the apt-trigger name compares)
-#include <cstdio>    // std::snprintf (the state-transition diagnostic)
 #include <cstddef>   // offsetof (the x64 payload-offset word of the voice-over record)
 
 namespace BrnGui
@@ -311,26 +309,6 @@ namespace BrnGui
 
     }
 
-    // Intro-state transition log -- the [BootLegal] / [BootProfile] / [FBurnMainHud]-style
-    // diagnostic every boot/flow state in this tree carries. PC-side only; the X360 has no
-    // equivalent (its retail build strips all of these).
-    static void LogIntroState(s32 liFrom, s32 liTo, const char* lpacWhere)
-    {
-        char lac[96];
-        std::snprintf(lac, sizeof(lac), "[Intro] state %d -> %d (%s)\n", liFrom, liTo, lpacWhere);
-        CgsDev::Log::WriteToLog(lac);
-    }
-
-    // The voice-over gate diagnostic: HandleStateTransitions holds both timed transitions
-    // while a voice-over is playing, so a stuck mbVoiceOverPlaying stalls the whole sequence.
-    static void LogIntroVoiceOver(bool lbPlaying, s32 liState)
-    {
-        char lac[96];
-        std::snprintf(lac, sizeof(lac), "[Intro] voice-over %s (state %d)\n",
-                      lbPlaying ? "STARTED" : "FINISHED", liState);
-        CgsDev::Log::WriteToLog(lac);
-    }
-
     // ================================================================================
     // @ 0x824FFF58 -- the compiler-emitted constructor. The X360 writes the state's own
     // vtable (+0x000, off_820740E0) plus ~20 embedded sub-object vtable pointers; with the
@@ -519,7 +497,6 @@ namespace BrnGui
     // ================================================================================
     void Intro::HandleTransitionFromWelcomeText()
     {
-        LogIntroState(E_INTROSTATE_WELCOMETEXT, E_INTROSTATE_PHOTOBOOTH, "HandleTransitionFromWelcomeText");
         meIntroState = E_INTROSTATE_PHOTOBOOTH;
         SetupComponents();
 
@@ -539,7 +516,6 @@ namespace BrnGui
         // X360: the inlined GuiEventPlayAptMovie record {8, 18, 12, "", 3} on channel 41.
         mpStateInterface->PlayAptMovie("", 3);
 
-        LogIntroState(E_INTROSTATE_LICENCE, E_INTROSTATE_START_FLYBY, "HandleTransitionFromLicense");
         meIntroState = E_INTROSTATE_START_FLYBY;
 
         mLicenseComponent.ReleaseResources();
@@ -686,7 +662,6 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_VOICEOVER_STARTED:
-                LogIntroVoiceOver(true, meIntroState);
                 mbVoiceOverPlaying = true;
                 if (meIntroState == E_INTROSTATE_PHOTOBOOTH)
                 {
@@ -695,7 +670,6 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_VOICEOVER_STOPPED:
-                LogIntroVoiceOver(false, meIntroState);
                 mfPauseTimer       = 0.0f;
                 mbVoiceOverPlaying = false;
                 if (meIntroState == E_INTROSTATE_PHOTOBOOTH)
@@ -805,7 +779,6 @@ namespace BrnGui
 
             if (lbAdvance)
             {
-                LogIntroState(meIntroState, E_INTROSTATE_LICENCE, "HandleControllerPressedPhotoBooth");
                 meIntroState = E_INTROSTATE_LICENCE;
                 SetupComponents();
             }
@@ -827,7 +800,6 @@ namespace BrnGui
         case E_INTROSTATE_NONE:
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:212
             mpStateInterface->StopLoadingScreen();
-            LogIntroState(E_INTROSTATE_NONE, E_INTROSTATE_LOADINGRESOURCES, "Update");
             meIntroState = E_INTROSTATE_LOADINGRESOURCES;
             // FALL THROUGH -- the X360 case 0 runs straight on into case 5 (no branch).
 
@@ -843,7 +815,6 @@ namespace BrnGui
                 mPhotoBoothComponent.OnLoad();
                 mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
                 AppendExpectedComponents();
-                LogIntroState(E_INTROSTATE_LOADINGRESOURCES, E_INTROSTATE_WAITINGFORCOMPONENTS, "Update");
                 meIntroState = E_INTROSTATE_WAITINGFORCOMPONENTS;
             }
             break;
@@ -852,7 +823,6 @@ namespace BrnGui
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:248
             if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
             {
-                LogIntroState(E_INTROSTATE_WAITINGFORCOMPONENTS, E_INTROSTATE_WELCOMETEXT, "Update");
                 meIntroState = E_INTROSTATE_WELCOMETEXT;
                 SetupComponents();
             }
@@ -862,7 +832,6 @@ namespace BrnGui
             if (CacheIsUserSignedIn(mpGuiCache))
             {
                 mfFlybyTimer = 0.0f;
-                LogIntroState(E_INTROSTATE_START_FLYBY, E_INTROSTATE_WAIT_FOR_FLYBY_FINISH, "Update");
                 meIntroState = E_INTROSTATE_WAIT_FOR_FLYBY_FINISH;
                 PostCommand16<KI_COMMAND_FLYBY_START>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             }
