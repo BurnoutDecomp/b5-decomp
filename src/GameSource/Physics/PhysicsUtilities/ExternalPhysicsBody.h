@@ -200,13 +200,9 @@ namespace BrnPhysics
         void ReadPropertiesFromChangeInertiaEvent(
             const CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia* lpEvent);
 
-        // ADDITIVE GROW (Deformation PhysicalBodyPart::Construct caller): DECLARE-ONLY. Set the body's
-        // mass (mfMass @ +208). The deformation part Construct @0x825B4178 stores 5.0 into the body's
-        // mass between ExternalPhysicsBody::Construct() and ::Prepare() (the lvlx/vspltw of a 5.0 stack
-        // temp into +208). The authoritative body is owned by ExternalPhysicsBody's own TU; only the
-        // declaration is needed for the per-TU `cl /c` gate. FLAG: signature from the Construct call
-        // site (a single f32 mass arg).
-        void SetMass(f32 lfMass);
+        // DWARF ExternalPhysicsBody.h:211. The inlined setter stores the full
+        // VecFloat register at +0xD0; callers construct the required splat.
+        void SetMass(VecFloat lvfMass);
 
         // ⭐ ADDED 2026-08-27 (detach-2 wave). SIGNATURE IS DWARF-AUTHORITATIVE: the DecFIGS dump
         // references/DecFIGS/dwarfdump/GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.h:178
@@ -240,11 +236,6 @@ namespace BrnPhysics
         // named on the host. Trivial inline, no console address of its own.
         VecFloat GetMass() const { return mfMass; }
 
-        const Matrix33& DiagWorldInverseInertia() const { return mWorldInverseInertia; }
-        const Vector3&  DiagTotalLinearImpulse() const  { return mTotalLinearImpulse; }
-        const Vector3&  DiagTotalAngularImpulse() const { return mTotalAngularImpulse; }
-        const Vector3&  DiagTotalLinearForce() const    { return mTotalLinearForce; }
-        const Vector3&  DiagTotalTorque() const         { return mTotalTorque; }
 
         // ⭐ ADDED 2026-08-19 (wave Q6 / the jointed lean+tilt prop response). The body's
         // linear momentum AT THE END of a step of `lvfTimeStep`, i.e. the momentum the
