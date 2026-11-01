@@ -1,11 +1,7 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Socket.h"
 
-// The X360 socket bodies call the platform Winsock primitives directly
-// (closesocket / select / recv / send / WSAGetLastError, and the WSAE* error
-// codes). MassiveAd is vendor middleware over the OS sockets layer, so these are
-// FLAGGED platform APIs supplied by <winsock2.h> on the PC target -- the same
-// direct calls the ARTIST asm makes, not routed through a Massive* hook.
-#include <winsock2.h>
+// X360 socket operations are provided by the XDK Winsock interface.
+#include <xtl.h>
 #include <cstring>
 
 // ===========================================================================
