@@ -211,8 +211,8 @@ namespace CgsDev
 
         lpDebug2DRender->DrawFrame(32.0f, 408.0f, 608.0f, 412.0f,
                                    0xFF000000u, 2.0f);
-        const Vector2 lv2TrackPosition = { 32.0f, 408.0f, 0.0f, 0.0f };
-        const Vector2 lv2TrackSize = { mfMaxCpu * 2.8799999f, 4.0f, 0.0f, 0.0f };
+        const Vector2 lv2TrackPosition(32.0f, 408.0f);
+        const Vector2 lv2TrackSize(mfMaxCpu * 2.8799999f, 4.0f);
         lpDebug2DRender->DrawBox(lv2TrackPosition, lv2TrackSize, 0xFF252525u);
 
         f32 lfX = 32.0f;
@@ -230,8 +230,8 @@ namespace CgsDev
                 continue;
 
             const f32 lfWidth = lData.mfCurrentValue * 2.8800001f;
-            const Vector2 lv2BarPosition = { lfX, 408.0f, 0.0f, 0.0f };
-            const Vector2 lv2BarSize = { lfWidth, 4.0f, 0.0f, 0.0f };
+            const Vector2 lv2BarPosition(lfX, 408.0f);
+            const Vector2 lv2BarSize(lfWidth, 4.0f);
             lpDebug2DRender->DrawBox(lv2BarPosition, lv2BarSize, 0xFFCC59CCu);
             lfX += lfWidth;
             lfTotal += lData.mfCurrentValue;

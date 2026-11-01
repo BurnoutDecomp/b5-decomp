@@ -99,13 +99,13 @@ void Statistics::DrawGraph(CgsDev::Debug2DImmediateRender* lpRender,
                            u32 lColour)
 {
     CGS_ASSERT(lpVoiceProfilingData, "lpVoiceProfilingData");
-    Vector2 lv2LineStart = {120.0f,
-        700.0f - lpVoiceProfilingData->GetTimeByIndex(127) * 6.0f, 0.0f, 0.0f};
+    Vector2 lv2LineStart(120.0f,
+        700.0f - lpVoiceProfilingData->GetTimeByIndex(127) * 6.0f);
     f32 lfX = 126.875f;
     for (u32 luHistoryIndex = 128; luHistoryIndex != 0; --luHistoryIndex)
     {
         const f32 lfTime = lpVoiceProfilingData->GetTimeByIndex(luHistoryIndex - 1);
-        const Vector2 lv2LineEnd = {lfX, 700.0f - lfTime * 6.0f, 0.0f, 0.0f};
+        const Vector2 lv2LineEnd(lfX, 700.0f - lfTime * 6.0f);
         lpRender->DrawLine(lv2LineStart, lv2LineEnd,
                            lfTime < 99.0f ? lColour : 0xFF0000FFu);
         lv2LineStart = lv2LineEnd;

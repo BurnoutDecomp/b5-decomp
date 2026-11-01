@@ -89,8 +89,8 @@ void WidgetLineGraph::Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY,
                 const f32 lfScaledY = lfValue * lfHeight;
                 if (lfPrevY > 0.0f && liRemaining > 0)
                 {
-                    const Vector2 lv2Start = { static_cast<f32>(liRemaining - 1) * lfXStep + lfX, lfBottom - lfPrevY,   0.0f, 0.0f };
-                    const Vector2 lv2End   = { static_cast<f32>(liRemaining)     * lfXStep + lfX, lfBottom - lfScaledY, 0.0f, 0.0f };
+                    const Vector2 lv2Start(static_cast<f32>(liRemaining - 1) * lfXStep + lfX, lfBottom - lfPrevY);
+                    const Vector2 lv2End(static_cast<f32>(liRemaining)     * lfXStep + lfX, lfBottom - lfScaledY);
                     lpRender->DrawLine(lv2Start, lv2End, lColour);
                 }
                 lfPrevY = lfScaledY;

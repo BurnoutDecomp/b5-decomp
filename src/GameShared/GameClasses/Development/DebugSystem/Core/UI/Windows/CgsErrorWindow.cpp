@@ -87,8 +87,8 @@ namespace CgsDev
             const f32 lfHeight = GetHeight();
 
             // DrawBox receives UI+0x54 in r4 @0x8282EF8C, independently of the pulse.
-            const Vector2 lv2Position = {lfX, lfY, 0, 0};
-            const Vector2 lv2Size = {lfWidth, lfHeight, 0, 0};
+            const Vector2 lv2Position(lfX, lfY);
+            const Vector2 lv2Size(lfWidth, lfHeight);
             lpRender->DrawBox(lv2Position, lv2Size, lrPalette.mColourErrorWindow);
 
             // Frame (X360 sub_8281C960 == DrawFrame 6-arg): rect + pulse colour + the metric border.
