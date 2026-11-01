@@ -6,8 +6,6 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include <cmath>
-#include <cstdlib>   // [DIAG] getenv -- BRN_MM_DIAG only
 
 namespace BrnGameState
 {
@@ -26,8 +24,8 @@ void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
     const f32 lfMinOpponentCount = static_cast<f32>(giMarkedManMinOpponentCount);
     const f32 lfMaxOpponentCount = static_cast<f32>(giMarkedManMaxOpponentCount);
     const f32 lfOpponentCountSpan = (lfMaxOpponentCount + 1.0f) - lfMinOpponentCount;
-    miMaxOpponentCount = static_cast<s32>(std::fma(lfOpponentCountSpan,
-        lpStartGameModeParams->GetProgressionRankAsRatio(), lfMinOpponentCount));
+    miMaxOpponentCount = static_cast<s32>(lfOpponentCountSpan
+        * lpStartGameModeParams->GetProgressionRankAsRatio() + lfMinOpponentCount);
     if (miMaxOpponentCount >= giMarkedManMaxOpponentCount)
         miMaxOpponentCount = giMarkedManMaxOpponentCount;
     lpGameModeParams->muJunctionID = lpStartGameModeParams->GetJunctionID();
@@ -75,17 +73,17 @@ void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
     miBroadcastOpponentCount = 0;
     mbInShortcut = false;
     // ARTIST 0x82332668..70: vmaddfp encodes A*C+B, using (min-max)*rank + max.
-    mfMaxRampTimer = std::fma(gfMarkedManMinRampTime - gfMarkedManMaxRampTime,
-                              lpGameModeParams->mfProgressionRankAsRatio,
-                              gfMarkedManMaxRampTime);
-
-    // ---- [DIAG] NOT IN THE X360 BINARY -- issue #24, BRN_MM_DIAG=1 ---------------------------
-    // The rival COUNT is arithmetic on the profile's rank ratio (ARTIST 0x823323A0:
-    // (dword_82CDB7C0 + 1 - dword_82CDB7BC) * ratio + dword_82CDB7BC, capped at dword_82CDB7C0;
-    // the image holds 2 and 4 there, so the default is fma(3, ratio, 2) capped at 4). Printing the
-    // ratio AND the result is the only way to say whether "barely any enemies" is the console's own
-    // number or a lost rival. DELETE-WHEN issue #24 is closed.
-    // ---- end [DIAG] --------------------------------------------------------------------------
+    const rw::math::vpu::VectorIntrinsic lMinimum = {
+        gfMarkedManMinRampTime, gfMarkedManMinRampTime,
+        gfMarkedManMinRampTime, gfMarkedManMinRampTime };
+    const rw::math::vpu::VectorIntrinsic lMaximum = {
+        gfMarkedManMaxRampTime, gfMarkedManMaxRampTime,
+        gfMarkedManMaxRampTime, gfMarkedManMaxRampTime };
+    const rw::math::vpu::VectorIntrinsic lRank = {
+        lpGameModeParams->mfProgressionRankAsRatio, lpGameModeParams->mfProgressionRankAsRatio,
+        lpGameModeParams->mfProgressionRankAsRatio, lpGameModeParams->mfProgressionRankAsRatio };
+    const rw::math::vpu::VectorIntrinsic lRamp = __vmaddfp(__vsubfp(lMinimum, lMaximum), lRank, lMaximum);
+    mfMaxRampTimer = lRamp.x;
 }
 
 // ARTIST 0x8234D188. Update the threat ramp before publishing it to the HUD.
@@ -114,24 +112,12 @@ void SurvivorMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
         if (lfDistance < 2000.0f)
         {
             // The two fctiwz conversions happen BEFORE their integer sum.
-            liOpponentCount += static_cast<s32>(std::fma(-lfDistance, 0.0005f, 1.0f)
+            liOpponentCount += static_cast<s32>((1.0f - lfDistance * 0.0005f)
                                                   * static_cast<f32>(miMaxOpponentCount + 1));
         }
         if (liOpponentCount > miMaxOpponentCount)
             liOpponentCount = miMaxOpponentCount;
     }
-    // ---- [DIAG] NOT IN THE X360 BINARY -- issue #24, BRN_MM_DIAG=1 ---------------------------
-    // Why HERE: `UpdateOpponents` is the ONLY producer of action 129, and action 129 is the ONLY
-    // writer of RaceCar::mbIsAllowedInRoadRage, which IsRaceCarWrappable @0x822E9E18 tests third.
-    // Run 1 measured allowedRR 0 for the whole event and rivals 2.7-5.6 km away, so the question
-    // is exactly which term of this arithmetic is pinning liOpponentCount to miBroadcastOpponent-
-    // Count. Sampled once per second off the mode's own time step.
-    // DELETE-WHEN issue #24 is closed.
-    {
-        static s32 siDiagCalls = 0;
-    }
-    // ---- end [DIAG] --------------------------------------------------------------------------
-
     mbInShortcut = false;
     if (miBroadcastOpponentCount != liOpponentCount)
     {
