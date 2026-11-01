@@ -11,23 +11,6 @@
 
 namespace BrnTraffic
 {
-    namespace
-    {
-        // rw::math::vpu::Vector4::SetComponent (DWARF BrnTrafficFuzzyEnvelopeSet.cpp:60, and the
-        // console's vperm-with-a-lane-mask). The committed PC Vector4 lives in the vendor header
-        // rw/math/vpu/types.h and carries no SetComponent; that header is not this file's to grow.
-        void SetLane(Vector4& lrVector, s32 liLane, f32 lfValue)
-        {
-            switch (liLane)
-            {
-            case 0:  lrVector.x = lfValue; break;
-            case 1:  lrVector.y = lfValue; break;
-            case 2:  lrVector.z = lfValue; break;
-            default: lrVector.w = lfValue; break;
-            }
-        }
-    }
-
     // @0x82752570 (DWARF BrnTrafficFuzzyEnvelopeSet.cpp:39). Four Vector4::SetZero.
     void FuzzyEnvelopeSet4::Construct()
     {
@@ -48,10 +31,10 @@ namespace BrnTraffic
         CGS_ASSERT(liEnvelope >= 0, "liEnvelope >= 0");
         CGS_ASSERT(liEnvelope < KI_MAX_ENVELOPES, "Tried to set out-of-range envelope ");
 
-        SetLane(mAttackStart, liEnvelope, lfAttackStart.x);
-        SetLane(mDecayStop,   liEnvelope, lfDecayStop.x);
-        SetLane(mAttackGradient, liEnvelope, 1.0f / (lfAttackStop.x  - lfAttackStart.x));
-        SetLane(mDecayGradient,  liEnvelope, 1.0f / (lfDecayStart.x - lfDecayStop.x));
+        mAttackStart.SetComponent(liEnvelope, lfAttackStart.mV.x);
+        mDecayStop.SetComponent(liEnvelope, lfDecayStop.mV.x);
+        mAttackGradient.SetComponent(liEnvelope, 1.0f / (lfAttackStop.mV.x  - lfAttackStart.mV.x));
+        mDecayGradient.SetComponent(liEnvelope, 1.0f / (lfDecayStart.mV.x - lfDecayStop.mV.x));
     }
 
     // Inline expansion: UpdateVehiclesJob::ProcessSwervingRules @0x82918828..0x829188EC evaluates
@@ -71,7 +54,7 @@ namespace BrnTraffic
     // followed by a vperm that broadcasts lane liEnvelope.
     VecFloat FuzzyEnvelopeSet4::CalcScore(s32 liEnvelope, VecFloat lfValue) const
     {
-        return rw::math::vpu::Splat(
+        return VecFloat(
                    rw::math::vpu::GetComponent(CalcScores(lfValue), liEnvelope));
     }
 }
