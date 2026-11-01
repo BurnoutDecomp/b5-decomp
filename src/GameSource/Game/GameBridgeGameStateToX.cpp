@@ -240,9 +240,6 @@ namespace BrnGame
         const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>* lpTakedownQueue,
         s32 liPlayerActiveRaceCarIndex)
     {
-        // The console builds the mask with li 1 / extldi 64,33 -- i.e. 1 << 33.
-        static const u64 KU_TAKEDOWN_SOFT_DISPLAY_MASK = 0x0000000200000000ull;
-
         const s32 liCount = lpTakedownQueue->GetLength();
 
         for (s32 i = 0; i < liCount; ++i)
@@ -257,7 +254,8 @@ namespace BrnGame
             }
             else
             {
-                lbHard = ((mu64TakedownDisplayFlags & KU_TAKEDOWN_SOFT_DISPLAY_MASK) == 0);
+                lbHard = !mGameStateModule.GetModeManager()->GetCurrentGameModeParams()->GetFlag(
+                    BrnGameState::GameModeParams::KU_FLAG_ENFORCE_SOFT_TAKEDOWNS);
             }
 
             if (lbHard)
