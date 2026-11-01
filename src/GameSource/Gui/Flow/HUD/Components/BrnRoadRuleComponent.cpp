@@ -209,9 +209,7 @@ namespace
     // four-lane shim, so all lanes carry the scalar).
     VecFloat MakeVecFloatSplat(f32 lfValue)
     {
-        VecFloat lvfSplat;
-        lvfSplat.x = lvfSplat.y = lvfSplat.z = lvfSplat.w = lfValue;
-        return lvfSplat;
+        return VecFloat(lfValue);
     }
 
 }
@@ -480,19 +478,7 @@ void RoadRuleComponent::Update(f32 lfTimeStep)
         mePreviousActiveRule = meCurrentlyActiveRule;
     }
 
-    static u32 suPlateTicks = 0, suPlateRows = 0;
-    if (sbPlateTrace && CgsDev::Log::gpDebugPrint != 0 &&
-        (++suPlateTicks % 30u) == 0u && suPlateRows < 240u)
-    {
-        ++suPlateRows;
-        *CgsDev::Log::gpDebugPrint << "[road-plate] road=" << mCurrentRunningRoadID
-            << " transition=" << mTransitionData.mRoadId << " index=" << mTransitionData.miRoadIndex
-            << " state=" << static_cast<s32>(meCurrentSignState)
-            << " rule=" << static_cast<s32>(meCurrentlyActiveRule)
-            << " colour=" << static_cast<s32>(mRoadSign.GetSignColour())
-            << " bestTime=" << mTransitionData.maiBestValues[0]
-            << " leader=" << static_cast<s32>(mTransitionData.maeRoadRuleLeaderType[0]) << "\n";
-    }
+
 }
 
 // @ 0x8243F540 -- push the running rule time into the timer field and fire the
@@ -557,36 +543,41 @@ void RoadRuleComponent::UpdateRoadSignDistance(Vector3 lv3CameraPosition,
                                                VecFloat lvfAdjustment,
                                                RoadRulesRoadSign* lpSign)
 {
-    // pos - maRoadWorldPosition[side], with the height lane zeroed (vrlimi mask 4).
-    const f32 lfDx = lv3CameraPosition.x - maRoadWorldPosition[leSide].x;
-    const f32 lfDz = lv3CameraPosition.z - maRoadWorldPosition[leSide].z;
-    const f32 lfDistSq = lfDx * lfDx + lfDz * lfDz;
-
-    // The X360 vcmpgtfp gate: |distSq| must exceed the epsilon or nothing moves.
-    if (!(std::fabs(lfDistSq) > KF_EPSILON))
+    // ARTIST 8242B038..B11C: horizontal dot product and two fused
+    // reciprocal-square-root refinements. Keep the four VMX lanes intact.
+    const __vector4 lvZero = __vspltisw(0);
+    __vector4 lvDelta = __vsubfp(lv3CameraPosition.mV, maRoadWorldPosition[leSide].mV);
+    lvDelta = __vrlimi(lvDelta, lvZero, 4, 0);
+    const __vector4 lvSquared = __vmsum3fp(lvDelta, lvDelta);
+    const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+    const __vector4 lvAbs = __vandc(lvSquared, lvSign);
+    const __vector4 lvEpsilon = MakeVecFloatSplat(KF_EPSILON).mV;
+    if (__vcmpgtfp(lvAbs, lvEpsilon).u[0] == 0)
         return;
 
-    const f32 lfDistance = (lfDistSq == 0.0f) ? 0.0f : std::sqrt(lfDistSq);   // vrsqrte + vsel
-
-    f32 lfBand = lfDistance - KF_SIGN_DISTANCE_MIN;
-    if (lfBand < 0.0f)
-        lfBand = 0.0f;
-    if (lfBand > KF_SIGN_DISTANCE_CLAMP)
-        lfBand = KF_SIGN_DISTANCE_CLAMP;
-
+    const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+    const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+    __vector4 lvEstimate = __vrsqrtefp(lvSquared);
+    for (int li = 0; li != 2; ++li)
+    {
+        const __vector4 lvError = __vnmsubfp(lvSquared, __vmulfp(lvEstimate, lvEstimate), lvOne);
+        lvEstimate = __vmaddfp(__vmulfp(lvEstimate, lvHalf), lvError, lvEstimate);
+    }
+    const __vector4 lvDistance = __vsel(__vmulfp(lvSquared, lvEstimate), lvZero,
+                                         __vcmpeqfp(lvZero, lvSquared));
+    const __vector4 lvBand = __vminfp(MakeVecFloatSplat(KF_SIGN_DISTANCE_CLAMP).mV,
+        __vmaxfp(lvZero, __vsubfp(lvDistance, MakeVecFloatSplat(KF_SIGN_DISTANCE_MIN).mV)));
     const VecFloat lvfSizeAdjustment = GetSignOffsetSizeAdjustment(leSide);
-
     if (lpSign->GetMovieClipRef().mpMovieClipInst != 0)
     {
-        const f32 lfSlide = lfBand * KF_SIGN_ONE_OVER_CLAMP * KF_SIGN_DISTANCE_SCALE;
-        const f32 lfX = KAF_SIGN_SIDE_BASE[leSide]
-                      + lvfAdjustment.x * lfSlide
-                      + lvfSizeAdjustment.x;
+        __vector4 lvSlide = __vmulfp(lvBand, MakeVecFloatSplat(KF_SIGN_ONE_OVER_CLAMP).mV);
+        lvSlide = __vmulfp(lvSlide, MakeVecFloatSplat(KF_SIGN_DISTANCE_SCALE).mV);
+        const __vector4 lvPosition = __vaddfp(
+            __vmaddfp(lvSlide, lvfAdjustment.mV, MakeVecFloatSplat(KAF_SIGN_SIDE_BASE[leSide]).mV),
+            lvfSizeAdjustment.mV);
         Vector2 lv2Position;
-        lv2Position.x = lfX;
-        lv2Position.y = KF_SIGN_POSITION_Y;
-        lv2Position.z = 0.0f;
-        lv2Position.w = 0.0f;
+        // Original control 82CDA350 selects x, fixed y, x, x.
+        lv2Position.mV = __vrlimi(lvPosition, MakeVecFloatSplat(KF_SIGN_POSITION_Y).mV, 4, 0);
         lpSign->GetMovieClipRef().SetPosition(lv2Position);
     }
 }

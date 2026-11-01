@@ -2,6 +2,7 @@
 #define BRN_GUI_FLAPT_ROAD_SIGN_ICON_COMPONENT_H
 
 #include "types.hpp"
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h"
 #include "BrnCommonTypes.h"                              // Vector2, Vector4, CgsID
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"   // BrnFlapt::MovieClipRef (embedded by value)
 #include "GameSource/Gui/BrnGuiShared.h"                 // BrnGui::ERoadIcon
@@ -17,29 +18,9 @@
 // member names/types/enums pinned from the DecFIGS DWARF
 // (BrnGuiFlaptRoadSignIconComponent.h), gated on the X360 ledger.
 //
-// LAYOUT NOTE (X360-attested offsets, from the Construct / Prepare / DisplayRoad /
-// SetColour asm). The DWARF declares this as
-//   struct FlaptRoadSignIconComponent : public BrnFlaptComponent { vptr; ... }
-// but -- exactly like the sibling FlaptTimerFieldComponent -- the X360 build inserts a
-// 12-byte gap between the leading vptr (+0x00) and the BrnFlaptComponent base subobject,
-// which the PS3 DWARF does not show. Per the layout-recovery rule we trust the X360 asm
-// offsets and model the class FLAT (named members at their attested displacements, with
-// explicit padding for the gap) rather than via C++ inheritance, which would misplace
-// the base at +0x04. All member access is BY NAME; there are no raw-offset hacks.
-//
-//   +0x00  vptr + 12-byte X360 lead gap (opaque)
-//   +0x10  mpStateInterface  (stw SI, 0x10(this))          -- BrnFlaptComponent base
-//   +0x14  mAptRef           (MovieClipRef; the road-sign clip)
-//   +0x20  mv2WorldPos       (Vector2; zeroed by the vector store at +0x20)
-//   +0x30  mRoadId           (CgsID / u64)
-//   +0x38  meIconType        (EIconType; Construct installs E_ICON_TYPE_COUNT == 7)
-//   +0x3C  meSignColour      (ESignColour)
-//   +0x40  mbTimeRuled       (bool)
-//   +0x41  mbCrashRuled      (bool)
-//   +0x42  mbShowPost        (bool)
-//   +0x43  mbSignVisible     (bool; DisplayRoad sets it once the sign clip is shown)
-//   +0x44  mPostMovieClip    (MovieClipRef; the "SignPole" child clip)
-//   sizeof 0x4C
+// Native XDK inheritance places BrnFlaptComponent at +0x10 and the Vector2 at
+// +0x20. ARTIST 8241CB68 writes the base at +0x10 and the remaining fields
+// through +0x48; the natural class extent is 0x50.
 // ============================================================================
 
 namespace CgsGui
@@ -54,7 +35,7 @@ namespace BrnFlapt
 
 namespace BrnGui
 {
-    struct FlaptRoadSignIconComponent
+    struct FlaptRoadSignIconComponent : public BrnFlaptComponent
     {
         // BrnGuiFlaptRoadSignIconComponent.h:52 (DWARF) -- which of the seven sign
         // shapes/layouts the sign uses. E_ICON_TYPE_COUNT is the "unset" sentinel
@@ -132,11 +113,7 @@ namespace BrnGui
         void DisplayRoad(ERoadIcon leRoadIcon, bool lbVisible);
 
     private:
-        // ---- layout (see LAYOUT NOTE; flat by attested offset) ------------------
-        u8                      mauPadHead[0x10];   // +0x00 vptr + X360 lead gap (opaque)
-        CgsGui::StateInterface* mpStateInterface;   // +0x10  BrnFlaptComponent base
-        BrnFlapt::MovieClipRef  mAptRef;            // +0x14
-        u8                      mauPad1C[0x04];     // +0x1C  align Vector2 to +0x20
+        // Native base, vptr and vector alignment are supplied by the compiler.
         Vector2                 mv2WorldPos;        // +0x20
         CgsID                   mRoadId;            // +0x30
         EIconType               meIconType;         // +0x38

@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                    // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // the state in-queue
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log (the deferral gap log)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // native filter-gated mugshot messages
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                         // GuiOverlayRequest / E_GUIFLOW_HUD
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"                       // BrnFlapt::FlaptManager
@@ -15,8 +15,6 @@
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h" // AttachToTextFieldComponent
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData
 
-#include <cstdio>    // std::snprintf (the one-shot deferral log)
-#include <cstdlib>   // std::getenv (BRN_PAYBACK_DIAG)
 
 // includes folded in from the BrnRaceMainHudState_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the two streamed asserts)
@@ -172,42 +170,6 @@ namespace BrnGui
             "NHD_LP",  "NHD_SV", "NHD_DT", "NHD_RC", "NHD_MC", "NHD_WF",
         };
 
-        // ---- component deferral log (the FBurn LogDeferredComponent idiom) ----------
-        // Each site below keeps the X360 control flow and logs the gap ONCE instead of
-        // inventing a body for a callee whose X360 function is not reconstructed yet.
-        //
-        // NOT IN THE X360 BINARY -- this helper is ours (progress/identity.json has no
-        // LogDeferredComponent and neither does any ARTIST export); there is no asm to
-        // match it against. Waves S3 and S4 each landed their own copy of it in their
-        // partfiles, and when issue #20 folded the family into this TU the three copies
-        // were one name over two different bodies. THE ONE-SHOT 16-SLOT SHAPE WINS: it is
-        // what this very comment already claimed ("logs the gap ONCE") and what wS3/wS4
-        // both wrote, and their call sites are per-frame (UpdateRunning @0x8247E898,
-        // Update, HandleTrigger) where the unconditional variant that stood here floods
-        // the log. The only edit to the surviving text is dropping wS3/wS4's "(wave SN)"
-        // tag -- one TU can carry only one of them, and the wave is provenance of our
-        // reconstruction, not of the console.
-        void LogDeferredComponent(const char* lpacComponent)
-        {
-            static const char* sapcNames[16];
-            for (s32 li = 0; li < 16; ++li)
-            {
-                if (sapcNames[li] == lpacComponent)
-                    return;
-                if (sapcNames[li] == 0)
-                {
-                    sapcNames[li] = lpacComponent;
-                    char lac[160];
-                    std::snprintf(lac, sizeof(lac),
-                                  "[RaceMainHud] %s -- component TU deferred.\n",
-                                  lpacComponent);
-                    CgsDev::Log::WriteToLog(lac);
-                    return;
-                }
-            }
-        }
-
-        const s32 KI_PAYBACK_DIAG_REPEAT = 4;
 
     }
 
@@ -247,6 +209,137 @@ namespace BrnGui
         {  90u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5VersionTextComponent
     };
     const u32 RaceMainHudState::muNumResourcesToLoad = 21;
+
+    const char* RaceMainHudState::KAAPC_MUGSHOT_FRAME_LABELS[6][6] =
+    {
+        { 0, "TdAggStart", 0, "TdAggClick", "invisible", "invisible" },
+        { 0, "EMAggStart", 0, "EMAggClick", "invisible", "invisible" },
+        { 0, "PbVicStart", "PbVicClick", "PbAggClick", "invisible", "invisible" },
+        { 0, 0, 0, 0, 0, 0 },
+        { 0, 0, 0, 0, 0, 0 },
+        { 0, 0, 0, 0, 0, 0 },
+    };
+    const char* RaceMainHudState::KAPC_MUGSHOT_STRING_IDS_CAPTURING[6] =
+    { "MUGSHOT_RECEIVING_FROM", "EVENT_MUGSHOT_RECEIVING_FROM", "", "", "", "" };
+    const char* RaceMainHudState::KAPC_MUGSHOT_STRING_IDS_SHOW[6] =
+    { "IN_LINEUP", "IN_LINEUP", "", "", "", "" };
+
+    // ARTIST82474B20: the native frame-table selection and filter-gated messages.
+    void RaceMainHudState::DoMugshot(const GuiMugshotControlEvent* lpEvent)
+    {
+        const char* lpcState = KAAPC_MUGSHOT_FRAME_LABELS[lpEvent->meImageType][lpEvent->meResponse];
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "Setting a mugshot state (event hud)\nImage type : "
+                << static_cast<s32>(lpEvent->meImageType)
+                << "\nMugshot response : " << static_cast<s32>(lpEvent->meResponse) << "\n";
+        }
+        if (lpcState == 0)
+            return;
+
+        mMugShotComponent.SetState(lpcState);
+        switch (lpEvent->meResponse)
+        {
+        case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_CAPTURE:
+        {
+            mMugshotDIARRHiderComponent.Run("invisible");
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpOpponent = 0;
+            for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+            {
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpInfo =
+                    &mpCache->maPlayerInfo[liPlayer];
+                if (lpInfo->meActiveRaceCarIndex == lpEvent->meOpponentARCI)
+                {
+                    lpOpponent = lpInfo;
+                    break;
+                }
+            }
+            mMugshotOpponentGamertag.SetLocalisedText(
+                KAPC_MUGSHOT_STRING_IDS_CAPTURING[lpEvent->meImageType], 9, 1,
+                lpOpponent->mPlayerName.GetPlayerName(), 0);
+            break;
+        }
+        case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_SHOW:
+            mMugshotOpponentGamertag.SetLocalisedText(
+                KAPC_MUGSHOT_STRING_IDS_SHOW[lpEvent->meImageType], 9);
+            break;
+        case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT:
+        case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_STOP_THEIR_MUGSHOT:
+            mMugshotDIARRHiderComponent.Run("visible");
+            mMugshotOpponentGamertag.ClearText();
+            break;
+        default:
+            mMugshotOpponentGamertag.ClearText();
+            break;
+        }
+    }
+
+    // ARTIST82474D10: absent opponents leave the existing component untouched.
+    void RaceMainHudState::DoRoadRuleShot(const GuiMugshotControlEvent* lpEvent)
+    {
+        using namespace BrnGameState::GameStateModuleIO;
+        switch (lpEvent->meResponse)
+        {
+        case E_MUGSHOT_RESPONSE_CAPTURE:
+        case E_MUGSHOT_RESPONSE_SHOW:
+        {
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpOpponent = 0;
+            for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+            {
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpInfo =
+                    &mpCache->maPlayerInfo[liPlayer];
+                if (lpInfo->meActiveRaceCarIndex == lpEvent->meOpponentARCI)
+                {
+                    lpOpponent = lpInfo;
+                    break;
+                }
+            }
+            if (lpOpponent == 0)
+                return;
+            mRoadRuleShotComponent.SetupComponent(
+                RoadRuleShotComponent::E_PLAYER_STATE_RACING, !lpEvent->mbLocalAggressor,
+                lpOpponent->mPlayerName.GetPlayerName(), lpEvent->mRoadId,
+                lpEvent->meImageType == E_IMAGE_TYPE_ROAD_RULE_TIME_MUGSHOT);
+            if (lpEvent->meResponse == E_MUGSHOT_RESPONSE_CAPTURE)
+                mRoadRuleShotComponent.Show(false);
+            else
+                mRoadRuleShotComponent.Snap(false);
+            break;
+        }
+        case E_MUGSHOT_RESPONSE_TAKE:
+            mRoadRuleShotComponent.Snap(false);
+            break;
+        case E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT:
+        case E_MUGSHOT_RESPONSE_STOP_THEIR_MUGSHOT:
+            mRoadRuleShotComponent.Hide();
+            break;
+        default:
+            break;
+        }
+    }
+
+    // ARTIST82475CD0; the response shutdown runs after the image-specific handler.
+    void RaceMainHudState::HandleMugshotEvent(const GuiMugshotControlEvent* lpEvent)
+    {
+        using namespace BrnGameState::GameStateModuleIO;
+        if (lpEvent->meImageType == E_IMAGE_TYPE_ROAD_RULE_TIME_MUGSHOT ||
+            lpEvent->meImageType == E_IMAGE_TYPE_ROAD_RULE_CRASH_MUGSHOT)
+            DoRoadRuleShot(lpEvent);
+        else
+            DoMugshot(lpEvent);
+
+        CGS_ASSERT(mpCache != 0, "mpCache");
+        const s32 liGameMode = mpCache->GetGameMode();
+        if ((liGameMode == 15 || liGameMode == 16) &&
+            (lpEvent->meResponse == E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT ||
+             lpEvent->meResponse == E_MUGSHOT_RESPONSE_STOP_THEIR_MUGSHOT))
+        {
+            mMugShotComponent.SetState("invisible");
+            mMugshotOpponentGamertag.ClearText();
+            mRoadRuleShotComponent.Hide();
+        }
+    }
 
     // =======================================================================
     //  SetExpectedComponent  @ 0x82473698
@@ -1074,7 +1167,7 @@ namespace BrnGui
 
         // The road-rule-shot panel. Gated on a CACHE byte (+0xAC59), NOT on a component
         // flag -- which is why RoadRuleShotComponent cannot be flag-deferred at the mount.
-        if (GuiCache_RoadRuleShotPending(mpCache))
+        if (mpCache->mbRoadRuleShotActive)
         {
             // The inlined find-record-by-race-car scan: eight 312-byte online player
             // records from cache+0xAC80, comparing each record's meActiveRaceCarIndex
@@ -1086,7 +1179,7 @@ namespace BrnGui
             for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
             {
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpInfo =
-                    mpCache->GetOnlinePlayerInfo(liPlayer);
+                    &mpCache->maPlayerInfo[liPlayer];
                 if (lpInfo->meActiveRaceCarIndex == liOpponentCar)
                 {
                     lpOpponent = lpInfo;
@@ -1095,13 +1188,16 @@ namespace BrnGui
             }
             CGS_ASSERT(lpOpponent != 0, "lpOpponentStatusData != NULL");   // cpp:2636 (non-gating)
 
-            // [FLAG deferred] SetupComponent's remaining three arguments come out of the
-            // un-named cache pad mPad_AC4C[14]: r7 is an `ldx` (8-byte CgsID) at +0xAC50,
-            // r8 a byte at +0xAC58, and the Snap-vs-Show pick a byte at +0xAC5B. Only
-            // r5 (+0xAC5A) has a named accessor today. This whole arm is therefore parked
-            // by GuiCache_RoadRuleShotPending above rather than half-fed.
-            // DELETE-WHEN: BrnGuiCache.h carves mPad_AC4C[14] / mPad_AC5B[1].
-            LogDeferredComponent("RoadRuleShotComponent::SetupComponent (cache +0xAC50/58/59/5B)");
+            mRoadRuleShotComponent.SetupComponent(
+                RoadRuleShotComponent::E_PLAYER_STATE_RACING,
+                mpCache->mbRoadRuleShotLocalPlayerNewRuler,
+                lpOpponent->mPlayerName.GetPlayerName(), mpCache->mRoadRuleShotRoadId,
+                mpCache->mbIsRoadRuleShotTime);
+            if (mpCache->mbRoadRuleShotTaken)
+                mRoadRuleShotComponent.Snap(true);
+            else
+                mRoadRuleShotComponent.Show(true);
+
         }
 
         return true;
@@ -1818,10 +1914,6 @@ namespace BrnGui
 //     lwz  r4, 0x140(r31)                 ; mpCache
 //     bl   BrnGui__EventInfoComponent__Update
 //
-// COMPONENT DEFERRALS. Same rule and same idiom as the sibling BrnFBurnMainHudState.cpp: an
-// arm whose method has no declaration yet keeps the console gate and control flow verbatim and
-// logs the gap once instead of inventing a body. Deferred here: HandleMugshotEvent (not
-// declared -- it is in the header's RESIDUE block).
 
 namespace BrnGui
 {
@@ -1888,31 +1980,6 @@ namespace BrnGui
                 reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT, 40);
         }
 
-        // ---- GuiCache boundary (the far cache fields this state reads that BrnGuiCache.h
-        // does not expose) -------------------------------------------------------------
-        // Same idiom as BrnFBurnMainHudState.cpp's cache boundary (:116-:215): one helper per
-        // X360 cache field, each carrying the offset so the eventual cache-member naming (or
-        // a `friend struct RaceMainHudState;` grant next to the existing friends at
-        // BrnGuiCache.h:992) lands exactly here.
-
-        // ---- the cache fields that DO have accessors now -----------------------------
-        // The wave's cache carve (BrnGuiCache.h) publishes the in-event gate as
-        // IsEventPreparedForModeStart() @+0xA014,
-        // GetPlayerRacePosition() @+0x4B24, IsPlayerRacePositionOverridden() @+0x4B25,
-        // IsFriendsListOpen() @+0xB86C and GetSatNavZoomLevel() @+0x803C, so this file reads
-        // them by name and only the one below still needs a stand-in.
-
-        // ⚠ FLAG accessor leaf: the sat-nav zoom-level WRITE. GuiCache publishes the
-        // read (GetSatNavZoomLevel() @+0x803C, BrnGuiCache.h:529) and the "zoom out" step
-        // (ZoomSatNavOut()), but the case-6 arm also stores 0 straight into the member and
-        // there is no setter for that half.
-        // DELETE-WHEN: BrnGuiCache.h publishes `void SetSatNavZoomLevel(s32)`; the body then
-        // becomes `lpGuiCache->SetSatNavZoomLevel(liLevel);`.
-        void GuiCache_SetSatNavZoomLevel(GuiCache* /*lpGuiCache*/, s32 /*liLevel*/)
-        {
-        }
-
-// (fold: an identical definition of LogDeferredComponent was dropped here -- this TU defines it once, above)
     }
 
     // =======================================================================
@@ -1992,7 +2059,7 @@ namespace BrnGui
                     if (mpCache->GetGameMode() == 13)
                     {
                         if (mpCache->GetSatNavZoomLevel() == 1)
-                            GuiCache_SetSatNavZoomLevel(mpCache, 0);
+                            mpCache->miSatNavZoomLevel = 0;
                         else
                             mpCache->ZoomSatNavOut();   // X360 renders this `this`-less (hazard 4)
                     }
@@ -2177,10 +2244,7 @@ namespace BrnGui
             case 325:
                 if (mbMugShotComponent)
                 {
-                    // FLAG deferred: HandleMugshotEvent @0x82475CD0 is in the header's
-                    // RESIDUE block -- its GuiMugshotControlEvent parameter type is still
-                    // an opaque payload with no named fields, so it has no declaration to call.
-                    LogDeferredComponent("RaceMainHudState::HandleMugshotEvent");
+                    HandleMugshotEvent(reinterpret_cast<const GuiMugshotControlEvent*>(lpEvent));
                 }
                 break;
             case 333:   // GuiEventRoadRuleEnter
@@ -2510,11 +2574,7 @@ namespace BrnGui
             // entirely -- the world-camera position. Same recipe as
             // BrnFBurnMainHudState.cpp:1290.
             const Vector4& lv4Camera = mpCache->GetWorldCameraPosition();
-            Vector3 lv3Camera;
-            lv3Camera.x = lv4Camera.x;
-            lv3Camera.y = lv4Camera.y;
-            lv3Camera.z = lv4Camera.z;
-            lv3Camera.w = lv4Camera.w;
+            const Vector3 lv3Camera(lv4Camera.mV);
             mRoadRuleComponent.UpdateRoadSignDistances(lv3Camera);
 
             GuiRoadRuleCrashEvent20 lCrash(mRoadRuleComponent.mfCurrentCrashScore);
@@ -2873,9 +2933,9 @@ namespace BrnGui
             }
         }
 
+        const s32 KI_TICKER_MAX_PARAMS = 1 + BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE;
         const u32 KU_TICKER_PARAM_TEXT_LEN = 64;   // `li r4, 0x40` into both SnPrintf calls
 
-// (fold: an identical definition of LogDeferredComponent was dropped here -- this TU defines it once, above)
     }
 
     // =======================================================================
@@ -2962,18 +3022,9 @@ namespace BrnGui
 
         if (mbEventInfo && mpCache != 0)                                    // lbz 0x157 / lwz 0x140
         {
-            // @0x824747D0: r3 = &mEventInfoComponent (this+0x170), r4 = lpEvent,
-            // r5 = mpCache -- i.e. EventInfoComponent::HandleTrigger(const GuiEventAptTrigger*,
-            // GuiCache*) (DWARF BrnEventInfo.h:429). The branch target IDA labels
-            // `BaseCollisionGenerator::Destruct` is 0x8284CB38, a bare `blr`: the image's ICF
-            // pool for every empty method, so this call does NOTHING in retail.
-            // FLAG deferred: HandleTrigger is not declared on BrnGui::EventInfoComponent in
-            // the tree (and its GuiEventAptTrigger parameter type has no committed home), so
-            // the gate is kept and the call is logged rather than invented. Behaviourally
-            // free -- the console body is empty.
-            // DELETE-WHEN: BrnEventInfo.h declares HandleTrigger; the line then becomes
-            // `mEventInfoComponent.HandleTrigger(lpTrigger, mpCache);`.
-            LogDeferredComponent("EventInfoComponent::HandleTrigger");
+            mEventInfoComponent.HandleTrigger(
+                reinterpret_cast<const CgsGui::GuiEventAptTrigger*>(lpEvent), mpCache);
+
         }
 
         if (mbBoostMessages)                                                // lbz 0x154
