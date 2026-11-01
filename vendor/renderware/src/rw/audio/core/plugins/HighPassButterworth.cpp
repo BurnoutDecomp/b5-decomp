@@ -206,14 +206,10 @@ int HighPassButterworth::Process(AudioProcessContext *ctx)
             mfFilterOrder != mfLastFilterOrder ||
             mfParam3 != mfLastParam3)
         {
-            // The coefficient designer's ABI is now RECOVERED (see Butterworth.cpp): the
-            // console passes r3=bw, f1=cutoff, f2=sampleRate, f3=mfParam3, r5=fctidz(order),
-            // r7=1 (the HIGH-pass selector). Those real arguments are passed here instead of
-            // being dropped; only the designer's BODY is still a keystone (it needs the three
-            // rodata design tables).
-            Butterworth::CalculateFilterCoefficients(
-                bw, mfCutoffFreq, ctx->mpFormat->mfSampleRate, mfParam3,
-                static_cast<s32>(mfFilterOrder), Butterworth::KFILTER_HIGHPASS);
+            // ARTIST: cutoff/order/rate/type/shape use f1/r5/f2/r7/f3.
+            bw->CalculateFilterCoefficients(
+                mfCutoffFreq, static_cast<u32>(mfFilterOrder), ctx->mpFormat->mfSampleRate,
+                Butterworth::KFILTER_HIGHPASS, mfParam3);
             mfLastCutoffFreq = mfCutoffFreq;   // stfs +0x40
             mfLastFilterOrder = mfFilterOrder; // stfs +0x48  (note: +0x50/mfLastParam3 NOT latched)
         }
