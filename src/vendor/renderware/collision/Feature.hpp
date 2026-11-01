@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/EATech/include/rw/math/vpu/vector3.h"
 #include "vendor/renderware/collision/FeatureEdge.hpp"
 
 // ===========================================================================
@@ -50,30 +51,23 @@ struct Feature
     // Canonical declaration rwccore.h:960 / DWARF volume.h:283
     // (void BuildEdgePlanes(RwBool, const Vector3&)).
     // (X360 __fastcall: r3=this, r4=abCcw, r5=&arExtrusionDir.)
-    void BuildEdgePlanes(RwBool abCcw, const Vec4& arExtrusionDir);
-
-    // .rdata constant reached only by reference in the asm (its address
-    // unk_8327EFD0 appears in the body but the export carries no value). It is
-    // the degenerate-length-squared epsilon the vcmpgtfp guards against -- the
-    // same role as FeatureEdge's KF_DEGENERATE_EPSILON (canonical build_plane
-    // guards with VEC_EPSILON). FLAGGED as inferred.
-    static const f32 KF_DEGENERATE_EPSILON;   // X360 unk_8327EFD0
+    void BuildEdgePlanes(RwBool abCcw, const rw::math::vpu::Vector3& arExtrusionDir);
 
     u32         region;                // +0x000  accumulated region/feature id
                                        //         (read-modify-written by the
                                        //         Find*Prism workers)
-    u32         mPad004[3];            // +0x004  16-byte alignment of edges[0]
-                                       //         (implicit on console)
     FeatureEdge edges[MAXEDGECOUNT];   // +0x010  boundary edges, stride 0x40
-    Vec4        ownNormal;             // +0x210  face plane unit normal
-    Vec4        pt;                    // +0x220  point-feature position
+    rw::math::vpu::Vector3 ownNormal;             // +0x210  face plane unit normal
+    rw::math::vpu::Vector3 pt;                    // +0x220  point-feature position
     s32         numedges;              // +0x230  0 = point, 1 = edge, >1 = face
-    u8          mPad234[0xC];          // +0x234  16-byte tail pad (console
-                                       //         sizeof/stride is 0x240)
 };
 
 CGS_STATIC_ASSERT((sizeof(FeatureEdge) == 0x40), "FeatureEdge record stride must be 0x40");
 CGS_STATIC_ASSERT((sizeof(Feature) == 0x240), "Feature console stride must be 0x240");
+CGS_STATIC_ASSERT((offsetof(Feature, edges) == 0x10), "Feature edges");
+CGS_STATIC_ASSERT((offsetof(Feature, ownNormal) == 0x210), "Feature normal");
+CGS_STATIC_ASSERT((offsetof(Feature, pt) == 0x220), "Feature point");
+CGS_STATIC_ASSERT((offsetof(Feature, numedges) == 0x230), "Feature count");
 
 } // namespace collision
 } // namespace rw

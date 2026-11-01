@@ -61,14 +61,14 @@ struct Fraction
 // volumelinequery.cpp). Native vector alignment leaves +0x04..+0x0F unwritten
 // after the four-byte input volume pointer.
 // ---------------------------------------------------------------------------
+class Volume;
 struct VolumeLineSegIntersectResult
 {
-    uintptr_t v;        // +0x00  the input volume the query is walking (pointer word)
-    CGS_ALIGN(16) Vec4 position; // +0x10  world-space hit position (out)
-    CGS_ALIGN(16) Vec4 normal;   // +0x20  unit plane normal in / hit normal out
-    CGS_ALIGN(16) Vec4 volParam; // +0x30  volume-space hit parameter (u, v, w)
+    const Volume* v;        // +0x00  the input volume the query is walking (pointer word)
+    rw::math::vpu::Vector3 position; // +0x10  world-space hit position (out)
+    rw::math::vpu::Vector3 normal;   // +0x20  unit plane normal in / hit normal out
+    rw::math::vpu::Vector3 volParam; // +0x30  volume-space hit parameter (u, v, w)
     f32    lineParam;   // +0x40  hit parameter along the segment
-    u32    mPad44[3];   // +0x44  unwritten
     VolRef vRef;        // +0x50  the hit volume reference (0x80 stride)
 };
 
@@ -89,11 +89,11 @@ CGS_STATIC_ASSERT((__alignof(VolumeLineSegIntersectResult) == 16), "X360 result 
 // Returns 1 on hit (result block filled), 0 on miss. The vector parameters
 // ride in VMX v1..v5 on the console (by value); f1 = the fatness.
 s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3
-                                Vec4 aLineStart,                          // v1
-                                Vec4 aLineDelta,                          // v2
-                                Vec4 aV0,                                 // v3
-                                Vec4 aV1,                                 // v4
-                                Vec4 aV2,                                 // v5
+                                rw::math::vpu::Vector3 aLineStart,                          // v1
+                                rw::math::vpu::Vector3 aLineDelta,                          // v2
+                                rw::math::vpu::Vector3 aV0,                                 // v3
+                                rw::math::vpu::Vector3 aV1,                                 // v4
+                                rw::math::vpu::Vector3 aV2,                                 // v5
                                 f32  afFatness);                          // f1
 
 // @ 0x82BACA30 -- damped Newton-Raphson search for one real root of the
@@ -109,9 +109,9 @@ RwBool SolveQuarticRoots(f32 lafCoefficients[5], f32& arRoot);
 // Voronoi loop. X360: r3=lpDist, r4/r5/r6 = the three vector pointers,
 // f1 = radius.
 s32 rwcSphereLineSegIntersect(Fraction* lpDist,
-                              const Vec4* lpLineStart,
-                              const Vec4* lpLineDelta,
-                              const Vec4* lpCentre,
+                              const rw::math::vpu::Vector3* lpLineStart,
+                              const rw::math::vpu::Vector3* lpLineDelta,
+                              const rw::math::vpu::Vector3* lpCentre,
                               f32 afRadius);
 
 // @ 0x82BA8818 -- one slab plane vs line segment (canonical rwccore.h:3716, Feb-2007): the crossing of
@@ -133,10 +133,10 @@ s32 rwcCylinderLineSegIntersect(Fraction* lpDist,
                                 f32 afRadius,
                                 s32 abInvert,
                                 s32 abIgnoreInside,
-                                Vec4 aLineStart,
-                                Vec4 aLineDelta,
-                                Vec4 aBase,
-                                Vec4 aAxis);
+                                rw::math::vpu::Vector3 aLineStart,
+                                rw::math::vpu::Vector3 aLineDelta,
+                                rw::math::vpu::Vector3 aBase,
+                                rw::math::vpu::Vector3 aAxis);
 
 // @ 0x82BADAB0 -- torus vs line segment (canonical rwccore.h:3813): builds
 // the line-parameter quartic of a z-axis torus (major radius R, minor r) and
@@ -144,8 +144,8 @@ s32 rwcCylinderLineSegIntersect(Fraction* lpDist,
 // accepted root (arDist = the line parameter), else 0 (arDist still receives
 // the solver's final iterate). Sole caller of SolveQuarticRoots.
 s32 rwcTorusLineSegIntersect(f32& arDist,
-                             Vec4 aLineStart,
-                             Vec4 aLineDir,
+                             rw::math::vpu::Vector3 aLineStart,
+                             rw::math::vpu::Vector3 aLineDir,
                              f32 afMajorRadius,
                              f32 afMinorRadius);
 
@@ -155,11 +155,11 @@ s32 rwcTorusLineSegIntersect(f32& arDist,
 // TriangleLineSegIntersect @ 0x82BBB7B8 writes it after a hit), 0 on miss.
 // X360 register map: r3 = lpResult, v1..v5 = the five vectors by value.
 s32 ThinTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
-                                 Vec4 aLineStart,
-                                 Vec4 aLineDelta,
-                                 Vec4 aV0,
-                                 Vec4 aV1,
-                                 Vec4 aV2);
+                                 rw::math::vpu::Vector3 aLineStart,
+                                 rw::math::vpu::Vector3 aLineDelta,
+                                 rw::math::vpu::Vector3 aV0,
+                                 rw::math::vpu::Vector3 aV1,
+                                 rw::math::vpu::Vector3 aV2);
 
 // @ 0x82BBB7B8 -- triangle vs line segment dispatcher: zero fatness runs the
 // thin one-sided tester and derives the unit face normal on a hit; non-zero
@@ -168,11 +168,11 @@ s32 ThinTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
 // surface. X360 register map: r3 = lpResult, v1..v5 = the five vectors by
 // value, f1 = the fatness.
 s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
-                             Vec4 aLineStart,
-                             Vec4 aLineDelta,
-                             Vec4 aV0,
-                             Vec4 aV1,
-                             Vec4 aV2,
+                             rw::math::vpu::Vector3 aLineStart,
+                             rw::math::vpu::Vector3 aLineDelta,
+                             rw::math::vpu::Vector3 aV0,
+                             rw::math::vpu::Vector3 aV1,
+                             rw::math::vpu::Vector3 aV2,
                              f32  afFatness);
 
 // (The 8-parameter TriangleNearestPointRegion declaration that stood here -- with an

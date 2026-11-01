@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "vendor/renderware/collision/AABBox.hpp"
 
 // ===========================================================================
 // rw::collision::KdTreeBBoxQuery -- a stateful "find all KD-tree leaves that
@@ -68,14 +69,17 @@ struct KdTree
         f32     mafExtents[2];   // +0x18  m_extents
     };
 
-    u32 muBranchNodes;    // +0x00  m_branchNodes (BranchNode*), a console-width word (the
-                          //        serialised tree resolves through the low-4 GB convention)
-    u32 muNumBranchNodes; // +0x04  nonzero => interior nodes exist
-    u32 muLeafNodeIndex;  // +0x08  seeds the cursor for a leaf-only tree
-    u32 muReserved0C;     // +0x0C  unread padding (aligns mBoxMin to +0x10)
-    f32 maBoxMin[4];      // +0x10  tree AABB lower corner (xyzw) -- LineQuery box-min
-    f32 maBoxMax[4];      // +0x20  tree AABB upper corner (xyzw) -- LineQuery box-max
+    BranchNode* mpBranchNodes;
+    u32 muNumBranchNodes;
+    u32 muNumEntries;
+    AABBox mBBox;
 };
+
+CGS_STATIC_ASSERT((offsetof(KdTree,mpBranchNodes)==0x00), "KDTree branches");
+CGS_STATIC_ASSERT((offsetof(KdTree,muNumBranchNodes)==0x04), "KDTree branch count");
+CGS_STATIC_ASSERT((offsetof(KdTree,muNumEntries)==0x08), "KDTree entries");
+CGS_STATIC_ASSERT((offsetof(KdTree,mBBox)==0x10), "KDTree box");
+CGS_STATIC_ASSERT((sizeof(KdTree)==0x30), "KDTree size");
 
 class KdTreeBBoxQuery
 {

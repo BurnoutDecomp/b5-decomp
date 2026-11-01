@@ -42,20 +42,35 @@ RwBool AggregateVolume::GetBBox(const math::vpu::Matrix44Affine* lpTransform,
                                 AABBox& arBBox) const
 {
     // r11 = *(this+0x44); the cached AABBox lives at Aggregate+0x00 (m_AABB).
-    // GetAggregate() is the +0x44 accessor -- a bare `Aggregate*` member gets pushed to
-    // +0x48 by x64 alignment, which is the defect fixed 2026-08-19 (see the header).
-    const AABBox lAggBox = *reinterpret_cast<const AABBox*>(GetAggregate());
+    const AABBox lAggBox = GetAggregate()->GetBBox();
 
     AABBox lResult;
     if (lpTransform != 0)
     {
         // Mult(Matrix44Affine this-transform, Matrix44 arg): volume transform
         // composed with the caller matrix, staged into the var_50 stack matrix.
-        const math::vpu::Matrix44 lCombined =
-            math::vpu::Mult(mTransform, *reinterpret_cast<const math::vpu::Matrix44*>(lpTransform));
-
-        lResult = lAggBox.Transform(
-            reinterpret_cast<const math::vpu::Matrix44Affine*>(&lCombined));
+        math::vpu::Matrix44Affine lCombined;
+        const __vector4 lx = lpTransform->xAxis.mV;
+        const __vector4 ly = lpTransform->yAxis.mV;
+        const __vector4 lz = lpTransform->zAxis.mV;
+        const __vector4 lw = lpTransform->wAxis.mV;
+        const __vector4 ax = mTransform.xAxis.mV;
+        const __vector4 ay = mTransform.yAxis.mV;
+        const __vector4 az = mTransform.zAxis.mV;
+        const __vector4 aw = mTransform.wAxis.mV;
+        __vector4 vx = __vmulfp(__vspltw(ax, 0), lx);
+        __vector4 vy = __vmulfp(__vspltw(ay, 0), lx);
+        __vector4 vz = __vmulfp(__vspltw(az, 0), lx);
+        __vector4 vw = __vmaddfp(__vspltw(aw, 0), lx, lw);
+        vx = __vmaddfp(__vspltw(ax, 1), ly, vx);
+        vy = __vmaddfp(__vspltw(ay, 1), ly, vy);
+        vz = __vmaddfp(__vspltw(az, 1), ly, vz);
+        vw = __vmaddfp(__vspltw(aw, 1), ly, vw);
+        lCombined.xAxis.mV = __vmaddfp(__vspltw(ax, 2), lz, vx);
+        lCombined.yAxis.mV = __vmaddfp(__vspltw(ay, 2), lz, vy);
+        lCombined.zAxis.mV = __vmaddfp(__vspltw(az, 2), lz, vz);
+        lCombined.wAxis.mV = __vmaddfp(__vspltw(aw, 2), lz, vw);
+        lResult = lAggBox.Transform(&lCombined);
     }
     else
     {
@@ -82,24 +97,22 @@ RwBool AggregateVolume::GetBBox(const math::vpu::Matrix44Affine* lpTransform,
 math::vpu::Vector3 AggregateVolume::GetBBoxDiag() const
 {
     // r11 = *(this+0x44); cached AABBox at Aggregate+0x00 (see GetBBox above on the
-    // accessor -- this offset was measurably wrong until 2026-08-19).
-    const AABBox lAggBox = *reinterpret_cast<const AABBox*>(GetAggregate());
+    // accessor.
+    const AABBox lAggBox = GetAggregate()->GetBBox();
 
     // AAB(var_30, var_50, r5=this): transform the cached box by the volume's
     // own transform (no caller matrix on this path).
     const AABBox lBox = lAggBox.Transform(&mTransform);
 
-    // vsubfp: per-lane (max - min) of the transformed box, all four lanes.
-    const f32* lafMin = lBox.mMin.mV.v;
-    const f32* lafMax = lBox.mMax.mV.v;
-
-    math::vpu::Vector3 lDiag;
-    for (int i = 0; i < 4; ++i)
-    {
-        lDiag.mV.v[i] = lafMax[i] - lafMin[i];
-    }
-    return lDiag;
+    return math::vpu::Vector3(__vsubfp(lBox.mMax.mV, lBox.mMin.mV));
 }
 
 } // namespace collision
 } // namespace rw
+
+// ARTIST folds these genuine per-type methods to 82BAC980, 82B0F1B8 or 82AD5078.
+namespace rw { namespace collision {
+RwBool AggregateVolume::GetMaximumFeature(RwBool, const Vector3&, Feature&) const { return 0; }
+RwBool AggregateVolume::CreateGPInstance(GPInstance&, const Matrix44Affine*) const { return 0; }
+void AggregateVolume::Release() {}
+} }

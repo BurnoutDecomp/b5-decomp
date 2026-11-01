@@ -77,164 +77,57 @@ namespace linemath
     // ARTIST cylinder cap tests 82BAE184..190 / 82BAEF80..94: splat y,
     // round y*y with vmulfp, then fuse x*x + that rounded product with vmaddfp.
     // Keep the operations in VMX so their denormal handling is not replaced by FPU.
-    inline f32 CapRadialSquared(const Vec4& arPoint)
+    inline f32 CapRadialSquared(const rw::math::vpu::Vector3& p)
+    { const __vector4 y=__vspltw(p.mV,1), x=__vspltw(p.mV,0); return __vmaddfp(x,x,__vmulfp(y,y)).x; }
+    inline f32 Dot3(const rw::math::vpu::Vector3& a,const rw::math::vpu::Vector3& b)
+    { return __vmsum3fp(a.mV,b.mV).x; }
+    inline f32 Nmsub(f32 a,f32 c,f32 b)
+    { const __vector4 av={a,a,a,a},cv={c,c,c,c},bv={b,b,b,b};return __vnmsubfp(av,cv,bv).x; }
+    inline f32 RefinedRecip(f32 value)
     {
-        const __vector4 lvPoint = { arPoint.x, arPoint.y, arPoint.z, arPoint.w };
-        const __vector4 lvY = __vspltw(lvPoint, 1);
-        const __vector4 lvX = __vspltw(lvPoint, 0);
-        const __vector4 lvYSquared = __vmulfp(lvY, lvY);
-        return __vmaddfp(lvX, lvX, lvYSquared).x;
+        const __vector4 x={value,value,value,value}, one=__vcfsx(__vspltisw(1),0);
+        __vector4 e=__vrefp(x), c=__vnmsubfp(e,x,one);
+        e=__vmaddfp(e,c,e);c=__vnmsubfp(e,x,one);return __vmaddfp(e,c,e).x;
     }
-
-    // vmsum3fp128 -- FLAG (model): one rounding of the exact f64 sum of the three f32 products.
-    inline f32 Dot3(const Vec4& arA, const Vec4& arB)
+    inline f32 RefinedRsqrt(f32 value)
     {
-        return static_cast<f32>(static_cast<f64>(arA.x) * arB.x + static_cast<f64>(arA.y) * arB.y
-                                + static_cast<f64>(arA.z) * arB.z);
+        const __vector4 x={value,value,value,value},one=__vcfsx(__vspltisw(1),0),half=__vcfsx(__vspltisw(1),1);
+        __vector4 e=__vrsqrtefp(x), c=__vnmsubfp(x,__vmulfp(e,e),one);
+        e=__vmaddfp(__vmulfp(e,half),c,e);c=__vnmsubfp(x,__vmulfp(e,e),one);
+        return __vmaddfp(__vmulfp(e,half),c,e).x;
     }
-
-    // Native vnmsubfp computes -(a*c - b), including its signed-zero/NaN result.
-    inline f32 Nmsub(f32 afA, f32 afC, f32 afB)
+    inline rw::math::vpu::Vector3 MakeVec4(f32 x,f32 y,f32 z,f32 w)
+    { const __vector4 v={x,y,z,w};return rw::math::vpu::Vector3(v); }
+    inline rw::math::vpu::Vector3 Cross(const rw::math::vpu::Vector3& a,const rw::math::vpu::Vector3& b)
+    { return rw::math::vpu::Vector3(__vpermwi(__vnmsubfp(__vpermwi(a.mV,0x63),b.mV,__vmulfp(a.mV,__vpermwi(b.mV,0x63))),0x63)); }
+    inline f32& Lane(rw::math::vpu::Vector3& v,u32 lane) { return (&v.mV.x)[lane]; }
+    inline f32 Lane(const rw::math::vpu::Vector3& v,u32 lane) { return (&v.mV.x)[lane]; }
+    inline rw::math::vpu::Vector3 Sub(const rw::math::vpu::Vector3& a,const rw::math::vpu::Vector3& b)
+    { return rw::math::vpu::Vector3(__vsubfp(a.mV,b.mV)); }
+    inline rw::math::vpu::Vector3 MulSplat(const rw::math::vpu::Vector3& a,f32 s)
+    { const __vector4 v={s,s,s,s};return rw::math::vpu::Vector3(__vmulfp(a.mV,v)); }
+    inline rw::math::vpu::Vector3 MaddSplat(const rw::math::vpu::Vector3& a,f32 s,const rw::math::vpu::Vector3& b)
+    { const __vector4 v={s,s,s,s};return rw::math::vpu::Vector3(__vmaddfp(a.mV,v,b.mV)); }
+    inline void ComposeFrame(const rw::math::vpu::Vector3* frame,const rw::math::vpu::Vector3* transform,rw::math::vpu::Vector3 (&out)[4])
     {
-        const __vector4 lvA = { afA, afA, afA, afA };
-        const __vector4 lvC = { afC, afC, afC, afC };
-        const __vector4 lvB = { afB, afB, afB, afB };
-        return __vnmsubfp(lvA, lvC, lvB).x;
+        for(u32 i=0;i<3;++i) out[i]=MaddSplat(transform[2],frame[i].mV.z,MaddSplat(transform[1],frame[i].mV.y,MulSplat(transform[0],frame[i].mV.x)));
+        out[3]=MaddSplat(transform[2],frame[3].mV.z,MaddSplat(transform[1],frame[3].mV.y,MaddSplat(transform[0],frame[3].mV.x,transform[3])));
     }
-
-    // vrefp + two steps of `vnmsubfp r = 1 - est*x` / `vmaddfp est = est*r + est`.
-    inline f32 RefinedRecip(f32 afX)
+    struct LocalFrame { rw::math::vpu::Vector3 mColumn0,mColumn1,mColumn2,mTranslation; };
+    inline LocalFrame InvertFrame(const rw::math::vpu::Vector3 (&frame)[4])
     {
-        f32 lfEstimate = static_cast<f32>(1.0 / static_cast<f64>(afX));
-        for (u32 luStep = 0; luStep < 2u; ++luStep)
-        {
-            const f32 lfResidual = Nmsub(lfEstimate, afX, 1.0f);
-            lfEstimate = Madd(lfEstimate, lfResidual, lfEstimate);
-        }
-        return lfEstimate;
+        LocalFrame f;f.mColumn0=MakeVec4(frame[0].mV.x,frame[1].mV.x,frame[2].mV.x,0);
+        f.mColumn1=MakeVec4(frame[0].mV.y,frame[1].mV.y,frame[2].mV.y,0);
+        f.mColumn2=MakeVec4(frame[0].mV.z,frame[1].mV.z,frame[2].mV.z,0);
+        const rw::math::vpu::Vector3 n=Sub(MakeVec4(0,0,0,0),frame[3]);
+        f.mTranslation=MaddSplat(f.mColumn0,n.mV.x,MaddSplat(f.mColumn1,n.mV.y,MulSplat(f.mColumn2,n.mV.z)));return f;
     }
-
-    // vrsqrtefp + two steps of `vmulfp sq = est*est`, `vmulfp half = est*0.5` (vcfsx 1, 1),
-    // `vnmsubfp r = 1 - x*sq`, `vmaddfp est = half*r + est`.
-    inline f32 RefinedRsqrt(f32 afX)
-    {
-        f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(afX)));
-        for (u32 luStep = 0; luStep < 2u; ++luStep)
-        {
-            const f32 lfSquared  = lfEstimate * lfEstimate;
-            const f32 lfHalf     = lfEstimate * 0.5f;
-            const f32 lfResidual = Nmsub(afX, lfSquared, 1.0f);
-            lfEstimate = Madd(lfHalf, lfResidual, lfEstimate);
-        }
-        return lfEstimate;
-    }
-
-    inline Vec4 MakeVec4(f32 afX, f32 afY, f32 afZ, f32 afW)
-    {
-        const Vec4 lvOut = { afX, afY, afZ, afW };
-        return lvOut;
-    }
-
-    // The console's two-permute cross product (vpermwi128 0x63 / vmulfp128 / vnmsubfp / vpermwi128 0x63): with
-    // perm = (y, z, x, w), pre = round(a * perm(b)) - perm(a) * b (vnmsubfp: ONE rounding), cross = perm(pre), i.e.
-    //   x = round(a.y*b.z) - a.z*b.y,  y = round(a.z*b.x) - a.x*b.z,  z = round(a.x*b.y) - a.y*b.x,
-    //   w = round(a.w*b.w) - a.w*b.w (the +0 / -0 residue),
-    // each difference rounded once. Sites: rwcSphereLineSegIntersect 0x82BA8250..0x82BA8270 (a = toCentre,
-    // b = delta), rwcCylinderLineSegIntersect 0x82BAF8A4..0x82BAF8C4 (a = toBase, b = axis) and
-    // 0x82BAF8FC..0x82BAF910 (a = delta, b = axis).
-    inline Vec4 Cross(const Vec4& arA, const Vec4& arB)
-    {
-        return MakeVec4(Nmsub(arA.z, arB.y, arA.y * arB.z), Nmsub(arA.x, arB.z, arA.z * arB.x),
-                        Nmsub(arA.y, arB.x, arA.x * arB.y), Nmsub(arA.w, arB.w, arA.w * arB.w));
-    }
-
-    // Lane i (0 = x, 1 = y, 2 = z, 3 = w): the kernels index their vectors by axis, as the console's
-    // lfsx / stfsx on the stack copies do.
-    inline f32& Lane(Vec4& arV, u32 luLane)             { return (&arV.x)[luLane]; }
-    inline f32  Lane(const Vec4& arV, u32 luLane)       { return (&arV.x)[luLane]; }
-
-    // vsubfp: per-lane a - b.
-    inline Vec4 Sub(const Vec4& arA, const Vec4& arB)
-    {
-        return MakeVec4(arA.x - arB.x, arA.y - arB.y, arA.z - arB.z, arA.w - arB.w);
-    }
-
-    // vmulfp against a splat: per-lane a * s.
-    inline Vec4 MulSplat(const Vec4& arA, f32 afS)
-    {
-        return MakeVec4(arA.x * afS, arA.y * afS, arA.z * afS, arA.w * afS);
-    }
-
-    // vmaddfp against a splat: per-lane a*s + b, ONE rounding.
-    inline Vec4 MaddSplat(const Vec4& arA, f32 afS, const Vec4& arB)
-    {
-        return MakeVec4(Madd(arA.x, afS, arB.x), Madd(arA.y, afS, arB.y),
-                        Madd(arA.z, afS, arB.z), Madd(arA.w, afS, arB.w));
-    }
-
-    // The volume's frame composed with the caller's transform -- the four scheduled chains that open the box and
-    // capsule kernels (BoxVolume 0x82BA9530..0x82BA9590, CapsuleVolume 0x82BAFDB0..0x82BAFE08): rows 0..2 start
-    // from a product (vmulfp128 frame.x*T0), row 3 from the transform's own translation (vmaddfp frame.x*T0 + T3);
-    // the y and z terms are fused on.
-    inline void ComposeFrame(const Vec4* lpFrame, const Vec4* lpTransform, Vec4 (&arOut)[4])
-    {
-        for (u32 luRow = 0; luRow < 3u; ++luRow)
-        {
-            arOut[luRow] = MaddSplat(lpTransform[2], lpFrame[luRow].z,
-                                     MaddSplat(lpTransform[1], lpFrame[luRow].y,
-                                               MulSplat(lpTransform[0], lpFrame[luRow].x)));
-        }
-        arOut[3] = MaddSplat(lpTransform[2], lpFrame[3].z,
-                             MaddSplat(lpTransform[1], lpFrame[3].y,
-                                       MaddSplat(lpTransform[0], lpFrame[3].x, lpTransform[3])));
-    }
-
-    // Into the frame (BoxVolume 0x82BA95FC..0x82BA9664, CapsuleVolume 0x82BAFE60..0x82BAFEC4): the transposed
-    // rotation (vmrghw / vmrglw with a zero vector, so every column's w lane is +0) and the negated translation
-    // (vsubfp 0 - row3) pushed through it: tinv = (-t.x)*c0 + ((-t.y)*c1 + (-t.z)*c2), the last term a product.
-    struct LocalFrame
-    {
-        Vec4 mColumn0;   // (row0.x, row1.x, row2.x, 0)
-        Vec4 mColumn1;   // (row0.y, row1.y, row2.y, 0)
-        Vec4 mColumn2;   // (row0.z, row1.z, row2.z, 0)
-        Vec4 mTranslation;
-    };
-
-    inline LocalFrame InvertFrame(const Vec4 (&arFrame)[4])
-    {
-        LocalFrame lFrame;
-        lFrame.mColumn0 = MakeVec4(arFrame[0].x, arFrame[1].x, arFrame[2].x, 0.0f);
-        lFrame.mColumn1 = MakeVec4(arFrame[0].y, arFrame[1].y, arFrame[2].y, 0.0f);
-        lFrame.mColumn2 = MakeVec4(arFrame[0].z, arFrame[1].z, arFrame[2].z, 0.0f);
-        const Vec4 lvNegated = Sub(MakeVec4(0.0f, 0.0f, 0.0f, 0.0f), arFrame[3]);
-        lFrame.mTranslation = MaddSplat(lFrame.mColumn0, lvNegated.x,
-                                        MaddSplat(lFrame.mColumn1, lvNegated.y,
-                                                  MulSplat(lFrame.mColumn2, lvNegated.z)));
-        return lFrame;
-    }
-
-    // A point into the frame: c0*p.x + tinv first, then c1*p.y, then c2*p.z, all fused.
-    inline Vec4 ToLocal(const LocalFrame& arFrame, const Vec4& arPoint)
-    {
-        return MaddSplat(arFrame.mColumn2, arPoint.z,
-                         MaddSplat(arFrame.mColumn1, arPoint.y,
-                                   MaddSplat(arFrame.mColumn0, arPoint.x, arFrame.mTranslation)));
-    }
-
-    // Out of the frame (BoxVolume 0x82BA9EC4..0x82BA9F4C, CapsuleVolume 0x82BB02BC..0x82BB0344, SphereVolume's
-    // centre 0x82BA830C..0x82BA831C): a point opens from the translation row (row0*p.x + row3), a direction from a
-    // product (row0*n.x); the y and z terms are fused on.
-    inline Vec4 FramePoint(const Vec4* lpFrame, const Vec4& arPoint)
-    {
-        return MaddSplat(lpFrame[2], arPoint.z,
-                         MaddSplat(lpFrame[1], arPoint.y, MaddSplat(lpFrame[0], arPoint.x, lpFrame[3])));
-    }
-
-    inline Vec4 FrameDirection(const Vec4* lpFrame, const Vec4& arDirection)
-    {
-        return MaddSplat(lpFrame[2], arDirection.z,
-                         MaddSplat(lpFrame[1], arDirection.y, MulSplat(lpFrame[0], arDirection.x)));
-    }
+    inline rw::math::vpu::Vector3 ToLocal(const LocalFrame& f,const rw::math::vpu::Vector3& p)
+    { return MaddSplat(f.mColumn2,p.mV.z,MaddSplat(f.mColumn1,p.mV.y,MaddSplat(f.mColumn0,p.mV.x,f.mTranslation))); }
+    inline rw::math::vpu::Vector3 FramePoint(const rw::math::vpu::Vector3* f,const rw::math::vpu::Vector3& p)
+    { return MaddSplat(f[2],p.mV.z,MaddSplat(f[1],p.mV.y,MaddSplat(f[0],p.mV.x,f[3]))); }
+    inline rw::math::vpu::Vector3 FrameDirection(const rw::math::vpu::Vector3* f,const rw::math::vpu::Vector3& p)
+    { return MaddSplat(f[2],p.mV.z,MaddSplat(f[1],p.mV.y,MulSplat(f[0],p.mV.x))); }
 
     // vminfp / vmaxfp: a NaN operand gives a NaN (the first NaN operand); -0 is below +0.
     // (AALineClipper::Init @0x828AED60 / the constructor @0x82BAE3C8; the fat cylinder's torus clip 0x82BAF30C /

@@ -1,6 +1,8 @@
 #include "vendor/renderware/collision/GPInstance.hpp"
+#include "vendor/renderware/collision/LineSegKernelMath.hpp"
 
-#include <cmath>   // sqrt, fabs
+#include <cmath>   // fabs
+#include <cstring> // complete FeatureEdge object copies
 
 // ===========================================================================
 // rw::collision::GPCylinder -- the cylinder primitive's VolumeMethods
@@ -11,21 +13,12 @@
 //   GPCylinder::GetInterval        @ 0x82BAD7F8   (VolumeMethods +0xA8)
 //   GPCylinder::GetIntervals       @ 0x82BAD938   (VolumeMethods +0xAC)
 //
-// Canonical declarations Feb-2007 rwccore.h:1264-1267 (non-static const
-// members on PS3); reconstructed as static plain-function callbacks matching
-// the committed GPInstance::VolumeMethods typedefs per the X360 delta note in
-// GPInstance.hpp. Instance layout per the canonical GPCylinder::Initialize
-// (rwccore.h:1390): mFaceNormals[0] = the axis (== mEdgeDirections[0]),
-// mFaceNormals[1]/[2] = the perpendicular frame axes, mDimensions.x = the
-// half-height, mDimensions.y = the radius.
+// Native const members consume the direction by value in v1. GetMaximumFeature
+// receives this/r3, winding/r4 and Feature&/r5. Real inherited Vector3 rows
+// retain mV storage; no scalar callback facade is introduced here.
 //
-// VMX lowering notes shared by all three bodies: vrsqrtefp + 2x Newton-
-// Raphson -> exact 1/sqrt; vrefp + 2x Newton-Raphson -> exact 1/x;
-// lenSq * rsqrt(lenSq) with vcmpeqfp/vsel -> zero-guarded length; the
-// vpermwi128 0x63 / vmulfp128 / vnmsubfp / vpermwi128 idiom -> Cross;
-// vrlimi128 vD, vB, 2, 0 -> insert vB's z lane into vD; vxor with the
-// vspltisw(-1)/vslw sign mask -> per-lane negation. vmaddfp operand rule
-// (multiplier LAST, addend THIRD) checked at every FMA.
+// The local-frame transpose and all product/fused accumulation boundaries are
+// retained. VMX estimates receive the original ordered two refinements.
 // ===========================================================================
 
 namespace rw
@@ -35,88 +28,70 @@ namespace collision
 
 namespace
 {
-    // dot3 of the xyz lanes (the asm's vmsum3fp128; broadcast lane 0).
-    inline f32 Dot3(const Vec4& a, const Vec4& b)
+    inline __vector4 SplatValue(f32 value)
     {
-        return a.x * b.x + a.y * b.y + a.z * b.z;
+        return __vspltw(__lvlx(&value, 0), 0);
     }
 
-    // stvx128 of a lane-0 vspltw broadcast: all four lanes carry the scalar.
-    inline Vec4 Splat(f32 s)
+    inline __vector4 FlipSigns(__vector4 value)
     {
-        Vec4 r;
-        r.x = s;
-        r.y = s;
-        r.z = s;
-        r.w = s;
-        return r;
+        const __vector4 ones = __vspltisw(-1);
+        return __vxor(value, __vslw(ones, ones));
     }
 
-    // vsubfp: per-lane a - b.
-    inline Vec4 Sub(const Vec4& a, const Vec4& b)
+    inline __vector4 CrossNative(__vector4 a, __vector4 b)
     {
-        Vec4 r;
-        r.x = a.x - b.x;
-        r.y = a.y - b.y;
-        r.z = a.z - b.z;
-        r.w = a.w - b.w;
-        return r;
+        const __vector4 ayzx = __vpermwi(a, 0x63);
+        const __vector4 byzx = __vpermwi(b, 0x63);
+        return __vpermwi(__vnmsubfp(ayzx, b, __vmulfp(a, byzx)), 0x63);
     }
 
-    // vmulfp128 against a splat: per-lane a * s.
-    inline Vec4 Scale(const Vec4& a, f32 s)
+    inline __vector4 ReciprocalRootTwice(__vector4 square)
     {
-        Vec4 r;
-        r.x = a.x * s;
-        r.y = a.y * s;
-        r.z = a.z * s;
-        r.w = a.w * s;
-        return r;
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(square);
+        const __vector4 squareEstimate = __vmulfp(estimate, estimate);
+        const __vector4 halfEstimate = __vmulfp(estimate, half);
+        const __vector4 correction = __vnmsubfp(square, squareEstimate, one);
+        estimate = __vmaddfp(halfEstimate, correction, estimate);
+        const __vector4 squareRefined = __vmulfp(estimate, estimate);
+        const __vector4 halfRefined = __vmulfp(estimate, half);
+        const __vector4 refinedCorrection = __vnmsubfp(square, squareRefined, one);
+        return __vmaddfp(halfRefined, refinedCorrection, estimate);
     }
 
-    // vmaddfp against a splat multiplier: per-lane a*s + b.
-    inline Vec4 MaddScalar(const Vec4& a, f32 s, const Vec4& b)
+    inline __vector4 ReciprocalTwice(__vector4 value)
     {
-        Vec4 r;
-        r.x = a.x * s + b.x;
-        r.y = a.y * s + b.y;
-        r.z = a.z * s + b.z;
-        r.w = a.w * s + b.w;
-        return r;
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        __vector4 estimate = __vrefp(value);
+        const __vector4 correction = __vnmsubfp(estimate, value, one);
+        estimate = __vmaddfp(estimate, correction, estimate);
+        const __vector4 refinedCorrection = __vnmsubfp(estimate, value, one);
+        return __vmaddfp(estimate, refinedCorrection, estimate);
     }
 
-    // vspltisw(-1)/vslw sign mask + vxor: flip every lane's sign bit.
-    inline Vec4 Negate(const Vec4& a)
+    inline __vector4 GuardedLength(__vector4 value)
     {
-        Vec4 r;
-        r.x = -a.x;
-        r.y = -a.y;
-        r.z = -a.z;
-        r.w = -a.w;
-        return r;
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 square = __vmsum3fp(value, value);
+        const __vector4 length = __vmulfp(square, ReciprocalRootTwice(square));
+        return __vsel(length, zero, __vcmpeqfp(zero, square));
     }
 
-    // Cross product a x b via the VMX two-permute idiom; the w lane cancels
-    // to 0.
-    inline Vec4 Cross(const Vec4& a, const Vec4& b)
+    inline __vector4 Rotate(__vector4 x, __vector4 y, __vector4 z, __vector4 value)
     {
-        Vec4 r;
-        r.x = a.y * b.z - a.z * b.y;
-        r.y = a.z * b.x - a.x * b.z;
-        r.z = a.x * b.y - a.y * b.x;
-        r.w = a.w * b.w - a.w * b.w;   // == 0 (carried for fidelity)
-        return r;
+        __vector4 result = __vmulfp(x, __vspltw(value, 0));
+        result = __vmaddfp(y, __vspltw(value, 1), result);
+        return __vmaddfp(z, __vspltw(value, 2), result);
     }
 
-    // Lane-by-lane stack quad build (stfs/stw staging rows).
-    inline Vec4 MakeVec4(f32 x, f32 y, f32 z, f32 w)
+    inline __vector4 TransformPoint(__vector4 x, __vector4 y, __vector4 z,
+                                    __vector4 position, __vector4 value)
     {
-        Vec4 r;
-        r.x = x;
-        r.y = y;
-        r.z = z;
-        r.w = w;
-        return r;
+        __vector4 result = __vmaddfp(x, __vspltw(value, 0), position);
+        result = __vmaddfp(y, __vspltw(value, 1), result);
+        return __vmaddfp(z, __vspltw(value, 2), result);
     }
 }
 
@@ -141,8 +116,8 @@ static const f32 KF_OCTAGON_DIAGONAL = 0.70710677f;
 //
 // Structure (asm-attested):
 //   0. Fold the direction into the cylinder's LOCAL frame with a vmrghw/
-//      vmrglw 3x3 transpose + column FMA: localDir = { dot(fn[2], dir),
-//      dot(fn[1], dir), dot(fn[0], dir), 0 } (fn[0] == the axis).
+//      vmrglw transpose + a product and two ordered fused column folds.
+//      fn[0] is the axis; the zero fourth column still participates.
 //   A. |localDir.z| > 0.99980003: END-CAP FACE -- an 8-vertex octagon at
 //      z = +/-halfHeight, 8 FeatureEdge records, numedges = 8. The winding
 //      flag is toggled instead of the loop normal when the cap faces -Z
@@ -151,7 +126,7 @@ static const f32 KF_OCTAGON_DIAGONAL = 0.70710677f;
 //   C. |localDir.z| <= 0.02: SIDE EDGE -- the axis-parallel rim line nearest
 //      the direction, one FeatureEdge, numedges = 1. Its pn row is NEVER
 //      staged: the console memcpy carries 16 bytes of leftover stack into
-//      edges[0].pn (left unwritten here; no consumer reads an edge-feature pn).
+//      edges[0].pn. The common tail also rotates that copied row.
 //   D. otherwise: RIM POINT -- radius * normalised XY of localDir with
 //      z = +/-halfHeight, numedges = 0, feature.pt written.
 //   T. Tail (all paths): rotate ownNormal / translate+rotate pt into world
@@ -163,237 +138,123 @@ static const f32 KF_OCTAGON_DIAGONAL = 0.70710677f;
 // rodata: flt_82001CC0 = 0.0f / flt_82001C98 = 1.0f (committed
 // SeparatingDirection.cpp rodata note); the three thresholds above.
 // ===========================================================================
-void GPCylinder::GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
-                                   const Vec4& arDir, Feature& arFeature)
+void GPCylinder::GetMaximumFeature(RwBool abCcw, math::vpu::Vector3 arDir,
+                                   Feature& arFeature) const
 {
-    // Local-frame rows (lvx128 this+0x00/+0x30/+0x20/+0x10). Local X rides on
-    // mFaceNormals[2], Y on mFaceNormals[1], Z on mFaceNormals[0] == the axis.
-    const Vec4 lvPos   = lpThis->mPos;               // v119
-    const Vec4 lvAxisX = lpThis->mFaceNormals[2];    // v124
-    const Vec4 lvAxisY = lpThis->mFaceNormals[1];    // v123
-    const Vec4 lvAxisZ = lpThis->mFaceNormals[0];    // v122 (cylinder axis)
+    const __vector4 position = mPos.mV;
+    const __vector4 axisX = mFaceNormals[2].mV;
+    const __vector4 axisY = mFaceNormals[1].mV;
+    const __vector4 axisZ = mFaceNormals[0].mV;
+    const __vector4 zero = __vspltisw(0);
 
-    // vmrghw/vmrglw 3x3 transpose + column FMA fold: the direction in the
-    // cylinder's local frame. The merged fourth column is all zeros, so the
-    // w lane is exactly 0.
-    Vec4 lvLocalDir;                                 // v127 -> var_230
-    lvLocalDir.x = Dot3(lvAxisX, arDir);
-    lvLocalDir.y = Dot3(lvAxisY, arDir);
-    lvLocalDir.z = Dot3(lvAxisZ, arDir);
-    lvLocalDir.w = 0.0f;
+    // ARTIST82BAE480..4C8: merged-word transpose followed by one product
+    // and two ordered fused additions, including the fourth lane.
+    const __vector4 xzHigh = __vmrghw(axisX, axisZ);
+    const __vector4 yzHigh = __vmrghw(axisY, zero);
+    const __vector4 xzLow = __vmrglw(axisX, axisZ);
+    const __vector4 yzLow = __vmrglw(axisY, zero);
+    const __vector4 columnX = __vmrghw(xzHigh, yzHigh);
+    const __vector4 columnY = __vmrglw(xzHigh, yzHigh);
+    const __vector4 columnZ = __vmrghw(xzLow, yzLow);
+    __vector4 localDirection = __vmulfp(columnX, __vspltw(arDir.mV, 0));
+    localDirection = __vmaddfp(columnY, __vspltw(arDir.mV, 1), localDirection);
+    localDirection = __vmaddfp(columnZ, __vspltw(arDir.mV, 2), localDirection);
+    const f32 lfLocalZ = localDirection.z;
+    const f32 lfAbsoluteZ = std::fabs(lfLocalZ);
 
-    const f32 lfLocalZ = lvLocalDir.z;               // lfs var_228 (f0)
-
-    if (std::fabs(lfLocalZ) > KF_END_FACE_COS_THRESHOLD)
+    // The genuine temporary's pn is deliberately unwritten on the side
+    // path. Copy its complete object representation, as the retail memcpy
+    // does; no value or preserved destination row is invented for it.
+    FeatureEdge edge;
+    if (lfAbsoluteZ > KF_END_FACE_COS_THRESHOLD)
     {
-        // ================= branch A: END-CAP FACE (8 edges) =================
-        // Local cap normal, built lane-by-lane from the 0.0f/1.0f rodata
-        // (var_220 quad = {0,0,1,0}) -- v121. The loop's prism-wall crosses
-        // keep using the UN-flipped +Z copy even when the -Z cap is selected;
-        // only the winding flag and the stored ownNormal flip.
-        const Vec4 lvLocalNormal = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);
-
-        arFeature.ownNormal = lvLocalNormal;   // stvx128 v121 -> +0x210
-
-        f32    lfZ   = lpThis->mDimensions.x;  // vspltw dims lane 0: halfHeight
-        RwBool lbCcw = abCcw;                  // r23
-        if (lfLocalZ < 0.0f)                   // fcmpu/bge polarity preserved
+        const __vector4 normal = {0.0f, 0.0f, 1.0f, 0.0f};
+        arFeature.ownNormal.mV = normal;
+        f32 lfHeight = mDimensions.mV.x;
+        RwBool lbCcw = abCcw;
+        if (lfLocalZ < 0.0f)
         {
-            lbCcw = (abCcw == 0);              // cntlzw + extrwi bit trick
-            // vxor128 v121 ^ signmask stored (v121 itself NOT updated):
-            // ownNormal = {-0,-0,-1,-0}.
-            arFeature.ownNormal = Negate(lvLocalNormal);
-            lfZ = -lfZ;                        // splat(halfHeight) ^ signmask
+            lbCcw = abCcw == 0;
+            arFeature.ownNormal.mV = FlipSigns(normal);
+            lfHeight = -lfHeight;
         }
-
-        const f32 lfRadius = lpThis->mDimensions.y;   // vspltw dims lane 1
-        const f32 lfDiag   = lfRadius * KF_OCTAGON_DIAGONAL;   // fmuls
-
-        // The 8 octagon vertices in the cap plane z = lfZ, staged into the
-        // ascending stack run var_160..var_F0 (slot order preserved).
-        Vec4 laOctagon[8];
-        laOctagon[0] = MakeVec4(0.0f,      lfRadius,  lfZ, 0.0f);   // var_160
-        laOctagon[1] = MakeVec4(lfDiag,    lfDiag,    lfZ, 0.0f);   // var_150
-        laOctagon[2] = MakeVec4(lfRadius,  0.0f,      lfZ, 0.0f);   // var_140
-        laOctagon[3] = MakeVec4(lfDiag,   -lfDiag,    lfZ, 0.0f);   // var_130
-        laOctagon[4] = MakeVec4(0.0f,     -lfRadius,  lfZ, 0.0f);   // var_120
-        laOctagon[5] = MakeVec4(-lfDiag,  -lfDiag,    lfZ, 0.0f);   // var_110
-        laOctagon[6] = MakeVec4(-lfRadius, 0.0f,      lfZ, 0.0f);   // var_100
-        laOctagon[7] = MakeVec4(-lfDiag,   lfDiag,    lfZ, 0.0f);   // var_F0
-
-        // 8 iterations (r29 = 0..7); the ccw test sits INSIDE the loop.
+        const f32 lfRadius = mDimensions.mV.y;
+        const f32 lfDiagonal = lfRadius * KF_OCTAGON_DIAGONAL;
+        const __vector4 octagon[8] =
+        {
+            {0.0f, lfRadius, lfHeight, 0.0f},
+            {lfDiagonal, lfDiagonal, lfHeight, 0.0f},
+            {lfRadius, 0.0f, lfHeight, 0.0f},
+            {lfDiagonal, -lfDiagonal, lfHeight, 0.0f},
+            {0.0f, -lfRadius, lfHeight, 0.0f},
+            {-lfDiagonal, -lfDiagonal, lfHeight, 0.0f},
+            {-lfRadius, 0.0f, lfHeight, 0.0f},
+            {-lfDiagonal, lfDiagonal, lfHeight, 0.0f}
+        };
         for (u32 lu = 0; lu < 8; ++lu)
         {
-            Vec4 lvBase;       // v13 -> staged base row (var_1A0)
-            Vec4 lvEdgeVec;    // v12
-            Vec4 lvCrossRaw;   // v10 -> unnormalised prism-wall direction
-            if (lbCcw != 0)
-            {
-                // Descending r26 cursor: base = P[7-i]; the ring successor
-                // comes from the (16 * r27) & 0x70 slot with r27 = -2 - i.
-                lvBase     = laOctagon[7 - lu];
-                lvEdgeVec  = Sub(laOctagon[(6u - lu) & 7], lvBase);   // vsubfp
-                // e * perm(n) - perm(e) * n, permuted = cross(edge, +Z).
-                lvCrossRaw = Cross(lvEdgeVec, lvLocalNormal);
-            }
-            else
-            {
-                // Ascending r25 cursor: base = P[i], successor P[(i+1)&7].
-                lvBase     = laOctagon[lu];
-                lvEdgeVec  = Sub(laOctagon[(lu + 1u) & 7], lvBase);
-                // n * perm(e) - perm(n) * e, permuted = cross(+Z, edge).
-                lvCrossRaw = Cross(lvLocalNormal, lvEdgeVec);
-            }
-
-            // vmsum3fp128; guarded length = lenSq * rsqrt(lenSq) (vrsqrtefp +
-            // 2x Newton-Raphson), vsel'd to 0 when lenSq == 0.
-            const f32 lfLenSq  = Dot3(lvEdgeVec, lvEdgeVec);
-            const f32 lfLength = (lfLenSq == 0.0f)
-                                     ? 0.0f
-                                     : lfLenSq * (1.0f / std::sqrt(lfLenSq));
-
-            // vrefp + two Newton-Raphson refines of 1/length feed BOTH the
-            // unit edge direction and the prism normal (1/0 -> inf lanes,
-            // exactly as vrefp(0) -- unreachable for this octagon).
-            const f32 lfInvLength = 1.0f / lfLength;
-
-            // memcpy(edges cursor, staging, 0x40): the four staged rows.
-            FeatureEdge& lrEdge = arFeature.edges[lu];      // r28 += 0x40
-            lrEdge.base   = lvBase;                          // var_1A0 +0x00
-            lrEdge.dir    = Scale(lvEdgeVec, lfInvLength);   // var_190 +0x10
-            lrEdge.pn     = Scale(lvCrossRaw, lfInvLength);  // var_180 +0x20
-            lrEdge.length = Splat(lfLength);                 // var_170 +0x30
+            const __vector4 base = lbCcw ? octagon[7 - lu] : octagon[lu];
+            const __vector4 next = lbCcw ? octagon[(6u - lu) & 7] : octagon[(lu + 1) & 7];
+            const __vector4 delta = __vsubfp(next, base);
+            const __vector4 plane = lbCcw ? CrossNative(delta, normal) : CrossNative(normal, delta);
+            const __vector4 length = GuardedLength(delta);
+            const __vector4 directionInverse = ReciprocalTwice(length);
+            const __vector4 planeInverse = ReciprocalTwice(length);
+            edge.base.mV = base;
+            edge.dir.mV = __vmulfp(directionInverse, delta);
+            edge.length.mV = length;
+            edge.pn.mV = __vmulfp(planeInverse, plane);
+            std::memcpy(&arFeature.edges[lu], &edge, sizeof(edge));
         }
-
-        arFeature.numedges = 8;   // LABEL_15: stw r11(8), 0x230(r30)
+        arFeature.numedges = 8;
     }
-    else if (std::fabs(lfLocalZ) <= KF_SIDE_EDGE_COS_THRESHOLD)
+    else if (!(lfAbsoluteZ > KF_SIDE_EDGE_COS_THRESHOLD))
     {
-        // ================= branch C: SIDE EDGE (1 edge) =====================
-        // Unguarded normalisation of the FULL local direction (vrsqrtefp +
-        // 2x Newton-Raphson, no vsel on this pipeline).
-        const f32  lfDirLenSq = Dot3(lvLocalDir, lvLocalDir);   // v12
-        const Vec4 lvUnitDir  = Scale(lvLocalDir,
-                                      1.0f / std::sqrt(lfDirLenSq));
-
-        const f32 lfHalfHeight = lpThis->mDimensions.x;   // vspltw lane 0
-        const f32 lfRadius     = lpThis->mDimensions.y;   // vspltw lane 1
-
-        // Rim point at the +z cap: radius * unitDir with the z lane replaced
-        // by +halfHeight (vrlimi128 v11, v9, 2, 0); the -z copy replaces it
-        // with -halfHeight (vrlimi128 v12, v8, 2, 0).
-        Vec4 lvTop = Scale(lvUnitDir, lfRadius);   // v11
-        lvTop.z = lfHalfHeight;
-        Vec4 lvBottom = lvTop;                     // vmr v12, v11
-        lvBottom.z = -lfHalfHeight;
-
-        const Vec4 lvUp   = Sub(lvTop, lvBottom);  // v12 = {0,0,+2h,0}
-        const Vec4 lvDown = Sub(lvBottom, lvTop);  // v9  = {0,0,-2h,0}
-
-        // Guarded length of the up vector -> the FeatureEdge length row
-        // (vrsqrtefp + 2x NR; vcmpeqfp v4 / vsel against zero).
-        const f32 lfLenSq  = Dot3(lvUp, lvUp);
-        const f32 lfLength = (lfLenSq == 0.0f)
-                                 ? 0.0f
-                                 : lfLenSq * (1.0f / std::sqrt(lfLenSq));
-
-        // The down vector is normalised through its OWN (unguarded) rsqrt
-        // pipeline (vmsum3fp128 v10 + vrsqrtefp v12 + 2x NR).
-        const f32 lfDownLenSq = Dot3(lvDown, lvDown);
-
-        // memcpy(feature+0x10, staging, 0x40). The pn row (var_180) is never
-        // staged on this path -- the console copies 16 bytes of leftover
-        // stack into edges[0].pn; left unwritten here (indeterminate either
-        // way, no consumer reads an edge-feature pn).
-        FeatureEdge& lrEdge = arFeature.edges[0];
-        lrEdge.base   = lvTop;                                        // var_1A0
-        lrEdge.dir    = Scale(lvDown, 1.0f / std::sqrt(lfDownLenSq)); // var_190
-        lrEdge.length = Splat(lfLength);                              // var_170
-
-        // Post-memcpy: ownNormal = the untouched local direction (v127).
-        arFeature.ownNormal = lvLocalDir;   // stvx128 v127 -> +0x210
-        arFeature.numedges  = 1;            // LABEL_15: stw r11(1)
+        // ARTIST's ble includes unordered, unlike an ordered <= test.
+        const __vector4 square = __vmsum3fp(localDirection, localDirection);
+        const __vector4 unit = __vmulfp(localDirection, ReciprocalRootTwice(square));
+        const __vector4 radius = __vspltw(mDimensions.mV, 1);
+        const __vector4 height = __vspltw(mDimensions.mV, 0);
+        const __vector4 top = __vrlimi(__vmulfp(unit, radius), height, 2, 0);
+        const __vector4 bottom = __vrlimi(top, FlipSigns(height), 2, 0);
+        const __vector4 up = __vsubfp(top, bottom);
+        const __vector4 down = __vsubfp(bottom, top);
+        const __vector4 length = GuardedLength(up);
+        const __vector4 downSquare = __vmsum3fp(down, down);
+        edge.base.mV = top;
+        edge.length.mV = SplatValue(length.x);
+        edge.dir.mV = __vmulfp(down, ReciprocalRootTwice(downSquare));
+        std::memcpy(&arFeature.edges[0], &edge, sizeof(edge));
+        arFeature.ownNormal.mV = localDirection;
+        arFeature.numedges = 1;
     }
     else
     {
-        // ================= branch D: RIM POINT (0 edges) ====================
-        // Zero the z lane of the local direction (stfs 0.0f into the staged
-        // quad), then normalise the radial part -- unguarded rsqrt pipeline.
-        Vec4 lvRadial = lvLocalDir;          // stvx128 v127 -> var_230
-        lvRadial.z = 0.0f;                   // var_228 = flt_82001CC0
-        const f32  lfXYLenSq = Dot3(lvRadial, lvRadial);   // vmsum3fp128
-        const Vec4 lvUnitXY  = Scale(lvRadial, 1.0f / std::sqrt(lfXYLenSq));
-
-        // point = radius * unitXY with z = +halfHeight inserted (vspltw dims
-        // lane 1 multiply; vrlimi128 v0, splat(dims lane 0), 2, 0).
-        Vec4 lvPoint = Scale(lvUnitXY, lpThis->mDimensions.y);
-        lvPoint.z = lpThis->mDimensions.x;
-        if (lfLocalZ < 0.0f)                 // fcmpu/bge polarity preserved
-        {
-            // splat lane 2 ^ signmask, re-inserted: z = -halfHeight.
-            lvPoint.z = -lvPoint.z;
-        }
-
-        arFeature.numedges  = 0;             // stw r31, 0x230(r30)
-        arFeature.ownNormal = lvLocalDir;    // stvx128 v127 (full, z included)
-        arFeature.pt        = lvPoint;       // stvx128 v0 -> +0x220
+        const __vector4 radial = __vrlimi(localDirection, zero, 2, 0);
+        const __vector4 square = __vmsum3fp(radial, radial);
+        const __vector4 unit = __vmulfp(radial, ReciprocalRootTwice(square));
+        __vector4 point = __vmulfp(unit, __vspltw(mDimensions.mV, 1));
+        point = __vrlimi(point, __vspltw(mDimensions.mV, 0), 2, 0);
+        if (lfLocalZ < 0.0f)
+            point = __vrlimi(point, FlipSigns(__vspltw(point, 2)), 2, 0);
+        arFeature.numedges = 0;
+        arFeature.ownNormal.mV = localDirection;
+        arFeature.pt.mV = point;
     }
 
-    // ===================== LABEL_16: local -> world =========================
-    // ownNormal is rotated (no translation); pt is rotated AND translated by
-    // mPos. On branches A and C feature.pt was never written -- the console
-    // transforms whatever the caller's +0x220 slot held; preserved here.
+    const __vector4 localNormal = arFeature.ownNormal.mV;
+    const __vector4 localPoint = arFeature.pt.mV;
+    arFeature.ownNormal.mV = Rotate(axisX, axisY, axisZ, localNormal);
+    arFeature.pt.mV = TransformPoint(axisX, axisY, axisZ, position, localPoint);
+    for (s32 li = 0; li < arFeature.numedges; ++li)
     {
-        const Vec4 lvLocalN  = arFeature.ownNormal;   // lvx128 [r24]
-        const Vec4 lvLocalPt = arFeature.pt;          // lvx128 [r30+0x220]
-
-        Vec4 lvWorldN = Scale(lvAxisX, lvLocalN.x);             // v124 * splat0
-        lvWorldN = MaddScalar(lvAxisY, lvLocalN.y, lvWorldN);   // vmaddfp128
-        lvWorldN = MaddScalar(lvAxisZ, lvLocalN.z, lvWorldN);
-        arFeature.ownNormal = lvWorldN;                         // stvx128 [r24]
-
-        Vec4 lvWorldPt = MaddScalar(lvAxisX, lvLocalPt.x, lvPos);   // v119 seed
-        lvWorldPt = MaddScalar(lvAxisY, lvLocalPt.y, lvWorldPt);
-        lvWorldPt = MaddScalar(lvAxisZ, lvLocalPt.z, lvWorldPt);
-        arFeature.pt = lvWorldPt;                        // stvx128 [r30+0x220]
-    }
-
-    // cmpwi (signed) numedges > 0: rotate/translate every edge record.
-    // The console reloads numedges from +0x230 each iteration (no writes to
-    // it inside the loop, so the do-while collapses cleanly).
-    if (arFeature.numedges > 0)
-    {
-        s32 li = 0;   // r31 (0 on entry to every branch)
-        do
-        {
-            FeatureEdge& lrEdge = arFeature.edges[li];   // r11 = dir row cursor
-            const Vec4 lvDir  = lrEdge.dir;    // lvx128 [r11]
-            const Vec4 lvBase = lrEdge.base;   // lvx128 [r11-0x10]
-            const Vec4 lvPn   = lrEdge.pn;     // lvx128 [r11+0x10]
-
-            // dir: rotation only.
-            Vec4 lvWorldDir = Scale(lvAxisX, lvDir.x);
-            lvWorldDir = MaddScalar(lvAxisY, lvDir.y, lvWorldDir);
-            lvWorldDir = MaddScalar(lvAxisZ, lvDir.z, lvWorldDir);
-            lrEdge.dir = lvWorldDir;                     // stored first
-
-            // base: rotation + mPos translation (v8 seeded from v119).
-            Vec4 lvWorldBase = MaddScalar(lvAxisX, lvBase.x, lvPos);
-            lvWorldBase = MaddScalar(lvAxisY, lvBase.y, lvWorldBase);
-            lvWorldBase = MaddScalar(lvAxisZ, lvBase.z, lvWorldBase);
-
-            // pn: rotation only.
-            Vec4 lvWorldPn = Scale(lvAxisX, lvPn.x);
-            lvWorldPn = MaddScalar(lvAxisY, lvPn.y, lvWorldPn);
-            lvWorldPn = MaddScalar(lvAxisZ, lvPn.z, lvWorldPn);
-
-            lrEdge.base = lvWorldBase;                   // stvx128 [r10]
-            lrEdge.pn   = lvWorldPn;                     // stvx128 [r9]
-            // length row untouched.
-
-            ++li;   // addi r31, r31, 1; edge cursor r11 += 0x40
-        }
-        while (li < arFeature.numedges);   // lwz 0x230(r30) / cmpw / blt
+        FeatureEdge& result = arFeature.edges[li];
+        const __vector4 direction = result.dir.mV;
+        const __vector4 base = result.base.mV;
+        const __vector4 plane = result.pn.mV;
+        result.dir.mV = Rotate(axisX, axisY, axisZ, direction);
+        result.base.mV = TransformPoint(axisX, axisY, axisZ, position, base);
+        result.pn.mV = Rotate(axisX, axisY, axisZ, plane);
     }
 }
 
@@ -408,102 +269,51 @@ void GPCylinder::GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
 //   interval.min/max = lane-0 broadcasts (padding words NOT touched).
 // Hex-Rays's "int result" return is the r3 pass-through artifact -- void.
 // ===========================================================================
-void GPCylinder::GetInterval(const GPInstance* lpThis,
-                             const Vec4& arDir, Interval& arInterval)
+namespace
 {
-    // vmsum3fp128 v9 = dot3(mPos, dir); v11 = dot3(mEdgeDirections[0], dir)
-    // (the cylinder axis lives in mEdgeDirections[0], canonical Axis()).
-    const f32 lfCentreDot = Dot3(lpThis->mPos, arDir);                // v9
-    const f32 lfAxisDot   = Dot3(lpThis->mEdgeDirections[0], arDir);  // v11
-
-    // fnmsubs f13 = -(axisDot*axisDot - 1.0f) = 1 - axisDot^2
-    // (flt_82001C98 = 1.0f), then fabs on both the term and the dot.
-    const f32 lfSinSq      = 1.0f - lfAxisDot * lfAxisDot;    // f13
-    const f32 lfAbsAxisDot = std::fabs(lfAxisDot);            // -> var_40 quad
-    const f32 lfAbsSinSq   = std::fabs(lfSinSq);              // -> var_50 quad
-
-    // Guarded sqrt: vrsqrtefp + two Newton-Raphson refines (vcfsx 1.0/0.5
-    // constants), x * rsqrt(x), forced to 0 by vcmpeqfp/vsel when x == 0.
-    const f32 lfSin = (lfAbsSinSq == 0.0f)
-                          ? 0.0f
-                          : lfAbsSinSq * (1.0f / std::sqrt(lfAbsSinSq));
-
-    // v0 = splat(radius) * sin; v0 = splat(halfHeight) * splat(|axisDot|) + v0
-    // (vmaddfp v0, v7, v0, v5: multiplier v5 is the LAST-listed operand).
-    const f32 lfProj = lpThis->mDimensions.x * lfAbsAxisDot
-                     + lpThis->mDimensions.y * lfSin;
-
-    // fsubs f13 = centreDot - |proj|; fadds f0 = |proj| + centreDot
-    // (the console fabs's the projection twice, f13/f12; proj is already
-    // non-negative for sane inputs -- preserved regardless).
-    const f32 lfMin = lfCentreDot - std::fabs(lfProj);
-    const f32 lfMax = std::fabs(lfProj) + lfCentreDot;
-
-    // Lane-0 broadcasts stored at out+0x00 / out+0x10 (stvx128 v0, r4 /
-    // stvx128 v13, r4+0x10). Interval::padding is not written.
-    arInterval.min = Splat(lfMin);
-    arInterval.max = Splat(lfMax);
+    // ARTIST 82BAD7F8/82BAD938: scalar fnmsubs precedes two VMX
+    // reciprocal-root refinements; scalar fsubs/fadds form the bounds.
+    inline void CylinderInterval(const GPCylinder& cylinder, __vector4 direction, Interval& interval)
+    {
+        const f32 centre = __vmsum3fp(cylinder.mPos.mV, direction).x;
+        const f32 axial = __vmsum3fp(cylinder.mEdgeDirections[0].mV, direction).x;
+        const f32 square = std::fabs(linemath::ScalarNmsub(axial, axial, 1.0f));
+        const f32 absoluteAxial = std::fabs(axial);
+        const __vector4 x = {square, square, square, square};
+        const __vector4 axialV = {absoluteAxial, absoluteAxial, absoluteAxial, absoluteAxial};
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(x);
+        __vector4 correction = __vnmsubfp(x, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        correction = __vnmsubfp(x, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        const __vector4 root = __vsel(__vmulfp(x, estimate), zero, __vcmpeqfp(zero, x));
+        const __vector4 radial = __vmulfp(__vspltw(cylinder.mDimensions.mV, 1), root);
+        const __vector4 extent = __vmaddfp(__vspltw(cylinder.mDimensions.mV, 0), axialV, radial);
+        const f32 absoluteExtent = std::fabs(extent.x);
+        const f32 lo = centre - absoluteExtent;
+        const f32 hi = absoluteExtent + centre;
+        const __vector4 minV = {lo, lo, lo, lo};
+        const __vector4 maxV = {hi, hi, hi, hi};
+        interval.min.mV = minV;
+        interval.max.mV = maxV;
+    }
 }
 
-// ===========================================================================
-// rw::collision::GPCylinder::GetIntervals @ 0x82BAD938
-// Called by the committed FindBestSeparatingDirection through
-// mMethods.mGetIntervals. Per direction, the identical math to GetInterval;
-// the instance rows are reloaded every iteration on the console -- kept
-// inside the loop body here. Output stride 0x30 == sizeof(Interval)
-// (`addi r10, r10, 0x30`); the Interval padding words are NOT touched.
-// ===========================================================================
-void GPCylinder::GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
-                              u32 auNumDirs, Interval* lapIntervals)
+void GPCylinder::GetInterval(rw::math::vpu::Vector3 arDir, Interval& arInterval) const
 {
-    // cmplwi cr6, r7, 0 / beq: zero directions -> nothing to do.
-    if (auNumDirs == 0)
-    {
-        return;
-    }
-
-    const Vec4* lpDir      = lapDirs;       // r6, += 0x10
-    Interval*   lpInterval = lapIntervals;  // r10, += 0x30
-    u32         luRemaining = auNumDirs;    // r7, addic. decrement
-
-    do
-    {
-        // Instance rows reloaded per iteration on the console (lvx128 inside
-        // the loop body): axis @+0x40, centre @+0x00, dimensions @+0x70.
-        const f32 lfAxisDot   = Dot3(lpThis->mEdgeDirections[0], *lpDir);  // v13
-        const f32 lfCentreDot = Dot3(lpThis->mPos, *lpDir);                // v0
-
-        // fnmsubs f13 = -(axisDot*axisDot - 1.0f) = 1 - axisDot^2, then fabs
-        // on both the term and the dot (staged as {value,0,0,0} quads).
-        const f32 lfSinSq      = 1.0f - lfAxisDot * lfAxisDot;     // f13
-        const f32 lfAbsAxisDot = std::fabs(lfAxisDot);             // var_70
-        const f32 lfAbsSinSq   = std::fabs(lfSinSq);               // var_80
-
-        // vrsqrtefp + 2x Newton-Raphson (vcfsx 1.0/0.5), x * rsqrt(x), forced
-        // to 0 by vcmpeqfp v3 / vsel when x == 0 -- the guarded sqrt.
-        const f32 lfSin = (lfAbsSinSq == 0.0f)
-                              ? 0.0f
-                              : lfAbsSinSq * (1.0f / std::sqrt(lfAbsSinSq));
-
-        // v0 = splat(radius) * sin; vmaddfp v0, v7, v0, v6:
-        // v0 = splat(halfHeight) * splat(|axisDot|) + v0.
-        const f32 lfProj = lpThis->mDimensions.x * lfAbsAxisDot
-                         + lpThis->mDimensions.y * lfSin;
-
-        // fsubs f11 = centreDot - |proj|; fadds f0 = |proj| + centreDot
-        // (fabs'd twice, f11/f0, exactly as GetInterval does).
-        const f32 lfMin = lfCentreDot - std::fabs(lfProj);
-        const f32 lfMax = std::fabs(lfProj) + lfCentreDot;
-
-        // Lane-0 broadcasts stored at r10+0x00 / r10+0x10; padding untouched.
-        lpInterval->min = Splat(lfMin);
-        lpInterval->max = Splat(lfMax);
-
-        ++lpDir;         // addi r6, r6, 0x10
-        ++lpInterval;    // addi r10, r10, 0x30 (== sizeof(Interval))
-    }
-    while (--luRemaining != 0);   // addic. / bne
+    CylinderInterval(*this, arDir.mV, arInterval);
 }
+
+void GPCylinder::GetIntervals(const rw::math::vpu::Vector3* lapDirs, u32 auNumDirs, Interval* lapIntervals) const
+{
+    for (u32 i = 0; i < auNumDirs; ++i)
+        CylinderInterval(*this, lapDirs[i].mV, lapIntervals[i]);
+}
+
+void GPCylinder::GetBBox(AABBox&) const {} // ARTIST ICF 0x82AD5078
 
 } // namespace collision
 } // namespace rw

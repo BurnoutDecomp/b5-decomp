@@ -14,15 +14,11 @@
 // This is the TU that GPInstance.hpp, CapsuleVolume.cpp and TriangleVolume*.cpp
 // have been calling "the un-recovered GP registration TU" (canonical
 // FixupSepDirMethods, rwccore.h:2955). It carries DATA only -- no reconstructed
-// function bodies other than the one folded empty callback described below -- which is
-// why it can land ahead of the SAT/prism kernels that are still missing.
+// data table; the independently declared GetBBox members are folded by the
+// retail linker to the same empty function.
 //
-// WHY IT IS DATA, NOT CODE, ON THIS BUILD: on the console the canonical SDK
-// fills both tables at runtime from pointers-to-member (FixupSepDirMethods).
-// The X360 compile emitted them as fully-resolved rodata blocks of PLAIN
-// function pointers -- that is what the two dumps below are -- so the host
-// spelling is a static initialiser, and the GPInstance.hpp "X360 SHAPE DELTA"
-// note (static plain-function callbacks) is what makes it type-check.
+// ARTIST records contain the native member entry points. The single-
+// inheritance member pointers below preserve the observed four-word records.
 //
 // AGENTS gotcha 5 ("rodata tables are dumps, not blocks") applies and was
 // checked: both tables' extents are pinned by their contents, not assumed.
@@ -37,20 +33,6 @@ namespace rw
 {
 namespace collision
 {
-
-namespace
-{
-    // THE CONSOLE FUNCTION IS EMPTY. Every VolumeMethods record's +0xB0
-    // (GetBBox) slot in unk_82F918F0 holds 0x82AD5078, and 0x82AD5078 is the
-    // XEX's ICF-folded shared empty function -- a lone `blr`, the single
-    // address every empty function in the image was folded onto (AGENTS
-    // gotcha 6 names this exact address). This is therefore the reconstructed
-    // body of a real function that executes nothing, reproduced exactly; the
-    // GP GetBBox slot simply returns on this build for all five types.
-    void GPFoldedEmptyGetBBox(const GPInstance* /*lpThis*/, AABBox& /*arBBox*/)
-    {
-    }
-}
 
 // ---------------------------------------------------------------------------
 // rw::collision::gapFindBestSeparatingDirection -- X360 off_82F91800
@@ -126,24 +108,34 @@ gapFindBestSeparatingDirection[GPInstance::NUMINTERNALTYPES][GPInstance::NUMINTE
 // Slot order is GetMaximumFeature (+0xA4), GetInterval (+0xA8), GetIntervals
 // (+0xAC), GetBBox (+0xB0) -- the committed VolumeMethods member order. All
 // fifteen concrete callbacks have bodies in this directory; the sixteenth
-// distinct target, 0x82AD5078, is the folded empty function above.
+// distinct target, 0x82AD5078, is the five folded empty GetBBox members.
 //
 // Row 0 is all-zero in the image and is reproduced as all-null: a GPInstance
 // of type UNUSED that reaches a dispatch would null-call on the console too.
 // ---------------------------------------------------------------------------
 const GPInstance::VolumeMethods g_aGPVolumeMethods[GPInstance::NUMINTERNALTYPES] =
 {
-    /* [0] UNUSED   */ { 0, 0, 0, 0 },
-    /* [1] SPHERE   */ { &GPSphere::GetMaximumFeature,   &GPSphere::GetInterval,
-                         &GPSphere::GetIntervals,        &GPFoldedEmptyGetBBox },
-    /* [2] CAPSULE  */ { &GPCapsule::GetMaximumFeature,  &GPCapsule::GetInterval,
-                         &GPCapsule::GetIntervals,       &GPFoldedEmptyGetBBox },
-    /* [3] TRIANGLE */ { &GPTriangle::GetMaximumFeature, &GPTriangle::GetInterval,
-                         &GPTriangle::GetIntervals,      &GPFoldedEmptyGetBBox },
-    /* [4] BOX      */ { &GPBox::GetMaximumFeature,      &GPBox::GetInterval,
-                         &GPBox::GetIntervals,           &GPFoldedEmptyGetBBox },
-    /* [5] CYLINDER */ { &GPCylinder::GetMaximumFeature, &GPCylinder::GetInterval,
-                         &GPCylinder::GetIntervals,      &GPFoldedEmptyGetBBox },
+    { 0, 0, 0, 0 },
+    { static_cast<GPInstance::GetMaximumFeatureFn>(&GPSphere::GetMaximumFeature),
+      static_cast<GPInstance::GetIntervalFn>(&GPSphere::GetInterval),
+      static_cast<GPInstance::GetIntervalsFn>(&GPSphere::GetIntervals),
+      static_cast<GPInstance::GetBBoxFn>(&GPSphere::GetBBox) },
+    { static_cast<GPInstance::GetMaximumFeatureFn>(&GPCapsule::GetMaximumFeature),
+      static_cast<GPInstance::GetIntervalFn>(&GPCapsule::GetInterval),
+      static_cast<GPInstance::GetIntervalsFn>(&GPCapsule::GetIntervals),
+      static_cast<GPInstance::GetBBoxFn>(&GPCapsule::GetBBox) },
+    { static_cast<GPInstance::GetMaximumFeatureFn>(&GPTriangle::GetMaximumFeature),
+      static_cast<GPInstance::GetIntervalFn>(&GPTriangle::GetInterval),
+      static_cast<GPInstance::GetIntervalsFn>(&GPTriangle::GetIntervals),
+      static_cast<GPInstance::GetBBoxFn>(&GPTriangle::GetBBox) },
+    { static_cast<GPInstance::GetMaximumFeatureFn>(&GPBox::GetMaximumFeature),
+      static_cast<GPInstance::GetIntervalFn>(&GPBox::GetInterval),
+      static_cast<GPInstance::GetIntervalsFn>(&GPBox::GetIntervals),
+      static_cast<GPInstance::GetBBoxFn>(&GPBox::GetBBox) },
+    { static_cast<GPInstance::GetMaximumFeatureFn>(&GPCylinder::GetMaximumFeature),
+      static_cast<GPInstance::GetIntervalFn>(&GPCylinder::GetInterval),
+      static_cast<GPInstance::GetIntervalsFn>(&GPCylinder::GetIntervals),
+      static_cast<GPInstance::GetBBoxFn>(&GPCylinder::GetBBox) },
 };
 
 } // namespace collision

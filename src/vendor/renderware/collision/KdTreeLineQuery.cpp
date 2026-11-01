@@ -69,95 +69,26 @@ namespace
 //        else (leaf-only)                        -> muTopNodeHi = 0 ;
 //               muTopNode = muLeafNodeIndex ; muStackCount = 0
 // ---------------------------------------------------------------------------
-KdTreeLineQuery::KdTreeLineQuery(KdTree* lpKdTree,
-                                 const AALineClipper::Vec4& rStart,
-                                 const AALineClipper::Vec4& rEnd, f32 lfFatness)
+KdTreeLineQuery::KdTreeLineQuery(const KdTree* lpKdTree, rw::math::vpu::Vector3 rStart,
+                                 rw::math::vpu::Vector3 rEnd, f32 lfFatness)
+    : mpKdTree(lpKdTree), mClipper(rStart,rEnd,rw::math::vpu::Vector3(lfFatness,lfFatness,lfFatness),lpKdTree->mBBox)
 {
-    mpKdTree = lpKdTree; // +0x00
-
-    // ---- build the per-axis dir-seed for AALineClipper::Init ---------------
-    // The w lane fatness is 0 (the asm splats fatness into 3 stack words and
-    // leaves the 4th at 0), so the w seed reduces to just the pad epsilon.
-    const f32 lFatness[4] = { lfFatness, lfFatness, lfFatness, 0.0f };
-    AALineClipper::Vec4 lSeed;
-    f32* lpSeed = &lSeed.x;
-    const f32* lpStart = &rStart.x;
-    const f32* lpEnd   = &rEnd.x;
-    for (s32 li = 0; li < 4; ++li)
-    {
-        const f32 lfAbsMax = linemath::VmxMax(AbsF(lpStart[li]), AbsF(lpEnd[li]));
-        lpSeed[li] = lfAbsMax * lFatness[li] + KF_SEED_PAD_EPS;
-    }
-
-    // ---- precompute the per-axis clip parameters ---------------------------
-    AALineClipper::Aabb lTreeBox;
-    lTreeBox.mMin.x = lpKdTree->maBoxMin[0]; lTreeBox.mMin.y = lpKdTree->maBoxMin[1]; lTreeBox.mMin.z = lpKdTree->maBoxMin[2]; lTreeBox.mMin.w = lpKdTree->maBoxMin[3];
-    lTreeBox.mMax.x = lpKdTree->maBoxMax[0]; lTreeBox.mMax.y = lpKdTree->maBoxMax[1]; lTreeBox.mMax.z = lpKdTree->maBoxMax[2]; lTreeBox.mMax.w = lpKdTree->maBoxMax[3];
-    mClipper.Init(rStart, rEnd, lSeed, &lTreeBox); // this+0x10
-
-    muTopNode   = 0; // +0x254
-    muTopNodeHi = 0; // +0x258
-
-    // The clipped line interval [tMin,tMax] lives in the first stack record's
-    // key/far fields: +0x58 == maNodeStack[0].mfKey, +0x5C == maNodeStack[0].mfFar.
-    // (On the root-descent branch the record's node words are filled below; the
-    // interval IS the root entry.)
-    f32 lfClipMin = KF_CLIP_MIN_INIT; // +0x58 init 0.0
-    f32 lfClipMax = KF_CLIP_MAX_INIT; // +0x5C init 1.0
-
-    // ---- axis-aligned slab clip --------------------------------------------
-    const f32* lpClipMin   = &mClipper.mClipMin.x;
-    const f32* lpRecipSpan = &mClipper.mRecipSpan.x;
-    const f32* lpPadExtent = &mClipper.mPadExtent.x;
-    const f32* lpBoxMin    = lpKdTree->maBoxMin;
-    const f32* lpBoxMax    = lpKdTree->maBoxMax;
-
-    f32 lEnter[3];
-    f32 lExit[3];
-    for (s32 li = 0; li < 3; ++li) // horizontal reduce uses x,y,z only
-    {
-        const f32 lfA = lpRecipSpan[li] * ((lpBoxMin[li] - lpPadExtent[li]) - lpClipMin[li]);
-        const f32 lfB = lpRecipSpan[li] * ((lpBoxMax[li] + lpPadExtent[li]) - lpClipMin[li]);
-        lEnter[li] = linemath::VmxMin(lfA, lfB);
-        lExit[li]  = linemath::VmxMax(lfA, lfB);
-    }
-
-    // fsel-form horizontal reduce (matches the asm fsub/fsel chain exactly):
-    //   maxEnter = max(max(enter.x, enter.y), enter.z)
-    //   minExit  = min(min(exit.x,  exit.y),  exit.z)
-    f32 lfMaxEnter = Fsel(lEnter[0] - lEnter[1], lEnter[0], lEnter[1]);
-    lfMaxEnter     = Fsel(lfMaxEnter - lEnter[2], lfMaxEnter, lEnter[2]);
-    f32 lfMinExit  = Fsel(lExit[0] - lExit[1], lExit[1], lExit[0]);
-    lfMinExit      = Fsel(lfMinExit - lExit[2], lExit[2], lfMinExit);
-
-    // mfClipMin = max(prevClipMin, maxEnter) ; mfClipMax = min(prevClipMax, minExit)
-    lfClipMin = Fsel(lfClipMin - lfMaxEnter, lfClipMin, lfMaxEnter);
-    lfClipMax = Fsel(lfClipMax - lfMinExit, lfMinExit, lfClipMax);
-
-    maNodeStack[0].mfKey = lfClipMin; // +0x58
-    maNodeStack[0].mfFar = lfClipMax; // +0x5C
-
-    // ---- seed the descent cursor -------------------------------------------
-    if (lfClipMin >= lfClipMax)
-    {
-        // Empty clipped interval: the segment misses the tree AABB.
-        muStackCount = 0; // +0x250
-    }
+    muTopNode=0; muTopNodeHi=0;
+    const __vector4 lo=__vsubfp(__vsubfp(lpKdTree->mBBox.mMin.mV,mClipper.m_padding.mV),mClipper.m_origin.mV);
+    const __vector4 hi=__vsubfp(__vaddfp(lpKdTree->mBBox.mMax.mV,mClipper.m_padding.mV),mClipper.m_origin.mV);
+    const __vector4 a=__vmulfp(mClipper.m_recip.mV,lo), b=__vmulfp(mClipper.m_recip.mV,hi);
+    const __vector4 enter=__vminfp(a,b), exit=__vmaxfp(a,b);
+    f32 maxEnter=Fsel(enter.x-enter.y,enter.x,enter.y);
+    maxEnter=Fsel(maxEnter-enter.z,maxEnter,enter.z);
+    f32 minExit=Fsel(exit.x-exit.y,exit.y,exit.x);
+    minExit=Fsel(minExit-exit.z,exit.z,minExit);
+    const f32 clipMin=Fsel(0.0f-maxEnter,0.0f,maxEnter);
+    const f32 clipMax=Fsel(1.0f-minExit,minExit,1.0f);
+    maNodeStack[0].mfKey=clipMin; maNodeStack[0].mfFar=clipMax;
+    if (!(clipMin < clipMax)) muStackCount=0;
     else if (lpKdTree->muNumBranchNodes != 0)
-    {
-        // Tree has interior nodes: seed the first stack record for a root descent.
-        maNodeStack[0].muNode1 = 0;          // +0x54  (stw 0)
-        // 0xFFFFFFFF bit pattern (li -1) -- the asm stores it as a word.
-        maNodeStack[0].muNode0 = 0xFFFFFFFFu; // +0x50  (stw -1)
-        muStackCount           = 1;           // +0x250 (stw 1)
-    }
-    else
-    {
-        // Leaf-only tree: latch the single leaf node and leave the cursor inactive.
-        muTopNodeHi  = 0;                          // +0x258
-        muTopNode    = lpKdTree->muLeafNodeIndex;  // +0x254
-        muStackCount = 0;                          // +0x250
-    }
+    { maNodeStack[0].muNode1=0; maNodeStack[0].muNode0=0xFFFFFFFFu; muStackCount=1; }
+    else { muTopNodeHi=0; muTopNode=lpKdTree->muNumEntries; muStackCount=0; }
 }
 
 // ---------------------------------------------------------------------------
@@ -177,14 +108,14 @@ KdTreeLineQuery::KdTreeLineQuery(KdTree* lpKdTree,
 //       ++j
 //   muStackCount = j
 // ---------------------------------------------------------------------------
-KdTreeLineQuery* KdTreeLineQuery::ClipEnd(f32 lfFarParam)
+void KdTreeLineQuery::ClipEnd(f32 lfFarParam)
 {
     u32 luSurvivors = 0;
 
     const u32 luCount = muStackCount;
     for (u32 lui = 0; lui < luCount; ++lui)
     {
-        if (maNodeStack[lui].mfKey <= lfFarParam)
+        if (!(maNodeStack[lui].mfKey > lfFarParam))
         {
             NodeStackEntry& rDst = maNodeStack[luSurvivors];
             // Copy the two header words verbatim (asm: two 8-byte ld/std pairs).
@@ -200,7 +131,6 @@ KdTreeLineQuery* KdTreeLineQuery::ClipEnd(f32 lfFarParam)
     }
 
     muStackCount = luSurvivors;
-    return this;
 }
 
 } // namespace collision

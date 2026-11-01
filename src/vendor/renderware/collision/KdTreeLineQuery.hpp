@@ -85,8 +85,8 @@ public:
     // first stack record is seeded for a root descent and muStackCount = 1; on a
     // leaf-only tree the leaf node index is latched into muTopNode and the cursor
     // is left inactive.
-    KdTreeLineQuery(KdTree* lpKdTree, const AALineClipper::Vec4& rStart,
-                    const AALineClipper::Vec4& rEnd, f32 lfFatness);
+    KdTreeLineQuery(const KdTree* lpKdTree, rw::math::vpu::Vector3 rStart,
+                    rw::math::vpu::Vector3 rEnd, f32 lfFatness);
 
     // @ 0x82BB0408 -- shorten the pending-node stack to a new far line endpoint.
     // Walks the live records (0..muStackCount), keeping those whose mfKey <=
@@ -94,17 +94,20 @@ public:
     // min(mfFar, lfFarParam), and writes back the reduced count. Returns this.
     // (X360 passes the new endpoint as a3; the asm compares mfKey via fcmpu and
     // clamps mfFar via fsub/fsel.)
-    KdTreeLineQuery* ClipEnd(f32 lfFarParam);
+    void ClipEnd(f32 lfFarParam);
 
     // --- members (reconstructed from the asm store offsets) ------------------
-    KdTree*        mpKdTree;                        // +0x00
-    u32            muPad04[3];                       // +0x04..+0x0F (aligns clipper)
+    const KdTree*  mpKdTree;                        // +0x00
     AALineClipper  mClipper;                         // +0x10..+0x4F
     NodeStackEntry maNodeStack[KU_NUM_STACK_ENTRIES];// +0x50..+0x24F
     u32            muStackCount;                     // +0x250  pending count / active
     u32            muTopNode;                        // +0x254  leaf node index seed
     u32            muTopNodeHi;                       // +0x258  companion word
 };
+
+CGS_STATIC_ASSERT((offsetof(KdTreeLineQuery,mClipper)==0x10), "KdTreeLineQuery clipper");
+CGS_STATIC_ASSERT((offsetof(KdTreeLineQuery,maNodeStack)==0x50), "KdTreeLineQuery stack");
+CGS_STATIC_ASSERT((offsetof(KdTreeLineQuery,muStackCount)==0x250), "KdTreeLineQuery stack count");
 
 } // namespace collision
 } // namespace rw

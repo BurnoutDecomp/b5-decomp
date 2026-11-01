@@ -33,68 +33,18 @@ static const f32 KF_DEGENERATE_GAP_EPSILON = 1.1920929e-7f;
 
 namespace
 {
-    // dot3 of the xyz lanes (the asm's vmsum3fp128; the broadcast result's
-    // lane 0 is what every consumer reads).
-    inline f32 Dot3(const Vec4& a, const Vec4& b)
-    {
-        return a.x * b.x + a.y * b.y + a.z * b.z;
-    }
-
-    // vsubfp: per-lane a - b (all four lanes, w included).
-    inline Vec4 Sub(const Vec4& a, const Vec4& b)
-    {
-        Vec4 r;
-        r.x = a.x - b.x;
-        r.y = a.y - b.y;
-        r.z = a.z - b.z;
-        r.w = a.w - b.w;
-        return r;
-    }
-
-    // vaddfp: per-lane a + b.
-    inline Vec4 Add(const Vec4& a, const Vec4& b)
-    {
-        Vec4 r;
-        r.x = a.x + b.x;
-        r.y = a.y + b.y;
-        r.z = a.z + b.z;
-        r.w = a.w + b.w;
-        return r;
-    }
-
-    // vmulfp128 against a lvlx/vspltw splat: per-lane a * s.
-    inline Vec4 Scale(const Vec4& a, f32 s)
-    {
-        Vec4 r;
-        r.x = a.x * s;
-        r.y = a.y * s;
-        r.z = a.z * s;
-        r.w = a.w * s;
-        return r;
-    }
-
-    // vmaddfp against a splat multiplier: per-lane a*s + b.
-    inline Vec4 MaddScalar(const Vec4& a, f32 s, const Vec4& b)
-    {
-        Vec4 r;
-        r.x = a.x * s + b.x;
-        r.y = a.y * s + b.y;
-        r.z = a.z * s + b.z;
-        r.w = a.w * s + b.w;
-        return r;
-    }
-
-    // vspltisw v0,-1 / vslw v0,v0,v0 / vxor: build the 0x80000000 sign-bit
-    // splat and flip every lane's sign.
-    inline Vec4 Negate(const Vec4& a)
-    {
-        Vec4 r;
-        r.x = -a.x;
-        r.y = -a.y;
-        r.z = -a.z;
-        r.w = -a.w;
-        return r;
-    }
+    inline f32 Dot3(const rw::math::vpu::Vector3& a, const rw::math::vpu::Vector3& b)
+    { return __vmsum3fp(a.mV, b.mV).x; }
+    inline rw::math::vpu::Vector3 Sub(const rw::math::vpu::Vector3& a, const rw::math::vpu::Vector3& b)
+    { return rw::math::vpu::Vector3(__vsubfp(a.mV, b.mV)); }
+    inline rw::math::vpu::Vector3 NativeAdd(const rw::math::vpu::Vector3& a, const rw::math::vpu::Vector3& b)
+    { return rw::math::vpu::Vector3(__vaddfp(a.mV, b.mV)); }
+    inline rw::math::vpu::Vector3 Scale(const rw::math::vpu::Vector3& a, f32 s)
+    { const __vector4 v = {s,s,s,s}; return rw::math::vpu::Vector3(__vmulfp(a.mV, v)); }
+    inline rw::math::vpu::Vector3 MaddScalar(const rw::math::vpu::Vector3& a, f32 s, const rw::math::vpu::Vector3& b)
+    { const __vector4 v = {s,s,s,s}; return rw::math::vpu::Vector3(__vmaddfp(a.mV, v, b.mV)); }
+    inline rw::math::vpu::Vector3 NativeNegate(const rw::math::vpu::Vector3& a)
+    { const __vector4 m=__vspltisw(-1); return rw::math::vpu::Vector3(__vxor(a.mV,__vslw(m,m))); }
 
     // The shared support-interval orientation test of the two batch kernels
     // (inlined twice in each: the single-contact and multi-contact paths):
@@ -113,22 +63,16 @@ namespace
                                            f32 afDistance,
                                            bool& rbAllSeparated, bool& rbAnyFlip)
     {
-        const f32* laf1Min = &arInterval1.min.x;
-        const f32* laf1Max = &arInterval1.max.x;
-        const f32* laf2Min = &arInterval2.min.x;
-        const f32* laf2Max = &arInterval2.max.x;
-
-        rbAllSeparated = true;
-        rbAnyFlip      = false;
-        for (int liLane = 0; liLane < 4; ++liLane)
-        {
-            const f32  lfD1      = laf1Min[liLane] - laf2Max[liLane];
-            const f32  lfD2      = laf2Min[liLane] - laf1Max[liLane];
-            const bool lbGreater = lfD1 > lfD2;                          // vcmpgtfp
-            const f32  lfMax     = lbGreater ? lfD1 : lfD2;              // vsel
-            rbAllSeparated = rbAllSeparated && (afDistance > lfMax);     // vcmpgtfp. all
-            rbAnyFlip      = rbAnyFlip || lbGreater;                     // !vcmpeqfp(mask,0) all
-        }
+        const __vector4 d1 = __vsubfp(arInterval1.min.mV, arInterval2.max.mV);
+        const __vector4 d2 = __vsubfp(arInterval2.min.mV, arInterval1.max.mV);
+        const __vector4 mask = __vcmpgtfp(d1, d2);
+        const __vector4 maxSep = __vsel(d2, d1, mask);
+        const __vector4 distance = {afDistance, afDistance, afDistance, afDistance};
+        unsigned int comparison = 0;
+        __vcmpgtfpR(distance, maxSep, &comparison);
+        rbAllSeparated = (comparison & 0x80u) != 0;
+        __vcmpeqfpR(mask, __vspltisw(0), &comparison);
+        rbAnyFlip = (comparison & 0x80u) == 0;
     }
 }
 
@@ -215,26 +159,35 @@ namespace
     // vmulfp128 / vnmsubfp / vpermwi triple in both edge-fan helpers below is
     // a plain xyz cross product (its w lane cancels to zero and is only ever
     // consumed by a dot3).
-    inline Vec4 Cross3(const Vec4& a, const Vec4& b)
+    inline rw::math::vpu::Vector3 Cross3(const rw::math::vpu::Vector3& a, const rw::math::vpu::Vector3& b)
+    { return rw::math::vpu::Vector3(__vpermwi(__vnmsubfp(__vpermwi(a.mV,0x63),b.mV,__vmulfp(a.mV,__vpermwi(b.mV,0x63))),0x63)); }
+    inline rw::math::vpu::Vector3 Normalize3(const rw::math::vpu::Vector3& a)
     {
-        Vec4 r;
-        r.x = a.y * b.z - a.z * b.y;
-        r.y = a.z * b.x - a.x * b.z;
-        r.z = a.x * b.y - a.y * b.x;
-        r.w = 0.0f;
-        return r;
+        const __vector4 x=__vmsum3fp(a.mV,a.mV);
+        const __vector4 one=__vcfsx(__vspltisw(1),0), half=__vcfsx(__vspltisw(1),1);
+        __vector4 e=__vrsqrtefp(x);
+        __vector4 c=__vnmsubfp(x,__vmulfp(e,e),one);
+        e=__vmaddfp(__vmulfp(e,half),c,e);
+        c=__vnmsubfp(x,__vmulfp(e,e),one);
+        e=__vmaddfp(__vmulfp(e,half),c,e);
+        return rw::math::vpu::Vector3(__vmulfp(a.mV,e));
     }
 
-    // vrsqrtefp + two Newton-Raphson refinements, then vmulfp128 over all four
-    // lanes -- rendered exact.
-    inline Vec4 Normalize3(const Vec4& a)
+    inline f32 GuardedLength(const rw::math::vpu::Vector3& a)
     {
-        return Scale(a, 1.0f / std::sqrt(Dot3(a, a)));
+        const __vector4 x=__vmsum3fp(a.mV,a.mV), zero=__vspltisw(0);
+        const __vector4 one=__vcfsx(__vspltisw(1),0), half=__vcfsx(__vspltisw(1),1);
+        __vector4 e=__vrsqrtefp(x);
+        __vector4 c=__vnmsubfp(x,__vmulfp(e,e),one);
+        e=__vmaddfp(__vmulfp(e,half),c,e);
+        c=__vnmsubfp(x,__vmulfp(e,e),one);
+        e=__vmaddfp(__vmulfp(e,half),c,e);
+        return __vsel(__vmulfp(x,e),zero,__vcmpeqfp(zero,x)).x;
     }
 
     // The component of arVec perpendicular to the unit axis arAxis
     // (vmsum3fp128 / vmulfp128 / vsubfp), renormalised.
-    inline Vec4 NormalizedReject(const Vec4& arVec, const Vec4& arAxis)
+    inline rw::math::vpu::Vector3 NormalizedReject(const rw::math::vpu::Vector3& arVec, const rw::math::vpu::Vector3& arAxis)
     {
         return Normalize3(Sub(arVec, Scale(arAxis, Dot3(arVec, arAxis))));
     }
@@ -252,8 +205,8 @@ namespace
     // the edge axis and renormalised, still leans at least afEdgeCos toward
     // the face -- i.e. it is inside the dihedral wedge this triangle owns.
     // -----------------------------------------------------------------------
-    RwBool AcceptEdgeFanOneSided(const Vec4& arEdgeAxis, const Vec4& arFaceNormal,
-                                 const Vec4& arNormal, f32 afEdgeCos,
+    RwBool AcceptEdgeFanOneSided(const rw::math::vpu::Vector3& arEdgeAxis, const rw::math::vpu::Vector3& arFaceNormal,
+                                 const rw::math::vpu::Vector3& arNormal, f32 afEdgeCos,
                                  u32 auEdgeConvex)
     {
         // vmsum3fp128 against the cross, vs flt_82001CC0 (0.0f).
@@ -276,8 +229,8 @@ namespace
     // (vxor sign flip of the face normal), because a two-sided triangle owns
     // the space on both sides of its plane.
     // -----------------------------------------------------------------------
-    RwBool AcceptEdgeFanTwoSided(const Vec4& arEdgeAxis, const Vec4& arFaceNormal,
-                                 const Vec4& arNormal, f32 afEdgeCos,
+    RwBool AcceptEdgeFanTwoSided(const rw::math::vpu::Vector3& arEdgeAxis, const rw::math::vpu::Vector3& arFaceNormal,
+                                 const rw::math::vpu::Vector3& arNormal, f32 afEdgeCos,
                                  u32 auEdgeConvex)
     {
         if (0.0f > Dot3(arNormal, Cross3(arEdgeAxis, arFaceNormal)))
@@ -285,9 +238,9 @@ namespace
             return 1;                                   // li r3, 1
         }
 
-        const Vec4 lvRejected = NormalizedReject(arNormal, arEdgeAxis);
-        const Vec4 lvAgainst  = (auEdgeConvex != 0) ? arFaceNormal
-                                                    : Negate(arFaceNormal);
+        const rw::math::vpu::Vector3 lvRejected = NormalizedReject(arNormal, arEdgeAxis);
+        const rw::math::vpu::Vector3 lvAgainst  = (auEdgeConvex != 0) ? arFaceNormal
+                                                    : NativeNegate(arFaceNormal);
         return (Dot3(lvRejected, lvAgainst) >= afEdgeCos) ? 1 : 0;
     }
 
@@ -300,7 +253,7 @@ namespace
     // fixed cascade; the six outcomes are the three edge sectors and the three
     // vertex sectors of the triangle's in-plane Voronoi diagram.
     // -----------------------------------------------------------------------
-    u32 ClassifyInPlaneRegion(const GPInstance* lpTriangle, const Vec4& arDir)
+    u32 ClassifyInPlaneRegion(const GPInstance* lpTriangle, const rw::math::vpu::Vector3& arDir)
     {
         const f32 lfD0 = Dot3(arDir, lpTriangle->mEdgeDirections[0]);   // lvx +0x40
         const f32 lfD1 = Dot3(arDir, lpTriangle->mEdgeDirections[1]);   // lvx +0x50
@@ -335,10 +288,10 @@ namespace
     }
 }
 
-u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNormal)
+u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, rw::math::vpu::Vector3 arNormal)
 {
     const u32  luFlags   = lpTriangle->mFlags;              // lwz 0x94(r30)
-    const Vec4 lvFaceN   = lpTriangle->mFaceNormals[0];     // lvx128 r30+0x10
+    const rw::math::vpu::Vector3 lvFaceN   = lpTriangle->mFaceNormals[0];     // lvx128 r30+0x10
     const f32  lfFaceDot = Dot3(arNormal, lvFaceN);         // vmsum3fp128 v7
 
     // Sector 0 == "the normal lies on the face": no classification is run.
@@ -357,9 +310,9 @@ u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNo
         const f32 lfEdgeCos1 = lpTriangle->mEdgeData[1];    // lfs 0x9C(r30)
         const f32 lfEdgeCos2 = lpTriangle->mEdgeData[2];    // lfs 0xA0(r30)
 
-        const Vec4& lrEdgeDir0 = lpTriangle->mEdgeDirections[0];   // +0x40
-        const Vec4& lrEdgeDir1 = lpTriangle->mEdgeDirections[1];   // +0x50
-        const Vec4& lrEdgeDir2 = lpTriangle->mEdgeDirections[2];   // +0x60
+        const rw::math::vpu::Vector3& lrEdgeDir0 = lpTriangle->mEdgeDirections[0];   // +0x40
+        const rw::math::vpu::Vector3& lrEdgeDir1 = lpTriangle->mEdgeDirections[1];   // +0x50
+        const rw::math::vpu::Vector3& lrEdgeDir2 = lpTriangle->mEdgeDirections[2];   // +0x60
 
         // The edge-fan helpers take the NEGATED edge direction (vxor sign
         // flip staged into the stack slot the call reads).
@@ -401,12 +354,12 @@ u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNo
                 {
                     return 0;
                 }
-                if (!AcceptEdgeFanOneSided(Negate(lrEdgeDir2), lvFaceN, arNormal,
+                if (!AcceptEdgeFanOneSided(NativeNegate(lrEdgeDir2), lvFaceN, arNormal,
                                            lfEdgeCos0, luEdge0Convex))
                 {
                     return 0;
                 }
-                return AcceptEdgeFanOneSided(Negate(lrEdgeDir1), lvFaceN, arNormal,
+                return AcceptEdgeFanOneSided(NativeNegate(lrEdgeDir1), lvFaceN, arNormal,
                                              lfEdgeCos1, luEdge1Convex);
 
             case 5:   // vertex 0 -- bounded by edge 2 and edge 0
@@ -414,12 +367,12 @@ u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNo
                 {
                     return 0;
                 }
-                if (!AcceptEdgeFanOneSided(Negate(lrEdgeDir0), lvFaceN, arNormal,
+                if (!AcceptEdgeFanOneSided(NativeNegate(lrEdgeDir0), lvFaceN, arNormal,
                                            lfEdgeCos2, luEdge2Convex))
                 {
                     return 0;
                 }
-                return AcceptEdgeFanOneSided(Negate(lrEdgeDir2), lvFaceN, arNormal,
+                return AcceptEdgeFanOneSided(NativeNegate(lrEdgeDir2), lvFaceN, arNormal,
                                              lfEdgeCos0, luEdge0Convex);
 
             case 6:   // vertex 2 -- bounded by edge 1 and edge 2
@@ -427,12 +380,12 @@ u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNo
                 {
                     return 0;
                 }
-                if (!AcceptEdgeFanOneSided(Negate(lrEdgeDir1), lvFaceN, arNormal,
+                if (!AcceptEdgeFanOneSided(NativeNegate(lrEdgeDir1), lvFaceN, arNormal,
                                            lfEdgeCos1, luEdge1Convex))
                 {
                     return 0;
                 }
-                return AcceptEdgeFanOneSided(Negate(lrEdgeDir0), lvFaceN, arNormal,
+                return AcceptEdgeFanOneSided(NativeNegate(lrEdgeDir0), lvFaceN, arNormal,
                                              lfEdgeCos2, luEdge2Convex);
 
             default:
@@ -465,12 +418,12 @@ u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNo
             {
                 return 0;
             }
-            if (!AcceptEdgeFanTwoSided(Negate(lrEdgeDir2), lvFaceN, arNormal,
+            if (!AcceptEdgeFanTwoSided(NativeNegate(lrEdgeDir2), lvFaceN, arNormal,
                                        lfEdgeCos0, luEdge0Convex))
             {
                 return 0;
             }
-            return AcceptEdgeFanTwoSided(Negate(lrEdgeDir1), lvFaceN, arNormal,
+            return AcceptEdgeFanTwoSided(NativeNegate(lrEdgeDir1), lvFaceN, arNormal,
                                          lfEdgeCos1, luEdge1Convex);
 
         case 5:   // vertex 0
@@ -478,12 +431,12 @@ u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNo
             {
                 return 0;
             }
-            if (!AcceptEdgeFanTwoSided(Negate(lrEdgeDir0), lvFaceN, arNormal,
+            if (!AcceptEdgeFanTwoSided(NativeNegate(lrEdgeDir0), lvFaceN, arNormal,
                                        lfEdgeCos2, luEdge2Convex))
             {
                 return 0;
             }
-            return AcceptEdgeFanTwoSided(Negate(lrEdgeDir2), lvFaceN, arNormal,
+            return AcceptEdgeFanTwoSided(NativeNegate(lrEdgeDir2), lvFaceN, arNormal,
                                          lfEdgeCos0, luEdge0Convex);
 
         case 6:   // vertex 2
@@ -491,12 +444,12 @@ u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNo
             {
                 return 0;
             }
-            if (!AcceptEdgeFanTwoSided(Negate(lrEdgeDir1), lvFaceN, arNormal,
+            if (!AcceptEdgeFanTwoSided(NativeNegate(lrEdgeDir1), lvFaceN, arNormal,
                                        lfEdgeCos1, luEdge1Convex))
             {
                 return 0;
             }
-            return AcceptEdgeFanTwoSided(Negate(lrEdgeDir0), lvFaceN, arNormal,
+            return AcceptEdgeFanTwoSided(NativeNegate(lrEdgeDir0), lvFaceN, arNormal,
                                          lfEdgeCos2, luEdge2Convex);
 
         default:
@@ -607,7 +560,7 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
             // broadcast's lane 0 (stvx128 v1 + lfs) is the separating distance.
             const FindBestSeparatingDirectionFn lpfnSeparate =
                 gapFindBestSeparatingDirection[lpInstance->mVolumeType][arInst2.mVolumeType];
-            lpSlot->distance = lpfnSeparate(lpSlot->sepDir, *lpInstance, arInst2);
+            lpSlot->distance = lpfnSeparate(lpSlot->sepDir, *lpInstance, arInst2).mV.x;
         }
     }
 
@@ -632,13 +585,13 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
                 lpSlot->vNindex = liPair;
 
                 // N side: maximum feature along +sepDir, ccw = 1.
-                const Vec4 lvDir = lpSlot->sepDir;   // lvx128 slot+0x4A0
-                lpInstance->mMethods.mGetMaximumFeature(lpInstance, 1, lvDir, lpSlot->f1);
+                const rw::math::vpu::Vector3 lvDir = lpSlot->sepDir;   // lvx128 slot+0x4A0
+                (lpInstance->*(lpInstance->mMethods.mGetMaximumFeature))(1, lvDir, lpSlot->f1);
 
                 // 1 side: maximum feature along -sepDir (vspltisw/vslw/vxor
                 // sign flip of the reloaded slot direction), ccw = 0.
-                const Vec4 lvNegDir = Negate(lpSlot->sepDir);
-                arInst2.mMethods.mGetMaximumFeature(&arInst2, 0, lvNegDir, lpSlot->f2);
+                const rw::math::vpu::Vector3 lvNegDir = NativeNegate(lpSlot->sepDir);
+                (arInst2.*(arInst2.mMethods.mGetMaximumFeature))(0, lvNegDir, lpSlot->f2);
             }
         }
 
@@ -695,7 +648,7 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
                 // ==== single-contact branch (0x82BAAED4) ====================
                 // delta = pt2 - pt1; stored to the normal slot immediately
                 // (stvx128 v13 -> out+0x4C0), then length-tested.
-                const Vec4 lvDelta = Sub(lpOut->pointsOn2[0], lpOut->pointsOn1[0]);
+                const rw::math::vpu::Vector3 lvDelta = Sub(lpOut->pointsOn2[0], lpOut->pointsOn1[0]);
                 lpOut->normal = lvDelta;
                 const f32 lfLenSq = Dot3(lvDelta, lvDelta);
 
@@ -712,15 +665,14 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
                     // constants; vmulfp128/vnmsubfp/vmaddfp chain), then
                     // delta * recipLen. Rendered as the mathematically
                     // equivalent scalar.
-                    const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
-                    lpOut->normal = Scale(lvDelta, lfInvLen);
+                    lpOut->normal = Normalize3(lvDelta);
 
                     // Support intervals of both primitives along the
                     // normalised direction (v1 = dir on both calls).
                     Interval lInterval1;
                     Interval lInterval2;
-                    lpInstance->mMethods.mGetInterval(lpInstance, lpOut->normal, lInterval1);
-                    arInst2.mMethods.mGetInterval(&arInst2, lpOut->normal, lInterval2);
+                    (lpInstance->*(lpInstance->mMethods.mGetInterval))(lpOut->normal, lInterval1);
+                    (arInst2.*(arInst2.mMethods.mGetInterval))(lpOut->normal, lInterval2);
 
                     // Orientation resolve against the pass-1 distance of the
                     // INPUT slot (lfs 0x50(r23) = in+0x4F0).
@@ -735,7 +687,7 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
                     else if (lbAnyFlip)
                     {
                         // vxor sign flip of the stored direction.
-                        lpOut->normal = Negate(lpOut->normal);
+                        lpOut->normal = NativeNegate(lpOut->normal);
                     }
                     // else: keep the normalised direction (no store).
                 }
@@ -748,7 +700,7 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
                 // ==== LABEL_26: fatten both sides along the direction =======
                 const f32  lfFatness1 = lpInstance->mFatness;   // lvlx + vspltw splat
                 const f32  lfFatness2 = arInst2.mFatness;
-                const Vec4 lvNormal   = lpOut->normal;
+                const rw::math::vpu::Vector3 lvNormal   = lpOut->normal;
 
                 // pointOn1 = dir*fat1 + pt1[0] (vmaddfp); pointOn2 = pt2[0]
                 // - dir*fat2 (vmulfp128 + vsubfp) -- both from the UNfattened
@@ -778,17 +730,17 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
                 // ==== multi-contact branch (0x82BAB10C) =====================
                 // Seed both averages with the 0.0f constant (flt_82001CC0)
                 // and accumulate every contact point (vaddfp loop).
-                Vec4 lvZero;
-                lvZero.x = 0.0f;
-                lvZero.y = 0.0f;
-                lvZero.z = 0.0f;
-                lvZero.w = 0.0f;
+                rw::math::vpu::Vector3 lvZero;
+                lvZero.mV.x = 0.0f;
+                lvZero.mV.y = 0.0f;
+                lvZero.mV.z = 0.0f;
+                lvZero.mV.w = 0.0f;
                 lpOut->pointOn1 = lvZero;
                 lpOut->pointOn2 = lvZero;
                 for (u32 luPoint = 0; luPoint < lpOut->numPoints; ++luPoint)
                 {
-                    lpOut->pointOn1 = Add(lpOut->pointOn1, lpOut->pointsOn1[luPoint]);
-                    lpOut->pointOn2 = Add(lpOut->pointOn2, lpOut->pointsOn2[luPoint]);
+                    lpOut->pointOn1 = NativeAdd(lpOut->pointOn1, lpOut->pointsOn1[luPoint]);
+                    lpOut->pointOn2 = NativeAdd(lpOut->pointOn2, lpOut->pointsOn2[luPoint]);
                 }
 
                 // 1/count: std/lfd/fcfid (exact s64->f64) + frsp + fdivs of
@@ -806,8 +758,8 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
 
                     Interval lInterval1;
                     Interval lInterval2;
-                    lpInstance->mMethods.mGetInterval(lpInstance, lpOut->normal, lInterval1);
-                    arInst2.mMethods.mGetInterval(&arInst2, lpOut->normal, lInterval2);
+                    (lpInstance->*(lpInstance->mMethods.mGetInterval))(lpOut->normal, lInterval1);
+                    (arInst2.*(arInst2.mMethods.mGetInterval))(lpOut->normal, lInterval2);
 
                     bool lbAllSeparated;
                     bool lbAnyFlip;
@@ -819,7 +771,7 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
                     }
                     else if (lbAnyFlip)
                     {
-                        lpOut->normal = Negate(lpOut->normal);
+                        lpOut->normal = NativeNegate(lpOut->normal);
                     }
                 }
                 else
@@ -834,7 +786,7 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
                 // ==== LABEL_39: fatten around the averaged points ===========
                 const f32  lfFatness1 = lpInstance->mFatness;
                 const f32  lfFatness2 = arInst2.mFatness;
-                const Vec4 lvNormal   = lpOut->normal;
+                const rw::math::vpu::Vector3 lvNormal   = lpOut->normal;
 
                 lpOut->pointOn1 = MaddScalar(lvNormal, lfFatness1, lpOut->pointOn1);
                 lpOut->pointOn2 = Sub(lpOut->pointOn2, Scale(lvNormal, lfFatness2));
@@ -865,7 +817,7 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
             // 1 side: same test with -dir (vspltisw/vslw/vxor sign flip).
             if (arInst2.mVolumeType == GPInstance::TRIANGLE)
             {
-                const Vec4 lvNegNormal = Negate(lpOut->normal);
+                const rw::math::vpu::Vector3 lvNegNormal = NativeNegate(lpOut->normal);
                 if (!GPTriangleAcceptContactNormal(&arInst2, lvNegNormal))
                 {
                     lpOut->numPoints = 0;
@@ -875,9 +827,9 @@ s32 GPInstanceBatchIntersectNx1(PrimitivePairIntersectResult* lapResults,
             // ==== acceptance: publish tags/direction/features, advance ======
             if (lpOut->numPoints != 0)
             {
-                lpOut->v1   = lpInstance->mVolumeTag;   // N +0x84 -> out+0x00
+                lpOut->v1   = reinterpret_cast<const Volume*>(lpInstance->mVolumeTag);   // N +0x84 -> out+0x00
                 lpOut->tag1 = lpInstance->mUserTag;     // N +0x88 -> out+0x04
-                lpOut->v2   = arInst2.mVolumeTag;       // 1 +0x84 -> out+0x08
+                lpOut->v2   = reinterpret_cast<const Volume*>(arInst2.mVolumeTag);       // 1 +0x84 -> out+0x08
                 lpOut->tag2 = arInst2.mUserTag;         // 1 +0x88 -> out+0x0C
                 lpOut->sepDir = lpIn->sepDir;           // in+0x4A0 -> out+0x4A0
 
@@ -927,16 +879,16 @@ namespace
     void SelectContactNormal(const GPInstance& arInst1,
                              const GPInstance& arInstN,
                              f32 afDistance,
-                             const Vec4& arSepDir,
-                             Vec4& rNormal)
+                             const rw::math::vpu::Vector3& arSepDir,
+                             rw::math::vpu::Vector3& rNormal)
     {
         Interval lInterval1;
         Interval lInterval2;
-        arInst1.mMethods.mGetInterval(&arInst1, rNormal, lInterval1);
-        arInstN.mMethods.mGetInterval(&arInstN, rNormal, lInterval2);
+        (arInst1.*(arInst1.mMethods.mGetInterval))(rNormal, lInterval1);
+        (arInstN.*(arInstN.mMethods.mGetInterval))(rNormal, lInterval2);
 
-        const f32 lfSep1 = lInterval1.min.x - lInterval2.max.x;
-        const f32 lfSep2 = lInterval2.min.x - lInterval1.max.x;
+        const f32 lfSep1 = lInterval1.min.mV.x - lInterval2.max.mV.x;
+        const f32 lfSep2 = lInterval2.min.mV.x - lInterval1.max.mV.x;
         const f32 lfBestSep = (lfSep1 > lfSep2) ? lfSep1 : lfSep2;
 
         if (afDistance > lfBestSep)
@@ -945,7 +897,7 @@ namespace
         }
         else if (lfSep1 > lfSep2)
         {
-            rNormal = Negate(rNormal);
+            rNormal = NativeNegate(rNormal);
         }
     }
 
@@ -961,9 +913,9 @@ namespace
     f32 FattenContactPoints(PrimitivePairIntersectResult* lpResult,
                             const GPInstance& arInst1,
                             const GPInstance& arInstN,
-                            const Vec4& arNormal,
-                            const Vec4& arSeedOn1,
-                            const Vec4& arSeedOn2)
+                            const rw::math::vpu::Vector3& arNormal,
+                            const rw::math::vpu::Vector3& arSeedOn1,
+                            const rw::math::vpu::Vector3& arSeedOn2)
     {
         const f32 lfFatness1 = arInst1.mFatness;
         const f32 lfFatnessN = arInstN.mFatness;
@@ -1015,7 +967,7 @@ s32 GPInstanceBatchIntersect1xN(PrimitivePairIntersectResult* lapResults,
 
         const FindBestSeparatingDirectionFn lpfnSeparate =
             gapFindBestSeparatingDirection[arInst1.mVolumeType][lpInstanceN->mVolumeType];
-        lpCandidate->distance = lpfnSeparate(lpCandidate->sepDir, arInst1, *lpInstanceN);
+        lpCandidate->distance = lpfnSeparate(lpCandidate->sepDir, arInst1, *lpInstanceN).mV.x;
     }
 
     // ---- pass 2 (0x82BAB564): fatness cull + support features --------------
@@ -1036,10 +988,10 @@ s32 GPInstanceBatchIntersect1xN(PrimitivePairIntersectResult* lapResults,
             // Support feature on instance 1 along +direction (r4 = 1) and on
             // instance N along -direction (r4 = 0; vspltisw(-1)+vslw+vxor
             // sign-flip of the direction register).
-            arInst1.mMethods.mGetMaximumFeature(&arInst1, 1, lpCandidate->sepDir,
+            (arInst1.*(arInst1.mMethods.mGetMaximumFeature))(1, lpCandidate->sepDir,
                                                 lpCandidate->f1);
-            const Vec4 lvNegDir = Negate(lpCandidate->sepDir);
-            lpInstanceN->mMethods.mGetMaximumFeature(lpInstanceN, 0, lvNegDir,
+            const rw::math::vpu::Vector3 lvNegDir = NativeNegate(lpCandidate->sepDir);
+            (lpInstanceN->*(lpInstanceN->mMethods.mGetMaximumFeature))(0, lvNegDir,
                                                      lpCandidate->f2);
         }
     }
@@ -1086,7 +1038,7 @@ s32 GPInstanceBatchIntersect1xN(PrimitivePairIntersectResult* lapResults,
             if (lpResult->numPoints == 1)
             {
                 // --- single contact (0x82BAB6A4): normal = normalize(p2-p1) -
-                const Vec4 lvGap = Sub(lpResult->pointsOn2[0], lpResult->pointsOn1[0]); // vsubfp
+                const rw::math::vpu::Vector3 lvGap = Sub(lpResult->pointsOn2[0], lpResult->pointsOn1[0]); // vsubfp
                 const f32 lfLenSq = Dot3(lvGap, lvGap);                 // vmsum3fp128
                 lpResult->normal = lvGap;                               // raw gap staged first
 
@@ -1100,8 +1052,7 @@ s32 GPInstanceBatchIntersect1xN(PrimitivePairIntersectResult* lapResults,
                     // vrsqrtefp estimate + two vnmsubfp/vmaddfp Newton-Raphson
                     // refinements (est += 0.5*est*(1 - d*est*est), twice)
                     // == 1/sqrt(d) to full precision.
-                    const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
-                    lpResult->normal = Scale(lvGap, lfInvLen);          // vmulfp128
+                    lpResult->normal = Normalize3(lvGap);          // vmulfp128
                     SelectContactNormal(arInst1, *lpInstanceN, lpCandidate->distance,
                                         lpCandidate->sepDir, lpResult->normal);
                 }
@@ -1114,18 +1065,18 @@ s32 GPInstanceBatchIntersect1xN(PrimitivePairIntersectResult* lapResults,
             else
             {
                 // --- multi contact (0x82BAB8DC): reference points = averages -
-                Vec4 lvZero;                       // the asm stores four zero
-                lvZero.x = 0.0f;                   // lanes (stfs flt_82001CC0
-                lvZero.y = 0.0f;                   // x3 + stw 0)
-                lvZero.z = 0.0f;
-                lvZero.w = 0.0f;
+                rw::math::vpu::Vector3 lvZero;                       // the asm stores four zero
+                lvZero.mV.x = 0.0f;                   // lanes (stfs flt_82001CC0
+                lvZero.mV.y = 0.0f;                   // x3 + stw 0)
+                lvZero.mV.z = 0.0f;
+                lvZero.mV.w = 0.0f;
                 lpResult->pointOn1 = lvZero;
                 lpResult->pointOn2 = lvZero;
 
                 for (u32 luPoint = 0; luPoint < lpResult->numPoints; ++luPoint)  // vaddfp
                 {
-                    lpResult->pointOn1 = Add(lpResult->pointOn1, lpResult->pointsOn1[luPoint]);
-                    lpResult->pointOn2 = Add(lpResult->pointOn2, lpResult->pointsOn2[luPoint]);
+                    lpResult->pointOn1 = NativeAdd(lpResult->pointOn1, lpResult->pointsOn1[luPoint]);
+                    lpResult->pointOn2 = NativeAdd(lpResult->pointOn2, lpResult->pointsOn2[luPoint]);
                 }
 
                 // 1/count via std+lfd+fcfid+frsp then fdivs (flt_82001C98 =
@@ -1164,16 +1115,16 @@ s32 GPInstanceBatchIntersect1xN(PrimitivePairIntersectResult* lapResults,
                 lpResult->numPoints = 0;
             }
             if (lpInstanceN->mVolumeType == GPInstance::TRIANGLE
-                && !GPTriangleAcceptContactNormal(lpInstanceN, Negate(lpResult->normal)))
+                && !GPTriangleAcceptContactNormal(lpInstanceN, NativeNegate(lpResult->normal)))
             {
                 lpResult->numPoints = 0;
             }
 
             if (lpResult->numPoints != 0)
             {
-                lpResult->v1   = arInst1.mVolumeTag;
+                lpResult->v1   = reinterpret_cast<const Volume*>(arInst1.mVolumeTag);
                 lpResult->tag1 = arInst1.mUserTag;
-                lpResult->v2   = lpInstanceN->mVolumeTag;
+                lpResult->v2   = reinterpret_cast<const Volume*>(lpInstanceN->mVolumeTag);
                 lpResult->tag2 = lpInstanceN->mUserTag;
                 lpResult->sepDir = lpCandidate->sepDir;
                 // 0x240-byte block copies of the staged features into the
@@ -1209,56 +1160,7 @@ s32 GPInstanceBatchIntersect1xN(PrimitivePairIntersectResult* lapResults,
 // ordinary f32 pass-through parameter.
 // ===========================================================================
 
-namespace
-{
-    // Collision-volume dispatch table, reached through the pointer at
-    // Volume+0x40 (`lwz r11, 0x40(r3)`), inside the opaque pad of the
-    // committed 128-byte Volume image (CollisionVolume.hpp). Slot INDICES (word slots on
-    // X360, pointer slots here) are the preserved layout:
-    //   slot 1 (+0x04)  GetBBox            (VolumeVolumeQuery @ 0x82BB3AB0)
-    //   slot 5 (+0x14)  CreateGPInstance   (this driver)
-    // Unreferenced slots stay untyped. (TU-local view; the full Volume::VTable
-    // shape -- DWARF volume.h:1507 -- lands with the Volume TU.)
-    typedef void (*CreateGPInstanceFn)(const Volume* lpVolume,
-                                       GPInstance*   lpInstance,
-                                       const void*   lpTransform);
 
-    struct VolumeVTable
-    {
-        void*              mpSlot00;           // slot 0 (unreferenced here)
-        void*              mpGetBBox;          // slot 1
-        void*              mpSlot08;           // slot 2
-        void*              mpSlot0C;           // slot 3
-        void*              mpSlot10;           // slot 4
-        CreateGPInstanceFn mpCreateGPInstance; // slot 5
-    };
-
-    // The 0x82BABC78 asm attests the two leading VolRef words at this
-    // consumer: +0x00 -> the Volume* the vtable dispatch runs on
-    // (lwz r3, 0(rRef)); +0x04 -> the cached transform pointer passed in r5
-    // (lwz r5, 4(rRef)). Both are HOST-width in VolRef since waveQ5 C1 (they
-    // are pointers, not console values -- see the VolRef.hpp banner), so these
-    // views are plain reinterpretations: what AddPrimitiveRef/AddVolumeRef
-    // stored is exactly what CreateGPInstance dereferences here.
-    const Volume* VolRefVolume(const VolRef& lrRef)
-    {
-        return reinterpret_cast<const Volume*>(lrRef.muVolumePtr);
-    }
-
-    const void* VolRefTransform(const VolRef& lrRef)
-    {
-        return reinterpret_cast<const void*>(lrRef.muTransformPtr);
-    }
-
-    // The dispatch-table pointer lives at X360 byte +0x40 of the volume image
-    // (`lwz r11, 0x40(r3)`). On the host that slot holds the type ENUM and the
-    // descriptor is gVolumeVTable[enum] (CollisionVolume.hpp GetVolumeDescriptor;
-    // wave Q5 integration 2026-08-18) -- reinterpreted into this TU's slot view.
-    const VolumeVTable* GetVolumeVTable(const Volume* lpVolume)
-    {
-        return reinterpret_cast<const VolumeVTable*>(GetVolumeDescriptor(lpVolume));
-    }
-}
 
 s32 PrimitiveBatchIntersect(PrimitivePairIntersectResult* lapResults,
                             s32 aiResBufMaxSize,
@@ -1278,10 +1180,9 @@ s32 PrimitiveBatchIntersect(PrimitivePairIntersectResult* lapResults,
             {
                 // ---- instance the "1"-side volume into slot 0 ----
                 const VolRef* lpRef1    = lpGroup->vRef1;
-                const Volume* lpVolume1 = VolRefVolume(*lpRef1);
-                GetVolumeVTable(lpVolume1)->mpCreateGPInstance(
-                    lpVolume1, &lapInstancingBuffer[0], VolRefTransform(*lpRef1));
-                lapInstancingBuffer[0].mVolumeTag = lpRef1->muTag;  // stw r11, 0x88(r29)
+                const Volume* lpVolume1 = lpRef1->volume;
+                lpVolume1->CreateGPInstance(lapInstancingBuffer[0], lpRef1->tm);
+                lapInstancingBuffer[0].mUserTag = lpRef1->tag;  // stw r11, 0x88(r29)
 
                 // ---- instance the N-side volumes into slots 1..N ----
                 u32 luRefIndex = 0;                                 // r26
@@ -1292,11 +1193,10 @@ s32 PrimitiveBatchIntersect(PrimitivePairIntersectResult* lapResults,
                     do
                     {
                         const VolRef* lpRefN    = *lppRefN;
-                        const Volume* lpVolumeN = VolRefVolume(*lpRefN);
-                        GetVolumeVTable(lpVolumeN)->mpCreateGPInstance(
-                            lpVolumeN, lpInstanceN, VolRefTransform(*lpRefN));
+                        const Volume* lpVolumeN = lpRefN->volume;
+                        lpVolumeN->CreateGPInstance(*lpInstanceN, lpRefN->tm);
                         ++luRefIndex;                               // addi r26, r26, 1
-                        lpInstanceN->mVolumeTag = lpRefN->muTag;    // stw r11, 0(r27)
+                        lpInstanceN->mUserTag = lpRefN->tag;    // stw r11, 0(r27)
                         ++lppRefN;                                  // addi r28, r28, 4
                         ++lpInstanceN;                              // addi r27, r27, 0xC0
                     }
@@ -1369,10 +1269,10 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
     // (*(&off_82F91800[6 * gp1.type] + gp2.type))(&direction, gp1, gp2); the
     // distance comes back as a v1 lane broadcast (stvx128 to var_780, lfs
     // lane 0 -> f31).
-    Vec4 lvDirection;
+    rw::math::vpu::Vector3 lvDirection;
     const FindBestSeparatingDirectionFn lpfnFindSepDir =
         gapFindBestSeparatingDirection[arGP1.mVolumeType][arGP2.mVolumeType];
-    const f32 lfDistance = lpfnFindSepDir(lvDirection, arGP1, arGP2);
+    const f32 lfDistance = lpfnFindSepDir(lvDirection, arGP1, arGP2).mV.x;
 
     // --- 2. range early-out (fadds/fadds/fcmpu, bgt -> return 0) ----------
     // Scalar add ORDER preserved: (fatness2 + padding) + fatness1.
@@ -1386,8 +1286,8 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
     // Second instance: r4=0 and the NEGATED direction (vxor sign-bit splat).
     Feature lFeature1;
     Feature lFeature2;
-    arGP1.mMethods.mGetMaximumFeature(&arGP1, 1, lvDirection, lFeature1);
-    arGP2.mMethods.mGetMaximumFeature(&arGP2, 0, Negate(lvDirection), lFeature2);
+    (arGP1.*(arGP1.mMethods.mGetMaximumFeature))(1, lvDirection, lFeature1);
+    (arGP2.*(arGP2.mMethods.mGetMaximumFeature))(0, NativeNegate(lvDirection), lFeature2);
 
     rwc_FeatureIntersectionPrism lIntersection;
     lIntersection.normalOverride = 0;    // stw r28, var_4EC before the call
@@ -1397,13 +1297,13 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
     }
 
     // v127 = the direction, reloaded from var_770 only after the prism call.
-    Vec4 lvNormal = lvDirection;
+    rw::math::vpu::Vector3 lvNormal = lvDirection;
 
     // --- 4. single point pair: derive the normal from the point delta -----
     if (lIntersection.m_numpts == 1)
     {
         // delta = p2[0] - p1[0]                             (vsubfp, all lanes)
-        const Vec4 lvDelta = Sub(lIntersection.m_ptsOn2[0], lIntersection.m_ptsOn1[0]);
+        const rw::math::vpu::Vector3 lvDelta = Sub(lIntersection.m_ptsOn2[0], lIntersection.m_ptsOn1[0]);
 
         // lenSq = dot3(delta, delta)                        (vmsum3fp128)
         const f32 lfLenSq = Dot3(lvDelta, lvDelta);
@@ -1412,15 +1312,14 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
         // + TWO Newton-Raphson refines (vmulfp128/vnmsubfp/vmaddfp x2, with
         // the vcfsx-built 1.0/0.5 splats), zero-guarded by vcmpeqfp/vsel when
         // lenSq == 0. Rendered as the mathematically equivalent scalar.
-        const f32 lfInvLength = (lfLenSq == 0.0f) ? 0.0f : (1.0f / std::sqrt(lfLenSq));
-        const f32 lfLength    = lfLenSq * lfInvLength;
+        const f32 lfLength = GuardedLength(lvDelta);
 
         // fcmpu against flt_8218025C; ble skips the normal adoption.
         if (lfLength > KF_DEGENERATE_GAP_EPSILON)
         {
             // normal = delta * rsqrt(lenSq)                 (vmulfp128, all lanes)
             lIntersection.normalOverride = 1;
-            lIntersection.normal = Scale(lvDelta, lfInvLength);
+            lIntersection.normal = Normalize3(lvDelta);
         }
     }
 
@@ -1430,16 +1329,16 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
         // Both +0xA8 callbacks take the SAME (un-negated) derived normal in v1.
         Interval lInterval1;
         Interval lInterval2;
-        arGP1.mMethods.mGetInterval(&arGP1, lIntersection.normal, lInterval1);
-        arGP2.mMethods.mGetInterval(&arGP2, lIntersection.normal, lInterval2);
+        (arGP1.*(arGP1.mMethods.mGetInterval))(lIntersection.normal, lInterval1);
+        (arGP2.*(arGP2.mMethods.mGetInterval))(lIntersection.normal, lInterval2);
 
         // sepA = i1.min - i2.max / sepB = i2.min - i1.max   (vsubfp, all lanes)
         // mask = sepA > sepB per lane (vcmpgtfp); sel = max (vsel);
         // vcmpgefp. sel >= splat(distance) with the CR6 "all lanes" bit.
-        const f32* laf1Min = &lInterval1.min.x;
-        const f32* laf1Max = &lInterval1.max.x;
-        const f32* laf2Min = &lInterval2.min.x;
-        const f32* laf2Max = &lInterval2.max.x;
+        const f32* laf1Min = &lInterval1.min.mV.x;
+        const f32* laf1Max = &lInterval1.max.mV.x;
+        const f32* laf2Min = &lInterval2.min.mV.x;
+        const f32* laf2Max = &lInterval2.max.mV.x;
 
         bool lbSeparatedToDistance = true;
         bool lbNoneGreater         = true;
@@ -1462,7 +1361,7 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
             }
             else
             {
-                lvNormal = Negate(lIntersection.normal);     // vxor128 sign flip
+                lvNormal = NativeNegate(lIntersection.normal);     // vxor128 sign flip
             }
         }
     }
@@ -1479,7 +1378,7 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
     if (arGP2.mVolumeType == GPInstance::TRIANGLE)
     {
         // sub_82BAA600(gp2) with v1 = -normal (vxor sign flip).
-        if (!GPTriangleAcceptContactNormal(&arGP2, Negate(lvNormal)))
+        if (!GPTriangleAcceptContactNormal(&arGP2, NativeNegate(lvNormal)))
         {
             return 0;
         }
@@ -1490,13 +1389,13 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
     arResult.volumeTag2 = arGP2.mVolumeTag;      // stw 0x84(r30) -> 0x04(r29)
     arResult.userTag1   = arGP1.mUserTag;        // stw 0x88(r31) -> 0x08(r29)
     arResult.userTag2   = arGP2.mUserTag;        // stw 0x88(r30) -> 0x0C(r29)
-    arResult.normal     = Negate(lvNormal);      // stvx128 -normal -> 0x20(r29)
+    arResult.normal     = NativeNegate(lvNormal);      // stvx128 -normal -> 0x20(r29)
     arResult.numPoints  = static_cast<u32>(lIntersection.m_numpts);   // stw -> 0x10(r29)
 
     // Fatness push-out vectors: lvlx/vspltw broadcast each instance's fatness,
     // then vmulfp128 by the (un-negated) final normal -- all four lanes.
-    const Vec4 lvOffset1 = Scale(lvNormal, arGP1.mFatness);
-    const Vec4 lvOffset2 = Scale(lvNormal, arGP2.mFatness);
+    const rw::math::vpu::Vector3 lvOffset1 = Scale(lvNormal, arGP1.mFatness);
+    const rw::math::vpu::Vector3 lvOffset2 = Scale(lvNormal, arGP2.mFatness);
 
     // Pair loop (skipped entirely when the count is 0; the bound is re-read
     // from the result block each iteration, as the asm's lwz 0x10(r29) does).
@@ -1507,7 +1406,7 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
         // Store order per iteration: p2 (+0x40 + 0x20*i) first, then
         // p1 (+0x30 + 0x20*i).
         lrPair.p2 = Sub(lIntersection.m_ptsOn2[luPoint], lvOffset2);
-        lrPair.p1 = Add(lIntersection.m_ptsOn1[luPoint], lvOffset1);
+        lrPair.p1 = NativeAdd(lIntersection.m_ptsOn1[luPoint], lvOffset1);
     }
 
     // lwz r3, 0x10(r29)
@@ -1565,55 +1464,17 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
 
 namespace
 {
-    // --- TU-local Volume field views (same raw-offset convention as
-    //     GetVolumeVTable above; promote to members when the full Volume
-    //     layout lands) ------------------------------------------------------
-
-    // Volume +0x5C: the flags word (DWARF volume.h Volume::m_flags). Bit 0 is
-    // the enabled gate this function tests (lwz 0x5C / clrlwi. r11, r11, 31).
-    inline u32 VolumeFlags(const Volume* lpVolume)
-    {
-        return *reinterpret_cast<const u32*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x5C);
-    }
-
-    // Volume +0x50: the volume's fatness/radius word (lfs 0x50(r28)/0x50(r27);
-    // the same word the batch path mirrors into GPInstance::mFatness).
-    inline f32 VolumeFatness(const Volume* lpVolume)
-    {
-        return *reinterpret_cast<const f32*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x50);
-    }
-
-    // Console pointer image of a Volume* for the result header words
-    // (stw r28/r27 into +0x00/+0x08).
-    //
-    // FLAG (64->32 TRUNCATION, deliberate, UNRESOLVED): unlike VolRef -- whose
-    // two leading pointer words were promoted to host width in waveQ5 C1
-    // because the console left +0x08..+0x0F unwritten -- PrimitivePairIntersect-
-    // Result has NO hole to grow into: v1/tag1/v2/tag2/vNindex are five packed
-    // words at +0x00..+0x13 inside a record whose 0x750 stride is pinned by the
-    // batch kernels' `mulli rN, 0x750`, and the SAME two slots are written by
-    // the batch kernels with a genuine 32-bit GPInstance::mVolumeTag (see
-    // :447/:449 and :743/:745). So the field is a tag-or-pointer union that
-    // cannot be widened without relaying the record out from under both
-    // producers. The truncation is currently INERT -- no consumer anywhere in
-    // the tree reads v1/v2 back as a pointer (grepped) -- but a future consumer
-    // that does will get a wild pointer on x64. Fix belongs with a PPIR
-    // relayout, not here.
-    inline u32 VolumePointerImage(const Volume* lpVolume)
-    {
-        return static_cast<u32>(reinterpret_cast<uintptr_t>(lpVolume));
-    }
+    inline u32 VolumeFlags(const Volume* volume) { return volume->muFlags; }
+    inline f32 VolumeFatness(const Volume* volume) { return volume->mfRadius; }
 }
 
 RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r31)
                               const Volume* apVolume1,                  // r4 (r28)
-                              const void*   apMtx1,                     // r5 (rides through)
+                              const rw::math::vpu::Matrix44Affine* apMtx1,                     // r5 (rides through)
                               const Volume* apVolume2,                  // r6 (r27)
-                              const void*   apMtx2,                     // r7 (r29)
+                              const rw::math::vpu::Matrix44Affine* apMtx2,                     // r7 (r29)
                               f32           afPadding,                  // f1 (f30)
-                              const Vec4*   apSepDir)                   // r9 (r30)
+                              const rw::math::vpu::Vector4*   apSepDir)                   // r9 (r30)
 {
     // ---- 1. enabled gates (lwz 0x5C / clrlwi. / beq -> return 0) -----------
     if ((VolumeFlags(apVolume1) & 1u) == 0)
@@ -1629,11 +1490,11 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
     // First call: r5 = the UNTOUCHED incoming mtx1; second call: r5 = r29.
     GPInstance lInst1;                                  // var_880
     GPInstance lInst2;                                  // var_7C0
-    GetVolumeVTable(apVolume1)->mpCreateGPInstance(apVolume1, &lInst1, apMtx1);
-    GetVolumeVTable(apVolume2)->mpCreateGPInstance(apVolume2, &lInst2, apMtx2);
+    apVolume1->CreateGPInstance(lInst1, apMtx1);
+    apVolume2->CreateGPInstance(lInst2, apMtx2);
 
     // ---- 3. separating direction + distance ---------------------------------
-    Vec4 lvDirection;                                   // var_950
+    rw::math::vpu::Vector3 lvDirection;                                   // var_950
     f32  lfDistance;                                    // f31
     if (apSepDir != 0)                            // cmplwi cr6, r30, 0
     {
@@ -1641,8 +1502,8 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
         // vperm v1, v0, v0, [unk_82CDA350] + vrlimi128 v1, v0, 2, 0: the
         // generic three-source Vector3 lane-gather with all sources the same
         // register == verbatim copy (see the rodata FLAG above).
-        lvDirection = *apSepDir;
-        lfDistance  = apSepDir->w;
+        lvDirection.mV = apSepDir->mV;
+        lfDistance  = apSepDir->mV.w;
     }
     else
     {
@@ -1651,7 +1512,7 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
         // separating distance.
         const FindBestSeparatingDirectionFn lpfnFindSepDir =
             gapFindBestSeparatingDirection[lInst1.mVolumeType][lInst2.mVolumeType];
-        lfDistance = lpfnFindSepDir(lvDirection, lInst1, lInst2);
+        lfDistance = lpfnFindSepDir(lvDirection, lInst1, lInst2).mV.x;
     }
 
     // ---- 4. range cull (VOLUME fatness words, +0x50) -------------------------
@@ -1672,8 +1533,8 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
     // side 2: along -dir (vspltisw128/vslw128/vxor sign flip), ccw = 0.
     Feature lFeature1;                                  // var_4E0
     Feature lFeature2;                                  // var_2A0
-    lInst1.mMethods.mGetMaximumFeature(&lInst1, 1, lvDirection, lFeature1);
-    lInst2.mMethods.mGetMaximumFeature(&lInst2, 0, Negate(lvDirection), lFeature2);
+    (lInst1.*(lInst1.mMethods.mGetMaximumFeature))(1, lvDirection, lFeature1);
+    (lInst2.*(lInst2.mMethods.mGetMaximumFeature))(0, NativeNegate(lvDirection), lFeature2);
 
     rwc_FeatureIntersectionPrism lPrism;                // var_700
     lPrism.normalOverride = 0;                          // stw r29, var_4EC
@@ -1697,7 +1558,7 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
         // ==== single point pair (0x82BAC31C) ================================
         // delta = pt2[0] - pt1[0]; stored to the normal slot immediately
         // (stvx128 v13, r0, r30), then length-tested against FLT_EPSILON.
-        const Vec4 lvDelta = Sub(lPrism.m_ptsOn2[0], lPrism.m_ptsOn1[0]);
+        const rw::math::vpu::Vector3 lvDelta = Sub(lPrism.m_ptsOn2[0], lPrism.m_ptsOn1[0]);
         arResult.normal = lvDelta;
         const f32 lfLenSq = Dot3(lvDelta, lvDelta);     // vmsum3fp128 -> var_970
 
@@ -1709,15 +1570,15 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
         {
             // Normalise: vrsqrtefp + two Newton-Raphson steps (vspltisw/vcfsx
             // 1.0/0.5 splats; @ 0x82BAC354..0x82BAC39C), rendered exact.
-            arResult.normal = Scale(lvDelta, 1.0f / std::sqrt(lfLenSq));
+            arResult.normal = Normalize3(lvDelta);
 
             // Support intervals of both instances along the candidate normal
             // (v1 = the normal on both +0xA8 calls; interval rows on the stack
             // at var_910/var_900 and var_8E0/var_8D0).
             Interval lInterval1;
             Interval lInterval2;
-            lInst1.mMethods.mGetInterval(&lInst1, arResult.normal, lInterval1);
-            lInst2.mMethods.mGetInterval(&lInst2, arResult.normal, lInterval2);
+            (lInst1.*(lInst1.mMethods.mGetInterval))(arResult.normal, lInterval1);
+            (lInst2.*(lInst2.mMethods.mGetInterval))(arResult.normal, lInterval2);
 
             // The shared orientation test (vsubfp/vcmpgtfp/vsel row math +
             // vcmpgtfp. / vcmpeqfp. CR6 all-lanes bits, distance splatted
@@ -1732,7 +1593,7 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
             }
             else if (lbAnyFlip)                         // vcmpeqfp. all failed
             {
-                arResult.normal = Negate(arResult.normal);   // vxor sign flip
+                arResult.normal = NativeNegate(arResult.normal);   // vxor sign flip
             }
             // else: keep the normalised delta (bne skips the store).
         }
@@ -1744,8 +1605,8 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
 
         Interval lInterval1;                            // var_940/var_930
         Interval lInterval2;                            // var_8B0/var_8A0
-        lInst1.mMethods.mGetInterval(&lInst1, arResult.normal, lInterval1);
-        lInst2.mMethods.mGetInterval(&lInst2, arResult.normal, lInterval2);
+        (lInst1.*(lInst1.mMethods.mGetInterval))(arResult.normal, lInterval1);
+        (lInst2.*(lInst2.mMethods.mGetInterval))(arResult.normal, lInterval2);
 
         bool lbAllSeparated;
         bool lbAnyFlip;
@@ -1757,7 +1618,7 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
         }
         else if (lbAnyFlip)
         {
-            arResult.normal = Negate(arResult.normal);
+            arResult.normal = NativeNegate(arResult.normal);
         }
     }
     else
@@ -1772,9 +1633,9 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
     }
 
     // ---- 7. emit the result block (LABEL_21, 0x82BAC504) ---------------------
-    arResult.v1        = VolumePointerImage(apVolume1); // stw r28, 0x00(r31)
+    arResult.v1        = apVolume1; // stw r28, 0x00(r31)
     arResult.tag1      = 0;                             // stw r29, 0x04(r31)
-    arResult.v2        = VolumePointerImage(apVolume2); // stw r27, 0x08(r31)
+    arResult.v2        = apVolume2; // stw r27, 0x08(r31)
     arResult.tag2      = 0;                             // stw r29, 0x0C(r31)
     arResult.numPoints = static_cast<u32>(lPrism.m_numpts);   // stw -> +0x740
 
@@ -1798,17 +1659,17 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
     {
         // Zero-seeded averages (flt_82001CC0 x3 + stw 0 stack rows stored to
         // both reference slots, then accumulated in place).
-        Vec4 lvZero;
-        lvZero.x = 0.0f;
-        lvZero.y = 0.0f;
-        lvZero.z = 0.0f;
-        lvZero.w = 0.0f;
+        rw::math::vpu::Vector3 lvZero;
+        lvZero.mV.x = 0.0f;
+        lvZero.mV.y = 0.0f;
+        lvZero.mV.z = 0.0f;
+        lvZero.mV.w = 0.0f;
         arResult.pointOn1 = lvZero;
         arResult.pointOn2 = lvZero;
         for (u32 luPoint = 0; luPoint < arResult.numPoints; ++luPoint)
         {
-            arResult.pointOn1 = Add(arResult.pointOn1, arResult.pointsOn1[luPoint]);
-            arResult.pointOn2 = Add(arResult.pointOn2, arResult.pointsOn2[luPoint]);
+            arResult.pointOn1 = NativeAdd(arResult.pointOn1, arResult.pointsOn1[luPoint]);
+            arResult.pointOn2 = NativeAdd(arResult.pointOn2, arResult.pointsOn2[luPoint]);
         }
         // 1/count: std/lfd/fcfid (exact s64->f64) + frsp + fdivs of the 1.0f
         // constant (flt_82001C98), lvlx+vspltw splatted. The asm computes the
@@ -1823,7 +1684,7 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
     // VOLUME fatness words r26/r25; the normal is reloaded from +0x4C0 --
     // value unchanged). vmaddfp v0, v0, v12, v13 == normal*fat1 + point
     // (multiplier = LAST operand); side 2 is vmulfp128 + vsubfp.
-    const Vec4 lvNormal = arResult.normal;
+    const rw::math::vpu::Vector3 lvNormal = arResult.normal;
     arResult.pointOn1 = MaddScalar(lvNormal, lfFatness1, arResult.pointOn1);
     arResult.pointOn2 = Sub(arResult.pointOn2, Scale(lvNormal, lfFatness2));
 
@@ -1854,7 +1715,7 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
         return 0;
     }
     if (lInst2.mVolumeType == GPInstance::TRIANGLE &&
-        !GPTriangleAcceptContactNormal(&lInst2, Negate(lvNormal)))
+        !GPTriangleAcceptContactNormal(&lInst2, NativeNegate(lvNormal)))
     {
         return 0;
     }

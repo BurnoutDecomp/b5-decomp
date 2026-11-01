@@ -3,6 +3,7 @@
 #include <cstddef>   // offsetof (layout pins)
 
 #include "types.hpp"
+#include "SDKs/EATech/rwcollision/volume_debug_access.h"
 #include "vendor/renderware/collision/Feature.hpp"    // Vec4 / RwBool / FeatureEdge / Feature
 
 // ===========================================================================
@@ -86,6 +87,8 @@
 // records as a separate outstanding job; this header does not resolve it, it stays out of
 // its way.
 // ---------------------------------------------------------------------------
+namespace rw { struct Resource; }
+
 namespace rw
 {
 namespace math
@@ -109,11 +112,14 @@ struct VolumeLineSegIntersectResult;   // vendor/renderware/collision/LineSegInt
 struct GPInstance;   // vendor/renderware/collision/GPInstance.hpp (same
                      // forward-decl precedent as CapsuleVolume.hpp:56)
 
-class CylinderVolume
+class CylinderVolume : public Volume
 {
 public:
     // Canonical default ctor (members left uninitialised until Initialize).
     CylinderVolume() {}
+
+    RwBool GetInterval(const Vector3& arDir, Interval& arInterval) const;
+    void Release();
 
     // @ 0x82BAC7F8 -- instance this cylinder into the GP ("generalised
     // primitive") narrow-phase image arInst, optionally transformed by the
@@ -130,13 +136,13 @@ public:
     // MEASURED, scratchpad/waveQ5/probe_vtbind/measure_vocab*.cpp), which is
     // the spelling CapsuleVolume::CreateGPInstance and the descriptor adapter
     // in VolumeVTables.cpp already use.
-    RwBool CreateGPInstance(GPInstance& arInst, const Vec4* lpTransform) const;
+    RwBool CreateGPInstance(GPInstance& arInst, const Matrix44Affine* lpTransform) const;
 
     // @ 0x82BAD3F0 -- stamp the cylinder's default local frame + the three
     // dimensions into the volume referenced by *appVolume and return it (NULL
     // when the slot is empty). X360 __fastcall: r3 = the slot holding the volume
     // pointer (`lwz r11, 0(r3)`); f1 = radius, f2 = half-height, f3 = fatness.
-    static CylinderVolume* Initialize(CylinderVolume** appVolume,
+    static CylinderVolume* Initialize(const ::rw::Resource& arResource,
                                       f32 afRadius, f32 afHalfHeight, f32 afFatness);
 
     // @ 0x82BAC7B8 -- return the local axis-aligned bounding-box diagonal,
@@ -149,14 +155,14 @@ public:
     // the origin. lpTransform != NULL: box centred at the transform translation
     // (row 3); abTight selects a tight oriented extent (row 2 is the world axis)
     // vs a loose bounding-sphere extent.
-    RwBool GetBBox(const Vec4* lpTransform, RwBool abTight, AABBox& arResult) const;
+    RwBool GetBBox(const Matrix44Affine* lpTransform, RwBool abTight, AABBox& arResult) const;
 
     // @ 0x82BAC988 -- build the cylinder's maximum contact feature: the central
     // axis segment (centre +/- axis * half-height) as a single FeatureEdge in
     // arResult.edges[0], numedges = 1. abCcw / arDir are accepted but unused
     // (r4 / r5 are dead in the asm; the cylinder axis is always its maximum
     // feature here).
-    void GetMaximumFeature(RwBool abCcw, const Vec4& arDir, Feature& arResult) const;
+    RwBool GetMaximumFeature(RwBool abCcw, const Vector3& arDir, Feature& arResult) const;
 
     // @ 0x82BADCE0 (441 insns) -- the ZERO-fatness arm of the cylinder's line kernel: the segment arPt1 -> arPt2
     // against the frame's z cylinder |z| <= mfHalfHeight, radius mfRadius, in its frame (composed with lpTransform
@@ -164,56 +170,25 @@ public:
     // LineSegIntersect.cpp. The dispatcher LineSegIntersect @0x82BAF688 below sends it every call whose
     // mfFatness + afFatness is exactly 0. The same argument list as the other volumes' LineSegIntersect
     // (r3..r7, f1); the thin arm never reads afFatness.
-    RwBool ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
-                                VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
+    RwBool ThinLineSegIntersect(const Vector3& arPt1, const Vector3& arPt2, const Matrix44Affine* lpTransform,
+                                VolumeLineSegIntersectResult& arResult) const;
 
     // @ 0x82BAEB10 (733 insns) -- the FATTENED arm: the cylinder grown by mfFatness + afFatness, its cap edges
     // rounded by a torus (rwcTorusLineSegIntersect over an AALineClipper box). LANDED 2026-09-28 (lane L2,
     // stage (c)); body in LineSegIntersect.cpp.
-    RwBool FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+    RwBool FatLineSegIntersect(const Vector3& arPt1, const Vector3& arPt2, const Matrix44Affine* lpTransform,
                                VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
 
     // @ 0x82BAF688 (8 insns) -- the descriptor's lineSegIntersect slot: mfFatness + afFatness == 0 tail-calls
     // ThinLineSegIntersect, anything else (a NaN included) FatLineSegIntersect. LANDED 2026-09-28; bound in
     // VolumeVTables.cpp.
-    RwBool LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+    RwBool LineSegIntersect(const Vector3& arPt1, const Vector3& arPt2, const Matrix44Affine* lpTransform,
                             VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
 
-    // --- members (X360-asm-attested offsets; inferred names) ----------------
-    // The local frame: three basis rows + a centre row. Initialize seeds
-    // maFrame[0]/[1]/[2] = the three identity basis rows (gIVector @0x82181500,
-    // unk_82181510, unk_82181520 -- all three RECOVERED, see the .cpp) and
-    // maFrame[3] = 0. GetMaximumFeature reads maFrame[1] as the cylinder axis
-    // and maFrame[3] as the centre; CreateGPInstance transforms all four rows
-    // ([0..2] as directions, [3] as a point) and lays them into the GP image as
-    // mFaceNormals[2]/[1]/[0] = frame[0]/[1]/[2], mEdgeDirections[0] = frame[2],
-    // mPos = frame[3].
-    Vec4 maFrame[4];    // +0x00 / +0x10 / +0x20 / +0x30
-    u32  mInitWord;     // +0x40  Initialize's dword_8327EEF4 (see .cpp)
-    f32  mfHalfHeight;  // +0x44  cylinder half-height (axial extent); copied to
-                        //         GPInstance::mDimensions.x (+0x70)
-    f32  mfRadius;      // +0x48  cylinder radius (radial extent); copied to
-                        //         GPInstance::mDimensions.y (+0x74)
-    u32  mu4C;          // +0x4C  (unread by this TU; keeps +0x50 aligned)
-    f32  mfFatness;     // +0x50  surface fatness (0 by default); copied to
-                        //         GPInstance::mFatness (+0x80)
-    u32  mu54;          // +0x54  (Initialize: 0)
-    u32  mu58;          // +0x58  (Initialize: 0)
-    // RENAMED 2026-08-19 (wave Q6): was `mu5C`, "state/type word". It has a
-    // measured role now -- CreateGPInstance @0x82BAC7F8 copies it VERBATIM into
-    // GPInstance::mFlags (`lwz r6, 0x5C(r11) ; stw r6, 0x94(r4)`), exactly the
-    // role CapsuleVolume::muFlags (+0x5C) and TriangleVolume::mFlags (+0x5C)
-    // play. Nothing outside this class ever named it (grepped).
-    u32  muFlags;       // +0x5C  volume flag word (Initialize: 1); copied
-                        //         verbatim into GPInstance::mFlags (+0x94)
+
 };
 
-CGS_STATIC_ASSERT((offsetof(CylinderVolume, maFrame)     == 0x00), "CylinderVolume::maFrame");
-CGS_STATIC_ASSERT((offsetof(CylinderVolume, mInitWord)   == 0x40), "CylinderVolume::mInitWord");
-CGS_STATIC_ASSERT((offsetof(CylinderVolume, mfHalfHeight)== 0x44), "CylinderVolume::mfHalfHeight");
-CGS_STATIC_ASSERT((offsetof(CylinderVolume, mfRadius)    == 0x48), "CylinderVolume::mfRadius");
-CGS_STATIC_ASSERT((offsetof(CylinderVolume, mfFatness)   == 0x50), "CylinderVolume::mfFatness");
-CGS_STATIC_ASSERT((offsetof(CylinderVolume, muFlags)     == 0x5C), "CylinderVolume::muFlags");
+CGS_STATIC_ASSERT((sizeof(CylinderVolume) == 0x60), "Native CylinderVolume size");
 
 } // namespace collision
 } // namespace rw

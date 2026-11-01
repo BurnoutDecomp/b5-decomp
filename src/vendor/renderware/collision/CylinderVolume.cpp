@@ -3,6 +3,7 @@
 #include "vendor/renderware/collision/AABBox.hpp"       // AABBox + math::vpu::Vector3 -- moved OUT of
                                                         //   CylinderVolume.hpp on 2026-08-27 so game
                                                         //   TUs can include the header; see its banner
+#include "rw/rwcore_structs.h"
 #include "vendor/renderware/collision/GPInstance.hpp"   // GPInstance + g_aGPVolumeMethods
 
 #include <cmath>     // sqrt, fabs
@@ -58,7 +59,7 @@ namespace collision
 // the 4-byte VolumeType enum for the record's whole lifetime (an x64 pointer
 // would overlap +0x44, and the 96-byte serialised record cannot grow); every
 // reader recovers the console pointer as gVolumeVTable[enum]. So Initialize
-// stamps E_VOLUMETYPE_CYLINDER (5, the index the console pointer sits at).
+// stamps VOLUMETYPECYLINDER (5, the index the console pointer sits at).
 // Derivation: scratchpad/waveQ5/rwc3.owner.md section 7 / volume.cpp foot.
 static const u32 KU_CYLINDER_VOLUME_TYPE = 5u;   // gVolumeVTable[5] = &unk_82F91894
 
@@ -166,33 +167,23 @@ namespace
 //   stvx128 unk_82181520, r11(0x20)            ; maFrame[2]
 //   returns the volume pointer.
 // ---------------------------------------------------------------------------
-CylinderVolume* CylinderVolume::Initialize(CylinderVolume** appVolume,
+CylinderVolume* CylinderVolume::Initialize(const ::rw::Resource& arResource,
                                            f32 afRadius, f32 afHalfHeight, f32 afFatness)
 {
-    CylinderVolume* lpVolume = *appVolume;
-    if (lpVolume == 0)
-    {
-        return 0;
-    }
-
-    lpVolume->mfFatness = 0.0f;   // flt_82001CC0 pre-clear (overwritten below)
-    lpVolume->mu54      = 0;
-    lpVolume->mu58      = 0;
-    lpVolume->muFlags   = 1;
-    lpVolume->mInitWord = KU_CYLINDER_VOLUME_TYPE;   // console: dword_8327EEF4 = gVolumeVTable[5]
-
-    lpVolume->maFrame[0] = KV_BASIS_X;
-    lpVolume->maFrame[3].x = 0.0f;
-    lpVolume->maFrame[3].y = 0.0f;
-    lpVolume->maFrame[3].z = 0.0f;
-    lpVolume->maFrame[3].w = 0.0f;
-    lpVolume->maFrame[1] = KV_BASIS_Y;
-    lpVolume->maFrame[2] = KV_BASIS_Z;
-
-    lpVolume->mfFatness    = afFatness;      // f3 -> +0x50
-    lpVolume->mfRadius     = afRadius;       // f1 -> +0x48
-    lpVolume->mfHalfHeight = afHalfHeight;   // f2 -> +0x44
-
+    CylinderVolume* lpVolume = static_cast<CylinderVolume*>(arResource.m_baseResources[0]);
+    if (!lpVolume) return 0;
+    lpVolume->mfRadius = 0.0f;
+    lpVolume->muGroupID = 0;
+    lpVolume->muSurfaceID = 0;
+    lpVolume->muFlags = 1;
+    lpVolume->mpVTable = gVolumeVTable[VOLUMETYPECYLINDER];
+    lpVolume->mfRadius = afFatness;
+    lpVolume->mCylinderData.mfInnerRadius = afRadius;
+    lpVolume->mCylinderData.mfHalfHeight = afHalfHeight;
+    lpVolume->mTransform.xAxis = Vector3(1.0f, 0.0f, 0.0f);
+    lpVolume->mTransform.wAxis = Vector3(0.0f, 0.0f, 0.0f);
+    lpVolume->mTransform.yAxis = Vector3(0.0f, 1.0f, 0.0f);
+    lpVolume->mTransform.zAxis = Vector3(0.0f, 0.0f, 1.0f);
     return lpVolume;
 }
 
@@ -206,7 +197,9 @@ CylinderVolume* CylinderVolume::Initialize(CylinderVolume** appVolume,
 // ---------------------------------------------------------------------------
 math::vpu::Vector3 CylinderVolume::GetBBoxDiag() const
 {
-    return math::vpu::Vector3(mfRadius * 2.0f, mfRadius * 2.0f, mfHalfHeight * 2.0f);
+    const Vector3 dimensions(mCylinderData.mfInnerRadius, mCylinderData.mfInnerRadius,
+                             mCylinderData.mfHalfHeight);
+    return Vector3(__vmulfp(dimensions.mV, __vcfsx(__vspltisw(2), 0)));
 }
 
 // ---------------------------------------------------------------------------
@@ -269,57 +262,46 @@ math::vpu::Vector3 CylinderVolume::GetBBoxDiag() const
 // assignment and the index is a typed array index -- never a byte base +
 // (type << 4).
 // ---------------------------------------------------------------------------
-RwBool CylinderVolume::CreateGPInstance(GPInstance& arInst, const Vec4* lpTransform) const
+RwBool CylinderVolume::CreateGPInstance(GPInstance& arInst, const Matrix44Affine* lpTransform) const
 {
-    Vec4 lvRow0;   // v0  -- the (optionally rotated) maFrame[0]
-    Vec4 lvRow1;   // v13 -- the (optionally rotated) maFrame[1]
-    Vec4 lvRow2;   // v11 -- the (optionally rotated) maFrame[2], the axis
-    Vec4 lvCentre; // v12 -- the (optionally transformed) maFrame[3]
-
-    if (lpTransform != 0)
+    __vector4 lx = mTransform.xAxis.mV;
+    __vector4 ly = mTransform.yAxis.mV;
+    __vector4 lz = mTransform.zAxis.mV;
+    __vector4 lw = mTransform.wAxis.mV;
+    if (lpTransform)
     {
-        lvRow0   = RotateByTransform3x3(maFrame[0], lpTransform);
-        lvRow1   = RotateByTransform3x3(maFrame[1], lpTransform);
-        lvRow2   = RotateByTransform3x3(maFrame[2], lpTransform);
-        lvCentre = TransformPointByTransform(maFrame[3], lpTransform);
+        const __vector4 tx = lpTransform->xAxis.mV;
+        const __vector4 ty = lpTransform->yAxis.mV;
+        const __vector4 tz = lpTransform->zAxis.mV;
+        const __vector4 tw = lpTransform->wAxis.mV;
+        __vector4 x = __vmulfp(__vspltw(lx, 0), tx);
+        __vector4 y = __vmulfp(__vspltw(ly, 0), tx);
+        __vector4 z = __vmulfp(__vspltw(lz, 0), tx);
+        __vector4 w = __vmaddfp(__vspltw(lw, 0), tx, tw);
+        x = __vmaddfp(__vspltw(lx, 1), ty, x);
+        y = __vmaddfp(__vspltw(ly, 1), ty, y);
+        z = __vmaddfp(__vspltw(lz, 1), ty, z);
+        w = __vmaddfp(__vspltw(lw, 1), ty, w);
+        lx = __vmaddfp(__vspltw(lx, 2), tz, x);
+        ly = __vmaddfp(__vspltw(ly, 2), tz, y);
+        lz = __vmaddfp(__vspltw(lz, 2), tz, z);
+        lw = __vmaddfp(__vspltw(lw, 2), tz, w);
     }
-    else
-    {
-        lvRow0   = maFrame[0];
-        lvRow1   = maFrame[1];
-        lvRow2   = maFrame[2];
-        lvCentre = maFrame[3];
-    }
-
-    // FLAG (host width): the console stores its 4-byte `this` straight into the
-    // u32 mVolumeTag word, and the batch kernels copy that word verbatim into
-    // PrimitivePairIntersectResult::v1/v2. The committed GPInstance keeps the
-    // field as the console's 32-bit pointer IMAGE, so this truncates on x64;
-    // the real fix is to promote GPInstance::mVolumeTag (and PPIR::v1/v2) to a
-    // pointer-width field, which belongs to the GPInstance TU, not here. This
-    // is the identical note CapsuleVolume::CreateGPInstance carries.
-    arInst.mVolumeTag         = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
-    arInst.mPos               = lvCentre;
-    arInst.mNumFaceNormals    = 1;                          // stb 1, 0x8C
-    arInst.mVolumeType        = GPInstance::CYLINDER;       // stw 5, 0x90
-    arInst.mNumEdgeDirections = 1;                          // stb 1, 0x8D
-    arInst.mUserTag           = 0;                          // stw 0, 0x88
-
-    arInst.mFaceNormals[1]    = lvRow1;
-    arInst.mFaceNormals[2]    = lvRow0;
-    arInst.mEdgeDirections[0] = lvRow2;
-    arInst.mFaceNormals[0]    = lvRow2;
-
-    // The two +0x70 round trips: lanes x and y only; z/w survive untouched.
-    arInst.mDimensions.x      = mfHalfHeight;
-    arInst.mDimensions.y      = mfRadius;
-
-    arInst.mFlags             = muFlags;
-    arInst.mFatness           = mfFatness;
-
-    // The console re-reads the type word it just stored; keep that read.
-    arInst.mMethods           = g_aGPVolumeMethods[arInst.mVolumeType];
-
+    arInst.mVolumeTag = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
+    arInst.mPos.mV = lw;
+    arInst.mNumFaceNormals = 1;
+    arInst.mVolumeType = GPInstance::CYLINDER;
+    arInst.mNumEdgeDirections = 1;
+    arInst.mUserTag = 0;
+    arInst.mFaceNormals[1].mV = ly;
+    arInst.mFaceNormals[2].mV = lx;
+    arInst.mEdgeDirections[0].mV = lz;
+    arInst.mFaceNormals[0].mV = lz;
+    arInst.mDimensions.mV.x = mCylinderData.mfHalfHeight;
+    arInst.mDimensions.mV.y = mCylinderData.mfInnerRadius;
+    arInst.mFlags = muFlags;
+    arInst.mFatness = mfRadius;
+    arInst.mMethods = g_aGPVolumeMethods[GPInstance::CYLINDER];
     return 1;
 }
 
@@ -340,67 +322,76 @@ RwBool CylinderVolume::CreateGPInstance(GPInstance& arInst, const Vec4* lpTransf
 //      about the transform translation (row 3).
 // All paths: min = centre - extent, max = centre + extent; returns 1.
 // ---------------------------------------------------------------------------
-RwBool CylinderVolume::GetBBox(const Vec4* lpTransform, RwBool abTight, AABBox& arResult) const
+static __vector4 CylinderSqrt(__vector4 value)
 {
-    const f32 lfRadius  = mfRadius;    // v5 = a1[18] (+0x48)
-    const f32 lfFatness = mfFatness;   // v6 = a1[20] (+0x50)
+    const __vector4 zero = __vspltisw(0);
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    const __vector4 half = __vcfsx(__vspltisw(1), 1);
+    const __vector4 isZero = __vcmpeqfp(zero, value);
+    __vector4 estimate = __vrsqrtefp(value);
+    __vector4 square = __vmulfp(estimate, estimate);
+    __vector4 scale = __vmulfp(estimate, half);
+    __vector4 correction = __vnmsubfp(value, square, one);
+    estimate = __vmaddfp(scale, correction, estimate);
+    square = __vmulfp(estimate, estimate);
+    scale = __vmulfp(estimate, half);
+    correction = __vnmsubfp(value, square, one);
+    estimate = __vmaddfp(scale, correction, estimate);
+    return __vsel(__vmulfp(value, estimate), zero, isZero);
+}
 
-    f32 lfCentreX = 0.0f;
-    f32 lfCentreY = 0.0f;
-    f32 lfCentreZ = 0.0f;
+static __vector4 CylinderAxisExtent(__vector4 axis, __vector4 height, __vector4 radius)
+{
+    const __vector4 ones = __vspltisw(-1);
+    const __vector4 sign = __vslw(ones, ones);
+    const __vector4 sq = __vmulfp(axis, axis);
+    const f32 square = sq.x;
+    const f32 difference = 1.0f - square;
+    const __vector4 absDifference = __vandc(__vspltw(__lvlx(&difference, 0), 0), sign);
+    const __vector4 axial = __vmulfp(__vandc(axis, sign), height);
+    return __vmaddfp(CylinderSqrt(absDifference), radius, axial);
+}
 
-    f32 lfExtentX;
-    f32 lfExtentY;
-    f32 lfExtentZ;
-
-    if (lpTransform != 0)
+RwBool CylinderVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool abTight, AABBox& arResult) const
+{
+    const f32 radial = mfRadius + mCylinderData.mfInnerRadius;
+    const f32 axial = mfRadius + mCylinderData.mfHalfHeight;
+    if (!lpTransform)
     {
-        // Fatness folded into both dimensions (fadds f13 / fadds f0).
-        const f32 lfAxial  = lfFatness + mfHalfHeight;   // v10 = a1[20]+a1[17]
-        const f32 lfRadial = lfFatness + lfRadius;       // fatness + radius
-
-        if (abTight)
-        {
-            // The cylinder's world axis = the transform's row-2 (lvx128 [r4+0x20]).
-            const Vec4& lvAxis = lpTransform[2];
-
-            lfExtentX = std::fabs(lvAxis.x) * lfAxial
-                      + GuardedSqrt(std::fabs(1.0f - lvAxis.x * lvAxis.x)) * lfRadial;
-            lfExtentY = std::fabs(lvAxis.y) * lfAxial
-                      + GuardedSqrt(std::fabs(1.0f - lvAxis.y * lvAxis.y)) * lfRadial;
-            lfExtentZ = std::fabs(lvAxis.z) * lfAxial
-                      + GuardedSqrt(std::fabs(1.0f - lvAxis.z * lvAxis.z)) * lfRadial;
-        }
-        else
-        {
-            // fmadds: lenSq = (fatness+halfHeight)^2 + (fatness+radius)^2, then
-            // the guarded sqrt broadcast across every lane.
-            const f32 lfLenSq  = lfAxial * lfAxial + lfRadial * lfRadial;
-            const f32 lfSphere = GuardedSqrt(lfLenSq);
-            lfExtentX = lfSphere;
-            lfExtentY = lfSphere;
-            lfExtentZ = lfSphere;
-        }
-
-        // Centre = the transform translation (row 3, lvx128 [r4+0x30]).
-        lfCentreX = lpTransform[3].x;
-        lfCentreY = lpTransform[3].y;
-        lfCentreZ = lpTransform[3].z;
+        const Vector3 extent(radial, radial, axial);
+        const __vector4 ones = __vspltisw(-1);
+        const __vector4 sign = __vslw(ones, ones);
+        arResult.mMax = extent;
+        arResult.mMin.mV = __vxor(extent.mV, sign);
+        return 1;
+    }
+    __vector4 extent;
+    if (!abTight)
+    {
+        volatile f32 radiusSquare = radial * radial;
+        const f32 distanceSquare = axial * axial + radiusSquare;
+        const __vector4 distance = CylinderSqrt(__vspltw(__lvlx(&distanceSquare, 0), 0));
+        const f32 d = distance.x;
+        extent = Vector3(d, d, d).mV;
     }
     else
     {
-        // Local axis-aligned box (no orientation): centre stays at the origin.
-        lfExtentX = lfRadius + lfFatness;
-        lfExtentY = lfRadius + lfFatness;
-        lfExtentZ = mfHalfHeight + lfFatness;
+        const __vector4 axis = lpTransform->zAxis.mV;
+        const __vector4 height = __vspltw(__lvlx(&axial, 0), 0);
+        const __vector4 radius = __vspltw(__lvlx(&radial, 0), 0);
+        const __vector4 x = CylinderAxisExtent(__vspltw(axis, 0), height, radius);
+        const __vector4 y = CylinderAxisExtent(__vspltw(axis, 1), height, radius);
+        const __vector4 z = CylinderAxisExtent(__vspltw(axis, 2), height, radius);
+        // The original builds this row from the spilled axis-x square; its W
+        // lane survives the three component inserts.
+        const __vector4 axisX = __vspltw(axis, 0);
+        extent = __vrlimi(__vmulfp(axisX, axisX), x, 8, 0);
+        extent = __vrlimi(extent, y, 4, 0);
+        extent = __vrlimi(extent, z, 2, 0);
     }
-
-    arResult.mMin = math::vpu::Vector3(lfCentreX - lfExtentX,
-                                       lfCentreY - lfExtentY,
-                                       lfCentreZ - lfExtentZ);
-    arResult.mMax = math::vpu::Vector3(lfCentreX + lfExtentX,
-                                       lfCentreY + lfExtentY,
-                                       lfCentreZ + lfExtentZ);
+    const __vector4 centre = lpTransform->wAxis.mV;
+    arResult.mMin.mV = __vsubfp(centre, extent);
+    arResult.mMax.mV = __vaddfp(centre, extent);
     return 1;
 }
 
@@ -414,30 +405,25 @@ RwBool CylinderVolume::GetBBox(const Vec4* lpTransform, RwBool abTight, AABBox& 
 //   FeatureEdge(edge, P0, P1) ; memcpy(feature+0x10, edge, 0x40) ; numedges = 1
 // abCcw (r4) / arDir (r5) are dead in the asm.
 // ---------------------------------------------------------------------------
-void CylinderVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vec4& /*arDir*/,
-                                       Feature& arResult) const
+RwBool CylinderVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vector3& /*arDir*/, Feature& arResult) const
 {
-    const Vec4& lvAxis   = maFrame[1];
-    const Vec4& lvCentre = maFrame[3];
-    const f32   lfH      = mfHalfHeight;
-
-    Vec4 lvP0;   // var_70: centre + axis * halfHeight
-    lvP0.x = lvAxis.x * lfH + lvCentre.x;
-    lvP0.y = lvAxis.y * lfH + lvCentre.y;
-    lvP0.z = lvAxis.z * lfH + lvCentre.z;
-    lvP0.w = lvAxis.w * lfH + lvCentre.w;
-
-    Vec4 lvP1;   // var_60: centre - axis * halfHeight
-    lvP1.x = lvCentre.x - lvAxis.x * lfH;
-    lvP1.y = lvCentre.y - lvAxis.y * lfH;
-    lvP1.z = lvCentre.z - lvAxis.z * lfH;
-    lvP1.w = lvCentre.w - lvAxis.w * lfH;
-
-    const FeatureEdge lEdge(lvP0, lvP1);
-    std::memcpy(&arResult.edges[0], &lEdge, sizeof(FeatureEdge));
-
+    const __vector4 axis = mTransform.yAxis.mV;
+    const __vector4 centre = mTransform.wAxis.mV;
+    const f32 halfHeight = mCylinderData.mfHalfHeight;
+    const __vector4 height = __vspltw(__lvlx(&halfHeight, 0), 0);
+    const Vector3 plus(__vmaddfp(axis, height, centre));
+    const Vector3 minus(__vsubfp(centre, __vmulfp(axis, height)));
+    const FeatureEdge edge(plus, minus);
+    memcpy(&arResult.edges[0], &edge, sizeof(edge));
     arResult.numedges = 1;
+    return 1;
 }
 
 } // namespace collision
 } // namespace rw
+
+// ARTIST folds these genuine per-type methods to 82BAC980, 82B0F1B8 or 82AD5078.
+namespace rw { namespace collision {
+RwBool CylinderVolume::GetInterval(const Vector3&, Interval&) const { return 1; }
+void CylinderVolume::Release() {}
+} }

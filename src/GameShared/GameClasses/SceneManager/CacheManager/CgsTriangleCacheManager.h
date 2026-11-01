@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // Vector3Plus
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h" // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h" // CgsGeometric::Triangle4
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (inlined GetCachedTriangle guard)
@@ -104,21 +105,10 @@ namespace CgsSceneManager
     // they are modelled here to fix the 48-byte size and are touched by the other
     // (non-Prepare) CacheSlot TUs.
     // ------------------------------------------------------------------------
-    // A 16-byte sphere/vector field (xyz + w). Modelled as a 4-float, 4-aligned
-    // POD so the CacheSlot offsets below are byte-exact on the host (an alignas(16)
-    // vector type would over-align the slot and shift the trailing scalars). xyz/w
-    // lanes are accessed via SetZero()/the named floats. (CgsGeometric::Sphere's
-    // full home is a separate TU; this is the minimal sized stand-in.)
-    struct CacheSphere
-    {
-        f32 x, y, z, w;
-        void SetZero() { x = y = z = w = 0.0f; }
-    };
-
     struct CacheSlot
     {
-        CacheSphere mLastCachedSphere;             // +0x00  bounding sphere (centre.xyz, radius.w)
-        CacheSphere mInnerSpherePositionAndRadius; // +0x10  inner sphere (pos.xyz, radius.w)
+        CgsGeometric::Sphere mLastCachedSphere;             // +0x00  bounding sphere (centre.xyz, radius.w)
+        Vector3Plus mInnerSpherePositionAndRadius; // +0x10  inner sphere (pos.xyz, radius.w)
         bool        mbDebugRender;                  // +0x20  debug draw flag (DWARF :145 order)
         s32         miIndexIntoTriangleCache;       // +0x24  window start in the triangle cache
         s32         miNumCachedTriangleBatches;     // +0x28  batches owned by this slot
@@ -132,6 +122,13 @@ namespace CgsSceneManager
         // Body in CgsTriangleCacheManager_Events.cpp.
         void UpdateCachedObject(const TriangleCacheManagerIO::InEventUpdateCachedPosition& lrEvent);
     };
+
+    CGS_STATIC_ASSERT((sizeof(CacheSlot) == 0x30), "CacheSlot native stride");
+    CGS_STATIC_ASSERT((offsetof(CacheSlot, mLastCachedSphere) == 0), "CacheSlot cached sphere");
+    CGS_STATIC_ASSERT((offsetof(CacheSlot, mInnerSpherePositionAndRadius) == 0x10), "CacheSlot inner sphere");
+    CGS_STATIC_ASSERT((offsetof(CacheSlot, miIndexIntoTriangleCache) == 0x24), "CacheSlot triangle index");
+    CGS_STATIC_ASSERT((offsetof(CacheSlot, miNumCachedTriangleBatches) == 0x28), "CacheSlot batch count");
+    CGS_STATIC_ASSERT((offsetof(CacheSlot, miOverflow) == 0x2c), "CacheSlot overflow");
 
     // ------------------------------------------------------------------------
     // CgsSceneManager::CachedTriangleList -- the shared triangle cache backing

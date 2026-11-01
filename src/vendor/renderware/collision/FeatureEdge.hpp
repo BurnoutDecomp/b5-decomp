@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/EATech/include/rw/math/vpu/vector3.h"
+#include "SDKs/EATech/include/rw/math/vpu/vec_float.h"
 
 // ===========================================================================
 // rw::collision::FeatureEdge -- a RenderWare collision "feature edge": one
@@ -68,22 +70,22 @@ public:
 
     // @ 0x82BA85B8 -- construct the edge from endpoints arP1 / arP2
     // (canonical rwccore.h:869). X360 __fastcall: r3=this, r4=&arP1, r5=&arP2.
-    FeatureEdge(const Vec4& arP1, const Vec4& arP2);
+    FeatureEdge(const rw::math::vpu::Vector3& arP1, const rw::math::vpu::Vector3& arP2);
 
     // @ 0x82BB7728 -- constrain arPoint onto this edge segment in place;
     // returns the region code (1 = before base, 2 = on segment, 3 = past the
     // length). Canonical rwccore.h:912 (uint32_t return).
-    u32 constrain_point(Vec4& arPoint) const;
+    u32 constrain_point(rw::math::vpu::Vector3& arPoint) const;
 
     // .rdata constants recovered only by reference (flagged as inferred).
     static const f32 KF_DEGENERATE_EPSILON;   // X360 unk_8327EEA0 (ctor guard)
     static const f32 KF_START_THRESHOLD;      // X360 flt_82001CC0 (constrain)
 
-    Vec4 base;     // +0x00  edge base vertex (endpoint A)
-    Vec4 dir;      // +0x10  unit direction (B - A)/|B - A|
-    Vec4 pn;       // +0x20  extruded prism-wall plane normal
+    rw::math::vpu::Vector3 base;     // +0x00  edge base vertex (endpoint A)
+    rw::math::vpu::Vector3 dir;      // +0x10  unit direction (B - A)/|B - A|
+    rw::math::vpu::Vector3 pn;       // +0x20  extruded prism-wall plane normal
                    //        (written by Feature::BuildEdgePlanes @ 0x82BB9D68)
-    Vec4 length;   // +0x30  edge length (VecFloat: broadcast across the lanes)
+    rw::math::vpu::VecFloat length;   // +0x30  edge length (VecFloat: broadcast across the lanes)
 };
 
 } // namespace collision

@@ -67,19 +67,21 @@ class VolumeLineQuery;
 // pointers and the ninth integer argument (lpNumClusterTagBits) on the stack.
 // Returns 1 while the query can accept more results, else 0 (the caller's
 // keep-going condition).
-int AddQueryResult(VolumeLineQuery*              lpQuery,             // r3
-                   VolumeLineSegIntersectResult* lpResult,            // r4
-                   const TriangleVolume*         lpVolume,            // r5
-                   const Vec4*                   lpTransform,         // r6 (4 rows)
-                   const Vec4&                   rLocalPosition,      // v1
-                   const Vec4&                   rLineParam,          // v2 (lane X)
-                   const Vec4&                   rVolParam,           // v3
-                   const Vec4&                   rNormal,             // v4
-                   const u32*                    lpClusterId,         // r7
-                   const u32*                    lpUnitOffset,        // r8
-                   const u8*                     lpNumTagBits,        // r9
-                   const u32*                    lpNumMeshTagBits,    // r10
-                   const u32*                    lpNumClusterTagBits);// stack
+// ARTIST passes v1–v4 by value. Vector3/VecFloat spellings follow the
+// corresponding triangle-query outputs; same-register alternatives remain possible.
+int AddQueryResult(VolumeLineQuery* lpQuery,
+                   VolumeLineSegIntersectResult* lpResult,
+                   const TriangleVolume* lpVolume,
+                   const math::vpu::Matrix44Affine* lpTransform,
+                   math::vpu::Vector3 localPosition,
+                   math::vpu::VecFloat lineParam,
+                   math::vpu::Vector3 volParam,
+                   math::vpu::Vector3 normal,
+                   const u32* lpClusterId,
+                   const u32* lpUnitOffset,
+                   const u8* lpNumTagBits,
+                   const u32* lpNumMeshTagBits,
+                   const u32* lpNumClusterTagBits);// stack
 
 } // namespace collision
 } // namespace rw

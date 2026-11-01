@@ -1,560 +1,73 @@
 #include "vendor/renderware/collision/CollisionVolume.hpp"
-
-#include "vendor/renderware/collision/AABBox.hpp"            // AABBox (the getBBox out-param)
-#include "vendor/renderware/collision/Feature.hpp"           // Feature (getMaximumFeature)
-#include "vendor/renderware/collision/GPInstance.hpp"        // GPInstance / Interval
-#include "vendor/renderware/collision/LineSegIntersect.hpp"  // VolumeLineSegIntersectResult
 #include "vendor/renderware/collision/CapsuleVolume.hpp"
 #include "vendor/renderware/collision/CylinderVolume.hpp"
 #include "vendor/renderware/collision/TriangleVolume.hpp"
 #include "vendor/renderware/collision/AggregateVolume.hpp"
 
-// ===========================================================================================
-// THE SIX rw::collision::Volume DESCRIPTOR RECORDS, WITH THEIR METHOD SLOTS BOUND.
-//
-//   X360 .rdata  unk_82F91740 (SPHERE)  unk_82F918C0 (CAPSULE)  unk_82F919A4 (TRIANGLE)
-//                unk_82F9176C (BOX)     unk_82F91894 (CYLINDER) unk_82F919D0 (AGGREGATE)
-//
-// Installed into rw::collision::gVolumeVTable[1..6] by Volume::InitializeVTable @0x82BB03A8
-// (SDKs/EATech/rwcollision/volume.cpp). Every consumer that dispatches on a volume --
-// SceneManagerModule's scene-update drain and VolumeManager::AddDynamicVolume through
-// SDKs/EATech/rwcollision/volume_debug_access.h's Volume::GetBBox, VolumeQuery.cpp and
-// VolumeBBoxQuery.cpp through their mpGetBBox slot, PrimitiveIntersect.cpp through
-// mpCreateGPInstance -- reaches a body through this file.
-//
-// -------------------------------------------------------------------------------------------
-// WHY THIS TU EXISTS AT ALL
-// -------------------------------------------------------------------------------------------
-// The descriptors used to live in SDKs/EATech/rwcollision/volume.cpp with all seven method
-// slots NULL, because that TU cannot NAME any primitive class: including
-// volume_debug_access.h and any of the four primitive headers in one TU is a hard C2011 on
-// `rw::math::vpu::Vector3` (two vocabularies with the same qualified name -- MEASURED by
-// scratchpad/waveQ5/probe_rwc3/probe_descriptor_blocked.cpp, and that is still true today).
-//
-// The measurement that unblocks it: the fork is ONE-SIDED. The VENDOR half compiles all six
-// volume classes together with no conflict at all -- MEASURED,
-// scratchpad/waveQ5/probe_vtbind/measure_coinclude.cpp, STATUS=pass. So the descriptors are
-// defined HERE, where every primitive's methods are visible, while the SDK half keeps its
-// `extern const Volume::VTable gVolumeHandler_*` declarations and the gVolumeVTable fill.
-//
-// The two halves bind to ONE symbol per descriptor -- MEASURED with dumpbin /symbols on two
-// objects compiled with the canonical ship flags (scratchpad/waveQ5/vtbind/mangle_sdk.cpp and
-// mangle_vendor.cpp):
-//     SDK object     UNDEF  ?gVolumeHandler_82F91740@collision@rw@@3UVTable@Volume@12@B
-//     vendor object  SECT3  ?gVolumeHandler_82F91740@collision@rw@@3UVTable@Volume@12@B
-// and the two spellings of the record are LAYOUT-IDENTICAL -- MEASURED,
-// scratchpad/waveQ5/probe_vtbind/measure_layout.cpp: MSVC x64 gives a pointer-to-member of a
-// single-inheritance, non-polymorphic class size 8, so the SDK half's pointer-to-member slots
-// and this half's free-function slots agree offset for offset. The run-time proof that a
-// record written here reads back correctly through BOTH halves is
-// scratchpad/waveQ5/probe_vtbind/ (probe_vendor_side.cpp + probe_sdk_side.cpp, linked and RUN).
-//
-// -------------------------------------------------------------------------------------------
-// THE ADAPTERS: WHY EVERY SLOT GOES THROUGH A THIN static FUNCTION
-// -------------------------------------------------------------------------------------------
-// Not one primitive's member can be stored in a slot directly, for three separate reasons,
-// and the adapters make each one explicit instead of hiding it behind a function-pointer
-// cast (there is NO cast between function pointer types anywhere in this file -- every
-// adapter has the slot's exact signature, so the compiler type-checks all 42 slots):
-//
-//   1. FOUR OF THE SIX CLASSES ARE STANDALONE. CapsuleVolume, CylinderVolume,
-//      TriangleVolume and AggregateVolume have no `: public Volume` base clause on their
-//      `class X` line (line numbers deliberately NOT cited: the 2026-08-19 wave-Q6 edits to
-//      CylinderVolume.hpp and TriangleVolume.hpp moved two of the four, and three read-only
-//      files elsewhere still cite the old ones -- reported, not edited),
-//      so `&CapsuleVolume::GetBBox` cannot convert to anything Volume-shaped. Their adapters
-//      reinterpret_cast the `const Volume*`. That is sound because all five classes model the
-//      SAME 96-byte serialised record at the SAME offsets, which is pinned by static_asserts
-//      in each header (CapsuleVolume.hpp / CylinderVolume.hpp / TriangleVolume.hpp /
-//      AggregateVolume.hpp) and re-pinned per-class at the foot of this file. BoxVolume and
-//      SphereVolume DO derive from Volume, so their adapters use static_cast.
-//
-//   2. THE PARAMETER SPELLINGS DIVERGE. Three primitives take the transform as `const Vec4*`
-//      and AggregateVolume takes `const math::vpu::Matrix44Affine*`. Those are the same
-//      pointer: a Matrix44Affine is 64 bytes = four 16-byte rows and a Vec4 is one 16-byte
-//      row -- MEASURED, scratchpad/waveQ5/probe_vtbind/measure_vocab*.cpp
-//      (sizeof(Matrix44Affine)==64, sizeof(Vec4)==16, sizeof(math::vpu::Vector3)==16). The
-//      aggregate adapter does that one reinterpret and says so.
-//
-//   3. THE getMaximumFeature / getInterval SLOTS DO NOT HAVE A UNIFORM CONSOLE ABI, and that
-//      is a CONSOLE FACT, not a host artefact. DWARF box.h:39/:42 and triangle.h:45/:48
-//      declare BOX's and TRIANGLE's as taking `Vector3` BY VALUE; sphere.h:24/:27,
-//      capsule.h:33/:36, cylinder.h:39/:42 and aggregatevolume.h:30 take `const Vector3&`.
-//      A by-value VMX vector rides a vector register and consumes no GPR, so the `Feature&`
-//      out-parameter arrives in a DIFFERENT register per type -- visible in the raw asm:
-//      SphereVolume::GetMaximumFeature @0x82BA81B0 stores through r6 while the otherwise
-//      instruction-for-instruction identical BoxVolume::GetMaximumFeature @0x82BA87F0 stores
-//      through r5 (likewise TriangleVolume @0x82BBACD0 `mr r31,r5` vs CylinderVolume
-//      @0x82BAC988 `mr r31,r6`). Calling BOX's slot through SPHERE's prototype on the console
-//      would have written the Feature over the caller's direction vector. It never happened
-//      because the canonical `class Volume` (rwccore.h:1507-1567) exposes GetBBox,
-//      GetBBoxDiag, CreateGPInstance, LineSegIntersect and Release and NOTHING that reaches
-//      getInterval or getMaximumFeature -- which is also why AGGREGATE's getInterval slot is
-//      genuinely 0 in the image. On x64 both spellings pass a pointer, so one slot signature
-//      is faithful for all six; the adapters keep each primitive's own DWARF spelling and the
-//      divergence is recorded rather than smoothed away.
-//
-// -------------------------------------------------------------------------------------------
-// SLOT COVERAGE -- what is bound, what is a genuine NULL, what is PARKED
-// -------------------------------------------------------------------------------------------
-//  slot                [1] SPHERE  [2] CAPSULE  [3] TRIANGLE  [4] BOX     [5] CYLINDER  [6] AGG
-//  getBBox             82BA8020 ✅ 82BAF9C8 ✅  82BBA038 ✅   82BA9FC8 ✅ 82BAD490 ✅   82BBBA10 ✅
-//  getBBoxDiag         82BA8580 ✅ 82BAF6A8 ✅  82BBA110 ⭐   82BA8890 ✅ 82BAC7B8 ✅   82BBBB58 ✅
-//  getInterval         82BAC980 ✅ 82BAC980 ✅  82BAC980 ✅   82BAC980 ✅ 82BAC980 ✅   0 (image)
-//  getMaximumFeature   82BA81B0 ✅ 82BAF808 ✅  82BBACD0 ✅   82BA87F0 ✅ 82BAC988 ✅   82B0F1B8 ✅
-//  createGPInstance    82BA8100 ✅ 82BAF6F0 ✅  82BBAA00 ✅   82BA92E8 ✅ 82BAC7F8 ⭐   82B0F1B8 ✅
-//  lineSegIntersect    82BA82C8 ✅ 82BAFCF8 ✅  82BBB970 ✅   82BA9478 ✅ 82BAF688 ✅   0 (image)
-//  release             82AD5078 ✅ 82AD5078 ✅  82AD5078 ✅   82AD5078 ✅ 82AD5078 ✅   82AD5078 ✅
-//
-//  ✅ = bound to a real body (36 of the 40 slots the image binds).
-//  UPDATED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)): the lineSegIntersect slots of SPHERE (82BA82C8),
-//       CAPSULE (82BAFCF8) and BOX (82BA9478) are bound too -- 39 of the 40; CYLINDER (82BAF688) stays parked.
-//  UPDATED 2026-09-28 (owner's list, lane L2 CAMCOLLIDE, stage (c)): CYLINDER's lineSegIntersect (82BAF688) is
-//       bound -- all 40 of the slots the image binds; nothing is parked. The dispatcher and its two kernels
-//       (ThinLineSegIntersect 82BADCE0 / FatLineSegIntersect 82BAEB10) are in LineSegIntersect.cpp.
-//  ⭐ = bound 2026-08-19 by wave Q6 cluster C4, from bodies landed the same day in
-//       TriangleVolume.cpp / CylinderVolume.cpp. Both were wave-Q5 parks; the counts moved
-//       34 -> 36 bound and 6 -> 4 parked. The per-type slot masks the run-time descriptor
-//       probe checks move with them: TRIANGLE 0x7D -> 0x7F and CYLINDER 0x4F -> 0x5F
-//       (SPHERE / CAPSULE / BOX stay 0x5F, AGGREGATE stays 0x5B; bit i = slot i in the row
-//       order above, bit 0 = getBBox ... bit 6 = release).
-//  0 (image) = the shipped .rdata word really is zero -- reproduced, not a hole.
-//  ⛔P = PARKED, four slots, each with its reason at the record below and none of them
-//        stubbed: a NULL slot is an honest hole, a stub that returns a plausible value is a
-//        wrong answer. All four are lineSegIntersect, and none is on the wave-Q5 car-vs-prop
-//        contact path (that path is getBBox -> the sweeper, then createGPInstance ->
-//        PrimitiveIntersect); their consumer is rw::collision::VolumeLineQuery.
-//
-//  The four remaining parks, with the sizes MEASURED (the last two by a targeted headless
-//  idat run on a private .i64 copy this cluster, because they have no export JSON):
-//        SPHERE   lineSegIntersect 0x82BA82C8   136 insns
-//        CAPSULE  lineSegIntersect 0x82BAFCF8   428 insns
-//        BOX      lineSegIntersect 0x82BA9478   723 insns (+ rwcPlaneLineSegIntersect
-//                                               @0x82BA8818, itself bodyless)
-//        CYLINDER lineSegIntersect 0x82BAF688     8 insns -- RECOVERED IN FULL, but it only
-//                                               tail-calls Thin/FatLineSegIntersect
-//                                               (441 / 733 insns), neither of which has a
-//                                               body; see the CYLINDER record.
-//
-// The three shared/ICF-folded targets are reproduced as three shared adapters, exactly the
-// arrangement the console has (one body, many slots), NOT invented:
-//   0x82AD5078  `blr`             the empty function (411 xrefs; the exporter's symbol
-//                                 table gives this address a misleading name -- gotcha 6)
-//   0x82BAC980  `li r3,1 ; blr`   a folded "return 1" (54 xrefs) -- the getInterval slot for
-//                                 types 1..5. IDA mislabels it
-//                                 `MassiveAdClient3::...MediaDownload`; do not believe it.
-//   0x82B0F1B8  `li r3,0 ; blr`   a folded "return 0" (33 xrefs) -- AGGREGATE's
-//                                 getMaximumFeature AND createGPInstance, the same body twice.
-//
-// The typeID / name / flags words of all six records are the ones dumped out of the shipped
-// image (scratchpad/waveQ2/evidence/volume_vtables_ida_dump.txt, re-measured 2026-08-18 by
-// waveQ5 rwc3); this change binds the method slots and touches nothing else about them.
-// ===========================================================================================
+namespace rw { namespace collision {
 
-namespace rw
-{
-namespace collision
-{
-
-namespace
-{
-    // -----------------------------------------------------------------------------------
-    // The three shared / ICF-folded console bodies.
-    // -----------------------------------------------------------------------------------
-
-    // X360 0x82BAC980 -- `li r3,1 ; blr`. The getInterval slot of types 1..5. It writes
-    // NOTHING to arInterval: the console body is two instructions and never touches r5.
-    RwBool FoldedGetIntervalReturnsTrue(const Volume* /*lpVolume*/, const Vec4& /*arDir*/,
-                                        Interval& /*arInterval*/)
-    {
-        return 1;
-    }
-
-    // X360 0x82B0F1B8 -- `li r3,0 ; blr`. AGGREGATE binds this ONE body into TWO slots with
-    // two different signatures, so it appears here twice; that is the console's arrangement,
-    // not a duplication. An aggregate has no maximum feature and no GP instance of its own --
-    // the traversal decomposes it into leaf primitives first (VolumeVolumeQuery::
-    // GetPrimitiveIntersections -> VolumeBBoxQuery::AddVolumeRef -> AddPrimitiveRef).
-    RwBool FoldedGetMaximumFeatureReturnsFalse(const Volume* /*lpVolume*/, RwBool /*abCcw*/,
-                                               const Vec4& /*arDir*/, Feature& /*arFeature*/)
-    {
-        return 0;
-    }
-
-    RwBool FoldedCreateGPInstanceReturnsFalse(const Volume* /*lpVolume*/,
-                                              GPInstance& /*arInstance*/,
-                                              const Vec4* /*lpTransform*/)
-    {
-        return 0;
-    }
-
-    // X360 0x82AD5078 -- ONE instruction, `blr`. This is a full reconstruction of a real
-    // console body, not an absence: the address is the XEX's ICF-folded empty function
-    // (411 xrefs; AGENTS gotcha 6 names this exact address and warns that the exporter's
-    // symbol table gives it a misleading name). Every one of the six release slots points
-    // at it, which is the shipped build saying that rwcollision volumes are never
-    // individually released: a volume lives and dies with the resource block its
-    // Initialize was handed.
-    void FoldedReleaseEmptyBody(Volume* /*lpVolume*/)
-    {
-    }
-
-    // -----------------------------------------------------------------------------------
-    // The five reinterpreting views. BoxVolume / SphereVolume need none (they really derive
-    // from Volume); the other four are standalone classes over the same 96-byte record.
-    // -----------------------------------------------------------------------------------
-    const CapsuleVolume*   AsCapsule  (const Volume* lpV) { return reinterpret_cast<const CapsuleVolume*>(lpV);   }
-    const CylinderVolume*  AsCylinder (const Volume* lpV) { return reinterpret_cast<const CylinderVolume*>(lpV);  }
-    const TriangleVolume*  AsTriangle (const Volume* lpV) { return reinterpret_cast<const TriangleVolume*>(lpV);  }
-    const AggregateVolume* AsAggregate(const Volume* lpV) { return reinterpret_cast<const AggregateVolume*>(lpV); }
-
-    // A Matrix44Affine is four 16-byte rows and a Vec4 is one -- MEASURED (see the banner),
-    // so the transform argument is the same pointer in both vocabularies. Only the aggregate
-    // needs the conversion; the other five primitives already spell it `const Vec4*`.
-    const math::vpu::Matrix44Affine* AsAffine(const Vec4* lpRows)
-    {
-        return reinterpret_cast<const math::vpu::Matrix44Affine*>(lpRows);
-    }
-
-    // The three primitives whose GetBBoxDiag returns the EATech `math::vpu::Vector3` rather
-    // than this directory's `Vec4`. Both are one 16-byte, four-lane row (MEASURED), so this
-    // is a lane-for-lane copy and not a reinterpretation.
-    Vec4 AsVec4(const math::vpu::Vector3& arVector)
-    {
-        const Vec4 lvOut = { arVector.mV.v[0], arVector.mV.v[1],
-                             arVector.mV.v[2], arVector.mV.v[3] };
-        return lvOut;
-    }
-
-    // -----------------------------------------------------------------------------------
-    // [1] SPHERE -- unk_82F91740. All four homed bodies live in BoxVolume.cpp.
-    // -----------------------------------------------------------------------------------
-    RwBool SphereGetBBox(const Volume* lpV, const Vec4* lpTransform, RwBool abTight, AABBox& arBBox)
-    {
-        return static_cast<const SphereVolume*>(lpV)->GetBBox(lpTransform, abTight, arBBox);
-    }
-
-    Vec4 SphereGetBBoxDiag(const Volume* lpV)
-    {
-        return static_cast<const SphereVolume*>(lpV)->GetBBoxDiag();
-    }
-
-    RwBool SphereGetMaximumFeature(const Volume* lpV, RwBool abCcw, const Vec4& arDir,
-                                   Feature& arFeature)
-    {
-        return static_cast<const SphereVolume*>(lpV)->GetMaximumFeature(abCcw, arDir, arFeature);
-    }
-
-    RwBool SphereCreateGPInstance(const Volume* lpV, GPInstance& arInstance, const Vec4* lpTransform)
-    {
-        return static_cast<const SphereVolume*>(lpV)->CreateGPInstance(arInstance, lpTransform);
-    }
-
-    // @ 0x82BA82C8 SphereVolume::LineSegIntersect -- bound 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the body is in LineSegIntersect.cpp.
-    RwBool SphereLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
-                                 const Vec4* lpTransform, VolumeLineSegIntersectResult& arResult, f32 afFatness)
-    {
-        return static_cast<const SphereVolume*>(lpV)->LineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
-    }
-
-    // -----------------------------------------------------------------------------------
-    // [2] CAPSULE -- unk_82F918C0. Bodies in CapsuleVolume.cpp (read-only for this cluster).
-    // -----------------------------------------------------------------------------------
-    RwBool CapsuleGetBBox(const Volume* lpV, const Vec4* lpTransform, RwBool abTight, AABBox& arBBox)
-    {
-        return AsCapsule(lpV)->GetBBox(lpTransform, abTight, arBBox);
-    }
-
-    Vec4 CapsuleGetBBoxDiag(const Volume* lpV)
-    {
-        return AsVec4(AsCapsule(lpV)->GetBBoxDiag());
-    }
-
-    // CapsuleVolume::GetMaximumFeature is spelled `void` in its header while the DWARF
-    // (capsule.h:36) and the asm (`li r3, 1` at 0x82BAF...) both say RwBool-returning-1.
-    // The adapter supplies the 1 rather than leaving the caller to read whatever the void
-    // body left in RAX; the header spelling is CapsuleVolume.cpp's to correct, not this
-    // file's. Same for CYLINDER and TRIANGLE below.
-    RwBool CapsuleGetMaximumFeature(const Volume* lpV, RwBool abCcw, const Vec4& arDir,
-                                    Feature& arFeature)
-    {
-        AsCapsule(lpV)->GetMaximumFeature(abCcw, arDir, arFeature);
-        return 1;
-    }
-
-    RwBool CapsuleCreateGPInstance(const Volume* lpV, GPInstance& arInstance, const Vec4* lpTransform)
-    {
-        return AsCapsule(lpV)->CreateGPInstance(arInstance, lpTransform);
-    }
-
-    // @ 0x82BAFCF8 CapsuleVolume::LineSegIntersect -- bound 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the body is in LineSegIntersect.cpp.
-    RwBool CapsuleLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
-                                  const Vec4* lpTransform, VolumeLineSegIntersectResult& arResult, f32 afFatness)
-    {
-        return AsCapsule(lpV)->LineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
-    }
-
-    // -----------------------------------------------------------------------------------
-    // [3] TRIANGLE -- unk_82F919A4. Bodies in TriangleVolume.cpp / TriangleVolume_wN_01.cpp.
-    // -----------------------------------------------------------------------------------
-    RwBool TriangleGetBBox(const Volume* lpV, const Vec4* lpTransform, RwBool abTight, AABBox& arBBox)
-    {
-        return AsTriangle(lpV)->GetBBox(lpTransform, abTight, arBBox);
-    }
-
-    Vec4 TriangleGetBBoxDiag(const Volume* lpV)
-    {
-        return AsVec4(AsTriangle(lpV)->GetBBoxDiag());
-    }
-
-    // TriangleVolume::GetMaximumFeature omits the leading `abCcw` that DWARF triangle.h:48
-    // declares -- the reconstruction read the asm's r4 as the direction, which is what the
-    // BY-VALUE `Vector3` shape makes it look like (see reason 3 in the banner). Both
-    // parameters are dead in the body, so the adapter drops abCcw and the header spelling is
-    // TriangleVolume.hpp's owner to reconcile.
-    RwBool TriangleGetMaximumFeature(const Volume* lpV, RwBool /*abCcw*/, const Vec4& arDir,
-                                     Feature& arFeature)
-    {
-        AsTriangle(lpV)->GetMaximumFeature(arDir, arFeature);
-        return 1;
-    }
-
-    RwBool TriangleCreateGPInstance(const Volume* lpV, GPInstance& arInstance, const Vec4* lpTransform)
-    {
-        return AsTriangle(lpV)->CreateGPInstance(arInstance, lpTransform);
-    }
-
-    // TriangleVolume::LineSegIntersect is spelled in the CONSOLE'S REGISTER ORDER
-    // (`(tm, result, fatness, start, end)`) because on the X360 the two points ride VMX
-    // v1/v2 by value and take no GPR -- DWARF triangle.h:51 confirms
-    // `LineSegIntersect(Vector3, Vector3, const Matrix44Affine*, VolumeLineSegIntersectResult&,
-    // float32_t)`, i.e. the points ARE the first two parameters. The slot signature follows
-    // the DWARF; this adapter is the re-order, and it also takes the result by reference and
-    // hands it on as the pointer that body wants.
-    RwBool TriangleLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
-                                    const Vec4* lpTransform,
-                                    VolumeLineSegIntersectResult& arResult, f32 afFatness)
-    {
-        return AsTriangle(lpV)->LineSegIntersect(lpTransform, &arResult, afFatness, arPt1, arPt2);
-    }
-
-    // -----------------------------------------------------------------------------------
-    // [4] BOX -- unk_82F9176C. All four homed bodies live in BoxVolume.cpp.
-    // -----------------------------------------------------------------------------------
-    RwBool BoxGetBBox(const Volume* lpV, const Vec4* lpTransform, RwBool abTight, AABBox& arBBox)
-    {
-        return static_cast<const BoxVolume*>(lpV)->GetBBox(lpTransform, abTight, arBBox);
-    }
-
-    Vec4 BoxGetBBoxDiag(const Volume* lpV)
-    {
-        return static_cast<const BoxVolume*>(lpV)->GetBBoxDiag();
-    }
-
-    // BoxVolume::GetMaximumFeature takes its direction BY VALUE (DWARF box.h:42) -- see
-    // reason 3 in the banner. Dead either way.
-    RwBool BoxGetMaximumFeature(const Volume* lpV, RwBool abCcw, const Vec4& arDir,
-                                Feature& arFeature)
-    {
-        return static_cast<const BoxVolume*>(lpV)->GetMaximumFeature(abCcw, arDir, arFeature);
-    }
-
-    RwBool BoxCreateGPInstance(const Volume* lpV, GPInstance& arInstance, const Vec4* lpTransform)
-    {
-        return static_cast<const BoxVolume*>(lpV)->CreateGPInstance(arInstance, lpTransform);
-    }
-
-    // @ 0x82BA9478 BoxVolume::LineSegIntersect -- bound 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)); the body is in LineSegIntersect.cpp.
-    RwBool BoxLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
-                              const Vec4* lpTransform, VolumeLineSegIntersectResult& arResult, f32 afFatness)
-    {
-        return static_cast<const BoxVolume*>(lpV)->LineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
-    }
-
-    // -----------------------------------------------------------------------------------
-    // [5] CYLINDER -- unk_82F91894. Bodies in CylinderVolume.cpp (read-only for this cluster).
-    // -----------------------------------------------------------------------------------
-    RwBool CylinderGetBBox(const Volume* lpV, const Vec4* lpTransform, RwBool abTight, AABBox& arBBox)
-    {
-        return AsCylinder(lpV)->GetBBox(lpTransform, abTight, arBBox);
-    }
-
-    Vec4 CylinderGetBBoxDiag(const Volume* lpV)
-    {
-        return AsVec4(AsCylinder(lpV)->GetBBoxDiag());
-    }
-
-    RwBool CylinderGetMaximumFeature(const Volume* lpV, RwBool abCcw, const Vec4& arDir,
-                                     Feature& arFeature)
-    {
-        AsCylinder(lpV)->GetMaximumFeature(abCcw, arDir, arFeature);
-        return 1;
-    }
-
-    RwBool CylinderCreateGPInstance(const Volume* lpV, GPInstance& arInstance,
-                                    const Vec4* lpTransform)
-    {
-        return AsCylinder(lpV)->CreateGPInstance(arInstance, lpTransform);
-    }
-
-    // @ 0x82BAF688 CylinderVolume::LineSegIntersect -- bound 2026-09-28 (owner's list, lane L2 CAMCOLLIDE, stage
-    // (c)); the dispatcher and its two kernels are in LineSegIntersect.cpp.
-    RwBool CylinderLineSegIntersect(const Volume* lpV, const Vec4& arPt1, const Vec4& arPt2,
-                                    const Vec4* lpTransform, VolumeLineSegIntersectResult& arResult, f32 afFatness)
-    {
-        return AsCylinder(lpV)->LineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
-    }
-
-    // -----------------------------------------------------------------------------------
-    // [6] AGGREGATE -- unk_82F919D0. Bodies in AggregateVolume.cpp.
-    // -----------------------------------------------------------------------------------
-    RwBool AggregateGetBBox(const Volume* lpV, const Vec4* lpTransform, RwBool abInstanced,
-                            AABBox& arBBox)
-    {
-        return AsAggregate(lpV)->GetBBox(AsAffine(lpTransform), abInstanced, arBBox);
-    }
-
-    Vec4 AggregateGetBBoxDiag(const Volume* lpV)
-    {
-        return AsVec4(AsAggregate(lpV)->GetBBoxDiag());
-    }
-}
-
-// ===========================================================================================
-// The six records.
-// ===========================================================================================
-
-const Volume::VTable gVolumeHandler_82F91740 =                  // type 1 SPHERE
-{
-    E_VOLUMETYPE_SPHERE,
-    SphereGetBBox,                          // 82BA8020  SphereVolume::GetBBox
-    SphereGetBBoxDiag,                      // 82BA8580  SphereVolume::GetBBoxDiag
-    FoldedGetIntervalReturnsTrue,           // 82BAC980  ICF-folded `li r3,1 ; blr`
-    SphereGetMaximumFeature,                // 82BA81B0  SphereVolume::GetMaximumFeature
-    SphereCreateGPInstance,                 // 82BA8100  SphereVolume::CreateGPInstance
-    // A ray/sphere kernel around rwcSphereLineSegIntersect with two Newton-Raphson chains and a CR-bit
-    // predicate (body in LineSegIntersect.cpp). Its consumer is rw::collision::VolumeLineQuery, which the
-    // director camera's line tests reach.
-    SphereLineSegIntersect,                 // 82BA82C8  SphereVolume::LineSegIntersect
-    FoldedReleaseEmptyBody,                  // 82AD5078  ICF-folded empty `blr`
-    "SphereVolume",
-    0
+// ARTIST 82F91740..82F919F4: each record stores the real primitive method
+// addresses. Box and Triangle pass direction/segment vectors in VMX registers;
+// the SDK base slot types retain the generic member-pointer declaration.
+extern const Volume::VTable gVolumeHandler_82F91740 = {
+    VOLUMETYPESPHERE,
+    static_cast<Volume::GetBBoxFn>(&SphereVolume::GetBBox),
+    static_cast<Volume::GetBBoxDiagFn>(&SphereVolume::GetBBoxDiag),
+    static_cast<Volume::GetIntervalFn>(&SphereVolume::GetInterval),
+    static_cast<Volume::GetMaximumFeatureFn>(&SphereVolume::GetMaximumFeature),
+    static_cast<Volume::CreateGPInstanceFn>(&SphereVolume::CreateGPInstance),
+    static_cast<Volume::LineSegIntersectFn>(&SphereVolume::LineSegIntersect),
+    static_cast<Volume::ReleaseFn>(&SphereVolume::Release), "SphereVolume", 0
+};
+extern const Volume::VTable gVolumeHandler_82F918C0 = {
+    VOLUMETYPECAPSULE,
+    static_cast<Volume::GetBBoxFn>(&CapsuleVolume::GetBBox),
+    static_cast<Volume::GetBBoxDiagFn>(&CapsuleVolume::GetBBoxDiag),
+    static_cast<Volume::GetIntervalFn>(&CapsuleVolume::GetInterval),
+    static_cast<Volume::GetMaximumFeatureFn>(&CapsuleVolume::GetMaximumFeature),
+    static_cast<Volume::CreateGPInstanceFn>(&CapsuleVolume::CreateGPInstance),
+    static_cast<Volume::LineSegIntersectFn>(&CapsuleVolume::LineSegIntersect),
+    static_cast<Volume::ReleaseFn>(&CapsuleVolume::Release), "CapsuleVolume", 0
+};
+extern const Volume::VTable gVolumeHandler_82F919A4 = {
+    VOLUMETYPETRIANGLE,
+    static_cast<Volume::GetBBoxFn>(&TriangleVolume::GetBBox),
+    static_cast<Volume::GetBBoxDiagFn>(&TriangleVolume::GetBBoxDiag),
+    reinterpret_cast<Volume::GetIntervalFn>(&TriangleVolume::GetInterval),
+    reinterpret_cast<Volume::GetMaximumFeatureFn>(&TriangleVolume::GetMaximumFeature),
+    static_cast<Volume::CreateGPInstanceFn>(&TriangleVolume::CreateGPInstance),
+    reinterpret_cast<Volume::LineSegIntersectFn>(&TriangleVolume::LineSegIntersect),
+    static_cast<Volume::ReleaseFn>(&TriangleVolume::Release), "TriangleVolume", 0
+};
+extern const Volume::VTable gVolumeHandler_82F9176C = {
+    VOLUMETYPEBOX,
+    static_cast<Volume::GetBBoxFn>(&BoxVolume::GetBBox),
+    static_cast<Volume::GetBBoxDiagFn>(&BoxVolume::GetBBoxDiag),
+    reinterpret_cast<Volume::GetIntervalFn>(&BoxVolume::GetInterval),
+    reinterpret_cast<Volume::GetMaximumFeatureFn>(&BoxVolume::GetMaximumFeature),
+    static_cast<Volume::CreateGPInstanceFn>(&BoxVolume::CreateGPInstance),
+    static_cast<Volume::LineSegIntersectFn>(&BoxVolume::LineSegIntersect),
+    static_cast<Volume::ReleaseFn>(&BoxVolume::Release), "BoxVolume", 0
+};
+extern const Volume::VTable gVolumeHandler_82F91894 = {
+    VOLUMETYPECYLINDER,
+    static_cast<Volume::GetBBoxFn>(&CylinderVolume::GetBBox),
+    static_cast<Volume::GetBBoxDiagFn>(&CylinderVolume::GetBBoxDiag),
+    static_cast<Volume::GetIntervalFn>(&CylinderVolume::GetInterval),
+    static_cast<Volume::GetMaximumFeatureFn>(&CylinderVolume::GetMaximumFeature),
+    static_cast<Volume::CreateGPInstanceFn>(&CylinderVolume::CreateGPInstance),
+    static_cast<Volume::LineSegIntersectFn>(&CylinderVolume::LineSegIntersect),
+    static_cast<Volume::ReleaseFn>(&CylinderVolume::Release), "CylinderVolume", 0
+};
+extern const Volume::VTable gVolumeHandler_82F919D0 = {
+    VOLUMETYPEAGGREGATE,
+    static_cast<Volume::GetBBoxFn>(&AggregateVolume::GetBBox),
+    static_cast<Volume::GetBBoxDiagFn>(&AggregateVolume::GetBBoxDiag),
+    0,
+    static_cast<Volume::GetMaximumFeatureFn>(&AggregateVolume::GetMaximumFeature),
+    static_cast<Volume::CreateGPInstanceFn>(&AggregateVolume::CreateGPInstance),
+    0,
+    static_cast<Volume::ReleaseFn>(&AggregateVolume::Release), "AggregateVolume", 0
 };
 
-const Volume::VTable gVolumeHandler_82F918C0 =                  // type 2 CAPSULE
-{
-    E_VOLUMETYPE_CAPSULE,
-    CapsuleGetBBox,                         // 82BAF9C8  CapsuleVolume::GetBBox
-    CapsuleGetBBoxDiag,                     // 82BAF6A8  CapsuleVolume::GetBBoxDiag
-    FoldedGetIntervalReturnsTrue,           // 82BAC980
-    CapsuleGetMaximumFeature,               // 82BAF808  CapsuleVolume::GetMaximumFeature
-    CapsuleCreateGPInstance,                // 82BAF6F0  CapsuleVolume::CreateGPInstance
-    // ✅ UNPARKED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)). The park read: a register-allocated VMX
-    // kernel over rwcSphereLineSegIntersect + rwcCylinderLineSegIntersect with no declaration to bind. Both are
-    // there now: CapsuleVolume.hpp declares it and LineSegIntersect.cpp holds the body.
-    CapsuleLineSegIntersect,                // 82BAFCF8  CapsuleVolume::LineSegIntersect
-    FoldedReleaseEmptyBody,                  // 82AD5078
-    "CapsuleVolume",
-    0
-};
-
-const Volume::VTable gVolumeHandler_82F919A4 =                  // type 3 TRIANGLE
-{
-    E_VOLUMETYPE_TRIANGLE,
-    TriangleGetBBox,                        // 82BBA038  TriangleVolume::GetBBox
-    // ✅ UNPARKED 2026-08-19 (wave Q6 cluster C4). The wave-Q5 park read: "The address is in
-    // the descriptor dump but there is NO progress/identity.json row for it and NO per-address
-    // JSON: it is an EXPORT HOLE ... Closing it needs a targeted headless idat run on a private
-    // copy; the shape is almost certainly the sibling one, but 'almost certainly' is not a
-    // reconstruction." That idat run happened (scratchpad/waveQ6/ida_vt2/): 18 instructions,
-    // no callees, dumped in full. The park was right to refuse the guess AND right about the
-    // shape -- it is the fattened local extent, (max + fatness) - (min - fatness).
-    TriangleGetBBoxDiag,                    // 82BBA110  TriangleVolume::GetBBoxDiag
-    FoldedGetIntervalReturnsTrue,           // 82BAC980
-    TriangleGetMaximumFeature,              // 82BBACD0  TriangleVolume::GetMaximumFeature
-    TriangleCreateGPInstance,               // 82BBAA00  TriangleVolume::CreateGPInstance
-    TriangleLineSegIntersect,               // 82BBB970  TriangleVolume::LineSegIntersect
-    FoldedReleaseEmptyBody,                  // 82AD5078
-    "TriangleVolume",
-    0
-};
-
-const Volume::VTable gVolumeHandler_82F9176C =                  // type 4 BOX
-{
-    E_VOLUMETYPE_BBOX,
-    BoxGetBBox,                             // 82BA9FC8  BoxVolume::GetBBox
-    BoxGetBBoxDiag,                         // 82BA8890  BoxVolume::GetBBoxDiag
-    FoldedGetIntervalReturnsTrue,           // 82BAC980
-    BoxGetMaximumFeature,                   // 82BA87F0  BoxVolume::GetMaximumFeature
-    BoxCreateGPInstance,                    // 82BA92E8  BoxVolume::CreateGPInstance
-    // ✅ UNPARKED 2026-09-25 (crash parity FX-FOLLOWUPS stage (b)). The park read: six slab/cap arms over the
-    // sphere / plane / cylinder kernels, rwcPlaneLineSegIntersect @0x82BA8818 itself bodyless, and no consumer
-    // on the path. The plane kernel and the walk are in LineSegIntersect.cpp, and the consumer
-    // (VolumeLineQuery::GetIntersections, d6040b9f) is live.
-    BoxLineSegIntersect,                    // 82BA9478  BoxVolume::LineSegIntersect
-    FoldedReleaseEmptyBody,                  // 82AD5078
-    "BoxVolume",
-    0
-};
-
-const Volume::VTable gVolumeHandler_82F91894 =                  // type 5 CYLINDER
-{
-    E_VOLUMETYPE_CYLINDER,
-    CylinderGetBBox,                        // 82BAD490  CylinderVolume::GetBBox
-    CylinderGetBBoxDiag,                    // 82BAC7B8  CylinderVolume::GetBBoxDiag
-    FoldedGetIntervalReturnsTrue,           // 82BAC980
-    CylinderGetMaximumFeature,              // 82BAC988  CylinderVolume::GetMaximumFeature
-    // ✅ UNPARKED 2026-08-19 (wave Q6 cluster C4). The wave-Q5 park was purely an OWNERSHIP
-    // park -- "the body's home is CylinderVolume.cpp, which is READ-ONLY for this cluster" --
-    // and this cluster owns that file, so the 98 instructions were reconstructed there from
-    // the asm wave Q5 had already dumped. (The OLDER park reason, still standing in
-    // CylinderVolume.hpp until today, claimed the GP VolumeMethods table was un-recovered
-    // rodata. That was stale in the helpful direction: the table has been homed as
-    // g_aGPVolumeMethods since 2026-08-18, and its CYLINDER row was re-dumped this cluster.)
-    CylinderCreateGPInstance,               // 82BAC7F8  CylinderVolume::CreateGPInstance
-    // ✅ UNPARKED 2026-09-28 (owner's list, lane L2 CAMCOLLIDE, stage (c)). The park read: the
-    // eight-instruction dispatcher (`mfFatness + afFatness == 0.0f`, flt_82001CC0 == 0x00000000:
-    // ThinLineSegIntersect @0x82BADCE0, anything else FatLineSegIntersect @0x82BAEB10) had no
-    // bodies to tail-call. All three are in LineSegIntersect.cpp now, checked against the ARTIST
-    // words run on emu64 (tests/run_l2_cylinder_line.py). Until this slot was bound, a camera line
-    // test that staged a cylinder hit VolumeLineQuery::GetIntersections' LOUD trap and the
-    // cylinder was not tested.
-    CylinderLineSegIntersect,               // 82BAF688  CylinderVolume::LineSegIntersect
-    FoldedReleaseEmptyBody,                  // 82AD5078
-    "CylinderVolume",
-    0
-};
-
-const Volume::VTable gVolumeHandler_82F919D0 =                  // type 6 AGGREGATE
-{
-    E_VOLUMETYPE_AGGREGATE,
-    AggregateGetBBox,                       // 82BBBA10  AggregateVolume::GetBBox
-    AggregateGetBBoxDiag,                   // 82BBBB58  AggregateVolume::GetBBoxDiag
-    0,                                      // getInterval -- GENUINELY 0 in the image
-    FoldedGetMaximumFeatureReturnsFalse,    // 82B0F1B8  ICF-folded `li r3,0 ; blr`
-    FoldedCreateGPInstanceReturnsFalse,     // 82B0F1B8  the SAME folded body, second slot
-    0,                                      // lineSegIntersect -- GENUINELY 0 in the image
-    FoldedReleaseEmptyBody,                  // 82AD5078
-    "AggregateVolume",
-    0
-};
-
-// ===========================================================================================
-// PER-CLASS LAYOUT PINS -- what makes the four reinterpret_casts above sound.
-//
-// Every one of these classes models the same 96-byte serialised record; each header already
-// pins its own members, and these six lines pin the ONE fact the adapters depend on: that the
-// record is 96 bytes wide in every spelling, so a `const Volume*` handed to any adapter
-// addresses the same bytes the target class expects. (CapsuleVolume / CylinderVolume /
-// TriangleVolume also pin their +0x40 / +0x44 / +0x50 / +0x5C members in their own headers.)
-// ===========================================================================================
-CGS_STATIC_ASSERT((sizeof(Volume)          == 96), "rw::collision::Volume console stride");
-CGS_STATIC_ASSERT((sizeof(BoxVolume)       == 96), "BoxVolume");
-CGS_STATIC_ASSERT((sizeof(SphereVolume)    == 96), "SphereVolume");
-CGS_STATIC_ASSERT((sizeof(CapsuleVolume)   == 96), "CapsuleVolume");
-CGS_STATIC_ASSERT((sizeof(CylinderVolume)  == 96), "CylinderVolume");
-CGS_STATIC_ASSERT((sizeof(TriangleVolume)  == 96), "TriangleVolume");
-CGS_STATIC_ASSERT((sizeof(AggregateVolume) == 96), "AggregateVolume");
-
-} // namespace collision
-} // namespace rw
+} }

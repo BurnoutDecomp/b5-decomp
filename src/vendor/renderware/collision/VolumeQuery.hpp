@@ -146,7 +146,6 @@ namespace collision
         const math::vpu::Matrix44Affine*  m_queryMtx;                  // +0x3C
         VolumeBBoxQuery*                  m_bBoxQueryAtoB;             // +0x40 (= this+0x50)
         VolumeBBoxQuery*                  m_bBoxQueryBtoA;             // +0x44
-        u8                                maPad48[8];                  // +0x48..+0x4F
         // +0x50 onward: the embedded VolumeBBoxQuery sub-queries + report buffer the
         // ctor partitions out of the backing store (opaque to this header; reached
         // via m_bBoxQueryAtoB/BtoA and m_volRefPairBuffer above).
@@ -215,7 +214,7 @@ namespace collision
         // (0x828C8F34..0x828C8F8C). Primes one query -- the inputs, the segment, the fatness -- and resets the walk.
         // HOST SPELLING: the DWARF's two `const Vector3&` points are the 16-byte rows the members are.
         void InitQuery(const Volume** lppInputVols, const math::vpu::Matrix44Affine** lppInputMats, u32 luNumInputs,
-                       const VolRef::Vec4& arPt1, const VolRef::Vec4& arPt2, f32 afFatness)
+                       const rw::math::vpu::Vector3& arPt1, const rw::math::vpu::Vector3& arPt2, f32 afFatness)
         {
             m_inputVols              = lppInputVols;           // +0x00
             m_inputMats              = lppInputMats;           // +0x04
@@ -223,7 +222,7 @@ namespace collision
             m_currInput              = 0;                      // +0x0C
             m_stackNext              = 0;                      // +0xD0
             m_primNext               = 0;                      // +0xDC
-            m_currVRef.muVolumePtr   = 0;                      // +0x50
+            m_currVRef.volume   = 0;                      // +0x50
             m_aggIndex               = 0;                      // +0xF0
             m_curSpatialMapQuery     = 0;                      // +0xF8
             m_resCount               = 0;                      // +0x14
@@ -242,7 +241,7 @@ namespace collision
         // Every input consumed, no current volume, nothing stacked, nothing staged.
         s32 Finished()
         {
-            return (m_currInput == m_numInputs && m_currVRef.muVolumePtr == 0 && m_stackNext == 0 &&
+            return (m_currInput == m_numInputs && m_currVRef.volume == 0 && m_stackNext == 0 &&
                     m_primNext == 0) ? 1 : 0;
         }
 
@@ -254,8 +253,8 @@ namespace collision
         u32                               m_resCount;            // +0x14
         u32                               m_resMax;              // +0x18
         u32                               m_resBufferSize;       // +0x1C
-        CGS_ALIGN(16) VolRef::Vec4          m_pt1;                 // +0x20  (DWARF Vector3)
-        CGS_ALIGN(16) VolRef::Vec4          m_pt2;                 // +0x30  (DWARF Vector3)
+        CGS_ALIGN(16) rw::math::vpu::Vector3          m_pt1;                 // +0x20  (DWARF Vector3)
+        CGS_ALIGN(16) rw::math::vpu::Vector3          m_pt2;                 // +0x30  (DWARF Vector3)
         f32                               m_fatness;             // +0x40
         VolRef*                           m_stackVRefBuffer;     // +0x44
         VolRef                            m_currVRef;            // +0x50  (0x80)
@@ -276,12 +275,6 @@ namespace collision
         u8                                m_numTagBits;          // +0x108
     };
 
-    // NOT X360: host VolumeLineQuery width (2026-09-25, crash parity FX-FOLLOWUPS). The HOST backing-store size
-    // of a VolumeLineQuery built for 100 volumes / 100 results -- FineIntersectionTestModule::Construct's
-    // (0x828B0CB8 `li r5, 0x64` / 0x828B0CBC `li r4, 0x64`) -- for the CgsSceneManager consumer that sizes its
-    // buffer at compile time and must not include VolumeQueryHostLayout.hpp. The console total is 0x10450 (in
-    // the module's 67584-byte buffer); only the header differs (host 0x130, console 0x110). VolumeQuery.cpp
-    // static_asserts this value against VolumeLineQueryResourceSize(100, 100).
-    static const u32 KU_VOLUME_LINE_QUERY_HOST_SIZE_R100 = 0x10470;
+
 }
 }

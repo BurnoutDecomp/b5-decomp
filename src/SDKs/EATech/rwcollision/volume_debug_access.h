@@ -1,54 +1,7 @@
 #pragma once
 
-// ============================================================================
-// b5-decomp/src/SDKs/EATech/rwcollision/volume_debug_access.h
-//
-// Minimal typed view over an rw::collision::Volume for the debug renderers (the prop
-// debug overlay's Draw) and for the two rwcollision dispatch inlines the game calls
-// (GetBBox / GetBBoxDiag). rwcollision is NOT present in the PC libs (it must be
-// decompiled from the console build), and the Volume payload is an external EATech
-// *serialised* collision record (a fixed 96-byte blob -- see
-// SDKs/EATech/rwcollision/volume.cpp), so its fields are addressed by their fixed byte
-// offsets in the blob, which is the documented exception to the no-offset rule for
-// serialised / SPU data.
-//
-// ---------------------------------------------------------------------------
-// LAYOUT -- console offsets, all MEASURED unless marked otherwise. The canonical SDK
-// declaration is in the leaked EARenderWare header
-// references/Feb-2007/BrnEntityModuleUnity/EARenderWare/stable/platform/include/
-// native/ps3-ppu-gcc/rwccore.h:1487-1614 (`class Volume`), and the DecFIGS DWARF
-// prints the same member sequence at
-// references/DecFIGS/dwarfdump/SDKs/EATech/include/cmn/rw/collision/volume.h:1304-1554:
-//
-//   transform  @ +0x00 (0)   Matrix44Affine, 64 bytes  (rwccore.h:1599 / volume.h:1525)
-//   vTable     @ +0x40 (64)  Volume::VTable*           (rwccore.h:1600 / volume.h:1530)
-//   <union>    @ +0x44 (68)  {aggregate|sphere|capsule|triangle|box|cylinder}SpecificData
-//                            -- 12 bytes; the BOX arm is the half-extents x/y/z that the
-//                            debug overlay reads, and the x lane doubles as the
-//                            capsule/cylinder half-height  (volume.h:1534-1541)
-//   radius     @ +0x50 (80)  float32_t                 (volume.h:1545)
-//   groupID    @ +0x54 (84)  uint32_t                  (volume.h:1548)
-//   surfaceID  @ +0x58 (88)  uint32_t                  (volume.h:1551)
-//   m_flags    @ +0x5C (92)  uint32_t                  (volume.h:1554)  -> sizeof == 96
-//
-// The +0x40/+0x44/+0x50 offsets are independently pinned in the X360 asm by
-// PropEntityDebugComponent::Draw @ 0x822A9770, and sizeof(Volume)==96 is pinned a second
-// time by the 96-byte indexing stride of PropTypeData's volume run
-// (PropManager::GetPropInertia @0x82612640: `slwi r11,r30,1 ; add r11,r30,r11 ;
-// slwi r11,r11,5` == i*96) and static_asserted in
-// SharedClasses/Physics/Props/BrnPhysicsPropTypeData.h:201.
-//
-// ⚠️ HOST-vs-CONSOLE HAZARD -- RESOLVED 2026-08-18 (wave Q5 integration). The record must
-// stay 96 bytes on the host (the serialised stride above), but the vTable slot at +0x40
-// holds a POINTER on the console, which is 8 bytes on x64 and 4 on the console; a host
-// pointer written into +0x40 would overlap +0x44..+0x47 -- the box half-extent X lane
-// (and FixableVolume::FixUp used to do exactly that through a `void**`). THE HOST
-// REPRESENTATION IS THEREFORE THE TYPE ENUM: +0x40 keeps the 4-byte on-disk VolumeType
-// (1..6) for the whole lifetime of the record, FixUp/FixDown only validate it, and every
-// reader (Volume::GetVTable() below, FixableVolume.cpp, the vendor narrow-phase TUs'
-// TU-local descriptor views, the four *Volume::Initialize bodies) recovers the console's
-// pointer as gVolumeVTable[type]. Derivation: scratchpad/waveQ5/rwc3.owner.md section 7.
-// ============================================================================
+// Native rwcollision Volume declaration. The runtime descriptor is a pointer;
+// serialized FixableVolume data holds its type word until FixUp.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3, Matrix44Affine
@@ -62,6 +15,10 @@ namespace rw
         // does not need the definition -- deliberately, so that including this header does
         // not drag AABBox.hpp's math vocabulary into PropTypeData's many includers.
         class AABBox;
+        struct Interval;
+        struct Feature;
+        struct GPInstance;
+        struct VolumeLineSegIntersectResult;
 
         // RenderWare boolean. Identical typedef to the ones already in
         // vendor/renderware/collision/AggregateVolume.hpp:46 and FeatureEdge.hpp:60 -- an
@@ -79,41 +36,28 @@ namespace rw
         // 1/2/4/5 only; its default branch asserts "Collision volume very confused about
         // what type it is".
         //
-        // ⚠️ E_VOLUMETYPE_BBOX is this tree's spelling of the SDK's VOLUMETYPEBOX (4); the
-        // name is kept because BrnPropEntityDebugComponent.cpp already switches on it.
-        // ⚠️ The unrelated 128-byte placeholder enum in
-        // vendor/renderware/collision/CollisionVolume.hpp:28-32 puts E_VOLUMETYPE_BOX at
-        // 2 -- which is CAPSULE here. That is a separate pre-existing fork (see the class
-        // comment below); the two headers are never co-included, and the values in THIS
-        // enum are the measured ones.
-        enum EVolumeType
+        enum VolumeType
         {
-            E_VOLUMETYPE_SPHERE          = 1,   // descriptor 0x82F91740, leading word 1
-            E_VOLUMETYPE_CAPSULE         = 2,   // descriptor 0x82F918C0, leading word 2
-            E_VOLUMETYPE_TRIANGLE        = 3,   // descriptor 0x82F919A4, leading word 3
-            E_VOLUMETYPE_BBOX            = 4,   // descriptor 0x82F9176C, leading word 4
-            E_VOLUMETYPE_CYLINDER        = 5,   // descriptor 0x82F91894, leading word 5
-            E_VOLUMETYPE_AGGREGATE       = 6,   // descriptor 0x82F919D0, leading word 6
-            E_VOLUMETYPE_NUMINTERNALTYPES = 7   // == the 7-entry vTableArray in volume.cpp
+            VOLUMETYPENULL = 0,
+            VOLUMETYPESPHERE          = 1,   // descriptor 0x82F91740, leading word 1
+            VOLUMETYPECAPSULE         = 2,   // descriptor 0x82F918C0, leading word 2
+            VOLUMETYPETRIANGLE        = 3,   // descriptor 0x82F919A4, leading word 3
+            VOLUMETYPEBOX            = 4,   // descriptor 0x82F9176C, leading word 4
+            VOLUMETYPECYLINDER        = 5,   // descriptor 0x82F91894, leading word 5
+            VOLUMETYPEAGGREGATE       = 6,   // descriptor 0x82F919D0, leading word 6
+            VOLUMETYPENUMINTERNALTYPES = 7,
+            VOLUMETYPEFORCEENUMSIZEINT = 2147483647
         };
 
-        // Typed accessor over the serialised 96-byte volume blob. The named getters read
-        // the fixed-offset fields (documented serialised-data exception).
-        //
-        // ⚠️ THIS CLASS MUST NOT GAIN A VIRTUAL FUNCTION. sizeof(Volume) == 96 is
-        // static_asserted (BrnPhysicsPropTypeData.h:201) and is the indexing stride of the
-        // serialised volume run; a vptr would shift every field. The dispatch below is NOT
-        // C++ virtual dispatch -- it goes through the rwcollision per-TYPE descriptor
-        // pointer stored in the record at +0x40.
-        //
-        // ⚠️ FORK, REPORTED NOT RESOLVED: a second, unrelated `rw::collision::Volume`
-        // exists at vendor/renderware/collision/CollisionVolume.hpp:36 (a 128-byte
-        // placeholder image with its own EVolumeType). THIS class -- the 96-byte
-        // serialised record -- is the one PropTypeData/PropPartTypeData hold
-        // (BrnPhysicsPropTypeData.h:8/:101/:177) and the one the DWARF names as
-        // `VolRef::Volume` in GetPropInertia/GetPartInertia's locals
-        // (dwarfdump/.../BrnPropManager.cpp:2692/:2755, where volume.h:39 spells
-        // `typedef rw::collision::Volume Volume`). The two are never co-included today.
+        // The type-specific members overlay the same twelve bytes.
+        struct Aggregate;
+        struct SphereSpecificData { void* mpNothing; };
+        struct CapsuleSpecificData { f32 mfHalfHeight; };
+        struct TriangleSpecificData { f32 mfEdgeCos0, mfEdgeCos1, mfEdgeCos2; };
+        struct BoxSpecificData { f32 mfHx, mfHy, mfHz; };
+        struct CylinderSpecificData { f32 mfHalfHeight, mfInnerRadius; };
+        struct AggregateSpecificData { Aggregate* mpAggregate; };
+
         class Volume
         {
         public:
@@ -183,107 +127,49 @@ namespace rw
             // -----------------------------------------------------------------------
             struct VTable;
 
-            // rwccore.h:1490-1505 spells the slots as POINTERS TO MEMBER FUNCTION of
-            // Volume. That spelling is not usable across this fork: the four primitive
-            // classes with a home in the tree (Capsule/Cylinder/Triangle/Aggregate) are
-            // standalone, not `: public Volume`, so `&X::GetBBox` can never convert to a
-            // Volume pointer-to-member. The slots are therefore FREE function pointers
-            // with an explicit leading `const Volume*` -- the same spelling the three
-            // TU-local descriptor views in vendor/renderware/collision already use, and
-            // the one vendor/renderware/collision/VolumeVTables.cpp writes.
-            //
-            // MEASURED, not argued (scratchpad/waveQ5/probe_vtbind/measure_layout.cpp,
-            // STATUS=pass with the canonical ship flags): MSVC x64 gives a
-            // pointer-to-member of a single-inheritance, non-polymorphic class size 8, so
-            // the previous member-pointer spelling of this struct and the free-function
-            // spelling below are byte-for-byte the same record. Changing it moves nothing.
-            typedef RwBool  (*GetBBoxFn)(const Volume* lpVolume,
-                                         const Matrix44Affine* lpTransform,
-                                         RwBool lbTight, AABBox& lrBBox);
-            typedef Vector3 (*GetBBoxDiagFn)(const Volume* lpVolume);
-
-            // The four slots whose parameter types (Interval, Feature, GPInstance,
-            // VolumeLineSegIntersectResult) cannot be NAMED in this half: their headers
-            // reach the EATech `rw::math::vpu::Vector3` while this one reaches
-            // BrnCommonTypes.h's, and the two are a hard C2011 in one TU. They are BOUND
-            // in VolumeVTables.cpp to real bodies; here they are carried as a generic
-            // function pointer so the slot ORDER stays honest and nothing on this side can
-            // call them with the wrong prototype by accident. rwccore.h:1493-1505 has the
-            // canonical signatures, and that TU's banner documents the one place they are
-            // NOT uniform (getInterval / getMaximumFeature take the direction by value for
-            // BOX and TRIANGLE and by reference for the other four -- a console fact).
-            typedef void (*OpaqueSlotFn)();
+            typedef RwBool (Volume::*GetBBoxFn)(const Matrix44Affine*, RwBool, AABBox&) const;
+            typedef Vector3 (Volume::*GetBBoxDiagFn)() const;
+            typedef RwBool (Volume::*GetIntervalFn)(const Vector3&, Interval&) const;
+            typedef RwBool (Volume::*GetMaximumFeatureFn)(RwBool, const Vector3&, Feature&) const;
+            typedef RwBool (Volume::*CreateGPInstanceFn)(GPInstance&, const Matrix44Affine*) const;
+            typedef RwBool (Volume::*LineSegIntersectFn)(const Vector3&, const Vector3&,
+                const Matrix44Affine*, VolumeLineSegIntersectResult&, const f32) const;
+            typedef void (Volume::*ReleaseFn)();
 
             struct VTable
             {
-                u32           muTypeID;               // +0x00  DWARF `typeID`
+                VolumeType    muTypeID;               // +0x00  DWARF `typeID`
                 GetBBoxFn     mpfnGetBBox;            // +0x04  DWARF `getBBox`
                 GetBBoxDiagFn mpfnGetBBoxDiag;        // +0x08  DWARF `getBBoxDiag`
-                OpaqueSlotFn  mpfnGetInterval;        // +0x0C  DWARF `getInterval`
-                OpaqueSlotFn  mpfnGetMaximumFeature;  // +0x10  DWARF `getMaximumFeature`
-                OpaqueSlotFn  mpfnCreateGPInstance;   // +0x14  DWARF `createGPInstance`
-                OpaqueSlotFn  mpfnLineSegIntersect;   // +0x18  DWARF `lineSegIntersect`
-                OpaqueSlotFn  mpfnRelease;            // +0x1C  DWARF `release`
+                GetIntervalFn mpfnGetInterval;        // +0x0C  DWARF `getInterval`
+                GetMaximumFeatureFn mpfnGetMaximumFeature;  // +0x10  DWARF `getMaximumFeature`
+                CreateGPInstanceFn mpfnCreateGPInstance;   // +0x14  DWARF `createGPInstance`
+                LineSegIntersectFn mpfnLineSegIntersect;   // +0x18  DWARF `lineSegIntersect`
+                ReleaseFn mpfnRelease;            // +0x1C  DWARF `release`
                 const char*   mpcName;                // +0x20  DWARF `name` (const RwChar*)
                 u32           muFlags;                // +0x24  DWARF `flags`
             };
 
-            // `Volume::vTable` @ +0x40 (rwccore.h:1600). Read by byte offset for the same
-            // serialised-record reason as the getters below.
-            //
-            // HOST REPRESENTATION (2026-08-18, wave Q5 integration -- the "honest host
-            // design" of scratchpad/waveQ5/rwc3.owner.md section 7): the console keeps a
-            // 4-byte descriptor POINTER in this slot (FixableVolume::FixUp @0x828A87A0
-            // swaps the on-disk type enum for gVolumeVTable[enum]; FixDown puts the enum
-            // back). An x64 pointer is 8 bytes and would overlap +0x44..+0x47 (the box
-            // half-extent X lane), and the record cannot grow (96-byte serialised stride).
-            // So on the host the slot ALWAYS holds the 4-byte type enum (1..6) and every
-            // reader indexes gVolumeVTable[] with it -- the same descriptor the console
-            // pointer would have named. FixUp/FixDown are therefore validation-only on
-            // the host. Defined below the class, after gVolumeVTable's declaration.
-            const VTable* GetVTable() const;
 
             // rwccore.h:1616-1621 `return vTable->typeID;`. The SDK returns
             // rw::collision::VolumeType; the u32 spelling is kept because
             // BrnPropEntityDebugComponent.cpp already switches on the value as a word.
             // Behaviour is unchanged from the previous `**(u32**)(this+0x40)` form -- the
             // descriptor's leading word IS typeID (measured, table above).
-            u32 GetType() const
+            VolumeType GetType() const
             {
-                return GetVTable()->muTypeID;
+                return mpVTable->muTypeID;
             }
 
-            // Box half-extents (x/y/z); x lane doubles as the capsule/cylinder half-height.
-            // The union arm at console +0x44 (volume.h:1534-1540).
-            const Vector3& GetExtent() const
+            // The primitive-specific data is available through its union arm.
+            const f32& GetRadius() const
             {
-                return *reinterpret_cast<const Vector3*>(maPayload + 0x44);
+                return mfRadius;
             }
 
-            // Sphere / capsule / cylinder radius -- `float32_t radius` @ +0x50
-            // (volume.h:1545).
-            f32 GetRadius() const
-            {
-                return *reinterpret_cast<const f32*>(maPayload + 0x50);
-            }
-
-            // rwccore.h:1701-1706 `return &transform;` -- the volume-local transform IS the
-            // record's first 64 bytes (DWARF volume.h:1447/:1525). Corroborated by rung 1:
-            // the GetBBox call sites pass the VOLUME POINTER ITSELF as the `tm` argument
-            // (PropEntityModule::InitializePropPhysicsData @0x822DA840 emits
-            // `(*(*(volume+64)+4))(volume, volume, 1, &aabb)`), which is only meaningful if
-            // &transform == volume.
-            //
-            // ⚠️ The SDK (and the DWARF) return a POINTER here, not a reference; the
-            // reference spelling is this tree's and is kept because
-            // BrnPropEntityDebugComponent.cpp:323/:354 already multiplies the result.
-            // ⚠️ The previous comment on this line said the transform sits at +0x30. That
-            // was wrong: +0x30 is the wAxis (translation) ROW of a 64-byte Matrix44Affine
-            // whose base is +0x00. Corrected 2026-08-18 (waveQ2 rwcollision owner).
-            const Matrix44Affine& GetRelativeTransform() const
-            {
-                return *reinterpret_cast<const Matrix44Affine*>(maPayload);
-            }
+            // volume.h:1447/1450 return the actual transform address.
+            const Matrix44Affine* GetRelativeTransform() const { return &mTransform; }
+            Matrix44Affine* GetRelativeTransform() { return &mTransform; }
 
             // -----------------------------------------------------------------------
             // rwccore.h:1713-1718 -- the SDK's own one-line inline:
@@ -308,26 +194,25 @@ namespace rw
             // -----------------------------------------------------------------------
             RwBool GetBBox(const Matrix44Affine* lpTransform, RwBool lbTight, AABBox& lrBBox) const
             {
-                return GetVTable()->mpfnGetBBox(this, lpTransform, lbTight, lrBBox);
+                return (this->*(mpVTable->mpfnGetBBox))(lpTransform, lbTight, lrBBox);
             }
 
-            // rwccore.h:1719-1723 / DWARF volume.h:1457. Same dispatch, descriptor slot
-            // +0x08. No caller in the reconstructed tree yet; landed with GetBBox because
-            // the descriptor slot it uses is already typed above.
-            //
-            // ⚠️ THE ONE SLOT WHOSE TWO SPELLINGS DIFFER IN RETURN TYPE, NOT JUST IN
-            // PARAMETER SPELLING. This half returns `Vector3` (== rw::math::vpu::Vector3);
-            // the bodies in vendor/renderware/collision return that directory's `Vec4`.
-            // Both are ONE 16-byte, four-lane row -- MEASURED,
-            // scratchpad/waveQ5/probe_vtbind/measure_vocab.cpp and measure_vocab2.cpp --
-            // and neither is a compiler vector type, so MSVC x64 returns both through the
-            // caller's hidden buffer pointer: the same ABI, lane for lane. The run-time
-            // proof that a diagonal written by the vendor body reads back identically
-            // through this accessor is scratchpad/waveQ5/probe_vtbind/ (built and RUN, not
-            // reasoned about).
+            RwBool CreateGPInstance(GPInstance& instance, const Matrix44Affine* transform) const
+            {
+                return (this->*(mpVTable->mpfnCreateGPInstance))(instance, transform);
+            }
+
+            RwBool LineSegIntersect(const Vector3& start, const Vector3& end,
+                                    const Matrix44Affine* transform,
+                                    VolumeLineSegIntersectResult& result, f32 fatness) const
+            {
+                return (this->*(mpVTable->mpfnLineSegIntersect))(start, end, transform, result, fatness);
+            }
+
+            // The native member return uses the Vector3 ABI.
             Vector3 GetBBoxDiag() const
             {
-                return GetVTable()->mpfnGetBBoxDiag(this);
+                return (this->*(mpVTable->mpfnGetBBoxDiag))();
             }
 
             // -----------------------------------------------------------------------
@@ -358,39 +243,35 @@ namespace rw
             // word; net effect is a 96-byte payload copy.
             Volume& operator=(const Volume& lrSource);
 
-        private:
-            u8 maPayload[96];   // serialised rwcollision volume record (see volume.cpp)
+        public:
+            mutable Matrix44Affine mTransform;
+            VTable* mpVTable;
+            union
+            {
+                SphereSpecificData mSphereData;
+                CapsuleSpecificData mCapsuleData;
+                TriangleSpecificData mTriangleData;
+                BoxSpecificData mBoxData;
+                CylinderSpecificData mCylinderData;
+                AggregateSpecificData mAggregateData;
+            };
+            f32 mfRadius;
+            u32 muGroupID;
+            u32 muSurfaceID;
+            mutable u32 muFlags;
         };
 
-        // ---------------------------------------------------------------------------
-        // The shared per-type descriptor table -- X360 dword_8327EEE0..dword_8327EEF8,
-        // seven consecutive words, filled by Volume::InitializeVTable @0x82BB03A8 and
-        // read by FixableVolume::FixUp, SphereVolume::Initialize @0x82BA84E8,
-        // BoxVolume::BoxVolume @0x82BAA0F0, CylinderVolume::Initialize @0x82BAD3F0,
-        // TriangleVolume::Initialize @0x82BB0680 and the two resource FixUps.
-        //
-        // The element type is the DWARF's: `rw::collision::Volume::VTable *[7]
-        // vTableArray` (volume.h:1521; SDK rwccore.h:1597 `static VTable *vTableArray[]`).
-        // It used to be `void*[7]`, which threw the type away and forced a
-        // `const_cast<u8*>` at every fill site. Declared here (2026-08-18, waveQ5 rwc3)
-        // so consumers can stop re-declaring it privately.
-        //
-        // ⚠️ CHANGING THE ELEMENT TYPE CHANGES THE MANGLED SYMBOL -- MEASURED with
-        // dumpbin: `void*[7]`  -> ?gVolumeVTable@collision@rw@@3PAPEAXA
-        //          `VTable*[7]`-> ?gVolumeVTable@collision@rw@@3PAPEAUVTable@Volume@12@A.
-        // The vendor narrow-phase TUs (vendor/renderware/collision/CollisionVolume.hpp)
-        // declare the SAME symbol with their own `struct Volume { struct VTable; }` --
-        // the leaf `struct VTable` under a scope named `Volume` mangles identically, so
-        // both halves of the tree bind to the one table volume.cpp fills.
-        // ---------------------------------------------------------------------------
-        extern Volume::VTable* gVolumeVTable[E_VOLUMETYPE_NUMINTERNALTYPES];
+        CGS_STATIC_ASSERT((sizeof(Volume::VTable) == 0x28), "Native Volume descriptor size");
+        CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetBBox) == 0x04), "Native Volume GetBBox slot");
+        CGS_STATIC_ASSERT((sizeof(Volume) == 0x60), "Native Volume size");
+        CGS_STATIC_ASSERT((offsetof(Volume, mpVTable) == 0x40), "Native Volume descriptor");
+        CGS_STATIC_ASSERT((offsetof(Volume, mBoxData) == 0x44), "Native Volume data");
+        CGS_STATIC_ASSERT((offsetof(Volume, mfRadius) == 0x50), "Native Volume radius");
+        CGS_STATIC_ASSERT((offsetof(Volume, muFlags) == 0x5c), "Native Volume flags");
 
-        // The +0x40 slot holds the 4-byte VolumeType on the host (see the declaration
-        // in the class); the console's pointer is recovered by indexing the table.
-        inline const Volume::VTable* Volume::GetVTable() const
-        {
-            const u32 luType = *reinterpret_cast<const u32*>(maPayload + 0x40);  // serialised record slot
-            return gVolumeVTable[luType < static_cast<u32>(E_VOLUMETYPE_NUMINTERNALTYPES) ? luType : 0u];
-        }
+        // ARTIST 82BB03A8 fills the seven-entry descriptor registry.
+        extern Volume::VTable* gVolumeVTable[VOLUMETYPENUMINTERNALTYPES];
+
+
     }
 }

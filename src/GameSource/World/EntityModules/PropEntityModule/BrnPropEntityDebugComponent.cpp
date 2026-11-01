@@ -59,7 +59,7 @@ namespace BrnWorld
         // beginning at 0x82C4C270 would splat 1.5 into all four lanes, but its startup registration
         // or execution has not been established. Keep a mutable source shadow and do not assert
         // that the original runtime value is zero.
-        f32 gaInertiaScaleVector[4];
+        CGS_ALIGN(16) f32 gaInertiaScaleVector[4];
         CGS_STATIC_ASSERT((sizeof(gaInertiaScaleVector) == 16), "ARTIST inertia scale is one VMX vector");
 
         // --- de-inlined rwmath helpers (the RwMath:: free functions the X360 folded in) ---
@@ -67,10 +67,8 @@ namespace BrnWorld
         // RwMath::MagnitudeSquared(a - b): the squared distance between two world points.
         inline f32 MagnitudeSquared(const Vector3& lrA, const Vector3& lrB)
         {
-            const f32 lfDx = lrA.x - lrB.x;
-            const f32 lfDy = lrA.y - lrB.y;
-            const f32 lfDz = lrA.z - lrB.z;
-            return (lfDx * lfDx) + (lfDy * lfDy) + (lfDz * lfDz);
+            const __vector4 lDelta = __vsubfp(lrA.mV, lrB.mV);
+            return VecFloat(__vmsum3fp(lDelta, lDelta)).GetFloat();
         }
 
         // RwMath::IsValid(transform): every lane of all four rows is finite (the X360
@@ -81,24 +79,14 @@ namespace BrnWorld
 
         inline Vector3 MakeVector3(f32 lfX, f32 lfY, f32 lfZ)
         {
-            Vector3 lVector;
-            lVector.x = lfX;
-            lVector.y = lfY;
-            lVector.z = lfZ;
-            lVector.w = 0.0f;
-            return lVector;
+            return Vector3(lfX, lfY, lfZ);
         }
 
         // Broadcast a scalar into all four lanes (the VecFloat the inertia helper takes; the
         // X360 splats the volume radius across the register before the call).
         inline VecFloat lBroadcast(f32 lfValue)
         {
-            VecFloat lValue;
-            lValue.x = lfValue;
-            lValue.y = lfValue;
-            lValue.z = lfValue;
-            lValue.w = lfValue;
-            return lValue;
+            return VecFloat(lfValue);
         }
 
     }
@@ -206,7 +194,7 @@ namespace BrnWorld
     {
         switch (lpVolume->GetType())
         {
-            case rw::collision::E_VOLUMETYPE_SPHERE:
+            case rw::collision::VOLUMETYPESPHERE:
             {
                 const Vector3& lrCentre = lTransform.Pos();
                 const f32 lfRadius = lpVolume->GetRadius();
@@ -215,10 +203,10 @@ namespace BrnWorld
             }
             break;
 
-            case rw::collision::E_VOLUMETYPE_CAPSULE:
+            case rw::collision::VOLUMETYPECAPSULE:
             {
                 const f32 lfRadius     = lpVolume->GetRadius();
-                const f32 lfHalfHeight = lpVolume->GetExtent().x;
+                const f32 lfHalfHeight = lpVolume->mCapsuleData.mfHalfHeight;
                 const Vector3 lMin = MakeVector3(-lfRadius, -lfRadius, -lfHalfHeight);
                 const Vector3 lMax = MakeVector3( lfRadius,  lfRadius,  lfHalfHeight);
                 lpDisplay->DrawSolidBox(lMin, lMax, lTransform, rw::RGBA(255, 0, 0, 255));     // -65536  == ARGB 0xFFFF0000
@@ -226,20 +214,20 @@ namespace BrnWorld
             }
             break;
 
-            case rw::collision::E_VOLUMETYPE_BBOX:
+            case rw::collision::VOLUMETYPEBOX:
             {
-                const Vector3& lrExtent = lpVolume->GetExtent();
-                const Vector3 lMin = MakeVector3(-lrExtent.x, -lrExtent.y, -lrExtent.z);
-                const Vector3 lMax = MakeVector3( lrExtent.x,  lrExtent.y,  lrExtent.z);
+                const Vector3 lrExtent(lpVolume->mBoxData.mfHx, lpVolume->mBoxData.mfHy, lpVolume->mBoxData.mfHz);
+                const Vector3 lMin = MakeVector3(-lrExtent.GetX().GetFloat(), -lrExtent.GetY().GetFloat(), -lrExtent.GetZ().GetFloat());
+                const Vector3 lMax = MakeVector3( lrExtent.GetX().GetFloat(),  lrExtent.GetY().GetFloat(),  lrExtent.GetZ().GetFloat());
                 lpDisplay->DrawSolidBox(lMin, lMax, lTransform, rw::RGBA(255, 255, 255, 255)); // -1 == ARGB 0xFFFFFFFF
                 lpDisplay->DrawBox(lMin, lMax, lTransform, rw::RGBA(0, 0, 0, 255));
             }
             break;
 
-            case rw::collision::E_VOLUMETYPE_CYLINDER:
+            case rw::collision::VOLUMETYPECYLINDER:
             {
                 const f32 lfRadius     = lpVolume->GetRadius();
-                const f32 lfHalfHeight = lpVolume->GetExtent().x;
+                const f32 lfHalfHeight = lpVolume->mCylinderData.mfHalfHeight;
                 const Vector3 lMin = MakeVector3(-lfRadius, -lfRadius, -lfHalfHeight);
                 const Vector3 lMax = MakeVector3( lfRadius,  lfRadius,  lfHalfHeight);
                 lpDisplay->DrawSolidBox(lMin, lMax, lTransform, rw::RGBA(0, 255, 0, 255));     // -16711936 == ARGB 0xFF00FF00
@@ -289,7 +277,7 @@ namespace BrnWorld
                     CgsCore::SPrintf(lacLabel, sizeof(lacLabel), "ID: %u", luInstanceId);
                 }
                 const Vector3 lLabelPos = lrTransform.Pos();
-                lpDisplay->DrawText(MakeVector3(lLabelPos.x, lLabelPos.y + 2.0f, lLabelPos.z),
+                lpDisplay->DrawText(MakeVector3(lLabelPos.GetX().GetFloat(), lLabelPos.GetY().GetFloat() + 2.0f, lLabelPos.GetZ().GetFloat()),
                                     (luInstanceId != 0) ? lacLabel : "generated_instance", 16.0f);
 
                 CGS_ASSERT(lpProp->GetState() < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
@@ -327,7 +315,7 @@ namespace BrnWorld
                         for (u32 luVolumeIndex = 0; luVolumeIndex < luPartVolumes; ++luVolumeIndex)
                         {
                             rw::collision::Volume* lpVolume = lrPartGroup.GetCollisionVolume(luVolumeIndex);
-                            Draw(lpVolume, lpDisplay, lpVolume->GetRelativeTransform() * lrPartTransform);
+                            Draw(lpVolume, lpDisplay, *lpVolume->GetRelativeTransform() * lrPartTransform);
                         }
 
                         lpDisplay->DrawHollowSphere(lrPartTransform.Pos(), lrPartGroup.GetBoundingRadius(),
@@ -358,7 +346,7 @@ namespace BrnWorld
                     for (u32 luVolumeIndex = 0; luVolumeIndex < luNumberOfVolumes; ++luVolumeIndex)
                     {
                         rw::collision::Volume* lpVolume = lpType->GetCollisionVolume(luVolumeIndex);
-                        Draw(lpVolume, lpDisplay, lpVolume->GetRelativeTransform() * lrTransform);
+                        Draw(lpVolume, lpDisplay, *lpVolume->GetRelativeTransform() * lrTransform);
                     }
 
                     lpDisplay->DrawHollowSphere(lrTransform.Pos(), lpType->GetBoundingRadius(),
@@ -514,32 +502,24 @@ namespace BrnWorld
                         CGS_ASSERT(IsValid(lpPart->mWorldTransform),
                                    "RwMath::IsValid(lpPartInstance->mWorldTransform)");
 
-                        const u32 luPartVolumes = lpType->GetPartVolumeGroups()[luPartIndex].GetNumberOfVolumes();
-                        for (u32 luVolumeIndex = 0; luVolumeIndex < luPartVolumes; ++luVolumeIndex)
-                        {
-                            rw::collision::Volume* lpVolume = lpType->GetCollisionVolume(luVolumeIndex);
-                            RenderInertiaBox(lpDisplay, lpPart->mWorldTransform,
-                                             lpVolume->GetExtent(), lBroadcast(lpVolume->GetRadius()));
-                        }
+                        const BrnPhysics::Props::PropPartVolumeGroup& lrPart = lpType->GetPartVolumeGroups()[luPartIndex];
+                        RenderInertiaBox(lpDisplay, lpPart->mWorldTransform,
+                                         lrPart.GetInertia(), lBroadcast(lrPart.GetMass()));
                     }
                 }
                 else
                 {
-                    const u32 luNumberOfVolumes = lpType->GetNumberOfVolumes();
-                    for (u32 luVolumeIndex = 0; luVolumeIndex < luNumberOfVolumes; ++luVolumeIndex)
-                    {
-                        rw::collision::Volume* lpVolume = lpType->GetCollisionVolume(luVolumeIndex);
-                        RenderInertiaBox(lpDisplay, lrTransform, lpVolume->GetExtent(), lBroadcast(lpVolume->GetRadius()));
-                    }
+                    RenderInertiaBox(lpDisplay, lrTransform,
+                                     lpType->GetInertia(), lBroadcast(lpType->GetMass()));
                 }
             }
         }
     }
 
     // @ 0x822C54C0. Draw ONE inertia box for a collision volume: from the volume's box extent
-    // (lCentre) and a broadcast scale (lfExtent = the volume radius/mass), compute the three
+    // (lCentre) and a broadcast scale (lfExtent = mass), compute the three
     // principal half-extents of the equivalent solid-box inertia tensor and draw that box (white)
-    // under the prop/part world transform. Called per-volume by RenderInertiaBoxes.
+    // under the prop/part world transform. Called once per prop or part by RenderInertiaBoxes.
     //
     // The X360 body is a pure VMX cascade: it forms a Newton-refined reciprocal of the extent,
     // scales it by lfExtent, then for each axis takes sqrt(K * (sum of the other two lane terms -
@@ -557,26 +537,46 @@ namespace BrnWorld
                                                     Matrix44Affine lTransform, Vector3 lCentre,
                                                     VecFloat lfExtent)
     {
-        // Newton-refined reciprocal of the box extent (vrefp v11 + two vnmsubfp/vmaddfp steps),
-        // scaled by the broadcast lfExtent (vmulfp128 v11, v11, v1).
-        const f32 lfScale = lfExtent.x;
-        const f32 lfRx = (lCentre.x != 0.0f) ? (lfScale / lCentre.x) : 0.0f;
-        const f32 lfRy = (lCentre.y != 0.0f) ? (lfScale / lCentre.y) : 0.0f;
-        const f32 lfRz = (lCentre.z != 0.0f) ? (lfScale / lCentre.z) : 0.0f;
-
-        // Per-axis inertia-diagonal combination (sum of the OTHER two lanes minus this lane),
-        // each scaled by the un-homed constant, then sqrt (vrsqrtefp + Newton), zero-guarded.
-        const f32 lfTermX = (lfRy + lfRz - lfRx) * gaInertiaScaleVector[0]; // v11 = y+z-x
-        const f32 lfTermY = (lfRz + lfRx - lfRy) * gaInertiaScaleVector[1]; // v10 = z+x-y
-        const f32 lfTermZ = (lfRx + lfRy - lfRz) * gaInertiaScaleVector[2]; // v9  = x+y-z
-
-        const f32 lfHx = (lfTermX > 0.0f) ? std::sqrt(lfTermX) : 0.0f;  // vcmpeqfp/vsel zero-guard
-        const f32 lfHy = (lfTermY > 0.0f) ? std::sqrt(lfTermY) : 0.0f;
-        const f32 lfHz = (lfTermZ > 0.0f) ? std::sqrt(lfTermZ) : 0.0f;
-
-        // Box max = the three half-extents (vrlimi128 assembly), min = -max (vslw sign-mask XOR).
-        const Vector3 lMax = MakeVector3( lfHx,  lfHy,  lfHz);
-        const Vector3 lMin = MakeVector3(-lfHx, -lfHy, -lfHz);
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        const __vector4 lZero = __vspltisw(0);
+        const __vector4 lScale = __lvx(gaInertiaScaleVector, 0);
+        __vector4 lReciprocal = __vrefp(lfExtent.mV);
+        __vector4 lResidual = __vnmsubfp(lReciprocal, lfExtent.mV, lOne);
+        lReciprocal = __vmaddfp(lReciprocal, lResidual, lReciprocal);
+        lResidual = __vnmsubfp(lReciprocal, lfExtent.mV, lOne);
+        lReciprocal = __vmaddfp(lReciprocal, lResidual, lReciprocal);
+        const __vector4 lInertia = __vmulfp(lReciprocal, lCentre.mV);
+        const __vector4 lx = __vspltw(lInertia, 0);
+        const __vector4 ly = __vspltw(lInertia, 1);
+        const __vector4 lz = __vspltw(lInertia, 2);
+        const __vector4 tx = __vmulfp(lScale, __vsubfp(__vaddfp(ly, lz), lx));
+        const __vector4 ty = __vmulfp(lScale, __vsubfp(__vaddfp(lz, lx), ly));
+        const __vector4 tz = __vmulfp(lScale, __vsubfp(__vaddfp(lx, ly), lz));
+        __vector4 rx = __vrsqrtefp(tx);
+        __vector4 ry = __vrsqrtefp(ty);
+        __vector4 rz = __vrsqrtefp(tz);
+        __vector4 ex = __vnmsubfp(tx, __vmulfp(rx, rx), lOne);
+        __vector4 ey = __vnmsubfp(ty, __vmulfp(ry, ry), lOne);
+        __vector4 ez = __vnmsubfp(tz, __vmulfp(rz, rz), lOne);
+        rx = __vmaddfp(__vmulfp(rx, lHalf), ex, rx);
+        ry = __vmaddfp(__vmulfp(ry, lHalf), ey, ry);
+        rz = __vmaddfp(__vmulfp(rz, lHalf), ez, rz);
+        ex = __vnmsubfp(tx, __vmulfp(rx, rx), lOne);
+        ey = __vnmsubfp(ty, __vmulfp(ry, ry), lOne);
+        ez = __vnmsubfp(tz, __vmulfp(rz, rz), lOne);
+        rx = __vmaddfp(__vmulfp(rx, lHalf), ex, rx);
+        ry = __vmaddfp(__vmulfp(ry, lHalf), ey, ry);
+        rz = __vmaddfp(__vmulfp(rz, lHalf), ez, rz);
+        rx = __vsel(__vmulfp(tx, rx), lZero, __vcmpeqfp(lZero, tx));
+        ry = __vsel(__vmulfp(ty, ry), lZero, __vcmpeqfp(lZero, ty));
+        rz = __vsel(__vmulfp(tz, rz), lZero, __vcmpeqfp(lZero, tz));
+        __vector4 lMaxVector = __vrlimi(lZero, rx, 8, 0);
+        lMaxVector = __vrlimi(lMaxVector, ry, 4, 0);
+        lMaxVector = __vrlimi(lMaxVector, rz, 2, 0);
+        const __vector4 lOnes = __vspltisw(-1);
+        const Vector3 lMax(lMaxVector);
+        const Vector3 lMin(__vxor(lMaxVector, __vslw(lOnes, lOnes)));
 
         // DrawBox(lpDisplay, min, max, lTransform, white). Colour arg == -1 == ARGB 0xFFFFFFFF.
         lpDisplay->DrawBox(lMin, lMax, lTransform, rw::RGBA(255, 255, 255, 255));
@@ -625,7 +625,7 @@ namespace BrnWorld
                     CgsCore::SPrintf(lacLabel, sizeof(lacLabel), "ID: %u", luInstanceId);
                 }
                 const Vector3 lLabelPos = lrTransform.Pos();
-                lpDisplay->DrawText(MakeVector3(lLabelPos.x, lLabelPos.y + 1.0f, lLabelPos.z),
+                lpDisplay->DrawText(MakeVector3(lLabelPos.GetX().GetFloat(), lLabelPos.GetY().GetFloat() + 1.0f, lLabelPos.GetZ().GetFloat()),
                                     (luInstanceId != 0) ? lacLabel : "generated_instance", 16.0f);
             }
         }
@@ -736,15 +736,15 @@ namespace BrnWorld
     void PropEntityDebugComponent::RenderCellGrid(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
         const f32 lfMapScale = 1000.0f / mfCellGridZoom;
-        const Vector2 lMapDimensions = { lfMapScale, lfMapScale, 0.0f, 0.0f };
+        const Vector2 lMapDimensions(lfMapScale, lfMapScale);
         mMapDimensions = lMapDimensions;
         const Vector2 lVirtualSize = lpDisplay->GetVirtualScreenSize();
-        const Vector2 lScreenSize = { lVirtualSize.x, lVirtualSize.y, 0.0f, 0.0f };
+        const Vector2 lScreenSize = lVirtualSize;
         mScreenSize = lScreenSize;
 
         // The result is unused, but the original range assertions still run.
         BrnPhysics::Props::PropZoneData::GetCellId(
-            mpPropEntityModule->mPlayerPosition.x, mpPropEntityModule->mPlayerPosition.z);
+            mpPropEntityModule->mPlayerPosition.GetX().GetFloat(), mpPropEntityModule->mPlayerPosition.GetZ().GetFloat());
 
         PropZoneManager& lrZoneManager = mpPropEntityModule->mZoneManager;
         PropCellManager& lrCellManager = lrZoneManager.mCellManager;

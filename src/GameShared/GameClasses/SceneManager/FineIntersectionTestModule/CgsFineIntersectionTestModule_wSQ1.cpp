@@ -90,69 +90,30 @@ namespace
     const u8 KU8_UNIT_FLAG_GROUP_ID   = 0x40;
     const u8 KU8_UNIT_FLAG_SURFACE_ID = 0x80;
 
-    typedef rw::collision::Vec4 Lane4;
-
-    inline Lane4 MakeLane4(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    inline Vector3 MakeVectorRow(f32 x,f32 y,f32 z,f32 w)
+    { const __vector4 v={x,y,z,w};return Vector3(v); }
+    inline Vector3 SubVector(const Vector3& a,const Vector3& b)
+    { return Vector3(__vsubfp(a.mV,b.mV)); }
+    inline Vector3 AddVector(const Vector3& a,const Vector3& b)
+    { return Vector3(__vaddfp(a.mV,b.mV)); }
+    inline Vector3 ScaleVector(const Vector3& a,f32 scale)
+    { const __vector4 v={scale,scale,scale,scale};return Vector3(__vmulfp(a.mV,v)); }
+    inline f32 Dot3(const Vector3& a,const Vector3& b)
+    { return __vmsum3fp(a.mV,b.mV).x; }
+    inline Vector3 CrossVector(const Vector3& a,const Vector3& b)
+    { return Vector3(__vpermwi(__vnmsubfp(__vpermwi(a.mV,0x63),b.mV,__vmulfp(a.mV,__vpermwi(b.mV,0x63))),0x63)); }
+    inline f32 RefinedReciprocal(f32 x)
     {
-        Lane4 lOut;
-        lOut.x = lfX; lOut.y = lfY; lOut.z = lfZ; lOut.w = lfW;
-        return lOut;
+        const __vector4 value={x,x,x,x}, one=__vcfsx(__vspltisw(1),0);
+        __vector4 e=__vrefp(value), c=__vnmsubfp(e,value,one);
+        e=__vmaddfp(e,c,e);c=__vnmsubfp(e,value,one);return __vmaddfp(e,c,e).x;
     }
-
-    inline Lane4 ToLane4(const Vector3& lrV) { return MakeLane4(lrV.x, lrV.y, lrV.z, lrV.w); }
-
-    // vsubfp / vaddfp / vmulfp128 by a splat -- all four lanes, w riding along.
-    inline Lane4 SubLane4(const Lane4& lrA, const Lane4& lrB)
+    inline f32 RefinedReciprocalSqrt(f32 x)
     {
-        return MakeLane4(lrA.x - lrB.x, lrA.y - lrB.y, lrA.z - lrB.z, lrA.w - lrB.w);
-    }
-    inline Lane4 AddLane4(const Lane4& lrA, const Lane4& lrB)
-    {
-        return MakeLane4(lrA.x + lrB.x, lrA.y + lrB.y, lrA.z + lrB.z, lrA.w + lrB.w);
-    }
-    inline Lane4 ScaleLane4(const Lane4& lrV, f32 lfScale)
-    {
-        return MakeLane4(lrV.x * lfScale, lrV.y * lfScale, lrV.z * lfScale, lrV.w * lfScale);
-    }
-
-    // vmsum3fp128: the xyz dot product.
-    inline f32 Dot3(const Lane4& lrA, const Lane4& lrB)
-    {
-        return (lrA.x * lrB.x) + (lrA.y * lrB.y) + (lrA.z * lrB.z);
-    }
-
-    // The `vpermwi128 0x63` (yzxw) / vmulfp128 / vnmsubfp idiom: (a * b.yzx - a.yzx * b).yzx,
-    // i.e. a x b. Its w lane is never read (every consumer is a vmsum3fp).
-    inline Lane4 Cross(const Lane4& lrA, const Lane4& lrB)
-    {
-        return MakeLane4(lrA.y * lrB.z - lrA.z * lrB.y,
-                         lrA.z * lrB.x - lrA.x * lrB.z,
-                         lrA.x * lrB.y - lrA.y * lrB.x,
-                         0.0f);
-    }
-
-    // vrefp + two Newton-Raphson steps (`vnmsubfp128 e = 1 - x*d ; vmaddfp x = x*e + x`).
-    inline f32 RefinedReciprocal(f32 lfValue)
-    {
-        f32 lfReciprocal = 1.0f / lfValue;                                   // vrefp (the estimate)
-        for (s32 liStep = 0; liStep < 2; ++liStep)
-        {
-            const f32 lfError = 1.0f - lfReciprocal * lfValue;
-            lfReciprocal      = lfReciprocal * lfError + lfReciprocal;
-        }
-        return lfReciprocal;
-    }
-
-    // vrsqrtefp + two Newton-Raphson steps (`e = 1 - d*(x*x) ; x = (x*0.5)*e + x`).
-    inline f32 RefinedReciprocalSqrt(f32 lfValue)
-    {
-        f32 lfInvSqrt = 1.0f / std::sqrt(lfValue);                          // vrsqrtefp (the estimate)
-        for (s32 liStep = 0; liStep < 2; ++liStep)
-        {
-            const f32 lfError = 1.0f - lfValue * (lfInvSqrt * lfInvSqrt);
-            lfInvSqrt         = (lfInvSqrt * 0.5f) * lfError + lfInvSqrt;
-        }
-        return lfInvSqrt;
+        const __vector4 value={x,x,x,x},one=__vcfsx(__vspltisw(1),0),half=__vcfsx(__vspltisw(1),1);
+        __vector4 e=__vrsqrtefp(value), c=__vnmsubfp(value,__vmulfp(e,e),one);
+        e=__vmaddfp(__vmulfp(e,half),c,e);c=__vnmsubfp(value,__vmulfp(e,e),one);
+        return __vmaddfp(__vmulfp(e,half),c,e).x;
     }
 
     // ---- the cluster vertex decode (the three compression modes) ---------------------------
@@ -160,7 +121,7 @@ namespace
     // documented byte offsets above (the project's serialised-data exception). Each decode
     // fills all four lanes, as the console's 16-byte load does: lane 3 of a compressed vertex
     // is whatever the next bytes decode to, and it rides along unread.
-    Lane4 GetClusterVertex(const rw::collision::ClusteredMeshCluster* lpCluster, u32 luIndex, f32 lfGranularity)
+    Vector3 GetClusterVertex(const rw::collision::ClusteredMeshCluster* lpCluster, u32 luIndex, f32 lfGranularity)
     {
         const u8* lpClusterBytes = reinterpret_cast<const u8*>(lpCluster);
         f32 lafLanes[4];
@@ -194,7 +155,7 @@ namespace
             // Uncompressed: aligned float rows, vertex i at cluster + 16 * (i + 1).
             std::memcpy(lafLanes, lpClusterBytes + 16u * (luIndex + 1u), sizeof(lafLanes));
         }
-        return MakeLane4(lafLanes[0], lafLanes[1], lafLanes[2], lafLanes[3]);
+        return MakeVectorRow(lafLanes[0], lafLanes[1], lafLanes[2], lafLanes[3]);
     }
 
     // ---- the single-sided line-triangle test -------------------------------------------------
@@ -204,13 +165,13 @@ namespace
     // (> 1e-8: back faces and edge-on triangles miss). The `vcmpgefp` lower bounds and the
     // `vnot(vcmpgtfp)` upper bounds are kept apart because they disagree on a NaN.
     // On a hit, lrHit = lrStart + lrDelta * t.
-    bool IntersectLineTriangle(const Lane4& lrStart, const Lane4& lrDelta,
-                               const Lane4& lrP0, const Lane4& lrEdge1, const Lane4& lrEdge2,
-                               Lane4& lrHit)
+    bool IntersectLineTriangle(const Vector3& lrStart, const Vector3& lrDelta,
+                               const Vector3& lrP0, const Vector3& lrEdge1, const Vector3& lrEdge2,
+                               Vector3& lrHit)
     {
-        const Lane4 lToStart = SubLane4(lrStart, lrP0);
-        const Lane4 lP       = Cross(lrDelta, lrEdge2);
-        const Lane4 lQ       = Cross(lToStart, lrEdge1);
+        const Vector3 lToStart = SubVector(lrStart, lrP0);
+        const Vector3 lP       = CrossVector(lrDelta, lrEdge2);
+        const Vector3 lQ       = CrossVector(lToStart, lrEdge1);
 
         const f32 lfDet  = Dot3(lrEdge1, lP);
         const f32 lfUDet = Dot3(lToStart, lP);
@@ -231,7 +192,8 @@ namespace
         }
 
         const f32 lfT = lfTDet * RefinedReciprocal(lfDet);
-        lrHit = AddLane4(lrStart, ScaleLane4(lrDelta, lfT));               // vmaddcfp128
+        const __vector4 t={lfT,lfT,lfT,lfT};
+        lrHit.mV = __vmaddfp(lrDelta.mV,t,lrStart.mV);               // vmaddcfp128
         return true;
     }
 
@@ -256,14 +218,13 @@ namespace
                            const rw::collision::KdTreeLineQuery::NodeStackEntry& lrEntry)
     {
         const rw::collision::KdTree::BranchNode* lpaBranchNodes =
-            reinterpret_cast<const rw::collision::KdTree::BranchNode*>(
-                static_cast<uintptr_t>(lrQuery.mpKdTree->muBranchNodes));
+            lrQuery.mpKdTree->mpBranchNodes;
         const rw::collision::KdTree::BranchNode& lrNode = lpaBranchNodes[lrEntry.muNode1];
 
         const u32 luAxis    = lrNode.muAxis;
-        const f32 lfPad     = (&lrQuery.mClipper.mPadExtent.x)[luAxis];
-        const f32 lfClipMin = (&lrQuery.mClipper.mClipMin.x)[luAxis];
-        const f32 lfRecip   = (&lrQuery.mClipper.mRecipSpan.x)[luAxis];
+        const f32 lfPad     = (&lrQuery.mClipper.m_padding.mV.x)[luAxis];
+        const f32 lfClipMin = (&lrQuery.mClipper.m_origin.mV.x)[luAxis];
+        const f32 lfRecip   = (&lrQuery.mClipper.m_recip.mV.x)[luAxis];
 
         f32 lafSplit[2];
         lafSplit[0] = ((lrNode.mafExtents[0] + lfPad) - lfClipMin) * lfRecip;
@@ -323,7 +284,7 @@ namespace
     // One clustered-mesh hit, recorded.
     void RecordClusteredMeshHit(const rw::collision::ClusteredMesh*        lpMesh,
                                 const rw::collision::ClusteredMeshCluster* lpCluster,
-                                u32 luUnitOffset, const Lane4& lrHit,
+                                u32 luUnitOffset, const Vector3& lrHit,
                                 const Vector3& lrLineStart, const Vector3& lrLineEnd,
                                 s32 liVolumeInstance, u16 lu16EntityIndex,
                                 FineIntersectionTestIO::OutputBuffer::LineTestIntersectionArray* lpIntersections,
@@ -338,26 +299,20 @@ namespace
         u32 luSurfaceId = 0;
         lpCluster->GetGroupAndSurfaceId(static_cast<int>(luUnitOffset), &lInfo, &luGroupId, &luSurfaceId);
 
-        const Lane4 lStart = ToLane4(lrLineStart);
-        const Lane4 lEnd   = ToLane4(lrLineEnd);
+        const Vector3 lStart = lrLineStart;
+        const Vector3 lEnd   = lrLineEnd;
 
-        const Lane4 lForward = SubLane4(lEnd, lStart);
-        const Lane4 lUnitForward = ScaleLane4(lForward, RefinedReciprocalSqrt(Dot3(lForward, lForward)));
-        const Lane4 lBackward = SubLane4(lStart, lEnd);
-        const Lane4 lUnitBackward = ScaleLane4(lBackward, RefinedReciprocalSqrt(Dot3(lBackward, lBackward)));
+        const Vector3 lForward = SubVector(lEnd, lStart);
+        const Vector3 lUnitForward = ScaleVector(lForward, RefinedReciprocalSqrt(Dot3(lForward, lForward)));
+        const Vector3 lBackward = SubVector(lStart, lEnd);
+        const Vector3 lUnitBackward = ScaleVector(lBackward, RefinedReciprocalSqrt(Dot3(lBackward, lBackward)));
 
         LineTestIntersection lIntersection;
-        lIntersection.mPosition.x = lrHit.x;
-        lIntersection.mPosition.y = lrHit.y;
-        lIntersection.mPosition.z = lrHit.z;
-        lIntersection.mPosition.w = lrHit.w;
-        lIntersection.mNormal.x = lUnitBackward.x;
-        lIntersection.mNormal.y = lUnitBackward.y;
-        lIntersection.mNormal.z = lUnitBackward.z;
-        lIntersection.mNormal.w = lUnitBackward.w;
+        lIntersection.mPosition = lrHit;
+        lIntersection.mNormal = lUnitBackward;
         lIntersection.mVolumeInstanceId.muId = static_cast<u64>(static_cast<s64>(liVolumeInstance));
         lIntersection.mEntityId = EntityId(lu16EntityIndex);
-        lIntersection.mfLineParam = Dot3(SubLane4(lrHit, lStart), lUnitForward);
+        lIntersection.mfLineParam = Dot3(SubVector(lrHit, lStart), lUnitForward);
         lIntersection.mu16MaterialTag = static_cast<u16>(luSurfaceId);
         lIntersection.mu16GroupTag    = static_cast<u16>(luGroupId);
 
@@ -372,13 +327,11 @@ namespace
                                       FineIntersectionTestIO::OutputBuffer::LineTestIntersectionArray* lpIntersections,
                                       const LineTestIntersection*& lrpFirst, s32& lriCount)
     {
-        const Lane4 lStart = ToLane4(lrLineStart);
-        const Lane4 lDelta = SubLane4(ToLane4(lrLineEnd), lStart);
-        const Lane4 lEnd   = AddLane4(lStart, lDelta);   // the walk is handed start + (end - start)
+        const Vector3 lStart = lrLineStart;
+        const Vector3 lDelta = SubVector(lrLineEnd, lStart);
+        const Vector3 lEnd   = AddVector(lStart, lDelta);   // the walk is handed start + (end - start)
 
-        const rw::collision::AALineClipper::Vec4 lWalkStart = { lStart.x, lStart.y, lStart.z, lStart.w };
-        const rw::collision::AALineClipper::Vec4 lWalkEnd   = { lEnd.x, lEnd.y, lEnd.z, lEnd.w };
-        rw::collision::KdTreeLineQuery lLineQuery(lpMesh->GetKDTree(), lWalkStart, lWalkEnd,
+        rw::collision::KdTreeLineQuery lLineQuery(lpMesh->GetKDTree(), lStart, lEnd,
                                                   KF_CLUSTERED_MESH_LINE_FATNESS);
 
         const u32 luOffsetBits = KU_NARROW_UNIT_OFFSET_BITS
@@ -413,19 +366,19 @@ namespace
                                          + ((luType == KU8_UNIT_TYPE_COUNTED) ? static_cast<u32>(lpUnit[1]) : 0u);
                 const u8* lpIndices = lpUnit + ((luType == KU8_UNIT_TYPE_COUNTED) ? 1 : 0);
 
-                const Lane4 lV0 = GetClusterVertex(lpCluster, lpIndices[1], lfGranularity);
-                const Lane4 lV1 = GetClusterVertex(lpCluster, lpIndices[2], lfGranularity);
-                const Lane4 lV2 = GetClusterVertex(lpCluster, lpIndices[3], lfGranularity);
-                const Lane4 lV3 = GetClusterVertex(lpCluster, lpIndices[4], lfGranularity);
+                const Vector3 lV0 = GetClusterVertex(lpCluster, lpIndices[1], lfGranularity);
+                const Vector3 lV1 = GetClusterVertex(lpCluster, lpIndices[2], lfGranularity);
+                const Vector3 lV2 = GetClusterVertex(lpCluster, lpIndices[3], lfGranularity);
+                const Vector3 lV3 = GetClusterVertex(lpCluster, lpIndices[4], lfGranularity);
 
-                Lane4 lHit;
-                if (IntersectLineTriangle(lStart, lDelta, lV0, SubLane4(lV1, lV0), SubLane4(lV2, lV0), lHit))
+                Vector3 lHit;
+                if (IntersectLineTriangle(lStart, lDelta, lV0, SubVector(lV1, lV0), SubVector(lV2, lV0), lHit))
                 {
                     RecordClusteredMeshHit(lpMesh, lpCluster, luUnitOffset, lHit, lrLineStart, lrLineEnd,
                                            liVolumeInstance, lu16EntityIndex, lpIntersections, lrpFirst, lriCount);
                 }
                 if (luNumTriangles > 1u &&
-                    IntersectLineTriangle(lStart, lDelta, lV3, SubLane4(lV2, lV3), SubLane4(lV1, lV3), lHit))
+                    IntersectLineTriangle(lStart, lDelta, lV3, SubVector(lV2, lV3), SubVector(lV1, lV3), lHit))
                 {
                     RecordClusteredMeshHit(lpMesh, lpCluster, luUnitOffset, lHit, lrLineStart, lrLineEnd,
                                            liVolumeInstance, lu16EntityIndex, lpIntersections, lrpFirst, lriCount);
@@ -476,7 +429,7 @@ namespace
                                                          OutEventLineTestFineResult* lpOutResult,
                                                          void* lpResultsOut)
     {
-        auto* lpIntersections = static_cast<FineIntersectionTestIO::OutputBuffer::LineTestIntersectionArray*>(lpResultsOut);
+        FineIntersectionTestIO::OutputBuffer::LineTestIntersectionArray* lpIntersections = static_cast<FineIntersectionTestIO::OutputBuffer::LineTestIntersectionArray*>(lpResultsOut);
         u32 luMask = ~0u;
         u32 luExclude = static_cast<u32>(K_INVALID_ENTITY_ID);
         if (lpQuery->mu16ExcludeEntityIndex != 0xffff)
@@ -491,7 +444,7 @@ namespace
         const LineTestIntersection* lpFirst = 0;
         for (u16 luCandidate = 0; luCandidate < lpQuery->mu16NumEntities; ++luCandidate)
         {
-            const u16 luEntityIndex = lpQuery->mpau16EntityIndices[luCandidate];
+            const u32 luEntityIndex = lpQuery->mpau16EntityIndices[luCandidate];
             if ((static_cast<u32>(mpEntityManager->GetEntityIdByIndex(luEntityIndex)) & luMask) == luExclude)
                 continue;
             s32 liInstance = 0;
@@ -504,22 +457,19 @@ namespace
                     const rw::collision::Volume* lapVolumes[1] = {
                         reinterpret_cast<const rw::collision::Volume*>(mpVolumeManager->GetRwVolume(liVolume)) };
                     const Matrix44Affine* lapTransforms[1] = { &lpInstance->mWorldSpaceTransform };
-                    if (rw::collision::gVolumeVTable[lapVolumes[0]->muVTableSlot]->muTypeID == KU_VOLUME_TYPE_AGGREGATE)
+                    if (lapVolumes[0]->GetType() == KU_VOLUME_TYPE_AGGREGATE)
                     {
                         // The aggregate is a clustered mesh, walked directly (see the fast path's
                         // banner above). Trigger boxes take the other arm.
                         const rw::collision::ClusteredMesh* lpMesh =
-                            reinterpret_cast<const rw::collision::ClusteredMesh*>(
-                                static_cast<uintptr_t>(lapVolumes[0]->mAggregateData.muAggregate));
+                            static_cast<const rw::collision::ClusteredMesh*>(lapVolumes[0]->mAggregateData.mpAggregate);
                         ComputeLineTestClusteredMesh(lpMesh, lpQuery->mLineStart, lpQuery->mLineEnd,
                                                      liInstance, luEntityIndex, lpIntersections, lpFirst, liCount);
                     }
                     else
                     {
-                        const rw::collision::VolRef::Vec4 lStart = {
-                            lpQuery->mLineStart.x, lpQuery->mLineStart.y, lpQuery->mLineStart.z, lpQuery->mLineStart.w };
-                        const rw::collision::VolRef::Vec4 lEnd = {
-                            lpQuery->mLineEnd.x, lpQuery->mLineEnd.y, lpQuery->mLineEnd.z, lpQuery->mLineEnd.w };
+                        const Vector3 lStart = lpQuery->mLineStart;
+                        const Vector3 lEnd = lpQuery->mLineEnd;
                         mpVolumeLineQuery->InitQuery(lapVolumes, lapTransforms, 1, lStart, lEnd, 0.0f);
                         while (!mpVolumeLineQuery->Finished())
                         {
@@ -528,20 +478,14 @@ namespace
                             liCount += luCount;
                             for (u32 luHit = 0; luHit < luCount; ++luHit)
                             {
-                                const auto& lrHit = lpHits[luHit];
+                                const rw::collision::VolumeLineSegIntersectResult& lrHit = lpHits[luHit];
                                 LineTestIntersection lHit;
-                                lHit.mPosition.x = lrHit.position.x;
-                                lHit.mPosition.y = lrHit.position.y;
-                                lHit.mPosition.z = lrHit.position.z;
-                                lHit.mPosition.w = lrHit.position.w;
-                                lHit.mNormal.x = lrHit.normal.x;
-                                lHit.mNormal.y = lrHit.normal.y;
-                                lHit.mNormal.z = lrHit.normal.z;
-                                lHit.mNormal.w = lrHit.normal.w;
+                                lHit.mPosition = lrHit.position;
+                                lHit.mNormal = lrHit.normal;
                                 lHit.mVolumeInstanceId.muId = static_cast<u64>(static_cast<s64>(liInstance));
                                 lHit.mEntityId = EntityId(luEntityIndex);
                                 lHit.mfLineParam = lrHit.lineParam;
-                                const auto* lpHitVolume = reinterpret_cast<const rw::collision::Volume*>(lrHit.vRef.muVolumePtr);
+                                const rw::collision::Volume* lpHitVolume = lrHit.vRef.volume;
                                 lHit.mu16MaterialTag = lpHitVolume ? static_cast<u16>(lpHitVolume->muSurfaceID) : 0;
                                 lHit.mu16GroupTag = lpHitVolume ? static_cast<u16>(lpHitVolume->muGroupID) : 0;
                                 lpIntersections->Append(lHit);
@@ -645,10 +589,8 @@ namespace
                         { reinterpret_cast<const rw::collision::Volume*>(mpVolumeManager->GetRwVolume(liVolumeIndex)) };
                     const Matrix44Affine* lapInputMatrices[1] =                                // var_70
                         { &lpVolumeInstance->mWorldSpaceTransform };
-                    const rw::collision::VolRef::Vec4 lLineStart =
-                        { lpQuery->mLineStart.x, lpQuery->mLineStart.y, lpQuery->mLineStart.z, lpQuery->mLineStart.w };
-                    const rw::collision::VolRef::Vec4 lLineEnd =
-                        { lpQuery->mLineEnd.x, lpQuery->mLineEnd.y, lpQuery->mLineEnd.z, lpQuery->mLineEnd.w };
+                    const Vector3 lLineStart = lpQuery->mLineStart;
+                    const Vector3 lLineEnd = lpQuery->mLineEnd;
 
                     mpVolumeLineQuery->InitQuery(lapInputVolumes, lapInputMatrices, 1, lLineStart, lLineEnd,
                                                  KF_LINE_TEST_NEAREST_FATNESS);
@@ -675,17 +617,10 @@ namespace
                         lpOutResult->mbIntersection        = true;               // stb 1, 0x3A
                         lpOutResult->mu16EntityIndex       = lu16EntityIndex;    // sth r20, 0x34
                         lpOutResult->mfLineParam           = lrBest.lineParam;   // lfs 0x40 ; stfs 0x30
-                        lpOutResult->mPosition.x           = lrBest.position.x;  // lvx128 +0x10 ; stvx128 +0x10
-                        lpOutResult->mPosition.y           = lrBest.position.y;
-                        lpOutResult->mPosition.z           = lrBest.position.z;
-                        lpOutResult->mPosition.w           = lrBest.position.w;
-                        lpOutResult->muVolumeInstanceIndex = static_cast<u32>(liVolumeInstance);   // stw r22, 4
-                        lpOutResult->mNormal.x             = lrBest.normal.x;    // lvx128 +0x20 ; stvx128 +0x20
-                        lpOutResult->mNormal.y             = lrBest.normal.y;
-                        lpOutResult->mNormal.z             = lrBest.normal.z;
-                        lpOutResult->mNormal.w             = lrBest.normal.w;
-                        const rw::collision::Volume* lpHitVolume =
-                            reinterpret_cast<const rw::collision::Volume*>(lrBest.vRef.muVolumePtr);
+                        lpOutResult->mPosition = lrBest.position;
+                        lpOutResult->muVolumeInstanceIndex = static_cast<u32>(liVolumeInstance);
+                        lpOutResult->mNormal = lrBest.normal;
+                        const rw::collision::Volume* lpHitVolume = lrBest.vRef.volume;
                         if (lpHitVolume != 0)
                         {
                             lpOutResult->mu16MaterialTag = static_cast<u16>(lpHitVolume->muSurfaceID);   // +0x58

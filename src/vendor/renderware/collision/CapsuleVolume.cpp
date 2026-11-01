@@ -160,45 +160,34 @@ namespace
 // whole-struct assignment and the index is a typed array index -- never a
 // byte base + (type << 4).
 // ---------------------------------------------------------------------------
-RwBool CapsuleVolume::CreateGPInstance(GPInstance& arInst, const Vec4* lpTransform) const
+RwBool CapsuleVolume::CreateGPInstance(GPInstance& arInst, const Matrix44Affine* lpTransform) const
 {
-    Vec4 lvAxis;     // v0  -- the (optionally rotated) capsule axis, maFrame[2]
-    Vec4 lvCentre;   // v13 -- the (optionally transformed) centre,  maFrame[3]
-
-    if (lpTransform != 0)
+    __vector4 axis = mTransform.zAxis.mV;
+    __vector4 centre = mTransform.wAxis.mV;
+    if (lpTransform)
     {
-        lvAxis   = RotateByTransform3x3(maFrame[2], lpTransform);
-        lvCentre = TransformPointByTransform(maFrame[3], lpTransform);
+        const __vector4 tx = lpTransform->xAxis.mV;
+        const __vector4 ty = lpTransform->yAxis.mV;
+        const __vector4 tz = lpTransform->zAxis.mV;
+        const __vector4 tw = lpTransform->wAxis.mV;
+        __vector4 a = __vmulfp(__vspltw(axis, 0), tx);
+        __vector4 c = __vmaddfp(__vspltw(centre, 0), tx, tw);
+        a = __vmaddfp(__vspltw(axis, 1), ty, a);
+        c = __vmaddfp(__vspltw(centre, 1), ty, c);
+        axis = __vmaddfp(__vspltw(axis, 2), tz, a);
+        centre = __vmaddfp(__vspltw(centre, 2), tz, c);
     }
-    else
-    {
-        lvAxis   = maFrame[2];
-        lvCentre = maFrame[3];
-    }
-
-    // FLAG (host width): the console stores its 4-byte `this` straight into the
-    // u32 mVolumeTag word, and the batch kernels copy that word verbatim into
-    // PrimitivePairIntersectResult::v1/v2. The committed GPInstance keeps the
-    // field as the console's 32-bit pointer IMAGE, so this truncates on x64;
-    // the real fix is to promote GPInstance::mVolumeTag (and PPIR::v1/v2) to a
-    // pointer-width field, which belongs to the GPInstance TU, not here.
-    arInst.mVolumeTag        = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
-    arInst.mPos              = lvCentre;
-    arInst.mNumFaceNormals   = 0;
-    arInst.mUserTag          = 0;
-    arInst.mVolumeType       = GPInstance::CAPSULE;   // stw 2, 0x90
-    arInst.mNumEdgeDirections= 1;
-    arInst.mFatness          = mfRadius;
-    arInst.mEdgeDirections[0]= lvAxis;
-
-    // The +0x70 round trip: lane x only; y/z/w survive untouched.
-    arInst.mDimensions.x     = mfHalfHeight;
-
-    arInst.mFlags            = muFlags;
-
-    // The console re-reads the type word it just stored; keep that read.
-    arInst.mMethods          = g_aGPVolumeMethods[arInst.mVolumeType];
-
+    arInst.mVolumeTag = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
+    arInst.mPos.mV = centre;
+    arInst.mNumFaceNormals = 0;
+    arInst.mUserTag = 0;
+    arInst.mVolumeType = GPInstance::CAPSULE;
+    arInst.mNumEdgeDirections = 1;
+    arInst.mFatness = mfRadius;
+    arInst.mEdgeDirections[0].mV = axis;
+    arInst.mDimensions.mV.x = mCapsuleData.mfHalfHeight;
+    arInst.mFlags = muFlags;
+    arInst.mMethods = g_aGPVolumeMethods[GPInstance::CAPSULE];
     return 1;
 }
 
@@ -218,13 +207,12 @@ RwBool CapsuleVolume::CreateGPInstance(GPInstance& arInst, const Vec4* lpTransfo
 // ---------------------------------------------------------------------------
 math::vpu::Vector3 CapsuleVolume::GetBBoxDiag() const
 {
-    const Vec4& lvAxis = maFrame[2];
-
-    const f32 lfDiagX = 2.0f * (std::fabs(lvAxis.x) * mfHalfHeight + mfRadius);
-    const f32 lfDiagY = 2.0f * (std::fabs(lvAxis.y) * mfHalfHeight + mfRadius);
-    const f32 lfDiagZ = 2.0f * (std::fabs(lvAxis.z) * mfHalfHeight + mfRadius);
-
-    return math::vpu::Vector3(lfDiagX, lfDiagY, lfDiagZ);
+    const __vector4 ones = __vspltisw(-1);
+    const __vector4 sign = __vslw(ones, ones);
+    const __vector4 axis = __vandc(mTransform.zAxis.mV, sign);
+    const __vector4 height = __vspltw(__lvlx(&mCapsuleData.mfHalfHeight, 0), 0);
+    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
+    return math::vpu::Vector3(__vmulfp(__vmaddfp(axis, height, radius), __vcfsx(__vspltisw(2), 0)));
 }
 
 // ---------------------------------------------------------------------------
@@ -238,29 +226,17 @@ math::vpu::Vector3 CapsuleVolume::GetBBoxDiag() const
 //   FeatureEdge(edge, P0, P1) ; memcpy(feature+0x10, edge, 0x40) ; numedges = 1
 // abCcw (r4) / arDir (r5) are dead in the asm.
 // ---------------------------------------------------------------------------
-void CapsuleVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vec4& /*arDir*/,
-                                      Feature& arResult) const
+RwBool CapsuleVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vector3& /*arDir*/, Feature& arResult) const
 {
-    const Vec4& lvAxis   = maFrame[1];
-    const Vec4& lvCentre = maFrame[3];
-    const f32   lfScale  = mfHalfHeight;   // +0x44 scalar (splat)
-
-    Vec4 lvP0;   // var_70: axis * mfHalfHeight + centre
-    lvP0.x = lvAxis.x * lfScale + lvCentre.x;
-    lvP0.y = lvAxis.y * lfScale + lvCentre.y;
-    lvP0.z = lvAxis.z * lfScale + lvCentre.z;
-    lvP0.w = lvAxis.w * lfScale + lvCentre.w;
-
-    Vec4 lvP1;   // var_60: centre - axis * mfHalfHeight
-    lvP1.x = lvCentre.x - lvAxis.x * lfScale;
-    lvP1.y = lvCentre.y - lvAxis.y * lfScale;
-    lvP1.z = lvCentre.z - lvAxis.z * lfScale;
-    lvP1.w = lvCentre.w - lvAxis.w * lfScale;
-
-    const FeatureEdge lEdge(lvP0, lvP1);
-    std::memcpy(&arResult.edges[0], &lEdge, sizeof(FeatureEdge));
-
+    const __vector4 axis = mTransform.yAxis.mV;
+    const __vector4 centre = mTransform.wAxis.mV;
+    const __vector4 height = __vspltw(__lvlx(&mCapsuleData.mfHalfHeight, 0), 0);
+    const Vector3 plus(__vmaddfp(axis, height, centre));
+    const Vector3 minus(__vsubfp(centre, __vmulfp(axis, height)));
+    const FeatureEdge edge(plus, minus);
+    memcpy(&arResult.edges[0], &edge, sizeof(edge));
     arResult.numedges = 1;
+    return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -275,57 +251,38 @@ void CapsuleVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vec4& /*arDir*/,
 // Both paths: extent[i] = |axis[i]| * mfHalfHeight + mfRadius,
 //             min = centre - extent, max = centre + extent; returns 1.
 // ---------------------------------------------------------------------------
-RwBool CapsuleVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
+RwBool CapsuleVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
 {
-    f32 lfAxisX;
-    f32 lfAxisY;
-    f32 lfAxisZ;
-    f32 lfCentreX;
-    f32 lfCentreY;
-    f32 lfCentreZ;
-
-    if (lpTransform != 0)
+    __vector4 axis = mTransform.zAxis.mV;
+    __vector4 centre = mTransform.wAxis.mV;
+    if (lpTransform)
     {
-        const Vec4& lvM2   = maFrame[2];   // oriented axis
-        const Vec4& lvM3   = maFrame[3];   // centre
-        const Vec4& lvRow0 = lpTransform[0];
-        const Vec4& lvRow1 = lpTransform[1];
-        const Vec4& lvRow2 = lpTransform[2];
-        const Vec4& lvRow3 = lpTransform[3];
-
-        // Rotate the oriented axis by the transform's 3x3.
-        lfAxisX = lvM2.x * lvRow0.x + lvM2.y * lvRow1.x + lvM2.z * lvRow2.x;
-        lfAxisY = lvM2.x * lvRow0.y + lvM2.y * lvRow1.y + lvM2.z * lvRow2.y;
-        lfAxisZ = lvM2.x * lvRow0.z + lvM2.y * lvRow1.z + lvM2.z * lvRow2.z;
-
-        // Transform the centre as a point (row3 = translation).
-        lfCentreX = lvM3.x * lvRow0.x + lvM3.y * lvRow1.x + lvM3.z * lvRow2.x + lvRow3.x;
-        lfCentreY = lvM3.x * lvRow0.y + lvM3.y * lvRow1.y + lvM3.z * lvRow2.y + lvRow3.y;
-        lfCentreZ = lvM3.x * lvRow0.z + lvM3.y * lvRow1.z + lvM3.z * lvRow2.z + lvRow3.z;
+        const __vector4 tx = lpTransform->xAxis.mV;
+        const __vector4 ty = lpTransform->yAxis.mV;
+        const __vector4 tz = lpTransform->zAxis.mV;
+        const __vector4 tw = lpTransform->wAxis.mV;
+        __vector4 a = __vmulfp(__vspltw(axis, 0), tx);
+        __vector4 c = __vmaddfp(__vspltw(centre, 0), tx, tw);
+        a = __vmaddfp(__vspltw(axis, 1), ty, a);
+        c = __vmaddfp(__vspltw(centre, 1), ty, c);
+        axis = __vmaddfp(__vspltw(axis, 2), tz, a);
+        centre = __vmaddfp(__vspltw(centre, 2), tz, c);
     }
-    else
-    {
-        lfAxisX = maFrame[2].x;
-        lfAxisY = maFrame[2].y;
-        lfAxisZ = maFrame[2].z;
-        lfCentreX = maFrame[3].x;
-        lfCentreY = maFrame[3].y;
-        lfCentreZ = maFrame[3].z;
-    }
-
-    // Half extent per axis: |axis| * mfHalfHeight + mfRadius.
-    const f32 lfExtentX = std::fabs(lfAxisX) * mfHalfHeight + mfRadius;
-    const f32 lfExtentY = std::fabs(lfAxisY) * mfHalfHeight + mfRadius;
-    const f32 lfExtentZ = std::fabs(lfAxisZ) * mfHalfHeight + mfRadius;
-
-    arResult.mMin = math::vpu::Vector3(lfCentreX - lfExtentX,
-                                       lfCentreY - lfExtentY,
-                                       lfCentreZ - lfExtentZ);
-    arResult.mMax = math::vpu::Vector3(lfCentreX + lfExtentX,
-                                       lfCentreY + lfExtentY,
-                                       lfCentreZ + lfExtentZ);
+    const __vector4 ones = __vspltisw(-1);
+    const __vector4 sign = __vslw(ones, ones);
+    const __vector4 height = __vspltw(__lvlx(&mCapsuleData.mfHalfHeight, 0), 0);
+    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
+    const __vector4 extent = __vmaddfp(__vandc(axis, sign), height, radius);
+    arResult.mMin.mV = __vsubfp(centre, extent);
+    arResult.mMax.mV = __vaddfp(centre, extent);
     return 1;
 }
 
 } // namespace collision
 } // namespace rw
+
+// ARTIST folds these genuine per-type methods to 82BAC980, 82B0F1B8 or 82AD5078.
+namespace rw { namespace collision {
+RwBool CapsuleVolume::GetInterval(const Vector3&, Interval&) const { return 1; }
+void CapsuleVolume::Release() {}
+} }

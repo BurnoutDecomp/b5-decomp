@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"  // the 3D draws
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                     // triangle-test monitor
 #include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleSphere.h"                  // swept sphere / Triangle4 test
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                             // cached Sphere payload
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"                      // SweptSphere
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h"                       // entity + volume managers
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"         // cached slots and triangle batches
@@ -33,7 +34,7 @@ namespace CgsSceneManager
         template <typename TVector>
         f32 GetTriangleLane(const TVector& lrValues, s32 liLane)
         {
-            return (&lrValues.mV.x)[liLane];
+            return lrValues.mV.v[liLane];
         }
 
         rw::math::vpu::MaskScalar BroadcastMaskLane(const f32& lrLane)
@@ -41,26 +42,22 @@ namespace CgsSceneManager
             u32 luMaskBits = 0;
             std::memcpy(&luMaskBits, &lrLane, sizeof(luMaskBits));
 
-            rw::math::vpu::MaskScalar lMask;
-            std::memcpy(&lMask.x, &luMaskBits, sizeof(luMaskBits));
-            std::memcpy(&lMask.y, &luMaskBits, sizeof(luMaskBits));
-            std::memcpy(&lMask.z, &luMaskBits, sizeof(luMaskBits));
-            std::memcpy(&lMask.w, &luMaskBits, sizeof(luMaskBits));
-            return lMask;
+            rw::math::vpu::VectorIntrinsic lvLane;
+            lvLane.u[0] = luMaskBits;
+            return rw::math::vpu::MaskScalar(__vspltw(lvLane, 0));
         }
 
         Vector3 CopyVector3Plus(const Vector3Plus& lrPoint)
         {
-            const Vector3 lResult = { lrPoint.x, lrPoint.y, lrPoint.z, lrPoint.w };
-            return lResult;
+            return Vector3(lrPoint.mV);
         }
 
         void DrawContactAxes(CgsDev::Debug3DImmediateRender* lpRender, const Vector3& lrPosition)
         {
             const Vector3 laAxes[3] = {
-                { 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 0.0f },
+                Vector3(1.0f, 0.0f, 0.0f),
+                Vector3(0.0f, 1.0f, 0.0f),
+                Vector3(0.0f, 0.0f, 1.0f),
             };
             const rw::RGBA lWhite(0xFFu, 0xFFu, 0xFFu, 0xFFu);
             const f32 lfHalfLength = 0.1f;
@@ -69,12 +66,18 @@ namespace CgsSceneManager
             {
                 Vector3 lvStart = lrPosition;
                 Vector3 lvEnd = lrPosition;
-                lvStart.x -= laAxes[liAxis].x * lfHalfLength;
-                lvStart.y -= laAxes[liAxis].y * lfHalfLength;
-                lvStart.z -= laAxes[liAxis].z * lfHalfLength;
-                lvEnd.x += laAxes[liAxis].x * lfHalfLength;
-                lvEnd.y += laAxes[liAxis].y * lfHalfLength;
-                lvEnd.z += laAxes[liAxis].z * lfHalfLength;
+                lvStart.SetX(static_cast<f32>(lrPosition.GetX()) -
+                    static_cast<f32>(laAxes[liAxis].GetX()) * lfHalfLength);
+                lvStart.SetY(static_cast<f32>(lrPosition.GetY()) -
+                    static_cast<f32>(laAxes[liAxis].GetY()) * lfHalfLength);
+                lvStart.SetZ(static_cast<f32>(lrPosition.GetZ()) -
+                    static_cast<f32>(laAxes[liAxis].GetZ()) * lfHalfLength);
+                lvEnd.SetX(static_cast<f32>(lrPosition.GetX()) +
+                    static_cast<f32>(laAxes[liAxis].GetX()) * lfHalfLength);
+                lvEnd.SetY(static_cast<f32>(lrPosition.GetY()) +
+                    static_cast<f32>(laAxes[liAxis].GetY()) * lfHalfLength);
+                lvEnd.SetZ(static_cast<f32>(lrPosition.GetZ()) +
+                    static_cast<f32>(laAxes[liAxis].GetZ()) * lfHalfLength);
                 lpRender->DrawLine(lvStart, lvEnd, lWhite);
             }
         }
@@ -95,9 +98,9 @@ namespace CgsSceneManager
         mbDrawTriangleTest = false;
         mbDrawPadding = false;
         mfTriangleScale = 1.0f;
-        mTriangleOffset.x = 0.0f;
-        mTriangleOffset.y = 0.0f;
-        mTriangleOffset.z = 0.0f;
+        mTriangleOffset.SetX(0.0f);
+        mTriangleOffset.SetY(0.0f);
+        mTriangleOffset.SetZ(0.0f);
 
         siTriangleTestPerfMon = CgsDev::PerfMonCpu::AddMonitor(
             "Triangle-Sphere test", CgsDev::E_PMP_17, false, 80.0f, true);
@@ -152,61 +155,29 @@ namespace CgsSceneManager
         lpRender->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_OFF);
         lpRender->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_ON);
 
-        const Vector3Plus lSpherePositionAndRadius = { 0.5f, 1.0f, 0.5f, 0.5f };
-        const Vector3Plus lSphereDirectionAndLength = { 0.0f, -1.0f, 0.0f, 1.0f };
+        const Vector3Plus lSpherePositionAndRadius(0.5f, 1.0f, 0.5f, 0.5f);
+        const Vector3Plus lSphereDirectionAndLength(0.0f, -1.0f, 0.0f, 1.0f);
         CgsGeometric::SweptSphere lSweptSphere;
         lSweptSphere.Set(lSpherePositionAndRadius, lSphereDirectionAndLength);
 
-        const f32 lfTriX = mTriangleOffset.x;
-        const f32 lfTriY = mTriangleOffset.y;
-        const f32 lfTriZ = mTriangleOffset.z;
+        const f32 lfTriX = static_cast<f32>(mTriangleOffset.GetX());
+        const f32 lfTriY = static_cast<f32>(mTriangleOffset.GetY());
+        const f32 lfTriZ = static_cast<f32>(mTriangleOffset.GetZ());
         const f32 lfTriScale = mfTriangleScale;
         const f32 lfTriXPlusScale = lfTriScale + lfTriX;
         const f32 lfTriZPlusScale = lfTriScale + lfTriZ;
 
-        CgsGeometric::Triangle4 lTriangles = {};
-        lTriangles.mVertex0X.x = lfTriX;
-        lTriangles.mVertex0X.y = lfTriX;
-        lTriangles.mVertex0X.z = lfTriX;
-        lTriangles.mVertex0X.w = lfTriX;
-        lTriangles.mVertex0Y.x = lfTriY;
-        lTriangles.mVertex0Y.y = lfTriY;
-        lTriangles.mVertex0Y.z = lfTriY;
-        lTriangles.mVertex0Y.w = lfTriY;
-        lTriangles.mVertex0Z.x = lfTriZ;
-        lTriangles.mVertex0Z.y = lfTriZ;
-        lTriangles.mVertex0Z.z = lfTriZ;
-        lTriangles.mVertex0Z.w = lfTriZ;
-        lTriangles.mVertex1X.x = lfTriX;
-        lTriangles.mVertex1X.y = lfTriX;
-        lTriangles.mVertex1X.z = lfTriX;
-        lTriangles.mVertex1X.w = lfTriX;
-        lTriangles.mVertex1Y.x = lfTriY;
-        lTriangles.mVertex1Y.y = lfTriY;
-        lTriangles.mVertex1Y.z = lfTriY;
-        lTriangles.mVertex1Y.w = lfTriY;
-        lTriangles.mVertex1Z.x = lfTriZPlusScale;
-        lTriangles.mVertex1Z.y = lfTriZPlusScale;
-        lTriangles.mVertex1Z.z = lfTriZPlusScale;
-        lTriangles.mVertex1Z.w = lfTriZPlusScale;
-        lTriangles.mVertex2X.x = lfTriXPlusScale;
-        lTriangles.mVertex2X.y = lfTriXPlusScale;
-        lTriangles.mVertex2X.z = lfTriXPlusScale;
-        lTriangles.mVertex2X.w = lfTriXPlusScale;
-        lTriangles.mVertex2Y.x = lfTriY;
-        lTriangles.mVertex2Y.y = lfTriY;
-        lTriangles.mVertex2Y.z = lfTriY;
-        lTriangles.mVertex2Y.w = lfTriY;
-        lTriangles.mVertex2Z.x = lfTriZ;
-        lTriangles.mVertex2Z.y = lfTriZ;
-        lTriangles.mVertex2Z.z = lfTriZ;
-        lTriangles.mVertex2Z.w = lfTriZ;
-
-        const u32 luValidLane = 0xFFFFFFFFu;
-        std::memcpy(&lTriangles.mValidMasks.mV.x, &luValidLane, sizeof(luValidLane));
-        std::memcpy(&lTriangles.mValidMasks.mV.y, &luValidLane, sizeof(luValidLane));
-        std::memcpy(&lTriangles.mValidMasks.mV.z, &luValidLane, sizeof(luValidLane));
-        std::memcpy(&lTriangles.mValidMasks.mV.w, &luValidLane, sizeof(luValidLane));
+        CgsGeometric::Triangle4 lTriangles;
+        lTriangles.mVertex0X.Set(lfTriX, lfTriX, lfTriX, lfTriX);
+        lTriangles.mVertex0Y.Set(lfTriY, lfTriY, lfTriY, lfTriY);
+        lTriangles.mVertex0Z.Set(lfTriZ, lfTriZ, lfTriZ, lfTriZ);
+        lTriangles.mVertex1X.Set(lfTriX, lfTriX, lfTriX, lfTriX);
+        lTriangles.mVertex1Y.Set(lfTriY, lfTriY, lfTriY, lfTriY);
+        lTriangles.mVertex1Z.Set(lfTriZPlusScale, lfTriZPlusScale, lfTriZPlusScale, lfTriZPlusScale);
+        lTriangles.mVertex2X.Set(lfTriXPlusScale, lfTriXPlusScale, lfTriXPlusScale, lfTriXPlusScale);
+        lTriangles.mVertex2Y.Set(lfTriY, lfTriY, lfTriY, lfTriY);
+        lTriangles.mVertex2Z.Set(lfTriZ, lfTriZ, lfTriZ, lfTriZ);
+        lTriangles.mValidMasks.mV = __vspltisw(-1);
         lTriangles.mSurfaceTags.SetZero();
         lTriangles.mEdge0Cosigns.SetZero();
         lTriangles.mEdge1Cosigns.SetZero();
@@ -239,35 +210,34 @@ namespace CgsSceneManager
         CgsDev::PerfMonCpu::StopMonitor(siTriangleTestPerfMon);
 
         const Vector3 lSpherePosition = CopyVector3Plus(lSpherePositionAndRadius);
-        const Vector3 lSphereWorldPosition = {
-            lSpherePosition.x + mInitialCameraPosition.x,
-            lSpherePosition.y + mInitialCameraPosition.y,
-            lSpherePosition.z + mInitialCameraPosition.z,
-            lSpherePosition.w + mInitialCameraPosition.w };
-        lpRender->DrawSphere(lSphereWorldPosition, lSpherePositionAndRadius.w,
+        const Vector3 lSphereWorldPosition(__vaddfp(lSpherePosition.mV, mInitialCameraPosition.mV));
+        lpRender->DrawSphere(lSphereWorldPosition, static_cast<f32>(lSpherePositionAndRadius.GetPlus()),
             rw::RGBA(0xFFu, 0x00u, 0x00u, 0x64u)); // ARTIST r5 = 0x640000FF
 
         if (mbDrawPadding)
         {
- // ARTIST r5 = 0x63FFFF00
+            lpRender->DrawSphere(lSphereWorldPosition, mfPadding,
+                rw::RGBA(0x00u, 0xFFu, 0xFFu, 0x63u)); // ARTIST r5 = 0x63FFFF00
         }
 
-        const Vector3 lTriangleVertex0 = { lfTriX, lfTriY, lfTriZ, lfTriX };
-        const Vector3 lTriangleVertex1 = { lfTriX, lfTriY, lfTriZPlusScale, lfTriX };
-        const Vector3 lTriangleVertex2 = {
-            lfTriXPlusScale, lfTriY, lfTriZ, lfTriXPlusScale };
+        Vector3 lTriangleVertex0(lfTriX, lfTriY, lfTriZ);
+        lTriangleVertex0.mV.v[3] = lfTriX;
+        Vector3 lTriangleVertex1(lfTriX, lfTriY, lfTriZPlusScale);
+        lTriangleVertex1.mV.v[3] = lfTriX;
+        Vector3 lTriangleVertex2(lfTriXPlusScale, lfTriY, lfTriZ);
+        lTriangleVertex2.mV.v[3] = lfTriXPlusScale;
 
         DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
-            BroadcastMaskLane(lIntersectMask.mV.x),
+            BroadcastMaskLane(lIntersectMask.mV.v[0]),
             CopyVector3Plus(laSphereContactPoints[0]), CopyVector3Plus(laTriangleContactPoints[0]));
         DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
-            BroadcastMaskLane(lIntersectMask.mV.y),
+            BroadcastMaskLane(lIntersectMask.mV.v[1]),
             CopyVector3Plus(laSphereContactPoints[1]), CopyVector3Plus(laTriangleContactPoints[1]));
         DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
-            BroadcastMaskLane(lIntersectMask.mV.z),
+            BroadcastMaskLane(lIntersectMask.mV.v[2]),
             CopyVector3Plus(laSphereContactPoints[2]), CopyVector3Plus(laTriangleContactPoints[2]));
         DrawTriangle(lpRender, mInitialCameraPosition, lTriangleVertex0, lTriangleVertex1, lTriangleVertex2,
-            BroadcastMaskLane(lIntersectMask.mV.w),
+            BroadcastMaskLane(lIntersectMask.mV.v[3]),
             CopyVector3Plus(laSphereContactPoints[3]), CopyVector3Plus(laTriangleContactPoints[3]));
     }
 
@@ -296,18 +266,21 @@ namespace CgsSceneManager
 
                     // ARTIST builds each world-space point as {x, y, z, 1}; retain that
                     // homogeneous lane when gathering the three SoA coordinates.
-                    const Vector3 lvVertex0 = {
+                    Vector3 lvVertex0(
                         GetTriangleLane(lrBatch.mVertex0X, liLane),
                         GetTriangleLane(lrBatch.mVertex0Y, liLane),
-                        GetTriangleLane(lrBatch.mVertex0Z, liLane), 1.0f };
-                    const Vector3 lvVertex1 = {
+                        GetTriangleLane(lrBatch.mVertex0Z, liLane));
+                    lvVertex0.mV.v[3] = 1.0f;
+                    Vector3 lvVertex1(
                         GetTriangleLane(lrBatch.mVertex1X, liLane),
                         GetTriangleLane(lrBatch.mVertex1Y, liLane),
-                        GetTriangleLane(lrBatch.mVertex1Z, liLane), 1.0f };
-                    const Vector3 lvVertex2 = {
+                        GetTriangleLane(lrBatch.mVertex1Z, liLane));
+                    lvVertex1.mV.v[3] = 1.0f;
+                    Vector3 lvVertex2(
                         GetTriangleLane(lrBatch.mVertex2X, liLane),
                         GetTriangleLane(lrBatch.mVertex2Y, liLane),
-                        GetTriangleLane(lrBatch.mVertex2Z, liLane), 1.0f };
+                        GetTriangleLane(lrBatch.mVertex2Z, liLane));
+                    lvVertex2.mV.v[3] = 1.0f;
                     DrawCachedTriangle(lpRender, lvVertex0, lvVertex1, lvVertex2, lColour);
                 }
             }
@@ -329,15 +302,13 @@ namespace CgsSceneManager
                 continue;
 
             const CacheSlot& lrSlot = lrCache.mpaCachedObjectSlots[liSlot];
-            const CacheSphere& lrCachedSphere = lrSlot.mLastCachedSphere;
-            const Vector3 lvCachedCentre = {
-                lrCachedSphere.x, lrCachedSphere.y, lrCachedSphere.z, lrCachedSphere.w };
-            lpRender->DrawHollowSphere(lvCachedCentre, lrCachedSphere.w, lCachedSphereColour);
+            const CgsGeometric::Sphere& lrCachedSphere = lrSlot.mLastCachedSphere;
+            const Vector3 lvCachedCentre(lrCachedSphere.mData.mV);
+            lpRender->DrawHollowSphere(lvCachedCentre, lrCachedSphere.mData.mV.v[3], lCachedSphereColour);
 
-            const CacheSphere& lrInnerSphere = lrSlot.mInnerSpherePositionAndRadius;
-            const Vector3 lvInnerCentre = {
-                lrInnerSphere.x, lrInnerSphere.y, lrInnerSphere.z, lrInnerSphere.w };
-            lpRender->DrawHollowSphere(lvInnerCentre, lrInnerSphere.w, lInnerSphereColour);
+            const Vector3Plus& lrInnerSphere = lrSlot.mInnerSpherePositionAndRadius;
+            const Vector3 lvInnerCentre(lrInnerSphere.mV);
+            lpRender->DrawHollowSphere(lvInnerCentre, lrInnerSphere.mV.v[3], lInnerSphereColour);
         }
     }
 
@@ -347,9 +318,9 @@ namespace CgsSceneManager
                                                           Vector3 lVertex0, Vector3 lVertex1,
                                                           Vector3 lVertex2, rw::RGBA lColour)
     {
-        const __vector4 lv0 = __lvx(&lVertex0, 0);
-        const __vector4 lv1 = __lvx(&lVertex1, 0);
-        const __vector4 lv2 = __lvx(&lVertex2, 0);
+        const __vector4 lv0 = lVertex0.mV;
+        const __vector4 lv1 = lVertex1.mV;
+        const __vector4 lv2 = lVertex2.mV;
         const __vector4 lvEdge0 = __vsubfp(lv0, lv1);
         const __vector4 lvEdge1 = __vsubfp(lv0, lv2);
         const __vector4 lvEdge0YZX = { lvEdge0.y, lvEdge0.z, lvEdge0.x, lvEdge0.w };
@@ -368,9 +339,9 @@ namespace CgsSceneManager
         const __vector4 lvInverse = __vmaddfp(lvHalfEstimate, lvResidual, lvEstimate);
         const __vector4 lvNormal = __vmulfp(lvCross, lvInverse);
         const __vector4 lvOffset = { 0.04f, 0.04f, 0.04f, 0.04f };
-        __stvx(__vmaddfp(lvNormal, lvOffset, lv0), &lVertex0, 0);
-        __stvx(__vmaddfp(lvNormal, lvOffset, lv1), &lVertex1, 0);
-        __stvx(__vmaddfp(lvNormal, lvOffset, lv2), &lVertex2, 0);
+        lVertex0.mV = __vmaddfp(lvNormal, lvOffset, lv0);
+        lVertex1.mV = __vmaddfp(lvNormal, lvOffset, lv1);
+        lVertex2.mV = __vmaddfp(lvNormal, lvOffset, lv2);
 
         lpRender->DrawHollowTriangle(lVertex0, lVertex1, lVertex2,
             rw::RGBA(0xFFu, 0xFFu, 0xFFu, 0xFFu));
@@ -387,18 +358,9 @@ namespace CgsSceneManager
                                                     Vector3 lSphereContactPoint,
                                                     Vector3 lTriangleContactPoint)
     {
-        lVertex0.x += lTranslation.x;
-        lVertex0.y += lTranslation.y;
-        lVertex0.z += lTranslation.z;
-        lVertex0.w += lTranslation.w;
-        lVertex1.x += lTranslation.x;
-        lVertex1.y += lTranslation.y;
-        lVertex1.z += lTranslation.z;
-        lVertex1.w += lTranslation.w;
-        lVertex2.x += lTranslation.x;
-        lVertex2.y += lTranslation.y;
-        lVertex2.z += lTranslation.z;
-        lVertex2.w += lTranslation.w;
+        lVertex0.mV = __vaddfp(lVertex0.mV, lTranslation.mV);
+        lVertex1.mV = __vaddfp(lVertex1.mV, lTranslation.mV);
+        lVertex2.mV = __vaddfp(lVertex2.mV, lTranslation.mV);
 
         if (!lHitMask.GetBool())
         {
@@ -411,14 +373,8 @@ namespace CgsSceneManager
         const rw::RGBA lWhite(0xFFu, 0xFFu, 0xFFu, 0xFFu);
         lpRender->DrawQuad(lVertex0, lVertex0, lVertex1, lVertex2, lWhite);
 
-        lSphereContactPoint.x += lTranslation.x;
-        lSphereContactPoint.y += lTranslation.y;
-        lSphereContactPoint.z += lTranslation.z;
-        lSphereContactPoint.w += lTranslation.w;
-        lTriangleContactPoint.x += lTranslation.x;
-        lTriangleContactPoint.y += lTranslation.y;
-        lTriangleContactPoint.z += lTranslation.z;
-        lTriangleContactPoint.w += lTranslation.w;
+        lSphereContactPoint.mV = __vaddfp(lSphereContactPoint.mV, lTranslation.mV);
+        lTriangleContactPoint.mV = __vaddfp(lTriangleContactPoint.mV, lTranslation.mV);
         DrawContactAxes(lpRender, lSphereContactPoint);
         DrawContactAxes(lpRender, lTriangleContactPoint);
     }
@@ -432,14 +388,14 @@ namespace CgsSceneManager
         RegisterVariable(&mbDrawTriangleTest, "Draw Triangle Test");
         RegisterVariable(&mbDrawPadding, "Draw Padding");
 
-        RegisterVariable(&mTriangleOffset.x, "TriX");
-        RegisterVariable(&mTriangleOffset.y, "TriY");
-        RegisterVariable(&mTriangleOffset.z, "TriZ");
+        RegisterVariable(&mTriangleOffset.mV.x, "TriX");
+        RegisterVariable(&mTriangleOffset.mV.y, "TriY");
+        RegisterVariable(&mTriangleOffset.mV.z, "TriZ");
         RegisterVariable(&mfTriangleScale, "TriScale");
         RegisterVariable(&mfPadding, "Padding");
-        SetStep(&mTriangleOffset.x, 0.025f);
-        SetStep(&mTriangleOffset.y, 0.025f);
-        SetStep(&mTriangleOffset.z, 0.025f);
+        SetStep(&mTriangleOffset.mV.x, 0.025f);
+        SetStep(&mTriangleOffset.mV.y, 0.025f);
+        SetStep(&mTriangleOffset.mV.z, 0.025f);
         SetStep(&mfTriangleScale, 0.25f);
         SetStep(&mfPadding, 0.25f);
 
@@ -492,55 +448,45 @@ namespace CgsSceneManager
 
         switch (lpVolume->GetType())
         {
-            case rw::collision::E_VOLUMETYPE_SPHERE:
+            case rw::collision::VOLUMETYPESPHERE:
             {
                 const Vector3 lv3Centre =
-                    rw::math::vpu::TransformPoint(lTransform, lpVolume->GetRelativeTransform().wAxis);
+                    rw::math::vpu::TransformPoint(lTransform, lpVolume->GetRelativeTransform()->wAxis);
                 lpRender->DrawHollowSphere(lv3Centre, lpVolume->GetRadius(), lColour);
             }
             break;
 
-            case rw::collision::E_VOLUMETYPE_CAPSULE:
-            case rw::collision::E_VOLUMETYPE_CYLINDER:
+            case rw::collision::VOLUMETYPECAPSULE:
+            case rw::collision::VOLUMETYPECYLINDER:
             {
-                const Matrix44Affine lWorld = lpVolume->GetRelativeTransform() * lTransform;
-                const f32 lfHalfHeight = lpVolume->GetExtent().x;
+                const Matrix44Affine lWorld = *lpVolume->GetRelativeTransform() * lTransform;
+                const f32 lfHalfHeight = lpVolume->GetType() == rw::collision::VOLUMETYPECAPSULE
+                    ? lpVolume->mCapsuleData.mfHalfHeight
+                    : lpVolume->mCylinderData.mfHalfHeight;
 
-                Vector3 lv3Start;
-                lv3Start.x = 0.0f;
-                lv3Start.y = 0.0f;
-                lv3Start.z = -lfHalfHeight;
-                lv3Start.w = 0.0f;
-                Vector3 lv3End;
-                lv3End.x = 0.0f;
-                lv3End.y = 0.0f;
-                lv3End.z = lfHalfHeight;
-                lv3End.w = 0.0f;
+                const Vector3 lv3Start(0.0f, 0.0f, -lfHalfHeight);
+                const Vector3 lv3End(0.0f, 0.0f, lfHalfHeight);
 
                 const Vector3 lv3WorldStart = rw::math::vpu::TransformPoint(lWorld, lv3Start);
                 const Vector3 lv3WorldEnd   = rw::math::vpu::TransformPoint(lWorld, lv3End);
-                if (lpVolume->GetType() == rw::collision::E_VOLUMETYPE_CAPSULE)
+                if (lpVolume->GetType() == rw::collision::VOLUMETYPECAPSULE)
                     lpRender->DrawCapsule(lv3WorldStart, lv3WorldEnd, lpVolume->GetRadius(), lColour);
                 else
                     lpRender->DrawCylinder(lv3WorldStart, lv3WorldEnd, lpVolume->GetRadius(), lColour);
             }
             break;
 
-            case rw::collision::E_VOLUMETYPE_BBOX:
+            case rw::collision::VOLUMETYPEBOX:
             {
-                const Matrix44Affine lWorld = lpVolume->GetRelativeTransform() * lTransform;
-                const Vector3& lrv3Extent = lpVolume->GetExtent();
-
-                Vector3 lv3Max;
-                lv3Max.x = lrv3Extent.x;
-                lv3Max.y = lrv3Extent.y;
-                lv3Max.z = lrv3Extent.z;
-                lv3Max.w = 0.0f;
-                Vector3 lv3Min;
-                lv3Min.x = -lv3Max.x;
-                lv3Min.y = -lv3Max.y;
-                lv3Min.z = -lv3Max.z;
-                lv3Min.w = -lv3Max.w;
+                const Matrix44Affine lWorld = *lpVolume->GetRelativeTransform() * lTransform;
+                const Vector3 lv3Max(
+                    lpVolume->mBoxData.mfHx,
+                    lpVolume->mBoxData.mfHy,
+                    lpVolume->mBoxData.mfHz);
+                const Vector3 lv3Min(
+                    -static_cast<f32>(lv3Max.GetX()),
+                    -static_cast<f32>(lv3Max.GetY()),
+                    -static_cast<f32>(lv3Max.GetZ()));
 
                 lpRender->DrawBox(lv3Min, lv3Max, lWorld, lColour);
             }

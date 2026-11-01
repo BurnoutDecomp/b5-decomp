@@ -1,6 +1,7 @@
 #include "vendor/renderware/collision/FeatureEdge.hpp"
 
 #include <cmath>
+#include <cfloat>
 
 // ===========================================================================
 // rw::collision::FeatureEdge -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -31,6 +32,8 @@ namespace collision
 //   * flt_82001CC0 -- the constrain_point start-side threshold: x360rd 0x00000000 = 0.0
 //     (canonical compares t < 0.0f).
 const f32 FeatureEdge::KF_DEGENERATE_EPSILON = 1.1920929e-07f;
+// volume.h:37; ARTIST 82C73BD0 initializes 8327EEA0 from 0x34000000.
+const rw::math::vpu::VecFloat VEC_EPSILON(FLT_EPSILON);
 const f32 FeatureEdge::KF_START_THRESHOLD    = 0.0f;
 
 namespace
@@ -60,40 +63,29 @@ namespace
 //   invLen  = 1/length refined once (vrefp + Newton-Raphson)
 //   dir     = delta * invLen                     guarded by the same mask
 // ---------------------------------------------------------------------------
-FeatureEdge::FeatureEdge(const Vec4& arP1, const Vec4& arP2)
+FeatureEdge::FeatureEdge(const rw::math::vpu::Vector3& arP1, const rw::math::vpu::Vector3& arP2)
 {
-    // base = endpoint P1 (stored first, this+0x00).
     base = arP1;
-
-    // delta = P2 - P1
-    Vec4 lDelta;
-    lDelta.x = arP2.x - arP1.x;
-    lDelta.y = arP2.y - arP1.y;
-    lDelta.z = arP2.z - arP1.z;
-    lDelta.w = arP2.w - arP1.w;
-
-    const f32 lfLenSq = Dot3(lDelta, lDelta);
-
-    // Degenerate-edge guard: vcmpeqfp (lenSq == 0) and vcmpgtfp (lenSq > eps).
-    const bool lbValid = (lfLenSq != 0.0f) && (lfLenSq > KF_DEGENERATE_EPSILON);
-
-    // length = sqrt(lenSq) (vrsqrtefp + NR refine, then lenSq * recip). Zeroed
-    // when the edge is degenerate (the vsel masks).
-    const f32 lfLength = lbValid ? std::sqrt(lfLenSq) : 0.0f;
-
-    // length (this+0x30): the value broadcast through the VMX lanes.
-    length.x = lfLength;
-    length.y = lfLength;
-    length.z = lfLength;
-    length.w = lfLength;
-
-    // dir = delta / length (vrefp + NR refine of length, * delta), zeroed
-    // when degenerate.
-    const f32 lfInvLen = lbValid ? (1.0f / lfLength) : 0.0f;
-    dir.x = lDelta.x * lfInvLen;
-    dir.y = lDelta.y * lfInvLen;
-    dir.z = lDelta.z * lfInvLen;
-    dir.w = lDelta.w * lfInvLen;
+    const __vector4 zero = __vspltisw(0);
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    const __vector4 half = __vcfsx(__vspltisw(1), 1);
+    const __vector4 delta = __vsubfp(arP2.mV, arP1.mV);
+    const __vector4 square = __vmsum3fp(delta, delta);
+    const __vector4 estimate = __vrsqrtefp(square);
+    const __vector4 equalZero = __vcmpeqfp(zero, square);
+    const __vector4 valid = __vcmpgtfp(square, VEC_EPSILON.mV);
+    const __vector4 squareEstimate = __vmulfp(estimate, estimate);
+    const __vector4 halfEstimate = __vmulfp(estimate, half);
+    const __vector4 correction = __vnmsubfp(square, squareEstimate, one);
+    const __vector4 refined = __vmaddfp(halfEstimate, correction, estimate);
+    __vector4 distance = __vmulfp(square, refined);
+    distance = __vsel(distance, zero, equalZero);
+    distance = __vsel(zero, distance, valid);
+    length.mV = distance;
+    const __vector4 reciprocal = __vrefp(distance);
+    const __vector4 reciprocalCorrection = __vnmsubfp(reciprocal, distance, one);
+    const __vector4 inverse = __vmaddfp(reciprocal, reciprocalCorrection, reciprocal);
+    dir.mV = __vsel(zero, __vmulfp(delta, inverse), valid);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,41 +107,25 @@ FeatureEdge::FeatureEdge(const Vec4& arP1, const Vec4& arP2)
 // projections of rwccore.h:912-929. (This corrects the earlier transcription
 // that read the addend as the third operand.)
 // ---------------------------------------------------------------------------
-u32 FeatureEdge::constrain_point(Vec4& arPoint) const
+u32 FeatureEdge::constrain_point(rw::math::vpu::Vector3& arPoint) const
 {
-    // delta = point - base
-    Vec4 lDelta;
-    lDelta.x = arPoint.x - base.x;
-    lDelta.y = arPoint.y - base.y;
-    lDelta.z = arPoint.z - base.z;
-    lDelta.w = arPoint.w - base.w;
-
-    // t = dot3(delta, dir), broadcast across lanes (vmsum3fp128).
-    const f32 lfT = Dot3(lDelta, dir);
-
-    if (KF_START_THRESHOLD > lfT)
+    const __vector4 delta = __vsubfp(arPoint.mV, base.mV);
+    const __vector4 projection = __vmsum3fp(delta, dir.mV);
+    const __vector4 zero = __vspltisw(0);
+    unsigned int comparison = 0;
+    __vcmpgtfpR(zero, projection, &comparison);
+    if ((comparison & 0x80u) != 0)
     {
-        // Before the base: clamp to the base vertex (v0 unchanged == base).
         arPoint = base;
         return 1;
     }
-
-    if (lfT > length.x)
+    __vcmpgtfpR(projection, length.mV, &comparison);
+    if ((comparison & 0x80u) != 0)
     {
-        // Past the length: arPoint = base + dir*length (the endpoint;
-        // vmaddfp per lane, w included -- length is lane-broadcast).
-        arPoint.x = dir.x * length.x + base.x;
-        arPoint.y = dir.y * length.y + base.y;
-        arPoint.z = dir.z * length.z + base.z;
-        arPoint.w = dir.w * length.w + base.w;
+        arPoint.mV = __vmaddfp(dir.mV, length.mV, base.mV);
         return 3;
     }
-
-    // On the segment: arPoint = base + dir*t (vmaddfp; vC = the t broadcast).
-    arPoint.x = dir.x * lfT + base.x;
-    arPoint.y = dir.y * lfT + base.y;
-    arPoint.z = dir.z * lfT + base.z;
-    arPoint.w = dir.w * lfT + base.w;
+    arPoint.mV = __vmaddfp(dir.mV, projection, base.mV);
     return 2;
 }
 

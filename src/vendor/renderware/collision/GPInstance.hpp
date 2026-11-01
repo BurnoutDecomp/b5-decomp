@@ -3,6 +3,7 @@
 #include <cstddef>   // offsetof (layout pins)
 
 #include "types.hpp"
+#include "SDKs/EATech/include/rw/math/vpu/vector3.h"
 #include "vendor/renderware/collision/Feature.hpp"   // Vec4 / RwBool / FeatureEdge / Feature
 #include "vendor/renderware/collision/VolRef.hpp"
 
@@ -54,10 +55,9 @@ class AABBox;   // vendor/renderware/collision/AABBox.hpp (GetBBox callback)
 // ---------------------------------------------------------------------------
 struct Interval
 {
-    Vec4 min;          // +0x00  lower projection bound (lane-broadcast)
-    Vec4 max;          // +0x10  upper projection bound (lane-broadcast)
+    rw::math::vpu::VecFloat min;          // +0x00  lower projection bound (lane-broadcast)
+    rw::math::vpu::VecFloat max;          // +0x10  upper projection bound (lane-broadcast)
     f32  padding[2];   // +0x20  DWARF: float32_t[2] padding
-    f32  mPad28[2];    // +0x28  16-byte alignment tail (console aligned(16))
 };
 
 CGS_STATIC_ASSERT((sizeof(Interval) == 0x30), "Interval console array stride must be 0x30");
@@ -96,25 +96,12 @@ struct GPInstance
                                   + FLAG_TRIANGLEEDGE1CONVEX + FLAG_TRIANGLEEDGE2CONVEX
     };
 
-    // --- per-type callbacks (X360: plain function pointers cached inline; the
-    //     canonical member-function signatures are volume.h:472-475). The
-    //     console passes the direction in VMX v1; here it rides as an explicit
-    //     const-reference parameter in the canonical argument order.
-
-    // console +0xA4 -- build the primitive's maximum feature along arDir into
-    // arFeature. abCcw is 1 for the first/A side of a pair, 0 for the
-    // second/B side (which receives the negated direction).
-    typedef void (*GetMaximumFeatureFn)(const GPInstance* lpThis, RwBool abCcw,
-                                        const Vec4& arDir, Feature& arFeature);
-    // console +0xA8 -- write the primitive's projection interval along arDir.
-    typedef void (*GetIntervalFn)(const GPInstance* lpThis,
-                                  const Vec4& arDir, Interval& arInterval);
-    // console +0xAC -- batched form: one interval per direction.
-    typedef void (*GetIntervalsFn)(const GPInstance* lpThis, const Vec4* lapDirs,
-                                   u32 auNumDirs, Interval* lapIntervals);
-    // console +0xB0 -- write the primitive's bounding box (not called by the
-    // bodies of this wave).
-    typedef void (*GetBBoxFn)(const GPInstance* lpThis, AABBox& arBBox);
+    // ARTIST stores these single-inheritance member pointers in four
+    // 32-bit slots. Direction values use the native Vector3 register ABI.
+    typedef void (GPInstance::*GetMaximumFeatureFn)(RwBool, rw::math::vpu::Vector3, Feature&) const;
+    typedef void (GPInstance::*GetIntervalFn)(rw::math::vpu::Vector3, Interval&) const;
+    typedef void (GPInstance::*GetIntervalsFn)(const rw::math::vpu::Vector3*, u32, Interval*) const;
+    typedef void (GPInstance::*GetBBoxFn)(AABBox&) const;
 
     struct VolumeMethods               // DWARF volume.h:484
     {
@@ -134,8 +121,8 @@ struct GPInstance
     {
         struct PointPair
         {
-            Vec4 p1;   // +0x00  contact point on the first primitive
-            Vec4 p2;   // +0x10  contact point on the second primitive
+            rw::math::vpu::Vector3 p1;   // +0x00  contact point on the first primitive
+            rw::math::vpu::Vector3 p2;   // +0x10  contact point on the second primitive
         };
 
         u32       volumeTag1;      // +0x00  first->mVolumeTag
@@ -144,15 +131,15 @@ struct GPInstance
         u32       userTag2;        // +0x0C  second->mUserTag
         u32       numPoints;       // +0x10  contact-pair count
         u32       mPad14[3];       // +0x14  16-byte alignment of `normal`
-        Vec4      normal;          // +0x20  NEGATED contact normal
+        rw::math::vpu::Vector3 normal;          // +0x20  NEGATED contact normal
         PointPair pointPairs[16];  // +0x30  fattened point pairs
     };
 
     // --- members (DWARF volume.h:551-563; console offsets in the comments) --
-    Vec4          mPos;               // +0x00  primitive centre / triangle vert 0
-    Vec4          mFaceNormals[3];    // +0x10  unit face axes
-    Vec4          mEdgeDirections[3]; // +0x40  edge directions (cylinder axis in [0])
-    Vec4          mDimensions;        // +0x70  half-extents / (half-length, radius)
+    rw::math::vpu::Vector3 mPos;               // +0x00  primitive centre / triangle vert 0
+    rw::math::vpu::Vector3 mFaceNormals[3];    // +0x10  unit face axes
+    rw::math::vpu::Vector3 mEdgeDirections[3]; // +0x40  edge directions (cylinder axis in [0])
+    rw::math::vpu::Vector3 mDimensions;        // +0x70  half-extents / (half-length, radius)
     f32           mFatness;           // +0x80  surface fatness (radius pad)
     u32           mVolumeTag;         // +0x84  owning Volume tag word (VolRef +0x70)
     u32           mUserTag;           // +0x88  user tag word
@@ -173,42 +160,26 @@ CGS_STATIC_ASSERT((offsetof(GPInstance, mNumEdgeDirections) == 0x8D), "GPInstanc
 CGS_STATIC_ASSERT((offsetof(GPInstance, mVolumeType)        == 0x90), "GPInstance::mVolumeType");
 CGS_STATIC_ASSERT((offsetof(GPInstance, mFlags)             == 0x94), "GPInstance::mFlags");
 CGS_STATIC_ASSERT((offsetof(GPInstance, mEdgeData)          == 0x98), "GPInstance::mEdgeData");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mMethods) == 0xA4), "GPInstance::mMethods");
+CGS_STATIC_ASSERT((sizeof(GPInstance::VolumeMethods) == 0x10), "GPInstance methods size");
+CGS_STATIC_ASSERT((sizeof(GPInstance) == 0xC0), "GPInstance size");
 
 // ---------------------------------------------------------------------------
-// GP primitive images (canonical rwccore.h:1182-1266: no extra data members
-// on any of them). The per-type callbacks below are the bodies behind each
-// type's VolumeMethods slots. X360 SHAPE DELTA (per the header note above):
-// the canonical PS3 build declares them as non-static const member functions
-// reached through pointers-to-member; the X360 build caches PLAIN function
-// pointers, so they are reconstructed as static members matching the
-// committed GetMaximumFeatureFn / GetIntervalFn / GetIntervalsFn typedefs
-// exactly (the registration TU owns the table fill -- it is HOMED now, in
-// GPRegistration.cpp).
+// GP primitives have no extra data members; their callbacks use native
+// member pointers and Vector3 register-value arguments.
 //
-// GetBBox slot (waveQ5 C1, dumped from unk_82F918F0 on a private .i64 copy):
-// every one of the five per-type records carries 0x82AD5078 in the +0xB0 slot
-// -- the XEX's ICF-folded shared empty `blr` (AGENTS gotcha 6). So there is no
-// per-type GetBBox body to declare: the GP GetBBox callback is a NO-OP on this
-// build for ALL types, and GPRegistration.cpp stores one shared no-op there.
-// (The earlier wording here -- "GetBBox siblings exist in the binary at other
-// addresses outside these TUs" -- was a hypothesis; the table dump refutes it.)
+// Each concrete GetBBox callback is an independently declared member.
+// ARTIST folds the five empty bodies to 0x82AD5078.
 // ---------------------------------------------------------------------------
 
 // The GP sphere image (canonical rwccore.h:1182: the core primitive is a
 // point -- the radius rides in mFatness and is applied by the callers).
 struct GPSphere : public GPInstance
 {
-    // @ 0x82BA8088 -- VolumeMethods +0xA4 (GetMaximumFeatureFn). Homed in
-    // GPSphere.cpp (waveQ5 C1): it sits 0x20 bytes BEFORE GetInterval, i.e.
-    // inside this same TU run, not "at another address outside this TU".
-    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
-                                  const Vec4& arDir, Feature& arFeature);
-    // @ 0x82BA80A8 -- VolumeMethods +0xA8 (GetIntervalFn).
-    static void GetInterval(const GPInstance* lpThis,
-                            const Vec4& arDir, Interval& arInterval);
-    // @ 0x82BA80C0 -- VolumeMethods +0xAC (GetIntervalsFn).
-    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
-                             u32 auNumDirs, Interval* lapIntervals);
+    void GetMaximumFeature(RwBool abCcw, rw::math::vpu::Vector3 arDir, Feature& arFeature) const;
+    void GetInterval(rw::math::vpu::Vector3 arDir, Interval& arInterval) const;
+    void GetIntervals(const rw::math::vpu::Vector3* lapDirs, u32 auNumDirs, Interval* lapIntervals) const;
+    void GetBBox(AABBox& arBBox) const;
 };
 
 // The GP capsule image (canonical rwccore.h:1193: the core is the axis
@@ -216,15 +187,10 @@ struct GPSphere : public GPInstance
 // the radius rides in mFatness).
 struct GPCapsule : public GPInstance
 {
-    // @ 0x82BAFA80 -- VolumeMethods +0xA4 (GetMaximumFeatureFn).
-    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
-                                  const Vec4& arDir, Feature& arFeature);
-    // @ 0x82BAFB68 -- VolumeMethods +0xA8 (GetIntervalFn).
-    static void GetInterval(const GPInstance* lpThis,
-                            const Vec4& arDir, Interval& arInterval);
-    // @ 0x82BAFC10 -- VolumeMethods +0xAC (GetIntervalsFn).
-    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
-                             u32 auNumDirs, Interval* lapIntervals);
+    void GetMaximumFeature(RwBool abCcw, rw::math::vpu::Vector3 arDir, Feature& arFeature) const;
+    void GetInterval(rw::math::vpu::Vector3 arDir, Interval& arInterval) const;
+    void GetIntervals(const rw::math::vpu::Vector3* lapDirs, u32 auNumDirs, Interval* lapIntervals) const;
+    void GetBBox(AABBox& arBBox) const;
 };
 
 // The GP box image (canonical rwccore.h:1207: mFaceNormals are the unit face
@@ -232,14 +198,12 @@ struct GPCapsule : public GPInstance
 struct GPBox : public GPInstance
 {
     // @ 0x82BA8918 -- VolumeMethods +0xA4 (GetMaximumFeatureFn).
-    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
-                                  const Vec4& arDir, Feature& arFeature);
+    void GetMaximumFeature(RwBool abCcw, rw::math::vpu::Vector3 arDir, Feature& arFeature) const;
     // @ 0x82BA8650 -- VolumeMethods +0xA8 (GetIntervalFn).
-    static void GetInterval(const GPInstance* lpThis,
-                            const Vec4& arDir, Interval& arInterval);
+    void GetInterval(rw::math::vpu::Vector3 arDir, Interval& arInterval) const;
     // @ 0x82BA9238 -- VolumeMethods +0xAC (GetIntervalsFn).
-    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
-                             u32 auNumDirs, Interval* lapIntervals);
+    void GetIntervals(const rw::math::vpu::Vector3* lapDirs, u32 auNumDirs, Interval* lapIntervals) const;
+    void GetBBox(AABBox& arBBox) const;
 };
 
 // The GP cylinder image (canonical rwccore.h:1253: no extra data members --
@@ -249,14 +213,11 @@ struct GPBox : public GPInstance
 struct GPCylinder : public GPInstance
 {
     // @ 0x82BAE430 -- VolumeMethods +0xA4 (GetMaximumFeatureFn).
-    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
-                                  const Vec4& arDir, Feature& arFeature);
+    void GetMaximumFeature(RwBool abCcw, rw::math::vpu::Vector3 arDir, Feature& arFeature) const;
     // @ 0x82BAD7F8 -- VolumeMethods +0xA8 (GetIntervalFn).
-    static void GetInterval(const GPInstance* lpThis,
-                            const Vec4& arDir, Interval& arInterval);
-    // @ 0x82BAD938 -- VolumeMethods +0xAC (GetIntervalsFn).
-    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
-                             u32 auNumDirs, Interval* lapIntervals);
+    void GetInterval(rw::math::vpu::Vector3 arDir, Interval& arInterval) const;
+    void GetIntervals(const rw::math::vpu::Vector3* lapDirs, u32 auNumDirs, Interval* lapIntervals) const;
+    void GetBBox(AABBox& arBBox) const;
 };
 
 // The GP triangle image (canonical rwccore.h:1229: no extra data members --
@@ -269,14 +230,12 @@ struct GPCylinder : public GPInstance
 struct GPTriangle : public GPInstance
 {
     // @ 0x82BBA158 -- VolumeMethods +0xA4 (GetMaximumFeatureFn).
-    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
-                                  const Vec4& arDir, Feature& arFeature);
+    void GetMaximumFeature(RwBool abCcw, rw::math::vpu::Vector3 arDir, Feature& arFeature) const;
     // @ 0x82BBA6A0 -- VolumeMethods +0xA8 (GetIntervalFn).
-    static void GetInterval(const GPInstance* lpThis,
-                            const Vec4& arDir, Interval& arInterval);
+    void GetInterval(rw::math::vpu::Vector3 arDir, Interval& arInterval) const;
     // @ 0x82BBA6E0 -- VolumeMethods +0xAC (GetIntervalsFn).
-    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
-                             u32 auNumDirs, Interval* lapIntervals);
+    void GetIntervals(const rw::math::vpu::Vector3* lapDirs, u32 auNumDirs, Interval* lapIntervals) const;
+    void GetBBox(AABBox& arBBox) const;
 };
 
 // @ 0x82BBA748 -- point-vs-triangle nearest-feature query, HOMED in
@@ -294,8 +253,8 @@ struct GPTriangle : public GPInstance
 // parameter that the console function does not have (it never writes f3 --
 // see the body's banner). That declaration has no definition anywhere; this
 // one does.
-s32 TriangleNearestPointRegion(Vec4* lpNearest, f32* lpfParamS, f32* lpfParamT,
-                               Vec4 aPoint, Vec4 aV0, Vec4 aV1, Vec4 aV2);
+s32 TriangleNearestPointRegion(rw::math::vpu::Vector3* lpNearest, f32* lpfParamS, f32* lpfParamT,
+                               rw::math::vpu::Vector3 aPoint, rw::math::vpu::Vector3 aV0, rw::math::vpu::Vector3 aV1, rw::math::vpu::Vector3 aV2);
 
 // ---------------------------------------------------------------------------
 // rw::collision::PrimitivePairIntersectResult -- one narrow-phase result slot
@@ -324,27 +283,23 @@ struct PrimitivePairIntersectResult
         MAXPOINTCOUNT = 2 * Feature::MAXEDGECOUNT
     };
 
-    u32     v1;                          // +0x000  first Volume (console pointer image)
+    const Volume* v1;                          // +0x000  first Volume (console pointer image)
     u32     tag1;                        // +0x004  first user tag
-    u32     v2;                          // +0x008  second Volume (console pointer image)
+    const Volume* v2;                          // +0x008  second Volume (console pointer image)
     u32     tag2;                        // +0x00C  second user tag
     s32     vNindex;                     // +0x010  source pair index; -1 = fatness-culled
-    u8      mPad014[0xC];                // +0x014  16-byte alignment of f1
     Feature f1;                          // +0x020  support feature on the first side
     Feature f2;                          // +0x260  support feature on the second side
-    Vec4    sepDir;                      // +0x4A0  coarse separating direction (pass 1)
+    rw::math::vpu::Vector3 sepDir;                      // +0x4A0  coarse separating direction (pass 1)
     f32     sepDist;                     // +0x4B0  (untouched by the batch kernels)
-    u8      mPad4B4[0xC];                // +0x4B4  16-byte alignment of normal
-    Vec4    normal;                      // +0x4C0  final contact normal
-    Vec4    pointOn1;                    // +0x4D0  reference contact point, first side
-    Vec4    pointOn2;                    // +0x4E0  reference contact point, second side
+    rw::math::vpu::Vector3 normal;                      // +0x4C0  final contact normal
+    rw::math::vpu::Vector3 pointOn1;                    // +0x4D0  reference contact point, first side
+    rw::math::vpu::Vector3 pointOn2;                    // +0x4E0  reference contact point, second side
     f32     distance;                    // +0x4F0  separation along the direction
-    u8      mPad4F4[0xC];                // +0x4F4
-    Vec4    pointsOn1[MAXPOINTCOUNT];    // +0x500  contact points, first side
-    Vec4    pointsOn2[MAXPOINTCOUNT];    // +0x600  contact points, second side
+    rw::math::vpu::Vector3 pointsOn1[MAXPOINTCOUNT];    // +0x500  contact points, first side
+    rw::math::vpu::Vector3 pointsOn2[MAXPOINTCOUNT];    // +0x600  contact points, second side
     f32     distances[MAXPOINTCOUNT];    // +0x700  per-point separation along normal
     u32     numPoints;                   // +0x740  contact-point count (0 = rejected)
-    u8      mPad744[0xC];                // +0x744  pad to the 0x750 stride
 };
 
 CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, f1)        == 0x020), "PPIR::f1");
@@ -370,9 +325,9 @@ CGS_STATIC_ASSERT((sizeof(PrimitivePairIntersectResult)              == 0x750), 
 // ---------------------------------------------------------------------------
 struct rwc_FeatureIntersectionPrism
 {
-    Vec4   m_ptsOn1[2 * Feature::MAXEDGECOUNT];   // +0x000  points on feature 1
-    Vec4   m_ptsOn2[2 * Feature::MAXEDGECOUNT];   // +0x100  points on feature 2
-    Vec4   normal;                                // +0x200  override contact normal
+    rw::math::vpu::Vector3 m_ptsOn1[2 * Feature::MAXEDGECOUNT];   // +0x000  points on feature 1
+    rw::math::vpu::Vector3 m_ptsOn2[2 * Feature::MAXEDGECOUNT];   // +0x100  points on feature 2
+    rw::math::vpu::Vector3 normal;                                // +0x200  override contact normal
     s32    m_numpts;                              // +0x210  point-pair count
     RwBool normalOverride;                        // +0x214  caller zeroes; worker sets
 };
@@ -407,7 +362,7 @@ struct VolRef1xN
 // Separating-axis (SAT) family. Canonical shapes rwccore.h:3144-3166 /
 // :3830-3845: each writes the best separating direction (oriented from gp1
 // toward gp2) through arBestSepDir and returns the signed separation along it
-// (VecFloat broadcast on console; the scalar lane here). Negative return =
+// (native VecFloat returned in v1). Negative return =
 // penetration depth.
 // ---------------------------------------------------------------------------
 
@@ -416,7 +371,7 @@ struct VolRef1xN
 // ComputeContactPoints). RECOVERED + DEFINED 2026-08-18 (waveQ5 C1): the
 // registration TU is GPRegistration.cpp (canonical FixupSepDirMethods,
 // rwccore.h:2955); all 36 slots are dumped there entry by entry.
-typedef f32 (*FindBestSeparatingDirectionFn)(Vec4& arBestSepDir,
+typedef rw::math::vpu::VecFloat (*FindBestSeparatingDirectionFn)(rw::math::vpu::Vector3& arBestSepDir,
                                              const GPInstance& arGP1,
                                              const GPInstance& arGP2);
 extern const FindBestSeparatingDirectionFn
@@ -433,51 +388,51 @@ extern const GPInstance::VolumeMethods
 // delta); returns the end pointer of the filled array, or NULL if none
 // survived the degeneracy filter. (Same TU as FindBestSeparatingDirection;
 // the caller provides 15 usable 16-byte slots.)
-Vec4* FindBestSepDir_FindCandidates(Vec4* lapCandidates,
+rw::math::vpu::Vector3* FindBestSepDir_FindCandidates(rw::math::vpu::Vector3* lapCandidates,
                                     const GPInstance& arGP1, const GPInstance& arGP2);
 
 // @ 0x82BB4660 -- generic SAT driver: collect candidates, batch-project both
 // primitives (mMethods.mGetIntervals), keep the axis with the greatest
 // interval separation.
-f32 FindBestSeparatingDirection(Vec4& arBestSepDir,
+rw::math::vpu::VecFloat FindBestSeparatingDirection(rw::math::vpu::Vector3& arBestSepDir,
                                 const GPInstance& arGP1, const GPInstance& arGP2);
 
 // @ 0x82BB47F0 -- box/box SAT over the 6 face normals + 9 edge crosses.
-f32 FindBestSeparatingDirectionBoxBox(Vec4& arBestSepDir,
+rw::math::vpu::VecFloat FindBestSeparatingDirectionBoxBox(rw::math::vpu::Vector3& arBestSepDir,
                                       const GPInstance& arGP1, const GPInstance& arGP2);
 
 // PENDING (not delivered this wave; body in the same ledger TU family). The
 // tri/box worker FindBestSeparatingDirectionBoxTri @ 0x82BAA1A0 tail-calls.
-f32 FindBestSeparatingDirectionTriBox(Vec4& arBestSepDir,
+rw::math::vpu::VecFloat FindBestSeparatingDirectionTriBox(rw::math::vpu::Vector3& arBestSepDir,
                                       const GPInstance& arGP1, const GPInstance& arGP2);
 
 // @ 0x82BAA1A0 -- canonical inline rwccore.h:3151 emitted out of line: run the
 // tri/box worker swapped, then flip the direction.
-f32 FindBestSeparatingDirectionBoxTri(Vec4& arBestSepDir,
+rw::math::vpu::VecFloat FindBestSeparatingDirectionBoxTri(rw::math::vpu::Vector3& arBestSepDir,
                                       const GPInstance& arGP1, const GPInstance& arGP2);
 
 // @ 0x82BAA1F0 -- canonical inline rwccore.h:3158 emitted out of line: the
 // normalised centre1->centre2 axis; returns the centre distance (0 when
 // coincident).
-f32 FindBestSeparatingDirectionSphSph(Vec4& arBestSepDir,
+rw::math::vpu::VecFloat FindBestSeparatingDirectionSphSph(rw::math::vpu::Vector3& arBestSepDir,
                                       const GPInstance& arGP1, const GPInstance& arGP2);
 
 // @ 0x82BB76E8 -- cylinder SAT driver (canonical rwccore.h:3831): build the
 // rim-aware candidate table, then evaluate it.
-f32 FindBestSepDirWithCylinder(Vec4& arBestSepDir,
+rw::math::vpu::VecFloat FindBestSepDirWithCylinder(rw::math::vpu::Vector3& arBestSepDir,
                                const GPCylinder& arGPCylinder, const GPInstance& arGPOther);
 
 // @ 0x82BAA250 -- canonical inline rwccore.h:3834 emitted out of line: pure
 // tail-call thunk onto FindBestSepDirWithCylinder (cylinder-first operand
 // order is the worker's native order).
-f32 FindBestSeparatingDirCylVol(Vec4& arBestSepDir,
+rw::math::vpu::VecFloat FindBestSeparatingDirCylVol(rw::math::vpu::Vector3& arBestSepDir,
                                 const GPInstance& arGPCylinder, const GPInstance& arGPOther);
 
 // @ 0x82BAA258 -- the mirrored thunk (the CYLINDER-as-gp2 column of the
 // dispatch table): call the worker with the operands swapped so the cylinder
 // is first, then flip the sign of the stored direction. Same shape as
 // FindBestSeparatingDirectionBoxTri @ 0x82BAA1A0.
-f32 FindBestSeparatingDirVolCyl(Vec4& arBestSepDir,
+rw::math::vpu::VecFloat FindBestSeparatingDirVolCyl(rw::math::vpu::Vector3& arBestSepDir,
                                 const GPInstance& arGPOther, const GPInstance& arGPCylinder);
 
 // ---------------------------------------------------------------------------
@@ -490,32 +445,21 @@ f32 FindBestSeparatingDirVolCyl(Vec4& arBestSepDir,
 // [aEdgeP1, aEdgeP2]: a 10-step damped regula-falsi on the rim-to-edge gap.
 // The X360 passes all five vectors by value in VMX v1..v5 and returns the
 // direction in v1.
-Vec4 RimToEdge(Vec4 aRimCentre, Vec4 aRimAxis, Vec4 aRimRadius,
-               Vec4 aEdgeP1, Vec4 aEdgeP2);
+rw::math::vpu::Vector3 RimToEdge(rw::math::vpu::Vector3 aRimCentre, rw::math::vpu::Vector3 aRimAxis, rw::math::vpu::VecFloat aRimRadius,
+               rw::math::vpu::Vector3 aEdgeP1, rw::math::vpu::Vector3 aEdgeP2);
 
-// @ 0x82BB56C8 -- test one rim-circle pair for a separating-direction
-// candidate (interlock rejection, coplanar closed form, or a Heron-seeded
-// bracketed regula-falsi on the angular score); on success writes one
-// 16-byte candidate to lpCandidate and returns nonzero. (All vector
-// parameters by value: at the 0x82BB61C0 call site every argument register
-// carries the address of a fresh caller-stack copy.)
-RwBool RimToRim(Vec4 aRimCentre1, Vec4 aRimAxis1, Vec4 aRimRadius1,
-                Vec4 aRimCentre2, Vec4 aRimAxis2, Vec4 aRimRadius2,
-                Vec4 aSepDir, Vec4* lpCandidate);
+// 82BB56C8 reads reference arguments r3..r9 and writes the Vector3 at r10.
+// Radius VecFloat is inferred from the broadcast producer and register ABI.
+RwBool RimToRim(const rw::math::vpu::Vector3& aRimCentre1, const rw::math::vpu::Vector3& aRimAxis1, const rw::math::vpu::VecFloat& aRimRadius1,
+                const rw::math::vpu::Vector3& aRimCentre2, const rw::math::vpu::Vector3& aRimAxis2, const rw::math::vpu::VecFloat& aRimRadius2,
+                const rw::math::vpu::Vector3& aSepDir, rw::math::vpu::Vector3* lpCandidate);
 
-// @ 0x82BB6118 -- build the two end points of an edge given as
-// point + dir*(offset +/- halfLength), run RimToEdge on them, and append the
-// returned candidate to lapCandidateDirs (16-byte stride), bumping the count.
-void AddRimToEdgeCandidate(const Vec4& arRimCentre, const Vec4& arRimAxis,
-                           const Vec4& arRimRadius, const Vec4& arEdgePoint,
-                           const Vec4& arEdgeDirection,
-                           f32 afEdgeOffset, f32 afEdgeHalfLength,
-                           Vec4* lapCandidateDirs, u32* lpuNumCandidateDirs);
-
-// @ 0x82BB61C0 -- enumerate rim-to-rim candidates between two cylinder-style
-// GP instances (all four +/- rim-end pairings when the axes are not parallel).
+void AddRimToEdgeCandidate(const rw::math::vpu::Vector3& arRimCentre, const rw::math::vpu::Vector3& arRimAxis,
+                           const rw::math::vpu::VecFloat& arRimRadius, const rw::math::vpu::Vector3& arEdgePoint,
+                           const rw::math::vpu::Vector3& arEdgeDirection, f32 afEdgeOffset, f32 afEdgeHalfLength,
+                           rw::math::vpu::Vector3* lapCandidateDirs, u32* lpuNumCandidateDirs);
 void AddRimToRimCandidates(const GPInstance* lpGP1, const GPInstance* lpGP2,
-                           Vec4* lapCandidateDirs, u32* lpuNumCandidateDirs);
+                           rw::math::vpu::Vector3* lapCandidateDirs, u32* lpuNumCandidateDirs);
 
 // ---------------------------------------------------------------------------
 // Feature-pair prism intersection family (canonical rwccore.h:1810-1836).
@@ -526,40 +470,40 @@ void AddRimToRimCandidates(const GPInstance* lpGP1, const GPInstance* lpGP2,
 // ---------------------------------------------------------------------------
 
 // @ 0x82BB77C0 -- edge vs point.
-RwBool FindEdgePointPrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                          Feature& arEdgeFeature, Feature& arPointFeature, const Vec4& arSepDir);
+RwBool FindEdgePointPrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                          Feature& arEdgeFeature, Feature& arPointFeature, const rw::math::vpu::Vector3& arSepDir);
 
 // @ 0x82BB78A8 -- edge vs edge (skew closest approach, or the parallel
 // interval clip through FindIntervalOverlap).
-RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                         Feature& arEdgeFeature1, Feature& arEdgeFeature2, const Vec4& arSepDir);
+RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                         Feature& arEdgeFeature1, Feature& arEdgeFeature2, const rw::math::vpu::Vector3& arSepDir);
 
 // @ 0x82BB7F18 -- face vs point.
-RwBool FindFacePointPrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, Vec4* lapPtsOnP,
-                          Feature& arFaceFeature, Feature& arPointFeature, const Vec4& arSepDir);
+RwBool FindFacePointPrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOnF, rw::math::vpu::Vector3* lapPtsOnP,
+                          Feature& arFaceFeature, Feature& arPointFeature, const rw::math::vpu::Vector3& arSepDir);
 
 // @ 0x82BB83A8 -- face vs edge.
-RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, Vec4* lapPtsOnE,
-                         Feature& arFaceFeature, Feature& arEdgeFeature, const Vec4& arSepDir);
+RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOnF, rw::math::vpu::Vector3* lapPtsOnE,
+                         Feature& arFaceFeature, Feature& arEdgeFeature, const rw::math::vpu::Vector3& arSepDir);
 
 // @ 0x82BB8798 -- generic face vs face (simultaneous edge-ring walk).
-RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                         Feature& arFaceFeature1, Feature& arFaceFeature2, const Vec4& arSepDir);
+RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                         Feature& arFaceFeature1, Feature& arFaceFeature2, const rw::math::vpu::Vector3& arSepDir);
 
 // @ 0x82BB8CA0 -- 4-edge face vs 3-edge face specialisation.
-RwBool FindFaceFacePrism4x3(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                            Feature& arFaceFeature1, Feature& arFaceFeature2, const Vec4& arSepDir);
+RwBool FindFaceFacePrism4x3(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                            Feature& arFaceFeature1, Feature& arFaceFeature2, const rw::math::vpu::Vector3& arSepDir);
 
 // @ 0x82BB9400 -- 4-edge face vs 4-edge face specialisation.
-RwBool FindFaceFacePrism4x4(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                            Feature& arFaceFeature1, Feature& arFaceFeature2, const Vec4& arSepDir);
+RwBool FindFaceFacePrism4x4(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                            Feature& arFaceFeature1, Feature& arFaceFeature2, const rw::math::vpu::Vector3& arSepDir);
 
 // @ 0x82BB9BD8 -- dispatch on the two features' edge counts (0 = point,
 // 1 = edge, >1 = face) to the specialised worker, resolving the point/point
 // case inline. Returns nonzero when an intersection prism was found.
 RwBool FindFeatureIntersectionPrism(rwc_FeatureIntersectionPrism& arRes,
                                     Feature& arFeature1, Feature& arFeature2,
-                                    const Vec4& arSepDir);
+                                    const rw::math::vpu::Vector3& arSepDir);
 
 // @ 0x82BB7828 -- clip arInterval1 against arInterval2 into *lpResult and
 // report whether the clipped interval is non-empty (strict, all four lanes).
@@ -585,7 +529,7 @@ u32 FindIntervalOverlap(Interval* lpResult,
 // truthiness, never as 0/1.
 // FLAGGED: the name is descriptive, not SDK-attested (the binary symbol is
 // unnamed and no DWARF/Feb-2007 declaration exists for it).
-u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNormal);
+u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, rw::math::vpu::Vector3 arNormal);
 
 // @ 0x82BABDA8 -- narrow-phase contact generation for one GP-instance pair
 // (canonical rwccore.h:1180). Returns the number of contact-point pairs
@@ -628,16 +572,14 @@ struct Volume;
 // @ 0x82BAC130 -- single-pair narrow-phase entry point (canonical
 // rwccore.h:3001: RwBool PrimitivePairIntersect(PrimitivePairIntersectResult&,
 // const Volume*, const Matrix44Affine*, const Volume*, const Matrix44Affine*,
-// float padding, const Vector4* sepDir)). The transforms ride as const void*
-// per the committed CreateGPInstanceFn slot type (the Matrix44Affine layout
-// has not landed in this home). apSepDir, when non-NULL, carries the caller's
+// float padding, const Vector4* sepDir)). apSepDir, when non-NULL, carries the caller's
 // separating direction in xyz and the separation distance in w (lfs f31,
 // 0xC(r30)). Called by BrnPhysics::Vehicle::VehicleManager::
 // PredictCarCarIntersection and the CgsSceneManager OverlapCullingModule.
 RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,
-                              const Volume* apVolume1, const void* apMtx1,
-                              const Volume* apVolume2, const void* apMtx2,
-                              f32 afPadding, const Vec4* apSepDir);
+                              const Volume* apVolume1, const rw::math::vpu::Matrix44Affine* apMtx1,
+                              const Volume* apVolume2, const rw::math::vpu::Matrix44Affine* apMtx2,
+                              f32 afPadding, const rw::math::vpu::Vector4* apSepDir);
 
 } // namespace collision
 } // namespace rw

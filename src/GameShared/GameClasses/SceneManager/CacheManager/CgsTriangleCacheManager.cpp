@@ -84,7 +84,7 @@ namespace CgsSceneManager
         for (u32 luSlot = 0; luSlot < KU_MAX_CACHED_OBJECTS; ++luSlot)
         {
             CacheSlot& lrSlot = mpaCachedObjectSlots[luSlot];
-            lrSlot.mLastCachedSphere.SetZero();
+            lrSlot.mLastCachedSphere.mData.mV = __vspltisw(0);
             lrSlot.miIndexIntoTriangleCache   = liIndexIntoTriangleCache;
             lrSlot.miNumCachedTriangleBatches = 0;
             lrSlot.miOverflow                 = 0;

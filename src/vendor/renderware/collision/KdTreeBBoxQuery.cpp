@@ -38,7 +38,7 @@ KdTreeBBoxQuery::KdTreeBBoxQuery(KdTree* lpKdTree, const u32* lpQueryBox)
         // the traversal inactive.
         muStackDepth      = 0;                       // +0xB8 (re-cleared in asm)
         muTraversalActive = 0;                       // +0xB0
-        muTopNode         = lpKdTree->muLeafNodeIndex; // +0xB4
+        muTopNode         = lpKdTree->muNumEntries; // +0xB4
     }
 }
 

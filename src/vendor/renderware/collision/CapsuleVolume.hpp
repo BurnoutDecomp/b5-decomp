@@ -3,6 +3,7 @@
 #include <cstddef>   // offsetof (layout pins)
 
 #include "types.hpp"
+#include "SDKs/EATech/rwcollision/volume_debug_access.h"
 #include "vendor/renderware/collision/Feature.hpp"    // Vec4 / RwBool / FeatureEdge / Feature
 #include "vendor/renderware/collision/AABBox.hpp"      // AABBox / math::vpu::Vector3 (GetBBox / GetBBoxDiag out)
 
@@ -59,11 +60,14 @@ namespace collision
 struct GPInstance;   // vendor/renderware/collision/GPInstance.hpp
 struct VolumeLineSegIntersectResult;   // vendor/renderware/collision/LineSegIntersect.hpp
 
-class CapsuleVolume
+class CapsuleVolume : public Volume
 {
 public:
     // Canonical default ctor (members left uninitialised).
     CapsuleVolume() {}
+
+    RwBool GetInterval(const Vector3& arDir, Interval& arInterval) const;
+    void Release();
 
     // @ 0x82BAF6F0 -- instance this capsule into the GP ("generalised
     // primitive") narrow-phase image arInst, optionally transformed by the
@@ -72,7 +76,7 @@ public:
     // PrimitiveIntersect.cpp); the X360 register contract is the plain
     // __fastcall member one: r3 = this, r4 = &arInst, r5 = lpTransform.
     // The console always returns 1 (li r3, 1) and every caller discards it.
-    RwBool CreateGPInstance(GPInstance& arInst, const Vec4* lpTransform) const;
+    RwBool CreateGPInstance(GPInstance& arInst, const Matrix44Affine* lpTransform) const;
 
     // @ 0x82BAF6A8 -- return the local axis-aligned bounding-box diagonal:
     // 2 * ( |maFrame[2]| * mfHalfHeight + mfRadius ) per component. X360
@@ -85,7 +89,7 @@ public:
     // but unused (r4 / r5 are dead in the asm). Structurally identical to
     // CylinderVolume::GetMaximumFeature; the axis is scaled by the +0x44 scalar
     // (mfHalfHeight).
-    void GetMaximumFeature(RwBool abCcw, const Vec4& arDir, Feature& arResult) const;
+    RwBool GetMaximumFeature(RwBool abCcw, const Vector3& arDir, Feature& arResult) const;
 
     // @ 0x82BAF9C8 -- write the capsule's (optionally transformed) AABB to
     // arResult and return 1. The oriented axis is maFrame[2] and the centre is
@@ -94,43 +98,20 @@ public:
     // extent is |axis| * mfHalfHeight + mfRadius per component; min = centre -
     // extent, max = centre + extent. abTight (r5) is accepted but DEAD in the
     // asm (unlike CylinderVolume::GetBBox, the capsule has no tight/loose split).
-    RwBool GetBBox(const Vec4* lpTransform, RwBool abTight, AABBox& arResult) const;
+    RwBool GetBBox(const Matrix44Affine* lpTransform, RwBool abTight, AABBox& arResult) const;
 
     // @ 0x82BAFCF8 (428 insns) -- DWARF capsule.h:144 `RwBool LineSegIntersect(const Vector3&, const Vector3&,
     // const Matrix44Affine*, VolumeLineSegIntersectResult&, float32_t) const`. The segment arPt1 -> arPt2 against
     // the capsule (the frame's z segment +/- mfHalfHeight, rounded by mfRadius + afFatness), in its frame
     // (composed with lpTransform when given); fills arResult on a hit (1). LANDED 2026-09-25 (FX-FOLLOWUPS
     // stage (b)); body in LineSegIntersect.cpp, bound to the descriptor's lineSegIntersect slot in VolumeVTables.cpp.
-    RwBool LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+    RwBool LineSegIntersect(const Vector3& arPt1, const Vector3& arPt2, const Matrix44Affine* lpTransform,
                             VolumeLineSegIntersectResult& arResult, f32 afFatness) const;
 
-    // --- members (X360-asm-attested offsets; inferred names) ----------------
-    // The local frame: three basis rows + a centre row. GetBBox / GetBBoxDiag /
-    // CreateGPInstance read maFrame[2] as the oriented capsule axis and
-    // maFrame[3] as the centre (CreateGPInstance rotates maFrame[2] by the
-    // CALLER's transform rows and transforms maFrame[3] as a point -- it reads
-    // nothing else from the frame); GetMaximumFeature reads maFrame[1] as the
-    // (feature) axis and maFrame[3] as the centre.
-    Vec4 maFrame[4];    // +0x00 / +0x10 / +0x20 / +0x30
-    u32  mu40;          // +0x40  (unread by the homed funcs; init word slot,
-                        //         cf. CylinderVolume::mInitWord)
-    f32  mfHalfHeight;  // +0x44  axial half-length: scales |maFrame[2]| in the
-                        //         AABB and the GetMaximumFeature segment, and is
-                        //         copied to GPInstance::mDimensions.x (+0x70)
-    u32  mu48;          // +0x48  (unread by the homed funcs; keeps +0x50 aligned)
-    u32  mu4C;          // +0x4C  (unread by the homed funcs)
-    f32  mfRadius;      // +0x50  radial extent: isotropic AABB add; copied to
-                        //         GPInstance::mFatness (+0x80)
-    u32  mu54;          // +0x54  (unread by the homed funcs)
-    u32  mu58;          // +0x58  (unread by the homed funcs)
-    u32  muFlags;       // +0x5C  volume flag word: copied verbatim into
-                        //         GPInstance::mFlags (+0x94) by CreateGPInstance
+
 };
 
-CGS_STATIC_ASSERT((offsetof(CapsuleVolume, maFrame)     == 0x00), "CapsuleVolume::maFrame");
-CGS_STATIC_ASSERT((offsetof(CapsuleVolume, mfHalfHeight)== 0x44), "CapsuleVolume::mfHalfHeight");
-CGS_STATIC_ASSERT((offsetof(CapsuleVolume, mfRadius)    == 0x50), "CapsuleVolume::mfRadius");
-CGS_STATIC_ASSERT((offsetof(CapsuleVolume, muFlags)     == 0x5C), "CapsuleVolume::muFlags");
+CGS_STATIC_ASSERT((sizeof(CapsuleVolume) == 0x60), "Native CapsuleVolume size");
 
 } // namespace collision
 } // namespace rw
