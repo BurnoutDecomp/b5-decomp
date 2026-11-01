@@ -410,17 +410,17 @@ public:
         //                      vmsum3fp128 + vrsqrtefp + vmulfp (a scalar broadcast into all
         //                      four lanes, NOT a direction vector).
         void RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
-                            ActiveRaceCar::RenderParams* lpRenderParams,
-                            const CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>* lpCarGraphics,
-                            const CgsResource::ResourcePtr<BrnWheel::GraphicsSpec>* lpWheelGraphics,
+                            rw::math::vpu::VecFloat lCameraDistance,
+                            Vector4 lvFogScattering,
+                            Vector4 lvFogColourPlusWhiteLevel,
+                            const ActiveRaceCar::RenderParams* lpRenderParams,
+                            const CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>& lrCarGraphics,
+                            const CgsResource::ResourcePtr<BrnWheel::GraphicsSpec>& lrWheelGraphics,
                             s32 liObjectList,
                             s32 liOpaqueMeshList,
                             s32 liTransparentMeshList,
-                            const ShadowMap* lpShadowMap,
-                            bool lbRenderAttachedGeometry,
-                            f32  lfCameraDistance,
-                            Vector4 lvFogScattering,
-                            Vector4 lvFogColourPlusWhiteLevel );
+                            ShadowMap* lpShadowMap,
+                            bool lbRenderAttachedGeometry ) const;
 
         // ---- X360 0x822D1600 -- ONE race car's LAMP FLARES (coronas) ----
         // Signature + `const` are the DWARF's (BrnRaceCarEntityModule.h:788, definition
