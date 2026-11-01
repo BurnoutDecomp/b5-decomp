@@ -64,7 +64,7 @@ namespace CgsGeometric
             // Build the clip-test scratch data for triangle (lVert0, lVert1, lVert2):
             // vertices, face normal, three edges, three outward in-plane edge normals,
             // and the plane offset. (Body @ 0x82839D30.)
-            void Construct(const Vector3& lVert0, const Vector3& lVert1, const Vector3& lVert2);
+            void Construct(Vector3 lVert0, Vector3 lVert1, Vector3 lVert2);
         };
 
         // BT::BoxVertexData -- the sibling clip-scratch struct for a box vertex

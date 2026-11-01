@@ -208,7 +208,7 @@ namespace CgsGeometric
             }
         }
 
-        void TriangleData::Construct(const Vector3& lVert0, const Vector3& lVert1, const Vector3& lVert2)
+        void TriangleData::Construct(Vector3 lVert0, Vector3 lVert1, Vector3 lVert2)
         {
             mVertex0 = lVert0;
             mVertex1 = lVert1;
