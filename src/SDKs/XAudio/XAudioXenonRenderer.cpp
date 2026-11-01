@@ -1,6 +1,7 @@
 #include "SDKs/XAudio/XAudioXenonRenderer.h"
 
-#include <atomic>
+#include <xtl.h>
+#include <ppcintrinsics.h>
 #include <cstring>
 
 // ===========================================================================
@@ -34,12 +35,11 @@ extern s32 XAudioUnregisterRenderDriverClient(void* apClient);
 // --- XBOX-Media (XBM) audio-capture ring globals (file-static to this TU) ------
 // dword_82F37684: the capture ring's write cursor. Advanced atomically by one
 //   frame (6144 bytes) per capture; the sentinel 6144 latches it after a single
-//   frame. The X360 uses an interrupt-disabled lwarx/stwcx RMW; std::atomic is
-//   the faithful portable rendering.
+//   frame. The X360 uses an interrupt-masked lwarx/stwcx RMW.
 // dword_832BE604: the reset marker Initialize clears (0) and the dtor latches
 //   (6144); read as the fallback "last buffer" when the ring yields slot 0.
-static std::atomic<u32> guXBMCaptureCursor{0}; // dword_82F37684
-static u32              guXBMResetMarker = 0;   // dword_832BE604
+static volatile long guXBMCaptureCursor = 0x1800; // dword_82F37684, image initial value
+static u32              guXBMResetMarker = 0x1800; // dword_832BE604, image initial value
 
 static const u32 KU_XBM_FRAME_BYTES = 6144; // 0x1800
 
@@ -71,8 +71,7 @@ CXenonRenderer::~CXenonRenderer()
 
     // Atomically latch the ring: if the cursor is still 0, set it to 6144;
     // otherwise leave it (the stwcx r8 path stores the old value back).
-    u32 uExpected = 0;
-    guXBMCaptureCursor.compare_exchange_strong(uExpected, KU_XBM_FRAME_BYTES);
+    InterlockedCompareExchange(&guXBMCaptureCursor, KU_XBM_FRAME_BYTES, 0);
 
     s32 iResult = 0;
     if (mpRenderDriverClient)                            // lwz 0x18(r31) ; cmplwi
@@ -91,11 +90,11 @@ void* CXenonRenderer::CaptureXBMAudioFrame(CFrameBufferProcessingData* apSource)
 {
     void* pResult = this; // r3 is left = this when the ring is latched
 
-    if (guXBMCaptureCursor.load(std::memory_order_relaxed) != KU_XBM_FRAME_BYTES)
+    if (static_cast<u32>(guXBMCaptureCursor) != KU_XBM_FRAME_BYTES)
     {
         // Atomically claim the current slot and advance the cursor by one frame
         // (lwarx/stwcx fetch-add under an interrupt lock on the X360).
-        u32 uSlot = guXBMCaptureCursor.fetch_add(KU_XBM_FRAME_BYTES, std::memory_order_acq_rel);
+        u32 uSlot = static_cast<u32>(InterlockedExchangeAdd(&guXBMCaptureCursor, KU_XBM_FRAME_BYTES));
         pResult = reinterpret_cast<void*>(static_cast<uintptr_t>(uSlot));
 
         if (uSlot != 0)
@@ -113,7 +112,7 @@ void* CXenonRenderer::CaptureXBMAudioFrame(CFrameBufferProcessingData* apSource)
                 void* pSlot = reinterpret_cast<void*>(static_cast<uintptr_t>(uSlot));
                 std::memcpy(pSlot, apSource->mpBuffer, KU_XBM_FRAME_BYTES);
                 pResult = pSlot;
-                std::atomic_thread_fence(std::memory_order_release); // lwsync
+                __lwsync(); // lwsync
             }
         }
         else
