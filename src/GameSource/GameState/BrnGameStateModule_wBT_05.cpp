@@ -33,7 +33,7 @@ void GameStateModule::OnEnterOnline(GameStateModuleIO::OutputBuffer*    lpOutput
     // Inlined here on the console: action 151 when the latched tip pauses the game.
     mTrainingManager.ForceUnpause(lpActionQueue);
 
-    const GameStateModuleIO::ResetCrashingAction lResetCrashingAction = {};
+    GameStateModuleIO::ResetCrashingAction lResetCrashingAction;
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetCrashingAction),
                             GameStateModuleIO::E_ACTION_RESET_CRASHING,
                             static_cast<s32>(sizeof(lResetCrashingAction)));

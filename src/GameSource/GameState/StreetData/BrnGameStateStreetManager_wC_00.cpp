@@ -322,7 +322,7 @@ void StreetManager::UpdateBufferedHighScores( f32 lfSimTimeStep,
         // The console tests `timer < limit` and carries on for NaN.
         if ( !( mfUnbufferTimer < KF_TIME_BETWEEN_HIGH_SCORE_UNBUFFERS ) )
         {
-            GameStateModuleIO::RoadRulesNewHighScoreAction lNewHighScore = {};
+            GameStateModuleIO::RoadRulesNewHighScoreAction lNewHighScore;
 
             if ( mbTooManyHighScoresToBuffer )
             {

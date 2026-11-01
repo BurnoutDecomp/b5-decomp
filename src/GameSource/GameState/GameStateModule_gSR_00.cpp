@@ -791,7 +791,7 @@ void GameStateModule::DetectModeStarts(const GameStateModuleIO::PreWorldInputBuf
                         mShowtimeIntroOriginalDirection = mLastActiveRaceCarInterface.GetPlayerDirection();
                         mbShowtimeIntroHasTouchedGround = false;
                         const f32 lfAngularVelocityY =
-                            mLastActiveRaceCarInterface.GetPlayerRaceCarState()->mAngularVelocity.y;
+                            mLastActiveRaceCarInterface.GetPlayerRaceCarState()->mAngularVelocity.mV.y;
                         mfShowtimeIntroSteering = vmx::Flush(lfAngularVelocityY) >= 0.0f ? -1.0f : 1.0f;
                         lbStartedIntro = true;
                     }

@@ -463,17 +463,14 @@ void ProgressionManager::CheckForSpecialCarUnlocks()
 // ===================================================================================
 void ProgressionManager::SendGameCompletionResults(CgsModule::VariableEventQueue<13312, 16>* lpGameActionQueue)
 {
-    GsmIO::GameCompletionResultsAction lRecord = {};
+    GsmIO::GameCompletionResultsAction lRecord;
 
     // `lwzx r11, r31, 0x2093C` then `lwz r11, 0xD94(r11)` -- the MODE manager's current mode.
     // (That +0xD94 read is the evidence that the +0x2093C back-pointer is a ModeManager; it was
     // committed as an untyped `void* mpGameStateModule` until this wave. See the header.)
-    if (mpModeManager != 0)
-    {
-        lRecord.meGameMode = mpModeManager->GetCurrentGameModeType();
-    }
+    lRecord.meGameMode = mpModeManager->GetCurrentGameModeType();
 
-    if (ComputeCompletionPercentage() >= KF_COMPLETE)
+    if (!(ComputeCompletionPercentage() < KF_COMPLETE))
     {
         lRecord.mbGameComplete = true;
         // `lbzx r10, r31, 0x1CE80` == manager+118400 == Profile+118032.
@@ -486,6 +483,11 @@ void ProgressionManager::SendGameCompletionResults(CgsModule::VariableEventQueue
         {
             mProfile.Set100PercentCompletedDateAsNow();
         }
+    }
+    else
+    {
+        lRecord.mbGameComplete = false;
+        lRecord.mbCompletionAlreadyRecorded = false;
     }
 
     lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord),
