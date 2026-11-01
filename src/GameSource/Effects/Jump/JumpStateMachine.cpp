@@ -46,11 +46,8 @@
 #include "GameSource/Effects/BrnEffectsUtils.h"               // Utils::Vector3Randomiser (FireWheelDebris)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // BrnPhysics::Vehicle::RaceCarState / WheelLite
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // the [jump] diag witness
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"    // rw::math::vpu::VecFloat (RandomVecFloat's splat)
 #include <cmath>
-#include <cstdio>    // snprintf
-#include <cstdlib>   // getenv
 
 namespace BrnEffects
 {
@@ -99,14 +96,14 @@ namespace
     // The two ejection-cone bound PAIRS, lerped between by one shared draw: NARROW is the
     // pair used at interpolant 0, WIDE at 1. Lateral spread widens from +-3 to +-7 and the
     // upward component from [1, 4] to [1, 6].
-    const Vector3 KV_DEBRIS_CONE_MIN_NARROW = { -3.0f, 1.0f, -3.0f, 0.0f };
-    const Vector3 KV_DEBRIS_CONE_MAX_NARROW = {  3.0f, 4.0f,  3.0f, 0.0f };
-    const Vector3 KV_DEBRIS_CONE_MIN_WIDE   = { -7.0f, 1.0f, -7.0f, 0.0f };
-    const Vector3 KV_DEBRIS_CONE_MAX_WIDE   = {  7.0f, 6.0f,  7.0f, 0.0f };
+    const Vector3 KV_DEBRIS_CONE_MIN_NARROW(-3.0f, 1.0f, -3.0f);
+    const Vector3 KV_DEBRIS_CONE_MAX_NARROW(3.0f, 4.0f, 3.0f);
+    const Vector3 KV_DEBRIS_CONE_MIN_WIDE(-7.0f, 1.0f, -7.0f);
+    const Vector3 KV_DEBRIS_CONE_MAX_WIDE(7.0f, 6.0f, 7.0f);
 
     // The colour argument (a 1.0 splat). Ignored by SpawnDebris for every type but
     // eDebrisArray_Coloured, and this burst is Dark.
-    const Vector4 KV_DEBRIS_WHITE = { 1.0f, 1.0f, 1.0f, 1.0f };
+    const Vector4 KV_DEBRIS_WHITE(1.0f, 1.0f, 1.0f, 1.0f);
 
     // The three LION effect paths, read out of the ARTIST image at the pointer table
     // off_82CDAE58 / off_82CDAE5C / off_82CDAE60.
@@ -122,24 +119,29 @@ namespace
     const char* const KPC_LANDING_DUST_LITE_EFFECT =
         "gamedb://burnout5/Burnout/Effects/Cam_DustImpactL.lef.BurnoutFXLionEffectFile?ID=614063";
 
-    // The shared, budgeted lane: state transitions and the handles StartLionEffect
-    // returned. Capped so a car that lands repeatedly cannot flood the log.
-    bool JumpDiagTakeLine()
+    __vector4 ReciprocalSqrt2(__vector4 squared)
     {
-        static s32 siLinesLeft = 64;
-        {
-            return false;
-        }
-        --siLinesLeft;
-        return true;
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(squared);
+        __vector4 error = __vnmsubfp(squared, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), error, estimate);
+        error = __vnmsubfp(squared, __vmulfp(estimate, estimate), one);
+        return __vmaddfp(__vmulfp(estimate, half), error, estimate);
     }
 
-    void JumpDiagLine(const char* lpcFormat, s32 liA, u32 luB)
+    __vector4 Splat(f32 value)
     {
-        char lacMsg[224];
-        std::snprintf(lacMsg, sizeof(lacMsg), lpcFormat, liA, luB);
-        CgsDev::Log::WriteToLog(lacMsg);
+        return __vspltw(__lvlx(&value, 0), 0);
     }
+
+    Vector3 CrossNative(const Vector3& a, const Vector3& b)
+    {
+        const __vector4 ayzx = __vpermwi(a.mV, 0x63);
+        const __vector4 byzx = __vpermwi(b.mV, 0x63);
+        return Vector3(__vpermwi(__vnmsubfp(ayzx, b.mV, __vmulfp(a.mV, byzx)), 0x63));
+    }
+
 }
 
 // @ 0x82288A58
@@ -154,21 +156,22 @@ void JumpStateMachine::SetVapourBlend(f32 lfFadeTime,
     // speed = |mLinearVelocity| (X360: vmsum3fp128 + rsqrt Newton refine -> magnitude,
     // vsel-guarded so |v|^2 == 0 yields 0).
     const Vector3& lvVel = lpCar->mLinearVelocity;
-    const f32 lfSquared = vmx::Dot3(lvVel, lvVel);
-    const f32 lfInverseSpeed = vmx::RefinedReciprocalSqrt(lfSquared, 2);
-    const f32 lfUnselectedSpeed = vmx::Multiply(lfSquared, lfInverseSpeed);
-    const f32 lfSpeed = lfSquared == 0.0f ? 0.0f : lfUnselectedSpeed;
+    const __vector4 squared = __vmsum3fp(lvVel.mV, lvVel.mV);
+    const __vector4 inverseSpeed = ReciprocalSqrt2(squared);
+    const __vector4 zero = __vspltisw(0);
+    const __vector4 speed = __vsel(__vmulfp(squared, inverseSpeed), zero, __vcmpeqfp(squared, zero));
+    const f32 lfSpeed = speed.x;
 
-    if (lfSpeed > KF_VAPOUR_MIN_SPEED)
+    if (!(lfSpeed <= KF_VAPOUR_MIN_SPEED))
     {
-        // ARTIST82288B10 writes zero before vcmpgefp: horizontal/rising motion is allowed.
-        if (vmx::Flush(lvVel.y) >= 0.0f)
+        unsigned int risingCR;
+        __vcmpgefpR(__vspltw(lvVel.mV, 1), zero, &risingCR);
+        if ((risingCR & 0x80u) != 0)
         {
-            // Direction alignment: dot(unit velocity, car world Z axis).
             const Vector3& lvForward = lpCar->mTransform.zAxis;
-            const f32 lfDot = vmx::Dot3(vmx::Multiply(lvVel, lfInverseSpeed), lvForward);
+            const f32 lfDot = __vmsum3fp(__vmulfp(lvVel.mV, inverseSpeed), lvForward.mV).x;
 
-            if (lfDot > 0.0f)
+            if (!(lfDot <= 0.0f))
             {
                 const f32 lfVapourDelay = lpDebug->JumpParams().VapourStartDelay();   // +0x70
                 const f32 lfVapourEnd   = lpDebug->JumpParams().VapourRampEndTime()   // +0x74
@@ -235,31 +238,15 @@ void JumpStateMachine::FireWheelSparks(CarState& lCarState,
     const f32 lfGroundHeight = lRaceCarData.GetGroundPositionY();
     CgsNumeric::Random& lRandom = lHelper.GetEffectsModule()->RandomNumberGenerator();
 
-    const f32 lfSparksLerpA = lRandom.RandomVecFloat().GetFloat() * 0.5f;
-    const f32 lfSparksLerpB = std::fma(0.5f, lRandom.RandomVecFloat().GetFloat(), 0.5f);
-
-    const f32 lafLeftPos[4]     = { lRearLeftWheel.mRoadContact.mPosition.x,  lRearLeftWheel.mRoadContact.mPosition.y,
-                                    lRearLeftWheel.mRoadContact.mPosition.z,  lRearLeftWheel.mRoadContact.mPosition.w };
-    const f32 lafRightPos[4]    = { lRearRightWheel.mRoadContact.mPosition.x, lRearRightWheel.mRoadContact.mPosition.y,
-                                    lRearRightWheel.mRoadContact.mPosition.z, lRearRightWheel.mRoadContact.mPosition.w };
-    const f32 lafLeftNormal[4]  = { lRearLeftWheel.mRoadContact.mNormal.x,  lRearLeftWheel.mRoadContact.mNormal.y,
-                                    lRearLeftWheel.mRoadContact.mNormal.z,  lRearLeftWheel.mRoadContact.mNormal.w };
-    const f32 lafRightNormal[4] = { lRearRightWheel.mRoadContact.mNormal.x, lRearRightWheel.mRoadContact.mNormal.y,
-                                    lRearRightWheel.mRoadContact.mNormal.z, lRearRightWheel.mRoadContact.mNormal.w };
-    f32 lafPosA[4], lafPosB[4], lafNormalA[4], lafNormalB[4];
-    for (u32 luLane = 0; luLane < 4u; ++luLane)
-    {
-        const f32 lfPosSpan    = lafRightPos[luLane] - lafLeftPos[luLane];
-        const f32 lfNormalSpan = lafRightNormal[luLane] - lafLeftNormal[luLane];
-        lafPosA[luLane]    = std::fma(lfSparksLerpA, lfPosSpan, lafLeftPos[luLane]);
-        lafNormalA[luLane] = std::fma(lfSparksLerpA, lfNormalSpan, lafLeftNormal[luLane]);
-        lafPosB[luLane]    = std::fma(lfPosSpan, lfSparksLerpB, lafLeftPos[luLane]);
-        lafNormalB[luLane] = std::fma(lfNormalSpan, lfSparksLerpB, lafLeftNormal[luLane]);
-    }
-    const Vector3 lSparksSpawnPosA    = { lafPosA[0], lafPosA[1], lafPosA[2], lafPosA[3] };
-    const Vector3 lSparksSpawnPosB    = { lafPosB[0], lafPosB[1], lafPosB[2], lafPosB[3] };
-    const Vector3 lSparksSpawnNormalA = { lafNormalA[0], lafNormalA[1], lafNormalA[2], lafNormalA[3] };
-    const Vector3 lSparksSpawnNormalB = { lafNormalB[0], lafNormalB[1], lafNormalB[2], lafNormalB[3] };
+    const __vector4 half = __vcfsx(__vspltisw(1), 1);
+    const __vector4 lerpA = __vmulfp(lRandom.RandomVecFloat().mV, half);
+    const __vector4 lerpB = __vmaddfp(lRandom.RandomVecFloat().mV, half, half);
+    const __vector4 posSpan = __vsubfp(lRearRightWheel.mRoadContact.mPosition.mV, lRearLeftWheel.mRoadContact.mPosition.mV);
+    const __vector4 normalSpan = __vsubfp(lRearRightWheel.mRoadContact.mNormal.mV, lRearLeftWheel.mRoadContact.mNormal.mV);
+    const Vector3 lSparksSpawnPosA(__vmaddfp(lerpA, posSpan, lRearLeftWheel.mRoadContact.mPosition.mV));
+    const Vector3 lSparksSpawnPosB(__vmaddfp(posSpan, lerpB, lRearLeftWheel.mRoadContact.mPosition.mV));
+    const Vector3 lSparksSpawnNormalA(__vmaddfp(lerpA, normalSpan, lRearLeftWheel.mRoadContact.mNormal.mV));
+    const Vector3 lSparksSpawnNormalB(__vmaddfp(normalSpan, lerpB, lRearLeftWheel.mRoadContact.mNormal.mV));
 
     lHelper.GetEffectsModule()->FireJumpSparks(lCarState.GetDt(), lCarState.GetTime(), lSparksSpawnPosA,
                                                lSparksSpawnNormalA, lHelper.RaceCarState(), lfGroundHeight,
@@ -307,9 +294,9 @@ void JumpStateMachine::FireWheelDebris(CarState& lCarState,
     // speed = |mLinearVelocity| (the original is a reciprocal-square-root approximation with
     // two Newton refinements, guarded so |v|^2 == 0 yields 0).
     const Vector3& lvVelocity = lpCar->mLinearVelocity;
-    const f32 lfSpeed = sqrtf(lvVelocity.x * lvVelocity.x
-                            + lvVelocity.y * lvVelocity.y
-                            + lvVelocity.z * lvVelocity.z);
+    const __vector4 speedSq = __vmsum3fp(lvVelocity.mV, lvVelocity.mV);
+    const __vector4 zero = __vspltisw(0);
+    const f32 lfSpeed = __vsel(__vmulfp(speedSq, ReciprocalSqrt2(speedSq)), zero, __vcmpeqfp(speedSq, zero)).x;
 
     const f32 lfSpeedRamp = (1.0f / (KF_DEBRIS_SPEED_HIGH - KF_DEBRIS_SPEED_LOW))
                           * (lfSpeed - KF_DEBRIS_SPEED_LOW);
@@ -331,40 +318,17 @@ void JumpStateMachine::FireWheelDebris(CarState& lCarState,
     const BrnPhysics::Vehicle::WheelLite& lrRearRight = lpCar->maWheels[3];
     const Vector3& lvUp = lpCar->mTransform.yAxis;
 
-    const Vector3 lvSegmentStart = {
-        lvUp.x * lrRearLeft.mfRadius + lrRearLeft.mRoadContact.mPosition.x,
-        lvUp.y * lrRearLeft.mfRadius + lrRearLeft.mRoadContact.mPosition.y,
-        lvUp.z * lrRearLeft.mfRadius + lrRearLeft.mRoadContact.mPosition.z, 0.0f };
-    const Vector3 lvSegmentEnd = {
-        lvUp.x * lrRearRight.mfRadius + lrRearRight.mRoadContact.mPosition.x,
-        lvUp.y * lrRearRight.mfRadius + lrRearRight.mRoadContact.mPosition.y,
-        lvUp.z * lrRearRight.mfRadius + lrRearRight.mRoadContact.mPosition.z, 0.0f };
+    const Vector3 lvSegmentStart(__vmaddfp(lvUp.mV, Splat(lrRearLeft.mfRadius), lrRearLeft.mRoadContact.mPosition.mV));
+    const Vector3 lvSegmentEnd(__vmaddfp(lvUp.mV, Splat(lrRearRight.mfRadius), lrRearRight.mRoadContact.mPosition.mV));
+    const __vector4 half = __vcfsx(__vspltisw(1), 1);
+    const Vector3 lvMeanNormal(__vmulfp(__vaddfp(lrRearLeft.mRoadContact.mNormal.mV, lrRearRight.mRoadContact.mNormal.mV), half));
 
-    const Vector3 lvMeanNormal = {
-        (lrRearLeft.mRoadContact.mNormal.x + lrRearRight.mRoadContact.mNormal.x) * 0.5f,
-        (lrRearLeft.mRoadContact.mNormal.y + lrRearRight.mRoadContact.mNormal.y) * 0.5f,
-        (lrRearLeft.mRoadContact.mNormal.z + lrRearRight.mRoadContact.mNormal.z) * 0.5f, 0.0f };
-
-    // ---- the ejection cone: both bounds lerped by ONE shared draw ----
     const f32 lfConeWidth = Utils::Vector3Randomiser::DrawInterpolant(lrRandom);
-    const Vector3 lvConeMin = {
-        (KV_DEBRIS_CONE_MIN_WIDE.x - KV_DEBRIS_CONE_MIN_NARROW.x) * lfConeWidth + KV_DEBRIS_CONE_MIN_NARROW.x,
-        (KV_DEBRIS_CONE_MIN_WIDE.y - KV_DEBRIS_CONE_MIN_NARROW.y) * lfConeWidth + KV_DEBRIS_CONE_MIN_NARROW.y,
-        (KV_DEBRIS_CONE_MIN_WIDE.z - KV_DEBRIS_CONE_MIN_NARROW.z) * lfConeWidth + KV_DEBRIS_CONE_MIN_NARROW.z,
-        0.0f };
-    const Vector3 lvConeMax = {
-        (KV_DEBRIS_CONE_MAX_WIDE.x - KV_DEBRIS_CONE_MAX_NARROW.x) * lfConeWidth + KV_DEBRIS_CONE_MAX_NARROW.x,
-        (KV_DEBRIS_CONE_MAX_WIDE.y - KV_DEBRIS_CONE_MAX_NARROW.y) * lfConeWidth + KV_DEBRIS_CONE_MAX_NARROW.y,
-        (KV_DEBRIS_CONE_MAX_WIDE.z - KV_DEBRIS_CONE_MAX_NARROW.z) * lfConeWidth + KV_DEBRIS_CONE_MAX_NARROW.z,
-        0.0f };
-
-    // ---- the inherited velocity: the car's velocity flattened onto the mean normal ----
-    const f32 lfAlongNormal = lvVelocity.x * lvMeanNormal.x
-                            + lvVelocity.y * lvMeanNormal.y
-                            + lvVelocity.z * lvMeanNormal.z;
-    const Vector3 lvTangential = { lvVelocity.x - lvMeanNormal.x * lfAlongNormal,
-                                   lvVelocity.y - lvMeanNormal.y * lfAlongNormal,
-                                   lvVelocity.z - lvMeanNormal.z * lfAlongNormal, 0.0f };
+    const __vector4 coneWidth = Splat(lfConeWidth);
+    const Vector3 lvConeMin(__vmaddfp(__vsubfp(KV_DEBRIS_CONE_MIN_WIDE.mV, KV_DEBRIS_CONE_MIN_NARROW.mV), coneWidth, KV_DEBRIS_CONE_MIN_NARROW.mV));
+    const Vector3 lvConeMax(__vmaddfp(__vsubfp(KV_DEBRIS_CONE_MAX_WIDE.mV, KV_DEBRIS_CONE_MAX_NARROW.mV), coneWidth, KV_DEBRIS_CONE_MAX_NARROW.mV));
+    const __vector4 alongNormal = __vmsum3fp(lvVelocity.mV, lvMeanNormal.mV);
+    const Vector3 lvTangential(__vsubfp(lvVelocity.mV, __vmulfp(lvMeanNormal.mV, alongNormal)));
 
     Utils::Vector3Randomiser lPositionRandomiser;
     lPositionRandomiser.Prepare(lvSegmentStart, lvSegmentEnd);
@@ -373,20 +337,15 @@ void JumpStateMachine::FireWheelDebris(CarState& lCarState,
     lEjectionRandomiser.Prepare(lvConeMin, lvConeMax);
 
     Utils::Vector3Randomiser lInheritRandomiser;
-    lInheritRandomiser.Prepare(
-        { lvTangential.x * KF_DEBRIS_INHERIT_MIN, lvTangential.y * KF_DEBRIS_INHERIT_MIN,
-          lvTangential.z * KF_DEBRIS_INHERIT_MIN, 0.0f },
-        { lvTangential.x * KF_DEBRIS_INHERIT_MAX, lvTangential.y * KF_DEBRIS_INHERIT_MAX,
-          lvTangential.z * KF_DEBRIS_INHERIT_MAX, 0.0f });
+    lInheritRandomiser.Prepare(Vector3(__vmulfp(lvTangential.mV, Splat(KF_DEBRIS_INHERIT_MIN))),
+                               Vector3(__vmulfp(lvTangential.mV, Splat(KF_DEBRIS_INHERIT_MAX))));
 
     for (s32 liBurst = 0; liBurst < liBurstCount; ++liBurst)
     {
         const Vector3 lvPosition  = lPositionRandomiser.RandomInterpolate(lrRandom);
         const Vector3 lvEjection  = lEjectionRandomiser.RandomiseXYZ(lrRandom);
         const Vector3 lvInherited = lInheritRandomiser.RandomInterpolate(lrRandom);
-        const Vector3 lvDebrisVelocity = { lvEjection.x + lvInherited.x,
-                                           lvEjection.y + lvInherited.y,
-                                           lvEjection.z + lvInherited.z, 0.0f };
+        const Vector3 lvDebrisVelocity(__vaddfp(lvEjection.mV, lvInherited.mV));
 
         // Marsaglia rejection: a uniform point on the unit sphere.
         f32 lfU;
@@ -401,9 +360,7 @@ void JumpStateMachine::FireWheelDebris(CarState& lCarState,
         while (lfRadiusSq >= 1.0f);
 
         const f32 lfSphereScale = sqrtf(1.0f - lfRadiusSq) * 2.0f;
-        const Vector3 lvRotationAxis = { lfSphereScale * lfU,
-                                         lfSphereScale * lfV,
-                                         lfRadiusSq * 2.0f - 1.0f, 0.0f };
+        const Vector3 lvRotationAxis(lfSphereScale * lfU, lfSphereScale * lfV, lfRadiusSq * 2.0f - 1.0f);
 
         const f32 lfSizeDraw = lrRandom.RandomFloat();
         const f32 lfSize = (lfSizeDraw * lfSizeDraw) * KF_DEBRIS_SIZE_RANGE + KF_DEBRIS_SIZE_MIN;
@@ -481,7 +438,7 @@ EffectsState JumpStateMachine::OnDetermineNextState(CarState& lCarState,
             // Landing speed gate, kept in the squared domain exactly as the console
             // (vmsum3fp128 self-dot of mLinearVelocity vs 196.0).
             const Vector3& lvVel = lpCar->mLinearVelocity;
-            const f32 lfSpeedSq = lvVel.x * lvVel.x + lvVel.y * lvVel.y + lvVel.z * lvVel.z;
+            const f32 lfSpeedSq = __vmsum3fp(lvVel.mV, lvVel.mV).x;
             const bool lbFastLanding = (lfSpeedSq > KF_LANDING_MIN_SPEED_SQ);
 
             // ParticleModule +0x23136. In the junkyard the landing burst uses the full
@@ -513,12 +470,6 @@ EffectsState JumpStateMachine::OnDetermineNextState(CarState& lCarState,
                                     lpcEffectName,
                                     luWorldIndex);
 
-                    if (JumpDiagTakeLine())
-                    {
-                        JumpDiagLine("[jump] landing dust wheel %d -> handle 0x%08X\n",
-                                     static_cast<s32>(luWheel), lruHandle);
-                    }
-
                     // The console resolves the freshly-stored handle through the EFFECTS
                     // MODULE's own particle module (helper +0x08, member +0xA80), not
                     // through the helper's module reference -- transcribed as written.
@@ -547,47 +498,15 @@ EffectsState JumpStateMachine::OnDetermineNextState(CarState& lCarState,
 
                             // dot3 broadcast: the X360 subtracts in all four lanes, so the
                             // unused w lane rides along exactly as it does on the console.
-                            const f32 lfAlongNormal = lvNormal.x * lvWheelVel.x
-                                                    + lvNormal.y * lvWheelVel.y
-                                                    + lvNormal.z * lvWheelVel.z;
-                            const Vector3 lvTangent =
-                            {
-                                lvWheelVel.x - lvNormal.x * lfAlongNormal,
-                                lvWheelVel.y - lvNormal.y * lfAlongNormal,
-                                lvWheelVel.z - lvNormal.z * lfAlongNormal,
-                                lvWheelVel.w - lvNormal.w * lfAlongNormal
-                            };
-
-                            // The particle's own velocity override (+0x50..+0x58), then
-                            // OVERRIDE_VELOCITY | CHANGED (the console's `|= 0x24`).
-                            lpEffect->mfVelocityX = lvTangent.x;
-                            lpEffect->mfVelocityY = lvTangent.y;
-                            lpEffect->mfVelocityZ = lvTangent.z;
+                            const __vector4 alongNormal = __vmsum3fp(lvNormal.mV, lvWheelVel.mV);
+                            const Vector3 lvTangent(__vsubfp(lvWheelVel.mV, __vmulfp(lvNormal.mV, alongNormal)));
+                            lpEffect->mfVelocityX = lvTangent.mV.x;
+                            lpEffect->mfVelocityY = lvTangent.mV.y;
+                            lpEffect->mfVelocityZ = lvTangent.mV.z;
                             lpEffect->muFlags |= (BrnParticle::LionEffect::EPPE_FLAG_OVERRIDE_VELOCITY
                                                 | BrnParticle::LionEffect::EPPE_FLAG_CHANGED);
-
-                            // Forward = normalised tangential velocity. The X360 uses a bare
-                            // vrsqrtefp + two Newton refinements with NO zero guard here (unlike
-                            // SetVapourBlend's vsel), so a stationary wheel yields the same
-                            // infinities it does on the console.
-                            const f32 lfTangentLenSq = lvTangent.x * lvTangent.x
-                                                     + lvTangent.y * lvTangent.y
-                                                     + lvTangent.z * lvTangent.z;
-                            const f32 lfInvLen = 1.0f / sqrtf(lfTangentLenSq);
-                            const Vector3 lvForward = { lvTangent.x * lfInvLen,
-                                                        lvTangent.y * lfInvLen,
-                                                        lvTangent.z * lfInvLen,
-                                                        lvTangent.w * lfInvLen };
-
-                            // Right = cross(normal, forward). The console builds it with the
-                            // yzx-swizzle identity, whose w lane cancels to exactly 0.
-                            const Vector3 lvRight =
-                            {
-                                lvNormal.y * lvForward.z - lvNormal.z * lvForward.y,
-                                lvNormal.z * lvForward.x - lvNormal.x * lvForward.z,
-                                lvNormal.x * lvForward.y - lvNormal.y * lvForward.x,
-                                0.0f
-                            };
+                            const Vector3 lvForward(__vmulfp(lvTangent.mV, ReciprocalSqrt2(__vmsum3fp(lvTangent.mV, lvTangent.mV))));
+                            const Vector3 lvRight = CrossNative(lvNormal, lvForward);
 
                             lpEffect->mTransform.xAxis = lvRight;
                             lpEffect->mTransform.yAxis = lvNormal;
@@ -673,11 +592,6 @@ void JumpStateMachine::OnChangeState(EffectsState leNewState,
                                      RaceCarParticleEffectHelper& lHelper,
                                      CarState& /*lCarState*/)
 {
-    if (JumpDiagTakeLine())
-    {
-        JumpDiagLine("[jump] state %d -> %u\n",
-                     static_cast<s32>(mState), static_cast<u32>(leNewState));
-    }
 
     ActiveRaceCarData* const lpActiveRaceCar = lHelper.ActiveRaceCar();
 
@@ -703,12 +617,6 @@ void JumpStateMachine::OnChangeState(EffectsState leNewState,
                 BrnParticle::ParticleDescription::HashString(KPC_JUMP_VAPOUR_EFFECT),
                 KPC_JUMP_VAPOUR_EFFECT,
                 luWorldIndex);
-
-            if (JumpDiagTakeLine())
-            {
-                JumpDiagLine("[jump] vapour start %d -> handle 0x%08X\n",
-                             0, lpActiveRaceCar->mJumpEffectHandle);
-            }
 
             mFadeTime = 0.0f;                    // this +0x0C
             SetVapourBlend(mFadeTime, lHelper);  // the console passes the same f1 it just stored
