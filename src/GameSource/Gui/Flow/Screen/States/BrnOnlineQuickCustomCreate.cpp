@@ -15,11 +15,11 @@
 //   ShowFriendsMenu                     the guide's friends list (sign-in first if needed)
 //
 // Out-queue records are the console's own wire records, posted on channel 40 through
-// GetOutputEventQueue()->AddEvent with host sizeof sizes. The guide calls go through the
-// PC platform layer (CgsXboxLivePC.cpp).
+// GetOutputEventQueue()->AddEvent with the native record sizes.
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineQuickCustomCreate.h"
 
+#include <xtl.h>
 #include <cstddef>                                                        // offsetof (wire records)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
@@ -30,18 +30,6 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventActivateCrashNav, GuiFlow
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 #include "GameSource/Input/GameInputActions.h"                            // EGameInputActions
-
-// The guide entry points (PC bodies in the platform layer, CgsXboxLivePC.cpp family).
-extern "C"
-{
-    void* XNotifyCreateListener(unsigned long long luqwAreas);
-    int   XNotifyGetNext(void* lhListener, unsigned long ludwMsgFilter,
-                         unsigned long* lpdwId, unsigned long* lpParam);
-    int   CloseHandle(void* lhObject);
-    u32   XUserGetSigninState(u32 luUserIndex);
-    u32   XShowSigninUI(u32 luPanes, u32 luFlags);
-    u32   XShowFriendsUI(u32 luUserIndex);
-}
 
 namespace BrnGui
 {
@@ -109,9 +97,6 @@ namespace BrnGui
         // and the invite-accepted notice; the sign-in panel shows one pane, online-enabled
         // profiles only.
         const unsigned long long KU64_NOTIFY_AREA_SYSTEM = 1;
-        const u32 KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE      = 2;
-        const unsigned long KU_NOTIFY_SYSTEM_UI          = 9;
-        const unsigned long KU_NOTIFY_LIVE_INVITE_ACCEPTED = 0x2000002;
         const u32 KU_SIGNIN_UI_PANES                     = 1;
         const u32 KU_SIGNIN_UI_ONLINE_ENABLED_ONLY       = 2;
 
@@ -248,11 +233,11 @@ namespace BrnGui
 
         case E_SUBSTATE_WAIT_SIGN_IN_FINISH:
         {
-            unsigned long luNotificationId = 0;
-            unsigned long luNotificationParam = 0;
+            DWORD luNotificationId = 0;
+            ULONG_PTR luNotificationParam = 0;
             if (XNotifyGetNext(mhNotifyListener, 0, &luNotificationId, &luNotificationParam) != 0)
             {
-                if (luNotificationId == KU_NOTIFY_SYSTEM_UI)
+                if (luNotificationId == XN_SYS_UI)
                 {
                     // The sign-in panel closed: open the friends list if the profile is now
                     // on the service, and go back to the menu either way.
@@ -260,14 +245,14 @@ namespace BrnGui
                     {
                         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                         if (XUserGetSigninState(static_cast<u32>(mpGuiCache->GetActiveControllerIndex())) ==
-                            KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE)
+                            eXUserSigninState_SignedInToLive)
                         {
                             XShowFriendsUI(static_cast<u32>(mpGuiCache->GetActiveControllerIndex()));
                         }
                         meInternalState = E_INTERNALSTATE_RUNNING;
                     }
                 }
-                else if (luNotificationId == KU_NOTIFY_LIVE_INVITE_ACCEPTED)
+                else if (luNotificationId == XN_LIVE_INVITE_ACCEPTED)
                 {
                     CGS_ASSERT(false, "Invite notification processed by Online main menu screen. "
                                       "This could break cross game invites\n");
@@ -488,7 +473,7 @@ namespace BrnGui
         }
 
         if (XUserGetSigninState(static_cast<u32>(mpGuiCache->GetActiveControllerIndex())) !=
-            KU_SIGNIN_STATE_SIGNED_IN_TO_LIVE)
+            eXUserSigninState_SignedInToLive)
         {
             XShowSigninUI(KU_SIGNIN_UI_PANES, KU_SIGNIN_UI_ONLINE_ENABLED_ONLY);
             meInternalState = E_SUBSTATE_WAIT_SIGN_IN_FINISH;
