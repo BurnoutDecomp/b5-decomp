@@ -53,14 +53,9 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsMaterialAnimation.h"
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"            // ShaderConstantTable
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // the one-shot bring-up gates
 #include "BrnCommonTypes.h"                                                // Vector4 / Matrix44
-#include "rw/math/vpu/vector4_operation.h"                              // Splat / lane-wise * and +
 
 #include <cstring>   // memcpy
-#include <cmath>     // [DIAG] std::sqrt (BRN_OOBB_DIAG, issue #26)
-#include <cstdio>    // [diag] snprintf (the [vpcmp] view-projection probe)
-#include <cstdlib>   // [diag] getenv  (BRN_VP_PROBE)
 namespace CgsGraphics
 {
 
@@ -546,11 +541,14 @@ namespace
     rw::math::vpu::Vector4 TransformRow(const rw::math::vpu::Vector4& lrRow,
                                         const rw::math::vpu::Matrix44& lrMatrix)
     {
-        rw::math::vpu::Vector4 lvResult = rw::math::vpu::Splat(lrRow.x) * lrMatrix.xAxis;
-        lvResult = rw::math::vpu::Splat(lrRow.y) * lrMatrix.yAxis + lvResult;
-        lvResult = rw::math::vpu::Splat(lrRow.z) * lrMatrix.zAxis + lvResult;
-        lvResult = rw::math::vpu::Splat(lrRow.w) * lrMatrix.wAxis + lvResult;
-        return lvResult;
+        // ARTIST 827EE66C..72C: seed with x * matrix.xAxis, then accumulate
+        // y/z/w with vmaddfp in that order. Keep the same native VMX ops; scalar
+        // lane access and a separate vector add change the native code shape.
+        __vector4 lvResult = __vmulfp(lrMatrix.xAxis.mV, __vspltw(lrRow.mV, 0));
+        lvResult = __vmaddfp(lrMatrix.yAxis.mV, __vspltw(lrRow.mV, 1), lvResult);
+        lvResult = __vmaddfp(lrMatrix.zAxis.mV, __vspltw(lrRow.mV, 2), lvResult);
+        lvResult = __vmaddfp(lrMatrix.wAxis.mV, __vspltw(lrRow.mV, 3), lvResult);
+        return rw::math::vpu::Vector4(lvResult);
     }
 }
 
@@ -777,7 +775,6 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
             reinterpret_cast<RenderableMesh*>(ReadCommandPointer(&lpPacket[2]));
         const u32 luWord1        = lpPacket[1];
         const u8  lu8Technique   = static_cast<u8>(luWord1 & 0xFFu);
-        const u8  lu8Instances   = static_cast<u8>((luWord1 >> 8) & 0xFFu);
 
         const MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
         CGS_ASSERT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),
@@ -813,34 +810,6 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
         // [PC bring-up shim] the per-object WVP carried in the command
         // (payload qwords 1..4) feeds the fallback-shader transform.
 
-        // [DIAG wheels] the clip-space origin of a console-instanced mesh. Row 3 of the
-        // per-object WVP IS the object origin transformed into clip space, so this says
-        // whether the wheel lands on screen at all (|x|,|y| <= w and 0 <= z <= w) and which
-        // technique/list it went to. DELETE with the wheel bring-up.
-        // [DIAG wheels] SAMPLED ACROSS THE WHOLE RUN, not "the first N": the first samples of
-        // the instanced and the plain streams come from different FRAMES (and therefore
-        // different cameras), which makes comparing them meaningless. Every 4096th of each
-        // stream puts the two side by side in the same stretch of the log.
-        {
-            const bool lbInstanced = (lpMesh->mu8InstanceCount > 1u);
-            static u32 suWheelSeen = 0, suWheelLogged = 0;
-            static u32 suPlainSeen = 0, suPlainLogged = 0;
-            u32* lpuCounter = lbInstanced ? &suWheelSeen : &suPlainSeen;
-            u32* lpuLogged  = lbInstanced ? &suWheelLogged : &suPlainLogged;
-            const u32 luSeen   = (*lpuCounter)++;
-            const u32 luStride = lbInstanced ? 65536u : 1048576u;
-            if ((luSeen % luStride) == 0u && (*lpuLogged)++ < 12u && CgsDev::Log::gpDebugPrint != 0)
-            {
-                const f32* lpWvp = reinterpret_cast<const f32*>(&lpPacket[8]);
-                *CgsDev::Log::gpDebugPrint
-                    << (lbInstanced ? "[wheel-wvp] @" : "[plain-wvp] @") << luSeen
-                    << " tech " << luTechnique << "/" << luLen
-                    << " meshInstances " << static_cast<u32>(lpMesh->mu8InstanceCount)
-                    << " clipOrigin (" << lpWvp[12] << ", " << lpWvp[13]
-                    << ", " << lpWvp[14] << ", " << lpWvp[15] << ")\n";
-            }
-        }
-
         // Bind the mesh geometry + draw.
         // ARTIST @0x827F59EC-0x827F5A30 enters the manager's per-mesh
         // conditional bracket after SetMeshBuffers and before either draw path.
@@ -849,14 +818,6 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
                 == OcclusionCullManager::OCCLUSIONMODE_RENDER;
         if (lbConditionalRender)
             spOcclusionCullManager->BeginMeshConditionalRender();
-
-        if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
-        {
-            CGS_ASSERT(lpInstances && lpInstances->muCount == lu8Instances, "Missing native instance snapshots");
-        }
-        else
-        {
-        }
 
         if (lbConditionalRender)
             spOcclusionCullManager->EndMeshConditionalRender();
@@ -971,7 +932,6 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
         reinterpret_cast<RenderableMesh*>(ReadCommandPointer(&lpPacket[2]));
     const u32 luWord1      = lpPacket[1];
     const u8  lu8Technique = static_cast<u8>(luWord1 & 0xFFu);
-    const u8  lu8Instances = static_cast<u8>((luWord1 >> 8) & 0xFFu);
 
     const MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
 
@@ -1001,13 +961,6 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
 
     // [PC bring-up shim] the per-object WVP carried in the command (payload qwords 1..4).
 
-    if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
-    {
-        CGS_ASSERT(lpInstances && lpInstances->muCount == lu8Instances, "Missing native instance snapshots");
-    }
-    else
-    {
-    }
 }
 
 } // namespace CgsGraphics
@@ -1016,10 +969,12 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
 // Keep each output key relative to the owner frame's master bin, not this block.
 void ObjectToMeshJob::SharedMemoryChangeCallback(void* lpContext)
 {
-    auto* lpState = static_cast<CgsGraphics::DispatchObjectContext_JobState*>(lpContext);
+    CgsGraphics::DispatchObjectContext_JobState* lpState =
+        static_cast<CgsGraphics::DispatchObjectContext_JobState*>(lpContext);
     CgsGraphics::DispatchFrame& lrFrame = lpState->lDispatchFrameLocal;
     lpState->luOffsetToMainMemory = 0;
-    auto* lpBlock = reinterpret_cast<CgsGraphics::DispatchCommand*>(lrFrame.GetActiveBlockInSharedMemory());
+    CgsGraphics::DispatchCommand* lpBlock =
+        reinterpret_cast<CgsGraphics::DispatchCommand*>(lrFrame.GetActiveBlockInSharedMemory());
     lrFrame.GetBin().SetBinRange(lpBlock, lpBlock + CgsGraphics::DispatchBin::KU_BLOCK_SIZE_IN_QUAD_WORDS);
     const uintptr_t luMaster = lrFrame.GetDispatchBinMasterAddress()
         + reinterpret_cast<uintptr_t>(lrFrame.GetBin().GetBase()) - lrFrame.GetActiveBlockInSharedMemory();
@@ -1037,7 +992,8 @@ void ObjectToMeshJob::ExecuteImplementation(ObjectToMeshJobInfo* lpData)
     if (lpData->miStartIndex == -1) return;
 
     DispatchObjectContext lContext = *lpData->mpDispatchObjectContext;
-    DispatchObjectContext_JobState lState{};
+    DispatchObjectContext_JobState lState;
+    lState.luOffsetToMainMemory = 0;
     lContext.ResetShadowing();
     lContext.mpJobState = &lState;
     lState.lpObjectToMeshJobInfo = lpData;
