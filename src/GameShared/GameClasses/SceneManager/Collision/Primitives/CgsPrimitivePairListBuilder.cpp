@@ -200,11 +200,8 @@ namespace CgsCollision
                                                 f32 lfPadding,
                                                 u16 lu16PrimitiveTag)
     {
-        // `lwz r10,0x40(volume) ; lwz r10,0(r10)` -- the per-TYPE descriptor's leading
-        // word IS its typeID. On this host the +0x40 slot holds the 4-byte type enum and
-        // Volume::GetVTable() recovers the console's descriptor as gVolumeVTable[enum]
-        // (volume_debug_access.h's documented host representation), so GetType() is the
-        // exact same two loads.
+        // The volume holds the native descriptor pointer at +0x40; its first
+        // word is the type ID used by the original switch.
         const u32 luTypeID = lpVolume->GetType();
 
         // [DIAG] NOT IN THE X360 BINARY. Opt-in one-shot (set BRN_PROP_DIAG): the first
@@ -257,7 +254,7 @@ namespace CgsCollision
         // for CgsSphere.h's owner: adding the two DWARF setters would let this arm read
         // like the console does.
         // -----------------------------------------------------------------------------
-        case ::rw::collision::E_VOLUMETYPE_SPHERE:
+        case ::rw::collision::VOLUMETYPESPHERE:
         {
             CgsGeometric::Sphere lSphere;
             lSphere.mData.mV = lTransform.Pos().mV;       // preserve all position lane bits
@@ -273,7 +270,7 @@ namespace CgsCollision
         // volume's +0x50 and length from the volume's +0x44 half-height lane. The exact
         // store sequence is transcribed in CgsCapsule.h's Set banner.
         // -----------------------------------------------------------------------------
-        case ::rw::collision::E_VOLUMETYPE_CAPSULE:
+        case ::rw::collision::VOLUMETYPECAPSULE:
         {
             // `vspltw v12,<volume+0x50>,0` and `vspltw v13,<volume+0x44>,0` -- both
             // scalars are broadcast to all four lanes before the w-lane insert, which is
@@ -282,8 +279,8 @@ namespace CgsCollision
             lvfRadius.mV.x = lvfRadius.mV.y = lvfRadius.mV.z = lvfRadius.mV.w = lpVolume->GetRadius();
 
             // The +0x44 union lane: CapsuleSpecificData::mfHalfHeight (volume_debug_access.h
-            // names the 12-byte arm GetExtent(); its x lane IS the capsule half-height).
-            const f32 lfHalfHeight = lpVolume->GetExtent().mV.x;
+            // names the genuine capsule arm and its half-height).
+            const f32 lfHalfHeight = lpVolume->mCapsuleData.mfHalfHeight;
             VecFloat lvfLength;
             lvfLength.mV.x = lvfLength.mV.y = lvfLength.mV.z = lvfLength.mV.w = lfHalfHeight;
 
@@ -314,19 +311,20 @@ namespace CgsCollision
         // carries NO fatness / collision skin; the skin comes from the pair record's own
         // `lfPadding` field instead.
         // -----------------------------------------------------------------------------
-        case ::rw::collision::E_VOLUMETYPE_BBOX:
+        case ::rw::collision::VOLUMETYPEBOX:
         {
             // BoxSpecificData{mfHx, mfHy, mfHz} at volume +0x44/+0x48/+0x4C. The asm
             // stages the three floats individually and zeroes the 4th slot, so the
             // dimensions are built lane by lane rather than copied as a vector.
-            const Vector3& lrExtent = lpVolume->GetExtent();
+            const rw::collision::BoxSpecificData& lrExtent = lpVolume->mBoxData;
             Vector3 lvDimensions;
-            lvDimensions.mV.x = lrExtent.mV.x;
-            lvDimensions.mV.y = lrExtent.mV.y;
-            lvDimensions.mV.z = lrExtent.mV.z;
+            lvDimensions.mV.x = lrExtent.mfHx;
+            lvDimensions.mV.y = lrExtent.mfHy;
+            lvDimensions.mV.z = lrExtent.mfHz;
             lvDimensions.mV.w = 0.0f;              // `stw r8,[var_84]`, r8 == 0
 
-            VecFloat lvfFatness(0.0f);               // flt_82001CC0 == 0.0f, broadcast
+            VecFloat lvfFatness;
+            lvfFatness.mV = __vspltisw(0);           // flt_82001CC0 == 0.0f, broadcast
 
             CgsGeometric::Box lBox;
             lBox.Set(lTransform, lvDimensions, lvfFatness);
@@ -343,12 +341,12 @@ namespace CgsCollision
         // stored VERBATIM into Cylinder::mfLength -- the console does not double it. The
         // name difference is the console's, not a conversion.
         // -----------------------------------------------------------------------------
-        case ::rw::collision::E_VOLUMETYPE_CYLINDER:
+        case ::rw::collision::VOLUMETYPECYLINDER:
         {
             CgsGeometric::Cylinder lCylinder;
             lCylinder.Set(lTransform,
                           lpVolume->GetRadius(),        // 0x82814C48 lfs [volume+0x50]
-                          lpVolume->GetExtent().mV.x);     // 0x82814C58 lfs [volume+0x44]
+                          lpVolume->mCylinderData.mfHalfHeight);     // 0x82814C58 lfs [volume+0x44]
 
             AddPrimitive(&lCylinder, lfPadding, lu16PrimitiveTag);
             break;
@@ -365,7 +363,7 @@ namespace CgsCollision
         // @0x820DAFF0). CGS_ASSERT substitutes the host __FILE__/__LINE__, which is the
         // established house behaviour for every assert in this tree.
         // -----------------------------------------------------------------------------
-        case ::rw::collision::E_VOLUMETYPE_TRIANGLE:
+        case ::rw::collision::VOLUMETYPETRIANGLE:
         default:
             CGS_ASSERT(false,
                        "Tried to add a RW volume that wasn't a box, capsule, sphere or "
