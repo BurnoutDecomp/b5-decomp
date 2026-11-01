@@ -3997,10 +3997,10 @@ namespace CgsSceneManager
         // ---- 1. the world bit: the static world answers first ---------------------------------------------------
         if ((lx32EntityTypeFlags & KU_ENTITY_TYPE_FLAG_WORLD) != 0)
         {
-            CGS_ASSERT(lpVolume->GetType() == static_cast<u32>(rw::collision::E_VOLUMETYPE_SPHERE),
+            CGS_ASSERT(lpVolume->GetType() == static_cast<u32>(rw::collision::VOLUMETYPESPHERE),
                        "Currently only support sphere tests against world\n");                          // :1557
 
-            const Matrix44Affine& lrVolumeTransform = lpVolume->GetRelativeTransform();
+            const Matrix44Affine& lrVolumeTransform = *lpVolume->GetRelativeTransform();
             CgsGeometric::Sphere lSphere;                                                              // var_170
             lSphere.mData.mV = __vaddfp(lrTransform.wAxis.mV, lrVolumeTransform.wAxis.mV); // 828D4534
             lSphere.mData.mV.w = lpVolume->GetRadius();                                       // lvlx +0x50 ; vspltw

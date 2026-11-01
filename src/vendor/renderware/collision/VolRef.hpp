@@ -1,108 +1,34 @@
 #pragma once
 
-#include <cstddef>   // offsetof (layout pins)
+#include <cstddef>
 #include "types.hpp"
+#include "vendor/renderware/collision/AABBox.hpp"
 
-// ===========================================================================
-// rw::collision::VolRef -- a "volume reference": a volume pointer plus a cached
-// copy of the volume's transform and bounding box, used by the collision query
-// objects (VolumeLineQuery / VolumeBBoxQuery store an array of these as their
-// result set).
-//
-// OWNING HOME for the single VolRef function the X360 binary defines:
-//     rw::collision::VolRef::operator=  @ 0x82BB33E8
-//
-// No DWARF layout exists for this TU, so the LAYOUT below is reconstructed
-// from the copy widths/offsets in the X360 asm (the copy is the only evidence
-// of the field shape):
-//     +0x00  word              lwz/stw   (console 32-bit Volume*)
-//     +0x04  word              lwz/stw   (console 32-bit transform*)
-//     +0x10  16-byte vector     lvx128/stvx128   (transform row 0)
-//     +0x20  16-byte vector     lvx128/stvx128   (transform row 1)
-//     +0x30  16-byte vector     lvx128/stvx128   (transform row 2)
-//     +0x40  16-byte vector     lvx128/stvx128   (transform row 3 / bbox)
-//     +0x50  8-byte             ld/std
-//     +0x58  8-byte             ld/std
-//     +0x60  8-byte             ld/std
-//     +0x68  8-byte             ld/std
-//     +0x70  word               lwz/stw
-//     +0x74  byte               lbz/stb
-// Members are named per that layout so the assignment lands each field at the
-// observed offset; the gap at +0x08..+0x0F is an unwritten alignment slot.
-//
-// FIELD MEANINGS (attested by this wave's consumers -- see
-// rw::collision::PrimitiveBatchIntersect @ 0x82BABC78, which reads +0x00 as
-// the Volume* it vtable-dispatches on, +0x04 as the cached transform pointer
-// it passes to CreateGPInstance, and +0x70 as the tag word it copies into the
-// GPInstance; and rw::collision::AddQueryResult @ 0x82BB1588, which fills the
-// VolRef embedded in a VolumeLineSegIntersectResult: volume @+0x00, transform
-// pointer @+0x04 aimed at the inline rows @+0x10, tag @+0x70, tag bit count
-// @+0x74. The committed SDKs/EATech/rwcollision/volumelinequery.cpp records
-// the same shape for its 128-byte entries.)
-//
-// The first vector row carries 16-byte alignment, preserving the native gap
-// after the two pointer words. The assertions below pin this complete layout.
-// ===========================================================================
+namespace rw { namespace collision {
 
-namespace rw
+class Volume;
+
+// DecFIGS volume.h:1092–1098; ARTIST 82BB33E8 copies only these fields.
+struct VolRef
 {
-namespace collision
-{
-
-class VolRef
-{
-public:
-    // 16-byte (xyzw) vector row matching a VMX register.
-    struct CGS_ALIGN(16) Vec4
-    {
-        f32 x;
-        f32 y;
-        f32 z;
-        f32 w;
-    };
-
-    // @ 0x82BB33E8 -- copy-assign all cached fields from rOther.
+    typedef rw::collision::Volume Volume;
     VolRef& operator=(const VolRef& rOther);
 
-    // ARTIST stores pointers at +0/+4. The first vector row's native 16-byte
-    // alignment leaves the +8..+15 slot unwritten.
-    uintptr_t muVolumePtr;
-    uintptr_t muTransformPtr;
-    Vec4 mRow0;           // +0x10  transform row 0
-    Vec4 mRow1;           // +0x20  transform row 1
-    Vec4 mRow2;           // +0x30  transform row 2
-    Vec4 mRow3;           // +0x40  transform row 3 / bbox
-    u64  mu50;            // +0x50  8-byte field
-    u64  mu58;            // +0x58  8-byte field
-    u64  mu60;            // +0x60  8-byte field
-    u64  mu68;            // +0x68  8-byte field
-    u32  muTag;           // +0x70  aggregate/unit tag word
-    u8   muNumTagBits;    // +0x74  tag bit-count byte
-
-    // ADDITIVE GROW (rw-physics-collision group): pad VolRef to its true 0x80
-    // stride. The X360 collision query objects (VolumeBBoxQuery / VolumeVolumeQuery)
-    // index their result pool and embed a "current" VolRef using `idx << 7` (0x80)
-    // -- so the on-object stride is 0x80, not the 0x78 the written fields imply.
-    // This trailing pad makes sizeof(VolRef)==0x80 so embedded/strided VolRefs land
-    // at the observed offsets. Purely additive: no existing member moves.
-    u8   mPad75[11];      // +0x75..+0x7F  (unwritten tail; stride padding)
+    const Volume* volume;
+    rw::math::vpu::Matrix44Affine* tm;
+    rw::math::vpu::Matrix44Affine tmContents;
+    AABBox bBox;
+    u32 tag;
+    u8 numTagBits;
 };
 
-// The stride the query objects index with (`idx << 7`).
-CGS_STATIC_ASSERT((sizeof(VolRef) == 0x80), "VolRef on-object stride must be 0x80");
+CGS_STATIC_ASSERT((sizeof(VolRef) == 0x80), "Native VolRef size");
+CGS_STATIC_ASSERT((__alignof(VolRef) == 16), "Native VolRef alignment");
+CGS_STATIC_ASSERT((offsetof(VolRef, volume) == 0x00), "VolRef volume");
+CGS_STATIC_ASSERT((offsetof(VolRef, tm) == 0x04), "VolRef transform pointer");
+CGS_STATIC_ASSERT((offsetof(VolRef, tmContents) == 0x10), "VolRef transform");
+CGS_STATIC_ASSERT((offsetof(VolRef, bBox) == 0x50), "VolRef box");
+CGS_STATIC_ASSERT((offsetof(VolRef, tag) == 0x70), "VolRef tag");
+CGS_STATIC_ASSERT((offsetof(VolRef, numTagBits) == 0x74), "VolRef tag bits");
 
-// Native pointer words, aligned rows and cached query fields.
-CGS_STATIC_ASSERT((offsetof(VolRef, muVolumePtr)    == 0x00), "VolRef::muVolumePtr");
-CGS_STATIC_ASSERT((offsetof(VolRef, muTransformPtr) == 0x04), "X360 VolRef transform pointer");
-CGS_STATIC_ASSERT((__alignof(VolRef) == 16), "X360 VolRef vector alignment");
-CGS_STATIC_ASSERT((offsetof(VolRef, mRow0)          == 0x10), "VolRef::mRow0");
-CGS_STATIC_ASSERT((offsetof(VolRef, mRow1)          == 0x20), "VolRef::mRow1");
-CGS_STATIC_ASSERT((offsetof(VolRef, mRow2)          == 0x30), "VolRef::mRow2");
-CGS_STATIC_ASSERT((offsetof(VolRef, mRow3)          == 0x40), "VolRef::mRow3");
-CGS_STATIC_ASSERT((offsetof(VolRef, mu50)           == 0x50), "VolRef::mu50");
-CGS_STATIC_ASSERT((offsetof(VolRef, mu68)           == 0x68), "VolRef::mu68");
-CGS_STATIC_ASSERT((offsetof(VolRef, muTag)          == 0x70), "VolRef::muTag");
-CGS_STATIC_ASSERT((offsetof(VolRef, muNumTagBits)   == 0x74), "VolRef::muNumTagBits");
-
-} // namespace collision
-} // namespace rw
+} }

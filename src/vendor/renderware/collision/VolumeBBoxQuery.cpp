@@ -55,55 +55,14 @@ namespace
     static const f32 KF_IDENTITY_TRANSLATION_EPSILON = F32FromBits(0x00200000u);
 
     // -----------------------------------------------------------------------
-    // Collision-volume byte-offset views (the committed PrimitiveIntersect.cpp
-    // precedent -- read by image offset until the full Volume layout lands;
-    // canonical field homes rwccore.h:1599-1614).
-    // -----------------------------------------------------------------------
-
-    // Volume vtable slot 1 -- GetBBox (canonical Volume::VTable rwccore.h:1584;
-    // signature volume.h:539 / rwccore.h:2444). X360 call site: r3=volume,
-    // r4=matrix (may be NULL), r5=0 (tight), r6=&bbox out; result ignored.
-    typedef RwBool (*VolumeGetBBoxFn)(const Volume*                    lpVolume,
-                                      const math::vpu::Matrix44Affine* lpMtx,
-                                      RwBool                           abTight,
-                                      AABBox*                          lpBBox);
-
-    struct VolumeVTableView
-    {
-        u32             muTypeID;    // slot 0  typeID
-        VolumeGetBBoxFn mpGetBBox;   // slot 1  getBBox
-    };
-
-    // Console `lwz 0x40(vol)` = the descriptor pointer; on the host the slot holds the
-    // type enum and the descriptor is gVolumeVTable[enum] (CollisionVolume.hpp
-    // GetVolumeDescriptor; wave Q5 integration 2026-08-18).
-    const VolumeVTableView* GetVolumeVTable(const Volume* lpVolume)
-    {
-        return reinterpret_cast<const VolumeVTableView*>(GetVolumeDescriptor(lpVolume));
-    }
-
-    // Volume::m_flags -- console byte +0x5C; bit 0 is VOLUMEFLAG_ISENABLED
-    // (canonical rwccore.h:1474; the asm's clrlwi. r9, r9, 31).
-    u32 VolumeFlags(const Volume* lpVolume)
-    {
-        return *reinterpret_cast<const u32*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x5C);
-    }
-
-    // Volume::transform -- the volume's relative transform IS the image base
-    // (canonical rwccore.h:1599; the asm reads rows at vol+0x00..0x3F and
-    // passes r5 = vol as the matrix pointer on the identity path).
+    u32 VolumeFlags(const Volume* lpVolume) { return lpVolume->muFlags; }
     const math::vpu::Matrix44Affine* VolumeTransform(const Volume* lpVolume)
     {
-        return reinterpret_cast<const math::vpu::Matrix44Affine*>(lpVolume);
+        return lpVolume->GetRelativeTransform();
     }
-
-    // Volume::aggregateData.agg -- first word of the type union at console
-    // byte +0x44 (canonical rwccore.h:1601-1609; lwz r3, 0x44(r4)).
     Aggregate* VolumeAggregate(const Volume* lpVolume)
     {
-        return *reinterpret_cast<Aggregate* const*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x44);
+        return lpVolume->mAggregateData.mpAggregate;
     }
 
     // VolRef pointer-word views (the committed PrimitiveIntersect.cpp
@@ -111,51 +70,16 @@ namespace
     // plain reinterpretations, not a re-widening of a truncated console word.
     const Volume* VolRefVolume(const VolRef& lrRef)
     {
-        return reinterpret_cast<const Volume*>(lrRef.muVolumePtr);
+        return lrRef.volume;
     }
 
     const math::vpu::Matrix44Affine* VolRefTransform(const VolRef& lrRef)
     {
-        return reinterpret_cast<const math::vpu::Matrix44Affine*>(lrRef.muTransformPtr);
+        return lrRef.tm;
     }
 
     // -----------------------------------------------------------------------
-    // Aggregate dispatch: vtable pointer at Aggregate+0x20 (lwz r11, 0x20(r3);
-    // canonical Aggregate layout rwccore.h:2402-2405: m_AABB +0x00..0x1F,
-    // m_vTable +0x20), entry +0x18 = m_BBoxOverlapQuery (canonical VTable
-    // rwccore.h:2376-2385). X360 call: r3=aggregate, r4=query, r5=matrix
-    // (may be NULL). Returns 0 when the query ran out of buffer space.
-    // -----------------------------------------------------------------------
-    typedef RwBool (*AggregateBBoxOverlapQueryFn)(Aggregate*                       lpAggregate,
-                                                  VolumeBBoxQuery*                 lpQuery,
-                                                  const math::vpu::Matrix44Affine* lpMtx);
 
-    struct AggregateVTableView
-    {
-        u32                         muType;                  // +0x00 m_type
-        void*                       mpGetSize;               // +0x04
-        u32                         muAlignment;             // +0x08
-        RwBool                      mbIsProcedural;          // +0x0C
-        void*                       mpUpdate;                // +0x10
-        void*                       mpLineIntersectionQuery; // +0x14
-        AggregateBBoxOverlapQueryFn mpBBoxOverlapQuery;      // +0x18
-    };
-
-    const AggregateVTableView* GetAggregateVTable(const Aggregate* lpAggregate)
-    {
-        return *reinterpret_cast<const AggregateVTableView* const*>(
-            reinterpret_cast<const u8*>(lpAggregate) + 0x20);
-    }
-
-    // One lvx128/stvx128 pair: copy a 16-byte matrix row into the VolRef's
-    // inline row storage (straight block move, no lane math).
-    void CopyRow(VolRef::Vec4& lrDst, const math::vpu::VectorIntrinsic& arSrc)
-    {
-        lrDst.x = arSrc.v[0];
-        lrDst.y = arSrc.v[1];
-        lrDst.z = arSrc.v[2];
-        lrDst.w = arSrc.v[3];
-    }
 
     // -----------------------------------------------------------------------
     // Affine compose: child = A (the aggregate volume's relative transform,
@@ -235,7 +159,7 @@ RwBool VolumeBBoxQuery::AddVolumeRef(const Volume*                    lpVol,
     // lwz r10,0x40(r4); lwz r10,0(r10); cmpwi cr6,r10,6; beq/b: non-aggregate
     // volumes divert straight to the primitive-ref buffer (tail branch with
     // the same argument registers).
-    if (GetVolumeVTable(lpVol)->muTypeID != KU_VOLUMETYPE_AGGREGATE)
+    if (lpVol->GetType() != KU_VOLUMETYPE_AGGREGATE)
     {
         return AddPrimitiveRef(lpVol, lpTm, arBBox, auTag, auNumTagBits);
     }
@@ -253,30 +177,27 @@ RwBool VolumeBBoxQuery::AddVolumeRef(const Volume*                    lpVol,
     // stwx r4 -> record +0x00 (the console's 32-bit pointer word; VolRef
     // carries it at HOST width since waveQ5 C1, so no truncation here -- the
     // readers below dereference exactly what was stored).
-    lrRef.muVolumePtr = reinterpret_cast<uintptr_t>(lpVol);
+    lrRef.volume = lpVol;
 
     if (lpTm)                                       // cmplwi cr6, r5, 0
     {
         // 4x lvx128/stvx128 (tm +0x00/+0x10/+0x20/+0x30 -> record
         // +0x10..+0x4F): cache the transform rows inline, then aim the
         // record's transform pointer at that inline copy (stw r9 -> +0x04).
-        CopyRow(lrRef.mRow0, lpTm->xAxis.mV);
-        CopyRow(lrRef.mRow1, lpTm->yAxis.mV);
-        CopyRow(lrRef.mRow2, lpTm->zAxis.mV);
-        CopyRow(lrRef.mRow3, lpTm->wAxis.mV);
-        lrRef.muTransformPtr = reinterpret_cast<uintptr_t>(&lrRef.mRow0);
+        lrRef.tmContents = *lpTm;
+        lrRef.tm = &lrRef.tmContents;
     }
     else
     {
-        lrRef.muTransformPtr = 0;                   // stw 0 -> +0x04
+        lrRef.tm = 0;                   // stw 0 -> +0x04
     }
 
     // 4x ld/std: the 32-byte AABBox block-copied into record +0x50..+0x6F
     // (the committed VolRef carries those bytes as mu50..mu68).
-    std::memcpy(&lrRef.mu50, &arBBox, 4 * sizeof(u64));
+    lrRef.bBox = arBBox;
 
-    lrRef.muTag        = auTag;                     // stw r7 -> +0x70
-    lrRef.muNumTagBits = auNumTagBits;              // stb r8 -> +0x74 (arg r8;
+    lrRef.tag        = auTag;                     // stw r7 -> +0x70
+    lrRef.numTagBits = auNumTagBits;              // stb r8 -> +0x74 (arg r8;
                                                     // the pseudocode's BYTE3(v16)
                                                     // is a Hex-Rays artefact)
 
@@ -337,28 +258,25 @@ RwBool VolumeBBoxQuery::AddPrimitiveRef(const Volume*                    lpVol,
     // stwx r4 -> record +0x00 (the console's 32-bit pointer word; VolRef
     // carries it at HOST width since waveQ5 C1, so no truncation here -- the
     // readers below dereference exactly what was stored).
-    lrRef.muVolumePtr = reinterpret_cast<uintptr_t>(lpVol);
+    lrRef.volume = lpVol;
 
     if (lpTm)                                       // cmplwi cr6, r5, 0
     {
         // Cache the transform rows inline, then aim the record's transform
         // pointer at that inline copy (stw r9 -> +0x04).
-        CopyRow(lrRef.mRow0, lpTm->xAxis.mV);
-        CopyRow(lrRef.mRow1, lpTm->yAxis.mV);
-        CopyRow(lrRef.mRow2, lpTm->zAxis.mV);
-        CopyRow(lrRef.mRow3, lpTm->wAxis.mV);
-        lrRef.muTransformPtr = reinterpret_cast<uintptr_t>(&lrRef.mRow0);
+        lrRef.tmContents = *lpTm;
+        lrRef.tm = &lrRef.tmContents;
     }
     else
     {
-        lrRef.muTransformPtr = 0;                   // stw 0 -> +0x04
+        lrRef.tm = 0;                   // stw 0 -> +0x04
     }
 
     // 4x ld/std: the 32-byte AABBox block-copied into record +0x50..+0x6F.
-    std::memcpy(&lrRef.mu50, &arBBox, 4 * sizeof(u64));
+    lrRef.bBox = arBBox;
 
-    lrRef.muTag        = auTag;                     // stw r7 -> +0x70
-    lrRef.muNumTagBits = auNumTagBits;              // stb r8 -> +0x74
+    lrRef.tag        = auTag;                     // stw r7 -> +0x70
+    lrRef.numTagBits = auNumTagBits;              // stb r8 -> +0x74
 
     ++m_primNext;                                   // lwz/addi/stw +0xCC
     return 1;                                       // li r3, 1
@@ -542,7 +460,7 @@ int VolumeBBoxQuery::GetOverlaps(VolumeBBoxQuery* lpThis)
         // empty stack -> done. (blt/bne/ble chain -- any live source keeps
         // going.)
         if (luCurrInput >= luNumInputs &&
-            lpThis->m_currVRef.muVolumePtr == 0 &&
+            lpThis->m_currVRef.volume == 0 &&
             lpThis->m_stackNext == 0)
         {
             break;                              // ble cr6, loc_82BBC108
@@ -555,7 +473,7 @@ int VolumeBBoxQuery::GetOverlaps(VolumeBBoxQuery* lpThis)
         }
 
         // ---- input stage: only when there is no staged work at all --------
-        if (lpThis->m_currVRef.muVolumePtr == 0 &&
+        if (lpThis->m_currVRef.volume == 0 &&
             lpThis->m_stackNext == 0 &&
             luCurrInput < luNumInputs)
         {
@@ -580,7 +498,7 @@ int VolumeBBoxQuery::GetOverlaps(VolumeBBoxQuery* lpThis)
             // Vtable GetBBox (slot 1), tight = 0; result ignored. (A dead
             // stw 0 to a spilled stack slot follows the bctrl -- omitted.)
             AABBox lVolBBox;                    // var_C0/var_B0
-            GetVolumeVTable(lpVol)->mpGetBBox(lpVol, lpMtx, 0, &lVolBBox);
+            lpVol->GetBBox(lpMtx, 0, lVolBBox);
 
             // VMX overlap mask (see banner): separated iff volMin > queryMax
             // or queryMin > volMax on any of the x/y/z lanes; the vsldoi-by-12
@@ -613,14 +531,14 @@ int VolumeBBoxQuery::GetOverlaps(VolumeBBoxQuery* lpThis)
         }
 
         // ---- staged-work stage (loc_82BBBF4C) -----------------------------
-        if (lpThis->m_currVRef.muVolumePtr == 0 && lpThis->m_stackNext == 0)
+        if (lpThis->m_currVRef.volume == 0 && lpThis->m_stackNext == 0)
         {
             continue;                           // beq cr6, loc_82BBBE2C
         }
 
         // Pop the traversal stack into the current ref when it is empty
         // (VolRef::operator= @ 0x82BB33E8 -- bl rw__collision__VolRef__operator_).
-        if (lpThis->m_currVRef.muVolumePtr == 0)
+        if (lpThis->m_currVRef.volume == 0)
         {
             const u32 luTop = lpThis->m_stackNext - 1;     // addi -1
             lpThis->m_stackNext = luTop;                   // stw +0xC0
@@ -629,30 +547,30 @@ int VolumeBBoxQuery::GetOverlaps(VolumeBBoxQuery* lpThis)
 
         // Publish the ref's tag context into the query (read by the
         // aggregate's BBoxOverlapQuery / AddPrimitiveRef downstream).
-        lpThis->m_tag        = lpThis->m_currVRef.muTag;        // +0xEC <- +0xB0
-        lpThis->m_numTagBits = lpThis->m_currVRef.muNumTagBits; // +0xF0 <- +0xB4
+        lpThis->m_tag        = lpThis->m_currVRef.tag;        // +0xEC <- +0xB0
+        lpThis->m_numTagBits = lpThis->m_currVRef.numTagBits; // +0xF0 <- +0xB4
 
         const Volume* lpCurVol = VolRefVolume(lpThis->m_currVRef);
 
-        if (GetVolumeVTable(lpCurVol)->muTypeID != KU_VOLUMETYPE_AGGREGATE)
+        if (lpCurVol->GetType() != KU_VOLUMETYPE_AGGREGATE)
         {
             // ---- primitive: stage it in the result buffer ------------------
             // r5 = the ref's cached transform pointer (+0x04), r6 = the ref's
             // cached 32-byte bbox (this+0x90 == &m_currVRef.mu50), r7/r8 = the
             // tag words loaded above (still live in registers at the call).
             const AABBox& lrCurBBox =
-                *reinterpret_cast<const AABBox*>(&lpThis->m_currVRef.mu50);
+                lpThis->m_currVRef.bBox;
 
             if (!lpThis->AddPrimitiveRef(lpCurVol,
                                          VolRefTransform(lpThis->m_currVRef),
                                          lrCurBBox,
-                                         lpThis->m_currVRef.muTag,
-                                         lpThis->m_currVRef.muNumTagBits))
+                                         lpThis->m_currVRef.tag,
+                                         lpThis->m_currVRef.numTagBits))
             {
                 luOutOfSpace = 1;               // li r22, 1
                 continue;                       // b loc_82BBBE2C
             }
-            lpThis->m_currVRef.muVolumePtr = 0; // stw 0 -> +0x40 (retire)
+            lpThis->m_currVRef.volume = 0; // stw 0 -> +0x40 (retire)
             continue;
         }
 
@@ -699,13 +617,13 @@ int VolumeBBoxQuery::GetOverlaps(VolumeBBoxQuery* lpThis)
         // lwz r3, 0x44(r4): the aggregate; vtable +0x18 = BBoxOverlapQuery
         // (r3=aggregate, r4=this query, r5=matrix-or-NULL).
         Aggregate* lpAggregate = VolumeAggregate(lpCurVol);
-        if (GetAggregateVTable(lpAggregate)->mpBBoxOverlapQuery(lpAggregate, lpThis, lpAggTm))
+        if (lpAggregate->BBoxOverlapQuery(lpThis, lpAggTm))
         {
             // Completed: clear the resumable aggregate-query state and
             // retire the current ref.
             lpThis->m_curSpatialMapQuery   = 0;  // stw 0 -> +0xE8
             lpThis->m_aggIndex             = 0;  // stw 0 -> +0xE0
-            lpThis->m_currVRef.muVolumePtr = 0;  // stw 0 -> +0x40
+            lpThis->m_currVRef.volume = 0;  // stw 0 -> +0x40
         }
         else
         {

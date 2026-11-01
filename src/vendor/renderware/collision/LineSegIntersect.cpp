@@ -6,6 +6,9 @@
 #include "vendor/renderware/collision/AALineClipper.hpp"      // AALineClipper (the fat cylinder's torus clip)
 #include "vendor/renderware/collision/LineSegKernelMath.hpp"  // the kernels' console rounding (stage (b))
 
+#include <xtl.h>
+#include <xboxmath.h>
+#include <cfloat>
 #include <cmath>     // sqrt, fabs, powf
 #include <cstring>   // memcpy (bit-exact float constant)
 
@@ -170,26 +173,37 @@ static const f32 KF_PARALLEL_EPSILON_BITS = F32FromBits(0x00200000u);
 // (feature == k) ? 1.0f : 0.0f; srawi+addze signed /2 on non-negative values
 // -> plain integer /2.
 // ===========================================================================
+namespace fatmath
+{
+    inline f32 Dot3(const rw::math::vpu::Vector3& a,const rw::math::vpu::Vector3& b) { return __vmsum3fp(a.mV,b.mV).x; }
+    inline rw::math::vpu::Vector3 Sub(const rw::math::vpu::Vector3& a,const rw::math::vpu::Vector3& b) { return rw::math::vpu::Vector3(__vsubfp(a.mV,b.mV)); }
+    inline rw::math::vpu::Vector3 Add(const rw::math::vpu::Vector3& a,const rw::math::vpu::Vector3& b) { return rw::math::vpu::Vector3(__vaddfp(a.mV,b.mV)); }
+    inline rw::math::vpu::Vector3 Scale(const rw::math::vpu::Vector3& a,f32 s) { const __vector4 v={s,s,s,s};return rw::math::vpu::Vector3(__vmulfp(a.mV,v)); }
+    inline rw::math::vpu::Vector3 MaddScalar(const rw::math::vpu::Vector3& a,f32 s,const rw::math::vpu::Vector3& b) { const __vector4 v={s,s,s,s};return rw::math::vpu::Vector3(__vmaddfp(a.mV,v,b.mV)); }
+    inline rw::math::vpu::Vector3 Cross(const rw::math::vpu::Vector3& a,const rw::math::vpu::Vector3& b) { return rw::math::vpu::Vector3(__vpermwi(__vnmsubfp(__vpermwi(a.mV,0x63),b.mV,__vmulfp(a.mV,__vpermwi(b.mV,0x63))),0x63)); }
+    inline rw::math::vpu::Vector3 Make(f32 x,f32 y,f32 z,f32 w) { const __vector4 v={x,y,z,w};return rw::math::vpu::Vector3(v); }
+}
+
 s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
-                                Vec4 aLineStart,
-                                Vec4 aLineDelta,
-                                Vec4 aV0,
-                                Vec4 aV1,
-                                Vec4 aV2,
+                                rw::math::vpu::Vector3 aLineStart,
+                                rw::math::vpu::Vector3 aLineDelta,
+                                rw::math::vpu::Vector3 aV0,
+                                rw::math::vpu::Vector3 aV1,
+                                rw::math::vpu::Vector3 aV2,
                                 f32  afFatness)
 {
     // ---- prism rejection ---------------------------------------------------
     // stfs f31, 0x40(r30): the line parameter accumulates from zero.
     lpResult->lineParam = 0.0f;                                // flt_82001CC0
 
-    const Vec4 lvEdge1 = Sub(aV1, aV0);                        // vsubfp128 v124
-    const Vec4 lvEdge2 = Sub(aV2, aV0);                        // vsubfp128 v122
-    Vec4 lvStartRel = Sub(aLineStart, aV0);                    // vsubfp128 v0
+    const rw::math::vpu::Vector3 lvEdge1 = fatmath::Sub(aV1, aV0);                        // vsubfp128 v124
+    const rw::math::vpu::Vector3 lvEdge2 = fatmath::Sub(aV2, aV0);                        // vsubfp128 v122
+    rw::math::vpu::Vector3 lvStartRel = fatmath::Sub(aLineStart, aV0);                    // vsubfp128 v0
 
     // pvec = delta x edge2 (vpermwi128 0x63 / vmulfp128 / vnmsubfp / vpermwi128).
-    const Vec4 lvPVec = Cross(aLineDelta, lvEdge2);            // v10
+    const rw::math::vpu::Vector3 lvPVec = fatmath::Cross(aLineDelta, lvEdge2);            // v10
     // det = dot3(edge1, pvec) (vmsum3fp128 v12, v124, v10).
-    const f32 lfDet = Dot3(lvEdge1, lvPVec);
+    const f32 lfDet = fatmath::Dot3(lvEdge1, lvPVec);
 
     // Fold the determinant sign: sign = +/-1 (flt_82001C98 / flt_820037C8);
     // all interval tests below run against |det|.
@@ -202,21 +216,20 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
     }
     Fraction lDist;                                            // var_190
     lDist.num = lfSign;                                        // stfs f0, var_190
-    lDist.den = 0.0f;   // X360 leaves this word undefined until a helper writes it
 
     // Plane rejection against the caller-seeded unit normal (lvx128 v7, r0, r29):
     // start more than fatness behind the approach side -> miss.
-    const Vec4 lvPlaneNormal = lpResult->normal;
-    if (Dot3(lvPlaneNormal, lvStartRel) * lfSign < -afFatness) // fmuls / fcmpu / blt
+    const rw::math::vpu::Vector3 lvPlaneNormal = lpResult->normal;
+    if (fatmath::Dot3(lvPlaneNormal, lvStartRel) * lfSign < -afFatness) // fmuls / fcmpu / blt
     {
         return 0;
     }
 
     // u*det interval, widened by fatness * L1(pvec) (vandc sign-strip; the
     // fadds chain sums (|y| + |z|) + |x| in that order).
-    const f32 lfUDet = Dot3(lvStartRel, lvPVec) * lfSign;                     // v145[0]
+    const f32 lfUDet = fatmath::Dot3(lvStartRel, lvPVec) * lfSign;                     // v145[0]
     const f32 lfMarginU =
-        ((std::fabs(lvPVec.y) + std::fabs(lvPVec.z)) + std::fabs(lvPVec.x)) * afFatness;
+        ((std::fabs(lvPVec.mV.y) + std::fabs(lvPVec.mV.z)) + std::fabs(lvPVec.mV.x)) * afFatness;
     if (lfUDet < -lfMarginU)
     {
         return 0;
@@ -227,10 +240,10 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
     }
 
     // qvec = edge1 x delta (NOT delta x edge1 -- the polarity rides on lfSign).
-    const Vec4 lvQVec = Cross(lvEdge1, aLineDelta);            // v8
-    const f32 lfVDet = Dot3(lvStartRel, lvQVec) * lfSign;                     // v147[0]
+    const rw::math::vpu::Vector3 lvQVec = fatmath::Cross(lvEdge1, aLineDelta);            // v8
+    const f32 lfVDet = fatmath::Dot3(lvStartRel, lvQVec) * lfSign;                     // v147[0]
     const f32 lfMarginV =
-        ((std::fabs(lvQVec.y) + std::fabs(lvQVec.z)) + std::fabs(lvQVec.x)) * afFatness;
+        ((std::fabs(lvQVec.mV.y) + std::fabs(lvQVec.mV.z)) + std::fabs(lvQVec.mV.x)) * afFatness;
     if (lfVDet < -lfMarginV)
     {
         return 0;
@@ -245,18 +258,18 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
         return 0;
     }
 
-    Vec4 lvCurDelta = aLineDelta;   // var_150 (seeded by the prologue stvx128 v2)
+    rw::math::vpu::Vector3 lvCurDelta = aLineDelta;   // var_150 (seeded by the prologue stvx128 v2)
 
     // ---- offset-plane stage (only when the segment is not parallel) --------
     if (lfAbsDet > KF_PARALLEL_EPSILON_BITS)                   // fcmpu f3 / ble
     {
         // detNormal = edge2 x edge1, oriented so dot3(delta, detNormal) == det.
-        const Vec4 lvDetNormal = Cross(lvEdge2, lvEdge1);      // v11 -> vpermwi -> v13
+        const rw::math::vpu::Vector3 lvDetNormal = fatmath::Cross(lvEdge2, lvEdge1);      // v11 -> vpermwi -> v13
         // Slide the start onto the plane offset by fatness toward the approach
         // side (vmulfp128 normal * splat(sign*fatness); vsubfp).
-        const Vec4 lvShifted = Sub(lvStartRel, Scale(lvPlaneNormal, lfSign * afFatness));
+        const rw::math::vpu::Vector3 lvShifted = fatmath::Sub(lvStartRel, fatmath::Scale(lvPlaneNormal, lfSign * afFatness));
         // t*|det| = -(dot3(shifted, detNormal) * sign).
-        const f32 lfTNum = -(Dot3(lvShifted, lvDetNormal) * lfSign);          // f12
+        const f32 lfTNum = -(fatmath::Dot3(lvShifted, lvDetNormal) * lfSign);          // f12
         if (lfTNum > lfAbsDet)      // crossing beyond the segment end -> miss
         {
             return 0;
@@ -265,21 +278,21 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
         {
             // 1/|det|: vrefp estimate + two vnmsubfp/vmaddfp Newton-Raphson
             // steps (@ 0x82BBAFE4..0x82BBB00C), rendered exact.
-            const f32 lfRecipAbsDet = 1.0f / lfAbsDet;
-            const f32 lfUShift = Dot3(lvShifted, lvPVec) * lfSign;            // v71
+            const f32 lfRecipAbsDet = linemath::RefinedRecip(lfAbsDet);
+            const f32 lfUShift = fatmath::Dot3(lvShifted, lvPVec) * lfSign;            // v71
             const f32 lfT = lfRecipAbsDet * lfTNum;                           // v73
             // stfs f12, 0(r28): stored even when the face test below fails.
             lpResult->lineParam = lfT;
 
             if (lfUShift >= 0.0f && lfUShift <= lfAbsDet)
             {
-                const f32 lfVShift = Dot3(lvShifted, lvQVec) * lfSign;        // v75
+                const f32 lfVShift = fatmath::Dot3(lvShifted, lvQVec) * lfSign;        // v75
                 if (lfVShift >= 0.0f && lfVShift + lfUShift <= lfAbsDet)
                 {
                     // Face hit on the fat offset plane.
-                    lpResult->position = MaddScalar(aLineDelta, lfT, aLineStart);
-                    lpResult->normal   = Scale(lpResult->normal, lfSign);   // flip toward approach
-                    lpResult->volParam = MakeVec4(lfRecipAbsDet * lfUShift,
+                    lpResult->position = fatmath::MaddScalar(aLineDelta, lfT, aLineStart);
+                    lpResult->normal   = fatmath::Scale(lpResult->normal, lfSign);   // flip toward approach
+                    lpResult->volParam = fatmath::Make(lfRecipAbsDet * lfUShift,
                                                   lfRecipAbsDet * lfVShift,
                                                   0.0f, 0.0f);              // r30+0x30
                     return 1;
@@ -287,14 +300,14 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
             }
             // Clamp: advance the start to the offset-plane crossing and keep
             // only the remaining fraction of the segment.
-            lvStartRel = MaddScalar(aLineDelta, lfT, lvStartRel);   // vmaddfp v0
-            lvCurDelta = Scale(aLineDelta, 1.0f - lfT);             // vmulfp128 -> var_150
+            lvStartRel = fatmath::MaddScalar(aLineDelta, lfT, lvStartRel);   // vmaddfp v0
+            lvCurDelta = fatmath::Scale(aLineDelta, 1.0f - lfT);             // vmulfp128 -> var_150
         }
     }
 
     // ---- nearest-feature stage ----------------------------------------------
-    Vec4 lvPoint = Add(lvStartRel, aV0);   // vaddfp128 v1 -> var_1A0 (current point)
-    Vec4 lvFocus;                          // var_160: nearest point, later the sphere centre
+    rw::math::vpu::Vector3 lvPoint = fatmath::Add(lvStartRel, aV0);   // vaddfp128 v1 -> var_1A0 (current point)
+    rw::math::vpu::Vector3 lvFocus;                          // var_160: nearest point, later the sphere centre
     f32 lfNearU = 0.0f;                    // var_188
     f32 lfNearV = 0.0f;                    // var_178
     s32 liFeature = TriangleNearestPointRegion(&lvFocus, &lfNearU, &lfNearV,
@@ -302,17 +315,17 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
                                                // the callee writes f0/f4-f13, never f3 -- there is NO
                                                // plane-distance side channel; see the face arm below)
 
-    const Vec4 lvToPoint = Sub(lvPoint, lvFocus);              // vsubfp v0 = v1 - v0
-    const f32 lfDistSq  = Dot3(lvToPoint, lvToPoint);          // vmsum3fp128 -> var_170
-    const f32 lfDepthSq = afFatness * afFatness - lfDistSq;    // fmsubs
+    const rw::math::vpu::Vector3 lvToPoint = fatmath::Sub(lvPoint, lvFocus);              // vsubfp v0 = v1 - v0
+    const f32 lfDistSq  = fatmath::Dot3(lvToPoint, lvToPoint);          // vmsum3fp128 -> var_170
+    const f32 lfDepthSq = linemath::ScalarMadd(afFatness, afFatness, -lfDistSq);    // fmsubs
     if (lfDepthSq > 0.0f)
     {
         // The (possibly advanced) start already sits inside the fat surface.
         lpResult->position = lvPoint;                                     // r30+0x10
-        lpResult->volParam = MakeVec4(lfNearU, lfNearV, lfDepthSq, 0.0f); // r30+0x30
+        lpResult->volParam = fatmath::Make(lfNearU, lfNearV, lfDepthSq, 0.0f); // r30+0x30
         // vrsqrtefp + two Newton-Raphson steps (@ 0x82BBB198..0x82BBB1B8),
         // rendered exact.
-        lpResult->normal = Scale(lvToPoint, 1.0f / std::sqrt(lfDistSq));  // r29
+        lpResult->normal = fatmath::Scale(lvToPoint, linemath::RefinedRsqrt(lfDistSq));  // r29
         return 1;
     }
     if (liFeature == 6)
@@ -326,9 +339,9 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
         // it is kept in the console's shape rather than deleted (2026-08-18 wave Q5 fix).
         if (lfAbsDet < 0.0f)                                   // fcmpu f3, f31 / bge
         {
-            lpResult->normal = Scale(lpResult->normal, -1.0f); // flt_820037C8 broadcast
+            lpResult->normal = fatmath::Scale(lpResult->normal, -1.0f); // flt_820037C8 broadcast
         }
-        lpResult->volParam = MakeVec4(lfNearU, lfNearV, 0.0f, 0.0f);
+        lpResult->volParam = fatmath::Make(lfNearU, lfNearV, 0.0f, 0.0f);
         return 1;
     }
 
@@ -350,8 +363,8 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
             }
 
             // The two triangle edges leaving this vertex (cmplwi r31, 1 dispatch).
-            Vec4 lvEdgeA;
-            Vec4 lvEdgeB;
+            rw::math::vpu::Vector3 lvEdgeA;
+            rw::math::vpu::Vector3 lvEdgeB;
             if (liFeature < 1)
             {
                 lvEdgeA = lvEdge1;
@@ -359,23 +372,23 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
             }
             else if (liFeature == 1)
             {
-                lvEdgeA = Sub(aV0, aV1);
-                lvEdgeB = Sub(aV2, aV1);
+                lvEdgeA = fatmath::Sub(aV0, aV1);
+                lvEdgeB = fatmath::Sub(aV2, aV1);
             }
             else
             {
-                lvEdgeA = Sub(aV0, aV2);
-                lvEdgeB = Sub(aV1, aV2);
+                lvEdgeA = fatmath::Sub(aV0, aV2);
+                lvEdgeB = fatmath::Sub(aV1, aV2);
             }
 
             // Voronoi migration: if the segment leaves the vertex region across
             // an edge cap-plane no later than the sphere hit, that edge takes
             // over. Fractions compare cross-multiplied (no division yet).
             Fraction lCandidate;                               // var_180
-            lCandidate.den = Dot3(lvCurDelta, lvEdgeA);        // v152
+            lCandidate.den = fatmath::Dot3(lvCurDelta, lvEdgeA);        // v152
             if (lCandidate.den > KF_PARALLEL_EPSILON_BITS)
             {
-                lCandidate.num = Dot3(Sub(lvFocus, lvPoint), lvEdgeA);   // v158
+                lCandidate.num = fatmath::Dot3(fatmath::Sub(lvFocus, lvPoint), lvEdgeA);   // v158
                 if (lCandidate.num > 0.0f
                     && (liHitCode == 0
                         || lCandidate.den * lDist.num >= lCandidate.num * lDist.den))
@@ -384,10 +397,10 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
                     lDist = lCandidate;                // 8-byte ld/std Fraction copy
                 }
             }
-            lCandidate.den = Dot3(lvCurDelta, lvEdgeB);        // v157
+            lCandidate.den = fatmath::Dot3(lvCurDelta, lvEdgeB);        // v157
             if (lCandidate.den > KF_PARALLEL_EPSILON_BITS)
             {
-                lCandidate.num = Dot3(Sub(lvFocus, lvPoint), lvEdgeB);   // v155
+                lCandidate.num = fatmath::Dot3(fatmath::Sub(lvFocus, lvPoint), lvEdgeB);   // v155
                 if (lCandidate.num > 0.0f
                     && (liHitCode == 0
                         || lCandidate.den * lDist.num >= lCandidate.num * lDist.den))
@@ -406,14 +419,14 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
                 // Direct hit on the vertex sphere: finalize.
                 const f32 lfLocalT = lDist.num / lDist.den;                 // fdivs
                 lpResult->lineParam = lpResult->lineParam + lfLocalT;       // fadds accumulate
-                const Vec4 lvHit = MaddScalar(lvCurDelta, lfLocalT, lvPoint);   // vmaddfp v12
+                const rw::math::vpu::Vector3 lvHit = fatmath::MaddScalar(lvCurDelta, lfLocalT, lvPoint);   // vmaddfp v12
                 lpResult->position = lvHit;                                 // r30+0x10
                 // (hit - centre) / fatness: vrefp + two Newton-Raphson steps
                 // (@ 0x82BBB5E8..0x82BBB648), rendered exact. |hit-centre| is
                 // the sphere radius, so this is the unit normal.
-                lpResult->normal = Scale(Sub(lvHit, lvFocus), 1.0f / afFatness);   // r29
+                lpResult->normal = fatmath::Scale(fatmath::Sub(lvHit, lvFocus), linemath::RefinedRecip(afFatness));   // r29
                 // (u,v) = the vertex's barycentric corner (cntlzw/extrwi + fcfid).
-                lpResult->volParam = MakeVec4((liFeature == 1) ? 1.0f : 0.0f,
+                lpResult->volParam = fatmath::Make((liFeature == 1) ? 1.0f : 0.0f,
                                               (liFeature == 2) ? 1.0f : 0.0f,
                                               0.0f, 0.0f);                  // r30+0x30
                 return 1;
@@ -423,8 +436,8 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
         else
         {
             // ===== edge: infinite cylinder of radius fatness around the edge =====
-            Vec4 lvAxis;
-            Vec4 lvBase;
+            rw::math::vpu::Vector3 lvAxis;
+            rw::math::vpu::Vector3 lvBase;
             if (liFeature == 3)
             {
                 lvAxis = lvEdge1;
@@ -437,11 +450,11 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
             }
             else
             {
-                lvAxis = Sub(aV2, aV1);
+                lvAxis = fatmath::Sub(aV2, aV1);
                 lvBase = aV1;
             }
             lvFocus = lvBase;                                  // stvx128 v3 -> var_160
-            const f32 lfAxisLenSq = Dot3(lvAxis, lvAxis);      // vmsum3fp128 -> var_120
+            const f32 lfAxisLenSq = fatmath::Dot3(lvAxis, lvAxis);      // vmsum3fp128 -> var_120
 
             liHitCode = rwcCylinderLineSegIntersect(&lDist, lfAxisLenSq, afFatness,
                                                     0, 0,      // li r6/r7, 0: abInvert=0, abIgnoreInside=0
@@ -451,7 +464,7 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
                 return 0;
             }
 
-            const f32 lfAxisDen = Dot3(lvCurDelta, lvAxis);    // v154
+            const f32 lfAxisDen = fatmath::Dot3(lvCurDelta, lvAxis);    // v154
             Fraction lCandidate;                               // var_180
             bool lbMigratedFar = false;
 
@@ -460,8 +473,8 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
             {
                 // Far cap: does the segment leave through the plane at base+axis
                 // no later than the cylinder hit?
-                const Vec4 lvFarEnd = Add(lvFocus, lvAxis);    // vaddfp128 v0
-                lCandidate.num = Dot3(Sub(lvFarEnd, lvPoint), lvAxis);   // v156
+                const rw::math::vpu::Vector3 lvFarEnd = fatmath::Add(lvFocus, lvAxis);    // vaddfp128 v0
+                lCandidate.num = fatmath::Dot3(fatmath::Sub(lvFarEnd, lvPoint), lvAxis);   // v156
                 if (lCandidate.num > 0.0f
                     && (liHitCode == 0
                         || lCandidate.den * lDist.num >= lCandidate.num * lDist.den))
@@ -481,7 +494,7 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
                 lCandidate.den = lfNegDen;
                 if (lfNegDen > KF_PARALLEL_EPSILON_BITS)
                 {
-                    lCandidate.num = Dot3(Sub(lvPoint, lvFocus), lvAxis);   // v151[0]
+                    lCandidate.num = fatmath::Dot3(fatmath::Sub(lvPoint, lvFocus), lvAxis);   // v151[0]
                     if (lCandidate.num > 0.0f
                         && (liHitCode == 0
                             || lDist.num * lfNegDen >= lCandidate.num * lDist.den))
@@ -502,27 +515,27 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
                 // Direct hit on the edge cylinder: finalize.
                 const f32 lfLocalT = lDist.num / lDist.den;                 // fdivs
                 lpResult->lineParam = lpResult->lineParam + lfLocalT;       // fadds accumulate
-                const Vec4 lvHit = MaddScalar(lvCurDelta, lfLocalT, lvPoint);   // vmaddfp v12
+                const rw::math::vpu::Vector3 lvHit = fatmath::MaddScalar(lvCurDelta, lfLocalT, lvPoint);   // vmaddfp v12
                 // Axial parameter of the hit along the edge; both reciprocals
                 // (1/lenSq, 1/fatness) are vrefp + two interleaved Newton-
                 // Raphson steps (@ 0x82BBB6D8..0x82BBB714), rendered exact.
-                const f32 lfEdgeLenSq = Dot3(lvAxis, lvAxis);   // vmsum3fp128 v9 (recomputed)
-                const f32 lfS = Dot3(Sub(lvHit, lvFocus), lvAxis) * (1.0f / lfEdgeLenSq);
-                const Vec4 lvAxisPoint = MaddScalar(lvAxis, lfS, lvFocus);   // vmaddfp128 v10
-                lpResult->normal = Scale(Sub(lvHit, lvAxisPoint), 1.0f / afFatness);   // r29
+                const f32 lfEdgeLenSq = fatmath::Dot3(lvAxis, lvAxis);   // vmsum3fp128 v9 (recomputed)
+                const f32 lfS = fatmath::Dot3(fatmath::Sub(lvHit, lvFocus), lvAxis) * (linemath::RefinedRecip(lfEdgeLenSq));
+                const rw::math::vpu::Vector3 lvAxisPoint = fatmath::MaddScalar(lvAxis, lfS, lvFocus);   // vmaddfp128 v10
+                lpResult->normal = fatmath::Scale(fatmath::Sub(lvHit, lvAxisPoint), linemath::RefinedRecip(afFatness));   // r29
                 lpResult->position = lvHit;                    // stvx128 v12, r30, 0x10
                 // Barycentric (u,v) from the axial parameter, per edge id.
                 if (liFeature == 3)
                 {
-                    lpResult->volParam = MakeVec4(lfS, 0.0f, 0.0f, 0.0f);
+                    lpResult->volParam = fatmath::Make(lfS, 0.0f, 0.0f, 0.0f);
                 }
                 else if (liFeature == 4)
                 {
-                    lpResult->volParam = MakeVec4(0.0f, lfS, 0.0f, 0.0f);
+                    lpResult->volParam = fatmath::Make(0.0f, lfS, 0.0f, 0.0f);
                 }
                 else
                 {
-                    lpResult->volParam = MakeVec4(1.0f - lfS, lfS, 0.0f, 0.0f);
+                    lpResult->volParam = fatmath::Make(1.0f - lfS, lfS, 0.0f, 0.0f);
                 }
                 return 1;
             }
@@ -531,13 +544,13 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
 
         // ===== advance the walk start by the pending fraction (loc_82BBB518) =====
         const f32 lfLocalT = lDist.num / lDist.den;            // fdivs -> var_188
-        const Vec4 lvNewPoint = MaddScalar(lvCurDelta, lfLocalT, lvPoint);   // vmaddfp v1
+        const rw::math::vpu::Vector3 lvNewPoint = fatmath::MaddScalar(lvCurDelta, lfLocalT, lvPoint);   // vmaddfp v1
         // Fold the local fraction into the whole-segment parameter -- stored
         // BEFORE the t'>1 rejection (the asm stores through r28 either way).
         lpResult->lineParam = (1.0f - lpResult->lineParam) * lfLocalT
                             + lpResult->lineParam;             // fmadds / stfs 0(r28)
         lvPoint    = lvNewPoint;                               // stvx128 v1 -> var_1A0
-        lvCurDelta = Scale(lvCurDelta, 1.0f - lfLocalT);       // vmulfp128 -> var_150
+        lvCurDelta = fatmath::Scale(lvCurDelta, 1.0f - lfLocalT);       // vmulfp128 -> var_150
         if (lfLocalT > 1.0f)                                   // fcmpu f0, f29 / bgt
         {
             return 0;
@@ -594,13 +607,15 @@ namespace
     const f32 KF_FOUR             = 4.0f;                    // flt_82004EF4
     const s32 KI_MAX_ITERATIONS   = 50;                      // cmpwi cr6, r7, 0x32
 
-    // The VMX128 vectorised powf the compiler inlined five times per
-    // iteration -- rendered as the equivalent scalar powf (see the block
-    // comment above for the full instruction citation).
-    inline f32 VmxPowF(f32 lfBase, f32 lfExponent)
+    // The retail sequence is the XDK VMX128 XMVectorPow, including its
+    // log/exp polynomial, estimates, refinements and special-value selects.
+    inline f32 VmxPowF(f32 base, f32 exponent)
     {
-        return powf(lfBase, lfExponent);
+        const __vector4 x={base,base,base,base}, y={exponent,exponent,exponent,exponent};
+        return XMVectorPow(x,y).x;
     }
+    inline __vector4 QuarticSplat(f32 value)
+    { const __vector4 v={value,value,value,value}; return v; }
 }
 
 RwBool SolveQuarticRoots(f32 lafCoefficients[5], f32& arRoot)
@@ -641,22 +656,25 @@ RwBool SolveQuarticRoots(f32 lafCoefficients[5], f32& arRoot)
             //   vmaddfp   v8 = x^2 * c2 + v8
             //   vaddfp    v8 += c1*x   (c1*x precomputed by fmuls into var_70)
             //   vaddfp    v8 += c0     (var_B0)
-            f32 lfValue = lfX3 * lfC3;
-            lfValue = lfX4 * lfC4 + lfValue;
-            lfValue = lfX2 * lfC2 + lfValue;
-            lfValue = lfValue + lfC1 * lfRoot;
-            lfValue = lfValue + lafCoefficients[0];
-            lfResidual = lfValue;                   // lfs f11, var_50
+            __vector4 value = __vmulfp(QuarticSplat(lfX3),QuarticSplat(lfC3));
+            value = __vmaddfp(QuarticSplat(lfX4),QuarticSplat(lfC4),value);
+            value = __vmaddfp(QuarticSplat(lfX2),QuarticSplat(lfC2),value);
+            const f32 linear = lfC1 * lfRoot;
+            value = __vaddfp(value,QuarticSplat(linear));
+            value = __vaddfp(value,QuarticSplat(lafCoefficients[0]));
+            lfResidual = value.x;
 
             // f'(x) fold (stored to var_30):
             //   vmulfp128 v11 = x^2 * 3c3
             //   vmaddfp   v0  = x^3 * 4c4 + v11
             //   vaddfp    v0 += 2c2*x  (precomputed by fmuls into var_60)
             //   vaddfp    v0 += c1     (var_E0)
-            f32 lfSlope = lfDerivX2 * lfDerivC2;
-            lfSlope = lfDerivX3 * lfDerivC3 + lfSlope;
-            lfSlope = lfSlope + lfDerivC1 * lfRoot;
-            lfSlope = lfSlope + lfC1;
+            __vector4 slope = __vmulfp(QuarticSplat(lfDerivX2),QuarticSplat(lfDerivC2));
+            slope = __vmaddfp(QuarticSplat(lfDerivX3),QuarticSplat(lfDerivC3),slope);
+            const f32 linearSlope = lfDerivC1 * lfRoot;
+            slope = __vaddfp(slope,QuarticSplat(linearSlope));
+            slope = __vaddfp(slope,QuarticSplat(lfC1));
+            const f32 lfSlope = slope.x;
 
             // Damping uses the PRE-increment iteration index (extsw/fcfid of
             // the old r7): 1.0 on iteration 0, 0.02 on iteration 49.
@@ -665,7 +683,7 @@ RwBool SolveQuarticRoots(f32 lafCoefficients[5], f32& arRoot)
             ++liIteration;                          // addi r7, r7, 1
 
             const f32 lfStep = lfResidual / lfSlope;        // fdivs f29, f11, f29
-            lfRoot = lfRoot - lfDamping * lfStep;           // fnmsubs f0, f30, f29, f0
+            lfRoot = linemath::ScalarNmsub(lfDamping, lfStep, lfRoot);           // fnmsubs f0, f30, f29, f0
 
             // Loop-back: bgt cr6 on |f(pre-update x)| > 1e-6 (fabs/fcmpu were
             // issued before the update; the branch polarity is preserved).
@@ -712,63 +730,35 @@ RwBool SolveQuarticRoots(f32 lafCoefficients[5], f32& arRoot)
 // every fcmpu, via the !(...) forms below (the SolveQuarticRoots loop-back
 // precedent).
 // ===========================================================================
-s32 rwcSphereLineSegIntersect(Fraction* lpDist,           // r3
-                              const Vec4* lpLineStart,    // r4
-                              const Vec4* lpLineDelta,    // r5
-                              const Vec4* lpCentre,       // r6
-                              f32 afRadius)               // f1
+s32 rwcSphereLineSegIntersect(Fraction* lpDist,
+                              const rw::math::vpu::Vector3* lpLineStart,
+                              const rw::math::vpu::Vector3* lpLineDelta,
+                              const rw::math::vpu::Vector3* lpCentre,
+                              f32 afRadius)
 {
-    const f32 lfRadiusSq = afRadius * afRadius;           // fmuls f0, f1, f1
-
-    // toCentre = centre - start (lvx128 v0 / v13 ; vsubfp v13).
-    const Vec4 lvToCentre = Sub(*lpCentre, *lpLineStart);
-    // |toCentre|^2 (vmsum3fp128 v0, v13, v13 -> stack round-trip -> lfs f13).
-    const f32 lfDistSq = linemath::Dot3(lvToCentre, lvToCentre);
-
-    // fcmpu f13, f0 / bge loc_82BA821C: only a STRICTLY inside start takes
-    // the immediate-hit path (unordered goes to the main path with the asm).
-    if (lfDistSq < lfRadiusSq)
+    const __vector4 toCentre = __vsubfp(lpCentre->mV, lpLineStart->mV);
+    const f32 radiusSquare = afRadius * afRadius;
+    const f32 distanceSquare = __vmsum3fp(toCentre, toCentre).x;
+    if (distanceSquare < radiusSquare)
     {
-        // Start inside the sphere: hit at once, t = 0/1.
-        lpDist->den = 1.0f;   // flt_82001C98 (stfs f13, 4(r11))
-        lpDist->num = 0.0f;   // flt_82001CC0 (the shared tail store @ 0x82BA82B8)
-        return 1;             // li r3, 1
+        lpDist->den = 1.0f;
+        lpDist->num = 0.0f;
+        return 1;
     }
-
-    // proj = dot3(toCentre, delta) (vmsum3fp128 v12, v13, v0).
-    const f32 lfProj = linemath::Dot3(lvToCentre, *lpLineDelta);
-    if (!(lfProj > 0.0f))     // fcmpu f10, f13(0.0) / bgt skips -> li r3, -1
-    {
-        return -1;            // segment points away from (or grazes) the sphere
-    }
-
-    const f32 lfDeltaLenSq = linemath::Dot3(*lpLineDelta, *lpLineDelta);   // vmsum3fp128 v11
-    // |cross(toCentre, delta)|^2 -- the two-permute cross idiom + vmsum3fp128.
-    const Vec4 lvCross   = linemath::Cross(lvToCentre, *lpLineDelta);
-    const f32  lfCrossSq = linemath::Dot3(lvCross, lvCross);
-
-    // disc = |delta|^2 * r^2 - crossSq (fmsubs f11, f12, f0, f11: ONE rounding).
-    const f32 lfDisc = linemath::Madd(lfDeltaLenSq, lfRadiusSq, -lfCrossSq);
-    // `fcmpu f11, f13(0.0) ; bge 0x82BA8294` (0x82BA8284 / 0x82BA8288): bge is TAKEN on an unordered compare,
-    // so only an ORDERED disc < 0 returns 0 -- a NaN disc carries on to the root (owner's list 2026-09-27, L2).
-    if (lfDisc < 0.0f)
-    {
-        return 0;             // the infinite line misses the sphere
-    }
-
-    // Segment-end rejection (fsubs f0, f10, f12): the near root lies past
-    // t = 1 iff proj - |delta|^2 > 0 and its square exceeds the discriminant.
-    const f32 lfPastEnd = lfProj - lfDeltaLenSq;
-    if (lfPastEnd > 0.0f                              // fcmpu / ble skips the square test
-        && lfPastEnd * lfPastEnd > lfDisc)            // fmuls / fcmpu / bgt -> li r3, 0
-    {
-        return 0;
-    }
-
-    // Near root as a deferred fraction: t = (proj - sqrt(disc)) / |delta|^2.
-    lpDist->den = lfDeltaLenSq;                       // stfs f12, 4(r11)
-    lpDist->num = lfProj - std::sqrt(lfDisc);         // fsqrts / fsubs / stfs 0(r11)
-    return 1;                                         // li r3, 1
+    const __vector4 delta = lpLineDelta->mV;
+    const f32 projection = __vmsum3fp(toCentre, delta).x;
+    if (!(projection > 0.0f)) return -1;
+    const f32 deltaSquare = __vmsum3fp(delta, delta).x;
+    const __vector4 cross = __vpermwi(__vnmsubfp(__vpermwi(toCentre, 0x63), delta,
+        __vmulfp(toCentre, __vpermwi(delta, 0x63))), 0x63);
+    const f32 crossSquare = __vmsum3fp(cross, cross).x;
+    const f32 discriminant = deltaSquare * radiusSquare - crossSquare;
+    if (discriminant < 0.0f) return 0;
+    const f32 remaining = projection - deltaSquare;
+    if (remaining > 0.0f && remaining * remaining > discriminant) return 0;
+    lpDist->den = deltaSquare;
+    lpDist->num = projection - static_cast<f32>(std::sqrt(discriminant));
+    return 1;
 }
 
 // ===========================================================================
@@ -840,100 +830,48 @@ s32 rwcPlaneLineSegIntersect(Fraction* lpDist, f32 afOrig, f32 afSeg, f32 afSign
 // Branch polarity (incl. the unordered direction of every fcmpu) is
 // preserved via the !(...) forms.
 // ===========================================================================
-s32 rwcCylinderLineSegIntersect(Fraction* lpDist,        // r3
-                                f32 afAxisLengthSq,      // f1
-                                f32 afRadius,            // f2
-                                s32 abInvert,            // r6 (canonical `invert`)
-                                s32 abIgnoreInside,      // r7 (canonical `ignoreInside`)
-                                Vec4 aLineStart,         // v1 (canonical `orig`)
-                                Vec4 aLineDelta,         // v2 (canonical `seg`)
-                                Vec4 aBase,              // v3 (canonical `center`)
-                                Vec4 aAxis)              // v4
+s32 rwcCylinderLineSegIntersect(Fraction* lpDist, f32 afAxisLengthSq, f32 afRadius,
+                                s32 abInvert, s32 abIgnoreInside,
+                                rw::math::vpu::Vector3 aLineStart,
+                                rw::math::vpu::Vector3 aLineDelta,
+                                rw::math::vpu::Vector3 aBase,
+                                rw::math::vpu::Vector3 aAxis)
 {
-    // |axis|^2 * r^2 -- the scaled squared-radius limit (fmuls f0,f1,f2 ;
-    // fmuls f0,f0,f2).
-    const f32 lfRadialLimit = (afAxisLengthSq * afRadius) * afRadius;
-
-    // toBase = base - start (vsubfp v0, v3, v1) and its axis cross
-    // (two-permute idiom @ 0x82BAF8A4..0x82BAF8C4).
-    const Vec4 lvToBase      = Sub(aBase, aLineStart);
-    const Vec4 lvCrossBase   = linemath::Cross(lvToBase, aAxis);
-    const f32  lfCrossBaseSq = linemath::Dot3(lvCrossBase, lvCrossBase);   // vmsum3fp128 v12
-
-    // fcmpu f13, f0 / bge loc_82BAF8FC ; cmplwi r7 / bne loc_82BAF8FC: only a
-    // STRICTLY radially-inside start with abIgnoreInside == 0 early-accepts
-    // (unordered takes the main path with the asm).
-    if (lfCrossBaseSq < lfRadialLimit && abIgnoreInside == 0)
+    const __vector4 relative = __vsubfp(aBase.mV, aLineStart.mV);
+    const f32 radiusLimit = (afAxisLengthSq * afRadius) * afRadius;
+    const __vector4 axisPerm = __vpermwi(aAxis.mV, 0x63);
+    const __vector4 cross0 = __vpermwi(__vnmsubfp(__vpermwi(relative, 0x63), aAxis.mV,
+        __vmulfp(relative, axisPerm)), 0x63);
+    const f32 distanceSquare = __vmsum3fp(cross0, cross0).x;
+    if (distanceSquare < radiusLimit && !abIgnoreInside)
     {
-        lpDist->den = 1.0f;   // flt_82001C98 (stfs f13, 4(r10))
-        lpDist->num = 0.0f;   // flt_82001CC0 (the shared tail store @ loc_82BAF99C)
-        return 1;             // li r3, 1
+        lpDist->den = 1.0f;
+        lpDist->num = 0.0f;
+        return 1;
     }
-
-    // cross(delta, axis) (two-permute idiom @ 0x82BAF8FC..0x82BAF910) and the
-    // projected approach term proj = dot3(crossBase, crossDelta)
-    // (vmsum3fp128 v0, v0, v13).
-    const Vec4 lvCrossDelta = linemath::Cross(aLineDelta, aAxis);
-    const f32  lfProj       = linemath::Dot3(lvCrossBase, lvCrossDelta);
-
-    // cmplwi r6 / bne skips ; fcmpu f11, f12(0.0) / bgt skips -> li r3, -1.
-    if (abInvert == 0 && !(lfProj > 0.0f))
+    const __vector4 crossDelta = __vpermwi(__vnmsubfp(__vpermwi(aLineDelta.mV, 0x63), aAxis.mV,
+        __vmulfp(aLineDelta.mV, axisPerm)), 0x63);
+    const f32 projection = __vmsum3fp(cross0, crossDelta).x;
+    if (!abInvert && !(projection > 0.0f)) return -1;
+    const f32 deltaSquare = __vmsum3fp(crossDelta, crossDelta).x;
+    volatile f32 product = deltaSquare * distanceSquare;
+    volatile f32 first = projection * projection - product;
+    const f32 discriminant = deltaSquare * radiusLimit + first;
+    if (discriminant < 0.0f) return 0;
+    const f32 remaining = projection - deltaSquare;
+    if (!abInvert)
     {
-        return -1;            // segment points away from the surface
-    }
-
-    const f32 lfCrossDeltaSq = linemath::Dot3(lvCrossDelta, lvCrossDelta);   // vmsum3fp128 v0
-
-    // Discriminant, in asm order (fmuls f13, f10, f13 ; fmsubs f13, f11, f11,
-    // f13 ; fmadds f13, f10, f0, f13):
-    //   disc = crossDeltaSq*|axis|^2*r^2 + (proj^2 - crossDeltaSq*crossBaseSq)
-    f32 lfDisc = lfCrossDeltaSq * lfCrossBaseSq;                  // fmuls  f13, f10, f13
-    lfDisc = linemath::ScalarMadd(lfProj, lfProj, -lfDisc);                   // fmsubs f13, f11, f11, f13
-    lfDisc = linemath::ScalarMadd(lfCrossDeltaSq, lfRadialLimit, lfDisc);     // fmadds f13, f10, f0, f13
-    // `fcmpu f13, f12(0.0) ; bge 0x82BAF968` (0x82BAF958 / 0x82BAF95C): bge is TAKEN on an unordered compare,
-    // so only an ORDERED disc < 0 returns 0 -- a NaN disc carries on (owner's list 2026-09-27, L2).
-    if (lfDisc < 0.0f)
-    {
-        return 0;             // the infinite line misses the cylinder
-    }
-
-    // pastEnd = proj - crossDeltaSq (fsubs f0, f11, f10): the near root sits
-    // past t = 1 exactly when pastEnd >= 0 and pastEnd^2 >= disc.
-    const f32 lfPastEnd = lfProj - lfCrossDeltaSq;
-    f32 lfSign;               // the fsel-free +/-1 root selector (f0)
-    if (abInvert == 0)
-    {
-        // fcmpu f0, f12 / blt loc_82BAF988 skips the square test.
-        if (!(lfPastEnd < 0.0f))
-        {
-            // fmuls f0, f0, f0 ; fcmpu f0, f13 / bge loc_82BAF960 -> miss.
-            if (!(lfPastEnd * lfPastEnd < lfDisc))
-            {
-                return 0;     // near root beyond the segment end
-            }
-        }
-        lfSign = 1.0f;        // flt_82001C98 (loc_82BAF988): near root
+        if (!(remaining < 0.0f) && !(remaining * remaining < discriminant)) return 0;
     }
     else
     {
-        // loc_82BAF9A8 -- exit-surface (far root) selection: require the far
-        // root strictly inside the segment (crossDeltaSq - proj > sqrt(disc)).
-        if (!(lfPastEnd < 0.0f))                      // fcmpu / bge -> miss
-        {
-            return 0;
-        }
-        if (!(lfPastEnd * lfPastEnd > lfDisc))        // fmuls ; fcmpu / ble -> miss
-        {
-            return 0;
-        }
-        lfSign = -1.0f;       // flt_820037C8: far root
+        if (!(remaining < 0.0f) || !(remaining * remaining > discriminant)) return 0;
     }
-
-    // t = (proj - sign*sqrt(disc)) / crossDeltaSq as a deferred fraction
-    // (fsqrts f13 ; stfs f10, 4(r10) ; fnmsubs f0, f13, f0, f11 ; stfs 0(r10)).
-    lpDist->den = lfCrossDeltaSq;
-    lpDist->num = -(std::sqrt(lfDisc) * lfSign - lfProj);
-    return 1;                 // li r3, 1
+    const f32 sign = abInvert ? -1.0f : 1.0f;
+    const f32 root = static_cast<f32>(std::sqrt(discriminant));
+    lpDist->den = deltaSquare;
+    lpDist->num = projection - root * sign;
+    return 1;
 }
 
 // ===========================================================================
@@ -980,8 +918,8 @@ namespace
 }
 
 s32 rwcTorusLineSegIntersect(f32& arDist,          // r3
-                             Vec4 aLineStart,      // v1 (canonical `orig`)
-                             Vec4 aLineDir,        // v2 (canonical `dir`)
+                             rw::math::vpu::Vector3 aLineStart,      // v1 (canonical `orig`)
+                             rw::math::vpu::Vector3 aLineDir,        // v2 (canonical `dir`)
                              f32 afMajorRadius,    // f1
                              f32 afMinorRadius)    // f2
 {
@@ -992,17 +930,18 @@ s32 rwcTorusLineSegIntersect(f32& arDist,          // r3
     const f32 lfMajorSq = afMajorRadius * afMajorRadius;   // fmuls f13, f1, f1
     const f32 lfMinorSq = afMinorRadius * afMinorRadius;   // fmuls f12, f2, f2
 
-    const f32 lfOD = Dot3(aLineStart, aLineDir);    // vmsum3fp128 v11 -> var_50
-    const f32 lfDD = Dot3(aLineDir, aLineDir);      // vmsum3fp128 v10 -> var_20
-    const f32 lfOO = Dot3(aLineStart, aLineStart);  // vmsum3fp128 v12
+    const f32 lfOD = fatmath::Dot3(aLineStart, aLineDir);    // vmsum3fp128 v11 -> var_50
+    const f32 lfDD = fatmath::Dot3(aLineDir, aLineDir);      // vmsum3fp128 v10 -> var_20
+    const f32 lfOO = fatmath::Dot3(aLineStart, aLineStart);  // vmsum3fp128 v12
 
-    const f32 lfOrigZ = aLineStart.z;               // vspltw v0, v1, 2
-    const f32 lfDirZ  = aLineDir.z;                 // vspltw v13, v2, 2
+    const f32 lfOrigZ = aLineStart.mV.z;               // vspltw v0, v1, 2
+    const f32 lfDirZ  = aLineDir.mV.z;                 // vspltw v13, v2, 2
 
     // C0 = oo - (r^2 + R^2)  (fadds f10, f12, f13 -> var_80 splat ; vsubfp v12).
     const f32 lfC0 = lfOO - (lfMinorSq + lfMajorSq);
     // G0 = r^2 - origZ^2  (vmulfp128 v10, v0, v0 -> var_80 ; fsubs f13, f12, f13).
-    const f32 lfG0 = lfMinorSq - lfOrigZ * lfOrigZ;
+    const __vector4 zrow = {lfOrigZ,lfOrigZ,lfOrigZ,lfOrigZ};
+    const f32 lfG0 = lfMinorSq - __vmulfp(zrow,zrow).x;
 
     const f32 lfFourMajorSq  = lfMajorSq * KF_FOUR;    // fmuls f11, f13, f0  (4R^2)
     const f32 lfEightMajorSq = lfMajorSq * KF_EIGHT;   // fmuls f13, f13, f10 (8R^2)
@@ -1014,20 +953,27 @@ s32 rwcTorusLineSegIntersect(f32& arDist,          // r3
 
     // c0 = C0*C0 - G0*4R^2
     // (vmulfp128 v0, v12, v0 -> var_50 ; fmsubs f10, f13, f13, f10).
-    lafCoefficients[0] = lfC0 * lfC0 - lfG0 * lfFourMajorSq;
+    lafCoefficients[0] = linemath::ScalarMadd(lfC0, lfC0, -(lfG0 * lfFourMajorSq));
 
     // c1 = (C0*od)*4 + (dirZ*8R^2)*origZ
     // (vmulfp128 v11, v13, v11 ; vmulfp128 v0, v11, v0 -> var_40 = f9 ;
     //  fmuls f10, f13, f12 ; fmadds f10, f10, f0, f9 -> var_8C).
-    lafCoefficients[1] = (lfC0 * lfOD) * KF_FOUR
-                       + (lfDirZ * lfEightMajorSq) * lfOrigZ;
+    const __vector4 dz = {lfDirZ,lfDirZ,lfDirZ,lfDirZ};
+    const __vector4 oz = {lfOrigZ,lfOrigZ,lfOrigZ,lfOrigZ};
+    const __vector4 eight = {lfEightMajorSq,lfEightMajorSq,lfEightMajorSq,lfEightMajorSq};
+    const f32 zProduct = __vmulfp(__vmulfp(dz,eight),oz).x;
+    lafCoefficients[1] = linemath::ScalarMadd(lfC0 * lfOD, KF_FOUR, zProduct);
 
     // c2 = (od*od)*4 + (C0*dd)*2 + (dirZ*4R^2)*dirZ
     // (fmuls f9, f12, f12 ; fmuls f10, f13, f11 ; fmuls f13, f10, f13(2.0) ;
     //  fmadds f0, f9, f0(4.0), f13 ; vmulfp128 v0, v13, v0 ;
     //  vmulfp128 v0, v0, v13 ; fadds f0, f0, f13).
-    lafCoefficients[2] = ((lfOD * lfOD) * KF_FOUR + (lfC0 * lfDD) * KF_TWO)
-                       + (lfDirZ * lfFourMajorSq) * lfDirZ;
+    const __vector4 four = {lfFourMajorSq,lfFourMajorSq,lfFourMajorSq,lfFourMajorSq};
+    const f32 zSquaredProduct = __vmulfp(__vmulfp(dz,four),dz).x;
+    const f32 otherTerms = linemath::ScalarMadd(lfOD * lfOD, KF_FOUR, (lfC0 * lfDD) * KF_TWO);
+    const __vector4 zPart={zSquaredProduct,zSquaredProduct,zSquaredProduct,zSquaredProduct};
+    const __vector4 other={otherTerms,otherTerms,otherTerms,otherTerms};
+    lafCoefficients[2] = __vaddfp(other,zPart).x;
 
     // c3 = (od*dd)*4  (fmuls f12, f12, f11 ; fmuls f12, f12, f0 -> var_34).
     lafCoefficients[3] = (lfOD * lfDD) * KF_FOUR;
@@ -1071,94 +1017,45 @@ static const f32 KF_THIN_DET_EPSILON = 1.0e-8f;
 // det*1e-5 on both sides: low bound = det * -1e-5, high bound = det - low.
 static const f32 KF_THIN_TOLERANCE = -1.0e-5f;
 
-s32 ThinTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3
-                                 Vec4 aLineStart,                          // v1
-                                 Vec4 aLineDelta,                          // v2
-                                 Vec4 aV0,                                 // v3
-                                 Vec4 aV1,                                 // v4
-                                 Vec4 aV2)                                 // v5
+s32 ThinTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
+                                 rw::math::vpu::Vector3 aLineStart,
+                                 rw::math::vpu::Vector3 aLineDelta,
+                                 rw::math::vpu::Vector3 aV0,
+                                 rw::math::vpu::Vector3 aV1,
+                                 rw::math::vpu::Vector3 aV2)
 {
-    // ---- determinant (one-sided Moller-Trumbore) ---------------------------
-    const Vec4 lvEdge2 = Sub(aV2, aV0);                 // vsubfp v12, v5, v3
-    const Vec4 lvEdge1 = Sub(aV1, aV0);                 // vsubfp v0, v4, v3
-
-    // pvec = delta x edge2 (vpermwi128 0x63 / vmulfp128 / vnmsubfp / vpermwi128).
-    const Vec4 lvPVec = Cross(aLineDelta, lvEdge2);     // v13
-    // det = dot3(edge1, pvec) (vmsum3fp128 v11, v0, v13; lane 0 via the stack).
-    const f32 lfDet = Dot3(lvEdge1, lvPVec);
-
-    // fcmpu cr6 / ble: backfacing or (near-)parallel -> miss. ONE-SIDED: a
-    // negative determinant is rejected outright, there is no sign fold here
-    // (unlike the fat tester).
-    if (lfDet <= KF_THIN_DET_EPSILON)                   // flt_8200D5F0
-    {
-        return 0;
-    }
-
-    // Relative tolerance band for every interval test below (fmuls / fsubs):
-    //   low  = det * -1e-5      (a small NEGATIVE margin)
-    //   high = det - low        (det * (1 + 1e-5))
-    const f32 lfLowBound  = lfDet * KF_THIN_TOLERANCE;  // f0  (flt_82180AA4)
-    const f32 lfHighBound = lfDet - lfLowBound;         // f11
-
-    // ---- u interval ---------------------------------------------------------
-    const Vec4 lvTVec = Sub(aLineStart, aV0);           // vsubfp v11, v1, v3
-    const f32  lfUDet = Dot3(lvTVec, lvPVec);           // vmsum3fp128 v13, v11, v13
-    if (lfUDet < lfLowBound)                            // fcmpu / blt
-    {
-        return 0;
-    }
-    if (lfUDet > lfHighBound)                           // fcmpu / bgt
-    {
-        return 0;
-    }
-
-    // ---- v interval ---------------------------------------------------------
-    // qvec = tvec x edge1 (vmr/vpermwi128/vmulfp128/vnmsubfp/vpermwi128 block;
-    // vnmsubfp v0, v10, v0, v13 decodes as v0 = v0 - perm(tvec)*edge1).
-    const Vec4 lvQVec = Cross(lvTVec, lvEdge1);         // v0
-    const f32  lfVDet = Dot3(aLineDelta, lvQVec);       // vmsum3fp128 v13, v2, v0
-    if (lfVDet < lfLowBound)                            // fcmpu / blt
-    {
-        return 0;
-    }
-    // fadds f13, f10, f12: the u+v fold compares v + u against the high bound.
-    if (lfVDet + lfUDet > lfHighBound)                  // fcmpu / bgt
-    {
-        return 0;
-    }
-
-    // ---- t interval ---------------------------------------------------------
-    const f32 lfTDet = Dot3(lvEdge2, lvQVec);           // vmsum3fp128 v0, v12, v0
-
-    // stfs f13, 0x40(r11): the RAW t*det is stored to the caller's lineParam
-    // slot BEFORE the interval test -- a reject below leaves it there.
-    lpResult->lineParam = lfTDet;
-
-    if (lfTDet < lfLowBound || lfTDet > lfHighBound)    // fcmpu blt / bgt
-    {
-        return 0;
-    }
-
-    // ---- hit: divide through by the determinant and fill the result --------
-    // vrefp + two Newton-Raphson refine steps on the splatted determinant
-    // (@ 0x82BB9FCC..0x82BB9FE8), rendered exact.
-    const f32 lfRecipDet = 1.0f / lfDet;                // v22 lane 0
-
-    // fmuls f13, f0, f13 / stfs f13, 0(r10): overwrite the raw store with t.
-    const f32 lfT = lfRecipDet * lfTDet;
-    lpResult->lineParam = lfT;                          // +0x40
-
-    // volParam row assembled on the stack in lane order (u, v, 0.0f, 0).
-    lpResult->volParam = MakeVec4(lfRecipDet * lfUDet,
-                                  lfRecipDet * lfVDet,
-                                  0.0f, 0.0f);          // r11+0x30
-
-    // vmaddfp v0, v2, v1, v0 (== delta * splat(t) + start; the splat is the
-    // lvlx/vspltw reload of the lineParam field just stored) -> +0x10.
-    lpResult->position = MaddScalar(aLineDelta, lfT, aLineStart);   // r11+0x10
-
-    return 1;                                           // li r3, 1
+    const __vector4 e2 = __vsubfp(aV2.mV, aV0.mV);
+    const __vector4 e1 = __vsubfp(aV1.mV, aV0.mV);
+    const __vector4 q = __vpermwi(__vnmsubfp(__vpermwi(aLineDelta.mV, 0x63), e2,
+        __vmulfp(aLineDelta.mV, __vpermwi(e2, 0x63))), 0x63);
+    const f32 det = __vmsum3fp(e1, q).x;
+    if (!(det > 1.0e-8f)) return 0;
+    const __vector4 tvec = __vsubfp(aLineStart.mV, aV0.mV);
+    const f32 lower = det * -1.0e-5f;
+    const f32 upper = det - lower;
+    const f32 u = __vmsum3fp(tvec, q).x;
+    if (u < lower || u > upper) return 0;
+    const __vector4 q2 = __vpermwi(__vnmsubfp(__vpermwi(tvec, 0x63), e1,
+        __vmulfp(tvec, __vpermwi(e1, 0x63))), 0x63);
+    const f32 v = __vmsum3fp(aLineDelta.mV, q2).x;
+    if (v < lower || v + u > upper) return 0;
+    f32 t = __vmsum3fp(e2, q2).x;
+    lpResult->lineParam = t;
+    if (t < lower || t > upper) return 0;
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    const __vector4 determinant = __vspltw(__lvlx(&det, 0), 0);
+    __vector4 reciprocal = __vrefp(determinant);
+    __vector4 correction = __vnmsubfp(reciprocal, determinant, one);
+    reciprocal = __vmaddfp(reciprocal, correction, reciprocal);
+    correction = __vnmsubfp(reciprocal, determinant, one);
+    reciprocal = __vmaddfp(reciprocal, correction, reciprocal);
+    const f32 inv = reciprocal.x;
+    t = inv * t;
+    lpResult->lineParam = t;
+    lpResult->volParam = rw::math::vpu::Vector3(inv * u, inv * v, 0.0f);
+    const __vector4 time = __vspltw(__lvlx(&lpResult->lineParam, 0), 0);
+    lpResult->position.mV = __vmaddfp(aLineDelta.mV, time, aLineStart.mV);
+    return 1;
 }
 
 // ===========================================================================
@@ -1184,58 +1081,51 @@ namespace
     // The unit geometric normal of (V0, V1, V2): normalize(Cross(V0-V1, V0-V2)).
     // Emitted twice inline on the X360 (see the lowering notes above); the
     // subtraction ORDER (V0 - V1, V0 - V2) is the asm's.
-    inline Vec4 TriangleUnitNormal(const Vec4& arV0, const Vec4& arV1, const Vec4& arV2)
+    inline __vector4 TriangleUnitNormal(const rw::math::vpu::Vector3& p0,
+                                        const rw::math::vpu::Vector3& p1,
+                                        const rw::math::vpu::Vector3& p2)
     {
-        const Vec4 lvCross = Cross(Sub(arV0, arV1), Sub(arV0, arV2));
-        const f32  lfLenSq = Dot3(lvCross, lvCross);    // vmsum3fp128 v0, v13, v13
-        // vrsqrtefp + two Newton-Raphson steps, rendered exact.
-        return Scale(lvCross, 1.0f / std::sqrt(lfLenSq));
+        const __vector4 e2 = __vsubfp(p0.mV, p2.mV);
+        const __vector4 e1 = __vsubfp(p0.mV, p1.mV);
+        const __vector4 cross = __vpermwi(__vnmsubfp(__vpermwi(e1, 0x63), e2,
+            __vmulfp(e1, __vpermwi(e2, 0x63))), 0x63);
+        const __vector4 square = __vmsum3fp(cross, cross);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(square);
+        __vector4 correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        return __vmulfp(cross, estimate);
     }
 }
 
-s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3 (r31)
-                             Vec4 aLineStart,                          // v1
-                             Vec4 aLineDelta,                          // v2
-                             Vec4 aV0,                                 // v3 -> v127
-                             Vec4 aV1,                                 // v4 -> v126
-                             Vec4 aV2,                                 // v5 -> v125
-                             f32  afFatness)                           // f1 -> f31
+s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
+                             rw::math::vpu::Vector3 aLineStart,
+                             rw::math::vpu::Vector3 aLineDelta,
+                             rw::math::vpu::Vector3 aV0,
+                             rw::math::vpu::Vector3 aV1,
+                             rw::math::vpu::Vector3 aV2,
+                             f32 afFatness)
 {
-    s32 liHit;                                                         // r3
-
-    if (afFatness == 0.0f)                              // fcmpu vs flt_82001CC0 / bne
+    s32 hit;
+    if (afFatness == 0.0f)
     {
-        // ---- thin path: test first, derive the normal only on a hit --------
-        liHit = ThinTriangleLineSegIntersect(lpResult, aLineStart, aLineDelta,
-                                             aV0, aV1, aV2);   // bl 0x82BB9EB8
-        if (liHit)                                      // cmplwi / beq
-        {
-            // stvx128 v0, r31, 0x20: the unit face normal.
-            lpResult->normal = TriangleUnitNormal(aV0, aV1, aV2);
-        }
+        hit = ThinTriangleLineSegIntersect(lpResult, aLineStart, aLineDelta, aV0, aV1, aV2);
+        if (hit) lpResult->normal.mV = TriangleUnitNormal(aV0, aV1, aV2);
     }
     else
     {
-        // ---- fat path: the normal is an INPUT to the fat tester ------------
-        // stvx128 v0, r0, r30 (r30 = result + 0x20) BEFORE the call: the
-        // FatTriangleLineSegIntersect above reads +0x20 as the caller-seeded
-        // unit plane normal (its documented input contract).
-        lpResult->normal = TriangleUnitNormal(aV0, aV1, aV2);
-
-        liHit = FatTriangleLineSegIntersect(lpResult, aLineStart, aLineDelta,
-                                            aV0, aV1, aV2, afFatness);   // bl 0x82BBAD98
-        if (liHit)                                      // cmplwi / beq
+        lpResult->normal.mV = TriangleUnitNormal(aV0, aV1, aV2);
+        hit = FatTriangleLineSegIntersect(lpResult, aLineStart, aLineDelta, aV0, aV1, aV2, afFatness);
+        if (hit)
         {
-            // Pull the fat-surface hit back onto the core triangle:
-            //   position -= normal * fatness
-            // (the normal is reloaded from the result block, i.e. the fat
-            // tester's OUTPUT normal; all four lanes.)
-            lpResult->position =
-                Sub(lpResult->position, Scale(lpResult->normal, afFatness));
+            const __vector4 fatness = __vspltw(__lvlx(&afFatness, 0), 0);
+            lpResult->position.mV = __vsubfp(lpResult->position.mV, __vmulfp(lpResult->normal.mV, fatness));
         }
     }
-
-    return liHit;                                       // r3 pass-through
+    return hit;
 }
 
 
@@ -1262,42 +1152,70 @@ s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3 (r3
 //               value (0x82BA8468..0x82BA8498); otherwise n stays as it is
 //   0x82BA84CC  position = position - normal * fatness (vmulfp128, vsubfp); return 1. volParam is not written.
 // ===========================================================================
-RwBool SphereVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+RwBool SphereVolume::LineSegIntersect(const Vector3& arPt1, const Vector3& arPt2,
+                                      const Matrix44Affine* lpTransform,
                                       VolumeLineSegIntersectResult& arResult, f32 afFatness) const
 {
-    using namespace linemath;
-    using linemath::Dot3; using linemath::MakeVec4; using linemath::Sub;   // this TU has helpers of these names
-
-    const Vec4 lvCentre = (lpTransform != 0) ? FramePoint(lpTransform, maTransform[3]) : maTransform[3];
-    arResult.v = reinterpret_cast<uintptr_t>(this);                              // stw r11, 0(r7) @0x82BA8328
-
-    const Vec4 lvSeg    = Sub(arPt2, arPt1);                                    // vsubfp @0x82BA8338
-    const f32  lfRadius = mfRadius + afFatness;                                 // fadds  @0x82BA8344
-    Fraction lDist;
-    if (!(rwcSphereLineSegIntersect(&lDist, &arPt1, &lvSeg, &lvCentre, lfRadius) > 0))   // cmpwi ; bgt
+    __vector4 centre = mTransform.wAxis.mV;
+    if (lpTransform)
     {
-        return 0;
+        __vector4 result = __vmaddfp(lpTransform->xAxis.mV, __vspltw(centre, 0), lpTransform->wAxis.mV);
+        result = __vmaddfp(lpTransform->yAxis.mV, __vspltw(centre, 1), result);
+        centre = __vmaddfp(lpTransform->zAxis.mV, __vspltw(centre, 2), result);
     }
-
-    arResult.lineParam = lDist.num / lDist.den;                                 // fdivs @0x82BA8384
-    arResult.position  = MaddSplat(lvSeg, arResult.lineParam, arPt1);           // vmaddfp @0x82BA83AC
-    Vec4 lvNormal = Sub(arResult.position, lvCentre);                           // vsubfp  @0x82BA83B0
-
-    if (lDist.num > KF_LINE_ZERO)                                               // fcmpu ; ble @0x82BA83BC (NaN: inside)
+    arResult.v = this;
+    const Vector3 delta(__vsubfp(arPt2.mV, arPt1.mV));
+    const Vector3 centreValue(centre);
+    const f32 radius = mfRadius + afFatness;
+    Fraction fraction;
+    if (rwcSphereLineSegIntersect(&fraction, &arPt1, &delta, &centreValue, radius) <= 0) return 0;
+    arResult.lineParam = fraction.num / fraction.den;
+    const __vector4 time = __vspltw(__lvlx(&arResult.lineParam, 0), 0);
+    const __vector4 position = __vmaddfp(delta.mV, time, arPt1.mV);
+    __vector4 normal = __vsubfp(position, centre);
+    arResult.position.mV = position;
+    arResult.normal.mV = normal;
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    if (fraction.num > 0.0f)
     {
-        lvNormal = MulSplat(lvNormal, RefinedRecip(lfRadius));                  // 0x82BA83E0..0x82BA83F4
+        const __vector4 rad = __vspltw(__lvlx(&radius, 0), 0);
+        __vector4 estimate = __vrefp(rad);
+        __vector4 correction = __vnmsubfp(estimate, rad, one);
+        estimate = __vmaddfp(estimate, correction, estimate);
+        correction = __vnmsubfp(estimate, rad, one);
+        estimate = __vmaddfp(estimate, correction, estimate);
+        normal = __vmulfp(normal, estimate);
+        arResult.normal.mV = normal;
     }
     else
     {
-        const f32 lfLengthSq = Dot3(lvNormal, lvNormal);                        // vmsum3fp128 @0x82BA8424
-        const f32 lfLength   = (lfLengthSq == 0.0f) ? 0.0f : lfLengthSq * RefinedRsqrt(lfLengthSq);   // vsel
-        if (lfLength > KF_LINE_FLT_MIN)                                         // vcmpgtfp. @0x82BA8458
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        const __vector4 square = __vmsum3fp(normal, normal);
+        const __vector4 equalZero = __vcmpeqfp(zero, square);
+        __vector4 estimate = __vrsqrtefp(square);
+        __vector4 correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        const __vector4 magnitude = __vsel(__vmulfp(square, estimate), zero, equalZero);
+        const f32 threshold = FLT_MIN;
+        unsigned int comparison = 0;
+        __vcmpgtfpR(magnitude, __vspltw(__lvlx(&threshold, 0), 0), &comparison);
+        if ((comparison & 0x80u) != 0)
         {
-            lvNormal = MulSplat(lvNormal, RefinedRsqrt(lfLengthSq));            // 0x82BA8468..0x82BA8498
+            const __vector4 square2 = __vmsum3fp(normal, normal);
+            __vector4 inverse = __vrsqrtefp(square2);
+            correction = __vnmsubfp(square2, __vmulfp(inverse, inverse), one);
+            inverse = __vmaddfp(__vmulfp(inverse, half), correction, inverse);
+            correction = __vnmsubfp(square2, __vmulfp(inverse, inverse), one);
+            inverse = __vmaddfp(__vmulfp(inverse, half), correction, inverse);
+            normal = __vmulfp(normal, inverse);
+            arResult.normal.mV = normal;
         }
     }
-    arResult.normal   = lvNormal;
-    arResult.position = Sub(arResult.position, MulSplat(lvNormal, afFatness)); // vmulfp128 ; vsubfp @0x82BA84D0
+    const __vector4 fatness = __vspltw(__lvlx(&afFatness, 0), 0);
+    arResult.position.mV = __vsubfp(arResult.position.mV, __vmulfp(arResult.normal.mV, fatness));
     return 1;
 }
 
@@ -1345,7 +1263,7 @@ RwBool SphereVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, cons
 // lineParam SUMS the step fractions, each taken over the remaining segment -- the console's accumulation
 // (the fat triangle walk accumulates the same way).
 // ===========================================================================
-RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+RwBool BoxVolume::LineSegIntersect(const rw::math::vpu::Vector3& arPt1, const rw::math::vpu::Vector3& arPt2, const rw::math::vpu::Matrix44Affine* lpTransform,
                                    VolumeLineSegIntersectResult& arResult, f32 afFatness) const
 {
     using namespace linemath;
@@ -1354,22 +1272,26 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
     const f32 lafHalf[3] = { mBoxData.mfHx, mBoxData.mfHy, mBoxData.mfHz };   // lfs 0x44 / 0x48 / 0x4C
     const f32 lfRadius   = mfRadius + afFatness;                                // fadds @0x82BA94D4
 
-    Vec4 lavFrame[4];
+    rw::math::vpu::Vector3 lavFrame[4];
     if (lpTransform != 0)
     {
-        ComposeFrame(maTransform, lpTransform, lavFrame);                       // 0x82BA9508..0x82BA95A4
+        rw::math::vpu::Vector3 ownRows[4];
+        ownRows[0]=mTransform.xAxis; ownRows[1]=mTransform.yAxis; ownRows[2]=mTransform.zAxis; ownRows[3]=mTransform.wAxis;
+        rw::math::vpu::Vector3 transformRows[4];
+        transformRows[0]=lpTransform->xAxis; transformRows[1]=lpTransform->yAxis; transformRows[2]=lpTransform->zAxis; transformRows[3]=lpTransform->wAxis;
+        ComposeFrame(ownRows, transformRows, lavFrame);                       // 0x82BA9508..0x82BA95A4
     }
     else
     {
-        lavFrame[0] = maTransform[0];
-        lavFrame[1] = maTransform[1];
-        lavFrame[2] = maTransform[2];
-        lavFrame[3] = maTransform[3];
+        lavFrame[0] = mTransform.xAxis;
+        lavFrame[1] = mTransform.yAxis;
+        lavFrame[2] = mTransform.zAxis;
+        lavFrame[3] = mTransform.wAxis;
     }
     const LocalFrame lLocal = InvertFrame(lavFrame);
-    const Vec4 lvEnd  = ToLocal(lLocal, arPt2);                                 // v126
-    Vec4 lvPoint      = ToLocal(lLocal, arPt1);                                 // var_270
-    Vec4 lvDelta      = Sub(lvEnd, lvPoint);                                    // var_300
+    const rw::math::vpu::Vector3 lvEnd  = ToLocal(lLocal, arPt2);                                 // v126
+    rw::math::vpu::Vector3 lvPoint      = ToLocal(lLocal, arPt1);                                 // var_270
+    rw::math::vpu::Vector3 lvDelta      = Sub(lvEnd, lvPoint);                                    // var_300
 
     // ---- classify the start (0x82BA9694..0x82BA974C) -----------------------------------------------------
     f32 lafRegion[3];                       // var_2F0
@@ -1420,12 +1342,12 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
         }
     }
     arResult.lineParam = KF_LINE_ZERO;                                          // stfs @0x82BA9750
-    arResult.v         = reinterpret_cast<uintptr_t>(this);                    // stw  @0x82BA9754
+    arResult.v         = this;                    // stw  @0x82BA9754
 
     Fraction lDist = { 0.0f, 0.0f };        // var_310
-    Vec4 lvFeature = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);   // var_260: the corner / edge point
-    Vec4 lvPosition;
-    Vec4 lvNormal;
+    rw::math::vpu::Vector3 lvFeature = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);   // var_260: the corner / edge point
+    rw::math::vpu::Vector3 lvPosition;
+    rw::math::vpu::Vector3 lvNormal;
     for (u32 luSteps = KU_BOX_LINE_STEPS; ; )
     {
         if ((luInside & 2u) != 0)
@@ -1510,7 +1432,7 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
                 }
                 if (liHit > 0 && lDist.num == 0.0f)                             // 0x82BA97E8
                 {
-                    const Vec4 lvOut = Sub(lvPoint, lvFeature);                 // vsubfp @0x82BA9CC4
+                    const rw::math::vpu::Vector3 lvOut = Sub(lvPoint, lvFeature);                 // vsubfp @0x82BA9CC4
                     lvNormal   = MulSplat(lvOut, RefinedRsqrt(Dot3(lvOut, lvOut)));
                     lvPosition = lvPoint;
                     break;
@@ -1543,7 +1465,7 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
                 {
                     const f32 lfT = lDist.num / lDist.den;                      // fdivs @0x82BA9D08
                     lvPosition = MaddSplat(lvDelta, lfT, lvPoint);              // vmaddfp @0x82BA9D30
-                    const Vec4 lvOut = Sub(lvPosition, lvFeature);              // vsubfp  @0x82BA9D34
+                    const rw::math::vpu::Vector3 lvOut = Sub(lvPosition, lvFeature);              // vsubfp  @0x82BA9D34
                     arResult.lineParam = arResult.lineParam + lfT;              // fadds   @0x82BA9D40
                     lvNormal = MulSplat(lvOut, RefinedRecip(lfRadius));         // 0x82BA9D50..0x82BA9D64
                     break;
@@ -1556,7 +1478,7 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
             {
                 // ---- 1: an edge region along luAxis (0x82BA98C4) ----
                 const u32 luEdge = luAxis;
-                const Vec4 lvAxis = MakeVec4((luEdge == 0u) ? 1.0f : 0.0f, (luEdge == 1u) ? 1.0f : 0.0f,
+                const rw::math::vpu::Vector3 lvAxis = MakeVec4((luEdge == 0u) ? 1.0f : 0.0f, (luEdge == 1u) ? 1.0f : 0.0f,
                                              (luEdge == 2u) ? 1.0f : 0.0f, 0.0f);   // cntlzw ; fcfid @0x82BA98CC
                 s32 liHit = rwcCylinderLineSegIntersect(&lDist, KF_LINE_ONE, lfRadius, 0, 0,
                                                         lvPoint, lvDelta, lvFeature, lvAxis);
@@ -1570,7 +1492,7 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
                 }
                 if (liHit > 0 && lDist.num == 0.0f)                             // 0x82BA996C
                 {
-                    Vec4 lvRadial = Sub(lvPoint, lvFeature);                    // vsubfp @0x82BA9D90
+                    rw::math::vpu::Vector3 lvRadial = Sub(lvPoint, lvFeature);                    // vsubfp @0x82BA9D90
                     Lane(lvRadial, luEdge) = 0.0f;                              // stfsx @0x82BA9D9C
                     lvNormal   = MulSplat(lvRadial, RefinedRsqrt(Dot3(lvRadial, lvRadial)));
                     lvPosition = lvPoint;
@@ -1613,7 +1535,7 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
                 {
                     const f32 lfT = lDist.num / lDist.den;                      // fdivs @0x82BA9DE0
                     lvPosition = MaddSplat(lvDelta, lfT, lvPoint);              // vmaddfp @0x82BA9E14
-                    Vec4 lvRadial = Sub(lvPosition, lvFeature);                 // vsubfp  @0x82BA9E18
+                    rw::math::vpu::Vector3 lvRadial = Sub(lvPosition, lvFeature);                 // vsubfp  @0x82BA9E18
                     Lane(lvRadial, luEdge) = 0.0f;                              // stfsx   @0x82BA9E20
                     arResult.lineParam = arResult.lineParam + lfT;              // fadds (the shared tail)
                     lvNormal = MulSplat(lvRadial, RefinedRecip(lfRadius));
@@ -1650,8 +1572,8 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
     }
 
     // ---- the hit, back out of the frame (0x82BA9EB4..0x82BA9FA8) ----
-    const Vec4 lvWorldPosition = FramePoint(lavFrame, lvPosition);
-    const Vec4 lvWorldNormal   = FrameDirection(lavFrame, lvNormal);
+    const rw::math::vpu::Vector3 lvWorldPosition = FramePoint(lavFrame, lvPosition);
+    const rw::math::vpu::Vector3 lvWorldNormal   = FrameDirection(lavFrame, lvNormal);
     arResult.normal   = lvWorldNormal;
     arResult.volParam = MakeVec4(lafRegion[0], lafRegion[1], lafRegion[2], 0.0f);
     arResult.position = Sub(lvWorldPosition, MulSplat(lvWorldNormal, afFatness));
@@ -1694,35 +1616,39 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
 //               position -= normal * fatness; return 1.
 // A miss leaves result.position holding the last point and lineParam the steps taken, as on the console.
 // ===========================================================================
-RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+RwBool CapsuleVolume::LineSegIntersect(const rw::math::vpu::Vector3& arPt1, const rw::math::vpu::Vector3& arPt2, const rw::math::vpu::Matrix44Affine* lpTransform,
                                        VolumeLineSegIntersectResult& arResult, f32 afFatness) const
 {
     using namespace linemath;
     using linemath::Dot3; using linemath::MakeVec4; using linemath::Sub;   // this TU has helpers of these names
 
-    const Vec4 lvBarrelBase = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);   // var_1A0 (v124)
-    const Vec4 lvBarrelAxis = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);   // var_1B0 (v126): flt_82001CC0 x2, flt_82001C98
-    arResult.v = reinterpret_cast<uintptr_t>(this);                // stw r30, 0(r29) @0x82BAFD60
+    const rw::math::vpu::Vector3 lvBarrelBase = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);   // var_1A0 (v124)
+    const rw::math::vpu::Vector3 lvBarrelAxis = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);   // var_1B0 (v126): flt_82001CC0 x2, flt_82001C98
+    arResult.v = this;                // stw r30, 0(r29) @0x82BAFD60
 
-    Vec4 lavFrame[4];
+    rw::math::vpu::Vector3 lavFrame[4];
     if (lpTransform != 0)
     {
-        ComposeFrame(maFrame, lpTransform, lavFrame);              // 0x82BAFD90..0x82BAFE18
+        rw::math::vpu::Vector3 ownRows[4];
+        ownRows[0]=mTransform.xAxis; ownRows[1]=mTransform.yAxis; ownRows[2]=mTransform.zAxis; ownRows[3]=mTransform.wAxis;
+        rw::math::vpu::Vector3 transformRows[4];
+        transformRows[0]=lpTransform->xAxis; transformRows[1]=lpTransform->yAxis; transformRows[2]=lpTransform->zAxis; transformRows[3]=lpTransform->wAxis;
+        ComposeFrame(ownRows, transformRows, lavFrame);              // 0x82BAFD90..0x82BAFE18
     }
     else
     {
-        lavFrame[0] = maFrame[0];
-        lavFrame[1] = maFrame[1];
-        lavFrame[2] = maFrame[2];
-        lavFrame[3] = maFrame[3];
+        lavFrame[0] = mTransform.xAxis;
+        lavFrame[1] = mTransform.yAxis;
+        lavFrame[2] = mTransform.zAxis;
+        lavFrame[3] = mTransform.wAxis;
     }
     const LocalFrame lLocal = InvertFrame(lavFrame);
-    const Vec4 lvStart = ToLocal(lLocal, arPt1);                   // v127
-    const Vec4 lvEnd   = ToLocal(lLocal, arPt2);                   // v125
+    const rw::math::vpu::Vector3 lvStart = ToLocal(lLocal, arPt1);                   // v127
+    const rw::math::vpu::Vector3 lvEnd   = ToLocal(lLocal, arPt2);                   // v125
     const f32  lfRadius     = mfRadius + afFatness;                // fadds @0x82BAFE74 (var_1DC)
-    const f32  lfHalfHeight = mfHalfHeight;                        // f27 (+0x44)
-    Vec4 lvDelta = Sub(lvEnd, lvStart);                            // vsubfp128 @0x82BAFED8 (var_190)
-    const f32  lfStartZ = lvStart.z;                               // f22
+    const f32  lfHalfHeight = mCapsuleData.mfHalfHeight;                        // f27 (+0x44)
+    rw::math::vpu::Vector3 lvDelta = Sub(lvEnd, lvStart);                            // vsubfp128 @0x82BAFED8 (var_190)
+    const f32  lfStartZ = lvStart.mV.z;                               // f22
 
     f32 lfCap;                                                     // f31
     if (lfStartZ > lfHalfHeight)                                   // fcmpu ; ble @0x82BAFEF0 (NaN: next test)
@@ -1741,23 +1667,23 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
     arResult.position  = lvStart;                                  // stvx128 v127 @0x82BAFF28
 
     f32 lfDeltaZ = 0.0f;                                           // f26
-    Vec4 lvPosition;
-    Vec4 lvNormal;
+    rw::math::vpu::Vector3 lvPosition;
+    rw::math::vpu::Vector3 lvNormal;
     for (u32 luSteps = KU_CAPSULE_LINE_STEPS; ; )
     {
-        lfDeltaZ = lvDelta.z;                                      // lfs var_188 @0x82BAFF30
+        lfDeltaZ = lvDelta.mV.z;                                      // lfs var_188 @0x82BAFF30
         Fraction lEvent = { 0.0f, 0.0f };                          // f29 / f30 (fmr f28 @0x82BAFF34)
         if (lfCap != 0.0f)                                         // fcmpu ; beq @0x82BAFF44
         {
             // ---- a cap (0x82BAFF48) ----
-            const Vec4 lvCapCentre = MakeVec4(0.0f, 0.0f, lfCap * lfHalfHeight, 0.0f);   // fmuls @0x82BAFF4C
+            const rw::math::vpu::Vector3 lvCapCentre = MakeVec4(0.0f, 0.0f, lfCap * lfHalfHeight, 0.0f);   // fmuls @0x82BAFF4C
             Fraction lDist;
             const s32 liHit = rwcSphereLineSegIntersect(&lDist, &arResult.position, &lvDelta, &lvCapCentre,
                                                         lfRadius);
             if (liHit > 0 && lDist.num == 0.0f)                    // 0x82BAFF98
             {
                 arResult.position = lvStart;                       // stvx128 v127 @0x82BB00E0
-                const Vec4 lvOut = Sub(lvStart, lvCapCentre);      // vsubfp128 @0x82BB00F0
+                const rw::math::vpu::Vector3 lvOut = Sub(lvStart, lvCapCentre);      // vsubfp128 @0x82BB00F0
                 lvNormal   = MulSplat(lvOut, RefinedRsqrt(Dot3(lvOut, lvOut)));
                 lvPosition = lvStart;
                 break;
@@ -1768,7 +1694,7 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
             {
                 liEvent    = 1;
                 lEvent.den = -lfToward;                            // fneg @0x82BAFFB8
-                lEvent.num = linemath::ScalarNmsub(-arResult.position.z, lfCap, -lfHalfHeight);   // fnmsubs @0x82BAFFBC
+                lEvent.num = linemath::ScalarNmsub(-arResult.position.mV.z, lfCap, -lfHalfHeight);   // fnmsubs @0x82BAFFBC
                 if (lEvent.num > lEvent.den)                       // ble @0x82BAFFC4 (NaN: valid)
                 {
                     liEvent = 0;
@@ -1802,8 +1728,8 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
             }
             if (lDist.num == 0.0f)                                 // beq @0x82BB003C
             {
-                const Vec4 lvOffset = Sub(arResult.position, lvBarrelBase);                     // vsubfp128 @0x82BB01B8
-                const Vec4 lvRadial = MaddSplat(lvBarrelAxis, -Dot3(lvOffset, lvBarrelAxis), lvOffset);   // vxor ; vmaddfp128
+                const rw::math::vpu::Vector3 lvOffset = Sub(arResult.position, lvBarrelBase);                     // vsubfp128 @0x82BB01B8
+                const rw::math::vpu::Vector3 lvRadial = MaddSplat(lvBarrelAxis, -Dot3(lvOffset, lvBarrelAxis), lvOffset);   // vxor ; vmaddfp128
                 lvNormal   = MulSplat(lvRadial, RefinedRsqrt(Dot3(lvRadial, lvRadial)));
                 lvPosition = arResult.position;
                 break;
@@ -1820,8 +1746,8 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
                 arResult.lineParam = arResult.lineParam + lfT;           // fadds @0x82BB0254
                 lvPosition = MaddSplat(lvDelta, lfT, arResult.position); // vmaddfp @0x82BB0260
                 arResult.position = lvPosition;
-                const Vec4 lvOffset = Sub(lvPosition, lvBarrelBase);     // vsubfp128 @0x82BB0270
-                const Vec4 lvRadial = MaddSplat(lvBarrelAxis, -Dot3(lvOffset, lvBarrelAxis), lvOffset);   // 0x82BB0290
+                const rw::math::vpu::Vector3 lvOffset = Sub(lvPosition, lvBarrelBase);     // vsubfp128 @0x82BB0270
+                const rw::math::vpu::Vector3 lvRadial = MaddSplat(lvBarrelAxis, -Dot3(lvOffset, lvBarrelAxis), lvOffset);   // 0x82BB0290
                 lvNormal = MulSplat(lvRadial, RefinedRecip(lfRadius));   // vmulfp128 @0x82BB02A4
                 break;
             }
@@ -1840,8 +1766,8 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
     }
 
     // ---- the hit, back out of the frame (0x82BB02A8..0x82BB03A0) ----
-    const Vec4 lvWorldPosition = FramePoint(lavFrame, lvPosition);
-    const Vec4 lvWorldNormal   = FrameDirection(lavFrame, lvNormal);
+    const rw::math::vpu::Vector3 lvWorldPosition = FramePoint(lavFrame, lvPosition);
+    const rw::math::vpu::Vector3 lvWorldNormal   = FrameDirection(lavFrame, lvNormal);
     arResult.normal   = lvWorldNormal;
     arResult.volParam = MakeVec4(lfCap, lfDeltaZ, lfStartZ, 0.0f);   // stfs f31 / f26 / f22 @0x82BB0364..0x82BB0370
     arResult.position = Sub(lvWorldPosition, MulSplat(lvWorldNormal, afFatness));
@@ -1861,7 +1787,7 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
 //   0x82BADEEC / 0x82BADF24 both points beyond +mfHalfHeight: a miss (vcmpgtfp. "all": a NaN compares false)
 //   0x82BADF64 / 0x82BADF9C both points beyond -mfHalfHeight: a miss
 //   0x82BADFD8..0x82BAE044  the start radially outside (x^2 + y^2 of (x, y, 0), vmsum3fp128, > r^2 fmuls) and moving
-//                           away: (T - start) . delta < 0 with T = the volume's OWN translation row maFrame[3] (vsubfp
+//                           away: (T - start) . delta < 0 with T = the volume's OWN translation row mTransform.wAxis (vsubfp
 //                           v12, v8, v1 -- v8 is `lvx128 v8, this + 0x30` @0x82BADD68, never composed, not the local
 //                           origin; z lane zeroed) -- CONSOLE QUIRK, reproduced: for a cylinder whose frame has a
 //                           translation the test is taken against the wrong point
@@ -1879,70 +1805,73 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
 // volParam is never written. The caller's fatness is not read: the console reloads f1 with 1.0 (the axis' |a|^2) at
 // 0x82BADD28.
 // ===========================================================================
-RwBool CylinderVolume::ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
-                                            VolumeLineSegIntersectResult& arResult, f32 afFatness) const
+RwBool CylinderVolume::ThinLineSegIntersect(const rw::math::vpu::Vector3& arPt1, const rw::math::vpu::Vector3& arPt2, const rw::math::vpu::Matrix44Affine* lpTransform,
+                                            VolumeLineSegIntersectResult& arResult) const
 {
     using namespace linemath;
     using linemath::Dot3; using linemath::MakeVec4; using linemath::Sub;   // this TU has helpers of these names
-    (void)afFatness;
 
-    const Vec4 lvBase = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);          // var_130
-    const Vec4 lvAxis = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);          // var_120: flt_82001CC0 x2, flt_82001C98, 0
-    arResult.v = reinterpret_cast<uintptr_t>(this);                // stw r30, 0(r28) @0x82BADD48
+    const rw::math::vpu::Vector3 lvBase = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);          // var_130
+    const rw::math::vpu::Vector3 lvAxis = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);          // var_120: flt_82001CC0 x2, flt_82001C98, 0
+    arResult.v = this;                // stw r30, 0(r28) @0x82BADD48
 
-    Vec4 lavFrame[4];
+    rw::math::vpu::Vector3 lavFrame[4];
+    rw::math::vpu::Vector3 ownRows[4];
+    ownRows[0]=mTransform.xAxis; ownRows[1]=mTransform.yAxis; ownRows[2]=mTransform.zAxis; ownRows[3]=mTransform.wAxis;
     if (lpTransform != 0)
     {
-        ComposeFrame(maFrame, lpTransform, lavFrame);              // 0x82BADD70..0x82BADDFC
+        rw::math::vpu::Vector3 transformRows[4];
+        transformRows[0]=lpTransform->xAxis; transformRows[1]=lpTransform->yAxis; transformRows[2]=lpTransform->zAxis; transformRows[3]=lpTransform->wAxis;
+        ComposeFrame(ownRows, transformRows, lavFrame);              // 0x82BADD70..0x82BADDFC
     }
     else
     {
-        lavFrame[0] = maFrame[0];
-        lavFrame[1] = maFrame[1];
-        lavFrame[2] = maFrame[2];
-        lavFrame[3] = maFrame[3];
+        lavFrame[0] = ownRows[0];
+        lavFrame[1] = ownRows[1];
+        lavFrame[2] = ownRows[2];
+        lavFrame[3] = ownRows[3];
     }
     const LocalFrame lLocal = InvertFrame(lavFrame);               // 0x82BADE28..0x82BADE9C
-    const Vec4 lvStart = ToLocal(lLocal, arPt1);                   // v1 (var_100)
-    const Vec4 lvEnd   = ToLocal(lLocal, arPt2);                   // v0 (var_F0)
-    const Vec4 lvDelta = Sub(lvEnd, lvStart);                      // vsubfp v2 @0x82BADEC0 (var_110)
-    const f32  lfHalfHeight    = mfHalfHeight;                     // f31 (+0x44)
+    const rw::math::vpu::Vector3 lvStart = ToLocal(lLocal, arPt1);                   // v1 (var_100)
+    const rw::math::vpu::Vector3 lvEnd   = ToLocal(lLocal, arPt2);                   // v0 (var_F0)
+    const rw::math::vpu::Vector3 lvDelta = Sub(lvEnd, lvStart);                      // vsubfp v2 @0x82BADEC0 (var_110)
+    const f32  lfHalfHeight    = mCylinderData.mfHalfHeight;                     // f31 (+0x44)
     const f32  lfNegHalfHeight = -lfHalfHeight;                    // fneg f29 @0x82BADF40
-    const f32  lfRadiusSq      = mfRadius * mfRadius;              // fmuls f13 @0x82BADE74
+    const f32  lfRadiusSq      = mCylinderData.mfInnerRadius * mCylinderData.mfInnerRadius;              // fmuls f13 @0x82BADE74
 
-    if (lvStart.z > lfHalfHeight && lvEnd.z > lfHalfHeight)        // 0x82BADEEC / 0x82BADF24
+    if (lvStart.mV.z > lfHalfHeight && lvEnd.mV.z > lfHalfHeight)        // 0x82BADEEC / 0x82BADF24
     {
         return 0;
     }
-    if (lfNegHalfHeight > lvStart.z && lfNegHalfHeight > lvEnd.z)  // 0x82BADF64 / 0x82BADF9C
+    if (lfNegHalfHeight > lvStart.mV.z && lfNegHalfHeight > lvEnd.mV.z)  // 0x82BADF64 / 0x82BADF9C
     {
         return 0;
     }
 
-    const Vec4 lvStartRadial = MakeVec4(lvStart.x, lvStart.y, 0.0f, lvStart.w);   // stfs f30, var_148
+    const rw::math::vpu::Vector3 lvStartRadial = MakeVec4(lvStart.mV.x, lvStart.mV.y, 0.0f, lvStart.mV.w);   // stfs f30, var_148
     if (Dot3(lvStartRadial, lvStartRadial) > lfRadiusSq)          // vmsum3fp128 @0x82BADFD8 ; vcmpgtfp. @0x82BADFF8
     {
-        const Vec4 lvToAxis = Sub(maFrame[3], lvStart);            // vsubfp v12, v8, v1 @0x82BADFB0 (the quirk)
-        const Vec4 lvToAxisRadial = MakeVec4(lvToAxis.x, lvToAxis.y, 0.0f, lvToAxis.w);   // stfs f30, var_138
+        const rw::math::vpu::Vector3 lvToAxis = Sub(ownRows[3], lvStart);            // vsubfp v12, v8, v1 @0x82BADFB0 (the quirk)
+        const rw::math::vpu::Vector3 lvToAxisRadial = MakeVec4(lvToAxis.mV.x, lvToAxis.mV.y, 0.0f, lvToAxis.mV.w);   // stfs f30, var_138
         if (0.0f > Dot3(lvToAxisRadial, lvDelta))                  // vmsum3fp128 @0x82BAE020 ; vcmpgtfp. @0x82BAE038
         {
             return 0;
         }
     }
 
-    Vec4 lvPosition;
-    Vec4 lvNormal;
+    rw::math::vpu::Vector3 lvPosition;
+    rw::math::vpu::Vector3 lvNormal;
     bool lbHit = false;
-    if (lvStart.z > lfHalfHeight || lfNegHalfHeight > lvStart.z)   // 0x82BAE06C / 0x82BAE0A8
+    if (lvStart.mV.z > lfHalfHeight || lfNegHalfHeight > lvStart.mV.z)   // 0x82BAE06C / 0x82BAE0A8
     {
         // ---- the cap the start is beyond (0x82BAE0B8) ----
-        const Vec4 lvCapNormal = (lvDelta.z > 0.0f)                // vcmpgtfp. @0x82BAE0E4
-                               ? MakeVec4(-lvAxis.x, -lvAxis.y, -lvAxis.z, -lvAxis.w)   // vxor 0x80000000 @0x82BAE0FC
+        const rw::math::vpu::Vector3 lvCapNormal = (lvDelta.mV.z > 0.0f)                // vcmpgtfp. @0x82BAE0E4
+                               ? MakeVec4(-lvAxis.mV.x, -lvAxis.mV.y, -lvAxis.mV.z, -lvAxis.mV.w)   // vxor 0x80000000 @0x82BAE0FC
                                : lvAxis;
         const f32 lfStartDistance = Dot3(lvCapNormal, lvStart);    // vmsum3fp128 v12 @0x82BAE104
         const f32 lfApproach      = Dot3(lvCapNormal, lvDelta);    // vmsum3fp128 v0 @0x82BAE118
         const f32 lfT = RefinedRecip(lfApproach) * (lfHalfHeight - lfStartDistance);   // fsubs @0x82BAE124; vmulfp128 @0x82BAE154
-        const Vec4 lvCapPoint = MaddSplat(lvDelta, lfT, lvStart);  // vmaddfp @0x82BAE180
+        const rw::math::vpu::Vector3 lvCapPoint = MaddSplat(lvDelta, lfT, lvStart);  // vmaddfp @0x82BAE180
         const f32 lfCapRadialSq = linemath::CapRadialSquared(lvCapPoint);   // @0x82BAE190
         if (lfCapRadialSq < lfRadiusSq)                            // fcmpu ; bge @0x82BAE1A0 (NaN: the barrel)
         {
@@ -1957,22 +1886,22 @@ RwBool CylinderVolume::ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2
     {
         // ---- the barrel (0x82BAE1BC) ----
         Fraction lDist;
-        if (rwcCylinderLineSegIntersect(&lDist, KF_LINE_ONE, mfRadius, 0, 0, lvStart, lvDelta, lvBase, lvAxis) != 1)
+        if (rwcCylinderLineSegIntersect(&lDist, KF_LINE_ONE, mCylinderData.mfInnerRadius, 0, 0, lvStart, lvDelta, lvBase, lvAxis) != 1)
         {
             return 0;                                              // cmpwi r3, 1 ; bne @0x82BAE1DC
         }
         const f32 lfT = lDist.num / lDist.den;                     // fdivs @0x82BAE1F0
-        const Vec4 lvPoint = MaddSplat(lvDelta, lfT, lvStart);     // vmaddfp @0x82BAE228
-        if (!(lfHalfHeight > lvPoint.z))                           // vcmpgtfp. @0x82BAE248
+        const rw::math::vpu::Vector3 lvPoint = MaddSplat(lvDelta, lfT, lvStart);     // vmaddfp @0x82BAE228
+        if (!(lfHalfHeight > lvPoint.mV.z))                           // vcmpgtfp. @0x82BAE248
         {
             return 0;
         }
-        if (!(lvPoint.z > lfNegHalfHeight))                        // vcmpgtfp. @0x82BAE27C
+        if (!(lvPoint.mV.z > lfNegHalfHeight))                        // vcmpgtfp. @0x82BAE27C
         {
             return 0;
         }
         arResult.lineParam = lfT;                                  // stfs f0, 0x40(r28) @0x82BAE298
-        const Vec4 lvRadial = MakeVec4(lvPoint.x, lvPoint.y, 0.0f, lvPoint.w);   // stfs f30, var_148 @0x82BAE2B8
+        const rw::math::vpu::Vector3 lvRadial = MakeVec4(lvPoint.mV.x, lvPoint.mV.y, 0.0f, lvPoint.mV.w);   // stfs f30, var_148 @0x82BAE2B8
         lvPosition = lvPoint;                                      // stvx128 v13, result+0x10 @0x82BAE2B0
         lvNormal   = MulSplat(lvRadial, RefinedRsqrt(Dot3(lvRadial, lvRadial)));   // 0x82BAE2CC..0x82BAE2FC
     }
@@ -1985,8 +1914,8 @@ RwBool CylinderVolume::ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2
     }
     else
     {
-        arResult.position = FramePoint(maFrame, lvPosition);       // 0x82BAE370..0x82BAE380
-        arResult.normal   = FrameDirection(maFrame, lvNormal);     // 0x82BAE38C..0x82BAE39C
+        arResult.position = FramePoint(ownRows, lvPosition);       // 0x82BAE370..0x82BAE380
+        arResult.normal   = FrameDirection(ownRows, lvNormal);     // 0x82BAE38C..0x82BAE39C
     }
     return 1;                                                      // li r3, 1 @0x82BAE3A4
 }
@@ -2031,52 +1960,56 @@ RwBool CylinderVolume::ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2
 // (tests/run_l2_cylinder_line.py, check T); the early-outs, the flat cap, the barrel and the way out are bit for bit
 // (AALineClipper is the console's since 8b2adf55). FLAG (rule 6): the VMX denormal flush is not modelled.
 // ===========================================================================
-RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+RwBool CylinderVolume::FatLineSegIntersect(const rw::math::vpu::Vector3& arPt1, const rw::math::vpu::Vector3& arPt2, const rw::math::vpu::Matrix44Affine* lpTransform,
                                            VolumeLineSegIntersectResult& arResult, f32 afFatness) const
 {
     using namespace linemath;
     using linemath::Dot3; using linemath::MakeVec4; using linemath::Sub;   // this TU has helpers of these names
 
-    const Vec4 lvBase = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);          // var_230
-    const Vec4 lvAxis = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);          // var_220
-    arResult.v = reinterpret_cast<uintptr_t>(this);                // stw r30, 0(r29) @0x82BAEB68
+    const rw::math::vpu::Vector3 lvBase = MakeVec4(0.0f, 0.0f, 0.0f, 0.0f);          // var_230
+    const rw::math::vpu::Vector3 lvAxis = MakeVec4(0.0f, 0.0f, 1.0f, 0.0f);          // var_220
+    arResult.v = this;                // stw r30, 0(r29) @0x82BAEB68
 
-    Vec4 lavFrame[4];
+    rw::math::vpu::Vector3 lavFrame[4];
+    rw::math::vpu::Vector3 ownRows[4];
+    ownRows[0]=mTransform.xAxis; ownRows[1]=mTransform.yAxis; ownRows[2]=mTransform.zAxis; ownRows[3]=mTransform.wAxis;
     if (lpTransform != 0)
     {
-        ComposeFrame(maFrame, lpTransform, lavFrame);              // 0x82BAEB9C..0x82BAEC30
+        rw::math::vpu::Vector3 transformRows[4];
+        transformRows[0]=lpTransform->xAxis; transformRows[1]=lpTransform->yAxis; transformRows[2]=lpTransform->zAxis; transformRows[3]=lpTransform->wAxis;
+        ComposeFrame(ownRows, transformRows, lavFrame);              // 0x82BAEB9C..0x82BAEC30
     }
     else
     {
-        lavFrame[0] = maFrame[0];
-        lavFrame[1] = maFrame[1];
-        lavFrame[2] = maFrame[2];
-        lavFrame[3] = maFrame[3];
+        lavFrame[0] = ownRows[0];
+        lavFrame[1] = ownRows[1];
+        lavFrame[2] = ownRows[2];
+        lavFrame[3] = ownRows[3];
     }
     const LocalFrame lLocal = InvertFrame(lavFrame);               // 0x82BAEC68..0x82BAECE8
-    const Vec4 lvStart = ToLocal(lLocal, arPt1);                   // v1 (var_210)
-    const Vec4 lvEnd   = ToLocal(lLocal, arPt2);                   // v0 (var_1A0)
-    const Vec4 lvDelta = Sub(lvEnd, lvStart);                      // vsubfp v2 @0x82BAED0C (var_200)
-    const f32  lfFat           = mfFatness + afFatness;            // fadds f31 @0x82BAEC94
-    const f32  lfHalfHeight    = mfHalfHeight;                     // f28 (+0x44)
-    const f32  lfRadiusSq      = mfRadius * mfRadius;              // fmuls f13 @0x82BAECBC
+    const rw::math::vpu::Vector3 lvStart = ToLocal(lLocal, arPt1);                   // v1 (var_210)
+    const rw::math::vpu::Vector3 lvEnd   = ToLocal(lLocal, arPt2);                   // v0 (var_1A0)
+    const rw::math::vpu::Vector3 lvDelta = Sub(lvEnd, lvStart);                      // vsubfp v2 @0x82BAED0C (var_200)
+    const f32  lfFat           = mfRadius + afFatness;            // fadds f31 @0x82BAEC94
+    const f32  lfHalfHeight    = mCylinderData.mfHalfHeight;                     // f28 (+0x44)
+    const f32  lfRadiusSq      = mCylinderData.mfInnerRadius * mCylinderData.mfInnerRadius;              // fmuls f13 @0x82BAECBC
     const f32  lfCapHeight     = lfFat + lfHalfHeight;             // fadds f30 @0x82BAECCC
     const f32  lfNegHalfHeight = -lfHalfHeight;                    // fneg f26 @0x82BAED88
     const f32  lfNegCapHeight  = lfNegHalfHeight - lfFat;          // fsubs f0 @0x82BAED94
 
-    if (lvStart.z > lfCapHeight && lvEnd.z > lfCapHeight)          // 0x82BAED38 / 0x82BAED70
+    if (lvStart.mV.z > lfCapHeight && lvEnd.mV.z > lfCapHeight)          // 0x82BAED38 / 0x82BAED70
     {
         return 0;
     }
-    if (lfNegCapHeight > lvStart.z && lfNegCapHeight > lvEnd.z)    // 0x82BAEDB4 / 0x82BAEDEC
+    if (lfNegCapHeight > lvStart.mV.z && lfNegCapHeight > lvEnd.mV.z)    // 0x82BAEDB4 / 0x82BAEDEC
     {
         return 0;
     }
 
-    const Vec4 lvStartRadial = MakeVec4(lvStart.x, lvStart.y, 0.0f, lvStart.w);   // stfs f29, var_258
+    const rw::math::vpu::Vector3 lvStartRadial = MakeVec4(lvStart.mV.x, lvStart.mV.y, 0.0f, lvStart.mV.w);   // stfs f29, var_258
     if (Dot3(lvStartRadial, lvStartRadial) > lfFat + lfRadiusSq)  // fadds @0x82BAEE00 ; vcmpgtfp. @0x82BAEE3C
     {
-        if (0.0f > Dot3(Sub(maFrame[3], lvStart), lvDelta))       // vsubfp v0, v8, v1 @0x82BAEE4C ; @0x82BAEE78
+        if (0.0f > Dot3(Sub(ownRows[3], lvStart), lvDelta))       // vsubfp v0, v8, v1 @0x82BAEE4C ; @0x82BAEE78
         {
             return 0;
         }
@@ -2084,15 +2017,15 @@ RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2,
 
     RwBool lbHit = 0;                                              // r27
     bool   lbTorus = false;                                        // r28
-    Vec4   lvCapNormal = (lvDelta.z > 0.0f)                        // vcmpgtfp. @0x82BAEEC4 -> v126
-                       ? MakeVec4(-lvAxis.x, -lvAxis.y, -lvAxis.z, -lvAxis.w)   // vxor128 0x80000000 @0x82BAEEDC
+    rw::math::vpu::Vector3   lvCapNormal = (lvDelta.mV.z > 0.0f)                        // vcmpgtfp. @0x82BAEEC4 -> v126
+                       ? MakeVec4(-lvAxis.mV.x, -lvAxis.mV.y, -lvAxis.mV.z, -lvAxis.mV.w)   // vxor128 0x80000000 @0x82BAEEDC
                        : lvAxis;
     const f32 lfApproach      = Dot3(lvCapNormal, lvDelta);        // vmsum3fp128 v0 @0x82BAEEE0
     const f32 lfStartDistance = Dot3(lvCapNormal, lvStart);        // vmsum3fp128 v13 @0x82BAEEE8
     static const f64 KD_CAP_DISC_SLACK = 1.001;                    // dbl_821803A8 == 0x3FF004189374BC6A
     const f64 ldCapDiscLimit = static_cast<f64>(lfRadiusSq) * KD_CAP_DISC_SLACK;   // fmul f12, f13, f0 (double)
     const f32 lfCapT = RefinedRecip(lfApproach) * (lfCapHeight - lfStartDistance);   // fsubs @0x82BAEF24 ; vmulfp128 @0x82BAEF50
-    const Vec4 lvCapPoint = MaddSplat(lvDelta, lfCapT, lvStart);   // vmaddfp @0x82BAEF7C
+    const rw::math::vpu::Vector3 lvCapPoint = MaddSplat(lvDelta, lfCapT, lvStart);   // vmaddfp @0x82BAEF7C
     const f32 lfCapRadialSq = linemath::CapRadialSquared(lvCapPoint);   // @0x82BAEF94
     if (static_cast<f64>(lfCapRadialSq) < ldCapDiscLimit)          // fcmpu ; bge @0x82BAEFA4 (NaN: on)
     {
@@ -2103,103 +2036,97 @@ RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2,
     }
     else
     {
-        const f32 lfFatRadius = mfRadius + lfFat;                  // fadds @0x82BAEFBC
+        const f32 lfFatRadius = mCylinderData.mfInnerRadius + lfFat;                  // fadds @0x82BAEFBC
         if (lfCapRadialSq < lfFatRadius * lfFatRadius)             // fmuls ; fcmpu ; bge @0x82BAEFC8
         {
             lbTorus = true;                                        // li r28, 1
         }
 
         Fraction lDist;
-        if (rwcCylinderLineSegIntersect(&lDist, KF_LINE_ONE, mfRadius + lfFat, 0, 0, lvStart, lvDelta, lvBase,
+        if (rwcCylinderLineSegIntersect(&lDist, KF_LINE_ONE, mCylinderData.mfInnerRadius + lfFat, 0, 0, lvStart, lvDelta, lvBase,
                                         lvAxis) == 1)              // @0x82BAEFF4 ; cmpwi r3, 1 ; bne @0x82BAF00C
         {
             const f32 lfT = lDist.num / lDist.den;                 // fdivs @0x82BAF020
-            const Vec4 lvPoint = MaddSplat(lvDelta, lfT, lvStart); // vmaddfp @0x82BAF058
-            if (lfHalfHeight > lvPoint.z && lvPoint.z > lfNegHalfHeight)   // 0x82BAF068 / 0x82BAF09C
+            const rw::math::vpu::Vector3 lvPoint = MaddSplat(lvDelta, lfT, lvStart); // vmaddfp @0x82BAF058
+            if (lfHalfHeight > lvPoint.mV.z && lvPoint.mV.z > lfNegHalfHeight)   // 0x82BAF068 / 0x82BAF09C
             {
                 arResult.position  = lvPoint;                      // stvx128 v0, r29, r25 @0x82BAF0B0
                 arResult.lineParam = lfT;                          // stfs f0, 0x40(r29) @0x82BAF0B8
                 lbHit = 1;                                         // li r27, 1 @0x82BAF0C4
-                const Vec4 lvRadial = MakeVec4(lvPoint.x, lvPoint.y, 0.0f, lvPoint.w);   // stfs f29, var_258
+                const rw::math::vpu::Vector3 lvRadial = MakeVec4(lvPoint.mV.x, lvPoint.mV.y, 0.0f, lvPoint.mV.w);   // stfs f29, var_258
                 arResult.normal = MulSplat(lvRadial, RefinedRsqrt(Dot3(lvRadial, lvRadial)));   // 0x82BAF0E4..0x82BAF11C
             }
-            else if (lfCapHeight > lvPoint.z && lvPoint.z > -lfCapHeight)   // 0x82BAF148 / 0x82BAF180 (fneg f0, f30)
+            else if (lfCapHeight > lvPoint.mV.z && lvPoint.mV.z > -lfCapHeight)   // 0x82BAF148 / 0x82BAF180 (fneg f0, f30)
             {
                 lbTorus = true;                                    // li r28, 1 @0x82BAF198
-                lvCapNormal = (lvPoint.z > 0.0f)                   // vcmpgtfp. @0x82BAF1B8
+                lvCapNormal = (lvPoint.mV.z > 0.0f)                   // vcmpgtfp. @0x82BAF1B8
                             ? lvAxis                               // vmr128 v126, v124
-                            : MakeVec4(-lvAxis.x, -lvAxis.y, -lvAxis.z, -lvAxis.w);   // vxor128 @0x82BAF1D8
+                            : MakeVec4(-lvAxis.mV.x, -lvAxis.mV.y, -lvAxis.mV.z, -lvAxis.mV.w);   // vxor128 @0x82BAF1D8
             }
         }
 
         if (lbTorus)                                               // cmplwi r28, 0 ; beq @0x82BAF1E0
         {
             // ---- the rounded cap edge (0x82BAF1E4) ----
-            const Vec4 lvCapCentre = MulSplat(lvCapNormal, lfHalfHeight);   // vmulfp128 @0x82BAF278
+            const rw::math::vpu::Vector3 lvCapCentre = MulSplat(lvCapNormal, lfHalfHeight);   // vmulfp128 @0x82BAF278
             const f32  lfBoxScale  = 1.5f;                         // flt_82004D04 == 0x3FC00000
-            const f32  lfFatR      = mfRadius + lfFat;             // fadds f11 / f13 @0x82BAF260 / 0x82BAF26C
-            const f32  lfNegFatR   = -mfRadius - lfFat;            // fneg ; fsubs @0x82BAF290 / 0x82BAF29C
-            const Vec4 lvBoxMax = MulSplat(MakeVec4(lfFatR, lfFatR, lfFat, 0.0f), lfBoxScale);        // v123
-            const Vec4 lvBoxMin = MulSplat(MakeVec4(lfNegFatR, lfNegFatR, -lfFat, 0.0f), lfBoxScale); // v122
-            const Vec4 lvRelStart = Sub(lvStart, lvCapCentre);     // vsubfp128 v124 @0x82BAF2B4
-            const Vec4 lvRelEnd   = MakeVec4(lvRelStart.x + lvDelta.x, lvRelStart.y + lvDelta.y,
-                                             lvRelStart.z + lvDelta.z, lvRelStart.w + lvDelta.w);   // vaddfp128 @0x82BAF2D0
+            const f32  lfFatR      = mCylinderData.mfInnerRadius + lfFat;             // fadds f11 / f13 @0x82BAF260 / 0x82BAF26C
+            const f32  lfNegFatR   = -mCylinderData.mfInnerRadius - lfFat;            // fneg ; fsubs @0x82BAF290 / 0x82BAF29C
+            const rw::math::vpu::Vector3 lvBoxMax = MulSplat(MakeVec4(lfFatR, lfFatR, lfFat, 0.0f), lfBoxScale);        // v123
+            const rw::math::vpu::Vector3 lvBoxMin = MulSplat(MakeVec4(lfNegFatR, lfNegFatR, -lfFat, 0.0f), lfBoxScale); // v122
+            const rw::math::vpu::Vector3 lvRelStart = Sub(lvStart, lvCapCentre);     // vsubfp128 v124 @0x82BAF2B4
+            const rw::math::vpu::Vector3 lvRelEnd   = MakeVec4(lvRelStart.mV.x + lvDelta.mV.x, lvRelStart.mV.y + lvDelta.mV.y,
+                                             lvRelStart.mV.z + lvDelta.mV.z, lvRelStart.mV.w + lvDelta.mV.w);   // vaddfp128 @0x82BAF2D0
 
-            AALineClipper::Aabb lBox;
-            lBox.mMin.x = lvBoxMin.x; lBox.mMin.y = lvBoxMin.y; lBox.mMin.z = lvBoxMin.z; lBox.mMin.w = lvBoxMin.w;
-            lBox.mMax.x = lvBoxMax.x; lBox.mMax.y = lvBoxMax.y; lBox.mMax.z = lvBoxMax.z; lBox.mMax.w = lvBoxMax.w;
-            AALineClipper::Vec4 lClipStart = { lvRelStart.x, lvRelStart.y, lvRelStart.z, lvRelStart.w };
-            AALineClipper::Vec4 lClipEnd   = { lvRelEnd.x, lvRelEnd.y, lvRelEnd.z, lvRelEnd.w };
-            const AALineClipper lClipper(lClipStart, lClipEnd, &lBox);   // @0x82BAF2D8
+            AABBox lBox;
+            lBox.mMin = lvBoxMin;
+            lBox.mMax = lvBoxMax;
+            const AALineClipper lClipper(lvRelStart, lvRelEnd, lBox);
 
             // 0x82BAF2DC..0x82BAF310: the box's slab parameters -- ((min - pad) - clipMin) * recip and
             // ((max + pad) - clipMin) * recip, per lane, then lane-wise min / max.
-            const Vec4 lvPad   = MakeVec4(lClipper.mPadExtent.x, lClipper.mPadExtent.y, lClipper.mPadExtent.z,
-                                          lClipper.mPadExtent.w);
-            const Vec4 lvOrg   = MakeVec4(lClipper.mClipMin.x, lClipper.mClipMin.y, lClipper.mClipMin.z,
-                                          lClipper.mClipMin.w);
-            const Vec4 lvRecip = MakeVec4(lClipper.mRecipSpan.x, lClipper.mRecipSpan.y, lClipper.mRecipSpan.z,
-                                          lClipper.mRecipSpan.w);
-            const Vec4 lvLo = Sub(Sub(lvBoxMin, lvPad), lvOrg);    // vsubfp128 / vsubfp
-            const Vec4 lvHi = Sub(MakeVec4(lvBoxMax.x + lvPad.x, lvBoxMax.y + lvPad.y, lvBoxMax.z + lvPad.z,
-                                           lvBoxMax.w + lvPad.w), lvOrg);   // vaddfp128 / vsubfp
-            const Vec4 lvTa = MakeVec4(lvRecip.x * lvLo.x, lvRecip.y * lvLo.y, lvRecip.z * lvLo.z, lvRecip.w * lvLo.w);
-            const Vec4 lvTb = MakeVec4(lvRecip.x * lvHi.x, lvRecip.y * lvHi.y, lvRecip.z * lvHi.z, lvRecip.w * lvHi.w);
-            const Vec4 lvTlo = MakeVec4(VmxMin(lvTa.x, lvTb.x), VmxMin(lvTa.y, lvTb.y), VmxMin(lvTa.z, lvTb.z), 0.0f);
-            const Vec4 lvThi = MakeVec4(VmxMax(lvTa.x, lvTb.x), VmxMax(lvTa.y, lvTb.y), VmxMax(lvTa.z, lvTb.z), 0.0f);
+            const rw::math::vpu::Vector3 lvPad = lClipper.m_padding;
+            const rw::math::vpu::Vector3 lvOrg = lClipper.m_origin;
+            const rw::math::vpu::Vector3 lvRecip = lClipper.m_recip;
+            const rw::math::vpu::Vector3 lvLo = Sub(Sub(lvBoxMin, lvPad), lvOrg);
+            const rw::math::vpu::Vector3 lvHi = Sub(fatmath::Add(lvBoxMax, lvPad), lvOrg);
+            const rw::math::vpu::Vector3 lvTa(__vmulfp(lvRecip.mV,lvLo.mV));
+            const rw::math::vpu::Vector3 lvTb(__vmulfp(lvRecip.mV,lvHi.mV));
+            const rw::math::vpu::Vector3 lvTlo(__vminfp(lvTa.mV,lvTb.mV));
+            const rw::math::vpu::Vector3 lvThi(__vmaxfp(lvTa.mV,lvTb.mV));
 
             // 0x82BAF320..0x82BAF368: the entry = max(tlo.x, tlo.y, tlo.z, 0), the exit = min(thi.x, thi.y,
             // thi.z, 1), each step an fsubs + fsel (fsel d, a, b, c == a >= 0 ? b : c; a NaN takes c).
-            f32 lfEnter = Fsel(lvTlo.x - lvTlo.y, lvTlo.x, lvTlo.y);
-            f32 lfExit  = Fsel(lvThi.x - lvThi.y, lvThi.y, lvThi.x);
-            lfEnter = Fsel(lfEnter - lvTlo.z, lfEnter, lvTlo.z);
-            lfExit  = Fsel(lfExit - lvThi.z, lvThi.z, lfExit);
+            f32 lfEnter = Fsel(lvTlo.mV.x - lvTlo.mV.y, lvTlo.mV.x, lvTlo.mV.y);
+            f32 lfExit  = Fsel(lvThi.mV.x - lvThi.mV.y, lvThi.mV.y, lvThi.mV.x);
+            lfEnter = Fsel(lfEnter - lvTlo.mV.z, lfEnter, lvTlo.mV.z);
+            lfExit  = Fsel(lfExit - lvThi.mV.z, lvThi.mV.z, lfExit);
             lfEnter = Fsel(-lfEnter, KF_LINE_ZERO, lfEnter);       // fneg ; fsel f30, f12, f29, f0
             lfExit  = Fsel(KF_LINE_ONE - lfExit, lfExit, KF_LINE_ONE);   // fsubs ; fsel f0, f11, f13, f27
 
             if (lfEnter < lfExit)                                  // fcmpu ; bge @0x82BAF370 (NaN: none)
             {
                 const f32 lfSpan = lfExit - lfEnter;               // fsubs f27 @0x82BAF378
-                const Vec4 lvClipDirection = MulSplat(lvDelta, lfSpan);                 // vmulfp128 @0x82BAF3CC
-                const Vec4 lvClipStart = MaddSplat(lvDelta, lfEnter, lvRelStart);       // vmaddcfp128 @0x82BAF3D4
+                const rw::math::vpu::Vector3 lvClipDirection = MulSplat(lvDelta, lfSpan);                 // vmulfp128 @0x82BAF3CC
+                const rw::math::vpu::Vector3 lvClipStart = MaddSplat(lvDelta, lfEnter, lvRelStart);       // vmaddcfp128 @0x82BAF3D4
                 f32 lfRoot = KF_LINE_ZERO;                         // stfs f29, var_250
-                if (rwcTorusLineSegIntersect(lfRoot, lvClipStart, lvClipDirection, mfRadius, lfFat) == 1   // @0x82BAF3D8
+                if (rwcTorusLineSegIntersect(lfRoot, lvClipStart, lvClipDirection, mCylinderData.mfInnerRadius, lfFat) == 1   // @0x82BAF3D8
                     && (lfRoot < arResult.lineParam || lbHit == 0))   // fcmpu ; blt @0x82BAF3F0 ; cmplwi r27 @0x82BAF3F4
                 {
                     const f32 lfT = linemath::ScalarMadd(lfSpan, lfRoot, lfEnter);                   // fmadds @0x82BAF408
                     arResult.lineParam = lfT;                      // stfs f0, 0x40(r29) @0x82BAF418
-                    const Vec4 lvPoint = MaddSplat(lvDelta, lfT, lvStart);              // vmaddfp @0x82BAF46C
+                    const rw::math::vpu::Vector3 lvPoint = MaddSplat(lvDelta, lfT, lvStart);              // vmaddfp @0x82BAF46C
                     arResult.position = lvPoint;                   // stvx128 v11, r29, r25 @0x82BAF474
-                    const Vec4 lvRel = Sub(lvPoint, lvCapCentre);  // vsubfp @0x82BAF470
-                    const Vec4 lvRadial = MakeVec4(lvRel.x, lvRel.y, 0.0f, lvRel.w);    // stfs f29, var_208
+                    const rw::math::vpu::Vector3 lvRel = Sub(lvPoint, lvCapCentre);  // vsubfp @0x82BAF470
+                    const rw::math::vpu::Vector3 lvRadial = MakeVec4(lvRel.mV.x, lvRel.mV.y, 0.0f, lvRel.mV.w);    // stfs f29, var_208
                     const f32 lfRadialSq = Dot3(lvRadial, lvRadial);                    // vmsum3fp128 @0x82BAF4A0
                     f32 lfRadialLength = lfRadialSq * RefinedRsqrt(lfRadialSq);         // vmulfp128 @0x82BAF508
                     if (lfRadialSq == 0.0f)                        // vcmpeqfp128 @0x82BAF4C4 ; vsel @0x82BAF50C
                     {
                         lfRadialLength = 0.0f;
                     }
-                    const Vec4 lvRingOffset = MulSplat(MulSplat(lvRadial, RefinedRecip(lfRadialLength)), mfRadius);   // 0x82BAF51C..0x82BAF540
-                    const Vec4 lvTube = Sub(Sub(lvPoint, lvCapCentre), lvRingOffset);   // vsubfp @0x82BAF504 / 0x82BAF548
+                    const rw::math::vpu::Vector3 lvRingOffset = MulSplat(MulSplat(lvRadial, RefinedRecip(lfRadialLength)), mCylinderData.mfInnerRadius);   // 0x82BAF51C..0x82BAF540
+                    const rw::math::vpu::Vector3 lvTube = Sub(Sub(lvPoint, lvCapCentre), lvRingOffset);   // vsubfp @0x82BAF504 / 0x82BAF548
                     arResult.normal = MulSplat(lvTube, RefinedRsqrt(Dot3(lvTube, lvTube)));   // 0x82BAF54C..0x82BAF580
                     lbHit = 1;                                     // li r27, 1 @0x82BAF588
                 }
@@ -2215,8 +2142,8 @@ RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2,
     }
     else
     {
-        arResult.position = FramePoint(maFrame, arResult.position);    // 0x82BAF600..0x82BAF610
-        arResult.normal   = FrameDirection(maFrame, arResult.normal);  // 0x82BAF618..0x82BAF62C
+        arResult.position = FramePoint(ownRows, arResult.position);    // 0x82BAF600..0x82BAF610
+        arResult.normal   = FrameDirection(ownRows, arResult.normal);  // 0x82BAF618..0x82BAF62C
     }
     arResult.position = Sub(arResult.position, MulSplat(arResult.normal, afFatness));   // 0x82BAF660 / 0x82BAF664
     return lbHit;
@@ -2228,14 +2155,13 @@ RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2,
 // bne` -- a total fatness of exactly 0 tail-calls the thin arm, anything else (a NaN included: bne is taken on an
 // unordered compare) the fat arm, with the arguments untouched.
 // ===========================================================================
-RwBool CylinderVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const Vec4* lpTransform,
+RwBool CylinderVolume::LineSegIntersect(const Vector3& arPt1, const Vector3& arPt2,
+                                        const Matrix44Affine* lpTransform,
                                         VolumeLineSegIntersectResult& arResult, f32 afFatness) const
 {
-    if (mfFatness + afFatness != 0.0f)
-    {
-        return FatLineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);   // b 0x82BAEB10
-    }
-    return ThinLineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);      // b 0x82BADCE0
+    if (mfRadius + afFatness != 0.0f)
+        return FatLineSegIntersect(arPt1, arPt2, lpTransform, arResult, afFatness);
+    return ThinLineSegIntersect(arPt1, arPt2, lpTransform, arResult);
 }
 
 } // namespace collision

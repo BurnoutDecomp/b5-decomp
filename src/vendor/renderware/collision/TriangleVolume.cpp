@@ -1,4 +1,6 @@
 #include "vendor/renderware/collision/TriangleVolume.hpp"
+#include "rw/rwcore_structs.h"
+#include <cfloat>
 
 #include <cmath>
 #include <cstring>   // memcpy (GetMaximumFeature edge copies)
@@ -50,7 +52,9 @@ namespace collision
 // (lvlx unk_82180554 ; vspltw 0 ; stvx128 -> 0x8327EF10); the .rdata source
 // word 0x82180554 is 0x34000000 = 2^-23 = FLT_EPSILON. The earlier 1.0e-12f
 // here was an inference and is superseded by this measured value.
-const f32 TriangleVolume::KF_DEGENERATE_EPSILON = 1.1920928955078125e-07f;   // 0x34000000, 2^-23
+const f32 TriangleVolume::KF_DEGENERATE_EPSILON = 1.1920928955078125e-07f;
+// ARTIST 82C73C70 initializes this volume.h:37 TU-local VecFloat.
+const rw::math::vpu::VecFloat VEC_EPSILON(FLT_EPSILON);   // 0x34000000, 2^-23
 
 // dword_8327EEEC -- RECOVERED (2026-08-04 unblock dump): entry [3] (TRIANGLE)
 // of the per-VolumeType vtable registry at dword_8327EEE0, runtime-written by
@@ -66,7 +70,7 @@ const f32 TriangleVolume::KF_DEGENERATE_EPSILON = 1.1920928955078125e-07f;   // 
 // the 4-byte VolumeType enum for the record's whole lifetime (an x64 pointer
 // would overlap +0x44, and the 96-byte serialised record cannot grow); every
 // reader recovers the pointer as gVolumeVTable[enum]. So Initialize stamps
-// E_VOLUMETYPE_TRIANGLE (3, the index the console pointer sits at) here.
+// VOLUMETYPETRIANGLE (3, the index the console pointer sits at) here.
 // Derivation: scratchpad/waveQ5/rwc3.owner.md section 7 / volume.cpp foot.
 static const u32 KU_TRIANGLE_VOLUME_TYPE = 3u;   // gVolumeVTable[3] = &unk_82F919A4
 
@@ -161,35 +165,23 @@ namespace
 //   stw  0x1E3, 0x5C                     ; mFlags = 0x1E3
 //   returns the volume pointer.
 // ---------------------------------------------------------------------------
-TriangleVolume* TriangleVolume::Initialize(TriangleVolume** appVolume,
-                                           const Vec4& arP0, const Vec4& arP1, const Vec4& arP2)
+TriangleVolume* TriangleVolume::Initialize(const ::rw::Resource& arResource,
+                                           Vector3 arP0, Vector3 arP1, Vector3 arP2)
 {
-    TriangleVolume* lpVolume = *appVolume;
-    if (lpVolume == 0)
-    {
-        return 0;
-    }
-
-    lpVolume->maVerts[0] = arP0;
-    lpVolume->maVerts[1] = arP1;
-    lpVolume->maVerts[2] = arP2;
-
-    lpVolume->mNormal.x = 0.0f;
-    lpVolume->mNormal.y = 0.0f;
-    lpVolume->mNormal.z = 0.0f;
-    lpVolume->mNormal.w = 0.0f;
-
-    lpVolume->mInitWord = KU_TRIANGLE_VOLUME_TYPE;   // console: dword_8327EEEC = gVolumeVTable[3]
-
-    lpVolume->mafEdgeCos[0] = -1.0f;
-    lpVolume->mafEdgeCos[1] = -1.0f;
-    lpVolume->mafEdgeCos[2] = -1.0f;
-
-    lpVolume->mfFatness = 0.0f;
-    lpVolume->mu54      = 0;
-    lpVolume->mu58      = 0;
-    lpVolume->mFlags    = 0x1E3u;
-
+    TriangleVolume* lpVolume = static_cast<TriangleVolume*>(arResource.m_baseResources[0]);
+    if (!lpVolume) return 0;
+    lpVolume->mfRadius = 0.0f;
+    lpVolume->muGroupID = 0;
+    lpVolume->mTriangleData.mfEdgeCos0 = -1.0f;
+    lpVolume->muSurfaceID = 0;
+    lpVolume->mTriangleData.mfEdgeCos1 = -1.0f;
+    lpVolume->mTriangleData.mfEdgeCos2 = -1.0f;
+    lpVolume->mpVTable = gVolumeVTable[VOLUMETYPETRIANGLE];
+    lpVolume->mTransform.xAxis = arP0;
+    lpVolume->muFlags = 0x1e3;
+    lpVolume->mTransform.yAxis = arP1;
+    lpVolume->mTransform.zAxis = arP2;
+    lpVolume->mTransform.wAxis.mV = __vspltisw(0);
     return lpVolume;
 }
 
@@ -207,40 +199,36 @@ TriangleVolume* TriangleVolume::Initialize(TriangleVolume** appVolume,
 // if ( lpTransform )  n = 3x3(lpTransform) * n           (vspltw + vmaddfp)
 // *arNormal = n.
 // ---------------------------------------------------------------------------
-void TriangleVolume::GetNormal(Vec4& arNormal, const Vec4* lpTransform) const
+void TriangleVolume::GetNormal(Vector3& arNormal, const Matrix44Affine* lpTransform) const
 {
-    Vec4 lNormal = mNormal;
-
-    if ((mFlags & 0x2u) != 0)
+    __vector4 normal = mTransform.wAxis.mV;
+    if (muFlags & 2u)
     {
-        const Vec4 lE2 = SubXYZW(maVerts[2], maVerts[0]);
-        const Vec4 lE1 = SubXYZW(maVerts[1], maVerts[0]);
-
-        mFlags &= ~0x2u;
-
-        lNormal = Cross3(lE1, lE2);
-
-        // vcmpgtfp guard + vsel: normalise only when the area is non-degenerate,
-        // otherwise keep the raw (unnormalised) cross product.
-        const f32 lfLenSq = Dot3(lNormal, lNormal);
-        if (lfLenSq > KF_DEGENERATE_EPSILON)
-        {
-            const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
-            lNormal.x *= lfInvLen;
-            lNormal.y *= lfInvLen;
-            lNormal.z *= lfInvLen;
-            lNormal.w *= lfInvLen;
-        }
-
-        mNormal = lNormal;
+        const __vector4 p0 = mTransform.xAxis.mV;
+        const __vector4 e2 = __vsubfp(mTransform.zAxis.mV, p0);
+        const __vector4 e1 = __vsubfp(mTransform.yAxis.mV, p0);
+        muFlags &= ~2u;
+        const __vector4 perm2 = __vpermwi(e2, 0x63);
+        const __vector4 perm1 = __vpermwi(e1, 0x63);
+        const __vector4 product = __vmulfp(e1, perm2);
+        const __vector4 cross = __vpermwi(__vnmsubfp(perm1, e2, product), 0x63);
+        const __vector4 square = __vmsum3fp(cross, cross);
+        const __vector4 valid = __vcmpgtfp(square, VEC_EPSILON.mV);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        const __vector4 estimate = __vrsqrtefp(square);
+        const __vector4 correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        const __vector4 inverse = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        normal = __vsel(cross, __vmulfp(cross, inverse), valid);
+        mTransform.wAxis.mV = normal;
     }
-
-    if (lpTransform != 0)
+    if (lpTransform)
     {
-        lNormal = TransformDirection(lpTransform, lNormal);
+        __vector4 rotated = __vmulfp(lpTransform->xAxis.mV, __vspltw(normal, 0));
+        rotated = __vmaddfp(lpTransform->yAxis.mV, __vspltw(normal, 1), rotated);
+        normal = __vmaddfp(lpTransform->zAxis.mV, __vspltw(normal, 2), rotated);
     }
-
-    arNormal = lNormal;
+    arNormal.mV = normal;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,19 +237,26 @@ void TriangleVolume::GetNormal(Vec4& arNormal, const Vec4* lpTransform) const
 // lpTransform == NULL: copy the local vertices straight through.
 // lpTransform != NULL: affine-transform each vertex by the four rows.
 // ---------------------------------------------------------------------------
-void TriangleVolume::GetPoints(Vec4& arP0, Vec4& arP1, Vec4& arP2, const Vec4* lpTransform) const
+static __vector4 TriangleTransformPoint(__vector4 point, const Matrix44Affine& transform)
 {
-    if (lpTransform != 0)
+    __vector4 result = __vmaddfp(transform.xAxis.mV, __vspltw(point, 0), transform.wAxis.mV);
+    result = __vmaddfp(transform.yAxis.mV, __vspltw(point, 1), result);
+    return __vmaddfp(transform.zAxis.mV, __vspltw(point, 2), result);
+}
+
+void TriangleVolume::GetPoints(Vector3& arP0, Vector3& arP1, Vector3& arP2, const Matrix44Affine* lpTransform) const
+{
+    if (lpTransform)
     {
-        arP0 = TransformPoint(lpTransform, maVerts[0]);
-        arP1 = TransformPoint(lpTransform, maVerts[1]);
-        arP2 = TransformPoint(lpTransform, maVerts[2]);
+        arP0.mV = TriangleTransformPoint(mTransform.xAxis.mV, *lpTransform);
+        arP1.mV = TriangleTransformPoint(mTransform.yAxis.mV, *lpTransform);
+        arP2.mV = TriangleTransformPoint(mTransform.zAxis.mV, *lpTransform);
     }
     else
     {
-        arP0 = maVerts[0];
-        arP1 = maVerts[1];
-        arP2 = maVerts[2];
+        arP0 = mTransform.xAxis;
+        arP1 = mTransform.yAxis;
+        arP2 = mTransform.zAxis;
     }
 }
 
@@ -272,37 +267,24 @@ void TriangleVolume::GetPoints(Vec4& arP0, Vec4& arP1, Vec4& arP2, const Vec4* l
 // fatten by mfFatness (this+0x50, broadcast): min -= fatness, max += fatness.
 // Stores min @ result+0x00, max @ result+0x10. abTight (r5) is unused. Returns 1.
 // ---------------------------------------------------------------------------
-RwBool TriangleVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
+RwBool TriangleVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
 {
-    Vec4 lV0;
-    Vec4 lV1;
-    Vec4 lV2;
-
-    if (lpTransform != 0)
+    __vector4 p0 = mTransform.xAxis.mV;
+    __vector4 p1 = mTransform.yAxis.mV;
+    __vector4 p2 = mTransform.zAxis.mV;
+    if (lpTransform)
     {
-        lV0 = TransformPoint(lpTransform, maVerts[0]);
-        lV1 = TransformPoint(lpTransform, maVerts[1]);
-        lV2 = TransformPoint(lpTransform, maVerts[2]);
+        p0 = TriangleTransformPoint(p0, *lpTransform);
+        p1 = TriangleTransformPoint(p1, *lpTransform);
+        p2 = TriangleTransformPoint(p2, *lpTransform);
     }
-    else
-    {
-        lV0 = maVerts[0];
-        lV1 = maVerts[1];
-        lV2 = maVerts[2];
-    }
-
-    // vminfp v11,v13,v12 ; vminfp v13,v0,v11  (and the vmaxfp mirror).
-    Vec4 lMin = MinXYZW(lV0, MinXYZW(lV1, lV2));
-    Vec4 lMax = MaxXYZW(lV0, MaxXYZW(lV1, lV2));
-
-    // lvlx this+0x50 ; vspltw lane0 : the fatness broadcast.
-    const f32 lfFatness = mfFatness;
-    lMin.x -= lfFatness; lMin.y -= lfFatness; lMin.z -= lfFatness;
-    lMax.x += lfFatness; lMax.y += lfFatness; lMax.z += lfFatness;
-
-    arResult.mMin = math::vpu::Vector3(lMin.x, lMin.y, lMin.z);
-    arResult.mMax = math::vpu::Vector3(lMax.x, lMax.y, lMax.z);
-
+    const __vector4 low = __vminfp(p0, __vminfp(p1, p2));
+    const __vector4 high = __vmaxfp(p0, __vmaxfp(p1, p2));
+    arResult.mMin.mV = low;
+    arResult.mMax.mV = high;
+    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
+    arResult.mMin.mV = __vsubfp(low, radius);
+    arResult.mMax.mV = __vaddfp(arResult.mMax.mV, radius);
     return 1;
 }
 
@@ -349,19 +331,13 @@ RwBool TriangleVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABB
 // ---------------------------------------------------------------------------
 math::vpu::Vector3 TriangleVolume::GetBBoxDiag() const
 {
-    // vminfp v10,v12,v13 ; vminfp v12,v0,v10  (and the vmaxfp mirror) -- the
-    // same fold order GetBBox uses.
-    const Vec4 lLo = MinXYZW(maVerts[0], MinXYZW(maVerts[1], maVerts[2]));
-    const Vec4 lHi = MaxXYZW(maVerts[0], MaxXYZW(maVerts[1], maVerts[2]));
-
-    // lvlx this+0x50 ; vspltw lane0 : the fatness broadcast.
-    const f32 lfFatness = mfFatness;
-
-    const f32 lfDiagX = (lHi.x + lfFatness) - (lLo.x - lfFatness);
-    const f32 lfDiagY = (lHi.y + lfFatness) - (lLo.y - lfFatness);
-    const f32 lfDiagZ = (lHi.z + lfFatness) - (lLo.z - lfFatness);
-
-    return math::vpu::Vector3(lfDiagX, lfDiagY, lfDiagZ);
+    const __vector4 p0 = mTransform.xAxis.mV;
+    const __vector4 p1 = mTransform.yAxis.mV;
+    const __vector4 p2 = mTransform.zAxis.mV;
+    const __vector4 low = __vminfp(p0, __vminfp(p1, p2));
+    const __vector4 high = __vmaxfp(p0, __vmaxfp(p1, p2));
+    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
+    return Vector3(__vsubfp(__vaddfp(high, radius), __vsubfp(low, radius)));
 }
 
 // ---------------------------------------------------------------------------
@@ -373,18 +349,19 @@ math::vpu::Vector3 TriangleVolume::GetBBoxDiag() const
 // (V0V1, V1V2, V2V0) and memcpy's each 0x40-byte record into edges[i]. arDir
 // (r4) is unused -- the triangle's whole face is its maximum feature.
 // ---------------------------------------------------------------------------
-void TriangleVolume::GetMaximumFeature(const Vec4& /*arDir*/, Feature& arResult) const
+RwBool TriangleVolume::GetMaximumFeature(RwBool /*abCcw*/, Vector3 /*arDir*/, Feature& arResult) const
 {
-    const FeatureEdge lEdge0(maVerts[0], maVerts[1]);
-    std::memcpy(&arResult.edges[0], &lEdge0, sizeof(FeatureEdge));
-
-    const FeatureEdge lEdge1(maVerts[1], maVerts[2]);
-    std::memcpy(&arResult.edges[1], &lEdge1, sizeof(FeatureEdge));
-
-    const FeatureEdge lEdge2(maVerts[2], maVerts[0]);
-    std::memcpy(&arResult.edges[2], &lEdge2, sizeof(FeatureEdge));
-
+    const Vector3 p0 = mTransform.xAxis;
+    const Vector3 p1 = mTransform.yAxis;
+    const Vector3 p2 = mTransform.zAxis;
+    const FeatureEdge edge0(p0, p1);
+    memcpy(&arResult.edges[0], &edge0, sizeof(edge0));
+    const FeatureEdge edge1(p1, p2);
+    memcpy(&arResult.edges[1], &edge1, sizeof(edge1));
+    const FeatureEdge edge2(p2, p0);
+    memcpy(&arResult.edges[2], &edge2, sizeof(edge2));
     arResult.numedges = 3;
+    return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -394,18 +371,14 @@ void TriangleVolume::GetMaximumFeature(const Vec4& /*arDir*/, Feature& arResult)
 // dispatch to TriangleLineSegIntersect with the segment start (v1), the segment
 // delta (aLineEnd - aLineStart) and the fatness. Returns its hit code.
 // ---------------------------------------------------------------------------
-s32 TriangleVolume::LineSegIntersect(const Vec4* lpTransform,
-                                     VolumeLineSegIntersectResult* lpResult,
-                                     f32 afFatness, Vec4 aLineStart, Vec4 aLineEnd) const
+RwBool TriangleVolume::LineSegIntersect(Vector3 aLineStart, Vector3 aLineEnd,
+                                        const Matrix44Affine* lpTransform,
+                                        VolumeLineSegIntersectResult& lrResult, f32 afFatness) const
 {
-    Vec4 lP0;
-    Vec4 lP1;
-    Vec4 lP2;
-    GetPoints(lP0, lP1, lP2, lpTransform);
-
-    const Vec4 lLineDelta = SubXYZW(aLineEnd, aLineStart);
-
-    return TriangleLineSegIntersect(lpResult, aLineStart, lLineDelta, lP0, lP1, lP2, afFatness);
+    Vector3 p0, p1, p2;
+    GetPoints(p0, p1, p2, lpTransform);
+    const Vector3 delta(__vsubfp(aLineEnd.mV, aLineStart.mV));
+    return TriangleLineSegIntersect(&lrResult, aLineStart, delta, p0, p1, p2, afFatness);
 }
 
 } // namespace collision
@@ -568,106 +541,93 @@ namespace
 // whole-struct assignment at a typed array index -- never a byte base +
 // (type << 4). Same treatment as CapsuleVolume.cpp:154-159.
 // ---------------------------------------------------------------------------
-RwBool TriangleVolume::CreateGPInstance(GPInstance& arInst, const Vec4* lpTransform) const
+static __vector4 TriangleInverseLength(__vector4 delta)
 {
-    // GetNormal is always called with a NULL transform (li r5, 0 @ 0x82BBAA90);
-    // this function rotates the result itself with the masked rows below.
-    Vec4 lvNormal;
-    GetNormal(lvNormal, 0);
+    const __vector4 square = __vmsum3fp(delta, delta);
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    const __vector4 half = __vcfsx(__vspltisw(1), 1);
+    const __vector4 estimate = __vrsqrtefp(square);
+    const __vector4 correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+    return __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+}
 
-    Vec4 lvP0;   // v127
-    Vec4 lvP1;   // v126
-    Vec4 lvP2;   // v125
+static __vector4 TriangleLengthFromInverse(__vector4 inverse)
+{
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    __vector4 estimate = __vrefp(inverse);
+    __vector4 correction = __vnmsubfp(estimate, inverse, one);
+    estimate = __vmaddfp(estimate, correction, estimate);
+    correction = __vnmsubfp(estimate, inverse, one);
+    return __vmaddfp(estimate, correction, estimate);
+}
 
-    if (lpTransform != 0)
+RwBool TriangleVolume::CreateGPInstance(GPInstance& arInst, const Matrix44Affine* lpTransform) const
+{
+    __vector4 p0 = mTransform.xAxis.mV;
+    __vector4 p1 = mTransform.yAxis.mV;
+    __vector4 p2 = mTransform.zAxis.mV;
+    Vector3 localNormal;
+    GetNormal(localNormal, 0);
+    __vector4 normal = localNormal.mV;
+    if (lpTransform)
     {
-        // The vrlimi128 w-lane masking: rows 0..2 get w = 0, row 3 gets w = 1.
-        const Vec4 laRows[4] = {
-            { lpTransform[0].x, lpTransform[0].y, lpTransform[0].z, 0.0f },
-            { lpTransform[1].x, lpTransform[1].y, lpTransform[1].z, 0.0f },
-            { lpTransform[2].x, lpTransform[2].y, lpTransform[2].z, 0.0f },
-            { lpTransform[3].x, lpTransform[3].y, lpTransform[3].z, 1.0f },
-        };
-
-        lvP0     = TransformPoint(laRows, maVerts[0]);
-        lvP1     = TransformPoint(laRows, maVerts[1]);
-        lvP2     = TransformPoint(laRows, maVerts[2]);
-        lvNormal = TransformDirection(laRows, lvNormal);
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 tx = __vrlimi(lpTransform->xAxis.mV, zero, 1, 0);
+        const __vector4 ty = __vrlimi(lpTransform->yAxis.mV, zero, 1, 0);
+        const __vector4 tz = __vrlimi(lpTransform->zAxis.mV, zero, 1, 0);
+        const __vector4 tw = __vrlimi(lpTransform->wAxis.mV, one, 1, 0);
+        __vector4 a = __vmaddfp(tx, __vspltw(p0, 0), tw);
+        __vector4 b = __vmaddfp(tx, __vspltw(p1, 0), tw);
+        __vector4 c = __vmaddfp(tx, __vspltw(p2, 0), tw);
+        __vector4 n = __vmulfp(tx, __vspltw(normal, 0));
+        a = __vmaddfp(ty, __vspltw(p0, 1), a);
+        b = __vmaddfp(ty, __vspltw(p1, 1), b);
+        c = __vmaddfp(ty, __vspltw(p2, 1), c);
+        n = __vmaddfp(ty, __vspltw(normal, 1), n);
+        p0 = __vmaddfp(tz, __vspltw(p0, 2), a);
+        p1 = __vmaddfp(tz, __vspltw(p1, 2), b);
+        p2 = __vmaddfp(tz, __vspltw(p2, 2), c);
+        normal = __vmaddfp(tz, __vspltw(normal, 2), n);
     }
-    else
-    {
-        lvP0 = maVerts[0];
-        lvP1 = maVerts[1];
-        lvP2 = maVerts[2];
-    }
-
-    const Vec4 lvE0 = SubXYZW(lvP2, lvP0);   // v9
-    const Vec4 lvE1 = SubXYZW(lvP1, lvP2);   // v8
-    const Vec4 lvE2 = SubXYZW(lvP0, lvP1);   // v10
-
-    arInst.mVolumeType        = GPInstance::TRIANGLE;   // stw 3, 0x90
+    const __vector4 e0 = __vsubfp(p2, p0);
+    const __vector4 e1 = __vsubfp(p1, p2);
+    const __vector4 e2 = __vsubfp(p0, p1);
+    const __vector4 i0 = TriangleInverseLength(e0);
+    const __vector4 i1 = TriangleInverseLength(e1);
+    const __vector4 i2 = TriangleInverseLength(e2);
+    const __vector4 l0 = TriangleLengthFromInverse(i0);
+    const __vector4 l1 = TriangleLengthFromInverse(i1);
+    const __vector4 l2 = TriangleLengthFromInverse(i2);
+    __vector4 dimensions = __vrlimi(l0, l1, 4, 0);
+    dimensions = __vrlimi(dimensions, l2, 2, 0);
+    arInst.mVolumeType = GPInstance::TRIANGLE;
     arInst.mNumEdgeDirections = 3;
-    arInst.mPos               = lvP0;
-    arInst.mNumFaceNormals    = 1;
-    arInst.mUserTag           = 0;
-
-    // FLAG (host width): the console stores its 4-byte `this` straight into the
-    // u32 mVolumeTag word, and the batch kernels copy that word verbatim into
-    // PrimitivePairIntersectResult::v1/v2. The committed GPInstance keeps the
-    // field as the console's 32-bit pointer IMAGE, so this truncates on x64;
-    // the real fix is to promote GPInstance::mVolumeTag (and PPIR::v1/v2) to a
-    // pointer-width field, which belongs to the GPInstance TU, not here.
-    // (Verbatim from CapsuleVolume.cpp:177-183 -- the same defect, same site.)
-    arInst.mVolumeTag         = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
-
-    // GPTriangle aliasing: verts 1 and 2 ride in the face-normal rows.
-    arInst.mFaceNormals[1]    = lvP1;
-    arInst.mFaceNormals[2]    = lvP2;
-
-    arInst.mFatness           = mfFatness;
-    arInst.mFaceNormals[0]    = lvNormal;
-
-    arInst.mEdgeData[2]       = mafEdgeCos[2];
-    arInst.mEdgeData[1]       = mafEdgeCos[1];
-    arInst.mEdgeData[0]       = mafEdgeCos[0];
-
-    // Read AFTER GetNormal: the recompute clears bit 0x2 in place, and the asm's
-    // lwz 0x5C(r30) sits past the call, so it observes the cleared flags.
-    arInst.mFlags             = mFlags;
-
-    // Edge lengths and unit edge directions. No degenerate guard (see above).
-    const f32 lfLen0    = std::sqrt(Dot3(lvE0, lvE0));
-    const f32 lfLen1    = std::sqrt(Dot3(lvE1, lvE1));
-    const f32 lfLen2    = std::sqrt(Dot3(lvE2, lvE2));
-    const f32 lfInvLen0 = 1.0f / lfLen0;
-    const f32 lfInvLen1 = 1.0f / lfLen1;
-    const f32 lfInvLen2 = 1.0f / lfLen2;
-
-    // mDimensions lane w = L0, per the dumped unk_82CDA350 control.
-    arInst.mDimensions.x = lfLen0;
-    arInst.mDimensions.y = lfLen1;
-    arInst.mDimensions.z = lfLen2;
-    arInst.mDimensions.w = lfLen0;
-
-    arInst.mEdgeDirections[0].x = lvE0.x * lfInvLen0;
-    arInst.mEdgeDirections[0].y = lvE0.y * lfInvLen0;
-    arInst.mEdgeDirections[0].z = lvE0.z * lfInvLen0;
-    arInst.mEdgeDirections[0].w = lvE0.w * lfInvLen0;
-
-    arInst.mEdgeDirections[1].x = lvE1.x * lfInvLen1;
-    arInst.mEdgeDirections[1].y = lvE1.y * lfInvLen1;
-    arInst.mEdgeDirections[1].z = lvE1.z * lfInvLen1;
-    arInst.mEdgeDirections[1].w = lvE1.w * lfInvLen1;
-
-    arInst.mEdgeDirections[2].x = lvE2.x * lfInvLen2;
-    arInst.mEdgeDirections[2].y = lvE2.y * lfInvLen2;
-    arInst.mEdgeDirections[2].z = lvE2.z * lfInvLen2;
-    arInst.mEdgeDirections[2].w = lvE2.w * lfInvLen2;
-
+    arInst.mPos.mV = p0;
+    arInst.mNumFaceNormals = 1;
+    arInst.mUserTag = 0;
+    arInst.mVolumeTag = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
+    arInst.mFaceNormals[1].mV = p1;
+    arInst.mFaceNormals[2].mV = p2;
+    arInst.mFatness = mfRadius;
+    arInst.mFaceNormals[0].mV = normal;
+    arInst.mEdgeData[2] = mTriangleData.mfEdgeCos2;
+    arInst.mEdgeData[1] = mTriangleData.mfEdgeCos1;
+    arInst.mEdgeData[0] = mTriangleData.mfEdgeCos0;
+    arInst.mFlags = muFlags;
+    arInst.mDimensions.mV = dimensions;
+    arInst.mEdgeDirections[0].mV = __vmulfp(e0, i0);
+    arInst.mEdgeDirections[1].mV = __vmulfp(e1, i1);
+    arInst.mEdgeDirections[2].mV = __vmulfp(e2, i2);
     arInst.mMethods = g_aGPVolumeMethods[GPInstance::TRIANGLE];
-
     return 1;
 }
 
 } // namespace collision
 } // namespace rw
+
+// ARTIST folds these genuine per-type methods to 82BAC980, 82B0F1B8 or 82AD5078.
+namespace rw { namespace collision {
+RwBool TriangleVolume::GetInterval(Vector3, Interval&) const { return 1; }
+void TriangleVolume::Release() {}
+} }

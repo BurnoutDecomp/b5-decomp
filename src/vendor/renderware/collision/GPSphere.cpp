@@ -71,12 +71,11 @@ namespace
 // matches the sibling GPCapsule/GPTriangle callbacks: r3 = this, r4 = abCcw,
 // r5 = &arFeature, the query direction in v1.
 // ===========================================================================
-void GPSphere::GetMaximumFeature(const GPInstance* lpThis, RwBool /*abCcw*/,
-                                 const Vec4& /*arDir*/, Feature& arFeature)
+void GPSphere::GetMaximumFeature(RwBool /*abCcw*/, math::vpu::Vector3 /*arDir*/, Feature& arFeature) const
 {
-    arFeature.numedges = 0;              // stw r11(0), 0x230(r5)
-    arFeature.pt       = lpThis->mPos;   // stvx128 v0, r5, r10(0x220)
-    arFeature.region   = 0;              // stw r11(0), 0(r5)
+    arFeature.numedges = 0;
+    arFeature.pt = mPos;
+    arFeature.region = 0;
 }
 
 // ===========================================================================
@@ -90,14 +89,11 @@ void GPSphere::GetMaximumFeature(const GPInstance* lpThis, RwBool /*abCcw*/,
 // Store order preserved (max row first, then min); the Interval padding rows
 // (+0x20..+0x2F) are not written, exactly as on the console.
 // ===========================================================================
-void GPSphere::GetInterval(const GPInstance* lpThis,
-                           const Vec4& arDir, Interval& arInterval)
+void GPSphere::GetInterval(math::vpu::Vector3 arDir, Interval& arInterval) const
 {
-    // vmsum3fp128 v0, v1, v0 -- dot3(dir, mPos), lane-broadcast.
-    const f32 lfCentreProj = Dot3(arDir, lpThis->mPos);
-
-    arInterval.max = Splat(lfCentreProj);   // stvx128 v0, r4, r11 (+0x10)
-    arInterval.min = Splat(lfCentreProj);   // stvx128 v0, r0, r4  (+0x00)
+    const __vector4 projection = __vmsum3fp(arDir.mV, mPos.mV);
+    arInterval.max.mV = projection;
+    arInterval.min.mV = projection;
 }
 
 // ===========================================================================
@@ -118,19 +114,18 @@ void GPSphere::GetInterval(const GPInstance* lpThis,
 // are not written. The 0x30 output stride is sizeof(Interval) (static-
 // asserted in GPInstance.hpp), so plain array indexing carries it.
 // ===========================================================================
-void GPSphere::GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
-                            u32 auNumDirs, Interval* lapIntervals)
+void GPSphere::GetIntervals(const math::vpu::Vector3* lapDirs, u32 auNumDirs, Interval* lapIntervals) const
 {
-    // cmplwi/beqlr: the zero-count call falls straight out.
-    for (u32 luDir = 0; luDir < auNumDirs; ++luDir)
+    for (u32 i = 0; i < auNumDirs; ++i)
     {
-        // vmsum3fp128 v0, v0, v13 -- dot3(dirs[i], mPos), lane-broadcast.
-        const f32 lfCentreProj = Dot3(lapDirs[luDir], lpThis->mPos);
-
-        lapIntervals[luDir].max = Splat(lfCentreProj);   // stvx128 v0, r11, r8
-        lapIntervals[luDir].min = Splat(lfCentreProj);   // stvx128 v0, r0, r11
+        const __vector4 projection = __vmsum3fp(lapDirs[i].mV, mPos.mV);
+        lapIntervals[i].max.mV = projection;
+        lapIntervals[i].min.mV = projection;
     }
 }
+
+// ARTIST's GP sphere bbox slot is the folded empty method at 82AD5078.
+void GPSphere::GetBBox(AABBox&) const {}
 
 } // namespace collision
 } // namespace rw

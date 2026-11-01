@@ -43,123 +43,52 @@ namespace collision
 
 namespace
 {
-    // dot3 of the xyz lanes (the asm's vmsum3fp128; also the discrete
-    // vmulfp128 + 2x vmaddfp splat chains, which sum in the same
-    // y-term, +x-term, +z-term association order).
-    inline f32 Dot3(const Vec4& a, const Vec4& b)
+    // Raw native row operations, preserving all four lanes.
+    inline f32 Dot3(const rw::math::vpu::Vector3& a, const rw::math::vpu::Vector3& b)
+    { return __vmsum3fp(a.mV, b.mV).x; }
+    inline rw::math::vpu::Vector3 Sub(const rw::math::vpu::Vector3& a, const rw::math::vpu::Vector3& b)
+    { return rw::math::vpu::Vector3(__vsubfp(a.mV, b.mV)); }
+    inline rw::math::vpu::Vector3 MulAdd(const rw::math::vpu::Vector3& a, f32 scale, const rw::math::vpu::Vector3& b)
+    { const __vector4 s = {scale, scale, scale, scale}; return rw::math::vpu::Vector3(__vmaddfp(a.mV, s, b.mV)); }
+    inline rw::math::vpu::Vector3 Scale(const rw::math::vpu::Vector3& a, f32 scale)
+    { const __vector4 s = {scale, scale, scale, scale}; return rw::math::vpu::Vector3(__vmulfp(a.mV, s)); }
+    inline rw::math::vpu::VecFloat Splat(f32 value)
+    { const __vector4 s = {value, value, value, value}; return rw::math::vpu::VecFloat(s); }
+    inline rw::math::vpu::Vector3 Normalise(const rw::math::vpu::Vector3& row)
     {
-        return a.x * b.x + a.y * b.y + a.z * b.z;
+        const __vector4 square = __vmsum3fp(row.mV, row.mV);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(square);
+        __vector4 correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        return rw::math::vpu::Vector3(__vmulfp(row.mV, estimate));
     }
-
-    // Full 4-lane subtract (vsubfp).
-    inline Vec4 Sub(const Vec4& a, const Vec4& b)
+    inline f32 GuardedLength(const rw::math::vpu::Vector3& row)
     {
-        Vec4 r;
-        r.x = a.x - b.x;
-        r.y = a.y - b.y;
-        r.z = a.z - b.z;
-        r.w = a.w - b.w;
-        return r;
+        const __vector4 square = __vmsum3fp(row.mV, row.mV);
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(square);
+        __vector4 correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        return __vsel(__vmulfp(square, estimate), zero, __vcmpeqfp(zero, square)).x;
     }
-
-    // Full 4-lane row * splat + row (vmaddfp with a vmsum3fp128/vspltw splat;
-    // all four lanes, w included, exactly as stored).
-    inline Vec4 MulAdd(const Vec4& lRow, f32 lfScale, const Vec4& lAdd)
-    {
-        Vec4 r;
-        r.x = lRow.x * lfScale + lAdd.x;
-        r.y = lRow.y * lfScale + lAdd.y;
-        r.z = lRow.z * lfScale + lAdd.z;
-        r.w = lRow.w * lfScale + lAdd.w;
-        return r;
-    }
-
-    // Full 4-lane row * splat (vmulfp128 against a broadcast register).
-    inline Vec4 Scale(const Vec4& lRow, f32 lfScale)
-    {
-        Vec4 r;
-        r.x = lRow.x * lfScale;
-        r.y = lRow.y * lfScale;
-        r.z = lRow.z * lfScale;
-        r.w = lRow.w * lfScale;
-        return r;
-    }
-
-    // lvlx (from a stack float) + vspltw 0: one scalar broadcast into all four
-    // lanes -- the shape every rw::collision Interval bound is stored in.
-    inline Vec4 Splat(f32 lfValue)
-    {
-        Vec4 r;
-        r.x = lfValue;
-        r.y = lfValue;
-        r.z = lfValue;
-        r.w = lfValue;
-        return r;
-    }
-
-    // vmsum3fp128 + vrsqrtefp + 2x Newton-Raphson refine + vmulfp128, with NO
-    // zero guard -- used only where the caller has already established that
-    // the row is non-degenerate.
-    inline Vec4 Normalise(const Vec4& lRow)
-    {
-        return Scale(lRow, 1.0f / std::sqrt(Dot3(lRow, lRow)));
-    }
-
-    // vsubfp + vmsum3fp128 + vmaddfp: the orthogonal projection of lPoint onto
-    // the edge's INFINITE line (no segment clamp -- that is
-    // FeatureEdge::constrain_point's job).
-    inline Vec4 ProjectOntoEdgeLine(const FeatureEdge& arEdge, const Vec4& lPoint)
-    {
-        return MulAdd(arEdge.dir, Dot3(Sub(lPoint, arEdge.base), arEdge.dir), arEdge.base);
-    }
-
-    // Cross product via the VMX two-permute idiom (vpermwi128 0x63 +
-    // vmulfp128 + vnmsubfp + rotate back); the w lane is literally
-    // a.w*b.w - a.w*b.w (0 for finite inputs; kept verbatim, not folded).
-    inline Vec4 CrossRow(const Vec4& a, const Vec4& b)
-    {
-        Vec4 r;
-        r.x = a.y * b.z - a.z * b.y;
-        r.y = a.z * b.x - a.x * b.z;
-        r.z = a.x * b.y - a.y * b.x;
-        r.w = a.w * b.w - a.w * b.w;
-        return r;
-    }
-
-    // Project lPoint onto the plane through lOnPlane with unit normal
-    // lNormal: vsubfp + vmsum3fp128 + vmaddfp -> point + normal *
-    // dot3(normal, onPlane - point), all four lanes.
-    inline Vec4 ProjectOntoFacePlane(const Vec4& lNormal,
-                                     const Vec4& lOnPlane,
-                                     const Vec4& lPoint)
-    {
-        const f32 lfDist = Dot3(lNormal, Sub(lOnPlane, lPoint));
-        return MulAdd(lNormal, lfDist, lPoint);
-    }
-
-    // vcmpgtfp. + mfocrf rD,2 + extrwi rD,rD,1,24: CR6 bit 0, the "a > b in
-    // ALL four lanes" record bit. Strict compare; a NaN lane compares false
-    // and therefore clears the all-lanes bit, exactly as vcmpgtfp does.
-    inline bool AllLanesGreater(const Vec4& a, const Vec4& b)
-    {
-        return a.x > b.x
-            && a.y > b.y
-            && a.z > b.z
-            && a.w > b.w;
-    }
-
-    // vcmpgtfp. + mfocrf/extrwi on CR6: true only when splat(lfLhs) > lRhs
-    // holds in ALL four lanes. (length is lane-broadcast by the FeatureEdge
-    // ctor, so this equals the lane-x test; kept per-lane for fidelity. NaN
-    // lanes compare false, defeating the all-true bit, exactly like the
-    // scalar > here.) Shared by FindEdgeEdgePrism and FindFaceFacePrism.
-    inline bool AllLanesGreaterScalar(f32 lfLhs, const Vec4& lRhs)
-    {
-        return lfLhs > lRhs.x
-            && lfLhs > lRhs.y
-            && lfLhs > lRhs.z
-            && lfLhs > lRhs.w;
-    }
+    inline rw::math::vpu::Vector3 ProjectOntoEdgeLine(const FeatureEdge& edge, const rw::math::vpu::Vector3& point)
+    { return MulAdd(edge.dir, Dot3(Sub(point, edge.base), edge.dir), edge.base); }
+    inline rw::math::vpu::Vector3 CrossRow(const rw::math::vpu::Vector3& a, const rw::math::vpu::Vector3& b)
+    { return rw::math::vpu::Vector3(__vpermwi(__vnmsubfp(__vpermwi(a.mV, 0x63), b.mV, __vmulfp(a.mV, __vpermwi(b.mV, 0x63))), 0x63)); }
+    inline rw::math::vpu::Vector3 ProjectOntoFacePlane(const rw::math::vpu::Vector3& normal, const rw::math::vpu::Vector3& onPlane, const rw::math::vpu::Vector3& point)
+    { return MulAdd(normal, Dot3(normal, Sub(onPlane, point)), point); }
+    inline bool AllLanesGreater(const rw::math::vpu::VecFloat& a, const rw::math::vpu::VecFloat& b)
+    { unsigned int cr = 0; __vcmpgtfpR(a.mV, b.mV, &cr); return (cr & 0x80u) != 0; }
+    inline bool AllLanesGreaterScalar(f32 lhs, const rw::math::vpu::VecFloat& rhs)
+    { const __vector4 l = {lhs, lhs, lhs, lhs}; unsigned int cr = 0; __vcmpgtfpR(l, rhs.mV, &cr); return (cr & 0x80u) != 0; }
 
     // -----------------------------------------------------------------------
     // flt_82180968 -- the family's shared degenerate/parallel cutoff, read by
@@ -195,30 +124,14 @@ namespace
 u32 FindIntervalOverlap(Interval* lpResult,
                         const Interval* lpInterval1, const Interval* lpInterval2)
 {
-    // lvx128 v0,r5 / lvx128 v13,r4 / vcmpgtfp. v13,v0 -> pick r10 = r4 or r5;
-    // lvx128 v0,r10 / stvx128 v0,r3. The min row is STORED before the max
-    // rows are loaded, exactly as below (matters if lpResult aliases an input).
-    const Vec4 lvMin = AllLanesGreater(lpInterval1->min, lpInterval2->min)
-                           ? lpInterval1->min
-                           : lpInterval2->min;
-    lpResult->min = lvMin;
-
-    // lvx128 v0,r4+0x10 / lvx128 v13,r5+0x10 / vcmpgtfp. v13,v0 (i.e. is
-    // interval2.max > interval1.max) -> keep r11 = r4+0x10 on all-true, else
-    // r11 = r5+0x10; lvx128 v0,r11 loads the chosen max row into a register.
-    const Vec4 lvMax = AllLanesGreater(lpInterval2->max, lpInterval1->max)
-                           ? lpInterval1->max
-                           : lpInterval2->max;
-
-    // lvx128 v13,r3 (re-load the just-stored min row) / vcmpgtfp. v13,v0,v13;
-    // the compare is issued before the max store, both on the same register.
-    const u32 luOverlaps = AllLanesGreater(lvMax, lpResult->min) ? 1u : 0u;
-
-    // stvx128 v0, r3, 0x10
-    lpResult->max = lvMax;
-
-    // extrwi r3, r11, 1,24 -- CR6[0] zero-extended into the return register.
-    return luOverlaps;
+    unsigned int comparison = 0;
+    __vcmpgtfpR(lpInterval1->min.mV, lpInterval2->min.mV, &comparison);
+    lpResult->min.mV = (comparison & 0x80u) ? lpInterval1->min.mV : lpInterval2->min.mV;
+    __vcmpgtfpR(lpInterval2->max.mV, lpInterval1->max.mV, &comparison);
+    const __vector4 maxValue = (comparison & 0x80u) ? lpInterval1->max.mV : lpInterval2->max.mV;
+    __vcmpgtfpR(maxValue, lpResult->min.mV, &comparison);
+    lpResult->max.mV = maxValue;
+    return (comparison & 0x80u) ? 1u : 0u;
 }
 
 // ===========================================================================
@@ -256,8 +169,8 @@ u32 FindIntervalOverlap(Interval* lpResult,
 // register knowledge -- FindIntervalOverlap @ 0x82BB7828 genuinely touches
 // only r3/r4/r5/r8..r11 and v0/v13, which the dump confirms.
 // ===========================================================================
-RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                         Feature& arEdgeFeature1, Feature& arEdgeFeature2, const Vec4& arSepDir)
+RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                         Feature& arEdgeFeature1, Feature& arEdgeFeature2, const rw::math::vpu::Vector3& arSepDir)
 {
     // r25 = ef1+0x20 / r26 = ef2+0x20 (the direction rows), r27 / r7 = +0x10
     // and r6 = +0x10 (the base rows): an edge feature carries exactly one
@@ -266,7 +179,7 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     const FeatureEdge& lrEdge2 = arEdgeFeature2.edges[0];
 
     // vpermwi128 0x63 x2 + vmulfp128 + vnmsubfp + vmsum3fp128.
-    const Vec4 lvCross   = CrossRow(lrEdge1.dir, lrEdge2.dir);
+    const rw::math::vpu::Vector3 lvCross   = CrossRow(lrEdge1.dir, lrEdge2.dir);
     const f32  lfCrossSq = Dot3(lvCross, lvCross);
 
     // fcmpu cr6 / ble -> the parallel arm, so an unordered compare takes the
@@ -277,8 +190,8 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
         // n = normalize(dir1 x dir2); n x dir2 spans the plane that contains
         // edge 2 and is perpendicular to n, so the parameter along edge 1 is
         // a plain ray/plane solve against it.
-        const Vec4 lvNormal = Normalise(lvCross);
-        const Vec4 lvPerp   = CrossRow(lvNormal, lrEdge2.dir);
+        const rw::math::vpu::Vector3 lvNormal = Normalise(lvCross);
+        const rw::math::vpu::Vector3 lvPerp   = CrossRow(lvNormal, lrEdge2.dir);
 
         // fdivs: both dots are vmsum3fp128 folds bounced through stack floats
         // so the divide runs scalar on lane 0.
@@ -295,7 +208,7 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
         // vcmpgtfp. splat(t) > the broadcast length row, CR6 all-lanes bit.
         if (AllLanesGreaterScalar(lfT, lrEdge1.length))
         {
-            lfT = lrEdge1.length.x;                        // lfs 0x40(ef1)
+            lfT = lrEdge1.length.mV.x;                        // lfs 0x40(ef1)
         }
 
         arRes.m_numpts = 1;                                // stw r10, 0x210(r22)
@@ -321,7 +234,7 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     // fabs/fabs + fcmpu/blt: keep edge 1's direction only when it is LESS
     // aligned with the sweep direction; a tie (or an unordered compare) takes
     // edge 2's row, because the vmr sits on the not-taken side of the blt.
-    const Vec4& lrAxis =
+    const rw::math::vpu::Vector3& lrAxis =
         (std::fabs(Dot3(arSepDir, lrEdge1.dir)) < std::fabs(Dot3(arSepDir, lrEdge2.dir)))
             ? lrEdge1.dir
             : lrEdge2.dir;
@@ -330,8 +243,8 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     // endpoint (vmaddfp dir * length + base), each folded with vmsum3fp128.
     const f32 lfA0 = Dot3(lrAxis, lrEdge1.base);
     const f32 lfB0 = Dot3(lrAxis, lrEdge2.base);
-    const f32 lfA1 = Dot3(lrAxis, MulAdd(lrEdge1.dir, lrEdge1.length.x, lrEdge1.base));
-    const f32 lfB1 = Dot3(lrAxis, MulAdd(lrEdge2.dir, lrEdge2.length.x, lrEdge2.base));
+    const f32 lfA1 = Dot3(lrAxis, MulAdd(lrEdge1.dir, lrEdge1.length.mV.x, lrEdge1.base));
+    const f32 lfB1 = Dot3(lrAxis, MulAdd(lrEdge2.dir, lrEdge2.length.mV.x, lrEdge2.base));
 
     // vcmpgefp (first >= second) + vnot + vsel pairs on the broadcast rows:
     // whole-register min/max selects, so an exact tie takes the second row on
@@ -352,12 +265,12 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
         // n1 / n2 = normalize((sepDir x dir) x dir) -- the sweep direction's
         // component perpendicular to each edge (negated; the sign cancels in
         // the ray/plane quotient below).
-        const Vec4 lvNormal1 = Normalise(CrossRow(CrossRow(arSepDir, lrEdge1.dir), lrEdge1.dir));
-        const Vec4 lvNormal2 = Normalise(CrossRow(CrossRow(arSepDir, lrEdge2.dir), lrEdge2.dir));
+        const rw::math::vpu::Vector3 lvNormal1 = Normalise(CrossRow(CrossRow(arSepDir, lrEdge1.dir), lrEdge1.dir));
+        const rw::math::vpu::Vector3 lvNormal2 = Normalise(CrossRow(CrossRow(arSepDir, lrEdge2.dir), lrEdge2.dir));
 
         // vmulfp128 of the axis row by the broadcast interval bound.
-        const Vec4 lvAnchor0 = Scale(lrAxis, lOverlap.min.x);
-        const Vec4 lvAnchor1 = Scale(lrAxis, lOverlap.max.x);
+        const rw::math::vpu::Vector3 lvAnchor0 = Scale(lrAxis, lOverlap.min.mV.x);
+        const rw::math::vpu::Vector3 lvAnchor1 = Scale(lrAxis, lOverlap.max.mV.x);
 
         // Ray-cast each anchor along sepDir onto each edge's plane. The asm
         // builds 1/denominator with vrefp + two Newton-Raphson refines;
@@ -403,7 +316,7 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     {
         if (lfA0 <= lfA1)                                       // ble cr6
         {
-            lapPtsOn1[0] = MulAdd(lrEdge1.dir, lrEdge1.length.x, lrEdge1.base);
+            lapPtsOn1[0] = MulAdd(lrEdge1.dir, lrEdge1.length.mV.x, lrEdge1.base);
             arEdgeFeature1.region = arEdgeFeature1.region + 1;
         }
         else
@@ -414,7 +327,7 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
 
         if (lfB0 >= lfB1)                                       // bge cr6
         {
-            lapPtsOn2[0] = MulAdd(lrEdge2.dir, lrEdge2.length.x, lrEdge2.base);
+            lapPtsOn2[0] = MulAdd(lrEdge2.dir, lrEdge2.length.mV.x, lrEdge2.base);
             arEdgeFeature2.region = arEdgeFeature2.region + 1;
         }
         else
@@ -427,7 +340,7 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     {
         if (lfA0 >= lfA1)                                       // bge cr6
         {
-            lapPtsOn1[0] = MulAdd(lrEdge1.dir, lrEdge1.length.x, lrEdge1.base);
+            lapPtsOn1[0] = MulAdd(lrEdge1.dir, lrEdge1.length.mV.x, lrEdge1.base);
             arEdgeFeature1.region = arEdgeFeature1.region + 1;
         }
         else
@@ -443,7 +356,7 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
         }
         else
         {
-            lapPtsOn2[0] = MulAdd(lrEdge2.dir, lrEdge2.length.x, lrEdge2.base);
+            lapPtsOn2[0] = MulAdd(lrEdge2.dir, lrEdge2.length.mV.x, lrEdge2.base);
             arEdgeFeature2.region = arEdgeFeature2.region + 1;
         }
     }
@@ -469,8 +382,8 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
 //   li r3,1 ; blr
 // The 6th (sepDir) argument is forwarded by the dispatcher but never read.
 // ===========================================================================
-RwBool FindEdgePointPrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                          Feature& arEdgeFeature, Feature& arPointFeature, const Vec4& arSepDir)
+RwBool FindEdgePointPrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                          Feature& arEdgeFeature, Feature& arPointFeature, const rw::math::vpu::Vector3& arSepDir)
 {
     (void)arSepDir;
 
@@ -513,91 +426,42 @@ RwBool FindEdgePointPrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, 
 //   ptsOnP[0] = pf.pt                                   (lvx128 r29/stvx128 r27)
 //   return 1
 //
-// The initial best distance is seeded from .rdata flt_82001CC0 == 0.0f. NaN
-// polarity of the max-track matches the asm: fcmpu+ble skips the update when
-// the compare is unordered, exactly as (lfDist > lfBest) does.
+// The initial best distance is flt_82001CC0 == 0.0f. The fcmpu/ble
+// sequence branches on not-greater, including unordered.
 // ===========================================================================
-RwBool FindFacePointPrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, Vec4* lapPtsOnP,
-                          Feature& arFaceFeature, Feature& arPointFeature, const Vec4& arSepDir)
+RwBool FindFacePointPrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOnF, rw::math::vpu::Vector3* lapPtsOnP,
+                          Feature& arFaceFeature, Feature& arPointFeature, const rw::math::vpu::Vector3& arSepDir)
 {
-    // stw r10, 0x210(r3) -- exactly one contact point is produced.
     arRes.m_numpts = 1;
-
-    // lvx128 v0  <- sepDir (r8); lvx128 v13 <- pf.pt (+0x220);
-    // lvx128 v12 <- face base vertex (ff+0x10 == edges[0].base).
-    const Vec4  lvDir     = arSepDir;
-    const Vec4  lvOther   = arPointFeature.pt;
-    const Vec4& lrVertex0 = arFaceFeature.edges[0].base;
-
-    // vsubfp v12, v12, v13 : vertex0 - pointPos (all four lanes);
-    // vmsum3fp128 v12, v0, v12 : t = dot3(dir, delta).
-    const f32 lfT = Dot3(lvDir, Sub(lrVertex0, lvOther));
-
-    // vmaddfp v0, v0, v13, v12 (vD = vA*vC + vB) : point = dir*t + pointPos --
-    // the point feature's position advanced along the prism direction onto the
-    // face's base-vertex plane. All four lanes, w included.
-    Vec4 lvPoint = MulAdd(lvDir, lfT, lvOther);
-
-    // f0 = f12 = flt_82001CC0 (0.0f); r30 = -1. (The asm also spills f0 to a
-    // stack float it later lvlx+vspltw's back -- purely local traffic.)
-    f32 lfBest = 0.0f;
-    s32 liBest = -1;
-
-    // lwz r10, 0x230(r31); cmpwi/ble cr6 -- skip everything when no edges.
-    if (arFaceFeature.numedges > 0)
+    const __vector4 direction = arSepDir.mV;
+    const __vector4 other = arPointFeature.pt.mV;
+    const __vector4 delta = __vsubfp(arFaceFeature.edges[0].base.mV, other);
+    const __vector4 distance = __vmsum3fp(direction, delta);
+    rw::math::vpu::Vector3 point(__vmaddfp(direction, distance, other));
+    f32 bestDistance = 0.0f;
+    s32 best = -1;
+    const s32 count = arFaceFeature.numedges;
+    if (count > 0)
     {
-        const s32 liCount = arFaceFeature.numedges;   // lwz r9, 0x230(r31)
-
-        // r10 walks ff+0x30 (the plane-normal row) in 0x40 strides; the vertex
-        // row is loaded at r10-0x20.
-        for (s32 liEdge = 0; liEdge < liCount; ++liEdge)
+        for (s32 i = 0; i < count; ++i)
         {
-            const FeatureEdge& lrEdge = arFaceFeature.edges[liEdge];
-
-            // vsubfp v12, v0, v12 : point - base_i;
-            // vmsum3fp128 v13, v13, v12 : signed distance to face plane i.
-            const f32 lfDist = Dot3(lrEdge.pn, Sub(lvPoint, lrEdge.base));
-
-            // blt cr6 (liBest < 0 short-circuit) / fcmpu+ble (take on >):
-            // unordered compares skip the update, matching NaN behaviour.
-            if (liBest < 0 || lfDist > lfBest)
-            {
-                lfBest = lfDist;
-                liBest = liEdge;
-            }
+            const FeatureEdge& edge = arFaceFeature.edges[i];
+            const f32 d = __vmsum3fp(edge.pn.mV, __vsubfp(point.mV, edge.base.mV)).x;
+            // fcmpu/ble skips an unordered or non-greater comparison.
+            if (best < 0 || d > bestDistance) { bestDistance = d; best = i; }
         }
-
-        // stfs f0 (spill) ; fcmpu cr6, f0, f12 ; ble -- act only when the
-        // point ended up OUTSIDE the most-violated face plane.
-        if (lfBest > 0.0f)
+        if (bestDistance > 0.0f)
         {
-            const FeatureEdge& lrBestEdge = arFaceFeature.edges[liBest];
-
-            // lvlx+vspltw broadcast lfBest; lvx128 v12 <- pn of the winning
-            // face edge; vmulfp128 + vsubfp : point -= pn * dist (all lanes).
-            lvPoint.x -= lrBestEdge.pn.x * lfBest;
-            lvPoint.y -= lrBestEdge.pn.y * lfBest;
-            lvPoint.z -= lrBestEdge.pn.z * lfBest;
-            lvPoint.w -= lrBestEdge.pn.w * lfBest;
-
-            // bl constrain_point with r3 = ff + (best<<6) + 0x10 (the embedded
-            // FeatureEdge) and r4 = the point buffer: clamp onto the edge, in
-            // place. The asm reloads v0 from the buffer afterwards, so the
-            // clamped point IS the output.
-            const u32 luRegion = lrBestEdge.constrain_point(lvPoint);
-
-            // lwz/add/stw @ (r31)+0 : fold the region code and edge index into
-            // the face feature's region accumulator.
-            arFaceFeature.region += luRegion + 2 * static_cast<u32>(liBest);
+            const FeatureEdge& edge = arFaceFeature.edges[best];
+            const __vector4 d = {bestDistance, bestDistance, bestDistance, bestDistance};
+            point.mV = __vsubfp(point.mV, __vmulfp(edge.pn.mV, d));
+            const u32 region = edge.constrain_point(point);
+            arFaceFeature.region += region + 2 * static_cast<u32>(best);
         }
     }
-
-    // stvx128 v0 -> *r28, then lvx128 (pf+0x220) / stvx128 -> *r27, in that
-    // order (the point-side output is re-read from the feature at exit).
-    lapPtsOnF[0] = lvPoint;
+    lapPtsOnF[0] = point;
     lapPtsOnP[0] = arPointFeature.pt;
-
-    return 1;   // li r3, 1
+    return 1;
 }
 
 namespace
@@ -643,8 +507,8 @@ namespace
 // Returns 0 when the point already sits inside every wall: r3 is loaded with
 // 0 in the prologue and only overwritten on the constrain path.
 // ===========================================================================
-u32 ConstrainPointToFacePrism(Feature& arFaceFeature, const Vec4& arSepDir,
-                              Vec4* lpPoint)
+u32 ConstrainPointToFacePrism(Feature& arFaceFeature, const rw::math::vpu::Vector3& arSepDir,
+                              rw::math::vpu::Vector3* lpPoint)
 {
     // li r3, 0 / li r31, -1 / the splat of flt_82001CC0 (0.0f). The seeded
     // 0.0f best is dead: liBest == -1 forces the first edge to take its own
@@ -653,7 +517,7 @@ u32 ConstrainPointToFacePrism(Feature& arFaceFeature, const Vec4& arSepDir,
     s32  liBest   = -1;     // r31
     f32  lfBest   = 0.0f;   // v8 (lane-broadcast; every candidate is a
                             //     vmsum3fp128 broadcast, so the lanes agree)
-    Vec4 lvBestNormal;      // sp+var_20 -- only read when liBest >= 0
+    rw::math::vpu::Vector3 lvBestNormal;      // sp+var_20 -- only read when liBest >= 0
 
     const s32 liCount = arFaceFeature.numedges;   // lwz r9, 0x230(r10)
     for (s32 liEdge = 0; liEdge < liCount; ++liEdge)
@@ -661,14 +525,14 @@ u32 ConstrainPointToFacePrism(Feature& arFaceFeature, const Vec4& arSepDir,
         const FeatureEdge& lrEdge = arFaceFeature.edges[liEdge];
 
         // vpermwi128 0x63 x2 + vmulfp128 + vnmsubfp: the inward wall normal.
-        Vec4 lvNormal = CrossRow(arSepDir, lrEdge.dir);
+        rw::math::vpu::Vector3 lvNormal = CrossRow(arSepDir, lrEdge.dir);
 
         // vmsum3fp128 + fcmpu/ble around the vrsqrtefp + 2x Newton-Raphson
         // block: an unordered compare NORMALISES (the ble is not taken).
         const f32 lfLenSq = Dot3(lvNormal, lvNormal);
         if (!(lfLenSq <= KF_PARALLEL_EPSILON))
         {
-            lvNormal = Scale(lvNormal, 1.0f / std::sqrt(lfLenSq));
+            lvNormal = Normalise(lvNormal);
         }
 
         // vsubfp + vmsum3fp128: the signed distance from this rebuilt wall.
@@ -734,15 +598,15 @@ u32 ConstrainPointToFacePrism(Feature& arFaceFeature, const Vec4& arSepDir,
 // has to be valid on the FALSE side: FindFaceEdgePrism reads it only there.
 // ===========================================================================
 RwBool FindFaceEdgePrismInterval(Feature& arFaceFeature, Feature& arEdgeFeature,
-                                 const Vec4& arSepDir,
+                                 const rw::math::vpu::Vector3& arSepDir,
                                  f32* lpfT0, f32* lpfT1,
-                                 Vec4* lpCrossPoint, Vec4* lpCrossDir)
+                                 rw::math::vpu::Vector3* lpCrossPoint, rw::math::vpu::Vector3* lpCrossDir)
 {
     const FeatureEdge& lrEdge = arEdgeFeature.edges[0];
 
     // stfs flt_82001CC0 (0.0f) -> *t0 ; lfs 0x40(r4) -> *t1: the whole edge.
     *lpfT0 = 0.0f;
-    *lpfT1 = lrEdge.length.x;
+    *lpfT1 = lrEdge.length.mV.x;
 
     bool lbUnresolved = false;   // r31
 
@@ -755,11 +619,9 @@ RwBool FindFaceEdgePrismInterval(Feature& arFaceFeature, Feature& arEdgeFeature,
         // The rebuilt wall normal and its LENGTH: vrsqrtefp + 2x
         // Newton-Raphson, times lenSq (== sqrt), with a vcmpeqfp/vsel guard
         // that forces 0 where lenSq is exactly 0.
-        const Vec4 lvWall  = CrossRow(arSepDir, lrFaceEdge.dir);
+        const rw::math::vpu::Vector3 lvWall  = CrossRow(arSepDir, lrFaceEdge.dir);
         const f32  lfLenSq = Dot3(lvWall, lvWall);
-        const f32  lfLen   = (lfLenSq == 0.0f)
-                           ? 0.0f
-                           : lfLenSq * (1.0f / std::sqrt(lfLenSq));
+        const f32 lfLen = GuardedLength(lvWall);
 
         if (lfLen < KF_DEGENERATE_WALL_LENGTH)   // fcmpu cr6 / blt -> next wall
         {
@@ -768,7 +630,7 @@ RwBool FindFaceEdgePrismInterval(Feature& arFaceFeature, Feature& arEdgeFeature,
 
         // The unit normal: a second vrsqrtefp pair on the same lenSq (no zero
         // guard needed -- the length test above already passed).
-        const Vec4 lvNormal = Scale(lvWall, 1.0f / std::sqrt(lfLenSq));
+        const rw::math::vpu::Vector3 lvNormal = Normalise(lvWall);
 
         const f32 lfDenom = Dot3(lrEdge.dir, lvNormal);                        // vmsum3fp128
         const f32 lfNumer = Dot3(Sub(lrFaceEdge.base, lrEdge.base), lvNormal); // vsubfp + vmsum3fp128
@@ -852,13 +714,13 @@ RwBool FindFaceEdgePrismInterval(Feature& arFaceFeature, Feature& arEdgeFeature,
 // X360 image, at lower addresses in the same run).
 // ===========================================================================
 
-RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, Vec4* lapPtsOnE,
-                         Feature& arFaceFeature, Feature& arEdgeFeature, const Vec4& arSepDir)
+RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOnF, rw::math::vpu::Vector3* lapPtsOnE,
+                         Feature& arFaceFeature, Feature& arEdgeFeature, const rw::math::vpu::Vector3& arSepDir)
 {
     f32  lfT0 = 0.0f;    // sp+0x50 (var_90) -- interval start along ef.edges[0]
     f32  lfT1 = 0.0f;    // sp+0x58 (var_88) -- interval end
-    Vec4 lvCrossDir;     // sp+0x60 (var_80) -- helper out, r9
-    Vec4 lvCrossPoint;   // sp+0x70 (var_70) -- helper out, r8
+    rw::math::vpu::Vector3 lvCrossDir;     // sp+0x60 (var_80) -- helper out, r9
+    rw::math::vpu::Vector3 lvCrossPoint;   // sp+0x70 (var_70) -- helper out, r8
 
     const FeatureEdge& lrEdge = arEdgeFeature.edges[0];
 
@@ -878,12 +740,12 @@ RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, V
         // Both dots are vmsum3fp128 folds bounced through stack rows so the
         // divide is a SCALAR fdivs on lane 0 (the asm swaps which scratch row
         // holds numerator/denominator between the two casts -- same math).
-        const Vec4 lvToFace0 = Sub(arFaceFeature.edges[0].base, lapPtsOnE[0]);   // vsubfp
+        const rw::math::vpu::Vector3 lvToFace0 = Sub(arFaceFeature.edges[0].base, lapPtsOnE[0]);   // vsubfp
         const f32  lfRay0    = Dot3(lvToFace0, arFaceFeature.ownNormal)
                              / Dot3(arSepDir, arFaceFeature.ownNormal);          // fdivs
         lapPtsOnF[0] = MulAdd(arSepDir, lfRay0, lapPtsOnE[0]);   // stvx128 -> [r30]
 
-        const Vec4 lvToFace1 = Sub(arFaceFeature.edges[0].base, lapPtsOnE[1]);
+        const rw::math::vpu::Vector3 lvToFace1 = Sub(arFaceFeature.edges[0].base, lapPtsOnE[1]);
         const f32  lfRay1    = Dot3(lvToFace1, arFaceFeature.ownNormal)
                              / Dot3(arSepDir, arFaceFeature.ownNormal);          // fdivs
         lapPtsOnF[1] = MulAdd(arSepDir, lfRay1, lapPtsOnE[1]);   // stvx128 -> [r30+0x10]
@@ -902,7 +764,7 @@ RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, V
         // Orthogonal offset along sepDir toward the face plane -- NO divide
         // on this path (sepDir is unit length):
         //   ptsOnF[0] = ptsOnE[0] + sepDir * dot3(sepDir, ffBase - ptsOnE[0])
-        const Vec4 lvToFace = Sub(arFaceFeature.edges[0].base, lapPtsOnE[0]);
+        const rw::math::vpu::Vector3 lvToFace = Sub(arFaceFeature.edges[0].base, lapPtsOnE[0]);
         lapPtsOnF[0] = MulAdd(arSepDir, Dot3(arSepDir, lvToFace), lapPtsOnE[0]);
 
         // Clamp the face point into the face region (in place); the returned
@@ -927,9 +789,9 @@ RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, V
     // Drop the edge base into the prism cross-section:
     //   anchor  = efBase + sepDir   * dot3(sepDir,   ffBase     - efBase)
     //   anchor += crossDir          * dot3(crossDir, crossPoint - anchor)
-    const Vec4 lvBaseToFace = Sub(arFaceFeature.edges[0].base, lrEdge.base);      // vsubfp
-    Vec4 lvAnchor = MulAdd(arSepDir, Dot3(arSepDir, lvBaseToFace), lrEdge.base);
-    const Vec4 lvToCross = Sub(lvCrossPoint, lvAnchor);                           // vsubfp
+    const rw::math::vpu::Vector3 lvBaseToFace = Sub(arFaceFeature.edges[0].base, lrEdge.base);      // vsubfp
+    rw::math::vpu::Vector3 lvAnchor = MulAdd(arSepDir, Dot3(arSepDir, lvBaseToFace), lrEdge.base);
+    const rw::math::vpu::Vector3 lvToCross = Sub(lvCrossPoint, lvAnchor);                           // vsubfp
     lvAnchor = MulAdd(lvCrossDir, Dot3(lvCrossDir, lvToCross), lvAnchor);
 
     // Sweep along the edge direction across the clipped interval.
@@ -959,11 +821,9 @@ RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, V
     //   len   = lenSq * rsqrt(lenSq)      (vrsqrtefp + 2x Newton-Raphson refine)
     //   len   = (lenSq == 0) ? 0 : len    (vcmpeqfp zero mask + vsel)
     //   if (len > FLT_MIN)                (vcmpgtfp. vs flt_82180934)
-    const Vec4 lvSep    = Sub(lapPtsOnF[0], lapPtsOnE[0]);
+    const rw::math::vpu::Vector3 lvSep    = Sub(lapPtsOnF[0], lapPtsOnE[0]);
     const f32  lfLenSq  = Dot3(lvSep, lvSep);
-    const f32  lfLen    = (lfLenSq == 0.0f)
-                        ? 0.0f
-                        : lfLenSq * (1.0f / std::sqrt(lfLenSq));
+    const f32 lfLen = GuardedLength(lvSep);
     if (lfLen > KF_MIN_SEPARATION_LENGTH)
     {
         // The clamps separated the point pairs: override the contact normal
@@ -971,17 +831,13 @@ RwBool FindFaceEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOnF, V
         // perpendicular to the edge -- normalised.
         arRes.normalOverride = 1;                             // stw 1, 0x214(r24)
 
-        const Vec4 lvSepAgain = Sub(lapPtsOnF[0], lapPtsOnE[0]);   // rows reloaded
-        const Vec4 lvCross    = CrossRow(lvSepAgain, lrEdge.dir);  // sep x dir
-        const Vec4 lvNormal   = CrossRow(lrEdge.dir, lvCross);     // dir x (sep x dir)
+        const rw::math::vpu::Vector3 lvSepAgain = Sub(lapPtsOnF[0], lapPtsOnE[0]);   // rows reloaded
+        const rw::math::vpu::Vector3 lvCross    = CrossRow(lvSepAgain, lrEdge.dir);  // sep x dir
+        const rw::math::vpu::Vector3 lvNormal   = CrossRow(lrEdge.dir, lvCross);     // dir x (sep x dir)
 
         // Normalise WITHOUT a zero guard on this path (vrsqrtefp + 2x
         // Newton-Raphson refine at 0x82BB86E0..0x82BB8700, then vmulfp128).
-        const f32 lfScale = 1.0f / std::sqrt(Dot3(lvNormal, lvNormal));
-        arRes.normal.x = lvNormal.x * lfScale;                // stvx128 -> r24+0x200
-        arRes.normal.y = lvNormal.y * lfScale;
-        arRes.normal.z = lvNormal.z * lfScale;
-        arRes.normal.w = lvNormal.w * lfScale;
+        arRes.normal = Normalise(lvNormal);
     }
 
     return 1;
@@ -1019,17 +875,20 @@ namespace
     // vslw 0x80000000 sign mask (a lane fabs), then the same CR6 all-lanes
     // vcmpgtfp. test: true only when lfAbsLhs > |lLength.lane * lfScale| in
     // all four lanes.
-    inline bool AllLanesAbsGreater(f32 lfAbsLhs, const Vec4& lLength, f32 lfScale)
+    inline bool AllLanesAbsGreater(f32 lhs, const rw::math::vpu::VecFloat& length, f32 scale)
     {
-        return lfAbsLhs > std::fabs(lLength.x * lfScale)
-            && lfAbsLhs > std::fabs(lLength.y * lfScale)
-            && lfAbsLhs > std::fabs(lLength.z * lfScale)
-            && lfAbsLhs > std::fabs(lLength.w * lfScale);
+        const __vector4 scaleV = {scale, scale, scale, scale};
+        const __vector4 lhsV = {lhs, lhs, lhs, lhs};
+        const __vector4 ones = __vspltisw(-1);
+        const __vector4 magnitude = __vandc(__vmulfp(length.mV, scaleV), __vslw(ones, ones));
+        unsigned int cr = 0;
+        __vcmpgtfpR(lhsV, magnitude, &cr);
+        return (cr & 0x80u) != 0;
     }
 }
 
-RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                         Feature& arFaceFeature1, Feature& arFaceFeature2, const Vec4& arSepDir)
+RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                         Feature& arFaceFeature1, Feature& arFaceFeature2, const rw::math::vpu::Vector3& arSepDir)
 {
     (void)arSepDir;   // r8 forwarded by the dispatcher, never read here
 
@@ -1045,7 +904,7 @@ RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     s32 liIndex2    = 0;    // r27  current edge of ff2
     s32 liIndex1    = 0;    // r26  current edge of ff1
 
-    Vec4 laPoints[KI_MAX_PRISM_POINTS];   // the stack buffer behind r17
+    rw::math::vpu::Vector3 laPoints[KI_MAX_PRISM_POINTS];   // the stack buffer behind r17
 
     // Bottom-tested ring walk (the asm's do/while back to loc_82BB87EC).
     for (;;)
@@ -1082,7 +941,7 @@ RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
                 !AllLanesAbsGreater(std::fabs(lfNum), lrEdge2.length, lfDenom))
             {
                 // P = dir2 * t + base2  (lvlx/vspltw t; vmaddfp).
-                const Vec4 lvPoint = MulAdd(lrEdge2.dir, lfT, lrEdge2.base);
+                const rw::math::vpu::Vector3 lvPoint = MulAdd(lrEdge2.dir, lfT, lrEdge2.base);
 
                 // var_1A0: P's parameter along edge 1.
                 const f32 lfS = Dot3(Sub(lvPoint, lrEdge1.base), lrEdge1.dir);
@@ -1164,7 +1023,7 @@ RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
         // planes -- out = ownNormal * dot3(ownNormal, vert0 - P) + P.
         for (s32 liPoint = 0; liPoint < liNumPoints; ++liPoint)
         {
-            const Vec4& lrPoint = laPoints[liPoint];
+            const rw::math::vpu::Vector3& lrPoint = laPoints[liPoint];
 
             lapPtsOn1[liPoint] = ProjectOntoFacePlane(arFaceFeature1.ownNormal,
                                                       arFaceFeature1.edges[0].base,
@@ -1184,7 +1043,7 @@ RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     const s32 liCount2 = arFaceFeature2.numedges;
     if (liCount2 > 0)
     {
-        const Vec4 lvVert10 = arFaceFeature1.edges[0].base;   // lvx128 [r29]
+        const rw::math::vpu::Vector3 lvVert10 = arFaceFeature1.edges[0].base;   // lvx128 [r29]
         for (s32 liEdge = 0; liEdge < liCount2; ++liEdge)
         {
             const FeatureEdge& lrEdge = arFaceFeature2.edges[liEdge];
@@ -1203,7 +1062,7 @@ RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
         s32 liEmitted = 0;   // r31; the count is re-read every pass (8B6C)
         while (liEmitted < arFaceFeature1.numedges)
         {
-            const Vec4& lrVert1 = arFaceFeature1.edges[liEmitted].base;
+            const rw::math::vpu::Vector3& lrVert1 = arFaceFeature1.edges[liEmitted].base;
             lapPtsOn1[liEmitted] = lrVert1;
             lapPtsOn2[liEmitted] = ProjectOntoFacePlane(arFaceFeature2.ownNormal,
                                                         arFaceFeature2.edges[0].base,
@@ -1219,7 +1078,7 @@ RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     const s32 liCount1 = arFaceFeature1.numedges;
     if (liCount1 > 0)
     {
-        const Vec4 lvVert20 = arFaceFeature2.edges[0].base;
+        const rw::math::vpu::Vector3 lvVert20 = arFaceFeature2.edges[0].base;
         for (s32 liEdge = 0; liEdge < liCount1; ++liEdge)
         {
             const FeatureEdge& lrEdge = arFaceFeature1.edges[liEdge];
@@ -1237,7 +1096,7 @@ RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
     s32 liEmitted = 0;   // r9 (v6)
     do
     {
-        const Vec4& lrVert2 = arFaceFeature2.edges[liEmitted].base;
+        const rw::math::vpu::Vector3& lrVert2 = arFaceFeature2.edges[liEmitted].base;
         lapPtsOn1[liEmitted] = ProjectOntoFacePlane(arFaceFeature1.ownNormal,
                                                     arFaceFeature1.edges[0].base,
                                                     lrVert2);
@@ -1272,8 +1131,7 @@ RwBool FindFaceFacePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, V
 // is consumed by the scatter loops (lwzx), so the per-candidate masks are
 // scalar bools and the vector compares against the length rows read lane x --
 // exactly the lane the hardware mask word 0 came from. The crossing
-// reciprocal is vrefp + two vnmsubfp/vmaddfp Newton-Raphson refines, rendered
-// as the exact division (the |denom| guard kills the divergent case). The
+// reciprocal is vrefp + two vnmsubfp/vmaddfp Newton-Raphson refines. The
 // vertex points rebuilt from SoA carry a 1.0f w lane (interleave against the
 // vcfsx(1,0) row), reproduced explicitly.
 //
@@ -1314,47 +1172,40 @@ namespace
     // -----------------------------------------------------------------------
     void SweepFaceVerticesPrism(const Feature& arVertexFace, s32 aiNumVerts,
                                 const Feature& arPlaneFace, s32 aiNumPlanes,
-                                const Vec4& arSepDir,
-                                const Vec4& arBase1, const Vec4& arNorm1,
-                                const Vec4& arBase2, const Vec4& arNorm2,
-                                Vec4* lapPtsOn1, Vec4* lapPtsOn2,
+                                const rw::math::vpu::Vector3& arSepDir,
+                                const rw::math::vpu::Vector3& arBase1, const rw::math::vpu::Vector3& arNorm1,
+                                const rw::math::vpu::Vector3& arBase2, const rw::math::vpu::Vector3& arNorm2,
+                                rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
                                 s32& riNumPts)
     {
-        const Vec4& lrPlaneBase = arPlaneFace.edges[0].base;
+        const rw::math::vpu::Vector3& lrPlaneBase = arPlaneFace.edges[0].base;
 
         bool labAccept[4];   // one mask lane per vertex
-        Vec4 laProj1[4];
-        Vec4 laProj2[4];
+        rw::math::vpu::Vector3 laProj1[4];
+        rw::math::vpu::Vector3 laProj2[4];
 
         for (s32 lk = 0; lk < aiNumVerts; ++lk)
         {
-            const Vec4& lrVert = arVertexFace.edges[lk].base;
+            const rw::math::vpu::Vector3& lrVert = arVertexFace.edges[lk].base;
 
             // d = dot3(sepDir, planeBase - V), accumulated y -> x -> z as the
             // vmulfp128 + two-vmaddfp chain does.
-            const f32 lfD = (lrPlaneBase.z - lrVert.z) * arSepDir.z
-                          + ((lrPlaneBase.x - lrVert.x) * arSepDir.x
-                           + ((lrPlaneBase.y - lrVert.y) * arSepDir.y));
+            const __vector4 delta = __vsubfp(lrPlaneBase.mV, lrVert.mV);
+            __vector4 d = __vmulfp(__vspltw(delta, 1), __vspltw(arSepDir.mV, 1));
+            d = __vmaddfp(__vspltw(delta, 0), __vspltw(arSepDir.mV, 0), d);
+            d = __vmaddfp(__vspltw(delta, 2), __vspltw(arSepDir.mV, 2), d);
+            rw::math::vpu::Vector3 lvSwept(__vmaddfp(arSepDir.mV, d, lrVert.mV));
+            lvSwept.mV.w = 1.0f;
 
-            // P = V + d*sepDir (vmaddfp per component); w = 1.0f from the
-            // vmrghw/vmrglw AoS rebuild against the vcfsx(1,0) row.
-            Vec4 lvSwept;
-            lvSwept.x = lfD * arSepDir.x + lrVert.x;
-            lvSwept.y = lfD * arSepDir.y + lrVert.y;
-            lvSwept.z = lfD * arSepDir.z + lrVert.z;
-            lvSwept.w = 1.0f;
-
-            // Prism-wall containment: accept iff no plane reports
-            // dot3(pn_m, P - base_m) >= 0.
             bool lbInside = true;
             for (s32 lm = 0; lm < aiNumPlanes; ++lm)
             {
                 const FeatureEdge& lrEdge = arPlaneFace.edges[lm];
-                const f32 lfPlaneTest =
-                      (lvSwept.z - lrEdge.base.z) * lrEdge.pn.z
-                    + ((lvSwept.x - lrEdge.base.x) * lrEdge.pn.x
-                     + ((lvSwept.y - lrEdge.base.y) * lrEdge.pn.y));
-                lbInside = lbInside && !(lfPlaneTest >= 0.0f);   // vcmpgefp + vnot
+                const __vector4 difference = __vsubfp(lvSwept.mV, lrEdge.base.mV);
+                __vector4 test = __vmulfp(__vspltw(difference, 1), __vspltw(lrEdge.pn.mV, 1));
+                test = __vmaddfp(__vspltw(difference, 0), __vspltw(lrEdge.pn.mV, 0), test);
+                test = __vmaddfp(__vspltw(difference, 2), __vspltw(lrEdge.pn.mV, 2), test);
+                lbInside = lbInside && !(test.x >= 0.0f);
             }
             labAccept[lk] = lbInside;
 
@@ -1384,12 +1235,12 @@ namespace
     // -----------------------------------------------------------------------
     void CrossFaceEdgesPrism(const Feature& arFace1, s32 aiNum1,
                              const Feature& arFace2, s32 aiNum2,
-                             const Vec4& arBase1, const Vec4& arNorm1,
-                             const Vec4& arBase2, const Vec4& arNorm2,
-                             Vec4* lapPtsOn1, Vec4* lapPtsOn2,
+                             const rw::math::vpu::Vector3& arBase1, const rw::math::vpu::Vector3& arNorm1,
+                             const rw::math::vpu::Vector3& arBase2, const rw::math::vpu::Vector3& arNorm2,
+                             rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
                              s32& riNumPts)
     {
-        Vec4 laCrossPoint[16];
+        rw::math::vpu::Vector3 laCrossPoint[16];
         bool labValid[16];
 
         for (s32 li = 0; li < aiNum1; ++li)
@@ -1406,10 +1257,16 @@ namespace
                 const f32 lfDenom = Dot3(lrEdge2.dir, lrEdge1.pn);
                 const f32 lfNumer = Dot3(Sub(lrEdge1.base, lrEdge2.base), lrEdge1.pn);
 
-                // t = numer/denom: vrefp + two Newton-Raphson refines,
-                // rendered as the exact division (equivalent whenever the
-                // |denom| guard below passes).
-                const f32 lfT = lfNumer / lfDenom;
+                // ARTIST uses vrefp and two ordered fused refinements.
+                const __vector4 denomV = {lfDenom, lfDenom, lfDenom, lfDenom};
+                const __vector4 numerV = {lfNumer, lfNumer, lfNumer, lfNumer};
+                const __vector4 one = __vcfsx(__vspltisw(1), 0);
+                __vector4 reciprocal = __vrefp(denomV);
+                __vector4 correction = __vnmsubfp(reciprocal, denomV, one);
+                reciprocal = __vmaddfp(reciprocal, correction, reciprocal);
+                correction = __vnmsubfp(reciprocal, denomV, one);
+                reciprocal = __vmaddfp(reciprocal, correction, reciprocal);
+                const f32 lfT = __vmulfp(numerV, reciprocal).x;
 
                 // Candidate P = base2 + dir2*t (vmaddfp, all four lanes),
                 // stored unconditionally like the asm's staging stvx128.
@@ -1422,12 +1279,12 @@ namespace
                 // broadcasts; lane x carries the compare.
                 const bool lbInRange2 =
                     (lfNumer * lfDenom >= 0.0f) &&
-                    !(std::fabs(lfNumer) > std::fabs(lrEdge2.length.x * lfDenom));
+                    !(std::fabs(lfNumer) > std::fabs(lrEdge2.length.mV.x * lfDenom));
 
                 // Foot-of-crossing span test along edge i:
                 // s = dot3(P - base1, dir1); keep 0 <= s <= length1.
                 const f32 lfS = Dot3(Sub(laCrossPoint[liSlot], lrEdge1.base), lrEdge1.dir);
-                const bool lbInRange1 = (lfS >= 0.0f) && !(lfS > lrEdge1.length.x);
+                const bool lbInRange1 = (lfS >= 0.0f) && !(lfS > lrEdge1.length.mV.x);
 
                 // Accept = |denom| > epsilon AND both range masks.
                 labValid[liSlot] = (std::fabs(lfDenom) > KF_PARALLEL_EPSILON_VEC) &&
@@ -1441,8 +1298,8 @@ namespace
         // both faces' support planes (vsubfp + vmsum3fp128 + vmaddfp per row;
         // the asm copies the mask rows aside first because it reuses the
         // staging buffer -- separate locals make the copy unnecessary).
-        Vec4 laProj1[16];
-        Vec4 laProj2[16];
+        rw::math::vpu::Vector3 laProj1[16];
+        rw::math::vpu::Vector3 laProj2[16];
         for (s32 liSlot = 0; liSlot < liNumSlots; ++liSlot)
         {
             laProj1[liSlot] = ProjectOntoFacePlane(arNorm1, arBase1, laCrossPoint[liSlot]);
@@ -1462,15 +1319,15 @@ namespace
     }
 }
 
-RwBool FindFaceFacePrism4x3(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                            Feature& arFaceFeature1, Feature& arFaceFeature2, const Vec4& arSepDir)
+RwBool FindFaceFacePrism4x3(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                            Feature& arFaceFeature1, Feature& arFaceFeature2, const rw::math::vpu::Vector3& arSepDir)
 {
     s32 liCount = 0;   // r26, running output row index
 
-    const Vec4& lrBase1 = arFaceFeature1.edges[0].base;   // ff1+0x10
-    const Vec4& lrNorm1 = arFaceFeature1.ownNormal;       // ff1+0x210
-    const Vec4& lrBase2 = arFaceFeature2.edges[0].base;   // ff2+0x10
-    const Vec4& lrNorm2 = arFaceFeature2.ownNormal;       // ff2+0x210
+    const rw::math::vpu::Vector3& lrBase1 = arFaceFeature1.edges[0].base;   // ff1+0x10
+    const rw::math::vpu::Vector3& lrNorm1 = arFaceFeature1.ownNormal;       // ff1+0x210
+    const rw::math::vpu::Vector3& lrBase2 = arFaceFeature2.edges[0].base;   // ff2+0x10
+    const rw::math::vpu::Vector3& lrNorm2 = arFaceFeature2.ownNormal;       // ff2+0x210
 
     // Phase 1 -- ff2 edge j x ff1 side plane i, 4x3 = 12 candidates.
     CrossFaceEdgesPrism(arFaceFeature1, 4, arFaceFeature2, 3,
@@ -1492,15 +1349,15 @@ RwBool FindFaceFacePrism4x3(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1
     return liCount != 0;
 }
 
-RwBool FindFaceFacePrism4x4(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
-                            Feature& arFaceFeature1, Feature& arFaceFeature2, const Vec4& arSepDir)
+RwBool FindFaceFacePrism4x4(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
+                            Feature& arFaceFeature1, Feature& arFaceFeature2, const rw::math::vpu::Vector3& arSepDir)
 {
     s32 liCount = 0;   // r11 across all phases
 
-    const Vec4& lrBase1 = arFaceFeature1.edges[0].base;   // r23 = ff1+0x10
-    const Vec4& lrNorm1 = arFaceFeature1.ownNormal;       // r22 = ff1+0x210
-    const Vec4& lrBase2 = arFaceFeature2.edges[0].base;   // r21 = ff2+0x10
-    const Vec4& lrNorm2 = arFaceFeature2.ownNormal;       // r20 = ff2+0x210
+    const rw::math::vpu::Vector3& lrBase1 = arFaceFeature1.edges[0].base;   // r23 = ff1+0x10
+    const rw::math::vpu::Vector3& lrNorm1 = arFaceFeature1.ownNormal;       // r22 = ff1+0x210
+    const rw::math::vpu::Vector3& lrBase2 = arFaceFeature2.edges[0].base;   // r21 = ff2+0x10
+    const rw::math::vpu::Vector3& lrNorm2 = arFaceFeature2.ownNormal;       // r20 = ff2+0x210
 
     // Phase 1 (0x82BB9444) + 2a/2b (0x82BB956C/0x82BB95C4): the 16 edge-edge
     // crossings, staged, projected, then emitted in pair order.
@@ -1540,7 +1397,7 @@ RwBool FindFaceFacePrism4x4(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1
 // ===========================================================================
 RwBool FindFeatureIntersectionPrism(rwc_FeatureIntersectionPrism& arRes,
                                     Feature& arFeature1, Feature& arFeature2,
-                                    const Vec4& arSepDir)
+                                    const rw::math::vpu::Vector3& arSepDir)
 {
     const s32 liCount1 = arFeature1.numedges;   // lwz r10, 0x230(r4)
     const s32 liCount2 = arFeature2.numedges;   // lwz r9,  0x230(r5)

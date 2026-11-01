@@ -104,44 +104,18 @@ namespace
     //   stvx unk_82181510,  0x10(vol)          ; transform.yAxis
     //   stvx unk_82181520,  0x20(vol)          ; transform.zAxis
     //
-    // ⚠️ [FLAG host-width delta -- the ONE store that is not console-exact.]
-    // The console stamp is `lwz r11, gVolumeVTable[type] ; stw r11, 0x40(vol)`: the
-    // RUNTIME per-type descriptor POINTER (BoxVolume reads dword_8327EEF0 == slot 4,
-    // SphereVolume reads dword_8327EEE4 == slot 1, where dword_8327EEE0 is
-    // rw::collision::gVolumeVTable, SDKs/EATech/rwcollision/volume.cpp:100). That
-    // pointer is 4 bytes on the console and 8 on the host, and the slot CANNOT widen --
-    // Volume::mfRadius/muGroupID/muSurfaceID/muFlags and the +0x44 half-extents are
-    // offset-pinned by the static_asserts in CollisionVolume.hpp and by the 96-byte
-    // serialised stride. Storing a truncated host pointer there is the exact
-    // console-value corruption class this project has shipped repeatedly, so it is not
-    // done. The EVolumeType id is stamped instead: that is the value this same slot
-    // legitimately carries in this tree's own *unfixed* state, defined by
-    // BrnPhysics::Props::FixableVolume::FixUp @0x828A87A0 (reads the enum here, writes
-    // gVolumeVTable[enum] back) and FixDown @0x828A8830 (reverses it), so one FixUp()
-    // call converts the record the day the slot can hold a host pointer.
-    // CONSEQUENCE: the enum-in-+0x40 representation is the DESIGNED HOST FORM, not a
-    // shortfall. Every consumer that dispatches recovers the descriptor as
-    // gVolumeVTable[enum] through the shared helper GetVolumeDescriptor
-    // (CollisionVolume.hpp:450-453) -- VolumeBBoxQuery.cpp:83, VolumeQuery.cpp:178 and
-    // PrimitiveIntersect.cpp:1259 each go through it. rw::collision::Volume::
-    // InitializeVTable (SDKs/EATech/rwcollision/volume.cpp) fills gVolumeVTable with the
-    // six descriptor records defined in vendor/renderware/collision/VolumeVTables.cpp,
-    // whose method slots are bound (see that file for the per-slot census).
-    // No host-width promotion is required -- FixableVolume::FixUp/FixDown are the
-    // console's validation half only, and the enum<->pointer swap is the identity here.
-    void ConstructVolume(Volume& arVolume, EVolumeType aeType)
+    void ConstructVolume(Volume& arVolume, VolumeType aeType)
     {
         arVolume.mfRadius    = KF_ZERO_FATNESS;
         arVolume.muGroupID   = 0;
         arVolume.muSurfaceID = 0;
         arVolume.muFlags     = KU_VOLUMEFLAG_ISENABLED;
 
-        arVolume.muVTableSlot = static_cast<u32>(aeType);   // [FLAG host-width delta]
-
-        arVolume.maTransform[0] = KV_BASIS_X;
-        arVolume.maTransform[3] = KV_ZERO;
-        arVolume.maTransform[1] = KV_BASIS_Y;
-        arVolume.maTransform[2] = KV_BASIS_Z;
+        arVolume.mpVTable = gVolumeVTable[aeType];
+        arVolume.mTransform.xAxis = Vector3(1.0f, 0.0f, 0.0f);
+        arVolume.mTransform.wAxis = Vector3(0.0f, 0.0f, 0.0f);
+        arVolume.mTransform.yAxis = Vector3(0.0f, 1.0f, 0.0f);
+        arVolume.mTransform.zAxis = Vector3(0.0f, 0.0f, 1.0f);
     }
 
     // Rotate a local basis row by the transform's 3x3 (the three vmulfp/vmaddfp chains
@@ -241,13 +215,13 @@ namespace
 // preserved because ConstructVolume also writes +0x50 (the fatness) and the two blocks
 // must not be interleaved differently from the console if anyone ever diffs them.
 // ---------------------------------------------------------------------------
-BoxVolume::BoxVolume(const Vec4& arHalfDimensions)
+BoxVolume::BoxVolume(Vector3 arHalfDimensions)
 {
-    ConstructVolume(*this, E_VOLUMETYPE_BBOX);
+    ConstructVolume(*this, VOLUMETYPEBOX);
 
-    mBoxData.mfHx = arHalfDimensions.x;
-    mBoxData.mfHy = arHalfDimensions.y;
-    mBoxData.mfHz = arHalfDimensions.z;
+    mBoxData.mfHx = arHalfDimensions.mV.x;
+    mBoxData.mfHy = arHalfDimensions.mV.y;
+    mBoxData.mfHz = arHalfDimensions.mV.z;
 }
 
 // ---------------------------------------------------------------------------
@@ -265,7 +239,7 @@ BoxVolume::BoxVolume(const Vec4& arHalfDimensions)
 // memory, i.e. a placement new, and the ctor's r3 return is what Initialize returns.
 // ---------------------------------------------------------------------------
 BoxVolume* BoxVolume::Initialize(const ::rw::Resource& arResource,
-                                 const Vec4&           arHalfDimensions)
+                                 Vector3               arHalfDimensions)
 {
     void* lpBlock = arResource.m_baseResources[0];
     if (lpBlock == 0)
@@ -298,60 +272,43 @@ BoxVolume* BoxVolume::Initialize(const ::rw::Resource& arResource,
 // The returned RwBool is a constant 1; ActiveRaceCar::AddToScene @0x822EB95C, the only
 // direct caller in the game, discards it.
 // ---------------------------------------------------------------------------
-RwBool BoxVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
+RwBool BoxVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
 {
-    f32 lfRow0X, lfRow0Y, lfRow0Z;
-    f32 lfRow1X, lfRow1Y, lfRow1Z;
-    f32 lfRow2X, lfRow2Y, lfRow2Z;
-    f32 lfRow3X, lfRow3Y, lfRow3Z;
-
-    if (lpTransform != 0)
+    __vector4 lx = mTransform.xAxis.mV;
+    __vector4 ly = mTransform.yAxis.mV;
+    __vector4 lz = mTransform.zAxis.mV;
+    __vector4 lw = mTransform.wAxis.mV;
+    if (lpTransform)
     {
-        RotateRow(maTransform[0], lpTransform, lfRow0X, lfRow0Y, lfRow0Z);
-        RotateRow(maTransform[1], lpTransform, lfRow1X, lfRow1Y, lfRow1Z);
-        RotateRow(maTransform[2], lpTransform, lfRow2X, lfRow2Y, lfRow2Z);
-        TransformPoint(maTransform[3], lpTransform, lfRow3X, lfRow3Y, lfRow3Z);
+        const __vector4 tx = lpTransform->xAxis.mV;
+        const __vector4 ty = lpTransform->yAxis.mV;
+        const __vector4 tz = lpTransform->zAxis.mV;
+        const __vector4 tw = lpTransform->wAxis.mV;
+        __vector4 x = __vmulfp(__vspltw(lx, 0), tx);
+        __vector4 y = __vmulfp(__vspltw(ly, 0), tx);
+        __vector4 z = __vmulfp(__vspltw(lz, 0), tx);
+        __vector4 w = __vmaddfp(__vspltw(lw, 0), tx, tw);
+        x = __vmaddfp(__vspltw(lx, 1), ty, x);
+        y = __vmaddfp(__vspltw(ly, 1), ty, y);
+        z = __vmaddfp(__vspltw(lz, 1), ty, z);
+        w = __vmaddfp(__vspltw(lw, 1), ty, w);
+        lx = __vmaddfp(__vspltw(lx, 2), tz, x);
+        ly = __vmaddfp(__vspltw(ly, 2), tz, y);
+        lz = __vmaddfp(__vspltw(lz, 2), tz, z);
+        lw = __vmaddfp(__vspltw(lw, 2), tz, w);
     }
-    else
-    {
-        lfRow0X = maTransform[0].x;  lfRow0Y = maTransform[0].y;  lfRow0Z = maTransform[0].z;
-        lfRow1X = maTransform[1].x;  lfRow1Y = maTransform[1].y;  lfRow1Z = maTransform[1].z;
-        lfRow2X = maTransform[2].x;  lfRow2Y = maTransform[2].y;  lfRow2Z = maTransform[2].z;
-        lfRow3X = maTransform[3].x;  lfRow3Y = maTransform[3].y;  lfRow3Z = maTransform[3].z;
-    }
-
-    // Half extent per axis: |row0|*hx + |row1|*hy + |row2|*hz + the isotropic fatness.
-    const f32 lfExtentX = std::fabs(lfRow0X) * mBoxData.mfHx
-                        + std::fabs(lfRow1X) * mBoxData.mfHy
-                        + std::fabs(lfRow2X) * mBoxData.mfHz + mfRadius;
-    const f32 lfExtentY = std::fabs(lfRow0Y) * mBoxData.mfHx
-                        + std::fabs(lfRow1Y) * mBoxData.mfHy
-                        + std::fabs(lfRow2Y) * mBoxData.mfHz + mfRadius;
-    const f32 lfExtentZ = std::fabs(lfRow0Z) * mBoxData.mfHx
-                        + std::fabs(lfRow1Z) * mBoxData.mfHy
-                        + std::fabs(lfRow2Z) * mBoxData.mfHz + mfRadius;
-
-    // `Set` rather than `mMin = Vector3(x,y,z)` -- SAME three lane stores
-    // (SDKs/EATech/include/rw/math/vpu/detail/vector3_type_inline.h:39 vs :232). The
-    // original reason was an LNK2005: the ctor spelling emits a COMDAT
-    // `rw::math::vpu::Vector3::Vector3(float,float,float)` that collided with the strong
-    // out-of-line copy in SDKs/EATech/rw/math/vpu/vector3.cpp.
-    // ⚠️ THAT REASON IS SPENT (corrected 2026-08-19, wave Q5 vtbind -- a wrong comment is a
-    // real defect): the wave-Q5 integration DELETED that bat line, and build_game_exe.bat
-    // now says so at :2610. The spelling is kept anyway because `Set` is the direction
-    // scratchpad/waveQ2/rwvol.owner.md section 4.5 item 3 wants these sites moved in, and
-    // because switching them would change nothing observable --
-    //
-    // ⚠️ NEITHER SPELLING WRITES LANE 3. Both `Set` and the 3-float ctor leave the W lane of
-    // mMin/mMax EXACTLY as the caller's buffer had it, while the console's `stvx128` stores
-    // all sixteen bytes (its W lane is row3.w -/+ extent.w). MEASURED at run time: the
-    // wave-Q5 descriptor probe compared a zeroed AABBox against a stack-garbage one and the
-    // ONLY difference was those two words. Nothing geometric reads them today, but any
-    // future memcmp/hash of an AABBox (a cache key, a dedup, a replay checksum) would be
-    // non-deterministic. The fix is a tree-wide one in the EATech Vector3 vocabulary, not
-    // here -- reported in scratchpad/waveQ5/vtbind.owner.md.
-    arResult.mMin.Set(lfRow3X - lfExtentX, lfRow3Y - lfExtentY, lfRow3Z - lfExtentZ);
-    arResult.mMax.Set(lfRow3X + lfExtentX, lfRow3Y + lfExtentY, lfRow3Z + lfExtentZ);
+    const __vector4 ones = __vspltisw(-1);
+    const __vector4 sign = __vslw(ones, ones);
+    const __vector4 hx = __vspltw(__lvlx(&mBoxData.mfHx, 0), 0);
+    const __vector4 hy = __vspltw(__lvlx(&mBoxData.mfHy, 0), 0);
+    const __vector4 hz = __vspltw(__lvlx(&mBoxData.mfHz, 0), 0);
+    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
+    __vector4 extent = __vmulfp(__vandc(ly, sign), hy);
+    extent = __vmaddfp(__vandc(lx, sign), hx, extent);
+    extent = __vmaddfp(__vandc(lz, sign), hz, extent);
+    extent = __vaddfp(extent, radius);
+    arResult.mMin.mV = __vsubfp(lw, extent);
+    arResult.mMax.mV = __vaddfp(lw, extent);
     return 1;
 }
 
@@ -369,24 +326,22 @@ RwBool BoxVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABBox& a
 //   v0  = (v0 + radius) * 2.0f
 //   stvx128 v0, r3
 // ---------------------------------------------------------------------------
-Vec4 BoxVolume::GetBBoxDiag() const
+Vector3 BoxVolume::GetBBoxDiag() const
 {
-    const Vec4& lvRow0 = maTransform[0];
-    const Vec4& lvRow1 = maTransform[1];
-    const Vec4& lvRow2 = maTransform[2];
-
-    const f32 lfDiagX = 2.0f * (std::fabs(lvRow0.x) * mBoxData.mfHx
-                              + std::fabs(lvRow1.x) * mBoxData.mfHy
-                              + std::fabs(lvRow2.x) * mBoxData.mfHz + mfRadius);
-    const f32 lfDiagY = 2.0f * (std::fabs(lvRow0.y) * mBoxData.mfHx
-                              + std::fabs(lvRow1.y) * mBoxData.mfHy
-                              + std::fabs(lvRow2.y) * mBoxData.mfHz + mfRadius);
-    const f32 lfDiagZ = 2.0f * (std::fabs(lvRow0.z) * mBoxData.mfHx
-                              + std::fabs(lvRow1.z) * mBoxData.mfHy
-                              + std::fabs(lvRow2.z) * mBoxData.mfHz + mfRadius);
-
-    const Vec4 lvDiag = { lfDiagX, lfDiagY, lfDiagZ, 0.0f };
-    return lvDiag;
+    const __vector4 lOnes = __vspltisw(-1);
+    const __vector4 lSign = __vslw(lOnes, lOnes);
+    const __vector4 lX = __vandc(mTransform.xAxis.mV, lSign);
+    const __vector4 lY = __vandc(mTransform.yAxis.mV, lSign);
+    const __vector4 lZ = __vandc(mTransform.zAxis.mV, lSign);
+    const __vector4 lHx = __vspltw(__lvlx(&mBoxData.mfHx, 0), 0);
+    const __vector4 lHy = __vspltw(__lvlx(&mBoxData.mfHy, 0), 0);
+    const __vector4 lHz = __vspltw(__lvlx(&mBoxData.mfHz, 0), 0);
+    const __vector4 lRadius = __vspltw(__lvlx(&mfRadius, 0), 0);
+    __vector4 lExtent = __vmulfp(lY, lHy);
+    lExtent = __vmaddfp(lX, lHx, lExtent);
+    lExtent = __vmaddfp(lZ, lHz, lExtent);
+    lExtent = __vaddfp(lExtent, lRadius);
+    return Vector3(__vmulfp(lExtent, __vcfsx(__vspltisw(2), 0)));
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +369,7 @@ SphereVolume* SphereVolume::Initialize(const ::rw::Resource& arResource, f32 afR
 
     SphereVolume* lpVolume = static_cast<SphereVolume*>(lpBlock);
 
-    ConstructVolume(*lpVolume, E_VOLUMETYPE_SPHERE);
+    ConstructVolume(*lpVolume, VOLUMETYPESPHERE);
     lpVolume->mfRadius = afRadius;
 
     return lpVolume;
@@ -433,27 +388,18 @@ SphereVolume* SphereVolume::Initialize(const ::rw::Resource& arResource, f32 afR
 // Only ONE row of the volume's own transform is read (+0x30) -- a sphere has no
 // orientation. abTight (r5) is never read here either.
 // ---------------------------------------------------------------------------
-RwBool SphereVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
+RwBool SphereVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
 {
-    f32 lfCentreX;
-    f32 lfCentreY;
-    f32 lfCentreZ;
-
-    if (lpTransform != 0)
+    __vector4 centre = mTransform.wAxis.mV;
+    if (lpTransform)
     {
-        TransformPoint(maTransform[3], lpTransform, lfCentreX, lfCentreY, lfCentreZ);
+        __vector4 result = __vmaddfp(__vspltw(centre, 0), lpTransform->xAxis.mV, lpTransform->wAxis.mV);
+        result = __vmaddfp(__vspltw(centre, 1), lpTransform->yAxis.mV, result);
+        centre = __vmaddfp(__vspltw(centre, 2), lpTransform->zAxis.mV, result);
     }
-    else
-    {
-        lfCentreX = maTransform[3].x;
-        lfCentreY = maTransform[3].y;
-        lfCentreZ = maTransform[3].z;
-    }
-
-    // `Set` for the same reason as BoxVolume::GetBBox above -- including the W-lane
-    // caveat recorded there.
-    arResult.mMin.Set(lfCentreX - mfRadius, lfCentreY - mfRadius, lfCentreZ - mfRadius);
-    arResult.mMax.Set(lfCentreX + mfRadius, lfCentreY + mfRadius, lfCentreZ + mfRadius);
+    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
+    arResult.mMin.mV = __vsubfp(centre, radius);
+    arResult.mMax.mV = __vaddfp(centre, radius);
     return 1;
 }
 
@@ -467,12 +413,11 @@ RwBool SphereVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABBox
 //                                           ; Vector3(s,s,s) construction)
 //   stvx128 v13, r0, r3
 // ---------------------------------------------------------------------------
-Vec4 SphereVolume::GetBBoxDiag() const
+Vector3 SphereVolume::GetBBoxDiag() const
 {
-    const f32 lfDiameter = 2.0f * mfRadius;
-
-    const Vec4 lvDiag = { lfDiameter, lfDiameter, lfDiameter, 0.0f };
-    return lvDiag;
+    const __vector4 lRadius = __vspltw(__lvlx(&mfRadius, 0), 0);
+    const __vector4 lTwo = __vcfsx(__vspltisw(2), 0);
+    return Vector3(__vmulfp(lTwo, lRadius));
 }
 
 // ===========================================================================
@@ -505,11 +450,11 @@ Vec4 SphereVolume::GetBBoxDiag() const
 // VTable banner. On x64 both spellings pass a pointer, so the two host bodies really are
 // identical; the console's were not.
 // ---------------------------------------------------------------------------
-RwBool SphereVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vec4& /*arDir*/,
+RwBool SphereVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vector3& /*arDir*/,
                                        Feature& arFeature) const
 {
     arFeature.numedges = 0;
-    arFeature.pt       = maTransform[3];
+    arFeature.pt       = mTransform.wAxis;
     return 1;
 }
 
@@ -533,11 +478,11 @@ RwBool SphereVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vec4& /*arDir*/,
 // GPInstance::mMethods, and already bodied in GPBox.cpp). Reconstructing a face feature
 // here would be invention.
 // ---------------------------------------------------------------------------
-RwBool BoxVolume::GetMaximumFeature(RwBool /*abCcw*/, Vec4 /*aDir*/,
+RwBool BoxVolume::GetMaximumFeature(RwBool /*abCcw*/, Vector3 /*aDir*/,
                                     Feature& arFeature) const
 {
     arFeature.numedges = 0;
-    arFeature.pt       = maTransform[3];
+    arFeature.pt       = mTransform.wAxis;
     return 1;
 }
 
@@ -573,34 +518,24 @@ RwBool BoxVolume::GetMaximumFeature(RwBool /*abCcw*/, Vec4 /*aDir*/,
 // is pointer-widened on x64 (GPInstance.hpp:164), so the host spelling is a whole-struct
 // assignment through a typed array index. Same treatment as CapsuleVolume.cpp:161.
 // ---------------------------------------------------------------------------
-RwBool SphereVolume::CreateGPInstance(GPInstance& arInstance, const Vec4* lpTransform) const
+RwBool SphereVolume::CreateGPInstance(GPInstance& arInstance, const Matrix44Affine* lpTransform) const
 {
-    Vec4 lvCentre;   // v0 -- the (optionally transformed) centre
-
-    if (lpTransform != 0)
+    __vector4 centre = mTransform.wAxis.mV;
+    if (lpTransform)
     {
-        lvCentre = TransformPoint4(maTransform[3], lpTransform);
+        __vector4 result = __vmaddfp(__vspltw(centre, 0), lpTransform->xAxis.mV, lpTransform->wAxis.mV);
+        result = __vmaddfp(__vspltw(centre, 1), lpTransform->yAxis.mV, result);
+        centre = __vmaddfp(__vspltw(centre, 2), lpTransform->zAxis.mV, result);
     }
-    else
-    {
-        lvCentre = maTransform[3];
-    }
-
-    // FLAG (host width), identical to CapsuleVolume.cpp:180: the console stores its
-    // 4-byte `this` straight into the u32 mVolumeTag word and the batch kernels copy that
-    // word verbatim into PrimitivePairIntersectResult::v1/v2, so this truncates on x64.
-    // The fix is to promote GPInstance::mVolumeTag (and PPIR::v1/v2) to pointer width,
-    // which belongs to the GPInstance TU, not here.
-    arInstance.mVolumeTag         = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
-    arInstance.mPos               = lvCentre;
-    arInstance.mNumFaceNormals    = 0;
+    arInstance.mVolumeTag = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
+    arInstance.mPos.mV = centre;
+    arInstance.mNumFaceNormals = 0;
     arInstance.mNumEdgeDirections = 0;
-    arInstance.mVolumeType        = GPInstance::SPHERE;   // stw 1, 0x90
-    arInstance.mUserTag           = 0;
-    arInstance.mFatness           = mfRadius;
-    arInstance.mFlags             = muFlags;
-    arInstance.mMethods           = g_aGPVolumeMethods[GPInstance::SPHERE];
-
+    arInstance.mVolumeType = GPInstance::SPHERE;
+    arInstance.mUserTag = 0;
+    arInstance.mFatness = mfRadius;
+    arInstance.mFlags = muFlags;
+    arInstance.mMethods = g_aGPVolumeMethods[GPInstance::SPHERE];
     return 1;
 }
 
@@ -648,54 +583,62 @@ RwBool SphereVolume::CreateGPInstance(GPInstance& arInstance, const Vec4* lpTran
 // g_aGPVolumeMethods; the 0x10 stride and the 0xA4 base are console-only (see the sphere
 // body above).
 // ---------------------------------------------------------------------------
-RwBool BoxVolume::CreateGPInstance(GPInstance& arInstance, const Vec4* lpTransform) const
+RwBool BoxVolume::CreateGPInstance(GPInstance& arInstance, const Matrix44Affine* lpTransform) const
 {
-    Vec4 lvRow0;   // v0  -- rotated  transform.xAxis
-    Vec4 lvRow1;   // v13 -- rotated  transform.yAxis
-    Vec4 lvRow2;   // v12 -- rotated  transform.zAxis
-    Vec4 lvRow3;   // v10 -- transformed transform.wAxis (the centre)
-
-    if (lpTransform != 0)
+    __vector4 lx = mTransform.xAxis.mV;
+    __vector4 ly = mTransform.yAxis.mV;
+    __vector4 lz = mTransform.zAxis.mV;
+    __vector4 lw = mTransform.wAxis.mV;
+    if (lpTransform)
     {
-        lvRow0 = RotateRow4(maTransform[0], lpTransform);
-        lvRow1 = RotateRow4(maTransform[1], lpTransform);
-        lvRow2 = RotateRow4(maTransform[2], lpTransform);
-        lvRow3 = TransformPoint4(maTransform[3], lpTransform);
+        const __vector4 tx = lpTransform->xAxis.mV;
+        const __vector4 ty = lpTransform->yAxis.mV;
+        const __vector4 tz = lpTransform->zAxis.mV;
+        const __vector4 tw = lpTransform->wAxis.mV;
+        __vector4 x = __vmulfp(__vspltw(lx, 0), tx);
+        __vector4 y = __vmulfp(__vspltw(ly, 0), tx);
+        __vector4 z = __vmulfp(__vspltw(lz, 0), tx);
+        __vector4 w = __vmaddfp(__vspltw(lw, 0), tx, tw);
+        x = __vmaddfp(__vspltw(lx, 1), ty, x);
+        y = __vmaddfp(__vspltw(ly, 1), ty, y);
+        z = __vmaddfp(__vspltw(lz, 1), ty, z);
+        w = __vmaddfp(__vspltw(lw, 1), ty, w);
+        lx = __vmaddfp(__vspltw(lx, 2), tz, x);
+        ly = __vmaddfp(__vspltw(ly, 2), tz, y);
+        lz = __vmaddfp(__vspltw(lz, 2), tz, z);
+        lw = __vmaddfp(__vspltw(lw, 2), tz, w);
     }
-    else
-    {
-        lvRow0 = maTransform[0];
-        lvRow1 = maTransform[1];
-        lvRow2 = maTransform[2];
-        lvRow3 = maTransform[3];
-    }
-
-    // FLAG (host width) -- see SphereVolume::CreateGPInstance above.
-    arInstance.mVolumeTag         = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
-    arInstance.mPos               = lvRow3;
-    arInstance.mVolumeType        = GPInstance::BOX;      // stw 4, 0x90
-    arInstance.mUserTag           = 0;
-    arInstance.mNumFaceNormals    = 3;
+    const __vector4 hx = __vspltw(__lvlx(&mBoxData.mfHx, 0), 0);
+    const __vector4 hy = __vspltw(__lvlx(&mBoxData.mfHy, 0), 0);
+    const __vector4 hz = __vspltw(__lvlx(&mBoxData.mfHz, 0), 0);
+    __vector4 dims = __vrlimi(hx, hy, 4, 0);
+    dims = __vrlimi(dims, hz, 2, 0);
+    arInstance.mVolumeTag = static_cast<u32>(reinterpret_cast<uintptr_t>(this));
+    arInstance.mPos.mV = lw;
+    arInstance.mVolumeType = GPInstance::BOX;
+    arInstance.mUserTag = 0;
+    arInstance.mNumFaceNormals = 3;
     arInstance.mNumEdgeDirections = 3;
-
-    arInstance.mFaceNormals[0]    = lvRow0;
-    arInstance.mEdgeDirections[0] = lvRow0;
-    arInstance.mFaceNormals[1]    = lvRow1;
-    arInstance.mEdgeDirections[1] = lvRow1;
-    arInstance.mFaceNormals[2]    = lvRow2;
-    arInstance.mEdgeDirections[2] = lvRow2;
-
-    arInstance.mDimensions.x = mBoxData.mfHx;
-    arInstance.mDimensions.y = mBoxData.mfHy;
-    arInstance.mDimensions.z = mBoxData.mfHz;
-    arInstance.mDimensions.w = mBoxData.mfHx;   // the dumped vperm control, see above
-
+    arInstance.mFaceNormals[0].mV = lx;
+    arInstance.mEdgeDirections[0].mV = lx;
+    arInstance.mFaceNormals[1].mV = ly;
+    arInstance.mEdgeDirections[1].mV = ly;
+    arInstance.mFaceNormals[2].mV = lz;
+    arInstance.mEdgeDirections[2].mV = lz;
+    arInstance.mDimensions.mV = dims;
     arInstance.mFatness = mfRadius;
-    arInstance.mFlags   = muFlags;
+    arInstance.mFlags = muFlags;
     arInstance.mMethods = g_aGPVolumeMethods[GPInstance::BOX];
-
     return 1;
 }
 
 } // namespace collision
 } // namespace rw
+
+// ARTIST folds these genuine per-type methods to 82BAC980, 82B0F1B8 or 82AD5078.
+namespace rw { namespace collision {
+RwBool BoxVolume::GetInterval(Vector3, Interval&) const { return 1; }
+void BoxVolume::Release() {}
+RwBool SphereVolume::GetInterval(const Vector3&, Interval&) const { return 1; }
+void SphereVolume::Release() {}
+} }

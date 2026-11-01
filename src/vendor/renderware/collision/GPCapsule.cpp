@@ -117,61 +117,28 @@ namespace
 //                          float 0.05)
 //   flt_82001CC0 = 0.0f   (end-selection compare)
 // ===========================================================================
-void GPCapsule::GetMaximumFeature(const GPInstance* lpThis, RwBool /*abCcw*/,
-                                  const Vec4& arDir, Feature& arFeature)
+void GPCapsule::GetMaximumFeature(RwBool /*abCcw*/, math::vpu::Vector3 arDir, Feature& arFeature) const
 {
-    // flt_82180458 -- the vertex-vs-edge axis-projection threshold. FLAGGED:
-    // the NAME is the reconstruction's; the VALUE (0.05f) is the extract's.
-    const f32 KF_VERTEX_PROJ_THRESHOLD = 0.05f;
-
-    const Vec4& lvAxis   = lpThis->mEdgeDirections[0];   // this+0x40
-    const Vec4& lvCentre = lpThis->mPos;                 // this+0x00
-    const f32   lfHalfHeight = lpThis->mDimensions.x;    // this+0x70, vspltw 0
-
-    // vmsum3fp128 v13, v0, v1 -- dot3(axis, dir) (spilled; read on the scalar
-    // fpu for both compares).
-    const f32 lfAxisProj = Dot3(lvAxis, arDir);
-
-    // fcmpu f12(fabs), f0(0.05f); bge -> vertex. Polarity preserved: an
-    // unordered (NaN) compare falls into the edge path on both machines.
-    if (std::fabs(lfAxisProj) >= KF_VERTEX_PROJ_THRESHOLD)
+    const __vector4 axis = mEdgeDirections[0].mV;
+    const __vector4 halfHeight = __vspltw(mDimensions.mV, 0);
+    const f32 projection = __vmsum3fp(axis, arDir.mV).x;
+    if (std::fabs(projection) < 0.05f)
     {
-        // ---- vertex path: the supporting end cap centre -------------------
-        Vec4 lvVertex;
-        // fcmpu f13, 0.0f; ble -> minus end (unordered/NaN also takes it).
-        if (lfAxisProj > 0.0f)
-        {
-            // vmaddfp v0, v0, v13, v12 == axis * splat(h) + centre.
-            lvVertex = MaddScalar(lvAxis, lfHalfHeight, lvCentre);
-        }
-        else
-        {
-            // vmulfp128 + vsubfp == centre - axis * splat(h).
-            lvVertex = Sub(lvCentre, Scale(lvAxis, lfHalfHeight));
-        }
-
-        arFeature.pt       = lvVertex;   // stvx128 v0, r31, 0x220
-        arFeature.numedges = 0;          // stw r30(0), 0x230(r31)
+        const __vector4 scaled = __vmulfp(axis, halfHeight);
+        const math::vpu::Vector3 plus(__vaddfp(mPos.mV, scaled));
+        const math::vpu::Vector3 minus(__vsubfp(mPos.mV, scaled));
+        const FeatureEdge edge(plus, minus);
+        memcpy(&arFeature.edges[0], &edge, sizeof(edge));
+        arFeature.numedges = 1;
     }
     else
     {
-        // ---- edge path: the whole axis segment ----------------------------
-        const Vec4 lvHalfVec  = Scale(lvAxis, lfHalfHeight);   // vmulfp128
-        const Vec4 lvEndMinus = Sub(lvCentre, lvHalfVec);      // v12 -> var_80
-        const Vec4 lvEndPlus  = Add(lvCentre, lvHalfVec);      // v0  -> var_70
-
-        // FeatureEdge::FeatureEdge @ 0x82BA85B8 (committed, FeatureEdge.cpp):
-        // arP1 = the + end (r4 = &var_70), arP2 = the - end (r5 = &var_80).
-        const FeatureEdge lEdge(lvEndPlus, lvEndMinus);
-
-        // memcpy(r31+0x10, &edge, 0x40) -> edges[0]; sizeof(FeatureEdge) is
-        // static-asserted == 0x40 in the FeatureEdge home.
-        std::memcpy(&arFeature.edges[0], &lEdge, sizeof(FeatureEdge));
-
-        arFeature.numedges = 1;          // stw 1, 0x230(r31)
+        if (projection > 0.0f)
+            arFeature.pt.mV = __vmaddfp(axis, halfHeight, mPos.mV);
+        else
+            arFeature.pt.mV = __vsubfp(mPos.mV, __vmulfp(axis, halfHeight));
+        arFeature.numedges = 0;
     }
-
-    // Common tail: stw r30(0), 0(r31).
     arFeature.region = 0;
 }
 
@@ -185,28 +152,17 @@ void GPCapsule::GetMaximumFeature(const GPInstance* lpThis, RwBool /*abCcw*/,
 // the raw centre projection before the extent fix-up. The Interval padding
 // rows (+0x20..+0x2F) are not written, exactly as on the console.
 // ===========================================================================
-void GPCapsule::GetInterval(const GPInstance* lpThis,
-                            const Vec4& arDir, Interval& arInterval)
+void GPCapsule::GetInterval(math::vpu::Vector3 arDir, Interval& arInterval) const
 {
-    // vmsum3fp128 v0, v0, v1 -- dot3(mPos, dir), lane-broadcast.
-    const f32 lfCentreProj = Dot3(lpThis->mPos, arDir);
-
-    // Seed both rows with the centre projection (stvx128 pair @ 0x82BAFB88).
-    arInterval.min = Splat(lfCentreProj);
-    arInterval.max = Splat(lfCentreProj);
-
-    // halfHeight = mDimensions.x (lvx this+0x70 + vspltw 0 == the canonical
-    // GPCapsule::HalfHeight()); a = dot3(mEdgeDirections[0], dir).
-    const f32 lfHalfHeight = lpThis->mDimensions.x;
-    const f32 lfAxisProj   = Dot3(lpThis->mEdgeDirections[0], arDir);
-
-    // Scalar-fpu extent, exactly the asm's fabs + fmuls operand order:
-    // e = fabs(a) * halfHeight.
-    const f32 lfExtent = std::fabs(lfAxisProj) * lfHalfHeight;
-
-    // vsubfp / vaddfp against the splat(e) quad.
-    arInterval.min = Splat(lfCentreProj - lfExtent);   // stvx128 v0, r0, r4
-    arInterval.max = Splat(lfCentreProj + lfExtent);   // stvx128 v0, r0, r10
+    const __vector4 projection = __vmsum3fp(mPos.mV, arDir.mV);
+    arInterval.min.mV = projection;
+    arInterval.max.mV = projection;
+    const f32 halfHeight = mDimensions.mV.x;
+    const f32 direction = __vmsum3fp(mEdgeDirections[0].mV, arDir.mV).x;
+    const f32 extent = std::fabs(direction) * halfHeight;
+    const __vector4 value = __vspltw(__lvlx(&extent, 0), 0);
+    arInterval.min.mV = __vsubfp(projection, value);
+    arInterval.max.mV = __vaddfp(projection, value);
 }
 
 // ===========================================================================
@@ -217,35 +173,24 @@ void GPCapsule::GetInterval(const GPInstance* lpThis,
 // preserved, the Interval padding rows are not written, and the 0x30 output
 // stride is sizeof(Interval) (static-asserted in GPInstance.hpp).
 // ===========================================================================
-void GPCapsule::GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
-                             u32 auNumDirs, Interval* lapIntervals)
+void GPCapsule::GetIntervals(const math::vpu::Vector3* lapDirs, u32 auNumDirs, Interval* lapIntervals) const
 {
-    // cmplwi/beq: the zero-count call falls straight out.
-    for (u32 luDir = 0; luDir < auNumDirs; ++luDir)
+    for (u32 i = 0; i < auNumDirs; ++i)
     {
-        const Vec4& lrDir      = lapDirs[luDir];
-        Interval&   lrInterval = lapIntervals[luDir];
-
-        // vmsum3fp128 v0, v13, v0 -- dot3(mPos, dirs[i]), lane-broadcast.
-        const f32 lfCentreProj = Dot3(lpThis->mPos, lrDir);
-
-        // Seed both rows with the centre projection (stvx128 pair
-        // @ 0x82BAFC54/58).
-        lrInterval.min = Splat(lfCentreProj);
-        lrInterval.max = Splat(lfCentreProj);
-
-        // a = dot3(mEdgeDirections[0], dir); halfHeight = mDimensions.x.
-        const f32 lfAxisProj   = Dot3(lpThis->mEdgeDirections[0], lrDir);
-        const f32 lfHalfHeight = lpThis->mDimensions.x;
-
-        // Scalar-fpu extent, exactly the asm's fabs + fmuls operand order.
-        const f32 lfExtent = std::fabs(lfAxisProj) * lfHalfHeight;
-
-        // vsubfp / vaddfp against the splat(e) quad.
-        lrInterval.min = Splat(lfCentreProj - lfExtent);   // stvx128 -> r11
-        lrInterval.max = Splat(lfCentreProj + lfExtent);   // stvx128 -> r8
+        const __vector4 projection = __vmsum3fp(mPos.mV, lapDirs[i].mV);
+        lapIntervals[i].min.mV = projection;
+        lapIntervals[i].max.mV = projection;
+        const f32 halfHeight = mDimensions.mV.x;
+        const f32 direction = __vmsum3fp(mEdgeDirections[0].mV, lapDirs[i].mV).x;
+        const f32 extent = std::fabs(direction) * halfHeight;
+        const __vector4 value = __vspltw(__lvlx(&extent, 0), 0);
+        lapIntervals[i].min.mV = __vsubfp(projection, value);
+        lapIntervals[i].max.mV = __vaddfp(projection, value);
     }
 }
+
+// ARTIST's GP capsule bbox slot is the folded empty method at 82AD5078.
+void GPCapsule::GetBBox(AABBox&) const {}
 
 } // namespace collision
 } // namespace rw

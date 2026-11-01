@@ -1,4 +1,5 @@
 #include "vendor/renderware/collision/ClusteredMeshQuery.hpp"
+#include "vendor/renderware/collision/VolumeQuery.hpp"
 
 #include <cmath>     // sqrt
 #include <cstddef>   // offsetof
@@ -402,142 +403,41 @@ f32 ComputeEdgeCos(u8* lpConvexFlag,
 //     either the result buffer or the instanced-volume pool is full.
 // ===========================================================================
 
-namespace
-{
-    // TU-local view of the VolumeLineQuery fields AddQueryResult touches
-    // (offsets attested by the this-relative loads in the 0x82BB1588 asm).
-    // It matches the committed layout in src/SDKs/EATech/rwcollision/
-    // volumelinequery.cpp where the two overlap (result-list pointer @ +0x10;
-    // +0x18 is the active-intersection budget GetAllIntersections seeds,
-    // +0xEC the result capacity Initialize seeds) and extends past its end
-    // with the two aggregate-tag fields @ +0x104/+0x108. A view struct is used
-    // instead of a second class definition to avoid an ODR clash with that TU.
-    struct LineQueryView
-    {
-        u32 muInputVolsBase;             // +0x00  input volume-pointer stack base
-        u32 muPad04[2];                  // +0x04..+0x0B
-        u32 muCurrInput;                 // +0x0C  1-based cursor into the stack
-        u32 muResListPtr;                // +0x10  result-list base (not read here)
-        u32 muResCursor;                 // +0x14  results consumed so far
-        u32 muResBudget;                 // +0x18  result budget for this pass
-        u8  maPad1C[0xE8 - 0x1C];        // +0x1C..+0xE7
-        u32 muPoolCursor;                // +0xE8  instanced-volume pool cursor
-        u32 muResCapacity;               // +0xEC  instanced-volume pool capacity
-        u8  maPadF0[0x104 - 0xF0];       // +0xF0..+0x103
-        u32 muTag;                       // +0x104 parent aggregate tag (low bits)
-        u8  muNumTagBits;                // +0x108 parent tag bit count
-    };
 
-    CGS_STATIC_ASSERT((offsetof(LineQueryView, muResCursor)  == 0x14),  "view layout");
-    CGS_STATIC_ASSERT((offsetof(LineQueryView, muPoolCursor) == 0xE8),  "view layout");
-    CGS_STATIC_ASSERT((offsetof(LineQueryView, muTag)        == 0x104), "view layout");
-    CGS_STATIC_ASSERT((offsetof(LineQueryView, muNumTagBits) == 0x108), "view layout");
 
-    // Copy one 16-byte transform row into the VolRef's cached row (the
-    // lvx128/stvx128 pair; VolRef carries its own nested row type).
-    inline void CopyRow(VolRef::Vec4& rDst, const Vec4& rSrc)
-    {
-        rDst.x = rSrc.x;
-        rDst.y = rSrc.y;
-        rDst.z = rSrc.z;
-        rDst.w = rSrc.w;
-    }
-}
-
-int AddQueryResult(VolumeLineQuery*              lpQuery,
+int AddQueryResult(VolumeLineQuery* lpQuery,
                    VolumeLineSegIntersectResult* lpResult,
-                   const TriangleVolume*         lpVolume,
-                   const Vec4*                   lpTransform,
-                   const Vec4&                   rLocalPosition,
-                   const Vec4&                   rLineParam,
-                   const Vec4&                   rVolParam,
-                   const Vec4&                   rNormal,
-                   const u32*                    lpClusterId,
-                   const u32*                    lpUnitOffset,
-                   const u8*                     lpNumTagBits,
-                   const u32*                    lpNumMeshTagBits,
-                   const u32*                    lpNumClusterTagBits)
+                   const TriangleVolume* lpVolume,
+                   const math::vpu::Matrix44Affine* lpTransform,
+                   math::vpu::Vector3 localPosition,
+                   math::vpu::VecFloat lineParam,
+                   math::vpu::Vector3 volParam,
+                   math::vpu::Vector3 normal,
+                   const u32* lpClusterId,
+                   const u32* lpUnitOffset,
+                   const u8* lpNumTagBits,
+                   const u32* lpNumMeshTagBits,
+                   const u32* lpNumClusterTagBits)
 {
-    const LineQueryView* lpView = reinterpret_cast<const LineQueryView*>(lpQuery);
-
-    // lwz r23, -4(...): the input volume the query is currently walking --
-    // inputVols[currInput - 1] (word @+0x00 = stack base, word @+0x0C = cursor).
-    const u32* lpInputVols =
-        reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpView->muInputVolsBase));
-    const u32 luInputVolume = lpInputVols[lpView->muCurrInput - 1];
-
-    // stw r3 -> +0x50, stw r23 -> +0x00 (store order as on X360). The console
-    // pointer words are kept as the u32 image (committed VolRef convention).
-    lpResult->vRef.muVolumePtr =
-        static_cast<u32>(reinterpret_cast<uintptr_t>(lpVolume));
-    lpResult->v = luInputVolume;
-
-    // 4x lvx128/stvx128 (+0x00/+0x10/+0x20/+0x30 -> +0x60/+0x70/+0x80/+0x90):
-    // copy the instance transform rows inline, then aim the record's transform
-    // pointer at that copy (stw r11 -> +0x54).
-    CopyRow(lpResult->vRef.mRow0, lpTransform[0]);
-    CopyRow(lpResult->vRef.mRow1, lpTransform[1]);
-    CopyRow(lpResult->vRef.mRow2, lpTransform[2]);
-    CopyRow(lpResult->vRef.mRow3, lpTransform[3]);
-    lpResult->vRef.muTransformPtr =
-        static_cast<u32>(reinterpret_cast<uintptr_t>(&lpResult->vRef.mRow0));
-
-    // stvx128 v4 -> +0x20, stvx128 v3 -> +0x30. The staged normal is then
-    // recomputed by TriangleVolume::GetNormal below, exactly as the X360 does.
-    lpResult->normal   = rNormal;
-    lpResult->volParam = rVolParam;
-
-    // stvx128 v2 to its stack home slot + lfs/stfs of its first word -> +0x40:
-    // the line parameter is lane X of the v2 vector argument.
-    lpResult->lineParam = rLineParam.x;
-
-    // vspltw v0/v13/v12 = splat rLocalPosition lanes X/Y/Z, then the vmaddfp
-    // chain folds the transform rows into the world-space position:
-    //   v0 = xAxis*pos.x + wAxis;  v0 = yAxis*pos.y + v0;  v0 = zAxis*pos.z + v0
-    // stvx128 v0 -> +0x10 (all four lanes stored; per-lane association kept).
-    lpResult->position.x =
-        lpTransform[2].x * rLocalPosition.z +
-        (lpTransform[1].x * rLocalPosition.y +
-         (lpTransform[0].x * rLocalPosition.x + lpTransform[3].x));
-    lpResult->position.y =
-        lpTransform[2].y * rLocalPosition.z +
-        (lpTransform[1].y * rLocalPosition.y +
-         (lpTransform[0].y * rLocalPosition.x + lpTransform[3].y));
-    lpResult->position.z =
-        lpTransform[2].z * rLocalPosition.z +
-        (lpTransform[1].z * rLocalPosition.y +
-         (lpTransform[0].z * rLocalPosition.x + lpTransform[3].z));
-    lpResult->position.w =
-        lpTransform[2].w * rLocalPosition.z +
-        (lpTransform[1].w * rLocalPosition.y +
-         (lpTransform[0].w * rLocalPosition.x + lpTransform[3].w));
-
-    // bl rw::collision::TriangleVolume::GetNormal (r3 = the triangle volume,
-    // r4 = &lpResult->normal, r5 = the transform rows).
+    lpResult->vRef.volume = lpVolume;
+    lpResult->v = lpQuery->m_inputVols[lpQuery->m_currInput - 1];
+    lpResult->vRef.tmContents = *lpTransform;
+    lpResult->vRef.tm = &lpResult->vRef.tmContents;
+    lpResult->normal = normal;
+    lpResult->volParam = volParam;
+    lpResult->lineParam = lineParam.mV.x;
+    __vector4 position = __vmaddfp(lpTransform->xAxis.mV, __vspltw(localPosition.mV, 0), lpTransform->wAxis.mV);
+    position = __vmaddfp(lpTransform->yAxis.mV, __vspltw(localPosition.mV, 1), position);
+    position = __vmaddfp(lpTransform->zAxis.mV, __vspltw(localPosition.mV, 2), position);
+    lpResult->position.mV = position;
     lpVolume->GetNormal(lpResult->normal, lpTransform);
-
-    // Compose the clustered-mesh unit tag (loads in asm order). Only the
-    // subtraction is attested for the shift pair: the cluster id is shifted up
-    // by (*lpNumMeshTagBits - *lpNumClusterTagBits) -- the unit-id bit count --
-    // added to the word-scaled unit offset, then shifted past the parent
-    // aggregate tag bits and OR'd with the parent tag (subf/slw/srwi/add/slw/or).
-    const u32 luClusterShift = *lpNumMeshTagBits - *lpNumClusterTagBits;
-    u32 luTag = (*lpClusterId << luClusterShift) + (*lpUnitOffset >> 2);
-    luTag = (luTag << lpView->muNumTagBits) | lpView->muTag;
-    lpResult->vRef.muTag        = luTag;          // stw  -> +0xC0
-    lpResult->vRef.muNumTagBits = *lpNumTagBits;  // stb  -> +0xC4
-
-    // Room-for-more check: return 1 only while BOTH the result buffer
-    // (+0x14 == +0x18 -> full) and the instanced-volume pool (+0xE8 == +0xEC
-    // -> full) still have space; the caller uses 0 as its stop condition.
-    if (lpView->muResCursor == lpView->muResBudget)
-    {
-        return 0;
-    }
-    if (lpView->muPoolCursor == lpView->muResCapacity)
-    {
-        return 0;
-    }
+    const u32 clusterShift = *lpNumMeshTagBits - *lpNumClusterTagBits;
+    u32 tag = (*lpClusterId << clusterShift) + (*lpUnitOffset >> 2);
+    tag = (tag << lpQuery->m_numTagBits) | lpQuery->m_tag;
+    lpResult->vRef.tag = tag;
+    lpResult->vRef.numTagBits = *lpNumTagBits;
+    if (lpQuery->m_resCount == lpQuery->m_resMax) return 0;
+    if (lpQuery->m_instVolCount == lpQuery->m_instVolMax) return 0;
     return 1;
 }
 

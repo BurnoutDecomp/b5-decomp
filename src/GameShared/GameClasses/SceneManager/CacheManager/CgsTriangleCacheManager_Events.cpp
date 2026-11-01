@@ -166,7 +166,7 @@ namespace CgsSceneManager
     //
     // Move this slot's cached object to the event's new position/radius and decide
     // whether the cached triangle set is now stale. The X360 body:
-    //   1. mInnerSpherePositionAndRadius <- {lrEvent.mNewPositionAndRadius.xyz, .w}.
+    //   1. mInnerSpherePositionAndRadius <- {lrEvent.mNewPositionAndRadius.mV.xyz, .w}.
     //      Emitted as TWO stvx128 to the same address (0x828BE6A8 then 0x828BE6B0):
     //      the first merges in the OLD inner-sphere w, the second overwrites it with
     //      the event's radius. That is an inlined SetPosition() immediately followed by
@@ -174,7 +174,7 @@ namespace CgsSceneManager
     //      assignments the source shape implies; the dead intermediate is not reproduced
     //      (it has no observable effect and no address is published between the stores).
     //   2. mbIsDirty = false                                   (stb r10, 0x2E(r3))
-    //   3. lfDistance = |lrEvent.mNewPositionAndRadius.xyz - mLastCachedSphere.xyz|
+    //   3. lfDistance = |lrEvent.mNewPositionAndRadius.mV.xyz - mLastCachedSphere.mData.mV.xyz|
     //      X360: vsubfp -> vmsum3fp128 (3-lane dot) -> vrsqrtefp + TWO Newton-Raphson
     //      refinements (the vcfsx v9,v0,0 == 1.0f and vcfsx v8,v0,1 == 0.5f constants),
     //      then vmulfp128 by the squared length to turn 1/|d| into |d|, with a
@@ -182,7 +182,7 @@ namespace CgsSceneManager
     //      standard rw::math::vpu length lowering; expressed here as sqrtf(dot3).
     //      ⚠️ Faithful, NOT bit-exact: the refined reciprocal-square-root estimate and
     //      sqrtf can differ in the last ulp. Flagged for review.
-    //   4. if (lfDistance + newRadius > mLastCachedSphere.w) OR the slot holds no
+    //   4. if (lfDistance + newRadius > mLastCachedSphere.mData.mV.w) OR the slot holds no
     //      batches yet, re-seat the cached sphere's CENTRE on the new position (its w,
     //      the cached radius, is deliberately KEPT -- `vrlimi128 v12, v7, 1, 0` merges
     //      the OLD w back into the new position vector before the store) and mark dirty.
@@ -192,34 +192,34 @@ namespace CgsSceneManager
     // ------------------------------------------------------------------------
     void CacheSlot::UpdateCachedObject(const TriangleCacheManagerIO::InEventUpdateCachedPosition& lrEvent)
     {
-        const f32 lfNewRadius = lrEvent.mNewPositionAndRadius.w;
+        const f32 lfNewRadius = lrEvent.mNewPositionAndRadius.mV.w;
 
         // Step 1 -- the inner sphere always follows the object exactly.
         // (VMX: two stvx128 lane merges at +0x10; see the banner note.)
-        mInnerSpherePositionAndRadius.x = lrEvent.mNewPositionAndRadius.x;
-        mInnerSpherePositionAndRadius.y = lrEvent.mNewPositionAndRadius.y;
-        mInnerSpherePositionAndRadius.z = lrEvent.mNewPositionAndRadius.z;
-        mInnerSpherePositionAndRadius.w = lfNewRadius;
+        mInnerSpherePositionAndRadius.mV.x = lrEvent.mNewPositionAndRadius.mV.x;
+        mInnerSpherePositionAndRadius.mV.y = lrEvent.mNewPositionAndRadius.mV.y;
+        mInnerSpherePositionAndRadius.mV.z = lrEvent.mNewPositionAndRadius.mV.z;
+        mInnerSpherePositionAndRadius.mV.w = lfNewRadius;
 
         // Step 2.
         mbIsDirty = false;
 
         // Step 3 -- distance from the object's new centre to the centre the triangles
         // were last cached around.
-        const f32 lfDeltaX = lrEvent.mNewPositionAndRadius.x - mLastCachedSphere.x;
-        const f32 lfDeltaY = lrEvent.mNewPositionAndRadius.y - mLastCachedSphere.y;
-        const f32 lfDeltaZ = lrEvent.mNewPositionAndRadius.z - mLastCachedSphere.z;
+        const f32 lfDeltaX = lrEvent.mNewPositionAndRadius.mV.x - mLastCachedSphere.mData.mV.x;
+        const f32 lfDeltaY = lrEvent.mNewPositionAndRadius.mV.y - mLastCachedSphere.mData.mV.y;
+        const f32 lfDeltaZ = lrEvent.mNewPositionAndRadius.mV.z - mLastCachedSphere.mData.mV.z;
         const f32 lfDistanceSquared = (lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY) + (lfDeltaZ * lfDeltaZ);
         const f32 lfDistance = (lfDistanceSquared == 0.0f) ? 0.0f : sqrtf(lfDistanceSquared);
 
         // Step 4 -- has the object's bound escaped the sphere the triangles cover, or
         // was it never cached at all?
-        if (((lfDistance + lfNewRadius) > mLastCachedSphere.w) || (miNumCachedTriangleBatches == 0))
+        if (((lfDistance + lfNewRadius) > mLastCachedSphere.mData.mV.w) || (miNumCachedTriangleBatches == 0))
         {
             // Re-centre on the new position; the cached RADIUS (w) is kept.
-            mLastCachedSphere.x = lrEvent.mNewPositionAndRadius.x;
-            mLastCachedSphere.y = lrEvent.mNewPositionAndRadius.y;
-            mLastCachedSphere.z = lrEvent.mNewPositionAndRadius.z;
+            mLastCachedSphere.mData.mV.x = lrEvent.mNewPositionAndRadius.mV.x;
+            mLastCachedSphere.mData.mV.y = lrEvent.mNewPositionAndRadius.mV.y;
+            mLastCachedSphere.mData.mV.z = lrEvent.mNewPositionAndRadius.mV.z;
             mbIsDirty = true;
         }
     }
@@ -366,10 +366,10 @@ namespace CgsSceneManager
             // recovers on its next update -- but a slot whose owner posts nothing (frozen, or no
             // cache slot of its own) would otherwise keep that stale centre, which is exactly the
             // input StartUpdateTriangleCaches hands the fill job.
-            lrSlot.mLastCachedSphere.x = 0.0f;
-            lrSlot.mLastCachedSphere.y = 0.0f;
-            lrSlot.mLastCachedSphere.z = 0.0f;
-            lrSlot.mLastCachedSphere.w = 0.0f;
+            lrSlot.mLastCachedSphere.mData.mV.x = 0.0f;
+            lrSlot.mLastCachedSphere.mData.mV.y = 0.0f;
+            lrSlot.mLastCachedSphere.mData.mV.z = 0.0f;
+            lrSlot.mLastCachedSphere.mData.mV.w = 0.0f;
 
             // CgsBitArray.h:241 -- UnSetBit's OWN bound, a different rodata entry from the
             // IsBitSet :203 tripwire above: X360 0x828B2C18 `bl BeginAssert` / 0x828B2C1C
@@ -420,7 +420,7 @@ namespace CgsSceneManager
             // w lane before the store, so x/y/z survive the claim. (Contrast the remove leg, whose
             // merge base is the ZERO register -- that asymmetry is the console's, and it is why
             // zeroing the sphere on release is load-bearing rather than cosmetic.)
-            lrSlot.mLastCachedSphere.w      = lrEvent.mfCacheSphereRadius;
+            lrSlot.mLastCachedSphere.mData.mV.w      = lrEvent.mfCacheSphereRadius;
             lrSlot.miNumCachedTriangleBatches = 0;
 
             // CgsBitArray.h:222 -- SetBit's OWN bound, again distinct from the :203 IsBitSet
@@ -485,14 +485,14 @@ namespace CgsSceneManager
 
             if (liCacheSlot < KI_MAX_RADIUS_TRACKED_SLOTS)
             {
-                const f32 lfRadius = lrEvent.mNewPositionAndRadius.w;
-                if (lfRadius > mvfMaxRadiusSoFar.w)
+                const f32 lfRadius = lrEvent.mNewPositionAndRadius.mV.w;
+                if (lfRadius > mvfMaxRadiusSoFar.mV.w)
                 {
                     // Splatted across all four lanes, as the X360 stores it.
-                    mvfMaxRadiusSoFar.x = lfRadius;
-                    mvfMaxRadiusSoFar.y = lfRadius;
-                    mvfMaxRadiusSoFar.z = lfRadius;
-                    mvfMaxRadiusSoFar.w = lfRadius;
+                    mvfMaxRadiusSoFar.mV.x = lfRadius;
+                    mvfMaxRadiusSoFar.mV.y = lfRadius;
+                    mvfMaxRadiusSoFar.mV.z = lfRadius;
+                    mvfMaxRadiusSoFar.mV.w = lfRadius;
                 }
             }
         }

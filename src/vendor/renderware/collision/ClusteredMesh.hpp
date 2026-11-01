@@ -2,7 +2,8 @@
 
 #include "types.hpp"
 
-#include "types.hpp"   // uintptr_t
+#include "vendor/renderware/collision/Aggregate.hpp"
+#include "vendor/renderware/collision/KdTreeBBoxQuery.hpp"
 
 // ===========================================================================
 // rw::collision::ClusteredMesh -- the clustered collision mesh procedural
@@ -22,24 +23,25 @@ namespace rw
 namespace collision
 {
 
-struct KdTree;
-
-struct ClusteredMesh
+// DecFIGS procedural.h:49 / clusteredmeshbase.h:49; ARTIST Fixup
+// 82BB31E8..3200 reads and writes the two genuine pointers at +30/+34.
+// Aggregate +28 and the mesh tail are still unrecovered.
+struct Procedural : public Aggregate {};
+struct ClusteredMesh : public Procedural
 {
-    u32 mauReserved0[12];               // +0x00..+0x2F  the Procedural / Aggregate base
-    u32 muKDTree;                       // +0x30  mKDTree (KDTree*)
-    u32 muCluster;                      // +0x34  mCluster (uint32_t*): per-cluster byte offset from `this`
-    // mClusterParams (ClusterParams, clusteredmeshcluster.h) @ +0x38
-    f32 mfVertexCompressionGranularity; // +0x38  metres per compressed integer step
-    u16 muClusterFlags;                 // +0x3C  mFlags
-    u8  muGroupIdSize;                  // +0x3E  mGroupIdSize (bytes of a unit's group id)
-    u8  muSurfaceIdSize;                // +0x3F  mSurfaceIdSize (bytes of a unit's surface id)
+    KdTree* mpKDTree;
+    u32* mpCluster;
+    f32 mfVertexCompressionGranularity;
+    u16 muClusterFlags;
+    u8 muGroupIdSize;
+    u8 muSurfaceIdSize;
 
-    KdTree*    GetKDTree() const         { return reinterpret_cast<KdTree*>(static_cast<uintptr_t>(muKDTree)); }
-    const u32* GetClusterOffsets() const { return reinterpret_cast<const u32*>(static_cast<uintptr_t>(muCluster)); }
+    KdTree* GetKDTree() const { return mpKDTree; }
+    const u32* GetClusterOffsets() const { return mpCluster; }
 };
-
-CGS_STATIC_ASSERT((sizeof(ClusteredMesh) == 0x40), "the view ends after the cluster parameters (+0x3F)");
+CGS_STATIC_ASSERT((sizeof(Aggregate)==0x30), "Aggregate native base extent");
+CGS_STATIC_ASSERT((offsetof(ClusteredMesh,mpKDTree)==0x30), "ClusteredMesh KDTree");
+CGS_STATIC_ASSERT((offsetof(ClusteredMesh,mpCluster)==0x34), "ClusteredMesh cluster offsets");
 
 } // namespace collision
 } // namespace rw

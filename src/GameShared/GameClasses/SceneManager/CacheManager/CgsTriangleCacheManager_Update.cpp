@@ -169,10 +169,10 @@ namespace CgsSceneManager
 
             // 0x828BEED0..0x828BEEE0: the slot's cached sphere is copied verbatim (two 8-byte
             // moves of the same 16 bytes) and becomes the fill query.
-            lpCommand->mCacheSphere.mData.mV.x = lrSlot.mLastCachedSphere.x;
-            lpCommand->mCacheSphere.mData.mV.y = lrSlot.mLastCachedSphere.y;
-            lpCommand->mCacheSphere.mData.mV.z = lrSlot.mLastCachedSphere.z;
-            lpCommand->mCacheSphere.mData.mV.w = lrSlot.mLastCachedSphere.w;
+            lpCommand->mCacheSphere.mData.mV.x = lrSlot.mLastCachedSphere.mData.mV.x;
+            lpCommand->mCacheSphere.mData.mV.y = lrSlot.mLastCachedSphere.mData.mV.y;
+            lpCommand->mCacheSphere.mData.mV.z = lrSlot.mLastCachedSphere.mData.mV.z;
+            lpCommand->mCacheSphere.mData.mV.w = lrSlot.mLastCachedSphere.mData.mV.w;
 
             // 0x828BEEBC..0x828BEECC: the destination is this slot's own window into the shared
             // cache (`mulli r11, r29, 0xE0` == index * sizeof(Triangle4)), reached through the
@@ -304,10 +304,10 @@ namespace CgsSceneManager
             char lacMessage[256];
             ::sprintf(lacMessage,
                       "TRI CACHE OVERFLOW WITH SPHERE AT %.2f, %.2f, %.2f, RADIUS %.2f, OVERFLOW %d",
-                      static_cast<double>(lrSlot.mLastCachedSphere.x),
-                      static_cast<double>(lrSlot.mLastCachedSphere.y),
-                      static_cast<double>(lrSlot.mLastCachedSphere.z),
-                      static_cast<double>(lrSlot.mLastCachedSphere.w),
+                      static_cast<double>(lrSlot.mLastCachedSphere.mData.mV.x),
+                      static_cast<double>(lrSlot.mLastCachedSphere.mData.mV.y),
+                      static_cast<double>(lrSlot.mLastCachedSphere.mData.mV.z),
+                      static_cast<double>(lrSlot.mLastCachedSphere.mData.mV.w),
                       static_cast<int>(lrSlot.miOverflow));
 
             lDebugInterface.Get2dRender().Draw2DText(lacMessage, 100.0f, lfTextY, 20.0f,
