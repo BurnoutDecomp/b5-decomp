@@ -471,9 +471,9 @@ f32 PassbyEffect::GetRelativeVelocityMag() const
     const Vector3 lControlPosition = mpPassby3DControl->GetEmitterPosition().GetCurrent();
     const f32 lfInverseTimeStep = 1.0f / mfDeltaTime;
 
-    const f32 lfX = (mPosition.x - lControlPosition.x) * lfInverseTimeStep - lrListenerVelocity.x;
-    const f32 lfY = (mPosition.y - lControlPosition.y) * lfInverseTimeStep - lrListenerVelocity.y;
-    const f32 lfZ = (mPosition.z - lControlPosition.z) * lfInverseTimeStep - lrListenerVelocity.z;
+    const f32 lfX = (mPosition.mV.x - lControlPosition.mV.x) * lfInverseTimeStep - lrListenerVelocity.mV.x;
+    const f32 lfY = (mPosition.mV.y - lControlPosition.mV.y) * lfInverseTimeStep - lrListenerVelocity.mV.y;
+    const f32 lfZ = (mPosition.mV.z - lControlPosition.mV.z) * lfInverseTimeStep - lrListenerVelocity.mV.z;
     const f32 lfSquared = lfX * lfX + lfY * lfY + lfZ * lfZ;
     return lfSquared == 0.0f ? 0.0f : std::sqrt(lfSquared);
 }
