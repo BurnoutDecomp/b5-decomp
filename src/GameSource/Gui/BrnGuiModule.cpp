@@ -1753,8 +1753,8 @@ void GuiModule::Destruct()
         static const char* const KAPC_ACTION_NAMES[14] = {
             "ON_ENTER", "ON_LEAVE", "ON_FOCUS", "ON_LOSE_FOCUS",
             "ON_ACCEPT", "ON_CANCEL", "ON_TICK", "ON_CHANGE",
-            "ON_UP", "ON_DOWN", "ON_LEFT", "ON_LEFT_SWEEP",
-            "ON_RIGHT", "ON_RIGHT_SWEEP"
+            "ON_UP", "ON_DOWN", "ON_LEFT", "ON_LEFTSWEEP",
+            "ON_RIGHT", "ON_RIGHTSWEEP"
         };
 
         s32 liAction = 14;
@@ -1785,9 +1785,9 @@ void GuiModule::Destruct()
                 << " Movie: " << lpcLogMovie
                 << "\n";
         }
-        lpThis->mpOutputBuffer->GetOutEventQueueNonConst()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAudioEvent),
-            lAudioEvent.GetEventType(), static_cast<s32>(sizeof(lAudioEvent)));
+        // ARTIST8250BF0C..1C publishes the raw 100-byte body as event457.
+        GuiAudioTriggerWirePayload457 lPayload(lAudioEvent);
+        lpThis->mpOutputBuffer->AddGuiOutEvent(lPayload);
     }
 
     namespace
