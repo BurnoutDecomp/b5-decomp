@@ -66,23 +66,44 @@ enum EDLCFeature
 //
 // Layout recovered store-for-store from BrnResource::DLCFeatureAvailability::
 // Construct (@0x82662C48), GetPackMask (@0x82661628) and
-// SetPackAvailabilityState (@0x826616A0). Total size 0x99 (153) bytes.
-//   +0x00 mbConstructed      byte, set 1 by Construct
-//   +0x01 mbField01          byte, set 0 by Construct
+// SetPackAvailabilityState (@0x826616A0). The last flag is at +0x98; natural 4-byte alignment gives size 0x9C.
+//   +0x00 mBeatTheTeamGame   availability and enabled bytes, initialized to 1 and 0
 //   +0x04 muAvailabilityMask dword, the running mask SetPackAvailabilityState mutates
 //   +0x08 mauPackMask[5]     dword per pack {1,2,4,8,16}; GetPackMask returns mauPackMask[lPack]
 //   +0x1C maePackForFeature[25] dword per feature (which pack it requires)
 //   +0x80 mabFeatureEnabled[25] byte per feature (default-enabled flag)
 // ---------------------------------------------------------------------------
+// A single downloadable "Beat The Team" online game's availability/enabled state.
+// Layout recovered from SetEnabledState: mbIsAvailable @ +0x00, mbIsEnabled @ +0x01.
+class DLCBeatTheTeamGame
+{
+public:
+    bool IsAvailable() const { return mbIsAvailable; }
+    bool IsEnabled() const   { return mbIsEnabled; }
+
+    // X360 0x82472CA8. Stores the enabled flag, then asserts that the content is not
+    // enabled while it is unavailable (BrnDLCManager.h:405). The assert is non-fatal
+    // (the binary stores the flag and returns regardless).
+    void SetEnabledState(bool lbEnabled);
+
+private:
+    friend class DLCFeatureAvailability;
+    bool mbIsAvailable; // +0x00
+    bool mbIsEnabled;   // +0x01
+};
+
 class DLCDebugComponent;   // same-TU debug component reaches the file-scope table directly
 
 class DLCFeatureAvailability
 {
-    // The DLC debug component lives in the same TU as the file-scope availability table and, in the
-    // X360 image, reads/writes its members straight off the static's address (byte_82FFA7F0 etc.).
+    // The DLC debug component accesses this same global feature table.
     friend class DLCDebugComponent;
 
 public:
+    // ARTIST uses the table base as the BeatTheTeamGame receiver. A first
+    // subobject expresses that proven alias; its member spelling is inferred.
+    DLCBeatTheTeamGame mBeatTheTeamGame;
+
     // X360 0x82662C48. Zeroes the mask + table, then writes the default per-pack
     // masks, per-feature pack indices and per-feature enabled flags. (The asm's
     // int return is just memset's r3 leaking through Hex-Rays; the method is void.)
@@ -115,9 +136,6 @@ private:
     // Never called; defined in BrnDLCManager.cpp to pin member offsets via offsetof.
     static void _AssertLayout();
 
-    bool mbConstructed;                          // +0x00
-    bool mbField01;                              // +0x01
-    u8   mPad02[2];                              // +0x02 (alignment to the +0x04 dword)
     u32  muAvailabilityMask;                     // +0x04
     u32  mauPackMask[E_DLC_DATA_PACK_COUNT];     // +0x08 .. +0x18
     s32  maePackForFeature[KU_DLC_FEATURE_COUNT];// +0x1C .. +0x7C
@@ -126,24 +144,6 @@ private:
 
 // The file-scope availability table (one instance; defined in BrnDLCManager.cpp).
 extern DLCFeatureAvailability g_DLCFeatureAvailability;
-
-// A single downloadable "Beat The Team" online game's availability/enabled state.
-// Layout recovered from SetEnabledState: mbIsAvailable @ +0x00, mbIsEnabled @ +0x01.
-class DLCBeatTheTeamGame
-{
-public:
-    bool IsAvailable() const { return mbIsAvailable; }
-    bool IsEnabled() const   { return mbIsEnabled; }
-
-    // X360 0x82472CA8. Stores the enabled flag, then asserts that the content is not
-    // enabled while it is unavailable (BrnDLCManager.h:405). The assert is non-fatal
-    // (the binary stores the flag and returns regardless).
-    void SetEnabledState(bool lbEnabled);
-
-private:
-    bool mbIsAvailable; // +0x00
-    bool mbIsEnabled;   // +0x01
-};
 
 // ---------------------------------------------------------------------------
 // DLCDebugComponent
@@ -189,7 +189,7 @@ public:
     virtual void Update();
 
     // X360 0x826629C8. Draw the "Beat the team mode" HUD label iff the file-scope
-    // DLCFeatureAvailability's mbField01 flag is set.
+    // Beat The Team game's enabled flag is set.
     virtual void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender);
 
 protected:

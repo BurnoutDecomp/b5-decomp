@@ -44,6 +44,8 @@ namespace BrnResource
     // Never called -- pins the asm-attested member offsets of DLCFeatureAvailability.
     void DLCFeatureAvailability::_AssertLayout()
     {
+        CGS_STATIC_ASSERT((offsetof(DLCFeatureAvailability, mBeatTheTeamGame) == 0x00), "game @ +0x00");
+        CGS_STATIC_ASSERT((sizeof(DLCBeatTheTeamGame) == 2), "ARTIST game flags");
         CGS_STATIC_ASSERT((offsetof(DLCFeatureAvailability, muAvailabilityMask) == 0x04), "mask @ +0x04");
         CGS_STATIC_ASSERT((offsetof(DLCFeatureAvailability, mauPackMask)        == 0x08), "pack masks @ +0x08");
         CGS_STATIC_ASSERT((offsetof(DLCFeatureAvailability, maePackForFeature)  == 0x1C), "feature pack @ +0x1C");
@@ -63,8 +65,8 @@ namespace BrnResource
         // The +0x80 bool block is zeroed by a 6-dword + 1-byte loop, then set to 1 below.
         std::memset(mabFeatureEnabled, 0, sizeof(mabFeatureEnabled));
 
-        mbField01    = false;                   // stb r30(0), 1(r31)
-        mbConstructed = true;                   // stb r11(1), 0(r31)
+        mBeatTheTeamGame.mbIsEnabled = false;                   // stb r30(0), 1(r31)
+        mBeatTheTeamGame.mbIsAvailable = true;                   // stb r11(1), 0(r31)
 
         // Per-feature required-pack indices (stw immediates @ +0x1C..+0x7C).
         maePackForFeature[0]  = 0;
@@ -143,9 +145,12 @@ namespace BrnResource
     {
         mbIsEnabled = lbEnabled;
 
-        if (lbEnabled)
+        if (lbEnabled && !mbIsAvailable)
         {
-            CGS_ASSERT(mbIsAvailable, "!(mbIsEnabled && !mbIsAvailable)");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("!(mbIsEnabled && !mbIsAvailable)",
+                "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h", 405);
+            CgsDev::Assert::EndAssert();
         }
     }
 
@@ -154,7 +159,7 @@ namespace BrnResource
     // =============================================================================================
 
     // The file-scope downloadable-content availability table the debug component drives. In the X360
-    // image this is the static instance at byte_82FFA7F0; Update / RenderHUD / OnActivate all reach it
+    // image its base is byte_82FFA7F0; Update / RenderHUD / OnActivate all reach it
     // directly (the asm hard-codes its address). The online leaderboard code reads it too, so it has
     // external linkage (declared in the header).
     DLCFeatureAvailability g_DLCFeatureAvailability;
@@ -228,13 +233,13 @@ namespace BrnResource
         }
     }
 
-    // X360 0x826629C8. Early-out unless the file-scope availability table's mbField01 flag (the byte at
+    // X360 0x826629C8. Early-out unless the file-scope Beat The Team game's enabled flag (the byte at
     // its +0x01, byte_82FFA7F1) is set; when set, draw the "Beat the team mode" HUD label. The float
     // literals are baked .rdata: X=700.0 (flt_8205820C), Y=40.0 (flt_82004D0C, asm-confirmed in
     // BrnStuntManager), scale=16.0 (flt_82004000); the colour is the packed 0xFFFFFFC8 (li r8,-0x38).
     void DLCDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
-        if (g_DLCFeatureAvailability.mbField01)   // byte_82FFA7F1
+        if (g_DLCFeatureAvailability.mBeatTheTeamGame.IsEnabled())   // byte_82FFA7F1
         {
             MaybeDrawText(lpRender, "Beat the team mode", 700.0f, 40.0f, 16.0f, 0xFFFFFFC8u, false);
         }
