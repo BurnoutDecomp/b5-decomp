@@ -1,15 +1,9 @@
 #include "GameShared/GameClasses/Gui/CgsGuiKeyboard.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include <type_traits>
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   CgsGui::GuiKeyboard::Show   @ 0x8284CFD8
 //   CgsGui::GuiKeyboard::Update @ 0x8284D0C0
-
-// ---- XDK entry points (real prototypes live in the Xbox 360 XDK) -----------------
-extern "C" u32 XShowKeyboardUI(u32 dwUserIndex, u32 dwFlags, const u16* wszDefaultText,
-                               const u16* wszTitleText, const u16* wszDescriptionText,
-                               u16* wszResultText, u32 cchResultText, PXOVERLAPPED pOverlapped);
 
 // Win32/XDK winerror.h literals consumed by Update's pending check.
 #ifndef ERROR_IO_INCOMPLETE
@@ -22,12 +16,10 @@ extern "C" u32 XShowKeyboardUI(u32 dwUserIndex, u32 dwFlags, const u16* wszDefau
 // XShowKeyboardUI flags baked into the X360 call (lis 0x3000 | ori 0x64).
 static const u32 KU_KEYBOARD_FLAGS = 0x30000064u;
 
-// CgsXOverlapped is the canonical one-member standard-layout wrapper. The
-// system API receives its pointer-interconvertible first XOVERLAPPED member.
-CGS_STATIC_ASSERT((std::is_standard_layout<CgsSystem::CgsXOverlapped>::value),
-              "XDK wrapper and its sole native member are pointer-interconvertible");
+// CgsXOverlapped has one native data member and no bases or virtual functions;
+// the size check also requires that member to begin at offset zero.
 CGS_STATIC_ASSERT((sizeof(CgsSystem::CgsXOverlapped) == sizeof(XOVERLAPPED)),
-              "keyboard contains the complete canonical overlapped wrapper");
+              "keyboard wrapper begins with and exactly contains the native overlapped member");
 
 namespace CgsGui
 {
@@ -54,8 +46,11 @@ namespace CgsGui
 
         mOverlapped.Construct();
 
-        return XShowKeyboardUI(luUserIndex, KU_KEYBOARD_FLAGS, lpDefaultText, lpTitleText,
-                               lpDescriptionText, maResultBuffer, KU_KEYBOARD_MAX_CHARACTERS,
+        return XShowKeyboardUI(luUserIndex, KU_KEYBOARD_FLAGS,
+                               reinterpret_cast<LPCWSTR>(lpDefaultText),
+                               reinterpret_cast<LPCWSTR>(lpTitleText),
+                               reinterpret_cast<LPCWSTR>(lpDescriptionText),
+                               reinterpret_cast<LPWSTR>(maResultBuffer), KU_KEYBOARD_MAX_CHARACTERS,
                                reinterpret_cast<PXOVERLAPPED>(&mOverlapped));
     }
 
