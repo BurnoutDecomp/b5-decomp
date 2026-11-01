@@ -1060,9 +1060,9 @@ namespace BrnGui
             // The X360 adds the SAME district parameter twice (@0x8247A2CC / @0x8247A2DC),
             // both with id 2 -- faithful, not a transcription slip.
             lWire.mRequest.AddMessageParam(
-                2, KAPC_DISTRICT_OVERLAY_MESSAGE_IDS[liDestinationDistrict]);
+                CgsGui::E_POPUPPARAMTYPES_STRING_ID, KAPC_DISTRICT_OVERLAY_MESSAGE_IDS[liDestinationDistrict]);
             lWire.mRequest.AddMessageParam(
-                2, KAPC_DISTRICT_OVERLAY_MESSAGE_IDS[liDestinationDistrict]);
+                CgsGui::E_POPUPPARAMTYPES_STRING_ID, KAPC_DISTRICT_OVERLAY_MESSAGE_IDS[liDestinationDistrict]);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
                 static_cast<s32>(sizeof(GuiOverlayRequestWire)));

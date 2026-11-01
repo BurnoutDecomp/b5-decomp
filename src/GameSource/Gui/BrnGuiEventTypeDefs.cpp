@@ -315,129 +315,63 @@ void GuiEventUpdateSatNav::DoWorstCase()
 // The X360 stores the compressed id at this+0x00 (`std r3,0(r27)`), i.e. over the first
 // 8 bytes of maMessages[0] (its 8-byte maHead). Reproduced as an 8-byte block write to the
 // head so the on-object id sits at the proven offset; sizeof(CgsID) == 8 matches the std.
-CgsID GuiOverlayRequest::Construct(const char* lpcOverlayId)
+void GuiOverlayRequest::Construct(const char* lpcOverlayId)
 {
     CGS_ASSERT(lpcOverlayId != 0, "Invalid Overlay Id");
-
-    const CgsID lId = CgsIDCompress(lpcOverlayId);
-
-    CGS_STATIC_ASSERT((sizeof(CgsID) == sizeof(maMessages[0].maHead)),
-                  "overlay id (std r3,0) overlays the first param record's 8-byte head");
-    std::memcpy(&maMessages[0].maHead[0], &lId, sizeof(CgsID)); // std r3, 0(this)
-
-    miNumMessages = 0;   // stw 0, 0x118(this)
-    mbButton1Used = 0;   // stb 0, 0x11C(this)
-    mbButton2Used = 0;   // stb 0, 0x11D(this)
-    return lId;
+    mOverlayID = CgsIDCompress(lpcOverlayId);
+    miNumMessages = 0;
+    mbButton1Used = false;
+    mbButton2Used = false;
 }
 
-// ARTIST case 49 @0x823ED8E0..0x823ED920: zero the same three fields as the string constructor,
-// then std the already-compressed action qword at +0. The original arm does not compress this
-// value or assert that it is non-null.
-CgsID GuiOverlayRequest::Construct(CgsID lOverlayId)
+void GuiOverlayRequest::Construct(CgsID lOverlayId)
 {
-    CGS_STATIC_ASSERT((sizeof(CgsID) == sizeof(maMessages[0].maHead)),
-                  "overlay id (std r3,0) overlays the first param record's 8-byte head");
-    miNumMessages = 0;   // stw 0, 0x118(this)
-    mbButton1Used = 0;   // stb 0, 0x11C(this)
-    mbButton2Used = 0;   // stb 0, 0x11D(this)
-    std::memcpy(&maMessages[0].maHead[0], &lOverlayId, sizeof(CgsID)); // std r11, 0(this)
-    return lOverlayId;
+    miNumMessages = 0;
+    mbButton1Used = false;
+    mbButton2Used = false;
+    mOverlayID = lOverlayId;
 }
 
-// @0x82472A18 -- append one message param at the next free slot.
-//   guard: *(this+0x118) >= 2 -> streamed "Not enough free params in the Overlay (<n>/2)."
-//                                (BrnGuiEventTypeDefs.h:7438)
-//   guard: lpcParam == NULL   -> "lpcParam != NULL"  (h:7440)
-//   entry = this + 0x44*count
-//   SPrintf(entry+0x0C, 63, "%s", lpcParam);  stb 0, 0x4B(entry);  stw luId, 8(entry);  ++count
-//   returns r3 == the SPrintf result (untouched between the call and the epilogue).
-//
-// ⚠️ CONSOLE-ATTESTED OVERRUN, reproduced deliberately: the text write spans entry+0x0C
-// .. entry+0x4B inclusive (63 bytes + the forced NUL at +0x4B) == 64 bytes, but the param
-// record stride is only 0x44. Each slot therefore spills its last 8 bytes into the FOLLOWING
-// record's 8-byte maHead: slot 0 into maMessages[1].maHead, slot 1 into mButton1.maHead.
-// Both are inside this object and neither head is read by any accessor (only
-// maMessages[0].maHead is used, and Construct writes the overlay id there BEFORE any
-// AddMessageParam call), so the spill is observationally inert -- but GetMessageParam reads
-// the text back with "%s", so a >55-char param genuinely relies on those 8 bytes and the
-// bytes must be written where the console writes them. Addressed through the record base with
-// the offsets pinned below rather than through macText[0x38], which would be a declared-bound
-// overrun.
-s32 GuiOverlayRequest::AddMessageParam(u32 luId, const char* lpcParam)
+void GuiOverlayRequest::AddMessageParam(CgsGui::PopupParamTypes leType, const char* lpcParam)
 {
-    CGS_STATIC_ASSERT((sizeof(ParamInfo) == 0x44), "param record stride 0x44 (GetMessageParam: 0x44*idx)");
-    CGS_STATIC_ASSERT((offsetof(ParamInfo, muId) == 0x08), "param id @ record+0x08");
-    CGS_STATIC_ASSERT((offsetof(ParamInfo, macText) == 0x0C), "param text @ record+0x0C");
-    // The console's 64-byte text write from the LAST slot must still land inside the object.
-    CGS_STATIC_ASSERT((KI_MAX_MESSAGES * 0x44 - 0x44 + 0x0C + 64 <= sizeof(GuiOverlayRequest)),
-                  "the attested 64-byte text write stays within the request object");
-
-    CGS_ASSERT(miNumMessages < KI_MAX_MESSAGES,
-               "Not enough free params in the Overlay.");   // h:7438 (streamed "<n>/2." on the X360)
-    CGS_ASSERT(lpcParam != 0, "lpcParam != NULL");          // h:7440
-
-    ParamInfo& lParam = maMessages[miNumMessages];          // this + 0x44*count
-    char* const lpacText = reinterpret_cast<char*>(&lParam) + 0x0C;
-
-    CgsCore::SPrintf(lpacText, 0x3F, "%s", lpcParam);       // li r4, 0x3F
-    lpacText[0x3F] = 0;                                     // stb 0, 0x4B(entry)  (0x4B-0x0C == 0x3F)
-    lParam.muId    = luId;                                  // stw r24, 8(entry)
-    ++miNumMessages;                                        // stw r11, 0x118(this)
-
-    // The X360 leaves SPrintf's r3 in place and returns it. The committed CgsCore::SPrintf
-    // reconstruction returns void (CgsStringUtils.h:11), so that value is not available here --
-    // return 0, exactly as the sibling GetMessageParam/GetButton1Param/GetButton2Param bodies
-    // already do for the same reason. No caller in the tree inspects the result.
-    return 0;
+    if (miNumMessages >= KI_MAX_MESSAGES)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Not enough free params in the Overlay (" << miNumMessages << "/" << KI_MAX_MESSAGES << ").";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+            "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7438);
+        CgsDev::Assert::EndAssert();
+    }
+    CGS_ASSERT(lpcParam != 0, "lpcParam != NULL");
+    CgsGui::GuiPopupParameter& lParam = maMessageParams[miNumMessages];
+    CgsCore::SPrintf(lParam.macParameter, 0x3F, "%s", lpcParam);
+    lParam.macParameter[0x3F] = 0;
+    lParam.meParamType = leType;
+    ++miNumMessages;
 }
 
-// @0x824EB948 -- copy message param liIndex into *lpOut.
-//   guard: liIndex >= *(this+0x118)  -> "Index isn't used in Overlay." (h:7508)
-//   guard: liIndex <  0              -> "Index isn't valid."           (h:7509)
-//   entry = this + 0x44*liIndex; SPrintf(out+4, 64, "%s", entry+0x0C); *out = *(entry+0x08)
-s32 GuiOverlayRequest::GetMessageParam(ParamOut* lpOut, s32 liIndex) const
+void GuiOverlayRequest::GetMessageParam(CgsGui::GuiPopupParameter* lpOut, s32 liIndex) const
 {
-    // X360-pinned member offsets (validated from a member context where the private
-    // members are visible to offsetof): the two button records at +0x88/+0xCC, the count
-    // at +0x118 and the two guard bytes at +0x11C/+0x11D.
-    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, mButton1) == 0x88), "button1 record @+0x88");
-    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, mButton2) == 0xCC), "button2 record @+0xCC");
-    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, miNumMessages) == 0x118), "count @+0x118");
-    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, mbButton1Used) == 0x11C), "button1 guard @+0x11C");
-    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, mbButton2Used) == 0x11D), "button2 guard @+0x11D");
-
-    CGS_ASSERT( liIndex < miNumMessages, "Index isn't used in Overlay." );
-    CGS_ASSERT( liIndex >= 0,            "Index isn't valid." );
-
-    const ParamInfo& lParam = maMessages[liIndex]; // this + 0x44*liIndex
-    CgsCore::SPrintf( lpOut->macText, sizeof(lpOut->macText), "%s", lParam.macText );
-    lpOut->muId = lParam.muId;                      // *a2 = *(entry+0x08)
-    return 0;
+    CGS_ASSERT(liIndex < miNumMessages, "Index isn't used in Overlay.");
+    CGS_ASSERT(liIndex >= 0, "Index isn't valid.");
+    const CgsGui::GuiPopupParameter& lParam = maMessageParams[liIndex];
+    CgsCore::SPrintf(lpOut->macParameter, sizeof(lpOut->macParameter), "%s", lParam.macParameter);
+    lpOut->meParamType = lParam.meParamType;
 }
 
-// @0x824EBA78 -- copy button-1 param into *lpOut.
-//   guard: *(this+0x11C) == 0 -> "button 1 param isn't used in Overlay." (h:7528)
-//   SPrintf(out+4, 64, "%s", this+0x94); *out = *(this+0x90)
-s32 GuiOverlayRequest::GetButton1Param(ParamOut* lpOut) const
+void GuiOverlayRequest::GetButton1Param(CgsGui::GuiPopupParameter* lpOut) const
 {
-    CGS_ASSERT( mbButton1Used != 0, "button 1 param isn't used in Overlay." );
-
-    CgsCore::SPrintf( lpOut->macText, sizeof(lpOut->macText), "%s", mButton1.macText );
-    lpOut->muId = mButton1.muId;
-    return 0;
+    CGS_ASSERT(mbButton1Used, "button 1 param isn't used in Overlay.");
+    CgsCore::SPrintf(lpOut->macParameter, sizeof(lpOut->macParameter), "%s", mButton1Param.macParameter);
+    lpOut->meParamType = mButton1Param.meParamType;
 }
 
-// @0x824EBB38 -- copy button-2 param into *lpOut.
-//   guard: *(this+0x11D) == 0 -> "button 2 param isn't used in Overlay." (h:7547)
-//   SPrintf(out+4, 64, "%s", this+0xD8); *out = *(this+0xD4)
-s32 GuiOverlayRequest::GetButton2Param(ParamOut* lpOut) const
+void GuiOverlayRequest::GetButton2Param(CgsGui::GuiPopupParameter* lpOut) const
 {
-    CGS_ASSERT( mbButton2Used != 0, "button 2 param isn't used in Overlay." );
-
-    CgsCore::SPrintf( lpOut->macText, sizeof(lpOut->macText), "%s", mButton2.macText );
-    lpOut->muId = mButton2.muId;
-    return 0;
+    CGS_ASSERT(mbButton2Used, "button 2 param isn't used in Overlay.");
+    CgsCore::SPrintf(lpOut->macParameter, sizeof(lpOut->macParameter), "%s", mButton2Param.macParameter);
+    lpOut->meParamType = mButton2Param.meParamType;
 }
 
 // ============================================================================

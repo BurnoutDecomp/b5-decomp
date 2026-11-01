@@ -61,7 +61,7 @@ namespace BrnGui
 
         // The message-param slot this handler fills with the disconnect reason text
         // (the X360's `li r4, 1` at 0x824D89E0).
-        const u32 KU_DISCONNECT_REASON_MESSAGE_PARAM = 1;
+        const CgsGui::PopupParamTypes KU_DISCONNECT_REASON_MESSAGE_PARAM = CgsGui::E_POPUPPARAMTYPES_STRING;
     }
 
     // ---- HandleDisconnectedEvent @ 0x824D8830 (cpp:873) -----------------------------

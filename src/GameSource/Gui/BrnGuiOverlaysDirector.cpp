@@ -93,7 +93,7 @@ void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpEvent)
         if (mBufferedOverlay.mNameId != 0)
         {
             char lacOverlayName[16];
-            CgsIDConvertToString(lpEvent->GetOverlayId(), lacOverlayName);
+            CgsIDConvertToString(lpEvent->mOverlayID, lacOverlayName);
             lacOverlayName[12] = 0;
 
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -147,10 +147,7 @@ void GuiOverlaysDirector::HandleWaitFinishRequest(const GuiOverlayWaitFinishRequ
 void GuiOverlaysDirector::SetUpOverlayInfo(GuiOverlayFullInfoResponse* lpOverlay,
                                            const GuiOverlayRequest* lpEvent)
 {
-    CGS_STATIC_ASSERT((sizeof(GuiOverlayRequest::ParamOut) == sizeof(CgsGui::GuiPopupParameter)),
-                  "a request param copies into a GuiPopupParameter slot");
-
-    lpOverlay->mNameId            = lpEvent->GetOverlayId();
+    lpOverlay->mNameId            = lpEvent->mOverlayID;
     lpOverlay->mbButon1ParamUsed  = lpEvent->mbButton1Used != 0;
     lpOverlay->mbButon2ParamUsed  = lpEvent->mbButton2Used != 0;
     lpOverlay->miMessageParamsUsed = lpEvent->GetMessageParamCount();
@@ -158,15 +155,15 @@ void GuiOverlaysDirector::SetUpOverlayInfo(GuiOverlayFullInfoResponse* lpOverlay
     for (s32 liIter = 0; liIter < lpOverlay->miMessageParamsUsed; ++liIter)
     {
         lpEvent->GetMessageParam(
-            reinterpret_cast<GuiOverlayRequest::ParamOut*>(&lpOverlay->maMessageParams[liIter]),
+            &lpOverlay->maMessageParams[liIter],
             liIter);
     }
 
     if (lpOverlay->mbButon1ParamUsed)
-        lpEvent->GetButton1Param(reinterpret_cast<GuiOverlayRequest::ParamOut*>(&lpOverlay->mButton1Param));
+        lpEvent->GetButton1Param(&lpOverlay->mButton1Param);
 
     if (lpOverlay->mbButon2ParamUsed)
-        lpEvent->GetButton2Param(reinterpret_cast<GuiOverlayRequest::ParamOut*>(&lpOverlay->mButton2Param));
+        lpEvent->GetButton2Param(&lpOverlay->mButton2Param);
 
     mpController->GetPopup(lpOverlay);
 }
@@ -213,7 +210,7 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
             else
             {
                 lEnterGameOverlayRequest.Construct("OnCReturnOn");
-                lEnterGameOverlayRequest.AddMessageParam(1, lpHostPlayerInfo->mPlayerName.GetPlayerName());
+                lEnterGameOverlayRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING, lpHostPlayerInfo->mPlayerName.GetPlayerName());
             }
         }
         else if (lpHostPlayerInfo == NULL ||
@@ -226,12 +223,12 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
             // The local host with company: named after the first non-host player.
             CGS_ASSERT(lpFirstNonHostPlayerInfo != NULL, "lpFirstNonHostPlayerInfo");
             lEnterGameOverlayRequest.Construct("OnCEnterOn");
-            lEnterGameOverlayRequest.AddMessageParam(1, lpFirstNonHostPlayerInfo->mPlayerName.GetPlayerName());
+            lEnterGameOverlayRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING, lpFirstNonHostPlayerInfo->mPlayerName.GetPlayerName());
         }
         else
         {
             lEnterGameOverlayRequest.Construct("OnCEnterOn");
-            lEnterGameOverlayRequest.AddMessageParam(1, lpHostPlayerInfo->mPlayerName.GetPlayerName());
+            lEnterGameOverlayRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING, lpHostPlayerInfo->mPlayerName.GetPlayerName());
         }
         HandleOverlayRequest(&lEnterGameOverlayRequest);
     }

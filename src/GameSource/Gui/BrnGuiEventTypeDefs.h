@@ -625,106 +625,29 @@ private:
 class GuiOverlayRequest
 {
 public:
-    // One overlay parameter: a 0x44-byte record holding an id and a text string. The
-    // X360 stride between message params is 0x44 (GetMessageParam: r31 = 0x44*idx+this),
-    // with the id read at record+0x08 and the text formatted from record+0x0C.
-    struct ParamInfo
-    {
-        u8   maHead[0x08];   // +0x00..+0x07 (head; not touched by the accessors)
-        u32  muId;           // +0x08  (copied into the output record's leading dword)
-        char macText[0x38];  // +0x0C..+0x43  (SPrintf "%s" source; 56 bytes to the 0x44 stride)
-    };
-
-    // The output record the accessors fill: a leading id dword then a 64-byte text
-    // buffer (SPrintf writes into output+0x04 with length 64; the id is stored at
-    // output+0x00).
-    struct ParamOut
-    {
-        u32  muId;            // +0x00  (*a2 = param.muId)
-        char macText[0x40];   // +0x04  (SPrintf(out+4, 64, "%s", param.macText))
-    };
-
-    // Message param slots. GetMessageParam asserts the index is in [0, miNumMessages);
-    // the first button record sits immediately after these two slots (+0x88).
     static const s32 KI_MAX_MESSAGES = 2;
+    CgsID mOverlayID;
 
-    // ADDITIVE GROW (CgsGui::GuiModule::AddGuiEvent<GuiOverlayRequest> @0x823D5180): the
-    // producer queues this request with the compile-time id 184 (inlined GetEventType()).
-    // The type is not GuiEvent<N>-derived, so the id is carried by this method. X360-attested
-    // by the AddEvent(&request, 184, 288) literal.
     s32 GetEventType() const { return 184; }
-
-    // @0x823B1CC8 -- initialise the request from an overlay-id string. Asserts the string
-    // is non-NULL ("Invalid Overlay Id", BrnGuiEventTypeDefs.h:7404), compresses it to the
-    // leading CgsID (stored over the first param record's 8-byte head at +0x00), and clears
-    // the message count + the two button-present guards. Returns the compressed id (the X360
-    // returns r3 == the CgsIDCompress result). Called by ~45 overlay-request sites.
-    CgsID Construct(const char* lpcOverlayId);
-
-    // ARTIST case 49 @0x823ED8E0..0x823ED920 already has the compressed CgsID in the action's
-    // leading qword. It clears the same count/button guards, then stores that id directly over
-    // maMessages[0].maHead, without another CgsIDCompress call.
-    CgsID Construct(CgsID lOverlayId);
-
-    // ADDITIVE GROW (GuiOverlaysDirector::HandleOverlayRequest @0x825162C8, which loads
-    // the request's leading qword): the compressed overlay id Construct stored over the
-    // first param record's head.
-    CgsID GetOverlayId() const
-    {
-        return *reinterpret_cast<const CgsID*>(maMessages[0].maHead);
-    }
-
-    // @0x82472A18 -- append one message param: SPrintf ("%s", cap 63 + forced NUL @+0x4B)
-    // lpcParam into the next free record's text, store luId at its +0x08 id slot, bump
-    // miNumMessages. Asserts miNumMessages < 2 ("Not enough free params in the Overlay
-    // (<n>/2).", streamed) and lpcParam != NULL. Returns the SPrintf result (r3). ADDITIVE
-    // GROW (BrnCarSelectMain wave G: HandleLaunchedEvent @0x824C8FBC / the sibling
-    // HandleLaunchingEvent @0x824C915C call it). Declaration-only: the body's ledger TU is
-    // elsewhere (identity primary_file mis-attributes it to CgsStrStream.h) and no
-    // definition exists in the tree yet -- see the wave-G spec.
-    s32 AddMessageParam(u32 luId, const char* lpcParam);
-
-    // @0x824EB948 -- copy message param liIndex into lOut. Asserts liIndex < miNumMessages
-    // ("Index isn't used in Overlay.") and liIndex >= 0 ("Index isn't valid."). Returns the
-    // SPrintf result (the X360 returns r3 from CgsCore::SPrintf).
-    s32 GetMessageParam(ParamOut* lpOut, s32 liIndex) const;
-
-    // @0x824EBA78 -- copy button-1 param into lOut. Asserts mbButton1Used != 0
-    // ("button 1 param isn't used in Overlay."). Returns the SPrintf result.
-    s32 GetButton1Param(ParamOut* lpOut) const;
-
-    // @0x824EBB38 -- copy button-2 param into lOut. Asserts mbButton2Used != 0
-    // ("button 2 param isn't used in Overlay."). Returns the SPrintf result.
-    s32 GetButton2Param(ParamOut* lpOut) const;
-
-    // The message-param count (miNumMessages, +0x118). Inlined at its one reader,
-    // GuiOverlaysDirector::SetUpOverlayInfo, which also reads the two button-used bytes
-    // directly (hence the friend below).
+    void Construct(const char* lpcOverlayId);
+    void Construct(CgsID lOverlayId);
+    void AddMessageParam(CgsGui::PopupParamTypes leType, const char* lpcParam);
+    void GetMessageParam(CgsGui::GuiPopupParameter* lpOut, s32 liIndex) const;
+    void GetButton1Param(CgsGui::GuiPopupParameter* lpOut) const;
+    void GetButton2Param(CgsGui::GuiPopupParameter* lpOut) const;
     s32 GetMessageParamCount() const { return miNumMessages; }
     friend struct GuiOverlaysDirector;
 
 private:
-    ParamInfo maMessages[KI_MAX_MESSAGES];  // @0x00..0x87 (message params 0,1)
-    ParamInfo mButton1;                     // @0x88 (id @0x90, text @0x94)
-    ParamInfo mButton2;                     // @0xCC (id @0xD4, text @0xD8)
-    u8        maReserved[0x118 - 0x110];    // @0x110..0x117 (unrecovered span before the count)
-    s32       miNumMessages;                // @0x118 (message-param count)
-    u8        mbButton1Used;                // @0x11C (button-1 present guard)
-    u8        mbButton2Used;                // @0x11D (button-2 present guard)
-
-    // X360-pinned sub-field guards on the parameter records (the loads/stores that index
-    // them: id @+0x08, text @+0x0C, 0x44 stride; the output's text buffer at +0x04).
-    CGS_STATIC_ASSERT((sizeof(ParamInfo) == 0x44), "ParamInfo stride 0x44 (GetMessageParam: 0x44*idx)");
-    CGS_STATIC_ASSERT((offsetof(ParamInfo, muId) == 0x08), "param id @+0x08");
-    CGS_STATIC_ASSERT((offsetof(ParamInfo, macText) == 0x0C), "param text @+0x0C");
-    CGS_STATIC_ASSERT((offsetof(ParamOut, macText) == 0x04), "out text @+0x04 (SPrintf out+4)");
+    CgsGui::GuiPopupParameter maMessageParams[KI_MAX_MESSAGES];
+    CgsGui::GuiPopupParameter mButton1Param;
+    CgsGui::GuiPopupParameter mButton2Param;
+    s32 miNumMessages;
+    bool mbButton1Used;
+    bool mbButton2Used;
 };
-
-// X360-pinned member offsets (the two button records and the count / guard bytes). At
-// namespace scope after the complete type; the members are non-public so these are
-// validated indirectly via the reserved-span construction documented above. (The button
-// records land at +0x88 / +0xCC == 2*0x44 / 3*0x44, the count at +0x118, the guards at
-// +0x11C / +0x11D, matching GetButton1Param/GetButton2Param/GetMessageParam.)
+CGS_STATIC_ASSERT((sizeof(GuiOverlayRequest) == 0x120), "ARTIST overlay request payload");
+CGS_STATIC_ASSERT((__alignof(GuiOverlayRequest) == 8), "ARTIST overlay request alignment");
 
 // ===================================================================================
 // BrnGui::GuiNewBurnoutSkillzEvent -- the per-frame "new burnout skillz scores" event

@@ -677,7 +677,7 @@ namespace BrnGui
             // constructed in place here.
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct("CNOnlLchFail");
-            lWire.mRequest.AddMessageParam(2, KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
+            lWire.mRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING_ID, KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
 
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
@@ -1117,8 +1117,8 @@ namespace BrnGui
         };
 
         // The launch overlay's two message parameters.
-        const u32 KU_LAUNCH_PARAM_PLAYER_NAME = 1;
-        const u32 KU_LAUNCH_PARAM_GAME_MODE   = 2;
+        const CgsGui::PopupParamTypes KU_LAUNCH_PARAM_PLAYER_NAME = CgsGui::E_POPUPPARAMTYPES_STRING;
+        const CgsGui::PopupParamTypes KU_LAUNCH_PARAM_GAME_MODE = CgsGui::E_POPUPPARAMTYPES_STRING_ID;
     }
 
     // ---- HandleLaunchingEvent ------------------------------------------------------
