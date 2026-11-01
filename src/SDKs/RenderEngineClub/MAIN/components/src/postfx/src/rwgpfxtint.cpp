@@ -41,12 +41,11 @@ namespace rw { namespace graphics { namespace postfx {
         params.muFunction = reinterpret_cast<u32>(kTintPixelProgram);
         params.muShaderType = 1;
         params.muReserved8 = sizeof(kTintPixelProgram);
-        rw::BaseResourceDescriptors<5> descriptor;
+        rw::ResourceDescriptor descriptor;
         renderengine::ProgramBuffer::GetResourceDescriptor(&descriptor, &params);
-        gTintPixelProgramResource = allocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(descriptor), 0);
+        gTintPixelProgramResource = allocator->DoAllocate(descriptor, 0);
         gpTintPixelProgram = renderengine::ProgramBuffer::Initialize(
-            reinterpret_cast<renderengine::ProgramResourceLayout*>(&gTintPixelProgramResource), &params);
+            &gTintPixelProgramResource, &params);
         return gpTintPixelProgram;
     }
 

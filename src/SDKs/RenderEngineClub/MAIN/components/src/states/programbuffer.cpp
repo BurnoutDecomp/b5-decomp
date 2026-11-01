@@ -50,7 +50,7 @@
 //     +0x20  u32  muConstantTableSize  size of that blob (0 -> rebuild from microcode)
 //     +0x24  u32  muNumVariables       descriptor count for the pre-baked blob
 //
-//   ProgramResourceLayout  (the `a1` handed to Initialize)
+//   rw::Resource  (the five-lane `a1` handed to Initialize)
 //     +0x00  ProgramBufferData*  the object slot (also the +0x00 pointer the loop seeds)
 //     +0x08  void*               the physical resource block memcpy / register target
 //
@@ -178,7 +178,7 @@ namespace renderengine
     // header (from a compiled function via XGGetMicrocodeShaderParts, or the inline params words),
     // installs the shader header + registers it with the GPU (vertex vs pixel by params shader-type),
     // then copies (or rebuilds) the named-variable constant table immediately past the microcode.
-    ProgramBufferData* ProgramBuffer::Initialize(ProgramResourceLayout* lpLayout, const ProgramBufferParameters* lpParams)
+    ProgramBufferData* ProgramBuffer::Initialize(rw::Resource* lpResource, const ProgramBufferParameters* lpParams)
     {
         ProgramMicrocodeParts lParts;
         if (lpParams->muFunction != 0)
@@ -193,8 +193,8 @@ namespace renderengine
             lParts.cbPhysicalPartSize = lpParams->muMicrocodePart3;  // a2[6]
         }
 
-        ProgramBufferData* lpData = lpLayout->mpData;
-        void*              lpPhysical = lpLayout->mpPhysicalBlock;
+        ProgramBufferData* lpData = static_cast<ProgramBufferData*>(lpResource->m_baseResources[0]);
+        void*              lpPhysical = lpResource->m_baseResources[2];
 
         lpData->muShaderType     = 0;
         lpData->mu16NumVariables = 0;
@@ -244,9 +244,10 @@ namespace renderengine
         {
             // Rebuild from the compiled microcode.
             XGGetMicrocodeShaderParts(reinterpret_cast<const void*>(lpParams->muFunction), &lParts);
+            u32 luTableSize;
             lpData->mu16NumVariables = static_cast<u16>(
                 ProgramBuffer::Xbox2CreateConstantTable(reinterpret_cast<const void*>(lpParams->muFunction),
-                                                        lpVarTable, 0));
+                                                        lpVarTable, &luTableSize));
         }
 
         return lpData;

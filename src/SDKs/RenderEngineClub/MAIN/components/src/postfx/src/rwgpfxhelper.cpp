@@ -208,10 +208,9 @@ namespace
     // The renderengine allocator keeps its dispatch pointer as the first word; the helper stores that
     // word (m_allocator) and routes DoAllocate through it.
     rw::Resource AllocateResource(rw::IResourceAllocator* lpAllocator,
-                                  const rw::BaseResourceDescriptors<5>& lrDescriptor)
+                                  const rw::ResourceDescriptor& lrDescriptor)
     {
-        return lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), 0);
+        return lpAllocator->DoAllocate(lrDescriptor, 0);
     }
 
     // ARTIST 0x82C4F910 initializes these positions; 0x82408494 uploads the first three.
@@ -242,11 +241,11 @@ namespace postfx
         params.muFunction = reinterpret_cast<u32>(microcode);
         params.muShaderType = type;
         params.muReserved8 = size;
-        rw::BaseResourceDescriptors<5> descriptor;
+        rw::ResourceDescriptor descriptor;
         renderengine::ProgramBuffer::GetResourceDescriptor(&descriptor, &params);
         rw::Resource resource = AllocateResource(allocator, descriptor);
         return renderengine::ProgramBuffer::Initialize(
-            reinterpret_cast<renderengine::ProgramResourceLayout*>(&resource), &params);
+            &resource, &params);
     }
 
     // X360 0x82402D88. DWARF rwgpfxhelper.h:112 -- void; the console leaves the new state in r3 but
@@ -532,7 +531,7 @@ namespace postfx
             params.maElements[1].mu16Stream = 0;
             params.maElements[1].miOffset = 0x002C23A5;
             params.maElements[1].mu8UsageIndex = 6;
-            rw::BaseResourceDescriptors<5> descriptor;
+            rw::ResourceDescriptor descriptor;
             renderengine::VertexDescriptor::GetResourceDescriptor(&descriptor, &params);
             rw::Resource resource = AllocateResource(m_allocator, descriptor);
             m_quadVertexDescriptor = renderengine::VertexDescriptor::Initialize(&resource, &params);

@@ -637,11 +637,10 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
             lVsParameters.muFunction          = static_cast<u32>(reinterpret_cast<usize>(lpVertexProgram));
             lVsParameters.muReserved8         = luVertexProgramSize;
 
-            rw::BaseResourceDescriptors<5> lVsResDesc;
+            rw::ResourceDescriptor lVsResDesc;
             renderengine::ProgramBuffer::GetResourceDescriptor(&lVsResDesc, &lVsParameters);
 
-            renderengine::ProgramResourceLayout lVsResource = {};
-            CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lVsResource, &lVsResDesc);
+            rw::Resource lVsResource = lpAllocator->DoAllocate(lVsResDesc, 0);
             mpVertexProgram = renderengine::ProgramBuffer::Initialize(&lVsResource, &lVsParameters);
 
             CGS_ASSERT(mpVertexProgram != 0, "NULL != mpVertexProgram");   // BrnPostFxShader.cpp:196
@@ -656,11 +655,10 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
             lPsParameters.muShaderType        = 1;
             lPsParameters.muReserved8         = luPixelProgramSize;
 
-            rw::BaseResourceDescriptors<5> lPsResDesc;
+            rw::ResourceDescriptor lPsResDesc;
             renderengine::ProgramBuffer::GetResourceDescriptor(&lPsResDesc, &lPsParameters);
 
-            renderengine::ProgramResourceLayout lPsResource = {};
-            CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lPsResource, &lPsResDesc);
+            rw::Resource lPsResource = lpAllocator->DoAllocate(lPsResDesc, 0);
             mpPixelProgram = renderengine::ProgramBuffer::Initialize(&lPsResource, &lPsParameters);
 
             CGS_ASSERT(mpPixelProgram != 0, "NULL != mpPixelProgram");     // BrnPostFxShader.cpp:208

@@ -122,7 +122,7 @@ renderengine::ProgramBufferData* CreateProgram(rw::IResourceAllocator* lpAllocat
     // ARTIST82400B0C/B98/C30/CB0 passes the actual five-lane resource.
     // ProgramBuffer::Initialize consumes its existing lane-zero/lane-two view.
     return renderengine::ProgramBuffer::Initialize(
-        reinterpret_cast<renderengine::ProgramResourceLayout*>(&lResource), &lParameters);
+        &lResource, &lParameters);
 }
 
 struct SunCoronaVertex
