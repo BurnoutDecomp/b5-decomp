@@ -1,6 +1,6 @@
 #include "SDKs/XCam/XCamDecoder.h"
 
-#include <intrin.h>   // _InterlockedIncrement (X360 interrupt-safe interlocked inc)
+#include <xtl.h>
 
 // ===========================================================================
 // XCAM::CDecoder -- reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
@@ -49,7 +49,7 @@ int CDecoder::DecodeFrame(int bSkipOutput, int iErrorRecoveryFrameType)
 
     // Atomically bump the decoded-frame counter (X360 interrupt-safe interlocked
     // increment: mfmsr/mtmsree around lwarx/stwcx on this+0).
-    _InterlockedIncrement(reinterpret_cast<volatile long*>(&muDecodeCount));
+    InterlockedIncrement(reinterpret_cast<volatile long*>(&muDecodeCount));
 
     switch (iResult)
     {

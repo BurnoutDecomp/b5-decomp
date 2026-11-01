@@ -1,8 +1,7 @@
 #include "SDKs/XCam/XCamEncoder.h"
 
 #include <cstring> // memset
-#include <intrin.h> // _InterlockedIncrement -- portable stand-in for the X360
-                    // interrupt-masked lwarx/stwcx. reservation increment.
+#include <xtl.h>
 
 // ===========================================================================
 // XCAM::CEncoder -- reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
@@ -191,7 +190,7 @@ int CEncoder::EncodeFrame(int iFrameKind, int iParam, u32* pOutStatus,
     pSlot->SignalComplete(0, 0, mFormat.muSizeImage);
 
     // Interrupt-masked reservation increment of the encoded-frame counter.
-    _InterlockedIncrement(reinterpret_cast<volatile long*>(&muFrameCounter));
+    InterlockedIncrement(reinterpret_cast<volatile long*>(&muFrameCounter));
     return 0;
 }
 
