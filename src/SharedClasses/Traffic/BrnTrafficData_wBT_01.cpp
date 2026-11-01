@@ -19,17 +19,17 @@ namespace BrnTraffic
         // The console's all-lanes self-equality test on a VecFloat (vcmpeqfp. v, v, v).
         inline bool IsValidVecFloat(VecFloat lfValue)
         {
-            return lfValue.x == lfValue.x && lfValue.y == lfValue.y
-                && lfValue.z == lfValue.z && lfValue.w == lfValue.w;
+            return lfValue.mV.x == lfValue.mV.x && lfValue.mV.y == lfValue.mV.y
+                && lfValue.mV.z == lfValue.mV.z && lfValue.mV.w == lfValue.mV.w;
         }
 
         // Every lane of lfLhs strictly greater than the same lane of lfRhs (vcmpgtfp. "all true").
         inline bool AllGreater(VecFloat lfLhs, VecFloat lfRhs)
         {
-            return lfLhs.x > lfRhs.x && lfLhs.y > lfRhs.y && lfLhs.z > lfRhs.z && lfLhs.w > lfRhs.w;
+            return lfLhs.mV.x > lfRhs.mV.x && lfLhs.mV.y > lfRhs.mV.y && lfLhs.mV.z > lfRhs.mV.z && lfLhs.mV.w > lfRhs.mV.w;
         }
 
-        inline VecFloat SplatScalar(f32 lfValue) { { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; } }
+        inline VecFloat SplatScalar(f32 lfValue) { return VecFloat(lfValue); }
     }
 
     // BrnTrafficData.h. Search the hull under lPosition plus the hulls under the four
@@ -67,10 +67,13 @@ namespace BrnTraffic
         for (s32 liProbe = 0; liProbe < KI_NUM_PROBES; ++liProbe)
         {
             const Vector3& lrDirection = laProbeDirections[liProbe];
-            const Vector3 lProbe = { lfMaxDistance.x * lrDirection.x + lPosition.x,
-                                     lfMaxDistance.y * lrDirection.y + lPosition.y,
-                                     lfMaxDistance.z * lrDirection.z + lPosition.z,
-                                     lfMaxDistance.w * lrDirection.w + lPosition.w };
+            const rw::math::vpu::VectorIntrinsic lProbeLanes = {
+                lfMaxDistance.mV.x * lrDirection.mV.x + lPosition.mV.x,
+                lfMaxDistance.mV.y * lrDirection.mV.y + lPosition.mV.y,
+                lfMaxDistance.mV.z * lrDirection.mV.z + lPosition.mV.z,
+                lfMaxDistance.mV.w * lrDirection.mV.w + lPosition.mV.w
+            };
+            const Vector3 lProbe(lProbeLanes);
             const u16 luHull = static_cast<u16>(mpPvs->GetHullIndexForPoint(lProbe));
             if (lHulls.FindFirstInstanceOf(luHull) == -1)
                 lHulls.Append(luHull);
@@ -110,7 +113,7 @@ namespace BrnTraffic
     {
         const Hull* lpHull = mpapHulls[luHull];
 
-        f32  lfBestDistanceSquared = lfMaxDistance.x * lfMaxDistance.x;
+        f32  lfBestDistanceSquared = lfMaxDistance.mV.x * lfMaxDistance.mV.x;
         u32  luBestSection = 255;
         u32  luBestSegment = 0xFFFFFFFFu;
         bool lbFound = false;
