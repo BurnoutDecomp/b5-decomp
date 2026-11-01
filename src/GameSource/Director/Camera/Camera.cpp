@@ -129,11 +129,12 @@ rw::math::vpu::Matrix44Affine* Camera::ValidateTransformWithDebugInfo()
 
     // 2. Position within +/- 1,000,000 on every axis. One-time-initialised broadcast
     //    bound (the X360 dword_82FAAD20 & 1 cache guard).
-    static const rw::math::vpu::Vector3 sOneMillion = { 1000000.0f, 1000000.0f, 1000000.0f, 1000000.0f };
+    static const rw::math::vpu::VectorIntrinsic sOneMillionLanes = { 1000000.0f, 1000000.0f, 1000000.0f, 1000000.0f };
+    static const rw::math::vpu::Vector3 sOneMillion(sOneMillionLanes);
     const rw::math::vpu::Vector3 lAbsPosition = rw::math::vpu::Abs(mTransform.Pos());
-    CGS_ASSERT(lAbsPosition.x < sOneMillion.x
-            && lAbsPosition.y < sOneMillion.y
-            && lAbsPosition.z < sOneMillion.z,
+    CGS_ASSERT(lAbsPosition.mV.x < sOneMillion.mV.x
+            && lAbsPosition.mV.y < sOneMillion.mV.y
+            && lAbsPosition.mV.z < sOneMillion.mV.z,
                "Camera has unreasonable position, originated from: ");
 
     return &mTransform;
@@ -623,10 +624,10 @@ void Camera::CopyToCgsCamera(CgsGraphics::Camera* lpOutCamera) const
 
     // target = Pos + At (the vaddfp of +0x30 and +0x20).
     rw::math::vpu::Vector3 lTarget;
-    lTarget.x = mTransform.Pos().x + mTransform.At().x;
-    lTarget.y = mTransform.Pos().y + mTransform.At().y;
-    lTarget.z = mTransform.Pos().z + mTransform.At().z;
-    lTarget.w = mTransform.Pos().w + mTransform.At().w;
+    lTarget.mV.x = mTransform.Pos().mV.x + mTransform.At().mV.x;
+    lTarget.mV.y = mTransform.Pos().mV.y + mTransform.At().mV.y;
+    lTarget.mV.z = mTransform.Pos().mV.z + mTransform.At().mV.z;
+    lTarget.mV.w = mTransform.Pos().mV.w + mTransform.At().mV.w;
     lpOutCamera->LookAt(mTransform.Pos(), mTransform.Up(), lTarget);
 
     // Near clip (the inlined GetNearClipDistance selection), then rebuild.
