@@ -84,9 +84,6 @@ struct State : public CgsSound::MemBase
     // synthesised from (body = DestroyEffects()). Was an inline no-op.
     virtual ~State();
 
-    // CgsState.h:245 @ 0x826916D8. True when apv is this state's attachment.
-    virtual bool IsAttachedToThis(void* apvAttachment);
-
     // Per-class RTTI hooks the derived leaves override (declared on the base for
     // the virtual dispatch shape; the DWARF leaves each list both as virtual
     // overrides). FLAG: declaration-only un-homed base virtuals (each leaf's
@@ -113,6 +110,9 @@ struct State : public CgsSound::MemBase
     virtual void ProcessUpdate();
     virtual bool Detach();
     virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {}
+
+    // CgsState.h:245 @ 0x826916D8. True when apv is this state's attachment.
+    virtual bool IsAttachedToThis(void* apvAttachment);
 
     // True once the state is bound to an attachment -- the mbIsAttached flag at
     // +72 (0x48), i.e. the `lbz 0x48(state)` byte the derived accessors test
