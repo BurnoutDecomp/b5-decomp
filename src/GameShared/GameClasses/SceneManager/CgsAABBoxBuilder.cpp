@@ -22,23 +22,11 @@ namespace CgsSceneManager
 
 namespace
 {
-    // vminfp / vmaxfp: per-lane minimum / maximum over all four lanes.
-    inline f32 LaneMin(f32 afA, f32 afB) { return (afA < afB) ? afA : afB; }
-    inline f32 LaneMax(f32 afA, f32 afB) { return (afA > afB) ? afA : afB; }
-
-    inline void ReadLanes(const rw::collision::Vec4& arRow, f32 (&arfLanes)[4])
-    {
-        arfLanes[0] = arRow.x;
-        arfLanes[1] = arRow.y;
-        arfLanes[2] = arRow.z;
-        arfLanes[3] = arRow.w;
-    }
-
     // X360 .data unk_83270F80 -- the three cardinal probe directions handed to
     // GPInstance::mMethods.mGetIntervals, built on first use behind the
     // one-shot flag dword_83270FB0 (bit 0). TU-shared: CreateFromCylinder
     // forwards into CreateFromBox.
-    rw::collision::Vec4 gaProbeDirections[3];
+    rw::math::vpu::Vector3 gaProbeDirections[3];
     u32                 guProbeDirectionsOnce = 0;   // X360 dword_83270FB0
 }
 
@@ -59,33 +47,10 @@ namespace
 void AABBoxBuilder::CreateFromTriangle(rw::collision::AABBox* lpBBox,
                                        const rw::collision::GPInstance* lpTriangle)
 {
-    f32 lafV0[4];
-    f32 lafV1[4];
-    f32 lafV2[4];
-
-    // --- min row (stored first, @ r3+0x00) ---------------------------------
-    // lvx128 vert0/vert2/vert1; vminfp v13, v12(vert1), v13(vert2);
-    // vminfp v0, v0(vert0), v13; stvx128 @r3.
-    ReadLanes(lpTriangle->mPos,            lafV0);   // r4+0x00  Vertex0
-    ReadLanes(lpTriangle->mFaceNormals[1], lafV1);   // r4+0x20  Vertex1
-    ReadLanes(lpTriangle->mFaceNormals[2], lafV2);   // r4+0x30  Vertex2
-    for (u32 luLane = 0; luLane < 4; ++luLane)
-    {
-        lpBBox->mMin.mV.v[luLane] =
-            LaneMin(lafV0[luLane], LaneMin(lafV1[luLane], lafV2[luLane]));
-    }
-
-    // --- max row (vertex rows RE-loaded after the min store, @ r3+0x10) ----
-    // lvx128 vert1/vert2; vmaxfp v0, v13(vert1), v0(vert2);
-    // lvx128 vert0; vmaxfp v0, v13(vert0), v0; stvx128 @r3+0x10.
-    ReadLanes(lpTriangle->mFaceNormals[1], lafV1);
-    ReadLanes(lpTriangle->mFaceNormals[2], lafV2);
-    ReadLanes(lpTriangle->mPos,            lafV0);
-    for (u32 luLane = 0; luLane < 4; ++luLane)
-    {
-        lpBBox->mMax.mV.v[luLane] =
-            LaneMax(lafV0[luLane], LaneMax(lafV1[luLane], lafV2[luLane]));
-    }
+    lpBBox->mMin.mV = __vminfp(lpTriangle->mPos.mV,
+        __vminfp(lpTriangle->mFaceNormals[1].mV, lpTriangle->mFaceNormals[2].mV));
+    lpBBox->mMax.mV = __vmaxfp(lpTriangle->mPos.mV,
+        __vmaxfp(lpTriangle->mFaceNormals[1].mV, lpTriangle->mFaceNormals[2].mV));
 }
 
 // ===========================================================================
@@ -111,12 +76,9 @@ void AABBoxBuilder::CreateFromTriangle(rw::collision::AABBox* lpBBox,
 //     at 0x827C0360 (perpendicular build from two broadcast operands with
 //     the identical vrlimi z-insert).
 //
-// FLAG -- w lane only: the 16 bytes of the perm control unk_82CDA350 are not
-// in the export (un-homed across the whole tree). Interval.min/.max are
-// lane-broadcast VecFloats (GPInstance.hpp), so every candidate pick for the
-// w lane is a duplicate of either interval[0]'s or interval[1]'s scalar;
-// this body takes w from interval[1] (the canonical "X from operand A, YZW
-// from operand B" control). x/y/z are exact regardless.
+// ARTIST control 82CDA350 is 00010203 14151617 00010203 00010203:
+// after inserting interval 2 into z, the four lanes come from A.x, B.y,
+// interval 2.z, A.x respectively.
 // ===========================================================================
 void AABBoxBuilder::CreateFromBox(rw::collision::AABBox* lpBBox,
                                   const rw::collision::GPInstance* lpVolume)
@@ -128,45 +90,41 @@ void AABBoxBuilder::CreateFromBox(rw::collision::AABBox* lpBBox,
         guProbeDirectionsOnce |= 1u;
 
         // flt_82001C98 = 1.0f, flt_82001CC0 = 0.0f (float-pool immediates).
-        gaProbeDirections[0].x = 1.0f;   // unk_83270F80 + 0x00: (1,0,0,0)
-        gaProbeDirections[0].y = 0.0f;
-        gaProbeDirections[0].z = 0.0f;
-        gaProbeDirections[0].w = 0.0f;
+        gaProbeDirections[0].mV.x = 1.0f;   // unk_83270F80 + 0x00: (1,0,0,0)
+        gaProbeDirections[0].mV.y = 0.0f;
+        gaProbeDirections[0].mV.z = 0.0f;
+        gaProbeDirections[0].mV.w = 0.0f;
 
-        gaProbeDirections[1].x = 0.0f;   // unk_83270F80 + 0x10: (0,1,0,0)
-        gaProbeDirections[1].y = 1.0f;
-        gaProbeDirections[1].z = 0.0f;
-        gaProbeDirections[1].w = 0.0f;
+        gaProbeDirections[1].mV.x = 0.0f;   // unk_83270F80 + 0x10: (0,1,0,0)
+        gaProbeDirections[1].mV.y = 1.0f;
+        gaProbeDirections[1].mV.z = 0.0f;
+        gaProbeDirections[1].mV.w = 0.0f;
 
-        gaProbeDirections[2].x = 0.0f;   // unk_83270F80 + 0x20: (0,0,1,0)
-        gaProbeDirections[2].y = 0.0f;
-        gaProbeDirections[2].z = 1.0f;
-        gaProbeDirections[2].w = 0.0f;
+        gaProbeDirections[2].mV.x = 0.0f;   // unk_83270F80 + 0x20: (0,0,1,0)
+        gaProbeDirections[2].mV.y = 0.0f;
+        gaProbeDirections[2].mV.z = 1.0f;
+        gaProbeDirections[2].mV.w = 0.0f;
     }
 
     // `lwz r11, 0xAC(r3)` / bctrl -- the instance's cached batched-interval
     // callback (GPInstance::VolumeMethods::mGetIntervals, console +0xAC):
     // one projection interval per probe direction, Interval stride 0x30.
     rw::collision::Interval laIntervals[3];
-    lpVolume->mMethods.mGetIntervals(lpVolume, gaProbeDirections, 3u, laIntervals);
+    (lpVolume->*(lpVolume->mMethods.mGetIntervals))(gaProbeDirections, 3u, laIntervals);
 
     // min row @ bbox+0x00: vperm(unk_82CDA350)(i0.min, i1.min) then
     // vrlimi128 ...,2,0 inserts z from i2.min. Interval bounds are broadcast
     // VecFloats, so each pick below reads that interval's scalar.
-    lpBBox->mMin.mV.v[0] = laIntervals[0].min.x;
-    lpBBox->mMin.mV.v[1] = laIntervals[1].min.y;
-    lpBBox->mMin.mV.v[2] = laIntervals[2].min.z;
-    lpBBox->mMin.mV.v[3] = laIntervals[1].min.w;   // FLAGGED: w-lane source
-                                                         // (i1 per the canonical
-                                                         // control; i0 the only
-                                                         // alternative -- both
-                                                         // broadcast duplicates)
+    lpBBox->mMin.mV.v[0] = laIntervals[0].min.mV.x;
+    lpBBox->mMin.mV.v[1] = laIntervals[1].min.mV.y;
+    lpBBox->mMin.mV.v[2] = laIntervals[2].min.mV.z;
+    lpBBox->mMin.mV.v[3] = laIntervals[0].min.mV.x;
 
     // max row @ bbox+0x10: same shuffle over the interval maxima.
-    lpBBox->mMax.mV.v[0] = laIntervals[0].max.x;
-    lpBBox->mMax.mV.v[1] = laIntervals[1].max.y;
-    lpBBox->mMax.mV.v[2] = laIntervals[2].max.z;
-    lpBBox->mMax.mV.v[3] = laIntervals[1].max.w;   // FLAGGED: as above
+    lpBBox->mMax.mV.v[0] = laIntervals[0].max.mV.x;
+    lpBBox->mMax.mV.v[1] = laIntervals[1].max.mV.y;
+    lpBBox->mMax.mV.v[2] = laIntervals[2].max.mV.z;
+    lpBBox->mMax.mV.v[3] = laIntervals[0].max.mV.x;
 }
 
 // ===========================================================================
