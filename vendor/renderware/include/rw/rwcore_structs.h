@@ -259,7 +259,11 @@ struct RGBA {  // sizeof = 4
     RGBA() : m_rgba(0) {}
     struct NoInitTag {};
     explicit RGBA(NoInitTag) {}
-    RGBA(uint8_t lu8Red, uint8_t lu8Green, uint8_t lu8Blue, uint8_t lu8Alpha);
+    // ARTIST821F05B0: native ABGR input word. Inline placement preserves static colors.
+    RGBA(uint8_t lu8Red, uint8_t lu8Green, uint8_t lu8Blue, uint8_t lu8Alpha)
+        : m_rgba((static_cast<uint32_t>(lu8Alpha) << 24) |
+                 (static_cast<uint32_t>(lu8Blue) << 16) |
+                 (static_cast<uint32_t>(lu8Green) << 8) | static_cast<uint32_t>(lu8Red)) {}
 
     uint32_t m_rgba;  // +0
 };
