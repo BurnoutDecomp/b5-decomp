@@ -7,7 +7,7 @@
 // BrnAI::BoundaryLine::GetInterp @ 0x82676C78.
 //
 // Interpolate a point along the boundary line by parameter lfT, writing the full 16-byte
-// result Vector2 to *lpv2Out (X360 ABI: out in r3, this in r4, lfT in f1). The console body
+// returned Vector2 (X360 ABI: out in r3, this in r4, lfT in f1). The console body
 // is a hand-vectorised VMX128 pipeline, decoded lane-by-lane in the wave-2 VMX pass:
 //   - lvx128 loads the whole 16-byte line (start in lanes 0,1; end in lanes 2,3);
 //   - lfT is spilled/reloaded and broadcast to all lanes (stfs + lvlx + vspltw);
@@ -34,13 +34,15 @@
 
 namespace BrnAI
 {
-    void BoundaryLine::GetInterp(Vector2* lpv2Out, f32 lfT) const
+    Vector2 BoundaryLine::GetInterp(f32 lfT) const
     {
         // ARTIST 82676C78 performs all four lanes and stores one VMX register.
         const Vector4 lvStart(mfStartX, mfStartY, 0.0f, 0.0f);
         const Vector4 lvEnd(mfEndX, mfEndY, 0.0f, 0.0f);
         const __vector4 lvT = __vspltw(__lvlx(&lfT, 0), 0);
-        lpv2Out->mV = __vmaddfp(__vsubfp(lvEnd.mV, lvStart.mV), lvT, lvStart.mV);
+        Vector2 lvResult;
+        lvResult.mV = __vmaddfp(__vsubfp(lvEnd.mV, lvStart.mV), lvT, lvStart.mV);
+        return lvResult;
     }
 
     f32 BoundaryLine::GetLength() const

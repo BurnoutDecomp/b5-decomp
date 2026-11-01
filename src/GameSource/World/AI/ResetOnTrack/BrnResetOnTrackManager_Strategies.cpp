@@ -117,16 +117,16 @@ namespace
     // "none true", so the console's `bne` arm is taken when EVERY lane is within tolerance.
     bool IsSimilar2D(Vector2 lA, Vector2 lB)
     {
-        const f32 lfDX = (lB.x - lA.x) < 0.0f ? -(lB.x - lA.x) : (lB.x - lA.x);
-        const f32 lfDY = (lB.y - lA.y) < 0.0f ? -(lB.y - lA.y) : (lB.y - lA.y);
+        const f32 lfDX = (lB.mV.x - lA.mV.x) < 0.0f ? -(lB.mV.x - lA.mV.x) : (lB.mV.x - lA.mV.x);
+        const f32 lfDY = (lB.mV.y - lA.mV.y) < 0.0f ? -(lB.mV.y - lA.mV.y) : (lB.mV.y - lA.mV.y);
         return !(lfDX > KF_IS_SIMILAR_EPSILON || lfDY > KF_IS_SIMILAR_EPSILON);
     }
 
     bool IsSimilar3D(Vector3 lA, Vector3 lB)
     {
-        const f32 lfDX = (lB.x - lA.x) < 0.0f ? -(lB.x - lA.x) : (lB.x - lA.x);
-        const f32 lfDY = (lB.y - lA.y) < 0.0f ? -(lB.y - lA.y) : (lB.y - lA.y);
-        const f32 lfDZ = (lB.z - lA.z) < 0.0f ? -(lB.z - lA.z) : (lB.z - lA.z);
+        const f32 lfDX = (lB.mV.x - lA.mV.x) < 0.0f ? -(lB.mV.x - lA.mV.x) : (lB.mV.x - lA.mV.x);
+        const f32 lfDY = (lB.mV.y - lA.mV.y) < 0.0f ? -(lB.mV.y - lA.mV.y) : (lB.mV.y - lA.mV.y);
+        const f32 lfDZ = (lB.mV.z - lA.mV.z) < 0.0f ? -(lB.mV.z - lA.mV.z) : (lB.mV.z - lA.mV.z);
         return !(lfDX > KF_IS_SIMILAR_EPSILON || lfDY > KF_IS_SIMILAR_EPSILON ||
                  lfDZ > KF_IS_SIMILAR_EPSILON);
     }
@@ -145,21 +145,21 @@ namespace
     Vector3 Normalise3D(Vector3 lVector)
     {
         const f32 lfLengthSquared =
-            lVector.x * lVector.x + lVector.y * lVector.y + lVector.z * lVector.z;
+            lVector.mV.x * lVector.mV.x + lVector.mV.y * lVector.mV.y + lVector.mV.z * lVector.mV.z;
         const f32 lfInverse = 1.0f / sqrtf(lfLengthSquared);
-        { const Vector3 lResult = { lVector.x * lfInverse, lVector.y * lfInverse, lVector.z * lfInverse, 0.0f }; return lResult; }
+        { const Vector3 lResult(Vector4(lVector.mV.x * lfInverse, lVector.mV.y * lfInverse, lVector.mV.z * lfInverse, 0.0f).mV); return lResult; }
     }
 
     f32 Dot3D(Vector3 lA, Vector3 lB)
     {
-        return lA.x * lB.x + lA.y * lB.y + lA.z * lB.z;
+        return lA.mV.x * lB.mV.x + lA.mV.y * lB.mV.y + lA.mV.z * lB.mV.z;
     }
 
     // `vsubfp ; vmulfp ; vspltw lane1 ; vaddfp` -- the 2-lane horizontal dot the two Scan* loops
     // use for "how far ahead of the car is this portal, along the car's heading".
     f32 Dot2D(Vector2 lA, Vector2 lB)
     {
-        return lA.x * lB.x + lA.y * lB.y;
+        return lA.mV.x * lB.mV.x + lA.mV.y * lB.mV.y;
     }
 
     // The console writes the two scratch nodes field-for-field; the portal index goes in the
@@ -201,32 +201,32 @@ namespace
     // FLT_EPSILON (flt_820C3B70). A NaN lane counts as zero, as vcmpgtfp does.
     bool IsZero2D(Vector2 lVector)
     {
-        return !(fabsf(lVector.x) > KF_NORMALISE_EPSILON) &&
-               !(fabsf(lVector.y) > KF_NORMALISE_EPSILON);
+        return !(fabsf(lVector.mV.x) > KF_NORMALISE_EPSILON) &&
+               !(fabsf(lVector.mV.y) > KF_NORMALISE_EPSILON);
     }
 
     // The 3-lane form: `vandc ; vrlimi128 (w <- x) ; vcmpgtfp.` and the CR6 "none true" bit
     // (0x82785C20..0x82785C7C, 0x82785D3C..0x82785D64).
     bool IsZero3D(Vector3 lVector)
     {
-        return !(fabsf(lVector.x) > KF_NORMALISE_EPSILON) &&
-               !(fabsf(lVector.y) > KF_NORMALISE_EPSILON) &&
-               !(fabsf(lVector.z) > KF_NORMALISE_EPSILON);
+        return !(fabsf(lVector.mV.x) > KF_NORMALISE_EPSILON) &&
+               !(fabsf(lVector.mV.y) > KF_NORMALISE_EPSILON) &&
+               !(fabsf(lVector.mV.z) > KF_NORMALISE_EPSILON);
     }
 
     // `vmulfp ; vspltw x/y ; vaddfp ; vrsqrtefp + two Newton-Raphson steps ; vmulfp` with NO zero
     // guard -- every caller has already refused a zero vector through IsZero2D.
     Vector2 Normalise2D(Vector2 lVector)
     {
-        const f32 lfInverse = 1.0f / sqrtf(lVector.x * lVector.x + lVector.y * lVector.y);
-        { const Vector2 lResult = { lVector.x * lfInverse, lVector.y * lfInverse, 0.0f, 0.0f }; return lResult; }
+        const f32 lfInverse = 1.0f / sqrtf(lVector.mV.x * lVector.mV.x + lVector.mV.y * lVector.mV.y);
+        { const Vector2 lResult(lVector.mV.x * lfInverse, lVector.mV.y * lfInverse); return lResult; }
     }
 
     // |v| through the same rsqrt pipeline (d2 * rsqrt(d2)) with its `vcmpeqfp ; vsel` zero guard
     // (0x82785904..0x8278595C for the 2-lane sum, 0x82785B88..0x82785BCC for vmsum3fp128).
     f32 Length2D(Vector2 lVector)
     {
-        const f32 lfLengthSquared = lVector.x * lVector.x + lVector.y * lVector.y;
+        const f32 lfLengthSquared = lVector.mV.x * lVector.mV.x + lVector.mV.y * lVector.mV.y;
         return (lfLengthSquared == 0.0f) ? 0.0f : sqrtf(lfLengthSquared);
     }
 
@@ -362,13 +362,11 @@ bool ResetOnTrackManager::ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& 
         const Portal* lpNextPortal = lpNextSection->GetPortal(lu8NextPortal);
 
         // `lfs 0(portal) ; lfs 8(portal)` -- the portal's X and Z, i.e. its ground-plane position.
-        const Vector2 lPrevPortalPosition2D =
-            { lpPrevPortal->GetPositionX(), lpPrevPortal->GetPositionZ(), 0.0f, 0.0f };
-        const Vector2 lNextPortalPosition2D =
-            { lpNextPortal->GetPositionX(), lpNextPortal->GetPositionZ(), 0.0f, 0.0f };
+        const Vector2 lPrevPortalPosition2D(lpPrevPortal->GetPositionX(), lpPrevPortal->GetPositionZ());
+        const Vector2 lNextPortalPosition2D(lpNextPortal->GetPositionX(), lpNextPortal->GetPositionZ());
 
-        const Vector2 lRelative = { lNextPortalPosition2D.x - lPlayerPosition.x,
-                                    lNextPortalPosition2D.y - lPlayerPosition.y, 0.0f, 0.0f };
+        const Vector2 lRelative(lNextPortalPosition2D.mV.x - lPlayerPosition.mV.x,
+                                    lNextPortalPosition2D.mV.y - lPlayerPosition.mV.y);
         const f32 lfAheadness = Dot2D(lPlayerDirection, lRelative);
 
         if (lfAheadness > lfBestSeparation)
@@ -378,9 +376,9 @@ bool ResetOnTrackManager::ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& 
 
         lfBestSeparation = lfAheadness;
 
-        WriteHelperNode(mHelperNodeNext, lPrevPortalPosition2D.x, lPrevPortalPosition2D.y,
+        WriteHelperNode(mHelperNodeNext, lPrevPortalPosition2D.mV.x, lPrevPortalPosition2D.mV.y,
                         static_cast<u16>(luPrevSectionIndex), lu8PrevPortal);
-        WriteHelperNode(mHelperNodePrev, lNextPortalPosition2D.x, lNextPortalPosition2D.y,
+        WriteHelperNode(mHelperNodePrev, lNextPortalPosition2D.mV.x, lNextPortalPosition2D.mV.y,
                         static_cast<u16>(luNextAISectionIndex), lu8NextPortal);
 
         lrpNextNode = &mHelperNodeNext;
@@ -397,8 +395,8 @@ bool ResetOnTrackManager::ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& 
             continue;
         }
 
-        const Vector2 lNextNodePosition = { lrpNextNode->mfPositionX, lrpNextNode->mfPositionZ, 0.0f, 0.0f };
-        const Vector2 lPrevNodePosition = { lrpPrevNode->mfPositionX, lrpPrevNode->mfPositionZ, 0.0f, 0.0f };
+        const Vector2 lNextNodePosition(lrpNextNode->mfPositionX, lrpNextNode->mfPositionZ);
+        const Vector2 lPrevNodePosition(lrpPrevNode->mfPositionX, lrpPrevNode->mfPositionZ);
         if (!IsSimilar2D(lNextNodePosition, lPrevNodePosition))
         {
             return true;
@@ -489,21 +487,19 @@ bool ResetOnTrackManager::ScanForwardsAlongExtrapolatedRoute(const RouteNode*& l
         const Portal* lpPrevPortal = lpPrevSection->GetPortal(lu8PrevPortal);
         const Portal* lpNextPortal = lpNextSection->GetPortal(lu8NextPortal);
 
-        const Vector2 lPrevPortalPosition2D =
-            { lpPrevPortal->GetPositionX(), lpPrevPortal->GetPositionZ(), 0.0f, 0.0f };
-        const Vector2 lNextPortalPosition2D =
-            { lpNextPortal->GetPositionX(), lpNextPortal->GetPositionZ(), 0.0f, 0.0f };
+        const Vector2 lPrevPortalPosition2D(lpPrevPortal->GetPositionX(), lpPrevPortal->GetPositionZ());
+        const Vector2 lNextPortalPosition2D(lpNextPortal->GetPositionX(), lpNextPortal->GetPositionZ());
 
-        WriteHelperNode(mHelperNodeNext, lPrevPortalPosition2D.x, lPrevPortalPosition2D.y,
+        WriteHelperNode(mHelperNodeNext, lPrevPortalPosition2D.mV.x, lPrevPortalPosition2D.mV.y,
                         static_cast<u16>(luPrevSectionIndex), lu8PrevPortal);
-        WriteHelperNode(mHelperNodePrev, lNextPortalPosition2D.x, lNextPortalPosition2D.y,
+        WriteHelperNode(mHelperNodePrev, lNextPortalPosition2D.mV.x, lNextPortalPosition2D.mV.y,
                         static_cast<u16>(luNextAISectionIndex), lu8NextPortal);
 
         lrpNextNode = &mHelperNodeNext;
         lrpPrevNode = &mHelperNodePrev;
 
-        const Vector2 lRelative = { lNextPortalPosition2D.x - lPlayerPosition.x,
-                                    lNextPortalPosition2D.y - lPlayerPosition.y, 0.0f, 0.0f };
+        const Vector2 lRelative(lNextPortalPosition2D.mV.x - lPlayerPosition.mV.x,
+                                    lNextPortalPosition2D.mV.y - lPlayerPosition.mV.y);
         const f32 lfAheadness = Dot2D(lPlayerDirection, lRelative);
 
         // NaN polarity (FX-AINAN2): `fcmpu aheadness, lfResetDistance ; ble` @0x82784F14/
@@ -515,8 +511,8 @@ bool ResetOnTrackManager::ScanForwardsAlongExtrapolatedRoute(const RouteNode*& l
             continue;
         }
 
-        const Vector2 lNextNodePosition = { lrpNextNode->mfPositionX, lrpNextNode->mfPositionZ, 0.0f, 0.0f };
-        const Vector2 lPrevNodePosition = { lrpPrevNode->mfPositionX, lrpPrevNode->mfPositionZ, 0.0f, 0.0f };
+        const Vector2 lNextNodePosition(lrpNextNode->mfPositionX, lrpNextNode->mfPositionZ);
+        const Vector2 lPrevNodePosition(lrpPrevNode->mfPositionX, lrpPrevNode->mfPositionZ);
         if (!IsSimilar2D(lNextNodePosition, lPrevNodePosition))
         {
             return true;
@@ -617,10 +613,10 @@ Vector3 ResetOnTrackManager::DeterminePositionBetweenNodes(Vector3 lPrevPortalPo
     const Vector2 lPrev2D = BrnMath::Flatten(lPrevPortalPosition);
     const Vector2 lNext2D = BrnMath::Flatten(lNextPortalPosition);
 
-    const Vector2 lPrevRelative = { lPrev2D.x - lPlayerPosition2D.x,
-                                    lPrev2D.y - lPlayerPosition2D.y, 0.0f, 0.0f };
-    const Vector2 lNextRelative = { lNext2D.x - lPlayerPosition2D.x,
-                                    lNext2D.y - lPlayerPosition2D.y, 0.0f, 0.0f };
+    const Vector2 lPrevRelative(lPrev2D.mV.x - lPlayerPosition2D.mV.x,
+                                    lPrev2D.mV.y - lPlayerPosition2D.mV.y);
+    const Vector2 lNextRelative(lNext2D.mV.x - lPlayerPosition2D.mV.x,
+                                    lNext2D.mV.y - lPlayerPosition2D.mV.y);
 
     const f32 lfPrevAheadness = Dot2D(lPrevRelative, lPlayerDirection2D);
     const f32 lfNextAheadness = Dot2D(lNextRelative, lPlayerDirection2D);
@@ -655,10 +651,10 @@ Vector3 ResetOnTrackManager::DeterminePositionBetweenNodes(Vector3 lPrevPortalPo
         return lNextPortalPosition;
     }
 
-    { const Vector3 lResult = { (lNextPortalPosition.x - lPrevPortalPosition.x) * lfInterp + lPrevPortalPosition.x,
-                    (lNextPortalPosition.y - lPrevPortalPosition.y) * lfInterp + lPrevPortalPosition.y,
-                    (lNextPortalPosition.z - lPrevPortalPosition.z) * lfInterp + lPrevPortalPosition.z,
-                    0.0f }; return lResult; }
+    { const Vector3 lResult(Vector4((lNextPortalPosition.mV.x - lPrevPortalPosition.mV.x) * lfInterp + lPrevPortalPosition.mV.x,
+                    (lNextPortalPosition.mV.y - lPrevPortalPosition.mV.y) * lfInterp + lPrevPortalPosition.mV.y,
+                    (lNextPortalPosition.mV.z - lPrevPortalPosition.mV.z) * lfInterp + lPrevPortalPosition.mV.z,
+                    0.0f).mV); return lResult; }
 }
 
 // =================================================================================================
@@ -716,29 +712,27 @@ bool ResetOnTrackManager::ConvertNodesToPositionAndDirection(const RouteNode* lp
     const Portal* lpPrevPortal = lpPrevSection->GetPortal(GetHelperNodePortalIndex(*lpPrevNode));
     const Portal* lpNextPortal = lpNextSection->GetPortal(GetHelperNodePortalIndex(*lpNextNode));
 
-    Vector2 lPrevInterp;
-    Vector2 lNextInterp;
-    lpPrevPortal->GetBoundaryLine(0)->GetInterp(&lPrevInterp, lfRoadSide);
-    lpNextPortal->GetBoundaryLine(0)->GetInterp(&lNextInterp, lfRoadSide);
+    const Vector2 lPrevInterp = lpPrevPortal->GetBoundaryLine(0)->GetInterp(lfRoadSide);
+    const Vector2 lNextInterp = lpNextPortal->GetBoundaryLine(0)->GetInterp(lfRoadSide);
 
     if (IsSimilar2D(lPrevInterp, lNextInterp))
     {
         return false;
     }
 
-    const Vector3 lPrevPortalPosition = { lPrevInterp.x, lpPrevPortal->GetPositionY(),
-                                          lPrevInterp.y, 0.0f };
-    const Vector3 lNextPortalPosition = { lNextInterp.x, lpNextPortal->GetPositionY(),
-                                          lNextInterp.y, 0.0f };
+    const Vector3 lPrevPortalPosition(Vector4(lPrevInterp.mV.x, lpPrevPortal->GetPositionY(),
+                                          lPrevInterp.mV.y, 0.0f).mV);
+    const Vector3 lNextPortalPosition(Vector4(lNextInterp.mV.x, lpNextPortal->GetPositionY(),
+                                          lNextInterp.mV.y, 0.0f).mV);
 
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     lpResetData->mPosition = DeterminePositionBetweenNodes(lPrevPortalPosition, lNextPortalPosition,
                                                            lpPlayerAICar, lfResetDistance);
 
-    const Vector3 lDelta = { lNextPortalPosition.x - lPrevPortalPosition.x,
-                             lNextPortalPosition.y - lPrevPortalPosition.y,
-                             lNextPortalPosition.z - lPrevPortalPosition.z, 0.0f };
+    const Vector3 lDelta(Vector4(lNextPortalPosition.mV.x - lPrevPortalPosition.mV.x,
+                             lNextPortalPosition.mV.y - lPrevPortalPosition.mV.y,
+                             lNextPortalPosition.mV.z - lPrevPortalPosition.mV.z, 0.0f).mV);
 
     CGS_ASSERT(!IsSimilar3D(lNextPortalPosition, lPrevPortalPosition),
                "!RwMath::IsSimilar( lNextPortalPosition, lPrevPortalPosition )");   // :758
@@ -763,9 +757,9 @@ void ResetOnTrackManager::EnsureAIIsDrivingSameDirectionAsPlayer(const AICar* lp
     if (0.0f > lfDot)
     {
         {
-            const Vector3 lAggregateValue = { -lpResetData->mDirection.x,
-                                           -lpResetData->mDirection.y,
-                                           -lpResetData->mDirection.z, 0.0f };
+            const Vector3 lAggregateValue(Vector4(-lpResetData->mDirection.mV.x,
+                                           -lpResetData->mDirection.mV.y,
+                                           -lpResetData->mDirection.mV.z, 0.0f).mV);
             lpResetData->mDirection = lAggregateValue;
         }
     }
@@ -818,36 +812,36 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
     lpResetData->mpAISection = lpAISection;
 
     const Portal* lpStartPortal = lpAISection->GetPortal(lpPlayerAICar->muResetOnTrackStartPortal);
-    const Vector3 lPrevPortal = { lpStartPortal->GetPositionX(), lpStartPortal->GetPositionY(),
-                                  lpStartPortal->GetPositionZ(), 0.0f };
+    const Vector3 lPrevPortal(Vector4(lpStartPortal->GetPositionX(), lpStartPortal->GetPositionY(),
+                                  lpStartPortal->GetPositionZ(), 0.0f).mV);
 
     const Portal* lpEndPortal = lpAISection->GetPortal(lpPlayerAICar->muResetOnTrackEndPortal);
-    const Vector3 lNextPortal = { lpEndPortal->GetPositionX(), lpEndPortal->GetPositionY(),
-                                  lpEndPortal->GetPositionZ(), 0.0f };
+    const Vector3 lNextPortal(Vector4(lpEndPortal->GetPositionX(), lpEndPortal->GetPositionY(),
+                                  lpEndPortal->GetPositionZ(), 0.0f).mV);
 
     CGS_ASSERT(!IsSimilar3D(lNextPortal, lPrevPortal),
                "!RwMath::IsSimilar( lNextPortal, lPrevPortal )");   // :1199
 
     lpResetData->mPosition  = lPrevPortal;
-    const Vector3 lPortalDelta = { lNextPortal.x - lPrevPortal.x,
-                                   lNextPortal.y - lPrevPortal.y,
-                                   lNextPortal.z - lPrevPortal.z, 0.0f };
+    const Vector3 lPortalDelta(Vector4(lNextPortal.mV.x - lPrevPortal.mV.x,
+                                   lNextPortal.mV.y - lPrevPortal.mV.y,
+                                   lNextPortal.mV.z - lPrevPortal.mV.z, 0.0f).mV);
     lpResetData->mDirection = Normalise3D(lPortalDelta);
 
     const Vector3 lPlayerPosition = lpPlayerAICar->GetPosition();
-    Vector3 lPlayerRelativePosition = { lpResetData->mPosition.x - lPlayerPosition.x,
-                                        lpResetData->mPosition.y - lPlayerPosition.y,
-                                        lpResetData->mPosition.z - lPlayerPosition.z, 0.0f };
+    Vector3 lPlayerRelativePosition(Vector4(lpResetData->mPosition.mV.x - lPlayerPosition.mV.x,
+                                        lpResetData->mPosition.mV.y - lPlayerPosition.mV.y,
+                                        lpResetData->mPosition.mV.z - lPlayerPosition.mV.z, 0.0f).mV);
 
     // 0x827846AC: normalise only when the offset is not (near) zero -- the guard uses FLT_EPSILON,
     // NOT the IsSimilar tolerance the assert above used.
     {
-        const f32 lfAbsX = lPlayerRelativePosition.x < 0.0f ? -lPlayerRelativePosition.x
-                                                            :  lPlayerRelativePosition.x;
-        const f32 lfAbsY = lPlayerRelativePosition.y < 0.0f ? -lPlayerRelativePosition.y
-                                                            :  lPlayerRelativePosition.y;
-        const f32 lfAbsZ = lPlayerRelativePosition.z < 0.0f ? -lPlayerRelativePosition.z
-                                                            :  lPlayerRelativePosition.z;
+        const f32 lfAbsX = lPlayerRelativePosition.mV.x < 0.0f ? -lPlayerRelativePosition.mV.x
+                                                            :  lPlayerRelativePosition.mV.x;
+        const f32 lfAbsY = lPlayerRelativePosition.mV.y < 0.0f ? -lPlayerRelativePosition.mV.y
+                                                            :  lPlayerRelativePosition.mV.y;
+        const f32 lfAbsZ = lPlayerRelativePosition.mV.z < 0.0f ? -lPlayerRelativePosition.mV.z
+                                                            :  lPlayerRelativePosition.mV.z;
         if (lfAbsX > KF_NORMALISE_EPSILON || lfAbsY > KF_NORMALISE_EPSILON ||
             lfAbsZ > KF_NORMALISE_EPSILON)
         {
@@ -871,10 +865,10 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
         const Vector3 lDirection = lpPlayerAICar->GetDirection();
         const Vector3 lPosition  = lpPlayerAICar->GetPosition();
         {
-            const Vector3 lAggregateValue = { lPosition.x - lDirection.x * KF_DISTANCE_BEHIND_PLAYER,
-                                          lPosition.y - lDirection.y * KF_DISTANCE_BEHIND_PLAYER,
-                                          lPosition.z - lDirection.z * KF_DISTANCE_BEHIND_PLAYER,
-                                          0.0f };
+            const Vector3 lAggregateValue(Vector4(lPosition.mV.x - lDirection.mV.x * KF_DISTANCE_BEHIND_PLAYER,
+                                          lPosition.mV.y - lDirection.mV.y * KF_DISTANCE_BEHIND_PLAYER,
+                                          lPosition.mV.z - lDirection.mV.z * KF_DISTANCE_BEHIND_PLAYER,
+                                          0.0f).mV);
             lpResetData->mPosition = lAggregateValue;
         }
     }
@@ -936,9 +930,9 @@ bool ResetOnTrackManager::ResetAwayFromPlayer(ResetOnTrackCoords* lpResetData)
         const AISection* lpAISection = lpAISectionsData->GetAISection(luSectionIndex);
 
         const Vector3 lMiddle = lpAISection->GetMiddle();
-        const Vector3 lOffset = { lMiddle.x - lPlayerPosition.x,
-                                  lMiddle.y - lPlayerPosition.y,
-                                  lMiddle.z - lPlayerPosition.z, 0.0f };
+        const Vector3 lOffset(Vector4(lMiddle.mV.x - lPlayerPosition.mV.x,
+                                  lMiddle.mV.y - lPlayerPosition.mV.y,
+                                  lMiddle.mV.z - lPlayerPosition.mV.z, 0.0f).mV);
 
         const f32 lfMagnitudeSquared = Dot3D(lOffset, lOffset);
         const f32 lfMagnitude = (lfMagnitudeSquared == 0.0f) ? 0.0f : sqrtf(lfMagnitudeSquared);
@@ -949,7 +943,7 @@ bool ResetOnTrackManager::ResetAwayFromPlayer(ResetOnTrackCoords* lpResetData)
             lpResetData->mPosition   = lMiddle;
             // 0x82784334..0x82784368: {1.0, 0.0, 0.0, 0.0} built on the stack and stored to +0x20.
             {
-                const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(Vector4(1.0f, 0.0f, 0.0f, 0.0f).mV);
                 lpResetData->mDirection = lAggregateValue;
             }
             return true;
@@ -1113,9 +1107,9 @@ bool ResetOnTrackManager::ResetFixedDistanceAheadOfPlayer(ResetOnTrackCoords* lp
     EnsureAIIsDrivingSameDirectionAsPlayer(lpPlayerAICar, lpResetData);
 
     {
-        const Vector3 lAggregateValue = { -lpResetData->mDirection.x,
-                                       -lpResetData->mDirection.y,
-                                       -lpResetData->mDirection.z, 0.0f };
+        const Vector3 lAggregateValue(Vector4(-lpResetData->mDirection.mV.x,
+                                       -lpResetData->mDirection.mV.y,
+                                       -lpResetData->mDirection.mV.z, 0.0f).mV);
         lpResetData->mDirection = lAggregateValue;
     }
     return true;
@@ -1142,8 +1136,8 @@ Vector3 ResetOnTrackManager::InterpolatePositionFromAngle(Vector2 lPlayerPositio
                                                           f32 lfAngleToJoin)
 {
     const Vector2 lFlatEntrance = BrnMath::Flatten(lEntranceNodePosition);
-    Vector2 lVectorFromPlayer = { lFlatEntrance.x - lPlayerPosition.x,
-                                  lFlatEntrance.y - lPlayerPosition.y, 0.0f, 0.0f };
+    Vector2 lVectorFromPlayer(lFlatEntrance.mV.x - lPlayerPosition.mV.x,
+                                  lFlatEntrance.mV.y - lPlayerPosition.mV.y);
     if (IsZero2D(lVectorFromPlayer))
     {
         return lExitNodePosition;
@@ -1152,8 +1146,8 @@ Vector3 ResetOnTrackManager::InterpolatePositionFromAngle(Vector2 lPlayerPositio
 
     const Vector2 lFlatExit = BrnMath::Flatten(lExitNodePosition);
     {
-        const Vector2 lAggregateValue = { lFlatExit.x - lPlayerPosition.x,
-                                 lFlatExit.y - lPlayerPosition.y, 0.0f, 0.0f };
+        const Vector2 lAggregateValue(lFlatExit.mV.x - lPlayerPosition.mV.x,
+                                 lFlatExit.mV.y - lPlayerPosition.mV.y);
         lVectorFromPlayer = lAggregateValue;
     }
     if (IsZero2D(lVectorFromPlayer))
@@ -1179,10 +1173,10 @@ Vector3 ResetOnTrackManager::InterpolatePositionFromAngle(Vector2 lPlayerPositio
         return lExitNodePosition;
     }
 
-    { const Vector3 lResult = { (lExitNodePosition.x - lEntranceNodePosition.x) * lfInterp + lEntranceNodePosition.x,
-                    (lExitNodePosition.y - lEntranceNodePosition.y) * lfInterp + lEntranceNodePosition.y,
-                    (lExitNodePosition.z - lEntranceNodePosition.z) * lfInterp + lEntranceNodePosition.z,
-                    (lExitNodePosition.w - lEntranceNodePosition.w) * lfInterp + lEntranceNodePosition.w }; return lResult; }
+    { const Vector3 lResult(Vector4((lExitNodePosition.mV.x - lEntranceNodePosition.mV.x) * lfInterp + lEntranceNodePosition.mV.x,
+                    (lExitNodePosition.mV.y - lEntranceNodePosition.mV.y) * lfInterp + lEntranceNodePosition.mV.y,
+                    (lExitNodePosition.mV.z - lEntranceNodePosition.mV.z) * lfInterp + lEntranceNodePosition.mV.z,
+                    (lExitNodePosition.mV.w - lEntranceNodePosition.mV.w) * lfInterp + lEntranceNodePosition.mV.w).mV); return lResult; }
 }
 
 // =================================================================================================
@@ -1261,8 +1255,8 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
 
         const Vector3 lMiddle   = lpJunctionSection->GetMiddle();
         const Vector3 lPosition = lpPlayerAICar->GetPosition();
-        const Vector3 lOffset   = { lPosition.x - lMiddle.x, lPosition.y - lMiddle.y,
-                                    lPosition.z - lMiddle.z, 0.0f };
+        const Vector3 lOffset(Vector4(lPosition.mV.x - lMiddle.mV.x, lPosition.mV.y - lMiddle.mV.y,
+                                    lPosition.mV.z - lMiddle.mV.z, 0.0f).mV);
 
         // `fcmpu ; blt` @0x82785484: only a section NOT closer than 100 m is tested for the flag.
         if (!(Length3D(lOffset) < KF_TOO_CLOSE_TO_JOIN_FROM_SIDE) && lpJunctionSection->IsJunction())
@@ -1291,8 +1285,8 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
     const Vector2 lSectionAfterJunctionMiddle =
         BrnMath::Flatten(lpSectionAfterJunction->GetMiddle());
 
-    const Vector2 lRouteDelta = { lSectionAfterJunctionMiddle.x - lJunctionMiddle.x,
-                                  lSectionAfterJunctionMiddle.y - lJunctionMiddle.y, 0.0f, 0.0f };
+    const Vector2 lRouteDelta(lSectionAfterJunctionMiddle.mV.x - lJunctionMiddle.mV.x,
+                                  lSectionAfterJunctionMiddle.mV.y - lJunctionMiddle.mV.y);
     if (IsZero2D(lRouteDelta))
     {
         return false;
@@ -1302,7 +1296,7 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
     // ---- the side road that runs back into the junction -----------------------------------------
     f32 lfBestAheadness = KF_ZERO;
     const AISection* lpSideRouteSection = 0;
-    Vector3 lEntranceNodePosition = { 0.0f, 0.0f, 0.0f, 0.0f };   // vmr128 v120, v124 (zero)
+    Vector3 lEntranceNodePosition(Vector4(0.0f, 0.0f, 0.0f, 0.0f).mV);   // vmr128 v120, v124 (zero)
 
     for (s32 liPortal = 0; liPortal < lpJunctionSection->mu8NumPortals; ++liPortal)
     {
@@ -1316,8 +1310,8 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
         }
 
         const Vector2 lCandidateMiddle = BrnMath::Flatten(lpCandidate->GetMiddle());
-        const Vector2 lToJunction = { lJunctionMiddle.x - lCandidateMiddle.x,
-                                      lJunctionMiddle.y - lCandidateMiddle.y, 0.0f, 0.0f };
+        const Vector2 lToJunction(lJunctionMiddle.mV.x - lCandidateMiddle.mV.x,
+                                      lJunctionMiddle.mV.y - lCandidateMiddle.mV.y);
         if (IsZero2D(lToJunction))
         {
             continue;
@@ -1346,7 +1340,7 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
 
     // ---- walk out along it until the join point leaves the player's 20-degree cone ------------
     const Vector2 lPlayerDirection = BrnMath::Flatten(lpPlayerAICar->GetDirection());
-    Vector3 lExitNodePosition = { 0.0f, 0.0f, 0.0f, 0.0f };        // vmr128 v122, v124 (zero)
+    Vector3 lExitNodePosition(Vector4(0.0f, 0.0f, 0.0f, 0.0f).mV);        // vmr128 v122, v124 (zero)
     const AISection* lpNextSideRouteSection = 0;
 
     for (s32 liSideScan = 0; ; )
@@ -1371,8 +1365,8 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
             }
 
             const Vector2 lCandidateMiddle = BrnMath::Flatten(lpCandidate->GetMiddle());
-            const Vector2 lFromJunction = { lCandidateMiddle.x - lJunctionMiddle.x,
-                                            lCandidateMiddle.y - lJunctionMiddle.y, 0.0f, 0.0f };
+            const Vector2 lFromJunction(lCandidateMiddle.mV.x - lJunctionMiddle.mV.x,
+                                            lCandidateMiddle.mV.y - lJunctionMiddle.mV.y);
             const f32 lfDistance = Length2D(lFromJunction);
             if (!(lfDistance > lfFurthest))                 // ble 0x8278596C: a NaN is skipped
             {
@@ -1392,9 +1386,8 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
         lpSideRouteSection = lpNextSideRouteSection;
 
         const Vector3 lPlayerPosition3D = lpPlayerAICar->GetPosition();
-        const Vector3 lExitDelta = {
-            lExitNodePosition.x - lPlayerPosition3D.x, lExitNodePosition.y - lPlayerPosition3D.y,
-            lExitNodePosition.z - lPlayerPosition3D.z, lExitNodePosition.w - lPlayerPosition3D.w };
+        const Vector3 lExitDelta(Vector4(lExitNodePosition.mV.x - lPlayerPosition3D.mV.x, lExitNodePosition.mV.y - lPlayerPosition3D.mV.y,
+            lExitNodePosition.mV.z - lPlayerPosition3D.mV.z, lExitNodePosition.mV.w - lPlayerPosition3D.mV.w).mV);
         const Vector2 lExitFromPlayer = BrnMath::Flatten(lExitDelta);
 
         if (!IsZero2D(lExitFromPlayer))
@@ -1420,10 +1413,10 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
         lExitNodePosition, KF_ANGLE_TO_JOIN_FROM_SIDE_ROAD);
 
     const Vector3 lPlayerPosition = lpPlayerAICar->GetPosition();
-    Vector3 lRelativePosition = { lpResetData->mPosition.x - lPlayerPosition.x,
-                                  lpResetData->mPosition.y - lPlayerPosition.y,
-                                  lpResetData->mPosition.z - lPlayerPosition.z,
-                                  lpResetData->mPosition.w - lPlayerPosition.w };
+    Vector3 lRelativePosition(Vector4(lpResetData->mPosition.mV.x - lPlayerPosition.mV.x,
+                                  lpResetData->mPosition.mV.y - lPlayerPosition.mV.y,
+                                  lpResetData->mPosition.mV.z - lPlayerPosition.mV.z,
+                                  lpResetData->mPosition.mV.w - lPlayerPosition.mV.w).mV);
 
     if (KF_TOO_CLOSE_DISTANCE > Length3D(lRelativePosition))
     {
@@ -1435,8 +1428,8 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
     {
         const f32 lfInverse = 1.0f / sqrtf(Dot3D(lRelativePosition, lRelativePosition));
         {
-            const Vector3 lAggregateValue = { lRelativePosition.x * lfInverse, lRelativePosition.y * lfInverse,
-                                     lRelativePosition.z * lfInverse, lRelativePosition.w * lfInverse };
+            const Vector3 lAggregateValue(Vector4(lRelativePosition.mV.x * lfInverse, lRelativePosition.mV.y * lfInverse,
+                                     lRelativePosition.mV.z * lfInverse, lRelativePosition.mV.w * lfInverse).mV);
             lRelativePosition = lAggregateValue;
         }
     }
@@ -1454,10 +1447,10 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
         return false;
     }
 
-    const Vector3 lDirection3D = { lEntranceNodePosition.x - lExitNodePosition.x,
-                                   lEntranceNodePosition.y - lExitNodePosition.y,
-                                   lEntranceNodePosition.z - lExitNodePosition.z,
-                                   lEntranceNodePosition.w - lExitNodePosition.w };
+    const Vector3 lDirection3D(Vector4(lEntranceNodePosition.mV.x - lExitNodePosition.mV.x,
+                                   lEntranceNodePosition.mV.y - lExitNodePosition.mV.y,
+                                   lEntranceNodePosition.mV.z - lExitNodePosition.mV.z,
+                                   lEntranceNodePosition.mV.w - lExitNodePosition.mV.w).mV);
     lpResetData->mDirection = lDirection3D;   // 0x82785D40: stored BEFORE the zero test
     if (IsZero3D(lDirection3D))
     {
@@ -1467,8 +1460,8 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
     lpResetData->mpAISection = lpNextSideRouteSection;
     const f32 lfInverse = 1.0f / sqrtf(Dot3D(lDirection3D, lDirection3D));
     {
-        const Vector3 lAggregateValue = { lDirection3D.x * lfInverse, lDirection3D.y * lfInverse,
-                                       lDirection3D.z * lfInverse, lDirection3D.w * lfInverse };
+        const Vector3 lAggregateValue(Vector4(lDirection3D.mV.x * lfInverse, lDirection3D.mV.y * lfInverse,
+                                       lDirection3D.mV.z * lfInverse, lDirection3D.mV.w * lfInverse).mV);
         lpResetData->mDirection = lAggregateValue;
     }
     return true;
