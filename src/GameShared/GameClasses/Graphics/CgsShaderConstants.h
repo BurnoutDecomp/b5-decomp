@@ -1,7 +1,6 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"
 #include "BrnCommonTypes.h"               // Vector2/Vector3/Vector3Plus/Vector4/Matrix44/Matrix44Affine aliases
 #include "rw/math/vpu/types.h"            // rw::math::vpu::Vector4 (qualified member type)
 
@@ -267,6 +266,7 @@ struct ShaderConstantsExternal
     // CgsShaderConstants.h:856
     renderengine::ProgramVariableHandle* mpaProgramStateHandles;  // word 3 (offset 0x0C) - per-instance program handles
 };
+CGS_STATIC_ASSERT((sizeof(ShaderConstantsExternal) == 16), "Serialized external constants");
 
 // CgsShaderConstants.h:861
 // On-disk "internal" (engine, hash-keyed) shader-constant block. Same shape as External
@@ -293,13 +293,13 @@ struct ShaderConstantsInternal
     // CgsShaderConstants.h:904
     u32 muNumConstantsInstances;                                  // word 0 (offset 0x00) - element count
     // CgsShaderConstants.h:905
-    CgsGraphics::Ptr32<u32> mpauConstantsInstanceSize;             // word 1 (offset 0x04) - per-instance sizes
+    u32* mpauConstantsInstanceSize;                                 // word 1 (offset 0x04) - per-instance sizes
     // CgsShaderConstants.h:906
-    CgsGraphics::Ptr32<CgsGraphics::Ptr32<u32>> mppaConstantsInstanceData; // word 2 (offset 0x08)
+    u32** mppaConstantsInstanceData;                               // word 2 (offset 0x08)
     // CgsShaderConstants.h:907
-    CgsGraphics::Ptr32<u32> mpauNamesHash;                         // word 3 (offset 0x0C) - per-instance name hashes
+    u32* mpauNamesHash;                                             // word 3 (offset 0x0C) - per-instance name hashes
     // CgsShaderConstants.h:912
-    CgsGraphics::Ptr32<renderengine::ProgramVariableHandle> mpaProgramStateHandles; // word 4 (offset 0x10)
+    renderengine::ProgramVariableHandle* mpaProgramStateHandles;   // word 4 (offset 0x10)
 };
 CGS_STATIC_ASSERT((sizeof(ShaderConstantsInternal) == 20), "Serialized internal constants");
 
@@ -326,13 +326,13 @@ struct ShaderConstantsCPU
 
     // ---- console-faithful member layout (DWARF CgsShaderConstants.h:1047-1050) ----
     // CgsShaderConstants.h:1047
-    CgsGraphics::Ptr32<ICPUShader> mpCPUShader; // word 0 (offset 0x00)
+    ICPUShader* mpCPUShader; // word 0 (offset 0x00)
     // CgsShaderConstants.h:1048
     u32          muNumConstantsInstances;     // word 1 (offset 0x04) - element count
     // CgsShaderConstants.h:1049
-    CgsGraphics::Ptr32<CgsGraphics::Ptr32<u32>> mppaConstantsInstanceData; // word 2 (offset 0x08)
+    u32** mppaConstantsInstanceData; // word 2 (offset 0x08)
     // CgsShaderConstants.h:1050
-    CgsGraphics::Ptr32<CgsGraphics::Ptr32<const char>> mppacNames; // word 3 (offset 0x0C)
+    const char** mppacNames; // word 3 (offset 0x0C)
 };
 CGS_STATIC_ASSERT((sizeof(ShaderConstantsCPU) == 16), "Serialized CPU constants");
 
