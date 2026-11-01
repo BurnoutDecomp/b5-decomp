@@ -271,10 +271,13 @@ namespace
     const f32 KF_HALF_W = 0.5f;
 }
 
-int Butterworth::CalculateFilterCoefficients(Butterworth *self, f32 afCutoff,
-                                             f32 afSampleRate, f32 afShape,
-                                             s32 aiOrder, s32 aiType)
+void Butterworth::CalculateFilterCoefficients(f32 afCutoff, u32 auOrder,
+                                              f32 afSampleRate, FilterType aeType,
+                                              f32 afShape)
 {
+    Butterworth *self = this;
+    const s32 aiOrder = static_cast<s32>(auOrder);
+    const FilterType aiType = aeType;
     // XMemSet(self, 0, 0x28) -- exactly the nested coefficient object, nothing else.
     XMemSet(&self->mCoefficients, 0, sizeof(self->mCoefficients));
 
@@ -345,9 +348,6 @@ int Butterworth::CalculateFilterCoefficients(Butterworth *self, f32 afCutoff,
     for (int liK = 0; liK <= aiOrder; ++liK)
         self->mCoefficients.b[liK] = self->mCoefficients.b[liK] * lfGain;
 
-    // The machine leaves order+1 in r3; both callers ignore it (the same-middleware
-    // ProStreet shape is void).
-    return aiOrder + 1;
 }
 
 } // namespace core

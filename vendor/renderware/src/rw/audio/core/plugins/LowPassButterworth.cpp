@@ -184,12 +184,10 @@ int LowPassButterworth::Process(LowPassButterworth *self, AudioProcessContext *c
         self->mfFilterOrder != self->mfLastFilterOrder ||
         self->mfParam3 != self->mfLastParam3)
     {
-        // The designer's recovered ABI: r3=bw, f1=cutoff, f2=sampleRate, f3=the third
-        // attribute, r5=fctidz(order), r7=0 (the LOW-pass selector). Its BODY is still a
-        // keystone pending the three rodata design tables (see Butterworth.cpp).
-        Butterworth::CalculateFilterCoefficients(
-            lpButterworth, self->mfCutoffFreq, lfSampleRate, self->mfParam3,
-            static_cast<s32>(self->mfFilterOrder), Butterworth::KFILTER_LOWPASS);
+        // ARTIST: cutoff/order/rate/type/shape use f1/r5/f2/r7/f3.
+        lpButterworth->CalculateFilterCoefficients(
+            self->mfCutoffFreq, static_cast<u32>(self->mfFilterOrder), lfSampleRate,
+            Butterworth::KFILTER_LOWPASS, self->mfParam3);
 
         self->mfLastCutoffFreq = self->mfCutoffFreq;      // stfs +0x40
         self->mfLastFilterOrder = self->mfFilterOrder;    // stfs +0x48
