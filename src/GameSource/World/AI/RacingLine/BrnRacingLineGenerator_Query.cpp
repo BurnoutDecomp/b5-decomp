@@ -213,7 +213,7 @@ void RacingLineGenerator::InitialiseRacingLine(RacingLine* lpRacingLine, AICar* 
     }
 
     // f31 is loaded ONCE, before the loop, from the car position's height lane.
-    const f32 lfCarHeight = lCarPosition.y;
+    const f32 lfCarHeight = lCarPosition.mV.y;
 
     Vector2 lRouteCentreAhead;
     Vector2 lRouteCentreBehind;
@@ -572,15 +572,15 @@ bool RacingLineGenerator::GetPointFarAhead(RacingLine* lpRacingLine, f32 lfDista
     GetPointAndNormalOnCurve(lpRacingLine, liSectionID, lfInterp, lPoint, lNormal);
 
     const f32 lfRoadPlacement = lpRacingLine->mfRoadPlacement;
-    lrOutPosition.x = lNormal.x * lfRoadPlacement + lPoint.x;
-    lrOutPosition.y = lNormal.y * lfRoadPlacement + lPoint.y;
-    lrOutPosition.z = lNormal.z * lfRoadPlacement + lPoint.z;
-    lrOutPosition.w = lNormal.w * lfRoadPlacement + lPoint.w;
+    lrOutPosition.mV.x = lNormal.mV.x * lfRoadPlacement + lPoint.mV.x;
+    lrOutPosition.mV.y = lNormal.mV.y * lfRoadPlacement + lPoint.mV.y;
+    lrOutPosition.mV.z = lNormal.mV.z * lfRoadPlacement + lPoint.mV.z;
+    lrOutPosition.mV.w = lNormal.mV.w * lfRoadPlacement + lPoint.mV.w;
 
     // Only lanes x and y are written (vrlimi128 masks 8 and 4); z / w keep whatever the caller
     // had there, exactly as the console leaves them.
-    lrOutDirection.x =  lNormal.y;
-    lrOutDirection.y = -lNormal.x;
+    lrOutDirection.mV.x =  lNormal.mV.y;
+    lrOutDirection.mV.y = -lNormal.mV.x;
 
     CgsDev::PerfMonCpu::StopMonitor(miFarAheadPM);
     return true;

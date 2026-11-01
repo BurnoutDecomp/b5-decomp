@@ -276,11 +276,11 @@ void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
 // ============================================================================================
 f32 SteeringFan::FanIntersectsEdge(Vector2* lpEdge, s32 liIndex, Vector2 lA, Vector2 lB)
 {
-    const f32 lfDirectionX = lB.x - lA.x;
-    const f32 lfDirectionY = lB.y - lA.y;
+    const f32 lfDirectionX = lB.mV.x - lA.mV.x;
+    const f32 lfDirectionY = lB.mV.y - lA.mV.y;
 
-    const f32 lfEdgeX = lpEdge[liIndex + 1].x - lpEdge[liIndex].x;
-    const f32 lfEdgeY = lpEdge[liIndex + 1].y - lpEdge[liIndex].y;
+    const f32 lfEdgeX = lpEdge[liIndex + 1].mV.x - lpEdge[liIndex].mV.x;
+    const f32 lfEdgeY = lpEdge[liIndex + 1].mV.y - lpEdge[liIndex].mV.y;
 
     // ROUNDING_RULE rule 3 (L6 AIDRIVE, owner list 2026-09-27): the three 2D crosses are each
     // `fmuls p, a, b ; fmsubs r, c, d, p` -- ONE rounding of c*d - round(a*b):
@@ -293,8 +293,8 @@ f32 SteeringFan::FanIntersectsEdge(Vector2* lpEdge, s32 liIndex, Vector2 lA, Vec
         !(lfDenominator < -KF_FAN_EDGE_PARALLEL_EPSILON))
         return KF_FAN_EDGE_NO_INTERSECTION;                 // parallel (or NaN) -- no crossing
 
-    const f32 lfToEdgeX    = lpEdge[liIndex].x - lA.x;
-    const f32 lfToEdgeY    = lpEdge[liIndex].y - lA.y;
+    const f32 lfToEdgeX    = lpEdge[liIndex].mV.x - lA.mV.x;
+    const f32 lfToEdgeY    = lpEdge[liIndex].mV.y - lA.mV.y;
     const f32 lfReciprocal = 1.0f / lfDenominator;
 
     const f32 lfEdgeParam = (lfToEdgeY * lfDirectionX - lfToEdgeX * lfDirectionY) * lfReciprocal;
@@ -381,10 +381,10 @@ void SteeringFan::IncludeRouteEdgeIntersection(RacingLineGenerator* lpRacingLine
     // 0x8277A3B8 -- the XZ flatten of lpRacingLine->mCarPos. The console leaves z/w as whatever
     // the stack slot held; nothing downstream reads them, so they are zeroed here.
     Vector2 lCarPosition2D;
-    lCarPosition2D.x = lpRacingLine->mCarPos.x;
-    lCarPosition2D.y = lpRacingLine->mCarPos.z;
-    lCarPosition2D.z = 0.0f;
-    lCarPosition2D.w = 0.0f;
+    lCarPosition2D.mV.x = lpRacingLine->mCarPos.mV.x;
+    lCarPosition2D.mV.y = lpRacingLine->mCarPos.mV.z;
+    lCarPosition2D.mV.z = 0.0f;
+    lCarPosition2D.mV.w = 0.0f;
 
     s32 liSection = lpRacingLineGenerator->GetLocalSectionID(lpRacingLine, lCarPosition2D,
                                                              lpRacingLine->miLastKnownSectionID);
