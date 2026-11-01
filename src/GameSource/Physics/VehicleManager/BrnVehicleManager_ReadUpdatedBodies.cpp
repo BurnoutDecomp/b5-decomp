@@ -142,7 +142,10 @@ namespace
     inline void ApplyGravityAndIntegrate(ExternalPhysicsBody& lrBody, VecFloat lvfDeltaTime)
     {
         Vector3 lvLinearVelocity = lrBody.GetLinearVelocity();
-        lvLinearVelocity.y -= KF_GRAVITY * lvfDeltaTime.x;
+        const __vector4 lGravityScale = { KF_GRAVITY, KF_GRAVITY, KF_GRAVITY, KF_GRAVITY };
+        const __vector4 lGravity = __vmulfp(__vspltw(lvfDeltaTime.mV, 0), lGravityScale);
+        const __vector4 lUpdated = __vsubfp(__vspltw(lvLinearVelocity.mV, 1), lGravity);
+        lvLinearVelocity.mV = __vrlimi(lvLinearVelocity.mV, lUpdated, 4, 0);
         lrBody.SetLinearVelocity(lvLinearVelocity);
 
         lrBody.IntegrateTransform(lvfDeltaTime);

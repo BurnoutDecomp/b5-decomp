@@ -206,7 +206,7 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
         // return -- i.e. the self-equality NaN check, which is what RwMath::IsValid is. Spelled as
         // that same self-comparison here because this tree's GetSteeringAngle returns a scalar f32
         // (see the divergence note in BrnVehicleOutputInterface_UpdateRaceCarState.cpp).
-        const f32 lfSteeringAngle = lpRaceCar->GetSteeringAngle().x;
+        const f32 lfSteeringAngle = lpRaceCar->GetSteeringAngle().GetFloat();
         CGS_ASSERT(lfSteeringAngle == lfSteeringAngle,
                    "RwMath::IsValid( maRaceCarVehicles[liRaceCar].GetSteeringAngle() )");
 
@@ -556,13 +556,13 @@ void VehicleManager::ProcessResetEvents(
             const Matrix44Affine& lrSeated = lpRaceCar->GetTransform();
             *CgsDev::Log::gpDebugPrint
                 << "[teleport] ProcessResetEvents car " << liRaceCar
-                << " road (" << lrEvent.mInitialTransform.wAxis.x << ", "
-                << lrEvent.mInitialTransform.wAxis.y << ", "
-                << lrEvent.mInitialTransform.wAxis.z << ")"
-                << " -> seated (" << lrSeated.wAxis.x << ", " << lrSeated.wAxis.y << ", "
-                << lrSeated.wAxis.z << ")"
-                << " at (" << lrSeated.zAxis.x << ", " << lrSeated.zAxis.y << ", "
-                << lrSeated.zAxis.z << ")"
+                << " road (" << lrEvent.mInitialTransform.wAxis.mV.v[0] << ", "
+                << lrEvent.mInitialTransform.wAxis.mV.v[1] << ", "
+                << lrEvent.mInitialTransform.wAxis.mV.v[2] << ")"
+                << " -> seated (" << lrSeated.wAxis.mV.v[0] << ", " << lrSeated.wAxis.mV.v[1] << ", "
+                << lrSeated.wAxis.mV.v[2] << ")"
+                << " at (" << lrSeated.zAxis.mV.v[0] << ", " << lrSeated.zAxis.mV.v[1] << ", "
+                << lrSeated.zAxis.mV.v[2] << ")"
                 << " resetTransform=" << (lrEvent.mbResetTransform ? 1 : 0)
                 << " resetDeform=" << (lrEvent.mbResetDeformation ? 1 : 0) << "\n";
         }

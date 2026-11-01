@@ -543,12 +543,12 @@ namespace Vehicle
         const SimpleVehiclePhysics* lpBody = GetTrafficVehicle(liTrafficVehicleIndex)->mpVehicleBody;
 
         const Vector3 lvHalfExtent    = lpBody->GetHalfExtent();
-        const f32     lfMass          = lpBody->GetMass().x;
+        const f32     lfMass          = lpBody->GetMass().GetFloat();
         const f32     lfCoeff         = lfMass * KF_BOX_INERTIA_COEFF;
 
-        const f32 lfX = lvHalfExtent.x * KF_TWO;
-        const f32 lfY = lvHalfExtent.y * KF_TWO;
-        const f32 lfZ = lvHalfExtent.z * KF_TWO;
+        const f32 lfX = lvHalfExtent.mV.v[0] * KF_TWO;
+        const f32 lfY = lvHalfExtent.mV.v[1] * KF_TWO;
+        const f32 lfZ = lvHalfExtent.mV.v[2] * KF_TWO;
 
         const f32 lfXX = lfX * lfX;
         const f32 lfYY = lfY * lfY;
@@ -556,10 +556,10 @@ namespace Vehicle
 
         // `vmulfp128 v,broadcast(coeff),(sum)` then `vrefp` + two Newton steps == 1/(coeff*sum).
         Vector3 lvInverseInertia;
-        lvInverseInertia.x = KF_ONE / ((lfYY + lfZZ) * lfCoeff);
-        lvInverseInertia.y = KF_ONE / ((lfXX + lfZZ) * lfCoeff);
-        lvInverseInertia.z = KF_ONE / ((lfXX + lfYY) * lfCoeff);
-        lvInverseInertia.w = KF_ZERO;
+        lvInverseInertia.mV.v[0] = KF_ONE / ((lfYY + lfZZ) * lfCoeff);
+        lvInverseInertia.mV.v[1] = KF_ONE / ((lfXX + lfZZ) * lfCoeff);
+        lvInverseInertia.mV.v[2] = KF_ONE / ((lfXX + lfYY) * lfCoeff);
+        lvInverseInertia.mV.v[3] = KF_ZERO;
 
         rw::physics::Inertia lInertia;
         lInertia.SetLinearDrag(KF_TRAFFIC_DRAG);                          // block +0x20

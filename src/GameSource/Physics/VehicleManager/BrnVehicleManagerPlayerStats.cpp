@@ -680,8 +680,8 @@ namespace Vehicle
                         << ", type " << static_cast<s32>(maeRaceCarTypes[liRaceCarIndex])
                         << " was made hidden because it snapped to ";
                     const Vector3& lrSnapPosition = lpControls->mTransform.wAxis;               // lvx 0x80(r25)
-                    lrStream.AppendFormat("(%f, %f, %f)", lrSnapPosition.x, lrSnapPosition.y,
-                                          lrSnapPosition.z);                                     // off_82F31964
+                    lrStream.AppendFormat("(%f, %f, %f)", lrSnapPosition.mV.v[0], lrSnapPosition.mV.v[1],
+                                          lrSnapPosition.mV.v[2]);                                     // off_82F31964
                     lrStream << "\n";
                 }
 
