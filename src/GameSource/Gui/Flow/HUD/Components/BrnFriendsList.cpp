@@ -752,7 +752,7 @@ void FriendsListComponent::UpdateAptVariables()
     // floats. SetPositionY takes a broadcast VecFloat (the console's vspltw of lane 0).
     const f32 lfPosition = static_cast<f32>(static_cast<s8>(mbSnapshotFlagB)) * KF_BRANCH_ROW_PITCH
                          - KF_BRANCH_ROW_ORIGIN;                             // @0x8242363C..0x82423664
-    const VecFloat lvfPosition = { lfPosition, lfPosition, lfPosition, lfPosition };
+    const VecFloat lvfPosition(lfPosition);
     mBranchClip.SetPositionY(lvfPosition);                                   // @0x82423670
     mBranchClip.GotoAndPlayLabel(KAPC_BRANCH_STATE_FRAMES[muSnapshotB]);     // @0x8242368C
 

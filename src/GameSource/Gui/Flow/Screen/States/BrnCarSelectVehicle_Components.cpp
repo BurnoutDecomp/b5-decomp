@@ -459,7 +459,7 @@ namespace BrnGui
         {
             Vector2 lv2ScreenPosition;
             lv2ScreenPosition.SetZero();
-            lv2ScreenPosition.x = mfCarouselXOffset + mafCarouselOriginalXPos[liIcon];
+            lv2ScreenPosition.mV.x = mfCarouselXOffset + mafCarouselOriginalXPos[liIcon];
             maCarouselOverviewSelectable[liIcon].SetScreenPosition(lv2ScreenPosition);
         }
     }
