@@ -1,82 +1,9 @@
-// ============================================================================
-// b5-decomp/src/GameSource/World/EntityModules/RaceCarEntityModule/
-//   BrnRaceCarEntityModule_Render.cpp
-//
-// The race-car RENDER leg, reconstructed from BURNOUT_X360_ARTIST.XEX:
-//   BrnWorld::RaceCarEntityModule::GenerateDispatchLists @ 0x822E79F8
-//   BrnWorld::RaceCarEntityModule::RenderRaceCar         @ 0x822CF6A0
-//
-// ---- SIGNATURES COME FROM THE ASM, NOT FROM THE OLD DECLARATIONS -----------
-// GenerateDispatchLists' committed PC declaration carried five arguments; the console
-// call site (WorldModule::GenerateDispatchLists @0x827D27A0..0x827D27C8) loads NINE:
-//     r4 = lpInput   r5 = &maRaceCarEntityIds   r6 = 12   r7 = 19   r8 = 20   r9 = 0
-//     v1 = fog scattering   v2 = fog colour + white level   v3 = camera position
-// 12 is the dispatch-frame OBJECT list; 19/20 are the race-car OPAQUE and TRANSPARENT
-// MESH lists (compare the world's own 2 / 11 / 15). Those three integers are forwarded
-// verbatim into RenderRaceCar and are the only thing that tells the submission leaf
-// where to put the car, so dropping them made the render leg unimplementable.
-//
-// RenderRaceCar's own prologue (@0x822CF6C4..0x822CF764) homes r3->r20 (this),
-// r5->r16 (the RenderParams), r6->r25 (the vehicle graphics ResourcePtr) and spills
-// r4/r7/r8/r9/r10 to arg_1C/arg_64/arg_6C/arg_74/arg_7C; the call site @0x822E8534
-// adds two STACK arguments -- arg_84 = the frame's ShadowMap and arg_8F = the
-// "render attached geometry" bool. v1 is the camera->car DISTANCE (the caller builds it
-// with vmsum3fp128 + vrsqrtefp + a Newton step + vmulfp, i.e. sqrt of the squared
-// distance, broadcast into all four lanes) -- NOT a direction vector.
-//
-// ---- WHAT THIS FILE DOES *NOT* RECONSTRUCT (all of it named, none of it faked) ----
-// 1. GenerateDispatchLists' OTHER branch. The console function is
-//        if (byte_82CDB6B9) { ...scene-manager/replay path... } else { ...this... }
-//    where byte_82CDB6B9 is a build-config byte with exactly ONE xref in the whole XEX
-//    (this test) and no writer. The arm reconstructed here is the `else`: an 8-slot
-//    sweep of maActiveRaceCars. The `if` arm walks the scene-manager visible-entity ids
-//    instead and additionally drives the replay serialiser
-//    (BrnReplays::RaceCarEntitySerialiser::GetStaticLayout), the blobby-shadow buffer
-//    (BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow), ShadowMap::CalcOptimisedLod
-//    and RaceCarEntityModule::SubmitCoronasForRaceCar.
-//    It is a later wave, not a stub: no empty branch is written for it here.
-//    UPDATED 2026-08-17 (coronas step 1): SubmitCoronasForRaceCar @0x822D1600 IS now in the
-//    tree -- bodied at the foot of this file -- and its CALL is wired into the `else` arm's
-//    per-car loop at the console's own position within the per-car body (last, after
-//    RenderRaceCar; asm order in the `if` arm: RenderRaceCar @0x822E7E4C ... AddShadow
-//    @0x822E8040 ... the five gates @0x822E8044..0x822E808C ... SubmitCoronasForRaceCar
-//    @0x822E80BC ... `b` to the loop tail @0x822E83A0). The replay serialiser, the blobby
-//    shadow buffer and CalcOptimisedLod are still `if`-arm-only and still absent.
-// 2. RenderRaceCar's CRACKED-GLASS loop. It walks the spec's shattered-glass part table
-//    and calls BrnWorld::SetGlassFractureConstants per pane before its own AddToBin /
-//    Submit, and it needs two .rodata constant vectors the function-only IDA export does
-//    not carry.
-//    ⚠️ The console ALSO calls SetGlassFractureConstants(0.0f, 1.0f, {0,0}, {0,0,0,0})
-//    ONCE per car @0x822CFC08, immediately before shader constants 20/21 -- the "no
-//    fracture" reset for the whole car. It is NOT reproduced here for a link reason, not
-//    a knowledge one: the only definition of BrnWorld::SetGlassFractureConstants lives in
-//    BrnRaceCarEntityModule_GlassFracture.cpp, and that TU is NOT on
-//    tools/build/build_game_exe.bat (grepped: no `GlassFracture` line in the file), so
-//    calling it would leave an unresolved external at link. The consequence is real and
-//    named: shader constants 30/31/32 are never published by anything on this build, and
-//    an unset external constant is SKIPPED rather than zeroed (shadowingdevice.cpp:847),
-//    so the glass programs that declare them read the previous draw's registers -- the
-//    same failure mode the verlet block below documents. DELETE-WHEN the GlassFracture TU
-//    is mounted.
-//    ⭐ Shader constant 24 -- the head/brake/reverse emission vector -- IS reconstructed
-//    as of 2026-08-17 (car-lights wave); its three module debug floats at +100232..+100240
-//    are now named + offset-pinned in BrnRaceCarEntityModule.h.
-// 3. The IsNormal3x3 / IsOrthogonal3x3 / IsValid dev-assert blocks (~73% of the
-//    function's 2008 instructions is assert scaffolding), including the wheel loop's
-//    own rw::math::IsValid(lWheelMatrix).
-//
-// ---- THE WHEEL BLOCK IS NOW HERE, AND IT IS A FAITHFUL DECOMPILE ------------
-// It submits ONE DrawRenderable command with instanceCount == the number of wheels,
-// exactly as the console does. The PC's D3D9 back end cannot honour that in one draw
-// (the fallback shader takes a single WVP per draw and the instanced draw leaf is a
-// trap), so the N-instance command is expanded into N single-instance mesh commands in
-// CgsGraphics::DrawRenderable::Interpret -- the same PC bring-up shim that already
-// carries the per-object WVP there. The deviation belongs in that render back end, NOT
-// in this function.
-// ============================================================================
+// Native race-car rendering: GenerateDispatchLists 0x822E79F8, RenderRaceCar 0x822CF6A0.
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
+#include "GameSource/Replays/Serialisers/BrnReplayRaceCarSerialiserFrame.h"
+#include "GameSource/Graphics/BrnBlobbyShadowManager.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // InputBuffer_GenerateDispatchLists
 
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                    // CgsGraphics::Model / Renderable
@@ -91,10 +18,7 @@
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::Negate
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec (spec+1552) + ETagPointType
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
 
-#include <cmath>   // powf / sqrtf
-#include <stdlib.h> // getenv / atoi ([deform-upload] control, host-side diagnostic only)
 
 // The selector backing DeformationDebugComponent::OnActivate's "Render car part" control.
 namespace BrnPhysics { namespace Deformation { extern s32 giDebugOnlyRenderThisCarPart; } }
@@ -103,7 +27,6 @@ namespace BrnPhysics { namespace Deformation { extern s32 giDebugOnlyRenderThisC
 // by the CgsShaderConstants TU). Mirrors the committed extern in the sibling TUs.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 
-static const u32 KU_RACECAR_DIAG_MAX_LINES  = 128u;
 
 // ============================================================================
 // The two file-scope globals the wheel block reads. Both are console globals, and
@@ -172,7 +95,7 @@ s32 giWheelsToRender = 4;
 // The producer side is live as of 2026-09-12: ActiveRaceCar::CalculateWheelAngularVelocities
 // fills RenderParams::mafWheelAngularVelocities every tick from the published per-wheel spin
 // rate, so the race car now has BOTH halves -- sharp at rest and blurred past 30 rad/s.
-Vector4 gvWheelBlurConstants = { 30.0f, 30.0f, 30.0f, 30.0f };
+Vector4 gvWheelBlurConstants(30.0f, 30.0f, 30.0f, 30.0f);
 
 // The console's wheel matrix / pointer stack arrays are four entries long
 // (`__vector_constructor_iterator(v390, 64, 4, ...)`), which is also the debug
@@ -207,14 +130,14 @@ static const s32 KU_WHEELS_TO_RENDER_MAX = 4;
 // ============================================================================
 static const Vector4 KAV4_GLASS_FRACTURE_UV_OFFSETS[8] =
 {
-    { -0.0f,  0.5f,  0.9f,  0.1f },
-    { -0.2f, -0.7f,  0.3f,  0.8f },
-    { -0.5f,  0.8f,  0.6f,  0.9f },
-    { -0.1f,  0.7f,  0.5f,  0.7f },
-    { -0.9f, -0.9f,  0.8f,  0.4f },
-    { -0.5f,  0.3f,  0.6f,  0.6f },
-    { -0.8f,  0.5f,  0.5f,  0.1f },
-    { -0.3f, -0.3f,  0.9f,  0.4f },
+    Vector4(-0.0f,  0.5f,  0.9f,  0.1f),
+    Vector4(-0.2f, -0.7f,  0.3f,  0.8f),
+    Vector4(-0.5f,  0.8f,  0.6f,  0.9f),
+    Vector4(-0.1f,  0.7f,  0.5f,  0.7f),
+    Vector4(-0.9f, -0.9f,  0.8f,  0.4f),
+    Vector4(-0.5f,  0.3f,  0.6f,  0.6f),
+    Vector4(-0.8f,  0.5f,  0.5f,  0.1f),
+    Vector4(-0.3f, -0.3f,  0.9f,  0.4f),
 };
 
 // BrnWorld::SetGlassFractureConstants @0x822BD280 -- defined in the sibling TU
@@ -222,6 +145,8 @@ static const Vector4 KAV4_GLASS_FRACTURE_UV_OFFSETS[8] =
 // BrnRaceCarEntityModule.h. Declared here rather than added to that header for the same
 // reason the ShaderConstantTable extern above is spelled locally: this TU needs the
 // symbol, not the header's whole surface.
+namespace BrnPhysics { namespace Deformation { extern s32 giDebugOnlyRenderThisCarPart; extern bool kbAllowDeformationDebug; } }
+
 namespace BrnWorld
 {
     void SetGlassFractureConstants(float lfFractureStrength,
@@ -287,19 +212,90 @@ namespace BrnWorld
 //     override that matrix -> bind it as shader constant 0 -> BeginPacket ->
 //     DrawRenderable::AddToBin -> DispatchList::Submit.
 // ============================================================================
+static __vector4 RaceCarPack3(__vector4 a, __vector4 b, __vector4 c)
+{
+    static const __declspec(align(16)) unsigned char mask[16] =
+        {0,1,2,3,20,21,22,23,0,1,2,3,0,1,2,3};
+    return __vrlimi(__vperm(a, b, __lvx(mask, 0)), c, 2, 0);
+}
+
+static bool RaceCarMagnitudeExceeds(__vector4 v, float tolerance)
+{
+    const __vector4 allOnes = __vspltisw(-1);
+    const __vector4 sign = __vslw(allOnes, allOnes);
+    const __vector4 magnitude = __vandc(__vmsum3fp(v, v), sign);
+    const __vector4 threshold = __vspltw(__lvlx(&tolerance, 0), 0);
+    unsigned int cr;
+    __vcmpgtfpR(magnitude, threshold, &cr);
+    return (cr & 0x80u) != 0;
+}
+
+static bool RaceCarIsNormal(const Matrix44Affine& m)
+{
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    return !RaceCarMagnitudeExceeds(RaceCarPack3(
+        __vsubfp(__vmsum3fp(m.xAxis.mV, m.xAxis.mV), one),
+        __vsubfp(__vmsum3fp(m.yAxis.mV, m.yAxis.mV), one),
+        __vsubfp(__vmsum3fp(m.zAxis.mV, m.zAxis.mV), one)), 0.01f);
+}
+
+static bool RaceCarIsOrthogonal(const Matrix44Affine& m, float tolerance)
+{
+    const __vector4 x = m.xAxis.mV, y = m.yAxis.mV, z = m.zAxis.mV;
+    const __vector4 t0 = __vmrghw(x, z), t1 = __vmrghw(y, y);
+    const __vector4 t2 = __vmrglw(x, z), t3 = __vmrglw(y, y);
+    const __vector4 c0 = __vmrghw(t0, t1), c1 = __vmrglw(t0, t1), c2 = __vmrghw(t2, t3);
+    const Vector4 ix(1.0f,0.0f,0.0f,0.0f);
+    const Vector4 iy(0.0f,1.0f,0.0f,0.0f);
+    const Vector4 iz(0.0f,0.0f,1.0f,0.0f);
+    __vector4 a = __vmaddfp(c1, __vspltw(x,1), __vmulfp(c0, __vspltw(x,0)));
+    __vector4 b = __vmaddfp(c1, __vspltw(y,1), __vmulfp(c0, __vspltw(y,0)));
+    __vector4 c = __vmaddfp(c1, __vspltw(z,1), __vmulfp(c0, __vspltw(z,0)));
+    a = __vsubfp(__vmaddfp(c2, __vspltw(x,2), a), ix.mV);
+    b = __vsubfp(__vmaddfp(c2, __vspltw(y,2), b), iy.mV);
+    c = __vsubfp(__vmaddfp(c2, __vspltw(z,2), c), iz.mV);
+    return !RaceCarMagnitudeExceeds(RaceCarPack3(__vmsum3fp(a,a), __vmsum3fp(b,b), __vmsum3fp(c,c)), tolerance);
+}
+
+static bool RaceCarWheelRowValid(__vector4 row)
+{
+    unsigned int cr;
+    __vector4 lane = __vspltw(row, 0); __vcmpeqfpR(lane, lane, &cr);
+    if (!(cr & 0x80u)) return false;
+    lane = __vspltw(row, 1); __vcmpeqfpR(lane, lane, &cr);
+    if (!(cr & 0x80u)) return false;
+    lane = __vspltw(row, 2); __vcmpeqfpR(lane, lane, &cr);
+    return (cr & 0x80u) != 0;
+}
+
+static void RaceCarMatrixAssert(const char* message, const Matrix44Affine& m, int line)
+{
+    CgsDev::Assert::BeginAssert();
+    CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+    stream << message;
+    stream.AppendFormat("\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n",
+        m.xAxis.mV.x,m.xAxis.mV.y,m.xAxis.mV.z,m.xAxis.mV.w,
+        m.yAxis.mV.x,m.yAxis.mV.y,m.yAxis.mV.z,m.yAxis.mV.w,
+        m.zAxis.mV.x,m.zAxis.mV.y,m.zAxis.mV.z,m.zAxis.mV.w,
+        m.wAxis.mV.x,m.wAxis.mV.y,m.wAxis.mV.z,m.wAxis.mV.w);
+    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp", line);
+    CgsDev::Assert::EndAssert();
+}
+
 void
 RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
-                                    ActiveRaceCar::RenderParams* lpRenderParams,
-                                    const CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>* lpCarGraphics,
-                                    const CgsResource::ResourcePtr<BrnWheel::GraphicsSpec>* lpWheelGraphics,
+                                    rw::math::vpu::VecFloat lCameraDistance,
+                                    Vector4 lvFogScattering,
+                                    Vector4 lvFogColourPlusWhiteLevel,
+                                    const ActiveRaceCar::RenderParams* lpRenderParams,
+                                    const CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>& lrCarGraphics,
+                                    const CgsResource::ResourcePtr<BrnWheel::GraphicsSpec>& lrWheelGraphics,
                                     s32 liObjectList,
                                     s32 liOpaqueMeshList,
                                     s32 liTransparentMeshList,
-                                    const ShadowMap* lpShadowMap,
-                                    bool lbRenderAttachedGeometry,
-                                    f32  lfCameraDistance,
-                                    Vector4 lvFogScattering,
-                                    Vector4 lvFogColourPlusWhiteLevel )
+                                    ShadowMap* lpShadowMap,
+                                    bool lbRenderAttachedGeometry ) const
 {
     CGS_ASSERT( lpRenderParams != 0, "lpRenderParams" );
     CGS_ASSERT( lpDispatchFrame != 0, "lpDispatchFrame" );
@@ -309,6 +305,10 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // r5 (the RenderParams) before anything else -- the matrix at offset 0 IS
     // mBodyTransform.
     const Matrix44Affine lBodyTransform = lpRenderParams->GetBodyTransform();
+    if (!mbInReplay && !RaceCarIsNormal(lBodyTransform))
+        RaceCarMatrixAssert("Non-normal racecar body transform: ", lBodyTransform, 3457);
+    if (!mbInReplay && !RaceCarIsOrthogonal(lBodyTransform, 0.1f))
+        RaceCarMatrixAssert("Body transform is not orthogonal ", lBodyTransform, 3458);
 
     // `if (!*(rp + 5131))` -- mbIsHidden gates the ENTIRE function body.
     if ( lpRenderParams->IsRaceCarHidden() )
@@ -318,7 +318,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
 
     // Every spec read in the console body goes through ResourcePtr::operator-> (the
     // `BrnVehicle::GraphicsSpec_::operat(v56)` calls); it is hoisted once here.
-    const BrnVehicle::GraphicsSpec* lpCarGraphicsSpec = lpCarGraphics->operator->();
+    const BrnVehicle::GraphicsSpec* lpCarGraphicsSpec = lrCarGraphics.operator->();
 
     // ---- the DEBUG damage overrides (@0x822CFAB4..0x822CFB0C) ---------------
     // `if (DEBUG_mbOverrideDamage) { v119 = {crumple, 0, dust, 0};
@@ -329,14 +329,15 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // ARTIST 822CF708/70C/718/720 zeros all four lanes of var_4D0; 822CF738
     // addresses that stack vector and 822CF760 loads it into v119. The override-off
     // value is therefore the original zero vector, not an uninitialized register.
-    Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
+    Vector4 lv4DamageConstants(0.0f, 0.0f, 0.0f, 0.0f);
     if ( DEBUG_mbOverrideDamage )
     {
         // `stfs module+0x18784 -> var_510 (lane X)` / `stfs module+0x18780 -> var_508
         // (lane Z)`, with f31 (== flt_82001CC0 == 0.0f) in lanes Y and W.
-        lv4DamageConstants.x = DEBUG_mfVehicleCrumpleAmount;
-        lv4DamageConstants.z = DEBUG_mfVehicleDustAmount;
-        lpRenderParams->DEBUG_OverrideScratchAmount( DEBUG_mfVehicleScratchAmount );
+        lv4DamageConstants.mV.x = DEBUG_mfVehicleCrumpleAmount;
+        lv4DamageConstants.mV.z = DEBUG_mfVehicleDustAmount;
+        // The original const input is passed to this non-const debug method at 822CFB0C.
+        const_cast<ActiveRaceCar::RenderParams*>(lpRenderParams)->DEBUG_OverrideScratchAmount( DEBUG_mfVehicleScratchAmount );
     }
 
     // ========================================================================
@@ -394,29 +395,31 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // read out of the shipped image (see the three constants at the top of this file),
     // and every RenderParams member is one this header already names and pins.
     // ========================================================================
-    Vector4 lv4LightState = { 0.0f, 0.0f, 0.0f, 0.0f };
+    Vector4 lv4LightState(0.0f, 0.0f, 0.0f, 0.0f);
     if ( !lpRenderParams->IsEngineOff()
          && lpRenderParams->GetDeformationSquared() < KF_LIGHTS_OUT_DEFORMATION_SQUARED )
     {
         // unk_82181510 == (0, 1, 0, 0): the always-on channel, and only that one.
-        lv4LightState.y = KF_LIGHT_CHANNEL_G_ALWAYS_ON;
+        lv4LightState.mV.y = KF_LIGHT_CHANNEL_G_ALWAYS_ON;
 
         if ( lpRenderParams->IsBraking() )
         {
-            lv4LightState.x = 1.0f;     // vrlimi128 mask 8 -> lane X
+            lv4LightState.mV.x = 1.0f;     // vrlimi128 mask 8 -> lane X
         }
         if ( lpRenderParams->IsReversing() )
         {
-            lv4LightState.z = 1.0f;     // vrlimi128 mask 2 -> lane Z
+            lv4LightState.mV.z = 1.0f;     // vrlimi128 mask 2 -> lane Z
         }
     }
 
     // vmaxfp against the three editable floats, then vmulfp. Both flush
     // subnormals; the vector maximum propagates unordered operands.
-    const Vector4 lv4DebugIllumination = { DEBUG_mfSelfIlluminationR,
-                                           DEBUG_mfSelfIlluminationG,
-                                           DEBUG_mfSelfIlluminationB,
-                                           0.0f };
+    const Vector4 lv4DebugIllumination(DEBUG_mfSelfIlluminationR,
+                                       DEBUG_mfSelfIlluminationG,
+                                       DEBUG_mfSelfIlluminationB, 0.0f);
+    const Vector4 lv4SelfIlluminationMask(__vmulfp(
+        __vmaxfp(lv4DebugIllumination.mV, lv4LightState.mV),
+        __vcfsx(__vspltisw(8), 0)));
 
     // ---- the shadow-pass selector ------------------------------------------
     // v320 = (shadowMap[0] && shadowMap[1]): the two LEADING ShadowMap bytes the asm reads
@@ -461,496 +464,393 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 24, lv4SelfIlluminationMask );
     bool lbSelfIlluminationArmed = true;
 
-    // [PC diagnostic] print the value at the CONSUMING end. UpdateActiveRaceCarColours
-    // prints the same two vectors where it writes them; this prints what actually reaches
-    // shader constant 20/21, so a silent drop between the two shows up as a mismatch rather
-    // than as a plausible-looking white car. (The existing [WorldShader] / [WorldSamplers]
-    // tallies cannot answer this -- both saturate at 4096 draws, long before a car exists.)
+    // ARTIST 0x822CFC50..0x822CFE18. Keep VMX estimates, masks and fused operations.
     {
-        static u32 suPaintDiagLines = 0u;
-        static f32 sfLastLoggedPaintX = -1.0f;
-        static f32 sfLastLoggedPaintY = -1.0f;
-        static f32 sfLastLoggedPaintZ = -1.0f;
-        const Vector4& lrPaintProbe = lpRenderParams->GetPaintColour();
-        if( sbPaintDiag && suPaintDiagLines < KU_RACECAR_DIAG_MAX_LINES
-            && ( lrPaintProbe.x != sfLastLoggedPaintX
-              || lrPaintProbe.y != sfLastLoggedPaintY
-              || lrPaintProbe.z != sfLastLoggedPaintZ )
-            && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++suPaintDiagLines;
-            sfLastLoggedPaintX = lrPaintProbe.x;
-            sfLastLoggedPaintY = lrPaintProbe.y;
-            sfLastLoggedPaintZ = lrPaintProbe.z;
-            const Vector4& lrPaint = lpRenderParams->GetPaintColour();
-            const Vector4& lrPearl = lpRenderParams->GetPearlescentColour();
-            *CgsDev::Log::gpDebugPrint
-                << "[racecar-paint] RenderRaceCar -> shader constant 20 g_paintColour ("
-                << lrPaint.x << ", " << lrPaint.y << ", " << lrPaint.z << ", " << lrPaint.w
-                << ") / 21 g_pearlescentColour (" << lrPearl.x << ", " << lrPearl.y << ", "
-                << lrPearl.z << ", " << lrPearl.w << ")\n";
-        }
+        static const __declspec(align(16)) u32 auPowC0[4] = {0x3c1d8c54u,0xbaae1854u,0x391aa7d7u,0xb7364261u};
+        static const __declspec(align(16)) u32 auPowC1[4] = {0x3f800000u,0xbf317218u,0x3e75fdedu,0xbd6357cau};
+        static const __declspec(align(16)) u32 auPowC2[4] = {0x3e77adbdu,0xbe0cd4fbu,0x3d5541c6u,0xbc188b0bu};
+        static const __declspec(align(16)) u32 auPowC3[4] = {0x3fb8aa0eu,0xbf389e52u,0x3ef5162du,0xbeb1d204u};
+        const __vector4 v123 = __vspltisw(0);
+        const __vector4 v127 = __vspltisw(-1);
+        __vector4 v8 = __vspltisw(1);
+        __vector4 v4 = __vspltisw(-9);
+        __vector4 v7 = lvFogScattering.mV;
+        const __vector4 v121 = __vcfsx(v8, 0);
+        __vector4 v0 = __vspltw(v7, 0);
+        __vector4 v13 = __vspltw(v7, 1);
+        __vector4 v3 = __vslw(v127, v127);
+        const __vector4 v6 = __vspltw(__vupkd3d(v123, VPACK_NORMSHORT2), 3);
+        __vector4 v12 = __vmulfp(lCameraDistance.mV, v0);
+        v0 = __vspltw(v7, 2);
+        __vector4 v10 = __lvx(auPowC3, 0);
+        __vector4 v31 = __vspltw(v10, 1);
+        __vector4 v1 = __vspltw(v10, 0);
+        const __vector4 v27 = __vspltw(v10, 3);
+        v13 = __vsubfp(v12, v13);
+        v12 = __vslw(v127, v4);
+        __vector4 v9 = __lvx(auPowC2, 0);
+        __vector4 v29 = __vspltw(v9, 1);
+        __vector4 v30 = __vspltw(v9, 0);
+        const __vector4 v26 = __vspltw(v9, 3);
+        v13 = __vmaxfp(v123, v13);
+        __vector4 v11 = __vminfp(v121, v13);
+        __vector4 v5 = __vandc(v11, v3);
+        v13 = __vsel(v5, v6, v12);
+        __vector4 v28 = __vlogefp(v5);
+        v13 = __vsubfp(v13, v6);
+        v12 = __vmulfp(v13, v13);
+        v1 = __vmaddfp(v13, v31, v1);
+        v31 = __vspltw(v10, 2);
+        v30 = __vmaddfp(v13, v29, v30);
+        v10 = __lvx(auPowC1, 0);
+        v29 = __vspltw(v9, 2);
+        v5 = __vspltw(v10, 0);
+        v9 = __lvx(auPowC0, 0);
+        __vector4 v2 = __vmulfp(v13, v12);
+        v1 = __vmaddfp(v12, v31, v1);
+        v31 = __vmulfp(v12, v12);
+        v12 = __vmaddfp(v12, v29, v30);
+        v13 = __vmulfp(v13, v0);
+        v30 = __vrfim(v28);
+        v1 = __vmaddfp(v2, v27, v1);
+        v29 = __vspltw(v10, 1);
+        v12 = __vmaddfp(v2, v26, v12);
+        const __vector4 v25 = __vspltw(v9, 0);
+        v2 = __vmulfp(v30, v0);
+        const __vector4 v24 = __vspltw(v9, 1);
+        v28 = __vspltw(v10, 2);
+        v30 = __vrfiz(v0);
+        v10 = __vspltw(v10, 3);
+        v3 = __vand(v11, v3);
+        v4 = __vslw(v127, v4);
+        v7 = __vspltw(v7, 3);
+        v12 = __vmaddfp(v31, v12, v1);
+        v13 = __vmaddfp(v13, v12, v2);
+        v12 = __vrfim(v13);
+        v13 = __vsubfp(v13, v12);
+        v2 = __vexptefp(v12);
+        v12 = __vmulfp(v13, v13);
+        v1 = __vmaddfp(v13, v29, v5);
+        v31 = __vmaddfp(v13, v24, v25);
+        v13 = __vmulfp(v13, v12);
+        v1 = __vmaddfp(v12, v28, v1);
+        v10 = __vmaddfp(v13, v10, v1);
+        v1 = __vspltw(v9, 2);
+        v9 = __vspltw(v9, 3);
+        v1 = __vmaddfp(v12, v1, v31);
+        v12 = __vmulfp(v12, v12);
+        v31 = __vctsxs(v0, 0);
+        v13 = __vmaddfp(v13, v9, v1);
+        v1 = __vcmpeqfp(v0, v30);
+        v9 = __vcmpeqfp(v0, v123);
+        v0 = __vcmpgtfp(v123, v0);
+        v12 = __vmaddfp(v12, v13, v10);
+        v13 = __vand(v31, v8);
+        v31 = __vcmpgtfp(v123, v11);
+        v8 = __vsrw(v4, v8);
+        v10 = __vcmpeqfp(v11, v123);
+        v13 = __vslw(v13, v127);
+        v11 = __vand(v3, v13);
+        v13 = __vrefp(v12);
+        v4 = __vandc(v31, v1);
+        v0 = __vandc(v10, v0);
+        v1 = __vor(v123, v11);
+        v10 = __vor(v10, v9);
+        v0 = __vsel(v8, v1, v0);
+        v10 = __vor(v4, v10);
+        v9 = __vsel(v0, v6, v9);
+        v0 = __vnmsubfp(v12, v13, v5);
+        v0 = __vmaddfp(v13, v0, v13);
+        v12 = __vnmsubfp(v12, v0, v5);
+        v8 = __vcmpeqfp(v0, v0);
+        v0 = __vmaddfp(v0, v12, v0);
+        v0 = __vsel(v13, v0, v8);
+        v0 = __vmulfp(v2, v0);
+        v0 = __vor(v0, v11);
+        v0 = __vsel(v0, v9, v10);
+        v0 = __vmulfp(v0, v7);
+        v13 = __vsubfp(v121, v0);
+        Vector4 lv4Fog;
+        lv4Fog.mV = __vrlimi(__vmulfp(lvFogColourPlusWhiteLevel.mV, v0), v13, 1, 0);
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData(26, lv4Fog);
     }
 
-    // 26: the per-car FOG blend. The console inlines a powf here (vlogefp / vexptefp plus
-    // the usual polynomial refinement over the .rodata coefficient vectors at
-    // 0x82014AC0..0x82014AF0); de-optimised back to the library call it is:
-    //     t = powf( saturate( distance * scattering.x - scattering.y ), scattering.z )
-    //         * scattering.w
-    //     constant26 = { fogColour.xyz * t, 1 - t }
-    // (`vrlimi128 v1, v13, 1, 0` writes the 1-t into lane w only.)
+    // ARTIST uploads the verlet offsets and damage constants when deformation is enabled.
+    const bool lbDamaged = lpRenderParams->IsDamaged() || BrnPhysics::Deformation::kbAllowDeformationDebug;
+    if (lbDamaged || DEBUG_mbOverrideDamage)
     {
-        f32 lfBlend = lfCameraDistance * lvFogScattering.x - lvFogScattering.y;
-        if ( lfBlend < 0.0f ) { lfBlend = 0.0f; }
-        if ( lfBlend > 1.0f ) { lfBlend = 1.0f; }
-        const f32 lfFog = powf( lfBlend, lvFogScattering.z ) * lvFogScattering.w;
-
-        const Vector4 lv4Fog = { lvFogColourPlusWhiteLevel.x * lfFog,
-                                 lvFogColourPlusWhiteLevel.y * lfFog,
-                                 lvFogColourPlusWhiteLevel.z * lfFog,
-                                 1.0f - lfFog };
-        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 26, lv4Fog );
+        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(22, lpRenderParams->GetVerletOffsets());
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData(23, lv4DamageConstants);
     }
 
-    // 22 / 23: the deformation verlet block. `v107 = mbDamaged; if (kbAllowDeformationDebug)
-    // v107 = 1;` then `if (v107 || <module debug bool>)` uploads the 128-entry offset array
-    // as constant 22 and its companion scale as 23.
-    //
-    // ⭐ LANDED 2026-08-12 (exploding-panels wave). The old banner here said this "cannot be
-    // expressed yet" because SetShaderConstantArrayData was declaration-only for all five
-    // overloads. THAT IS NO LONGER TRUE -- the Vector4* overload is bodied
-    // (CgsShaderConstantTable.cpp:80) and carries this array verbatim: maVerletOffsets is
-    // Vector3Plus[128] and Vector3Plus is a 16-byte lane register, the same quad-word the
-    // overload's FastNonOverlappedVectorMemcpy copies, GetNumEntries() == the declared 128.
-    //
-    // WHY LEAVING IT UNSENT WAS NOT NEUTRAL -- this is the panel-stretch defect, and the
-    // mechanism is MEASURED, not inferred. Sixteen vertex programs in SHADERS_PC.BNDL declare
-    // `g_verletOffsets` at register c0 with count 128, and an external constant whose source
-    // pointer is null is SKIPPED, not zeroed (shadowingdevice.cpp:847). So the car body
-    // program read c0..c127 as they were left by the preceding world draws:
-    //     c0..c11   ShadowMap_WorldToLight (three light matrices)
-    //     c12..c15  ViewProjectionModified
-    //     c16..c19  IrradianceQuadricA
-    //     c20..c23  the LAST WORLD OBJECT'S WORLD MATRIX -- translations in the thousands of metres
-    //     c24..c31  irradiance/shadow/scattering leftovers
-    //     c32..c127 never written by any program in the bundle -> zero
-    // mbDamaged is TRUE for every player car (RaceCar::ToBeRenderedDamaged, console
-    // behaviour), so the DAMAGED technique ran and offset each vertex by
-    // g_verletOffsets[boneIndex]: a vertex whose bone index was 32..127 stayed exactly put
-    // while its neighbour indexing 0..31 was catapulted by a matrix row. One or two vertices
-    // of a triangle flung metres away, the rest anchored -- a long thin sail, anchored at the
-    // car because `world` (c148) IS published and the rigid transform was always correct.
-    // The wheels (forced onto the flat fallback pair) and the non-deforming parts were
-    // untouched, which is exactly the frame the user saw.
-    //
-    // The array itself is zero-seeded in RenderParams::Reset until BrnDeformationManager
-    // lands; see the flagged block there.
-    //
-    // ⭐⭐⭐ 2026-09-07 (deformation-SHAPE wave) -- THE CONSUMPTION SIDE OF THE DEFORMATION IS
-    // CLOSED AS FAITHFUL. The owner reported panels reading SMEARED / STRETCHED rather than
-    // crumpled and this was the obvious suspect, because the weights scale the OFFSET, not
-    // the position: blend data that came apart in the BE->LE port would distort the
-    // DEFORMATION while leaving the REST POSE exact, i.e. invisible to every rest-pose audit
-    // this campaign has run. It did not come apart. Measured on shipped bytes, no runtime:
-    //
-    //   * THE MESH. 430/430 VEHICLES/*_GR.BIN (and 138/138 WHEELS/*_GR.BNDL) are platform 4
-    //     with a retail twin. Over all 430 cars -- 144,958 renderable meshes, 144,143 of them
-    //     skinned, 20,475,516 vertices compared against the X360 retail bytes -- the
-    //     {BLENDINDEX, BLENDWEIGHT} multiset is IDENTICAL on every single vertex, no index is
-    //     out of range, and the only weight sums that miss 255 (16,180, 0.079%) miss it
-    //     IDENTICALLY on both sides: the console's own authoring rounds those to 256.
-    //   * THE LANE ASSIGNMENT, which is the part a dword flip could have wrecked.
-    //     BLENDINDICES is UBYTE4 (0x1A2286) and BLENDWEIGHT UBYTE4N (0x1A2086) -- four bytes
-    //     in ONE dword, flipped AS A DWORD by renderable_transcode. X360 memory carries the
-    //     two live influences in bytes 2,3 (lane mask 0b1100 on 19,657,114 vertices, 0b1000
-    //     on the 818,402 single-influence ones); the port reverses BOTH elements consistently
-    //     so PC memory carries them in bytes 0,1 (0b0011 / 0b0001 -- an exact mirror). D3D9
-    //     UBYTE4N delivers memory byte 0 as .x, so the pair lands in .x/.y -- and the console
-    //     must be delivering memory byte 3 as .x (an 8-in-32 fetch swap) or NO X360 car would
-    //     ever deform. So the reversal is not merely consistent, it is the right one, lane
-    //     for lane, including which of the two influences is .x.
-    //   * THE PROGRAM. X360 VS 274C49FB's Xenos microcode against its PC twin (same resource
-    //     id in both bundles), instruction for instruction:
-    //         X360  trunc r5.xy, r1.xy | maxas a0<-r5.y | mul r1, r3.yyyy, c30[a0]
-    //                                  | maxas a0<-r5.x | mad r5, r3.xxxx, c30[a0], r1
-    //                                  | add r1.xyz, r5, position
-    //         PC    mova a0.xy, r0.yx  | mul r0.xyz, v4.y, c0[a0.x]
-    //                                  | mad r0.xyz, c0[a0.y], v4.x, r0 | add r0.xyz, r0, v0
-    //     Same formula, same two lanes, same order, and NEITHER side deforms the normal. The
-    //     X360 CTAB puts g_verletOffsets at c30 x128 and the PC recompile at c0 x128 -- a
-    //     different fxc register allocation of the same declaration, which is harmless
-    //     because ShaderConstantsExternal::FixUp binds by NAME through
-    //     GetVariableHandleByName and then OVERRIDES the register count with
-    //     (mu8SizeInBytes * mu8NumEntries) >> 4 == 128 for any array entry.
-    //   * THE COUNT SURVIVES THE PORT END TO END: AddShaderConstantArray(22,"g_verletOffsets",
-    //     16,128) -> SetSize/SetNumEntries cache 128 qw -> AllocateMemoryFast(128) quad-words
-    //     (DispatchCommand is u32[4], still 16 B on x64) -> FastNonOverlappedVectorMemcpy 128
-    //     Vector4 -> DispatchExternalBlock -> SetVertexShaderConstantF(0, ., 128), under
-    //     D3D9's 256-register vertex limit so WorldShaderConstants_Set never clamps. All 16
-    //     vs_3_0 programs in the shipped SHADERS.BNDL declare the array float4[128] at c0.
-    //     Upstream, RaceCarEntityModule's L4 arm copies the full 128 rows out of the
-    //     DeformableObject scratch, and RenderParams pins maVerletOffsets@64 with
-    //     mWheelTransforms@2112 -- 2048 bytes, i.e. 128 x 16 exactly.
-    //   * THE ROW NUMBERING MATCHES PER CAR, not just on PUSMC01. On all 430 cars the mesh's
-    //     max BLENDINDEX + 1 equals (skinned tag count + SUM of GetNumberOfDrivenPoints)
-    //     EXACTLY -- no row the physics never writes, and no spare row either. And the
-    //     two-writer hazard the UpdateSkinningOffsets banner flagged as data-dependent is
-    //     safe fleet-wide: every car has exactly FOUR unskinned tag points, they ARE the four
-    //     wheel tags, and they are always the last four, so packed row == raw tag index for
-    //     every skinned tag -- while UpdateIKSuspensionOffsets' raw-indexed scratch write is
-    //     gated on lpSpec->IsSkinned(), which no retail wheel tag satisfies, so the two
-    //     numberings cannot collide on any shipped car.
-    //
-    // => DO NOT RE-OPEN THE MESH/SHADER/UPLOAD PATH FOR A "the panels stretch" REPORT. Rebuild
-    // any of the above with tools/assets/bundles/vehicle_skin_audit.py (parent repo): --car,
-    // --fleet, --rows, --tags, --platform, and --selftest, whose four negative controls were
-    // each seen to BITE (a weights-only reversal fires the pairing test; a consistent
-    // reversal of both does not, and restores the X360 lane mask exactly -- which is what
-    // proves the port's transform IS that reversal; +1 on a weight byte fires the sum test;
-    // inverting the skinned flag flags all 430 cars).
-    const bool lbDamaged = lpRenderParams->IsDamaged();
-
-    // ⚠ DELIBERATE DEVIATION from the console's `if (mbDamaged || <debug>)` gate: the upload
-    // is UNCONDITIONAL. Measured reason -- of the 16 vertex programs in SHADERS_PC.BNDL that
-    // declare g_verletOffsets, fifteen are the `*_Damaged_*` variants but the sixteenth is
-    // `ZOnlyVehicleSkinnedOpaqueSingleSided_VertexShader`, i.e. the SHADOW / Z-only skinned
-    // path, which binds irrespective of mbDamaged. Under the console's gate an UNDAMAGED car
-    // would leave slot 22 unpublished for that program and have its shadow-map geometry torn
-    // by the same stale registers this fix exists to stop. An unpublished constant is not
-    // zero, it is the previous draw's value, so "only when damaged" is not a safe economy on
-    // PC. Cost is one 2 KB copy per car per pass.
-    // RESTORE the console gate if the Z-only skinned program is ever shown to ignore the array.
+    // ARTIST 822CFE78..822D15BC: body, glass and wheel dispatch.
+    if (mbRenderCarsDuringCrash)
     {
-        // ---- [deform-upload] THE CONTROL FOR [deform-trace]. NOT X360; opt-in, shares the
-        // BRN_DEFORM_TRACE latch. The per-frame witness in ActiveRaceCar::UpdateDeformationState
-        // reports max|verlet| off mRenderParams -- one leg upstream of here and one frame of
-        // slack away from it. This line reports the SAME statistic off the array actually being
-        // handed to SetShaderConstantArrayData(22), at the instant it is handed over.
-        // ⭐ If [deform-trace]'s maxVerlet is non-zero and this stays 0.000000, the witness is
-        // measuring an array the GPU never sees, and every conclusion drawn from it is void.
-        // Rate-limited hard (this runs per car PER PASS, several times a frame).
-        // DELETE-WHEN the crash-deformation question is closed and banked.
+        const u32 luPartCount = lrCarGraphics->muPartsCount;
+        for (u32 luPart = 0; luPart < luPartCount; ++luPart)
         {
-            static s32 siUploadOn = -1;
-            if ( siUploadOn < 0 )
+            const s32 liSelectedPart = BrnPhysics::Deformation::giDebugOnlyRenderThisCarPart;
+            if (liSelectedPart != -1 && liSelectedPart != static_cast<s32>(luPart)) continue;
+            if (!lpRenderParams->IsPartVisible(static_cast<u8>(luPart))) continue;
+            const CgsGraphics::Model* lpPartModel = lrCarGraphics->GetPartModel(luPart);
+            if (!lpPartModel) continue;
+            const CgsGraphics::Model::State leLOD = lpRenderParams->GetLOD();
+            if (!lpPartModel->DoesStateExist(leLOD)) continue;
+            const Matrix44Affine& lrNormalLocator = lrCarGraphics->GetPartLocators()[luPart];
+            if (!RaceCarIsNormal(lrNormalLocator))
             {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("IsNormal3x3( lpCarGraphicsSpec->mpPartLocators[ luPartIdx ], 0.01f )",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp", 3583);
+                CgsDev::Assert::EndAssert();
             }
-            if ( siUploadOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
+            const Matrix44Affine& lrOrthogonalLocator = lrCarGraphics->GetPartLocators()[luPart];
+            if (!RaceCarIsOrthogonal(lrOrthogonalLocator, 1.1920928955078125e-7f))
             {
-                static u32 sluUploadCalls = 0;
-                ++sluUploadCalls;
-
-                // FX-WITNESS 2026-09-24: WHICH car. RenderRaceCar is handed only the params block, so
-                // match it against the live cars' own blocks (the call site passes
-                // maActiveRaceCars[liCar].GetRenderParams()); -1 == a block no live car owns (the
-                // replay path). The deformation entity is 0x01000000 | (car << 10). The change test
-                // is now PER CAR: one shared last-sum made cars that render in turn re-print each other.
-                s32 liUploadCar = -1;
-                for ( s32 liC = 0; liC < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liC )
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("IsOrthogonal3x3( lpCarGraphicsSpec->mpPartLocators[ luPartIdx ] )",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp", 3584);
+                CgsDev::Assert::EndAssert();
+            }
+            const Matrix44Affine& lrLocator = lrCarGraphics->GetPartLocators()[luPart];
+            Matrix44Affine lPart;
+            __vector4 lvRow = lrLocator.xAxis.mV;
+            __vector4 lvResult = __vmulfp(__vspltw(lvRow, 0), lBodyTransform.xAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lvRow, 1), lBodyTransform.yAxis.mV, lvResult);
+            lPart.xAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lBodyTransform.zAxis.mV, lvResult);
+            lvRow = lrLocator.yAxis.mV;
+            lvResult = __vmulfp(__vspltw(lvRow, 0), lBodyTransform.xAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lvRow, 1), lBodyTransform.yAxis.mV, lvResult);
+            lPart.yAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lBodyTransform.zAxis.mV, lvResult);
+            lvRow = lrLocator.zAxis.mV;
+            lvResult = __vmulfp(__vspltw(lvRow, 0), lBodyTransform.xAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lvRow, 1), lBodyTransform.yAxis.mV, lvResult);
+            lPart.zAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lBodyTransform.zAxis.mV, lvResult);
+            lvRow = lrLocator.wAxis.mV;
+            lvResult = __vmaddfp(__vspltw(lvRow, 0), lBodyTransform.xAxis.mV, lBodyTransform.wAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lvRow, 1), lBodyTransform.yAxis.mV, lvResult);
+            lPart.wAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lBodyTransform.zAxis.mV, lvResult);
+            bool lbAttached = true;
+            const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrQueue = lpRenderParams->GetDetachedPartQueue();
+            for (s32 liEvent = 0; liEvent < lrQueue.GetLength(); ++liEvent)
+            {
+                const DetachedPartRenderEvent& lrEvent = lrQueue.GetEvent(liEvent);
+                if (lrEvent.miPartIndex == static_cast<s32>(luPart))
                 {
-                    if ( maActiveRaceCars[liC].GetRenderParams() == lpRenderParams ) { liUploadCar = liC; }
-                }
-                CGS_STATIC_ASSERT(( E_ACTIVE_RACE_CAR_INDEX_COUNT == 8),
-                               "safLastSum's initialiser lists one slot per race car plus the -1 slot" );
-                static f32 safLastSum[E_ACTIVE_RACE_CAR_INDEX_COUNT + 1] = { -1.0f, -1.0f, -1.0f, -1.0f,
-                                                                             -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };
-                f32& sfLastMax = safLastSum[liUploadCar + 1];   // holds the SUM (see below)
-
-                // ⛔ SUM, not max -- see the statistic note in ActiveRaceCar::UpdateDeformationState.
-                // The preset pins one row high enough to mask every other row's movement.
-                const Vector3Plus* lpV = lpRenderParams->GetVerletOffsets();
-                f32 lfMax = 0.0f;
-                f32 lfSum = 0.0f;
-                s32 liNnz = 0;
-                for ( u32 luRow = 0; luRow < 128u; ++luRow )
-                {
-                    const f32 lfRow = std::fabs( lpV[luRow].x )
-                                    + std::fabs( lpV[luRow].y )
-                                    + std::fabs( lpV[luRow].z );
-                    lfSum += lfRow;
-                    if ( lfRow > 1.0e-6f ) { ++liNnz; }
-                    if ( lfRow > lfMax ) { lfMax = lfRow; }
-                }
-
-                // Print on a real change, or once every 600 uploads as a liveness heartbeat.
-                if ( std::fabs( lfSum - sfLastMax ) > 1.0e-6f || ( sluUploadCalls % 600u ) == 0u )
-                {
-                    sfLastMax = lfSum;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[deform-upload] call " << static_cast< s32 >( sluUploadCalls )
-                        << " damaged " << ( lbDamaged ? 1 : 0 )
-                        << " sumVerlet " << lfSum
-                        << " nnzVerlet " << liNnz
-                        << " maxVerlet " << lfMax
-                        << " car " << liUploadCar
-                        << "\n";
+                    lPart = lrEvent.mTransform;
+                    lbAttached = lrEvent.mbIsAttached;
+                    break;
                 }
             }
-        }
-
-        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
-            22, reinterpret_cast< const Vector4* >( lpRenderParams->GetVerletOffsets() ) );
-
-        // ARTIST 822CFE64..FE70 uploads the original v119 as constant 23.
-        // Its default is the four-lane zero vector initialized above; the debug
-        // override substitutes crumple in X and dust in Z before this upload.
-        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 23, lv4DamageConstants );
-    }
-
-    // ---- the body-part loop -------------------------------------------------
-    // `if (*(this + 99147))` -- the module's own render switch (see the header's
-    // two-point offset fit). ARTIST also reads the shared debug selector at
-    // dword_82CDB49C here: -1 draws every part; otherwise only the selected mesh index
-    // reaches the visibility/model/detached-transform and submission path.
-
-    // ---- [DIAG car-lights wave 2026-08-17] THE LIGHT-STATE WITNESS -------------
-    // ⛔ DELETE-WHEN the head/brake/reverse lamps are confirmed on a booted run.
-    // Latched on the STATE, not on a "printed once" bool: a car that never brakes and a car
-    // that brakes print different lines, and every transition reprints exactly once. It is
-    // also the only thing that can tell the three ways this block produces a black lamp
-    // apart -- engine off, deformed past the cut-off, or simply not braking -- and it prints
-    // mfDeformationSquared verbatim. (Refreshed 2026-09-23, FX-RCEM3 G62-D2: the member's console
-    // producer, ActiveRaceCar::UpdateDeformationState @0x822D4A58, is LANDED and writes it every
-    // frame for each slot the physics readback owns; RenderParams::Reset keeps a PC-only 0.0f
-    // seed only for the three PC skips of that store -- see its banner.)
-    {
-        const u32 luLightState =
-            ( lpRenderParams->IsEngineOff()  ? 1u : 0u )
-          | ( lpRenderParams->IsBraking()    ? 2u : 0u )
-          | ( lpRenderParams->IsReversing()  ? 4u : 0u )
-          | ( lpRenderParams->GetDeformationSquared() >= KF_LIGHTS_OUT_DEFORMATION_SQUARED
-                                             ? 8u : 0u );
-        static u32 suSeenLightStates = 0u;
-        const u32  luBit = 1u << luLightState;
-        if ( ( suSeenLightStates & luBit ) == 0u && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            suSeenLightStates |= luBit;
-            *CgsDev::Log::gpDebugPrint
-                << "[racecar-lights] shader constant 24 g_selfIlluminationMask ("
-                << lv4SelfIlluminationMask.x << ", " << lv4SelfIlluminationMask.y << ", "
-                << lv4SelfIlluminationMask.z << ", " << lv4SelfIlluminationMask.w
-                << ")  [x=brake y=alwaysOn z=reverse]  engineOff "
-                << ( lpRenderParams->IsEngineOff() ? 1 : 0 )
-                << " braking " << ( lpRenderParams->IsBraking() ? 1 : 0 )
-                << " reversing " << ( lpRenderParams->IsReversing() ? 1 : 0 )
-                << " deformation^2 " << lpRenderParams->GetDeformationSquared()
-                << " (lights out at " << KF_LIGHTS_OUT_DEFORMATION_SQUARED << ")\n";
-        }
-    }
-
-    // ---- [DIAG carrender wave 2026-08-12] THE PER-PART WITNESS -----------------
-    // Answers, in ONE line per part, the two questions the frame poses: "where does a body
-    // part's world matrix come from?" and "is anything flung?". It re-walks the spec
-    // read-only -- it cannot perturb the loop above.
-    // Latched on the number of parts sitting further than 3 m from the body origin (plus the
-    // detached-queue length), NOT on a "printed once" bool: a run where nothing is flung and
-    // a run where six panels are flung print different lines, and a change mid-run reprints.
-    if ( mbRenderCarsDuringCrash && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrDiagQueue =
-            lpRenderParams->GetDetachedPartQueue();
-
-        s32 liFarParts = 0;
-        f32 lfMaxDist  = 0.0f;
-        for ( u32 luDiag = 0; luDiag < lpCarGraphicsSpec->muPartsCount; ++luDiag )
-        {
-            const Matrix44Affine lDiagWorld =
-                rw::math::vpu::Mult( lpCarGraphicsSpec->GetPartLocators()[ luDiag ], lBodyTransform );
-            const f32 lfDX = lDiagWorld.wAxis.x - lBodyTransform.wAxis.x;
-            const f32 lfDY = lDiagWorld.wAxis.y - lBodyTransform.wAxis.y;
-            const f32 lfDZ = lDiagWorld.wAxis.z - lBodyTransform.wAxis.z;
-            const f32 lfD  = sqrtf( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ );
-            if ( lfD > lfMaxDist ) { lfMaxDist = lfD; }
-            if ( lfD > 3.0f )      { ++liFarParts; }
-        }
-
-        // The Y-OVER-TIME probe (observable (d)): one compact line per CENTIMETRE of body
-        // travel, budgeted so a settling car prints its whole descent and a settled one goes
-        // quiet. This is what proves a render change did not disturb the physics.
-        {
-            static s32 siLastBodyYcm = 0x7FFFFFFF;
-            static s32 siYBudget     = 60;
-            const s32  liBodyYcm     = static_cast< s32 >( lBodyTransform.wAxis.y * 100.0f );
-            if ( liBodyYcm != siLastBodyYcm && siYBudget > 0 )
+            if (lbAttached)
             {
-                siLastBodyYcm = liBodyYcm;
-                --siYBudget;
-                *CgsDev::Log::gpDebugPrint
-                    << "[carrender-y] bodyDraw y " << lBodyTransform.wAxis.y
-                    << " wheel0 exists " << ( lpRenderParams->GetWheelExists( 0u ) ? 1 : 0 )
-                    << " wheel0 y " << lpRenderParams->GetWheelTransform( 0u ).wAxis.y
-                    << " archPartWorldY " << rw::math::vpu::Mult(
-                           lpCarGraphicsSpec->GetPartLocators()[ 3 ], lBodyTransform ).wAxis.y
-                    << "\n";
-            }
-        }
-
-        // [DIAG wheel-blank regression, 2026-08-25] NOT IN THE X360 BINARY. Env-gated
-        // (BRN_WHEEL_DIAG=1) periodic witness of the wheel data ACTUALLY SUBMITTED: one
-        // line per wheel every 60th render frame. The one-shot [carrender] block below
-        // fires only on the FIRST rendered frames (junkyard, stand-in-pose era), which is
-        // how a driving-state wheel blank hid behind a green boot snapshot.
-        // DELETE-WHEN the wheel regression is pinned and fixed.
-        {
-            static s32 siWheelDiagFrame = 0;
-        }
-
-        static s32 siLastFarParts   = -1;
-        static s32 siLastQueueLen   = -1;
-        // (2026-09-04) budgeted: the change test was written for ONE car; with six cars in a mode the
-        // per-car values differ every frame and the witness wrote 733k lines in 70 s (the harness's
-        // 128 MB log cap). First 64 emissions only.
-        static s32 siCarRenderDiagBudget = 64;
-        if ( ( liFarParts != siLastFarParts || lrDiagQueue.GetLength() != siLastQueueLen ) && siCarRenderDiagBudget-- > 0 )
-        {
-            siLastFarParts = liFarParts;
-            siLastQueueLen = lrDiagQueue.GetLength();
-
-            *CgsDev::Log::gpDebugPrint
-                << "[carrender] parts " << lpCarGraphicsSpec->muPartsCount
-                << " sizeof(locator) " << static_cast< s32 >( sizeof( Matrix44Affine ) )
-                << " detachedQueueLen " << lrDiagQueue.GetLength()
-                << " farParts(>3m) " << liFarParts
-                << " maxPartDist " << lfMaxDist
-                << " body (" << lBodyTransform.wAxis.x << ", " << lBodyTransform.wAxis.y
-                << ", " << lBodyTransform.wAxis.z << ")\n";
-
-            for ( u32 luDiag = 0; luDiag < lpCarGraphicsSpec->muPartsCount; ++luDiag )
-            {
-                const Matrix44Affine& lrLoc = lpCarGraphicsSpec->GetPartLocators()[ luDiag ];
-                const Matrix44Affine  lDiagWorld = rw::math::vpu::Mult( lrLoc, lBodyTransform );
-                const CgsGraphics::Model* lpDiagModel = lpCarGraphicsSpec->GetPartModel( luDiag );
-
-                // did the queue override this part?
-                s32 liQueueHit = -1;
-                for ( s32 liEv = 0; liEv < lrDiagQueue.GetLength(); ++liEv )
+                if (!lbRenderAttachedGeometry) continue;
+                if (!lbSelfIlluminationArmed)
                 {
-                    if ( lrDiagQueue.GetEvent( liEv ).miPartIndex == static_cast< s32 >( luDiag ) )
+                    CgsGraphics::mShaderConstantTable.SetShaderConstantData(24, lv4SelfIlluminationMask);
+                    lbSelfIlluminationArmed = true;
+                }
+            }
+            else if (lbSelfIlluminationArmed)
+            {
+                const Vector4 lvZero(0.0f,0.0f,0.0f,0.0f);
+                CgsGraphics::mShaderConstantTable.SetShaderConstantData(24, lvZero);
+                lbSelfIlluminationArmed = false;
+            }
+            if (!mbInReplay && !RaceCarIsNormal(lPart))
+                RaceCarMatrixAssert("Part matrix is not normal", lPart, 3627);
+            if (!mbInReplay && !RaceCarIsOrthogonal(lPart, 1.1920928955078125e-7f))
+                RaceCarMatrixAssert("Part matrix is not orthogonal", lPart, 3628);
+            const u8 lu8Technique = (lbDamaged || DEBUG_mbOverrideDamage)
+                ? (lbShadowPass ? 3u : 0u) : (lbShadowPass ? 2u : 1u);
+            const CgsGraphics::Model::State leDrawLOD = lpRenderParams->GetLOD();
+            const u8 luDamageFlags = lpRenderParams->GetRenderDamageFlag();
+            const CgsGraphics::Renderable* lpRenderable = lpPartModel->GetRenderable(leDrawLOD);
+            CGS_ASSERT(lpRenderable != 0, "Missing renderable in a model");
+            CgsGraphics::DispatchList* lpList = lpDispatchFrame->GetList(liObjectList);
+            CGS_ASSERT(lpList != 0, "lpDispatchList");
+            CGS_ASSERT(!lpPartModel->GetFlag(CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER),
+                       "lbInstancing == GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER )");
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData(0, lPart);
+            const bool lbFirst = (lpList->GetCount() & 0x7F) == 0;
+            lpDispatchFrame->GetBin().BeginPacket();
+            CgsGraphics::DrawRenderable::AddToBin(lpRenderable, lpDispatchFrame, lbFirst,
+                static_cast<s8>(liOpaqueMeshList),
+                static_cast<s8>(lbShadowPass ? liOpaqueMeshList : liTransparentMeshList),
+                1, lu8Technique, lbShadowPass, 0xFFu, 0u, 0, luDamageFlags);
+            lpList->Submit(0, lpDispatchFrame->GetBin().EndPacket());
+        }
+    }
+    // ARTIST 0x822D0964..0x822D0F64: the glass pass follows the body-part pass.
+    if (lbRenderAttachedGeometry)
+    {
+        for (u32 luGlass = 0; luGlass < lrCarGraphics->muShatteredGlassPartsCount; ++luGlass)
+        {
+            const BrnVehicle::ShatteredGlassPart* lpPart = &lrCarGraphics->GetShatteredGlassParts()[luGlass];
+            CGS_ASSERT(lpPart != 0, "lpPart != NULL");
+            const s32 liPane = static_cast<s32>(lpPart->muBodyPartType) - 16;
+            const f32 lfFracture = lpRenderParams->GetCrackedGlassFractureAmountN(liPane);
+            if ((lpRenderParams->GetRenderDamageFlag() & (1u << liPane)) == 0 || lfFracture > 1.0f)
+                continue;
+            const f32 lfEqualisation = lpRenderParams->GetCrackedGlassEqualisationFactorN(liPane);
+            const Vector4 lUVOffsets = KAV4_GLASS_FRACTURE_UV_OFFSETS[luGlass];
+            const rw::math::fpu::Vector2Template<float> lScale = lpRenderParams->GetCrackedGlassScaleFactorsN(liPane);
+            SetGlassFractureConstants(lfFracture, lfEqualisation, lScale, lUVOffsets);
+
+            const Matrix44Affine& lrLocator = lrCarGraphics->GetPartLocators()[lpPart->muBodyPartIndex];
+            Matrix44Affine lGlass;
+            __vector4 lvRow = lrLocator.xAxis.mV;
+            __vector4 lvResult = __vmulfp(__vspltw(lvRow, 0), lBodyTransform.xAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lvRow, 1), lBodyTransform.yAxis.mV, lvResult);
+            lGlass.xAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lBodyTransform.zAxis.mV, lvResult);
+            lvRow = lrLocator.yAxis.mV;
+            lvResult = __vmulfp(__vspltw(lvRow, 0), lBodyTransform.xAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lvRow, 1), lBodyTransform.yAxis.mV, lvResult);
+            lGlass.yAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lBodyTransform.zAxis.mV, lvResult);
+            lvRow = lrLocator.zAxis.mV;
+            lvResult = __vmulfp(__vspltw(lvRow, 0), lBodyTransform.xAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lvRow, 1), lBodyTransform.yAxis.mV, lvResult);
+            lGlass.zAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lBodyTransform.zAxis.mV, lvResult);
+            lvRow = lrLocator.wAxis.mV;
+            lvResult = __vmaddfp(__vspltw(lvRow, 0), lBodyTransform.xAxis.mV, lBodyTransform.wAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lvRow, 1), lBodyTransform.yAxis.mV, lvResult);
+            lGlass.wAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lBodyTransform.zAxis.mV, lvResult);
+
+            const ActiveRaceCar::RenderParams::DetachedPartRenderQueue& lrQueue = lpRenderParams->GetDetachedPartQueue();
+            for (s32 liEvent = 0; liEvent < lrQueue.GetLength(); ++liEvent)
+            {
+                const DetachedPartRenderEvent& lrEvent = lrQueue.GetEvent(liEvent);
+                if (lrEvent.miPartIndex == static_cast<s32>(lpPart->muBodyPartIndex))
+                {
+                    lGlass = lrEvent.mTransform;
+                    break;
+                }
+            }
+            const u8 lu8Technique = (lbDamaged || DEBUG_mbOverrideDamage)
+                ? (lbShadowPass ? 3u : 0u) : (lbShadowPass ? 2u : 1u);
+            const CgsGraphics::Model* lpModel = lpPart->GetModel();
+            const CgsGraphics::Renderable* lpRenderable = lpModel->GetRenderable(CgsGraphics::Model::E_STATE_LOD_0);
+            CGS_ASSERT(lpRenderable != 0, "lpRenderable");
+            CgsGraphics::DispatchList* lpList = lpDispatchFrame->GetList(liObjectList);
+            CGS_ASSERT(lpList != 0, "lpDispatchList");
+            CGS_ASSERT(!lpModel->GetFlag(CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER),
+                       "lbInstancing == GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER )");
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData(0, lGlass);
+            const bool lbFirst = (lpList->GetCount() & 0x7F) == 0;
+            lpDispatchFrame->GetBin().BeginPacket();
+            CgsGraphics::DrawRenderable::AddToBin(lpRenderable, lpDispatchFrame, lbFirst,
+                static_cast<s8>(liOpaqueMeshList),
+                static_cast<s8>(lbShadowPass ? liOpaqueMeshList : liTransparentMeshList),
+                1, lu8Technique, lbShadowPass, 0xFFu, 0u, 0, 0u);
+            lpList->Submit(0, lpDispatchFrame->GetBin().EndPacket());
+        }
+    }
+    // ARTIST 0x822D0F68..0x822D15BC.
+    if (mbRenderWheels && lbRenderAttachedGeometry)
+    {
+        const BrnWheel::GraphicsSpec* lpWheelSpec = lrWheelGraphics.operator->();
+        const CgsGraphics::Model* lpWheelModel = lpWheelSpec->GetWheelModel();
+        CgsGraphics::Model::State leLOD = lpRenderParams->GetLOD();
+        if (leLOD <= CgsGraphics::Model::E_STATE_LOD_1) leLOD = CgsGraphics::Model::E_STATE_LOD_1;
+        if (lpWheelModel)
+        {
+            if (!lpWheelModel->DoesStateExist(leLOD)) leLOD = CgsGraphics::Model::E_STATE_LOD_1;
+            if (lpWheelModel->DoesStateExist(leLOD))
+            {
+                // The four real constant vectors immediately precede the four real
+                // matrices in ARTIST's stack frame. The provider reads a fifth vector,
+                // which is the first matrix row, rather than a fifth constant entry.
+                struct WheelInstanceStack
+                {
+                    Vector4 maConstants[4];
+                    Matrix44Affine maMatrices[4];
+                } lWheelStack;
+                CGS_STATIC_ASSERT((offsetof(WheelInstanceStack, maMatrices) == 0x40), "ARTIST adjacent wheel vectors and matrices");
+                const Matrix44Affine* lapMatrices[4] = {0, 0, 0, 0};
+                s32 liCount = 0;
+                u8 lu8Technique = 0;
+                u32 luWheelCount = static_cast<u32>(giWheelsToRender);
+                if (luWheelCount != 0)
+                {
+                    u8 luWheel = 0;
+                    do
                     {
-                        liQueueHit = liEv;
-                        break;
-                    }
+                        if (lpRenderParams->GetWheelExists(luWheel))
+                        {
+                            const Matrix44Affine& lrWheel = lpRenderParams->GetWheelTransform(luWheel);
+                            const Matrix44Affine& lrScale = lpRenderParams->GetWheelScaleMatrix(luWheel);
+                            Matrix44Affine lWheel;
+                            __vector4 lvRow = lrScale.xAxis.mV;
+                            __vector4 lv = __vmulfp(__vspltw(lvRow, 0), lrWheel.xAxis.mV);
+                            lv = __vmaddfp(__vspltw(lvRow, 1), lrWheel.yAxis.mV, lv);
+                            lWheel.xAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lrWheel.zAxis.mV, lv);
+                            lvRow = lrScale.yAxis.mV;
+                            lv = __vmulfp(__vspltw(lvRow, 0), lrWheel.xAxis.mV);
+                            lv = __vmaddfp(__vspltw(lvRow, 1), lrWheel.yAxis.mV, lv);
+                            lWheel.yAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lrWheel.zAxis.mV, lv);
+                            lvRow = lrScale.zAxis.mV;
+                            lv = __vmulfp(__vspltw(lvRow, 0), lrWheel.xAxis.mV);
+                            lv = __vmaddfp(__vspltw(lvRow, 1), lrWheel.yAxis.mV, lv);
+                            lWheel.zAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lrWheel.zAxis.mV, lv);
+                            lvRow = lrScale.wAxis.mV;
+                            lv = __vmaddfp(__vspltw(lvRow, 0), lrWheel.xAxis.mV, lrWheel.wAxis.mV);
+                            lv = __vmaddfp(__vspltw(lvRow, 1), lrWheel.yAxis.mV, lv);
+                            lWheel.wAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lrWheel.zAxis.mV, lv);
+                            const f32 lfAngularVelocity = lpRenderParams->GetWheelAngularVelocity(luWheel);
+                            const f32 lfSpin = lfAngularVelocity / gvWheelBlurConstants.mV.x;
+                            const __vector4 lvSpin = __vspltw(__lvlx(&lfSpin, 0), 0);
+                            const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+                            Vector4 lWheelConstants;
+                            lWheelConstants.mV = __vrlimi(__vspltisw(0), __vminfp(lvSpin, lvOne), 8, 0);
+                            CgsGraphics::mShaderConstantTable.SetShaderConstantData(25, lWheelConstants);
+                            const f32 lfTechniqueVelocity = lpRenderParams->GetWheelAngularVelocity(luWheel);
+                            const __vector4 lvAngularVelocity = __vspltw(__lvlx(&lfTechniqueVelocity, 0), 0);
+                            unsigned int luCompare;
+                            __vcmpgtfpR(gvWheelBlurConstants.mV, lvAngularVelocity, &luCompare);
+                            if (luCompare & 0x80u) lu8Technique = 1;
+                            if (lbShadowPass) lu8Technique = 2;
+                            const bool lbXValid = RaceCarWheelRowValid(lWheel.xAxis.mV);
+                            const bool lbYValid = RaceCarWheelRowValid(lWheel.yAxis.mV);
+                            const bool lbZValid = RaceCarWheelRowValid(lWheel.zAxis.mV);
+                            const bool lbWValid = RaceCarWheelRowValid(lWheel.wAxis.mV);
+                            if (!(lbXValid && lbYValid && lbZValid && lbWValid))
+                            {
+                                CgsDev::Assert::BeginAssert();
+                                CgsDev::Assert::FireAssert("rw::math::IsValid(lWheelMatrix)",
+                                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp", 3856);
+                                CgsDev::Assert::EndAssert();
+                            }
+                            luWheelCount = static_cast<u32>(giWheelsToRender);
+                            lWheelStack.maMatrices[liCount] = lWheel;
+                            lWheelStack.maConstants[liCount] = lWheelConstants;
+                            lapMatrices[liCount] = &lWheelStack.maMatrices[liCount];
+                            ++liCount;
+                        }
+                        ++luWheel;
+                    } while (static_cast<u32>(luWheel) < luWheelCount);
                 }
-
-                *CgsDev::Log::gpDebugPrint
-                    << "[carrender]  part " << static_cast< s32 >( luDiag )
-                    << " vis " << ( lpRenderParams->IsPartVisible( static_cast< u8 >( luDiag ) ) ? 1 : 0 )
-                    << " model " << ( lpDiagModel != 0 ? 1 : 0 )
-                    << " locT (" << lrLoc.wAxis.x << ", " << lrLoc.wAxis.y << ", " << lrLoc.wAxis.z
-                    << ") locScaleRow0 (" << lrLoc.xAxis.x << ", " << lrLoc.xAxis.y << ", "
-                    << lrLoc.xAxis.z << ")"
-                    << " world (" << lDiagWorld.wAxis.x << ", " << lDiagWorld.wAxis.y << ", "
-                    << lDiagWorld.wAxis.z << ") queueHit " << liQueueHit << "\n";
-            }
-
-            // The wheel half of the same witness: what the wheel block will read.
-            for ( u32 luDiagW = 0; luDiagW < 4u; ++luDiagW )
-            {
-                const Matrix44Affine& lrWT = lpRenderParams->GetWheelTransform( luDiagW );
-                const Matrix44Affine& lrWS = lpRenderParams->GetWheelScaleMatrix( luDiagW );
-                *CgsDev::Log::gpDebugPrint
-                    << "[carrender]  wheel " << static_cast< s32 >( luDiagW )
-                    << " exists " << ( lpRenderParams->GetWheelExists( luDiagW ) ? 1 : 0 )
-                    << " T (" << lrWT.wAxis.x << ", " << lrWT.wAxis.y << ", " << lrWT.wAxis.z
-                    << ") scaleDiag (" << lrWS.xAxis.x << ", " << lrWS.yAxis.y << ", "
-                    << lrWS.zAxis.z << ")\n";
+                if (liCount > 0)
+                {
+                    CGS_ASSERT(lpWheelModel->GetFlag(CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER),
+                               "lpWheelModel->GetFlag(CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER)");
+                    const CgsGraphics::Renderable* lpRenderable = lpWheelModel->GetRenderable(leLOD);
+                    CGS_ASSERT(lpRenderable != 0, "lpRenderable");
+                    CgsGraphics::DispatchList* lpList = lpDispatchFrame->GetList(liObjectList);
+                    CGS_ASSERT(lpList != 0, "lpDispatchList");
+                    CGS_ASSERT(lpWheelModel->GetFlag(CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER),
+                               "lbInstancing == GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER )");
+                    CgsGraphics::Model::SetupShaderConstantsForInstancing(liCount, lapMatrices, lWheelStack.maConstants);
+                    const bool lbFirst = (lpList->GetCount() & 0x7F) == 0;
+                    lpDispatchFrame->GetBin().BeginPacket();
+                    CgsGraphics::DrawRenderable::AddToBin(lpRenderable, lpDispatchFrame, lbFirst,
+                        static_cast<s8>(liOpaqueMeshList), static_cast<s8>(liTransparentMeshList),
+                        0, lu8Technique, lbShadowPass, 0xFFu, 0u, liCount, 0u);
+                    lpList->Submit(0, lpDispatchFrame->GetBin().EndPacket());
+                }
             }
         }
     }
-    // ---- end [DIAG carrender wave] --------------------------------------------
 
-    // ========================================================================
-    // ⭐⭐⭐ THE CRACKED-GLASS LOOP  (@0x822D0964..0x822D0F64) -- LANDED 2026-09-06,
-    // AND IT IS ON FILM (2026-09-07, run scratch/GLASSFX/run_B, exe c39d8998de92).
-    //
-    // EVIDENCE FIRST. A 22 m/s wall shot cracks panes without driving them past the 5 cm smash
-    // edge, and the same two side windows read
-    //     evidence/B_INTACT_bb002320_zoom4x.png    clean, smooth, green-tinted glass
-    //     evidence/B_CRACKED_bb003180_zoom5x.png   a bright branching crack web across BOTH,
-    //                                              panes still present and still see-through
-    //     evidence/B_CRACKED_windscreen_bb002688_zoom4x.png   the windscreen at full strength
-    // and the device agrees on the line above the draw: pixel c5 takes the console's own
-    // {(1-s)*inv, inv, 0, 0} -- {11.611, 12.611, 0, 0} at s = 0.0793 up to {0, 1, 0, 0} at
-    // s = 1.0 -- with s14 holding the 512x512 DXT5 crack map at WRAP/LINEAR, and vertex
-    // c159/c160 cycling the per-pane offset table and the per-pane {scale, scale*eq} pair.
-    // Final histogram over the run: s0=17044 <.10=14 <.25=27 <.50=222 <1=7507 ==1=10003,
-    // FIFTY-SEVEN distinct strengths. Zero access violations.
-    //
-
-    // This block used to be the file's largest named absence, and it is not cosmetic: it is
-    // the ONLY thing that draws a cracked pane. The body-part loop above hands AddToBin
-    // `excludeMeshBits = mu8RenderDamageFlags`, and DrawRenderable::Interpret drops every
-    // mesh whose own `mu8Flags` intersects that byte -- and the L2 glass drain
-    // (BrnRaceCarEntityModule.cpp, the GlassSmashOrCrackQueue) sets bit N the moment pane N
-    // CRACKS, not only when it smashes. So without this loop a cracked pane's mesh is removed
-    // from the car and nothing replaces it: the pane becomes a hole, indistinguishable from a
-    // smashed one. On one measured crash that is 2,532 of 2,542 glass events.
-    //
-    // WHAT THE CONSOLE DRAWS INSTEAD. The spec carries a SECOND model per pane --
-    // BrnVehicle::GraphicsSpec::mpShatteredGlassParts[i] = {mpModel, muBodyPartIndex,
-    // muBodyPartType} -- and this loop submits it at the pane's own body-part locator with
-    // three shader constants published in front of it. The gate is the pair
-    //     (mu8RenderDamageFlags & (1 << pane)) != 0     &&     fractureAmount <= 1.0f
-    // (`lbz r11, 0x1416(r16)` / `slw r10, 1, pane` @0x822D09E4-9F8, then
-    // `fcmpu f31, f29(=1.0f) ; bgt` @0x822D09FC), and the second half is what separates the
-    // two states: the drain writes the crack amount in [0,1] for CRACKED and the literal
-    // 2.0f (flt_82014984) for SMASHED, so a smashed pane falls through this loop and stays a
-    // hole -- which is exactly the behaviour the glass wave already filmed.
-    //
-    // THE THREE CONSTANTS. BrnWorld::SetGlassFractureConstants(strength, equalisation,
-    // uvScale, uvOffsets) writes 30/31/32, and the shipped
-    // Glass_Specular_Transparent_Doublesided programs consume all three (fxc /dumpbin over
-    // build/game/SHADERS.BNDL):
-    //     VS  mov r2, c160 ; mad o7, v3.xyxy, r2, c159   -- TEXCOORD6 = uv1.xyxy*scale+offset
-    //     PS  texld r1, v6, s14 ; texld r3, v6.zwzw, s14 ; max r4.xyz, r1.xyww, r3.xyww
-    //         mad_sat r1.xy, r4, c5.y, -c5.x             -- saturate((crackTex - (1-s)) / s)
-    // i.e. TWO crack fetches at two scales, maxed, remapped by the strength, then used to
-    // perturb the normal and (past a 0.05 threshold) to swap the pane to the crack colour
-    // and double its alpha.
-    //
-    // ⚠️ THE PER-PANE UV OFFSET TABLE IS A SILENT-ZERO CONSTANT and had to be recovered from
-    // the image, not read from it. `unk_82FAD420` reads 128 bytes of 0x00 straight out of
-    // the XEX because a CRT init thunk fills it at startup; tools/re/findinit.py names the
-    // writer (0x82C4BE38 is the second of exactly two sites that materialise the address,
-    // the other being this loop's own `addi r24, r11, unk_82FAD420@l` @0x822D0990), and
-    // disassembling 0x82C4BD40..0x82C4BEBC gives eight stack-built quadwords copied to
-    // +0x00..+0x70. Their .rodata sources decode to the table below. The loop walks it with
-    // `addi r24, r24, 0x10` per ITERATION (not per drawn pane), so it is indexed by the
-    // loop counter.
-    // ========================================================================
-
-    // ---- the WHEEL block  (@0x822D0F60..0x822D15BC) -------------------------
-    // `if (*(this + 99148) && a42)` -- the module's wheel switch and the caller's
-    // "render attached geometry" bool. One INSTANCED draw for all four wheels: the
-    // per-wheel world matrices go up as shader constant 6 and the per-wheel spin
-    // constants as 7, then a single DrawRenderable command carries the instance count.
-
-    // [DIAG wheel wave] The outcome code for the block below, reported once per DISTINCT
-    // value at the end. Latched on the VALUE, never on a "printed once" bool: this block
-    // has five different ways to draw nothing and a "did it run" flag could only ever
-    // report the first car's answer.
-    //   0 no wheel resource / block skipped   1 spec has no wheel model
-    //   2 no LOD state on the model           3 no wheel reported as existing
-    //   4..8 SUBMITTED with 1..5 instances
-    s32 liWheelDiagCode = 0;
-
-    // [DIAG wheel wave] one line per DISTINCT outcome (a bitmask of codes already seen,
-    // so a car that draws wheels and a car whose wheel resource has not arrived each get
-    // reported exactly once instead of every frame for ever).
-    {
-        static u32 suSeenWheelDiagCodes = 0;
-        const u32  luBit = 1u << static_cast< u32 >( liWheelDiagCode );
-        if ( ( suSeenWheelDiagCodes & luBit ) == 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            suSeenWheelDiagCodes |= luBit;
-            *CgsDev::Log::gpDebugPrint
-                << "[racecar-wheels] RenderRaceCar wheel block outcome " << liWheelDiagCode
-                << " (0 no resource, 1 no model, 2 no LOD state, 3 no wheel exists, "
-                   "4..8 submitted with 1..5 instances, 9 GATED -- model lacks "
-                   "E_FLAG_MODEL_USES_INSTANCE_SHADER); wheels-to-render "
-                << giWheelsToRender << "\n";
-        }
-    }
 }
 
 // ============================================================================
@@ -1056,14 +956,6 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
     CGS_ASSERT( lpCoronaSubmissionInterface != 0, "lpCoronaSubmissionInterface != NULL" );  // :3905
     CGS_ASSERT( lpRenderParams != 0, "lpRenderParams != NULL" );                            // :3906
 
-    // [FLAG] NOT in the console -- its asserts are non-gating tripwires and it walks on. On PC
-    // a null interface or null params would be a null-deref two lines down, and the call site
-    // already refuses to call with a null interface, so this is the belt to that brace.
-    if ( lpCoronaSubmissionInterface == 0 || lpRenderParams == 0 )
-    {
-        return;
-    }
-
     // The four light-state bytes, in the console's own load order
     // (@0x822D1684/0x822D1688/0x822D1690/0x822D1698).
     const bool lbIsBraking         = lpRenderParams->IsBraking();          // +5127
@@ -1097,11 +989,6 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
     // (@0x822D1720) carries its own "Can not instance resource pointer" assert; the tree's
     // ResourcePtr::operator-> is that accessor.
     const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec = lrPhysicsResource.operator->();
-    if ( lpSpec == 0 )
-    {
-        return;   // [FLAG] the console asserts instead; a PC car can legitimately be mid-stream
-    }
-
     const Matrix44Affine& lrBodyTransform = lpRenderParams->GetBodyTransform();
     const Matrix44Affine  lLocatorToWorld =
         rw::math::vpu::Mult(
@@ -1120,7 +1007,6 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
     const f32 lfStrobePhase =
         lpRenderParams->GetLightOpacityFlipFlop() * KF_BLUES_AND_TWOS_PHASE_SCALE;
 
-    u32 luSubmitted = 0;   // [DIAG] one-shot boot proof only -- see the tail
 
     const u32 luNumLocators = lpRenderParams->GetNumLightLocators();
     for ( u32 luLocator = 0; luLocator < luNumLocators; ++luLocator )
@@ -1200,7 +1086,6 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
                                                             lLocatorToWorld,
                                                             lpRenderParams->GetLightLocatorPos( luLocator ) ),
                                                         lRearward, 1.0f, lfOpacity, leBluesRed );
-                ++luSubmitted;
 
                 leCoronaType = leBluesRed;  lbForward = true;  lbSubmit = true;
             }
@@ -1221,7 +1106,6 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
                                                             lLocatorToWorld,
                                                             lpRenderParams->GetLightLocatorPos( luLocator ) ),
                                                         lRearward, 1.0f, lfOpacity, leBluesBlue );
-                ++luSubmitted;
 
                 leCoronaType = leBluesBlue; lbForward = true;  lbSubmit = true;
             }
@@ -1247,269 +1131,185 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
                 1.0f,               // the scale argument is 1.0f on every path of this function
                 lfOpacity,
                 leCoronaType );
-            ++luSubmitted;
         }
     }
 
-    // [DIAG coronas step 1] one shot per boot -- the wave's own acceptance line. A car with a
-    // dark, working subsystem and a car with no light locators at all look identical on screen,
-    // so the count and the locator inventory are printed once rather than inferred.
-    static bool sbLoggedFirstCoronaSubmit = false;
-    if ( !sbLoggedFirstCoronaSubmit && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        sbLoggedFirstCoronaSubmit = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[corona] first submit: " << luSubmitted << " coronas from "
-            << luNumLocators << " light locators (types";
-        for ( u32 luLocator = 0; luLocator < luNumLocators; ++luLocator )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << " " << static_cast<s32>( lpRenderParams->GetLightLocatorType( luLocator ) );
-        }
-        *CgsDev::Log::gpDebugPrint
-            << ") playerCar " << ( lbIsPlayerCar ? 1 : 0 )
-            << " braking " << ( lbIsBraking ? 1 : 0 )
-            << " reversing " << ( lbIsReversing ? 1 : 0 )
-            << " bluesAndTwos " << ( lbBluesAndTwosOn ? 1 : 0 )
-            << " phase " << lfStrobePhase << "\n";
-    }
+
 }
 
-// ============================================================================
-// GenerateDispatchLists  @ 0x822E79F8  (the `else` arm -- see the banner)
-//
-//   for (i = 0; i < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++i)
-//   {
-//       ActiveRaceCar& car = maActiveRaceCars[i];
-//       if (!car.IsActive())                                       continue;
-//       if (!car.mbRenderThisFrame || car.mbIsInCarSelectOnline)   continue;
-//       distance = |cameraPosition - car.GetTransform().wAxis|;
-//       gfx   = ResourcePtr(mRaceCarStreamer.GetGraphicsResource(i));
-//       wheel = ResourcePtr(mRaceCarStreamer.GetWheelGraphicsResource(i));
-//       RenderRaceCar(frame, &car.mRenderParams, &gfx, &wheel,
-//                     objectList, opaqueMeshList, transparentMeshList,
-//                     shadowMap, true, distance, fogScattering, fogColour);
-//   }
-//
-// The console builds the two ResourcePtr locals with BaseResourcePtr::CreateFromHandle
-// and unlinks them from the resource's intrusive user list right after the call (that is
-// what the four pointer-fixup blocks after each RenderRaceCar call are); reproduced here
-// as plain ResourcePtr copies, which carry the same acquire/release semantics without
-// poking the list by hand.
-// ============================================================================
-void
-RaceCarEntityModule::GenerateDispatchLists(
-    RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists* lpInput,
-    const Array< CgsSceneManager::EntityId, 32u >& lrVisibleEntities,
-    s32  liObjectList,
-    s32  liOpaqueMeshList,
-    s32  liTransparentMeshList,
-    bool lbEnvironmentMapPass,
-    Vector4 lvFogScattering,
-    Vector4 lvFogColourPlusWhiteLevel,
-    Vector3 lvCameraPosition )
+// ARTIST 822E7B20 reads this writable byte, initialized to one.
+bool gUseVisibleRaceCars = true;
+// ARTIST CRT 82C4BCB8..BD1C constructs the three broadcast cull distances.
+static Vector4 gavShadowCullDistances[3] = {
+    Vector4(0.0f, 0.0f, 0.0f, 0.0f),
+    Vector4(64.0f, 64.0f, 64.0f, 64.0f),
+    Vector4(144.0f, 144.0f, 144.0f, 144.0f)
+};
+
+static rw::math::vpu::VecFloat RaceCarDistance(__vector4 lvCamera, __vector4 lvPosition,
+                                               __vector4& lrSquared)
 {
-    CGS_ASSERT( lpInput != 0, "lpInput != NULL" );
-    (void)lrVisibleEntities;    // consumed only by the scene-query arm (see the banner)
-    (void)lbEnvironmentMapPass;
-
-    lpInput->LockForRead();
-
-    CgsGraphics::DispatchFrame* lpDispatchFrame = lpInput->GetDispatchFrame();
-    const ShadowMap*            lpShadowMap     = lpInput->GetShadowMap();
-    CGS_ASSERT( lpShadowMap != 0, "lpShadowMap" );
-
-    if ( lpDispatchFrame != 0 && lpShadowMap != 0 )
+    const __vector4 lvDelta = __vsubfp(lvCamera, lvPosition);
+    lrSquared = __vmsum3fp(lvDelta, lvDelta);
+    const __vector4 lvZero = __vspltisw(0);
+    const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+    const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+    const __vector4 lvIsZero = __vcmpeqfp(lvZero, lrSquared);
+    __vector4 lvReciprocal = __vrsqrtefp(lrSquared);
+    for (s32 li = 0; li != 2; ++li)
     {
-        for ( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+        const __vector4 lvReciprocalSquared = __vmulfp(lvReciprocal, lvReciprocal);
+        const __vector4 lvHalfReciprocal = __vmulfp(lvReciprocal, lvHalf);
+        lvReciprocal = __vmaddfp(lvHalfReciprocal,
+                                 __vnmsubfp(lrSquared, lvReciprocalSquared, lvOne),
+                                 lvReciprocal);
+    }
+    rw::math::vpu::VecFloat lDistance;
+    lDistance.mV = __vsel(__vmulfp(lrSquared, lvReciprocal), lvZero, lvIsZero);
+    return lDistance;
+}
+
+void RaceCarEntityModule::GenerateDispatchLists(
+    RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists* lpInput,
+    const Array<CgsSceneManager::EntityId, 32u>& lrVisibleEntities,
+    s32 liObjectList, s32 liOpaqueMeshList, s32 liTransparentMeshList,
+    bool lbEnvironmentMapPass, Vector4 lvFogScattering,
+    Vector4 lvFogColourPlusWhiteLevel, Vector3 lvCameraPosition)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");
+    lpInput->LockForRead();
+    BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBlobby = lpInput->GetBlobbyShadowBuffer();
+    CGS_ASSERT(lpBlobby != 0, "lpBlobbyShadowRenderer");
+    BrnCoronaManager::BrnSubmissionInterface* lpCorona = lpInput->GetCoronaSubmissionInterface();
+    CGS_ASSERT(lpCorona != 0, "lpCoronaSubmissionInterface");
+    CgsGraphics::DispatchFrame* lpDispatchFrame = lpInput->GetDispatchFrame();
+    ShadowMap* lpShadowMap = lpInput->GetShadowMap();
+    CGS_ASSERT(lpShadowMap != 0, "lpShadowMap");
+
+    if (gUseVisibleRaceCars)
+    {
+        for (s32 liVisible = 0; liVisible < lrVisibleEntities.GetCount(); ++liVisible)
         {
-            ActiveRaceCar& lrActiveRaceCar = maActiveRaceCars[ liCar ];
-
-            const bool lbCapturePlayerWheels = lbEnvironmentMapPass
-                && mePlayerActiveRaceCarIndex == static_cast<EActiveRaceCarIndex>(liCar);
-
-            if ( !lrActiveRaceCar.IsActive() )
+            const CgsSceneManager::EntityId lEntity = lrVisibleEntities.GetItem(liVisible);
+            const s32 liCar = lEntity.GetEntityIndex();
+            if (mbInReplay)
             {
-                continue;
-            }
-            if ( !lrActiveRaceCar.ShouldRenderThisFrame() && !lbEnvironmentMapPass )
-            {
-                continue;
-            }
-
-            // ---- the director's HIDE_PLAYER flag -- console @0x822E7D30..0x822E7D44 ----------
-            // (*(GetCameraInput() + 324) & 4) != 0 && entity == mePlayerActiveRaceCarIndex
-            // clears the render bool the console hands RenderRaceCar (its v24 ->
-            // lbRenderAttachedGeometry): the player's geometry is dropped for as long as a
-            // camera raises E_FLAG_HIDE_PLAYER -- the bumper camera's own request
-            // (BrnBehaviourGameplayBumper.cpp, step 13). Nothing on PC read the flag before
-            // 2026-09-17, so the bumper view drew the car's shell from the inside.
-            const BrnDirector::Camera::Camera* lpHideCamera = lpInput->GetCameraInput();
-            const bool lbPlayerHidden =
-                lpHideCamera != 0
-                && lpHideCamera->GetState().IsFlagSet( BrnDirector::Camera::CameraState::E_FLAG_HIDE_PLAYER )
-                && mePlayerActiveRaceCarIndex == static_cast< EActiveRaceCarIndex >( liCar );
-            // [cam-hide] BRN_CAM_INPUT_DIAG witness -- the flag as it reaches this consumer.
-            {
-                static u32 suHideDiagCalls = 0;
-            }
-
-            // |camera - car|: the console's vmsum3fp128 / vrsqrtefp / Newton-step / vmulfp
-            // chain over (cameraPosition - transform.wAxis), with the vcmpeqfp/vsel128
-            // selecting zero when the squared length is exactly zero.
-            const Matrix44Affine lCarTransform = lrActiveRaceCar.GetTransform();
-            const f32 lfDeltaX   = lvCameraPosition.x - lCarTransform.wAxis.x;
-            const f32 lfDeltaY   = lvCameraPosition.y - lCarTransform.wAxis.y;
-            const f32 lfDeltaZ   = lvCameraPosition.z - lCarTransform.wAxis.z;
-            const f32 lfLengthSq = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
-            const f32 lfDistance = ( lfLengthSq != 0.0f ) ? sqrtf( lfLengthSq ) : 0.0f;
-
-            // RenderRaceCar Submits into the OBJECT list (12); 19/20 are mesh-bin routing
-            // ids that the dispatch interpreter fans the packet out to, not lists this
-            // producer appends to directly.
-            const s32 liBefore = lpDispatchFrame->GetList( liObjectList )->GetCount();
-
-            RenderRaceCar( lpDispatchFrame,
-                           lrActiveRaceCar.GetRenderParams(),
-                           &lrCarGraphics,
-                           &lrWheelGraphics,
-                           liObjectList,
-                           liOpaqueMeshList,
-                           liTransparentMeshList,
-                           lpShadowMap,
-                           lbEnvironmentMapPass || !lbPlayerHidden,
-                           lfDistance,
-                           lvFogScattering,
-                           lvFogColourPlusWhiteLevel );
-
-            if (lbEnvironmentMapPass) continue; // the face has its own light feed; never post into the main view
-
-            // ==============================================================
-            // THE SHADOW-PASS GATE -- console @0x822E7E50-0x822E7E58, RECOVERED
-            // (coronas step 2, group `coronacalib`). THIS IS THE DOUBLE-POST FIX.
-            //
-            //   0x822E7E4C  bl     RenderRaceCar
-            //   0x822E7E50  lbz    r11, 0(r19)        ; r19 = lpInput->GetShadowMap()
-            //   0x822E7E54  cmplwi cr6, r11, 0        ;   ShadowMap +0x00 == mbRenderingShadowMap
-            //   0x822E7E58  bne    cr6, loc_822E83A0  ; -> the LOOP TAIL: for this car, skip
-            //                                         ;    EVERYTHING after RenderRaceCar
-            //   0x822E8040  bl     BrnBlobbyShadowBuffer::AddShadow      (below the branch)
-            //   0x822E804C..0x822E808C  the five corona gates             (below the branch)
-            //   0x822E80BC  bl     SubmitCoronasForRaceCar               (below the branch)
-            //
-            // ShadowMap +0x00 IS mbRenderingShadowMap: ShadowMap::Construct writes it with
-            // `stb r28, 0(this)` (BrnShadowMap.cpp:192), it is the first of the two leading
-            // ShadowMap bytes this very file already reads at :336 for the shadow technique,
-            // and the console reads the same slot two instructions earlier (@0x822E7D9C
-            // `lbz r11, 0(r19)`) to choose ShadowMap::CalcOptimisedLod.
-            //
-            // WHY IT MATTERS ON PC. WorldModule::GenerateDispatchListsBringUp drives THIS
-            // function from TWO call sites -- the main-view leg (BrnWorldModule.cpp:6622) and
-            // the per-cascade leg (:7129, inside the arm that raises the latch at :7071
-            // `mShadowMap.SetRenderingShadowMap(true)`) -- all with the SAME
-            // `sRaceCarDispatchInput`, whose corona submission interface is set ONCE in the
-            // main leg (:6619) and never cleared. Without this branch a cascade leg posts the
-            // car's lamp flares again into the same corona buffer, and the pass is ADDITIVE:
-            // step 1's boot log proves at least one extra post reached the buffer --
-            // `[corona] first submit: 4 coronas` against `[corona] first draw: 8 quads` for
-            // ONE race car (BrnGame.log:4508/4509, `[racecar-lod] banded 1 cars`). Which
-            // cascade legs post on a given frame is what the `[corona-calib] dispatch leg`
-            // probe below measures; this branch removes EVERY cascade post regardless.
-            //
-            // (The console's SECOND gate at 0x822E7E5C -- `clrlwi r11, r21, 24 / beq
-            // loc_822E83A0`, where r21 is 1 unless the input buffer's camera flag word bit 2
-            // is set AND this car is the player's -- is NOT reproduced: its source is an
-            // unidentified 64-bit field at camera+0x140 (`ld r11, 0x140(r3)` @0x822E7CEC after
-            // an InputBuffer getter) and inventing it would be fabrication. It can only ever
-            // REMOVE the local player's own flares in a camera mode that hides the player car,
-            // which the boot frames are not in -- the player car renders in full. Recorded in
-            // the report as a named follow-up.)
-            //
-            // The blobby-shadow AddShadow leg is not reconstructed on PC yet; when it lands it
-            // belongs BELOW this branch, exactly where the console has it.
-            // ==============================================================
-            const bool lbRenderingShadowMap = lpShadowMap->IsRenderingShadowMap();
-
-            // [DIAG corona-calib -- coronas step 2] THE MEASUREMENT the calibration needs:
-            // which dispatch legs reach the per-car body in one frame, and which of them the
-            // gate above now rejects. A burst of the first 16 legs of the boot, then silent
-            // for ever. Read it together with `[corona] first draw: N quads`: N must equal the
-            // sum of the `main` legs' submitted counts and nothing else.
-            // DELETE-WHEN the corona calibration is signed off.
-            {
-                static u32 suCoronaCalibLegs = 0u;
-                if ( suCoronaCalibLegs < 16u && CgsDev::Log::gpDebugPrint != 0 )
+                if (!mReplaySerialiser.IsPlaying() || lEntity.GetOwner() != 33)
+                    continue;
+                if (lpInput->GetCameraInput()->GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_HIDE_PLAYER)
+                    && liCar == static_cast<u16>(mePlayerActiveRaceCarIndex))
+                    continue;
+                if (!mRaceCarStreamer.IsRaceCarActive(liCar) || !mRaceCarStreamer.IsRaceCarLoaded(liCar))
+                    continue;
+                const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(liCar);
+                BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface& lrActive =
+                    mReplaySerialiser.GetStaticLayout()->mLiveFrame.mActiveRaceCars;
+                if (!lrActive.IsRaceCarActive(leIndex))
+                    continue;
+                const BrnPhysics::Vehicle::RaceCarState* lpState = lrActive.GetRaceCarStateMutable(leIndex);
+                __vector4 lvSquared;
+                const rw::math::vpu::VecFloat lDistance = RaceCarDistance(lvCameraPosition.mV, lpState->mTransform.wAxis.mV, lvSquared);
+                if (lbEnvironmentMapPass)
                 {
-                    ++suCoronaCalibLegs;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[corona-calib] dispatch leg #" << static_cast< s32 >( suCoronaCalibLegs )
-                        << " car " << liCar
-                        << " site=" << ( lbRenderingShadowMap ? "shadow-cascade" : "main" )
-                        << " objectList " << liObjectList
-                        << " coronaPost=" << ( lbRenderingShadowMap ? 0 : 1 ) << "\n";
+                    const __vector4 lvCull = gavShadowCullDistances[lpShadowMap->GetCurrentShadowMap()].mV;
+                    unsigned int luCompare;
+                    __vcmpgtfpR(lvCull, lvSquared, &luCompare);
+                    if ((luCompare & 0x80u) != 0) continue;
                 }
-            }
-
-            if ( lbRenderingShadowMap )
-            {
+                CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec> lCarGraphics(mRaceCarStreamer.GetGraphicsResource(liCar).GetResourceHandle());
+                CgsResource::ResourcePtr<BrnWheel::GraphicsSpec> lWheelGraphics(mRaceCarStreamer.GetWheelGraphicsResource(liCar).GetResourceHandle());
+                const ActiveRaceCar::RenderParams* lpParams = &mReplaySerialiser.GetStaticLayout()->mLiveFrame.maRenderParams[liCar];
+                RenderRaceCar(lpDispatchFrame, lDistance, lvFogScattering, lvFogColourPlusWhiteLevel,
+                              lpParams, lCarGraphics, lWheelGraphics, liObjectList, liOpaqueMeshList,
+                              liTransparentMeshList, lpShadowMap, true);
+                mabRaceCarsRendered[liCar] = true;
                 continue;
             }
 
-            // [DIAG pose wave] one-shot proof that the console leg reached the submission
-            // leaf, and with what pose. Cheap enough to leave in: it fires once per boot.
-            static bool sbLoggedFirstSubmission = false;
-            if ( !sbLoggedFirstSubmission && CgsDev::Log::gpDebugPrint != 0 )
+            ActiveRaceCar& lrCar = maActiveRaceCars[liCar];
+            const Matrix44Affine lTransform = lrCar.GetTransform();
+            __vector4 lvSquared;
+            const rw::math::vpu::VecFloat lDistance = RaceCarDistance(lvCameraPosition.mV, lTransform.wAxis.mV, lvSquared);
+            if (lbEnvironmentMapPass)
             {
-                sbLoggedFirstSubmission = true;
-                const Matrix44Affine& lrBody =
-                    lrActiveRaceCar.GetRenderParams()->GetBodyTransform();
-                *CgsDev::Log::gpDebugPrint
-                    << "[racecar-render] GenerateDispatchLists -> RenderRaceCar: car "
-                    << liCar << " at (" << lrBody.wAxis.x << ", " << lrBody.wAxis.y
-                    << ", " << lrBody.wAxis.z << ") dist " << lfDistance
-                    << " object list " << liObjectList << " " << liBefore << " -> "
-                    << lpDispatchFrame->GetList( liObjectList )->GetCount()
-                    << " (mesh bins " << liOpaqueMeshList << "/"
-                    << liTransparentMeshList << ")\n";
+                const __vector4 lvCull = gavShadowCullDistances[lpShadowMap->GetCurrentShadowMap()].mV;
+                unsigned int luCompare;
+                __vcmpgtfpR(lvCull, lvSquared, &luCompare);
+                if ((luCompare & 0x80u) != 0) continue;
             }
-
-            // ---- THE LAMP FLARES (coronas step 1) -------------------------
-            // Console position: the LAST thing the per-car body does. In the scene-manager
-            // arm that is RenderRaceCar @0x822E7E4C ... AddShadow @0x822E8040 ... five gates
-            // ... SubmitCoronasForRaceCar @0x822E80BC ... `b` to the loop tail @0x822E83A0;
-            // here it is the same relative position inside the arm that is live on PC.
-            //
-            // THE FIVE CONSOLE GATES, in the console's own order and spelling:
-            //   @0x822E804C  lbzx r11, r22, 0x1834F   mbRenderRaceCarCoronas
-            //   @0x822E805C  lfs  f13, 0xD9C(r29)     mRenderParams.mfDeformationSquared < 0.25
-            //   @0x822E806C  lbz  r11, 0x44A(r28)     !GetPhysicsState()->mbCrashing
-            //   @0x822E8078  lbz  r11, 0x3646(r23)    !mRenderParams.mbIsEngineOff  (car +0x1BE6)
-            //   @0x822E8084  lbz  r11, 0x364B(r23)    !mRenderParams.mbIsRaceCarHidden (+0x1BEB)
-            // (the two ActiveRaceCar-relative offsets resolve through mRenderParams @+0x7E0:
-            //  0x3646 - 0x1A60 - 0x7E0 == 0x1406 and 0x364B - 0x1A60 - 0x7E0 == 0x140B).
-            if ( mbRenderRaceCarCoronas
-                 && lrActiveRaceCar.GetRenderParams()->GetDeformationSquared()
-                        < KF_LIGHTS_OUT_DEFORMATION_SQUARED
-                 && !lrActiveRaceCar.GetPhysicsState()->mbCrashing
-                 && !lrActiveRaceCar.GetRenderParams()->IsEngineOff()
-                 && !lrActiveRaceCar.GetRenderParams()->IsRaceCarHidden() )
+            CGS_ASSERT(lEntity.GetOwner() == 1, "RaceCarEntityModule trying to render something that isn't a RaceCar");
+            const bool lbAttached = !(lpInput->GetCameraInput()->GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_HIDE_PLAYER)
+                && liCar == static_cast<u16>(mePlayerActiveRaceCarIndex));
+            if (!lrCar.IsActive() || !lrCar.ShouldRenderThisFrame()) continue;
+            const RaceCarStreamer::GraphicsResourcePtr& lrGraphics = mRaceCarStreamer.GetGraphicsResource(liCar);
+            const RaceCarStreamer::WheelGraphicsResourcePtr& lrWheels = mRaceCarStreamer.GetWheelGraphicsResource(liCar);
+            ActiveRaceCar::RenderParams* lpParams = lrCar.GetRenderParams();
+            bool lbRender = true;
+            if (lpShadowMap->IsRenderingShadowMap())
             {
-
-                if ( lpCoronaSubmissionInterface != 0 && lpCoronaSubmissionInterface->IsReady() )
-                {
-                }
-                else
-                {
-                    static bool sbLoggedNoCoronaInterface = false;
-                    if ( !sbLoggedNoCoronaInterface && CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                        sbLoggedNoCoronaInterface = true;
-                    }
-                }
+                lpParams->SetLOD(lpShadowMap->CalcOptimisedLod(lpParams->GetLOD(), CgsGraphics::Model::E_STATE_LOD_4));
+                if (!lrCar.IsPlayer())
+                    lbRender = lpInput->GetCameraInput()->GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_SHOWING_ONLINE_INTRO);
             }
+            if (lbRender)
+                RenderRaceCar(lpDispatchFrame, lDistance, lvFogScattering, lvFogColourPlusWhiteLevel,
+                              lpParams, lrGraphics, lrWheels, liObjectList, liOpaqueMeshList,
+                              liTransparentMeshList, lpShadowMap, lbAttached);
+            if (lpShadowMap->IsRenderingShadowMap() || !lbAttached || !lrCar.IsActive()
+                || !lrCar.ShouldRenderThisFrame() || lpParams->IsRaceCarHidden()) continue;
+
+            BrnPhysics::Vehicle::RaceCarState* lpPhysics = lrCar.GetPhysicsState();
+            const RaceCarStreamer::PhysicsResourcePtr& lrPhysics = mRaceCarStreamer.GetPhysicsResource(liCar);
+            // ARTIST's vperm masks 82CDADE0 / 82CDADF0 select bbox z and axle z lanes bitwise.
+            static const __declspec(align(16)) unsigned char abAxleMask[16] = {8,9,10,11,24,25,26,27,0,1,2,3,0,1,2,3};
+            static const __declspec(align(16)) unsigned char abBoxMask[16] = {0,1,2,3,0,1,2,3,8,9,10,11,24,25,26,27};
+            const __vector4 lvBox = __vperm(lrCar.mDeformedBBox.mMax.mV, lrCar.mDeformedBBox.mMin.mV, __lvx(abBoxMask, 0));
+            const __vector4 lvAxles = __vperm(lpParams->GetAxlePosition(3)->mV, lpParams->GetAxlePosition(0)->mV, __lvx(abAxleMask, 0));
+            Vector4 lExtents;
+            lExtents.mV = __vsldoi(lvBox, lvAxles, 8);
+            const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec = lrPhysics.operator->();
+            CGS_ASSERT(0.1f > lpSpec->mCollisionOffset.mV.x, "Vehicle has asymmetric bounding box round Z");
+            const __vector4 lvNormal = lpPhysics->mAboveGroundTestResult.mIntersectionNormal.mV;
+            const __vector4 lvNormalPerm = __vpermwi(lvNormal, 0x63);
+            lpSpec = lrPhysics.operator->();
+            const __vector4 lvBodyForward = lpParams->GetBodyTransform().zAxis.mV;
+            const __vector4 lvRight = __vpermwi(__vnmsubfp(__vpermwi(lvBodyForward, 0x63),
+                                             lvNormal, __vmulfp(lvBodyForward, lvNormalPerm)), 0x63);
+            Matrix44Affine lShadowTransform;
+            lShadowTransform.xAxis.mV = lvRight;
+            lShadowTransform.yAxis.mV = lvNormal;
+            lShadowTransform.zAxis.mV = __vpermwi(__vnmsubfp(lvNormalPerm, lvRight,
+                __vmulfp(lvNormal, __vpermwi(lvRight, 0x63))), 0x63);
+            lShadowTransform.wAxis.mV = lpPhysics->mAboveGroundTestResult.mIntersectionPosition.mV;
+            rw::math::vpu::VecFloat lHeight;
+            lHeight.mV = __vsubfp(__vspltw(__lvlx(&lpPhysics->mAboveGroundTestResult.mfVerticalDistance, 0), 0),
+                                   __vspltw(lpSpec->mRigidBodyOffset.mV, 1));
+            lpSpec = lrPhysics.operator->();
+            rw::math::vpu::VecFloat lWidth;
+            lWidth.mV = __vspltw(lpSpec->mHandlingBodyDimensions.mV, 0);
+            lpBlobby->AddShadow(lShadowTransform, lExtents, lWidth, lHeight);
+            if (mbRenderRaceCarCoronas && !(lpParams->GetDeformationSquared() >= KF_LIGHTS_OUT_DEFORMATION_SQUARED)
+                && !lpPhysics->mbCrashing && !lpParams->IsEngineOff() && !lpParams->IsRaceCarHidden())
+                SubmitCoronasForRaceCar(lpCorona, lrPhysics, lpParams,
+                                       static_cast<u16>(mePlayerActiveRaceCarIndex) == liCar);
         }
     }
-
+    else
+    {
+        for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+        {
+            ActiveRaceCar& lrCar = maActiveRaceCars[liCar];
+            if (!lrCar.IsActive() || !lrCar.ShouldRenderThisFrame()) continue;
+            const Matrix44Affine lTransform = lrCar.GetTransform();
+            __vector4 lvSquared;
+            const rw::math::vpu::VecFloat lDistance = RaceCarDistance(lvCameraPosition.mV, lTransform.wAxis.mV, lvSquared);
+            CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec> lCarGraphics(mRaceCarStreamer.GetGraphicsResource(liCar).GetResourceHandle());
+            CgsResource::ResourcePtr<BrnWheel::GraphicsSpec> lWheelGraphics(mRaceCarStreamer.GetWheelGraphicsResource(liCar).GetResourceHandle());
+            RenderRaceCar(lpDispatchFrame, lDistance, lvFogScattering, lvFogColourPlusWhiteLevel,
+                          lrCar.GetRenderParams(), lCarGraphics, lWheelGraphics, liObjectList,
+                          liOpaqueMeshList, liTransparentMeshList, lpShadowMap, true);
+        }
+    }
     lpInput->UnlockForRead();
 }
 
