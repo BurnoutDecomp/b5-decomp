@@ -127,10 +127,10 @@ namespace BrnAI
                          + mpaCorners[2].y + mpaCorners[3].y;
 
         Vector3 lMiddle;
-        lMiddle.x = lfSumX * KF_CORNER_MEAN_SCALE;
-        lMiddle.y = GetPortal(0)->GetPositionY();
-        lMiddle.z = lfSumZ * KF_CORNER_MEAN_SCALE;
-        lMiddle.w = 0.0f;
+        lMiddle.mV.x = lfSumX * KF_CORNER_MEAN_SCALE;
+        lMiddle.mV.y = GetPortal(0)->GetPositionY();
+        lMiddle.mV.z = lfSumZ * KF_CORNER_MEAN_SCALE;
+        lMiddle.mV.w = 0.0f;
         return lMiddle;
     }
 

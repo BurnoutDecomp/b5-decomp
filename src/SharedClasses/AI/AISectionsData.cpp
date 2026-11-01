@@ -87,8 +87,8 @@ namespace BrnAI
 
         // Build the per-point arrays and the section AABB. Min seeds at +100000, max at
         // -100000 (the X360 floats flt_820080E8 / flt_820936E0).
-        Vector3 lGridMin = { 100000.0f, 100000.0f, 100000.0f, 100000.0f };
-        Vector3 lGridMax = { -100000.0f, -100000.0f, -100000.0f, -100000.0f };
+        Vector3 lGridMin(Vector4(100000.0f, 100000.0f, 100000.0f, 100000.0f).mV);
+        Vector3 lGridMax(Vector4(-100000.0f, -100000.0f, -100000.0f, -100000.0f).mV);
 
         u16 luPointCount = 0;
         for (u32 luSectionIndex = 0; luSectionIndex < muNumSections; ++luSectionIndex)
@@ -104,22 +104,22 @@ namespace BrnAI
             lpuSections[luPointCount] = static_cast<u16>(luSectionIndex);
             ++luPointCount;
 
-            lGridMin.x = lMiddle.x < lGridMin.x ? lMiddle.x : lGridMin.x;
-            lGridMin.y = lMiddle.y < lGridMin.y ? lMiddle.y : lGridMin.y;
-            lGridMin.z = lMiddle.z < lGridMin.z ? lMiddle.z : lGridMin.z;
-            lGridMin.w = lMiddle.w < lGridMin.w ? lMiddle.w : lGridMin.w;
-            lGridMax.x = lMiddle.x > lGridMax.x ? lMiddle.x : lGridMax.x;
-            lGridMax.y = lMiddle.y > lGridMax.y ? lMiddle.y : lGridMax.y;
-            lGridMax.z = lMiddle.z > lGridMax.z ? lMiddle.z : lGridMax.z;
-            lGridMax.w = lMiddle.w > lGridMax.w ? lMiddle.w : lGridMax.w;
+            lGridMin.mV.x = lMiddle.mV.x < lGridMin.mV.x ? lMiddle.mV.x : lGridMin.mV.x;
+            lGridMin.mV.y = lMiddle.mV.y < lGridMin.mV.y ? lMiddle.mV.y : lGridMin.mV.y;
+            lGridMin.mV.z = lMiddle.mV.z < lGridMin.mV.z ? lMiddle.mV.z : lGridMin.mV.z;
+            lGridMin.mV.w = lMiddle.mV.w < lGridMin.mV.w ? lMiddle.mV.w : lGridMin.mV.w;
+            lGridMax.mV.x = lMiddle.mV.x > lGridMax.mV.x ? lMiddle.mV.x : lGridMax.mV.x;
+            lGridMax.mV.y = lMiddle.mV.y > lGridMax.mV.y ? lMiddle.mV.y : lGridMax.mV.y;
+            lGridMax.mV.z = lMiddle.mV.z > lGridMax.mV.z ? lMiddle.mV.z : lGridMax.mV.z;
+            lGridMax.mV.w = lMiddle.mV.w > lGridMax.mV.w ? lMiddle.mV.w : lGridMax.mV.w;
         }
 
         // Snap the AABB to integer world units: floor the min, floor-then-+1 the max (the
         // X360 vrfim is floor; the +1 is vaddfp of a broadcast 1.0 from vcsxwfp(vspltisw 1)).
-        lGridMin.x = floorf(lGridMin.x); lGridMin.y = floorf(lGridMin.y);
-        lGridMin.z = floorf(lGridMin.z); lGridMin.w = floorf(lGridMin.w);
-        lGridMax.x = floorf(lGridMax.x) + 1.0f; lGridMax.y = floorf(lGridMax.y) + 1.0f;
-        lGridMax.z = floorf(lGridMax.z) + 1.0f; lGridMax.w = floorf(lGridMax.w) + 1.0f;
+        lGridMin.mV.x = floorf(lGridMin.mV.x); lGridMin.mV.y = floorf(lGridMin.mV.y);
+        lGridMin.mV.z = floorf(lGridMin.mV.z); lGridMin.mV.w = floorf(lGridMin.mV.w);
+        lGridMax.mV.x = floorf(lGridMax.mV.x) + 1.0f; lGridMax.mV.y = floorf(lGridMax.mV.y) + 1.0f;
+        lGridMax.mV.z = floorf(lGridMax.mV.z) + 1.0f; lGridMax.mV.w = floorf(lGridMax.mV.w) + 1.0f;
 
         // Per-cell bucket arrays: KI_GRID_WIDTH*KI_GRID_HEIGHT u16 counts/first-indices
         // (10000 entries == 20000 bytes), and one u16 per valid point for the scatter map.
@@ -142,29 +142,29 @@ namespace BrnAI
         // The horizontal plane uses world (X, Z); lane mapping follows the X360 vperm
         // shuffles (cell.X <- world X, cell.Y <- world Z).
         Vector3 lGridExtent;
-        lGridExtent.x = lGridMax.x - lGridMin.x;
-        lGridExtent.y = lGridMax.y - lGridMin.y;
-        lGridExtent.z = lGridMax.z - lGridMin.z;
-        lGridExtent.w = lGridMax.w - lGridMin.w;
+        lGridExtent.mV.x = lGridMax.mV.x - lGridMin.mV.x;
+        lGridExtent.mV.y = lGridMax.mV.y - lGridMin.mV.y;
+        lGridExtent.mV.z = lGridMax.mV.z - lGridMin.mV.z;
+        lGridExtent.mV.w = lGridMax.mV.w - lGridMin.mV.w;
 
         Vector3 lRecipCellSize;   // cellInv = 100 / extent (histogram factor; not stored)
-        lRecipCellSize.x = static_cast<f32>(KI_GRID_WIDTH)  / lGridExtent.x;
-        lRecipCellSize.y = 0.0f;
-        lRecipCellSize.z = static_cast<f32>(KI_GRID_HEIGHT) / lGridExtent.z;
-        lRecipCellSize.w = 0.0f;
+        lRecipCellSize.mV.x = static_cast<f32>(KI_GRID_WIDTH)  / lGridExtent.mV.x;
+        lRecipCellSize.mV.y = 0.0f;
+        lRecipCellSize.mV.z = static_cast<f32>(KI_GRID_HEIGHT) / lGridExtent.mV.z;
+        lRecipCellSize.mV.w = 0.0f;
 
         Vector3 lCellSize;        // cellSize = extent / 100 (stored into mvGridUnitSize)
-        lCellSize.x = lGridExtent.x / static_cast<f32>(KI_GRID_WIDTH);
-        lCellSize.y = 0.0f;
-        lCellSize.z = lGridExtent.z / static_cast<f32>(KI_GRID_HEIGHT);
-        lCellSize.w = 0.0f;
+        lCellSize.mV.x = lGridExtent.mV.x / static_cast<f32>(KI_GRID_WIDTH);
+        lCellSize.mV.y = 0.0f;
+        lCellSize.mV.z = lGridExtent.mV.z / static_cast<f32>(KI_GRID_HEIGHT);
+        lCellSize.mV.w = 0.0f;
 
         // 1) Histogram: assign every valid point to a grid cell and bump that cell's count.
         for (u32 luPoint = 0; luPoint < luPointCount; ++luPoint)
         {
             const Vector3& lPoint = lpPoints[luPoint];
-            s32 liGridX = static_cast<s32>((lPoint.x - lGridMin.x) * lRecipCellSize.x);
-            s32 liGridY = static_cast<s32>((lPoint.z - lGridMin.z) * lRecipCellSize.z);
+            s32 liGridX = static_cast<s32>((lPoint.mV.x - lGridMin.mV.x) * lRecipCellSize.mV.x);
+            s32 liGridY = static_cast<s32>((lPoint.mV.z - lGridMin.mV.z) * lRecipCellSize.mV.z);
             s32 liGridUnit = KI_GRID_WIDTH * liGridX + liGridY;
 
             CGS_ASSERT(liGridX < KI_GRID_WIDTH,  "liGridX < KI_GRID_WIDTH");
@@ -208,10 +208,10 @@ namespace BrnAI
         // factors into the 2D mvGridUnitSize / mvGridMin slots).
         lpMap->miGridWidth  = KI_GRID_WIDTH;
         lpMap->miGridHeight = KI_GRID_HEIGHT;
-        lpMap->mvGridUnitSize.x = lCellSize.x;   // world-space cell SIZE (extent / 100)
-        lpMap->mvGridUnitSize.y = lCellSize.z;
-        lpMap->mvGridMin.x = lGridMin.x;
-        lpMap->mvGridMin.y = lGridMin.z;
+        lpMap->mvGridUnitSize.mV.x = lCellSize.mV.x;   // world-space cell SIZE (extent / 100)
+        lpMap->mvGridUnitSize.mV.y = lCellSize.mV.z;
+        lpMap->mvGridMin.mV.x = lGridMin.mV.x;
+        lpMap->mvGridMin.mV.y = lGridMin.mV.z;
         lpMap->mpPoints                = lpPoints;
         lpMap->mpuSections             = lpuSections;
         lpMap->mpuGridUnitMap          = lpuGridPointMap;
@@ -223,7 +223,7 @@ namespace BrnAI
         // cell falls inside those bounds. Stores nothing into the map; pure consistency
         // check (the X360 only ever fires asserts in this loop). mvGridUnitSize already
         // holds the world-space cell size, so it is used directly (no reciprocal).
-        const Vector2 lDebugCellSize = { lpMap->mvGridUnitSize.x, lpMap->mvGridUnitSize.y };
+        const Vector2 lDebugCellSize(lpMap->mvGridUnitSize.mV.x, lpMap->mvGridUnitSize.mV.y);
         for (s32 liGridX = 0; liGridX < lpMap->miGridWidth; ++liGridX)
         {
             if (lpMap->miGridHeight <= 0)
@@ -233,11 +233,11 @@ namespace BrnAI
             for (s32 liGridY = 0; liGridY < lpMap->miGridHeight; ++liGridY)
             {
                 Vector2 lCellMin;
-                lCellMin.x = lpMap->mvGridMin.x + static_cast<f32>(liGridX) * lDebugCellSize.x;
-                lCellMin.y = lpMap->mvGridMin.y + static_cast<f32>(liGridY) * lDebugCellSize.y;
+                lCellMin.mV.x = lpMap->mvGridMin.mV.x + static_cast<f32>(liGridX) * lDebugCellSize.mV.x;
+                lCellMin.mV.y = lpMap->mvGridMin.mV.y + static_cast<f32>(liGridY) * lDebugCellSize.mV.y;
                 Vector2 lCellMax;
-                lCellMax.x = lCellMin.x + lDebugCellSize.x;
-                lCellMax.y = lCellMin.y + lDebugCellSize.y;
+                lCellMax.mV.x = lCellMin.mV.x + lDebugCellSize.mV.x;
+                lCellMax.mV.y = lCellMin.mV.y + lDebugCellSize.mV.y;
 
                 s32 liGridUnit = liGridX * lpMap->miGridWidth + liGridY;
                 u16 luCellCount = lpMap->mpuGridUnitPointCount[liGridUnit];
@@ -251,9 +251,9 @@ namespace BrnAI
                 {
                     u16 luMappedPoint = lpMap->mpuGridUnitMap[luCellFirst + luSlot];
                     const Vector3& lPos = lpMap->mpPoints[luMappedPoint];
-                    CGS_ASSERT((lPos.x >= lCellMin.x) && (lPos.x <= lCellMax.x),
+                    CGS_ASSERT((lPos.mV.x >= lCellMin.mV.x) && (lPos.mV.x <= lCellMax.mV.x),
                                "(lPos.X() >= lGridMin.X()) && (lPos.X() <= lGridMax.X())");
-                    CGS_ASSERT((lPos.z >= lCellMin.y) && (lPos.z <= lCellMax.y),
+                    CGS_ASSERT((lPos.mV.z >= lCellMin.mV.y) && (lPos.mV.z <= lCellMax.mV.y),
                                "(lPos.Z() >= lGridMin.Y()) && (lPos.Z() <= lGridMax.Y())");
                 }
             }
@@ -284,8 +284,8 @@ namespace BrnAI
         // vcfsx(1,1) == 0.5), and grows it by that same min-extent each miss.
         // mvGridUnitSize holds the world-space cell SIZE; the X360 reciprocates it (vrefp +
         // Newton-Raphson) to recover cellInv = 1 / cellSize for the world->cell mapping.
-        const f32 lfCellInvX = 1.0f / lpMap->mvGridUnitSize.x;   // 1 / cellSizeX
-        const f32 lfCellInvY = 1.0f / lpMap->mvGridUnitSize.y;   // 1 / cellSizeY
+        const f32 lfCellInvX = 1.0f / lpMap->mvGridUnitSize.mV.x;   // 1 / cellSizeX
+        const f32 lfCellInvY = 1.0f / lpMap->mvGridUnitSize.mV.y;   // 1 / cellSizeY
         const f32 lfMinExtent = (static_cast<f32>(liGridWidth - 1) < static_cast<f32>(liGridHeight - 1))
                                     ? static_cast<f32>(liGridWidth - 1)
                                     : static_cast<f32>(liGridHeight - 1);
@@ -305,13 +305,13 @@ namespace BrnAI
             //   max corner: ceil ((pos + half - gridMin) * cellInv), then min(.,gridDim-1)
             // (half-extent is the same value compared as a squared distance below, so it is
             // intentionally treated as a world-space radius here, bug-for-bug.)
-            f32 lfMinXf = floorf((lPosition.x - lfHalfExtent - lpMap->mvGridMin.x) * lfCellInvX);
-            f32 lfMinYf = floorf((lPosition.z - lfHalfExtent - lpMap->mvGridMin.y) * lfCellInvY);
+            f32 lfMinXf = floorf((lPosition.mV.x - lfHalfExtent - lpMap->mvGridMin.mV.x) * lfCellInvX);
+            f32 lfMinYf = floorf((lPosition.mV.z - lfHalfExtent - lpMap->mvGridMin.mV.y) * lfCellInvY);
             lfMinXf = lfMinXf > 0.0f ? lfMinXf : 0.0f;
             lfMinYf = lfMinYf > 0.0f ? lfMinYf : 0.0f;
 
-            f32 lfMaxXf = ceilf((lPosition.x + lfHalfExtent - lpMap->mvGridMin.x) * lfCellInvX);
-            f32 lfMaxYf = ceilf((lPosition.z + lfHalfExtent - lpMap->mvGridMin.y) * lfCellInvY);
+            f32 lfMaxXf = ceilf((lPosition.mV.x + lfHalfExtent - lpMap->mvGridMin.mV.x) * lfCellInvX);
+            f32 lfMaxYf = ceilf((lPosition.mV.z + lfHalfExtent - lpMap->mvGridMin.mV.y) * lfCellInvY);
             lfMaxXf = lfMaxXf < lfMaxGridX ? lfMaxXf : lfMaxGridX;
             lfMaxYf = lfMaxYf < lfMaxGridY ? lfMaxYf : lfMaxGridY;
 
@@ -348,9 +348,9 @@ namespace BrnAI
                             u16 luMappedPoint = lpMap->mpuGridUnitMap[luCellFirst + luSlot];
                             const Vector3& lPoint = lpMap->mpPoints[luMappedPoint];
 
-                            f32 lfDx = lPoint.x - lPosition.x;
-                            f32 lfDy = lPoint.y - lPosition.y;
-                            f32 lfDz = lPoint.z - lPosition.z;
+                            f32 lfDx = lPoint.mV.x - lPosition.mV.x;
+                            f32 lfDy = lPoint.mV.y - lPosition.mV.y;
+                            f32 lfDz = lPoint.mV.z - lPosition.mV.z;
                             f32 lfDistSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
 
                             if (lfDistSq < lfBestDistSq)

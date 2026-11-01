@@ -21,8 +21,8 @@ namespace BrnTraffic
 // Written as scalar float math for host parity: only .x and .z are consumed.
 u32 Pvs::GetHullIndexForPoint(Vector3 lPoint) const
 {
-    const f32 lfScaledX = (lPoint.x - mGridMin.x) * mRecipCellSize.x;
-    const f32 lfScaledZ = (lPoint.z - mGridMin.z) * mRecipCellSize.z;
+    const f32 lfScaledX = (lPoint.mV.x - mGridMin.mV.x) * mRecipCellSize.mV.x;
+    const f32 lfScaledZ = (lPoint.mV.z - mGridMin.mV.z) * mRecipCellSize.mV.z;
 
     s32 liX = static_cast<s32>(lfScaledX);
     if (liX <= 0)
@@ -64,8 +64,8 @@ u32 Pvs::GetHullIndexForPoint(Vector3 lPoint) const
 // ----------------------------------------------------------------------------
 u32 Pvs::GetHullIndexForPoint(Vector3 lPoint, s32& lriOutX, s32& lriOutZ) const
 {
-    const f32 lfScaledX = (lPoint.x - mGridMin.x) * mRecipCellSize.x;
-    const f32 lfScaledZ = (lPoint.z - mGridMin.z) * mRecipCellSize.z;
+    const f32 lfScaledX = (lPoint.mV.x - mGridMin.mV.x) * mRecipCellSize.mV.x;
+    const f32 lfScaledZ = (lPoint.mV.z - mGridMin.mV.z) * mRecipCellSize.mV.z;
 
     lriOutX = static_cast<s32>(lfScaledX);
     if (lriOutX <= 0)
