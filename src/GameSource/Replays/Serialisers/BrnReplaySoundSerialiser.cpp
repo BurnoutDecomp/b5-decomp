@@ -204,9 +204,9 @@ namespace BrnReplays
         const f32* lpSrc = static_cast<const f32*>(lpTransform);
 
         rw::math::vpu::Matrix33 lBasis;
-        lBasis.xAxis.x = lpSrc[0];  lBasis.xAxis.y = lpSrc[1];  lBasis.xAxis.z = lpSrc[2];
-        lBasis.yAxis.x = lpSrc[4];  lBasis.yAxis.y = lpSrc[5];  lBasis.yAxis.z = lpSrc[6];
-        lBasis.zAxis.x = lpSrc[8];  lBasis.zAxis.y = lpSrc[9];  lBasis.zAxis.z = lpSrc[10];
+        lBasis.xAxis.mV.x = lpSrc[0];  lBasis.xAxis.mV.y = lpSrc[1];  lBasis.xAxis.mV.z = lpSrc[2];
+        lBasis.yAxis.mV.x = lpSrc[4];  lBasis.yAxis.mV.y = lpSrc[5];  lBasis.yAxis.mV.z = lpSrc[6];
+        lBasis.zAxis.mV.x = lpSrc[8];  lBasis.zAxis.mV.y = lpSrc[9];  lBasis.zAxis.mV.z = lpSrc[10];
 
         const rw::math::vpu::Quaternion lQuat =
             rw::math::vpu::QuaternionFromMatrix33(lBasis, 0.0f);
