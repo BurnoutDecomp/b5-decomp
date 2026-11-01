@@ -36,6 +36,7 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                  // CgsNumeric::Random
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpuMonitorData
 
+#include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h"
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"           // KU_MAX_VEHICLE_TYPES, ...
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"          // Vehicle, VehicleAxles, VehicleSoaData
@@ -1827,6 +1828,10 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         f32                   mfShowtimeTimeNextCrashSpike;         // :773
         f32                   mfShowtimeTimeLastCrashSpike;         // :774
         f32                   mfShowtimeMisBounceTimer;             // :775
+
+        BrnReplays::TrafficEntitySerialiser mTrafficEntitySerialiser; // ARTIST +0x724C0
+        bool mbReplayPlayback;        // ARTIST +0x72520; name inferred from playback reads
+        bool mbReplayAssetsReady;     // ARTIST +0x72521; name inferred from asset-load test
 
         f32                   mfPlayerIdleTime;                     // :778
 
