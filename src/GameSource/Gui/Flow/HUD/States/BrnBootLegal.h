@@ -3,7 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"          // CgsGui::GuiComponent (the 5 apt animator components)
+#include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h"   // native animation components
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"          // BrnGui::MenuComponent (the title-screen menu)
 
 // BrnGui::BootLegal - the boot legal / title-screen GUI state (BF_LEGAL). It shows the
@@ -19,12 +19,8 @@
 //   DisplaySelectionMenu@ 0x82475C20
 //   UpdateSelectionMenu @ 0x82473978
 //
-// LAYOUT (X360 console offsets baked into the disasm as raw `this+N`; modelled here as
-// named x64 members with [c:0xNN] = the X360 byte offset). The base CgsGui::State occupies
-// 0x00..0x37 (mpInGuiEventQueue @c:0x18, mpStateInterface @c:0x1C); BootLegal's own members
-// begin at c:0x38. The X360 GuiComponents are an opaque embedded family the state reaches
-// through CgsGui::GuiComponent::Construct/AddOutputAptViewState; we model the five 0xDC-stride
-// component slots and the menu component as their committed types.
+// Native layout: the State base ends at 0x38. ARTIST places the five actual
+// AnimationComponents at 0x58, 0xE4, 0x170, 0x1FC and 0x288; each is 0x8C bytes.
 namespace BrnGui
 {
     class GuiCache;   // the GUI resource/component cache (BrnGuiCache.h); reached by pointer here
@@ -73,28 +69,26 @@ namespace BrnGui
 
         // ----- BootLegal data members (X360 console offsets in [c:0xNN]) -----
         //
-        // x64-native: the console byte offsets below are the X360 `this+N` slots the disasm
-        // bakes in; on x64 the real offsets differ (8-byte pointers / vptrs), so the members are
-        // declared by name/type in field order and the [c:] tags record the console layout only.
+        // The [c:] tags record offsets attested by the X360 callers.
         BrnGui::GuiCache* mpGuiCache;               // [c:0x38] cache set when the cache-ready event arrives
-        s32               muCurrentAttractMovieIdx; // [c:0x40] index into the attract-movie name table
+        s32               miNumFilesToLoad;         // [c:0x3C] DecFIGS BrnBootLegal.h:72
+        u32               muCurrentAttractMovieIdx; // [c:0x40] index into the attract-movie name table
         bool              mbWaitForStartPressed;    // [c:0x44] true: gate the start message on a "press start"
         s32               meUpdateStage;            // [c:0x48] EUpdateStage
         f32               mfStageStartTime;         // [c:0x4C] GuiCache time the current stage began
         bool              mbSignOutPending;         // [c:0x50] a sign-out overlay is up; suppress the menu
         f32               mfAcceptTime;             // [c:0x54] GuiCache time the accept was registered
 
-        // The five apt animator components the state drives (X360 0xDC-stride slots c:0x58 / 0xE4 /
+        // The five apt animator components the state drives (X360 0x8C-stride slots c:0x58 / 0xE4 /
         // 0x170 / 0x1FC / 0x288). Each is a CgsGui::GuiComponent built in OnEnter and transitioned
         // via AddOutputAptViewState.
-        CgsGui::GuiComponent  mHDCompAnimator;        // [c:0x58]  "HDCompAnimator_mc"
-        CgsGui::GuiComponent  mEsrbAnimator;          // [c:0xE4]  "esrb_anim"
-        CgsGui::GuiComponent  mStartMessageAnimator;  // [c:0x170] "StartMessageAnimatorComponent"
-        CgsGui::GuiComponent  mBackgroundAnimator;    // [c:0x1FC] "BackgroundAnimatorComponent"
-        CgsGui::GuiComponent  mSelectionMenuAnimator; // [c:0x288] "SelectionMenuAnimatorComponent"
+        BrnGui::AnimationComponent  mHDCompAnimator;        // [c:0x58]  "HDCompAnimator_mc"
+        BrnGui::AnimationComponent  mEsrbAnimator;          // [c:0xE4]  "esrb_anim"
+        BrnGui::AnimationComponent  mStartMessageAnimator;  // [c:0x170] "StartMessageAnimatorComponent"
+        BrnGui::AnimationComponent  mBackgroundAnimator;    // [c:0x1FC] "BackgroundAnimatorComponent"
+        BrnGui::AnimationComponent  mSelectionMenuAnimator; // [c:0x288] "SelectionMenuAnimatorComponent"
 
         BrnGui::MenuComponent mSelectionMenu;         // [c:0x318] the "MenuItem" 2-entry menu
-        u8                    mu8SelectedMenuIndex;   // [c:0x3BD] chosen entry (0 = Normal, 1 = BeatTheTeam)
 
         static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F25CEC (.rdata)
         static const u32                    muNumResourcesToLoad; // @ 0x82F25CF4 (.rdata)

@@ -763,6 +763,7 @@ namespace BrnGui
             if (liVideoAction == KI_ACTION_CONFIRM)
             {
                 GuiEventStopVideo lStopVideo;
+                lStopVideo.mVideo.Prepare();
                 mpStateInterface->OutputGuiEvent(lStopVideo);
                 meIntroState = E_INTROSTATE_WAITING_FOR_VIDEO;
             }

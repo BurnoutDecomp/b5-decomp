@@ -1,66 +1,25 @@
-#ifndef BRN_GUI_VIDEO_EVENTS_H
-#define BRN_GUI_VIDEO_EVENTS_H
+#pragma once
 
-#include "types.hpp"
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (-> CgsModule::Event)
+#include "GameSource/Gui/BrnGuiMovieManager.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 
-// BrnGui video events -- the GUI vocabulary the front-end fires at BrnGui::MovieManager (DecFIGS
-// GameSource/Gui/BrnGuiMovieManager.{h,cpp}: HandlePlayVideoEvent / HandleStopVideoEvent). Each derives
-// from CgsGui::GuiEvent<N> so it can be pushed onto a CgsModule::VariableEventQueue by byte image and
-// dispatched by its type id.
 namespace BrnGui
 {
-    // GUI event-type ids the MovieManager dispatches on (from ARTIST BrnGui::MovieManager::RecvEvent
-    // 0x824F9688: switch(eventId) { 504 -> audio ready; 508 -> play video (copy into mQueuedMovie);
-    // 509 -> stop video }).
-    enum
+    enum { KI_GUIEVENT_AUDIO_READY = 504, KI_GUIEVENT_PLAY_VIDEO = 508, KI_GUIEVENT_STOP_VIDEO = 509 };
+
+    // ARTIST 82476C68/82476CF8 copy the 48-byte definition as the whole payload.
+    class GuiEventPlayVideo : public CgsModule::Event
     {
-        KI_GUIEVENT_AUDIO_READY = 504,   // 0x1F8: localized audio stream ready -> WAITING_FOR_AUDIO -> PLAYING
-        KI_GUIEVENT_PLAY_VIDEO  = 508,   // 0x1FC: GuiEventPlayVideo  -> copied into mQueuedMovie
-        KI_GUIEVENT_STOP_VIDEO  = 509,   // 0x1FD: GuiEventStopVideo  -> HandleStopVideoEvent
+    public:
+        MovieManager::VideoDefinition mVideo;
+        s32 GetEventType() const { return KI_GUIEVENT_PLAY_VIDEO; }
     };
-
-    // Ask the MovieManager to play a video: carries the VideoDefinition parameters it copies into its
-    // queued movie (DecFIGS BrnGui::GuiEventPlayVideo).
-    struct GuiEventPlayVideo : public CgsGui::GuiEvent<KI_GUIEVENT_PLAY_VIDEO>
+    class GuiEventStopVideo : public CgsModule::Event
     {
-        // ⭐ WIDENED 2026-08-16 (boot audit F-P8b-5/F-P8b-6): the producers store this with
-        // `std` at VideoDefinition+0x10 -- it is one 64-bit CgsResource::ID, and the PC was
-        // truncating it to u32 on the way in and back out again.
-        u64  muVideoResourceId;            // +0x10 VideoDataResource id to load + play
-        f32  mafRectangle[4];              // unit-screen left, top, right, bottom -- X360 Vector4
-        s32  miCrossfadeInFrames;
-        s32  miCrossfadeOutFrames;
-        bool mbPreload;
-        bool mbKeepMemoryWhenFinished;
-        bool mbDisableCustomSoundtracks;
-        // The video's SOUND stream name, CgsSound::Playback::Name::MakeHash(name). The X360
-        // producers write it into the VideoDefinition slot at +0x18 alongside the resource id
-        // (boot audit F-P8b-5); it was a "[follow-on]" comment and the field did not exist, so
-        // every boot video was played with no sound name attached.
-        u32  muSoundStreamName;
-
-        GuiEventPlayVideo()
-            : muVideoResourceId(0)
-            , muSoundStreamName(0)
-            , miCrossfadeInFrames(0)
-            , miCrossfadeOutFrames(0)
-            , mbPreload(false)
-            , mbKeepMemoryWhenFinished(false)
-            , mbDisableCustomSoundtracks(false)
-        {
-            mafRectangle[0] = 0.0f;    mafRectangle[1] = 0.0f;
-            mafRectangle[2] = 1.0f;    mafRectangle[3] = 1.0f; // ARTIST 824729DC..72A00.
-        }
+    public:
+        MovieManager::VideoDefinition mVideo;
+        s32 GetEventType() const { return KI_GUIEVENT_STOP_VIDEO; }
     };
-
-    // Stop the currently-playing video (DecFIGS BrnGui::GuiEventStopVideo).
-    struct GuiEventStopVideo : public CgsGui::GuiEvent<KI_GUIEVENT_STOP_VIDEO>
-    {
-        bool mbStopStraightAway;
-
-        GuiEventStopVideo() : mbStopStraightAway(false) {}
-    };
+    CGS_STATIC_ASSERT((sizeof(GuiEventPlayVideo) == 0x30), "native play video payload");
+    CGS_STATIC_ASSERT((sizeof(GuiEventStopVideo) == 0x30), "native stop video payload");
 }
-
-#endif

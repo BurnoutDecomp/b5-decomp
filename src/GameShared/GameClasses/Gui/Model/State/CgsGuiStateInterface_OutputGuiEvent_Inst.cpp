@@ -57,7 +57,43 @@ namespace CgsGui
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventNetworkSplashEvent>(BrnGui::GuiEventNetworkSplashEvent&);  // 0x82493880
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventOnlineInviteEvent>(BrnGui::GuiEventOnlineInviteEvent&);  // 0x824369C0
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventOnlineShowProfile>(BrnGui::GuiEventOnlineShowProfile&);  // 0x82436B30
-    template void StateInterface::OutputGuiEvent<BrnGui::GuiEventPlayVideo>(BrnGui::GuiEventPlayVideo&);  // 0x82476C68
+    // Preserve the original field-wise copy; the trailing payload bytes are untouched.
+    template <>
+    GuiEventWrapper<BrnGui::GuiEventPlayVideo, 40>::GuiEventWrapper(BrnGui::GuiEventPlayVideo& lrEvent)
+        : miOutEventSize(0x30), miOutEventType(508), miOutEventOffset(0x10)
+    {
+        mOutEvent.mVideo.mv4Rectangle.mV = lrEvent.mVideo.mv4Rectangle.mV;
+        mOutEvent.mVideo.mVideoResourceId = lrEvent.mVideo.mVideoResourceId;
+        mOutEvent.mVideo.mSoundStreamName = lrEvent.mVideo.mSoundStreamName;
+        mOutEvent.mVideo.miCrossfadeInFrames = lrEvent.mVideo.miCrossfadeInFrames;
+        mOutEvent.mVideo.miCrossfadeOutFrames = lrEvent.mVideo.miCrossfadeOutFrames;
+        mOutEvent.mVideo.mbPreload = lrEvent.mVideo.mbPreload;
+        mOutEvent.mVideo.mbKeepMemoryWhenFinished = lrEvent.mVideo.mbKeepMemoryWhenFinished;
+        mOutEvent.mVideo.mbDisableCustomSoundtracks = lrEvent.mVideo.mbDisableCustomSoundtracks;
+    }
+
+    // Preserve the original field-wise copy; the trailing payload bytes are untouched.
+    template <>
+    GuiEventWrapper<BrnGui::GuiEventStopVideo, 40>::GuiEventWrapper(BrnGui::GuiEventStopVideo& lrEvent)
+        : miOutEventSize(0x30), miOutEventType(509), miOutEventOffset(0x10)
+    {
+        mOutEvent.mVideo.mv4Rectangle.mV = lrEvent.mVideo.mv4Rectangle.mV;
+        mOutEvent.mVideo.mVideoResourceId = lrEvent.mVideo.mVideoResourceId;
+        mOutEvent.mVideo.mSoundStreamName = lrEvent.mVideo.mSoundStreamName;
+        mOutEvent.mVideo.miCrossfadeInFrames = lrEvent.mVideo.miCrossfadeInFrames;
+        mOutEvent.mVideo.miCrossfadeOutFrames = lrEvent.mVideo.miCrossfadeOutFrames;
+        mOutEvent.mVideo.mbPreload = lrEvent.mVideo.mbPreload;
+        mOutEvent.mVideo.mbKeepMemoryWhenFinished = lrEvent.mVideo.mbKeepMemoryWhenFinished;
+        mOutEvent.mVideo.mbDisableCustomSoundtracks = lrEvent.mVideo.mbDisableCustomSoundtracks;
+    }
+
+    template <>
+    void StateInterface::OutputGuiEvent<BrnGui::GuiEventPlayVideo>(BrnGui::GuiEventPlayVideo& lrEvent)
+    {
+        GuiEventWrapper<BrnGui::GuiEventPlayVideo, 40> lWrapper(lrEvent);
+        CGS_STATIC_ASSERT((sizeof(lWrapper) == 0x40), "ARTIST native video wrapper");
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper), 40, sizeof(lWrapper));
+    }
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventPostEventFreeCarSequenceStart>(BrnGui::GuiEventPostEventFreeCarSequenceStart&);  // 0x824C2DF8
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventPostEventRankUpSequenceStart>(BrnGui::GuiEventPostEventRankUpSequenceStart&);  // 0x824C2E48
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventRequestCompressedCamPic>(BrnGui::GuiEventRequestCompressedCamPic&);  // 0x82436D90
@@ -74,7 +110,13 @@ namespace CgsGui
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventScoreboardRequestVariationEvent>(BrnGui::GuiEventScoreboardRequestVariationEvent&);  // 0x82494048
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventSetPlayer0ControllerPort>(BrnGui::GuiEventSetPlayer0ControllerPort&);  // 0x82476D88
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventShowHideHud>(BrnGui::GuiEventShowHideHud&);  // 0x82493988
-    template void StateInterface::OutputGuiEvent<BrnGui::GuiEventStopVideo>(BrnGui::GuiEventStopVideo&);  // 0x82476CF8
+    template <>
+    void StateInterface::OutputGuiEvent<BrnGui::GuiEventStopVideo>(BrnGui::GuiEventStopVideo& lrEvent)
+    {
+        GuiEventWrapper<BrnGui::GuiEventStopVideo, 40> lWrapper(lrEvent);
+        CGS_STATIC_ASSERT((sizeof(lWrapper) == 0x40), "ARTIST native video wrapper");
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper), 40, sizeof(lWrapper));
+    }
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventTickerClearMessages>(BrnGui::GuiEventTickerClearMessages&);  // 0x82436DF0
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventTickerCustomMessage>(BrnGui::GuiEventTickerCustomMessage&);  // 0x82436C40
     template void StateInterface::OutputGuiEvent<BrnGui::GuiEventTrophyCarUnlock>(BrnGui::GuiEventTrophyCarUnlock&);  // 0x82476F38
@@ -93,6 +135,14 @@ namespace CgsGui
     template void StateInterface::OutputGuiEvent<BrnGui::GuiTelemetryEvent>(BrnGui::GuiTelemetryEvent&);  // 0x824940E8
     // NetworkSuspension is already an inline explicit specialization in its header.
     // ARTIST82476C00: payload8, type23, offset12, channel40, total20.
+    // ARTIST 82476C00 writes the hash and two flags, leaving the last two bytes untouched.
+    template <>
+    GuiEventWrapper<GuiEventPlayMusicOnMenuStream, 40>::GuiEventWrapper(GuiEventPlayMusicOnMenuStream& lrEvent)
+        : miOutEventSize(8), miOutEventType(23), miOutEventOffset(12),
+          mOutEvent(lrEvent.muStreamNameHash, lrEvent.mbFlagA, lrEvent.mbFlagB)
+    {
+    }
+
     template <>
     void StateInterface::OutputGuiEvent<GuiEventPlayMusicOnMenuStream>(GuiEventPlayMusicOnMenuStream& lrEvent)
     {

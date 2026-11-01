@@ -1,3 +1,4 @@
+#include "GameSource/Gui/BrnGuiVideoEvents.h"
 #include "GameSource/Gui/BrnGuiMovieManager.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h" // collision memory response owner
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // original typed Prepare producer
@@ -79,8 +80,7 @@ namespace BrnGui
     // name; and the two crossfades are +0x1C/+0x20. See the header for the full store list.
     void MovieManager::VideoDefinition::Prepare()
     {
-        mv4Rectangle.x = 0.0f; mv4Rectangle.y = 0.0f;
-        mv4Rectangle.z = 1.0f; mv4Rectangle.w = 1.0f;
+        mv4Rectangle = rw::math::vpu::Vector4(0.0f, 0.0f, 1.0f, 1.0f);
         // zero-extended, matching the console's `clrldi r3,r11,32` tail (see BrnBootVideos).
         mVideoResourceId = static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
             reinterpret_cast<const u8*>(""))));   // the "" literal @0x820046A7
@@ -96,18 +96,17 @@ namespace BrnGui
 
     // VideoDefinition::Copy -- X360 ARTIST @0x824EAFD8. Asserts src non-null, then copies the
     // VMX rectangle (+0x00, 16B), the 64-bit id (+0x10, std), +0x18/+0x1C/+0x20 (stw), and the
-    // 3 bool bytes (+0x24/+0x25/+0x26). Member-by-name; equivalent to a full memberwise copy.
+    // 3 bool bytes (+0x24/+0x25/+0x26). ARTIST swaps the two crossfade words.
     void MovieManager::VideoDefinition::Copy(const VideoDefinition* lpOther)
     {
         CGS_ASSERT(lpOther != 0, "null src defined");
-        mv4Rectangle.x = lpOther->mv4Rectangle.x;
-        mv4Rectangle.y = lpOther->mv4Rectangle.y;
-        mv4Rectangle.z = lpOther->mv4Rectangle.z;
-        mv4Rectangle.w = lpOther->mv4Rectangle.w;
+        mv4Rectangle.mV = lpOther->mv4Rectangle.mV;
         mVideoResourceId = lpOther->mVideoResourceId;
         mSoundStreamName = lpOther->mSoundStreamName;
-        miCrossfadeInFrames = lpOther->miCrossfadeInFrames;
-        miCrossfadeOutFrames = lpOther->miCrossfadeOutFrames;
+        const s32 liSourceCrossfadeIn = lpOther->miCrossfadeInFrames;
+        const s32 liSourceCrossfadeOut = lpOther->miCrossfadeOutFrames;
+        miCrossfadeInFrames = liSourceCrossfadeOut;
+        miCrossfadeOutFrames = liSourceCrossfadeIn;
         mbPreload = lpOther->mbPreload;
         mbKeepMemoryWhenFinished = lpOther->mbKeepMemoryWhenFinished;
         mbDisableCustomSoundtracks = lpOther->mbDisableCustomSoundtracks;
@@ -207,6 +206,7 @@ namespace BrnGui
     // ---- events (ARTIST RecvEvent 0x824F9688: 504 audio / 508 play / 509 stop) -----------------------
     void MovieManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
+        CGS_ASSERT(lpEvent != 0, "invalid event passed through ");
         switch (liEventId)
         {
         case KI_GUIEVENT_AUDIO_READY:   // 504
@@ -214,7 +214,7 @@ namespace BrnGui
                 meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
             break;
         case KI_GUIEVENT_PLAY_VIDEO:    // 508
-            HandlePlayVideoEvent(static_cast<const GuiEventPlayVideo*>(lpEvent));
+            mQueuedMovie.Copy(&static_cast<const GuiEventPlayVideo*>(lpEvent)->mVideo);
             mbStopVideoStraightAway = false;
             break;
         case KI_GUIEVENT_STOP_VIDEO:    // 509
@@ -225,29 +225,10 @@ namespace BrnGui
         }
     }
 
-    void MovieManager::HandlePlayVideoEvent(const GuiEventPlayVideo* lpEv)
-    {
-        if (lpEv == 0) return;
-        mQueuedMovie.mv4Rectangle.x = lpEv->mafRectangle[0];
-        mQueuedMovie.mv4Rectangle.y = lpEv->mafRectangle[1];
-        mQueuedMovie.mv4Rectangle.z = lpEv->mafRectangle[2];
-        mQueuedMovie.mv4Rectangle.w = lpEv->mafRectangle[3];
-        mQueuedMovie.mVideoResourceId = lpEv->muVideoResourceId;
-        // ⭐ the sound name rides across with the id (boot audit F-P8b-5/F-P8b-6): the
-        // producer fills it, so the queued definition has to carry it or the whole point of
-        // filling it is lost at the first copy.
-        mQueuedMovie.mSoundStreamName = lpEv->muSoundStreamName;
-        mQueuedMovie.miCrossfadeInFrames = lpEv->miCrossfadeInFrames;
-        mQueuedMovie.miCrossfadeOutFrames = lpEv->miCrossfadeOutFrames;
-        mQueuedMovie.mbPreload = lpEv->mbPreload;
-        mQueuedMovie.mbKeepMemoryWhenFinished = lpEv->mbKeepMemoryWhenFinished;
-        mQueuedMovie.mbDisableCustomSoundtracks = lpEv->mbDisableCustomSoundtracks;
-    }
-
     void MovieManager::HandleStopVideoEvent(const GuiEventStopVideo* lpEv)
     {
         // ARTIST 0x824F17C0 does not read the event payload; the state selects stop behavior.
-        if (lpEv == 0) return;
+        (void)lpEv;
         switch (meState)
         {
         case E_MOVIEMANAGERSTATE_STOP_MOVIE:
@@ -444,8 +425,8 @@ namespace BrnGui
         mQueuedMovie.Prepare();
         std::memset(macMovieNameBuffer, 0, sizeof(macMovieNameBuffer));
 
-        mMoviePlayer.SetRectangle(mPlayingMovie.mv4Rectangle.x, mPlayingMovie.mv4Rectangle.y,
-                                  mPlayingMovie.mv4Rectangle.z, mPlayingMovie.mv4Rectangle.w);
+        mMoviePlayer.SetRectangle(mPlayingMovie.mv4Rectangle.mV.x, mPlayingMovie.mv4Rectangle.mV.y,
+                                  mPlayingMovie.mv4Rectangle.mV.z, mPlayingMovie.mv4Rectangle.mV.w);
         mMoviePlayer.SetCrossfade(mPlayingMovie.miCrossfadeInFrames, mPlayingMovie.miCrossfadeOutFrames);
 
         // The original .data pointers resolve to these exact code strings. The language table below
