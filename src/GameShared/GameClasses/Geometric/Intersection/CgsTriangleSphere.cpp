@@ -1,59 +1,6 @@
-// ============================================================================
-// GameShared/GameClasses/Geometric/Intersection/CgsTriangleSphere.cpp
-//
-// ⭐⭐ THE SPHERE CONTACT KERNEL (walls leg 2, 2026-08-14). Reconstructed from
-// BURNOUT_X360_ARTIST.XEX:
-//
-//   CgsGeometric::IntersectTriangle4Sphere_HackyBurnoutVersion @0x8283D2E0 (497)
-//
-// This is the narrow phase of race-car world contact generation: the worker
-// ContactGeneratorJob::ExecuteSphereListWithTriangleList runs it once per
-// (sensor sphere, Triangle4 batch) pair, and every wall/floor contact the
-// deformation penetration solver will ever see is produced here.
-//
-// ─── HOW THIS WAS DERIVED (method, verbatim reproducible) ───────────────────
-// The console body is 497 straight-line VMX128 instructions with no calls and a
-// single rodata reference. It was NOT paraphrased from IDA's pseudocode:
-//   1. every instruction word was read out of the image (x360rd) and its
-//      OPERANDS re-decoded from the raw word -- IDA prints VMX128 source
-//      registers "+32" per operand field, and this body had SEVENTY-EIGHT such
-//      misprints (all vor128/vmulfp128/vmaddfp128 B-fields);
-//   2. the decoded body was executed numerically, lane-exact, on float32
-//      (scratchpad sim_kernel.py; vrsqrtefp modelled as exact 1/sqrt -- the
-//      same abstraction this lowering ships, see PC LOWERING below);
-//   3. this scalar implementation was fuzz-compared against that execution:
-//      600 single-lane + 500x4 distinct-triangle lane trials across random
-//      triangles/spheres/paddings/edge-cosines = 2600 checks, 0 mismatches.
-//      Two structural facts were settled BY probe, not by reading:
-//      the vsel cascade's precedence (the LAST violated edge in order
-//      P0->P1, P1->P2, P2->P0 supplies the closest point -- a sphere outside
-//      two edge lines takes the SECOND edge's clamp) and the row pairing of
-//      the three edge-cosine thresholds (+0xB0 = edge P0->P1, +0xC0 = P1->P2,
-//      +0xD0 = P2->P0).
-// The PS3 twin (DecFIGS PPU ELF @0xB591CC, full DWARF) supplied the parameter
-// names and the KF_MIN_PLANE_DIST identity; the X360 image is the authority
-// for every constant and the structure.
-//
-// ─── WHY "HackyBurnoutVersion" ──────────────────────────────────────────────
-// Two deliberate hacks vs the textbook sphere/triangle contact:
-//   1. the reported contact normal is the DIRECTION FROM CLOSEST POINT TO
-//      CENTRE for edge/vertex contacts (both output normals are the same
-//      register on both consoles), and
-//   2. edge contacts are FILTERED BY PER-EDGE COSINE THRESHOLDS baked into the
-//      Triangle4 by the cache-fill leg (LoadEdgeCosines): an edge contact is
-//      kept only if dot(contactDir, faceNormal) clears the edge's threshold.
-//      That is the classic internal-edge ("ghost bump") suppression -- a car
-//      sliding along a tessellated wall must not catch on interior seams.
-//
-// ─── PC LOWERING, stated once ───────────────────────────────────────────────
-// Scalar per-lane float math, the established precedent for this exact family
-// (CgsPolygonSoupTests.cpp TestSphereTriangle4SOA, ContactGeneratorJob.cpp):
-// once the SoA lanes are array indexes there is no swizzle left to get wrong.
-// ⚠️ FLAGGED non-bit-identical spots, same wording as the precedent: the
-// console's vrsqrtefp + Newton-Raphson refinements are lowered to 1/sqrt()
-// (more accurate by a few ulps; changes no accept/reject except within a ulp
-// of a threshold).
-// ============================================================================
+// Native sphere/triangle contact kernels. The Triangle4 paths retain the
+// ARTIST VMX operation order and all four output lanes. The single-triangle
+// swept path below retains its separately reconstructed implementation.
 
 #include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleSphere.h"
 
@@ -75,7 +22,7 @@ namespace CgsGeometric
     // builds the identical splat. Modelled at its post-init value; a namespace
     // const here because the only consumer is this TU (the X360 kernel is its
     // single exported reader).
-    const VecFloat KF_MIN_PLANE_DIST = { 0.001f, 0.001f, 0.001f, 0.001f };
+    const VecFloat KF_MIN_PLANE_DIST(0.001f);
 
     Triangle4::Mask4 IntersectTriangle4Sphere_HackyBurnoutVersion(
         const Sphere&    lSphere,
@@ -90,380 +37,619 @@ namespace CgsGeometric
         Vector3& lContactNormal3, Vector3& lTriangleNormal3,
         Vector3Plus& lSphereContactPoint3, Vector3Plus& lTriangleContactPoint3)
     {
-        // The output groups, indexable per lane (the console receives these as
-        // sixteen distinct reference parameters; grouping them is pure syntax).
-        Vector3*     lapContactNormal[4]       = { &lContactNormal0, &lContactNormal1,
-                                                   &lContactNormal2, &lContactNormal3 };
-        Vector3*     lapTriangleNormal[4]      = { &lTriangleNormal0, &lTriangleNormal1,
-                                                   &lTriangleNormal2, &lTriangleNormal3 };
-        Vector3Plus* lapSphereContactPoint[4]  = { &lSphereContactPoint0, &lSphereContactPoint1,
-                                                   &lSphereContactPoint2, &lSphereContactPoint3 };
-        Vector3Plus* lapTriangleContactPoint[4]= { &lTriangleContactPoint0, &lTriangleContactPoint1,
-                                                   &lTriangleContactPoint2, &lTriangleContactPoint3 };
-
-        // lvx128 v11, r0, r3 + four vspltw: centre xyz and radius.
-        const f32 lfCx = lSphere.mData.mV.x;
-        const f32 lfCy = lSphere.mData.mV.y;
-        const f32 lfCz = lSphere.mData.mV.z;
-        const f32 lfRadius = lSphere.mData.mV.w;
-
-        // vaddfp v2, v21, v2 -- the reach of the test is radius + padding.
-        const f32 lfReach = lfRadius + lInPadding.x;
-
-        Triangle4::Mask4 lResult;
-        lResult.SetFalse();
-
-        for (s32 liLane = 0; liLane < 4; ++liLane)
-        {
-            const f32 lfP0x = (&lTriangles.mVertex0X.x)[liLane];
-            const f32 lfP0y = (&lTriangles.mVertex0Y.x)[liLane];
-            const f32 lfP0z = (&lTriangles.mVertex0Z.x)[liLane];
-            const f32 lfP1x = (&lTriangles.mVertex1X.x)[liLane];
-            const f32 lfP1y = (&lTriangles.mVertex1Y.x)[liLane];
-            const f32 lfP1z = (&lTriangles.mVertex1Z.x)[liLane];
-            const f32 lfP2x = (&lTriangles.mVertex2X.x)[liLane];
-            const f32 lfP2y = (&lTriangles.mVertex2Y.x)[liLane];
-            const f32 lfP2z = (&lTriangles.mVertex2Z.x)[liLane];
-
-            // ---- the edge loop e0 = P1-P0, e1 = P2-P1, e2 = P0-P2 and the face
-            // normal n = normalize(cross(e0, e1)) (vrsqrtefp + NR -> 1/sqrt) ----
-            const f32 lfE0x = lfP1x - lfP0x, lfE0y = lfP1y - lfP0y, lfE0z = lfP1z - lfP0z;
-            const f32 lfE1x = lfP2x - lfP1x, lfE1y = lfP2y - lfP1y, lfE1z = lfP2z - lfP1z;
-            const f32 lfE2x = lfP0x - lfP2x, lfE2y = lfP0y - lfP2y, lfE2z = lfP0z - lfP2z;
-
-            const f32 lfNx = (lfE0y * lfE1z) - (lfE0z * lfE1y);
-            const f32 lfNy = (lfE0z * lfE1x) - (lfE0x * lfE1z);
-            const f32 lfNz = (lfE0x * lfE1y) - (lfE0y * lfE1x);
-            const f32 lfInvNLen =
-                1.0f / std::sqrt((lfNx * lfNx) + (lfNy * lfNy) + (lfNz * lfNz));
-            const f32 lfUNx = lfNx * lfInvNLen;
-            const f32 lfUNy = lfNy * lfInvNLen;
-            const f32 lfUNz = lfNz * lfInvNLen;
-
-            // ---- signed plane distance of the centre, and its projection ------
-            const f32 lfPlaneDist = ((lfCx - lfP0x) * lfUNx)
-                                  + ((lfCy - lfP0y) * lfUNy)
-                                  + ((lfCz - lfP0z) * lfUNz);
-            const f32 lfFacePx = lfCx - (lfPlaneDist * lfUNx);
-            const f32 lfFacePy = lfCy - (lfPlaneDist * lfUNy);
-            const f32 lfFacePz = lfCz - (lfPlaneDist * lfUNz);
-
-            // ---- the three outside-half-plane tests (vcmpgtfp x3): the face
-            // projection against each edge's outward perpendicular cross(e, n) --
-            const f32 lafAx[3] = { lfP0x, lfP1x, lfP2x };
-            const f32 lafAy[3] = { lfP0y, lfP1y, lfP2y };
-            const f32 lafAz[3] = { lfP0z, lfP1z, lfP2z };
-            const f32 lafEx[3] = { lfE0x, lfE1x, lfE2x };
-            const f32 lafEy[3] = { lfE0y, lfE1y, lfE2y };
-            const f32 lafEz[3] = { lfE0z, lfE1z, lfE2z };
-
-            bool labOutside[3];
-            for (s32 liEdge = 0; liEdge < 3; ++liEdge)
-            {
-                const f32 lfOwx = (lafEy[liEdge] * lfUNz) - (lafEz[liEdge] * lfUNy);
-                const f32 lfOwy = (lafEz[liEdge] * lfUNx) - (lafEx[liEdge] * lfUNz);
-                const f32 lfOwz = (lafEx[liEdge] * lfUNy) - (lafEy[liEdge] * lfUNx);
-                labOutside[liEdge] =
-                    (((lfFacePx - lafAx[liEdge]) * lfOwx)
-                   + ((lfFacePy - lafAy[liEdge]) * lfOwy)
-                   + ((lfFacePz - lafAz[liEdge]) * lfOwz)) > 0.0f;
-            }
-            const bool lbInsideFace = !labOutside[0] && !labOutside[1] && !labOutside[2];
-
-            // ---- closest point: face projection, overridden by each violated
-            // edge's clamped segment point. ⚠️ THE CASCADE ORDER IS LOAD-BEARING:
-            // the LAST violated edge in order 0,1,2 wins (probe-settled; a centre
-            // outside the e0 AND e1 lines takes e1's clamp = the shared vertex).
-            f32 lfClosestX = lfFacePx, lfClosestY = lfFacePy, lfClosestZ = lfFacePz;
-            for (s32 liEdge = 0; liEdge < 3; ++liEdge)
-            {
-                if (!labOutside[liEdge])
-                {
-                    continue;
-                }
-                const f32 lfELen = std::sqrt((lafEx[liEdge] * lafEx[liEdge])
-                                           + (lafEy[liEdge] * lafEy[liEdge])
-                                           + (lafEz[liEdge] * lafEz[liEdge]));
-                const f32 lfInvELen = 1.0f / lfELen;   // vrsqrtefp + NR -> 1/sqrt
-                const f32 lfEux = lafEx[liEdge] * lfInvELen;
-                const f32 lfEuy = lafEy[liEdge] * lfInvELen;
-                const f32 lfEuz = lafEz[liEdge] * lfInvELen;
-
-                // t = clamp(dot(C - A, eu), 0, |e|)   (vmaxfp with 0, vminfp with |e|)
-                f32 lfT = ((lfCx - lafAx[liEdge]) * lfEux)
-                        + ((lfCy - lafAy[liEdge]) * lfEuy)
-                        + ((lfCz - lafAz[liEdge]) * lfEuz);
-                if (lfT < 0.0f)   { lfT = 0.0f; }
-                if (lfT > lfELen) { lfT = lfELen; }
-
-                lfClosestX = lafAx[liEdge] + (lfEux * lfT);
-                lfClosestY = lafAy[liEdge] + (lfEuy * lfT);
-                lfClosestZ = lafAz[liEdge] + (lfEuz * lfT);
-            }
-
-            // ---- distance and the effective contact direction -----------------
-            const f32 lfDx = lfCx - lfClosestX;
-            const f32 lfDy = lfCy - lfClosestY;
-            const f32 lfDz = lfCz - lfClosestZ;
-            const f32 lfDist =
-                std::sqrt((lfDx * lfDx) + (lfDy * lfDy) + (lfDz * lfDz));
-            const f32 lfInvDist = 1.0f / lfDist;       // vrsqrtefp + NR -> 1/sqrt
-            const f32 lfDirX = lfDx * lfInvDist;
-            const f32 lfDirY = lfDy * lfInvDist;
-            const f32 lfDirZ = lfDz * lfInvDist;
-
-            // dot(contactDir, faceNormal) -- what the edge-cosine gates compare.
-            const f32 lfDotDN = (lfDirX * lfUNx) + (lfDirY * lfUNy) + (lfDirZ * lfUNz);
-
-            // ---- outputs (written unconditionally, exactly as the console's
-            // sixteen stvx128 are; only hit lanes are ever consumed) ------------
-            // ⚠️ Both normals are the SAME value on the console (one register,
-            // two stores): the effective contact direction.
-            lapContactNormal[liLane]->x  = lfDirX;
-            lapContactNormal[liLane]->y  = lfDirY;
-            lapContactNormal[liLane]->z  = lfDirZ;
-            *lapTriangleNormal[liLane]   = *lapContactNormal[liLane];
-
-            lapTriangleContactPoint[liLane]->x = lfClosestX;
-            lapTriangleContactPoint[liLane]->y = lfClosestY;
-            lapTriangleContactPoint[liLane]->z = lfClosestZ;
-
-            lapSphereContactPoint[liLane]->x = lfCx - (lfDirX * lfRadius);
-            lapSphereContactPoint[liLane]->y = lfCy - (lfDirY * lfRadius);
-            lapSphereContactPoint[liLane]->z = lfCz - (lfDirZ * lfRadius);
-
-            // ---- the hit mask -------------------------------------------------
-            // Console shape: & of (planeDist >= KF_MIN_PLANE_DIST), (reach >=
-            // dist), (inside-face | dotDN >= 0), the three per-edge cosine gates,
-            // and the batch's own per-lane valid mask. NaN comparisons are false
-            // in both the vcmp* and this C, so a degenerate lane self-rejects.
-            const bool lbAccept =
-                   (lfPlaneDist >= KF_MIN_PLANE_DIST.x)
-                && (lfReach >= lfDist)
-                && (lbInsideFace || (lfDotDN >= 0.0f))
-                && (!labOutside[0] || (lfDotDN >= (&lTriangles.mEdge0Cosigns.x)[liLane]))
-                && (!labOutside[1] || (lfDotDN >= (&lTriangles.mEdge1Cosigns.x)[liLane]))
-                && (!labOutside[2] || (lfDotDN >= (&lTriangles.mEdge2Cosigns.x)[liLane]));
-
-            // vand with mValidMasks: the producer writes full-word lane masks, so
-            // the bitwise AND is reproduced on the exact bit patterns.
-            u32 luEnableBits = 0;
-            std::memcpy(&luEnableBits, &(&lTriangles.mValidMasks.mV.x)[liLane], sizeof(u32));
-            const u32 luLaneMask = (lbAccept ? 0xFFFFFFFFu : 0u) & luEnableBits;
-            std::memcpy(&(&lResult.mV.x)[liLane], &luLaneMask, sizeof(u32));
-        }
-
-        return lResult;
+        // ARTIST 8283D2E0: straight-line VMX operations and full-lane output stores.
+        __vector4 v[128];
+        v[1] = lInPadding.mV;
+        v[6] = lTriangles.mVertex0X.mV; // 8283D2EC
+        v[11] = lSphere.mData.mV; // 8283D2F4
+        v[20] = __vspltw(v[11], 1); // 8283D2FC
+        v[19] = __vspltw(v[11], 2); // 8283D300
+        v[18] = __vspltw(v[11], 3); // 8283D308
+        v[29] = lTriangles.mVertex1X.mV; // 8283D310
+        v[21] = __vspltw(v[11], 0); // 8283D314
+        v[0] = __vsubfp(v[29], v[6]); // 8283D318
+        v[5] = lTriangles.mVertex0Y.mV; // 8283D31C
+        v[28] = lTriangles.mVertex1Y.mV; // 8283D320
+        v[13] = __vsubfp(v[28], v[5]); // 8283D328
+        v[3] = lTriangles.mVertex0Z.mV; // 8283D32C
+        v[27] = lTriangles.mVertex1Z.mV; // 8283D330
+        v[12] = __vsubfp(v[27], v[3]); // 8283D338
+        v[10] = __vspltisw(1); // 8283D340
+        __vector4 spill30 = v[1]; // 8283D348
+        v[26] = lTriangles.mVertex2X.mV; // 8283D34C
+        v[9] = __vsubfp(v[26], v[29]); // 8283D350
+        __vector4 spill90 = v[18]; // 8283D358
+        v[30] = __vsubfp(v[6], v[26]); // 8283D35C
+        v[25] = lTriangles.mVertex2Y.mV; // 8283D360
+        v[8] = __vsubfp(v[25], v[28]); // 8283D364
+        v[24] = lTriangles.mVertex2Z.mV; // 8283D368
+        v[23] = __vsubfp(v[5], v[25]); // 8283D36C
+        __vector4 spill80 = v[19]; // 8283D374
+        v[22] = __vsubfp(v[3], v[24]); // 8283D378
+        __vector4 spill50 = v[20]; // 8283D380
+        v[11] = __vmulfp(v[0], v[0]); // 8283D384
+        __vector4 spill60 = v[24]; // 8283D38C
+        v[7] = __vsubfp(v[24], v[27]); // 8283D390
+        v[24] = v[13]; // 8283D394
+        v[4] = __vmulfp(v[9], v[9]); // 8283D398
+        v[2] = __vmulfp(v[30], v[30]); // 8283D39C
+        v[11] = __vmaddfp(v[13], v[13], v[11]); // 8283D3A0
+        v[11] = __vmaddfp(v[12], v[12], v[11]); // 8283D3A4
+        v[44] = v[11]; // 8283D3A8
+        v[11] = __vmaddfp(v[8], v[8], v[4]); // 8283D3AC
+        v[4] = __vmaddfp(v[23], v[23], v[2]); // 8283D3B0
+        v[17] = __vor(v[44], v[44]); // 8283D3B4
+        v[11] = __vmaddfp(v[7], v[7], v[11]); // 8283D3B8
+        v[4] = __vmaddfp(v[22], v[22], v[4]); // 8283D3BC
+        v[43] = v[11]; // 8283D3C0
+        v[11] = __vcfsx(v[10], 1); // 8283D3C4
+        v[42] = v[4]; // 8283D3C8
+        v[4] = __vrsqrtefp(v[44]); // 8283D3CC
+        v[10] = __vcfsx(v[10], 0); // 8283D3D0
+        v[2] = __vrsqrtefp(v[43]); // 8283D3D4
+        v[16] = __vor(v[43], v[43]); // 8283D3D8
+        v[31] = __vrsqrtefp(v[42]); // 8283D3DC
+        v[15] = __vor(v[42], v[42]); // 8283D3E0
+        v[14] = __vmulfp(v[4], v[4]); // 8283D3E4
+        v[1] = __vmulfp(v[4], v[11]); // 8283D3E8
+        v[19] = __vmulfp(v[2], v[11]); // 8283D3EC
+        v[18] = __vmulfp(v[31], v[31]); // 8283D3F0
+        v[20] = __vmulfp(v[31], v[11]); // 8283D3F4
+        v[17] = __vnmsubfp(v[17], v[14], v[10]); // 8283D3F8
+        v[14] = __vmulfp(v[2], v[2]); // 8283D3FC
+        v[15] = __vnmsubfp(v[15], v[18], v[10]); // 8283D400
+        v[17] = __vmaddfp(v[17], v[1], v[4]); // 8283D404
+        v[4] = __vnmsubfp(v[16], v[14], v[10]); // 8283D408
+        v[15] = __vmaddfp(v[15], v[20], v[31]); // 8283D40C
+        v[20] = v[0]; // 8283D410
+        v[31] = __vmulfp(v[13], v[7]); // 8283D414
+        v[14] = __vmulfp(v[0], v[17]); // 8283D418
+        v[16] = __vmaddfp(v[4], v[19], v[2]); // 8283D41C
+        v[19] = __vmulfp(v[12], v[9]); // 8283D420
+        v[63] = __vmulfp(v[13], v[17]); // 8283D424
+        v[0] = __vmulfp(v[0], v[8]); // 8283D428
+        v[4] = __vnmsubfp(v[12], v[8], v[31]); // 8283D42C
+        v[62] = __vmulfp(v[12], v[17]); // 8283D430
+        v[61] = __vmulfp(v[9], v[16]); // 8283D434
+        v[13] = __vnmsubfp(v[20], v[7], v[19]); // 8283D438
+        v[60] = __vmulfp(v[8], v[16]); // 8283D43C
+        v[12] = __vnmsubfp(v[24], v[9], v[0]); // 8283D440
+        v[31] = __vor(v[63], v[63]); // 8283D444
+        v[0] = __vmulfp(v[4], v[4]); // 8283D448
+        __vector4 spilld0 = v[15]; // 8283D450
+        v[59] = __vmulfp(v[7], v[16]); // 8283D454
+        __vector4 spillc0 = v[14]; // 8283D45C
+        v[57] = __vmulfp(v[23], v[15]); // 8283D460
+        v[23] = __vor(v[61], v[61]); // 8283D464
+        v[56] = __vmulfp(v[22], v[15]); // 8283D468
+        __vector4 spilla0 = v[16]; // 8283D470
+        v[58] = __vmulfp(v[30], v[15]); // 8283D474
+        __vector4 spillb0 = v[17]; // 8283D47C
+        __vector4 spill70 = v[25]; // 8283D484
+        v[22] = __vor(v[60], v[60]); // 8283D488
+        v[0] = __vmaddfp(v[13], v[13], v[0]); // 8283D48C
+        v[30] = __vor(v[59], v[59]); // 8283D490
+        v[55] = __vor(v[56], v[56]); // 8283D494
+        v[0] = __vmaddfp(v[12], v[12], v[0]); // 8283D498
+        v[9] = v[0]; // 8283D49C
+        v[0] = __vrsqrtefp(v[0]); // 8283D4A0
+        v[8] = __vmulfp(v[0], v[0]); // 8283D4A4
+        v[7] = __vmulfp(v[0], v[11]); // 8283D4A8
+        v[9] = __vnmsubfp(v[9], v[8], v[10]); // 8283D4AC
+        v[8] = __vor(v[62], v[62]); // 8283D4B0
+        v[9] = __vmaddfp(v[9], v[7], v[0]); // 8283D4B4
+        v[0] = __vmulfp(v[4], v[9]); // 8283D4B8
+        v[12] = __vmulfp(v[12], v[9]); // 8283D4BC
+        v[13] = __vmulfp(v[13], v[9]); // 8283D4C0
+        v[9] = __vmulfp(v[0], v[6]); // 8283D4C4
+        v[7] = v[0]; // 8283D4C8
+        v[4] = __vmulfp(v[63], v[12]); // 8283D4CC
+        v[1] = __vmulfp(v[14], v[13]); // 8283D4D0
+        v[54] = v[13]; // 8283D4D4
+        v[48] = __vmulfp(v[57], v[12]); // 8283D4D8
+        v[2] = __vmulfp(v[62], v[0]); // 8283D4DC
+        v[46] = __vmulfp(v[58], v[13]); // 8283D4E0
+        v[47] = __vmulfp(v[56], v[0]); // 8283D4E4
+        v[24] = __vmulfp(v[60], v[12]); // 8283D4E8
+        v[20] = __vmulfp(v[59], v[0]); // 8283D4EC
+        v[18] = __vmulfp(v[61], v[13]); // 8283D4F0
+        v[9] = __vmaddfp(v[13], v[5], v[9]); // 8283D4F4
+        v[4] = __vnmsubfp(v[8], v[13], v[4]); // 8283D4F8
+        v[8] = __vor(v[58], v[58]); // 8283D4FC
+        v[31] = __vnmsubfp(v[31], v[0], v[1]); // 8283D500
+        v[48] = __vnmsubfp(v[55], v[54], v[48]); // 8283D504
+        v[54] = __vor(v[57], v[57]); // 8283D508
+        v[2] = __vnmsubfp(v[14], v[12], v[2]); // 8283D50C
+        v[46] = __vnmsubfp(v[54], v[7], v[46]); // 8283D510
+        v[30] = __vnmsubfp(v[30], v[13], v[24]); // 8283D514
+        v[23] = __vnmsubfp(v[23], v[12], v[20]); // 8283D518
+        v[22] = __vnmsubfp(v[22], v[0], v[18]); // 8283D51C
+        v[9] = __vmaddfp(v[12], v[3], v[9]); // 8283D520
+        v[1] = __vmulfp(v[4], v[4]); // 8283D524
+        v[7] = __vmulfp(v[48], v[48]); // 8283D528
+        v[25] = __vmulfp(v[30], v[30]); // 8283D52C
+        v[55] = v[9]; // 8283D530
+        v[9] = v[12]; // 8283D534
+        v[47] = __vnmsubfp(v[8], v[9], v[47]); // 8283D538
+        v[9] = __vmaddfp(v[2], v[2], v[1]); // 8283D53C
+        v[8] = __vmaddfp(v[23], v[23], v[25]); // 8283D540
+        v[7] = __vmaddfp(v[47], v[47], v[7]); // 8283D544
+        v[9] = __vmaddfp(v[31], v[31], v[9]); // 8283D548
+        v[8] = __vmaddfp(v[22], v[22], v[8]); // 8283D54C
+        v[54] = v[7]; // 8283D550
+        v[7] = v[9]; // 8283D554
+        v[9] = __vrsqrtefp(v[9]); // 8283D558
+        v[1] = v[8]; // 8283D55C
+        v[8] = __vrsqrtefp(v[8]); // 8283D560
+        v[54] = __vmaddfp(v[46], v[46], v[54]); // 8283D564
+        __vector4 spill40 = v[7]; // 8283D56C
+        v[25] = __vmulfp(v[9], v[9]); // 8283D570
+        v[20] = __vmulfp(v[9], v[11]); // 8283D574
+        v[24] = __vmulfp(v[8], v[8]); // 8283D578
+        v[19] = __vmulfp(v[8], v[11]); // 8283D57C
+        v[7] = __vrsqrtefp(v[54]); // 8283D580
+        v[1] = __vnmsubfp(v[1], v[24], v[10]); // 8283D584
+        v[8] = __vmaddfp(v[1], v[19], v[8]); // 8283D588
+        v[1] = __vmulfp(v[7], v[7]); // 8283D58C
+        v[18] = spill40; // 8283D594
+        v[25] = __vnmsubfp(v[18], v[25], v[10]); // 8283D598
+        v[9] = __vmaddfp(v[25], v[20], v[9]); // 8283D59C
+        v[25] = __vor(v[54], v[54]); // 8283D5A0
+        v[54] = __vmulfp(v[4], v[9]); // 8283D5A4
+        v[24] = __vmulfp(v[7], v[11]); // 8283D5A8
+        v[20] = spill50; // 8283D5B0
+        v[52] = __vmulfp(v[2], v[9]); // 8283D5B4
+        v[19] = spill80; // 8283D5BC
+        v[50] = __vmulfp(v[31], v[9]); // 8283D5C0
+        v[4] = __vnmsubfp(v[25], v[1], v[10]); // 8283D5C8
+        v[25] = spill70; // 8283D5D0
+        v[53] = __vmulfp(v[30], v[8]); // 8283D5D4
+        v[51] = __vmulfp(v[23], v[8]); // 8283D5DC
+        v[49] = __vmulfp(v[22], v[8]); // 8283D5E0
+        v[8] = __vmulfp(v[21], v[0]); // 8283D5E4
+        v[17] = __vmulfp(v[44], v[17]); // 8283D5E8
+        v[38] = KF_MIN_PLANE_DIST.mV; // 8283D5EC
+        v[9] = __vmaddfp(v[4], v[24], v[7]); // 8283D5F0
+        v[24] = spill60; // 8283D5F8
+        v[7] = __vmulfp(v[54], v[6]); // 8283D5FC
+        v[2] = __vmulfp(v[53], v[29]); // 8283D600
+        v[48] = __vmulfp(v[48], v[9]); // 8283D604
+        v[46] = __vmulfp(v[46], v[9]); // 8283D608
+        v[47] = __vmulfp(v[47], v[9]); // 8283D60C
+        v[7] = __vmaddfp(v[52], v[5], v[7]); // 8283D610
+        v[2] = __vmaddfp(v[51], v[28], v[2]); // 8283D614
+        v[9] = __vmulfp(v[48], v[26]); // 8283D618
+        v[4] = v[7]; // 8283D61C
+        v[31] = v[2]; // 8283D620
+        v[4] = __vmaddfp(v[50], v[3], v[4]); // 8283D624
+        v[31] = __vmaddfp(v[49], v[27], v[31]); // 8283D628
+        v[9] = __vmaddfp(v[47], v[25], v[9]); // 8283D62C
+        v[22] = v[4]; // 8283D630
+        v[37] = v[31]; // 8283D634
+        v[39] = v[9]; // 8283D638
+        v[9] = __vmaddfp(v[20], v[13], v[8]); // 8283D63C
+        v[39] = __vmaddfp(v[46], v[24], v[39]); // 8283D640
+        v[9] = __vmaddfp(v[19], v[12], v[9]); // 8283D644
+        v[1] = __vor(v[39], v[39]); // 8283D648
+        v[45] = v[9]; // 8283D64C
+        v[9] = __vmulfp(v[45], v[0]); // 8283D650
+        v[8] = __vmulfp(v[45], v[13]); // 8283D654
+        v[7] = __vmulfp(v[45], v[12]); // 8283D658
+        v[9] = __vsubfp(v[21], v[9]); // 8283D65C
+        v[8] = __vsubfp(v[20], v[8]); // 8283D660
+        v[7] = __vsubfp(v[19], v[7]); // 8283D664
+        v[9] = __vmaddfp(v[0], v[55], v[9]); // 8283D668
+        v[8] = __vmaddfp(v[13], v[55], v[8]); // 8283D66C
+        v[7] = __vmaddfp(v[12], v[55], v[7]); // 8283D670
+        v[2] = __vmulfp(v[9], v[54]); // 8283D674
+        v[23] = __vmulfp(v[9], v[53]); // 8283D678
+        v[36] = __vmulfp(v[9], v[48]); // 8283D67C
+        v[2] = __vmaddfp(v[8], v[52], v[2]); // 8283D680
+        v[23] = __vmaddfp(v[8], v[51], v[23]); // 8283D684
+        v[36] = __vmaddfp(v[8], v[47], v[36]); // 8283D688
+        v[30] = v[2]; // 8283D68C
+        v[23] = __vmaddfp(v[7], v[49], v[23]); // 8283D690
+        v[30] = __vmaddfp(v[7], v[50], v[30]); // 8283D694
+        v[31] = __vcmpgtfp(v[23], v[31]); // 8283D698
+        v[35] = v[23]; // 8283D69C
+        v[2] = __vcmpgtfp(v[30], v[4]); // 8283D6A0
+        v[40] = v[30]; // 8283D6A4
+        v[4] = __vspltisw(0); // 8283D6A8
+        v[41] = v[2]; // 8283D6AC
+        v[41] = __vsel(v[40], v[22], v[41]); // 8283D6B0
+        v[40] = v[31]; // 8283D6B4
+        v[22] = __vor(v[36], v[36]); // 8283D6B8
+        v[36] = __vmulfp(v[30], v[52]); // 8283D6BC
+        v[40] = __vsel(v[35], v[37], v[40]); // 8283D6C0
+        v[37] = __vmulfp(v[30], v[54]); // 8283D6C4
+        v[30] = __vmulfp(v[30], v[50]); // 8283D6C8
+        v[35] = __vmulfp(v[23], v[53]); // 8283D6CC
+        v[22] = __vmaddfp(v[7], v[46], v[22]); // 8283D6D0
+        v[36] = __vsubfp(v[8], v[36]); // 8283D6D4
+        v[37] = __vsubfp(v[9], v[37]); // 8283D6D8
+        v[30] = __vsubfp(v[7], v[30]); // 8283D6DC
+        v[36] = __vmaddfp(v[52], v[41], v[36]); // 8283D6E0
+        v[52] = __vsubfp(v[9], v[35]); // 8283D6E4
+        v[37] = __vmaddfp(v[54], v[41], v[37]); // 8283D6E8
+        v[54] = __vmulfp(v[23], v[51]); // 8283D6EC
+        v[30] = __vmaddfp(v[50], v[41], v[30]); // 8283D6F0
+        v[50] = __vmulfp(v[43], v[16]); // 8283D6F4
+        v[16] = __vsubfp(v[37], v[6]); // 8283D6F8
+        v[44] = __vsubfp(v[36], v[5]); // 8283D6FC
+        v[43] = __vsubfp(v[30], v[3]); // 8283D700
+        v[30] = v[22]; // 8283D704
+        v[52] = __vmaddfp(v[53], v[40], v[52]); // 8283D708
+        v[54] = __vsubfp(v[8], v[54]); // 8283D70C
+        v[23] = __vmulfp(v[23], v[49]); // 8283D710
+        spillc0 = v[30]; // 8283D718
+        v[30] = __vcmpgtfp(v[22], v[39]); // 8283D71C
+        v[15] = __vmulfp(v[42], v[15]); // 8283D720
+        v[16] = __vmulfp(v[16], v[14]); // 8283D724
+        v[53] = __vsubfp(v[52], v[29]); // 8283D728
+        v[52] = __vmulfp(v[22], v[48]); // 8283D72C
+        v[54] = __vmaddfp(v[51], v[40], v[54]); // 8283D730
+        v[23] = __vsubfp(v[7], v[23]); // 8283D734
+        v[16] = __vmaddfp(v[44], v[63], v[16]); // 8283D738
+        v[44] = __vmulfp(v[22], v[47]); // 8283D73C
+        v[53] = __vmulfp(v[53], v[61]); // 8283D740
+        v[52] = __vsubfp(v[9], v[52]); // 8283D744
+        v[54] = __vsubfp(v[54], v[28]); // 8283D748
+        v[23] = __vmaddfp(v[49], v[40], v[23]); // 8283D74C
+        v[16] = __vmaddfp(v[43], v[62], v[16]); // 8283D750
+        v[51] = __vsubfp(v[8], v[44]); // 8283D754
+        v[53] = __vmaddfp(v[54], v[60], v[53]); // 8283D758
+        v[23] = __vsubfp(v[23], v[27]); // 8283D75C
+        v[16] = __vmaxfp(v[16], v[4]); // 8283D760
+        v[53] = __vmaddfp(v[23], v[59], v[53]); // 8283D764
+        v[17] = __vminfp(v[16], v[17]); // 8283D768
+        v[16] = v[22]; // 8283D76C
+        v[22] = __vmulfp(v[22], v[46]); // 8283D770
+        v[16] = __vsel(v[16], v[1], v[30]); // 8283D774
+        v[23] = __vmaxfp(v[53], v[4]); // 8283D778
+        v[52] = __vmaddfp(v[48], v[16], v[52]); // 8283D77C
+        v[51] = __vmaddfp(v[47], v[16], v[51]); // 8283D780
+        v[6] = __vmaddfp(v[14], v[17], v[6]); // 8283D784
+        v[22] = __vsubfp(v[7], v[22]); // 8283D788
+        v[5] = __vmaddfp(v[63], v[17], v[5]); // 8283D78C
+        v[3] = __vmaddfp(v[62], v[17], v[3]); // 8283D790
+        v[14] = __vsubfp(v[51], v[25]); // 8283D794
+        v[9] = __vsel(v[9], v[6], v[2]); // 8283D798
+        v[22] = __vmaddfp(v[46], v[16], v[22]); // 8283D79C
+        v[16] = __vsubfp(v[52], v[26]); // 8283D7A0
+        v[8] = __vsel(v[8], v[5], v[2]); // 8283D7A4
+        v[5] = __vspltisw(-1); // 8283D7A8
+        spilld0 = v[9]; // 8283D7B0
+        v[9] = __vminfp(v[23], v[50]); // 8283D7B4
+        v[5] = __vcfsx(v[5], 0); // 8283D7B8
+        v[22] = __vsubfp(v[22], v[24]); // 8283D7BC
+        v[6] = __vmulfp(v[16], v[58]); // 8283D7C0
+        v[29] = __vmaddfp(v[61], v[9], v[29]); // 8283D7C4
+        v[28] = __vmaddfp(v[60], v[9], v[28]); // 8283D7C8
+        v[27] = __vmaddfp(v[59], v[9], v[27]); // 8283D7CC
+        v[9] = __vsel(v[7], v[3], v[2]); // 8283D7D0
+        v[6] = __vmaddfp(v[14], v[57], v[6]); // 8283D7D4
+        v[8] = __vsel(v[8], v[28], v[31]); // 8283D7D8
+        v[9] = __vsel(v[9], v[27], v[31]); // 8283D7DC
+        v[6] = __vmaddfp(v[22], v[56], v[6]); // 8283D7E0
+        v[6] = __vmaxfp(v[6], v[4]); // 8283D7E4
+        v[23] = spilld0; // 8283D7EC
+        v[29] = __vsel(v[23], v[29], v[31]); // 8283D7F0
+        v[6] = __vminfp(v[6], v[15]); // 8283D7F4
+        v[26] = __vmaddfp(v[58], v[6], v[26]); // 8283D7F8
+        v[25] = __vmaddfp(v[57], v[6], v[25]); // 8283D7FC
+        v[24] = __vmaddfp(v[56], v[6], v[24]); // 8283D800
+        v[26] = __vsel(v[29], v[26], v[30]); // 8283D804
+        v[25] = __vsel(v[8], v[25], v[30]); // 8283D808
+        v[24] = __vsel(v[9], v[24], v[30]); // 8283D80C
+        v[8] = __vsubfp(v[26], v[21]); // 8283D810
+        v[7] = __vsubfp(v[25], v[20]); // 8283D814
+        v[6] = __vsubfp(v[24], v[19]); // 8283D818
+        v[9] = __vmulfp(v[8], v[8]); // 8283D81C
+        v[9] = __vmaddfp(v[7], v[7], v[9]); // 8283D820
+        v[23] = __vmaddfp(v[6], v[6], v[9]); // 8283D824
+        v[9] = __vrsqrtefp(v[23]); // 8283D828
+        v[29] = __vmulfp(v[9], v[9]); // 8283D82C
+        v[11] = __vmulfp(v[9], v[11]); // 8283D830
+        v[10] = __vnmsubfp(v[23], v[29], v[10]); // 8283D834
+        v[3] = __vmaddfp(v[10], v[11], v[9]); // 8283D838
+        v[11] = __vnor(v[4], v[4]); // 8283D83C
+        v[11] = __vmrglw(v[11], v[4]); // 8283D840
+        v[9] = __vmulfp(v[7], v[3]); // 8283D844
+        v[18] = spill90; // 8283D84C
+        v[10] = __vmulfp(v[8], v[3]); // 8283D850
+        v[8] = __vpermwi(v[11], 39); // 8283D854
+        v[27] = __vmulfp(v[6], v[3]); // 8283D858
+        spill80 = v[4]; // 8283D860
+        spillc0 = v[3]; // 8283D868
+        spilla0 = v[23]; // 8283D874
+        v[26] = __vpermwi(v[26], 27); // 8283D878
+        v[11] = __vand(v[8], v[11]); // 8283D87C
+        spill90 = v[12]; // 8283D884
+        v[25] = __vpermwi(v[25], 198); // 8283D888
+        v[24] = __vpermwi(v[24], 177); // 8283D88C
+        v[8] = __vpermwi(v[11], 108); // 8283D890
+        v[17] = __vmulfp(v[9], v[5]); // 8283D894
+        v[9] = __vmaddfp(v[9], v[18], v[20]); // 8283D898
+        v[22] = __vmulfp(v[10], v[5]); // 8283D89C
+        v[16] = __vmulfp(v[27], v[5]); // 8283D8A0
+        v[10] = __vmaddfp(v[10], v[18], v[21]); // 8283D8A4
+        v[27] = __vmaddfp(v[27], v[18], v[19]); // 8283D8A8
+        v[6] = __vpermwi(v[17], 198); // 8283D8AC
+        v[28] = __vpermwi(v[9], 198); // 8283D8B0
+        v[7] = __vpermwi(v[22], 27); // 8283D8B4
+        v[9] = __vpermwi(v[11], 99); // 8283D8B8
+        spilld0 = v[16]; // 8283D8C0
+        v[5] = __vpermwi(v[16], 177); // 8283D8C4
+        spillb0 = v[18]; // 8283D8CC
+        v[29] = __vpermwi(v[10], 27); // 8283D8D0
+        v[10] = __vpermwi(v[11], 75); // 8283D8D4
+        v[19] = __vsel(v[7], v[6], v[8]); // 8283D8D8
+        v[21] = __vsel(v[7], v[6], v[9]); // 8283D8DC
+        v[27] = __vpermwi(v[27], 177); // 8283D8E0
+        v[3] = __vsel(v[7], v[6], v[11]); // 8283D8E4
+        v[12] = __vsel(v[7], v[6], v[9]); // 8283D8E8
+        v[4] = __vsel(v[7], v[6], v[10]); // 8283D8EC
+        v[21] = __vsel(v[21], v[5], v[8]); // 8283D8F0
+        v[20] = __vsel(v[19], v[5], v[11]); // 8283D8F4
+        v[12] = __vsel(v[12], v[5], v[8]); // 8283D8F8
+        v[14] = __vsel(v[4], v[5], v[9]); // 8283D8FC
+        v[21] = __vpermwi(v[21], 108); // 8283D900
+        v[4] = __vsel(v[3], v[5], v[10]); // 8283D904
+        v[20] = __vpermwi(v[20], 177); // 8283D908
+        v[19] = __vsel(v[7], v[6], v[10]); // 8283D90C
+        v[63] = __vpermwi(v[12], 108); // 8283D910
+        lTriangleNormal0.mV = v[14]; // 8283D914
+        v[15] = __vpermwi(v[4], 198); // 8283D918
+        v[19] = __vsel(v[19], v[5], v[9]); // 8283D91C
+        lTriangleNormal1.mV = v[21]; // 8283D920
+        v[21] = __vsel(v[7], v[6], v[8]); // 8283D924
+        lTriangleNormal2.mV = v[20]; // 8283D928
+        v[7] = __vsel(v[7], v[6], v[11]); // 8283D930
+        v[6] = __vsel(v[29], v[28], v[9]); // 8283D934
+        v[21] = __vsel(v[21], v[5], v[11]); // 8283D938
+        v[20] = __vsel(v[29], v[28], v[10]); // 8283D93C
+        lTriangleNormal3.mV = v[15]; // 8283D940
+        v[7] = __vsel(v[7], v[5], v[10]); // 8283D948
+        lContactNormal0.mV = v[19]; // 8283D94C
+        v[21] = __vpermwi(v[21], 177); // 8283D950
+        lContactNormal1.mV = v[63]; // 8283D954
+        v[6] = __vsel(v[6], v[27], v[8]); // 8283D958
+        v[15] = __vsel(v[29], v[28], v[8]); // 8283D95C
+        v[7] = __vpermwi(v[7], 198); // 8283D960
+        v[29] = __vsel(v[29], v[28], v[11]); // 8283D964
+        v[28] = __vsel(v[20], v[27], v[9]); // 8283D968
+        v[6] = __vpermwi(v[6], 108); // 8283D96C
+        v[19] = __vsel(v[26], v[25], v[10]); // 8283D970
+        v[5] = __vsel(v[15], v[27], v[11]); // 8283D974
+        lContactNormal2.mV = v[21]; // 8283D978
+        v[29] = __vsel(v[29], v[27], v[10]); // 8283D980
+        v[27] = __vsel(v[19], v[24], v[9]); // 8283D984
+        v[5] = __vpermwi(v[5], 177); // 8283D988
+        lContactNormal3.mV = v[7]; // 8283D98C
+        lSphereContactPoint0.mV = v[28]; // 8283D994
+        v[29] = __vpermwi(v[29], 198); // 8283D998
+        lSphereContactPoint1.mV = v[6]; // 8283D99C
+        v[0] = __vmulfp(v[22], v[0]); // 8283D9A4
+        lSphereContactPoint2.mV = v[5]; // 8283D9A8
+        v[7] = __vnor(v[31], v[31]); // 8283D9B0
+        v[31] = __vsel(v[26], v[25], v[11]); // 8283D9B4
+        v[12] = spill90; // 8283D9BC
+        v[1] = spill30; // 8283D9C8
+        v[3] = spillc0; // 8283D9D0
+        v[6] = __vnor(v[2], v[2]); // 8283D9D8
+        v[4] = spill80; // 8283D9E0
+        lSphereContactPoint3.mV = v[29]; // 8283D9E4
+        v[29] = __vsel(v[26], v[25], v[9]); // 8283D9E8
+        lTriangleContactPoint0.mV = v[27]; // 8283D9EC
+        v[9] = __vnor(v[30], v[30]); // 8283D9F8
+        v[0] = __vmaddfp(v[17], v[13], v[0]); // 8283D9FC
+        v[13] = __vsel(v[26], v[25], v[8]); // 8283DA00
+        v[8] = __vsel(v[29], v[24], v[8]); // 8283DA04
+        v[13] = __vsel(v[13], v[24], v[11]); // 8283DA08
+        v[11] = __vpermwi(v[8], 108); // 8283DA0C
+        v[8] = __vaddfp(v[18], v[1]); // 8283DA10
+        v[13] = __vpermwi(v[13], 177); // 8283DA14
+        v[0] = __vmaddfp(v[16], v[12], v[0]); // 8283DA18
+        lTriangleContactPoint1.mV = v[11]; // 8283DA1C
+        v[12] = __vsel(v[31], v[24], v[10]); // 8283DA24
+        v[10] = __vmulfp(v[23], v[3]); // 8283DA28
+        v[12] = __vpermwi(v[12], 198); // 8283DA2C
+        lTriangleContactPoint2.mV = v[13]; // 8283DA30
+        v[13] = __vand(v[6], v[7]); // 8283DA38
+        v[13] = __vand(v[13], v[9]); // 8283DA3C
+        lTriangleContactPoint3.mV = v[12]; // 8283DA40
+        v[12] = lTriangles.mEdge2Cosigns.mV; // 8283DA44
+        v[11] = lTriangles.mEdge1Cosigns.mV; // 8283DA4C
+        v[12] = __vcmpgefp(v[0], v[12]); // 8283DA50
+        v[11] = __vcmpgefp(v[0], v[11]); // 8283DA54
+        v[5] = lTriangles.mEdge0Cosigns.mV; // 8283DA58
+        v[10] = __vcmpgefp(v[8], v[10]); // 8283DA5C
+        v[13] = __vnor(v[13], v[13]); // 8283DA60
+        v[8] = __vcmpgefp(v[0], v[5]); // 8283DA64
+        v[0] = __vcmpgefp(v[0], v[4]); // 8283DA68
+        v[12] = __vor(v[9], v[12]); // 8283DA6C
+        v[11] = __vor(v[7], v[11]); // 8283DA70
+        v[9] = __vor(v[6], v[8]); // 8283DA74
+        v[0] = __vor(v[13], v[0]); // 8283DA78
+        v[12] = __vand(v[11], v[12]); // 8283DA7C
+        v[11] = __vsubfp(v[45], v[55]); // 8283DA80
+        v[12] = __vand(v[9], v[12]); // 8283DA84
+        v[9] = lTriangles.mValidMasks.mV; // 8283DA88
+        v[0] = __vand(v[0], v[12]); // 8283DA8C
+        v[13] = __vcmpgefp(v[11], v[38]); // 8283DA90
+        v[0] = __vand(v[13], v[0]); // 8283DA94
+        v[0] = __vand(v[9], v[0]); // 8283DA98
+        v[1] = __vand(v[0], v[10]); // 8283DA9C
+        return Triangle4::Mask4(v[1]);
     }
 }
 
-// =============================================================================================
-// ⭐⭐⭐ THE SWEPT (CONTINUOUS) CONTACT KERNEL — swept leg, 2026-08-16.
-//
-//   CgsGeometric::IntersectTriangle4SweptSphere        @0x8283EF50 (896)
-//   CgsGeometric::Intersect2DCircleWithTriangleSOA     @0x82839AC0 (156)  [inlined below]
-//
-// WHY THIS EXISTS AND WHY THE IN-PLACE KERNEL ABOVE CANNOT STAND IN FOR IT.
-// DoRaceCarWorldContactGeneration picks between two contact generators per car per frame:
-// below ~6 m/s it posts a SphereList job (the kernel above, which tests the sensor spheres
-// where they are RIGHT NOW), and above it a SweptSphereList job (this one, which tests the
-// volume each sphere sweeps out over the frame). At 30 m/s a sphere travels ~0.5 m between
-// frames, so an in-place test simply misses the wall it passes through. Until this landed the
-// swept arm was an unimplemented gate, and the car had NO body-shell collision above walking
-// pace anywhere in the map.
-//
-// ─── HOW THIS WAS DERIVED (method, verbatim reproducible) ────────────────────────────────
-//   1. every instruction word read out of the image (scratchpad x360rd, self-test 10/10) and
-//      its OPERANDS re-decoded from the raw word — IDA prints VMX128 source registers "+32"
-//      per operand FIELD, and these two bodies carry 169 such misprints. The decoder was
-//      round-tripped on the already-verified sphere kernel @0x8283D2E0 first;
-//   2. the decoded bodies executed SYMBOLICALLY to read the algorithm off the dataflow
-//      (scratchpad swept/symtrace.py) and NUMERICALLY on float32 lanes to produce ground
-//      truth (scratchpad swept/sim_swept.py, which inlines the @0x82839AC0 call);
-//   3. this scalar lowering fuzz-compared against that execution: 2000 random
-//      triangle/swept-sphere trials (475 of them console-hits) plus a hand-built adversarial
-//      set (sweep parallel to the plane inside and outside the slab, zero-length sweep,
-//      back-face approach, exact vertex graze, 800 m sweep, 1e-4 m radius, collinear and
-//      fully degenerate triangles, per-lane valid masking) — 0 hit-mask mismatches and
-//      0 value mismatches on every output lane.
-// The DecFIGS PS3 DWARF (CgsTriangleSphere.cpp:2128) supplied the parameter list and the
-// names of the helpers the console inlined into this body: SolveSweptCircleEquationSOA
-// (:1958), IsBetween0And1SOA (:1989), Intersect2DSweptCircleWithVertexAndEdgeSOA (:2024).
-// The X360 image is the authority for every structural decision below.
-//
-// ─── THE ALGORITHM ───────────────────────────────────────────────────────────────────────
-// Per lane, with C the sphere centre, r its radius and D = direction * length the sweep:
-//   * N = normalize(cross(P1-P0, P2-P1)), the single-sided face normal; d = dot(N,P0);
-//   * an in-plane orthonormal frame: U = normalize(P1-P0), V = normalize(cross(U,N));
-//   * clip the sweep to the plane slab of half-thickness r: the two crossing times
-//     (h0 -/+ r) / -dot(D,N) give [tEnter,tExit] clamped to [0,1]; a sweep parallel to the
-//     plane is [0,1] if |h0| < r and rejected otherwise;
-//   * FACE contact: at tEnter the sphere cuts a circle of radius^2 = r^2 - h(tEnter)^2 in
-//     the plane. Intersect2DCircleWithTriangleSOA gives the closest point on the triangle and
-//     whether the circle reaches it;
-//   * EDGE/VERTEX contact: for each of the three (vertex, outgoing edge) pairs, solve the
-//     swept-circle quadratic for the vertex and for the edge's perpendicular component, keep
-//     the earlier root that lies in [0,1] (and, for an edge, whose foot lies within [0,|e|]);
-//   * the FACE result wins outright when it hits; otherwise the earliest of the three pairs;
-//   * outputs: TriangleContactPoint is the contact point on the triangle, SphereContactPoint
-//     is the same point brought back into the sphere's START frame (P - D*t) for a swept hit
-//     or the point on the sphere's surface (C + n*r) for a face hit, ContactNormal points
-//     from C towards it, TriangleNormal is N — and ⭐ THE CONTACT TIME RIDES IN THE w LANE OF
-//     BOTH CONTACT POINTS (the console's final vmrghw pairs each xyz with tHit);
-//   * the lane is accepted when the slab was not rejected, something hit, the contact normal
-//     OPPOSES the face normal (single-sided), and the batch's own valid-mask lane is set.
-//
-// ⚠️ NO PADDING, NO KF_MIN_PLANE_DIST, NO EDGE-COSINE GATES. All three appear in the in-place
-// kernel above and NONE of them appears here — checked instruction by instruction, not
-// assumed from the family. The swept kernel's only rejection filters are the slab clip, the
-// root windows and the single-sided normal test.
-//
-// ⚠️ PC LOWERING, same flag and same precedent as the kernel above: the console refines
-// `vrsqrtefp` and `vrefp` with in-line Newton-Raphson (two steps for the quadratic solver's
-// 1/(2a) and its sqrt(discriminant), one for each normalisation); all of them are lowered to
-// the exact operation here. More accurate by a few ulps, decision-identical except within a
-// ulp of a threshold, and it is the abstraction the numeric model above was verified against.
-// =============================================================================================
-
+// The swept Triangle4 path uses the original 2D-circle helper and VMX order.
 namespace CgsGeometric
 {
-    namespace
+    __vector4 Intersect2DCircleWithTriangleSOA(__vector4 a1, __vector4 a2, __vector4 a3, __vector4 a4, __vector4 a5, __vector4 a6, __vector4 a7, __vector4 a8, __vector4 a9, __vector4 a10, __vector4 a11, __vector4 a12, __vector4 a13, __vector4 a14, __vector4 a15, __vector4 a16, __vector4 a17, __vector4 a18, __vector4& out0, __vector4& out1)
     {
-        // A point in the triangle's own in-plane (U,V) frame. The console has no such type —
-        // it carries every one of these as two separate SoA registers, which is exactly why
-        // Intersect2DCircleWithTriangleSOA takes eighteen VectorIntrinsics by value.
-        struct SweptPlanePoint2 { f32 u, v; };
-
-        // vminfp / vmaxfp: `a < b ? a : b` and `a > b ? a : b`. Spelled out rather than reused
-        // from <algorithm> so the NaN behaviour matches the console's — a NaN operand makes the
-        // comparison false and the SECOND operand wins, in both.
-        inline f32 SweptMin(f32 lfA, f32 lfB) { return (lfA < lfB) ? lfA : lfB; }
-        inline f32 SweptMax(f32 lfA, f32 lfB) { return (lfA > lfB) ? lfA : lfB; }
-
-        // -------------------------------------------------------------------------------------
-        // CgsGeometric::Intersect2DCircleWithTriangleSOA @0x82839AC0 (156), scalar-lowered.
-        // Returns "the circle reaches the triangle" and writes the closest point on the
-        // triangle to the circle centre (the centre itself when it is inside).
-        //
-        // lfRadiusSq doubles as the initial best-distance-squared, which is what makes the
-        // "found anything" flag mean "within the radius": a candidate is only taken when its
-        // distance squared beats the current best, and the first best IS r^2.
-        //
-        // ⚠️⚠️ VERTEX C IS NOT A CANDIDATE, AND THAT IS MEASURED, NOT AN OMISSION HERE.
-        // The console tests vertex A (against edge AB's direction), then vertex B (against
-        // edge BC's) — and then emits the vertex-B test a SECOND time, against the same
-        // |B-centre|^2 and the same `0 >= dot(B->centre, dirBC)` predicate (0x82839BAC..
-        // 0x82839C64; registers resolved by hand, the repeat selects v6/v7 = B.u/B.v, not the
-        // third vertex). The repeat is idempotent, so the observable candidate set really is
-        // {A, B, edge AB, edge BC, edge CA}. Reproduced as shipped: a circle sitting in vertex
-        // C's Voronoi region falls through to "no face contact" here and is picked up by the
-        // VERTEX SWEEP in the caller instead, which does test all three vertices.
-        // -------------------------------------------------------------------------------------
-        bool Intersect2DCircleWithTriangleSOA(SweptPlanePoint2 lCentre, f32 lfRadiusSq,
-                                           SweptPlanePoint2 lA, SweptPlanePoint2 lB,
-                                           SweptPlanePoint2 lC,
-                                           SweptPlanePoint2 lDirAB, SweptPlanePoint2 lDirBC,
-                                           SweptPlanePoint2 lDirCA,
-                                           f32 lfLenAB, f32 lfLenBC, f32 lfLenCA,
-                                           SweptPlanePoint2& lrClosestPoint)
-        {
-            // The winding test: the centre is inside when it lies left of all three directed
-            // edges (0x82839B24..0x82839B54, three vnmsubfp + three vcmpgefp + two vand).
-            const f32 lfSideAB = (lDirAB.u * (lA.v - lCentre.v)) - (lDirAB.v * (lA.u - lCentre.u));
-            const f32 lfSideBC = (lDirBC.u * (lB.v - lCentre.v)) - (lDirBC.v * (lB.u - lCentre.u));
-            const f32 lfSideCA = (lDirCA.u * (lC.v - lCentre.v)) - (lDirCA.v * (lC.u - lCentre.u));
-            const bool lbInside = (lfSideBC >= 0.0f) && (lfSideAB >= 0.0f) && (lfSideCA >= 0.0f);
-
-            const SweptPlanePoint2 laQ[3] =
-            {
-                { lCentre.u - lA.u, lCentre.v - lA.v },
-                { lCentre.u - lB.u, lCentre.v - lB.v },
-                { lCentre.u - lC.u, lCentre.v - lC.v },
-            };
-            const SweptPlanePoint2 laBase[3] = { lA, lB, lC };
-            const SweptPlanePoint2 laDir[3]  = { lDirAB, lDirBC, lDirCA };
-            const f32              lafLen[3] = { lfLenAB, lfLenBC, lfLenCA };
-
-            // The projection of each vertex-to-centre offset onto that vertex's OUTGOING edge.
-            f32  lafProj[3];
-            bool labBehind[3];
-            for (s32 liEdge = 0; liEdge < 3; ++liEdge)
-            {
-                lafProj[liEdge] = (laQ[liEdge].u * laDir[liEdge].u)
-                                + (laQ[liEdge].v * laDir[liEdge].v);
-                labBehind[liEdge] = (0.0f >= lafProj[liEdge]);
-            }
-
-            f32  lfBest  = lfRadiusSq;
-            bool lbFound = false;
-            lrClosestPoint = lCentre;
-
-            // The two vertex candidates, in the console's order. (Vertex C is absent — see the
-            // banner above; `liVertex < 2` is the measured bound, not a typo.)
-            for (s32 liVertex = 0; liVertex < 2; ++liVertex)
-            {
-                const f32 lfDistSq = (laQ[liVertex].u * laQ[liVertex].u)
-                                   + (laQ[liVertex].v * laQ[liVertex].v);
-                if ((lfBest >= lfDistSq) && labBehind[liVertex])
-                {
-                    lfBest = lfDistSq;
-                    lrClosestPoint = laBase[liVertex];
-                    lbFound = true;
-                }
-            }
-
-            // The three edges: the perpendicular offset from the edge line, accepted only when
-            // the foot of the projection lies strictly inside the segment. `!(behind || proj >=
-            // len)` is the console's vnor of the two tests, kept in that form so a NaN
-            // projection rejects the edge exactly as it does there.
-            for (s32 liEdge = 0; liEdge < 3; ++liEdge)
-            {
-                const f32 lfPerpU = laQ[liEdge].u - (lafProj[liEdge] * laDir[liEdge].u);
-                const f32 lfPerpV = laQ[liEdge].v - (lafProj[liEdge] * laDir[liEdge].v);
-                const f32 lfDistSq = (lfPerpU * lfPerpU) + (lfPerpV * lfPerpV);
-
-                const bool lbOnSegment =
-                    !(labBehind[liEdge] || (lafProj[liEdge] >= lafLen[liEdge]));
-
-                if ((lfBest >= lfDistSq) && lbOnSegment)
-                {
-                    lfBest = lfDistSq;
-                    lrClosestPoint.u = (lafProj[liEdge] * laDir[liEdge].u) + laBase[liEdge].u;
-                    lrClosestPoint.v = (lafProj[liEdge] * laDir[liEdge].v) + laBase[liEdge].v;
-                    lbFound = true;
-                }
-            }
-
-            // 0x82839D18: an inside centre reports ITSELF as the closest point, overriding
-            // whatever the cascade picked.
-            if (lbInside)
-            {
-                lrClosestPoint = lCentre;
-            }
-            return lbFound || lbInside;
-        }
-
-        // -------------------------------------------------------------------------------------
-        // CgsGeometric::SolveSweptCircleEquationSOA (DWARF CgsTriangleSphere.cpp:1958), inlined
-        // by the console. The smaller root of `a t^2 + b t + c = 0`, plus the discriminant the
-        // caller tests separately.
-        //
-        // ⚠️ THE ZERO-DISCRIMINANT GUARD IS LOAD-BEARING, not defensive: the console computes
-        // the square root as `disc * rsqrt(disc)`, and rsqrt(0) is +inf, so 0 * inf would hand
-        // back a NaN root for every exactly-tangential sweep. It selects a literal 0 in that
-        // case (0x8283F480 `vsel(sqrt, 0, disc == 0)`), and so does this.
-        // -------------------------------------------------------------------------------------
-        f32 SolveSweptCircleEquation(f32 lfA, f32 lfB, f32 lfC, f32& lrfDiscriminant)
-        {
-            lrfDiscriminant = (lfB * lfB) - ((4.0f * lfA) * lfC);
-
-            const f32 lfInvTwoA = 1.0f / (2.0f * lfA);              // vrefp + 2 NR
-            const f32 lfRoot = (lrfDiscriminant == 0.0f)
-                             ? 0.0f
-                             : (lrfDiscriminant * (1.0f / std::sqrt(lrfDiscriminant))); // vrsqrtefp + 2 NR
-
-            return SweptMin((-lfB + lfRoot) * lfInvTwoA, (-lfB - lfRoot) * lfInvTwoA);
-        }
+        __vector4 v[128];
+        v[1] = a1;
+        v[2] = a2;
+        v[3] = a3;
+        v[4] = a4;
+        v[5] = a5;
+        v[6] = a6;
+        v[7] = a7;
+        v[8] = a8;
+        v[9] = a9;
+        v[10] = a10;
+        v[11] = a11;
+        v[12] = a12;
+        v[13] = a13;
+        __vector4 stack224 = a14;
+        __vector4 stack240 = a15;
+        __vector4 stack256 = a16;
+        __vector4 stack272 = a17;
+        __vector4 stack288 = a18;
+        v[27] = __vsubfp(v[7], v[2]); // 82839AC0
+        v[26] = __vsubfp(v[5], v[2]); // 82839AC8
+        v[0] = __vspltisw(0); // 82839ACC
+        v[25] = __vsubfp(v[9], v[2]); // 82839AD0
+        v[15] = v[3]; // 82839AD4
+        v[24] = __vsubfp(v[6], v[1]); // 82839AD8
+        v[22] = v[1]; // 82839ADC
+        v[23] = __vsubfp(v[4], v[1]); // 82839AE0
+        v[62] = v[5]; // 82839AE4
+        v[21] = stack224; // 82839AE8
+        v[16] = __vsubfp(v[8], v[1]); // 82839AEC
+        v[31] = __vsubfp(v[1], v[4]); // 82839AF4
+        v[30] = __vsubfp(v[1], v[6]); // 82839AF8
+        __vector4 stackm48 = v[22]; // 82839B00
+        v[29] = __vsubfp(v[2], v[5]); // 82839B04
+        v[61] = v[2]; // 82839B08
+        v[28] = __vsubfp(v[2], v[7]); // 82839B0C
+        v[60] = v[6]; // 82839B10
+        v[19] = __vsubfp(v[1], v[8]); // 82839B14
+        v[59] = v[7]; // 82839B18
+        v[20] = stack240; // 82839B1C
+        v[18] = __vsubfp(v[2], v[9]); // 82839B20
+        v[27] = __vmulfp(v[12], v[27]); // 82839B24
+        v[26] = __vmulfp(v[10], v[26]); // 82839B28
+        v[25] = __vmulfp(v[21], v[25]); // 82839B2C
+        v[27] = __vnmsubfp(v[13], v[24], v[27]); // 82839B30
+        v[26] = __vnmsubfp(v[11], v[23], v[26]); // 82839B34
+        v[25] = __vnmsubfp(v[20], v[16], v[25]); // 82839B38
+        v[24] = __vmulfp(v[30], v[30]); // 82839B3C
+        v[27] = __vcmpgefp(v[27], v[0]); // 82839B40
+        v[26] = __vcmpgefp(v[26], v[0]); // 82839B44
+        v[25] = __vcmpgefp(v[25], v[0]); // 82839B48
+        v[27] = __vand(v[26], v[27]); // 82839B4C
+        v[26] = __vmulfp(v[31], v[10]); // 82839B50
+        v[23] = __vand(v[27], v[25]); // 82839B54
+        v[25] = __vmulfp(v[30], v[12]); // 82839B58
+        __vector4 stackm16 = v[23]; // 82839B60
+        v[27] = __vmaddfp(v[29], v[11], v[26]); // 82839B64
+        v[26] = __vmaddfp(v[28], v[13], v[25]); // 82839B68
+        v[25] = __vmulfp(v[31], v[31]); // 82839B6C
+        v[17] = __vcmpgefp(v[0], v[27]); // 82839B70
+        v[10] = __vmulfp(v[27], v[10]); // 82839B74
+        v[11] = __vmulfp(v[27], v[11]); // 82839B78
+        v[22] = __vcmpgefp(v[0], v[26]); // 82839B7C
+        v[16] = __vmaddfp(v[29], v[29], v[25]); // 82839B80
+        v[25] = __vmaddfp(v[28], v[28], v[24]); // 82839B84
+        v[24] = __vmulfp(v[19], v[21]); // 82839B88
+        v[12] = __vmulfp(v[26], v[12]); // 82839B8C
+        v[3] = __vcmpgefp(v[3], v[16]); // 82839B90
+        v[23] = v[16]; // 82839B94
+        v[16] = v[25]; // 82839B98
+        v[24] = __vmaddfp(v[18], v[20], v[24]); // 82839B9C
+        __vector4 stackm32 = v[16]; // 82839BA4
+        v[3] = __vand(v[3], v[17]); // 82839BA8
+        v[16] = __vsel(v[15], v[23], v[3]); // 82839BAC
+        v[23] = v[1]; // 82839BB0
+        v[15] = __vor(v[0], v[3]); // 82839BB4
+        v[63] = v[3]; // 82839BB8
+        v[14] = __vsel(v[23], v[4], v[3]); // 82839BBC
+        v[3] = v[16]; // 82839BC0
+        v[16] = __vcmpgefp(v[16], v[25]); // 82839BC4
+        v[23] = v[25]; // 82839BC8
+        v[63] = __vsel(v[61], v[62], v[63]); // 82839BCC
+        v[61] = v[14]; // 82839BD0
+        stackm48 = v[3]; // 82839BD8
+        v[3] = __vand(v[16], v[22]); // 82839BDC
+        v[62] = v[3]; // 82839BE0
+        v[14] = __vor(v[15], v[3]); // 82839BE4
+        v[15] = __vmulfp(v[26], v[13]); // 82839BE8
+        v[13] = __vor(v[63], v[63]); // 82839BEC
+        v[63] = v[3]; // 82839BF0
+        v[62] = __vsel(v[61], v[60], v[62]); // 82839BF4
+        v[63] = __vsel(v[13], v[59], v[63]); // 82839BF8
+        v[16] = stackm48; // 82839C00
+        v[16] = __vsel(v[16], v[23], v[3]); // 82839C04
+        v[3] = __vmulfp(v[24], v[21]); // 82839C08
+        v[21] = __vmulfp(v[24], v[20]); // 82839C0C
+        v[61] = __vcmpgefp(v[16], v[25]); // 82839C10
+        v[13] = __vand(v[61], v[22]); // 82839C14
+        v[31] = __vsubfp(v[31], v[10]); // 82839C18
+        stackm48 = v[2]; // 82839C20
+        stackm32 = v[9]; // 82839C28
+        v[9] = __vor(v[63], v[63]); // 82839C2C
+        v[63] = __vsubfp(v[30], v[12]); // 82839C30
+        v[29] = __vsubfp(v[29], v[11]); // 82839C38
+        v[20] = __vor(v[62], v[62]); // 82839C3C
+        v[30] = __vsel(v[16], v[25], v[13]); // 82839C40
+        v[62] = __vsubfp(v[28], v[15]); // 82839C44
+        v[25] = __vor(v[14], v[13]); // 82839C48
+        v[4] = __vaddfp(v[10], v[4]); // 82839C4C
+        v[5] = __vaddfp(v[11], v[5]); // 82839C50
+        v[23] = stackm16; // 82839C58
+        v[28] = __vsel(v[20], v[6], v[13]); // 82839C5C
+        v[16] = stack256; // 82839C60
+        v[20] = __vsel(v[9], v[7], v[13]); // 82839C64
+        v[27] = __vcmpgefp(v[27], v[16]); // 82839C6C
+        v[11] = __vsubfp(v[18], v[21]); // 82839C70
+        v[0] = __vcmpgefp(v[0], v[24]); // 82839C74
+        v[31] = __vmulfp(v[31], v[31]); // 82839C78
+        v[14] = stack272; // 82839C7C
+        v[13] = __vor(v[63], v[63]); // 82839C84
+        v[26] = __vcmpgefp(v[26], v[14]); // 82839C88
+        v[13] = __vmulfp(v[13], v[13]); // 82839C8C
+        v[29] = __vmaddfp(v[29], v[29], v[31]); // 82839C90
+        v[31] = __vor(v[62], v[62]); // 82839C94
+        v[31] = __vmaddfp(v[31], v[31], v[13]); // 82839C98
+        v[13] = __vnor(v[17], v[27]); // 82839C9C
+        v[27] = __vnor(v[22], v[26]); // 82839CA0
+        v[26] = __vaddfp(v[12], v[6]); // 82839CA4
+        v[12] = __vsubfp(v[19], v[3]); // 82839CA8
+        v[17] = stack288; // 82839CAC
+        v[22] = __vaddfp(v[15], v[7]); // 82839CB0
+        v[16] = __vcmpgefp(v[30], v[29]); // 82839CB4
+        v[12] = __vmulfp(v[12], v[12]); // 82839CB8
+        v[13] = __vand(v[16], v[13]); // 82839CBC
+        v[9] = stackm32; // 82839CC4
+        v[10] = __vsel(v[30], v[29], v[13]); // 82839CC8
+        v[6] = __vsel(v[28], v[4], v[13]); // 82839CCC
+        v[4] = __vcmpgefp(v[24], v[17]); // 82839CD0
+        v[7] = __vor(v[25], v[13]); // 82839CD4
+        v[5] = __vsel(v[20], v[5], v[13]); // 82839CD8
+        v[13] = __vcmpgefp(v[10], v[31]); // 82839CDC
+        v[12] = __vmaddfp(v[11], v[11], v[12]); // 82839CE0
+        v[11] = __vaddfp(v[21], v[9]); // 82839CE4
+        v[0] = __vnor(v[0], v[4]); // 82839CE8
+        v[13] = __vand(v[13], v[27]); // 82839CEC
+        v[7] = __vor(v[7], v[13]); // 82839CF0
+        v[5] = __vsel(v[5], v[22], v[13]); // 82839CF4
+        v[6] = __vsel(v[6], v[26], v[13]); // 82839CF8
+        v[13] = __vsel(v[10], v[31], v[13]); // 82839CFC
+        v[10] = __vaddfp(v[3], v[8]); // 82839D00
+        v[13] = __vcmpgefp(v[13], v[12]); // 82839D04
+        v[0] = __vand(v[13], v[0]); // 82839D08
+        v[13] = __vsel(v[6], v[10], v[0]); // 82839D0C
+        v[12] = __vsel(v[5], v[11], v[0]); // 82839D10
+        v[0] = __vor(v[7], v[0]); // 82839D14
+        v[13] = __vsel(v[13], v[1], v[23]); // 82839D18
+        v[12] = __vsel(v[12], v[2], v[23]); // 82839D1C
+        v[1] = __vor(v[0], v[23]); // 82839D20
+        out0 = v[13]; // 82839D24
+        out1 = v[12]; // 82839D28
+        return v[1];
     }
 
     Triangle4::Mask4 IntersectTriangle4SweptSphere(
@@ -478,317 +664,869 @@ namespace CgsGeometric
         Vector3& lContactNormal3, Vector3& lTriangleNormal3,
         Vector3Plus& lSphereContactPoint3, Vector3Plus& lTriangleContactPoint3)
     {
-        Vector3*     lapContactNormal[4]        = { &lContactNormal0, &lContactNormal1,
-                                                    &lContactNormal2, &lContactNormal3 };
-        Vector3*     lapTriangleNormal[4]       = { &lTriangleNormal0, &lTriangleNormal1,
-                                                    &lTriangleNormal2, &lTriangleNormal3 };
-        Vector3Plus* lapSphereContactPoint[4]   = { &lSphereContactPoint0, &lSphereContactPoint1,
-                                                    &lSphereContactPoint2, &lSphereContactPoint3 };
-        Vector3Plus* lapTriangleContactPoint[4] = { &lTriangleContactPoint0, &lTriangleContactPoint1,
-                                                    &lTriangleContactPoint2, &lTriangleContactPoint3 };
-
-        // 0x8283EF68..0x8283F000: the two packed lanes, then four vspltw each. The sweep is
-        // stored as a DIRECTION plus a LENGTH and the console multiplies them here; the
-        // direction is used as authored and is never re-normalised.
-        const Vector3Plus lPositionAndRadius  = lSweptSphere.GetPositionAndRadius();
-        const Vector3Plus lDirectionAndLength = lSweptSphere.GetDirectionAndLength();
-
-        const f32 lfCx = lPositionAndRadius.x;
-        const f32 lfCy = lPositionAndRadius.y;
-        const f32 lfCz = lPositionAndRadius.z;
-        const f32 lfRadius = lPositionAndRadius.w;
-
-        const f32 lfDx = lDirectionAndLength.x * lDirectionAndLength.w;
-        const f32 lfDy = lDirectionAndLength.y * lDirectionAndLength.w;
-        const f32 lfDz = lDirectionAndLength.z * lDirectionAndLength.w;
-
-        Triangle4::Mask4 lResult;
-        lResult.SetFalse();
-
-        for (s32 liLane = 0; liLane < 4; ++liLane)
-        {
-            const f32 lfP0x = (&lTriangles.mVertex0X.x)[liLane];
-            const f32 lfP0y = (&lTriangles.mVertex0Y.x)[liLane];
-            const f32 lfP0z = (&lTriangles.mVertex0Z.x)[liLane];
-            const f32 lfP1x = (&lTriangles.mVertex1X.x)[liLane];
-            const f32 lfP1y = (&lTriangles.mVertex1Y.x)[liLane];
-            const f32 lfP1z = (&lTriangles.mVertex1Z.x)[liLane];
-            const f32 lfP2x = (&lTriangles.mVertex2X.x)[liLane];
-            const f32 lfP2y = (&lTriangles.mVertex2Y.x)[liLane];
-            const f32 lfP2z = (&lTriangles.mVertex2Z.x)[liLane];
-
-            // ---- the face normal, from cross(P1-P0, P2-P1) (0x8283EFD4..0x8283F064) --------
-            const f32 lfE1x = lfP1x - lfP0x, lfE1y = lfP1y - lfP0y, lfE1z = lfP1z - lfP0z;
-            const f32 lfE2x = lfP2x - lfP1x, lfE2y = lfP2y - lfP1y, lfE2z = lfP2z - lfP1z;
-
-            const f32 lfCrx = (lfE1y * lfE2z) - (lfE1z * lfE2y);
-            const f32 lfCry = (lfE1z * lfE2x) - (lfE1x * lfE2z);
-            const f32 lfCrz = (lfE1x * lfE2y) - (lfE1y * lfE2x);
-            const f32 lfInvCr =
-                1.0f / std::sqrt((lfCrx * lfCrx) + (lfCry * lfCry) + (lfCrz * lfCrz));
-            const f32 lfNx = lfCrx * lfInvCr;
-            const f32 lfNy = lfCry * lfInvCr;
-            const f32 lfNz = lfCrz * lfInvCr;
-            const f32 lfPlaneD = (lfNx * lfP0x) + (lfNy * lfP0y) + (lfNz * lfP0z);
-
-            // ---- the in-plane frame: U along P1-P0, V = normalize(cross(U,N)) -------------
-            const f32 lfInvE1 =
-                1.0f / std::sqrt((lfE1x * lfE1x) + (lfE1y * lfE1y) + (lfE1z * lfE1z));
-            const f32 lfUx = lfE1x * lfInvE1;
-            const f32 lfUy = lfE1y * lfInvE1;
-            const f32 lfUz = lfE1z * lfInvE1;
-
-            f32 lfVx = (lfUy * lfNz) - (lfUz * lfNy);
-            f32 lfVy = (lfUz * lfNx) - (lfUx * lfNz);
-            f32 lfVz = (lfUx * lfNy) - (lfUy * lfNx);
-            const f32 lfInvV =
-                1.0f / std::sqrt((lfVx * lfVx) + (lfVy * lfVy) + (lfVz * lfVz));
-            lfVx *= lfInvV;
-            lfVy *= lfInvV;
-            lfVz *= lfInvV;
-
-            // ---- clip the sweep to the plane slab of half-thickness r ---------------------
-            // 0x8283F148..0x8283F1E8. Note the reciprocal is of MINUS dot(D,N), so a sweep
-            // heading into the front face produces positive times.
-            const f32 lfDotDN = (lfDx * lfNx) + (lfDy * lfNy) + (lfDz * lfNz);
-            const f32 lfH0 = ((lfCx * lfNx) + (lfCy * lfNy) + (lfCz * lfNz)) - lfPlaneD;
-
-            const f32 lfInvNegDN = 1.0f / (-lfDotDN);           // vrefp + 2 NR
-            const f32 lfTa = (lfH0 - lfRadius) * lfInvNegDN;
-            const f32 lfTb = (lfH0 + lfRadius) * lfInvNegDN;
-
-            const bool lbParallel = (lfDotDN == 0.0f);
-            const f32 lfTExit  = lbParallel ? 1.0f : SweptMin(SweptMax(lfTa, lfTb), 1.0f);
-            const f32 lfTEnter = lbParallel ? 0.0f : SweptMax(SweptMin(lfTa, lfTb), 0.0f);
-
-            // ⚠️ |h0| is the console's vandc against the sign bit, i.e. plain fabs. A sweep
-            // exactly parallel to the plane survives only while it is already inside the slab.
-            const f32 lfAbsH0 = (lfH0 < 0.0f) ? -lfH0 : lfH0;
-            const bool lbRejectSlab =
-                  (lbParallel && (lfAbsH0 >= lfRadius))
-               || (!lbParallel && ((0.0f >= lfTExit) || (lfTEnter >= 1.0f)));
-
-            // ---- everything the tests need, expressed in the (U,V) frame with origin P0 ---
-            const f32 lfW2x = lfP2x - lfP0x, lfW2y = lfP2y - lfP0y, lfW2z = lfP2z - lfP0z;
-            const f32 lfRelx = lfCx - lfP0x, lfRely = lfCy - lfP0y, lfRelz = lfCz - lfP0z;
-
-            const SweptPlanePoint2 lCentre2 = { (lfRelx * lfUx) + (lfRely * lfUy) + (lfRelz * lfUz),
-                                                (lfRelx * lfVx) + (lfRely * lfVy) + (lfRelz * lfVz) };
-            const SweptPlanePoint2 lSweep2  = { (lfDx * lfUx) + (lfDy * lfUy) + (lfDz * lfUz),
-                                                (lfDx * lfVx) + (lfDy * lfVy) + (lfDz * lfVz) };
-
-            const SweptPlanePoint2 laVertex[3] =
-            {
-                { 0.0f, 0.0f },
-                { (lfE1x * lfUx) + (lfE1y * lfUy) + (lfE1z * lfUz),
-                  (lfE1x * lfVx) + (lfE1y * lfVy) + (lfE1z * lfVz) },
-                { (lfW2x * lfUx) + (lfW2y * lfUy) + (lfW2z * lfUz),
-                  (lfW2x * lfVx) + (lfW2y * lfVy) + (lfW2z * lfVz) },
-            };
-
-            // The three edge directions and lengths. ⭐ The console gets the LENGTH out of the
-            // same reciprocal square root it uses for the direction (`lenSq * rsqrt(lenSq)`),
-            // and that shape is kept rather than calling sqrt twice.
-            SweptPlanePoint2 laDir[3];
-            f32 lafLen[3];
-            for (s32 liEdge = 0; liEdge < 3; ++liEdge)
-            {
-                const SweptPlanePoint2& lrFrom = laVertex[liEdge];
-                const SweptPlanePoint2& lrTo   = laVertex[(liEdge + 1) % 3];
-                const f32 lfEu = lrTo.u - lrFrom.u;
-                const f32 lfEv = lrTo.v - lrFrom.v;
-                const f32 lfLenSq = (lfEu * lfEu) + (lfEv * lfEv);
-                const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
-                laDir[liEdge].u = lfEu * lfInvLen;
-                laDir[liEdge].v = lfEv * lfInvLen;
-                lafLen[liEdge]  = lfLenSq * lfInvLen;
-            }
-
-            // ---- the FACE test: the circle the sphere cuts in the plane at tEnter ---------
-            // 0x8283F2E0..0x8283F3A0. r^2 - h(tEnter)^2 is that circle's squared radius; at a
-            // genuine slab entry h == +/-r and it is 0, and it grows as the sphere sinks in.
-            const f32 lfHEnter = (((lfCx + lfDx * lfTEnter) * lfNx)
-                                + ((lfCy + lfDy * lfTEnter) * lfNy)
-                                + ((lfCz + lfDz * lfTEnter) * lfNz)) - lfPlaneD;
-            const f32 lfCircleRadiusSq = (lfRadius * lfRadius) - (lfHEnter * lfHEnter);
-
-            const SweptPlanePoint2 lCircleCentre =
-                { (lfTEnter * lSweep2.u) + lCentre2.u, (lfTEnter * lSweep2.v) + lCentre2.v };
-
-            SweptPlanePoint2 lFacePoint = { 0.0f, 0.0f };
-            const bool lbFaceHit =
-                Intersect2DCircleWithTriangleSOA(lCircleCentre, lfCircleRadiusSq,
-                                              laVertex[0], laVertex[1], laVertex[2],
-                                              laDir[0], laDir[1], laDir[2],
-                                              lafLen[0], lafLen[1], lafLen[2],
-                                              lFacePoint);
-
-            // ---- the three (vertex, edge) swept tests ------------------------------------
-            // Intersect2DSweptCircleWithVertexAndEdgeSOA (DWARF :2024), inlined three times.
-            // The quadratic is written in the (U,V,N) frame, which is orthonormal, so its
-            // constant term carries the out-of-plane offset h0 and its leading term the
-            // out-of-plane sweep component — i.e. these ARE the full 3D sweeps against the
-            // vertex sphere and the edge cylinder, not a flattened 2D approximation.
-            const f32 lfAFull = ((lSweep2.u * lSweep2.u) + (lSweep2.v * lSweep2.v))
-                              + (lfDotDN * lfDotDN);               // == |D|^2
-            const f32 lfCOffset = (lfH0 * lfH0) - (lfRadius * lfRadius);
-            const f32 lfBOffset = (2.0f * lfH0) * lfDotDN;
-
-            bool labPairHit[3];
-            f32  lafPairTime[3];
-            SweptPlanePoint2 laPairPoint[3];
-
-            for (s32 liPair = 0; liPair < 3; ++liPair)
-            {
-                const f32 lfQu = lCentre2.u - laVertex[liPair].u;
-                const f32 lfQv = lCentre2.v - laVertex[liPair].v;
-
-                // --- the vertex sweep ---
-                f32 lfDiscV = 0.0f;
-                const f32 lfVertexTime = SolveSweptCircleEquation(
-                    lfAFull,
-                    (((lfQu * lSweep2.u) + (lfQv * lSweep2.v)) * 2.0f) + lfBOffset,
-                    ((lfQu * lfQu) + (lfQv * lfQv)) + lfCOffset,
-                    lfDiscV);
-                // IsBetween0And1SOA (DWARF :1989) is the `(t >= 0) && (1 >= t)` pair.
-                const bool lbVertexHit = (lfAFull != 0.0f) && (lfDiscV >= 0.0f)
-                                      && (lfVertexTime >= 0.0f) && (1.0f >= lfVertexTime);
-
-                // --- the edge sweep: the components perpendicular to the edge ---
-                const f32 lfQAlong = (lfQu * laDir[liPair].u) + (lfQv * laDir[liPair].v);
-                const f32 lfDAlong = (lSweep2.u * laDir[liPair].u) + (lSweep2.v * laDir[liPair].v);
-                const f32 lfQpu = lfQu - (lfQAlong * laDir[liPair].u);
-                const f32 lfQpv = lfQv - (lfQAlong * laDir[liPair].v);
-                const f32 lfDpu = lSweep2.u - (lfDAlong * laDir[liPair].u);
-                const f32 lfDpv = lSweep2.v - (lfDAlong * laDir[liPair].v);
-
-                const f32 lfEdgeA = ((lfDpu * lfDpu) + (lfDpv * lfDpv)) + (lfDotDN * lfDotDN);
-                f32 lfDiscE = 0.0f;
-                const f32 lfEdgeTime = SolveSweptCircleEquation(
-                    lfEdgeA,
-                    (((lfQpu * lfDpu) + (lfQpv * lfDpv)) * 2.0f) + lfBOffset,
-                    ((lfQpu * lfQpu) + (lfQpv * lfQpv)) + lfCOffset,
-                    lfDiscE);
-
-                // how far along the edge the contact lands, at that root
-                const f32 lfAlong = (((lSweep2.u * lfEdgeTime) + lfQu) * laDir[liPair].u)
-                                  + (((lSweep2.v * lfEdgeTime) + lfQv) * laDir[liPair].v);
-
-                const bool lbEdgeHit = (lfEdgeA != 0.0f) && (lfDiscE >= 0.0f)
-                                    && (lfEdgeTime >= 0.0f) && (1.0f >= lfEdgeTime)
-                                    && (lfAlong >= 0.0f) && (lafLen[liPair] >= lfAlong);
-
-                // The console carries a 2.0 sentinel for "this feature did not hit", which is
-                // outside [0,1] and therefore loses every subsequent earliest-time compare.
-                const f32 lfVertexT = lbVertexHit ? lfVertexTime : 2.0f;
-                const f32 lfEdgeT   = lbEdgeHit   ? lfEdgeTime   : 2.0f;
-                const bool lbUseVertex = (lfEdgeT >= lfVertexT);
-
-                labPairHit[liPair]  = lbVertexHit || lbEdgeHit;
-                lafPairTime[liPair] = labPairHit[liPair]
-                                    ? (lbUseVertex ? lfVertexT : lfEdgeT)
-                                    : 2.0f;
-                laPairPoint[liPair].u = lbUseVertex
-                                      ? laVertex[liPair].u
-                                      : ((lfAlong * laDir[liPair].u) + laVertex[liPair].u);
-                laPairPoint[liPair].v = lbUseVertex
-                                      ? laVertex[liPair].v
-                                      : ((lfAlong * laDir[liPair].v) + laVertex[liPair].v);
-            }
-
-            // The earliest of the three pairs (0x8283FAA0..0x8283FB14; the compare is `>=`, so
-            // on an exact tie the LATER pair wins — reproduced in that order).
-            f32 lfSweptTime = lafPairTime[0];
-            SweptPlanePoint2 lSweptPoint = laPairPoint[0];
-            for (s32 liPair = 1; liPair < 3; ++liPair)
-            {
-                if (lfSweptTime >= lafPairTime[liPair])
-                {
-                    lfSweptTime = lafPairTime[liPair];
-                    lSweptPoint = laPairPoint[liPair];
-                }
-            }
-
-            // ⭐ THE FACE RESULT WINS OUTRIGHT when it hits — it is not entered into the
-            // earliest-time race (0x8283FB1C/0x8283FB28/0x8283FB3C select on the face mask
-            // alone, after the three-way minimum has already been resolved).
-            const f32 lfHitTime = lbFaceHit ? lfTEnter : lfSweptTime;
-            const SweptPlanePoint2 lHitPoint = lbFaceHit ? lFacePoint : lSweptPoint;
-
-            // ---- back to world space, and the two contact points -------------------------
-            const f32 lfPx = ((lHitPoint.u * lfUx) + (lHitPoint.v * lfVx)) + lfP0x;
-            const f32 lfPy = ((lHitPoint.u * lfUy) + (lHitPoint.v * lfVy)) + lfP0y;
-            const f32 lfPz = ((lHitPoint.u * lfUz) + (lHitPoint.v * lfVz)) + lfP0z;
-
-            // the face case: the direction from the centre to the contact point, and where
-            // that direction meets the sphere's surface
-            const f32 lfFx = lfPx - lfCx, lfFy = lfPy - lfCy, lfFz = lfPz - lfCz;
-            const f32 lfInvF =
-                1.0f / std::sqrt((lfFx * lfFx) + (lfFy * lfFy) + (lfFz * lfFz));
-            const f32 lfFaceNx = lfFx * lfInvF;
-            const f32 lfFaceNy = lfFy * lfInvF;
-            const f32 lfFaceNz = lfFz * lfInvF;
-
-            // the swept case: the contact point brought BACK into the sphere's start frame,
-            // which is the frame the caller's spheres and the penetration solver live in
-            const f32 lfBackX = lfPx - (lfDx * lfHitTime);
-            const f32 lfBackY = lfPy - (lfDy * lfHitTime);
-            const f32 lfBackZ = lfPz - (lfDz * lfHitTime);
-            const f32 lfGx = lfBackX - lfCx, lfGy = lfBackY - lfCy, lfGz = lfBackZ - lfCz;
-            const f32 lfInvG =
-                1.0f / std::sqrt((lfGx * lfGx) + (lfGy * lfGy) + (lfGz * lfGz));
-            const f32 lfSweptNx = lfGx * lfInvG;
-            const f32 lfSweptNy = lfGy * lfInvG;
-            const f32 lfSweptNz = lfGz * lfInvG;
-
-            const f32 lfNormalX = lbFaceHit ? lfFaceNx : lfSweptNx;
-            const f32 lfNormalY = lbFaceHit ? lfFaceNy : lfSweptNy;
-            const f32 lfNormalZ = lbFaceHit ? lfFaceNz : lfSweptNz;
-
-            // ---- outputs (written unconditionally, as the console's sixteen stvx128 are) --
-            // ⭐ The final vmrghw/vmrglw transpose pairs each contact point's xyz with the
-            // CONTACT TIME, so w carries t; and it pairs each normal's xyz with its own z, so
-            // w duplicates z. Both are reproduced — the w lane of a Vector3Plus travels into
-            // the queued PrimitiveTestResult and must not be left as whatever the caller's
-            // record happened to hold.
-            lapContactNormal[liLane]->x = lfNormalX;
-            lapContactNormal[liLane]->y = lfNormalY;
-            lapContactNormal[liLane]->z = lfNormalZ;
-            lapContactNormal[liLane]->w = lfNormalZ;
-
-            lapTriangleNormal[liLane]->x = lfNx;
-            lapTriangleNormal[liLane]->y = lfNy;
-            lapTriangleNormal[liLane]->z = lfNz;
-            lapTriangleNormal[liLane]->w = lfNz;
-
-            lapSphereContactPoint[liLane]->x = lbFaceHit ? (lfFaceNx * lfRadius) + lfCx : lfBackX;
-            lapSphereContactPoint[liLane]->y = lbFaceHit ? (lfFaceNy * lfRadius) + lfCy : lfBackY;
-            lapSphereContactPoint[liLane]->z = lbFaceHit ? (lfFaceNz * lfRadius) + lfCz : lfBackZ;
-            lapSphereContactPoint[liLane]->w = lfHitTime;
-
-            lapTriangleContactPoint[liLane]->x = lfPx;
-            lapTriangleContactPoint[liLane]->y = lfPy;
-            lapTriangleContactPoint[liLane]->z = lfPz;
-            lapTriangleContactPoint[liLane]->w = lfHitTime;
-
-            // ---- the hit mask (0x8283FCFC..0x8283FD3C) -----------------------------------
-            // ⚠️ The single-sided test is on the CONTACT normal against the FACE normal, and it
-            // is strict: a contact direction perpendicular to the face is rejected.
-            const f32 lfNormalAgainstFace =
-                (lfNormalX * lfNx) + (lfNormalY * lfNy) + (lfNormalZ * lfNz);
-
-            const bool lbAccept =
-                   !lbRejectSlab
-                && (lbFaceHit || labPairHit[0] || labPairHit[1] || labPairHit[2])
-                && (0.0f > lfNormalAgainstFace);
-
-            u32 luEnableBits = 0;
-            std::memcpy(&luEnableBits, &(&lTriangles.mValidMasks.mV.x)[liLane], sizeof(u32));
-            const u32 luLaneMask = (lbAccept ? 0xFFFFFFFFu : 0u) & luEnableBits;
-            std::memcpy(&(&lResult.mV.x)[liLane], &luLaneMask, sizeof(u32));
-        }
-
-        return lResult;
+        const Vector3Plus lPosition = lSweptSphere.GetPositionAndRadius();
+        const Vector3Plus lDirection = lSweptSphere.GetDirectionAndLength();
+        __vector4 v[128];
+        v[11] = lPosition.mV; // 8283EF68
+        v[38] = __vspltw(v[11], 0); // 8283EF70
+        v[37] = __vspltw(v[11], 1); // 8283EF78
+        v[36] = __vspltw(v[11], 2); // 8283EF80
+        v[0] = lDirection.mV; // 8283EF88
+        v[0] = __vspltw(v[0], 3); // 8283EF90
+        v[10] = lDirection.mV; // 8283EF94
+        v[126] = lTriangles.mVertex0Y.mV; // 8283EF98
+        v[8] = lTriangles.mVertex1X.mV; // 8283EFA0
+        v[2] = __vspltw(v[10], 1); // 8283EFAC
+        v[9] = __vspltw(v[0], 0); // 8283EFB0
+        v[127] = lTriangles.mVertex0X.mV; // 8283EFB4
+        v[0] = __vspltw(v[11], 3); // 8283EFB8
+        v[6] = lTriangles.mVertex1Z.mV; // 8283EFBC
+        v[11] = __vspltw(v[10], 0); // 8283EFC0
+        v[5] = lTriangles.mVertex2X.mV; // 8283EFC4
+        v[10] = __vspltw(v[10], 2); // 8283EFC8
+        v[125] = lTriangles.mVertex0Z.mV; // 8283EFCC
+        v[7] = lTriangles.mVertex1Y.mV; // 8283EFD0
+        v[12] = __vsubfp(v[6], v[125]); // 8283EFD4
+        v[50] = __vspltw(v[0], 0); // 8283EFD8
+        v[0] = __vsubfp(v[8], v[127]); // 8283EFDC
+        v[8] = __vsubfp(v[5], v[8]); // 8283EFE0
+        v[3] = lTriangles.mVertex2Z.mV; // 8283EFE4
+        v[122] = __vmulfp(v[10], v[9]); // 8283EFE8
+        v[13] = __vsubfp(v[7], v[126]); // 8283EFF0
+        v[10] = __vsubfp(v[3], v[6]); // 8283EFF4
+        v[124] = __vmulfp(v[11], v[9]); // 8283EFF8
+        v[11] = __vspltisw(1); // 8283EFFC
+        v[123] = __vmulfp(v[2], v[9]); // 8283F000
+        v[4] = lTriangles.mVertex2Y.mV; // 8283F004
+        v[9] = __vsubfp(v[4], v[7]); // 8283F008
+        v[56] = __vcfsx(v[11], 1); // 8283F00C
+        v[57] = __vcfsx(v[11], 0); // 8283F010
+        v[6] = v[8]; // 8283F014
+        v[8] = __vmulfp(v[12], v[8]); // 8283F018
+        v[30] = __vmulfp(v[13], v[10]); // 8283F01C
+        v[1] = __vor(v[57], v[57]); // 8283F020
+        v[31] = __vor(v[57], v[57]); // 8283F024
+        v[10] = __vnmsubfp(v[0], v[10], v[8]); // 8283F028
+        v[8] = __vmulfp(v[0], v[9]); // 8283F02C
+        v[9] = __vnmsubfp(v[12], v[9], v[30]); // 8283F030
+        v[8] = __vnmsubfp(v[13], v[6], v[8]); // 8283F034
+        v[11] = __vmulfp(v[9], v[9]); // 8283F038
+        v[11] = __vmaddfp(v[10], v[10], v[11]); // 8283F03C
+        v[11] = __vmaddfp(v[8], v[8], v[11]); // 8283F040
+        v[7] = v[11]; // 8283F044
+        v[11] = __vrsqrtefp(v[11]); // 8283F048
+        v[6] = __vmulfp(v[11], v[11]); // 8283F04C
+        v[2] = __vmulfp(v[11], v[56]); // 8283F050
+        v[1] = __vnmsubfp(v[7], v[6], v[1]); // 8283F054
+        v[11] = __vmaddfp(v[1], v[2], v[11]); // 8283F058
+        v[52] = __vmulfp(v[9], v[11]); // 8283F05C
+        v[51] = __vmulfp(v[10], v[11]); // 8283F060
+        v[53] = __vmulfp(v[8], v[11]); // 8283F064
+        v[10] = __vmulfp(v[0], v[0]); // 8283F068
+        v[11] = __vmulfp(v[52], v[127]); // 8283F06C
+        v[7] = __vor(v[52], v[52]); // 8283F070
+        v[9] = __vor(v[51], v[51]); // 8283F074
+        v[8] = __vor(v[53], v[53]); // 8283F078
+        v[10] = __vmaddfp(v[13], v[13], v[10]); // 8283F07C
+        v[11] = __vmaddfp(v[51], v[126], v[11]); // 8283F080
+        v[2] = v[11]; // 8283F084
+        v[11] = __vmaddfp(v[12], v[12], v[10]); // 8283F088
+        v[2] = __vmaddfp(v[53], v[125], v[2]); // 8283F08C
+        v[10] = v[11]; // 8283F090
+        v[11] = __vrsqrtefp(v[11]); // 8283F094
+        v[6] = __vmulfp(v[11], v[11]); // 8283F098
+        v[1] = __vmulfp(v[11], v[56]); // 8283F09C
+        v[31] = __vnmsubfp(v[10], v[6], v[31]); // 8283F0A0
+        v[11] = __vmaddfp(v[31], v[1], v[11]); // 8283F0A4
+        v[49] = __vmulfp(v[13], v[11]); // 8283F0A8
+        v[28] = __vor(v[57], v[57]); // 8283F0AC
+        v[48] = __vmulfp(v[12], v[11]); // 8283F0B0
+        v[58] = __vspltisw(0); // 8283F0B4
+        v[47] = __vmulfp(v[0], v[11]); // 8283F0B8
+        v[10] = __vmulfp(v[49], v[53]); // 8283F0BC
+        v[1] = __vor(v[49], v[49]); // 8283F0C0
+        v[11] = __vor(v[48], v[48]); // 8283F0C4
+        v[31] = __vmulfp(v[48], v[52]); // 8283F0C8
+        v[6] = __vor(v[47], v[47]); // 8283F0CC
+        v[30] = __vmulfp(v[47], v[51]); // 8283F0D0
+        v[10] = __vnmsubfp(v[11], v[9], v[10]); // 8283F0D4
+        v[9] = __vnmsubfp(v[6], v[8], v[31]); // 8283F0D8
+        v[8] = __vnmsubfp(v[1], v[7], v[30]); // 8283F0DC
+        v[7] = __vspltisw(-1); // 8283F0E0
+        v[31] = __vmulfp(v[124], v[52]); // 8283F0E4
+        v[30] = __vmulfp(v[38], v[52]); // 8283F0E8
+        v[46] = __vcfsx(v[7], 0); // 8283F0EC
+        v[7] = __vslw(v[7], v[7]); // 8283F0F0
+        v[11] = __vmulfp(v[10], v[10]); // 8283F0F4
+        v[31] = __vmaddfp(v[123], v[51], v[31]); // 8283F0F8
+        v[30] = __vmaddfp(v[37], v[51], v[30]); // 8283F0FC
+        v[11] = __vmaddfp(v[9], v[9], v[11]); // 8283F100
+        v[121] = v[31]; // 8283F104
+        v[30] = __vmaddfp(v[36], v[53], v[30]); // 8283F108
+        v[121] = __vmaddfp(v[122], v[53], v[121]); // 8283F10C
+        v[6] = __vmaddfp(v[8], v[8], v[11]); // 8283F110
+        v[35] = __vsubfp(v[30], v[2]); // 8283F114
+        v[11] = __vrsqrtefp(v[6]); // 8283F118
+        v[7] = __vandc(v[35], v[7]); // 8283F11C
+        v[7] = __vcmpgefp(v[7], v[50]); // 8283F120
+        v[29] = __vmulfp(v[11], v[11]); // 8283F124
+        v[1] = __vmulfp(v[11], v[56]); // 8283F128
+        v[28] = __vnmsubfp(v[6], v[29], v[28]); // 8283F12C
+        v[11] = __vmaddfp(v[28], v[1], v[11]); // 8283F130
+        v[1] = __vor(v[57], v[57]); // 8283F134
+        v[120] = __vmulfp(v[10], v[11]); // 8283F138
+        v[10] = __vmulfp(v[46], v[121]); // 8283F13C
+        v[118] = __vmulfp(v[8], v[11]); // 8283F140
+        v[119] = __vmulfp(v[9], v[11]); // 8283F144
+        v[9] = __vsubfp(v[35], v[50]); // 8283F148
+        v[11] = __vrefp(v[10]); // 8283F14C
+        v[8] = v[10]; // 8283F150
+        v[6] = v[10]; // 8283F154
+        v[10] = v[11]; // 8283F158
+        v[1] = __vnmsubfp(v[8], v[10], v[1]); // 8283F15C
+        v[8] = __vor(v[57], v[57]); // 8283F160
+        v[11] = __vmaddfp(v[11], v[1], v[11]); // 8283F164
+        v[1] = __vmulfp(v[0], v[47]); // 8283F168
+        v[0] = __vmulfp(v[0], v[120]); // 8283F16C
+        v[10] = v[11]; // 8283F170
+        v[1] = __vmaddfp(v[13], v[49], v[1]); // 8283F174
+        v[0] = __vmaddfp(v[13], v[119], v[0]); // 8283F178
+        v[8] = __vnmsubfp(v[6], v[10], v[8]); // 8283F17C
+        v[6] = __vor(v[57], v[57]); // 8283F180
+        v[34] = v[1]; // 8283F184
+        v[33] = v[0]; // 8283F188
+        v[11] = __vmaddfp(v[11], v[8], v[11]); // 8283F18C
+        v[8] = __vsubfp(v[5], v[127]); // 8283F190
+        v[5] = __vor(v[58], v[58]); // 8283F194
+        v[34] = __vmaddfp(v[12], v[48], v[34]); // 8283F198
+        v[33] = __vmaddfp(v[12], v[118], v[33]); // 8283F19C
+        v[10] = __vmulfp(v[9], v[11]); // 8283F1A0
+        v[9] = __vaddfp(v[35], v[50]); // 8283F1A4
+        v[9] = __vmulfp(v[9], v[11]); // 8283F1A8
+        v[11] = __vcmpeqfp(v[121], v[58]); // 8283F1AC
+        v[13] = __vminfp(v[10], v[9]); // 8283F1B0
+        v[10] = __vmaxfp(v[10], v[9]); // 8283F1B4
+        v[45] = v[11]; // 8283F1B8
+        v[12] = __vnor(v[11], v[11]); // 8283F1BC
+        v[0] = v[13]; // 8283F1C0
+        v[13] = __vminfp(v[10], v[57]); // 8283F1C4
+        v[10] = __vand(v[7], v[11]); // 8283F1C8
+        v[0] = __vmaxfp(v[0], v[58]); // 8283F1CC
+        v[13] = __vsel(v[13], v[6], v[11]); // 8283F1D0
+        v[45] = __vsel(v[0], v[5], v[45]); // 8283F1D4
+        v[13] = __vcmpgefp(v[58], v[13]); // 8283F1D8
+        v[0] = __vcmpgefp(v[45], v[57]); // 8283F1DC
+        v[0] = __vor(v[0], v[13]); // 8283F1E0
+        v[0] = __vand(v[0], v[12]); // 8283F1E4
+        v[115] = __vor(v[10], v[0]); // 8283F1E8
+        v[0] = __vsubfp(v[4], v[126]); // 8283F1EC
+        v[27] = __vor(v[57], v[57]); // 8283F1F0
+        v[7] = __vmulfp(v[8], v[47]); // 8283F1F4
+        v[6] = __vmulfp(v[8], v[120]); // 8283F1FC
+        v[10] = __vsubfp(v[38], v[127]); // 8283F204
+        v[9] = __vsubfp(v[37], v[126]); // 8283F208
+        v[12] = __vsubfp(v[34], v[58]); // 8283F20C
+        v[13] = __vsubfp(v[3], v[125]); // 8283F210
+        v[11] = __vsubfp(v[33], v[58]); // 8283F214
+        v[31] = __vmulfp(v[124], v[47]); // 8283F218
+        v[3] = __vsubfp(v[36], v[125]); // 8283F21C
+        v[112] = __vmulfp(v[50], v[50]); // 8283F220
+        v[7] = __vmaddfp(v[0], v[49], v[7]); // 8283F224
+        v[6] = __vmaddfp(v[0], v[119], v[6]); // 8283F228
+        v[0] = __vmulfp(v[10], v[47]); // 8283F22C
+        v[1] = __vmulfp(v[10], v[120]); // 8283F230
+        v[31] = __vmaddfp(v[123], v[49], v[31]); // 8283F234
+        v[8] = v[7]; // 8283F238
+        v[32] = v[6]; // 8283F23C
+        v[0] = __vmaddfp(v[9], v[49], v[0]); // 8283F240
+        v[1] = __vmaddfp(v[9], v[119], v[1]); // 8283F244
+        v[8] = __vmaddfp(v[13], v[48], v[8]); // 8283F248
+        v[32] = __vmaddfp(v[13], v[118], v[32]); // 8283F24C
+        v[55] = v[31]; // 8283F250
+        v[55] = __vmaddfp(v[122], v[48], v[55]); // 8283F254
+        v[117] = v[0]; // 8283F258
+        v[0] = __vmulfp(v[12], v[12]); // 8283F25C
+        v[116] = v[1]; // 8283F260
+        v[10] = __vsubfp(v[8], v[34]); // 8283F264
+        v[9] = __vsubfp(v[32], v[33]); // 8283F268
+        v[117] = __vmaddfp(v[3], v[48], v[117]); // 8283F26C
+        v[116] = __vmaddfp(v[3], v[118], v[116]); // 8283F270
+        v[7] = __vsubfp(v[58], v[8]); // 8283F274
+        v[6] = __vsubfp(v[58], v[32]); // 8283F278
+        v[5] = __vmaddfp(v[11], v[11], v[0]); // 8283F27C
+        v[0] = __vmulfp(v[124], v[120]); // 8283F280
+        v[13] = __vmulfp(v[10], v[10]); // 8283F284
+        v[3] = v[5]; // 8283F288
+        v[0] = __vmaddfp(v[123], v[119], v[0]); // 8283F28C
+        v[4] = __vmaddfp(v[9], v[9], v[13]); // 8283F290
+        v[54] = v[0]; // 8283F294
+        v[0] = __vrsqrtefp(v[5]); // 8283F298
+        v[13] = __vrsqrtefp(v[4]); // 8283F29C
+        v[1] = v[4]; // 8283F2A0
+        v[54] = __vmaddfp(v[122], v[118], v[54]); // 8283F2A4
+        v[31] = __vmulfp(v[0], v[0]); // 8283F2A8
+        v[30] = __vmulfp(v[0], v[56]); // 8283F2AC
+        v[29] = __vmulfp(v[13], v[13]); // 8283F2B0
+        v[28] = __vmulfp(v[13], v[56]); // 8283F2B4
+        v[27] = __vnmsubfp(v[3], v[31], v[27]); // 8283F2B8
+        v[3] = __vor(v[57], v[57]); // 8283F2BC
+        v[3] = __vnmsubfp(v[1], v[29], v[3]); // 8283F2C0
+        v[0] = __vmaddfp(v[27], v[30], v[0]); // 8283F2C4
+        v[13] = __vmaddfp(v[3], v[28], v[13]); // 8283F2C8
+        v[44] = __vmulfp(v[12], v[0]); // 8283F2CC
+        v[12] = __vor(v[38], v[38]); // 8283F2D0
+        v[114] = __vmulfp(v[5], v[0]); // 8283F2D4
+        v[43] = __vmulfp(v[11], v[0]); // 8283F2D8
+        v[0] = __vmulfp(v[7], v[7]); // 8283F2DC
+        v[12] = __vmaddfp(v[45], v[124], v[12]); // 8283F2E0
+        v[42] = __vmulfp(v[10], v[13]); // 8283F2E4
+        v[41] = __vmulfp(v[9], v[13]); // 8283F2E8
+        v[113] = __vmulfp(v[4], v[13]); // 8283F2EC
+        v[13] = __vor(v[37], v[37]); // 8283F2F0
+        v[13] = __vmaddfp(v[45], v[123], v[13]); // 8283F2F4
+        __vector4 stack256 = v[114]; // 8283F2FC
+        v[11] = __vor(v[43], v[43]); // 8283F300
+        v[10] = __vmaddfp(v[6], v[6], v[0]); // 8283F304
+        v[0] = __vmulfp(v[12], v[52]); // 8283F308
+        v[12] = __vor(v[36], v[36]); // 8283F30C
+        __vector4 stack272 = v[113]; // 8283F314
+        v[12] = __vmaddfp(v[45], v[122], v[12]); // 8283F318
+        v[5] = v[10]; // 8283F31C
+        v[0] = __vmaddfp(v[13], v[51], v[0]); // 8283F320
+        v[13] = __vor(v[41], v[41]); // 8283F324
+        v[0] = __vmaddfp(v[12], v[53], v[0]); // 8283F328
+        v[12] = __vor(v[42], v[42]); // 8283F32C
+        v[9] = __vsubfp(v[0], v[2]); // 8283F330
+        v[0] = __vrsqrtefp(v[10]); // 8283F334
+        v[4] = __vmulfp(v[0], v[0]); // 8283F338
+        v[2] = __vor(v[57], v[57]); // 8283F33C
+        v[3] = __vmulfp(v[0], v[56]); // 8283F340
+        v[1] = __vor(v[45], v[45]); // 8283F344
+        v[1] = __vmaddfp(v[55], v[1], v[117]); // 8283F348
+        v[2] = __vnmsubfp(v[5], v[4], v[2]); // 8283F34C
+        v[5] = __vor(v[58], v[58]); // 8283F350
+        v[4] = __vor(v[58], v[58]); // 8283F354
+        v[0] = __vmaddfp(v[2], v[3], v[0]); // 8283F358
+        v[2] = __vor(v[45], v[45]); // 8283F35C
+        v[2] = __vmaddfp(v[54], v[2], v[116]); // 8283F360
+        v[40] = __vmulfp(v[7], v[0]); // 8283F364
+        v[7] = __vor(v[33], v[33]); // 8283F368
+        v[39] = __vmulfp(v[6], v[0]); // 8283F36C
+        v[6] = __vor(v[34], v[34]); // 8283F370
+        v[111] = __vmulfp(v[10], v[0]); // 8283F374
+        v[10] = __vor(v[44], v[44]); // 8283F378
+        v[0] = __vmulfp(v[9], v[9]); // 8283F37C
+        v[9] = __vor(v[32], v[32]); // 8283F380
+        __vector4 stack224 = v[40]; // 8283F388
+        __vector4 stack240 = v[39]; // 8283F390
+        __vector4 stack288 = v[111]; // 8283F398
+        v[3] = __vsubfp(v[112], v[0]); // 8283F39C
+        __vector4 stack320;
+        __vector4 stack336;
+        v[1] = Intersect2DCircleWithTriangleSOA(v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], stack224, stack240, stack256, stack272, stack288, stack320, stack336);
+        v[0] = __vspltisw(2); // 8283F3A4
+        v[12] = __vsubfp(v[117], v[58]); // 8283F3A8
+        v[11] = __vsubfp(v[116], v[58]); // 8283F3AC
+        v[22] = __vor(v[57], v[57]); // 8283F3B0
+        v[13] = __vmulfp(v[55], v[55]); // 8283F3B4
+        v[5] = __vmulfp(v[121], v[121]); // 8283F3B8
+        v[0] = __vcfsx(v[0], 0); // 8283F3BC
+        v[10] = __vmulfp(v[35], v[35]); // 8283F3C0
+        v[6] = __vmulfp(v[12], v[55]); // 8283F3C4
+        v[13] = __vmaddfp(v[54], v[54], v[13]); // 8283F3C8
+        v[7] = __vmulfp(v[0], v[35]); // 8283F3CC
+        v[10] = __vsubfp(v[10], v[112]); // 8283F3D0
+        v[9] = __vmulfp(v[0], v[0]); // 8283F3D4
+        v[6] = __vmaddfp(v[11], v[54], v[6]); // 8283F3D8
+        v[13] = __vaddfp(v[13], v[5]); // 8283F3DC
+        v[7] = __vmulfp(v[7], v[121]); // 8283F3E0
+        v[2] = __vmulfp(v[9], v[13]); // 8283F3E4
+        v[4] = __vmulfp(v[0], v[13]); // 8283F3E8
+        v[3] = __vmaddfp(v[6], v[0], v[7]); // 8283F3EC
+        v[6] = __vmulfp(v[12], v[12]); // 8283F3F0
+        v[31] = __vcmpeqfp(v[13], v[58]); // 8283F3F4
+        v[28] = v[4]; // 8283F3F8
+        v[30] = __vmulfp(v[3], v[3]); // 8283F3FC
+        v[27] = v[4]; // 8283F400
+        v[6] = __vmaddfp(v[11], v[11], v[6]); // 8283F404
+        v[6] = __vaddfp(v[6], v[10]); // 8283F408
+        v[6] = __vmulfp(v[2], v[6]); // 8283F40C
+        v[2] = __vrefp(v[4]); // 8283F410
+        v[6] = __vsubfp(v[30], v[6]); // 8283F414
+        v[30] = __vor(v[58], v[58]); // 8283F418
+        v[23] = v[2]; // 8283F41C
+        v[22] = __vnmsubfp(v[23], v[28], v[22]); // 8283F420
+        v[4] = __vrsqrtefp(v[6]); // 8283F424
+        v[26] = v[6]; // 8283F428
+        v[25] = v[6]; // 8283F42C
+        v[24] = __vcmpeqfp(v[58], v[6]); // 8283F430
+        v[29] = __vcmpgefp(v[6], v[58]); // 8283F434
+        v[2] = __vmaddfp(v[2], v[22], v[2]); // 8283F438
+        v[22] = __vor(v[57], v[57]); // 8283F43C
+        v[28] = __vmulfp(v[4], v[4]); // 8283F440
+        v[23] = __vmulfp(v[4], v[56]); // 8283F444
+        v[22] = __vnmsubfp(v[26], v[28], v[22]); // 8283F448
+        v[28] = v[2]; // 8283F44C
+        v[26] = __vor(v[57], v[57]); // 8283F450
+        v[26] = __vnmsubfp(v[28], v[27], v[26]); // 8283F454
+        v[4] = __vmaddfp(v[23], v[22], v[4]); // 8283F458
+        v[2] = __vmaddfp(v[2], v[26], v[2]); // 8283F45C
+        v[26] = __vor(v[57], v[57]); // 8283F460
+        v[28] = __vmulfp(v[4], v[4]); // 8283F464
+        v[27] = __vmulfp(v[4], v[56]); // 8283F468
+        v[26] = __vnmsubfp(v[25], v[28], v[26]); // 8283F46C
+        v[28] = __vmulfp(v[55], v[44]); // 8283F470
+        v[4] = __vmaddfp(v[27], v[26], v[4]); // 8283F474
+        v[6] = __vmulfp(v[6], v[4]); // 8283F478
+        v[4] = __vmulfp(v[46], v[3]); // 8283F47C
+        v[6] = __vsel(v[6], v[30], v[24]); // 8283F480
+        v[30] = __vmulfp(v[12], v[44]); // 8283F484
+        v[31] = __vnor(v[31], v[31]); // 8283F488
+        v[30] = __vmaddfp(v[11], v[43], v[30]); // 8283F48C
+        v[28] = __vmaddfp(v[54], v[43], v[28]); // 8283F490
+        v[26] = __vor(v[44], v[44]); // 8283F494
+        v[25] = __vor(v[43], v[43]); // 8283F498
+        v[27] = __vor(v[44], v[44]); // 8283F49C
+        v[29] = __vand(v[31], v[29]); // 8283F4A0
+        v[31] = __vsubfp(v[4], v[6]); // 8283F4A4
+        v[6] = __vaddfp(v[4], v[6]); // 8283F4A8
+        v[21] = __vor(v[57], v[57]); // 8283F4AC
+        v[3] = v[30]; // 8283F4B0
+        v[30] = v[28]; // 8283F4B4
+        v[28] = __vor(v[43], v[43]); // 8283F4B8
+        v[4] = __vnmsubfp(v[3], v[25], v[11]); // 8283F4BC
+        v[24] = __vmulfp(v[6], v[2]); // 8283F4C0
+        v[6] = __vnmsubfp(v[3], v[26], v[12]); // 8283F4C4
+        v[3] = __vor(v[55], v[55]); // 8283F4C8
+        v[31] = __vmulfp(v[31], v[2]); // 8283F4CC
+        v[2] = v[30]; // 8283F4D0
+        v[26] = __vor(v[58], v[58]); // 8283F4D4
+        v[3] = __vnmsubfp(v[2], v[27], v[3]); // 8283F4D8
+        v[2] = __vor(v[54], v[54]); // 8283F4DC
+        v[2] = __vnmsubfp(v[30], v[28], v[2]); // 8283F4E0
+        v[31] = __vminfp(v[24], v[31]); // 8283F4E4
+        v[30] = __vmulfp(v[6], v[3]); // 8283F4E8
+        v[28] = __vmulfp(v[3], v[3]); // 8283F4EC
+        v[3] = __vcmpgefp(v[57], v[31]); // 8283F4F0
+        v[27] = __vcmpgefp(v[31], v[58]); // 8283F4F4
+        v[30] = __vmaddfp(v[4], v[2], v[30]); // 8283F4F8
+        v[2] = __vmaddfp(v[2], v[2], v[28]); // 8283F4FC
+        v[27] = __vand(v[27], v[3]); // 8283F500
+        v[3] = __vmaddfp(v[30], v[0], v[7]); // 8283F504
+        v[30] = __vand(v[29], v[27]); // 8283F508
+        v[29] = __vmulfp(v[6], v[6]); // 8283F50C
+        v[6] = __vaddfp(v[2], v[5]); // 8283F510
+        v[28] = __vmulfp(v[3], v[3]); // 8283F514
+        v[4] = __vmaddfp(v[4], v[4], v[29]); // 8283F518
+        v[27] = __vmulfp(v[9], v[6]); // 8283F51C
+        v[29] = __vcmpeqfp(v[6], v[58]); // 8283F520
+        v[3] = __vmulfp(v[46], v[3]); // 8283F524
+        v[2] = __vaddfp(v[4], v[10]); // 8283F528
+        v[4] = __vmulfp(v[0], v[6]); // 8283F52C
+        v[29] = __vnor(v[29], v[29]); // 8283F530
+        v[6] = __vmulfp(v[27], v[2]); // 8283F534
+        v[2] = __vrefp(v[4]); // 8283F538
+        v[27] = v[4]; // 8283F53C
+        v[25] = v[4]; // 8283F540
+        v[6] = __vsubfp(v[28], v[6]); // 8283F544
+        v[22] = v[2]; // 8283F548
+        v[21] = __vnmsubfp(v[22], v[27], v[21]); // 8283F54C
+        v[4] = __vrsqrtefp(v[6]); // 8283F550
+        v[24] = v[6]; // 8283F554
+        v[28] = __vcmpgefp(v[6], v[58]); // 8283F558
+        v[23] = __vcmpeqfp(v[58], v[6]); // 8283F55C
+        v[2] = __vmaddfp(v[2], v[21], v[2]); // 8283F560
+        v[21] = __vor(v[57], v[57]); // 8283F564
+        v[27] = __vmulfp(v[4], v[4]); // 8283F568
+        v[22] = __vmulfp(v[4], v[56]); // 8283F56C
+        v[29] = __vand(v[29], v[28]); // 8283F570
+        v[21] = __vnmsubfp(v[24], v[27], v[21]); // 8283F574
+        v[27] = v[2]; // 8283F578
+        v[24] = __vor(v[57], v[57]); // 8283F57C
+        v[24] = __vnmsubfp(v[27], v[25], v[24]); // 8283F580
+        v[25] = v[6]; // 8283F584
+        v[4] = __vmaddfp(v[22], v[21], v[4]); // 8283F588
+        v[2] = __vmaddfp(v[2], v[24], v[2]); // 8283F58C
+        v[24] = __vor(v[57], v[57]); // 8283F590
+        v[27] = __vmulfp(v[4], v[4]); // 8283F594
+        v[24] = __vnmsubfp(v[25], v[27], v[24]); // 8283F598
+        v[27] = __vmulfp(v[4], v[56]); // 8283F59C
+        v[4] = __vmaddfp(v[27], v[24], v[4]); // 8283F5A0
+        v[27] = __vsel(v[0], v[31], v[30]); // 8283F5A4
+        v[6] = __vmulfp(v[6], v[4]); // 8283F5A8
+        v[6] = __vsel(v[6], v[26], v[23]); // 8283F5AC
+        v[4] = __vsubfp(v[3], v[6]); // 8283F5B0
+        v[6] = __vaddfp(v[3], v[6]); // 8283F5B4
+        v[4] = __vmulfp(v[4], v[2]); // 8283F5B8
+        v[6] = __vmulfp(v[6], v[2]); // 8283F5BC
+        v[6] = __vminfp(v[6], v[4]); // 8283F5C0
+        v[12] = __vmaddfp(v[55], v[6], v[12]); // 8283F5C4
+        v[3] = v[6]; // 8283F5C8
+        v[11] = __vmaddfp(v[54], v[6], v[11]); // 8283F5CC
+        v[24] = __vor(v[57], v[57]); // 8283F5D0
+        v[12] = __vmulfp(v[12], v[44]); // 8283F5D4
+        v[21] = __vor(v[57], v[57]); // 8283F5D8
+        v[4] = __vcmpgefp(v[57], v[6]); // 8283F5DC
+        v[14] = __vor(v[57], v[57]); // 8283F5E0
+        v[6] = __vcmpgefp(v[6], v[58]); // 8283F5E4
+        v[20] = __vor(v[58], v[58]); // 8283F5E8
+        v[18] = __vor(v[42], v[42]); // 8283F5EC
+        v[12] = __vmaddfp(v[11], v[43], v[12]); // 8283F5F0
+        v[6] = __vand(v[6], v[4]); // 8283F5F4
+        v[6] = __vand(v[29], v[6]); // 8283F5F8
+        v[29] = __vcmpeqfp(v[13], v[58]); // 8283F5FC
+        v[4] = v[12]; // 8283F600
+        v[11] = __vcmpgefp(v[4], v[58]); // 8283F604
+        v[12] = __vcmpgefp(v[114], v[4]); // 8283F608
+        v[29] = __vnor(v[29], v[29]); // 8283F60C
+        v[12] = __vand(v[11], v[12]); // 8283F610
+        v[11] = __vsubfp(v[116], v[33]); // 8283F614
+        v[12] = __vand(v[6], v[12]); // 8283F618
+        v[6] = __vmulfp(v[0], v[13]); // 8283F61C
+        v[26] = __vsel(v[0], v[3], v[12]); // 8283F620
+        v[3] = __vmulfp(v[9], v[13]); // 8283F624
+        v[25] = __vor(v[30], v[12]); // 8283F628
+        v[12] = __vsubfp(v[117], v[34]); // 8283F62C
+        v[2] = __vcmpgefp(v[26], v[27]); // 8283F630
+        v[28] = v[6]; // 8283F634
+        v[23] = v[6]; // 8283F638
+        v[30] = __vmulfp(v[12], v[12]); // 8283F63C
+        v[31] = __vmulfp(v[12], v[55]); // 8283F640
+        v[30] = __vmaddfp(v[11], v[11], v[30]); // 8283F644
+        v[31] = __vmaddfp(v[11], v[54], v[31]); // 8283F648
+        v[30] = __vaddfp(v[30], v[10]); // 8283F64C
+        v[31] = __vmaddfp(v[31], v[0], v[7]); // 8283F650
+        v[30] = __vmulfp(v[3], v[30]); // 8283F654
+        v[3] = __vrefp(v[6]); // 8283F658
+        v[6] = __vmulfp(v[31], v[31]); // 8283F65C
+        v[6] = __vsubfp(v[6], v[30]); // 8283F660
+        v[30] = v[3]; // 8283F664
+        v[24] = __vnmsubfp(v[30], v[28], v[24]); // 8283F668
+        v[28] = v[6]; // 8283F66C
+        v[19] = __vcmpeqfp(v[58], v[6]); // 8283F670
+        v[30] = __vmaddfp(v[3], v[24], v[3]); // 8283F674
+        v[3] = __vrsqrtefp(v[6]); // 8283F678
+        v[24] = __vcmpgefp(v[6], v[58]); // 8283F67C
+        v[22] = v[30]; // 8283F680
+        v[17] = __vand(v[29], v[24]); // 8283F684
+        v[21] = __vnmsubfp(v[22], v[23], v[21]); // 8283F688
+        v[22] = __vor(v[57], v[57]); // 8283F68C
+        v[23] = __vmulfp(v[3], v[3]); // 8283F690
+        v[30] = __vmaddfp(v[30], v[21], v[30]); // 8283F694
+        v[22] = __vnmsubfp(v[28], v[23], v[22]); // 8283F698
+        v[23] = v[6]; // 8283F69C
+        v[21] = __vmulfp(v[3], v[56]); // 8283F6A0
+        v[28] = __vmulfp(v[46], v[31]); // 8283F6A4
+        v[31] = __vmulfp(v[55], v[42]); // 8283F6A8
+        v[3] = __vmaddfp(v[21], v[22], v[3]); // 8283F6AC
+        v[21] = __vor(v[41], v[41]); // 8283F6B0
+        v[22] = __vmulfp(v[12], v[42]); // 8283F6B4
+        v[31] = __vmaddfp(v[54], v[41], v[31]); // 8283F6B8
+        v[29] = __vmulfp(v[3], v[3]); // 8283F6BC
+        v[22] = __vmaddfp(v[11], v[41], v[22]); // 8283F6C0
+        v[15] = v[31]; // 8283F6C4
+        v[16] = v[31]; // 8283F6C8
+        v[31] = __vor(v[54], v[54]); // 8283F6CC
+        v[31] = __vnmsubfp(v[16], v[21], v[31]); // 8283F6D0
+        v[14] = __vnmsubfp(v[23], v[29], v[14]); // 8283F6D4
+        v[29] = __vor(v[55], v[55]); // 8283F6D8
+        v[24] = v[22]; // 8283F6DC
+        v[22] = __vmulfp(v[3], v[56]); // 8283F6E0
+        v[29] = __vnmsubfp(v[15], v[18], v[29]); // 8283F6E4
+        v[3] = __vmaddfp(v[22], v[14], v[3]); // 8283F6E8
+        v[6] = __vmulfp(v[6], v[3]); // 8283F6EC
+        v[6] = __vsel(v[6], v[20], v[19]); // 8283F6F0
+        v[3] = __vsubfp(v[28], v[6]); // 8283F6F4
+        v[6] = __vaddfp(v[28], v[6]); // 8283F6F8
+        v[3] = __vmulfp(v[3], v[30]); // 8283F6FC
+        v[6] = __vmulfp(v[6], v[30]); // 8283F700
+        v[30] = __vminfp(v[6], v[3]); // 8283F704
+        v[6] = __vcmpgefp(v[57], v[30]); // 8283F708
+        v[3] = __vcmpgefp(v[30], v[58]); // 8283F70C
+        v[6] = __vand(v[3], v[6]); // 8283F710
+        v[23] = __vor(v[41], v[41]); // 8283F714
+        v[20] = __vor(v[57], v[57]); // 8283F718
+        v[16] = __vor(v[57], v[57]); // 8283F71C
+        v[28] = __vand(v[17], v[6]); // 8283F720
+        v[6] = __vor(v[42], v[42]); // 8283F724
+        v[3] = __vnmsubfp(v[24], v[23], v[11]); // 8283F728
+        v[6] = __vnmsubfp(v[24], v[6], v[12]); // 8283F72C
+        v[24] = __vmulfp(v[29], v[29]); // 8283F730
+        v[29] = __vmulfp(v[6], v[29]); // 8283F734
+        v[24] = __vmaddfp(v[31], v[31], v[24]); // 8283F738
+        v[23] = __vmulfp(v[6], v[6]); // 8283F73C
+        v[31] = __vmaddfp(v[3], v[31], v[29]); // 8283F740
+        v[6] = __vaddfp(v[24], v[5]); // 8283F744
+        v[3] = __vmaddfp(v[3], v[3], v[23]); // 8283F748
+        v[31] = __vmaddfp(v[31], v[0], v[7]); // 8283F74C
+        v[23] = __vmulfp(v[9], v[6]); // 8283F750
+        v[24] = __vaddfp(v[3], v[10]); // 8283F754
+        v[3] = __vmulfp(v[0], v[6]); // 8283F758
+        v[29] = __vcmpeqfp(v[6], v[58]); // 8283F75C
+        v[6] = __vmulfp(v[23], v[24]); // 8283F760
+        v[24] = __vmulfp(v[31], v[31]); // 8283F764
+        v[22] = v[3]; // 8283F768
+        v[31] = __vmulfp(v[46], v[31]); // 8283F76C
+        v[29] = __vnor(v[29], v[29]); // 8283F770
+        v[6] = __vsubfp(v[24], v[6]); // 8283F774
+        v[24] = v[3]; // 8283F778
+        v[3] = __vrefp(v[3]); // 8283F77C
+        v[23] = __vcmpgefp(v[6], v[58]); // 8283F780
+        v[21] = v[3]; // 8283F784
+        v[19] = __vcmpeqfp(v[58], v[6]); // 8283F788
+        v[20] = __vnmsubfp(v[21], v[24], v[20]); // 8283F78C
+        v[21] = __vor(v[57], v[57]); // 8283F790
+        v[29] = __vand(v[29], v[23]); // 8283F794
+        v[23] = __vcmpeqfp(v[13], v[58]); // 8283F798
+        v[3] = __vmaddfp(v[3], v[20], v[3]); // 8283F79C
+        v[20] = __vor(v[58], v[58]); // 8283F7A0
+        v[24] = v[3]; // 8283F7A4
+        v[21] = __vnmsubfp(v[24], v[22], v[21]); // 8283F7A8
+        v[22] = v[6]; // 8283F7AC
+        v[24] = __vmaddfp(v[3], v[21], v[3]); // 8283F7B0
+        v[21] = v[6]; // 8283F7B4
+        v[3] = __vrsqrtefp(v[6]); // 8283F7B8
+        v[18] = __vmulfp(v[3], v[3]); // 8283F7BC
+        v[17] = __vmulfp(v[3], v[56]); // 8283F7C0
+        v[16] = __vnmsubfp(v[22], v[18], v[16]); // 8283F7C4
+        v[3] = __vmaddfp(v[17], v[16], v[3]); // 8283F7C8
+        v[17] = __vor(v[57], v[57]); // 8283F7CC
+        v[22] = __vmulfp(v[3], v[3]); // 8283F7D0
+        v[18] = __vmulfp(v[3], v[56]); // 8283F7D4
+        v[17] = __vnmsubfp(v[21], v[22], v[17]); // 8283F7D8
+        v[3] = __vmaddfp(v[18], v[17], v[3]); // 8283F7DC
+        v[6] = __vmulfp(v[6], v[3]); // 8283F7E0
+        v[6] = __vsel(v[6], v[20], v[19]); // 8283F7E4
+        v[20] = __vmulfp(v[9], v[13]); // 8283F7E8
+        v[3] = __vsubfp(v[31], v[6]); // 8283F7EC
+        v[6] = __vaddfp(v[31], v[6]); // 8283F7F0
+        v[3] = __vmulfp(v[3], v[24]); // 8283F7F4
+        v[6] = __vmulfp(v[6], v[24]); // 8283F7F8
+        v[6] = __vminfp(v[6], v[3]); // 8283F7FC
+        v[12] = __vmaddfp(v[55], v[6], v[12]); // 8283F800
+        v[22] = v[6]; // 8283F804
+        v[11] = __vmaddfp(v[54], v[6], v[11]); // 8283F808
+        v[3] = __vcmpgefp(v[57], v[6]); // 8283F80C
+        v[31] = __vcmpgefp(v[6], v[58]); // 8283F810
+        v[12] = __vmulfp(v[12], v[42]); // 8283F814
+        v[31] = __vand(v[31], v[3]); // 8283F818
+        v[6] = __vand(v[29], v[31]); // 8283F81C
+        v[31] = __vmulfp(v[0], v[13]); // 8283F820
+        v[12] = __vmaddfp(v[11], v[41], v[12]); // 8283F824
+        v[3] = v[12]; // 8283F828
+        v[12] = __vcmpgefp(v[113], v[3]); // 8283F82C
+        v[11] = __vcmpgefp(v[3], v[58]); // 8283F830
+        v[24] = __vand(v[11], v[12]); // 8283F834
+        v[12] = __vsubfp(v[117], v[8]); // 8283F838
+        v[11] = __vsubfp(v[116], v[32]); // 8283F83C
+        v[6] = __vand(v[6], v[24]); // 8283F840
+        v[24] = __vsel(v[0], v[30], v[28]); // 8283F844
+        v[13] = __vmulfp(v[12], v[55]); // 8283F848
+        v[30] = __vmulfp(v[12], v[12]); // 8283F84C
+        v[13] = __vmaddfp(v[11], v[54], v[13]); // 8283F850
+        v[29] = __vmaddfp(v[11], v[11], v[30]); // 8283F854
+        v[22] = __vsel(v[0], v[22], v[6]); // 8283F858
+        v[30] = __vmaddfp(v[13], v[0], v[7]); // 8283F85C
+        v[21] = __vor(v[28], v[6]); // 8283F860
+        v[18] = v[31]; // 8283F864
+        v[15] = __vor(v[57], v[57]); // 8283F868
+        v[14] = __vor(v[57], v[57]); // 8283F86C
+        v[28] = __vcmpgefp(v[22], v[24]); // 8283F870
+        v[13] = __vaddfp(v[29], v[10]); // 8283F874
+        v[6] = __vmulfp(v[30], v[30]); // 8283F878
+        v[29] = __vrefp(v[31]); // 8283F87C
+        v[30] = __vmulfp(v[46], v[30]); // 8283F880
+        v[13] = __vmulfp(v[20], v[13]); // 8283F884
+        v[17] = v[29]; // 8283F888
+        v[15] = __vnmsubfp(v[17], v[18], v[15]); // 8283F88C
+        v[13] = __vsubfp(v[6], v[13]); // 8283F890
+        v[31] = __vmaddfp(v[29], v[15], v[29]); // 8283F894
+        v[29] = __vnor(v[23], v[23]); // 8283F898
+        v[23] = __vor(v[58], v[58]); // 8283F89C
+        v[6] = __vrsqrtefp(v[13]); // 8283F8A0
+        v[19] = v[13]; // 8283F8A4
+        v[16] = v[13]; // 8283F8A8
+        v[20] = __vcmpgefp(v[13], v[58]); // 8283F8AC
+        v[17] = __vmulfp(v[6], v[6]); // 8283F8B0
+        v[15] = __vmulfp(v[6], v[56]); // 8283F8B4
+        v[29] = __vand(v[29], v[20]); // 8283F8B8
+        v[20] = __vcmpeqfp(v[58], v[13]); // 8283F8BC
+        v[14] = __vnmsubfp(v[19], v[17], v[14]); // 8283F8C0
+        v[19] = v[31]; // 8283F8C4
+        v[17] = __vor(v[57], v[57]); // 8283F8C8
+        v[17] = __vnmsubfp(v[19], v[18], v[17]); // 8283F8CC
+        v[6] = __vmaddfp(v[15], v[14], v[6]); // 8283F8D0
+        v[31] = __vmaddfp(v[31], v[17], v[31]); // 8283F8D4
+        v[17] = __vor(v[57], v[57]); // 8283F8D8
+        v[19] = __vmulfp(v[6], v[6]); // 8283F8DC
+        v[18] = __vmulfp(v[6], v[56]); // 8283F8E0
+        v[17] = __vnmsubfp(v[16], v[19], v[17]); // 8283F8E4
+        v[19] = __vor(v[39], v[39]); // 8283F8E8
+        v[6] = __vmaddfp(v[18], v[17], v[6]); // 8283F8EC
+        v[18] = __vor(v[40], v[40]); // 8283F8F0
+        v[17] = __vor(v[39], v[39]); // 8283F8F4
+        v[13] = __vmulfp(v[13], v[6]); // 8283F8F8
+        v[13] = __vsel(v[13], v[23], v[20]); // 8283F8FC
+        v[20] = __vor(v[40], v[40]); // 8283F900
+        v[6] = __vsubfp(v[30], v[13]); // 8283F904
+        v[13] = __vaddfp(v[30], v[13]); // 8283F908
+        v[6] = __vmulfp(v[6], v[31]); // 8283F90C
+        v[13] = __vmulfp(v[13], v[31]); // 8283F910
+        v[6] = __vminfp(v[13], v[6]); // 8283F914
+        v[13] = __vcmpgefp(v[57], v[6]); // 8283F918
+        v[31] = __vcmpgefp(v[6], v[58]); // 8283F91C
+        v[30] = __vand(v[31], v[13]); // 8283F920
+        v[13] = __vmulfp(v[55], v[40]); // 8283F924
+        v[31] = __vmulfp(v[12], v[40]); // 8283F928
+        v[23] = __vand(v[29], v[30]); // 8283F92C
+        v[13] = __vmaddfp(v[54], v[39], v[13]); // 8283F930
+        v[31] = __vmaddfp(v[11], v[39], v[31]); // 8283F934
+        v[29] = v[13]; // 8283F938
+        v[30] = v[13]; // 8283F93C
+        v[13] = __vor(v[55], v[55]); // 8283F940
+        v[16] = v[31]; // 8283F944
+        v[15] = v[31]; // 8283F948
+        v[31] = __vor(v[54], v[54]); // 8283F94C
+        v[13] = __vnmsubfp(v[30], v[20], v[13]); // 8283F950
+        v[30] = __vnmsubfp(v[16], v[18], v[12]); // 8283F954
+        v[31] = __vnmsubfp(v[29], v[19], v[31]); // 8283F958
+        v[29] = __vnmsubfp(v[15], v[17], v[11]); // 8283F95C
+        v[20] = __vmulfp(v[13], v[13]); // 8283F960
+        v[13] = __vmulfp(v[30], v[13]); // 8283F964
+        v[30] = __vmulfp(v[30], v[30]); // 8283F968
+        v[20] = __vmaddfp(v[31], v[31], v[20]); // 8283F96C
+        v[13] = __vmaddfp(v[29], v[31], v[13]); // 8283F970
+        v[31] = __vmaddfp(v[29], v[29], v[30]); // 8283F974
+        v[5] = __vaddfp(v[20], v[5]); // 8283F978
+        v[7] = __vmaddfp(v[13], v[0], v[7]); // 8283F97C
+        v[13] = __vaddfp(v[31], v[10]); // 8283F980
+        v[10] = __vmulfp(v[9], v[5]); // 8283F984
+        v[9] = __vmulfp(v[7], v[7]); // 8283F988
+        v[31] = __vcmpeqfp(v[5], v[58]); // 8283F98C
+        v[13] = __vmulfp(v[10], v[13]); // 8283F990
+        v[13] = __vsubfp(v[9], v[13]); // 8283F994
+        v[10] = __vrsqrtefp(v[13]); // 8283F998
+        v[29] = v[13]; // 8283F99C
+        v[9] = __vmulfp(v[0], v[5]); // 8283F9A0
+        v[14] = __vor(v[57], v[57]); // 8283F9A4
+        v[5] = __vmulfp(v[46], v[7]); // 8283F9A8
+        v[20] = v[13]; // 8283F9AC
+        v[30] = __vcmpgefp(v[13], v[58]); // 8283F9B0
+        v[19] = __vor(v[58], v[58]); // 8283F9B4
+        v[18] = __vcmpeqfp(v[58], v[13]); // 8283F9B8
+        v[16] = __vmulfp(v[10], v[10]); // 8283F9C0
+        v[17] = v[9]; // 8283F9C4
+        v[7] = __vrefp(v[9]); // 8283F9C8
+        v[15] = v[9]; // 8283F9CC
+        v[9] = __vmulfp(v[10], v[56]); // 8283F9D0
+        v[14] = __vnmsubfp(v[29], v[16], v[14]); // 8283F9D4
+        v[29] = __vor(v[57], v[57]); // 8283F9D8
+        v[10] = __vmaddfp(v[9], v[14], v[10]); // 8283F9DC
+        v[9] = v[7]; // 8283F9E0
+        v[29] = __vnmsubfp(v[9], v[17], v[29]); // 8283F9E4
+        v[17] = __vor(v[57], v[57]); // 8283F9E8
+        v[9] = __vmaddfp(v[7], v[29], v[7]); // 8283F9EC
+        v[7] = __vmulfp(v[10], v[10]); // 8283F9F0
+        v[29] = __vmulfp(v[10], v[56]); // 8283F9F4
+        v[17] = __vnmsubfp(v[20], v[7], v[17]); // 8283F9F8
+        v[7] = __vor(v[57], v[57]); // 8283F9FC
+        v[10] = __vmaddfp(v[29], v[17], v[10]); // 8283FA00
+        v[13] = __vmulfp(v[13], v[10]); // 8283FA04
+        v[10] = v[9]; // 8283FA08
+        v[7] = __vnmsubfp(v[10], v[15], v[7]); // 8283FA0C
+        v[13] = __vsel(v[13], v[19], v[18]); // 8283FA10
+        v[10] = __vmaddfp(v[9], v[7], v[9]); // 8283FA14
+        v[9] = __vsubfp(v[5], v[13]); // 8283FA18
+        v[13] = __vaddfp(v[5], v[13]); // 8283FA1C
+        v[9] = __vmulfp(v[9], v[10]); // 8283FA20
+        v[13] = __vmulfp(v[13], v[10]); // 8283FA24
+        v[13] = __vminfp(v[13], v[9]); // 8283FA28
+        v[12] = __vmaddfp(v[55], v[13], v[12]); // 8283FA2C
+        v[5] = v[13]; // 8283FA30
+        v[11] = __vmaddfp(v[54], v[13], v[11]); // 8283FA34
+        v[9] = __vcmpgefp(v[13], v[58]); // 8283FA38
+        v[10] = __vcmpgefp(v[57], v[13]); // 8283FA3C
+        v[13] = __vnor(v[31], v[31]); // 8283FA40
+        v[31] = __vor(v[34], v[34]); // 8283FA44
+        v[30] = __vand(v[13], v[30]); // 8283FA48
+        v[7] = __vmulfp(v[12], v[40]); // 8283FA4C
+        v[12] = __vsel(v[0], v[6], v[23]); // 8283FA50
+        v[10] = __vand(v[9], v[10]); // 8283FA54
+        v[9] = __vsel(v[22], v[24], v[28]); // 8283FA58
+        v[29] = v[12]; // 8283FA5C
+        v[10] = __vand(v[30], v[10]); // 8283FA60
+        v[30] = __vsel(v[26], v[27], v[2]); // 8283FA64
+        v[27] = __vor(v[45], v[45]); // 8283FA68
+        v[7] = __vmaddfp(v[11], v[39], v[7]); // 8283FA6C
+        v[11] = __vsel(v[0], v[9], v[21]); // 8283FA70
+        v[13] = v[7]; // 8283FA74
+        v[7] = __vor(v[34], v[34]); // 8283FA78
+        v[6] = __vcmpgefp(v[13], v[58]); // 8283FA7C
+        v[9] = __vcmpgefp(v[111], v[13]); // 8283FA80
+        v[7] = __vmaddfp(v[3], v[42], v[7]); // 8283FA84
+        v[9] = __vand(v[6], v[9]); // 8283FA88
+        v[7] = __vsel(v[7], v[31], v[28]); // 8283FA8C
+        v[10] = __vand(v[10], v[9]); // 8283FA90
+        v[9] = __vsel(v[0], v[5], v[10]); // 8283FA94
+        v[6] = __vor(v[23], v[10]); // 8283FA98
+        v[5] = __vor(v[58], v[58]); // 8283FA9C
+        v[12] = __vcmpgefp(v[9], v[12]); // 8283FAA0
+        v[5] = __vmaddfp(v[4], v[44], v[5]); // 8283FAA4
+        v[10] = __vsel(v[9], v[29], v[12]); // 8283FAA8
+        v[29] = __vor(v[58], v[58]); // 8283FAAC
+        v[10] = __vsel(v[0], v[10], v[6]); // 8283FAB0
+        v[0] = __vsel(v[0], v[30], v[25]); // 8283FAB4
+        v[30] = v[8]; // 8283FAB8
+        v[5] = __vsel(v[5], v[29], v[2]); // 8283FABC
+        v[29] = __vor(v[32], v[32]); // 8283FAC0
+        v[30] = __vmaddfp(v[13], v[40], v[30]); // 8283FAC4
+        v[29] = __vmaddfp(v[13], v[39], v[29]); // 8283FAC8
+        v[13] = __vor(v[32], v[32]); // 8283FACC
+        v[8] = __vsel(v[30], v[8], v[12]); // 8283FAD0
+        v[30] = stack320; // 8283FAD4
+        v[29] = __vsel(v[29], v[13], v[12]); // 8283FADC
+        v[26] = stack336; // 8283FAE0
+        v[13] = __vor(v[33], v[33]); // 8283FAE4
+        v[24] = __vor(v[33], v[33]); // 8283FAE8
+        v[23] = __vor(v[57], v[57]); // 8283FAEC
+        v[13] = __vmaddfp(v[3], v[41], v[13]); // 8283FAF0
+        v[3] = v[13]; // 8283FAF4
+        v[13] = __vcmpgefp(v[0], v[11]); // 8283FAF8
+        v[9] = __vsel(v[3], v[24], v[28]); // 8283FAFC
+        v[0] = __vsel(v[0], v[11], v[13]); // 8283FB00
+        v[11] = __vsel(v[5], v[7], v[13]); // 8283FB04
+        v[12] = __vcmpgefp(v[0], v[10]); // 8283FB08
+        v[11] = __vsel(v[11], v[8], v[12]); // 8283FB0C
+        v[8] = __vor(v[58], v[58]); // 8283FB10
+        v[0] = __vsel(v[0], v[10], v[12]); // 8283FB14
+        v[10] = __vor(v[58], v[58]); // 8283FB18
+        v[11] = __vsel(v[11], v[30], v[1]); // 8283FB1C
+        v[8] = __vmaddfp(v[4], v[43], v[8]); // 8283FB20
+        v[30] = v[122]; // 8283FB24
+        v[0] = __vsel(v[0], v[27], v[1]); // 8283FB28
+        v[10] = __vsel(v[8], v[10], v[2]); // 8283FB2C
+        v[2] = __vor(v[57], v[57]); // 8283FB30
+        v[13] = __vsel(v[10], v[9], v[13]); // 8283FB34
+        v[13] = __vsel(v[13], v[29], v[12]); // 8283FB38
+        v[13] = __vsel(v[13], v[26], v[1]); // 8283FB3C
+        v[12] = __vmulfp(v[13], v[120]); // 8283FB40
+        v[10] = __vmulfp(v[13], v[119]); // 8283FB44
+        v[13] = __vmulfp(v[13], v[118]); // 8283FB48
+        v[12] = __vmaddfp(v[11], v[47], v[12]); // 8283FB4C
+        v[10] = __vmaddfp(v[11], v[49], v[10]); // 8283FB50
+        v[13] = __vmaddfp(v[11], v[48], v[13]); // 8283FB54
+        v[12] = __vaddfp(v[12], v[127]); // 8283FB58
+        v[11] = __vaddfp(v[10], v[126]); // 8283FB5C
+        v[10] = __vaddfp(v[13], v[125]); // 8283FB60
+        v[9] = __vsubfp(v[12], v[38]); // 8283FB64
+        v[8] = __vsubfp(v[11], v[37]); // 8283FB68
+        v[7] = __vsubfp(v[10], v[36]); // 8283FB6C
+        v[13] = __vmulfp(v[9], v[9]); // 8283FB70
+        v[13] = __vmaddfp(v[8], v[8], v[13]); // 8283FB74
+        v[13] = __vmaddfp(v[7], v[7], v[13]); // 8283FB78
+        v[5] = v[13]; // 8283FB7C
+        v[13] = __vrsqrtefp(v[13]); // 8283FB80
+        v[4] = __vmulfp(v[13], v[13]); // 8283FB84
+        v[3] = __vmulfp(v[13], v[56]); // 8283FB88
+        v[2] = __vnmsubfp(v[5], v[4], v[2]); // 8283FB8C
+        v[4] = v[124]; // 8283FB90
+        v[5] = __vnmsubfp(v[4], v[0], v[12]); // 8283FB94
+        v[13] = __vmaddfp(v[2], v[3], v[13]); // 8283FB98
+        v[2] = v[123]; // 8283FB9C
+        v[3] = __vnmsubfp(v[30], v[0], v[10]); // 8283FBA0
+        v[4] = __vnmsubfp(v[2], v[0], v[11]); // 8283FBA4
+        v[2] = __vmulfp(v[9], v[13]); // 8283FBA8
+        v[9] = __vsubfp(v[5], v[38]); // 8283FBAC
+        v[31] = __vmulfp(v[8], v[13]); // 8283FBB0
+        v[30] = __vmulfp(v[7], v[13]); // 8283FBB4
+        v[8] = __vsubfp(v[4], v[37]); // 8283FBB8
+        v[7] = __vsubfp(v[3], v[36]); // 8283FBBC
+        v[38] = __vmaddfp(v[2], v[50], v[38]); // 8283FBC0
+        v[13] = __vmulfp(v[9], v[9]); // 8283FBC4
+        v[37] = __vmaddfp(v[31], v[50], v[37]); // 8283FBC8
+        v[36] = __vmaddfp(v[30], v[50], v[36]); // 8283FBCC
+        v[13] = __vmaddfp(v[8], v[8], v[13]); // 8283FBD0
+        v[13] = __vmaddfp(v[7], v[7], v[13]); // 8283FBD4
+        v[27] = v[13]; // 8283FBD8
+        v[13] = __vrsqrtefp(v[13]); // 8283FBDC
+        v[26] = __vmulfp(v[13], v[13]); // 8283FBE0
+        v[24] = __vmulfp(v[13], v[56]); // 8283FBE4
+        v[23] = __vnmsubfp(v[27], v[26], v[23]); // 8283FBE8
+        v[13] = __vmaddfp(v[23], v[24], v[13]); // 8283FBEC
+        v[9] = __vmulfp(v[9], v[13]); // 8283FBF0
+        v[8] = __vmulfp(v[8], v[13]); // 8283FBF4
+        v[13] = __vmulfp(v[7], v[13]); // 8283FBF8
+        v[7] = __vor(v[38], v[38]); // 8283FBFC
+        v[7] = __vsel(v[5], v[7], v[1]); // 8283FC00
+        v[9] = __vsel(v[9], v[2], v[1]); // 8283FC04
+        v[2] = __vor(v[37], v[37]); // 8283FC08
+        v[8] = __vsel(v[8], v[31], v[1]); // 8283FC0C
+        v[13] = __vsel(v[13], v[30], v[1]); // 8283FC10
+        v[31] = __vor(v[36], v[36]); // 8283FC14
+        v[30] = v[3]; // 8283FC18
+        v[5] = __vsel(v[4], v[2], v[1]); // 8283FC1C
+        v[4] = __vsel(v[30], v[31], v[1]); // 8283FC20
+        v[31] = __vmrghw(v[9], v[13]); // 8283FC24
+        v[30] = __vmrghw(v[8], v[13]); // 8283FC28
+        v[29] = __vmrglw(v[9], v[13]); // 8283FC30
+        v[28] = __vmrglw(v[8], v[13]); // 8283FC34
+        v[3] = __vmrghw(v[52], v[53]); // 8283FC38
+        v[27] = __vmrghw(v[31], v[30]); // 8283FC3C
+        v[31] = __vmrglw(v[31], v[30]); // 8283FC40
+        v[30] = __vmrghw(v[29], v[28]); // 8283FC44
+        v[29] = __vmrglw(v[29], v[28]); // 8283FC48
+        v[2] = __vmrghw(v[51], v[53]); // 8283FC4C
+        v[28] = __vmrghw(v[5], v[0]); // 8283FC50
+        v[5] = __vmrglw(v[5], v[0]); // 8283FC54
+        lContactNormal0.mV = v[27]; // 8283FC58
+        v[27] = __vmrghw(v[11], v[0]); // 8283FC5C
+        lContactNormal1.mV = v[31]; // 8283FC60
+        v[0] = __vmrglw(v[11], v[0]); // 8283FC64
+        lContactNormal2.mV = v[30]; // 8283FC68
+        v[11] = __vmrghw(v[3], v[2]); // 8283FC70
+        v[31] = __vmrglw(v[52], v[53]); // 8283FC74
+        v[30] = __vmrglw(v[51], v[53]); // 8283FC78
+        lContactNormal3.mV = v[29]; // 8283FC7C
+        v[29] = __vmrghw(v[7], v[4]); // 8283FC80
+        v[7] = __vmrglw(v[7], v[4]); // 8283FC84
+        v[4] = __vmrghw(v[12], v[10]); // 8283FC8C
+        v[12] = __vmrglw(v[12], v[10]); // 8283FC90
+        lTriangleNormal0.mV = v[11]; // 8283FC94
+        v[10] = __vmrglw(v[3], v[2]); // 8283FC98
+        v[11] = __vmrghw(v[31], v[30]); // 8283FC9C
+        v[3] = __vmrghw(v[29], v[28]); // 8283FCA0
+        v[2] = __vmrglw(v[29], v[28]); // 8283FCA4
+        lTriangleNormal1.mV = v[10]; // 8283FCA8
+        v[10] = __vmrglw(v[31], v[30]); // 8283FCAC
+        lTriangleNormal2.mV = v[11]; // 8283FCB0
+        v[11] = __vmrghw(v[7], v[5]); // 8283FCB8
+        lTriangleNormal3.mV = v[10]; // 8283FCC0
+        lSphereContactPoint0.mV = v[3]; // 8283FCC8
+        v[10] = __vmrglw(v[7], v[5]); // 8283FCCC
+        v[7] = __vmrghw(v[4], v[27]); // 8283FCD0
+        v[5] = __vmrglw(v[4], v[27]); // 8283FCD4
+        lSphereContactPoint1.mV = v[2]; // 8283FCD8
+        lSphereContactPoint2.mV = v[11]; // 8283FCE0
+        v[11] = __vmrghw(v[12], v[0]); // 8283FCE8
+        v[0] = __vmrglw(v[12], v[0]); // 8283FCEC
+        lSphereContactPoint3.mV = v[10]; // 8283FCF0
+        lTriangleContactPoint0.mV = v[7]; // 8283FCF8
+        v[10] = __vor(v[1], v[25]); // 8283FCFC
+        lTriangleContactPoint1.mV = v[5]; // 8283FD00
+        v[10] = __vor(v[10], v[21]); // 8283FD04
+        lTriangleContactPoint2.mV = v[11]; // 8283FD08
+        v[11] = __vmulfp(v[9], v[52]); // 8283FD0C
+        v[9] = __vnor(v[115], v[115]); // 8283FD10
+        v[10] = __vor(v[10], v[6]); // 8283FD1C
+        lTriangleContactPoint3.mV = v[0]; // 8283FD20
+        v[12] = __vand(v[9], v[10]); // 8283FD24
+        v[0] = lTriangles.mValidMasks.mV; // 8283FD28
+        v[11] = __vmaddfp(v[8], v[51], v[11]); // 8283FD2C
+        v[11] = __vmaddfp(v[13], v[53], v[11]); // 8283FD30
+        v[13] = __vcmpgtfp(v[58], v[11]); // 8283FD34
+        v[13] = __vand(v[13], v[12]); // 8283FD38
+        v[1] = __vand(v[13], v[0]); // 8283FD3C
+        return Triangle4::Mask4(v[1]);
     }
 }
 
@@ -875,24 +1613,14 @@ namespace CgsGeometric
 
         inline rw::math::vpu::MaskScalar SweptMask(bool lbValue)
         {
-            rw::math::vpu::MaskScalar lMask;
-            const u32 luLane = lbValue ? 0xFFFFFFFFu : 0u;
-            std::memcpy(&lMask.x, &luLane, sizeof(u32));
-            std::memcpy(&lMask.y, &luLane, sizeof(u32));
-            std::memcpy(&lMask.z, &luLane, sizeof(u32));
-            std::memcpy(&lMask.w, &luLane, sizeof(u32));
-            return lMask;
+            return rw::math::vpu::MaskScalar(lbValue ? __vspltisw(-1) : __vspltisw(0));
         }
 
-        // A 2D point as the console builds it: `vperm` of two splatted dot products with the
-        // (A.w0, B.w1, A.w0, A.w0) control vector, so z and w repeat x.
+        // The original two-dimensional lane packing is (x, y, x, x).
         inline Vector2 SweptPlanePoint(f32 lfX, f32 lfY)
         {
-            Vector2 lPoint;
-            lPoint.x = lfX;
-            lPoint.y = lfY;
-            lPoint.z = lfX;
-            lPoint.w = lfX;
+            Vector2 lPoint(lfX, lfY);
+            lPoint.mV = __vrlimi(lPoint.mV, __vspltw(lPoint.mV, 0), 3, 0);
             return lPoint;
         }
 
@@ -1041,87 +1769,169 @@ namespace CgsGeometric
         }
     }
 
-    rw::math::vpu::MaskScalar Intersect2DCircleWithTriangle(const Vector2&  lCentre,
-                                                            const VecFloat& lRadiusSquared,
-                                                            const Vector2&  lVert0,
-                                                            const Vector2&  lVert1,
-                                                            const Vector2&  lVert2,
-                                                            const Vector2&  lEdge01Dir,
-                                                            const Vector2&  lEdge12Dir,
-                                                            const Vector2&  lEdge20Dir,
-                                                            const VecFloat& lfEdge01Magnitude,
-                                                            const VecFloat& lfEdge12Magnitude,
-                                                            const VecFloat& lfEdge20Magnitude,
-                                                            Vector2&        lIntersectPoint)
+    rw::math::vpu::MaskScalar Intersect2DCircleWithTriangle(Vector2 lCentre, VecFloat lRadiusSquared, Vector2 lVert0, Vector2 lVert1, Vector2 lVert2, Vector2 lEdge01Dir, Vector2 lEdge12Dir, Vector2 lEdge20Dir, VecFloat lfEdge01Magnitude, VecFloat lfEdge12Magnitude, VecFloat lfEdge20Magnitude, Vector2& lIntersectPoint)
     {
-        const Vector2* lapVertex[3]  = { &lVert0, &lVert1, &lVert2 };
-        const Vector2* lapEdgeDir[3] = { &lEdge01Dir, &lEdge12Dir, &lEdge20Dir };
-        const f32      lafEdgeMagnitude[3] = { lfEdge01Magnitude.x, lfEdge12Magnitude.x, lfEdge20Magnitude.x };
-
-        bool lbInside = true;
-        f32  lafProjection[3];
-        bool labBehind[3];
-        Vector2 laOffset[3];
-        for (s32 liEdge = 0; liEdge < 3; ++liEdge)
-        {
-            const Vector2& lrVertex = *lapVertex[liEdge];
-            const Vector2& lrDir    = *lapEdgeDir[liEdge];
-
-            // The winding test: the centre lies left of every directed edge.
-            const f32 lfSide = SweptSub(SweptMul(lrDir.x, SweptSub(lrVertex.y, lCentre.y)), SweptMul(lrDir.y, SweptSub(lrVertex.x, lCentre.x)));
-            lbInside = lbInside && SweptGE(lfSide, 0.0f);
-
-            __stvx(__vsubfp(__lvx(&lCentre, 0), __lvx(&lrVertex, 0)), &laOffset[liEdge], 0);
-            lafProjection[liEdge] = SweptDot2(laOffset[liEdge], lrDir);
-            labBehind[liEdge]     = !SweptGT(lafProjection[liEdge], 0.0f);
-        }
-
-        // Candidates in the console's order -- the three vertices, then the three edges -- each
-        // taken when it is not farther than the best so far (`!(d > best)`, the first best being
-        // the squared radius) and its own gate holds.
-        f32     lfBest  = lRadiusSquared.x;
-        bool    lbFound = false;
-        Vector2 lPoint  = lCentre;
-
-        for (s32 liVertex = 0; liVertex < 3; ++liVertex)
-        {
-            const f32 lfDistanceSq = SweptDot2(laOffset[liVertex], laOffset[liVertex]);
-            if (!SweptGT(lfDistanceSq, lfBest) && labBehind[liVertex])
-            {
-                lfBest  = lfDistanceSq;
-                lPoint  = *lapVertex[liVertex];
-                lbFound = true;
-            }
-        }
-
-        for (s32 liEdge = 0; liEdge < 3; ++liEdge)
-        {
-            const Vector2& lrVertex = *lapVertex[liEdge];
-            const Vector2& lrDir    = *lapEdgeDir[liEdge];
-            const f32      lfProj   = lafProjection[liEdge];
-
-            Vector2 lPerp;
-            __stvx(__vsubfp(__lvx(&laOffset[liEdge], 0), __vmulfp(__lvx(&lrDir, 0), XMVectorReplicate(lfProj))), &lPerp, 0);
-            const f32 lfDistanceSq = SweptDot2(lPerp, lPerp);
-
-            const bool lbOnSegment = !(labBehind[liEdge] || SweptGE(lfProj, lafEdgeMagnitude[liEdge]));
-            if (!SweptGT(lfDistanceSq, lfBest) && lbOnSegment)
-            {
-                lfBest   = lfDistanceSq;
-                // ARTIST keeps the product rounded before DC00/DC04's add.
-                // XDK otherwise contracts the explicit intrinsics to vmaddfp.
-                const volatile __vector4 lRoundedProduct = __vmulfp(__lvx(&lrDir, 0), XMVectorReplicate(lfProj));
-                __stvx(__vaddfp(__lvx_volatile(&lRoundedProduct, 0), __lvx(&lrVertex, 0)), &lPoint, 0);
-                lbFound  = true;
-            }
-        }
-
-        if (lbInside)
-        {
-            lPoint = lCentre;
-        }
-        lIntersectPoint = lPoint;
-        return SweptMask(lbFound || lbInside);
+        __vector4 v[128];
+        v[1] = lCentre.mV;
+        v[2] = lRadiusSquared.mV;
+        v[3] = lVert0.mV;
+        v[4] = lVert1.mV;
+        v[5] = lVert2.mV;
+        v[6] = lEdge01Dir.mV;
+        v[7] = lEdge12Dir.mV;
+        v[8] = lEdge20Dir.mV;
+        v[9] = lfEdge01Magnitude.mV;
+        v[10] = lfEdge12Magnitude.mV;
+        v[11] = lfEdge20Magnitude.mV;
+        v[30] = __vsubfp(v[3], v[1]); // 8283DAA8
+        v[25] = __vspltw(v[6], 1); // 8283DAAC
+        v[29] = __vsubfp(v[4], v[1]); // 8283DAB0
+        v[26] = __vspltw(v[7], 0); // 8283DAB4
+        v[28] = __vsubfp(v[5], v[1]); // 8283DAB8
+        v[24] = __vspltw(v[6], 0); // 8283DABC
+        v[27] = __vspltw(v[7], 1); // 8283DAC0
+        v[13] = __vsubfp(v[1], v[3]); // 8283DAC4
+        v[23] = __vspltw(v[8], 1); // 8283DAC8
+        v[12] = __vsubfp(v[1], v[4]); // 8283DACC
+        v[22] = __vspltw(v[8], 0); // 8283DAD0
+        v[31] = __vsubfp(v[1], v[5]); // 8283DAD4
+        v[0] = __vspltisw(0); // 8283DAD8
+        v[18] = v[2]; // 8283DADC
+        v[21] = __vspltw(v[30], 0); // 8283DAE0
+        v[20] = __vspltw(v[29], 0); // 8283DAE4
+        v[29] = __vspltw(v[29], 1); // 8283DAE8
+        v[30] = __vspltw(v[30], 1); // 8283DAEC
+        v[25] = __vmulfp(v[25], v[21]); // 8283DAF0
+        v[21] = __vspltw(v[28], 0); // 8283DAF4
+        v[27] = __vmulfp(v[27], v[20]); // 8283DAF8
+        v[28] = __vspltw(v[28], 1); // 8283DAFC
+        v[29] = __vmulfp(v[26], v[29]); // 8283DB00
+        v[30] = __vmulfp(v[24], v[30]); // 8283DB04
+        v[26] = __vmulfp(v[23], v[21]); // 8283DB08
+        v[28] = __vmulfp(v[22], v[28]); // 8283DB0C
+        v[24] = __vmulfp(v[12], v[12]); // 8283DB10
+        v[20] = __vmulfp(v[31], v[31]); // 8283DB14
+        v[29] = __vsubfp(v[29], v[27]); // 8283DB18
+        v[30] = __vsubfp(v[30], v[25]); // 8283DB1C
+        v[28] = __vsubfp(v[28], v[26]); // 8283DB20
+        v[21] = __vspltw(v[24], 1); // 8283DB24
+        v[24] = __vspltw(v[24], 0); // 8283DB28
+        v[29] = __vcmpgefp(v[29], v[0]); // 8283DB2C
+        v[27] = __vcmpgefp(v[30], v[0]); // 8283DB30
+        v[30] = __vmulfp(v[13], v[6]); // 8283DB34
+        v[28] = __vcmpgefp(v[28], v[0]); // 8283DB38
+        v[27] = __vand(v[27], v[29]); // 8283DB3C
+        v[29] = __vmulfp(v[12], v[7]); // 8283DB40
+        v[28] = __vand(v[27], v[28]); // 8283DB44
+        v[27] = __vspltw(v[30], 1); // 8283DB48
+        v[30] = __vspltw(v[30], 0); // 8283DB4C
+        v[30] = __vaddfp(v[30], v[27]); // 8283DB50
+        v[27] = __vmulfp(v[31], v[8]); // 8283DB54
+        v[25] = __vspltw(v[29], 1); // 8283DB58
+        v[29] = __vspltw(v[29], 0); // 8283DB5C
+        v[29] = __vaddfp(v[29], v[25]); // 8283DB60
+        v[25] = __vmulfp(v[13], v[13]); // 8283DB64
+        v[23] = __vcmpgefp(v[30], v[9]); // 8283DB68
+        v[26] = __vcmpgtfp(v[30], v[0]); // 8283DB6C
+        v[9] = __vspltw(v[27], 1); // 8283DB70
+        v[27] = __vspltw(v[27], 0); // 8283DB74
+        v[9] = __vaddfp(v[27], v[9]); // 8283DB78
+        v[22] = __vcmpgefp(v[29], v[10]); // 8283DB7C
+        v[10] = __vspltw(v[25], 1); // 8283DB80
+        v[7] = __vmulfp(v[7], v[29]); // 8283DB84
+        v[25] = __vspltw(v[25], 0); // 8283DB88
+        v[27] = __vnor(v[26], v[26]); // 8283DB8C
+        v[26] = __vcmpgtfp(v[29], v[0]); // 8283DB90
+        v[10] = __vaddfp(v[25], v[10]); // 8283DB94
+        v[25] = __vaddfp(v[24], v[21]); // 8283DB98
+        v[24] = __vor(v[27], v[23]); // 8283DB9C
+        v[23] = __vcmpgtfp(v[9], v[0]); // 8283DBA0
+        v[11] = __vcmpgefp(v[9], v[11]); // 8283DBA4
+        v[9] = __vmulfp(v[8], v[9]); // 8283DBA8
+        v[8] = __vspltw(v[20], 1); // 8283DBAC
+        v[26] = __vnor(v[26], v[26]); // 8283DBB0
+        v[19] = v[10]; // 8283DBB4
+        v[22] = __vor(v[26], v[22]); // 8283DBB8
+        v[23] = __vnor(v[23], v[23]); // 8283DBBC
+        v[21] = __vor(v[23], v[11]); // 8283DBC0
+        v[11] = __vcmpgtfp(v[10], v[2]); // 8283DBC4
+        v[10] = __vmulfp(v[6], v[30]); // 8283DBC8
+        v[6] = __vspltw(v[20], 0); // 8283DBCC
+        v[8] = __vaddfp(v[6], v[8]); // 8283DBD0
+        v[11] = __vnor(v[11], v[11]); // 8283DBD4
+        v[13] = __vsubfp(v[13], v[10]); // 8283DBD8
+        v[11] = __vand(v[11], v[27]); // 8283DBDC
+        v[2] = v[11]; // 8283DBE0
+        v[30] = v[11]; // 8283DBE4
+        v[11] = __vsel(v[18], v[19], v[11]); // 8283DBE8
+        v[6] = __vmulfp(v[13], v[13]); // 8283DBEC
+        v[24] = __vnor(v[24], v[24]); // 8283DBF0
+        v[13] = __vcmpgtfp(v[25], v[11]); // 8283DBF4
+        v[0] = __vor(v[0], v[2]); // 8283DBF8
+        v[12] = __vsubfp(v[12], v[7]); // 8283DBFC
+        v[10] = __vaddfp(v[10], v[3]); // 8283DC00
+        v[7] = __vaddfp(v[7], v[4]); // 8283DC04
+        v[13] = __vnor(v[13], v[13]); // 8283DC08
+        v[12] = __vmulfp(v[12], v[12]); // 8283DC0C
+        v[13] = __vand(v[13], v[26]); // 8283DC10
+        v[29] = v[13]; // 8283DC14
+        v[27] = v[13]; // 8283DC18
+        v[13] = __vsel(v[11], v[25], v[13]); // 8283DC1C
+        v[0] = __vor(v[0], v[29]); // 8283DC20
+        v[11] = v[13]; // 8283DC24
+        v[13] = __vcmpgtfp(v[8], v[13]); // 8283DC28
+        v[13] = __vnor(v[13], v[13]); // 8283DC2C
+        v[13] = __vand(v[13], v[23]); // 8283DC30
+        v[23] = __vnor(v[21], v[21]); // 8283DC34
+        v[26] = v[13]; // 8283DC38
+        v[25] = v[13]; // 8283DC3C
+        v[13] = __vsel(v[11], v[8], v[13]); // 8283DC40
+        v[8] = __vspltw(v[6], 0); // 8283DC44
+        v[11] = __vspltw(v[6], 1); // 8283DC48
+        v[0] = __vor(v[0], v[26]); // 8283DC4C
+        v[6] = v[13]; // 8283DC50
+        v[11] = __vaddfp(v[8], v[11]); // 8283DC54
+        v[8] = __vsubfp(v[31], v[9]); // 8283DC58
+        v[31] = __vnor(v[22], v[22]); // 8283DC5C
+        v[9] = __vaddfp(v[9], v[5]); // 8283DC60
+        v[13] = __vcmpgtfp(v[11], v[13]); // 8283DC64
+        v[22] = v[11]; // 8283DC68
+        v[11] = __vmulfp(v[8], v[8]); // 8283DC6C
+        v[8] = __vspltw(v[12], 1); // 8283DC70
+        v[12] = __vspltw(v[12], 0); // 8283DC74
+        v[12] = __vaddfp(v[12], v[8]); // 8283DC78
+        v[13] = __vnor(v[13], v[13]); // 8283DC7C
+        v[8] = __vspltw(v[11], 1); // 8283DC80
+        v[11] = __vspltw(v[11], 0); // 8283DC84
+        v[13] = __vand(v[13], v[24]); // 8283DC88
+        v[24] = __vaddfp(v[11], v[8]); // 8283DC8C
+        v[11] = v[13]; // 8283DC90
+        v[8] = v[13]; // 8283DC94
+        v[13] = __vsel(v[6], v[22], v[13]); // 8283DC98
+        v[22] = v[12]; // 8283DC9C
+        v[0] = __vor(v[0], v[11]); // 8283DCA0
+        v[21] = v[13]; // 8283DCA4
+        v[13] = __vcmpgtfp(v[12], v[13]); // 8283DCA8
+        v[13] = __vnor(v[13], v[13]); // 8283DCAC
+        v[13] = __vand(v[13], v[31]); // 8283DCB0
+        v[31] = __vsel(v[1], v[3], v[30]); // 8283DCB4
+        v[12] = v[13]; // 8283DCB8
+        v[6] = v[13]; // 8283DCBC
+        v[13] = __vsel(v[21], v[22], v[13]); // 8283DCC0
+        v[3] = __vsel(v[31], v[4], v[27]); // 8283DCC4
+        v[0] = __vor(v[0], v[12]); // 8283DCC8
+        v[13] = __vcmpgtfp(v[24], v[13]); // 8283DCCC
+        v[4] = __vsel(v[3], v[5], v[25]); // 8283DCD0
+        v[10] = __vsel(v[4], v[10], v[8]); // 8283DCD4
+        v[10] = __vsel(v[10], v[7], v[6]); // 8283DCD8
+        v[13] = __vnor(v[13], v[13]); // 8283DCDC
+        v[13] = __vand(v[13], v[23]); // 8283DCE0
+        v[12] = __vsel(v[10], v[9], v[13]); // 8283DCE4
+        v[0] = __vor(v[0], v[13]); // 8283DCE8
+        v[13] = __vsel(v[12], v[1], v[28]); // 8283DCEC
+        v[1] = __vor(v[0], v[28]); // 8283DCF0
+        lIntersectPoint.mV = v[13]; // 8283DCF4
+        return rw::math::vpu::MaskScalar(v[1]);
     }
 
     const rw::math::vpu::MaskScalar IntersectTriangleSweptSphere(const SweptSphere& lSphere,
@@ -1140,12 +1950,10 @@ namespace CgsGeometric
 
         const Vector3Plus lPositionAndRadius  = lSphere.GetPositionAndRadius();
         const Vector3Plus lDirectionAndLength = lSphere.GetDirectionAndLength();
-        const Vector3     lSpherePos          = { lPositionAndRadius.x, lPositionAndRadius.y,
-                                                  lPositionAndRadius.z, lPositionAndRadius.w };
-        const Vector3     lSphereDir          = { lDirectionAndLength.x, lDirectionAndLength.y,
-                                                  lDirectionAndLength.z, lDirectionAndLength.w };
-        const f32         lfSphereRad         = lPositionAndRadius.w;
-        const f32         lfSphereLength      = lDirectionAndLength.w;
+        const Vector3 lSpherePos(lPositionAndRadius.mV);
+        const Vector3 lSphereDir(lDirectionAndLength.mV);
+        const f32 lfSphereRad = lPositionAndRadius.mV.w;
+        const f32 lfSphereLength = lDirectionAndLength.mV.w;
         Vector3 lSphereTranslation;
         __stvx(__vmulfp(__lvx(&lDirectionAndLength, 0), XMVectorReplicate(lfSphereLength)), &lSphereTranslation, 0);
 
@@ -1218,18 +2026,10 @@ namespace CgsGeometric
         __stvx(__vmaddfp(__lvx(&lSphereTranslation, 0), XMVectorReplicate(lfT0), __lvx(&lPositionAndRadius, 0)), &lSpherePosAtT0, 0);
 
         const f32 lfHeightAtT0 = SweptSub(SweptDot3(lSpherePosAtT0, lTriangleNormal), lfPlaneOffset);
-        VecFloat lRadiusSquaredAtT0;
-        lRadiusSquaredAtT0.x = SweptSub(SweptMul(lfSphereRad, lfSphereRad), SweptMul(lfHeightAtT0, lfHeightAtT0));
-        lRadiusSquaredAtT0.y = lRadiusSquaredAtT0.x;
-        lRadiusSquaredAtT0.z = lRadiusSquaredAtT0.x;
-        lRadiusSquaredAtT0.w = lRadiusSquaredAtT0.x;
-
+        const f32 lfRadiusSquaredAtT0 = SweptSub(SweptMul(lfSphereRad, lfSphereRad), SweptMul(lfHeightAtT0, lfHeightAtT0));
+        const VecFloat lRadiusSquaredAtT0(lfRadiusSquaredAtT0);
         const Vector2 l2DCirclePosAtT0 = SweptTransform3DTo2D(lBasisOrigin, lBasisX, lBasisY, lSpherePosAtT0);
-
-        VecFloat lEdge01Magnitude, lEdge12Magnitude, lEdge20Magnitude;
-        lEdge01Magnitude.x = lEdge01Magnitude.y = lEdge01Magnitude.z = lEdge01Magnitude.w = lfEdge01Magnitude;
-        lEdge12Magnitude.x = lEdge12Magnitude.y = lEdge12Magnitude.z = lEdge12Magnitude.w = lfEdge12Magnitude;
-        lEdge20Magnitude.x = lEdge20Magnitude.y = lEdge20Magnitude.z = lEdge20Magnitude.w = lfEdge20Magnitude;
+        const VecFloat lEdge01Magnitude(lfEdge01Magnitude), lEdge12Magnitude(lfEdge12Magnitude), lEdge20Magnitude(lfEdge20Magnitude);
 
         Vector2 l2DResultAtT0;
         const bool lbResultValidAtT0 = Intersect2DCircleWithTriangle(
@@ -1284,8 +2084,8 @@ namespace CgsGeometric
         // w lane the caller's TriangleContactPoint already held, and computes both normals from
         // that vector before the w lane is replaced by the contact time.
         Vector3 lTriangleContactPoint;
-        const __vector4 lAlongY = __vmulfp(__lvx(&lBasisY, 0), XMVectorReplicate(lResultP.y));
-        __vector4 lContact = __vaddfp(__vmaddfp(__lvx(&lBasisX, 0), XMVectorReplicate(lResultP.x), lAlongY), __lvx(&lBasisOrigin, 0));
+        const __vector4 lAlongY = __vmulfp(__lvx(&lBasisY, 0), XMVectorReplicate(lResultP.mV.y));
+        __vector4 lContact = __vaddfp(__vmaddfp(__lvx(&lBasisX, 0), XMVectorReplicate(lResultP.mV.x), lAlongY), __lvx(&lBasisOrigin, 0));
         lContact = __vrlimi(lContact, __lvx(&lOutTriangleContactPoint, 0), 1, 0);
         __stvx(lContact, &lTriangleContactPoint, 0);
 
