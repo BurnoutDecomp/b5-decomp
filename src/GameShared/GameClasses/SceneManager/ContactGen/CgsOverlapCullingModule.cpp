@@ -50,7 +50,6 @@
 
 #include <cstddef>  // offsetof
 #include <cstring>  // memset
-#include <stdlib.h> // getenv ([DIAG] BRN_PROP_DIAG, host only)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint / gxMessageFilterFlags
@@ -58,7 +57,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsVolumeManager.h"           // VolumeManager::GetRwVolume
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerContact.h"     // CgsSceneManager::Contact (the emitted event)
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsContactGenerationIO.h"  // OverlapCullingIO::InputBuffer / OutputBuffer
-#include "vendor/renderware/collision/CollisionVolume.hpp"                  // rw::collision::Volume + E_VOLUMETYPE_*
+#include "vendor/renderware/collision/CollisionVolume.hpp"                  // native Volume type descriptors
 #include "vendor/renderware/collision/GPInstance.hpp"                       // PrimitivePairIntersect(+Result)
 #include "vendor/renderware/collision/VolumeQuery.hpp"                      // rw::collision::VolumeVolumeQuery
 
@@ -129,8 +128,7 @@ namespace
                            const RwPairResult&             lrResult,
                            u32                             luVolumeInstanceIndexA,
                            u32                             luVolumeInstanceIndexB,
-                           u32&                            lruContactCounter,
-                           u32&                            lruDiagContactCount)
+                           u32&                            lruContactCounter)
     {
         for (u32 luPoint = 0; luPoint < lrResult.numPoints; ++luPoint)
         {
@@ -151,16 +149,7 @@ namespace
                         << ": Failed to add contact event - queue is full\n";
                 }
             }
-            else
-            {
-                // [DIAG] NOT IN THE X360 BINARY. One-shot: the first contact the
-                // narrow phase ever pushes is the single line that says the scene
-                // volume-collision middle is alive. Opt in with BRN_PROP_DIAG.
-                static bool       sbLoggedFirstContact = false;
-            }
-
             ++lruContactCounter;
-            ++lruDiagContactCount;
         }
     }
 }  // namespace
@@ -746,9 +735,9 @@ void OverlapCullingModule::DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputB
         reinterpret_cast<const rw::collision::Volume*>(lpVolumeB);
 
     const bool lbIsAggregateA =
-        (lpRwVolumeA->muVTableSlot == static_cast<u32>(rw::collision::E_VOLUMETYPE_AGGREGATE));
+        (lpRwVolumeA->GetType() == rw::collision::VOLUMETYPEAGGREGATE);
     const bool lbIsAggregateB =
-        (lpRwVolumeB->muVTableSlot == static_cast<u32>(rw::collision::E_VOLUMETYPE_AGGREGATE));
+        (lpRwVolumeB->GetType() == rw::collision::VOLUMETYPEAGGREGATE);
 
     if (!lbIsAggregateA && !lbIsAggregateB)
     {
@@ -762,12 +751,6 @@ void OverlapCullingModule::DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputB
     {
         ++muNumOtherPairs;
     }
-
-    // [DIAG] NOT IN THE X360 BINARY. One-shot pair-query probe (BRN_PROP_DIAG): the
-    // first time the narrow phase is asked to resolve anything, report which two volume
-    // types it got and how many contacts came out. luDiagContacts is the only cost when
-    // the probe is off -- one register increment per emitted contact.
-    u32 luDiagContacts = 0;
 
     if (!lbIsAggregateA && !lbIsAggregateB)
     {
@@ -784,7 +767,7 @@ void OverlapCullingModule::DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputB
         {
             EmitContactPoints(lpOutputBuffer, lResult,
                               luVolumeInstanceIndexA, luVolumeInstanceIndexB,
-                              muNumPrimPrimContacts, luDiagContacts);
+                              muNumPrimPrimContacts);
         }
     }
     else
@@ -827,15 +810,11 @@ void OverlapCullingModule::DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputB
             {
                 EmitContactPoints(lpOutputBuffer, lrResult,
                                   luVolumeInstanceIndexA, luVolumeInstanceIndexB,
-                                  muNumPrimAggContacts, luDiagContacts);
+                                  muNumPrimAggContacts);
             }
         }
     }
 
-    // [DIAG] see above -- one shot, after both arms.
-    {
-        static bool       sbLoggedFirstPairQuery = false;
-    }
 }
 
 // ---------------------------------------------------------------------------
