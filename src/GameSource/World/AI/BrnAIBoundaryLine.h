@@ -24,9 +24,9 @@ namespace BrnAI
         f32 mfEndX;     // +8  (lane 2)
         f32 mfEndY;     // +12 (lane 3)
 
-        // 0x82676C78 -- interpolate a point along the boundary line by parameter lfT, writing
-        // the result Vector2 to *lpv2Out. (X360 ABI: out in r3, this in r4, lfT in f1.)
-        void GetInterp(Vector2* lpv2Out, f32 lfT) const;
+        // DecFIGS AISectionsData.h:184; ARTIST 82676C78 returns by hidden
+        // destination in r3, with this in r4 and lfT in f1.
+        Vector2 GetInterp(f32 lfT) const;
 
         // 0x82676BE8 -- planar length of the boundary line == distance between its two 2D
         // endpoints, sqrt((mfEndX-mfStartX)^2 + (mfEndY-mfStartY)^2). (X360 ABI: this in r3,
