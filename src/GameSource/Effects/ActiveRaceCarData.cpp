@@ -282,7 +282,7 @@ void ActiveRaceCarData::Tick(CarState& lCarState, const BrnPhysics::Vehicle::Rac
         const BrnPhysics::Vehicle::WheelLite& lrWheel = lRaceCarState.maWheels[luWheel];
         if (lrWheel.mbAttached && lrWheel.mRoadContact.mbLineTestIsValid)
         {
-            const f32 lfY = lrWheel.mRoadContact.mPosition.y;
+            const f32 lfY = lrWheel.mRoadContact.mPosition.mV.y;
             lfLowest = ((lfLowest - lfY) >= 0.0f) ? lfY : lfLowest;   // fsel(FLT_MAX - y, y, running)
             mfGroundPositionY = lfLowest;
         }

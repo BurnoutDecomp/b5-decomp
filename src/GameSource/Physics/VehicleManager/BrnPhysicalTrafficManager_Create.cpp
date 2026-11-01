@@ -593,7 +593,7 @@ namespace Vehicle
             CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
             lavWheelPositions[liWheel] = lpModelData->maWheelSpecs[liWheel].mPosition;
             CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
-            lafWheelRadii[liWheel] = 0.5f * lpModelData->maWheelSpecs[liWheel].mScale.y;
+            lafWheelRadii[liWheel] = 0.5f * lpModelData->maWheelSpecs[liWheel].mScale.mV.y;
         }
 
         CGS_ASSERT(liTrafficVehicleIndex >= 0, "liVehicle >= 0");                        // h:740
