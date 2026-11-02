@@ -5,15 +5,14 @@
 #include <math.h>
 #include <cstring>
 
-#if defined(_XBOX)
 #include <vectorintrinsics.h>
-#endif
 
 namespace
 {
     rw::math::vpu::Vector2 MakeDebugVector2(float x, float y, float z, float w)
     {
-        const rw::math::vpu::Vector2 value = { x, y, z, w };
+        rw::math::vpu::Vector2 value;
+        value.mV = rw::math::vpu::Vector4(x, y, z, w).mV;
         return value;
     }
 }
@@ -55,13 +54,13 @@ namespace CgsDev
     // (mfVirtualScreenWidth / mfVirtualScreenHeight) rather than by the X360 0x34/0x38 offsets.
     bool Debug2DImmediateRender::Is2DPointOnScreen(Vector2 lv2Point) const
     {
-        if (!(lv2Point.x >= 0.0f))
+        if (!(lv2Point.mV.x >= 0.0f))
             return false;
-        if (!(lv2Point.y >= 0.0f))
+        if (!(lv2Point.mV.y >= 0.0f))
             return false;
-        if (!(mfVirtualScreenWidth >= lv2Point.x))
+        if (!(mfVirtualScreenWidth >= lv2Point.mV.x))
             return false;
-        if (!(mfVirtualScreenHeight >= lv2Point.y))
+        if (!(mfVirtualScreenHeight >= lv2Point.mV.y))
             return false;
         return true;
     }
@@ -73,18 +72,18 @@ namespace CgsDev
         if (Is2DPointOnScreen(lv2Start) || Is2DPointOnScreen(lv2End))
             return true;
 
-        const f32 lfMinX = (lv2Start.x < lv2End.x) ? lv2Start.x : lv2End.x;
-        const f32 lfMinY = (lv2Start.y < lv2End.y) ? lv2Start.y : lv2End.y;
-        const f32 lfMaxX = (lv2Start.x > lv2End.x) ? lv2Start.x : lv2End.x;
-        const f32 lfMaxY = (lv2Start.y > lv2End.y) ? lv2Start.y : lv2End.y;
+        const f32 lfMinX = (lv2Start.mV.x < lv2End.mV.x) ? lv2Start.mV.x : lv2End.mV.x;
+        const f32 lfMinY = (lv2Start.mV.y < lv2End.mV.y) ? lv2Start.mV.y : lv2End.mV.y;
+        const f32 lfMaxX = (lv2Start.mV.x > lv2End.mV.x) ? lv2Start.mV.x : lv2End.mV.x;
+        const f32 lfMaxY = (lv2Start.mV.y > lv2End.mV.y) ? lv2Start.mV.y : lv2End.mV.y;
         return lfMaxX >= 0.0f && lfMaxY >= 0.0f &&
                lfMinX <= mfVirtualScreenWidth && lfMinY <= mfVirtualScreenHeight;
     }
 
     bool Debug2DImmediateRender::Is2DBoxOnScreen(Vector2 lv2Min, Vector2 lv2Max) const
     {
-        return lv2Max.x >= 0.0f && lv2Max.y >= 0.0f &&
-               lv2Min.x <= mfVirtualScreenWidth && lv2Min.y <= mfVirtualScreenHeight;
+        return lv2Max.mV.x >= 0.0f && lv2Max.mV.y >= 0.0f &&
+               lv2Min.mV.x <= mfVirtualScreenWidth && lv2Min.mV.y <= mfVirtualScreenHeight;
     }
 
     // ARTIST 0x828188F8. Build the polygon bounds and intersect them with the
@@ -98,10 +97,10 @@ namespace CgsDev
         Vector2 lMax = lpaPoints[0];
         for (u32 luIndex = 1; luIndex < luCount; ++luIndex)
         {
-            if (lpaPoints[luIndex].x < lMin.x) lMin.x = lpaPoints[luIndex].x;
-            if (lpaPoints[luIndex].y < lMin.y) lMin.y = lpaPoints[luIndex].y;
-            if (lpaPoints[luIndex].x > lMax.x) lMax.x = lpaPoints[luIndex].x;
-            if (lpaPoints[luIndex].y > lMax.y) lMax.y = lpaPoints[luIndex].y;
+            if (lpaPoints[luIndex].mV.x < lMin.mV.x) lMin.mV.x = lpaPoints[luIndex].mV.x;
+            if (lpaPoints[luIndex].mV.y < lMin.mV.y) lMin.mV.y = lpaPoints[luIndex].mV.y;
+            if (lpaPoints[luIndex].mV.x > lMax.mV.x) lMax.mV.x = lpaPoints[luIndex].mV.x;
+            if (lpaPoints[luIndex].mV.y > lMax.mV.y) lMax.mV.y = lpaPoints[luIndex].mV.y;
         }
         return Is2DBoxOnScreen(lMin, lMax);
     }
@@ -191,9 +190,9 @@ namespace CgsDev
     bool Debug2DImmediateRender::Do2DBoxesIntersect(Vector2 lv2MinA, Vector2 lv2MaxA,
                                                    Vector2 lv2MinB, Vector2 lv2MaxB) const
     {
-        if (lv2MinB.x > lv2MaxA.x || lv2MinA.x > lv2MaxB.x)
+        if (lv2MinB.mV.x > lv2MaxA.mV.x || lv2MinA.mV.x > lv2MaxB.mV.x)
             return false;
-        if (lv2MinB.y > lv2MaxA.y || lv2MinA.y > lv2MaxB.y)
+        if (lv2MinB.mV.y > lv2MaxA.mV.y || lv2MinA.mV.y > lv2MaxB.mV.y)
             return false;
         return true;
     }
@@ -202,11 +201,11 @@ namespace CgsDev
     // EmitQuad retains the existing native triangle-strip adapter.
     void Debug2DImmediateRender::DrawBox(Vector2 lv2Position, Vector2 lv2Size, RGBA lColour)
     {
-        const Vector2 lv2End = {lv2Position.x + lv2Size.x, lv2Position.y + lv2Size.y,
-                               lv2Position.z + lv2Size.z, lv2Position.w + lv2Size.w};
+        const Vector2 lv2End = MakeDebugVector2(lv2Position.mV.x + lv2Size.mV.x, lv2Position.mV.y + lv2Size.mV.y,
+                               lv2Position.mV.z + lv2Size.mV.z, lv2Position.mV.w + lv2Size.mV.w);
         if (!Do2DBoxesIntersect(MakeDebugVector2(0, 0, 0, 0), GetVirtualScreenSize(), lv2Position, lv2End))
             return;
-        EmitQuad(lv2Position.x, lv2Position.y, lv2End.x, lv2End.y, lColour);
+        EmitQuad(lv2Position.mV.x, lv2Position.mV.y, lv2End.mV.x, lv2End.mV.y, lColour);
     }
 
     // ARTIST export hole 8281C3E0: f3-f1 and f4-f2 produce the vector size.
@@ -251,13 +250,13 @@ namespace CgsDev
         }
         if (miIm2dVertsHead >= KI_VERTEX_BUFFER_SIZE - 2)
             DispatchVertices();
-        AddVertex(lv2Start.x, lv2Start.y, lColour);
-        AddVertex(lv2End.x, lv2End.y, lColour);
+        AddVertex(lv2Start.mV.x, lv2Start.mV.y, lColour);
+        AddVertex(lv2End.mV.x, lv2End.mV.y, lColour);
     }
 
     void Debug2DImmediateRender::DrawFrame(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour)
     {
-        DrawFrame(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lColour, 1.0f);
+        DrawFrame(lv2Min.mV.x, lv2Min.mV.y, lv2Max.mV.x, lv2Max.mV.y, lColour, 1.0f);
     }
 
     // ARTIST 0x8281C440. The wire polygon closes the final point back to the first.
@@ -283,9 +282,9 @@ namespace CgsDev
         for (u32 luIndex = 1; luIndex + 1 < luCount; ++luIndex)
         {
             DispatchVertices();
-            AddVertex(lpaPoints[0].x, lpaPoints[0].y, lColour);
-            AddVertex(lpaPoints[luIndex].x, lpaPoints[luIndex].y, lColour);
-            AddVertex(lpaPoints[luIndex + 1].x, lpaPoints[luIndex + 1].y, lColour);
+            AddVertex(lpaPoints[0].mV.x, lpaPoints[0].mV.y, lColour);
+            AddVertex(lpaPoints[luIndex].mV.x, lpaPoints[luIndex].mV.y, lColour);
+            AddVertex(lpaPoints[luIndex + 1].mV.x, lpaPoints[luIndex + 1].mV.y, lColour);
             DispatchVertices();
         }
     }
@@ -300,16 +299,14 @@ namespace CgsDev
 
         const f32 lfTwoPi = 6.2831853071795864769f;
         const f32 lfStep = lfTwoPi / static_cast<f32>(liSegments);
-        Vector2 lPrevious = { lv2Centre.x + lfRadius, lv2Centre.y, 0.0f, 0.0f };
+        Vector2 lPrevious = MakeDebugVector2(lv2Centre.mV.x + lfRadius, lv2Centre.mV.y, 0.0f, 0.0f);
         for (s32 liIndex = 1; liIndex <= liSegments; ++liIndex)
         {
             const f32 lfAngle = lfStep * static_cast<f32>(liIndex);
-            Vector2 lCurrent = {
-                lv2Centre.x + cosf(lfAngle) * lfRadius,
-                lv2Centre.y + sinf(lfAngle) * lfRadius,
+            Vector2 lCurrent = MakeDebugVector2(lv2Centre.mV.x + cosf(lfAngle) * lfRadius,
+                lv2Centre.mV.y + sinf(lfAngle) * lfRadius,
                 0.0f,
-                0.0f
-            };
+                0.0f);
             DrawLine(lPrevious, lCurrent, lColour);
             lPrevious = lCurrent;
         }
@@ -327,8 +324,7 @@ namespace CgsDev
         if (!(lfMax > 0.0f) || lfValue < 0.0f || lfValue > lfMax)
             return;
 
-        DrawBox(lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y, lBackColour);
-#if defined(_XBOX)
+        DrawBox(lv2Min.mV.x, lv2Min.mV.y, lv2Max.mV.x, lv2Max.mV.y, lBackColour);
         // ARTIST 8281CB48..CC30: splat input lanes; perform each inset
         // operation in VMX before the fused multiply-add.
         const __vector4 lMin = __lvx(&lv2Min, 0);
@@ -353,13 +349,7 @@ namespace CgsDev
         const f32 lfTop = laResult[0];
         __stvx(lBottom, laResult, 0);
         const f32 lfBottom = laResult[0];
-#else
-        const f32 lfSpan = (lv2Max.x - lv2Min.x) - 2.0f;
-        const f32 lfRight = fmaf(lfSpan, lv2Min.x + 1.0f, lfValue / lfMax);
-        const f32 lfTop = lv2Min.y + 2.0f;
-        const f32 lfBottom = lv2Max.y - 2.0f;
-#endif
-        DrawBox(lv2Min.x, lfTop, lfRight, lfBottom, lForeColour);
+        DrawBox(lv2Min.mV.x, lfTop, lfRight, lfBottom, lForeColour);
     }
 
     // Faithful port of X360 0x82823DE0 (the pseudocode is VPU-garbled -- the rect setup is reconstructed
@@ -425,7 +415,7 @@ namespace CgsDev
     {
         if (lbCheckScreen && !Is2DPointOnScreen(lv2Position))
             return;
-        DrawText(lpcText, lv2Position.x, lv2Position.y, lfScale, lColour);
+        DrawText(lpcText, lv2Position.mV.x, lv2Position.mV.y, lfScale, lColour);
     }
 
     // ARTIST 0x8282C4C0. Alignment is expressed as 0=left, .5=centre, 1=right.
@@ -446,7 +436,7 @@ namespace CgsDev
     {
         const Vector2 lExtent = CalcTextExtent(lpcText, lfScale);
         DrawBox(MakeDebugVector2(lfX - lfBorder, lfY - lfBorder, 0, 0),
-                MakeDebugVector2(lExtent.x + lfBorder * 2.0f, lExtent.y + lfBorder * 2.0f, 0, 0),
+                MakeDebugVector2(lExtent.mV.x + lfBorder * 2.0f, lExtent.mV.y + lfBorder * 2.0f, 0, 0),
                 lBackgroundColour);
         DrawText(lpcText, lfX, lfY, lfScale, lTextColour);
     }
@@ -482,7 +472,7 @@ namespace CgsDev
                              liMegabytes, liKilobytes, liRemainder);
         }
 
-        const Vector2 lv2Position = {lfX, lfY, 0.0f, 0.0f};
+        const Vector2 lv2Position = MakeDebugVector2(lfX, lfY, 0.0f, 0.0f);
         DrawText(lacSize, lv2Position, lfScale, lColour, false);
     }
 
@@ -552,7 +542,7 @@ namespace CgsDev
         }
 
         return VectorFont::ComputeTextExtent(
-            lpcText, MakeDebugVector2( lfScale, lfScale, 0.0f, 0.0f )).x;
+            lpcText, MakeDebugVector2( lfScale, lfScale, 0.0f, 0.0f )).mV.x;
     }
 
     // X360 0x82824308. Bitmap-font height is exactly the requested text size; vector-font
