@@ -43,7 +43,7 @@ const f32 K_TRAFFIC_IGNORE_HEIGHT = 99.0f;
 
 VecFloat SplatDistance(f32 lfValue)
 {
-    const VecFloat lvValue = { lfValue, lfValue, lfValue, lfValue };
+    const VecFloat lvValue( lfValue );
     return lvValue;
 }
 
@@ -247,7 +247,7 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
         if ( lau16EntityMatched[luEntry] != 0 )
             continue;
 
-        const f32 lfHeight = std::fabs( lListenerPosition.y - lrEntity.mLocalTransform.Pos().y );
+        const f32 lfHeight = std::fabs( lListenerPosition.GetY().GetFloat() - lrEntity.mLocalTransform.Pos().GetY().GetFloat() );
         if ( !( K_TRAFFIC_IGNORE_HEIGHT > lfHeight ) )
             continue;
 
@@ -260,7 +260,7 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
             {
                 BrnSound::Debug::DebugComponent::mLogCombined
                     << "[Traffic] Failed to Cull for item @ distance of "
-                    << std::sqrt( laSortedEntities[luEntry].mfDistance.x ) << "\n";
+                    << std::sqrt( laSortedEntities[luEntry].mfDistance.GetFloat() ) << "\n";
             }
             break;
         }
@@ -328,8 +328,8 @@ bool TrafficStateManager::CullIfFurtherThan( VecFloat lfDistance, Vector3 lPosit
 
         const VecFloat lvSlotDistance =
             SplatDistance( rw::math::vpu::MagnitudeSquared( lPosition - lrSlot.mEntity.mLocalTransform.Pos() ) );
-        if ( lvSlotDistance.x > lfDistance.x && lvSlotDistance.y > lfDistance.y
-             && lvSlotDistance.z > lfDistance.z && lvSlotDistance.w > lfDistance.w )
+        if ( lvSlotDistance.mV.x > lfDistance.mV.x && lvSlotDistance.mV.y > lfDistance.mV.y
+             && lvSlotDistance.mV.z > lfDistance.mV.z && lvSlotDistance.mV.w > lfDistance.mV.w )
         {
             laCandidates[li16CandidateCount].mfDistance = lvSlotDistance;
             laCandidates[li16CandidateCount].muIndex = luSlot;
@@ -365,8 +365,8 @@ void TrafficStateManager::SortEntitiesDistanceFromPosition(
 
 bool TrafficStateManager::SortResult::LessThanDistance( const SortResult& lrA, const SortResult& lrB )
 {
-    return lrB.mfDistance.x > lrA.mfDistance.x && lrB.mfDistance.y > lrA.mfDistance.y
-        && lrB.mfDistance.z > lrA.mfDistance.z && lrB.mfDistance.w > lrA.mfDistance.w;
+    return lrB.mfDistance.mV.x > lrA.mfDistance.mV.x && lrB.mfDistance.mV.y > lrA.mfDistance.mV.y
+        && lrB.mfDistance.mV.z > lrA.mfDistance.mV.z && lrB.mfDistance.mV.w > lrA.mfDistance.mV.w;
 }
 
 } // namespace Traffic

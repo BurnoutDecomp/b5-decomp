@@ -207,9 +207,9 @@ void TrafficHorn::ProcessUpdate()
 
         rw::math::vpu::Vector3 lPosition = lpEntity->mLocalTransform.Pos();
         const rw::math::vpu::Vector3& lrUp = lpEntity->mLocalTransform.Up();
-        lPosition.x += lrUp.x * 3.0f;
-        lPosition.y += lrUp.y * 3.0f;
-        lPosition.z += lrUp.z * 3.0f;
+        lPosition.SetX( lPosition.GetX().GetFloat() + lrUp.GetX().GetFloat() * 3.0f );
+        lPosition.SetY( lPosition.GetY().GetFloat() + lrUp.GetY().GetFloat() * 3.0f );
+        lPosition.SetZ( lPosition.GetZ().GetFloat() + lrUp.GetZ().GetFloat() * 3.0f );
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.GetRender().DrawText(
             lPosition, lpcAlarmKind, 25.0f, lDebugColour );

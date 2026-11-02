@@ -238,7 +238,7 @@ void AISkidEffect::UpdateParams( f32 afTimeStep )
         CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "%0.1f",
                          mfDriftFactor);
         rw::math::vpu::Vector3 lDrawPosition = lrPhysics.mPosition3d.GetCurrent();
-        lDrawPosition.y += 2.0f;
+        lDrawPosition.SetY( lDrawPosition.GetY().GetFloat() + 2.0f );
         const bool lbNoDrift = !(mfDriftFactor > 1.1920929e-7f ||
                                  mfDriftFactor < -1.1920929e-7f);
         const CgsDev::RGBA lColour = lbNoDrift ? 0xFFFFFFFFu : 0xFF0000FFu;

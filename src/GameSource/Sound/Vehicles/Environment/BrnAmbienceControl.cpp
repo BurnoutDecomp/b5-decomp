@@ -43,8 +43,8 @@ static const f32 KF_AMBIENCE_UPDATE_TIME = 5.0f;
 
 // The world rectangle the ambience map covers (the same Paradise City rectangle the
 // district map uses): origin and size in x/z.
-static const Vector2 KV_AMBIENCE_MAP_WORLD_ORIGIN = { -4208.0f, -3846.0f, 0.0f, 0.0f };
-static const Vector2 KV_AMBIENCE_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 0.0f };
+static const Vector2 KV_AMBIENCE_MAP_WORLD_ORIGIN( -4208.0f, -3846.0f );
+static const Vector2 KV_AMBIENCE_MAP_WORLD_SIZE( 8270.0f, 6101.0f );
 
 // ---------------------------------------------------------------------------
 // AmbienceControl::CreateObject(u32)   (the factory hook)
@@ -87,7 +87,7 @@ void AmbienceControl::UpdateParams(f32 afTimeStep)
                            CgsSound::Logic::MicrophoneSystem::E_PLAYER_1)
             ->GetMicrophoneMatrix()
             .Pos();
-    const Vector2 lListener2d = { lrListener.x, lrListener.z, 0.0f, 0.0f };
+    const Vector2 lListener2d( lrListener.GetX().GetFloat(), lrListener.GetZ().GetFloat() );
     const u8 lu8MapRegion = mMap2d.GetValue(lListener2d);
 
     mfTimeSinceUpdate += afTimeStep;
@@ -136,10 +136,10 @@ void AmbienceControl::DrawDebug(Vector3 lrPosition) const
                      static_cast<s32>(mRegion.GetCurrent()));
     lrRender.Draw2DText(lacText, 900.0f, 50.0f, 40.0f, KU_DEBUG_COLOUR);
 
-    const f32 lfMapX = ((lrPosition.x - KV_AMBIENCE_MAP_WORLD_ORIGIN.x) /
-                        KV_AMBIENCE_MAP_WORLD_SIZE.x) * 256.0f;
-    const f32 lfMapY = ((lrPosition.z - KV_AMBIENCE_MAP_WORLD_ORIGIN.y) /
-                        KV_AMBIENCE_MAP_WORLD_SIZE.y) * 256.0f;
+    const f32 lfMapX = ((lrPosition.GetX().GetFloat() - KV_AMBIENCE_MAP_WORLD_ORIGIN.mV.x) /
+                        KV_AMBIENCE_MAP_WORLD_SIZE.mV.x) * 256.0f;
+    const f32 lfMapY = ((lrPosition.GetZ().GetFloat() - KV_AMBIENCE_MAP_WORLD_ORIGIN.mV.y) /
+                        KV_AMBIENCE_MAP_WORLD_SIZE.mV.y) * 256.0f;
     CgsCore::SPrintf(lacText, static_cast<u32>(sizeof(lacText)), "%.0f, %.0f",
                      lfMapX, lfMapY);
     lrRender.Draw2DText(lacText, 850.0f, 100.0f, 25.0f, KU_DEBUG_COLOUR);
