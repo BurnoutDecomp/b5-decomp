@@ -72,6 +72,8 @@ struct AptLinker
         void PushBack(const AptFilePtr& rFile);
         // swap with another (the X360 swap-assign sub_82AFF018; SBO-aware).
         void Swap(PendingFileVector& rOther);
+        // dtor Strin @0x82AFFB08 -- release every owned AptFilePtr + free a heap block.
+        ~PendingFileVector();
     };
 
     AptSingleListNode* mpThingyListHead;   // [+0x00] linker thingy list head

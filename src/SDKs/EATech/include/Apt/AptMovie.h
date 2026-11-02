@@ -101,8 +101,11 @@ struct AptMovie
     void resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
                    AptConstFile* pConstFile, int64_t* pnParsedValues);
 
-    // @0x82AF4830 -- the inverse of resolve (un-relocate + tear down the label hash).
-    void* unresolve(int nBase, int a3);
+    // @0x82AF4830 (X360) / sub_14085EE40 (XB1, the native-8 arbiter) -- the inverse of
+    // resolve64: un-parse every action stream, un-relocate every 8-byte slot resolve64
+    // relocated, then tear down the label hash. nBase is the same 8-byte load base;
+    // pnParsedValues the def's +0x50 counter (the XB1 a3, threaded to _parseStream).
+    void* unresolve(uintptr_t nBase, int64_t* pnParsedValues);
 };
 
 // AptValue_toInteger removed -- it was a forwarder to the real member

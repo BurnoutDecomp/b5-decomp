@@ -391,7 +391,19 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
             // Already loaded?  -> grab its handle. The loader is keyed by the MOVIE
             // NAME (X360 a2 == pName) -- NOT the "_level%d" target string (a3), which
             // only names the destination variable resolved above.
-            filePtr = gpAptTarget->mpLoader->IsLoaded(*pName);     // AptLoader::IsLoaded(&v98, loader, a2) + operator=
+            //
+            // IsLoaded and Load return their handle BY VALUE with one counted reference
+            // (v98 / v99), and operator= takes a second one for filePtr. The X360 then
+            // drops the temporary's reference straight after each assignment (the
+            // `v98 = 0; lwarx/-1/stwcx.; delete-at-zero` block). AptFilePtr has no
+            // destructor in this model, so that release is written out here; without it
+            // every loadMovie leaked one reference, no movie's AptFile ever reached zero,
+            // and its streamed GUI bundle stayed pinned in the Apt bank (issue #78).
+            {
+                AptFilePtr loadedPtr = gpAptTarget->mpLoader->IsLoaded(*pName);   // AptLoader::IsLoaded(&v98, loader, a2)
+                filePtr = loadedPtr;                                              // AptFile_::operator=(&v96, v98)
+                AptSharedPtr<AptFile>::Dispose(loadedPtr.pData);                  // release v98
+            }
             pLinkedFile = filePtr.pData;
             if (pLinkedFile != nullptr)
             {
@@ -403,7 +415,11 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
             else
             {
                 // Not loaded yet: kick a load request (by the movie NAME, X360 a2).
-                filePtr = gpAptTarget->mpLoader->Load(*pName);     // AptLoader::Load(&v99, loader, a2)
+                {
+                    AptFilePtr requestPtr = gpAptTarget->mpLoader->Load(*pName);  // AptLoader::Load(&v99, loader, a2)
+                    filePtr = requestPtr;                                         // AptFile_::operator=(&v96, v99)
+                    AptSharedPtr<AptFile>::Dispose(requestPtr.pData);             // release v99
+                }
                 pLinkedFile = filePtr.pData;
                 // If the request just completed (state 6 -> swap state/field12 to 4),
                 // notify immediately.
@@ -1306,6 +1322,41 @@ void AptLinker::PendingFileVector::PushBack(const AptFilePtr& rFile)
     mpData[mnSize].pData = nullptr;
     mpData[mnSize]       = rFile;
     ++mnSize;
+}
+
+// ~PendingFileVector -- Strin @0x82AFFB08 (the BasicString<StringAsVectorEncoding<
+// AptFilePtr>> dtor). A heap block goes back through StringAsVectorPolicy::ReAlloc
+// (data, 0, 0) @0x82AFD5E0, whose zero-size arm is the AptFilePtr array deleting
+// destructor -- every slot released, then the block freed. The two inline SBO slots
+// are then released last-to-first (the `for (i = 1; i >= 0; --i)` LL/SC loop).
+//
+// ⭐ The type had no destructor before (issue #78), so the `empty` temporary that
+// AptLinker::Update swaps the linked files into never released them: every linked
+// movie kept one reference for good, its AptFile never reached zero, and the GUI
+// bundle it was loaded from stayed pinned in the streamed Apt bank until that bank
+// was full.
+AptLinker::PendingFileVector::~PendingFileVector()
+{
+    if (mpData != mInlineStorage)
+    {
+        for (int32_t i = mnCapacity - 1; i >= 0; --i)
+        {
+            AptFile* const pData = mpData[i].pData;
+            mpData[i].pData = nullptr;
+            if (pData != nullptr && AptSharedPtrDecRef(pData) == 0)
+                AptSharedPtrDelete(pData);
+        }
+        gpAptSharedPtrPool->Deallocate(mpData, sizeof(AptFilePtr) * mnCapacity);
+        mpData = mInlineStorage;
+    }
+
+    for (int32_t i = 1; i >= 0; --i)
+    {
+        AptFile* const pData = mInlineStorage[i].pData;
+        mInlineStorage[i].pData = nullptr;
+        if (pData != nullptr && AptSharedPtrDecRef(pData) == 0)
+            AptSharedPtrDelete(pData);
+    }
 }
 
 // Swap -- sub_82AFF018. Exchange this vector's {size, capacity, data} triple with

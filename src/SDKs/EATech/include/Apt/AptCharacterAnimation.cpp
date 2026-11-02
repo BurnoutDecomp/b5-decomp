@@ -1103,9 +1103,15 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
         switch (pChar->mnType)
         {
             case 1:   // Shape: clear the resolved flag, free the host rendering
-            {         // unit (+0x30), null the slot.
+            {         // unit, null the slot.
+                // The XB1 frees + nulls +0x30 because ITS Fixup stores the unit there
+                // (keyed by character index). Our Fixup case 1 keys the geometry by the
+                // id the converted bundle carries AT +0x30 and stores the unit at +0x20,
+                // so the unit is torn down from +0x20 and the geometry id survives for
+                // the next Fixup. Nulling +0x30 here made every reloaded shape resolve
+                // geometry 0 and draw through a null unit (issue #78 follow-on).
                 *reinterpret_cast<uint16_t*>(BlobAt(pc, 0x12)) &= ~0x8000u;
-                void** const ppUnit = reinterpret_cast<void**>(pc + 0x30);
+                void** const ppUnit = reinterpret_cast<void**>(pc + 0x20);
                 gAptFuncs.pfnFreeRenderingUnit(*ppUnit);
                 *ppUnit = nullptr;
                 result = nullptr;
@@ -1129,9 +1135,9 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
             case 5:
             case 9:   // Sprite / movie: recurse into the embedded timeline
                       // (the XB1 sub_14085EE40(body, base, &parsedCount) --
-                      // AptMovie::unresolve; ours keeps its declared shape).
+                      // AptMovie::unresolve, the native-8 inverse of resolve64).
                 result = reinterpret_cast<AptMovie*>(pc + 0x20)   // KU_AptEmbeddedMovieOff (AptCIH.h)
-                             ->unresolve(nBase, static_cast<int>(mnParsedValueCount));
+                             ->unresolve(static_cast<uintptr_t>(nBase), &mnParsedValueCount);
                 break;
             case 7:   // Image: queued release of the live unit when resolved.
             {
@@ -1143,17 +1149,27 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
                     // qword_14147A0E0 ring) or calls the host free hook
                     // directly off-thread; single-threaded bring-up = direct.
                     gAptFuncs.pfnFreeTexture(*ppUnit);
+                    // The XB1 nulls the slot unconditionally because ITS load path
+                    // fills it. Ours never does (Fixup has no Image arm and nothing
+                    // sets the loaded bit), so the slot is only cleared when a unit
+                    // really was loaded -- an unconditional null would erase
+                    // serialized data the next Fixup reads, the same failure the
+                    // Shape arm above had (issue #78 follow-on).
+                    *ppUnit = nullptr;
                 }
                 rFlags &= ~3u;
-                *ppUnit = nullptr;
                 break;
             }
-            case 10:  // StaticText: per record (stride 0x40) un-relocate the
-            {         // glyph-array slot (+0x38); then the record-array ptr.
-                const int32_t nRecs = *reinterpret_cast<int32_t*>(BlobAt(pc, 0x48));
-                char* const pRecs = *reinterpret_cast<char**>(BlobAt(pc, 0x50));
-                for (int32_t r = 0; r < nRecs; ++r)
-                    Unreloc(*reinterpret_cast<void**>(pRecs + r * 0x40 + 0x38));
+            case 10:  // StaticText: un-relocate the record-array ptr (+0x50).
+            {
+                // The XB1 also un-relocates each record's glyph-array slot (stride
+                // 0x40, +0x38) because its Fixup relocates them. Ours relocates only
+                // the array pointer (Fixup case 10), and the converted records are not
+                // 0x40 wide: walking them at the XB1 stride ran off the array and
+                // un-relocated the NEXT character's frame table (SaveLoadComponent
+                // char 4, frame 0), which then faulted in AptMovie::unresolve -- the
+                // crash on leaving the autosave prompt (issue #78 follow-on). The
+                // inverse mirrors the forward pass.
                 Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x50)));
                 break;
             }
