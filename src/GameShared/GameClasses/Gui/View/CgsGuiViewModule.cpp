@@ -12,13 +12,8 @@
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResource (the string-table load)
 #include "GameShared/GameClasses/Fonts/CgsFont.h"                          // CgsResource::Font (the loaded-font trace)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint / gxMessageFilterFlags (the font trace)
-#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h" // Im2dTransform (RenderBlackScreen's unit-to-screen)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h" // Im2dTransform::GetDefault (ARTIST 0x830112D0)
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // the clear-quad vertices
-
-// [diag] BRN_IM2D_TRACE (risk R1, RenderBlackScreen): the present counter the 2D traces
-// gate on, and the Win32 env read. Both are diagnostic-only.
-#include <xtl.h>                                   // [diag] GetEnvironmentVariableA
-namespace renderengine { extern u32 guPresentCount; }  // [diag]
 
 namespace CgsGui
 {
@@ -541,36 +536,11 @@ namespace CgsGui
 
     // RenderBlackScreen @0x82858988 -- when the clear screen is enabled (+0xE000), draw
     // the alpha-modulated black clear quad through the Im2d command buffer: open a render
-    // block, install the unit-to-screen transform (the X360 reads the constant transform
-    // at flt_830112D0), bind the untextured/cull-none/standard-blend frame states from
-    // the shared state library, then submit a 4-vertex triangle strip over the unit
-    // square whose colour is black at mfClearScreenAlpha (+0xE004), and close the block.
+    // block, install the shared transform at flt_830112D0, bind the frame states from the
+    // shared state library, then submit a 4-vertex triangle strip over the unit square whose
+    // colour is black at mfClearScreenAlpha (+0xE004), and close the block.
     void ViewModule::RenderBlackScreen()
     {
-        // [diag] BRN_IM2D_TRACE -- risk R1's witness, emitted ONCE PER FRAME at the head of
-        // the GUI render so the [Im2dTrace] (immediate/FLAPT) and [DispTrace] (deferred/Apt)
-        // lines that follow are attributable to a known clear-screen state. The question R1
-        // asks: is the in-game HUD hidden in menus by a REAL hide, or merely by being painted
-        // over? If the latter, moving the Apt flush earlier makes the HUD bleed THROUGH the
-        // pause menu. `clear=1` with `alpha=1.00` is the full-screen black clear; a FLAPT
-        // quad count of 0 after this line is the pass condition for that frame.
-        {
-            static int siR1State = -1;
-            if (siR1State < 0)
-            {
-                char lacR1Buf[8];
-            }
-            if (siR1State == 1 && (renderengine::guPresentCount % 60u) == 0u)
-            {
-                char lacR1Msg[128];
-                CgsCore::SPrintf(lacR1Msg, sizeof(lacR1Msg),
-                                 "[R1] f=%u clear=%d alpha=%.2f\n",
-                                 renderengine::guPresentCount,
-                                 mbClearScreenEnabled ? 1 : 0, mfClearScreenAlpha);
-                CgsDev::Log::WriteToLog(lacR1Msg);
-            }
-        }
-
         if (!mbClearScreenEnabled)
             return;
 
@@ -579,25 +549,8 @@ namespace CgsGui
 
         lrBuffer.BeginRendering();
 
-        // The constant unit-to-screen transform (X360 flt_830112D0): the body draws the
-        // quad over the UNIT square, so the batch transform maps it onto the full
-        // 1280x720 logical screen (the fixed logical space the 2D dispatch scales from),
-        // with the identity colour transform (scale 255 / shift 0 in the CXForm
-        // (A,R,G,B) channel order the dispatch decodes). The X360 data global is not
-        // exported; the values are pinned by that observable contract (full-screen
-        // clear + unmodified vertex colour).
-        CgsGraphics::Im2dTransform lUnitToScreen;
-        lUnitToScreen.mOriginXYZ.SetZero();          // origin (0,0)
-        lUnitToScreen.mRightUp.Set(1280.0f, 0.0f, 0.0f, 720.0f); // right = (1280, 0), up = (0, 720)
-        lUnitToScreen.mColourShift.SetZero();        // (A,R,G,B) shift 0
-        lUnitToScreen.mColourScale.Set(255.0f, 255.0f, 255.0f, 255.0f); // (R,G,B,A) scale identity; the Apt chain
-                                                     // carries CXForm fixed-point 0..255 units
-                                                     // end to end on PC, which is what
-                                                     // DispatchColourChannel's /255 expects.
-                                                     // All four lanes are equal here, so the
-                                                     // lane order does not bite -- but do not
-                                                     // "simplify" this to 1.0f.
-        lrBuffer.SetTransform(lUnitToScreen);
+        // ARTIST 0x828589C0..0x828589CC passes flt_830112D0 to SetTransform.
+        lrBuffer.SetTransform(CgsGraphics::Im2dTransform::GetDefault());
 
         // ARTIST frame-clear states from the shared immediate-mode state library.
         lrBuffer.SetState(gpGuiBlendStateStandard);
