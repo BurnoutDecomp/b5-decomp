@@ -71,12 +71,12 @@ bool BehaviourHeliCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
         const f32 lfHeight    = mpParameters->mfHeight * KF_METRES_PER_KILOMETRE;
         const f32 lfDistanceZ = mpParameters->mfInitialDistanceZ * KF_METRES_PER_KILOMETRE;
 
-        const Vector3 lHeightOffset = { 0.0f, lfHeight, 0.0f, 0.0f };
+        const rw::math::vpu::Vector3 lHeightOffset(0.0f, lfHeight, 0.0f);
         mPosition = ((lPlayerPosition + lHeightOffset) - lrPlayerTransform.xAxis * lfDistanceX)
                   - lrPlayerTransform.zAxis * lfDistanceZ;
 
         mVelocity   = lrPlayerTransform.xAxis + lrPlayerTransform.zAxis;
-        mVelocity.y = 0.0f;
+        mVelocity.SetY(0.0f);
         mTarget     = lPlayerPosition;
         mVelocity   = rw::math::vpu::Normalize(mVelocity) * mpParameters->mfVelocityMPS;
 

@@ -43,10 +43,10 @@ bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInf
         if (mTarget.mbSet)
         {
             CGS_ASSERT(mTarget != mAttachment, "mTarget != mAttachment");
-            const Vector3 target = mTarget.Get(lrInfo.GetWorld())->mRaceCarState.mTransform.Pos();
+            const rw::math::vpu::Vector3 target = mTarget.Get(lrInfo.GetWorld())->mRaceCarState.mTransform.Pos();
             mWorldSpaceOffsetFromCar = attachment.mRaceCarState.mTransform.Pos() - target;
             if (mpParameters->mbLookFromTarget) mWorldSpaceOffsetFromCar = -mWorldSpaceOffsetFromCar;
-            mWorldSpaceOffsetFromCar.y = 0;
+            mWorldSpaceOffsetFromCar.SetY(0.0f);
             CGS_ASSERT(!IsZero(mWorldSpaceOffsetFromCar, 1.1920929e-7f), "!IsZero(mWorldSpaceOffsetFromCar)");
             mWorldSpaceOffsetFromCar = Normalize(mWorldSpaceOffsetFromCar) * mpParameters->mfDistance;
             if (mbTargetVectorLock) SetPrepared();
@@ -68,11 +68,11 @@ bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInf
     }
     else
     {
-        Matrix44Affine transform = attachment.mRaceCarState.mTransform;
+        rw::math::vpu::Matrix44Affine transform = attachment.mRaceCarState.mTransform;
         mPositionLag.Update(mpParameters->mPositionLagParams, dt, transform);
-        const Vector3 position = attachment.mRaceCarState.mTransform.Pos();
+        const rw::math::vpu::Vector3 position = attachment.mRaceCarState.mTransform.Pos();
         transform = Utils::CreateLookAt(position + mWorldSpaceOffsetFromCar, position);
-        transform.Pos().y += mpParameters->mfHeight;
+        transform.Pos().Y() += mpParameters->mfHeight;
         transform = Mult(MakeRotationZ(mpParameters->mfDutch * 0.017453292f), transform);
         transform = Mult(MakeRotationX(mpParameters->mfPitch * 0.017453292f), transform);
         mShake.Update(transform, mpParameters->mShakeParams, mRandom, dt, 1.0f);
@@ -80,7 +80,7 @@ bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInf
         lrCamera.ValidateTransformWithDebugInfo();
         lrCamera.SetFOV(mpParameters->mfField54);
     }
-    const auto& impact = mpParameters->mImpact;
+    const Utils::CameraImpactEffect::Parameters& impact = mpParameters->mImpact;
     mImpact.GetCameraShake().Update(lrCamera.mTransform, impact.mShakeParams, mRandom,
         impact.mfShakeFrequencyScale * dt, impact.mfShakeMagnitude * mImpact.GetImpactFactor());
     mImpact.SetImpactFactor(mImpact.GetImpactFactor() * (1.0f - impact.mfShakeDecayFactor));

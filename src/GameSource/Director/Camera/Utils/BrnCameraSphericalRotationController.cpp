@@ -112,7 +112,7 @@ void CameraSphericalRotationController::Update(f32 lfTimestep, Vector2 lStick,
         mfYawReturnRate += (KF_YAW_RETURN_TARGET - mfYawReturnRate) * KF_YAW_RETURN_RATE_LERP;
         mfYawDegs = -lfOldYawDegs * mfYawReturnRate + lfOldYawDegs;
 
-        if (fpu::Abs(mStickVector.x) > KF_MOVING_YAW_RETURN_RATE)
+        if (fpu::Abs(mStickVector.mV.v[0]) > KF_MOVING_YAW_RETURN_RATE)
         {
             // Stick pushed past the dead zone: spring the yaw. The spring softens as the
             // yaw approaches +/-179 degs (outside the +/-169 band).
@@ -125,7 +125,7 @@ void CameraSphericalRotationController::Update(f32 lfTimestep, Vector2 lStick,
                              - KF_YAW_SPRING);
             }
 
-            mfYawDegs += mStickVector.x * lfSpring * lfTimestep;
+            mfYawDegs += mStickVector.mV.v[0] * lfSpring * lfTimestep;
 
             // Clamp to [-179, 179] (two fsel, in asm order: low side then high side).
             mfYawDegs = (KF_YAW_MIN - mfYawDegs >= 0.0f) ? KF_YAW_MIN : mfYawDegs;  // max(yaw,-179)
@@ -135,15 +135,15 @@ void CameraSphericalRotationController::Update(f32 lfTimestep, Vector2 lStick,
         mfYawVelocity = (mfYawDegs - lfOldYawDegs) / lfTimestep;
 
         lPitchMoverParams.mbUseCentering = true;
-        mPitchMover.Update(lfTimestep, mStickVector.y, lPitchMoverParams);
+        mPitchMover.Update(lfTimestep, mStickVector.mV.v[1], lPitchMoverParams);
     }
     else
     {
         // Paused: drive the yaw VELOCITY toward stick*90 (or toward 0 in the dead zone),
         // integrate, and wrap into [-180, 180].
         f32 lfTargetDelta;
-        if (fpu::Abs(mStickVector.x) > KF_MOVING_YAW_RETURN_RATE)
-            lfTargetDelta = mStickVector.x * KF_YAW_SPEED - mfYawVelocity;
+        if (fpu::Abs(mStickVector.mV.v[0]) > KF_MOVING_YAW_RETURN_RATE)
+            lfTargetDelta = mStickVector.mV.v[0] * KF_YAW_SPEED - mfYawVelocity;
         else
             lfTargetDelta = -mfYawVelocity;
 
@@ -152,7 +152,7 @@ void CameraSphericalRotationController::Update(f32 lfTimestep, Vector2 lStick,
         mfYawDegs      = GetSmallestDifferenceBetweenDegsAngles(KF_ZERO, mfYawDegs);
 
         lPitchMoverParams.mbUseCentering = false;
-        mPitchMover.Update(lfTimestep, mStickVector.y, lPitchMoverParams);
+        mPitchMover.Update(lfTimestep, mStickVector.mV.v[1], lPitchMoverParams);
         mfYawReturnRate = KF_ZERO;
     }
 
@@ -194,10 +194,7 @@ void CameraSphericalRotationController::Update(f32 lfTimestep, Vector2 lStick,
 // ============================================================================
 void CameraSphericalRotationController::Construct()
 {
-    mStickVector.x = 0.0f;
-    mStickVector.y = 0.0f;
-    mStickVector.z = 0.0f;
-    mStickVector.w = 0.0f;
+    mStickVector.SetZero();
 
     mfYawDegs       = 0.0f;
     mfYawVelocity   = 0.0f;

@@ -43,7 +43,7 @@ namespace Utils
         // dead-zone radius (kfDeadZoneRadius == 0.5, flt_82001DA0). The console works
         // over the x/y lanes only (the packed scratch vector is {0.5, 0}).
         const f32 lfStickMagnitude =
-            std::sqrt(lStick.x * lStick.x + lStick.y * lStick.y);
+            std::sqrt(lStick.mV.v[0] * lStick.mV.v[0] + lStick.mV.v[1] * lStick.mV.v[1]);
 
         if (lfStickMagnitude >= kfDeadZoneRadius)
         {
@@ -56,10 +56,9 @@ namespace Utils
 
             // Snapshot the normalised stick direction (rsqrt-Newton normalise on console).
             const f32 lfInvMagnitude = 1.0f / lfStickMagnitude;
-            mStickVector.x = lStick.x * lfInvMagnitude;
-            mStickVector.y = lStick.y * lfInvMagnitude;
-            mStickVector.z = 0.0f;
-            mStickVector.w = 0.0f;
+            const f32 lfNormalisedX = lStick.mV.v[0] * lfInvMagnitude;
+            const f32 lfNormalisedY = lStick.mV.v[1] * lfInvMagnitude;
+            mStickVector = rw::math::vpu::Vector2(lfNormalisedX, lfNormalisedY);
         }
         else if (mbIsRotated && !lbPaused && mfTimeSinceRotation > mfMinRotationTime)
         {
@@ -76,11 +75,11 @@ namespace Utils
         {
             // Angle of the held stick direction away from straight-up (0,1). Dot with
             // {0,1} == mStickVector.y.
-            const f32 lfDot = rw::math::fpu::Clamp(mStickVector.y, -1.0f, 1.0f);
+            const f32 lfDot = rw::math::fpu::Clamp(mStickVector.mV.v[1], -1.0f, 1.0f);
             lfTargetAngleDegs = static_cast<f32>(std::acos(lfDot)) * 57.29578f;
             // Negate when the stick is pushed to the LEFT (x lane below zero). The
-            // console test is vcmpgtfp. 0.0 > mStickVector.x, i.e. mStickVector.x < 0.
-            if (mStickVector.x < 0.0f)
+            // console test is vcmpgtfp. 0.0 > mStickVector.x, i.e. x < 0.
+            if (mStickVector.mV.v[0] < 0.0f)
             {
                 lfTargetAngleDegs = lfTargetAngleDegs * -1.0f;
             }
