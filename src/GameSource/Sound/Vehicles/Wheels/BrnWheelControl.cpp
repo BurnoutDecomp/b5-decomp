@@ -88,18 +88,18 @@ WheelControl::WheelControl()
     , mfTimeInAir(0.0f)
     , mfTimeSinceLanding(0.0f)
 {
-    mWheelAttribs.mPeelSlow.x = 0.2f;
-    mWheelAttribs.mPeelSlow.y = 4.0f;
-    mWheelAttribs.mPeelFast.x = 0.2f;
-    mWheelAttribs.mPeelFast.y = 4.0f;
-    mWheelAttribs.mLateralSlow.x = 1.0f;
-    mWheelAttribs.mLateralSlow.y = 7.0f;
-    mWheelAttribs.mLateralFast.x = 2.5f;
-    mWheelAttribs.mLateralFast.y = 13.0f;
-    mWheelAttribs.mBrakeSlow.x = 0.1f;
-    mWheelAttribs.mBrakeSlow.y = 0.5f;
-    mWheelAttribs.mBrakeFast.x = 0.1f;
-    mWheelAttribs.mBrakeFast.y = 0.5f;
+    mWheelAttribs.mPeelSlow.mV.x = 0.2f;
+    mWheelAttribs.mPeelSlow.mV.y = 4.0f;
+    mWheelAttribs.mPeelFast.mV.x = 0.2f;
+    mWheelAttribs.mPeelFast.mV.y = 4.0f;
+    mWheelAttribs.mLateralSlow.mV.x = 1.0f;
+    mWheelAttribs.mLateralSlow.mV.y = 7.0f;
+    mWheelAttribs.mLateralFast.mV.x = 2.5f;
+    mWheelAttribs.mLateralFast.mV.y = 13.0f;
+    mWheelAttribs.mBrakeSlow.mV.x = 0.1f;
+    mWheelAttribs.mBrakeSlow.mV.y = 0.5f;
+    mWheelAttribs.mBrakeFast.mV.x = 0.1f;
+    mWheelAttribs.mBrakeFast.mV.y = 0.5f;
     mWheelAttribs.mafSideRightLateralMultipler[0] = 0.8f;
     mWheelAttribs.mafSideRightLateralMultipler[1] = 1.1f;
     mWheelAttribs.mafSideLeftLateralMultipler[0] = 1.2f;
@@ -177,8 +177,8 @@ void WheelControl::UpdateWheelStatus(f32)
 f32 WheelControl::LerpedNormalise(const Vector2& arSlow, const Vector2& arFast,
                                   f32 afValue, f32 afFraction) const
 {
-    const f32 lfMinimum = arSlow.x + (arFast.x - arSlow.x) * afFraction;
-    const f32 lfMaximum = arSlow.y + (arFast.y - arSlow.y) * afFraction;
+    const f32 lfMinimum = arSlow.mV.x + (arFast.mV.x - arSlow.mV.x) * afFraction;
+    const f32 lfMaximum = arSlow.mV.y + (arFast.mV.y - arSlow.mV.y) * afFraction;
     if (lfMaximum <= lfMinimum)
         return 0.0f;
     return Clamp((std::fabs(afValue) - lfMinimum) / (lfMaximum - lfMinimum), 0.0f, 1.0f);
