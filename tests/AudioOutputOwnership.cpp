@@ -24,6 +24,7 @@ static void Check(bool value, const char* label)
 static DWORD mainThread;
 static std::mutex engineGate;
 static std::atomic<unsigned> calls(0), badPairs(0), mainFills(0), primaryCalls(0);
+static std::atomic<unsigned> inFlight(0), overlaps(0);
 static std::atomic<bool> block(false);
 static HANDLE entered, resumeFill;
 static int contextA, contextB;
@@ -31,6 +32,8 @@ static void FillEngine(f32* out, int frames, void* context)
 {
     if (context != &contextA) ++badPairs;
     if (::GetCurrentThreadId() == mainThread) ++mainFills;
+    if (inFlight.fetch_add(1) != 0) ++overlaps;
+    struct Leave { ~Leave() { --inFlight; } } leave;
     std::lock_guard<std::mutex> lock(engineGate);
     if (block.load()) { ::SetEvent(entered); ::WaitForSingleObject(resumeFill, 5000); }
     ++calls;
@@ -78,6 +81,23 @@ int main()
         if ((n & 15) == 0) ::Sleep(1);
     }
     Check(WaitForCalls(before), "engine runs during publication churn");
+
+    // Issue #47: XAudio2 stops its engine for good after OnCriticalError (an unplugged or
+    // reconfigured endpoint). The sink must stay logically open, rebuild the device off the
+    // callback thread and keep the engine fill -- the RWAC command consumer -- running.
+    CgsSystem::g_engineCallback.OnCriticalError(XAUDIO2_E_DEVICE_INVALIDATED);
+    Check(AudioOutputPC::IsOpen(), "a lost device leaves the sink logically open");
+    bool rebuilt = false;
+    for (unsigned n = 0; n < 500 && !rebuilt; ++n)
+    {
+        ::Sleep(10);
+        std::lock_guard<std::mutex> lock(CgsSystem::g_deviceMutex);
+        // OnCriticalError raised the flag synchronously; only recovery clears it.
+        rebuilt = CgsSystem::g_pSource != nullptr && !CgsSystem::g_deviceLost.load();
+    }
+    Check(rebuilt, "a critical error rebuilds the XAudio2 device");
+    Check(WaitForCalls(calls.load()), "engine production continues after device recovery");
+    Check(AudioOutputPC::Open(48000, 2, nullptr, nullptr), "open stays idempotent after recovery");
     AudioOutputPC::ReleasePrimaryFill();
     const unsigned stoppedPrimary = primaryCalls.load();
     Check(WaitForCalls(calls.load()), "primary retirement preserves engine callbacks");
@@ -98,6 +118,7 @@ int main()
     AudioOutputPC::Close();
     Check(!AudioOutputPC::IsOpen(), "close drains callbacks and diagnostics");
     Check(mainFills.load() == 0, "engine fills never run on the startup thread");
+    Check(overlaps.load() == 0, "device callbacks and recovery never produce concurrently");
     ::CloseHandle(entered); ::CloseHandle(resumeFill);
     std::printf("AudioOutputOwnership: %u checks, %u failures\n", checks, failures);
     return failures ? 1 : 0;
