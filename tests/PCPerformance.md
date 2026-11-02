@@ -5,6 +5,27 @@ while preserving resolution, antialiasing, LOD distances, reflection settings an
 damage visibility. It does **not** establish original-PC minimum requirements or a locked
 165 FPS at 1440p.
 
+## Reflection preset regression (2026-11-02)
+
+The example INI now keeps the original 128-pixel cube and fixed reflection LODs,
+with the extra scene-reflection feeds and small/debris shadows disabled until
+selected. The enabled Relative preset introduced on October 10, followed by a
+512-pixel cube, added rendering work beyond the earlier performance settings.
+All of those options remain available through the debug menu and INI.
+
+Restoring the saved earlier setup retains AF16, shadow scale 2, 500 m LOD0 world
+and prop reflections, and extended world/prop/vehicle LODs. One foreground
+90-second Road Rage on executable `60cf32e78b0a` (source `91b9ac3a` plus existing
+local rendering WIP) qualified with 12 takedowns across seven rivals, up to four
+crashing/two airborne rivals, and zero assertions/exceptions. It averaged
+140.97 FPS, p99 11.21 ms; the lowest rolling one-second count was 92 FPS.
+Two individual frames exceeded 50 ms (maximum 127.32 ms), so this does not prove
+a hitch-free run or locked 100/165 FPS. The remaining optimization work in
+[#41](https://github.com/BurnoutDecomp/b5-decomp/issues/41) stays open.
+
+Evidence: parent checkout `scratch/performance_regression_20261101/`, especially
+`preset_restore.json`, and `scratch/performance_max_1003/debug_regression_1102_saved_pre_debug_profile/`.
+
 ## Compiler boundary checks (2026-10-03)
 
 A private whole-program optimization build exposed three correctness issues.
