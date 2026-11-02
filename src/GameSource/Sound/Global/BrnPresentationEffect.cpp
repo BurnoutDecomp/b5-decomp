@@ -151,8 +151,15 @@ bool PresentationEffect::Attach()
     mStreamParams.mpLogicModule = lpModule;
     mStreamParams.mFactoryName = static_cast<u32>(
         CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+    // The STREAM voice spec, not the WAV one. PresentationEffect::PlayStream (X360
+    // @0x8269E418, not exported; DecFIGS @0x845CDC) fills these params with
+    // MakeHash("MusicVoiceSpec") -- the same stream voice X360 SpeechEffect::PlayStream
+    // @0x8269EAF0 uses. "StereoWavVoiceSpec" belongs to the resident WAV arm of Play
+    // (splice 65535); a stream entry (65534) built on it handed its hybrid sample to the
+    // resident-only SnP1 player, which faults opening the stream (StreamPool null) --
+    // the race-start crash on RACESTARTMUSICLOOP.SNS.
     mStreamParams.mVoiceSpecName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("StereoWavVoiceSpec"));
+        CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
     mStreamParams.mSlotName = static_cast<u32>(
         CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
     mStreamParams.mSendName = static_cast<u32>(
