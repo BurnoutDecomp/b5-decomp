@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/RenderWare/CgsMaterialStateResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"                   // rw::Resource, rw::BaseResourceDescriptors<5>
+#include "GameShared/GameClasses/Graphics/CgsMaterialState.h"
 #include "types.hpp"   // uintptr_t
 
 // CgsResource::MaterialStateResourceType -- the material-state (blend-state) handler (id 0xF).
@@ -23,10 +24,10 @@ namespace CgsResource
     ResourceDescriptor MaterialStateResourceType::GetSerialisedResourceDescriptor(const void* /*lpResource*/) const
     {
         // Faithful to X360 0x828A98C0: a fixed descriptor -- slot0 = the MaterialState object
-        // (X360 hardcoded {0xFC=252, 0x10=16}; PC uses sizeof), slots 1..4 = {0, 1}.
+        // (X360 hardcoded {0xFC=252, 0x10=16}), slots 1..4 = {0, 1}.
         ResourceDescriptor lDescriptor;
         u32* lpData = reinterpret_cast<u32*>(&lDescriptor);
-        lpData[0] = static_cast<u32>(sizeof(renderengine::MaterialState));  // X360: 0xFC=252
+        lpData[0] = 0xFCu;  // X360: 0xFC=252
         lpData[1] = 16u;
         lpData[2] = 0u;  lpData[3] = 1u;
         lpData[4] = 0u;  lpData[5] = 1u;
@@ -49,11 +50,10 @@ namespace CgsResource
         //     base = *a2;                       // a2[0] = rw::Resource main base
         //     result[0] += base; result[1] += base; result[2] += base;
         // i.e. rebase the three serialised state-object self-pointers offset -> absolute. The
-        // platform-4 blob (tools/assets/bundles/world_type_transcode.py transcode_materialstate)
-        // serialises them as u64 offsets {0x18, 0x68, 0xC8} into the same 264-byte resource.
-        renderengine::MaterialState* lpState = static_cast<renderengine::MaterialState*>(lpResource);
+        // native pointer slots are 32-bit at offsets 0, 4 and 8.
+        CgsGraphics::MaterialState* lpState = static_cast<CgsGraphics::MaterialState*>(lpResource);
         const uintptr_t luBase = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
-        lpState->mpBlendState = reinterpret_cast<renderengine::BlendMaterialState*>(
+        lpState->mpBlendState = reinterpret_cast<renderengine::BlendState*>(
             reinterpret_cast<uintptr_t>(lpState->mpBlendState) + luBase);
         lpState->mpDepthStencilState = reinterpret_cast<renderengine::DepthStencilState*>(
             reinterpret_cast<uintptr_t>(lpState->mpDepthStencilState) + luBase);
@@ -69,15 +69,14 @@ namespace CgsResource
         //     result[0] -= base; result[1] -= base;
         //     *(u32*)(v3 + 0x28) = 1;           // rasterizer word 10 (serialised-blob poke)
         //     result[2] -= base;
-        renderengine::MaterialState* lpState = static_cast<renderengine::MaterialState*>(lpResource);
+        CgsGraphics::MaterialState* lpState = static_cast<CgsGraphics::MaterialState*>(lpResource);
         const uintptr_t luBase = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
-        u8* lpReferenced = reinterpret_cast<u8*>(lpState->mpRasterizerState);
-        lpState->mpBlendState = reinterpret_cast<renderengine::BlendMaterialState*>(
+        renderengine::RasterizerState* lpReferenced = lpState->mpRasterizerState;
+        lpState->mpBlendState = reinterpret_cast<renderengine::BlendState*>(
             reinterpret_cast<uintptr_t>(lpState->mpBlendState) - luBase);
         lpState->mpDepthStencilState = reinterpret_cast<renderengine::DepthStencilState*>(
             reinterpret_cast<uintptr_t>(lpState->mpDepthStencilState) - luBase);
-        if (lpReferenced != 0)
-            *reinterpret_cast<u32*>(lpReferenced + 0x28) = 1u;
+        lpReferenced->muPrimitiveResetEnable = 1u;
         lpState->mpRasterizerState = reinterpret_cast<renderengine::RasterizerState*>(
             reinterpret_cast<uintptr_t>(lpReferenced) - luBase);
     }

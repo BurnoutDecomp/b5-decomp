@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/RenderWare/CgsRwTextureStateResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"                   // rw::Resource, rw::BaseResourceDescriptors<5>
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstddef>   // offsetof
 #include "types.hpp"   // uintptr_t
 
@@ -70,10 +72,8 @@ namespace CgsResource
         // Faithful to X360 0x828A8128: import 0 lives at the state's raster slot (X360 +0x20).
         //   *lpuOffset = 0x20;  *lppValue = *(state + 0x20);
         const renderengine::TextureState* lpState = static_cast<const renderengine::TextureState*>(lpResource);
-        if (lpuOffset != 0)
-            *lpuOffset = static_cast<u32>(offsetof(renderengine::TextureState, mpRaster));  // X360: 0x20
-        if (lppValue != 0)
-            *lppValue = lpState->mpRaster;
+        *lppValue = lpState->mpRaster;
+        *lpuOffset = static_cast<u32>(offsetof(renderengine::TextureState, mpRaster));
     }
 
     bool RwTextureStateResourceType::DebugValidate(const void* lpResource) const
@@ -82,8 +82,12 @@ namespace CgsResource
         // -1 unresolved sentinel (the X360 asserts "Texture state has invalid texture value").
         const renderengine::TextureState* lpState = static_cast<const renderengine::TextureState*>(lpResource);
         const uintptr_t luRaster = reinterpret_cast<uintptr_t>(lpState->mpRaster);
-        return luRaster != static_cast<uintptr_t>(renderengine::TextureState::KU_INVALID_TEXTURE)
-            && luRaster != 0;
+        if (luRaster == static_cast<uintptr_t>(renderengine::TextureState::KU_INVALID_TEXTURE))
+        {
+            CGS_ASSERT(false, "Texture state has invalid texture value\n");
+            return false;
+        }
+        return true;
     }
 
     EDebugResourceCategory RwTextureStateResourceType::GetDebugResourceCategory() const

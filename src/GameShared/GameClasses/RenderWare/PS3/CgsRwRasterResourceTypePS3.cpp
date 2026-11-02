@@ -1,23 +1,9 @@
-// GameShared/GameClasses/RenderWare/PS3/CgsRwRasterResourceTypePS3.cpp
-//
-// NOTE: despite the PS3 path, this TU reconstructs the CONSOLE (X360/Xbox2) bodies of the
-// three CgsResource::RwRasterResourceType virtuals from BURNOUT_X360_ARTIST.XEX:
-//     GetSerialisedResourceDescriptor  @ 0x828A9858
-//     FixDown                          @ 0x828A88E0
-//     FixUp                            @ 0x828A8930
-//
-// These SAME three virtuals already have a committed home in the cross TU
-//   GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.cpp
-// where FixDown/FixUp are the PC (D3D9) divergence (Destroy/Create) and
-// GetSerialisedResourceDescriptor is the descriptor port. To avoid a duplicate-definition
-// (ODR / duplicate-symbol) collision with that committed PC home, the console bodies below
-// are compiled ONLY under CGS_PLATFORM_X360. In the PC build (the compile gate: /DWIN32,
-// no CGS_PLATFORM_X360) this TU is empty and the committed cross bodies remain
-// authoritative. (Mirrors CgsHardwareInitPS3.cpp, which likewise carries the X360 surface
-// on a PS3 path behind CGS_PLATFORM_X360.)
-
+// Native ARTIST raster bodies; the PS3 filename is DecFIGS attribution.
 #include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 #include "rw/rwcore_structs.h"                // rw::Resource (m_baseResources[]), rw::ResourceDescriptor
+CGS_STATIC_ASSERT((offsetof(D3DBaseTexture, Format) == 0x1C), "ARTIST packed raster fetch constant");
+
 namespace CgsResource
 {
     // ---- FixDown @ 0x828A88E0 --------------------------------------------------------------
@@ -35,30 +21,30 @@ namespace CgsResource
     //   stw -65536,+0x14; stw 0,+0x08; stw -65536,+0x18
     void RwRasterResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        u32* const lpRaster = reinterpret_cast<u32*>(lpResource);
+        renderengine::Texture* const lpRaster = static_cast<renderengine::Texture*>(lpResource);
         const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[2]));  // 8(r5)
 
         // +0x20: high-20 -= delta, low-12 flag bits preserved (unconditional).
         {
-            const u32 luWord = lpRaster[0x20 / 4];
-            lpRaster[0x20 / 4] = (luWord & 0x00000FFFu)
+            const u32 luWord = lpRaster->Format.dword[1];
+            lpRaster->Format.dword[1] = (luWord & 0x00000FFFu)
                                | (((luWord & 0xFFFFF000u) - luDelta) & 0xFFFFF000u);
         }
 
         // +0x30: same rebase, only when the packed offset (high-20) is non-zero.
         {
-            const u32 luWord = lpRaster[0x30 / 4];
+            const u32 luWord = lpRaster->Format.dword[5];
             if ((luWord & 0xFFFFF000u) != 0)
             {
-                lpRaster[0x30 / 4] = (luWord & 0x00000FFFu)
+                lpRaster->Format.dword[5] = (luWord & 0x00000FFFu)
                                    | (((luWord & 0xFFFFF000u) - luDelta) & 0xFFFFF000u);
             }
         }
 
         // Reset the serialised header words the fix-down invalidates.
-        lpRaster[0x14 / 4] = 0xFFFF0000u;  // stw lis -1 -> 0xFFFF0000 (-65536)
-        lpRaster[0x08 / 4] = 0u;
-        lpRaster[0x18 / 4] = 0xFFFF0000u;  // -65536
+        lpRaster->BaseFlush = 0xFFFF0000u;  // stw lis -1 -> 0xFFFF0000 (-65536)
+        lpRaster->Fence = 0u;
+        lpRaster->MipFlush = 0xFFFF0000u;  // -65536
     }
 
     // ---- FixUp @ 0x828A8930 ----------------------------------------------------------------
@@ -69,52 +55,33 @@ namespace CgsResource
     // (asm returns via beqlr). No header reset.
     void RwRasterResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        u32* const lpRaster = reinterpret_cast<u32*>(lpResource);
+        renderengine::Texture* const lpRaster = static_cast<renderengine::Texture*>(lpResource);
         const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[2]));  // 8(r5)
 
         // +0x20: high-20 += delta, low-12 preserved (unconditional).
         {
-            const u32 luWord = lpRaster[0x20 / 4];
-            lpRaster[0x20 / 4] = (luWord & 0x00000FFFu)
+            const u32 luWord = lpRaster->Format.dword[1];
+            lpRaster->Format.dword[1] = (luWord & 0x00000FFFu)
                                | (((luWord & 0xFFFFF000u) + luDelta) & 0xFFFFF000u);
         }
 
         // +0x30: same rebase, only when its high-20 is non-zero.
         {
-            const u32 luWord = lpRaster[0x30 / 4];
+            const u32 luWord = lpRaster->Format.dword[5];
             if ((luWord & 0xFFFFF000u) != 0)
             {
-                lpRaster[0x30 / 4] = (luWord & 0x00000FFFu)
+                lpRaster->Format.dword[5] = (luWord & 0x00000FFFu)
                                    | (((luWord & 0xFFFFF000u) + luDelta) & 0xFFFFF000u);
             }
         }
     }
 
-    // ---- GetSerialisedResourceDescriptor @ 0x828A9858 --------------------------------------
-    //
-    //   renderengine::Texture::Parameters params;  // v5[8], v5[0] = the DIMENSION word = -1, rest 0
-    //   renderengine::Texture::GetParameters(resource, &params);
-    //   renderengine::Texture::GetResourceDescriptor(out, &params);
-    // Descriptor written into the five-lane rw::ResourceDescriptor.
+    // ARTIST 828A9858 initializes seven parameter words and returns the descriptor.
     ResourceDescriptor RwRasterResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
-        ResourceDescriptor lDescriptor;
-        renderengine::Texture::Parameters lParameters;
-        // ⚠ v5[0] IS THE DIMENSION WORD, NOT THE FORMAT (corrected 2026-08-16 with the Parameters
-        // layout): renderengine::Texture::GetParameters @0x82B60D80 writes -1 into word 0 for a
-        // resource type it does not recognise (`li r11, -1` @0x82B60DD8) and puts the format in
-        // word 6. The seed is otherwise unchanged -- the console zeroes every other word, and
-        // GetParameters overwrites all eight anyway.
-        lParameters.meType      = renderengine::Texture::E_TYPE_UNKNOWN;   // v5[0] = -1
-        lParameters.muSysMem    = 0;
-        lParameters.muWidth     = 0;
-        lParameters.muHeight    = 0;
-        lParameters.muDepth     = 0;
-        lParameters.muNumLevels = 0;
-        lParameters.miFormat    = 0;    // v5[6]
-        lParameters.muReserved1 = 0;
-        renderengine::Texture::GetParameters(static_cast<const renderengine::Texture*>(lpResource), &lParameters);
-        renderengine::Texture::GetResourceDescriptor(reinterpret_cast<u32*>(&lDescriptor), &lParameters);
-        return lDescriptor;
+        renderengine::Texture::Parameters lParameters =
+            { renderengine::Texture::TYPE_NA, 0, 0, 0, 0, 0, static_cast<renderengine::PixelFormat>(0) };
+        static_cast<const renderengine::Texture*>(lpResource)->GetParameters(lParameters);
+        return renderengine::Texture::GetResourceDescriptor(lParameters);
     }
 }

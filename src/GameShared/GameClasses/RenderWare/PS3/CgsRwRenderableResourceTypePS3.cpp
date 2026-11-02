@@ -1,69 +1,44 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"
-// CgsResource::RwRenderableResourceType::FixUpRenderableMesh @ 0x828A8968.
-//
-// Relocates one just-loaded serialised renderable mesh and re-validates its GPU buffers.
-// SEAM (platform-4 widened data): the mesh is the natural x64 widening of ::RenderableMesh
-// (renderablemesh.h); the walk uses the NAMED members -- muNumVertexBuffers (X360 lbz +0x26),
-// the index-buffer header pointer mapBuffers[0] (X360 +0x28) and the vertex-buffer header
-// pointers mapBuffers[1..numVB] (X360 +0x2C..). The fix-up block supplies two deltas:
-// lpFixUp->muPointerBase (a3[0]) relocates the serialised pointers to their loaded base, and
-// lpFixUp->muBufferOffset (a3[2]) is folded into each GPU buffer header's base-address word.
-//
-// Store-for-store from the asm:
-//   1) for each vertex-buffer pointer slot: *slot += muPointerBase   (relocate the ptr array)
-//   2) mpIndexBuffer += muPointerBase                                (relocate the IB ptr)
-//   3) indexBuffer->muBaseAddress += muBufferOffset                  (straight add)
-//      then IndexBuffer::Xbox2CheckPhysicalMemoryFlags(indexBuffer)
-//   4) for each vertex buffer: muBaseAddress =
-//          (((muBaseAddress & ~3u) + muBufferOffset) & ~3u) | (muBaseAddress & 3u)
-//      (clrrwi + add + insrwi: relocate the base while preserving the low-2-bit memory flags)
-//      then VertexBuffer::Xbox2CheckPhysicalMemoryFlags(vertexBuffer)
+#include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
+#include "rw/rwcore_structs.h"
 
+CGS_STATIC_ASSERT((offsetof(RenderableMesh, mu8NumVertexBuffers) == 0x26), "ARTIST mesh vertex count");
+CGS_STATIC_ASSERT((offsetof(RenderableMesh, maBuffers) == 0x28), "ARTIST mesh buffer table");
+CGS_STATIC_ASSERT((sizeof(rw::Resource) == 20), "ARTIST five resource lanes");
+
+// ARTIST 828A8968; DecFIGS CgsRwRenderableResourceType.h declares the mesh
+// and the original five-lane resource, which the caller forwards unchanged.
 namespace CgsResource
 {
-    void RwRenderableResourceType::FixUpRenderableMesh(RwRenderableMesh* lpMesh,
-                                                       const RwRenderableFixUpData* lpFixUp) const
+    void RwRenderableResourceType::FixUpRenderableMesh(RenderableMesh* lpMesh,
+                                                       const rw::Resource& lrResource) const
     {
-        // SEAM (platform-4 widened data): the serialised pointer slots are host-width, so the
-        // relocation base is too (X360: a 32-bit `lwz 0(a3)`). The buffer offset stays 32-bit --
-        // muBaseAddress is a console u32 slot resolved through the low-4 GB reservation.
-        const uintptr_t luPointerBase  = lpFixUp->muPointerBase;   // a3[0]
-        const u32       luBufferOffset = lpFixUp->muBufferOffset;  // a3[2]
+        const uintptr_t luPointerBase = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
+        const u32 luBufferOffset = reinterpret_cast<u32>(lrResource.m_baseResources[2]);
 
-        // 1) Relocate each serialised vertex-buffer-header pointer slot to its loaded base.
-        //    SEAM: the widened buffer table holds the IB header pointer at mapBuffers[0] and
-        //    the VB header pointers at mapBuffers[1..numVB] (X360: separate +0x28 / +0x2C
-        //    slots); the slot values are relocated in place, matching the X360 walk.
-        for (u32 luI = 0; luI < lpMesh->muNumVertexBuffers; ++luI)
+        for (u32 luI = 0; luI < lpMesh->mu8NumVertexBuffers; ++luI)
         {
-            // Pointer arithmetic on the stored address: add the relocation base.
-            uintptr_t luAddr = reinterpret_cast<uintptr_t>(lpMesh->mapBuffers[1 + luI]) + luPointerBase;
-            lpMesh->mapBuffers[1 + luI] = reinterpret_cast<void*>(luAddr);
+            const uintptr_t luAddress = reinterpret_cast<uintptr_t>(lpMesh->maBuffers[1 + luI]) + luPointerBase;
+            lpMesh->maBuffers[1 + luI] = reinterpret_cast<void*>(luAddress);
         }
 
-        // 2) Relocate the index-buffer-header pointer (mapBuffers[0]) the same way.
-        {
-            uintptr_t luAddr = reinterpret_cast<uintptr_t>(lpMesh->mapBuffers[0]) + luPointerBase;
-            lpMesh->mapBuffers[0] = reinterpret_cast<void*>(luAddr);
-        }
+        const uintptr_t luIndexAddress = reinterpret_cast<uintptr_t>(lpMesh->maBuffers[0]) + luPointerBase;
+        lpMesh->maBuffers[0] = reinterpret_cast<void*>(luIndexAddress);
+        renderengine::IndexBuffer* lpIndexBuffer =
+            static_cast<renderengine::IndexBuffer*>(lpMesh->maBuffers[0]);
+        lpIndexBuffer->Address += luBufferOffset;
+        lpIndexBuffer->Xbox2CheckPhysicalMemoryFlags();
 
-        // 3) Fold the buffer offset into the index buffer's GPU base-address word (straight add),
-        //    then re-check its physical-memory flags.
-        renderengine::IndexBufferHeader* lpIndexBuffer =
-            static_cast<renderengine::IndexBufferHeader*>(lpMesh->mapBuffers[0]);
-        lpIndexBuffer->muBaseAddress += luBufferOffset;
-        renderengine::IndexBuffer::Xbox2CheckPhysicalMemoryFlags(reinterpret_cast<u32*>(lpIndexBuffer));
-
-        // 4) Same fold for each vertex buffer, but preserving the low-2-bit memory flags
-        //    across the relocation, then re-check the flags.
-        for (u32 luI = 0; luI < lpMesh->muNumVertexBuffers; ++luI)
+        for (u32 luI = 0; luI < lpMesh->mu8NumVertexBuffers; ++luI)
         {
-            renderengine::VertexBufferHeader* lpVertexBuffer =
-                static_cast<renderengine::VertexBufferHeader*>(lpMesh->mapBuffers[1 + luI]);
-            const u32 luOld = lpVertexBuffer->muBaseAddress;
-            lpVertexBuffer->muBaseAddress =
+            renderengine::VertexBuffer* lpVertexBuffer =
+                static_cast<renderengine::VertexBuffer*>(lpMesh->maBuffers[1 + luI]);
+            const u32 luOld = lpVertexBuffer->Format.dword[0];
+            lpVertexBuffer->Format.dword[0] =
                 (((luOld & ~3u) + luBufferOffset) & ~3u) | (luOld & 3u);
-            renderengine::VertexBuffer::Xbox2CheckPhysicalMemoryFlags(reinterpret_cast<u32*>(lpVertexBuffer));
+            lpVertexBuffer->Xbox2CheckPhysicalMemoryFlags();
         }
     }
 }
