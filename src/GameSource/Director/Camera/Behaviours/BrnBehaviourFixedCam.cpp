@@ -134,8 +134,8 @@ bool BehaviourFixedCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrIn
 
     if (!mbPositionSet)
     {
-        Vector3 lOffset = lrTarget.mLinearVelocity;
-        lOffset.y *= 0.0f;
+        rw::math::vpu::Vector3 lOffset = lrTarget.mLinearVelocity;
+        lOffset.SetY(0.0f);
         lOffset = lOffset * KF_TIME_AHEAD;
 
         if (MagnitudeSquared(lOffset) > KF_MAX_DISTANCE_SQUARED)
@@ -153,7 +153,7 @@ bool BehaviourFixedCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrIn
             lOffset = lrTarget.mTransform.zAxis * KF_MIN_DISTANCE;
         }
 
-        const Vector3 lTargetPosition = lrTarget.mTransform.wAxis;
+        const rw::math::vpu::Vector3 lTargetPosition = lrTarget.mTransform.wAxis;
         mBaseTranform = Utils::CreateLookAt(lTargetPosition + lOffset, lTargetPosition);
 
         mfDutch = lrInfo.GetRandom()->RandomFloat(-mpParameters->mfMaxDutch, mpParameters->mfMaxDutch);
