@@ -182,14 +182,14 @@ namespace CgsGui
         if (lrHandler.GetVertexTransform().mColourScale.mV.w == 0.0f)
             return;
 
-        Im2dCommandBuffer* lpBuffer = lrHandler.GetCommandBuffer();
+        AptIm2dRenderBuffer* lpBuffer = lrHandler.GetIm2dRendererBase();
         lpBuffer->SetTransform(lrHandler.GetVertexTransform());
 
         // The pooled CgsAptString's leading member IS the CgsGraphics::TextObject (same address).
         const CgsGraphics::TextObject* lpTextObject =
             reinterpret_cast<const CgsGraphics::TextObject*>(lpSlot);
 
-        lrHandler.GetTextRenderer()->RenderStringBuffered(lpBuffer, *lpTextObject);
+        lrHandler.GetTextRenderer()->RenderString(lpBuffer, *lpTextObject);
     }
 
     // -------------------------------------------------------------------------

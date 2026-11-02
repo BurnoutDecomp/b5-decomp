@@ -45,8 +45,6 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"  // CrashModeScoring::DealWithRemovedTraffic
 #include <cmath>                                             // sqrtf (the icon heading derivation)
 #include "SDKs/XboxMath/XMVectorACos.h"                       // XboxMath::XMVectorACos (X360 0x821F0980)
-#include <cstdlib>                                           // [DIAG] getenv (BRN_TRAFFICGUI_DIAG)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"     // RouteResponse / RouteResponseQueue / E_OWNER_GUI
 #include "GameSource/World/AI/Route/BrnRoute.h"                // Route / RouteNode
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"               // GuiTracker::RecEvent / RouteInformation
@@ -183,20 +181,13 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
 
             lbWasPlayerCarCrashing = lbCrashState;
 
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[crash-hud] posting GUI 377 GuiPlayerCrashingStateChangeEvent state="
-                    << static_cast<s32>(lCrashEvent.meCurrentState)
-                    << (lbCrashState ? " (START_CRASHED)" : " (LEAVE_CRASHED)") << "\n";
-            }
         }
     }
 
     // ARTIST 0x823E58CC..0x823E5918: repeat the drivable notification during the crash.
     if (lpActiveInterface->IsPlayerCarCrashing() && lpActiveInterface->GetCanDriveAwayFromCrash())
     {
-        BrnGui::GuiPlayerDrivableFromCrash lEvent{};
+        BrnGui::GuiPlayerDrivableFromCrash lEvent = BrnGui::GuiPlayerDrivableFromCrash();
         lpGuiInputBuffer->GetGuiEvents()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lEvent), lEvent.GetEventType(), sizeof(lEvent));
     }
@@ -263,13 +254,6 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                     lEngineEvent.GetEventType(),
                     static_cast<s32>(sizeof(lEngineEvent)));
 
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[hud-reveal] posting GUI 379 GuiPlayerEngineEvent engineOn="
-                        << (lbIsOn ? 1 : 0) << " (raw state " << lseLastEngineState
-                        << " -> " << liEngineState << ")\n";
-                }
             }
             lseLastEngineState = liEngineState;
         }
@@ -454,7 +438,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     // ARTIST 0x823E5C74..0x823E5C8C: the analyzer accumulates the duration of this signal.
     if (lpActiveInterface->IsPlayerWrecked())
     {
-        BrnGui::GuiEventPlayerWrecked lEvent{};
+        BrnGui::GuiEventPlayerWrecked lEvent = BrnGui::GuiEventPlayerWrecked();
         lpGuiInputBuffer->GetGuiEvents()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lEvent), lEvent.GetEventType(), sizeof(lEvent));
     }
@@ -506,9 +490,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
 
                 // Position lane (lvx128 16*idx / stvx128 into the icon head).
                 const Vector3 lPosition = lpGlobalInterface->GetRaceCarPosition(leGlobal);
-                Vector4 lv4Lane;
-                lv4Lane.x = lPosition.x; lv4Lane.y = lPosition.y;
-                lv4Lane.z = lPosition.z; lv4Lane.w = 0.0f;
+                const Vector4 lv4Lane(lPosition.mV);
                 lrIcon.SetPositionLane(lv4Lane);
 
                 // Speed (m/s -> MPH; `lfs speeds[idx]` * flt_830180B0).
@@ -544,21 +526,21 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                 // vertical axis. RED/GREEN: tools/tests/cases/minimap_player_arrow.ps1.
                 {
                     const Vector3 lAt = lpGlobalInterface->GetRaceCarAt(leGlobal);
-                    const bool lbNaN = (lAt.x != lAt.x) || (lAt.y != lAt.y) ||
-                                       (lAt.z != lAt.z);
+                    const bool lbNaN = (lAt.mV.x != lAt.mV.x) || (lAt.mV.y != lAt.mV.y) ||
+                                       (lAt.mV.z != lAt.mV.z);
                     if (lbNaN)
                     {
                         lrIcon.SetRotation(0.0f);
                     }
                     else
                     {
-                        const f32 lfLenSq = lAt.x * lAt.x + lAt.y * lAt.y + lAt.z * lAt.z;
+                        const f32 lfLenSq = lAt.mV.x * lAt.mV.x + lAt.mV.y * lAt.mV.y + lAt.mV.z * lAt.mV.z;
                         f32 lfRotation = 0.0f;
                         if (lfLenSq > 0.0f)
                         {
                             const f32 lfInvLen = 1.0f / sqrtf(lfLenSq);
                             // dot(normalised At, north(0,0,1)) == At.z / |At|
-                            f32 lfDot = lAt.z * lfInvLen;
+                            f32 lfDot = lAt.mV.z * lfInvLen;
                             if (lfDot > 1.0f)  lfDot = 1.0f;
                             if (lfDot < -1.0f) lfDot = -1.0f;
                             // bl XMVectorACos @0x823E60E0, after the vmaxfp / vminfp clamp at
@@ -566,7 +548,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                             lfRotation = XboxMath::XMVectorACos(lfDot);
                             // cross(north, dHat) . up == +dHat.x ; below the plane flips
                             // (vcmpgtfp 0 > dot -> 2pi - angle).
-                            const f32 lfSide = lAt.x * lfInvLen;
+                            const f32 lfSide = lAt.mV.x * lfInvLen;
                             if (lfSide < 0.0f)
                             {
                                 const f32 KF_TWO_PI = 6.2831855f;  // 0x82034E30 lane 0
@@ -627,23 +609,6 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                 lSatNavEvent.GetEventType(),
                 static_cast<s32>(sizeof(lSatNavEvent)));
 
-            // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the first two 199 posts.
-            {
-                static s32 siLeft = 2;
-                if (siLeft > 0 && CgsDev::Log::gpDebugPrint != 0 && liNumIcons > 0)
-                {
-                    --siLeft;
-                    const BrnGui::GuiEventUpdateSatNav::SatNavIconInfo& lrFirst =
-                        lSatNavEvent.maIconInfo[0];
-                    *CgsDev::Log::gpDebugPrint
-                        << "[satnav-diag] bridge 199: icons=" << liNumIcons
-                        << " first type=" << static_cast<s32>(lrFirst.GetIconTypeByte())
-                        << " pos=(" << lrFirst.GetPositionLane().x
-                        << "," << lrFirst.GetPositionLane().z
-                        << ") rot=" << lrFirst.GetRotation()
-                        << "\n";
-                }
-            }
         }
     }
 
@@ -686,9 +651,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                     continue;
 
                 const Vector3 lPosition = lpGlobalInterface->GetRaceCarPosition(leGlobal);
-                Vector4 lv4Lane;
-                lv4Lane.x = lPosition.x; lv4Lane.y = lPosition.y;
-                lv4Lane.z = lPosition.z; lv4Lane.w = 0.0f;
+                const Vector4 lv4Lane(lPosition.mV);
 
                 // The crashing byte rides only on active (flags bit 0) cars; the console
                 // reads GetRaceCarState(active)->mbCrashing (@1098) under that gate.
@@ -830,7 +793,7 @@ void BrnGameModule::BridgeWorldRouteInformationToGui(const BrnWorldIO::UpdateOut
         for (s32 liNodeIndex = 0; liNodeIndex < lGuiRouteInfoEvent.miNumPoints; ++liNodeIndex)
         {
             const BrnAI::RouteNode* lpRouteNode = lpRoute->GetNode(liNodeIndex);
-            const Vector3 lPositionWithZeroY = { lpRouteNode->GetX(), 0.0f, lpRouteNode->GetY(), 0.0f };
+            const Vector3 lPositionWithZeroY(Vector4(lpRouteNode->GetX(), 0.0f, lpRouteNode->GetY(), 0.0f).mV);
             lGuiRouteInfoEvent.mav3Points[liNodeIndex] = lPositionWithZeroY;
         }
 
@@ -872,12 +835,6 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
 {
     CGS_ASSERT(lpGuiInput != 0, "lpGuiInput");         // cpp:126 (`li r5, 0x7E` @0x823E5590)
     CGS_ASSERT(lpWorldOutput != 0, "lpWorldOutput");   // cpp:127 (`li r5, 0x7F` @0x823E55B4)
-
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFICGUI_DIAG: the first few forwards of each id and
-    // every removed-traffic record that named a car, with the scorer's recent-crash count around
-    // DealWithRemovedTraffic.
-    static s32        siLinesLeft  = 32;
-    static s32        siFirstLeft[5] = { 2, 2, 2, 2, 2 };   // 512 / 208 / 209 / 210 / 592
 
     const CgsModule::Event* lpEvent     = 0;   // DWARF :129
     s32                     liEventSize = 0;   // DWARF :130
@@ -930,7 +887,6 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
 
                 BrnGameState::CrashModeScoring* const lpCrashScorer =
                     mGameStateModule.GetModeManager()->GetScoringSystem()->GetCrashScorer();
-   // [DIAG]
                 lpCrashScorer->DealWithRemovedTraffic(lpRemovedTrafficEvent);
                 break;
             }

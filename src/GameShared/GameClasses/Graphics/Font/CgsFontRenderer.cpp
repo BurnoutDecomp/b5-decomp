@@ -1,13 +1,9 @@
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // IncrementUtf8Pointer
-#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the buffered Apt string path)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (RenderDropShadow's two console asserts)
 
 #include <cmath>    // fabsf
-#include <cstdlib>
-#include <cstring>
 
 // CgsGraphics::TextObject + TextRenderer bodies (faithful X360 ARTIST ports):
 //   TextObject::Construct       0x827EEE70
@@ -171,7 +167,6 @@ namespace CgsGraphics
     {
         mpIm2dRenderBuffer     = lpRenderBuffer;
         mpIm3dRenderBuffer     = 0;
-        mpBufferedRenderBuffer = 0;   // (PC fold: guarantee the immediate path regardless of init)
         RenderStringInternal(lrTextObject, EImRenderingType_Buffered);
         mpIm2dRenderBuffer = 0;
     }
@@ -181,23 +176,8 @@ namespace CgsGraphics
     {
         mpIm2dRenderBuffer = 0;
         mpIm3dRenderBuffer = lpRenderBuffer;
-        mpBufferedRenderBuffer = 0;
         RenderStringInternal(lrTextObject, EImRenderingType_Buffered);
         mpIm3dRenderBuffer = 0;
-    }
-
-    // FLAG (PC fold; see the header note): the Apt string path -- the glyphs ride the SAME
-    // dispatched command stream as the Apt shapes (per-batch SET_TRANSFORM + walk order), which
-    // is exactly what the console's buffered Im2dRenderBuffer::RenderStart/RenderEnd did. Same
-    // layout/glyph path as RenderString; only the RenderBuffer* helpers' target differs.
-    void TextRenderer::RenderStringBuffered(ImRenderBuffer<Im2dVertex>* lpBufferedBuffer,
-                                            const TextObject& lrTextObject)
-    {
-        mpIm2dRenderBuffer     = 0;
-        mpIm3dRenderBuffer     = 0;
-        mpBufferedRenderBuffer = lpBufferedBuffer;
-        RenderStringInternal(lrTextObject, EImRenderingType_Buffered);
-        mpBufferedRenderBuffer = 0;
     }
 
     namespace
@@ -225,82 +205,7 @@ namespace CgsGraphics
             *reinterpret_cast<u32*>(&lrVtx.mv4Colour) = lColour;
         }
 
-        enum
-        {
-            KU_FONT_DIAG_BUCKETS      = 2,   // 0 = shadow off, 1 = shadow on
-            KU_FONT_DIAG_SLOTS_PLAIN  = 24,
-            KU_FONT_DIAG_SLOTS_SHADOW = 232
-        };
 
-        bool lFontDiagFirstSight(u32 luBucket, u32 luKey)
-        {
-            static u32 sauSeen[KU_FONT_DIAG_BUCKETS][KU_FONT_DIAG_SLOTS_SHADOW] = { { 0 } };
-            static u32 sauSeenCount[KU_FONT_DIAG_BUCKETS] = { 0, 0 };
-            const u32 luLimit = (luBucket == 0) ? static_cast<u32>(KU_FONT_DIAG_SLOTS_PLAIN)
-                                                : static_cast<u32>(KU_FONT_DIAG_SLOTS_SHADOW);
-            if (luKey == 0)
-                luKey = 1u;
-            for (u32 luI = 0; luI < sauSeenCount[luBucket]; ++luI)
-            {
-                if (sauSeen[luBucket][luI] == luKey)
-                    return false;
-            }
-            if (sauSeenCount[luBucket] >= luLimit)
-                return false;
-            sauSeen[luBucket][sauSeenCount[luBucket]++] = luKey;
-            return true;
-        }
-
-        // Vertices the drop-shadow pass actually submitted for the CURRENT RenderStringInternal
-        // call (reset by the caller, bumped by TextRenderer::RenderDropShadow).
-        u32 guFontDiagShadowVerts = 0;
-
-        // One [font] line per distinct string+flag. The number the drop-shadow bug moves is
-        // shadowquads: a mbDropShadow text object whose shadow pass never runs reports
-        // shadow=1 shadowquads=0.
-        void lWitnessTextSubmission(const CgsGraphics::TextObject& lrTextObject, u32 luGlyphVerts,
-                                    u32 luPath)
-        {
-            static u32 suSeenHudKinds = 0;
-            if (sbHudTrace && CgsDev::Log::gpDebugPrint && lrTextObject.mpUtf8String)
-            {
-                const char* lpcText = reinterpret_cast<const char*>(lrTextObject.mpUtf8String);
-                const u32 luKind = std::strncmp(lpcText, "Average speed:", 14) == 0 ? 1u
-                    : std::strncmp(lpcText, "ENGINE ", 7) == 0 ? 2u
-                    : std::strstr(lpcText, "Damaged:") ? 4u
-                    : std::strncmp(lpcText, "0: ", 3) == 0 ? 8u
-                    : std::strncmp(lpcText, "Player Direction:", 17) == 0 ? 16u
-                    : std::strncmp(lpcText, "Traffic Direction:", 18) == 0 ? 32u : 0u;
-                if (luKind && !(suSeenHudKinds & luKind))
-                {
-                    suSeenHudKinds |= luKind;
-                    CgsDev::Log::gpDebugPrint->AppendFormat("[racecar-hud-text] kind=%u vertices=%u pos=(%g,%g) height=%g text=%s\n",
-                        luKind, luGlyphVerts, lrTextObject.mv2TopLeft.mX, lrTextObject.mv2TopLeft.mY,
-                        *lrTextObject.mpfCurrentFontHeight, lpcText);
-                }
-            }
-
-            char lacText[17];
-            u32  luLen = 0;
-            u32  luKey = 2166136261u;   // FNV-1a over the printable prefix
-            const CgsResource::CgsUtf8* lpText = lrTextObject.mpUtf8String;
-            if (lpText != 0)
-            {
-                while (luLen < 16u && lpText[luLen] != 0)
-                {
-                    const u8 luCh = static_cast<u8>(lpText[luLen]);
-                    lacText[luLen] = (luCh >= 32u && luCh < 127u) ? static_cast<char>(luCh) : '?';
-                    luKey = (luKey ^ luCh) * 16777619u;
-                    ++luLen;
-                }
-            }
-            lacText[luLen] = 0;
-            luKey = (luKey << 1) | (lrTextObject.mbDropShadow ? 1u : 0u);
-
-            if (!lFontDiagFirstSight(lrTextObject.mbDropShadow ? 1u : 0u, luKey))
-                return;
-
-        }
     }
 
     // Translated from the X360 PPC asm (0x827FF670) per rsi_notes.md. Lays each line of the text out as
@@ -324,8 +229,6 @@ namespace CgsGraphics
 
         mauVertexCount[leType] = 0;
 
-        u32 luDiagGlyphVerts = 0;
-        guFontDiagShadowVerts = 0;
 
         const f32 lfFontHeight = *lrTextObject.mpfCurrentFontHeight;
         const f32 lfGlyphX     = lpFont->mScaleUV.mX * lfFontHeight;                    // X360 f29
@@ -480,7 +383,6 @@ namespace CgsGraphics
             // glyph run that was just laid out. (An earlier note here claimed the 2D path does
             // NOT stash it -- it does; only the 3D TEMP scratch is maaTempVertices.)
             mapaVertices[leType] = lpVtxBase;
-            luDiagGlyphVerts += mauVertexCount[leType];
 
             // The guarded effect passes the console runs over the finished glyph run, in its
             // order: background (0x827FFE68), border (0x827FFEC4), DROP SHADOW (0x827FFF1C),
@@ -505,8 +407,6 @@ namespace CgsGraphics
             lfPenY += lfFontHeight;
         }
 
-        lWitnessTextSubmission(lrTextObject, luDiagGlyphVerts,
-                               (mpBufferedRenderBuffer != 0) ? 1u : 0u);
     }
 
     // -------------------------------------------------------------------------------------
@@ -547,13 +447,13 @@ namespace CgsGraphics
             CGS_ASSERT(luVertexCount < KU_MAX_VERTICES, "luVertexCount<KU_MAX_VERTICES");
             for (u32 luI = 0; luI < luVertexCount; ++luI)
             {
-                lpOut3d[luI].mv3Pos = {lpInVert[luI].mv2Pos.x + 0.03f,
-                                      lpInVert[luI].mv2Pos.y + 0.03f, 0.001f, 0.0f};
+                lpOut3d[luI].mv3Pos = rw::math::vpu::Vector3(rw::math::vpu::Vector4(
+                    lpInVert[luI].mv2Pos.x + 0.03f, lpInVert[luI].mv2Pos.y + 0.03f, 0.001f, 0.0f).mV);
                 *reinterpret_cast<u32*>(&lpOut3d[luI].mv4Colour) = *lpDropShadowColour;
-                lpOut3d[luI].mv2Tex0UV = {lpInVert[luI].mv2Tex0UV.x, lpInVert[luI].mv2Tex0UV.y};
+                lpOut3d[luI].mv2Tex0UV.x = lpInVert[luI].mv2Tex0UV.x;
+                lpOut3d[luI].mv2Tex0UV.y = lpInVert[luI].mv2Tex0UV.y;
             }
             mpIm3dRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(KU_PRIMITIVE_TRIANGLE_STRIP), lpOut3d, luVertexCount);
-            guFontDiagShadowVerts += luVertexCount;
             return;
         }
 
@@ -584,11 +484,6 @@ namespace CgsGraphics
     // X360 0x827F7D80: reserve luVertexCount vertices and return the write pointer.
     TextRenderer::Im2dVertex* TextRenderer::RenderBufferRenderStart(u32 luVertexCount, EImRenderingType leType)
     {
-        // FLAG (PC fold): the buffered Apt path reserves from the command buffer's vertex
-        // stream (the console Im2dRenderBuffer::RenderStart @0x57E0A0 == AllocVertices).
-        if (mpBufferedRenderBuffer != 0)
-            return mpBufferedRenderBuffer->RenderStart(luVertexCount);
-
         if (mpIm2dRenderBuffer != 0)
             return mpIm2dRenderBuffer->RenderStart(luVertexCount);
 
@@ -618,7 +513,6 @@ namespace CgsGraphics
 
         mpIm2dRenderBuffer     = lpRenderBuffer;
         mpIm3dRenderBuffer     = 0;
-        mpBufferedRenderBuffer = 0;   // (PC fold: guarantee the immediate path regardless of init)
 
         const CgsResource::Font* lpFont = lrTextObject.mpFont.operator->();
 
@@ -778,14 +672,6 @@ namespace CgsGraphics
     void TextRenderer::RenderBufferSetTextureState(const renderengine::TextureState* lpTextureState,
                                                    EImRenderingType /*leType*/)
     {
-        // FLAG (PC fold): the buffered Apt path appends a SET_STATE_TEXTURE command
-        // (Dispatch binds the state's raster -- the font atlas -- with modulate stages).
-        if (mpBufferedRenderBuffer != 0)
-        {
-            mpBufferedRenderBuffer->SetTextureState(lpTextureState);
-            return;
-        }
-
         if (mpIm2dRenderBuffer != 0)
             mpIm2dRenderBuffer->SetState(lpTextureState);
         else if (mpIm3dRenderBuffer != 0)
@@ -796,15 +682,6 @@ namespace CgsGraphics
     void TextRenderer::RenderBufferRenderEnd(u32 luPrimitiveType, const Im2dVertex* lpVertices,
                                              u32 luVertexCount, EImRenderingType leType)
     {
-        // FLAG (PC fold): the buffered Apt path appends the RENDER_PRIMITIVES command over the
-        // RenderStart-reserved run (the console Im2dRenderBuffer::RenderEnd @0x57E5DC).
-        if (mpBufferedRenderBuffer != 0)
-        {
-            mpBufferedRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(luPrimitiveType),
-                                              lpVertices, luVertexCount);
-            return;
-        }
-
         if (mpIm2dRenderBuffer != 0)
         {
             mpIm2dRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(luPrimitiveType),
@@ -819,9 +696,11 @@ namespace CgsGraphics
             Im3dVertex* const lpOut3d = mpIm3dRenderBuffer->RenderStart(luVertexCount);
             for (u32 luI = 0; luI < luVertexCount; ++luI)
             {
-                lpOut3d[luI].mv3Pos = {lpVertices[luI].mv2Pos.x, lpVertices[luI].mv2Pos.y, 0.0f, 0.0f};
+                lpOut3d[luI].mv3Pos = rw::math::vpu::Vector3(rw::math::vpu::Vector4(
+                    lpVertices[luI].mv2Pos.x, lpVertices[luI].mv2Pos.y, 0.0f, 0.0f).mV);
                 lpOut3d[luI].mv4Colour = lpVertices[luI].mv4Colour;
-                lpOut3d[luI].mv2Tex0UV = {lpVertices[luI].mv2Tex0UV.x, lpVertices[luI].mv2Tex0UV.y};
+                lpOut3d[luI].mv2Tex0UV.x = lpVertices[luI].mv2Tex0UV.x;
+                lpOut3d[luI].mv2Tex0UV.y = lpVertices[luI].mv2Tex0UV.y;
             }
             mpIm3dRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(luPrimitiveType), lpOut3d, luVertexCount);
             mabTempVerticesInUse[leType] = false;
