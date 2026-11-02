@@ -23,8 +23,6 @@ namespace rw
 namespace collision
 {
 
-const u32 KdTreeLineQuery::KU_NUM_STACK_ENTRIES;
-
 namespace
 {
     inline f32 AbsF(f32 lfV) { return std::fabs(lfV); }
