@@ -28,10 +28,10 @@ f32 VectorElement(const Vector4& arValue, s32 aiIndex)
 {
     switch (aiIndex)
     {
-    case 0: return arValue.x;
-    case 1: return arValue.y;
-    case 2: return arValue.z;
-    default: return arValue.w;
+    case 0: return arValue.mV.x;
+    case 1: return arValue.mV.y;
+    case 2: return arValue.mV.z;
+    default: return arValue.mV.w;
     }
 }
 }
