@@ -28,18 +28,18 @@ namespace CgsGeometric
 
         AxisAlignedBox lBox;
 
-        lBox.mMin.x = mafMinX[lu32BoxNum];
-        lBox.mMin.y = mafMinY[lu32BoxNum];
-        lBox.mMin.z = mafMinZ[lu32BoxNum];
+        lBox.mMin.mV.x = mafMinX[lu32BoxNum];
+        lBox.mMin.mV.y = mafMinY[lu32BoxNum];
+        lBox.mMin.mV.z = mafMinZ[lu32BoxNum];
         // The console's vperm/vrlimi merge leaves the w lane holding a copy of the X
         // component; nothing downstream reads it. Reproduced so the 16-byte store is
         // fully defined rather than leaving an indeterminate lane.
-        lBox.mMin.w = mafMinX[lu32BoxNum];
+        lBox.mMin.mV.w = mafMinX[lu32BoxNum];
 
-        lBox.mMax.x = mafMaxX[lu32BoxNum];
-        lBox.mMax.y = mafMaxY[lu32BoxNum];
-        lBox.mMax.z = mafMaxZ[lu32BoxNum];
-        lBox.mMax.w = mafMaxX[lu32BoxNum];
+        lBox.mMax.mV.x = mafMaxX[lu32BoxNum];
+        lBox.mMax.mV.y = mafMaxY[lu32BoxNum];
+        lBox.mMax.mV.z = mafMaxZ[lu32BoxNum];
+        lBox.mMax.mV.w = mafMaxX[lu32BoxNum];
 
         return lBox;
     }

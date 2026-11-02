@@ -54,7 +54,7 @@ namespace CgsGraphics
         // Per-row w splat (lane 3 of each row -- the `vspltw v,vX,3`), broadcast across lanes.
         const f32 lafW[4] =
         {
-            lapRow[0]->w, lapRow[1]->w, lapRow[2]->w, lapRow[3]->w,
+            lapRow[0]->mV.w, lapRow[1]->mV.w, lapRow[2]->mV.w, lapRow[3]->mV.w,
         };
 
         // rowK component in lane L (0=x,1=y,2=z,3=w). The PC vector type stores the
@@ -67,10 +67,10 @@ namespace CgsGraphics
                 const rw::math::vpu::Vector4& lrRow = *lapRow[liRow];
                 switch (liLane)
                 {
-                case 0:  return lrRow.x;
-                case 1:  return lrRow.y;
-                case 2:  return lrRow.z;
-                default: return lrRow.w;
+                case 0:  return lrRow.mV.x;
+                case 1:  return lrRow.mV.y;
+                case 2:  return lrRow.mV.z;
+                default: return lrRow.mV.w;
                 }
             }
         };

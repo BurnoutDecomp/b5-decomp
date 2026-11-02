@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 
-#include <cmath>   // std::fabs / std::fma (IntersectionOf3Planes)
+#include <cmath>   // std::fabs (IntersectionOf3Planes)
 
 // ============================================================================
 // CgsGeometric::Frustum -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -79,7 +79,26 @@ namespace CgsGeometric
 
         inline Vector3 MakeFrustumDebugVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
         {
-            { const Vector3 lResult = { lfX, lfY, lfZ, lfW }; return lResult; }
+            Vector3 lResult;
+            lResult.mV.x = lfX; lResult.mV.y = lfY;
+            lResult.mV.z = lfZ; lResult.mV.w = lfW;
+            return lResult;
+        }
+
+        inline Vector3 AddFrustumDebugVectors(const Vector3& lrA, const Vector3& lrB)
+        {
+            return Vector3(__vaddfp(lrA.mV, lrB.mV));
+        }
+
+        inline Vector3 ScaleFrustumDebugVector(const Vector3& lrA, f32 lfScale)
+        {
+            return Vector3(__vmulfp(lrA.mV, VecFloat(lfScale).mV));
+        }
+
+        inline Vector3 AddFrustumDebugPlane(const Vector3& lrA, const rw::collision::Plane& lrPlane)
+        {
+            return AddFrustumDebugVectors(lrA,
+                MakeFrustumDebugVector(lrPlane.x, lrPlane.y, lrPlane.z, lrPlane.w));
         }
 
         // Preserve the X360 vadd order: (A+B)+C+D, then multiply by 1/4.
@@ -100,10 +119,10 @@ namespace CgsGeometric
         {
             switch (luLane)
             {
-            case 0:  return lrLane.x;
-            case 1:  return lrLane.y;
-            case 2:  return lrLane.z;
-            default: return lrLane.w;
+            case 0:  return lrLane.mV.x;
+            case 1:  return lrLane.mV.y;
+            case 2:  return lrLane.mV.z;
+            default: return lrLane.mV.w;
             }
         }
 
@@ -111,10 +130,10 @@ namespace CgsGeometric
         {
             switch (luLane)
             {
-            case 0:  lrLane.x = lfValue; break;
-            case 1:  lrLane.y = lfValue; break;
-            case 2:  lrLane.z = lfValue; break;
-            default: lrLane.w = lfValue; break;
+            case 0:  lrLane.mV.x = lfValue; break;
+            case 1:  lrLane.mV.y = lfValue; break;
+            case 2:  lrLane.mV.z = lfValue; break;
+            default: lrLane.mV.w = lfValue; break;
             }
         }
 
@@ -163,35 +182,35 @@ namespace CgsGeometric
         inline Vector4 SolvePlaneTriple(const Vector4& lrA, const Vector4& lrB, const Vector4& lrC)
         {
             // Cofactor rows of the normal matrix (rows N_a, N_b, N_c).
-            const f32 lfBCx = lrB.y * lrC.z - lrB.z * lrC.y;
-            const f32 lfBCy = lrB.z * lrC.x - lrB.x * lrC.z;
-            const f32 lfBCz = lrB.x * lrC.y - lrB.y * lrC.x;
+            const f32 lfBCx = lrB.mV.y * lrC.mV.z - lrB.mV.z * lrC.mV.y;
+            const f32 lfBCy = lrB.mV.z * lrC.mV.x - lrB.mV.x * lrC.mV.z;
+            const f32 lfBCz = lrB.mV.x * lrC.mV.y - lrB.mV.y * lrC.mV.x;
 
-            const f32 lfCAx = lrC.y * lrA.z - lrC.z * lrA.y;
-            const f32 lfCAy = lrC.z * lrA.x - lrC.x * lrA.z;
-            const f32 lfCAz = lrC.x * lrA.y - lrC.y * lrA.x;
+            const f32 lfCAx = lrC.mV.y * lrA.mV.z - lrC.mV.z * lrA.mV.y;
+            const f32 lfCAy = lrC.mV.z * lrA.mV.x - lrC.mV.x * lrA.mV.z;
+            const f32 lfCAz = lrC.mV.x * lrA.mV.y - lrC.mV.y * lrA.mV.x;
 
-            const f32 lfABx = lrA.y * lrB.z - lrA.z * lrB.y;
-            const f32 lfABy = lrA.z * lrB.x - lrA.x * lrB.z;
-            const f32 lfABz = lrA.x * lrB.y - lrA.y * lrB.x;
+            const f32 lfABx = lrA.mV.y * lrB.mV.z - lrA.mV.z * lrB.mV.y;
+            const f32 lfABy = lrA.mV.z * lrB.mV.x - lrA.mV.x * lrB.mV.z;
+            const f32 lfABz = lrA.mV.x * lrB.mV.y - lrA.mV.y * lrB.mV.x;
 
             // Cofactor expansion along column 0 -- vmsum3fp128 of the X column
             // against cross(Ycolumn, Zcolumn).
-            const f32 lfDet    = lrA.x * lfBCx + lrB.x * lfCAx + lrC.x * lfABx;
+            const f32 lfDet    = lrA.mV.x * lfBCx + lrB.mV.x * lfCAx + lrC.mV.x * lfABx;
             const f32 lfInvDet = 1.0f / lfDet;
 
             // Accumulation order is the asm's: BC*D_a, then += CA*D_b, then
             // += AB*D_c (vmulfp128 -> vmaddfp -> vmaddfp).
             Vector4 lvPoint;
-            lvPoint.x = ((lfBCx * lfInvDet) * lrA.w
-                       + (lfCAx * lfInvDet) * lrB.w)
-                       + (lfABx * lfInvDet) * lrC.w;
-            lvPoint.y = ((lfBCy * lfInvDet) * lrA.w
-                       + (lfCAy * lfInvDet) * lrB.w)
-                       + (lfABy * lfInvDet) * lrC.w;
-            lvPoint.z = ((lfBCz * lfInvDet) * lrA.w
-                       + (lfCAz * lfInvDet) * lrB.w)
-                       + (lfABz * lfInvDet) * lrC.w;
+            lvPoint.mV.x = ((lfBCx * lfInvDet) * lrA.mV.w
+                       + (lfCAx * lfInvDet) * lrB.mV.w)
+                       + (lfABx * lfInvDet) * lrC.mV.w;
+            lvPoint.mV.y = ((lfBCy * lfInvDet) * lrA.mV.w
+                       + (lfCAy * lfInvDet) * lrB.mV.w)
+                       + (lfABy * lfInvDet) * lrC.mV.w;
+            lvPoint.mV.z = ((lfBCz * lfInvDet) * lrA.mV.w
+                       + (lfCAz * lfInvDet) * lrB.mV.w)
+                       + (lfABz * lfInvDet) * lrC.mV.w;
 
             // The console works four lanes wide and lane 3 of each assembled
             // cofactor vector is the SoA duplicate of its Y component
@@ -201,7 +220,7 @@ namespace CgsGeometric
             // reproduce it. (Every reconstructed caller overwrites W with 1.0f
             // before transforming, so this is inert downstream -- but it is what
             // the binary leaves there.)
-            lvPoint.w = lvPoint.y;
+            lvPoint.mV.w = lvPoint.mV.y;
             return lvPoint;
         }
     }
@@ -226,10 +245,10 @@ namespace CgsGeometric
     rw::collision::Plane Frustum::VectorToPlane(const Vector4& lrVector) const
     {
         Vector4 lNegated;
-        lNegated.x = -lrVector.x;
-        lNegated.y = -lrVector.y;
-        lNegated.z = -lrVector.z;
-        lNegated.w = -lrVector.w;
+        lNegated.mV.x = -lrVector.mV.x;
+        lNegated.mV.y = -lrVector.mV.y;
+        lNegated.mV.z = -lrVector.mV.z;
+        lNegated.mV.w = -lrVector.mV.w;
         return rw::collision::Plane(lNegated);
     }
 
@@ -246,10 +265,10 @@ namespace CgsGeometric
         const Vector4& lrPlaneVector = *reinterpret_cast<const Vector4*>(&lrPlane);
 
         Vector4 lNegated;
-        lNegated.x = -lrPlaneVector.x;
-        lNegated.y = -lrPlaneVector.y;
-        lNegated.z = -lrPlaneVector.z;
-        lNegated.w = -lrPlaneVector.w;
+        lNegated.mV.x = -lrPlaneVector.mV.x;
+        lNegated.mV.y = -lrPlaneVector.mV.y;
+        lNegated.mV.z = -lrPlaneVector.mV.z;
+        lNegated.mV.w = -lrPlaneVector.mV.w;
         return lNegated;
     }
 
@@ -272,10 +291,10 @@ namespace CgsGeometric
         const u32 luBatch = (luPlaneIndex >= 4) ? 4u : 0u;   // 4 SoA lanes per batch
 
         Vector4 lPlaneVector;
-        lPlaneVector.x = LaneGet(maSwizzledPlanes[luBatch + 0], luLane);   // Nx
-        lPlaneVector.y = LaneGet(maSwizzledPlanes[luBatch + 1], luLane);   // Ny
-        lPlaneVector.z = LaneGet(maSwizzledPlanes[luBatch + 2], luLane);   // Nz
-        lPlaneVector.w = LaneGet(maSwizzledPlanes[luBatch + 3], luLane);   // signed offset
+        lPlaneVector.mV.x = LaneGet(maSwizzledPlanes[luBatch + 0], luLane);   // Nx
+        lPlaneVector.mV.y = LaneGet(maSwizzledPlanes[luBatch + 1], luLane);   // Ny
+        lPlaneVector.mV.z = LaneGet(maSwizzledPlanes[luBatch + 2], luLane);   // Nz
+        lPlaneVector.mV.w = LaneGet(maSwizzledPlanes[luBatch + 3], luLane);   // signed offset
         return VectorToPlane(lPlaneVector);
     }
 
@@ -299,10 +318,10 @@ namespace CgsGeometric
         const u32 luLane  = luPlaneIndex & 3;
         const u32 luBatch = (luPlaneIndex >= 4) ? 4u : 0u;
 
-        LaneSet(maSwizzledPlanes[luBatch + 0], luLane, lPlaneVector.x);   // Nx
-        LaneSet(maSwizzledPlanes[luBatch + 1], luLane, lPlaneVector.y);   // Ny
-        LaneSet(maSwizzledPlanes[luBatch + 2], luLane, lPlaneVector.z);   // Nz
-        LaneSet(maSwizzledPlanes[luBatch + 3], luLane, lPlaneVector.w);   // signed offset
+        LaneSet(maSwizzledPlanes[luBatch + 0], luLane, lPlaneVector.mV.x);   // Nx
+        LaneSet(maSwizzledPlanes[luBatch + 1], luLane, lPlaneVector.mV.y);   // Ny
+        LaneSet(maSwizzledPlanes[luBatch + 2], luLane, lPlaneVector.mV.z);   // Nz
+        LaneSet(maSwizzledPlanes[luBatch + 3], luLane, lPlaneVector.mV.w);   // signed offset
     }
 
     // ------------------------------------------------------------------------
@@ -378,10 +397,10 @@ namespace CgsGeometric
             const u32 luBatch = (luSlot >= 4) ? 4u : 0u;   // 4 SoA lanes per batch
             const u32 luLane  = luSlot & 3u;
 
-            LaneSet(maSwizzledPlanes[luBatch + 0], luLane, -lrRwPlane.x);
-            LaneSet(maSwizzledPlanes[luBatch + 1], luLane, -lrRwPlane.y);
-            LaneSet(maSwizzledPlanes[luBatch + 2], luLane, -lrRwPlane.z);
-            LaneSet(maSwizzledPlanes[luBatch + 3], luLane, -lrRwPlane.w);
+            LaneSet(maSwizzledPlanes[luBatch + 0], luLane, -lrRwPlane.mV.x);
+            LaneSet(maSwizzledPlanes[luBatch + 1], luLane, -lrRwPlane.mV.y);
+            LaneSet(maSwizzledPlanes[luBatch + 2], luLane, -lrRwPlane.mV.z);
+            LaneSet(maSwizzledPlanes[luBatch + 3], luLane, -lrRwPlane.mV.w);
         }
     }
 
@@ -471,10 +490,10 @@ namespace CgsGeometric
             const u32 luBatch = (luPlane >= 4) ? 4u : 0u;   // 4 SoA lanes per batch
             const u32 luLane  = luPlane & 3u;
 
-            laPlanes[luPlane].x = -LaneGet(maSwizzledPlanes[luBatch + 0], luLane);
-            laPlanes[luPlane].y = -LaneGet(maSwizzledPlanes[luBatch + 1], luLane);
-            laPlanes[luPlane].z = -LaneGet(maSwizzledPlanes[luBatch + 2], luLane);
-            laPlanes[luPlane].w = -LaneGet(maSwizzledPlanes[luBatch + 3], luLane);
+            laPlanes[luPlane].mV.x = -LaneGet(maSwizzledPlanes[luBatch + 0], luLane);
+            laPlanes[luPlane].mV.y = -LaneGet(maSwizzledPlanes[luBatch + 1], luLane);
+            laPlanes[luPlane].mV.z = -LaneGet(maSwizzledPlanes[luBatch + 2], luLane);
+            laPlanes[luPlane].mV.w = -LaneGet(maSwizzledPlanes[luBatch + 3], luLane);
         }
 
         // Stage 2: bit 0 picks the horizontal plane, bit 1 the vertical, bit 2
@@ -611,7 +630,9 @@ namespace CgsGeometric
                         }
 
                         const rw::collision::Plane& lrPlane = laPlanes[luOtherPlane];
-                        const Vector3 lPlaneNormal = { lrPlane.x, lrPlane.y, lrPlane.z, 0.0f };
+                        // ARTIST82845CE4..D20: dot3(plane, point) - plane.w.
+                        const Vector3 lPlaneNormal = MakeFrustumDebugVector(lrPlane.x, lrPlane.y, lrPlane.z, lrPlane.w);
+                        const f32 lfSignedDistance = __vmsum3fp(lPlaneNormal.mV, lIntersection.mV).x - lrPlane.w;
 
                         if (-0.001f > lfSignedDistance)
                         {
@@ -683,11 +704,8 @@ namespace CgsGeometric
     // The epsilon is a 16-byte splat in .bss written at static-init time by a CRT
     // thunk from the rodata float 0x3A83126F (0.001f); the image holds zero there.
     // A NaN determinant fails the epsilon compare and is solved (NaN point, true),
-    // as on the console. PC LOWERING: the refined reciprocal is a divide; the fused
-    // multiply-subtracts of the crosses and the two fused multiply-adds of the sum are
-    // std::fma, because a nearly singular triple (|det| just above the epsilon) is decided
-    // by their single rounding. Compared with an interpreter of the instruction stream on
-    // 1,000 random plane triples (a sixth of them nearly singular): identical results.
+    // as on the console. The native path uses the same fused VMX crosses,
+    // accumulation and two reciprocal refinements, including the stored fourth lane.
     // ------------------------------------------------------------------------
     bool Frustum::IntersectionOf3Planes(rw::collision::Plane lPlane0,
                                         rw::collision::Plane lPlane1,
@@ -696,36 +714,25 @@ namespace CgsGeometric
     {
         const f32 KF_MIN_PLANE_TRIPLE_DETERMINANT = 0.001f;
 
-        // a x b on all four lanes: one rounded product (vmulfp128), the other subtracted fused
-        // (vnmsubfp); the yzx permute keeps w in w, so w is the fused residue of a.w*b.w.
-        struct PlaneCross { f32 x, y, z, w; };
-        const auto Cross = [](const rw::collision::Plane& lrA, const rw::collision::Plane& lrB)
-        {
-            PlaneCross lResult;
-            lResult.x = std::fma(-lrA.z, lrB.y, lrA.y * lrB.z);
-            lResult.y = std::fma(-lrA.x, lrB.z, lrA.z * lrB.x);
-            lResult.z = std::fma(-lrA.y, lrB.x, lrA.x * lrB.y);
-            lResult.w = std::fma(-lrA.w, lrB.w, lrA.w * lrB.w);
-            return lResult;
-        };
-
-        const PlaneCross l12 = Cross(lPlane1, lPlane2);
-        const f32 lfDeterminant = lPlane0.x * l12.x + lPlane0.y * l12.y + lPlane0.z * l12.z;
-
-        if (KF_MIN_PLANE_TRIPLE_DETERMINANT > std::fabs(lfDeterminant))
-        {
+        // ARTIST82841618..82841734: fused crosses and both reciprocal refinements.
+        const Vector3 l0 = MakeFrustumDebugVector(lPlane0.x, lPlane0.y, lPlane0.z, lPlane0.w);
+        const Vector3 l1 = MakeFrustumDebugVector(lPlane1.x, lPlane1.y, lPlane1.z, lPlane1.w);
+        const Vector3 l2 = MakeFrustumDebugVector(lPlane2.x, lPlane2.y, lPlane2.z, lPlane2.w);
+        const Vector3 l12 = rw::math::vpu::Cross(l1, l2);
+        const rw::math::vpu::VectorIntrinsic lDeterminant = __vmsum3fp(l0.mV, l12.mV);
+        if (KF_MIN_PLANE_TRIPLE_DETERMINANT > std::fabs(lDeterminant.x))
             return false;
-        }
 
-        const PlaneCross l01 = Cross(lPlane0, lPlane1);
-        const PlaneCross l20 = Cross(lPlane2, lPlane0);
-        const f32 lfInverseDeterminant = 1.0f / lfDeterminant;
-
-        lIntersectionPointOut.x = std::fma(l01.x, lPlane2.w, std::fma(l12.x, lPlane0.w, l20.x * lPlane1.w)) * lfInverseDeterminant;
-        lIntersectionPointOut.y = std::fma(l01.y, lPlane2.w, std::fma(l12.y, lPlane0.w, l20.y * lPlane1.w)) * lfInverseDeterminant;
-        lIntersectionPointOut.z = std::fma(l01.z, lPlane2.w, std::fma(l12.z, lPlane0.w, l20.z * lPlane1.w)) * lfInverseDeterminant;
-        lIntersectionPointOut.w =
-            std::fma(l01.w, lPlane2.w, std::fma(l12.w, lPlane0.w, l20.w * lPlane1.w)) * lfInverseDeterminant;
+        const Vector3 l01 = rw::math::vpu::Cross(l0, l1);
+        const Vector3 l20 = rw::math::vpu::Cross(l2, l0);
+        rw::math::vpu::VectorIntrinsic lInverse = __vrefp(lDeterminant);
+        const rw::math::vpu::VectorIntrinsic lOne = __vcfsx(__vspltisw(1), 0);
+        lInverse = __vmaddfp(lInverse, __vnmsubfp(lInverse, lDeterminant, lOne), lInverse);
+        lInverse = __vmaddfp(lInverse, __vnmsubfp(lInverse, lDeterminant, lOne), lInverse);
+        rw::math::vpu::VectorIntrinsic lPoint = __vmulfp(l20.mV, __vspltw(l1.mV, 3));
+        lPoint = __vmaddfp(l12.mV, __vspltw(l0.mV, 3), lPoint);
+        lPoint = __vmaddfp(l01.mV, __vspltw(l2.mV, 3), lPoint);
+        lIntersectionPointOut.mV = __vmulfp(lInverse, lPoint);
         return true;
     }
 }
