@@ -245,10 +245,7 @@ Vector3 EntityManager::SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstan
         // two +0x30 rows @0x828CD5E8.
         const Vector3 lOldTranslation = lrInstance.mWorldSpaceTransform.Pos();
         const Vector3& lrNewTranslation = lrTransform.Pos();
-        lPositionDelta.x = lrNewTranslation.x - lOldTranslation.x;
-        lPositionDelta.y = lrNewTranslation.y - lOldTranslation.y;
-        lPositionDelta.z = lrNewTranslation.z - lOldTranslation.z;
-        lPositionDelta.w = lrNewTranslation.w - lOldTranslation.w;
+        lPositionDelta.mV = __vsubfp(lrNewTranslation.mV, lOldTranslation.mV);
 
         lrInstance.mWorldSpaceTransform = lrTransform;
     }

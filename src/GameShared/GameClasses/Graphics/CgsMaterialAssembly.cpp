@@ -39,9 +39,9 @@ namespace CgsGraphics
         if (!mpCPUShaderConstants.Get()) return;
 
         Vector4 lValue;
-        const f32 lfDuration = mpCPUShaderConstants->GetValue("AnimDuration", lValue) ? lValue.x : 0.0f;
-        const f32 lfStepsU = mpCPUShaderConstants->GetValue("AnimNumberOfFramesU", lValue) ? lValue.x : 0.0f;
-        const f32 lfStepsV = mpCPUShaderConstants->GetValue("AnimNumberOfFramesV", lValue) ? lValue.x : 0.0f;
+        const f32 lfDuration = mpCPUShaderConstants->GetValue("AnimDuration", lValue) ? lValue.mV.x : 0.0f;
+        const f32 lfStepsU = mpCPUShaderConstants->GetValue("AnimNumberOfFramesU", lValue) ? lValue.mV.x : 0.0f;
+        const f32 lfStepsV = mpCPUShaderConstants->GetValue("AnimNumberOfFramesV", lValue) ? lValue.mV.x : 0.0f;
         ICPUShader* lpShader = MaterialAnimationFactory::Instance().Create(lfDuration, lfStepsU, lfStepsV);
         if (!lpShader) return;
 

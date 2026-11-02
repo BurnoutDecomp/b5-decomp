@@ -324,10 +324,10 @@ void SceneManagerModule::BridgeOverlapGenerationToOutputBuffer(
 //
 // LANE-COPY NOTE (host type seam, not a divergence): the three 16-byte lanes are typed
 // Vector4 on CgsSceneManager::Contact and Vector3 on SceneManagerIO::PotentialContact.
-// Both are the same 16-byte 4-lane POD (rw::math::vpu::Vector3 / Vector4 in
+// Both are the same 16-byte 4-lane register (rw::math::vpu::Vector3 / Vector4 in
 // vendor/renderware/include/rw/math/vpu/types.h) and the console moves each with one
-// lvx/stvx pair, but they are DISTINCT structs on the host, so the copy is spelled
-// lane-for-lane. It collapses to a plain assignment the moment
+// lvx/stvx pair, but they are DISTINCT structs on the host, so the copy assigns their
+// shared mV register. It collapses to a plain assignment the moment
 // CgsSceneManagerContact.h's Vector4 members are retyped to the DWARF's Vector3 (a delta
 // cluster E3a already recorded in that header, together with the mPosition -> mPointOnA /
 // mImpulse -> mPointOnB / muFieldA -> muPolyTagA / muFieldB -> muPolyTagB renames the
@@ -367,20 +367,11 @@ void SceneManagerModule::BridgeOverlapCullerToOutputBuffer(
 
         // mPosition / mImpulse are Contact::mPointOnA / ::mPointOnB (DWARF
         // CgsSceneManagerTypes.h:104/:105) -- see the LANE-COPY NOTE above.
-        lPotentialContact.mPointOnA.x = lrContact.mPosition.x;
-        lPotentialContact.mPointOnA.y = lrContact.mPosition.y;
-        lPotentialContact.mPointOnA.z = lrContact.mPosition.z;
-        lPotentialContact.mPointOnA.w = lrContact.mPosition.w;
+        lPotentialContact.mPointOnA.mV = lrContact.mPosition.mV;
 
-        lPotentialContact.mPointOnB.x = lrContact.mImpulse.x;
-        lPotentialContact.mPointOnB.y = lrContact.mImpulse.y;
-        lPotentialContact.mPointOnB.z = lrContact.mImpulse.z;
-        lPotentialContact.mPointOnB.w = lrContact.mImpulse.w;
+        lPotentialContact.mPointOnB.mV = lrContact.mImpulse.mV;
 
-        lPotentialContact.mNormal.x = lrContact.mNormal.x;
-        lPotentialContact.mNormal.y = lrContact.mNormal.y;
-        lPotentialContact.mNormal.z = lrContact.mNormal.z;
-        lPotentialContact.mNormal.w = lrContact.mNormal.w;
+        lPotentialContact.mNormal.mV = lrContact.mNormal.mV;
 
         lPotentialContact.muVolumeInstanceIdA =
             mEntityManager.GetVolumeInstanceIdByIndex(static_cast<s32>(lrContact.muVolumeInstanceA));
