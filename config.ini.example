@@ -208,12 +208,12 @@ ShadowSlopeBias=0
 
 [Debug]
 ; Pixels per cube face: 128 (original), 256, 512, 1024 or 2048. Restart after changing.
-World/Reflections/Resolution (restart)=512
+World/Reflections/Resolution (restart)=128
 ; Any registered writable scalar: full debug menu path/name=value.
 ; Paths are case-insensitive; / and backslash separators are equivalent.
 ; Initial values apply once after registration. Menu edits remain live.
-; The reflection preset below enables the optional scene captures in Relative mode.
-; Set their Enabled keys false and World/Props LOD mode Fixed for original captures.
+; Original capture defaults; enable the optional scene categories individually.
+; Their Relative/Custom distance and LOD controls apply when enabled.
 Environment/Bloom luminance scale=1
 World/LODs/Environment Map LOD=2
 ; Props in reflections: 0 = highest detail, 1 = intermediate, 2 = original.
@@ -223,11 +223,11 @@ World/LODs/Prop Environment Map LOD=2
 World/LODs/Environment Map Draw Distance=0
 ; Optional reflection transitions. Fixed (default) retains LOD2 and the 75 m capture.
 ; Relative follows each category's normal LOD distances; Custom uses the metre values below.
-World/Reflections/World/LOD mode=Relative
+World/Reflections/World/LOD mode=Fixed
 World/Reflections/World/LOD distance scale=0.5
 World/Reflections/World/LOD0 distance=50
 World/Reflections/World/LOD1 distance=100
-World/Reflections/Props/LOD mode=Relative
+World/Reflections/Props/LOD mode=Fixed
 World/Reflections/Props/LOD distance scale=0.5
 World/Reflections/Props/LOD0 distance=50
 World/Reflections/Props/LOD1 distance=100
@@ -249,7 +249,7 @@ Graphics/Vehicles.../LODs.../Quality LOD 4=70
 World Module/Graphics/Render environment map at 30hz=false
 
 ; Optional native scene categories. Draw distance scale multiplies the normal cutoff.
-World/Reflections/Backdrops/Enabled=true
+World/Reflections/Backdrops/Enabled=false
 World/Reflections/Backdrops/Draw distance mode=Relative
 World/Reflections/Backdrops/Draw distance scale=0.5
 World/Reflections/Backdrops/Draw distance=100
@@ -258,7 +258,7 @@ World/Reflections/Backdrops/LOD distance scale=0.5
 World/Reflections/Backdrops/Fixed LOD=2
 World/Reflections/Backdrops/LOD0 distance=50
 World/Reflections/Backdrops/LOD1 distance=100
-World/Reflections/Traffic/Enabled=true
+World/Reflections/Traffic/Enabled=false
 World/Reflections/Traffic/Draw distance mode=Relative
 World/Reflections/Traffic/Draw distance scale=0.5
 World/Reflections/Traffic/Draw distance=100
@@ -267,7 +267,7 @@ World/Reflections/Traffic/LOD distance scale=0.5
 World/Reflections/Traffic/Fixed LOD=2
 World/Reflections/Traffic/LOD0 distance=50
 World/Reflections/Traffic/LOD1 distance=100
-World/Reflections/Rivals/Enabled=true
+World/Reflections/Rivals/Enabled=false
 World/Reflections/Rivals/Draw distance mode=Relative
 World/Reflections/Rivals/Draw distance scale=0.5
 World/Reflections/Rivals/Draw distance=100
@@ -285,7 +285,7 @@ World/Reflections/Wheels/LOD distance scale=0.5
 World/Reflections/Wheels/Fixed LOD=2
 World/Reflections/Wheels/LOD0 distance=50
 World/Reflections/Wheels/LOD1 distance=100
-World/Reflections/Glass/Enabled=true
+World/Reflections/Glass/Enabled=false
 World/Reflections/Glass/Draw distance mode=Relative
 World/Reflections/Glass/Draw distance scale=0.5
 World/Reflections/Glass/Draw distance=100
@@ -294,21 +294,21 @@ World/Reflections/Glass/LOD distance scale=0.5
 World/Reflections/Glass/Fixed LOD=2
 World/Reflections/Glass/LOD0 distance=50
 World/Reflections/Glass/LOD1 distance=100
-World/Reflections/Lights/Enabled=true
+World/Reflections/Lights/Enabled=false
 World/Reflections/Lights/Draw distance mode=Relative
 World/Reflections/Lights/Draw distance scale=0.5
 World/Reflections/Lights/Draw distance=100
-World/Reflections/Particles/Enabled=true
+World/Reflections/Particles/Enabled=false
 World/Reflections/Particles/Draw distance mode=Relative
 World/Reflections/Particles/Draw distance scale=0.5
 World/Reflections/Particles/Draw distance=100
 
 ; Small prop and solid debris casters follow [Graphics] ShadowDistance.
-World/ShadowMap/Small objects/Enabled=true
+World/ShadowMap/Small objects/Enabled=false
 World/ShadowMap/Small objects/Draw distance mode=Relative
 World/ShadowMap/Small objects/Draw distance scale=0.5
 World/ShadowMap/Small objects/Draw distance=60
-World/ShadowMap/Solid debris/Enabled=true
+World/ShadowMap/Solid debris/Enabled=false
 World/ShadowMap/Solid debris/Draw distance mode=Relative
 World/ShadowMap/Solid debris/Draw distance scale=0.5
 World/ShadowMap/Solid debris/Draw distance=60
@@ -317,7 +317,7 @@ World/ShadowMap/Small objects/LOD mode=Relative
 World/ShadowMap/Small objects/LOD distance scale=1
 
 ; Native player-wheel, decal and player-effect reflections
-World/Reflections/Player wheels/Enabled=true
+World/Reflections/Player wheels/Enabled=false
 World/Reflections/Player wheels/Draw distance mode=Relative
 World/Reflections/Player wheels/Draw distance scale=0.5
 World/Reflections/Player wheels/Draw distance=100
@@ -326,7 +326,7 @@ World/Reflections/Player wheels/LOD distance scale=0.5
 World/Reflections/Player wheels/Fixed LOD=1
 World/Reflections/Player wheels/LOD0 distance=10
 World/Reflections/Player wheels/LOD1 distance=22
-World/Reflections/Decals/Enabled=true
+World/Reflections/Decals/Enabled=false
 World/Reflections/Decals/Draw distance mode=Relative
 World/Reflections/Decals/Draw distance scale=0.5
 World/Reflections/Decals/Draw distance=100

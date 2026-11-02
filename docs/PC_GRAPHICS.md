@@ -40,9 +40,14 @@ never registers. Do not put trailing comments on value lines.
 ## Reflections
 
 `World/Reflections/Resolution (restart)` selects pixels per cube face: **128**
-(original), **256**, **512**, **1024**, or **2048**. The example INI selects 512;
-an absent setting preserves 128. Restart after changing it in the menu or INI.
+(original), **256**, **512**, **1024**, or **2048**. The example INI and an absent
+setting preserve 128. Restart after changing it in the menu or INI.
 The device's supported texture extent limits the requested size automatically.
+
+Extra backdrop, vehicle, glass, light, particle and trail reflection feeds are
+opt-in, as are small-object and debris shadows. The example keeps them disabled;
+enable the categories you want individually. Their distance and LOD parameters
+remain available while disabled.
 
 ```ini
 [Debug]
