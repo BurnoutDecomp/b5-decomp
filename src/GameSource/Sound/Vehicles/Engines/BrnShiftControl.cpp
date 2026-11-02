@@ -32,8 +32,8 @@ f32 ClampRpm(f32 lfRpm)
 f32 EvaluateCurveY(const Matrix44& lrCurve, f32 lfX)
 {
     const f32 lfX2 = lfX * lfX;
-    return lrCurve.xAxis.y * (lfX2 * lfX) +
-           lrCurve.yAxis.y * lfX2 + lrCurve.zAxis.y * lfX + lrCurve.wAxis.y;
+    return lrCurve.xAxis.mV.y * (lfX2 * lfX) +
+           lrCurve.yAxis.mV.y * lfX2 + lrCurve.zAxis.mV.y * lfX + lrCurve.wAxis.mV.y;
 }
 }
 

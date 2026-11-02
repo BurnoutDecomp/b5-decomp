@@ -32,10 +32,10 @@ f32 Component(const Vector4& lrValue, s32 liIndex)
 {
     switch (liIndex)
     {
-    case 1: return lrValue.y;
-    case 2: return lrValue.z;
-    case 3: return lrValue.w;
-    default: return lrValue.x;
+    case 1: return lrValue.mV.y;
+    case 2: return lrValue.mV.z;
+    case 3: return lrValue.mV.w;
+    default: return lrValue.mV.x;
     }
 }
 }

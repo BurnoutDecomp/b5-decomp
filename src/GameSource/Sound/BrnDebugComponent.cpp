@@ -671,7 +671,7 @@ void DebugComponent::Render3dControl(
     const CgsSound::Logic::Cgs3dEffectControl::DebugRendererMessage& lrMessage =
         lp3dControl->GetDebugRenderingMessage();
     Vector3 lPosition = lp3dControl->GetEmitterPosition().GetCurrent();
-    lPosition.y += lrMessage.mfYOffset;
+    lPosition.SetY(lPosition.GetY().GetFloat() + lrMessage.mfYOffset);
 
     lRender.DrawSphere(lPosition, lrMessage.mfRadius, 0xFF00FFA0u);
 }
@@ -690,7 +690,7 @@ void DebugComponent::UpdateMaxRpmDisplay()
     char lacText[32];
     CgsCore::SPrintf(lacText, 32, "MAX RPM [%d]",
                      static_cast<s32>(BrnSound::Vehicles::Engines::gfMaxRpmMonitor));
-    const Vector2 lPosition = { 40.0f, 30.0f, 0.0f, 0.0f };
+    const Vector2 lPosition(40.0f, 30.0f);
     lRender.Draw2DTextJustified(lacText, lPosition,
                                 CgsDev::DebugRender::E_JUSTIFY_LEFT,
                                 12.0f, 0xFFFFFFFFu);

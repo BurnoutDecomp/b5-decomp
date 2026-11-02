@@ -1235,7 +1235,7 @@ void SoundLogicModule::UpdateMicrophones(const Io::LogicInputBuffer* apLogicInpu
             lpVehicles->GetRaceCarState(lePlayerIndex);
 
         rw::math::vpu::Vector3 lvCameraAt = lCameraTransform.At();
-        lvCameraAt.y = 0.0f;
+        lvCameraAt.SetY(0.0f);
         lvCameraAt = rw::math::vpu::Normalize(lvCameraAt);
 
         const rw::math::vpu::Vector3 lvNewCarPos =
