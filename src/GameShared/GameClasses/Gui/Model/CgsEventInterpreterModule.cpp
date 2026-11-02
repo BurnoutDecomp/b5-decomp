@@ -478,13 +478,15 @@ void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsP
         case E_GUI_OUT_REGISTER_FOR_EVENT:
         {
             // serialised record: { s32 eventType@+0; EventObserver* observer@+4 }
-            const auto* lpRecord = reinterpret_cast<const GuiEventRegisterForEvents*>(lpEvent);
+            const GuiEventRegisterForEvents* lpRecord =
+                reinterpret_cast<const GuiEventRegisterForEvents*>(lpEvent);
             RegisterForEvent(lpRecord->lpEventObserver, lpRecord->miEventType);
             break;
         }
         case E_GUI_OUT_UNREGISTER_FOR_EVENT:
         {
-            const auto* lpRecord = reinterpret_cast<const GuiEventUnRegisterForEvents*>(lpEvent);
+            const GuiEventUnRegisterForEvents* lpRecord =
+                reinterpret_cast<const GuiEventUnRegisterForEvents*>(lpEvent);
             UnRegisterForEvent(lpRecord->lpEventObserver, lpRecord->miEventType);
             break;
         }
@@ -492,20 +494,23 @@ void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsP
         {
             // payload: { s32 eventType@+0; EventObserver* observer@+0x964;
             //            const s32 overrides[]@+4; u32 overrideCount@+0x968 }
-            const auto* lpRecord = reinterpret_cast<const GuiEventPriorityRegisterForEvents*>(lpEvent);
+            const GuiEventPriorityRegisterForEvents* lpRecord =
+                reinterpret_cast<const GuiEventPriorityRegisterForEvents*>(lpEvent);
             RegisterPriorityEvent(lpRecord->lpEventObserver, lpRecord->miEventType,
                 lpRecord->miEventTypeOverridden, lpRecord->muOverrideCount);
             break;
         }
         case E_GUI_OUT_PRIORITY_UNREGISTER_FOR_EVENT:
         {
-            const auto* lpRecord = reinterpret_cast<const GuiEventPriorityUnRegisterForEvents*>(lpEvent);
+            const GuiEventPriorityUnRegisterForEvents* lpRecord =
+                reinterpret_cast<const GuiEventPriorityUnRegisterForEvents*>(lpEvent);
             UnregisterPriorityEvent(lpRecord->lpEventObserver, lpRecord->miEventType);
             break;
         }
         case E_GUI_OUT_PRIORITY_STOP_BLOCKING:
         {
-            const auto* lpRecord = reinterpret_cast<const GuiEventPriorityStopBlocking*>(lpEvent);
+            const GuiEventPriorityStopBlocking* lpRecord =
+                reinterpret_cast<const GuiEventPriorityStopBlocking*>(lpEvent);
             StopPriorityEventBlocking(lpRecord->lpEventObserver);
             break;
         }

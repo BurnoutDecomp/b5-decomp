@@ -124,7 +124,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // InputBuffer::GetGuiEvents()
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"  // KI_MAX_CHALLENGES
-#include <stdlib.h>                                                // getenv (the diag guard)
 #include <cstring>                                                 // memset / memcpy
 
 namespace BrnGame
@@ -611,10 +610,6 @@ namespace
         }
         (void)lpGameStateOutput;   // read only by the parked case-37 asserts -- see that arm
 
-        // [DIAG] the `[evt-flow]` rung. NOT IN THE X360 BINARY. Same logger, same env guard
-        // (BRN_PROP_DIAG) and same first-N latch as the `[UI-gate]` ladder in the stunt TU.
-        static s32        siDiagLinesLeft = 24;
-
         switch (liActionType)
         {
         // ARTIST junkyard unlock transport. These events connect the camera's
@@ -624,28 +619,36 @@ namespace
             struct UnlockWire { CgsID mCar; s32 GetEventType() const { return 76; } };
             const CgsID lCar = *reinterpret_cast<const CgsID*>(lpAction);
             CGS_ASSERT(lCar != 0, "Invalid car unlock id");
-            PushGuiEvent(UnlockWire{lCar}, lpGuiInput);
+            UnlockWire lEvent;
+            lEvent.mCar = lCar;
+            PushGuiEvent(lEvent, lpGuiInput);
             return true;
         }
         case 62: // NewCarUnlockedAction -> GuiCarUnlockNewCarEvent, id 73.
         {
             struct NewCarWire { CgsID mCar; s32 GetEventType() const { return 73; } };
-            PushGuiEvent(NewCarWire{*reinterpret_cast<const CgsID*>(lpAction)}, lpGuiInput);
+            NewCarWire lEvent;
+            lEvent.mCar = *reinterpret_cast<const CgsID*>(lpAction);
+            PushGuiEvent(lEvent, lpGuiInput);
             return true;
         }
         case 63: // CarUnlockEndAction -> unlock screen ADVANCE.
         {
             struct UnlockEndWire { u8 mSignal; s32 GetEventType() const { return 74; } };
-            PushGuiEvent(UnlockEndWire{0}, lpGuiInput);
+            UnlockEndWire lEvent;
+            lEvent.mSignal = 0;
+            PushGuiEvent(lEvent, lpGuiInput);
             return true;
         }
         case 73: // Transition-in begins with unlocks -> InGame TO_CUNLOCK.
         {
-            const auto* lFlags = reinterpret_cast<const u8*>(lpAction);
+            const u8* lFlags = reinterpret_cast<const u8*>(lpAction);
             if (lFlags[0] && lFlags[1])
             {
                 struct UnlockStartWire { u8 mSignal; s32 GetEventType() const { return 75; } };
-                PushGuiEvent(UnlockStartWire{0}, lpGuiInput);
+                UnlockStartWire lEvent;
+                lEvent.mSignal = 0;
+                PushGuiEvent(lEvent, lpGuiInput);
             }
             return true;
         }
@@ -699,13 +702,6 @@ namespace
             lEvent.mbIsAutoUnlockedChallenge = lpJunction->mbIsAutoUnlockedChallenge;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            // ⭐ 2026-08-27: OWN counter, not the shared siDiagLinesLeft. Action 201 posts EVERY
-            // FRAME while the player stands in a light region, so 24 frames of idling at the
-            // junction burned the whole shared budget before action 23 ever printed -- the later
-            // arms then went BLIND, not quiet (the S4 audit's "e-count (never)" hazard). Edge-
-            // filtered on the event id so one line per junction visit, 8 visits per run.
-            static s32 siJunctionDiagLeft = 8;
-            static s32 siLastDiagEventId  = -1;
             return true;
         }
 
@@ -856,13 +852,14 @@ namespace
         case BrnGameState::GameStateModuleIO::E_ACTION_START_MODE_INTRO:
         {
             namespace GsmIO = BrnGameState::GameStateModuleIO;
-            const auto* lpIntro = reinterpret_cast<const GsmIO::StartModeIntroAction*>(lpAction);
+            const GsmIO::StartModeIntroAction* lpIntro =
+                reinterpret_cast<const GsmIO::StartModeIntroAction*>(lpAction);
             BrnGui::GuiEventPreRaceMessages lMessages;
             lMessages.Construct();
             for (s32 liCar = 0; liCar < lpIntro->mFlybyData.miNumberOfCars; ++liCar)
             {
                 // The original accessor is non-const; this bridge only reads its result.
-                const auto* lpRival = const_cast<GsmIO::FlybyData&>(lpIntro->mFlybyData)
+                const GsmIO::FlybyRivalData* lpRival = const_cast<GsmIO::FlybyData&>(lpIntro->mFlybyData)
                     .GetFlybyRivalData(liCar);
                 switch (static_cast<s32>(lpRival->meMessageStyle))
                 {
@@ -900,10 +897,6 @@ namespace
                     PushGuiEvent(lIntro,lpGuiInput);
                 }
             }
-            static s32 siPreRaceRows = 0;
-            if (sbPreRaceDiag && siPreRaceRows++ < 8 && CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[cnav-prerace] action29 -> gui159 messages="
-                    << lMessages.miNumMessages << " mode=" << static_cast<s32>(lpIntro->meGameMode) << "\n";
             return true;
         }
 
@@ -988,13 +981,6 @@ namespace
                 }
             }
 
-            // [DIAG] NOT IN THE X360 BINARY. OWN counter, not the shared siDiagLinesLeft: this is
-            // the one line the fly-by-exit investigation needs, and actions 44/47/201 can burn the
-            // shared budget long before a mode intro ever stops (the 2026-08-27 lesson on the
-            // action-201 arm -- a spent shared budget makes later arms BLIND, not quiet).
-            {
-                static s32 siStopIntroDiagLeft = 8;
-            }
             return true;
         }
 
@@ -1048,12 +1034,6 @@ namespace
             lEvent.miCarSelectFlow = lpReady->miCarSelectFlow;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            // [DIAG] NOT IN THE X360 BINARY. OWN counter, for the reason the case-30 arm spells
-            // out: this fires ONCE per junkyard entry, long after actions 44/47/201 can have
-            // spent the shared budget, and a spent budget makes an arm BLIND, not quiet.
-            {
-                static s32 siCarSelectDiagLeft = 8;
-            }
             return true;
         }
 
@@ -1407,7 +1387,6 @@ namespace
                 lEvent.mabPlayerBeatenOnlineCrash[liRoad]  = lpRoadRulesBatchQuery->mabPlayerBestOnlineCrash[liRoad];
             }
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
             return true;
         }
 
@@ -1419,7 +1398,6 @@ namespace
             BrnGui::GuiEventRoadRuleBegin lEvent;
             lEvent.meRuleType = lpStartRule->meScoreType;
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType(), lEvent.meRuleType);
             return true;
         }
 
@@ -1434,8 +1412,6 @@ namespace
             lEvent.mfScore        = lpEndRule->mfScore;
             lEvent.mbScoreAttempt = lpEndRule->mbValidAttempt;
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType(), lEvent.meRuleType,
-                               lEvent.mfScore, lEvent.mbScoreAttempt);
             return true;
         }
 
@@ -1451,7 +1427,6 @@ namespace
             BrnGui::GuiEventRoadRuleUpdateTargetScores lEvent;
             lEvent.Construct(lpRRAction);
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
             return true;
         }
 
@@ -1474,7 +1449,6 @@ namespace
             lEvent.mbMultipleScores           = lpRoadRulesHighScoreAction->mbMultipleScores;
             lEvent.mbOnlineLossButOfflineWin  = lpRoadRulesHighScoreAction->mbOnlineLossButOfflineWin;
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
             return true;
         }
 
@@ -1486,7 +1460,6 @@ namespace
             BrnGui::GuiEventRoadRuleChangeMode lEvent;
             lEvent.meScoreType = lpRuleChange->meActiveRoadRule;
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType(), lEvent.meScoreType);
             return true;
         }
 
@@ -1509,7 +1482,6 @@ namespace
             lEvent.mbAIRulesRoadOnline     = lpScoreAction->mbAIRulesRoadOnline;
             lEvent.mbLocalPlayerRulesRoad  = lpScoreAction->mbLocalPlayerRulesRoad;
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
             return true;
         }
 
@@ -1526,7 +1498,6 @@ namespace
             lEvent.mRoadRulesChangedBitArray.ORArrays(&lEvent.mRoadRulesChangedBitArray,
                                                       &lpNewRulersAction->mRoadRulesChangedBitArray);
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
             return true;
         }
 
@@ -1542,7 +1513,6 @@ namespace
                                                 ? BrnGui::GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE
                                                 : BrnGui::GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_OFFLINE;
             PushGuiEvent(lEvent, lpGuiInput);
-            RoadRuleGuiWitness(liActionType, lEvent.GetEventType());
             return true;
         }
 
@@ -1568,8 +1538,6 @@ namespace
                 PostRunFsm(lpGuiInput, "BRNFBFSM", 0,
                            BrnGui::E_GUI_HUD_FREEBURN, BrnGui::E_GUIFLOW_HUD);
             }
-            RaceFlowGuiWitness(liActionType, (lbStartingGameDueToPlayerJoin == 0) ? 144 : -1,
-                               "quit, run BRNFBFSM", (lbStartingGameDueToPlayerJoin == 0) ? 1 : 0);
             return true;
         }
 
@@ -1589,8 +1557,6 @@ namespace
             lEvent.miCheckpointIndex    = lpCheckpoint->miCheckPointIndex;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "checkpoint",
-                               lEvent.miCheckpointIndex);
             return true;
         }
 
@@ -1608,8 +1574,6 @@ namespace
             lEvent.mTrophyCarID = lpTrophy->mCarToUnlock;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "unlock type",
-                               lEvent.meUnlockType);
             return true;
         }
 
@@ -1626,8 +1590,6 @@ namespace
             lEvent.meGameEventType = static_cast<s32>(lpAllEventTypeWonAction->leGameEventType);
             PushGuiEvent(lEvent, lpGuiInput);
 
-            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "event type",
-                               lEvent.meGameEventType);
             return true;
         }
 
@@ -1640,7 +1602,6 @@ namespace
                 reinterpret_cast<
                     const BrnGameState::GameStateModuleIO::GameCompletionResultsAction*>(lpAction);
 
-            s32 liGuiEventId = 0;
             if (lpCompletion->meGameMode == BrnGameState::GameStateModuleIO::E_MODE_NONE)
             {
                 GameCompletedWire309 lEvent;
@@ -1648,7 +1609,6 @@ namespace
                 lEvent.mbCompletionAlreadyRecorded =
                     lpCompletion->mbCompletionAlreadyRecorded ? 1u : 0u;
                 PushGuiEvent(lEvent, lpGuiInput);
-                liGuiEventId = lEvent.GetEventType();
             }
             else
             {
@@ -1657,11 +1617,8 @@ namespace
                 lEvent.mbCompletionAlreadyRecorded =
                     lpCompletion->mbCompletionAlreadyRecorded ? 1u : 0u;
                 PushGuiEvent(lEvent, lpGuiInput);
-                liGuiEventId = lEvent.GetEventType();
             }
 
-            RaceFlowGuiWitness(liActionType, liGuiEventId, "complete",
-                               lpCompletion->mbGameComplete ? 1 : 0);
             return true;
         }
 
@@ -1674,7 +1631,6 @@ namespace
             lEvent.mu8Unused = 0;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "all rivals shut down", 1);
             return true;
         }
 
@@ -1687,7 +1643,6 @@ namespace
             lEvent.mu8Unused = 0;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "wrong way", 1);
             return true;
         }
 
@@ -1699,8 +1654,6 @@ namespace
             lEvent.mbSucceeded = *reinterpret_cast<const u8*>(lpAction);
             PushGuiEvent(lEvent, lpGuiInput);
 
-            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "succeeded",
-                               static_cast<s32>(lEvent.mbSucceeded));
             return true;
         }
 
@@ -1719,9 +1672,6 @@ namespace
             lEvent.mSpecialCarID = lpWrongCar->mSpecialEventCarId;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            char lacCarId[KI_CGSID_STRING_LEN];
-            CgsIDConvertToString(lEvent.mSpecialCarID, lacCarId);
-            RaceFlowGuiWitness(liActionType, lEvent.GetEventType(), "needs car", 0, lacCarId);
             return true;
         }
 

@@ -68,10 +68,9 @@ void PerlinShakeController::Update(Camera::Camera* lpCamera, f32 lfTime,
 
         // The Euler-angle vector, exactly as the asm packs it (x <- the yaw channel,
         // y <- the pitch channel, z <- the roll channel).
-        const Vector3 lRotationAngles = Vector3{ lfYawAmount * lfYawScale,
-                                                 lfPitchAmount * lfPitchScale,
-                                                 lfRollAmount * lfRollScale,
-                                                 0.0f };
+        const Vector3 lRotationAngles(lfYawAmount * lfYawScale,
+                                       lfPitchAmount * lfPitchScale,
+                                       lfRollAmount * lfRollScale);
 
         Matrix44Affine lTransform;
         lTransform.SetIdentity();
