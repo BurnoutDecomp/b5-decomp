@@ -116,14 +116,9 @@ namespace CgsResource
             for (u32 luMesh = 0; luMesh < luNumMeshes; ++luMesh)
             {
                 const RenderableMesh* lpMesh = lpRenderable->mppMeshes[luMesh];
-                if (lpMesh == 0)
-                    continue;
-
-                if (lpAssembly != 0)
-                {
-                    CGS_ASSERT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),
-                               "lpMesh->GetNumVertexDescriptors() == lpMesh->mpMaterialAssembly->GetLength()");
-                }
+                const CgsGraphics::MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
+                CGS_ASSERT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),
+                           "lpMesh->GetNumVertexDescriptors() == lpMesh->mpMaterialAssembly->GetLength()");
 
                 if (lpMesh->mu8InstanceCount != 0)
                 {
