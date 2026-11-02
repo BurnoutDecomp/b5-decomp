@@ -66,7 +66,7 @@ namespace BrnEffects
         // Lane `luLane` of a Triangle4 member, as the float it is.
         inline f32 GetLane(const Vector4& lrVector, u32 luLane)
         {
-            return (&lrVector.x)[luLane];
+            return lrVector.GetComponent(luLane).GetFloat();
         }
 
         // Lane `luLane` of a Triangle4 member as a raw word. mSurfaceTags travels in a vector
@@ -74,9 +74,9 @@ namespace BrnEffects
         // `VectorIntrinsicUnion lSurfaceTagsIntrinsic`), never converted.
         inline u32 GetLaneBits(const Vector4& lrVector, u32 luLane)
         {
-            u32 luBits;
-            std::memcpy(&luBits, &(&lrVector.x)[luLane], sizeof(u32));
-            return luBits;
+            rw::math::vpu::detail::VectorIntrinsicUnion lVectorBits;
+            lVectorBits.vector = lrVector.GetVector();
+            return lVectorBits.scalarUInt[luLane];
         }
 
         // VecFloat(<member>.GetComponent(lane)): lane `luLane` of a Triangle4 member splatted
@@ -206,7 +206,7 @@ namespace BrnEffects
                 bool lbSkipTriangle = (lu8SurfaceId == BrnWorld::KU8_COLLISION_INVISIBLE_SURFACE_ID);     // cmplwi 0x11
                 if (!lbSkipTriangle)
                 {
-                    lbSkipTriangle = CompEqualVmx(GetLane(lpIncomingTriangles->mValidMasks, luComponent), 0.0f);   // T+0x90
+                    lbSkipTriangle = CompEqualVmx(lpIncomingTriangles->mValidMasks.mV.v[luComponent], 0.0f);   // T+0x90
                 }
                 labMaskValues[luComponent] = lbSkipTriangle;
             }
@@ -339,9 +339,9 @@ namespace BrnEffects
             for (u32 luLineTest = 0; luLineTest < luNumberLines; ++luLineTest, ++lpCurrentLine)
             {
                 const Vector3& lrStart = lpCurrentLine->mLineStartPosition;
-                const f32 lfDeltaX = lpCurrentLine->mLineEndPos.x - lrStart.x;
-                const f32 lfDeltaY = lpCurrentLine->mLineEndPos.y - lrStart.y;
-                const f32 lfDeltaZ = lpCurrentLine->mLineEndPos.z - lrStart.z;
+                const f32 lfDeltaX = lpCurrentLine->mLineEndPos.GetX().GetFloat() - lrStart.GetX().GetFloat();
+                const f32 lfDeltaY = lpCurrentLine->mLineEndPos.GetY().GetFloat() - lrStart.GetY().GetFloat();
+                const f32 lfDeltaZ = lpCurrentLine->mLineEndPos.GetZ().GetFloat() - lrStart.GetZ().GetFloat();
 
                 f32  lafOutDeterminant[KU_TRIANGLES_PER_PACK];
                 f32  lafOutLineParams[KU_TRIANGLES_PER_PACK];
@@ -367,9 +367,9 @@ namespace BrnEffects
                     const f32 lfPZ = (lfEdge2Y * lfDeltaX) - (lfEdge2X * lfDeltaY);
 
                     // T = start - V0 ; Q = T x e1
-                    const f32 lfTX = lrStart.x - lfVertex0X;
-                    const f32 lfTY = lrStart.y - lfVertex0Y;
-                    const f32 lfTZ = lrStart.z - lfVertex0Z;
+                    const f32 lfTX = lrStart.GetX().GetFloat() - lfVertex0X;
+                    const f32 lfTY = lrStart.GetY().GetFloat() - lfVertex0Y;
+                    const f32 lfTZ = lrStart.GetZ().GetFloat() - lfVertex0Z;
                     const f32 lfQX = (lfTY * lfEdge1Z) - (lfTZ * lfEdge1Y);
                     const f32 lfQY = (lfTZ * lfEdge1X) - (lfTX * lfEdge1Z);
                     const f32 lfQZ = (lfTX * lfEdge1Y) - (lfTY * lfEdge1X);
@@ -410,7 +410,7 @@ namespace BrnEffects
                         continue;
                     }
                     const f32 lfLineParam = lafOutLineParams[luLane] / lafOutDeterminant[luLane];
-                    if (lfLineParam >= lrNormalPlusParam.w)
+                    if (lfLineParam >= lrNormalPlusParam.GetPlus().GetFloat())
                     {
                         continue;
                     }
@@ -432,10 +432,10 @@ namespace BrnEffects
                     const f32 lfInvLength =
                         1.0f / std::sqrt((lfNormalX * lfNormalX) + (lfNormalY * lfNormalY) + (lfNormalZ * lfNormalZ));
 
-                    lrNormalPlusParam.x = lfNormalX * lfInvLength;     // SetVector3
-                    lrNormalPlusParam.y = lfNormalY * lfInvLength;
-                    lrNormalPlusParam.z = lfNormalZ * lfInvLength;
-                    lrNormalPlusParam.w = lfLineParam;                 // SetPlus
+                    lrNormalPlusParam.SetX(lfNormalX * lfInvLength);     // SetVector3
+                    lrNormalPlusParam.SetY(lfNormalY * lfInvLength);
+                    lrNormalPlusParam.SetZ(lfNormalZ * lfInvLength);
+                    lrNormalPlusParam.SetPlus(lfLineParam);              // SetPlus
                 }
             }
         }

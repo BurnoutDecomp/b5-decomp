@@ -268,10 +268,10 @@ namespace Native
 
         // Diffuse colour tinted by the array's diffuse factor: rgb *= mfDiffuseFactor, a *= 1.
         const f32 lfDiffuseFactor = mpParams->mfDiffuseFactor;
-        lpNewDebris->mDiffuseColour.x = lDiffuseColour.x * lfDiffuseFactor;
-        lpNewDebris->mDiffuseColour.y = lDiffuseColour.y * lfDiffuseFactor;
-        lpNewDebris->mDiffuseColour.z = lDiffuseColour.z * lfDiffuseFactor;
-        lpNewDebris->mDiffuseColour.w = lDiffuseColour.w * 1.0f;
+        lpNewDebris->mDiffuseColour.SetX(lDiffuseColour.GetX().GetFloat() * lfDiffuseFactor);
+        lpNewDebris->mDiffuseColour.SetY(lDiffuseColour.GetY().GetFloat() * lfDiffuseFactor);
+        lpNewDebris->mDiffuseColour.SetZ(lDiffuseColour.GetZ().GetFloat() * lfDiffuseFactor);
+        lpNewDebris->mDiffuseColour.SetW(lDiffuseColour.GetW().GetFloat() * 1.0f);
 
         // Pseudo-random bounce count: seed = (rotVel + 2.4679999)*(sizeScale + 1.357); take the
         // fractional part of seed^2, scale onto the bounce range (span 3.0, min 2.5), and floor.

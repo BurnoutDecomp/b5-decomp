@@ -137,7 +137,7 @@ namespace BrnGraphics
 
         void* lpShaderState = 0;
         RenderEngineDeviceBeginShaderStates(&mOffsetHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lvDepthUvOffset.x + KF_HALF, lvDepthUvOffset.y + KF_HALF,
+        WriteShaderRow(lpShaderState, lvDepthUvOffset.mV.v[0] + KF_HALF, lvDepthUvOffset.mV.v[1] + KF_HALF,
                        lfFarPlane, KF_ZERO);
 
         lpShaderState = 0;
