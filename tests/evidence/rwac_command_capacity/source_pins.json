@@ -5,8 +5,8 @@
   "base_head": "b823505348af025a784fc3ac171cfd0e7f0c1f99",
   "files": {
     "src/GameShared/GameClasses/System/PC/CgsAudioOutputPC.cpp": {
-      "expected_lf_sha256": "736acfd2eb11baa93bb1e952e2d86f4637642d1e11aee760f2adfd4892511348",
-      "expected_lf_bytes": 32696
+      "expected_lf_sha256": "24c5dd689e9deafaa4a7214050fa56e5beb246adab2fd2eebfab59c81b994fc6",
+      "expected_lf_bytes": 40715
     },
     "src/GameShared/GameClasses/System/PC/CgsDacOutputPC.cpp": {
       "expected_lf_sha256": "0043d62c6661ecdf82b405ec6613c9e790c899ca3494bf1802bbc3c0b4c0e70b",

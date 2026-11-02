@@ -363,14 +363,53 @@ void QueueDiagnostics(const f32* apMix, bool abEngine)
     ::SetEvent(g_diagEvent);
 }
 
-void SubmitBuffer(int liIndex, bool abPrime = false)
+// ===========================================================================
+// FLAG PC-platform leaf: OUTPUT-DEVICE LOSS RECOVERY (b5-decomp issue #47).
+//
+// XAudio2 reports a lost endpoint (a Bluetooth/USB device disconnected, a default-device or
+// format change, another process taking the device exclusively) through
+// IXAudio2EngineCallback::OnCriticalError and then STOPS ITS ENGINE FOR GOOD: no OnBufferEnd
+// is issued again until the XAudio2 object is released and created anew. On this backend that
+// is two failures, because the engine fill is also the only consumer of the RWAC
+// deferred-command ring (System::ExecuteCommands, run from DacOutputPC's fill):
+//   * every sound stops for the rest of the session, reconnecting the device or not, and
+//   * the game thread keeps queueing commands into the fixed 0x30000-byte ring, whose
+//     console-faithful producers never bound it, so it overruns into the next Rwac block.
+//     Measured with BRN_RWAC_COMMAND_TRACE=1 (Bluetooth speaker disconnected and reconnected):
+//     critical_errors=1, callback_age_ms=12031, pending=196600 of 196608 -- and without the
+//     trace, "START GUARD TRAMPLE [Rwac]" in TestBed SanityCheck, then an access violation.
+// The console's output is platform-owned and never disappears, so the contract to preserve is
+// "the fill runs once per 256 frames, always". On a loss the recovery thread releases the dead
+// engine, keeps that cadence with a device-less pump (its frames are discarded), and recreates
+// the engine, mastering voice and source voice until an endpoint accepts them again.
+// The XAudio2 callbacks only raise a flag. The pump runs only while no source voice exists,
+// and a new voice is started only after the pump has stopped, so OnBufferEnd stays the sole
+// producer whenever a device is live.
+// ===========================================================================
+std::mutex              g_deviceMutex;              // Open/Close/recovery; never taken by a fill
+std::atomic<bool>       g_logicalOpen(false);       // Open succeeded and Close has not run since
+std::atomic<bool>       g_deviceLost(false);
+std::atomic<HRESULT>    g_deviceLostResult(S_OK);
+HANDLE                  g_recoveryEvent  = nullptr;
+HANDLE                  g_recoveryThread = nullptr;
+const ULONGLONG         kReopenIntervalMs = 500;
+// Device-creation failures are logged on the first reopen attempt only, not every 500 ms.
+bool                    g_deviceLogQuiet = false;
+#define DEVICE_LOG if (!g_deviceLogQuiet) AUDIO_LOG
+
+// Callback-safe: no XAudio2 call, no allocation, no logging.
+void SignalDeviceLost(HRESULT lResult)
 {
-    f32* lpBuf = g_buf[liIndex];
+    g_deviceLostResult.store(lResult, std::memory_order_relaxed);
+    if (!g_deviceLost.exchange(true, std::memory_order_acq_rel) && g_recoveryEvent)
+        ::SetEvent(g_recoveryEvent);
+}
+
+// Run one 256-frame production pass (primary + engine fills) into lpBuf.
+void ProduceBuffer(f32* lpBuf)
+{
     const int liValues = kFrames * g_channels;
     std::memset(lpBuf, 0, sizeof(f32) * liValues);
-    // Device creation may run under the System lock. Priming is SILENCE ONLY;
-    // the sole engine producer is OnBufferEnd after all buffers are submitted.
-    if (!abPrime)
     {
         AudioOutputPC::FillFn lpFill;
         AudioOutputPC::EngineFillFn lpEngineFill;
@@ -413,12 +452,25 @@ void SubmitBuffer(int liIndex, bool abPrime = false)
         for (int li = 0; li < liValues; ++li)
             lpBuf[li] = SaturateDeviceSample(lpBuf[li]);
     }
+}
+
+HRESULT SubmitBuffer(int liIndex, bool abPrime = false)
+{
+    f32* lpBuf = g_buf[liIndex];
+    const int liValues = kFrames * g_channels;
+    // Device creation may run under the System lock. Priming is SILENCE ONLY;
+    // the sole engine producer is OnBufferEnd after all buffers are submitted.
+    if (abPrime)
+        std::memset(lpBuf, 0, sizeof(f32) * liValues);
+    else
+        ProduceBuffer(lpBuf);
     XAUDIO2_BUFFER lBuf = {};
     lBuf.AudioBytes = static_cast<UINT32>(liValues * sizeof(f32));
     lBuf.pAudioData = reinterpret_cast<const BYTE*>(lpBuf);
     lBuf.pContext = reinterpret_cast<void*>(static_cast<intptr_t>(liIndex));
     const HRESULT lSubmitResult = g_pSource->SubmitSourceBuffer(&lBuf);
     RwacCommandTracePC::MarkSubmit(lSubmitResult);
+    return lSubmitResult;
 }
 
 void FinishOutput()
@@ -435,7 +487,11 @@ public:
     void STDMETHODCALLTYPE OnBufferEnd(void* pBufferContext) override
     {
         RwacCommandTracePC::Mark(RwacCommandTracePC::DeviceCallbackBegin);
-        SubmitBuffer(static_cast<int>(reinterpret_cast<intptr_t>(pBufferContext)));
+        // A rejected re-queue drops this slot from the refill chain for good.
+        const HRESULT lResult =
+            SubmitBuffer(static_cast<int>(reinterpret_cast<intptr_t>(pBufferContext)));
+        if (FAILED(lResult))
+            SignalDeviceLost(lResult);
         RwacCommandTracePC::Mark(RwacCommandTracePC::DeviceCallbackEnd);
     }
     void STDMETHODCALLTYPE OnBufferStart(void*) override {}
@@ -450,9 +506,9 @@ public:
 };
 VoiceCallback g_callback;
 
-// FLAG PC-platform leaf: observe critical endpoint/engine failures without
-// making XAudio calls or logging on its callback thread.
-class EngineCallbackTrace : public IXAudio2EngineCallback
+// FLAG PC-platform leaf: hand critical endpoint/engine failures to the recovery
+// thread without making XAudio calls or logging on the callback thread.
+class EngineCallback : public IXAudio2EngineCallback
 {
 public:
     void STDMETHODCALLTYPE OnProcessingPassStart() override {}
@@ -460,10 +516,11 @@ public:
     void STDMETHODCALLTYPE OnCriticalError(HRESULT lResult) override
     {
         RwacCommandTracePC::MarkCriticalError(lResult);
+        SignalDeviceLost(lResult);
     }
 };
-EngineCallbackTrace g_engineCallbackTrace;
-bool g_engineCallbackTraceRegistered = false;
+EngineCallback g_engineCallback;
+bool g_engineCallbackRegistered = false;
 
 // FLAG PC-platform leaf: XAudio2 2.9 normally selects Windows' default render
 // endpoint.  A machine may have active endpoints but no current default (for
@@ -494,9 +551,9 @@ HRESULT CreateMasteringVoiceWithEndpointFallback(int liChannels, int liSampleRat
         lEnumResult = lpEndpoints->GetCount(&luCount);
     char lacEnumResult[16];
     sprintf_s(lacEnumResult, "0x%08X", static_cast<unsigned>(lEnumResult));
-    AUDIO_LOG << "[Audio] default endpoint unavailable; active-endpoint fallback: COM "
-              << (SUCCEEDED(lComResult) || lComResult == RPC_E_CHANGED_MODE ? "ready" : "failed")
-              << ", enumerate " << lacEnumResult << ", candidates " << luCount << "\n";
+    DEVICE_LOG << "[Audio] default endpoint unavailable; active-endpoint fallback: COM "
+               << (SUCCEEDED(lComResult) || lComResult == RPC_E_CHANGED_MODE ? "ready" : "failed")
+               << ", enumerate " << lacEnumResult << ", candidates " << luCount << "\n";
     for (UINT32 luIndex = 0; SUCCEEDED(lEnumResult) && luIndex < luCount; ++luIndex)
     {
         IMMDevice* lpEndpoint = nullptr;
@@ -518,8 +575,8 @@ HRESULT CreateMasteringVoiceWithEndpointFallback(int liChannels, int liSampleRat
         {
             char lacItemResult[16];
             sprintf_s(lacItemResult, "0x%08X", static_cast<unsigned>(lItemResult));
-            AUDIO_LOG << "[Audio] active endpoint " << luIndex
-                      << " rejected: " << lacItemResult << "\n";
+            DEVICE_LOG << "[Audio] active endpoint " << luIndex
+                       << " rejected: " << lacItemResult << "\n";
         }
         ::CoTaskMemFree(lpEndpointId);
         if (lpEndpoint)
@@ -599,16 +656,30 @@ void TestToneFill(s16* lpOut, int liFrames, void* lpUser)
             *lpOut++ = lsV;
     }
 }
-} // namespace
+UINT32 g_endpointIndex = UINT32_MAX;   // active-endpoint fallback used by the live device
 
-bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* lpUser)
+// Release the XAudio2 engine and its voices. Never called on an XAudio2 callback thread:
+// DestroyVoice waits for the last callback before buffers or bindings are touched.
+void ReleaseDevice()
 {
-    RwacCommandTracePC::ConfigureFromEnvironment();
-    if (g_pSource)
-        return true; // already open
-    if (liSampleRate != 48000 || liChannels != 2)
-        return false; // this shared sink has one explicit master clock and layout
+    RwacCommandTracePC::MarkDeviceClosed();
+    if (g_pSource) { g_pSource->Stop(0); g_pSource->DestroyVoice(); g_pSource = nullptr; }
+    if (g_pMaster) { g_pMaster->DestroyVoice(); g_pMaster = nullptr; }
+    if (g_pXAudio2)
+    {
+        if (g_engineCallbackRegistered)
+            g_pXAudio2->UnregisterForCallbacks(&g_engineCallback);
+        g_engineCallbackRegistered = false;
+        g_pXAudio2->Release();
+        g_pXAudio2 = nullptr;
+    }
+    if (g_hXAudioDll) { ::FreeLibrary(g_hXAudioDll); g_hXAudioDll = nullptr; }
+}
 
+// Create the engine, mastering voice and source voice, and queue silent buffers. The voice
+// is not started; StartDevice does that once the caller's producer state is in place.
+bool CreateDevice(int liSampleRate, int liChannels)
+{
     // XAUDIO2_DLL_W is L"xaudio2_9redist.dll" (xaudio2Redist.h; the _W spelling because
     // plain XAUDIO2_DLL follows UNICODE, which this build does not define). That is the
     // redistributable 2.9 engine, shipped beside Burnout_PC.exe by build_game_exe.bat and
@@ -622,36 +693,39 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
         g_hXAudioDll = ::LoadLibraryW(L"xaudio2_8.dll"); // in-box 2.8 (Win8/older Win10)
     if (!g_hXAudioDll)
     {
-        AUDIO_LOG << "[Audio] XAudio2 unavailable (no xaudio2_9redist/_9/_8.dll) -- running muted\n";
+        DEVICE_LOG << "[Audio] XAudio2 unavailable (no xaudio2_9redist/_9/_8.dll) -- running muted\n";
         return false;
     }
     PFN_XAudio2Create lpCreate = reinterpret_cast<PFN_XAudio2Create>(
         ::GetProcAddress(g_hXAudioDll, "XAudio2Create"));
     if (!lpCreate || FAILED(lpCreate(&g_pXAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR)))
     {
-        AUDIO_LOG << "[Audio] XAudio2Create failed -- running muted\n";
-        Close();
+        DEVICE_LOG << "[Audio] XAudio2Create failed -- running muted\n";
+        ReleaseDevice();
         return false;
     }
-    g_engineCallbackTraceRegistered = false;
-    if (RwacCommandTracePC::Enabled())
+    // Always registered: OnCriticalError is the only notice of a lost endpoint.
+    const HRESULT lCallbackRegistration = g_pXAudio2->RegisterForCallbacks(&g_engineCallback);
+    g_engineCallbackRegistered = SUCCEEDED(lCallbackRegistration);
+    RwacCommandTracePC::MarkEngineCallbackRegistration(lCallbackRegistration);
+    if (!g_engineCallbackRegistered)
     {
-        const HRESULT lTraceRegistration =
-            g_pXAudio2->RegisterForCallbacks(&g_engineCallbackTrace);
-        g_engineCallbackTraceRegistered = SUCCEEDED(lTraceRegistration);
-        RwacCommandTracePC::MarkEngineCallbackRegistration(lTraceRegistration);
+        char lacResult[16];
+        sprintf_s(lacResult, "0x%08X", static_cast<unsigned>(lCallbackRegistration));
+        DEVICE_LOG << "[Audio] RegisterForCallbacks failed (" << lacResult
+                   << ") -- a lost output device will not be recovered\n";
     }
-    UINT32 luEndpointIndex = UINT32_MAX;
+    g_endpointIndex = UINT32_MAX;
     const HRESULT lMasterResult = CreateMasteringVoiceWithEndpointFallback(
-        liChannels, liSampleRate, &luEndpointIndex);
+        liChannels, liSampleRate, &g_endpointIndex);
     if (FAILED(lMasterResult))
     {
         char lacResult[16];
         sprintf_s(lacResult, "0x%08X", static_cast<unsigned>(lMasterResult));
-        AUDIO_LOG << "[Audio] CreateMasteringVoice failed (" << lacResult
-                  << ", " << liSampleRate << " Hz, " << liChannels
-                  << " ch) -- running muted\n";
-        Close();
+        DEVICE_LOG << "[Audio] CreateMasteringVoice failed (" << lacResult
+                   << ", " << liSampleRate << " Hz, " << liChannels
+                   << " ch) -- running muted\n";
+        ReleaseDevice();
         return false;
     }
 
@@ -674,34 +748,32 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
     if (FAILED(g_pXAudio2->CreateSourceVoice(&g_pSource, &lWfx, 0,
                                              XAUDIO2_DEFAULT_FREQ_RATIO, &g_callback)))
     {
-        AUDIO_LOG << "[Audio] CreateSourceVoice failed -- running muted\n";
-        Close();
+        DEVICE_LOG << "[Audio] CreateSourceVoice failed -- running muted\n";
+        ReleaseDevice();
         return false;
     }
 
     g_channels = liChannels;
     g_openRate = liSampleRate;
-    SetFill(lpFill, lpUser);
-    static bool sbExitRegistered = false;
-    if (!sbExitRegistered)
-    {
-        std::atexit(&FinishOutput);
-        sbExitRegistered = true;
-    }
-    StartDiagnostics();
     for (int li = 0; li < kBuffers; ++li)
         SubmitBuffer(li, true);
+    return true;
+}
+
+// Start the created source voice; from here OnBufferEnd is the producer.
+bool StartDevice()
+{
     if (FAILED(g_pSource->Start(0)))
     {
-        Close();
+        ReleaseDevice();
         return false;
     }
 
     RwacCommandTracePC::MarkDeviceOpened();
-    AUDIO_LOG << "[Audio] XAudio2 opened: " << liSampleRate << " Hz, " << liChannels
+    AUDIO_LOG << "[Audio] XAudio2 opened: " << g_openRate << " Hz, " << g_channels
               << " ch (float PCM, final saturation)";
-    if (luEndpointIndex != UINT32_MAX)
-        AUDIO_LOG << " via active endpoint " << luEndpointIndex;
+    if (g_endpointIndex != UINT32_MAX)
+        AUDIO_LOG << " via active endpoint " << g_endpointIndex;
     // [FLAG PC witness] The mastering voice's OWN gain, read back out of the engine rather than
     // echoed from the request -- "this run is silent" is then a measurement and not a claim, and
     // a SetVolume that silently failed cannot pass for a mute. Once per Open, so it is bounded by
@@ -719,27 +791,126 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
     return true;
 }
 
-void AudioOutputPC::Close()
+// Caller holds g_deviceMutex. Diagnostic writes have their own drain barrier.
+void CloseLocked()
 {
-    RwacCommandTracePC::MarkDeviceClosed();
-    // DestroyVoice waits for the last callback before buffers, bindings or
-    // capture headers are touched. Diagnostic writes have their own drain barrier.
-    if (g_pSource) { g_pSource->Stop(0); g_pSource->DestroyVoice(); g_pSource = nullptr; }
+    g_logicalOpen.store(false, std::memory_order_release);
+    ReleaseDevice();
+    // After the drain: a submit rejected by the closing voice must not mark the next device lost.
+    g_deviceLost.store(false, std::memory_order_release);
     StopDiagnostics();
     if (g_capture) CapturePatchHeader();
     if (g_engCapture) EngineCapturePatchHeader();
-    if (g_pMaster) { g_pMaster->DestroyVoice(); g_pMaster = nullptr; }
-    if (g_pXAudio2)
-    {
-        if (g_engineCallbackTraceRegistered)
-            g_pXAudio2->UnregisterForCallbacks(&g_engineCallbackTrace);
-        g_engineCallbackTraceRegistered = false;
-        g_pXAudio2->Release();
-        g_pXAudio2 = nullptr;
-    }
-    if (g_hXAudioDll) { ::FreeLibrary(g_hXAudioDll); g_hXAudioDll = nullptr; }
-    SetFill(nullptr, nullptr);
+    AudioOutputPC::SetFill(nullptr, nullptr);
     g_openRate = 0;
+}
+
+// The recovery thread (see the device-loss banner above). Created by the first successful
+// Open and never joined: between losses it only waits on its event, and Close/exit just
+// clear g_logicalOpen under g_deviceMutex, which it re-checks before every step.
+DWORD WINAPI RecoveryThread(void*)
+{
+    for (;;)
+    {
+        ::WaitForSingleObject(g_recoveryEvent, INFINITE);
+        std::unique_lock<std::mutex> lLock(g_deviceMutex);
+        if (!g_logicalOpen.load(std::memory_order_acquire) ||
+            !g_deviceLost.load(std::memory_order_acquire))
+            continue;
+
+        char lacResult[16];
+        sprintf_s(lacResult, "0x%08X",
+                  static_cast<unsigned>(g_deviceLostResult.load(std::memory_order_relaxed)));
+        AUDIO_LOG << "[Audio] output device lost (" << lacResult
+                  << ") -- releasing XAudio2; the engine fill keeps its cadence until an"
+                     " endpoint accepts a new device\n";
+        ReleaseDevice();
+
+        LARGE_INTEGER lFrequency, lNow;
+        ::QueryPerformanceFrequency(&lFrequency);
+        ::QueryPerformanceCounter(&lNow);
+        const LONGLONG liPeriod = lFrequency.QuadPart * kFrames / g_openRate;
+        LONGLONG liDue = lNow.QuadPart;
+        ULONGLONG luNextAttempt = ::GetTickCount64();
+        u32 luAttempts = 0;
+        while (g_logicalOpen.load(std::memory_order_acquire))
+        {
+            if (::GetTickCount64() >= luNextAttempt)
+            {
+                g_deviceLogQuiet = luAttempts++ != 0;
+                const bool lbCreated = CreateDevice(g_openRate, g_channels);
+                g_deviceLogQuiet = false;
+                if (lbCreated)
+                {
+                    g_deviceLost.store(false, std::memory_order_release);
+                    if (StartDevice())
+                    {
+                        AUDIO_LOG << "[Audio] output device recovered after " << luAttempts
+                                  << " attempt(s)\n";
+                        break;
+                    }
+                    g_deviceLost.store(true, std::memory_order_release);
+                }
+                luNextAttempt = ::GetTickCount64() + kReopenIntervalMs;
+            }
+
+            // Device-less pump: one production pass per elapsed 256-frame period, output discarded.
+            ::QueryPerformanceCounter(&lNow);
+            if (lNow.QuadPart - liDue > lFrequency.QuadPart / 10)
+                liDue = lNow.QuadPart; // resynchronise after a long stall instead of bursting
+            while (liDue <= lNow.QuadPart)
+            {
+                ProduceBuffer(g_buf[0]);
+                liDue += liPeriod;
+            }
+            const DWORD luWaitMs =
+                static_cast<DWORD>((liDue - lNow.QuadPart) * 1000 / lFrequency.QuadPart);
+            lLock.unlock();
+            ::Sleep(luWaitMs);
+            lLock.lock();
+        }
+    }
+}
+} // namespace
+
+bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* lpUser)
+{
+    RwacCommandTracePC::ConfigureFromEnvironment();
+    std::lock_guard<std::mutex> lLock(g_deviceMutex);
+    if (g_logicalOpen.load(std::memory_order_acquire))
+        return true; // already open (possibly recovering a lost endpoint)
+    if (liSampleRate != 48000 || liChannels != 2)
+        return false; // this shared sink has one explicit master clock and layout
+    if (!CreateDevice(liSampleRate, liChannels))
+        return false;
+
+    SetFill(lpFill, lpUser);
+    static bool sbExitRegistered = false;
+    if (!sbExitRegistered)
+    {
+        std::atexit(&FinishOutput);
+        sbExitRegistered = true;
+    }
+    StartDiagnostics();
+    if (!g_recoveryThread)
+    {
+        g_recoveryEvent = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (g_recoveryEvent)
+            g_recoveryThread = ::CreateThread(nullptr, 0, &RecoveryThread, nullptr, 0, nullptr);
+    }
+    g_logicalOpen.store(true, std::memory_order_release);
+    if (!StartDevice())
+    {
+        CloseLocked();
+        return false;
+    }
+    return true;
+}
+
+void AudioOutputPC::Close()
+{
+    std::lock_guard<std::mutex> lLock(g_deviceMutex);
+    CloseLocked();
 }
 
 void AudioOutputPC::ReleasePrimaryFill()
@@ -749,7 +920,7 @@ void AudioOutputPC::ReleasePrimaryFill()
     g_fillIdle.wait(lLock, [] { return g_primaryActive == 0; });
 }
 
-bool AudioOutputPC::IsOpen() { return g_pSource != nullptr; }
+bool AudioOutputPC::IsOpen() { return g_logicalOpen.load(std::memory_order_acquire); }
 
 int AudioOutputPC::GetOpenSampleRate() { return g_openRate; }
 
@@ -774,7 +945,7 @@ void AudioOutputPC::ReleaseEngineFill()
 
 void AudioOutputPC::PlayTestTone(float lfSeconds)
 {
-    if (!g_pSource && !Open(48000, 2, nullptr, nullptr))
+    if (!IsOpen() && !Open(48000, 2, nullptr, nullptr))
         return;
     ReleasePrimaryFill();
     g_tone.phase = 0.0;
