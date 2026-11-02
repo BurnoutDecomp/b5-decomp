@@ -13,7 +13,6 @@
 #include "SharedClasses/Graphics/BrnEffectsData.h"                    // BrnEffectsFrame
 #include <cstring>                                                    // _strnicmp
 #include <cfloat>                                                     // FLT_MAX
-#include <cstdlib>                                                    // getenv (BRN_PFX_DIAG)
 
 // =============================================================================
 // BrnGui::EffectsArbitrator -- reconstructed from BURNOUT_X360_ARTIST.XEX:
@@ -117,14 +116,6 @@ namespace BrnGui
     {
     }
 
-    void EffectsArbitrator::SetGuiCache(GuiCache* lpGuiCache)
-    {
-        if (mpGuiCache == 0)
-        {
-            mpGuiCache = lpGuiCache;
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                    // :280
-        }
-    }
 
     // ------------------------------------------------------------------------------------
     // ResourceUpdate @0x825177E8 (BrnGuiEffectsArbitrator.cpp:171)
@@ -559,10 +550,10 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     void EffectsArbitrator::EventUpdate(BrnUpdateSet leUpdateSet,
                                         const CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
-                                        CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
+                                        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
     {
         CGS_ASSERT(lpGuiInputBuffer != 0, "lpGuiInputBuffer != NULL");              // :256
-        CGS_ASSERT(lpGuiOutQueue != 0, "lpGuiOutputBuffer != NULL");                // :257
+        CGS_ASSERT(lpGuiOutputBuffer != 0, "lpGuiOutputBuffer != NULL");                // :257
 
         const CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue = lpGuiInputBuffer->GetGuiEvents();
         CGS_ASSERT(lpEventQueue != 0, "lpEventQueue != NULL");                      // :265
@@ -625,7 +616,7 @@ namespace BrnGui
                         lEnumeration.mapHookNames[liHook] = lpBundle->GetHook(liHook)->macName;
                     }
                 }
-                lpGuiOutQueue->AddEvent(&lEnumeration, 501, static_cast<s32>(sizeof(lEnumeration)));   // AddGuiOutEvent<GuiPFXHookEnumeration>
+                lpGuiOutputBuffer->AddGuiOutEvent(lEnumeration);   // AddGuiOutEvent<GuiPFXHookEnumeration>
                 break;
             }
             default:
@@ -669,18 +660,8 @@ namespace BrnGui
     void EffectsArbitrator::GenerateEffectFrameEvents(RendererIO::OutputBuffer* lpRenderOutput)
     {
         CGS_ASSERT(lpRenderOutput != 0, "lpRenderOutput != NULL");                  // :860
-        GenerateEffectFrameEvents(lpRenderOutput->GetFXEventsEffectsFrame(0),
-                                  lpRenderOutput->GetFXEventsEffectsFrame(1));
-    }
-
-    // The frame-pointer form (see the header): everything past the two frame reads is the
-    // console body of @0x82503060 unchanged.
-    void EffectsArbitrator::GenerateEffectFrameEvents(BrnEffectsFrame* lpFrame1, BrnEffectsFrame* lpFrame2)
-    {
-        if (lpFrame1 == 0 || lpFrame2 == 0)
-        {
-            return;
-        }
+        BrnEffectsFrame* lpFrame1 = lpRenderOutput->GetFXEventsEffectsFrame(0);
+        BrnEffectsFrame* lpFrame2 = lpRenderOutput->GetFXEventsEffectsFrame(1);
 
         BloomBlend        lBloom;        lBloom.Construct();
         VignetteBlend     lVignette;     lVignette.Construct();
