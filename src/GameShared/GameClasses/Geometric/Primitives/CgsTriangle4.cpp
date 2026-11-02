@@ -29,14 +29,14 @@ namespace CgsGeometric
     // is the best evidence and replaces the 0.01 that was inferred here.
     // (Same recovery that settled KF_MIN_PLANE_DIST = 0.001, whose X360 writer
     // sub_82C6DCF0 IS exported and matches PS3 exactly.)
-    const VecFloat K_TRIANGLE_NORMAL_TOLERANCE = { 0.001f, 0.001f, 0.001f, 0.001f };
+    const VecFloat K_TRIANGLE_NORMAL_TOLERANCE(0.001f);
 
     namespace
     {
         // vcmpeqfp self-compare per lane: a component equals itself iff not NaN.
         inline bool Vec3Finite(const Vector3& lrV)
         {
-            return lrV.x == lrV.x && lrV.y == lrV.y && lrV.z == lrV.z;
+            return lrV.mV.x == lrV.mV.x && lrV.mV.y == lrV.mV.y && lrV.mV.z == lrV.mV.z;
         }
     }
 
@@ -64,28 +64,28 @@ namespace CgsGeometric
         const s32 i = liLane;
 
         // Gather lane `i` of each SoA component into the AOS vertices.
-        roOut.mVertex0.x = (&mVertex0X.x)[i];
-        roOut.mVertex0.y = (&mVertex0Y.x)[i];
-        roOut.mVertex0.z = (&mVertex0Z.x)[i];
-        roOut.mVertex0.w = 0.0f;
+        roOut.mVertex0.mV.x = (&mVertex0X.mV.x)[i];
+        roOut.mVertex0.mV.y = (&mVertex0Y.mV.x)[i];
+        roOut.mVertex0.mV.z = (&mVertex0Z.mV.x)[i];
+        roOut.mVertex0.mV.w = 0.0f;
 
-        roOut.mVertex1.x = (&mVertex1X.x)[i];
-        roOut.mVertex1.y = (&mVertex1Y.x)[i];
-        roOut.mVertex1.z = (&mVertex1Z.x)[i];
-        roOut.mVertex1.w = 0.0f;
+        roOut.mVertex1.mV.x = (&mVertex1X.mV.x)[i];
+        roOut.mVertex1.mV.y = (&mVertex1Y.mV.x)[i];
+        roOut.mVertex1.mV.z = (&mVertex1Z.mV.x)[i];
+        roOut.mVertex1.mV.w = 0.0f;
 
-        roOut.mVertex2.x = (&mVertex2X.x)[i];
-        roOut.mVertex2.y = (&mVertex2Y.x)[i];
-        roOut.mVertex2.z = (&mVertex2Z.x)[i];
-        roOut.mVertex2.w = 0.0f;
+        roOut.mVertex2.mV.x = (&mVertex2X.mV.x)[i];
+        roOut.mVertex2.mV.y = (&mVertex2Y.mV.x)[i];
+        roOut.mVertex2.mV.z = (&mVertex2Z.mV.x)[i];
+        roOut.mVertex2.mV.w = 0.0f;
 
         // edges (matching the two vsubfp results)
-        const f32 lfBx = roOut.mVertex1.x - roOut.mVertex0.x; // edgeB = V1 - V0
-        const f32 lfBy = roOut.mVertex1.y - roOut.mVertex0.y;
-        const f32 lfBz = roOut.mVertex1.z - roOut.mVertex0.z;
-        const f32 lfAx = roOut.mVertex2.x - roOut.mVertex1.x; // edgeA = V2 - V1
-        const f32 lfAy = roOut.mVertex2.y - roOut.mVertex1.y;
-        const f32 lfAz = roOut.mVertex2.z - roOut.mVertex1.z;
+        const f32 lfBx = roOut.mVertex1.mV.x - roOut.mVertex0.mV.x; // edgeB = V1 - V0
+        const f32 lfBy = roOut.mVertex1.mV.y - roOut.mVertex0.mV.y;
+        const f32 lfBz = roOut.mVertex1.mV.z - roOut.mVertex0.mV.z;
+        const f32 lfAx = roOut.mVertex2.mV.x - roOut.mVertex1.mV.x; // edgeA = V2 - V1
+        const f32 lfAy = roOut.mVertex2.mV.y - roOut.mVertex1.mV.y;
+        const f32 lfAz = roOut.mVertex2.mV.z - roOut.mVertex1.mV.z;
 
         // normal = edgeB x edgeA (the vpermwi 0x63 swizzle + vnmsubfp idiom)
         f32 lfNx = lfBy * lfAz - lfBz * lfAy;
@@ -100,15 +100,15 @@ namespace CgsGeometric
         lfNy *= lfInv;
         lfNz *= lfInv;
 
-        roOut.mNormal.x = lfNx;
-        roOut.mNormal.y = lfNy;
-        roOut.mNormal.z = lfNz;
-        roOut.mNormal.w = 0.0f;
+        roOut.mNormal.mV.x = lfNx;
+        roOut.mNormal.mV.y = lfNy;
+        roOut.mNormal.mV.z = lfNz;
+        roOut.mNormal.mV.w = 0.0f;
 
         // trailing per-lane edge cosines (lfsx loads of lane `i` of each Cosigns vec)
-        roOut.mfEdgeCosine0 = (&mEdge0Cosigns.x)[i];
-        roOut.mfEdgeCosine1 = (&mEdge1Cosigns.x)[i];
-        roOut.mfEdgeCosine2 = (&mEdge2Cosigns.x)[i];
+        roOut.mfEdgeCosine0 = (&mEdge0Cosigns.mV.x)[i];
+        roOut.mfEdgeCosine1 = (&mEdge1Cosigns.mV.x)[i];
+        roOut.mfEdgeCosine2 = (&mEdge2Cosigns.mV.x)[i];
     }
 
     // ------------------------------------------------------------------------
@@ -136,11 +136,11 @@ namespace CgsGeometric
         if (!Vec3Finite(mVertex2)) return false;
         if (!Vec3Finite(mNormal))  return false;
 
-        const f32 lfLenSq = mNormal.x * mNormal.x
-                          + mNormal.y * mNormal.y
-                          + mNormal.z * mNormal.z;
+        const f32 lfLenSq = mNormal.mV.x * mNormal.mV.x
+                          + mNormal.mV.y * mNormal.mV.y
+                          + mNormal.mV.z * mNormal.mV.z;
         const f32 lfLen = std::sqrt(lfLenSq);
-        if (std::fabs(lfLen - 1.0f) > K_TRIANGLE_NORMAL_TOLERANCE.x)
+        if (std::fabs(lfLen - 1.0f) > K_TRIANGLE_NORMAL_TOLERANCE.mV.x)
             return false;
 
         if (!(mfEdgeCosine0 > -1.1f && mfEdgeCosine0 < 1.1f))        return false;

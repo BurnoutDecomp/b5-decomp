@@ -23,9 +23,9 @@ namespace CgsGeometric
         // vcmpeqfp self-compare per lane: a component equals itself iff not NaN.
         inline bool PointXyzFinite(const Vector3Plus& lrPoint)
         {
-            return lrPoint.x == lrPoint.x
-                && lrPoint.y == lrPoint.y
-                && lrPoint.z == lrPoint.z;
+            return lrPoint.mV.x == lrPoint.mV.x
+                && lrPoint.mV.y == lrPoint.mV.y
+                && lrPoint.mV.z == lrPoint.mV.z;
         }
     }
 
