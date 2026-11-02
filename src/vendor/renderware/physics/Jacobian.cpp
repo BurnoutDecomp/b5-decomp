@@ -112,10 +112,10 @@ rw::math::vpu::Matrix33* DriveJacobian::GetMatIBT(rw::math::vpu::Matrix33* lpDst
     for (u32 luRow = 0u; luRow < 3u; ++luRow)
     {
         const u32 luBase = 13u + luRow * 4u;          // rows 13, 17, 21
-        lRows[luRow].x = lpJac->mRows[luBase + 0u].w;   // +0xDC + i*0x40
-        lRows[luRow].y = lpJac->mRows[luBase + 1u].w;   // +0xEC + i*0x40
-        lRows[luRow].z = lpJac->mRows[luBase + 2u].w;   // +0xFC + i*0x40
-        lRows[luRow].w = 0.0f;                         // `li r11,0` / `stw r11,0(rN)`
+        lRows[luRow].mV.v[0] = lpJac->mRows[luBase + 0u].mV.v[3]; // +0xDC + i*0x40
+        lRows[luRow].mV.v[1] = lpJac->mRows[luBase + 1u].mV.v[3]; // +0xEC + i*0x40
+        lRows[luRow].mV.v[2] = lpJac->mRows[luBase + 2u].mV.v[3]; // +0xFC + i*0x40
+        lRows[luRow].mV.u[3] = 0; // `li r11,0` / `stw r11,0(rN)`
     }
 
     // `stvx128 v0,r0,r3` / `stvx128 v13,r3,r7(=0x10)` / `stvx128 v12,r3,r6(=0x20)`
