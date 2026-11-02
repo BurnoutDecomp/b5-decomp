@@ -57,12 +57,8 @@ namespace
     CgsGraphics::Im2dTransform MakeBillboardScreenTransform()
     {
         CgsGraphics::Im2dTransform lTransform = {};
-        lTransform.mRightUp.x     = 1280.0f;  // right basis: x' = 1280 * x
-        lTransform.mRightUp.w     = 720.0f;   // up basis:    y' =  720 * y
-        lTransform.mColourScale.x = 255.0f;
-        lTransform.mColourScale.y = 255.0f;
-        lTransform.mColourScale.z = 255.0f;
-        lTransform.mColourScale.w = 255.0f;
+        lTransform.mRightUp.Set(1280.0f, 0.0f, 0.0f, 720.0f); // x' = 1280*x, y' = 720*y
+        lTransform.mColourScale.Set(255.0f, 255.0f, 255.0f, 255.0f);
         return lTransform;
     }
 }
@@ -246,10 +242,10 @@ void BillboardRenderer::Render(
         // next drawn billboard). Stride is six vertices per drawn billboard.
         CgsGraphics::Basic2dColouredTexturedVertex* lpQuad = &maVertexList[6 * liRenderedCount];
 
-        const f32 lfPosX     = lrBillboard.mv2Pos.x;
-        const f32 lfPosY     = lrBillboard.mv2Pos.y;
-        const f32 lfSizeX    = lrBillboard.mv2Size.x;
-        const f32 lfSizeY    = lrBillboard.mv2Size.y;
+        const f32 lfPosX     = lrBillboard.mv2Pos.mV.v[0];
+        const f32 lfPosY     = lrBillboard.mv2Pos.mV.v[1];
+        const f32 lfSizeX    = lrBillboard.mv2Size.mV.v[0];
+        const f32 lfSizeY    = lrBillboard.mv2Size.mV.v[1];
         const f32 lfRotation = lrBillboard.mfRotation;
         const u32 luColour   = PackVertexColour(lrBillboard.mcDiffuse.m_rgba);
 

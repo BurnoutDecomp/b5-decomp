@@ -116,9 +116,9 @@ namespace CgsGui
         case E_GUICAMERA_NORMAL:
         {
             lCamera.Construct(0.9f, KF_GUI_ASPECT_RATIO, KF_GUI_NEAR_CLIP, KF_GUI_FAR_CLIP); // 820E3E70
-            static const Vector3 sEye = {-0.4f, 0.0f, 2.0f, 0.0f};    // 8305F250; 82012EF8/82001D9C
-            static const Vector3 sUp = {0.0f, 1.0f, 0.0f, 0.0f};     // 8305F240; vector 82181510
-            static const Vector3 sTarget = {-0.08f, 0.0f, 0.0f, 0.0f}; // 8305F230; 8200D5B0
+            static const Vector3 sEye(-0.4f, 0.0f, 2.0f);       // 8305F250; 82012EF8/82001D9C
+            static const Vector3 sUp(0.0f, 1.0f, 0.0f);         // 8305F240; vector 82181510
+            static const Vector3 sTarget(-0.08f, 0.0f, 0.0f);   // 8305F230; 8200D5B0
             lCamera.LookAt(sEye, sUp, sTarget);
             break;
         }
@@ -127,9 +127,9 @@ namespace CgsGui
             // DecFIGS names selector 0 ORTHO, but ARTIST calls the same perspective
             // constructor with the narrow 0.02-radian FOV. No orthogonal setter runs.
             lCamera.Construct(0.02f, KF_GUI_ASPECT_RATIO, KF_GUI_NEAR_CLIP, KF_GUI_FAR_CLIP); // 820E3E6C
-            static const Vector3 sEye = {0.0f, 0.0f, 100.0f, 0.0f}; // 8305F220; 820049E0
-            static const Vector3 sUp = {0.0f, 1.0f, 0.0f, 0.0f};   // 8305F210; vector 82181510
-            static const Vector3 sTarget = {0.0f, 0.0f, 0.0f, 0.0f}; // 8305F200
+            static const Vector3 sEye(0.0f, 0.0f, 100.0f);  // 8305F220; 820049E0
+            static const Vector3 sUp(0.0f, 1.0f, 0.0f);      // 8305F210; vector 82181510
+            static const Vector3 sTarget(0.0f, 0.0f, 0.0f);  // 8305F200
             lCamera.LookAt(sEye, sUp, sTarget);
             break;
         }
