@@ -49,7 +49,7 @@ namespace
         const Lanes l = { { afX, afY, afZ, afW } };
         return l;
     }
-    inline Lanes Load(const Vector3& arV)             { return Make(arV.x, arV.y, arV.z, arV.w); }
+    inline Lanes Load(const Vector3& arV)             { return Make(arV.mV.v[0], arV.mV.v[1], arV.mV.v[2], arV.mV.v[3]); }
     inline Lanes Splat(f32 af)                        { return Make(af, af, af, af); }
     inline Lanes Splat(const Lanes& arA, u32 luLane)  { return Splat(arA.v[luLane]); }
 

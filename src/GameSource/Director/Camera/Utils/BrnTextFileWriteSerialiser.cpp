@@ -124,7 +124,6 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, Vector3& lrValue)
     char              lacLabel[KI_CHARBUFFERLENGTH];
     CgsDev::StrStream lLabel(lacLabel, sizeof(lacLabel));
     const char*       lpcSafeName = lpcName ? lpcName : "<NULLSTRING>";
-    const f32* const  lapfLane[3] = { &lrValue.x, &lrValue.y, &lrValue.z };
 
     for (s32 liAxis = 0; liAxis < 3; ++liAxis)
     {
@@ -136,7 +135,7 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, Vector3& lrValue)
         {
             char lacBuffer[KI_CHARBUFFERLENGTH];
             FormatName(lacBuffer, lLabel.GetBuffer());
-            std::fprintf(mpFile, "%s : %f\n", lacBuffer, *lapfLane[liAxis]);
+            std::fprintf(mpFile, "%s : %f\n", lacBuffer, lrValue.GetComponent(liAxis).GetFloat());
         }
     }
 }
