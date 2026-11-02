@@ -71,22 +71,27 @@ void Im2d::SaveMaskShaderConstants(const Basic2dColouredTexturedVertex* lpaMaskV
     const Basic2dColouredTexturedVertex& lrMin = lpaMaskVertices[0];
     const Basic2dColouredTexturedVertex& lrMax = lpaMaskVertices[1];
 
-    const Vector4 lvMinPosition = { lrMin.mv2Pos.x, lrMin.mv2Pos.y, 0.0f, 0.0f };
-    const Vector4 lvMaxPosition = { lrMax.mv2Pos.x, lrMax.mv2Pos.y, 0.0f, 0.0f };
+    const Vector4 lvMinPosition(lrMin.mv2Pos.x, lrMin.mv2Pos.y, 0.0f, 0.0f);
+    const Vector4 lvMaxPosition(lrMax.mv2Pos.x, lrMax.mv2Pos.y, 0.0f, 0.0f);
 
     CGS_ASSERT(mu32NumMasks < KU_IM2D_MAX_MASK_COUNT, "mu32NumMasks < V_IM2D_MAX_MASK_COUNT");
 
-    const Vector4 lvExtent = { lvMaxPosition.x - lvMinPosition.x, lvMaxPosition.y - lvMinPosition.y,
-                               lvMaxPosition.z - lvMinPosition.z, lvMaxPosition.w - lvMinPosition.w };
-    const Vector4 lvReciprocalExtent = { 1.0f / lvExtent.x, 1.0f / lvExtent.y, 0.0f, 0.0f };
+    const Vector4 lvExtent(lvMaxPosition.GetX().GetFloat() - lvMinPosition.GetX().GetFloat(),
+                           lvMaxPosition.GetY().GetFloat() - lvMinPosition.GetY().GetFloat(),
+                           lvMaxPosition.GetZ().GetFloat() - lvMinPosition.GetZ().GetFloat(),
+                           lvMaxPosition.GetW().GetFloat() - lvMinPosition.GetW().GetFloat());
+    const Vector4 lvReciprocalExtent(1.0f / lvExtent.GetX().GetFloat(),
+                                     1.0f / lvExtent.GetY().GetFloat(), 0.0f, 0.0f);
 
     for (u32 luMask = 0; luMask < KU_IM2D_NUM_MASK_PROGRAMS; ++luMask)
     {
         Im2dMask& lrMask = maMask[luMask];
         Im2dMask::Im2dMaskLayer& lrLayer = lrMask.maPixelMaskHandles[mu32NumMasks];
 
-        const Vector4 lvPositionMinMax = { lvMinPosition.x, lvMinPosition.y, lvMaxPosition.x, lvMaxPosition.y };
-        const Vector4 lvUVStartEnd     = { lrMin.mv2Tex0UV.x, lrMin.mv2Tex0UV.y, lrMax.mv2Tex0UV.x, lrMax.mv2Tex0UV.y };
+        const Vector4 lvPositionMinMax(lvMinPosition.GetX().GetFloat(), lvMinPosition.GetY().GetFloat(),
+                                       lvMaxPosition.GetX().GetFloat(), lvMaxPosition.GetY().GetFloat());
+        const Vector4 lvUVStartEnd(lrMin.mv2Tex0UV.x, lrMin.mv2Tex0UV.y,
+                                   lrMax.mv2Tex0UV.x, lrMax.mv2Tex0UV.y);
 
         lrLayer.mvPixelMaskPositionMinMax = lvPositionMinMax;
         lrLayer.mvPixelMaskUVStartEnd     = lvUVStartEnd;

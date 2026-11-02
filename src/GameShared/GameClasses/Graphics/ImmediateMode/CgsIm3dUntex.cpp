@@ -228,9 +228,9 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
         D3DDevice_BeginVertices(lpDevice, leType, luCount, sizeof(PackedVertex)));
         for (u32 luVertex = 0; luVertex < luCount; ++luVertex)
             {
-                lpOutput[luVertex].mPosition.x = lpVertices[luVertex].mv3Pos.x;
-                lpOutput[luVertex].mPosition.y = lpVertices[luVertex].mv3Pos.y;
-                lpOutput[luVertex].mPosition.z = lpVertices[luVertex].mv3Pos.z;
+                lpOutput[luVertex].mPosition.x = lpVertices[luVertex].mv3Pos.GetX().GetFloat();
+                lpOutput[luVertex].mPosition.y = lpVertices[luVertex].mv3Pos.GetY().GetFloat();
+                lpOutput[luVertex].mPosition.z = lpVertices[luVertex].mv3Pos.GetZ().GetFloat();
                 lpOutput[luVertex].mColour = lpVertices[luVertex].mv4Colour;
             }
     D3DDevice_EndVertices(lpDevice);

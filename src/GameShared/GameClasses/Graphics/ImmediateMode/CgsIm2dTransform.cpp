@@ -22,13 +22,19 @@
 namespace CgsGraphics
 {
     // ARTIST static initializer82C6C3E8..C494 constructs830112D0.
-    Im2dTransform Im2dTransform::mgDefault =
+    namespace
     {
-        { -1.0f, 1.0f, 0.0f, 0.0f },
-        { 2.0f, 0.0f, 0.0f, -2.0f },
-        { 0.0f, 0.0f, 0.0f, 0.0f },
-        { 1.0f, 1.0f, 1.0f, 1.0f }
-    };
+        Im2dTransform CreateDefaultTransform()
+        {
+            Im2dTransform lTransform;
+            lTransform.mOriginXYZ = rw::math::vpu::Vector4(2.0f, 0.0f, 0.0f, -2.0f);
+            lTransform.mRightUp = rw::math::vpu::Vector4(-1.0f, 1.0f, 0.0f, 0.0f);
+            lTransform.mColourShift = rw::math::vpu::Vector4(0.0f, 0.0f, 0.0f, 0.0f);
+            lTransform.mColourScale = rw::math::vpu::Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+            return lTransform;
+        }
+    }
+    Im2dTransform Im2dTransform::mgDefault = CreateDefaultTransform();
     Im2dTransform Im2dTransform::mgAspectCorrected;
     rw::math::fpu::Matrix33Template<float> Im2dTransform::mgAspectRatioCorrection;
 
@@ -58,12 +64,16 @@ namespace CgsGraphics
                 "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2dTransform.h", 206);
             CgsDev::Assert::EndAssert();
         }
-        Matrix33Template<float> source =
-        {
-            mgDefault.mRightUp.x, mgDefault.mRightUp.z, 0.0f,
-            mgDefault.mRightUp.y, mgDefault.mRightUp.w, 0.0f,
-            mgDefault.mOriginXYZ.x, mgDefault.mOriginXYZ.y, 1.0f
-        };
+        Matrix33Template<float> source;
+        source.mRow0X = mgDefault.mRightUp.GetX().GetFloat();
+        source.mRow0Y = mgDefault.mRightUp.GetZ().GetFloat();
+        source.mRow0Z = 0.0f;
+        source.mRow1X = mgDefault.mRightUp.GetY().GetFloat();
+        source.mRow1Y = mgDefault.mRightUp.GetW().GetFloat();
+        source.mRow1Z = 0.0f;
+        source.mRow2X = mgDefault.mOriginXYZ.GetX().GetFloat();
+        source.mRow2Y = mgDefault.mOriginXYZ.GetY().GetFloat();
+        source.mRow2Z = 1.0f;
         const Matrix33Template<float> product = rw::math::fpu::Mult(source, correction);
         if (!rw::math::fpu::IsValid(Vector3Template<float>(product.mRow0X, product.mRow0Y, product.mRow0Z))
             || !rw::math::fpu::IsValid(Vector3Template<float>(product.mRow1X, product.mRow1Y, product.mRow1Z))
@@ -76,13 +86,13 @@ namespace CgsGraphics
         }
         mgAspectCorrected.mColourShift = mgDefault.mColourShift;
         mgAspectCorrected.mColourScale = mgDefault.mColourScale;
-        mgAspectCorrected.mRightUp.x = product.mRow0X;
-        mgAspectCorrected.mRightUp.y = product.mRow0Y;
-        mgAspectCorrected.mRightUp.z = product.mRow1X;
-        mgAspectCorrected.mRightUp.w = product.mRow1Y;
-        mgAspectCorrected.mOriginXYZ.x = product.mRow2X;
-        mgAspectCorrected.mOriginXYZ.y = product.mRow2Y;
-        mgAspectCorrected.mOriginXYZ.w = 0.0f;
+        mgAspectCorrected.mRightUp.SetX(product.mRow0X);
+        mgAspectCorrected.mRightUp.SetY(product.mRow0Y);
+        mgAspectCorrected.mRightUp.SetZ(product.mRow1X);
+        mgAspectCorrected.mRightUp.SetW(product.mRow1Y);
+        mgAspectCorrected.mOriginXYZ.SetX(product.mRow2X);
+        mgAspectCorrected.mOriginXYZ.SetY(product.mRow2Y);
+        mgAspectCorrected.mOriginXYZ.SetW(0.0f);
     }
 
     void Im2dTransform::TransformByAspectRatio()
@@ -117,14 +127,14 @@ namespace CgsGraphics
         // Row1 = (m10, m11) = (y, w), Origin row2; the implicit homogeneous column is
         // (0,0,1). @0x823DB4E0..0x823DB534.
         Matrix33Template<float> lTransform;
-        lTransform.mRow0X = mRightUp.x;
-        lTransform.mRow0Y = mRightUp.z;
+        lTransform.mRow0X = mRightUp.GetX().GetFloat();
+        lTransform.mRow0Y = mRightUp.GetZ().GetFloat();
         lTransform.mRow0Z = 0.0f;
-        lTransform.mRow1X = mRightUp.y;
-        lTransform.mRow1Y = mRightUp.w;
+        lTransform.mRow1X = mRightUp.GetY().GetFloat();
+        lTransform.mRow1Y = mRightUp.GetW().GetFloat();
         lTransform.mRow1Z = 0.0f;
-        lTransform.mRow2X = mOriginXYZ.x;
-        lTransform.mRow2Y = mOriginXYZ.y;
+        lTransform.mRow2X = mOriginXYZ.GetX().GetFloat();
+        lTransform.mRow2Y = mOriginXYZ.GetY().GetFloat();
         lTransform.mRow2Z = 1.0f;
 
         // lSrc = lTransform * lMatrix (the aspect-ratio fold). @0x823DB538.
@@ -150,14 +160,14 @@ namespace CgsGraphics
         // Store the product's basis rows back into mRightUp (16B @+0x10) and its origin row
         // into mOriginXYZ (16B @+0x00), preserving mOriginXYZ.z and clearing the 4th origin
         // lane. @0x823DB5F0..0x823DB628 (stvx128 to r30=this+0x10 and r31=this).
-        mRightUp.x = lSrc.mRow0X;
-        mRightUp.y = lSrc.mRow0Y;
-        mRightUp.z = lSrc.mRow1X;
-        mRightUp.w = lSrc.mRow1Y;
+        mRightUp.SetX(lSrc.mRow0X);
+        mRightUp.SetY(lSrc.mRow0Y);
+        mRightUp.SetZ(lSrc.mRow1X);
+        mRightUp.SetW(lSrc.mRow1Y);
 
-        mOriginXYZ.x = lSrc.mRow2X;
-        mOriginXYZ.y = lSrc.mRow2Y;
+        mOriginXYZ.SetX(lSrc.mRow2X);
+        mOriginXYZ.SetY(lSrc.mRow2Y);
         // mOriginXYZ.z preserved (reloaded from [8](this) and re-stored).
-        mOriginXYZ.w = 0.0f;
+        mOriginXYZ.SetW(0.0f);
     }
 }
