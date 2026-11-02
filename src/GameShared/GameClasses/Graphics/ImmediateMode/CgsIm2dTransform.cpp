@@ -27,8 +27,8 @@ namespace CgsGraphics
         Im2dTransform CreateDefaultTransform()
         {
             Im2dTransform lTransform;
-            lTransform.mOriginXYZ = rw::math::vpu::Vector4(2.0f, 0.0f, 0.0f, -2.0f);
-            lTransform.mRightUp = rw::math::vpu::Vector4(-1.0f, 1.0f, 0.0f, 0.0f);
+            lTransform.mOriginXYZ = rw::math::vpu::Vector4(-1.0f, 1.0f, 0.0f, 0.0f);
+            lTransform.mRightUp = rw::math::vpu::Vector4(2.0f, 0.0f, 0.0f, -2.0f);
             lTransform.mColourShift = rw::math::vpu::Vector4(0.0f, 0.0f, 0.0f, 0.0f);
             lTransform.mColourScale = rw::math::vpu::Vector4(1.0f, 1.0f, 1.0f, 1.0f);
             return lTransform;
