@@ -81,34 +81,35 @@ void PositionLag::Construct()
 // ----------------------------------------------------------------------------
 void PositionLag::Update(const Parameters& lrParameters, f32 lfTimestep, rw::math::vpu::Matrix44Affine& lrTransform)
 {
-    using namespace rw::math::vpu;
-
     CGS_ASSERT(mbConstructed, "mbConstructed");
 
     // (1) Inverse of the orthonormal affine: transpose the 3x3, inverse-transform the position.
-    const Matrix44Affine lInverseTransform = InverseOfMatrixWithOrthonormal3x3(lrTransform);
+    const rw::math::vpu::Matrix44Affine lInverseTransform =
+        rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lrTransform);
 
     // (2) First frame: seed the carried world position and the inverse-transformed offset.
     if (mbFirstFrame)
     {
         mLastWorldPosition = lrTransform.Pos();
-        mLastLocalOffset   = TransformPoint(lInverseTransform, lrTransform.Pos());
+        mLastLocalOffset   = rw::math::vpu::TransformPoint(lInverseTransform, lrTransform.Pos());
         mbFirstFrame       = false;
     }
 
     // (3) Project the previous world position into the current inverted local frame, then
     //     swap the carried world position to the current Pos (asm reads the old value first).
-    const Vector3 lLocalOffset = TransformPoint(lInverseTransform, mLastWorldPosition);
+    const rw::math::vpu::Vector3 lLocalOffset =
+        rw::math::vpu::TransformPoint(lInverseTransform, mLastWorldPosition);
     mLastWorldPosition = lrTransform.Pos();
 
     // Ease the carried local offset toward the freshly projected one by (1 - mfSmoothing).
-    mLastLocalOffset = Lerp(mLastLocalOffset, lLocalOffset, 1.0f - lrParameters.mfSmoothing);
+    mLastLocalOffset = rw::math::vpu::Lerp(mLastLocalOffset, lLocalOffset, 1.0f - lrParameters.mfSmoothing);
 
     // (4) Scale by the per-axis response, rotate the eased offset back to world space, and
-    //     add it onto the transform's translation.
-    const Vector3 lResponse{ lrParameters.mfXResponse, lrParameters.mfYResponse, lrParameters.mfZResponse, 0.0f };
-    const Vector3 lScaledOffset = Mult(mLastLocalOffset, lResponse);
-    lrTransform.Pos() = lrTransform.Pos() + TransformVector(lrTransform, lScaledOffset);
+    //     add it onto the transform's translation. The float3 constructor writes W=0.
+    const rw::math::vpu::Vector3 lResponse(
+        lrParameters.mfXResponse, lrParameters.mfYResponse, lrParameters.mfZResponse);
+    const rw::math::vpu::Vector3 lScaledOffset = rw::math::vpu::Mult(mLastLocalOffset, lResponse);
+    lrTransform.Pos() = lrTransform.Pos() + rw::math::vpu::TransformVector(lrTransform, lScaledOffset);
 
     (void)lfTimestep;
 }

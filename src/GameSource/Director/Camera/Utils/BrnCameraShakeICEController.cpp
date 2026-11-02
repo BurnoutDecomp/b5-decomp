@@ -33,7 +33,7 @@
 #include "GameSource/Director/BrnDirectorResourceManager.h"       // GetShakeAnimGroup() (+0x518)
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"     // Attrib::Gen::shotgroup::Num_ShotList
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"             // Random::Construct / ::RandomFloat
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"        // [diag] CgsDev::Log::gpDebugPrint
+
 #include "rw/math/vpu/types.h"                                    // Matrix44Affine (complete)
 #include "rw/math/fpu/scalar_operation.h"                         // Clamp -- the console's fsel pair
 
@@ -194,11 +194,10 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     //   does, and thrown away when a gate trips -- which is precisely why publishing nothing
     //   on a gated frame is faithful rather than a stand-in.
     Vector3 lTargetCameraAnglesRandom;
-    lTargetCameraAnglesRandom.x =
-        mfBumpValue * 0.01f * (1.0f / kfShakeFocalDistance) * lfShakeAmplitude;
-    lTargetCameraAnglesRandom.y = 0.0f;
-    lTargetCameraAnglesRandom.z = 0.0f;
-    lTargetCameraAnglesRandom.w = 0.0f;
+    lTargetCameraAnglesRandom.SetX(
+        mfBumpValue * 0.01f * (1.0f / kfShakeFocalDistance) * lfShakeAmplitude);
+    lTargetCameraAnglesRandom.SetY(0.0f);
+    lTargetCameraAnglesRandom.SetZ(0.0f);
 
     // ---- GATE 1 @0x8223F014 / PS3 0x68A88 -----------------------------------
     // `fcmpu cr6, f30, flt_82001CC0` then `beq -> epilogue`. An exact float compare against
@@ -236,36 +235,81 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     const f32 frame = lfShakeFrequency * mfShotRunningTime * 30.0f;
     const s32 wholeFrame = static_cast<s32>(frame);
     const s32 count = mShakeTake.GetNumKeys(11);
-    auto key = [count](s32 value) -> u16 {
-        if (count <= 0) return 0;
-        while (value < 0) value += count;
-        return static_cast<u16>(value % count);
-    };
-    const u16 current = key(wholeFrame), next = key(wholeFrame + 1);
+
+    s32 currentFrame = wholeFrame;
+    u16 current = 0;
+    if (count > 0)
+    {
+        while (currentFrame < 0) currentFrame += count;
+        current = static_cast<u16>(currentFrame % count);
+    }
+
+    s32 nextFrame = wholeFrame + 1;
+    u16 next = 0;
+    if (count > 0)
+    {
+        while (nextFrame < 0) nextFrame += count;
+        next = static_cast<u16>(nextFrame % count);
+    }
+
     const f32 t = frame - static_cast<f32>(wholeFrame);
     using namespace rw::math::vpu;
-    auto sampleRotation = [&](u16 k) {
-        Vector3 v = {mShakeTake.GetValueFloat(22,k), mShakeTake.GetValueFloat(23,k), mShakeTake.GetValueFloat(24,k),0};
-        v = v * (lfShakeAmplitude / kfShakeFocalDistance);
-        const f32 remainder = 1.0f - Magnitude(v);
-        { const Quaternion lResult = {v.x,v.y,v.z,remainder == 0.0f ? 0.0f : std::sqrt(remainder)}; return lResult; }
-    };
-    Quaternion a = sampleRotation(current), b = sampleRotation(next);
+
+    // The two C++11 closures are expanded in their original evaluation order: key 22, 23, 24;
+    // native float3 construction (W=0); scalar broadcast multiply; then xyz magnitude.
+    const f32 lfCurrentX = mShakeTake.GetValueFloat(22, current);
+    const f32 lfCurrentY = mShakeTake.GetValueFloat(23, current);
+    const f32 lfCurrentZ = mShakeTake.GetValueFloat(24, current);
+    Vector3 lvCurrentRotation(lfCurrentX, lfCurrentY, lfCurrentZ);
+    lvCurrentRotation = lvCurrentRotation * (lfShakeAmplitude / kfShakeFocalDistance);
+    const f32 lfCurrentRemainder = 1.0f - Magnitude(lvCurrentRotation);
+    Quaternion a = {lvCurrentRotation.GetX().GetFloat(),
+                    lvCurrentRotation.GetY().GetFloat(),
+                    lvCurrentRotation.GetZ().GetFloat(),
+                    lfCurrentRemainder == 0.0f ? 0.0f : std::sqrt(lfCurrentRemainder)};
+
+    const f32 lfNextX = mShakeTake.GetValueFloat(22, next);
+    const f32 lfNextY = mShakeTake.GetValueFloat(23, next);
+    const f32 lfNextZ = mShakeTake.GetValueFloat(24, next);
+    Vector3 lvNextRotation(lfNextX, lfNextY, lfNextZ);
+    lvNextRotation = lvNextRotation * (lfShakeAmplitude / kfShakeFocalDistance);
+    const f32 lfNextRemainder = 1.0f - Magnitude(lvNextRotation);
+    Quaternion b = {lvNextRotation.GetX().GetFloat(),
+                    lvNextRotation.GetY().GetFloat(),
+                    lvNextRotation.GetZ().GetFloat(),
+                    lfNextRemainder == 0.0f ? 0.0f : std::sqrt(lfNextRemainder)};
     f32 dot = a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
-    if (dot < 0.0f) { a = {-a.x,-a.y,-a.z,-a.w}; dot = -dot; }
+    if (dot < 0.0f)
+    {
+        a.x = -a.x;
+        a.y = -a.y;
+        a.z = -a.z;
+        a.w = -a.w;
+        dot = -dot;
+    }
     Quaternion rotation;
     if (dot > std::cos(0.087266468f))
     {
-        rotation = {a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t,a.w+(b.w-a.w)*t};
-        const f32 inverseLength = 1.0f / std::sqrt(rotation.x*rotation.x+rotation.y*rotation.y+rotation.z*rotation.z+rotation.w*rotation.w);
-        rotation = {rotation.x*inverseLength,rotation.y*inverseLength,rotation.z*inverseLength,rotation.w*inverseLength};
+        rotation.x = a.x + (b.x - a.x) * t;
+        rotation.y = a.y + (b.y - a.y) * t;
+        rotation.z = a.z + (b.z - a.z) * t;
+        rotation.w = a.w + (b.w - a.w) * t;
+        const f32 inverseLength = 1.0f / std::sqrt(rotation.x * rotation.x + rotation.y * rotation.y
+                                                  + rotation.z * rotation.z + rotation.w * rotation.w);
+        rotation.x = rotation.x * inverseLength;
+        rotation.y = rotation.y * inverseLength;
+        rotation.z = rotation.z * inverseLength;
+        rotation.w = rotation.w * inverseLength;
     }
     else
     {
         const f32 angle = std::acos(dot);
-        const f32 from = std::sin((1.0f-t)*angle) / std::sin(angle);
-        const f32 to = std::sin(t*angle) / std::sin(angle);
-        rotation = {a.x*from+b.x*to,a.y*from+b.y*to,a.z*from+b.z*to,a.w*from+b.w*to};
+        const f32 from = std::sin((1.0f - t) * angle) / std::sin(angle);
+        const f32 to = std::sin(t * angle) / std::sin(angle);
+        rotation.x = a.x * from + b.x * to;
+        rotation.y = a.y * from + b.y * to;
+        rotation.z = a.z * from + b.z * to;
+        rotation.w = a.w * from + b.w * to;
     }
     mMatrix = Matrix44AffineFromQuaternion(rotation);
     const Vector3 angles = EulerAnglesZXYFromMatrix44Affine(mMatrix, 0, 0.01f) + lTargetCameraAnglesRandom;
@@ -275,13 +319,8 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     mShakeTake.GetValueFloat(27,current);
     mShakeTake.GetValueFloat(26,current);
     mShakeTake.GetValueFloat(25,current);
-    mMatrix.Pos().y -= std::tan(angles.x) * kfShakeFocalDistance;
+    mMatrix.Pos().Y() -= std::tan(angles.GetX().GetFloat()) * kfShakeFocalDistance;
     mu8ActiveShake = lu8ShakeType;
-    static u32 lines = 0;
-    if (trace && lfShakeAmplitude > 0.1f && lines++ < 32 && CgsDev::Log::gpDebugPrint)
-        *CgsDev::Log::gpDebugPrint << "[camera-rig] boost-shake type=" << static_cast<u32>(lu8ShakeType)
-            << " keys=" << count << " frame=" << frame << " angles=" << angles.x << "," << angles.y << "," << angles.z
-            << " lift=" << mMatrix.Pos().y << "\n";
 }
 
 // ============================================================================

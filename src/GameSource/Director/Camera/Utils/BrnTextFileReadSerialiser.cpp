@@ -128,12 +128,10 @@ void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, Vector3& lrVecto
 {
     if (mpFile != 0)
     {
-        f32& lrLane = (INDEX == 0) ? lrVector.x : (INDEX == 1) ? lrVector.y : lrVector.z;
-
         char lacBuffer[KI_CHARBUFFERLENGTH];
-        f32  lfTemp = lrLane;
+        f32 lfTemp = lrVector.GetComponent(INDEX).GetFloat();
         std::fscanf(mpFile, "%s : %f\n", lacBuffer, &lfTemp);
-        lrLane = lfTemp;
+        lrVector.SetComponent(INDEX, lfTemp);
     }
 }
 
