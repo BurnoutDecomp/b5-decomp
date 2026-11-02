@@ -74,18 +74,18 @@ void CameraRig::Construct(const Params& lrData, const AABBox& lrAABB, bool lbRev
 
     mfFOV = lrData.mfFOV;                                                               // stfs f12, 0x40(r3)
 
-    const Vector3 lSize = lrAABB.mMax - lrAABB.mMin;                                    // :33
+    const rw::math::vpu::Vector3 lSize = lrAABB.mMax - lrAABB.mMin;                                    // :33
 
     // :38 -- the look-at point on the car: the preset's offset, in units of the car's size, from the box centre
     // (the centre one fused vmaddfp, the offset a vmulfp128, their sum a vaddfp128).
-    Matrix44Affine lOffsetFromCar;
+    rw::math::vpu::Matrix44Affine lOffsetFromCar;
     lOffsetFromCar.SetIdentity();
     lOffsetFromCar.Pos() = Mult(lrData.mOffsetFromTarget, lSize)
                          + ConsoleVpu::MultiplyAdd(lSize, KF_HALF, lrAABB.mMin);
 
     // :39 -- yaw about Y first, then pitch about X, then roll about Z (row vectors: Rz * Rx * Ry). Each angle is one
     // fmuls to radians.
-    Matrix44Affine lRotation;
+    rw::math::vpu::Matrix44Affine lRotation;
     lRotation = ConsoleVpu::Mult(
         ConsoleVpu::Matrix44AffineFromAxisRotationAngle(GetVector3_ZAxis(), lrData.mfRoll * KF_DEGREES_TO_RADIANS),
         ConsoleVpu::Mult(
@@ -93,7 +93,7 @@ void CameraRig::Construct(const Params& lrData, const AABBox& lrAABB, bool lbRev
             ConsoleVpu::Matrix44AffineFromAxisRotationAngle(GetVector3_YAxis(), lrData.mfYaw * KF_DEGREES_TO_RADIANS)));
 
     // :40 -- where the camera sits relative to the point it rotates about.
-    Matrix44Affine lOffsetFromRotationCentre;
+    rw::math::vpu::Matrix44Affine lOffsetFromRotationCentre;
     lOffsetFromRotationCentre.SetIdentity();
     lOffsetFromRotationCentre.Pos() = lrData.mOffsetFromRotationCentre;
 
@@ -106,11 +106,11 @@ void CameraRig::Construct(const Params& lrData, const AABBox& lrAABB, bool lbRev
     if (lbReverse)
     {
         // Mirror in X, one lane at a time in the console's order.
-        mRigTransform.Right().y = mRigTransform.Right().y * KF_MIRROR;
-        mRigTransform.Right().z = mRigTransform.Right().z * KF_MIRROR;
-        mRigTransform.Up().x    = mRigTransform.Up().x * KF_MIRROR;
-        mRigTransform.At().x    = mRigTransform.At().x * KF_MIRROR;
-        mRigTransform.Pos().x   = mRigTransform.Pos().x * KF_MIRROR;
+        mRigTransform.Right().mV.v[1] = mRigTransform.Right().mV.v[1] * KF_MIRROR;
+        mRigTransform.Right().mV.v[2] = mRigTransform.Right().mV.v[2] * KF_MIRROR;
+        mRigTransform.Up().mV.v[0]    = mRigTransform.Up().mV.v[0] * KF_MIRROR;
+        mRigTransform.At().mV.v[0]    = mRigTransform.At().mV.v[0] * KF_MIRROR;
+        mRigTransform.Pos().mV.v[0]   = mRigTransform.Pos().mV.v[0] * KF_MIRROR;
     }
 }
 

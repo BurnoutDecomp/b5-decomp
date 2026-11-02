@@ -36,7 +36,7 @@ namespace BrnDirector
     // Rung step (the X360 walks luRung as a u8 byte counter += 10 each iteration, and
     // the VMX lfParam accumulator += a broadcast 10.0f = unk_82FAAB20).
     static const u8       KU_RUNG_DISTANCE  = 10;
-    static const VecFloat KVF_RUNG_DISTANCE = { 10.0f, 10.0f, 10.0f, 10.0f };
+    static const VecFloat KVF_RUNG_DISTANCE(10.0f);
 
     // Drop the returned "safe" point this far below the lane along the lane's up vector
     // (X360 flt_82009A74 == 2.25, broadcast then vmulfp/vsubfp in GetSafePositionNearest).
@@ -304,7 +304,7 @@ namespace BrnDirector
                 {
                     // The X360 broadcasts (float)luRung into the parameter lane each iteration.
                     const f32      lfParam = static_cast<f32>(luRung);
-                    const VecFloat lParam  = { lfParam, lfParam, lfParam, lfParam };
+                    const VecFloat lParam(lfParam);
 
                     Vector3 lProspectivePosition;
                     lpSection->CalcPositionAtParameter(lpHull->mpaRungs, lParam, luRung,
@@ -357,7 +357,7 @@ namespace BrnDirector
         const BrnTraffic::Hull* lpHull =
             mpTrafficData.operator->()->GetHull(lNearest.muHullIndex);
 
-        VecFloat lNearestDistance = { 100000.0f, 100000.0f, 100000.0f, 100000.0f };
+        VecFloat lNearestDistance(100000.0f);
 
         if (lpHull->muNumSections != 0)
         {
@@ -366,7 +366,7 @@ namespace BrnDirector
             {
                 const BrnTraffic::Section* lpSection = lpHull->GetSection(luSection);
 
-                VecFloat lRung  = { 0.0f, 0.0f, 0.0f, 0.0f };
+                VecFloat lRung(0.0f);
                 u8       luRung = 0;
                 while (luRung < lpSection->GetNumSegments())
                 {
@@ -377,12 +377,12 @@ namespace BrnDirector
                     const f32 lfSqDistance =
                         rw::math::vpu::MagnitudeSquared(lPosition - lProspectivePosition);
 
-                    if (lNearestDistance.x > lfSqDistance)
+                    if (lNearestDistance.mV.v[0] > lfSqDistance)
                     {
                         if (rw::math::vpu::Dot(lDisplacement,
                                                lProspectivePosition - lPosition) > 0.0f)
                         {
-                            lNearestDistance.x           = lfSqDistance;
+                            lNearestDistance.mV.v[0]           = lfSqDistance;
                             lNearest.mPosition           = lProspectivePosition;
                             lNearest.muSection           = luSection;
                             lNearest.muRung              = luRung;
@@ -391,10 +391,7 @@ namespace BrnDirector
                         }
                     }
 
-                    lRung.x += KVF_RUNG_DISTANCE.x;
-                    lRung.y += KVF_RUNG_DISTANCE.y;
-                    lRung.z += KVF_RUNG_DISTANCE.z;
-                    lRung.w += KVF_RUNG_DISTANCE.w;
+                    lRung.mV = __vaddfp(lRung.mV, KVF_RUNG_DISTANCE.mV);
                     luRung = static_cast<u8>(luRung + KU_RUNG_DISTANCE);
                 }
 
@@ -406,7 +403,7 @@ namespace BrnDirector
             while (luSection < lpHull->muNumSections);
         }
 
-        lNearest.mfSquaredDistance = lNearestDistance.x;
+        lNearest.mfSquaredDistance = lNearestDistance.mV.v[0];
         return lNearest;
     }
 
@@ -539,11 +536,10 @@ namespace BrnDirector
         {
             const BrnTraffic::Section* lpSection = lpHull->GetSection(lNearest.muSection);
 
-            Vector3 lUp = { 0.0f, 0.0f, 0.0f, 0.0f };   // v55 (up) zeroed
+            Vector3 lUp(0.0f, 0.0f, 0.0f);   // v55 (up) zeroed
             Vector3 lDirection;
 
-            const VecFloat lParam0 = { lNearest.mfParamAlongSection, lNearest.mfParamAlongSection,
-                                       lNearest.mfParamAlongSection, lNearest.mfParamAlongSection };
+            const VecFloat lParam0(lNearest.mfParamAlongSection);
             lpSection->CalcDirectionAtParameter(lpHull->mpaRungs, lParam0, lNearest.muRung,
                                                 lDirection);
 
@@ -555,8 +551,7 @@ namespace BrnDirector
                     lNearest.muRung              = static_cast<u8>(lNearest.muRung + 1);
                     lNearest.mfParamAlongSection = static_cast<f32>(lNearest.muRung);
 
-                    const VecFloat lParam = { lNearest.mfParamAlongSection, lNearest.mfParamAlongSection,
-                                              lNearest.mfParamAlongSection, lNearest.mfParamAlongSection };
+                    const VecFloat lParam(lNearest.mfParamAlongSection);
                     lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, lNearest.muRung,
                                                         lNearest.mPosition, lDirection, lUp);
 
@@ -572,8 +567,7 @@ namespace BrnDirector
                     lNearest.muRung              = static_cast<u8>(lNearest.muRung - 1);
                     lNearest.mfParamAlongSection = static_cast<f32>(lNearest.muRung);
 
-                    const VecFloat lParam = { lNearest.mfParamAlongSection, lNearest.mfParamAlongSection,
-                                              lNearest.mfParamAlongSection, lNearest.mfParamAlongSection };
+                    const VecFloat lParam(lNearest.mfParamAlongSection);
                     lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, lNearest.muRung,
                                                         lNearest.mPosition, lDirection, lUp);
 
@@ -586,8 +580,7 @@ namespace BrnDirector
                          &lNearest.mfParamAlongSection);
 
             const BrnTraffic::Section* lpFinalSection = lpHull->GetSection(lNearest.muSection);
-            const VecFloat lParamF = { lNearest.mfParamAlongSection, lNearest.mfParamAlongSection,
-                                       lNearest.mfParamAlongSection, lNearest.mfParamAlongSection };
+            const VecFloat lParamF(lNearest.mfParamAlongSection);
             lpFinalSection->CalcTransformAtParameter(lpHull->mpaRungs, lParamF, lNearest.muRung,
                                                      lNearest.mPosition, lDirection, lUp);
 
@@ -625,11 +618,10 @@ namespace BrnDirector
         {
             const BrnTraffic::Section* lpSection = lpHull->GetSection(lNearest.muSection);
 
-            Vector3 lUp = { 0.0f, 0.0f, 0.0f, 0.0f };
+            Vector3 lUp(0.0f, 0.0f, 0.0f);
             Vector3 lDirection;
 
-            const VecFloat lParam0 = { lNearest.mfParamAlongSection, lNearest.mfParamAlongSection,
-                                       lNearest.mfParamAlongSection, lNearest.mfParamAlongSection };
+            const VecFloat lParam0(lNearest.mfParamAlongSection);
             lpSection->CalcDirectionAtParameter(lpHull->mpaRungs, lParam0, lNearest.muRung,
                                                 lDirection);
 
@@ -642,8 +634,7 @@ namespace BrnDirector
                     lNearest.muRung              = static_cast<u8>(lNearest.muRung + 1);
                     lNearest.mfParamAlongSection = static_cast<f32>(lNearest.muRung);
 
-                    const VecFloat lParam = { lNearest.mfParamAlongSection, lNearest.mfParamAlongSection,
-                                              lNearest.mfParamAlongSection, lNearest.mfParamAlongSection };
+                    const VecFloat lParam(lNearest.mfParamAlongSection);
                     lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, lNearest.muRung,
                                                         lNearest.mPosition, lDirection, lUp);
 
@@ -659,8 +650,7 @@ namespace BrnDirector
                     lNearest.muRung              = static_cast<u8>(lNearest.muRung - 1);
                     lNearest.mfParamAlongSection = static_cast<f32>(lNearest.muRung);
 
-                    const VecFloat lParam = { lNearest.mfParamAlongSection, lNearest.mfParamAlongSection,
-                                              lNearest.mfParamAlongSection, lNearest.mfParamAlongSection };
+                    const VecFloat lParam(lNearest.mfParamAlongSection);
                     lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, lNearest.muRung,
                                                         lNearest.mPosition, lDirection, lUp);
 
@@ -674,8 +664,7 @@ namespace BrnDirector
                          &lNearest.mfParamAlongSection);
 
             const BrnTraffic::Section* lpFinalSection = lpHull->GetSection(lNearest.muSection);
-            const VecFloat lParamF = { lNearest.mfParamAlongSection, lNearest.mfParamAlongSection,
-                                       lNearest.mfParamAlongSection, lNearest.mfParamAlongSection };
+            const VecFloat lParamF(lNearest.mfParamAlongSection);
             lpFinalSection->CalcTransformAtParameter(lpHull->mpaRungs, lParamF, lNearest.muRung,
                                                      lNearest.mPosition, lDirection, lUp);
 
