@@ -1,28 +1,13 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
-#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"  // CgsResource::GetLoadBase64
+#include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"     // Renderable / ObjectScopeTextureInfo
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h" // RenderableMesh
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"      // CgsGraphics::MaterialAssembly
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsResource::RwRenderableResourceType::GetTypeID        @ 0x828A7D58  (executed)
-//   CgsResource::RwRenderableResourceType::FixDown          @ 0x828A7D60
-//   CgsResource::RwRenderableResourceType::GetImportPointer @ 0x828A7DA0
-//   CgsResource::RwRenderableResourceType::DebugValidate    @ 0x828A7DE0
-//
-// FixDown and GetImportPointer are "not at runtime" stubs (the X360 unconditionally
-// fires its assert). DebugValidate walks the serialised renderable via the NAMED members
-// of Renderable / RenderableMesh / CgsGraphics::MaterialAssembly.
-// SEAM (platform-4 widened blob): the converted x64 data is the natural widening of those
-// committed layouts -- mesh count u16 @+0x12 (unchanged from X360), mesh pointer table
-// @+0x18 with u64 entries (X360: u32 table @+0x14, lwz 0x14), mesh material assembly u64
-// @+0x20 (X360: u32 @+32). Field roles from the ARTIST asm: +0x12 mesh count (lhz, 16-bit),
-// +0x14 mesh-pointer-array base (lwz), mesh+32 material assembly, assembly+8 non-empty
-// count (lbz byte = mu8NumMaterials), assembly[0] technique-table pointer (mappMaterials).
-// NB: the X360 offsets are RAW BYTES — the Hex-Rays pseudocode renders them as
-// *(a2+18)/*(a2+20) in int* arithmetic (=72/80 bytes), but the ARTIST asm is lhz 0x12 /
-// lwz 0x14 = byte 18 / byte 20. Trust the asm.
+// ARTIST renderable metadata and graph relocation. Native meshes use four-byte
+// pointer slots; FixUp forwards the original resource lanes to the mesh helper.
 
 namespace CgsResource
 {
@@ -52,8 +37,7 @@ namespace CgsResource
 
     namespace
     {
-        // Relocate one serialised pointer slot: the converted platform-4 blob stores a
-        // resource-relative OFFSET in a host-width slot, so the load base is simply added.
+        // Add the native main-memory resource base to one serialized pointer.
         template <typename T>
         inline T* RebaseSlot(T* lpSlot, uintptr_t luBase)
         {
@@ -61,31 +45,13 @@ namespace CgsResource
         }
     }
 
-    // @0x828A9498 -- override. The serialise-IN relocation for a whole renderable graph.
-    //
-    // X360 store-for-store (asm, byte offsets: version lhz 0x10, mesh count lhz 0x12, mesh table
-    // lwz 0x14, object-scope texture info lwz 0x18, flags lhz 0x1C):
-    //   1) two version tripwires against 11
-    //   2) *(this+0x14) += delta                                   (the mesh pointer table)
-    //   3) if (*(this+0x18)) { *(this+0x18) += delta; then its +4/+8/+0xC slots += delta;
-    //      then for i < *(u16*)(osti+0): ((u32*)osti->+0xC)[i] += delta }   (the name pool)
-    //   4) for i < numMeshes: table[i] += delta; FixUpRenderableMesh(this, table[i], a3)
-    //   5) flags |= 8 (only when clear)
-    //
-    // SEAM (platform-4 widened data): the pointer slots are 8 bytes wide in the converted blob
-    // (tools/assets/bundles/renderable_transcode.py emits the natural MSVC x64 relayout:
-    // Renderable 0x30 with mppMeshes @+0x18 / mpObjectScopeTextureInfo @+0x20 / flags @+0x28,
-    // ObjectScopeTextureInfo 0x20 with the three tables @+0x08/+0x10/+0x18), so the walk is by
-    // NAME over the committed Renderable / RenderableMesh layouts and the delta is the full-width
-    // load base. The graph is otherwise identical store-for-store to the console's.
+    // ARTIST 828A9498: relocate the mesh table and object-scope texture graph,
+    // then forward the same five-lane resource to each mesh fixup.
     void RwRenderableResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
         Renderable* lpRenderable = static_cast<Renderable*>(lpResource);
 
-        RwRenderableFixUpData lFixUp;
-        lFixUp.muPointerBase  = CgsResource::GetLoadBase64(lrResource);               // *a3
-        lFixUp.muBufferOffset = static_cast<u32>(reinterpret_cast<uintptr_t>(
-                                    lrResource.m_baseResources[2]));                  // a3[2]
+        const uintptr_t luPointerBase = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
 
         // CgsRwRenderableResourceType.cpp:490 / :492 -- the two halves of the version tripwire.
         CGS_ASSERT(lpRenderable->mu16VersionNumber >= KU_RENDERABLE_DATA_VERSION,
@@ -94,31 +60,31 @@ namespace CgsResource
                    "Error loading renderable. Code is out of date. Data version : ");
 
         // 2) the mesh pointer table (X360 `lwz r10,0x14` / `add` / `stw` -- unconditional).
-        lpRenderable->mppMeshes = RebaseSlot(lpRenderable->mppMeshes, lFixUp.muPointerBase);
+        lpRenderable->mppMeshes = RebaseSlot(lpRenderable->mppMeshes, luPointerBase);
 
         // 3) the object-scope texture-info block and everything it points at.
         Renderable::ObjectScopeTextureInfo* lpTextureInfo = lpRenderable->mpObjectScopeTextureInfo;
         if (lpTextureInfo != 0)
         {
-            lpTextureInfo = RebaseSlot(lpTextureInfo, lFixUp.muPointerBase);
+            lpTextureInfo = RebaseSlot(lpTextureInfo, luPointerBase);
             lpRenderable->mpObjectScopeTextureInfo = lpTextureInfo;
 
             // The three interior tables (X360 +4 / +8 / +0xC, read into temporaries before the
             // stores). The purpose map and the texture-pointer array are relocated even when the
             // count is zero, exactly as the console does.
             lpTextureInfo->mpi16PurposeToIndexMapping =
-                RebaseSlot(lpTextureInfo->mpi16PurposeToIndexMapping, lFixUp.muPointerBase);
+                RebaseSlot(lpTextureInfo->mpi16PurposeToIndexMapping, luPointerBase);
             lpTextureInfo->mppTextures =
-                RebaseSlot(lpTextureInfo->mppTextures, lFixUp.muPointerBase);
+                RebaseSlot(lpTextureInfo->mppTextures, luPointerBase);
             lpTextureInfo->mppcTextureNames =
-                RebaseSlot(lpTextureInfo->mppcTextureNames, lFixUp.muPointerBase);
+                RebaseSlot(lpTextureInfo->mppcTextureNames, luPointerBase);
 
             // ...then each texture-name string pointer in the name table.
             const u32 luNumTextures = lpTextureInfo->mu16NumTextures;
             for (u32 luName = 0; luName < luNumTextures; ++luName)
             {
                 lpTextureInfo->mppcTextureNames[luName] =
-                    RebaseSlot(lpTextureInfo->mppcTextureNames[luName], lFixUp.muPointerBase);
+                    RebaseSlot(lpTextureInfo->mppcTextureNames[luName], luPointerBase);
             }
         }
 
@@ -127,9 +93,9 @@ namespace CgsResource
         for (u32 luMesh = 0; luMesh < luNumMeshes; ++luMesh)
         {
             RenderableMesh* lpMesh =
-                RebaseSlot(lpRenderable->mppMeshes[luMesh], lFixUp.muPointerBase);
+                RebaseSlot(lpRenderable->mppMeshes[luMesh], luPointerBase);
             lpRenderable->mppMeshes[luMesh] = lpMesh;
-            FixUpRenderableMesh(reinterpret_cast<RwRenderableMesh*>(lpMesh), &lFixUp);
+            FixUpRenderableMesh(lpMesh, lrResource);
         }
 
         // 5) mark the graph relocated.
@@ -155,10 +121,6 @@ namespace CgsResource
 
     bool RwRenderableResourceType::DebugValidate(const void* lpResource) const
     {
-        // SEAM (platform-4 widened-blob walk): named-struct access replaces the X360
-        // 32-bit-slot byte-offset pokes; the converted data matches the committed
-        // Renderable / RenderableMesh / MaterialAssembly x64 layouts (count u16 @+0x12
-        // unchanged, mesh table u64 entries @+0x18, assembly u64 @+0x20).
         const Renderable* lpRenderable = static_cast<const Renderable*>(lpResource);
 
         // FLAG: ARTIST `lhz r11,0x12(r29)` — byte offset 18, 16-bit zero-extended count.
@@ -173,7 +135,7 @@ namespace CgsResource
         for (u32 luI = 0; luI < luNumMeshes; ++luI)                          // v2 < *(a2+18); v3 += 4
         {
             const RenderableMesh* lpMesh = lppMeshes[luI];                   // *(*(a2+20)+v3)
-            const CgsGraphics::MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly; // X360 *(mesh+32); widened +0x20 u64
+            const CgsGraphics::MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly; // ARTIST lwz 0x20
             if (lpAssembly)
             {
                 // FLAG: ARTIST `lbz r11,8(r31)` — byte load at X360 assembly+8 = the
@@ -185,7 +147,7 @@ namespace CgsResource
                 }
                 // X360 assembly[0] = the technique-table pointer (mappMaterials); its first
                 // entry must be a non-NULL MaterialTechnique*.
-                if (lpAssembly->mappMaterials[0] == 0)                 // if (!**v4)
+                if (lpAssembly->mappMaterials[0u] == 0)                 // if (!**v4)
                 {
                     // X360 breaks out of the loop here, then fires the NULL-material
                     // assert; flattened to the in-loop assert + return (same result).
@@ -278,13 +240,13 @@ namespace CgsResource
             //    build a five-entry descriptor inline: slot0 = 36-byte header {36,4},
             //    slot2 = the 16-byte-aligned index bytes {aligned,4}, the rest {0,1}.
             //    bytesPerIndex = 2 for 16-bit indices, 4 otherwise.
-            renderengine::IndexBufferHeader* lpIndexBuffer =
-                reinterpret_cast<renderengine::IndexBufferHeader*>(lpMesh->maBuffers[0]);
-            renderengine::IndexBufferParamsOut lIndexParams = { 0u, 0u, 0u };
-            renderengine::IndexBuffer::GetParameters(lpIndexBuffer, &lIndexParams);
+            renderengine::IndexBuffer* lpIndexBuffer =
+                reinterpret_cast<renderengine::IndexBuffer*>(lpMesh->maBuffers[0]);
+            renderengine::IndexBuffer::Parameters lIndexParams = { 0u, 0u, 0u };
+            lpIndexBuffer->GetParameters(lIndexParams);
 
-            const u32 luBytesPerIndex = (lIndexParams.muBits == 16u) ? 2u : 4u;
-            const u32 luIndexBytes    = (luBytesPerIndex * lIndexParams.muCount + 15u) & ~static_cast<u32>(15);
+            const u32 luBytesPerIndex = (lIndexParams.depth == 16u) ? 2u : 4u;
+            const u32 luIndexBytes    = (luBytesPerIndex * lIndexParams.numIndices + 15u) & ~static_cast<u32>(15);
 
             CgsResource::ResourceDescriptor lIndexDescriptor;
             lIndexDescriptor.m_baseResourceDescriptors[0].m_size      = 36u;   // index-buffer header
@@ -303,18 +265,15 @@ namespace CgsResource
             //    vertex buffer for its descriptor, fold it in.
             for (u32 luVb = 0u; luVb < lpMesh->mu8NumVertexBuffers; ++luVb)
             {
-                renderengine::VertexBufferHeader* lpVertexBuffer =
-                    reinterpret_cast<renderengine::VertexBufferHeader*>(lpMesh->maBuffers[1u + luVb]);
+                renderengine::VertexBuffer* lpVertexBuffer =
+                    reinterpret_cast<renderengine::VertexBuffer*>(lpMesh->maBuffers[1u + luVb]);
 
-                // GetParameters writes { format, size } -- the same two dwords, in the same order,
-                // that VertexBuffer::Parameters names muFormat/muLength, so the X360's "hand the
-                // scratch pair straight back in as the parameters block" is spelled with the type.
+                // ARTIST 82B61130 writes the native {type, bufferSize} parameter pair.
                 renderengine::VertexBuffer::Parameters lVbParams = { 0u, 0u };
-                renderengine::VertexBuffer::GetParameters(lpVertexBuffer,
-                                                          reinterpret_cast<u32*>(&lVbParams));
+                lpVertexBuffer->GetParameters(lVbParams);
 
-                CgsResource::ResourceDescriptor lVbDescriptor;
-                renderengine::VertexBuffer::GetResourceDescriptor(&lVbDescriptor, &lVbParams);
+                CgsResource::ResourceDescriptor lVbDescriptor =
+                    renderengine::VertexBuffer::GetResourceDescriptor(lVbParams);
                 lTotal += lVbDescriptor;
             }
         }
