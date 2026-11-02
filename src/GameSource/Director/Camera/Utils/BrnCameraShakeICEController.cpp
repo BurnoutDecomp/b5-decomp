@@ -193,11 +193,9 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     //   EulerAnglesZXYFromMatrix44Affine. Computed before the gates, exactly as the console
     //   does, and thrown away when a gate trips -- which is precisely why publishing nothing
     //   on a gated frame is faithful rather than a stand-in.
-    Vector3 lTargetCameraAnglesRandom;
-    lTargetCameraAnglesRandom.SetX(
-        mfBumpValue * 0.01f * (1.0f / kfShakeFocalDistance) * lfShakeAmplitude);
-    lTargetCameraAnglesRandom.SetY(0.0f);
-    lTargetCameraAnglesRandom.SetZ(0.0f);
+    Vector3 lTargetCameraAnglesRandom(
+        mfBumpValue * 0.01f * (1.0f / kfShakeFocalDistance) * lfShakeAmplitude,
+        0.0f, 0.0f);
 
     // ---- GATE 1 @0x8223F014 / PS3 0x68A88 -----------------------------------
     // `fcmpu cr6, f30, flt_82001CC0` then `beq -> epilogue`. An exact float compare against
