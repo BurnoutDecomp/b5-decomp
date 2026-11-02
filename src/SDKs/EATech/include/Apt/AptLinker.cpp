@@ -1299,13 +1299,13 @@ void AptLinker::PendingFileVector::PushBack(const AptFilePtr& rFile)
         AptFilePtr* const pNew =
             static_cast<AptFilePtr*>(gpAptSharedPtrPool->Allocate(sizeof(AptFilePtr) * nNewCap));
 
-        // Relocate the existing elements (operator= carries each counted ref to the new
-        // block; the source slots are then cleared so the old storage owns nothing).
+        // Copy each counted reference, then release the old slot's ownership.
         for (int32_t i = 0; i < mnSize; ++i)
         {
             pNew[i].pData = nullptr;
-            pNew[i] = mpData[i];        // incref new == old, then nothing to decref (new slot was null)
-            mpData[i].pData = nullptr;  // old slot relinquishes (the live ref now lives in pNew)
+            pNew[i] = mpData[i];
+            AptSharedPtr<AptFile>::Dispose(mpData[i].pData);
+            mpData[i].pData = nullptr;
         }
         // Initialise the unused tail of the new block.
         for (int32_t i = mnSize; i < nNewCap; ++i)
@@ -1324,17 +1324,8 @@ void AptLinker::PendingFileVector::PushBack(const AptFilePtr& rFile)
     ++mnSize;
 }
 
-// ~PendingFileVector -- Strin @0x82AFFB08 (the BasicString<StringAsVectorEncoding<
-// AptFilePtr>> dtor). A heap block goes back through StringAsVectorPolicy::ReAlloc
-// (data, 0, 0) @0x82AFD5E0, whose zero-size arm is the AptFilePtr array deleting
-// destructor -- every slot released, then the block freed. The two inline SBO slots
-// are then released last-to-first (the `for (i = 1; i >= 0; --i)` LL/SC loop).
-//
-// ⭐ The type had no destructor before (issue #78), so the `empty` temporary that
-// AptLinker::Update swaps the linked files into never released them: every linked
-// movie kept one reference for good, its AptFile never reached zero, and the GUI
-// bundle it was loaded from stayed pinned in the streamed Apt bank until that bank
-// was full.
+// Strin @0x82AFFB08 releases the heap array through ReAlloc @0x82AFD5E0,
+// then the two inline references in reverse order.
 AptLinker::PendingFileVector::~PendingFileVector()
 {
     if (mpData != mInlineStorage)
@@ -1369,6 +1360,7 @@ void AptLinker::PendingFileVector::Swap(PendingFileVector& rOther)
 {
     const bool bOtherInline = (rOther.mpData == rOther.mInlineStorage);   // a2+3 == a2[2]
     const bool bThisInline  = (mpData == mInlineStorage);                 // result+3 == v9
+    AptFilePtr* const pOtherData = rOther.mpData;
 
     // Swap the {size, capacity} scalars (v6/v7/v8 dance in the X360).
     const int32_t nTmpSize = rOther.mnSize;
@@ -1382,7 +1374,7 @@ void AptLinker::PendingFileVector::Swap(PendingFileVector& rOther)
     // Re-point each data slot: an inline-owning side must keep pointing at its OWN
     // inline buffer after the swap (the X360 v10 / `result+3==v9` tests).
     rOther.mpData = bThisInline  ? rOther.mInlineStorage : pTmpData;
-    mpData        = bOtherInline ? mInlineStorage        : rOther.mpData;
+    mpData        = bOtherInline ? mInlineStorage        : pOtherData;
 
     // When either side was inline, the two inline buffers themselves must be exchanged
     // (their contents, not their addresses). Relocate through a scratch pair, copying

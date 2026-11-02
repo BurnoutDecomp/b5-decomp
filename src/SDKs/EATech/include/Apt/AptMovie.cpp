@@ -9,6 +9,9 @@
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 
 #include <cstdint>
+#include <type_traits>
+#include "SDKs/EATech/include/Apt/AptControl.h"
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"
 
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                  // DOGMA_PoolManager
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"            // AptPseudoCIH_t, gpAptPseudoDataPool
@@ -58,16 +61,9 @@ int AptMovie::labelToFrame(const EAStringC* pLabel) const
 //   AptMovie::resolve                  @ 0x82AF80B0
 //   AptMovie::unresolve                @ 0x82AF4830
 //
-// These walk the timeline's per-frame display-list command records. Each frame is
-// an AptMovieFrame {mnCommandCount @+0, mpCommands @+4}; mpCommands[i] points to a
-// serialised command record whose leading dword is a tag (1=action / 2=label /
-// 3=place / 4=remove / 5=back-to-script / 8=morph). Those records are the in-place
-// .apt blob (no recovered struct), so they are addressed by their console byte
-// offsets through the kCmd* helpers below, matching the asm's literal lwz/stw
-// offsets exactly. FLAG: a typed runtime model for the command records + the
-// AptActionInterpreter VM transcode are the shared follow-on with
-// AptCharacterAnimation::Fixup (see that .cpp); the bodies here are the faithful
-// asm decompilation that drives + relocates those raw records.
+// AptMovieFrame and AptControl describe the serialized timeline. Native pointer
+// relocation uses their named fields; the older console helpers below retain the
+// four-byte record view for console-reference entry points.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -1009,337 +1005,202 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
     return result;
 }
 
-// ===========================================================================
-// resolve64 -- the x64 native-8 fork of resolve @0x82AF80B0.
-//
-// The GUIAPT "Apt Data:1:7:8" bundle keeps the serialised timeline in the native
-// 8-byte pointer format: every "pointer" slot is a full 8-byte word holding a
-// file-relative OFFSET, so relocation is `slot = slot + base` in place (offset ->
-// absolute pointer). This is what the console-32 resolve() cannot do on x64 (its
-// `int nBase` truncates the high x64 base). VERIFIED vs TITLE_SCREEN02.bundle: the
-// ROOT movie's framesOffset lives at movie+0x08 (== 0x5180 file-relative), the frame
-// table stride is 16 (AptMovieFrame {mnCommandCount@0, mpCommands@8}) and each frame's
-// command-pointer array is a stride-8 array of command-record offsets.
-//
-// The relocation walk is structurally identical to the console resolve() above (the
-// same label-hash build + the same per-tag inner-pointer relocations), only widened
-// to 8-byte slots / native strides. It now relocates EVERY per-frame command record's
-// pointer slots at the native-8 offsets -- tag-1 Action (action-stream ptr @cmd+0x08),
-// tag-2 FrameLabel (name ptr @cmd+0x08, registered into the label hash), tag-3
-// PlaceObject (name @body+0x30 + clipActions block @body+0x40, and the clipActions
-// record-array + per-record stream pointers), tag-8 Morph (stream ptr @cmd+0x08) --
-// so that after resolve64 NO command record (root OR imported) holds an un-relocated
-// file offset, and doFrameControls / queueFrameActions / placeObject read them safely.
-//
-// STATUS (ACTIVATED 2026-07-01): _parseStream (the homed XB1 sub_14084A920) is now
-// CALLED on every action/clipActions/morph stream below -- serialized inline operands
-// (dictionary strings, function records, branch targets) resolve into live pointers/
-// values at movie-resolve time, and the runtime handlers read the parsed 8-aligned
-// GUIAPT64 operand form. The VM chain is complete end-to-end.
-// ===========================================================================
+// XB1 sub_1408567D0: relocate the native timeline and parse its action streams.
 void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
                          AptConstFile* pConstFile, int64_t* pnParsedValues)
 {
-    // Relocate a native-8 offset slot IN PLACE, but only when it holds a plausible
-    // file-relative offset (0 < off < nResSize). A slot already carrying an absolute
-    // pointer (>= nResBase) or garbage is left untouched -- so a re-entrant call, an
-    // already-relocated field, or a non-pointer field (e.g. clipDepth == -1) never
-    // produces a wild-pointer write. Returns the resulting 64-bit pointer (or 0).
-    auto reloc64 = [nBase, nResSize](void* pRec, int nOff) -> uintptr_t
+    // Serialized offsets are rebased through their declared pointer members.
+    auto reloc64 = [nBase, nResSize](auto& rpSlot) -> uintptr_t
     {
-        uintptr_t* pSlot = reinterpret_cast<uintptr_t*>(reinterpret_cast<char*>(pRec) + nOff);
-        const uintptr_t luVal = *pSlot;
-        if (luVal != 0 && luVal < nResSize)   // a live file-relative offset
+        const uintptr_t luValue = reinterpret_cast<uintptr_t>(rpSlot);
+        if (luValue != 0 && luValue < nResSize)
         {
-            *pSlot = nBase + luVal;
-            return *pSlot;
+            using Pointer = std::remove_reference_t<decltype(rpSlot)>;
+            rpSlot = reinterpret_cast<Pointer>(nBase + luValue);
+            return nBase + luValue;
         }
-        return (luVal != 0 && luVal >= nBase) ? luVal : 0;   // already-abs (kept) else none
+        return (luValue != 0 && luValue >= nBase) ? luValue : 0;
     };
-    // True iff luPtr is a live pointer inside the resource (safe to dereference).
-    auto inRes = [nResBase, nResSize](uintptr_t luPtr) -> bool
+    auto inRes = [nResBase, nResSize](uintptr_t luPointer) -> bool
     {
-        return luPtr >= nResBase && luPtr < nResBase + nResSize;
+        return luPointer >= nResBase && luPointer < nResBase + nResSize;
     };
 
-    // The parse ctx + resolved-value counter (the XB1 resolve twin sub_1408567D0's
-    // a3/a4, threaded from Fixup case-5/9): pConstFile = the "Apt constant file" chunk
-    // (record table @ctx+0x28, relocated around Fixup by Resolve; string payloads rebase
-    // ctx-relative), pnParsedValues = the root def's +0x50 accumulator (CompleteLoad
-    // zeroes it). Layout verified vs the shipped bundle (libapt2 Const::Write: magic+
-    // align8, movieOffset@+0x18, itemCount@+0x20, itemStart@+0x28, 16-byte records).
-    void* const pParseCtx = pConstFile;
     int64_t lnFallbackCount = 0;
     int64_t* const pnCount = pnParsedValues ? pnParsedValues : &lnFallbackCount;
-
-    // ---- allocate + init the label hash (5 dwords, tag 2) ------------------
-    void* pHash = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
-    if (pHash)
+    AptNativeHash* const lpHash = static_cast<AptNativeHash*>(
+        gpAptPseudoDataPool->Allocate(sizeof(AptNativeHash)));
+    if (lpHash != nullptr)
     {
-        // XB1 (sub_1408567D0) zeroes the four 8-byte member slots of the 0x28-byte
-        // AptNativeHash then stamps the type word. (The prior 4-byte zeroing left the
-        // pointers' upper halves as pool garbage on x64 -- named-member init clears them
-        // as full 8-byte fields.)
-        AptNativeHash* const pNativeHash = reinterpret_cast<AptNativeHash*>(pHash);
-        pNativeHash->mpTable            = nullptr;   // +0x08
-        pNativeHash->mp__Proto__        = nullptr;   // +0x10
-        pNativeHash->mpPrototype        = nullptr;   // +0x18
-        pNativeHash->mnEventHandlerMask = 0;         // +0x20 (upper 4B is struct padding)
-        CmdSetI32(pHash, 0x00, 2);
+        lpHash->mnCapacity = 2;
+        lpHash->mpTable = nullptr;
+        lpHash->mp__Proto__ = nullptr;
+        lpHash->mpPrototype = nullptr;
+        lpHash->mnEventHandlerMask = 0;
     }
-    this->mpLabelHash = reinterpret_cast<AptNativeHash*>(pHash);
+    mpLabelHash = lpHash;
 
-    // Relocate the frame-table base (mpFrames) IN PLACE: framesOffset -> pointer.
-    const int32_t nFrames = this->mnFrameCount;
-    const uintptr_t luFrames = reloc64(this, 0x08);   // mpFrames @movie+0x08
-    if (nFrames <= 0 || luFrames == 0 || !inRes(luFrames))
+    const uintptr_t luFrames = reloc64(mpFrames);
+    if (mnFrameCount <= 0 || luFrames == 0 || !inRes(luFrames))
         return;
 
-    for (int32_t f = 0; f < nFrames; ++f)
+    for (int32_t liFrame = 0; liFrame < mnFrameCount; ++liFrame)
     {
-        AptMovieFrame* pFrame = &mpFrames[f];   // 16 * f + mpFrames (native-8 stride 16)
-
-        // relocate the frame's command-pointer array (mpCommands @frame+0x08).
-        const uintptr_t luCmds = reloc64(pFrame, 0x08);
-        const int32_t nCmds = pFrame->mnCommandCount;
-        if (luCmds == 0 || !inRes(luCmds) || nCmds <= 0)
+        AptMovieFrame& lrFrame = mpFrames[liFrame];
+        const uintptr_t luCommands = reloc64(lrFrame.mpCommands);
+        if (luCommands == 0 || !inRes(luCommands) || lrFrame.mnCommandCount <= 0)
             continue;
 
-        for (int32_t i = 0; i < nCmds; ++i)
+        for (int32_t liCommand = 0; liCommand < lrFrame.mnCommandCount; ++liCommand)
         {
-            // relocate the command-pointer slot itself (8-byte offset -> pointer).
-            const uintptr_t luCmd = reloc64(&pFrame->mpCommands[i], 0);
-            if (luCmd == 0 || !inRes(luCmd))
+            const uintptr_t luCommand = reloc64(lrFrame.mpCommands[liCommand]);
+            if (luCommand == 0 || !inRes(luCommand))
                 continue;
-            void* pCmd = reinterpret_cast<void*>(luCmd);
-            const int32_t eTag = CmdI32(pCmd, 0x00);
-
-            // Relocate EVERY per-command inner POINTER slot -- so that after resolve64 NO command
-            // record (root OR imported) holds an un-relocated file offset, and doFrameControls /
-            // queueFrameActions / placeObject can read them without an AV. The relocation walk +
-            // per-tag pointer SET is decompiled from the FAITHFUL native-64-bit build: the Xbox One
-            // remaster's AptMovie unresolve twin sub_14085EE40 (@0x14085EE40, .ida-exports/
-            // Burnout_External_Xbox_One.exe) -- the native-8 build that loads these SAME GUIAPT
-            // bundles single-path. It walks frames (stride 16), commands (stride 8), and switches on
-            // the tag with these inner-pointer relocations (XB1 offsets shown as [xb1:0xNN]):
-            //   case 1 ACTION : stream ptr [xb1:cmd+0x08] + _parseStream(stream)
-            //   case 2 LABEL  : name ptr   [xb1:cmd+0x08]
-            //   case 3 PLACE  : clipActions block ptr [xb1:cmd+0x48]; walk block {count@+0x00;
-            //                   recArrayPtr@+0x08}, records STRIDE 16 with stream ptr @rec+0x08 +
-            //                   _parseStream(each); then name ptr [xb1:cmd+0x38]
-            //   case 8 MORPH  : stream ptr [xb1:cmd+0x10] + _parseStream(stream); un-negate id@+0x08
-            //
-            // BUNDLE PROVENANCE (2026-07-04): the staged GUIAPT bundles are now the REAL
-            // native-8 set (JeBobs' GUIAPT64 drive drop), which matches the XB1 layout
-            // EXACTLY: place body = cmd+8 (align8(cmd+4) lands there), name @body+0x30
-            // (cmd+0x38), clipActions block @body+0x40 (cmd+0x48), block recArrayPtr
-            // @block+0x08. The apt_convert-era "-4" deltas are retired with the converter.
-            //
-            // FLAG (deferred _parseStream): XB1 calls sub_14084A920 (its _parseStream) on each action
-            // stream; here the stream POINTERS are relocated (reads never AV) but the BYTECODE stays
-            // un-parsed (raw serialized operands). The VM is live (2026-07-01) -- _parseStream is the
-            // remaining gate; see the resolve64 header FLAG above.
-            switch (eTag)
+            AptControl* const lpCommand = static_cast<AptControl*>(lrFrame.mpCommands[liCommand]);
+            switch (lpCommand->eType)
             {
-                case 1:   // ACTION: relocate the action-stream pointer (@cmd+0x08), then
-                {         // PARSE it (the XB1 sub_14084A920 call -- resolve the stream's
-                          // serialized inline operands into live pointers/values).
-                    const uintptr_t luStream = reloc64(pCmd, 0x08);
+                case AptControlType_DoAction:
+                {
+                    const uintptr_t luStream = reloc64(lpCommand->action.actions.aActionStream);
                     if (luStream != 0 && inRes(luStream))
                         AptActionInterpreter::_parseStream(
-                            reinterpret_cast<unsigned char*>(luStream), nBase,
-                            pParseCtx, pnCount);
+                            lpCommand->action.actions.aActionStream, nBase, pConstFile, pnCount);
                     break;
                 }
-
-                case 2:   // LABEL: relocate the name pointer (@cmd+0x08) + register name -> frame f.
+                case AptControlType_FrameLabel:
                 {
-                    const uintptr_t luName = reloc64(pCmd, 0x08);
-                    if (luName != 0 && inRes(luName) && this->mpLabelHash != nullptr)
+                    const uintptr_t luName = reloc64(lpCommand->frameLabel.szLabel);
+                    if (luName != 0 && inRes(luName) && mpLabelHash != nullptr)
                     {
-                        // Console/XB1: InitFromBuffer(&scratch, name); Set(hash, scratch, AptInteger::Create(f)).
-                        // Structural (the label hash the labelToFrame lookup reads), NOT VM.
-                        EAStringC label(reinterpret_cast<const char*>(luName));
-                        AptInteger* pIdx = AptInteger::Create(f);
-                        this->mpLabelHash->Set(label, pIdx);
+                        EAStringC lLabel(lpCommand->frameLabel.szLabel);
+                        mpLabelHash->Set(lLabel, AptInteger::Create(liFrame));
                     }
                     break;
                 }
-
-                case 3:   // PLACE: relocate the instance-NAME (@body+0x30) + the clipActions block (@body+0x40).
+                case AptControlType_PlaceObject2:
                 {
-                    const uintptr_t luBody =
-                        (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
-                    void* const pBody = reinterpret_cast<void*>(luBody);
-                    reloc64(pBody, 0x30);                          // place record instance-name
-                    const uintptr_t luClip = reloc64(pBody, 0x40); // place record clipActions/init-action block
-
-                    // Walk the clipActions block's records (XB1 case-3 inner loop): the block is
-                    // {count@+0x00 (i32); recArrayPtr@block+0x08 (XB1/native-8)}; each
-                    // record is STRIDE 16 (XB1 v17+=16) with its action-stream pointer at rec+0x08 (an
-                    // 8-byte native-8 slot). Relocate the record-array pointer + each record's stream
-                    // pointer, then PARSE each stream (XB1 sub_1408567D0 case-3 calls
-                    // sub_14084A920 == _parseStream per record -- verified 2026-07-09).
+                    AptPlaceObjectBody_t* const lpBody =
+                        static_cast<AptPlaceObjectInfo_t*>(lrFrame.mpCommands[liCommand])->GetBody();
+                    reloc64(lpBody->mpName);
+                    const uintptr_t luClip = reloc64(lpBody->mpClipActions);
                     if (luClip != 0 && inRes(luClip))
                     {
-                        void* const pClip = reinterpret_cast<void*>(luClip);
-                        const int32_t nRecs = CmdI32(pClip, 0x00);
-                        // record-array ptr @block+0x08 on XB1/native-8 (+4 = pad 0);
-                        // @block+0x04 (nonzero) on the converter-era bundles.
-                        const uintptr_t luRecs = (CmdI32(pClip, 0x04) != 0)
-                            ? reloc64(pClip, 0x04) : reloc64(pClip, 0x08);
-                        if (luRecs != 0 && inRes(luRecs) && nRecs > 0 && nRecs <= 0x1000)
+                        AptClipEventHandlerList* const lpClip =
+                            static_cast<AptClipEventHandlerList*>(lpBody->mpClipActions);
+                        const uintptr_t luHandlers = reloc64(lpClip->mpHandlers);
+                        if (luHandlers != 0 && inRes(luHandlers) &&
+                            lpClip->mnCount > 0 && lpClip->mnCount <= 0x1000)
                         {
-                            for (int32_t k = 0; k < nRecs; ++k)
+                            for (int32_t liHandler = 0; liHandler < lpClip->mnCount; ++liHandler)
                             {
-                                // rec+0x08 == the action-stream pointer (native-8 8-byte slot; STRIDE 16).
-                                const uintptr_t luRec = luRecs + static_cast<uintptr_t>(16) * k;
-                                if (!inRes(luRec) || (luRec + 16) > (nResBase + nResSize))
+                                AptClipEventHandler& lrHandler = lpClip->mpHandlers[liHandler];
+                                const uintptr_t luHandler = reinterpret_cast<uintptr_t>(&lrHandler);
+                                if (!inRes(luHandler) ||
+                                    luHandler + sizeof(lrHandler) > nResBase + nResSize)
                                     continue;
-                                const uintptr_t luClipStream =
-                                    reloc64(reinterpret_cast<void*>(luRec), 0x08);   // stream ptr (bounds-guarded)
-                                if (luClipStream != 0 && inRes(luClipStream))
+                                const uintptr_t luStream = reloc64(lrHandler.mpActionStream);
+                                if (luStream != 0 && inRes(luStream))
                                     AptActionInterpreter::_parseStream(
-                                        reinterpret_cast<unsigned char*>(luClipStream), nBase,
-                                        pParseCtx, pnCount);
+                                        const_cast<unsigned char*>(lrHandler.mpActionStream),
+                                        nBase, pConstFile, pnCount);
                             }
                         }
                     }
                     break;
                 }
-
-                case 8:   // MORPH: relocate the action-stream pointer (@cmd+0x10 per XB1) + parse it.
+                case AptControlType_DoInitAction:
                 {
-                    const uintptr_t luStream = reloc64(pCmd, 0x10);
+                    const uintptr_t luStream = reloc64(lpCommand->initAction.actions.aActionStream);
                     if (luStream != 0 && inRes(luStream))
                         AptActionInterpreter::_parseStream(
-                            reinterpret_cast<unsigned char*>(luStream), nBase,
-                            pParseCtx, pnCount);
+                            lpCommand->initAction.actions.aActionStream, nBase, pConstFile, pnCount);
                     break;
                 }
-
-                default:  // tag 4 REMOVE / tag 5 BACK-TO-SCRIPT carry no relocatable inner pointer.
+                default:
                     break;
             }
         }
     }
 }
 
-// ===========================================================================
-// unresolve @ 0x82AF4830 (X360) -- TRANSCODED from the XB1 native-8 twin
-// sub_14085EE40 (.ida-exports/Burnout_External_Xbox_One.exe), the exact inverse of
-// resolve64 above: walk the timeline (frames stride 16, command-pointer arrays
-// stride 8), un-parse each action stream (_parseStream with a null const ctx is the
-// inverse transcode), subtract nBase from every 8-byte slot resolve64 relocated,
-// then un-relocate the frame table and tear down the label hash.
-//   case 1 ACTION : un-parse + un-relocate the stream ptr [xb1:cmd+0x08]
-//   case 2 LABEL  : un-relocate the name ptr [xb1:cmd+0x08]
-//   case 3 PLACE  : clipActions block [xb1:cmd+0x48] {count@+0x00; records@+0x08
-//                   (+0x04 on converter-era bundles, as resolve64 reads them),
-//                   stride 16, stream ptr @rec+0x08}: un-parse + un-relocate each
-//                   stream, then the record array; then the name [xb1:cmd+0x38] and
-//                   the block pointer itself [xb1:cmd+0x48] (body = align8(cmd+4), as resolve64)
-//   case 8 MORPH  : un-parse + un-relocate the stream ptr [xb1:cmd+0x10]; restore a
-//                   negated (already-run) id [xb1:cmd+0x08, i32]
-// then the command slot, the frame's command array, mpFrames [xb1:+0x08] and the
-// label hash [xb1:+0x10] (XB1 sub_140836180 teardown + free 0x28 back to the pool
-// resolve64 allocated it from).
-//
-// ⚠️ The previous body was the console 32-bit walk (4-byte slots at the console
-// offsets, the base truncated to int). It never ran on PC until AptFiles could reach
-// a zero refcount (issue #78); its first run read a native-8 slot as a console one
-// and faulted inside ~AptFile.
-// ===========================================================================
+// X360 0x82AF4830; XB1 sub_14085EE40 supplies the native pointer widths.
+// The parse context is null during teardown, selecting bytecode unresolve.
 void* AptMovie::unresolve(uintptr_t nBase, int64_t* pnParsedValues)
 {
-    // Subtract nBase from a relocated 8-byte slot (a null slot stays null).
-    auto unreloc64 = [nBase](void* pRec, int nOff)
+    auto unreloc64 = [nBase](auto& rpSlot)
     {
-        uintptr_t* const pSlot = reinterpret_cast<uintptr_t*>(reinterpret_cast<char*>(pRec) + nOff);
-        if (*pSlot != 0)
-            *pSlot -= nBase;
+        if (rpSlot != nullptr)
+        {
+            using Pointer = std::remove_reference_t<decltype(rpSlot)>;
+            rpSlot = reinterpret_cast<Pointer>(reinterpret_cast<uintptr_t>(rpSlot) - nBase);
+        }
     };
 
-    const int32_t nFrames = this->mnFrameCount;
-    for (int32_t f = 0; f < nFrames; ++f)
+    for (int32_t liFrame = 0; liFrame < mnFrameCount; ++liFrame)
     {
-        AptMovieFrame* const pFrame = &mpFrames[f];
-        const int32_t nCmds = pFrame->mnCommandCount;
-        for (int32_t i = 0; i < nCmds; ++i)
+        AptMovieFrame& lrFrame = mpFrames[liFrame];
+        for (int32_t liCommand = 0; liCommand < lrFrame.mnCommandCount; ++liCommand)
         {
-            void* const pCmd = pFrame->mpCommands[i];
-            switch (CmdI32(pCmd, 0x00))
+            AptControl* const lpCommand = static_cast<AptControl*>(lrFrame.mpCommands[liCommand]);
+            switch (lpCommand->eType)
             {
-                case 1:   // ACTION
+                case AptControlType_DoAction:
                     AptActionInterpreter::_parseStream(
-                        static_cast<unsigned char*>(CmdPtr(pCmd, 0x08)), nBase, nullptr, pnParsedValues);
-                    unreloc64(pCmd, 0x08);
+                        lpCommand->action.actions.aActionStream, nBase, nullptr, pnParsedValues);
+                    unreloc64(lpCommand->action.actions.aActionStream);
                     break;
 
-                case 2:   // LABEL
-                    unreloc64(pCmd, 0x08);
+                case AptControlType_FrameLabel:
+                    unreloc64(lpCommand->frameLabel.szLabel);
                     break;
 
-                case 3:   // PLACE
+                case AptControlType_PlaceObject2:
                 {
-                    // The place body sits at align8(cmd+4), exactly as resolve64 located it
-                    // (== cmd+8 on an 8-aligned XB1 record): name @body+0x30, clipActions
-                    // block @body+0x40.
-                    void* const pBody = reinterpret_cast<void*>(
-                        (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u));
-                    void* const pClip = CmdPtr(pBody, 0x40);
-                    if (pClip != nullptr)
+                    AptPlaceObjectBody_t* const lpBody =
+                        static_cast<AptPlaceObjectInfo_t*>(lrFrame.mpCommands[liCommand])->GetBody();
+                    AptClipEventHandlerList* const lpClip =
+                        static_cast<AptClipEventHandlerList*>(lpBody->mpClipActions);
+                    if (lpClip != nullptr)
                     {
-                        // The record-array slot is wherever resolve64 found it: +0x08 on
-                        // XB1/native-8, +0x04 (nonzero) on the converter-era bundles. A
-                        // relocated +0x04 pointer keeps that dword nonzero, so the same test
-                        // picks the same slot on the way back.
-                        const int nRecsOff = (CmdI32(pClip, 0x04) != 0) ? 0x04 : 0x08;
-                        const int32_t nRecs = CmdI32(pClip, 0x00);
-                        char* const pRecs = static_cast<char*>(CmdPtr(pClip, nRecsOff));
-                        for (int32_t k = 0; k < nRecs; ++k)
+                        for (int32_t liHandler = 0; liHandler < lpClip->mnCount; ++liHandler)
                         {
-                            void* const pRec = pRecs + 16 * k;
+                            AptClipEventHandler& lrHandler = lpClip->mpHandlers[liHandler];
                             AptActionInterpreter::_parseStream(
-                                static_cast<unsigned char*>(CmdPtr(pRec, 0x08)), nBase, nullptr,
-                                pnParsedValues);
-                            unreloc64(pRec, 0x08);
+                                const_cast<unsigned char*>(lrHandler.mpActionStream),
+                                nBase, nullptr, pnParsedValues);
+                            unreloc64(lrHandler.mpActionStream);
                         }
-                        unreloc64(pClip, nRecsOff);
+                        unreloc64(lpClip->mpHandlers);
                     }
-                    unreloc64(pBody, 0x30);
-                    unreloc64(pBody, 0x40);
+                    unreloc64(lpBody->mpName);
+                    unreloc64(lpBody->mpClipActions);
                     break;
                 }
 
-                case 8:   // MORPH
+                case AptControlType_DoInitAction:
                     AptActionInterpreter::_parseStream(
-                        static_cast<unsigned char*>(CmdPtr(pCmd, 0x10)), nBase, nullptr, pnParsedValues);
-                    unreloc64(pCmd, 0x10);
-                    if (CmdI32(pCmd, 0x08) < 0)
-                        CmdSetI32(pCmd, 0x08, -CmdI32(pCmd, 0x08));
+                        lpCommand->initAction.actions.aActionStream, nBase, nullptr, pnParsedValues);
+                    unreloc64(lpCommand->initAction.actions.aActionStream);
+                    if (lpCommand->initAction.nSpriteID < 0)
+                        lpCommand->initAction.nSpriteID = -lpCommand->initAction.nSpriteID;
                     break;
 
-                default:  // tag 4 REMOVE / tag 5 BACK-TO-SCRIPT carry no inner pointer.
+                default:
                     break;
             }
-
-            unreloc64(&pFrame->mpCommands[i], 0);
+            unreloc64(lrFrame.mpCommands[liCommand]);
         }
-
-        unreloc64(pFrame, 0x08);   // mpCommands
+        unreloc64(lrFrame.mpCommands);
     }
+    unreloc64(mpFrames);
 
-    unreloc64(this, 0x08);         // mpFrames
-
-    void* result = this->mpLabelHash;
-    if (this->mpLabelHash != nullptr)
+    AptNativeHash* const lpHash = mpLabelHash;
+    if (lpHash != nullptr)
     {
-        AptNativeHash* const pHash = this->mpLabelHash;
-        pHash->DestroyGCPointers();          // XB1 sub_140836180
-        pHash->~AptNativeHash();
-        gpAptPseudoDataPool->Deallocate(pHash, sizeof(AptPseudoCIH_t));   // the resolve64 allocation
-        this->mpLabelHash = nullptr;
+        lpHash->DestroyGCPointers();
+        lpHash->~AptNativeHash();
+        gpAptPseudoDataPool->Deallocate(lpHash, sizeof(AptNativeHash));
+        mpLabelHash = nullptr;
     }
-    return result;
+    return lpHash;
 }

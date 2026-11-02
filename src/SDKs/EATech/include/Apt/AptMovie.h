@@ -32,8 +32,8 @@ struct AptDisplayList;
 struct AptCIH;
 
 // One frame: its display-list commands (place/remove/action/label). The command
-// records are part of the serialised .apt timeline (resolved by AptMovie::resolve);
-// kept opaque here.
+// records are part of the serialised .apt timeline. AptControl.h declares the
+// payloads used by the relocation walk.
 struct AptMovieFrame
 {
     int32_t mnCommandCount;   // [0]
@@ -52,9 +52,8 @@ struct AptMovie
     // ---- the timeline driver / relocate pass (X360 ARTIST.XEX) -------------
     // The methods that drive the clip's display list + run its frame actions, and
     // the (un)resolve relocation pass the loader runs over the serialised timeline.
-    // The per-frame command records they walk are the in-place .apt blob (no
-    // recovered struct yet) -- see the .cpp for the FLAGged opaque-record access
-    // and the deferred VM/display-list callees they reach.
+    // Command payloads are serialized AptControl records; place-object readers
+    // share AptPlaceObjectInfo_t::GetBody().
 
     // @0x82AEEB98 -- build the interpreter's pseudo display list for frame nFrame
     // (place/remove commands), for AptCIH::jumpToFrame's skip path.
