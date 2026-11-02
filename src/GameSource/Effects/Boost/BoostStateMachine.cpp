@@ -142,13 +142,13 @@ namespace
                           : (liRow == 1) ? lWorld.yAxis
                           : (liRow == 2) ? lWorld.zAxis
                                          : lWorld.wAxis;
-            lOut.x = lLocal.x * lCarWorld.xAxis.x + lLocal.y * lCarWorld.yAxis.x
-                   + lLocal.z * lCarWorld.zAxis.x + lfTranslate * lCarWorld.wAxis.x;
-            lOut.y = lLocal.x * lCarWorld.xAxis.y + lLocal.y * lCarWorld.yAxis.y
-                   + lLocal.z * lCarWorld.zAxis.y + lfTranslate * lCarWorld.wAxis.y;
-            lOut.z = lLocal.x * lCarWorld.xAxis.z + lLocal.y * lCarWorld.yAxis.z
-                   + lLocal.z * lCarWorld.zAxis.z + lfTranslate * lCarWorld.wAxis.z;
-            lOut.w = 0.0f;
+            lOut.SetX(lLocal.GetX().GetFloat() * lCarWorld.xAxis.GetX().GetFloat() + lLocal.GetY().GetFloat() * lCarWorld.yAxis.GetX().GetFloat()
+                   + lLocal.GetZ().GetFloat() * lCarWorld.zAxis.GetX().GetFloat() + lfTranslate * lCarWorld.wAxis.GetX().GetFloat());
+            lOut.SetY(lLocal.GetX().GetFloat() * lCarWorld.xAxis.GetY().GetFloat() + lLocal.GetY().GetFloat() * lCarWorld.yAxis.GetY().GetFloat()
+                   + lLocal.GetZ().GetFloat() * lCarWorld.zAxis.GetY().GetFloat() + lfTranslate * lCarWorld.wAxis.GetY().GetFloat());
+            lOut.SetZ(lLocal.GetX().GetFloat() * lCarWorld.xAxis.GetZ().GetFloat() + lLocal.GetY().GetFloat() * lCarWorld.yAxis.GetZ().GetFloat()
+                   + lLocal.GetZ().GetFloat() * lCarWorld.zAxis.GetZ().GetFloat() + lfTranslate * lCarWorld.wAxis.GetZ().GetFloat());
+            lOut.SetComponent(3, 0.0f);
         }
         return lWorld;
     }

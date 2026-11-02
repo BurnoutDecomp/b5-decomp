@@ -67,7 +67,7 @@ namespace Native
         // i.e. exactly {0, 0.03, 0, 0} -- a 3 cm lift along WORLD +Y (not along the contact
         // normal), read out of the X360 image. The committed value was right.
         const f32     KR_TRAIL_HEIGHT_ADJUSTMENT = 0.03f;
-        const ::Vector3 K_TRAIL_HEIGHT_ADJUSTMENT  = { 0.0f, KR_TRAIL_HEIGHT_ADJUSTMENT, 0.0f, 0.0f };
+        const ::Vector3 K_TRAIL_HEIGHT_ADJUSTMENT(0.0f, KR_TRAIL_HEIGHT_ADJUSTMENT, 0.0f);
 
         // krTrailsMinSegmentLength / krTrailsMinSegmentLengthSquared (:35/36). Only the square is
         // read by the binary (flt_82CDB3E0 == 0.09f); the length is its root.
@@ -87,7 +87,7 @@ namespace Native
 
         // rw::math::vpu::detail::gIVector (.rdata 0x82181500 == {1,0,0,0}): the tangent a strip's
         // very first segment is laid with, before any direction exists.
-        const ::Vector3 K_I_VECTOR = { 1.0f, 0.0f, 0.0f, 0.0f };
+        const ::Vector3 K_I_VECTOR(1.0f, 0.0f, 0.0f);
 
         // [diag] the [trailpass] render probe's gate -- the same BRN_SKID_PROBE the
         // HandleWheels gate probe reads, so one run carries both halves of the claim.
@@ -508,14 +508,14 @@ namespace Native
         CGS_ASSERT(liSkidMarkTypeID < KI_MAX_NUM_TRAIL_TYPES, "liSkidMarkTypeID < KI_MAX_NUM_TRAIL_TYPES");
 
         TrailParams& lrParams = mgaDefaultParams[liSkidMarkTypeID];
-        lrParams.mStartColour.red   = lSkidMarkStartColour.x;
-        lrParams.mStartColour.green = lSkidMarkStartColour.y;
-        lrParams.mStartColour.blue  = lSkidMarkStartColour.z;
-        lrParams.mStartColour.alpha = lSkidMarkStartColour.w;
-        lrParams.mEndColour.red     = lSkidMarkEndColour.x;
-        lrParams.mEndColour.green   = lSkidMarkEndColour.y;
-        lrParams.mEndColour.blue    = lSkidMarkEndColour.z;
-        lrParams.mEndColour.alpha   = lSkidMarkEndColour.w;
+        lrParams.mStartColour.red   = lSkidMarkStartColour.GetX().GetFloat();
+        lrParams.mStartColour.green = lSkidMarkStartColour.GetY().GetFloat();
+        lrParams.mStartColour.blue  = lSkidMarkStartColour.GetZ().GetFloat();
+        lrParams.mStartColour.alpha = lSkidMarkStartColour.GetW().GetFloat();
+        lrParams.mEndColour.red     = lSkidMarkEndColour.GetX().GetFloat();
+        lrParams.mEndColour.green   = lSkidMarkEndColour.GetY().GetFloat();
+        lrParams.mEndColour.blue    = lSkidMarkEndColour.GetZ().GetFloat();
+        lrParams.mEndColour.alpha   = lSkidMarkEndColour.GetW().GetFloat();
     }
 
     // =========================================================================================
