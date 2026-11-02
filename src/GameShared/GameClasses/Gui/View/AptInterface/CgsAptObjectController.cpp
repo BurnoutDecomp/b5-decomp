@@ -156,11 +156,7 @@ namespace CgsGui
         const f32 lfPosY = GetPosY();
         const f32 lfPosX = GetPosX();
 
-        Vector2 lv2Pos;
-        lv2Pos.x = lfPosX;
-        lv2Pos.y = lfPosY;
-        lv2Pos.z = 0.0f;
-        lv2Pos.w = 0.0f;
+        Vector2 lv2Pos(lfPosX, lfPosY);
         return lv2Pos;
     }
 

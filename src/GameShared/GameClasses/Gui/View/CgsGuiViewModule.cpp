@@ -588,21 +588,15 @@ namespace CgsGui
         // clear + unmodified vertex colour).
         CgsGraphics::Im2dTransform lUnitToScreen;
         lUnitToScreen.mOriginXYZ.SetZero();          // origin (0,0)
-        lUnitToScreen.mRightUp.x = 1280.0f;          // right = (1280, 0)
-        lUnitToScreen.mRightUp.y = 0.0f;
-        lUnitToScreen.mRightUp.z = 0.0f;             // up    = (0, 720)
-        lUnitToScreen.mRightUp.w = 720.0f;
+        lUnitToScreen.mRightUp.Set(1280.0f, 0.0f, 0.0f, 720.0f); // right = (1280, 0), up = (0, 720)
         lUnitToScreen.mColourShift.SetZero();        // (A,R,G,B) shift 0
-        lUnitToScreen.mColourScale.x = 255.0f;       // (R,G,B,A) scale identity; the Apt chain
+        lUnitToScreen.mColourScale.Set(255.0f, 255.0f, 255.0f, 255.0f); // (R,G,B,A) scale identity; the Apt chain
                                                      // carries CXForm fixed-point 0..255 units
                                                      // end to end on PC, which is what
                                                      // DispatchColourChannel's /255 expects.
                                                      // All four lanes are equal here, so the
                                                      // lane order does not bite -- but do not
                                                      // "simplify" this to 1.0f.
-        lUnitToScreen.mColourScale.y = 255.0f;
-        lUnitToScreen.mColourScale.z = 255.0f;
-        lUnitToScreen.mColourScale.w = 255.0f;
         lrBuffer.SetTransform(lUnitToScreen);
 
         // ARTIST frame-clear states from the shared immediate-mode state library.

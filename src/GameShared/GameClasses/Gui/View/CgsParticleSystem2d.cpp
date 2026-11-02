@@ -113,9 +113,9 @@ rw::RGBA ParticleSystem2d::GetRGBA(const Vector4& lrColour)
     const ::Vector4 lOne   = GetVector4_One();
     const ::Vector4 lScaled = Clamp(lrColour, lZero, lOne) * Splat(KF_COLOURSCALE);
 
-    return rw::RGBA(PackChannel(lScaled.x),   // r
-                    PackChannel(lScaled.y),   // g
-                    PackChannel(lScaled.z),   // b
-                    PackChannel(lScaled.w));  // a
+    return rw::RGBA(PackChannel(lScaled.GetX().GetFloat()),   // r
+                    PackChannel(lScaled.GetY().GetFloat()),   // g
+                    PackChannel(lScaled.GetZ().GetFloat()),   // b
+                    PackChannel(lScaled.GetW().GetFloat()));  // a
 }
 }
