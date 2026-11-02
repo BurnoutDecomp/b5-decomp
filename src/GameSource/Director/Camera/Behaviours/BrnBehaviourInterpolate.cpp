@@ -370,10 +370,10 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
             *CgsDev::Log::gpDebugPrint
                 << (lbBlackPresent ? "[interp] BLACK-PRESENT #" : "[interp] #") << static_cast<s32>(suBlendTraceCount)
                 << " t=" << lfParametricTime
-                << " from (" << lFrom.mTransform.wAxis.x << ", " << lFrom.mTransform.wAxis.y
-                << ", " << lFrom.mTransform.wAxis.z << ") fov " << lFrom.mfFOV
-                << " -> to (" << lTo.mTransform.wAxis.x << ", " << lTo.mTransform.wAxis.y
-                << ", " << lTo.mTransform.wAxis.z << ") fov " << lTo.mfFOV << "\n";
+                << " from (" << lFrom.mTransform.wAxis.mV.v[0] << ", " << lFrom.mTransform.wAxis.mV.v[1]
+                << ", " << lFrom.mTransform.wAxis.mV.v[2] << ") fov " << lFrom.mfFOV
+                << " -> to (" << lTo.mTransform.wAxis.mV.v[0] << ", " << lTo.mTransform.wAxis.mV.v[1]
+                << ", " << lTo.mTransform.wAxis.mV.v[2] << ") fov " << lTo.mfFOV << "\n";
         }
     }
 

@@ -71,14 +71,14 @@ template void DebugMenuSerialiser::Process<bool>(const char* lpcName, bool& lrVa
 // ----------------------------------------------------------------------------
 void DebugMenuSerialiser::Serialise(const char* lpcName, Vector3& lrValue)
 {
-    Process<float>(lpcName, lrValue.x);
-    mpDebugComponent->SetStep(&lrValue.x, KF_DEBUG_ADJUST_STEP);
+    Process<float>(lpcName, lrValue.mV.v[0]);
+    mpDebugComponent->SetStep(&lrValue.mV.v[0], KF_DEBUG_ADJUST_STEP);
 
-    Process<float>(lpcName, lrValue.y);
-    mpDebugComponent->SetStep(&lrValue.y, KF_DEBUG_ADJUST_STEP);
+    Process<float>(lpcName, lrValue.mV.v[1]);
+    mpDebugComponent->SetStep(&lrValue.mV.v[1], KF_DEBUG_ADJUST_STEP);
 
-    Process<float>(lpcName, lrValue.z);
-    mpDebugComponent->SetStep(&lrValue.z, KF_DEBUG_ADJUST_STEP);
+    Process<float>(lpcName, lrValue.mV.v[2]);
+    mpDebugComponent->SetStep(&lrValue.mV.v[2], KF_DEBUG_ADJUST_STEP);
 }
 
 } // namespace Camera

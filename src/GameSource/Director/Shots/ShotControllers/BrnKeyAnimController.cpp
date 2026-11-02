@@ -188,10 +188,10 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
     // but it is what the X360 does (the three GetValueFloat calls at 0x821F7EE8/0x821F7EF8/
     // 0x821F7F08 pass 2, 1 and 0). It is harmless in practice -- the first Update overwrites
     // it before anything reads it. Do not "fix" it.
-    mLookPos.x = mPlaybackTake.GetValueFloat(E_ICE_EYE_X);
-    mLookPos.y = mPlaybackTake.GetValueFloat(E_ICE_EYE_Y);
-    mLookPos.z = mPlaybackTake.GetValueFloat(E_ICE_EYE_Z);
-    mLookPos.w = 0.0f;
+    mLookPos.mV.v[0] = mPlaybackTake.GetValueFloat(E_ICE_EYE_X);
+    mLookPos.mV.v[1] = mPlaybackTake.GetValueFloat(E_ICE_EYE_Y);
+    mLookPos.mV.v[2] = mPlaybackTake.GetValueFloat(E_ICE_EYE_Z);
+    mLookPos.mV.v[3] = 0.0f;
 
     return true;
 }
@@ -282,10 +282,10 @@ void KeyAnimController::Update(const ShotContext& lrContext, Camera::Camera* lpC
     mEyeSpace  = static_cast<ICE::eICESpace>(mPlaybackTake.GetValueInt(E_ICE_SPACE_EYE));
     mLookSpace = static_cast<ICE::eICESpace>(mPlaybackTake.GetValueInt(E_ICE_SPACE_LOOK));
 
-    mLookPos.x = mPlaybackTake.GetValueFloat(E_ICE_LOOK_X);
-    mLookPos.y = mPlaybackTake.GetValueFloat(E_ICE_LOOK_Y);
-    mLookPos.z = mPlaybackTake.GetValueFloat(E_ICE_LOOK_Z);
-    mLookPos.w = 0.0f;
+    mLookPos.mV.v[0] = mPlaybackTake.GetValueFloat(E_ICE_LOOK_X);
+    mLookPos.mV.v[1] = mPlaybackTake.GetValueFloat(E_ICE_LOOK_Y);
+    mLookPos.mV.v[2] = mPlaybackTake.GetValueFloat(E_ICE_LOOK_Z);
+    mLookPos.mV.v[3] = 0.0f;
 }
 
 // ============================================================================
@@ -358,16 +358,16 @@ void KeyAnimController::UpdateTransformationMatrix(const ICE::ICETake& lrTake,
                                                    Camera::Camera* lpCamera)
 {
     rw::math::vpu::Vector3 lEyePosition;
-    lEyePosition.x = lrTake.GetValueFloat(E_ICE_EYE_X);
-    lEyePosition.y = lrTake.GetValueFloat(E_ICE_EYE_Y);
-    lEyePosition.z = lrTake.GetValueFloat(E_ICE_EYE_Z);
-    lEyePosition.w = 0.0f;
+    lEyePosition.mV.v[0] = lrTake.GetValueFloat(E_ICE_EYE_X);
+    lEyePosition.mV.v[1] = lrTake.GetValueFloat(E_ICE_EYE_Y);
+    lEyePosition.mV.v[2] = lrTake.GetValueFloat(E_ICE_EYE_Z);
+    lEyePosition.mV.v[3] = 0.0f;
 
     rw::math::vpu::Vector3 lLookPosition;
-    lLookPosition.x = lrTake.GetValueFloat(E_ICE_LOOK_X);
-    lLookPosition.y = lrTake.GetValueFloat(E_ICE_LOOK_Y);
-    lLookPosition.z = lrTake.GetValueFloat(E_ICE_LOOK_Z);
-    lLookPosition.w = 0.0f;
+    lLookPosition.mV.v[0] = lrTake.GetValueFloat(E_ICE_LOOK_X);
+    lLookPosition.mV.v[1] = lrTake.GetValueFloat(E_ICE_LOOK_Y);
+    lLookPosition.mV.v[2] = lrTake.GetValueFloat(E_ICE_LOOK_Z);
+    lLookPosition.mV.v[3] = 0.0f;
 
     const ICE::eICESpace leEyeSpace =
         static_cast<ICE::eICESpace>(lrTake.GetValueInt(E_ICE_SPACE_EYE));
@@ -426,14 +426,14 @@ void KeyAnimController::UpdateTransformationMatrix(const ICE::ICETake& lrTake,
         *CgsDev::Log::gpDebugPrint
             << "  eyeSpace " << static_cast<s32>(leEyeSpace)
             << " lookSpace " << static_cast<s32>(leLookSpace)
-            << " rawEye (" << lEyePosition.x << ", " << lEyePosition.y
-            << ", " << lEyePosition.z << ")"
-            << " -> world (" << lWorldEyePosition.x << ", " << lWorldEyePosition.y
-            << ", " << lWorldEyePosition.z << ")"
-            << " rawLook (" << lLookPosition.x << ", " << lLookPosition.y
-            << ", " << lLookPosition.z << ")"
-            << " -> world (" << lWorldLookPosition.x << ", " << lWorldLookPosition.y
-            << ", " << lWorldLookPosition.z << ")\n";
+            << " rawEye (" << lEyePosition.mV.v[0] << ", " << lEyePosition.mV.v[1]
+            << ", " << lEyePosition.mV.v[2] << ")"
+            << " -> world (" << lWorldEyePosition.mV.v[0] << ", " << lWorldEyePosition.mV.v[1]
+            << ", " << lWorldEyePosition.mV.v[2] << ")"
+            << " rawLook (" << lLookPosition.mV.v[0] << ", " << lLookPosition.mV.v[1]
+            << ", " << lLookPosition.mV.v[2] << ")"
+            << " -> world (" << lWorldLookPosition.mV.v[0] << ", " << lWorldLookPosition.mV.v[1]
+            << ", " << lWorldLookPosition.mV.v[2] << ")\n";
     }
 }
 
