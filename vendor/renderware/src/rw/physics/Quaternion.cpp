@@ -58,17 +58,25 @@ namespace physics
 void Quaternion::UnitQuaternionToMatrix(rw::math::vpu::Matrix33* lpDst,
                                         const rw::math::vpu::Quaternion* lpQuat)
 {
-    const float lfX = lpQuat->x, lfY = lpQuat->y, lfZ = lpQuat->z, lfW = lpQuat->w;
+    // ARTIST 0x82BC3ECC..3F78 loads the four components as scalar floats
+    // and rounds the nine products before the three vector doubles.
+    const __vector4 lQuat = __lvx(lpQuat, 0);
+    const float x = lQuat.v[0], y = lQuat.v[1], z = lQuat.v[2], w = lQuat.v[3];
+    __vector4 squared, spin, cross;
+    squared.v[0] = x * x; squared.v[1] = y * y; squared.v[2] = z * z; squared.u[3] = 0;
+    spin.v[0] = w * x; spin.v[1] = y * w; spin.v[2] = z * w; spin.u[3] = 0;
+    cross.v[0] = y * x; cross.v[1] = z * y; cross.v[2] = z * x; cross.u[3] = 0;
+    const __vector4 two = __vcfsx(__vspltisw(2), 0);
+    squared = __vmulfp(squared, two);
+    spin = __vmulfp(spin, two);
+    cross = __vmulfp(cross, two);
+    const float xx = squared.v[0], yy = squared.v[1], zz = squared.v[2];
+    const float wx = spin.v[0], wy = spin.v[1], wz = spin.v[2];
+    const float xy = cross.v[0], yz = cross.v[1], zx = cross.v[2];
+    lpDst->xAxis = rw::math::vpu::Vector3(1.0f - (yy + zz), xy + wz, zx - wy);
+    lpDst->yAxis = rw::math::vpu::Vector3(xy - wz, 1.0f - (zz + xx), yz + wx);
+    lpDst->zAxis = rw::math::vpu::Vector3(zx + wy, yz - wx, 1.0f - (yy + xx));
 
-    // Nine fmuls, then each triple doubled by one vmulfp128 against splat(flt_82001D9C = 2.0f).
-    const float lf2XX = (lfX * lfX) * 2.0f, lf2YY = (lfY * lfY) * 2.0f, lf2ZZ = (lfZ * lfZ) * 2.0f;
-    const float lf2WX = (lfW * lfX) * 2.0f, lf2WY = (lfY * lfW) * 2.0f, lf2WZ = (lfZ * lfW) * 2.0f;
-    const float lf2XY = (lfY * lfX) * 2.0f, lf2YZ = (lfZ * lfY) * 2.0f, lf2ZX = (lfZ * lfX) * 2.0f;
-
-    // Diagonals: flt_82001C98 (1.0f) minus the SUM -- one fadds, then one fsubs.
-    lpDst->xAxis = { 1.0f - (lf2YY + lf2ZZ), lf2XY + lf2WZ, lf2ZX - lf2WY, 0.0f };   // r3+0x00
-    lpDst->yAxis = { lf2XY - lf2WZ, 1.0f - (lf2ZZ + lf2XX), lf2YZ + lf2WX, 0.0f };   // r3+0x10
-    lpDst->zAxis = { lf2ZX + lf2WY, lf2YZ - lf2WX, 1.0f - (lf2YY + lf2XX), 0.0f };   // r3+0x20
 }
 
 } // namespace physics
