@@ -28,8 +28,8 @@ namespace CgsSceneManager
     //   return this
     //
     // The vspltisw/vslw/vxor triple is the standard VMX idiom for a per-component
-    // float negation (flip bit 31 of each of the four lanes) — reproduced scalarly as
-    // a component-wise negate of the source normal.
+    // float negation (flip bit 31 of each of the four lanes) — reproduced with the
+    // corresponding vector intrinsics below.
     // -------------------------------------------------------------------------
     Contact* Contact::Construct(const SourceResult* lpResult, u32 luContactPointIndex)
     {
@@ -38,10 +38,8 @@ namespace CgsSceneManager
                    "luContactPointIndex < lpResult->numPoints");                          // :158
 
         // -mNormal : VMX sign-bit flip on all four lanes.
-        mNormal.x = -lpResult->mNormal.x;
-        mNormal.y = -lpResult->mNormal.y;
-        mNormal.z = -lpResult->mNormal.z;
-        mNormal.w = -lpResult->mNormal.w;
+        const __vector4 lSignMask = __vslw(__vspltisw(-1), __vspltisw(-1));
+        mNormal.mV = __vxor(lpResult->mNormal.mV, lSignMask);
 
         mPosition = lpResult->maPositions[luContactPointIndex];
         mImpulse  = lpResult->maImpulses[luContactPointIndex];

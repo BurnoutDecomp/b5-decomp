@@ -267,7 +267,7 @@ namespace CgsNetwork
         // Horizontal scale: 1 / graph-full-scale; the plot area is the virtual screen width less a
         // 100px inset. (X360 reads mfVirtualScreenWidth @0x34 directly; reached here by name.)
         const f32 lfInvMaxGraph = 1.0f / lfX;
-        const f32 lfPlotWidth   = lpRender->GetVirtualScreenSize().x - 100.0f;
+        const f32 lfPlotWidth   = lpRender->GetVirtualScreenSize().mV.x - 100.0f;
         const f32 lfBarLength   = lfPlotWidth * (lfMaxOnGraph * lfInvMaxGraph);
 
         // Row geometry.
@@ -290,8 +290,8 @@ namespace CgsNetwork
 
         // 4) The max-bandwidth threshold marker: a vertical line at lfMax's scaled position (no +50).
         const f32     lfMaxLength   = lfPlotWidth * (lfMax * lfInvMaxGraph);
-        const Vector2 lv2LineTop    = { lfMaxLength, lfBottomY, 0.0f, 0.0f };
-        const Vector2 lv2LineBottom = { lfMaxLength, lfRowY,    0.0f, 0.0f };
+        const Vector2 lv2LineTop(lfMaxLength, lfBottomY);
+        const Vector2 lv2LineBottom(lfMaxLength, lfRowY);
         lpRender->DrawLine(lv2LineTop, lv2LineBottom, 0xFFFF0000u);
     }
 }
