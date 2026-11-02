@@ -111,9 +111,8 @@ namespace CgsDev
         lParameter.mfDrawY  = lrMetrics.mfScreenBorderTop;     // metrics @ +0x74
 
         // The title sits 1.5 text rows above the first monitor row (fnmsubs, flt_82004D04).
-        const Vector2 lv2TitlePos = { lrMetrics.mfScreenBorderLeft,
-                                     lrMetrics.mfScreenBorderTop - lfRowHeight * KF_TABLETITLEHEIGHT,
-                                     0.0f, 0.0f };
+        const Vector2 lv2TitlePos(lrMetrics.mfScreenBorderLeft,
+                                  lrMetrics.mfScreenBorderTop - lfRowHeight * KF_TABLETITLEHEIGHT);
         lpDebug2DRender->DrawText( "GPU Render Cost", lv2TitlePos, lfRowHeight, 0xFFFFFFFFu, false );
 
         PerfMonGpu::ReportMonitors( &RenderTableCallback, &lParameter, /*lbReportTotal*/ true );
@@ -145,10 +144,10 @@ namespace CgsDev
         {
             const f32 lfGridX = static_cast<f32>( luLine ) * KF_GRAPHCOLUMNPITCH + KF_GRAPHORIGINX;
             const f32 lfGridY = KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT;
-            const Vector2 lv2Min = { lfGridX - KF_GRAPHGRIDHALF, lfGridY, 0.0f, 0.0f };
-            const Vector2 lv2Size = { (lfGridX + KF_GRAPHGRIDHALF) - lv2Min.x,
-                                      (KF_GRAPHORIGINY + KF_GRAPHGRIDEND) - lv2Min.y,
-                                      0.0f, 0.0f };
+            const f32 lfGridLeft = lfGridX - KF_GRAPHGRIDHALF;
+            const Vector2 lv2Min(lfGridLeft, lfGridY);
+            const Vector2 lv2Size((lfGridX + KF_GRAPHGRIDHALF) - lfGridLeft,
+                                  (KF_GRAPHORIGINY + KF_GRAPHGRIDEND) - lfGridY);
             lpDebug2DRender->DrawBox( lv2Min, lv2Size, KC_GRAPHGRID );
         }
 
@@ -164,16 +163,16 @@ namespace CgsDev
         for ( u32 luLabel = 0; luLabel < 5u; ++luLabel )
         {
             const f32 lfLabelX = KAF_LABELX[luLabel];
-            const Vector2 lv2Pos = { lfLabelX, KF_GRAPHORIGINY + KF_GRAPHLABELDROP, 0.0f, 0.0f };
+            const Vector2 lv2Pos(lfLabelX, KF_GRAPHORIGINY + KF_GRAPHLABELDROP);
             lpDebug2DRender->DrawText( KAPCLABELS[luLabel], lv2Pos, KF_GRAPHLABELSIZE, KC_GRAPHLABEL, false );
         }
 
         // The translucent reference bar showing the current vertical scale (mfMaxGpu).
         {
             const f32 lfBarRight = mfMaxGpu * KF_GRAPHREFERENCEBARSCALE + KF_GRAPHORIGINX; // fmadds, flt_820DD6F4
-            const Vector2 lv2Min = { KF_GRAPHORIGINX, KF_GRAPHORIGINY,                     0.0f, 0.0f };
-            const Vector2 lv2Size = { lfBarRight - lv2Min.x,
-                                      (KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT) - lv2Min.y, 0.0f, 0.0f };
+            const Vector2 lv2Min(KF_GRAPHORIGINX, KF_GRAPHORIGINY);
+            const Vector2 lv2Size(lfBarRight - KF_GRAPHORIGINX,
+                                  (KF_GRAPHORIGINY + KF_GRAPHBARHEIGHT) - KF_GRAPHORIGINY);
             lpDebug2DRender->DrawBox( lv2Min, lv2Size, KC_GRAPHSCALEBAR );
         }
 
@@ -205,15 +204,15 @@ namespace CgsDev
                                  : ( lParameters.mColour.m_rgba | 0xFF000000u );  // monitor colour, opaque
 
         // The monitor name.
-        const Vector2 lv2NamePos = { lpParameter->mfDrawX, lpParameter->mfDrawY, 0.0f, 0.0f };
+        const Vector2 lv2NamePos(lpParameter->mfDrawX, lpParameter->mfDrawY);
         lpParameter->mpRender->DrawText( lParameters.mpcName, lv2NamePos, lfRowHeight, lColour, false );
 
         // The cost value.
         char lacValue[32];
         CgsCore::SPrintf( lacValue, 32, "%.03f", lParameters.mfCurrentValue );
 
-        const Vector2 lv2ValuePos = { lpParameter->mfDrawX + KF_TABLEVALUEOFFSET,
-                                      lpParameter->mfDrawY, 0.0f, 0.0f };
+        const Vector2 lv2ValuePos(lpParameter->mfDrawX + KF_TABLEVALUEOFFSET,
+                                  lpParameter->mfDrawY);
         lpParameter->mpRender->DrawText( lacValue, lv2ValuePos, lfRowHeight, lColour, false );
 
         // Advance to the next row.
@@ -239,9 +238,9 @@ namespace CgsDev
         const f32 lfY = lpParam->mfDrawY;
 
         // ARTIST 8281F2C4/CC subtracts the origin to form the vector size.
-        const Vector2 lv2Min = { lfX,               lfY,                         0.0f, 0.0f };
-        const Vector2 lv2Size = { (lfX + lfBarLength) - lfX,
-                                  (lfY + KF_GRAPHBARHEIGHT) - lfY, 0.0f, 0.0f };
+        const Vector2 lv2Min(lfX, lfY);
+        const Vector2 lv2Size((lfX + lfBarLength) - lfX,
+                              (lfY + KF_GRAPHBARHEIGHT) - lfY);
         lpParam->mpRender->DrawBox( lv2Min, lv2Size, lColour );
 
         lpParam->mfDrawX    += lfBarLength;

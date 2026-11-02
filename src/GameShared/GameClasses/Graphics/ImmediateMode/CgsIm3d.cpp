@@ -240,9 +240,9 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
         lpDevice, leType, luCount, sizeof(PackedVertex)));
         for (u32 luVertex = 0; luVertex < luCount; ++luVertex)
             {
-                lpOutput[luVertex].mPosition.x = lpVertices[luVertex].mv3Pos.x;
-                lpOutput[luVertex].mPosition.y = lpVertices[luVertex].mv3Pos.y;
-                lpOutput[luVertex].mPosition.z = lpVertices[luVertex].mv3Pos.z;
+                lpOutput[luVertex].mPosition.x = lpVertices[luVertex].mv3Pos.GetX().GetFloat();
+                lpOutput[luVertex].mPosition.y = lpVertices[luVertex].mv3Pos.GetY().GetFloat();
+                lpOutput[luVertex].mPosition.z = lpVertices[luVertex].mv3Pos.GetZ().GetFloat();
                 lpOutput[luVertex].mColour = lpVertices[luVertex].mv4Colour;
                 lpOutput[luVertex].mUv = lpVertices[luVertex].mv2Tex0UV;
             }
@@ -358,14 +358,15 @@ void Im3d::SaveMaskShaderConstants(const BasicColouredTexturedVertex* lpVertices
 {
     Im3dMask& lrMask = maMask[0];
     Im3dMask::Im3dMaskLayer& lrLayer = lrMask.maPixelMaskHandles[mu32NumMasks];
-    const Vector4 lPosition = { lpVertices[0].mv3Pos.x, lpVertices[0].mv3Pos.y,
-                               lpVertices[1].mv3Pos.x, lpVertices[1].mv3Pos.y };
+    const Vector4 lPosition(lpVertices[0].mv3Pos.GetX().GetFloat(), lpVertices[0].mv3Pos.GetY().GetFloat(),
+                            lpVertices[1].mv3Pos.GetX().GetFloat(), lpVertices[1].mv3Pos.GetY().GetFloat());
     lrLayer.mvPixelMaskPositionMinMax = lPosition;
-    const Vector4 lUV = { lpVertices[0].mv2Tex0UV.x, lpVertices[0].mv2Tex0UV.y,
-                         lpVertices[1].mv2Tex0UV.x, lpVertices[1].mv2Tex0UV.y };
+    const Vector4 lUV(lpVertices[0].mv2Tex0UV.x, lpVertices[0].mv2Tex0UV.y,
+                      lpVertices[1].mv2Tex0UV.x, lpVertices[1].mv2Tex0UV.y);
     lrLayer.mvPixelMaskUVStartEnd = lUV;
-    const Vector4 lDifference = { 1.0f / (lpVertices[1].mv3Pos.x - lpVertices[0].mv3Pos.x),
-                                 1.0f / (lpVertices[1].mv3Pos.y - lpVertices[0].mv3Pos.y), 0.0f, 0.0f };
+    const Vector4 lDifference(1.0f / (lpVertices[1].mv3Pos.GetX().GetFloat() - lpVertices[0].mv3Pos.GetX().GetFloat()),
+                              1.0f / (lpVertices[1].mv3Pos.GetY().GetFloat() - lpVertices[0].mv3Pos.GetY().GetFloat()),
+                              0.0f, 0.0f);
     lrLayer.mvPixelMaskUVDifference = lDifference;
     lrLayer.mpMaskTextureState = lpTextureState;
     lrLayer.mpMaskTexture = lpTexture;
