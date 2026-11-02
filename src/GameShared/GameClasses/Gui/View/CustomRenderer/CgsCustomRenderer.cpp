@@ -3,6 +3,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // CgsCustomRenderer.cpp -- the custom-render component base bodies, plus the one
@@ -48,7 +49,7 @@ namespace CgsGui
     // ARTIST 0x82857748: publish default states before each custom component.
     void CustomRenderComponentInterface::Render(ImRendererSet* lpRendererSet)
     {
-        auto& lrBuffer = *lpRendererSet->mpIm2dRenderBuffer;
+        CgsGraphics::Im2dRenderBuffer& lrBuffer = *lpRendererSet->mpIm2dRenderBuffer;
         lrBuffer.BeginRendering();
         lrBuffer.SetState(gpGuiBlendStateStandard);
         lrBuffer.SetState(gpGuiRasterizerStateCullNone);

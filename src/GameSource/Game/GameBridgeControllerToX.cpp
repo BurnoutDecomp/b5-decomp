@@ -299,11 +299,11 @@ namespace BrnGame
         // left in the other half of each quadword, and only x/y are ever read (Vector2's
         // consumers are 2-lane dots and the yaw/pitch integrators). Zeroed here.
         {
-            const Vector2 lAggregateValue = { lpPad->mfStickLX, lpPad->mfStickLY, 0.0f, 0.0f };
+            const Vector2 lAggregateValue(lpPad->mfStickLX, lpPad->mfStickLY);
             lImage.mCarModifier = lAggregateValue;
         }
         {
-            const Vector2 lAggregateValue = { lpPad->mfStickRX, lpPad->mfStickRY, 0.0f, 0.0f };
+            const Vector2 lAggregateValue(lpPad->mfStickRX, lpPad->mfStickRY);
             lImage.mCameraModifier = lAggregateValue;
         }
 
