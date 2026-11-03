@@ -624,30 +624,6 @@ void LionBlendRenderer::RenderSprites(EffectsVertexBufferIterator& arIterator,
             laPoints[luCorner] = rw::math::vpu::TransformPoint(mBackMat, laPoints[luCorner]);
         }
 
-        // [lionsprite] ONE-SHOT bring-up witness. NOT console behaviour. Every step between the
-        // per-particle matrix and the corner the vertex writer receives, because the spawn point
-        // is provably correct and the vertex provably is not. DELETE-WHEN-STABLE.
-        {
-            static bool sbSpriteOnce = false;
-            if (!sbSpriteOnce)
-            {
-                sbSpriteOnce = true;
-                char lacMsg[384];
-                _snprintf(lacMsg, sizeof(lacMsg),
-                    "[lionsprite] mat.wa=(%.2f,%.2f,%.2f,%.2f) conv.wAxis=(%.2f,%.2f,%.2f,%.2f)"
-                    " part.mPos=(%.2f,%.2f,%.2f) back.wAxis=(%.2f,%.2f,%.2f,%.2f)"
-                    " back.xAxis=(%.3f,%.3f,%.3f) corner0=(%.2f,%.2f,%.2f)\n",
-                    apMatrix[luIndex].wa.x, apMatrix[luIndex].wa.y, apMatrix[luIndex].wa.z,
-                    apMatrix[luIndex].wa.w,
-                    lConvertedXform.wAxis.mV.x, lConvertedXform.wAxis.mV.y, lConvertedXform.wAxis.mV.z,
-                    lConvertedXform.wAxis.mV.w,
-                    lrPart.mPos.x, lrPart.mPos.y, lrPart.mPos.z,
-                    mBackMat.wAxis.mV.x, mBackMat.wAxis.mV.y, mBackMat.wAxis.mV.z, mBackMat.wAxis.mV.w,
-                    mBackMat.xAxis.mV.x, mBackMat.xAxis.mV.y, mBackMat.xAxis.mV.z,
-                    laPoints[0].mV.x, laPoints[0].mV.y, laPoints[0].mV.z);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
 
         QuadDraw(lrLionBlendVertexIterator, lUVData, lrPart, laPoints, *apEmitter);
     }

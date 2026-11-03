@@ -492,38 +492,6 @@ U32 LionParticleRender::CreateInternalMaterial(const cParticleMaterial* apMateri
         ++siMaterialCount;
     }
 
-    // ---- [lionmat] witness. NOT console behaviour: ours, bounded (one line per DISTINCT
-    // material render state -- this build's material set produces a handful), log-only.
-    // It prints the number the "washed out" complaint is actually about, so a claim about the
-    // blend can be checked against the state that was built rather than against a screenshot.
-    {
-        static const char* const KAPC_BLEND_MODE_NAMES[26] =
-        {
-            "COPYRGB", "SRCALPHA", "SRCALPHA_KEEP", "COPYALPHA", "DESTALPHA",
-            "DESTALPHA_KEEP", "SRCALPHA_ADD", "DESTALPHA_ADD", "SRCALPHA_SUB",
-            "DESTALPHA_SUB", "SRCDEST_5050", "SRCALPHA_ADD_KEEP", "DESTALPHA_ADD_KEEP",
-            "COPYRGB_KEEP", "SRCINVALPHA", "SRCINVALPHA_KEEP", "DESTINVALPHA",
-            "DESTINVALPHA_KEEP", "SRCALPHA_LIGHTMAP", "SRCALPHA_LIGHTMAP_KEEP",
-            "ADD_SRCALPHA", "ADD_SRCALPHA_KEEP", "ZWRITE_ONLY", "SRCMINUSDEST",
-            "DESTMINUSSRC", "SRCADDDEST"
-        };
-        const u32 luMode = apMaterial->mBlendMode;
-        char lacMsg[288];
-        _snprintf(lacMsg, sizeof(lacMsg),
-            "[lionmat] #%d hash=%08X mode=%u(%s) rb_blendcontrol=%08X"
-            " colour src=%u dst=%u op=%u  alpha src=%u dst=%u op=%u"
-            "  alphatest=%u func=%u ref=%u ztest=%u\n",
-            (int)siMaterialCount - 1, (unsigned)luMaterialHash, (unsigned)luMode,
-            (luMode < 26u) ? KAPC_BLEND_MODE_NAMES[luMode] : "?",
-            (unsigned)lruBlend,
-            (unsigned)(lruBlend & 0x1Fu), (unsigned)((lruBlend >> 8) & 0x1Fu),
-            (unsigned)((lruBlend >> 5) & 0x7u),
-            (unsigned)((lruBlend >> 16) & 0x1Fu), (unsigned)((lruBlend >> 24) & 0x1Fu),
-            (unsigned)((lruBlend >> 21) & 0x7u),
-            (unsigned)lParams.mbState16, (unsigned)lParams.muState15,
-            (unsigned)lParams.muState17, (unsigned)apMaterial->mZTestMode);
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
 
     return luMaterialHash;
 }
@@ -627,82 +595,6 @@ renderengine::Texture* LionParticleRender::FindTexture(U32 auTextureMapHandle) c
     return lpTexture;
 }
 
-//
-// WHY. The Lion pass draws a hard-edged, near-opaque pale block where the console draws soft
-// smoke, and the three inputs that could do that are all readable from the device rather than
-// argued about: what is on sampler unit 0 before and after this bind, whether the acquired-texture
-// table is indexed the way FindTexture assumes, and what the material asked for. The texture data
-// itself is already cleared: ExhaustSmoke's material names BURNOUTSMOKE, which ports to a 128x128
-// DXT5 raster whose BORDER alpha averages 5/255 -- a correctly sampled quad cannot have a hard
-// edge, so the alpha is being lost somewhere between here and the fragment.
-//
-// ⚠ THE TABLE DUMP IS NOT DECORATION. FindTexture reads saTextures[i] where i is the NAME-MAP
-// ENTRY index, while AcquireTexture appends at siTextureCount++ in ACQUIRE-REPLY order. The two
-// agree only if the replies arrive in request order; the console's resource system guarantees
-// that and this host's is a different implementation, so it is measured, not assumed.
-//
-// ⭐ WHAT IT ANSWERED (2026-09-05, three runs). acquired=48 against mapEntries=48, every slot
-// matching its map entry by hash AND by raster size; the bind moves sampler 0 onto a real
-// 128x128 DXT5 with one mip (BURNOUTSMOKE) with LINEAR filtering; the vertex UVs are the
-// console's own non-atlas corner set (0,1)/(0,0)/(1,0)/(1,1); and the bound vertex declaration,
-// read back off the device on 30 draws and identical every time, is
-//     [s0+0 FLOAT4 POSITION0] [s0+16 UBYTE4N COLOR0] [s0+20 FLOAT4 TEXCOORD0]
-// -- exactly LionBlendVertex. NOTHING on the texture path is unbound, mis-indexed, degenerate or
-// undeclared. The plume's remaining defect is BRIGHTNESS, not texturing; see the overbright
-// banner in BrnLionBlendRenderer.cpp for where that trail goes next.
-// ============================================================================================
-namespace
-{
-    void LionBindWitness(const char* apcTag, u32 auTextureHandle,
-                         const renderengine::Texture* apTexture,
-                         const BrnParticle::TextureNameMap* apMap)
-    {
-        // Re-walk the map read-only for the matched index (FindTexture itself stays untouched).
-        s32 liEntry = -1;
-        u32 luCount = 0;
-        if (apMap != 0)
-        {
-            const BrnParticle::TextureNameMap::Entry* lpEntries = apMap->GetEntries();
-            luCount = apMap->GetEntryCount();
-            for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
-            {
-                if (lpEntries[luIndex].muHashedLionTextureName == auTextureHandle)
-                {
-                    liEntry = static_cast<s32>(luIndex);
-                    break;
-                }
-            }
-        }
-
-        const void* lpD3D = (apTexture != 0)
-                          ? static_cast<const void*>(apTexture) : 0;
-
-        // ...and, once, the acquired-texture table beside the map it is indexed by.
-        static bool sbTableDumped = false;
-        if (!sbTableDumped && apMap != 0)
-        {
-            sbTableDumped = true;
-            const BrnParticle::TextureNameMap::Entry* lpEntries = apMap->GetEntries();
-            char lacMsg[224];
-            _snprintf(lacMsg, sizeof(lacMsg),
-                          "[liontab] acquired=%d mapEntries=%u\n", siTextureCount, luCount);
-            CgsDev::Log::WriteToLog(lacMsg);
-            const u32 luDump = (luCount < 8u) ? luCount : 8u;
-            for (u32 luIndex = 0; luIndex < luDump; ++luIndex)
-            {
-                renderengine::Texture* lpSlot = saTextures[luIndex];
-                _snprintf(lacMsg, sizeof(lacMsg),
-                              "[liontab]   %2u hash=%08X tex=%p d3d=%p %ux%u\n",
-                              luIndex, lpEntries[luIndex].muHashedLionTextureName,
-                              static_cast<void*>(lpSlot),
-                              (lpSlot != 0) ? static_cast<void*>(lpSlot) : 0,
-                              (lpSlot != 0) ? (unsigned)lpSlot->GetWidth() : 0u,
-                              (lpSlot != 0) ? (unsigned)lpSlot->GetHeight() : 0u);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-    }
-}
 
 // ----------------------------------------------------------------------------
 // LionParticleRender::SetMaterial (X360 0x822896B8)
@@ -726,9 +618,7 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
     renderengine::Texture* lpTexture = FindTexture(apMaterial->mTextureHandle);
     if (shadow::Device::GetSamplerTextureShadow(0u) != static_cast<void*>(lpTexture))
     {
-        LionBindWitness("B", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
         D3DDevice_SetTexture(gpD3DDevice, 0, lpTexture, 0x80000000u);
-        LionBindWitness("A", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
         shadow::Device::SetSamplerTextureShadow(0u, static_cast<void*>(lpTexture));
     }
 
@@ -789,29 +679,6 @@ void LionParticleRender::TextureRegister(cParticleMaterial* apMaterial, char* ap
         apMaterial->SetNormalMapHandle(luNormalHash);
     }
 
-    // ---- [texreg] witness. NOT console behaviour: ours, bounded, log-only. -------------------
-    // ⭐ WHY A COUNT AND NOT A ONE-SHOT. This function is the ONLY place a particle material ever
-    // gets a texture-map handle, and it is reached only while gpLionParticleRender is non-null --
-    // which, before cLionFX::Init landed, it never was. A one-shot line would prove the path is
-    // live and say nothing about COVERAGE, and "at least one material registered" is exactly the
-    // kind of claim this project keeps having to retract. So: the first registration, then every
-    // 32nd, then a final line -- each carrying the material's texture NAME and the handle the
-    // hash produced, because a wrong record layout would give a garbage name or a zero handle
-    // here rather than nothing at all. DELETE-WHEN-STABLE.
-    {
-        static u32 suRegistered = 0;
-        ++suRegistered;
-        if (suRegistered == 1 || (suRegistered % 32) == 0)
-        {
-            char lacMsg[256];
-            _snprintf(lacMsg, sizeof(lacMsg),
-                          "[texreg] #%u material=%p texture=\"%s\" texHandle=%08X matHandle=%08X\n",
-                          suRegistered, static_cast<const void*>(apMaterial),
-                          apcTextureName ? apcTextureName : "<null>",
-                          luTextureHash, apMaterial->mMaterialHandle);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1099,22 +966,6 @@ void LionParticleRender::Render(EffectsVertexBufferIterator& arIterator,
 {
     cMatrix laMatrices[KU_VECTOR_DRAW_RUN];
 
-    // [lionvec] ONE-SHOT bring-up witness. NOT console behaviour. The per-particle VECTOR this
-    // adapter reads out of the bucket's side array, beside the particle's own local position --
-    // the second half of the spawn/draw split. DELETE-WHEN-STABLE.
-    {
-        static bool sbVecOnce = false;
-        if (!sbVecOnce && auCount != 0)
-        {
-            sbVecOnce = true;
-            char lacMsg[224];
-            _snprintf(lacMsg, sizeof(lacMsg),
-                "[lionvec] count=%u v0=(%.2f,%.2f,%.2f,%.2f) partPos=(%.2f,%.2f,%.2f)\n",
-                (unsigned)auCount, apVectors[0].x, apVectors[0].y, apVectors[0].z, apVectors[0].w,
-                apParticle[0].mPos.x, apParticle[0].mPos.y, apParticle[0].mPos.z);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 
     for (U32 luIndex = 0; luIndex < auCount; ++luIndex)
     {
