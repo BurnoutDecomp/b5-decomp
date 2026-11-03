@@ -30,12 +30,7 @@
 //   0x82209350    if (flags & HardStop)
 //                   the box-space face test below; mbSuggestLeftOfLineOfAction; IsZero(normal) -> Clear()
 //
-// FLAG (PC-platform, numeric -- the rw::math::vpu precedent: vector3_operation.h Divide / Normalize,
-// matrix44affine_operation.h MakeRotation*): the console forms the reciprocal half extents with
-// vrefp + two Newton steps (0x822093B4..0x822093C8) and the normalisation with vrsqrtefp + two
-// Newton steps (0x822093DC..0x822093FC); both are exact 1/x and 1/sqrt(x) here. The console's
-// normalisation has NO zero guard (no vcmpeqfp/vsel), and neither does this one: a vertical
-// normal gives 0 * inf = NaN on both, every compare fails, and the verdict is the same.
+// Reciprocal and reciprocal-square-root use the console VMX estimates and two refinements.
 // ============================================================================
 
 #include "GameSource/Director/BrnCrashAnalyser.h"
@@ -67,8 +62,8 @@ namespace
 
     // rw::math::vpu::detail::gIVector rows 0 and 2 (0x82181500 / 0x82181520, x360rd): the car-space
     // X and Z unit axes the left-of-action-line accumulator steps along.
-    const Vector3 KV_X_AXIS = { 1.0f, 0.0f, 0.0f, 0.0f };
-    const Vector3 KV_Z_AXIS = { 0.0f, 0.0f, 1.0f, 0.0f };
+    const Vector3 KV_X_AXIS(1.0f, 0.0f, 0.0f);
+    const Vector3 KV_Z_AXIS(0.0f, 0.0f, 1.0f);
 }
 
 // @0x82209290
@@ -99,8 +94,7 @@ void CrashAnalyser::Update(const DirectorIO::InputBuffer* lpInput, const GameSta
 
             // cpp:167 / :168 -- the car box's half extents and their reciprocal (One / half).
             const Vector3 lHalfExtents = (lpPlayerVehicleInfo->mAABB.mMax - lpPlayerVehicleInfo->mAABB.mMin) * KF_HALF;
-            const Vector3 lReciprocalHalfExtents = { 1.0f / lHalfExtents.x, 1.0f / lHalfExtents.y,
-                                                     1.0f / lHalfExtents.z, 1.0f / lHalfExtents.w };
+            const Vector3 lReciprocalHalfExtents(rw::math::vpu::detail::Vector3NativeReciprocal(lHalfExtents.mV));
 
             // cpp:170 -- the contact normal with its component along the car's up axis removed.
             const Vector3 lCurrentCollisionNormalNoY =
@@ -109,9 +103,10 @@ void CrashAnalyser::Update(const DirectorIO::InputBuffer* lpInput, const GameSta
             // cpp:171 -- into box units, then Normalize (no zero guard -- see the banner).
             const Vector3 lAdjustedCollisionNormal =
                 rw::math::vpu::Mult(lCurrentCollisionNormalNoY, lReciprocalHalfExtents);
-            const f32 lfInverseLength =
-                1.0f / std::sqrt(rw::math::vpu::Dot(lAdjustedCollisionNormal, lAdjustedCollisionNormal));
-            const Vector3 lCurrentNormalisedAdjustedCollisionNormal = lAdjustedCollisionNormal * lfInverseLength;
+            const Vector3 lCurrentNormalisedAdjustedCollisionNormal(__vmulfp(
+                lAdjustedCollisionNormal.mV,
+                rw::math::vpu::detail::Vector3NativeReciprocalRoot(
+                    __vmsum3fp(lAdjustedCollisionNormal.mV, lAdjustedCollisionNormal.mV), 2)));
 
             // cpp:172 / :173 / :174.
             const f32 lXAngle = rw::math::vpu::Dot(lCurrentNormalisedAdjustedCollisionNormal, lrCarTransform.xAxis);
@@ -150,9 +145,9 @@ void CrashAnalyser::Update(const DirectorIO::InputBuffer* lpInput, const GameSta
             // lane, vrlimi128 @0x82209558) with `vcmpgtfp.` against FLT_EPSILON and reads CR6's
             // "no lane true" bit. Written as that predicate, NOT as rw IsZero's `<=`, so a NaN
             // normal counts as zero exactly as it does on the console.
-            if (!(std::fabs(lrNormal.x) > KF_ZERO_NORMAL_TOLERANCE
-                  || std::fabs(lrNormal.y) > KF_ZERO_NORMAL_TOLERANCE
-                  || std::fabs(lrNormal.z) > KF_ZERO_NORMAL_TOLERANCE))
+            if (!(std::fabs(lrNormal.GetX().GetFloat()) > KF_ZERO_NORMAL_TOLERANCE
+                  || std::fabs(lrNormal.GetY().GetFloat()) > KF_ZERO_NORMAL_TOLERANCE
+                  || std::fabs(lrNormal.GetZ().GetFloat()) > KF_ZERO_NORMAL_TOLERANCE))
             {
                 mAnalysis.Clear();
             }

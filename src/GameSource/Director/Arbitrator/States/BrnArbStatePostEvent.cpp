@@ -12,8 +12,6 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h"          // Camera::BehaviourIceAnim + DirectorResourceManager slice
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                        // Camera::BehaviourManager (complete)
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::Gen::shotgroup
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [diag] CgsDev::Log::gpDebugPrint
-#include <cstdlib>                                                              // [diag] getenv (BRN_FINISHLINE_DIAG)
 
 // NOTE: the director-camera cone uses the minimal DirectorResourceManager SLICE declared in
 // BrnBehaviourIceAnim.h (GetEventCompletionShots / GetBurnoutLicense), NOT the heavier
@@ -57,7 +55,7 @@ namespace BrnDirector
         // three-lane vector dot; the w lane never takes part).
         inline f32 Dot3(const Vector3& lrA, const Vector3& lrB)
         {
-            return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+            return lrA.GetX().GetFloat() * lrB.GetX().GetFloat() + lrA.GetY().GetFloat() * lrB.GetY().GetFloat() + lrA.GetZ().GetFloat() * lrB.GetZ().GetFloat();
         }
 
         // Magnitude only -- the picker compares the two dots with their sign bits cleared.
@@ -182,9 +180,9 @@ namespace BrnDirector
                     Camera::Utils::CreateLookAt(lOrigin, lrFinishLineDir);
 
                 const f32 lfAlong  = Dot3(lrFinishLineDir, lrVelocity);
-                const f32 lfAcross = -(lFinishLineFrame.xAxis.x * lrVelocity.x +
-                                       lFinishLineFrame.xAxis.y * lrVelocity.y +
-                                       lFinishLineFrame.xAxis.z * lrVelocity.z);
+                const f32 lfAcross = -(lFinishLineFrame.xAxis.GetX().GetFloat() * lrVelocity.GetX().GetFloat() +
+                                       lFinishLineFrame.xAxis.GetY().GetFloat() * lrVelocity.GetY().GetFloat() +
+                                       lFinishLineFrame.xAxis.GetZ().GetFloat() * lrVelocity.GetZ().GetFloat());
 
                 if (Abs(lfAlong) > Abs(lfAcross))
                     luShotIndex = (lfAlong > 0.0f) ? 0u : 2u;

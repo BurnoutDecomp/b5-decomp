@@ -46,9 +46,7 @@
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::Gen::shotgroup
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"                      // Timestep::E_WORLD_NO_SLOMO
 #include "rw/math/vpu/vector3_operation.h"                                      // Normalize / IsZero / operator-
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [diag] gpDebugPrint ([crashcam])
 #include <cmath>                                                                // sinf (the blend easing curves)
-#include <cstdlib>                                                              // [diag] getenv (BRN_CRASHCAM_DIAG)
 
 namespace BrnDirector
 {
@@ -613,7 +611,6 @@ namespace BrnDirector
             {
                 mfActiveTime = 0.0f;
                 meState = E_STATE_ACTIVE;
-   // [DIAG] NOT X360
             }
             else
             {
@@ -901,21 +898,11 @@ namespace BrnDirector
             const rw::math::vpu::Vector3 lPlayerDirection =
                 rw::math::vpu::Normalize(lrSharedInfo.mpPlayerCar->mRaceCarState.mLinearVelocity);
 
-            const rw::math::vpu::Vector3 lEyeScale =
-            {
-                KF_DESTRUCTION_PATH_EYE_SCALE,
-                lPlayerPosition.y + KF_DESTRUCTION_PATH_EYE_SCALE,
-                KF_DESTRUCTION_PATH_EYE_SCALE,
-                0.0f
-            };
-
-            const rw::math::vpu::Vector3 lEyePosition =
-            {
-                lPlayerDirection.x * lEyeScale.x + KF_DESTRUCTION_PATH_EYE_OFFSET,
-                lPlayerDirection.y * lEyeScale.y + KF_DESTRUCTION_PATH_EYE_OFFSET,
-                lPlayerDirection.z * lEyeScale.z + KF_DESTRUCTION_PATH_EYE_OFFSET,
-                0.0f
-            };
+            const rw::math::vpu::Vector3 lUp(0.0f, 1.0f, 0.0f);
+            const rw::math::vpu::VecFloat lScale(KF_DESTRUCTION_PATH_EYE_SCALE);
+            const rw::math::vpu::VecFloat lOffset(KF_DESTRUCTION_PATH_EYE_OFFSET);
+            const rw::math::vpu::Vector3 lEyeScale(__vmaddfp(lUp.mV, lPlayerPosition.mV, lScale.mV));
+            const rw::math::vpu::Vector3 lEyePosition(__vmaddfp(lPlayerDirection.mV, lEyeScale.mV, lOffset.mV));
 
             Camera::Camera lFromCamera;
             lFromCamera.Construct();

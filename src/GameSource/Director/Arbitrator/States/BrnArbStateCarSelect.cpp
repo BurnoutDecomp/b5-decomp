@@ -4,8 +4,6 @@
 #include <cmath>                                                                  // fabsf (the car-stillness test)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT / the FireAssert tripwires
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                      // CgsDev::StrStream (the formatted asserts)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // [DIAG] gpDebugPrint (bring-up only)
-#include <cstdlib>                                                                // getenv ([DIAG] BRN_DIRECTOR_TRACE)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"              // BrnDirector::GameState
 #include "GameSource/Director/Camera/Camera.h"                                    // Camera::Camera (mEffects / mState_uFlags)
 #include "GameSource/Director/Camera/BrnSharedCameraContainer.h"                  // SharedCameraContainer
@@ -422,9 +420,9 @@ namespace BrnDirector
         f32 lfNearestSqDistance = 0.0f;
         for (s32 liJunkyard = 0; liJunkyard < KI_NUM_JUNKYARDS; ++liJunkyard)
         {
-            const f32 lfDx = laJunkyards[liJunkyard].mafPosition[0] - lrPlayerPosition.x;
-            const f32 lfDy = laJunkyards[liJunkyard].mafPosition[1] - lrPlayerPosition.y;
-            const f32 lfDz = laJunkyards[liJunkyard].mafPosition[2] - lrPlayerPosition.z;
+            const f32 lfDx = laJunkyards[liJunkyard].mafPosition[0] - lrPlayerPosition.GetX().GetFloat();
+            const f32 lfDy = laJunkyards[liJunkyard].mafPosition[1] - lrPlayerPosition.GetY().GetFloat();
+            const f32 lfDz = laJunkyards[liJunkyard].mafPosition[2] - lrPlayerPosition.GetZ().GetFloat();
             const f32 lfSqDistance = (lfDx * lfDx) + (lfDy * lfDy) + (lfDz * lfDz);
 
             // The X360 seeds the running minimum from the first record's own slot, so the
@@ -724,22 +722,14 @@ namespace BrnDirector
         Camera::BehaviourManager&      lrManager   = *lrSharedInfo.mpBehaviourManager;
         const DirectorResourceManager& lrResources = *lrSharedInfo.mpDirectorResourceManager;
 
-        // [DIAG BRN_DIRECTOR_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Report every meState
-        // transition once, and the fact that this state is running at all -- the sibling
-        // ArbStateRoaming carries the same block. Off unless the env var is set; remove with the
-        // bring-up path.
-        {
-            static s32 siLastReported = -2;
-        }
-
         // The junkyard camera is not the "entering junkyard" camera by default; each arm that
         // wants that bit raises it again.
         GetNonConstCamera().mState_uFlags &= ~KI_CAMERA_STATE_JUNKYARD_ENTERING;
 
         // Has the car settled? (rising implicit acceleration + a near-zero vertical velocity)
         const bool lbCarIsStill =
-            (lrSharedInfo.mpPlayerTracker->GetImplicitAcceleration().y > 0.0f) &&
-            (fabsf(lrPlayerCar.mRaceCarState.mLinearVelocity.y) < KF_CAR_STILLNESS_THRESHOLD);
+            (lrSharedInfo.mpPlayerTracker->GetImplicitAcceleration().GetY().GetFloat() > 0.0f) &&
+            (fabsf(lrPlayerCar.mRaceCarState.mLinearVelocity.GetY().GetFloat()) < KF_CAR_STILLNESS_THRESHOLD);
 
         if (mbWaitingForCarToTouchGround)
         {
