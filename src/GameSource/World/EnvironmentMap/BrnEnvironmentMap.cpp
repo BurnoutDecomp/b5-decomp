@@ -16,22 +16,22 @@ namespace BrnGraphics
 {
     static const rw::math::vpu::Vector3 KAV_ENV_MAP_LOOK_DIRECTIONS[E_FACE_NUM] =
     {
-        {  1.0f,  0.0f,  0.0f, 0.0f },
-        { -1.0f,  0.0f,  0.0f, 0.0f },
-        {  0.0f,  1.0f,  0.0f, 0.0f },
-        {  0.0f, -1.0f,  0.0f, 0.0f },
-        {  0.0f,  0.0f,  1.0f, 0.0f },
-        {  0.0f,  0.0f, -1.0f, 0.0f }
+        rw::math::vpu::Vector3( 1.0f,  0.0f,  0.0f ),
+        rw::math::vpu::Vector3(-1.0f,  0.0f,  0.0f ),
+        rw::math::vpu::Vector3( 0.0f,  1.0f,  0.0f ),
+        rw::math::vpu::Vector3( 0.0f, -1.0f,  0.0f ),
+        rw::math::vpu::Vector3( 0.0f,  0.0f,  1.0f ),
+        rw::math::vpu::Vector3( 0.0f,  0.0f, -1.0f )
     };
 
     static const rw::math::vpu::Vector3 KAV_ENV_MAP_UP_DIRECTIONS[E_FACE_NUM] =
     {
-        { 0.0f, 1.0f,  0.0f, 0.0f },
-        { 0.0f, 1.0f,  0.0f, 0.0f },
-        { 0.0f, 0.0f, -1.0f, 0.0f },
-        { 0.0f, 0.0f,  1.0f, 0.0f },
-        { 0.0f, 1.0f,  0.0f, 0.0f },
-        { 0.0f, 1.0f,  0.0f, 0.0f }
+        rw::math::vpu::Vector3(0.0f, 1.0f,  0.0f),
+        rw::math::vpu::Vector3(0.0f, 1.0f,  0.0f),
+        rw::math::vpu::Vector3(0.0f, 0.0f, -1.0f),
+        rw::math::vpu::Vector3(0.0f, 0.0f,  1.0f),
+        rw::math::vpu::Vector3(0.0f, 1.0f,  0.0f),
+        rw::math::vpu::Vector3(0.0f, 1.0f,  0.0f)
     };
 
     // ------------------------------------------------------------------------
