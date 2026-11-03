@@ -185,12 +185,9 @@ namespace BrnWorld
         const CgsSceneManager::Zone* lpZones = lpZoneList->GetZones();
         const u32 luZoneCount = lpZoneList->GetTotalZones();
         const Vector2 lScreenSize = lpRender->GetVirtualScreenSize();
-        const Vector2 lScreenCentre = {
-            lScreenSize.x * KF_OVERLAY_HALF,
-            lScreenSize.y * KF_OVERLAY_HALF,
-            0.0f,
-            0.0f
-        };
+        const Vector2 lScreenCentre(
+            lScreenSize.mV.x * KF_OVERLAY_HALF,
+            lScreenSize.mV.y * KF_OVERLAY_HALF);
 
         for (u32 luZoneIndex = 0; luZoneIndex < luZoneCount; ++luZoneIndex)
         {
@@ -200,18 +197,15 @@ namespace BrnWorld
                 continue;
 
             Vector2 laPoints[32];
-            Vector2 lMinimum = { 100000000.0f, 100000000.0f, 0.0f, 0.0f };
+            Vector2 lMinimum(100000000.0f, 100000000.0f);
             for (s32 liPoint = 0; liPoint < liPointCount; ++liPoint)
             {
                 const Vector2 lWorldPoint = lrZone.GetPoint(static_cast<s16>(liPoint));
-                laPoints[liPoint] = {
-                    (lWorldPoint.x - mPvsCentrePosition.x) * KF_WORLD_TO_SCREEN_SCALE + lScreenCentre.x,
-                    (lWorldPoint.y - mPvsCentrePosition.z) * KF_WORLD_TO_SCREEN_SCALE + lScreenCentre.y,
-                    0.0f,
-                    0.0f
-                };
-                if (laPoints[liPoint].x < lMinimum.x) lMinimum.x = laPoints[liPoint].x;
-                if (laPoints[liPoint].y < lMinimum.y) lMinimum.y = laPoints[liPoint].y;
+                laPoints[liPoint] = Vector2(
+                    (lWorldPoint.mV.x - mPvsCentrePosition.GetX()) * KF_WORLD_TO_SCREEN_SCALE + lScreenCentre.mV.x,
+                    (lWorldPoint.mV.y - mPvsCentrePosition.GetZ()) * KF_WORLD_TO_SCREEN_SCALE + lScreenCentre.mV.y);
+                if (laPoints[liPoint].mV.x < lMinimum.mV.x) lMinimum.mV.x = laPoints[liPoint].mV.x;
+                if (laPoints[liPoint].mV.y < lMinimum.mV.y) lMinimum.mV.y = laPoints[liPoint].mV.y;
             }
 
             s32 liPvsIndex = -1;
@@ -258,14 +252,14 @@ namespace BrnWorld
             {
                 lpRender->DrawWirePolygon(laPoints, static_cast<u32>(liPointCount), 0xFFFFFFFFu);
 
-                if (lMinimum.x >= 0.0f && lMinimum.x <= 1000.0f &&
-                    lMinimum.y >= 0.0f && lMinimum.y <= 1000.0f)
+                if (lMinimum.mV.x >= 0.0f && lMinimum.mV.x <= 1000.0f &&
+                    lMinimum.mV.y >= 0.0f && lMinimum.mV.y <= 1000.0f)
                 {
                     char lacLabel[256];
                     const char* lpcStatus = KAPC_ASSET_STATUS_NAMES[static_cast<s32>(leStatus)];
                     CgsCore::SPrintf(lacLabel, sizeof(lacLabel), "%d: %s",
                                      static_cast<s32>(static_cast<u32>(lrZone.GetId())), lpcStatus);
-                    lpRender->DrawText(lacLabel, lMinimum.x, lMinimum.y, 15.0f, 0xFFFFFFFFu);
+                    lpRender->DrawText(lacLabel, lMinimum.mV.x, lMinimum.mV.y, 15.0f, 0xFFFFFFFFu);
                 }
             }
         }
@@ -295,8 +289,8 @@ namespace BrnWorld
         // render's virtual screen size at render+0x34/+0x38 (GetVirtualScreenSize) and multiplies by
         // flt_82001DA0 == 0.5 -- vmulfp128 v123, screenSize, splat(0.5) @0x827C7424.
         const Vector2 lScreenSize   = lpRender->GetVirtualScreenSize();
-        const f32     lfScreenOffX  = lScreenSize.x * KF_OVERLAY_HALF;
-        const f32     lfScreenOffY  = lScreenSize.y * KF_OVERLAY_HALF;
+        const f32     lfScreenOffX  = lScreenSize.mV.x * KF_OVERLAY_HALF;
+        const f32     lfScreenOffY  = lScreenSize.mV.y * KF_OVERLAY_HALF;
 
         for (s32 liIndex = 0; liIndex < miNumCollisionZones; ++liIndex)
         {
@@ -304,9 +298,9 @@ namespace BrnWorld
             const Vector3        lZoneCentre = lrZone.GetSpherePosition();
 
             // Distance from the PVS centre to this zone (3-component length of the delta).
-            const f32 lfDeltaX   = lZoneCentre.x - mPvsCentrePosition.x;
-            const f32 lfDeltaY   = lZoneCentre.y - mPvsCentrePosition.y;
-            const f32 lfDeltaZ   = lZoneCentre.z - mPvsCentrePosition.z;
+            const f32 lfDeltaX   = lZoneCentre.GetX() - mPvsCentrePosition.GetX();
+            const f32 lfDeltaY   = lZoneCentre.GetY() - mPvsCentrePosition.GetY();
+            const f32 lfDeltaZ   = lZoneCentre.GetZ() - mPvsCentrePosition.GetZ();
             const f32 lfDistance = sqrtf(lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ);
 
             // Only draw zones inside the configured draw radius of the PVS centre.
@@ -316,13 +310,9 @@ namespace BrnWorld
             }
 
             // Project the zone centre (world XZ) to the overlay and draw the bounding-sphere disc.
-            const Vector2 lScreenPos =
-            {
-                (lZoneCentre.x - mPvsCentrePosition.x) * KF_WORLD_TO_SCREEN_SCALE + lfScreenOffX,
-                (lZoneCentre.z - mPvsCentrePosition.z) * KF_WORLD_TO_SCREEN_SCALE + lfScreenOffY,
-                0.0f,
-                0.0f,
-            };
+            const Vector2 lScreenPos(
+                (lZoneCentre.GetX() - mPvsCentrePosition.GetX()) * KF_WORLD_TO_SCREEN_SCALE + lfScreenOffX,
+                (lZoneCentre.GetZ() - mPvsCentrePosition.GetZ()) * KF_WORLD_TO_SCREEN_SCALE + lfScreenOffY);
 
             const s32          liZoneNumber  = lrZone.GetZoneNumber();
             const f32          lfScreenRadius = lrZone.GetSphereRadius() * KF_WORLD_TO_SCREEN_SCALE;
@@ -335,15 +325,11 @@ namespace BrnWorld
             CgsCore::SPrintf(lacLabel, sizeof(lacLabel), "%d", liZoneNumber);
 
             const f32     lfLabelWidth = lpRender->CalcTextWidth(lacLabel, KF_BOUNDING_SPHERE_TEXT_SIZE);
-            const Vector2 lLabelPos =
-            {
-                lScreenPos.x - lfLabelWidth * KF_OVERLAY_HALF,
-                lScreenPos.y - KF_BOUNDING_SPHERE_TEXT_SIZE * 0.5f,
-                0.0f,
-                0.0f,
-            };
+            const Vector2 lLabelPos(
+                lScreenPos.mV.x - lfLabelWidth * KF_OVERLAY_HALF,
+                lScreenPos.mV.y - KF_BOUNDING_SPHERE_TEXT_SIZE * 0.5f);
 
-            lpRender->DrawText(lacLabel, lLabelPos.x, lLabelPos.y, KF_BOUNDING_SPHERE_TEXT_SIZE, lColour);
+            lpRender->DrawText(lacLabel, lLabelPos.mV.x, lLabelPos.mV.y, KF_BOUNDING_SPHERE_TEXT_SIZE, lColour);
         }
 
         RenderPvsCentrePosition(lpRender);
@@ -354,19 +340,11 @@ namespace BrnWorld
     void PVSDebugComponent::RenderPvsCentrePosition(CgsDev::Debug2DImmediateRender* lpRender)
     {
         const Vector2 lScreenSize = lpRender->GetVirtualScreenSize();
-        const Vector2 lMinimum = {
-            lScreenSize.x * 0.5f - 5.0f,
-            lScreenSize.y * 0.5f - 10.0f,
-            0.0f,
-            0.0f
-        };
-        const Vector2 lMaximum = {
-            lScreenSize.x * 0.5f + 5.0f,
-            lScreenSize.y * 0.5f + 10.0f,
-            0.0f,
-            0.0f
-        };
+        const Vector2 lMinimum(lScreenSize.mV.x * 0.5f - 5.0f,
+                               lScreenSize.mV.y * 0.5f - 10.0f);
+        const Vector2 lMaximum(lScreenSize.mV.x * 0.5f + 5.0f,
+                               lScreenSize.mV.y * 0.5f + 10.0f);
         // ARTIST 827BFC68 uses the scalar two-corner wrapper.
-        lpRender->DrawBox(lMinimum.x, lMinimum.y, lMaximum.x, lMaximum.y, 0xFFFFFFFFu);
+        lpRender->DrawBox(lMinimum.mV.x, lMinimum.mV.y, lMaximum.mV.x, lMaximum.mV.y, 0xFFFFFFFFu);
     }
 }

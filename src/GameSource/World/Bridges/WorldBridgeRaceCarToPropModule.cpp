@@ -1,7 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // gpDebugPrint (PROPS-BOOT one-shot)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // RaceCarState::mLinearVelocity
 
 // ============================================================================
@@ -177,24 +176,6 @@ void BridgeRaceCarModuleToPropModule_PreScene(
         }
     }
 
-    // DIAGNOSTIC (prop-spawn wave 2026-08-12) -- NOT in the X360 binary. Deliberately NOT
-    // gated on gxMessageFilterFlags. One-shot: fires the first frame the player car is
-    // actually active, i.e. the first frame the prop module gets a real player position.
-    // Boot-log grep: "PROPS-BOOT racecar->prop bridge".
-    {
-        static bool sbLoggedFirstPlayer = false;
-        if ( !sbLoggedFirstPlayer && CgsDev::Log::gpDebugPrint != 0 &&
-             lpActiveRaceCarInterface->IsPlayerCarActive() )
-        {
-            sbLoggedFirstPlayer = true;
-            const Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
-            *CgsDev::Log::gpDebugPrint
-                << "PROPS-BOOT racecar->prop bridge first player publish: carIndex "
-                << static_cast<s32>( lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() )
-                << " pos " << lPlayerPosition.x << "," << lPlayerPosition.y
-                << "," << lPlayerPosition.z << "\n";
-        }
-    }
 }
 
 }   // namespace WorldModule

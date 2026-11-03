@@ -47,10 +47,13 @@ namespace
     inline rw::math::vpu::Vector2 GroundPlane( const Vector4& lrVector )
     {
         rw::math::vpu::Vector2 lResult;
-        lResult.x = lrVector.x;
-        lResult.y = lrVector.z;
-        lResult.z = lrVector.x;   // the mask duplicates lane 0 into the two unused lanes
-        lResult.w = lrVector.x;
+        const rw::math::vpu::VectorIntrinsic lGroundPlane = {
+            static_cast<f32>(lrVector.GetX()),
+            static_cast<f32>(lrVector.GetZ()),
+            static_cast<f32>(lrVector.GetX()),
+            static_cast<f32>(lrVector.GetX())
+        };
+        lResult.mV = lGroundPlane;
         return lResult;
     }
 }
@@ -375,15 +378,15 @@ namespace
 
                 // unit(velocity) -- vrsqrtefp + two Newton refinements, then a vsel that
                 // yields the zero vector when the length is not > 0.
-                const f32 lfSpeedSq = ( lVelocity2.x * lVelocity2.x ) + ( lVelocity2.y * lVelocity2.y );
+                const f32 lfSpeedSq = ( lVelocity2.mV.x * lVelocity2.mV.x ) + ( lVelocity2.mV.y * lVelocity2.mV.y );
                 const f32 lfSpeed   = ( lfSpeedSq == 0.0f ) ? 0.0f : sqrtf( lfSpeedSq );
 
                 f32 lfHeadingX = 0.0f;
                 f32 lfHeadingY = 0.0f;
                 if ( lfSpeed > 0.0f )
                 {
-                    lfHeadingX = lVelocity2.x / lfSpeed;
-                    lfHeadingY = lVelocity2.y / lfSpeed;
+                    lfHeadingX = lVelocity2.mV.x / lfSpeed;
+                    lfHeadingY = lVelocity2.mV.y / lfSpeed;
                 }
 
                 for ( s32 liZone = 1; liZone < lResponse.miNumZones; ++liZone )
@@ -397,8 +400,8 @@ namespace
 
                     const rw::math::vpu::Vector2 lCentre = lapZones[liZone]->CalculateCentre();
 
-                    const f32 lfToZoneX = lCentre.x - lQueryPoint.x;
-                    const f32 lfToZoneY = lCentre.y - lQueryPoint.y;
+                    const f32 lfToZoneX = lCentre.mV.x - lQueryPoint.mV.x;
+                    const f32 lfToZoneY = lCentre.mV.y - lQueryPoint.mV.y;
 
                     const f32 lfDistanceSq = ( lfToZoneX * lfToZoneX ) + ( lfToZoneY * lfToZoneY );
                     const f32 lfDistance   = ( lfDistanceSq == 0.0f ) ? 0.0f : sqrtf( lfDistanceSq );
