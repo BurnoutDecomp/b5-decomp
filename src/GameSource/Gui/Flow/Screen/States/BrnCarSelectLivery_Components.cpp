@@ -27,7 +27,6 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                     // BrnGui::WorldDataController
 #include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h"          // ButtonIconComponent::EPadButton
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // gpDebugPrint (the palette FLAG)
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectVehicle.h"        // the SHARED carousel counter, see below
 #include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // BrnResource::VehicleListEntry
@@ -473,39 +472,6 @@ namespace BrnGui
         if (lpPalette->miNumColours <= KI_MAX_PALETTE_COLOURS)
         {
             liNumColours = lpPalette->miNumColours;
-        }
-
-        // [DIAG -- BRING-UP SCAFFOLDING, NOT CONSOLE CODE, one shot.]
-        // ⛔ CORRECTED 2026-09-07 (b5-decomp issue #3). This note used to say "the colour
-        // picker has no drawn representation on this build yet (the livery Apt movie does not
-        // composite the toggle)". THAT WAS FALSE and it was the same wave's own bug read back
-        // as a property of the assets: BRNCARSELECTLIVERY.bundle carries `colourOptionToggle`
-        // (and `optionToggle_0` / `optionToggle_1`) as placed instances right beside
-        // `HelpItemRestore_mc` and `CarName_mc`, which do draw. Nothing composited because
-        // ColourMenuToggle::KAC_STATE_NAMES pushed the invented "Highlighted"/"Unhighlighted"
-        // instead of the console's "Selected"/"Unselected" (image @0x82F27488), so every
-        // gotoAndPlay() missed and the clip stayed on `invisible`.
-        // The print below is still useful -- it distinguishes "the picker drew empty" from
-        // "the palette resource never arrived" -- so it stays until the palette is confirmed
-        // on film. It reports the palette index, its colour count and the first paint/pearl
-        // pair. Expected from the shipped payload:
-        // {25, 25, 25, 2} colours, palette 0 colour 0 == paint (0.784, 0, 0, 1) /
-        // pearl (0.588, 0, 0, 1). Remove with the FLAG above once the toggle draws.
-        {
-            static bool s_bLoggedPalette = false;
-            if (!s_bLoggedPalette && CgsDev::Log::gpDebugPrint != 0 && liNumColours > 0)
-            {
-                s_bLoggedPalette = true;
-                const rw::math::vpu::Vector4& lrPaint = lpPalette->GetPaintColours()[0];
-                const rw::math::vpu::Vector4& lrPearl = lpPalette->GetPearlColours()[0];
-                *CgsDev::Log::gpDebugPrint
-                    << "[CarSelectLivery] palette " << liPaintFinish << " resolved: "
-                    << lpPalette->miNumColours << " colours; [0] paint=("
-                    << lrPaint.x << ", " << lrPaint.y << ", " << lrPaint.z << ", " << lrPaint.w
-                    << ") pearl=("
-                    << lrPearl.x << ", " << lrPearl.y << ", " << lrPearl.z << ", " << lrPearl.w
-                    << ")\n";
-            }
         }
 
         // The three parallel arrays the toggle wants: the top colour, the bottom colour and

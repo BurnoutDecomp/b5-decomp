@@ -158,17 +158,6 @@ void SatNavComponent::LoadResources()
 
     const void* lpMaskTexture = mpGuiCache->GetLoadedResource(201u);
 
-    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the two adopted textures.
-    {
-        static bool sbLogged = false;
-        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav-diag] LoadResources: map(199)nn=" << static_cast<s32>(lpMapTexture != 0)
-                << " mask(201)nn=" << static_cast<s32>(lpMaskTexture != 0) << "\n";
-        }
-    }
     CGS_ASSERT(mRenderSatNavEvent.mpMaskTexture == 0
                    || lpMaskTexture == mRenderSatNavEvent.mpMaskTexture,
                "mRenderSatNavEvent.mpMaskTexture==NULL || lpNewTexture==mRenderSatNavEvent.mpMaskTexture");   // :579 (non-gating)
@@ -188,8 +177,12 @@ f32 SatNavComponent::GetViewDistance(f32 lfSpeedMph, s32 liCurrentZoomLevel)
 
     // ARTIST82447C40..88 reads the distinct live lerp words, then performs
     // one fused VMADDFP before clamping against the shared distance words.
-    f32 lfViewDistance = std::fma(KF_MAX_VIEW_LERP - KF_MIN_VIEW_LERP,
-        lfRatio, KF_MIN_VIEW_LERP);
+    const rw::math::vpu::VecFloat lrViewDelta(KF_MAX_VIEW_LERP - KF_MIN_VIEW_LERP);
+    const rw::math::vpu::VecFloat lrViewRatio(lfRatio);
+    const rw::math::vpu::VecFloat lrViewMinimum(KF_MIN_VIEW_LERP);
+    const rw::math::vpu::VectorIntrinsic lrViewLerp = __vmaddfp(
+        lrViewDelta.mV, lrViewRatio.mV, lrViewMinimum.mV);
+    f32 lfViewDistance = lrViewLerp.x;
     lfViewDistance = KF_MIN_VIEW_DIST - lfViewDistance >= 0.0f
         ? KF_MIN_VIEW_DIST : lfViewDistance;
     lfViewDistance = KF_MAX_VIEW_DIST - lfViewDistance >= 0.0f
@@ -311,17 +304,14 @@ void SatNavComponent::UpdateFreeRoaming()
         if (mfRoamTime > 0.0f)
         {
             const f32 lfT = mfRoamTimeElapsed / mfRoamTime;
-            lv3Out.x = (lv3Last.x - lv3First.x) * lfT + lv3First.x;
-            lv3Out.y = (lv3Last.y - lv3First.y) * lfT + lv3First.y;
-            lv3Out.z = (lv3Last.z - lv3First.z) * lfT + lv3First.z;
-            lv3Out.w = (lv3Last.w - lv3First.w) * lfT + lv3First.w;
+            const rw::math::vpu::VecFloat lrRoamTime(lfT);
+            lv3Out.SetVector(__vmaddfp(
+                __vsubfp(lv3Last.mV, lv3First.mV), lrRoamTime.mV, lv3First.mV));
         }
         else
         {
-            lv3Out.x = lv3Last.x * lv3First.x + 0.5f;
-            lv3Out.y = lv3Last.y * lv3First.y + 0.5f;
-            lv3Out.z = lv3Last.z * lv3First.z + 0.5f;
-            lv3Out.w = lv3Last.w * lv3First.w + 0.5f;
+            const rw::math::vpu::VecFloat lrHalf(0.5f);
+            lv3Out.SetVector(__vmaddfp(lv3Last.mV, lv3First.mV, lrHalf.mV));
         }
         mRenderSatNavEvent.mv3CarPosition = lv3Out;
         break;
@@ -402,22 +392,6 @@ void SatNavComponent::Update()
         &mpGuiCache->GetWorldCameraPosition());   // cache +0x4AE0
     CGS_ASSERT(mpPlayerInfo != 0, "mpPlayerInfo");   // :292 (non-gating)
     SetViewParamsFromPlayerCar(mpPlayerInfo);
-
-    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] first Update tick.
-    {
-        static bool sbLogged = false;
-        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav-diag] component Update: pos=(" << mpPlayerInfo->mv4Position.x
-                << "," << mpPlayerInfo->mv4Position.z << ") mph=" << mpPlayerInfo->miSpeedMph
-                << " orient=" << mpPlayerInfo->mfOrientation
-                << " mgrId=" << static_cast<s32>(mIconManagerId)
-                << " mapnn=" << static_cast<s32>(mRenderSatNavEvent.mpMapTexture != 0)
-                << " masknn=" << static_cast<s32>(mRenderSatNavEvent.mpMaskTexture != 0) << "\n";
-        }
-    }
 
     if (mpIconManager != 0)
         mpIconManager->Update();
@@ -536,8 +510,8 @@ void SatNavComponent::GetZoomedCarWorldRect(Vector3* lpOutCorners, Vector3 lv3Ca
         lfTxX = lfViewDistance * lfCos2;
         lfTxZ = -lfViewDistance * lfSin2;
 
-        lv3CarPosition.x += -2.0f * (lfShiftX * lfCos2 + lfShiftZ * lfSin2);
-        lv3CarPosition.z += -2.0f * (lfShiftZ * lfCos2 - lfShiftX * lfSin2);
+        lv3CarPosition.mV.x += -2.0f * (lfShiftX * lfCos2 + lfShiftZ * lfSin2);
+        lv3CarPosition.mV.z += -2.0f * (lfShiftZ * lfCos2 - lfShiftX * lfSin2);
     }
 
     // corners = centre +/- T(z-axis) +/- T(x-axis) (X360 vaddfp tail, stores at
@@ -546,10 +520,10 @@ void SatNavComponent::GetZoomedCarWorldRect(Vector3* lpOutCorners, Vector3 lv3Ca
     {
         const f32 lfSz = (lu == 0 || lu == 2) ? 1.0f : -1.0f;   // +Tz on [0]/[2]
         const f32 lfSx = (lu == 0 || lu == 1) ? 1.0f : -1.0f;   // +Tx on [0]/[1]
-        lpOutCorners[lu].x = lv3CarPosition.x + lfSz * lfTzX + lfSx * lfTxX;
-        lpOutCorners[lu].y = lv3CarPosition.y;
-        lpOutCorners[lu].z = lv3CarPosition.z + lfSz * lfTzZ + lfSx * lfTxZ;
-        lpOutCorners[lu].w = 0.0f;
+        lpOutCorners[lu].mV.x = lv3CarPosition.mV.x + lfSz * lfTzX + lfSx * lfTxX;
+        lpOutCorners[lu].mV.y = lv3CarPosition.mV.y;
+        lpOutCorners[lu].mV.z = lv3CarPosition.mV.z + lfSz * lfTzZ + lfSx * lfTxZ;
+        lpOutCorners[lu].mV.w = 0.0f;
     }
 }
 
@@ -562,10 +536,7 @@ void SatNavComponent::SetViewParamsFromPlayerCar(const GuiPlayerInfo* lpPlayerIn
     CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerCar");   // BrnSatNav.cpp:188 (non-gating)
 
     Vector3 lv3Position;
-    lv3Position.x = lpPlayerInfo->mv4Position.x;
-    lv3Position.y = lpPlayerInfo->mv4Position.y;
-    lv3Position.z = lpPlayerInfo->mv4Position.z;
-    lv3Position.w = lpPlayerInfo->mv4Position.w;
+    lv3Position.SetVector(lpPlayerInfo->mv4Position.mV);
 
     Vector3 lav3Corners[4];
     GetZoomedCarWorldRect(lav3Corners, lv3Position,
@@ -576,9 +547,9 @@ void SatNavComponent::SetViewParamsFromPlayerCar(const GuiPlayerInfo* lpPlayerIn
 
     if (mpIconManager != 0)
     {
-        Vector2 lv2C0; lv2C0.x = lav3Corners[0].x; lv2C0.y = lav3Corners[0].z; lv2C0.z = 0.0f; lv2C0.w = 0.0f;
-        Vector2 lv2C1; lv2C1.x = lav3Corners[1].x; lv2C1.y = lav3Corners[1].z; lv2C1.z = 0.0f; lv2C1.w = 0.0f;
-        Vector2 lv2C2; lv2C2.x = lav3Corners[2].x; lv2C2.y = lav3Corners[2].z; lv2C2.z = 0.0f; lv2C2.w = 0.0f;
+        Vector2 lv2C0(lav3Corners[0].mV.x, lav3Corners[0].mV.z);
+        Vector2 lv2C1(lav3Corners[1].mV.x, lav3Corners[1].mV.z);
+        Vector2 lv2C2(lav3Corners[2].mV.x, lav3Corners[2].mV.z);
         MapTransform::SetZoomedWorldRect(lv2C0, lv2C2, lv2C1);
         MapTransform::SetZoomedViewportRect(MapTransform::GetSatNavViewRect());
     }
