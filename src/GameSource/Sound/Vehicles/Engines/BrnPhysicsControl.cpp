@@ -480,14 +480,14 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     lrData.IsDeforming.Update(lrRaw.mbStartedDeforming);
     lrData.mTransform.Update(lrRaw.mTransform);
     lrData.mPosition3d.Update(lrRaw.mTransform.Pos());
-    Vector2 lPosition2d = { lrRaw.mTransform.Pos().x, lrRaw.mTransform.Pos().z, 0.0f, 0.0f };
+    Vector2 lPosition2d(lrRaw.mTransform.Pos().X(), lrRaw.mTransform.Pos().Z());
     lrData.mPosition2d.Update(lPosition2d);
     lrData.mVelocity3d.Update(lrRaw.mLinearVelocity);
-    Vector2 lVelocity2d = { lrRaw.mLinearVelocity.x, lrRaw.mLinearVelocity.z, 0.0f, 0.0f };
+    Vector2 lVelocity2d(lrRaw.mLinearVelocity.X(), lrRaw.mLinearVelocity.Z());
     lrData.mVelocity2d.Update(lVelocity2d);
-    const f32 lfVelocity = std::sqrt(lrRaw.mLinearVelocity.x * lrRaw.mLinearVelocity.x +
-                                     lrRaw.mLinearVelocity.y * lrRaw.mLinearVelocity.y +
-                                     lrRaw.mLinearVelocity.z * lrRaw.mLinearVelocity.z);
+    const f32 lfVelocity = std::sqrt(lrRaw.mLinearVelocity.X() * lrRaw.mLinearVelocity.X() +
+                                     lrRaw.mLinearVelocity.Y() * lrRaw.mLinearVelocity.Y() +
+                                     lrRaw.mLinearVelocity.Z() * lrRaw.mLinearVelocity.Z());
     lrData.mVelocityMagnitude.Update(lfVelocity);
     // ARTIST 0x826CB9D0..0x826CB9EC -- mAcceleration3d is the RAW per-frame velocity
     // DELTA, not a per-second rate:
@@ -499,12 +499,9 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     {
         const Vector3& lrVelCur  = lrData.mVelocity3d.GetCurrent();
         const Vector3& lrVelPrev = lrData.mVelocity3d.GetPrevious();
-        Vector3 lAcceleration3d = { lrVelCur.x - lrVelPrev.x,
-                                    lrVelCur.y - lrVelPrev.y,
-                                    lrVelCur.z - lrVelPrev.z,
-                                    lrVelCur.w - lrVelPrev.w };
+        Vector3 lAcceleration3d(__vsubfp(lrVelCur.GetVector(), lrVelPrev.GetVector()));
         lrData.mAcceleration3d.Update(lAcceleration3d);
-        Vector2 lAcceleration2d = { lAcceleration3d.x, lAcceleration3d.z, 0.0f, 0.0f };
+        Vector2 lAcceleration2d(lAcceleration3d.X(), lAcceleration3d.Z());
         lrData.mAcceleration2d.Update(lAcceleration2d);
     }
 
@@ -694,9 +691,9 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
         {
             const Vector3& lrCarForward = lrData.mTransform.GetCurrent().At();
             const Vector3& lrCameraForward = lpCamera->GetTransform().At();
-            const f32 lfDot = lrCarForward.x * lrCameraForward.x
-                            + lrCarForward.y * lrCameraForward.y
-                            + lrCarForward.z * lrCameraForward.z;
+            const f32 lfDot = lrCarForward.X() * lrCameraForward.X()
+                            + lrCarForward.Y() * lrCameraForward.Y()
+                            + lrCarForward.Z() * lrCameraForward.Z();
             const f32 lfRaw = (1.0f - lfDot) * 0.5f;
             const f32 lfLow = (-lfRaw >= 0.0f) ? 0.0f : lfRaw;           // fsel(-u, 0, u)
             const f32 lfUnit = ((1.0f - lfLow) >= 0.0f) ? lfLow : 1.0f;  // fsel(1-u, u, 1)
@@ -735,10 +732,10 @@ f32 PhysicsControl::UnityPhysicsRpm(f32 afPhysicsRPM) const
     // PhysicsRpmMap vectors with Horner's rule, and returns the Y lane.
     const Matrix44 lMap = mVehicleEngineAttributes.PhysicsRpmMap();
     const f32 lfUnity2 = lfUnity * lfUnity;
-    const f32 lfMapped = lMap.xAxis.y * (lfUnity2 * lfUnity) +
-                         lMap.yAxis.y * lfUnity2 +
-                         lMap.zAxis.y * lfUnity +
-                         lMap.wAxis.y;
+    const f32 lfMapped = lMap.xAxis.Y() * (lfUnity2 * lfUnity) +
+                         lMap.yAxis.Y() * lfUnity2 +
+                         lMap.zAxis.Y() * lfUnity +
+                         lMap.wAxis.Y();
     return (std::max)(0.0f, (std::min)(1.0f, lfMapped));
 }
 
@@ -877,9 +874,9 @@ void PhysicsControl::UpdateCollisionPassbys(f32 afTimeStep)
     const BrnSound::Vehicles::VehicleData* lpRaw = mpVehiclePhysicsData;
     const Vector3& lrAngularVelocity = lpRaw->mAngularVelocity;
     const f32 lfAngularSpeed = std::sqrt(
-        lrAngularVelocity.x * lrAngularVelocity.x +
-        lrAngularVelocity.y * lrAngularVelocity.y +
-        lrAngularVelocity.z * lrAngularVelocity.z);
+        lrAngularVelocity.X() * lrAngularVelocity.X() +
+        lrAngularVelocity.Y() * lrAngularVelocity.Y() +
+        lrAngularVelocity.Z() * lrAngularVelocity.Z());
 
     mfAngularVelocityAccumulator.Update(
         mfAngularVelocityAccumulator.GetCurrent() + lfAngularSpeed * afTimeStep);
