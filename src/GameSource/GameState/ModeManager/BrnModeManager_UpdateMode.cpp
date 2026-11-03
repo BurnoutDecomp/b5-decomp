@@ -41,7 +41,6 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<>::AddEvent
 #include "SharedClasses/Trigger/BrnRegion.h"                      // BrnTrigger::BoxRegion::GetPosition
 #include "SharedClasses/Progression/BrnTrainingTypes.h"           // BrnProgression::ETrainingType (action-149 payload)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"        // [diagnostic] the [showtime-switch] arming witness
 #include "GameSource/GameState/BrnGameStateModuleIO.h"            // [FX-GS G11-D4] PreWorldInputBuffer::GetPlayerStatusInterface / OutputBuffer::GetGameActionQueue
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // [FX-GS G11-D4] InputBuffer::TakedownEventQueue (complete)
 
@@ -258,17 +257,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
                                         GameStateModuleIO::E_ACTION_SHOWTIME_MODE_SWITCH,
                                         static_cast<s32>(sizeof(GameStateModuleIO::ShowtimeModeSwitchAction)));
 
-            // [DIAG] NOT IN THE X360 BINARY. One-shot, unconditional (no env gate) because this
-            // post is the arming edge of the whole showtime session and its absence is exactly the
-            // defect above -- a run that does not print this line has the 5-second session.
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[showtime-switch] action 143 posted: car "
-                    << static_cast<s32>(lSwitch.meActiveRaceCarIndex)
-                    << " entering=1 (arms ActiveRaceCar::mbIsInShowtime -> IsCarInShowtime ->"
-                       " CrashModule::TickCrashes skips this wreck)\n";
-            }
+
         }
     }
 
@@ -799,11 +788,11 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
     const Vector3 lCurrentPosition     = lpCurrentLandmark->GetBoxRegion()->GetPosition();
     const Vector3 lDestinationPosition = lpDestinationLandmark->GetBoxRegion()->GetPosition();
     {
-        const Vector3 lAggregateValue = { lCurrentPosition.x, lCurrentPosition.y, lCurrentPosition.z, 0.0f };
+        const Vector3 lAggregateValue(lCurrentPosition.mV.x, lCurrentPosition.mV.y, lCurrentPosition.mV.z);
         lRouteRequest.maPositions[0] = lAggregateValue;
     }
     {
-        const Vector3 lAggregateValue = { lDestinationPosition.x, lDestinationPosition.y, lDestinationPosition.z, 0.0f };
+        const Vector3 lAggregateValue(lDestinationPosition.mV.x, lDestinationPosition.mV.y, lDestinationPosition.mV.z);
         lRouteRequest.maPositions[1] = lAggregateValue;
     }
 

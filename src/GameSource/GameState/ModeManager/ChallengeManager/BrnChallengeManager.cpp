@@ -30,7 +30,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint  ([fburn] diag)
 
 #include <cstddef>   // offsetof (layout assert)
-#include <stdlib.h>  // getenv     ([fburn] diag)
 
 // includes folded in from the BrnChallengeManager_w*.cpp partfiles (2026-09-15)
 #include "GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManagerDebugComponent.h"
@@ -196,20 +195,7 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
 
     mScoresSetThisFrameBitArray.UnSetAll();   // X360 std 0,+0xFD0
 
-    // ==============================================================================================
-    // [DIAG] NOT IN THE X360 BINARY -- the `[fburn]` witness (added 2026-09-07, the round that
-    // embedded mChallengeManager in ModeManager). Gated on BRN_MODEMGR_DIAG, the same env the
-    // `[evt-finish]` / `[queue-hwm]` / `[mode-results]` witnesses in this subsystem stand behind.
-    // ==============================================================================================
-    // WHY IT EARNS ITS PLACE. Construct is the FIRST observable moment of the whole freeburn
-    // subsystem, and it is the one fact that separates "the ChallengeManager mount landed and the
-    // ModeManager call was un-parked" from "the member is embedded but nothing calls it" -- which is
-    // exactly the state this file's callers are in today. Without it a run tells you nothing either
-    // way. One line per Construct, i.e. once per ModeManager::Construct, so it is not a sampler.
-    // ⛔ NO SIDE EFFECTS: prints the two back-pointers' non-nullness and nothing else.
-    // DELETE-WHEN the freeburn bring-up is done.
-    {
-    }
+
 }
 
 // ----------------------------------------------------------------------------
@@ -1131,19 +1117,6 @@ bool ChallengeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChall
     }
 
     mPotentiallyLeaptCars.Clear();   // X360 free-queue refill @+0xE0..+0x100
-
-    // ==============================================================================================
-    // [DIAG] NOT IN THE X360 BINARY -- the `[fburn]` witness, second rung (2026-09-07). Gated on
-    // BRN_MODEMGR_DIAG, the same env as the Construct rung in BrnChallengeManager.cpp.
-    // ==============================================================================================
-    // WHY IT EARNS ITS PLACE. Construct proves the object exists; only Prepare proves it has DATA.
-    // The challenge count it prints is the single number that says whether the freeburn challenge
-    // list actually loaded -- a zero there and a missing line are two very different bugs, and the
-    // Construct rung alone cannot tell them apart. One line per Prepare, i.e. once per level load.
-    // ⛔ NO SIDE EFFECTS: re-reads the already-cached list pointer and the histogram just built.
-    // DELETE-WHEN the freeburn bring-up is done.
-    {
-    }
 
     return true;
 }
@@ -2911,12 +2884,7 @@ void ChallengeManager::PreWorldUpdate(
     WriteDataToOutput(lpOutputBuffer);
     UpdateFreeburnSkillsThisFrame(lpActiveRaceCarOutputInterface, lfTimeStep);
 
-    // [PC HARNESS] one bounded "[net] fburn" line per manager status change (LAN / harness runs).
-    static s32 siWitnessedStatus = E_CHALLENGE_MANAGER_STATUS_NONE;
-    if (static_cast<s32>(meChallengeManagerStatus) != siWitnessedStatus)
-    {
-        siWitnessedStatus = static_cast<s32>(meChallengeManagerStatus);
-    }
+
 }
 
 // ----------------------------------------------------------------------------
@@ -4899,7 +4867,10 @@ bool ChallengeManager::CheckCurrentLocation(
     // The permute mask is dumped from the image: bytes 00 01 02 03 18 19 1A 1B 00 01 02 03
     // 00 01 02 03, i.e. lane 0 = x and lane 1 = byte 8 of the second (same) operand = z. The
     // pack is (x, z): XZ, confirmed.
-    const Vector2 l2DCarPosition = { lCarPosition.x, lCarPosition.z, 0.0f, 0.0f };
+    static const CGS_ALIGN(16) u32 lauFlattenPermute[4] = {
+        0x00010203, 0x18191A1B, 0x00010203, 0x00010203 };
+    Vector2 l2DCarPosition;
+    l2DCarPosition.mV = __vperm(lCarPosition.mV, lCarPosition.mV, __lvx(lauFlattenPermute, 0));
     const s32 liDistrict = static_cast<s32>(lpWorldMap->GetValue(l2DCarPosition));
 
     const CgsID lCurrentRoadID = mpRoadRulesManager->GetCurrentRoadID();
@@ -5077,9 +5048,9 @@ void ChallengeManager::UpdateLeaptCars(
             const Vector3 lCarPosition = lpRaceCarState->mTransform.Pos();
 
             // Height gate: the player's underside must clear the car's roof by 0.25m.
-            const f32 lfHeightAboveCar = (lPlayerPosition.y - lCarPosition.y)
-                                       - lpPlayerRaceCarState->mHalfExtent.y
-                                       - lpRaceCarState->mHalfExtent.y;
+            const f32 lfHeightAboveCar = (lPlayerPosition.mV.y - lCarPosition.mV.y)
+                                       - lpPlayerRaceCarState->mHalfExtent.mV.y
+                                       - lpRaceCarState->mHalfExtent.mV.y;
             if (lfHeightAboveCar < 0.25f)                                           // flt_82021138
             {
                 continue;
@@ -5087,7 +5058,10 @@ void ChallengeManager::UpdateLeaptCars(
 
             // Horizontal gate: within 10m on the XZ plane (100.0 == flt_820049E0, squared radius).
             const Vector3 lPlayerToCar = lCarPosition - lPlayerPosition;
-            if (lPlayerToCar.x * lPlayerToCar.x + lPlayerToCar.z * lPlayerToCar.z > 100.0f)
+            const __vector4 lvX = __vspltw(lPlayerToCar.mV, 0);
+            const __vector4 lvZ = __vspltw(lPlayerToCar.mV, 2);
+            const f32 lfHorizontalDistanceSquared = __vmaddfp(lvX, lvX, __vmulfp(lvZ, lvZ)).x;
+            if (lfHorizontalDistanceSquared > 100.0f)
             {
                 continue;
             }
@@ -5130,8 +5104,11 @@ void ChallengeManager::UpdateLeaptCars(
             {
                 // Already tracked: compare the entry vector against the current one on the XZ plane.
                 const StoredLeapingData& lrStored = mPotentiallyLeaptCars[liStored];
-                const f32 lfEntryDot = lrStored.mLeapRadiusEntryVector.x * lrCandidate.mPlayerToCar.x
-                                     + lrStored.mLeapRadiusEntryVector.z * lrCandidate.mPlayerToCar.z;
+                const __vector4 lvEntryX = __vspltw(lrStored.mLeapRadiusEntryVector.mV, 0);
+                const __vector4 lvEntryZ = __vspltw(lrStored.mLeapRadiusEntryVector.mV, 2);
+                const __vector4 lvCurrentX = __vspltw(lrCandidate.mPlayerToCar.mV, 0);
+                const __vector4 lvCurrentZ = __vspltw(lrCandidate.mPlayerToCar.mV, 2);
+                const f32 lfEntryDot = __vmaddfp(lvEntryX, lvCurrentX, __vmulfp(lvEntryZ, lvCurrentZ)).x;
                 if (lfEntryDot >= 0.0f)
                 {
                     // Same side of the car as on entry: still only a POTENTIAL leap; keep the slot

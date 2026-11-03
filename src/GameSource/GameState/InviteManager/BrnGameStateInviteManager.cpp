@@ -74,8 +74,8 @@ namespace BrnGameState
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/InviteManager/BrnGameStateInviteManager.cpp";
 
     // Update's on-screen status lines: text and position (rodata pairs 614.8,64 / 606.35,64).
-    static const Vector2 KV2_PREPARING_INVITE_TEXT_POSITION  = { 614.8f, 64.0f, 0.0f, 0.0f };
-    static const Vector2 KV2_PERFORMING_INVITE_TEXT_POSITION = { 606.35f, 64.0f, 0.0f, 0.0f };
+    static const Vector2 KV2_PREPARING_INVITE_TEXT_POSITION  = Vector2(614.8f, 64.0f);
+    static const Vector2 KV2_PERFORMING_INVITE_TEXT_POSITION = Vector2(606.35f, 64.0f);
 
     // The ids Update posts: the game action that hands the invite to the other modules (reference
     // E_ACTION_START_PREPARE_FOR_INVITE 87, +5 on the console) and the two game events this
