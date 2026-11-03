@@ -108,6 +108,9 @@ namespace BrnFlapt
         // GotoAndStopLabel @ 0x8246F498 call site (Ref hashes the label first).
         void GotoAndStopLabel(u32 luLabelHash, const char* lpcLabel);
 
+        // [PC] NOT IN THE X360 BINARY. MovieClipRef::HasFrameLabel's search.
+        bool HasFrameLabel(u32 luLabelHash) const;
+
         // ---- trigger callbacks --------------------------------------------
         // The clip's current timeline frame, ONE-BASED (the accessor NAME is given
         // by BoostMessageSlot's :266 assert text). CONTRACT PIN: the X360 field at
