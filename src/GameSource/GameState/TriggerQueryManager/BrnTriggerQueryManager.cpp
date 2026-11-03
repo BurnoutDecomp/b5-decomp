@@ -3,7 +3,6 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 
 #include <cstddef>   // offsetof (layout asserts)
-#include <stdlib.h>  // getenv ([UI-gate] arming-timeline diag; same env guard as the wQ_04 rung)
 #include <cstring>   // std::memset (the 24-byte player-trigger action record)
 
 #include "rw/math/vpu/vector3_operation.h"  // rw::math::vpu operator-/Dot/MagnitudeSquared (refresh-gate + entry-direction maths)
@@ -120,7 +119,7 @@ void TriggerQueryManager::Construct(BrnProgression::ProgressionManager* lpProgre
     // at +896/+1492/+1560/+1564; the two modelled here are the ones later code touches.
     meTriggerLoadStage = E_TRIGGER_LOAD_NOT_STARTED;
     maSoundActions.Construct();      // ARTIST82364D14, count at896
-    const Vector3 lZeroPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lZeroPosition(0.0f, 0.0f, 0.0f);
     for (s32 i = 0; i < 8; ++i) maActiveRaceCarPosLastFrame[i] = lZeroPosition;
     maActiveTriggers.Construct();      // X360: stw 0 @ +1424
     mLandmarkIndexArray.Construct();   // X360: stw 0 @ +1864
@@ -135,7 +134,7 @@ void TriggerQueryManager::Construct(BrnProgression::ProgressionManager* lpProgre
 
     // Cached refresh position (X360: stvx128 v0 zero store @ +1776).
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         mLastPlayerPosition = lAggregateValue;
     }
 
@@ -291,8 +290,10 @@ void TriggerQueryManager::UpdateTriggers(
                     // lane zeroed (Vector2{x,z}); reproduced here as plain scalar math on the X/Z
                     // lanes (no Vector2 operator- exists in the vpu SDK -- only Vector3).
                     const Vector2 lTriggerPosition2D = lpBoxRegion->GetPosition2D();   // {x = posX, y = posZ}
-                    const f32 lfOffsetX = lTriggerPosition2D.x - lPlayerPosition.x;
-                    const f32 lfOffsetZ = lTriggerPosition2D.y - lPlayerPosition.z;
+                    const f32 lfOffsetX = lTriggerPosition2D.mV.x -
+                                          lPlayerPosition.GetX().GetFloat();
+                    const f32 lfOffsetZ = lTriggerPosition2D.mV.y -
+                                          lPlayerPosition.GetZ().GetFloat();
                     const f32 lfDistSq  = (lfOffsetX * lfOffsetX) + (lfOffsetZ * lfOffsetZ);
 
                     if (lfDistSq < lfClipDistanceSq)
@@ -308,79 +309,7 @@ void TriggerQueryManager::UpdateTriggers(
             // Cache the player position used for this rebuild.
             mLastPlayerPosition = lPlayerPosition;
 
-            // -----------------------------------------------------------------------------
-            // [DIAG] NOT IN THE X360 BINARY -- the gateui ARMING TIMELINE.
-            //
-            // ⭐ ROUND-8 CORRECTION. The round-7 banner that stood here justified this rung with
-            // "the round-7 brief's whole defect-A premise (an armed-set warm-up race) could be
-            // neither confirmed nor killed". That is FALSE and is removed. The run-9 log KILLED
-            // that premise: for the first smashed gate, StuntManager::OnPropHit was never called
-            // at all (no `[UI-gate] bridged prop-hit` and no `[UI-gate] OnPropHit` line exists for
-            // it -- BrnGame.log:4720-4745), so whatever maActiveTriggers held at that moment is
-            // causally irrelevant to the first-gate failure. The break is upstream, in the world
-            // module: PropEntityModule ProcessContacts' LEG-1 gate, which round 8 instruments
-            // directly (PropEntityModule_wQ2_03.cpp, the "[prop-diag] LEG1 REJECT" rung).
-            //
-            // WHAT THIS RUNG IS, THEN: general arming instrumentation, not evidence for or
-            // against defect A. The round-6 ladder had exactly ONE arming rung -- the
-            // `[UI-gate] armed` one-shot in GameStateModule_gUI_00.cpp, which fires on the FIRST
-            // non-empty active set and never again; on the run-9 drive that shot landed in the
-            // junk yard (`armed smash=0 billboard=0 of=3`, BrnGame.log:863) and the log then said
-            // nothing about arming for the rest of the drive. This rung reports EVERY rebuild of
-            // the active set -- the only event that can change what OnPropHit walks -- with the
-            // player position the rebuild was keyed on and the SMASH/BILLBOARD census of the
-            // resulting set. It is what you read when a prop-hit event DOES reach OnPropHit and
-            // latches `none`; correlate the positions against the `[prop-diag] contact` /
-            // `[Q6-world] first part ... pos` lines.
-            //
-            // BUDGET (the PREAMBLE's "keep the ladder readable" rule). Three windows:
-            //   * the first KI_UI_GATE_REBUILD_DIAG_FIRST_N rebuilds;
-            //   * one extra line the first time a SMASH region enters the set (FIRST-SMASH-ARMED);
-            //   * ⭐ ROUND 8: the KI_UI_GATE_REBUILD_DIAG_AFTER_SMASH rebuilds AFTER that, because
-            //     the one-shot alone is spendable on the wrong region -- 400 of the world's 4670
-            //     generic regions are SMASH ([UI-gate] prepare tally, BrnGame.log:217) and the
-            //     clip radius is max(halfX,halfZ)+70, so an arbitrary early smash region burns the
-            //     shot and the rebuild that arms the gate you care about prints nothing.
-            // ⚠️ Do NOT read the first-N window as route coverage. A rebuild needs >30 u of travel
-            // FROM THE PREVIOUS REBUILD POSITION, so N rebuilds is a lower bound of 30*N u of net
-            // displacement and an unbounded amount of actual driving; nothing here establishes
-            // that it reaches any particular gate. (The round-7 banner asserted "covers the whole
-            // junk-yard exit and the first ~240 m"; that was unsupported and is withdrawn.)
-            // The census loop itself now stops running once all three windows are spent, so a
-            // long BRN_PROP_DIAG run pays nothing per rebuild after that.
-            // ⚠️ PERF: what remains runs INSIDE the gsiUpdateTriggersPM monitored span
-            // (StopMonitor(gsiUpdateTriggersPM) is after this block), so UpdateTriggers' perf
-            // number is inflated while BRN_PROP_DIAG is set. Do not profile with it on.
-            //
-            // Same logger and same env guard (BRN_PROP_DIAG) as the `[prop-diag] BREAK` rung this
-            // ladder hangs off (PropEntityModule_wQ_04.cpp).
-            // -----------------------------------------------------------------------------
-            {
-                static s32        siRebuildCount      = 0;
-                static bool       sbFirstSmashLogged  = false;
-                static s32        siPostSmashLinesLeft = 0;
-                const s32         KI_UI_GATE_REBUILD_DIAG_FIRST_N     = 8;
-                const s32         KI_UI_GATE_REBUILD_DIAG_AFTER_SMASH = 8;
-
-                // Once every window is spent there is nothing left to print, so skip the census
-                // walk entirely rather than paying it on every rebuild for the life of the run.
-                const bool lbCensusStillWanted =
-                    (siRebuildCount < KI_UI_GATE_REBUILD_DIAG_FIRST_N)
-                    || !sbFirstSmashLogged
-                    || (siPostSmashLinesLeft > 0);
-
-            }
         }
-    }
-    else
-    {
-        // [DIAG] NOT IN THE X360 BINARY. The one-shot twin of the rung above: the console skips
-        // the ENTIRE rebuild while the player car is inactive (asm 0x82392340 `bne cr6,
-        // loc_8239265C`; 0x8239233C is the `cmplwi cr6, r11, 1` it branches on -- ⭐ ROUND 8
-        // corrected an off-by-one-instruction citation here and at the gate above),
-        // so a log with no `trig rebuild` lines at all is answered here -- "the pump ran, the
-        // player car was never active" -- rather than by silence. One line per process.
-        static bool       sbInactiveLogged   = false;
     }
 
     mbTriggersUpdated = true;
@@ -426,15 +355,6 @@ void TriggerQueryManager::ProcessPlayerTriggers(
             lpDriveThruManager->HandleDriveThru(lpGenericRegion, lpActiveRaceCarInterface,
                                                 lpVehicleList, lpOutput);
 
-            // [DIAG] NOT IN THE X360 BINARY. ENTRY DETECTION, logged SEPARATELY from the effect.
-            // This observes the swept-region hit reaching its gameplay handler;
-            // successful repair/reset is observed separately at its actual owner.
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[drivethru] ENTER type=" << static_cast<s32>(lpGenericRegion->GetType())
-                    << " id=" << static_cast<u64>(lpGenericRegion->GetId()) << "\n";
-            }
             break;
         }
 
@@ -540,17 +460,6 @@ void TriggerQueryManager::PreWorldUpdate(
     CacheSoundQueryPositions(lpActiveRaceCarInterface);
     const BrnTrigger::TriggerData* lpTriggerData = mpTriggerData.operator->();
 
-    // [DIAG] NOT IN THE X360 BINARY. Edge-triggered enter/leave for the light region, with the
-    // packed handle. This is THE rung that separates "the car is not standing in a junction box"
-    // from "it is, and the chain above CheckIfPlayerIsAtJunctionWithAnEvent dropped it": the id
-    // printed here is what TrafficData::GetJunctionLogicBoxForTrafficLight decodes as
-    // hull = (id >> 8) & 0xFFFF, trigger = id & 0xFF -- cross-check it against
-    // scratch/stuntrace_scout/eventdata/dump_lighttriggers.py's `lightTriggerId=` column (the
-    // stunt-run test target is 0x7a08 == hull 122, trigger 8, junction 480897 / event 558269).
-    // Capped so a car parked on a box boundary cannot spam the log.
-    {
-    }
-
     // ------------------------------------------------------------------------------------
     // (1) THE CONSOLE'S FAN-OUT (0x8239F714..0x8239F83C), verbatim.
     // ------------------------------------------------------------------------------------
@@ -590,32 +499,6 @@ void TriggerQueryManager::PreWorldUpdate(
 
         ProcessPlayerTriggers(lAction.mbFirstFrame, lpActiveRaceCarInterface, lpRegion,
                               lpOutput, lpStuntManager, lpDriveThruManager, lpVehicleList);
-    }
-
-    // [DIAG] NOT IN THE X360 BINARY. First-N: what the fan-out routed. This is the rung that
-    // separates "the player never entered a jump region" from "the region was entered and the
-    // StuntManager dropped it" -- pair it with the `[jump-ladder]` rungs in BrnStuntManager.cpp.
-    if (luPlayerTriggerCount != 0)
-    {
-        static s32 siFanOutLines = 0;
-        const s32  KI_FANOUT_DIAG_FIRST_N = 12;
-        if (siFanOutLines < KI_FANOUT_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siFanOutLines;
-            for (u32 luDiag = 0; luDiag < luPlayerTriggerCount; ++luDiag)
-            {
-                const BrnTrigger::TriggerRegion* lpDiagRegion =
-                    lpTriggerData->GetRegion(maLastPlayerTriggers.GetItem(luDiag));
-                s32 liGenericType = -1;
-                if (lpDiagRegion->GetType() == BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
-                {
-                    liGenericType = static_cast<s32>(
-                        static_cast<const BrnTrigger::GenericRegion*>(lpDiagRegion)->GetType());
-                }
-                *CgsDev::Log::gpDebugPrint << " " << liGenericType;
-            }
-            *CgsDev::Log::gpDebugPrint << " (7 == E_TYPE_JUMP)\n";
-        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -837,15 +720,13 @@ void TriggerQueryManager::SubmitTriggerQueries(
 
             if (lfLengthSquared > 225.0f)
                 {
-                    const Vector3 lAggregateValue = {lForward.x * 15.0f, lForward.y * 15.0f,
-                                         lForward.z * 15.0f, lForward.w * 15.0f};
+                    const Vector3 lAggregateValue(
+                        __vmulfp(__lvx(&lForward, 0), XMVectorReplicate(15.0f)));
                     lLookAheadDist = lAggregateValue;
                 }
             {
-                const Vector3 lAggregateValue = {lrCar.mPosition.x + lLookAheadDist.x,
-                                         lrCar.mPosition.y + lLookAheadDist.y,
-                                         lrCar.mPosition.z + lLookAheadDist.z,
-                                         lrCar.mPosition.w + lLookAheadDist.w};
+                const Vector3 lAggregateValue(
+                    __vaddfp(__lvx(&lrCar.mPosition, 0), __lvx(&lLookAheadDist, 0)));
                 mPlayerLookAheadPos = lAggregateValue;
             }
             if (mbDoSoundLookAheadThisFrame)
@@ -1045,7 +926,7 @@ void TriggerQueryManager::PostWorldUpdate(
         mCachedLookAheadSoundAction.mQueryPos = mPlayerLookAheadPos;
         maSoundActions.Append(mCachedLookAheadSoundAction);
         {
-            const Vector3 lAggregateValue = { 0 };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mCachedLookAheadSoundAction.mQueryPos = lAggregateValue;
         }
         mCachedLookAheadSoundAction.mEntityId.muValue = 0;

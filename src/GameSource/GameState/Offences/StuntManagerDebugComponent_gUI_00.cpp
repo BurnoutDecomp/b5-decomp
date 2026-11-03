@@ -231,7 +231,9 @@ namespace BrnGameState
                     lTriggerWorldRegion.GetDistrict());
                 lrStream << ", ";
                 lrStream.AppendFormat("(%f, %f, %f)",
-                                      lPosition.x, lPosition.y, lPosition.z);
+                                      lPosition.GetX().GetFloat(),
+                                      lPosition.GetY().GetFloat(),
+                                      lPosition.GetZ().GetFloat());
             }
             else
             {

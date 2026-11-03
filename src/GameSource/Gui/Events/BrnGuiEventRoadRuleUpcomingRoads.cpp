@@ -190,9 +190,12 @@ void GuiEventRoadRuleUpcomingRoads::FindRoadRuler(ERoadSide side,
     const UpcomingRoadChangeAction* action, BrnStreetData::ScoreType type)
 {
     using BrnStreetData::ChallengeData;
-    const auto& par = side == E_ROAD_LEFT ? action->mLeftParScore : action->mRightParScore;
-    const auto& friends = side == E_ROAD_LEFT ? action->mLeftFriendHighScore : action->mRightFriendHighScore;
-    const auto& user = side == E_ROAD_LEFT ? action->mLeftUserScore : action->mRightUserScore;
+    const BrnStreetData::ChallengeParScoresEntry& par =
+        side == E_ROAD_LEFT ? action->mLeftParScore : action->mRightParScore;
+    const BrnStreetData::ChallengeHighScoreEntry& friends =
+        side == E_ROAD_LEFT ? action->mLeftFriendHighScore : action->mRightFriendHighScore;
+    const BrnStreetData::ChallengePlayerScoreEntry& user =
+        side == E_ROAD_LEFT ? action->mLeftUserScore : action->mRightUserScore;
     CGS_ASSERT(par.ContainsData(type), "Failed to find road rule scores for upcoming road");
     maaeLeaderTypes[side][type] = E_ROADRULELEADERTYPE_AI;
     s32 parScore; CgsID rival;
@@ -262,8 +265,8 @@ void GuiEventRoadRuleData::Construct(const BrnGameState::GameStateModuleIO::Road
     mRoadID = action->mRoadId;
     for (s32 i = 0; i < 2; ++i)
     {
-        const auto type = static_cast<BrnStreetData::ScoreType>(i);
-        auto& rule = mRules[i];
+        const BrnStreetData::ScoreType type = static_cast<BrnStreetData::ScoreType>(i);
+        GuiEventRoadRuleData::RoadRuleType& rule = mRules[i];
         rule.mFriendName.Construct("");
         rule.mRivalId = 0;
         rule.maiScores[0] = rule.maiScores[1] = rule.maiScores[2] = 0;
