@@ -381,30 +381,6 @@ void RaceCarEntityModule::ProcessResetOnTrackResultQueue(
                                                       lfAppliedSpeed );
             }
 
-            if( CgsDev::Log::gpDebugPrint != 0 )
-            {
-                // [DIAG resetpump] NOT IN THE X360 BINARY -- the other end of the witness pair
-                // opened by SendResetOnTrackRequests. Prints the POSE, because "a request came
-                // back" and "the car was told to go somewhere sane" are different claims.
-                //
-                // ⚠️ CORRECTED 2026-09-03 (aiwave A11). This used to print
-                // ActiveRaceCar::GetResetCoords ON BOTH ARMS -- i.e. on a SUCCESS it printed the
-                // car's OWN last-good pose while announcing "SUCCESS (AI pose)", so the one line
-                // that exists to tell the two apart printed the same thing either way. It could
-                // not have been noticed before this wave because nothing had ever produced a
-                // SUCCESS. It now prints the pose that was actually applied.
-                *CgsDev::Log::gpDebugPrint
-                    << "[resetpump] RESULT applied: global car "
-                    << static_cast<s32>( lrResult.GetGlobalRaceCarIndex() )
-                    << ( lrResult.GetState() ==
-                             BrnAI::AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS
-                             ? " SUCCESS (AI pose)" : " FAILURE (own reset coords)" )
-                    << " -> (" << lAppliedPosition.x << "," << lAppliedPosition.y
-                    << "," << lAppliedPosition.z << ") facing ("
-                    << lAppliedDirection.x << "," << lAppliedDirection.y
-                    << "," << lAppliedDirection.z << ") speed " << lfAppliedSpeed << "\n";
-            }
-
             if( mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                 lpActiveRaceCar == GetActiveRaceCar( mePlayerActiveRaceCarIndex ) )
             {
@@ -576,32 +552,11 @@ void RaceCarEntityModule::CheckForResetOnTrackConditions()
         const Vector4& lrLeading =
             *static_cast<const Vector4*>( lSurface.GetAttributeData() );
         const bool lbSurfaceListLooksSane =
-               ( AbsF( lrLeading.x ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
-            || ( AbsF( lrLeading.y ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
-            || ( AbsF( lrLeading.z ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
-            || ( AbsF( lrLeading.w ) > KF_SURFACE_LIST_MIN_MAGNITUDE );
+               ( AbsF( lrLeading.GetX().GetFloat() ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( AbsF( lrLeading.GetY().GetFloat() ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( AbsF( lrLeading.GetZ().GetFloat() ) > KF_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( AbsF( lrLeading.GetW().GetFloat() ) > KF_SURFACE_LIST_MIN_MAGNITUDE );
 
-        // The verdict and the values behind it, printed once per process (the bug-test case
-        // surface_list_tripwire reads this line). Until 2026-09-07 the assert below was latched
-        // to once per process because the collection key above read as 0 and the tripwire fired
-        // 4,082 times in 85 seconds; with the key real the collection resolves and the console's
-        // unconditional per-frame form is what runs.
-        {
-            static bool sbSurfaceListReported = false;
-            if( !sbSurfaceListReported )
-            {
-                sbSurfaceListReported = true;
-                if( CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[reset-watchdog] surface-list tripwire: entry="
-                        << ( lpEntry != 0 ? "resolved" : "DefaultDataArea" )
-                        << " leading quad (" << lrLeading.x << ", " << lrLeading.y << ", "
-                        << lrLeading.z << ", " << lrLeading.w << ") sane="
-                        << ( lbSurfaceListLooksSane ? 1 : 0 ) << "\n";
-                }
-            }
-        }
         CGS_ASSERT( lbSurfaceListLooksSane, "Surface list appears to be corrupt" );  // :2516
     }
 
@@ -634,9 +589,9 @@ void RaceCarEntityModule::CheckForResetOnTrackConditions()
         // operands are splats of one scalar each, so the four-lane test IS the scalar one.
         const BrnPhysics::Vehicle::AboveGroundTestResult& lrGround =
             lpState->mAboveGroundTestResult;
-        const f32 lfLowestPointY = lpActiveRaceCar->mvfLowestPointWorldSpace.x;
+        const f32 lfLowestPointY = lpActiveRaceCar->mvfLowestPointWorldSpace.GetFloat();
 
-        if( lrGround.mIntersectionPosition.y >= ( lfLowestPointY - mfResetOnWaterHeight ) )
+        if( lrGround.mIntersectionPosition.GetY().GetFloat() >= ( lfLowestPointY - mfResetOnWaterHeight ) )
         {
             // ⚠️ mCollisionTag here is the GLOBAL stand-in `struct CollisionTag { u32 muValue; }`
             // (BrnCommonTypes.h:29), NOT BrnWorld::CollisionTag -- two different types with the
@@ -711,7 +666,7 @@ void RaceCarEntityModule::CheckForResetOnTrackConditions()
 
         // (4) fell out of the world.
         const Vector3 lPosition = lpActiveRaceCar->GetPosition();
-        if( KF_FELL_OUT_OF_WORLD_HEIGHT > lPosition.y )
+        if( KF_FELL_OUT_OF_WORLD_HEIGHT > lPosition.GetY().GetFloat() )
         {
             lbNeedsReset = true;
         }
