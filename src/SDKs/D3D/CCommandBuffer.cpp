@@ -1,6 +1,8 @@
 #include "SDKs/D3D/CCommandBuffer.h"
 #include "SDKs/D3D/CDevice.h"
 
+#include <xtl.h>
+#include <d3d9gpu.h>
 #include <cstddef> // offsetof (uncalled _CCommandBufferAssertLayout)
 #include "types.hpp" // uintptr_t (X360 address math on the host pointer)
 
@@ -12,11 +14,6 @@
 // methods below are pure software (linked-list edit / lock-guarded callback /
 // cache-flush) recovered faithfully with no added control flow.
 // ===========================================================================
-
-// X360 kernel critical-section primitives (the same externs the Cgs file-system
-// futex paths declare).
-extern "C" void RtlEnterCriticalSection(void* lpCriticalSection);
-extern "C" void RtlLeaveCriticalSection(void* lpCriticalSection);
 
 // The XGRAPHICS global device slot. The X360 asm loads the stored value and then
 // dereferences it once (two loads: `lwz r11, VdGlobalDevice@l(r11)` then
@@ -37,7 +34,7 @@ void CCommandBuffer::FlushCachedAllocation()
     {
         u32 uStart = static_cast<u32>(reinterpret_cast<uintptr_t>(mpCachedAllocation));
         u32 uEnd   = uStart + muCachedSize - 1;
-        FlushCachedMemory(ToGpuPhysical(uStart), ToGpuPhysical(uEnd), 0);
+        FlushCachedMemory((GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(uStart)) - 0x40000000u), (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(uEnd)) - 0x40000000u), 0);
     }
 }
 
@@ -69,7 +66,7 @@ void CCommandBuffer::DebugDestroy()
         return;
 
     CDevice* pDevice = *VdGlobalDevice;
-    RtlEnterCriticalSection(&pDevice->mCommandBufferLock);
+    RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(pDevice->mCommandBufferLock));
 
     if (pDevice->mpCommandBufferList == this)
     {
@@ -87,7 +84,7 @@ void CCommandBuffer::DebugDestroy()
         pPrev->mpNextDebug = pNode->mpNextDebug;
     }
 
-    RtlLeaveCriticalSection(&pDevice->mCommandBufferLock);
+    RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(pDevice->mCommandBufferLock));
 }
 
 // --- @ 0x8294C878 ----------------------------------------------------------
@@ -98,7 +95,7 @@ void CCommandBuffer::DebugDestroy()
 void CCommandBuffer::GrowableFree()
 {
     CDevice* pDevice = *VdGlobalDevice;
-    RtlEnterCriticalSection(&pDevice->mCommandBufferLock);
+    RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(pDevice->mCommandBufferLock));
 
     void*   pContext = mpAllocatorContext;
     TFreeFn pfnFree  = mpfnFree;
@@ -110,7 +107,7 @@ void CCommandBuffer::GrowableFree()
 
     pfnFree(pContext);
 
-    RtlLeaveCriticalSection(&pDevice->mCommandBufferLock);
+    RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(pDevice->mCommandBufferLock));
 }
 
 // --- @ 0x8294CB20 ----------------------------------------------------------
@@ -124,12 +121,12 @@ s32 CCommandBuffer::GrowableAllocate(s32 iCount, u32* puSize, s32 iAlignment)
     if (*puSize < muMinSize)
         *puSize = muMinSize;
 
-    RtlEnterCriticalSection(&pDevice->mCommandBufferLock);
+    RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(pDevice->mCommandBufferLock));
 
     s32 iAllocation = mpfnAllocate(mpAllocatorContext, iCount, puSize, iAlignment);
     if (DebugAddAllocation(iAllocation, static_cast<s32>(*puSize)))
     {
-        RtlLeaveCriticalSection(&pDevice->mCommandBufferLock);
+        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(pDevice->mCommandBufferLock));
         return iAllocation;
     }
 
