@@ -52,37 +52,43 @@ namespace
     // KF_FAN_TINY; kept TU-local (internal linkage) so the two partfiles cannot drift apart.
     const f32 KF_AGGRESSION_TINY = 1.1920928955078125e-07f;
 
-    // The 2D lane sum of `vmulfp128 vD,vA,vB ; vspltw 1 ; vspltw 0 ; vaddfp` -- rw::math::vpu::Dot
-    // on a Vector2 (lanes 0 and 1 only; .z/.w are never read).
+    // ARTIST 827879D8..87AA0: dot, rsqrt estimate and two refinements.
+    __vector4 LengthSquared2DAggression(const Vector2& lVector)
+    {
+        const __vector4 lSquare = __vmulfp(lVector.mV, lVector.mV);
+        return __vaddfp(__vspltw(lSquare, 0), __vspltw(lSquare, 1));
+    }
     f32 Dot2DAggression(const Vector2& lA, const Vector2& lB)
     {
-        return lA.x * lB.x + lA.y * lB.y;
+        const __vector4 lProduct = __vmulfp(lA.mV, lB.mV);
+        return __vaddfp(__vspltw(lProduct, 0), __vspltw(lProduct, 1)).x;
     }
-
-    // vrsqrtefp + two Newton-Raphson refinement steps over (x*x + y*y). rw::math::vpu::Normalize
-    // does NOT guard a zero length -- neither does the console here (no vsel follows), so a zero
-    // input produces the same non-finite answer it does on the X360. Callers gate it.
+    __vector4 ReciprocalLength2DAggression(__vector4 lLength)
+    {
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        __vector4 lEstimate = __vrsqrtefp(lLength);
+        __vector4 lSquare = __vmulfp(lEstimate, lEstimate);
+        __vector4 lHalfEstimate = __vmulfp(lEstimate, lHalf);
+        __vector4 lCorrection = __vnmsubfp(lLength, lSquare, lOne);
+        lEstimate = __vmaddfp(lHalfEstimate, lCorrection, lEstimate);
+        lSquare = __vmulfp(lEstimate, lEstimate);
+        lHalfEstimate = __vmulfp(lEstimate, lHalf);
+        lCorrection = __vnmsubfp(lLength, lSquare, lOne);
+        return __vmaddfp(lHalfEstimate, lCorrection, lEstimate);
+    }
     Vector2 Normalize2DAggression(const Vector2& lVector)
     {
-        const f32 lfScale = 1.0f / std::sqrt(lVector.x * lVector.x + lVector.y * lVector.y);
         Vector2 lOut;
-        lOut.x = lVector.x * lfScale;
-        lOut.y = lVector.y * lfScale;
-        lOut.z = 0.0f;
-        lOut.w = 0.0f;
+        lOut.mV = __vmulfp(lVector.mV, ReciprocalLength2DAggression(LengthSquared2DAggression(lVector)));
         return lOut;
     }
-
-    // rw::math::vpu::Magnitude: the same refined rsqrt, but `vmulfp128 v0, lengthSq, rsqrt`
-    // followed by `vcmpeqfp`/`vsel` against zero -- so a ZERO-length vector returns 0.0, not NaN.
-    // That guard is the console's own (IncludeSmashIntoTarget @0x82787A74/9C,
-    // FindNeabyAIInTraffic @0x82787CD0/F8 and @0x82787D98/DC0).
     f32 Magnitude2DAggression(const Vector2& lVector)
     {
-        const f32 lfLengthSq = lVector.x * lVector.x + lVector.y * lVector.y;
-        if (lfLengthSq == 0.0f)
-            return 0.0f;                                   // vsel against the vcmpeqfp mask
-        return std::sqrt(lfLengthSq);
+        const __vector4 lLength = LengthSquared2DAggression(lVector);
+        const __vector4 lZero = __vspltisw(0);
+        return __vsel(__vmulfp(lLength, ReciprocalLength2DAggression(lLength)), lZero,
+                      __vcmpeqfp(lZero, lLength)).x;
     }
 
     // The `vandc` (drop the sign bit) + `vcmpgtfp` pair the console emits for
@@ -93,8 +99,8 @@ namespace
     // NaN non-zero).
     bool IsZero2DAggression(const Vector2& lVector)
     {
-        return !(std::fabs(lVector.x) > KF_AGGRESSION_TINY)
-            && !(std::fabs(lVector.y) > KF_AGGRESSION_TINY);
+        return !(std::fabs(lVector.mV.x) > KF_AGGRESSION_TINY)
+            && !(std::fabs(lVector.mV.y) > KF_AGGRESSION_TINY);
     }
 
     // The `fsel f12,(lo-v),lo,v ; fsel f12,(hi-v),v,hi` ladder, i.e. rw::math::vpu::Clamp (lo == 0:
@@ -112,7 +118,9 @@ namespace
     // (IncludeDriveCloseToPlayer @0x8278807C..84).
     f32 Cross2DAggression(const Vector2& lA, const Vector2& lB)
     {
-        return lA.x * lB.y - lA.y * lB.x;
+        const __vector4 lXY = __vmulfp(__vspltw(lA.mV, 0), __vspltw(lB.mV, 1));
+        const __vector4 lYX = __vmulfp(__vspltw(lA.mV, 1), __vspltw(lB.mV, 0));
+        return __vsubfp(lXY, lYX).x;
     }
 
     // Zero one contributor row. Every Include* below has an arm that does exactly this
@@ -162,16 +170,13 @@ void SteeringFan::IncludeSmashIntoTarget(AICar* lpCar, const NearbyVehicle* lpTa
                                          f32 lfMinAheadness, f32 lfMaxAheadness)
 {
     // DWARF BrnAISteeringFan.cpp:2015 -- declared inside the body, not at file scope.
-    const f32 KF_MAX_SEPERATION_FOR_SLAM = 20.0f;
+    const f32 KF_RECIP_MAX_SEPERATION_FOR_SLAM = 0.05f; // ARTIST 82787AB0/AB8
 
     const Vector2 lCarPosition  = BrnMath::Flatten(lpCar->GetPosition());    // @0x827879A0
     const Vector2 lCarDirection = BrnMath::Flatten(lpCar->GetDirection());   // @0x827879B8
 
     Vector2 lRelativeVector;
-    lRelativeVector.x = lpTarget->mCentre.x - lCarPosition.x;
-    lRelativeVector.y = lpTarget->mCentre.y - lCarPosition.y;
-    lRelativeVector.z = 0.0f;
-    lRelativeVector.w = 0.0f;
+    lRelativeVector.mV = __vsubfp(lpTarget->mCentre.mV, lCarPosition.mV); // ARTIST 827879D8
 
     const Vector2 lRelativeDirection = Normalize2DAggression(lRelativeVector);
     const f32     lfSeparation       = Magnitude2DAggression(lRelativeVector);
@@ -179,7 +184,7 @@ void SteeringFan::IncludeSmashIntoTarget(AICar* lpCar, const NearbyVehicle* lpTa
                                                        lRelativeVector);
 
     const f32 lfProximity =
-        1.0f - ClampAggression(lfSeparation / KF_MAX_SEPERATION_FOR_SLAM, 0.0f, 1.0f);
+        1.0f - ClampAggression(lfSeparation * KF_RECIP_MAX_SEPERATION_FOR_SLAM, 0.0f, 1.0f);
 
     f32* lpRow = mfWeighting[leContributor];
 
@@ -259,10 +264,7 @@ const NearbyVehicle* SteeringFan::FindNeabyAIInTraffic(const NearbyVehicles* lpN
             continue;
 
         Vector2 lRelativePosition;
-        lRelativePosition.x = lpRival->mCentre.x - lOurPosition.x;
-        lRelativePosition.y = lpRival->mCentre.y - lOurPosition.y;
-        lRelativePosition.z = 0.0f;
-        lRelativePosition.w = 0.0f;
+        lRelativePosition.mV = __vsubfp(lpRival->mCentre.mV, lOurPosition.mV);
 
         const f32 lfSeparation = Magnitude2DAggression(lRelativePosition);
         if (lfSeparation > KF_AI_SMASH_SEPERATION)                          // @0x82787D04
@@ -287,8 +289,7 @@ const NearbyVehicle* SteeringFan::FindNeabyAIInTraffic(const NearbyVehicles* lpN
         }
 
         // See the CONSOLE QUIRK note above: lRelativePosition is the UNIT vector here.
-        const f32 lfProximity = lRelativePosition.x * lRelativePosition.x
-                              + lRelativePosition.y * lRelativePosition.y;
+        const f32 lfProximity = Dot2DAggression(lRelativePosition, lRelativePosition);
         if (lfProximity < lfBestProximity)                                  // @0x82787E14
         {
             lfBestProximity = lfProximity;
@@ -416,10 +417,7 @@ void SteeringFan::IncludeDriveCloseToPlayer(RacingLine* lpRacingLine, AICar* lpC
     // The inline vrlimi128 XZ flatten (@0x82787EFC / @0x82787F2C), not a BrnMath::Flatten call.
     const Vector3 lOurCarPosition3D = lpCar->GetPosition();
     Vector2 lOurCarPosition;
-    lOurCarPosition.x = lOurCarPosition3D.x;
-    lOurCarPosition.y = lOurCarPosition3D.z;
-    lOurCarPosition.z = 0.0f;
-    lOurCarPosition.w = 0.0f;
+    lOurCarPosition.mV = __vrlimi(lOurCarPosition3D.mV, lOurCarPosition3D.mV, 4, 1);
 
     lpRacingLine->mfImmmediateApproachSpeedOfTrafficAhead = 0.0f;           // @0x82787F10
     lpRacingLine->mfImmediateDistanceToTrafficImpact      = 100.0f;         // @0x82787F14
@@ -435,31 +433,19 @@ void SteeringFan::IncludeDriveCloseToPlayer(RacingLine* lpRacingLine, AICar* lpC
     // DWARF :2220 -- loop-invariant, so the console recomputes it at 0x827880BC every step from
     // the same two loads; hoisted here to where the source declares it.
     Vector2 lRelativePosition;
-    lRelativePosition.x = lOurCarPosition.x - lpPlayer->mCentre.x;
-    lRelativePosition.y = lOurCarPosition.y - lpPlayer->mCentre.y;
-    lRelativePosition.z = 0.0f;
-    lRelativePosition.w = 0.0f;
+    lRelativePosition.mV = __vsubfp(lOurCarPosition.mV, lpPlayer->mCentre.mV);
 
     const Vector2 lPosA = BrnMath::Flatten(lpCar->GetPosition());           // DWARF :2224, @0x82788034
     const Vector2 lPosB = lpPlayer->mCentre;                                // DWARF :2225
 
     Vector2 lPosC;                                                          // DWARF :2226
-    lPosC.x = lPosB.x + lPlayerUnitVelocity.x;
-    lPosC.y = lPosB.y + lPlayerUnitVelocity.y;
-    lPosC.z = 0.0f;
-    lPosC.w = 0.0f;
+    lPosC.mV = __vaddfp(lPosB.mV, lPlayerUnitVelocity.mV);
 
     Vector2 lToPosB;
-    lToPosB.x = lPosB.x - lPosA.x;
-    lToPosB.y = lPosB.y - lPosA.y;
-    lToPosB.z = 0.0f;
-    lToPosB.w = 0.0f;
+    lToPosB.mV = __vsubfp(lPosB.mV, lPosA.mV);
 
     Vector2 lToPosC;
-    lToPosC.x = lPosC.x - lPosA.x;
-    lToPosC.y = lPosC.y - lPosA.y;
-    lToPosC.z = 0.0f;
-    lToPosC.w = 0.0f;
+    lToPosC.mV = __vsubfp(lPosC.mV, lPosA.mV);
 
     // DWARF :2232, @0x827880A4 (`fsel f27, lfCarSide, 1.0, -1.0`): +1 on one side of the player's
     // line of travel, -1 on the other, which is what flips the sign of lfPassingSpace below.
@@ -470,16 +456,12 @@ void SteeringFan::IncludeDriveCloseToPlayer(RacingLine* lpRacingLine, AICar* lpC
         const Vector2& lUnitDirection = mUnitDirection[liFanIndex];
 
         Vector2 lOurCarMotion;
-        lOurCarMotion.x = lUnitDirection.x * lfOurCarSpeed;
-        lOurCarMotion.y = lUnitDirection.y * lfOurCarSpeed;
-        lOurCarMotion.z = 0.0f;
-        lOurCarMotion.w = 0.0f;
+        __vector4 lSpeed;
+        lSpeed.x = lfOurCarSpeed;
+        lOurCarMotion.mV = __vmulfp(lUnitDirection.mV, __vspltw(lSpeed, 0));
 
         Vector2 lRelativeVelocity;
-        lRelativeVelocity.x = lOurCarMotion.x - lpPlayer->mVelocity.x;
-        lRelativeVelocity.y = lOurCarMotion.y - lpPlayer->mVelocity.y;
-        lRelativeVelocity.z = 0.0f;
-        lRelativeVelocity.w = 0.0f;
+        lRelativeVelocity.mV = __vsubfp(lOurCarMotion.mV, lpPlayer->mVelocity.mV);
 
         // DWARF :2256 lfAheadness (the raw dot) then :2260 KF_PROJECT_AHEAD; the console adds them
         // at 0x82788108 (`fadds f0, f13, flt_820C488C`) and splats the sum at 0x82788124.
@@ -487,10 +469,9 @@ void SteeringFan::IncludeDriveCloseToPlayer(RacingLine* lpRacingLine, AICar* lpC
         const f32 lfProjectHere = lfAheadness + KF_PROJECT_AHEAD;
 
         Vector2 lProjectedPosition;
-        lProjectedPosition.x = lRelativePosition.x - lPlayerUnitVelocity.x * lfProjectHere;
-        lProjectedPosition.y = lRelativePosition.y - lPlayerUnitVelocity.y * lfProjectHere;
-        lProjectedPosition.z = 0.0f;
-        lProjectedPosition.w = 0.0f;
+        __vector4 lProject;
+        lProject.x = lfProjectHere;
+        lProjectedPosition.mV = __vsubfp(lRelativePosition.mV, __vmulfp(lPlayerUnitVelocity.mV, __vspltw(lProject, 0)));
 
         const f32 lfPassingSpace =
             DistancePosVelToOrigin(lProjectedPosition, lRelativeVelocity) * lfCarSide
@@ -547,10 +528,7 @@ void SteeringFan::IncludeDriftDirectionTracking(RacingLineGenerator* lpRacingLin
         return;
 
     Vector2 lVectorToCentre;                                                // @0x827881E0
-    lVectorToCentre.x = mCentreAheadFarAhead.x - mCentreFarAhead.x;
-    lVectorToCentre.y = mCentreAheadFarAhead.y - mCentreFarAhead.y;
-    lVectorToCentre.z = 0.0f;
-    lVectorToCentre.w = 0.0f;
+    lVectorToCentre.mV = __vsubfp(mCentreAheadFarAhead.mV, mCentreFarAhead.mV);
 
     Vector2 lLineVector = lVectorToCentre;
     if (!IsZero2DAggression(lVectorToCentre))                               // @0x8278828C
@@ -594,10 +572,7 @@ void SteeringFan::IncludeDriftLocationTracking(RacingLineGenerator* lpRacingLine
         return;
 
     Vector2 lVectorToCentre;                                                // @0x82788768
-    lVectorToCentre.x = mCentreFarAhead.x - mFanOrigin2D.x;
-    lVectorToCentre.y = mCentreFarAhead.y - mFanOrigin2D.y;
-    lVectorToCentre.z = 0.0f;
-    lVectorToCentre.w = 0.0f;
+    lVectorToCentre.mV = __vsubfp(mCentreFarAhead.mV, mFanOrigin2D.mV);
 
     if (IsZero2DAggression(lVectorToCentre))                                // @0x82788814
         return;
