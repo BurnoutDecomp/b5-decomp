@@ -73,13 +73,12 @@
 // here.
 // ============================================================================
 
-#include <cstdlib>                                    // getenv (the [crash-end] BRN_SHOWTIME_WATCH witness)
 #include <cstring>                                    // std::memset (ClearData zeroes the Vector3 members)
 #include <cmath>                                      // std::fabs (Update's IsVectorSet epsilon test)
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"       // BrnGui::GuiRemovedTrafficEvent (DealWithRemovedTraffic)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the X360 assert sites in these bodies)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diagnostic] the [crash-end] witness
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // native unknown-vehicle message
 #include "GameShared/GameClasses/Core/CgsID.h"        // CgsIDUnCompress (GetVehicleScoreData diagnostic)
 // [showtime score wave 2026-08-29] Update's real body needs the two console types its own
 // signature already names by pointer. These are .cpp includes, NOT header includes -- the
@@ -357,22 +356,6 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     void CrashModeScoring::DealWithHitProp(u16 luPropIndex, u8 luPropFlags)
     {
-        // [DIAG] NOT IN THE X360 BINARY -- the `[evt-prop]` witness. Gated BRN_MODEMGR_DIAG,
-        // first three calls per process only, so it cannot flood a drive through a railed street.
-        //
-        // WHY A CRASH FIX NEEDS ITS OWN WITNESS. Without it the only evidence that restoring
-        // CrashModeScoring::Construct worked is that the process STOPPED dying -- and a run can
-        // stop dying because the bug is fixed OR because it never touched a prop that time. Those
-        // are indistinguishable from the outside, and "reproducible is not attributable" is exactly
-        // how a fix gets banked that never ran. This line makes the repaired store attributable:
-        // it prints from INSIDE the function that faulted, one instruction ahead of the Push that
-        // faulted, and it prints miMaxLength -- which is 0 on the broken build and 8 on the fixed
-        // one, because that word is written by the same attach the fault proved was missing.
-        // DELETE-WHEN the event-finish bring-up is done.
-        {
-            static s32        siCalls    = 0;
-        }
-
         const s32 liLength = mRecentlyHitPropSet.GetLength();
         for (s32 liPropSetIndex = 0; liPropSetIndex < liLength; ++liPropSetIndex)
         {
@@ -478,38 +461,16 @@ namespace BrnGameState
     // (mfTimeSinceLastEvent), each advanced by lfPadding, have exceeded the 3-second
     // threshold. The ~0 test uses the X360's epsilon (FLT_EPSILON ~= 1.1920929e-7).
     //
-    // ⭐ THIS FUNCTION IS THE ONLY THING THAT ENDS AN OFFLINE SHOWTIME SESSION.
-    // ModeManager::UpdateMode's arm 12 (BrnModeManager_UpdateMode.cpp:505) polls it every
-    // frame the mode is E_GMS_IN_PROGRESS and, on true, calls PlayerFinishedMode -> the
-    // +0x94F7 latch -> FinishCurrentMode -> SendEvent(E_GME_NEXT) -> OUTRO -> RESULTS.
-    // CrashMode overrides neither ShouldFinish (base returns false) nor ShouldExit (folded
-    // `li r3,0`), so no other route exists. A showtime session that only reaches IN_PROGRESS
-    // for ~5 s is therefore THIS predicate answering true, and the witness below says which
-    // of its two `return true` sites did it and on what inputs.
+    // ModeManager::UpdateMode polls this predicate while the mode is E_GMS_IN_PROGRESS.
     // ------------------------------------------------------------------------
     bool CrashModeScoring::HasCrashModeEnded(f32 lfPadding) const
     {
-        // [DIAG] NOT IN THE X360 BINARY. The INPUT witness, printed before any branch so it
-        // reports even on the frames the predicate answers false. Every ~2 s at 60 Hz while
-        // the mode is IN_PROGRESS (which is the only state that calls this at all), so it
-        // cannot flood: a 5-second window yields three lines.
-        // ⚠️ It reports the five INPUTS ONLY. The verdict is reported at the two `return true`
-        // sites themselves, so nothing here can drift out of step with the predicate -- the
-        // trap a duplicated copy of the test would walk straight into.
-        {
-            static s32        siCalls = 0;
-        }
-
         if (mbInfiniteCrashMode)
         {
             return false;
         }
         if (!mbPlayerIsCrashing)
         {
-            // [DIAG] NOT IN THE X360 BINARY. One-shot: the FIRST of the two exits.
-            {
-                static bool       sbReported = false;
-            }
             return true;
         }
 
@@ -530,10 +491,6 @@ namespace BrnGameState
             return false;
         }
 
-        // [DIAG] NOT IN THE X360 BINARY. One-shot: the SECOND exit -- the idle ladder.
-        {
-            static bool       sbReported = false;
-        }
         return true;
     }
 
@@ -932,18 +889,10 @@ namespace BrnGameState
         // The console's own two asserts, with their baked line numbers. Neither gates: it fires
         // and dereferences anyway.
         CGS_ASSERT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface != NULL");  // :189
-        if (lpActiveRaceCarInterface == 0)
-        {
-            return;   // [PC GUARD] not X360 -- the console's precondition is the assert above.
-        }
 
         const BrnPhysics::Vehicle::RaceCarState* const lpPlayerState =
             lpActiveRaceCarInterface->GetPlayerRaceCarState();
         CGS_ASSERT(lpPlayerState != 0, "lpPlayerState != NULL");                        // :193
-        if (lpPlayerState == 0)
-        {
-            return;   // [PC GUARD] same shape.
-        }
 
         // ---- 0x823208C4..0x82320948: the two speeds, computed BEFORE the clocks store ------
         // The console's VMX form is `vmsum3fp128` + two Newton-Raphson rsqrt refinements + a
@@ -966,25 +915,6 @@ namespace BrnGameState
         // The console inlines the -1-sentinel form verbatim (`lwz 0x2858 ; cmpwi -1 ; else
         // lbz 1120*idx + 0x77A`), which IS IsPlayerCarCrashing(): 1914 - 816 == RaceCarState
         // +1098 == mbCrashing. Reached by name.
-        // [DIAG] NOT IN THE X360 BINARY. THE FALLING EDGE OF THE ONLY LATCH THAT ENDS SHOWTIME.
-        // MEASURED 2026-08-29: an offline showtime session left E_GMS_IN_PROGRESS after 5.7 s and
-        // the [crash-end] witness named the exit "!mbPlayerIsCrashing" -- with boost% frozen at
-        // 0.595307 for the whole session, so the OTHER exit (the idle ladder) was closed the
-        // entire time and cannot be the cause. That leaves this store, and it has TWO completely
-        // different failure modes that the boolean alone cannot tell apart:
-        //   (a) the player's car really stopped crashing, or
-        //   (b) mePlayerActiveRaceCarIndex went to the -1 sentinel, which makes
-        //       IsPlayerCarCrashing() return false with no reference to the car at all
-        //       (BrnRCEntityActiveRaceCarOutputInterface.cpp:804 -- "the -1 arm yields false").
-        // So the witness prints the index, IsPlayerCarActive(), AND the player RaceCarState's own
-        // mbCrashing: (b) is index==-1 or the raw byte still 1; (a) is the raw byte 0 too.
-        // [[diagnostics-that-lie]] -- a false that means "no car" reads exactly like a false that
-        // means "not crashing". One-shot on the 1->0 edge, so it cannot flood.
-        {
-            static bool       sbReported  = false;
-            const bool        lbNowCrashing = lpActiveRaceCarInterface->IsPlayerCarCrashing();
-        }
-
         mbPlayerIsCrashing = lpActiveRaceCarInterface->IsPlayerCarCrashing();   // +0x54
 
         // ---- 0x823209A0..0x823209C8: the boost gauge --------------------------------------
@@ -995,16 +925,9 @@ namespace BrnGameState
         // a side effect.
         const EActiveRaceCarIndex lePlayerIndex =
             lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
-        // [PC GUARD] not X360. The console indexes with the raw -1 sentinel and reads off the
-        // front of the array (its two asserts fire and do not gate). Bounded here; on every
-        // input the asserts accept, the behaviour is identical.
-        if (lePlayerIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
-            lePlayerIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT)
-        {
-            const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo* const lpBoost =
-                lpActiveRaceCarInterface->GetBoostOutputInfoN(lePlayerIndex);
-            mfPlayerBoostPercentage = lpBoost->mfBoostAmount / lpBoost->mfMaxBoost;   // +0x50
-        }
+        const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo* const lpBoost =
+            lpActiveRaceCarInterface->GetBoostOutputInfoN(lePlayerIndex);
+        mfPlayerBoostPercentage = lpBoost->mfBoostAmount / lpBoost->mfMaxBoost;   // +0x50
 
         // ---- 0x823209CC..0x82320A8C: the wall-contact combo-break timer --------------------
         // Accumulate while the car is scraping a wall OR is on the ground; zero it the moment

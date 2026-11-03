@@ -128,32 +128,16 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
         lpAISectionsData->BuildAISectionPointMap(&lArena);
 
     // ---- the district map (0x82375A54..0x82375A8C) ------------------------------------------
-    // The console builds this unconditionally off the StreetManager's "Districts" handle; the
-    // same not-ready shape StreetManager::SetupParRivals already guards for is guarded here, and
-    // an unbound map simply leaves mbDistrictMapBound false so the per-junction county falls back
-    // to E_COUNTY_INVALID (the value the StuntManager's own off-map arm uses).
+    // ARTIST constructs it unconditionally from the StreetManager's "Districts" handle.
     CgsWorld::WorldMap2D lDistrictMap;
-    bool                 lbDistrictMapBound = false;
-    {
-        const CgsResource::ResourceHandle* const lpHandle =
-            mStreetManager.GetDistrictMapResourceHandle();
-        if (lpHandle != 0 && lpHandle->mpResourceMemory != 0)
-        {
-            // The handle slot holds a pointer to the resource-memory pointer; the X360 folds
-            // BinaryFileResource::GetData() into its caller as `base + *(u32*)(base + 4)`
-            // (0x82375A80..0x82375A88), the same three loads SetupParRivals @0x8233F5EC makes.
-            const CgsResource::BinaryFileResource* const lpBlob =
-                *reinterpret_cast<const CgsResource::BinaryFileResource* const*>(
-                    lpHandle->mpResourceMemory);
-            if (lpBlob != 0)
-            {
-                lDistrictMap.Construct(lpBlob->GetData(),
-                                       KV2_DISTRICT_MAP_WORLD_ORIGIN,
-                                       KV2_DISTRICT_MAP_WORLD_SIZE);
-                lbDistrictMapBound = true;
-            }
-        }
-    }
+    const CgsResource::ResourceHandle* const lpHandle =
+        mStreetManager.GetDistrictMapResourceHandle();
+    const CgsResource::BinaryFileResource* const lpBlob =
+        *reinterpret_cast<const CgsResource::BinaryFileResource* const*>(
+            lpHandle->mpResourceMemory);
+    lDistrictMap.Construct(lpBlob->GetData(),
+                           KV2_DISTRICT_MAP_WORLD_ORIGIN,
+                           KV2_DISTRICT_MAP_WORLD_SIZE);
 
     // ---- the table itself (the console's var_2190 stack local) ------------------------------
     // `li r11, -1 / stw r11, var_C0` is the Array ctor's sentinel; `li r11, 0 / stw r11, var_C0`
@@ -165,11 +149,6 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
     for (u32 luHull = 0; luHull < luNumHulls; ++luHull)
     {
         const BrnTraffic::Hull* const lpHull = lpTrafficData->GetHull(luHull);
-        if (lpHull == 0)
-        {
-            continue;   // [GUARD] GetHull carries the console's own bounds assert
-        }
-
         const u32 luNumLightTriggers = lpHull->muNumLightTriggers;   // `lbz r27, 0xE(r18)`
         for (u32 luTrigger = 0; luTrigger < luNumLightTriggers; ++luTrigger)
         {
@@ -204,27 +183,20 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
                 (lpTrafficData->GetStartDataForTrafficLight(luLightTriggerId, false) != 0) &&
                 (lpTrafficData->GetStartDataForTrafficLight(luLightTriggerId, true)  != 0);
 
-            if (!lbHasEventData || lpJunctionLogicBox == 0)
+            if (!lbHasEventData)
             {
                 // The console's own gated diagnostic (0x82375CB8..0x82375D94), streamed into
                 // gpDebugPrint behind `CgsDev::Message::gxMessageFilterFlags & 1`. It prints the
                 // trigger id in hex and the two junction ids -- which is exactly the information
                 // needed to find a junction whose lane data and progression data disagree.
-                // ⚠️ lpJunctionLogicBox != 0 is a PC GUARD folded into the same arm: the console
-                // reads the box's ids inside this print WITHOUT a null test (`lwz r28, 0x38(r30)`
-                // @0x82375CD4), so a null box would AV in its own warning.
-                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 &&
-                    CgsDev::Log::gpDebugPrint != 0)
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "WARNING: Missing event data for junction. Light trigger = "
                         << luLightTriggerId;
-                    if (lpJunctionLogicBox != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << ", junction id=" << lpJunctionLogicBox->GetID()
-                            << ", event junction id=" << lpJunctionLogicBox->GetEventJunctionID();
-                    }
+                    *CgsDev::Log::gpDebugPrint
+                        << ", junction id=" << lpJunctionLogicBox->GetID()
+                        << ", event junction id=" << lpJunctionLogicBox->GetEventJunctionID();
                     *CgsDev::Log::gpDebugPrint << "\n";
                 }
                 continue;
@@ -240,26 +212,20 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
             const Vector3 lv3TriggerPosition = lrTrigger.GetTransform().Pos();
 
             // The district sample -- ground-plane lanes, see the banner's ⚠️.
-            BrnWorld::ECounty leCounty = BrnWorld::E_COUNTY_INVALID;
-            if (lbDistrictMapBound)
+            const Vector2 lv2Ground(lv3TriggerPosition.mV.x, lv3TriggerPosition.mV.z);
+            const u8 luMapValue = lDistrictMap.GetValue(lv2Ground);
+            if (luMapValue == CgsWorld::KU_INVALID_WORLD_MAP_VALUE)
             {
-                const Vector2 lv2Ground(lv3TriggerPosition.mV.x, lv3TriggerPosition.mV.z);
-                const u8 luMapValue = lDistrictMap.GetValue(lv2Ground);
-                if (luMapValue == CgsWorld::KU_INVALID_WORLD_MAP_VALUE)
-                {
-                    CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert(
-                        "luMapValue != CgsWorld::KU_INVALID_WORLD_MAP_VALUE",
-                        KAC_GAMESTATEMODULE_CPP, 5764);
-                    CgsDev::Assert::EndAssert();
-                }
-                // The console passes the raw sample straight through, INCLUDING the 255 it just
-                // asserted about (`mr r3, r27` @0x82375C7C is the untouched byte). Reproduced:
-                // DistrictToCounty carries its own range assert and answers E_COUNTY_INVALID for
-                // anything past E_DISTRICT_COUNT, so the assert is a report, not a gate.
-                leCounty = BrnWorld::WorldRegion::DistrictToCounty(
-                    static_cast<BrnWorld::EDistrict>(luMapValue));
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "luMapValue != CgsWorld::KU_INVALID_WORLD_MAP_VALUE",
+                    KAC_GAMESTATEMODULE_CPP, 5764);
+                CgsDev::Assert::EndAssert();
             }
+            // The console passes the raw sample straight through, INCLUDING the 255 it just
+            // asserted about (`mr r3, r27` @0x82375C7C is the untouched byte).
+            const BrnWorld::ECounty leCounty = BrnWorld::WorldRegion::DistrictToCounty(
+                static_cast<BrnWorld::EDistrict>(luMapValue));
 
             // The nearest AI section to the trigger (0x82375C74).
             const s16 li16AISectionIndex = static_cast<s16>(
@@ -286,14 +252,6 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
     // 0x82375E5C -- and the flag the GameState->Gui bridge polls.
     lpOutput->SetSetUpAllEventStartsInterfaceIsValid(true);
 
-    // [DIAG] NOT IN THE X360 BINARY -- the one line that proves the table filled, once.
-    // DELETE-WHEN the event-icon path has a regression test behind it.
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[event-starts] published " << static_cast<s32>(lEventStarts.GetNumEventStarts())
-            << " event starts from " << static_cast<s32>(luNumHulls) << " hulls\n";
-    }
 }
 
 } // namespace BrnGameState

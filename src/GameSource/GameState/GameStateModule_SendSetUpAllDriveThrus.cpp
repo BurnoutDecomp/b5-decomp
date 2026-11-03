@@ -46,7 +46,6 @@
 #include "SharedClasses/Trigger/BrnTriggerData.h"             // TriggerData::GetGenericRegion / count
 #include "SharedClasses/Trigger/BrnGenericRegion.h"           // GenericRegion::IsDriveThru / GetType
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [DIAG] the publish lines
 
 namespace BrnGameState
 {
@@ -56,31 +55,10 @@ void GameStateModule::SendSetUpAllDriveThrusMessage(GameStateModuleIO::GameActio
     // (the console brackets the body in a CPU perf-monitor start/stop pair on a member this
     //  build does not model)
     CGS_ASSERT(lpOutputActionQueue != 0, "lpOutputActionQueue");   // the console's own, non-gating
-    if (lpOutputActionQueue == 0)
-    {
-        return;
-    }
 
     const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
-    if (lpTriggerData == 0)
-    {
-        mProgressionManager.SetDriveThrusDirtyFlag();
-        static bool sbLogged = false;
-        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[drivethru] SETUP deferred: trigger data not bound yet (dirty byte re-raised)\n";
-        }
-        return;
-    }
 
     BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
-    CGS_ASSERT(lpProfile != 0, "lpProfile");
-    if (lpProfile == 0)
-    {
-        return;
-    }
 
     // The action's Array<> count word is the one thing the console initialises in its frame local.
     GameStateModuleIO::SetUpAllDriveThrusAction lAction;
@@ -121,33 +99,13 @@ void GameStateModule::SendSetUpAllDriveThrusMessage(GameStateModuleIO::GameActio
         CGS_ASSERT(liNumDriveThrus <= 46,
                    "SendSetUpAllDriveThrusMessage: Too many drive thrus in Generic Region list");   // non-gating
 
-        // [DIAG] NOT IN THE X360 BINARY -- the per-record witness the minimap_drivethru_blips
-        // case pairs against the icon pass (world x/z straight off the region table; the icon
-        // side prints what it drew). Bounded by the 46-record table, fires only on a publish.
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[drivethru] SETUP rec id=" << static_cast<u32>(lDriveThruId)
-                << " type=" << static_cast<s32>(leType)
-                << " pos=(" << lv3Position.mV.x << "," << lv3Position.mV.z << ")\n";
-        }
     }
 
-    // The console posts 1112 bytes; the host record is the same size (46 * 24 + the count word +
-    // pad), and it goes out by sizeof so producer advance == consumer stride.
+    // The console posts 1112 bytes (46 * 24 + the count word + pad).
     lpOutputActionQueue->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lAction),
         GameStateModuleIO::E_ACTION_SET_UP_ALL_DRIVE_THRUS,
         static_cast<s32>(sizeof(lAction)));
-
-    // [DIAG] NOT IN THE X360 BINARY -- the publish line (once per dirty raise: boot, discovery,
-    // junkyard exit). Same `[drivethru]` tag as the manager's ladder so one grep reads it all.
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[drivethru] SETUP: posted action 45 with " << liNumDriveThrus
-            << " discovered drive-thru(s) of " << liRegionCount << " generic regions\n";
-    }
 }
 
 } // namespace BrnGameState

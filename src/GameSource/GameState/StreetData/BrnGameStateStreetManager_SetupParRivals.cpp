@@ -64,8 +64,6 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                  // CgsNumeric::Random
 #include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h" // CgsResource::BinaryFileResource::GetData
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // gpDebugPrint ([parrivals] witness)
-#include <cstdlib>                                                     // getenv ([parrivals] witness gate)
 
 namespace
 {
@@ -110,64 +108,16 @@ void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryMan
     // (mpProgressionManager + 133348).
     const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
 
-    // ⚠️ PC HARDENING #2 -- the SECOND null on this path, guarded in the same pass rather than
-    // waiting for it to crash. GetProgressionData() legitimately returns NULL while the
-    // PROGRESSION.DAT acquire is outstanding, and the fallback branch below dereferences
-    // lpProgressionData unconditionally (GetRivalCount / GetRival(0)) exactly as the console
-    // does. The console is safe by ORDERING -- GameStateModule::Prepare2 @0x8239ED10 runs its
-    // progression case 0/1 to completion before falling into the street case 2, and
-    // ProgressionManager::LoadProgressionData is the only writer of mpProgressionData -- and the
-    // PC path reproduces that ordering, so this should never fire. It is here because the
-    // district-map handle taught the same lesson this wave: "an earlier stage guarantees it" is
-    // a claim worth making testable.
-    // DELETE-WHEN the bring-up diagnostics go.
-    CGS_ASSERT( lpProgressionData != 0,
-                "[PC] SetupParRivals: GetProgressionData() is null -- the progression leg of "
-                "GameStateModule::Prepare2 did not complete before the street leg" );
-    if ( lpProgressionData == 0 )
-    {
-        return;
-    }
+    // The accessor tests the ProgressionData resource pointer as ARTIST does. The fallback
+    // below dereferences its result; GameStateModule::Prepare2 prepares progression before street.
 
     CgsNumeric::Random lRandom;
     lRandom.Construct();   // muSeed == 0xB5E330D02EC654DA, the console's r27 (see the note above)
 
-    // ⚠️ PC HARDENING (2026-08-11) -- documented deviation, NOT a placeholder.
-    // The console dereferences mDistrictMapResourceHandle UNCONDITIONALLY here (0x8233F5BC
-    // `lwz r10, 0x1D08(r29)` straight into 0x8233F5EC `lwz r11, 0(r10)`): it has no null
-    // check and no assert, because on the X360 the acquire is guaranteed to have resolved
-    // (StuntManager::Prepare loaded Districts.dat 19 prepare-stages before StreetManager
-    // acquired it). On PC that guarantee is a chain of reconstructed stages, and a broken
-    // link anywhere in it turns this into an access violation with no diagnostic -- which is
-    // exactly what a tagged resource id in LoadDistrictMap produced until this same wave
-    // (see the boot-log evidence in BrnGameStateStreetManager_wB_01.cpp). One early-out with
-    // a loud assert is the difference between a named failure and a silent crash.
-    // The guard NEVER fires on a healthy boot; if it does, the district-map acquire failed
-    // (check the "[StreetManager] district map:" line in BrnGameStateStreetManager_Prepare.cpp)
-    // and every road's par rivals stay at their Construct-time zero -- which is degraded, but
-    // it is the same state the whole leg was parked in before this wave.
-    // DELETE-WHEN: the PC bring-up diagnostics go, i.e. once the district-map acquire has a
-    // regression test behind it. Precedent for keeping a PC-only guard in an otherwise
-    // faithful body: BrnWorldModule.cpp's "KEEP THE GUARD" block.
-    CGS_ASSERT( mDistrictMapResourceHandle.mpResourceMemory != 0,
-                "[PC] SetupParRivals: the \"Districts\" acquire never resolved" );
-    if ( mDistrictMapResourceHandle.mpResourceMemory == 0 )
-    {
-        return;
-    }
-
-    // The district-map handle slot holds a pointer to the resource-memory
-    // pointer; the X360 folds BinaryFileResource::GetData() into its caller as
-    // `base + *(u32*)(base + 4)` (0x8233F5EC..0x8233F5F4).
+    // ARTIST dereferences the acquired Districts resource without a null test (0x8233F5BC..
+    // 0x8233F5F4); StuntManager::Prepare acquires it before StreetManager::Prepare2 runs.
     const CgsResource::BinaryFileResource* lpBinaryFileResource =
         *reinterpret_cast<const CgsResource::BinaryFileResource* const*>( mDistrictMapResourceHandle.mpResourceMemory );
-
-    CGS_ASSERT( lpBinaryFileResource != 0,
-                "[PC] SetupParRivals: the district-map entry has no main-memory resource" );
-    if ( lpBinaryFileResource == 0 )
-    {
-        return;
-    }
 
     CgsWorld::WorldMap2D lWorldMap;
     lWorldMap.Construct( lpBinaryFileResource->GetData(),
