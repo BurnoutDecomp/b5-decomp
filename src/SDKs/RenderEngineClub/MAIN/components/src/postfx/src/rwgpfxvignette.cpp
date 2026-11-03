@@ -177,22 +177,10 @@ namespace postfx
     Vignette::Parameters::Parameters()
         : m_allocator(0)                                        // stw r9(=0), 0(r3)
     {
-        m_state.m_gradientScalars.x = KF_ZERO;
-        m_state.m_gradientScalars.y = KF_ZERO;
-        m_state.m_gradientScalars.z = KF_ZERO;
-        m_state.m_gradientScalars.w = KF_ZERO;
-        m_state.m_innerColour.x = KF_ONE;
-        m_state.m_innerColour.y = KF_ONE;
-        m_state.m_innerColour.z = KF_ONE;
-        m_state.m_innerColour.w = KF_ONE;
-        m_state.m_outerColour.x = KF_ONE;
-        m_state.m_outerColour.y = KF_ONE;
-        m_state.m_outerColour.z = KF_ONE;
-        m_state.m_outerColour.w = KF_ONE;
-        m_state.m_centerScale.x = KF_HALF;
-        m_state.m_centerScale.y = KF_HALF;
-        m_state.m_centerScale.z = KF_ONE;
-        m_state.m_centerScale.w = KF_ONE;
+        m_state.m_gradientScalars.Set(KF_ZERO, KF_ZERO, KF_ZERO, KF_ZERO);
+        m_state.m_innerColour.Set(KF_ONE, KF_ONE, KF_ONE, KF_ONE);
+        m_state.m_outerColour.Set(KF_ONE, KF_ONE, KF_ONE, KF_ONE);
+        m_state.m_centerScale.Set(KF_HALF, KF_HALF, KF_ONE, KF_ONE);
     }
 
     // ============================================================================================
@@ -204,7 +192,7 @@ namespace postfx
         // for the CRT pow and rounds the result back with `frsp`; reproduced exactly. (The sibling
         // BrnPostFxShader.cpp:1219 spells the same curve with single-precision powf -- a sub-ulp
         // divergence between two sites that compute the same value; unifying them is a follow-up.)
-        const f32 lfSharpParam = (lrState.m_gradientScalars.x * KF_HALF) + KF_HALF;
+        const f32 lfSharpParam = (lrState.m_gradientScalars.GetX().GetFloat() * KF_HALF) + KF_HALF;
         const f32 lfGradient   = static_cast<f32>(
             std::pow(static_cast<f64>(lfSharpParam), KF_VIGNETTE_GRADIENT_POWER));
         const f32 lfScaled     = lfGradient * KF_VIGNETTE_GRADIENT_LIMIT;
@@ -212,10 +200,7 @@ namespace postfx
         // The controlScalars constant: { 0, 0, gradient*500 + 1, -(gradient*500) } -- the MUL/ADD
         // pair the pixel program applies to the gradient ramp. Lanes x and y are the two 0.0 stores
         // at var_40 / var_3C; the vector is assembled on the stack and stored with one stvx.
-        m_gradientScalars.x = KF_ZERO;
-        m_gradientScalars.y = KF_ZERO;
-        m_gradientScalars.z = lfScaled + KF_ONE;
-        m_gradientScalars.w = -lfScaled;
+        m_gradientScalars.Set(KF_ZERO, KF_ZERO, lfScaled + KF_ONE, -lfScaled);
 
         // The three remaining vectors copy straight across (three lvx/stvx pairs at +0x10/+0x20/+0x30).
         m_innerColour = lrState.m_innerColour;
@@ -224,7 +209,7 @@ namespace postfx
 
         // `lfs f0, 4(r30)` / `stfs f0, 0x40(r31)`: the state's SECOND gradient scalar is the rotation
         // angle, and it lands in the object's own m_angle.
-        m_angle = lrState.m_gradientScalars.y;
+        m_angle = lrState.m_gradientScalars.GetY().GetFloat();
     }
 
     // ============================================================================================

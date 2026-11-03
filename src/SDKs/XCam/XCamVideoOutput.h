@@ -44,48 +44,23 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include <xtl.h>
 
 namespace XCAM
 {
 
-// --- Xbox-360 D3D9 platform object types (opaque handles) ------------------
-// Modelled with the D3D COM-style resource hierarchy the X360 image assumes
-// (every buffer/shader is a D3DResource), so the by-name Release calls upcast
-// exactly as the asm does. These are external XDK types; only the pointer
-// relationship the call sites rely on is expressed here.
-struct D3DResource {};
-struct D3DDevice {};
-struct D3DVertexBuffer      : D3DResource {};
-struct D3DVertexDeclaration : D3DResource {};
-struct D3DVertexShader      : D3DResource {};
+// The XDK owns these types. Keep the qualified XCAM spelling used by callers.
+using ::D3DDevice;
+using ::D3DResource;
+using ::D3DVertexBuffer;
+using ::D3DVertexDeclaration;
+using ::D3DVertexShader;
 
 // --- Xbox-360 kernel spin-lock primitives (platform boundary) --------------
 typedef u32 KSPIN_LOCK;
 typedef u8  KIRQL;
 KIRQL KfAcquireSpinLock(KSPIN_LOCK* pSpinLock);
 void  KfReleaseSpinLock(KSPIN_LOCK* pSpinLock, KIRQL uNewIrql);
-
-// --- Xbox-360 XDK D3D device / resource entry points (platform boundary) ---
-// Declared with the argument/return shapes the X360 call sites use so the
-// reconstructed bodies compile store-for-store. Supplied by the platform layer;
-// NOT reconstructed here.
-u32                   D3DDevice_AddRef(D3DDevice* pDevice);
-u32                   D3DDevice_Release(D3DDevice* pDevice);
-u32                   D3DResource_Release(D3DResource* pResource);
-D3DVertexDeclaration* D3DDevice_CreateVertexDeclaration(const void* pVertexElements);
-D3DVertexShader*      D3DDevice_CreateVertexShader(const void* pFunction);
-D3DVertexBuffer*      D3DDevice_CreateVertexBuffer(u32 uLength, u32 uUsage, u32 uUnusedPool);
-D3DVertexBuffer*      D3DDevice_GetStreamSource(D3DDevice* pDevice, u32 uStreamNumber,
-                                                u32* pOffsetInBytes, u32* pStride);
-u32                   D3DDevice_SetStreamSource(D3DDevice* pDevice, u32 uStreamNumber,
-                                                D3DVertexBuffer* pStreamData, u32 uOffsetInBytes,
-                                                u32 uStride, u32 uUnused);
-void*                 D3DVertexBuffer_Lock(D3DVertexBuffer* pThis, u32 uOffsetToLock,
-                                           u32 uSizeToLock, u32 uFlags);
-void                  D3DVertexBuffer_Unlock(D3DVertexBuffer* pThis);
-
-// --- Xbox-360 XDK heap free (platform boundary) ----------------------------
-void XMemFree(void* pAddress, u32 uAttributes);
 
 // The attribute word baked into the no-device Shutdown path (`lis r4,0x6090 ;
 // ori r4,r4,0x2068` -> 0x60902068) when freeing a ring block through XMemFree.
