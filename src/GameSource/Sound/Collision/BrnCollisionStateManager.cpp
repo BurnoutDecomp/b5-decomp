@@ -139,8 +139,8 @@ void InputCollision::DebugPrint(const CollisionStateManager& lCollisionManager) 
           << (lpcB ? lpcB : "<NULLSTRING>") << "\t"
           << " EntityA: " << CgsDev::E_PRINTMODE_HEXONCE << maEntityID[0].muValue << "\t"
           << " EntityB: " << CgsDev::E_PRINTMODE_HEXONCE << maEntityID[1].muValue << "\t"
-          << " Impulse: " << maParameter[0].x << "\t"
-          << " CamDist: " << std::sqrt(maParameter[1].x) << "\t"
+          << " Impulse: " << maParameter[0].GetVector().x << "\t"
+          << " CamDist: " << std::sqrt(maParameter[1].GetVector().x) << "\t"
           << " Orientation: " << KAPC_ORIENTATION_NAMES[DebugFlagIndex(meOrientation)] << "\t"
           << " Action: " << KAPC_ACTION_NAMES[DebugFlagIndex(meAction)] << "\t"
           << " Cull: " << (mbCull ? "true" : "false") << "\n";
@@ -158,14 +158,14 @@ void OutputCollision::DebugPrint(const CollisionStateManager& lCollisionManager)
           << (lpcB ? lpcB : "<NULLSTRING>") << "\t"
           << " EntityA: " << CgsDev::E_PRINTMODE_HEXONCE << maEntityID[0].muValue << "\t"
           << " EntityB: " << CgsDev::E_PRINTMODE_HEXONCE << maEntityID[1].muValue << "\t"
-          << " Impulse: " << maParameter[0].x << "\t"
+          << " Impulse: " << maParameter[0].GetVector().x << "\t"
           << " BinIndex: " << static_cast<s32>(miBinIndex) << "\t"
           << " Priority: " << mfPriority << "\t"
           << " Orientation: " << KAPC_ORIENTATION_NAMES[DebugFlagIndex(meOrientation)] << "\t"
           << " Action: " << KAPC_ACTION_NAMES[DebugFlagIndex(meAction)] << "\t"
           << " Fatal:" << KAPC_FATALITY_NAMES[meFatality]
           << " ImpT:" << KAPC_IMPACT_TIME_NAMES[DebugFlagIndex(meImpactTime)] << "\t"
-          << " CamDist: " << std::sqrt(maParameter[1].x) << "\t\n";
+          << " CamDist: " << std::sqrt(maParameter[1].GetVector().x) << "\t\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -753,7 +753,7 @@ EeMaterialType MapEntityIdToMaterial(EntityId lEntityId, s32 liPlayerIndex,
 // KV_DIRECTION_BIAS (DWARF cpp:88) -- unk_83008160 = (1, 1, 1, 0), written by the CRT thunk
 // 0x82C63308..0x82C63338 from flt_82001C98 (1.0f). The per-axis weight of the box-face distances.
 // ---------------------------------------------------------------------------
-Vector3 KV_DIRECTION_BIAS = { 1.0f, 1.0f, 1.0f, 0.0f };
+Vector3 KV_DIRECTION_BIAS(XMVectorSet( 1.0f, 1.0f, 1.0f, 0.0f ));
 
 namespace
 {
@@ -761,8 +761,8 @@ namespace
     // signed-zero and denormal behavior.
     f32 VminfpLane(f32 lfA, f32 lfB)
     {
-        const Vector3 lA = {lfA, lfA, lfA, lfA};
-        const Vector3 lB = {lfB, lfB, lfB, lfB};
+        const Vector3 lA(XMVectorSet(lfA, lfA, lfA, lfA));
+        const Vector3 lB(XMVectorSet(lfB, lfB, lfB, lfB));
         return __vminfp(__lvx(&lA, 0), __lvx(&lB, 0)).x;
     }
 
@@ -804,24 +804,24 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
     for (u32 luAxis = 0; luAxis < 3u; ++luAxis)
     {
         const Vector3& lrRow = *lapRows[luAxis];
-        f32 lfLocal = -lrTranslation.z * lrRow.z;
-        lfLocal = -lrTranslation.y * lrRow.y + lfLocal;
-        lfLocal = -lrTranslation.x * lrRow.x + lfLocal;
-        lfLocal = lrRow.x * lPosition.x + lfLocal;
-        lfLocal = lrRow.y * lPosition.y + lfLocal;
-        lfLocal = lrRow.z * lPosition.z + lfLocal;
+        f32 lfLocal = -lrTranslation.GetVector().z * lrRow.GetVector().z;
+        lfLocal = -lrTranslation.GetVector().y * lrRow.GetVector().y + lfLocal;
+        lfLocal = -lrTranslation.GetVector().x * lrRow.GetVector().x + lfLocal;
+        lfLocal = lrRow.GetVector().x * lPosition.GetVector().x + lfLocal;
+        lfLocal = lrRow.GetVector().y * lPosition.GetVector().y + lfLocal;
+        lfLocal = lrRow.GetVector().z * lPosition.GetVector().z + lfLocal;
         lafLocal[luAxis] = lfLocal;
     }
-    const f32 lfLocalX = lafLocal[0] - lComOffset.x;
-    const f32 lfLocalY = lafLocal[1] - lComOffset.y;
-    const f32 lfLocalZ = lafLocal[2] - lComOffset.z;
+    const f32 lfLocalX = lafLocal[0] - lComOffset.GetVector().x;
+    const f32 lfLocalY = lafLocal[1] - lComOffset.GetVector().y;
+    const f32 lfLocalZ = lafLocal[2] - lComOffset.GetVector().z;
 
-    const f32 lfFrontDist  = std::fabs(lfLocalZ - lMax.z) * KV_DIRECTION_BIAS.z;
-    const f32 lfBackDist   = std::fabs(lfLocalZ - lMin.z) * KV_DIRECTION_BIAS.z;
-    const f32 lfLeftDist   = std::fabs(lfLocalX - lMin.x) * KV_DIRECTION_BIAS.x;
-    const f32 lfRightDist  = std::fabs(lfLocalX - lMax.x) * KV_DIRECTION_BIAS.x;
-    const f32 lfTopDist    = std::fabs(lfLocalY - lMax.y) * KV_DIRECTION_BIAS.y;
-    const f32 lfBottomDist = std::fabs(lfLocalY - lMin.y) * KV_DIRECTION_BIAS.y;
+    const f32 lfFrontDist  = std::fabs(lfLocalZ - lMax.GetVector().z) * KV_DIRECTION_BIAS.GetVector().z;
+    const f32 lfBackDist   = std::fabs(lfLocalZ - lMin.GetVector().z) * KV_DIRECTION_BIAS.GetVector().z;
+    const f32 lfLeftDist   = std::fabs(lfLocalX - lMin.GetVector().x) * KV_DIRECTION_BIAS.GetVector().x;
+    const f32 lfRightDist  = std::fabs(lfLocalX - lMax.GetVector().x) * KV_DIRECTION_BIAS.GetVector().x;
+    const f32 lfTopDist    = std::fabs(lfLocalY - lMax.GetVector().y) * KV_DIRECTION_BIAS.GetVector().y;
+    const f32 lfBottomDist = std::fabs(lfLocalY - lMin.GetVector().y) * KV_DIRECTION_BIAS.GetVector().y;
 
     eOrientation leOrientation = Front;
     f32 lfNearest = lfFrontDist;
@@ -848,12 +848,12 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
     if (KI_DEBUG_DRAW_ORIENATION_BOX)
     {
         CgsDev::DebugInterface lDebug;
-        const Vector3 lBoxMin = {lMin.x+lComOffset.x, lMin.y+lComOffset.y,
-                                lMin.z+lComOffset.z, lMin.w+lComOffset.w};
-        const Vector3 lBoxMax = {lMax.x+lComOffset.x, lMax.y+lComOffset.y,
-                                lMax.z+lComOffset.z, lMax.w+lComOffset.w};
+        const Vector3 lBoxMin(XMVectorSet(lMin.GetVector().x+lComOffset.GetVector().x, lMin.GetVector().y+lComOffset.GetVector().y,
+                                lMin.GetVector().z+lComOffset.GetVector().z, lMin.GetVector().w+lComOffset.GetVector().w));
+        const Vector3 lBoxMax(XMVectorSet(lMax.GetVector().x+lComOffset.GetVector().x, lMax.GetVector().y+lComOffset.GetVector().y,
+                                lMax.GetVector().z+lComOffset.GetVector().z, lMax.GetVector().w+lComOffset.GetVector().w));
         lDebug.GetRender().DrawBox(lBoxMin, lBoxMax, lTransform, 0xFF00FFA0u);
-        const Vector3 lLocal = {lfLocalX, lfLocalY, lfLocalZ, 0.0f};
+        const Vector3 lLocal(XMVectorSet(lfLocalX, lfLocalY, lfLocalZ, 0.0f));
         const __vector4 lvLocal = __lvx(&lLocal, 0);
         __vector4 lvDrawPosition = __vmaddfp(__lvx(&lTransform.Right(), 0),
             __vspltw(lvLocal, 0), __lvx(&lTransform.Pos(), 0));
@@ -861,8 +861,8 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
         lvDrawPosition = __vmaddfp(__lvx(&lTransform.At(), 0), __vspltw(lvLocal, 2), lvDrawPosition);
         Vector3 lDrawPosition;
         __stvx(lvDrawPosition, &lDrawPosition, 0);
-        const Vector3 lArrowEnd = {lDrawPosition.x+lNormal.x, lDrawPosition.y+lNormal.y,
-                                  lDrawPosition.z+lNormal.z, lDrawPosition.w+lNormal.w};
+        const Vector3 lArrowEnd(XMVectorSet(lDrawPosition.GetVector().x+lNormal.GetVector().x, lDrawPosition.GetVector().y+lNormal.GetVector().y,
+                                  lDrawPosition.GetVector().z+lNormal.GetVector().z, lDrawPosition.GetVector().w+lNormal.GetVector().w));
         lDebug.GetRender().DrawSphere(lDrawPosition, 0.33f, 0xFFFFFFFFu);
         lDebug.GetRender().DrawArrow(lDrawPosition, lArrowEnd, 0xFFFFFFFFu);
     }
@@ -877,13 +877,13 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
         lrLog << "\tFrontDist: " << lfFrontDist << "\tBackDist: " << lfBackDist
               << "\tLeftDist: " << lfLeftDist << "\tRightDist: " << lfRightDist
               << "\tTopDist: " << lfTopDist << "\tBottomDist: " << lfBottomDist << "\tAt: ";
-        lrLog.AppendFormat("(%f, %f, %f)", lTransform.At().x, lTransform.At().y, lTransform.At().z);
+        lrLog.AppendFormat("(%f, %f, %f)", lTransform.At().GetVector().x, lTransform.At().GetVector().y, lTransform.At().GetVector().z);
         lrLog << "\tUp: ";
-        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Up().x, lTransform.Up().y, lTransform.Up().z);
+        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Up().GetVector().x, lTransform.Up().GetVector().y, lTransform.Up().GetVector().z);
         lrLog << "\tRight: ";
-        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Right().x, lTransform.Right().y, lTransform.Right().z);
+        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Right().GetVector().x, lTransform.Right().GetVector().y, lTransform.Right().GetVector().z);
         lrLog << "\tPos: ";
-        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Pos().x, lTransform.Pos().y, lTransform.Pos().z);
+        lrLog.AppendFormat("(%f, %f, %f)", lTransform.Pos().GetVector().x, lTransform.Pos().GetVector().y, lTransform.Pos().GetVector().z);
         lrLog << "\t\n";
     }
     return leOrientation;
@@ -918,7 +918,7 @@ bool MapPositionToOrientation(Matrix44Affine /*lTransform*/, Vector3 lPosition, 
         const RaceCarCache::RaceCarCacheNode* lpCar = lMgr.GetRaceCarCache().GetRaceCar(luIndex);
         if (lpCar && lpCar->mbActive.GetPrevious())
         {
-            const Vector3 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };   // vspltisw v3, 0
+            const Vector3 lZero(XMVectorSet( 0.0f, 0.0f, 0.0f, 0.0f ));   // vspltisw v3, 0
             leOrientation = MapPositionToOrientationUsingBox(
                 lPosition, lNormal, lpCar->mTransform.GetPrevious(), lZero,
                 lpCar->mComOffset, lpCar->mMin, lpCar->mMax);
@@ -973,12 +973,12 @@ namespace
 
 f32 Dot3(const Vector3& lrA, const Vector3& lrB)
 {
-    return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+    return lrA.GetVector().x * lrB.GetVector().x + lrA.GetVector().y * lrB.GetVector().y + lrA.GetVector().z * lrB.GetVector().z;
 }
 
 VecFloat Splat(f32 lfValue)
 {
-    const VecFloat lSplat = { lfValue, lfValue, lfValue, lfValue };
+    const VecFloat lSplat(XMVectorSet( lfValue, lfValue, lfValue, lfValue ));
     return lSplat;
 }
 
@@ -1045,7 +1045,7 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
                                  lSpyModified.mNormal, lSpyModified.mEntityIdA,
                                  lSpyModified.mEntityIdB, lMgr, meOrientation))
     {
-        mScrapeInfo = ScrapeInfo(lSpyModified, meOrientation, lfTimeStamp, maParameter[0].x);
+        mScrapeInfo = ScrapeInfo(lSpyModified, meOrientation, lfTimeStamp, maParameter[0].GetVector().x);
     }
     else
     {
@@ -1055,7 +1055,7 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
         maEntityID[1] = lNewSpy.mEntityIdB;
         MapPositionToOrientation(lrFrame.mPlayerTransform, lNewSpy.mPointOnA, lNewSpy.mNormal,
                                  lNewSpy.mEntityIdA, lNewSpy.mEntityIdB, lMgr, meOrientation);
-        mScrapeInfo = ScrapeInfo(lNewSpy, meOrientation, lfTimeStamp, maParameter[0].x);
+        mScrapeInfo = ScrapeInfo(lNewSpy, meOrientation, lfTimeStamp, maParameter[0].GetVector().x);
     }
 
     // The EeMaterialType is a 32-bit enum; `extsw` widens it (0x826D3BA4 / 0x826D3BE8).
@@ -1064,15 +1064,15 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
     maMaterial[1] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
         maEntityID[1], lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
 
-    const Vector3 lSpyToCamera = { mPosition.x - lCamera.mTransform.Pos().x,
-                                   mPosition.y - lCamera.mTransform.Pos().y,
-                                   mPosition.z - lCamera.mTransform.Pos().z, 0.0f };
+    const Vector3 lSpyToCamera(XMVectorSet( mPosition.GetVector().x - lCamera.mTransform.Pos().GetVector().x,
+                                   mPosition.GetVector().y - lCamera.mTransform.Pos().GetVector().y,
+                                   mPosition.GetVector().z - lCamera.mTransform.Pos().GetVector().z, 0.0f ));
     const f32 lfDistanceSquared = Dot3(lSpyToCamera, lSpyToCamera);
     maParameter[1] = Splat(lfDistanceSquared);
     const f32 lfInverseDistance = 1.0f / std::sqrt(lfDistanceSquared);
-    const Vector3 lDirection = { lSpyToCamera.x * lfInverseDistance,
-                                 lSpyToCamera.y * lfInverseDistance,
-                                 lSpyToCamera.z * lfInverseDistance, 0.0f };
+    const Vector3 lDirection(XMVectorSet( lSpyToCamera.GetVector().x * lfInverseDistance,
+                                 lSpyToCamera.GetVector().y * lfInverseDistance,
+                                 lSpyToCamera.GetVector().z * lfInverseDistance, 0.0f ));
     maParameter[2] = Splat(Dot3(lDirection, lCamera.mTransform.At()));
 
     if (lrFrame.meImpactTime.GetCurrent() != AttribSys::Enums::eImpactTime::False)
@@ -1137,15 +1137,15 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
         lSpy.mEntityIdB, lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
 
     maParameter[0] = Splat(NormalisedImpulse(lSpy.mNormalStress, lfTimeStep));
-    const Vector3 lSpyToCamera = { mPosition.x - lCamera.mTransform.Pos().x,
-                                   mPosition.y - lCamera.mTransform.Pos().y,
-                                   mPosition.z - lCamera.mTransform.Pos().z, 0.0f };
+    const Vector3 lSpyToCamera(XMVectorSet( mPosition.GetVector().x - lCamera.mTransform.Pos().GetVector().x,
+                                   mPosition.GetVector().y - lCamera.mTransform.Pos().GetVector().y,
+                                   mPosition.GetVector().z - lCamera.mTransform.Pos().GetVector().z, 0.0f ));
     const f32 lfDistanceSquared = Dot3(lSpyToCamera, lSpyToCamera);
     maParameter[1] = Splat(lfDistanceSquared);
     const f32 lfInverseDistance = 1.0f / std::sqrt(lfDistanceSquared);
-    const Vector3 lDirection = { lSpyToCamera.x * lfInverseDistance,
-                                 lSpyToCamera.y * lfInverseDistance,
-                                 lSpyToCamera.z * lfInverseDistance, 0.0f };
+    const Vector3 lDirection(XMVectorSet( lSpyToCamera.GetVector().x * lfInverseDistance,
+                                 lSpyToCamera.GetVector().y * lfInverseDistance,
+                                 lSpyToCamera.GetVector().z * lfInverseDistance, 0.0f ));
     maParameter[2] = Splat(Dot3(lDirection, lCamera.mTransform.At()));
 
     u64 luMaterial = 0;
@@ -1222,15 +1222,15 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
         lSpy.mEntityIdB, lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
 
     maParameter[0] = Splat(lSpy.mfClosingVelocity);
-    const Vector3 lSpyToCamera = { mPosition.x - lCamera.mTransform.Pos().x,
-                                   mPosition.y - lCamera.mTransform.Pos().y,
-                                   mPosition.z - lCamera.mTransform.Pos().z, 0.0f };
+    const Vector3 lSpyToCamera(XMVectorSet( mPosition.GetVector().x - lCamera.mTransform.Pos().GetVector().x,
+                                   mPosition.GetVector().y - lCamera.mTransform.Pos().GetVector().y,
+                                   mPosition.GetVector().z - lCamera.mTransform.Pos().GetVector().z, 0.0f ));
     const f32 lfDistanceSquared = Dot3(lSpyToCamera, lSpyToCamera);
     maParameter[1] = Splat(lfDistanceSquared);
     const f32 lfInverseDistance = 1.0f / std::sqrt(lfDistanceSquared);
-    const Vector3 lDirection = { lSpyToCamera.x * lfInverseDistance,
-                                 lSpyToCamera.y * lfInverseDistance,
-                                 lSpyToCamera.z * lfInverseDistance, 0.0f };
+    const Vector3 lDirection(XMVectorSet( lSpyToCamera.GetVector().x * lfInverseDistance,
+                                 lSpyToCamera.GetVector().y * lfInverseDistance,
+                                 lSpyToCamera.GetVector().z * lfInverseDistance, 0.0f ));
     maParameter[2] = Splat(Dot3(lDirection, lCamera.mTransform.At()));
 }
 
@@ -1245,13 +1245,13 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
 
 // KF_SCRAPE_IDLE_TIME (DWARF cpp:77) -- unk_82FFBF40 = splat(0.2f), written by the CRT thunk
 // 0x82C63250 from 0x82004744 (0x3E4CCCCD): a history scrape not refreshed for this long is dropped.
-VecFloat KF_SCRAPE_IDLE_TIME = { 0.2f, 0.2f, 0.2f, 0.2f };
+VecFloat KF_SCRAPE_IDLE_TIME(XMVectorSet( 0.2f, 0.2f, 0.2f, 0.2f ));
 
 // KF_CULLING_DISTANCE_SQUARED (DWARF cpp:86) -- unk_82FFBF50 = splat(2500.0f), CRT 0x82C632E0 from
 // 0x8200D510 (0x451C4000): only scrapes within 50 m of the player are tracked. Named by the CRT
 // order: cpp:85 KF_EARLY_CULL_DISTANCE_SQUARED is the thunk before it (0x82C632B8, 4900, the one
 // AddInputCollision reads at 0x830085A0).
-const VecFloat KF_CULLING_DISTANCE_SQUARED = { 2500.0f, 2500.0f, 2500.0f, 2500.0f };
+const VecFloat KF_CULLING_DISTANCE_SQUARED(XMVectorSet( 2500.0f, 2500.0f, 2500.0f, 2500.0f ));
 
 // ---------------------------------------------------------------------------
 // CollisionStateManager::FindOldestScrapeInHistory()  sub_82688A58  (DWARF cpp:2881)
@@ -1364,10 +1364,10 @@ bool CollisionStateManager::FindEntity(const EntityId& lEntityId, GenericEntity&
     lEntity.mPosition = lpTraffic->mLocalTransform.Pos();
     const Vector3& lrAt = lpTraffic->mLocalTransform.At();
     const f32 lfSpeed = lpTraffic->mfSpeed;
-    lEntity.mVelocity.x = lrAt.x * lfSpeed;
-    lEntity.mVelocity.y = lrAt.y * lfSpeed;
-    lEntity.mVelocity.z = lrAt.z * lfSpeed;
-    lEntity.mVelocity.w = lrAt.w * lfSpeed;
+    lEntity.mVelocity.GetVector().x = lrAt.GetVector().x * lfSpeed;
+    lEntity.mVelocity.GetVector().y = lrAt.GetVector().y * lfSpeed;
+    lEntity.mVelocity.GetVector().z = lrAt.GetVector().z * lfSpeed;
+    lEntity.mVelocity.GetVector().w = lrAt.GetVector().w * lfSpeed;
     return true;
 }
 
@@ -1399,7 +1399,7 @@ void CollisionStateManager::UpdateScrapeHistory(const BrnSound::Logic::FrameInfo
             continue;
 
         const f32 lfAge = lfTime - lrScrape.mfTimeStamp;
-        if (!(KF_SCRAPE_IDLE_TIME.x > lfAge) ||
+        if (!(KF_SCRAPE_IDLE_TIME.GetFloat() > lfAge) ||
             (lu32LastEntityA != lrScrape.mEntityIdA.muValue && !FindEntity(lrScrape.mEntityIdA, lEntityA)) ||
             (lu32LastEntityB != lrScrape.mEntityIdB.muValue && !FindEntity(lrScrape.mEntityIdB, lEntityB)))
         {
@@ -1409,13 +1409,13 @@ void CollisionStateManager::UpdateScrapeHistory(const BrnSound::Logic::FrameInfo
         lu32LastEntityA = lrScrape.mEntityIdA.muValue;
         lu32LastEntityB = lrScrape.mEntityIdB.muValue;
 
-        lrScrape.mRelativeVelocity.x = lEntityB.mVelocity.x - lEntityA.mVelocity.x;
-        lrScrape.mRelativeVelocity.y = lEntityB.mVelocity.y - lEntityA.mVelocity.y;
-        lrScrape.mRelativeVelocity.z = lEntityB.mVelocity.z - lEntityA.mVelocity.z;
-        lrScrape.mRelativeVelocity.w = lEntityB.mVelocity.w - lEntityA.mVelocity.w;
-        CGS_ASSERT(lrScrape.mRelativeVelocity.x == lrScrape.mRelativeVelocity.x &&
-                   lrScrape.mRelativeVelocity.y == lrScrape.mRelativeVelocity.y &&
-                   lrScrape.mRelativeVelocity.z == lrScrape.mRelativeVelocity.z,
+        lrScrape.mRelativeVelocity.GetVector().x = lEntityB.mVelocity.GetVector().x - lEntityA.mVelocity.GetVector().x;
+        lrScrape.mRelativeVelocity.GetVector().y = lEntityB.mVelocity.GetVector().y - lEntityA.mVelocity.GetVector().y;
+        lrScrape.mRelativeVelocity.GetVector().z = lEntityB.mVelocity.GetVector().z - lEntityA.mVelocity.GetVector().z;
+        lrScrape.mRelativeVelocity.GetVector().w = lEntityB.mVelocity.GetVector().w - lEntityA.mVelocity.GetVector().w;
+        CGS_ASSERT(lrScrape.mRelativeVelocity.GetVector().x == lrScrape.mRelativeVelocity.GetVector().x &&
+                   lrScrape.mRelativeVelocity.GetVector().y == lrScrape.mRelativeVelocity.GetVector().y &&
+                   lrScrape.mRelativeVelocity.GetVector().z == lrScrape.mRelativeVelocity.GetVector().z,
                    "maScrapeHistory[ i ].mRelativeVelocity == maScrapeHistory[ i ].mRelativeVelocity");
 
         lrScrape.mbCrashing = (lEntityA.mbPlayer && lEntityA.mbCrashing) ||
@@ -1469,10 +1469,10 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
             continue;
 
         const Vector3& lrPlayer = lrFrame.mPlayerTransform.Pos();
-        const f32 lfX = lrPlayer.x - lrInput.mPosition.x;
-        const f32 lfY = lrPlayer.y - lrInput.mPosition.y;
-        const f32 lfZ = lrPlayer.z - lrInput.mPosition.z;
-        if (lfX * lfX + lfY * lfY + lfZ * lfZ >= KF_CULLING_DISTANCE_SQUARED.x)
+        const f32 lfX = lrPlayer.GetVector().x - lrInput.mPosition.GetVector().x;
+        const f32 lfY = lrPlayer.GetVector().y - lrInput.mPosition.GetVector().y;
+        const f32 lfZ = lrPlayer.GetVector().z - lrInput.mPosition.GetVector().z;
+        if (lfX * lfX + lfY * lfY + lfZ * lfZ >= KF_CULLING_DISTANCE_SQUARED.GetFloat())
             continue;
 
         BrnSound::Logic::Collision::ScrapeInfo* lpScrape = FindInScrapeHistory(lrInput.mScrapeInfo);
@@ -1579,7 +1579,7 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
 // 0x82004270 (0x40400000): the impulse lane of a glass, broken-joint and detached-part collision.
 // Named by the CRT order of the four VecFloats cpp:60..63 (0x82C63190 2.0, 0x82C631B8 10.0,
 // 0x82C631E0 3.0, 0x82C63208 0.1).
-const VecFloat KF_MAX_IMPULSE = { 3.0f, 3.0f, 3.0f, 3.0f };
+const VecFloat KF_MAX_IMPULSE(XMVectorSet( 3.0f, 3.0f, 3.0f, 3.0f ));
 
 // KF_HINGING_VELOCITY_MIN_TOLERANCE (DWARF cpp:66) -- flt_82F2CEF0 = 6.0f; KF_HINGING_VELOCITY_DELTA_
 // TOLERANCE (cpp:67) -- flt_82F2CEF4 = 0.1f (.data, in declaration order ahead of KF_FASTEST_COLLISION
@@ -1600,28 +1600,28 @@ const f32 KF_HINGE_OPEN_CLOSED_EPSILON = 0.08f;
 // normalise it first (the rsqrte refinement, 0x826BE204..0x826BE240).
 VecFloat CameraDistanceSquared(const Vector3& lrPosition, const CameraInfo& lrCamera)
 {
-    const Vector3 lOffset = { lrPosition.x - lrCamera.mTransform.Pos().x,
-                              lrPosition.y - lrCamera.mTransform.Pos().y,
-                              lrPosition.z - lrCamera.mTransform.Pos().z, 0.0f };
+    const Vector3 lOffset(XMVectorSet( lrPosition.GetVector().x - lrCamera.mTransform.Pos().GetVector().x,
+                              lrPosition.GetVector().y - lrCamera.mTransform.Pos().GetVector().y,
+                              lrPosition.GetVector().z - lrCamera.mTransform.Pos().GetVector().z, 0.0f ));
     return Splat(Dot3(lOffset, lOffset));
 }
 
 VecFloat CameraFacingRaw(const Vector3& lrPosition, const CameraInfo& lrCamera)
 {
-    const Vector3 lOffset = { lrPosition.x - lrCamera.mTransform.Pos().x,
-                              lrPosition.y - lrCamera.mTransform.Pos().y,
-                              lrPosition.z - lrCamera.mTransform.Pos().z, 0.0f };
+    const Vector3 lOffset(XMVectorSet( lrPosition.GetVector().x - lrCamera.mTransform.Pos().GetVector().x,
+                              lrPosition.GetVector().y - lrCamera.mTransform.Pos().GetVector().y,
+                              lrPosition.GetVector().z - lrCamera.mTransform.Pos().GetVector().z, 0.0f ));
     return Splat(Dot3(lOffset, lrCamera.mTransform.At()));
 }
 
 VecFloat CameraFacingNormalised(const Vector3& lrPosition, const CameraInfo& lrCamera)
 {
-    const Vector3 lOffset = { lrPosition.x - lrCamera.mTransform.Pos().x,
-                              lrPosition.y - lrCamera.mTransform.Pos().y,
-                              lrPosition.z - lrCamera.mTransform.Pos().z, 0.0f };
+    const Vector3 lOffset(XMVectorSet( lrPosition.GetVector().x - lrCamera.mTransform.Pos().GetVector().x,
+                              lrPosition.GetVector().y - lrCamera.mTransform.Pos().GetVector().y,
+                              lrPosition.GetVector().z - lrCamera.mTransform.Pos().GetVector().z, 0.0f ));
     const f32 lfInverseDistance = 1.0f / std::sqrt(Dot3(lOffset, lOffset));
-    const Vector3 lDirection = { lOffset.x * lfInverseDistance, lOffset.y * lfInverseDistance,
-                                 lOffset.z * lfInverseDistance, 0.0f };
+    const Vector3 lDirection(XMVectorSet( lOffset.GetVector().x * lfInverseDistance, lOffset.GetVector().y * lfInverseDistance,
+                                 lOffset.GetVector().z * lfInverseDistance, 0.0f ));
     return Splat(Dot3(lDirection, lrCamera.mTransform.At()));
 }
 
@@ -2103,9 +2103,9 @@ void CollisionStateManager::AddInputCollision(const InputCollision& lrCollision)
 
     // The distance splat at 0x830085A0 is 4900 (CRT 0x82C632B8).
     const Vector3& lrCamera = mCameraInfo.mTransform.Pos();
-    const f32 lfX = lrCollision.mPosition.x - lrCamera.x;
-    const f32 lfY = lrCollision.mPosition.y - lrCamera.y;
-    const f32 lfZ = lrCollision.mPosition.z - lrCamera.z;
+    const f32 lfX = lrCollision.mPosition.GetVector().x - lrCamera.GetVector().x;
+    const f32 lfY = lrCollision.mPosition.GetVector().y - lrCamera.GetVector().y;
+    const f32 lfZ = lrCollision.mPosition.GetVector().z - lrCamera.GetVector().z;
     if (lfX * lfX + lfY * lfY + lfZ * lfZ > 4900.0f)
     {
         if (KI_DEBUG_CULL_AGAINST_PLAYING >= 4)
@@ -2167,7 +2167,7 @@ void CollisionStateManager::CullInputCollisions_RemoveDuplicates()
             {
                 const VecFloat& a = lpWinner->maParameter[0];
                 const VecFloat& b = lpOther->maParameter[0];
-                if (b.x > a.x || b.y > a.y || b.z > a.z || b.w > a.w)
+                if (b.GetVector().x > a.GetVector().x || b.GetVector().y > a.GetVector().y || b.GetVector().z > a.GetVector().z || b.GetVector().w > a.GetVector().w)
                 {
                     lpWinner->mbCull = true;
                     if (KI_DEBUG_CULL_AGAINST_PLAYING >= 2)
@@ -2235,7 +2235,7 @@ void CollisionStateManager::CullAgainstPlaying()
                 // 0x82C63208 initializes 0x830082E0 from 0x820ABB14 == 0.1.
                 const VecFloat& a = lrInput.maParameter[0];
                 const VecFloat& b = lrPlaying.maParameter[0];
-                if (a.x * 0.1f > b.x && a.y * 0.1f > b.y && a.z * 0.1f > b.z && a.w * 0.1f > b.w)
+                if (a.GetVector().x * 0.1f > b.GetVector().x && a.GetVector().y * 0.1f > b.GetVector().y && a.GetVector().z * 0.1f > b.GetVector().z && a.GetVector().w * 0.1f > b.GetVector().w)
                     continue;
             }
             if (lrInput.meOrientation == lrPlaying.meOrientation && lbRecent)
@@ -2278,8 +2278,8 @@ void CollisionStateManager::CullInputCollisions()
 // thunk 0x82C63278..0x82C63290 (lvlx 0x820AA254 = 0x3FAAAAAB ; vspltw 0 ; stvx128).
 // SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN (DWARF cpp:83) -- unk_83005F30 = splat(16/9), CRT
 // 0x82C63298..0x82C632B0 (lvlx 0x820AA250 = 0x3FE38E39). The CRT order follows the declaration order.
-VecFloat CollisionStateManager::SKF32_CAMERA_ASPECT_RATIO_NORMAL = { 4.0f / 3.0f, 4.0f / 3.0f, 4.0f / 3.0f, 4.0f / 3.0f };
-VecFloat CollisionStateManager::SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN = { 16.0f / 9.0f, 16.0f / 9.0f, 16.0f / 9.0f, 16.0f / 9.0f };
+VecFloat CollisionStateManager::SKF32_CAMERA_ASPECT_RATIO_NORMAL(XMVectorSet( 4.0f / 3.0f, 4.0f / 3.0f, 4.0f / 3.0f, 4.0f / 3.0f ));
+VecFloat CollisionStateManager::SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN(XMVectorSet( 16.0f / 9.0f, 16.0f / 9.0f, 16.0f / 9.0f, 16.0f / 9.0f ));
 
 // ---------------------------------------------------------------------------
 // CollisionStateManager::SetCameraInfo  @0x8269FFD0 (UpdateResolver 0x826F9340)
@@ -2305,8 +2305,8 @@ void CollisionStateManager::SetCameraInfo(
         static_cast<f64>(mCameraInfo.mfFieldOfView * 0.0087266462f)));
     mCameraInfo.mfAspectRatio =
         lrCamera.GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_WIDESCREEN)
-            ? SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN.x
-            : SKF32_CAMERA_ASPECT_RATIO_NORMAL.x;
+            ? SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN.GetFloat()
+            : SKF32_CAMERA_ASPECT_RATIO_NORMAL.GetFloat();
     mCameraInfo.mfZoom = BrnDirector::Camera::Utils::GetZoomFromFOVDegs(
         mCameraInfo.mfFieldOfView);
 }
@@ -2816,22 +2816,8 @@ void CollisionStateManager::SelectCollisionBin(
         return;
     if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 1)
         lrOutput.DebugPrint(*this);
-    const f32 lfDistanceSquared = lrOutput.maParameter[1].x;
-    const f32 lfImpulse = lrOutput.maParameter[0].x;
-
-    // NOT IN X360 BINARY: opt-in host diagnostics for auditing the recovered
-    // resolver.  Each counter is cumulative, so the first counter that stops
-    // advancing identifies the original authored-bin predicate rejecting a hit.
-    u32 luValidBins = 0;
-    u32 luMaterialBins = 0;
-    u32 luCameraBins = 0;
-    u32 luGameModeBins = 0;
-    u32 luImpactTimeBins = 0;
-    u32 luFatalityBins = 0;
-    u32 luOrientationBins = 0;
-    u32 luActionBins = 0;
-    u32 luDistanceBins = 0;
-    u32 luImpulseBins = 0;
+    const f32 lfDistanceSquared = lrOutput.maParameter[1].GetVector().x;
+    const f32 lfImpulse = lrOutput.maParameter[0].GetVector().x;
 
     // SelectBin<List, Bin> (@0x826A97E8 crashbin / @0x826A8828 propscrashbin): the material pair
     // of every bin comes from THIS PIPELINE'S LOOKUP CACHE, built by ResourcesAreReady --
@@ -2855,12 +2841,12 @@ void CollisionStateManager::SelectCollisionBin(
             (lrEntry.mx64MaterialB & lrOutput.maMaterial[0]) != 0;
         if (!lbMaterialsForward && !(lbMaterialsReverse && lbReverseAllowed))
             continue;
-        ++luMaterialBins;
+
 
         BinType lBin(lrList.GetCrashBinCollectionKey(luIndex), 0);
         if (!lBin.IsValid())
             continue;
-        ++luValidBins;
+
         if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 3)
         {
             CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
@@ -2880,7 +2866,7 @@ void CollisionStateManager::SelectCollisionBin(
             }
             continue;
         }
-        ++luCameraBins;
+
         if ((lBin.mGameModes() & mx32GameModeBinFlags) == 0)
         {
             if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
@@ -2891,14 +2877,14 @@ void CollisionStateManager::SelectCollisionBin(
             }
             continue;
         }
-        ++luGameModeBins;
+
         if ((lBin.mImpactTime() & static_cast<u32>(lrOutput.meImpactTime)) == 0)
         {
             if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
                 BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Impact time Mismatch, next\n";
             continue;
         }
-        ++luImpactTimeBins;
+
         if ((lBin.mFatalityFlag() &
              (1u << static_cast<u32>(lrOutput.meFatality))) == 0)
         {
@@ -2906,7 +2892,7 @@ void CollisionStateManager::SelectCollisionBin(
                 BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Fatality Mismatch, next\n";
             continue;
         }
-        ++luFatalityBins;
+
         if ((lBin.mOrientation() &
              static_cast<u32>(lrOutput.meOrientation)) == 0)
         {
@@ -2914,14 +2900,14 @@ void CollisionStateManager::SelectCollisionBin(
                 BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Orientaion Mismatch, next\n";
             continue;
         }
-        ++luOrientationBins;
+
         if ((lBin.mAction() & static_cast<u32>(lrOutput.meAction)) == 0)
         {
             if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 2)
                 BrnSound::Debug::DebugComponent::mLogCombined << "BinLogic: Detach Mismatch, next\n";
             continue;
         }
-        ++luActionBins;
+
         const f32 lfDistanceMin = lBin.DistanceFactor_Min();
         const f32 lfDistanceMax = lBin.DistanceFactor_Max();
         if (lfDistanceSquared < lfDistanceMin * lfDistanceMin ||
@@ -2935,7 +2921,7 @@ void CollisionStateManager::SelectCollisionBin(
             }
             continue;
         }
-        ++luDistanceBins;
+
 
         // 0x826AA2B4 `stb r22, 0xD4(r29)`: the bin index is stored as soon as the distance test
         // passes -- before the impulse test can still reject this bin.
@@ -2950,7 +2936,7 @@ void CollisionStateManager::SelectCollisionBin(
             }
             continue;
         }
-        ++luImpulseBins;
+
 
         // 0x826AA320 `std r25, 0x90(r29)`: the bin's collection key, stored before the size test.
         lrOutput.mBinKey = lrList.GetCrashBinCollectionKey(luIndex);
@@ -2978,12 +2964,12 @@ void CollisionStateManager::SelectCollisionBin(
         // size inside the same bin.
         ESize leSize;
         s32 liNumSamples;
-        if (lfNormalized > lBin.IntensityThreshold().y)                  // vspltw 1 ; vcmpgtfp.
+        if (lfNormalized > lBin.IntensityThreshold().GetVector().y)                  // vspltw 1 ; vcmpgtfp.
         {
             leSize = E_SIZE_LARGE;                                       // 0x826AA654
             liNumSamples = lBin.mNumCollisionsLarge();                   // 0x826AA3D0 +0x168
         }
-        else if (lfNormalized > lBin.IntensityThreshold().x)             // vspltw 0 ; vcmpgtfp.
+        else if (lfNormalized > lBin.IntensityThreshold().GetVector().x)             // vspltw 0 ; vcmpgtfp.
         {
             leSize = E_SIZE_MEDIUM;                                      // 0x826AA65C
             liNumSamples = lBin.mNumCollisionsMedium();                  // 0x826AA45C +0x164
@@ -3012,7 +2998,7 @@ void CollisionStateManager::SelectCollisionBin(
         // The accepted bin (0x826AA73C..0x826AA790): the splatted normalised impulse, sample id
         // 0, the bin's content-spec bank, its priority added.
         {
-            const VecFloat lAggregateValue = {lfNormalized, lfNormalized, lfNormalized, lfNormalized};
+            const VecFloat lAggregateValue(XMVectorSet(lfNormalized, lfNormalized, lfNormalized, lfNormalized));
             lrOutput.mNormalizedImpulse = lAggregateValue;
         }
         lrOutput.miSampleID = 0;

@@ -113,7 +113,7 @@ HybridExhaustControl::HybridExhaustControl()
 {
     for (u32 luPoint = 0; luPoint < 6; ++luPoint)
         {
-            const Vector2 lAggregateValue = {0.0f, 0.0f, 0.0f, 0.0f};
+            const Vector2 lAggregateValue(0.0f, 0.0f);
             maCrossFadesPoints[luPoint] = lAggregateValue;
         }
 }
@@ -181,25 +181,6 @@ bool HybridExhaustControl::Attach()
         0x7F161D94482CB3BFull, luCollectionKey);
     mVehicleEngineAttributes.Change(lpCollection);
     mMasterVehicleEngineComponentAttributes.Change(lpCollection);
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_GINSU_DIAG=1.
-    {
-        static int siDiag = -1;
-        if (siDiag < 0)
-        {
-        }
-        if (siDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[engine-attrib] control Attach component="
-                << (leComponent == BrnSound::Vehicles::VehicleState::E_ENGINE ? "ENGINE" : "EXHAUST")
-                << " key=" << CgsDev::E_PRINTMODE_HEXONCE << luCollectionKey
-                << " collection=" << (lpCollection != 0 ? "found" : "NULL")
-                << " accel=" << (mVehicleEngineAttributes.GinsuFileAccel()
-                                     ? mVehicleEngineAttributes.GinsuFileAccel() : "<null>")
-                << "\n";
-        }
-    }
-
     CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != 0,
                "mVehicleEngineAttributes.LoopModel()");
     CGS_ASSERT(mVehicleEngineAttributes.GinsuFileAccel() != 0,
@@ -216,28 +197,27 @@ bool HybridExhaustControl::Attach()
     const f32 lfFadeInRpm = lfDecelMaxRpm -
         (lfDecelMaxRpm - lfDecelMinRpm) * KF_DECEL_GINSU_FADE_IN;
     {
-        const Vector2 lAggregateValue = {0.0f, 0.0f, 0.0f, 0.0f};
+        const Vector2 lAggregateValue(0.0f, 0.0f);
         maCrossFadesPoints[0] = lAggregateValue;
     }
     {
-        const Vector2 lAggregateValue = {lfIdleRpm, 0.0f, 0.0f, 0.0f};
+        const Vector2 lAggregateValue(lfIdleRpm, 0.0f);
         maCrossFadesPoints[1] = lAggregateValue;
     }
     {
-        const Vector2 lAggregateValue = {lfIdleRpm + 200.0f, 1.0f, 0.0f, 0.0f};
+        const Vector2 lAggregateValue(lfIdleRpm + 200.0f, 1.0f);
         maCrossFadesPoints[2] = lAggregateValue;
     }
     {
-        const Vector2 lAggregateValue = {lfFadeInRpm, 1.0f, 0.0f, 0.0f};
+        const Vector2 lAggregateValue(lfFadeInRpm, 1.0f);
         maCrossFadesPoints[3] = lAggregateValue;
     }
     {
-        const Vector2 lAggregateValue = {lfDecelMaxRpm, 0.0f, 0.0f, 0.0f};
+        const Vector2 lAggregateValue(lfDecelMaxRpm, 0.0f);
         maCrossFadesPoints[4] = lAggregateValue;
     }
     {
-        const Vector2 lAggregateValue = {mVehicleEngineAttributes.MaxRpm(),
-                                    0.0f, 0.0f, 0.0f};
+        const Vector2 lAggregateValue(mVehicleEngineAttributes.MaxRpm(), 0.0f);
         maCrossFadesPoints[5] = lAggregateValue;
     }
 
@@ -358,10 +338,10 @@ void HybridExhaustControl::UpdateRpmVolume(f32& arfVolume)
     const f32 lfUnityRpm2 = lfUnityRpm * lfUnityRpm;
     const Matrix44 lVolumeCurve = mVehicleEngineAttributes.VolumeOverRPM();
     const f32 lfRpmVolume =
-        lVolumeCurve.xAxis.y * (lfUnityRpm2 * lfUnityRpm) +
-        lVolumeCurve.yAxis.y * lfUnityRpm2 +
-        lVolumeCurve.zAxis.y * lfUnityRpm +
-        lVolumeCurve.wAxis.y;
+        lVolumeCurve.xAxis.Y() * (lfUnityRpm2 * lfUnityRpm) +
+        lVolumeCurve.yAxis.Y() * lfUnityRpm2 +
+        lVolumeCurve.zAxis.Y() * lfUnityRpm +
+        lVolumeCurve.wAxis.Y();
     arfVolume *= lfRpmVolume;
 }
 

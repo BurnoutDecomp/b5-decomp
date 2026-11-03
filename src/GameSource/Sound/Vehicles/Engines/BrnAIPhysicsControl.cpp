@@ -88,7 +88,7 @@ static f32 Length3( f32 afX, f32 afY, f32 afZ )
 
 static VecFloat Splat( f32 afValue )
 {
-    VecFloat lValue = { afValue, afValue, afValue, afValue };
+    VecFloat lValue(afValue);
     return lValue;
 }
 } // namespace
@@ -209,7 +209,7 @@ void AIPhysicsControl::UpdateParams( f32 afTimeStep )
 
     const Vector3& lrForward  = lpRaw->mTransform.At();
     const Vector3& lrVelocity = lpRaw->mLinearVelocity;
-    const f32 lfForwardSpeed = lrForward.x * lrVelocity.x + lrForward.y * lrVelocity.y + lrForward.z * lrVelocity.z;
+    const f32 lfForwardSpeed = lrForward.X() * lrVelocity.X() + lrForward.Y() * lrVelocity.Y() + lrForward.Z() * lrVelocity.Z();
     mAverageSpeedMps.Record( std::fabs( lfForwardSpeed ) );
 
     mPhysicsEngine.SetClutchFactor( 1.0f );
@@ -427,12 +427,12 @@ void AIPhysicsControl::UpdateAIPassbys( f32 afTimeStep )
     const Vector3& lrVelocity = mProcessedPhysicsData.mVelocity3d.GetCurrent();
     const Vector3& lrPosition = mProcessedPhysicsData.mTransform.GetCurrent().Pos();
 
-    const f32 lfRelativeSpeed = Length3( lrVelocity.x - lrListenerVelocity.x,
-                                         lrVelocity.y - lrListenerVelocity.y,
-                                         lrVelocity.z - lrListenerVelocity.z );
-    const f32 lfDistance = Length3( lrPosition.x - lrListenerPosition.x,
-                                    lrPosition.y - lrListenerPosition.y,
-                                    lrPosition.z - lrListenerPosition.z );
+    const f32 lfRelativeSpeed = Length3( lrVelocity.X() - lrListenerVelocity.X(),
+                                         lrVelocity.Y() - lrListenerVelocity.Y(),
+                                         lrVelocity.Z() - lrListenerVelocity.Z() );
+    const f32 lfDistance = Length3( lrPosition.X() - lrListenerPosition.X(),
+                                    lrPosition.Y() - lrListenerPosition.Y(),
+                                    lrPosition.Z() - lrListenerPosition.Z() );
 
     if ( lfRelativeSpeed >= KF_PASSBY_MIN_VELOCITY_THRESHOLD )
     {
