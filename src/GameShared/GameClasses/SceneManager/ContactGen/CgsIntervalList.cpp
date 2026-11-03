@@ -186,12 +186,12 @@ namespace CgsSceneManager
         CGS_ASSERT(rw::math::vpu::IsValid(lMin), "rw::math::IsValid( lMin )");
         CGS_ASSERT(rw::math::vpu::IsValid(lMax), "rw::math::IsValid( lMax )");
 
-        const f32 lfMinX      =  lMin.x;
-        const f32 lfMaxX      =  lMax.x;
-        const f32 lfZMin      =  lMin.z;
-        const f32 lfYMin      =  lMin.y;
-        const f32 lfMinusZMax = -lMax.z;
-        const f32 lfMinusYMax = -lMax.y;
+        const f32 lfMinX      =  lMin.GetX();
+        const f32 lfMaxX      =  lMax.GetX();
+        const f32 lfZMin      =  lMin.GetZ();
+        const f32 lfYMin      =  lMin.GetY();
+        const f32 lfMinusZMax = -lMax.GetZ();
+        const f32 lfMinusYMax = -lMax.GetY();
 
         ObjectToIntervalMap& lrMap = mpaObjectToIntervalMap[luObjectIndex];
 
@@ -548,24 +548,30 @@ namespace CgsSceneManager
 
         // Per-axis extent, asserted non-degenerate. Operand order is the console's
         // `vsubfp vD, vMax, vMin` (0x828B4C48 / 0x828B4CC8 / 0x828B4D44).
-        const f32 lfWidth  = lMax.x - lMin.x;
+        const f32 lfMinX = lMin.GetX();
+        const f32 lfMaxX = lMax.GetX();
+        const f32 lfWidth  = lfMaxX - lfMinX;
         CGS_ASSERT(!rw::math::fpu::IsZero(lfWidth),  "Bounding box added with zero width");   // :209
 
-        const f32 lfHeight = lMax.y - lMin.y;
+        const f32 lfMinY = lMin.GetY();
+        const f32 lfMaxY = lMax.GetY();
+        const f32 lfHeight = lfMaxY - lfMinY;
         CGS_ASSERT(!rw::math::fpu::IsZero(lfHeight), "Bounding box added with zero height");  // :210
 
-        const f32 lfDepth  = lMax.z - lMin.z;
+        const f32 lfMinZ = lMin.GetZ();
+        const f32 lfMaxZ = lMax.GetZ();
+        const f32 lfDepth  = lfMaxZ - lfMinZ;
         CGS_ASSERT(!rw::math::fpu::IsZero(lfDepth),  "Bounding box added with zero depth");   // :211
 
         // The two endpoint records. Everything but mfXInterval is shared.
-        const f32 lfZMin      =  lMin.z;
-        const f32 lfYMin      =  lMin.y;
-        const f32 lfMinusZMax = -lMax.z;
-        const f32 lfMinusYMax = -lMax.y;
+        const f32 lfZMin      =  lfMinZ;
+        const f32 lfYMin      =  lfMinY;
+        const f32 lfMinusZMax = -lfMaxZ;
+        const f32 lfMinusYMax = -lfMaxY;
 
         Interval& lrMinInterval = mpaIntervals[luNewObjectMin];
         lrMinInterval.mu16ObjectIndex     = luObjectIndex;
-        lrMinInterval.mfXInterval         = lMin.x;
+        lrMinInterval.mfXInterval         = lfMinX;
         lrMinInterval.mfYMinInterval      = lfYMin;
         lrMinInterval.mfZMinInterval      = lfZMin;
         lrMinInterval.mfMinusYMaxInterval = lfMinusYMax;
@@ -574,7 +580,7 @@ namespace CgsSceneManager
 
         Interval& lrMaxInterval = mpaIntervals[luNewObjectMax];
         lrMaxInterval.mu16ObjectIndex     = luObjectIndex;
-        lrMaxInterval.mfXInterval         = lMax.x;
+        lrMaxInterval.mfXInterval         = lfMaxX;
         lrMaxInterval.mfYMinInterval      = lfYMin;
         lrMaxInterval.mfZMinInterval      = lfZMin;
         lrMaxInterval.mfMinusYMaxInterval = lfMinusYMax;

@@ -49,11 +49,10 @@ namespace CgsSceneManager
         mpuIndexData[luIndex] = lrInterval.mu16ObjectIndex;
 
         // Packed Z/Y min/max lane into mpIntervalData[muLen] (one 16-byte SIMD store).
-        Vector4 lvLane;
-        lvLane.x = lrInterval.mfMinusZMaxInterval;
-        lvLane.y = lrInterval.mfZMinInterval;
-        lvLane.z = lrInterval.mfMinusYMaxInterval;
-        lvLane.w = lrInterval.mfYMinInterval;
+        const Vector4 lvLane(lrInterval.mfMinusZMaxInterval,
+                             lrInterval.mfZMinInterval,
+                             lrInterval.mfMinusYMaxInterval,
+                             lrInterval.mfYMinInterval);
         mpIntervalData[luIndex].mvZYMaxMin = lvLane;
 
         ++muLen;
@@ -181,10 +180,14 @@ namespace CgsSceneManager
         {
             const Vector4& lrOpen = mpIntervalData[luEntry].mvZYMaxMin;
 
-            const f32 lfZLow  = lfZMin      + lrOpen.x;  // newZMin - openZMax
-            const f32 lfZHigh = lfMinusZMax + lrOpen.y;  // openZMin - newZMax
-            const f32 lfYLow  = lfYMin      + lrOpen.z;  // newYMin - openYMax
-            const f32 lfYHigh = lfMinusYMax + lrOpen.w;  // openYMin - newYMax
+            const f32 lfOpenMinusZMax = lrOpen.GetX();
+            const f32 lfOpenZMin      = lrOpen.GetY();
+            const f32 lfOpenMinusYMax = lrOpen.GetZ();
+            const f32 lfOpenYMin      = lrOpen.GetW();
+            const f32 lfZLow  = lfZMin      + lfOpenMinusZMax;  // newZMin - openZMax
+            const f32 lfZHigh = lfMinusZMax + lfOpenZMin;       // openZMin - newZMax
+            const f32 lfYLow  = lfYMin      + lfOpenMinusYMax;  // newYMin - openYMax
+            const f32 lfYHigh = lfMinusYMax + lfOpenYMin;       // openYMin - newYMax
 
             if (!(lfZLow > 0.0f) && !(lfZHigh > 0.0f) && !(lfYLow > 0.0f) && !(lfYHigh > 0.0f))
             {
