@@ -50,15 +50,6 @@
 
 namespace BrnPhysics
 {
-// [T5-def] DIAG counters, DEFINED in
-// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
-// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-namespace Vehicle
-{
-    extern u32 gT5Q8Routed;
-    extern u32 gT5Q8Accepted;
-}
-
 namespace Deformation
 {
     namespace
@@ -182,21 +173,19 @@ namespace Deformation
         // columns via three vspltw/vmaddfp steps): rotation transposed, translation -(T . R).
         inline void BuildWorldToModel(Matrix44Affine& lrOut, const Matrix44Affine& lrTransform)
         {
-            // Rotation transposed (the vmrghw/vmrglw word-interleave cascade).
-            lrOut.xAxis.x = lrTransform.xAxis.x; lrOut.xAxis.y = lrTransform.yAxis.x;
-            lrOut.xAxis.z = lrTransform.zAxis.x; lrOut.xAxis.w = 0.0f;
-            lrOut.yAxis.x = lrTransform.xAxis.y; lrOut.yAxis.y = lrTransform.yAxis.y;
-            lrOut.yAxis.z = lrTransform.zAxis.y; lrOut.yAxis.w = 0.0f;
-            lrOut.zAxis.x = lrTransform.xAxis.z; lrOut.zAxis.y = lrTransform.yAxis.z;
-            lrOut.zAxis.z = lrTransform.zAxis.z; lrOut.zAxis.w = 0.0f;
-
-            // Translation: -(T . R) folded through the transposed rows (the three
-            // vspltw(-T, lane) / vmaddfp steps).
-            const Vector3& lrT = lrTransform.wAxis;
-            lrOut.wAxis.x = -(lrT.x * lrOut.xAxis.x + lrT.y * lrOut.yAxis.x + lrT.z * lrOut.zAxis.x);
-            lrOut.wAxis.y = -(lrT.x * lrOut.xAxis.y + lrT.y * lrOut.yAxis.y + lrT.z * lrOut.zAxis.y);
-            lrOut.wAxis.z = -(lrT.x * lrOut.xAxis.z + lrT.y * lrOut.yAxis.z + lrT.z * lrOut.zAxis.z);
-            lrOut.wAxis.w = -(lrT.x * lrOut.xAxis.w + lrT.y * lrOut.yAxis.w + lrT.z * lrOut.zAxis.w);
+            // ARTIST 0x82605528..0x8260558C, including the fourth lane and fused order.
+            const __vector4 zero = __vspltisw(0);
+            const __vector4 negT = __vsubfp(zero, lrTransform.wAxis.mV);
+            const __vector4 xzlo = __vmrglw(lrTransform.xAxis.mV, lrTransform.zAxis.mV);
+            const __vector4 yzlo = __vmrglw(lrTransform.yAxis.mV, zero);
+            const __vector4 xzhi = __vmrghw(lrTransform.xAxis.mV, lrTransform.zAxis.mV);
+            const __vector4 yzhi = __vmrghw(lrTransform.yAxis.mV, zero);
+            lrOut.zAxis.mV = __vmrghw(xzlo, yzlo);
+            lrOut.yAxis.mV = __vmrglw(xzhi, yzhi);
+            lrOut.xAxis.mV = __vmrghw(xzhi, yzhi);
+            __vector4 translation = __vmulfp(__vspltw(negT, 2), lrOut.zAxis.mV);
+            translation = __vmaddfp(__vspltw(negT, 1), lrOut.yAxis.mV, translation);
+            lrOut.wAxis.mV = __vmaddfp(__vspltw(negT, 0), lrOut.xAxis.mV, translation);
         }
     }
 
@@ -285,7 +274,7 @@ namespace Deformation
         // the SceneManagerIO:: home at consolidation, after which this cast can be dropped.
         lrSensor.ValidateAndAddContact(
             lWorldTransform,
-            reinterpret_cast<const CgsSceneManager::PotentialContact&>(lrPotentialContact),
+            lrPotentialContact,
             lContactId, 0, 0);
     }
 
@@ -325,8 +314,7 @@ namespace Deformation
     //   * owner tripwire :1872 (both owners racecar / traffic; fire-and-continue);
     //   * model lookups through FindModelIndexByEntityID (the PHYSICAL-id tables -- the PS3
     //     inlines its racecar/traffic table reads with bounds asserts h:701/h:710);
-    //   * :1885/:1886 -1 tripwires (fire-and-continue -- the console indexes with -1 anyway;
-    //     the host gates the array reads instead, diagnostics unchanged);
+    //   * :1885/:1886 -1 tripwires (fire-and-continue);
     //   * the inlined world->model-A affine inverse (see BuildWorldToModel above) handed to
     //     DeformationSensor::ValidateAndAddContact as its transform argument;
     //   * sensors resolved through GetDeformationSensorFromVolumeInstance (out-of-line on the
@@ -370,13 +358,6 @@ namespace Deformation
 
         CGS_ASSERT(liModelIndexA != -1, "liModelIndexA != -1");   // :1885
         CGS_ASSERT(liModelIndexB != -1, "liModelIndexB != -1");   // :1886
-        if (liModelIndexA == -1 || liModelIndexB == -1)
-        {
-            // Host bounds guard only -- the console's asserts above are fire-and-continue and it
-            // indexes the model pool with the -1 anyway; nothing live changes (diagnostics TU).
-            return;
-        }
-
         DeformableObject& lrModelA = mpaModels[liModelIndexA];
         DeformableObject& lrModelB = mpaModels[liModelIndexB];
 
@@ -392,29 +373,16 @@ namespace Deformation
             lrModelA.GetDeformationSensorFromVolumeInstance(lrPotentialContact.muVolumeInstanceIdA);
 
         // Same cross-TU namespace cast FLAG as ReadPotentialVehicleWorldContact above.
-        // [T5-def] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Count the race-car-vs-traffic
-        // (queue [8]) contacts that actually reach a sensor, and how many the sensor keeps -- the
-        // two numbers that separate "no contact was ever routed" from "the sensor rejected it".
-        const bool lbT5Q8 = ((static_cast<u32>(lContactId) >> 24) == 0x08u);
-        if (lbT5Q8)
-        {
-            ++BrnPhysics::Vehicle::gT5Q8Routed;
-        }
-
         if (lrSensorA.ValidateAndAddContact(
                 lWorldToModelA,
-                reinterpret_cast<const CgsSceneManager::PotentialContact&>(lrPotentialContact),
+                lrPotentialContact,
                 lContactId, &lrModelB, &lrSensorB))
         {
-            if (lbT5Q8)
-            {
-                ++BrnPhysics::Vehicle::gT5Q8Accepted;
-            }
             // Accepted: zero BOTH cars' contact cool-down (the Y lane of the packed timer bank).
             lrModelA.GetVehiclePhysics()
-                ->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;
+                ->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.GetY() = 0.0f;
             lrModelB.GetVehiclePhysics()
-                ->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;
+                ->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.GetY() = 0.0f;
         }
     }
 
@@ -502,14 +470,6 @@ namespace Deformation
             CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS,
                        "lContact.muPolyTagB < BrnPhysics::Deformation::KU_MAX_DEFORMATION_MODELS");                            // :2381
             CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS, "invalid index : ");        // CgsBitArray.h:203
-            if (luModelIndex >= KU_MAX_DEFORMATION_MODELS)
-            {
-                // Host bounds guard only. The console's tripwires above are fire-and-continue and
-                // it indexes mModelsAdded / mpaModels with the out-of-range tag anyway, then posts
-                // a contact built from that out-of-range entry; the host refuses to read past the
-                // pool and drops the contact.
-                continue;
-            }
             CGS_ASSERT(mModelsAdded.IsBitSet(luModelIndex),
                        "mModelsAdded.IsBitSet(lContact.muPolyTagB)");                                                          // :2382
 
@@ -574,14 +534,6 @@ namespace Deformation
         const Queue& lrQueue = lpContacts->GetDetachedWheelCarQueue();
         const s32 liQueueLength = lrQueue.GetLength();   // snapshot, as above
 
-        // [wheel-car] DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_DEFORM_TRACE). Running total of the
-        // detached-wheel-vs-car contacts this bridge drains -- zero for the whole life of the tree
-        // until AddRaceCarWheelPair landed (crash parity G22-D1). First 20 non-empty frames, then
-        // every 50th. DELETE-WHEN-STABLE.
-        {
-            static u32 suFrames = 0u, suContacts = 0u;
-        }
-
         for (s32 liEventIndex = 0; liEventIndex < liQueueLength; ++liEventIndex)
         {
             const CgsSceneManager::SceneManagerIO::PotentialContact lContact =
@@ -619,10 +571,6 @@ namespace Deformation
 
             const u32 luModelIndex = lContact.muPolyTagB;
             CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS, "invalid index : ");        // CgsBitArray.h:203
-            if (luModelIndex >= KU_MAX_DEFORMATION_MODELS)
-            {
-                continue;   // host bounds guard only -- see the part bridge's note
-            }
             CGS_ASSERT(mModelsAdded.IsBitSet(luModelIndex),
                        "mModelsAdded.IsBitSet(lContact.muPolyTagB)");                                                          // :2473
 

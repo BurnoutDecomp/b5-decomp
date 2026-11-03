@@ -80,7 +80,7 @@ namespace Deformation
     // -----------------------------------------------------------------------------------
     const f32      KF_PART_DYNAMIC_FRICTION         = 0.30000001f;                // RECOVERED 0x82F2A140 (3E99999A)
     const f32      KF_PART_STATIC_FRICTION          = 0.30000001f;                // RECOVERED 0x82F2A144 (3E99999A)
-    const VecFloat KVF_PROJECTSPHERE_RADIUS_PADDING = { 0.0f, 0.0f, 0.0f, 0.0f }; // FLAG: rodata value unrecovered
+    const VecFloat KVF_PROJECTSPHERE_RADIUS_PADDING(0.05f); // ARTIST initializer 0x82C5B7E0, flt_820047C8
 
     // The packed-entity-id owner tags this TU's asserts test against (BrnWorld::E_ENTITYTYPE_*;
     // the enum is not in-tree -- the high byte values are the asm-attested constants, matching
@@ -315,20 +315,17 @@ namespace Deformation
             DeformableObject* lpPlayerModel = GetPlayerCarModel();
             CGS_ASSERT(lpPlayerModel != 0, "lpPlayerModel");
 
-            if (lpPlayerModel != 0)   // PC-only null guard: the console asserts, then dereferences
-            {
-                // Zero every deformation sensor's scratch, then re-blend (crash parity G24-D1,
-                // 2026-09-23): 0x82644ED0..0x82644F04 is the inlined DeformableObject::ResetScratching
-                // (PS3 calls it out of line @0x6B9D7C; ProcessEvents is its only caller) -- spec+0x652
-                // sensors, `stfs 0.0, 0x1AF4(model + 0x1B0*i)` == maDeformationSensors[i].mfScratchAmount.
-                // The old FLAG here called it a per-driven-point clear "folded into
-                // UpdateSkinningOffsets"; the stride and base make it per-SENSOR, and
-                // UpdateSkinningOffsets never clears it -- so the respray re-blended the old scratch.
-                lpPlayerModel->ResetScratching();
-                const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
-                lpPlayerModel->UpdateIK(lvfZero);   // 0x82644F0C vspltisw v1,0
-                lpPlayerModel->UpdateSkinningOffsets();
-            }
+            // Zero every deformation sensor's scratch, then re-blend (crash parity G24-D1,
+            // 2026-09-23): 0x82644ED0..0x82644F04 is the inlined DeformableObject::ResetScratching
+            // (PS3 calls it out of line @0x6B9D7C; ProcessEvents is its only caller) -- spec+0x652
+            // sensors, `stfs 0.0, 0x1AF4(model + 0x1B0*i)` == maDeformationSensors[i].mfScratchAmount.
+            // The old FLAG here called it a per-driven-point clear "folded into
+            // UpdateSkinningOffsets"; the stride and base make it per-SENSOR, and
+            // UpdateSkinningOffsets never clears it -- so the respray re-blended the old scratch.
+            lpPlayerModel->ResetScratching();
+            const VecFloat lvfZero(__vspltisw(0));
+            lpPlayerModel->UpdateIK(lvfZero);   // 0x82644F0C vspltisw v1,0
+            lpPlayerModel->UpdateSkinningOffsets();
         }
 
         // Drain every input queue (the X360 zeroes each queue's miLength directly -- the queues
@@ -492,7 +489,7 @@ namespace Deformation
             //                   whether or not slot 0 is in use (no GetPart tripwires on console).
             // Only the model-27 arm is observable: OutputState rewrites the CarState rows before any
             // reader, while the part row carries a live part's render offset and hinge velocity.
-            const Vector3 lZeroRow = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lZeroRow(__vspltisw(0));
             const s32 liSensorsPerCar = static_cast<s32>(CarState::KU_MAX_SENSORS);   // 20
             if (liModelIndex < liSensorsPerCar)
             {
@@ -508,7 +505,7 @@ namespace Deformation
             }
             else
             {
-                const Vector3Plus lZeroPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3Plus lZeroPosition(__vspltisw(0));
                 mDetachedPartManager.GetPartPool().GetPartSlot(0).SetLocalGraphicsPositionPlusJointVelocity(lZeroPosition);
             }
         }
@@ -614,8 +611,7 @@ namespace Deformation
 
             // Reset the model's deformation in place (keep the slot live). The damage/time + reset
             // type come from the event; mRandom passes as the last arg.
-            const VecFloat lvfDamage = { lrEvent.mfInitialDamageAmount, lrEvent.mfInitialDamageAmount,
-                                         lrEvent.mfInitialDamageAmount, lrEvent.mfInitialDamageAmount };
+            const VecFloat lvfDamage(lrEvent.mfInitialDamageAmount);
             mpaModels[liModelIndex].ResetDeformation(
                 lpSimInput, lpSceneInterface, &mDetachedPartManager, &mDetachedWheelManager,
                 lvfDamage,
@@ -990,10 +986,9 @@ namespace Deformation
             CGS_ASSERT(liCabModel != -1,     "Failed to find deformation model for cab ");   // :1039
             CGS_ASSERT(liTrailerModel != -1, "Failed to find deformation model for cab ");   // :1040
 
-            const Vector4* lpLanes = reinterpret_cast<const Vector4*>(&lrEvent);
-            const Vector3 lvPointOnA = { lpLanes[0].x, lpLanes[0].y, lpLanes[0].z, 0.0f };
-            const Vector3 lvPointOnB = { lpLanes[1].x, lpLanes[1].y, lpLanes[1].z, 0.0f };
-            const Vector3 lvNormal = { lpLanes[2].x, lpLanes[2].y, lpLanes[2].z, 0.0f };
+            const Vector3 lvPointOnA(lrEvent.mPointOnA.mV);
+            const Vector3 lvPointOnB(lrEvent.mPointOnB.mV);
+            const Vector3 lvNormal(lrEvent.mNormal.mV);
 
             lpSolver->AddVehicleContact(lvPointOnA, lvPointOnB, lvNormal,
                                         liCabModel, liTrailerModel);
@@ -1067,7 +1062,7 @@ namespace Deformation
 
         // Zero time vector, the raw -1 reset type the console passes (the enum names only
         // E_DEFORMATION_RESET_NONE == 0), flag clear, the manager's own generator.
-        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const VecFloat lvfZero(__vspltisw(0));
         mpaModels[liModelIndex].ResetDeformation(
             lpSimInput, lpSceneInterface, &mDetachedPartManager, &mDetachedWheelManager,
             lvfZero,
@@ -1086,7 +1081,7 @@ namespace Deformation
         {
             if (mpaModels[liModelIndex].ShouldResetDeformationNextUpdate())
             {
-                const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const VecFloat lvfZero(__vspltisw(0));
                 mpaModels[liModelIndex].ResetDeformation(
                     lpSimInput, lpSceneInterface, &mDetachedPartManager, &mDetachedWheelManager,
                     lvfZero,

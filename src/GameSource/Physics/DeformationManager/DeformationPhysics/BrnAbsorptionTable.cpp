@@ -165,12 +165,12 @@ namespace Deformation
     // which is the physically right answer and not something a mis-strided read produces.
     static const VecFloat KsaSpeedScaleTable[E_NSD_NUM] =
     {
-        { 0.5f, 0.5f, 0.5f, 0.5f },   // [0] @0x82FB9C50  flt_82001DA0 = 0.5
-        { 0.5f, 0.5f, 0.5f, 0.5f },   // [1] @0x82FB9C60  flt_82001DA0 = 0.5
-        { 1.0f, 1.0f, 1.0f, 1.0f },   // [2] @0x82FB9C70  flt_82001C98 = 1.0
-        { 0.200000003f, 0.200000003f, 0.200000003f, 0.200000003f },  // [3] @0x82FB9C80  flt_82004744 = 0.2
-        { 1.0f, 1.0f, 1.0f, 1.0f },   // [4] @0x82FB9C90  flt_82001C98 = 1.0
-        { 1.0f, 1.0f, 1.0f, 1.0f },   // [5] @0x82FB9CA0  flt_82001C98 = 1.0
+        VecFloat(0.5f),   // [0] @0x82FB9C50  flt_82001DA0 = 0.5
+        VecFloat(0.5f),   // [1] @0x82FB9C60  flt_82001DA0 = 0.5
+        VecFloat(1.0f),   // [2] @0x82FB9C70  flt_82001C98 = 1.0
+        VecFloat(0.200000003f),  // [3] @0x82FB9C80  flt_82004744 = 0.2
+        VecFloat(1.0f),   // [4] @0x82FB9C90  flt_82001C98 = 1.0
+        VecFloat(1.0f),   // [5] @0x82FB9CA0  flt_82001C98 = 1.0
     };
 
     // -----------------------------------------------------------------------------------------
@@ -183,7 +183,7 @@ namespace Deformation
         CGS_ASSERT(luValue < KU_NUM_ABSORPTION_VALUES, "luValue < KU_NUM_ABSORPTION_VALUES");
 
         const f32 lfAbsorption = KsaAbsorptionCurve[leSet][luValue].mfAbsorption;
-        { const Vector4 lResult = { lfAbsorption, lfAbsorption, lfAbsorption, lfAbsorption }; return lResult; }
+        return VecFloat(lfAbsorption);
     }
 
     // -----------------------------------------------------------------------------------------
@@ -199,7 +199,7 @@ namespace Deformation
 
         const VecFloat lScale = KsaSpeedScaleTable[liScaleIndex];
         const f32 lfSpeed = KsaAbsorptionCurve[leSet][luValue].mfSpeedForMaxAbsorbtion;
-        { const Vector4 lResult = { lfSpeed * lScale.x, lfSpeed * lScale.y, lfSpeed * lScale.z, lfSpeed * lScale.w }; return lResult; }
+        return VecFloat(__vmulfp(VecFloat(lfSpeed).mV, lScale.mV));
     }
 
     // -----------------------------------------------------------------------------------------
@@ -212,7 +212,7 @@ namespace Deformation
         CGS_ASSERT(luValue < KU_NUM_ABSORPTION_VALUES, "luValue < KU_NUM_ABSORPTION_VALUES");
 
         const f32 lfProportion = KsaAbsorptionCurve[leSet][luValue].mfProportionToSpeed;
-        { const Vector4 lResult = { lfProportion, lfProportion, lfProportion, lfProportion }; return lResult; }
+        return VecFloat(lfProportion);
     }
 }
 }
