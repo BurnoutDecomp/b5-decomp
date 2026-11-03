@@ -5,10 +5,6 @@
 
 namespace CgsDev
 {
-namespace Log
-{
-    StrStreamBase* gpAssertPrint = gpDebugPrint;
-}
 namespace Assert
 {
     namespace

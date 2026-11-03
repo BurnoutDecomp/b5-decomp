@@ -11,15 +11,12 @@ namespace Log
 
 
     extern StrStreamBase* gpDebugPrint;
+    extern StrStreamBase* gpAssertPrint;
 }
 
 namespace Message
 {
-    // Log-category filter. Call sites gate logging on `(gxMessageFilterFlags & bit)`; set broad
-    // so the engine's logging is captured. (The real per-category default differs; tune later.)
-    // Width is 64-bit: the X360 asm loads/stores the full 64-bit value and the DecFIGS DWARF
-    // (CgsMessage.h:40) types it `uint64_t`. Matches CgsMessage.h's `extern FilterFlag (u64)`
-    // declaration of the same CgsDev::Message::gxMessageFilterFlags symbol (no ODR conflict).
+    // ARTIST initial filter is the 64-bit value 1.
     extern u64 gxMessageFilterFlags;
 }
 }
