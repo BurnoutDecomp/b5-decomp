@@ -218,7 +218,7 @@ namespace BrnGui
     const char GuiNetworkRouteInfo::macCrashNavBoroughName[11] = "Borough_mc";
     const char GuiNetworkRouteInfo::macSatNavIconBaseName[11]  = "SatNavIcon";
 
-    const Vector2 GuiNetworkRouteInfo::K_MAP_DISPLAY_RECT = { 591.0f, 316.0f, 0.0f, 0.0f };
+    const Vector2 GuiNetworkRouteInfo::K_MAP_DISPLAY_RECT(591.0f, 316.0f);
 
     // ------------------------------------------------------------ ctor
     // Member construction only (the nine animators and text-field pairs, the map component
@@ -247,14 +247,14 @@ namespace BrnGui
         }
 
         MainMapComponent::MainMapParameterBundle lParameters;
-        lParameters.mv4ViewRect.x    = KF_VIEW_RECT_LEFT;
-        lParameters.mv4ViewRect.y    = KF_VIEW_RECT_TOP;
-        lParameters.mv4ViewRect.z    = KF_VIEW_RECT_RIGHT;
-        lParameters.mv4ViewRect.w    = KF_VIEW_RECT_BOTTOM;
-        lParameters.mv4PaddingRect.x = KF_PADDING_RECT_LEFT;
-        lParameters.mv4PaddingRect.y = KF_PADDING_RECT_TOP;
-        lParameters.mv4PaddingRect.z = KF_PADDING_RECT_RIGHT;
-        lParameters.mv4PaddingRect.w = KF_PADDING_RECT_BOTTOM;
+        lParameters.mv4ViewRect.SetX(KF_VIEW_RECT_LEFT);
+        lParameters.mv4ViewRect.SetY(KF_VIEW_RECT_TOP);
+        lParameters.mv4ViewRect.SetZ(KF_VIEW_RECT_RIGHT);
+        lParameters.mv4ViewRect.SetW(KF_VIEW_RECT_BOTTOM);
+        lParameters.mv4PaddingRect.SetX(KF_PADDING_RECT_LEFT);
+        lParameters.mv4PaddingRect.SetY(KF_PADDING_RECT_TOP);
+        lParameters.mv4PaddingRect.SetZ(KF_PADDING_RECT_RIGHT);
+        lParameters.mv4PaddingRect.SetW(KF_PADDING_RECT_BOTTOM);
         lParameters.meMapType        = static_cast<GuiEventRenderMainMap::EMapType>(leMapType);
 
         mMainMapComponent.Construct(mpStateInterface, &lParameters);
@@ -262,10 +262,7 @@ namespace BrnGui
         mMainMapComponent.SetStickMapToScreenEdges(false, false, false, false);
 
         mpIconManager = 0;
-        mv2WorldCenterPoint.x = 0.0f;
-        mv2WorldCenterPoint.y = 0.0f;
-        mv2WorldCenterPoint.z = 0.0f;
-        mv2WorldCenterPoint.w = 0.0f;
+        mv2WorldCenterPoint.SetZero();
 
         mCrashNavBorough.Construct(macCrashNavBoroughName, mpStateInterface, 0);
 
@@ -591,18 +588,19 @@ namespace BrnGui
             mpGuiCache->GetLandmarkInfoFromIndex(mEvent.GetLandmark(liLandmark), &lLandmarkInfo);
 
             const Vector4& lv4Position = lLandmarkInfo.GetPositionLane();
-            const Vector2 lv2Point = { lv4Position.x, lv4Position.z, 0.0f, 0.0f };
+            const Vector2 lv2Point(lv4Position.GetX(), lv4Position.GetZ());
 
-            lv2Min.x = (lv2Min.x < lv2Point.x) ? lv2Min.x : lv2Point.x;   // vminfp
-            lv2Min.y = (lv2Min.y < lv2Point.y) ? lv2Min.y : lv2Point.y;
-            lv2Max.x = (lv2Max.x > lv2Point.x) ? lv2Max.x : lv2Point.x;   // vmaxfp
-            lv2Max.y = (lv2Max.y > lv2Point.y) ? lv2Max.y : lv2Point.y;
+            lv2Min.mV.x = (lv2Min.mV.x < lv2Point.mV.x) ? lv2Min.mV.x : lv2Point.mV.x;   // vminfp
+            lv2Min.mV.y = (lv2Min.mV.y < lv2Point.mV.y) ? lv2Min.mV.y : lv2Point.mV.y;
+            lv2Max.mV.x = (lv2Max.mV.x > lv2Point.mV.x) ? lv2Max.mV.x : lv2Point.mV.x;   // vmaxfp
+            lv2Max.mV.y = (lv2Max.mV.y > lv2Point.mV.y) ? lv2Max.mV.y : lv2Point.mV.y;
         }
 
-        const Vector2 lv2Centre = { (lv2Max.x + lv2Min.x) / 2.0f,
-                                    (lv2Max.y + lv2Min.y) / 2.0f,
-                                    (lv2Max.z + lv2Min.z) / 2.0f,
-                                    (lv2Max.w + lv2Min.w) / 2.0f };
+        Vector2 lv2Centre;
+        lv2Centre.mV.x    = (lv2Max.mV.x + lv2Min.mV.x) / 2.0f;
+        lv2Centre.mV.y    = (lv2Max.mV.y + lv2Min.mV.y) / 2.0f;
+        lv2Centre.mV.u[2] = (lv2Max.mV.u[2] + lv2Min.mV.u[2]) / 2.0f;
+        lv2Centre.mV.u[3] = (lv2Max.mV.u[3] + lv2Min.mV.u[3]) / 2.0f;
         mMainMapComponent.SetDesiredWorldCentre(lv2Centre);
 
         return MapTransform::CalculateZoomFactor(lv2Min, lv2Max, K_MAP_DISPLAY_RECT, KF_MAP_BASE_ASPECT_RATIO);

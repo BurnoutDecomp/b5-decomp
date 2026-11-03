@@ -675,11 +675,11 @@ namespace BrnGui
     {
         char lacValue[12];
 
-        CgsCore::SnPrintf(lacValue, 11, "%f", lv2Position.x);
+        CgsCore::SnPrintf(lacValue, 11, "%f", lv2Position.mV.x);
         lacValue[11] = 0;
         AddOutputAptViewState("_x", lacValue, true);
 
-        CgsCore::SnPrintf(lacValue, 11, "%f", lv2Position.y);
+        CgsCore::SnPrintf(lacValue, 11, "%f", lv2Position.mV.y);
         lacValue[11] = 0;
         AddOutputAptViewState("_y", lacValue, true);
     }

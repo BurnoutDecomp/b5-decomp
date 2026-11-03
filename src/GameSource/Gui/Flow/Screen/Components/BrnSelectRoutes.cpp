@@ -153,9 +153,9 @@ namespace BrnGui
         template <typename TA, typename TB>
         f32 Distance3(const TA& lrA, const TB& lrB)
         {
-            const f32 lfX = lrA.x - lrB.x;
-            const f32 lfY = lrA.y - lrB.y;
-            const f32 lfZ = lrA.z - lrB.z;
+            const f32 lfX = static_cast<f32>(lrA.GetX()) - static_cast<f32>(lrB.GetX());
+            const f32 lfY = static_cast<f32>(lrA.GetY()) - static_cast<f32>(lrB.GetY());
+            const f32 lfZ = static_cast<f32>(lrA.GetZ()) - static_cast<f32>(lrB.GetZ());
             return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
         }
     }
