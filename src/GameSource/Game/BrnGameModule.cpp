@@ -1127,6 +1127,11 @@ namespace BrnGame
                 }
             }
             const s32 liPayload0 = static_cast<s32>(lpuPayload[0]);
+            // The bool-payload arms (94, 469/470) read ONE byte (`lbz r?, 0(r29)` @0x823CC3CC /
+            // @0x823CC708). A bool event can arrive with a 1-byte payload whose neighbours are
+            // stale, so testing the whole word read GUI 470's "finished" {0} as non-zero and
+            // left the 100% sequence (and its crash-nav camera) latched on (b5-decomp #79).
+            const bool lbPayload0 = (*reinterpret_cast<const u8*>(lpuPayload) != 0);
 
             switch (liCommand)
             {
@@ -1134,8 +1139,8 @@ namespace BrnGame
                     lpDirectorInput->SetCarSelectTickerClosedThisFrame();
                     break;
 
-                case 94:    // the shortcut menu opened/closed (payload word = the new state)
-                    lpDirectorInput->SetShortcutMenuEvent(liPayload0 != 0);
+                case 94:    // the shortcut menu opened/closed (payload byte = the new state)
+                    lpDirectorInput->SetShortcutMenuEvent(lbPayload0);
                     break;
 
                 case 191:   // crash-nav shown/hidden -- ignored entirely when payload[1] == 2
@@ -1184,7 +1189,7 @@ namespace BrnGame
 
                 case 469:   // +0x7AD3 / +0x7AD4  the 100%-completion sequence start/finish
                 case 470:   // (the two ids share one body on the console)
-                    if (liPayload0 != 0)
+                    if (lbPayload0)
                         lpDirectorInput->SetStarting100PercentSequence();
                     else
                         lpDirectorInput->SetFinished100PercentSequence();
