@@ -93,7 +93,6 @@
 #include "GameShared/Jobs/ContactGenerator/ContactGeneratorJob.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint (the gates + witness)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"          // Sphere (16B centre+radius)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"      // SweptSphere (the swept arm)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"       // Triangle4 (the SoA block)
@@ -229,10 +228,10 @@ namespace
     inline rw::collision::Vec4 ToVec4(const Vector3& lrV)
     {
         rw::collision::Vec4 lOut;
-        lOut.x = lrV.x;
-        lOut.y = lrV.y;
-        lOut.z = lrV.z;
-        lOut.w = lrV.w;   // the AOS rows carry w == 0 (GetAOSTriangle writes it); vsubfp/vmulfp
+        lOut.x = lrV.mV.x;
+        lOut.y = lrV.mV.y;
+        lOut.z = lrV.mV.z;
+        lOut.w = lrV.mV.w;   // the AOS rows carry w == 0 (GetAOSTriangle writes it); vsubfp/vmulfp
                           // below run on all four lanes, so w rides along exactly as on VMX.
         return lOut;
     }
@@ -357,10 +356,10 @@ namespace
         const Vec4 lvE1 = SubVec4(lvP1, lvP2);
         const Vec4 lvE2 = SubVec4(lvP0, lvP1);
 
-        arInst.mPos               = lvP0;
-        arInst.mFaceNormals[0]    = ToVec4(arTriangle.mNormal);
-        arInst.mFaceNormals[1]    = lvP1;
-        arInst.mFaceNormals[2]    = lvP2;
+        std::memcpy(&arInst.mPos, &lvP0, sizeof(lvP0));
+        arInst.mFaceNormals[0] = arTriangle.mNormal;
+        std::memcpy(&arInst.mFaceNormals[1], &lvP1, sizeof(lvP1));
+        std::memcpy(&arInst.mFaceNormals[2], &lvP2, sizeof(lvP2));
 
         arInst.mFatness           = KF_GP_TRIANGLE_FATNESS;
         arInst.mVolumeTag         = 0;
@@ -382,14 +381,14 @@ namespace
         const f32 lfLength1 = std::sqrt(Dot3(lvE1, lvE1));
         const f32 lfLength2 = std::sqrt(Dot3(lvE2, lvE2));
 
-        arInst.mDimensions.x = lfLength0;
-        arInst.mDimensions.y = lfLength1;
-        arInst.mDimensions.z = lfLength2;
-        arInst.mDimensions.w = lfLength0;   // the perm control's fourth lane, measured
+        arInst.mDimensions.mV.x = lfLength0;
+        arInst.mDimensions.mV.y = lfLength1;
+        arInst.mDimensions.mV.z = lfLength2;
+        arInst.mDimensions.mV.w = lfLength0;   // the perm control's fourth lane, measured
 
-        arInst.mEdgeDirections[0] = ScaleVec4(lvE0, 1.0f / lfLength0);
-        arInst.mEdgeDirections[1] = ScaleVec4(lvE1, 1.0f / lfLength1);
-        arInst.mEdgeDirections[2] = ScaleVec4(lvE2, 1.0f / lfLength2);
+        { const Vec4 v = ScaleVec4(lvE0, 1.0f / lfLength0); std::memcpy(&arInst.mEdgeDirections[0], &v, sizeof(v)); }
+        { const Vec4 v = ScaleVec4(lvE1, 1.0f / lfLength1); std::memcpy(&arInst.mEdgeDirections[1], &v, sizeof(v)); }
+        { const Vec4 v = ScaleVec4(lvE2, 1.0f / lfLength2); std::memcpy(&arInst.mEdgeDirections[2], &v, sizeof(v)); }
 
         arInst.mMethods = rw::collision::g_aGPVolumeMethods[GPInstance::TRIANGLE];
     }
@@ -630,12 +629,12 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
             Vector4 laNormal[4];
             for (s32 liLane = 0; liLane < 4; ++liLane)
             {
-                const f32 lfAx = (&lrBlock.mVertex0X.x)[liLane] - (&lrBlock.mVertex1X.x)[liLane];
-                const f32 lfAy = (&lrBlock.mVertex0Y.x)[liLane] - (&lrBlock.mVertex1Y.x)[liLane];
-                const f32 lfAz = (&lrBlock.mVertex0Z.x)[liLane] - (&lrBlock.mVertex1Z.x)[liLane];
-                const f32 lfBx = (&lrBlock.mVertex0X.x)[liLane] - (&lrBlock.mVertex2X.x)[liLane];
-                const f32 lfBy = (&lrBlock.mVertex0Y.x)[liLane] - (&lrBlock.mVertex2Y.x)[liLane];
-                const f32 lfBz = (&lrBlock.mVertex0Z.x)[liLane] - (&lrBlock.mVertex2Z.x)[liLane];
+                const f32 lfAx = (&lrBlock.mVertex0X.mV.x)[liLane] - (&lrBlock.mVertex1X.mV.x)[liLane];
+                const f32 lfAy = (&lrBlock.mVertex0Y.mV.x)[liLane] - (&lrBlock.mVertex1Y.mV.x)[liLane];
+                const f32 lfAz = (&lrBlock.mVertex0Z.mV.x)[liLane] - (&lrBlock.mVertex1Z.mV.x)[liLane];
+                const f32 lfBx = (&lrBlock.mVertex0X.mV.x)[liLane] - (&lrBlock.mVertex2X.mV.x)[liLane];
+                const f32 lfBy = (&lrBlock.mVertex0Y.mV.x)[liLane] - (&lrBlock.mVertex2Y.mV.x)[liLane];
+                const f32 lfBz = (&lrBlock.mVertex0Z.mV.x)[liLane] - (&lrBlock.mVertex2Z.mV.x)[liLane];
 
                 const f32 lfCx = (lfAy * lfBz) - (lfAz * lfBy);
                 const f32 lfCy = (lfAz * lfBx) - (lfAx * lfBz);
@@ -644,10 +643,10 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
                 const f32 lfLenSq = (lfCx * lfCx) + (lfCy * lfCy) + (lfCz * lfCz);
                 const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);   // vrsqrtefp + 2 NR
 
-                laNormal[liLane].x = lfCx * lfInvLen;
-                laNormal[liLane].y = lfCy * lfInvLen;
-                laNormal[liLane].z = lfCz * lfInvLen;
-                laNormal[liLane].w = 0.0f;
+                laNormal[liLane].mV.x = lfCx * lfInvLen;
+                laNormal[liLane].mV.y = lfCy * lfInvLen;
+                laNormal[liLane].mV.z = lfCz * lfInvLen;
+                laNormal[liLane].mV.w = 0.0f;
             }
 
             for (s32 liLine = 0; liLine < liNumLines; ++liLine)
@@ -655,9 +654,9 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
                 const Vector4& lrStart = lpCommand->maLineStart[liLine];
                 const Vector4& lrEnd   = lpCommand->maLineEnd[liLine];
 
-                const f32 lfDx = lrEnd.x - lrStart.x;   // 0x82921E88  vsubfp v13, v13, v12
-                const f32 lfDy = lrEnd.y - lrStart.y;
-                const f32 lfDz = lrEnd.z - lrStart.z;
+                const f32 lfDx = lrEnd.mV.x - lrStart.mV.x;   // 0x82921E88  vsubfp v13, v13, v12
+                const f32 lfDy = lrEnd.mV.y - lrStart.mV.y;
+                const f32 lfDz = lrEnd.mV.z - lrStart.mV.z;
 
                 // The console runs all four lanes then folds; here each lane is one iteration.
                 // ⭐ The console's scalar early-out at 0x82921F8C (four vspltw + vcmpeqfp. +
@@ -665,17 +664,17 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
                 // result -- per-lane iteration subsumes it exactly.
                 for (s32 liLane = 0; liLane < 4; ++liLane)
                 {
-                    const f32 lfP0x = (&lrBlock.mVertex0X.x)[liLane];
-                    const f32 lfP0y = (&lrBlock.mVertex0Y.x)[liLane];
-                    const f32 lfP0z = (&lrBlock.mVertex0Z.x)[liLane];
+                    const f32 lfP0x = (&lrBlock.mVertex0X.mV.x)[liLane];
+                    const f32 lfP0y = (&lrBlock.mVertex0Y.mV.x)[liLane];
+                    const f32 lfP0z = (&lrBlock.mVertex0Z.mV.x)[liLane];
 
                     // e1 = P1 - P0, e2 = P2 - P0  (0x82921E54..0x82921E90)
-                    const f32 lfE1x = (&lrBlock.mVertex1X.x)[liLane] - lfP0x;
-                    const f32 lfE1y = (&lrBlock.mVertex1Y.x)[liLane] - lfP0y;
-                    const f32 lfE1z = (&lrBlock.mVertex1Z.x)[liLane] - lfP0z;
-                    const f32 lfE2x = (&lrBlock.mVertex2X.x)[liLane] - lfP0x;
-                    const f32 lfE2y = (&lrBlock.mVertex2Y.x)[liLane] - lfP0y;
-                    const f32 lfE2z = (&lrBlock.mVertex2Z.x)[liLane] - lfP0z;
+                    const f32 lfE1x = (&lrBlock.mVertex1X.mV.x)[liLane] - lfP0x;
+                    const f32 lfE1y = (&lrBlock.mVertex1Y.mV.x)[liLane] - lfP0y;
+                    const f32 lfE1z = (&lrBlock.mVertex1Z.mV.x)[liLane] - lfP0z;
+                    const f32 lfE2x = (&lrBlock.mVertex2X.mV.x)[liLane] - lfP0x;
+                    const f32 lfE2y = (&lrBlock.mVertex2Y.mV.x)[liLane] - lfP0y;
+                    const f32 lfE2z = (&lrBlock.mVertex2Z.mV.x)[liLane] - lfP0z;
 
                     // P = cross(dir, e2)   (0x82921EA0..0x82921EC0)
                     const f32 lfPx = (lfE2z * lfDy) - (lfE2y * lfDz);
@@ -683,9 +682,9 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
                     const f32 lfPz = (lfE2y * lfDx) - (lfE2x * lfDy);
 
                     // T = lineStart - P0   (0x82921ED0..0x82921ED8)
-                    const f32 lfTx = lrStart.x - lfP0x;
-                    const f32 lfTy = lrStart.y - lfP0y;
-                    const f32 lfTz = lrStart.z - lfP0z;
+                    const f32 lfTx = lrStart.mV.x - lfP0x;
+                    const f32 lfTy = lrStart.mV.y - lfP0y;
+                    const f32 lfTz = lrStart.mV.z - lfP0z;
 
                     // det = dot(e1, P)     (0x82921EDC / 0x82921EF0 / 0x82921F00)
                     const f32 lfDet = (lfE1x * lfPx) + (lfE1y * lfPy) + (lfE1z * lfPz);
@@ -775,10 +774,10 @@ void ContactGeneratorJob::ExecuteLineWithTriangleListStream()
                 const Vector4& lrEnd   = lpCommand->maLineEnd[liLine];
                 const f32      lfT     = lafBestT[liLine];
 
-                lpResult->maHitPosition[liLine].x = ((lrEnd.x - lrStart.x) * lfT) + lrStart.x;
-                lpResult->maHitPosition[liLine].y = ((lrEnd.y - lrStart.y) * lfT) + lrStart.y;
-                lpResult->maHitPosition[liLine].z = ((lrEnd.z - lrStart.z) * lfT) + lrStart.z;
-                lpResult->maHitPosition[liLine].w = ((lrEnd.w - lrStart.w) * lfT) + lrStart.w;
+                lpResult->maHitPosition[liLine].mV.x = ((lrEnd.mV.x - lrStart.mV.x) * lfT) + lrStart.mV.x;
+                lpResult->maHitPosition[liLine].mV.y = ((lrEnd.mV.y - lrStart.mV.y) * lfT) + lrStart.mV.y;
+                lpResult->maHitPosition[liLine].mV.z = ((lrEnd.mV.z - lrStart.mV.z) * lfT) + lrStart.mV.z;
+                lpResult->maHitPosition[liLine].mV.w = ((lrEnd.mV.w - lrStart.mV.w) * lfT) + lrStart.mV.w;
 
                 lpResult->maHitNormal[liLine]   = laBestNormal[liLine];
                 lpResult->mauSurfaceTag[liLine] = lauBestTag[liLine];
@@ -880,7 +879,7 @@ void ContactGeneratorJob::ExecuteSphereListWithTriangleList(
 
     // stfs f0 -> vspltw128 v124: the padding reach, broadcast.
     VecFloat lPadding;
-    lPadding.x = lPadding.y = lPadding.z = lPadding.w = lpDesc->mfRadius;
+    lPadding.mV.x = lPadding.mV.y = lPadding.mV.z = lPadding.mV.w = lpDesc->mfRadius;
 
     PrimitiveTestResult* lpaResults =
         reinterpret_cast<PrimitiveTestResult*>(lHeader.mpResults);
@@ -1439,8 +1438,8 @@ void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList(
 
                 // |MagnitudeSquared(n) - 1| < 0.1f, all four lanes (the operand is a broadcast,
                 // so the console's all-lanes `vcmpgtfp.` is one scalar test here).
-                const f32 lfNormalMagnitudeSquared = Dot3(lrGPTriangle.mFaceNormals[0],
-                                                          lrGPTriangle.mFaceNormals[0]);
+                const f32 lfNormalMagnitudeSquared = Dot3(ToVec4(lrGPTriangle.mFaceNormals[0]),
+                                                          ToVec4(lrGPTriangle.mFaceNormals[0]));
                 CGS_ASSERT(std::fabs(lfNormalMagnitudeSquared - 1.0f)
                                < KF_GP_TRIANGLE_NORMAL_TOLERANCE,
                            KAPC_GP_TRIANGLE_NORMAL_ASSERTS[liLane]);   // :1052/:1059/:1066/:1073
@@ -1924,61 +1923,13 @@ using rw::collision::GPInstance;
 
 namespace
 {
-    // ---------------------------------------------------------------------------------------
-    // Lane-exact bridges between the two 16-byte vector vocabularies. The console moves these
-    // rows with a single lvx128/stvx128 pair -- ALL FOUR LANES, including w -- so none of these
-    // may go through an accessor that manufactures a zero w (CgsGeometric's GetPosition() /
-    // GetDimensions() do exactly that, which is why the packed w lanes below are re-attached
-    // from the matching GetRadius()/GetLength()/GetFatness() broadcast instead).
-    // ---------------------------------------------------------------------------------------
-    template <typename TSourceVector>
-    inline rw::collision::Vec4 AsVec4(const TSourceVector& arSource)
-    {
-        rw::collision::Vec4 lvResult;
-        lvResult.x = arSource.x;
-        lvResult.y = arSource.y;
-        lvResult.z = arSource.z;
-        lvResult.w = arSource.w;
-        return lvResult;
-    }
-
-    inline rw::collision::Vec4 MakeVec4(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
-    {
-        rw::collision::Vec4 lvResult;
-        lvResult.x = lfX;
-        lvResult.y = lfY;
-        lvResult.z = lfZ;
-        lvResult.w = lfW;
-        return lvResult;
-    }
-
-    inline Vector3 AsVector3(const rw::collision::Vec4& arSource)
-    {
-        Vector3 lvResult;
-        lvResult.x = arSource.x;
-        lvResult.y = arSource.y;
-        lvResult.z = arSource.z;
-        lvResult.w = arSource.w;   // carried, not dropped -- the console moves 16 bytes
-        return lvResult;
-    }
-
-    inline Vector3Plus AsVector3Plus(const rw::collision::Vec4& arSource)
-    {
-        Vector3Plus lvResult;
-        lvResult.x = arSource.x;
-        lvResult.y = arSource.y;
-        lvResult.z = arSource.z;
-        lvResult.w = arSource.w;
-        return lvResult;
-    }
-
     // The inlined `rw::math::IsValid( <Vector3> )` the three CollideGPInstances asserts spell.
     // vcmpeqfp. self-compare per lane, lanes x/y/z only (the console never splats lane 3).
-    inline bool IsValidVector(const rw::collision::Vec4& arVector)
+    inline bool IsValidVector(const Vector3& arVector)
     {
-        return arVector.x == arVector.x
-            && arVector.y == arVector.y
-            && arVector.z == arVector.z;
+        return arVector.mV.x == arVector.mV.x
+            && arVector.mV.y == arVector.mV.y
+            && arVector.mV.z == arVector.mV.z;
     }
 
     // X360 flt_82001CC0 -- the fatness the CYLINDER arm stores (`lfs f0, flt_82001CC0@l(r10)`).
@@ -2045,13 +1996,13 @@ void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolum
             // The two packed rows, rebuilt with their w lanes intact (the accessors split them).
             const Vector3 lvPosition  = lpCapsule->GetPosition();
             const Vector3 lvDirection = lpCapsule->GetDirection();
-            const f32     lfRadius    = lpCapsule->GetRadius().w;
-            const f32     lfLength    = lpCapsule->GetLength().w;
+            const f32     lfRadius    = lpCapsule->GetRadius().mV.w;
+            const f32     lfLength    = lpCapsule->GetLength().mV.w;
 
-            lpInstance->mPos               = MakeVec4(lvPosition.x, lvPosition.y,
-                                                      lvPosition.z, lfRadius);
-            lpInstance->mEdgeDirections[0] = MakeVec4(lvDirection.x, lvDirection.y,
-                                                      lvDirection.z, lfLength);
+            lpInstance->mPos               = Vector3(rw::math::vpu::Vector4(lvPosition.mV.x, lvPosition.mV.y,
+                                                      lvPosition.mV.z, lfRadius).mV);
+            lpInstance->mEdgeDirections[0] = Vector3(rw::math::vpu::Vector4(lvDirection.mV.x, lvDirection.mV.y,
+                                                      lvDirection.mV.z, lfLength).mV);
             lpInstance->mVolumeTag         = lu16Tag;
             lpInstance->mUserTag           = lu16Tag;
             lpInstance->mNumFaceNormals    = 0;
@@ -2061,7 +2012,7 @@ void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolum
             lpInstance->mFatness           = lfRadius;
 
             // The +0x70 round trip: lane x only; y/z/w survive untouched.
-            lpInstance->mDimensions.x      = lfLength;
+            lpInstance->mDimensions.mV.x      = lfLength;
 
             // The console re-reads the type word it just stored; keep that read.
             lpInstance->mMethods = rw::collision::g_aGPVolumeMethods[lpInstance->mVolumeType];
@@ -2084,19 +2035,19 @@ void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolum
 
             const Matrix44Affine lTransform  = lpBox->GetTransform();
             const Vector3        lvDimensions = lpBox->GetDimensions();
-            const f32            lfFatness    = lpBox->GetFatness().w;
+            const f32            lfFatness    = lpBox->GetFatness().mV.w;
 
-            lpInstance->mPos               = AsVec4(lTransform.Pos());
-            lpInstance->mFaceNormals[0]    = AsVec4(lTransform.Right());
-            lpInstance->mEdgeDirections[0] = AsVec4(lTransform.Right());
-            lpInstance->mFaceNormals[1]    = AsVec4(lTransform.Up());
-            lpInstance->mEdgeDirections[1] = AsVec4(lTransform.Up());
-            lpInstance->mFaceNormals[2]    = AsVec4(lTransform.At());
-            lpInstance->mEdgeDirections[2] = AsVec4(lTransform.At());
+            lpInstance->mPos               = lTransform.Pos();
+            lpInstance->mFaceNormals[0]    = lTransform.Right();
+            lpInstance->mEdgeDirections[0] = lTransform.Right();
+            lpInstance->mFaceNormals[1]    = lTransform.Up();
+            lpInstance->mEdgeDirections[1] = lTransform.Up();
+            lpInstance->mFaceNormals[2]    = lTransform.At();
+            lpInstance->mEdgeDirections[2] = lTransform.At();
 
             // mDimensions takes the WHOLE packed row -- half-extents in xyz, fatness in w.
-            lpInstance->mDimensions        = MakeVec4(lvDimensions.x, lvDimensions.y,
-                                                      lvDimensions.z, lfFatness);
+            lpInstance->mDimensions        = Vector3(rw::math::vpu::Vector4(lvDimensions.mV.x, lvDimensions.mV.y,
+                                                      lvDimensions.mV.z, lfFatness).mV);
 
             lpInstance->mVolumeTag         = lu16Tag;
             lpInstance->mUserTag           = lu16Tag;
@@ -2117,11 +2068,11 @@ void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolum
 
             const Matrix44Affine lTransform = lpCylinder->GetTransform();
 
-            lpInstance->mPos               = AsVec4(lTransform.Pos());
-            lpInstance->mFaceNormals[0]    = AsVec4(lTransform.At());     // THE AXIS
-            lpInstance->mEdgeDirections[0] = AsVec4(lTransform.At());     // the same row
-            lpInstance->mFaceNormals[1]    = AsVec4(lTransform.Up());
-            lpInstance->mFaceNormals[2]    = AsVec4(lTransform.Right());
+            lpInstance->mPos               = lTransform.Pos();
+            lpInstance->mFaceNormals[0]    = lTransform.At();     // THE AXIS
+            lpInstance->mEdgeDirections[0] = lTransform.At();     // the same row
+            lpInstance->mFaceNormals[1]    = lTransform.Up();
+            lpInstance->mFaceNormals[2]    = lTransform.Right();
 
             lpInstance->mVolumeTag         = lu16Tag;
             lpInstance->mUserTag           = lu16Tag;
@@ -2131,8 +2082,8 @@ void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolum
             lpInstance->mVolumeType        = GPInstance::CYLINDER;
 
             // The two +0x70 round trips: lanes x then y; z/w survive untouched.
-            lpInstance->mDimensions.x      = lpCylinder->GetLength().w;   // f32 @ src+0x44
-            lpInstance->mDimensions.y      = lpCylinder->GetRadius().w;   // f32 @ src+0x40
+            lpInstance->mDimensions.mV.x      = lpCylinder->GetLength().mV.w;   // f32 @ src+0x44
+            lpInstance->mDimensions.mV.y      = lpCylinder->GetRadius().mV.w;   // f32 @ src+0x40
 
             lpInstance->mFatness           = KF_GP_CYLINDER_FATNESS;      // flt_82001CC0 == 0.0f
 
@@ -2212,10 +2163,10 @@ void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpGPInstance0,
 
         // Both normal slots get the SAME contact normal (one v0, two stvx128) -- the same shape
         // the sphere kernel produces, where the two "sides" share one contact direction.
-        lRecord.mPrimitive0Normal  = AsVector3(lStackResult.normal);
-        lRecord.mPrimitive1Normal  = AsVector3(lStackResult.normal);
-        lRecord.mPrimitive0Contact = AsVector3Plus(lrPair.p1);
-        lRecord.mPrimitive1Contact = AsVector3Plus(lrPair.p2);
+        lRecord.mPrimitive0Normal  = lStackResult.normal;
+        lRecord.mPrimitive1Normal  = lStackResult.normal;
+        lRecord.mPrimitive0Contact = Vector3Plus(lrPair.p1.mV);
+        lRecord.mPrimitive1Contact = Vector3Plus(lrPair.p2.mV);
         lRecord.muPrimitive0Tag    = lStackResult.volumeTag1;
         lRecord.muPrimitive1Tag    = lStackResult.volumeTag2;
 
@@ -2497,10 +2448,10 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereList(
             const f32 lfDirectionW = lfDeltaW * lfInverseLength;
 
             // 0x82921718 — record +0x10. Sphere B's separation direction is A->B.
-            lRecord.mPrimitive1Normal.x = lfDirectionX;
-            lRecord.mPrimitive1Normal.y = lfDirectionY;
-            lRecord.mPrimitive1Normal.z = lfDirectionZ;
-            lRecord.mPrimitive1Normal.w = lfDirectionW;
+            lRecord.mPrimitive1Normal.mV.x = lfDirectionX;
+            lRecord.mPrimitive1Normal.mV.y = lfDirectionY;
+            lRecord.mPrimitive1Normal.mV.z = lfDirectionZ;
+            lRecord.mPrimitive1Normal.mV.w = lfDirectionW;
 
             // 0x8292171C `vmaddfp v9, v13, v10, v9` — A + dir*rA, the point on A's surface facing
             // B. 0x82921724 `vsubfp v12, v12, v11` — B - dir*rB, the point on B's facing A.
@@ -2509,15 +2460,15 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereList(
             // v127 == 0 and the immediate mask selecting the w lane, right before the store. The
             // vrlimi that PRECEDES each of those (0x82921728 / 0x82921734) inserts the PREVIOUS
             // iteration's w and is immediately overwritten by the zero — dead, and not reproduced.
-            lRecord.mPrimitive0Contact.x = lSphereA.mData.mV.x + (lfDirectionX * lfRadiusA);
-            lRecord.mPrimitive0Contact.y = lSphereA.mData.mV.y + (lfDirectionY * lfRadiusA);
-            lRecord.mPrimitive0Contact.z = lSphereA.mData.mV.z + (lfDirectionZ * lfRadiusA);
-            lRecord.mPrimitive0Contact.w = 0.0f;
+            lRecord.mPrimitive0Contact.mV.x = lSphereA.mData.mV.x + (lfDirectionX * lfRadiusA);
+            lRecord.mPrimitive0Contact.mV.y = lSphereA.mData.mV.y + (lfDirectionY * lfRadiusA);
+            lRecord.mPrimitive0Contact.mV.z = lSphereA.mData.mV.z + (lfDirectionZ * lfRadiusA);
+            lRecord.mPrimitive0Contact.mV.w = 0.0f;
 
-            lRecord.mPrimitive1Contact.x = lrSphereB.mData.mV.x - (lfDirectionX * lfRadiusB);
-            lRecord.mPrimitive1Contact.y = lrSphereB.mData.mV.y - (lfDirectionY * lfRadiusB);
-            lRecord.mPrimitive1Contact.z = lrSphereB.mData.mV.z - (lfDirectionZ * lfRadiusB);
-            lRecord.mPrimitive1Contact.w = 0.0f;
+            lRecord.mPrimitive1Contact.mV.x = lrSphereB.mData.mV.x - (lfDirectionX * lfRadiusB);
+            lRecord.mPrimitive1Contact.mV.y = lrSphereB.mData.mV.y - (lfDirectionY * lfRadiusB);
+            lRecord.mPrimitive1Contact.mV.z = lrSphereB.mData.mV.z - (lfDirectionZ * lfRadiusB);
+            lRecord.mPrimitive1Contact.mV.w = 0.0f;
 
             // 0x82921710 + the vsel at 0x82921750: the separation is `dot3 * invLen` (== sqrt of
             // dot3), with a HARD ZERO substituted when dot3 compared equal to 0. Written as the
@@ -2539,10 +2490,10 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereList(
 
             // 0x8292177C `vspltisw v0,-1 ; vcfsx v0,v0,0` == -1.0f, 0x82921780 `vmulfp128` —
             // record +0x00. Sphere A's separation direction is B->A, the opposite of B's.
-            lRecord.mPrimitive0Normal.x = lfDirectionX * -1.0f;
-            lRecord.mPrimitive0Normal.y = lfDirectionY * -1.0f;
-            lRecord.mPrimitive0Normal.z = lfDirectionZ * -1.0f;
-            lRecord.mPrimitive0Normal.w = lfDirectionW * -1.0f;
+            lRecord.mPrimitive0Normal.mV.x = lfDirectionX * -1.0f;
+            lRecord.mPrimitive0Normal.mV.y = lfDirectionY * -1.0f;
+            lRecord.mPrimitive0Normal.mV.z = lfDirectionZ * -1.0f;
+            lRecord.mPrimitive0Normal.mV.w = lfDirectionW * -1.0f;
 
             // 0x82921788 — the console's only assert in this worker. Its message is the source
             // expression, read whole out of the image at 0x821019D0.
