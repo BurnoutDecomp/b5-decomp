@@ -202,15 +202,21 @@ s32 VolumeManager::AddDynamicVolume(VolumeId lVolumeId,
         reinterpret_cast<const rw::collision::Volume*>(lpVolume);
     lpRwVolume->GetBBox(&lMatrix, 1, *reinterpret_cast<rw::collision::AABBox*>(&lAabb));
 
-    CGS_ASSERT(!rw::math::fpu::IsZero(lAabb.mMax.x - lAabb.mMin.x),
+    const f32 lfMinX = lAabb.mMin.GetX();
+    const f32 lfMaxX = lAabb.mMax.GetX();
+    CGS_ASSERT(!rw::math::fpu::IsZero(lfMaxX - lfMinX),
                "Bounding box with zero width for volume instance id ");
-    CGS_ASSERT(!rw::math::fpu::IsZero(lAabb.mMax.y - lAabb.mMin.y),
+    const f32 lfMinY = lAabb.mMin.GetY();
+    const f32 lfMaxY = lAabb.mMax.GetY();
+    CGS_ASSERT(!rw::math::fpu::IsZero(lfMaxY - lfMinY),
                "Bounding box with zero height for volume instance id ");
-    CGS_ASSERT(!rw::math::fpu::IsZero(lAabb.mMax.z - lAabb.mMin.z),
+    const f32 lfMinZ = lAabb.mMin.GetZ();
+    const f32 lfMaxZ = lAabb.mMax.GetZ();
+    CGS_ASSERT(!rw::math::fpu::IsZero(lfMaxZ - lfMinZ),
                "Bounding box with zero depth for volume instance id ");
-    CGS_ASSERT(lAabb.mMin.x <= lAabb.mMax.x, "Inside out bounding box for volume instance id ");
-    CGS_ASSERT(lAabb.mMin.z <= lAabb.mMax.z, "Inside out bounding box for volume instance id ");
-    CGS_ASSERT(lAabb.mMin.y <= lAabb.mMax.y, "Inside out bounding box for volume instance id ");
+    CGS_ASSERT(lfMinX <= lfMaxX, "Inside out bounding box for volume instance id ");
+    CGS_ASSERT(lfMinZ <= lfMaxZ, "Inside out bounding box for volume instance id ");
+    CGS_ASSERT(lfMinY <= lfMaxY, "Inside out bounding box for volume instance id ");
 
     const s32 liIndex = mVolumePool.AllocateObject();          // DWARF liIndex (:153)
     CGS_ASSERT(liIndex != KI_INVALID_VOLUME_INDEX, "Exceeded Scene Manager Volume allocation");

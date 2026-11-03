@@ -50,16 +50,16 @@ namespace CgsSceneManager
             if (lpMinInterval->mu16Flags != IntervalList::KI_MIN_INDEX)
                 continue;
 
-            const Vector3 lMin = {
+            // The native float3 constructor writes XYZ and zeroes W, as the original
+            // four-component initializer intended for these box corners.
+            const Vector3 lMin(
                 lpMinInterval->mfXInterval,
                 lpMinInterval->mfYMinInterval,
-                lpMinInterval->mfZMinInterval,
-                0.0f,
-            };
+                lpMinInterval->mfZMinInterval);
 
-            const f32 lfDeltaX = lCameraPosition.x - lMin.x;
-            const f32 lfDeltaY = lCameraPosition.y - lMin.y;
-            const f32 lfDeltaZ = lCameraPosition.z - lMin.z;
+            const f32 lfDeltaX = lCameraPosition.GetX() - lMin.GetX();
+            const f32 lfDeltaY = lCameraPosition.GetY() - lMin.GetY();
+            const f32 lfDeltaZ = lCameraPosition.GetZ() - lMin.GetZ();
             const f32 lfDistanceSquared =
                 lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
             if (lfDistanceSquared >= lfMaxDistanceSquared)
@@ -70,12 +70,10 @@ namespace CgsSceneManager
             CGS_ASSERT(lpMaxInterval->mu16ObjectIndex == lpMinInterval->mu16ObjectIndex,
                        "lpMaxInterval->GetObjectIndex() == lpMinInterval->GetObjectIndex()");
 
-            const Vector3 lMax = {
+            const Vector3 lMax(
                 lpMaxInterval->mfXInterval,
                 -lpMinInterval->mfMinusYMaxInterval,
-                -lpMinInterval->mfMinusZMaxInterval,
-                0.0f,
-            };
+                -lpMinInterval->mfMinusZMaxInterval);
             lpDisplay->DrawBox(lMin, lMax, lColour);
         }
     }

@@ -77,14 +77,20 @@ namespace CgsCollision
         inline bool AllFiniteXYZ(const TLaneVector& lrV)
         {
             // x==x is false only for NaN (the console never tests the w lane).
-            return (lrV.x == lrV.x) && (lrV.y == lrV.y) && (lrV.z == lrV.z);
+            const f32 lfX = lrV.GetX();
+            const f32 lfY = lrV.GetY();
+            const f32 lfZ = lrV.GetZ();
+            return (lfX == lfX) && (lfY == lfY) && (lfZ == lfZ);
         }
 
         inline bool NormalNonDegenerate(const Vector3& lrV)
         {
-            const f32 lfAx = lrV.x < 0.0f ? -lrV.x : lrV.x;   // vandc sign clear
-            const f32 lfAy = lrV.y < 0.0f ? -lrV.y : lrV.y;
-            const f32 lfAz = lrV.z < 0.0f ? -lrV.z : lrV.z;
+            const f32 lfX = lrV.GetX();
+            const f32 lfY = lrV.GetY();
+            const f32 lfZ = lrV.GetZ();
+            const f32 lfAx = lfX < 0.0f ? -lfX : lfX;   // vandc sign clear
+            const f32 lfAy = lfY < 0.0f ? -lfY : lfY;
+            const f32 lfAz = lfZ < 0.0f ? -lfZ : lfZ;
             return (lfAx > KF_MIN_NORMAL_COMPONENT)
                 || (lfAy > KF_MIN_NORMAL_COMPONENT)
                 || (lfAz > KF_MIN_NORMAL_COMPONENT);
