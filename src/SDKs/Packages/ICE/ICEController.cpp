@@ -1,5 +1,5 @@
 // ICE controller lifecycle, cursor and zoom helpers. Native inheritance and
-// service wiring are recovered; the trailing controller layout remains incomplete.
+// service wiring and native tail representation are pinned in ICEController.hpp.
 
 #include "SDKs/Packages/ICE/ICEController.hpp"
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"   // ICE::ICEAuthor base methods (called on `this`)
@@ -17,8 +17,8 @@ static const f32 KF_ICE_PARAM_ENGAGE_THRESHOLD = 0.1f;
 
 // ---------------------------------------------------------------------------
 // Construct: ARTIST8253DA30 chains Author, binds bundle services, initializes
-// editor state and calls ConstructMenus. Tail field offsets remain incomplete;
-// the base call and service-prefix routing are independently validated.
+// editor state and calls ConstructMenus. The unobserved representation windows
+// have no per-Construct initialization, matching the native stores.
 // ---------------------------------------------------------------------------
 void ICEController::Construct(ICEPointers* lpICEPointers)
 {
@@ -28,7 +28,7 @@ void ICEController::Construct(ICEPointers* lpICEPointers)
     mpMenuB = lpICEPointers->mpICETimer;
     mpSubTakeSource = lpICEPointers->mpResourceManager;
 
-    // Zero the on-screen status-text block and the spare edit flag.
+    // Reset the counts, first format character and separate edit flag only.
     miStatusCount = 0;
     miStatusMode  = 0;
     miStatusText  = 0;

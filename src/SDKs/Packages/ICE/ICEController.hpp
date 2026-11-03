@@ -14,9 +14,10 @@
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidgetWideScrMarker.hpp" // ICE::ICEWidgetWideScrMarker (the letterbox marker)
 
 // ARTIST's controller derives from ICEAuthor (Construct calls the base at
-// 8253DA4C). Native prefix/contained-widget offsets are pinned below. The old
-// target-box gap and trailing status/tail declarations remain unrecovered;
-// no whole Controller or Manager extent is certified by these prefix gates.
+// 8253DA4C). Native offsets and the object-representation extent are pinned below.
+// The three unobserved tail windows preserve bytes bounded by independent native
+// accesses; their original declarations remain unknown. They add no initialization
+// or editor behavior and do not establish a status-string capacity.
 
 namespace ICE
 {
@@ -58,13 +59,16 @@ struct ICEController : public ICEAuthor
     f32 mfHudRectWidth;
     f32 mfHudRectHeight;
 
-    // Incomplete tail: fields below are in native order, but their absolute
-    // offsets are still early. The word at7200, the
-    // status-string capacity and7390..73B7 need further native evidence.
-    // No filler is introduced to force this tail or the overall extent to fit.
+    // ARTIST 825321AC ends the HUD rectangle at 7200; 8253DA84 stores the next
+    // named scalar at 7204. Only the full game zero-init touches these bytes.
+    u8 maUnobservedHudStatusStorage[0x04];       // native +7200..7203
     s32 miStatusCount;                           // native +7204
     s32 miStatusMode;                            // native +7208
-    char miStatusText;                           // native +720C first character only
+    char miStatusText;                           // native +720C first format character
+    // 8253DA8C clears only the first character; 8253DA90 stores the separate
+    // scalar at 724C. This preserves the intervening representation, without
+    // assigning it a string capacity or clearing it during Construct.
+    u8 maUnobservedStatusStorage[0x3F];           // native +720D..724B
     s32 miEditFlag724C;
     u8 miShowUi;
     u8 miFlagOrient;
@@ -78,6 +82,9 @@ struct ICEController : public ICEAuthor
     f32 mfBubbleRadius;
     f32 maChangeBuffer[KI_ICE_NUM_CHANGE_ELEMENTS]; // native +7268, joystick values
     f32 maRampAccum[KI_ICE_NUM_CHANGE_ELEMENTS];    // native +72FC, acceleration values
+    // Native description axes end at 36: the last active ramp ends at 7390.
+    // 8253DADC separately stores the timer at 73B8. No extra active entries.
+    u8 maUnobservedPostAccelerationStorage[0x28]; // native +7390..73B7
     s32 miMenuTimer;                            // native +73B8
     u8 miBarFlipLatch;                          // native +73BC (stb/lbz)
     u8 miBarFlipSub;                            // native +73BD
@@ -114,7 +121,7 @@ struct ICEController : public ICEAuthor
     bool AreMenusActive() const { return miState > 0; }
 };
 
-// Actual containment anchors. These do not certify the unresolved tail.
+// Native member accesses and independently bounded object-representation windows.
 CGS_STATIC_ASSERT((sizeof(ICEAuthor) == 0xF6C), "native author extent");
 CGS_STATIC_ASSERT((offsetof(ICEController, mEditTake) == 0x28), "native controller edit take");
 CGS_STATIC_ASSERT((offsetof(ICEController, mScratchTake) == 0x760), "native controller scratch take");
@@ -135,6 +142,28 @@ CGS_STATIC_ASSERT((offsetof(ICEController, mLogo) - offsetof(ICEController, mTar
                   "native target-to-logo widget delta");
 CGS_STATIC_ASSERT((offsetof(ICEController, mfHudRectX) == 0x71F0), "native HUD rectangle X");
 CGS_STATIC_ASSERT((offsetof(ICEController, mfHudRectHeight) == 0x71FC), "native HUD rectangle height");
+CGS_STATIC_ASSERT((offsetof(ICEController, maUnobservedHudStatusStorage) == 0x7200), "native controller maUnobservedHudStatusStorage");
+CGS_STATIC_ASSERT((offsetof(ICEController, miStatusCount) == 0x7204), "native controller miStatusCount");
+CGS_STATIC_ASSERT((offsetof(ICEController, miStatusMode) == 0x7208), "native controller miStatusMode");
+CGS_STATIC_ASSERT((offsetof(ICEController, miStatusText) == 0x720C), "native controller miStatusText");
+CGS_STATIC_ASSERT((offsetof(ICEController, maUnobservedStatusStorage) == 0x720D), "native controller maUnobservedStatusStorage");
+CGS_STATIC_ASSERT((offsetof(ICEController, miEditFlag724C) == 0x724C), "native controller miEditFlag724C");
+CGS_STATIC_ASSERT((offsetof(ICEController, miShowUi) == 0x7250), "native controller miShowUi");
+CGS_STATIC_ASSERT((offsetof(ICEController, mfCursorParam) == 0x7254), "native controller mfCursorParam");
+CGS_STATIC_ASSERT((offsetof(ICEController, mfCursorRatio) == 0x7258), "native controller mfCursorRatio");
+CGS_STATIC_ASSERT((offsetof(ICEController, mfBarFade) == 0x725C), "native controller mfBarFade");
+CGS_STATIC_ASSERT((offsetof(ICEController, mi16BubbleYaw) == 0x7260), "native controller mi16BubbleYaw");
+CGS_STATIC_ASSERT((offsetof(ICEController, mi16BubblePitch) == 0x7262), "native controller mi16BubblePitch");
+CGS_STATIC_ASSERT((offsetof(ICEController, mfBubbleRadius) == 0x7264), "native controller mfBubbleRadius");
+CGS_STATIC_ASSERT((offsetof(ICEController, maChangeBuffer) == 0x7268), "native controller maChangeBuffer");
+CGS_STATIC_ASSERT((offsetof(ICEController, maRampAccum) == 0x72FC), "native controller maRampAccum");
+CGS_STATIC_ASSERT((offsetof(ICEController, maUnobservedPostAccelerationStorage) == 0x7390), "native controller maUnobservedPostAccelerationStorage");
+CGS_STATIC_ASSERT((offsetof(ICEController, miMenuTimer) == 0x73B8), "native controller miMenuTimer");
+CGS_STATIC_ASSERT((offsetof(ICEController, miBarFlipLatch) == 0x73BC), "native controller miBarFlipLatch");
+CGS_STATIC_ASSERT((offsetof(ICEController, miBarFlipSub) == 0x73BD), "native controller miBarFlipSub");
+CGS_STATIC_ASSERT((offsetof(ICEController, mfMarkIn) == 0x73C0), "native controller mfMarkIn");
+CGS_STATIC_ASSERT((offsetof(ICEController, mfMarkOut) == 0x73C4), "native controller mfMarkOut");
+CGS_STATIC_ASSERT((sizeof(ICEController) == 0x73D0), "native controller representation extent");
 CGS_STATIC_ASSERT((offsetof(ICEController, maRampAccum) == offsetof(ICEController, maChangeBuffer) +
                   sizeof(((ICEController*)0)->maChangeBuffer)), "distinct adjacent native velocity banks");
 CGS_STATIC_ASSERT((sizeof(((ICEController*)0)->miShowUi) == 1), "native UI flag width");

@@ -56,7 +56,8 @@
 //       placed at +0x1D00 per its DWARF position after mpICEMemory. The 12-byte gap
 //       to the controller (+0x1D04..+0x1D0C) is left as an explicit alignment/pad
 //       region -- no member is invented for it (none is attested).
-// FLAG: ICEController mController is a MINIMAL SLICE (see ICEController.hpp).
+// ICEController retains independently bounded unobserved representation windows;
+// their original private declarations remain unknown (see ICEController.hpp).
 // ============================================================================
 
 namespace ICE
@@ -149,6 +150,8 @@ public:
     f32  GetCurrentTakeParameter();
     void AddShakeTake(ICETakeData* lpTakeData);
 };
+
+CGS_STATIC_ASSERT((sizeof(ICEManager) == 0x90E0), "native ICE manager containment extent");
 
 } // namespace ICE
 
