@@ -2,7 +2,6 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"               // CgsDev::Log::WriteToLog ([calib-screen] trace)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // CgsResource::Events::AcquireResourceResponse
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiOptionsBrightnessContrastPostFxControl
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
@@ -99,7 +98,7 @@ void ColourCalibrationScreen::RecvEvent(const CgsModule::Event* lpEvent, s32 liI
     else if (liId == 515)
     {
         meState = E_COLOURCALIBRATIONSCREENSTATE_PREPARE_TO_HIDE;
-        CgsDev::Log::WriteToLog("[calib-screen] hide requested (GUI 515)\n");
+
     }
 }
 
@@ -179,7 +178,7 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
 
         mpTextureState = renderengine::TextureState::Initialize(mTextureStateResource,
                                                                 lTextureStateParameters);
-        CgsDev::Log::WriteToLog("[calib-screen] calibration texture acquired\n");
+
     }
         // FALLTHROUGH (the X360 case-2 body runs straight into the PREPARED publish).
     case E_COLOURCALIBRATIONSCREENSTATE_PREPARED:
@@ -201,7 +200,7 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         lpGuiOutput->AddGuiOutEvent(lControl);
 
         meState = E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED;
-        CgsDev::Log::WriteToLog("[calib-screen] hidden -- post-fx restored\n");
+
         break;
     }
 

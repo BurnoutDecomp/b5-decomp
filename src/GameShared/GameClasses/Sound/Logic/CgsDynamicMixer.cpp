@@ -95,7 +95,8 @@ int DynamicMixer::DMixPrintf(const char* apFormat, ...)
     va_end(lArgs);
     CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacText)),
                "lNumBytesCopied<(int32_t)luBytes");
-    CgsDev::Log::WriteToLog(lacText);
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << lacText;
     return 0;
 }
 

@@ -281,20 +281,7 @@ namespace BrnGui
         // 0x824CC758 loaded r3 = this + 0x6168 (24936) for the tail call.
         mCreatedRace.Construct();
 
-        // ⛔⛔ PC BRING-UP ESCAPE HATCH (1 of 3) -- NOT CONSOLE BEHAVIOUR. One line, once
-        // per run, so that "the map-event screen was actually entered" is visible in
-        // BrnGame.log while the console's own exit path is inert (see the file banner).
-        // Delete with the other two blocks in Update.
-        {
-            static bool sbLoggedEntry = false;
-            if (!sbLoggedEntry)
-            {
-                sbLoggedEntry = true;
-                CgsDev::Log::WriteToLog(
-                    "[p0-mapevent] CrashNavMapEvent::OnEnter -- real screen state entered "
-                    "(Start/Back leaves via the fenced bring-up arm).\n");
-            }
-        }
+
     }
 
     // =================================================================================
@@ -511,10 +498,7 @@ namespace BrnGui
             // The WHOLE 16-byte lane, w included, not a three-component narrow -- the
             // console moves it as one quadword.
             const Vector4& lrv4Lane = lSatNavInfo.GetPositionLane();
-            lrItem.mv3Position.x = lrv4Lane.x;
-            lrItem.mv3Position.y = lrv4Lane.y;
-            lrItem.mv3Position.z = lrv4Lane.z;
-            lrItem.mv3Position.w = lrv4Lane.w;
+            lrItem.mv3Position.SetVector(lrv4Lane.GetVector());
             lrItem.mTargetLandmarkIndex =
                 static_cast<u16>(lSatNavInfo.GetLandmarkIndexHalf());
         }
@@ -701,15 +685,7 @@ namespace BrnGui
                     mi8NextEventIndex    = 0;
                 }
             }
-            else if (liEventId == KI_EVENT_CONTROLLER_INPUT_PRESSED)
-            {
-                // ⛔⛔ PC BRING-UP ESCAPE HATCH (2 of 3) -- NOT CONSOLE BEHAVIOUR. The
-                // console registers for event 6 (it is maiEventToObserve[2]) and then
-                // drops it: this screen never overrides the HandleCrashNavInputPressed
-                // vtable slot, so the base's empty one runs. Delete with the other two.
-                const GuiControllerInputPressedPayload* lpInput =
-                    static_cast<const GuiControllerInputPressedPayload*>(lpEvent);
-            }
+
         }
 
         // ---- the name dialog came back ----------------------------------------------
@@ -748,13 +724,7 @@ namespace BrnGui
 
         lpInQueue->Clear();
 
-        // ⛔⛔ PC BRING-UP ESCAPE HATCH (3 of 3) -- NOT CONSOLE BEHAVIOUR. Start/Back leaves
-        // the screen the same way CrashNavMapMain's 45/50 arm does; OnLeave already posts
-        // the crash-nav re-activate, so a bare GO_BACK resumes the world. Gated on the
-        // tracker being INACTIVE: once a preset-race producer lands and the console's own
-        // exit (HandleSelect) is reachable, this block must not fire beside it (it would
-        // double the GO_BACK and let Start/Back abort an in-progress authoring stage).
-        // Delete with the other two blocks.
+
     }
 
     // =================================================================================

@@ -1,3 +1,4 @@
+#include <float.h>
 #include "GameSource/Gui/Flow/HUD/States/BrnFBurnMainHudState.h"
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
@@ -187,31 +188,7 @@ namespace BrnGui
             return lpGuiCache->GetGameMode();
         }
 
-        // One-shot deferral log: the un-reconstructed component TUs this state drives.
-        // Slice-B reconstruction replaces each call site; until then the gap stays
-        // visible in the log instead of silently vanishing.
-        void LogDeferredComponent(const char* lpacComponent)
-        {
-            static bool sbLogged[8];
-            static const char* sapcNames[8];
-            for (s32 li = 0; li < 8; ++li)
-            {
-                if (sapcNames[li] == lpacComponent)
-                    return;
-                if (sapcNames[li] == 0)
-                {
-                    sapcNames[li] = lpacComponent;
-                    sbLogged[li]  = true;
-                    char lac[128];
-                    std::snprintf(lac, sizeof(lac),
-                                  "[FBurnMainHud] %s -- component TU deferred (Slice B).\n",
-                                  lpacComponent);
-                    CgsDev::Log::WriteToLog(lac);
-                    return;
-                }
-            }
-            (void)sbLogged;
-        }
+
     }
 
     // =======================================================================
@@ -505,18 +482,8 @@ namespace BrnGui
     //  Update -- the phase dispatch (header-inline on X360, not exported; composed
     //  from the phase bodies' advance returns; UpdatePermenant runs every frame)
     // =======================================================================
-    // Stage-transition log (the [BootLegal]/[BootProfile]-style diagnostic every boot/HUD
-    // state carries).
-    static void LogFBurnStage(s32 liFrom, s32 liTo)
-    {
-        char lac[64];
-        std::snprintf(lac, sizeof(lac), "[FBurnMainHud] stage %d -> %d\n", liFrom, liTo);
-        CgsDev::Log::WriteToLog(lac);
-    }
-
     void FBurnMainHudState::Update()
     {
-        const EInternalState lePrevState = meInternalState;
         switch (meInternalState)
         {
         case E_INTERNALSTATE_SETUP:
@@ -537,8 +504,6 @@ namespace BrnGui
         default:
             break;
         }
-        if (meInternalState != lePrevState)
-            LogFBurnStage(lePrevState, meInternalState);
 
         UpdatePermenant();
 
@@ -579,7 +544,7 @@ namespace BrnGui
 
         // The pause gate: no live game mode and no override -> hand the FSM "PAUSE"
         // (X360 cache words +19256 / +80784).
-        if (GuiCache_GetGameModeWord(mpGuiCache) == -1 && !GuiCache_GetPauseOverride(mpGuiCache))
+        if (mpGuiCache->GetGameMode() == -1 && !mpGuiCache->IsLoadingScreenVisible())
         {
             SendStateEvent("PAUSE");
             return false;
@@ -715,12 +680,7 @@ namespace BrnGui
         // GATE: ENGINE_ON composes the HUD visible, ENGINE_OFF parks the master
         // "EventHud_Animator" on its invisible transition frame and leaves it there.
         const s32 liEngineState = GuiCache_GetPlayerEngineState(mpGuiCache);
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[hud-reveal] UpdateWFInit engineState=" << liEngineState
-                << (liEngineState == 1 ? " -> compose VISIBLE\n" : " -> compose INVISIBLE\n");
-        }
+
         CGS_ASSERT(liEngineState < 2,
                    "( GuiPlayerEngineEvent::E_ENGINE_OFF == mpCache->GetPlayerEngineState( )) || ( GuiPlayerEngineEvent::E_ENGINE_ON == mpCache->GetPlayerEngineState( ))");   // cpp:1536
 
@@ -1100,14 +1060,7 @@ namespace BrnGui
                                 reinterpret_cast<const CgsModule::Event*>(&lTrophyCarUnlockRecord),
                                 KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lTrophyCarUnlockRecord)));
 
-                            static s32 siTrophyDiagLinesLeft = 8;
-                            if (sbTrophyDiag && siTrophyDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                            {
-                                --siTrophyDiagLinesLeft;
-                                *CgsDev::Log::gpDebugPrint
-                                    << "[trophy] scan raised gui 375 type " << static_cast<s32>(leUnlockType)
-                                    << " index " << static_cast<s32>(luIndex) << "\n";
-                            }
+
                             break;
                         }
                     }
@@ -1222,7 +1175,7 @@ namespace BrnGui
         if (mbRoadRulesEnabled)
         {
             const f32 lfTimeNow = mpGuiCache->GetTime();
-            CGS_ASSERT(lfTimeNow != -3.4028235e38f, "mfTimeNow!=-FLT_MAX");   // CgsGuiEventTypeDefs.h:250
+            CGS_ASSERT(lfTimeNow != -FLT_MAX, "mfTimeNow!=-FLT_MAX");   // CgsGuiEventTypeDefs.h:250
             mRoadRuleComponent.Update(lfTimeNow);   // [H2] the per-frame crash-score / leader tick
         }
         if (mbOdometerEnabled)
@@ -1232,7 +1185,7 @@ namespace BrnGui
         if (mbPpToggleEnabled && mbPpToggleActive)
         {
             const f32 lfTimeNow = mpGuiCache->GetTime();
-            CGS_ASSERT(lfTimeNow != -3.4028235e38f, "mfTimeNow!=-FLT_MAX");
+            CGS_ASSERT(lfTimeNow != -FLT_MAX, "mfTimeNow!=-FLT_MAX");
             if (lfTimeNow > mfPpToggleNextTime)
             {
                 mIdentAnimator.Run("invisible");
@@ -1304,27 +1257,11 @@ namespace BrnGui
                 }
                 break;
             case 377:
-                // [crash-hud] delivery witness. NOT X360. One-shot; proves the producer's event
-                // actually REACHES this consumer and which arm it takes.
-                {
-                    static bool sbSeen377 = false;
-                    if (!sbSeen377 && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbSeen377 = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[crash-hud] FBurnMainHudState received GUI 377, payload="
-                            << lpiPayload[0] << "\n";
-                    }
-                }
                 if (lpiPayload[0] == 0 || lpiPayload[0] == 2)
                 {
                     if (mbFriendsListEnabled)
                         mFriendsList.SaveCurrentState();
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[crash-hud] SendStateEvent(\"START_CRASH\")\n";
-                    }
+
                     SendStateEvent("START_CRASH");
                 }
                 break;
@@ -1339,11 +1276,7 @@ namespace BrnGui
             // vector (the operand Hex-Rays drops; taken from the asm) into
             // UpdateRoadSignDistances.
             const Vector4& lv4Camera = mpGuiCache->GetWorldCameraPosition();
-            Vector3 lv3Camera;
-            lv3Camera.x = lv4Camera.x;
-            lv3Camera.y = lv4Camera.y;
-            lv3Camera.z = lv4Camera.z;
-            lv3Camera.w = lv4Camera.w;
+            Vector3 lv3Camera(lv4Camera.GetVector());
             mRoadRuleComponent.UpdateRoadSignDistances(lv3Camera);
         }
         if (mbFriendsListEnabled && mpGuiCache != 0)
