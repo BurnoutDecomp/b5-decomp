@@ -22,70 +22,91 @@ namespace Vehicle
 {
     namespace
     {
+        Vector3 MakeVector3FromLanes(float lfX, float lfY, float lfZ, float lfW)
+        {
+            Vector3 lResult;
+            rw::math::vpu::VectorIntrinsic& lvValue = lResult.GetVector();
+            lvValue.v[0] = lfX;
+            lvValue.v[1] = lfY;
+            lvValue.v[2] = lfZ;
+            lvValue.v[3] = lfW;
+            return lResult;
+        }
+
         float ControlsFlush(float lfValue)
         {
-            return std::fpclassify(lfValue) == FP_SUBNORMAL
-                ? std::copysign(0.0f, lfValue) : lfValue;
+            union FloatBits
+            {
+                float mfValue;
+                u32 muBits;
+            } lBits;
+            lBits.mfValue = lfValue;
+            if ((lBits.muBits & 0x7F800000u) == 0u && (lBits.muBits & 0x007FFFFFu) != 0u)
+                lBits.muBits &= 0x80000000u;
+            return lBits.mfValue;
         }
 
         float ControlsMultiplyAdd(float lfA, float lfB, float lfC)
         {
-            return ControlsFlush(std::fmaf(ControlsFlush(lfA), ControlsFlush(lfB), ControlsFlush(lfC)));
+            return ControlsFlush(rw::math::vpu::SLerpDetail::MultiplyAdd(
+                ControlsFlush(lfA), ControlsFlush(lfB), ControlsFlush(lfC)));
         }
 
         Vector3 ControlsScale(Vector3 lvValue, float lfScale)
         {
             lfScale = ControlsFlush(lfScale);
-            { const Vector3 lResult = {ControlsFlush(ControlsFlush(lvValue.x) * lfScale),
-                           ControlsFlush(ControlsFlush(lvValue.y) * lfScale),
-                           ControlsFlush(ControlsFlush(lvValue.z) * lfScale),
-                           ControlsFlush(ControlsFlush(lvValue.w) * lfScale)}; return lResult; }
+            return MakeVector3FromLanes(ControlsFlush(ControlsFlush(lvValue.GetVector().x) * lfScale),
+                           ControlsFlush(ControlsFlush(lvValue.GetVector().y) * lfScale),
+                           ControlsFlush(ControlsFlush(lvValue.GetVector().z) * lfScale),
+                           ControlsFlush(ControlsFlush(lvValue.GetVector().w) * lfScale));
         }
 
         Vector3 ControlsScaleAdd(Vector3 lvValue, float lfScale, Vector3 lvBase)
         {
-            { const Vector3 lResult = {ControlsMultiplyAdd(lvValue.x, lfScale, lvBase.x),
-                           ControlsMultiplyAdd(lvValue.y, lfScale, lvBase.y),
-                           ControlsMultiplyAdd(lvValue.z, lfScale, lvBase.z),
-                           ControlsMultiplyAdd(lvValue.w, lfScale, lvBase.w)}; return lResult; }
+            return MakeVector3FromLanes(ControlsMultiplyAdd(lvValue.GetVector().x, lfScale, lvBase.GetVector().x),
+                           ControlsMultiplyAdd(lvValue.GetVector().y, lfScale, lvBase.GetVector().y),
+                           ControlsMultiplyAdd(lvValue.GetVector().z, lfScale, lvBase.GetVector().z),
+                           ControlsMultiplyAdd(lvValue.GetVector().w, lfScale, lvBase.GetVector().w));
         }
 
         Vector3 ControlsAdd(Vector3 lvA, Vector3 lvB)
         {
-            { const Vector3 lResult = {ControlsFlush(ControlsFlush(lvA.x) + ControlsFlush(lvB.x)),
-                           ControlsFlush(ControlsFlush(lvA.y) + ControlsFlush(lvB.y)),
-                           ControlsFlush(ControlsFlush(lvA.z) + ControlsFlush(lvB.z)),
-                           ControlsFlush(ControlsFlush(lvA.w) + ControlsFlush(lvB.w))}; return lResult; }
+            return MakeVector3FromLanes(ControlsFlush(ControlsFlush(lvA.GetVector().x) + ControlsFlush(lvB.GetVector().x)),
+                           ControlsFlush(ControlsFlush(lvA.GetVector().y) + ControlsFlush(lvB.GetVector().y)),
+                           ControlsFlush(ControlsFlush(lvA.GetVector().z) + ControlsFlush(lvB.GetVector().z)),
+                           ControlsFlush(ControlsFlush(lvA.GetVector().w) + ControlsFlush(lvB.GetVector().w)));
         }
 
         Vector3 ControlsSubtract(Vector3 lvA, Vector3 lvB)
         {
-            { const Vector3 lResult = {ControlsFlush(ControlsFlush(lvA.x) - ControlsFlush(lvB.x)),
-                           ControlsFlush(ControlsFlush(lvA.y) - ControlsFlush(lvB.y)),
-                           ControlsFlush(ControlsFlush(lvA.z) - ControlsFlush(lvB.z)),
-                           ControlsFlush(ControlsFlush(lvA.w) - ControlsFlush(lvB.w))}; return lResult; }
+            return MakeVector3FromLanes(ControlsFlush(ControlsFlush(lvA.GetVector().x) - ControlsFlush(lvB.GetVector().x)),
+                           ControlsFlush(ControlsFlush(lvA.GetVector().y) - ControlsFlush(lvB.GetVector().y)),
+                           ControlsFlush(ControlsFlush(lvA.GetVector().z) - ControlsFlush(lvB.GetVector().z)),
+                           ControlsFlush(ControlsFlush(lvA.GetVector().w) - ControlsFlush(lvB.GetVector().w)));
         }
 
         float ControlsNegativeMultiplySubtract(float lfA, float lfB, float lfC)
         {
             const float lfDifference = ControlsFlush(
-                std::fmaf(ControlsFlush(lfA), ControlsFlush(lfB), -ControlsFlush(lfC)));
+                rw::math::vpu::SLerpDetail::MultiplyAdd(
+                    ControlsFlush(lfA), ControlsFlush(lfB), -ControlsFlush(lfC)));
             return lfDifference != lfDifference ? lfDifference : -lfDifference;
         }
 
         Vector3 ConeCross(Vector3 lvA, Vector3 lvB)
         {
-            { const Vector3 lResult = {
-                ControlsNegativeMultiplySubtract(lvA.z, lvB.y, ControlsFlush(ControlsFlush(lvA.y) * ControlsFlush(lvB.z))),
-                ControlsNegativeMultiplySubtract(lvA.x, lvB.z, ControlsFlush(ControlsFlush(lvA.z) * ControlsFlush(lvB.x))),
-                ControlsNegativeMultiplySubtract(lvA.y, lvB.x, ControlsFlush(ControlsFlush(lvA.x) * ControlsFlush(lvB.y))),
-                ControlsNegativeMultiplySubtract(lvA.w, lvB.w, ControlsFlush(ControlsFlush(lvA.w) * ControlsFlush(lvB.w)))}; return lResult; }
+            return MakeVector3FromLanes(
+                ControlsNegativeMultiplySubtract(lvA.GetVector().z, lvB.GetVector().y, ControlsFlush(ControlsFlush(lvA.GetVector().y) * ControlsFlush(lvB.GetVector().z))),
+                ControlsNegativeMultiplySubtract(lvA.GetVector().x, lvB.GetVector().z, ControlsFlush(ControlsFlush(lvA.GetVector().z) * ControlsFlush(lvB.GetVector().x))),
+                ControlsNegativeMultiplySubtract(lvA.GetVector().y, lvB.GetVector().x, ControlsFlush(ControlsFlush(lvA.GetVector().x) * ControlsFlush(lvB.GetVector().y))),
+                ControlsNegativeMultiplySubtract(lvA.GetVector().w, lvB.GetVector().w, ControlsFlush(ControlsFlush(lvA.GetVector().w) * ControlsFlush(lvB.GetVector().w))));
         }
 
         Vector3 NormalizeConeBasis(Vector3 lvValue)
         {
-            const Vector3 lvFlushed{ControlsFlush(lvValue.x), ControlsFlush(lvValue.y),
-                                    ControlsFlush(lvValue.z), ControlsFlush(lvValue.w)};
+            const Vector3 lvFlushed = MakeVector3FromLanes(
+                ControlsFlush(lvValue.GetVector().x), ControlsFlush(lvValue.GetVector().y),
+                ControlsFlush(lvValue.GetVector().z), ControlsFlush(lvValue.GetVector().w));
             const float lfLengthSquared = rw::math::vpu::SLerpDetail::Dot3(lvFlushed, lvFlushed);
             // ARTIST 0x825CA0EC..110 / 128..14C and its alternate arm:
             // two rsqrt refinements, with NO zero-vector fallback.
@@ -104,24 +125,26 @@ namespace Vehicle
         CGS_ASSERT(lpControls != 0, "lpControls"); // :695
         CGS_ASSERT(lpDisplay != 0, "lpDisplay");   // :696
 
-        const Vector3 lvCentre = ControlsAdd(lvPosition, Vector3{0.0f, 2.5f, 0.0f, 0.0f});
+        const Vector3 lvCentre = ControlsAdd(lvPosition, Vector3(0.0f, 2.5f, 0.0f));
         const Matrix44 lViewProjection = lpDisplay->GetViewProjectionMatrix();
-        const float lfClipZ = ControlsMultiplyAdd(lViewProjection.zAxis.z, lvCentre.z,
-            ControlsMultiplyAdd(lViewProjection.yAxis.z, lvCentre.y,
-                ControlsMultiplyAdd(lViewProjection.xAxis.z, lvCentre.x, lViewProjection.wAxis.z)));
+        const float lfClipZ = ControlsMultiplyAdd(lViewProjection.zAxis.GetVector().z, lvCentre.GetVector().z,
+            ControlsMultiplyAdd(lViewProjection.yAxis.GetVector().z, lvCentre.GetVector().y,
+                ControlsMultiplyAdd(lViewProjection.xAxis.GetVector().z, lvCentre.GetVector().x, lViewProjection.wAxis.GetVector().z)));
         if (0.001f > lfClipZ) // equality and unordered values continue, as vcmpgtfp does
             return;
 
-        VecFloat lvfDeterminant;
+        Vector4 lvfDeterminant;
         const Matrix44 lInverse = rw::math::vpu::Inverse(lViewProjection, lvfDeterminant);
         const Vector2 lvScreenSize = lpDisplay->GetVirtualScreenSize();
         // 0x825CA4C4..0x825CA4D8: vrefp plus TWO unguarded Newton steps,
         // then a separately rounded multiply by the screen height.
         const float lfAspect = ControlsFlush(
-            rw::math::vpu::SLerpDetail::RefinedReciprocal(lvScreenSize.x, 2) * ControlsFlush(lvScreenSize.y));
+            rw::math::vpu::SLerpDetail::RefinedReciprocal(lvScreenSize.mV.x, 2) * ControlsFlush(lvScreenSize.mV.y));
         const Vector3 lvRight = ControlsScale(
-            Vector3{lInverse.xAxis.x, lInverse.xAxis.y, lInverse.xAxis.z, lInverse.xAxis.w}, lfAspect);
-        const Vector3 lvUp{lInverse.yAxis.x, lInverse.yAxis.y, lInverse.yAxis.z, lInverse.yAxis.w};
+            MakeVector3FromLanes(lInverse.xAxis.GetVector().x, lInverse.xAxis.GetVector().y,
+                                 lInverse.xAxis.GetVector().z, lInverse.xAxis.GetVector().w), lfAspect);
+        const Vector3 lvUp = MakeVector3FromLanes(lInverse.yAxis.GetVector().x, lInverse.yAxis.GetVector().y,
+                                                  lInverse.yAxis.GetVector().z, lInverse.yAxis.GetVector().w);
 
         rw::RGBA lBackground, lSteeringColour, lBrakeColour, lGasColour;
         lBackground.m_rgba = 0xFF008CB4u;     // dword_82FBA074
@@ -323,9 +346,9 @@ namespace Vehicle
         Vector3 lImpulse = lpAirRam->mImpulse;
         if (lpAirRam->meImpulseSpace == rw::physics::BODY_SPACE)
         {
-            lImpulse = ControlsScaleAdd(lVehicleTransform.zAxis, lImpulse.z,
-                ControlsScaleAdd(lVehicleTransform.yAxis, lImpulse.y,
-                    ControlsScale(lVehicleTransform.xAxis, lImpulse.x)));
+            lImpulse = ControlsScaleAdd(lVehicleTransform.zAxis, lImpulse.GetVector().z,
+                ControlsScaleAdd(lVehicleTransform.yAxis, lImpulse.GetVector().y,
+                    ControlsScale(lVehicleTransform.xAxis, lImpulse.GetVector().x)));
         }
         else
         {
@@ -335,8 +358,9 @@ namespace Vehicle
 
         // 0x825EDBD4..0x825EDC40: vmsum3fp128, two rsqrt refinements,
         // then |impulse| = squaredLength * inverseLength, with vsel zero.
-        const Vector3 lvFlushedImpulse{ControlsFlush(lImpulse.x), ControlsFlush(lImpulse.y),
-                                       ControlsFlush(lImpulse.z), ControlsFlush(lImpulse.w)};
+        const Vector3 lvFlushedImpulse = MakeVector3FromLanes(
+            ControlsFlush(lImpulse.GetVector().x), ControlsFlush(lImpulse.GetVector().y),
+            ControlsFlush(lImpulse.GetVector().z), ControlsFlush(lImpulse.GetVector().w));
         const f32 lfLengthSquared = rw::math::vpu::SLerpDetail::Dot3(lvFlushedImpulse, lvFlushedImpulse);
         const f32 lfInverseLength = rw::math::vpu::SLerpDetail::RefinedReciprocalSqrt(lfLengthSquared, 2);
         const f32 lfMagnitude = lfLengthSquared == 0.0f ? 0.0f
@@ -348,11 +372,12 @@ namespace Vehicle
         // 0x825EDD60/80 negates the NORMALIZED impulse via sign-bit XOR.
         // The Normalize itself has no zero guard after the visibility gate.
         const Vector3 lvNormalizedImpulse = ControlsScale(lImpulse, lfInverseLength);
-        const Vector3 lDirection{-lvNormalizedImpulse.x, -lvNormalizedImpulse.y,
-                                  -lvNormalizedImpulse.z, -lvNormalizedImpulse.w};
-        const Vector3 lStart = ControlsScaleAdd(lVehicleTransform.zAxis, lpAirRam->mPosition.z,
-            ControlsScaleAdd(lVehicleTransform.yAxis, lpAirRam->mPosition.y,
-                ControlsScaleAdd(lVehicleTransform.xAxis, lpAirRam->mPosition.x, lVehicleTransform.wAxis)));
+        const Vector3 lDirection = MakeVector3FromLanes(
+            -lvNormalizedImpulse.GetVector().x, -lvNormalizedImpulse.GetVector().y,
+            -lvNormalizedImpulse.GetVector().z, -lvNormalizedImpulse.GetVector().w);
+        const Vector3 lStart = ControlsScaleAdd(lVehicleTransform.zAxis, lpAirRam->mPosition.GetVector().z,
+            ControlsScaleAdd(lVehicleTransform.yAxis, lpAirRam->mPosition.GetVector().y,
+                ControlsScaleAdd(lVehicleTransform.xAxis, lpAirRam->mPosition.GetVector().x, lVehicleTransform.wAxis)));
         // 0x825EDD08..6C takes ANOTHER square root of |impulse| before
         // the scale multiply, and 0x825EDCC4/0x825EDD68 use eight degrees.
         const f32 lfMagnitudeRoot = lfMagnitude == 0.0f ? 0.0f
@@ -360,8 +385,8 @@ namespace Vehicle
         const f32 lfConeLength = ControlsFlush(ControlsFlush(lfScale) * lfMagnitudeRoot);
         const f32 lfConeTheta = 8.0f * 0.01745329238474369f; // flt_82004C88 * flt_8208F5F4
         const rw::RGBA lColour(0xB4, 0xB4, 0xFF, 0x96); // 0x96FFB4B4, renderer's packed low-red order
-        const VecFloat lvfLength{lfConeLength, lfConeLength, lfConeLength, lfConeLength};
-        const VecFloat lvfTheta{lfConeTheta, lfConeTheta, lfConeTheta, lfConeTheta};
+        const VecFloat lvfLength(lfConeLength);
+        const VecFloat lvfTheta(lfConeTheta);
         RenderCone(lStart, lDirection, lvfLength, lColour.m_rgba, lvfTheta, lpDisplay);
     }
 
@@ -376,32 +401,32 @@ namespace Vehicle
         CGS_ASSERT(rw::math::vpu::IsValid(lvConeStart), "IsValid( lConeStart )"); // :618
         CGS_ASSERT(rw::math::vpu::IsValid(lvConeDirection), "IsValid( lConeDir )"); // :619
         // 0x825C9FD4/0x825CA008 compare the WHOLE VecFloat register with itself.
-        CGS_ASSERT(lvfConeLength.x == lvfConeLength.x && lvfConeLength.y == lvfConeLength.y
-                   && lvfConeLength.z == lvfConeLength.z && lvfConeLength.w == lvfConeLength.w,
+        CGS_ASSERT(lvfConeLength.GetVector().x == lvfConeLength.GetVector().x && lvfConeLength.GetVector().y == lvfConeLength.GetVector().y
+                   && lvfConeLength.GetVector().z == lvfConeLength.GetVector().z && lvfConeLength.GetVector().w == lvfConeLength.GetVector().w,
                    "IsValid( lfConeLength )"); // :620
-        CGS_ASSERT(lvfTheta.x == lvfTheta.x && lvfTheta.y == lvfTheta.y
-                   && lvfTheta.z == lvfTheta.z && lvfTheta.w == lvfTheta.w,
+        CGS_ASSERT(lvfTheta.GetVector().x == lvfTheta.GetVector().x && lvfTheta.GetVector().y == lvfTheta.GetVector().y
+                   && lvfTheta.GetVector().z == lvfTheta.GetVector().z && lvfTheta.GetVector().w == lvfTheta.GetVector().w,
                    "IsValid( lfTheta )"); // :621
         CGS_ASSERT(lpDisplay != 0, "lpDisplay"); // :622
 
         // The original tests the absolute direction dot with global Y against 0.9. It uses Y as
         // the first basis when the direction is not near vertical and X in the near-parallel arm.
-        const f32 lfDotY = rw::math::vpu::SLerpDetail::Dot3(lvConeDirection, Vector3{0.0f, 1.0f, 0.0f, 0.0f});
+        const f32 lfDotY = rw::math::vpu::SLerpDetail::Dot3(lvConeDirection, Vector3(0.0f, 1.0f, 0.0f));
         const bool lbUseY = 0.9f > std::fabs(lfDotY); // ordered compare: unordered takes the X arm
         Vector3 lBasisA, lBasisB;
         if (lbUseY)
         {
-            lBasisB = NormalizeConeBasis(ConeCross(lvConeDirection, Vector3{0.0f, 1.0f, 0.0f, 0.0f}));
+            lBasisB = NormalizeConeBasis(ConeCross(lvConeDirection, Vector3(0.0f, 1.0f, 0.0f)));
             lBasisA = NormalizeConeBasis(ConeCross(lBasisB, lvConeDirection));
         }
         else
         {
-            lBasisA = NormalizeConeBasis(ConeCross(Vector3{1.0f, 0.0f, 0.0f, 0.0f}, lvConeDirection));
+            lBasisA = NormalizeConeBasis(ConeCross(Vector3(1.0f, 0.0f, 0.0f), lvConeDirection));
             lBasisB = NormalizeConeBasis(ConeCross(lvConeDirection, lBasisA));
         }
 
-        const f32 lfRadius = ControlsFlush(lvfConeLength.x * XboxMath::XMVectorTan(lvfTheta.x));
-        const Vector3 lBaseCentre = ControlsScaleAdd(lvConeDirection, lvfConeLength.x, lvConeStart);
+        const f32 lfRadius = ControlsFlush(lvfConeLength.GetVector().x * XboxMath::XMVectorTan(lvfTheta.GetVector().x));
+        const Vector3 lBaseCentre = ControlsScaleAdd(lvConeDirection, lvfConeLength.GetVector().x, lvConeStart);
         const Vector3 lBasisAOffset = ControlsScale(lBasisA, lfRadius);
         const Vector3 lBasisBOffset = ControlsScale(lBasisB, lfRadius);
         const Vector3 lCornerA = ControlsAdd(lBaseCentre, lBasisAOffset);
@@ -460,7 +485,7 @@ namespace Vehicle
             lpTrafficManager->GetTrafficVehicle(liTraffic)->mpVehicleBody;
         Matrix44Affine lGraphicsTransform = lpTrafficPhysics->GetGraphicsVehicleTransform();
         {
-            const Vector3 lAggregateValue = { 3355.0f, 6.0f, -1378.8f, 0.0f };
+        const Vector3 lAggregateValue( 3355.0f, 6.0f, -1378.8f );
             lGraphicsTransform.wAxis = lAggregateValue;
         }
         lpTrafficPhysics->SetGraphicsVehicleTransform(lGraphicsTransform);
@@ -480,15 +505,15 @@ namespace Vehicle
         CgsGeometric::Box lSimpleTrafficBox;
         lpTrafficPhysics->GetSimpleVehicleBox(lSimpleTrafficBox);
         const Vector3 lvBoxHalfExtents = lSimpleTrafficBox.GetDimensions();
-        const Vector3 lvBoxInf{ -lvBoxHalfExtents.x, -lvBoxHalfExtents.y,
-                                -lvBoxHalfExtents.z, 0.0f };
-        const Vector3 lvBoxSup{ lvBoxHalfExtents.x, lvBoxHalfExtents.y,
-                                lvBoxHalfExtents.z, 0.0f };
+        const Vector3 lvBoxInf( -lvBoxHalfExtents.GetVector().x, -lvBoxHalfExtents.GetVector().y,
+                                -lvBoxHalfExtents.GetVector().z );
+        const Vector3 lvBoxSup( lvBoxHalfExtents.GetVector().x, lvBoxHalfExtents.GetVector().y,
+                                lvBoxHalfExtents.GetVector().z );
         lpDisplay->DrawBox(lvBoxInf, lvBoxSup, lSimpleTrafficBox.GetTransform(),
                            rw::RGBA(255, 255, 255, 255));
 
         const Matrix44Affine lGraphicsTransform = lpTrafficPhysics->GetGraphicsVehicleTransform();
-        const f32 lfHalfLength = lpTrafficPhysics->GetHalfExtent().z;
+        const f32 lfHalfLength = lpTrafficPhysics->GetHalfExtent().GetVector().z;
         const Vector3 lvArrowStart = ControlsScaleAdd(lGraphicsTransform.zAxis, lfHalfLength, lGraphicsTransform.wAxis);
         const Vector3 lvArrowEnd = ControlsScaleAdd(lGraphicsTransform.zAxis, lfHalfLength + 1.5f, lGraphicsTransform.wAxis);
         lpDisplay->DrawArrow(lvArrowStart, lvArrowEnd, rw::RGBA(255, 0, 0, 255));
@@ -500,12 +525,12 @@ namespace Vehicle
         {
             const Wheel* const lpWheel =
                 lpTrafficPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel));
-            const f32 lfWheelRadius = lpWheel->mSlipVariables.w;
-            const Vector3 lvWheelHalfExtents{ 0.15f, lfWheelRadius, lfWheelRadius, 0.0f };
-            const Vector3 lvWheelInf{ -lvWheelHalfExtents.x, -lvWheelHalfExtents.y,
-                                      -lvWheelHalfExtents.z, 0.0f };
-            const Vector3 lvWheelSup{ lvWheelHalfExtents.x, lvWheelHalfExtents.y,
-                                      lvWheelHalfExtents.z, 0.0f };
+            const f32 lfWheelRadius = lpWheel->mSlipVariables.GetVector().w;
+            const Vector3 lvWheelHalfExtents( 0.15f, lfWheelRadius, lfWheelRadius );
+            const Vector3 lvWheelInf( -lvWheelHalfExtents.GetVector().x, -lvWheelHalfExtents.GetVector().y,
+                                      -lvWheelHalfExtents.GetVector().z );
+            const Vector3 lvWheelSup( lvWheelHalfExtents.GetVector().x, lvWheelHalfExtents.GetVector().y,
+                                      lvWheelHalfExtents.GetVector().z );
             const Matrix44Affine lWheelTransform = lpTrafficPhysics->GetWheelsWorldTransfrom(
                 static_cast<EVehicleDrivenWheel>(liWheel), false);
             lpDisplay->DrawBox(lvWheelInf, lvWheelSup, lWheelTransform,
@@ -563,16 +588,16 @@ namespace Vehicle
             CgsGeometric::Box lTrafficBox;
             lpTrafficPhysics->GetSimpleVehicleBox(lTrafficBox);
             const Vector3 lvHalfExtents = lTrafficBox.GetDimensions();
-            const Vector3 lvBoxInf{ -lvHalfExtents.x, -lvHalfExtents.y,
-                                    -lvHalfExtents.z, 0.0f };
-            const Vector3 lvBoxSup{ lvHalfExtents.x, lvHalfExtents.y,
-                                    lvHalfExtents.z, 0.0f };
+            const Vector3 lvBoxInf( -lvHalfExtents.GetVector().x, -lvHalfExtents.GetVector().y,
+                                    -lvHalfExtents.GetVector().z );
+            const Vector3 lvBoxSup( lvHalfExtents.GetVector().x, lvHalfExtents.GetVector().y,
+                                    lvHalfExtents.GetVector().z );
             const rw::RGBA lCarColour = lpTrafficPhysics->IsFrozen()
                 ? rw::RGBA(0, 0, 255, 255) : rw::RGBA(255, 255, 255, 255);
             lpDisplay->DrawBox(lvBoxInf, lvBoxSup, lTrafficBox.GetTransform(), lCarColour);
 
             const Matrix44Affine lGraphicsTransform = lpTrafficPhysics->GetGraphicsVehicleTransform();
-            const f32 lfHalfLength = lpTrafficPhysics->GetHalfExtent().z;
+            const f32 lfHalfLength = lpTrafficPhysics->GetHalfExtent().GetVector().z;
             const Vector3 lvArrowStart = ControlsScaleAdd(lGraphicsTransform.zAxis, lfHalfLength, lGraphicsTransform.wAxis);
             const Vector3 lvArrowEnd = ControlsScaleAdd(lGraphicsTransform.zAxis, lfHalfLength + 1.5f, lGraphicsTransform.wAxis);
             lpDisplay->DrawArrow(lvArrowStart, lvArrowEnd, rw::RGBA(255, 0, 0, 255));
@@ -581,12 +606,12 @@ namespace Vehicle
             {
                 const Wheel* const lpWheel =
                     lpTrafficPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel));
-                const f32 lfWheelRadius = lpWheel->mSlipVariables.w;
-                const Vector3 lvWheelHalfExtents{ 0.15f, lfWheelRadius, lfWheelRadius, 0.0f };
-                const Vector3 lvWheelInf{ -lvWheelHalfExtents.x, -lvWheelHalfExtents.y,
-                                          -lvWheelHalfExtents.z, 0.0f };
-                const Vector3 lvWheelSup{ lvWheelHalfExtents.x, lvWheelHalfExtents.y,
-                                          lvWheelHalfExtents.z, 0.0f };
+                const f32 lfWheelRadius = lpWheel->mSlipVariables.GetVector().w;
+                const Vector3 lvWheelHalfExtents( 0.15f, lfWheelRadius, lfWheelRadius );
+                const Vector3 lvWheelInf( -lvWheelHalfExtents.GetVector().x, -lvWheelHalfExtents.GetVector().y,
+                                          -lvWheelHalfExtents.GetVector().z );
+                const Vector3 lvWheelSup( lvWheelHalfExtents.GetVector().x, lvWheelHalfExtents.GetVector().y,
+                                          lvWheelHalfExtents.GetVector().z );
                 const Matrix44Affine lWheelTransform = lpTrafficPhysics->GetWheelsWorldTransfrom(
                     static_cast<EVehicleDrivenWheel>(liWheel), false);
                 lpDisplay->DrawBox(lvWheelInf, lvWheelSup, lWheelTransform,
@@ -628,15 +653,15 @@ namespace Vehicle
             // 0x825ED2C0..2F0 subtracts target-basis COM offset before BOTH
             // the target box and arrow endpoint; its accumulation is y/x/z.
             const Vector3 lvCOMOffset = lpTrafficPhysics->GetSimpleAttribs()->mCOMOffset;
-            const Vector3 lvTargetCOMOffset = ControlsScaleAdd(lTargetTransform.zAxis, lvCOMOffset.z,
-                ControlsScaleAdd(lTargetTransform.xAxis, lvCOMOffset.x,
-                    ControlsScale(lTargetTransform.yAxis, lvCOMOffset.y)));
+            const Vector3 lvTargetCOMOffset = ControlsScaleAdd(lTargetTransform.zAxis, lvCOMOffset.GetVector().z,
+                ControlsScaleAdd(lTargetTransform.xAxis, lvCOMOffset.GetVector().x,
+                    ControlsScale(lTargetTransform.yAxis, lvCOMOffset.GetVector().y)));
             lTargetTransform.wAxis = ControlsSubtract(lTargetTransform.wAxis, lvTargetCOMOffset);
             const Vector3 lvHalfExtents = lpTrafficPhysics->GetHalfExtent();
-            const Vector3 lvBoxInf{ -lvHalfExtents.x, -lvHalfExtents.y,
-                                    -lvHalfExtents.z, 0.0f };
-            const Vector3 lvBoxSup{ lvHalfExtents.x, lvHalfExtents.y,
-                                    lvHalfExtents.z, 0.0f };
+            const Vector3 lvBoxInf( -lvHalfExtents.GetVector().x, -lvHalfExtents.GetVector().y,
+                                    -lvHalfExtents.GetVector().z );
+            const Vector3 lvBoxSup( lvHalfExtents.GetVector().x, lvHalfExtents.GetVector().y,
+                                    lvHalfExtents.GetVector().z );
             lpDisplay->DrawBox(lvBoxInf, lvBoxSup, lTargetTransform,
                                rw::RGBA(255, 255, 255, 255));
             const Vector3 lvCurrentPosition = lpTrafficPhysics->GetGraphicsVehicleTransform().wAxis;
@@ -660,7 +685,7 @@ namespace Vehicle
             const SimpleVehiclePhysics* const lpTrafficPhysics = lpTrafficVehicle->mpVehicleBody;
             const Vector3 lLineStart = lpTrafficPhysics->GetGraphicsVehicleTransform().wAxis;
             Vector3 lLineEnd = lLineStart;
-            lLineEnd.y = mpTrafficManager->mavfLowestPointWorldSpace[liTraffic].y;
+            lLineEnd.GetVector().y = mpTrafficManager->mavfLowestPointWorldSpace[liTraffic].GetVector().y;
             lpDisplay->DrawArrow(lLineStart, lLineEnd, rw::RGBA(255, 255, 255, 255));
             lpDisplay->DrawSphere(lLineEnd, 0.1f, rw::RGBA(255, 255, 255, 255));
         }

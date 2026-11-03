@@ -52,11 +52,11 @@ namespace Props
     void PropPartInstance::Construct()
     {
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue( 0.0f, 0.0f, 0.0f );
             mLinearVelocity = lAggregateValue;
         }   // +0x10  vspltisw 0 / stvx
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue( 0.0f, 0.0f, 0.0f );
             mAngularVelocity = lAggregateValue;
         }   // +0x20  vspltisw 0 / stvx
         mbUpdated        = false;                               // +0x39  stb r,0x39
