@@ -111,16 +111,12 @@ namespace ICE
                      f32 lfR, f32 lfG, f32 lfB, f32 lfA)
         {
             Poly lQuad;
-            lQuad.maVertices[0] = { lfLeft,  lfTop,    lfZ, 0.0f };
-            lQuad.maVertices[1] = { lfRight, lfTop,    lfZ, 0.0f };
-            lQuad.maVertices[2] = { lfRight, lfBottom, lfZ, 0.0f };
-            lQuad.maVertices[3] = { lfLeft,  lfBottom, lfZ, 0.0f };
+            lQuad.maVertices[0] = Vector3(lfLeft,  lfTop,    lfZ);
+            lQuad.maVertices[1] = Vector3(lfRight, lfTop,    lfZ);
+            lQuad.maVertices[2] = Vector3(lfRight, lfBottom, lfZ);
+            lQuad.maVertices[3] = Vector3(lfLeft,  lfBottom, lfZ);
 
-            Vector4 lColour;
-            lColour.x = lfR;
-            lColour.y = lfG;
-            lColour.z = lfB;
-            lColour.w = lfA;
+            Vector4 lColour(lfR, lfG, lfB, lfA);
 
             Matrix4 lLocalWorld;
             ICEMath::Identity(&lLocalWorld);

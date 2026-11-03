@@ -100,9 +100,9 @@ static const s32 KI_ICE_ELEM_LOOKAT_SPACE = 31;
 // placeholders; the colour-selection structure is reproduced faithfully (see
 // IceBarMarkerColour below).
 // FLAG: placeholder colours -- exact RGBA not recoverable.
-static const Vector4 KV_ICE_COLOUR_BACKDROP = { 0.0f, 0.0f, 0.0f, 0.0f };
-static const Vector4 KV_ICE_COLOUR_SEGMENT  = { 1.0f, 1.0f, 1.0f, 1.0f };
-static const Vector4 KV_ICE_COLOUR_SELECTED = { 1.0f, 1.0f, 0.0f, 1.0f };
+static const Vector4 KV_ICE_COLOUR_BACKDROP(0.0f, 0.0f, 0.0f, 0.0f);
+static const Vector4 KV_ICE_COLOUR_SEGMENT (1.0f, 1.0f, 1.0f, 1.0f);
+static const Vector4 KV_ICE_COLOUR_SELECTED(1.0f, 1.0f, 0.0f, 1.0f);
 
 // ----------------------------------------------------------------------------
 // Editor take query helper (the unnamed `this+0x28` take predicate the bar fill
@@ -179,10 +179,7 @@ void ICEController::Render()
     Poly lBackdrop;
     for (s32 liVert = 0; liVert < 4; ++liVert)
     {
-        lBackdrop.maVertices[liVert].x = 0.0f;
-        lBackdrop.maVertices[liVert].y = 0.0f;
-        lBackdrop.maVertices[liVert].z = 0.0f;
-        lBackdrop.maVertices[liVert].w = 0.0f;
+        lBackdrop.maVertices[liVert].SetZero();
     }
 
     // The editor render context is passed BY ADDRESS to the static draw entry points
@@ -596,11 +593,11 @@ void ICEController::RenderTargetBox()
     const u16 lu16SampleKey = (u16)(lu16Key + liEndEdge);
 
     // Sample the look-at target offset (elements 3/4/5) at the resolved key.
-    Vector4 lLookAt;
-    lLookAt.x = mEditTake.GetValueFloat(KI_ICE_ELEM_LOOKAT_X, lu16SampleKey);
-    lLookAt.y = mEditTake.GetValueFloat(KI_ICE_ELEM_LOOKAT_Y, lu16SampleKey);
-    lLookAt.z = mEditTake.GetValueFloat(KI_ICE_ELEM_LOOKAT_Z, lu16SampleKey);
-    lLookAt.w = 0.0f;
+    Vector4 lLookAt(
+        mEditTake.GetValueFloat(KI_ICE_ELEM_LOOKAT_X, lu16SampleKey),
+        mEditTake.GetValueFloat(KI_ICE_ELEM_LOOKAT_Y, lu16SampleKey),
+        mEditTake.GetValueFloat(KI_ICE_ELEM_LOOKAT_Z, lu16SampleKey),
+        0.0f);
 
     // Fill the box widget's transform: the reference-space rotation rows verbatim and
     // the transformed look-at point as the translation row (wAxis + R * lookAt). The
@@ -609,20 +606,23 @@ void ICEController::RenderTargetBox()
     mTargetBox.mTransform.yAxis = lTransform.yAxis;
     mTargetBox.mTransform.zAxis = lTransform.zAxis;
 
-    Vector3& lrTranslation = mTargetBox.mTransform.wAxis;
-    lrTranslation.x = lTransform.wAxis.x
-                      + lTransform.xAxis.x * lLookAt.x
-                      + lTransform.yAxis.x * lLookAt.y
-                      + lTransform.zAxis.x * lLookAt.z;
-    lrTranslation.y = lTransform.wAxis.y
-                      + lTransform.xAxis.y * lLookAt.x
-                      + lTransform.yAxis.y * lLookAt.y
-                      + lTransform.zAxis.y * lLookAt.z;
-    lrTranslation.z = lTransform.wAxis.z
-                      + lTransform.xAxis.z * lLookAt.x
-                      + lTransform.yAxis.z * lLookAt.y
-                      + lTransform.zAxis.z * lLookAt.z;
-    lrTranslation.w = 0.0f;
+    // Keep the matrix rows as their full four-lane VMX registers. ARTIST performs
+    // one vector multiply, two fused multiply-adds, then a vector add and stores all
+    // four lanes of the result into wAxis.
+    const Vector4 lXAxis(mTargetBox.mTransform.xAxis.GetVector());
+    const Vector4 lYAxis(mTargetBox.mTransform.yAxis.GetVector());
+    const Vector4 lZAxis(mTargetBox.mTransform.zAxis.GetVector());
+    const Vector4 lWAxis(mTargetBox.mTransform.wAxis.GetVector());
+    const Vector4 lScaleY(lLookAt.GetY(), lLookAt.GetY(),
+                          lLookAt.GetY(), lLookAt.GetY());
+    const Vector4 lScaleZ(lLookAt.GetZ(), lLookAt.GetZ(),
+                          lLookAt.GetZ(), lLookAt.GetZ());
+
+    Vector4 lTranslation = rw::math::vpu::Mult(lXAxis, lLookAt.GetX());
+    lTranslation = rw::math::vpu::MultAdd(lYAxis, lScaleY, lTranslation);
+    lTranslation = rw::math::vpu::MultAdd(lZAxis, lScaleZ, lTranslation);
+    lTranslation = rw::math::vpu::Add(lWAxis, lTranslation);
+    mTargetBox.mTransform.wAxis.SetVector(lTranslation.GetVector());
 
     // Draw the box. The editor threads its render context to the widget; the committed
     // ICEWidgetTargetBox::Render builds its own debug-render context, so it takes no

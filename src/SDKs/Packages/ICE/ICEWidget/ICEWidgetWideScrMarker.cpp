@@ -33,15 +33,12 @@
 //            the complementary marker rectangle spanning x 1..480, y 0..480.
 //
 //     The constants: flt_82006D70 = -2.0, flt_82001CC0 = 0.0, flt_82056DC0 /
-//     flt_8207B974 = 480.0, flt_82001C98 / flt_82057930 = 1.0, flt_8201A1F0 =
-//     200.0. The 200.0 is loaded into a quad's w lane (unused by RenderPoly) and
-//     does not affect the drawn geometry.
+//     flt_8207B974 = 480.0, flt_82001C98 / flt_82057930 = 1.0, and
+//     flt_8201A1F0 = 200.0 for the colour alpha.
 //
-//   * COLOUR -- the X360 passes the {-2.0, 0, 0, 0} vector (the same stack vector
-//     whose lane 0 also seeds the -2.0 corner) as RenderPoly's colour args. The
-//     committed RenderPoly clamp-packs colour0 to RGBA8: clamp({-2,0,0,0}) ->
-//     (0,0,0,0) = black at zero alpha. Reproduced verbatim so the clamp behaviour
-//     matches the X360.
+//   * COLOUR -- the X360 passes {0, 0, 0, 200} as RenderPoly's colour vector.
+//     RenderPoly clamp-packs colour0 to RGBA8, so the marker is black with alpha
+//     200. The -2.0 constant supplies the first quad's left edge, not its colour.
 //
 //   * CALLS -- ICE::ICERender::RenderPoly(poly, colour, colour, localWorld) twice.
 //     The X360 marshals the render context (r4) as RenderPoly's first arg; the
@@ -60,10 +57,8 @@
 
 namespace ICE
 {
-    // The marker colour vector the X360 hands RenderPoly (flt_82006D70 = -2.0 in
-    // the x lane, zero elsewhere). RenderPoly clamps each channel to [0,255], so
-    // this resolves to opaque-less black (0,0,0,0).  FLAG: asm-derived constant.
-    static const f32 KF_ICE_WIDESCR_COLOUR_X = -2.0f;
+    // RenderPoly's colour vector alpha (flt_8201A1F0).  FLAG: asm-derived constant.
+    static const f32 KF_ICE_WIDESCR_COLOUR_ALPHA = 200.0f;
 
     // The two screen-space marker quads, with the exact vertex lanes recovered from
     // the X360 vrlimi128 lane composition (z lane carries the per-quad depth; the
@@ -80,13 +75,8 @@ namespace ICE
     // ------------------------------------------------------------------------
     void ICEWidgetWideScrMarker::Render(ICERender* lpRender)
     {
-        // The marker colour: the X360's {-2.0, 0, 0, 0} vector. RenderPoly clamps
-        // each channel to [0,255] -> packs to black (0,0,0,0).
-        Vector4 lColour;
-        lColour.x = KF_ICE_WIDESCR_COLOUR_X;
-        lColour.y = 0.0f;
-        lColour.z = 0.0f;
-        lColour.w = 0.0f;
+        // The X360's {0, 0, 0, 200} marker colour, with every RGBA lane initialized.
+        Vector4 lColour(0.0f, 0.0f, 0.0f, KF_ICE_WIDESCR_COLOUR_ALPHA);
 
         // The take->screen context. The committed RenderPoly does not read it; an
         // identity transform stands in for the X360's editor-render context carried
@@ -98,19 +88,19 @@ namespace ICE
         // --- Quad 0 (depth 1.0): left-edge marker rectangle ------------------
         // V0 corner = (-2, 480), V2 opposite = (0, 0); V1/V3 close the box.
         Poly lQuad0;
-        lQuad0.maVertices[0] = { KF_ICE_WIDESCR_X_LEFT, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_NEAR, 0.0f };
-        lQuad0.maVertices[1] = { KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_NEAR, 0.0f };
-        lQuad0.maVertices[2] = { KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_NEAR, 0.0f };
-        lQuad0.maVertices[3] = { KF_ICE_WIDESCR_X_LEFT, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_NEAR, 0.0f };
+        lQuad0.maVertices[0] = Vector3(KF_ICE_WIDESCR_X_LEFT, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_NEAR);
+        lQuad0.maVertices[1] = Vector3(KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_NEAR);
+        lQuad0.maVertices[2] = Vector3(KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_NEAR);
+        lQuad0.maVertices[3] = Vector3(KF_ICE_WIDESCR_X_LEFT, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_NEAR);
         ICERender::RenderPoly(&lQuad0, &lColour, &lColour, &lLocalWorld);
 
         // --- Quad 1 (depth 0.0): complementary marker rectangle --------------
         // V0 corner = (480, 0), V2 opposite = (1, 480); V1/V3 close the box.
         Poly lQuad1;
-        lQuad1.maVertices[0] = { KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_FAR, 0.0f };
-        lQuad1.maVertices[1] = { KF_ICE_WIDESCR_X_ONE,  KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_FAR, 0.0f };
-        lQuad1.maVertices[2] = { KF_ICE_WIDESCR_X_ONE,  KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR, 0.0f };
-        lQuad1.maVertices[3] = { KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR, 0.0f };
+        lQuad1.maVertices[0] = Vector3(KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_FAR);
+        lQuad1.maVertices[1] = Vector3(KF_ICE_WIDESCR_X_ONE, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_FAR);
+        lQuad1.maVertices[2] = Vector3(KF_ICE_WIDESCR_X_ONE, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR);
+        lQuad1.maVertices[3] = Vector3(KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR);
         ICERender::RenderPoly(&lQuad1, &lColour, &lColour, &lLocalWorld);
     }
 }

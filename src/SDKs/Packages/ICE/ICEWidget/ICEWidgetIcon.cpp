@@ -71,17 +71,14 @@ namespace ICE
         // is the top-left origin and V2 is the opposite (bottom-right) corner --
         // RenderPoly reads exactly V0 and V2 to form the box.
         Poly lQuad;
-        lQuad.maVertices[0] = { lfLeft,  lfTop,    KF_ICE_ICON_QUAD_Z, 0.0f }; // top-left
-        lQuad.maVertices[1] = { lfRight, lfTop,    KF_ICE_ICON_QUAD_Z, 0.0f }; // top-right
-        lQuad.maVertices[2] = { lfRight, lfBottom, KF_ICE_ICON_QUAD_Z, 0.0f }; // bottom-right
-        lQuad.maVertices[3] = { lfLeft,  lfBottom, KF_ICE_ICON_QUAD_Z, 0.0f }; // bottom-left
+        lQuad.maVertices[0] = Vector3(lfLeft,  lfTop,    KF_ICE_ICON_QUAD_Z); // top-left
+        lQuad.maVertices[1] = Vector3(lfRight, lfTop,    KF_ICE_ICON_QUAD_Z); // top-right
+        lQuad.maVertices[2] = Vector3(lfRight, lfBottom, KF_ICE_ICON_QUAD_Z); // bottom-right
+        lQuad.maVertices[3] = Vector3(lfLeft,  lfBottom, KF_ICE_ICON_QUAD_Z); // bottom-left
 
         // Flat grey box colour (per-channel [0,255]); RenderPoly clamp-packs it.
-        Vector4 lColour;
-        lColour.x = KF_ICE_ICON_GREY;
-        lColour.y = KF_ICE_ICON_GREY;
-        lColour.z = KF_ICE_ICON_GREY;
-        lColour.w = KF_ICE_ICON_ALPHA;
+        Vector4 lColour(KF_ICE_ICON_GREY, KF_ICE_ICON_GREY,
+                        KF_ICE_ICON_GREY, KF_ICE_ICON_ALPHA);
 
         // The take->screen context. The committed RenderPoly does not read it; an
         // identity transform stands in for the X360's editor-render context (carried
