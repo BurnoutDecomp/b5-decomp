@@ -1,20 +1,10 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPartPool.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"   // the REAL interface (walls leg 4: model accessor views)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"  // the two OutputEvents sinks (landed 2026-08-24)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"        // IKBodyPart::GetMeshId / GetPartType (OutputEvents' trailer fields)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([detach-pose] probe)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // OutUpdateRigidBody (UpdatePart's echo event)
-#include <cstdlib>   // getenv/atoi ([detach-pose] latch)
-
-// [detach-pose] host-side present counter, for EXACT frame correlation -- the same extern the
-// other correlated instruments use (BrnActiveRaceCar.cpp:59, CgsIm2d.cpp:24, BrnRendererModule
-// .cpp:288). BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp, so printing this number
-// turns "the frame where the panel is at y = -3" from an ESTIMATE into a filename. A trace
-// correlated against a dump of a DIFFERENT frame has already produced a false lead in this tree.
-namespace renderengine { extern u32 guPresentCount; }
 
 // ============================================================================
 // BrnPhysics::Deformation::PhysicalBodyPartPool
@@ -193,13 +183,8 @@ namespace Deformation
 
             // 0x825E7FBC..0x825E7FC8: gravity times mass, then rotate/accumulate.
             const VecFloat lvfMass = lpPart->GetExternalBody()->GetMass();
-            const Vector3 lvLocalGravity = { 0.0f, kfPartExtraGravity, 0.0f, 0.0f };
-            const Vector3 lvForce = {
-                lvLocalGravity.x * lvfMass.x,
-                lvLocalGravity.y * lvfMass.y,
-                lvLocalGravity.z * lvfMass.z,
-                lvLocalGravity.w * lvfMass.w
-            };
+            const Vector3 lvLocalGravity(0.0f, kfPartExtraGravity, 0.0f);
+            const Vector3 lvForce(__vmulfp(lvLocalGravity.mV, lvfMass.mV));
             lpPart->GetExternalBody()->AddLocalSpaceForce(lvForce);
         }
     }
@@ -309,10 +294,8 @@ namespace Deformation
             // vector at copy+0x20 == mNormal. It is the CONTACT NORMAL that is mirrored onto the
             // joined part -- not "the leading 4-vector" the previous FLAG guessed at, which with a
             // 48-byte forked record was unreachable anyway.
-            lContact.mNormal.x = -lContact.mNormal.x;
-            lContact.mNormal.y = -lContact.mNormal.y;
-            lContact.mNormal.z = -lContact.mNormal.z;
-            lContact.mNormal.w = -lContact.mNormal.w;
+            const VecFloat lvfNegativeOne(-1.0f);
+            lContact.mNormal.SetVector(__vmulfp(lContact.mNormal.mV, lvfNegativeOne.mV));
 
             CGS_ASSERT(liPartIndex < static_cast<s32>(KU_MAX_DETACHED_PARTS),
                        "liPartIndex < (int32_t)KU_MAX_DETACHED_PARTS");
@@ -454,17 +437,8 @@ namespace Deformation
     //      by the time they detach). So this fix restores the console's arithmetic; it does not
     //      change how a shed panel collides in any run taken so far.
     // =============================================================================================
-    // [DIAG] NOT IN THE X360 BINARY -- the [ubb] census, defined below this function so the
-    // console's own body reads uninterrupted. File-local (anonymous namespace): no ODR surface,
-    // no class-surface change, no storage. DELETE-WHEN the part-box question is banked.
-    namespace { void UbbCensus(s32, s32, bool, f32, f32, u8, s32); }
-
     void PhysicalBodyPartPool::UpdateABoundingBox(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInterface*/)
     {
-        // [DIAG] the entry-state reads for the [ubb] census below. Read-only; see its banner.
-        const s32 liCursorOnEntry = miLastUpdatedBoundingBox;
-        const bool lbPoolWasLive  = !mUsedParts.IsZero();
-
         // `cmpwi r11, -1` -> restart the sweep at the first used slot, else continue after it.
         const s32 liSlot =
             ( miLastUpdatedBoundingBox == CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
@@ -474,169 +448,12 @@ namespace Deformation
         // `stw r11, 0x60E8(r15)` -- stored on BOTH arms, including the -1 that ends a sweep.
         miLastUpdatedBoundingBox = liSlot;
 
-        // [DIAG] the pre-refresh box scalar, for the "did the recompute MOVE anything" counter.
-        const f32 lfRadiusBefore =
-            ( liSlot != CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
-                ? maParts[liSlot].GetSphereRadius() : 0.0f;
-
         if ( liSlot != CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
         {
             maParts[liSlot].UpdateBoundingBox();   // bl 0x8260ACC8 on &maParts[slot]
         }
 
-        UbbCensus(liCursorOnEntry, liSlot, lbPoolWasLive, lfRadiusBefore,
-                  ( liSlot != CgsContainers::BitArray<KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX )
-                      ? maParts[liSlot].GetSphereRadius() : 0.0f,
-                  mu8NumDetachedParts, miLastUpdatedBoundingBox);
     }
-
-    // =============================================================================================
-    // [DIAG] NOT IN THE X360 BINARY. The [ubb] CENSUS -- the runtime witness for the reconstruction
-    // above. Opt-in on the SAME BRN_DEFORM_TRACE latch the [detach-*] / [part-rest] probes use, so
-    // one armed run produces all of them and they are directly correlatable. Read-only: it reads
-    // the cursor, the used-mask and the part's own broad-phase radius, and writes nothing the
-    // console does not.
-    //
-    // ⭐ WHY A CENSUS AND NOT A PER-CALL ROW. This runs EVERY physics frame -- ~60 rows a second,
-    // ~15k rows a run -- and an assert/print storm starves the harness badly enough to manufacture
-    // physics failures [[watch-the-window-asserts-pause]]. So the counters are incremented
-    // unconditionally (their values are true even on an unarmed run) and printed on a period.
-    //
-    // ⭐⭐ WHY THESE COUNTERS AND NOT A MAXIMUM. "UpdateABoundingBox ran" cannot distinguish the
-    // four states this wave has to separate:
-    //     (a) it is never called at all                      -> calls == 0
-    //     (b) it is called, but the pool is always empty      -> calls > 0, livePool == 0
-    //     (c) it is called on a live pool but never refreshes -> livePool > 0, refreshed == 0
-    //     (d) it refreshes, but every recompute is identical  -> refreshed > 0, moved == 0
-    // and the per-slot VISIT HISTOGRAM (a distinct-value count, not a maximum) is the only thing
-    // that can say whether the round-robin reaches EVERY used slot or parks on a subset.
-    //
-    // ⭐ THE CURSOR-SEED WITNESS (Construct seeds -1, not 0 -- see BrnPhysicalBodyPartPool_
-    // Construct.cpp). `firstCall` records the cursor value and pool state at the FIRST call after
-    // Construct, and `firstSweep` records the ORDERED slot list of the first sweep that visits
-    // anything. Between them they say whether the seed had an observable consequence in this run
-    // or was overwritten before the pool ever went live -- which is a measurement, not an
-    // assumption. DELETE-WHEN the part-box question is closed and banked.
-    // =============================================================================================
-    namespace
-    {
-
-        // ⭐ THE PERIOD IS THE CONTROL. At 600 calls (~10 s of physics) a crash run prints
-        // several census rows BEFORE the first part ever detaches, and those rows must read
-        // `livePool 0 refreshed 0` with an EMPTY [ubb-visits]. That is the negative control for
-        // this counter, in the SAME process and through the SAME path as the positive result: a
-        // counter that cannot print zero cannot be trusted when it prints a number.
-        static const u32 KU_UBB_CENSUS_EVERY   = 600;
-        static const u32 KU_UBB_FIRST_SWEEP_MAX = 24;
-
-        u32 gxUbbCalls     = 0;   // every entry -- step (4) of UpdatePostPhysics ran
-        u32 gxUbbLivePool  = 0;   // ... with at least one used slot
-        u32 gxUbbRestarts  = 0;   // ... entered with the cursor at -1 (GetFirstNonZeroBit arm)
-        u32 gxUbbIdle      = 0;   // ... and chose -1 (empty pool, or the sweep just ended)
-        u32 gxUbbRefreshed = 0;   // entries that actually called PhysicalBodyPart::UpdateBoundingBox
-        u32 gxUbbMoved     = 0;   // ... where the broad-phase radius CHANGED across the call
-        u32 gxaUbbVisits[PhysicalBodyPartPool::KU_MAX_DETACHED_PARTS] = { 0 };
-
-        bool gxbUbbFirstCallSeen = false;
-        s32  gxiUbbFirstCursor   = -2;    // the cursor Construct left, as seen by the first call
-        bool gxbUbbFirstLive     = false; // ... and whether the pool was already live then
-        s32  gxaUbbFirstSweep[KU_UBB_FIRST_SWEEP_MAX] = { 0 };
-        u32  gxUbbFirstSweepLen  = 0;
-        bool gxbUbbSweepOpen     = false;
-        bool gxbUbbFirstSweepDone = false;
-
-    void UbbCensus(s32 liCursorOnEntry, s32 liSlot, bool lbPoolWasLive,
-                   f32 lfRadiusBefore, f32 lfRadiusAfter,
-                   u8 lu8UsedNow, s32 liCursorNow)
-    {
-        const u32 KU_MAX_DETACHED_PARTS = PhysicalBodyPartPool::KU_MAX_DETACHED_PARTS;
-        const s32 KI_NONE = CgsContainers::BitArray<PhysicalBodyPartPool::KU_MAX_DETACHED_PARTS>::KI_INVALID_BITINDEX;
-
-        ++gxUbbCalls;
-        if ( !gxbUbbFirstCallSeen )
-        {
-            gxbUbbFirstCallSeen = true;
-            gxiUbbFirstCursor   = liCursorOnEntry;
-            gxbUbbFirstLive     = lbPoolWasLive;
-        }
-        if ( lbPoolWasLive )  { ++gxUbbLivePool; }
-        if ( liCursorOnEntry == KI_NONE ) { ++gxUbbRestarts; }
-
-        if ( liSlot == KI_NONE )
-        {
-            ++gxUbbIdle;
-            if ( gxbUbbSweepOpen ) { gxbUbbSweepOpen = false; gxbUbbFirstSweepDone = true; }
-        }
-        else
-        {
-            ++gxUbbRefreshed;
-            if ( lfRadiusAfter != lfRadiusBefore ) { ++gxUbbMoved; }
-            if ( liSlot >= 0 && liSlot < static_cast<s32>(KU_MAX_DETACHED_PARTS) )
-            {
-                ++gxaUbbVisits[liSlot];
-            }
-            if ( !gxbUbbFirstSweepDone )
-            {
-                gxbUbbSweepOpen = true;
-                if ( gxUbbFirstSweepLen < KU_UBB_FIRST_SWEEP_MAX )
-                {
-                    gxaUbbFirstSweep[gxUbbFirstSweepLen++] = liSlot;
-                }
-            }
-        }
-
-        u32 luDistinctSlots = 0;
-        u32 luMaxVisits = 0;
-        u32 luMinVisitsOfVisited = 0xFFFFFFFFu;
-        for ( u32 luSlot = 0; luSlot < KU_MAX_DETACHED_PARTS; ++luSlot )
-        {
-            if ( gxaUbbVisits[luSlot] == 0u ) { continue; }
-            ++luDistinctSlots;
-            if ( gxaUbbVisits[luSlot] > luMaxVisits ) { luMaxVisits = gxaUbbVisits[luSlot]; }
-            if ( gxaUbbVisits[luSlot] < luMinVisitsOfVisited ) { luMinVisitsOfVisited = gxaUbbVisits[luSlot]; }
-        }
-        if ( luDistinctSlots == 0u ) { luMinVisitsOfVisited = 0u; }
-
-        *CgsDev::Log::gpDebugPrint
-            << "[ubb] f " << renderengine::guPresentCount
-            << " calls " << static_cast<s32>(gxUbbCalls)
-            << " livePool " << static_cast<s32>(gxUbbLivePool)
-            << " restarts " << static_cast<s32>(gxUbbRestarts)
-            << " idle " << static_cast<s32>(gxUbbIdle)
-            << " refreshed " << static_cast<s32>(gxUbbRefreshed)
-            << " moved " << static_cast<s32>(gxUbbMoved)
-            << " usedNow " << static_cast<s32>(lu8UsedNow)
-            << " cursorNow " << liCursorNow
-            << " | firstCall cursor " << gxiUbbFirstCursor
-            << " live " << (gxbUbbFirstLive ? 1 : 0)
-            << " | distinctSlots " << static_cast<s32>(luDistinctSlots)
-            << " visitMin " << static_cast<s32>(luMinVisitsOfVisited)
-            << " visitMax " << static_cast<s32>(luMaxVisits)
-            << " slot0 " << static_cast<s32>(gxaUbbVisits[0])
-            << "\n";
-
-        *CgsDev::Log::gpDebugPrint << "[ubb-visits]";
-        for ( u32 luSlot = 0; luSlot < KU_MAX_DETACHED_PARTS; ++luSlot )
-        {
-            if ( gxaUbbVisits[luSlot] != 0u )
-            {
-                *CgsDev::Log::gpDebugPrint << " " << static_cast<s32>(luSlot)
-                                           << ":" << static_cast<s32>(gxaUbbVisits[luSlot]);
-            }
-        }
-        *CgsDev::Log::gpDebugPrint << "\n";
-
-        *CgsDev::Log::gpDebugPrint << "[ubb-sweep1] closed "
-                                   << (gxbUbbFirstSweepDone ? 1 : 0)
-                                   << " len " << static_cast<s32>(gxUbbFirstSweepLen)
-                                   << " slots";
-        for ( u32 luIndex = 0; luIndex < gxUbbFirstSweepLen; ++luIndex )
-        {
-            *CgsDev::Log::gpDebugPrint << " " << gxaUbbFirstSweep[luIndex];
-        }
-        *CgsDev::Log::gpDebugPrint << "\n";
-    }
-    }   // anonymous namespace ([ubb] census)
 
     // ------------------------------------------------------------------------------------------
     // UpdatePart @ 0x8260CB08  (74 instructions) -- ⭐⭐ RECONSTRUCTED 2026-08-27 (detach-2 wave).
@@ -730,54 +547,7 @@ namespace Deformation
             lPositionEvent.meType           = lpIKPart->GetPartType();      // spec+0x1DC
             lpOutput->AddDetachedPartPosition(lPositionEvent);                // 0x8260DDAC -> AddEventSafe
 
-            // [detach-pose] NOT X360. The pose witness for the 2026-08-27 detach wave, latched on
-            // BRN_DEFORM_TRACE (0/unset == inert). Prints the WORLD POSITION the shed panel is
-            // actually drawn at, per slot, whenever it moves by more than a centimetre -- which is
-            // the only thing that can distinguish "the panel separated" from "the panel is still
-            // being drawn on the car". Pixels cannot answer that on their own at this camera
-            // distance. DELETE-WHEN the detach question is closed and banked.
-            {
-                static s32 siPoseProbe = -1;
-                if (siPoseProbe < 0)
-                {
-                }
-                if (siPoseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && liSlot < 16)
-                {
-                    static s32 saiLastX[16] = { 0 }; static s32 saiLastZ[16] = { 0 };
-                    const s32 liXcm = static_cast<s32>(lTransform.wAxis.x * 100.0f);
-                    const s32 liZcm = static_cast<s32>(lTransform.wAxis.z * 100.0f);
-                    if (liXcm != saiLastX[liSlot] || liZcm != saiLastZ[liSlot])
-                    {
-                        saiLastX[liSlot] = liXcm; saiLastZ[liSlot] = liZcm;
 
-                        // ⭐ BOTH SIDES, SAME FRAME, SAME PART (2026-09-02, deform close-out wave).
-                        // The owner filmed a torn-off body panel PARKED IN MID-AIR above a
-                        // stationary car. The rest-proof this wave inherited was read from a
-                        // per-slot log line carrying only the number below marked `render` -- and
-                        // if the two transforms have diverged, "frozen on the road" and "floating"
-                        // are BOTH TRUE, of different numbers. So print the physics body's own
-                        // transform (mRwBody, what the sim integrates and freezes) beside the
-                        // published one (GetEventRenderTransform, what BrnRaceCarEntityModule_
-                        // Render.cpp:625 assigns straight into lPartWorldMatrix), plus the offset
-                        // that separates them -- localGraphicsPos - localInitialComPos, the term
-                        // GetEventRenderTransform adds and GetRenderTransform does not.
-                        // A car-height gap between the two columns indicts the offset; no gap at
-                        // all indicts the physics rest state instead.
-                        const Matrix44Affine lPhysics = lrPart.GetRigidBodyTransform();
-                        *CgsDev::Log::gpDebugPrint
-                            << "[detach-pose] present " << renderengine::guPresentCount
-                            << " slot " << liSlot
-                            << " mesh " << lpIKPart->GetMeshId()
-                            << " attached " << (lrPart.IsJoinedToVehicle() ? 1 : 0)
-                            << " render (" << lTransform.wAxis.x << ", " << lTransform.wAxis.y
-                            << ", " << lTransform.wAxis.z << ")"
-                            << " physics (" << lPhysics.wAxis.x << ", " << lPhysics.wAxis.y
-                            << ", " << lPhysics.wAxis.z << ")"
-                            << " dy " << (lTransform.wAxis.y - lPhysics.wAxis.y)
-                            << "\n";
-                    }
-                }
-            }
         }
     }
 }

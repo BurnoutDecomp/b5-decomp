@@ -44,31 +44,12 @@ namespace Deformation
     //      neighbour on the console.
     //   3. The DWARF itself says char[96], and the wheel's twin (BrnPhysicalWheel.h:202) says 96.
     //
-    // ⛔ WHERE THE 128 IS REAL, AND WHY IT IS A READ AND NOT A WRITE. The CONSUMER over-reads:
-    // InSceneUpdateInterface::AddDynamicVolume @0x822B1518 block-copies a fixed 128-byte volume
-    // image OUT of the pointer it is handed (`li r5, 0x80`; InEventAddDynamicVolume::maVolumeData
-    // is 128 bytes). So the console reads 32 bytes past this buffer, into its 0x82FB7C90
-    // neighbour, and always has. That is the game's own behaviour, benign there because the two
-    // statics are adjacent. On the host two separate statics are NOT guaranteed adjacent, so the
-    // neighbour is modelled EXPLICITLY below rather than left to chance -- reproducing the
-    // console's memory neighbourhood instead of committing an out-of-bounds read.
-    // (Same fact, same wording, as BrnActiveRaceCar_wQ5_01.cpp's `u8 laVolumeStorage[128]`.)
-    //
-    // ⚠️ ALIGNMENT, STATED EXPLICITLY BECAUSE NO GATE IN THIS PROJECT CAN SEE IT: the array is
-    // `alignas(16)` to match the console's 16-aligned .data placement. sizeof is UNCHANGED (96 is
-    // already a multiple of 16) and the declared array is UNCHANGED at 96 bytes, so nothing about
-    // any layout, stride or offset moves. Had it been widened to 128 the alignment consequence
-    // would have been real; it was not widened.
+    // The event producer copies 128 bytes from this 96-byte static on the console.
+    // Preserve the real allocation; the over-read is a retained layout limitation.
     // =============================================================================================
     namespace
     {
-        struct BoxInitialiseStorage
-        {
-            CGS_ALIGN(16) char maBoxInitialiseBuffer[96];  // DWARF BrnPhysicalBodyPart.h:297 -- the BoxVolume
-            char maConsoleNeighbourTail[32];             // NOT a source member: the 32 bytes the
-                                                         // consumer's 128-byte copy runs into (see above)
-        };
-        BoxInitialiseStorage gBoxInitialiseStorage = {};
+        CGS_ALIGN(16) char maBoxInitialiseBuffer[96];
 
         // ---- AddToScene's four literal inputs (all X360-attested) --------------------------------
         // `li r6, 4`  @0x8260A99C -- InEventAddDynamicVolume::VolumeTypeFlags for a dynamic box.
@@ -203,47 +184,24 @@ namespace Deformation
     // emitter (`EmitUpdateTriangleCacheEvent`) was a FABRICATED free function and is retired in
     // the same commit -- see BrnDetachedWheelManager.cpp.
     //
-    // PC-SAFETY GUARD (not console behaviour, stated so): the console has no null test on the
-    // scene interface here. The early return mirrors the one BrnActiveRaceCar_wQ5_01.cpp's
-    // AddToScene already carries, same convention.
     // =============================================================================================
     void PhysicalBodyPart::AddToScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput)
     {
-        if ( lpSceneInput == 0 )
-        {
-            return;
-        }
-
         // ---- 1. build the oriented box ----------------------------------------------------------
         // The console clears five resource words and puts the static buffer in word 0;
         // the native rw::Resource constructor clears the five slots before this assignment.
         // BoxVolume::Initialize reads word 0 (`lwz r3, 0(r3)`).
         rw::Resource lVolumeResource;
-        lVolumeResource.m_baseResources[0] = gBoxInitialiseStorage.maBoxInitialiseBuffer;
+        lVolumeResource.m_baseResources[0] = maBoxInitialiseBuffer;
 
         // The ctor spills v1 and re-reads it as three scalar floats, so the 3-float overload is the
         // faithful spelling (the same one BrnActiveRaceCar_wQ5_01.cpp's AddToScene uses).
         rw::collision::BoxVolume* lpVolume = rw::collision::BoxVolume::Initialize(
             lVolumeResource,
-            mBoundingBoxHalfDimensions.x, mBoundingBoxHalfDimensions.y, mBoundingBoxHalfDimensions.z);
-        if ( lpVolume == 0 )
-        {
-            return;   // `lwz r3,0(r3); beq -> li r3,0` -- Initialize's own empty-slot arm
-        }
-
+            mBoundingBoxHalfDimensions);
         // The four `lvx128 part+0x120.. / stvx128 volume+0x00..` row copies: the box is expressed
         // in the part's own oriented-bbox basis, replacing the identity frame the ctor stamped.
-        const Vector3* lapOrientationRows[4] = {
-            &mBBoxOrientation.xAxis, &mBBoxOrientation.yAxis,
-            &mBBoxOrientation.zAxis, &mBBoxOrientation.wAxis
-        };
-        for ( s32 liRow = 0; liRow < 4; ++liRow )
-        {
-            lpVolume->maTransform[liRow].x = lapOrientationRows[liRow]->x;
-            lpVolume->maTransform[liRow].y = lapOrientationRows[liRow]->y;
-            lpVolume->maTransform[liRow].z = lapOrientationRows[liRow]->z;
-            lpVolume->maTransform[liRow].w = lapOrientationRows[liRow]->w;
-        }
+        *lpVolume->GetRelativeTransform() = mBBoxOrientation;
 
         // ---- 2. the five scene posts -------------------------------------------------------------
         // Every id derives from the ONE `ld 0x1D0(part)` the console performs (three times, but it
@@ -269,7 +227,7 @@ namespace Deformation
         // The volume instance carries the body's four transform rows (part+0x00/0x10/0x20/0x30).
         lpSceneInput->AddVolumeInstance(lVolumeInstanceId, lVolumeId, lBodyTransform);
 
-        const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lZeroVelocity(0.0f, 0.0f, 0.0f);
         lpSceneInput->AddForCollision(
             lVolumeInstanceId,
             static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(

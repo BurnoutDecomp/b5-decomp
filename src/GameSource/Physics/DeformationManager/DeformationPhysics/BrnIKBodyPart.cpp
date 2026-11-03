@@ -2,9 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([detach-band] probe)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"  // SensorSpec / the .w latch the band reads
-#include <cstdlib>  // getenv ([detach-band] latch)
 
 // BrnPhysics::Deformation::IKBodyPart -- the SKINNING + DETACHMENT side of one deformable
 // vehicle panel. Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX (offset authority).
@@ -56,9 +54,9 @@ namespace Deformation
     // self-consistent: [500, 5000] normally, and the TOUGH panels cap at 1200 instead of 5000.
     // ⚠️ The zeros were not inert -- every panel saw a [0,0] band, so "peak within band" could only
     // ever fire at exactly zero peak, i.e. detachment was effectively disabled.
-    VecFloat KVF_MIN_IMPULSE_FOR_DETACHMENT       = { 500.0f, 500.0f, 500.0f, 500.0f };  // unk_82FB9670 @82C5B720 <- flt_8200A034
-    VecFloat KVF_MAX_IMPULSE_FOR_DETACHMENT       = { 5000.0f, 5000.0f, 5000.0f, 5000.0f };  // unk_82FB9730 @82C5B748 <- flt_82019638
-    VecFloat KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH = { 1200.0f, 1200.0f, 1200.0f, 1200.0f };  // unk_82FB9630 @82C5B770 <- flt_82020A6C
+    VecFloat KVF_MIN_IMPULSE_FOR_DETACHMENT(500.0f);  // unk_82FB9670 @82C5B720 <- flt_8200A034
+    VecFloat KVF_MAX_IMPULSE_FOR_DETACHMENT(5000.0f);  // unk_82FB9730 @82C5B748 <- flt_82019638
+    VecFloat KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH(1200.0f);  // unk_82FB9630 @82C5B770 <- flt_82020A6C
 
     namespace
     {
@@ -169,10 +167,8 @@ namespace Deformation
                 CGS_ASSERT(liIndex < mpSpec->GetNumberOfDrivenPoints(),
                            "liIndex < GetNumberOfDrivenPoints()");
 
-                lpaSkinningOffsets[liIndex].x = lvOffset.x;
-                lpaSkinningOffsets[liIndex].y = lvOffset.y;
-                lpaSkinningOffsets[liIndex].z = lvOffset.z;
-                lpaSkinningOffsets[liIndex].w = lfScratch;   // v13 = *(drivenPoint+44) into the w lane
+                lpaSkinningOffsets[liIndex].SetVector(lvOffset.GetVector());
+                lpaSkinningOffsets[liIndex].SetPlus(lfScratch);
                 ++liIndex;
             }
             while ( liIndex < mpSpec->GetNumberOfDrivenPoints() );
@@ -196,29 +192,19 @@ namespace Deformation
         s32 liIndex = 0;
         if ( mpSpec->GetNumberOfDrivenPoints() > 0 )
         {
-            const Vector4& lvBoxMin = lpClampBox->mMin;   // lvx r27 (box+0)
-            const Vector4& lvBoxMax = lpClampBox->mMax;   // lvx r26 (box+16)
+            const Vector3& lvBoxMin = lpClampBox->mMin;   // lvx r27 (box+0)
+            const Vector3& lvBoxMax = lpClampBox->mMax;   // lvx r26 (box+16)
             do
             {
                 const Vector3& lvCurrentPos = maDrivenPoints[liIndex].GetPosition();
                 const Vector3  lvOriginalPos = maDrivenPoints[liIndex].GetOriginalPosition();
                 const f32      lfScratch = maDrivenPoints[liIndex].GetScratchAmount();
 
-                // vmaxfp(pos, boxMin) then vminfp(., boxMax) -- per-lane clamp.
-                f32 lfClampedX = lvCurrentPos.x > lvBoxMin.x ? lvCurrentPos.x : lvBoxMin.x;
-                f32 lfClampedY = lvCurrentPos.y > lvBoxMin.y ? lvCurrentPos.y : lvBoxMin.y;
-                f32 lfClampedZ = lvCurrentPos.z > lvBoxMin.z ? lvCurrentPos.z : lvBoxMin.z;
-                lfClampedX = lfClampedX < lvBoxMax.x ? lfClampedX : lvBoxMax.x;
-                lfClampedY = lfClampedY < lvBoxMax.y ? lfClampedY : lvBoxMax.y;
-                lfClampedZ = lfClampedZ < lvBoxMax.z ? lfClampedZ : lvBoxMax.z;
-
+                const Vector3 lvClamped(__vminfp(__vmaxfp(lvCurrentPos.mV, lvBoxMin.mV), lvBoxMax.mV));
                 CGS_ASSERT(liIndex < mpSpec->GetNumberOfDrivenPoints(),
                            "liIndex < GetNumberOfDrivenPoints()");
-
-                lpaSkinningOffsets[liIndex].x = lfClampedX - lvOriginalPos.x;
-                lpaSkinningOffsets[liIndex].y = lfClampedY - lvOriginalPos.y;
-                lpaSkinningOffsets[liIndex].z = lfClampedZ - lvOriginalPos.z;
-                lpaSkinningOffsets[liIndex].w = lfScratch;   // v16 = *(drivenPoint+44) into the w lane
+                lpaSkinningOffsets[liIndex].SetVector(__vsubfp(lvClamped.mV, lvOriginalPos.mV));
+                lpaSkinningOffsets[liIndex].SetPlus(lfScratch);
                 ++liIndex;
             }
             while ( liIndex < mpSpec->GetNumberOfDrivenPoints() );
@@ -272,8 +258,8 @@ namespace Deformation
 
                 const TagPoint& lTagPoint = maTagPoints[liIndex];
                 // sensor+0x10 vector, w lane (vspltw v0,v0,3) -- max-folded across both sensors.
-                const f32 lfImpulseA = lTagPoint.GetDeformationSensorA()->GetMaxSensorImpulse().w;
-                const f32 lfImpulseB = lTagPoint.GetDeformationSensorB()->GetMaxSensorImpulse().w;
+                const f32 lfImpulseA = lTagPoint.GetDeformationSensorA()->GetMaxSensorImpulse().GetVector().v[3];
+                const f32 lfImpulseB = lTagPoint.GetDeformationSensorB()->GetMaxSensorImpulse().GetVector().v[3];
 
                 // vmaxfp128 v0 = max(peak, A) ; vmaxfp128 peak = max(v0, B).
                 f32 lfStep = lfPeakImpulse > lfImpulseA ? lfPeakImpulse : lfImpulseA;
@@ -291,13 +277,13 @@ namespace Deformation
         f32 lfUpperBound;
         if ( lbToughened )
         {
-            lfUpperBound = KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH.w;   // v0  <- &unk_82FB9630
-            lfLowerBound = KVF_MIN_IMPULSE_FOR_DETACHMENT.w;         // v13 <- &unk_82FB9670
+            lfUpperBound = KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH.GetFloat();   // v0  <- &unk_82FB9630
+            lfLowerBound = KVF_MIN_IMPULSE_FOR_DETACHMENT.GetFloat();         // v13 <- &unk_82FB9670
         }
         else
         {
             lfLowerBound = 0.0f;                                     // v13 <- v126 (zero vector)
-            lfUpperBound = KVF_MAX_IMPULSE_FOR_DETACHMENT.w;         // v0  <- &unk_82FB9730
+            lfUpperBound = KVF_MAX_IMPULSE_FOR_DETACHMENT.GetFloat();         // v0  <- &unk_82FB9730
         }
 
         // vcmpgtfp128. peak > upper -> no detach.
@@ -396,7 +382,7 @@ namespace Deformation
     //     asm: v3=100.0; for i in [0,GetNumberOfTagPoints()): x = *(maTagPoints[i]) (mPos.x);
     //          if ( x < v3 ) { best=i; v3=x; }
     //   (The shown pseudocode has no per-iteration assert -- GetTagPoint()'s bounds check is provably
-    //    in range here and was elided; read directly via maTagPoints[i].GetPosition().x to match.)
+    //    in range here and was elided; read directly via maTagPoints[i].GetPosition().GetX() to match.)
     // ---------------------------------------------------------------------------------------------
     s32 IKBodyPart::FindLeftMostTagPoint()
     {
@@ -407,7 +393,7 @@ namespace Deformation
         {
             do
             {
-                const f32 lfXDist = maTagPoints[liTagPointIndex].GetPosition().x;
+                const f32 lfXDist = maTagPoints[liTagPointIndex].GetPosition().GetX();
                 if ( lfXDist < lfLeftMostPos )
                 {
                     liLeftMostIndex = liTagPointIndex;
@@ -434,7 +420,7 @@ namespace Deformation
         {
             do
             {
-                const f32 lfXDist = maTagPoints[liTagPointIndex].GetPosition().x;
+                const f32 lfXDist = maTagPoints[liTagPointIndex].GetPosition().GetX();
                 if ( lfXDist > lfRightMostPos )
                 {
                     liRightMostIndex = liTagPointIndex;
@@ -452,7 +438,7 @@ namespace Deformation
     // points; decide whether the accumulated sensor impulse should detach the part, and hand back
     // the tag index whose joint should hinge. Store for store:
     //   * per tag point i: fold the two sensors' biggest-impulse magnitudes (each sensor's
-    //     mPointDisplacement_BiggestImpulseThisFrame.w lane, vmaxfp chain) into lvfMaxImpulse;
+    //     mPointDisplacement_BiggestImpulseThisFrame.GetPlus() lane, vmaxfp chain) into lvfMaxImpulse;
     //     lfDeform = |tagPos - spec initial pos|^2 - spec detach-threshold^2;
     //     track the LARGEST lfDeform (fsel fold, FP31) and the tag with the SMALLEST lfDeform
     //     among tags that HAVE a joint (spec joint index != 255) -> the hinge candidate;
@@ -486,17 +472,17 @@ namespace Deformation
             const TagPointSpec* lpSpec = const_cast<TagPoint*>(lpTag)->GetSpec();
 
             const f32 lfImpA = lpTag->GetDeformationSensorA()
-                                   ->mPointDisplacement_BiggestImpulseThisFrame.w;
+                                   ->mPointDisplacement_BiggestImpulseThisFrame.GetPlus();
             const f32 lfImpB = lpTag->GetDeformationSensorB()
-                                   ->mPointDisplacement_BiggestImpulseThisFrame.w;
+                                   ->mPointDisplacement_BiggestImpulseThisFrame.GetPlus();
             f32 lfPair = (lfImpA > lfMaxImpulse) ? lfImpA : lfMaxImpulse;   // vmaxfp fold
             lfMaxImpulse = (lfImpB > lfPair) ? lfImpB : lfPair;
 
             const Vector3& lrPos     = lpTag->GetPosition();
             const Vector3& lrInitial = lpSpec->GetInitialPosition();
-            const f32 lfDx = lrPos.x - lrInitial.x;
-            const f32 lfDy = lrPos.y - lrInitial.y;
-            const f32 lfDz = lrPos.z - lrInitial.z;
+            const f32 lfDx = lrPos.GetX() - lrInitial.GetX();
+            const f32 lfDy = lrPos.GetY() - lrInitial.GetY();
+            const f32 lfDz = lrPos.GetZ() - lrInitial.GetZ();
             const f32 lfExcess = (lfDx * lfDx + lfDy * lfDy + lfDz * lfDz)
                                - lpSpec->GetDetachThresholdSquared();      // spec +56
 
@@ -529,64 +515,14 @@ namespace Deformation
         }
         lriDetachJointIndexOut = liCandidate;
 
-        const f32 lfMaxBand = IsToughenedPart() ? KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH.x
-                                                : KVF_MAX_IMPULSE_FOR_DETACHMENT.x;
+        const f32 lfMaxBand = IsToughenedPart() ? KVF_MAX_IMPULSE_FOR_DETACHMENT_TOUGH.GetFloat()
+                                                : KVF_MAX_IMPULSE_FOR_DETACHMENT.GetFloat();
 
         const s32 liPartType = static_cast<s32>(GetPartType());   // spec +476
 
-        // ---- [detach-band] READ-ONLY WITNESS. NOT IN THE X360 BINARY. Opt-in via BRN_DEFORM_TRACE.
-        //      DELETE-WHEN the shedding question is banked.
-        // ⭐ WHY IT EXISTS: [detach-gate] counts arm-A hits and [detach-make] names the part that
-        // left, but NEITHER carries the two numbers the decision is actually made on -- the
-        // deformation excess and the impulse the sensors latched. "The impulse fed to the band is
-        // not verified" stayed open for exactly as long as nothing printed it. This sits AFTER the
-        // `largestExcess > 0` early-out and BEFORE the band, so it fires once per part that is
-        // genuinely in play, prints the predicted verdict, and lists every tag's two sensor indices
-        // with the .w latch ApplySensorImpulse wrote on each -- which is the only quantity the band
-        // ever compares. `banded 0` means the band was SKIPPED (the candidate/type guard), i.e. the
-        // part detaches on deformation alone.
-        {
-            static s32 siBandProbe = -1;
-            if ( siBandProbe < 0 )
-            {
-            }
-            static u32 suBandLines = 0u;
-            if ( siBandProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suBandLines < 4000u )
-            {
-                ++suBandLines;
-                const bool lbBanded =
-                    ( liCandidate == -1 || liPartType == 1 || liPartType == 2 || liPartType == 3 );
-                const bool lbVerdict = !lbBanded
-                    || ( KVF_MIN_IMPULSE_FOR_DETACHMENT.x <= lfMaxImpulse && lfMaxImpulse <= lfMaxBand );
-                *CgsDev::Log::gpDebugPrint
-                    << "[detach-band] type " << liPartType
-                    << " tough " << (IsToughenedPart() ? 1 : 0)
-                    << " nTag " << liNumTagPoints
-                    << " cand " << liCandidate
-                    << " excess " << lfLargestExcess
-                    << " maxImp " << lfMaxImpulse
-                    << " band [" << KVF_MIN_IMPULSE_FOR_DETACHMENT.x << "," << lfMaxBand << "]"
-                    << " banded " << (lbBanded ? 1 : 0)
-                    << " hinge " << ((liCandidate != -1) ? 1 : 0)
-                    << " -> " << (lbVerdict ? "DETACH" : "keep");
-                for ( s32 lj = 0; lj < liNumTagPoints; ++lj )
-                {
-                    const TagPoint* lpT = GetTagPoint(lj);
-                    const TagPointSpec* lpS = const_cast<TagPoint*>(lpT)->GetSpec();
-                    *CgsDev::Log::gpDebugPrint
-                        << " s" << static_cast<s32>(lpS->GetDeformationSensorA())
-                        << ":" << lpT->GetDeformationSensorA()->mPointDisplacement_BiggestImpulseThisFrame.w
-                        << " s" << static_cast<s32>(lpS->GetDeformationSensorB())
-                        << ":" << lpT->GetDeformationSensorB()->mPointDisplacement_BiggestImpulseThisFrame.w;
-                }
-                *CgsDev::Log::gpDebugPrint << "\n";
-            }
-        }
-        // ---- end [detach-band] -----------------------------------------------------------------
-
         if ( liCandidate == -1 || liPartType == 1 || liPartType == 2 || liPartType == 3 )
         {
-            if ( KVF_MIN_IMPULSE_FOR_DETACHMENT.x > lfMaxImpulse )
+            if ( KVF_MIN_IMPULSE_FOR_DETACHMENT.GetFloat() > lfMaxImpulse )
             {
                 return false;
             }
