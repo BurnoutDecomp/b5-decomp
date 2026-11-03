@@ -16,7 +16,7 @@
 #include "GameSource/Director/Utils/BrnVehicleRef.h"              // BrnDirector::VehicleRef (mVehicleRef + EType)
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex (PlayMovie race car)
 
-namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
+namespace BrnResource { class ICEList; namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
 
 // ============================================================================
 // GameSource/Director/BrnDirectorICEWrapper.h
@@ -35,11 +35,10 @@ namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Dir
 // LAYOUT (member NAMES from the DWARF, ICEWrapper.hpp:215..:246; OFFSETS/ORDER from the
 // X360 functions' member accesses -- the ctor, Prepare, Construct, Destruct, PlayMovie,
 // Update, GetCurrentMovie, IsPlayingMovie and UpdateAction). Members are accessed BY
-// NAME; the offsets are recorded for provenance, never used as casts. The memory
-// manager, manager, mover, camera, anchor and action queue are embedded BY VALUE and our
-// rebuilt sizes differ from the recorded build, so the relative offsets below are NOT
-// reproduced with padding -- members are declared in their recorded ORDER and parity is
-// by name.
+// NAME; the offsets are recorded for provenance, never used as casts. The native
+// embedded extents and member offsets are guarded below. The inactive list pointer
+// and next-movie counter retain the DecFIGS declaration shape within independently
+// bounded ARTIST storage; no new initialization or active use is added.
 //
 //   +0x00000  ICE::ICEMemory         mICEMemory    the ICE heap (a HeapMalloc) + its edit
 //                                                  heap at +0x520; Prepare constructs it,
@@ -274,16 +273,18 @@ private:
     // incoming spaces into (ICECameraAnchor::SetAnchor, `CameraSpaceHandler::operator=` @0x825401A8).
     ICE::ICECameraAnchor mICECameraAnchor;
 
-    // FLAG (provisional names): two ICE load-state scalars the DWARF lists just before
-    // mVehicleRef. Construct zeroes exactly these two (+0x120E4 and +0x120E8); their
-    // roles beyond "ICE load-state" are not recovered, so the names are provisional.
-    // They are modelled with an explicit pad so the two scalars land at +0x120E4/+0x120E8
-    // and mVehicleRef stays at +0x120F0 (the +0x120F0..+0x120FC ref fields Construct seeds).
-    // +0x120E4  s32  miICELoadStateA  (zeroed by Construct)
-    // +0x120E8  s32  miICELoadStateB  (zeroed by Construct)
-    s32 miICELoadStateA;
-    s32 miICELoadStateB;
-    u8  maVehicleRefPad[4];   // pad so mVehicleRef lands at +0x120F0 (0x120E8 + 4 + 4)
+    // +0x120E0  DecFIGS ICEWrapper.hpp:232 names this list pointer after the
+    // 0x210-byte anchor. ARTIST stores the next two words at120E4/120E8.
+    // No active ARTIST dereference identifies this slot; its pointer shape is
+    // corroborated by the near-ancestor declaration and native neighborhood.
+    const BrnResource::ICEList* mpICEList;
+
+    // Provisional names for DecFIGS's EICELoadStage / EICEPrepareStage words.
+    // Construct clears exactly these two; Prepare switches on the second.
+    s32 miICELoadStateA;                       // native +120E4
+    s32 miICELoadStateB;                       // native +120E8
+    // DecFIGS ICEWrapper.hpp:235; native Construct leaves this word untouched.
+    s32 miNextMovieToAcquire;                  // native +120EC
 
     // +0x120F0  The vehicle the active take is anchored to.
     VehicleRef mVehicleRef;
@@ -294,6 +295,31 @@ private:
 
     // +0x12108  Dev-tools input gate -- UpdateAction only queues actions while this is set.
     bool mbAcceptInput;
+
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(ICE::CameraSpaceHandler) == 0x210), "native camera-space handler extent");
+        CGS_STATIC_ASSERT((sizeof(ICE::ICECameraAnchor) == 0x210), "native ICE anchor extent");
+        CGS_STATIC_ASSERT((sizeof(VehicleRef) == 0x10), "native vehicle reference extent");
+        CGS_STATIC_ASSERT((__alignof(VehicleRef) == 4), "native vehicle reference natural alignment");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mICEMemory) == 0x0), "native wrapper mICEMemory");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mICEManager) == 0xA40), "native wrapper mICEManager");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mICETimer) == 0x9B20), "native wrapper mICETimer");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mICEFileHandler) == 0x9B24), "native wrapper mICEFileHandler");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mpResourceManager) == 0x11B24), "native wrapper mpResourceManager");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mActionQueue) == 0x11B28), "native wrapper mActionQueue");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mCameraMover) == 0x11BD0), "native wrapper mCameraMover");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mICECamera) == 0x11D60), "native wrapper mICECamera");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mICECameraAnchor) == 0x11ED0), "native wrapper mICECameraAnchor");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mpICEList) == 0x120E0), "native wrapper mpICEList");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, miICELoadStateA) == 0x120E4), "native wrapper miICELoadStateA");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, miICELoadStateB) == 0x120E8), "native wrapper miICELoadStateB");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, miNextMovieToAcquire) == 0x120EC), "native wrapper miNextMovieToAcquire");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mVehicleRef) == 0x120F0), "native wrapper mVehicleRef");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mCurrentMovieID) == 0x12100), "native wrapper mCurrentMovieID");
+        CGS_STATIC_ASSERT((offsetof(ICEWrapper, mbAcceptInput) == 0x12108), "native wrapper mbAcceptInput");
+        CGS_STATIC_ASSERT((sizeof(ICEWrapper) == 0x12110), "native ICE wrapper containment extent");
+    }
 };
 
 } // namespace BrnDirector
