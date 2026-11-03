@@ -8,121 +8,29 @@
 // ===================================================================================
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"
 #include "GameSource/Gui/BrnGuiCache.h"                  // GetLandmarkInfoFromIndex / AtPositionInList
-#include "GameSource/Gui/BrnGuiWorldDataController.h"   // the test hook's trigger-data gate
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"    // BrnGui::CalculateRoute
 #include "GameSource/GameState/BrnGameStateTypes.h"      // BrnGameState::LandmarkIndex
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the BRN_SATNAV_DIAG witness
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
 
-#include <cstdlib>   // getenv, std::strtol
-#include <cstring>   // std::memset
 
 namespace BrnGui
 {
-    namespace
-    {
-        template <class T>
-        void AddGuiOutEvent(CgsModule::VariableEventQueue<18432, 16>* lpQueue, const T& lrEvent)
-        {
-            CGS_ASSERT(lpQueue != NULL, "lpQueue");
-            if (lpQueue != NULL)
-            {
-                lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrEvent),
-                                  lrEvent.GetEventType(), static_cast<s32>(sizeof(T)));
-            }
-        }
-
-        void RunRouteTestHook(GuiCache* lpGuiCache, bool lbTrackingActive)
-        {
-            static s32 siState = -1;   // -1 unread, 0 off / done, 1 armed
-            static s32 saiListPositions[2] = { 0, 0 };
-            if (siState == -1)
-            {
-                siState = 0;
-            }
-
-            if (siState != 1 || lbTrackingActive || lpGuiCache == 0)
-            {
-                return;
-            }
-            const WorldDataController* lpWorldData = lpGuiCache->GetWorldDataController();
-            if (lpWorldData == 0 || !lpWorldData->HasTriggerData() || lpGuiCache->IsInJunkyard())
-            {
-                return;
-            }
-            // The trigger data is ready during loading, long before the GUI -> game-state bridge
-            // first runs (BrnGameModule runs DoUpdate_GameStatePostWorld only in game), and a 494
-            // posted then is cleared at the head of the next GUI leg without ever becoming game
-            // event 84. So the hook waits for the free-roam HUD (FBurnMainHudState raises
-            // mbGameplayHudActive once the gameplay HUD is up, which is in game) and then
-            // ~2 s more of tracker updates.
-            if (!lpGuiCache->IsGameplayHudActive())
-            {
-                return;
-            }
-            static s32 siSettleCalls = 120;
-            if (--siSettleCalls > 0)
-            {
-                return;
-            }
-
-            siState = 0;
-            const s32 liLandmarkCount = lpWorldData->GetTotalNumberOfLandmarks();
-            if (saiListPositions[0] >= liLandmarkCount || saiListPositions[1] >= liLandmarkCount)
-            {
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[satnav] TEST HOOK list positions " << saiListPositions[0] << ","
-                        << saiListPositions[1] << " outside the landmark list (count "
-                        << liLandmarkCount << "), nothing published\n";
-                }
-                return;
-            }
-
-            u16 lau16Landmarks[2];
-            Vector4 lav4Positions[2];
-            for (s32 liEnd = 0; liEnd < 2; ++liEnd)
-            {
-                GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
-                lpGuiCache->GetLandmarkInfoAtPositionInList(saiListPositions[liEnd], &lLandmarkInfo);
-                lau16Landmarks[liEnd] = static_cast<u16>(lLandmarkInfo.GetLandmarkIndexHalf());
-                lav4Positions[liEnd]  = lLandmarkInfo.GetPositionLane();
-            }
-
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[satnav] TEST HOOK list positions " << saiListPositions[0] << ","
-                    << saiListPositions[1] << " publishes landmarks "
-                    << static_cast<s32>(lau16Landmarks[0]) << ","
-                    << static_cast<s32>(lau16Landmarks[1])
-                    << " at (" << lav4Positions[0].x << "," << lav4Positions[0].z << ") ("
-                    << lav4Positions[1].x << "," << lav4Positions[1].z << ")\n";
-            }
-            lpGuiCache->UpdateTrackerInfo(lau16Landmarks, 2);
-        }
-    }
-
     // GuiTracker::Update (45 insns). Only while mbRouteDataPending: the leg number is the
     // count of route records already received, the leg runs from tracker record [leg] to
     // record [leg + 1] (each record's whole 16-byte position lane), each end is filled by
     // ContructRouteNodeFromTrackedItem, the record is published, and the pending flag
     // drops (`stb 0, 1(this)`).
     //
-    // The console builds the 80-byte record on its stack and never writes
-    // maSectionIndices (+0x40..+0x43), so those two halves are residue there. FLAG host
-    // deviation: the record is zeroed first, the SendRouteRequestAction precedent.
-    void GuiTracker::Update(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents)
+    // The console leaves the section-index halves as stack residue.
+    void GuiTracker::Update(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
     {
-        RunRouteTestHook(mpGuiCache, mbTrackingActive);
         if (!mbRouteDataPending)
         {
             return;
         }
 
         CalculateRoute lCalculateRoute;
-        std::memset(&lCalculateRoute, 0, sizeof(lCalculateRoute));
 
         const s32 liLeg = miNumRouteInfoReceived;
         lCalculateRoute.mu16EventID    = static_cast<u16>(liLeg);           // sth -> +0x44
@@ -132,7 +40,7 @@ namespace BrnGui
         ContructRouteNodeFromTrackedItem(&maTrackerRecords[liLeg], &lCalculateRoute, 0);
         ContructRouteNodeFromTrackedItem(&maTrackerRecords[liLeg + 1], &lCalculateRoute, 1);
 
-        AddGuiOutEvent(lpGuiOutEvents, lCalculateRoute);
+        lpOutput->AddGuiOutEvent(lCalculateRoute);
 
         mbRouteDataPending = false;
     }

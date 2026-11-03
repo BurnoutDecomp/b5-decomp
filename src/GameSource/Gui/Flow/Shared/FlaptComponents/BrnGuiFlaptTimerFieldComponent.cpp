@@ -59,12 +59,12 @@ namespace BrnGui
         // Default colours: safe = white (1,1,1), danger = red (1,0,0), current = 0
         // (the X360 builds these into the three colour lanes after zeroing them).
         mv4SafeColour.SetZero();
-        mv4SafeColour.x = 1.0f;
-        mv4SafeColour.y = 1.0f;
-        mv4SafeColour.z = 1.0f;
+        mv4SafeColour.mV.x = 1.0f;
+        mv4SafeColour.mV.y = 1.0f;
+        mv4SafeColour.mV.z = 1.0f;
 
         mv4DangerColour.SetZero();
-        mv4DangerColour.x = 1.0f;
+        mv4DangerColour.mV.x = 1.0f;
 
         mv4CurrentColour.SetZero();
 
@@ -147,10 +147,10 @@ namespace BrnGui
             if (lfRatio < 0.0f) { lfRatio = 0.0f; }
             if (lfRatio > 1.0f) { lfRatio = 1.0f; }
 
-            mv4CurrentColour.x = mv4DangerColour.x + (mv4SafeColour.x - mv4DangerColour.x) * lfRatio;
-            mv4CurrentColour.y = mv4DangerColour.y + (mv4SafeColour.y - mv4DangerColour.y) * lfRatio;
-            mv4CurrentColour.z = mv4DangerColour.z + (mv4SafeColour.z - mv4DangerColour.z) * lfRatio;
-            mv4CurrentColour.w = mv4DangerColour.w + (mv4SafeColour.w - mv4DangerColour.w) * lfRatio;
+            mv4CurrentColour.mV.x = mv4DangerColour.mV.x + (mv4SafeColour.mV.x - mv4DangerColour.mV.x) * lfRatio;
+            mv4CurrentColour.mV.y = mv4DangerColour.mV.y + (mv4SafeColour.mV.y - mv4DangerColour.mV.y) * lfRatio;
+            mv4CurrentColour.mV.z = mv4DangerColour.mV.z + (mv4SafeColour.mV.z - mv4DangerColour.mV.z) * lfRatio;
+            mv4CurrentColour.mV.w = mv4DangerColour.mV.w + (mv4SafeColour.mV.w - mv4DangerColour.mV.w) * lfRatio;
         }
         else if (meCountingMode == E_TIMER_MODE_COUNTING_UP)
         {
@@ -163,10 +163,10 @@ namespace BrnGui
             if (lfRatio < 0.0f) { lfRatio = 0.0f; }
             if (lfRatio > 1.0f) { lfRatio = 1.0f; }
 
-            mv4CurrentColour.x = mv4SafeColour.x + (mv4DangerColour.x - mv4SafeColour.x) * lfRatio;
-            mv4CurrentColour.y = mv4SafeColour.y + (mv4DangerColour.y - mv4SafeColour.y) * lfRatio;
-            mv4CurrentColour.z = mv4SafeColour.z + (mv4DangerColour.z - mv4SafeColour.z) * lfRatio;
-            mv4CurrentColour.w = mv4SafeColour.w + (mv4DangerColour.w - mv4SafeColour.w) * lfRatio;
+            mv4CurrentColour.mV.x = mv4SafeColour.mV.x + (mv4DangerColour.mV.x - mv4SafeColour.mV.x) * lfRatio;
+            mv4CurrentColour.mV.y = mv4SafeColour.mV.y + (mv4DangerColour.mV.y - mv4SafeColour.mV.y) * lfRatio;
+            mv4CurrentColour.mV.z = mv4SafeColour.mV.z + (mv4DangerColour.mV.z - mv4SafeColour.mV.z) * lfRatio;
+            mv4CurrentColour.mV.w = mv4SafeColour.mV.w + (mv4DangerColour.mV.w - mv4SafeColour.mV.w) * lfRatio;
         }
         else
         {
@@ -257,16 +257,16 @@ namespace BrnGui
     // directly.
     void FlaptTimerFieldComponent::SetSafeColours(u8 luRed, u8 luGreen, u8 luBlue)
     {
-        mv4SafeColour.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
-        mv4SafeColour.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
-        mv4SafeColour.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
+        mv4SafeColour.mV.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
+        mv4SafeColour.mV.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
+        mv4SafeColour.mV.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
     }
 
     void FlaptTimerFieldComponent::SetDangerColours(u8 luRed, u8 luGreen, u8 luBlue)
     {
-        mv4DangerColour.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
-        mv4DangerColour.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
-        mv4DangerColour.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
+        mv4DangerColour.mV.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
+        mv4DangerColour.mV.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
+        mv4DangerColour.mV.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
     }
 
     void FlaptTimerFieldComponent::SetCountingMode(ETimerMode leCountingMode)
