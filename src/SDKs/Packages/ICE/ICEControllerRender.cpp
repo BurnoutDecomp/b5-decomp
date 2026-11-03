@@ -194,15 +194,11 @@ void ICEController::Render()
     if (!miShowUi)
         return;
 
-    // Status caption: only when a status line is live (count > 0) and the status mode
-    // selects the print (mode == 2). The status text base is miStatusText (the buffer
-    // at +0x720C); the render context rides as the first ScrShadowPrintf arg (the
-    // committed convention used by the widget Render bodies).
+    // ARTIST 8253B2CC..8253B2E8 passes 720C as the FORMAT, at 150/180 and size 16.
+    // Its following native bytes are preserved without claiming a text capacity.
     if (miStatusCount > 0 && miStatusMode == 2)
     {
-        const char* lpcStatus = reinterpret_cast<const char*>(&miStatusText);
-        ICERender::ScrShadowPrintf((s32)mRenderContext, 150,
-                                   KF_ICE_STATUS_TEXT_SIZE, "%s", lpcStatus);
+        ICERender::ScrShadowPrintf(150, 180, KF_ICE_STATUS_TEXT_SIZE, &miStatusText);
     }
 
     // The animated logo and the widescreen/letterbox marker (both 2D screen-space) are
