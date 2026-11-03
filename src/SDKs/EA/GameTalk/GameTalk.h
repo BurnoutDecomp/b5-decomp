@@ -76,6 +76,12 @@ namespace GameTalk
     void* Free(void* lpBlock);
     bool  StrIEqual(const char* lpcLhs, const char* lpcRhs);
 
+    class GameTalkMessage;
+    struct GameTalkMessageVTable
+    {
+        GameTalkMessage* (*DeletingDestructor)(GameTalkMessage*, unsigned int);
+    };
+
     class GameTalkMessage
     {
     public:
@@ -95,6 +101,8 @@ namespace GameTalk
         // Construct a message bound to the named tool channel ("Camera").
         explicit GameTalkMessage(const char* lpcChannel);
         ~GameTalkMessage();
+        static void* operator new(size_t luSize);
+        static void operator delete(void* lpBlock);
 
         // @0x82838D98 -- static factory: decode a big-endian wire buffer into a message.
         static GameTalkMessage* Create(const char* lpBuffer);
@@ -160,6 +168,9 @@ namespace GameTalk
         // AddKeyContent; seeded by AllocateDataBuffer in its own TU).
         static s32 KsDataBufferCapacity;
 
+        // Native 0x820DF230 contains only the deleting-destructor slot.
+        const GameTalkMessageVTable* mpVTable; // +0x00
+
     private:
         // Wire-cursor parse helpers (X360 statics). Each reads a big-endian u32 length
         // prefix off the cursor, advances past it, package-allocates the payload and copies
@@ -169,8 +180,7 @@ namespace GameTalk
         static char* ReadString(const char*& rlpCursor);
         static void* ReadBinary(const char*& rlpCursor, u32* lpuLength);
 
-        void* mpVTable;         // +0x00  vtable
-        s32   mbParsed;         // +0x04  mbCreatedFromBuffer (parsed-from-wire flag)
+        bool  mbParsed;         // +0x04  mbCreatedFromBuffer (parsed-from-wire flag)
         KeyContent** mppEntries;// +0x08  entry-pointer table
         s32   miNumKeys;        // +0x0C  live key/content entry count
         const char* mpcChannel; // +0x10  tool channel string

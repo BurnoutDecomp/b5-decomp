@@ -228,15 +228,11 @@ void NFSLiveLink::UpdateChannelMonitoring()
         mfTime = 0.0f;
         void* lpMemory = EA::GameTalk::Alloc(sizeof(EA::GameTalk::GameTalkMessage));
         EA::GameTalk::GameTalkMessage* lpMessage = lpMemory
-            ? new (lpMemory) EA::GameTalk::GameTalkMessage("Tool.Nicotine") : 0;
+            ? ::new (lpMemory) EA::GameTalk::GameTalkMessage("Tool.Nicotine") : 0;
         lpMessage->AddKeyContent("MonitorControl", 1, mMonitorOutput, sizeof(mMonitorOutput));
         EA::GameTalk::GameTalkManager::GetInstance();
         EA::GameTalk::GameTalkManager::SendMessage("Tool.Nicotine", lpMessage);
-        if (lpMessage)
-        {
-            lpMessage->~GameTalkMessage();
-            EA::GameTalk::Free(lpMessage);
-        }
+        if (lpMessage) lpMessage->mpVTable->DeletingDestructor(lpMessage, 1);
     }
     if (miMonitorRecordSize > static_cast<int>(static_cast<unsigned int>(mMonitorOutput + 512 - mpMonitorWrite) & 0x3fffffffu))
         mpMonitorWrite = mMonitorOutput;
@@ -359,16 +355,12 @@ void NFSLiveLink::DynMixReceiveGameTalkMessage(EA::GameTalk::GameTalkMessage* ap
     {
         lpLink->mfLastPingTime = lpLink->mfTime;
         void* lpMemory = Alloc(sizeof(GameTalkMessage));
-        GameTalkMessage* lpReply = lpMemory ? new (lpMemory) GameTalkMessage("Tool.Nicotine") : 0;
+        GameTalkMessage* lpReply = lpMemory ? ::new (lpMemory) GameTalkMessage("Tool.Nicotine") : 0;
         lpReply->AddKeyContent("Ping", 0, "Nicotine.xenon",
                                rw::core::stdc::StringLength("Nicotine.xenon"));
         GameTalkManager::GetInstance();
         GameTalkManager::SendMessage("Tool.Nicotine", lpReply);
-        if (lpReply)
-        {
-            lpReply->~GameTalkMessage();
-            Free(lpReply);
-        }
+        if (lpReply) lpReply->mpVTable->DeletingDestructor(lpReply, 1);
     }
     else if (!StringCompare(apMessage->GetKey(0), "RefreshMap"))
     {
