@@ -209,14 +209,14 @@ struct Matrix44Template
     // call site (0x824092FC.. and 0x8240948C..), which is exactly this element-by-element widen.
     explicit Matrix44Template(const rw::math::vpu::Matrix44& lrMatrix)
     {
-        xAxis.Set(static_cast<Type>(lrMatrix.xAxis.x), static_cast<Type>(lrMatrix.xAxis.y),
-                  static_cast<Type>(lrMatrix.xAxis.z), static_cast<Type>(lrMatrix.xAxis.w));
-        yAxis.Set(static_cast<Type>(lrMatrix.yAxis.x), static_cast<Type>(lrMatrix.yAxis.y),
-                  static_cast<Type>(lrMatrix.yAxis.z), static_cast<Type>(lrMatrix.yAxis.w));
-        zAxis.Set(static_cast<Type>(lrMatrix.zAxis.x), static_cast<Type>(lrMatrix.zAxis.y),
-                  static_cast<Type>(lrMatrix.zAxis.z), static_cast<Type>(lrMatrix.zAxis.w));
-        wAxis.Set(static_cast<Type>(lrMatrix.wAxis.x), static_cast<Type>(lrMatrix.wAxis.y),
-                  static_cast<Type>(lrMatrix.wAxis.z), static_cast<Type>(lrMatrix.wAxis.w));
+        xAxis.Set(static_cast<Type>(lrMatrix.xAxis.X().GetFloat()), static_cast<Type>(lrMatrix.xAxis.Y().GetFloat()),
+                  static_cast<Type>(lrMatrix.xAxis.Z().GetFloat()), static_cast<Type>(lrMatrix.xAxis.W().GetFloat()));
+        yAxis.Set(static_cast<Type>(lrMatrix.yAxis.X().GetFloat()), static_cast<Type>(lrMatrix.yAxis.Y().GetFloat()),
+                  static_cast<Type>(lrMatrix.yAxis.Z().GetFloat()), static_cast<Type>(lrMatrix.yAxis.W().GetFloat()));
+        zAxis.Set(static_cast<Type>(lrMatrix.zAxis.X().GetFloat()), static_cast<Type>(lrMatrix.zAxis.Y().GetFloat()),
+                  static_cast<Type>(lrMatrix.zAxis.Z().GetFloat()), static_cast<Type>(lrMatrix.zAxis.W().GetFloat()));
+        wAxis.Set(static_cast<Type>(lrMatrix.wAxis.X().GetFloat()), static_cast<Type>(lrMatrix.wAxis.Y().GetFloat()),
+                  static_cast<Type>(lrMatrix.wAxis.Z().GetFloat()), static_cast<Type>(lrMatrix.wAxis.W().GetFloat()));
     }
 
     // DWARF matrix44.h:161 / :210 / :252-267 / :183.
