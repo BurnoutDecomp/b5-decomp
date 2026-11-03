@@ -101,14 +101,13 @@ namespace BrnPhysics
         {
             const Vector3 lPreviousPosition = mTransform.wAxis;
             mTransform = lpRigidBody->GetTransform();
-            mTransform.wAxis = { lPreviousPosition.x, 10.0f,
-                                 lPreviousPosition.z, lPreviousPosition.w };
+            mTransform.wAxis = lPreviousPosition;
+            mTransform.wAxis.SetY(10.0f);
             mLinearVelocity.SetZero();
             const f32 lfTwoPi = 6.2831855f; // flt_8208C240
-            mAngularVelocity = { KF_SPINNING_SPEED_X * lfTwoPi,
-                                 KF_SPINNING_SPEED_Y * lfTwoPi,
-                                 KF_SPINNING_SPEED_Z * lfTwoPi,
-                                 0.0f };
+            mAngularVelocity = Vector3(KF_SPINNING_SPEED_X * lfTwoPi,
+                                       KF_SPINNING_SPEED_Y * lfTwoPi,
+                                       KF_SPINNING_SPEED_Z * lfTwoPi);
             return;
         }
 
@@ -118,9 +117,9 @@ namespace BrnPhysics
             mTransform = lpRigidBody->GetTransform();
             // The original VMX insert mask replaces only position Y from physics; X/Z/W
             // remain the previous externally simulated position.
-            mTransform.wAxis.x = lPreviousPosition.x;
-            mTransform.wAxis.z = lPreviousPosition.z;
-            mTransform.wAxis.w = lPreviousPosition.w;
+            Vector3 lPosition = lPreviousPosition;
+            lPosition.SetY(mTransform.wAxis.GetY());
+            mTransform.wAxis = lPosition;
         }
         else
         {

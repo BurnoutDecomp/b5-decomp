@@ -61,7 +61,7 @@ namespace Vehicle
 
         // +0x1070 LANE Z ONLY -- a read-modify-write, exactly as VehiclePhysics::Construct already
         // does to the same lane a few instructions earlier. Redundant in both builds; reproduced.
-        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.z = 0.0f;
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.SetZ(0.0f);
     }
 }
 }

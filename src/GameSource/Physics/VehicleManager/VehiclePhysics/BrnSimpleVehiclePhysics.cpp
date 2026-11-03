@@ -40,9 +40,9 @@ namespace Vehicle
     static Vector3 RotateCOMOffsetToWorld(const Matrix44Affine& lrTransform, const Vector3& lrCOMOffset)
     {
         // xAxis*com.x + yAxis*com.y + zAxis*com.z  (matches the asm vmul/vmaddfp accumulation).
-        Vector3 lvWorld = vpu::Mult(lrTransform.xAxis, lrCOMOffset.x);
-        lvWorld = vpu::Add(lvWorld, vpu::Mult(lrTransform.yAxis, lrCOMOffset.y));
-        lvWorld = vpu::Add(lvWorld, vpu::Mult(lrTransform.zAxis, lrCOMOffset.z));
+        Vector3 lvWorld = vpu::Mult(lrTransform.xAxis, lrCOMOffset.mV.v[0]);
+        lvWorld = vpu::Add(lvWorld, vpu::Mult(lrTransform.yAxis, lrCOMOffset.mV.v[1]));
+        lvWorld = vpu::Add(lvWorld, vpu::Mult(lrTransform.zAxis, lrCOMOffset.mV.v[2]));
         return lvWorld;
     }
 
@@ -103,13 +103,12 @@ namespace Vehicle
         if (!mbMinWheelDistValid)
             return false;
 
-        const Vector3 lvPlanePos = { mWheelPlanePosAndHeight.x, mWheelPlanePosAndHeight.y,
-                                     mWheelPlanePosAndHeight.z, 0.0f };
-        const f32 lfPlaneHeight = mWheelPlanePosAndHeight.w;          // height packed in w lane
+        const Vector3 lvPlanePos(mWheelPlanePosAndHeight.mV.v[0], mWheelPlanePosAndHeight.mV.v[1], mWheelPlanePosAndHeight.mV.v[2]);
+        const f32 lfPlaneHeight = mWheelPlanePosAndHeight.mV.v[3];          // height packed in w lane
         const Vector3 lvOffset = vpu::Subtract(lvContactPoint, lvPlanePos);
         const f32 lfProjected = vpu::Dot(lvOffset, mTransform.yAxis); // vehicle up axis
 
-        return (lvfThreshold.x + lfPlaneHeight) > lfProjected;
+        return (lvfThreshold.mV.v[0] + lfPlaneHeight) > lfProjected;
     }
 
     // ===========================================================================================
@@ -117,7 +116,7 @@ namespace Vehicle
     //  The X360 originals are VMX128 inline asm; these are the de-SIMD'd named-member equivalents.
     // ===========================================================================================
 
-    static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
+    static const Vector3 KV_ZERO(0.0f, 0.0f, 0.0f);
 
     // The two GetTractionLine @0x825D85C0 scalars, READ OUT OF THE X360 IMAGE at the addresses
     // its own `lfs` instructions name (x360rd, 10/10 self-calibration) rather than guessed:
@@ -217,7 +216,7 @@ namespace Vehicle
         for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             maLocalTractionPoints[liWheel] = KV_ZERO;   // +0x530/+0x540/+0x550/+0x560
 
-        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const VecFloat lvfZero(0.0f);
         mfSpeedMPH = lvfZero;   // +1728 (VecFloat == Vector4)
 
         mbCrashing               = false;               // +1808
@@ -270,7 +269,7 @@ namespace Vehicle
         // `vspltw v13,v1(lvPosition),1 ; lvx128 v0,this,+64 ; vspltw v0,v0,1 ; vsubfp v0,v0,v13`).
         // this+64 = mTransform.wAxis (mTransform @ +16; rows xAxis/yAxis/zAxis/wAxis at +16/+32/+48/+64),
         // i.e. the vehicle world position. The subtraction is (reference y) - (position y).
-        mAboveGroundTestResult.mfVerticalDistance = mTransform.wAxis.y - lvPosition.y;
+        mAboveGroundTestResult.mfVerticalDistance = mTransform.wAxis.mV.v[1] - lvPosition.mV.v[1];
         mAboveGroundTestResult.mbValid = true;                       // +1432
     }
 
@@ -278,7 +277,7 @@ namespace Vehicle
     // it at BrnSimpleVehiclePhysics.cpp:768; VehiclePhysics overrides it with @0x825D4028.
     VecFloat SimpleVehiclePhysics::GetSteeringAngle() const
     {
-        { const VecFloat lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
+        { const VecFloat lResult(0.0f); return lResult; }
     }
 
     // -------------------------------------------------------------------------------------------
@@ -303,9 +302,9 @@ namespace Vehicle
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
             Wheel& lrWheel = maWheels[liWheel];
-            lrWheel.mIntegrationVariables.y = 0.0f; // wheel+0x30.y
-            lrWheel.mIntegrationVariables.x =
-                lfForwardSpeed / lrWheel.mSlipVariables.w; // wheel angular velocity = v/r
+            lrWheel.mIntegrationVariables.mV.v[1] = 0.0f; // wheel+0x30.y
+            lrWheel.mIntegrationVariables.mV.v[0] =
+                lfForwardSpeed / lrWheel.mSlipVariables.mV.v[3]; // wheel angular velocity = v/r
             lrWheel.mbBrokenAdhesiveLimit = false;  // wheel+0xD5
         }
     }
@@ -319,11 +318,11 @@ namespace Vehicle
     void AboveGroundTestResult::Reset()
     {
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mIntersectionPosition = lAggregateValue;
         }   // stvx128 v127(0), +0x00
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mIntersectionNormal = lAggregateValue;
         }   // stvx128 v127(0), +0x10
         mfVerticalDistance    = 0.0f;                                // stfs f31(0), +0x20
@@ -409,37 +408,31 @@ namespace Vehicle
         const u16 lu16TagHi = static_cast<u16>(lu32CollisionTag >> 16);
         const u16 lu16TagLo = static_cast<u16>(lu32CollisionTag & 0xFFFFu);
 
-        CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
-                   lrWheel.mPosition.y == lrWheel.mPosition.y &&
-                   lrWheel.mPosition.z == lrWheel.mPosition.z,
+        CGS_ASSERT(lrWheel.mPosition.mV.v[0] == lrWheel.mPosition.mV.v[0] &&
+                   lrWheel.mPosition.mV.v[1] == lrWheel.mPosition.mV.v[1] &&
+                   lrWheel.mPosition.mV.v[2] == lrWheel.mPosition.mV.v[2],
                    "Invalid wheel position: , please tell Graham D.");   // vcmpeqfp NaN sweep
 
         // world position of the wheel: the three rotation rows scaled by the local lanes,
         // seeded with the translation row (exactly the console's vmaddfp cascade).
-        const Vector3 lvWorldWheelPos = {
-            mTransform.xAxis.x * lrWheel.mPosition.x + mTransform.yAxis.x * lrWheel.mPosition.y
-                + mTransform.zAxis.x * lrWheel.mPosition.z + mTransform.wAxis.x,
-            mTransform.xAxis.y * lrWheel.mPosition.x + mTransform.yAxis.y * lrWheel.mPosition.y
-                + mTransform.zAxis.y * lrWheel.mPosition.z + mTransform.wAxis.y,
-            mTransform.xAxis.z * lrWheel.mPosition.x + mTransform.yAxis.z * lrWheel.mPosition.y
-                + mTransform.zAxis.z * lrWheel.mPosition.z + mTransform.wAxis.z,
-            0.0f };
+        const Vector3 lvWorldWheelPos(mTransform.xAxis.mV.v[0] * lrWheel.mPosition.mV.v[0] + mTransform.yAxis.mV.v[0] * lrWheel.mPosition.mV.v[1]
+                + mTransform.zAxis.mV.v[0] * lrWheel.mPosition.mV.v[2] + mTransform.wAxis.mV.v[0], mTransform.xAxis.mV.v[1] * lrWheel.mPosition.mV.v[0] + mTransform.yAxis.mV.v[1] * lrWheel.mPosition.mV.v[1]
+                + mTransform.zAxis.mV.v[1] * lrWheel.mPosition.mV.v[2] + mTransform.wAxis.mV.v[1], mTransform.xAxis.mV.v[2] * lrWheel.mPosition.mV.v[0] + mTransform.yAxis.mV.v[2] * lrWheel.mPosition.mV.v[1]
+                + mTransform.zAxis.mV.v[2] * lrWheel.mPosition.mV.v[2] + mTransform.wAxis.mV.v[2]);
 
-        const Vector3 lvDelta = { lvWorldWheelPos.x - lvPosition.x,
-                               lvWorldWheelPos.y - lvPosition.y,
-                               lvWorldWheelPos.z - lvPosition.z, 0.0f };
+        const Vector3 lvDelta(lvWorldWheelPos.mV.v[0] - lvPosition.mV.v[0], lvWorldWheelPos.mV.v[1] - lvPosition.mV.v[1], lvWorldWheelPos.mV.v[2] - lvPosition.mV.v[2]);
         const f32 lfDistSq   = vpu::MagnitudeSquared(lvDelta);
         const f32 lfLineDist = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;   // vsel 0-guard
 
         // the two reach tests: the wheel's local height minus its suspension seat plus its
         // radius lane, against the measured line distance.
-        const f32 lfReach = lrWheel.mPosition.y
-                          - lrWheel.mSuspensionAndInertiaVariables.x
-                          + lrWheel.mSlipVariables.w;
+        const f32 lfReach = lrWheel.mPosition.mV.v[1]
+                          - lrWheel.mSuspensionAndInertiaVariables.mV.v[0]
+                          + lrWheel.mSlipVariables.mV.v[3];
         const bool lbIsOnGround      = lfReach > lfLineDist;
         const bool lbIsCloseToGround =
             (lfReach +
-             mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w)
+             mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.mV.v[3])
             > lfLineDist;
 
         lrWheel.SetRoadContact(lbIsOnGround, lbIsCloseToGround, lvPosition, lvNormal,
@@ -507,9 +500,9 @@ namespace Vehicle
 
         // 0x825D8650..0x825D86B8 -- the same three-lane NaN sweep AddTractionPoint runs, with
         // the same console-authored message (Wheel.h:368).
-        CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
-                   lrWheel.mPosition.y == lrWheel.mPosition.y &&
-                   lrWheel.mPosition.z == lrWheel.mPosition.z,
+        CGS_ASSERT(lrWheel.mPosition.mV.v[0] == lrWheel.mPosition.mV.v[0] &&
+                   lrWheel.mPosition.mV.v[1] == lrWheel.mPosition.mV.v[1] &&
+                   lrWheel.mPosition.mV.v[2] == lrWheel.mPosition.mV.v[2],
                    "Invalid wheel position: , please tell Graham D.");
 
         // 0x825D8774 `lbz r9, 1668(r26)` == mSimpleAttribs (+0x5A0) + mbIsValid (+0xE4).
@@ -517,37 +510,33 @@ namespace Vehicle
 
         // 0x825D8778..0x825D8798 -- worldWheelPos = mTransform * wheel.mPosition. Same cascade
         // as AddTractionPoint (three rows scaled by the local lanes, seeded with the wAxis row).
-        const Vector3 lvWorldWheelPos = {
-            mTransform.xAxis.x * lrWheel.mPosition.x + mTransform.yAxis.x * lrWheel.mPosition.y
-                + mTransform.zAxis.x * lrWheel.mPosition.z + mTransform.wAxis.x,
-            mTransform.xAxis.y * lrWheel.mPosition.x + mTransform.yAxis.y * lrWheel.mPosition.y
-                + mTransform.zAxis.y * lrWheel.mPosition.z + mTransform.wAxis.y,
-            mTransform.xAxis.z * lrWheel.mPosition.x + mTransform.yAxis.z * lrWheel.mPosition.y
-                + mTransform.zAxis.z * lrWheel.mPosition.z + mTransform.wAxis.z,
-            mTransform.xAxis.w * lrWheel.mPosition.x + mTransform.yAxis.w * lrWheel.mPosition.y
-                + mTransform.zAxis.w * lrWheel.mPosition.z + mTransform.wAxis.w };
+        Vector3 lvWorldWheelPos(mTransform.xAxis.mV.v[0] * lrWheel.mPosition.mV.v[0] + mTransform.yAxis.mV.v[0] * lrWheel.mPosition.mV.v[1]
+                + mTransform.zAxis.mV.v[0] * lrWheel.mPosition.mV.v[2] + mTransform.wAxis.mV.v[0], mTransform.xAxis.mV.v[1] * lrWheel.mPosition.mV.v[0] + mTransform.yAxis.mV.v[1] * lrWheel.mPosition.mV.v[1]
+                + mTransform.zAxis.mV.v[1] * lrWheel.mPosition.mV.v[2] + mTransform.wAxis.mV.v[1], mTransform.xAxis.mV.v[2] * lrWheel.mPosition.mV.v[0] + mTransform.yAxis.mV.v[2] * lrWheel.mPosition.mV.v[1]
+                + mTransform.zAxis.mV.v[2] * lrWheel.mPosition.mV.v[2] + mTransform.wAxis.mV.v[2]); lvWorldWheelPos.mV.v[3] = mTransform.xAxis.mV.v[3] * lrWheel.mPosition.mV.v[0] + mTransform.yAxis.mV.v[3] * lrWheel.mPosition.mV.v[1]
+                + mTransform.zAxis.mV.v[3] * lrWheel.mPosition.mV.v[2] + mTransform.wAxis.mV.v[3];
 
         // 0x825D87CC..0x825D8854 -- the probe length: the wheel's own reach (hub height above
         // its lowest suspension seat, plus the tyre radius), plus the car's TractionLineLength
         // attribute, plus one metre of margin.
         const f32 lfProbeLength =
-            (lrWheel.mPosition.y
-             - lrWheel.mSuspensionAndInertiaVariables.x
-             + lrWheel.mSlipVariables.w)
-            + mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
+            (lrWheel.mPosition.mV.v[1]
+             - lrWheel.mSuspensionAndInertiaVariables.mV.v[0]
+             + lrWheel.mSlipVariables.mV.v[3])
+            + mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.mV.v[3]
             + KF_TRACTION_LINE_EXTRA_LENGTH;
 
         // 0x825D8850 `vmaddfp128 v8, v0, v9` : start = worldWheelPos + yAxis * 0.4
-        lOutSusLineStart.x = lvWorldWheelPos.x + mTransform.yAxis.x * KF_TRACTION_LINE_START_LIFT;
-        lOutSusLineStart.y = lvWorldWheelPos.y + mTransform.yAxis.y * KF_TRACTION_LINE_START_LIFT;
-        lOutSusLineStart.z = lvWorldWheelPos.z + mTransform.yAxis.z * KF_TRACTION_LINE_START_LIFT;
-        lOutSusLineStart.w = lvWorldWheelPos.w + mTransform.yAxis.w * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.mV.v[0] = lvWorldWheelPos.mV.v[0] + mTransform.yAxis.mV.v[0] * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.mV.v[1] = lvWorldWheelPos.mV.v[1] + mTransform.yAxis.mV.v[1] * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.mV.v[2] = lvWorldWheelPos.mV.v[2] + mTransform.yAxis.mV.v[2] * KF_TRACTION_LINE_START_LIFT;
+        lOutSusLineStart.mV.v[3] = lvWorldWheelPos.mV.v[3] + mTransform.yAxis.mV.v[3] * KF_TRACTION_LINE_START_LIFT;
 
         // 0x825D885C/0x825D8860 `vmulfp128` + `vsubfp128` : end = worldWheelPos - yAxis * length
-        lOutSusLineEnd.x = lvWorldWheelPos.x - mTransform.yAxis.x * lfProbeLength;
-        lOutSusLineEnd.y = lvWorldWheelPos.y - mTransform.yAxis.y * lfProbeLength;
-        lOutSusLineEnd.z = lvWorldWheelPos.z - mTransform.yAxis.z * lfProbeLength;
-        lOutSusLineEnd.w = lvWorldWheelPos.w - mTransform.yAxis.w * lfProbeLength;
+        lOutSusLineEnd.mV.v[0] = lvWorldWheelPos.mV.v[0] - mTransform.yAxis.mV.v[0] * lfProbeLength;
+        lOutSusLineEnd.mV.v[1] = lvWorldWheelPos.mV.v[1] - mTransform.yAxis.mV.v[1] * lfProbeLength;
+        lOutSusLineEnd.mV.v[2] = lvWorldWheelPos.mV.v[2] - mTransform.yAxis.mV.v[2] * lfProbeLength;
+        lOutSusLineEnd.mV.v[3] = lvWorldWheelPos.mV.v[3] - mTransform.yAxis.mV.v[3] * lfProbeLength;
     }
 
     // ===========================================================================================
@@ -630,10 +619,10 @@ namespace Vehicle
         f32 lfSin, lfCos;
         SvpSinCos(lfAngle, lfSin, lfCos);
         Matrix44Affine lM;
-        { const Vector3 lRow = { 1.0f,   0.0f,  0.0f, 0.0f }; lM.xAxis = lRow; }   // 0x825D92B4: X row untouched [V]
-        { const Vector3 lRow = { 0.0f,  lfCos, lfSin, 0.0f }; lM.yAxis = lRow; }
-        { const Vector3 lRow = { 0.0f, -lfSin, lfCos, 0.0f }; lM.zAxis = lRow; }
-        { const Vector3 lRow = { 0.0f,   0.0f,  0.0f, 1.0f }; lM.wAxis = lRow; }
+        { const Vector3 lRow(1.0f, 0.0f, 0.0f); lM.xAxis = lRow; }   // 0x825D92B4: X row untouched [V]
+        { const Vector3 lRow(0.0f, lfCos, lfSin); lM.yAxis = lRow; }
+        { const Vector3 lRow(0.0f, -lfSin, lfCos); lM.zAxis = lRow; }
+        { Vector3 lRow(0.0f, 0.0f, 0.0f); lRow.mV.v[3] = 1.0f; lM.wAxis = lRow; }
         return lM;
     }
 
@@ -642,10 +631,10 @@ namespace Vehicle
         f32 lfSin, lfCos;
         SvpSinCos(lfAngle, lfSin, lfCos);
         Matrix44Affine lM;
-        { const Vector3 lRow = { lfCos, 0.0f, -lfSin, 0.0f }; lM.xAxis = lRow; }
-        { const Vector3 lRow = {  0.0f, 1.0f,   0.0f, 0.0f }; lM.yAxis = lRow; }   // 0x825D9460: Y row untouched [V]
-        { const Vector3 lRow = { lfSin, 0.0f,  lfCos, 0.0f }; lM.zAxis = lRow; }
-        { const Vector3 lRow = {  0.0f, 0.0f,   0.0f, 1.0f }; lM.wAxis = lRow; }
+        { const Vector3 lRow(lfCos, 0.0f, -lfSin); lM.xAxis = lRow; }
+        { const Vector3 lRow(0.0f, 1.0f, 0.0f); lM.yAxis = lRow; }   // 0x825D9460: Y row untouched [V]
+        { const Vector3 lRow(lfSin, 0.0f, lfCos); lM.zAxis = lRow; }
+        { Vector3 lRow(0.0f, 0.0f, 0.0f); lRow.mV.v[3] = 1.0f; lM.wAxis = lRow; }
         return lM;
     }
 
@@ -654,10 +643,10 @@ namespace Vehicle
         f32 lfSin, lfCos;
         SvpSinCos(lfAngle, lfSin, lfCos);
         Matrix44Affine lM;
-        { const Vector3 lRow = {  lfCos, lfSin, 0.0f, 0.0f }; lM.xAxis = lRow; }
-        { const Vector3 lRow = { -lfSin, lfCos, 0.0f, 0.0f }; lM.yAxis = lRow; }
-        { const Vector3 lRow = {   0.0f,  0.0f, 1.0f, 0.0f }; lM.zAxis = lRow; }   // 0x825D8CFC: Z row untouched [V]
-        { const Vector3 lRow = {   0.0f,  0.0f, 0.0f, 1.0f }; lM.wAxis = lRow; }
+        { const Vector3 lRow(lfCos, lfSin, 0.0f); lM.xAxis = lRow; }
+        { const Vector3 lRow(-lfSin, lfCos, 0.0f); lM.yAxis = lRow; }
+        { const Vector3 lRow(0.0f, 0.0f, 1.0f); lM.zAxis = lRow; }   // 0x825D8CFC: Z row untouched [V]
+        { Vector3 lRow(0.0f, 0.0f, 0.0f); lRow.mV.v[3] = 1.0f; lM.wAxis = lRow; }
         return lM;
     }
 
@@ -672,12 +661,12 @@ namespace Vehicle
         for (s32 li = 0; li < 3; ++li)
         {
             const Vector3& lrRow = *lpaARows[li];
-            lpaORows[li]->x = lrRow.x * lrB.xAxis.x + lrRow.y * lrB.yAxis.x + lrRow.z * lrB.zAxis.x;
-            lpaORows[li]->y = lrRow.x * lrB.xAxis.y + lrRow.y * lrB.yAxis.y + lrRow.z * lrB.zAxis.y;
-            lpaORows[li]->z = lrRow.x * lrB.xAxis.z + lrRow.y * lrB.yAxis.z + lrRow.z * lrB.zAxis.z;
-            lpaORows[li]->w = 0.0f;
+            lpaORows[li]->mV.v[0] = lrRow.mV.v[0] * lrB.xAxis.mV.v[0] + lrRow.mV.v[1] * lrB.yAxis.mV.v[0] + lrRow.mV.v[2] * lrB.zAxis.mV.v[0];
+            lpaORows[li]->mV.v[1] = lrRow.mV.v[0] * lrB.xAxis.mV.v[1] + lrRow.mV.v[1] * lrB.yAxis.mV.v[1] + lrRow.mV.v[2] * lrB.zAxis.mV.v[1];
+            lpaORows[li]->mV.v[2] = lrRow.mV.v[0] * lrB.xAxis.mV.v[2] + lrRow.mV.v[1] * lrB.yAxis.mV.v[2] + lrRow.mV.v[2] * lrB.zAxis.mV.v[2];
+            lpaORows[li]->mV.v[3] = 0.0f;
         }
-        { const Vector3 lRow = { 0.0f, 0.0f, 0.0f, 1.0f }; lOut.wAxis = lRow; }
+        { Vector3 lRow(0.0f, 0.0f, 0.0f); lRow.mV.v[3] = 1.0f; lOut.wAxis = lRow; }
         return lOut;
     }
 
@@ -688,30 +677,30 @@ namespace Vehicle
 
         // 0x825D88B8..0x825D8924 -- Wheel::GetPosition() inlined: the three-lane NaN
         // self-compare with the console-authored message (Wheel.h:412, `li r5, 0x19C`).
-        CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
-                   lrWheel.mPosition.y == lrWheel.mPosition.y &&
-                   lrWheel.mPosition.z == lrWheel.mPosition.z,
+        CGS_ASSERT(lrWheel.mPosition.mV.v[0] == lrWheel.mPosition.mV.v[0] &&
+                   lrWheel.mPosition.mV.v[1] == lrWheel.mPosition.mV.v[1] &&
+                   lrWheel.mPosition.mV.v[2] == lrWheel.mPosition.mV.v[2],
                    "Invalid wheel position: , please tell Graham D.");
 
         // 0x825D89C8/0x825D89D8 -- the spin angle: mIntegrationVariables lane .z (the
         // accumulated wheel rotation the drivetrain integrates at 0x8261F494).
-        const f32 lfSpinAngle = lrWheel.mIntegrationVariables.z;
+        const f32 lfSpinAngle = lrWheel.mIntegrationVariables.mV.v[2];
 
         Matrix44Affine lLocal;
         if (mbCrashing)   // 0x825D89D4 `lbz r11, 0x710(r16)`
         {
             // 0x825D8A08..0x825D8A70 -- the console runs GetPosition() (and its NaN assert)
             // a SECOND time on this path.
-            CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
-                       lrWheel.mPosition.y == lrWheel.mPosition.y &&
-                       lrWheel.mPosition.z == lrWheel.mPosition.z,
+            CGS_ASSERT(lrWheel.mPosition.mV.v[0] == lrWheel.mPosition.mV.v[0] &&
+                       lrWheel.mPosition.mV.v[1] == lrWheel.mPosition.mV.v[1] &&
+                       lrWheel.mPosition.mV.v[2] == lrWheel.mPosition.mV.v[2],
                        "Invalid wheel position: , please tell Graham D.");
 
             // Buckle angle (0x825D8B10..0x825D8B9C): (2*|posZ - streamedZ|)^2, clamped.
             // The SQUARE is the angle in radians -- faithful on both platforms (bank §7.3);
             // it looks like a bug a porter would "fix". Do not.
             const f32 lfDeltaZ =
-                lrWheel.mPosition.z - lrWheel.mStreamedPositionPlusTwistAmount.z;
+                lrWheel.mPosition.mV.v[2] - lrWheel.mStreamedPositionPlusTwistAmount.mV.v[2];
             f32 lfBuckleAngle = 2.0f * ((lfDeltaZ >= 0.0f) ? lfDeltaZ : -lfDeltaZ);
             lfBuckleAngle = lfBuckleAngle * lfBuckleAngle;
             if (lfBuckleAngle > KVF_MAX_BUCKLE_ANGLE_CRASHING)         // vminfp @0x825D8B98
@@ -722,7 +711,7 @@ namespace Vehicle
             // Twist angle (0x825D8B30/0x825D8EEC): the streamed twist amount (.w lane) signed
             // by the per-wheel direction table (+1/-1/+1/-1).
             const f32 lfTwistAngle =
-                lrWheel.mStreamedPositionPlusTwistAmount.w * KAVF_WHEEL_TWIST_DIRECTIONS[leWheel];
+                lrWheel.mStreamedPositionPlusTwistAmount.mV.v[3] * KAVF_WHEEL_TWIST_DIRECTIONS[leWheel];
 
             // 0x825D8CFC (RotZ) -> 0x825D8E98 (RotX) -> 0x825D9034 (RotY), composed
             // buckle-first in row-vector order. Steering is NEVER applied while crashing
@@ -742,7 +731,7 @@ namespace Vehicle
             if (leWheel == eFrontLeftWheel || leWheel == eFrontRightWheel)
             {
                 // The console dispatches vtable slot 0 and consumes the broadcast VecFloat.
-                const f32 lfSteerAngle = GetSteeringAngle().x;
+                const f32 lfSteerAngle = GetSteeringAngle().mV.v[0];
                 lLocal = SvpMulRotation(lLocal, SvpRotationAboutY(lfSteerAngle));
             }
         }
@@ -759,32 +748,32 @@ namespace Vehicle
         if (!lbHackDontReverseRightWheels &&
             (leWheel == eFrontLeftWheel || leWheel == eRearLeftWheel))
         {
-            lWheelTransform.xAxis.x = -lWheelTransform.xAxis.x;
-            lWheelTransform.xAxis.y = -lWheelTransform.xAxis.y;
-            lWheelTransform.xAxis.z = -lWheelTransform.xAxis.z;
-            lWheelTransform.xAxis.w = -lWheelTransform.xAxis.w;
-            lWheelTransform.zAxis.x = -lWheelTransform.zAxis.x;
-            lWheelTransform.zAxis.y = -lWheelTransform.zAxis.y;
-            lWheelTransform.zAxis.z = -lWheelTransform.zAxis.z;
-            lWheelTransform.zAxis.w = -lWheelTransform.zAxis.w;
+            lWheelTransform.xAxis.mV.v[0] = -lWheelTransform.xAxis.mV.v[0];
+            lWheelTransform.xAxis.mV.v[1] = -lWheelTransform.xAxis.mV.v[1];
+            lWheelTransform.xAxis.mV.v[2] = -lWheelTransform.xAxis.mV.v[2];
+            lWheelTransform.xAxis.mV.v[3] = -lWheelTransform.xAxis.mV.v[3];
+            lWheelTransform.zAxis.mV.v[0] = -lWheelTransform.zAxis.mV.v[0];
+            lWheelTransform.zAxis.mV.v[1] = -lWheelTransform.zAxis.mV.v[1];
+            lWheelTransform.zAxis.mV.v[2] = -lWheelTransform.zAxis.mV.v[2];
+            lWheelTransform.zAxis.mV.v[3] = -lWheelTransform.zAxis.mV.v[3];
         }
 
         // 0x825D95C4..0x825D95F4 -- translation: the body position plus the BODY-ROTATED wheel
         // position (mPosition is car-space with the suspension travel already integrated into
         // its .y by ApplyWheelWeight -- rotation-only transform, then add the wAxis row).
-        lWheelTransform.wAxis.x = mTransform.wAxis.x
-            + mTransform.xAxis.x * lrWheel.mPosition.x
-            + mTransform.yAxis.x * lrWheel.mPosition.y
-            + mTransform.zAxis.x * lrWheel.mPosition.z;
-        lWheelTransform.wAxis.y = mTransform.wAxis.y
-            + mTransform.xAxis.y * lrWheel.mPosition.x
-            + mTransform.yAxis.y * lrWheel.mPosition.y
-            + mTransform.zAxis.y * lrWheel.mPosition.z;
-        lWheelTransform.wAxis.z = mTransform.wAxis.z
-            + mTransform.xAxis.z * lrWheel.mPosition.x
-            + mTransform.yAxis.z * lrWheel.mPosition.y
-            + mTransform.zAxis.z * lrWheel.mPosition.z;
-        lWheelTransform.wAxis.w = 1.0f;
+        lWheelTransform.wAxis.mV.v[0] = mTransform.wAxis.mV.v[0]
+            + mTransform.xAxis.mV.v[0] * lrWheel.mPosition.mV.v[0]
+            + mTransform.yAxis.mV.v[0] * lrWheel.mPosition.mV.v[1]
+            + mTransform.zAxis.mV.v[0] * lrWheel.mPosition.mV.v[2];
+        lWheelTransform.wAxis.mV.v[1] = mTransform.wAxis.mV.v[1]
+            + mTransform.xAxis.mV.v[1] * lrWheel.mPosition.mV.v[0]
+            + mTransform.yAxis.mV.v[1] * lrWheel.mPosition.mV.v[1]
+            + mTransform.zAxis.mV.v[1] * lrWheel.mPosition.mV.v[2];
+        lWheelTransform.wAxis.mV.v[2] = mTransform.wAxis.mV.v[2]
+            + mTransform.xAxis.mV.v[2] * lrWheel.mPosition.mV.v[0]
+            + mTransform.yAxis.mV.v[2] * lrWheel.mPosition.mV.v[1]
+            + mTransform.zAxis.mV.v[2] * lrWheel.mPosition.mV.v[2];
+        lWheelTransform.wAxis.mV.v[3] = 1.0f;
 
         // PS3 DWARF names the sret local `lWheelTransform` -- kept.
         return lWheelTransform;
@@ -799,8 +788,8 @@ namespace Vehicle
     // ===========================================================================================
     void SimpleVehiclePhysics::GetSimpleVehicleBox(CgsGeometric::Box& lrOutBox) const
     {
-        Vector3 lvMin = { -mHalfExtent.x, -mHalfExtent.y, -mHalfExtent.z, 0.0f };
-        Vector3 lvMax = {  mHalfExtent.x,  mHalfExtent.y,  mHalfExtent.z, 0.0f };
+        Vector3 lvMin(-mHalfExtent.mV.v[0], -mHalfExtent.mV.v[1], -mHalfExtent.mV.v[2]);
+        Vector3 lvMax(mHalfExtent.mV.v[0], mHalfExtent.mV.v[1], mHalfExtent.mV.v[2]);
 
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
@@ -810,34 +799,19 @@ namespace Vehicle
 
             // The wheel's lowest point in graphics/model space:
             //     COM offset + wheel centre - (0, radius, 0).
-            const Vector3 lvWheelBottom = {
-                mSimpleAttribs.mCOMOffset.x + lrWheel.mPosition.x,
-                mSimpleAttribs.mCOMOffset.y + lrWheel.mPosition.y - lrWheel.mSlipVariables.w,
-                mSimpleAttribs.mCOMOffset.z + lrWheel.mPosition.z,
-                0.0f
-            };
+            const Vector3 lvWheelBottom(mSimpleAttribs.mCOMOffset.mV.v[0] + lrWheel.mPosition.mV.v[0], mSimpleAttribs.mCOMOffset.mV.v[1] + lrWheel.mPosition.mV.v[1] - lrWheel.mSlipVariables.mV.v[3], mSimpleAttribs.mCOMOffset.mV.v[2] + lrWheel.mPosition.mV.v[2]);
             lvMin = vpu::Min(lvMin, lvWheelBottom);
             lvMax = vpu::Max(lvMax, lvWheelBottom);
         }
 
-        const Vector3 lvCentre = {
-            (lvMin.x + lvMax.x) * 0.5f,
-            (lvMin.y + lvMax.y) * 0.5f,
-            (lvMin.z + lvMax.z) * 0.5f,
-            0.0f
-        };
-        const Vector3 lvDimensions = {
-            lvMax.x - lvCentre.x,
-            lvMax.y - lvCentre.y,
-            lvMax.z - lvCentre.z,
-            0.0f
-        };
+        const Vector3 lvCentre((lvMin.mV.v[0] + lvMax.mV.v[0]) * 0.5f, (lvMin.mV.v[1] + lvMax.mV.v[1]) * 0.5f, (lvMin.mV.v[2] + lvMax.mV.v[2]) * 0.5f);
+        const Vector3 lvDimensions(lvMax.mV.v[0] - lvCentre.mV.v[0], lvMax.mV.v[1] - lvCentre.mV.v[1], lvMax.mV.v[2] - lvCentre.mV.v[2]);
 
         Matrix44Affine lBoxTransform = GetGraphicsVehicleTransform();
         lBoxTransform.wAxis = vpu::Add(lBoxTransform.wAxis,
                                        RotateCOMOffsetToWorld(lBoxTransform, lvCentre));
-        lBoxTransform.wAxis.w = 1.0f;
-        const VecFloat lvfNoPadding = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lBoxTransform.wAxis.mV.v[3] = 1.0f;
+        const VecFloat lvfNoPadding(0.0f);
         lrOutBox.Set(lBoxTransform, lvDimensions, lvfNoPadding);
     }
 
@@ -877,7 +851,7 @@ namespace Vehicle
         const Vector3& lvUp = mTransform.yAxis;   // v125 = lvx this+0x20
 
         f32     lfBestHeight = KF_NO_CONTACT_HEIGHT;   // v127
-        Vector3 lvBestPoint = { 0.0f, 0.0f, 0.0f, 0.0f }; // v126
+        Vector3 lvBestPoint(0.0f, 0.0f, 0.0f); // v126
         bool    lbAnyValid = false;                    // r14
 
         mbAnyWheelsDetatched = false;   // stb 0 -> +0x715 (before the loop)
@@ -908,32 +882,26 @@ namespace Vehicle
 
             // close-but-not-touching: how high does this wheel's lowest point sit above its
             // contact, along the body up axis?
-            CGS_ASSERT(lrWheel.mPosition.x == lrWheel.mPosition.x &&
-                       lrWheel.mPosition.y == lrWheel.mPosition.y &&
-                       lrWheel.mPosition.z == lrWheel.mPosition.z,
+            CGS_ASSERT(lrWheel.mPosition.mV.v[0] == lrWheel.mPosition.mV.v[0] &&
+                       lrWheel.mPosition.mV.v[1] == lrWheel.mPosition.mV.v[1] &&
+                       lrWheel.mPosition.mV.v[2] == lrWheel.mPosition.mV.v[2],
                        "Invalid wheel position: , please tell Graham D.");   // Wheel.h:412
 
             // localBottom = wheel.mPosition with the y lane dropped by the radius
             // (mSlipVariables.w) -- the vsubfp + vrlimi(mask 4) pair.
-            const Vector3 lvLocalBottom = { lrWheel.mPosition.x,
-                                         lrWheel.mPosition.y - lrWheel.mSlipVariables.w,
-                                         lrWheel.mPosition.z, 0.0f };
+            const Vector3 lvLocalBottom(lrWheel.mPosition.mV.v[0], lrWheel.mPosition.mV.v[1] - lrWheel.mSlipVariables.mV.v[3], lrWheel.mPosition.mV.v[2]);
 
             // worldBottom = mTransform * localBottom (the same vmaddfp cascade as
             // AddTractionPoint above).
-            const Vector3 lvWorldBottom = {
-                mTransform.xAxis.x * lvLocalBottom.x + mTransform.yAxis.x * lvLocalBottom.y
-                    + mTransform.zAxis.x * lvLocalBottom.z + mTransform.wAxis.x,
-                mTransform.xAxis.y * lvLocalBottom.x + mTransform.yAxis.y * lvLocalBottom.y
-                    + mTransform.zAxis.y * lvLocalBottom.z + mTransform.wAxis.y,
-                mTransform.xAxis.z * lvLocalBottom.x + mTransform.yAxis.z * lvLocalBottom.y
-                    + mTransform.zAxis.z * lvLocalBottom.z + mTransform.wAxis.z,
-                0.0f };
+            const Vector3 lvWorldBottom(mTransform.xAxis.mV.v[0] * lvLocalBottom.mV.v[0] + mTransform.yAxis.mV.v[0] * lvLocalBottom.mV.v[1]
+                    + mTransform.zAxis.mV.v[0] * lvLocalBottom.mV.v[2] + mTransform.wAxis.mV.v[0], mTransform.xAxis.mV.v[1] * lvLocalBottom.mV.v[0] + mTransform.yAxis.mV.v[1] * lvLocalBottom.mV.v[1]
+                    + mTransform.zAxis.mV.v[1] * lvLocalBottom.mV.v[2] + mTransform.wAxis.mV.v[1], mTransform.xAxis.mV.v[2] * lvLocalBottom.mV.v[0] + mTransform.yAxis.mV.v[2] * lvLocalBottom.mV.v[1]
+                    + mTransform.zAxis.mV.v[2] * lvLocalBottom.mV.v[2] + mTransform.wAxis.mV.v[2]);
 
             const f32 lfHeight =
-                (lvWorldBottom.x - lrContact.mPosition.x) * lvUp.x +
-                (lvWorldBottom.y - lrContact.mPosition.y) * lvUp.y +
-                (lvWorldBottom.z - lrContact.mPosition.z) * lvUp.z;   // vmsum3fp128 vs v125
+                (lvWorldBottom.mV.v[0] - lrContact.mPosition.mV.v[0]) * lvUp.mV.v[0] +
+                (lvWorldBottom.mV.v[1] - lrContact.mPosition.mV.v[1]) * lvUp.mV.v[1] +
+                (lvWorldBottom.mV.v[2] - lrContact.mPosition.mV.v[2]) * lvUp.mV.v[2];   // vmsum3fp128 vs v125
 
             if (!(lfHeight > lfBestHeight))   // the vnot'd vcmpgtfp: keep the MINIMUM
             {
@@ -978,9 +946,9 @@ namespace Vehicle
         static const f32 KF_ONE_TWELFTH = 0.0833333358f;   // flt_82094724 (the box-tensor 1/12)
 
         // ---- phase 1: the mass ----------------------------------------------------------------
-        const f32 lfMass = lpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+        const f32 lfMass = lpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.v[0];
         {
-            const VecFloat lAggregateValue = { lfMass, lfMass, lfMass, lfMass };
+            const VecFloat lAggregateValue(lfMass);
             mfMass = lAggregateValue;
         }   // stvx128 -> +0xE0 (base mfMass)
         CGS_ASSERT(lfMass > 0.0f, "mfMass > 0.0f");            // console line 0xA5
@@ -988,29 +956,29 @@ namespace Vehicle
         // ---- phase 2: the solid-box inverse inertia --------------------------------------------
         const Vector3 lBoxExtent = vpu::Mult(mHalfExtent, 2.0f);   // flt_82001D9C
         CGS_ASSERT(vpu::IsValid(lBoxExtent), "RwMath::IsValid( lBoxExtent )");   // 0xAB
-        CGS_ASSERT(lBoxExtent.x > 0.0f, "lBoxExtent.X() > 0.0f");                // 0xAD
-        CGS_ASSERT(lBoxExtent.y > 0.0f, "lBoxExtent.Y() > 0.0f");                // 0xAE
-        CGS_ASSERT(lBoxExtent.z > 0.0f, "lBoxExtent.Z() > 0.0f");                // 0xAF
+        CGS_ASSERT(lBoxExtent.mV.v[0] > 0.0f, "lBoxExtent.X() > 0.0f");                // 0xAD
+        CGS_ASSERT(lBoxExtent.mV.v[1] > 0.0f, "lBoxExtent.Y() > 0.0f");                // 0xAE
+        CGS_ASSERT(lBoxExtent.mV.v[2] > 0.0f, "lBoxExtent.Z() > 0.0f");                // 0xAF
 
         {
             const f32 lfMassOver12 = lfMass * KF_ONE_TWELFTH;   // v126 = splat(1/12) * splat(mass)
-            const f32 lfX2 = lBoxExtent.x * lBoxExtent.x;
-            const f32 lfY2 = lBoxExtent.y * lBoxExtent.y;
-            const f32 lfZ2 = lBoxExtent.z * lBoxExtent.z;
+            const f32 lfX2 = lBoxExtent.mV.v[0] * lBoxExtent.mV.v[0];
+            const f32 lfY2 = lBoxExtent.mV.v[1] * lBoxExtent.mV.v[1];
+            const f32 lfZ2 = lBoxExtent.mV.v[2] * lBoxExtent.mV.v[2];
             // vrefp + two Newton refines on each -> the diagonal inverse tensor.
             const f32 lfIxx = 1.0f / (lfMassOver12 * (lfY2 + lfZ2));
             const f32 lfIyy = 1.0f / (lfMassOver12 * (lfX2 + lfZ2));
             const f32 lfIzz = 1.0f / (lfMassOver12 * (lfX2 + lfY2));
             {
-                const Vector3 lAggregateValue = { lfIxx, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(lfIxx, 0.0f, 0.0f);
                 mLocalInverseInertia.xAxis = lAggregateValue;
             }   // -> +0x80
             {
-                const Vector3 lAggregateValue = { 0.0f, lfIyy, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, lfIyy, 0.0f);
                 mLocalInverseInertia.yAxis = lAggregateValue;
             }   // -> +0x90
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, lfIzz, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 0.0f, lfIzz);
                 mLocalInverseInertia.zAxis = lAggregateValue;
             }   // -> +0xA0
         }
@@ -1027,15 +995,15 @@ namespace Vehicle
         // Per-axle height-offset deltas: new (VehicleAttribs suspension lanes x/y) minus old
         // (the CURRENT mSimpleAttribs lanes z/w) -- read BEFORE SetupAttribs overwrites them.
         const f32 lfFrontHeightDelta =
-            lpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x
-            - mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+            lpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.mV.v[0]
+            - mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.mV.v[2];
         const f32 lfRearHeightDelta =
-            lpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y
-            - mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+            lpAttribs->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.mV.v[1]
+            - mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.mV.v[3];
 
         // The new suspension travel bounds; travel-down floored at the .data 0.025 (vmaxfp).
-        const f32 lfTravelUp = lpAttribs->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z;
-        const f32 lfTravelDownRaw = lpAttribs->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w;
+        const f32 lfTravelUp = lpAttribs->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.mV.v[2];
+        const f32 lfTravelDownRaw = lpAttribs->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.mV.v[3];
         const f32 lfTravelDown = (lfTravelDownRaw > KF_MIN_SUSPENSION_TRAVEL_DOWN)
                                      ? lfTravelDownRaw : KF_MIN_SUSPENSION_TRAVEL_DOWN;
 
@@ -1045,11 +1013,11 @@ namespace Vehicle
             // (the caller's stacked pointer table var_110..var_104: 2D0, 2D0, 310, 310).
             const bool lbFront = (liWheel < 2);
             Vector3 lvDelta = lvCOMDelta;
-            lvDelta.y += lbFront ? lfFrontHeightDelta : lfRearHeightDelta;   // vrlimi(4)
+            lvDelta.mV.v[1] += lbFront ? lfFrontHeightDelta : lfRearHeightDelta;   // vrlimi(4)
 
             maWheels[liWheel].SwitchAttribs(
                 lvDelta,
-                maWheels[liWheel].mSlipVariables.w,   // the wheel's CURRENT radius, preserved
+                maWheels[liWheel].mSlipVariables.mV.v[3],   // the wheel's CURRENT radius, preserved
                 KF_WHEEL_INTEGRATION_SEED,
                 lfTravelUp,
                 lfTravelDown,
@@ -1083,15 +1051,15 @@ namespace Vehicle
         Vector3 laPositions[eNumDrivenWheels];
         {
             const f32 lfFrontOffset =
-                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.mV.v[2];
             const f32 lfRearOffset =
-                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.mV.v[3];
             for (s32 li = 0; li < eNumDrivenWheels; ++li)
             {
-                lafRadii[li] = maWheels[li].mSlipVariables.w;
+                lafRadii[li] = maWheels[li].mSlipVariables.mV.v[3];
                 laPositions[li] = vpu::Add(maWheels[li].mStreamedPositionPlusTwistAmount.GetVector3(),
                                            mSimpleAttribs.mCOMOffset);
-                laPositions[li].y -= (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
+                laPositions[li].mV.v[1] -= (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
             }
         }
 
@@ -1138,9 +1106,9 @@ namespace Vehicle
         // On mass <= 0 the X360 dumps the vault array through a stack StrStream into
         // gpcMessageBuffer and FireAsserts it (console line 0x152); modelled as the assert it
         // fires, with the console's own message text.
-        const f32 lfMass = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z;
+        const f32 lfMass = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.mV.v[2];
         {
-            const VecFloat lAggregateValue = { lfMass, lfMass, lfMass, lfMass };
+            const VecFloat lAggregateValue(lfMass);
             mfMass = lAggregateValue;
         }          // stvx128 -> +0xE0
         CGS_ASSERT(lfMass > 0.0f,
@@ -1160,28 +1128,28 @@ namespace Vehicle
         // BrnVehicleManager_ProcessCreateEvents.cpp.
         const Vector3 lBoxExtent = vpu::Mult(mHalfExtent, 2.0f);      // flt_82001D9C
         CGS_ASSERT(vpu::IsValid(lBoxExtent), "RwMath::IsValid( lBoxExtent )");   // 0x15A
-        CGS_ASSERT(lBoxExtent.x > 0.0f, "lBoxExtent.X() > 0.0f");                // 0x15C
-        CGS_ASSERT(lBoxExtent.y > 0.0f, "lBoxExtent.Y() > 0.0f");                // 0x15D
-        CGS_ASSERT(lBoxExtent.z > 0.0f, "lBoxExtent.Z() > 0.0f");                // 0x15E
+        CGS_ASSERT(lBoxExtent.mV.v[0] > 0.0f, "lBoxExtent.X() > 0.0f");                // 0x15C
+        CGS_ASSERT(lBoxExtent.mV.v[1] > 0.0f, "lBoxExtent.Y() > 0.0f");                // 0x15D
+        CGS_ASSERT(lBoxExtent.mV.v[2] > 0.0f, "lBoxExtent.Z() > 0.0f");                // 0x15E
         {
             const f32 lfMassOver12 = lfMass * KF_ONE_TWELFTH;
-            const f32 lfX2 = lBoxExtent.x * lBoxExtent.x;
-            const f32 lfY2 = lBoxExtent.y * lBoxExtent.y;
-            const f32 lfZ2 = lBoxExtent.z * lBoxExtent.z;
+            const f32 lfX2 = lBoxExtent.mV.v[0] * lBoxExtent.mV.v[0];
+            const f32 lfY2 = lBoxExtent.mV.v[1] * lBoxExtent.mV.v[1];
+            const f32 lfZ2 = lBoxExtent.mV.v[2] * lBoxExtent.mV.v[2];
             // vrefp + two Newton refines each -> the diagonal inverse tensor.
             const f32 lfIxx = 1.0f / (lfMassOver12 * (lfY2 + lfZ2));
             const f32 lfIyy = 1.0f / (lfMassOver12 * (lfX2 + lfZ2));
             const f32 lfIzz = 1.0f / (lfMassOver12 * (lfX2 + lfY2));
             {
-                const Vector3 lAggregateValue = { lfIxx, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(lfIxx, 0.0f, 0.0f);
                 mLocalInverseInertia.xAxis = lAggregateValue;
             }   // -> +0x80
             {
-                const Vector3 lAggregateValue = { 0.0f, lfIyy, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, lfIyy, 0.0f);
                 mLocalInverseInertia.yAxis = lAggregateValue;
             }   // -> +0x90
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, lfIzz, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 0.0f, lfIzz);
                 mLocalInverseInertia.zAxis = lAggregateValue;
             }   // -> +0xA0
         }
@@ -1197,18 +1165,18 @@ namespace Vehicle
         Vector3 laPositions[eNumDrivenWheels];
         {
             const f32 lfFrontOffset =
-                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z;
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.mV.v[2];
             const f32 lfRearOffset =
-                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w;
+                mSimpleAttribs.mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.mV.v[3];
             for (s32 li = 0; li < eNumDrivenWheels; ++li)
             {
                 laPositions[li] = lpaWheelPositions[li];
-                laPositions[li].y += (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
+                laPositions[li].mV.v[1] += (li < 2) ? lfFrontOffset : lfRearOffset;   // vrlimi(4)
             }
         }
 
-        const f32 lfTravelUp = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x;
-        const f32 lfTravelDownRaw = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y;
+        const f32 lfTravelUp = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.mV.v[0];
+        const f32 lfTravelDownRaw = mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.mV.v[1];
         const f32 lfTravelDown = (lfTravelDownRaw > KF_MIN_SUSPENSION_TRAVEL_DOWN)
                                      ? lfTravelDownRaw : KF_MIN_SUSPENSION_TRAVEL_DOWN;   // vmaxfp
 
@@ -1358,8 +1326,7 @@ namespace Vehicle
         const f32 lfForwardSpeedMPH =
             vpu::Dot(mTransform.zAxis, mLinearVelocity) * KF_SVP_MPS_TO_MPH;
         {
-            const VecFloat lAggregateValue = { lfForwardSpeedMPH, lfForwardSpeedMPH,
-                               lfForwardSpeedMPH, lfForwardSpeedMPH };
+            const VecFloat lAggregateValue(lfForwardSpeedMPH);
             mfSpeedMPH = lAggregateValue;
         }
 
