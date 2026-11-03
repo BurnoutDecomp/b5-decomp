@@ -6,13 +6,8 @@
 // BrnPhysics::Deformation::IKDrivenPoint::Construct @ 0x82615468
 // BrnPhysics::Deformation::IKDrivenPoint::Update    @ 0x825E7608
 //
-// The X360 build solves the two-bone IK constraint with VMX/AltiVec; the bodies below are the
-// DE-SIMD'd vector equivalent (no __asm), operating BY MEMBER NAME on the named lanes of the
-// committed flat Vector3/Vector3Plus aggregates (same de-modelling contract as BrnTagPoint.cpp
-// and rw/math/vpu/vector3_operation.h: the console rsqrt-estimate-plus-refinement reciprocal
-// magnitude is de-optimised to an exact 1/std::sqrt via Normalize; broadcast VecFloat dots are
-// read as a single scalar lane). Member offsets used by the console asm are 32-bit-pointer
-// offsets and are not reproduced byte-for-byte; the host recomputes them from the names.
+// The X360 solves the constraint in VMX registers. The reconstruction uses native vector
+// storage; existing Normalize and scalar checks retain their numerical limitations.
 
 namespace BrnPhysics
 {
@@ -52,20 +47,13 @@ Vector3 IKDrivenPoint::ResolveConstraint(Vector3 lPosition, Vector3 lEndpoint, V
     // v = pos - endpoint, then drop its against-the-rest-side component: v -= n * min(dot(n, v), 0).
     Vector3 lDelta = Subtract(lPosition, lEndpoint);
     const Vector3& lrSide = reinterpret_cast<const Vector3&>(mDirectionPlusDistanceToB);
-    f32 lfProj = lrSide.x * lDelta.x + lrSide.y * lDelta.y + lrSide.z * lDelta.z;   // vmsum3fp128
-    lfProj = ( lfProj < 0.0f ) ? lfProj : 0.0f;                                     // vminfp vs 0
-    lDelta.x -= lrSide.x * lfProj;
-    lDelta.y -= lrSide.y * lfProj;
-    lDelta.z -= lrSide.z * lfProj;
+    f32 lfProj = Dot(lrSide, lDelta);
+    lfProj = (lfProj < 0.0f) ? lfProj : 0.0f;
+    const VecFloat lvfProj(lfProj);
+    lDelta = Vector3(__vsubfp(lDelta.mV, __vmulfp(lrSide.mV, lvfProj.mV)));
 
-    const Vector3 lDirection        = Normalize(lDelta);
-    const f32     lfDesiredDistance = lvfDesiredDistance.x;   // broadcast VecFloat -> one lane
-
-    // Re-extend from the endpoint along the unit direction by the desired distance.
-    { const Vector3 lResult = { lEndpoint.x + lDirection.x * lfDesiredDistance,
-                    lEndpoint.y + lDirection.y * lfDesiredDistance,
-                    lEndpoint.z + lDirection.z * lfDesiredDistance,
-                    lPosition.w }; return lResult; }
+    const Vector3 lDirection = Normalize(lDelta);
+    return Vector3(__vmaddfp(lDirection.mV, lvfDesiredDistance.mV, lEndpoint.mV));
 }
 
 void IKDrivenPoint::Construct(const IKDrivenPointSpec* lpSpec, const TagPoint* lpTagPointArrayBase)
@@ -84,10 +72,8 @@ void IKDrivenPoint::Construct(const IKDrivenPointSpec* lpSpec, const TagPoint* l
     // Seed the position lane from the streamed initial position; the w "plus" lane carries the
     // desired distance to endpoint A.
     const Vector3& lInitialPos       = lpSpec->GetInitialPos();
-    mPositionPlusDistanceToA.x = lInitialPos.x;
-    mPositionPlusDistanceToA.y = lInitialPos.y;
-    mPositionPlusDistanceToA.z = lInitialPos.z;
-    mPositionPlusDistanceToA.w = lpSpec->GetDesiredDistanceFromTagPointA();
+    mPositionPlusDistanceToA.SetVector(lInitialPos.GetVector());
+    mPositionPlusDistanceToA.SetPlus(lpSpec->GetDesiredDistanceFromTagPointA());
 
     // Constraint direction: raw A->B between the two endpoints' rest positions, then normalised;
     // the w "plus" lane carries the desired distance to endpoint B.
@@ -124,23 +110,20 @@ void IKDrivenPoint::Construct(const IKDrivenPointSpec* lpSpec, const TagPoint* l
     // vector, and one for which the (then missing) clamp would have been meaningless.
     const Vector3 lToPoint = Subtract(lInitialPos, mpTagPointA->GetInitialPosition());
     const f32     lfAlong  = Dot(lToPoint, lDirectionToB);
-    Vector3 lSide = { lToPoint.x - lDirectionToB.x * lfAlong,
-                   lToPoint.y - lDirectionToB.y * lfAlong,
-                   lToPoint.z - lDirectionToB.z * lfAlong, 0.0f };
+    const VecFloat lvfAlong(lfAlong);
+    Vector3 lSide(__vsubfp(lToPoint.mV, __vmulfp(lDirectionToB.mV, lvfAlong.mV)));
     {
-        const f32 lfAx = ( lSide.x < 0.0f ) ? -lSide.x : lSide.x;
-        const f32 lfAy = ( lSide.y < 0.0f ) ? -lSide.y : lSide.y;
-        const f32 lfAz = ( lSide.z < 0.0f ) ? -lSide.z : lSide.z;
+        const f32 lfAx = ( lSide.GetX() < 0.0f ) ? -lSide.GetX() : lSide.GetX();
+        const f32 lfAy = ( lSide.GetY() < 0.0f ) ? -lSide.GetY() : lSide.GetY();
+        const f32 lfAz = ( lSide.GetZ() < 0.0f ) ? -lSide.GetZ() : lSide.GetZ();
         if ( lfAx > KF_UNIT_DELTA_EPSILON || lfAy > KF_UNIT_DELTA_EPSILON || lfAz > KF_UNIT_DELTA_EPSILON )
         {
             lSide = Normalize(lSide);
         }
     }
 
-    mDirectionPlusDistanceToB.x = lSide.x;
-    mDirectionPlusDistanceToB.y = lSide.y;
-    mDirectionPlusDistanceToB.z = lSide.z;
-    mDirectionPlusDistanceToB.w = lpSpec->GetDesiredDistanceFromTagPointB();
+    mDirectionPlusDistanceToB.SetVector(lSide.GetVector());
+    mDirectionPlusDistanceToB.SetPlus(lpSpec->GetDesiredDistanceFromTagPointB());
 
     // Solve the constraint into mPositionPlusDistanceToA.
     Update();
@@ -154,14 +137,13 @@ void IKDrivenPoint::Update()
     using rw::math::vpu::Dot;
 
     // Current driven-point position (xyz of mPositionPlusDistanceToA) and the two endpoints.
-    Vector3 lPosition = { mPositionPlusDistanceToA.x, mPositionPlusDistanceToA.y,
-                       mPositionPlusDistanceToA.z, mPositionPlusDistanceToA.w };
+    Vector3 lPosition(mPositionPlusDistanceToA.GetVector());
 
     const Vector3& lPosA = mpTagPointA->GetPosition();
     const Vector3& lPosB = mpTagPointB->GetPosition();
 
-    VecFloat lvfDistanceToA; lvfDistanceToA.SetZero(); lvfDistanceToA.x = mPositionPlusDistanceToA.w;
-    VecFloat lvfDistanceToB; lvfDistanceToB.SetZero(); lvfDistanceToB.x = mDirectionPlusDistanceToB.w;
+    const VecFloat lvfDistanceToA(mPositionPlusDistanceToA.GetPlus());
+    const VecFloat lvfDistanceToB(mDirectionPlusDistanceToB.GetPlus());
 
     // Two-pass solve: pull to the desired distance from A, then from B (the console runs the
     // ResolveConstraint VMX block twice, once per endpoint), and write the corrected position
@@ -169,9 +151,9 @@ void IKDrivenPoint::Update()
     lPosition = ResolveConstraint(lPosition, lPosA, lvfDistanceToA);
     lPosition = ResolveConstraint(lPosition, lPosB, lvfDistanceToB);
 
-    mPositionPlusDistanceToA.x = lPosition.x;
-    mPositionPlusDistanceToA.y = lPosition.y;
-    mPositionPlusDistanceToA.z = lPosition.z;
+    mPositionPlusDistanceToA.SetX(lPosition.GetX());
+    mPositionPlusDistanceToA.SetY(lPosition.GetY());
+    mPositionPlusDistanceToA.SetZ(lPosition.GetZ());
 
     // Blended scratch/damage amount: lerp(A.scratch, B.scratch, distA / (distA + distB)).
     // Console (Update tail): f0 = distA/(distA+distB); *(this+0x2C) =

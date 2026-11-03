@@ -32,12 +32,12 @@ namespace Deformation
     extern const Vector3 KA_IMPULSE_DIRECTIONS[6];
     const Vector3 KA_IMPULSE_DIRECTIONS[6] =
     {
-        {  1.0f,  0.0f,  0.0f, 0.0f },   // E_NSD_POS_XAXIS (+0x00)
-        { -1.0f,  0.0f,  0.0f, 0.0f },   // E_NSD_NEG_XAXIS (+0x10)
-        {  0.0f,  1.0f,  0.0f, 0.0f },   // E_NSD_POS_YAXIS (+0x20)
-        {  0.0f, -1.0f,  0.0f, 0.0f },   // E_NSD_NEG_YAXIS (+0x30)
-        {  0.0f,  0.0f,  1.0f, 0.0f },   // E_NSD_POS_ZAXIS (+0x40)
-        {  0.0f,  0.0f, -1.0f, 0.0f },   // E_NSD_NEG_ZAXIS (+0x50)
+        Vector3(1.0f, 0.0f, 0.0f),   // E_NSD_POS_XAXIS (+0x00)
+        Vector3(-1.0f, 0.0f, 0.0f),   // E_NSD_NEG_XAXIS (+0x10)
+        Vector3(0.0f, 1.0f, 0.0f),   // E_NSD_POS_YAXIS (+0x20)
+        Vector3(0.0f, -1.0f, 0.0f),   // E_NSD_NEG_YAXIS (+0x30)
+        Vector3(0.0f, 0.0f, 1.0f),   // E_NSD_POS_ZAXIS (+0x40)
+        Vector3(0.0f, 0.0f, -1.0f),   // E_NSD_NEG_ZAXIS (+0x50)
     };
 
     // ---------------------------------------------------------------------------------------------
