@@ -1,3 +1,5 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMovieVideoRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"
@@ -24,12 +26,15 @@ namespace CgsGraphics
 
     MovieVideoRenderer::~MovieVideoRenderer()
     {
-        for (TextureInfoType& lrTexture : maTextureInfoTypes)
+        for (u32 i = 0; i < KU_NUM_TEXTURES; ++i)
         {
+            TextureInfoType& lrTexture = maTextureInfoTypes[i];
             if (lrTexture.mpTexture != 0)
-                renderengine::Texture::Destroy(lrTexture.mpTexture);
-            CGS_ASSERT(lrTexture.mpTexture == 0 || lrTexture.mpTextureState != 0,
-                       "maTextureInfoTypes[i].mpTextureState");
+            {
+                lrTexture.mpTexture->Release();
+                CGS_ASSERT(lrTexture.mpTextureState != 0,
+                           "maTextureInfoTypes[i].mpTextureState");
+            }
         }
     }
 
@@ -56,8 +61,8 @@ namespace CgsGraphics
         muWidth = luWidth;
         muHeight = luHeight;
         mJob.Clear();
-        for (TextureInfoType& lrTexture : maTextureInfoTypes)
-            CreateOutputTexture(&lrTexture, luWidth, luHeight);
+        for (u32 i = 0; i < KU_NUM_TEXTURES; ++i)
+            CreateOutputTexture(&maTextureInfoTypes[i], luWidth, luHeight);
     }
 
     unsigned int MovieVideoRenderer::GetNumberOfVideoBuffers(rw::movie::VideoRenderable::VideoFormat)

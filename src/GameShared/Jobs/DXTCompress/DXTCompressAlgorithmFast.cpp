@@ -12,12 +12,33 @@
 // arithmetic between the accesses is the console's, in 32-bit unsigned registers.
 
 #include "GameShared/Jobs/DXTCompress/DXTCompressAlgorithmFast.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include <cmath>   // std::fmaf (the fused single-precision multiply-adds of ConvertYUVPixel)
+#include <cmath>
+#if defined(_XBOX)
+#include <vectorintrinsics.h>
+#endif
 
 namespace
 {
+    // The source pixels are byte values, so these operands and results are finite
+    // normal values or zero. VMX multiply-add preserves the single rounding of
+    // ARTIST 82AD05F8..060C for this conversion on the native compiler.
+    inline f32 PixelMultiplyAdd(f32 a, f32 b, f32 c)
+    {
+#if defined(_XBOX)
+        __vector4 va, vb, vc;
+        va.x = va.y = va.z = va.w = a;
+        vb.x = vb.y = vb.z = vb.w = b;
+        vc.x = vc.y = vc.z = vc.w = c;
+        const __vector4 result = __vmaddfp(va, vb, vc);
+        return result.x;
+#else
+        return std::fmaf(a, b, c);
+#endif
+    }
+
     // ---- [PC platform layer] big-endian memory access ----
     inline u32 LoadU32(const u8* lpBytes)
     {
@@ -286,10 +307,10 @@ namespace
         const f32 lfU0   = lfU - KF_YUV_CHROMA_OFFSET;
 
         const f32 lfScaledLuma = lfLuma * KF_YUV_LUMA_SCALE;
-        const f32 lfRed        = std::fmaf(lfV0, KF_YUV_V_TO_R, lfScaledLuma);
-        const f32 lfGreenU     = -std::fmaf(lfU0, KF_YUV_U_TO_G, -lfScaledLuma);
-        const f32 lfBlue       = std::fmaf(lfU0, KF_YUV_U_TO_B, lfScaledLuma);
-        const f32 lfGreen      = -std::fmaf(lfV0, KF_YUV_V_TO_G, -lfGreenU);
+        const f32 lfRed        = PixelMultiplyAdd(lfV0, KF_YUV_V_TO_R, lfScaledLuma);
+        const f32 lfGreenU     = -PixelMultiplyAdd(lfU0, KF_YUV_U_TO_G, -lfScaledLuma);
+        const f32 lfBlue       = PixelMultiplyAdd(lfU0, KF_YUV_U_TO_B, lfScaledLuma);
+        const f32 lfGreen      = -PixelMultiplyAdd(lfV0, KF_YUV_V_TO_G, -lfGreenU);
 
         lpDst[0] = 0xFF;
 
