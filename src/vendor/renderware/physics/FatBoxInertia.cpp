@@ -79,10 +79,7 @@ f32 ComputeFatBoxInertia(f32 lfHalfX, f32 lfHalfY, f32 lfHalfZ, f32 lfMargin,
 
     // Store the 16-byte lane register (var_30..var_24) that the closing
     // lvx128/stvx128 copies straight to *out. (stfs var_30/2C/28 + stw 0 @ var_24.)
-    lpOut->x = lfIxx;   // var_30 -> lane 0   (0x82BC6D98)
-    lpOut->y = lfIyy;   // var_2C -> lane 1   (0x82BC6D80)
-    lpOut->z = lfIzz;   // var_28 -> lane 2   (0x82BC6D90)
-    lpOut->w = 0.0f;    // var_24 -> lane 3   (stw r9, r9 = 0 @ 0x82BC6D9C)
+    *lpOut = rw::math::vpu::Vector4(lfIxx, lfIyy, lfIzz, 0.0f);
 
     // --- return value: fat-box (Minkowski-sum) volume, left live in f1 @ blr ---
     // box core                8*x*y*z                                 (f31=xyz @ D44; f13=8xyz @ D58)

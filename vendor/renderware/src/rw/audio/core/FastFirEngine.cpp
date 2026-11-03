@@ -16,7 +16,8 @@
 #include "rw/audio/core/FastFirEngine.h"
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::System (the shared allocator @+0x14)
 
-#include <cmath>   // std::fma / std::log (the cost model, the VMX fused lanes)
+#include <cmath>
+#include <vectorintrinsics.h>
 #include <cstring> // memset / memcpy (the X360 XMemSet / XMemCpy)
 
 namespace rw
@@ -430,7 +431,7 @@ void FastFirEngine::LoadDistributionCalc(FastFirEngine *self, s32 sizeLog2, s32 
     const f32 lfOutCh = static_cast<f32>(self->miOutputChannels);
     const f32 lfNumBlocks = static_cast<f32>(numBlocks);
     const f32 lfFftUnit = static_cast<f32>(sizeLog2 - 1) * KF_FFT_COST;
-    const f32 lfDryShare = std::fma(-self->mfField60, KF_PERCENT, KF_ONE); // fnmsubs
+    const f32 lfDryShare = (KF_ONE - self->mfField60 * KF_PERCENT); // fnmsubs
 
     const f32 lfOverlapCost = (lfOutCh * KF_OVERLAP_COST) / lfFftUnit;
     const f32 lfMacTotal = ((lfDryShare * lfNumBlocks) * lfOutCh * KF_MAC_COST) / lfFftUnit;
@@ -519,15 +520,23 @@ void FastFirEngine::MultiplyAccumulateComplex(FastFirEngine *self, f32 *pFreq, s
     {
         for (s32 liBin = 0; liBin < KI_MAC_BINS_PER_STEP; ++liBin)
         {
-            const f32 lfIr = static_cast<f32>(lpBins[2 * liBin]) * lfScale;
-            const f32 lfIi = static_cast<f32>(lpBins[2 * liBin + 1]) * lfScale;
+            __vector4 lvIr, lvIi, lvScale;
+            lvIr.x = static_cast<f32>(lpBins[2 * liBin]);
+            lvIi.x = static_cast<f32>(lpBins[2 * liBin + 1]);
+            lvScale.x = lfScale;
+            lvIr = __vmulfp(lvIr, lvScale);
+            lvIi = __vmulfp(lvIi, lvScale);
             const f32 lfFr = pFreq[2 * liBin];
             const f32 lfFi = pFreq[2 * liBin + 1];
 
-            const f32 lfRe = lfIr * lfFr - lfIi * lfFi;
-            const f32 lfIm = std::fma(lfIr, lfFi, lfIi * lfFr);
-            pAcc[2 * liBin] = lfRe + pAcc[2 * liBin];
-            pAcc[2 * liBin + 1] = lfIm + pAcc[2 * liBin + 1];
+            __vector4 lvFr, lvFi;
+            lvFr.x = lfFr; lvFi.x = lfFi;
+            const __vector4 lvRe = __vsubfp(__vmulfp(lvIr, lvFr), __vmulfp(lvIi, lvFi));
+            const __vector4 lvIm = __vmaddfp(lvIr, lvFi, __vmulfp(lvIi, lvFr));
+            __vector4 lvAccRe, lvAccIm;
+            lvAccRe.x = pAcc[2 * liBin]; lvAccIm.x = pAcc[2 * liBin + 1];
+            pAcc[2 * liBin] = __vaddfp(lvRe, lvAccRe).x;
+            pAcc[2 * liBin + 1] = __vaddfp(lvIm, lvAccIm).x;
         }
         lpBins += 2 * KI_MAC_BINS_PER_STEP;
         pFreq += 2 * KI_MAC_BINS_PER_STEP;
@@ -560,9 +569,9 @@ f32 FastFirEngine::EstimateLoad(FastFirEngine *self, s32 macLen, s32 blockSize,
     const f32 lfMacs = ((static_cast<f32>(impulseSamples) / lfN) * static_cast<f32>(macLen))
                      * lfOutCh;
 
-    f32 lfCost = std::fma(lfMacs, KF_MAC_COST, lfInFft);
-    lfCost = std::fma(lfOutCh * lfFftUnit, KF_FFT_COST, lfCost);
-    lfCost = std::fma(lfOutCh * lfN, KF_OVERLAP_COST, lfCost);
+    f32 lfCost = (lfMacs * KF_MAC_COST + lfInFft);
+    lfCost = ((lfOutCh * lfFftUnit) * KF_FFT_COST + lfCost);
+    lfCost = ((lfOutCh * lfN) * KF_OVERLAP_COST + lfCost);
     return lfCost / static_cast<f32>(liPasses);
 }
 
