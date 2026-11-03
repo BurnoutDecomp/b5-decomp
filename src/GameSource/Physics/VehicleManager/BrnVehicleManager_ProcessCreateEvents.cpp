@@ -170,22 +170,12 @@ namespace
     const f32 KF_MAX_ANGULAR_VELOCITY= 30.0f;       // flt_82004F5C
     const f32 KF_SIM_INERTIA_SCALE   = 1.2f;        // flt_82009B84 -- the sim's softer tensor
 
-    // `vandc v13, v13, v124` with v124 == the per-lane sign mask (`vspltisw v0,-1 ; vslw v124,v0,v0`
-    // == 0x80000000 in every lane). The console clears the sign bit in ALL FOUR lanes -- vandc is
-    // a whole-register operation and knows nothing about Vector3's three-lane convention. This
-    // helper deliberately PRESERVES .w instead of taking its absolute value: the .w lane is dead
-    // downstream (the only consumer is the x/y/z box-dimension math at the mHandlingBodyDimensions
-    // add below), so the divergence is cosmetic, not behavioural. Named here so the next reader
-    // does not "fix" the helper to match the asm and assume it mattered.
     inline Vector3 AbsPerLane(Vector3 lvValue)
     {
-        Vector3 lvResult;
-        lvResult.x = (lvValue.x < 0.0f) ? -lvValue.x : lvValue.x;
-        lvResult.y = (lvValue.y < 0.0f) ? -lvValue.y : lvValue.y;
-        lvResult.z = (lvValue.z < 0.0f) ? -lvValue.z : lvValue.z;
-        lvResult.w = lvValue.w;
-        return lvResult;
+        const __vector4 allBits = __vspltisw(-1);
+        return Vector3(__vandc(lvValue.mV, __vslw(allBits, allBits)));
     }
+
 }
 
 namespace BrnPhysics
@@ -265,8 +255,8 @@ namespace Vehicle
 
             // ---- the wheel walk (skipped when the event disables the physics-state reset) ---
             Vector3 lvHandlingBodyOffset;
-            lvHandlingBodyOffset.x = 0.0f; lvHandlingBodyOffset.y = 0.0f;
-            lvHandlingBodyOffset.z = 0.0f; lvHandlingBodyOffset.w = 0.0f;   // `vmr128 v125,v123(0)`
+            lvHandlingBodyOffset.mV.v[0] = 0.0f; lvHandlingBodyOffset.mV.v[1] = 0.0f;
+            lvHandlingBodyOffset.mV.v[2] = 0.0f; lvHandlingBodyOffset.mV.v[3] = 0.0f;   // `vmr128 v125,v123(0)`
 
             Vector3 lavWheelPositions[4];
             f32     lafWheelRadii[4];
@@ -285,7 +275,7 @@ namespace Vehicle
 
                     CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
                     // `vspltw v13,v13,1` == lane .y of maWheelSpecs[i].mScale, halved.
-                    lafWheelRadii[liWheel] = KF_HALF * lpSpec->maWheelSpecs[liWheel].mScale.y;
+                    lafWheelRadii[liWheel] = KF_HALF * lpSpec->maWheelSpecs[liWheel].mScale.mV.v[1];
                 }
 
                 // `v125 = v125 * (1/4)` -- the VMX reciprocal expansion of a divide by 4.0f.
@@ -303,22 +293,22 @@ namespace Vehicle
 
             // `lvx128 v0,&attribs+0x70 ; vspltw v0,v0,0` -- lane .x of the packed mass register.
             const f32 lfMass =
-                lVehicleAttribs.mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+                lVehicleAttribs.mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.mV.v[0];
             const f32 lfCoeff = KF_BOX_INERTIA_COEFF * lfMass;
 
-            const f32 lfXX = lvBoxDimensions.x * lvBoxDimensions.x;
-            const f32 lfYY = lvBoxDimensions.y * lvBoxDimensions.y;
-            const f32 lfZZ = lvBoxDimensions.z * lvBoxDimensions.z;
+            const f32 lfXX = lvBoxDimensions.mV.v[0] * lvBoxDimensions.mV.v[0];
+            const f32 lfYY = lvBoxDimensions.mV.v[1] * lvBoxDimensions.mV.v[1];
+            const f32 lfZZ = lvBoxDimensions.mV.v[2] * lvBoxDimensions.mV.v[2];
 
             Vector3 lvInverseInertia;
-            lvInverseInertia.x = 1.0f / (lfCoeff * (lfYY + lfZZ));
-            lvInverseInertia.y = 1.0f / (lfCoeff * (lfXX + lfZZ));
-            lvInverseInertia.z = 1.0f / (lfCoeff * (lfXX + lfYY));
+            lvInverseInertia.mV.v[0] = 1.0f / (lfCoeff * (lfYY + lfZZ));
+            lvInverseInertia.mV.v[1] = 1.0f / (lfCoeff * (lfXX + lfZZ));
+            lvInverseInertia.mV.v[2] = 1.0f / (lfCoeff * (lfXX + lfYY));
             // Lane .w is NEVER written by the console: the three `vrlimi128` inserts touch
             // lanes 0, 1 and 2 only, so v126's .w carries whatever the previous iteration left.
             // Reproduced as an explicit zero rather than as uninitialised stack -- the lane is
             // the Vector3 pad and nothing downstream reads it.
-            lvInverseInertia.w = 0.0f;
+            lvInverseInertia.mV.v[3] = 0.0f;
 
             rw::physics::Inertia lSeatInertia;
             lSeatInertia.SetLinearDrag(KF_SEAT_DRAG);            // stfs -> block +0x20

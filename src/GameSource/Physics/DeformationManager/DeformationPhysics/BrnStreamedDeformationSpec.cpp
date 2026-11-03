@@ -1,7 +1,5 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
 #include "SharedClasses/Physics/Deformation/BrnBodyPartBBoxSpec.h"   // BodyPartBBoxSpec::HackCheckHandedness (FixUp)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint -- the opt-in [com] / [handedness] probes only
-#include <cstdlib>                                                   // getenv/atoi  -- the opt-in [com] / [handedness] probes only
 
 // BrnPhysics::Deformation::StreamedDeformationSpec.
 //
@@ -82,22 +80,10 @@ namespace Deformation
         // placeholder skipped every COM move of 0.35..1 mm that the console re-frames.
         static const f32 KF_COM_MOVE_EPSILON = 1.1920929e-07f;
 
-        // Add a 16-byte vector lane-by-lane (the vaddfp the asm runs on xyz; w lane folded the same
-        // way the SIMD register is, harmlessly).
         inline void AddVector(Vector3& lAccum, const Vector3& lDelta)
-        {
-            lAccum.x += lDelta.x;
-            lAccum.y += lDelta.y;
-            lAccum.z += lDelta.z;
-            lAccum.w += lDelta.w;
-        }
+        { lAccum = __vaddfp(lAccum.mV, lDelta.mV); }
         inline void SubVector(Vector3& lAccum, const Vector3& lDelta)
-        {
-            lAccum.x -= lDelta.x;
-            lAccum.y -= lDelta.y;
-            lAccum.z -= lDelta.z;
-            lAccum.w -= lDelta.w;
-        }
+        { lAccum = __vsubfp(lAccum.mV, lDelta.mV); }
 
     }
 
@@ -228,8 +214,8 @@ namespace Deformation
     void StreamedDeformationSpec::GetBoundingBox(CgsGeometric::AxisAlignedBox& lBoxOut) const
     {
         // vspltisw v12,0 ; vmr v11,v12 -- both accumulators start at the zero vector.
-        Vector4 lvMaxPositions = { 0.0f, 0.0f, 0.0f, 0.0f };
-        Vector4 lvMinPositions = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector4 lvMaxPositions(__vspltisw(0));
+        Vector4 lvMinPositions(__vspltisw(0));
 
         if ( mu8NumDeformationSensors )
         {
@@ -242,25 +228,16 @@ namespace Deformation
                 const Vector3& lvOffset = lSensor.mInitialOffset;
                 const f32      lfRadius = lSensor.mfRadius;          // vspltw of the radius scalar
 
-                // offset + radius / offset - radius, then per-lane max / min into the accumulators.
-                const f32 lfMaxX = lvOffset.x + lfRadius, lfMinX = lvOffset.x - lfRadius;
-                const f32 lfMaxY = lvOffset.y + lfRadius, lfMinY = lvOffset.y - lfRadius;
-                const f32 lfMaxZ = lvOffset.z + lfRadius, lfMinZ = lvOffset.z - lfRadius;
-
-                if ( lfMaxX > lvMaxPositions.x ) lvMaxPositions.x = lfMaxX;
-                if ( lfMaxY > lvMaxPositions.y ) lvMaxPositions.y = lfMaxY;
-                if ( lfMaxZ > lvMaxPositions.z ) lvMaxPositions.z = lfMaxZ;
-
-                if ( lfMinX < lvMinPositions.x ) lvMinPositions.x = lfMinX;
-                if ( lfMinY < lvMinPositions.y ) lvMinPositions.y = lfMinY;
-                if ( lfMinZ < lvMinPositions.z ) lvMinPositions.z = lfMinZ;
+                const __vector4 vRadius = __vspltw(__lvlx(&lfRadius, 0), 0);
+                lvMaxPositions = __vmaxfp(lvMaxPositions.mV, __vaddfp(lvOffset.mV, vRadius));
+                lvMinPositions = __vminfp(lvMinPositions.mV, __vsubfp(lvOffset.mV, vRadius));
             }
             while ( lu8Index < mu8NumDeformationSensors );
         }
 
         // stvx128 v11 -> box+0 (min) ; stvx128 v12 -> box+16 (max)
-        lBoxOut.mMin = lvMinPositions;
-        lBoxOut.mMax = lvMaxPositions;
+        lBoxOut.mMin = lvMinPositions.mV;
+        lBoxOut.mMax = lvMaxPositions.mV;
     }
 
     // X360 @ 0x825E3148. Re-express every streamed geometry point in a new centre-of-mass frame.
@@ -280,71 +257,17 @@ namespace Deformation
     void StreamedDeformationSpec::TransformToNewCOMSpace(Vector3 lCOMOffset)
     {
         // lOldToNewCOMOffset = mCurrentCOMOffset - lCOMOffset ; IsZero(|.|^2) test.
-        const Vector3 lOldMinusNew = {
-            mCurrentCOMOffset.x - lCOMOffset.x,
-            mCurrentCOMOffset.y - lCOMOffset.y,
-            mCurrentCOMOffset.z - lCOMOffset.z,
-            0.0f
-        };
+        const Vector3 lOldMinusNew(__vsubfp(mCurrentCOMOffset.mV, lCOMOffset.mV));
         const f32 lfMagnitudeSquared =
-            lOldMinusNew.x * lOldMinusNew.x +
-            lOldMinusNew.y * lOldMinusNew.y +
-            lOldMinusNew.z * lOldMinusNew.z;
-
-        // ---- [com] PC bring-up instrument -- DELETE WHEN the wall test is banked -----------------
-        // OPT-IN (BRN_SPHERE_PROBE=1, the same switch as the sensor-sphere probe it is read with).
-        // ⭐ walls leg 11: the sensor offsets and the live wheel positions end up 2*COM apart in y
-        // (0.807 m on the starter car), which is exactly what parks a real-radius car on its belly.
-        // The two candidate causes -- "this ran with a zero old COM" vs "this was a no-op and the
-        // discrepancy is downstream" -- differ ONLY in the value of mCurrentCOMOffset ON ENTRY, so
-        // that is what this prints. One line, before the branch, so the skip is visible too.
-        {
-            static s32 siComProbe = -1;
-            if ( siComProbe < 0 )
-            {
-            }
-            static u32 suLogged = 0;
-            if ( siComProbe == 1 && suLogged < 6u && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++suLogged;
-                *CgsDev::Log::gpDebugPrint
-                    << "[com] TransformToNewCOMSpace old " << mCurrentCOMOffset.x << " "
-                    << mCurrentCOMOffset.y << " " << mCurrentCOMOffset.z
-                    << " -> new " << lCOMOffset.x << " " << lCOMOffset.y << " " << lCOMOffset.z
-                    << " magSq " << lfMagnitudeSquared
-                    << " applies " << (lfMagnitudeSquared > KF_COM_MOVE_EPSILON ? 1 : 0)
-                    << " sensor0 " << maDeformationSensorSpecs[0].mInitialOffset.x << " "
-                    << maDeformationSensorSpecs[0].mInitialOffset.y << " "
-                    << maDeformationSensorSpecs[0].mInitialOffset.z
-                    << " wheel0 " << maWheelSpecs[0].mPosition.x << " "
-                    << maWheelSpecs[0].mPosition.y << " " << maWheelSpecs[0].mPosition.z
-                    // ⭐ walls leg 12: the SERIALISED-vs-LOADED question. The probe above proves the
-                    // LOADED mCurrentCOMOffset; these prove the RECORD REGION is being read at the
-                    // right offset at all -- the raw dwords at +1632 next to mMeshOffset/mRigidBody
-                    // Offset/mCollisionOffset. A layout slip that faked a zero COM would have to
-                    // fake plausible floats in all three neighbours as well.
-                    << " | rawCOM " << reinterpret_cast<const u32*>(&mCurrentCOMOffset)[0] << " "
-                    << reinterpret_cast<const u32*>(&mCurrentCOMOffset)[1] << " "
-                    << reinterpret_cast<const u32*>(&mCurrentCOMOffset)[2]
-                    << " mesh " << mMeshOffset.x << " " << mMeshOffset.y << " " << mMeshOffset.z
-                    << " rigid " << mRigidBodyOffset.x << " " << mRigidBodyOffset.y << " "
-                    << mRigidBodyOffset.z
-                    << " coll " << mCollisionOffset.x << " " << mCollisionOffset.y << " "
-                    << mCollisionOffset.z
-                    << "\n";
-            }
-        }
+            lOldMinusNew.mV.v[0] * lOldMinusNew.mV.v[0] +
+            lOldMinusNew.mV.v[1] * lOldMinusNew.mV.v[1] +
+            lOldMinusNew.mV.v[2] * lOldMinusNew.mV.v[2];
 
         // back_chain[0] = (magSq > FLT_EPSILON)  ->  the COM moved (vcmpgtfp @0x825E3198, beqlr @0x825E31AC).
         if ( lfMagnitudeSquared > KF_COM_MOVE_EPSILON )
         {
             // delta = lCOMOffset - mCurrentCOMOffset (v0 = v1 - v13).
-            const Vector3 lDelta = {
-                lCOMOffset.x - mCurrentCOMOffset.x,
-                lCOMOffset.y - mCurrentCOMOffset.y,
-                lCOMOffset.z - mCurrentCOMOffset.z,
-                lCOMOffset.w - mCurrentCOMOffset.w
-            };
+            const Vector3 lDelta(__vsubfp(lCOMOffset.mV, mCurrentCOMOffset.mV));
 
             // mMeshOffset -= delta.
             SubVector(mMeshOffset, lDelta);
@@ -371,9 +294,9 @@ namespace Deformation
                 {
                     f32* lpPos = reinterpret_cast<f32*>(
                         lpTagBase + KU_TAG_POINT_STRIDE * liIndex + KU_TAG_POINT_POS_OFFSET);
-                    lpPos[0] += lDelta.x;
-                    lpPos[1] += lDelta.y;
-                    lpPos[2] += lDelta.z;
+                    lpPos[0] += lDelta.mV.v[0];
+                    lpPos[1] += lDelta.mV.v[1];
+                    lpPos[2] += lDelta.mV.v[2];
                     // lpPos[3] (detach threshold) intentionally left unchanged (vrlimi128 w-preserve).
                     ++liIndex;
                 }
@@ -388,10 +311,10 @@ namespace Deformation
                 do
                 {
                     f32* lpPos = reinterpret_cast<f32*>(lpDrivenBase + KU_DRIVEN_POINT_STRIDE * liIndex);
-                    lpPos[0] += lDelta.x;
-                    lpPos[1] += lDelta.y;
-                    lpPos[2] += lDelta.z;
-                    lpPos[3] += lDelta.w;
+                    lpPos[0] += lDelta.mV.v[0];
+                    lpPos[1] += lDelta.mV.v[1];
+                    lpPos[2] += lDelta.mV.v[2];
+                    lpPos[3] += lDelta.mV.v[3];
                     ++liIndex;
                 }
                 while ( liIndex < miNumberOfDrivenPoints );
@@ -415,10 +338,10 @@ namespace Deformation
                         do
                         {
                             f32* lpJoint = reinterpret_cast<f32*>(lpJointBase + KU_JOINT_STRIDE * liJoint);
-                            lpJoint[0] += lDelta.x;
-                            lpJoint[1] += lDelta.y;
-                            lpJoint[2] += lDelta.z;
-                            lpJoint[3] += lDelta.w;
+                            lpJoint[0] += lDelta.mV.v[0];
+                            lpJoint[1] += lDelta.mV.v[1];
+                            lpJoint[2] += lDelta.mV.v[2];
+                            lpJoint[3] += lDelta.mV.v[3];
                             ++liJoint;
                         }
                         while ( liJoint < liNumJoints );
