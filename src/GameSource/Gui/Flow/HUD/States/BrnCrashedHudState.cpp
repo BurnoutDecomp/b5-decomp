@@ -125,9 +125,9 @@ void CrashedHudState::OnEnter()
     meInternalState = E_CRASHINTERNALSTATE_GETCACHE;
     mbInImpactTime = false;
     mpCache = 0;
-    auto* lpAccess = mpStateInterface->GetAccessPointers();
+    CgsGui::GuiAccessPointers* lpAccess = mpStateInterface->GetAccessPointers();
     CGS_ASSERT(lpAccess != 0, "mpAccessPointers != NULL");
-    auto* lpFlapt = lpAccess->GetFlaptManager();
+    BrnFlapt::FlaptManager* lpFlapt = lpAccess->GetFlaptManager();
     CGS_ASSERT(lpFlapt != 0, "NULL != mpFlaptManager");
     BrnFlapt::FileRef lFile;
     lpFlapt->GetFile(&lFile, 0);
@@ -152,7 +152,7 @@ void CrashedHudState::OnEnter()
     mMudAnimator.Construct("DirtAnimator_mc", mpStateInterface, 0);
     mMugShotComponent.Construct("CrashMugShot_mc", mpStateInterface, 0);
     mMugShotComponent.Prepare("CrashMugShot_mc", lFile, 0);
-    mMugshotOpponentGamertag = {};
+    mMugshotOpponentGamertag = BrnFlapt::TextFieldRef();
     AttachToTextFieldComponent(&mMugshotOpponentGamertag, "Gamertag_txt", "Gamertag_mc", "CrashMugShot_mc", lFile);
     // FLAG deferred: online RoadRuleShotComponent name/data and mugshot event handlers.
     mSkipPromptAnimator.Construct("skipAnim_cpt", mpStateInterface, 0);
@@ -220,7 +220,7 @@ void CrashedHudState::Update()
 // ARTIST 0x82476698.
 void CrashedHudState::UpdateGetCache()
 {
-    auto* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+    StateInputQueue* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
     const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     CGS_ASSERT(mpCache == 0, "mpCache == NULL");
@@ -286,7 +286,12 @@ bool CrashedHudState::UpdateSetupState()
     {
         u8 mbVisible;
         u8 maPad[3];
-        BoostVisibility(bool lbVisible) : CgsGui::GuiEvent<214>(1, 12), mbVisible(lbVisible), maPad{} {}
+        BoostVisibility(bool lbVisible) : CgsGui::GuiEvent<214>(1, 12), mbVisible(lbVisible)
+        {
+            maPad[0] = 0;
+            maPad[1] = 0;
+            maPad[2] = 0;
+        }
     } lBoost(mbBoostBar);
     mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
     if (mbImpactTimer)
@@ -319,7 +324,7 @@ bool CrashedHudState::UpdateSetupState()
 // ARTIST 0x824767D8.
 void CrashedHudState::UpdateRunning()
 {
-    auto* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+    StateInputQueue* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
     const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
@@ -338,7 +343,8 @@ void CrashedHudState::UpdateRunning()
         case 7: if (mbImpactTimer && lpiPayload[1] == 49) EnterImpactTimeScreen(); break;
         case 21:
         {
-            const auto* lpTrigger = reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
+            const CgsGui::GuiEventAptTriggerPayload* lpTrigger =
+                reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
             if (lpTrigger->meEventType == 4 && mbHudMessages && std::strcmp(lpTrigger->mpacComponentName, "crashHudMessages_mc") == 0)
                 mHudMessageComponent.EndTransition();
             break;
@@ -518,7 +524,7 @@ void CrashedHudState::UpdateRunning()
         const CgsID lChallengeID = lpChallenge->GetChallengeID();
         const s32 liChallengeIndex = mpCache->GetFreeburnChallengeList()->GetChallengeIndex(lChallengeID);
 
-        GuiEventTickerCustomMessage lMessage = {};
+        GuiEventTickerCustomMessage lMessage;
         lMessage.Construct(true, false, true, true);
 
         // The local player's completed-challenge bit (FastBitArray<2000>::IsBitSet, inlined

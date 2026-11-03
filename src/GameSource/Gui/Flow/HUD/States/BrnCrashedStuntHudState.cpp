@@ -1,6 +1,7 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnCrashedStuntHudState.h"
 #include "GameShared/GameClasses/Containers/CgsHash.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
@@ -16,11 +17,18 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <xboxmath.h>
 namespace BrnGui {
 namespace {
     typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
     struct GuiEventCache : CgsModule::Event { GuiCache* mpGuiCache; };
     const char* const KAPC_CRASH_RUNNING_STATES[] = {"default", "transin", "tallyscore", "transout"};
+
+    inline f32 FusedMultiplyAdd(f32 lfA, f32 lfB, f32 lfC)
+    {
+        return __vmaddfp(XMVectorReplicate(lfA), XMVectorReplicate(lfB),
+                         XMVectorReplicate(lfC)).x;
+    }
 }
 const s32 CrashedStuntHudState::maiEventToObserve[12] =
 {
@@ -55,9 +63,9 @@ void CrashedStuntHudState::OnEnter()
     mpCache = 0;
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
     // FLAG deferred: replay serialiser EndMessage, shared with the other HUD states.
-    auto* lpAccess = mpStateInterface->GetAccessPointers();
+    CgsGui::GuiAccessPointers* lpAccess = mpStateInterface->GetAccessPointers();
     CGS_ASSERT(lpAccess != 0, "mpAccessPointers != NULL");
-    auto* lpFlapt = lpAccess->GetFlaptManager();
+    BrnFlapt::FlaptManager* lpFlapt = lpAccess->GetFlaptManager();
     CGS_ASSERT(lpFlapt != 0, "NULL != mpFlaptManager");
     BrnFlapt::FileRef lFile;
     lpFlapt->GetFile(&lFile, 0);
@@ -67,7 +75,7 @@ void CrashedStuntHudState::OnEnter()
     CGS_ASSERT(mCrashHudAnimator.IsValid(), "mpMovieClipInst");
     mCrashHudAnimator.mpMovieClipInst->ResetTimeline();
     mHudMessageComponent.Construct("crashHudMessages_mc", mpStateInterface, 0);
-    auto* lpCache = lpAccess->GetGuiCache();
+    GuiCache* lpCache = lpAccess->GetGuiCache();
     CGS_ASSERT(lpCache != 0, "mpGuiCache");
     mHudMessageComponent.SetInGameMessagesQueue(lpCache->GetInGameMessagesQueue());
     mHudMessageComponent.Prepare("crashHudMessages_mc", lFile);
@@ -139,8 +147,9 @@ void CrashedStuntHudState::SetExpectedAptComponentList()
     mpCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
     const char* lapcNames[] = { mStuntScoreAnimator.GetName(), mStuntMultiplierAnimator.GetName(),
         mScoreTallyAnimator.GetName(), mStuntRunScoreText.GetName(), mStuntRunMultiplierText.GetName() };
-    for (const char* lpcName : lapcNames)
+    for (u32 luIndex = 0; luIndex < sizeof(lapcNames) / sizeof(lapcNames[0]); ++luIndex)
     {
+        const char* lpcName = lapcNames[luIndex];
         const u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName), static_cast<s32>(std::strlen(lpcName)));
         mpCache->AppendExpectedAptComponentList(E_GUIFLOW_HUD, &luHash, 1);
     }
@@ -155,7 +164,12 @@ bool CrashedStuntHudState::UpdateSetupState()
     struct BoostVisibility : CgsGui::GuiEvent<214>
     {
         u8 mbVisible; u8 maPad[3];
-        BoostVisibility() : CgsGui::GuiEvent<214>(1, 12), mbVisible(false), maPad{} {}
+        BoostVisibility() : CgsGui::GuiEvent<214>(1, 12), mbVisible(false)
+        {
+            maPad[0] = 0;
+            maPad[1] = 0;
+            maPad[2] = 0;
+        }
     } lBoost;
     mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
     miStartScore = mpCache->miLastStuntScore;
@@ -165,11 +179,11 @@ bool CrashedStuntHudState::UpdateSetupState()
     char lacValue[16];
     if (miStartScore > 0 && miFinishScore > 0)
     {
-        std::snprintf(lacValue, 15, "%d", miStartScore);
+        CgsCore::SnPrintf(lacValue, 15, "%d", miStartScore);
         mStuntRunScoreText.SetLocalisedText("STUNT_RUN_COMBO_SCORE", static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(9), 1, lacValue, 11);
         if (miStartMultiplier > 1)
         {
-            std::snprintf(lacValue, 15, "%d", miCurrentMultiplier);
+            CgsCore::SnPrintf(lacValue, 15, "%d", miCurrentMultiplier);
             mStuntRunMultiplierText.SetLocalisedText("STUNTRUN_MULT_FORMAT", static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(9), 1, lacValue, 11);
         }
         else mStuntRunMultiplierText.SetText("");
@@ -189,7 +203,7 @@ bool CrashedStuntHudState::UpdateSetupState()
 bool CrashedStuntHudState::UpdateRunning()
 {
     bool lbFinished = false;
-    auto* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+    StateInputQueue* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
     const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
@@ -197,7 +211,8 @@ bool CrashedStuntHudState::UpdateRunning()
     {
         if (liId == 21)
         {
-            const auto* lpTrigger = reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
+            const CgsGui::GuiEventAptTriggerPayload* lpTrigger =
+                reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
             if (lpTrigger->meEventType == 4 && mbHudMessages)
             {
                 if (std::strcmp(lpTrigger->mpacComponentName, "ScoreTally_cpt") == 0)
@@ -225,7 +240,8 @@ bool CrashedStuntHudState::UpdateRunning()
         else if (liId == 154)
         {
             // ARTIST 0x824816F0..0x82481704 builds the full 64-bit Drive Away message ID.
-            if (mbHudMessages && *reinterpret_cast<const CgsID*>(lpEvent) != UINT64_C(0x5BBA2B744F8C0000))
+            if (mbHudMessages && *reinterpret_cast<const CgsID*>(lpEvent) !=
+                ((static_cast<u64>(0x5BBA2B74u) << 32) | 0x4F8C0000u))
                 mHudMessageComponent.AddMessage(lpEvent);
         }
         else if (liId == 156 && mbHudMessages) mHudMessageComponent.TerminateMessages();
@@ -243,13 +259,19 @@ void CrashedStuntHudState::UpdateCrashRunningState()
         const f32 lfElapsed = (mpCache->GetTime() - mfTallyScoreStartTime) * 0.5f;
         const f32 lfNonnegative = -lfElapsed >= 0.0f ? 0.0f : lfElapsed;
         const f32 lfProportion = 1.0f - lfNonnegative >= 0.0f ? lfNonnegative : 1.0f;
-        const s32 liScore = static_cast<s32>(std::floor(std::fma(static_cast<f32>(miFinishScore) - static_cast<f32>(miStartScore), lfProportion, static_cast<f32>(miStartScore)) + 0.5f));
-        const s32 liMultiplier = static_cast<s32>(std::floor(std::fma(static_cast<f32>(miFinishMultiplier) - static_cast<f32>(miStartMultiplier), lfProportion, static_cast<f32>(miStartMultiplier)) + 0.5f));
+        // The console uses a fused scalar multiply-add here. Replicating the operands and
+        // using XDK's VMX intrinsic keeps one-rounding semantics under the C++03 CRT.
+        const s32 liScore = static_cast<s32>(std::floor(
+            FusedMultiplyAdd(static_cast<f32>(miFinishScore) - static_cast<f32>(miStartScore),
+                             lfProportion, static_cast<f32>(miStartScore)) + 0.5f));
+        const s32 liMultiplier = static_cast<s32>(std::floor(
+            FusedMultiplyAdd(static_cast<f32>(miFinishMultiplier) - static_cast<f32>(miStartMultiplier),
+                             lfProportion, static_cast<f32>(miStartMultiplier)) + 0.5f));
         char lacValue[32];
         if (miCurrentScore != liScore)
         {
             miCurrentScore = liScore;
-            std::snprintf(lacValue, 31, "%d", miCurrentScore);
+            CgsCore::SnPrintf(lacValue, 31, "%d", miCurrentScore);
             mStuntRunScoreText.SetLocalisedText("STUNT_RUN_COMBO_SCORE", static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(9), 1, lacValue, 11);
         }
         if (miCurrentMultiplier != liMultiplier)
@@ -257,7 +279,7 @@ void CrashedStuntHudState::UpdateCrashRunningState()
             miCurrentMultiplier = liMultiplier;
             if (miCurrentMultiplier > 1)
             {
-                std::snprintf(lacValue, 31, "%d", miCurrentMultiplier);
+                CgsCore::SnPrintf(lacValue, 31, "%d", miCurrentMultiplier);
                 mStuntRunMultiplierText.SetLocalisedText("STUNTRUN_MULT_FORMAT", static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(9), 1, lacValue, 11);
                 mStuntMultiplierAnimator.AddOutputAptViewState("apt_Transition", "bounce", false);
             }

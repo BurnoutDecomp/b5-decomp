@@ -22,12 +22,12 @@ namespace BrnGui
 
     CrashNavBorough::BoroughPositions CrashNavBorough::maBoroughPositions[KI_NUM_BOROUGHS] =
     {
-        { { -0.0f, -3400.0f, 0.0f, 0.0f }, { 4350.0f, 4400.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, MainMapComponent::E_ZOOMFACTOR_MEDIUM },
-        { { -3500.0f, -4000.0f, 0.0f, 0.0f }, { 5200.0f, 5100.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, MainMapComponent::E_ZOOMFACTOR_LOW    },
-        { { -2000.0f, -1150.0f, 0.0f, 0.0f }, { 4300.0f, 4700.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, MainMapComponent::E_ZOOMFACTOR_MEDIUM },
-        { { -4400.0f, -4000.0f, 0.0f, 0.0f }, { 8300.0f, 8300.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, MainMapComponent::E_ZOOMFACTOR_LOW    },
-        { { 1450.0f, -2800.0f, 0.0f, 0.0f }, { 4000.0f, 3900.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, MainMapComponent::E_ZOOMFACTOR_MEDIUM },
-        { { 0.0f, 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, MainMapComponent::E_ZOOMFACTOR_LOW    },
+        { Vector2(-0.0f, -3400.0f), Vector2(4350.0f, 4400.0f), Vector2(0.0f, 0.0f), MainMapComponent::E_ZOOMFACTOR_MEDIUM },
+        { Vector2(-3500.0f, -4000.0f), Vector2(5200.0f, 5100.0f), Vector2(0.0f, 0.0f), MainMapComponent::E_ZOOMFACTOR_LOW    },
+        { Vector2(-2000.0f, -1150.0f), Vector2(4300.0f, 4700.0f), Vector2(0.0f, 0.0f), MainMapComponent::E_ZOOMFACTOR_MEDIUM },
+        { Vector2(-4400.0f, -4000.0f), Vector2(8300.0f, 8300.0f), Vector2(0.0f, 0.0f), MainMapComponent::E_ZOOMFACTOR_LOW    },
+        { Vector2(1450.0f, -2800.0f), Vector2(4000.0f, 3900.0f), Vector2(0.0f, 0.0f), MainMapComponent::E_ZOOMFACTOR_MEDIUM },
+        { Vector2(0.0f, 0.0f), Vector2(1.0f, 1.0f), Vector2(0.0f, 0.0f), MainMapComponent::E_ZOOMFACTOR_LOW    },
     };
 
     const char CrashNavBorough::macIconState[10]    = "apt_label";
@@ -50,8 +50,8 @@ namespace BrnGui
         for (s32 liBorough = 0; liBorough < KI_NUM_BOROUGHS; ++liBorough)
         {
             BoroughPositions& lrBorough = maBoroughPositions[liBorough];
-            lrBorough.mv2CenterPosition.x = 0.5f * lrBorough.mv2WidthHeight.x + lrBorough.mv2Position.x;
-            lrBorough.mv2CenterPosition.y = 0.5f * lrBorough.mv2WidthHeight.y + lrBorough.mv2Position.y;
+            lrBorough.mv2CenterPosition.mV.x = 0.5f * lrBorough.mv2WidthHeight.mV.x + lrBorough.mv2Position.mV.x;
+            lrBorough.mv2CenterPosition.mV.y = 0.5f * lrBorough.mv2WidthHeight.mV.y + lrBorough.mv2Position.mV.y;
         }
     }
 
@@ -69,26 +69,27 @@ namespace BrnGui
         const Vector2 lv2TopLeft =
             MapTransform::WorldToDevice(MapTransform::Unflatten(lrBorough.mv2Position), false);
 
-        CgsCore::SPrintf(lacValue, KU_VIEW_STATE_BUFFER_LENGTH - 1, "%f", lv2TopLeft.x);
+        CgsCore::SPrintf(lacValue, KU_VIEW_STATE_BUFFER_LENGTH - 1, "%f", lv2TopLeft.mV.x);
         lacValue[KU_VIEW_STATE_BUFFER_LENGTH - 1] = '\0';
         AddOutputAptViewState(macXposVar, lacValue, true);
 
-        CgsCore::SPrintf(lacValue, KU_VIEW_STATE_BUFFER_LENGTH - 1, "%f", lv2TopLeft.y);
+        CgsCore::SPrintf(lacValue, KU_VIEW_STATE_BUFFER_LENGTH - 1, "%f", lv2TopLeft.mV.y);
         lacValue[KU_VIEW_STATE_BUFFER_LENGTH - 1] = '\0';
         AddOutputAptViewState(macYposVar, lacValue, true);
 
-        const Vector2 lv2BottomRightWorld = { lrBorough.mv2Position.x + lrBorough.mv2WidthHeight.x,
-                                              lrBorough.mv2Position.y + lrBorough.mv2WidthHeight.y,
-                                              lrBorough.mv2Position.z + lrBorough.mv2WidthHeight.z,
-                                              lrBorough.mv2Position.w + lrBorough.mv2WidthHeight.w };
+        Vector2 lv2BottomRightWorld;
+        lv2BottomRightWorld.mV.x = lrBorough.mv2Position.mV.x + lrBorough.mv2WidthHeight.mV.x;
+        lv2BottomRightWorld.mV.y = lrBorough.mv2Position.mV.y + lrBorough.mv2WidthHeight.mV.y;
+        lv2BottomRightWorld.mV.z = lrBorough.mv2Position.mV.z + lrBorough.mv2WidthHeight.mV.z;
+        lv2BottomRightWorld.mV.w = lrBorough.mv2Position.mV.w + lrBorough.mv2WidthHeight.mV.w;
         const Vector2 lv2BottomRight =
             MapTransform::WorldToDevice(MapTransform::Unflatten(lv2BottomRightWorld), false);
 
-        CgsCore::SPrintf(lacValue, KU_VIEW_STATE_BUFFER_LENGTH - 1, "%f", lv2BottomRight.x - lv2TopLeft.x);
+        CgsCore::SPrintf(lacValue, KU_VIEW_STATE_BUFFER_LENGTH - 1, "%f", lv2BottomRight.mV.x - lv2TopLeft.mV.x);
         lacValue[KU_VIEW_STATE_BUFFER_LENGTH - 1] = '\0';
         AddOutputAptViewState(macWidthposVar, lacValue, true);
 
-        CgsCore::SPrintf(lacValue, KU_VIEW_STATE_BUFFER_LENGTH - 1, "%f", lv2BottomRight.y - lv2TopLeft.y);
+        CgsCore::SPrintf(lacValue, KU_VIEW_STATE_BUFFER_LENGTH - 1, "%f", lv2BottomRight.mV.y - lv2TopLeft.mV.y);
         lacValue[KU_VIEW_STATE_BUFFER_LENGTH - 1] = '\0';
         AddOutputAptViewState(macHeightposVar, lacValue, true);
     }

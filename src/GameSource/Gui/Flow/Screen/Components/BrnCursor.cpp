@@ -71,9 +71,6 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnCursor.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // getenv ([cnav-diag])
-#include <cstdlib>   // getenv ([cnav-diag])
-
 #include <cfloat>   // FLT_MAX (flt_8204F664 == 0x7F7FFFFF)
 #include <cmath>    // std::sqrt / std::fabs (the de-SIMD'd vrsqrtefp and vandc chains)
 
@@ -127,17 +124,13 @@ void GuiCursor::Update()
     lEvent.muHeader2   = 16;
 
     // 16-byte position lane (X360 lvx128 from this+0xA0 -> stvx128 into the event).
-    lEvent.maPosition[0] = mv2Position.x;
-    lEvent.maPosition[1] = mv2Position.y;
-    lEvent.maPosition[2] = mv2Position.z;
-    lEvent.maPosition[3] = mv2Position.w;
+    lEvent.maPosition[0] = mv2Position.mV.x;
+    lEvent.maPosition[1] = mv2Position.mV.y;
+    lEvent.maPosition[2] = mv2Position.mV.z;
+    lEvent.maPosition[3] = mv2Position.mV.w;
 
     lEvent.miState0 = static_cast<s32>( meDisplayState );     // *(this + 0xE4)
     lEvent.miState1 = static_cast<s32>( meAnimationState );   // *(this + 0xE8)
-    // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the cursor post, every 120th.
-    {
-        static s32 siTick = 0;
-    }
 
     // Push onto the owning state's large output queue with channel id 40 (GuiEventOut),
     // record size 48 bytes (the X360 li r5=0x28=40 type, li r6=0x30=48 size).
@@ -166,10 +159,10 @@ void GuiCursor::Construct(const char* lpacName, CgsGui::StateInterface* lpStateI
     mfLastInputTime  = 0.0f;                      // stfs f0, 0x94(r31)
 
     // stvx128 v13, r31, 0xA0 -- the quad built at var_40/var_3C plus the zeroed top half.
-    mv2Position.x = lfX;
-    mv2Position.y = lfY;
-    mv2Position.z = 0.0f;
-    mv2Position.w = 0.0f;
+    mv2Position.mV.x = lfX;
+    mv2Position.mV.y = lfY;
+    mv2Position.mV.z = 0.0f;
+    mv2Position.mV.w = 0.0f;
 
     mv2LastDelta.SetZero();                       // stvx128 v0(zero), r31, 0xB0
     mv4BoundsRect.SetZero();                      // stvx128 v0(zero), r31, 0xD0
@@ -192,23 +185,23 @@ bool GuiCursor::ClampPosition()
 {
     // `vcmpgtfp.` + `mfocrf`/`extrwi 1,24` reads CR6 bit 0 ("all lanes true"); every lane
     // is a splat of the same scalar, so each test is exactly the scalar compare.
-    if (!(mv4BoundsRect.x > mv2Position.x) &&    // r8 = 0  : bounds.x > pos.x
-        !(mv2Position.x > mv4BoundsRect.z) &&    // r8 = 8  : pos.x    > bounds.z
-        !(mv4BoundsRect.y > mv2Position.y) &&    // r8 = 4  : bounds.y > pos.y
-        !(mv2Position.y > mv4BoundsRect.w))      // r8 = 12 : pos.y    > bounds.w
+    if (!(mv4BoundsRect.mV.x > mv2Position.mV.x) &&    // r8 = 0  : bounds.x > pos.x
+        !(mv2Position.mV.x > mv4BoundsRect.mV.z) &&    // r8 = 8  : pos.x    > bounds.z
+        !(mv4BoundsRect.mV.y > mv2Position.mV.y) &&    // r8 = 4  : bounds.y > pos.y
+        !(mv2Position.mV.y > mv4BoundsRect.mV.w))      // r8 = 12 : pos.y    > bounds.w
     {
         return false;                            // li r3, 0; blr
     }
 
     // `fsel f0, f12, f13, f0` == `f12 >= 0.0f ? f13 : f0`, kept in operand order. Each
     // axis is max-against-the-low-edge then min-against-the-high-edge, x first, then y.
-    f32 lfX = ((mv4BoundsRect.x - mv2Position.x) >= 0.0f) ? mv4BoundsRect.x : mv2Position.x;
-    lfX     = ((mv4BoundsRect.z - lfX)           >= 0.0f) ? lfX             : mv4BoundsRect.z;
-    mv2Position.x = lfX;
+    f32 lfX = ((mv4BoundsRect.mV.x - mv2Position.mV.x) >= 0.0f) ? mv4BoundsRect.mV.x : mv2Position.mV.x;
+    lfX     = ((mv4BoundsRect.mV.z - lfX)           >= 0.0f) ? lfX             : mv4BoundsRect.mV.z;
+    mv2Position.mV.x = lfX;
 
-    f32 lfY = ((mv4BoundsRect.y - mv2Position.y) >= 0.0f) ? mv4BoundsRect.y : mv2Position.y;
-    lfY     = ((mv4BoundsRect.w - lfY)           >= 0.0f) ? lfY             : mv4BoundsRect.w;
-    mv2Position.y = lfY;
+    f32 lfY = ((mv4BoundsRect.mV.y - mv2Position.mV.y) >= 0.0f) ? mv4BoundsRect.mV.y : mv2Position.mV.y;
+    lfY     = ((mv4BoundsRect.mV.w - lfY)           >= 0.0f) ? lfY             : mv4BoundsRect.mV.w;
+    mv2Position.mV.y = lfY;
 
     return true;                                 // li r3, 1
 }
@@ -226,10 +219,10 @@ void GuiCursor::SetDelta(f32 lfXDelta, f32 lfYDelta, f32 lfTimeStep)
                "Invalid y delta send to GuiCursor::SetDelta");
 
     Vector2 lv2Delta;
-    lv2Delta.x = mfMovementScalar * lfXDelta;                     // fmuls f0, f0, f31
-    lv2Delta.y = (mfMovementScalar * lfYDelta) * KF_Y_AXIS_SIGN;  // fmuls f13, then * -1.0f
-    lv2Delta.z = 0.0f;                                            // std r25(0), 0(r11)
-    lv2Delta.w = 0.0f;
+    lv2Delta.mV.x = mfMovementScalar * lfXDelta;                     // fmuls f0, f0, f31
+    lv2Delta.mV.y = (mfMovementScalar * lfYDelta) * KF_Y_AXIS_SIGN;  // fmuls f13, then * -1.0f
+    lv2Delta.mV.z = 0.0f;                                            // std r25(0), 0(r11)
+    lv2Delta.mV.w = 0.0f;
 
     SetDelta(lv2Delta, lfTimeStep);
 }
@@ -253,17 +246,17 @@ void GuiCursor::SetDelta(Vector2 lv2Delta, f32 lfTimeStep)
     if (!mbAlwaysSnap)
     {
         // `lvx128 / vaddfp128 / stvx128` on this+0xA0 -- an all-lane add.
-        mv2Position.x += lv2Delta.x;
-        mv2Position.y += lv2Delta.y;
-        mv2Position.z += lv2Delta.z;
-        mv2Position.w += lv2Delta.w;
+        mv2Position.mV.x += lv2Delta.mV.x;
+        mv2Position.mV.y += lv2Delta.mV.y;
+        mv2Position.mV.z += lv2Delta.mV.z;
+        mv2Position.mV.w += lv2Delta.mV.w;
         return;
     }
 
     // BrnCursor.h:272 on the console. Non-fatal: the timing arithmetic below runs anyway.
     CGS_ASSERT(lfTimeStep > 0.0f, "Must have a valid time to use autorepeat");
 
-    const f32 lfMagnitude = Length2(lv2Delta.x, lv2Delta.y);
+    const f32 lfMagnitude = Length2(lv2Delta.mV.x, lv2Delta.mV.y);
 
     if (lfMagnitude > KF_SNAP_DEADZONE)
     {
@@ -308,8 +301,8 @@ u32 GuiCursor::FindClosestSnapIndex(Vector2* lpv2Locations, u32 luNumLocations)
     for (u32 luIndex = 0; luIndex < luNumLocations; ++luIndex)
     {
         // `vsubfp v0, v9(position), v0(location)` then the 2-lane length.
-        const f32 lfDistance = Length2(mv2Position.x - lpv2Locations[luIndex].x,
-                                       mv2Position.y - lpv2Locations[luIndex].y);
+        const f32 lfDistance = Length2(mv2Position.mV.x - lpv2Locations[luIndex].mV.x,
+                                       mv2Position.mV.y - lpv2Locations[luIndex].mV.y);
 
         if (lfDistance < lfClosestDistance)
         {
@@ -351,16 +344,16 @@ u32 GuiCursor::FindClosestSnapIndexInDirection(Vector2* lpv2Locations, u32 luNum
     u32 luBestIndex = KU_INVALID_SNAP_INDEX;   // li r3, -1
     f32 lfBestScore = 0.0f;                    // fmr f13, f12 (flt_82001CC0)
 
-    const f32 lfDirectionLength = Length2(lv2Direction.x, lv2Direction.y);
-    const f32 lfDirectionX      = lv2Direction.x / lfDirectionLength;
-    const f32 lfDirectionY      = lv2Direction.y / lfDirectionLength;
+    const f32 lfDirectionLength = Length2(lv2Direction.mV.x, lv2Direction.mV.y);
+    const f32 lfDirectionX      = lv2Direction.mV.x / lfDirectionLength;
+    const f32 lfDirectionY      = lv2Direction.mV.y / lfDirectionLength;
 
     for (u32 luIndex = 0; luIndex < luNumLocations; ++luIndex)
     {
         // `vsubfp v10, v0(location), v8(position)` -- note this one is location MINUS
         // position, the opposite order to FindClosestSnapIndex above.
-        const f32 lfOffsetX = lpv2Locations[luIndex].x - mv2Position.x;
-        const f32 lfOffsetY = lpv2Locations[luIndex].y - mv2Position.y;
+        const f32 lfOffsetX = lpv2Locations[luIndex].mV.x - mv2Position.mV.x;
+        const f32 lfOffsetY = lpv2Locations[luIndex].mV.y - mv2Position.mV.y;
 
         const f32 lfDistance = Length2(lfOffsetX, lfOffsetY);
         const f32 lfDot      = (lfDirectionX * (lfOffsetX / lfDistance)) +
@@ -417,8 +410,8 @@ GuiCursor::SnapResults GuiCursor::UpdateToSnapLocations(Vector2* lpv2Locations,
 
         // `vandc` clears the sign bit (abs) and `vcmpgtfp` compares against FLT_EPSILON:
         // "did the stick move at all this frame", per axis.
-        if (std::fabs(lv2LastDelta.x) > KF_DELTA_EPSILON ||
-            std::fabs(lv2LastDelta.y) > KF_DELTA_EPSILON)
+        if (std::fabs(lv2LastDelta.mV.x) > KF_DELTA_EPSILON ||
+            std::fabs(lv2LastDelta.mV.y) > KF_DELTA_EPSILON)
         {
             luIndex = FindClosestSnapIndexInDirection(lpv2Locations, luNumLocations,
                                                       lv2LastDelta);
@@ -440,10 +433,10 @@ GuiCursor::SnapResults GuiCursor::UpdateToSnapLocations(Vector2* lpv2Locations,
         const Vector2 lv2Target = lpv2Locations[luIndex];   // lvx128 v8, r10(index*16), r30
 
         // `vsubfp v12, v13(position), v8(target)` -- kept whole for the pull below.
-        const f32 lfOffsetX = mv2Position.x - lv2Target.x;
-        const f32 lfOffsetY = mv2Position.y - lv2Target.y;
-        const f32 lfOffsetZ = mv2Position.z - lv2Target.z;
-        const f32 lfOffsetW = mv2Position.w - lv2Target.w;
+        const f32 lfOffsetX = mv2Position.mV.x - lv2Target.mV.x;
+        const f32 lfOffsetY = mv2Position.mV.y - lv2Target.mV.y;
+        const f32 lfOffsetZ = mv2Position.mV.z - lv2Target.mV.z;
+        const f32 lfOffsetW = mv2Position.mV.w - lv2Target.mV.w;
 
         const f32 lfDistance = Length2(lfOffsetX, lfOffsetY);
 
@@ -479,10 +472,10 @@ GuiCursor::SnapResults GuiCursor::UpdateToSnapLocations(Vector2* lpv2Locations,
             {
                 // `vspltw` the scalar, `vmulfp128` against the offset, `vsubfp` from the
                 // position -- an all-lane operation, so all four lanes are written.
-                mv2Position.x -= lfOffsetX * lfPull;
-                mv2Position.y -= lfOffsetY * lfPull;
-                mv2Position.z -= lfOffsetZ * lfPull;
-                mv2Position.w -= lfOffsetW * lfPull;
+                mv2Position.mV.x -= lfOffsetX * lfPull;
+                mv2Position.mV.y -= lfOffsetY * lfPull;
+                mv2Position.mV.z -= lfOffsetZ * lfPull;
+                mv2Position.mV.w -= lfOffsetW * lfPull;
             }
         }
     }
@@ -526,10 +519,10 @@ GuiCursor::SnapResults GuiCursor::UpdateToSnapLocations(Vector2* lpv2Locations,
 
     SetPosition(lv2AfterClamp, lbForceSnap);
 
-    lResults.lv2Offset.x   = lv2BeforeClamp.x - lv2AfterClamp.x;   // vsubfp128 v0, v126, v127
-    lResults.lv2Offset.y   = lv2BeforeClamp.y - lv2AfterClamp.y;
-    lResults.lv2Offset.z   = lv2BeforeClamp.z - lv2AfterClamp.z;
-    lResults.lv2Offset.w   = lv2BeforeClamp.w - lv2AfterClamp.w;
+    lResults.lv2Offset.mV.x   = lv2BeforeClamp.mV.x - lv2AfterClamp.mV.x;   // vsubfp128 v0, v126, v127
+    lResults.lv2Offset.mV.y   = lv2BeforeClamp.mV.y - lv2AfterClamp.mV.y;
+    lResults.lv2Offset.mV.z   = lv2BeforeClamp.mV.z - lv2AfterClamp.mV.z;
+    lResults.lv2Offset.mV.w   = lv2BeforeClamp.mV.w - lv2AfterClamp.mV.w;
     lResults.luLockedIndex = muLockedToIndex;                      // stw r11, 0x10(r26)
 
     return lResults;
@@ -569,8 +562,8 @@ void GuiCursor::SetPosition(Vector2 lv2Position, bool lbClamp)
 {
     // `vrlimi128 v0, v1, 3, 2` duplicates (x, y) into the z/w lanes of both operands before
     // `vcmpeqfp.`, so the all-lanes-equal bit is exactly "x equal AND y equal".
-    if (lv2Position.x == mv2LastOutputPosition.x &&
-        lv2Position.y == mv2LastOutputPosition.y)
+    if (lv2Position.mV.x == mv2LastOutputPosition.mV.x &&
+        lv2Position.mV.y == mv2LastOutputPosition.mV.y)
     {
         return;
     }
@@ -587,9 +580,9 @@ void GuiCursor::SetPosition(Vector2 lv2Position, bool lbClamp)
     // BrnCursor.h:245 / :249. The console streams the offending float into the message
     // ("Crazy position being printed in the cursor : " << value << "\n"); CGS_ASSERT takes
     // a plain string, so the axis is named in the text instead and the value is dropped.
-    CGS_ASSERT(std::fabs(mv2Position.x) < KF_CRAZY_POSITION,
+    CGS_ASSERT(std::fabs(mv2Position.mV.x) < KF_CRAZY_POSITION,
                "Crazy position being printed in the cursor : x");
-    CGS_ASSERT(std::fabs(mv2Position.y) < KF_CRAZY_POSITION,
+    CGS_ASSERT(std::fabs(mv2Position.mV.y) < KF_CRAZY_POSITION,
                "Crazy position being printed in the cursor : y");
 }
 
