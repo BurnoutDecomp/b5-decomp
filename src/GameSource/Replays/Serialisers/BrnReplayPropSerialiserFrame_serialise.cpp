@@ -85,11 +85,11 @@ namespace BrnReplays
                 lafWorking[1] = lrOrientation.y;
                 lafWorking[2] = lrOrientation.z;
                 lafWorking[3] = lrOrientation.w;
-                lafWorking[4] = lrPosition.x;
-                lafWorking[5] = (lrPosition.y > KF_MIN_RECORDED_HEIGHT)
-                                    ? lrPosition.y
+                lafWorking[4] = static_cast<float>(lrPosition.GetX());
+                lafWorking[5] = (static_cast<float>(lrPosition.GetY()) > KF_MIN_RECORDED_HEIGHT)
+                                    ? static_cast<float>(lrPosition.GetY())
                                     : KF_MIN_RECORDED_HEIGHT;
-                lafWorking[6] = lrPosition.z;
+                lafWorking[6] = static_cast<float>(lrPosition.GetZ());
 
                 u8 lau8Packed[KI_QUANTISED_QUATPOS_BYTES];
                 QuantisedQuatPos::Pack(lau8Packed, lafWorking);

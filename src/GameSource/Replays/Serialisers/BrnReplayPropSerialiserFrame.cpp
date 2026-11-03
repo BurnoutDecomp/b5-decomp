@@ -328,17 +328,17 @@ namespace
         const f32 lfWX = 2.0f * lfW * lfX, lfWY = 2.0f * lfW * lfY, lfWZ = 2.0f * lfW * lfZ;
         const f32 lfXX = 2.0f * lfX * lfX, lfYY = 2.0f * lfY * lfY, lfZZ = 2.0f * lfZ * lfZ;
 
-        lrTransform.xAxis.x = 1.0f - lfYY - lfZZ;
-        lrTransform.xAxis.y = lfXY + lfWZ;
-        lrTransform.xAxis.z = lfZX - lfWY;
+        lrTransform.xAxis.SetX(1.0f - lfYY - lfZZ);
+        lrTransform.xAxis.SetY(lfXY + lfWZ);
+        lrTransform.xAxis.SetZ(lfZX - lfWY);
 
-        lrTransform.yAxis.x = lfXY - lfWZ;
-        lrTransform.yAxis.y = 1.0f - lfXX - lfZZ;
-        lrTransform.yAxis.z = lfYZ + lfWX;
+        lrTransform.yAxis.SetX(lfXY - lfWZ);
+        lrTransform.yAxis.SetY(1.0f - lfXX - lfZZ);
+        lrTransform.yAxis.SetZ(lfYZ + lfWX);
 
-        lrTransform.zAxis.x = lfZX + lfWY;
-        lrTransform.zAxis.y = lfYZ - lfWX;
-        lrTransform.zAxis.z = 1.0f - lfXX - lfYY;
+        lrTransform.zAxis.SetX(lfZX + lfWY);
+        lrTransform.zAxis.SetY(lfYZ - lfWX);
+        lrTransform.zAxis.SetZ(1.0f - lfXX - lfYY);
     }
 
     // [2026-08-18 round 3] The matrix->quaternion helper that used to live here has been DELETED.
@@ -582,11 +582,7 @@ namespace BrnReplays
                 f32        lafWorking[KI_QUATPOS_WORKING_FLOATS];
                 const f32* lpfQuatPos = QuantisedQuatPos::UnPack(lafWorking, lau8Packed);
 
-                Vector3 lPosition;
-                lPosition.x = lpfQuatPos[4];
-                lPosition.y = lpfQuatPos[5];
-                lPosition.z = lpfQuatPos[6];
-                lPosition.w = 0.0f;
+                Vector3 lPosition(lpfQuatPos[4], lpfQuatPos[5], lpfQuatPos[6]);
 
                 rw::math::vpu::Quaternion lOrientation;
                 lOrientation.x = lpfQuatPos[0];

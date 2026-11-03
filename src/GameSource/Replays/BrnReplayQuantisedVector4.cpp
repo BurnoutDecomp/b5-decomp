@@ -43,10 +43,10 @@ namespace BrnReplays
         maBitCounts[3] = luBitsW;
 
         // Per-lane range sanity: lMin[i] < lMax[i] (X360: vcmpgtfp lMax[i] > lMin[i]).
-        CGS_ASSERT(lrMin.x < lrMax.x, "lMin[0] < lMax[0]");
-        CGS_ASSERT(lrMin.y < lrMax.y, "lMin[1] < lMax[1]");
-        CGS_ASSERT(lrMin.z < lrMax.z, "lMin[2] < lMax[2]");
-        CGS_ASSERT(lrMin.w < lrMax.w, "lMin[3] < lMax[3]");
+        CGS_ASSERT(static_cast<float>(lrMin.GetX()) < static_cast<float>(lrMax.GetX()), "lMin[0] < lMax[0]");
+        CGS_ASSERT(static_cast<float>(lrMin.GetY()) < static_cast<float>(lrMax.GetY()), "lMin[1] < lMax[1]");
+        CGS_ASSERT(static_cast<float>(lrMin.GetZ()) < static_cast<float>(lrMax.GetZ()), "lMin[2] < lMax[2]");
+        CGS_ASSERT(static_cast<float>(lrMin.GetW()) < static_cast<float>(lrMax.GetW()), "lMin[3] < lMax[3]");
 
         // +16 / +32: stvx128 v127(lMin)/v126(lMax)
         mMin = lrMin;
@@ -66,7 +66,7 @@ namespace BrnReplays
         {
             CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
             lrStream << "Vec: "
-                     << lrValue.x << lrValue.y << lrValue.z << lrValue.w
+                     << static_cast<float>(lrValue.GetX()) << static_cast<float>(lrValue.GetY()) << static_cast<float>(lrValue.GetZ()) << static_cast<float>(lrValue.GetW())
                      << "\n";
         }
     }
@@ -82,10 +82,10 @@ namespace BrnReplays
         // (X360: vmaxfp(value,mMin) / vminfp(.,mMax) / vcmpeqfp.(value,clamped) --
         // if any lane was clamped the value was out of range.)
         const bool lbInRange =
-            lrValue.x >= lrC.mMin.x && lrValue.x <= lrC.mMax.x &&
-            lrValue.y >= lrC.mMin.y && lrValue.y <= lrC.mMax.y &&
-            lrValue.z >= lrC.mMin.z && lrValue.z <= lrC.mMax.z &&
-            lrValue.w >= lrC.mMin.w && lrValue.w <= lrC.mMax.w;
+            static_cast<float>(lrValue.GetX()) >= static_cast<float>(lrC.mMin.GetX()) && static_cast<float>(lrValue.GetX()) <= static_cast<float>(lrC.mMax.GetX()) &&
+            static_cast<float>(lrValue.GetY()) >= static_cast<float>(lrC.mMin.GetY()) && static_cast<float>(lrValue.GetY()) <= static_cast<float>(lrC.mMax.GetY()) &&
+            static_cast<float>(lrValue.GetZ()) >= static_cast<float>(lrC.mMin.GetZ()) && static_cast<float>(lrValue.GetZ()) <= static_cast<float>(lrC.mMax.GetZ()) &&
+            static_cast<float>(lrValue.GetW()) >= static_cast<float>(lrC.mMin.GetW()) && static_cast<float>(lrValue.GetW()) <= static_cast<float>(lrC.mMax.GetW());
         if (!lbInRange)
         {
             QuantisedVector4::PrintVector4(lrValue);
@@ -101,19 +101,19 @@ namespace BrnReplays
         lStream.Prepare(static_cast<u8*>(lpDest), 0, 0, liTotalBits);
 
         u32 luPacked;
-        CgsNetwork::FloatQuantiser::Pack(lrValue.x, lrC.mMin.x, lrC.mMax.x,
+        CgsNetwork::FloatQuantiser::Pack(static_cast<float>(lrValue.GetX()), static_cast<float>(lrC.mMin.GetX()), static_cast<float>(lrC.mMax.GetX()),
                                         lrC.maBitCounts[0], &luPacked);
         lStream.AddBits(luPacked, lrC.maBitCounts[0]);
 
-        CgsNetwork::FloatQuantiser::Pack(lrValue.y, lrC.mMin.y, lrC.mMax.y,
+        CgsNetwork::FloatQuantiser::Pack(static_cast<float>(lrValue.GetY()), static_cast<float>(lrC.mMin.GetY()), static_cast<float>(lrC.mMax.GetY()),
                                         lrC.maBitCounts[1], &luPacked);
         lStream.AddBits(luPacked, lrC.maBitCounts[1]);
 
-        CgsNetwork::FloatQuantiser::Pack(lrValue.z, lrC.mMin.z, lrC.mMax.z,
+        CgsNetwork::FloatQuantiser::Pack(static_cast<float>(lrValue.GetZ()), static_cast<float>(lrC.mMin.GetZ()), static_cast<float>(lrC.mMax.GetZ()),
                                         lrC.maBitCounts[2], &luPacked);
         lStream.AddBits(luPacked, lrC.maBitCounts[2]);
 
-        CgsNetwork::FloatQuantiser::Pack(lrValue.w, lrC.mMin.w, lrC.mMax.w,
+        CgsNetwork::FloatQuantiser::Pack(static_cast<float>(lrValue.GetW()), static_cast<float>(lrC.mMin.GetW()), static_cast<float>(lrC.mMax.GetW()),
                                         lrC.maBitCounts[3], &luPacked);
         lStream.AddBits(luPacked, lrC.maBitCounts[3]);
     }
@@ -140,33 +140,29 @@ namespace BrnReplays
         float lfW;
 
         s32 liBits = static_cast<s32>(lStream.GetBits(lrC.maBitCounts[0]));
-        CgsNetwork::FloatQuantiser::UnPack(&lfX, lrC.mMin.x, lrC.mMax.x,
+        CgsNetwork::FloatQuantiser::UnPack(&lfX, static_cast<float>(lrC.mMin.GetX()), static_cast<float>(lrC.mMax.GetX()),
                                           lrC.maBitCounts[0], static_cast<u32>(liBits));
 
         liBits = static_cast<s32>(lStream.GetBits(lrC.maBitCounts[1]));
-        CgsNetwork::FloatQuantiser::UnPack(&lfY, lrC.mMin.y, lrC.mMax.y,
+        CgsNetwork::FloatQuantiser::UnPack(&lfY, static_cast<float>(lrC.mMin.GetY()), static_cast<float>(lrC.mMax.GetY()),
                                           lrC.maBitCounts[1], static_cast<u32>(liBits));
 
         liBits = static_cast<s32>(lStream.GetBits(lrC.maBitCounts[2]));
-        CgsNetwork::FloatQuantiser::UnPack(&lfZ, lrC.mMin.z, lrC.mMax.z,
+        CgsNetwork::FloatQuantiser::UnPack(&lfZ, static_cast<float>(lrC.mMin.GetZ()), static_cast<float>(lrC.mMax.GetZ()),
                                           lrC.maBitCounts[2], static_cast<u32>(liBits));
 
         liBits = static_cast<s32>(lStream.GetBits(lrC.maBitCounts[3]));
-        CgsNetwork::FloatQuantiser::UnPack(&lfW, lrC.mMin.w, lrC.mMax.w,
+        CgsNetwork::FloatQuantiser::UnPack(&lfW, static_cast<float>(lrC.mMin.GetW()), static_cast<float>(lrC.mMax.GetW()),
                                           lrC.maBitCounts[3], static_cast<u32>(liBits));
 
-        Vector4 lValue;
-        lValue.x = lfX;
-        lValue.y = lfY;
-        lValue.z = lfZ;
-        lValue.w = lfW;
+        Vector4 lValue(lfX, lfY, lfZ, lfW);
 
         // Range sanity on the reconstructed value (mirrors Pack's clamp check).
         const bool lbInRange =
-            lValue.x >= lrC.mMin.x && lValue.x <= lrC.mMax.x &&
-            lValue.y >= lrC.mMin.y && lValue.y <= lrC.mMax.y &&
-            lValue.z >= lrC.mMin.z && lValue.z <= lrC.mMax.z &&
-            lValue.w >= lrC.mMin.w && lValue.w <= lrC.mMax.w;
+            static_cast<float>(lValue.GetX()) >= static_cast<float>(lrC.mMin.GetX()) && static_cast<float>(lValue.GetX()) <= static_cast<float>(lrC.mMax.GetX()) &&
+            static_cast<float>(lValue.GetY()) >= static_cast<float>(lrC.mMin.GetY()) && static_cast<float>(lValue.GetY()) <= static_cast<float>(lrC.mMax.GetY()) &&
+            static_cast<float>(lValue.GetZ()) >= static_cast<float>(lrC.mMin.GetZ()) && static_cast<float>(lValue.GetZ()) <= static_cast<float>(lrC.mMax.GetZ()) &&
+            static_cast<float>(lValue.GetW()) >= static_cast<float>(lrC.mMin.GetW()) && static_cast<float>(lValue.GetW()) <= static_cast<float>(lrC.mMax.GetW());
         if (!lbInRange)
         {
             QuantisedVector4::PrintVector4(lValue);
