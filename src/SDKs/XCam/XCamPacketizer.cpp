@@ -54,7 +54,7 @@ int CPacketizer::Initialize(int iPayloadSize, u32 uMaxPacketSize)
 
     const int iBufferSize = static_cast<int>(uChunkSize * uNumChunks) + 0x11;
     mpBuffers[0] = static_cast<u8*>(
-        XMemAlloc(3u * static_cast<u32>(iBufferSize), KU_PACKETIZER_XMEM_ATTRIBUTES));
+        ::XMemAlloc(3u * static_cast<u32>(iBufferSize), KU_PACKETIZER_XMEM_ATTRIBUTES));
     if (!mpBuffers[0])
         return 8;
 
@@ -64,10 +64,10 @@ int CPacketizer::Initialize(int iPayloadSize, u32 uMaxPacketSize)
 
     const u32 uRowStride = muChunkSize + 12u;
     mpRowTable = static_cast<u8*>(
-        XMemAlloc((muChunkSize + 16u) * muRowCount, KU_PACKETIZER_XMEM_ATTRIBUTES));
+        ::XMemAlloc((muChunkSize + 16u) * muRowCount, KU_PACKETIZER_XMEM_ATTRIBUTES));
     if (!mpRowTable)
     {
-        XMemFree(mpBuffers[0], KU_PACKETIZER_XMEM_ATTRIBUTES);
+        ::XMemFree(mpBuffers[0], KU_PACKETIZER_XMEM_ATTRIBUTES);
         return 8;
     }
 
@@ -122,9 +122,9 @@ int CPacketizer::Initialize(int iPayloadSize, u32 uMaxPacketSize)
 void CPacketizer::Shutdown()
 {
     if (mpBuffers[0])
-        XMemFree(mpBuffers[0], KU_PACKETIZER_XMEM_ATTRIBUTES);
+        ::XMemFree(mpBuffers[0], KU_PACKETIZER_XMEM_ATTRIBUTES);
     if (mpRowTable)
-        XMemFree(mpRowTable, KU_PACKETIZER_XMEM_ATTRIBUTES);
+        ::XMemFree(mpRowTable, KU_PACKETIZER_XMEM_ATTRIBUTES);
 }
 
 // @ 0x82986680

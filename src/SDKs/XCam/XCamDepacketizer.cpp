@@ -101,16 +101,16 @@ int CDepacketizer::Initialize(int iReserved, int iPayloadSize)
     miPayloadSize = iPayloadSize;
 
     mpFrameSlots = static_cast<FrameSlot*>(
-        XMemAlloc(6000, KU_DEPACKETIZER_XMEM_ATTRIBUTES));
+        ::XMemAlloc(6000, KU_DEPACKETIZER_XMEM_ATTRIBUTES));
     if (!mpFrameSlots)
         return 8;
 
     muRecoveryCount = 40;
     mpRecoveryTable = static_cast<RecoveryPacket**>(
-        XMemAlloc(static_cast<u32>((iPayloadSize + 12) * 40), KU_DEPACKETIZER_XMEM_ATTRIBUTES));
+        ::XMemAlloc(static_cast<u32>((iPayloadSize + 12) * 40), KU_DEPACKETIZER_XMEM_ATTRIBUTES));
     if (!mpRecoveryTable)
     {
-        XMemFree(mpFrameSlots, KU_DEPACKETIZER_XMEM_ATTRIBUTES);
+        ::XMemFree(mpFrameSlots, KU_DEPACKETIZER_XMEM_ATTRIBUTES);
         return 8;
     }
 
@@ -152,9 +152,9 @@ int CDepacketizer::Shutdown()
 {
     Reset();
     if (mpFrameSlots)
-        XMemFree(mpFrameSlots, KU_DEPACKETIZER_XMEM_ATTRIBUTES);
+        ::XMemFree(mpFrameSlots, KU_DEPACKETIZER_XMEM_ATTRIBUTES);
     if (mpRecoveryTable)
-        XMemFree(mpRecoveryTable, KU_DEPACKETIZER_XMEM_ATTRIBUTES);
+        ::XMemFree(mpRecoveryTable, KU_DEPACKETIZER_XMEM_ATTRIBUTES);
     return 0;
 }
 

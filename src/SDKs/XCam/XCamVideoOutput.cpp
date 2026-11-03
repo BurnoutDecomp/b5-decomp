@@ -136,7 +136,7 @@ void CVideoOutputBase::GetBufferForWriting(SVideoBuffer* pOut)
 // @ 0x82984478
 void CVideoOutputBase::BufferWriteSucceeded()
 {
-    KIRQL uOldIrql = KfAcquireSpinLock(&mSpinLock);
+    unsigned char uOldIrql = ::KfAcquireSpinLock(&mSpinLock);
 
     u32 uIndex = muWriteIndex;
     mbBufferReady = 1;
@@ -145,7 +145,7 @@ void CVideoOutputBase::BufferWriteSucceeded()
     if (uIndex + 1 >= 3)
         muWriteIndex = 0;
 
-    KfReleaseSpinLock(&mSpinLock, uOldIrql);
+    ::KfReleaseSpinLock(&mSpinLock, uOldIrql);
 }
 
 // @ 0x829844E8
@@ -154,10 +154,10 @@ int CVideoOutputBase::GetNextBufferHelper()
     int iIndex = 3; // sentinel: no completed buffer
     if (mbBufferReady)
     {
-        KIRQL uOldIrql = KfAcquireSpinLock(&mSpinLock);
+        unsigned char uOldIrql = ::KfAcquireSpinLock(&mSpinLock);
         iIndex = static_cast<int>(muReadyIndex);
         mbBufferReady = 0;
-        KfReleaseSpinLock(&mSpinLock, uOldIrql);
+        ::KfReleaseSpinLock(&mSpinLock, uOldIrql);
     }
     return iIndex;
 }
