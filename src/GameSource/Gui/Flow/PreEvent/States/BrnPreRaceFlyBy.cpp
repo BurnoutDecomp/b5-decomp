@@ -60,7 +60,6 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // GuiEventAptTrigger(+Payload)
 #include <cstring>   // strcmp (the X360 inlines it into HandleAptEvents)
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
-#include <stdlib.h>                                                       // getenv (the [flyby] diag gate only)
 #include <cmath>                                            // std::sqrt / std::floor
 #include "SDKs/XboxMath/XMVectorACos.h"                      // XboxMath::XMVectorACos (X360 0x821F0980)
 #include "GameSource/GameState/BrnGameStateTypes.h"          // BrnGameState::LandmarkIndex (complete: passed by value)
@@ -172,8 +171,8 @@ namespace BrnGui
     //   0x8206B490 = 349.79999, 0x8206B494 = 638.0, 0x82047A6C = 0.1875,
     //   0x82001C98 = 1.0, 0x82069E24 = 0.83888888, 0x820662EC = 0.4,
     //   0x82058108 = 0.9375, 0x82069E1C = 0.78333336, 0x82001CC0 = 0.0.
-    const Vector4 PreRaceFlyByState::KV4_VIEW_RECT    = { 0.0f, 0.1875f, 1.0f, 0.83888888f };
-    const Vector4 PreRaceFlyByState::KV4_PADDING_RECT = { 0.4f, 0.1875f, 0.9375f, 0.78333336f };
+    const Vector4 PreRaceFlyByState::KV4_VIEW_RECT(0.0f, 0.1875f, 1.0f, 0.83888888f);
+    const Vector4 PreRaceFlyByState::KV4_PADDING_RECT(0.4f, 0.1875f, 0.9375f, 0.78333336f);
 
     // INFERENCE, stated plainly: which of 0x82FB4AB0 / 0x82FB4AA0 is LONG and which is
     // TALL is taken from initialiser-stub order == declaration order (the lower stub
@@ -181,8 +180,8 @@ namespace BrnGui
     // IDENTICAL values, so CalculateZoomFactor's pick between them is value-neutral and
     // the naming cannot be settled from the image. The z/w lanes are the `std r9, 0(r11)`
     // zero pair in both stubs.
-    const Vector2 PreRaceFlyByState::K_PRERACE_LONG_DISPLAY_RECT = { 638.0f, 349.79999f, 0.0f, 0.0f };
-    const Vector2 PreRaceFlyByState::K_PRERACE_TALL_DISPLAY_RECT = { 638.0f, 349.79999f, 0.0f, 0.0f };
+    const Vector2 PreRaceFlyByState::K_PRERACE_LONG_DISPLAY_RECT(638.0f, 349.79999f);
+    const Vector2 PreRaceFlyByState::K_PRERACE_TALL_DISPLAY_RECT(638.0f, 349.79999f);
 
     // The two in-class-initialised integral statics still need a definition for the
     // link (both are odr-used: KI_PRERACEMAP_NUMICONS by the icon loops, and
@@ -1620,25 +1619,23 @@ namespace
 
     f32 Dot3(const Vector3& lv3A, const Vector3& lv3B)
     {
-        return (lv3A.x * lv3B.x) + (lv3A.y * lv3B.y) + (lv3A.z * lv3B.z);
+        return (lv3A.mV.x * lv3B.mV.x) + (lv3A.mV.y * lv3B.mV.y) + (lv3A.mV.z * lv3B.mV.z);
     }
 
     Vector3 Cross3(const Vector3& lv3A, const Vector3& lv3B)
     {
-        const Vector3 lv3Result = { (lv3A.y * lv3B.z) - (lv3A.z * lv3B.y),
-                                    (lv3A.z * lv3B.x) - (lv3A.x * lv3B.z),
-                                    (lv3A.x * lv3B.y) - (lv3A.y * lv3B.x),
-                                    0.0f };
+        const Vector3 lv3Result((lv3A.mV.y * lv3B.mV.z) - (lv3A.mV.z * lv3B.mV.y),
+                                (lv3A.mV.z * lv3B.mV.x) - (lv3A.mV.x * lv3B.mV.z),
+                                (lv3A.mV.x * lv3B.mV.y) - (lv3A.mV.y * lv3B.mV.x));
         return lv3Result;
     }
 
     Vector3 Normalise3(const Vector3& lv3In)
     {
         const f32 lfInverseLength = 1.0f / std::sqrt(Dot3(lv3In, lv3In));
-        const Vector3 lv3Result = { lv3In.x * lfInverseLength,
-                                    lv3In.y * lfInverseLength,
-                                    lv3In.z * lfInverseLength,
-                                    0.0f };
+        const Vector3 lv3Result(lv3In.mV.x * lfInverseLength,
+                                lv3In.mV.y * lfInverseLength,
+                                lv3In.mV.z * lfInverseLength);
         return lv3Result;
     }
 }
@@ -1683,10 +1680,9 @@ namespace
 
         const Vector4& lv4CameraPosition = mpGuiCache->GetWorldCameraPosition();
 
-        const Vector3 lv3Reference = { KF_SECTOR_REFERENCE_X,
-                                       KF_SECTOR_REFERENCE_Y,
-                                       KF_SECTOR_REFERENCE_Z,
-                                       0.0f };
+        const Vector3 lv3Reference(KF_SECTOR_REFERENCE_X,
+                                    KF_SECTOR_REFERENCE_Y,
+                                    KF_SECTOR_REFERENCE_Z);
 
         GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
         mpGuiCache->GetLandmarkInfoFromIndex(mpGuiCache->GetEventDestinationLandmarkIndex(),
@@ -1695,10 +1691,9 @@ namespace
         // The icon record's leading 16-byte lane is the landmark's world position -- the
         // `lvx128 v13, r0, <info>` at 0x824B4FC0.
         const Vector4& lv4LandmarkPosition = lLandmarkInfo.GetPositionLane();
-        const Vector3 lv3ToLandmark = { lv4LandmarkPosition.x - lv4CameraPosition.x,
-                                        lv4LandmarkPosition.y - lv4CameraPosition.y,
-                                        lv4LandmarkPosition.z - lv4CameraPosition.z,
-                                        0.0f };
+        const Vector3 lv3ToLandmark(lv4LandmarkPosition.mV.x - lv4CameraPosition.mV.x,
+                                    lv4LandmarkPosition.mV.y - lv4CameraPosition.mV.y,
+                                    lv4LandmarkPosition.mV.z - lv4CameraPosition.mV.z);
 
         const Vector3 lv3ReferenceDirection = Normalise3(lv3Reference);
         const Vector3 lv3LandmarkDirection  = Normalise3(lv3ToLandmark);
@@ -1717,7 +1712,7 @@ namespace
         // recovered from the sign of the cross product's Y component -- the console dots
         // the cross with unk_82181510 == the +Y axis and tests it against zero.
         const Vector3 lv3Cross = Cross3(lv3ReferenceDirection, lv3LandmarkDirection);
-        if (lv3Cross.y < 0.0f)
+        if (lv3Cross.mV.y < 0.0f)
             lfAngle = KF_TWO_PI - lfAngle;
 
         f32 lfDegrees = lfAngle * KF_RADIANS_TO_DEGREES;
@@ -1802,7 +1797,7 @@ namespace
 
         // Seed the bounding rectangle with the event's start position, flattened onto the
         // map plane ({x, z}).
-        Vector2 lv2Min = { lpEventStart->mv3Position.x, lpEventStart->mv3Position.z, 0.0f, 0.0f };
+        Vector2 lv2Min(lpEventStart->mv3Position.mV.x, lpEventStart->mv3Position.mV.z);
         Vector2 lv2Max = lv2Min;
 
         for (s32 liCheckpointIndex = 0;
@@ -1815,20 +1810,19 @@ namespace
                 &lLandmarkInfo);
 
             const Vector4& lv4Position = lLandmarkInfo.GetPositionLane();
-            const Vector2 lv2Point = { lv4Position.x, lv4Position.z, 0.0f, 0.0f };
+            const Vector2 lv2Point(lv4Position.mV.x, lv4Position.mV.z);
 
-            lv2Min.x = (lv2Min.x < lv2Point.x) ? lv2Min.x : lv2Point.x;   // vminfp
-            lv2Min.y = (lv2Min.y < lv2Point.y) ? lv2Min.y : lv2Point.y;
-            lv2Max.x = (lv2Max.x > lv2Point.x) ? lv2Max.x : lv2Point.x;   // vmaxfp
-            lv2Max.y = (lv2Max.y > lv2Point.y) ? lv2Max.y : lv2Point.y;
+            lv2Min.mV.x = (lv2Min.mV.x < lv2Point.mV.x) ? lv2Min.mV.x : lv2Point.mV.x;   // vminfp
+            lv2Min.mV.y = (lv2Min.mV.y < lv2Point.mV.y) ? lv2Min.mV.y : lv2Point.mV.y;
+            lv2Max.mV.x = (lv2Max.mV.x > lv2Point.mV.x) ? lv2Max.mV.x : lv2Point.mV.x;   // vmaxfp
+            lv2Max.mV.y = (lv2Max.mV.y > lv2Point.mV.y) ? lv2Max.mV.y : lv2Point.mV.y;
         }
 
-        const f32 lfWidth  = lv2Max.x - lv2Min.x;
-        const f32 lfHeight = lv2Max.y - lv2Min.y;
+        const f32 lfWidth  = lv2Max.mV.x - lv2Min.mV.x;
+        const f32 lfHeight = lv2Max.mV.y - lv2Min.mV.y;
 
-        const Vector2 lv2Centre = { (lv2Max.x + lv2Min.x) * 0.5f,
-                                    (lv2Max.y + lv2Min.y) * 0.5f,
-                                    0.0f, 0.0f };
+        const Vector2 lv2Centre((lv2Max.mV.x + lv2Min.mV.x) * 0.5f,
+                                (lv2Max.mV.y + lv2Min.mV.y) * 0.5f);
         mMainMapComponent.SetDesiredWorldCentre(lv2Centre);
 
         const Vector2& lv2DisplayRect = (lfHeight > lfWidth) ? K_PRERACE_TALL_DISPLAY_RECT
