@@ -22,7 +22,7 @@ namespace Fuzzy
 {
     using rw::math::vpu::Vector4;
     using rw::math::vpu::MaskScalar;
-    using rw::math::vpu::Splat;   // broadcast a scalar corner into a VecFloat
+
 
     // ---------------------------------------------------------------------------------
     // Construct: zero every envelope set + the cached normal/swerve score vector, latch
@@ -55,7 +55,7 @@ namespace Fuzzy
         // stickiness pulled from the tweak block, z = w = 0 (the asm reads +0x2C of
         // mpTweakValues == mfExtremeSwerveStickiness into lane y).
         {
-            const Vector4 lAggregateValue = { 0.2f, mpTweakValues->GetExtremeSwerveStickiness(), 0.0f, 0.0f };
+            const Vector4 lAggregateValue(0.2f, mpTweakValues->GetExtremeSwerveStickiness(), 0.0f, 0.0f);
             mNormalScore_ExtremeSwerveStickiness_Z_W = lAggregateValue;
         }
     }
@@ -88,8 +88,8 @@ namespace Fuzzy
         }
         // The corners are scalar floats here but the envelope set works in broadcast
         // VecFloat lanes (the asm vspltw's each scalar before the SetEnvelope call).
-        lpSet->SetEnvelope(liEnvelope, Splat(lfAttackStart), Splat(lfAttackStop),
-                           Splat(lfDecayStart), Splat(lfDecayStop));
+        lpSet->SetEnvelope(liEnvelope, VecFloat(lfAttackStart), VecFloat(lfAttackStop),
+                           VecFloat(lfDecayStart), VecFloat(lfDecayStop));
     }
 
     // ---------------------------------------------------------------------------------
@@ -116,18 +116,18 @@ namespace Fuzzy
         // -- Distance envelopes (category 0, via direct FuzzyEnvelopeSet4::SetEnvelope) --
         // SetEnvelope(envelope, attackStart, attackStop, decayStart, decayStop); the corners
         // are broadcast into VecFloat lanes (asm vspltw's each scalar before the call).
-        mDistanceEnvelopes.SetEnvelope(0, Splat(-3.5f), Splat(-1.5f), Splat(7.0f),  Splat(11.0f));
-        mDistanceEnvelopes.SetEnvelope(1, Splat( 6.0f), Splat(12.0f), Splat(14.0f), Splat(16.0f));
-        mDistanceEnvelopes.SetEnvelope(2, Splat(15.0f), Splat(18.0f), Splat(20.0f), Splat(30.0f));
+        mDistanceEnvelopes.SetEnvelope(0, VecFloat(-3.5f), VecFloat(-1.5f), VecFloat(7.0f),  VecFloat(11.0f));
+        mDistanceEnvelopes.SetEnvelope(1, VecFloat( 6.0f), VecFloat(12.0f), VecFloat(14.0f), VecFloat(16.0f));
+        mDistanceEnvelopes.SetEnvelope(2, VecFloat(15.0f), VecFloat(18.0f), VecFloat(20.0f), VecFloat(30.0f));
 
         // -- Height envelopes (category 1) --
-        mHeightEnvelopes.SetEnvelope(0, Splat(-2.0f), Splat(-1.0f), Splat(3.0f), Splat(5.0f));
+        mHeightEnvelopes.SetEnvelope(0, VecFloat(-2.0f), VecFloat(-1.0f), VecFloat(3.0f), VecFloat(5.0f));
 
         // -- ClosingSpeed envelopes (category 2) --
-        mClosingSpeedEnvelopes.SetEnvelope(0, Splat(-1000.1f), Splat(-1000.0f), Splat(-4.0f),   Splat(-3.0f));
-        mClosingSpeedEnvelopes.SetEnvelope(1, Splat(-3.5f),    Splat(-2.0f),    Splat(-0.5f),   Splat(0.5f));
-        mClosingSpeedEnvelopes.SetEnvelope(2, Splat(0.0f),     Splat(3.0f),     Splat(1000.0f), Splat(1000.1f));
-        mClosingSpeedEnvelopes.SetEnvelope(3, Splat(10.0f),    Splat(20.0f),    Splat(75.0f),   Splat(95.0f));
+        mClosingSpeedEnvelopes.SetEnvelope(0, VecFloat(-1000.1f), VecFloat(-1000.0f), VecFloat(-4.0f),   VecFloat(-3.0f));
+        mClosingSpeedEnvelopes.SetEnvelope(1, VecFloat(-3.5f),    VecFloat(-2.0f),    VecFloat(-0.5f),   VecFloat(0.5f));
+        mClosingSpeedEnvelopes.SetEnvelope(2, VecFloat(0.0f),     VecFloat(3.0f),     VecFloat(1000.0f), VecFloat(1000.1f));
+        mClosingSpeedEnvelopes.SetEnvelope(3, VecFloat(10.0f),    VecFloat(20.0f),    VecFloat(75.0f),   VecFloat(95.0f));
 
         // -- The remaining categories go through SetupEnvelope(category, envelope, ...) --
         SetupEnvelope(3, 0, -2.5f, -1.5f, 1.5f, 2.5f);          // LanePos
@@ -220,14 +220,14 @@ namespace Fuzzy
         // --- per-category membership scores (each broadcast input lane fed to its envelope
         //     set; Splat is the asm's vspltw/vperm broadcasting one input lane). Each
         //     CalcScores returns the four per-envelope memberships in lanes x/y/z/w.
-        const Vector4 lafRCDistanceScores     = mDistanceEnvelopes.CalcScores(Splat(lRC.x));      // @0x30, lRC.x
-        const Vector4 lafRCHeightScores       = mHeightEnvelopes.CalcScores(Splat(lRC.y));        // @0x70, lRC.y
-        const Vector4 lafRCClosingSpeedScores = mClosingSpeedEnvelopes.CalcScores(Splat(lRC.z));  // @0xB0, lRC.z
-        const Vector4 lafRCLanePosScores      = mLanePosEnvelopes.CalcScores(Splat(lRC.w));       // @0xF0, lRC.w
-        const Vector4 lafTrafLightDistScores  = mTrafficLightEnvelopes.CalcScores(Splat(lTLNP.x));// @0x170, lTLNP.x
-        const Vector4 lafNPDistScores         = mNextParamDistEnvelopes.CalcScores(Splat(lTLNP.y));//@0x1B0, lTLNP.y
-        const Vector4 lafNPClosingSpeedScores = mClosingSpeedEnvelopes.CalcScores(Splat(lTLNP.z));// @0xB0 (2nd), lTLNP.z
-        const Vector4 lafTimeQueueingScores   = mTimeQueueingEnvelopes.CalcScores(Splat(lTQ.x));  // @0x1F0, lTQ.x
+        const Vector4 lafRCDistanceScores     = mDistanceEnvelopes.CalcScores(VecFloat(lRC.GetX()));      // @0x30, lRC.x
+        const Vector4 lafRCHeightScores       = mHeightEnvelopes.CalcScores(VecFloat(lRC.GetY()));        // @0x70, lRC.y
+        const Vector4 lafRCClosingSpeedScores = mClosingSpeedEnvelopes.CalcScores(VecFloat(lRC.GetZ()));  // @0xB0, lRC.z
+        const Vector4 lafRCLanePosScores      = mLanePosEnvelopes.CalcScores(VecFloat(lRC.GetW()));       // @0xF0, lRC.w
+        const Vector4 lafTrafLightDistScores  = mTrafficLightEnvelopes.CalcScores(VecFloat(lTLNP.GetX()));// @0x170, lTLNP.x
+        const Vector4 lafNPDistScores         = mNextParamDistEnvelopes.CalcScores(VecFloat(lTLNP.GetY()));//@0x1B0, lTLNP.y
+        const Vector4 lafNPClosingSpeedScores = mClosingSpeedEnvelopes.CalcScores(VecFloat(lTLNP.GetZ()));// @0xB0 (2nd), lTLNP.z
+        const Vector4 lafTimeQueueingScores   = mTimeQueueingEnvelopes.CalcScores(VecFloat(lTQ.GetX()));  // @0x1F0, lTQ.x
 
         // --- behaviour rules (fuzzy combination of specific category-score lanes) ---------
         // The exact lane picks (.x/.y/.z) below are the vperm lane selections in the asm.
@@ -237,35 +237,35 @@ namespace Fuzzy
         //        MAX( MIN(Dist[y], RCClosingSpeed[z]),
         //             MIN(Dist[x], 1 - RCClosingSpeed[x]) ) ) )
         const VecFloat lfFollowPlayerScore =
-            FuzzyAND(Splat(lafRCHeightScores.x),
-                     FuzzyAND(Splat(lafRCLanePosScores.x),
-                              FuzzyOR(FuzzyAND(Splat(lafRCDistanceScores.y),
-                                               Splat(lafRCClosingSpeedScores.z)),
-                                      FuzzyAND(Splat(lafRCDistanceScores.x),
-                                               FuzzyNOT(Splat(lafRCClosingSpeedScores.x))))));
+            FuzzyAND(VecFloat(lafRCHeightScores.GetX()),
+                     FuzzyAND(VecFloat(lafRCLanePosScores.GetX()),
+                              FuzzyOR(FuzzyAND(VecFloat(lafRCDistanceScores.GetY()),
+                                               VecFloat(lafRCClosingSpeedScores.GetZ())),
+                                      FuzzyAND(VecFloat(lafRCDistanceScores.GetX()),
+                                               FuzzyNOT(VecFloat(lafRCClosingSpeedScores.GetX()))))));
 
         // Output 2 (r30+0x20, drive-around-obstruction score):
         //   MIN( Height[x],
         //        MIN( MAX(Dist[y], Dist[z]),
         //             MIN(LanePos[x], 1 - RCClosingSpeed[z]) ) )
         const VecFloat lfDriveAroundObstructionScore =
-            FuzzyAND(Splat(lafRCHeightScores.x),
-                     FuzzyAND(FuzzyOR(Splat(lafRCDistanceScores.y),
-                                      Splat(lafRCDistanceScores.z)),
-                              FuzzyAND(Splat(lafRCLanePosScores.x),
-                                       FuzzyNOT(Splat(lafRCClosingSpeedScores.z)))));
+            FuzzyAND(VecFloat(lafRCHeightScores.GetX()),
+                     FuzzyAND(FuzzyOR(VecFloat(lafRCDistanceScores.GetY()),
+                                      VecFloat(lafRCDistanceScores.GetZ())),
+                              FuzzyAND(VecFloat(lafRCLanePosScores.GetX()),
+                                       FuzzyNOT(VecFloat(lafRCClosingSpeedScores.GetZ())))));
 
         // Output 3 (r30+0x30): a single TrafficLight envelope membership, no combinator
         //   (asm stores the clamped TrafficLight(lTLNP.x) lane0 broadcast directly).
-        const VecFloat lfQueueingScore = Splat(lafTrafLightDistScores.x);
+        const VecFloat lfQueueingScore = VecFloat(lafTrafLightDistScores.GetX());
 
         // Output 4 (r30+0x40): MIN( NextParamDist[x], 1 - NPClosingSpeed[x] ).
         const VecFloat lfNextParamScore =
-            FuzzyAND(Splat(lafNPDistScores.x),
-                     FuzzyNOT(Splat(lafNPClosingSpeedScores.x)));
+            FuzzyAND(VecFloat(lafNPDistScores.GetX()),
+                     FuzzyNOT(VecFloat(lafNPClosingSpeedScores.GetX())));
 
         // Output 5 (r30+0x50): the cached normal-score vector, lane0 (0.2) broadcast.
-        const VecFloat lfNormalScore = Splat(mNormalScore_ExtremeSwerveStickiness_Z_W.x);
+        const VecFloat lfNormalScore = VecFloat(mNormalScore_ExtremeSwerveStickiness_Z_W.GetX());
 
         // --- Output 0 (r30+0x00): the Select at the tail -------------------------------
         // The asm computes maxOutputs = MAX(out1, out2), gates a "stickiness" fallback by
@@ -276,22 +276,20 @@ namespace Fuzzy
         //   output0      = mask ? 1.0 : false branch
         // (vcmpgtfp v6,maxOutputs,0; vcmpgtfp v13,lTQ.z,0; vand; vsel(false,1.0,mask).)
         const VecFloat lfMaxOutputs = FuzzyOR(lfFollowPlayerScore, lfDriveAroundObstructionScore);
-        const VecFloat lfDriveAroundStickiness = Splat(lTQ.z);
+        const VecFloat lfDriveAroundStickiness = VecFloat(lTQ.GetZ());
 
-        const VecFloat lfStickyFallback =
-            FuzzyAND(FuzzyOR(Splat(lTQ.y), lfMaxOutputs),
-                     Splat(lafTimeQueueingScores.x))
-            + lfDriveAroundStickiness;
+        const VecFloat lfStickyBase =
+            FuzzyAND(FuzzyOR(VecFloat(lTQ.GetY()), lfMaxOutputs),
+                     VecFloat(lafTimeQueueingScores.GetX()));
+        const VecFloat lfStickyFallback(__vaddfp(lfStickyBase.GetVector(),
+                                                  lfDriveAroundStickiness.GetVector()));
 
-        const Vector4 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
-        const MaskScalar lMaskOutputs    = rw::math::vpu::IsGreater(lfMaxOutputs, lZero);
-        const MaskScalar lMaskStickiness = rw::math::vpu::IsGreater(lfDriveAroundStickiness, lZero);
-        const MaskScalar lMaskCombined   = rw::math::vpu::And(lMaskOutputs, lMaskStickiness);
-
-        const VecFloat lfSelectedScore =
-            rw::math::vpu::Select(/*false:*/ lfStickyFallback,
-                                  /*true :*/ rw::math::vpu::GetVector4_One(),
-                                  lMaskCombined);
+        const rw::math::vpu::VectorIntrinsic lZero = __vspltisw(0);
+        const rw::math::vpu::VectorIntrinsic lMaskCombined = __vand(
+            __vcmpgtfp(lfMaxOutputs.GetVector(), lZero),
+            __vcmpgtfp(lfDriveAroundStickiness.GetVector(), lZero));
+        const VecFloat lfSelectedScore(__vsel(lfStickyFallback.GetVector(),
+                                             VecFloat(1.0f).GetVector(), lMaskCombined));
 
         // --- store the six behaviour scores -------------------------------------------
         lpafOutputs[0] = lfSelectedScore;                 // r30 + 0x00

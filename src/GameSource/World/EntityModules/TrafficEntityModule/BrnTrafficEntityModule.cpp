@@ -1469,9 +1469,9 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
             const Vector3 lBBoxHalfSize =
                 maVehicleTypeRuntime[luVehicleType].GetBBoxHalfSize();
 
-            const f32 lfHalfX = lBBoxHalfSize.x;
-            const f32 lfHalfY = lBBoxHalfSize.y;
-            const f32 lfHalfZ = lBBoxHalfSize.z;
+            const f32 lfHalfX = lBBoxHalfSize.mV.x;
+            const f32 lfHalfY = lBBoxHalfSize.mV.y;
+            const f32 lfHalfZ = lBBoxHalfSize.mV.z;
 
             // min( hx, hy, hz ) * 0.49f, clamped to 0.44f.
             f32 lfSmallestHalfExtent = lfHalfX;
@@ -1694,20 +1694,17 @@ namespace
 
     // Construct's tuning block writes each member as one 16-byte store; these two spell the
     // `vspltw`-then-`stvx128` and the lane-wise forms. [DIAG-FREE] pure de-inlining.
-    inline void SetTuningSplat(Vector4& lrOut, f32 lfValue)
+    inline void SetTuningSplat(VecFloat& lrOut, f32 lfValue)
     {
-        lrOut.x = lfValue;
-        lrOut.y = lfValue;
-        lrOut.z = lfValue;
-        lrOut.w = lfValue;
+        lrOut = VecFloat(lfValue);
     }
 
     inline void SetTuningLanes(Vector4& lrOut, f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
     {
-        lrOut.x = lfX;
-        lrOut.y = lfY;
-        lrOut.z = lfZ;
-        lrOut.w = lfW;
+        lrOut.mV.x = lfX;
+        lrOut.mV.y = lfY;
+        lrOut.mV.z = lfZ;
+        lrOut.mV.w = lfW;
     }
 }
 
@@ -2749,22 +2746,22 @@ void TrafficEntityModule::UpdateRaceCarHulls(const BrnTrafficIO::InputBuffer_Pos
             // is 195.0f, and only lanes 0 and 2 reach the Pvs. Written as the Vector3 it
             // produces rather than transcribed as VMX.
             Vector3 lHalfExtent;
-            lHalfExtent.x = mfTrafficSimRadius.x;
-            lHalfExtent.y = mfTrafficSimRadius.y;
-            lHalfExtent.z = mfTrafficSimRadius.z;
-            lHalfExtent.w = 0.0f;
+            lHalfExtent.mV.x = mfTrafficSimRadius.mV.x;
+            lHalfExtent.mV.y = mfTrafficSimRadius.mV.y;
+            lHalfExtent.mV.z = mfTrafficSimRadius.mV.z;
+            lHalfExtent.mV.w = 0.0f;
 
             Vector3 lBoxMin;                        // vsubfp128 v125, v126, v127
-            lBoxMin.x = lSimCentre.x - lHalfExtent.x;
-            lBoxMin.y = lSimCentre.y - lHalfExtent.y;
-            lBoxMin.z = lSimCentre.z - lHalfExtent.z;
-            lBoxMin.w = 0.0f;
+            lBoxMin.mV.x = lSimCentre.mV.x - lHalfExtent.mV.x;
+            lBoxMin.mV.y = lSimCentre.mV.y - lHalfExtent.mV.y;
+            lBoxMin.mV.z = lSimCentre.mV.z - lHalfExtent.mV.z;
+            lBoxMin.mV.w = 0.0f;
 
             Vector3 lBoxMax;                        // vaddfp128 v127, v126, v127
-            lBoxMax.x = lSimCentre.x + lHalfExtent.x;
-            lBoxMax.y = lSimCentre.y + lHalfExtent.y;
-            lBoxMax.z = lSimCentre.z + lHalfExtent.z;
-            lBoxMax.w = 0.0f;
+            lBoxMax.mV.x = lSimCentre.mV.x + lHalfExtent.mV.x;
+            lBoxMax.mV.y = lSimCentre.mV.y + lHalfExtent.mV.y;
+            lBoxMax.mV.z = lSimCentre.mV.z + lHalfExtent.mV.z;
+            lBoxMax.mV.w = 0.0f;
 
             // ---- corner -> grid coordinates -------------------------------------------
             // Each corner goes through TrafficData::operator-> then `lwz r3, 8(r3)`, i.e.
@@ -3021,10 +3018,7 @@ void TrafficEntityModule::PredictHullChanges(const BrnTrafficIO::InputBuffer_Pos
     const Vector3& lrPosition = lpPlayerState->mTransform.wAxis;
     const Vector3& lrVelocity = lpPlayerState->mLinearVelocity;
     Vector3 lPredicted;
-    lPredicted.x = __vmaddfp(XMVectorReplicate(lrVelocity.x), XMVectorReplicate(KF_HULL_PREDICTION_SECONDS), XMVectorReplicate(lrPosition.x)).x;
-    lPredicted.y = __vmaddfp(XMVectorReplicate(lrVelocity.y), XMVectorReplicate(KF_HULL_PREDICTION_SECONDS), XMVectorReplicate(lrPosition.y)).x;
-    lPredicted.z = __vmaddfp(XMVectorReplicate(lrVelocity.z), XMVectorReplicate(KF_HULL_PREDICTION_SECONDS), XMVectorReplicate(lrPosition.z)).x;
-    lPredicted.w = __vmaddfp(XMVectorReplicate(lrVelocity.w), XMVectorReplicate(KF_HULL_PREDICTION_SECONDS), XMVectorReplicate(lrPosition.w)).x;
+    lPredicted.mV = __vmaddfp(lrVelocity.mV, XMVectorReplicate(KF_HULL_PREDICTION_SECONDS), lrPosition.mV);
 
     const u32 luPredictedHull = mpData->mpPvs->GetHullIndexForPoint(lPredicted);
     CGS_ASSERT(luPredictedHull < KU_MAX_HULLS, "luPredictedHull < KU_MAX_HULLS");   // .cpp 7541
@@ -4138,14 +4132,14 @@ void TrafficEntityModule::GenerateNetworkUpdateEvents(const BrnTrafficIO::InputB
             // the squared ground-plane distance from the world origin. Plain f32 products and sums
             // in lane order, the tree's standing vmsum3fp128 convention (KillAllTrafficInCylinder).
             Vector3 lGroundOffset = lPosition;
-            lGroundOffset.y = 0.0f;
-            const f32 lfGroundDistSq = lGroundOffset.x * lGroundOffset.x
-                                     + lGroundOffset.y * lGroundOffset.y
-                                     + lGroundOffset.z * lGroundOffset.z;
+            lGroundOffset.mV.y = 0.0f;
+            const f32 lfGroundDistSq = lGroundOffset.mV.x * lGroundOffset.mV.x
+                                     + lGroundOffset.mV.y * lGroundOffset.mV.y
+                                     + lGroundOffset.mV.z * lGroundOffset.mV.z;
 
             if (lfGroundDistSq > KF_MIN_GROUND_DIST_SQ_FROM_ORIGIN)
             {
-                if (lPosition.y > KF_MIN_HEIGHT_ABOVE_ORIGIN
+                if (lPosition.mV.y > KF_MIN_HEIGHT_ABOVE_ORIGIN
                     || lfGroundDistSq > KF_FAR_GROUND_DIST_SQ_FROM_ORIGIN)
                 {
                     luHull = static_cast<u16>(mpData->mpPvs->GetHullIndexForPoint(lPosition));
@@ -4733,10 +4727,10 @@ void TrafficEntityModule::Construct()
     // one Pvs cell without ever producing a non-finite value.
     // 195 m is the half-extent of the box UpdateRaceCarHulls builds around the player, which at
     // the shipped Pvs cell size gives the handful of hulls its "> 4" assert polices.
-    mfTrafficSimRadius.x = 195.0f;
-    mfTrafficSimRadius.y = 195.0f;
-    mfTrafficSimRadius.z = 195.0f;
-    mfTrafficSimRadius.w = 195.0f;
+    mfTrafficSimRadius.mV.x = 195.0f;
+    mfTrafficSimRadius.mV.y = 195.0f;
+    mfTrafficSimRadius.mV.z = 195.0f;
+    mfTrafficSimRadius.mV.w = 195.0f;
 
     muMaxVehiclesToRender  = 32;
     mfRenderCullDistanceSq = 62500.0f;   // == 250.0f * 250.0f
@@ -5990,10 +5984,10 @@ void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene*
     // 0x8272158F0..0x82715924 builds a 4-lane splat of mfSimTimeStep through the stack
     // (`lvx128` + `vspltw ,0`); the zero-word staging is just how the console gets a scalar
     // into a lane.
-    mfSimTimeStepVec.x = mfSimTimeStep;
-    mfSimTimeStepVec.y = mfSimTimeStep;
-    mfSimTimeStepVec.z = mfSimTimeStep;
-    mfSimTimeStepVec.w = mfSimTimeStep;
+    mfSimTimeStepVec.mV.x = mfSimTimeStep;
+    mfSimTimeStepVec.mV.y = mfSimTimeStep;
+    mfSimTimeStepVec.mV.z = mfSimTimeStep;
+    mfSimTimeStepVec.mV.w = mfSimTimeStep;
 
     {
         // GATE -- the store at 0x82715928..0x82715954, `splat(mfSimTimeStep * mfSimTimeStep *
@@ -6528,7 +6522,7 @@ void TrafficEntityModule::SpawnShowtimeTraffic()
                 // 0x82743428..0x82743450. The full parameter goes in the vector lane, its
                 // truncation in the segment slot -- CalcPositionAtParameter asserts they
                 // agree.
-                const VecFloat lvParam = { lfParam, lfParam, lfParam, lfParam };
+                const VecFloat lvParam(lfParam);
                 Vector3        lSpawnPosition;
                 lpSection->CalcPositionAtParameter(lpHull->mpaRungs,
                                                    lvParam,
@@ -6810,7 +6804,7 @@ void TrafficEntityModule::GenerateNewVehicle(u32 luVehicleTypeId,
         // unk_8300C960 == splat(flt_820BA5C8 == 100.0f)).
         Vector3 lSpawnPos;
         lpSection->CalcPositionAtParameter(lpHull->mpaRungs,
-                                           rw::math::vpu::Splat(lfParamAlong),
+                                           VecFloat(lfParamAlong),
                                            static_cast<u32>(lfParamAlong),
                                            lSpawnPos);
 
@@ -6854,7 +6848,7 @@ void TrafficEntityModule::GenerateNewVehicle(u32 luVehicleTypeId,
     // here (leak :4864 stores it into ParamTransform::mRight); the declaration in
     // BrnTrafficSection.h names that parameter for its WorldMap consumer instead.
     // 0x827368A0 vspltw v1, v0, 0 -- the parameter reaches Section as a broadcast lane.
-    const VecFloat lParamLane = { lfParamAlong, lfParamAlong, lfParamAlong, lfParamAlong };
+    const VecFloat lParamLane(lfParamAlong);
 
     Vector3 lPos;
     Vector3 lDir;
@@ -6871,10 +6865,10 @@ void TrafficEntityModule::GenerateNewVehicle(u32 luVehicleTypeId,
     ParamTransform* lpTransform = &maParamTransforms[luFreeSlot];
 
     VecFloat lfSpeed;
-    lfSpeed.x = lpNewParam->mfSpeed;
-    lfSpeed.y = lpNewParam->mfSpeed;
-    lfSpeed.z = lpNewParam->mfSpeed;
-    lfSpeed.w = lpNewParam->mfSpeed;
+    lfSpeed.mV.x = lpNewParam->mfSpeed;
+    lfSpeed.mV.y = lpNewParam->mfSpeed;
+    lfSpeed.mV.z = lpNewParam->mfSpeed;
+    lfSpeed.mV.w = lpNewParam->mfSpeed;
     lpTransform->Initialise(lPos, lDir, lRight, lfSpeed);
 
     // 0x827368E0. Offline (mbAllowDivergentBehaviour false) a still-alive recycled vehicle is
@@ -8034,7 +8028,7 @@ namespace
 
     inline VecFloat SplatLane(f32 lfValue)
     {
-        const VecFloat lLane = { lfValue, lfValue, lfValue, lfValue };
+        const VecFloat lLane(lfValue);
         return lLane;
     }
 }
@@ -9082,9 +9076,9 @@ void TrafficEntityModule::DEBUG_AddFuzzyLogicData(u32 luParam, VecFloat* lpafFuz
 
     const Vector3 lParamPosition = GetParamTransform(luParam)->GetDeterministicPos();
     const Vector3 lCameraPosition = mFuzzyBehaviours.mDEBUGLastCameraPos;
-    const f32 lfDeltaX = lParamPosition.x - lCameraPosition.x;
-    const f32 lfDeltaY = lParamPosition.y - lCameraPosition.y;
-    const f32 lfDeltaZ = lParamPosition.z - lCameraPosition.z;
+    const f32 lfDeltaX = lParamPosition.mV.x - lCameraPosition.mV.x;
+    const f32 lfDeltaY = lParamPosition.mV.y - lCameraPosition.mV.y;
+    const f32 lfDeltaZ = lParamPosition.mV.z - lCameraPosition.mV.z;
     const f32 lfDistanceSquared = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
     if (!(900.0f > lfDistanceSquared))
         return;
@@ -9107,10 +9101,10 @@ void TrafficEntityModule::DEBUG_AddFuzzyLogicData(u32 luParam, VecFloat* lpafFuz
     lpDebugData->muVehicle = luParam;
     CGS_ASSERT(luParam < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
     Vector3 lRenderPosition = maVehicleTransforms[luParam].Pos();
-    lRenderPosition.y += 2.5f;
+    lRenderPosition.mV.y += 2.5f;
     lpDebugData->mRenderPosition = lRenderPosition;
     for (u32 luOutput = 0; luOutput < 6; ++luOutput)
-        lpDebugData->mafParamOutputScores[luOutput] = lpafFuzzyOutputs[luOutput].x;
+        lpDebugData->mafParamOutputScores[luOutput] = lpafFuzzyOutputs[luOutput].GetFloat();
 }
 
 // ----------------------------------------------------------------------------
@@ -9229,9 +9223,9 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
     {
         const VecFloat lfCap = SplatLane(1.0f - mfCrashSliderFinalValue);
 
-        lafScores[1] = Min(lfCap, lafScores[1]);
-        lafScores[0] = Min(lfCap, lafScores[0]);
-        lafScores[2] = Min(lfCap, lafScores[2]);
+        lafScores[1] = VecFloat(__vminfp(lfCap.GetVector(), lafScores[1].GetVector()));
+        lafScores[0] = VecFloat(__vminfp(lfCap.GetVector(), lafScores[0].GetVector()));
+        lafScores[2] = VecFloat(__vminfp(lfCap.GetVector(), lafScores[2].GetVector()));
 
         if (meGameMode != -1)
         {
@@ -9250,7 +9244,7 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
     f32 lfBestScore = 0.0f;
     for (u32 luScore = 0; luScore < KU_PARAM_NUM_BEHAVIOUR_SCORES; ++luScore)
     {
-        const f32 lfScore = lafScores[luScore].x;
+        const f32 lfScore = lafScores[luScore].GetFloat();
         if (lfScore > lfBestScore)
         {
             liNewAction = static_cast<s32>(luScore);
@@ -9278,7 +9272,7 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
         CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic,
                    "Decided to STOP_FOR_PLAYER online");
 
-        const f32 lfRCDistance        = lConeA.x;
+        const f32 lfRCDistance        = lConeA.mV.x;
         const f32 lfStopForPlayerDist = lfRCDistance - mTweakValues.GetRaceCarStopDist();
 
         lpNeedToSlow->mfTargetSpeed = 0.0f;
@@ -9292,9 +9286,9 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
         CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic,
                    "Decided to FOLLOW_PLAYER online");
 
-        const f32 lfRCDistance       = lConeA.x;
-        const f32 lfNPDistance       = lConeB.y;
-        const f32 lfRCSpeedInOurLane = lConeB.w;
+        const f32 lfRCDistance       = lConeA.mV.x;
+        const f32 lfNPDistance       = lConeB.mV.y;
+        const f32 lfRCSpeedInOurLane = lConeB.mV.w;
 
         const f32 lfRaw              = lfRCDistance - mTweakValues.GetRaceCarStopDist();
         const f32 lfFollowPlayerDist = (lfRaw > 0.0f) ? lfRaw : 0.0f;
@@ -9313,7 +9307,7 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
 
     case 3:   // STOP AT THE STOPLINE (0x82718494)
     {
-        const f32 lfTLDistance = lConeB.x;
+        const f32 lfTLDistance = lConeB.mV.x;
 
         lpNeedToSlow->mfTargetSpeed = 0.0f;
         lpNeedToSlow->miBehaviour   = 4;
@@ -9326,7 +9320,7 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
     {
         const Param* lpNextParam = GetParam(lpNeedToSlow->muParamInFront);
 
-        const f32 lfNPDistance   = lConeB.y;
+        const f32 lfNPDistance   = lConeB.mV.y;
         const f32 lfTargetSpeed1 = mTweakValues.GetGapClosingFactor() * lfNPDistance;
         const f32 lfTargetSpeed2 = (lpParam->mfSpeed < lpNextParam->mfSpeed)
                                        ? lpParam->mfSpeed
@@ -9459,11 +9453,11 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
             CalcRaceCarOnStartGridFuzzyScores(luParam, lvRCDistance, lvRCHeight, lvRCClosingSpeed,
                                               lvRCLanePos, lvRCSpeedInOurLane);
 
-            lfRCDistance       = lvRCDistance.x;
-            lfRCHeight         = lvRCHeight.x;
-            lfRCClosingSpeed   = lvRCClosingSpeed.x;
-            lfRCLanePos        = lvRCLanePos.x;
-            lfRCSpeedInOurLane = lvRCSpeedInOurLane.x;
+            lfRCDistance       = lvRCDistance.mV.x;
+            lfRCHeight         = lvRCHeight.mV.x;
+            lfRCClosingSpeed   = lvRCClosingSpeed.mV.x;
+            lfRCLanePos        = lvRCLanePos.mV.x;
+            lfRCSpeedInOurLane = lvRCSpeedInOurLane.mV.x;
         }
         else if (!(GetVehicle(luParam)->IsAlive() && GetVehicle(luParam)->IsExtremeSwerving()))
         {
@@ -9483,10 +9477,10 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
                 const PhysicalVehicleInfo& lInfo = (*lpaPhysicalVehicles)[luPhysicalVehicle];
 
                 Vector3 lTargetPos;
-                lTargetPos.x = lInfo.mPositionAndImportance.x;
-                lTargetPos.y = lInfo.mPositionAndImportance.y;
-                lTargetPos.z = lInfo.mPositionAndImportance.z;
-                lTargetPos.w = 0.0f;
+                lTargetPos.mV.x = lInfo.mPositionAndImportance.mV.x;
+                lTargetPos.mV.y = lInfo.mPositionAndImportance.mV.y;
+                lTargetPos.mV.z = lInfo.mPositionAndImportance.mV.z;
+                lTargetPos.mV.w = 0.0f;
 
                 if (!IsPointWithinSquishedCone(lpParamTransform->GetDeterministicPos(),
                                                lpParamTransform->GetDirection(),
@@ -9497,7 +9491,7 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
                 }
 
                 const Vector3 lDiff = lTargetPos - lpParamTransform->GetDeterministicPos();
-                const f32 lfImportance = lInfo.mPositionAndImportance.w;     // vspltw v0,v0,3
+                const f32 lfImportance = lInfo.mPositionAndImportance.mV.w;     // vspltw v0,v0,3
                 const f32 lfScore = rw::math::vpu::Dot(lDiff, lDiff) * lfImportance;
 
                 if (lfBestScore > lfScore)
@@ -9512,10 +9506,10 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
                 const PhysicalVehicleInfo& lInfo = (*lpaPhysicalVehicles)[luBestVehicle];
 
                 Vector3 lInfoPos;
-                lInfoPos.x = lInfo.mPositionAndImportance.x;
-                lInfoPos.y = lInfo.mPositionAndImportance.y;
-                lInfoPos.z = lInfo.mPositionAndImportance.z;
-                lInfoPos.w = 0.0f;
+                lInfoPos.mV.x = lInfo.mPositionAndImportance.mV.x;
+                lInfoPos.mV.y = lInfo.mPositionAndImportance.mV.y;
+                lInfoPos.mV.z = lInfo.mPositionAndImportance.mV.z;
+                lInfoPos.mV.w = 0.0f;
 
                 const Vector3 lDiff = lInfoPos - lpParamTransform->GetDeterministicPos();
 
@@ -9573,22 +9567,22 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
     }
 
     Vector4 lConeA;
-    lConeA.x = lfRCDistance;
-    lConeA.y = lfRCHeight;
-    lConeA.z = lfRCClosingSpeed;
-    lConeA.w = lfRCLanePos;
+    lConeA.mV.x = lfRCDistance;
+    lConeA.mV.y = lfRCHeight;
+    lConeA.mV.z = lfRCClosingSpeed;
+    lConeA.mV.w = lfRCLanePos;
 
     Vector4 lConeB;
-    lConeB.x = lfStoplineStopDist;
-    lConeB.y = lfNPDistance;
-    lConeB.z = lfNPClosingSpeed;
-    lConeB.w = lfRCSpeedInOurLane;
+    lConeB.mV.x = lfStoplineStopDist;
+    lConeB.mV.y = lfNPDistance;
+    lConeB.mV.z = lfNPClosingSpeed;
+    lConeB.mV.w = lfRCSpeedInOurLane;
 
     Vector4 lConeC;
-    lConeC.x = lfTimeQueueing;
-    lConeC.y = lbObstructed ? 1.0f : 0.0f;
-    lConeC.z = lfDriveAroundStickiness;
-    lConeC.w = KF_PARAM_NO_STOP_DIST;   // lane 3 of KF_MAX_FLOAT survives the three SetLanes
+    lConeC.mV.x = lfTimeQueueing;
+    lConeC.mV.y = lbObstructed ? 1.0f : 0.0f;
+    lConeC.mV.z = lfDriveAroundStickiness;
+    lConeC.mV.w = KF_PARAM_NO_STOP_DIST;   // lane 3 of KF_MAX_FLOAT survives the three SetLanes
 
     (void)lParamPos;   // the console loads it (0x82738530) but only the transform is read on
 
@@ -10212,7 +10206,7 @@ void TrafficEntityModule::CacheRaceCarState(
         mRaceCarState.mRaceCarLinearVelocities.Append(lpRaceCarState->mLinearVelocity);
 
         Vector3 lXZVelocity = lpRaceCarState->mLinearVelocity;
-        lXZVelocity.y = 0.0f;
+        lXZVelocity.mV.y = 0.0f;
 
         if (!rw::math::vpu::IsZero(lXZVelocity))
         {
@@ -10220,14 +10214,14 @@ void TrafficEntityModule::CacheRaceCarState(
             const f32 lfSpeed =
                 rw::math::vpu::NormalizeReturnMagnitude(lXZVelocity, lVelocityDir);
             mRaceCarState.mRaceCarXZVelocityDirs.Append(lVelocityDir);
-            mRaceCarState.mRaceCarSpeeds.Append(rw::math::vpu::Splat(lfSpeed));
+            mRaceCarState.mRaceCarSpeeds.Append(VecFloat(lfSpeed));
         }
         else
         {
             // The stalled-car fallback keeps the direction list index-parallel: fall back on
             // the car's own At axis, and on world Z if that is flat too.
             Vector3 lFacing = lpRaceCarState->mTransform.At();
-            lFacing.y = 0.0f;
+            lFacing.mV.y = 0.0f;
 
             if (!rw::math::vpu::IsZero(lFacing))
             {
@@ -10238,7 +10232,7 @@ void TrafficEntityModule::CacheRaceCarState(
                 mRaceCarState.mRaceCarXZVelocityDirs.Append(rw::math::vpu::GetVector3_ZAxis());
             }
 
-            mRaceCarState.mRaceCarSpeeds.Append(rw::math::vpu::Splat(0.0f));
+            mRaceCarState.mRaceCarSpeeds.Append(VecFloat(0.0f));
         }
     }
 }
@@ -11024,11 +11018,11 @@ void TrafficEntityModule::UpdateParams_TryAvoidCrashing(
 
     // 0x82716C10..0x82716C30 -- the cone comes from the member, one splat per lane.
     const VecFloat lfConeCosAngle =
-        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.x);   // +0x727A0
+        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.mV.x);   // +0x727A0
     const VecFloat lfConeLength =
-        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.y);
+        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.mV.y);
     const VecFloat lfConeRecipYScale =
-        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.z);
+        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.mV.z);
 
     for (u32 luThing = 0; luThing < lpaCrashingThings->GetLength(); ++luThing)
     {
@@ -11133,9 +11127,9 @@ void TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing(
         lCone = kfParamSympatheticCone_CosAngle_Length_RecipYScale_W;           // +0x726E0
     }
 
-    const VecFloat lfConeCosAngle    = SplatLane(lCone.x);
-    const VecFloat lfConeLength      = SplatLane(lCone.y);
-    const VecFloat lfConeRecipYScale = SplatLane(lCone.z);
+    const VecFloat lfConeCosAngle    = SplatLane(lCone.mV.x);
+    const VecFloat lfConeLength      = SplatLane(lCone.mV.y);
+    const VecFloat lfConeRecipYScale = SplatLane(lCone.mV.z);
 
     const ParamTransform* const lpParamTransform = GetParamTransform(luParam);
     const EntityId lOurEntityId = MakeTrafficEntityId(luParam);
@@ -11270,7 +11264,7 @@ namespace BrnTraffic
         // 0x8271DD60 loads the transform row at +0x20 (zAxis == At()) and 0x8271DD7C scales it
         // by GetSpeed's broadcast lane.
         lOutInitialVelocity = rw::math::vpu::Mult(lVehicleTransform.At(),
-                                                  lpInVehicle->GetSpeed().x);
+                                                  lpInVehicle->GetSpeed().GetFloat());
 
         lOutAngularVelocity.SetZero();
 
@@ -12114,7 +12108,7 @@ void TrafficEntityModule::GenerateCrashedVehicleEvents(BrnTrafficIO::OutputBuffe
         // 0x8272057C..0x827205E0 -- the swept padding: the car's own At axis times the distance
         // it covers this frame. Same three factors UpdateCollidableVehicles uses.
         const Vector3 lPadding =
-            lTransform.At() * (lpVehicle->GetSpeed().x * mfSimTimeStepVec.x);
+            lTransform.At() * (lpVehicle->GetSpeed().GetFloat() * mfSimTimeStepVec.mV.x);
 
         lpOutput->GetSceneInputInterface()->AddForCollision(
             lVolumeInstanceId,
@@ -12279,7 +12273,7 @@ namespace
 
     inline VecFloat SplatDrive(f32 lfValue)
     {
-        const VecFloat lLane = { lfValue, lfValue, lfValue, lfValue };
+        const VecFloat lLane(lfValue);
         return lLane;
     }
 
@@ -12807,7 +12801,7 @@ VecFloat TrafficEntityModule::CalculateDriverGasBrake(u32 luVehicle, VecFloat lf
     // 0x82718E00..0x82718E18 -- below the epsilon the divide is meaningless, so the console
     // substitutes a "practically stationary" time of 100 s.
     const f32 lfTimeToTarget =
-        (lfSpeed > lfMinSpeed) ? (lfDistToTarget.x / lfSpeed) : lfStalledTime;
+        (lfSpeed > lfMinSpeed) ? (lfDistToTarget.mV.x / lfSpeed) : lfStalledTime;
 
     // 0x82718E1C..0x82718E28
     f32 lfPedal = (lfTimeToTarget - lfOptimalTime) * lfGain;
@@ -12848,13 +12842,13 @@ void TrafficEntityModule::CalculateAndSetSteering(u32 luVehicle, Vector3 lTarget
 
     // 0x82718F8C..0x82718FD4 -- Sgn(lCross.y) built from two compares and two vsels. Matches
     // rw::math::fpu::Sgn<VecFloat> @0x825BC920 exactly: ==0 -> 0.0, >=0 -> 1.0, else -1.0.
-    const f32 lfSign = (lCross.y > 0.0f) ? 1.0f : ((lCross.y < 0.0f) ? -1.0f : 0.0f);
+    const f32 lfSign = (lCross.mV.y > 0.0f) ? 1.0f : ((lCross.mV.y < 0.0f) ? -1.0f : 0.0f);
 
-    const f32 lfCurrentSteering = lpVehicle->GetSteering().x;
+    const f32 lfCurrentSteering = lpVehicle->GetSteering().GetFloat();
     const f32 lfDelta           = lfSinAngle * lfSign - lfCurrentSteering;
 
-    const f32 lfMaxDelta = KF_VEHICLE_MAX_STEERING_DELTA.x;          // this+0x72670
-    const f32 lfMaxSin   = KF_VEHICLE_SIN_MAX_STEERING_ANGLE.x;      // this+0x72680
+    const f32 lfMaxDelta = KF_VEHICLE_MAX_STEERING_DELTA.mV.x;          // this+0x72670
+    const f32 lfMaxSin   = KF_VEHICLE_SIN_MAX_STEERING_ANGLE.mV.x;      // this+0x72680
 
     f32 lfClamped = (lfDelta < -lfMaxDelta) ? -lfMaxDelta : lfDelta;
     lfClamped     = (lfClamped > lfMaxDelta) ? lfMaxDelta : lfClamped;
@@ -12867,7 +12861,7 @@ void TrafficEntityModule::CalculateAndSetSteering(u32 luVehicle, Vector3 lTarget
 
     // 0x82719030..0x82719090 -- the record carries the DELTA, not the absolute.
     const f32 lfRecordScale =
-        (lvfScale.x >= KF_STEERING_SCALE_THRESHOLD) ? KF_STEERING_SCALE_HIGH : 1.0f;
+        (lvfScale.mV.x >= KF_STEERING_SCALE_THRESHOLD) ? KF_STEERING_SCALE_HIGH : 1.0f;
     lpControls->mfSteering = lfDelta * lfRecordScale;
 
     // GATE: DEBUG_ValidateEmDriverControls @0x82708FF8 (0x82719094) -- debug-only validator.
@@ -12961,10 +12955,10 @@ namespace
     {
         switch (luLane)
         {
-        case 0:  return lrMember.x;
-        case 1:  return lrMember.y;
-        case 2:  return lrMember.z;
-        default: return lrMember.w;
+        case 0:  return lrMember.mV.x;
+        case 1:  return lrMember.mV.y;
+        case 2:  return lrMember.mV.z;
+        default: return lrMember.mV.w;
         }
     }
 
@@ -12985,10 +12979,10 @@ namespace
 // --------------------------------------------------------------------------------------------
 void Convert3DVectorTo2D(Vector3 l3DVector, Vector2& l2DVector)
 {
-    l2DVector.x = l3DVector.x;
-    l2DVector.y = l3DVector.z;
-    l2DVector.z = l3DVector.x;
-    l2DVector.w = l3DVector.x;
+    l2DVector.mV.x = l3DVector.mV.x;
+    l2DVector.mV.y = l3DVector.mV.z;
+    l2DVector.mV.z = l3DVector.mV.x;
+    l2DVector.mV.w = l3DVector.mV.x;
 }
 
 // --------------------------------------------------------------------------------------------
@@ -13004,32 +12998,32 @@ void Convert3DVectorTo2D(Vector3 l3DVector, Vector2& l2DVector)
 // --------------------------------------------------------------------------------------------
 VecFloat TrafficEntityModule::GetAvoidPassImpactTimeMax() const
 {
-    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.x);
+    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.mV.x);
 }
 
 VecFloat TrafficEntityModule::GetAvoidPassImpactTimeScoreFactor() const
 {
-    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.y);
+    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.mV.y);
 }
 
 VecFloat TrafficEntityModule::GetAvoidPassMaxDistance() const
 {
-    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.z);
+    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.mV.z);
 }
 
 VecFloat TrafficEntityModule::GetAvoidPassHeightSkip() const
 {
-    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.w);
+    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.mV.w);
 }
 
 VecFloat TrafficEntityModule::GetAvoidOffcourseScoreFactor() const
 {
-    return SplatDrive(kfVehicle_Avoidance_Constants.x);
+    return SplatDrive(kfVehicle_Avoidance_Constants.mV.x);
 }
 
 VecFloat TrafficEntityModule::GetAvoidMaxOverallRisk() const
 {
-    return SplatDrive(kfVehicle_Avoidance_Constants.y);
+    return SplatDrive(kfVehicle_Avoidance_Constants.mV.y);
 }
 
 // --------------------------------------------------------------------------------------------
@@ -13051,10 +13045,10 @@ void TrafficEntityModule::PrecalculateAvoidanceFeelerData()
         const f32 lfCos = std::cos(lfAngle);
         const f32 lfSin = std::sin(lfAngle);
 
-        maFeelerCosSin[liIndex].x = lfCos;
-        maFeelerCosSin[liIndex].y = lfSin;
-        maFeelerCosSin[liIndex].z = lfCos;
-        maFeelerCosSin[liIndex].w = lfCos;
+        maFeelerCosSin[liIndex].mV.x = lfCos;
+        maFeelerCosSin[liIndex].mV.y = lfSin;
+        maFeelerCosSin[liIndex].mV.z = lfCos;
+        maFeelerCosSin[liIndex].mV.w = lfCos;
     }
 }
 
@@ -13074,10 +13068,10 @@ void TrafficEntityModule::PrecalculateAvoidanceFeelerData()
 // --------------------------------------------------------------------------------------------
 VecFloat TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin(Vector2 lStart, Vector2 lVel)
 {
-    const f32 lfLineLengthSq  = lVel.x * lVel.x + lVel.y * lVel.y;
-    const f32 lfCross         = lStart.x * lVel.y - lStart.y * lVel.x;
+    const f32 lfLineLengthSq  = lVel.mV.x * lVel.mV.x + lVel.mV.y * lVel.mV.y;
+    const f32 lfCross         = lStart.mV.x * lVel.mV.y - lStart.mV.y * lVel.mV.x;
     const f32 lfCrossResultSq = lfCross * lfCross;
-    const f32 lfStartLengthSq = lStart.x * lStart.x + lStart.y * lStart.y;
+    const f32 lfStartLengthSq = lStart.mV.x * lStart.mV.x + lStart.mV.y * lStart.mV.y;
 
     const f32 lfResult = (lfLineLengthSq == 0.0f) ? lfStartLengthSq
                                                   : lfCrossResultSq * (1.0f / lfLineLengthSq);
@@ -13111,7 +13105,7 @@ VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore(Vector3 lPositionA
                                                               VecFloat /*lfObjectBHalfLength*/,
                                                               VecFloat /*lfObjectBHalfWidth*/)
 {
-    if (std::fabs(lPositionA.y - lPositionB.y) > GetAvoidPassHeightSkip().x)
+    if (std::fabs(lPositionA.mV.y - lPositionB.mV.y) > GetAvoidPassHeightSkip().GetFloat())
     {
         return SplatDrive(0.0f);
     }
@@ -13122,9 +13116,9 @@ VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore(Vector3 lPositionA
     // 0.94 steering gate (0x8273D310). rw::math::vpu::Dot rounded every product and partial sum.
     const Vector3 lRelativePosition        = lPositionB - lPositionA;
     const f32     lfRelativePositionSizeSq =
-        static_cast<f32>(static_cast<f64>(lRelativePosition.x) * lRelativePosition.x
-                         + static_cast<f64>(lRelativePosition.y) * lRelativePosition.y
-                         + static_cast<f64>(lRelativePosition.z) * lRelativePosition.z);
+        static_cast<f32>(static_cast<f64>(lRelativePosition.mV.x) * lRelativePosition.mV.x
+                         + static_cast<f64>(lRelativePosition.mV.y) * lRelativePosition.mV.y
+                         + static_cast<f64>(lRelativePosition.mV.z) * lRelativePosition.mV.z);
     if (lfRelativePositionSizeSq == 0.0f)
     {
         return SplatDrive(0.0f);
@@ -13132,16 +13126,16 @@ VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore(Vector3 lPositionA
 
     const Vector3 lRelativeVelocity        = lVelocityB - lVelocityA;
     const f32     lfRelativeVelocitySizeSq =
-        static_cast<f32>(static_cast<f64>(lRelativeVelocity.x) * lRelativeVelocity.x
-                         + static_cast<f64>(lRelativeVelocity.y) * lRelativeVelocity.y
-                         + static_cast<f64>(lRelativeVelocity.z) * lRelativeVelocity.z);
+        static_cast<f32>(static_cast<f64>(lRelativeVelocity.mV.x) * lRelativeVelocity.mV.x
+                         + static_cast<f64>(lRelativeVelocity.mV.y) * lRelativeVelocity.mV.y
+                         + static_cast<f64>(lRelativeVelocity.mV.z) * lRelativeVelocity.mV.z);
     if (lfRelativeVelocitySizeSq == 0.0f)
     {
         return SplatDrive(0.0f);
     }
 
     const f32 lfTimeToImpact = lfRelativePositionSizeSq * (1.0f / lfRelativeVelocitySizeSq);
-    if (lfTimeToImpact > GetAvoidPassImpactTimeMax().x)
+    if (lfTimeToImpact > GetAvoidPassImpactTimeMax().GetFloat())
     {
         return SplatDrive(0.0f);
     }
@@ -13151,12 +13145,12 @@ VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore(Vector3 lPositionA
     Convert3DVectorTo2D(lRelativePosition, lRelativePosition2D);
     Convert3DVectorTo2D(lRelativeVelocity, lRelativeVelocity2D);
     const f32 lfPassingSpace =
-        Avoidance_CalculateDistancePosVelToOrigin(lRelativePosition2D, lRelativeVelocity2D).x;
+        Avoidance_CalculateDistancePosVelToOrigin(lRelativePosition2D, lRelativeVelocity2D).GetFloat();
 
-    const f32 lfMaxDistance       = GetAvoidPassMaxDistance().x;
+    const f32 lfMaxDistance       = GetAvoidPassMaxDistance().GetFloat();
     const f32 lfPassingScore      = lfMaxDistance - AvoidVmxMin(std::fabs(lfPassingSpace), lfMaxDistance);
-    const f32 lfTotalScore        = __vmaddfp(XMVectorReplicate(GetAvoidPassImpactTimeMax().x - lfTimeToImpact),
-                                             XMVectorReplicate(GetAvoidPassImpactTimeScoreFactor().x), XMVectorReplicate(lfPassingScore)).x;
+    const f32 lfTotalScore        = __vmaddfp(XMVectorReplicate(GetAvoidPassImpactTimeMax().GetFloat() - lfTimeToImpact),
+                                             XMVectorReplicate(GetAvoidPassImpactTimeScoreFactor().GetFloat()), XMVectorReplicate(lfPassingScore)).x;
 
     return SplatDrive(lfTotalScore);
 }
@@ -13180,17 +13174,14 @@ void TrafficEntityModule::Avoidance_CalculateFeelers(Vector3 lDirection, Vector3
     laFeelers[0] = lDirection;
     for (s32 liFeelCosSin = 0; liFeelCosSin < KI_TRAFFIC_AVOIDANCE_FEELERS_CALC_COUNT; ++liFeelCosSin)
     {
-        const f32 lfCos = maFeelerCosSin[liFeelCosSin].x;
-        const f32 lfSin = maFeelerCosSin[liFeelCosSin].y;
+        const f32 lfCos = maFeelerCosSin[liFeelCosSin].mV.x;
+        const f32 lfSin = maFeelerCosSin[liFeelCosSin].mV.y;
 
         laFeelers[1 + liFeelCosSin] = lDirection * lfSin - lRight * lfCos;
 
         const Vector3 lRightCos = lRight * lfCos;
         Vector3& lrPlus = laFeelers[1 + KI_TRAFFIC_AVOIDANCE_FEELERS_CALC_COUNT + liFeelCosSin];
-        lrPlus.x = __vmaddfp(XMVectorReplicate(lDirection.x), XMVectorReplicate(lfSin), XMVectorReplicate(lRightCos.x)).x;
-        lrPlus.y = __vmaddfp(XMVectorReplicate(lDirection.y), XMVectorReplicate(lfSin), XMVectorReplicate(lRightCos.y)).x;
-        lrPlus.z = __vmaddfp(XMVectorReplicate(lDirection.z), XMVectorReplicate(lfSin), XMVectorReplicate(lRightCos.z)).x;
-        lrPlus.w = __vmaddfp(XMVectorReplicate(lDirection.w), XMVectorReplicate(lfSin), XMVectorReplicate(lRightCos.w)).x;
+        lrPlus.mV = __vmaddfp(lDirection.mV, XMVectorReplicate(lfSin), lRightCos.mV);
     }
 }
 
@@ -13223,14 +13214,14 @@ void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vecto
     Vehicle* const lpVehicle = GetVehicle(luVehicle);   // its own .h 2459 bound assert, inlined here
     CGS_ASSERT(lpVehicle != 0, "lpVehicle");            // `li r5, 0x454E` (.cpp 17742)
 
-    const f32            lfVehicleSpeed = std::fabs(lpVehicle->GetSpeed().x);
+    const f32            lfVehicleSpeed = std::fabs(lpVehicle->GetSpeed().GetFloat());
     const Vector3        lTargetDir     = lNewDirection;
     const Matrix44Affine lTransform     = GetVehicleTransform(luVehicle);
     const Vector3        lPosition      = lTransform.Pos();
     const Vector3        lRight         = lTransform.Right();
 
     Vector3 lDirection = lTransform.At();
-    if (0.0f > lpVehicle->GetSpeed().x)
+    if (0.0f > lpVehicle->GetSpeed().GetFloat())
     {
         lDirection = -lDirection;
     }
@@ -13250,11 +13241,11 @@ void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vecto
         // [1..4]): ONE rounding of the exact sum -- FLAG (model), the Dot3 convention (see the 0.94 gate).
         const Vector3& lrFeeler          = laFeelers[liFeelerIndex];
         const f32 lfDotFeelerDir         =
-            static_cast<f32>(static_cast<f64>(lTargetDir.x) * lrFeeler.x + static_cast<f64>(lTargetDir.y) * lrFeeler.y
-                             + static_cast<f64>(lTargetDir.z) * lrFeeler.z);
+            static_cast<f32>(static_cast<f64>(lTargetDir.mV.x) * lrFeeler.mV.x + static_cast<f64>(lTargetDir.mV.y) * lrFeeler.mV.y
+                             + static_cast<f64>(lTargetDir.mV.z) * lrFeeler.mV.z);
         const f32 lfDotFeelerDirPositive = AvoidVmxMin(1.0f, AvoidVmxMax(0.0f, lfDotFeelerDir));
         lafOffcourseScore[liFeelerIndex] =
-            (1.0f - lfDotFeelerDirPositive) * GetAvoidOffcourseScoreFactor().x;
+            (1.0f - lfDotFeelerDirPositive) * GetAvoidOffcourseScoreFactor().GetFloat();
     }
     lfOverallRisk = SplatDrive(0.0f);
 
@@ -13265,16 +13256,16 @@ void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vecto
         {
             // 0x8272C600 / 0x8272C614: x and y spliced by unk_82CDA350, z inserted by vrlimi128.
             Vector3 lCachedPosition;
-            lCachedPosition.x = AvoidPacketLane(lrCachedCollidableInfo.mPosition_X, luCachedStructIndex);
-            lCachedPosition.y = AvoidPacketLane(lrCachedCollidableInfo.mPosition_Y, luCachedStructIndex);
-            lCachedPosition.z = AvoidPacketLane(lrCachedCollidableInfo.mPosition_Z, luCachedStructIndex);
-            lCachedPosition.w = lCachedPosition.x;
+            lCachedPosition.mV.x = AvoidPacketLane(lrCachedCollidableInfo.mPosition_X, luCachedStructIndex);
+            lCachedPosition.mV.y = AvoidPacketLane(lrCachedCollidableInfo.mPosition_Y, luCachedStructIndex);
+            lCachedPosition.mV.z = AvoidPacketLane(lrCachedCollidableInfo.mPosition_Z, luCachedStructIndex);
+            lCachedPosition.mV.w = lCachedPosition.mV.x;
 
             Vector3 lCachedVelocity;
-            lCachedVelocity.x = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_X, luCachedStructIndex);
-            lCachedVelocity.y = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_Y, luCachedStructIndex);
-            lCachedVelocity.z = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_Z, luCachedStructIndex);
-            lCachedVelocity.w = lCachedVelocity.x;
+            lCachedVelocity.mV.x = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_X, luCachedStructIndex);
+            lCachedVelocity.mV.y = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_Y, luCachedStructIndex);
+            lCachedVelocity.mV.z = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_Z, luCachedStructIndex);
+            lCachedVelocity.mV.w = lCachedVelocity.mV.x;
 
             const VecFloat lfHalfLength =
                 SplatDrive(AvoidPacketLane(lrCachedCollidableInfo.mHalfLengths, luCachedStructIndex));
@@ -13286,15 +13277,15 @@ void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vecto
                 const f32 lfPassingScore =
                     Avoidance_CalculatePassingScore(lPosition, laFeelerVelocity[liFeelerIndex],
                                                     lCachedPosition, lCachedVelocity,
-                                                    lfHalfLength, lfHalfWidth).x;
+                                                    lfHalfLength, lfHalfWidth).GetFloat();
                 lafFeelerScore[liFeelerIndex] = AvoidVmxMax(lfPassingScore, lafFeelerScore[liFeelerIndex]);
             }
         }
     }
 
     s32 liBestFeeler      = 0;
-    f32 lfBestFeelerScore = KF_MAX_FLOAT.x;
-    f32 lfRiskSum         = lfOverallRisk.x;
+    f32 lfBestFeelerScore = KF_MAX_FLOAT.mV.x;
+    f32 lfRiskSum         = lfOverallRisk.mV.x;
     for (s32 liFeelerIndex = 0; liFeelerIndex < KI_TRAFFIC_AVOIDANCE_FEELERS; ++liFeelerIndex)
     {
         const f32 lfOffcourse = lafOffcourseScore[liFeelerIndex];
@@ -13309,7 +13300,7 @@ void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vecto
     }
 
     lfRiskSum = lfRiskSum * KF_AVOIDANCE_FEELER_MEAN;
-    const f32 lfRisk = lfRiskSum * (1.0f / GetAvoidMaxOverallRisk().x);
+    const f32 lfRisk = lfRiskSum * (1.0f / GetAvoidMaxOverallRisk().GetFloat());
     lfOverallRisk    = SplatDrive(AvoidVmxMin(1.0f, AvoidVmxMax(0.0f, lfRisk)));
     lNewDirection    = laFeelers[liBestFeeler];
 }
@@ -13346,8 +13337,8 @@ void TrafficEntityModule::CalculateAndSetSteeringUsingAvoidance(
     // the car steers on the target direction unchanged).
 
 
-    if (lfOverallRisk.x >= KF_AVOIDANCE_MIN_RISK &&
-        lfDistFromTarget.x >= KF_AVOIDANCE_MIN_TARGET_DIST &&
+    if (lfOverallRisk.mV.x >= KF_AVOIDANCE_MIN_RISK &&
+        lfDistFromTarget.mV.x >= KF_AVOIDANCE_MIN_TARGET_DIST &&
         mbDEBUGEnableAvoidance)
     {
         // 0x8273D310 `vmsum3fp128 v11, v12, v0`: ONE rounding of the exact three-term sum. FLAG (model):
@@ -13355,16 +13346,13 @@ void TrafficEntityModule::CalculateAndSetSteeringUsingAvoidance(
         // products are exact in f64 and their f64 sum rounds far below an f32 ulp. rw::math::vpu::Dot
         // rounds every product and partial sum and can land an ulp away -- on this gate, the other arm.
         const f32 lfAvoidDotTargetDir =
-            static_cast<f32>(static_cast<f64>(lAvoidDirection.x) * lNewDirection.x
-                             + static_cast<f64>(lAvoidDirection.y) * lNewDirection.y
-                             + static_cast<f64>(lAvoidDirection.z) * lNewDirection.z);
+            static_cast<f32>(static_cast<f64>(lAvoidDirection.mV.x) * lNewDirection.mV.x
+                             + static_cast<f64>(lAvoidDirection.mV.y) * lNewDirection.mV.y
+                             + static_cast<f64>(lAvoidDirection.mV.z) * lNewDirection.mV.z);
         if (KF_AVOIDANCE_SNAP_DOT > lfAvoidDotTargetDir)
         {
             const Vector3 lDelta = lAvoidDirection - lNewDirection;   // vsubfp 0x8273D32C
-            lNewDirection.x = __vmaddfp(XMVectorReplicate(lDelta.x), XMVectorReplicate(mfSimTimeStep), XMVectorReplicate(lNewDirection.x)).x;
-            lNewDirection.y = __vmaddfp(XMVectorReplicate(lDelta.y), XMVectorReplicate(mfSimTimeStep), XMVectorReplicate(lNewDirection.y)).x;
-            lNewDirection.z = __vmaddfp(XMVectorReplicate(lDelta.z), XMVectorReplicate(mfSimTimeStep), XMVectorReplicate(lNewDirection.z)).x;
-            lNewDirection.w = __vmaddfp(XMVectorReplicate(lDelta.w), XMVectorReplicate(mfSimTimeStep), XMVectorReplicate(lNewDirection.w)).x;
+            lNewDirection.mV = __vmaddfp(lDelta.mV, XMVectorReplicate(mfSimTimeStep), lNewDirection.mV);
         }
         else
         {
@@ -13404,7 +13392,7 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     // at 0x82C66C30: 0.44704 (mph->m/s) * 10 == 10 mph.
     if (lpVehicle->IsRecoveringFromSlam() && lpVehicle->IsOfStandardSpecies() &&
         lpVehicle->GetRandomVal() < KF_GIVE_UP_RANDOM_CHANCE &&
-        lpVehicle->GetSpeed().x > KF_GIVE_UP_SPEED)
+        lpVehicle->GetSpeed().GetFloat() > KF_GIVE_UP_SPEED)
     {
         lpVehicle->StartGiveUpManoeuvre();
         CgsDev::PerfMonCpu::StopMonitor(miPerfMon_Driving);
@@ -13497,7 +13485,7 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     const Vector3 lParamLinearVelocity =
         lpParamTransform->GetDirection() * lpParamTransform->GetSpeed();
     const f32 lfPedal =
-        CalculateDriverGasBrake(luVehicle, SplatDrive(lfForwardDist), lParamLinearVelocity).x;
+        CalculateDriverGasBrake(luVehicle, SplatDrive(lfForwardDist), lParamLinearVelocity).GetFloat();
 
     // 0x8273E5B4..0x8273E620 -- split into gas and brake by the console's clamp pairs, not by
     // a sign test: gas = vminfp128(vmaxfp128(pedal, 0), 1.0) and brake = the same on -pedal (the
@@ -13523,7 +13511,7 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     // rw::math::fpu::Sgn<VecFloat>(GetSpeed()) @0x825BC920, whose ladder is `vcmpeqfp. 0` -> 0.0
     // (flt_82001CC0), `vcmpgefp. 0` -> 1.0 (flt_82001C98), else -1.0 (flt_820037C8) -- so a NaN
     // speed is -1, not 0 (FX-TRAFFIC5, same NaN-polarity class as follow-up (a)).
-    const f32 lfSpeed = lpVehicle->GetSpeed().x;
+    const f32 lfSpeed = lpVehicle->GetSpeed().GetFloat();
     const f32 lfSpeedSign = (lfSpeed == 0.0f) ? 0.0f : ((lfSpeed >= 0.0f) ? 1.0f : -1.0f);
     lpControls->mfSteering = lpControls->mfSteering * lfSpeedSign;
 
@@ -13531,7 +13519,7 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     // swerving (`bne` past it) and the avoidance risk at 0.7 or more (var_150 against
     // unk_8300CEE0 == splat(0.7), vcmpgefp. all lanes, so a NaN risk fails): mfHandBrake (+0xC)
     // = 0.5 (flt_820BA62C).
-    if (!lpVehicle->IsExtremeSwerving() && lfOverallRisk.x >= KF_AVOIDANCE_HANDBRAKE_RISK)
+    if (!lpVehicle->IsExtremeSwerving() && lfOverallRisk.mV.x >= KF_AVOIDANCE_HANDBRAKE_RISK)
     {
         lpControls->mfHandBrake = KF_AVOIDANCE_HANDBRAKE;
 
@@ -13571,7 +13559,7 @@ namespace
     // DWARF BrnTrafficEntityModule.cpp:378 `kfManoeuvreStuckReverse_MaxTime_Phase0Dot_Phase1Speed_W`:
     // the .bss vector unk_8300C9C0, filled by the CRT thunk at 0x82C66E08..0x82C66E4C from
     // flt_820BA5F4 (3.0), flt_820C0800 (0.866 == 0x3F5DB22D), flt_820BA86C (2.0), flt_82001CC0 (0.0).
-    const Vector4 kfManoeuvreStuckReverse_MaxTime_Phase0Dot_Phase1Speed_W = { 3.0f, 0.866f, 2.0f, 0.0f };
+    const Vector4 kfManoeuvreStuckReverse_MaxTime_Phase0Dot_Phase1Speed_W(3.0f, 0.866f, 2.0f, 0.0f);
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witnesses, capped: every stuck response
     // other than NONE, the first KI_STUCK_NONE_DIAG_CAP NONE responses and as many live timers
@@ -13711,8 +13699,8 @@ void TrafficEntityModule::UpdateStuckReverseManoeuvre(u32 luVehicle,
         const f32 lfSteering = rw::math::vpu::Dot(lDirToTarget, lVehicleAt);            // 0x82719768
 
         const bool lbBackContact = (lpPhysInfo->muContactSideFlags & TrafficPhysicsInfo::E_CONTACT_SIDE_BACK) != 0;
-        const bool lbTurned      = K.y > std::fabs(lfSteering);                          // 0x827197C4
-        const bool lbTimedOut    = lpVehicle->GetManoeuvreTime() >= K.x;                 // 0x82719804
+        const bool lbTurned      = K.mV.y > std::fabs(lfSteering);                          // 0x827197C4
+        const bool lbTimedOut    = lpVehicle->GetManoeuvreTime() >= K.mV.x;                 // 0x82719804
 
         if (!lbBackContact && !lbTurned && !lbTimedOut)
         {
@@ -13733,8 +13721,8 @@ void TrafficEntityModule::UpdateStuckReverseManoeuvre(u32 luVehicle,
     }
     else if (liPhase == 1)
     {
-        const f32 lfSpeed = lpVehicle->GetSpeed().x;
-        if (std::fabs(lfSpeed) > K.z && K.x > lpVehicle->GetManoeuvreTime())            // 0x827196AC / 0x827196EC
+        const f32 lfSpeed = lpVehicle->GetSpeed().GetFloat();
+        if (std::fabs(lfSpeed) > K.mV.z && K.mV.x > lpVehicle->GetManoeuvreTime())            // 0x827196AC / 0x827196EC
         {
             lpControls->mfGas       = 0.0f;                                              // 0x8271970C
             lpControls->mfBrake     = 0.0f;                                              // 0x82719710
@@ -13819,13 +13807,13 @@ void TrafficEntityModule::UpdateGiveUpManoeuvre(u32 luVehicle,
     const s32 liPhase = lpVehicle->GetCurrentManoeuvrePhase();
     if (liPhase == 0)
     {
-        if (std::fabs(lpVehicle->GetSpeed().x) > 1.0f)                                   // 0x8273ED48
+        if (std::fabs(lpVehicle->GetSpeed().GetFloat()) > 1.0f)                                   // 0x8273ED48
         {
             // vxor sign / vmaxfp128 0 / vminfp128 1 (0x8273ED8C..0x8273ED94), then vmaxfp128 0 /
             // vminfp128 1 on the third GetSpeed (0x8273EDB0 / 0x8273EDC0).
-            lpControls->mfGas      = __vminfp(__vmaxfp(XMVectorReplicate(-lpVehicle->GetSpeed().x), XMVectorZero()), XMVectorReplicate(1.0f)).x;   // 0x8273EDA0
+            lpControls->mfGas      = __vminfp(__vmaxfp(XMVectorReplicate(-lpVehicle->GetSpeed().GetFloat()), XMVectorZero()), XMVectorReplicate(1.0f)).x;   // 0x8273EDA0
             lpControls->mfSteering = 0.5f;                                               // 0x8273EDBC flt_820BA62C
-            lpControls->mfBrake    = __vminfp(__vmaxfp(XMVectorReplicate(lpVehicle->GetSpeed().x), XMVectorZero()), XMVectorReplicate(1.0f)).x;    // 0x8273EDCC
+            lpControls->mfBrake    = __vminfp(__vmaxfp(XMVectorReplicate(lpVehicle->GetSpeed().GetFloat()), XMVectorZero()), XMVectorReplicate(1.0f)).x;    // 0x8273EDCC
             return;
         }
 
@@ -14551,7 +14539,7 @@ namespace
     // `vmsum3fp128 v1, v0, v126` -- the 3-lane dot the speed publish uses.
     inline f32 Dot3(const Vector3& lvA, const Vector3& lvB)
     {
-        return lvA.x * lvB.x + lvA.y * lvB.y + lvA.z * lvB.z;
+        return lvA.mV.x * lvB.mV.x + lvA.mV.y * lvB.mV.y + lvA.mV.z * lvB.mV.z;
     }
 
 
@@ -14761,10 +14749,10 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
             lBBoxTranslate.SetIdentity();
             {
                 const Vector3 lvOffset = lpVehicleTypeRuntime->GetBBoxOffset();
-                lBBoxTranslate.wAxis.x = -lvOffset.x;
-                lBBoxTranslate.wAxis.y = -lvOffset.y;
-                lBBoxTranslate.wAxis.z = -lvOffset.z;
-                lBBoxTranslate.wAxis.w = lvOffset.w;
+                lBBoxTranslate.wAxis.mV.x = -lvOffset.mV.x;
+                lBBoxTranslate.wAxis.mV.y = -lvOffset.mV.y;
+                lBBoxTranslate.wAxis.mV.z = -lvOffset.mV.z;
+                lBBoxTranslate.wAxis.mV.w = lvOffset.mV.w;
             }
             const Matrix44Affine lTransform =
                 rw::math::vpu::Mult(lBBoxTranslate, lrState.mTransform);
@@ -14773,9 +14761,9 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
             f32 lfDeltaLength = 0.0f;
             {
                 const Matrix44Affine lPrevious = GetVehicleTransform(luVehicle);
-                const f32 lfDX = lTransform.wAxis.x - lPrevious.wAxis.x;
-                const f32 lfDY = lTransform.wAxis.y - lPrevious.wAxis.y;
-                const f32 lfDZ = lTransform.wAxis.z - lPrevious.wAxis.z;
+                const f32 lfDX = lTransform.wAxis.mV.x - lPrevious.wAxis.mV.x;
+                const f32 lfDY = lTransform.wAxis.mV.y - lPrevious.wAxis.mV.y;
+                const f32 lfDZ = lTransform.wAxis.mV.z - lPrevious.wAxis.mV.z;
                 lfDeltaLength = std::sqrt(lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ);
             }
 
@@ -14789,12 +14777,12 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
 
             // The road-test normal, then its .w height corrected for the bbox shift the transform
             // above just applied (`vsubfp` of the two translation rows, lane .y only).
-            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.x = lrState.mvRoadTestNormal_HeightAboveRoad.x;
-            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.y = lrState.mvRoadTestNormal_HeightAboveRoad.y;
-            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.z = lrState.mvRoadTestNormal_HeightAboveRoad.z;
-            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.w =
-                lrState.mvRoadTestNormal_HeightAboveRoad.w
-                - (lrState.mTransform.wAxis.y - lTransform.wAxis.y);
+            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.mV.x = lrState.mvRoadTestNormal_HeightAboveRoad.mV.x;
+            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.mV.y = lrState.mvRoadTestNormal_HeightAboveRoad.mV.y;
+            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.mV.z = lrState.mvRoadTestNormal_HeightAboveRoad.mV.z;
+            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.mV.w =
+                lrState.mvRoadTestNormal_HeightAboveRoad.mV.w
+                - (lrState.mTransform.wAxis.mV.y - lTransform.wAxis.mV.y);
 
             // `*(info + 4069) = info->mbIsDeforming || event.mbIsDeforming` -- an OR-accumulate,
             // not a copy: the flag is cleared elsewhere in the deformation pass.
@@ -14970,7 +14958,7 @@ namespace
     // before the side test. Carried here beside its only reader -- the tree's
     // BrnTrafficTweakConstants.h holds the TweakValues type only and leaves the constant pool
     // to the TU that reads it.
-    const Vector3 K_SIDE_STUCK_BOUNDING_BOX_ADD = { 0.2f, 0.05f, 0.0f, 0.0f };
+    const Vector3 K_SIDE_STUCK_BOUNDING_BOX_ADD(0.2f, 0.05f, 0.0f);
 
     // DEBUG_RenderContactPoint's arrow: `lfs f0, flt_8200426C` (5.0) splatted into the
     // vmaddfp at 0x8270835C. The PS3 twin builds the same splat from an immediate
@@ -15127,17 +15115,17 @@ void TrafficEntityModule::ProcessContactPoint(const BrnPhysics::ContactSpy::Traf
     const f32 lfDirDot   = rw::math::vpu::Dot(lPointInLocalSpace, lVehicleDir);
     const f32 lfRightDot = rw::math::vpu::Dot(lPointInLocalSpace, lVehicleRight);
 
-    if (!(fabsf(lfRightDot) <= lVehicleHalfSize.x * KF_CONTACT_DISCARD_SIDE))
+    if (!(fabsf(lfRightDot) <= lVehicleHalfSize.mV.x * KF_CONTACT_DISCARD_SIDE))
     {
         return;
     }
 
     TrafficPhysicsInfo::EContactSideFlag leSide = TrafficPhysicsInfo::E_CONTACT_SIDE_NONE;
-    if (lfDirDot >= lVehicleHalfSize.z * KF_CONTACT_FRONT_BACK)
+    if (lfDirDot >= lVehicleHalfSize.mV.z * KF_CONTACT_FRONT_BACK)
     {
         leSide = TrafficPhysicsInfo::E_CONTACT_SIDE_FRONT;
     }
-    else if (lfDirDot <= lVehicleHalfSize.z * -KF_CONTACT_FRONT_BACK)
+    else if (lfDirDot <= lVehicleHalfSize.mV.z * -KF_CONTACT_FRONT_BACK)
     {
         leSide = TrafficPhysicsInfo::E_CONTACT_SIDE_BACK;
     }
@@ -15241,8 +15229,8 @@ namespace
     // unk_8300CEF0. Lane 0 AvoidRadiusSq (50 m), lane 1 CollideRadiusSq (20 m), lane 2 the
     // FLT_MAX the nearest-source search is seeded with, lane 3 unused. The console's spelling,
     // straight off the baked assert string.
-    const Vector4 kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W =
-        { 2500.0f, 400.0f, 3.4028234663852886e+38f, 0.0f };
+    const Vector4 kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W(
+        2500.0f, 400.0f, 3.4028234663852886e+38f, 0.0f);
 
     // unk_8300C980 == splat(0.001f).
     const f32 KF_VEHICLE_MOTION_EPSILON = 0.001f;
@@ -15268,10 +15256,10 @@ namespace
     {
         switch (luLane)
         {
-        case 0:  lrVector.x = lfValue; break;
-        case 1:  lrVector.y = lfValue; break;
-        case 2:  lrVector.z = lfValue; break;
-        default: lrVector.w = lfValue; break;
+        case 0:  lrVector.mV.x = lfValue; break;
+        case 1:  lrVector.mV.y = lfValue; break;
+        case 2:  lrVector.mV.z = lfValue; break;
+        default: lrVector.mV.w = lfValue; break;
         }
     }
 
@@ -15283,25 +15271,25 @@ namespace
     {
         CGS_ASSERT(luLane < 4u, "luLane < 4");
 
-        SetLane(lrPacket.mPosition_X, luLane, lPosition.x);
-        SetLane(lrPacket.mPosition_Y, luLane, lPosition.y);
-        SetLane(lrPacket.mPosition_Z, luLane, lPosition.z);
+        SetLane(lrPacket.mPosition_X, luLane, lPosition.mV.x);
+        SetLane(lrPacket.mPosition_Y, luLane, lPosition.mV.y);
+        SetLane(lrPacket.mPosition_Z, luLane, lPosition.mV.z);
 
-        SetLane(lrPacket.mLinearVelocity_X, luLane, lMotion.x);
-        SetLane(lrPacket.mLinearVelocity_Y, luLane, lMotion.y);
-        SetLane(lrPacket.mLinearVelocity_Z, luLane, lMotion.z);
+        SetLane(lrPacket.mLinearVelocity_X, luLane, lMotion.mV.x);
+        SetLane(lrPacket.mLinearVelocity_Y, luLane, lMotion.mV.y);
+        SetLane(lrPacket.mLinearVelocity_Z, luLane, lMotion.mV.z);
 
-        SetLane(lrPacket.mHalfLengths, luLane, lHalfExtent.z);
-        SetLane(lrPacket.mHalfWidths,  luLane, lHalfExtent.x);
+        SetLane(lrPacket.mHalfLengths, luLane, lHalfExtent.mV.z);
+        SetLane(lrPacket.mHalfWidths,  luLane, lHalfExtent.mV.x);
     }
 
 // (fold: an identical definition of MakeTrafficVolumeInstanceId was dropped here -- this TU defines it once, above)
 
     inline Vector3 PickMotionLane(Vector3 lMotion, Vector3 lFacing)
     {
-        const f32 lfAbsX = (lMotion.x < 0.0f) ? -lMotion.x : lMotion.x;
-        const f32 lfAbsY = (lMotion.y < 0.0f) ? -lMotion.y : lMotion.y;
-        const f32 lfAbsZ = (lMotion.z < 0.0f) ? -lMotion.z : lMotion.z;
+        const f32 lfAbsX = (lMotion.mV.x < 0.0f) ? -lMotion.mV.x : lMotion.mV.x;
+        const f32 lfAbsY = (lMotion.mV.y < 0.0f) ? -lMotion.mV.y : lMotion.mV.y;
+        const f32 lfAbsZ = (lMotion.mV.z < 0.0f) ? -lMotion.mV.z : lMotion.mV.z;
 
         if (lfAbsX > KF_VEHICLE_MOTION_EPSILON ||
             lfAbsY > KF_VEHICLE_MOTION_EPSILON ||
@@ -15524,7 +15512,7 @@ void TrafficEntityModule::UpdateCollidableVehicles(
                 // lane so an empty source list leaves every car non-collidable.
                 const Vector3 lPosition = GetVehicleTransform(luVehicle).Pos();
 
-                f32 lfNearestSq = kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.z;
+                f32 lfNearestSq = kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.mV.z;
                 for (u32 luSource = 0; luSource < lSourcePositions.GetLength(); ++luSource)
                 {
                     const Vector3 lToSource = lPosition - lSourcePositions[luSource];
@@ -15536,17 +15524,17 @@ void TrafficEntityModule::UpdateCollidableVehicles(
                     lfNearestSq = AvoidVmxMin(lfNearestSq, lfDistSq);
                 }
 
-                if (kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.x > lfNearestSq)
+                if (kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.mV.x > lfNearestSq)
                 {
                     lbAvoidable = true;
                     mVehiclesAvoidableLastFrame.SetBit(luVehicle);
 
-                    CGS_ASSERT(kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.y <
-                               kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.x,
+                    CGS_ASSERT(kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.mV.y <
+                               kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.mV.x,
                                "kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W[1] < "
                                "kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W[0]");  // .cpp 4953
 
-                    if (kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.y > lfNearestSq)
+                    if (kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.mV.y > lfNearestSq)
                     {
                         lbCollidable = true;   // 0x827318EC
                     }
@@ -15587,7 +15575,7 @@ void TrafficEntityModule::UpdateCollidableVehicles(
             const Vector3 lPosition = lTransform.Pos();   // +0x30
 
             CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");   // BrnTrafficVehicle.h:0x26B
-            const f32 lfSpeed = lpVehicle->GetSpeed().x;
+            const f32 lfSpeed = lpVehicle->GetSpeed().GetFloat();
 
             const VehicleTypeRuntime* lpVehicleTypeRuntime =
                 GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
@@ -15662,7 +15650,7 @@ void TrafficEntityModule::UpdateCollidableVehicles(
 
             // 0x8273248C..0x827324BC: the swept padding == the car's facing axis times the
             // distance it covers this frame (GetSpeed() * mfSimTimeStepVec, this+0x71410).
-            const Vector3 lPadding = lForward * (lpVehicle->GetSpeed().x * mfSimTimeStepVec.x);
+            const Vector3 lPadding = lForward * (lpVehicle->GetSpeed().GetFloat() * mfSimTimeStepVec.mV.x);
 
             lpOutput->GetSceneInputInterface()->AddForCollision(
                 lVolumeInstanceId,
@@ -15694,7 +15682,7 @@ void TrafficEntityModule::UpdateCollidableVehicles(
     if (luPartialLanes != 0 &&
         mCachedCollidableList.GetLength() != KU_MAX_COLLIDABLE_CACHED_TRAFFIC_ARRAY)
     {
-        const f32 lfFar = kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.z;
+        const f32 lfFar = kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.mV.z;
         for (u32 luLane = luPartialLanes; luLane < 4u; ++luLane)
         {
             SetLane(lPacket.mPosition_X, luLane, lfFar);
@@ -16558,14 +16546,14 @@ void TrafficEntityModule::KillAllTrafficInCylinder(Vector3 lvCentre, f32 lfRadiu
 
         const Vector3 lvPosition = GetVehicleTransform(luVehicle).Pos();
 
-        const f32 lfDeltaX = lvPosition.x - lvCentre.x;
-        const f32 lfDeltaZ = lvPosition.z - lvCentre.z;
+        const f32 lfDeltaX = lvPosition.mV.x - lvCentre.mV.x;
+        const f32 lfDeltaZ = lvPosition.mV.z - lvCentre.mV.z;
         if (lfDeltaX * lfDeltaX + lfDeltaZ * lfDeltaZ > lfRadiusSquared)
         {
             continue;
         }
 
-        if (fabsf(lvPosition.y - lvCentre.y) >= lfHeight)
+        if (fabsf(lvPosition.mV.y - lvCentre.mV.y) >= lfHeight)
         {
             continue;
         }
@@ -17810,10 +17798,10 @@ void TrafficEntityModule::HandleExternalRequests(
             const bool lbStart = (*reinterpret_cast<const u8*>(lpEvent) != 0);
             if (lbStart && mbAllowDivergentBehaviour)
             {
-                mfTrafficSimRadius.x   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
-                mfTrafficSimRadius.y   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
-                mfTrafficSimRadius.z   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
-                mfTrafficSimRadius.w   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
+                mfTrafficSimRadius.mV.x   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
+                mfTrafficSimRadius.mV.y   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
+                mfTrafficSimRadius.mV.z   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
+                mfTrafficSimRadius.mV.w   = KF_CAR_SELECT_TRAFFIC_SIM_RADIUS;
                 muMaxVehiclesToRender  = KU_CAR_SELECT_MAX_VEHICLES_TO_RENDER;
                 mbInOfflineCarSelect   = true;
                 mfRenderCullDistanceSq = KF_CAR_SELECT_RENDER_CULL_DISTANCE_SQ;
@@ -17871,10 +17859,10 @@ void TrafficEntityModule::HandleExternalRequests(
                 }
                 if (mbInOfflineCarSelect)
                 {
-                    mfTrafficSimRadius.x   = KF_TRAFFIC_SIM_RADIUS;
-                    mfTrafficSimRadius.y   = KF_TRAFFIC_SIM_RADIUS;
-                    mfTrafficSimRadius.z   = KF_TRAFFIC_SIM_RADIUS;
-                    mfTrafficSimRadius.w   = KF_TRAFFIC_SIM_RADIUS;
+                    mfTrafficSimRadius.mV.x   = KF_TRAFFIC_SIM_RADIUS;
+                    mfTrafficSimRadius.mV.y   = KF_TRAFFIC_SIM_RADIUS;
+                    mfTrafficSimRadius.mV.z   = KF_TRAFFIC_SIM_RADIUS;
+                    mfTrafficSimRadius.mV.w   = KF_TRAFFIC_SIM_RADIUS;
                     muMaxVehiclesToRender  = KU_MAX_VEHICLES_TO_RENDER;
                     mbInOfflineCarSelect   = false;
                     mfRenderCullDistanceSq = KF_RENDER_CULL_DISTANCE_SQ;
@@ -17993,19 +17981,19 @@ void TrafficEntityModule::HandleExternalRequests(
             const Vector3& lrCameraPosition  = mCameraLastFrame.mTransform.Pos();
             const Vector3& lrCameraDirection = mCameraLastFrame.mTransform.At();
             Vector3 lToPlayer = mLocalPlayerPosition;
-            lToPlayer.x = mLocalPlayerPosition.x - lrCameraPosition.x;
-            lToPlayer.y = mLocalPlayerPosition.y - lrCameraPosition.y;
-            lToPlayer.z = mLocalPlayerPosition.z - lrCameraPosition.z;
+            lToPlayer.mV.x = mLocalPlayerPosition.mV.x - lrCameraPosition.mV.x;
+            lToPlayer.mV.y = mLocalPlayerPosition.mV.y - lrCameraPosition.mV.y;
+            lToPlayer.mV.z = mLocalPlayerPosition.mV.z - lrCameraPosition.mV.z;
 
-            const f32 lfDistanceSq = static_cast<f32>(static_cast<f64>(lToPlayer.x) * lToPlayer.x
-                                                      + static_cast<f64>(lToPlayer.y) * lToPlayer.y
-                                                      + static_cast<f64>(lToPlayer.z) * lToPlayer.z);
+            const f32 lfDistanceSq = static_cast<f32>(static_cast<f64>(lToPlayer.mV.x) * lToPlayer.mV.x
+                                                      + static_cast<f64>(lToPlayer.mV.y) * lToPlayer.mV.y
+                                                      + static_cast<f64>(lToPlayer.mV.z) * lToPlayer.mV.z);
             bool lbClear = (lfDistanceSq >= KF_PICTURE_PARADISE_FAR_DIST_SQ);
             if (!lbClear)
             {
-                const f32 lfAlongView = static_cast<f32>(static_cast<f64>(lToPlayer.x) * lrCameraDirection.x
-                                                         + static_cast<f64>(lToPlayer.y) * lrCameraDirection.y
-                                                         + static_cast<f64>(lToPlayer.z) * lrCameraDirection.z);
+                const f32 lfAlongView = static_cast<f32>(static_cast<f64>(lToPlayer.mV.x) * lrCameraDirection.mV.x
+                                                         + static_cast<f64>(lToPlayer.mV.y) * lrCameraDirection.mV.y
+                                                         + static_cast<f64>(lToPlayer.mV.z) * lrCameraDirection.mV.z);
                 lbClear = (lfAlongView > 0.0f);
             }
             if (lbClear)
@@ -18482,32 +18470,32 @@ void TrafficEntityModule::CreateTrafficAIEntity( u32                            
 
     // The AI works in the world XZ plane: lane 0 is world X, lane 1 is world Z. Only those
     // two lanes of mCentre are written -- the record's remaining centre lanes are not read.
-    lpOutEntity->mCentre.x = lTransform.Pos().x + lBBoxOffset.x;
-    lpOutEntity->mCentre.y = lTransform.Pos().z + lBBoxOffset.z;
+    lpOutEntity->mCentre.mV.x = lTransform.Pos().mV.x + lBBoxOffset.mV.x;
+    lpOutEntity->mCentre.mV.y = lTransform.Pos().mV.z + lBBoxOffset.mV.z;
 
-    const f32 lfSpeed = lpVehicle->GetSpeed().x;
-    lpOutEntity->mVelocity.x = lTransform.At().x * lfSpeed;
-    lpOutEntity->mVelocity.y = lTransform.At().z * lfSpeed;
+    const f32 lfSpeed = lpVehicle->GetSpeed().GetFloat();
+    lpOutEntity->mVelocity.mV.x = lTransform.At().mV.x * lfSpeed;
+    lpOutEntity->mVelocity.mV.y = lTransform.At().mV.z * lfSpeed;
 
     // Corner i takes +X for bit 0, +Y for bit 1 and -Z for bit 2, all about the box offset,
     // then rides the vehicle transform into world space.
     for ( s32 liCorner = 0; liCorner < BrnTrafficIO::KI_BB_NUM_CORNERS; ++liCorner )
     {
-        const f32 lfLocalX = lBBoxOffset.x
-                           + ( ( liCorner & 1 ) != 0 ?  lBBoxHalfSize.x : -lBBoxHalfSize.x );
-        const f32 lfLocalY = lBBoxOffset.y
-                           + ( ( liCorner & 2 ) != 0 ?  lBBoxHalfSize.y : -lBBoxHalfSize.y );
-        const f32 lfLocalZ = lBBoxOffset.z
-                           + ( ( liCorner & 4 ) != 0 ? -lBBoxHalfSize.z :  lBBoxHalfSize.z );
+        const f32 lfLocalX = lBBoxOffset.mV.x
+                           + ( ( liCorner & 1 ) != 0 ?  lBBoxHalfSize.mV.x : -lBBoxHalfSize.mV.x );
+        const f32 lfLocalY = lBBoxOffset.mV.y
+                           + ( ( liCorner & 2 ) != 0 ?  lBBoxHalfSize.mV.y : -lBBoxHalfSize.mV.y );
+        const f32 lfLocalZ = lBBoxOffset.mV.z
+                           + ( ( liCorner & 4 ) != 0 ? -lBBoxHalfSize.mV.z :  lBBoxHalfSize.mV.z );
 
         Vector3 lWorld;
-        lWorld.x = lTransform.Right().x * lfLocalX + lTransform.Up().x * lfLocalY
-                 + lTransform.At().x    * lfLocalZ + lTransform.Pos().x;
-        lWorld.y = lTransform.Right().y * lfLocalX + lTransform.Up().y * lfLocalY
-                 + lTransform.At().y    * lfLocalZ + lTransform.Pos().y;
-        lWorld.z = lTransform.Right().z * lfLocalX + lTransform.Up().z * lfLocalY
-                 + lTransform.At().z    * lfLocalZ + lTransform.Pos().z;
-        lWorld.w = 0.0f;
+        lWorld.mV.x = lTransform.Right().mV.x * lfLocalX + lTransform.Up().mV.x * lfLocalY
+                 + lTransform.At().mV.x    * lfLocalZ + lTransform.Pos().mV.x;
+        lWorld.mV.y = lTransform.Right().mV.y * lfLocalX + lTransform.Up().mV.y * lfLocalY
+                 + lTransform.At().mV.y    * lfLocalZ + lTransform.Pos().mV.y;
+        lWorld.mV.z = lTransform.Right().mV.z * lfLocalX + lTransform.Up().mV.z * lfLocalY
+                 + lTransform.At().mV.z    * lfLocalZ + lTransform.Pos().mV.z;
+        lWorld.mV.w = 0.0f;
 
         lpOutEntity->maBBCorners[ liCorner ] = lWorld;
     }
@@ -18656,16 +18644,16 @@ void TrafficEntityModule::AIPostSceneQueryRequests(
         const Vector3& lPos = lpRaceCarState->mTransform.Pos();
 
         Vector3 lEye;
-        lEye.x = lPos.x - KF_AI_QUERY_CAMERA_PULLBACK * lAt.x;
-        lEye.y = lPos.y - KF_AI_QUERY_CAMERA_PULLBACK * lAt.y;
-        lEye.z = lPos.z - KF_AI_QUERY_CAMERA_PULLBACK * lAt.z;
-        lEye.w = lPos.w - KF_AI_QUERY_CAMERA_PULLBACK * lAt.w;
+        lEye.mV.x = lPos.mV.x - KF_AI_QUERY_CAMERA_PULLBACK * lAt.mV.x;
+        lEye.mV.y = lPos.mV.y - KF_AI_QUERY_CAMERA_PULLBACK * lAt.mV.y;
+        lEye.mV.z = lPos.mV.z - KF_AI_QUERY_CAMERA_PULLBACK * lAt.mV.z;
+        lEye.mV.w = lPos.mV.w - KF_AI_QUERY_CAMERA_PULLBACK * lAt.mV.w;
 
         Vector3 lTarget;
-        lTarget.x = lPos.x + lAt.x;
-        lTarget.y = lPos.y + lAt.y;
-        lTarget.z = lPos.z + lAt.z;
-        lTarget.w = lPos.w + lAt.w;
+        lTarget.mV.x = lPos.mV.x + lAt.mV.x;
+        lTarget.mV.y = lPos.mV.y + lAt.mV.y;
+        lTarget.mV.z = lPos.mV.z + lAt.mV.z;
+        lTarget.mV.w = lPos.mV.w + lAt.mV.w;
 
         lQueryCamera.LookAt( lEye, lUp, lTarget );
 
@@ -18742,9 +18730,9 @@ namespace
     // the first, so only x/y/z are distinct.
     bool IsZeroPosition( const Vector3& lrPosition )
     {
-        return std::fabs( lrPosition.x ) <= KF_POSITION_ZERO_TOLERANCE
-            && std::fabs( lrPosition.y ) <= KF_POSITION_ZERO_TOLERANCE
-            && std::fabs( lrPosition.z ) <= KF_POSITION_ZERO_TOLERANCE;
+        return std::fabs( lrPosition.mV.x ) <= KF_POSITION_ZERO_TOLERANCE
+            && std::fabs( lrPosition.mV.y ) <= KF_POSITION_ZERO_TOLERANCE
+            && std::fabs( lrPosition.mV.z ) <= KF_POSITION_ZERO_TOLERANCE;
     }
 }
 
@@ -18852,10 +18840,10 @@ void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
                         BrnTrafficIO::TrafficDirectorEntity lDirectorEntity;
                         lDirectorEntity.mLocalTransform       = lTransform;
                         lDirectorEntity.mLocalTransform.Pos() = lTransform.Pos()
-                                                              + lTransform.Right() * lBBoxOffset.x
-                                                              + lTransform.Up()    * lBBoxOffset.y
-                                                              + lTransform.At()    * lBBoxOffset.z;
-                        lDirectorEntity.mVelocity       = lTransform.At() * lpVehicle->GetSpeed().x;
+                                                              + lTransform.Right() * lBBoxOffset.mV.x
+                                                              + lTransform.Up()    * lBBoxOffset.mV.y
+                                                              + lTransform.At()    * lBBoxOffset.mV.z;
+                        lDirectorEntity.mVelocity       = lTransform.At() * lpVehicle->GetSpeed().GetFloat();
                         lDirectorEntity.mHalfExtents    = lBBoxHalfSize;
                         lDirectorEntity.mVehicleId      = lVehicleId;
                         lDirectorEntity.mu16EntityIndex = static_cast<u16>( luIndex );
@@ -18917,7 +18905,7 @@ void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
 
                                     if ( rw::math::vpu::Dot( lToShowtimePlayer, lToShowtimePlayer )
                                              > KF_SHOWTIME_HORN_RADIUS_SQUARED
-                                         || std::fabs( lToShowtimePlayer.y )
+                                         || std::fabs( lToShowtimePlayer.mV.y )
                                              > KF_SHOWTIME_HORN_MAX_HEIGHT_DELTA )
                                     {
                                         lbIsHooting = false;
@@ -18935,7 +18923,7 @@ void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
                             BrnTrafficIO::TrafficSoundEntity lSoundEntity;
                             lSoundEntity.mLocalTransform   = lTransform;
                             lSoundEntity.mEntityId.muValue = static_cast<u32>( lEntityId );
-                            lSoundEntity.mfSpeed           = lpVehicle->GetSpeed().x;
+                            lSoundEntity.mfSpeed           = lpVehicle->GetSpeed().GetFloat();
                             lSoundEntity.mu16EntityIndex   = static_cast<u16>( luIndex );
                             lSoundEntity.muVehicleClass    = lu8VehicleClass;
                             lSoundEntity.mbIsEngineOn      = lbIsEngineOn;
@@ -19199,7 +19187,7 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
             // 0x8271F378 `stvx128 v0 (+0x220), +0x724A0` then 0x8271F38C..0x8271F394 subtract the
             // splatted height and keep only the result's Y lane (`vrlimi128 v12, v0, 4, 0`).
             mShowtimePlayerGroundPos    = lpPlayerRaceCarState->mTransform.Pos();
-            mShowtimePlayerGroundPos.y -= lfGroundHeight;
+            mShowtimePlayerGroundPos.mV.y -= lfGroundHeight;
 
             if (lfGroundHeight < KF_SHOWTIME_MISBOUNCE_MIN_HEIGHT)
             {
@@ -19222,16 +19210,16 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
         // 0x8271F4BC..0x8271F4C8 `mfocrf ; extrwi 1,24 ; bne` is the mask's GetBool.
         VecFloat lfT0;
         VecFloat lfT1;
-        if (CgsNumeric::SolveQuadratic(rw::math::vpu::Splat(-4.905f),
-                                       rw::math::vpu::Splat(lpPlayerRaceCarState->mLinearVelocity.y),
-                                       rw::math::vpu::Splat(lfGroundHeight),
+        if (CgsNumeric::SolveQuadratic(VecFloat(-4.905f),
+                                       VecFloat(lpPlayerRaceCarState->mLinearVelocity.GetY()),
+                                       VecFloat(lfGroundHeight),
                                        lfT0, lfT1).GetBool())
         {
             // 0x8271F4CC `vminfp` ; 0x8271F4E0 `fcmpu f0, f31(0.0) ; bge` ; 0x8271F4E8 `vmaxfp`.
-            lfTimeUntilLanding = rw::math::vpu::Min(lfT0, lfT1).x;
+            lfTimeUntilLanding = VecFloat(__vminfp(lfT0.GetVector(), lfT1.GetVector())).GetFloat();
             if (lfTimeUntilLanding < 0.0f)
             {
-                lfTimeUntilLanding = rw::math::vpu::Max(lfT0, lfT1).x;
+                lfTimeUntilLanding = VecFloat(__vmaxfp(lfT0.GetVector(), lfT1.GetVector())).GetFloat();
             }
 
             // 0x8271F4F8 `fcmpu f30, f31 ; blt` -> 0x8271F584.
@@ -19250,7 +19238,7 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
 
                 // 0x8271F564 `vrlimi128 v0, v12(0), 4, 3` -- the velocity with its Y lane zeroed.
                 Vector3 lLinearVelocityXZ = lpPlayerRaceCarState->mLinearVelocity;
-                lLinearVelocityXZ.y       = 0.0f;
+                lLinearVelocityXZ.mV.y       = 0.0f;
 
                 // 0x8271F570 `vmaddfp v0, v0, v13, v11` (D = A*C + B: vXZ * t + pos) ; 0x8271F57C
                 // `stvx128 v0, +0x72490`.
@@ -19319,10 +19307,10 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
 
             // XZ only, Z first (DWARF: operator*<Z,Z> then operator+= of operator*<X,X>):
             // 0x8271F72C / 0x8271F734 -> var_130 ; 0x8271F748 / 0x8271F754 -> var_140.
-            f32 lfDistanceSq = lPlayerToVehicle.z * lPlayerToVehicle.z;
-            lfDistanceSq    += lPlayerToVehicle.x * lPlayerToVehicle.x;
-            f32 lfDistanceStompSq = lPlayerToStompPos.z * lPlayerToStompPos.z;
-            lfDistanceStompSq    += lPlayerToStompPos.x * lPlayerToStompPos.x;
+            f32 lfDistanceSq = lPlayerToVehicle.mV.z * lPlayerToVehicle.mV.z;
+            lfDistanceSq    += lPlayerToVehicle.mV.x * lPlayerToVehicle.mV.x;
+            f32 lfDistanceStompSq = lPlayerToStompPos.mV.z * lPlayerToStompPos.mV.z;
+            lfDistanceStompSq    += lPlayerToStompPos.mV.x * lPlayerToStompPos.mV.x;
 
             // 0x8271F7FC..0x8271F834 -- FastBitArray IsBitSet on +0x28460.
             const bool lbOnScreenVehicle = mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle);
@@ -19351,7 +19339,7 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
                 BrnGameState::CrashModeScoring::GetVehicleScoreData(leClass, lTypeID,
                                                                     &liScore, &liMultiplier, &leCategory);
                 Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
-                lVehiclePos.y += KF_SCORE_HEIGHT_TWEAK_BY_VEHICLE_CLASS[leClass];
+                lVehiclePos.mV.y += KF_SCORE_HEIGHT_TWEAK_BY_VEHICLE_CLASS[leClass];
                 lpOutput->AddPotentialScoree(lVehiclePos, lfDistanceSq, liScore, liMultiplier,
                                              static_cast<u16>(luVehicle));
             }
@@ -19527,10 +19515,10 @@ void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lp
                 lAddEvent.miTriggerRegionType              = 0xFFu;
                 lAddEvent.miGenericRegionType                  = 0xFFu;
                 const Vector3 lDimensions            = lpLightTrigger->GetDimensions();
-                lAddEvent.mDimensions.x              = std::fabs(lDimensions.x);
-                lAddEvent.mDimensions.y              = std::fabs(lDimensions.y);
-                lAddEvent.mDimensions.z              = std::fabs(lDimensions.z);
-                lAddEvent.mDimensions.w              = std::fabs(lDimensions.w);
+                lAddEvent.mDimensions.mV.x              = std::fabs(lDimensions.mV.x);
+                lAddEvent.mDimensions.mV.y              = std::fabs(lDimensions.mV.y);
+                lAddEvent.mDimensions.mV.z              = std::fabs(lDimensions.mV.z);
+                lAddEvent.mDimensions.mV.w              = std::fabs(lDimensions.mV.w);
                 lpOutput->GetTriggerManagementInputInterface()->GetAddTriggerEventQueue()
                     .AddEvent<BrnWorld::TriggerEntityModuleIO::InAddBoxTriggerEvent>(&lAddEvent, 2);
             }

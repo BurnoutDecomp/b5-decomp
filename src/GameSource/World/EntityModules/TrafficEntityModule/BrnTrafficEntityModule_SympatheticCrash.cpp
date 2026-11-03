@@ -107,12 +107,10 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "GameSource/Jobs/Traffic/BrnTrafficSwerveWatch.h"   // [DIAG] the chain-crash film arm
 
 #include "rw/math/vpu/vector3_operation.h"   // Dot, Normalize, IsValid
 #include "rw/math/vpu/vector4_operation.h"   // Splat
 
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
 
 namespace BrnTraffic
 {
@@ -133,27 +131,6 @@ namespace
     const f32 KF_ONE                       = 1.0f;    // flt_82001C98
     const f32 KF_MINUS_ONE                 = -1.0f;   // flt_820037C8
     const f32 KF_ZERO                      = 0.0f;    // flt_82001CC0
-
-    // ---- [DIAG] THE CHAIN-CRASH FILM ARM. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. ------
-    // Publish where the sympathetic crasher IS, so (a) BRN_WORLD_CAMTRAFFIC=3/4 can stage a
-    // static wide shot on it, (b) BRN_FRAME_DUMP_ARM can start filming at that instant, and
-    // (c) every dumped frame carries the position in frames.csv, which is what lets a marker
-    // be projected from the car's OWN logged coordinates instead of a crash being asserted
-    // from a log line. Three float stores and two counters; no branch in the sim's control
-    // flow, and it is gated on the same BRN_TRAFFIC_DIAG the [T6-symp] rungs already use.
-    void PublishSympCrasher(u32 luVehicle, s32 liState, const Vector3& lvPos, bool lbCommitBound)
-    {
-        BrnTraffic::gSwerveWatch.mfSympPosX    = lvPos.x;
-        BrnTraffic::gSwerveWatch.mfSympPosY    = lvPos.y;
-        BrnTraffic::gSwerveWatch.mfSympPosZ    = lvPos.z;
-        BrnTraffic::gSwerveWatch.miSympVehicle = static_cast<s32>(luVehicle);
-        BrnTraffic::gSwerveWatch.miSympState   = liState;
-        ++BrnTraffic::gSwerveWatch.muSympPublishes;
-        if (lbCommitBound)
-        {
-            ++BrnTraffic::gSwerveWatch.muSympCommits;
-        }
-    }
 
     // The `% 101` reduction the console does with the 0x446F8657 magic-multiply reciprocal at
     // 0x8273D910..0x8273D92C, and the `< 50` split at 0x8273D930. Same pair
@@ -313,7 +290,7 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     // what makes IsSympatheticallyCrashing() (miPhysicalReason == 3) go false next frame, which
     // hands the car to UpdateNormalPhysical -> DriveTowardsTarget ->
     // ReturnPhysicalVehicleToTraffic. Do not "simplify" the three stores; each is load-bearing.
-    if (KF_SYMP_GIVE_UP_SPEED > lpVehicle->GetSpeed().x
+    if (KF_SYMP_GIVE_UP_SPEED > lpVehicle->GetSpeed().GetFloat()
         && !lpPhysicsInfo->mbIsFatallyCrashing)
     {
         lpVehicle->SetPhysicalReason(static_cast<s8>(E_PHYSICALREASON_NORMAL));
@@ -362,7 +339,7 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     case Vehicle::E_SYMPATHETIC_HEADON:      // jump table entry 0 -> 0x8273DA28
     {
         CalculateAndSetSteering(luVehicle, lvSteerDirection, lpOutControls,
-                                rw::math::vpu::Splat(KF_ZERO));
+                                VecFloat(KF_ZERO));
 
         // 0x8273DA8C. Nose-first into something for long enough == the crash has happened.
         if (lpPhysicsInfo->mfStuckTimeFront >= KF_SYMP_STUCK_FRONT_GIVE_UP)
@@ -388,7 +365,7 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     case Vehicle::E_SYMPATHETIC_ACCELERATE:  // jump table entry 1 -> 0x8273D6F4
     {
         CalculateAndSetSteering(luVehicle, lvSteerDirection, lpOutControls,
-                                rw::math::vpu::Splat(KF_ZERO));
+                                VecFloat(KF_ZERO));
 
         ApplyDriverGasBrake(luVehicle, lfForwardDistance, lvVehiclePos, lpOutControls);
 
@@ -421,7 +398,7 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
     {
         // 0x8273D990..0x8273D9E0. Full gas, full handbrake, and full lock AGAINST whichever way
         // the car is already steering -- the spin.
-        const f32 lfSteering = lpVehicle->GetSteering().x;
+        const f32 lfSteering = lpVehicle->GetSteering().GetFloat();
 
         lpOutControls->mfGas       = KF_ONE;
         lpOutControls->mfBrake     = KF_ZERO;
@@ -489,7 +466,7 @@ void TrafficEntityModule::ApplyDriverGasBrake(
         Vector3 lvVehiclePos,
         BrnPhysics::Vehicle::BrnTrafficDriverControls* lpOutControls)
 {
-    Vector3 lvParamVelocity = { KF_ZERO, KF_ZERO, KF_ZERO, KF_ZERO };
+    Vector3 lvParamVelocity(KF_ZERO, KF_ZERO, KF_ZERO);
 
     if (!mbPlayingShowtimeMode)
     {
@@ -504,9 +481,9 @@ void TrafficEntityModule::ApplyDriverGasBrake(
     }
 
     const VecFloat lvfPedal =
-        CalculateDriverGasBrake(luVehicle, rw::math::vpu::Splat(lfForwardDistance), lvParamVelocity);
+        CalculateDriverGasBrake(luVehicle, VecFloat(lfForwardDistance), lvParamVelocity);
 
-    const f32 lfPedal = lvfPedal.x;
+    const f32 lfPedal = lvfPedal.GetFloat();
 
     f32 lfGas = lfPedal;
     if (lfGas < KF_ZERO) { lfGas = KF_ZERO; }
