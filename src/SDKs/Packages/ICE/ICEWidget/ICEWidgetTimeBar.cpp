@@ -130,20 +130,17 @@ namespace ICE
                      const f32* lpColour4)
         {
             Poly lQuad;
-            const Vector3 lTopLeft = { lfLeft, lfTop, lfZ, 0.0f };
-            const Vector3 lTopRight = { lfRight, lfTop, lfZ, 0.0f };
-            const Vector3 lBottomRight = { lfRight, lfBottom, lfZ, 0.0f };
-            const Vector3 lBottomLeft = { lfLeft, lfBottom, lfZ, 0.0f };
+            const Vector3 lTopLeft(lfLeft, lfTop, lfZ);
+            const Vector3 lTopRight(lfRight, lfTop, lfZ);
+            const Vector3 lBottomRight(lfRight, lfBottom, lfZ);
+            const Vector3 lBottomLeft(lfLeft, lfBottom, lfZ);
             lQuad.maVertices[0] = lTopLeft;
             lQuad.maVertices[1] = lTopRight;
             lQuad.maVertices[2] = lBottomRight;
             lQuad.maVertices[3] = lBottomLeft;
 
-            Vector4 lColour;
-            lColour.x = lpColour4[0];
-            lColour.y = lpColour4[1];
-            lColour.z = lpColour4[2];
-            lColour.w = lpColour4[3];
+            Vector4 lColour(lpColour4[0], lpColour4[1],
+                            lpColour4[2], lpColour4[3]);
 
             Matrix4 lLocalWorld;
             ICEMath::Identity(&lLocalWorld);
