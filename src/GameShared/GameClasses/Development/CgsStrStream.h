@@ -7,7 +7,7 @@
 // via the KAC_* formats) and forward it to the virtual char* sink, which each concrete stream
 // implements (StrStream -> a fixed char buffer; the debug-log stream -> debug output). The
 // current PrintMode controls integer formatting (decimal / hex / hex-once). Reconstructed from
-// the DecFIGS DWARF (Development/CgsStrStream.h/.cpp); the X360 lays the sink at vtable+4 and
+// the DecFIGS DWARF (Development/CgsStrStream.h/.cpp); the X360 lays Reset and Append at vtable+0 and vtable+4 and
 // the call sites do `stream << "text" << value`.
 namespace CgsDev
 {
@@ -21,10 +21,11 @@ namespace CgsDev
     struct StrStreamBase
     {
         StrStreamBase();
-        virtual ~StrStreamBase() {}
+        ~StrStreamBase() {}
+        virtual void Reset() { mePrintMode = E_PRINTMODE_DECIMAL; }
 
-        // The sink: each concrete stream writes the string somewhere (buffer / debug output).
-        virtual StrStreamBase& operator<<(const char* lpcText) = 0;
+        // Text insertion replaces null with <NULLSTRING> and calls the virtual Append sink.
+        StrStreamBase& operator<<(const char* lpcText);
 
         // Formatting overloads (render then forward to the sink).
         StrStreamBase& operator<<(s32 liValue);
@@ -42,6 +43,7 @@ namespace CgsDev
         void AppendFormat(const char* lpcFormat, ...);
 
     protected:
+        virtual void Append(const char* lpcText) = 0;
         void Append64IntDecimal(u64 luValue);
         void Append64IntHex(u64 luValue);
 
@@ -54,32 +56,26 @@ namespace CgsDev
     {
         StrStream(char* lpcBuffer, s32 liBufferSize);
 
-        // Un-hide the inherited scalar formatting overloads (s32/u32/u64/f32/void*/PrintMode):
-        // overriding operator<<(const char*) below would otherwise hide every base-class overload
-        // by name. The X360 streams the teleport-location ordinal as an int through this path
-        // (StrStreamBase::AppendFormat) when building the "Reset Player Car" location labels.
-        using StrStreamBase::operator<<;
-
-        StrStreamBase& operator<<(const char* lpcText) ;
-
-        // 0x82815E80 - the buffer sink: append text to mpcBuffer without overflowing it (X360
-        // CgsDev::StrStream::Append - walk to the NUL then strncat with the remaining room
-        // miBufferSize - used). operator<<(const char*) forwards here; exposed by name because the
-        // X360 streams the assert/HUD label text through this method.
-        void Append(const char* lpcText);
-
         char* GetBuffer() { return mpcBuffer; }
 
         // 0x82815E68 - clear the caller-supplied buffer back to the empty string and reset the
         // formatting mode to decimal (X360 CgsDev::StrStream::Reset: `*(this+4)=0` resets
         // mePrintMode, `*(this+8)` is the buffer whose first byte is zeroed). Called between
         // successive label builds in the debug HUD.
-        void Reset()
+        virtual void Reset()
         {
             mePrintMode = E_PRINTMODE_DECIMAL;
             if (mpcBuffer && miBufferSize > 0)
                 mpcBuffer[0] = '\0';
         }
+
+    protected:
+        // 0x82815E80 - the buffer sink: append text to mpcBuffer without overflowing it (X360
+        // CgsDev::StrStream::Append - walk to the NUL then strncat with the remaining room
+        // miBufferSize - used). operator<<(const char*) forwards here; exposed by name because the
+        // X360 streams the assert/HUD label text through this method.
+        virtual void Append(const char* lpcText);
+
 
     private:
         char* mpcBuffer;
@@ -97,7 +93,7 @@ namespace CgsDev
     {
         SimpleStrStream();
 
-        StrStreamBase& operator<<(const char* lpcText) ;
+        StrStreamBase& operator<<(const char* lpcText);
         StrStreamBase& operator<<(s32 liValue);
         StrStreamBase& operator<<(f32 lfValue);
 
@@ -107,11 +103,14 @@ namespace CgsDev
         // to decimal (X360 CgsDev::SimpleStrStream::Reset: `*(this+4)=0` mePrintMode,
         // `*(this+8)=0` macCharBuffer[0]). Called between the three score cells of each debug-HUD
         // table row.
-        void Reset()
+        virtual void Reset()
         {
             mePrintMode = E_PRINTMODE_DECIMAL;
             macCharBuffer[0] = '\0';
         }
+
+    protected:
+        virtual void Append(const char* lpcText);
 
     private:
         static const s32 KI_BUFFER_SIZE = 256;   // DWARF CgsStrStream.h:306

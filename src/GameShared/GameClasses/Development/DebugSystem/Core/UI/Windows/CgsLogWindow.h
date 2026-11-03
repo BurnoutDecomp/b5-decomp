@@ -31,12 +31,13 @@ namespace CgsDev
             // The sink (X360 CgsLogWindow.cpp:56): hand the text to mpWindow->Append. operator<<(const
             // char*) forwards here; while unbound (the freshly default-constructed state this TU's
             // LogWindow ctor leaves it in, before mpWindow is wired) it is a no-op.
-            StrStreamBase& operator<<(const char* lpcText) ;
+
 
             // Wire the back-pointer to the owning window (the ctor's `mLog.mpWindow = this`).
             void SetWindow(LogWindow* lpWindow) { mpWindow = lpWindow; }
 
         protected:
+            virtual void Append(const char* lpcText);
             LogWindow* mpWindow;   // the LogWindow whose ring this stream feeds
         };
 

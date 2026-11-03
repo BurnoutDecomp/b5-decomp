@@ -40,13 +40,6 @@ namespace Log
         // CgsLogCombined.cpp:123. Clear all child slots.
         void RemoveAllStreams();
 
-        // Concrete sink so the StrStreamBase pure-virtual is satisfied; forwards to Append.
-        StrStreamBase& operator<<(const char* lpcText)
-        {
-            Append(lpcText);
-            return *this;
-        }
-
     protected:
         // X360 0x82817698 (CgsLogCombined.cpp:99). The char* sink: forward the text to every
         // non-null child stream (null text becomes "<NULLSTRING>").

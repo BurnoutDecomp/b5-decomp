@@ -1,21 +1,10 @@
 #include "GameShared/GameClasses/Development/Log/CgsLogOutput.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <xtl.h>
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x827DB720
-//   (CgsDev::Log::LogOutput::Append)
-//
-// The X360 pseudocode forwarded the text to the platform debug channel
-// (OutputDebugStringA). Routed through the unified game log (WriteToLog -> BrnGame.log +
-// the debugger output) so every log sink lands in the one log file.
-
-namespace CgsDev
-{
-    namespace Log
+namespace CgsDev { namespace Log {
+    // ARTIST 0x827DB720: forward directly to the platform debug output.
+    void LogOutput::Append(const char* lpcText)
     {
-        int LogOutput::Append(const char* lpcText)
-        {
-            WriteToLog(lpcText);
-            return 0;
-        }
+        OutputDebugStringA(lpcText);
     }
-}
+}}

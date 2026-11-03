@@ -37,16 +37,10 @@ namespace CgsDev
             mLog.SetWindow(this);
         }
 
-        // operator<<(const char*) sink. COMPILE-REQUIRED override (the base
-        // StrStreamBase::operator<<(const char*) is pure-virtual) -- NOT this TU's ledger func and
-        // with NO asm in this TU's dossier. Body is a CONSERVATIVE RECONSTRUCTION (not recovered):
-        // it forwards each chunk to the owning window's line ring via LogWindow::Append (its own
-        // not-yet-done TU); while unbound (mpWindow null) it is a guarded no-op.
-        StrStreamBase& LogWindowStrStream::operator<<(const char* lpcText)
+        // ARTIST 0x828310C0 forwards directly to the owning window.
+        void LogWindowStrStream::Append(const char* lpcText)
         {
-            if (mpWindow && lpcText)
-                mpWindow->Append(lpcText);
-            return *this;
+            mpWindow->Append(lpcText);
         }
 
         // @ 0x8281A188 -- size the line ring: store the capacity, allocate maxLines x

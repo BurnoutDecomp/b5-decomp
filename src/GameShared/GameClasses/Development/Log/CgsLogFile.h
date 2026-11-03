@@ -39,18 +39,8 @@ namespace Log
         bool IsOpen() const { return miFile != INVALID_HANDLE_VALUE; }
 
     protected:
-        // X360 0x82817608. The char* sink (virtual; overrides StrStreamBase::operator<< via the base
-        // forwarder). When open, writes strlen(lpcString) bytes of lpcString to miFile via WriteFile.
+        // X360 0x82817608. The char* sink (virtual; overrides StrStreamBase::Append). When open, writes strlen(lpcString) bytes of lpcString to miFile via WriteFile.
         virtual void Append(const char* lpcString);
-
-        // StrStreamBase requires a concrete operator<<(const char*) sink; forward it to Append so the
-        // class is instantiable and `stream << "text"` reaches the file (the X360 streams through the
-        // virtual char* sink, which this concrete stream points at Append).
-        StrStreamBase& operator<<(const char* lpcText)
-        {
-            Append(lpcText);
-            return *this;
-        }
 
     protected:
         HANDLE miFile;   // [+0x08] open file handle (-1 == INVALID_HANDLE_VALUE) -- CgsLogFile.h:67
