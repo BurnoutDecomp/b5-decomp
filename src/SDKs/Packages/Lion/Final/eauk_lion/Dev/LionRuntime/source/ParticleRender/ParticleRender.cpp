@@ -647,4 +647,3 @@ void cParticleRender::EmitterCubeRender(const EffectsVertexBufferLocked& arVerte
         const_cast<LionBatchArray&>(arBatchArray).Append(lBatch);
     }
 }
-
