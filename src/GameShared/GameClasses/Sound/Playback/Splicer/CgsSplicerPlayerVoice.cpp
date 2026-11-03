@@ -88,7 +88,7 @@ SplicerPlayerVoice::SplicerPlayerVoice(Factory& arFactory,
         (luRwacFeatureCount > 0
             ? sizeof(FeatureSchema*) * (luRwacFeatureCount - 1u) : 0u);
     std::vector<u8> laSchemaStorage(luSchemaBytes);
-    VoiceSchema* lpRwacSchema = ::new (laSchemaStorage.data())
+    VoiceSchema* lpRwacSchema = ::new (&laSchemaStorage[0])
         VoiceSchema(luRwacFeatureCount);
     lpRwacSchema->mName = lrSourceSchema.mName;
     lpRwacSchema->mTypeName = lrSourceSchema.mTypeName;
@@ -100,7 +100,7 @@ SplicerPlayerVoice::SplicerPlayerVoice(Factory& arFactory,
     const size_t luSpecBytes = sizeof(VoiceSpec) +
         (luSendCount > 0 ? sizeof(Name) * (luSendCount - 1u) : 0u);
     std::vector<u8> laSpecStorage(luSpecBytes);
-    VoiceSpec* lpRwacSpec = reinterpret_cast<VoiceSpec*>(laSpecStorage.data());
+    VoiceSpec* lpRwacSpec = reinterpret_cast<VoiceSpec*>(&laSpecStorage[0]);
     std::memcpy(lpRwacSpec, &arVoiceSpec, luSpecBytes);
     lpRwacSpec->mpVoiceSchema = lpRwacSchema;
     // ARTIST @ 0x826E1294-0x826E12A4 stores byte 1 at VoiceSpec +0x0F.

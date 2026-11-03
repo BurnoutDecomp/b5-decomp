@@ -83,7 +83,7 @@ AemsPlayerVoice::AemsPlayerVoice(AemsFactory& arFactory,
         (luRwacFeatureCount > 0 ?
             sizeof(FeatureSchema*) * (luRwacFeatureCount - 1u) : 0u);
     std::vector<u8> laSchemaStorage(luSchemaBytes);
-    VoiceSchema* lpRwacSchema = ::new (laSchemaStorage.data())
+    VoiceSchema* lpRwacSchema = ::new (&laSchemaStorage[0])
         VoiceSchema(luRwacFeatureCount);
     lpRwacSchema->mName = lrSourceSchema.mName;
     lpRwacSchema->mTypeName = lrSourceSchema.mTypeName;
@@ -95,7 +95,7 @@ AemsPlayerVoice::AemsPlayerVoice(AemsFactory& arFactory,
     const size_t luSpecBytes = sizeof(VoiceSpec) +
         (luSendCount > 0 ? sizeof(Name) * (luSendCount - 1u) : 0u);
     std::vector<u8> laSpecStorage(luSpecBytes);
-    VoiceSpec* lpRwacSpec = reinterpret_cast<VoiceSpec*>(laSpecStorage.data());
+    VoiceSpec* lpRwacSpec = reinterpret_cast<VoiceSpec*>(&laSpecStorage[0]);
     std::memcpy(lpRwacSpec, &arVoiceSpec, luSpecBytes);
     lpRwacSpec->mpVoiceSchema = lpRwacSchema;
     // ARTIST @ 0x826DA3FC-0x826DA404 writes 1 to VoiceSpec +0x0F: the
