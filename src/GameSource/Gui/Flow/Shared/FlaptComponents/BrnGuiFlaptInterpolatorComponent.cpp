@@ -113,20 +113,14 @@ namespace BrnGui
         {
             mfCurrentProportion = lfNewProportion;
 
-            // Colour scale = lerp(start, end, t) per RGBA lane.
-            Vector4 lv4Colour;
-            lv4Colour.x = mv4StartColour.x + (mv4EndColour.x - mv4StartColour.x) * lfNewProportion;
-            lv4Colour.y = mv4StartColour.y + (mv4EndColour.y - mv4StartColour.y) * lfNewProportion;
-            lv4Colour.z = mv4StartColour.z + (mv4EndColour.z - mv4StartColour.z) * lfNewProportion;
-            lv4Colour.w = mv4StartColour.w + (mv4EndColour.w - mv4StartColour.w) * lfNewProportion;
+            __vector4 lScalar = __vspltisw(0);
+            lScalar.x = lfNewProportion;
+            const __vector4 lT = __vspltw(lScalar, 0);
+            Vector4 lv4Colour(__vmaddfp(__vsubfp(mv4EndColour.GetVector(), mv4StartColour.GetVector()), lT, mv4StartColour.GetVector()));
             mControlledMovieClip.SetColourScale(lv4Colour);
 
-            // Size scale = lerp(start, end, t) per lane.
             Vector2 lv2Scale;
-            lv2Scale.x = mv2StartScale.x + (mv2EndScale.x - mv2StartScale.x) * lfNewProportion;
-            lv2Scale.y = mv2StartScale.y + (mv2EndScale.y - mv2StartScale.y) * lfNewProportion;
-            lv2Scale.z = mv2StartScale.z + (mv2EndScale.z - mv2StartScale.z) * lfNewProportion;
-            lv2Scale.w = mv2StartScale.w + (mv2EndScale.w - mv2StartScale.w) * lfNewProportion;
+            lv2Scale.mV = __vmaddfp(__vsubfp(mv2EndScale.mV, mv2StartScale.mV), lT, mv2StartScale.mV);
             mControlledMovieClip.SetSizeScale(lv2Scale);
         }
     }

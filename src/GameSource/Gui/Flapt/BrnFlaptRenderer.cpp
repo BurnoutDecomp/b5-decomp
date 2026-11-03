@@ -5,8 +5,6 @@
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"     // CgsGraphics::TextRenderer / TextObject (RenderTextField submission)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"                     // BrnFlapt::Mesh / FlaptFile / FlaptFile::GuiTexture / GuiVertex
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"            // [gateui r6] gpDebugPrint (the mask/text placement probes)
-#include <stdlib.h>                                                   // [gateui r6] getenv (BRN_PROP_DIAG)
 #include <cmath>
 
 // BrnFlapt::FlaptRenderer member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -46,72 +44,6 @@ namespace BrnFlapt
 // two flag values are pinned here against the DWARF rather than reaching into it.
 const u8 KU_BATCH_FLAG_SETTEXTURE = 1;
 const u8 KU_BATCH_FLAG_SETBLEND   = 2;
-
-// The immediate renderer's two default render-state singletons RenderMesh binds. On the
-// console these are members of the shared CgsGraphics::ImRendererBase::StateLibrary
-// (mgStateLibrary), built once by ImRendererBase::ConstructOnceOnly:
-//   gpFlaptNoTexture          = mgStateLibrary.mpTexture_White      (X360 *(0x83010F58)) -
-//                               the white "no texture" bound for an untextured mesh
-//                               (miTextureId < 0); it samples white so the mesh shows its
-//                               vertex colours (this is how solid-colour UI -- backgrounds,
-//                               borders -- draws).
-//   gpFlaptDefaultBlendState  = mgStateLibrary.mpBlendState_Standard (X360 *(0x83010F20)).
-//
-// FLAG (interim homing): the ImRendererBase state library (CgsImRenderer.cpp) is not yet
-// compiled into the build, so its ConstructOnceOnly never runs and these were null link
-// placeholders -- which made RenderMesh's faithful `lbIsSpecialTexture || lpTexture` guard
-// assert on the first untextured mesh once MovieClipInstance::Render was bodied. Until the
-// state library is homed and linked (a separate, scoped milestone -- see the flapt-render
-// bring-up notes), build the SAME white fallback ConstructWhiteTexture produces (4x4 A8R8G8B8,
-// every texel 0xFFFFFFFF) lazily here, through the PC render-engine Texture2D create path
-// (identical to CgsMoviePlayer / LoadingScreenRenderer). The default blend state stays null:
-// RenderMesh only binds a blend state when it differs from the cached one, and both start
-// null, so it is never bound (the batch inherits the current device blend) -- tolerable and
-// non-asserting. Replace both with `extern` refs into mgStateLibrary once ConstructOnceOnly
-// is brought into the build.
-const renderengine::BlendState* const gpFlaptDefaultBlendState = 0;
-
-// Interim ConstructWhiteTexture (see FLAG above): the faithful 4x4 all-white A8R8G8B8 fallback,
-// built once via the render-engine Texture2D create/lock/fill/unlock path the PC texture
-// creators use. Returned to RenderMesh in place of the null gpFlaptNoTexture placeholder.
-renderengine::Texture* GetFlaptNoTexture()
-{
-    static renderengine::Texture* spWhiteTexture = 0;
-    if (spWhiteTexture == 0)
-    {
-        renderengine::Texture2D::Parameters lParams = {};
-        lParams.muWidth     = 4;
-        lParams.muHeight    = 4;
-        lParams.muDepth     = 1;
-        lParams.muNumLevels = 1;
-        lParams.muFormat    = 340;   // A8R8G8B8 (the PC render-engine's 32-bit RGBA format)
-
-        renderengine::Texture2D::ResourceDescriptor lDesc;
-        renderengine::Texture2D::GetResourceDescriptor(&lDesc, &lParams);
-        renderengine::Texture2D* lpTexture = renderengine::Texture2D::Initialize(&lDesc, &lParams);
-
-        renderengine::Texture::LockInfo lLocked;
-        renderengine::Texture::Lock(lpTexture, 0, 0, 0, &lLocked);
-        if (lLocked.mpBits != 0)
-        {
-            // Fill white row-by-row at the locked pitch (the surface row stride may exceed
-            // the 16-byte texel run for a 4-wide A8R8G8B8 row).
-            u8* lpRow = static_cast<u8*>(lLocked.mpBits);
-            for (u32 luY = 0; luY < 4; ++luY)
-            {
-                u32* lpTexels = reinterpret_cast<u32*>(lpRow);
-                for (u32 luX = 0; luX < 4; ++luX)
-                {
-                    lpTexels[luX] = 0xFFFFFFFFu;
-                }
-                lpRow += lLocked.muPitch;
-            }
-        }
-        renderengine::Texture::Unlock(lpTexture, &lLocked);
-        spWhiteTexture = lpTexture;
-    }
-    return spWhiteTexture;
-}
 
 // ---- StartRenderingFrame @ 0x82470698 --------------------------------------
 void FlaptRenderer::StartRenderingFrame()
@@ -173,7 +105,7 @@ void FlaptRenderer::RenderMesh(const Mesh* lpMesh, const FlaptFile* lpFile)
     const s32 liTextureId = lpMesh->miTextureId;   // signed: <0 means "no texture"
     if (liTextureId < 0)
     {
-        lpTexture = GetFlaptNoTexture();   // interim mgStateLibrary.mpTexture_White (see FLAG above)
+        lpTexture = CgsGraphics::ImRendererBase::GetStateLibrary().mpTexture_White;
         if (miShaderProgram != 0)
         {
             // Force the program back to 0 directly (bypassing SetShader's cache, then
@@ -220,7 +152,7 @@ void FlaptRenderer::RenderMesh(const Mesh* lpMesh, const FlaptFile* lpFile)
     CGS_ASSERT(static_cast<u32>(lpMesh->muVertOffset + lpMesh->muNumVerts) <= lpFile->muNumVerts,
                "(uint32_t)( lpMesh->muVertOffset + lpMesh->muNumVerts ) <= lpFile->muNumVerts");
 
-    const renderengine::BlendState* lpBlendState = gpFlaptDefaultBlendState;
+    const renderengine::BlendState* lpBlendState = CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard;
 
     // Only re-bind the texture/blend state the batch command actually changes.
     u8 luFlags = 0;
@@ -261,7 +193,6 @@ void FlaptRenderer::RenderTextField(const CgsGraphics::TextObject* lpTextObject)
     const CgsGraphics::Im2dTransform& lrTransform = maTransformStack.Peek();
     mpImRenderSet->mpIm2dRenderBuffer->SetTransform(lrTransform);
 
-    // [DIAG] NOT IN THE X360 BINARY. [gateui r6] The text-placement probe. The glyph run
     // the TextRenderer builds is in the field's LOCAL box space; this transform is what
     // carries it onto the banner. Until this round the submit path (RenderStart/RenderEnd)
     // dropped it, so every FLAPT text field landed at its authored box origin read as raw
@@ -335,27 +266,18 @@ void FlaptRenderer::Construct(FlaptRenderSet* lpImRenderSet, void* lpTextRendere
     CgsGraphics::Im2dTransform lScreenXForm;
 
     // Origin: NDC top-left corner.
-    lScreenXForm.mOriginXYZ.x = -1.0f;
-    lScreenXForm.mOriginXYZ.y =  1.0f;
-    lScreenXForm.mOriginXYZ.z =  0.0f;
-    lScreenXForm.mOriginXYZ.w =  0.0f;
+    lScreenXForm.mOriginXYZ.Set(-1.0f, 1.0f, 0.0f, 0.0f);
 
     // Right/Up basis interleaved as {right.x, right.y, up.x, up.y}: a pure scale, so the
     // off-diagonal lanes (right.y, up.x) are zero.
-    lScreenXForm.mRightUp.x = KF_NDC_PER_HALF_WIDTH;    // right.x (m00)
-    lScreenXForm.mRightUp.y = 0.0f;                     // right.y (m10)
-    lScreenXForm.mRightUp.z = 0.0f;                     // up.x    (m01)
-    lScreenXForm.mRightUp.w = KF_NDC_PER_HALF_HEIGHT;   // up.y    (m11)
+    lScreenXForm.mRightUp.SetX(KF_NDC_PER_HALF_WIDTH);    // right.x (m00)
+    lScreenXForm.mRightUp.SetY(0.0f);                     // right.y (m10)
+    lScreenXForm.mRightUp.SetZ(0.0f);                     // up.x    (m01)
+    lScreenXForm.mRightUp.SetW(KF_NDC_PER_HALF_HEIGHT);   // up.y    (m11)
 
     // Identity colour transform.
-    lScreenXForm.mColourShift.x = 0.0f;
-    lScreenXForm.mColourShift.y = 0.0f;
-    lScreenXForm.mColourShift.z = 0.0f;
-    lScreenXForm.mColourShift.w = 0.0f;
-    lScreenXForm.mColourScale.x = 1.0f;
-    lScreenXForm.mColourScale.y = 1.0f;
-    lScreenXForm.mColourScale.z = 1.0f;
-    lScreenXForm.mColourScale.w = 1.0f;
+    lScreenXForm.mColourShift.Set(0.0f, 0.0f, 0.0f, 0.0f);
+    lScreenXForm.mColourScale.Set(1.0f, 1.0f, 1.0f, 1.0f);
 
     lScreenXForm.TransformByAspectRatio();
 
@@ -407,13 +329,23 @@ void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
 
     CgsGraphics::Basic2dColouredTexturedVertex laMaskVerts[2];
 
-    laMaskVerts[0].mv2Pos.x   = std::fma(lLogical.mRightUp.x, lMinVert.mv2Pos.x, lLogical.mOriginXYZ.x);
-    laMaskVerts[0].mv2Pos.y   = std::fma(lLogical.mRightUp.w, lMinVert.mv2Pos.y, lLogical.mOriginXYZ.y);
-    laMaskVerts[0].mv4Colour  = lMinVert.mv4Colour;
-    laMaskVerts[0].mv2Tex0UV  = lMinVert.mv2Tex0UV;
-
-    laMaskVerts[1].mv2Pos.x   = std::fma(lLogical.mRightUp.x, lMaxVert.mv2Pos.x, lLogical.mOriginXYZ.x);
-    laMaskVerts[1].mv2Pos.y   = std::fma(lLogical.mRightUp.w, lMaxVert.mv2Pos.y, lLogical.mOriginXYZ.y);
+    __vector4 lMinPosition = __vspltisw(0);
+    lMinPosition.x = lMinVert.mv2Pos.x;
+    lMinPosition.y = lMinVert.mv2Pos.y;
+    __vector4 lMaxPosition = __vspltisw(0);
+    lMaxPosition.x = lMaxVert.mv2Pos.x;
+    lMaxPosition.y = lMaxVert.mv2Pos.y;
+    __vector4 lScale = __vspltisw(0);
+    lScale.x = lrTransform.mRightUp.GetX().GetFloat();
+    lScale.y = lrTransform.mRightUp.GetW().GetFloat();
+    const __vector4 lMinTransformed = __vmaddfp(lScale, lMinPosition, lrTransform.mOriginXYZ.GetVector());
+    const __vector4 lMaxTransformed = __vmaddfp(lScale, lMaxPosition, lrTransform.mOriginXYZ.GetVector());
+    laMaskVerts[0].mv2Pos.x = lMinTransformed.x;
+    laMaskVerts[0].mv2Pos.y = lMinTransformed.y;
+    laMaskVerts[0].mv4Colour = lMinVert.mv4Colour;
+    laMaskVerts[0].mv2Tex0UV = lMinVert.mv2Tex0UV;
+    laMaskVerts[1].mv2Pos.x = lMaxTransformed.x;
+    laMaskVerts[1].mv2Pos.y = lMaxTransformed.y;
     laMaskVerts[1].mv4Colour  = lMaxVert.mv4Colour;
     laMaskVerts[1].mv2Tex0UV  = lMaxVert.mv2Tex0UV;
 
