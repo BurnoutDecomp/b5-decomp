@@ -13,7 +13,8 @@ namespace CgsDev
 {
 namespace Log
 {
-    // Central sink: append one chunk of text to the game log file (and the debugger output).
+#if !defined(_XBOX)
+    // PC-only log-file facade.
     void WriteToLog(const char* lpcText);
     void WriteToLogEmergency(const char* lpcText);
 
@@ -32,6 +33,8 @@ namespace Log
 
     protected:
     };
+
+#endif
 
     extern StrStreamBase* gpDebugPrint;
 }

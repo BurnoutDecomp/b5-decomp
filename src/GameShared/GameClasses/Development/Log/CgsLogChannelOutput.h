@@ -42,16 +42,9 @@ struct LogChannelOutput : public StrStreamBase
     // CgsLogChannelOutput.h:84 (DWARF).
     void SetChannel(EUserChannel leChannel) { miChannel = static_cast<s32>(leChannel); }
 
-    // Concrete sink so the StrStreamBase pure-virtual is satisfied; forwards to Append.
-    StrStreamBase& operator<<(const char* lpcText)
-    {
-        Append(lpcText);
-        return *this;
-    }
-
 protected:
     // X360 0x8229FB20 (CgsLogChannelOutput.h:118 DWARF). The char* sink: write the text to the
-    // unified log, channel-prefixed when miChannel != -1.
+    // native CRT output, channel-prefixed when miChannel != -1.
     virtual void Append(const char* lpcText);
 
 private:

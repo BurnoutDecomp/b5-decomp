@@ -9,15 +9,8 @@ namespace Log
 {
 class LogOutput : public StrStreamBase
 {
-public:
-    using StrStreamBase::operator<<;
-    StrStreamBase& operator<<(const char* lpcText)
-    {
-        Append(lpcText);
-        return *this;
-    }
-
-    int Append(const char* lpcText);
+protected:
+    virtual void Append(const char* lpcText);
 };
 }
 }

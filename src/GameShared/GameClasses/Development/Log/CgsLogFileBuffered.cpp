@@ -98,13 +98,6 @@ namespace Log
         miBufferPosition = 0;
     }
 
-    // The typed C++ char sink maps to the original Append vtable entry.
-    StrStreamBase& LogFileBuffered::operator<<(const char* lpcText)
-    {
-        Append(lpcText);
-        return *this;
-    }
-
     // ARTIST82827110. Equality leaves a full buffer pending; only an overflow
     // flushes in this loop. The caller must supply an opened, nonzero buffer.
     void LogFileBuffered::Append(const char* lpcText)

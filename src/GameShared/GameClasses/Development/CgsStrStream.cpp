@@ -36,6 +36,12 @@ namespace CgsDev
     {
     }
 
+    StrStreamBase& StrStreamBase::operator<<(const char* lpcText)
+    {
+        Append(lpcText ? lpcText : "<NULLSTRING>");
+        return *this;
+    }
+
     // ARTIST821F0E50 / 821F0EC8: 0 decimal, 1/2 hex, other modes silent.
     StrStreamBase& StrStreamBase::operator<<(s32 liValue)
     {
@@ -111,7 +117,7 @@ namespace CgsDev
     // formatted with vsnprintf capped at 256) and forward it to the virtual char* sink. The X360
     // guards that the formatted length did not exceed the destination (CgsStringUtils copy guard:
     // `lNumBytesCopied < (int32_t)luBytes`); CGS_ASSERT carries that bound here. The sink call
-    // `(*(*this+4))(this, buffer)` is the virtual operator<<(const char*) override.
+    // `(*(*this+4))(this, buffer)` is virtual Append.
     void StrStreamBase::AppendFormat(const char* lpcFormat, ...)
     {
         char lacBuffer[256];
@@ -167,13 +173,6 @@ namespace CgsDev
         }
     }
 
-    // operator<<(const char*) forwards to the named sink (Append).
-    StrStreamBase& StrStream::operator<<(const char* lpcText)
-    {
-        Append(lpcText);
-        return *this;
-    }
-
     // @ 0x827DB6E8-loop init. Resets the inline buffer to the empty string (the X360 `stb 0,8(this)`).
     // The StrStreamBase() base ctor already set mePrintMode = E_PRINTMODE_DECIMAL.
     SimpleStrStream::SimpleStrStream()
@@ -183,19 +182,15 @@ namespace CgsDev
 
     // 0x8229F6C8 - inline-buffer sink. The X360 substitutes the literal "<NULLSTRING>" for a null
     // pointer (`if (!a2) a2 = "<NULLSTRING>";`) before appending, then forwards to the virtual char*
-    // sink; here that sink is this same override, which strncats into macCharBuffer without overflow.
+    // sink. The sink at 0x82815EC8 uses strncat with count 256 minus the used length.
     StrStreamBase& SimpleStrStream::operator<<(const char* lpcText)
     {
-        if (!lpcText)
-            lpcText = "<NULLSTRING>";
+        return StrStreamBase::operator<<(lpcText);
+    }
 
-        const size_t luUsed = std::strlen(macCharBuffer);
-        if ((size_t)KI_BUFFER_SIZE - 1 > luUsed)
-        {
-            const size_t luRoom = (size_t)KI_BUFFER_SIZE - 1 - luUsed;
-            std::strncat(macCharBuffer, lpcText, luRoom);
-        }
-        return *this;
+    void SimpleStrStream::Append(const char* lpcText)
+    {
+        std::strncat(macCharBuffer, lpcText, KI_BUFFER_SIZE - std::strlen(macCharBuffer));
     }
 
     StrStreamBase& SimpleStrStream::operator<<(s32 liValue)
