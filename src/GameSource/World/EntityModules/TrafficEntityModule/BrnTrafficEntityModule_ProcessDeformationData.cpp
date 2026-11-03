@@ -60,18 +60,11 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"                          // ShaderConstantTable
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                       // CGS_ASSERT
 #include "rw/math/vpu/vector4_operation.h"                                               // rw::math::vpu::Max
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // CgsDev::Log::gpDebugPrint ([tdef] witness, opt-in)
 
-#include <cstdlib>   // getenv / atoi ([tdef] witness)
-#include <cmath>     // sqrtf ([tdef] witness)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied by the
 // CgsShaderConstants TU). Same extern the traffic render TU carries.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
-
-// [DIAG] the renderer's present counter (BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp);
-// stamped on the [tdef] witness so it pairs with the frame file. NOT X360.
-namespace renderengine { extern u32 guPresentCount; }
 
 namespace BrnTraffic
 {
@@ -118,18 +111,18 @@ void SetGlassFractureConstants( f32 lfFractureStrength,
     const f32 lfInverseStrength =
         ( lfFractureStrength > 0.0f ) ? ( 1.0f / lfFractureStrength ) : 0.0f;
 
-    const Vector4 lv4Fracture = { ( 1.0f - lfFractureStrength ) * lfInverseStrength,
+    const Vector4 lv4Fracture( ( 1.0f - lfFractureStrength ) * lfInverseStrength,
                                   lfInverseStrength,
                                   0.0f,
-                                  0.0f };
+                                  0.0f );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 30, lv4Fracture );
 
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 31, lvUVOffsets );
 
-    const Vector4 lv4UVScale = { lvUVScale.x,
-                                 lvUVScale.x * lfEqualisationFactor,
-                                 lvUVScale.y,
-                                 lvUVScale.y * lfEqualisationFactor };
+    const Vector4 lv4UVScale( lvUVScale.mV.x,
+                                 lvUVScale.mV.x * lfEqualisationFactor,
+                                 lvUVScale.mV.y,
+                                 lvUVScale.mV.y * lfEqualisationFactor );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 32, lv4UVScale );
 }
 
@@ -215,13 +208,13 @@ void TrafficEntityModule::ProcessDeformationData(
                         // `lvx128 v11, runtime, 0x10 ; vmulfp128 v0, v11, splat(2.0)` -- the
                         // type's full extent (twice mBBoxHalfSize, element +0x10).
                         const Vector3 lBBoxHalfSize = lpVehicleRuntime->GetBBoxHalfSize();
-                        const f32 lfVehicleWidth  = lBBoxHalfSize.x * 2.0f;
-                        const f32 lfVehicleLength = lBBoxHalfSize.z * 2.0f;
+                        const f32 lfVehicleWidth  = lBBoxHalfSize.GetX().GetFloat() * 2.0f;
+                        const f32 lfVehicleLength = lBBoxHalfSize.GetZ().GetFloat() * 2.0f;
 
                         // Two `vcmpgefp.` on the splatted lanes; the first true one stores
                         // `stb 1, 0xFE6(info)` (0x8271E300 / 0x8271E32C / 0x8271E340).
-                        if ( lv4MaxOffset.x >= lfVehicleWidth  * KF_MAX_DEFORMATION_FOR_FATAL_WIDTH_PERC
-                          || lv4MaxOffset.z >= lfVehicleLength * KF_MAX_DEFORMATION_FOR_FATAL_LENGTH_PERC )
+                        if ( lv4MaxOffset.GetX().GetFloat() >= lfVehicleWidth  * KF_MAX_DEFORMATION_FOR_FATAL_WIDTH_PERC
+                          || lv4MaxOffset.GetZ().GetFloat() >= lfVehicleLength * KF_MAX_DEFORMATION_FOR_FATAL_LENGTH_PERC )
                         {
                             lpPhysInfo->mbIsFatallyCrashing = true;
                         }

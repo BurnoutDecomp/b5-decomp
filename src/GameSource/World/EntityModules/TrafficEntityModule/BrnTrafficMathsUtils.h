@@ -40,7 +40,7 @@ namespace BrnTraffic
     {
         // 0x82714768 vsubfp / vspltw(1) / vmulfp / vrlimi(mask 4 == lane y).
         Vector3 lDiff = lPoint - lConeOrigin;
-        lDiff.y = lDiff.y * lfRecipYScale.x;
+        lDiff.SetY(lDiff.GetY().GetFloat() * lfRecipYScale.GetFloat());
 
         // 0x827147AC..0x827147D8 -- behind the apex, or past the cone's length.
         const f32 lfAlong = rw::math::vpu::Dot(lConeDirection, lDiff);
@@ -48,24 +48,17 @@ namespace BrnTraffic
         {
             return false;
         }
-        if (lfAlong > lfLength.x)
+        if (lfAlong > lfLength.GetFloat())
         {
             return false;
         }
 
         // 0x827147DC..0x82714838 -- vrsqrtefp + two Newton steps, then dot with the axis.
-        // FLAG (host guard, no console equivalent): the console runs the raw rsqrt and returns
-        // TRUE for a point coincident with the cone origin. False kept here instead.
         const f32 lfLenSq = rw::math::vpu::Dot(lDiff, lDiff);
-        if (lfLenSq <= 0.0f)
-        {
-            return false;
-        }
-
         const Vector3 lUnit = lDiff * (1.0f / std::sqrt(lfLenSq));
         const f32     lfCos = rw::math::vpu::Dot(lUnit, lConeDirection);
 
-        return !(lfCosAngle.x > lfCos);
+        return !(lfCosAngle.GetFloat() > lfCos);
     }
 
     // DWARF BrnTrafficMathsUtils.h:191. DECLARED-ONLY, same reason.

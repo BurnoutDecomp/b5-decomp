@@ -10,23 +10,23 @@
 //   OR (a,b) = max(a,b)   (vmaxfp)
 //   NOT(a)   = 1 - a      (vsubfp of the broadcast 1.0 produced by vspltisw/vcfsx)
 
-#include "BrnCommonTypes.h"                  // VecFloat (== rw::math::vpu::Vector4)
+#include "BrnCommonTypes.h"                  // VecFloat
 #include "rw/math/vpu/vector4_operation.h"   // Min / Max / operator- / GetVector4_One
 
 namespace BrnTraffic
 {
     inline VecFloat FuzzyAND(VecFloat lLhs, VecFloat lRhs)
     {
-        return rw::math::vpu::Min(lLhs, lRhs);
+        return VecFloat(__vminfp(lLhs.GetVector(), lRhs.GetVector()));
     }
 
     inline VecFloat FuzzyOR(VecFloat lLhs, VecFloat lRhs)
     {
-        return rw::math::vpu::Max(lLhs, lRhs);
+        return VecFloat(__vmaxfp(lLhs.GetVector(), lRhs.GetVector()));
     }
 
     inline VecFloat FuzzyNOT(VecFloat lValue)
     {
-        return rw::math::vpu::GetVector4_One() - lValue;
+        return VecFloat(__vsubfp(VecFloat(1.0f).GetVector(), lValue.GetVector()));
     }
 }

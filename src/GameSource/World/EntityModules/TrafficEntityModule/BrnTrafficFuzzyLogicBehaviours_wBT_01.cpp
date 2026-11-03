@@ -183,7 +183,7 @@ namespace Fuzzy
         std::fclose(lpFile);
 
         Vector4 lNormalScore = mNormalScore_ExtremeSwerveStickiness_Z_W;
-        lNormalScore.y = mpTweakValues->GetExtremeSwerveStickiness();
+        lNormalScore.SetY(mpTweakValues->GetExtremeSwerveStickiness());
         mNormalScore_ExtremeSwerveStickiness_Z_W = lNormalScore;
     }
 }
