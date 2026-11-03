@@ -10,39 +10,118 @@
 //   Im2dRenderBuffer::PushBoostBarColours                  @0x824502A8
 //   Im2dRenderBuffer::BatchTransformTextureBlendRenderStatic @0x8246F7D0
 //
-// SetTransform @0x8244FF30 uses the base opcode-16 writer. The native interface
-// below adapts its NDC/unit-colour inputs to the existing PC command consumer's
-// logical/byte-colour representation; no extra command opcode is introduced.
-//
-// The X360 asm proves these operate on THIS buffer's layout: every one derives the
-// command-line base as (r3 + 4) + 0x20 == mpWriteBuffer, reads muCommandBufferSize
-// @+0x30, mbInRenderBlock @+0x34, mbFailGracefully @+0x41, muVertexBufferSize
-// @+0x2C -- the exact ImRenderBuffer<V> member set. They are appended with the SAME
-// overflow-checked bump-append the base writers use (SetTexture/SetProgram/
-// SetTransform above): if the record fits, stamp {muType,muSize} + payload and
-// advance muCommandBufferWritePos; otherwise SetBufferFullRewindToLastEndRender().
-//
-// Per this template's established convention (see CgsImRenderBufferTemplate.cpp
-// header): the X360 `dcbz128` command-line cache pre-warm is dropped (a pure
-// micro-opt with no effect on the produced stream), and the diagnostic-only
-// "Command called outside of a BeginRendering/EndRendering block" /
-// "ImRenderBuffer command buffer is full" / "run out of vertex buffer space"
-// asserts are dropped (they hold whenever the caller is correct and have no effect
-// on the produced command stream -- exactly as BeginRendering/EndRendering/SetState
-// already drop them). Every constant (opcode, record size, vertex count, payload
-// offset) is taken straight from the asm immediates; none is fabricated.
-//
-// Generic <Basic2dColouredTexturedVertex> bodies are instantiated per member in
-// CgsImRenderBufferTemplate.cpp. This TU separately instantiates only the four
-// Im2d-specific command writers it owns, also per member (the wave-30 lesson).
+// Dispatch @0x827F9BA0 consumes the complete native stream, including the
+// 32-byte clear record and its by-value colour at +16. Derived writers retain
+// their native block assertions, overflow rewind and cache prewarm.
 // =============================================================================
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelbuffer.h"
 #include <ppcintrinsics.h>
 
 namespace CgsGraphics
 {
+
+    // ARTIST827F9BA0: walk the frozen stream and issue each native command.
+    void Im2dRenderBuffer::Dispatch(Im2d* lpRenderer) const
+    {
+        if (!mpDispatchBuffer->muCommandBufferWritePos) return;
+        const u8* const lpBase = mpDispatchBuffer->mpu8CommandBuffer;
+        if (!lpBase) return;
+        u32 luPos = 0;
+        while (luPos < mpDispatchBuffer->muCommandBufferWritePos)
+        {
+            const ImCommand* lpCommand = reinterpret_cast<const ImCommand*>(lpBase + luPos);
+            switch (lpCommand->muType)
+            {
+            case 0: lpRenderer->BeginRendering(); break;
+            case 1: lpRenderer->EndRendering(); break;
+            case 2:
+            {
+                const ImCommandRenderPrimitives<Basic2dColouredTexturedVertex>* p = static_cast<const ImCommandRenderPrimitives<Basic2dColouredTexturedVertex>*>(lpCommand);
+                lpRenderer->Render(p->mePrimitiveType, p->mpVertices, p->muNumVertices); break;
+            }
+            case 3: lpRenderer->SetState(static_cast<const ImCommandSetStateBlend*>(lpCommand)->mpBlendState); break;
+            case 4: lpRenderer->SetState(static_cast<const ImCommandSetStateDepthStencil*>(lpCommand)->mpDepthStencilState); break;
+            case 5:
+            {
+                const ImCommandSetStateDepthStencilStencilRef* p = static_cast<const ImCommandSetStateDepthStencilStencilRef*>(lpCommand);
+                lpRenderer->SetState(p->mpDepthStencilState, p->muStencilRef); break;
+            }
+            case 6: lpRenderer->SetState(static_cast<const ImCommandSetStateRasterizer*>(lpCommand)->mpRasterizerState); break;
+            case 7: lpRenderer->SetState(static_cast<const ImCommandSetStateRenderTarget*>(lpCommand)->mpRenderTargetState); break;
+            case 8: lpRenderer->SetState(static_cast<const ImCommandSetStateSampler*>(lpCommand)->mpSamplerState); break;
+            case 9: lpRenderer->SetState(static_cast<const ImCommandSetStateTexture*>(lpCommand)->mpTextureState); break;
+            case 10: lpRenderer->SetTexture(static_cast<const ImCommandSetTexture*>(lpCommand)->mpTexture); break;
+            case 11:
+            {
+                const ImCommandSetViewport* p = static_cast<const ImCommandSetViewport*>(lpCommand);
+                D3DVIEWPORTF9 v;
+                v.X = static_cast<float>(p->mu32StartPosX); v.Y = static_cast<float>(p->mu32StartPosY);
+                v.Width = static_cast<float>(p->mu32Width); v.Height = static_cast<float>(p->mu32Height);
+                v.MinZ = 0.0f; v.MaxZ = 1.0f; v.Flags = 0;
+                D3DDevice_SetViewportF(gpD3DDevice, &v); break;
+            }
+            case 12:
+            {
+                const ImCommandSetScissor* p = static_cast<const ImCommandSetScissor*>(lpCommand);
+                RECT r; r.left = p->mu32StartPosX; r.top = p->mu32StartPosY;
+                r.right = p->mu32StartPosX + p->mu32Width; r.bottom = p->mu32StartPosY + p->mu32Height;
+                D3DDevice_SetScissorRect(gpD3DDevice, &r); break;
+            }
+            case 13:
+                renderengine::Device::Clear(static_cast<const ImCommandSetClear*>(lpCommand)->mClearParams,
+                    renderengine::RenderTargetState::TARGETID_COLOR_ALL); break;
+            case 14:
+            {
+                const ImCommandResolve* p = static_cast<const ImCommandResolve*>(lpCommand);
+                if (p->mbResolve) p->mpPixelBuffer->Xbox2ResolveTo(p->mpTexture, 0, 0, 0, 0, 0, 0, 1.0f, 0);
+                break;
+            }
+            case 15: lpRenderer->SetProgram(static_cast<const ImCommandSetShaderProgram*>(lpCommand)->mi8ShaderProgram); break;
+            case 16: lpRenderer->SetTransform(static_cast<const ImCommandSetTransform*>(lpCommand)->mTransform); break;
+            case 17:
+            {
+                const ImCommandPushMaskTextureState<Basic2dColouredTexturedVertex>* p = static_cast<const ImCommandPushMaskTextureState<Basic2dColouredTexturedVertex>*>(lpCommand);
+                lpRenderer->PushMask(const_cast<renderengine::TextureState*>(p->mpTextureState), 0, p->mpVertices); break;
+            }
+            case 18:
+            {
+                const ImCommandPushMaskTexture<Basic2dColouredTexturedVertex>* p = static_cast<const ImCommandPushMaskTexture<Basic2dColouredTexturedVertex>*>(lpCommand);
+                lpRenderer->PushMask(0, p->mpTexture, p->mpVertices); break;
+            }
+            case 19: lpRenderer->PopMask(); break;
+            case 20:
+            {
+                const ImCommandSetTransformBasic* p = static_cast<const ImCommandSetTransformBasic*>(lpCommand);
+                Im2dTransform t;
+                t.mOriginXYZ.Set(p->mOrigin.mV.x, p->mOrigin.mV.y, p->mfZ, 0.0f);
+                t.mRightUp.Set(p->mRight.mV.x, p->mRight.mV.y, p->mUp.mV.x, p->mUp.mV.y);
+                t.mColourShift.SetZero(); t.mColourScale.Set(1.0f, 1.0f, 1.0f, 1.0f);
+                lpRenderer->SetTransform(t); break;
+            }
+            case 21:
+            {
+                const ImCommandPushBoostBarColours* p = static_cast<const ImCommandPushBoostBarColours*>(lpCommand);
+                lpRenderer->PushBoostBarColours(rw::math::vpu::Vector3(p->maColours[0].mV), rw::math::vpu::Vector3(p->maColours[1].mV)); break;
+            }
+            case 22:
+            {
+                const ImCommandBatchTransformTextureBlendRender<Basic2dColouredTexturedVertex>* p = static_cast<const ImCommandBatchTransformTextureBlendRender<Basic2dColouredTexturedVertex>*>(lpCommand);
+                lpRenderer->SetTransform(p->mTransform);
+                if (p->mu8Flags & 1) lpRenderer->SetTexture(p->mpTexture);
+                if (p->mu8Flags & 2) lpRenderer->SetState(p->mpBlendState);
+                lpRenderer->Render(p->mePrimitiveType, p->mpVertices, p->muNumVertices); break;
+            }
+            default: break;
+            }
+            CGS_ASSERT(luPos < mpDispatchBuffer->muCommandBufferWritePos,
+                "luCurrentCommandPos >= 0 && luCurrentCommandPos < mpDispatchBuffer->muCommandBufferWritePos");
+            luPos += lpCommand->muSize;
+        }
+    }
 
     // ARTIST824501C8: the command buffer is the base subobject at this+4.
     void Im2dRenderBuffer::PopMask()
@@ -82,6 +161,36 @@ namespace CgsGraphics
         const renderengine::BlendState* lpBlendState, renderengine::PrimitiveType lePrimitiveType,
         const Basic2dColouredTexturedVertex* lpVertices, u32 luNumVertices, u8 lu8Flags)
     {
+        const char* lpFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h";
+        if (!mbInRenderBlock)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", lpFile, 1216);
+            CgsDev::Assert::EndAssert();
+        }
+        __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u), mpWriteBuffer->mpu8CommandBuffer);
+        const u32 pos = mpWriteBuffer->muCommandBufferWritePos;
+        const u32 next = pos + 112u;
+        if (next <= muCommandBufferSize)
+        {
+            ImCommandBatchTransformTextureBlendRender<Basic2dColouredTexturedVertex>* p =
+                reinterpret_cast<ImCommandBatchTransformTextureBlendRender<Basic2dColouredTexturedVertex>*>(mpWriteBuffer->mpu8CommandBuffer + pos);
+            p->muSize = 112u; p->muType = IM_CMD_BATCH_TRANSFORM_TEXTURE_BLEND_RENDER;
+            mpWriteBuffer->muCommandBufferWritePos = next;
+            p->mTransform = lrTransform; p->mpTexture = lpTexture; p->mpBlendState = lpBlendState;
+            p->mePrimitiveType = lePrimitiveType; p->mpVertices = lpVertices;
+            p->muNumVertices = luNumVertices; p->mu8Flags = lu8Flags;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+            if (!mbFailGracefully)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", lpFile, 1254);
+                CgsDev::Assert::EndAssert();
+            }
+        }
     }
 
     // ARTIST8246F638: append the command before reserving two vertices.
@@ -273,10 +382,8 @@ namespace CgsGraphics
 
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
         const bool lbCommandBufferFull = luPos + luRecord > muCommandBufferSize;
-        const rw::math::vpu::Vector4 lrPayload0 =
-            { lrColour0.x, lrColour0.y, lrColour0.z, lrColour0.w };
-        const rw::math::vpu::Vector4 lrPayload1 =
-            { lrColour1.x, lrColour1.y, lrColour1.z, lrColour1.w };
+        const rw::math::vpu::Vector4 lrPayload0(lrColour0.mV);
+        const rw::math::vpu::Vector4 lrPayload1(lrColour1.mV);
         Im2dColouredTexturedRenderBuffer::PushBoostBarColours(lrPayload0, lrPayload1);
 
         if (lbCommandBufferFull && !mbFailGracefully)

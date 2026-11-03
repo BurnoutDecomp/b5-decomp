@@ -731,13 +731,11 @@ void MainMapRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     }
     else if (mRenderMainMapEvent.meMapType == GuiEventRenderMainMap::E_MAPTYPE_LOADING_MAP)
     {
-        // The console pushes an opaque-black clear first (the guarded function-local static
-        // at qword_82FB3790 is {0,0,0,1}), then falls onto the BACKGROUND mask.
-        // FLAG: ImRenderBuffer<V>::SetClear (IM_CMD_SET_CLEAR, opcode 13) has a command
-        // record in CgsImRenderBufferTemplate.h but no committed setter in this slice, so
-        // the call is DOCUMENTED, not stubbed with a substitute -- the same policy
-        // CgsCustomRenderer.cpp's Render() states for the five missing Im2d state entry
-        // points. This arm is unreachable on the main map (meMapType == E_MAPTYPE_MAINMAP).
+        // ARTIST's function-local clear colour is opaque black.
+        renderengine::ClearColorParameters lClear;
+        lClear.m_color = __vspltisw(0);
+        lClear.m_color.w = 1.0f;
+        lpRenderBuffer->SetClear(lClear);
     }
     else if (mRenderMainMapEvent.meMapType != GuiEventRenderMainMap::E_MAPTYPE_MAINMAP)
     {

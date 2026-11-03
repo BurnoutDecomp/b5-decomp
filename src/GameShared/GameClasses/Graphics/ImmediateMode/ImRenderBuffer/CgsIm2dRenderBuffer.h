@@ -6,6 +6,21 @@ namespace CgsGraphics
 {
     struct Im2d;
 
+    // DecFIGS CgsIm2dRenderBuffer.h:61; ARTIST827F9D8C consumes all three
+    // 16-byte Vector2 registers and the depth at +64.
+    struct ImCommandSetTransformBasic : public ImCommand
+    {
+        rw::math::vpu::Vector2 mOrigin;
+        rw::math::vpu::Vector2 mRight;
+        rw::math::vpu::Vector2 mUp;
+        f32 mfZ;
+    };
+
+    CGS_STATIC_ASSERT((offsetof(ImCommandSetTransformBasic, mOrigin) == 16), "ARTIST basic origin");
+    CGS_STATIC_ASSERT((offsetof(ImCommandSetTransformBasic, mRight) == 32), "ARTIST basic right");
+    CGS_STATIC_ASSERT((offsetof(ImCommandSetTransformBasic, mUp) == 48), "ARTIST basic up");
+    CGS_STATIC_ASSERT((offsetof(ImCommandSetTransformBasic, mfZ) == 64), "ARTIST basic depth");
+
     // ARTIST 0x827F9BA0 / DecFIGS CgsIm2dRenderBuffer.h:102: a polymorphic
     // ImRenderBuffer<Basic2dColouredTexturedVertex>, separate from Im2d.
     struct Im2dRenderBuffer : public Im2dColouredTexturedRenderBuffer

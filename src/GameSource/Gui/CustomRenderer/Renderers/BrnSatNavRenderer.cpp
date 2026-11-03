@@ -1051,12 +1051,13 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 
     // Gate: both the map and the mask texture must have arrived in the render payload
     // (X360 lwz +0x7C / +0x80). Without them the console clears its output surface
-    // (SetClear on the lazily-zeroed clear colour) inside an empty Begin/End bracket;
-    // the PC dispatch draws straight to the back buffer, so the bracket alone is the
-    // faithful no-op.
+    // (SetClear on the lazily-zeroed clear colour) inside a Begin/End bracket.
     if (mRenderSatNavEvent.mpMapTexture == 0 || mRenderSatNavEvent.mpMaskTexture == 0)
     {
         lrCmd.BeginRendering();
+        renderengine::ClearColorParameters lClear;
+        lClear.m_color = __vspltisw(0);
+        lrCmd.SetClear(lClear);
         lrCmd.EndRendering();
         return;
     }

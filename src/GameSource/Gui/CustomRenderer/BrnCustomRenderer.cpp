@@ -824,8 +824,10 @@ void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexture
     lB.mV.z = lrv4Rect.GetX().GetFloat(); lB.mV.w = lB.mV.z;
     lA = MapTransform::Transform(lA, MapTransform::GetNormalisedSpace(), gMaskSpace);
     lB = MapTransform::Transform(lB, MapTransform::GetNormalisedSpace(), gMaskSpace);
-    if (lA.mV.x > lB.mV.x) { const f32 t = lA.mV.x; lA.mV.x = lB.mV.x; lB.mV.x = t; }
-    if (lA.mV.y > lB.mV.y) { const f32 t = lA.mV.y; lA.mV.y = lB.mV.y; lB.mV.y = t; }
+    // 82450D78..E70 keeps corner A and chooses the second corner's X/Y
+    // independently. Ordered comparisons fall back to A on unordered inputs.
+    lB.mV.x = lB.mV.x > lA.mV.x ? lB.mV.x : lA.mV.x;
+    lB.mV.y = lA.mV.y > lB.mV.y ? lB.mV.y : lA.mV.y;
     CgsGraphics::Basic2dColouredTexturedVertex laCorners[2];
     laCorners[0].mv2Pos.x = lA.mV.x; laCorners[0].mv2Pos.y = lA.mV.y;
     laCorners[1].mv2Pos.x = lB.mV.x; laCorners[1].mv2Pos.y = lB.mV.y;
