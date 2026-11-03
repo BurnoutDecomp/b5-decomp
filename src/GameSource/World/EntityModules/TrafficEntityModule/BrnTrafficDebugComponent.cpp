@@ -48,13 +48,30 @@
 
 namespace {
 Vector3 TrafficVector3(f32 x, f32 y, f32 z, f32 w)
-{ const Vector3 v = {x, y, z, w}; return v; }
+{
+    const rw::math::vpu::VectorIntrinsic lVector = {x, y, z, w};
+    return Vector3(lVector);
+}
 f32 TrafficLane(const Vector4& v, u32 lane)
-{ switch (lane) { case 0: return v.x; case 1: return v.y; case 2: return v.z; default: return v.w; } }
+{
+    switch (lane)
+    {
+        case 0: return v.GetX().GetFloat();
+        case 1: return v.GetY().GetFloat();
+        case 2: return v.GetZ().GetFloat();
+        default: return v.GetW().GetFloat();
+    }
+}
 Vector3 TrafficPermute63(Vector3 v)
-{ return TrafficVector3(v.y, v.z, v.x, v.w); }
+{
+    return TrafficVector3(v.GetY().GetFloat(), v.GetZ().GetFloat(),
+                         v.GetX().GetFloat(), v.GetVector().w);
+}
 Vector3 TrafficRow(const Vector4& v)
-{ return TrafficVector3(v.x, v.y, v.z, v.w); }
+{
+    return TrafficVector3(v.GetX().GetFloat(), v.GetY().GetFloat(),
+                          v.GetZ().GetFloat(), v.GetW().GetFloat());
+}
 Vector3 TrafficVmxMadd(Vector3 a, f32 b, Vector3 c)
 {
     const __vector4 v = __vmaddfp(__lvx(&a, 0), XMVectorReplicate(b), __lvx(&c, 0));
@@ -93,13 +110,11 @@ namespace BrnTraffic
 
     namespace
     {
-        // VecFloat and Vector3 are separate portable lane types, but the original VMX
-        // MultAdd accepts the same 128-bit register for its multiplier. Copy every lane
-        // explicitly, then use the canonical four-lane fused operation; do not scalarize
-        // or split the multiply-add.
+        // VecFloat and Vector3 are separate native types over a 128-bit VMX register. Pass
+        // the scalar's complete register to the four-lane fused operation.
         inline Vector3 TrafficMultAdd(Vector3 lValue, VecFloat lScale, Vector3 lAddend)
         {
-            const Vector3 lVectorScale = {lScale.x, lScale.y, lScale.z, lScale.w};
+            const Vector3 lVectorScale(lScale.GetVector());
             return rw::math::vpu::MultAdd(lValue, lVectorScale, lAddend);
         }
 
@@ -663,8 +678,8 @@ namespace BrnTraffic
 
                 if (!ShouldObjectBeCulled(lStart, lpDisplay))
                 {
-                    lStart.y += KF_STOPLINE_DRAW_HEIGHT;
-                    lEnd.y   += KF_STOPLINE_DRAW_HEIGHT;
+                    lStart.SetY(lStart.GetY().GetFloat() + KF_STOPLINE_DRAW_HEIGHT);
+                    lEnd.SetY(lEnd.GetY().GetFloat() + KF_STOPLINE_DRAW_HEIGHT);
                     lpDisplay->DrawLine(lStart, lEnd, lColour);
                 }
             }
@@ -676,7 +691,7 @@ namespace BrnTraffic
     void DebugComponent::DrawOffsetArrow(Vector3 lFrom, Vector3 lTo, f32 lfOffset, rw::RGBA lColour,
                                          CgsDev::Debug3DImmediateRender* lpDisplay) const
     {
-        const Vector3 lUp        = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lUp(0.0f, 1.0f, 0.0f);
         const Vector3 lDirection = UnitVector(lTo - lFrom);
         const Vector3 lSide      = UnitVector(rw::math::vpu::Cross(lUp, lDirection));
         const Vector3 lOffset    = lSide * lfOffset;
@@ -741,7 +756,7 @@ void DebugComponent::DrawSections(CgsDev::Debug3DImmediateRender* lpDisplay) con
 void DebugComponent::DrawSectionsInHull(s32 liHull, CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     const Hull* lpHull = mpModule->GetHull(liHull);
-    const Vector3 lLift = {0.0f, 0.1f, 0.0f, 0.0f};
+    const Vector3 lLift(0.0f, 0.1f, 0.0f);
     const rw::RGBA lColour(255, 255, 0, 255); // 0xFF00FFFF
     for (u32 luSection = 0; luSection < lpHull->muNumSections; ++luSection)
     {
@@ -781,7 +796,7 @@ void DebugComponent::DrawSectionCurvesInHull(s32 liHull, CgsDev::Debug3DImmediat
     CGS_ASSERT(lpHull != 0, "lpHull");
     const rw::RGBA lCurveColour(0, 127, 255, 255); // 0xFFFF7F00
     const rw::RGBA lDirectionColour(80, 150, 255, 255); // 0xFFFF9650
-    const VecFloat lHalf = {0.5f, 0.5f, 0.5f, 0.5f};
+    const VecFloat lHalf(0.5f);
     for (u32 luSection = 0; luSection < lpHull->muNumSections; ++luSection)
     {
         const Section* lpSection = &lpHull->mpaSections[luSection];
@@ -792,14 +807,14 @@ void DebugComponent::DrawSectionCurvesInHull(s32 liHull, CgsDev::Debug3DImmediat
             const f32 lfNext = lfParam + 0.125f;
             if (lfNext >= static_cast<f32>(lpSection->GetNumSegments()))
                 break;
-            const VecFloat lParam = {lfParam, lfParam, lfParam, lfParam};
-            const VecFloat lNext = {lfNext, lfNext, lfNext, lfNext};
+            const VecFloat lParam(lfParam);
+            const VecFloat lNext(lfNext);
             Vector3 lA, lB, lDirection;
             const u32 luSegment = static_cast<u32>(lfParam);
             lpSection->CalcPositionAtParameter(lpHull->mpaRungs, lParam, luSegment, lA);
             lpSection->CalcPositionAtParameter(lpHull->mpaRungs, lNext, static_cast<u32>(lfNext), lB);
-            lA.y += 0.2f;
-            lB.y += 0.2f;
+            lA.SetY(lA.GetY().GetFloat() + 0.2f);
+            lB.SetY(lB.GetY().GetFloat() + 0.2f);
             lpDisplay->DrawLine(lA, lB, lCurveColour);
             lpSection->CalcDirectionAtParameter(lpHull->mpaRungs, lParam, luSegment, lDirection);
             lpDisplay->DrawLine(lA, TrafficMultAdd(lDirection, lHalf, lA), lDirectionColour);
@@ -822,8 +837,8 @@ void DebugComponent::DrawJunctions(CgsDev::Debug3DImmediateRender* lpDisplay) co
 void DebugComponent::DrawJunctionsInHull(s32 liHull, CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     const Hull* lpHull = mpModule->GetHull(liHull);
-    const Vector3 lMin = {-1.0f, -1.0f, -1.0f, 0.0f};
-    const Vector3 lMax = {1.0f, 1.0f, 1.0f, 0.0f};
+    const Vector3 lMin(-1.0f, -1.0f, -1.0f);
+    const Vector3 lMax(1.0f, 1.0f, 1.0f);
     const rw::RGBA lColour(80, 80, 150, 255); // 0xFF965050
     for (u32 luJunction = 0; luJunction < lpHull->muNumJunctions; ++luJunction)
     {
@@ -863,7 +878,7 @@ void DebugComponent::GetStopLinePosition(u16 luHull, u8 luSection, u8 luStopLine
     const u32 luRung = static_cast<u32>(lfParam);
     CGS_ASSERT(luRung + 1 < lpSection->muNumRungs, "( luSegment + 1 ) < lpSection->muNumRungs");
     const f32 lfFraction = lfParam - std::floor(lfParam);
-    const VecFloat lFraction = {lfFraction, lfFraction, lfFraction, lfFraction};
+    const VecFloat lFraction(lfFraction);
     const LaneRung& lrA = lpHull->mpaRungs[lpSection->muRungOffset + luRung];
     const LaneRung& lrB = lpHull->mpaRungs[lpSection->muRungOffset + luRung + 1];
     lrStart = TrafficMultAdd(lrB.maPoints[0] - lrA.maPoints[0], lFraction, lrA.maPoints[0]);
@@ -874,8 +889,8 @@ void DebugComponent::GetStopLinePosition(u16 luHull, u8 luSection, u8 luStopLine
 void DebugComponent::DrawStartLines(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const Vector3 lLift = {0.0f, 0.1f, 0.0f, 0.0f};
-    const VecFloat lHalf = {0.5f, 0.5f, 0.5f, 0.5f};
+    const Vector3 lLift(0.0f, 0.1f, 0.0f);
+    const VecFloat lHalf(0.5f);
     const rw::RGBA lColour(200, 30, 200, 255); // 0xFFC81EC8
     for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
     {
@@ -902,7 +917,7 @@ void DebugComponent::DrawStartLines(CgsDev::Debug3DImmediateRender* lpDisplay) c
 void DebugComponent::DrawNeighbours(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const VecFloat lHalf = {0.5f, 0.5f, 0.5f, 0.5f};
+    const VecFloat lHalf(0.5f);
     const rw::RGBA laColours[2] = {rw::RGBA(200, 0, 0, 255), rw::RGBA(0, 200, 0, 255)};
     for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
     {
@@ -914,7 +929,7 @@ void DebugComponent::DrawNeighbours(CgsDev::Debug3DImmediateRender* lpDisplay) c
                 continue;
             const Neighbour* lpNeighbour = lpHull->mpaNeighbourData + lpSection->muNeighbourOffset;
             f32 lfOffset = -1.5f;
-            Vector3 lLift = {0.0f, 0.2f, 0.0f, 0.0f};
+            Vector3 lLift(0.0f, 0.2f, 0.0f);
             for (u32 luSide = 0; luSide < 2; ++luSide)
             {
                 const u32 luCount = luSide == 0 ? lpSection->muLeftNeighbourCount : lpSection->muRightNeighbourCount;
@@ -931,14 +946,14 @@ void DebugComponent::DrawNeighbours(CgsDev::Debug3DImmediateRender* lpDisplay) c
                                                          lHalf, lrOurRung.maPoints[0]);
                     Vector3 lTo = TrafficMultAdd(lrTheirRung.maPoints[1] - lrTheirRung.maPoints[0],
                                                        lHalf, lrTheirRung.maPoints[0]);
-                    const VecFloat lOffset = {lfOffset, lfOffset, lfOffset, lfOffset};
-                    const VecFloat lOtherOffset = {-lfOffset, -lfOffset, -lfOffset, -lfOffset};
+                    const VecFloat lOffset(lfOffset);
+                    const VecFloat lOtherOffset(-lfOffset);
                     lFrom = TrafficMultAdd(lOurRight, lOffset, lFrom);
                     lTo = TrafficMultAdd(lTheirRight, lOtherOffset, lTo);
                     DrawArrow(lFrom + lLift, lTo + lLift, laColours[luSide], lpDisplay);
                 }
                 lfOffset = -lfOffset;
-                lLift.y += 0.05f;
+                lLift.SetY(lLift.GetY().GetFloat() + 0.05f);
             }
         }
     }
@@ -979,10 +994,10 @@ void DebugComponent::DrawKillZone(const KillZone* lpKillZone, u64 luKillZoneId,
     lColour.m_rgba = 0x320064FF;
     rw::RGBA lApproachColour;
     lApproachColour.m_rgba = 0x32001EFF;
-    const Vector3 lLift = {0, 3.5f, 0, 0};
-    const VecFloat lApproachLength = {18, 18, 18, 18};
+    const Vector3 lLift(0.0f, 3.5f, 0.0f);
+    const VecFloat lApproachLength(18.0f);
     CGS_ASSERT(lpKillZone != 0, "lpKillZone");
-    Vector3 lLabelSum = {0, 0, 0, 0};
+    Vector3 lLabelSum(0.0f, 0.0f, 0.0f);
     f32 lfLabelCount = 0;
     bool lbDrawn = false;
     for (u32 luRegion = lpKillZone->muOffset;
@@ -1011,8 +1026,8 @@ void DebugComponent::DrawKillZone(const KillZone* lpKillZone, u64 luKillZoneId,
         // with no zero-length selection. Preserve degenerate-input NaNs.
         const f32 lfLeftInv = 1.0f / std::sqrt(rw::math::vpu::Dot(lLeftDirection, lLeftDirection));
         const f32 lfRightInv = 1.0f / std::sqrt(rw::math::vpu::Dot(lRightDirection, lRightDirection));
-        const VecFloat lLeftInv = {lfLeftInv, lfLeftInv, lfLeftInv, lfLeftInv};
-        const VecFloat lRightInv = {lfRightInv, lfRightInv, lfRightInv, lfRightInv};
+        const VecFloat lLeftInv(lfLeftInv);
+        const VecFloat lRightInv(lfRightInv);
         const Vector3 lLeftBack = lrStart.maPoints[0] - (lLeftDirection * lLeftInv) * lApproachLength;
         const Vector3 lRightBack = lrStart.maPoints[1] - (lRightDirection * lRightInv) * lApproachLength;
         lpDisplay->DrawSolidQuad(lrStart.maPoints[0], lrStart.maPoints[0] + lLift,
@@ -1034,7 +1049,7 @@ void DebugComponent::DrawKillZone(const KillZone* lpKillZone, u64 luKillZoneId,
         char lacText[128];
         rw::core::stdc::ConvertI64ToA(static_cast<s64>(luKillZoneId), lacText, 10);
         const f32 lfInverse = 1.0f / lfLabelCount;
-        const VecFloat lInverse = {lfInverse, lfInverse, lfInverse, lfInverse};
+        const VecFloat lInverse(lfInverse);
         lpDisplay->DrawText(lLabelSum * lInverse, lacText, 16.0f);
     }
 }
@@ -1055,8 +1070,8 @@ void DebugComponent::DrawStuckDetection(CgsDev::Debug3DImmediateRender* lpDispla
     rw::RGBA lAbove;
     lAbove.m_rgba = 0xC80000FF;
     // ARTIST std r22(0) clears the two spare lanes of each Vector2.
-    static const Vector2 lFrontOffset = {-0.8f, 0.4f, 0, 0};
-    static const Vector2 lBackOffset = {0.8f, 0.4f, 0, 0};
+    static const Vector2 lFrontOffset(-0.8f, 0.4f);
+    static const Vector2 lBackOffset(0.8f, 0.4f);
     for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
     {
         const Vehicle& lrVehicle = mpModule->maVehicles[luVehicle];
@@ -1070,9 +1085,9 @@ void DebugComponent::DrawStuckDetection(CgsDev::Debug3DImmediateRender* lpDispla
         const Vector3 lPosition = lTransform.Pos();
         const Vector3 lBase = lPosition + TrafficVector3(0, 1, 0, 0);
         const Vector3 lHalf = lpType->GetBBoxHalfSize();
-        const Vector3 lMin = {-lHalf.x, -0.15f, -0.15f, 0};
-        const Vector3 lMax = {lHalf.x, 0.15f, 0.15f, 0};
-        const VecFloat lDistance = {lHalf.z, lHalf.z, lHalf.z, lHalf.z};
+        const Vector3 lMin(-lHalf.GetX().GetFloat(), -0.15f, -0.15f);
+        const Vector3 lMax(lHalf.GetX().GetFloat(), 0.15f, 0.15f);
+        const VecFloat lDistance(lHalf.GetZ().GetFloat());
         if ((lpInfo->muContactSideFlags & TrafficPhysicsInfo::E_CONTACT_SIDE_FRONT) != 0)
         {
             lTransform.Pos() = TrafficMultAdd(lTransform.At(), lDistance, lBase);
@@ -1102,14 +1117,14 @@ void DebugComponent::DrawFuzzyLogic(CgsDev::Debug3DImmediateRender* lpDisplay) c
     for (u32 luRecord = 0; luRecord < 40; ++luRecord)
     {
         const DEBUG_VehicleFuzzyLogic& lrRecord = mpModule->mpaDEBUGVehicleFuzzyLogic[luRecord];
-        Vector2 lOffset = {-0.9000000357627869f, 0.1f, 0, 0};
+        Vector2 lOffset(-0.9000000357627869f, 0.1f);
         for (u32 luOutput = 0; luOutput < 6; ++luOutput)
         {
             rw::RGBA lColour;
             lColour.m_rgba = laColours[luOutput];
             RenderVerticalMeter(lpDisplay, lrRecord.mRenderPosition, lOffset, 0.15f, 1.0f,
                                 lBase, lColour, 1.0f, lrRecord.mafParamOutputScores[luOutput]);
-            lOffset.x += 0.3f;
+            lOffset.mV.x += 0.3f;
         }
     }
 }
@@ -1127,31 +1142,32 @@ void DebugComponent::DrawAvoidance(CgsDev::Debug3DImmediateRender* lpDisplay) co
     lBoxColour.m_rgba = 0x6400FFFF;
     rw::RGBA lArrowColour;
     lArrowColour.m_rgba = 0xA000FFFF;
-    const Vector3 lMin = {-0.4f, -0.4f, -0.4f, 0};
-    const Vector3 lMax = {0.4f, 0.4f, 0.4f, 0};
-    const VecFloat lHalf = {0.5f, 0.5f, 0.5f, 0.5f};
+    const Vector3 lMin(-0.4f, -0.4f, -0.4f);
+    const Vector3 lMax(0.4f, 0.4f, 0.4f);
+    const VecFloat lHalf(0.5f);
     for (u32 luPacket = 0; luPacket < mpModule->mCachedCollidableList.GetLength(); ++luPacket)
     {
         const CollidableVehicleInfo4& lrPacket = mpModule->mCachedCollidableList.GetItem(luPacket);
         for (u32 luLane = 0; luLane < 4; ++luLane)
         {
             // Actual structure-of-arrays lanes, not byte offsets or duplicate packet structs.
-            Vector3 lPosition = {TrafficLane(lrPacket.mPosition_X, luLane), TrafficLane(lrPacket.mPosition_Y, luLane),
-                                 TrafficLane(lrPacket.mPosition_Z, luLane), 0};
-            const Vector3 lOffset = lPosition - TrafficVector3(mpModule->KF_MAX_FLOAT.x, mpModule->KF_MAX_FLOAT.y,
-                                                        mpModule->KF_MAX_FLOAT.z, 0);
-            if (!(std::fabs(lOffset.x) > 0.0000152587890625f
-                  || std::fabs(lOffset.y) > 0.0000152587890625f
-                  || std::fabs(lOffset.z) > 0.0000152587890625f))
+            Vector3 lPosition(TrafficLane(lrPacket.mPosition_X, luLane),
+                              TrafficLane(lrPacket.mPosition_Y, luLane),
+                              TrafficLane(lrPacket.mPosition_Z, luLane));
+            const f32 lfMaxFloat = mpModule->KF_MAX_FLOAT.GetFloat();
+            const Vector3 lOffset = lPosition - TrafficVector3(lfMaxFloat, lfMaxFloat, lfMaxFloat, 0.0f);
+            if (!(std::fabs(lOffset.GetX().GetFloat()) > 0.0000152587890625f
+                  || std::fabs(lOffset.GetY().GetFloat()) > 0.0000152587890625f
+                  || std::fabs(lOffset.GetZ().GetFloat()) > 0.0000152587890625f))
                 continue;
-            lPosition.y += 2.0f;
+            lPosition.SetY(lPosition.GetY().GetFloat() + 2.0f);
             Matrix44Affine lTransform;
             lTransform.SetIdentity();
             lTransform.Pos() = lPosition;
             lpDisplay->DrawSolidBox(lMin, lMax, lTransform, lBoxColour);
-            const Vector3 lVelocity = {TrafficLane(lrPacket.mLinearVelocity_X, luLane),
-                                       TrafficLane(lrPacket.mLinearVelocity_Y, luLane),
-                                       TrafficLane(lrPacket.mLinearVelocity_Z, luLane), 0};
+            const Vector3 lVelocity(TrafficLane(lrPacket.mLinearVelocity_X, luLane),
+                                     TrafficLane(lrPacket.mLinearVelocity_Y, luLane),
+                                     TrafficLane(lrPacket.mLinearVelocity_Z, luLane));
             lpDisplay->DrawArrow(lPosition, TrafficMultAdd(lVelocity, lHalf, lPosition), lArrowColour);
             ++luCachedCount;
         }
@@ -1170,7 +1186,7 @@ namespace BrnTraffic
 void DebugComponent::DrawParamBehaviours(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const Vector3 lHalf = {0.3f, 0.3f, 0.3f, 0};
+    const Vector3 lHalf(0.3f, 0.3f, 0.3f);
     const u32 laColours[7] = {0xFF00C8C8, 0xFF1E1E64, 0xFFC81EC8, 0xFFC86400,
                               0xFF0000C8, 0xFFC81E1E, 0xFF00C800};
     rw::RGBA lStopColour;
@@ -1198,8 +1214,7 @@ void DebugComponent::DrawParamBehaviours(CgsDev::Debug3DImmediateRender* lpDispl
         {
             const Vector3 lFrom = lPosition - TrafficVector3(0, 1, 0, 0);
             const Vector3 lDirection = mpModule->GetParamTransform(luParam)->GetDirection();
-            const VecFloat lDistance = {lrParam.mfStopDist, lrParam.mfStopDist,
-                                       lrParam.mfStopDist, lrParam.mfStopDist};
+            const VecFloat lDistance(lrParam.mfStopDist);
             lpDisplay->DrawLine(lFrom, TrafficMultAdd(lDirection, lDistance, lFrom), lStopColour);
         }
     }
@@ -1231,8 +1246,7 @@ void DebugComponent::DrawParamSlowData(CgsDev::Debug3DImmediateRender* lpDisplay
         {
             const Vector3 lFrom = lPosition - TrafficVector3(0, 1, 0, 0);
             const Vector3 lDirection = mpModule->GetParamTransform(luParam)->GetDirection();
-            const VecFloat lDistance = {lrParam.mfStopDist, lrParam.mfStopDist,
-                                       lrParam.mfStopDist, lrParam.mfStopDist};
+            const VecFloat lDistance(lrParam.mfStopDist);
             lpDisplay->DrawLine(lFrom, TrafficMultAdd(lDirection, lDistance, lFrom), lStopColour);
         }
     }
@@ -1277,10 +1291,10 @@ namespace BrnTraffic
 void DebugComponent::DrawParams(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const Vector3 lMin = {-0.3f, -0.3f, -0.3f, 0.0f};
-    const Vector3 lMax = {0.3f, 0.3f, 0.3f, 0.0f};
+    const Vector3 lMin(-0.3f, -0.3f, -0.3f);
+    const Vector3 lMax(0.3f, 0.3f, 0.3f);
     const rw::RGBA lColour(0, 255, 0, 255); // 0xFF00FF00
-    const VecFloat lTwo = {2.0f, 2.0f, 2.0f, 2.0f};
+    const VecFloat lTwo(2.0f);
     for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
     {
         if (!mpModule->GetParam(luParam)->IsAlive())
@@ -1290,7 +1304,7 @@ void DebugComponent::DrawParams(CgsDev::Debug3DImmediateRender* lpDisplay) const
         if (ShouldObjectBeCulled(lPosition, lpDisplay))
             continue;
         lpDisplay->DrawSolidBox(lPosition + lMin, lPosition + lMax, lColour);
-        lPosition.y += 0.1f;
+        lPosition.SetY(lPosition.GetY().GetFloat() + 0.1f);
         const Vector3 lDirection = mpModule->GetParamTransform(luParam)->GetDirection();
         DrawArrow(lPosition, TrafficMultAdd(lDirection, lTwo, lPosition), lColour, lpDisplay);
     }
@@ -1300,8 +1314,8 @@ void DebugComponent::DrawParams(CgsDev::Debug3DImmediateRender* lpDisplay) const
 void DebugComponent::DrawLerpedParams(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const Vector3 lMin = {-0.25f, -0.25f, -0.25f, 0.0f};
-    const Vector3 lMax = {0.25f, 0.25f, 0.25f, 0.0f};
+    const Vector3 lMin(-0.25f, -0.25f, -0.25f);
+    const Vector3 lMax(0.25f, 0.25f, 0.25f);
     const rw::RGBA lColour(70, 130, 180, 255); // 0xFFB48246
     for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
     {
@@ -1333,7 +1347,7 @@ void DebugComponent::DrawParamVehicleLinks(CgsDev::Debug3DImmediateRender* lpDis
 void DebugComponent::DrawParamParamLinks(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const Vector3 lLift = {0.0f, 1.0f, 0.0f, 0.0f};
+    const Vector3 lLift(0.0f, 1.0f, 0.0f);
     const rw::RGBA lNextColour(240, 0, 64, 255); // 0xFF4000F0
     const rw::RGBA lPrevColour(64, 0, 240, 255); // 0xFFF00040
     for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
@@ -1466,7 +1480,7 @@ rw::RGBA Lerp(const rw::RGBA& lrA, const rw::RGBA& lrB, f32 lfT)
 void DebugComponent::DrawVehicleSwervingDebugging(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const Vector3 lHalf = {0.3f, 0.3f, 0.3f, 0};
+    const Vector3 lHalf(0.3f, 0.3f, 0.3f);
     rw::RGBA lNoSwerve;
     lNoSwerve.m_rgba = 0xFFC0C0C0;
     rw::RGBA lBase;
@@ -1485,7 +1499,7 @@ void DebugComponent::DrawVehicleSwervingDebugging(CgsDev::Debug3DImmediateRender
         if (ShouldObjectBeCulled(mpModule->maVehicleTransforms[luVehicle].Pos(), lpDisplay))
             continue;
         const Vector3 lPosition = lrVehicle.mTargetPos;
-        const f32 lfAmount = lrVehicle.GetSwerveAmount().x;
+        const f32 lfAmount = lrVehicle.GetSwerveAmount().GetFloat();
         rw::RGBA lColour;
         if (!(lfAmount > 0.00000011920928955078125f) && lfAmount >= -0.00000011920928955078125f)
             lColour = lNoSwerve;
@@ -1507,9 +1521,9 @@ void DebugComponent::DrawVehicleSwervingDebugging(CgsDev::Debug3DImmediateRender
 void DebugComponent::DrawPhysicalVehicleState(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const Vector3 lMin = {-0.15f, -0.15f, -0.15f, 0};
-    const Vector3 lMax = {0.15f, 0.15f, 0.15f, 0};
-    const Vector3 lRow = {0, 0.15f * 2.5f, 0, 0};
+    const Vector3 lMin(-0.15f, -0.15f, -0.15f);
+    const Vector3 lMax(0.15f, 0.15f, 0.15f);
+    const Vector3 lRow(0.0f, 0.15f * 2.5f, 0.0f);
     for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
     {
         const Vehicle& lrVehicle = mpModule->maVehicles[luVehicle];
@@ -1555,7 +1569,7 @@ void DebugComponent::DrawPickedVehicle(CgsDev::Debug3DImmediateRender* lpDisplay
     const Matrix44Affine& lrCamera = mpModule->mCameraLastFrame.GetTransform();
     const Vector3 lDirection = lrCamera.At();
     const Vector3 lCameraPosition = lrCamera.Pos();
-    const VecFloat lRayLength = {500, 500, 500, 500};
+    const VecFloat lRayLength(500.0f);
     const Vector3 lRayEnd = TrafficMultAdd(lDirection, lRayLength, lCameraPosition);
     f32 lfNearestSquared = 9000000.0f;
     muCurrentVehicleToPick = 0xFFFFFFFF;
@@ -1573,14 +1587,15 @@ void DebugComponent::DrawPickedVehicle(CgsDev::Debug3DImmediateRender* lpDisplay
         if (!lrVehicle.IsAlive() || ShouldObjectBeCulled(lCentre, lpDisplay))
             continue;
         // The original sphere is centered on transform.Pos(), without the bbox offset.
-        const f32 lfRadius = mpModule->maVehicleTypeRuntime[lrVehicle.GetVehicleType()].GetBBoxHalfSize().z;
+        const f32 lfRadius = mpModule->maVehicleTypeRuntime[lrVehicle.GetVehicleType()]
+                                 .GetBBoxHalfSize().GetZ().GetFloat();
         const f32 lfRadiusSquared = lfRadius * lfRadius;
         const Vector3 lFromStart = lCentre - lCameraPosition;
         const Vector3 lFromEnd = lCentre - lRayEnd;
         const f32 lfStartSquared = rw::math::vpu::Dot(lFromStart, lFromStart);
         const f32 lfEndSquared = rw::math::vpu::Dot(lFromEnd, lFromEnd);
         const f32 lfAlong = rw::math::vpu::Dot(lDirection, lFromStart);
-        const VecFloat lAlong = {lfAlong, lfAlong, lfAlong, lfAlong};
+        const VecFloat lAlong(lfAlong);
         const Vector3 lPerpendicular = lFromStart - lDirection * lAlong;
         const f32 lfPerpendicularSquared = rw::math::vpu::Dot(lPerpendicular, lPerpendicular);
         // Literal comparison polarity preserves the VMX not-greater branches at NaN.
@@ -1615,7 +1630,7 @@ void DebugComponent::DrawPickedVehicle(CgsDev::Debug3DImmediateRender* lpDisplay
     }
     Matrix44Affine lGuide;
     lGuide.SetIdentity();
-    const VecFloat lGuideDistance = {10, 10, 10, 10};
+    const VecFloat lGuideDistance(10.0f);
     lGuide.Pos() = TrafficMultAdd(lDirection, lGuideDistance, lCameraPosition);
     lpDisplay->DrawBox(TrafficVector3(-0.08f, -0.08f, -0.08f, 0),
                        TrafficVector3(0.08f, 0.08f, 0.08f, 0), lGuide, lGuideColour);
@@ -1654,8 +1669,8 @@ void DebugComponent::DrawShowtime(CgsDev::Debug3DImmediateRender* lpDisplay) con
         if (lpVehicle->IsAlive())
             lpDisplay->DrawSolidSphere(lpVehicle->mTargetPos, 0.2f, lTargetColour);
     }
-    const Vector3 lMin = {-0.15f, -0.15f, -0.15f, 0};
-    const Vector3 lMax = {0.15f, 0.15f, 0.15f, 0};
+    const Vector3 lMin(-0.15f, -0.15f, -0.15f);
+    const Vector3 lMax(0.15f, 0.15f, 0.15f);
     for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
     {
         const Vehicle& lrVehicle = mpModule->maVehicles[luVehicle];
@@ -1685,8 +1700,8 @@ namespace BrnTraffic
 void DebugComponent::DrawSplitters(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
-    const VecFloat lHalf = {0.5f, 0.5f, 0.5f, 0.5f};
-    const Vector3 lLift = {0, 0.3f, 0.2f, 0};
+    const VecFloat lHalf(0.5f);
+    const Vector3 lLift(0.0f, 0.3f, 0.2f);
     rw::RGBA lCrossColour;
     lCrossColour.m_rgba = 0xFFFF0000; // 82F300D4
     const u32 laExitOrder[3] = {1, 0, 2};
@@ -1733,7 +1748,7 @@ void DebugComponent::DrawNearestVehicleId(CgsDev::Debug3DImmediateRender* lpDisp
     const Vector3 lCamera = lpDisplay->GetCameraPosition();
     f32 lfNearestSquared = 3.402823466e38f; // 8204F664 = FLT_MAX
     u32 luNearest = KU_INVALID_VEHICLE;
-    Vector3 lNearestPosition = {0, 0, 0, 0};
+    Vector3 lNearestPosition(0.0f, 0.0f, 0.0f);
     for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
     {
         const Vehicle* lpVehicle = mpModule->GetVehicle(luVehicle);
@@ -1839,7 +1854,7 @@ void DebugComponent::DrawRearArticPoints(CgsDev::Debug3DImmediateRender* lpDispl
         if (ShouldObjectBeCulled(lTransform.Pos(), lpDisplay))
             continue;
         const f32 lfPivot = mpModule->maVehicleTypeRuntime[lrVehicle.GetVehicleType()].GetCabPivotDistance();
-        const VecFloat lPivot = {lfPivot, lfPivot, lfPivot, lfPivot};
+        const VecFloat lPivot(lfPivot);
         lTransform.Pos() = TrafficMultAdd(lTransform.At(), lPivot, lTransform.Pos()) + TrafficVector3(0, 0.2f, 0, 0);
         lpDisplay->DrawAxis(lTransform);
     }
@@ -1856,7 +1871,7 @@ void DebugComponent::DrawFrontArticPoints(CgsDev::Debug3DImmediateRender* lpDisp
     if (ShouldObjectBeCulled(lTransform.Pos(), lpDisplay))
         return;
     const f32 lfPivot = mpModule->maVehicleTypeRuntime[lpVehicle->GetVehicleType()].GetTrailerPivotDistance();
-    const VecFloat lPivot = {lfPivot, lfPivot, lfPivot, lfPivot};
+    const VecFloat lPivot(lfPivot);
     lTransform.Pos() = TrafficMultAdd(lTransform.At(), lPivot, lTransform.Pos()) + TrafficVector3(0, 0.2f, 0, 0);
     lpDisplay->DrawAxis(lTransform);
 }
@@ -1865,8 +1880,8 @@ void DebugComponent::DrawFrontArticPoints(CgsDev::Debug3DImmediateRender* lpDisp
 void DebugComponent::DrawHorns(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(lpDisplay != 0, "lpDisplay");
-    const Vector3 lMin = {-0.5f, -0.5f, -0.5f, 0};
-    const Vector3 lMax = {0.5f, 0.5f, 0.5f, 0};
+    const Vector3 lMin(-0.5f, -0.5f, -0.5f);
+    const Vector3 lMax(0.5f, 0.5f, 0.5f);
     rw::RGBA lColour;
     lColour.m_rgba = 0xFF0000FF;
     for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
@@ -1887,13 +1902,17 @@ void DebugComponent::DrawAxle(const Axle* lpAxle, CgsDev::Debug3DImmediateRender
 {
     CGS_ASSERT(lpAxle != 0, "lpAxle");
     const Vector3 lPosition = lpAxle->mPosAndWheelRadius.GetVector3();
-    if (!(lPosition.x == lPosition.x && lPosition.y == lPosition.y && lPosition.z == lPosition.z))
+    if (!(lPosition.GetX().GetFloat() == lPosition.GetX().GetFloat()
+          && lPosition.GetY().GetFloat() == lPosition.GetY().GetFloat()
+          && lPosition.GetZ().GetFloat() == lPosition.GetZ().GetFloat()))
         return;
     rw::RGBA lSphereColour;
     lSphereColour.m_rgba = 0xFF323280;
     lpDisplay->DrawSolidSphere(lPosition, 0.1f, lSphereColour);
     const Vector3 lUp = lpAxle->mUpAndDebug.GetVector3();
-    if (!(lUp.x == lUp.x && lUp.y == lUp.y && lUp.z == lUp.z))
+    if (!(lUp.GetX().GetFloat() == lUp.GetX().GetFloat()
+          && lUp.GetY().GetFloat() == lUp.GetY().GetFloat()
+          && lUp.GetZ().GetFloat() == lUp.GetZ().GetFloat()))
         return;
     const f32 lfDebug = lpAxle->mUpAndDebug.GetPlus();
     rw::RGBA lColour;
@@ -1904,7 +1923,7 @@ void DebugComponent::DrawAxle(const Axle* lpAxle, CgsDev::Debug3DImmediateRender
         lColour.m_rgba = 0xFF00FF00;
     else
         lColour.m_rgba = 0xFF0000FF;
-    const VecFloat lScale = {2.5f, 2.5f, 2.5f, 2.5f};
+    const VecFloat lScale(2.5f);
     lpDisplay->DrawLine(lPosition, TrafficMultAdd(lUp, lScale, lPosition), lColour);
 }
 
@@ -1949,20 +1968,30 @@ void DebugComponent::DrawArrow(Vector3 lFrom, Vector3 lTo, rw::RGBA lColour,
     // Only the scalar magnitude is zero-selected. Direction normalization is unguarded.
     const f32 lfLength = lfSquaredLength == 0.0f ? 0.0f : lfSquaredLength * lfInverseLength;
 
-    const Vector3 lUp = {0, 1, 0, 0};
+    const Vector3 lUp(0.0f, 1.0f, 0.0f);
     const Vector3 lPermutedUp = TrafficPermute63(lUp);
     const Vector3 lPermutedDirection = TrafficPermute63(lDirection);
-    const Vector3 lMaskedDirection = {
-        lUp.x * lPermutedDirection.x, lUp.y * lPermutedDirection.y,
-        lUp.z * lPermutedDirection.z, lUp.w * lPermutedDirection.w};
+    const Vector3 lMaskedDirection = TrafficVector3(
+        lUp.GetX().GetFloat() * lPermutedDirection.GetX().GetFloat(),
+        lUp.GetY().GetFloat() * lPermutedDirection.GetY().GetFloat(),
+        lUp.GetZ().GetFloat() * lPermutedDirection.GetZ().GetFloat(),
+        lUp.GetVector().w * lPermutedDirection.GetVector().w);
     // 82750884 raw 141EF6F3 is vmr128 v0,v126. Preserve that copy; do not
     // insert a guessed multiply. Classic vnmsubfp at 827508A0 is B - A*C.
     const Vector3 lCopiedDirection = lDirection;
-    const Vector3 lDifference = {
-        Vmx::NegativeMultiplySubtract(lPermutedUp.x, lCopiedDirection.x, lMaskedDirection.x),
-        Vmx::NegativeMultiplySubtract(lPermutedUp.y, lCopiedDirection.y, lMaskedDirection.y),
-        Vmx::NegativeMultiplySubtract(lPermutedUp.z, lCopiedDirection.z, lMaskedDirection.z),
-        Vmx::NegativeMultiplySubtract(lPermutedUp.w, lCopiedDirection.w, lMaskedDirection.w)};
+    const Vector3 lDifference = TrafficVector3(
+        Vmx::NegativeMultiplySubtract(lPermutedUp.GetX().GetFloat(),
+                                      lCopiedDirection.GetX().GetFloat(),
+                                      lMaskedDirection.GetX().GetFloat()),
+        Vmx::NegativeMultiplySubtract(lPermutedUp.GetY().GetFloat(),
+                                      lCopiedDirection.GetY().GetFloat(),
+                                      lMaskedDirection.GetY().GetFloat()),
+        Vmx::NegativeMultiplySubtract(lPermutedUp.GetZ().GetFloat(),
+                                      lCopiedDirection.GetZ().GetFloat(),
+                                      lMaskedDirection.GetZ().GetFloat()),
+        Vmx::NegativeMultiplySubtract(lPermutedUp.GetVector().w,
+                                      lCopiedDirection.GetVector().w,
+                                      lMaskedDirection.GetVector().w));
     const Vector3 lSideUnnormalised = TrafficPermute63(lDifference);
     const f32 lfSideSquared = Vmx::Dot3(lSideUnnormalised, lSideUnnormalised);
     const f32 lfInverseSide = Vmx::RefinedReciprocalSqrt(lfSideSquared, 2);
@@ -1975,9 +2004,15 @@ void DebugComponent::DrawArrow(Vector3 lFrom, Vector3 lTo, rw::RGBA lColour,
     lpDisplay->DrawLine(lFrom, lTo, lColour);
     const Vector3 lBack = lTo - Vmx::Scale(lDirection, lfHead);
     lpDisplay->DrawLine(lTo, lBack - Vmx::Scale(lSide, lfHead), lColour);
-    const Vector3 lOtherHead = {
-        __vmaddfp(XMVectorReplicate(lSide.x), XMVectorReplicate(lfHead), XMVectorReplicate(lBack.x)).x, __vmaddfp(XMVectorReplicate(lSide.y), XMVectorReplicate(lfHead), XMVectorReplicate(lBack.y)).x,
-        __vmaddfp(XMVectorReplicate(lSide.z), XMVectorReplicate(lfHead), XMVectorReplicate(lBack.z)).x, __vmaddfp(XMVectorReplicate(lSide.w), XMVectorReplicate(lfHead), XMVectorReplicate(lBack.w)).x};
+    const Vector3 lOtherHead = TrafficVector3(
+        __vmaddfp(XMVectorReplicate(lSide.GetX().GetFloat()), XMVectorReplicate(lfHead),
+                  XMVectorReplicate(lBack.GetX().GetFloat())).x,
+        __vmaddfp(XMVectorReplicate(lSide.GetY().GetFloat()), XMVectorReplicate(lfHead),
+                  XMVectorReplicate(lBack.GetY().GetFloat())).x,
+        __vmaddfp(XMVectorReplicate(lSide.GetZ().GetFloat()), XMVectorReplicate(lfHead),
+                  XMVectorReplicate(lBack.GetZ().GetFloat())).x,
+        __vmaddfp(XMVectorReplicate(lSide.GetVector().w), XMVectorReplicate(lfHead),
+                  XMVectorReplicate(lBack.GetVector().w)).x);
     lpDisplay->DrawLine(lTo, lOtherHead, lColour);
 }
 
@@ -1996,23 +2031,23 @@ void DebugComponent::RenderVerticalMeter(CgsDev::Debug3DImmediateRender* lpDispl
 {
     CGS_ASSERT(lpDisplay != 0, "lpDisplay");
     const Matrix44 lViewProjection = lpDisplay->GetViewProjectionMatrix();
-    Vector3 lClip = TrafficVmxMadd(TrafficRow(lViewProjection.xAxis), lPosition.x,
+    Vector3 lClip = TrafficVmxMadd(TrafficRow(lViewProjection.xAxis), lPosition.GetX().GetFloat(),
                                  TrafficRow(lViewProjection.wAxis));
-    lClip = TrafficVmxMadd(TrafficRow(lViewProjection.yAxis), lPosition.y, lClip);
-    lClip = TrafficVmxMadd(TrafficRow(lViewProjection.zAxis), lPosition.z, lClip);
+    lClip = TrafficVmxMadd(TrafficRow(lViewProjection.yAxis), lPosition.GetY().GetFloat(), lClip);
+    lClip = TrafficVmxMadd(TrafficRow(lViewProjection.zAxis), lPosition.GetZ().GetFloat(), lClip);
     // Original is 0.001 > clip.z, with no W division and no unordered early-out.
-    if (0.0010000000474974513f > lClip.z)
+    if (0.0010000000474974513f > lClip.GetZ().GetFloat())
         return;
 
-    VecFloat lDeterminant;
+    Vector4 lDeterminant;
     const Matrix44 lInverse = rw::math::vpu::Inverse(lViewProjection, lDeterminant);
     const Vector3 lUp = TrafficRow(lInverse.yAxis);
     const Vector2 lScreen = lpDisplay->GetVirtualScreenSize();
-    const f32 lfInverseWidth = rw::math::vpu::SLerpDetail::RefinedReciprocal(lScreen.x, 2);
-    const f32 lfAspect = lfInverseWidth * lScreen.y;
+    const f32 lfInverseWidth = rw::math::vpu::SLerpDetail::RefinedReciprocal(lScreen.mV.x, 2);
+    const f32 lfAspect = lfInverseWidth * lScreen.mV.y;
     const Vector3 lHorizontal = rw::math::vpu::SLerpDetail::Scale(TrafficRow(lInverse.xAxis), lfAspect);
-    lPosition = TrafficVmxMadd(lHorizontal, lOffset.x, lPosition);
-    lPosition = TrafficVmxMadd(lUp, lOffset.y, lPosition);
+    lPosition = TrafficVmxMadd(lHorizontal, lOffset.mV.x, lPosition);
+    lPosition = TrafficVmxMadd(lUp, lOffset.mV.y, lPosition);
     const Vector3 lHalfWidth = rw::math::vpu::SLerpDetail::Scale(lHorizontal, lfHalfWidth);
     const Vector3 lTop = TrafficVmxMadd(lUp, lfHeight, lPosition);
     const Vector3 lMiddle = TrafficVmxMadd(lUp, lfHeight * 0.5f, lPosition);
@@ -2064,7 +2099,7 @@ void DebugComponent::RenderPerfmon(CgsDev::Debug2DImmediateRender* lpDisplay,
 // Hex-Rays loses the vector result and prints the misleading expression 0.5+50.
 void DebugComponent::RenderPerformanceTable(CgsDev::Debug2DImmediateRender* lpDisplay)
 {
-    const f32 lfX = lpDisplay->GetVirtualScreenSize().x * 0.5f + 50.0f;
+    const f32 lfX = lpDisplay->GetVirtualScreenSize().mV.x * 0.5f + 50.0f;
     const CgsDev::RGBA lColour = 0xFFFFFFFFu;
     MaybeDrawText(lpDisplay, "Traffic [special]", lfX, 76.0f, 24.0f, lColour, false);
     MaybeDrawText(lpDisplay, "Current", lfX + 200.0f, 84.0f, 16.0f, lColour, false);
@@ -2091,40 +2126,39 @@ void DebugComponent::DrawActiveHulls(CgsDev::Debug2DImmediateRender* lpDisplay) 
     const u32 luRows = lpPvs->muNumCells / luColumns;
     const f32 lfStepX = 170.0f / static_cast<f32>(luColumns);
     const f32 lfStepY = 170.0f / static_cast<f32>(luRows);
-    const Vector2 lSize = {lfStepX, lfStepY, 0.0f, 0.0f};
+    const Vector2 lSize(lfStepX, lfStepY);
 
     for (u32 luActive = 0; luActive < mpModule->mActiveHulls.GetLength(); ++luActive)
     {
         const u16 luHull = mpModule->mActiveHulls.GetItem(luActive);
         const u32 luHullColumns = mpModule->mpData->mpPvs->muNumCells_X;
-        const Vector2 lPosition = {
+        const Vector2 lPosition(
             (static_cast<f32>(luHull % luHullColumns) * lfStepX + 80.0f),
-            (static_cast<f32>(luHull / luHullColumns) * lfStepY + 80.0f),
-            0.0f, 0.0f};
+            (static_cast<f32>(luHull / luHullColumns) * lfStepY + 80.0f));
         // Vector DrawBox takes position+size; scalar DrawBox takes min/max.
         lpDisplay->DrawBox(lPosition, lSize, 0x88FFFF00u);
     }
 
-    Vector2 lStart = {80.0f, 80.0f, 0.0f, 0.0f};
-    Vector2 lEnd = {80.0f, 250.0f, 0.0f, 0.0f};
+    Vector2 lStart(80.0f, 80.0f);
+    Vector2 lEnd(80.0f, 250.0f);
     u32 luLines = luColumns + 1;
     do
     {
         lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
         --luLines;
-        lStart.x += lfStepX;
-        lEnd.x += lfStepX;
+        lStart.mV.x += lfStepX;
+        lEnd.mV.x += lfStepX;
     } while (luLines);
 
-    lStart.x = 80.0f; lStart.y = 80.0f; lStart.z = 0.0f; lStart.w = 0.0f;
-    lEnd.x = 250.0f; lEnd.y = 80.0f; lEnd.z = 0.0f; lEnd.w = 0.0f;
+    lStart.mV.x = 80.0f; lStart.mV.y = 80.0f; lStart.mV.z = 0.0f; lStart.mV.w = 0.0f;
+    lEnd.mV.x = 250.0f; lEnd.mV.y = 80.0f; lEnd.mV.z = 0.0f; lEnd.mV.w = 0.0f;
     luLines = luRows + 1;
     do
     {
         lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
         --luLines;
-        lStart.y += lfStepY;
-        lEnd.y += lfStepY;
+        lStart.mV.y += lfStepY;
+        lEnd.mV.y += lfStepY;
     } while (luLines);
 
 }

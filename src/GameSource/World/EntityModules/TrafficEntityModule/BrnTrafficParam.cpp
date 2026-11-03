@@ -164,8 +164,8 @@ void Param::Initialise(u32 luHullIndex,
     mfTimeQueueing = 0.0f;
 
     // asm: vspltw lane 2 of the runtime's bbox offset and half-size, then vaddfp / vsubfp.
-    const f32 lfBBoxOffsetZ   = lpVehicleTypeRuntime->GetBBoxOffset().z;
-    const f32 lfBBoxHalfSizeZ = lpVehicleTypeRuntime->GetBBoxHalfSize().z;
+    const f32 lfBBoxOffsetZ   = lpVehicleTypeRuntime->GetBBoxOffset().GetZ().GetFloat();
+    const f32 lfBBoxHalfSizeZ = lpVehicleTypeRuntime->GetBBoxHalfSize().GetZ().GetFloat();
     mfFrontDist = lfBBoxOffsetZ + lfBBoxHalfSizeZ;
     mfBackDist  = lfBBoxOffsetZ - lfBBoxHalfSizeZ;
     if ((lpVehicleTypeData->mxVehicleFlags & 1u) != 0)
@@ -445,7 +445,7 @@ VecFloat ParamTransform::GetSpeed() const
 
     CGS_ASSERT(lfSpeed == lfSpeed, "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )");
 
-    { const VecFloat lResult = { lfSpeed, lfSpeed, lfSpeed, lfSpeed }; return lResult; }
+    { const VecFloat lResult(lfSpeed); return lResult; }
 }
 
 // 0x82712BA8 -- seed the transform from the spawn basis + speed. Stores (targets/order exact
@@ -459,7 +459,7 @@ void ParamTransform::Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecF
     CGS_ASSERT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )");
     CGS_ASSERT(rw::math::vpu::IsValid(lDir),   "RwMath::IsValid( lDir )");
     CGS_ASSERT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
-    CGS_ASSERT(lfSpeed.x == lfSpeed.x,         "RwMath::IsValid( lfSpeed )");
+    CGS_ASSERT(lfSpeed.GetFloat() == lfSpeed.GetFloat(), "RwMath::IsValid( lfSpeed )");
 
     // flt_82004014 = 0.1f (rodata 3D CC CC CD @0x82004014).
     const f32 KF_INIT_LERP_STEP = 0.1f;
@@ -470,10 +470,11 @@ void ParamTransform::Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecF
     mDirAndAccel.SetVector3(lDir);
     mDirAndAccel.SetPlus(0.0f);
 
-    const f32 lfSpeedScalar = lfSpeed.x;
+    const f32 lfSpeedScalar = lfSpeed.GetFloat();
     const f32 lfStep        = lfSpeedScalar * KF_INIT_LERP_STEP;
-    const Vector3 lLerpedPos = { lPos.x - lDir.x * lfStep,
-        lPos.y - lDir.y * lfStep, lPos.z - lDir.z * lfStep, 0.0f };
+    const Vector3 lLerpedPos(lPos.GetX().GetFloat() - lDir.GetX().GetFloat() * lfStep,
+                             lPos.GetY().GetFloat() - lDir.GetY().GetFloat() * lfStep,
+                             lPos.GetZ().GetFloat() - lDir.GetZ().GetFloat() * lfStep);
     mLerpedPosAndSpeed.SetVector3(lLerpedPos);
     mLerpedPosAndSpeed.SetPlus(lfSpeedScalar);
 }
@@ -490,7 +491,7 @@ void ParamTransform::Construct()
 
     mRight = rw::math::vpu::GetVector3_XAxis();
 
-    const Vector3 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lZero(0.0f, 0.0f, 0.0f);
     mLerpedPosAndSpeed.SetVector3(lZero);
     mLerpedPosAndSpeed.SetPlus(0.0f);
 }
@@ -533,9 +534,9 @@ void ParamTransform::UpdateLerpedPosition(VecFloat lfSimTimeStep)
                "RwMath::IsValid( mDirAndAccel.GetVector3() )");
     CGS_ASSERT(mDirAndAccel.GetPlus() == mDirAndAccel.GetPlus(),
                "RwMath::IsValid( mDirAndAccel.GetPlus() )");
-    CGS_ASSERT(lfSimTimeStep.x == lfSimTimeStep.x, "RwMath::IsValid( lfSimTimeStep )");
+    CGS_ASSERT(lfSimTimeStep.GetFloat() == lfSimTimeStep.GetFloat(), "RwMath::IsValid( lfSimTimeStep )");
 
-    const f32 lfStep     = lfSimTimeStep.x;
+    const f32 lfStep     = lfSimTimeStep.GetFloat();
     const f32 lfAccelled = mLerpedPosAndSpeed.GetPlus() + mDirAndAccel.GetPlus() * lfStep;
     const f32 lfSpeed    = (lfAccelled > 0.0f) ? lfAccelled : 0.0f;   // asm: vmaxfp vs zero
 
@@ -553,17 +554,19 @@ void ParamTransform::Update(Vector3 lPos, Vector3 lDir, Vector3 lRight,
     CGS_ASSERT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )");
     CGS_ASSERT(rw::math::vpu::IsValid(lDir),   "RwMath::IsValid( lDir )");
     CGS_ASSERT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
-    CGS_ASSERT(lfSpeed.x == lfSpeed.x,               "RwMath::IsValid( lfSpeed )");
-    CGS_ASSERT(lfAcceleration.x == lfAcceleration.x, "RwMath::IsValid( lfAcceleration )");
+    CGS_ASSERT(lfSpeed.GetFloat() == lfSpeed.GetFloat(),
+               "RwMath::IsValid( lfSpeed )");
+    CGS_ASSERT(lfAcceleration.GetFloat() == lfAcceleration.GetFloat(),
+               "RwMath::IsValid( lfAcceleration )");
     CGS_ASSERT(rw::math::vpu::IsValid(mPos), "RwMath::IsValid( mPos )");
 
     mLerpedPosAndSpeed.SetVector3(mPos);
-    mLerpedPosAndSpeed.SetPlus(lfSpeed.x);
+    mLerpedPosAndSpeed.SetPlus(lfSpeed.GetFloat());
 
     mPos = lPos;
 
     mDirAndAccel.SetVector3(lDir);
-    mDirAndAccel.SetPlus(lfAcceleration.x);
+    mDirAndAccel.SetPlus(lfAcceleration.GetFloat());
 
     mRight = lRight;
 }

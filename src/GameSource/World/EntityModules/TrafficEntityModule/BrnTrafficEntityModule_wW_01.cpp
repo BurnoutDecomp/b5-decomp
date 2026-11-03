@@ -23,11 +23,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include "rw/math/vpu/vector3_operation.h"   // Dot, Magnitude, operator-/*, operator!=
-#include "rw/math/vpu/vector4_operation.h"   // Splat
 
 #include <cfloat>    // FLT_MAX
 #include <cmath>     // std::sqrt, fabsf
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
@@ -108,14 +106,14 @@ void TrafficEntityModule::CalcRaceCarOnStartGridFuzzyScores(u32 luParam,
 
     const ParamTransform* const lpParamTransform = GetParamTransform(luParam);
 
-    const Vector3 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lZero(0.0f, 0.0f, 0.0f);
 
     f32     lfNearestDistance        = FLT_MAX;
     Vector3 lNearestStartingPosition = lZero;
 
-    const VecFloat lfConeCosAngle = rw::math::vpu::Splat(KF_START_GRID_CONE_COS_ANGLE);
-    const VecFloat lfConeLength   = rw::math::vpu::Splat(KF_START_GRID_CONE_LENGTH);
-    const VecFloat lfConeRecipY   = rw::math::vpu::Splat(KF_START_GRID_CONE_RECIP_Y);
+    const VecFloat lfConeCosAngle(KF_START_GRID_CONE_COS_ANGLE);
+    const VecFloat lfConeLength(KF_START_GRID_CONE_LENGTH);
+    const VecFloat lfConeRecipY(KF_START_GRID_CONE_RECIP_Y);
 
     for (u8 luiIndex = 0; luiIndex < muNumberOfParticipantsInCurrentEvent; ++luiIndex)
     {
@@ -142,20 +140,19 @@ void TrafficEntityModule::CalcRaceCarOnStartGridFuzzyScores(u32 luParam,
     {
         const Vector3 lDiff = lNearestStartingPosition - lpParamTransform->GetLerpedPos();
 
-        lfRCDistance = rw::math::vpu::Splat(rw::math::vpu::Dot(lDiff, lpParamTransform->GetDirection()));
-        lfRCHeight   = rw::math::vpu::Splat(rw::math::vpu::Dot(lDiff, lpParamTransform->CalcUp()));
-        lfRCLanePos  = rw::math::vpu::Splat(0.0f);
+        lfRCDistance = VecFloat(rw::math::vpu::Dot(lDiff, lpParamTransform->GetDirection()));
+        lfRCHeight   = VecFloat(rw::math::vpu::Dot(lDiff, lpParamTransform->CalcUp()));
+        lfRCLanePos  = VecFloat(0.0f);
 
         // The grid slot does not move, so the closing velocity is the param's own. The console
-        // normalises lDiff with a refined reciprocal square root and no zero guard, and so does this.
-        // On this host lDiff is never zero: the tree's IsPointWithinSquishedCone rejects a slot at the
-        // cone's origin (a host guard of its own; the console accepts it and gets a NaN here).
+        // normalises lDiff with a refined reciprocal square root and no zero guard. A coincident
+        // slot therefore retains the console's degenerate-input behavior.
         const Vector3 lParamLinearVel = lpParamTransform->GetDirection() * lpParamTransform->GetSpeed();
         const Vector3 lClosingVel     = lParamLinearVel;
         const Vector3 lRCDirection    = lDiff * (1.0f / std::sqrt(rw::math::vpu::Dot(lDiff, lDiff)));
 
-        lfRCClosingSpeed   = rw::math::vpu::Splat(rw::math::vpu::Dot(lRCDirection, lClosingVel));
-        lfRCSpeedInOurLane = rw::math::vpu::Splat(0.0f);
+        lfRCClosingSpeed   = VecFloat(rw::math::vpu::Dot(lRCDirection, lClosingVel));
+        lfRCSpeedInOurLane = VecFloat(0.0f);
     }
 }
 

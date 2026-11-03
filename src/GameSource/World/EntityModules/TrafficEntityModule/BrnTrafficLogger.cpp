@@ -162,10 +162,7 @@ namespace BrnTraffic
             // The deterministic position goes in as (x, y, z, 0); the direction/acceleration
             // quad is copied whole.
             const ParamTransform& lrTransform = lpModule->maParamTransforms[luParam];
-            lpData->mPos.x       = lrTransform.mPos.x;
-            lpData->mPos.y       = lrTransform.mPos.y;
-            lpData->mPos.z       = lrTransform.mPos.z;
-            lpData->mPos.w       = 0.0f;
+            lpData->mPos = Vector4(lrTransform.mPos, 0.0f);
             lpData->mDirAndAccel = lrTransform.mDirAndAccel;
         }
 
