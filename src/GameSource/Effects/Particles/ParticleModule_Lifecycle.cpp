@@ -42,10 +42,10 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h" // AllocatorList::Get*Allocator
 #include "GameSource/Resource/BrnResourceAllocator.h"           // Allocators::GetGlobalGraphicsAllocator
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"        // CgsMemory::HeapMalloc::Malloc
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the NOT-RECONSTRUCTED announcements
-#include "GameShared/GameClasses/System/Resource/CgsResourceId.h"       // CgsResource::ID::HashString
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // AcquireResourceResponse
+#include "GameShared/GameClasses/System/Resource/CgsResourceId.h"       // CgsResource::ID::HashString
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"     // BrnResource::GameDataIO::LoadGameDataEvent (stage 18's reply)
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"  // BrnParticle::TextureNameMap
 #include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
@@ -64,16 +64,6 @@ namespace BrnParticle
 {
 namespace
 {
-    // One line, once, for an arm this build does not carry. Never an assert.
-    void LogNotReconstructed(bool& lrbLogged, const char* lpcWhat)
-    {
-        if (lrbLogged)
-            return;
-        lrbLogged = true;
-        char lacMsg[256];
-        _snprintf(lacMsg, sizeof(lacMsg), "[particles] NOT RECONSTRUCTED: %s\n", lpcWhat);
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
 
     // ---- Prepare's literal operands (all from the asm, none tuned) --------------------
     const s32 KI_PARTICLE_HEAP_BANK        = 0x29;    // `li r4, 0x29` -> GetHeapAllocator
@@ -114,70 +104,26 @@ namespace
     const f32 KF_LION_SECONDS_PER_TICK      = 0.00033333332976326346f;  // flt_82CDB018
     const f32 KF_LION_EFFECT_NEVER_EXPIRES  = 1.0e10f;                  // flt_82011E3C
 
-    // The two console asserts StartLionEffect fires on a failed start. Both build their
-    // message with CgsDev::StrStream (`"...: " << name << "\r\n"`); reproduced as a single
-    // log line each so the name -- the thing that actually identifies the failure -- is
-    // present. Once per distinct reason, never per frame: a boost effect that cannot start
-    // is retried on every state change and would otherwise flood the log.
-    void LogEffectLookupMiss(u32 luNameHash, const char* lpcEffectName)
+    // ARTIST 0x82289F50: both failures are streamed into the shared assert buffer.
+    void LogEffectLookupMiss(u32, const char* name)
     {
-        static bool sbLogged = false;
-        if (sbLogged)
-            return;
-        sbLogged = true;
-        char lacMsg[512];
-        _snprintf(lacMsg, sizeof(lacMsg),
-                      "[particles] ParticleModule: Couldn't locate lion effect description "
-                      "%s (hash %08X) Does the Particles Bundle need rebuilding ?\n",
-                      lpcEffectName ? lpcEffectName : "<NULLSTRING>", luNameHash);
-        CgsDev::Log::WriteToLog(lacMsg);
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        stream << "ParticleModule: Couldn't locate lion effect description " << name
+               << "Does the Particles Bundle need rebuilding ?\r\n";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/ParticleModule.cpp", 1777);
+        CgsDev::Assert::EndAssert();
     }
 
-    void LogNoFreeSlot(const char* lpcEffectName)
+    void LogNoFreeSlot(const char* name)
     {
-        static bool sbLogged = false;
-        if (sbLogged)
-            return;
-        sbLogged = true;
-        char lacMsg[512];
-        _snprintf(lacMsg, sizeof(lacMsg),
-                      "[particles] ParticleModule: No free effect instances available to play "
-                      "effect: %s\n", lpcEffectName ? lpcEffectName : "<NULLSTRING>");
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
-
-    // ---- the [lionstart] witness ------------------------------------------------------
-    // The console has no such line; this is OURS, and it exists because "the effect
-    // started" is otherwise invisible on a build with no Lion simulation to watch. It
-    // prints the four numbers that discriminate a real resolve from a plausible one: the
-    // hash that matched, the definition and effect addresses BinLoad produced, how many
-    // descriptors the effect graph actually carries, and the duration
-    // cParticleDescriptor::GetDurationMax computed from them. A miss cannot fake any of
-    // those -- StartLionEffect returns before reaching here.
-    //
-    // BOUNDED: the first KU_START_WITNESS_LIMIT starts of the run and no more. Boost
-    // effects restart on every state change, so an unbounded line would be per-second
-    // noise, and a budget that runs out before the subject appears is one of this
-    // project's recorded ways to measure nothing -- so the limit is generous and the
-    // line says which start index it is.
-    const u32 KU_START_WITNESS_LIMIT = 24;
-    u32 guStartWitnessCount = 0;
-
-    void LogEffectStarted(const char* lpcEffectName, u32 luNameHash, u32 luHandle,
-                          const void* lpDefinition, const void* lpEffect,
-                          u32 luDescriptors, f32 lfDurationMax, f32 lfExpiry)
-    {
-        if (guStartWitnessCount >= KU_START_WITNESS_LIMIT)
-            return;
-        ++guStartWitnessCount;
-        char lacMsg[640];
-        _snprintf(lacMsg, sizeof(lacMsg),
-                      "[lionstart] #%u STARTED %s hash=%08X handle=%u def=%p effect=%p "
-                      "descriptors=%u durationMax=%.4f expiry=%.4f\n",
-                      guStartWitnessCount, lpcEffectName ? lpcEffectName : "<NULLSTRING>",
-                      luNameHash, luHandle, lpDefinition, lpEffect, luDescriptors,
-                      lfDurationMax, lfExpiry);
-        CgsDev::Log::WriteToLog(lacMsg);
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        stream << "ParticleModule: No free effect instances available to play effect: " << name << "\r\n";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/ParticleModule.cpp", 1821);
+        CgsDev::Assert::EndAssert();
     }
     const f32 KF_SLOWMO_LOWER               = 0.03333333507180214f;  // flt_8200DB9C (1/30)
     const f32 KF_SLOWMO_UPPER               = 0.2857142984867096f;   // flt_8200DBA0 (2/7)
@@ -302,14 +248,6 @@ void ParticleModule::Construct()
     // reproduced. The debris jobs themselves run in place inside BeginSimulateDebris.
     for (s32 liJob = 0; liJob < KI_NUM_DEBRIS_UPDATE_JOBS; ++liJob)
         std::memset(&maDebrisUpdateJobData[liJob], 0, sizeof(maDebrisUpdateJobData[liJob]));
-    {
-        static bool sbLogged = false;
-        LogNotReconstructed(sbLogged,
-            "ParticleModule::Construct's EA::Jobs::Job blocks -- the two render jobs "
-            "(ParticleRender_Sparks / ParticleRender_Particles) and the five DebrisUpdate_%d "
-            "Job objects (EA::Jobs::Job is an asm-sized placeholder; the render jobs never run "
-            "on this single-threaded host, the debris jobs run in place in BeginSimulateDebris)");
-    }
 
     miNumDebrisUpdateJobsToWaitOn = -1;   // +0x27780
 
@@ -321,12 +259,6 @@ void ParticleModule::Construct()
 
     // LionPerfMon::Construct(&dword_82FAB638, ...) -- the Lion perf-monitor set. Its class
     // is TU-local to LionPerfMon.cpp (no header), so it is not reachable from here.
-    {
-        static bool sbLogged = false;
-        LogNotReconstructed(sbLogged,
-            "ParticleModule::Construct's LionPerfMon::Construct (the class is TU-local to "
-            "LionPerfMon.cpp and has no header)");
-    }
 
     gRaceCpuMonitors.Construct("Race");
     gCrashCpuMonitors.Construct("Crash");
@@ -379,13 +311,6 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         mVertexBufferManagerSparks.Construct(lpVfxAllocator, KU_VB_SIZE_SPARKS, false);
         mVertexBufferManagerParticles.Construct(lpVfxAllocator, KU_VB_SIZE_PARTICLES, false);
 
-        // NativeParticleVertex::Construct(lpVfxAllocator) -- the Lion vertex declaration.
-        {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's BrnParticle::NativeParticleVertex::Construct "
-                "(the native Lion vertex declaration)");
-        }
 
         // --- the five contained immediate-mode renderers ---------------------------------
         // All five take the same argument: `off_82F2C814`, the process-wide "GlobalGraphics"
@@ -481,7 +406,6 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // allocator every contained renderer takes. SparkRenderer::Dispatch @0x8228BBC8 draws
         // through it.
         mImmediateModeRenderer.Construct(lpGraphicsAllocator);
-        ++gauSparkPrepareCount;   // [diag] how many times Prepare re-built the spark banks
         mSparkRenderer.Construct(mpHeapMalloc, &mImmediateModeRenderer);
         for (u32 luArray = 0; luArray < KU_NUM_SPARK_ARRAYS; ++luArray)
         {
@@ -516,24 +440,6 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         {
             maDebris[luArray].Construct(&mBucketManager,
                                         static_cast<Native::EDebrisArrayID>(luArray));
-        }
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                char lacMsg[192];
-                _snprintf(lacMsg, sizeof(lacMsg),
-                              "[p0-debris] %u debris arrays constructed; presets: "
-                              "coloured=%d shiny=%d dark=%d highdetail=%d glass=%d particles\n",
-                              KU_NUM_DEBRIS_ARRAYS,
-                              Native::_gaDebrisArrayParams[Native::eDebrisArray_Coloured].mnNumParticles,
-                              Native::_gaDebrisArrayParams[Native::eDebrisArray_Shiny].mnNumParticles,
-                              Native::_gaDebrisArrayParams[Native::eDebrisArray_Dark].mnNumParticles,
-                              Native::_gaDebrisArrayParams[Native::eDebrisArray_HighDetail].mnNumParticles,
-                              Native::_gaDebrisArrayParams[Native::eDebrisArray_Glass].mnNumParticles);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
         }
 
         // --- simple particles ---------------------------------------------------------------
@@ -816,11 +722,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             lTexture.mpSourceEntry    = lpReply->mpSourceEntry;
             maDebris[lpReply->miEventId].AcquireTexture(lTexture);
         }
-        // [DIAG] BRN_DEBRIS_DIAG=1 -- NOT IN THE X360 BINARY. What the five debris arrays hold once the mesh
-        // stages are through, one line each, once per run. DELETE-WHEN-STABLE.
-        {
-            static bool sbLogged = false;
-        }
         // fall through (into stage 11, 0x8229D1A8)
     }
     case E_LOADSTAGE_ACQUIRE_TEXTURES:
@@ -849,36 +750,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         const TextureNameMap* lpMap = TextureNameMapOrNull();
         const u32 luEntryCount = (lpMap != 0) ? lpMap->GetEntryCount() : 0u;
         const u32 luTrailNameHash = TextureNameMap::Entry::HashString(KAC_TRAIL_TEXTURE_NAME);
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                // * Print the blob RAW HEADER WORDS beside the struct-read count. A bare
-                // "entries=0" cannot tell a layout mismatch from an empty payload -- these can:
-                // if w1 (the +4 slot) is a sane count and w2 is junk, the reader was wrong;
-                // if w0/w1 are both 0, particles.bundle really did ship an empty map.
-                const u32* lpuWords = reinterpret_cast<const u32*>(lpMap);
-                char lacMsg[320];
-                _snprintf(lacMsg, sizeof(lacMsg),
-                    "[skid-ready] FX texture stage: map=%p entries=%u wanted hash=0x%08X "
-                    "(\"fxskid\") replies>=%d raw=[%08X %08X %08X %08X]\n",
-                    static_cast<const void*>(lpMap), luEntryCount, luTrailNameHash, miResourceCount,
-                    (lpuWords != 0) ? lpuWords[0] : 0u, (lpuWords != 0) ? lpuWords[1] : 0u,
-                    (lpuWords != 0) ? lpuWords[2] : 0u, (lpuWords != 0) ? lpuWords[3] : 0u);
-                CgsDev::Log::WriteToLog(lacMsg);
-                // and the first four entries by name, so a mismatch on "fxskid" is visible.
-                for (u32 luDump = 0; luDump < luEntryCount && luDump < 4u; ++luDump)
-                {
-                    const TextureNameMap::Entry& lrEntry = lpMap->GetEntries()[luDump];
-                    _snprintf(lacMsg, sizeof(lacMsg),
-                        "[skid-ready]   entry %u: hash=0x%08X name='%s'\n",
-                        luDump, lrEntry.muHashedLionTextureName,
-                        (lrEntry.mpGDBTextureName != 0) ? lrEntry.GDBTextureName() : "(null)");
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
-        }
 
         for (const AcquireResponse* lpReply = NextAcquireResponse(mReceiverQueue, 0);
              lpReply != 0;
@@ -914,17 +785,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             for (u32 luSparkArray = 0; luSparkArray < KU_NUM_SPARK_ARRAYS; ++luSparkArray)
             {
                 const char* const lpcSparkTextureName = maSparks[luSparkArray].GetTextureName();
-                // ⚠ FLAG -- ONE TERM THE CONSOLE DOES NOT HAVE. The X360 dereferences the
-                // name unconditionally, because SparkArray::Construct leaves it unwritten
-                // and EffectsModule::Prepare's UpdateParams copy has always run by the time
-                // stage 12 is reached. That ordering holds here too, but ParticleModule is
-                // pool-carved (no ctor runs over this region), so a build that reached this
-                // stage with UpdateParams not yet wired would hash a garbage pointer -- a
-                // valid-pointer/invalid-object fault, not a missing effect. The null test is
-                // the whole of the difference; delete it once nothing can reach stage 12
-                // before EffectsModule::Prepare's RESOURCES stage.
-                if (lpcSparkTextureName == 0)
-                    continue;
                 if (TextureNameMap::Entry::HashString(lpcSparkTextureName) == luEntryHash)
                 {
                     Native::SparkArray::AcquireTexture(
@@ -937,12 +797,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             {
                 mTrailSystem.SetTrailTexture(lTexture);   // module +139668
                 mTrailSystem.SetReady();                  // module +141320 = 1
-                char lacMsg[224];
-                _snprintf(lacMsg, sizeof(lacMsg),
-                    "[skid-ready] TrailSystem::mbIsReady RAISED: entry %u/%u hash=0x%08X == "
-                    "HashString(\"fxskid\") res=%p\n",
-                    luEntryIndex, luEntryCount, luEntryHash, lpReply->mpResourceMemory);
-                CgsDev::Log::WriteToLog(lacMsg);
             }
 
             // (d) the 13 native simple-particle arrays, 0x8229D468..0x8229D4AC:
@@ -1002,16 +856,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
     }
     case E_LOADSTAGE_DONE:
     {
-        static bool sbLogged = false;
-        if (!sbLogged)
-        {
-            sbLogged = true;
-            char lacMsg[160];
-            _snprintf(lacMsg, sizeof(lacMsg),
-                "[skid-ready] LoadFXBundle DONE -- TrailSystem::IsReady()=%d\n",
-                mTrailSystem.IsReady() ? 1 : 0);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
         meInitialLoadStage = E_LOADSTAGE_DONE;
         lbDone = true;
         break;
@@ -1209,23 +1053,6 @@ u32 ParticleModule::StartLionEffect(u32 luNameHash, const char* lpcEffectName, u
             static_cast<f32>(liLionTicks) * KF_LION_SECONDS_PER_TICK + lfDurationMax;
     }
 
-    // The [lionstart] witness (see LogEffectStarted). Not console behaviour -- ours,
-    // bounded, and the only way a build with no Lion simulation can show that an effect
-    // resolved at all. The descriptor count is walked here rather than stored because
-    // nothing else needs it.
-    {
-        u32 luDescriptors = 0;
-        if (lpEffect != 0)
-        {
-            for (const cParticleDescriptor* lpDes = lpEffect->GetDescriptors();
-                 lpDes != 0; lpDes = lpDes->GetNextDescriptor())
-            {
-                ++luDescriptors;
-            }
-        }
-        LogEffectStarted(lpcEffectName, luNameHash, lrSlot.muHandle, lpDefinition, lpEffect,
-                         luDescriptors, lfDurationMax, lrSlot.mfExpiryTime);
-    }
 
     return lrSlot.muHandle;
 }
