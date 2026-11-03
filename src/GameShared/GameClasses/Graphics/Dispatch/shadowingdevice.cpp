@@ -5,6 +5,7 @@
 #include "types.hpp"
 
 #include <cstring>                                                          // memcpy (serialised-slot reads)
+#include "rw/rwcore_structs.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // the quiet one-shot gates
@@ -17,6 +18,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexprogramstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/meshhelper.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 
@@ -46,9 +48,15 @@ namespace
 
 namespace shadow
 {
-    renderengine::VertexProgramState Device::mVertexProgramState = {};
-    // ARTIST83011118 is zero in the original image; Initialize publishes the state.
-    renderengine::VertexProgramState* Device::mapVertexProgramStateSlot[5] = { 0, 0, 0, 0, 0 };
+    // DecFIGS shadowingdevice.cpp:174-180 supplies the byte-storage wrapper and
+    // Resource ownership. ARTIST's linked NoBind path needs bytes through +0x27;
+    // this is its minimum payload view, not a recovered full class sizeof.
+    struct VertexProgramStateData
+    {
+        char maData[renderengine::VertexProgramState::X360NoBindStorageSize];
+    };
+    static VertexProgramStateData sVertexProgramStateData;
+    static rw::Resource sVertexProgramStateResource;
     bool Device::mbVertexProgramStateDirty = false;
 
     const void* Device::mpStreamArray = 0;
@@ -89,12 +97,10 @@ namespace shadow
     {
         const bool lbInitialised = renderengine::Device::Initialize();
 
-        // @0x827ED6E0: the slot is reset to { &mVertexProgramState, 0, 0, 0, 0 }.
-        mapVertexProgramStateSlot[0] = &mVertexProgramState;
-        mapVertexProgramStateSlot[1] = 0;
-        mapVertexProgramStateSlot[2] = 0;
-        mapVertexProgramStateSlot[3] = 0;
-        mapVertexProgramStateSlot[4] = 0;
+        // ARTIST 827ED6E0 constructs then copies the five-word Resource.
+        rw::Resource lResource;
+        lResource.m_baseResources[0] = &sVertexProgramStateData;
+        sVertexProgramStateResource = lResource;
         return lbInitialised;
     }
 
@@ -102,18 +108,15 @@ namespace shadow
         const renderengine::ProgramBufferData* lpVertexProgram,
         const renderengine::VertexDescriptorData* lpVertexDescriptor)
     {
-        // @0x827E7998: a two-entry Parameters block { program, descriptor } is
-        // passed alongside the state slot; InitializeNoBindX360 dereferences the
-        // slot to fill the live state object and returns it.
-        const void* const lapParameters[] =
-        {
-            lpVertexProgram,
-            lpVertexDescriptor
-        };
+        // ARTIST 827E7998 passes the typed two-pointer parameter block alongside
+        // the Resource whose first lane owns the caller-provided byte payload.
+        renderengine::VertexProgramState::Parameters lParameters;
+        lParameters.SetVertexProgram(lpVertexProgram);
+        lParameters.SetVertexDescriptor(lpVertexDescriptor);
 
         renderengine::VertexProgramState* lpVertexProgramState =
             renderengine::VertexProgramState::InitializeNoBindX360(
-                mapVertexProgramStateSlot, lapParameters);
+                sVertexProgramStateResource, lParameters);
         CGS_ASSERT(lpVertexProgramState, "lpVertexProgramState");
         return lpVertexProgramState;
     }

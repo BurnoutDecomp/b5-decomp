@@ -224,12 +224,6 @@ namespace shadow
         static void ResetProgramShadows();
 
     private:
-        // The X360 build keeps the live vertex-program binding as a small static
-        // slot (5 dwords @ dword_83011118) whose first entry points at the real
-        // state object (@ unk_83010920); InitializeNoBindX360 dereferences the
-        // slot to reach it. Both are modelled here by name.
-        static renderengine::VertexProgramState mVertexProgramState;
-        static renderengine::VertexProgramState* mapVertexProgramStateSlot[5];
         // The vertex-program-state dirty flag (X360 byte_83010A34): ResetShadowing sets it,
         // SetVertexProgramInternal sets it, FlushVertexProgramState consumes & clears it.
         static bool mbVertexProgramStateDirty;
