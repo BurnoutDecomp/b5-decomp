@@ -127,7 +127,7 @@ namespace AIModuleIO
 
         // X360 0x8276DC68 (W, :458) / 0x8279CCA0 (R, :465).
         const AICarOutputInterface* GetAICarOutputInterfaceConst() const;
-        u8*                         GetAICarOutputInterface();
+        AICarOutputInterface*       GetAICarOutputInterface();
         u8*                         GetAICarOutputInterfaceForRead();
 
         // X360 0x8279C658 (R, :232) / 0x8276D680 (W, :233).

@@ -110,14 +110,19 @@ namespace BrnAI
         // `lenSq > 0 ? 1 / sqrt : 0`, an invented guard that answered (0, 0).
         Vector2 Normalize2DU(Vector2 lVector)
         {
-            const f32 lfLenSq  = lVector.x * lVector.x + lVector.y * lVector.y;
-            const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
-            Vector2 lResult;
-            lResult.x = lVector.x * lfInvLen;
-            lResult.y = lVector.y * lfInvLen;
-            lResult.z = 0.0f;
-            lResult.w = 0.0f;
-            return lResult;
+            // ARTIST 0x827933B0..F0 and following refinement: preserve all lanes.
+            const __vector4 product = __vmulfp(lVector.mV, lVector.mV);
+            const __vector4 dot = __vaddfp(__vspltw(product, 0), __vspltw(product, 1));
+            const __vector4 one = __vcfsx(__vspltisw(1), 0);
+            const __vector4 half = __vcfsx(__vspltisw(1), 1);
+            __vector4 estimate = __vrsqrtefp(dot);
+            __vector4 correction = __vnmsubfp(dot, __vmulfp(estimate, estimate), one);
+            estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+            correction = __vnmsubfp(dot, __vmulfp(estimate, estimate), one);
+            estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+            Vector2 result;
+            result.mV = __vmulfp(lVector.mV, estimate);
+            return result;
         }
 
         // BrnMath::Flatten @0x822CB8E8 -- project onto the XZ GROUND plane (drop the height lane).
@@ -128,12 +133,7 @@ namespace BrnAI
         // does the same. See the long banner on BrnAIDriver.cpp's To2D.
         Vector2 To2DU(Vector3 lVector)
         {
-            Vector2 lResult;
-            lResult.x = lVector.x;
-            lResult.y = lVector.z;   // ground plane: Vector2.y IS world Z
-            lResult.z = 0.0f;
-            lResult.w = 0.0f;
-            return lResult;
+            return Vector2(lVector.X().GetFloat(), lVector.Z().GetFloat());
         }
 
         // rw::math::fpu::Clamp<float>(x, 0.0f, 1.0f) as the console inlines it (DWARF: HardShoulderSpeed
@@ -148,53 +148,34 @@ namespace BrnAI
             return ((1.0f - lfFloored) >= 0.0f) ? lfFloored : 1.0f;
         }
 
-        inline f32 Dot2D(Vector2 lA, Vector2 lB) { return lA.x * lB.x + lA.y * lB.y; }
+        inline f32 Dot2D(Vector2 lA, Vector2 lB) { return rw::math::vpu::Dot(lA, lB).GetFloat(); }
 
         // The two half-extent vectors the avoidance box is built from. On the X360 these are two
         // lazily-initialised statics (unk_8300DC90 == (2,0,..), unk_8300DC80 == (0,2,..); the
         // `dword_8300DCA0 & 1/2` bits are the one-shot guards). Const data on the host.
         Vector2 MakeHalfExtentX()
         {
-            Vector2 lV; lV.x = KF_NEARBY_VEHICLE_HALF_EXTENT; lV.y = 0.0f; lV.z = 0.0f; lV.w = 0.0f;
-            return lV;
+            return Vector2(KF_NEARBY_VEHICLE_HALF_EXTENT, 0.0f);
         }
         Vector2 MakeHalfExtentY()
         {
-            Vector2 lV; lV.x = 0.0f; lV.y = KF_NEARBY_VEHICLE_HALF_EXTENT; lV.z = 0.0f; lV.w = 0.0f;
-            return lV;
+            return Vector2(0.0f, KF_NEARBY_VEHICLE_HALF_EXTENT);
         }
 
         // Fill one NearbyVehicle's four HNG boundary lines from a closed 4-corner quad, in the
         // console's order: line[i] runs corner[i] -> corner[i+1] (wrapping).
         void FillHNGQuad(NearbyVehicle* lpVehicle, Vector2 lC0, Vector2 lC1, Vector2 lC2, Vector2 lC3)
         {
-            lpVehicle->maHNGLines[0].mfStartX = lC0.x; lpVehicle->maHNGLines[0].mfStartY = lC0.y;
-            lpVehicle->maHNGLines[0].mfEndX   = lC1.x; lpVehicle->maHNGLines[0].mfEndY   = lC1.y;
-            lpVehicle->maHNGLines[1].mfStartX = lC1.x; lpVehicle->maHNGLines[1].mfStartY = lC1.y;
-            lpVehicle->maHNGLines[1].mfEndX   = lC2.x; lpVehicle->maHNGLines[1].mfEndY   = lC2.y;
-            lpVehicle->maHNGLines[2].mfStartX = lC2.x; lpVehicle->maHNGLines[2].mfStartY = lC2.y;
-            lpVehicle->maHNGLines[2].mfEndX   = lC3.x; lpVehicle->maHNGLines[2].mfEndY   = lC3.y;
-            lpVehicle->maHNGLines[3].mfStartX = lC3.x; lpVehicle->maHNGLines[3].mfStartY = lC3.y;
-            lpVehicle->maHNGLines[3].mfEndX   = lC0.x; lpVehicle->maHNGLines[3].mfEndY   = lC0.y;
+            lpVehicle->maHNGLines[0].mfStartX = lC0.mV.x; lpVehicle->maHNGLines[0].mfStartY = lC0.mV.y;
+            lpVehicle->maHNGLines[0].mfEndX   = lC1.mV.x; lpVehicle->maHNGLines[0].mfEndY   = lC1.mV.y;
+            lpVehicle->maHNGLines[1].mfStartX = lC1.mV.x; lpVehicle->maHNGLines[1].mfStartY = lC1.mV.y;
+            lpVehicle->maHNGLines[1].mfEndX   = lC2.mV.x; lpVehicle->maHNGLines[1].mfEndY   = lC2.mV.y;
+            lpVehicle->maHNGLines[2].mfStartX = lC2.mV.x; lpVehicle->maHNGLines[2].mfStartY = lC2.mV.y;
+            lpVehicle->maHNGLines[2].mfEndX   = lC3.mV.x; lpVehicle->maHNGLines[2].mfEndY   = lC3.mV.y;
+            lpVehicle->maHNGLines[3].mfStartX = lC3.mV.x; lpVehicle->maHNGLines[3].mfStartY = lC3.mV.y;
+            lpVehicle->maHNGLines[3].mfEndX   = lC0.mV.x; lpVehicle->maHNGLines[3].mfEndY   = lC0.mV.y;
         }
 
-        // [DIAG] NOT IN THE X360 BINARY (BRN_AI_FAN_DIAG=1). Crash-parity G03-D2 witness: the two
-        // avoidance feeders ask GetIndexOfFurthestVehicle only when the 16-slot list is full.
-        // Until 2026-09-22 it always answered -1, so every later candidate (the player's
-        // E_NEARBY_PLAYER entry, the other rivals) was dropped. Counts asks vs. evictions per
-        // kind (0 traffic, 1 race car) so a live run shows whether the path was reached at all.
-        void NoteFurthestVehicleAnswer(s32 liKind, s32 liIndex)
-        {
-            static u32 sauAsked[2] = { 0, 0 }, sauEvicted[2] = { 0, 0 };
-            ++sauAsked[liKind];
-            if (liIndex != -1)
-                ++sauEvicted[liKind];
-            if (sauAsked[liKind] <= 8 || (sauAsked[liKind] % 240) == 0)
-                *CgsDev::Log::gpDebugPrint
-                    << "[aidrv] furthest " << (liKind ? "race-car" : "traffic")
-                    << " index " << liIndex
-                    << " evicted " << sauEvicted[liKind] << "/" << sauAsked[liKind] << "\n";
-        }
     }
 
     // ================================================================================
@@ -543,10 +524,7 @@ namespace BrnAI
         lfDesired = ((lfDesired - lfProximity) >= 0.0f) ? lfProximity : lfDesired;
         mfDesiredSpeed = lfDesired;
 
-#if BRN_AI_STEERINGFAN_TARGET_PRESENT
         const f32 lfRatio = mSteeringFan.GetSpeedRatio();     // @0x82779B90 (r3 = this + 0x710)
-#else
-#endif
         mfDesiredSpeed = (lfRatio * KF_SPEED_RATIO_SCALE + KF_SPEED_RATIO_BASE) * lfDesired;
     }
 
@@ -561,11 +539,8 @@ namespace BrnAI
         // fmsubs f12, f31, 0.75, f31 -- the lerp's (target - source) term, computed before the call.
         const f32 lfDelta = lfInputSpeed * KF_AI_HARD_SHOULDER_PROPORTION - lfInputSpeed;
 
-#if BRN_AI_RACINGLINE_STACK_PRESENT
         const f32 lfRoadPercentage =
             mRacingLineGenerator.GetRoadPositionAsPercentage(&GetRacingLine(), mpCar);
-#else
-#endif
 
         const f32 lfRamp = SaturateU((lfRoadPercentage - KF_HARD_SHOULDER_START)   // flt_820C7EC8
                                      * KF_HARD_SHOULDER_RAMP);                     // flt_820C822C
@@ -699,15 +674,15 @@ namespace BrnAI
         if (leSelection == E_DRIFT_DIRECTION_SELECTION_CAR_MOVING)  // cmpwi r4,0
         {
             lFrom = To2DU(mpCar->GetVelocity());                // @0x8276B570
-            if (!(std::fabs(lFrom.x) > KF_STEERING_VECTOR_EPSILON) &&
-                !(std::fabs(lFrom.y) > KF_STEERING_VECTOR_EPSILON))
+            if (!(std::fabs(lFrom.mV.x) > KF_STEERING_VECTOR_EPSILON) &&
+                !(std::fabs(lFrom.mV.y) > KF_STEERING_VECTOR_EPSILON))
                 lFrom = To2DU(mpCar->GetDirection());           // b 0x827932F8 -> @0x8276B488
         }
         else
             lFrom = To2DU(mpCar->GetDirection());               // @0x8276B488
 
-        if (!(std::fabs(lFrom.x) > KF_STEERING_VECTOR_EPSILON) &&
-            !(std::fabs(lFrom.y) > KF_STEERING_VECTOR_EPSILON))
+        if (!(std::fabs(lFrom.mV.x) > KF_STEERING_VECTOR_EPSILON) &&
+            !(std::fabs(lFrom.mV.y) > KF_STEERING_VECTOR_EPSILON))
             return 0.0f;                                            // bne loc_827931F4 @0x827933AC
         lFrom = Normalize2DU(lFrom);
 
@@ -730,16 +705,11 @@ namespace BrnAI
         if (lfLookAhead < KF_DRIFT_LOOK_AHEAD_MIN)                                   // flt_820C4150 == 10
             lfLookAhead = KF_DRIFT_LOOK_AHEAD_MIN;
 
-#if BRN_AI_RACINGLINE_STACK_PRESENT
         // DWARF/X360 argument order (CachePointAhead @0x82791424..44 is the attesting call site):
         // (lpRacingLine r4, lfDistanceAhead f1, lFrom2D v1, lrOutPosition r6, lrOutDirection r7).
         Vector2 lPosition;
         return mRacingLineGenerator.GetPointFarAhead(&GetRacingLine(), lfLookAhead, m2DCarPos,
                                                      lPosition, lrOutDirection);
-#else
-        (void)lrOutDirection;
-        return false;
-#endif
     }
 
     // ================================================================================
@@ -766,15 +736,8 @@ namespace BrnAI
         // (FX-AINAN2: the old `if ((max - dist) < 0) dist = max` kept a NaN distance)
         lfDistance = ((lfMaxDistance - lfDistance) >= 0.0f) ? lfDistance : lfMaxDistance;
 
-#if BRN_AI_RACINGLINE_STACK_PRESENT
         return mRacingLineGenerator.GetPointFarAhead(&GetRacingLine(), lfDistance, m2DCarPos,
                                                      lrOutPosition, lrOutDirection);
-#else
-        (void)lfDistance;
-        (void)lrOutPosition;
-        (void)lrOutDirection;
-        return false;
-#endif
     }
 
     // ================================================================================
@@ -872,18 +835,20 @@ namespace BrnAI
     // ================================================================================
     f32 AIDriver::GetQuickTurnSteering(Vector2 lVectorToTarget)
     {
-        const Vector2 lFacing = Normalize2DU(To2DU(mpCar->GetDirection()));
+        const Vector3 lDirection3 = mpCar->GetDirection();
+        Vector2 lDirection2;
+        lDirection2.mV = __vrlimi(lDirection3.mV, lDirection3.mV, 4, 1);
+        const Vector2 lFacing = Normalize2DU(lDirection2);
 
         f32 lfSelector;
         if (GetRacingLine().mbCentreLineHereKnown)                      // lbz 0x1AF1 (this+6897)
         {
-            const Vector2 lCarPos2D = To2DU(mpCar->GetPosition());
-            // lvx128 v12, r31, 6912 == this+0x1B00 == mRacingLine.mCentreHere (RacingLine +0xBE0)
-            const Vector2 lCentreHere = GetRacingLine().mCentreHere;
-            const f32 lfDeltaX = lCentreHere.x - lCarPos2D.x;
-            const f32 lfDeltaY = lCentreHere.y - lCarPos2D.y;
-            // vmulfp/vsubfp: facing.x * delta.y - facing.y * delta.x  (the 2D cross)
-            lfSelector = lFacing.x * lfDeltaY - lFacing.y * lfDeltaX;
+            const Vector3 lCarPos = mpCar->GetPosition();
+            const __vector4 position = __vrlimi(lCarPos.mV, lCarPos.mV, 4, 1);
+            const __vector4 delta = __vsubfp(GetRacingLine().mCentreHere.mV, position);
+            const __vector4 left = __vmulfp(__vspltw(lFacing.mV, 0), __vspltw(delta, 1));
+            const __vector4 right = __vmulfp(__vspltw(lFacing.mV, 1), __vspltw(delta, 0));
+            lfSelector = __vsubfp(left, right).x; // ARTIST 0x8277C6DC..F4
         }
         else
         {
@@ -902,14 +867,16 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::UpdateQuickTurn()
     {
-        const Vector2 lUseful = Normalize2DU(To2DU(mpCar->GetUsefulDirection()));
+        const Vector3 lUseful3 = mpCar->GetUsefulDirection();
+        Vector2 lUseful2;
+        lUseful2.mV = __vrlimi(lUseful3.mV, lUseful3.mV, 4, 1);
+        const Vector2 lUseful = Normalize2DU(lUseful2);
         const Vector2 lTarget = GetTargetPosition();
-        const Vector2 lCarPos = To2DU(mpCar->GetPosition());
-
+        const Vector3 lCarPos = mpCar->GetPosition();
+        __vector4 lFlat = __vrlimi(lTarget.mV, lCarPos.mV, 8, 0);
+        lFlat = __vrlimi(lFlat, lCarPos.mV, 4, 1);
         Vector2 lDelta;
-        lDelta.x = lTarget.x - lCarPos.x;
-        lDelta.y = lTarget.y - lCarPos.y;
-        lDelta.z = 0.0f; lDelta.w = 0.0f;
+        lDelta.mV = __vsubfp(lTarget.mV, lFlat); // ARTIST 0x8278B1A8..C0
 
         const f32 lfDot = Dot2D(lUseful, lDelta);
 
@@ -1062,15 +1029,12 @@ namespace BrnAI
         else
             GetRacingLine().mfSpreadDistance = K_NORMAL_SPREAD_HNG;      // 50.0
 
-#if BRN_AI_RACINGLINE_STACK_PRESENT
         // X360 @0x82792EE8..0x82792F30: r3 = this+0x1B30 (generator), r4 = this+0xF20 (line),
         // r5 = mpCar (0x1CE0), r6 = mpCar->miNextRouteNodeIndex (car+0x1524) - 2,
         // r7 = mpSectionsData (0x1CE4).
         mRacingLineGenerator.InitialiseRacingLine(&GetRacingLine(), lpCar,
                                                   lpCar->miNextRouteNodeIndex - 2,
                                                   mpSectionsData);   // @0x8278FB20
-#else
-#endif
 
         mSteeringTargetVector.SetZero();                       // stvx 0x1C70
         mbIsRacingLineInitialised = 1;                         // stb 1, 0x1D68
@@ -1100,10 +1064,7 @@ namespace BrnAI
         {
             mbCurrentRouteComplete = 1;                                  // stb 1, 0x1D6A
             const Vector3 lTargetPos = GetAggression()->GetTargetPos();  // @0x827656D0
-#if BRN_AI_RACINGLINE_STACK_PRESENT
             mRacingLineGenerator.RaceLineDefaultsToSlamPlayer(&GetRacingLine(), lTargetPos);
-#else
-#endif
             if (GetAggression()->GetAggressionState() == E_AI_AGGRESSION_STATE_ATTACK_SLAM)
             {
                 // this+6724 = this+6704 == mfRoadPlacement = mfDefaultPerpendicularOffset
@@ -1138,15 +1099,10 @@ namespace BrnAI
             const Vector3 lUseful   = mpCar->GetUsefulDirection();  // @0x82770028
             const Vector3 lPosition = mpCar->GetPosition();         // @0x8276B1F0
 
-            mBrakingAnticipationPos.x = lPosition.x + lUseful.x;        // stvx 0x1CA0
-            mBrakingAnticipationPos.y = lPosition.y + lUseful.y;
-            mBrakingAnticipationPos.z = 0.0f;
-            mBrakingAnticipationPos.w = 0.0f;
-
-            mBrakingRoadDir.x = lUseful.x;                              // stvx 0x1CB0
-            mBrakingRoadDir.y = lUseful.y;
-            mBrakingRoadDir.z = 0.0f;
-            mBrakingRoadDir.w = 0.0f;
+            // Calibrated ARTIST 0x82796568..80: store all four lanes and
+            // call GetUsefulDirection a second time for the road direction.
+            mBrakingAnticipationPos.mV = __vaddfp(lPosition.mV, lUseful.mV);
+            mBrakingRoadDir.mV = mpCar->GetUsefulDirection().mV;
         }
 
         mBrakingRoadDir = Normalize2DU(mBrakingRoadDir);
@@ -1244,25 +1200,19 @@ namespace BrnAI
         {
             for (s32 liStep = 0; liStep <= 3; ++liStep)
             {
-#if BRN_AI_RACINGLINE_STACK_PRESENT
                 if (mRacingLineGenerator.SpreadHNGBackOneStep(&GetRacingLine()))
                     break;
                 ++liWorkDone;
-#else
-                break;
-#endif
             }
         }
         else if (leType == E_ROUND_ROBIN_FAN)
         {
-#if BRN_AI_STEERINGFAN_TARGET_PRESENT
             // X360: UpdateWeightings(this+1808 == mSteeringFan, mpCar (0x1CE0), this+3872 ==
             // mRacingLine, this+6960 == mRacingLineGenerator, this == &mNearbyVehicles,
             // *(this+7408) == meAggressionVictim (0x1CF0)).
             mSteeringFan.UpdateWeightings(mpCar, &GetRacingLine(), &mRacingLineGenerator,
                                           GetNearbyVehicles(),
                                           static_cast<EGlobalRaceCarIndex>(meAggressionVictim));
-#endif
         }
 
         return liWorkDone;
@@ -1297,13 +1247,11 @@ namespace BrnAI
     s32 AIDriver::GetIndexOfFurthestVehicle(Vector2 lNewPosition)
     {
         const Vector3 lCarPosition   = mpCar->GetPosition();
-        const Vector2 lCar2DPosition = To2DU(lCarPosition);
+        Vector2 lCar2DPosition;
+        lCar2DPosition.mV = __vrlimi(lCarPosition.mV, lCarPosition.mV, 4, 1); // ARTIST 0x8277D330..44
 
         Vector2 lToCandidate;
-        lToCandidate.x = lNewPosition.x - lCar2DPosition.x;
-        lToCandidate.y = lNewPosition.y - lCar2DPosition.y;
-        lToCandidate.z = 0.0f;
-        lToCandidate.w = 0.0f;
+        lToCandidate.mV = __vsubfp(lNewPosition.mV, lCar2DPosition.mV); // ARTIST 0x8277D34C
         const f32 lDistanceToDriver = rw::math::vpu::Magnitude(lToCandidate);
 
         s32       lCacheIndex = -1;
@@ -1313,10 +1261,7 @@ namespace BrnAI
             const NearbyVehicle* lpVehicle = mNearbyVehicles.GetVehiclePointer(lNewIndex);
 
             Vector2 lToEntry;
-            lToEntry.x = lpVehicle->mCentre.x - lCar2DPosition.x;
-            lToEntry.y = lpVehicle->mCentre.y - lCar2DPosition.y;
-            lToEntry.z = 0.0f;
-            lToEntry.w = 0.0f;
+            lToEntry.mV = __vsubfp(lpVehicle->mCentre.mV, lCar2DPosition.mV);
             const f32 lfNewSeperation = rw::math::vpu::Magnitude(lToEntry);
 
             if (lfNewSeperation > lfFurthest)
@@ -1348,7 +1293,6 @@ namespace BrnAI
         else
         {
             liIndex = GetIndexOfFurthestVehicle(lpEntity->mCentre);             // v1 = entity+16
-            NoteFurthestVehicleAnswer(0, liIndex);                              // [DIAG] BRN_AI_FAN_DIAG only
             if (liIndex == -1)
                 return false;
         }
@@ -1406,7 +1350,6 @@ namespace BrnAI
         else
         {
             liIndex = GetIndexOfFurthestVehicle(lCentre);
-            NoteFurthestVehicleAnswer(1, liIndex);                              // [DIAG] BRN_AI_FAN_DIAG only
             if (liIndex == -1)
                 return false;
         }
@@ -1429,15 +1372,13 @@ namespace BrnAI
         const Vector2 lHalfX = MakeHalfExtentX();
         const Vector2 lHalfY = MakeHalfExtentY();
 
-        Vector2 lMinusX; lMinusX.x = lCentre.x - lHalfX.x; lMinusX.y = lCentre.y - lHalfX.y;
-        lMinusX.z = 0.0f; lMinusX.w = 0.0f;
-        Vector2 lPlusX;  lPlusX.x  = lCentre.x + lHalfX.x; lPlusX.y  = lCentre.y + lHalfX.y;
-        lPlusX.z = 0.0f; lPlusX.w = 0.0f;
-
-        Vector2 lC0; lC0.x = lMinusX.x + lHalfY.x; lC0.y = lMinusX.y + lHalfY.y; lC0.z = 0.0f; lC0.w = 0.0f;
-        Vector2 lC1; lC1.x = lPlusX.x  + lHalfY.x; lC1.y = lPlusX.y  + lHalfY.y; lC1.z = 0.0f; lC1.w = 0.0f;
-        Vector2 lC2; lC2.x = lPlusX.x  - lHalfY.x; lC2.y = lPlusX.y  - lHalfY.y; lC2.z = 0.0f; lC2.w = 0.0f;
-        Vector2 lC3; lC3.x = lMinusX.x - lHalfY.x; lC3.y = lMinusX.y - lHalfY.y; lC3.z = 0.0f; lC3.w = 0.0f;
+        // ARTIST 0x8277D9B4..D4 computes the four corners in full registers.
+        Vector2 lMinusX; lMinusX.mV = __vsubfp(lCentre.mV, lHalfX.mV);
+        Vector2 lPlusX;  lPlusX.mV = __vaddfp(lCentre.mV, lHalfX.mV);
+        Vector2 lC0; lC0.mV = __vaddfp(lMinusX.mV, lHalfY.mV);
+        Vector2 lC1; lC1.mV = __vaddfp(lPlusX.mV, lHalfY.mV);
+        Vector2 lC2; lC2.mV = __vsubfp(lPlusX.mV, lHalfY.mV);
+        Vector2 lC3; lC3.mV = __vsubfp(lMinusX.mV, lHalfY.mV);
 
         FillHNGQuad(lpVehicle, lC0, lC1, lC2, lC3);
         return true;

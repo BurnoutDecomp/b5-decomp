@@ -114,10 +114,10 @@ namespace AIModuleIO
     }
 
     // X360 0x8276DC68 (W, :458) -- write-lock handle at this+0x16A60.
-    u8* OutputBuffer::GetAICarOutputInterface()
+    AICarOutputInterface* OutputBuffer::GetAICarOutputInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return reinterpret_cast<u8*>(&mAICarOutputInterface);
+        return &mAICarOutputInterface;
     }
 
     // X360 0x8279CCA0 (R, :465) -- read-lock handle at this+0x16A60.

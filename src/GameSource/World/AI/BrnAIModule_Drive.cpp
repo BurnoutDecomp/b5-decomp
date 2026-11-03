@@ -190,10 +190,8 @@
 #include "SharedClasses/AI/AISectionsResourceType.h"                    // BrnAI::AISectionsData
 #include "GameSource/Math/BrnMathUtils.h"                               // [PC HARNESS] BrnMath::Flatten (the pursuit geometry)
 
-#if BRNAI_AIWAVE_A3_LANDED
 #include "GameSource/World/AI/BrnAIAggression.h"                        // AIAggression::SetSuitabilityForAggression
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h" // TrafficAIInterface
-#endif
 
 #include <cmath>
 
@@ -212,15 +210,6 @@ namespace
     const f32 KF_FLT_MAX                     = 3.4028234663852886e+38f; // flt_8204F664 (UpdateOneProximityIndex)
     const s32 KI_ROUND_ROBIN_HNG_WORK        = 4;        // DoRoundRobins `li r4, 4`
 
-    inline bool WitnessOnce(bool& lrbFlag)
-    {
-        if (lrbFlag || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return false;
-        }
-        lrbFlag = true;
-        return true;
-    }
 
     // RwMath::IsValid( x ) -- a NaN SELF-COMPARE. ⛔ CORRECTED (issue #31): was `std::isfinite`,
     // which also rejects +-Inf. StoreDrivenCarData's own three cascades are `vcmpeqfp. v13,v13,v13`
@@ -326,13 +315,10 @@ void AIModule::UpdateCars(f32 lfTimeStep,
 
     AICar* lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
 
-    // [GUARD] the null test is host-only: the console's GetAICar cannot return null.
-    if (lpPlayerCar != 0 && lpPlayerCar->IsActive())
+    if (lpPlayerCar->IsActive())
     {
         const s32 liCarCount = mbIsInGameMode ? KI_MAX_ACTIVE_RACE_CARS : KI_MAX_OUT_OF_RANGE_RACE_CARS;
 
-        static s32 siWitnessFrames = 0;
-        s32 liUpdated = 0;
 
         for (EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0;
              static_cast<s32>(leCar) < liCarCount;
@@ -350,7 +336,6 @@ void AIModule::UpdateCars(f32 lfTimeStep,
                                 &mMasterRoute,
                                 mbIsInOnlineGameMode);
 
-                ++liUpdated;
             }
         }
 
@@ -386,12 +371,7 @@ void AIModule::UpdateOneProximityIndex()
         meProximityGlobalRaceCarIndexRoundRobin = E_GLOBAL_RACE_CAR_INDEX_0;
     }
 
-    // [GUARD] host-only null tests (GetAICar's PC bail); the console dereferences unconditionally.
     const AICar* lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
-    if (lpCar == 0 || lpPlayerCar == 0)
-    {
-        return;
-    }
     const s32 liPlayerRaceCarIndex = lpPlayerCar->GetRaceCarIndex();
 
     mfClosestDistance = KF_FLT_MAX;
@@ -470,15 +450,9 @@ s32 AIModule::RoundRobinDrivers(s32 liMaxWork, ERoundRobinType leType)
     {
         AIDriver* lpDriver = GetAIDriver(mePlayerActiveRaceCarIndex);
         s32 liWork = 0;
-        if (lpDriver != 0 && lpDriver->mbIsActive)   // [GUARD] null is host-only
+        if (lpDriver->mbIsActive)
         {
-#if BRNAI_AIWAVE_A3_LANDED
             liWork = lpDriver->DoRoundRobinWork(leType);
-#else
-            // [FLAG header_request] AIDriver::DoRoundRobinWork(ERoundRobinType) @0x82796340 --
-            // DWARF BrnAIDriver.h:327; not declared in BrnAIDriver.h yet. DELETE-WHEN A3 lands.
-            (void)leType;
-#endif
         }
         return liWork;
     }
@@ -498,23 +472,10 @@ s32 AIModule::RoundRobinDrivers(s32 liMaxWork, ERoundRobinType leType)
             }
 
             AIDriver* lpDriver = GetAIDriver(lrCursor);
-            if (lpDriver != 0 && lpDriver->mbIsActive)   // [GUARD] null is host-only
+            if (lpDriver->mbIsActive)
             {
                 --liMaxWork;
-#if BRNAI_AIWAVE_A3_LANDED
                 liWorkDone += lpDriver->DoRoundRobinWork(leType);
-#else
-                // [FLAG header_request] AIDriver::DoRoundRobinWork -- see above. The work counter
-                // still advances so the cursor walks exactly as the console's does.
-                static bool sbReported = false;
-                if (WitnessOnce(sbReported))
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[aidrive] RoundRobinDrivers: AIDriver::DoRoundRobinWork is PARKED "
-                           "(BRNAI_AIWAVE_A3_LANDED == 0) -- racing-line / HNG round-robin work "
-                           "is not being done\n";
-                }
-#endif
             }
         }
         while (lrCursor != leStart && liMaxWork > 0);
@@ -552,10 +513,6 @@ void AIModule::SetSuitabilityForAggression(EActiveRaceCarIndex leActiveRaceCarIn
 
     AIDriver* lpDriver = GetAIDriver(leActiveRaceCarIndex);
     CGS_ASSERT(lpDriver != 0, "Missing Driver in aggression check\n");   // BrnAIModule.cpp:1251
-    if (lpDriver == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
     AICar* lpCar = lpDriver->GetCar();
     if (lpCar == 0)
@@ -563,7 +520,6 @@ void AIModule::SetSuitabilityForAggression(EActiveRaceCarIndex leActiveRaceCarIn
         return;
     }
 
-#if BRNAI_AIWAVE_A3_LANDED
     // flt_8300D704 = init 0x82C68578: `lfs f0, flt_82F31928 (0.44703999) ; lfs f13, flt_820C4158
     // (60.0) ; fmuls f0,f0,f13 ; stfs f0, 0x8300D704` -- 60 mph in m/s, the same mph->m/s
     // static-init shape every constant in BrnAICar_Constants.h uses.  RECOVERED 2026-09-06 by the
@@ -594,17 +550,6 @@ void AIModule::SetSuitabilityForAggression(EActiveRaceCarIndex leActiveRaceCarIn
     {
         lpDriver->GetAggression()->SetSuitabilityForAggression(true);
     }
-#else
-    // [FLAG header_request] AIDriver::GetAggression() (the embedded AIAggression @+0x1C00, DWARF
-    // BrnAIDriver.h:547) is not declared in BrnAIDriver.h; BrnAIDriver.cpp reaches it through a
-    // TU-local offset helper. The whole body above is the console's; nothing runs until A3 lands.
-    static bool sbReported = false;
-    if (WitnessOnce(sbReported))
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[aidrive] SetSuitabilityForAggression is PARKED (BRNAI_AIWAVE_A3_LANDED == 0)\n";
-    }
-#endif
 }
 
 // =================================================================================================
@@ -648,10 +593,7 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
                              f32 lfTimeStep)
 {
     CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");   // X360 :1383
-    if (lpInputBuffer == 0 || lpOutputBuffer == 0)
-    {
-        return;   // [GUARD] host-only
-    }
+
 
     const AIModuleIO::RaceCarAIInterface* lpCarInterface = lpInputBuffer->GetRaceCarAIInterface();
     CGS_ASSERT(lpCarInterface != 0, "lpCarInterface != NULL");   // X360 :1388
@@ -689,7 +631,6 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
     const BrnWorld::PlayerVehicleControls* lpPlayerControls =
         static_cast<const BrnWorld::PlayerVehicleControls*>(lpInputBuffer->GetPlayerVehicleControls());
 
-    static s32 siWitnessFrames = 0;
     s32 liActiveDrivers = 0;
     unsigned luProfileRivals = 0, luProfileCrashing = 0, luProfileAirborne = 0;
 
@@ -794,27 +735,16 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
 void AIModule::StoreDrivenCarData(const AIModuleIO::InputBuffer* lpInputBuffer)
 {
     CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");   // X360 :2003
-    if (lpInputBuffer == 0)
-    {
-        return;   // [GUARD] host-only
-    }
-
     const AIModuleIO::RaceCarAIInterface* lpCarInterface = lpInputBuffer->GetRaceCarAIInterface();
     CGS_ASSERT(lpCarInterface != 0, "lpCarInterface != NULL");   // X360 :2010
-    if (lpCarInterface == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
-    static s32 siWitnessFrames = 0;
-    s32 liStored = 0;
 
     for (EActiveRaceCarIndex leSlot = E_ACTIVE_RACE_CAR_INDEX_0;
          leSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT;
          leSlot++)
     {
         AIDriver* lpDriver = GetAIDriver(leSlot);
-        if (lpDriver == 0 || !lpDriver->mbIsActive)
+        if (!lpDriver->mbIsActive)
         {
             continue;
         }
@@ -833,14 +763,14 @@ void AIModule::StoreDrivenCarData(const AIModuleIO::InputBuffer* lpInputBuffer)
 
         // "Invalid car matrix" :2024 -- x/y/z of all four rows must be finite (vcmpeqfp v==v).
         const bool lbMatrixValid =
-            IsFiniteF32(lrMatrix.xAxis.x) && IsFiniteF32(lrMatrix.xAxis.y) && IsFiniteF32(lrMatrix.xAxis.z) &&
-            IsFiniteF32(lrMatrix.yAxis.x) && IsFiniteF32(lrMatrix.yAxis.y) && IsFiniteF32(lrMatrix.yAxis.z) &&
-            IsFiniteF32(lrMatrix.zAxis.x) && IsFiniteF32(lrMatrix.zAxis.y) && IsFiniteF32(lrMatrix.zAxis.z) &&
-            IsFiniteF32(lrMatrix.wAxis.x) && IsFiniteF32(lrMatrix.wAxis.y) && IsFiniteF32(lrMatrix.wAxis.z);
+            IsFiniteF32(lrMatrix.xAxis.X().GetFloat()) && IsFiniteF32(lrMatrix.xAxis.Y().GetFloat()) && IsFiniteF32(lrMatrix.xAxis.Z().GetFloat()) &&
+            IsFiniteF32(lrMatrix.yAxis.X().GetFloat()) && IsFiniteF32(lrMatrix.yAxis.Y().GetFloat()) && IsFiniteF32(lrMatrix.yAxis.Z().GetFloat()) &&
+            IsFiniteF32(lrMatrix.zAxis.X().GetFloat()) && IsFiniteF32(lrMatrix.zAxis.Y().GetFloat()) && IsFiniteF32(lrMatrix.zAxis.Z().GetFloat()) &&
+            IsFiniteF32(lrMatrix.wAxis.X().GetFloat()) && IsFiniteF32(lrMatrix.wAxis.Y().GetFloat()) && IsFiniteF32(lrMatrix.wAxis.Z().GetFloat());
         CGS_ASSERT(lbMatrixValid, "Invalid car matrix");   // X360 :2024
 
         const Vector3 lVelocity = lpCarInterface->maVelocities[luSlot];   // GetActiveRaceCarVelocity(i)
-        CGS_ASSERT(IsFiniteF32(lVelocity.x) && IsFiniteF32(lVelocity.y) && IsFiniteF32(lVelocity.z),
+        CGS_ASSERT(IsFiniteF32(lVelocity.X().GetFloat()) && IsFiniteF32(lVelocity.Y().GetFloat()) && IsFiniteF32(lVelocity.Z().GetFloat()),
                    "Invalid car velocity");   // X360 :2025
 
         const f32 lfSpeed = lpCarInterface->mafSpeeds[luSlot];            // GetActiveRaceCarSpeed(i)
@@ -866,21 +796,6 @@ void AIModule::StoreDrivenCarData(const AIModuleIO::InputBuffer* lpInputBuffer)
 
         AISectionsData* lpAISectionsData = GetAISectionsData();
 
-        if (lpCar == 0)
-        {
-            // [GUARD] host-only: a live driver with no car is an AV on the console too. Witness it
-            // once -- it means HandleManagementEvents' attach ring raised mbIsActive without
-            // AIDriver::SetAICar.
-            static bool sbReported = false;
-            if (WitnessOnce(sbReported))
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[aidrive] StoreDrivenCarData: driver slot " << static_cast<s32>(leSlot)
-                    << " is active but has NO AICar (mpCar NULL) -- skipping\n";
-            }
-            continue;
-        }
-
         lpCar->UpdateInRangeData(lpAISectionsData,
                                  lrMatrix,
                                  lVelocity,
@@ -895,7 +810,6 @@ void AIModule::StoreDrivenCarData(const AIModuleIO::InputBuffer* lpInputBuffer)
                                  lbDrifting,
                                  lbTouchingAnother,
                                  lbTouchingPlayer);
-        ++liStored;
     }
 
 }
@@ -921,13 +835,11 @@ void AIModule::StoreDrivenCarData(const AIModuleIO::InputBuffer* lpInputBuffer)
 // =================================================================================================
 void AIModule::SortTrafficIntoAICars(const AIModuleIO::InputBuffer* lpInputBuffer)
 {
-#if BRNAI_AIWAVE_A3_LANDED
     for (EActiveRaceCarIndex leSlot = E_ACTIVE_RACE_CAR_INDEX_0; leSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; leSlot++)
     {
         GetAIDriver(leSlot)->ClearNearbyVehicles();
     }
 
-#if BRNAI_TRAFFICAI_ENTITY_ACCESSORS_PRESENT
     // The AIModuleIO InputBuffer seat is already typed (BrnAIModuleIO.h:75 typedefs
     // BrnTraffic::BrnTrafficIO::TrafficAIInterface inside the class), so no cast is needed.
     const BrnTraffic::BrnTrafficIO::TrafficAIInterface* lpTrafficAI = lpInputBuffer->GetTrafficAI();
@@ -939,32 +851,13 @@ void AIModule::SortTrafficIntoAICars(const AIModuleIO::InputBuffer* lpInputBuffe
         const BrnTraffic::BrnTrafficIO::TrafficAIEntity* lpTraffic = lpTrafficAI->GetTrafficEntity(luEntity);
         CGS_ASSERT(lpTraffic != 0, "lpTraffic");   // BrnAIModule.cpp:2337
         AIDriver* lpDriver = GetAIDriver(lpTraffic->meNearbyRaceCarIndex);
-        if (lpDriver != 0 && lpDriver->mbIsActive)
+        if (lpDriver->mbIsActive)
         {
             lpDriver->AddNearbyTrafficToAvoidance(lpTraffic);
         }
     }
 
-    {
-        static u32 suFrames = 0;
-        static s32 siLines  = 0;
-    }
-#else
-    // [FLAG header_request] see BRNAI_TRAFFICAI_ENTITY_ACCESSORS_PRESENT at the top of this file.
-    // AIDriver::AddNearbyTrafficToAvoidance @0x8277D4F8 IS bodied (BrnAIDriver_Update.cpp); only
-    // the two TrafficAIInterface accessors that reach the entity list are missing.
-    (void)lpInputBuffer;
-    {
-        static bool sbReportedTraffic = false;
-        if (WitnessOnce(sbReportedTraffic))
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[aidrive] SortTrafficIntoAICars: the TRAFFIC half is gated "
-                   "(TrafficAIInterface::GetTrafficEntity/Count have no bodies) -- rivals avoid "
-                   "each other but not traffic\n";
-        }
-    }
-#endif
+
 
     for (EActiveRaceCarIndex leSlot = E_ACTIVE_RACE_CAR_INDEX_0; leSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; leSlot++)
     {
@@ -986,19 +879,6 @@ void AIModule::SortTrafficIntoAICars(const AIModuleIO::InputBuffer* lpInputBuffe
             }
         }
     }
-#else
-    (void)lpInputBuffer;
-    // [FLAG header_request] (dead arm) AIDriver::ClearNearbyVehicles / AddNearbyTrafficToAvoidance
-    // @0x8277D4F8 / AddNearbyAIToAvoidance @0x8277D6E0 (DWARF BrnAIDriver.h:275/:279/:283) are
-    // not declared in BrnAIDriver.h. Rivals drive WITHOUT traffic/rival avoidance until A3 lands.
-    static bool sbReported = false;
-    if (WitnessOnce(sbReported))
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[aidrive] SortTrafficIntoAICars is PARKED (BRNAI_AIWAVE_A3_LANDED == 0) -- no "
-               "traffic / rival avoidance feed\n";
-    }
-#endif
 }
 
 // =================================================================================================
@@ -1047,29 +927,12 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
     }
 
     CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2144
-    if (lpOutputBuffer == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
-    // [FLAG header_request] OutputBuffer::GetVehicleDriverInterface() hands out an untyped u8*
-    // seat (maVehicleDriverInterface[0x14B0], a NOMINAL blob). The console type at this+0x15120
-    // is BrnPhysics::Vehicle::VehicleDriverInputInterface (its first member IS the
-    // VariableEventQueue<5040,16> the AddEvent below targets); sizeof on this host is 5296 ==
-    // 0x14B0 exactly, pinned here. DELETE-WHEN the OutputBuffer owner types + Constructs the member.
-    CGS_STATIC_ASSERT((sizeof(VehicleDriverInputInterface) <= 0x14B0),
-                  "VehicleDriverInputInterface must fit the OutputBuffer's 0x14B0 vehicle-driver seat");
-    VehicleDriverInputInterface* lpDriverInputInterface =
-        reinterpret_cast<VehicleDriverInputInterface*>(lpOutputBuffer->GetVehicleDriverInterface());
+    VehicleDriverInputInterface* lpDriverInputInterface = lpOutputBuffer->GetVehicleDriverInterface();
     CGS_ASSERT(lpDriverInputInterface != 0, "lpDriverInputInterface != NULL");   // X360 :2148
-    if (lpDriverInputInterface == 0)
-    {
-        return;   // [GUARD] host-only
-    }
+
     VehicleDriverInputInterface::UpdateDriverEventQueue* lpQueue = lpDriverInputInterface->GetUpdateDriverQueue();
 
-    static s32 siWitnessFrames = 0;
-    s32 liActiveRecords = 0;
 
     for (EActiveRaceCarIndex leSlot = E_ACTIVE_RACE_CAR_INDEX_0;
          leSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT;
@@ -1107,10 +970,10 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
         lControls.mbForceComeOutOfDrift     = false;
         lControls.mbSlamPlayer              = false;
 
-        if (lpDriver != 0 && lpDriver->mbIsActive)
+        if (lpDriver->mbIsActive)
         {
             const AICar* lpCar      = lpDriver->GetCar();
-            const bool   lbIsPlayer = (lpCar != 0) ? lpCar->IsPlayerCar() : false;   // [GUARD] null car is host-only
+            const bool   lbIsPlayer = lpCar->IsPlayerCar();
 
             lControls.miVehicleID   = static_cast<s32>(leSlot);
             lControls.mfGas         = lpDriver->mfAccelerator;
@@ -1134,7 +997,6 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
 
 
 
-            ++liActiveRecords;
         }
 
         lpQueue->AddEvent<BrnAIDriverControls>(&lControls, BrnPhysics::Vehicle::E_DRIVER_TYPE_AI);
@@ -1155,18 +1017,10 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
 void AIModule::ProcessOutOfRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffer)
 {
     CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2196
-    if (lpOutputBuffer == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
     AIModuleIO::AIRaceCarInterface* lpAIRaceCarInterface =
-        reinterpret_cast<AIModuleIO::AIRaceCarInterface*>(lpOutputBuffer->GetAIRaceCarInterface());
+        lpOutputBuffer->GetAIRaceCarInterface();
     CGS_ASSERT(lpAIRaceCarInterface != 0, "lpAIRaceCarInterface != NULL");   // X360 :2200
-    if (lpAIRaceCarInterface == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
     for (EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0;
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
@@ -1195,18 +1049,10 @@ void AIModule::ProcessOutOfRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffe
 void AIModule::ProcessInRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffer)
 {
     CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2231
-    if (lpOutputBuffer == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
     AIModuleIO::AIRaceCarInterface* lpAIRaceCarInterface =
-        reinterpret_cast<AIModuleIO::AIRaceCarInterface*>(lpOutputBuffer->GetAIRaceCarInterface());
+        lpOutputBuffer->GetAIRaceCarInterface();
     CGS_ASSERT(lpAIRaceCarInterface != 0, "lpAIRaceCarInterface != NULL");   // X360 :2235
-    if (lpAIRaceCarInterface == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
     for (EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0;
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
@@ -1216,19 +1062,7 @@ void AIModule::ProcessInRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffer)
         if (!lpCar->IsPlayerCar() && lpCar->GetState() == E_AI_CAR_STATE_IN_RANGE)
         {
             const AIDriver* lpDriver = lpCar->GetDriver();
-            if (lpDriver == 0)
-            {
-                // [GUARD] host-only: an IN_RANGE car with no driver is a null deref on the
-                // console; here it is the "attach without SetDriver" signature -- witness once.
-                static bool sbReported = false;
-                if (WitnessOnce(sbReported))
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[aidrive] ProcessInRangeVehicles: IN_RANGE car " << static_cast<s32>(leCar)
-                        << " has no AIDriver (mpDriver NULL) -- skipping its pass-through flag\n";
-                }
-                continue;
-            }
+
             const bool lbCanPassThroughTraffic = lpDriver->mfDistanceToPlayer > KF_PASS_THROUGH_TRAFFIC_DISTANCE;
             lpAIRaceCarInterface->UpdateAllRaceCarData(leCar, lbCanPassThroughTraffic);
         }
@@ -1261,10 +1095,6 @@ void AIModule::ProcessInRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffer)
 void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
 {
     CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2270
-    if (lpOutputBuffer == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
     const AICar* lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
     if (lpPlayerCar == 0)
@@ -1273,12 +1103,8 @@ void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
     }
 
     AIModuleIO::AICarOutputInterface* lpCarOutputInterface =
-        reinterpret_cast<AIModuleIO::AICarOutputInterface*>(lpOutputBuffer->GetAICarOutputInterface());
+        lpOutputBuffer->GetAICarOutputInterface();
     CGS_ASSERT(lpCarOutputInterface != 0, "lpCarOutputInterface != NULL");   // X360 :2279
-    if (lpCarOutputInterface == 0)
-    {
-        return;   // [GUARD] host-only
-    }
 
     for (EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0;
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
@@ -1307,7 +1133,7 @@ void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
     if (lpPlayerRoute->GetStatus() != Route::E_STATUS_UNINITIALISED && lpPlayerRoute->GetNodeCount() > 0)
     {
         AIModuleIO::AIRaceCarInterface* lpAIRaceCarInterface =
-            reinterpret_cast<AIModuleIO::AIRaceCarInterface*>(lpOutputBuffer->GetAIRaceCarInterface());
+            lpOutputBuffer->GetAIRaceCarInterface();
         lpAIRaceCarInterface->SetPlayerRouteNodePositions(lpPlayerCar);
     }
 }

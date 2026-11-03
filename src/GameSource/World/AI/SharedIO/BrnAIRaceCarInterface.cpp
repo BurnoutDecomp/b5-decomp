@@ -59,15 +59,8 @@ namespace AIModuleIO
             CGS_ASSERT(lpNextRouteNode != NULL, "lpNextRouteNode != NULL");
 
             // Only the planar (x,y) is carried; the z/w lanes are zeroed (std r9=0).
-            mCurrentNodePosition.x = lpRouteNode->GetX();
-            mCurrentNodePosition.y = lpRouteNode->GetY();
-            mCurrentNodePosition.z = 0.0f;
-            mCurrentNodePosition.w = 0.0f;
-
-            mNextNodePosition.x = lpNextRouteNode->GetX();
-            mNextNodePosition.y = lpNextRouteNode->GetY();
-            mNextNodePosition.z = 0.0f;
-            mNextNodePosition.w = 0.0f;
+            mCurrentNodePosition = Vector2(lpRouteNode->GetX(), lpRouteNode->GetY());
+            mNextNodePosition = Vector2(lpNextRouteNode->GetX(), lpNextRouteNode->GetY());
         }
     }
 
