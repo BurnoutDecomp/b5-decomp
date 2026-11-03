@@ -182,17 +182,17 @@ bool BehaviourDebugOrbitPlayer::Update(Camera& lrCamera, const BehaviourSharedIn
     // (3) The orbit orientation: identity rotated by the primary pitch/yaw, roll pinned to 0.
     Matrix44Affine lOrbitRotation;
     lOrbitRotation.SetIdentity();
-    Utils::RotateMatrix44AffineByEulerAnglesZXY(lOrbitRotation, Vector3{ mfPitch, mfYaw, 0.0f, 0.0f });
+    Utils::RotateMatrix44AffineByEulerAnglesZXY(lOrbitRotation, Vector3(mfPitch, mfYaw, 0.0f));
 
     // (4) The eye: the orbit frame's BACKWARD axis, pushed out by distance SQUARED (the squaring
     //     is what makes the stick-driven distance slider feel linear across its [0.1, 20] band).
     const Vector3 lEye =
         rw::math::vpu::Mult(
-            rw::math::vpu::TransformPoint(lOrbitRotation, Vector3{ 0.0f, 0.0f, -1.0f, 0.0f }),
+            rw::math::vpu::TransformPoint(lOrbitRotation, Vector3(0.0f, 0.0f, -1.0f)),
             mfDistance * mfDistance);
 
     // (5) Look from that eye back at the orbit centre (the frame's own origin).
-    const Matrix44Affine lLookAt = Utils::CreateLookAt(lEye, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+    const Matrix44Affine lLookAt = Utils::CreateLookAt(lEye, Vector3(0.0f, 0.0f, 0.0f));
 
     // (6) Re-base onto the tracked car: shift the look-at frame's origin to the car's world AABB
     //     centre, then compose it with the car's world transform so the whole rig orbits the car.
@@ -209,7 +209,7 @@ bool BehaviourDebugOrbitPlayer::Update(Camera& lrCamera, const BehaviourSharedIn
     Matrix44Affine lSecondaryRotation;
     lSecondaryRotation.SetIdentity();
     Utils::RotateMatrix44AffineByEulerAnglesZXY(
-        lSecondaryRotation, Vector3{ mfSecondaryPitch, mfSecondaryYaw, mfSecondaryRoll, 0.0f });
+        lSecondaryRotation, Vector3(mfSecondaryPitch, mfSecondaryYaw, mfSecondaryRoll));
 
     // (8) Publish + validate the transform, then publish the clamped FOV (SetFOV carries the
     //     "FOV > 0" assert, which the clamp above already guarantees).

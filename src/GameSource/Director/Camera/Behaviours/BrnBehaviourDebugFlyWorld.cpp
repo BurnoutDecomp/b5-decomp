@@ -28,6 +28,19 @@
 #include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::TransformVector
 #include "rw/math/vpu/vector3_operation.h"                  // Vector3 operator+ / MultAdd / Lerp
 
+namespace
+{
+    Vector3 MakeVector3WithLanes(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    {
+        rw::math::vpu::VectorIntrinsic lvValue;
+        lvValue.x = lfX;
+        lvValue.y = lfY;
+        lvValue.z = lfZ;
+        lvValue.w = lfW;
+        return Vector3(lvValue);
+    }
+}
+
 namespace BrnDirector
 {
 namespace Camera
@@ -194,9 +207,9 @@ void BehaviourDebugFlyWorld::WarpToLookAt(Vector3 lEye, Vector3 lLookAt)
 
     mPosition = lEye;
 
-    mfPitch = lAngles.x;
-    mfYaw   = lAngles.y;
-    mfRoll  = lAngles.z;
+    mfPitch = lAngles.GetX().GetFloat();
+    mfYaw   = lAngles.GetY().GetFloat();
+    mfRoll  = lAngles.GetZ().GetFloat();
 }
 
 // ----------------------------------------------------------------------------
@@ -276,9 +289,9 @@ bool BehaviourDebugFlyWorld::Update(Camera& lrCamera, const BehaviourSharedInfo&
     //     consume the input.
     Matrix44Affine lYawFrame;
     lYawFrame.SetIdentity();
-    Utils::RotateMatrix44AffineByEulerAnglesZXY(lYawFrame, Vector3{ 0.0f, mfYaw, 0.0f, 0.0f });
+    Utils::RotateMatrix44AffineByEulerAnglesZXY(lYawFrame, Vector3(0.0f, mfYaw, 0.0f));
 
-    const Vector3 lLocalMove{ mfX, mfY, mfZ, 0.0f };
+    const Vector3 lLocalMove(mfX, mfY, mfZ);
     mPosition        = mPosition + rw::math::vpu::TransformVector(lYawFrame, lLocalMove);
     mCurrentPosition = rw::math::vpu::Lerp(mCurrentPosition, mPosition, 0.2f);
 
@@ -289,7 +302,7 @@ bool BehaviourDebugFlyWorld::Update(Camera& lrCamera, const BehaviourSharedInfo&
     // (4) Build the full rig orientation.
     Matrix44Affine lOrientation;
     lOrientation.SetIdentity();
-    Utils::RotateMatrix44AffineByEulerAnglesZXY(lOrientation, Vector3{ mfPitch, mfYaw, mfRoll, 0.0f });
+    Utils::RotateMatrix44AffineByEulerAnglesZXY(lOrientation, Vector3(mfPitch, mfYaw, mfRoll));
 
     // (5) Warp-to-car request: clear it and snap the eye 4m behind the car along the rig's forward
     //     axis: if (mbWarpToCar) { clear it; eye = forward * -4.0 + carPos }.
@@ -298,7 +311,7 @@ bool BehaviourDebugFlyWorld::Update(Camera& lrCamera, const BehaviourSharedInfo&
         mbWarpToCar = false;
         const Vector3 lCarPosition = lrInfo.mPlayerInfo.mRaceCarState.mTransform.Pos();
         mPosition = rw::math::vpu::MultAdd(lOrientation.At(),
-                                           Vector3{ -4.0f, -4.0f, -4.0f, -4.0f },
+                                           MakeVector3WithLanes(-4.0f, -4.0f, -4.0f, -4.0f),
                                            lCarPosition);
     }
 
@@ -313,12 +326,12 @@ bool BehaviourDebugFlyWorld::Update(Camera& lrCamera, const BehaviourSharedInfo&
         const f32 lfScaleA = lrInfo.mTimestep.Get(BrnDirector::Timestep::E_WORLD);
         const Vector3 lVelocityA = lpTracker->GetImplicitVelocity();
         mPosition = rw::math::vpu::MultAdd(lVelocityA, mPosition,
-                                           Vector3{ lfScaleA, lfScaleA, lfScaleA, lfScaleA });
+                                           MakeVector3WithLanes(lfScaleA, lfScaleA, lfScaleA, lfScaleA));
 
         const f32 lfScaleB = lrInfo.mTimestep.Get(BrnDirector::Timestep::E_WORLD);   // re-read
         const Vector3 lVelocityB = lpTracker->GetImplicitVelocity();     // re-read
         mCurrentPosition = rw::math::vpu::MultAdd(lVelocityB, mCurrentPosition,
-                                                  Vector3{ lfScaleB, lfScaleB, lfScaleB, lfScaleB });
+                                                  MakeVector3WithLanes(lfScaleB, lfScaleB, lfScaleB, lfScaleB));
     }
 
     // (7) Look-at-car request: re-derive the rig yaw/pitch/roll from a look-at frame that points
@@ -330,9 +343,9 @@ bool BehaviourDebugFlyWorld::Update(Camera& lrCamera, const BehaviourSharedInfo&
         const Matrix44Affine lLookAt = Utils::CreateLookAt(mPosition, lCarPosition);
         const Vector3 lAngles = Utils::EulerAnglesZXYFromMatrix44Affine(lLookAt, 0, 0.0099999998f);
 
-        mfPitch = lAngles.x;
-        mfYaw   = lAngles.y;
-        mfRoll  = lAngles.z;
+        mfPitch = lAngles.GetX().GetFloat();
+        mfYaw   = lAngles.GetY().GetFloat();
+        mfRoll  = lAngles.GetZ().GetFloat();
     }
     // (8) Publish the clamped FOV (SetFOV carries the "FOV > 0" assert the clamp already
     //     the clamp above already guarantees it), publish the produced transform (orientation rows +
