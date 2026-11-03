@@ -92,24 +92,28 @@ namespace
     // Row-vector point transform through a full 4x4 (w = 1).
     Vector4 TransformToClip(Matrix44::InParam lrMatrix, Vector3::InParam lrPoint)
     {
-        Vector4 lClip;
-        lClip.x = lrPoint.x * lrMatrix.xAxis.x + lrPoint.y * lrMatrix.yAxis.x + lrPoint.z * lrMatrix.zAxis.x + lrMatrix.wAxis.x;
-        lClip.y = lrPoint.x * lrMatrix.xAxis.y + lrPoint.y * lrMatrix.yAxis.y + lrPoint.z * lrMatrix.zAxis.y + lrMatrix.wAxis.y;
-        lClip.z = lrPoint.x * lrMatrix.xAxis.z + lrPoint.y * lrMatrix.yAxis.z + lrPoint.z * lrMatrix.zAxis.z + lrMatrix.wAxis.z;
-        lClip.w = lrPoint.x * lrMatrix.xAxis.w + lrPoint.y * lrMatrix.yAxis.w + lrPoint.z * lrMatrix.zAxis.w + lrMatrix.wAxis.w;
-        return lClip;
+        const f32 lfPointX = lrPoint.GetX();
+        const f32 lfPointY = lrPoint.GetY();
+        const f32 lfPointZ = lrPoint.GetZ();
+        return Vector4(
+            lfPointX * lrMatrix.xAxis.GetX() + lfPointY * lrMatrix.yAxis.GetX() +
+                lfPointZ * lrMatrix.zAxis.GetX() + lrMatrix.wAxis.GetX(),
+            lfPointX * lrMatrix.xAxis.GetY() + lfPointY * lrMatrix.yAxis.GetY() +
+                lfPointZ * lrMatrix.zAxis.GetY() + lrMatrix.wAxis.GetY(),
+            lfPointX * lrMatrix.xAxis.GetZ() + lfPointY * lrMatrix.yAxis.GetZ() +
+                lfPointZ * lrMatrix.zAxis.GetZ() + lrMatrix.wAxis.GetZ(),
+            lfPointX * lrMatrix.xAxis.GetW() + lfPointY * lrMatrix.yAxis.GetW() +
+                lfPointZ * lrMatrix.zAxis.GetW() + lrMatrix.wAxis.GetW());
     }
 
     // Clip space -> the reference screen: ((clip / w) + 1) * 0.5 * (1280, 720).
     Vector3 ClipToScreen(const Vector4& lrClip)
     {
-        const f32 lfInvW = 1.0f / lrClip.w;
-        Vector3 lScreen;
-        lScreen.x = (lrClip.x * lfInvW + 1.0f) * 0.5f * static_cast<f32>(KU_IMPRESSION_SCREEN_WIDTH);
-        lScreen.y = (lrClip.y * lfInvW + 1.0f) * 0.5f * static_cast<f32>(KU_IMPRESSION_SCREEN_HEIGHT);
-        lScreen.z = 0.0f;
-        lScreen.w = 0.0f;
-        return lScreen;
+        const f32 lfInvW = 1.0f / lrClip.GetW();
+        return Vector3(
+            (lrClip.GetX() * lfInvW + 1.0f) * 0.5f * static_cast<f32>(KU_IMPRESSION_SCREEN_WIDTH),
+            (lrClip.GetY() * lfInvW + 1.0f) * 0.5f * static_cast<f32>(KU_IMPRESSION_SCREEN_HEIGHT),
+            0.0f);
     }
 }
 
@@ -359,10 +363,10 @@ WorldEntityModule::GenerateMassiveImpressionData( Matrix44Affine::InParam lTrans
     Vector3 laCorners[8];
     for ( s32 liCorner = 0; liCorner < 8; ++liCorner )
     {
-        laCorners[ liCorner ].x = ( liCorner & 1 ) ? lBoundingBoxMax.x : lBoundingBoxMin.x;
-        laCorners[ liCorner ].y = ( liCorner & 2 ) ? lBoundingBoxMax.y : lBoundingBoxMin.y;
-        laCorners[ liCorner ].z = ( liCorner & 4 ) ? lBoundingBoxMax.z : lBoundingBoxMin.z;
-        laCorners[ liCorner ].w = 0.0f;
+        laCorners[ liCorner ] = Vector3(
+            static_cast<f32>(( liCorner & 1 ) ? lBoundingBoxMax.GetX() : lBoundingBoxMin.GetX()),
+            static_cast<f32>(( liCorner & 2 ) ? lBoundingBoxMax.GetY() : lBoundingBoxMin.GetY()),
+            static_cast<f32>(( liCorner & 4 ) ? lBoundingBoxMax.GetZ() : lBoundingBoxMin.GetZ()));
     }
 
     Vector3 lCentre = ( lBoundingBoxMax - lBoundingBoxMin ) * 0.5f + lBoundingBoxMin;
@@ -371,10 +375,10 @@ WorldEntityModule::GenerateMassiveImpressionData( Matrix44Affine::InParam lTrans
 
     // The box centre must be inside the view volume.
     const Vector4 lCentreClip = TransformToClip( lWorldViewProjection, lCentre );
-    const f32 lfCentreW = std::fabs( lCentreClip.w );
-    if ( std::fabs( lCentreClip.x ) > lfCentreW ||
-         std::fabs( lCentreClip.y ) > lfCentreW ||
-         std::fabs( lCentreClip.z ) > lfCentreW )
+    const f32 lfCentreW = std::fabs( lCentreClip.GetW() );
+    if ( std::fabs( lCentreClip.GetX() ) > lfCentreW ||
+         std::fabs( lCentreClip.GetY() ) > lfCentreW ||
+         std::fabs( lCentreClip.GetZ() ) > lfCentreW )
     {
         return;
     }
@@ -383,8 +387,8 @@ WorldEntityModule::GenerateMassiveImpressionData( Matrix44Affine::InParam lTrans
     for ( s32 liCorner = 0; liCorner < 8; ++liCorner )
     {
         const Vector4 lClip = TransformToClip( lWorldViewProjection, laCorners[ liCorner ] );
-        const f32 lfW = std::fabs( lClip.w );
-        if ( lfW >= std::fabs( lClip.x ) && lfW >= std::fabs( lClip.y ) && lfW >= std::fabs( lClip.z ) )
+        const f32 lfW = std::fabs( lClip.GetW() );
+        if ( lfW >= std::fabs( lClip.GetX() ) && lfW >= std::fabs( lClip.GetY() ) && lfW >= std::fabs( lClip.GetZ() ) )
         {
             ++liCornersInView;
         }
@@ -440,7 +444,7 @@ WorldEntityModule::DEBUG_RenderAdvert( Matrix44Affine::InParam lTransform,
     lBoxTransform.Pos() = lTransform.At() * 0.25f + lTransform.Pos();
     lrRender.DrawBox( lBoundingBoxMin, lBoundingBoxMax, lBoxTransform, KU_ADVERT_DEBUG_COLOUR );
 
-    const Vector3 lNormal = { 1.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lNormal(1.0f, 0.0f, 0.0f);
     lrRender.DrawCircle( lTransform.Pos(), lNormal, 1.0f, KU_ADVERT_DEBUG_COLOUR );
 }
 

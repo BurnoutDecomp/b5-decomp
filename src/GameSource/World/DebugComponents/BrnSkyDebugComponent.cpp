@@ -458,20 +458,20 @@ void DebugComponent::Update()
 {
     if (mbGetJunkyardKeyLightDirection)
     {
-        mafJunkyardKeyLightDirection[0] = mpEnvironmentManager->mOverrideKeyLightDirection.x;
-        mafJunkyardKeyLightDirection[1] = mpEnvironmentManager->mOverrideKeyLightDirection.y;
-        mafJunkyardKeyLightDirection[2] = mpEnvironmentManager->mOverrideKeyLightDirection.z;
+        mafJunkyardKeyLightDirection[0] = mpEnvironmentManager->mOverrideKeyLightDirection.GetX();
+        mafJunkyardKeyLightDirection[1] = mpEnvironmentManager->mOverrideKeyLightDirection.GetY();
+        mafJunkyardKeyLightDirection[2] = mpEnvironmentManager->mOverrideKeyLightDirection.GetZ();
     }
 
     if (mbOverrideJunkyardKeyLightDirection)
     {
-        const Vector3 lDirection = {mafJunkyardKeyLightDirection[0], mafJunkyardKeyLightDirection[1],
-                                    mafJunkyardKeyLightDirection[2], 0.0f};
+        const Vector3 lDirection(mafJunkyardKeyLightDirection[0], mafJunkyardKeyLightDirection[1],
+                                 mafJunkyardKeyLightDirection[2]);
         mpEnvironmentManager->mOverrideKeyLightDirection = NormalizeJunkyardKeyLightDirection(lDirection);
-        if (mpEnvironmentManager->mOverrideKeyLightDirection.y > KF_JUNKYARD_MAX_VERTICAL)
-            mpEnvironmentManager->mOverrideKeyLightDirection.y = KF_JUNKYARD_MAX_VERTICAL;
-        if (mpEnvironmentManager->mOverrideKeyLightDirection.y < -KF_JUNKYARD_MAX_VERTICAL)
-            mpEnvironmentManager->mOverrideKeyLightDirection.y = -KF_JUNKYARD_MAX_VERTICAL;
+        if (mpEnvironmentManager->mOverrideKeyLightDirection.GetY() > KF_JUNKYARD_MAX_VERTICAL)
+            mpEnvironmentManager->mOverrideKeyLightDirection.SetY(KF_JUNKYARD_MAX_VERTICAL);
+        if (mpEnvironmentManager->mOverrideKeyLightDirection.GetY() < -KF_JUNKYARD_MAX_VERTICAL)
+            mpEnvironmentManager->mOverrideKeyLightDirection.SetY(-KF_JUNKYARD_MAX_VERTICAL);
     }
 
     if (mbCalculateJunkyardKeyLightDirectionFromTime)
@@ -482,9 +482,9 @@ void DebugComponent::Update()
             mpEnvironmentManager->mfSunRigRotation,
             mpEnvironmentManager->mfSunTiltAtHorizon,
             mpEnvironmentManager->mfSunTiltAtMidday);
-        mafJunkyardKeyLightDirection[0] = lDirection.x;
-        mafJunkyardKeyLightDirection[1] = lDirection.y;
-        mafJunkyardKeyLightDirection[2] = lDirection.z;
+        mafJunkyardKeyLightDirection[0] = lDirection.GetX();
+        mafJunkyardKeyLightDirection[1] = lDirection.GetY();
+        mafJunkyardKeyLightDirection[2] = lDirection.GetZ();
     }
 
     mpEnvironmentManager->UpdateFromTool(mbUpdateValuesFromTool);
