@@ -40,10 +40,10 @@ namespace postfx
     // image of 0.005). The vector lanes z/w are the 0.0 the SIMD slot carries.
     B4Blur::State::State()
     {
-        m_blendAmount.x = 1.0f;  m_blendAmount.y = 1.0f;  m_blendAmount.z = 0.0f;  m_blendAmount.w = 0.0f;
-        m_blurAmount.x  = 1.0f;  m_blurAmount.y  = 1.0f;  m_blurAmount.z  = 0.0f;  m_blurAmount.w  = 0.0f;
-        m_blendCenter.x = 0.5f;  m_blendCenter.y = 0.5f;  m_blendCenter.z = 0.0f;  m_blendCenter.w = 0.0f;
-        m_blurCenter.x  = 0.5f;  m_blurCenter.y  = 0.5f;  m_blurCenter.z  = 0.0f;  m_blurCenter.w  = 0.0f;
+        m_blendAmount = rw::math::vpu::Vector2(1.0f, 1.0f);
+        m_blurAmount  = rw::math::vpu::Vector2(1.0f, 1.0f);
+        m_blendCenter = rw::math::vpu::Vector2(0.5f, 0.5f);
+        m_blurCenter  = rw::math::vpu::Vector2(0.5f, 0.5f);
 
         m_blurOpacity   = 1.0f;   // +0x40
         m_blurVelocity  = 1.0f;   // +0x44

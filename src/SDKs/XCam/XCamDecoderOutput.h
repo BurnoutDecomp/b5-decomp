@@ -36,15 +36,6 @@
 namespace XCAM
 {
 
-// --- Xbox-360 XDK entry points used only by the decoder output (platform boundary)
-// Declared with the argument/return shapes the X360 call sites use so the
-// reconstructed bodies compile store-for-store. Supplied by the platform layer;
-// NOT reconstructed here. (GetTickCount / the D3D device-state setters and
-// D3DResource_Release / D3DDevice_CreatePixelShader come in via the base and
-// I420 headers.)
-extern "C" u32 GetTickCount();
-u32 D3DResource_AddRef(D3DResource* pResource);
-
 // RGB fallback pixel-shader microcode blob (dword_8210C210) handed to
 // D3DDevice_CreatePixelShader. Address-only load in the X360 image; the bytes are
 // unrecoverable so the symbol is declared and NOT defined.

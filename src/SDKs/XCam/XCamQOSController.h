@@ -31,6 +31,7 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include <xtl.h>
 
 namespace XCAM
 {
@@ -43,7 +44,7 @@ class CStreamEngine;
 
 // --- Win32 / Xbox platform boundary ----------------------------------------
 // Millisecond tick used to drive the QOS timers (matches the sibling XCAM TUs).
-extern "C" u32 GetTickCount();
+
 
 // The X360 asm folds the byte accumulator into an interrupt-disabled
 // lwarx/stwcx atomic (mfmsr / mtmsree wrap); that is the XDK

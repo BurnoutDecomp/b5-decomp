@@ -51,7 +51,7 @@ void RtlEnterCriticalSection(RTL_CRITICAL_SECTION* pCriticalSection);
 void RtlLeaveCriticalSection(RTL_CRITICAL_SECTION* pCriticalSection);
 
 // --- Win32/Xbox timing (platform boundary) ---------------------------------
-u32 GetTickCount();
+
 
 // --- BITMAPINFOHEADER (Win32 video format descriptor) ----------------------
 // The 40-byte format header the encoder builds for the YUY2 source frames and

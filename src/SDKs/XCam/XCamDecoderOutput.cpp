@@ -26,7 +26,7 @@ int CDecoderOutput::Initialize(D3DDevice* pDevice, s32 iWidth, s32 iHeight)
 
     if (pDevice)
     {
-        mpRGBPixelShader = D3DDevice_CreatePixelShader(gXCamRGBPixelShaderCode);
+        mpRGBPixelShader = D3DDevice_CreatePixelShader(reinterpret_cast<const DWORD*>(gXCamRGBPixelShaderCode));
         if (!mpRGBPixelShader)
             return KI_XCAM_VIDEO_OUT_OF_RESOURCES;
     }
@@ -41,12 +41,12 @@ void CDecoderOutput::Shutdown()
     {
         if (mpDefaultTexture)
         {
-            D3DResource_Release(mpDefaultTexture);
+            D3DTexture_Release(mpDefaultTexture);
             mpDefaultTexture = 0;
         }
         if (mpRGBPixelShader)
         {
-            D3DResource_Release(mpRGBPixelShader);
+            D3DPixelShader_Release(mpRGBPixelShader);
             mpRGBPixelShader = 0;
         }
     }
@@ -61,7 +61,7 @@ void CDecoderOutput::Reset()
 
     if (mpDefaultTexture)
     {
-        D3DResource_Release(mpDefaultTexture);
+        D3DTexture_Release(mpDefaultTexture);
         mpDefaultTexture = 0;
     }
 
@@ -88,17 +88,18 @@ void CDecoderOutput::Render()
     D3DDevice_SetVertexDeclaration(pDevice, mpVertexDeclaration);
     D3DDevice_SetVertexShader(pDevice, mpVertexShader);
     D3DDevice_SetPixelShader(pDevice, mpRGBPixelShader);
-    D3DDevice_SetTexture(pDevice, 0, mpDefaultTexture, 0x80000000u);
+    D3DDevice_SetTexture(pDevice, 0, reinterpret_cast<D3DBaseTexture*>(mpDefaultTexture), 0x80000000u);
     D3DDevice_SetStreamSource(pDevice, 0, mpVertexBuffer, 0, 20, 1);
 
-    SetSamplerDimension2D(pDevice, 0x480, 0x80000000u);
+    D3DDevice_SetSamplerState_AddressU_Inline(pDevice, 0, 1);
+    D3DDevice_SetSamplerState_AddressV_Inline(pDevice, 0, 1);
     D3DDevice_SetSamplerState_MinFilter(pDevice, 0, 1);
     D3DDevice_SetSamplerState_MagFilter(pDevice, 0, 1);
 
     D3DDevice_SetRenderState_ZEnable(pDevice, 0);
     D3DDevice_SetRenderState_CullMode(pDevice, 0);
     D3DDevice_SetRenderState_ViewportEnable(pDevice, 0);
-    D3DDevice_DrawVertices(pDevice, 6, 0, 4);
+    D3DDevice_DrawVertices(pDevice, static_cast<D3DPRIMITIVETYPE>(6), 0, 4);
 
     // Unbind everything.
     D3DDevice_SetVertexDeclaration(pDevice, 0);
@@ -135,12 +136,12 @@ void CDecoderOutput::BufferWriteSucceeded()
 void CDecoderOutput::SetDefaultRGBTexture(D3DTexture* pTexture)
 {
     if (mpDefaultTexture)
-        D3DResource_Release(mpDefaultTexture);
+        D3DTexture_Release(mpDefaultTexture);
 
     mpDefaultTexture = pTexture;
 
     if (pTexture)
-        D3DResource_AddRef(pTexture);
+        D3DTexture_AddRef(pTexture);
 }
 
 } // namespace XCAM

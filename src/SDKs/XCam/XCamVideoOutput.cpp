@@ -23,15 +23,15 @@ int CVideoOutputBase::Initialize(D3DDevice* pDevice, s32 iWidth, s32 iHeight)
         mpDevice = pDevice;
         D3DDevice_AddRef(pDevice);
 
-        mpVertexDeclaration = D3DDevice_CreateVertexDeclaration(gXCamVideoVertexElements);
+        mpVertexDeclaration = D3DDevice_CreateVertexDeclaration(reinterpret_cast<const D3DVERTEXELEMENT9*>(gXCamVideoVertexElements));
         if (!mpVertexDeclaration)
             return KI_XCAM_VIDEO_OUT_OF_RESOURCES;
 
-        mpVertexShader = D3DDevice_CreateVertexShader(gXCamVideoVertexShaderCode);
+        mpVertexShader = D3DDevice_CreateVertexShader(reinterpret_cast<const DWORD*>(gXCamVideoVertexShaderCode));
         if (!mpVertexShader)
             return KI_XCAM_VIDEO_OUT_OF_RESOURCES;
 
-        mpVertexBuffer = D3DDevice_CreateVertexBuffer(80, 0, 0);
+        mpVertexBuffer = D3DDevice_CreateVertexBuffer(80, 0, D3DPOOL_DEFAULT);
         if (!mpVertexBuffer)
             return KI_XCAM_VIDEO_OUT_OF_RESOURCES;
 
@@ -57,10 +57,10 @@ void CVideoOutputBase::Shutdown()
         D3DDevice_Release(mpDevice);
         mpDevice = 0;
 
-        if (mpVertexDeclaration) { D3DResource_Release(mpVertexDeclaration); mpVertexDeclaration = 0; }
-        if (mpVertexShader)      { D3DResource_Release(mpVertexShader);      mpVertexShader      = 0; }
+        if (mpVertexDeclaration) { D3DVertexDeclaration_Release(mpVertexDeclaration); mpVertexDeclaration = 0; }
+        if (mpVertexShader)      { D3DVertexShader_Release(mpVertexShader);      mpVertexShader      = 0; }
         if (mpResource0C)        { D3DResource_Release(mpResource0C);        mpResource0C        = 0; }
-        if (mpVertexBuffer)      { D3DResource_Release(mpVertexBuffer);      mpVertexBuffer      = 0; }
+        if (mpVertexBuffer)      { D3DVertexBuffer_Release(mpVertexBuffer);      mpVertexBuffer      = 0; }
 
         for (int i = 0; i < 3; ++i)
         {
@@ -78,7 +78,7 @@ void CVideoOutputBase::Shutdown()
         {
             if (mpBufferResource[i])
             {
-                XMemFree(mpBufferResource[i], KU_XCAM_XMEM_FREE_ATTRIBUTES);
+                ::XMemFree(mpBufferResource[i], KU_XCAM_XMEM_FREE_ATTRIBUTES);
                 mpBufferResource[i] = 0;
             }
         }
@@ -122,7 +122,7 @@ void CVideoOutputBase::UpdateVertexBuffer()
 
     D3DDevice_SetStreamSource(mpDevice, 0, pPrevStream, uOffsetInBytes, uStride, 1);
     if (pPrevStream)
-        D3DResource_Release(pPrevStream);
+        D3DVertexBuffer_Release(pPrevStream);
 }
 
 // @ 0x82984450

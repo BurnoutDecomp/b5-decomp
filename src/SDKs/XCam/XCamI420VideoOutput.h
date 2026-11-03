@@ -34,35 +34,8 @@
 namespace XCAM
 {
 
-// --- Xbox-360 D3D9 platform object types (opaque handles) ------------------
-// Both derive from D3DResource (defined in the base header) so the by-name
-// Release / SetTexture calls upcast exactly as the asm does. External XDK types.
-struct D3DTexture     : D3DResource {};
-struct D3DPixelShader : D3DResource {};
-
-// --- Xbox-360 XDK entry points used only by the I420 output (platform boundary)
-// Declared with the argument/return shapes the X360 call sites use so the
-// reconstructed bodies compile store-for-store. Supplied by the platform layer;
-// NOT reconstructed here.
-void*           XMemAlloc(u32 uSize, u32 uAttributes);
-D3DPixelShader* D3DDevice_CreatePixelShader(const void* pFunction);
-D3DTexture*     D3DDevice_CreateTexture(u32 uWidth, u32 uHeight, u32 uDepth, u32 uLevels,
-                                        u32 uUsage, u32 uFormat, u32 uUnusedPool, u32 uD3DType);
-void            D3DTexture_LockRect(D3DResource* pThis, u32 uLevel, SVideoBuffer* pLockedRect,
-                                    const void* pRect, u32 uFlags);
-void            D3DTexture_UnlockRect(D3DResource* pThis, u32 uLevel);
-
-// Draw-time device state setters (all inlined at the X360 call sites).
-void D3DDevice_SetVertexDeclaration(D3DDevice* pDevice, D3DVertexDeclaration* pDecl);
-void D3DDevice_SetVertexShader(D3DDevice* pDevice, D3DVertexShader* pShader);
-void D3DDevice_SetPixelShader(D3DDevice* pDevice, D3DPixelShader* pShader);
-u32  D3DDevice_SetTexture(D3DDevice* pDevice, u32 uSampler, D3DResource* pTexture, u32 uFlags);
-void D3DDevice_SetSamplerState_MinFilter(D3DDevice* pDevice, u32 uSampler, u32 uValue);
-void D3DDevice_SetSamplerState_MagFilter(D3DDevice* pDevice, u32 uSampler, u32 uValue);
-void D3DDevice_SetRenderState_ZEnable(D3DDevice* pDevice, u32 uValue);
-void D3DDevice_SetRenderState_CullMode(D3DDevice* pDevice, u32 uValue);
-void D3DDevice_SetRenderState_ViewportEnable(D3DDevice* pDevice, u32 uValue);
-void D3DDevice_DrawVertices(D3DDevice* pDevice, u32 uPrimitiveType, u32 uStartVertex, u32 uVertexCount);
+using ::D3DTexture;
+using ::D3DPixelShader;
 
 // Pixel-shader microcode blob (dword_8210BED0) handed to D3DDevice_CreatePixelShader.
 // Address-only load in the X360 image; the bytes are unrecoverable so the symbol

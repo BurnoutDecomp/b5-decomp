@@ -34,22 +34,22 @@ int CYUY2VideoOutput::Initialize(D3DDevice* pDevice, s32 iWidth, s32 iHeight)
         // Device present: back the single packed plane with a D3D texture per ring
         // slot and cache its locked pitch/pointer. mpResource0C (base @0x0C) holds
         // the YUY2->RGB pixel shader.
-        mpResource0C = D3DDevice_CreatePixelShader(gXCamYUY2PixelShaderCode);
+        mpResource0C = D3DDevice_CreatePixelShader(reinterpret_cast<const DWORD*>(gXCamYUY2PixelShaderCode));
         if (!mpResource0C)
             return KI_XCAM_VIDEO_OUT_OF_RESOURCES;
 
         for (int i = 0; i < 3; ++i)
         {
-            mpBufferResource[i] = D3DDevice_CreateTexture(miWidth, miHeight, 1, 1, 0,
-                                                          KU_XCAM_YUY2_PLANE_FORMAT, 0,
-                                                          KU_XCAM_YUY2_TEXTURE_TYPE);
+            mpBufferResource[i] = reinterpret_cast<D3DResource*>(D3DDevice_CreateTexture(miWidth, miHeight, 1, 1, 0,
+                                                          static_cast<D3DFORMAT>(KU_XCAM_YUY2_PLANE_FORMAT), D3DPOOL_DEFAULT,
+                                                          static_cast<D3DRESOURCETYPE>(KU_XCAM_YUY2_TEXTURE_TYPE)));
             if (!mpBufferResource[i])
                 return KI_XCAM_VIDEO_OUT_OF_RESOURCES;
 
             // Lock/unlock once so the descriptor caches the driver's row pitch and
             // backing pointer (the D3DLOCKED_RECT aliases SVideoBuffer {pitch,data}).
-            D3DTexture_LockRect(mpBufferResource[i], 0, &mBuffers[i], 0, 0);
-            D3DTexture_UnlockRect(mpBufferResource[i], 0);
+            D3DTexture_LockRect(reinterpret_cast<D3DTexture*>(mpBufferResource[i]), 0, reinterpret_cast<D3DLOCKED_RECT*>(&mBuffers[i]), 0, 0);
+            D3DTexture_UnlockRect(reinterpret_cast<D3DTexture*>(mpBufferResource[i]), 0);
         }
     }
     else
@@ -60,7 +60,7 @@ int CYUY2VideoOutput::Initialize(D3DDevice* pDevice, s32 iWidth, s32 iHeight)
             const u32 uBytes = 2u * static_cast<u32>(miHeight) * static_cast<u32>(miWidth);
 
             mpBufferResource[i] = static_cast<D3DResource*>(
-                XMemAlloc(uBytes, KU_XCAM_XMEM_FREE_ATTRIBUTES));
+                ::XMemAlloc(uBytes, KU_XCAM_XMEM_FREE_ATTRIBUTES));
             if (!mpBufferResource[i])
                 return KI_XCAM_VIDEO_OUT_OF_RESOURCES;
 
@@ -83,17 +83,18 @@ void CYUY2VideoOutput::Render()
     D3DDevice_SetVertexShader(pDevice, mpVertexShader);
     D3DDevice_SetPixelShader(pDevice, static_cast<D3DPixelShader*>(mpResource0C));
 
-    D3DDevice_SetTexture(pDevice, 0, mpBufferResource[uIndex], 0x80000000u);
+    D3DDevice_SetTexture(pDevice, 0, reinterpret_cast<D3DBaseTexture*>(mpBufferResource[uIndex]), 0x80000000u);
     D3DDevice_SetStreamSource(pDevice, 0, mpVertexBuffer, 0, 20, 1);
 
-    SetSamplerDimension2D(pDevice, 0x480, 0x80000000u);
+    D3DDevice_SetSamplerState_AddressU_Inline(pDevice, 0, 1);
+    D3DDevice_SetSamplerState_AddressV_Inline(pDevice, 0, 1);
     D3DDevice_SetSamplerState_MinFilter(pDevice, 0, 1);
     D3DDevice_SetSamplerState_MagFilter(pDevice, 0, 1);
 
     D3DDevice_SetRenderState_ZEnable(pDevice, 0);
     D3DDevice_SetRenderState_CullMode(pDevice, 0);
     D3DDevice_SetRenderState_ViewportEnable(pDevice, 0);
-    D3DDevice_DrawVertices(pDevice, 6, 0, 4);
+    D3DDevice_DrawVertices(pDevice, static_cast<D3DPRIMITIVETYPE>(6), 0, 4);
 
     // Unbind everything.
     D3DDevice_SetVertexDeclaration(pDevice, 0);
