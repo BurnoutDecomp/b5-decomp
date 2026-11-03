@@ -24,15 +24,8 @@
 //   * The RUNTIME objects -- AptCIH / AptCharacterTextInst / AptRenderItemDynamicText
 //     -- are accessed through their NAMED members (no offset hacks); the console
 //     offsets the pseudocode reads map to those members (see AptRenderItemDynamicText.h).
-//   * The SERIALISED font-character record walked to resolve the font NAME is external
-//     file data (the movie's widened native-8 character table). Its layout is fixed by
-//     the data, not a C++ class, so it is read by documented native-8 offsets (the
-//     AGENTS.md "external serialised data" exception). The console reads a 4-byte-slot
-//     table + a console font-char name @+0x10; the widened native-8 bundle strides the
-//     table 8 bytes and the type-3 font char's name pointer lands @+0x20 (widened char
-//     header 0x20 + name slot 0 -- the same native-8 character layout the XB1
-//     AptCharacterAnimation::Fixup / AptMovie::resolve64 walk; verify vs the XB1 char
-//     record, never a converter script).
+//   * Font character names use the ARTIST-attested native pointer field on
+//     AptCharacterFont, following the 16-byte AptCharacter header.
 //   * The TextFormat overrides (colour/style/indent/margins/font name) read the
 //     +0x68 slot as the embedded TextFormat RECORD by named member (AptTextFormat.h;
 //     the member's AptValue* typing is the opaque pass-through FLAG). The console's
@@ -48,6 +41,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"
 #include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"
 #include "SDKs/EATech/include/Apt/AptCharacter.h"
+#include "SDKs/EATech/include/Apt/AptCharacterFont.h"
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"   // mnDefaultGlyphIndex (font index)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"     // the movie def (font-char table walk)
 #include "SDKs/EATech/include/Apt/AptStd/AptRect.h"
@@ -68,10 +62,10 @@ extern intptr_t gAptEmptyTextRenderDataZID;   // &unk_82F72DB0
 // AptCIH::getTextFormat resolves texFormat->pFontName as
 //   pParentAnim->animation.apCharacters[text.nFontID]->font.szName
 // when the id is in range and the slot is a FONT character). The walk is the SAME
-// native-8 chain EnsureStringAllocated's draw path uses below: the field char's
+// native chain EnsureStringAllocated's draw path uses below: the field char's
 // mpFixupLink back-link -> the def base at +KU_AptEmbeddedMovieOff ->
-// mpCharacterTable[fontId] -> the type-3 font char's name pointer @+0x20
-// (serialised native-8 record; Fixup case 3 relocated it live). A negative id
+// mpCharacterTable[fontId] -> the type-3 font char's name pointer @+0x10
+// (Fixup case 3 relocated it live). A negative id
 // (setTextFormat's "explicit font installed" latch), an out-of-range id, or a
 // non-font slot yields "" -- the contract's no-font value (the getTextFormat
 // overlay then KEEPS the record's copied font name).
@@ -97,10 +91,8 @@ const char* AptResolveTextFieldFontName(AptCharacterInst* pTextInst)
     if (pFontChar == 0 || pFontChar->mnType != 3)   // not a FONT character
         return "";
 
-    // type-3 font char: name pointer at font-char native-8 +0x20 (console +0x10;
-    // relocated live by Fixup case 3 -- the same slot the draw path reads below).
-    const char* const pName = *reinterpret_cast<const char* const*>(
-        reinterpret_cast<const uint8_t*>(pFontChar) + 0x20);
+    // Font name follows the 16-byte character header.
+    const char* const pName = static_cast<const AptCharacterFont*>(pFontChar)->mpName;
     return (pName != 0) ? pName : "";
 }
 
@@ -287,8 +279,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             //   KU_AptEmbeddedMovieOff -- the same walk findCharacterInLibrary @0x82AFDF58 uses);
             //   fontChar = def->mpCharacterTable[fontIdx];  name = fontChar + <name slot>.
             // The def base + char table are NAMED AptCharacterAnimation members; the type-3 FONT
-            // character record is SERIALISED native-8 data (name pointer at font-char +0x20,
-            // relocated to a live pointer by Fixup case 3 -- documented offset access).
+            // character record exposes its ARTIST name pointer at +0x10.
             AptCharacterInst* pParentCI = pParent->GetCharacterInst();
             AptRenderItem*    pParentRI = pParentCI ? pParentCI->GetRenderItem() : 0;
             AptCharacter*     pParentChar = pParentRI ? pParentRI->mpCharacter : 0;
@@ -305,10 +296,8 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
                     const AptCharacter* pFontChar = pDef->mpCharacterTable[nFontIdx];
                     if (pFontChar != 0 && pFontChar->mnType == 3)   // a FONT character
                     {
-                        // type-3 font char: name pointer at font-char native-8 +0x20
-                        // (console +0x10; relocated live by Fixup case 3).
-                        pFontName = *reinterpret_cast<const char* const*>(
-                            reinterpret_cast<const uint8_t*>(pFontChar) + 0x20);
+                        // The font name follows its 16-byte character header.
+                        pFontName = static_cast<const AptCharacterFont*>(pFontChar)->mpName;
                     }
                 }
             }

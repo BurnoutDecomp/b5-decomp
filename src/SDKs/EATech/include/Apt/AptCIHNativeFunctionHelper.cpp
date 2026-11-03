@@ -1169,7 +1169,7 @@ static void OverlayFieldTextAttributes(AptCIH* pNode, AptRenderItemDynamicText* 
     }
 
     // Alignment = the field's packed alignment (mFlagsAndBackColor bits 3-6, signed).
-    pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 3) >> 28;
+    pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 25) >> 28;
     pResult->mFormat.mfSize  = pField->mFontSize;
 }
 
