@@ -1,10 +1,8 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentPlayerJumping.h"
 
 #include <math.h>                                                     // fabsf (the grounded test's sign clear)
-#include <cstdlib>                                                    // [DIAG] getenv (BRN_CRASHCAM_DIAG)
-#include <cstdio>                                                     // [DIAG] snprintf (the tick witness line)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::WriteToLog (the [pjump] traps, NOT X360)
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h"
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"     // the jump rig/bystander blocks
 #include "GameSource/Director/BrnDirectorICEWrapper.h"                // ICEWrapper (the resource-manager header's inlines need it complete first)
 #include "GameSource/Director/BrnDirectorResourceManager.h"           // the player-jumping shot group
@@ -26,18 +24,7 @@
 // (`lbzx` @0x82250350), and no data word holds 0x3542C. So the console never leaves SEARCHING: every roaming frame
 // integrates the landing cooldown, finds the gates shut, and reports not-met / can't-switch / head bit 18.
 //
-// [FX-DIRECTOR2 2026-09-25] The retail path is re-derived from the X360, and the moment is allocated (NewMoment case
-// 7, un-gated):
-//   * Construct @0x8225F1F0, Prepare @0x82251048, Update's SEARCHING arm and Release @0x8223AED0 -- the record is
-//     read BY NAME. The five detail:: reach shims this TU went through are gone, and BrnMomentSharedInfo.cpp keeps
-//     them only for PlayerStunt.
-//   * The collection members retail reaches are bodied: Construct (inlined in the moment's Construct), AddShot
-//     (0x8224B1B8 rig-6 / 0x8224B0A8 bystander / 0x8224B130 rig-4; the ice copy is inlined in Prepare) and Release
-//     (0x8222DF20 / 0x8222DDB0 / 0x8222DE68 / 0x8222E030).
-//   * [PC TRAP, NOT X360] What retail never reaches is a LOUD trap: announced in the game log once, then
-//     CGS_ASSERT(false) every time. Never a silent no-op. The traps are the collections' Prepare / HasFailed /
-//     CanSwitchToMeNow and MomentPlayerJumping::UpdateCamera @0x8223AB78. The only way in is the gate above.
-//     DELETE-WHEN: the collection bodies and UpdateCamera are re-derived (the filming closure).
+// Collection allocation and camera selection follow the native X360 bodies.
 // ============================================================================
 
 namespace BrnDirector
@@ -76,21 +63,7 @@ namespace
     const u32 KU_CAMERA_FLAG_1 = 1;
     const u32 KU_CAMERA_FLAG_7 = 7;
 
-    // [PC TRAP, NOT X360] a step this host has no body for: announced in the game log the first time
-    // (unconditionally -- no knob), then CGS_ASSERT(false) every time.
-    void PlayerJumpingTrap(bool& arbAnnounced, const char* lpcAnnouncement, const char* lpcAssert)
-    {
-        if (!arbAnnounced)
-        {
-            arbAnnounced = true;
-            CgsDev::Log::WriteToLog(lpcAnnouncement);
-        }
-        CGS_ASSERT(false, lpcAssert);
-    }
 
-    // [DIAG] NOT IN THE console BINARY. The jump moment's tick witness, behind BRN_CRASHCAM_DIAG (the moment diag
-    // gate, default off): the first SEARCHING tick, the 300th, and the first that sees the jump action flag -- each
-    // with the three gates, so a log shows the moment allocated, ticked and (on retail) shut. Reads only.
 }
 
 // ============================================================================
@@ -149,49 +122,53 @@ bool BehaviourCollection<TBehaviour, TParameters, N>::Release()
 }
 
 // ============================================================================
-// BehaviourCollection -- [PC TRAP, NOT X360] the members retail never reaches (only PrepareCameras and
-// GetCameraStatus call them, behind the mbAllowJumpMoment gate).
+// BehaviourCollection preparation and readiness, recovered from the per-type X360 bodies.
 // ============================================================================
 
-// Prepare (DWARF h:54): bystander @0x82267C40, rig-4 @0x82267D88, rig-6 @0x82267ED0, ice @0x82273360. Reports
-// failure, which PrepareCameras asserts on.
 template <typename TBehaviour, typename TParameters, u32 N>
-bool BehaviourCollection<TBehaviour, TParameters, N>::Prepare(Camera::BehaviourManager& /*lrBehaviourManager*/)
+bool BehaviourCollection<TBehaviour, TParameters, N>::Prepare(Camera::BehaviourManager& lrBehaviourManager)
 {
-    static bool sbAnnounced = false;
-    PlayerJumpingTrap(sbAnnounced,
-                      "[pjump] TRAP (PC, NOT X360): BehaviourCollection<>::Prepare (X360 bystander 0x82267C40 / "
-                      "rig-4 0x82267D88 / rig-6 0x82267ED0 / ice 0x82273360) has no host body: the jump shot's "
-                      "behaviours are NOT allocated. Reached only with MainDirector::mbAllowJumpMoment set, which "
-                      "retail never does.\n",
-                      "BehaviourCollection::Prepare has no host body (the jump moment's filming closure)");
-    return false;
-}
-
-// HasFailed (DWARF h:72): bystander @0x821FD118, rig-4 @0x821FD238, rig-6 @0x821FD358, ice @0x821FD5B8. Reports
-// FAILED, so FOUND_PREPARING releases the moment back to SEARCHING.
-template <typename TBehaviour, typename TParameters, u32 N>
-bool BehaviourCollection<TBehaviour, TParameters, N>::HasFailed()
-{
-    static bool sbAnnounced = false;
-    PlayerJumpingTrap(sbAnnounced,
-                      "[pjump] TRAP (PC, NOT X360): BehaviourCollection<>::HasFailed (X360 bystander 0x821FD118 / "
-                      "rig-4 0x821FD238 / rig-6 0x821FD358 / ice 0x821FD5B8) has no host body: reported FAILED.\n",
-                      "BehaviourCollection::HasFailed has no host body (the jump moment's filming closure)");
+    CGS_ASSERT(maShots.GetLength() > 0, "maShots.GetLength() > 0");
+    if (!mbAllocatedShots)
+    {
+        ++miCurrentCamera;
+        miCurrentCamera = static_cast<u32>(miCurrentCamera) % maShots.GetLength();
+        lrBehaviourManager.NewBehaviour<TBehaviour>(maShots[miCurrentCamera].mHandle,
+            const_cast<ArbitratorState*>(mpArbStateOwner), mpMomentOwner, 1);
+        if (maShots[miCurrentCamera].mpParams)
+        {
+            Shot& lrShot = maShots[miCurrentCamera];
+            TBehaviour* lpBehaviour = static_cast<TBehaviour*>(lrShot.mHandle.GetHelper().GetPoolHandle().Get());
+            lpBehaviour->SetParameters(lrShot.mpParams);
+        }
+        mbHasCurrentCamera = true;
+        mbAllocatedShots = true;
+    }
     return true;
 }
 
-// CanSwitchToMeNow (DWARF h:66): bystander @0x821FD088, rig-4 @0x821FD1A8, rig-6 @0x821FD2C8, ice @0x821FD528.
+template <typename TBehaviour, typename TParameters, u32 N>
+bool BehaviourCollection<TBehaviour, TParameters, N>::HasFailed()
+{
+    CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");
+    CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");
+    return false;
+}
+
 template <typename TBehaviour, typename TParameters, u32 N>
 bool BehaviourCollection<TBehaviour, TParameters, N>::CanSwitchToMeNow()
 {
-    static bool sbAnnounced = false;
-    PlayerJumpingTrap(sbAnnounced,
-                      "[pjump] TRAP (PC, NOT X360): BehaviourCollection<>::CanSwitchToMeNow (X360 bystander "
-                      "0x821FD088 / rig-4 0x821FD1A8 / rig-6 0x821FD2C8 / ice 0x821FD528) has no host body: "
-                      "reported NOT ready.\n",
-                      "BehaviourCollection::CanSwitchToMeNow has no host body (the jump moment's filming closure)");
-    return false;
+    CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");
+    CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");
+    return true;
+}
+
+template <typename TBehaviour, typename TParameters, u32 N>
+TBehaviour& BehaviourCollection<TBehaviour, TParameters, N>::GetBehaviour()
+{
+    CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");
+    CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");
+    return *static_cast<TBehaviour*>(maShots[miCurrentCamera].mHandle.GetHelper().GetPoolHandle().Get());
 }
 
 // ============================================================================
@@ -456,7 +433,6 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController, co
         }
 
         const GameState& lrGameState = *lrSharedInfo.mpGameState;
-   // [DIAG] NOT IN THE console BINARY (BRN_CRASHCAM_DIAG)
         if ((lrGameState.miThisFramesActionFlags & KI_ACTION_FLAG_JUMP) != 0
             && lrGameState.mbCanUseSlomo
             && lrSharedInfo.mbAllowJumpMoment)
@@ -543,21 +519,71 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController, co
     SetCamera(lCamera);
 }
 
-// ============================================================================
-// UpdateCamera @0x8223AB78 (DWARF :555) -- [PC TRAP, NOT X360]. The console walks the active sequence's
-// collections (GetCamera / HasActiveCamera through the per-type accessors, BehaviourIceAnim::GetTimeRemaining, the
-// interpolater) into lrCamera. Retail never gets here (VALID needs the mbAllowJumpMoment gate). Reports a camera
-// failure, so VALID releases the moment.
-// ============================================================================
-bool MomentPlayerJumping::UpdateCamera(Camera::Camera& /*lrCamera*/)
+// UpdateCamera @0x8223AB78 -- fill from the selected collection.
+bool MomentPlayerJumping::UpdateCamera(Camera::Camera& lrCamera)
 {
-    static bool sbAnnounced = false;
-    PlayerJumpingTrap(sbAnnounced,
-                      "[pjump] TRAP (PC, NOT X360): MomentPlayerJumping::UpdateCamera @0x8223AB78 has no host body: "
-                      "the jump camera is NOT produced (reported as a camera failure). Reached only with "
-                      "MainDirector::mbAllowJumpMoment set, which retail never does.\n",
-                      "MomentPlayerJumping::UpdateCamera @0x8223AB78 has no host body (the jump moment's filming closure)");
-    return false;
+    bool lbFailed = false;
+    switch (meType)
+    {
+    case E_TYPE_ICE_RIG:
+        lrCamera = mIceCollection.GetCamera();
+        lrCamera.GetEffects().SetSimTimeScale(2.0f / 7.0f);
+        lbFailed = mIceCollection.HasFailed();
+        if (mIceCollection.GetBehaviour().GetTimeRemaining() < 0.5f)
+            lbFailed = true;
+        break;
+    case E_TYPE_DROPPED_RIG_THEN_ATTACHED_RIG_SEQUENCE:
+        if (!(mfJumpTimer > 1.0f || mDroppedRigCollection.HasFailed()))
+        {
+            mDroppedRigCollection.GetBehaviour().SetDetached(true);
+            mDroppedRigCollection.GetBehaviour().SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+            lrCamera = mDroppedRigCollection.GetCamera();
+            lrCamera.GetEffects().SetSimTimeScale(2.0f / 7.0f);
+            break;
+        }
+        lrCamera = mRigCollection.GetCamera();
+        lrCamera.GetEffects().SetSimTimeScale(1.0f);
+        if (mfJumpTimer < 1.1f)
+            lrCamera.GetEffects().SetStartHookName("2dFlash", 1.0f);
+        lbFailed = mRigCollection.HasFailed();
+        break;
+    case E_TYPE_BYSTANDER_THEN_ATTACHED_RIG_SEQUENCE:
+        if (!(mfJumpTimer > 1.0f || mBystanderCollection.HasFailed()))
+        {
+            lrCamera = mBystanderCollection.GetCamera();
+            lrCamera.GetEffects().SetSimTimeScale(2.0f / 7.0f);
+            break;
+        }
+        lrCamera = mRigCollection.GetCamera();
+        lrCamera.GetEffects().SetSimTimeScale(1.0f);
+        if (mfJumpTimer < 1.1f)
+            lrCamera.GetEffects().SetStartHookName("2dFlash", 1.0f);
+        lbFailed = mRigCollection.HasFailed();
+        break;
+    case E_TYPE_BYSTANDER_SHOT:
+        lrCamera = mBystanderCollection.GetCamera();
+        lrCamera.GetEffects().SetSimTimeScale(2.0f / 7.0f);
+        lbFailed = mBystanderCollection.HasFailed();
+        if (mfJumpTimer > 1.0f) lbFailed = true;
+        break;
+    case E_TYPE_DROPPED_RIG_SHOT:
+        mDroppedRigCollection.GetBehaviour().SetDetached(true);
+        mDroppedRigCollection.GetBehaviour().SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
+        lrCamera = mDroppedRigCollection.GetCamera();
+        lrCamera.GetEffects().SetSimTimeScale(2.0f / 7.0f);
+        lbFailed = mDroppedRigCollection.HasFailed();
+        if (mfJumpTimer > 1.0f) lbFailed = true;
+        break;
+    case E_TYPE_ATTACHED_RIG_SHOT:
+        lrCamera = mRigCollection.GetCamera();
+        lrCamera.GetEffects().SetSimTimeScale(2.0f / 7.0f);
+        lbFailed = mRigCollection.HasFailed();
+        break;
+    default:
+        CGS_ASSERT(false, "invalid type");
+        break;
+    }
+    return !lbFailed;
 }
 
 // BehaviourCollection<TBehaviour,TParameters,N>::HasActiveCamera (DWARF h:63, NON-const). The console asserts carry
