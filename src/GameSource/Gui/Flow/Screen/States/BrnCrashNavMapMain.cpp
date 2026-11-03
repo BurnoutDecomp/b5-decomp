@@ -191,10 +191,10 @@ namespace BrnGui
         Vector2 KV2_ZOOMED_OUT_MAP_CENTRE()
         {
             Vector2 lv2Centre;
-            lv2Centre.x = 0.0f;
-            lv2Centre.y = 0.0f;
-            lv2Centre.z = 0.0f;
-            lv2Centre.w = 0.0f;
+            lv2Centre.mV.x = 0.0f;
+            lv2Centre.mV.y = 0.0f;
+            lv2Centre.mV.z = 0.0f;
+            lv2Centre.mV.w = 0.0f;
             return lv2Centre;
         }
 
@@ -381,10 +381,10 @@ namespace BrnGui
                 // to the 2-D map point (X,Z,X,X). Whole-quadword, so all four lanes are
                 // committed -- same expansion as OnlineGameRoomPlayerInfo_wH_00.cpp:476.
                 Vector2 lv2MapLocation;
-                lv2MapLocation.x = lpPlayerInfo->x;
-                lv2MapLocation.y = lpPlayerInfo->z;
-                lv2MapLocation.z = lpPlayerInfo->x;
-                lv2MapLocation.w = lpPlayerInfo->x;
+                lv2MapLocation.mV.x = lpPlayerInfo->mV.x;
+                lv2MapLocation.mV.y = lpPlayerInfo->mV.z;
+                lv2MapLocation.mV.z = lpPlayerInfo->mV.x;
+                lv2MapLocation.mV.w = lpPlayerInfo->mV.x;
                 mMainMapComponent.SnapToLocation(lv2MapLocation);
 
                 if (CrashNavMap::PlaceCursorOnPlayer())

@@ -95,13 +95,12 @@ namespace BrnGui
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
         const Vector4& lrv4CameraPosition = mpGuiCache->GetWorldCameraPosition();
-        const Vector3 lv3InitialCursorPosWorldSpace = { lrv4CameraPosition.x, lrv4CameraPosition.y,
-                                                        lrv4CameraPosition.z, lrv4CameraPosition.w };
+        const Vector3 lv3InitialCursorPosWorldSpace(lrv4CameraPosition.mV);
 
         // The console streams the lane after the text; lowered to the static text.
-        CGS_ASSERT(lv3InitialCursorPosWorldSpace.x == lv3InitialCursorPosWorldSpace.x,
+        CGS_ASSERT(lv3InitialCursorPosWorldSpace.mV.x == lv3InitialCursorPosWorldSpace.mV.x,
                    "Crazy 3D position for the cursor : \n");
-        CGS_ASSERT(lv3InitialCursorPosWorldSpace.z == lv3InitialCursorPosWorldSpace.z,
+        CGS_ASSERT(lv3InitialCursorPosWorldSpace.mV.z == lv3InitialCursorPosWorldSpace.mV.z,
                    "Crazy 3D position for the cursor : \n");
 
         // Onto the map plane (world X/Z; the console's lane permute).
@@ -112,8 +111,8 @@ namespace BrnGui
             mMainMapComponent.GetWorldRect(),
             mMainMapComponent.GetViewRect() * MapTransform::GetDeviceRect());
 
-        if (std::fabs(lv2InitialCursorPosScreenSpace.x) > KF_CRAZY_CURSOR_POSITION ||
-            std::fabs(lv2InitialCursorPosScreenSpace.y) > KF_CRAZY_CURSOR_POSITION)
+        if (std::fabs(lv2InitialCursorPosScreenSpace.mV.x) > KF_CRAZY_CURSOR_POSITION ||
+            std::fabs(lv2InitialCursorPosScreenSpace.mV.y) > KF_CRAZY_CURSOR_POSITION)
         {
             // Each line re-tests the log filter, as the console does.
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -136,8 +135,8 @@ namespace BrnGui
             {
                 *CgsDev::Log::gpDebugPrint << "MapTransform::Flatten( lv3InitialCursorPosWorldSpace ):";
                 CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR2_FORMAT,
-                                                        lv2InitialCursorPosMapSpace.x,
-                                                        lv2InitialCursorPosMapSpace.y);
+                                                        lv2InitialCursorPosMapSpace.mV.x,
+                                                        lv2InitialCursorPosMapSpace.mV.y);
                 *CgsDev::Log::gpDebugPrint << "\n";
             }
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -145,8 +144,8 @@ namespace BrnGui
                 const Vector4 lv4WorldRect = mMainMapComponent.GetWorldRect();
                 *CgsDev::Log::gpDebugPrint << "mMainMapComponent.GetWorldRect():";
                 CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR4_FORMAT,
-                                                        lv4WorldRect.x, lv4WorldRect.y,
-                                                        lv4WorldRect.z, lv4WorldRect.w);
+                                                        lv4WorldRect.mV.x, lv4WorldRect.mV.y,
+                                                        lv4WorldRect.mV.z, lv4WorldRect.mV.w);
                 *CgsDev::Log::gpDebugPrint << "\n";
             }
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -154,8 +153,8 @@ namespace BrnGui
                 const Vector4 lv4ViewRect = mMainMapComponent.GetViewRect();
                 *CgsDev::Log::gpDebugPrint << "mMainMapComponent.GetViewRect():";
                 CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR4_FORMAT,
-                                                        lv4ViewRect.x, lv4ViewRect.y,
-                                                        lv4ViewRect.z, lv4ViewRect.w);
+                                                        lv4ViewRect.mV.x, lv4ViewRect.mV.y,
+                                                        lv4ViewRect.mV.z, lv4ViewRect.mV.w);
                 *CgsDev::Log::gpDebugPrint << "\n";
             }
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -163,8 +162,8 @@ namespace BrnGui
                 const Vector4 lv4DeviceRect = MapTransform::GetDeviceRect();
                 *CgsDev::Log::gpDebugPrint << "MapTransform::GetDeviceRect():";
                 CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR4_FORMAT,
-                                                        lv4DeviceRect.x, lv4DeviceRect.y,
-                                                        lv4DeviceRect.z, lv4DeviceRect.w);
+                                                        lv4DeviceRect.mV.x, lv4DeviceRect.mV.y,
+                                                        lv4DeviceRect.mV.z, lv4DeviceRect.mV.w);
                 *CgsDev::Log::gpDebugPrint << "\n";
             }
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -173,27 +172,27 @@ namespace BrnGui
                     mMainMapComponent.GetViewRect() * MapTransform::GetDeviceRect();
                 *CgsDev::Log::gpDebugPrint << "mMainMapComponent.GetViewRect() * MapTransform::GetDeviceRect():";
                 CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR4_FORMAT,
-                                                        lv4ScaledViewRect.x, lv4ScaledViewRect.y,
-                                                        lv4ScaledViewRect.z, lv4ScaledViewRect.w);
+                                                        lv4ScaledViewRect.mV.x, lv4ScaledViewRect.mV.y,
+                                                        lv4ScaledViewRect.mV.z, lv4ScaledViewRect.mV.w);
                 *CgsDev::Log::gpDebugPrint << "\n";
             }
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
                 *CgsDev::Log::gpDebugPrint << "lv2InitialCursorPosScreenSpace:";
                 CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR2_FORMAT,
-                                                        lv2InitialCursorPosScreenSpace.x,
-                                                        lv2InitialCursorPosScreenSpace.y);
+                                                        lv2InitialCursorPosScreenSpace.mV.x,
+                                                        lv2InitialCursorPosScreenSpace.mV.y);
                 *CgsDev::Log::gpDebugPrint << "\n";
             }
 
             // The console streams the lane after the text; lowered to the static text.
-            CGS_ASSERT(lv2InitialCursorPosScreenSpace.x == lv2InitialCursorPosScreenSpace.x,
+            CGS_ASSERT(lv2InitialCursorPosScreenSpace.mV.x == lv2InitialCursorPosScreenSpace.mV.x,
                        "Crazy 2D position for the cursor : \nTELL RICH GELDARD and give the output (TTY)\n");
-            CGS_ASSERT(lv2InitialCursorPosScreenSpace.y == lv2InitialCursorPosScreenSpace.y,
+            CGS_ASSERT(lv2InitialCursorPosScreenSpace.mV.y == lv2InitialCursorPosScreenSpace.mV.y,
                        "Crazy 2D position for the cursor : \nTELL RICH GELDARD and give the output (TTY)\n");
-            CGS_ASSERT(std::fabs(lv2InitialCursorPosScreenSpace.x) < KF_CRAZY_CURSOR_POSITION,
+            CGS_ASSERT(std::fabs(lv2InitialCursorPosScreenSpace.mV.x) < KF_CRAZY_CURSOR_POSITION,
                        "Crazy position being printed in the cursor : \n");
-            CGS_ASSERT(std::fabs(lv2InitialCursorPosScreenSpace.y) < KF_CRAZY_CURSOR_POSITION,
+            CGS_ASSERT(std::fabs(lv2InitialCursorPosScreenSpace.mV.y) < KF_CRAZY_CURSOR_POSITION,
                        "Crazy position being printed in the cursor : \n");
         }
 

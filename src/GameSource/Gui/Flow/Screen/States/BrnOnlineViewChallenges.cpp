@@ -156,7 +156,7 @@ void OnlineViewChallenges::HandleControllerInput(const s32* event)
 // ARTIST 0x824AECF8.
 void OnlineViewChallenges::Update()
 {
-    auto* queue = reinterpret_cast<CgsModule::VariableEventQueue<18432, 16>*>(mpInGuiEventQueue);
+    CgsModule::VariableEventQueue<18432, 16>* queue = reinterpret_cast<CgsModule::VariableEventQueue<18432, 16>*>(mpInGuiEventQueue);
     const CgsModule::Event* event = 0;
     s32 size = 0;
     for (s32 type = queue->GetFirstEvent(&event, &size); event; type = queue->GetNextEvent(event, &event, &size))
