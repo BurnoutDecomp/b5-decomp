@@ -47,15 +47,8 @@
 //   0x8283B764..0x8283B77C  hit = ((c01&c12&c20) | !(c01|c12|c20)) & (0 >= d.n) & (denom != 0)
 //                           & (t >= 0) & (1 >= t).   `vnot v12, v7` is the denom != 0 term.
 //
-// ---- PC LOWERING, stated once ------------------------------------------------------------------
-// The tree's rw::math::vpu::Vector3 is a plain 16-byte {x,y,z,w} struct with no SIMD operations;
-// the standing precedent for this family (CgsPolygonSoupTests.cpp, CgsTriangle4.cpp,
-// ContactGeneratorJob.cpp) is portable scalar float math with a lane as an ARRAY INDEX. Followed.
-// TWO PLACES NOT BIT-IDENTICAL, both flagged at the site: `vrefp` + 1 Newton-Raphson step is
-// lowered to a divide (kernel), `vrsqrtefp` + 2 Newton-Raphson steps to 1/sqrt (driver's normal).
-// Both are more accurate than the console; neither moves an accept/reject decision except in the
-// last ulps. The compares are kept in the console's orientation (`0 >= f`, `best >= t`) so the
-// tie-breaking and the treatment of NaN (every compare false) are the console's.
+// The four-triangle kernel keeps its native SoA VMX arithmetic and uses the SDK's real 16-byte
+// Vector3/Vector4 types for gathers, output records, and lane payloads.
 // =================================================================================================
 #include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"
 
@@ -63,10 +56,10 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupPoly.h"
 #include "BrnCommonTypes.h"   // Vector3 / Vector4
 
-#include <cmath>              // std::sqrt (the normal's length)
-
 namespace CgsGeometric
 {
+    using rw::math::vpu::VectorIntrinsic;
+
     namespace
     {
         // The console's "no hit yet" line parameter: `vspltisw v0, 2 ; vcsxwfp128 v126, v0, 0` at
@@ -119,92 +112,129 @@ namespace CgsGeometric
                                                   const Vector3& lEnd,
                                                   f32            lafOutT[4])
     {
-        // vspltw of the segment: v30/v29/v27 = S.xyz, v11/v22/v20 = E.xyz; d = E - S (v15,v14,v63).
-        const f32 lfSx = lStart.x, lfSy = lStart.y, lfSz = lStart.z;
-        const f32 lfDx = lEnd.x - lfSx;
-        const f32 lfDy = lEnd.y - lfSy;
-        const f32 lfDz = lEnd.z - lfSz;
+        const Vector4 lV0X(laV0[0].GetX(), laV0[1].GetX(), laV0[2].GetX(), laV0[3].GetX());
+        const Vector4 lV0Y(laV0[0].GetY(), laV0[1].GetY(), laV0[2].GetY(), laV0[3].GetY());
+        const Vector4 lV0Z(laV0[0].GetZ(), laV0[1].GetZ(), laV0[2].GetZ(), laV0[3].GetZ());
+        const Vector4 lV1X(laV1[0].GetX(), laV1[1].GetX(), laV1[2].GetX(), laV1[3].GetX());
+        const Vector4 lV1Y(laV1[0].GetY(), laV1[1].GetY(), laV1[2].GetY(), laV1[3].GetY());
+        const Vector4 lV1Z(laV1[0].GetZ(), laV1[1].GetZ(), laV1[2].GetZ(), laV1[3].GetZ());
+        const Vector4 lV2X(laV2[0].GetX(), laV2[1].GetX(), laV2[2].GetX(), laV2[3].GetX());
+        const Vector4 lV2Y(laV2[0].GetY(), laV2[1].GetY(), laV2[2].GetY(), laV2[3].GetY());
+        const Vector4 lV2Z(laV2[0].GetZ(), laV2[1].GetZ(), laV2[2].GetZ(), laV2[3].GetZ());
+
+        const VectorIntrinsic lvZero = __vspltisw(0);
+        const VectorIntrinsic lvOne = __vcfsx(__vspltisw(1), 0);
+        const VectorIntrinsic lvStartX = __vspltw(lStart.GetVector(), 0);
+        const VectorIntrinsic lvStartY = __vspltw(lStart.GetVector(), 1);
+        const VectorIntrinsic lvStartZ = __vspltw(lStart.GetVector(), 2);
+        const VectorIntrinsic lvEndX = __vspltw(lEnd.GetVector(), 0);
+        const VectorIntrinsic lvEndY = __vspltw(lEnd.GetVector(), 1);
+        const VectorIntrinsic lvEndZ = __vspltw(lEnd.GetVector(), 2);
+        const VectorIntrinsic lvDeltaX = __vsubfp(lvEndX, lvStartX);
+        const VectorIntrinsic lvDeltaY = __vsubfp(lvEndY, lvStartY);
+        const VectorIntrinsic lvDeltaZ = __vsubfp(lvEndZ, lvStartZ);
+
+        const VectorIntrinsic lvV0X = lV0X.GetVector();
+        const VectorIntrinsic lvV0Y = lV0Y.GetVector();
+        const VectorIntrinsic lvV0Z = lV0Z.GetVector();
+        const VectorIntrinsic lvV1X = lV1X.GetVector();
+        const VectorIntrinsic lvV1Y = lV1Y.GetVector();
+        const VectorIntrinsic lvV1Z = lV1Z.GetVector();
+        const VectorIntrinsic lvV2X = lV2X.GetVector();
+        const VectorIntrinsic lvV2Y = lV2Y.GetVector();
+        const VectorIntrinsic lvV2Z = lV2Z.GetVector();
+
+        const VectorIntrinsic lvE01X = __vsubfp(lvV1X, lvV0X);
+        const VectorIntrinsic lvE01Y = __vsubfp(lvV1Y, lvV0Y);
+        const VectorIntrinsic lvE01Z = __vsubfp(lvV1Z, lvV0Z);
+        const VectorIntrinsic lvE12X = __vsubfp(lvV2X, lvV1X);
+        const VectorIntrinsic lvE12Y = __vsubfp(lvV2Y, lvV1Y);
+        const VectorIntrinsic lvE12Z = __vsubfp(lvV2Z, lvV1Z);
+        const VectorIntrinsic lvE20X = __vsubfp(lvV0X, lvV2X);
+        const VectorIntrinsic lvE20Y = __vsubfp(lvV0Y, lvV2Y);
+        const VectorIntrinsic lvE20Z = __vsubfp(lvV0Z, lvV2Z);
+
+        const VectorIntrinsic lvNX = __vnmsubfp(lvE01Z, lvE12Y, __vmulfp(lvE01Y, lvE12Z));
+        const VectorIntrinsic lvNY = __vnmsubfp(lvE01X, lvE12Z, __vmulfp(lvE01Z, lvE12X));
+        const VectorIntrinsic lvNZ = __vnmsubfp(lvE01Y, lvE12X, __vmulfp(lvE01X, lvE12Y));
+
+        VectorIntrinsic lvDotEnd = __vmulfp(lvEndX, lvNX);
+        lvDotEnd = __vmaddfp(lvEndY, lvNY, lvDotEnd);
+        lvDotEnd = __vmaddfp(lvEndZ, lvNZ, lvDotEnd);
+        VectorIntrinsic lvDotStart = __vmulfp(lvStartX, lvNX);
+        lvDotStart = __vmaddfp(lvStartY, lvNY, lvDotStart);
+        lvDotStart = __vmaddfp(lvStartZ, lvNZ, lvDotStart);
+        VectorIntrinsic lvDotV0 = __vmulfp(lvV0X, lvNX);
+        lvDotV0 = __vmaddfp(lvV0Y, lvNY, lvDotV0);
+        lvDotV0 = __vmaddfp(lvV0Z, lvNZ, lvDotV0);
+        const VectorIntrinsic lvDenom = __vsubfp(lvDotEnd, lvDotStart);
+        const VectorIntrinsic lvNumerator = __vsubfp(lvDotV0, lvDotStart);
+
+        VectorIntrinsic lvReciprocal = __vrefp(lvDenom);
+        const VectorIntrinsic lvReciprocalError = __vnmsubfp(lvReciprocal, lvDenom, lvOne);
+        lvReciprocal = __vmaddfp(lvReciprocal, lvReciprocalError, lvReciprocal);
+        const VectorIntrinsic lvT = __vmulfp(lvNumerator, lvReciprocal);
+        const VectorIntrinsic lvPointX = __vmaddfp(lvDeltaX, lvT, lvStartX);
+        const VectorIntrinsic lvPointY = __vmaddfp(lvDeltaY, lvT, lvStartY);
+        const VectorIntrinsic lvPointZ = __vmaddfp(lvDeltaZ, lvT, lvStartZ);
+
+        const VectorIntrinsic lvC01X = __vnmsubfp(lvE01Z, lvNY, __vmulfp(lvE01Y, lvNZ));
+        const VectorIntrinsic lvC01Y = __vnmsubfp(lvE01X, lvNZ, __vmulfp(lvE01Z, lvNX));
+        const VectorIntrinsic lvC01Z = __vnmsubfp(lvE01Y, lvNX, __vmulfp(lvE01X, lvNY));
+        const VectorIntrinsic lvC12X = __vnmsubfp(lvE12Z, lvNY, __vmulfp(lvE12Y, lvNZ));
+        const VectorIntrinsic lvC12Y = __vnmsubfp(lvE12X, lvNZ, __vmulfp(lvE12Z, lvNX));
+        const VectorIntrinsic lvC12Z = __vnmsubfp(lvE12Y, lvNX, __vmulfp(lvE12X, lvNY));
+        const VectorIntrinsic lvC20X = __vnmsubfp(lvE20Z, lvNY, __vmulfp(lvE20Y, lvNZ));
+        const VectorIntrinsic lvC20Y = __vnmsubfp(lvE20X, lvNZ, __vmulfp(lvE20Z, lvNX));
+        const VectorIntrinsic lvC20Z = __vnmsubfp(lvE20Y, lvNX, __vmulfp(lvE20X, lvNY));
+
+        const VectorIntrinsic lvP0X = __vsubfp(lvPointX, lvV0X);
+        const VectorIntrinsic lvP0Y = __vsubfp(lvPointY, lvV0Y);
+        const VectorIntrinsic lvP0Z = __vsubfp(lvPointZ, lvV0Z);
+        const VectorIntrinsic lvP1X = __vsubfp(lvPointX, lvV1X);
+        const VectorIntrinsic lvP1Y = __vsubfp(lvPointY, lvV1Y);
+        const VectorIntrinsic lvP1Z = __vsubfp(lvPointZ, lvV1Z);
+        const VectorIntrinsic lvP2X = __vsubfp(lvPointX, lvV2X);
+        const VectorIntrinsic lvP2Y = __vsubfp(lvPointY, lvV2Y);
+        const VectorIntrinsic lvP2Z = __vsubfp(lvPointZ, lvV2Z);
+
+        VectorIntrinsic lvF01 = __vmulfp(lvP0X, lvC01X);
+        lvF01 = __vmaddfp(lvP0Y, lvC01Y, lvF01);
+        lvF01 = __vmaddfp(lvP0Z, lvC01Z, lvF01);
+        VectorIntrinsic lvF12 = __vmulfp(lvP1X, lvC12X);
+        lvF12 = __vmaddfp(lvP1Y, lvC12Y, lvF12);
+        lvF12 = __vmaddfp(lvP1Z, lvC12Z, lvF12);
+        VectorIntrinsic lvF20 = __vmulfp(lvP2X, lvC20X);
+        lvF20 = __vmaddfp(lvP2Y, lvC20Y, lvF20);
+        lvF20 = __vmaddfp(lvP2Z, lvC20Z, lvF20);
+
+        const VectorIntrinsic lvCompare01 = __vcmpgefp(lvZero, lvF01);
+        const VectorIntrinsic lvCompare12 = __vcmpgefp(lvZero, lvF12);
+        const VectorIntrinsic lvCompare20 = __vcmpgefp(lvZero, lvF20);
+        const VectorIntrinsic lvAllEdges = __vand(__vand(lvCompare01, lvCompare12), lvCompare20);
+        const VectorIntrinsic lvAnyEdges = __vor(__vor(lvCompare01, lvCompare12), lvCompare20);
+        const VectorIntrinsic lvNoEdges = __vnor(lvAnyEdges, lvAnyEdges);
+        const VectorIntrinsic lvInside = __vor(lvAllEdges, lvNoEdges);
+
+        VectorIntrinsic lvDeltaDotNormal = __vmulfp(lvDeltaX, lvNX);
+        lvDeltaDotNormal = __vmaddfp(lvDeltaY, lvNY, lvDeltaDotNormal);
+        lvDeltaDotNormal = __vmaddfp(lvDeltaZ, lvNZ, lvDeltaDotNormal);
+        const VectorIntrinsic lvBackface = __vcmpgefp(lvZero, lvDeltaDotNormal);
+        const VectorIntrinsic lvDenomZero = __vcmpeqfp(lvDenom, lvZero);
+        const VectorIntrinsic lvDenomNonZero = __vnor(lvDenomZero, lvDenomZero);
+        const VectorIntrinsic lvTNonNegative = __vcmpgefp(lvT, lvZero);
+        const VectorIntrinsic lvTAtMostOne = __vcmpgefp(lvOne, lvT);
+        const VectorIntrinsic lvHit = __vand(
+            __vand(__vand(lvInside, lvBackface), lvDenomNonZero),
+            __vand(lvTNonNegative, lvTAtMostOne));
 
         u32 lu32HitMask = 0;
-
         for (s32 liLane = 0; liLane < 4; ++liLane)
         {
-            const Vector3& lrV0 = laV0[liLane];
-            const Vector3& lrV1 = laV1[liLane];
-            const Vector3& lrV2 = laV2[liLane];
-
-            // 0x8283B5A8..0x8283B5E8: the three edges (e01 = V1-V0, e12 = V2-V1, e20 = V0-V2).
-            const f32 lfE01x = lrV1.x - lrV0.x, lfE01y = lrV1.y - lrV0.y, lfE01z = lrV1.z - lrV0.z;
-            const f32 lfE12x = lrV2.x - lrV1.x, lfE12y = lrV2.y - lrV1.y, lfE12z = lrV2.z - lrV1.z;
-            const f32 lfE20x = lrV0.x - lrV2.x, lfE20y = lrV0.y - lrV2.y, lfE20z = lrV0.z - lrV2.z;
-
-            // 0x8283B5EC..0x8283B604: n = e01 x e12.
-            const f32 lfNx = lfE01y * lfE12z - lfE01z * lfE12y;
-            const f32 lfNy = lfE01z * lfE12x - lfE01x * lfE12z;
-            const f32 lfNz = lfE01x * lfE12y - lfE01y * lfE12x;
-
-            // 0x8283B608..0x8283B640: E.n, S.n, V0.n; denom = E.n - S.n; num = V0.n - S.n.
-            const f32 lfDotE  = lEnd.x * lfNx + lEnd.y * lfNy + lEnd.z * lfNz;
-            const f32 lfDotS  = lfSx * lfNx + lfSy * lfNy + lfSz * lfNz;
-            const f32 lfDotV0 = lrV0.x * lfNx + lrV0.y * lfNy + lrV0.z * lfNz;
-            const f32 lfDenom = lfDotE - lfDotS;
-            const f32 lfNum   = lfDotV0 - lfDotS;
-
-            // 0x8283B644..0x8283B650: t = num * (1/denom). PC LOWERING: `vrefp v11, v22` + one
-            // Newton-Raphson step (`vnmsubfp v17, v22, v16, v11 ; vmaddfp v11, v11, v17, v11`) is a
-            // divide here. A zero denominator gives inf/NaN exactly as the console's estimate
-            // does, and is masked out below by the console's own `denom != 0` term.
-            const f32 lfT = lfNum / lfDenom;
-
-            // 0x8283B658..0x8283B664: P = S + d*t. Stored (splatted) to the lane's out slot.
-            const f32 lfPx = lfDx * lfT + lfSx;
-            const f32 lfPy = lfDy * lfT + lfSy;
-            const f32 lfPz = lfDz * lfT + lfSz;
-            lafOutT[liLane] = lfT;
-
-            // 0x8283B668..0x8283B740: the three edge functions, (P - Vi) . (ei x n).
-            const f32 lfC01x = lfE01y * lfNz - lfE01z * lfNy;
-            const f32 lfC01y = lfE01z * lfNx - lfE01x * lfNz;
-            const f32 lfC01z = lfE01x * lfNy - lfE01y * lfNx;
-            const f32 lfF01  = (lfPx - lrV0.x) * lfC01x + (lfPy - lrV0.y) * lfC01y + (lfPz - lrV0.z) * lfC01z;
-
-            const f32 lfC12x = lfE12y * lfNz - lfE12z * lfNy;
-            const f32 lfC12y = lfE12z * lfNx - lfE12x * lfNz;
-            const f32 lfC12z = lfE12x * lfNy - lfE12y * lfNx;
-            const f32 lfF12  = (lfPx - lrV1.x) * lfC12x + (lfPy - lrV1.y) * lfC12y + (lfPz - lrV1.z) * lfC12z;
-
-            const f32 lfC20x = lfE20y * lfNz - lfE20z * lfNy;
-            const f32 lfC20y = lfE20z * lfNx - lfE20x * lfNz;
-            const f32 lfC20z = lfE20x * lfNy - lfE20y * lfNx;
-            const f32 lfF20  = (lfPx - lrV2.x) * lfC20x + (lfPy - lrV2.y) * lfC20y + (lfPz - lrV2.z) * lfC20z;
-
-            // 0x8283B6F0 / 0x8283B718 / 0x8283B75C: `vcmpgefp cXY, zero, fXY`.
-            const bool lbC01 = (0.0f >= lfF01);
-            const bool lbC12 = (0.0f >= lfF12);
-            const bool lbC20 = (0.0f >= lfF20);
-
-            // 0x8283B738..0x8283B750: d.n re-summed from the components (NOT the denom register),
-            // then `vcmpgefp v13, zero, v13` -- single-sided: the segment must run AGAINST n.
-            const f32  lfDdotN     = lfDz * lfNz + (lfDy * lfNy + lfDx * lfNx);
-            const bool lbBackface  = (0.0f >= lfDdotN);
-
-            // 0x8283B71C `vcmpeqfp v7, v22, zero` then `vnot v12, v7` at 0x8283B754.
-            const bool lbDenomNonZero = !(lfDenom == 0.0f);
-
-            // 0x8283B744 / 0x8283B748: `vcmpgefp v4, one, t` and `vcmpgefp v11, t, zero`.
-            const bool lbTIn = (lfT >= 0.0f) && (1.0f >= lfT);
-
-            // 0x8283B764..0x8283B77C.
-            const bool lbAll    = lbC01 && lbC12 && lbC20;
-            const bool lbNone   = !(lbC01 || lbC12 || lbC20);
-            const bool lbInside = lbAll || lbNone;
-
-            if (lbInside && lbBackface && lbDenomNonZero && lbTIn)
-            {
+            lafOutT[liLane] = lvT.v[liLane];
+            if (lvHit.u[liLane] != 0)
                 lu32HitMask |= (1u << liLane);
-            }
         }
-
         return lu32HitMask;
     }
 
@@ -355,35 +385,22 @@ namespace CgsGeometric
         lpOutResult->mVertex1 = lState.mV1;                                  // stvx128 v124, +0x10
         lpOutResult->mVertex2 = lState.mV2;                                  // stvx128 v122, +0x20
 
-        lpOutResult->mLineParam.x = lState.mfBestT;                          // stvx128 v125, +0x50
-        lpOutResult->mLineParam.y = lState.mfBestT;
-        lpOutResult->mLineParam.z = lState.mfBestT;
-        lpOutResult->mLineParam.w = lState.mfBestT;
+        const VectorIntrinsic lvBestT = VecFloat(lState.mfBestT).GetVector();
+        lpOutResult->mLineParam = Vector4(lvBestT);                           // stvx128 v125, +0x50
 
         // `vmaddfp128 v108, v13(E-S), v125(t), v108(S)` -> +0x40.
-        lpOutResult->mPosition.x = (lEnd.x - lStart.x) * lState.mfBestT + lStart.x;
-        lpOutResult->mPosition.y = (lEnd.y - lStart.y) * lState.mfBestT + lStart.y;
-        lpOutResult->mPosition.z = (lEnd.z - lStart.z) * lState.mfBestT + lStart.z;
-        lpOutResult->mPosition.w = (lEnd.w - lStart.w) * lState.mfBestT + lStart.w;
+        lpOutResult->mPosition = Vector4(__vmaddfp(
+            __vsubfp(lEnd.GetVector(), lStart.GetVector()), lvBestT, lStart.GetVector()));
 
         // Normal: a = V2-V1 (v12), b = V1-V0 (v11); `vnmsubfp v0, b.yzx, (b*a.yzx), a` then
         // `vpermwi 0x63` (yzx) gives b x a = (V1-V0) x (V2-V1) -- the SAME orientation as the
         // kernel's n = e01 x e12, so it faces the segment's start. Then vmsum3fp128 + vrsqrtefp +
         // two Newton-Raphson steps (0.5 = `vcfsx v10, 1, 1`) and a multiply.
-        // PC LOWERING: 1/sqrt. A no-hit record (all-zero vertices) yields 0*inf = NaN lanes on
-        // BOTH platforms; nothing reads the normal of a record whose return was "no hit".
         {
-            const f32 lfAx = lState.mV2.x - lState.mV1.x, lfAy = lState.mV2.y - lState.mV1.y, lfAz = lState.mV2.z - lState.mV1.z;
-            const f32 lfBx = lState.mV1.x - lState.mV0.x, lfBy = lState.mV1.y - lState.mV0.y, lfBz = lState.mV1.z - lState.mV0.z;
-            const f32 lfNx = lfBy * lfAz - lfBz * lfAy;
-            const f32 lfNy = lfBz * lfAx - lfBx * lfAz;
-            const f32 lfNz = lfBx * lfAy - lfBy * lfAx;
-            const f32 lfLenSq  = lfNx * lfNx + lfNy * lfNy + lfNz * lfNz;
-            const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);                 // vrsqrtefp + 2 NR
-            lpOutResult->mNormal.x = lfNx * lfInvLen;                        // stvx128 v0, +0x30
-            lpOutResult->mNormal.y = lfNy * lfInvLen;
-            lpOutResult->mNormal.z = lfNz * lfInvLen;
-            lpOutResult->mNormal.w = 0.0f * lfInvLen;   // the console's w lane: (0-0)*(1/len)
+            const Vector3 lvA = rw::math::vpu::Subtract(lState.mV2, lState.mV1);
+            const Vector3 lvB = rw::math::vpu::Subtract(lState.mV1, lState.mV0);
+            const Vector3 lvNormal = rw::math::vpu::Cross(lvB, lvA);
+            lpOutResult->mNormal = Vector4(rw::math::vpu::Normalize(lvNormal).GetVector());
         }
 
         // `stvlx128 v121, +0x60` -- the tag, splatted.
@@ -425,9 +442,8 @@ namespace CgsGeometric
     //     ++found ; `cmpw found, max ; bge` -> return found (tested AFTER the record)
     //   0x8283D2C8  return found (r30)
     //
-    // PC LOWERING (the Nearest sibling's, stated in the banner): vrsqrtefp + 2 NR is 1/sqrt, the
-    // fused multiply-adds are a multiply then an add. No accept/reject decision is made here -- the
-    // kernel made it -- so these touch only the last ulps of the record.
+    // This writer uses native four-lane position, cross, dot, and reciprocal-root operations; the
+    // output vector payload is stored as the full register produced by the console path.
     // =============================================================================================
     namespace
     {
@@ -445,31 +461,20 @@ namespace CgsGeometric
             lrResult.mVertex1 = lrV1;                                   // stvx128 +0x10
             lrResult.mVertex2 = lrV2;                                   // stvx128 +0x20
 
-            lrResult.mLineParam.x = lfT;                                // stvx128 +0x50 (the t slot)
-            lrResult.mLineParam.y = lfT;
-            lrResult.mLineParam.z = lfT;
-            lrResult.mLineParam.w = lfT;
+            const VectorIntrinsic lvT = VecFloat(lfT).GetVector();
+            lrResult.mLineParam = Vector4(lvT);                           // stvx128 +0x50 (the t slot)
 
             // `vmaddfp128 P, (E - S), t, S` -> +0x40.
-            lrResult.mPosition.x = (lrLineEnd.x - lrLineStart.x) * lfT + lrLineStart.x;
-            lrResult.mPosition.y = (lrLineEnd.y - lrLineStart.y) * lfT + lrLineStart.y;
-            lrResult.mPosition.z = (lrLineEnd.z - lrLineStart.z) * lfT + lrLineStart.z;
-            lrResult.mPosition.w = (lrLineEnd.w - lrLineStart.w) * lfT + lrLineStart.w;
+            lrResult.mPosition = Vector4(__vmaddfp(
+                __vsubfp(lrLineEnd.GetVector(), lrLineStart.GetVector()), lvT, lrLineStart.GetVector()));
 
             // a = V1 - V0 (v12), b = V2 - V1 (v13); c = a x b. The console's w lane is
             // a.w*b.w - a.w*b.w (the yzx permute keeps w in w) -- zero for a soup's vertices, whose w
             // lanes all carry the same unpack junk.
-            const f32 lfAx = lrV1.x - lrV0.x, lfAy = lrV1.y - lrV0.y, lfAz = lrV1.z - lrV0.z, lfAw = lrV1.w - lrV0.w;
-            const f32 lfBx = lrV2.x - lrV1.x, lfBy = lrV2.y - lrV1.y, lfBz = lrV2.z - lrV1.z, lfBw = lrV2.w - lrV1.w;
-            const f32 lfCx = lfAy * lfBz - lfAz * lfBy;
-            const f32 lfCy = lfAz * lfBx - lfAx * lfBz;
-            const f32 lfCz = lfAx * lfBy - lfAy * lfBx;
-            const f32 lfCw = lfAw * lfBw - lfAw * lfBw;
-            const f32 lfInverseLength = 1.0f / std::sqrt(lfCx * lfCx + lfCy * lfCy + lfCz * lfCz);  // vmsum3fp128, vrsqrtefp + 2 NR
-            lrResult.mNormal.x = lfCx * lfInverseLength;                // stvx128 +0x30
-            lrResult.mNormal.y = lfCy * lfInverseLength;
-            lrResult.mNormal.z = lfCz * lfInverseLength;
-            lrResult.mNormal.w = lfCw * lfInverseLength;
+            const Vector3 lvA = rw::math::vpu::Subtract(lrV1, lrV0);
+            const Vector3 lvB = rw::math::vpu::Subtract(lrV2, lrV1);
+            const Vector3 lvNormal = rw::math::vpu::Cross(lvA, lvB);
+            lrResult.mNormal = Vector4(rw::math::vpu::Normalize(lvNormal).GetVector());
 
             lrResult.mau32Tag[0] = lu32SurfaceTag;                      // stvlx128 +0x60 (the splat)
             lrResult.mau32Tag[1] = lu32SurfaceTag;

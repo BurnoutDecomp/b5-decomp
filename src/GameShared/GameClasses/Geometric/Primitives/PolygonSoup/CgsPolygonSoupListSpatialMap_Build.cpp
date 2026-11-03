@@ -62,42 +62,29 @@ namespace CgsGeometric
     // ------------------------------------------------------------------------
     namespace
     {
-        // vminfp / vmaxfp are full 4-lane operations on the console; the w lane is
-        // carried along but never consumed.
-        inline void AccumulateMin(Vector4& lrAccum, const Vector4& lrValue)
+        // Keep all four box lanes in the console's native min/max operations.
+        inline void AccumulateMin(Vector3& lrAccum, const Vector3& lrValue)
         {
-            if (lrValue.x < lrAccum.x) lrAccum.x = lrValue.x;
-            if (lrValue.y < lrAccum.y) lrAccum.y = lrValue.y;
-            if (lrValue.z < lrAccum.z) lrAccum.z = lrValue.z;
-            if (lrValue.w < lrAccum.w) lrAccum.w = lrValue.w;
+            lrAccum = rw::math::vpu::Min(lrAccum, lrValue);
         }
 
-        inline void AccumulateMax(Vector4& lrAccum, const Vector4& lrValue)
+        inline void AccumulateMax(Vector3& lrAccum, const Vector3& lrValue)
         {
-            if (lrValue.x > lrAccum.x) lrAccum.x = lrValue.x;
-            if (lrValue.y > lrAccum.y) lrAccum.y = lrValue.y;
-            if (lrValue.z > lrAccum.z) lrAccum.z = lrValue.z;
-            if (lrValue.w > lrAccum.w) lrAccum.w = lrValue.w;
+            lrAccum = rw::math::vpu::Max(lrAccum, lrValue);
         }
 
         // The console seeds each refit accumulator with the node's own box CENTRE
         // (vaddfp of the two corners, times vcsxwfp128(1,1) == 0.5), all four lanes.
-        inline Vector4 BoxCentre(const AxisAlignedBox& lrBox)
+        inline Vector3 BoxCentre(const AxisAlignedBox& lrBox)
         {
-            Vector4 lvCentre;
-            lvCentre.x = (lrBox.mMin.x + lrBox.mMax.x) * 0.5f;
-            lvCentre.y = (lrBox.mMin.y + lrBox.mMax.y) * 0.5f;
-            lvCentre.z = (lrBox.mMin.z + lrBox.mMax.z) * 0.5f;
-            lvCentre.w = (lrBox.mMin.w + lrBox.mMax.w) * 0.5f;
-            return lvCentre;
+            const rw::math::vpu::VectorIntrinsic lvHalf = __vcfsx(__vspltisw(1), 1);
+            const rw::math::vpu::VectorIntrinsic lvSum = __vaddfp(lrBox.mMin.GetVector(), lrBox.mMax.GetVector());
+            return Vector3(__vmulfp(lvSum, lvHalf));
         }
 
-        inline void SetZero(Vector4& lrVector)
+        inline void SetZero(Vector3& lrVector)
         {
-            lrVector.x = 0.0f;   // vspltisw v0, 0 ; stvx128
-            lrVector.y = 0.0f;
-            lrVector.z = 0.0f;
-            lrVector.w = 0.0f;
+            lrVector.SetZero();
         }
     }
 
@@ -116,8 +103,8 @@ namespace CgsGeometric
         // The running world bounds over every polygon soup. The console zeroes two
         // stack vectors here and folds every leaf box into them, so an EMPTY map
         // legitimately keeps the degenerate {0,0,0}..{0,0,0} box -- reproduced.
-        Vector4 lvGlobalMin;
-        Vector4 lvGlobalMax;
+        Vector3 lvGlobalMin;
+        Vector3 lvGlobalMax;
         SetZero(lvGlobalMin);
         SetZero(lvGlobalMax);
 
@@ -231,11 +218,10 @@ namespace CgsGeometric
                 // so this is a 2D partition of a 3D world (the console only divides
                 // lanes 0 and 2 -- lane 1 goes through the vperm untouched).
                 const f32 lfInvLevelSize = 1.0f / static_cast<f32>(liLevelSize);
-                Vector4 lvCell;
-                lvCell.x = (lvGlobalMax.x - lvGlobalMin.x) * lfInvLevelSize;
-                lvCell.y = (lvGlobalMax.y - lvGlobalMin.y);
-                lvCell.z = (lvGlobalMax.z - lvGlobalMin.z) * lfInvLevelSize;
-                lvCell.w = lvCell.x;   // the vperm's spare lane
+                const Vector3 lvWorldExtent = rw::math::vpu::Subtract(lvGlobalMax, lvGlobalMin);
+                const Vector4 lvCellScale(lfInvLevelSize, 1.0f, lfInvLevelSize, lfInvLevelSize);
+                Vector3 lvCell(__vmulfp(lvWorldExtent.GetVector(), lvCellScale.GetVector()));
+                lvCell.GetVector().v[3] = lvCell.GetVector().v[0];   // the vperm's spare lane
 
                 // The next finer level, which the child indices address.
                 const s32 liChildLevelSize  = liLevelSize * 2;
@@ -250,18 +236,22 @@ namespace CgsGeometric
                     {
                         PolygonSoupSpacialNode& lrNode = lpaNodes[liNode];
 
-                        lrNode.mBox.mMin.x =
-                            lvGlobalMin.x + lvCell.x * static_cast<f32>(liX);
-                        lrNode.mBox.mMin.y = lvGlobalMin.y;
-                        lrNode.mBox.mMin.z =
-                            lvGlobalMin.z + lvCell.z * static_cast<f32>(liZ);
-                        lrNode.mBox.mMin.w = lrNode.mBox.mMin.x;
+                        const VecFloat lvXIndex(static_cast<f32>(liX));
+                        const VecFloat lvZIndex(static_cast<f32>(liZ));
+                        Vector3 lvXOffset(__vmulfp(lvCell.GetVector(), lvXIndex.GetVector()));
+                        lvXOffset.GetVector().v[1] = 0.0f;
+                        lvXOffset.GetVector().v[2] = 0.0f;
+                        lvXOffset.GetVector().v[3] = 0.0f;
+                        Vector3 lvZOffset(__vmulfp(lvCell.GetVector(), lvZIndex.GetVector()));
+                        lvZOffset.GetVector().v[0] = 0.0f;
+                        lvZOffset.GetVector().v[1] = 0.0f;
+                        lvZOffset.GetVector().v[3] = 0.0f;
+                        lrNode.mBox.mMin = rw::math::vpu::Add(
+                            rw::math::vpu::Add(lvGlobalMin, lvXOffset), lvZOffset);
+                        lrNode.mBox.mMin.GetVector().v[3] = lrNode.mBox.mMin.GetVector().v[0];
 
                         // vaddfp128 v0, v127, v126 -- max = min + cell, all four lanes.
-                        lrNode.mBox.mMax.x = lrNode.mBox.mMin.x + lvCell.x;
-                        lrNode.mBox.mMax.y = lrNode.mBox.mMin.y + lvCell.y;
-                        lrNode.mBox.mMax.z = lrNode.mBox.mMin.z + lvCell.z;
-                        lrNode.mBox.mMax.w = lrNode.mBox.mMin.w + lvCell.w;
+                        lrNode.mBox.mMax = rw::math::vpu::Add(lrNode.mBox.mMin, lvCell);
 
                         // Four child indices, carved one 8-byte block per node.
                         lrNode.mpaIndices = static_cast<u16*>(
@@ -312,13 +302,13 @@ namespace CgsGeometric
 
         // The bottom level's cell, recomputed exactly as the console does (it does not
         // reuse the loop's last value; it re-derives from liNumLevels - 1).
-        Vector4 lvBottomCell;
+        Vector3 lvBottomCell;
         {
             const f32 lfInvWidth = 1.0f / static_cast<f32>(liLevelWidth);
-            lvBottomCell.x = (lvGlobalMax.x - lvGlobalMin.x) * lfInvWidth;
-            lvBottomCell.y = (lvGlobalMax.y - lvGlobalMin.y);
-            lvBottomCell.z = (lvGlobalMax.z - lvGlobalMin.z) * lfInvWidth;
-            lvBottomCell.w = lvBottomCell.x;
+            const Vector3 lvWorldExtent = rw::math::vpu::Subtract(lvGlobalMax, lvGlobalMin);
+            const Vector4 lvCellScale(lfInvWidth, 1.0f, lfInvWidth, lfInvWidth);
+            lvBottomCell = Vector3(__vmulfp(lvWorldExtent.GetVector(), lvCellScale.GetVector()));
+            lvBottomCell.GetVector().v[3] = lvBottomCell.GetVector().v[0];
         }
 
         // PASS 1 -- count. :296 / :297 / :298.
@@ -327,11 +317,14 @@ namespace CgsGeometric
             const PolygonSoupLeafNode& lrLeaf = lpaLeafNodes[li];
 
             // centre = (min + max) * 0.5  (vaddfp then vmulfp by vcsxwfp128(1,1))
-            const f32 lfCentreX = (lrLeaf.mBox.mMin.x + lrLeaf.mBox.mMax.x) * 0.5f;
-            const f32 lfCentreZ = (lrLeaf.mBox.mMin.z + lrLeaf.mBox.mMax.z) * 0.5f;
+            const Vector3 lvCentre = BoxCentre(lrLeaf.mBox);
+            const f32 lfCentreX = static_cast<f32>(lvCentre.GetX());
+            const f32 lfCentreZ = static_cast<f32>(lvCentre.GetZ());
 
-            const s32 liX = static_cast<s32>((lfCentreX - lvGlobalMin.x) / lvBottomCell.x);
-            const s32 liZ = static_cast<s32>((lfCentreZ - lvGlobalMin.z) / lvBottomCell.z);
+            const s32 liX = static_cast<s32>((lfCentreX - static_cast<f32>(lvGlobalMin.GetX()))
+                                              / static_cast<f32>(lvBottomCell.GetX()));
+            const s32 liZ = static_cast<s32>((lfCentreZ - static_cast<f32>(lvGlobalMin.GetZ()))
+                                              / static_cast<f32>(lvBottomCell.GetZ()));
             const s32 liNode = liX * liLevelWidth + liZ;
 
             CGS_ASSERT(liX >= 0 && liX < liLevelWidth, "X is out of range: liX=");
@@ -367,11 +360,14 @@ namespace CgsGeometric
         {
             const PolygonSoupLeafNode& lrLeaf = lpaLeafNodes[li];
 
-            const f32 lfCentreX = (lrLeaf.mBox.mMin.x + lrLeaf.mBox.mMax.x) * 0.5f;
-            const f32 lfCentreZ = (lrLeaf.mBox.mMin.z + lrLeaf.mBox.mMax.z) * 0.5f;
+            const Vector3 lvCentre = BoxCentre(lrLeaf.mBox);
+            const f32 lfCentreX = static_cast<f32>(lvCentre.GetX());
+            const f32 lfCentreZ = static_cast<f32>(lvCentre.GetZ());
 
-            const s32 liX = static_cast<s32>((lfCentreX - lvGlobalMin.x) / lvBottomCell.x);
-            const s32 liZ = static_cast<s32>((lfCentreZ - lvGlobalMin.z) / lvBottomCell.z);
+            const s32 liX = static_cast<s32>((lfCentreX - static_cast<f32>(lvGlobalMin.GetX()))
+                                              / static_cast<f32>(lvBottomCell.GetX()));
+            const s32 liZ = static_cast<s32>((lfCentreZ - static_cast<f32>(lvGlobalMin.GetZ()))
+                                              / static_cast<f32>(lvBottomCell.GetZ()));
             const s32 liNode = liX * liLevelWidth + liZ;
 
             CGS_ASSERT(liX >= 0 && liX < liLevelWidth, "X is out of range: liX=");
@@ -401,8 +397,8 @@ namespace CgsGeometric
             {
                 PolygonSoupSpacialNode& lrNode = lpaBottom[liNode];
 
-                Vector4 lvMin = BoxCentre(lrNode.mBox);
-                Vector4 lvMax = lvMin;
+                Vector3 lvMin = BoxCentre(lrNode.mBox);
+                Vector3 lvMax = lvMin;
 
                 for (u16 lu16 = 0; lu16 < lrNode.mu16NumIndices; ++lu16)
                 {
@@ -425,8 +421,8 @@ namespace CgsGeometric
                 {
                     PolygonSoupSpacialNode& lrNode = lpaLevel[liNode];
 
-                    Vector4 lvMin = BoxCentre(lrNode.mBox);
-                    Vector4 lvMax = lvMin;
+                    Vector3 lvMin = BoxCentre(lrNode.mBox);
+                    Vector3 lvMax = lvMin;
 
                     for (u16 lu16 = 0; lu16 < lrNode.mu16NumIndices; ++lu16)
                     {
