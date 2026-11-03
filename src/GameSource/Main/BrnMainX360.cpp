@@ -4,6 +4,7 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Resource/BrnResourceAllocator.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include <new>
 
@@ -63,13 +64,17 @@ int main(int lnArgc, char** lapcArgv)
     gDispatchThreadIOBufferStack.Prepare(
         BrnResource::GetRuntimeAllocator()->AllocateMemoryResource(0x18000, 128, 0), 0x18000, 128);
 
-    // Five inlined GetDebugAllocator checks survive at 827E64CC..827E6590.
-    // Their returned pointers are unused; do not allocate more buffers here.
-    BrnResource::GetDebugAllocator();
-    BrnResource::GetDebugAllocator();
-    BrnResource::GetDebugAllocator();
-    BrnResource::GetDebugAllocator();
-    BrnResource::GetDebugAllocator();
+    // ARTIST 827E64D0..827E6590 stops checking as soon as the backing
+    // allocator exists, including if an assertion causes it to be installed.
+    for (int liCheck = 0; liCheck < 5; ++liCheck)
+    {
+        if (BrnResource::Allocators::mpInternalDebugAllocator)
+            break;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Allocators::mpInternalDebugAllocator",
+            "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.h", 369);
+        CgsDev::Assert::EndAssert();
+    }
 
     gpBurnoutGame->Construct();
     while (!gpBurnoutGame->Prepare(&gUpdateInputBufferStack, &gUpdateOutputBufferStack,
