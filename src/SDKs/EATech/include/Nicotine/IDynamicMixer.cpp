@@ -1,5 +1,6 @@
 #include "SDKs/EATech/include/Nicotine/IDynamicMixer.hpp"
 #include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp"    // the mix master this drives
+#include "SDKs/EATech/include/NFSMix/NFSLiveLink.hpp"
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp"   // off_83250004 mixer allocator
 #include "SDKs/EATech/include/Nicotine/SnapshotMixer.hpp"  // the snapshot mixer this drives
 #include <new>                                              // placement new
@@ -14,12 +15,6 @@
 //    InitSnapshots    @0x82B44D68    ProcessMixMap    @0x82B44CA8
 //    SetCameraState   @0x825487C0    SetSnapshot      @0x82B44DB8
 //
-//  FLAG (deferred, NOT homed): NFSLiveLink is a >6KB ARTIST-divergent object that is
-//  not yet reconstructed. The X360 CreateInstance allocates 0x18BC (6332) bytes for it
-//  and constructs NFSLiveLink(block, this); the dtor runs CgsSceneManager::CgsCollision::
-//  BaseCollisionGenerator::Destruct on it (NFSLiveLink derives from that generator);
-//  ProcessMixMap forwards to NFSLiveLink::ProcessLiveLink. Until NFSLiveLink is homed,
-//  mLiveLink stays null in this incomplete implementation. Each omitted path is FLAGGED.
 // ===========================================================================
 
 namespace Nicotine
@@ -70,11 +65,12 @@ IDynamicMixer::~IDynamicMixer()
     if (mpSnapshot)                       // +0x1C -- freed raw (no dtor in the asm)
         g_pMixerAllocator->Free(mpSnapshot, 0);
 
-    // FLAG (deferred): the X360 here runs
-    //   if (mLiveLink) { CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct(mLiveLink);
-    //                    g_pMixerAllocator->Free(mLiveLink, 0); }
-    // NFSLiveLink is not yet homed, so mLiveLink is always null and this branch is a
-    // missing behavior. Wire it in once NFSLiveLink lands.
+    if (mLiveLink)
+    {
+        // The native destructor call at 0x8284CB38 is an empty body.
+        mLiveLink->~NFSLiveLink();
+        g_pMixerAllocator->Free(mLiveLink, 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +93,7 @@ IDynamicMixer* IDynamicMixer::GetInstance()
 //   mpSnapshot   = block;                                     (+0x1C)
 //   mpSnapshot->Construct(this);
 //   mLiveLink    = allocator->Allocate(6332, "NFSLiveLink")
-//                  ? NFSLiveLink(block, this) : 0;            (+0x0C)  [FLAG: deferred]
+//                  ? NFSLiveLink(block, this) : 0;            (+0x0C)
 //
 // X360 calls ICoreAllocator::Alloc(size, debug-name, 0) via vtable slot 2.
 // ---------------------------------------------------------------------------
@@ -116,12 +112,8 @@ void IDynamicMixer::CreateInstance(const MAP_CREATE_PARAMS* lpParams)
     mpSnapshot = static_cast<SnapshotMixer*>(lpSnapMem);
     mpSnapshot->Construct(this);         // owner = this
 
-    // --- NFSLiveLink (0x18BC == 6332 bytes) ---
-    // FLAG (deferred): the X360 does
-    //   void* m = allocator->Allocate(6332, "NFSLiveLink");
-    //   mLiveLink = m ? new(m) NFSLiveLink(this) : 0;
-    // NFSLiveLink is not yet homed; this remains an incomplete native path.
-    mLiveLink = 0;
+    void* lpLiveLinkMem = g_pMixerAllocator->Alloc(sizeof(NFSLiveLink), "NFSLiveLink", 0);
+    mLiveLink = lpLiveLinkMem ? new (lpLiveLinkMem) NFSLiveLink(this) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,14 +170,14 @@ void IDynamicMixer::InitSnapshots(void* apSnapshotData)
 
 // ---------------------------------------------------------------------------
 // IDynamicMixer::ProcessMixMap @0x82B44CA8 -- per-frame drive.
-//   if (mLiveLink)  NFSLiveLink::ProcessLiveLink(mLiveLink, mpSnapshot);   [FLAG: deferred]
+//   if (mLiveLink)  NFSLiveLink::ProcessLiveLink(mLiveLink, mpSnapshot);
 //   if (mpSnapshot) mpSnapshot->Update(dt);
 //   if (mMixMaster) mMixMaster->ProcessMixMap(dt, miCamState);
 // ---------------------------------------------------------------------------
 void IDynamicMixer::ProcessMixMap(int /*liUnused*/, float lfDeltaTime)
 {
-    // FLAG (deferred): NFSLiveLink::ProcessLiveLink(mLiveLink, mpSnapshot) -- mLiveLink
-    // is null until NFSLiveLink is homed; this is incomplete native behavior.
+    if (mLiveLink)
+        mLiveLink->ProcessLiveLink(mpSnapshot, lfDeltaTime);
     if (mpSnapshot)
         mpSnapshot->Update(lfDeltaTime);                    // FLAG: DSP rodata-blocked
     if (mMixMaster)

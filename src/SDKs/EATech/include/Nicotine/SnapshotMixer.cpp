@@ -1,4 +1,5 @@
 #include "SDKs/EATech/include/Nicotine/SnapshotMixer.hpp"
+#include "SDKs/EATech/include/Nicotine/IDynamicMixer.hpp"
 
 #include "SDKs/EATech/include/NFSMix/NFSMixMap.hpp"      // NFSMixMap::GetMasterMixChProc
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp" // g_pMixerAllocator (relocated InitSnapshots/DestroySnapshots)
@@ -248,6 +249,29 @@ void SnapshotMixer::Recall(int liSnapshotIdx)
             lpChan->mfDuration       = lfDuration;
             lpChan->mi16BaseVolume   = static_cast<s16>(liCurrent);
             lpChan->mi16TargetVolume = static_cast<s16>(lTarget);
+        }
+    }
+}
+
+// Timed recall @0x82B478B8: the supplied duration replaces the stored ramp.
+void SnapshotMixer::Recall(int liSnapshotIdx, float lfDuration)
+{
+    static_cast<IDynamicMixer*>(mpOwner)->DMixAssert(mpSnapshotHdr->meType == 2,
+        "SnapshotMixer::Recall : Snapshot data is not recall type.\n");
+    if (meState != 2 || liSnapshotIdx >= miNumSnapshots)
+        return;
+    SnapshotChannelData* lpData = GetSnapshot(liSnapshotIdx);
+    for (int i = 0; i < miNumChannels; ++i)
+    {
+        if (lpData[i].mTarget & 0xffff0000)
+        {
+            const u32 luTarget = lpData[i].mTarget;
+            SnapshotChannel* lpChannel = &mpChannels[i];
+            const int liCurrent = lpChannel->GetCurrentVolume();
+            lpChannel->mfElapsed = 0.0f;
+            lpChannel->mfDuration = lfDuration;
+            lpChannel->mi16BaseVolume = static_cast<s16>(liCurrent);
+            lpChannel->mi16TargetVolume = static_cast<s16>(luTarget);
         }
     }
 }
