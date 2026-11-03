@@ -32,13 +32,13 @@ namespace
 
     rw::math::vpu::Vector4 MakeVector4(f32 x, f32 y, f32 z, f32 w)
     {
-        const rw::math::vpu::Vector4 v = { x, y, z, w };
+        const rw::math::vpu::Vector4 v(x, y, z, w);
         return v;
     }
 
     rw::math::vpu::Vector3Plus MakeVector3Plus(f32 x, f32 y, f32 z, f32 w)
     {
-        const rw::math::vpu::Vector3Plus v = { x, y, z, w };
+        const rw::math::vpu::Vector3Plus v(x, y, z, w);
         return v;
     }
 
@@ -93,32 +93,32 @@ namespace
                                       f32 lfSine,
                                       f32 lfCosine)
     {
-        const f32 lfAxisDotNormal = lrAxis.x * lrNormal.x
-                                  + lrAxis.y * lrNormal.y
-                                  + lrAxis.z * lrNormal.z;
+        const f32 lfAxisDotNormal = lrAxis.mV.x * lrNormal.mV.x
+                                  + lrAxis.mV.y * lrNormal.mV.y
+                                  + lrAxis.mV.z * lrNormal.mV.z;
         Vector3 lvAxisCrossNormal;
-        lvAxisCrossNormal.x =
-            VmxMadd(lrAxis.y, lrNormal.z, -lrAxis.z * lrNormal.y);
-        lvAxisCrossNormal.y =
-            VmxMadd(lrAxis.z, lrNormal.x, -lrAxis.x * lrNormal.z);
-        lvAxisCrossNormal.z =
-            VmxMadd(lrAxis.x, lrNormal.y, -lrAxis.y * lrNormal.x);
+        lvAxisCrossNormal.mV.x =
+            VmxMadd(lrAxis.mV.y, lrNormal.mV.z, -lrAxis.mV.z * lrNormal.mV.y);
+        lvAxisCrossNormal.mV.y =
+            VmxMadd(lrAxis.mV.z, lrNormal.mV.x, -lrAxis.mV.x * lrNormal.mV.z);
+        lvAxisCrossNormal.mV.z =
+            VmxMadd(lrAxis.mV.x, lrNormal.mV.y, -lrAxis.mV.y * lrNormal.mV.x);
         const f32 lfAxisTerm = lfAxisDotNormal * (1.0f - lfCosine);
         Vector3 lvRotated;
-        lvRotated.x = VmxMadd(lrNormal.x, lfCosine,
-                               VmxMadd(lvAxisCrossNormal.x, lfSine,
-                                        lrAxis.x * lfAxisTerm));
-        lvRotated.y = VmxMadd(lrNormal.y, lfCosine,
-                               VmxMadd(lvAxisCrossNormal.y, lfSine,
-                                        lrAxis.y * lfAxisTerm));
-        lvRotated.z = VmxMadd(lrNormal.z, lfCosine,
-                               VmxMadd(lvAxisCrossNormal.z, lfSine,
-                                        lrAxis.z * lfAxisTerm));
+        lvRotated.mV.x = VmxMadd(lrNormal.mV.x, lfCosine,
+                               VmxMadd(lvAxisCrossNormal.mV.x, lfSine,
+                                        lrAxis.mV.x * lfAxisTerm));
+        lvRotated.mV.y = VmxMadd(lrNormal.mV.y, lfCosine,
+                               VmxMadd(lvAxisCrossNormal.mV.y, lfSine,
+                                        lrAxis.mV.y * lfAxisTerm));
+        lvRotated.mV.z = VmxMadd(lrNormal.mV.z, lfCosine,
+                               VmxMadd(lvAxisCrossNormal.mV.z, lfSine,
+                                        lrAxis.mV.z * lfAxisTerm));
         Vector3 lvResult;
-        lvResult.x = lvRotated.x;
-        lvResult.y = lvRotated.y;
-        lvResult.z = lvRotated.z;
-        lvResult.w = 0.0f;
+        lvResult.mV.x = lvRotated.mV.x;
+        lvResult.mV.y = lvRotated.mV.y;
+        lvResult.mV.z = lvRotated.mV.z;
+        lvResult.mV.w = 0.0f;
         return lvResult;
     }
 
@@ -128,9 +128,9 @@ namespace
     rw::math::vpu::Matrix44Affine Matrix44AffineFromEulerXYZ(const Vector3& lrAngles)
     {
         f32 lfSinX, lfCosX, lfSinY, lfCosY, lfSinZ, lfCosZ;
-        XboxMath::XMVectorSinCos(&lfSinX, &lfCosX, lrAngles.x);
-        XboxMath::XMVectorSinCos(&lfSinY, &lfCosY, lrAngles.y);
-        XboxMath::XMVectorSinCos(&lfSinZ, &lfCosZ, lrAngles.z);
+        XboxMath::XMVectorSinCos(&lfSinX, &lfCosX, lrAngles.mV.x);
+        XboxMath::XMVectorSinCos(&lfSinY, &lfCosY, lrAngles.mV.y);
+        XboxMath::XMVectorSinCos(&lfSinZ, &lfCosZ, lrAngles.mV.z);
 
         const f32 lfCosXSinZ = lfCosX * lfSinZ;
         const f32 lfSinXSinZ = lfSinX * lfSinZ;
@@ -138,20 +138,20 @@ namespace
         const f32 lfCosXCosZ = lfCosX * lfCosZ;
 
         rw::math::vpu::Matrix44Affine lResult;
-        lResult.xAxis.x = lfCosY * lfCosZ;
-        lResult.xAxis.y = lfCosY * lfSinZ;
-        lResult.xAxis.z = -lfSinY;
-        lResult.xAxis.w = 0.0f;
+        lResult.xAxis.mV.x = lfCosY * lfCosZ;
+        lResult.xAxis.mV.y = lfCosY * lfSinZ;
+        lResult.xAxis.mV.z = -lfSinY;
+        lResult.xAxis.mV.w = 0.0f;
 
-        lResult.yAxis.x = lfSinY * lfSinXCosZ - lfCosXSinZ;
-        lResult.yAxis.y = VmxMadd(lfSinY, lfSinXSinZ, lfCosXCosZ);
-        lResult.yAxis.z = lfCosY * lfSinX;
-        lResult.yAxis.w = 0.0f;
+        lResult.yAxis.mV.x = lfSinY * lfSinXCosZ - lfCosXSinZ;
+        lResult.yAxis.mV.y = VmxMadd(lfSinY, lfSinXSinZ, lfCosXCosZ);
+        lResult.yAxis.mV.z = lfCosY * lfSinX;
+        lResult.yAxis.mV.w = 0.0f;
 
-        lResult.zAxis.x = VmxMadd(lfSinY, lfCosXCosZ, lfSinXSinZ);
-        lResult.zAxis.y = lfSinY * lfCosXSinZ - lfSinXCosZ;
-        lResult.zAxis.z = lfCosY * lfCosX;
-        lResult.zAxis.w = 0.0f;
+        lResult.zAxis.mV.x = VmxMadd(lfSinY, lfCosXCosZ, lfSinXSinZ);
+        lResult.zAxis.mV.y = lfSinY * lfCosXSinZ - lfSinXCosZ;
+        lResult.zAxis.mV.z = lfCosY * lfCosX;
+        lResult.zAxis.mV.w = 0.0f;
         lResult.wAxis.SetZero();
         return lResult;
     }
@@ -309,50 +309,50 @@ namespace CgsSceneManager
         const rw::math::vpu::Matrix44 lViewProjection =
             lpRenderer->GetViewProjectionMatrix();
         rw::math::vpu::Vector4 lColumn0;
-        lColumn0.x = lViewProjection.xAxis.x;
-        lColumn0.y = lViewProjection.yAxis.x;
-        lColumn0.z = lViewProjection.zAxis.x;
-        lColumn0.w = lViewProjection.wAxis.x;
+        lColumn0.mV.x = lViewProjection.xAxis.mV.x;
+        lColumn0.mV.y = lViewProjection.yAxis.mV.x;
+        lColumn0.mV.z = lViewProjection.zAxis.mV.x;
+        lColumn0.mV.w = lViewProjection.wAxis.mV.x;
         rw::math::vpu::Vector4 lColumn1;
-        lColumn1.x = lViewProjection.xAxis.y;
-        lColumn1.y = lViewProjection.yAxis.y;
-        lColumn1.z = lViewProjection.zAxis.y;
-        lColumn1.w = lViewProjection.wAxis.y;
+        lColumn1.mV.x = lViewProjection.xAxis.mV.y;
+        lColumn1.mV.y = lViewProjection.yAxis.mV.y;
+        lColumn1.mV.z = lViewProjection.zAxis.mV.y;
+        lColumn1.mV.w = lViewProjection.wAxis.mV.y;
         rw::math::vpu::Vector4 lColumn2;
-        lColumn2.x = lViewProjection.xAxis.z;
-        lColumn2.y = lViewProjection.yAxis.z;
-        lColumn2.z = lViewProjection.zAxis.z;
-        lColumn2.w = lViewProjection.wAxis.z;
+        lColumn2.mV.x = lViewProjection.xAxis.mV.z;
+        lColumn2.mV.y = lViewProjection.yAxis.mV.z;
+        lColumn2.mV.z = lViewProjection.zAxis.mV.z;
+        lColumn2.mV.w = lViewProjection.wAxis.mV.z;
         rw::math::vpu::Vector4 lColumn3;
-        lColumn3.x = lViewProjection.xAxis.w;
-        lColumn3.y = lViewProjection.yAxis.w;
-        lColumn3.z = lViewProjection.zAxis.w;
-        lColumn3.w = lViewProjection.wAxis.w;
+        lColumn3.mV.x = lViewProjection.xAxis.mV.w;
+        lColumn3.mV.y = lViewProjection.yAxis.mV.w;
+        lColumn3.mV.z = lViewProjection.zAxis.mV.w;
+        lColumn3.mV.w = lViewProjection.wAxis.mV.w;
 
         // ARTIST stores each extracted xyzw column combination unchanged,
         // including its homogeneous W lane; it does not negate the offset.
         rw::math::vpu::Vector4 laClipPlanes[6];
         laClipPlanes[0] = lColumn2;
-        laClipPlanes[1].x = lColumn3.x - lColumn2.x;
-        laClipPlanes[1].y = lColumn3.y - lColumn2.y;
-        laClipPlanes[1].z = lColumn3.z - lColumn2.z;
-        laClipPlanes[1].w = lColumn3.w - lColumn2.w;
-        laClipPlanes[2].x = lColumn3.x + lColumn0.x;
-        laClipPlanes[2].y = lColumn3.y + lColumn0.y;
-        laClipPlanes[2].z = lColumn3.z + lColumn0.z;
-        laClipPlanes[2].w = lColumn3.w + lColumn0.w;
-        laClipPlanes[3].x = lColumn3.x - lColumn0.x;
-        laClipPlanes[3].y = lColumn3.y - lColumn0.y;
-        laClipPlanes[3].z = lColumn3.z - lColumn0.z;
-        laClipPlanes[3].w = lColumn3.w - lColumn0.w;
-        laClipPlanes[4].x = lColumn3.x - lColumn1.x;
-        laClipPlanes[4].y = lColumn3.y - lColumn1.y;
-        laClipPlanes[4].z = lColumn3.z - lColumn1.z;
-        laClipPlanes[4].w = lColumn3.w - lColumn1.w;
-        laClipPlanes[5].x = lColumn3.x + lColumn1.x;
-        laClipPlanes[5].y = lColumn3.y + lColumn1.y;
-        laClipPlanes[5].z = lColumn3.z + lColumn1.z;
-        laClipPlanes[5].w = lColumn3.w + lColumn1.w;
+        laClipPlanes[1].mV.x = lColumn3.mV.x - lColumn2.mV.x;
+        laClipPlanes[1].mV.y = lColumn3.mV.y - lColumn2.mV.y;
+        laClipPlanes[1].mV.z = lColumn3.mV.z - lColumn2.mV.z;
+        laClipPlanes[1].mV.w = lColumn3.mV.w - lColumn2.mV.w;
+        laClipPlanes[2].mV.x = lColumn3.mV.x + lColumn0.mV.x;
+        laClipPlanes[2].mV.y = lColumn3.mV.y + lColumn0.mV.y;
+        laClipPlanes[2].mV.z = lColumn3.mV.z + lColumn0.mV.z;
+        laClipPlanes[2].mV.w = lColumn3.mV.w + lColumn0.mV.w;
+        laClipPlanes[3].mV.x = lColumn3.mV.x - lColumn0.mV.x;
+        laClipPlanes[3].mV.y = lColumn3.mV.y - lColumn0.mV.y;
+        laClipPlanes[3].mV.z = lColumn3.mV.z - lColumn0.mV.z;
+        laClipPlanes[3].mV.w = lColumn3.mV.w - lColumn0.mV.w;
+        laClipPlanes[4].mV.x = lColumn3.mV.x - lColumn1.mV.x;
+        laClipPlanes[4].mV.y = lColumn3.mV.y - lColumn1.mV.y;
+        laClipPlanes[4].mV.z = lColumn3.mV.z - lColumn1.mV.z;
+        laClipPlanes[4].mV.w = lColumn3.mV.w - lColumn1.mV.w;
+        laClipPlanes[5].mV.x = lColumn3.mV.x + lColumn1.mV.x;
+        laClipPlanes[5].mV.y = lColumn3.mV.y + lColumn1.mV.y;
+        laClipPlanes[5].mV.z = lColumn3.mV.z + lColumn1.mV.z;
+        laClipPlanes[5].mV.w = lColumn3.mV.w + lColumn1.mV.w;
 
         for (u32 luPlane = 0; luPlane < 6; ++luPlane)
         {
@@ -381,11 +381,11 @@ namespace CgsSceneManager
             mpTriCollisionManager->GetPolySoupListSpacialMap();
         const s32 liNumPolySoupLists = lpSpatialMap->GetNumPolySoupLists();
         const rw::math::vpu::Vector3 lvCameraPosition = lpRenderer->GetCameraPosition();
-        rw::math::vpu::Vector4 lvCameraPoint;
-        lvCameraPoint.x = lvCameraPosition.x;
-        lvCameraPoint.y = lvCameraPosition.y;
-        lvCameraPoint.z = lvCameraPosition.z;
-        lvCameraPoint.w = lvCameraPosition.w;
+        rw::math::vpu::Vector3 lvCameraPoint;
+        lvCameraPoint.mV.x = lvCameraPosition.mV.x;
+        lvCameraPoint.mV.y = lvCameraPosition.mV.y;
+        lvCameraPoint.mV.z = lvCameraPosition.mV.z;
+        lvCameraPoint.mV.w = lvCameraPosition.mV.w;
 
         for (s32 liSoupList = 0; liSoupList < liNumPolySoupLists; ++liSoupList)
         {
@@ -393,14 +393,14 @@ namespace CgsSceneManager
                 lpSpatialMap->GetPolySoupList(liSoupList);
 
             CgsGeometric::AxisAlignedBox lSoupListBounds;
-            lSoupListBounds.mMin.x = lpSoupList->mOverallAabb[0];
-            lSoupListBounds.mMin.y = lpSoupList->mOverallAabb[1];
-            lSoupListBounds.mMin.z = lpSoupList->mOverallAabb[2];
-            lSoupListBounds.mMin.w = lpSoupList->mOverallAabb[3];
-            lSoupListBounds.mMax.x = lpSoupList->mOverallAabb[4];
-            lSoupListBounds.mMax.y = lpSoupList->mOverallAabb[5];
-            lSoupListBounds.mMax.z = lpSoupList->mOverallAabb[6];
-            lSoupListBounds.mMax.w = lpSoupList->mOverallAabb[7];
+            lSoupListBounds.mMin.mV.x = lpSoupList->mOverallAabb[0];
+            lSoupListBounds.mMin.mV.y = lpSoupList->mOverallAabb[1];
+            lSoupListBounds.mMin.mV.z = lpSoupList->mOverallAabb[2];
+            lSoupListBounds.mMin.mV.w = lpSoupList->mOverallAabb[3];
+            lSoupListBounds.mMax.mV.x = lpSoupList->mOverallAabb[4];
+            lSoupListBounds.mMax.mV.y = lpSoupList->mOverallAabb[5];
+            lSoupListBounds.mMax.mV.z = lpSoupList->mOverallAabb[6];
+            lSoupListBounds.mMax.mV.w = lpSoupList->mOverallAabb[7];
             if (!lSoupListBounds.ContainsPoint(lvCameraPoint))
                 continue;
 
@@ -411,11 +411,11 @@ namespace CgsSceneManager
                 const CgsGeometric::AxisAlignedBox lSoupBounds =
                     lpSoupList->Get4Boxes(liSoup / 4)->GetAxisAlignedBox(
                         static_cast<u32>(liSoup % 4));
-                const rw::math::vpu::Vector4& lrMin = lSoupBounds.mMin;
-                const rw::math::vpu::Vector4& lrMax = lSoupBounds.mMax;
-                const f32 lfDx = lvCameraPosition.x - (lrMin.x + lrMax.x) * 0.5f;
-                const f32 lfDy = lvCameraPosition.y - (lrMin.y + lrMax.y) * 0.5f;
-                const f32 lfDz = lvCameraPosition.z - (lrMin.z + lrMax.z) * 0.5f;
+                const rw::math::vpu::Vector3& lrMin = lSoupBounds.mMin;
+                const rw::math::vpu::Vector3& lrMax = lSoupBounds.mMax;
+                const f32 lfDx = lvCameraPosition.mV.x - (lrMin.mV.x + lrMax.mV.x) * 0.5f;
+                const f32 lfDy = lvCameraPosition.mV.y - (lrMin.mV.y + lrMax.mV.y) * 0.5f;
+                const f32 lfDz = lvCameraPosition.mV.z - (lrMin.mV.z + lrMax.mV.z) * 0.5f;
                 const f32 lfSqDistToSoup = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
 
                 if (!lSoupBounds.ContainsPoint(lvCameraPoint) && !(lfSqDistToSoup < 10000.0f))
@@ -430,15 +430,15 @@ namespace CgsSceneManager
                 if (mbDrawSoupAabbs)
                 {
                     rw::math::vpu::Vector3 lvMin;
-                    lvMin.x = lSoupBounds.mMin.x;
-                    lvMin.y = lSoupBounds.mMin.y;
-                    lvMin.z = lSoupBounds.mMin.z;
-                    lvMin.w = lSoupBounds.mMin.w;
+                    lvMin.mV.x = lSoupBounds.mMin.mV.x;
+                    lvMin.mV.y = lSoupBounds.mMin.mV.y;
+                    lvMin.mV.z = lSoupBounds.mMin.mV.z;
+                    lvMin.mV.w = lSoupBounds.mMin.mV.w;
                     rw::math::vpu::Vector3 lvMax;
-                    lvMax.x = lSoupBounds.mMax.x;
-                    lvMax.y = lSoupBounds.mMax.y;
-                    lvMax.z = lSoupBounds.mMax.z;
-                    lvMax.w = lSoupBounds.mMax.w;
+                    lvMax.mV.x = lSoupBounds.mMax.mV.x;
+                    lvMax.mV.y = lSoupBounds.mMax.mV.y;
+                    lvMax.mV.z = lSoupBounds.mMax.mV.z;
+                    lvMax.mV.w = lSoupBounds.mMax.mV.w;
                     const u32 luColour = KAU_SOUP_COLOURS[static_cast<u32>(liSoup) % 16u]
                                        | 0xFF000000u;
                     lpRenderer->DrawBox(lvMin, lvMax, RwRGBAFromPackedWord(luColour));
@@ -504,25 +504,25 @@ namespace CgsSceneManager
         __stvx(__vmulfp(lvCross, lvInverse), &lPolyNormal, 0);
 
         rw::math::vpu::Vector3 lAveragePoint;
-        lAveragePoint.x = 0.0f;
-        lAveragePoint.y = 0.0f;
-        lAveragePoint.z = 0.0f;
+        lAveragePoint.mV.x = 0.0f;
+        lAveragePoint.mV.y = 0.0f;
+        lAveragePoint.mV.z = 0.0f;
         for (s32 liVertex = 0; liVertex < liNumVertices; ++liVertex)
         {
-            lAveragePoint.x += laPolyPoints[liVertex].x;
-            lAveragePoint.y += laPolyPoints[liVertex].y;
-            lAveragePoint.z += laPolyPoints[liVertex].z;
+            lAveragePoint.mV.x += laPolyPoints[liVertex].mV.x;
+            lAveragePoint.mV.y += laPolyPoints[liVertex].mV.y;
+            lAveragePoint.mV.z += laPolyPoints[liVertex].mV.z;
         }
         const f32 lfInverseVertexCount = 1.0f / static_cast<f32>(liNumVertices);
-        lAveragePoint.x *= lfInverseVertexCount;
-        lAveragePoint.y *= lfInverseVertexCount;
-        lAveragePoint.z *= lfInverseVertexCount;
-        lAveragePoint.w = 0.0f;
+        lAveragePoint.mV.x *= lfInverseVertexCount;
+        lAveragePoint.mV.y *= lfInverseVertexCount;
+        lAveragePoint.mV.z *= lfInverseVertexCount;
+        lAveragePoint.mV.w = 0.0f;
 
         const rw::math::vpu::Vector3 lvCameraPosition = lpRenderer->GetCameraPosition();
-        const f32 lfCameraDx = lvCameraPosition.x - lAveragePoint.x;
-        const f32 lfCameraDy = lvCameraPosition.y - lAveragePoint.y;
-        const f32 lfCameraDz = lvCameraPosition.z - lAveragePoint.z;
+        const f32 lfCameraDx = lvCameraPosition.mV.x - lAveragePoint.mV.x;
+        const f32 lfCameraDy = lvCameraPosition.mV.y - lAveragePoint.mV.y;
+        const f32 lfCameraDz = lvCameraPosition.mV.z - lAveragePoint.mV.z;
         const f32 lfSqDistToPoly =
             lfCameraDx * lfCameraDx + lfCameraDy * lfCameraDy + lfCameraDz * lfCameraDz;
 
@@ -554,23 +554,23 @@ namespace CgsSceneManager
             const rw::math::vpu::Vector3& lrPointA = laPolyPoints[luStart];
             const rw::math::vpu::Vector3& lrPointB = laPolyPoints[luEnd];
             rw::math::vpu::Vector3 lvEdge;
-            lvEdge.x = lrPointB.x - lrPointA.x;
-            lvEdge.y = lrPointB.y - lrPointA.y;
-            lvEdge.z = lrPointB.z - lrPointA.z;
+            lvEdge.mV.x = lrPointB.mV.x - lrPointA.mV.x;
+            lvEdge.mV.y = lrPointB.mV.y - lrPointA.mV.y;
+            lvEdge.mV.z = lrPointB.mV.z - lrPointA.mV.z;
             const f32 lfEdgeLength = std::sqrt(
-                lvEdge.x * lvEdge.x + lvEdge.y * lvEdge.y + lvEdge.z * lvEdge.z);
+                lvEdge.mV.x * lvEdge.mV.x + lvEdge.mV.y * lvEdge.mV.y + lvEdge.mV.z * lvEdge.mV.z);
             const f32 lfInverseEdgeLength = 1.0f / lfEdgeLength;
             rw::math::vpu::Vector3 lAxis;
-            lAxis.x = lvEdge.x * lfInverseEdgeLength;
-            lAxis.y = lvEdge.y * lfInverseEdgeLength;
-            lAxis.z = lvEdge.z * lfInverseEdgeLength;
-            lAxis.w = 0.0f;
+            lAxis.mV.x = lvEdge.mV.x * lfInverseEdgeLength;
+            lAxis.mV.y = lvEdge.mV.y * lfInverseEdgeLength;
+            lAxis.mV.z = lvEdge.mV.z * lfInverseEdgeLength;
+            lAxis.mV.w = 0.0f;
 
             rw::math::vpu::Vector3 lEdgeCentre;
-            lEdgeCentre.x = (lrPointA.x + lrPointB.x) * 0.5f;
-            lEdgeCentre.y = (lrPointA.y + lrPointB.y) * 0.5f;
-            lEdgeCentre.z = (lrPointA.z + lrPointB.z) * 0.5f;
-            lEdgeCentre.w = 0.0f;
+            lEdgeCentre.mV.x = (lrPointA.mV.x + lrPointB.mV.x) * 0.5f;
+            lEdgeCentre.mV.y = (lrPointA.mV.y + lrPointB.mV.y) * 0.5f;
+            lEdgeCentre.mV.z = (lrPointA.mV.z + lrPointB.mV.z) * 0.5f;
+            lEdgeCentre.mV.w = 0.0f;
             const f32 lfEdgeCosine = static_cast<f32>(
                 lpPoly->GetEdgeCosineUncompressed(static_cast<u32>(liEdge)));
             const f32 lfEdgeAngle = XboxMath::XMVectorACos(lfEdgeCosine);
@@ -581,10 +581,10 @@ namespace CgsSceneManager
                 RotateTriangleDebugNormal(lPolyNormal, lAxis, lfSine, lfCosine);
             const rw::math::vpu::Vector3 lPointA = lEdgeCentre;
             rw::math::vpu::Vector3 lPointB;
-            lPointB.x = lEdgeCentre.x + lRenderEdgeCos.x;
-            lPointB.y = lEdgeCentre.y + lRenderEdgeCos.y;
-            lPointB.z = lEdgeCentre.z + lRenderEdgeCos.z;
-            lPointB.w = 0.0f;
+            lPointB.mV.x = lEdgeCentre.mV.x + lRenderEdgeCos.mV.x;
+            lPointB.mV.y = lEdgeCentre.mV.y + lRenderEdgeCos.mV.y;
+            lPointB.mV.z = lEdgeCentre.mV.z + lRenderEdgeCos.mV.z;
+            lPointB.mV.w = 0.0f;
             const u32 luColour = lbIsQuad ? KAU_QUAD_EDGE_COLOURS[liEdge]
                                            : 0xFF0000FFu;
             lpRenderer->DrawLine(lPointA, lPointB, RwRGBAFromPackedWord(luColour));
@@ -601,16 +601,16 @@ namespace CgsSceneManager
         {
             const rw::math::vpu::Vector3 lvCameraPosition =
                 lpRenderer->GetCameraPosition();
-            mSpherePos.X() = lvCameraPosition.x;
-            mSpherePos.Y() = lvCameraPosition.y;
-            mSpherePos.Z() = lvCameraPosition.z;
+            mSpherePos.X() = lvCameraPosition.mV.x;
+            mSpherePos.Y() = lvCameraPosition.mV.y;
+            mSpherePos.Z() = lvCameraPosition.mV.z;
             mbNeedToInitSpherePos = false;
             mSpherePos.Z() += 10.0f; // flt_82004A20
         }
 
-        const rw::math::vpu::Vector3 lvSphereCentre = {
+        const rw::math::vpu::Vector3 lvSphereCentre(MakeVector4(
             mSpherePos.X(), mSpherePos.Y(), mSpherePos.Z(), mfSphereRad
-        };
+        ).mV);
         const CgsGeometric::Sphere lSphere = {
             MakeVector4(
                 mSpherePos.X(), mSpherePos.Y(), mSpherePos.Z(), mfSphereRad
@@ -625,10 +625,7 @@ namespace CgsSceneManager
         const f32 KF_EXTRACTIONRADIUS = 5.0f;    // flt_820F2718
         const f32 KF_SPHERECONTACTPADDING = 1.0f; // 0x828BFB08..0x828BFB1C
         const f32 KF_TRIANGLEOFFSET = 0.02f;       // flt_82005574
-        const VecFloat lvSphereContactPadding = {
-            KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING,
-            KF_SPHERECONTACTPADDING, KF_SPHERECONTACTPADDING
-        };
+        const VecFloat lvSphereContactPadding(KF_SPHERECONTACTPADDING);
 
         for (s32 liSoupList = 0; liSoupList < liNumPolySoupLists; ++liSoupList)
         {
@@ -640,12 +637,12 @@ namespace CgsSceneManager
             const f32* const lapOverallAabb = lpPolySoupList->mOverallAabb;
             CgsGeometric::AxisAlignedBox lOverallAabb;
             lOverallAabb.Set(
-                MakeVector4(
+                rw::math::vpu::Vector3(MakeVector4(
                     lapOverallAabb[0], lapOverallAabb[1], lapOverallAabb[2], lapOverallAabb[3]
-                ),
-                MakeVector4(
+                ).mV),
+                rw::math::vpu::Vector3(MakeVector4(
                     lapOverallAabb[4], lapOverallAabb[5], lapOverallAabb[6], lapOverallAabb[7]
-                ));
+                ).mV));
             if (!lOverallAabb.ContainsPoint(lSphere.mData.GetVector3()))
                 continue;
 
@@ -738,40 +735,40 @@ namespace CgsSceneManager
         {
             const rw::math::vpu::Vector3 lvCameraPosition =
                 lpRenderer->GetCameraPosition();
-            mBoxPos.Set(lvCameraPosition.x, lvCameraPosition.y, lvCameraPosition.z);
+            mBoxPos.Set(lvCameraPosition.mV.x, lvCameraPosition.mV.y, lvCameraPosition.mV.z);
             mbNeedToInitBoxPos = false;
             mBoxPos.Z() += 10.0f; // flt_82004A20
         }
 
         rw::math::vpu::Vector3 lvBoxPosition;
-        lvBoxPosition.x = mBoxPos.X();
-        lvBoxPosition.y = mBoxPos.Y();
-        lvBoxPosition.z = mBoxPos.Z();
-        lvBoxPosition.w = 0.0f;
+        lvBoxPosition.mV.x = mBoxPos.X();
+        lvBoxPosition.mV.y = mBoxPos.Y();
+        lvBoxPosition.mV.z = mBoxPos.Z();
+        lvBoxPosition.mV.w = 0.0f;
         rw::math::vpu::Vector3 lvBoxAngles;
-        lvBoxAngles.x = mBoxOrientation.X();
-        lvBoxAngles.y = mBoxOrientation.Y();
-        lvBoxAngles.z = mBoxOrientation.Z();
-        lvBoxAngles.w = 0.0f;
+        lvBoxAngles.mV.x = mBoxOrientation.X();
+        lvBoxAngles.mV.y = mBoxOrientation.Y();
+        lvBoxAngles.mV.z = mBoxOrientation.Z();
+        lvBoxAngles.mV.w = 0.0f;
         rw::math::vpu::Matrix44Affine lTransform =
             Matrix44AffineFromEulerXYZ(lvBoxAngles);
         lTransform.wAxis = lvBoxPosition;
 
         rw::math::vpu::Vector3 lvBoxHalfSize;
-        lvBoxHalfSize.x = mBoxSize.X() * 0.5f;
-        lvBoxHalfSize.y = mBoxSize.Y() * 0.5f;
-        lvBoxHalfSize.z = mBoxSize.Z() * 0.5f;
-        lvBoxHalfSize.w = 0.0f;
+        lvBoxHalfSize.mV.x = mBoxSize.X() * 0.5f;
+        lvBoxHalfSize.mV.y = mBoxSize.Y() * 0.5f;
+        lvBoxHalfSize.mV.z = mBoxSize.Z() * 0.5f;
+        lvBoxHalfSize.mV.w = 0.0f;
         CgsGeometric::Box lBox;
         lBox.Set(lTransform, lvBoxHalfSize,
-                 MakeVector4(0.0f, 0.0f, 0.0f, 0.0f));
+                 VecFloat(0.0f));
 
-        const rw::math::vpu::Vector3 lvLocalMin = {
-            -lvBoxHalfSize.x, -lvBoxHalfSize.y, -lvBoxHalfSize.z, 0.0f
-        };
-        const rw::math::vpu::Vector3 lvLocalMax = {
-            lvBoxHalfSize.x, lvBoxHalfSize.y, lvBoxHalfSize.z, 0.0f
-        };
+        const rw::math::vpu::Vector3 lvLocalMin(MakeVector4(
+            -lvBoxHalfSize.mV.x, -lvBoxHalfSize.mV.y, -lvBoxHalfSize.mV.z, 0.0f
+        ).mV);
+        const rw::math::vpu::Vector3 lvLocalMax(MakeVector4(
+            lvBoxHalfSize.mV.x, lvBoxHalfSize.mV.y, lvBoxHalfSize.mV.z, 0.0f
+        ).mV);
         lpRenderer->DrawBox(lvLocalMin, lvLocalMax, lTransform,
                             RwRGBAFromPackedWord(0xFFFFFFFFu));
         lpRenderer->DrawSolidBox(lvLocalMin, lvLocalMax, lTransform,
@@ -788,27 +785,27 @@ namespace CgsSceneManager
         const f32 lfRadius = lfMaxSize * 0.5f;
 
         CgsGeometric::Sphere lBoundingSphere;
-        lBoundingSphere.mData.mV.x = lvBoxPosition.x;
-        lBoundingSphere.mData.mV.y = lvBoxPosition.y;
-        lBoundingSphere.mData.mV.z = lvBoxPosition.z;
+        lBoundingSphere.mData.mV.x = lvBoxPosition.mV.x;
+        lBoundingSphere.mData.mV.y = lvBoxPosition.mV.y;
+        lBoundingSphere.mData.mV.z = lvBoxPosition.mV.z;
         lBoundingSphere.mData.mV.w = lfRadius;
 
         CgsGeometric::AxisAlignedBox lBoundingBox;
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {
-            lvBoxPosition.x - lfRadius,
-            lvBoxPosition.y - lfRadius,
-            lvBoxPosition.z - lfRadius,
-            -lfRadius};
-            lBoundingBox.mMin = lAggregateValue;
+            const rw::math::vpu::Vector4 lAggregateValue(
+            lvBoxPosition.mV.x - lfRadius,
+            lvBoxPosition.mV.y - lfRadius,
+            lvBoxPosition.mV.z - lfRadius,
+            -lfRadius);
+            lBoundingBox.mMin = lAggregateValue.mV;
         }
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {
-            lvBoxPosition.x + lfRadius,
-            lvBoxPosition.y + lfRadius,
-            lvBoxPosition.z + lfRadius,
-            lfRadius};
-            lBoundingBox.mMax = lAggregateValue;
+            const rw::math::vpu::Vector4 lAggregateValue(
+            lvBoxPosition.mV.x + lfRadius,
+            lvBoxPosition.mV.y + lfRadius,
+            lvBoxPosition.mV.z + lfRadius,
+            lfRadius);
+            lBoundingBox.mMax = lAggregateValue.mV;
         }
 
         // RunQuery publishes its leaf-index list into the mutable spatial map.
@@ -835,14 +832,14 @@ namespace CgsSceneManager
 
                 // The X360 SIMD reduction is inclusive on all four vector lanes.
                 const bool lbLeafOverlapsBox =
-                    (lrLeafBox.mMax.x >= lBoundingBox.mMin.x) &&
-                    (lrLeafBox.mMax.y >= lBoundingBox.mMin.y) &&
-                    (lrLeafBox.mMax.z >= lBoundingBox.mMin.z) &&
-                    (lrLeafBox.mMax.w >= lBoundingBox.mMin.w) &&
-                    (lBoundingBox.mMax.x >= lrLeafBox.mMin.x) &&
-                    (lBoundingBox.mMax.y >= lrLeafBox.mMin.y) &&
-                    (lBoundingBox.mMax.z >= lrLeafBox.mMin.z) &&
-                    (lBoundingBox.mMax.w >= lrLeafBox.mMin.w);
+                    (lrLeafBox.mMax.mV.x >= lBoundingBox.mMin.mV.x) &&
+                    (lrLeafBox.mMax.mV.y >= lBoundingBox.mMin.mV.y) &&
+                    (lrLeafBox.mMax.mV.z >= lBoundingBox.mMin.mV.z) &&
+                    (lrLeafBox.mMax.mV.w >= lBoundingBox.mMin.mV.w) &&
+                    (lBoundingBox.mMax.mV.x >= lrLeafBox.mMin.mV.x) &&
+                    (lBoundingBox.mMax.mV.y >= lrLeafBox.mMin.mV.y) &&
+                    (lBoundingBox.mMax.mV.z >= lrLeafBox.mMin.mV.z) &&
+                    (lBoundingBox.mMax.mV.w >= lrLeafBox.mMin.mV.w);
                 if (!lbLeafOverlapsBox)
                     continue;
 
@@ -890,10 +887,8 @@ namespace CgsSceneManager
                               lAOSTriangle.mVertex1,
                               lAOSTriangle.mVertex2);
                 s32 liNumContacts = 0;
-                const rw::math::vpu::Vector4 lvPadding = {
-                    0.1f, 0.1f, 0.1f, 0.1f}; // flt_82004014
-                const rw::math::vpu::MaskScalar lvClampPenetration = {
-                    0.0f, 0.0f, 0.0f, 0.0f}; // unk_8327F240+0x10, raw initial zero
+                const VecFloat lvPadding(0.1f); // flt_82004014
+                const rw::math::vpu::MaskScalar lvClampPenetration(false); // unk_8327F240+0x10, raw initial zero
 
                 const u64 luIntersectionStart = CgsSystem::GetSystemTimerBaseTime();
                 (void)CgsGeometric::IntersectTriangleBox(
@@ -925,14 +920,14 @@ namespace CgsSceneManager
                         RwRGBAFromPackedWord(0xFFFFFFFFu));
 
                     rw::math::vpu::Vector3 lvNormalEnd;
-                    lvNormalEnd.x =
-                        laTrianglePoints[liContact].x + laTriangleNormals[liContact].x;
-                    lvNormalEnd.y =
-                        laTrianglePoints[liContact].y + laTriangleNormals[liContact].y;
-                    lvNormalEnd.z =
-                        laTrianglePoints[liContact].z + laTriangleNormals[liContact].z;
-                    lvNormalEnd.w =
-                        laTrianglePoints[liContact].w + laTriangleNormals[liContact].w;
+                    lvNormalEnd.mV.x =
+                        laTrianglePoints[liContact].mV.x + laTriangleNormals[liContact].mV.x;
+                    lvNormalEnd.mV.y =
+                        laTrianglePoints[liContact].mV.y + laTriangleNormals[liContact].mV.y;
+                    lvNormalEnd.mV.z =
+                        laTrianglePoints[liContact].mV.z + laTriangleNormals[liContact].mV.z;
+                    lvNormalEnd.mV.w =
+                        laTrianglePoints[liContact].mV.w + laTriangleNormals[liContact].mV.w;
                     lpRenderer->DrawArrow(
                         laTrianglePoints[liContact],
                         lvNormalEnd,
@@ -976,20 +971,20 @@ namespace CgsSceneManager
                                    0xFFFFFFFFu);
         }
 
-        const rw::math::vpu::Vector3 lvStartPosition = {
+        const rw::math::vpu::Vector3 lvStartPosition(MakeVector4(
             mSweptSpherePos.X(), mSweptSpherePos.Y(), mSweptSpherePos.Z(), 0.0f
-        };
-        const rw::math::vpu::Vector3 lvVelocity = {
+        ).mV);
+        const rw::math::vpu::Vector3 lvVelocity(MakeVector4(
             mSweptSphereVelocity.X(), mSweptSphereVelocity.Y(),
             mSweptSphereVelocity.Z(), 0.0f
-        };
+        ).mV);
 
         // ARTIST computes length from the three velocity lanes. Its scalar broad-phase
         // path uses fused multiply-adds for the squared-length accumulation.
         const f32 lfVelocityXYLengthSquared =
-            ScalarMadd(lvVelocity.x, lvVelocity.x, lvVelocity.y * lvVelocity.y);
+            ScalarMadd(lvVelocity.mV.x, lvVelocity.mV.x, lvVelocity.mV.y * lvVelocity.mV.y);
         const f32 lfVelocityLengthSquared =
-            ScalarMadd(lvVelocity.z, lvVelocity.z, lfVelocityXYLengthSquared);
+            ScalarMadd(lvVelocity.mV.z, lvVelocity.mV.z, lfVelocityXYLengthSquared);
         const f32 lfVelocityLength = std::sqrt(lfVelocityLengthSquared);
 
         // The broad-phase sphere/AABB uses (length + 2*radius) * 1.05 (raw
@@ -999,26 +994,26 @@ namespace CgsSceneManager
 
         CgsGeometric::Sphere lBroadPhaseSphere;
         {
-            const rw::math::vpu::Vector4 lAggregateValue = {
-            lvStartPosition.x, lvStartPosition.y, lvStartPosition.z, lfBroadPhaseRadius
-        };
+            const rw::math::vpu::Vector4 lAggregateValue(
+            lvStartPosition.mV.x, lvStartPosition.mV.y, lvStartPosition.mV.z, lfBroadPhaseRadius
+        );
             lBroadPhaseSphere.mData.mV = lAggregateValue.mV;
         }
 
         CgsGeometric::AxisAlignedBox lQueryBox;
         lQueryBox.Set(
-            MakeVector4(
-                lvStartPosition.x - lfBroadPhaseRadius,
-                lvStartPosition.y - lfBroadPhaseRadius,
-                lvStartPosition.z - lfBroadPhaseRadius,
+            rw::math::vpu::Vector3(MakeVector4(
+                lvStartPosition.mV.x - lfBroadPhaseRadius,
+                lvStartPosition.mV.y - lfBroadPhaseRadius,
+                lvStartPosition.mV.z - lfBroadPhaseRadius,
                 -lfBroadPhaseRadius
-            ),
-            MakeVector4(
-                lvStartPosition.x + lfBroadPhaseRadius,
-                lvStartPosition.y + lfBroadPhaseRadius,
-                lvStartPosition.z + lfBroadPhaseRadius,
+            ).mV),
+            rw::math::vpu::Vector3(MakeVector4(
+                lvStartPosition.mV.x + lfBroadPhaseRadius,
+                lvStartPosition.mV.y + lfBroadPhaseRadius,
+                lvStartPosition.mV.z + lfBroadPhaseRadius,
                 lfBroadPhaseRadius
-            ));
+            ).mV));
 
         rw::math::vpu::Vector3 lvSweepDirection;
         if (lfVelocityLength <= 0.00001f) // flt_82004884
@@ -1030,12 +1025,12 @@ namespace CgsSceneManager
         {
             const f32 lfInverseLength = 1.0f / lfVelocityLength;
             {
-                const rw::math::vpu::Vector3 lAggregateValue = {
-                lvVelocity.x * lfInverseLength,
-                lvVelocity.y * lfInverseLength,
-                lvVelocity.z * lfInverseLength,
+                const rw::math::vpu::Vector3 lAggregateValue(MakeVector4(
+                lvVelocity.mV.x * lfInverseLength,
+                lvVelocity.mV.y * lfInverseLength,
+                lvVelocity.mV.z * lfInverseLength,
                 0.0f
-            };
+            ).mV);
                 lvSweepDirection = lAggregateValue;
             }
         }
@@ -1043,22 +1038,22 @@ namespace CgsSceneManager
         CgsGeometric::SweptSphere lSweptSphere;
         lSweptSphere.Set(
             MakeVector3Plus(
-                lvStartPosition.x, lvStartPosition.y, lvStartPosition.z, mSweptSphereSize
+                lvStartPosition.mV.x, lvStartPosition.mV.y, lvStartPosition.mV.z, mSweptSphereSize
             ),
             MakeVector3Plus(
-                lvSweepDirection.x, lvSweepDirection.y, lvSweepDirection.z, lfVelocityLength
+                lvSweepDirection.mV.x, lvSweepDirection.mV.y, lvSweepDirection.mV.z, lfVelocityLength
             ));
 
         if (lp3DRenderer)
         {
             lp3DRenderer->DrawSphere(lvStartPosition, mSweptSphereSize,
                                      RwRGBAFromPackedWord(0xFFFF0000u));
-            const rw::math::vpu::Vector3 lvSweepEnd = {
-                lvStartPosition.x + lvVelocity.x,
-                lvStartPosition.y + lvVelocity.y,
-                lvStartPosition.z + lvVelocity.z,
+            const rw::math::vpu::Vector3 lvSweepEnd(MakeVector4(
+                lvStartPosition.mV.x + lvVelocity.mV.x,
+                lvStartPosition.mV.y + lvVelocity.mV.y,
+                lvStartPosition.mV.z + lvVelocity.mV.z,
                 0.0f
-            };
+            ).mV);
             lp3DRenderer->DrawArrow(lvStartPosition, lvSweepEnd,
                                     RwRGBAFromPackedWord(0xFFFF00FFu));
         }
@@ -1087,14 +1082,14 @@ namespace CgsSceneManager
 
                 // The console's VMX reduction is inclusive on all four lanes.
                 const bool lbLeafOverlapsQuery =
-                    (lrLeafBox.mMax.x >= lQueryBox.mMin.x) &&
-                    (lrLeafBox.mMax.y >= lQueryBox.mMin.y) &&
-                    (lrLeafBox.mMax.z >= lQueryBox.mMin.z) &&
-                    (lrLeafBox.mMax.w >= lQueryBox.mMin.w) &&
-                    (lQueryBox.mMax.x >= lrLeafBox.mMin.x) &&
-                    (lQueryBox.mMax.y >= lrLeafBox.mMin.y) &&
-                    (lQueryBox.mMax.z >= lrLeafBox.mMin.z) &&
-                    (lQueryBox.mMax.w >= lrLeafBox.mMin.w);
+                    (lrLeafBox.mMax.mV.x >= lQueryBox.mMin.mV.x) &&
+                    (lrLeafBox.mMax.mV.y >= lQueryBox.mMin.mV.y) &&
+                    (lrLeafBox.mMax.mV.z >= lQueryBox.mMin.mV.z) &&
+                    (lrLeafBox.mMax.mV.w >= lQueryBox.mMin.mV.w) &&
+                    (lQueryBox.mMax.mV.x >= lrLeafBox.mMin.mV.x) &&
+                    (lQueryBox.mMax.mV.y >= lrLeafBox.mMin.mV.y) &&
+                    (lQueryBox.mMax.mV.z >= lrLeafBox.mMin.mV.z) &&
+                    (lQueryBox.mMax.mV.w >= lrLeafBox.mMin.mV.w);
                 if (!lbLeafOverlapsQuery)
                     continue;
 
@@ -1141,17 +1136,17 @@ namespace CgsSceneManager
                     CgsGeometric::IntersectTriangleSweptSphere(
                         lSweptSphere, lTriangle, lContactNormal, lTriangleNormal,
                         lSphereContactPoint, lTriangleContactPoint);
-                if (lHitMask.x == 0.0f || !lp3DRenderer)
+                if (lHitMask.mV.x == 0.0f || !lp3DRenderer)
                     continue;
 
-                const rw::math::vpu::Vector3 lvTriangleContactPoint = {
-                    lTriangleContactPoint.x, lTriangleContactPoint.y,
-                    lTriangleContactPoint.z, lTriangleContactPoint.w
-                };
-                const rw::math::vpu::Vector3 lvSphereContactPoint = {
-                    lSphereContactPoint.x, lSphereContactPoint.y,
-                    lSphereContactPoint.z, lSphereContactPoint.w
-                };
+                const rw::math::vpu::Vector3 lvTriangleContactPoint(MakeVector4(
+                    lTriangleContactPoint.mV.x, lTriangleContactPoint.mV.y,
+                    lTriangleContactPoint.mV.z, lTriangleContactPoint.mV.w
+                ).mV);
+                const rw::math::vpu::Vector3 lvSphereContactPoint(MakeVector4(
+                    lSphereContactPoint.mV.x, lSphereContactPoint.mV.y,
+                    lSphereContactPoint.mV.z, lSphereContactPoint.mV.w
+                ).mV);
                 lp3DRenderer->DrawPoint(
                     lvTriangleContactPoint, RwRGBAFromPackedWord(0xFF00FFFFu));
                 lp3DRenderer->DrawPoint(
@@ -1160,12 +1155,12 @@ namespace CgsSceneManager
                     lvTriangleContactPoint, lvSphereContactPoint,
                     RwRGBAFromPackedWord(0xFFFFFFFFu));
 
-                const rw::math::vpu::Vector3 lvArrowEnd = {
-                    lvTriangleContactPoint.x + lContactNormal.x,
-                    lvTriangleContactPoint.y + lContactNormal.y,
-                    lvTriangleContactPoint.z + lContactNormal.z,
-                    lvTriangleContactPoint.w + lContactNormal.w
-                };
+                const rw::math::vpu::Vector3 lvArrowEnd(MakeVector4(
+                    lvTriangleContactPoint.mV.x + lContactNormal.mV.x,
+                    lvTriangleContactPoint.mV.y + lContactNormal.mV.y,
+                    lvTriangleContactPoint.mV.z + lContactNormal.mV.z,
+                    lvTriangleContactPoint.mV.w + lContactNormal.mV.w
+                ).mV);
                 lp3DRenderer->DrawArrow(
                     lvTriangleContactPoint, lvArrowEnd,
                     RwRGBAFromPackedWord(0xFF0000FFu));
@@ -1232,9 +1227,9 @@ namespace CgsSceneManager
             {
                 const rw::math::vpu::Vector3& lrVertex = lapVertices[liVertex];
                 const f32 lfSignedDistance =
-                    (lrVertex.x - lvCameraPosition.x) * lfNormalX +
-                    (lrVertex.y - lvCameraPosition.y) * lfNormalY +
-                    (lrVertex.z - lvCameraPosition.z) * lfNormalZ;
+                    (lrVertex.mV.x - lvCameraPosition.mV.x) * lfNormalX +
+                    (lrVertex.mV.y - lvCameraPosition.mV.y) * lfNormalY +
+                    (lrVertex.mV.z - lvCameraPosition.mV.z) * lfNormalZ;
                 if (lfSignedDistance < 0.0f)
                     ++liVerticesBehindPlane;
             }
