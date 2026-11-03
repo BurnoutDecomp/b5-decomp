@@ -394,4 +394,3 @@ void NFSLiveLink::DynMixReceiveGameTalkMessage(EA::GameTalk::GameTalkMessage* ap
         else if (!StringCompare(apMessage->GetKey(0), "RecallSnapshot")) lpLink->CheckInputBuffer(11);
     }
 }
-
