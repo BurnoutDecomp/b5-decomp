@@ -111,9 +111,9 @@ namespace BrnAI
     // spell the console form locally (crash parity FX-AINAN2).
     static inline bool IsZeroVmx(const Vector3& lrVector, f32 lfTolerance)
     {
-        return !(std::fabs(lrVector.x) > lfTolerance) &&
-               !(std::fabs(lrVector.y) > lfTolerance) &&
-               !(std::fabs(lrVector.z) > lfTolerance);
+        return !(std::fabs(lrVector.X().GetFloat()) > lfTolerance) &&
+               !(std::fabs(lrVector.Y().GetFloat()) > lfTolerance) &&
+               !(std::fabs(lrVector.Z().GetFloat()) > lfTolerance);
     }
 
     // The console's file strings (the unity .cpp path for .cpp-line asserts, the relative path
@@ -185,7 +185,7 @@ namespace BrnAI
         mfBuzzDistanceToPlayer = vpu::Magnitude(mPosition - lPlayerPos);
 
         // 0x8279906C  the console tests lane X only (vspltw v0,v0,0 ; vcmpeqfp.)
-        CGS_ASSERT(mPosition.x == mPosition.x, "AI car with nonsense position");            // :871
+        CGS_ASSERT(mPosition.X().GetFloat() == mPosition.X().GetFloat(), "AI car with nonsense position");            // :871
 
         // 0x827990A4  race timer: held at 0 while starting, else accumulates (not in free roam)
         if (meRouteFindingStyle != E_ROUTE_FINDING_FREE_ROAM)
@@ -325,7 +325,7 @@ namespace BrnAI
         {
             char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStream << "Diretion is  (" << lDirection.x << "," << lDirection.y << "," << lDirection.z << "\n";
+            lStream << "Diretion is  (" << lDirection.X().GetFloat() << "," << lDirection.Y().GetFloat() << "," << lDirection.Z().GetFloat() << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_AICAR_H, 848);
             CgsDev::Assert::EndAssert();
@@ -355,12 +355,12 @@ namespace BrnAI
     Vector3 AICar::GetUsefulDirection() const
     {
         Vector3 lXZSpeed = GetVelocity();
-        lXZSpeed.y = 0.0f;                                                                  // 0x827700A4
+        lXZSpeed.SetY(0.0f);                                                                  // 0x827700A4
         if (vpu::Magnitude(lXZSpeed) >= KF_USEFUL_DIRECTION_MIN_SPEED)                      // 0x827700FC
             return vpu::Normalize(GetVelocity());                                           // 0x82770118
 
         lXZSpeed = GetDirection();
-        lXZSpeed.y = 0.0f;                                                                  // 0x827701A0
+        lXZSpeed.SetY(0.0f);                                                                  // 0x827701A0
         if (vpu::Magnitude(lXZSpeed) > KF_USEFUL_DIRECTION_MIN_LENGTH)                      // 0x827701F4
             return GetDirection();                                                          // 0x82770210
 
@@ -369,7 +369,7 @@ namespace BrnAI
         if (vpu::Magnitude(lCross) > KF_USEFUL_DIRECTION_MIN_LENGTH)
             return lCross;                                                                  // NOT normalised on the console
 
-        { const Vector3 lResult = { 1.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
+        { const Vector3 lResult(1.0f, 0.0f, 0.0f); return lResult; }
     }
 
     // ==================================================================================
@@ -556,7 +556,7 @@ namespace BrnAI
         const f32 lfNodeX = lpNode->GetX();
         const f32 lfNodeZ = lpNode->GetY();                                                 // lfs f31,4(node)
         const f32 lfNodeY = GetCurrentNodeY(lpAISectionsData);                              // 0x8276F138
-        const Vector3 lTarget = { lfNodeX, lfNodeY, lfNodeZ, 0.0f };
+        const Vector3 lTarget(lfNodeX, lfNodeY, lfNodeZ);
 
         muDefaultSectionIndex = lpNode->GetSectionIndex();                                  // sth 0x1532
         muBestSectionIndex    = lpNode->GetSectionIndex();                                  // sth 0x1534
@@ -618,7 +618,7 @@ namespace BrnAI
             liNode = lpThisRoute->GetNodeCount() - 1;
         const RouteNode* lpNode = lpThisRoute->GetNode(liNode);
 
-        const Vector3 lNodePos = { lpNode->GetX(), 0.0f, lpNode->GetY(), 0.0f };
+        const Vector3 lNodePos(lpNode->GetX(), 0.0f, lpNode->GetY());
         const Vector3 lToNode = lNodePos - GetPosition();                                   // vsubfp128 v0 = node - pos
         const f32 lfAhead = vpu::Dot(GetDirection(), lToNode);                              // vmsum3fp128
         return 0.0f > lfAhead;                                                              // vcmpgtfp. zero > dot
@@ -641,7 +641,7 @@ namespace BrnAI
             return true;
 
         const RouteNode* lpLast = lpThisRoute->GetNode(lpThisRoute->GetNodeCount() - 1);
-        const Vector3 lLastPos = { lpLast->GetX(), 0.0f, lpLast->GetY(), 0.0f };
+        const Vector3 lLastPos(lpLast->GetX(), 0.0f, lpLast->GetY());
         const f32 lfDistance = vpu::Magnitude(lLastPos - GetPosition());
         // `fcmpu dist, flt_820C4160 (300.0) ; bge -> return false` 0x8276FD0C/0x8276FD10: a NaN
         // distance is "not old" and keeps its destination (FX-AINAN2; `>=` invalidated it).
@@ -734,8 +734,8 @@ namespace BrnAI
         }
 
         // 0x8277C2F0..0x8277C3B8  along = max(0, dot2D(pos.xz - node, seg / |seg|))
-        const f32 lfToNodeX = mPosition.x - lpNode->GetX();
-        const f32 lfToNodeZ = mPosition.z - lpNode->GetY();
+        const f32 lfToNodeX = mPosition.X().GetFloat() - lpNode->GetX();
+        const f32 lfToNodeZ = mPosition.Z().GetFloat() - lpNode->GetY();
         const f32 lfInvSegLength = 1.0f / std::sqrt(lfSegX * lfSegX + lfSegZ * lfSegZ);      // vrsqrtefp + 2 refinements, no zero guard
         f32 lfAlong = (lfToNodeX * lfSegX + lfToNodeZ * lfSegZ) * lfInvSegLength;
         if (-lfAlong >= 0.0f)                                                               // fneg / fsel -> 0
@@ -751,8 +751,8 @@ namespace BrnAI
             const AISection* lpDestination = lpAISectionsData->GetAISection(muDestinationSectionIndex);
             const Vector2 lMiddle = BrnMath::Flatten(lpDestination->GetMiddle());           // 0x8277C3E4
             const RouteNode* lpLast = lpRoute->GetNode(lpRoute->GetNodeCount() - 1);        // 0x8277C3F8
-            const f32 lfGapX = lMiddle.x - lpLast->GetX();
-            const f32 lfGapZ = lMiddle.y - lpLast->GetY();
+            const f32 lfGapX = lMiddle.mV.x - lpLast->GetX();
+            const f32 lfGapZ = lMiddle.mV.y - lpLast->GetY();
             const f32 lfGapSq = lfGapX * lfGapX + lfGapZ * lfGapZ;
             // vcmpeqfp v12, 0, lenSq @0x8277C44C ; vsel v0, lenSq*rsqrt, 0, mask @0x8277C478: only an
             // EXACT zero selects 0, a NaN gap stays NaN (FX-AINAN2; `lenSq > 0 ? .. : 0` gave 0).
@@ -807,12 +807,7 @@ namespace BrnAI
         if (meCarState == E_AI_CAR_STATE_IN_RANGE)                                          // 0x82792B4C
         {
             // 0x82792B50  lwz r3,0x14B0(this) ; bl BrnAI::AIDriver::ResetPIDTuningState @0x8277DA48
-            // The console has NO null guard here (`lwz r3,0x14B0 ; bl`); the [GUARD] is the
-            // host's, because AIModule::Construct never runs the console's AICar::Construct.
-            if (mpDriver != 0)
-            {
-                mpDriver->ResetPIDTuningState();
-            }
+            mpDriver->ResetPIDTuningState();
         }
 
         mbIsPlayer = lbIsPlayer;                                                            // stb r30,0x1549
@@ -1058,7 +1053,7 @@ namespace BrnAI
         lpThisRoute->meStatus           = Route::E_STATUS_UNINITIALISED;         // 0x82792654 stw 0,0x1408
         lpThisRoute->miNodeCount        = 0;                                     // 0x82792658 stw 0,0x1400
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mPosition = lAggregateValue;
         }     // 0x8279265C stvx128 v0,0(r29)
         lpThisRoute->miDefaultStartNode = 0;                                     // 0x82792660 stw 0,0x1404
@@ -1166,7 +1161,7 @@ namespace BrnAI
             muResetOnTrackEndPortal    = 1;                                                 // 0x827928B0 stb r9(li 1 @0x82792850),0x1539
             meResetSpeedType           = E_RESET_SPEED_TYPE_COUNT;                          // 0x827928B4 stw r8(0x14),0x14D0 <- 20
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
                 mPosition = lAggregateValue;
             }                                          // vspltisw 0 -> stvx128 0x1430
         }
@@ -1200,7 +1195,7 @@ namespace BrnAI
         mfScheduleOffset1       = 0.0f;                                                     // 0x151C
         miProximityIndex        = -100;                                                     // 0x152C
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mLastRoutePosition = lAggregateValue;
         }                                // stfs f31 x3 + stw 0 -> stvx128 0x1480
     }
@@ -1227,11 +1222,7 @@ namespace BrnAI
         Attrib::Gen::physicsvehicleboostattribs lBoost(const_cast<Attrib::Collection*>(lpBoostCollection), 0);
 
         const f32* lpBoostData = static_cast<const f32*>(lBoost.GetLayoutPointer());
-        // [GUARD] the console dereferences boostData unconditionally (lfs f13,0(r11)); a car
-        // whose attrib chain is unresolved on this host would fault, so the read is guarded
-        // and the speed left untouched -- CalcRoadRageSpeed then floors at 0 (GetDecentSpeed).
-        if (lpBoostData != 0)
-            mfMaxPlayerSpeed = lpBoostData[0] * KF_MPH_TO_MPS * KF_MAX_PLAYER_SPEED_SCALE;   // stfs 0x1504
+        mfMaxPlayerSpeed = lpBoostData[0] * KF_MPH_TO_MPS * KF_MAX_PLAYER_SPEED_SCALE;   // stfs 0x1504
 
         // (2026-09-05, aiwave2: a first-8 witness here proved every rival resolves its key to the
         // right car -- mfMaxPlayerSpeed 78..85 m/s. The "rival top speed ~10 m/s" symptom was

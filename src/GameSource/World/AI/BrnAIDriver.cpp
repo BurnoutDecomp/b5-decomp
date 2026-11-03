@@ -76,14 +76,20 @@ namespace BrnAI
     // `lenSq > 0 ? 1 / sqrt : 0`, an invented guard that answered (0, 0).
     static Vector2 Normalize2D(Vector2 lVector)
     {
-        const f32 lfLenSq = lVector.x * lVector.x + lVector.y * lVector.y;
-        const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
-        Vector2 lResult;
-        lResult.x = lVector.x * lfInvLen;
-        lResult.y = lVector.y * lfInvLen;
-        lResult.z = 0.0f;
-        lResult.w = 0.0f;
-        return lResult;
+        // ARTIST 0x8277CE5C..0x8277CEB4: dot XY, two rsqrt refinements,
+        // then multiply the complete input register (including Z and W).
+        const __vector4 product = __vmulfp(lVector.mV, lVector.mV);
+        const __vector4 dot = __vaddfp(__vspltw(product, 0), __vspltw(product, 1));
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(dot);
+        __vector4 correction = __vnmsubfp(dot, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        correction = __vnmsubfp(dot, __vmulfp(estimate, estimate), one);
+        estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+        Vector2 result;
+        result.mV = __vmulfp(lVector.mV, estimate);
+        return result;
     }
 
     // 2D-flatten a Vector3 onto the XZ GROUND plane. This is BrnMath::Flatten @0x822CB8E8, which
@@ -105,12 +111,7 @@ namespace BrnAI
     // and AICar::IsExtrapolatedRouteGettingOld reads a node back as {x, 0, y}.
     static Vector2 To2D(Vector3 lVector)
     {
-        Vector2 lResult;
-        lResult.x = lVector.x;
-        lResult.y = lVector.z;   // ground plane: Vector2.y IS world Z
-        lResult.z = 0.0f;
-        lResult.w = 0.0f;
-        return lResult;
+        return Vector2(lVector.X().GetFloat(), lVector.Z().GetFloat());
     }
 
     // rw::math::fpu::Clamp<float>(x, lo, hi) exactly as the X360 inlines it -- the DecFIGS DWARF
@@ -305,7 +306,6 @@ namespace BrnAI
             // line under the car; otherwise clear the "known" flag.
             if (GetRacingLine().mbIsInitialised)
             {
-#if BRN_AI_RACINGLINE_STACK_PRESENT
                 // X360 @0x8279AF1C..0x8279AF44: v1 = BrnMath::Flatten(mpCar->GetPosition()) and
                 // `vmr v2, v1` -- BOTH vector arguments are the flattened car position (the same
                 // shape SteeringFan::CachePointAhead @0x8279145C uses, where both are
@@ -318,8 +318,6 @@ namespace BrnAI
                                                                  lCarPos2D,
                                                                  GetRacingLine().mCentreHere,
                                                                  GetRacingLine().mCentreAhead);
-#else
-#endif
             }
             else
             {
@@ -436,10 +434,7 @@ namespace BrnAI
                     lpCar->mePreviousBehaviour = E_AI_BEHAVIOUR_CRUISING;   // stw 0x14B8, 3
                     lpCar->meBehaviour         = E_AI_BEHAVIOUR_FIGHTING;   // stw 0x14B4, 4
                 }
-                // [GUARD] 0x8279A768 `lwz r5, 0x1CE8(driver)` -- the aggression victim; the console never
-                // has it null here (the producer that stores +0x1CE8/+0x1CF0 runs first). On the host it
-                // can be (run1 AV in AIAggression::Update reading car+0x1549), so the tick is skipped.
-                if (meAggressionVictim != -1 && GetAggressionVictimCar() != 0)   // lwz 0x1CF0 != -1
+                if (meAggressionVictim != -1)   // lwz 0x1CF0 != -1
                     GetAggression()->Update(lfTimeStep, GetAggressionVictimCar());
                 UpdateStuck(lfTimeStep);
                 break;
@@ -451,11 +446,7 @@ namespace BrnAI
                     lpCar->mePreviousBehaviour = E_AI_BEHAVIOUR_FIGHTING;   // stw 0x14B8, 4
                     lpCar->meBehaviour         = E_AI_BEHAVIOUR_CRUISING;   // stw 0x14B4, 3
                 }
-                // [GUARD] 0x8279A7BC (r5 not reloaded -- the case-3 victim) `lwz r5, 0x1CE8(driver)` -- the aggression victim; the console never
-                // has it null here (the producer that stores +0x1CE8/+0x1CF0 runs first). On the host it
-                // can be (run1 AV in AIAggression::Update reading car+0x1549), so the tick is skipped.
-                if (GetAggressionVictimCar() != 0)
-                    GetAggression()->Update(lfTimeStep, GetAggressionVictimCar());
+                GetAggression()->Update(lfTimeStep, GetAggressionVictimCar());
                 UpdateStuck(lfTimeStep);
                 break;
 
@@ -492,27 +483,6 @@ namespace BrnAI
 
     //
     // CalculateSteeringAngle owns the heading and the target position as locals; UpdateSteeringAngle
-    // owns the actuator. These two TU-local statics carry the former into the latter so ONE line
-    // tells the whole story. sgbSteerInputsFresh is raised only by CalculateSteeringAngle, so a
-    // line printed from any other UpdateSteeringAngle caller (behaviour 5's quick-turn lock, the
-    // airborne/settle 0.0 calls) is marked `src lock` and its head/target are the last computed
-    // ones -- do not read them as this frame's.
-    // DELETE-WHEN rivals hold a lane along a route for a full event.
-    // ====================================================================================
-    namespace
-    {
-        Vector2 sgSteerHeading;
-        Vector2 sgSteerTarget;
-        bool    sgbSteerInputsFresh = false;
-        s32     sgiSteerWitnessLines = 0;
-    }
-
-    static void WitnessSteeringInputs(Vector2 lHeading, Vector2 lTarget)
-    {
-        sgSteerHeading      = lHeading;
-        sgSteerTarget       = lTarget;
-        sgbSteerInputsFresh = true;
-    }
 
     // ====================================================================================
     // UpdateSteeringAngle @0x827708F0  -- the STEER ACTUATOR.
@@ -582,12 +552,10 @@ namespace BrnAI
         else
             lHeadingRaw = To2D(mpCar->GetDirection());
 
-        if (!(std::fabs(lHeadingRaw.x) > KF_STEERING_VECTOR_EPSILON) &&
-            !(std::fabs(lHeadingRaw.y) > KF_STEERING_VECTOR_EPSILON))
+        if (!(std::fabs(lHeadingRaw.mV.x) > KF_STEERING_VECTOR_EPSILON) &&
+            !(std::fabs(lHeadingRaw.mV.y) > KF_STEERING_VECTOR_EPSILON))
         {
-            lHeadingRaw.x = 1.0f;    // flt_82001C98
-            lHeadingRaw.y = 0.0f;    // flt_82001CC0
-            lHeadingRaw.z = 0.0f; lHeadingRaw.w = 0.0f;
+            lHeadingRaw = Vector2(1.0f, 0.0f);
         }
         const Vector2 lHeading = Normalize2D(lHeadingRaw);
 
@@ -596,18 +564,16 @@ namespace BrnAI
         //    with the normalised one on the non-degenerate path (@0x8277D030).
         const Vector2 lTarget = GetTargetPosition();
         Vector2 lDelta;
-        lDelta.x = lTarget.x - m2DCarPos.x;
-        lDelta.y = lTarget.y - m2DCarPos.y;
-        lDelta.z = 0.0f; lDelta.w = 0.0f;
-        CGS_ASSERT(IsFinite(lDelta.x) && IsFinite(lDelta.y), "Invalid target vector");
+        lDelta.mV = __vsubfp(lTarget.mV, m2DCarPos.mV);
+        CGS_ASSERT(IsFinite(lDelta.mV.x) && IsFinite(lDelta.mV.y), "Invalid target vector");
         mSteeringTargetVector = lDelta;                          // 0x1C70 (raw)
 
         // The SAME per-lane epsilon test on the delta (@0x8277CF48..0x8277CFE0), but here a
         // degenerate delta SKIPS the normalise AND the angle call entirely: the asm branches to
         // 0x8277D080 with f30 still holding flt_82001CC0 == 0.0, so the PID records a ZERO error.
         const bool lbDeltaDegenerate =
-            !(std::fabs(lDelta.x) > KF_STEERING_VECTOR_EPSILON) &&
-            !(std::fabs(lDelta.y) > KF_STEERING_VECTOR_EPSILON);
+            !(std::fabs(lDelta.mV.x) > KF_STEERING_VECTOR_EPSILON) &&
+            !(std::fabs(lDelta.mV.y) > KF_STEERING_VECTOR_EPSILON);
 
         f32 lfAngleToTarget = 0.0f;
         if (!lbDeltaDegenerate)
@@ -771,10 +737,10 @@ namespace BrnAI
             lpTo   = lpNext;
         }
 
+        const Vector2 lTo(lpTo->GetX(), lpTo->GetY());
+        const Vector2 lFrom(lpFrom->GetX(), lpFrom->GetY());
         Vector2 lDir;
-        lDir.x = lpTo->GetX() - lpFrom->GetX();
-        lDir.y = lpTo->GetY() - lpFrom->GetY();
-        lDir.z = 0.0f; lDir.w = 0.0f;
+        lDir.mV = __vsubfp(lTo.mV, lFrom.mV); // ARTIST 0x82766604
         lrOutDirection = Normalize2D(lDir);
         return true;
     }
@@ -804,25 +770,30 @@ namespace BrnAI
             // [FX-AIBUZZ 2026-09-24 (FX-TAILS-A follow-up): was pos + Normalize2D(dir) -- the product
             //  dir * y2 rounded on its own, then the add]
             const Vector3 lPos = lpCar->GetPosition();
-            const Vector2 lDir = To2D(lpCar->GetDirection());
-            const f32 lfInvLen = 1.0f / std::sqrt(lDir.x * lDir.x + lDir.y * lDir.y);
-            lResult.x = NativeVmxMadd(lDir.x, lfInvLen, lPos.x);     // position + unit facing
-            lResult.y = NativeVmxMadd(lDir.y, lfInvLen, lPos.z);
-            lResult.z = 0.0f; lResult.w = 0.0f;
+            const Vector3 lDirection = lpCar->GetDirection();
+            const __vector4 pos = __vrlimi(lPos.mV, lPos.mV, 4, 1);
+            const __vector4 dir = __vrlimi(lDirection.mV, lDirection.mV, 4, 1);
+            const __vector4 product = __vmulfp(dir, dir);
+            const __vector4 dot = __vaddfp(__vspltw(product, 0), __vspltw(product, 1));
+            const __vector4 one = __vcfsx(__vspltisw(1), 0);
+            const __vector4 half = __vcfsx(__vspltisw(1), 1);
+            __vector4 estimate = __vrsqrtefp(dot);
+            __vector4 correction = __vnmsubfp(dot, __vmulfp(estimate, estimate), one);
+            estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+            correction = __vnmsubfp(dot, __vmulfp(estimate, estimate), one);
+            estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+            lResult.mV = __vmaddfp(dir, estimate, pos);
         }
         else
         {
             // X360 asm: SteeringFan::GetDrivingTarget(out, this+1808 (== mSteeringFan @0x710),
             // car, this+3872 (== mRacingLine @0xF20), this+6960 (== mRacingLineGenerator @0x1B30),
             // this (the driver's NearbyVehicles @0x000), 0).
-#if BRN_AI_STEERINGFAN_TARGET_PRESENT
             lResult = mSteeringFan.GetDrivingTarget(lpCar,
                                                     &GetRacingLine(),
                                                     &mRacingLineGenerator,
                                                     GetNearbyVehicles(),
                                                     false);
-#else
-#endif
         }
 
 
@@ -873,14 +844,6 @@ namespace BrnAI
         const f32 lfSpeed   = mpCar->GetSpeed();
         const f32 lfDesired = mfDesiredSpeed;                 // 0x1D10
 
-        // [DIAG] NOT IN THE X360 BINARY (BRN_AI_SPEED_DIAG=1). The payoff line for "the AI is
-        // too slow and never boosts": the speed it HAS, the speed it WANTS (post-limiters),
-        // the car's own uncapped top, and whether the boost latch is set. mph as well as m/s
-        // because every tuning constant in this subsystem is authored in mph.
-        // Rate limited to one line per car per ~2 s.
-        // NOTE: the accumulator is a file-local static keyed by opponent index, NOT a member --
-        // AIDriver's layout is pinned by offsetof static_asserts and must not grow.
-
         if (lfSpeed < lfDesired)
         {
             // under speed -> accelerate. ramp = clamp((desired - speed) / 20 mph, 0, 1).
@@ -911,9 +874,7 @@ namespace BrnAI
         const f32 lfAngle1 = FindUnsignedAngleBetween2DVectors(lUseful, mBrakingRoadDir); // 0x1CB0
 
         Vector2 lToAnticip;
-        lToAnticip.x = mBrakingAnticipationPos.x - m2DCarPos.x;   // 0x1CA0 - 0x1CD0
-        lToAnticip.y = mBrakingAnticipationPos.y - m2DCarPos.y;
-        lToAnticip.z = 0.0f; lToAnticip.w = 0.0f;
+        lToAnticip.mV = __vsubfp(mBrakingAnticipationPos.mV, m2DCarPos.mV);
         const Vector2 lAnticipDir = Normalize2D(lToAnticip);
         // X360: the SECOND FindUnsignedAngleBetween2DVectors call reuses the normalised useful
         // direction (v2 := v125, the first normalise result) as its first arg and the normalised
