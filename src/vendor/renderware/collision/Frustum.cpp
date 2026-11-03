@@ -50,8 +50,8 @@ int Frustum::IsBoxInFrustum(const Vector3* lapCorners)
         for (int liCorner = 0; liCorner < 8; ++liCorner)
         {
             const Vector3& lrCorner = lapCorners[liCorner];
-            const f32 lfDot = lrPlane.x * lrCorner.x + lrPlane.y * lrCorner.y
-                            + lrPlane.z * lrCorner.z;
+            const f32 lfDot = lrPlane.x * lrCorner.GetX().GetFloat() + lrPlane.y * lrCorner.GetY().GetFloat()
+                            + lrPlane.z * lrCorner.GetZ().GetFloat();
             // ARTIST fcmpu/blt rejects only w < dot; unordered stays culled.
             const int liOnCulledSide = !(lrPlane.w < lfDot) ? 1 : 0;
             liAllCornersOnCulledSide &= liOnCulledSide;
