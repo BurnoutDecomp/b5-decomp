@@ -918,9 +918,9 @@ namespace BrnGameState
         // Semantically: "has this anchor been written since ClearData zeroed it".
         bool IsVectorSet(const Vector3& lrVector)
         {
-            return (std::fabs(lrVector.x) > KF_VECTOR_SET_EPSILON) ||
-                   (std::fabs(lrVector.y) > KF_VECTOR_SET_EPSILON) ||
-                   (std::fabs(lrVector.z) > KF_VECTOR_SET_EPSILON);
+            return (std::fabs(lrVector.mV.x) > KF_VECTOR_SET_EPSILON) ||
+                   (std::fabs(lrVector.mV.y) > KF_VECTOR_SET_EPSILON) ||
+                   (std::fabs(lrVector.mV.z) > KF_VECTOR_SET_EPSILON);
         }
     }
 

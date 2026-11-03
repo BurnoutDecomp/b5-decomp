@@ -361,7 +361,7 @@ namespace BrnGameState
         if (mbInitialDriftOngoing)
         {
             // While a drift is still running (drift value not yet back to ~0), hold off.
-            if (!rw::math::vpu::IsZero(Vector3{ lfDriftTime, 0.0f, 0.0f, 0.0f }))
+            if (!rw::math::vpu::IsZero(Vector3(lfDriftTime, 0.0f, 0.0f)))
             {
                 return false;
             }
