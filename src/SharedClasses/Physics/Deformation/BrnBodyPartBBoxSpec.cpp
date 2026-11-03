@@ -34,13 +34,11 @@ namespace Deformation
 {
     void BodyPartBBoxSpec::HackCheckHandedness()
     {
-        const Vector3& lrRow0 = mOrientation.xAxis;
-        const Vector3& lrRow1 = mOrientation.yAxis;
-        const Vector3& lrRow2 = mOrientation.zAxis;
-        const f32 lfCrossX = lrRow0.y * lrRow1.z - lrRow0.z * lrRow1.y;
-        const f32 lfCrossY = lrRow0.z * lrRow1.x - lrRow0.x * lrRow1.z;
-        const f32 lfCrossZ = lrRow0.x * lrRow1.y - lrRow0.y * lrRow1.x;
-        const f32 lfTripleProduct = lfCrossX * lrRow2.x + lfCrossY * lrRow2.y + lfCrossZ * lrRow2.z;   // vmsum3fp128
+        const __vector4 r0 = mOrientation.xAxis.mV;
+        const __vector4 r1 = mOrientation.yAxis.mV;
+        const __vector4 cross = __vpermwi(__vnmsubfp(__vpermwi(r0, 0x63), r1,
+                                                     __vmulfp(r0, __vpermwi(r1, 0x63))), 0x63);
+        const f32 lfTripleProduct = VecFloat(__vmsum3fp(cross, mOrientation.zAxis.mV)).GetFloat();
 
         if ( !(lfTripleProduct >= 0.0f) )   // vcmpgefp / vcmpeqfp. / CR6 all-true : T < 0 or NaN
         {
@@ -51,10 +49,8 @@ namespace Deformation
             mCentreSkinData.HackSwapHandedness( mOrientation );
             mJointSkinData.HackSwapHandedness( mOrientation );
 
-            mOrientation.xAxis.x = -mOrientation.xAxis.x;   // vxor 0x80000000, all four lanes
-            mOrientation.xAxis.y = -mOrientation.xAxis.y;
-            mOrientation.xAxis.z = -mOrientation.xAxis.z;
-            mOrientation.xAxis.w = -mOrientation.xAxis.w;
+            const __vector4 sign = __vslw(__vspltisw(-1), __vspltisw(-1));
+            mOrientation.xAxis.mV = __vxor(mOrientation.xAxis.mV, sign);
         }
     }
 }

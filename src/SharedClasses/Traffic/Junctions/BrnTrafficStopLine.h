@@ -51,11 +51,7 @@ namespace BrnTraffic
         // point: multiply by 256.0f, truncate toward zero, keep the low 16 bits.
         //   asm: assert(lfFloat < 256.0f);
         //        return (u16)(s64)(lfFloat * 256.0f);   // fmuls + fctidz + low halfword
-        static u16 ConvertToFixed(f32 lfFloat)
-        {
-            CGS_ASSERT(lfFloat < 256.0f, "lfFloat < 256.0f");   // :117
-            return static_cast<u16>(lfFloat * 256.0f);
-        }
+        static u16 ConvertToFixed(f32 lfFloat);
 
         // :56 -- the inverse. Folded at every X360 call site (DoesParamNeedToStopForStopline
         // @0x82724B58 emits it as `luFixed * 0.00390625`).

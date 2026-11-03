@@ -93,14 +93,13 @@ namespace BrnTraffic
 
         // fctidz -> truncate the parameter's first lane toward zero; the segment index must
         // equal that whole part.
-        const f32 lfParamScalar = lfParam.x;
+        const f32 lfParamScalar = lfParam.GetFloat();
         CGS_ASSERT(luSegment == static_cast<u32>(static_cast<s32>(lfParamScalar)),
                    "Mismatched segment & param values: seg=");
 
         // Section-local fraction = param - floor(param)  (vrfim128 = round toward -inf).
-        const f32     lfFrac = lfParamScalar - std::floor(lfParamScalar);
-        const Vector3 lvFrac{ lfFrac, lfFrac, lfFrac, lfFrac };
-        const Vector3 lvHalf{ 0.5f, 0.5f, 0.5f, 0.5f };
+        const Vector3 lvFrac(__vsubfp(lfParam.mV, __vrfim(lfParam.mV)));
+        const Vector3 lvHalf(__vcfsx(__vspltisw(1), 1));
 
         // The rung pair straddling this segment (32-byte LaneRung stride).
         const LaneRung& lrRungA = lpaGlobalRungs[muRungOffset + luSegment];
@@ -178,10 +177,10 @@ namespace BrnTraffic
         CGS_ASSERT(lpaGlobalRungs != NULL, "lpaGlobalRungs != NULL");
         CGS_ASSERT(muNumRungs > 0, "muNumRungs > 0");
         CGS_ASSERT(luSegment < GetNumSegments(), "luSegment < GetNumSegments()");
-        CGS_ASSERT(luSegment == static_cast<u32>(static_cast<s32>(lfParam.x)),
+        CGS_ASSERT(luSegment == static_cast<u32>(static_cast<s32>(lfParam.GetFloat())),
                    "Mismatched segment & param values: seg=");
 
-        const Vector3 lvHalf{ 0.5f, 0.5f, 0.5f, 0.5f };
+        const Vector3 lvHalf(__vcfsx(__vspltisw(1), 1));
 
         const LaneRung& lrRungA = lpaGlobalRungs[muRungOffset + luSegment];
         const LaneRung& lrRungB = lpaGlobalRungs[muRungOffset + luSegment + 1];
@@ -245,13 +244,12 @@ namespace BrnTraffic
         const LaneRung& lrRungA      = lpaGlobalRungs[liGlobalRung];
         const LaneRung& lrRungB      = lpaGlobalRungs[liGlobalRung + 1];
 
-        const f32 lfParamScalar = lfParam.x;
+        const f32 lfParamScalar = lfParam.GetFloat();
         CGS_ASSERT(luSegment == static_cast<u32>(static_cast<s32>(lfParamScalar)),
                    "Mismatched segment & param values: seg=");
 
-        const f32     lfFrac = lfParamScalar - std::floor(lfParamScalar);
-        const Vector3 lvFrac{ lfFrac, lfFrac, lfFrac, lfFrac };
-        const Vector3 lvHalf{ 0.5f, 0.5f, 0.5f, 0.5f };
+        const Vector3 lvFrac(__vsubfp(lfParam.mV, __vrfim(lfParam.mV)));
+        const Vector3 lvHalf(__vcfsx(__vspltisw(1), 1));
 
         const Vector3 lvSpanA = lrRungA.maPoints[1] - lrRungA.maPoints[0];
         const Vector3 lvSpanB = lrRungB.maPoints[1] - lrRungB.maPoints[0];
@@ -284,7 +282,7 @@ namespace BrnTraffic
     // the resulting rung id must not run past this section's last rung.
     s32 Section::GetGlobalRungForSegment(VecFloat lfParam, u32 luSegment) const
     {
-        const s32 liParam = static_cast<s32>(lfParam.x);   // fctidz: truncate toward zero
+        const s32 liParam = static_cast<s32>(lfParam.GetFloat());   // fctidz: truncate toward zero
         CGS_ASSERT(luSegment == static_cast<u32>(liParam),
                    "Mismatched segment & param values: seg=");
 

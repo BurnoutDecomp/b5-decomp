@@ -1,6 +1,4 @@
 #include "types.hpp"
-#include <cstdlib>                                             // [diag] getenv
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint (BRN_PFX_DIAG)
 #include "SharedClasses/Graphics/BrnEffectsData.h"
 // The asset-keyed VignetteData::Construct @0x826780D0 builds one of these. Kept out of
 // BrnEffectsData.h so the AttribSys runtime does not follow the data structs into every
@@ -64,13 +62,13 @@ namespace BrnEffects
 //     (they are ALSO the values BrnEffectsFrame::Construct's stvx128 stores broadcast into every frame).
 const f32     BloomData::kfDefLuminance        = KF_DEF_BLOOM_LUMINANCE;             // 0.98f  flt_820A3A14
 const f32     BloomData::kfDefThreshold        = KF_DEF_BLOOM_THRESHOLD;             // 0.77f  flt_820A3A98
-const Vector4 BloomData::kv4DefScale           = { 0.2627f, 0.298f, 1.0f, 1.0f };    // unk_82FFAED0 (init @0x82C60AA0)
+const Vector4 BloomData::kv4DefScale           (0.2627f, 0.298f, 1.0f, 1.0f);    // unk_82FFAED0 (init @0x82C60AA0)
 const f32     VignetteData::kfDefAngle         = KF_DEF_VIGNETTE_ANGLE;              // 0.0f   flt_820A3A9C
 const f32     VignetteData::kfDefSharpness     = KF_DEF_VIGNETTE_SHARPNESS;          // 0.33f  flt_820A3AA0
-const Vector2 VignetteData::kv2DefAmount       = { 0.5f, 0.6f, 0.0f, 0.0f };         // unk_82FFAE20 (init @0x82C60AE0)
-const Vector2 VignetteData::kv2DefCentre       = { 0.5f, 0.7f, 0.0f, 0.0f };         // unk_82FFAEC0 (init @0x82C60B20)
-const Vector4 VignetteData::kv4DefInnerColour  = { 0.9765f, 0.9882f, 1.0f, 0.0f };   // unk_82FFB220 (init @0x82C60B60)
-const Vector4 VignetteData::kv4DefOuterColour  = { 0.0549f, 0.2078f, 0.3765f, 1.0f };// unk_82FFB1A0 (init @0x82C60BA8)
+const Vector2 VignetteData::kv2DefAmount       (0.5f, 0.6f);         // unk_82FFAE20 (init @0x82C60AE0)
+const Vector2 VignetteData::kv2DefCentre       (0.5f, 0.7f);         // unk_82FFAEC0 (init @0x82C60B20)
+const Vector4 VignetteData::kv4DefInnerColour  (0.9765f, 0.9882f, 1.0f, 0.0f);   // unk_82FFB220 (init @0x82C60B60)
+const Vector4 VignetteData::kv4DefOuterColour  (0.0549f, 0.2078f, 0.3765f, 1.0f);// unk_82FFB1A0 (init @0x82C60BA8)
 const f32     DepthOfFieldData::kfDefNearPlane   = KF_DEF_DEPTH_OF_FIELD_NEAR_PLANE;   // 0.0f  0x820A3AA4..
 const f32     DepthOfFieldData::kfDefFocalPlane  = KF_DEF_DEPTH_OF_FIELD_FOCAL_PLANE;  // 0.0f
 const f32     DepthOfFieldData::kfDefFocalPlane2 = KF_DEF_DEPTH_OF_FIELD_FOCAL_PLANE2; // 0.0f
@@ -80,20 +78,19 @@ const f32     BlurData::kfDefVelocity          = KF_DEF_BLUR_VELOCITY;          
 const f32     BlurData::kfDefSharpness         = KF_DEF_BLUR_SHARPNESS;              // 0.0f
 const f32     BlurData::kfDefNoise             = KF_DEF_BLUR_NOISE;                  // 0.0f
 const f32     BlurData::kfDefAngle             = KF_DEF_BLUR_ANGLE;                  // 0.0f
-const Vector2 BlurData::kv2DefBlendAmount      = { 0.0f, 0.0f, 0.0f, 0.0f };         // unk_82FFAFC0 (init @0x82C60BF0)
-const Vector2 BlurData::kv2DefBlurAmount       = { 0.0f, 0.0f, 0.0f, 0.0f };         // unk_82FFAE90 (init @0x82C60C28)
-const Vector2 BlurData::kv2DefBlendCentre      = { 0.0f, 0.0f, 0.0f, 0.0f };         // unk_82FFB030 (init @0x82C60C60)
-const Vector2 BlurData::kv2DefBlurCentre       = { 0.0f, 0.0f, 0.0f, 0.0f };         // unk_82FFB180 (init @0x82C60C98)
-const Vector4 TintData2d::kv4DefaultColour     = { 0.0f, 0.0f, 0.0f, 0.0f };         // unk_82FFB230 (init @0x82C60CD0)
+const Vector2 BlurData::kv2DefBlendAmount      (0.0f, 0.0f);         // unk_82FFAFC0 (init @0x82C60BF0)
+const Vector2 BlurData::kv2DefBlurAmount       (0.0f, 0.0f);         // unk_82FFAE90 (init @0x82C60C28)
+const Vector2 BlurData::kv2DefBlendCentre      (0.0f, 0.0f);         // unk_82FFB030 (init @0x82C60C60)
+const Vector2 BlurData::kv2DefBlurCentre       (0.0f, 0.0f);         // unk_82FFB180 (init @0x82C60C98)
+const Vector4 TintData2d::kv4DefaultColour     (0.0f, 0.0f, 0.0f, 0.0f);         // unk_82FFB230 (init @0x82C60CD0)
 
 // helper: lane-wise 2-way blend of a 16-byte vector member (Vector2 or Vector4)
 template <typename V>
 static inline void Blend2(V& lrOut, const V& lA, f32 lfWa, const V& lB, f32 lfWb)
 {
-    lrOut.x = lA.x * lfWa + lB.x * lfWb;
-    lrOut.y = lA.y * lfWa + lB.y * lfWb;
-    lrOut.z = lA.z * lfWa + lB.z * lfWb;
-    lrOut.w = lA.w * lfWa + lB.w * lfWb;
+    const __vector4 wa = __vspltw(__lvlx(&lfWa, 0), 0);
+    const __vector4 wb = __vspltw(__lvlx(&lfWb, 0), 0);
+    lrOut.mV = __vmaddfp(lA.mV, wa, __vmulfp(lB.mV, wb));
 }
 
 // helper: lane-wise 4-way blend of a 16-byte vector member
@@ -102,10 +99,14 @@ static inline void Blend4(V& lrOut,
                           const V& lA, f32 lfWa, const V& lB, f32 lfWb,
                           const V& lC, f32 lfWc, const V& lD, f32 lfWd)
 {
-    lrOut.x = lA.x * lfWa + lB.x * lfWb + lC.x * lfWc + lD.x * lfWd;
-    lrOut.y = lA.y * lfWa + lB.y * lfWb + lC.y * lfWc + lD.y * lfWd;
-    lrOut.z = lA.z * lfWa + lB.z * lfWb + lC.z * lfWc + lD.z * lfWd;
-    lrOut.w = lA.w * lfWa + lB.w * lfWb + lC.w * lfWc + lD.w * lfWd;
+    const __vector4 wa = __vspltw(__lvlx(&lfWa, 0), 0);
+    const __vector4 wb = __vspltw(__lvlx(&lfWb, 0), 0);
+    const __vector4 wc = __vspltw(__lvlx(&lfWc, 0), 0);
+    const __vector4 wd = __vspltw(__lvlx(&lfWd, 0), 0);
+    __vector4 result = __vmulfp(lB.mV, wb);
+    result = __vmaddfp(lA.mV, wa, result);
+    result = __vmaddfp(lC.mV, wc, result);
+    lrOut.mV = __vmaddfp(lD.mV, wd, result);
 }
 
 // ---- BloomData -----------------------------------------------------------
@@ -194,7 +195,7 @@ void BloomData::Construct(const u64& lruAssetKey)
     const f32* const lpScale = reinterpret_cast<const f32*>(lpLayout + 0x00);
     mfLuminance = *reinterpret_cast<const f32*>(lpLayout + 20);
     mfThreshold = *reinterpret_cast<const f32*>(lpLayout + 16);
-    mv4Scale.x = lpScale[0]; mv4Scale.y = lpScale[1]; mv4Scale.z = lpScale[2]; mv4Scale.w = lpScale[3];
+    mv4Scale.mV = __lvx(lpScale, 0);
 }
 
 // BrnEffects::DepthOfFieldData::Construct(const u64&) @0x82678158: five scalar loads,
@@ -224,14 +225,10 @@ void BlurData::Construct(const u64& lruAssetKey)
     const f32* const lpBlurAmount  = reinterpret_cast<const f32*>(lpLayout + 0x10);
     const f32* const lpBlendCentre = reinterpret_cast<const f32*>(lpLayout + 0x20);
     const f32* const lpBlurCentre  = reinterpret_cast<const f32*>(lpLayout + 0x00);
-    mv2BlendAmount.x = lpBlendAmount[0]; mv2BlendAmount.y = lpBlendAmount[1];
-    mv2BlendAmount.z = lpBlendAmount[2]; mv2BlendAmount.w = lpBlendAmount[3];
-    mv2BlurAmount.x  = lpBlurAmount[0];  mv2BlurAmount.y  = lpBlurAmount[1];
-    mv2BlurAmount.z  = lpBlurAmount[2];  mv2BlurAmount.w  = lpBlurAmount[3];
-    mv2BlendCentre.x = lpBlendCentre[0]; mv2BlendCentre.y = lpBlendCentre[1];
-    mv2BlendCentre.z = lpBlendCentre[2]; mv2BlendCentre.w = lpBlendCentre[3];
-    mv2BlurCentre.x  = lpBlurCentre[0];  mv2BlurCentre.y  = lpBlurCentre[1];
-    mv2BlurCentre.z  = lpBlurCentre[2];  mv2BlurCentre.w  = lpBlurCentre[3];
+    mv2BlendAmount.mV = __lvx(lpBlendAmount, 0);
+    mv2BlurAmount.mV = __lvx(lpBlurAmount, 0);
+    mv2BlendCentre.mV = __lvx(lpBlendCentre, 0);
+    mv2BlurCentre.mV = __lvx(lpBlurCentre, 0);
     mfOpacity   = lpData[18];
     mfVelocity  = lpData[16];
     mfSharpness = lpData[17];
@@ -244,7 +241,7 @@ void TintData2d::Construct(const u64& lruAssetKey)
 {
     Attrib::Gen::tint2dasset lAsset(lruAssetKey, 0);
     const f32* const lpColour = static_cast<const f32*>(lAsset.GetLayoutPointer());
-    mv4Colour.x = lpColour[0]; mv4Colour.y = lpColour[1]; mv4Colour.z = lpColour[2]; mv4Colour.w = lpColour[3];
+    mv4Colour.mV = __lvx(lpColour, 0);
 }
 
 void VignetteData::Construct(const u64& lruAssetKey)
@@ -252,29 +249,15 @@ void VignetteData::Construct(const u64& lruAssetKey)
     Attrib::Gen::vignetteasset lAsset(lruAssetKey, 0);
 
     const u8* const lpLayout = static_cast<const u8*>(lAsset.GetLayoutPointer());
-    {   // [diag] BRN_PFX_DIAG: did the vault collection resolve, and what did it say?
-    }
 
-    // Lane by lane, NOT by casting the block to a Vector2/Vector4. rw::math::vpu::VectorIntrinsic
-    // is `alignas(16)`, so a whole-vector cast would tell the compiler the layout block is
-    // 16-byte aligned. The vault's own payload regions are (their PtrN targets are all 16-byte
-    // multiples), but Attrib::DefaultDataArea's shared block is a plain static byte array with no
-    // stated alignment -- and that is exactly the block this call resolves to today. Four scalar
-    // float loads need no such promise. (The console's `lvx128` has the same requirement and gets
-    // it from the console allocator; on the host the guarantee does not exist, so it is not taken.)
     const f32* const lpOuter  = reinterpret_cast<const f32*>(lpLayout + 0x00);
     const f32* const lpInner  = reinterpret_cast<const f32*>(lpLayout + 0x10);
     const f32* const lpCentre = reinterpret_cast<const f32*>(lpLayout + 0x20);
     const f32* const lpAmount = reinterpret_cast<const f32*>(lpLayout + 0x30);
-
-    mv4OuterColour.x = lpOuter[0];  mv4OuterColour.y = lpOuter[1];
-    mv4OuterColour.z = lpOuter[2];  mv4OuterColour.w = lpOuter[3];
-    mv4InnerColour.x = lpInner[0];  mv4InnerColour.y = lpInner[1];
-    mv4InnerColour.z = lpInner[2];  mv4InnerColour.w = lpInner[3];
-    mv2Centre.x      = lpCentre[0]; mv2Centre.y      = lpCentre[1];
-    mv2Centre.z      = lpCentre[2]; mv2Centre.w      = lpCentre[3];
-    mv2Amount.x      = lpAmount[0]; mv2Amount.y      = lpAmount[1];
-    mv2Amount.z      = lpAmount[2]; mv2Amount.w      = lpAmount[3];
+    mv4OuterColour.mV = __lvx(lpOuter, 0);
+    mv4InnerColour.mV = __lvx(lpInner, 0);
+    mv2Centre.mV = __lvx(lpCentre, 0);
+    mv2Amount.mV = __lvx(lpAmount, 0);
 
     mfSharpness = *reinterpret_cast<const f32*>(lpLayout + 0x40);
     mfAngle     = *reinterpret_cast<const f32*>(lpLayout + 0x44);
