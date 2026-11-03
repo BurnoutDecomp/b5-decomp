@@ -1,20 +1,11 @@
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <xtl.h>
+#include <xonline.h>
 #include <cstring>   // memset / memcpy (UpdateUserName)
 
 // CgsGui::SystemUserProfile -- the X360 XNotify/XUserGetName system-user watcher.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. The PC profile-settings API and
-// its native pointer-bearing records share CgsXUserProfileSettings.h. Other
-// platform imports below retain their existing PC providers.
-extern "C"
-{
-    void* XNotifyCreateListener(unsigned long long luqwAreas);
-    int   XNotifyGetNext(void* lhListener, unsigned long ludwMsgFilter,
-                         unsigned long* lpdwId, unsigned long* lpParam);
-    int   CloseHandle(void* lhObject);
-    u32   XUserGetName(u32 luUserIndex, char* lpszUserName, u32 luCchUserName);
-    u32   XUserGetSigninState(u32 luUserIndex);
-}
+// Use the XDK's native imports and pointer-bearing profile records.
 
 namespace CgsGui
 {
@@ -127,29 +118,27 @@ namespace CgsGui
 
     // ARTIST8284CE90: read camera then vibration for the selected signed-in
     // user, and publish the same derived settings through the real Listener.
-    // The platform API owns native pointer-bearing records, never guest offsets.
     void SystemUserProfile::UpdateProfileSettings()
     {
         const u32 luUserIndex = miUserIndex;
         if (luUserIndex == KU_USERINDEX_NONE || miState != 1 || mpListener == 0)
             return;
 
-        const u32 laSettingIds[2] = {
+        const DWORD laSettingIds[2] = {
             XPROFILE_GAMER_RACE_CAMERA_LOCATION,
             XPROFILE_OPTION_CONTROLLER_VIBRATION,
         };
-        // Keep the original128-byte capacity. The native header plus two full
-        // records occupies112 bytes on x64; typed members supply their alignment.
-        constexpr u32 KU_READ_CAPACITY = 128;
-        struct ReadBuffer
+        // ARTIST8284CEF4 advertises a 128-byte SDK output buffer. The SDK
+        // returns its settings pointer in the result header at buffer +4.
+        enum { KU_READ_CAPACITY = 128 };
+        union ReadBuffer
         {
             XUSER_READ_PROFILE_SETTING_RESULT mResults;
-            XUSER_PROFILE_SETTING maSettings[2];
-            u8 maUnused[KU_READ_CAPACITY - sizeof(XUSER_READ_PROFILE_SETTING_RESULT) -
-                        2 * sizeof(XUSER_PROFILE_SETTING)];
+            u8 maStorage[KU_READ_CAPACITY];
         } lReadBuffer;
         CGS_STATIC_ASSERT((sizeof(ReadBuffer) == KU_READ_CAPACITY), "original profile-read capacity");
-        u32 lcbResults = sizeof(lReadBuffer);
+        CGS_STATIC_ASSERT((sizeof(XUSER_PROFILE_SETTING) == 40), "ARTIST profile-setting stride");
+        DWORD lcbResults = sizeof(lReadBuffer);
 
         if (XUserReadProfileSettings(0, luUserIndex, 2, laSettingIds,
                                      &lcbResults, &lReadBuffer.mResults, 0))
@@ -159,7 +148,6 @@ namespace CgsGui
         if (lcbResults > sizeof(lReadBuffer))
         {
             CGS_ASSERT(false, " data returned is too large ");
-            return;
         }
 
         const XUSER_PROFILE_SETTING* lpSettings = lReadBuffer.mResults.pSettings;
