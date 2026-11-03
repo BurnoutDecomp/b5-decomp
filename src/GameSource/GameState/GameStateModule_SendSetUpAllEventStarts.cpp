@@ -103,8 +103,8 @@ namespace
     //                                     @0x82375A6C  lvx128 v2 <- unk_82FAE140  (== SIZE)
     // Duplicated here rather than shared because StuntManager's copies are TU-local file statics;
     // if either pair is ever re-tuned, both must move together.
-    const Vector2 KV2_DISTRICT_MAP_WORLD_ORIGIN = { -4208.0f, -3846.0f, 0.0f, 0.0f }; // unk_82FADED0
-    const Vector2 KV2_DISTRICT_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 0.0f }; // unk_82FAE140
+    const Vector2 KV2_DISTRICT_MAP_WORLD_ORIGIN(-4208.0f, -3846.0f); // unk_82FADED0
+    const Vector2 KV2_DISTRICT_MAP_WORLD_SIZE( 8270.0f,  6101.0f); // unk_82FAE140
 }
 
 // ============================================================================
@@ -243,7 +243,7 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
             BrnWorld::ECounty leCounty = BrnWorld::E_COUNTY_INVALID;
             if (lbDistrictMapBound)
             {
-                const Vector2 lv2Ground = { lv3TriggerPosition.x, lv3TriggerPosition.z, 0.0f, 0.0f };
+                const Vector2 lv2Ground(lv3TriggerPosition.mV.x, lv3TriggerPosition.mV.z);
                 const u8 luMapValue = lDistrictMap.GetValue(lv2Ground);
                 if (luMapValue == CgsWorld::KU_INVALID_WORLD_MAP_VALUE)
                 {

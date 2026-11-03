@@ -111,8 +111,8 @@ void GameStateModule::SendSetUpAllDriveThrusMessage(GameStateModuleIO::GameActio
         const Vector3 lv3Position = lpRegion->GetBoxRegion()->GetPosition();
 
         GameStateModuleIO::SetUpAllDriveThrusAction::DriveThruInfo lInfo;
-        lInfo.mfXCoord     = lv3Position.x;
-        lInfo.mfZCoord     = lv3Position.z;
+        lInfo.mfXCoord     = lv3Position.mV.x;
+        lInfo.mfZCoord     = lv3Position.mV.z;
         lInfo.mDriveThruId = lDriveThruId;
         lInfo.meType       = leType;
         lAction.maDriveThrus.Append(lInfo);
@@ -129,7 +129,7 @@ void GameStateModule::SendSetUpAllDriveThrusMessage(GameStateModuleIO::GameActio
             *CgsDev::Log::gpDebugPrint
                 << "[drivethru] SETUP rec id=" << static_cast<u32>(lDriveThruId)
                 << " type=" << static_cast<s32>(leType)
-                << " pos=(" << lv3Position.x << "," << lv3Position.z << ")\n";
+                << " pos=(" << lv3Position.mV.x << "," << lv3Position.mV.z << ")\n";
         }
     }
 

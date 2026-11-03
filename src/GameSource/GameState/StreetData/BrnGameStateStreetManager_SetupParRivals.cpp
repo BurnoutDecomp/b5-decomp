@@ -79,8 +79,8 @@ namespace
     // FLAG: the identifiers are ours (no DWARF name survives); the VALUES are
     // byte-exact from the image.
     // -------------------------------------------------------------------
-    const Vector2 KV2_DISTRICT_MAP_WORLD_ORIGIN = { -4208.0f, -3846.0f, 0.0f, 0.0f };   // unk_82FADAA0
-    const Vector2 KV2_DISTRICT_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 0.0f };   // unk_82FADD60
+    const Vector2 KV2_DISTRICT_MAP_WORLD_ORIGIN(-4208.0f, -3846.0f);   // unk_82FADAA0
+    const Vector2 KV2_DISTRICT_MAP_WORLD_SIZE( 8270.0f,  6101.0f);   // unk_82FADD60
 
     // The LCG state SetupParRivals draws its rival picks from is materialised as a 64-bit
     // immediate at 0x8233F5D8..0x8233F5E8 (lis/ori 0x2EC654DA + insrdi of 0xB5E330D0 into the
@@ -212,12 +212,8 @@ void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryMan
                 // carry, so the ORDER (x, z) rather than (z, x) is inferred from that rectangle,
                 // not read out of the image. Built explicitly here rather than through
                 // CgsWorldMap2D.cpp's Vector3 overload, which flattens to (.x, .y).
-                Vector2 lSamplePosition;
                 const Vector3 lRegionPosition = lpGenericRegion->GetBoxRegion()->GetPosition();
-                lSamplePosition.x = lRegionPosition.x;
-                lSamplePosition.y = lRegionPosition.z;
-                lSamplePosition.z = 0.0f;
-                lSamplePosition.w = 0.0f;
+                const Vector2 lSamplePosition(lRegionPosition.mV.x, lRegionPosition.mV.z);
 
                 const u8 luDistrict = lWorldMap.GetValue( lSamplePosition );
 
