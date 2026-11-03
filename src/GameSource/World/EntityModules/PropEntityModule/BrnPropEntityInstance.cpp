@@ -110,9 +110,9 @@ namespace BrnWorld
         {
             const Vector3& lrComOffset = lpTypeData->GetCOMOffset();
 
-            Vector3 lvComInWorld = mWorldTransform.xAxis * lrComOffset.x;
-            lvComInWorld = mWorldTransform.yAxis * lrComOffset.y + lvComInWorld;
-            lvComInWorld = mWorldTransform.zAxis * lrComOffset.z + lvComInWorld;
+            Vector3 lvComInWorld = mWorldTransform.xAxis * lrComOffset.GetX().GetFloat();
+            lvComInWorld = mWorldTransform.yAxis * lrComOffset.GetY().GetFloat() + lvComInWorld;
+            lvComInWorld = mWorldTransform.zAxis * lrComOffset.GetZ().GetFloat() + lvComInWorld;
 
             mWorldTransform.wAxis = mWorldTransform.wAxis + lvComInWorld;
         }
@@ -406,19 +406,19 @@ namespace BrnWorld
         f32 lfSecondaryAngle;
         if (luRotAxis == 0x40u)
         {
-            const Vector3 lProbe = { 0.0f, 0.0f, 1.0f, 0.0f };
+            const Vector3 lProbe( 0.0f, 0.0f, 1.0f );
             lfCosAngle       = vpu::Dot(lProbe, lrTransform.zAxis);   // zAxis.z
             lfSecondaryAngle = vpu::Dot(lProbe, lrTransform.xAxis);   // xAxis.z
         }
         else if (luRotAxis == 0x00u)
         {
-            const Vector3 lProbe = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector3 lProbe( 0.0f, 1.0f, 0.0f );
             lfCosAngle       = vpu::Dot(lProbe, lrTransform.yAxis);   // yAxis.y
             lfSecondaryAngle = vpu::Dot(lProbe, lrTransform.zAxis);   // zAxis.y
         }
         else
         {
-            const Vector3 lProbe = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector3 lProbe( 0.0f, 1.0f, 0.0f );
             lfCosAngle       = vpu::Dot(lProbe, lrTransform.yAxis);   // yAxis.y
             lfSecondaryAngle = vpu::Dot(lProbe, lrTransform.xAxis);   // xAxis.y
         }

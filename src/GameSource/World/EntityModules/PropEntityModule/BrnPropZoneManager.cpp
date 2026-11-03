@@ -39,8 +39,6 @@
 #include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h"  // PropEntitySerialiser::GetStaticLayout / PropSerialiserFrame
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene / _PostPhysics / _PrePhysics
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // PropToTrafficInterface (SendTrafficLightRestoreEvents)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] BRN_PROP_DIAG, wave Q6)
-#include <stdlib.h>                                          // getenv    ([DIAG] BRN_PROP_DIAG, wave Q6)
 
 namespace BrnWorld
 {
@@ -151,10 +149,18 @@ namespace BrnWorld
         const Vector3& lU = lTransform.Up();
         const Vector3& lA = lTransform.At();
         const Vector3& lP = lTransform.Pos();
-        return (lR.x == lR.x) && (lR.y == lR.y) && (lR.z == lR.z)
-            && (lU.x == lU.x) && (lU.y == lU.y) && (lU.z == lU.z)
-            && (lA.x == lA.x) && (lA.y == lA.y) && (lA.z == lA.z)
-            && (lP.x == lP.x) && (lP.y == lP.y) && (lP.z == lP.z);
+        return (lR.GetX().GetFloat() == lR.GetX().GetFloat())
+            && (lR.GetY().GetFloat() == lR.GetY().GetFloat())
+            && (lR.GetZ().GetFloat() == lR.GetZ().GetFloat())
+            && (lU.GetX().GetFloat() == lU.GetX().GetFloat())
+            && (lU.GetY().GetFloat() == lU.GetY().GetFloat())
+            && (lU.GetZ().GetFloat() == lU.GetZ().GetFloat())
+            && (lA.GetX().GetFloat() == lA.GetX().GetFloat())
+            && (lA.GetY().GetFloat() == lA.GetY().GetFloat())
+            && (lA.GetZ().GetFloat() == lA.GetZ().GetFloat())
+            && (lP.GetX().GetFloat() == lP.GetX().GetFloat())
+            && (lP.GetY().GetFloat() == lP.GetY().GetFloat())
+            && (lP.GetZ().GetFloat() == lP.GetZ().GetFloat());
     }
 
     // ========================================================================
@@ -1206,7 +1212,7 @@ namespace BrnWorld
         // unk_82FAD840 against a transform's Y lane, confirming it is a world-floor / Y
         // threshold, not a NaN check.) The frozen-prop branch below uses this to decide
         // whether the prop must be pulled out of the scene / contact generation this frame.
-        const f32 lfPositionY = lTransform.Pos().y;
+        const f32 lfPositionY = lTransform.Pos().GetY().GetFloat();
         const bool lbBelowWorldFloor = (BrnPhysics::Props::KVF_PROP_FLOOR > lfPositionY);
 
         // The destination scene-update interface (X360 OutputBuffer_PostPhysics::GetScene...).
@@ -1261,10 +1267,6 @@ namespace BrnWorld
             const u32 luPartPoolIndex = static_cast<u32>(lpProp->mu16PartsIndex) + luPartId - 1u;
             PropPartEntityInstance* lpPart = &maParts[luPartPoolIndex];
 
-            // [DIAG] NOT IN THE X360 BINARY -- captured before the store so the [Q6-move]
-            // line below can report the frame's vertical displacement.
-            const f32 lfQ6PreviousPartY = lpPart->mWorldTransform.Pos().y;
-
             // Install the new world transform into the part.
             lpPart->mWorldTransform = lTransform;
 
@@ -1279,22 +1281,6 @@ namespace BrnWorld
             // The volume-instance handle for this part's prop.
             PropVolumeInstanceID lVolumeInstanceID;
             lVolumeInstanceID.SetPropEntityId(lEntityId);
-
-            // ---- [DIAG] NOT IN THE X360 BINARY -- wave Q6 "the money line" ---------------
-            // ⛔ DELETE-WHEN smashed parts are confirmed moving on screen. Set BRN_PROP_DIAG.
-            // Rate-limited to the first 16 part updates of the run (one line each), because
-            // the whole question the wave exists to answer is answered by the first few:
-            //   dy != 0 over consecutive lines  -> physics IS reaching the world transform;
-            //   volumes == 0 or contactGenBit=0 -> the per-volume scene push below is being
-            //                                      skipped, so the part will RENDER moving
-            //                                      while its collision volumes stay behind
-            //                                      (scout.md §4 item 5: BreakPropIntoParts
-            //                                      clears that bit and
-            //                                      AddPropPartsToContactGeneration only
-            //                                      re-sets it when CanAddPartVolumes passes).
-            {
-                static s32        siQ6MoveLines = 0;
-            }
 
             if (lbFrozen)
             {
@@ -1360,12 +1346,12 @@ namespace BrnWorld
             // StrStream assert in this file takes.
             static const f32 KF_MAX_VALID_POSITION_ALONG_AXIS = 15000.0f;
             const Vector3& lPosition = lTransform.Pos();
-            CGS_ASSERT(lPosition.x < KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
-            CGS_ASSERT(lPosition.y < KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
-            CGS_ASSERT(lPosition.z < KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
-            CGS_ASSERT(lPosition.x > -KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
-            CGS_ASSERT(lPosition.z > -KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
-            CGS_ASSERT(lPosition.y > -KF_MAX_VALID_POSITION_ALONG_AXIS, "fell out of the world");
+            CGS_ASSERT(lPosition.GetX().GetFloat() < KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
+            CGS_ASSERT(lPosition.GetY().GetFloat() < KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
+            CGS_ASSERT(lPosition.GetZ().GetFloat() < KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
+            CGS_ASSERT(lPosition.GetX().GetFloat() > -KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
+            CGS_ASSERT(lPosition.GetZ().GetFloat() > -KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
+            CGS_ASSERT(lPosition.GetY().GetFloat() > -KF_MAX_VALID_POSITION_ALONG_AXIS, "fell out of the world");
 
             // ⭐ Q6 FIX -- THE MISSING GUARD (X360 0x822F1410-0x822F1420):
             //     mr r3, r31 ; bl PropEntityInstance::IsSmashed
@@ -1445,9 +1431,9 @@ namespace BrnWorld
                 // the console's fabs-then-compare, where std::fabs would clear a NaN's sign.
                 const Vector3& lVelocity = lLinearVelocity;
                 const bool lbVelocityExceedsThreshold =
-                       (lVelocity.x < -KF_FIRST_MOVE_THRESHOLD || lVelocity.x > KF_FIRST_MOVE_THRESHOLD)
-                    || (lVelocity.y < -KF_FIRST_MOVE_THRESHOLD || lVelocity.y > KF_FIRST_MOVE_THRESHOLD)
-                    || (lVelocity.z < -KF_FIRST_MOVE_THRESHOLD || lVelocity.z > KF_FIRST_MOVE_THRESHOLD);
+                       (lVelocity.GetX().GetFloat() < -KF_FIRST_MOVE_THRESHOLD || lVelocity.GetX().GetFloat() > KF_FIRST_MOVE_THRESHOLD)
+                    || (lVelocity.GetY().GetFloat() < -KF_FIRST_MOVE_THRESHOLD || lVelocity.GetY().GetFloat() > KF_FIRST_MOVE_THRESHOLD)
+                    || (lVelocity.GetZ().GetFloat() < -KF_FIRST_MOVE_THRESHOLD || lVelocity.GetZ().GetFloat() > KF_FIRST_MOVE_THRESHOLD);
 
                 if (lbVelocityExceedsThreshold && (lpProp->mu8Flags & KU_MOVED_BIT) == 0)
                 {

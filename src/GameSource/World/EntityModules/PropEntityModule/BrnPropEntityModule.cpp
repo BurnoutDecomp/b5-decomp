@@ -64,8 +64,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h"
 #include "SharedClasses/Physics/Props/BrnPropConstants.h"        // KVF_PROP_FLOOR
 #include "rw/math/vpu/vector3_operation.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] BRN_PROP_DIAG)
-#include <stdlib.h>                                          // getenv    ([DIAG] BRN_PROP_DIAG)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // console debug messages
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // PotentialContact
 #include "GameSource/World/BrnEntityTypes.h"                            // E_ENTITYTYPE_*
 #include "rw/math/vpu/matrix44affine_operation.h"  // rw::math::vpu::OrthoNormalize3x3 @0x82203B28
@@ -248,10 +247,7 @@ namespace BrnWorld
         // 8 x `stvx128 v0(zero)` over 0xD3230..0xD32A0 -- one 16-byte lane per car slot.
         for (u32 luCar = 0; luCar < 8; ++luCar)
         {
-            maRaceCarVelocity[luCar].x = 0.0f;
-            maRaceCarVelocity[luCar].y = 0.0f;
-            maRaceCarVelocity[luCar].z = 0.0f;
-            maRaceCarVelocity[luCar].w = 0.0f;   // the console zeroes the whole 16-byte lane
+            maRaceCarVelocity[luCar].SetZero();
         }
 
         muNumberOfLoadedZones = 0;                 // stwx 0 @0xD320C
@@ -1599,7 +1595,7 @@ namespace BrnWorld
 
         // 0x822EF5D8. See the NaN-polarity note in this file's banner: `vcmpgtfp.` is the
         // ordered compare, so plain `>` is the faithful (and NaN-correct) spelling.
-        CGS_ASSERT(lpProp->GetWorldTransform().Pos().y > BrnPhysics::Props::KVF_PROP_FLOOR,
+        CGS_ASSERT(lpProp->GetWorldTransform().Pos().GetY().GetFloat() > BrnPhysics::Props::KVF_PROP_FLOOR,
                    "lpProp->GetWorldTransform().Pos().Y() > BrnPhysics::Props::KVF_PROP_FLOOR"); // :1569
 
         // 0x822EF628 / 0x822EF664 -- the legality pair. Each is a chain of `cmpwi/beq` over
@@ -1627,23 +1623,6 @@ namespace BrnWorld
         const BrnPhysics::Props::PropTypeData* lpPropTypeData =
             mpPropPhysicsDataHeader.GetMemoryResource()->GetType(lpProp->muTypeId);
         CGS_ASSERT(lpPropTypeData != NULL, "lpPropTypeData");                            // :1590
-
-        // ---- [DIAG] NOT IN THE X360 BINARY -- the BUG-WAVE STATE rung --------------------
-        // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen. Set BRN_PROP_DIAG.
-        //
-        // The two rungs either side of this one (CLASSIFY / COMMIT in PropEntityModule_wQ_05.cpp)
-        // can only say that a transition was asked for and whether it stuck. This one names WHICH
-        // OF THE TWO LEGS ran, and -- the reason it exists -- catches the ONE silent refusal in
-        // the whole promotion chain: leg B's `if (!GetPhysicalPropSlot(...)) return;`. There are
-        // only KU_MAX_PHYSICAL_PROPS == 15 physical prop slots, the console's own broker returns
-        // false when it cannot free one, and that return is a NO-OP with no assert and no log --
-        // a prop that loses that race simply never reacts, at any speed. A `legB-NOSLOT` line is
-        // therefore a complete diagnosis on its own.
-        // Rate-limited first-N; the getenv latch is a function-local static.
-        {
-            static s32        siStateLinesLeft = 32;
-
-        }
 
         if (leOldState == E_STATIC || leOldState == E_LEANING)
         {
@@ -1676,17 +1655,6 @@ namespace BrnWorld
 
         if (!mZoneManager.GetPhysicalPropSlot(lPropEntityId, liPhysicsSlot, lEvictedId, lbEvicted))
         {
-            // ---- [DIAG] NOT IN THE X360 BINARY -- see the STATE rung above ---------------
-            // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen.
-            // THE SILENT REFUSAL. The console returns here with no assert and no message; a
-            // prop that cannot get one of the 15 physical slots never reacts and nothing in
-            // the log says so. This line is the only way a boot-drive can tell "the promotion
-            // never happened" from "the promotion happened and the sim did nothing".
-            {
-                static s32        siNoSlotLinesLeft = 16;
-
-            }
-
             // 0x822EF73C -- no slot available: the prop keeps its old state entirely.
             return;
         }
@@ -1722,17 +1690,6 @@ namespace BrnWorld
         // 0x822EF7B4. Here the state lands BEFORE the add (contrast leg A).
         lpProp->SetState(leNewState);
         lpProp->SetPhysicsIndex(liPhysicsSlot);
-
-        // ---- [DIAG] NOT IN THE X360 BINARY -- the granted slot, ADDED 2026-08-23 -------
-        // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen.
-        // The STATE rung above can only print the slot the prop had BEFORE the broker ran.
-        // This one prints what GetPhysicalPropSlot actually granted, plus whether it had to
-        // evict a resident, so "slot 0 every time" can be told from "slot 0 because the
-        // previous tenant was released" without cross-reading the COMMIT rung.
-        {
-            static s32        siSlotLinesLeft = 32;
-
-        }
 
         lpPropManagerInterface->AddPropInstance(lPropEntityId,
                                                 lpProp->muTypeId,
@@ -1822,14 +1779,6 @@ namespace BrnWorld
         const BrnPhysics::Props::PropTypeData* lpType =
             mpPropPhysicsDataHeader.GetMemoryResource()->GetType(lpProp->muTypeId);
 
-        // [DIAG] NOT IN THE X360 BINARY. The middle rung of the wave-Q4 break probe (set
-        // BRN_PROP_DIAG): reaching here means the smash test passed and the prop is being
-        // taken apart. Placed after lpType is fetched because the part count comes from it,
-        // and after SetState(E_SMASHED) so a line here means the state change is committed.
-        // The latch is evaluated ONCE (a static bool), not per call.
-        {
-        }
-
         // 0x822FB12C..0x822FB144. `li r11,3; sldi r11,r11,56; std r11, var_E0` is the
         // compiler's fold of PropVolumeInstanceID's default constructor, which seeds the
         // embedded entity word's OWNER byte with E_ENTITYTYPE_PROP (== 3) at bit 56. The
@@ -1892,9 +1841,9 @@ namespace BrnWorld
             // the console carries the w lane through -- identical to
             // PropCellManager::AddPropPartsToScene, which is the same maths on the same data.
             const Vector3& lrOffset = lrPartType.GetOffset();
-            Vector3 lPartPosition = lrPropTransform.xAxis * lrOffset.x;
-            lPartPosition = lrPropTransform.yAxis * lrOffset.y + lPartPosition;
-            lPartPosition = lrPropTransform.zAxis * lrOffset.z + lPartPosition;
+            Vector3 lPartPosition = lrPropTransform.xAxis * lrOffset.GetX().GetFloat();
+            lPartPosition = lrPropTransform.yAxis * lrOffset.GetY().GetFloat() + lPartPosition;
+            lPartPosition = lrPropTransform.zAxis * lrOffset.GetZ().GetFloat() + lPartPosition;
             lPartPosition = lrPropTransform.wAxis + lPartPosition;
 
             // 0x822FB218 `sub_822CDB90` == PropZoneManager::GetPart(PropEntityID).
@@ -2003,15 +1952,6 @@ namespace BrnWorld
 namespace BrnWorld
 {
     // ------------------------------------------------------------------------------------
-    // [DIAG] NOT IN THE X360 BINARY -- the two rate limits for this file's BRN_PROP_DIAG
-    // rungs. ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen.
-    // First-N, not per-frame: a car sliding along a fence produces one contact per prop per
-    // frame, so an ungated line here is a log flood that hides its own answer. 24 is enough
-    // to cover a teleport-and-throttle run into a run of kerbside props plus one gate.
-    // ------------------------------------------------------------------------------------
-    static const s32 KI_DIAG_MAX_CLASSIFY_LINES = 24;
-    static const s32 KI_DIAG_MAX_COMMIT_LINES   = 24;
-
     // ROUND-2 UPDATE (2026-08-18): this file no longer has an anonymous namespace at all.
     //   * `KI_MAX_CONTACTED_PROPS` was a file constant; the DWARF makes it FUNCTION-LOCAL to
     //     ProcessPotentialContacts (BrnPropEntityModule.cpp:1179), which is where it now
@@ -2179,18 +2119,6 @@ namespace BrnWorld
                 ChangePropState( lpProp, lPropEntityId, leState, leNextState, lpOutput );
             }
 
-            // ---- [DIAG] NOT IN THE X360 BINARY -- the BUG-WAVE COMMIT rung ---------------
-            // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen.
-            // The CLASSIFY rung above says what the contact ASKED for; this one says what the
-            // prop actually GOT. `stateAfter != state` is the proof the transition committed;
-            // `stateAfter == state` with canChange=1 means ChangePropState refused it, and the
-            // [prop-diag] STATE rung in PropEntityModule_wQ_04.cpp names which of its two legs
-            // dropped it (the physical-slot broker is the silent one).
-            {
-                static s32        siCommitLinesLeft = KI_DIAG_MAX_COMMIT_LINES;
-
-            }
-
             // Whatever happened, the pending state is retired to the state the prop is
             // actually in now (`stb GetState(), 0x4E` at 0x822FA874).
             lpProp->SetNextState( lpProp->GetState() );
@@ -2341,35 +2269,6 @@ namespace BrnWorld
 
         const bool lbLatched = CanChangeState( leNextState, leDesiredState );
 
-        // ---- [DIAG] NOT IN THE X360 BINARY -- the BUG-WAVE CLASSIFY rung -----------------
-        // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen. Set BRN_PROP_DIAG.
-        //
-        // WHY IT EXISTS. This is the ONE place in the world module where the car's SPEED picks
-        // which response a prop will get, and the whole "reacts slow, does nothing fast" report
-        // turns on that pick:
-        //     carSpeedMph <= mfMoveThreshold  -> E_LEANING (2)  -> the prop enters the sim as a
-        //         jointed STATIC_BODY and PropManager::HandleContactWithLeanProp /
-        //         HandleContactWithTiltProp move it DIRECTLY (lerp + AddWorldSpaceImpulse +
-        //         their own UpdatePropEvent tail).
-        //     carSpeedMph >  mfMoveThreshold  -> E_PHYSICAL (4) -> the prop enters the sim as a
-        //         free ACTIVE_BODY and gets NO direct response at all: every millimetre of its
-        //         motion has to come back through sim -> PropManager::ReadUpdatedBodies ->
-        //         OutputUpdatedProps -> PropEntityModule::UpdateProps ->
-        //         PropZoneManager::UpdateInstance.
-        // So one line here plus the existing [Q6-world] line in UpdateProps
-        // (PropEntityModule_wQ_06.cpp) brackets the entire question: this line says which arm
-        // the contact took and at what speed; that one says whether the ACTIVE_BODY arm ever
-        // delivered a pose back.
-        //
-        // SCOPE + COST. RACE-CAR contacts only (the ones the player makes) and the first
-        // KI_DIAG_MAX_CLASSIFY_LINES of the run -- never an unbounded per-frame line. The getenv
-        // latch is a function-local static, so the shipped path pays one predicted branch. Every
-        // value printed is a member/accessor read with no side effect.
-        {
-            static s32        siClassifyLinesLeft = KI_DIAG_MAX_CLASSIFY_LINES;
-
-        }
-
         if ( lbLatched )
         {
             lpProp->SetNextState( leDesiredState );
@@ -2467,16 +2366,6 @@ namespace BrnWorld
     void PropEntityModule::UpdateProps( PropEntityIO::OutputBuffer_PostPhysics* lpOutput,
                                         const UpdatePropEventQueue* lpUpdatePropEventQueue )
     {
-        // ---- [DIAG] NOT IN THE X360 BINARY -- wave Q6 world-side arrival witness ---------
-        // ⛔ DELETE-WHEN smashed parts are confirmed moving on screen. Set BRN_PROP_DIAG.
-        // This is the first place in the world module that can see a physics pose, so it is
-        // the proof that PropManager::OutputUpdatedProps -> the post-physics bridge leg ->
-        // AppendUpdatedPropQueue actually delivered. Two independent one-shots rather than
-        // one line: the first non-empty batch can legitimately be all whole-prop events, and
-        // the part line is the one the wave is actually about.
-        {
-        }
-
         for ( s32 liEvent = 0; liEvent < lpUpdatePropEventQueue->GetLength(); ++liEvent )
         {
             const BrnPhysics::Props::UpdatePropEvent& lrEvent =
@@ -3194,15 +3083,6 @@ namespace BrnWorld
         {
             const PropEntityID lPropEntityId = maRecentlyBrokenProps[luBroken];
 
-            // [DIAG] NOT IN THE X360 BINARY. The last rung of the wave-Q4 break probe (set
-            // BRN_PROP_DIAG): the prop reached maRecentlyBrokenProps and is being retired
-            // from the simulation. Emitted at the TOP of the iteration, before the E_MOVED
-            // early-out, so an entry that is skipped still shows up -- "the event exists" and
-            // "the event was acted on" are different failures and the log must separate them.
-            // The latch is evaluated ONCE (a static bool), not per iteration.
-            {
-            }
-
             // 0x822EF150 `sub_822CDA28` == PropZoneManager::GetProp(PropEntityID) -- the
             // GLOBAL-index overload. Hex-Rays drops its second argument; the asm passes
             // r4 = the id.
@@ -3334,9 +3214,9 @@ namespace BrnWorld
                 lPartTransform.zAxis = lrPropTransform.zAxis;
                 lPartTransform.wAxis = lrPropTransform.wAxis;
 
-                Vector3 lPartPosition = lrPropTransform.xAxis * lrOffset.x;
-                lPartPosition = lrPropTransform.yAxis * lrOffset.y + lPartPosition;
-                lPartPosition = lrPropTransform.zAxis * lrOffset.z + lPartPosition;
+                Vector3 lPartPosition = lrPropTransform.xAxis * lrOffset.GetX().GetFloat();
+                lPartPosition = lrPropTransform.yAxis * lrOffset.GetY().GetFloat() + lPartPosition;
+                lPartPosition = lrPropTransform.zAxis * lrOffset.GetZ().GetFloat() + lPartPosition;
                 lPartPosition = lrPropTransform.wAxis + lPartPosition;
 
                 lPartTransform.wAxis = lPartPosition;
@@ -3920,23 +3800,6 @@ namespace BrnWorld
             meStreamingMode = E_WAITING_FOR_PROFILE_DATA;
         }
 
-        // [pausebit] witness. NOT X360. Prints ONLY when the value CHANGES, so a whole run costs
-        // a handful of lines. Pairs with the identical probe in PhysicsModule::Update: the two
-        // read the SAME bit of the SAME set and must agree on every frame.
-        {
-            static u32 suLastSet = 0xFFFFFFFFu;
-            const u32 luSet = static_cast<u32>( lUpdateSet );
-            if ( luSet != suLastSet && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                suLastSet = luSet;
-                *CgsDev::Log::gpDebugPrint
-                    << "[pausebit] PropEntityModule::PostPhysicsUpdate updateSet="
-                    << CgsDev::E_PRINTMODE_HEXONCE << luSet
-                    << " bit0=" << static_cast<s32>( luSet & 1 )
-                    << " -> ProcessContacts " << ( ( luSet & 1 ) == 0 ? "RUNS" : "skipped" ) << "\n";
-            }
-        }
-
         // MEASURED: bit 0 of the update set, not bit 8 (`clrlwi r29, r8, 31` at 0x823031F4,
         // then `bne -> skip` at 0x82303238). The heavy half of the tick is skipped on the
         // update sets that do not carry a physics result.
@@ -4306,12 +4169,6 @@ namespace BrnWorld
         // f31 at 0x822FA9DC and used at 0x822FAE98 (`fadds f0, f0, f31`).
         const f32 KF_EASY_SMASH_THRESHOLD_EPSILON = 0.1f;
 
-        // [DIAG] NOT IN THE X360 BINARY. Line budget for the LEG-0 per-contact rung below.
-        // ADDED 2026-08-23 (bug-wave round 2): that rung shipped with NO budget at all and
-        // printed one line per qualifying car-vs-prop contact per frame -- an unbounded
-        // per-frame log line, which the wave's own probe rules forbid. Budgeted like every
-        // sibling rung in this file set.
-        const s32 KI_DIAG_MAX_CONTACT_LINES = 64;
     }
 
     // ========================================================================================
@@ -4417,77 +4274,17 @@ namespace BrnWorld
             CGS_ASSERT( lpInstance->GetState() > E_NON_PHYSICAL,
                         "lpInstance->GetState() > E_NON_PHYSICAL" );            // :1964 (0x7AC)
 
-            // [DIAG] NOT IN THE X360 BINARY. Opt-in break-pipeline probe for the wave-Q4
-            // bring-up: set BRN_PROP_DIAG to answer "did a car-vs-prop contact even reach
-            // the world module?" -- the first question every parked bridge in
-            // WorldBridgePropModule.cpp changes the answer to. Placed here, after the
-            // race-car/whole-prop filters and before LEG 1, so it reports EVERY qualifying
-            // contact, not just the ones that go on to smash. The impact speed is recomputed
-            // inside the gate (same dot/abs/MPH the smash test uses further down) so the
-            // shipped path pays nothing when the probe is off.
-            // The latch is evaluated ONCE: getenv per contact would be a per-frame syscall.
-            //
-            // ⚠️ ROUND-2 CORRECTION 2026-08-23 -- READ THIS BEFORE FILING `speed=` AS A BUG.
-            // `speed=` is |dot(carVelocity, contactNormal)| in MPH: the closing speed ALONG
-            // THE CONTACT NORMAL. It is NOT the car's speed, and the two coincide only for a
-            // dead-on hit. A car riding OVER a prop has a near-vertical normal, so `speed=`
-            // collapses to the car's VERTICAL velocity (a few cm/s == ~0.1 mph) while the car
-            // is doing 74 mph -- that is geometry, not a mis-read slot. The 2026-08-23 drive
-            // (scratch/flow_run/bugwave_verify1/BrnGame.log) carries BOTH readings out of this
-            // ONE expression -- 74.15 / 73.39 / 55.44 / 32.77 mph on head-on contacts and
-            // 0.13-0.27 mph on the ride-over frames -- which is what rules out "the wrong
-            // velocity slot is being read". Both operands are printed now so nobody has to
-            // re-litigate it from the scalar alone.
-            {
-                static s32        siContactDiagLinesLeft = KI_DIAG_MAX_CONTACT_LINES;
-
-            }
-
             // -------------------------------------------------------------------------------
             // LEG 1 -- PROGRESSION. Player car only, prop not already moved, progression
             // enabled and the player not mid-crash. Four separate `bne/beq -> loc_822FAD60`
             // at 0x822FAB68 / 0x822FAB78 / 0x822FAB88 / 0x822FAB9C, in this order.
             // -------------------------------------------------------------------------------
-            // The four clauses are named so the [DIAG] rung below can report WHICH ONE rejected a
-            // contact. Each is a plain member/word read with NO side effect, so computing all
-            // four ahead of the `&&` chain (which still short-circuits) is observationally
-            // identical to the console's four separate branches.
+            // These named predicates preserve the console's short-circuit order.
             const bool lbPlayerCarStruckIt =
                 ( static_cast<u32>( lPlayerCarEntityId ) == lrContact.mEntityIdB.muValue );
             const bool lbPropNotMoved    = ( ( lpInstance->mu8Flags & KU_MOVED_BIT ) == 0 );
             const bool lbProgressionAllowed = mbAllowPropProgression;
             const bool lbPlayerNotCrashing  = !mbPlayerCrashing;
-
-            // [DIAG] NOT IN THE X360 BINARY. ROUND-8 LEG-1 CLAUSE PROBE -- the cheapest probe the
-            // round-7 verifier named, and the one rung that can redirect round 9.
-            //
-            // WHY IT EXISTS. Run 9 (scratch\flow_run\20260820_200848\BrnGame.log:4720-4745) shows
-            // the first smashed gate printing "[prop-diag] contact" (LEG 0, above) and
-            // "[prop-diag] BREAK" (LEG 2, below) but NEITHER "Hit dont respawn prop:" NOR
-            // "Hit respawn changed prop:" -- so the contact reached this function, qualified as a
-            // whole-prop-vs-race-car contact, went on to smash, and was rejected somewhere inside
-            // LEG 1. A later gate on the same drive (:5226-5232) passed LEG 1 and produced the
-            // whole [UI-gate] ladder, so nothing about the leg is structurally missing. The five
-            // candidate rejectors are the four clauses above plus the E_RESPAWN early-out, and
-            // the existing "[prop-diag] contact" line cannot separate them: it prints
-            // `car=GetEntityIndex()`, which hides the part-index and owner bits that the clause-1
-            // compare (a WHOLE-word compare against the player car's packed entity id) actually
-            // uses. Hence: both ids IN FULL, plus each clause, plus GetRespawnType().
-            //
-            // COST WHEN OFF: one already-evaluated bool test. GetRespawnType() is called only
-            // inside the guard -- it is const and side-effect free (BrnPropZoneManager.cpp's
-            // body is two BitArray::IsBitSet reads plus non-gating tripwires), so the shipped
-            // path is byte-for-byte the console's.
-            //
-            // SCOPE: smashable props only (KU_SMASHABLE_BIT, the same mask LEG 2 gates on at
-            // asm 0x822FAD60). Gates and billboards are smashable; kerbside clutter is not, and
-            // letting clutter spend the first-16 budget before the junkyard exit is exactly how
-            // this rung would fail to answer the question it was added for. The full mu8Flags
-            // decode is not printed -- the two bits that matter are printed by name.
-            {
-                static s32 siLeg1DiagLinesLeft = 16;
-
-            }
 
             if ( lbPlayerCarStruckIt
                  && lbPropNotMoved
@@ -4635,32 +4432,6 @@ namespace BrnWorld
                 && ( lpType->GetSmashThreshold()
                      < lpType->GetMoveThreshold() + KF_EASY_SMASH_THRESHOLD_EPSILON );
 
-            // ---- [DIAG] NOT IN THE X360 BINARY -- the BUG-WAVE LEG2 rung -----------------
-            // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen. BRN_PROP_DIAG.
-            //
-            // The bug report is "props react slow, do nothing fast", and the smash gate is the
-            // one place in the POST-physics half where a SPEED decides. This rung names the
-            // rejecting clause instead of leaving the caller to guess between four of them:
-            //   full=1        -> maRecentlyBrokenProps (32) never drained this frame;
-            //   hard=0        -> the NORMAL-COMPONENT impact speed lost to the type threshold
-            //                    (note that is |dot(carVel, contactNormal)|, NOT the car speed
-            //                    GetDesiredState is fed -- a glancing 130 mph pass reads ~0);
-            //                    MEASURED 2026-08-23: this is the ONLY clause that ever fired
-            //                    in the bug-wave drive, and it was CORRECT every time -- the
-            //                    three rejects were ride-over contacts with a near-vertical
-            //                    normal, while head-on contacts in the same run read 74.15 /
-            //                    73.39 / 55.44 / 32.77 mph out of this same expression and
-            //                    smashed. Do NOT "fix" the dot;
-            //   easy=0        -> the type is not an easy-smash type, so `hard` had to carry it;
-            //   dup=1         -> already recorded this frame, which is not a failure.
-            // Rate-limited first-N and printed only for a REJECT, so a working smash is silent.
-            {
-                static s32        siLeg2DiagLinesLeft = 16;
-
-                // Computed INSIDE the latch so the shipped path never pays for the Contains
-                // scan; the real gate below still evaluates them in the console's own order.
-            }
-
             // Evaluation ORDER is the console's: IsFull first (0x822FAEB8), then the OR of the
             // two smash predicates (0x822FAECC), then Contains (0x822FAEE4).
             if ( !maRecentlyBrokenProps.IsFull()
@@ -4786,7 +4557,7 @@ namespace BrnWorld
 
         // ⭐ ROUND 2: KVF_PROP_FLOOR is now homed at BrnPropConstants.h:56; the parked body's
         // file-local copy (and its "no header home exists" claim) are gone.
-        const f32 lfPositionY = lpPartInstance->mWorldTransform.Pos().y;
+        const f32 lfPositionY = lpPartInstance->mWorldTransform.Pos().GetY().GetFloat();
         if ( BrnPhysics::Props::KVF_PROP_FLOOR >= lfPositionY )
         {
             return;
