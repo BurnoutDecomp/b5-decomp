@@ -37,91 +37,14 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
-#include <cmath>     // sqrtf (diag speed readouts)
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-// [T5-ram] DIAG state, DEFINED in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
-// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-extern s32 gT5RamFramesLeft;
-extern s32 gT5RamTrafficSlot;
-extern s32 gT5RamGlobalIndex;
-extern f32 gT5PlayerVel[3];
-extern f32 gT5ArmedPlayerSpeed;
-extern f32 gT5MaxImpulseMag;
-extern f32 gT5SumImpulseMag;
-extern f32 gT5MaxClosing;
-extern s32 gT5WindowFrame;
-
 namespace
 {
-
-    // [T5-ram] arm the post-hit measurement window. 180 frames at 60 Hz == 3 s.
-    // RE-ARM POLICY (2026-09-02, traffic crash wave): the first version armed on the FIRST
-    // outcome of the run and never again -- on the standard recipe that is a 37 mph brush 20 m
-    // after the teleport, so a 100+ mph hit a minute later was never measured. Now a NEW outcome
-    // takes the window when (a) no window is open, (b) it is the run's first CRASHING outcome, or
-    // (c) the player is at least 20 % faster than at the last arming. A secondary contact at the
-    // same speed still cannot re-point the probe mid-measurement.
-    bool s_bT5ArmedCrashing = false;
-
-    void ArmT5RamWindow(u16 lu16TrafficSlot, EntityId lGlobalTrafficID, bool lbCrashingOutcome)
-    {
-        const f32 lfPlayerSpeed = sqrtf(gT5PlayerVel[0] * gT5PlayerVel[0]
-                                        + gT5PlayerVel[1] * gT5PlayerVel[1]
-                                        + gT5PlayerVel[2] * gT5PlayerVel[2]);
-        if (gT5RamTrafficSlot >= 0 && gT5RamFramesLeft > 0)
-        {
-            const bool lbFirstCrash = lbCrashingOutcome && !s_bT5ArmedCrashing;
-            const bool lbHarder     = lfPlayerSpeed > gT5ArmedPlayerSpeed * 1.2f;
-            if (!lbFirstCrash && !lbHarder)
-            {
-                return;
-            }
-        }
-        gT5RamTrafficSlot   = static_cast<s32>(lu16TrafficSlot);
-        gT5RamGlobalIndex   = static_cast<s32>((lGlobalTrafficID.muValue >> 10) & 0x3FFFu);
-        gT5RamFramesLeft    = 180;
-        gT5ArmedPlayerSpeed = lfPlayerSpeed;
-        s_bT5ArmedCrashing  = lbCrashingOutcome;
-        gT5MaxImpulseMag    = 0.0f;
-        gT5SumImpulseMag    = 0.0f;
-        gT5MaxClosing       = 0.0f;
-        gT5WindowFrame      = 0;
-    }
-
-    // [T4-hit] outcome lines: a BUDGET rather than a once-per-kind latch, so a run with several
-    // hits reports each of them (SLAMMED/CRASHING fire once per car by construction; CHECKED is
-    // per contact and is what the budget bounds).
-    s32 s_iT4OutcomeBudget = 40;
-
-    // [T4-hit] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One latch PER OUTCOME so the
-    // first crash does not mask the first check/slam/near-miss.
-    bool s_bT4CrashingReported = false;
-    bool s_bT4CheckedReported  = false;
-    bool s_bT4SlammedReported  = false;
-    bool s_bT4NearMissReported = false;
-
-    f32 SpeedOf(const SimpleVehiclePhysics& lrBody)
-    {
-        const Vector3 lv = lrBody.GetLinearVelocity();
-        return sqrtf(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
-    }
-
-    f32 RelativeSpeed(const SimpleVehiclePhysics& lrA, const SimpleVehiclePhysics& lrB)
-    {
-        const Vector3 lvA = lrA.GetLinearVelocity();
-        const Vector3 lvB = lrB.GetLinearVelocity();
-        const f32 lfX = lvB.x - lvA.x;
-        const f32 lfY = lvB.y - lvA.y;
-        const f32 lfZ = lvB.z - lvA.z;
-        return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
-    }
 
     // MPH -> m/s (unk_83017FE0, the same splat SimpleVehiclePhysics.h:422 already names).
     const f32 KF_CRASHRESP_MPH_TO_MPS = 0.447039992f;
@@ -163,25 +86,20 @@ namespace
         return -1.0f;
     }
 
+    // ARTIST uses vmsum3fp and full-register add/subtract for these operations.
     inline f32 Dot3(const Vector3& lrA, const Vector3& lrB)
     {
-        return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+        return __vmsum3fp(lrA.mV, lrB.mV).x;
     }
 
     inline Vector3 Sub3(const Vector3& lrA, const Vector3& lrB)
     {
-        Vector3 lvR;
-        lvR.x = lrA.x - lrB.x; lvR.y = lrA.y - lrB.y;
-        lvR.z = lrA.z - lrB.z; lvR.w = lrA.w - lrB.w;
-        return lvR;
+        return Vector3(__vsubfp(lrA.mV, lrB.mV));
     }
 
     inline Vector3 Add3(const Vector3& lrA, const Vector3& lrB)
     {
-        Vector3 lvR;
-        lvR.x = lrA.x + lrB.x; lvR.y = lrA.y + lrB.y;
-        lvR.z = lrA.z + lrB.z; lvR.w = lrA.w + lrB.w;
-        return lvR;
+        return Vector3(__vaddfp(lrA.mV, lrB.mV));
     }
 
     // The "which side of the traffic car did the race car come from" scalar both the CHECKED and
@@ -315,16 +233,11 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
     lEvent.muGlobalCrasherID = lGlobalCrasherID.muValue;
     lEvent.mCgsID            = lpVehicle->mCgsID;
     lEvent.mu8Crashing       = 1;
-    lEvent.mfMass            = lpVehicle->mpVehicleBody->GetMass().x;
+    lEvent.mfMass            = lpVehicle->mpVehicleBody->GetMass().GetFloat();
     lEvent.miReserved        = -1;
     lpVehicleOutputInterface->GetGameEventQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lEvent), 63, 32);
 
-    // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
-    // measurement window on this car.
-    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, true);
-
-    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
 
     // An articulated car crashes as one: the other half of the joint takes the same response.
     // The CRASHING early-out at the top ends the recursion when it comes back to this half.
@@ -392,18 +305,13 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
                                             : lCrasherEntityID;
 
     // flt_82001DA0 == 0.5 on the steering lane; flt_82001C98 == 1.0 on the drive lane.
-    const f32 lfDriveDirection = SignumLane(lpRaceCarPhysics->GetSpeedMPH().x * KF_CRASHRESP_MPH_TO_MPS) * 1.0f;
+    const f32 lfDriveDirection = SignumLane(lpRaceCarPhysics->GetSpeedMPH().GetFloat() * KF_CRASHRESP_MPH_TO_MPS) * 1.0f;
 
     lpManagerOutputInterface->AddSlammedTrafficEvent(lGlobalTrafficID, lGlobalCrasherID,
                                                      eCrashTrafficType_Slammed,
                                                      lfSteeringSide * 0.5f,
                                                      lfDriveDirection);
 
-    // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
-    // measurement window on this car.
-    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, false);
-
-    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
 }
 
 // -------------------------------------------------------------------------------------------
@@ -458,9 +366,10 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
     const TrafficPhysics* const lpFull = lpVehicle->GetFullTrafficPhysics();
     const f32 lfSteeringSide = SteeringSideSignum(*lpRaceCarPhysics, *lpFull);
 
-    f32 lfMagnitude = lvfSlamMagnitude.x * KF_SLAM_MAGNITUDE_SCALE;
-    if (lfMagnitude > 1.0f)
-        lfMagnitude = 1.0f;                                   // vminfp against 1.0
+    const __vector4 lvScale = Vector4(KF_SLAM_MAGNITUDE_SCALE, KF_SLAM_MAGNITUDE_SCALE,
+                                       KF_SLAM_MAGNITUDE_SCALE, KF_SLAM_MAGNITUDE_SCALE).mV;
+    const __vector4 lvOne = Vector4(1.0f, 1.0f, 1.0f, 1.0f).mV;
+    const f32 lfMagnitude = __vminfp(__vmulfp(lvfSlamMagnitude.mV, lvScale), lvOne).x;
 
     const EntityId lGlobalTrafficID =
         (EntityOwnerOf(lTrafficEntityID) == 2u) ? maTrafficEntityIDs[lu16TrafficIndex] : lTrafficEntityID;
@@ -468,18 +377,13 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
         (EntityOwnerOf(lCrasherEntityID) == 2u) ? maTrafficEntityIDs[EntityIndexOf(lCrasherEntityID)]
                                             : lCrasherEntityID;
 
-    const f32 lfDriveDirection = SignumLane(lpRaceCarPhysics->GetSpeedMPH().x * KF_CRASHRESP_MPH_TO_MPS) * 0.5f;
+    const f32 lfDriveDirection = SignumLane(lpRaceCarPhysics->GetSpeedMPH().GetFloat() * KF_CRASHRESP_MPH_TO_MPS) * 0.5f;
 
     lpManagerOutputInterface->AddSlammedTrafficEvent(lGlobalTrafficID, lGlobalCrasherID,
                                                      eCrashTrafficType_Slammed,
                                                      lfSteeringSide * lfMagnitude,
                                                      lfDriveDirection);
 
-    // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
-    // measurement window on this car.
-    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, false);
-
-    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
 }
 
 // -------------------------------------------------------------------------------------------
@@ -510,7 +414,7 @@ void PhysicalTrafficManager::TestForNearMissFreakOut(
     CGS_ASSERT(lContact.muVolumeInstanceIdB.GetEntityIDOwner() == 2u,
                "lContact.muVolumeInstanceIdB.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
 
-    if (KF_NEAR_MISS_MIN_RACECAR_SPEED_MPH > lpRaceCarPhysics->GetSpeedMPH().x)
+    if (KF_NEAR_MISS_MIN_RACECAR_SPEED_MPH > lpRaceCarPhysics->GetSpeedMPH().GetFloat())
         return;
 
     PhysicalTrafficVehicle* const lpVehicle =
@@ -524,7 +428,7 @@ void PhysicalTrafficManager::TestForNearMissFreakOut(
     TrafficPhysics* const lpFull = lpVehicle->GetFullTrafficPhysics();
     if (lpFull->IsCrashing())
         return;
-    if (KF_NEAR_MISS_MIN_TRAFFIC_SPEED_MPH > lpFull->GetSpeedMPH().x)
+    if (KF_NEAR_MISS_MIN_TRAFFIC_SPEED_MPH > lpFull->GetSpeedMPH().GetFloat())
         return;
 
     const Matrix44Affine lTraffic = lpFull->GetTransform();
@@ -550,8 +454,6 @@ void PhysicalTrafficManager::TestForNearMissFreakOut(
 
     lpFull->SetFreakedOut(lfSide, lfSeverity);
 
-    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE. lfSeverity is
-    // the SQUARED relative speed the console feeds SetFreakedOut, reported as-is.
 }
 
 }   // namespace Vehicle

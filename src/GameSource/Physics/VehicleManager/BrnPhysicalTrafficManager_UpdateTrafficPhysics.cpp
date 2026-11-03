@@ -18,143 +18,12 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
-#include <cmath>     // sqrtf ([T5-ram] velocity magnitude)
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-// =================================================================================================
-// [T5-ram] DIAG STATE. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-//
-// Defined here (the per-frame traffic tick is the natural print site); the arming sites live in
-// BrnPhysicalTrafficManager_CrashResponse.cpp, the player pose is published by
-// BrnVehicleManager_UpdateVehiclePhysics.cpp, the deformation counters are bumped by the
-// DeformationManager contact bridge / DeformableObject impulse TUs, and the module-side pose is
-// printed by TrafficEntityModule::HandleExternalResponses -- all through `extern` declarations, so
-// no header this cluster does not own is touched.
-// =================================================================================================
-s32 gT5RamFramesLeft  = 0;     // > 0 while the post-hit measurement window is open
-s32 gT5RamTrafficSlot = -1;    // the PHYSICAL traffic slot that was hit
-s32 gT5RamGlobalIndex = -1;    // ...and its GLOBAL traffic vehicle index (for the module side)
-f32 gT5PlayerPos[3]   = { 0.0f, 0.0f, 0.0f };
-f32 gT5PlayerVel[3]   = { 0.0f, 0.0f, 0.0f };
-u32 gT5Q8Routed       = 0;     // queue-[8] contacts handed to DeformationManager::ReadPotentialContact
-u32 gT5Q8Accepted     = 0;     // ...of which DeformationSensor::ValidateAndAddContact kept one
-u32 gT5CarCarCalls    = 0;     // DeformableObject::ApplyCarCarImpulse entries
-u32 gT5CarCarApplied  = 0;     // ...that returned true (an impulse actually went into both bodies)
-f32 gT5LastImpulseMag = 0.0f;  // the last car-car impulse LENGTH handed to ApplySensorImpulse
-f32 gT5LastClosing    = 0.0f;  // ...and the closing speed it was solved from
-f32 gT5MaxImpulseMag  = 0.0f;  // the LARGEST car-car impulse length since the window was (re)armed
-f32 gT5SumImpulseMag  = 0.0f;  // ...and their running sum -- the momentum actually delivered
-f32 gT5MaxClosing     = 0.0f;  // the largest closing speed a car-car solve ran on since (re)arming
-f32 gT5ArmedPlayerSpeed = 0.0f; // |player velocity| at the instant the window was (re)armed
-s32 gT5ApplyOwner     = -1;    // [T5-sens] the handling-body OWNER byte of the DeformableObject whose
-s32 gT5ApplyGlobal    = -1;    //   ApplySensorImpulse is dispatching into a sensor right now, and its
-                               //   global entity index -- so the sensor-side [impulse] probe can tag
-                               //   the traffic car's applies apart from the player's.
-s32 gT5WindowFrame    = 0;     // frames since the window was (re)armed -- reset by ArmT5RamWindow, so
-                               // the every-frame impact stretch is per WINDOW (the old global
-                               // counter left a re-armed window sampling every 10th frame: the
-                               // 109 mph CHECK in run tw_ram1 has no impact-frame rows).
-
-namespace
-{
-
-    // [T5-ram] one line per print, in two halves (pre-tick / post-tick) so "the impulse landed and
-    // TrafficPhysics::Update then wiped it" is distinguishable from "no impulse ever landed".
-    void PrintT5Line(const char* lpcWhen, s32 liFrame, s32 liSlot,
-                     const PhysicalTrafficVehicle& lrVehicle, const VehicleDriver* lpDriver)
-    {
-        const SimpleVehiclePhysics* const lpBody = lrVehicle.mpVehicleBody;
-        if (lpBody == 0 || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return;
-        }
-        const Vector3 lvVel = lpBody->GetLinearVelocity();
-        const Vector3 lvPos = lpBody->GetTransform().wAxis;
-        const f32 lfSpeed = sqrtf(lvVel.x * lvVel.x + lvVel.y * lvVel.y + lvVel.z * lvVel.z);
-        const f32 lfPlayerSpeed = sqrtf(gT5PlayerVel[0] * gT5PlayerVel[0]
-                                        + gT5PlayerVel[1] * gT5PlayerVel[1]
-                                        + gT5PlayerVel[2] * gT5PlayerVel[2]);
-
-        *CgsDev::Log::gpDebugPrint
-            << "[T5-ram] " << lpcWhen << " f=" << liFrame << " slot=" << liSlot
-            << " state=" << static_cast<s32>(lrVehicle.mePhysicalTrafficState)
-            << " ptype=" << static_cast<s32>(lrVehicle.mu8PhysicalType)
-            << " frozen=" << static_cast<s32>(lpBody->IsFrozen() ? 1 : 0)
-            << " mass=" << lpBody->GetMass().x
-            << " tpos=(" << lvPos.x << "," << lvPos.y << "," << lvPos.z << ")"
-            << " tvel=(" << lvVel.x << "," << lvVel.y << "," << lvVel.z << ")"
-            << " |tv|=" << lfSpeed;
-
-        // The three numbers a "does it crash hard" claim needs beside the speed: is the body in
-        // its crashing state at all, how fast is it spinning, and has it left the upright.
-        {
-            const Vector3 lvW = lpBody->GetAngularVelocity();
-            *CgsDev::Log::gpDebugPrint
-                << " crashing=" << static_cast<s32>(lpBody->IsCrashing() ? 1 : 0)
-                << " |w|=" << sqrtf(lvW.x * lvW.x + lvW.y * lvW.y + lvW.z * lvW.z)
-                << " upY=" << lpBody->GetTransform().yAxis.y;
-        }
-
-        // The traffic body's DEFORMED AABB (SimpleVehiclePhysics::mDeformableAABB @+0x6D0/+0x6E0,
-        // the pair DeformableObject::UpdateDeformedBBox writes back for every model, traffic
-        // included) and its drift from the first sample of this window -- the traffic-side
-        // deformation reading. NOTE the console's drive-time-limit compare in UpdateDeformedBBox
-        // (0x825E0DB4..DC4) runs for RACE CAR owners only; a traffic model has no limit verdict.
-        {
-            static f32 s_afFirstBox[6] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-            static s32 s_iFirstBoxSlot = -1;
-            static s32 s_iFirstBoxArm  = -1;
-            const CgsGeometric::AxisAlignedBox& lrBox = lpBody->GetDeformableAABB();
-            const f32 lafNow[6] = { lrBox.mMin.x, lrBox.mMin.y, lrBox.mMin.z,
-                                    lrBox.mMax.x, lrBox.mMax.y, lrBox.mMax.z };
-            if (s_iFirstBoxSlot != liSlot || s_iFirstBoxArm != gT5RamGlobalIndex)
-            {
-                s_iFirstBoxSlot = liSlot;
-                s_iFirstBoxArm  = gT5RamGlobalIndex;
-                for (s32 li = 0; li < 6; ++li) s_afFirstBox[li] = lafNow[li];
-            }
-            *CgsDev::Log::gpDebugPrint
-                << " dmin=(" << lafNow[0] << "," << lafNow[1] << "," << lafNow[2] << ")"
-                << " dmax=(" << lafNow[3] << "," << lafNow[4] << "," << lafNow[5] << ")"
-                << " ddelta=(" << (lafNow[0] - s_afFirstBox[0]) << "," << (lafNow[1] - s_afFirstBox[1])
-                << "," << (lafNow[2] - s_afFirstBox[2]) << "," << (lafNow[3] - s_afFirstBox[3])
-                << "," << (lafNow[4] - s_afFirstBox[4]) << "," << (lafNow[5] - s_afFirstBox[5]) << ")";
-        }
-
-        if (lpDriver != 0)
-        {
-            const BrnPlayerDriverControls* const lpControls = lpDriver->GetControls();
-            *CgsDev::Log::gpDebugPrint
-                << " gas=" << lpControls->mfGas
-                << " brake=" << lpControls->mfBrake
-                << " hb=" << lpControls->mfHandBrake
-                << " steer=" << lpControls->mfSteering;
-        }
-
-        *CgsDev::Log::gpDebugPrint
-            << " ppos=(" << gT5PlayerPos[0] << "," << gT5PlayerPos[1] << "," << gT5PlayerPos[2] << ")"
-            << " pvel=(" << gT5PlayerVel[0] << "," << gT5PlayerVel[1] << "," << gT5PlayerVel[2] << ")"
-            << " |pv|=" << lfPlayerSpeed
-            << " q8routed=" << static_cast<s32>(gT5Q8Routed)
-            << " q8acc=" << static_cast<s32>(gT5Q8Accepted)
-            << " ccCalls=" << static_cast<s32>(gT5CarCarCalls)
-            << " ccApplied=" << static_cast<s32>(gT5CarCarApplied)
-            << " lastMag=" << gT5LastImpulseMag
-            << " lastClose=" << gT5LastClosing
-            << " maxMag=" << gT5MaxImpulseMag
-            << " sumMag=" << gT5SumImpulseMag
-            << " maxClose=" << gT5MaxClosing
-            << " armedPv=" << gT5ArmedPlayerSpeed
-            << "\n";
-    }
-}
-
 // -------------------------------------------------------------------------------------------
 // @0x82644418. Structure, read off the asm:
 //
@@ -192,27 +61,6 @@ void PhysicalTrafficManager::UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameT
                                                   const Matrix44Affine* lpCameraMatrix,
                                                   bool lbImpactTime, bool lbUnknownFalse)
 {
-    // ---- [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. -------------------------
-    // The measurement window the finisher round asked for: every 10th frame for ~3 s after the
-    // first race-car-vs-traffic outcome, print the hit car's whole physical state twice -- once
-    // BEFORE the driver+physics tick and once AFTER it -- so a wiped velocity and an absent
-    // impulse are two different readings rather than one ambiguous zero.
-    s32 liT5Frame = 0;
-    bool lbT5Print = false;
-    if (gT5RamFramesLeft > 0)
-    {
-        --gT5RamFramesLeft;
-        liT5Frame = ++gT5WindowFrame;
-        // Every frame for the first half second (the impact lives there), then every 10th.
-    }
-    if (lbT5Print && gT5RamTrafficSlot >= 0
-        && static_cast<u32>(gT5RamTrafficSlot) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC
-        && mUsedTrafficVehicles.IsBitSet(static_cast<u32>(gT5RamTrafficSlot)))
-    {
-        PrintT5Line("pre ", liT5Frame, gT5RamTrafficSlot,
-                    mpaTrafficVehicles[gT5RamTrafficSlot], &mpaTrafficDrivers[gT5RamTrafficSlot]);
-    }
-
     for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
          liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
          liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
@@ -250,14 +98,7 @@ void PhysicalTrafficManager::UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameT
                          false /* lbUseSixaxis -- `li r10, 0` @0x8264461C */);
     }
 
-    // ---- [T5-ram] the POST-tick half of the same frame. DELETE-WHEN-STABLE. ------------------
-    if (lbT5Print && gT5RamTrafficSlot >= 0
-        && static_cast<u32>(gT5RamTrafficSlot) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC
-        && mUsedTrafficVehicles.IsBitSet(static_cast<u32>(gT5RamTrafficSlot)))
-    {
-        PrintT5Line("post", liT5Frame, gT5RamTrafficSlot,
-                    mpaTrafficVehicles[gT5RamTrafficSlot], &mpaTrafficDrivers[gT5RamTrafficSlot]);
-    }
+
 }
 }
 }
