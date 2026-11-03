@@ -2,14 +2,12 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. BrnGui::GuiRaceCarInfoEvent::Construct
 // (@0x823A7658) zero-initialises the fixed set of 8 per-active-race-car entries (the
 // 16-byte position lanes, the identity qwords, the entry count, and the three per-entry
-// flag-byte arrays). The 16-byte VMX zero-store is reproduced as a scalar Vector4 zero
-// per the project's established VMX-as-scalar reconstruction (endian-independent;
-// see BrnGuiEventTypeDefs.cpp DoWorstCase precedent).
+// flag-byte arrays). Vector4::SetZero writes the complete 16-byte position register.
 //
-// DoWorstCase (@0x823A6BB8) recomputes every entry's "worst case" screen position via a
-// per-entry VMX vmaddfp128 fused-multiply-add transform; it is reconstructed below by
-// scalarizing the lane math, following the committed GuiEventUpdateSatNav::DoWorstCase
-// precedent in BrnGuiEventTypeDefs.cpp. The X360 inlined the bounds-checked
+// DoWorstCase (@0x823A6BB8) recomputes every entry's "worst case" screen position via the
+// two four-lane VMX fused multiply-adds (vmaddfp128, then vmaddfp); the reconstruction keeps
+// those operations and their operand order through the native rw::math::vpu::MultAdd helper. The
+// X360 inlined the bounds-checked
 // operator++(EActiveRaceCarIndex&, int) (BurnoutConstants.h, the asm's FireAssert points at
 // BurnoutConstants.h:39 with "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT"); the loop is
 // restored to drive that real operator so the guard lands exactly where the operator defines
@@ -33,10 +31,7 @@ GuiRaceCarInfoEvent* GuiRaceCarInfoEvent::Construct()
 {
     for ( s32 liIndex = 0; liIndex < KI_NUM_ENTRIES; ++liIndex )
     {
-        maPosition[liIndex].x = 0.0f;
-        maPosition[liIndex].y = 0.0f;
-        maPosition[liIndex].z = 0.0f;
-        maPosition[liIndex].w = 0.0f;
+        maPosition[liIndex].SetZero();
         maIdentity[liIndex] = 0;
         maFlagA[liIndex] = 0;
         maFlagB[liIndex] = 0;
@@ -64,11 +59,12 @@ void GuiRaceCarInfoEvent::DoWorstCase(EActiveRaceCarIndex leNumActive, Vector3 l
     // Preserve all four raw VMX lanes: the native Vector3 is carried in v1 and its W lane
     // is consumed by the 16-byte vmr128 before the per-lane transform.
     const s32 liNumActive = static_cast<s32>(leNumActive);
-    const Vector4 lInput = { lvInput.x, lvInput.y, lvInput.z, lvInput.w };
+    const Vector4 lInput(lvInput.GetVector());
 
     // X360 float-pool immediates (named for clarity; values from the asm float pool).
     static const f32 KAF_WEIGHT[4] = { 0.0f, 0.1f, 0.25f, 0.0f }; // {flt_82001CC0, flt_82004014, flt_82003F40, flt_82001CC0}
     static const f32 KF_INPUT_SCALE = 2.0f;                       // flt_82001D9C
+    const Vector4 lWeight(KAF_WEIGHT[0], KAF_WEIGHT[1], KAF_WEIGHT[2], KAF_WEIGHT[3]);
 
     // The source/template entry the others are derived from. FLAGGED: the X360 reads
     // maPosition[liNumActive] unconditionally; if liNumActive == KI_NUM_ENTRIES (8) this is a
@@ -88,20 +84,13 @@ void GuiRaceCarInfoEvent::DoWorstCase(EActiveRaceCarIndex leNumActive, Vector3 l
 
         const f32 lfIndex = static_cast<f32>( liIndex );
         const f32 lfScale = KF_INPUT_SCALE * lfIndex; // splat(li*2)
+        const Vector4 lScale(lfScale, lfScale, lfScale, lfScale);
+        const Vector4 lIndex(lfIndex, lfIndex, lfIndex, lfIndex);
 
-        // step = lvInput * (2*li) + source  (vmaddfp128, lane-by-lane)
-        Vector4 lStep;
-        lStep.x = lInput.x * lfScale + lSource.x;
-        lStep.y = lInput.y * lfScale + lSource.y;
-        lStep.z = lInput.z * lfScale + lSource.z;
-        lStep.w = lInput.w * lfScale + lSource.w;
-
-        // pos = weight * step + li  (vmaddfp, lane-by-lane). Lanes 0/3 weight==0 -> just li.
+        // Keep the X360 fused operation order across all four lanes.
+        const Vector4 lStep = rw::math::vpu::MultAdd(lInput, lScale, lSource);
         Vector4& lPos = maPosition[liIndex];
-        lPos.x = KAF_WEIGHT[0] * lStep.x + lfIndex;
-        lPos.y = KAF_WEIGHT[1] * lStep.y + lfIndex;
-        lPos.z = KAF_WEIGHT[2] * lStep.z + lfIndex;
-        lPos.w = KAF_WEIGHT[3] * lStep.w + lfIndex;
+        lPos = rw::math::vpu::MultAdd(lWeight, lStep, lIndex);
 
         maFlagA[liIndex] = 1;
         maFlagD[liIndex] = 1;

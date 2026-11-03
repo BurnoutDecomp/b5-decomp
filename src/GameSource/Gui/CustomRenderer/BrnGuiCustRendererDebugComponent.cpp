@@ -244,8 +244,8 @@ void GuiCustRendererDebugComponent::SetBoostColour(BrnWorld::EBoostType leBoostT
 // @0x824FC868: write the edited inner/outer RGB triples to all renderer slots, then refresh the sliders.
 void GuiCustRendererDebugComponent::SetBoostColourToCustom()
 {
-    const Vector3 lv3InnerColour = { mfBoostInnerRed, mfBoostInnerGreen, mfBoostInnerBlue };
-    const Vector3 lv3OuterColour = { mfBoostOuterRed, mfBoostOuterGreen, mfBoostOuterBlue };
+    const Vector3 lv3InnerColour(mfBoostInnerRed, mfBoostInnerGreen, mfBoostInnerBlue);
+    const Vector3 lv3OuterColour(mfBoostOuterRed, mfBoostOuterGreen, mfBoostOuterBlue);
     mpCustRenderManager->GetBoostBarRendererInstance()->ForceSetBoostBarColours(
         lv3InnerColour, lv3OuterColour);
     UpdateBoostColours();

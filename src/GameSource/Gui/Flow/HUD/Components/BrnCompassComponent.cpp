@@ -30,7 +30,6 @@
 
 #include "rw/math/vpu/vector3_operation.h"                  // Dot / Cross / Normalize over Vector3
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (the one-shot mount witness)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SnPrintf
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameSource/Gui/BrnGuiCache.h"                     // GuiCache::GetLandmarkInfoFromIndex / GetFreeburnChallengeManager / GetWorldDataController
@@ -143,8 +142,8 @@ namespace BrnGui
         // bearing math: NORTH is +Z and UP is +Y -- the very same pair the sat-nav icon
         // heading uses (GameBridgeWorldToGui's rotation derivation), so a compass bearing
         // and a minimap arrow agree by construction.
-        const Vector3 KV3_COMPASS_NORTH = { 0.0f, 0.0f, 1.0f, 0.0f };
-        const Vector3 KV3_COMPASS_UP    = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 KV3_COMPASS_NORTH(0.0f, 0.0f, 1.0f);
+        const Vector3 KV3_COMPASS_UP(0.0f, 1.0f, 0.0f);
 
         const f32 KF_TWO_PI             = 6.2831855f;    // the acos sign flip
         const f32 KF_RADIANS_TO_DEGREES = 57.29578f;
@@ -187,7 +186,7 @@ namespace BrnGui
 
         // flt_82004920 == 0.0027777778 == 1/360 (degrees -> [0,1] strip fraction).
         Vector2 lPos = mv2InitialViewPos;
-        lPos.x = (lfBearing * (1.0f / 360.0f)) * mfSingleViewLength + mv2InitialViewPos.x;
+        lPos.mV.x = (lfBearing * (1.0f / 360.0f)) * mfSingleViewLength + mv2InitialViewPos.mV.x;
         mCompassViewMovie.SetPosition(lPos);
     }
 
@@ -203,7 +202,7 @@ namespace BrnGui
         {
             // flt_82004920 == 0.0027777778 == 1/360.
             Vector2 lPos = mv2InitialDestMarkerPos;
-            lPos.x = (lfMarkerBearing * (1.0f / 360.0f)) * mfSingleViewLength + mv2InitialDestMarkerPos.x;
+            lPos.mV.x = (lfMarkerBearing * (1.0f / 360.0f)) * mfSingleViewLength + mv2InitialDestMarkerPos.mV.x;
             mDestMarkerMovie.SetPosition(lPos);
         }
         else
@@ -243,8 +242,7 @@ namespace BrnGui
     void CompassComponent::ShowPositionOnCompass(Vector3 lv3Destination, f32 lfBearing)
     {
         const Vector4& lrv4CameraPosition = mpGuiCache->GetWorldCameraPosition();
-        const Vector3 lv3CameraPosition = { lrv4CameraPosition.x, lrv4CameraPosition.y,
-                                            lrv4CameraPosition.z, 0.0f };
+        const Vector3 lv3CameraPosition(lrv4CameraPosition.GetVector());
 
         const Vector3 lv3North         = Normalize(KV3_COMPASS_NORTH);
         const Vector3 lv3ToDestination = Normalize(lv3Destination - lv3CameraPosition);
@@ -322,17 +320,6 @@ namespace BrnGui
         (void)lacParentName;
         (void)liParentAptLayer;
 
-        // [p0-compass] one-shot mount witness (existing convention). Retire once the
-        // compass has been seen drawing in a live event.
-        {
-            static bool s_bLoggedConstruct = false;
-            if (!s_bLoggedConstruct)
-            {
-                s_bLoggedConstruct = true;
-                *CgsDev::Log::gpDebugPrint << "[p0-compass] CompassComponent::Construct -- real TU\n";
-            }
-        }
-
         // BrnFlaptComponent::Construct: assert lpStateInterface (h:113), store it, SetInvalid the clip.
         BrnFlaptComponent::Construct(lpStateInterface);
 
@@ -346,17 +333,6 @@ namespace BrnGui
     // matches the requested visibility (immediate vs. animated).
     void CompassComponent::SetVisibility(bool lbVisible, bool lbImmediate)
     {
-        {
-            static bool s_bLoggedSetVisibility = false;
-            if (!s_bLoggedSetVisibility)
-            {
-                s_bLoggedSetVisibility = true;
-                *CgsDev::Log::gpDebugPrint << "[p0-compass] CompassComponent::SetVisibility visible="
-                                           << (lbVisible ? 1 : 0) << " immediate="
-                                           << (lbImmediate ? 1 : 0) << "\n";
-            }
-        }
-
         if (lbVisible)
             mAptRef.GotoAndPlayLabel(lbImmediate ? "visible" : "transin");
         else
@@ -369,10 +345,9 @@ namespace BrnGui
     {
         GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
         mpGuiCache->GetLandmarkInfoFromIndex(lLandmark, &lLandmarkInfo);
-        // The X360 VMX-copies the icon's 16-byte position lane straight into the vector arg;
-        // narrow it to the Vector3 destination ShowPositionOnCompass takes.
+        // The X360 lvx128 copies the full icon position lane directly into v1; preserve W.
         const Vector4& lv4Position = lLandmarkInfo.GetPositionLane();
-        const Vector3 lv3Destination = { lv4Position.x, lv4Position.y, lv4Position.z, 0.0f };
+        const Vector3 lv3Destination(lv4Position.GetVector());
         ShowPositionOnCompass(lv3Destination, lfBearing);
     }
 
@@ -531,8 +506,8 @@ namespace BrnGui
         mCompassViewMovie.FindChildMovieClip(&lCompassViewBackRight,   "RightView_Back_mc");
 
         mv2InitialViewPos       = mCompassViewMovie.GetPosition();
-        mfSingleViewLength      = lCompassViewFrontRight.GetPosition().x
-                                - lCompassViewFrontCentre.GetPosition().x;
+        mfSingleViewLength      = lCompassViewFrontRight.GetPosition().mV.x
+                                - lCompassViewFrontCentre.GetPosition().mV.x;
         mv2InitialDestMarkerPos = mDestMarkerMovie.GetPosition();
 
         char lacTempString[32];
@@ -554,15 +529,5 @@ namespace BrnGui
         FormatDirectionLetters(leLanguage, &lCompassViewBackCentre);
         FormatDirectionLetters(leLanguage, &lCompassViewBackRight);
 
-        {
-            static bool s_bLoggedPrepare = false;
-            if (!s_bLoggedPrepare)
-            {
-                s_bLoggedPrepare = true;
-                *CgsDev::Log::gpDebugPrint << "[p0-compass] CompassComponent::Prepare done language="
-                                           << static_cast<s32>(leLanguage) << " viewLen="
-                                           << mfSingleViewLength << "\n";
-            }
-        }
     }
 }
