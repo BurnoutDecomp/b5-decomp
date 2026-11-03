@@ -15,6 +15,7 @@
 #include "SharedClasses/DataLists/BrnHudMessageController.h" // BrnResource::HudMessageController
 
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnGui
 {
@@ -98,10 +99,9 @@ namespace BrnGui
         if (!lpUserData)
         {
             CgsDev::Assert::BeginAssert();
-            char lacMessage[256];
-            CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid data pointer sent to GuiHudMessagesDebugComponent::TriggerMessageCallback";
-            CgsDev::Assert::FireAssert(lStream.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                 "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 238);
             CgsDev::Assert::EndAssert();
         }
@@ -113,10 +113,9 @@ namespace BrnGui
         if (!lpUserData)
         {
             CgsDev::Assert::BeginAssert();
-            char lacMessage[256];
-            CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid data sent to GuiHudMessagesDebugComponent::TriggerMessageWithoutTimerCallback";
-            CgsDev::Assert::FireAssert(lStream.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                 "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 252);
             CgsDev::Assert::EndAssert();
         }
@@ -128,10 +127,9 @@ namespace BrnGui
         if (!lpUserData)
         {
             CgsDev::Assert::BeginAssert();
-            char lacMessage[256];
-            CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid data in the callback";
-            CgsDev::Assert::FireAssert(lStream.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                 "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 267);
             CgsDev::Assert::EndAssert();
         }
@@ -143,10 +141,9 @@ namespace BrnGui
         if (!lpUserData)
         {
             CgsDev::Assert::BeginAssert();
-            char lacMessage[256];
-            CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid data in the callback";
-            CgsDev::Assert::FireAssert(lStream.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                 "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 282);
             CgsDev::Assert::EndAssert();
         }
