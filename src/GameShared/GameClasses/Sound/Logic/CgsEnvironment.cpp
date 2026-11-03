@@ -106,6 +106,7 @@ void Environment::Construct(const EnvironmentSpec& akrSpec)
     Nicotine::IDynamicMixer::MAP_CREATE_PARAMS lCreateParams;
     lCreateParams.mPrintSelect   = 0;
     lCreateParams.NumMixStates   = static_cast<int>(mu32StateManagerCount);
+    lCreateParams.MixerAllocator = mpAllocator;
     mDynamicMixer.CreateInstance(&lCreateParams);
 
     mCpuMonitors.miDynamicMixer      = -1;

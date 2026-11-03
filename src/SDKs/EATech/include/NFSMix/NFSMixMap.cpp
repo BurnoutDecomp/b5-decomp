@@ -1390,67 +1390,67 @@ void NFSMixMap::UpdateSubChannels()
 // ---------------------------------------------------------------------------
 int NFSMixMap::AllocateMixerMemory()
 {
-    MixerAllocator* lpAlloc = g_pMixerAllocator;
+    EA::Allocator::ICoreAllocator* lpAlloc = g_pMixerAllocator;
     const int liNumStates = m_pMMHdr->NumStates;   // +0x74 -> NumStates
 
     if (!m_pStateProcs)                             // +0x98
         m_pStateProcs = static_cast<NFSMixMapState**>(
-            lpAlloc->Allocate(sizeof(NFSMixMapState*) * liNumStates, 16, "Dyn Mix Proc Array"));
+            lpAlloc->Alloc(sizeof(NFSMixMapState*) * liNumStates, "Dyn Mix Proc Array", 0));
     for (int li = 0; li < liNumStates; ++li)
         m_pStateProcs[li] = 0;
 
     m_pMasterChannelInputs = static_cast<int**>(    // +0x204 (ptr array on runtime)
-        lpAlloc->Allocate(sizeof(int*) * m_nTotalMasterChannelInputs, 16, "Master Channel Input Array Block"));
+        lpAlloc->Alloc(sizeof(int*) * m_nTotalMasterChannelInputs, "Master Channel Input Array Block", 0));
     m_pSubChannelInputs = static_cast<int**>(       // +0x208 (ptr array on runtime)
-        lpAlloc->Allocate(sizeof(int*) * m_nTotalSubChannelInputs, 16, "Sub Channel Input Array Block"));
+        lpAlloc->Alloc(sizeof(int*) * m_nTotalSubChannelInputs, "Sub Channel Input Array Block", 0));
     m_pMasterChannelOutputArrayBlock = static_cast<int*>( // +0x178 (16 int slots per channel)
-        lpAlloc->Allocate(64 * m_nTotalUniqueMasterChannels, 16, "Master Channel Output Array Block"));
+        lpAlloc->Alloc(64 * m_nTotalUniqueMasterChannels, "Master Channel Output Array Block", 0));
 
     NFSMixMapState* lpStateMem = static_cast<NFSMixMapState*>( // +0x9C object memory
-        lpAlloc->Allocate(sizeof(NFSMixMapState) * m_nStateMapCount, 16, "NFSMixMapState Object Memory"));
+        lpAlloc->Alloc(sizeof(NFSMixMapState) * m_nStateMapCount, "NFSMixMapState Object Memory", 0));
     m_pStateProcMemBlock = reinterpret_cast<NFSMixMapState**>(lpStateMem);
     for (int li = 0; li < m_nStateMapCount; ++li)   // +0xA8
         new (&lpStateMem[li]) NFSMixMapState();
 
     m_pScalePtrArray = static_cast<int**>(          // +0x180 (packed ids / object ptrs)
-        lpAlloc->Allocate(sizeof(int*) * m_ScaleParamsAdded, 16, "Scale Input Ptr Array Block"));
+        lpAlloc->Alloc(sizeof(int*) * m_ScaleParamsAdded, "Scale Input Ptr Array Block", 0));
     m_pCurveDataArray = static_cast<stCurveDataProc*>( // +0x184
-        lpAlloc->Allocate(sizeof(stCurveDataProc) * m_CurveProcsAdded, 16, "Curve Proc Data Array"));
+        lpAlloc->Alloc(sizeof(stCurveDataProc) * m_CurveProcsAdded, "Curve Proc Data Array", 0));
 
     m_pMixCtlData_S = static_cast<stMixCtlSharedData*>(  // +0x188
-        lpAlloc->Allocate(sizeof(stMixCtlSharedData) * m_SharedMixCtlCount, 16, "NFSMixCtl Shared Data Array"));
+        lpAlloc->Alloc(sizeof(stMixCtlSharedData) * m_SharedMixCtlCount, "NFSMixCtl Shared Data Array", 0));
     m_pMixCtlData_U = static_cast<stMixCtlUniqueData*>(  // +0x18C
-        lpAlloc->Allocate(sizeof(stMixCtlUniqueData) * m_MixCtlsAdded, 16, "NFSMixCtl Unique Data Array"));
+        lpAlloc->Alloc(sizeof(stMixCtlUniqueData) * m_MixCtlsAdded, "NFSMixCtl Unique Data Array", 0));
     m_pMixCtlProc = static_cast<stMixCtlProc*>(          // +0x190
-        lpAlloc->Allocate(sizeof(stMixCtlProc) * m_MixCtlsAdded, 16, "NFSMixCtl Process Data Array"));
+        lpAlloc->Alloc(sizeof(stMixCtlProc) * m_MixCtlsAdded, "NFSMixCtl Process Data Array", 0));
 
     m_pSubChData_S = static_cast<stMixChSharedData*>(    // +0x1AC
-        lpAlloc->Allocate(sizeof(stMixChSharedData) * m_SharedSubMixCount, 16, "SubMix Shared Data Block"));
+        lpAlloc->Alloc(sizeof(stMixChSharedData) * m_SharedSubMixCount, "SubMix Shared Data Block", 0));
     m_pSubChData_U = static_cast<stMixChUniqueData*>(    // +0x1B0
-        lpAlloc->Allocate(sizeof(stMixChUniqueData) * m_SubMixChannelsAdded, 16, "SubMix Unique Data Block"));
+        lpAlloc->Alloc(sizeof(stMixChUniqueData) * m_SubMixChannelsAdded, "SubMix Unique Data Block", 0));
     m_pSubChProc = static_cast<stSubMixChProc*>(         // +0x1B4
-        lpAlloc->Allocate(sizeof(stSubMixChProc) * m_SubMixChannelsAdded, 16, "SubMix Proc Data Block"));
+        lpAlloc->Alloc(sizeof(stSubMixChProc) * m_SubMixChannelsAdded, "SubMix Proc Data Block", 0));
 
     m_pMasterChData_S = static_cast<stMasterMixChSharedData*>( // +0x1B8
-        lpAlloc->Allocate(sizeof(stMasterMixChSharedData) * m_SharedMasterMixCount, 16, "MasterMix Shared Data Block"));
+        lpAlloc->Alloc(sizeof(stMasterMixChSharedData) * m_SharedMasterMixCount, "MasterMix Shared Data Block", 0));
     m_pMasterChData_U = static_cast<stMasterMixChUniqueData*>( // +0x1BC
-        lpAlloc->Allocate(sizeof(stMasterMixChUniqueData) * m_MasterChannelsAdded, 16, "MasterMix Unique Data Block"));
+        lpAlloc->Alloc(sizeof(stMasterMixChUniqueData) * m_MasterChannelsAdded, "MasterMix Unique Data Block", 0));
     m_pMasterChProc = static_cast<stMasterMixChProc*>(        // +0x1C0
-        lpAlloc->Allocate(sizeof(stMasterMixChProc) * m_MasterChannelsAdded, 16, "MasterMix Proc Data Block"));
+        lpAlloc->Alloc(sizeof(stMasterMixChProc) * m_MasterChannelsAdded, "MasterMix Proc Data Block", 0));
 
     m_p3DMixCtlData_S = static_cast<st3DMixCtlSharedData*>(   // +0x1A4
-        lpAlloc->Allocate(sizeof(st3DMixCtlSharedData) * m_3DMixCtlsAdded, 16, "3DMixCtl Shared Data Block"));
+        lpAlloc->Alloc(sizeof(st3DMixCtlSharedData) * m_3DMixCtlsAdded, "3DMixCtl Shared Data Block", 0));
     m_p3DMixCtlData_U = static_cast<st3DMixCtlUniqueData*>(   // +0x1A8
-        lpAlloc->Allocate(sizeof(st3DMixCtlUniqueData) * m_3DMixCtlsAdded, 16, "3DMixCtl Unique Data Block"));
+        lpAlloc->Alloc(sizeof(st3DMixCtlUniqueData) * m_3DMixCtlsAdded, "3DMixCtl Unique Data Block", 0));
     m_p3DMixCtlProc = static_cast<st3DMixCtlProc*>(          // +0x1A0
-        lpAlloc->Allocate(sizeof(st3DMixCtlProc) * m_3DMixCtlsAdded, 16, "3DMixCtl Proc Data Block"));
+        lpAlloc->Alloc(sizeof(st3DMixCtlProc) * m_3DMixCtlsAdded, "3DMixCtl Proc Data Block", 0));
 
     m_pEvtMixCtlData_S = static_cast<stEvtMixCtlSharedData*>( // +0x198
-        lpAlloc->Allocate(sizeof(stEvtMixCtlSharedData) * m_EventCtlsAdded, 16, "EvtMixCtl Shared Data Block"));
+        lpAlloc->Alloc(sizeof(stEvtMixCtlSharedData) * m_EventCtlsAdded, "EvtMixCtl Shared Data Block", 0));
     m_pEvtMixCtlData_U = static_cast<stEvtMixCtlUniqueData*>( // +0x19C
-        lpAlloc->Allocate(sizeof(stEvtMixCtlUniqueData) * m_EventCtlsAdded, 16, "EvtMixCtl Unique Data Block"));
+        lpAlloc->Alloc(sizeof(stEvtMixCtlUniqueData) * m_EventCtlsAdded, "EvtMixCtl Unique Data Block", 0));
     m_pEvtMixCtlProc = static_cast<stEvtMixCtlProc*>(        // +0x194
-        lpAlloc->Allocate(sizeof(stEvtMixCtlProc) * m_EventCtlsAdded, 16, "EvtMixCtl Proc Data Block"));
+        lpAlloc->Alloc(sizeof(stEvtMixCtlProc) * m_EventCtlsAdded, "EvtMixCtl Proc Data Block", 0));
     return 0;
 }
 
@@ -1612,9 +1612,8 @@ int* NFSMixMap::AllocateInputArrays()
         AddUniqueDMixID(laIDs, static_cast<u32>(reinterpret_cast<uintptr_t>(m_pEvtMixCtlData_U[li].pTriggerPtr)));
 
     const size_t luCount = laIDs.size() * 16u;
-    m_pDynMixInputBlocks = static_cast<int*>(g_pMixerAllocator->Allocate(
-        static_cast<unsigned int>(luCount * sizeof(int)), 16,
-        "DMIX SFXOBJ, SFXCTL Input Block"));
+    m_pDynMixInputBlocks = static_cast<int*>(g_pMixerAllocator->Alloc(
+        static_cast<unsigned int>(luCount * sizeof(int)), "DMIX SFXOBJ, SFXCTL Input Block", 0));
     if (m_pDynMixInputBlocks && luCount)
         std::memset(m_pDynMixInputBlocks, 0, luCount * sizeof(int));
     return m_pDynMixInputBlocks;
@@ -1642,10 +1641,10 @@ void NFSMixMap::AllocateDMixIOArrays()
 
     if (m_nTotalDMixIO <= 0)
         return;
-    m_pDMixIOObj = static_cast<Nicotine::DMixIO**>(g_pMixerAllocator->Allocate(
-        sizeof(Nicotine::DMixIO*) * m_nTotalDMixIO, 16, "DMixIO Ptr Array"));
-    m_pDMixIOMemBlock = static_cast<Nicotine::DMixIO*>(g_pMixerAllocator->Allocate(
-        sizeof(Nicotine::DMixIO) * m_nTotalDMixIO, 16, "DMixIO Object Memory"));
+    m_pDMixIOObj = static_cast<Nicotine::DMixIO**>(g_pMixerAllocator->Alloc(
+        sizeof(Nicotine::DMixIO*) * m_nTotalDMixIO, "DMixIO Ptr Array", 0));
+    m_pDMixIOMemBlock = static_cast<Nicotine::DMixIO*>(g_pMixerAllocator->Alloc(
+        sizeof(Nicotine::DMixIO) * m_nTotalDMixIO, "DMixIO Object Memory", 0));
     for (int li = 0; li < m_nTotalDMixIO; ++li)
     {
         Nicotine::DMixIO* lpIO = new (&m_pDMixIOMemBlock[li]) Nicotine::DMixIO();
