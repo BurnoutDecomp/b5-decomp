@@ -47,7 +47,7 @@ namespace PhysicsModuleIO
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mCameraInput)                  == 16),     "mCameraInput @16");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mVehicleInputInterface)       == 368),    "mVehicleInputInterface @368");
         {
-            constexpr size_t KU_DRIFT =
+            const size_t KU_DRIFT =
                 (368 + sizeof(VehicleInputInterfaceStorage)) - 142544;   // host growth of the vehicle-input span
             CGS_STATIC_ASSERT((sizeof(VehicleInputInterfaceStorage) >= 142176),
                           "vehicle-input span smaller than the console span -- retype regressed");
@@ -78,7 +78,7 @@ namespace PhysicsModuleIO
             // consumer needs it"; PhysicsModule::PostSceneUpdate is that consumer as of today, and
             // the three members it reads (mePlayerActiveRaceCarIndex, mbIsPlayerCarActive,
             // maRaceCarStates[player].mEntityId) are only reachable by NAME once the seat is typed.
-            constexpr size_t KU_RCENTITY_DRIFT =
+            const size_t KU_RCENTITY_DRIFT =
                 sizeof(RCEntityOutputInterfaceStorage) - (160112 - 149632);  // host growth of the RCEntity span
             CGS_STATIC_ASSERT((sizeof(RCEntityOutputInterfaceStorage) >= 160112 - 149632),
                           "RCEntity span smaller than the console span -- retype regressed");
@@ -93,7 +93,7 @@ namespace PhysicsModuleIO
             // two-pointer ResourceHandle), so mGameActionQueue takes a SECOND uniform drift.
             // Computing it from sizeof keeps the gate's teeth: any wrong pad run still fails.
             {
-                constexpr size_t KU_PROP_DRIFT =
+                const size_t KU_PROP_DRIFT =
                     sizeof(PropInputInterfaceStorage) - (338496 - 327216);  // host growth of the prop-input span
                 CGS_STATIC_ASSERT((sizeof(PropInputInterfaceStorage) >= 338496 - 327216),
                               "prop-input span smaller than the console span -- retype regressed");

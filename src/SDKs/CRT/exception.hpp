@@ -17,10 +17,10 @@ namespace std {
 
 class exception {
 public:
-    exception(const exception& rOther) noexcept;
-    virtual ~exception() noexcept;
+    exception(const exception& rOther) throw();
+    virtual ~exception() throw();
 
-    virtual const char* what() const noexcept;
+    virtual const char* what() const throw();
 
 private:
     const char* mpWhat;

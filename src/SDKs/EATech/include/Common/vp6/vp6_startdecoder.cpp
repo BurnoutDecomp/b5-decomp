@@ -49,12 +49,14 @@ int VP6_StartDecoder(xPB_INST* pbi, u32 ImageWidth, u32 ImageHeight, bool UseJob
         (*pbi)->DecodeJobData = static_cast<VP6_DECODE_JOB_DATA*>(
             duck_mallocAlign(2 * sizeof(VP6_DECODE_JOB_DATA), 16, 0));
 
+        // ARTIST 0x82B58078 calls the folded constant-16 size helper.
+        // sizeof keeps the recovered semaphore type correct on each target.
         (*pbi)->JobSlotSemaphoreMemory =
-            duck_mallocAlign(static_cast<unsigned int>(EA::Thread::SemaphoreFactory::GetSemaphoreSize()), 16, 0);
+            duck_mallocAlign(static_cast<unsigned int>(sizeof(EA::Thread::Semaphore)), 16, 0);
         (*pbi)->JobSlotSemaphore = EA::Thread::SemaphoreFactory::ConstructSemaphore((*pbi)->JobSlotSemaphoreMemory);
 
         (*pbi)->FrameReleasedSemaphoreMemory =
-            duck_mallocAlign(static_cast<unsigned int>(EA::Thread::SemaphoreFactory::GetSemaphoreSize()), 16, 0);
+            duck_mallocAlign(static_cast<unsigned int>(sizeof(EA::Thread::Semaphore)), 16, 0);
         (*pbi)->FrameReleasedSemaphore =
             EA::Thread::SemaphoreFactory::ConstructSemaphore((*pbi)->FrameReleasedSemaphoreMemory);
     }

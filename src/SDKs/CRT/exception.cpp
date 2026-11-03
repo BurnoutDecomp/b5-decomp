@@ -13,7 +13,7 @@ namespace std {
 // (0x82C08CB8); its body is the real base destructor (reset vtable, free the
 // owned string) plus the scalar-delete tail.  We reconstruct the logical
 // destructor and let the compiler regenerate the deleting thunk/vtable.
-exception::~exception() noexcept
+exception::~exception() throw()
 {
     if (miDoFree)
     {
@@ -24,7 +24,7 @@ exception::~exception() noexcept
 // Copy constructor (0x82C08C08).  A non-owning source (miDoFree == 0) shares
 // the literal message pointer; an owning source is deep-copied via malloc +
 // strcpy_s (strlen was inlined in the X360 asm).
-exception::exception(const exception& rOther) noexcept
+exception::exception(const exception& rOther) throw()
     : mpWhat(0)
     , miDoFree(rOther.miDoFree)
 {
@@ -49,7 +49,7 @@ exception::exception(const exception& rOther) noexcept
 }
 
 // what() (0x82C08CA0).
-const char* exception::what() const noexcept
+const char* exception::what() const throw()
 {
     if (!mpWhat)
     {
