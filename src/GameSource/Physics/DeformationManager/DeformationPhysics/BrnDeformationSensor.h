@@ -40,13 +40,7 @@
 // load-bearing (console 432 == 0x1B0; the host figure is larger and is nobody's constant). GROW the
 // reconstructed scratch overlay into the real DWARF members as further sensor TUs land -- do not fork.
 
-namespace CgsSceneManager
-{
-	// Penetration / contact handling reaches the solver only through DeformationSensor::
-	// AddContactsToPenetrationSolver, which takes a PenetrationSolver* -- but a PotentialContact
-	// (ValidateAndAddContact's input) is a CgsSceneManager contact record passed by const ref.
-	struct PotentialContact;
-}
+namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
 
 // Collision sphere; its leading 16 bytes are centre.xyz + radius.w. Its canonical home is
 // CgsGeometric (GameShared/GameClasses/Geometric/Primitives/CgsSphere.h); referenced only by
@@ -63,17 +57,6 @@ namespace BrnPhysics
 namespace PhysicsModuleIO { struct PotentialContactInterface; }
 namespace Deformation
 {
-	// ⚠️ FORK FIXED 2026-08-14 (walls wave): this used to be `struct Sphere;` declared INSIDE
-	// namespace Deformation -- which, despite its own "avoid forking the real type" comment,
-	// IS the fork: it minted the distinct type BrnPhysics::Deformation::Sphere, so every
-	// signature in this header (Prepare's two sphere args, mpLocal/WorldSpaceSphere) mangled
-	// against a type no other TU uses. The PS3 mangle for DeformationSensor::Prepare
-	// (@0x744...ResetSensors' callee: `...PN12CgsGeometric6SphereES7_...`) says CgsGeometric::
-	// Sphere, and the arrays these pointers point into (DeformableObject::maLocal/World-
-	// SensorSpheres) are declared CgsGeometric::Sphere. The alias below keeps every use in
-	// this header source-identical while restoring the one true type.
-	using CgsGeometric::Sphere;
-
 	// The full streamed sensor spec lives in SharedClasses/Physics/Deformation/BrnSensorSpec.h; the
 	// sensor holds it only by const pointer (mpSpec), so a forward declaration suffices and avoids an
 	// include cycle (the streamed spec embeds sensor specs, not sensors).
@@ -229,13 +212,13 @@ namespace Deformation
 		// only in the i32 width tag).
 		s32 mi32NumStoredContacts;      // console +0x198 (408) -- live contact count  (DWARF :270 miNumStoredContacts)
 
-		Sphere* mpLocalSpaceSphere;   // console +0x19C (412)  (DWARF :271)
-		Sphere* mpWorldSpaceSphere;   // console +0x1A0 (416)  (DWARF :272)
+		CgsGeometric::Sphere* mpLocalSpaceSphere;   // console +0x19C (412)  (DWARF :271)
+		CgsGeometric::Sphere* mpWorldSpaceSphere;   // console +0x1A0 (416)  (DWARF :272)
 		f32     mfScratchAmount;      // console +0x1A4 (420)  (DWARF :273) — accumulated scratch / damage
 
 		// ---- trivial accessors (bodied) --------------------------------------------------------
-		const Sphere* GetLocalSpaceSphere() const { return mpLocalSpaceSphere; }
-		const Sphere* GetWorldSpaceSphere() const { return mpWorldSpaceSphere; }
+		const CgsGeometric::Sphere* GetLocalSpaceSphere() const { return mpLocalSpaceSphere; }
+		const CgsGeometric::Sphere* GetWorldSpaceSphere() const { return mpWorldSpaceSphere; }
 		f32           GetScratchAmount()   const { return mfScratchAmount; }
 
 		void SetLocalPosition(Vector3 lPosition);
@@ -262,7 +245,7 @@ namespace Deformation
 		// DWARF BrnDeformationSensor.cpp:90. Bind the sensor to its spec + local/world spheres and place
 		// it in the body frame. (Matrix44Affine + the four trailing Vector3Plus/Vector3 args are the
 		// world transform + the seeded displacement/offset vectors.)
-		bool Prepare(const SensorSpec* lpSpec, Sphere* lpLocalSphere, Sphere* lpWorldSphere,
+		bool Prepare(const SensorSpec* lpSpec, CgsGeometric::Sphere* lpLocalSphere, CgsGeometric::Sphere* lpWorldSphere,
 		             Matrix44Affine lWorldTransform, Vector3Plus lDisplacement,
 		             Vector3 lOffsetA, Vector3 lOffsetB, Vector3 lOffsetC);
 
@@ -279,7 +262,7 @@ namespace Deformation
 		// (BrnPhysicsUnity2.cpp:10334). The transform is the INVERSE (world -> this car), which the
 		// old name `lWorldTransform` said the opposite of; `lpOtherCar` is the DWARF's spelling.
 		bool ValidateAndAddContact(Matrix44Affine lInverseVehicleTransform,
-		                           const CgsSceneManager::PotentialContact& lrPotential,
+		                           const CgsSceneManager::SceneManagerIO::PotentialContact& lrPotential,
 		                           ContactId lContactId,
 		                           DeformableObject* lpOtherCar,
 		                           DeformationSensor* lpOtherSensor);
