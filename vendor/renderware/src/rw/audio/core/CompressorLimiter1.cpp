@@ -14,7 +14,8 @@
 #include "rw/audio/core/Mixer.h"  // Mixer (the process context) + SampleBuffer
 
 #include <cstring> // std::memset (the X360 XMemSet) / std::memcpy (the gain-word compare)
-#include <cmath>   // std::fma / std::fabs / std::exp2 / std::log2 (the recurrence + curve)
+#include <cmath>
+#include <vectorintrinsics.h>
 
 namespace rw
 {
@@ -80,15 +81,8 @@ CompressorLimiter1 *CompressorLimiter1::Configure(CompressorLimiter1 *self, f32 
 // frame, the destination-as-gain-scratch protocol, the reverse channel order of the linked
 // application loop, and the unconditional slot swap.
 //
-// ⭐ THE ONE DEVIATION, marked because it is physically impossible on PC: the gain curve is
-// evaluated on the console by the VMX ESTIMATE pair `vexptefp(vlogefp(|B|) * E)`. Those are
-// hardware estimate instructions; the ISA publishes error BOUNDS, not the algorithm, and
-// Xenon's tables are not in the image. std::exp2/std::log2 below is therefore a
-// mathematically better but NOT bit-identical substitute. The architectural worst case for
-// vexptefp alone is about +0.53/-0.56 dB of gain error, so the audible difference is a
-// slightly different level contour WHILE the compressor is actively pulling gain down --
-// never a timing, routing, channel-count or buffer-publication difference. Everything else
-// in this body is exact.
+// The native path uses the console VMX log2 and exp2 estimate instructions.
+// The scalar reconstruction still does not model the console edge-mask network.
 //
 // Buffer protocol (load-bearing, and the reason NEITHER caller swaps): source and
 // destination must be DISTINCT. The kernel first fills the destination with per-sample GAIN
@@ -129,7 +123,7 @@ namespace
                         f32 afThresholdReciprocal, f32 afInput)
     {
         const f32 lfFeedbackTerm = arHistory.lpfDelay1 * KF_ENVELOPE_FEEDBACK;   // fmuls
-        f32 lfLevel = std::fma(std::fabs(afInput), KF_ENVELOPE_INPUT, lfFeedbackTerm); // fmadds
+        f32 lfLevel = std::fabs(afInput) * KF_ENVELOPE_INPUT + lfFeedbackTerm; // fmadds
         lfLevel = lfLevel + KF_ENVELOPE_BIAS;                                    // fadds
 
         // Attack steps the exponent toward the (negative) target and simply STOPS stepping
@@ -158,13 +152,16 @@ namespace
         arHistory.compExponentCurrent = lfNextExponent;
 
         // gain = (level / thresholdOn) ^ exponent. On the console this is the estimate pair
-        // vexptefp(vlogefp(|B|) * E) -- see the marked deviation in the header comment. The
+        // vexptefp(vlogefp(|B|) * E). The
         // console's surrounding mask network handles negative/zero bases and integral
         // exponents; the configured domain here always has a positive, nonzero base (the
         // bias guarantees it) and an exponent in [mCompExponent, 0], so the normal path is
         // the only reachable one and the edge machinery is documented rather than emulated.
         const f32 lfNormalizedLevel = lfLevel * afThresholdReciprocal;
-        return std::exp2(lfNextExponent * std::log2(lfNormalizedLevel));
+        __vector4 lvBase, lvExponent;
+        lvBase.x = lfNormalizedLevel;
+        lvExponent.x = lfNextExponent;
+        return __vexptefp(__vmulfp(__vlogefp(lvBase), lvExponent)).x;
     }
 }
 
