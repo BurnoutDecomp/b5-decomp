@@ -303,17 +303,16 @@ void StuntAttackMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // 0x82332188..0x823321EC -- the start direction. The console loads the 16-byte
     // StartGameModeParams::mStartDirection, stores it to mStartDir, ZEROES the Y lane, stores it
     // again, then normalises in place (vrsqrtefp + two Newton refinements) and stores a third
-    // time. Semantically one assignment; the PC Normalize is an exact std::sqrt (see the header
-    // banner in rw/math/vpu/vector3_operation.h).
+    // time. The native Normalize retains the estimate and refinement sequence.
     mStartDir   = lpStartGameModeParams->GetStartDirection();
-    mStartDir.y = 0.0f;
+    mStartDir.SetY(0.0f);
     mStartDir   = rw::math::vpu::Normalize(mStartDir);
 
     // 0x823321F0..0x82332228 -- ONE authored junction overrides the trigger-data direction.
     if (lpGameModeParams->muJunctionID == KU_HARDCODED_START_DIRECTION_JUNCTION_ID)
     {
         {
-            const Vector3 lAggregateValue = { KF_HARDCODED_START_DIRECTION_X, 0.0f, KF_HARDCODED_START_DIRECTION_Z, 0.0f };
+            const Vector3 lAggregateValue(KF_HARDCODED_START_DIRECTION_X, 0.0f, KF_HARDCODED_START_DIRECTION_Z);
             mStartDir = lAggregateValue;
         }
     }
@@ -414,7 +413,7 @@ void StuntAttackMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     // The console flattens the car's forward vector onto the XZ plane, normalises it, and dots it
     // with mStartDir (which Start already normalised).
     Vector3 lFlattenedPlayerDirection = lpActiveRaceCars->GetPlayerDirection();
-    lFlattenedPlayerDirection.y = 0.0f;
+    lFlattenedPlayerDirection.SetY(0.0f);
     const f32 lfDirectionDot =
         rw::math::vpu::Dot(rw::math::vpu::Normalize(lFlattenedPlayerDirection), mStartDir);
 
@@ -428,11 +427,11 @@ void StuntAttackMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     const Vector3 lCrossProduct = rw::math::vpu::Cross(lpActiveRaceCars->GetPlayerDirection(), mStartDir);
 
     f32 lfSign = 0.0f;
-    if (lCrossProduct.y > 0.0f)
+    if (lCrossProduct.mV.y > 0.0f)
     {
         lfSign = 1.0f;
     }
-    else if (lCrossProduct.y < 0.0f)
+    else if (!(lCrossProduct.mV.y >= 0.0f))
     {
         lfSign = -1.0f;
     }

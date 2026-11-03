@@ -14,10 +14,8 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
 
 #include <cstring>                                                        // memcpy (case 115)
-#include <cstdlib>                                                        // getenv (the case-84 witness)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint (the case-84 witness)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // AddEvent
 #include "GameShared/GameClasses/Containers/CgsArray.h"                  // Array<ProfileEvent,175>, Array<s64,15>
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"                  // WorldMap2D::GetValue (case 95)
@@ -72,9 +70,6 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
                                lpActionQueue,
                                BrnAI::RouteMapModuleIO::E_OWNER_GUI);
 
-        // [DIAG] harness witness, not console code: BRN_SATNAV_DIAG, first 32, one line per GUI
-        // route question (the satnav_route case counts it).
-        static s32        siSatNavLinesLeft = 32;
         break;
     }
 
@@ -230,11 +225,10 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
         // The district map is sampled at the position flattened to (x, z); the permute fills the
         // two unread lanes with x.
         const Vector3& lrPosition = lpRegionRequestEvent->mPosition;
+        static const CGS_ALIGN(16) u32 lauFlattenPermute[4] = {
+            0x00010203, 0x18191A1B, 0x00010203, 0x00010203 };
         Vector2 lFlatPosition;
-        lFlatPosition.x = lrPosition.x;
-        lFlatPosition.y = lrPosition.z;
-        lFlatPosition.z = lrPosition.x;
-        lFlatPosition.w = lrPosition.x;
+        lFlatPosition.mV = __vperm(lrPosition.mV, lrPosition.mV, __lvx(lauFlattenPermute, 0));
 
         u8 luDistrict = GetDistrictMap()->GetValue(lFlatPosition);
         if (luDistrict == CgsWorld::KU_INVALID_WORLD_MAP_VALUE)
