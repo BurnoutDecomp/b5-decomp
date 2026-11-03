@@ -26,32 +26,26 @@ namespace Deformation
 {
 	void BBoxPointSkinData::HackSwapHandedness( const Matrix44Affine& arFrame )
 	{
-		const Vector3& lrRow0   = arFrame.xAxis;
-		const Vector3& lrRow1   = arFrame.yAxis;
-		const Vector3& lrRow2   = arFrame.zAxis;
-		const Vector3& lrOrigin = arFrame.wAxis;
-		const Vector3  lPoint   = mVertex;
-
-		// vsubfp v12 = 0 - T (0x825E6DE8): spelled 0 - t, not -t, so a zero lane keeps the
-		// console's sign.
-		const f32 lfNegOriginX = 0.0f - lrOrigin.x;
-		const f32 lfNegOriginY = 0.0f - lrOrigin.y;
-		const f32 lfNegOriginZ = 0.0f - lrOrigin.z;
-
-		// L_i = dot3(R_i, P - T), accumulated in the console's order.
-		f32 lfLocalX = ((((lfNegOriginZ * lrRow0.z) + lfNegOriginY * lrRow0.y) + lfNegOriginX * lrRow0.x)
-		                + lrRow0.x * lPoint.x) + lrRow0.y * lPoint.y + lrRow0.z * lPoint.z;
-		const f32 lfLocalY = ((((lfNegOriginZ * lrRow1.z) + lfNegOriginY * lrRow1.y) + lfNegOriginX * lrRow1.x)
-		                      + lrRow1.x * lPoint.x) + lrRow1.y * lPoint.y + lrRow1.z * lPoint.z;
-		const f32 lfLocalZ = ((((lfNegOriginZ * lrRow2.z) + lfNegOriginY * lrRow2.y) + lfNegOriginX * lrRow2.x)
-		                      + lrRow2.x * lPoint.x) + lrRow2.y * lPoint.y + lrRow2.z * lPoint.z;
-
-		lfLocalX *= -1.0f;   // flt_820037C8 (x360rd 0xBF800000), the x lane only (vrlimi128 mask 8)
-
-		mVertex.x = ((lrOrigin.x + lrRow0.x * lfLocalX) + lrRow1.x * lfLocalY) + lrRow2.x * lfLocalZ;
-		mVertex.y = ((lrOrigin.y + lrRow0.y * lfLocalX) + lrRow1.y * lfLocalY) + lrRow2.y * lfLocalZ;
-		mVertex.z = ((lrOrigin.z + lrRow0.z * lfLocalX) + lrRow1.z * lfLocalY) + lrRow2.z * lfLocalZ;
-		mVertex.w = ((lrOrigin.w + lrRow0.w * lfLocalX) + lrRow1.w * lfLocalY) + lrRow2.w * lfLocalZ;
+        const __vector4 r0 = arFrame.xAxis.mV, r1 = arFrame.yAxis.mV;
+        const __vector4 r2 = arFrame.zAxis.mV, origin = arFrame.wAxis.mV;
+        const __vector4 point = mVertex.mV;
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 negOrigin = __vsubfp(zero, origin);
+        const __vector4 hi = __vmrghw(r0, r2), lo = __vmrglw(r0, r2);
+        const __vector4 r1hi = __vmrghw(r1, zero), r1lo = __vmrglw(r1, zero);
+        const __vector4 cx = __vmrghw(hi, r1hi), cy = __vmrglw(hi, r1hi);
+        const __vector4 cz = __vmrghw(lo, r1lo);
+        __vector4 local = __vmulfp(__vspltw(negOrigin, 2), cz);
+        local = __vmaddfp(__vspltw(negOrigin, 1), cy, local);
+        local = __vmaddfp(__vspltw(negOrigin, 0), cx, local);
+        local = __vmaddfp(cx, __vspltw(point, 0), local);
+        local = __vmaddfp(cy, __vspltw(point, 1), local);
+        local = __vmaddfp(cz, __vspltw(point, 2), local);
+        const __vector4 minusOne = __vcfsx(__vspltisw(-1), 0);
+        local = __vrlimi(local, __vmulfp(local, minusOne), 8, 0);
+        __vector4 result = __vmaddfp(r0, __vspltw(local, 0), origin);
+        result = __vmaddfp(r1, __vspltw(local, 1), result);
+        mVertex.mV = __vmaddfp(r2, __vspltw(local, 2), result);
 	}
 }
 }
