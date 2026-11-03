@@ -137,7 +137,7 @@ GuiDebugComponent* GuiDebugComponent::mspSingletonThis = 0;
 
 // ARTIST827E5D38/40. No module, singleton, display, PFX, base-active or link field reset.
 GuiDebugComponent::GuiDebugComponent()
-    : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag{})
+    : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag())
 {
     mInputQueue.MarkUnconstructed();
 }
@@ -150,9 +150,10 @@ void GuiDebugComponent::Construct(GuiModule* lpGuiModule)
     if (!lpGuiModule)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "Invalid Gui module passed to GuiDebugComponent::Construct";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 92);
         CgsDev::Assert::EndAssert();
     }
@@ -619,9 +620,10 @@ void GuiDebugComponent::EnterCarSelectCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "EnterCarSelectCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1101);
         CgsDev::Assert::EndAssert();
     }
@@ -634,9 +636,10 @@ void GuiDebugComponent::TriggerIntroCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "Invalid data pointer sent to GuiDebugComponent::TriggerIntro";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 753);
         CgsDev::Assert::EndAssert();
     }
@@ -649,9 +652,10 @@ void GuiDebugComponent::TriggerPostEventCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "Invalid data pointer sent to GuiDebugComponent::TriggerPostEventCallback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 766);
         CgsDev::Assert::EndAssert();
     }
@@ -664,9 +668,10 @@ void GuiDebugComponent::OpenCrashNavCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "OpenCrashNavCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1075);
         CgsDev::Assert::EndAssert();
     }
@@ -679,9 +684,10 @@ void GuiDebugComponent::MiniMapSwitchCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "MiniMapSwitchCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1008);
         CgsDev::Assert::EndAssert();
     }
@@ -694,9 +700,10 @@ void GuiDebugComponent::ToggleShow43AreaCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "ToggleShow43AreaCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1036);
         CgsDev::Assert::EndAssert();
     }
@@ -709,9 +716,10 @@ void GuiDebugComponent::ToggleShowSafeAreaCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "ToggleShowSafeAreaCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1049);
         CgsDev::Assert::EndAssert();
     }
@@ -724,9 +732,10 @@ void GuiDebugComponent::ChangeFontSpacingCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 887);
         CgsDev::Assert::EndAssert();
     }
@@ -739,9 +748,10 @@ void GuiDebugComponent::PlayMovieCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "PlayMovieCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1022);
         CgsDev::Assert::EndAssert();
     }
@@ -754,9 +764,10 @@ void GuiDebugComponent::RotateThroughFontsCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 873);
         CgsDev::Assert::EndAssert();
     }
@@ -769,9 +780,10 @@ void GuiDebugComponent::RotateThroughFontEffectsCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 859);
         CgsDev::Assert::EndAssert();
     }
@@ -784,9 +796,10 @@ void GuiDebugComponent::TriggerPFXCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "TriggerPFXCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1179);
         CgsDev::Assert::EndAssert();
     }
@@ -799,9 +812,10 @@ void GuiDebugComponent::TriggerClosePFXCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "TriggerPFXCloseCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1192);
         CgsDev::Assert::EndAssert();
     }
@@ -814,9 +828,10 @@ void GuiDebugComponent::ToggleGenericHUDPriorityOverrideCallback(void* lpUserDat
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 900);
         CgsDev::Assert::EndAssert();
     }
@@ -831,31 +846,42 @@ void GuiDebugComponent::DrawDebugFrame1280(CgsDev::Debug2DImmediateRender* lpRen
     const Vector2 lvScreen = lpRender->GetVirtualScreenSize();
     const f32 lfInvWidth = 0.0007812500116415322f;
     const f32 lfInvHeight = 0.0013888889225199819f;
-    const f32 lfX0 = std::fma(lfInvWidth * lvFrame.x, lvScreen.x, 1.0f);
-    const f32 lfY0 = std::fma(lfInvHeight * lvFrame.y, lvScreen.y, 1.0f);
-    const f32 lfX1 = (lfInvWidth * lvFrame.z) * lvScreen.x - 1.0f;
-    const f32 lfY1 = (lfInvHeight * lvFrame.w) * lvScreen.y - 1.0f;
+    const f32 lfScaledFrameX = lfInvWidth * lvFrame.mV.x;
+    const f32 lfScaledFrameY = lfInvHeight * lvFrame.mV.y;
+    const Vector4 lvFrameScale(
+        lfScaledFrameX, lfScaledFrameY, lfScaledFrameX, lfScaledFrameY);
+    const Vector4 lvScreenScale(
+        lvScreen.mV.x, lvScreen.mV.y, lvScreen.mV.x, lvScreen.mV.y);
+    const Vector4 lvOne(1.0f, 1.0f, 1.0f, 1.0f);
+    const Vector4 lvTopLeft(__vmaddfp(lvFrameScale.mV, lvScreenScale.mV, lvOne.mV));
+    const f32 lfX0 = lvTopLeft.mV.x;
+    const f32 lfY0 = lvTopLeft.mV.y;
+    const f32 lfX1 = (lfInvWidth * lvFrame.mV.z) * lvScreen.mV.x - 1.0f;
+    const f32 lfY1 = (lfInvHeight * lvFrame.mV.w) * lvScreen.mV.y - 1.0f;
     lpRender->DrawFrame(lfX0, lfY0, lfX1, lfY1, lColour, lfBorderSize);
 }
 
 // ARTIST824FD010. Function-local rectangle constants are native1280x720 coordinates.
 void GuiDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
 {
-    static const Vector4 lFullArea = { 0.0f, 0.0f, 1280.0f, 720.0f };
-    static const Vector4 lFourThreeArea = { 160.0f, 0.0f, 1120.0f, 720.0f };
+    static const Vector4 lFullArea(0.0f, 0.0f, 1280.0f, 720.0f);
+    static const Vector4 lFourThreeArea(160.0f, 0.0f, 1120.0f, 720.0f);
     if (mbShow43Area)
         DrawDebugFrame1280(lpRender, lFourThreeArea, 0xFF00FF00u, 1.0f);
     if (mbShowSafeArea)
     {
         const Vector4& lrArea = mbShow43Area ? lFourThreeArea : lFullArea;
-        const f32 lfHalfWidth = (lFullArea.z - lFullArea.x) * 0.5f;
-        const f32 lfHalfHeight = (lFullArea.w - lFullArea.y) * 0.5f;
+        const f32 lfHalfWidth = (lFullArea.mV.z - lFullArea.mV.x) * 0.5f;
+        const f32 lfHalfHeight = (lFullArea.mV.w - lFullArea.mV.y) * 0.5f;
         const f32 lfPercent = mfSafePercent * 0.01f;
-        Vector4 lvSafeArea;
-        lvSafeArea.x = std::fma(lrArea.x - lfHalfWidth, lfPercent, lfHalfWidth);
-        lvSafeArea.y = std::fma(lrArea.y - lfHalfHeight, lfPercent, lfHalfHeight);
-        lvSafeArea.z = std::fma(lrArea.z - lfHalfWidth, lfPercent, lfHalfWidth);
-        lvSafeArea.w = std::fma(lrArea.w - lfHalfHeight, lfPercent, lfHalfHeight);
+        const Vector4 lvSafeAreaOffsets(
+            lrArea.mV.x - lfHalfWidth, lrArea.mV.y - lfHalfHeight,
+            lrArea.mV.z - lfHalfWidth, lrArea.mV.w - lfHalfHeight);
+        const Vector4 lvSafeAreaOrigins(
+            lfHalfWidth, lfHalfHeight, lfHalfWidth, lfHalfHeight);
+        const Vector4 lvSafePercent(lfPercent, lfPercent, lfPercent, lfPercent);
+        const Vector4 lvSafeArea(
+            __vmaddfp(lvSafeAreaOffsets.mV, lvSafePercent.mV, lvSafeAreaOrigins.mV));
         DrawDebugFrame1280(lpRender, lvSafeArea, 0xFF0000FFu, 1.0f);
     }
     if (mpGuiModule->mScreenFlow.mpStateOnlineInstantResults && mbDebugOnlineInstantResults)
@@ -985,9 +1011,10 @@ void GuiDebugComponent::BootupProfileCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "BootupProfileCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1114);
         CgsDev::Assert::EndAssert();
     }
@@ -1000,9 +1027,10 @@ void GuiDebugComponent::AutosaveProfileCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "AutosaveProfileCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1127);
         CgsDev::Assert::EndAssert();
     }
@@ -1015,9 +1043,10 @@ void GuiDebugComponent::SaveProfileCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "SaveProfileCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1140);
         CgsDev::Assert::EndAssert();
     }
@@ -1030,9 +1059,10 @@ void GuiDebugComponent::LoadProfileCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "LoadProfileCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1153);
         CgsDev::Assert::EndAssert();
     }
@@ -1045,9 +1075,10 @@ void GuiDebugComponent::ShowKeyboardCallback(void* lpUserData)
     if (!lpUserData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+        char lacMessage[256];
+        CgsDev::StrStream lStream(lacMessage, static_cast<s32>(sizeof(lacMessage)));
         lStream << "ShowKeyboardCallback: Invalid data in the callback";
-        CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+        CgsDev::Assert::FireAssert(lStream.GetBuffer(),
             "..\\..\\..\\GameSource\\Gui/BrnGuiDebugComponent.cpp", 1166);
         CgsDev::Assert::EndAssert();
     }
