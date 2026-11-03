@@ -109,7 +109,6 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"      // RaceCarState
 
 #include <cstring>   // std::memcpy
-#include <cmath>     // std::sqrt (the [cam-impact] diagnostic)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"          // ContactSpyInterface / RaceCarContactQueue / BaseContact (the hardest-impact leg)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleManagerOutputInterface::RaceCarCrashEventQueue (step 13)
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"          // VolumeInstanceId entity-word geometry (step 13)
@@ -119,16 +118,12 @@
 #include "rw/math/vpu/vector3_operation.h"       // rw::math::vpu::IsValid / IsZero / operator- / MagnitudeSquared
 #include "rw/math/vpu/matrix44affine_operation.h"// rw::math::vpu::IsValid(Matrix44Affine)
 #include "rw/math/fpu/scalar_operation.h"        // rw::math::fpu::IsValid(float)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // CgsDev::Log::gpDebugPrint
 // [gateui] BridgeWorldToGameState's destination buffer + the AI-car interface it copies.
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                          // GameStateModuleIO::PostWorldInputBuffer
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"               // BrnAI::AIModuleIO::AICarOutputInterface
-#include <stdlib.h>                                                             // getenv (the [UI-gate] diag guard)
 
 namespace BrnGame
 {
-    // Publish counter for the bring-up diagnostic below (file scope; no console member).
-    static u32 suRaceCarInfoPublishCount = 0;
 
     // ------------------------------------------------------------------------------------
     // The console builds this on the stack once and hands the SAME identity matrix to all
@@ -149,11 +144,6 @@ namespace BrnGame
             BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
             const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
     {
-        if (lpDirectorInput == 0 || lpWorldOutput == 0)
-        {
-            return;
-        }
-
         typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
                 ActiveRaceCarInterface;
 
@@ -165,12 +155,6 @@ namespace BrnGame
         mbPlayerCarCrashing = lpActiveRaceCars->IsPlayerCarActive()
                            && lpActiveRaceCars->IsPlayerCarCrashing();
 
-        // [crash-probe] witness. NOT X360. Inert unless BRN_CRASH_PLAYER is set. Latches the
-        // 0 -> 1 EDGE only, so it proves the crash state reached the WORLD->DIRECTOR bridge --
-        // i.e. that the commit is not physics-local the way the [showtime-probe] path is.
-        {
-            static bool sbSeen = false;
-        }
 
         if (!lpActiveRaceCars->IsPlayerCarActive())
         {
@@ -278,10 +262,6 @@ namespace BrnGame
             const BrnPhysics::Vehicle::RaceCarState* lpState =
                 lpActiveRaceCars->GetRaceCarState(leSlot);
             CGS_ASSERT(lpState != 0, "lpState != NULL");                                 // :110
-            if (lpState == 0)
-            {
-                continue;
-            }
 
             // The console's sixteen validity tripwires (:112..:128), BY NAME. Their X360
             // offsets are what pinned the RaceCarState +4 drift documented in this file's
@@ -345,7 +325,7 @@ namespace BrnGame
             {
                 const Vector3& lHalfExtent = lpState->mHalfExtent;
                 {
-                    const Vector3 lAggregateValue = { -lHalfExtent.x, -lHalfExtent.y, -lHalfExtent.z, -lHalfExtent.w };
+                    const Vector3 lAggregateValue = rw::math::vpu::Negate(lHalfExtent);
                     lVehicleInfo.mAABB.mMin = lAggregateValue;
                 }
                 lVehicleInfo.mAABB.mMax = lHalfExtent;
@@ -360,7 +340,7 @@ namespace BrnGame
             // through r25 = unk_82181510), the stress is `vspltisw128 v127, 0`, the impact is f31 =
             // flt_82001CC0 = 0.0f.
             {
-                const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 1.0f, 0.0f);
                 lVehicleInfo.mHardestNormalStressNormal = lAggregateValue;
             }
             lVehicleInfo.mHardestNormalStress.SetZero();
@@ -410,35 +390,6 @@ namespace BrnGame
 
             lpDirectorInput->SetRaceCarInfo(static_cast<u32>(liSlot), lVehicleInfo);
 
-            // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG (the camera-input gate). The
-            // impact-shake input as published: the first 40 non-zero publishes, then every 200th --
-            // and at most 60 lines per session (HARD CAP 2026-09-24, crash-parity diag hygiene).
-            // sqrt(impact) * 0.0001 is the chase camera's raw shake request
-            // (BehaviourGameplayExternal::Update, before its 40 MPH ramp and 0.8 clamp).
-            {
-                static u32 suNonZeroImpacts = 0;
-                static s32 siImpactLinesLeft = 60;
-            }
-
-            // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The camera box as published when
-            // it came from the DEFORMATION state (the arm CC-7 restored): the first 12 such
-            // publishes, then every 400th -- at most 24 lines per session (HARD CAP 2026-09-24) --
-            // with the pristine half-extent box beside it and the largest per-axis difference
-            // between the two.
-            {
-                static u32 suDeformedBoxes = 0;
-                static s32 siBoxLinesLeft = 24;
-            }
-
-            // [DIAG] NOT IN THE X360 BINARY -- bring-up diagnostic: print the pose the cameras will
-            // actually frame -- on the FIRST publish (which lands the frame the car is attached,
-            // before its physics state has been seeded) and then every 3000th (~40 s), which is the
-            // steady state. This is the exact claim the retired fake-car stand-in could not make.
-            // GATED 2026-09-24 (crash-parity diag hygiene) behind BRN_CAM_INPUT_DIAG, the file's
-            // default-off camera-input switch, and capped at 20 lines: an ungated periodic print is
-            // not console behaviour. (Remove when the whole world->director staging is routine.)
-            ++suRaceCarInfoPublishCount;
-            static s32 siPublishLinesLeft = 20;
 
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                        "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
@@ -536,20 +487,6 @@ namespace BrnGame
 
             lpDirectorInput->SetPlayerCrashInfo(&lPlayerCrashInfo);
 
-            // [DIAG] NOT IN THE X360 BINARY -- BRN_CRASHCAM_DIAG (the crash-camera gate). The
-            // record as published, on every CHANGE of its four flags or of a non-zero speed (at
-            // most 60 lines): the witness that ArbStateCrashing / the moment selector / the water
-            // fade now receive what the world says instead of a zeroed slot.
-            {
-                static s32 siLinesLeft = 60;
-                static u32 suLastKey = 0;
-                const u32 luKey = (lPlayerCrashInfo.mbHardstopVsWall ? 1u : 0u)
-                                | (lPlayerCrashInfo.mbHardStopVsAI   ? 2u : 0u)
-                                | (lPlayerCrashInfo.mbWrecked        ? 4u : 0u)
-                                | (lPlayerCrashInfo.mbHitWater       ? 8u : 0u)
-                                | (lPlayerCrashInfo.mfSpeedMPH != 0.0f ? 16u : 0u);
-                suLastKey = luKey;
-            }
         }
     }
 
@@ -633,15 +570,6 @@ namespace BrnGame
                     static_cast<s32>(BrnGameState::GameStateModuleIO::E_EVENT_MODE_MANAGER_ROUTE_INFO),
                     static_cast<s32>(sizeof(lRouteInfoEvent)));   // console size 8
 
-                static s32 siRouteLinesLeft = 40;
-                if (sbRouteDiag && siRouteLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siRouteLinesLeft;
-                    *CgsDev::Log::gpDebugPrint << "[route-info] BridgeWorldToGameState leg 10: event 174 leg "
-                                               << lRouteInfoEvent.miEventId << " nodes "
-                                               << lRouteResponse.GetRoute()->GetNodeCount() << " distance "
-                                               << lRouteInfoEvent.mfRouteDistance << "\n";
-                }
             }
         }
 

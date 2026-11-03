@@ -77,10 +77,6 @@
 #include <cmath>
 #include <cfloat>
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
-#include <cstdlib>   // [diag] getenv -- BRN_SLOMO_DIAG
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint
-#include <cstdlib>
-// [diag] BRN_PFX_DIAG -- the director-side witness of the post-FX hook hand-over.
 
 // FLAG: CgsSceneManager::CgsCollision::BaseCollisionGenerator has no reconstructed home
 //   layout yet (the committed CgsSceneManagerModule.h forward-declares it only). Destruct /
@@ -95,13 +91,6 @@ namespace BrnDirector
 {
     namespace
     {
-        // [diag, NOT X360] BRN_DIRECTOR_TRAFFIC_DIAG -- the witness of the world -> director traffic
-        // hop and the team words (FX-DIRECTOR2, 2026-09-25). What AllVehicleData::Update stored: the
-        // traffic record count behind mpTrafficVehicleArray, its first record (entity index, id,
-        // world position, speed), every record's traffic entity index (to match the crash module's
-        // `[traffic-crash] added vehicle=V`), and every nearest-car row with its team. Printed when
-        // the traffic count changes and on every 300th frame; at most 600 lines. Silent without the
-        // variable.
 
         // ⭐ The FLOOR MainDirector::Update clamps the camera's requested sim time scale to
         // before publishing it as the sim timer's multiplier (`fsel f1, f13, f31, f0` with
@@ -166,40 +155,6 @@ namespace BrnDirector
                       offsetof(CarAdditionPresentationStartActionRecord, mbDoCamera) == 0x18),
                       "the console reads action 223's global index / duration / camera flag at +0x10 / +0x14 / +0x18");
 
-        // [DIAG] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. One line per director
-        // game-action arm this lane landed, printing the GameState VALUES the arm left behind
-        // (not "the arm ran"), capped so a per-hit Showtime stream cannot flood the log.
-        // DELETE-WHEN: the crash-parity Showtime / director audit closes.
-        const s32 KI_DIRECTOR_ACTION_DIAG_MAX_LINES = 400;
-
-        // [DIAG] BRN_SLOMO_DIAG -- NOT IN THE X360 BINARY. Edge-triggered per call site, so a
-        // steady 1.0 costs one line for the whole session. It exists because the published time
-        // scale is a value that arrives from a camera several copies away, and a wrong one is
-        // indistinguishable from a right one in every other log this build writes.
-        // [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The game-camera blend's live witness (CC-14,
-        // MainDirector::Update 0x822749D4). Before the blend statement it notes the keyed blend, its two shape
-        // selectors and the frame camera's position; after it, on the first frame of a keyed stretch, it prints
-        // the frame camera's distance to the chase camera before and after the controller, and when the stretch
-        // ends, its length and peak. Reads only.
-        struct GameCameraBlendDiag
-        {
-            f32     mfBlend;
-            u32     muCurve;
-            u32     muMethod;
-            Vector3 mPrePosition;
-            s32     miFrames;
-            f32     mfPeak;
-            f32     mfLast;
-        };
-        GameCameraBlendDiag gGameCameraBlendDiag = { 0.0f, 0u, 0u, { 0.0f, 0.0f, 0.0f, 0.0f }, 0, 0.0f, 0.0f };
-
-        f32 GameCameraBlendDiagDistance(const Vector3& lrA, const Vector3& lrB)
-        {
-            const f32 lfX = lrA.x - lrB.x;
-            const f32 lfY = lrA.y - lrB.y;
-            const f32 lfZ = lrA.z - lrB.z;
-            return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
-        }
 
         // The collision-generator view of an embedded aggregate. Takes a NAMED member's
         // address (never an offset into this class's storage) -- the X360 tears the embedded
@@ -892,7 +847,6 @@ namespace BrnDirector
                                    static_cast<EActiveRaceCarIndex>(liPlayerCarIndex),
                                    &lpInput->GetTrafficOutputInterface()->GetTrafficDirectorEntityArray(),
                                    lpaVehicleTeams);
-   // [diag, NOT X360] BRN_DIRECTOR_TRAFFIC_DIAG
         }
 
         // ⭐ X360 line 2 of the guarded body.
@@ -947,12 +901,6 @@ namespace BrnDirector
         // step N+2 at it (2 full-dt crash frames, the console's count).
         mCrashAnalyser.Update(lpIO->mpInputBuffer, &maGameState,
                               static_cast<EActiveRaceCarIndex>(liPlayerCarIndex));
-        // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The analysis on the frames it raises
-        // an event (a crash's first frame only), next to the [crashcam] line that names the moment
-        // the crash is then filmed through.
-        if (mCrashAnalyser.GetAnalysis().mxEventFlags != 0)
-        {
-        }
 
         // ⭐⭐ X360 LINE 6 (@0x8225BCF0). BODIED SINCE THE BANNER ABOVE WAS WRITTEN AND STILL
         // NOT CALLED -- BehaviourManager::ReleaseBehaviours has a full body in
@@ -1068,13 +1016,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void MainDirector::ProcessNewVehicleEvents(const DirectorIO::InputBuffer* lpInput)
     {
-        if (lpInput == 0)
-            return;
-
         const BrnDirectorVehicleInputInterface* lpVehicleInput = lpInput->GetVehicleInputInterface();
-        if (lpVehicleInput == 0)
-            return;
-
         const BrnDirectorVehicleInputInterface::NewVehicleEventQueue* lpQueue =
             lpVehicleInput->GetNewVehicleEventQueue();
 
@@ -1116,29 +1058,6 @@ namespace BrnDirector
 
             lrBank.SetGameplayCameraCarAttribsKey(lrEvent.mAttribsKey);
 
-            // [diag, one-shot -- NOT console code] the far end of the chain the world's
-            // new-vehicle publish starts. It reports the two bytes that decide whether the
-            // console gameplay cameras can run at all. Remove when the chase camera's own
-            // Update lands and the camera itself is the evidence.
-            {
-                static bool sbReported = false;
-                if (!sbReported && (CgsDev::Message::gxMessageFilterFlags & 1) &&
-                    CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbReported = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[newveh] MainDirector::ProcessNewVehicleEvents: seeded from key hi "
-                        << static_cast<s32>(lrEvent.mAttribsKey >> 32) << " lo "
-                        << static_cast<s32>(lrEvent.mAttribsKey & 0xFFFFFFFFu)
-                        << " -- externalValid "
-                        << (lrBank.GetGameplayExternalCameraParamsForCar().mbIsValid ? 1 : 0)
-                        << " FOV " << lrBank.GetGameplayExternalCameraParamsForCar().mrFOV
-                        << " boostFOV " << lrBank.GetGameplayExternalCameraParamsForCar().mfBoostFOV
-                        << " | bumperValid "
-                        << (lrBank.GetGameplayBumperCameraParamsForCar().mbIsValid ? 1 : 0)
-                        << "\n";
-                }
-            }
         }
     }
 
@@ -1165,11 +1084,8 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void MainDirector::UpdateAttribSys(const DirectorIO::InputBuffer* lpInput)
     {
-        if (lpInput == 0)
-            return;
-
         const DirectorIO::ControlInput* lpControl = lpInput->GetControll();
-        if (lpControl == 0 || !lpControl->IsGameTalkRefreshRequested())
+        if (!lpControl->IsGameTalkRefreshRequested())
             return;
 
         Camera::BehaviourParameterBank& lrBank = mBehaviourManager.GetBehaviourParameterBank();
@@ -1362,8 +1278,6 @@ namespace BrnDirector
         const BrnTraffic::TrafficLightCollection& lTrafficLightCollection =
             lpIO->mpWorldMap->GetTrafficData()->mTrafficLights;
 
-    // [DIAG] NOT X360 -- the witness below
-        s32 liDiagChosenInstance  = -1;   // [DIAG] NOT X360
 
         for (s32 liLoop = 0; liLoop < liNumLightControllers; ++liLoop)
         {
@@ -1379,10 +1293,8 @@ namespace BrnDirector
 
                 // vsubfp128: every lane (the w lane carries the instance's Y rotation minus the player's w; the
                 // two vmsum3fp128 below never read it).
-                const Vector3 lPlayerToLight = { lLightPos.x - lPlayerPos.x, lLightPos.y - lPlayerPos.y,
-                                                 lLightPos.z - lPlayerPos.z, lLightPos.w - lPlayerPos.w };
+                const Vector3 lPlayerToLight = lLightPos - lPlayerPos;
                 const f32 lfCurrentDistance = Camera::Utils::ConsoleVpu::Dot3(lPlayerToLight, lPlayerToLight);
-   // [DIAG] NOT X360
 
                 if (lfCurrentDistance < lfClosestLight)
                 {
@@ -1391,7 +1303,6 @@ namespace BrnDirector
                         lfClosestLight = lfCurrentDistance;
                         maGameState.mTrafficLightSpace = lTrafficLightCollection.CalcArbitraryAmberCoronaTransform(
                             maGameState.mpEventJLBox->GetLight(static_cast<u32>(liLoop))->mauTrafficLightIds[liLoop2]);
-                        liDiagChosenInstance = static_cast<s32>(luInstance);   // [DIAG] NOT X360
                     }
                 }
             }
@@ -1479,9 +1390,6 @@ namespace BrnDirector
         // out of the DirectorInputOutput. r4 being live is the whole reason this function's
         // declaration needed the argument back.
         const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
-        if (lpInput == 0)
-            return;
-
         const CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpInput->GetGameActionQueue();
 
         // 0x82237350..0x822373AC -- the inlined GameState::ResetPerFrameData().
@@ -1514,18 +1422,6 @@ namespace BrnDirector
         maGameState.mbModeTimeExpired  = lpInput->GetModeTimeExpired();               // +0x1D1 (0x82237430 / 0x82237438)
         maGameState.mbPlayerEliminated = lpInput->GetPlayerEliminated();              // +0x1D0 (0x8223743C / 0x82237440)
 
-        // [DIAG] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. Edge-triggered: one line each
-        // time either copied flag changes, with the event type and team they arrive in. The one
-        // reader, ArbStateRoaming::ProcessPossibleFX, acts on them in the online modes only. Its
-        // own budget (at most 40 lines), so a stunt-heavy drive that spends the per-arm lines'
-        // shared 400 cannot silence it.
-        {
-            static s32        siEndOfEventLinesLeft  = 40;
-            static bool       sbLastModeTimeExpired  = false;
-            static bool       sbLastPlayerEliminated = false;
-            sbLastModeTimeExpired  = maGameState.mbModeTimeExpired;
-            sbLastPlayerEliminated = maGameState.mbPlayerEliminated;
-        }
 
         const CgsModule::Event* lpAction = 0;
         s32 liActionSize = 0;
@@ -1637,14 +1533,6 @@ namespace BrnDirector
                     maGameState.miThisFramesActionFlags |= 0x8;
                 }
 
-                // [DIAG] NOT IN THE X360 BINARY. One-shot: the jump ladder reached the Director.
-                {
-                    static bool sbLoggedJumpStart = false;
-                    if (!sbLoggedJumpStart && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbLoggedJumpStart = true;
-                    }
-                }
                 break;
             }
 
@@ -1708,17 +1596,17 @@ namespace BrnDirector
                 Matrix44Affine& lrBase = maGameState.mBaseDriveThruTransform;
                 if (lbGasStation)
                 {
-                    { const Vector3 lAxis = { -0.24346f,    0.0f,  -0.96991098f, 0.0f }; lrBase.Right() = lAxis; }
-                    { const Vector3 lAxis = {  0.0f,        1.0f,   0.0f,        0.0f }; lrBase.Up() = lAxis; }
-                    { const Vector3 lAxis = {  0.96991098f, 0.0f,  -0.24346f,    0.0f }; lrBase.At() = lAxis; }
-                    { const Vector3 lAxis = {  2624.5f,     2.99f, -641.42999f,  0.0f }; lrBase.Pos() = lAxis; }
+                    { const Vector3 lAxis( -0.24346f,    0.0f,  -0.96991098f); lrBase.Right() = lAxis; }
+                    { const Vector3 lAxis(  0.0f,        1.0f,   0.0f); lrBase.Up() = lAxis; }
+                    { const Vector3 lAxis(  0.96991098f, 0.0f,  -0.24346f); lrBase.At() = lAxis; }
+                    { const Vector3 lAxis(  2624.5f,     2.99f, -641.42999f); lrBase.Pos() = lAxis; }
                 }
                 else
                 {
-                    { const Vector3 lAxis = { 0.61846203f, 0.0f,       -0.785815f,   0.0f }; lrBase.Right() = lAxis; }
-                    { const Vector3 lAxis = { 0.0f,        1.0f,        0.0f,        0.0f }; lrBase.Up() = lAxis; }
-                    { const Vector3 lAxis = { 0.785815f,   0.0f,        0.61846203f, 0.0f }; lrBase.At() = lAxis; }
-                    { const Vector3 lAxis = { 2915.99f,    2.6198201f, -1590.3199f,  0.0f }; lrBase.Pos() = lAxis; }
+                    { const Vector3 lAxis( 0.61846203f, 0.0f,       -0.785815f); lrBase.Right() = lAxis; }
+                    { const Vector3 lAxis( 0.0f,        1.0f,        0.0f); lrBase.Up() = lAxis; }
+                    { const Vector3 lAxis( 0.785815f,   0.0f,        0.61846203f); lrBase.At() = lAxis; }
+                    { const Vector3 lAxis( 2915.99f,    2.6198201f, -1590.3199f); lrBase.Pos() = lAxis; }
                 }
 
                 if (liActionType == 100)
@@ -1749,21 +1637,6 @@ namespace BrnDirector
                         maGameState.mfHowCloseToTotalled = 0.0f;
                 }
 
-                // [DIAG] NOT IN THE X360 BINARY. The DIRECTOR rung of the drive-thru ladder,
-                // on the same `[drivethru]` tag as the producer's GATE/ENTER/POST rungs and the
-                // bridge's BRIDGE rung, so one grep reads the chain end to end. It prints the
-                // transform POSITION because "the flag was raised" and "the camera was aimed at
-                // a real bay" are different claims and a zero transform looks like neither
-                // [[diagnostics-that-lie]]. Delete with the rest of the drive-thru bring-up.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    const Vector3& lrPos = maGameState.mDriveThruTransform.Pos();
-                    *CgsDev::Log::gpDebugPrint
-                        << "[drivethru] DIRECTOR action=" << liActionType
-                        << " -> active=" << (maGameState.mbDriveThruActive ? 1 : 0)
-                        << " type=" << static_cast<s32>(maGameState.meDriveThruType)
-                        << " pos=(" << lrPos.x << "," << lrPos.y << "," << lrPos.z << ")\n";
-                }
                 break;
             }
 
@@ -1798,10 +1671,6 @@ namespace BrnDirector
                 maGameState.mbDriveThruActive = false;                       // +0x0D0 = 0
                 maGameState.meDriveThruType   = GameState::E_DRIVETHRU_INVALID; // +0x0D4 = 0
 
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[drivethru] DIRECTOR action=102 -> active=0\n";
-                }
                 break;
             }
 
@@ -1855,7 +1724,6 @@ namespace BrnDirector
                 maGameState.mbImpactTimeActive      = true;                                        // +0x105
                 maGameState.mfImpactTimeSloMoFactor = lrImpactTimeStart.mfTimestepMultiplier;      // +0x108
 
-                // [diag] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY.
                 break;
             }
 
@@ -2075,8 +1943,6 @@ namespace BrnDirector
                 maGameState.mFinishLineID           = lrFinishLinesAction.mFinishLineID;                // +0x160
                 maGameState.mFinishLineNorthmostDir = lrFinishLinesAction.mBoxRegion.ComputeDirection(); // +0x170
 
-                // [diag] BRN_FINISHLINE_DIAG -- NOT IN THE X360 BINARY. One line per broadcast: the
-                // live witness that the arm is dispatched and what the post-event camera will key on.
                 break;
             }
 
@@ -2410,12 +2276,6 @@ namespace BrnDirector
                     maGameState.mbPlayerHitCheckpointThisFrame = true;                            // +0x1B4
                 }
 
-                // [diag] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. Its own budget (at most
-                // 60 lines): every car's checkpoint posts one, and a long race would otherwise spend
-                // the shared 400 before the player's.
-                {
-                    static s32        siCheckpointLinesLeft = 60;
-                }
                 break;
             }
 
@@ -2522,10 +2382,6 @@ namespace BrnDirector
                 maGameState.mbPlayerWasTakenDown = false;              // +0x1C3
             }
 
-            // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. Edge-triggered: one line
-            // when the crash window opens and one when it closes. This is the FIRST link in the
-            // crash-camera chain, and without it "the camera never slowed down" cannot be told
-            // apart from "the crash was never published to the director at all".
 
             maGameState.mbCrashActive = lbPlayerCarCrashing;           // +0x0F9
 
@@ -3080,9 +2936,9 @@ namespace BrnDirector
     {
         mCameraDebugInfo.mfAspectRatio = lrCamera.mfAspectRatio;
         mCameraDebugInfo.mfFOV         = lrCamera.mfFOV;
-        mCameraDebugInfo.mfX           = lrCamera.mTransform.wAxis.x;
-        mCameraDebugInfo.mfY           = lrCamera.mTransform.wAxis.y;
-        mCameraDebugInfo.mfZ           = lrCamera.mTransform.wAxis.z;
+        mCameraDebugInfo.mfX           = static_cast<f32>(lrCamera.mTransform.wAxis.GetX());
+        mCameraDebugInfo.mfY           = static_cast<f32>(lrCamera.mTransform.wAxis.GetY());
+        mCameraDebugInfo.mfZ           = static_cast<f32>(lrCamera.mTransform.wAxis.GetZ());
         mCameraDebugInfo.mfNearClip    = lrCamera.GetNearClipDistance();
         mCameraDebugInfo.mAt           = lrCamera.mTransform.zAxis;
     }
@@ -3123,17 +2979,15 @@ namespace BrnDirector
         // ARTIST 0x821F67EC uses scalar fnmsubs.
         const f32 lfX = lrMetrics.mfScreenWidth - lrMetrics.mfScreenWidth * 0.1f;
         const f32 lfY = lrMetrics.mfScreenHeight * 0.125f;
-        Vector2 lv2Position = { lfX, lfY, 0.0f, 0.0f };
+        Vector2 lv2Position(lfX, lfY);
         lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
                                      16.0f, 0xFF000000u);
 
-        lv2Position.x = lfX + 2.0f;
-        lv2Position.y = lfY + 2.0f;
+        lv2Position = Vector2(lfX + 2.0f, lfY + 2.0f);
         lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
                                      16.0f, 0xFF000000u);
 
-        lv2Position.x = lfX + 1.0f;
-        lv2Position.y = lfY + 1.0f;
+        lv2Position = Vector2(lfX + 1.0f, lfY + 1.0f);
         lrRender.Draw2DTextJustified(lacMessage, lv2Position, CgsDev::DebugRender::E_JUSTIFY_RIGHT,
                                      16.0f, 0xFFFFFFFFu);
     }
@@ -3191,7 +3045,6 @@ namespace BrnDirector
             // ⭐ The arbitrator picks and runs the state that owns this frame's camera.
             UpdateArbitrator(lpIO, lCamera, liPlayerCarIndex);
 
-            // [diag] BRN_SLOMO_DIAG -- where the published time scale comes from.
 
             // ⭐ (2026-09-25, FX-DIRECTOR2 CC-16) @0x82274524..0x82274554 -- THE EVENT-WIN SCREEN EFFECT. The
             // console runs it on every live frame: it is the join point after the ICE-editor preview block
@@ -3232,8 +3085,6 @@ namespace BrnDirector
             // how a take such as "Takendown" eases out of and back into the chase camera instead of
             // cutting. `fcmpu f0, f29(=0.0, flt_82001CC0) ; ble` -- anything not above zero, a NaN
             // included, takes the reset arm: both interpolaters zeroed (0x82274A08..0x82274A24).
-                         // [DIAG] NOT X360
-            const bool lbGameCameraBlendReset = !(lCamera.GetEffects().mfGameCameraBlend > KF_GAME_CAMERA_BLEND_OFF);   // [DIAG]
             if (lCamera.GetEffects().mfGameCameraBlend > KF_GAME_CAMERA_BLEND_OFF)
             {
                 mCameraInterpolationController.Update(
@@ -3245,7 +3096,6 @@ namespace BrnDirector
             {
                 mCameraInterpolationController.Construct();
             }
-        // [DIAG] NOT X360
 
             // ⭐ (2026-09-25, FX-DIRECTOR2) @0x82274A28..0x82274A80 -- THE ICE SCENE SPACE FOLLOWS THE
             // PUBLISHED CAMERA. Unless the frame camera is in a scene-space shot, its transform becomes the
@@ -3364,7 +3214,6 @@ namespace BrnDirector
         mCameraFinaliser.Update(lpIO->mpInputBuffer, &maGameState, lpIO->mpResourceManager,
                                 &lCamera);
 
-        // [diag] BRN_SLOMO_DIAG
 
         // ⭐⭐ X360 lines 836-848 (@0x82275008..0x82275064) -- THE SLOW-MOTION PERMISSION GATE.
         // ⚠️ THE VALUE IT GUARDS IS NOT A SEPARATE LOCAL: IDA calls it `v220` / `var_40C`, but
@@ -3433,9 +3282,6 @@ namespace BrnDirector
             reinterpret_cast<EffectInterface*>(maEffectInterface)->RegisterStartingEffectWithId(
                 luRequestedPostFxId);                                                        // 0x822750D4..E4
 
-            // [DIAG] BRN_PFX_DIAG (the GUI PFX switch, default off) -- NOT IN THE X360 BINARY. One line
-            // per registration, i.e. per frame the id actually travels to the GUI (at most 40 lines).
-            static s32        siPostFxIdLinesLeft = 40;
         }
 
         // The debug component's panorama-screenshot pass gets the finished camera.
@@ -3446,15 +3292,11 @@ namespace BrnDirector
         // camera and publish BOTH forms into the director output buffer.
         lCamera.ValidateTransformWithDebugInfo();
 
-        // [diag] BRN_CAMERA_TRACE -- the per-frame published-camera witness (see the helper).
 
         lCamera.CopyToCgsCamera(&mCgsCamera);
 
         lpIO->mpOutputBuffer->SetCgsCamera(mCgsCamera);
         lpIO->mpOutputBuffer->SetCameraOutput(lCamera);
-        {   // [cam-flags] BRN_CAM_INPUT_DIAG: the state flags as published.
-            static u32 suCamDiagCalls = 0;
-        }
         // ⭐⭐ X360 lines 871-875 (@0x82275128..0x82275148) -- THE TIME-DILATION PUBLISH, and the
         // whole reason a camera can slow the game down. It was GATED here with the note "none of
         // them alters the published camera -- the two publish calls are already done", which is
@@ -3684,9 +3526,6 @@ namespace BrnDirector
     void MainDirector::PostGuiUpdate(const DirectorInputOutput* lpIO)
     {
         const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
-        if (lpInput == 0)
-            return;
-
         // GUI command 415 -> the junkyard selection-changed handshake's WAITING bit (+0x1A0).
         if (lpInput->GetCarSelectionChangedThisFrame())
             maGameState.mbJunkyardSelectionChangedMessageWaiting = true;
