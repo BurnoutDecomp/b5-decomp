@@ -48,9 +48,6 @@ namespace BrnParticle
 {
 namespace Native
 {
-    // [DIAG] NOT IN THE X360 BINARY -- see the header. DELETE-WHEN-STABLE.
-    u32 gauSimpleParticleQuadsBuilt    = 0;
-    u32 gauSimpleParticleBatchesBuilt  = 0;
 
     namespace
     {
@@ -388,7 +385,6 @@ namespace Native
                     lrIterator.Write(laPositions[2], reinterpret_cast<const int*>(&lauColours[2]), lafUv2);
                     lrIterator.Write(laPositions[3], reinterpret_cast<const int*>(&lauColours[3]), lafUv3);
 
-                    ++gauSimpleParticleQuadsBuilt;   // [diag]
                 }
             }
         }
@@ -448,7 +444,6 @@ namespace Native
                            "lBatch.meBlendMode < AttribSys::Enums::ParticleBlend::eParticleBlendMax");   // :1300
                 lBatch.meParticleType = luParticleType;
                 lrBatches.Append(lBatch);
-                ++gauSimpleParticleBatchesBuilt;   // [diag]
             }
         }
     }
