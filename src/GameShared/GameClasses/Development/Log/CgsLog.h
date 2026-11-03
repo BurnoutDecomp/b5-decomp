@@ -3,38 +3,12 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
-// The engine's debug-print/log front-end. Game code logs through CgsDev::Log::gpDebugPrint
-// (a StrStreamBase: `*gpDebugPrint << "text" << value << "\n"`), gated by
-// CgsDev::Message::gxMessageFilterFlags. Every log line - debug prints, channel output, and
-// asserts - is routed to a single game log file by WriteToLog. Reconstructed from the DecFIGS
-// DWARF (Development/Log/*) + the X360 call sites; the original fanned output to console /
-// on-screen channels, here unified into one log file (+ the debugger output).
+// Shared native debug-stream declarations.
 namespace CgsDev
 {
 namespace Log
 {
-#if !defined(_XBOX)
-    // PC-only log-file facade.
-    void WriteToLog(const char* lpcText);
-    void WriteToLogEmergency(const char* lpcText);
 
-    // The debug-print stream: a StrStreamBase whose char* sink forwards to WriteToLog, so the
-    // engine's `gpDebugPrint << ...` logging lands in the log file.
-    struct DebugPrint : public StrStreamBase
-    {
-        // Un-hide the inherited scalar formatting overloads (s32/u32/u64/f32/void*/PrintMode):
-        // overriding operator<<(const char*) below would otherwise hide every base-class
-        // overload by name -- the same fix CgsStrStream.h's StrStream carries, needed here
-        // since 2026-08-06 when a log chain first STARTS with a scalar
-        // (PhysicsSimulationModule::AddContactSpiesToOutputQueue's contact-dump lines).
-        using StrStreamBase::operator<<;
-
-        StrStreamBase& operator<<(const char* lpcText) ;
-
-    protected:
-    };
-
-#endif
 
     extern StrStreamBase* gpDebugPrint;
 }
