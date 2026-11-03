@@ -76,12 +76,6 @@ namespace GameTalk
     void* Free(void* lpBlock);
     bool  StrIEqual(const char* lpcLhs, const char* lpcRhs);
 
-    class GameTalkMessage;
-    struct GameTalkMessageVTable
-    {
-        GameTalkMessage* (*DeletingDestructor)(GameTalkMessage*, unsigned int);
-    };
-
     class GameTalkMessage
     {
     public:
@@ -100,7 +94,7 @@ namespace GameTalk
 
         // Construct a message bound to the named tool channel ("Camera").
         explicit GameTalkMessage(const char* lpcChannel);
-        ~GameTalkMessage();
+        virtual ~GameTalkMessage();
         static void* operator new(size_t luSize);
         static void operator delete(void* lpBlock);
 
@@ -168,9 +162,6 @@ namespace GameTalk
         // AddKeyContent; seeded by AllocateDataBuffer in its own TU).
         static s32 KsDataBufferCapacity;
 
-        // Native 0x820DF230 contains only the deleting-destructor slot.
-        const GameTalkMessageVTable* mpVTable; // +0x00
-
     private:
         // Wire-cursor parse helpers (X360 statics). Each reads a big-endian u32 length
         // prefix off the cursor, advances past it, package-allocates the payload and copies
@@ -190,12 +181,6 @@ namespace GameTalk
     // decoded incoming message to the registered handler. CgsGameTalk's
     // GameTalkProtocol::OnMessageReceived is registered through this.
     typedef void (*MessageHandler)(GameTalkMessage* lpMessage);
-
-    class GameTalkManager;
-    struct GameTalkManagerVTable
-    {
-        GameTalkManager* (*DeletingDestructor)(GameTalkManager*, unsigned int);
-    };
 
     class GameTalkManager
     {
@@ -270,9 +255,8 @@ namespace GameTalk
         GameTalkManager(void* lpOwner, s32 liMaxChannels, const char* lpcName);
 
         // X360 @0x828384A0: slot zero frees the handler table and optionally this.
-        ~GameTalkManager();
-        static GameTalkManager* DeletingDestructor(GameTalkManager* lpManager, unsigned int luFlags);
-        static const GameTalkManagerVTable sVTable;
+        virtual ~GameTalkManager();
+        static void operator delete(void* lpBlock);
 
         // X360 @0x82837770. Build a keyword message ([key][value], each length-
         // prefixed big-endian) in the shared scratch buffer and send it over the
@@ -294,7 +278,7 @@ namespace GameTalk
         static void ReceiverCallback(const char* lpacMessage, u32 luLength);
 
         // --- members (X360 offsets 0x00..0x18; pointers widened to x64) ---
-        const GameTalkManagerVTable* mpVTable; // +0x00
+        // +0x00 is the compiler-generated virtual table pointer.
         const char*           mpcName;        // +0x04  instance name ("Game.Xenon")
         IGameTalkProtocol*    mpProtocol;     // +0x08  transport the manager drives
         MessageHandlerEntry** mppHandlers;    // +0x0C  handler table (miMaxChannels slots)

@@ -232,7 +232,7 @@ void NFSLiveLink::UpdateChannelMonitoring()
         lpMessage->AddKeyContent("MonitorControl", 1, mMonitorOutput, sizeof(mMonitorOutput));
         EA::GameTalk::GameTalkManager::GetInstance();
         EA::GameTalk::GameTalkManager::SendMessage("Tool.Nicotine", lpMessage);
-        if (lpMessage) lpMessage->mpVTable->DeletingDestructor(lpMessage, 1);
+        delete lpMessage;
     }
     if (miMonitorRecordSize > static_cast<int>(static_cast<unsigned int>(mMonitorOutput + 512 - mpMonitorWrite) & 0x3fffffffu))
         mpMonitorWrite = mMonitorOutput;
@@ -360,7 +360,7 @@ void NFSLiveLink::DynMixReceiveGameTalkMessage(EA::GameTalk::GameTalkMessage* ap
                                rw::core::stdc::StringLength("Nicotine.xenon"));
         GameTalkManager::GetInstance();
         GameTalkManager::SendMessage("Tool.Nicotine", lpReply);
-        if (lpReply) lpReply->mpVTable->DeletingDestructor(lpReply, 1);
+        delete lpReply;
     }
     else if (!StringCompare(apMessage->GetKey(0), "RefreshMap"))
     {

@@ -43,6 +43,26 @@ namespace CgsResource
         meReleaseStage = 1;
     }
 
+    // Raw ARTIST 0x828E65D8: register only on the first prepare pass.
+    bool LiveUpdateModule::Prepare()
+    {
+        if (static_cast<u32>(miField273) > 1)
+        {
+            CGS_ASSERT(false, "Invalid stage\n");
+            return false;
+        }
+        if (miField273 == 0)
+        {
+            miField273 = 0;
+            mpGameTalk->RegisterMessageHandler(&LiveUpdateModule::GameTalkMsgHandler, "LiveUpdate");
+            mReceiverQueue.Clear();
+        }
+        meReleaseStage = 0;
+        miUpdateState = 0;
+        miField273 = 1;
+        return true;
+    }
+
     // ---- Destruct @ 0x828E6708 -------------------------------------------------
     void LiveUpdateModule::Destruct()
     {

@@ -175,9 +175,19 @@ namespace BrnResource
 
             // fall through
         }
+        case E_PREPARE_GAMETALK:
+            mePrepareStage = E_PREPARE_GAMETALK;
+            if (!mGameTalk.Prepare(10.0f, 0.01666666753590107f))
+                goto Pending;
+            CGS_ASSERT(mDebugGameTalkInterface.Prepare(), "mDebugGameTalkInterface.Prepare()");
+            // fall through
+        case E_PREPARE_LIVE_UPDATE:
+            mePrepareStage = E_PREPARE_LIVE_UPDATE;
+            if (!mLiveUpdateModule.Prepare())
+                goto Pending;
+            // fall through
         case E_PREPARE_VEHICLE_LIST:
-            // X360 stage 9 (LABEL_26): PrepareVehicleList. (Stage 7 GameTalk and stage 8's
-            // module prepare stay deferred between ATTRIBSYS and here.)
+            // X360 stage 9 (LABEL_26): PrepareVehicleList.
             mePrepareStage = E_PREPARE_VEHICLE_LIST;
             if (!PrepareVehicleList(lpInputStack, lpOutputStack))
                 goto Pending;
@@ -1336,12 +1346,12 @@ namespace BrnResource
 
         // [deferred] dev slot-usage dump toggles (byte_82FFAD00/01 -> AllocatorList::
         // DebugDumpStats + the "Slot <n> is used" walk over the event-slot free list).
-        // [deferred] CgsGameTalk::GameTalk::Update (X360 a1+399624; module not committed).
 
         CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
         CgsAttribSys::AttribSysIO::InputBuffer* lpAttribInput = 0;
         lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         lpInputStack->CreateIOBuffer(&lpAttribInput, "Attrib");
+        mGameTalk.Update();
 
         if (lpOutput != 0)
         {

@@ -50,7 +50,7 @@ namespace CgsGameTalk
         // at it, prepare the transport with the inactivity timeout / update step,
         // register the AttribSys GameTalk handler on the "AttribSys.xenon" channel,
         // register the debug component, and mark prepared.
-        void Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep);
+        bool Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep);
 
         // X360 @0x828248D0 (header-inline). Forward a handler registration to the
         // GameTalk manager once prepared.
