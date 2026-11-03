@@ -157,7 +157,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress / CgsIDUnCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // NULLResourceHandle
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"               // GetGameDataEvent
@@ -174,9 +173,6 @@ namespace BrnWorld
 {
     namespace
     {
-        // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off: the prop world's half of the
-        // prop-progression handshake (L4 WORLDVFX 2026-09-27). DELETE-WHEN-STABLE.
-
         // ------------------------------------------------------------------
         // The pre-scene output buffer models its interface members as opaque sized spans
         // (BrnPropEntityModuleIO.h owns that decision). Re-type the handle exactly the way
@@ -319,23 +315,6 @@ namespace BrnWorld
         // and the body at PropEntityModule_wQ_03.cpp:151.
         ReplayPreSceneUpdate( lpInput, lpOutput, lUpdateSet );
 
-        // DIAGNOSTIC (prop-spawn wave 2026-08-12) -- NOT in the X360 binary. Deliberately
-        // NOT gated on gxMessageFilterFlags (bit 0 is off in a default PC boot), so a boot
-        // log always proves whether the prop subsystem is ticking at all.
-        // Boot-log grep: "PROPS-BOOT PreSceneUpdate".
-        {
-            static bool sbLoggedFirstTick = false;
-            if ( !sbLoggedFirstTick && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                sbLoggedFirstTick = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "PROPS-BOOT PreSceneUpdate first tick: streamingMode "
-                    << static_cast<s32>( meStreamingMode )
-                    << " loadedZones " << muNumberOfLoadedZones
-                    << " playerZone " << lpInput->GetPlayerZoneNumber() << "\n";
-            }
-        }
-
         // ================================================================
         // [2] player index / position, and the eight race-car velocities.
         //
@@ -361,9 +340,9 @@ namespace BrnWorld
         {
             const Vector3 lVelocity = lpInput->GetRaceCarVelocity( liCar );
 
-            const f32 lfSpeedSquared = lVelocity.x * lVelocity.x
-                                     + lVelocity.y * lVelocity.y
-                                     + lVelocity.z * lVelocity.z;
+            const f32 lfSpeedSquared = lVelocity.GetX().GetFloat() * lVelocity.GetX().GetFloat()
+                                     + lVelocity.GetY().GetFloat() * lVelocity.GetY().GetFloat()
+                                     + lVelocity.GetZ().GetFloat() * lVelocity.GetZ().GetFloat();
 
             // vsel on vcmpeqfp: a zero-length vector yields a zero speed rather than the
             // 0 * inf the reciprocal estimate would otherwise produce.
@@ -372,11 +351,11 @@ namespace BrnWorld
                                 : lfSpeedSquared * ( 1.0f / sqrtf( lfSpeedSquared ) );
 
             Vector3& lrStored = maRaceCarVelocity[liCar];
-            lrStored.x = lVelocity.x;
-            lrStored.y = lVelocity.y;
-            lrStored.z = lVelocity.z;
+            lrStored.SetX( lVelocity.GetX().GetFloat() );
+            lrStored.SetY( lVelocity.GetY().GetFloat() );
+            lrStored.SetZ( lVelocity.GetZ().GetFloat() );
             // The W ("plus") lane of the DWARF's Vector3Plus: the car's speed in MPH.
-            lrStored.w = lfSpeed * KF_METRES_PER_SECOND_TO_MPH;
+            lrStored.GetVector().v[rw::math::vpu::VectorAxisW] = lfSpeed * KF_METRES_PER_SECOND_TO_MPH;
         }
 
         // ================================================================
@@ -416,9 +395,6 @@ namespace BrnWorld
             // through the READ-LOCKED handle, like every other input read in this function.
             mZoneManager.SetHitPropBitArray( lpInputRead->GetHitPropsBitArray() );
 
-            // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off (see the
-            // SendingPropProgression arm below). DELETE-WHEN-STABLE.
-
             meStreamingMode = E_STREAM;
         }
 
@@ -440,8 +416,6 @@ namespace BrnWorld
                         "meStreamingMode != E_RESET_UNLOADING_FOR_PROFILE" );      // cpp:528
             CGS_ASSERT( meStreamingMode != E_WAITING_FOR_PROFILE_DATA,
                         "meStreamingMode != E_WAITING_FOR_PROFILE_DATA" );         // cpp:529
-            // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off: the world's half of
-            // the prop-progression handshake (L4 WORLDVFX, tests/PropProgressionLive.ps1). DELETE-WHEN-STABLE.
             meStreamingMode = E_RESET_UNLOADING_FOR_PROFILE;
         }
 
@@ -496,17 +470,6 @@ namespace BrnWorld
                             "!mabLoadedWorldGraphics.IsBitSet( luZone )" );        // cpp:580
                 mabLoadedWorldGraphics.SetBit( luZone );
 
-                // DIAGNOSTIC -- NOT in the X360 binary. Ungated one-shot.
-                // Boot-log grep: "PROPS-BOOT first graphics-list request".
-                {
-                    static bool sbLoggedFirstGraphicsRequest = false;
-                    if ( !sbLoggedFirstGraphicsRequest && CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                        sbLoggedFirstGraphicsRequest = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "PROPS-BOOT first graphics-list request: zone " << luZone << "\n";
-                    }
-                }
             }
         }
 
@@ -665,8 +628,7 @@ namespace BrnWorld
             // The exclusion radius is a BROADCAST VecFloat on the console (the dynamic
             // initialiser at 0x82C4B9B8 splats flt_82004270 == 3.0f across all four lanes
             // into unk_82FAD760); built the same way here rather than as a scalar.
-            const VecFloat lvClearRadius = { KF_MIN_DIST_FROM_PLAYER, KF_MIN_DIST_FROM_PLAYER,
-                                             KF_MIN_DIST_FROM_PLAYER, KF_MIN_DIST_FROM_PLAYER };
+            const VecFloat lvClearRadius( KF_MIN_DIST_FROM_PLAYER );
 
             // GetMemoryResource() first (its 0x8230AC38 null test bakes CgsResourcePtr.h:581),
             // then the scene interface, then the prop-input interface -- the console's order.
@@ -723,21 +685,6 @@ namespace BrnWorld
                                                &mPropEntitySerialiser );
 
         CgsDev::PerfMonCpu::StopMonitor( miCollisionStreamingPM );
-
-        // [DIAG] NOT IN THE X360 BINARY. Wave-Q5 probe: proves the cell-activation sweep
-        // is now entered at all -- until this wave PropCellManager::Update was never
-        // called, so AddPropToContactGeneration never ran and no prop volume ever reached
-        // the broad phase. One-shot; the env latch is evaluated ONCE (a static bool).
-        // ⚠ HONEST LIMIT: the requested "N active cells" cannot be printed. The count lives
-        // in PropCellManager::miNumActiveCells (BrnPropCellManager.h:318), PropCellManager is
-        // reached only through PropZoneManager::mCellManager which is PRIVATE, and neither
-        // class exposes an accessor for it -- and both headers are outside this lane. What is
-        // printed instead is reachable and true: that the step ran, and the module's own
-        // loaded-zone count (no cell can be active before a zone is loaded). Boot-log grep:
-        // "[Q5-props] first cell activation sweep".
-        {
-            static bool sbLoggedFirstCellSweep = false;
-        }
 
         // ================================================================
         // [10] break everything the cell sweep (and last frame's physics) reported broken.
@@ -825,21 +772,6 @@ namespace BrnWorld
                         LoadZone( lZoneData.GetMemoryResource(), lpOutput );
                         CgsDev::PerfMonCpu::StopMonitor( miLoadingPM );
 
-                        // DIAGNOSTIC -- NOT in the X360 binary. Ungated one-shot. THIS is
-                        // the line that proves a zone's props actually loaded: if it never
-                        // appears, nothing downstream can possibly render a prop.
-                        // Boot-log grep: "PROPS-BOOT prop instances arrived".
-                        {
-                            static bool sbLoggedFirstInstances = false;
-                            if ( !sbLoggedFirstInstances && CgsDev::Log::gpDebugPrint != 0 )
-                            {
-                                sbLoggedFirstInstances = true;
-                                *CgsDev::Log::gpDebugPrint
-                                    << "PROPS-BOOT prop instances arrived: zone " << luZone
-                                    << " -> LoadZone done, loadedZones now "
-                                    << muNumberOfLoadedZones << "\n";
-                            }
-                        }
                     }
 
                     // Cleared UNCONDITIONALLY -- outside the stalled / pool-full gate, so
@@ -919,17 +851,6 @@ namespace BrnWorld
                         mapGraphicsLists[luZone] = lGraphicsList;
                         mabWaitingForGraphics.UnSetBit( luZone );
 
-                        // DIAGNOSTIC -- NOT in the X360 binary. Ungated one-shot.
-                        // Boot-log grep: "PROPS-BOOT graphics list bound".
-                        {
-                            static bool sbLoggedFirstGraphicsList = false;
-                            if ( !sbLoggedFirstGraphicsList && CgsDev::Log::gpDebugPrint != 0 )
-                            {
-                                sbLoggedFirstGraphicsList = true;
-                                *CgsDev::Log::gpDebugPrint
-                                    << "PROPS-BOOT graphics list bound: zone " << luZone << "\n";
-                            }
-                        }
                     }
                 }
 

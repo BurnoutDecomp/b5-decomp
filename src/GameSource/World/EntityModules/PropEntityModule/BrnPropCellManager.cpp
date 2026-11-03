@@ -80,9 +80,9 @@ namespace BrnWorld
             for (s32 liColumn = 0; liColumn < 4; ++liColumn)
             {
                 const Vector3& lrColumn = *lpaColumns[liColumn];
-                if (!(lrColumn.x == lrColumn.x) ||
-                    !(lrColumn.y == lrColumn.y) ||
-                    !(lrColumn.z == lrColumn.z))
+                if (!(lrColumn.GetX().GetFloat() == lrColumn.GetX().GetFloat()) ||
+                    !(lrColumn.GetY().GetFloat() == lrColumn.GetY().GetFloat()) ||
+                    !(lrColumn.GetZ().GetFloat() == lrColumn.GetZ().GetFloat()))
                 {
                     return false;
                 }
@@ -270,8 +270,8 @@ namespace BrnWorld
         static const f32 lfCellSizeX = static_cast<f32>(KI_CELL_SIZE);
         static const f32 lfCellSizeZ = static_cast<f32>(KI_CELL_SIZE);
 
-        const f32 lfX = lv3Position.x;
-        const f32 lfZ = lv3Position.z;
+        const f32 lfX = lv3Position.GetX().GetFloat();
+        const f32 lfZ = lv3Position.GetZ().GetFloat();
 
         CGS_ASSERT(lfX > -static_cast<f32>(KI_WORLD_X_HALF_EXTENT),
                    "lfX > -KI_WORLD_X_HALF_EXTENT");
@@ -546,17 +546,17 @@ namespace BrnWorld
         }
 
         CGS_ASSERT(IsValid(lTransform), "IsValid(lTransform)");
-        CGS_ASSERT(lTransform.Pos().x < KF_MAX_VALID_POSITION_ALONG_AXIS,
+        CGS_ASSERT(lTransform.Pos().GetX().GetFloat() < KF_MAX_VALID_POSITION_ALONG_AXIS,
                    "lTransform.Pos().GetX() < KF_MAX_VALID_POSITION_ALONG_AXIS");
-        CGS_ASSERT(lTransform.Pos().y < KF_MAX_VALID_POSITION_ALONG_AXIS,
+        CGS_ASSERT(lTransform.Pos().GetY().GetFloat() < KF_MAX_VALID_POSITION_ALONG_AXIS,
                    "lTransform.Pos().GetY() < KF_MAX_VALID_POSITION_ALONG_AXIS");
-        CGS_ASSERT(lTransform.Pos().z < KF_MAX_VALID_POSITION_ALONG_AXIS,
+        CGS_ASSERT(lTransform.Pos().GetZ().GetFloat() < KF_MAX_VALID_POSITION_ALONG_AXIS,
                    "lTransform.Pos().GetZ() < KF_MAX_VALID_POSITION_ALONG_AXIS");
-        CGS_ASSERT(lTransform.Pos().x > -KF_MAX_VALID_POSITION_ALONG_AXIS,
+        CGS_ASSERT(lTransform.Pos().GetX().GetFloat() > -KF_MAX_VALID_POSITION_ALONG_AXIS,
                    "lTransform.Pos().GetX() > -KF_MAX_VALID_POSITION_ALONG_AXIS");
-        CGS_ASSERT(lTransform.Pos().y > -KF_MAX_VALID_POSITION_ALONG_AXIS,
+        CGS_ASSERT(lTransform.Pos().GetY().GetFloat() > -KF_MAX_VALID_POSITION_ALONG_AXIS,
                    "lTransform.Pos().GetY() > -KF_MAX_VALID_POSITION_ALONG_AXIS");
-        CGS_ASSERT(lTransform.Pos().z > -KF_MAX_VALID_POSITION_ALONG_AXIS,
+        CGS_ASSERT(lTransform.Pos().GetZ().GetFloat() > -KF_MAX_VALID_POSITION_ALONG_AXIS,
                    "lTransform.Pos().GetZ() > -KF_MAX_VALID_POSITION_ALONG_AXIS");
 
         ++mu16NumberOfPropEntitiesInScene;
@@ -707,9 +707,9 @@ namespace BrnWorld
             lVolumeInstanceID.SetPartIndex(luPart);
 
             const Vector3& lrOffset = lrPartType.GetOffset();
-            Vector3 lPartPosition = lrPropTransform.xAxis * lrOffset.x;
-            lPartPosition = lrPropTransform.yAxis * lrOffset.y + lPartPosition;
-            lPartPosition = lrPropTransform.zAxis * lrOffset.z + lPartPosition;
+            Vector3 lPartPosition = lrPropTransform.xAxis * lrOffset.GetX().GetFloat();
+            lPartPosition = lrPropTransform.yAxis * lrOffset.GetY().GetFloat() + lPartPosition;
+            lPartPosition = lrPropTransform.zAxis * lrOffset.GetZ().GetFloat() + lPartPosition;
             lPartPosition = lrPropTransform.wAxis + lPartPosition;
 
             // The console re-applies the part index to the extracted entity id even though
@@ -961,7 +961,7 @@ namespace BrnWorld
                 lVolumeInstanceID.SetEntityIndex(static_cast<u16>(liPropSlot));
 
                 // Sphere overlap: (lvClearRadius + type bounding radius)^2 > |pos - propPos|^2.
-                const f32 lfCombinedRadius = lvClearRadius.x + lpType->GetBoundingRadius();
+                const f32 lfCombinedRadius = lvClearRadius.GetFloat() + lpType->GetBoundingRadius();
                 const Vector3 lv3Delta = lv3Position - lrProp.mWorldTransform.Pos();
                 if (lfCombinedRadius * lfCombinedRadius <= MagnitudeSquared(lv3Delta))
                 {
