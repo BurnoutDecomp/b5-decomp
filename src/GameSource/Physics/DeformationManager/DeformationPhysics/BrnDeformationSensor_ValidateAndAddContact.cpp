@@ -15,14 +15,13 @@
 
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"
 
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- the opt-in [latch] probe only
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"    // DeformableObject
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::TransformPoint (the localB rebase)
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::Magnitude (the normal-magnitude tripwire)
 
-#include <cstdlib>   // getenv    -- the opt-in [latch] bring-up probe only
-#include "types.hpp"   // uintptr_t -- the opt-in [latch] bring-up probe only
 
 namespace BrnPhysics
 {
@@ -40,9 +39,9 @@ namespace Deformation
 		// struct (BrnDeformationSensor.h) and every field below is written BY NAME.
 
 		// Leading Vector4 view of an opaque Sphere (centre.xyz + radius.w).
-		inline Vector4& SphereVec(Sphere* lpSphere)
+		inline Vector3Plus& SphereVec(CgsGeometric::Sphere* lpSphere)
 		{
-			return *reinterpret_cast<Vector4*>(lpSphere);
+			return lpSphere->mData;
 		}
 
 		// The 0.01f tolerance the normal-magnitude assert + the final accept gates compare against
@@ -52,11 +51,11 @@ namespace Deformation
 		// vmsum3fp128 == xyz dot product (the SIMD horizontal sum over the first three lanes).
 		inline f32 Dot3(const Vector3& lA, const Vector3& lB)
 		{
-			return lA.x * lB.x + lA.y * lB.y + lA.z * lB.z;
+			return __vmsum3fp(lA.mV, lB.mV).v[0];
 		}
 		inline Vector3 Sub3(const Vector3& lA, const Vector3& lB)
 		{
-			{ const Vector3 lResult = { lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f }; return lResult; }
+			return Vector3(__vsubfp(lA.mV, lB.mV));
 		}
 
 		// DWARF: maStoredContacts[3].
@@ -89,17 +88,16 @@ namespace Deformation
 	//           latched 0        <- "t" was a WORLD COORDINATE, so the t <= 1.0 gate could not pass
 	// =============================================================================================
 	bool DeformationSensor::ValidateAndAddContact(Matrix44Affine lInverseVehicleTransform,
-	                                              const CgsSceneManager::PotentialContact& lrPotential,
+	                                              const CgsSceneManager::SceneManagerIO::PotentialContact& lrPotential,
 	                                              ContactId lContactId,
 	                                              DeformableObject* lpOtherCar,
 	                                              DeformationSensor* lpOtherSensor)
 	{
 		// --- (1) normal magnitude tripwire (non-gating) -------------------------------------------
 		// The leading Vector4 lanes of the potential contact carry: +0 pointA, +16 pointB, +32 normal.
-		const Vector4* lpPotential = reinterpret_cast<const Vector4*>(&lrPotential);
-		const Vector3  lPointOnA = { lpPotential[0].x, lpPotential[0].y, lpPotential[0].z, 0.0f };
-		const Vector3  lPointOnB = { lpPotential[1].x, lpPotential[1].y, lpPotential[1].z, 0.0f };
-		const Vector3  lNormal   = { lpPotential[2].x, lpPotential[2].y, lpPotential[2].z, 0.0f };
+		const Vector3 lPointOnA = lrPotential.mPointOnA;
+		const Vector3 lPointOnB = lrPotential.mPointOnB;
+		const Vector3 lNormal = lrPotential.mNormal;
 
 		// ⭐⭐⭐ FIXED 2026-08-27 (traffic-bus ram). This compared the SQUARED length against the
 		// 0.01 window -- `Dot3(lNormal, lNormal)` in [0.99, 1.01] -- which is a window on |n| of
@@ -152,17 +150,11 @@ namespace Deformation
 		const Vector3& lAt = lInverseVehicleTransform.At();
 		const Vector3& lT  = lInverseVehicleTransform.Pos();
 
-		Vector3 lLocalA = {
-			lPointOnA.x * lR.x + lPointOnA.y * lU.x + lPointOnA.z * lAt.x + lT.x,
-			lPointOnA.x * lR.y + lPointOnA.y * lU.y + lPointOnA.z * lAt.y + lT.y,
-			lPointOnA.x * lR.z + lPointOnA.y * lU.z + lPointOnA.z * lAt.z + lT.z, 0.0f };
-		if ( mpLocalSpaceSphere != 0 )
-		{
-			const Vector4& lrCentre = SphereVec(mpLocalSpaceSphere);
-			lLocalA.x -= lrCentre.x;
-			lLocalA.y -= lrCentre.y;
-			lLocalA.z -= lrCentre.z;
-		}
+		// ARTIST 0x825E18CC..0x825E1924: three fused rows, then full-register subtract.
+		__vector4 lvLocalA = __vmaddfp(lR.mV, __vspltw(lPointOnA.mV, 0), lT.mV);
+		lvLocalA = __vmaddfp(lU.mV, __vspltw(lPointOnA.mV, 1), lvLocalA);
+		lvLocalA = __vmaddfp(lAt.mV, __vspltw(lPointOnA.mV, 2), lvLocalA);
+		const Vector3 lLocalA(__vsubfp(lvLocalA, SphereVec(mpLocalSpaceSphere).mV));
 		lCandidate.mLocalPointOnA = lLocalA;
 
 		// ⭐⭐⭐ 2026-08-23 (traffic wave 4, SOLVER wave) -- THE +-1667 m LAUNCH.
@@ -204,13 +196,7 @@ namespace Deformation
 			lpOtherCar->GetInverseTransform(lInverseOtherCarTransform);
 
 			Vector3 lLocalB = rw::math::vpu::TransformPoint(lInverseOtherCarTransform, lPointOnB);
-			if ( lpOtherSensor != 0 && lpOtherSensor->mpLocalSpaceSphere != 0 )
-			{
-				const Vector4& lrOtherCentre = SphereVec(lpOtherSensor->mpLocalSpaceSphere);
-				lLocalB.x -= lrOtherCentre.x;
-				lLocalB.y -= lrOtherCentre.y;
-				lLocalB.z -= lrOtherCentre.z;
-			}
+			lLocalB.mV = __vsubfp(lLocalB.mV, SphereVec(lpOtherSensor->mpLocalSpaceSphere).mV);
 			lCandidate.mLocalPointOnB = lLocalB;
 		}
 
@@ -229,9 +215,7 @@ namespace Deformation
 		// It is the key the "keep the 3 deepest" insertion sorts on, and a lane sum of world
 		// coordinates is not a depth: at the junkyard wall it was ~ -3000 for every contact.
 		const Vector3Plus& lrDisp = mPointDisplacement_BiggestImpulseThisFrame;   // this+0x10
-		const Vector3 lSweptDelta = { lPointOnA.x + lrDisp.x - lPointOnB.x,
-		                              lPointOnA.y + lrDisp.y - lPointOnB.y,
-		                              lPointOnA.z + lrDisp.z - lPointOnB.z, 0.0f };
+		const Vector3 lSweptDelta(__vsubfp(__vaddfp(lPointOnA.mV, lrDisp.mV), lPointOnB.mV));
 		lCandidate.mfProjectedDist = Dot3(lNormal, lSweptDelta);
 		lCandidate.mpOtherVehicle  = lpOtherCar;
 		lCandidate.mpOtherSensor   = lpOtherSensor;
@@ -379,63 +363,6 @@ namespace Deformation
 		                       && lfImpactTime >= 0.0f                 // vcmpgefp v13 >= 0
 		                       && mImpulseContact.mfImpactTimeInFrame > lfImpactTime ); // stored (+0x118) > cand
 
-		// ---- [latch] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------------
-		// OPT-IN (BRN_LATCH_PROBE=1) so a default run and every golden gate stay byte-identical.
-		//
-		// ⭐ WHY THIS PROBE EXISTS. Nine legs measured this chain from DOWNSTREAM ("|vz| fell",
-		// "route WALL fired") and every one of those signals turned out to be produced by the
-		// GROUND. `mImpulseContact` is the ONLY feed into the deformation impulse path
-		// (GetImpulse -> UpdateContacts -> ApplyCarWorldImpulse), so the question "why does a wall
-		// take no momentum" reduces exactly to "does a wall-normal contact arm this latch". One
-		// line per candidate answers it, and prints BOTH the arithmetic the tree runs and the
-		// arithmetic the two consoles run, so the comparison is inside a single run rather than
-		// across two.
-		// Two windows (leg 9's rule -- cap the EVENTS you are counting, not the calls you filter):
-		// a short opening window that proves the probe can speak, plus a window reserved for
-		// horizontal normals, which is the rare event actually being hunted.
-		{
-			static s32 siLatchProbe = -1;
-			if ( siLatchProbe < 0 )
-			{
-			}
-			static u32 suSeen = 0;
-			static u32 suWall = 0;
-			++suSeen;
-			const f32  lfAbsNY   = ( lNormal.y < 0.0f ) ? -lNormal.y : lNormal.y;
-			const bool lbWallish = ( lfAbsNY < 0.6f );   // the [wall] probe's own discriminator
-			if ( siLatchProbe == 1 && CgsDev::Log::gpDebugPrint != 0
-			     && ( suSeen <= 24u || ( lbWallish && ++suWall <= 400u ) ) )
-			{
-				// ⚠️ THE SENSOR IDENTITY IS PART OF THE EVIDENCE, not decoration: consecutive
-				// candidates carrying byte-identical contact points are either one contact offered
-				// to many sensors (each of which will raise its own full-strength impulse) or the
-				// same sensor re-offered the same contact. Those have different fixes, and without
-				// `sensor` in the line the two are indistinguishable in the log.
-				// ⭐ walls leg 11: the VOLUME-INSTANCE LOW BYTE is the console's ownership key
-				// (ReadPotentialVehicleWorldContact hands the whole id to
-				// GetDeformationSensorFromVolumeInstance @0x825B4338, whose first instruction is
-				// `clrlwi r11, r4, 24` -- the low byte, minus one, IS the sensor index). Printing it
-				// beside the sensor address turns "20 sensors saw one contact" from an inference
-				// into a reading: distinct low bytes mean twenty distinct CONTACTS were generated,
-				// not one contact fanned out by a broken lookup.
-				const u64* lpProbeIds = reinterpret_cast<const u64*>(&lpPotential[3]);
-				*CgsDev::Log::gpDebugPrint
-					<< "[latch] n " << static_cast<s32>(suSeen)
-					<< " sensor " << static_cast<s32>(reinterpret_cast<uintptr_t>(this) & 0xFFFFFu)
-					<< " volA " << static_cast<s32>(lpProbeIds[0] & 0xFFu)
-					<< ( lbWallish ? " WALLFACE" : " floor" )
-					<< " nrm " << lNormal.x << " " << lNormal.y << " " << lNormal.z
-					<< " pA " << lPointOnA.x << " " << lPointOnA.y << " " << lPointOnA.z
-					<< " pB " << lPointOnB.x << " " << lPointOnB.y << " " << lPointOnB.z
-					<< " disp " << lrDisp.x << " " << lrDisp.y << " " << lrDisp.z
-					<< " | pen " << lfPenetration << " basis " << lfBasis
-					<< " t " << lfImpactTime
-					<< " stored " << mImpulseContact.mfImpactTimeInFrame
-					<< " latched " << static_cast<s32>(lbLatch ? 1 : 0)
-					<< "\n";
-			}
-		}
-
 		if ( lbLatch )
 		{
 			// The impulse record (sensor +0xE0..+0x11F), field for field per the PS3 stores:
@@ -448,12 +375,11 @@ namespace Deformation
 			mImpulseContact.mContactId          = lContactId;      // stw  this,0x11C
 
 			// The contact-spy record (sensor +0x140..+0x183):
-			const u64* lpIds = reinterpret_cast<const u64*>(&lpPotential[3]);   // +0x30 idA, +0x38 idB
 			mSpyNormal            = lNormal;                                    // stvx v30, this,0x140
 			mSpyPointOnA          = lPointOnA;                                  // stvx (potential+0),  this,0x150
 			mSpyPointOnB          = lPointOnB;                                  // stvx (potential+0x10),this,0x160
-			mSpyVolumeInstanceIdA = lpIds[0] & 0xFFFFFFFF00000000ull;           // std (idA word)<<32, this,0x170
-			mSpyVolumeInstanceIdB = lpIds[1] & 0xFFFFFFFF00000000ull;           // std (idB word)<<32, this,0x178
+			mSpyVolumeInstanceIdA = lrPotential.muVolumeInstanceIdA.muId & 0xFFFFFFFF00000000ull;           // std (idA word)<<32, this,0x170
+			mSpyVolumeInstanceIdB = lrPotential.muVolumeInstanceIdB.muId & 0xFFFFFFFF00000000ull;           // std (idB word)<<32, this,0x178
 			mSpyContactId         = static_cast<u32>(lContactId);               // stw r16, this,0x180 (operator u32)
 		}
 

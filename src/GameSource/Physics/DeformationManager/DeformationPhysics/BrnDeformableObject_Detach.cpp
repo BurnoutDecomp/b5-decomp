@@ -221,7 +221,7 @@ namespace Deformation
         // SIMD magnitude-squared of a VecFloat's xyz lanes (vmsum3fp128 / the spin-speed^2 compared).
         inline f32 MagnitudeSquared3(const VecFloat& lvf)
         {
-            return lvf.x * lvf.x + lvf.y * lvf.y + lvf.z * lvf.z;
+            return __vmsum3fp(lvf.mV, lvf.mV).v[0];
         }
 
         // =========================================================================================
@@ -383,7 +383,7 @@ namespace Deformation
                             CGS_ASSERT(mi16NumHingedParts > 0, "mi16NumHingedParts > 0");
 
                             // vspltisw v0,0 / stvx128 v0,r31,3904 -> zero the spin accumulator (+3904).
-                            mAngularVelocitySum.SetZero();
+                            mAngularVelocitySum.mV = __vspltisw(0);
 
                             maPartStates[li] = KU_PART_STATE_DETATCHED;   // *v8 = 4
                             --mi16NumHingedParts;                         // --*(_R31 + 26288) (lhz/sth)
@@ -398,7 +398,7 @@ namespace Deformation
 
         // ⭐ 2026-08-27: the "impulse vs time-step" ambiguity in the note below is now MOOT and the
         // FLAG is retired. The asm at 0x826422DC..0x826422E8 is `lfs f31, 240(r1)` (the x lane of the
-        // spilled lvfTimeStep) then `fmr f1, f31` -- the float arg IS lvfTimeStep.x. And
+        // spilled lvfTimeStep) then `fmr f1, f31` -- the float arg IS lvfTimeStep.mV.v[0]. And
         // IKBodyPart::CheckForDetachment IGNORES it (`(void)lfImpulse;` -- the impulse it actually
         // bands against is folded from the tag points' own sensors). So passing the time-step here is
         // both faithful and observationally inert; it was NOT a fifth kill switch.
@@ -511,7 +511,7 @@ namespace Deformation
         // during ordinary driving, which the original explicitly excludes.
         if ( !GetVehiclePhysics()->IsCrashing() )
         {
-            mAngularVelocitySum.SetZero();   // stvx128 0 -> +3904
+            mAngularVelocitySum.mV = __vspltisw(0);   // stvx128 0 -> +3904
             return;
         }
 
@@ -522,10 +522,10 @@ namespace Deformation
         //   0x8263A7FC/808  vaddfp x2                             -- the L1 norm
         //   0x8263A80C  vmaddfp (D = A*C + B): sum = L1 * dt + sum
         //   then *= pow(0.99, 60*dt) and stvx128 -> +0xF40 (a splat; all four lanes equal)
-        const f32 lfTimeStep = lvfTimeStep.x;
+        const f32 lfTimeStep = lvfTimeStep.mV.v[0];
         const Vector3 lBodyOmega = GetVehicleBody().GetAngularVelocity();   // lvx body+96
-        const f32 lfL1 = std::fabs(lBodyOmega.x) + std::fabs(lBodyOmega.y) + std::fabs(lBodyOmega.z);
-        f32 lfSum = mAngularVelocitySum.x + lfL1 * lfTimeStep;
+        const f32 lfL1 = std::fabs(lBodyOmega.mV.v[0]) + std::fabs(lBodyOmega.mV.v[1]) + std::fabs(lBodyOmega.mV.v[2]);
+        f32 lfSum = mAngularVelocitySum.mV.v[0] + lfL1 * lfTimeStep;
 
         // pow(0.99, timeStep * 60) -- the asm's exp/log polynomial with the 60.0 reference rate the
         // same block loads (flt_82092BC4 @0x8263A7CC). At a 60 fps step this is exactly 0.99 per
@@ -535,7 +535,7 @@ namespace Deformation
             std::exp( std::log( kfAngularVelocityDecay ) * ( lfTimeStep * KF_ANGULAR_DECAY_REFERENCE_RATE ) );
         lfSum *= lfDecayFactor;
         {
-            const VecFloat lAggregateValue = { lfSum, lfSum, lfSum, lfSum };
+            const VecFloat lAggregateValue(lfSum);
             mAngularVelocitySum = lAggregateValue;
         }   // 0x8263A99C stvx128 -> +0xF40
 
@@ -580,7 +580,7 @@ namespace Deformation
 
         // 0x8263AB90 stvx128 v127(=0) -> +0xF40: the accumulator restarts after every hinge attempt,
         // including one DetachPart refuses at the 20-part cap.
-        mAngularVelocitySum.SetZero();
+        mAngularVelocitySum.mV = __vspltisw(0);
     }
 
     // =============================================================================================
@@ -624,7 +624,7 @@ namespace Deformation
         IKBodyPart& lrPart = maIKParts[liPartIndex];                 // v16 = 16*a5 + a1 (+25380)
 
         // vspltisw v0,0 / stvx128 v0,r31,3904 -> zero the spin accumulator.
-        mAngularVelocitySum.SetZero();
+        mAngularVelocitySum.mV = __vspltisw(0);
 
         const IKBodyPartSpec* lpSpec = lrPart.GetSpec();            // _R29 = *(v16 + 25388)
 
@@ -695,9 +695,7 @@ namespace Deformation
         // transforms into world space. All four were {0,0,0} before this wave.
         const Vector3 lPartGraphicsPosition = lpSpec->GetPartGraphicsTransform().wAxis;
         const Vector3 lMeshOffset           = GetDeformationSpec()->mMeshOffset;
-        const Vector3 lLocalComPosition = { lPartGraphicsPosition.x - lMeshOffset.x,
-                                            lPartGraphicsPosition.y - lMeshOffset.y,
-                                            lPartGraphicsPosition.z - lMeshOffset.z, 0.0f };
+        const Vector3 lLocalComPosition(__vsubfp(lPartGraphicsPosition.mV, lMeshOffset.mV));
 
         // The part's local RENDER frame: the spec's graphics transform with its translation row
         // replaced by the COM-frame position above (the asm stores spec rows 0/1/2 then v126).
@@ -707,15 +705,14 @@ namespace Deformation
         // omega x r + v -- the world velocity of the part's own origin under the car's rigid motion.
         const Vector3 lBodyAngularVelocity = GetVehicleBody().GetAngularVelocity();
         const Vector3 lBodyLinearVelocity  = GetVehicleBody().GetLinearVelocity();
-        const Vector3 lInitialLinearVelocity = {
-            lBodyLinearVelocity.x + lBodyAngularVelocity.y * lLocalComPosition.z
-                                  - lBodyAngularVelocity.z * lLocalComPosition.y,
-            lBodyLinearVelocity.y + lBodyAngularVelocity.z * lLocalComPosition.x
-                                  - lBodyAngularVelocity.x * lLocalComPosition.z,
-            lBodyLinearVelocity.z + lBodyAngularVelocity.x * lLocalComPosition.y
-                                  - lBodyAngularVelocity.y * lLocalComPosition.x,
-            0.0f
-        };
+        const Vector3 lInitialLinearVelocity(
+            lBodyLinearVelocity.mV.v[0] + lBodyAngularVelocity.mV.v[1] * lLocalComPosition.mV.v[2]
+                                  - lBodyAngularVelocity.mV.v[2] * lLocalComPosition.mV.v[1],
+            lBodyLinearVelocity.mV.v[1] + lBodyAngularVelocity.mV.v[2] * lLocalComPosition.mV.v[0]
+                                  - lBodyAngularVelocity.mV.v[0] * lLocalComPosition.mV.v[2],
+            lBodyLinearVelocity.mV.v[2] + lBodyAngularVelocity.mV.v[0] * lLocalComPosition.mV.v[1]
+                                  - lBodyAngularVelocity.mV.v[1] * lLocalComPosition.mV.v[0]
+        );
 
         // =====================================================================================
         // DetachedPartManager::MakePartPhysical @0x82626E30 -- CALLED BY NAME 2026-08-27.
@@ -821,8 +818,7 @@ namespace Deformation
                 // mfMaxJointAngle at +0x30, so both are read through their named accessors here.
                 // (SetJoinedToVehicle ignores v2; it is passed because the console passes it.)
                 const DeformationJointSpec* lpActiveJoint = lrPart.GetActiveJointSpec();   // GetAct
-                const VecFloat lvfMaxJointAngle = { lpActiveJoint->GetMaxAngle(), lpActiveJoint->GetMaxAngle(),
-                                                    lpActiveJoint->GetMaxAngle(), lpActiveJoint->GetMaxAngle() };
+                const VecFloat lvfMaxJointAngle(lpActiveJoint->GetMaxAngle());
                 lpPhysicalBodyPart->SetJoinedToVehicle(lpActiveJoint->GetCarSpacePosition(),
                                                        lLocalComPosition,
                                                        lvfMaxJointAngle,
@@ -876,19 +872,10 @@ namespace Deformation
                 Deformation::DetachedPartNotificationEvent lNotification;
 
                 const Matrix44Affine& lVehicleTransform = lVehicleWorldTransform;
-                lNotification.mPointOnA.x = lVehicleTransform.xAxis.x * lLocalComPosition.x
-                                          + lVehicleTransform.yAxis.x * lLocalComPosition.y
-                                          + lVehicleTransform.zAxis.x * lLocalComPosition.z
-                                          + lVehicleTransform.wAxis.x;
-                lNotification.mPointOnA.y = lVehicleTransform.xAxis.y * lLocalComPosition.x
-                                          + lVehicleTransform.yAxis.y * lLocalComPosition.y
-                                          + lVehicleTransform.zAxis.y * lLocalComPosition.z
-                                          + lVehicleTransform.wAxis.y;
-                lNotification.mPointOnA.z = lVehicleTransform.xAxis.z * lLocalComPosition.x
-                                          + lVehicleTransform.yAxis.z * lLocalComPosition.y
-                                          + lVehicleTransform.zAxis.z * lLocalComPosition.z
-                                          + lVehicleTransform.wAxis.z;
-                lNotification.mPointOnA.w = 0.0f;
+                __vector4 lvPoint = __vmaddfp(lVehicleTransform.xAxis.mV, __vspltw(lLocalComPosition.mV, 0), lVehicleTransform.wAxis.mV);
+                lvPoint = __vmaddfp(lVehicleTransform.yAxis.mV, __vspltw(lLocalComPosition.mV, 1), lvPoint);
+                lvPoint = __vmaddfp(lVehicleTransform.zAxis.mV, __vspltw(lLocalComPosition.mV, 2), lvPoint);
+                lNotification.mPointOnA.mV = lvPoint; // ARTIST 0x82630C00 stores the full register.
 
                 // The asm's `ld 0x6710(this) ; srdi r8, r8, 32` -- the handling body id's HIGH dword.
                 // Two DIFFERENT EntityId types meet here and neither is wrong: RigidBodyId::

@@ -2,8 +2,8 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"
 
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags (the ApplyLocalImpulse gate)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnAbsorptionTable.h"     // AbsorptionTable
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPenetrationSolver.h"   // PenetrationSolver
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnCollidableBody.h"      // ImpulseParams
@@ -14,18 +14,6 @@
 #include "rw/math/vpu/vector3_operation.h"                    // rw::math::vpu::Magnitude (Prepare's guarded |d|)
 
 #include <cmath>   // std::pow -- ApplyLocalImpulse's vlogefp/vexptefp + minimax refinement IS powf
-
-// [dent] host-side present counter for exact frame correlation (the same extern the
-// [deform-bbox] / [chain] instruments use). DIAG only.
-namespace renderengine { extern u32 guPresentCount; }
-
-// [T5-sens] DIAG state, DEFINED in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
-// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-namespace BrnPhysics { namespace Vehicle {
-    extern s32 gT5RamFramesLeft; extern s32 gT5RamGlobalIndex; extern s32 gT5ApplyOwner; extern s32 gT5ApplyGlobal;
-} }
-                   // (the image's coefficient rows are the log2 / 2^-x series; see its banner)
-#include <cstdlib> // getenv -- the opt-in [impulse] bring-up probe only
 
 // Out-of-line bodies for BrnPhysics::Deformation::DeformationSensor.
 //
@@ -111,14 +99,8 @@ namespace Deformation
 		}
 
 		CgsPhysics::PhysicsSimulationIO::OutContactSpy lSpy;
-		{
-		    const Vector3 lAggregateValue = {maPostPhysicsVec0[0], maPostPhysicsVec0[1], maPostPhysicsVec0[2], maPostPhysicsVec0[3]};
-		    lSpy.mFrictionStress = lAggregateValue;
-		}
-		{
-		    const Vector3 lAggregateValue = {maPostPhysicsVec1[0], maPostPhysicsVec1[1], maPostPhysicsVec1[2], maPostPhysicsVec1[3]};
-		    lSpy.mNormalStress = lAggregateValue;
-		}
+		lSpy.mFrictionStress.mV = __lvx(maPostPhysicsVec0, 0);
+		lSpy.mNormalStress.mV = __lvx(maPostPhysicsVec1, 0);
 		lSpy.mNormal = mSpyNormal;
 		lSpy.mPointOnA = mSpyPointOnA;
 		lSpy.mPointOnB = mSpyPointOnB;
@@ -149,9 +131,9 @@ namespace Deformation
 		// bit-pattern in mbValid, and an access violation in the vehicle arm of the contact walk.
 
 		// Leading Vector4 view of an opaque Sphere (centre.xyz + radius.w).
-		inline Vector4& SphereVec(Sphere* lpSphere)
+		inline Vector3Plus& SphereVec(CgsGeometric::Sphere* lpSphere)
 		{
-			return *reinterpret_cast<Vector4*>(lpSphere);
+			return lpSphere->mData;
 		}
 
 		// FLAGGED-0 PLACEHOLDER for the per-direction hit-direction table (&unk_82FB9680). Indexed
@@ -186,8 +168,8 @@ namespace Deformation
 		// down (-1 z lane in the sensor's damage frame). The old zeros muted the whole preset
 		// (junkyard 0.85) damage displacement -- the term multiplies lDamageScale, which is
 		// NON-zero on the unlock/junkyard spawn path landed this wave.
-		static const VecFloat KV_POS_X_HIT_DIRECTION = { -0.7f, 0.0f, -1.0f, 0.0f };   // &unk_82FB82C0 (init 0x82C5DAD0)
-		static const VecFloat KV_NEG_X_HIT_DIRECTION = { +0.7f, 0.0f, -1.0f, 0.0f };   // &unk_82FB9F20 (init 0x82C5DB10)
+		static const Vector4 KV_POS_X_HIT_DIRECTION(-0.7f, 0.0f, -1.0f, 0.0f);   // &unk_82FB82C0 (init 0x82C5DAD0)
+		static const Vector4 KV_NEG_X_HIT_DIRECTION(+0.7f, 0.0f, -1.0f, 0.0f);   // &unk_82FB9F20 (init 0x82C5DB10)
 
 		// ⭐ REAL 2026-08-15 (walls leg 8). &unk_82FB9560, indexed 16*absorptionSet -- the PS3 exports
 		// name it `AbsorptionTable::savfCompressionLimitFactor` (that is what it scales: the
@@ -203,11 +185,11 @@ namespace Deformation
 		// allowed the MOST compression (1.5) and shutdown next (1.25).
 		static const VecFloat KsaAbsorptionScale[E_ABSORPTIONSETS_NUM] =
 		{
-			{ 1.0f,  1.0f,  1.0f,  1.0f  },   // E_ABSORPTIONSET_NORMAL               flt_82001C98 = 1.0
-			{ 1.0f,  1.0f,  1.0f,  1.0f  },   // E_ABSORPTIONSET_AI_CRASHING          flt_82001C98 = 1.0
-			{ 1.5f,  1.5f,  1.5f,  1.5f  },   // E_ABSORPTIONSET_PLAYER_EXTREME_CRASH flt_820945DC = 1.5
-			{ 1.25f, 1.25f, 1.25f, 1.25f },   // E_ABSORPTIONSET_SHUTDOWN             flt_820092CC = 1.25
-			{ 1.0f,  1.0f,  1.0f,  1.0f  },   // E_ABSORPTIONSET_INVINCIBLE           flt_82001C98 = 1.0
+			VecFloat(1.0f),   // E_ABSORPTIONSET_NORMAL               flt_82001C98 = 1.0
+			VecFloat(1.0f),   // E_ABSORPTIONSET_AI_CRASHING          flt_82001C98 = 1.0
+			VecFloat(1.5f),   // E_ABSORPTIONSET_PLAYER_EXTREME_CRASH flt_820945DC = 1.5
+			VecFloat(1.25f),   // E_ABSORPTIONSET_SHUTDOWN             flt_820092CC = 1.25
+			VecFloat(1.0f),   // E_ABSORPTIONSET_INVINCIBLE           flt_82001C98 = 1.0
 		};
 
 		// DWARF BrnDeformationSensor.cpp:198/264 -- the two file-static VecFloats.
@@ -218,7 +200,7 @@ namespace Deformation
 		// the absorption frame-rate independent: at 60 Hz the exponent is 1 and the absorption factor
 		// is exactly the table value. ⭐ That matters here specifically because this build is
 		// deliberately DECOUPLED from the console's 60 fps lock.
-		static const VecFloat KVF_60_HTZ        = { 60.0f, 60.0f, 60.0f, 60.0f };
+		static const VecFloat KVF_60_HTZ(60.0f);
 		// ⭐ KVF_VELOCITY_FACTOR DELETED 2026-08-24 (deform-land wave, P3): it was an invention
 		// of the old RecievePassedOnImpulse paraphrase, not an unrecovered constant -- the asm's
 		// factors at that site are the params' own mvfInverseInertia and mvfTimeStep.
@@ -230,11 +212,11 @@ namespace Deformation
 		// vmsum3fp128 == xyz dot product (the SIMD horizontal sum over the first three lanes).
 		inline f32 Dot3(const Vector3& lA, const Vector3& lB)
 		{
-			return lA.x * lB.x + lA.y * lB.y + lA.z * lB.z;
+			return __vmsum3fp(lA.mV, lB.mV).v[0];
 		}
 		inline Vector3 Sub3(const Vector3& lA, const Vector3& lB)
 		{
-			{ const Vector3 lResult = { lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f }; return lResult; }
+			return Vector3(__vsubfp(lA.mV, lB.mV));
 		}
 
 		// RwMathVPU::IsValid(vec) -- the asm spells this as a per-lane self-compare (vspltw +
@@ -242,7 +224,7 @@ namespace Deformation
 		// not NaN. AddContactsToPenetrationSolver tripwires the three contact vectors with it.
 		inline bool IsValid3(const Vector3& lV)
 		{
-			return lV.x == lV.x && lV.y == lV.y && lV.z == lV.z;
+			return lV.mV.v[0] == lV.mV.v[0] && lV.mV.v[1] == lV.mV.v[1] && lV.mV.v[2] == lV.mV.v[2];
 		}
 
 		// The other-car stride: AddContactsToPenetrationSolver derives the other vehicle's solver
@@ -359,7 +341,7 @@ namespace Deformation
 	// scalar still zeroes it, exactly as the shipped console computes.
 	// ⛔ The BASE is a different matter and was the bug: `existing + 0` is not `mInitialOffset + 0`.
 	// =============================================================================================
-	bool DeformationSensor::Prepare(const SensorSpec* lpSpec, Sphere* lpLocalSphere, Sphere* lpWorldSphere,
+	bool DeformationSensor::Prepare(const SensorSpec* lpSpec, CgsGeometric::Sphere* lpLocalSphere, CgsGeometric::Sphere* lpWorldSphere,
 	                                Matrix44Affine lWorldTransform, Vector3Plus lDisplacement,
 	                                Vector3 lOffsetA, Vector3 lOffsetB, Vector3 lOffsetC)
 	{
@@ -395,7 +377,7 @@ namespace Deformation
 		//   lOffsetB      == lNegLimits     lOffsetC == lDamagePoint
 		if ( lpLocalSphere && lpSpec )
 		{
-			Vector4& lLocalCentre = SphereVec(lpLocalSphere);
+			Vector3Plus& lLocalCentre = SphereVec(lpLocalSphere);
 
 			// d = spec->mInitialOffset - lDamagePoint, then the guarded |d| (vmsum3fp128 magSq ->
 			// vrsqrtefp + 2 Newton refines -> magSq * rsqrt == |d|, vsel'd to 0 when magSq == 0).
@@ -413,24 +395,24 @@ namespace Deformation
 			// The per-direction limit row: the sign of lDamagePoint.x picks BOTH the hit-direction
 			// row and which of the two lateral compression limits it scales. y is left at zero by
 			// the console's own vrlimi/vperm assembly; z always uses maDirectionParams[5].
-			const bool lbPosX = ( lOffsetC.x > 0.0f );            // vspltw + vcmpgtfp. on lane 0
-			const VecFloat& lrHitDir = lbPosX ? KV_POS_X_HIT_DIRECTION : KV_NEG_X_HIT_DIRECTION;
+			const bool lbPosX = ( lOffsetC.mV.v[0] > 0.0f );            // vspltw + vcmpgtfp. on lane 0
+			const Vector4& lrHitDir = lbPosX ? KV_POS_X_HIT_DIRECTION : KV_NEG_X_HIT_DIRECTION;
 			const f32 lfDirX = lbPosX ? lpSpec->maDirectionParams[1].mCompressionLimits    // spec+0x14
 			                          : lpSpec->maDirectionParams[0].mCompressionLimits;   // spec+0x10
 			const f32 lfDirZ = lpSpec->maDirectionParams[5].mCompressionLimits;            // spec+0x24
 
-			const Vector3 lLimit = { lrHitDir.x * lfDirX, 0.0f, lrHitDir.z * lfDirZ, 0.0f };
+			const Vector3 lLimit(lrHitDir.mV.v[0] * lfDirX, 0.0f, lrHitDir.mV.v[2] * lfDirZ);
 
 			// displacement = clamp(limit * lDamageScale * weight, lNegLimits, lPosLimits).
-			Vector3 lDisp = { lLimit.x * lDisplacement.x * lfWeight,
-			               lLimit.y * lDisplacement.y * lfWeight,
-			               lLimit.z * lDisplacement.z * lfWeight, 0.0f };
-			lDisp.x = ( lDisp.x > lOffsetB.x ) ? lDisp.x : lOffsetB.x;   // vmaxfp vs lNegLimits
-			lDisp.y = ( lDisp.y > lOffsetB.y ) ? lDisp.y : lOffsetB.y;
-			lDisp.z = ( lDisp.z > lOffsetB.z ) ? lDisp.z : lOffsetB.z;
-			lDisp.x = ( lDisp.x < lOffsetA.x ) ? lDisp.x : lOffsetA.x;   // vminfp vs lPosLimits
-			lDisp.y = ( lDisp.y < lOffsetA.y ) ? lDisp.y : lOffsetA.y;
-			lDisp.z = ( lDisp.z < lOffsetA.z ) ? lDisp.z : lOffsetA.z;
+			Vector3 lDisp(lLimit.mV.v[0] * lDisplacement.mV.v[0] * lfWeight,
+			              lLimit.mV.v[1] * lDisplacement.mV.v[1] * lfWeight,
+			              lLimit.mV.v[2] * lDisplacement.mV.v[2] * lfWeight);
+			lDisp.mV.v[0] = ( lDisp.mV.v[0] > lOffsetB.mV.v[0] ) ? lDisp.mV.v[0] : lOffsetB.mV.v[0];   // vmaxfp vs lNegLimits
+			lDisp.mV.v[1] = ( lDisp.mV.v[1] > lOffsetB.mV.v[1] ) ? lDisp.mV.v[1] : lOffsetB.mV.v[1];
+			lDisp.mV.v[2] = ( lDisp.mV.v[2] > lOffsetB.mV.v[2] ) ? lDisp.mV.v[2] : lOffsetB.mV.v[2];
+			lDisp.mV.v[0] = ( lDisp.mV.v[0] < lOffsetA.mV.v[0] ) ? lDisp.mV.v[0] : lOffsetA.mV.v[0];   // vminfp vs lPosLimits
+			lDisp.mV.v[1] = ( lDisp.mV.v[1] < lOffsetA.mV.v[1] ) ? lDisp.mV.v[1] : lOffsetA.mV.v[1];
+			lDisp.mV.v[2] = ( lDisp.mV.v[2] < lOffsetA.mV.v[2] ) ? lDisp.mV.v[2] : lOffsetA.mV.v[2];
 
 			// ⭐⭐⭐ WHY THIS ARITHMETIC RUNS UNGUARDED (walls leg 12, 2026-08-16). Leg 11 landed it behind a
 			// `gbPlaceSensorSpheres = false` because switching it on parked the car on its belly:
@@ -444,23 +426,23 @@ namespace Deformation
 			// deleted -- exactly the "two `if`s" leg 11's RETIRE-WHEN promised, and nothing else.
 			// The placed body-local sphere: centre = mInitialOffset + displacement, radius from the
 			// spec (the two `lfs f0, 0x28(spec)` w-lane inserts, one per sphere).
-			lLocalCentre.x = lSpecOffset.x + lDisp.x;
-			lLocalCentre.y = lSpecOffset.y + lDisp.y;
-			lLocalCentre.z = lSpecOffset.z + lDisp.z;
-			lLocalCentre.w = lpSpec->mfRadius;
+			lLocalCentre.mV.v[0] = lSpecOffset.mV.v[0] + lDisp.mV.v[0];
+			lLocalCentre.mV.v[1] = lSpecOffset.mV.v[1] + lDisp.mV.v[1];
+			lLocalCentre.mV.v[2] = lSpecOffset.mV.v[2] + lDisp.mV.v[2];
+			lLocalCentre.mV.v[3] = lpSpec->mfRadius;
 
 			if ( lpWorldSphere )
 			{
-				Vector4& lWorldCentre = SphereVec(lpWorldSphere);
-				lWorldCentre.w = lpSpec->mfRadius;
+				Vector3Plus& lWorldCentre = SphereVec(lpWorldSphere);
+				lWorldCentre.mV.v[3] = lpSpec->mfRadius;
 
 				const Vector3& lR = lWorldTransform.Right();
 				const Vector3& lU = lWorldTransform.Up();
 				const Vector3& lAt = lWorldTransform.At();
 				const Vector3& lP = lWorldTransform.Pos();
-				lWorldCentre.x = lLocalCentre.x * lR.x + lLocalCentre.y * lU.x + lLocalCentre.z * lAt.x + lP.x;
-				lWorldCentre.y = lLocalCentre.x * lR.y + lLocalCentre.y * lU.y + lLocalCentre.z * lAt.y + lP.y;
-				lWorldCentre.z = lLocalCentre.x * lR.z + lLocalCentre.y * lU.z + lLocalCentre.z * lAt.z + lP.z;
+				lWorldCentre.mV.v[0] = lLocalCentre.mV.v[0] * lR.mV.v[0] + lLocalCentre.mV.v[1] * lU.mV.v[0] + lLocalCentre.mV.v[2] * lAt.mV.v[0] + lP.mV.v[0];
+				lWorldCentre.mV.v[1] = lLocalCentre.mV.v[0] * lR.mV.v[1] + lLocalCentre.mV.v[1] * lU.mV.v[1] + lLocalCentre.mV.v[2] * lAt.mV.v[1] + lP.mV.v[1];
+				lWorldCentre.mV.v[2] = lLocalCentre.mV.v[0] * lR.mV.v[2] + lLocalCentre.mV.v[1] * lU.mV.v[2] + lLocalCentre.mV.v[2] * lAt.mV.v[2] + lP.mV.v[2];
 				// w untouched by the row cascade (vrlimi128 v13, v8, 1, 0 keeps the radius above).
 			}
 		}
@@ -468,125 +450,9 @@ namespace Deformation
 		// The tail store both consoles end on: the biggest-impulse displacement's w lane is zeroed
 		// (X360 0x8260A4F8 vrlimi128 v13, v0, 1, 0 -> stvx128 to this+0x10; PS3 0x6C1C5C
 		// vperm<0,1,2,7> against the zero register -> stvx to this+0x10).
-		mPointDisplacement_BiggestImpulseThisFrame.w = 0.0f;
+		mPointDisplacement_BiggestImpulseThisFrame.mV = __vrlimi(mPointDisplacement_BiggestImpulseThisFrame.mV, __vspltisw(0), 1, 0);
 
 		return true;   // the asm returns 1 unconditionally.
-	}
-
-	// =============================================================================================
-	// [hop] NOT IN THE X360 BINARY -- host-side witness, opt-in on BRN_HOP_PROBE (0/unset ==
-	// fully inert). DELETE-WHEN the deformation-SHAPE question is banked.
-	//
-	// IT ANSWERS ONE QUESTION: HOW WIDE IS A DENT?
-	//   A dent that stays on ONE sensor while its neighbours hold still IS a stretched panel --
-	//   UpdateIK blends every tag point from TWO sensor sphere centres, so a big move on A with
-	//   zero on B pulls the panel between them apart. A dent shared across a CHAIN of sensors is
-	//   a crumple. The chain is authored: ApplyLocalImpulse ends with
-	//       ImpulsePasser::PassOnImpulse(spec->maNextSensor[dir], params, absorbed * 0.5)
-	//   and DeformationSensor::RecievePassedOnImpulse deposits into ITS sphere and forwards with
-	//   the SAME direction and the SAME magnitude (`vmr128 v1, v127` @0x825E12BC -- the incoming
-	//   argument, never attenuated), so the chain deposits at CONSTANT amplitude once per hop and
-	//   the HOP COUNT is the width of the crumple.
-	//
-	// THE ORACLE IS OFFLINE AND INDEPENDENT, AND ITS PREDICTION IS PRE-REGISTERED HERE.
-	// tools/re/deform_chain_walk.py (parent repo) walks the same maNextSensor[] out of the shipped
-	// VEH_*_AT.BIN, so the runtime histogram below has a number to be checked against rather than
-	// a plausible one to be admired. Measured over the fleet 2026-09-07 -- 429 cars, 8,334 sensors,
-	// 50,004 chains, ALL terminating at the car body (0 cycles, 0 out-of-range, 0 self-loops,
-	// mu8SceneIndex == i+1 everywhere):
-	//     mean hops per direction    +X 0.80   -X 0.78   +Y 0.00   -Y 0.16   +Z 1.95   -Z 1.99
-	//     hop histogram   0:29668 1:8910 2:4123 3:3122 4:1479 5:1386 6:1316
-	//     PUSMC01 alone   +X 0.80  -X 0.80  +Y 0.00  -Y 0.20  +Z 2.25  -Z 2.25
-	// ⭐ THAT SIX-VALUE FINGERPRINT IS THE NEGATIVE CONTROL. It is strongly shaped -- the vertical
-	// axes are near zero and the two crush axes are an order of magnitude larger -- so a ledger
-	// that is merely counting something plausible cannot reproduce it by accident, and a ledger
-	// reporting every chain dead at depth 0 while the data says 1.99 has found the smear rather
-	// than a bug in itself. dirDepth[d] / dirN[d] is the runtime side of the comparison.
-	// The absorption-weighted spread profile puts numbers on what is at stake: on the two crush
-	// axes the chain carries 1.01 / 1.03 times the displacement of the sensor that was actually
-	// hit, so a dead chain loses HALF of a head-on dent and concentrates the rest on one sphere.
-	//
-	// WHY IT COUNTS RATHER THAN MAXIMISES: a max is monotone -- it can only freeze -- and this
-	// campaign has read a frozen max as a stall before. Every field here is a COUNT or a SUM
-	// printed with its present number, so two dumps subtract into a window.
-	//
-	// muNextZeroAtHead / muNextZeroAtHop exist so that "no chain ever got past depth 0" can be
-	// told apart from "the receiving body never ran" -- those are two completely different
-	// findings and only the pair of counters distinguishes them.
-	//
-	// THE dt FIELDS ARE THE FRAME-RATE COUPLING, AND THEY ARE LOAD-BEARING HERE. The direct-hit
-	// arm scales its absorption by pow(base, 60*dt) (the inlined powf at 0x825E14E4..0x825E16C0)
-	// while THIS chain arm has NO such correction (the asm 0x825E12DC..0x825E12E4 is three plain
-	// multiplies). At the console's dt == 1/60 the exponent is exactly 1 and the two arms agree;
-	// at any other dt their ratio is base^(60*dt - 1) != 1, so a step that is not 1/60 changes the
-	// BALANCE between the direct dent and the spread dent -- i.e. it changes the SHAPE. The
-	// game's first frame runs a ~9.8 s sim catch-up, so this is not hypothetical.
-	// =============================================================================================
-	namespace
-	{
-		const s32 KI_HOP_BINS = 12;
-		// ⚠️ 512, AND A REFUSAL COUNTER. The [dent] table above learned this the expensive way:
-		// its 48 rows were shared FIRST-COME between the player and every traffic car, so a
-		// 148 mph wreck produced rows for three of the player's sensors and read exactly like
-		// "only one corner of the car ever deforms". muRowsRefused below makes a full table say
-		// so instead of silently answering a different question. [[diagnostics-that-lie]]
-		const s32 KI_HOP_ROWS = 512;
-
-		struct HopSensorRow
-		{
-			const void* mpSensor;
-			s32         miDir;
-			f32         mafInitialOffset[3];
-			f32         mfChainMove;    // sum of the moves this sensor took AS A CHAIN MEMBER
-			u32         muHits;
-			u32         muNegative;     // deposits pulled BACKWARD (room - consumed < 0)
-			s32         miOwner;
-			s32         miDepth;        // the depth of the last hop that reached it
-		};
-
-		struct HopLedger
-		{
-			u32 muHeadApplies;              // ApplyLocalImpulse tails that started a chain
-			u32 muNextZeroAtHead;           // ...of those, next == 0 (straight to the car body)
-			u32 muChainDeposits;            // DeformationSensor::RecievePassedOnImpulse entries
-			u32 muNextZeroAtHop;            // ...of those, whose own next == 0
-			u32 muPositive, muZeroMove, muNegative;
-			u32 mauDepth[KI_HOP_BINS];      // terminal chain depth histogram
-			f32 mafDepthMove[KI_HOP_BINS];  // metres deposited at each depth
-			f32 mfHeadMove;                 // metres deposited by direct hits
-			f32 mfChainMove;                // metres deposited by chain hops
-			u32 mauDirCount[6];             // chains started per direction
-			u32 mauDirDepthSum[6];          // and the total depth they reached
-			u32 muDtSamples, muDtOffConsole, muDtBig;
-			f32 mfDtMax;
-			u32 muRowsRefused;              // chain deposits the per-sensor table had no room for
-		};
-
-		HopLedger    gHop = { 0 };
-		HopSensorRow gaHopRows[KI_HOP_ROWS];
-		s32          giHopRows = 0;
-		s32          giHopDepth = 0;
-		u32          guHopLastDump = 0xFFFFFFFFu;
-		s32          giHopProbe = -1;
-
-		HopSensorRow* HopFind( const void* lpSensor, s32 liDir )
-		{
-			for ( s32 li = 0; li < giHopRows; ++li )
-			{
-				if ( gaHopRows[li].mpSensor == lpSensor && gaHopRows[li].miDir == liDir )
-				{
-					return &gaHopRows[li];
-				}
-			}
-			if ( giHopRows >= KI_HOP_ROWS ) { ++gHop.muRowsRefused; return 0; }
-			HopSensorRow& lrNew = gaHopRows[giHopRows++];
-			lrNew.mpSensor = lpSensor;   lrNew.miDir = liDir;
-			lrNew.mafInitialOffset[0] = 0.0f; lrNew.mafInitialOffset[1] = 0.0f;
-			lrNew.mafInitialOffset[2] = 0.0f;
-			lrNew.mfChainMove = 0.0f;    lrNew.muHits = 0u;   lrNew.muNegative = 0u;
-			lrNew.miOwner = -1;          lrNew.miDepth = -1;
-			return &lrNew;
-		}
 	}
 
 	// =============================================================================================
@@ -633,89 +499,29 @@ namespace Deformation
 	// tripwire on a field that IS written by all three params builders.
 	void DeformationSensor::RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude)
 	{
-		const ENextSensorDirection leDir = lpImpulseParams->meImpulseDirection;   // params +0x00
-		const s32  liDir = static_cast<s32>(leDir);
-
-		// The per-direction unit axis (lvx128 &unk_82FB9680 + 16*dir == KA_IMPULSE_DIRECTIONS[dir]).
-		const Vector3& lrAxis = KA_IMPULSE_DIRECTIONS[liDir];
-
-		// Room limit: max(spec per-direction compression limit, 0.01)      (vmaxfp vs splat 0.01)
-		//           * savfCompressionLimitFactor[absorption set]           (unk_82FB9560[set])
-		//           * params->mvfAllowedCompressionFactor                  (params +0x90).
-		const f32 lfCompLimit = mpSpec ? mpSpec->maDirectionParams[liDir].mCompressionLimits : 0.0f;
-		const f32 lfClampedLimit = lfCompLimit > KF_NORMAL_TOLERANCE ? lfCompLimit : KF_NORMAL_TOLERANCE;
-		const f32 lfRoom = lfClampedLimit
-		                 * KsaAbsorptionScale[lpImpulseParams->meAbsorptionSet].x
-		                 * lpImpulseParams->mvfAllowedCompressionFactor.x;
-
-		// Compression consumed so far: max( dot3(axis, currentDisplacement), 0 ) where
-		// currentDisplacement = local sphere lead - spec rest offset (vsubfp v12; vmsum3fp; vmaxfp 0).
-		f32 lfConsumed = 0.0f;
-		if ( mpLocalSpaceSphere && mpSpec )
-		{
-			const Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
-			const Vector3 lCentre3 = { lCentre.x, lCentre.y, lCentre.z, 0.0f };
-			const Vector3 lAxis3 = { lrAxis.x, lrAxis.y, lrAxis.z, 0.0f };
-			const Vector3 lDisp = Sub3(lCentre3, mpSpec->mInitialOffset);
-			const f32 lfDot = Dot3(lAxis3, lDisp);
-			lfConsumed = lfDot > 0.0f ? lfDot : 0.0f;
-		}
-
-		// AbsorptionTable consult (params set +0xB4, spec absorption level +0x33).
-		const u8 lu8AbsorptionLevel = mpSpec ? mpSpec->GetAbsorptionLevel() : 0;
-		const VecFloat lvfAbsorption =
-			AbsorptionTable::GetAbsorption(lpImpulseParams->meAbsorptionSet, lu8AbsorptionLevel);
-
-		// Applied displacement = magnitude
-		//                      * min(params->mvfMaximumAllowedAbsorption, absorption)  (vminfp)
-		//                      * params->mvfInverseInertia * params->mvfTimeStep,
-		// clamped to the REMAINING room (vminfp against room - consumed) -- the remaining-room
-		// clamp is what lets a dent SPREAD: once this sensor is full the amount goes to zero here
-		// while the full magnitude still passes on below.
-		f32 lfAbsorb = lvfAbsorption.x < lpImpulseParams->mvfMaximumAllowedAbsorption.x
-		             ? lvfAbsorption.x : lpImpulseParams->mvfMaximumAllowedAbsorption.x;
-		f32 lfAmount = lvfPassedMagnitude.x * lfAbsorb
-		             * lpImpulseParams->mvfInverseInertia.x
-		             * lpImpulseParams->mvfTimeStep.x;
-		const f32 lfRemaining = lfRoom - lfConsumed;
-		if ( lfAmount > lfRemaining )
-		{
-			lfAmount = lfRemaining;
-		}
-
-		// Accumulate: local sphere lead += axis * amount (vmaddfp; vrlimi keeps the w/radius lane).
-		if ( mpLocalSpaceSphere )
-		{
-			Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
-			lCentre.x += lrAxis.x * lfAmount;
-			lCentre.y += lrAxis.y * lfAmount;
-			lCentre.z += lrAxis.z * lfAmount;
-			// w (radius) lane preserved.
-		}
-
-		// ---- [hop] the chain arm's ledger (see the banner above; opt-in, inert by default) -----
-		// ⚠️ THE SIGN IS RECORDED SEPARATELY AND IT IS NOT A BUG. There is no max(.,0) on
-		// `lfRemaining` in the asm -- 0x825E12B0 is a bare `vsubfp128 v11, v125, v124` and the
-		// only clamp is the `vminfp v0, v0, v11` at 0x825E12E8 -- so a sensor whose consumed
-		// compression already EXCEEDS the room this impulse's budget allows takes a NEGATIVE
-		// move and is pulled back toward rest. That is the console's own arithmetic (it happens
-		// whenever a dent banked at allowedCompression 1.0 is later passed an impulse at the
-		// 0.2 drive-time budget), so it is counted, not clamped.
-
-		// Forward the (now absorbed) impulse onto the next body in the chain. The X360
-		// UNCONDITIONALLY calls (asm tail):
-		//     ImpulsePasser::PassOnImpulse(_R31[44], *(meImpulseDirection + mpSpec + 44), _R31);
-		// i.e. the passer carried on the ImpulseParams (_R31[44] == lpImpulseParams->mpImpulsePasser),
-		// the chain slot selected by the spec's next-sensor for this impulse direction
-		// (*(mpSpec + 44-region) indexed by meImpulseDirection == maNextSensor[liDir]), and the
-		// params block itself (_R31 == lpImpulseParams). The return is propagated through
-		// _restvmx_124; PassOnImpulse is void here, so the call IS the side effect. The callee's
-		// body lives in the BrnImpulsePasser TU -- reached BY NAME (declared in BrnImpulsePasser.h).
-		const u8 lu8NextSlot = mpSpec ? mpSpec->maNextSensor[liDir] : 0;
-		if ( lpImpulseParams->mpImpulsePasser )
-		{
-			lpImpulseParams->mpImpulsePasser->PassOnImpulse(lu8NextSlot, lpImpulseParams, lvfPassedMagnitude);
-		}
+		// ARTIST 0x825E1210..0x825E1308, register operations in instruction order.
+		const s32 liDir = static_cast<s32>(lpImpulseParams->meImpulseDirection);
+		const __vector4 axis = KA_IMPULSE_DIRECTIONS[liDir].mV;
+		Vector3Plus& centre = SphereVec(mpLocalSpaceSphere);
+		const __vector4 offset = __vsubfp(centre.mV, mpSpec->mInitialOffset.mV);
+		const __vector4 limit = VecFloat(mpSpec->maDirectionParams[liDir].mCompressionLimits).mV;
+		const __vector4 tolerance = VecFloat(KF_NORMAL_TOLERANCE).mV;
+		const __vector4 scaledLimit = __vmulfp(
+		    __vmulfp(__vmaxfp(limit, tolerance), KsaAbsorptionScale[lpImpulseParams->meAbsorptionSet].mV),
+		    lpImpulseParams->mvfAllowedCompressionFactor.mV);
+		const __vector4 used = __vmaxfp(__vmsum3fp(axis, offset), __vspltisw(0));
+		const VecFloat absorption = AbsorptionTable::GetAbsorption(
+		    lpImpulseParams->meAbsorptionSet, mpSpec->GetAbsorptionLevel());
+		const __vector4 remaining = __vsubfp(scaledLimit, used);
+		__vector4 amount = __vminfp(lpImpulseParams->mvfMaximumAllowedAbsorption.mV, absorption.mV);
+		amount = __vmulfp(lvfPassedMagnitude.mV, amount);
+		amount = __vmulfp(amount, lpImpulseParams->mvfInverseInertia.mV);
+		amount = __vmulfp(amount, lpImpulseParams->mvfTimeStep.mV);
+		amount = __vminfp(amount, remaining);
+		const __vector4 previous = centre.mV;
+		centre.mV = __vrlimi(__vmaddfp(axis, amount, previous), previous, 1, 0);
+		lpImpulseParams->mpImpulsePasser->PassOnImpulse(
+		    mpSpec->maNextSensor[liDir], lpImpulseParams, lvfPassedMagnitude);
 	}
 
 	// =============================================================================================
@@ -759,118 +565,6 @@ namespace Deformation
 	// the partition + dedupe control flow is reproduced; the dense VMX point math is modelled per-lane.
 	// =============================================================================================
 
-	// =============================================================================================
-	// [dent] NOT IN THE X360 BINARY -- host-side witness, opt-in on BRN_DENT_PROBE (0/unset ==
-	// fully inert, not even a table row is written).  It answers ONE question and states both
-	// sides of it on the SAME frame:
-	//
-	//     THE CONSOLE'S DENT  vs  THE PC'S DENT, per sensor, per direction.
-	//
-	// The console's number is NOT a second copy of this body's arithmetic.  It is the closed form
-	// the X360 asm's own clamp structure forces, derived at 0x825E13E0..0x825E1744 and re-decoded
-	// from the raw instruction words 2026-09-03:
-	//
-	//     move_step = min( room , mag * F * invI * dt )
-	//     room      = max( 0, min( compLimit - max(0,used) , dot(mLimitVector - centre, hitDir) ) )
-	//     compLimit = max(specLim[dir], 0.01) * savfCompressionLimitFactor[set] * allowedCompression
-	//
-	// `used` only ever grows and `compLimit` is constant across a contact, so summing the clamped
-	// per-step moves telescopes EXACTLY to
-	//
-	//     total dent  =  min( compLimit , SUM of the unclamped steps )      [the box term aside]
-	//
-	// i.e. the console's dent is min(CEILING, SUPPLY) -- a ceiling that is pure DATA (the streamed
-	// SensorSpec::maDirectionParams[dir], which this witness prints so it can be joined offline to
-	// the X360 retail VEH_*_AT.BIN by mInitialOffset) and a supply that is the impulse chain.
-	// `disp` is the PC's achieved displacement, read live off the sphere -- the other side.
-	//   * disp ~= min(ceiling, supply)         -> the clamp ladder is transcribed faithfully
-	//   * disp <  ceiling and nRoom == 0       -> IMPULSE-limited: the dent is the chain's answer
-	//   * disp pinned at ceiling               -> DATA-limited: the dent is the spec's answer
-	// DELETE-WHEN the dent magnitude is banked.
-	// =============================================================================================
-	namespace
-	{
-		struct DentRow
-		{
-			const void* mpSensor;
-			s32         miDir;
-			f32         mafInitialOffset[3];
-			f32         mfCeiling;      // compLimit at the last apply (the console's data ceiling)
-			f32         mfSupply;       // SUM of the UNCLAMPED per-step moves (the impulse supply)
-			f32         mfApplied;      // SUM of the moves actually taken (after the room clamp)
-			f32         mfLastToLimit;  // the box term, so a box-bound row can be told apart
-			f32         mfLastMag;      // the incoming magnitude of the last apply
-			f32         mfLastInvI;
-			f32         mfLastFactor;
-			f32         mfLastVn;
-			f32         mfSupply60;     // the same sum with the CONSOLE's exponent (60*dt == 1)
-			f32         mfLastDt;
-			f32         mfLastBase;
-			f32         mfAllowed;      // the compression BUDGET the row's supply was accumulated under
-			u32         muRoomClamped;  // applies where the room bound bit
-			u32         muFree;         // applies where the impulse was the smaller of the two
-			s32         miOwner;
-			s32         miSet;
-			s32         miLevel;
-			u32         muWorld;        // applies whose params carried mbWorldContact
-			// ⭐⭐ THE THREE FIELDS THAT MAKE THE ROW'S SILENCE READABLE (2026-09-07). Everything
-			// above is a SUM or a LAST-VALUE, and both go to zero in an invincible window -- so the
-			// row above cannot distinguish "no impulse arrived" from "an impulse arrived and
-			// absorbed nothing". These three separate them: muApplies counts arrivals whatever
-			// they absorbed, muInvApplies counts the arrivals that landed in
-			// E_ABSORPTIONSET_INVINCIBLE, and muAppliesLastDump is what the dump filter below
-			// subtracts to ask "was this row touched since the last present".
-			u32         muApplies;
-			u32         muInvApplies;
-			u32         muAppliesLastDump;
-		};
-		// ⚠️⚠️ 48 WAS A DIAGNOSTIC THAT LIED BY OMISSION (momentum wave, 2026-09-05). DentFind
-		// allocates one row per (sensor, direction) pair FIRST-COME, and every vehicle in the
-		// world -- the player AND every traffic car -- competes for the same 48. A player car has
-		// 20 body sensors x 6 directions == 120 pairs on its own, so the table is exhausted long
-		// before the player's crash and DentFind then returns 0 and silently records nothing.
-		// MEASURED in run mom_A1: a 148 mph wall wreck that drove the deepest sensor to 0.968 m
-		// produced [dent] rows for exactly THREE of the player's sensors, all on the front-left --
-		// which reads exactly like "only one corner of the car ever deforms" and is not that at all.
-		// Raised so the ledger can answer the OWNER'S first complaint (does every part deform?)
-		// instead of answering the table's capacity. 512 rows == 8 KB of host BSS in a probe that
-		// is dead unless BRN_DENT_PROBE is set.
-		const s32   KI_DENT_ROWS   = 512;
-		DentRow     gaDentRows[KI_DENT_ROWS];
-		s32         giDentRows     = 0;
-		u32         guDentLastDump = 0xFFFFFFFFu;
-		u32         guDentLines    = 0;
-		s32         giDentProbe    = -1;
-		// running total of impulse arrivals that landed in E_ABSORPTIONSET_INVINCIBLE, over every
-		// row and every owner -- the run-level counter the `[dent-guard]` line reports.
-		u32         guDentInvincibleApplies = 0;
-		// the last present at which a `[dent-guard]` line was emitted (one per present, at most)
-		u32         guDentGuardLastDump     = 0xFFFFFFFFu;
-		u32         guDentGuardLines        = 0;
-
-		DentRow* DentFind( const void* lpSensor, s32 liDir )
-		{
-			for ( s32 li = 0; li < giDentRows; ++li )
-			{
-				if ( gaDentRows[li].mpSensor == lpSensor && gaDentRows[li].miDir == liDir )
-				{
-					return &gaDentRows[li];
-				}
-			}
-			if ( giDentRows >= KI_DENT_ROWS ) { return 0; }
-			DentRow& lrNew = gaDentRows[giDentRows++];
-			lrNew.mpSensor = lpSensor;  lrNew.miDir = liDir;
-			lrNew.mafInitialOffset[0] = 0.0f; lrNew.mafInitialOffset[1] = 0.0f; lrNew.mafInitialOffset[2] = 0.0f;
-			lrNew.mfCeiling = 0.0f; lrNew.mfSupply = 0.0f; lrNew.mfApplied = 0.0f;
-			lrNew.mfLastToLimit = 0.0f; lrNew.mfLastMag = 0.0f; lrNew.mfLastInvI = 0.0f;
-			lrNew.mfLastFactor = 0.0f; lrNew.mfLastVn = 0.0f; lrNew.mfAllowed = -1.0f;
-			lrNew.mfSupply60 = 0.0f; lrNew.mfLastDt = 0.0f; lrNew.mfLastBase = 0.0f;
-			lrNew.muRoomClamped = 0u; lrNew.muFree = 0u; lrNew.muWorld = 0u;
-			lrNew.miOwner = -1; lrNew.miSet = -1; lrNew.miLevel = -1;
-			lrNew.muApplies = 0u; lrNew.muInvApplies = 0u; lrNew.muAppliesLastDump = 0u;
-			return &lrNew;
-		}
-	}
 	// =============================================================================================
 	// ApplyLocalImpulse -- X360 **sub_825E1320** (0x825E1320..0x825E1787, 1128 bytes == 282
 	// instructions). This is the CollidableBody override the sensor vtable needs (slot 0) and the
@@ -982,12 +676,12 @@ namespace Deformation
 		const Vector3 lHitDir = KA_IMPULSE_DIRECTIONS[liDir];
 
 		// ---- (B) how much compression room is left along this axis -----------------------------
-		Vector3 lFromRest = { 0.0f, 0.0f, 0.0f, 0.0f };
-		Vector3 lToLimit  = { 0.0f, 0.0f, 0.0f, 0.0f };
+		Vector3 lFromRest(__vspltisw(0));
+		Vector3 lToLimit(__vspltisw(0));
 		if ( mpLocalSpaceSphere && mpSpec )
 		{
-			const Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
-			const Vector3 lCentre3 = { lCentre.x, lCentre.y, lCentre.z, 0.0f };
+			const Vector3Plus& lCentre = SphereVec(mpLocalSpaceSphere);
+			const Vector3 lCentre3(lCentre.mV.v[0], lCentre.mV.v[1], lCentre.mV.v[2]);
 			lFromRest = Sub3(lCentre3, mpSpec->mInitialOffset);                       // vsubfp v9,v0,v9
 			lToLimit  = Sub3(lpImpulseParams->mLimitVector, lCentre3);                // vsubfp v0,v11,v0
 		}
@@ -997,8 +691,8 @@ namespace Deformation
 		// (lvlx + vspltw @0x825E13E0/E4; vmaxfp @0x825E13F0; vmulfp128 @0x825E13F8 / @0x825E1400)
 		const f32 lfSpecLimit = mpSpec ? mpSpec->maDirectionParams[liDir].mCompressionLimits : 0.0f;
 		f32 lfCompressionLimit = lfSpecLimit > KF_NORMAL_TOLERANCE ? lfSpecLimit : KF_NORMAL_TOLERANCE;
-		lfCompressionLimit *= KsaAbsorptionScale[leSet].x;
-		lfCompressionLimit *= lpImpulseParams->mvfAllowedCompressionFactor.x;
+		lfCompressionLimit *= KsaAbsorptionScale[leSet].mV.v[0];
+		lfCompressionLimit *= lpImpulseParams->mvfAllowedCompressionFactor.mV.v[0];
 
 		// vmsum3fp128 v12 (@0x825E13FC) then vmaxfp128 v12,v12,v127 (@0x825E1404): how far the
 		// sphere has ALREADY travelled along this axis, floored at zero.
@@ -1029,7 +723,7 @@ namespace Deformation
 
 		// vcmpgefp128. v11,v7,v127 @0x825E13D8 -> the assert arm @0x825E142C, source line 319. The
 		// console builds the message with the offending float appended; the static text is verbatim.
-		CGS_ASSERT(lpImpulseParams->mvfVelocityAlongNormal.x >= 0.0f,
+		CGS_ASSERT(lpImpulseParams->mvfVelocityAlongNormal.mV.v[0] >= 0.0f,
 		           "Applying impulse with -ve velocity: ");
 
 		// ---- (C) the absorption fraction, made frame-rate independent --------------------------
@@ -1041,22 +735,22 @@ namespace Deformation
 
 		// vrefp128 + two Newton-Raphson steps (@0x825E14EC..0x825E1544) converge to the reciprocal;
 		// vmulfp128 @0x825E1548 then vminfp @0x825E155C clamps the ratio at 1.
-		f32 lfSpeedRatio = lpImpulseParams->mvfVelocityAlongNormal.x / lvfSpeedForMax.x;
+		f32 lfSpeedRatio = lpImpulseParams->mvfVelocityAlongNormal.mV.v[0] / lvfSpeedForMax.mV.v[0];
 		if ( lfSpeedRatio > 1.0f )
 			lfSpeedRatio = 1.0f;
 
 		// vmulfp128 v13,v13,v124 / v13,v13,v1 then vmaddfp128 v13,v124,v3,v13 (@0x825E1560..0x825E156C),
 		// where v3 == 1 - proportion (vsubfp v3,v11,v1 @0x825E1538):
 		//     absorption*(1 - proportion)  +  absorption*proportion*speedRatio
-		const f32 lfFraction = lvfAbsorption.x * (1.0f - lvfProportion.x)
-		                     + lvfAbsorption.x * lvfProportion.x * lfSpeedRatio;
+		const f32 lfFraction = lvfAbsorption.mV.v[0] * (1.0f - lvfProportion.mV.v[0])
+		                     + lvfAbsorption.mV.v[0] * lvfProportion.mV.v[0] * lfSpeedRatio;
 
 		// vminfp v9,v7,v13 @0x825E1570 -- v7 is params +0xA0.
-		const f32 lfMaxAllowed = lpImpulseParams->mvfMaximumAllowedAbsorption.x;
+		const f32 lfMaxAllowed = lpImpulseParams->mvfMaximumAllowedAbsorption.mV.v[0];
 		const f32 lfBase = lfMaxAllowed < lfFraction ? lfMaxAllowed : lfFraction;
 
 		// the inlined powf (@0x825E14E4..0x825E16C0): base == lfBase, exponent == 60 * timeStep.
-		const f32 lfExponent = KVF_60_HTZ.x * lpImpulseParams->mvfTimeStep.x;
+		const f32 lfExponent = KVF_60_HTZ.mV.v[0] * lpImpulseParams->mvfTimeStep.mV.v[0];
 		const f32 lfAbsorbFactor = std::pow(lfBase, lfExponent);
 
 		// vcmpgtfp128. @0x825E16C4 and vcmpgefp128. @0x825E16DC -> the assert arm @0x825E16F0,
@@ -1066,12 +760,12 @@ namespace Deformation
 
 		// ---- (D) absorb, deform, and hand the rest down the chain -------------------------------
 		// vmulfp128 v0,v0,v125 @0x825E1728 -- the part of the impulse this sensor takes.
-		const f32 lfAbsorbed = lpImpulseParams->mvfImpulseMagnitude.x * lfAbsorbFactor;
+		const f32 lfAbsorbed = lpImpulseParams->mvfImpulseMagnitude.mV.v[0] * lfAbsorbFactor;
 
 		// vmulfp128 v12,v0,v12 (* mvfInverseInertia) then v13,v12,v13 (* mvfTimeStep)
 		// (@0x825E1738 / @0x825E1740): impulse -> velocity -> displacement this step.
 		// vminfp128 v13,v13,v121 @0x825E1744 clamps it to the room computed in (B).
-		f32 lfMove = lfAbsorbed * lpImpulseParams->mvfInverseInertia.x * lpImpulseParams->mvfTimeStep.x;
+		f32 lfMove = lfAbsorbed * lpImpulseParams->mvfInverseInertia.mV.v[0] * lpImpulseParams->mvfTimeStep.mV.v[0];
 		if ( lfMove > lfRoom )
 			lfMove = lfRoom;
 
@@ -1079,10 +773,10 @@ namespace Deformation
 		// local sphere centre along the hit direction, KEEPING the w lane (the radius) untouched.
 		if ( mpLocalSpaceSphere )
 		{
-			Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
-			lCentre.x += lHitDir.x * lfMove;
-			lCentre.y += lHitDir.y * lfMove;
-			lCentre.z += lHitDir.z * lfMove;
+			Vector3Plus& lCentre = SphereVec(mpLocalSpaceSphere);
+			lCentre.mV.v[0] += lHitDir.mV.v[0] * lfMove;
+			lCentre.mV.v[1] += lHitDir.mV.v[1] * lfMove;
+			lCentre.mV.v[2] += lHitDir.mV.v[2] * lfMove;
 			// w (radius) preserved -- vrlimi128 re-inserts it from the pre-update copy.
 		}
 
@@ -1115,112 +809,21 @@ namespace Deformation
 		// while v13 is what moved the sphere. A sensor with NO ROOM LEFT therefore still removes its
 		// full share from the chain magnitude even though it cannot dent any further, which is why a
 		// fully-crushed panel does not suddenly start dumping momentum into the body.
-		lpImpulseParams->mvfImpulseMagnitude.x -= lfAbsorbed;
-		lpImpulseParams->mvfImpulseMagnitude.y -= lfAbsorbed;
-		lpImpulseParams->mvfImpulseMagnitude.z -= lfAbsorbed;
-		lpImpulseParams->mvfImpulseMagnitude.w -= lfAbsorbed;
+		lpImpulseParams->mvfImpulseMagnitude.mV.v[0] -= lfAbsorbed;
+		lpImpulseParams->mvfImpulseMagnitude.mV.v[1] -= lfAbsorbed;
+		lpImpulseParams->mvfImpulseMagnitude.mV.v[2] -= lfAbsorbed;
+		lpImpulseParams->mvfImpulseMagnitude.mV.v[3] -= lfAbsorbed;
 
 		// bl 0x825BA400 @0x825E1770 == ImpulsePasser::PassOnImpulse(spec.maNextSensor[dir], params,
 		// absorbed * 0.5f). ⭐ Slot 0 of the passer's body map is the car's own VehicleRigidBody,
 		// which is how an ordinary world contact reaches the momentum bank.
-		const u8 lu8NextSlot = mpSpec ? mpSpec->maNextSensor[liDir] : 0;
-
-		// ---- [impulse] PC bring-up instrument -- DELETE WHEN the wall test is banked -----------
-		// OPT-IN (BRN_IMPULSE_PROBE=1) so a default run and every golden gate stay byte-identical.
-		// Prints the FIRST few entries with every operand this body consumed, in ONE run -- the
-		// campaign rule is to read values a probe prints directly rather than infer them across runs.
-		// ⚠️ READ `mag` CAREFULLY: the probe sits AFTER the `mvfImpulseMagnitude -= lfAbsorbed`
-		// above, so `mag` is the REMAINING magnitude the chain forwards, not the incoming one. The
-		// incoming magnitude is `mag + absorbed`, and `absorbed / (mag + absorbed)` is `factor`.
-		// (Cost of not knowing this: an `absorbed/mag` ratio of 0.25 that should have been 0.2.)
-		{
-			static s32 siImpulseProbe = -1;
-			if ( siImpulseProbe < 0 )
-			{
-			}
-			// ⚠️ TWO WINDOWS (2026-08-16, walls leg 9): the +Y floor support runs this body ~20 times
-			// a frame while the car merely rests, so a flat cap is spent long before anything
-			// interesting happens. Window 1 proves the body runs at all; window 2 keeps only the
-			// applies along a HORIZONTAL body axis with a real magnitude -- what a wall face gives
-			// and what the ground does not.
-			static u32 suCalls      = 0;
-			static u32 suHorizontal = 0;
-			++suCalls;
-			const bool lbHorizontalDir = ( liDir != 2 && liDir != 3 );
-			const f32  lfProbeMag      = lpImpulseParams->mvfImpulseMagnitude.x;
-			const bool lbInteresting   = ( suCalls <= 30u )
-			                          || ( lbHorizontalDir && lfProbeMag > 1.0f
-			                               && ++suHorizontal <= 600u );
-			// [T5-sens] arm (traffic crash wave, 2026-09-02): while the [T5-ram] window is open, every
-			// apply into the HIT TRAFFIC CAR's sensors prints regardless of the two windows above.
-			static u32 suT5Lines = 0;
-			const bool lbT5Traffic = ( BrnPhysics::Vehicle::gT5RamFramesLeft > 0
-			                        && BrnPhysics::Vehicle::gT5ApplyOwner == 2
-			                        && BrnPhysics::Vehicle::gT5ApplyGlobal == BrnPhysics::Vehicle::gT5RamGlobalIndex
-			                        && ++suT5Lines <= 400u );
-			if ( siImpulseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && ( lbInteresting || lbT5Traffic ) )
-			{
-				*CgsDev::Log::gpDebugPrint
-					<< "[impulse] n " << static_cast<s32>(suCalls)
-					<< " owner " << BrnPhysics::Vehicle::gT5ApplyOwner
-					<< " global " << BrnPhysics::Vehicle::gT5ApplyGlobal
-					<< " specLim " << lfSpecLimit << " compLim " << lfCompressionLimit
-					<< " used " << lfClampedUsed << " toLimit " << lfToLimit
-					<< " dir " << liDir << " set " << static_cast<s32>(leSet)
-					<< " lvl " << static_cast<s32>(lu8AbsorptionLevel)
-					<< " mag " << lpImpulseParams->mvfImpulseMagnitude.x
-					<< " vAlongN " << lpImpulseParams->mvfVelocityAlongNormal.x
-					<< " dt " << lpImpulseParams->mvfTimeStep.x
-					<< " absn " << lvfAbsorption.x << " prop " << lvfProportion.x
-					<< " spdMax " << lvfSpeedForMax.x << " ratio " << lfSpeedRatio
-					<< " maxAllow " << lfMaxAllowed << " base " << lfBase
-					<< " expo " << lfExponent << " factor " << lfAbsorbFactor
-					<< " absorbed " << lfAbsorbed
-					<< " invI " << lpImpulseParams->mvfInverseInertia.x
-					<< " room " << lfRoom << " move " << lfMove
-					<< " nextSlot " << static_cast<s32>(lu8NextSlot)
-					<< " passer " << ( lpImpulseParams->mpImpulsePasser != 0 ? 1 : 0 )
-					<< " world " << ( lpImpulseParams->mbWorldContact ? 1 : 0 )
-					<< "\n";
-			}
-		}
-
-		// ---- [dent] the console-law ledger, both sides -----------------------------------------
+		const u8 lu8NextSlot = mpSpec->maNextSensor[liDir];
 
 		const f32 lfPassedOn = lfAbsorbed * 0.5f;
 
-		// ⭐⭐⭐ CHAIN-FORWARD RELEASED 2026-08-16 (walls leg 9) -- and the leg-8 gate banner that stood
-		// here was WRONG about why. It is worth recording the correction, because the wrong diagnosis
-		// would have cost the next leg a whole wave.
-		//
-		// LEG 8 WROTE: "no C++ constructor ever runs over the model pool, so every embedded
-		// DeformationSensor's vptr is uninitialised". ⛔ FALSE. DeformationManager::Prepare has
-		// placement-newed all 28 models since commit 583acffc ("Deformation Wave 5"):
-		//     for (li = KU_MAX_DEFORMATION_MODELS-1; li >= 0; --li) new (&mpaModels[li]) DeformableObject();
-		// which runs every member's constructor -- the 20 by-value maDeformationSensors and the
-		// by-value mVehicleBody included. Their vptrs were never in doubt.
-		//
-		// ⭐⭐ THE ACTUAL DEFECT was one line UPSTREAM, in the params builders: `ImpulseParams` is a
-		// 192-byte POD declared as a bare local, and `mpImpulsePasser` (+0xB0) had FOUR read sites in
-		// the tree and ZERO write sites. So the test below ran on UNINITIALISED STACK -- a non-null
-		// garbage pointer -- and PassOnImpulse then read `mapCollidableBodies[i]` off a garbage
-		// `this`. That is the 0xC0000005, and it needs no unconstructed object to explain it.
-		// ⚠️ It also explains leg 8's "zeroing the map turned a garbage-AV into a null-AV": the wild
-		// passer pointer aliased the model pool, which leg 8's ClearVariables change had just zeroed.
-		// The clue that looked like confirmation was an artefact of the fix being measured.
-		// ⇒ BrnDeformableObject.cpp now writes `lParams.mpImpulsePasser = &mImpulsePasser` in BOTH
-		//   builders (X360 @0x82625118/0x82625128 and @0x826251B0/0x826251B8; PS3 @0x746F6C/0x746F98),
-		//   along with the four other stores that block was dropping.
-		// ⭐ The `if (mpImpulsePasser)` guard is KEPT even though the console forwards
-		// unconditionally: it is now a real, meaningful test on a field that is really written, and
-		// on the host it is the difference between a located defect and a wild jump if a future
-		// builder ever forgets the store again.
-		if ( lpImpulseParams->mpImpulsePasser )
-		{
-			const Vector4 lvPassedOn = { lfPassedOn, lfPassedOn, lfPassedOn, lfPassedOn };
-			lpImpulseParams->mpImpulsePasser->PassOnImpulse(lu8NextSlot, lpImpulseParams, lvPassedOn);
-		}
-
+		// ARTIST 0x825E1754..0x825E1770 loads the passer and calls unconditionally.
+		const VecFloat lvPassedOn(lfPassedOn);
+		lpImpulseParams->mpImpulsePasser->PassOnImpulse(lu8NextSlot, lpImpulseParams, lvPassedOn);
 
 	}
 
@@ -1333,7 +936,7 @@ namespace Deformation
 			if ( mpLocalSpaceSphere != 0 )
 			{
 				const Vector4& lrC = *reinterpret_cast<const Vector4*>(mpLocalSpaceSphere);
-				lPointA.x += lrC.x; lPointA.y += lrC.y; lPointA.z += lrC.z;
+				lPointA.mV.v[0] += lrC.mV.v[0]; lPointA.mV.v[1] += lrC.mV.v[1]; lPointA.mV.v[2] += lrC.mV.v[2];
 			}
 			lpSolver->AddWorldContact(lPointA, lContact.mLocalPointOnB, lContact.mNormal,
 			                          liParentObjectIndex, liWorldObjectIndex);
@@ -1370,14 +973,14 @@ namespace Deformation
 			if ( mpLocalSpaceSphere != 0 )
 			{
 				const Vector4& lrC = *reinterpret_cast<const Vector4*>(mpLocalSpaceSphere);
-				lPointA.x += lrC.x; lPointA.y += lrC.y; lPointA.z += lrC.z;
+				lPointA.mV.v[0] += lrC.mV.v[0]; lPointA.mV.v[1] += lrC.mV.v[1]; lPointA.mV.v[2] += lrC.mV.v[2];
 			}
 			Vector3 lPointB = lContact.mLocalPointOnB;
 			if ( lContact.mpOtherSensor != 0 && lContact.mpOtherSensor->mpLocalSpaceSphere != 0 )
 			{
 				const Vector4& lrC =
 					*reinterpret_cast<const Vector4*>(lContact.mpOtherSensor->mpLocalSpaceSphere);
-				lPointB.x += lrC.x; lPointB.y += lrC.y; lPointB.z += lrC.z;
+				lPointB.mV.v[0] += lrC.mV.v[0]; lPointB.mV.v[1] += lrC.mV.v[1]; lPointB.mV.v[2] += lrC.mV.v[2];
 			}
 
 			// THE NORMAL FLATTENING. When BOTH cars have all four wheels on the ground the
@@ -1408,9 +1011,9 @@ namespace Deformation
 			{
 				const Vector3& lrOtherUp = lpOtherPhysics->GetTransform().Up();
 				const f32 lfAlongUp = Dot3(lNormal, lrOtherUp);
-				lNormal.x -= lrOtherUp.x * lfAlongUp;
-				lNormal.y -= lrOtherUp.y * lfAlongUp;
-				lNormal.z -= lrOtherUp.z * lfAlongUp;
+				lNormal.mV.v[0] -= lrOtherUp.mV.v[0] * lfAlongUp;
+				lNormal.mV.v[1] -= lrOtherUp.mV.v[1] * lfAlongUp;
+				lNormal.mV.v[2] -= lrOtherUp.mV.v[2] * lfAlongUp;
 			}
 
 			lpSolver->AddVehicleContact(lPointA, lPointB, lNormal,
@@ -1517,10 +1120,9 @@ namespace Deformation
 	{
 		lrInverse.mPointOnA = mPointOnB;
 		lrInverse.mPointOnB = mPointOnA;
-		{
-		    const Vector3 lAggregateValue = { -mNormal.x, -mNormal.y, -mNormal.z, 0.0f };
-		    lrInverse.mNormal = lAggregateValue;
-		}
+		// ARTIST ApplyCarCarImpulse 0x826251C4: flip the sign bit of every lane.
+		const __vector4 lOnes = __vspltisw(-1);
+		lrInverse.mNormal.mV = __vxor(mNormal.mV, __vslw(lOnes, lOnes));
 		lrInverse.mpOtherVehicle      = mpOtherVehicle;
 		lrInverse.mpOtherSensor       = mpOtherSensor;
 		lrInverse.mfImpactTimeInFrame = mfImpactTimeInFrame;

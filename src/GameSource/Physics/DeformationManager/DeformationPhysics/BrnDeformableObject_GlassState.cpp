@@ -108,8 +108,8 @@ namespace Deformation
         // compare is against a SQUARED displacement, exactly as the block comment claims.
         // ⚠️ The zeros were the opposite of inert: a strict-greater compare against 0 fired on ANY
         // positive displacement, so glass went straight to cracked/smashed on the first contact.
-        static const Vector4 KVF_GLASS_SMASH_THRESHOLD = { 0.00250000018f, 0.00250000018f, 0.00250000018f, 0.00250000018f }; // unk_82FB9BC0 = unk_82FB9650^2
-        static const Vector4 KVF_GLASS_CRACK_THRESHOLD = { 1.00000011e-06f, 1.00000011e-06f, 1.00000011e-06f, 1.00000011e-06f }; // unk_82FB9AD0 = unk_82FB9DF0^2
+        static const Vector4 KVF_GLASS_SMASH_THRESHOLD(0.00250000018f, 0.00250000018f, 0.00250000018f, 0.00250000018f); // unk_82FB9BC0 = unk_82FB9650^2
+        static const Vector4 KVF_GLASS_CRACK_THRESHOLD(1.00000011e-06f, 1.00000011e-06f, 1.00000011e-06f, 1.00000011e-06f); // unk_82FB9AD0 = unk_82FB9DF0^2
 
         // The asm-visible displacement pre-scale: vspltisw v0,2 ; vcfsx v0,v0,0 -> 2.0 ; the
         // threshold vec4 is then vmulfp128'd by (2.0 * 2.0) == 4.0 before the compare.
@@ -267,8 +267,8 @@ namespace Deformation
 
         // The threshold vec4s are pre-scaled by the asm-visible 4.0 (vspltisw 2 -> vcfsx -> 2.0;
         // vmulfp128 v127,v0,v0 -> 4.0). Lane 0 is the live compare lane.
-        const f32 lfSmashThreshold = KVF_GLASS_SMASH_THRESHOLD.x * KF_GLASS_DISPLACEMENT_SCALE;
-        const f32 lfCrackThreshold = KVF_GLASS_CRACK_THRESHOLD.x * KF_GLASS_DISPLACEMENT_SCALE;
+        const f32 lfSmashThreshold = KVF_GLASS_SMASH_THRESHOLD.mV.v[0] * KF_GLASS_DISPLACEMENT_SCALE;
+        const f32 lfCrackThreshold = KVF_GLASS_CRACK_THRESHOLD.mV.v[0] * KF_GLASS_DISPLACEMENT_SCALE;
 
         const char* lpcPaneSpec    = reinterpret_cast<const char*>(lpPaneSpec);
 
@@ -416,7 +416,7 @@ namespace Deformation
         // (lvx128 v13,r31,{16,32,48,64}; vaddfp v0,v0,v13) BEFORE the vehicle-transform vmaddfp
         // cascade. The largest squared (live - control) displacement (vmaxfp v10) is tracked for
         // the crack-amount shaping.
-        f32 lfMaxDisplacementSq = 0.0f;
+        __vector4 lvMaxDisplacementSq = __vspltisw(0);
         for (s32 liCorner = 0; liCorner < 4; ++liCorner)
         {
             const s16 li16PointIndex = *reinterpret_cast<const s16*>(
@@ -449,9 +449,9 @@ namespace Deformation
             lEvent.maCorners[liCorner] = vpu::TransformPoint(lrVehicleTransform, lCornerLocal);
 
             // Track the largest squared (live - control) displacement (vmaxfp v10 over the corners).
-            const Vector3 lDisplacement = vpu::Subtract(lLivePosition, lRestPosition);
-            const f32 lfDispSq = vpu::MagnitudeSquared(lDisplacement);
-            if (lfDispSq > lfMaxDisplacementSq) lfMaxDisplacementSq = lfDispSq;
+            const __vector4 lvDisplacement = __vsubfp(lLivePosition.mV, lRestPosition.mV);
+            lvMaxDisplacementSq = __vmaxfp(lvMaxDisplacementSq,
+                                           __vmsum3fp(lvDisplacement, lvDisplacement));
         }
 
         // Linear velocity: the asm copies the car velocity vector at vehicle[+80] (lvx128 v0,r4,80
@@ -465,93 +465,31 @@ namespace Deformation
         // eased out by the outer square. See the KF_GLASS_CRACK_REMAP_LO/HI banner above for the
         // operand-by-operand decode and for why the two endpoints are self-corroborating.
         //
-        // MODELLED-vs-asm: the console reaches the square root as `vrsqrtefp` + ONE Newton refine
-        // (r1 = r0 + 0.5*r0*(1 - x*r0^2)) then `x * r1`, and the 1/(0.05-0.001) divide as `vrefp` +
-        // TWO Newton refines. Both converge to within a float ulp, so they are written here as the
-        // exact sqrt/divide -- the same de-optimisation every committed sibling in this subsystem
-        // uses for the identical idiom (BrnDeformationSensor.cpp, BrnPenetrationSolver.cpp,
-        // BrnDeformationManager_VehicleContactFixUp.cpp).
-        //
-        // ⚠️ THE ZERO GUARD IS THE CONSOLE'S, NOT DEFENSIVE CODE WE ADDED. `vcmpeqfp v4, v8, v12`
-        // builds a (maxDispSq == 0) mask and the `vsel v7, v13, v8, v4` substitutes 0 for the
-        // sqrt result on that lane -- because vrsqrtefp(0) is +inf and 0 * inf is a NaN, which
-        // would otherwise propagate all the way into the event's crack amount. Reproduced exactly.
+        // ARTIST 0x82608CB4..0x82608D34: preserve the estimates, refinements,
+        // zero selection, packed clamps and final subtraction.
         f32 lfCrackAmount = 0.0f;
         if (leNewState == E_GLASS_STATE_CRACKED)
         {
-            // vrsqrtefp + Newton + the vsel zero-guard == a guarded sqrt.
-            const f32 lfMaxDisplacement = (lfMaxDisplacementSq == 0.0f)
-                                              ? 0.0f
-                                              : std::sqrt(lfMaxDisplacementSq);
-
-            // t = (|maxDisplacement| - LO) / (HI - LO), then clamp01 (vmaxfp 0 / vminfp 1.0).
-            const f32 lfSpan     = KF_GLASS_CRACK_REMAP_HI - KF_GLASS_CRACK_REMAP_LO;  // vsubfp v11, v0, v9
-            const f32 lfRemapped = (lfMaxDisplacement - KF_GLASS_CRACK_REMAP_LO) / lfSpan;
-
-            f32 lfClamped = lfRemapped;
-            if (lfClamped < 0.0f) lfClamped = 0.0f;
-            if (lfClamped > 1.0f) lfClamped = 1.0f;
-            const f32 lfOneMinus = 1.0f - lfClamped;
-            lfCrackAmount = 1.0f - lfOneMinus * lfOneMinus;
+            const __vector4 zero = __vspltisw(0);
+            const __vector4 one = __vcfsx(__vspltisw(1), 0);
+            const __vector4 half = __vcfsx(__vspltisw(1), 1);
+            const __vector4 x = lvMaxDisplacementSq;
+            const __vector4 lo = VecFloat(KF_GLASS_CRACK_REMAP_LO).mV;
+            const __vector4 hi = VecFloat(KF_GLASS_CRACK_REMAP_HI).mV;
+            const __vector4 estimate = __vrsqrtefp(x);
+            const __vector4 square = __vmulfp(estimate, estimate);
+            const __vector4 correction = __vnmsubfp(x, square, one);
+            const __vector4 refined = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
+            const __vector4 distance = __vsel(__vmulfp(x, refined), zero, __vcmpeqfp(zero, x));
+            const __vector4 span = __vsubfp(hi, lo);
+            const __vector4 r0 = __vrefp(span);
+            const __vector4 r1 = __vmaddfp(r0, __vnmsubfp(r0, span, one), r0);
+            const __vector4 r2 = __vmaddfp(r1, __vnmsubfp(r1, span, one), r1);
+            const __vector4 t = __vmulfp(r2, __vsubfp(distance, lo));
+            const __vector4 inv = __vsubfp(one, __vminfp(one, __vmaxfp(zero, t)));
+            lfCrackAmount = __vsubfp(one, __vmulfp(inv, inv)).v[0];
         }
         lEvent.mfCrackAmount = lfCrackAmount;
-
-        // ---------------------------------------------------------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY. BRN_GLASS_PROBE=1 only. Read-only; deleted when the glass
-        // question is banked.
-        //
-        // WHAT IT HAS TO DISTINGUISH, and why it is a HISTOGRAM and not a max: the failure this
-        // replaces was a hard 0.0, so "did the remap light up" is answered by whether any bucket
-        // ABOVE b0 is populated -- a max alone could not tell one saturated pane from a whole car
-        // of them, and a mean could not tell "all zero" from "half zero". Buckets are on the crack
-        // amount; the three counters above them bound the population the buckets came from. The
-        // summary prints on EVERY smash/crack event once armed (state changes are rare -- a pane
-        // changes state at most twice per wreck) and re-prints its zero row, so a silent probe is
-        // distinguishable from a probe that armed and saw nothing.
-        {
-            static s32 siGlassProbe = -1;
-            if ( siGlassProbe < 0 )
-            {
-            }
-            if ( siGlassProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                static u32 suEvents = 0, suCracked = 0, suSmashed = 0, suIntact = 0;
-                static u32 suBucket[6] = { 0, 0, 0, 0, 0, 0 };
-                static f32 sfMinDisp = 1e30f, sfMaxDisp = -1e30f;
-
-                ++suEvents;
-                if      ( leNewState == E_GLASS_STATE_CRACKED ) ++suCracked;
-                else if ( leNewState == E_GLASS_STATE_SMASHED ) ++suSmashed;
-                else                                            ++suIntact;
-
-                if ( leNewState == E_GLASS_STATE_CRACKED )
-                {
-                    const f32 lfDisp = (lfMaxDisplacementSq > 0.0f) ? std::sqrt(lfMaxDisplacementSq) : 0.0f;
-                    if ( lfDisp < sfMinDisp ) sfMinDisp = lfDisp;
-                    if ( lfDisp > sfMaxDisp ) sfMaxDisp = lfDisp;
-
-                    const f32 lfA = lfCrackAmount;
-                    if      ( lfA <= 0.0f  ) ++suBucket[0];
-                    else if ( lfA <  0.25f ) ++suBucket[1];
-                    else if ( lfA <  0.5f  ) ++suBucket[2];
-                    else if ( lfA <  0.75f ) ++suBucket[3];
-                    else if ( lfA <  1.0f  ) ++suBucket[4];
-                    else                     ++suBucket[5];
-                }
-
-                *CgsDev::Log::gpDebugPrint
-                    << "[glass] pane " << liPaneIndex << " state " << static_cast<s32>(leNewState)
-                    << " crack " << lfCrackAmount
-                    << " maxDisp " << ((lfMaxDisplacementSq > 0.0f) ? std::sqrt(lfMaxDisplacementSq) : 0.0f)
-                    << " | events " << suEvents
-                    << " intact " << suIntact << " cracked " << suCracked << " smashed " << suSmashed
-                    << " | crackAmt b0 " << suBucket[0] << " b1 " << suBucket[1] << " b2 " << suBucket[2]
-                    << " b3 " << suBucket[3] << " b4 " << suBucket[4] << " b1.0 " << suBucket[5]
-                    << " | dispRange " << ((sfMinDisp < 1e29f) ? sfMinDisp : 0.0f)
-                    << " .. " << ((sfMaxDisp > -1e29f) ? sfMaxDisp : 0.0f)
-                    << "\n";
-            }
-        }
 
         // The remaining scalar payload: transform, entity id, body-part type, new state, suppress flag.
         // The asm writes three consecutive int fields v66/v67/v68 == the event's id / part / state.
@@ -596,69 +534,10 @@ namespace Deformation
         // static_asserts miNumGlassPanes @ +32, so the two spellings are the same read.
         const s32 liNumPanes = mpDeformationSpec->miNumGlassPanes;
 
-        // ---------------------------------------------------------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY. BRN_GLASS_PROBE=1 only. Read-only; deleted when the glass
-        // question is banked.
-        //
-        // WHY THIS EXISTS AND WHAT IT HAS TO SETTLE. 59702646 concluded from an AV's CODE OFFSET
-        // (UpdateGlassSmashedState+0x3E) that maGlassPaneData was absent behind a non-zero pane
-        // count. No faulting address was captured and the registers quoted were call-clobbered, so
-        // that was an inference, not a measurement -- and there is a second, certain pointer bug in
-        // the same 62 bytes (the console-seat tag/driven reads, fixed above). This prints the SPEC'S
-        // OWN FOUR TABLE SLOTS side by side, so the three explanations separate on sight:
-        //   * all four slots small and similar  -> FixUp never ran; the slots are still on-disc
-        //     base-relative offsets (the record is 1712 bytes, so a real offset is >= 1712).
-        //   * glass slot 0 while the other three are large  -> the pane array really is absent and
-        //     the producer hunt is on (the 27 rig-less retail cars carry a GARBAGE glass slot with
-        //     count 0 -- count 0 with a junk slot is NORMAL and is not this).
-        //   * all four large and the pane loop runs  -> the AV was the tag/driven ghost.
-        // It also prints the HOST seats of maTagPoints/maDrivenPoints so the console figures
-        // 15120/19232 and strides 32/48 can be compared against what this build actually has.
-        // Capped at 8 lines for the whole process: a per-object-per-frame probe would starve the
-        // harness [[watch-the-window-asserts-pause]].
-        {
-            static s32 siSpecProbe = -1;
-            if ( siSpecProbe < 0 )
-            {
-            }
-            if ( siSpecProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                static u32 suSpecLines = 0;
-                if ( suSpecLines < 8u )
-                {
-                    ++suSpecLines;
-                    const StreamedDeformationSpec* lpSpec = mpDeformationSpec;
-                    const char* lpcObject = reinterpret_cast<const char*>(this);
-                    *CgsDev::Log::gpDebugPrint
-                        << "[glassspec] obj " << static_cast<s32>(mu16DeformableObjectIndex)
-                        << " spec " << static_cast<void*>(const_cast<StreamedDeformationSpec*>(lpSpec))
-                        << " sizeof " << static_cast<u64>(sizeof(StreamedDeformationSpec))
-                        << " | tag slot "    << lpSpec->maTagPointData.muSlot
-                        << " n " << lpSpec->miNumberOfTagPoints
-                        << " | driven slot " << lpSpec->maDrivenPointData.muSlot
-                        << " n " << lpSpec->miNumberOfDrivenPoints
-                        << " | ik slot "     << lpSpec->maIKPartData.muSlot
-                        << " n " << lpSpec->miNumberOfIKParts
-                        << " | GLASS slot "  << lpSpec->maGlassPaneData.muSlot
-                        << " n " << lpSpec->miNumGlassPanes
-                        << " ptr " << static_cast<void*>(lpSpec->maGlassPaneData.Get())
-                        << " | live tags " << miNumTagPoints << " driven " << miNumDrivenPoints
-                        << " | host tagSeat "
-                        << static_cast<u64>(reinterpret_cast<const char*>(&maTagPoints[0]) - lpcObject)
-                        << " stride " << static_cast<u64>(sizeof(TagPoint))
-                        << " drivenSeat "
-                        << static_cast<u64>(reinterpret_cast<const char*>(&maDrivenPoints[0]) - lpcObject)
-                        << " stride " << static_cast<u64>(sizeof(IKDrivenPoint))
-                        << " (console 15120/32, 19232/48)\n";
-                }
-            }
-        }
-
         for (s32 liPane = 0; liPane < liNumPanes; ++liPane)
         {
             // The 4.0 pre-scale (asm v127) is passed as the time-step-position vfloat arg.
-            const VecFloat lvfScale = { KF_GLASS_DISPLACEMENT_SCALE, KF_GLASS_DISPLACEMENT_SCALE,
-                                        KF_GLASS_DISPLACEMENT_SCALE, KF_GLASS_DISPLACEMENT_SCALE };
+            const VecFloat lvfScale(KF_GLASS_DISPLACEMENT_SCALE);
             if (UpdateGlassSmashedState(liPane, lvfScale))
             {
                 SendGlassUpdateEvents(liPane, lpOut, lpOutEM);
@@ -789,16 +668,9 @@ namespace Deformation
         // over maWheelTagPoints[0..1]) were a PC-only overrun that step (4) happened to overwrite.
         const Vehicle::SimpleVehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
         const CgsGeometric::AxisAlignedBox&  lrDeformedAABB = lpVehicle->GetDeformableAABB();
-        {
-            const Vector3 lAggregateValue = { lrDeformedAABB.mMin.x, lrDeformedAABB.mMin.y,
-                                                lrDeformedAABB.mMin.z, lrDeformedAABB.mMin.w };
-            lpCarState->mDeformedBBoxMin = lAggregateValue;
-        }   // ld/std +0x00/+0x08
-        {
-            const Vector3 lAggregateValue = { lrDeformedAABB.mMax.x, lrDeformedAABB.mMax.y,
-                                                lrDeformedAABB.mMax.z, lrDeformedAABB.mMax.w };
-            lpCarState->mDeformedBBoxMax = lAggregateValue;
-        }   // ld/std +0x10/+0x18
+        // ARTIST 0x825C1FB4..0x825C1FD0 copies both full 16-byte rows.
+        lpCarState->mDeformedBBoxMin = lrDeformedAABB.mMin;
+        lpCarState->mDeformedBBoxMax = lrDeformedAABB.mMax;
 
         // (4) per-wheel CarState tag-point write. UNLIKE GetWheelTagPoints, the asm does NOT transform
         // the tag point here: it writes maTagPoints[tagIndex] (console this+0x3B10+32*idx, LOCAL)
@@ -837,7 +709,7 @@ namespace Deformation
             // (BY NAME since 2026-09-06, glass wave: the console seat/stride +15120/32 is wrong on
             // the widened host object.)
             Vector3 lTagPoint = maTagPoints[lpWheelSpec->liTagPointIndex].GetPosition();   // lvx128 v127 @0x825C20F8
-            lTagPoint.y = lWheelPosition.y;                                                // vrlimi128 v127,v0,4,0 @0x825C2214
+            lTagPoint.SetY(lWheelPosition.Y());                                                // vrlimi128 v127,v0,4,0 @0x825C2214
             lpCarState->maWheelTagPoints[liWheel] = lTagPoint;                             // stvx128 v127 -> +0x660+16*i @0x825C2240
         }
     }
@@ -942,7 +814,7 @@ namespace Deformation
         // fold (the same vaddfp/vcmpgtfp/vmaxfp/vsel cascade @0x8260914C..0x8260915C), and at the
         // tail min-clamps + stores it BACK INTO THE MEMBER (vrlimi mask 1 @0x8260919C ->
         // stvx this+0x66D0) before asserting THE MEMBER.
-        f32 lfEntitySphereSize = mLastLinearVelocityPlusEntityRadius.w;
+        f32 lfEntitySphereSize = mLastLinearVelocityPlusEntityRadius.mV.v[3];
 
         // The assembled per-wheel state block (the stack WheelPhysicalStates the asm copies out
         // with operator= at the tail). The console seeds only the eight flag bytes
@@ -1000,21 +872,31 @@ namespace Deformation
                     Matrix44Affine lWheelTransform = *lpPhysWheel->GetRenderTransform();
                     if (liWheel == 0 || liWheel == 2)
                     {
-                        // lInverseX * M, row-vector convention: rows x and z negated, y and the
-                        // translation row untouched (the four vmaddfp chains @0x82609090..0x826090C0).
-                        lWheelTransform.xAxis.x = -lWheelTransform.xAxis.x;
-                        lWheelTransform.xAxis.y = -lWheelTransform.xAxis.y;
-                        lWheelTransform.xAxis.z = -lWheelTransform.xAxis.z;
-                        lWheelTransform.zAxis.x = -lWheelTransform.zAxis.x;
-                        lWheelTransform.zAxis.y = -lWheelTransform.zAxis.y;
-                        lWheelTransform.zAxis.z = -lWheelTransform.zAxis.z;
+                        // ARTIST 0x82609070..0x826090D0: retain the zero
+                        // products and fused adds, including W and translation.
+                        const __vector4 x = lWheelTransform.xAxis.mV;
+                        const __vector4 y = lWheelTransform.yAxis.mV;
+                        const __vector4 z = lWheelTransform.zAxis.mV;
+                        const __vector4 w = lWheelTransform.wAxis.mV;
+                        const __vector4 zero = __vspltisw(0);
+                        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+                        const __vector4 negOne = __vcfsx(__vspltisw(-1), 0);
+                        __vector4 rx = __vmulfp(negOne, x);
+                        __vector4 ry = __vmulfp(zero, x);
+                        __vector4 rz = __vmulfp(zero, x);
+                        __vector4 rw = __vmaddfp(zero, x, w);
+                        rx = __vmaddfp(zero, y, rx);
+                        ry = __vmaddfp(one, y, ry);
+                        rz = __vmaddfp(zero, y, rz);
+                        rw = __vmaddfp(zero, y, rw);
+                        lWheelTransform.xAxis.mV = __vmaddfp(zero, z, rx);
+                        lWheelTransform.yAxis.mV = __vmaddfp(zero, z, ry);
+                        lWheelTransform.zAxis.mV = __vmaddfp(negOne, z, rz);
+                        lWheelTransform.wAxis.mV = __vmaddfp(zero, z, rw);
                     }
                     lWheelStates.maStates[liWheel].mWorldSpaceTransform       = lWheelTransform;
                     lWheelStates.maStates[liWheel].mWorldSpaceVelocity        = lpPhysWheel->GetLinearVelocity();
-                    {
-                        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
-                        lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity = lAggregateValue;
-                    }
+                    lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity.mV = __vspltisw(0);
                     lWheelStates.mabWheelExists[liWheel]   = true;    // stb 1, -4
                     lWheelStates.mabWheelAttached[liWheel] = false;   // stb 0,  0
 
@@ -1066,11 +948,11 @@ namespace Deformation
                 // PS3 twin 0x77781C: `lvx v0,wheel,48 ; vspltw 0 ; vmaddfp row0*splat+0` -> +0x50,
                 // `lvx v0,wheel,160` -> +0x40.
                 const Vehicle::Wheel* lpWheel = lpSimple->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel));
-                const f32      lfWheelSpin    = lpWheel->mIntegrationVariables.x;
-                const VecFloat lvfWheelSpin   = { lfWheelSpin, lfWheelSpin, lfWheelSpin, lfWheelSpin };
+                // ARTIST 0x82608F30..0x82608F54: splat spin X and multiply all four lanes.
+                const __vector4 lvWheelSpin = __vspltw(lpWheel->mIntegrationVariables.mV, 0);
                 lWheelStates.maStates[liWheel].mWorldSpaceTransform       = lWheelTransform;
                 lWheelStates.maStates[liWheel].mWorldSpaceVelocity        = lpWheel->mBodyPointVelocity;
-                lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity = vpu::Mult(lWheelTransform.xAxis, lvfWheelSpin);
+                lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity.mV = __vmulfp(lWheelTransform.xAxis.mV, lvWheelSpin);
                 lWheelStates.mabWheelExists[liWheel]   = true;
                 lWheelStates.mabWheelAttached[liWheel] = true;
 
@@ -1084,83 +966,6 @@ namespace Deformation
             }
         }
 
-        // -------------------------------------------------------------------------------------
-        // [wheelreset] NOT IN THE X360 BINARY -- opt-in witness, BRN_WHEELRESET_PROBE=1 (0/unset
-        // == inert). This is the ONE site in the program where BOTH SIDES of the "does the
-        // respawned car have four wheels" question exist on the SAME FRAME for the SAME wheel:
-        //   * the PHYSICS side -- Wheel::mu8State (0 attached / 1 twisting / 2 detached), read
-        //     from maWheels[w] two lines above;
-        //   * the PUBLISHED side -- mabWheelExists[w] / mabWheelAttached[w], which is what
-        //     ActiveRaceCar::UpdateWheelPhysicsState and TrafficEntityModule::
-        //     ProcessDeformationData actually consume ("exists && !attached" == torn off);
-        //   * the MANAGER side -- whether DetachedWheelManager still holds a record for this
-        //     vehicle+wheel, which is the state ResetDeformation's RemoveVehicleWheels clears.
-        // A log line that showed only one of the three could say "on the road" while the screen
-        // showed a three-wheeled car, and both would be true of different numbers.
-        // Emits only when the 4-wheel signature CHANGES, so a whole run costs a handful of lines
-        // and every transition (detach, reset, re-attach) is on the record.
-        // DELETE-WHEN the respawn-after-wheel-loss question is banked on film.
-        // -------------------------------------------------------------------------------------
-        {
-            static s32 siWheelResetProbe = -1;
-            if ( siWheelResetProbe < 0 )
-            {
-            }
-            if ( siWheelResetProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                EntityId lProbeVehicleId;
-                lProbeVehicleId.muValue = static_cast<u32>(static_cast<u64>(mHandlingBodyID) >> 32);
-
-                u32 luSignature = 0u;
-                for ( s32 liW = 0; liW < 4; ++liW )
-                {
-                    const u32 luState = lpSimple->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liW))->mu8State;
-                    const u32 luRec   = ( lpWheelMgr->GetWheel(lProbeVehicleId, liW) != 0 ) ? 1u : 0u;
-                    const u32 luPub   = ( lWheelStates.mabWheelExists[liW] ? 2u : 0u )
-                                      | ( lWheelStates.mabWheelAttached[liW] ? 1u : 0u );
-                    luSignature = (luSignature << 8) | ((luState & 3u) << 4) | (luRec << 2) | (luPub & 3u);
-                }
-
-                static const void* sapProbeObj[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-                static u32         sauProbeSig[8] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
-                                                      0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
-                static u32         suProbeNext = 0u;
-
-                s32 liProbeSlot = -1;
-                for ( u32 luS = 0; luS < 8u; ++luS )
-                {
-                    if ( sapProbeObj[luS] == static_cast<const void*>(this) ) { liProbeSlot = static_cast<s32>(luS); break; }
-                }
-                if ( liProbeSlot < 0 )
-                {
-                    liProbeSlot = static_cast<s32>(suProbeNext % 8u);
-                    ++suProbeNext;
-                    sapProbeObj[liProbeSlot] = this;
-                    sauProbeSig[liProbeSlot] = 0xFFFFFFFFu;
-                }
-
-                if ( sauProbeSig[liProbeSlot] != luSignature )
-                {
-                    sauProbeSig[liProbeSlot] = luSignature;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[wheelreset] obj " << static_cast<s32>(mu16DeformableObjectIndex)
-                        << " entity " << static_cast<s32>(lProbeVehicleId.muValue)
-                        << " broken " << static_cast<s32>(miNumBrokenWheels)
-                        << " force " << (mbForceWheelsToDetach ? 1 : 0);
-                    for ( s32 liW = 0; liW < 4; ++liW )
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << " | w" << liW
-                            << " state " << static_cast<s32>(lpSimple->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liW))->mu8State)
-                            << " exists " << (lWheelStates.mabWheelExists[liW] ? 1 : 0)
-                            << " attached " << (lWheelStates.mabWheelAttached[liW] ? 1 : 0)
-                            << " rec " << ((lpWheelMgr->GetWheel(lProbeVehicleId, liW) != 0) ? 1 : 0);
-                    }
-                    *CgsDev::Log::gpDebugPrint << "\n";
-                }
-            }
-        }
-
         // Tail: min-clamp + store the member's w lane (vminfp @0x8260917C; vrlimi mask 1 +
         // stvx this+0x66D0 @0x8260919C..0x826091A8), then the bounds tripwire ON THE MEMBER.
         // ⭐ KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE (unk_82FB8070) = splat(100.0), static-init
@@ -1169,7 +974,7 @@ namespace Deformation
         {
             lfEntitySphereSize = KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE;
         }
-        mLastLinearVelocityPlusEntityRadius.w = lfEntitySphereSize;
+        mLastLinearVelocityPlusEntityRadius.SetPlus(lfEntitySphereSize);
         CGS_ASSERT(lfEntitySphereSize <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f),
                    "GetEntitySphereSize() <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f)");
 
@@ -1215,7 +1020,7 @@ namespace Deformation
     {
         const Vehicle::SimpleVehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
         const f32 lfRadius = vpu::Magnitude(lpVehicle->GetHalfExtent());   // zero-guard folded (|0| == 0)
-        mLastLinearVelocityPlusEntityRadius.w = lfRadius;
+        mLastLinearVelocityPlusEntityRadius.SetPlus(lfRadius);
     }
 
     // ===========================================================================================
@@ -1241,7 +1046,7 @@ namespace Deformation
     void DeformableObject::UpdateAndOutputJointStates(DeformationOutputInterface* lpOut,
                                                       DetachedPartManager* lpPartMgr)
     {
-        f32 lfSphereSize = mLastLinearVelocityPlusEntityRadius.w;   // v127 = splat(+0x66D0 lane w)
+        f32 lfSphereSize = mLastLinearVelocityPlusEntityRadius.mV.v[3];   // v127 = splat(+0x66D0 lane w)
 
         const Vehicle::SimpleVehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
         const Vector3 lVehiclePos = lpVehicle->GetTransform().Pos();  // v125 = vehicle+0x40
@@ -1262,12 +1067,12 @@ namespace Deformation
                 lEvent.mVehicleId.muValue = static_cast<u32>(
                     GetHandlingBodyVolumeInstanceId().muId >> 32);            // `ld 0x6710; srdi 32`
                 lEvent.meType = lpIKPart->GetPartType();                        // *(ikPart+8) -> spec+0x1DC
-                lEvent.mfCurrentOrientation = lpPart->GetJointRotationProportion().x;
+                lEvent.mfCurrentOrientation = lpPart->GetJointRotationProportion().GetFloat();
 
                 // The asm re-tests the jointed flag between the two reads (IsJoinedToVehicle(),
                 // BrnPhysicalBodyPart.h:276) -- a non-gating tripwire.
                 CGS_ASSERT(lpPart->IsJoinedToVehicle(), "IsJoinedToVehicle()");
-                lEvent.mfHingeVelocity = lpPart->GetJointVelocity().x;          // part+0x170 lane w
+                lEvent.mfHingeVelocity = lpPart->GetJointVelocity().GetFloat();          // part+0x170 lane w
 
                 lpOut->mJointedPartStateQueue.AddEventSafe(lEvent);
             }
@@ -1292,7 +1097,7 @@ namespace Deformation
         {
             lfSphereSize = KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE;
         }
-        mLastLinearVelocityPlusEntityRadius.w = lfSphereSize;
+        mLastLinearVelocityPlusEntityRadius.SetPlus(lfSphereSize);
 
         CGS_ASSERT(lfSphereSize <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f),
                    "GetEntitySphereSize() <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f)");
