@@ -1,3 +1,5 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
 #include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
 #include "rw/rwcore_structs.h"                            // rw::Resource / BaseResourceDescriptors complete
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
@@ -122,7 +124,7 @@ namespace BrnParticle
 
         u32 luVbBaseAddr = lpVertexBuffer[6];                                    // 0x18(r3)
         lpVertexBuffer[6] = (luVbBaseAddr & 3u) | (((luVbBaseAddr & 0xFFFFFFFCu) + luAddressDelta) & 0xFFFFFFFCu);
-        renderengine::VertexBuffer::Xbox2CheckPhysicalMemoryFlags(lpVertexBuffer);
+        reinterpret_cast<renderengine::VertexBuffer*>(lpVertexBuffer)->Xbox2CheckPhysicalMemoryFlags();
 
         // Index buffer. Rebase the buffer pointer, then add the address delta to its
         // base-address dword at +0x18 (no flag-bit preservation here).
@@ -130,7 +132,7 @@ namespace BrnParticle
         u32* lpIndexBuffer = reinterpret_cast<u32*>(static_cast<uintptr_t>(lpMeshHelper[E_MESHHELPER_INDEX_BUFFER]));
 
         lpIndexBuffer[6] += luAddressDelta;                                      // 0x18(r3) += a3[2]
-        renderengine::IndexBuffer::Xbox2CheckPhysicalMemoryFlags(lpIndexBuffer);
+        reinterpret_cast<renderengine::IndexBuffer*>(lpIndexBuffer)->Xbox2CheckPhysicalMemoryFlags();
     }
 
     // Both FixDown and Serialise are non-tool-build code paths: the X360 fires a
