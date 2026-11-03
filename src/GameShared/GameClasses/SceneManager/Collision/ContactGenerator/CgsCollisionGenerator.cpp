@@ -1,10 +1,8 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 
 #include <new>     // placement new (per-batch job construction in Prepare)
-#include <cstdlib> // std::getenv (the BRN_PROP_DIAG latch -- diagnostics only, see the [DIAG] block)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint (the [DIAG] block only)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h" // CollisionResultList (complete: by-value return)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairList.h" // PrimitivePairList::GetNumTests
@@ -499,43 +497,15 @@ namespace CgsCollision
         inline bool LeafOverlapsBoxXYZ(const CgsGeometric::AxisAlignedBox& lrLeaf,
                                        const CgsGeometric::AxisAlignedBox& lrBox)
         {
-            if (!(lrLeaf.mMax.x >= lrBox.mMin.x)) return false;
-            if (!(lrLeaf.mMax.y >= lrBox.mMin.y)) return false;
-            if (!(lrLeaf.mMax.z >= lrBox.mMin.z)) return false;
-            if (!(lrBox.mMax.x >= lrLeaf.mMin.x)) return false;
-            if (!(lrBox.mMax.y >= lrLeaf.mMin.y)) return false;
-            if (!(lrBox.mMax.z >= lrLeaf.mMin.z)) return false;
+            if (!(lrLeaf.mMax.GetX().GetFloat() >= lrBox.mMin.GetX().GetFloat())) return false;
+            if (!(lrLeaf.mMax.GetY().GetFloat() >= lrBox.mMin.GetY().GetFloat())) return false;
+            if (!(lrLeaf.mMax.GetZ().GetFloat() >= lrBox.mMin.GetZ().GetFloat())) return false;
+            if (!(lrBox.mMax.GetX().GetFloat() >= lrLeaf.mMin.GetX().GetFloat())) return false;
+            if (!(lrBox.mMax.GetY().GetFloat() >= lrLeaf.mMin.GetY().GetFloat())) return false;
+            if (!(lrBox.mMax.GetZ().GetFloat() >= lrLeaf.mMin.GetZ().GetFloat())) return false;
             return true;
         }
 
-        // [DIAG] NOT IN THE X360 BINARY -- CollideLineAgainstPolySoupList's result-block overrun tripwire
-        // (crash parity FX-TAILS-A item 7, REVIEW-E risk 2). Default on, one line per process, changes nothing.
-        // PrepareNewPrimitiveTestResultsList @0x82810798 sizes a list's block for 80-byte PrimitiveTestResult
-        // records (`slwi ; add ; slwi` 0x828108A0..0x828108A8: Malloc((5 * max) << 4) @0x828108AC), but the
-        // all-hits line driver fills it with 112-byte soup records and neither of its arms tests
-        // `found < max` before calling the kernel (0x82812CE4 / 0x82813178 pass `max - found` as it is,
-        // and the kernel writes a record before it tests its limit). So from the
-        // 23rd hit at max 32 -- or any hit once the list is full -- the console writes past the block into
-        // the linear allocator's unclaimed tail. That behaviour is KEPT (no clamp, no guard); this only makes
-        // it visible on PC, where a dense line near the end of the arena would corrupt the next block silently.
-        void NoteLineSoupListOverrun(s32 liNumFound, u16 lu16MaxNumResults)
-        {
-            const u32 lu32BytesWritten = static_cast<u32>(liNumFound) *
-                                         static_cast<u32>(sizeof(CgsGeometric::PolySoupLineNearestResult));
-            const u32 lu32BlockBytes   = static_cast<u32>(lu16MaxNumResults) *
-                                         static_cast<u32>(sizeof(PrimitiveTestResult));
-            static bool sbReported = false;
-            if (lu32BytesWritten <= lu32BlockBytes || sbReported || CgsDev::Log::gpDebugPrint == 0)
-            {
-                return;
-            }
-            sbReported = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[scene] CollideLineAgainstPolySoupList overran its result block: " << liNumFound
-                << " records x 112 bytes = " << lu32BytesWritten << " bytes into a block of "
-                << static_cast<s32>(lu16MaxNumResults) << " x 80 = " << lu32BlockBytes
-                << " bytes (console behaviour kept; NOT IN THE X360 BINARY tripwire, reported once)\n";
-        }
     }
 
     // @ 0x828131C0
@@ -554,10 +524,10 @@ namespace CgsCollision
         CollisionResultList* lpList = mapCollisionResultLists[static_cast<u16>(liResultListIndex)];
         CgsGeometric::PolySoupLineNearestResult* lpBest =
             reinterpret_cast<CgsGeometric::PolySoupLineNearestResult*>(lpList->mpResults);
-        lpBest->mLineParam.x = KF_LINE_PARAM_NO_HIT;
-        lpBest->mLineParam.y = KF_LINE_PARAM_NO_HIT;
-        lpBest->mLineParam.z = KF_LINE_PARAM_NO_HIT;
-        lpBest->mLineParam.w = KF_LINE_PARAM_NO_HIT;
+        lpBest->mLineParam.mV.x = KF_LINE_PARAM_NO_HIT;
+        lpBest->mLineParam.mV.y = KF_LINE_PARAM_NO_HIT;
+        lpBest->mLineParam.mV.z = KF_LINE_PARAM_NO_HIT;
+        lpBest->mLineParam.mV.w = KF_LINE_PARAM_NO_HIT;
 
         // v127 / v123: the two 16-byte lanes of the line, w included (the soup test's +0x40
         // position lane multiplies all four).
@@ -573,14 +543,14 @@ namespace CgsCollision
         {
             // 0x82813318 / 0x82813320: the line's box, all four lanes -- vmaxfp128 / vminfp128 (v127 start, v123 end).
             CgsGeometric::AxisAlignedBox lBox;
-            lBox.mMin.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
-            lBox.mMin.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
-            lBox.mMin.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
-            lBox.mMin.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
-            lBox.mMax.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
-            lBox.mMax.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
-            lBox.mMax.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
-            lBox.mMax.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMin.mV.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMin.mV.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMin.mV.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMin.mV.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMax.mV.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMax.mV.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMax.mV.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMax.mV.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
 
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);   // 0x828132C8
 
@@ -608,7 +578,7 @@ namespace CgsCollision
 
                     // 0x828133E8..0x828133F4: `vcmpgtfp. best+0x50, tmp+0x50` -- STRICTLY nearer
                     // replaces (all four lanes carry the same splatted value).
-                    if (lpBest->mLineParam.x > lTemp.mLineParam.x)
+                    if (lpBest->mLineParam.mV.x > lTemp.mLineParam.mV.x)
                     {
                         std::memcpy(lpBest, &lTemp, sizeof(CgsGeometric::PolySoupLineNearestResult));   // 14 qwords
                     }
@@ -651,7 +621,7 @@ namespace CgsCollision
                     }
 
                     // 0x828138B4..0x828138D4: `vcmpgtfp. best+0x50, tmp+0x50` -- STRICTLY nearer replaces.
-                    if (lpBest->mLineParam.x > lTemp.mLineParam.x)
+                    if (lpBest->mLineParam.mV.x > lTemp.mLineParam.mV.x)
                     {
                         std::memcpy(lpBest, &lTemp, sizeof(CgsGeometric::PolySoupLineNearestResult));   // 14 qwords
                     }
@@ -660,7 +630,7 @@ namespace CgsCollision
         }
 
         // 0x82813930..0x82813960: mu16NumResults = (1.0 >= best t). The one write of the count.
-        lpList->mu16NumResults = (1.0f >= lpBest->mLineParam.x) ? 1 : 0;
+        lpList->mu16NumResults = (1.0f >= lpBest->mLineParam.mV.x) ? 1 : 0;
 
         return static_cast<u16>(liResultListIndex);
     }
@@ -692,10 +662,10 @@ namespace CgsCollision
         CollisionResultList* lpList = mapCollisionResultLists[static_cast<u16>(liResultListIndex)];
         CgsGeometric::PolySoupLineNearestResult* lpRecord =
             reinterpret_cast<CgsGeometric::PolySoupLineNearestResult*>(lpList->mpResults);
-        lpRecord->mLineParam.x = KF_LINE_PARAM_NO_HIT;
-        lpRecord->mLineParam.y = KF_LINE_PARAM_NO_HIT;
-        lpRecord->mLineParam.z = KF_LINE_PARAM_NO_HIT;
-        lpRecord->mLineParam.w = KF_LINE_PARAM_NO_HIT;
+        lpRecord->mLineParam.mV.x = KF_LINE_PARAM_NO_HIT;
+        lpRecord->mLineParam.mV.y = KF_LINE_PARAM_NO_HIT;
+        lpRecord->mLineParam.mV.z = KF_LINE_PARAM_NO_HIT;
+        lpRecord->mLineParam.mV.w = KF_LINE_PARAM_NO_HIT;
 
         const Vector3& lrStart = lrLine.mStart.GetVector3();
         const Vector3& lrEnd   = lrLine.mEnd.GetVector3();
@@ -708,14 +678,14 @@ namespace CgsCollision
         if (KF_SHORT_LINE_LENGTH_SQ > lfLengthSq)
         {
             CgsGeometric::AxisAlignedBox lBox;
-            lBox.mMin.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
-            lBox.mMin.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
-            lBox.mMin.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
-            lBox.mMin.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
-            lBox.mMax.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
-            lBox.mMax.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
-            lBox.mMax.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
-            lBox.mMax.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMin.mV.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMin.mV.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMin.mV.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMin.mV.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMax.mV.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMax.mV.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMax.mV.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMax.mV.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
 
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);
 
@@ -842,14 +812,14 @@ namespace CgsCollision
         {
             // 0x82812C20..0x82812C40: the line's box, all four lanes -- vmaxfp128 / vminfp128 (v127 start, v123 end).
             CgsGeometric::AxisAlignedBox lBox;
-            lBox.mMin.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
-            lBox.mMin.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
-            lBox.mMin.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
-            lBox.mMin.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
-            lBox.mMax.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
-            lBox.mMax.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
-            lBox.mMax.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
-            lBox.mMax.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMin.mV.x = VmxMinFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMin.mV.y = VmxMinFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMin.mV.z = VmxMinFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMin.mV.w = VmxMinFp(lrStart.mV.w, lrEnd.mV.w);
+            lBox.mMax.mV.x = VmxMaxFp(lrStart.mV.x, lrEnd.mV.x);
+            lBox.mMax.mV.y = VmxMaxFp(lrStart.mV.y, lrEnd.mV.y);
+            lBox.mMax.mV.z = VmxMaxFp(lrStart.mV.z, lrEnd.mV.z);
+            lBox.mMax.mV.w = VmxMaxFp(lrStart.mV.w, lrEnd.mV.w);
 
             const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);   // 0x82812C4C
 
@@ -908,7 +878,6 @@ namespace CgsCollision
         // 0x8281319C..0x828131A4: the one write of the count.
         lpList->mu16NumResults = static_cast<u16>(liNumFound);
 
-        NoteLineSoupListOverrun(liNumFound, lu16MaxNumResults);   // [DIAG] NOT IN THE X360 BINARY (see its banner)
 
         return static_cast<u16>(liResultListIndex);
     }

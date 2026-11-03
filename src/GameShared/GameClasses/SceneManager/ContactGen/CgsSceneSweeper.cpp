@@ -493,9 +493,9 @@ namespace
         // The world box, read as its two corner rows (see the AABBoxRows note above).
         const AABBoxRows& lrBox = *reinterpret_cast<const AABBoxRows*>(lpAABBox);
 
-        CGS_ASSERT(lrBox.mMax.x >= lrBox.mMin.x, "Bad AABBox ");   // :278  (lane 0)
-        CGS_ASSERT(lrBox.mMax.z >= lrBox.mMin.z, "Bad AABBox ");   // :279  (lane 2)
-        CGS_ASSERT(lrBox.mMax.y >= lrBox.mMin.y, "Bad AABBox ");   // :280  (lane 1)
+        CGS_ASSERT(lrBox.mMax.GetX().GetFloat() >= lrBox.mMin.GetX().GetFloat(), "Bad AABBox ");   // :278  (lane 0)
+        CGS_ASSERT(lrBox.mMax.GetZ().GetFloat() >= lrBox.mMin.GetZ().GetFloat(), "Bad AABBox ");   // :279  (lane 2)
+        CGS_ASSERT(lrBox.mMax.GetY().GetFloat() >= lrBox.mMin.GetY().GetFloat(), "Bad AABBox ");   // :280  (lane 1)
 
         if ((leBodyState & rw::physics::ACTIVE_BODY) != 0)
         {
@@ -676,8 +676,8 @@ void SceneSweeper::UpdateObject(u32 luObjectIndex, const rw::collision::AABBox* 
 
     // The two literal clamp vectors, lane 3 zero exactly as the console builds them
     // (DWARF: the two rw::math::vpu::Vector3::Vector3 constructions).
-    const Vector3 lMinPaddingLimit = { KF_MIN_PADDING, KF_MIN_PADDING, KF_MIN_PADDING, 0.0f };
-    const Vector3 lMaxPaddingLimit = { KF_MAX_PADDING, KF_MAX_PADDING, KF_MAX_PADDING, 0.0f };
+    const Vector3 lMinPaddingLimit(KF_MIN_PADDING, KF_MIN_PADDING, KF_MIN_PADDING);
+    const Vector3 lMaxPaddingLimit(KF_MAX_PADDING, KF_MAX_PADDING, KF_MAX_PADDING);
 
     // vminfp128 v13,v13,v127 / vmaxfp128 v11,v11,v127 -- ARGUMENT ORDER PRESERVED: the clamp
     // vector is the first operand, so an unordered (NaN) padding lane yields the padding lane,
@@ -685,9 +685,9 @@ void SceneSweeper::UpdateObject(u32 luObjectIndex, const rw::collision::AABBox* 
     const Vector3 lPaddedMin = lrBox.mMin + rw::math::vpu::Min(lMinPaddingLimit, lPadding);
     const Vector3 lPaddedMax = lrBox.mMax + rw::math::vpu::Max(lMaxPaddingLimit, lPadding);
 
-    CGS_ASSERT(lPaddedMin.x < lPaddedMax.x
-               || lPaddedMin.y < lPaddedMax.y
-               || lPaddedMin.z < lPaddedMax.z, "\n Bad AABBox \n");                // :403
+    CGS_ASSERT(lPaddedMin.GetX().GetFloat() < lPaddedMax.GetX().GetFloat()
+               || lPaddedMin.GetY().GetFloat() < lPaddedMax.GetY().GetFloat()
+               || lPaddedMin.GetZ().GetFloat() < lPaddedMax.GetZ().GetFloat(), "\n Bad AABBox \n");                // :403
 
     const eObjectBodyState leBodyState =
         static_cast<eObjectBodyState>(maObjectData[luObjectIndex].mu8BodyState);
@@ -1013,9 +1013,9 @@ namespace CgsSceneManager
             // then reads lane 0 back with `lfs`).
             const Vector3 lvPaddingA = lpVolumeInstanceA->mPadding;
             const Vector3 lvPaddingB = lpVolumeInstanceB->mPadding;
-            const f32 lfDeltaX = lvPaddingA.x - lvPaddingB.x;
-            const f32 lfDeltaY = lvPaddingA.y - lvPaddingB.y;
-            const f32 lfDeltaZ = lvPaddingA.z - lvPaddingB.z;
+            const f32 lfDeltaX = lvPaddingA.GetX().GetFloat() - lvPaddingB.GetX().GetFloat();
+            const f32 lfDeltaY = lvPaddingA.GetY().GetFloat() - lvPaddingB.GetY().GetFloat();
+            const f32 lfDeltaZ = lvPaddingA.GetZ().GetFloat() - lvPaddingB.GetZ().GetFloat();
             const f32 lfPadding = (lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY) + (lfDeltaZ * lfDeltaZ);
 
             if (muNumCollidingPairs + 1 >= KU_MAX_NUM_COLLIDING_PAIRS)
