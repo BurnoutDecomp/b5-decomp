@@ -54,43 +54,22 @@ namespace BrnPhysics
     // ---------------------------------------------------------------------------------------
     void ExternalPhysicsBody::ReadPropertiesFromRenderware(const rw::physics::RigidBody* lpRigidBody)
     {
-        // Local inverse inertia: the diagonal matrix of the body's local diagonal vector.
-        const vpu::Vector3& lvLocalDiag = lpRigidBody->GetLocalInvInertiaDiagonal();
-        {
-            const Vector3 lAggregateValue = { lvLocalDiag.x, 0.0f, 0.0f, 0.0f };
-            mLocalInverseInertia.xAxis = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = { 0.0f, lvLocalDiag.y, 0.0f, 0.0f };
-            mLocalInverseInertia.yAxis = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, lvLocalDiag.z, 0.0f };
-            mLocalInverseInertia.zAxis = lAggregateValue;
-        }
-
-        // Mass: 1 / the body's packed inverse mass, splatted across the lane register.
-        const f32 lfMass = 1.0f / lpRigidBody->GetInverseMass();
-        mfMass.x = mfMass.y = mfMass.z = mfMass.w = lfMass;
-
-        // World inverse inertia: the symmetric tensor from the two packed vectors. The three
-        // X360 row stores are whole-register moves, so each row's w lane carries the console's
-        // mIfull.w -- which is the INVERSE MASS. On the PC that scalar is its own member, so
-        // the lane is written from GetInverseMass() by name instead of riding along in .w.
-        const vpu::Vector4& lvA = lpRigidBody->GetInertiaFull();    // {Ixx, Ixy, Ixz}
-        const vpu::Vector4& lvB = lpRigidBody->GetInertiaSplit();   // {Izz, Iyy, Iyz}
-        const f32 lfInvm = lpRigidBody->GetInverseMass();           // console mIfull.w
-        {
-            const Vector3 lAggregateValue = { lvA.x, lvA.y, lvA.z, lfInvm };
-            mWorldInverseInertia.xAxis = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = { lvA.y, lvB.y, lvB.z, lfInvm };
-            mWorldInverseInertia.yAxis = lAggregateValue;
-        }
-        {
-            const Vector3 lAggregateValue = { lvA.z, lvB.z, lvB.x, lfInvm };
-            mWorldInverseInertia.zAxis = lAggregateValue;
-        }
+        static const CGS_ALIGN(16) f32 kX[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+        static const CGS_ALIGN(16) f32 kY[4] = {0.0f, 1.0f, 0.0f, 0.0f};
+        static const CGS_ALIGN(16) f32 kZ[4] = {0.0f, 0.0f, 1.0f, 0.0f};
+        static const CGS_ALIGN(16) u32 kRowY[4] = {0x04050607, 0x14151617, 0x18191A1B, 0x0C0D0E0F};
+        static const CGS_ALIGN(16) u32 kRowZ[4] = {0x08090A0B, 0x18191A1B, 0x10111213, 0x0C0D0E0F};
+        const __vector4 diagonal = lpRigidBody->GetLocalInvInertiaDiagonal().mV;
+        mLocalInverseInertia.xAxis = __vmulfp(__lvx(kX, 0), __vspltw(diagonal, 0));
+        mLocalInverseInertia.yAxis = __vmulfp(__lvx(kY, 0), __vspltw(diagonal, 1));
+        mLocalInverseInertia.zAxis = __vmulfp(__lvx(kZ, 0), __vspltw(diagonal, 2));
+        const f32 mass = 1.0f / lpRigidBody->GetInverseMass();
+        mfMass.mV = __vspltw(__lvlx(&mass, 0), 0);
+        const __vector4 full = __lvx(&lpRigidBody->GetInertiaFull(), 0);
+        const __vector4 split = __lvx(&lpRigidBody->GetInertiaSplit(), 0);
+        mWorldInverseInertia.xAxis = full;
+        mWorldInverseInertia.yAxis = __vperm(full, split, __lvx(kRowY, 0));
+        mWorldInverseInertia.zAxis = __vperm(full, split, __lvx(kRowZ, 0));
     }
+
 }

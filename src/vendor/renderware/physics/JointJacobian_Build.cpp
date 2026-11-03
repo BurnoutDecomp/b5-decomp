@@ -66,7 +66,7 @@ namespace
     // `flt_82035570` = 0xFF7FFFFF and `flt_821815B0[0]` = 0x7F7FFFFF -- the two "no limit"
     // sentinels that seed the angular lo/hi pair. Also corroborated by use: a value that is
     // later `min`'d must be the upper sentinel.
-    inline V3 Splat(f32 lfV) { return MakeV3(lfV, lfV, lfV); }
+
 }
 
 void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
@@ -97,7 +97,11 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
     // UnitQuaternionToMatrix (X360 0x82BC448C..0x82BC44AC). Only a unit quaternion can go
     // there, and L(conj qA').R(qB') makes that column exactly conj(qA') (x) qB'. That is an
     // independent, in-code confirmation of Jacobian_RQD::Create's closed form.
-    Quat lqRel = { lRQD.RowW(0u), lRQD.RowW(1u), lRQD.RowW(2u), lRQD.RowW(3u) };
+    Quat lqRel;
+    __vector4 lRelative;
+    lRelative.v[0] = lRQD.RowW(0u); lRelative.v[1] = lRQD.RowW(1u);
+    lRelative.v[2] = lRQD.RowW(2u); lRelative.v[3] = lRQD.RowW(3u);
+    __stvx(lRelative, &lqRel, 0);
 
     M33 lM_A, lM_B, lM_L, lM_Rel;
     Quaternion::UnitQuaternionToMatrix(&lM_A,   &lqA);
@@ -111,23 +115,41 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
     // =================================================================================
     const V3 lvPosA = Xyz(lrF.GetChildPosition());
     const V3 lvPosB = Xyz(lrF.GetParentPosition());
-    const V3 lvRA = Add(Add(Scale(Xyz(lrA.mRi), lvPosA.x), Scale(Xyz(lrA.mUp), lvPosA.y)),
-                        Scale(Xyz(lrA.mAt), lvPosA.z));
-    const V3 lvRB = Add(Add(Scale(Xyz(lrB.mRi), lvPosB.x), Scale(Xyz(lrB.mUp), lvPosB.y)),
-                        Scale(Xyz(lrB.mAt), lvPosB.z));
+    // ARTIST uses one rounded multiply followed by two fused accumulations.
+    __vector4 lRA = __vmulfp(__lvx(&lrA.mRi, 0), __vspltw(lvPosA.mV, 0));
+    lRA = __vmaddfp(__lvx(&lrA.mUp, 0), __vspltw(lvPosA.mV, 1), lRA);
+    lRA = __vmaddfp(__lvx(&lrA.mAt, 0), __vspltw(lvPosA.mV, 2), lRA);
+    __vector4 lRB = __vmulfp(__lvx(&lrB.mRi, 0), __vspltw(lvPosB.mV, 0));
+    lRB = __vmaddfp(__lvx(&lrB.mUp, 0), __vspltw(lvPosB.mV, 1), lRB);
+    lRB = __vmaddfp(__lvx(&lrB.mAt, 0), __vspltw(lvPosB.mV, 2), lRB);
+    const V3 lvRA(lRA), lvRB(lRB);
 
     // Unlike the drive builder, the joint folds velocity and acceleration into ONE predicted
     // velocity -- it has no separate gains to apply to them.
     // (`cross(mOmega, r)`, not the transpose -- the sign is read off tables 0x82181680 = YZX
     // and 0x82181670 = ZXY, and BurnoutPR's `pshufd 9`/`12h` pair agrees.)
-    const V3 lvVelA = Add(Add(Xyz(lrA.mVel), Cross(Xyz(lrA.mOmega), lvRA)),
-                          Scale(Add(Xyz(lrA.mForce), Cross(Xyz(lrA.mTorque), lvRA)), lfH));
-    const V3 lvVelB = Add(Add(Xyz(lrB.mVel), Cross(Xyz(lrB.mOmega), lvRB)),
-                          Scale(Add(Xyz(lrB.mForce), Cross(Xyz(lrB.mTorque), lvRB)), lfH));
+    // ARTIST 0x82BC458C..4664: the point velocity and acceleration
+    // each carry the body's vector as the addend of a fused cross product.
+    const __vector4 rAYZ = __vpermwi(lvRA.mV, 0x63), rAZX = __vpermwi(lvRA.mV, 0x87);
+    const __vector4 rBYZ = __vpermwi(lvRB.mV, 0x63), rBZX = __vpermwi(lvRB.mV, 0x87);
+    const __vector4 omegaA = __lvx(&lrA.mOmega, 0), torqueA = __lvx(&lrA.mTorque, 0);
+    const __vector4 omegaB = __lvx(&lrB.mOmega, 0), torqueB = __lvx(&lrB.mTorque, 0);
+    const __vector4 forceA = __lvx(&lrA.mForce, 0), forceB = __lvx(&lrB.mForce, 0);
+    const __vector4 motionA = __vmaddfp(rAZX, __vpermwi(omegaA, 0x63),
+                              __vnmsubfp(rAYZ, __vpermwi(omegaA, 0x87), __lvx(&lrA.mVel, 0)));
+    const __vector4 motionB = __vmaddfp(rBZX, __vpermwi(omegaB, 0x63),
+                              __vnmsubfp(rBYZ, __vpermwi(omegaB, 0x87), __lvx(&lrB.mVel, 0)));
+    const __vector4 accelA = __vmaddfp(rAZX, __vpermwi(torqueA, 0x63),
+                             __vnmsubfp(rAYZ, __vpermwi(torqueA, 0x87), forceA));
+    const __vector4 accelB = __vmaddfp(rBZX, __vpermwi(torqueB, 0x63),
+                             __vnmsubfp(rBYZ, __vpermwi(torqueB, 0x87), forceB));
+    const __vector4 timestep = __vspltw(__lvlx(&lfH, 0), 0);
+    const V3 lvVelA(__vmaddfp(accelA, timestep, motionA));
+    const V3 lvVelB(__vmaddfp(accelB, timestep, motionB));
 
     const V3 lvRelVel = Sub(lvVelB, lvVelA);
-    const V3 lvErr    = Sub(Add(Xyz(lrB.mCom), lvRB), Add(Xyz(lrA.mCom), lvRA));
-    const V3 lvDisp   = Add(lvErr, Scale(lvRelVel, lfH));   // predicted end-of-step offset
+    const V3 lvErr    = Sub(Add(V3(__lvx(&lrB.mCom, 0)), lvRB), Add(V3(__lvx(&lrA.mCom, 0)), lvRA));
+    const V3 lvDisp(__vmaddfp(lvRelVel.mV, timestep, lvErr.mV)); // 0x82BC467C
 
     // Project both onto the LINEAR frame -- the three rows of M_L.
     const V3 lvLocalVel  = Project(lM_L, lvRelVel);
@@ -154,36 +176,42 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
     // slots, BurnoutPR an `unpcklps` chain over [ecx+20h]/[ecx+24h].
     // ⇒ lane x = TWIST, lanes y and z = the two SWING rows.
     // =================================================================================
-    V3 lvAxisT  = MakeV3(0.0f, 0.0f, 0.0f);
-    V3 lvAxisS1 = MakeV3(0.0f, 0.0f, 0.0f);
-    V3 lvAxisS2 = MakeV3(0.0f, 0.0f, 0.0f);
-    V3 lvAngLoRaw = Splat(-FLT_MAX);   // flt_82035570
-    V3 lvAngHiRaw = Splat(+FLT_MAX);   // flt_821815B0[0]
+    V3 lvAxisT, lvAxisS1, lvAxisS2;
+    // 0x82BC460C..4614 replaces XYZ of the relative quaternion local only.
+    V3 lvAngLoRaw(lRelative);
+    lvAngLoRaw.mV.v[0] = -FLT_MAX;
+    lvAngLoRaw.mV.v[1] = -FLT_MAX;
+    lvAngLoRaw.mV.v[2] = -FLT_MAX;
+    // 0x82BC46DC..46EC replaces XYZ of the qB local, preserving its W.
+    V3 lvAngHiRaw(__lvx(&lqB, 0));
+    lvAngHiRaw.mV.v[0] = FLT_MAX;
+    lvAngHiRaw.mV.v[1] = FLT_MAX;
+    lvAngHiRaw.mV.v[2] = FLT_MAX;
 
     SwingType leSwing = lrLim.GetSwingType();
 
     // SWING_CONE degenerates to SWING_FREE when the two reference axes are (near) parallel:
     // X360 compares M_Rel(0,0) against flt_821817E0 and branches straight into the FREE arm.
-    if (leSwing == SWING_CONE && lM_Rel.xAxis.x >= KF_CONE_DEGENERATE)
+    if (leSwing == SWING_CONE && lM_Rel.xAxis.mV.v[0] >= KF_CONE_DEGENERATE)
         leSwing = SWING_FREE;
 
     switch (leSwing)
     {
     case SWING_LOCKED:                                   // loc_82BC4978
-        lvAngLoRaw.y = lvAngHiRaw.y = KF_ANGLE * lRQD.RowW(1u);
-        lvAngLoRaw.z = lvAngHiRaw.z = KF_ANGLE * lRQD.RowW(2u);
-        lvAxisS1 = MakeV3(lRQD.RowX(1u), lRQD.RowY(1u), lRQD.RowZ(1u));
-        lvAxisS2 = MakeV3(lRQD.RowX(2u), lRQD.RowY(2u), lRQD.RowZ(2u));
+        lvAngLoRaw.mV.v[1] = lvAngHiRaw.mV.v[1] = KF_ANGLE * lRQD.RowW(1u);
+        lvAngLoRaw.mV.v[2] = lvAngHiRaw.mV.v[2] = KF_ANGLE * lRQD.RowW(2u);
+        lvAxisS1 = V3(__lvx(&lRQD.mData[4], 0));
+        lvAxisS2 = V3(__lvx(&lRQD.mData[8], 0));
         break;
 
     case SWING_CONE:                                     // loc_82BC4884
         {
-            const f32 lfS2 = lM_Rel.yAxis.x * lM_Rel.yAxis.x + lM_Rel.zAxis.x * lM_Rel.zAxis.x;
+            const f32 lfS2 = lM_Rel.yAxis.mV.v[0] * lM_Rel.yAxis.mV.v[0] + lM_Rel.zAxis.mV.v[0] * lM_Rel.zAxis.mV.v[0];
             const f32 lfR  = 1.0f / Sqrt(lfS2);
             lvAxisS1 = Scale(Cross(lM_A.xAxis, lM_B.xAxis), lfR);
             lvAxisS2 = Cross(lvAxisS1, lM_A.xAxis);
             // A ONE-SIDED lower bound: the cone only limits how far apart the axes may open.
-            lvAngLoRaw.y = (lrLim.GetSwingLimit() - lM_Rel.xAxis.x) * lfR;
+            lvAngLoRaw.mV.v[1] = (lrLim.GetSwingLimit() - lM_Rel.xAxis.mV.v[0]) * lfR;
         }
         break;
 
@@ -195,25 +223,25 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
         lvAxisS1 = lM_B.yAxis;
         if (lrLim.GetTwistType() == TWIST_LOCKED)
         {
-            lvAngLoRaw.z = lvAngHiRaw.z = KF_ANGLE * lRQD.RowW(2u);
-            lvAxisS2 = MakeV3(lRQD.RowX(2u), lRQD.RowY(2u), lRQD.RowZ(2u));
+            lvAngLoRaw.mV.v[2] = lvAngHiRaw.mV.v[2] = KF_ANGLE * lRQD.RowW(2u);
+            lvAxisS2 = V3(__lvx(&lRQD.mData[8], 0));
         }
         else
         {
             // X360 negates with `vspltisw -1` + `vslw` (a 0x80000000 sign mask) + `vxor`;
             // BurnoutPR with `xorps xmm3,xmm3` + `subps`. Both are a unary minus.
-            lvAngLoRaw.z = lvAngHiRaw.z = -lM_Rel.yAxis.x;
+            lvAngLoRaw.mV.v[2] = lvAngHiRaw.mV.v[2] = -lM_Rel.yAxis.mV.v[0];
             lvAxisS2 = Cross(lM_A.xAxis, lM_B.yAxis);
         }
         if (lrLim.GetSwingType() == SWING_HINGE)         // loc_82BC483C
         {
-            const f32 lfD = lM_Rel.zAxis.x;
+            const f32 lfD = lM_Rel.zAxis.mV.v[0];
             if (lfD != 0.0f)                             // the `fcmpu` guard vs 0.0f
             {
-                const f32 lfV = (lrLim.GetSwingLimit() - lM_Rel.xAxis.x) / lfD;
+                const f32 lfV = (lrLim.GetSwingLimit() - lM_Rel.xAxis.mV.v[0]) / lfD;
                 // The SIGN OF THE DENOMINATOR flips the inequality direction.
-                if (lfD >= 0.0f) lvAngLoRaw.y = lfV;
-                else             lvAngHiRaw.y = lfV;
+                if (lfD >= 0.0f) lvAngLoRaw.mV.v[1] = lfV;
+                else             lvAngHiRaw.mV.v[1] = lfV;
             }
         }
         break;
@@ -228,20 +256,20 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
     switch (lrLim.GetTwistType())                        // loc_82BC49E0
     {
     case TWIST_LOCKED:                                   // loc_82BC4A90
-        lvAngLoRaw.x = lvAngHiRaw.x = KF_ANGLE * lRQD.RowW(0u);
-        lvAxisT = MakeV3(lRQD.RowX(0u), lRQD.RowY(0u), lRQD.RowZ(0u));
+        lvAngLoRaw.mV.v[0] = lvAngHiRaw.mV.v[0] = KF_ANGLE * lRQD.RowW(0u);
+        lvAxisT = V3(__lvx(&lRQD.mData[0], 0));
         break;
 
     case TWIST_ARC:                                      // loc_82BC49F8
         lvAxisT = lM_A.xAxis;
         {
-            const f32 lfD = lM_Rel.yAxis.z - lM_Rel.zAxis.y;
+            const f32 lfD = lM_Rel.yAxis.mV.v[2] - lM_Rel.zAxis.mV.v[1];
             if (lfD != 0.0f)
             {
-                const f32 lfV = ((lM_Rel.xAxis.x + 1.0f) * lrLim.GetTwistLimit()
-                                 - (lM_Rel.yAxis.y + lM_Rel.zAxis.z)) / lfD;
-                if (lfD >= 0.0f) lvAngLoRaw.x = lfV;
-                else             lvAngHiRaw.x = lfV;
+                const f32 lfV = ((lM_Rel.xAxis.mV.v[0] + 1.0f) * lrLim.GetTwistLimit()
+                                 - (lM_Rel.yAxis.mV.v[1] + lM_Rel.zAxis.mV.v[2])) / lfD;
+                if (lfD >= 0.0f) lvAngLoRaw.mV.v[0] = lfV;
+                else             lvAngHiRaw.mV.v[0] = lfV;
             }
         }
         break;
@@ -259,9 +287,10 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
     // ⭐ ONE FORMULA, TWO HALVES: this is literally the prismatic box of block 2 again, with
     // (lo, hi) = (raw + w.h, raw + w.h) instead of (disp - P, disp + P).
     // =================================================================================
-    const M33 lAngFrame = { lvAxisT, lvAxisS1, lvAxisS2 };
-    const V3  lvRelOmega = Add(Sub(Xyz(lrB.mOmega), Xyz(lrA.mOmega)),
-                               Scale(Sub(Xyz(lrB.mTorque), Xyz(lrA.mTorque)), lfH));
+    const M33 lAngFrame(lvAxisT, lvAxisS1, lvAxisS2);
+    const __vector4 angularVelocity = __vsubfp(__lvx(&lrB.mOmega, 0), __lvx(&lrA.mOmega, 0));
+    const __vector4 angularAccel = __vsubfp(__lvx(&lrB.mTorque, 0), __lvx(&lrA.mTorque, 0));
+    const V3  lvRelOmega(__vmaddfp(angularAccel, timestep, angularVelocity));
     const V3  lvLocalOmega = Project(lAngFrame, lvRelOmega);
     const V3  lvVAng = Xyz(lrLim.GetAngularVelocityLimit());   // (mVtwist, mVswing, mVswing)
 
@@ -275,13 +304,13 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
     // =================================================================================
     // ⭐ The joint builder zeroes the ENTIRE 384-byte record first (three `dcbz128` at +0x00 /
     // +0x80 / +0x100); the drive builder does not. That is what covers the lanes neither
-    // builder writes -- +0x5C in particular, which the drive leaves genuinely untouched.
+    // builder writes before the subsequent packed stores.
     for (u32 luRow = 0u; luRow < 24u; ++luRow)
     {
-        mRows[luRow].x = 0.0f; mRows[luRow].y = 0.0f;
-        mRows[luRow].z = 0.0f; mRows[luRow].w = 0.0f;
+        mRows[luRow].mV.v[0] = 0.0f; mRows[luRow].mV.v[1] = 0.0f;
+        mRows[luRow].mV.v[2] = 0.0f; mRows[luRow].mV.v[3] = 0.0f;
     }
-    mIdA = 0u; mIdB = 0u; mSpy = 0u; mpNode = 0;
+    mRows[0].mV.u[3] = 0u; mRows[1].mV.u[3] = 0u; mRows[4].mV.u[3] = 0u; mRows[12].mV.u[3] = 0;
 
     // Branchless ACTIVE test on the console: `vspltw(mIsplt,3) & 4 == 4` -> a `vcmpequw` lane
     // mask, then `vsel(0, mIfull, mask)` / `vsel(0, mIsplt, mask)`. Zeroing mIfull also zeroes
@@ -291,22 +320,22 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
     const bool lbActiveB = (lrB.mState & ACTIVE_BODY) != 0;
     const f32  lfInvMassA = lbActiveA ? lrA.mInvm : 0.0f;
     const f32  lfInvMassB = lbActiveB ? lrB.mInvm : 0.0f;
-    const M33  lInvIA = lbActiveA ? UnpackInverseInertia(lrA.mIfull, lrA.mIsplt) : ZeroMatrix33();
-    const M33  lInvIB = lbActiveB ? UnpackInverseInertia(lrB.mIfull, lrB.mIsplt) : ZeroMatrix33();
+    const M33  lInvIA = lbActiveA ? UnpackInverseInertia(V4(__lvx(&lrA.mIfull, 0)), V4(__lvx(&lrA.mIsplt, 0))) : ZeroMatrix33();
+    const M33  lInvIB = lbActiveB ? UnpackInverseInertia(V4(__lvx(&lrB.mIfull, 0)), V4(__lvx(&lrB.mIsplt, 0))) : ZeroMatrix33();
 
     // Slots 0 and 1: the anchor arms with the reaction-force ids in their w lanes. The console
     // builds them with `vsel(mCom, r, tbl@0x82181660)` = (r.xyz, mCom.w) and RigidBody+0x1C
     // is mId -- so rA pairs with A's id, which is an independent corroboration of rA/rB.
-    mRows[0].x = lvRA.x; mRows[0].y = lvRA.y; mRows[0].z = lvRA.z;   // +0x00
-    mIdA = lrA.mId;                                                  // +0x0C
-    mRows[1].x = lvRB.x; mRows[1].y = lvRB.y; mRows[1].z = lvRB.z;   // +0x10
-    mIdB = lrB.mId;                                                  // +0x1C
+    mRows[0].mV.v[0] = lvRA.mV.v[0]; mRows[0].mV.v[1] = lvRA.mV.v[1]; mRows[0].mV.v[2] = lvRA.mV.v[2];   // +0x00
+    mRows[0].mV.u[3] = lrA.mId;                                                  // +0x0C
+    mRows[1].mV.v[0] = lvRB.mV.v[0]; mRows[1].mV.v[1] = lvRB.mV.v[1]; mRows[1].mV.v[2] = lvRB.mV.v[2];   // +0x10
+    mRows[1].mV.u[3] = lrB.mId;                                                  // +0x1C
     // +0x20 and +0x30 are stored as an explicit zero vector (already zeroed above).
 
     // The three linear constraint axes are the rows of M_L; the angular ones are the triple
     // the two switches selected.
     V3  lavCrossA[3], lavCrossB[3], lavAngA[3], lavAngB[3];
-    f32 lafMassL[3],  lafMassA[3];
+    __vector4 lMassTermsL[3], lMassTermsA[3];
     for (u32 luI = 0u; luI < 3u; ++luI)
     {
         const V3 lvLinAxis = Row(lM_L, luI);
@@ -319,9 +348,11 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
         lavAngA[luI]   = Transform(lInvIA, lvAngAxis);
         lavAngB[luI]   = Transform(lInvIB, lvAngAxis);
 
-        lafMassL[luI] = lfInvMassA + lfInvMassB
-                      + Dot3(lvCA, lavCrossA[luI]) + Dot3(lvCB, lavCrossB[luI]);
-        lafMassA[luI] = Dot3(lvAngAxis, lavAngA[luI]) + Dot3(lvAngAxis, lavAngB[luI]);
+        // 0x82BC4E48..4EC0 keeps each component until the packed transpose.
+        const __vector4 aLinear = __vmaddfp(lvCA.mV, lavCrossA[luI].mV, __vspltisw(0));
+        lMassTermsL[luI] = __vmaddfp(lvCB.mV, lavCrossB[luI].mV, aLinear);
+        const __vector4 angInertia = __vaddfp(lavAngA[luI].mV, lavAngB[luI].mV);
+        lMassTermsA[luI] = __vmaddfp(lvAngAxis.mV, angInertia, __vspltisw(0));
     }
 
     // ⭐ THE RECORD IS THREE IDENTICAL 0x40-BYTE GROUPS, base 0xC0 + 0x40*i:
@@ -340,28 +371,28 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
         const u32 luBase = 12u + luI * 4u;      // rows 12, 16, 20 -> +0xC0 / +0x100 / +0x140
         const V3  lvLinAxis = Row(lM_L, luI);
 
-        mRows[luBase + 0u].x = lvLinAxis.x;
-        mRows[luBase + 0u].y = lvLinAxis.y;
-        mRows[luBase + 0u].z = lvLinAxis.z;
+        mRows[luBase + 0u].mV.v[0] = lvLinAxis.mV.v[0];
+        mRows[luBase + 0u].mV.v[1] = lvLinAxis.mV.v[1];
+        mRows[luBase + 0u].mV.v[2] = lvLinAxis.mV.v[2];
 
-        mRows[luBase + 1u].x = lavCrossA[luI].x;
-        mRows[luBase + 1u].y = lavCrossA[luI].y;
-        mRows[luBase + 1u].z = lavCrossA[luI].z;
-        mRows[luBase + 1u].w = lavAngB[luI].x;
+        mRows[luBase + 1u].mV.v[0] = lavCrossA[luI].mV.v[0];
+        mRows[luBase + 1u].mV.v[1] = lavCrossA[luI].mV.v[1];
+        mRows[luBase + 1u].mV.v[2] = lavCrossA[luI].mV.v[2];
+        mRows[luBase + 1u].mV.v[3] = lavAngB[luI].mV.v[0];
 
-        mRows[luBase + 2u].x = lavAngA[luI].x;
-        mRows[luBase + 2u].y = lavAngA[luI].y;
-        mRows[luBase + 2u].z = lavAngA[luI].z;
-        mRows[luBase + 2u].w = lavAngB[luI].y;
+        mRows[luBase + 2u].mV.v[0] = lavAngA[luI].mV.v[0];
+        mRows[luBase + 2u].mV.v[1] = lavAngA[luI].mV.v[1];
+        mRows[luBase + 2u].mV.v[2] = lavAngA[luI].mV.v[2];
+        mRows[luBase + 2u].mV.v[3] = lavAngB[luI].mV.v[1];
 
-        mRows[luBase + 3u].x = lavCrossB[luI].x;
-        mRows[luBase + 3u].y = lavCrossB[luI].y;
-        mRows[luBase + 3u].z = lavCrossB[luI].z;
-        mRows[luBase + 3u].w = lavAngB[luI].z;
+        mRows[luBase + 3u].mV.v[0] = lavCrossB[luI].mV.v[0];
+        mRows[luBase + 3u].mV.v[1] = lavCrossB[luI].mV.v[1];
+        mRows[luBase + 3u].mV.v[2] = lavCrossB[luI].mV.v[2];
+        mRows[luBase + 3u].mV.v[3] = lavAngB[luI].mV.v[2];
     }
-    mpNode      = const_cast<Joint*>(&lrJoint);   // +0xCC  `stw r27,0xCC(r31)`
-    mRows[16].w = lfInvMassA;                     // +0x10C
-    mRows[20].w = lfInvMassB;                     // +0x14C
+    mRows[12].mV.u[3] = reinterpret_cast<u32>(const_cast<Joint*>(&lrJoint));   // +0xCC  `stw r27,0xCC(r31)`
+    mRows[16].mV.v[3] = lfInvMassA;                     // +0x10C
+    mRows[20].mV.v[3] = lfInvMassB;                     // +0x14C
 
     // =================================================================================
     // BLOCK 7 -- 0x82BC4EC0..0x82BC5088   TAIL.
@@ -372,50 +403,63 @@ void JointJacobian::Build(const Joint& lrJoint, Simulation* lpSim)
     // factor would double every angular impulse.
     // The linear sum ADDS the two inverse masses; the angular sum has no mass term, which is
     // correct for a pure rotational row.
-    const V3 lvInvMassL = MakeV3(1.0f / lafMassL[0], 1.0f / lafMassL[1], 1.0f / lafMassL[2]);
-    const V3 lvInvMassA = MakeV3(0.5f / lafMassA[0], 0.5f / lafMassA[1], 0.5f / lafMassA[2]);
+    // The controls below are the image bytes at 0x821816C0..0x82181750.
+    // The fourth lane is deliberately carried through the same merges and
+    // permutations: +0x5C is a full-vector store on ARTIST.
+    static const CGS_ALIGN(16) u32 kYZ[4] = {0x08090A0B, 0x0C0D0E0F, 0x14151617, 0x10111213};
+    static const CGS_ALIGN(16) u32 kZX[4] = {0x00010203, 0x04050607, 0x18191A1B, 0x10111213};
+    static const CGS_ALIGN(16) u32 kXY[4] = {0x00010203, 0x04050607, 0x10111213, 0x14151617};
+    static const CGS_ALIGN(16) u32 kInsertX[4] = {0x00010203, 0x04050607, 0x08090A0B, 0x10111213};
+    static const CGS_ALIGN(16) u32 kInsertY[4] = {0x00010203, 0x04050607, 0x08090A0B, 0x14151617};
+    static const CGS_ALIGN(16) u32 kInsertZ[4] = {0x00010203, 0x04050607, 0x08090A0B, 0x18191A1B};
+    const __vector4 yz = __lvx(kYZ, 0), zx = __lvx(kZX, 0), xy = __lvx(kXY, 0);
+    const __vector4 zero = __vspltisw(0);
+    const __vector4 lin01h = __vmrghw(lMassTermsL[0], lMassTermsL[1]);
+    const __vector4 lin01l = __vmrglw(lMassTermsL[0], lMassTermsL[1]);
+    const __vector4 ang01h = __vmrghw(lMassTermsA[0], lMassTermsA[1]);
+    const __vector4 ang01l = __vmrglw(lMassTermsA[0], lMassTermsA[1]);
+    const __vector4 linX = __vperm(lin01h, lMassTermsL[2], xy);
+    const __vector4 linY = __vperm(lin01h, lMassTermsL[2], yz);
+    const __vector4 linZ = __vperm(lin01l, lMassTermsL[2], zx);
+    const __vector4 angX = __vperm(ang01h, lMassTermsA[2], xy);
+    const __vector4 angY = __vperm(ang01h, lMassTermsA[2], yz);
+    const __vector4 angZ = __vperm(ang01l, lMassTermsA[2], zx);
+    const __vector4 massA = __vspltw(__lvx(&lrA.mIfull, 0), 3);
+    const __vector4 massB = __vspltw(__lvx(&lrB.mIfull, 0), 3);
+    const __vector4 activeA = __vcmpequw(__vand(__vspltw(__lvx(&lrA.mIsplt, 0), 3), __vspltisw(4)), __vspltisw(4));
+    const __vector4 activeB = __vcmpequw(__vand(__vspltw(__lvx(&lrB.mIsplt, 0), 3), __vspltisw(4)), __vspltisw(4));
+    const __vector4 invMassSum = __vaddfp(__vsel(zero, massA, activeA), __vsel(zero, massB, activeB));
+    const __vector4 massLin = __vaddfp(__vaddfp(linZ, linY), __vaddfp(linX, invMassSum));
+    const __vector4 massAng = __vaddfp(angZ, __vaddfp(angX, angY));
+    const __vector4 invLin = __vrefp(massLin); // 0x82BC4FA4: no Newton refinement
+    const __vector4 half = __vcfsx(__vspltisw(1), 1);
+    const __vector4 invAng = __vmaddfp(__vrefp(massAng), half, zero); // 4FC8, 4FEC
 
-    // +0x40..+0x90 are the TRANSPOSED, PRE-DIVIDED J^T, linear and angular interleaved:
-    //     +0x40 = (L0.x, L1.x, L2.x) * 1/mEffLin      +0x50 = (T.x , S1.x, S2.x) * 0.5/mEffAng
-    //     +0x60 = (L0.y, L1.y, L2.y) * 1/mEffLin      +0x70 = (T.y , S1.y, S2.y) * 0.5/mEffAng
-    //     +0x80 = (L0.z, L1.z, L2.z) * 1/mEffLin      +0x90 = (T.z , S1.z, S2.z) * 0.5/mEffAng
-    // The row index i is the SAME i as the twelve-slot groups: block 2 builds the linear
-    // projection as (dot(L0,.), dot(L1,.), dot(L2,.)) and block 5 the angular one as
-    // (dot(T,.), dot(S1,.), dot(S2,.)) through the identical `vmsum3fp128` + gather, so lane i
-    // is row i in both.
-    for (u32 luC = 0u; luC < 3u; ++luC)
-    {
-        const V3 lvLin = MulLanes(GatherComponent(lM_L.xAxis, lM_L.yAxis, lM_L.zAxis, luC),
-                                  lvInvMassL);
-        const V3 lvAng = MulLanes(GatherComponent(lvAxisT, lvAxisS1, lvAxisS2, luC), lvInvMassA);
-        rw::math::vpu::Vector4& lrLinRow = mRows[4u + luC * 2u];   // +0x40, +0x60, +0x80
-        rw::math::vpu::Vector4& lrAngRow = mRows[5u + luC * 2u];   // +0x50, +0x70, +0x90
-        lrLinRow.x = lvLin.x; lrLinRow.y = lvLin.y; lrLinRow.z = lvLin.z;
-        lrAngRow.x = lvAng.x; lrAngRow.y = lvAng.y; lrAngRow.z = lvAng.z;
-    }
+    const __vector4 l01h = __vmrghw(lM_L.xAxis.mV, lM_L.yAxis.mV);
+    const __vector4 l01l = __vmrglw(lM_L.xAxis.mV, lM_L.yAxis.mV);
+    const __vector4 a01h = __vmrghw(lvAxisT.mV, lvAxisS1.mV);
+    const __vector4 a01l = __vmrglw(lvAxisT.mV, lvAxisS1.mV);
+    const __vector4 linearX = __vmaddfp(__vperm(l01h, lM_L.zAxis.mV, xy), invLin, zero);
+    const __vector4 linearY = __vmaddfp(__vperm(l01h, lM_L.zAxis.mV, yz), invLin, zero);
+    const __vector4 linearZ = __vmaddfp(__vperm(l01l, lM_L.zAxis.mV, zx), invLin, zero);
+    const __vector4 angularX = __vmaddfp(__vperm(a01h, lvAxisS2.mV, xy), invAng, zero);
+    const __vector4 angularY = __vmaddfp(__vperm(a01h, lvAxisS2.mV, yz), invAng, zero);
+    const __vector4 angularZ = __vmaddfp(__vperm(a01l, lvAxisS2.mV, zx), invAng, zero);
+    const __vector4 angularLo = __vmaddfp(lvAngLo.mV, invAng, zero);
+    const __vector4 angularHi = __vmaddfp(lvAngHi.mV, invAng, zero);
+    const __vector4 linearLo = __vmaddfp(lvLinLo.mV, invLin, zero);
+    const __vector4 linearHi = __vmaddfp(lvLinHi.mV, invLin, zero);
+    mRows[4].mV = linearX;
+    mRows[5].mV = angularX;
+    mRows[6].mV = __vperm(linearY, angularLo, __lvx(kInsertX, 0));
+    mRows[7].mV = __vperm(angularY, angularLo, __lvx(kInsertY, 0));
+    mRows[8].mV = __vperm(linearZ, angularHi, __lvx(kInsertX, 0));
+    mRows[9].mV = __vperm(angularZ, angularHi, __lvx(kInsertY, 0));
+    mRows[10].mV = __vperm(linearLo, angularLo, __lvx(kInsertZ, 0));
+    mRows[11].mV = __vperm(linearHi, angularHi, __lvx(kInsertZ, 0));
 
-    // ⭐ THE ANGULAR lo/hi PAIR IS NOT STORED WHOLE. Only its .z reaches +0xA0/+0xB0; its .x
-    // and .y ride in the w lanes of +0x60/+0x70 (lo) and +0x80/+0x90 (hi). Missing that would
-    // leave two thirds of the angular limits at whatever the `dcbz128` left behind.
-    const V3 lvAngLoOut = MulLanes(lvAngLo, lvInvMassA);
-    const V3 lvAngHiOut = MulLanes(lvAngHi, lvInvMassA);
-    mRows[6].w = lvAngLoOut.x;   // +0x6C
-    mRows[7].w = lvAngLoOut.y;   // +0x7C
-    mRows[8].w = lvAngHiOut.x;   // +0x8C
-    mRows[9].w = lvAngHiOut.y;   // +0x9C
-
-    // +0xA0 / +0xB0: the PRE-DIVIDED linear lo/hi pair, with the angular pair's .z in w.
-    const V3 lvLinLoOut = MulLanes(lvLinLo, lvInvMassL);
-    const V3 lvLinHiOut = MulLanes(lvLinHi, lvInvMassL);
-    mRows[10].x = lvLinLoOut.x; mRows[10].y = lvLinLoOut.y; mRows[10].z = lvLinLoOut.z;
-    mRows[10].w = lvAngLoOut.z;   // +0xAC
-    mRows[11].x = lvLinHiOut.x; mRows[11].y = lvLinHiOut.y; mRows[11].z = lvLinHiOut.z;
-    mRows[11].w = lvAngHiOut.z;   // +0xBC
-
-    mSpy = lrJoint.m_spy;   // +0x4C  `lwz r9,0x1C(r27)` / `stw r9,0x4C(r31)`
-    // ⚠️ +0x5C: the console's whole-vector store at +0x50 leaves a FOURTH gathered lane there
-    // (S2.y scaled by the w lane of the reciprocal vector) and nothing ever reads it. It is
-    // left at the `dcbz128` zero rather than reproducing an undefined lane.
+    mRows[4].mV.u[3] = lrJoint.m_spy;   // +0x4C  `lwz r9,0x1C(r27)` / `stw r9,0x4C(r31)`
+    // +0x5C is the fourth lane of angularX from the packed store above.
 }
 
 } // namespace physics

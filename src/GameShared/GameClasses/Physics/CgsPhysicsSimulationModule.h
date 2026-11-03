@@ -708,7 +708,7 @@ namespace CgsPhysics
         // (it is this class's nested type) but not consumed yet.
         struct SimulationParams
         {
-            f32 mafGravity[4];      // Vector3 mGravity   (h:288)
+            rw::math::vpu::Vector3 mGravity; // h:288
             f32 mfFreezingEnergy;   // (h:289)
             f32 mfTimeStep;         // (h:290)
             u32 muMaxIterations;    // (h:291)
