@@ -91,9 +91,7 @@ namespace
 
     Vector4 MakeV4(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
     {
-        Vector4 lv4;
-        lv4.x = lfX; lv4.y = lfY; lv4.z = lfZ; lv4.w = lfW;
-        return lv4;
+        return Vector4(lfX, lfY, lfZ, lfW);
     }
 
     // The map-space point MapTransform::Transform consumes: the console feeds it a
@@ -101,10 +99,10 @@ namespace
     Vector2 MakeMapPoint(f32 lfX, f32 lfY)
     {
         Vector2 lv2;
-        lv2.x = lfX;
-        lv2.y = lfY;
-        lv2.z = 1.0f;
-        lv2.w = 0.0f;
+        lv2.mV.x = lfX;
+        lv2.mV.y = lfY;
+        lv2.mV.z = 1.0f;
+        lv2.mV.w = 0.0f;
         return lv2;
     }
 
@@ -621,41 +619,22 @@ void MainMapRenderer::ClearBackgroundFadeToMapEdges(Im2dCommandBuffer* lpRenderB
                 MakeMapPoint(lrTexture.mBBWorld.mfRight, lrTexture.mBBWorld.mfBottom),
                 lrm33MapToView);
 
-            if (lv2TopLeft.x     > lfMapLeft)  lfMapLeft  = lv2TopLeft.x;
-            if (lv2BottomRight.x < lfMapRight) lfMapRight = lv2BottomRight.x;
+            if (lv2TopLeft.mV.x     > lfMapLeft)  lfMapLeft  = lv2TopLeft.mV.x;
+            if (lv2BottomRight.mV.x < lfMapRight) lfMapRight = lv2BottomRight.mV.x;
         }
     }
 
     // ---- the three quads --------------------------------------------------------------
-    // `SetTexture(a2+4, dword_83010F58)` -- an entry of the shared GUI state library. FLAG
-    // (state-library global, not modelled in this slice -- the CgsGuiViewModule
-    // RenderBlackScreen precedent): these three quads are flat vertex-coloured gradients,
-    // so the untextured bind is the correct visual and is what is emitted here.
-    lpRenderBuffer->SetTexture(0);
-    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);   // sub_82458EC0(a2+4, dword_83010F20)
-
-    // `SetTransform(a2, &flt_830112D0)` -- the CONSTANT unit-to-screen transform (the same
-    // data global CgsGuiViewModule::RenderBlackScreen binds: origin (0,0), right (1280,0),
-    // up (0,720), identity 0..255 colour transform). Built here rather than referenced,
-    // because the global has no committed home; see that function's note for the pinning.
-    CgsGraphics::Im2dTransform lUnitToScreen;
-    lUnitToScreen.mOriginXYZ.SetZero();
-    lUnitToScreen.mRightUp.x = 1280.0f;
-    lUnitToScreen.mRightUp.y = 0.0f;
-    lUnitToScreen.mRightUp.z = 0.0f;
-    lUnitToScreen.mRightUp.w = 720.0f;
-    lUnitToScreen.mColourShift.SetZero();
-    lUnitToScreen.mColourScale.x = 255.0f;
-    lUnitToScreen.mColourScale.y = 255.0f;
-    lUnitToScreen.mColourScale.z = 255.0f;
-    lUnitToScreen.mColourScale.w = 255.0f;
-    lpRenderBuffer->SetTransform(lUnitToScreen);
+    // ARTIST binds the shared white texture and the native default transform.
+    lpRenderBuffer->SetTexture(CgsGui::gpGuiWhiteTexture);
+    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
+    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetDefault());
 
     const CgsGraphics::RGBA8 lBlack       = MakeBlackWithAlpha(lu8Alpha);
     const CgsGraphics::RGBA8 lTransparent = MakeTransparent();
 
-    const f32 lfTop    = lrv4ViewRect.y;
-    const f32 lfBottom = lrv4ViewRect.w;
+    const f32 lfTop    = lrv4ViewRect.GetY().GetFloat();
+    const f32 lfBottom = lrv4ViewRect.GetW().GetFloat();
 
     CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
     laVertices[0].mv2Tex0UV = MakeV2(0.0f, 0.0f);
@@ -664,8 +643,8 @@ void MainMapRenderer::ClearBackgroundFadeToMapEdges(Im2dCommandBuffer* lpRenderB
     laVertices[3].mv2Tex0UV = MakeV2(1.0f, 1.0f);
 
     // quad 1 -- the left bar: transparent at the view edge, black at the map's left edge.
-    laVertices[0].mv2Pos = MakeV2(lrv4ViewRect.x, lfTop);    laVertices[0].mv4Colour = lTransparent;
-    laVertices[1].mv2Pos = MakeV2(lrv4ViewRect.x, lfBottom); laVertices[1].mv4Colour = lTransparent;
+    laVertices[0].mv2Pos = MakeV2(lrv4ViewRect.GetX().GetFloat(), lfTop);    laVertices[0].mv4Colour = lTransparent;
+    laVertices[1].mv2Pos = MakeV2(lrv4ViewRect.GetX().GetFloat(), lfBottom); laVertices[1].mv4Colour = lTransparent;
     laVertices[2].mv2Pos = MakeV2(lfMapLeft,      lfTop);    laVertices[2].mv4Colour = lBlack;
     laVertices[3].mv2Pos = MakeV2(lfMapLeft,      lfBottom); laVertices[3].mv4Colour = lBlack;
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
@@ -680,8 +659,8 @@ void MainMapRenderer::ClearBackgroundFadeToMapEdges(Im2dCommandBuffer* lpRenderB
     // quad 3 -- the right bar: black at the map's right edge, transparent at the view edge.
     laVertices[0].mv2Pos = MakeV2(lfMapRight,     lfTop);    laVertices[0].mv4Colour = lBlack;
     laVertices[1].mv2Pos = MakeV2(lfMapRight,     lfBottom); laVertices[1].mv4Colour = lBlack;
-    laVertices[2].mv2Pos = MakeV2(lrv4ViewRect.z, lfTop);    laVertices[2].mv4Colour = lTransparent;
-    laVertices[3].mv2Pos = MakeV2(lrv4ViewRect.z, lfBottom); laVertices[3].mv4Colour = lTransparent;
+    laVertices[2].mv2Pos = MakeV2(lrv4ViewRect.GetZ().GetFloat(), lfTop);    laVertices[2].mv4Colour = lTransparent;
+    laVertices[3].mv2Pos = MakeV2(lrv4ViewRect.GetZ().GetFloat(), lfBottom); laVertices[3].mv4Colour = lTransparent;
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
 }
 
@@ -717,27 +696,6 @@ void MainMapRenderer::ClearBackgroundFadeToMapEdges(Im2dCommandBuffer* lpRenderB
 // ---------------------------------------------------------------------------
 void MainMapRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 {
-    // [DIAG] NOT IN THE X360 BINARY -- the wave witness, one line every 120 draws: which of
-    // the four guard bindings this component actually has, and how many tiles the published
-    // set carries. It is what proved the two mask states were never arriving (the third
-    // notification seat, now added in BrnGuiModule.cpp) and it is the first thing to read if
-    // the map screen ever goes blank again. Same shape/cadence policy as the [satnav-diag]
-    // line in BrnSatNavRenderer.cpp.
-    {
-        static s32 siCall = 0;
-        if ((siCall++ % 120) == 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[map-world] render: tex=" << static_cast<s32>(mRenderMainMapEvent.mpActiveTextures != 0)
-                << " cache=" << static_cast<s32>(mpGuiCache != 0)
-                << " bgmask=" << static_cast<s32>(mpBackgroundMaskTextureState != 0)
-                << " prmask=" << static_cast<s32>(mpPreRaceMaskTextureState != 0)
-                << " count=" << (mRenderMainMapEvent.mpActiveTextures != 0
-                                     ? static_cast<s32>(mRenderMainMapEvent.mpActiveTextures->muTextureCount) : -1)
-                << "\n";
-        }
-    }
-
     // (1) the console's four-way guard, verbatim (+0x30 / +0x40 / +0x5C / +0x74).
     if (mRenderMainMapEvent.mpActiveTextures == 0 ||
         mpGuiCache                           == 0 ||
@@ -904,10 +862,10 @@ void MainMapRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
             lm33MapToView);
 
         CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
-        laVertices[0].mv2Pos = MakeV2(lv2TopLeft.x,     lv2TopLeft.y);
-        laVertices[1].mv2Pos = MakeV2(lv2TopLeft.x,     lv2BottomRight.y);
-        laVertices[2].mv2Pos = MakeV2(lv2BottomRight.x, lv2TopLeft.y);
-        laVertices[3].mv2Pos = MakeV2(lv2BottomRight.x, lv2BottomRight.y);
+        laVertices[0].mv2Pos = MakeV2(lv2TopLeft.mV.x,     lv2TopLeft.mV.y);
+        laVertices[1].mv2Pos = MakeV2(lv2TopLeft.mV.x,     lv2BottomRight.mV.y);
+        laVertices[2].mv2Pos = MakeV2(lv2BottomRight.mV.x, lv2TopLeft.mV.y);
+        laVertices[3].mv2Pos = MakeV2(lv2BottomRight.mV.x, lv2BottomRight.mV.y);
         laVertices[0].mv2Tex0UV = MakeV2(0.0f, 0.0f);
         laVertices[1].mv2Tex0UV = MakeV2(0.0f, 1.0f);
         laVertices[2].mv2Tex0UV = MakeV2(1.0f, 0.0f);

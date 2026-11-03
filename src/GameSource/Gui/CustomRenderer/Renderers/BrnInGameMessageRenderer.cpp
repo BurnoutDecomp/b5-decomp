@@ -683,7 +683,7 @@ void InGameMessageRenderer::DrawMessages(CgsGraphics::Im2dRenderBuffer* lpBuffer
         {
             mTextObject.CalculateAutosizing();
         }
-        mpTextRenderer->RenderStringBuffered(
+        mpTextRenderer->RenderString(
             lpBuffer,
             mTextObject);
 
@@ -718,21 +718,7 @@ void InGameMessageRenderer::DrawMessages(CgsGraphics::Im2dRenderBuffer* lpBuffer
         }
 
         const f32 lfScaledWidth = mTextObject.mfFontHeight * lpMessage->mfStringWidth;
-        // [DIAG] NOT IN THE X360 BINARY -- the [tut-ticker] DRAW rung (first 8).
-        {
-            static s32 siDrawDiagLeft = 8;
-            if (siDrawDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                --siDrawDiagLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[tut-ticker] DrawMessages x=" << lfPosX << " y=" << mfTextPosY
-                    << " alpha=" << static_cast<s32>(mu8TextAlpha)
-                    << " w=" << lpMessage->mfStringWidth
-                    << " text='" << reinterpret_cast<const char*>(lpMessage->macMessageText)
-                    << "'\n";
-            }
-        }
-        mpTextRenderer->RenderStringBuffered(
+        mpTextRenderer->RenderString(
             lpBuffer,
             mTextObject);
 
@@ -1026,12 +1012,6 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             if (_strnicmp(lpcFontName, "B5DOTMAT", 8) == 0)
             {
                 mTextObject.mpFont = lFont;
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    // [DIAG] NOT IN THE X360 BINARY -- the [tut-ticker] FONT rung.
-                    *CgsDev::Log::gpDebugPrint
-                        << "[tut-ticker] ticker font adopted '" << lpcFontName << "'\n";
-                }
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 &&
                     CgsDev::Log::gpDebugPrint != 0)
                 {
@@ -1175,24 +1155,6 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
                 false, false, /*custom*/ true, lbRepeats, lbTraining, lbAllowDuplicates,
                 lbChallenge, lapResolved[0], (li8Count > 0) ? (li8Count - 1) : 0,
                 lapResolved[1], lapResolved[2], lapResolved[3]);
-
-            // [DIAG] NOT IN THE X360 BINARY -- the [tut-ticker] consumer rung: the text is
-            // QUEUED in the renderer. First-N latched.
-            {
-                static s32 siDiagLeft = 8;
-                if (siDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siDiagLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[tut-ticker] InGameMessageRenderer queued custom message"
-                        << " added=" << (lbAdded ? 1 : 0)
-                        << " training=" << (lbTraining ? 1 : 0)
-                        << " text='"
-                        << (lapResolved[0] != 0
-                                ? reinterpret_cast<const char*>(lapResolved[0]) : "<null>")
-                        << "'\n";
-                }
-            }
 
             if (!lbAdded)
             {
@@ -1446,54 +1408,15 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
     lrCmd.SetState(CgsGui::gpGuiRasterizerStateCullNone);
     lrCmd.SetTexture(CgsGui::gpGuiWhiteTexture);
 
-    // Publish the batch transform. The CONSOLE builds the canonical screen->NDC block
-    // ({1/640, -1/360, -1, +1} + the aspect fold) because its GPU consumed NDC. The PC
-    // dispatch walk (CgsImRenderBufferTemplate.cpp RENDER_PRIMITIVES) consumes
-    // transforms in the Apt SetVertexMatrix convention instead: local -> LOGICAL SCREEN
-    // pixels, which the dispatch then scales to the back buffer itself. Publishing the
-    // console NDC block here collapsed every ticker vertex to a sub-pixel at the
-    // top-left (the 14:04 boot). The renderer's vertices are ALREADY logical-screen
-    // pixels, so the PC-correct batch transform is the screen-space identity -- it
-    // must still be PUBLISHED (not skipped) to override whatever transform the Apt
-    // walk latched last.
+    // ARTIST82469DD0: screen pixels to clip space, then apply display aspect.
     {
-        CgsGraphics::Im2dTransform lTransform = {};
-        lTransform.mOriginXYZ.x  = 0.0f;
-        lTransform.mOriginXYZ.y  = 0.0f;
-        lTransform.mRightUp.x    = 1.0f;   // right = (1, 0)
-        lTransform.mRightUp.w    = 1.0f;   // up    = (0, 1)
-        // Colour lanes ride the Apt CXForm units through this dispatch: the fold is
-        // (vertex/255) * (scale/255), so the IDENTITY scale is 255, not 1 (a 1.0 here
-        // crushed every ticker colour to 0x01 -- the raw=FFFFFFFF folded=01010101 boot).
-        lTransform.mColourScale.x = 255.0f;
-        lTransform.mColourScale.y = 255.0f;
-        lTransform.mColourScale.z = 255.0f;
-        lTransform.mColourScale.w = 255.0f;
+        CgsGraphics::Im2dTransform lTransform;
+        lTransform.mOriginXYZ.Set(-1.0f, 1.0f, 0.0f, 0.0f);
+        lTransform.mRightUp.Set(0.0015625f, 0.0f, 0.0f, -0.0027777778f);
+        lTransform.mColourShift.Set(0.0f, 0.0f, 0.0f, 0.0f);
+        lTransform.mColourScale.Set(1.0f, 1.0f, 1.0f, 1.0f);
+        lTransform.TransformByAspectRatio();
         lrCmd.SetTransform(lTransform);
-    }
-
-    // [DIAG] NOT IN THE X360 BINARY -- the [tut-ticker] RENDER rung: proves the
-    // component passed every early-out and reports each stage transition (low-noise:
-    // prints only when the stage changes; first 24).
-    {
-        static s32 siLastStage = -999;
-        static s32 siDiagLeft  = 24;
-        if (static_cast<s32>(meUpdateStage) != siLastStage && siDiagLeft > 0 &&
-            CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siDiagLeft;
-            s32 liQueuedDiag = 0;
-            for (InGameMessage* lp = mpCurrentMessage; lp != 0; lp = lp->mpNextMessage)
-            {
-                ++liQueuedDiag;
-            }
-            *CgsDev::Log::gpDebugPrint
-                << "[tut-ticker] RenderComponent stage " << siLastStage << " -> "
-                << static_cast<s32>(meUpdateStage)
-                << " mode=" << static_cast<s32>(meTickerMode)
-                << " queued=" << liQueuedDiag << "\n";
-            siLastStage = static_cast<s32>(meUpdateStage);
-        }
     }
 
     switch (meUpdateStage)

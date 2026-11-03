@@ -428,20 +428,6 @@ void SatNavRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
         // typed assignment instead (the PlayAptMovie width precedent).
         mRenderSatNavEvent =
             *reinterpret_cast<const GuiEventRenderSatNav*>(lpEvent); // +0x60
-        // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the first two 212 payloads.
-        {
-            static s32 siLeft = 2;
-            if (siLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                --siLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[satnav-diag] renderer 212: mapnn=" << static_cast<s32>(mRenderSatNavEvent.mpMapTexture != 0)
-                    << " masknn=" << static_cast<s32>(mRenderSatNavEvent.mpMaskTexture != 0)
-                    << " pos=(" << mRenderSatNavEvent.mv3CarPosition.x
-                    << "," << mRenderSatNavEvent.mv3CarPosition.z
-                    << ") zoom=" << mRenderSatNavEvent.miZoomLevel << "\n";
-            }
-        }
         break;
 
     default:
@@ -544,9 +530,9 @@ void SatNavRenderer::GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo*
         // The landmark record carries its own world position (leading 16-byte lane) + a signed
         // landmark-index half-word; the X360 copies them into the cached icon and fixes the row to 6.
         const Vector4& lv4Pos = lLandmark.GetPositionLane();
-        lpInfo->mv3Position.x = lv4Pos.x;
-        lpInfo->mv3Position.y = lv4Pos.y;
-        lpInfo->mv3Position.z = lv4Pos.z;
+        lpInfo->mv3Position.SetX(lv4Pos.GetX());
+        lpInfo->mv3Position.SetY(lv4Pos.GetY());
+        lpInfo->mv3Position.SetZ(lv4Pos.GetZ());
         lpInfo->miEventId        = static_cast<s32>(lLandmark.GetLandmarkIndexHalf()); // sign-extended @0x20
         lpInfo->muEventTypeIndex = 6;
         lpInfo->meSatNavIconType = E_SATNAVICON_EVENT_NOTATTEMPTED;
@@ -788,21 +774,6 @@ void SatNavRenderer::RenderIconsForSatNav(
     // unconditionally after the gate, before loading muNumberOfSatNavIcons @0x8245FA64).
     InitSatNavIcons();
 
-    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the line that proves the event-icon gate
-    // above opened (it never did before GuiCache::Construct seeded the sat-nav event filter,
-    // issue #9). Once per boot.
-    {
-        static bool sbLoggedGate = false;
-        if (!sbLoggedGate && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedGate = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav-diag] event icons: " << static_cast<s32>(muNumberOfSatNavIcons)
-                << " cached, display type " << static_cast<s32>(meIconDisplayType)
-                << ", filter " << meGameModeFilter << "\n";
-        }
-    }
-
     // The world-camera position is latched ONCE here (X360 @0x8245FA48 lvx128 v124, mpGuiCache,
     // 0x4AE0). The per-icon off-screen distance below measures against it.
     const Vector4& lv4CameraPos = mpGuiCache->GetWorldCameraPosition();
@@ -864,13 +835,13 @@ void SatNavRenderer::RenderIconsForSatNav(
         // renormalisation entirely -- every gate below compares against the 0..1
         // minimap-local band, so icons would have been placed/clipped in the wrong space.
         const Vector4& lv4ViewRect = MapTransform::GetSatNavViewRect();
-        const f32 lfViewW = lv4ViewRect.z - lv4ViewRect.x;
-        const f32 lfViewH = lv4ViewRect.w - lv4ViewRect.y;
+        const f32 lfViewW = lv4ViewRect.GetZ().GetFloat() - lv4ViewRect.GetX().GetFloat();
+        const f32 lfViewH = lv4ViewRect.GetW().GetFloat() - lv4ViewRect.GetY().GetFloat();
         const Vector2 lv2Device = MapTransform::WorldToDevice(lIcon.mv3Position, false);
         Vector2 lv2Transformed  = MapTransform::Transform(
             lv2Device, MapTransform::GetDeviceSpace(), MapTransform::GetNormalisedSpace());
-        lv2Transformed.x = (lv2Transformed.x - lv4ViewRect.x) / lfViewW;   // the asm's vrefp(w) product
-        lv2Transformed.y = (lv2Transformed.y - lv4ViewRect.y) / lfViewH;
+        lv2Transformed.mV.x = (lv2Transformed.mV.x - lv4ViewRect.GetX().GetFloat()) / lfViewW;   // the asm's vrefp(w) product
+        lv2Transformed.mV.y = (lv2Transformed.mV.y - lv4ViewRect.GetY().GetFloat()) / lfViewH;
 
         if (lbCurrentCarRoute)
             continue;
@@ -885,10 +856,10 @@ void SatNavRenderer::RenderIconsForSatNav(
 
         // Inside the viewport -> draw it. The visible test reads the TRANSFORMED result
         // (X360 @0x8245FCAC fcmpu f1/f3 vs 0.0/1.0, f1/f3 == var_1A0).
-        if (lv2Transformed.x >= KF_VISIBLE_MIN && lv2Transformed.x <= KF_VISIBLE_MAX &&
-            lv2Transformed.y >= KF_VISIBLE_MIN && lv2Transformed.y <= KF_VISIBLE_MAX)
+        if (lv2Transformed.mV.x >= KF_VISIBLE_MIN && lv2Transformed.mV.x <= KF_VISIBLE_MAX &&
+            lv2Transformed.mV.y >= KF_VISIBLE_MIN && lv2Transformed.mV.y <= KF_VISIBLE_MAX)
         {
-            RenderSatNavIcon(lv2Transformed.x, lfHalfWidth, lv2Transformed.y, lfHalfHeight,
+            RenderSatNavIcon(lv2Transformed.mV.x, lfHalfWidth, lv2Transformed.mV.y, lfHalfHeight,
                              lIcon.meSatNavIconType, lIcon.muEventTypeIndex, lpRenderBuffer);
             ++liNumDrawn;
         }
@@ -896,15 +867,15 @@ void SatNavRenderer::RenderIconsForSatNav(
         // Near/outside an edge -> candidate for the "closest off-screen" marker. The edge test
         // also reads the TRANSFORMED result (X360 @0x8245FD14 fcmpu f31/f30 vs 0.025/0.975,
         // f31/f30 == var_1A0).
-        if (lv2Transformed.x <= KF_ICON_CLAMP_MIN || lv2Transformed.x >= KF_ICON_CLAMP_MAX ||
-            lv2Transformed.y <= KF_ICON_CLAMP_MIN || lv2Transformed.y >= KF_ICON_CLAMP_MAX)
+        if (lv2Transformed.mV.x <= KF_ICON_CLAMP_MIN || lv2Transformed.mV.x >= KF_ICON_CLAMP_MAX ||
+            lv2Transformed.mV.y <= KF_ICON_CLAMP_MIN || lv2Transformed.mV.y >= KF_ICON_CLAMP_MAX)
         {
             // X360 distance = |iconPos - cameraPos|^2 over the first 3 lanes (vsubfp128 +
             // vmsum3fp128 @0x8245FD34). cameraPos is the GuiCache world-camera lane latched above.
             const Vector3& lv3 = lIcon.mv3Position;
-            const f32 lfDx = lv3.x - lv4CameraPos.x;
-            const f32 lfDy = lv3.y - lv4CameraPos.y;
-            const f32 lfDz = lv3.z - lv4CameraPos.z;
+            const f32 lfDx = lv3.GetX().GetFloat() - lv4CameraPos.GetX().GetFloat();
+            const f32 lfDy = lv3.GetY().GetFloat() - lv4CameraPos.GetY().GetFloat();
+            const f32 lfDz = lv3.GetZ().GetFloat() - lv4CameraPos.GetZ().GetFloat();
             const f32 lfDistSq    = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
             const f32 lfAbsDistSq = lfDistSq < 0.0f ? -lfDistSq : lfDistSq; // X360 fabs @0x8245FD48
             if (lfAbsDistSq < lfClosestDistSq)
@@ -948,12 +919,12 @@ void SatNavRenderer::RenderIconsForSatNav(
     const Vector2 lv2Device = MapTransform::WorldToDevice(lClosest.mv3Position, true);
     Vector2 lv2Transformed  = MapTransform::Transform(
         lv2Device, MapTransform::GetDeviceSpace(), MapTransform::GetNormalisedSpace());
-    lv2Transformed.x = (lv2Transformed.x - lv4ViewRect.x) / (lv4ViewRect.z - lv4ViewRect.x);
-    lv2Transformed.y = (lv2Transformed.y - lv4ViewRect.y) / (lv4ViewRect.w - lv4ViewRect.y);
+    lv2Transformed.mV.x = (lv2Transformed.mV.x - lv4ViewRect.GetX().GetFloat()) / (lv4ViewRect.GetZ().GetFloat() - lv4ViewRect.GetX().GetFloat());
+    lv2Transformed.mV.y = (lv2Transformed.mV.y - lv4ViewRect.GetY().GetFloat()) / (lv4ViewRect.GetW().GetFloat() - lv4ViewRect.GetY().GetFloat());
 
     // Clamp the marker into the visible band [0.025, 0.975] (X360 @0x8245FEBC-FF00).
-    f32 lfEventStartX = lv2Transformed.x;
-    f32 lfEventStartY = lv2Transformed.y;
+    f32 lfEventStartX = lv2Transformed.mV.x;
+    f32 lfEventStartY = lv2Transformed.mV.y;
     lfEventStartX = lfEventStartX < KF_ICON_CLAMP_MIN ? KF_ICON_CLAMP_MIN
                   : (lfEventStartX > KF_ICON_CLAMP_MAX ? KF_ICON_CLAMP_MAX : lfEventStartX);
     lfEventStartY = lfEventStartY < KF_ICON_CLAMP_MIN ? KF_ICON_CLAMP_MIN
@@ -1057,13 +1028,6 @@ void SatNavRenderer::RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfH
     // Bind this icon-type's texture state + the default blend state, then submit the quad
     // (X360 SetState(texture) @0x8245A5B4, SetState(blend, dword_83010F20) @0x8245A5C4,
     // Render(6, verts, 4) @0x8245A5D8). On the PC fold the ImRenderer<V> API is reached by name.
-    // [DIAG] NOT IN THE X360 BINARY -- [satnav-quad] the first 8 icon quads a run submits:
-    // the four device-space corners the caller computed and the four atlas UV corners the
-    // tables answered. Opt-in via BRN_SATNAV_DIAG. Named for exactly what it prints.
-    {
-        static s32 siQuadsLogged = 0;
-    }
-
     lpRenderBuffer->SetState(mapIconTextureStates[luRow]);
     lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
@@ -1092,16 +1056,6 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     // faithful no-op.
     if (mRenderSatNavEvent.mpMapTexture == 0 || mRenderSatNavEvent.mpMaskTexture == 0)
     {
-        // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the no-texture bracket.
-        static bool sbLoggedEmpty = false;
-        if (!sbLoggedEmpty && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedEmpty = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav-diag] RenderComponent EMPTY bracket: mapnn="
-                << static_cast<s32>(mRenderSatNavEvent.mpMapTexture != 0) << " masknn="
-                << static_cast<s32>(mRenderSatNavEvent.mpMaskTexture != 0) << "\n";
-        }
         lrCmd.BeginRendering();
         lrCmd.EndRendering();
         return;
@@ -1132,9 +1086,9 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         mRenderSatNavEvent.miZoomLevel);
 
     // Corners flattened to the (x, z) map plane (the vperm ctrl 0x82CDA450 lane pick).
-    Vector2 lv2C0; lv2C0.x = lav3Corners[0].x; lv2C0.y = lav3Corners[0].z; lv2C0.z = 0.0f; lv2C0.w = 0.0f;
-    Vector2 lv2C1; lv2C1.x = lav3Corners[1].x; lv2C1.y = lav3Corners[1].z; lv2C1.z = 0.0f; lv2C1.w = 0.0f;
-    Vector2 lv2C2; lv2C2.x = lav3Corners[2].x; lv2C2.y = lav3Corners[2].z; lv2C2.z = 0.0f; lv2C2.w = 0.0f;
+    Vector2 lv2C0; lv2C0.mV.x = lav3Corners[0].GetX().GetFloat(); lv2C0.mV.y = lav3Corners[0].GetZ().GetFloat(); lv2C0.mV.z = 0.0f; lv2C0.mV.w = 0.0f;
+    Vector2 lv2C1; lv2C1.mV.x = lav3Corners[1].GetX().GetFloat(); lv2C1.mV.y = lav3Corners[1].GetZ().GetFloat(); lv2C1.mV.z = 0.0f; lv2C1.mV.w = 0.0f;
+    Vector2 lv2C2; lv2C2.mV.x = lav3Corners[2].GetX().GetFloat(); lv2C2.mV.y = lav3Corners[2].GetZ().GetFloat(); lv2C2.mV.z = 0.0f; lv2C2.mV.w = 0.0f;
 
     // Install the zoomed spaces (X360 passes corners[0], corners[2], corners[1]).
     MapTransform::SetZoomedWorldRect(lv2C0, lv2C2, lv2C1);
@@ -1156,10 +1110,10 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         for (u32 lu = 0; lu < 4; ++lu)
         {
             Vector2 lv2Unit;
-            lv2Unit.x = KAF_UNIT[lu][0];
-            lv2Unit.y = KAF_UNIT[lu][1];
-            lv2Unit.z = 0.0f;
-            lv2Unit.w = 0.0f;
+            lv2Unit.mV.x = KAF_UNIT[lu][0];
+            lv2Unit.mV.y = KAF_UNIT[lu][1];
+            lv2Unit.mV.z = 0.0f;
+            lv2Unit.mV.w = 0.0f;
             const Vector2 lv2World = MapTransform::Transform(lv2Unit, lm33Corners);
             lav2Uv[lu] = MapTransform::Transform(
                 lv2World, MapTransform::GetWorldSpace(), MapTransform::GetNormalisedSpace());
@@ -1184,23 +1138,8 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         laVerts[lu].mv2Pos.x    = KAF_POS[lu][0];
         laVerts[lu].mv2Pos.y    = KAF_POS[lu][1];
         laVerts[lu].mv4Colour   = lColour;
-        laVerts[lu].mv2Tex0UV.x = lav2Uv[lu].x;
-        laVerts[lu].mv2Tex0UV.y = lav2Uv[lu].y;
-    }
-
-    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the live draw path (once).
-    {
-        static bool sbLoggedDraw = false;
-        if (!sbLoggedDraw && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedDraw = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav-diag] RenderComponent DRAW: origin=(" << mTransform.mOriginXYZ.x
-                << "," << mTransform.mOriginXYZ.y << ") rightup=(" << mTransform.mRightUp.x
-                << "," << mTransform.mRightUp.w << ") uv0=(" << lav2Uv[0].x
-                << "," << lav2Uv[0].y << ") uv3=(" << lav2Uv[3].x << "," << lav2Uv[3].y
-                << ") colour=" << mMapQuadColour << "\n";
-        }
+        laVerts[lu].mv2Tex0UV.x = lav2Uv[lu].mV.x;
+        laVerts[lu].mv2Tex0UV.y = lav2Uv[lu].mV.y;
     }
 
     // ---- the draw bracket (X360 @0x82466254-0x82466280) ----
@@ -1235,7 +1174,7 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     // (X360 builds the {0,0,1,1} uv vector @0x82466524-0x8246654C, then SetMaskRect).
     {
         Vector4 lv4MaskUv;
-        lv4MaskUv.x = 0.0f; lv4MaskUv.y = 0.0f; lv4MaskUv.z = 1.0f; lv4MaskUv.w = 1.0f;
+        lv4MaskUv.Set(0.0f, 0.0f, 1.0f, 1.0f);
         SetMaskRect(lrCmd, mpMaskTextureState, MapTransform::GetSatNavViewRect(), lv4MaskUv);
     }
 
@@ -1258,47 +1197,23 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 // 0.66527778, 0.93125, 0.86666667}) -- the old "unrecovered input, normalised-device
 // default" FLAG body is retired.
 //
-// The X360 builds the CONSOLE NDC block from the rect:
-//   origin = (2*x0 - 1, 1 - 2*y0), right = (2*w, 0), up = (0, -2*h)
-// then folds the display aspect ratio (TransformByAspectRatio) because its GPU consumed
-// NDC. The PC dispatch walk (CgsImRenderBufferTemplate.cpp RENDER_PRIMITIVES) consumes
-// batch transforms in the Apt SetVertexMatrix convention instead -- local -> LOGICAL
-// 1280x720 SCREEN pixels, which the dispatch then scales to the back buffer itself --
-// and its colour lanes ride the CXForm fold whose identity scale is 255 (both are the
-// [tut-ticker] InGameMessageRenderer::RenderComponent precedent, including the boot
-// that collapsed every vertex to a sub-pixel when the console NDC block was published
-// verbatim). So the PC-correct block maps the renderer's unit-square drawing space to
-// the viewport's logical-pixel rectangle:
-//   origin = (x0*1280, y0*720), right = (w*1280, 0), up = (0, h*720), colourScale = 255.
+// ARTIST8245F4D8 maps the viewport into clip space, then applies aspect correction.
 void SatNavRenderer::UpdateRendererTransform()
 {
-    const Vector4& lv4Rect = MapTransform::GetSatNavViewRect();   // {x0, y0, x1, y1}
-    const f32 lfWidth  = lv4Rect.z - lv4Rect.x;
-    const f32 lfHeight = lv4Rect.w - lv4Rect.y;
-
-    // The engine's fixed logical screen (the dispatch's KF_DISPATCH_LOGICAL_W/H).
-    const f32 KF_LOGICAL_W = 1280.0f;
-    const f32 KF_LOGICAL_H = 720.0f;
-
-    mTransform.mOriginXYZ.SetZero();
-    mTransform.mRightUp.SetZero();
+    const Vector4& lrRect = MapTransform::GetSatNavViewRect();
+    const f32 lfX = lrRect.GetX().GetFloat();
+    const f32 lfY = lrRect.GetY().GetFloat();
+    const f32 lfWidth = lrRect.GetZ().GetFloat() - lfX;
+    const f32 lfHeight = lrRect.GetW().GetFloat() - lfY;
+    const Vector4 lvY(lfY, lfY, lfY, lfY);
+    const Vector4 lvMinusTwo(-2.0f, -2.0f, -2.0f, -2.0f);
+    const Vector4 lvOne(1.0f, 1.0f, 1.0f, 1.0f);
+    const Vector4 lvOriginY(__vmaddfp(lvY.mV, lvMinusTwo.mV, lvOne.mV));
+    mTransform.mOriginXYZ.Set(2.0f * lfX - 1.0f, lvOriginY.GetX().GetFloat(), 0.0f, 0.0f);
+    mTransform.mRightUp.Set(2.0f * lfWidth, 0.0f, 0.0f, -2.0f * lfHeight);
     mTransform.mColourShift.SetZero();
-    mTransform.mColourScale.SetZero();
-
-    mTransform.mOriginXYZ.x = lv4Rect.x * KF_LOGICAL_W;
-    mTransform.mOriginXYZ.y = lv4Rect.y * KF_LOGICAL_H;
-    mTransform.mRightUp.x   = lfWidth  * KF_LOGICAL_W;   // right = (w_px, 0)
-    mTransform.mRightUp.w   = lfHeight * KF_LOGICAL_H;   // up    = (0, h_px)
-
-    // CXForm identity on the PC dispatch is 255 (the ticker's folded=01010101 lesson).
-    mTransform.mColourScale.x = 255.0f;
-    mTransform.mColourScale.y = 255.0f;
-    mTransform.mColourScale.z = 255.0f;
-    mTransform.mColourScale.w = 255.0f;
-
-    // The console's trailing TransformByAspectRatio() folds the display aspect into the
-    // NDC basis; the PC logical-pixel dispatch performs its own back-buffer scale, so
-    // folding it here would double-apply (the ticker precedent publishes without it).
+    mTransform.mColourScale.Set(1.0f, 1.0f, 1.0f, 1.0f);
+    mTransform.TransformByAspectRatio();
 }
 
 } // namespace BrnGui

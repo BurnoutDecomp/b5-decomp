@@ -65,6 +65,8 @@
 
 // SetMaskRect (bottom of this TU) writes the 2-vertex clip-mask corner run and pushes it
 // through the Im2d command buffer (opcode 17).
+#include "SharedClasses/Gui/SatNav/BrnMapUtils.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"
 #include "BrnCommonTypes.h"  // rw::math::vpu::Vector4
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h"
 
@@ -372,21 +374,6 @@ void CustomRendererManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
         case E_EVT_535:
         case E_EVT_536:
         case E_EVT_537:
-            // [DIAG] NOT IN THE X360 BINARY -- the [tut-ticker] RECEPTION rung: proves the
-            // tutorial-ticker event crossed the whole producer->bridge->GUI chain and reached
-            // this dispatch (event payload +0x810 is the string count). First-N latched.
-            {
-                static s32 siTickerDiagLeft = 8;
-                if (liEventType == E_EVT_537 &&
-                    siTickerDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siTickerDiagLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[tut-ticker] RecvEvent 537 reached CustomRendererManager"
-                        << " (blackBar=" << (lpBlackBar != 0)
-                        << " inGameMsg=" << (lpInGameMessage != 0) << ")\n";
-                }
-            }
             RouteEvent(lpBlackBar,      lpEvent, liEventType);   // v4[28674]
             RouteEvent(lpInGameMessage, lpEvent, liEventType);   // v4[30780]
             break;
@@ -514,23 +501,6 @@ void CustomRendererManager::RecvEvent_Event213(const CgsModule::Event* lpEvent)
 
     const bool lbEnableFlag  = (lpu8[8] != 0);
     const f32  lfFadeSeconds = lpf32[1];        // `lfs f1, 4(r30)`
-
-    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the map-toggle records as the
-    // manager sees them (first 12), plus the resulting SatNav enable.
-    {
-        static s32 siLeft = 12;
-        if (siLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav-diag] mgr 213: submode=" << static_cast<s32>(lpu8[0])
-                << " flag=" << static_cast<s32>(lpu8[8])
-                << " fade=" << lfFadeSeconds
-                << " satnavEnabledBefore="
-                << static_cast<s32>((lpSatNav != 0) ? lpSatNav->GetRenderEnabled() : -1)
-                << "\n";
-        }
-    }
 
     if (lpu8[0] != 0)
     {
@@ -828,106 +798,70 @@ void CustomRendererManager::SetLanguageManager(CgsLanguage::LanguageManager* lpL
 // ⭐ [H3b x boost-bar reconcile 2026-08-25] TWO SetMaskRect bodies follow -- a REAL X360
 // overload pair: @0x82450BE0 (pointer buffer; the boost-bar callers) and @0x82450D28
 // (reference buffer; the sat-nav caller). Distinct functions in the image, both named
-// BrnGui::SetMaskRect, both homed here.
-// ================= BrnGui::SetMaskRect @ 0x82450BE0 =================
-// The shared GUI clip-mask helper (this TU is its home -- the assert below bakes
-// BrnCustomRenderer.cpp:889). The X360 body:
-//   1. asserts the "Mask Aspect Correction Matrix" (BSS 0x82FB3220, written at runtime by the
-//      map manager's construct) is initialised ("Mask Aspect Correction Matrix not
-//      initialised.", :889);
-//   2. vperm-extracts the rect's two corners ({x,y} and {z,w}) and pushes each through
-//      BrnGui::MapTransform::Transform(point, &0x82FB2FA0, &0x82FB3010) -- the runtime-built
-//      proportion-space -> aspect-corrected-device-space pair;
-//   3. orders the two transformed corners min/max per axis (the vcmpgtfp swap pair);
-//   4. builds a 2-vertex corner run -- positions from the ordered corners, UVs from the caller's
-//      mask-UV vector ({u0,v0} on the min corner, {u1,v1} on the max), the colour lane left as
-//      filler (the console stores a NaN pattern; nothing reads it) -- and pushes it with
-//      Im2dRenderBuffer::PushMask(lpTextureState, run) (opcode 17).
-//
+// ARTIST 0x82FB3220 and 0x82FB3010: the display aspect matrix and the
+// mask-space coordinate system composed with it.
+namespace
+{
+    Matrix33 gMaskAspectCorrection;
+    Matrix33 gMaskSpace;
+}
+
+// ARTIST82450BE0.
 void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer,
                  const renderengine::TextureState* lpTextureState,
                  const rw::math::vpu::Vector4& lrv4Rect,
                  const rw::math::vpu::Vector4& lrv4MaskUVs)
 {
-    if (lpRenderBuffer == 0)
-        return;
-
-    // Corner A = {x,y}, corner B = {z,w}, proportion space -> logical pixels (the fold above).
-    f32 lfAX = lrv4Rect.x * 1280.0f;
-    f32 lfAY = lrv4Rect.y * 720.0f;
-    f32 lfBX = lrv4Rect.z * 1280.0f;
-    f32 lfBY = lrv4Rect.w * 720.0f;
-
-    // Order min/max per axis (the console's two vcmpgtfp corner swaps).
-    if (lfAX > lfBX) { const f32 lfSwap = lfAX; lfAX = lfBX; lfBX = lfSwap; }
-    if (lfAY > lfBY) { const f32 lfSwap = lfAY; lfAY = lfBY; lfBY = lfSwap; }
-
+    CGS_ASSERT(gMaskAspectCorrection.xAxis.mV.x != 0.0f || gMaskAspectCorrection.xAxis.mV.y != 0.0f ||
+               gMaskAspectCorrection.yAxis.mV.x != 0.0f || gMaskAspectCorrection.yAxis.mV.y != 0.0f ||
+               gMaskAspectCorrection.zAxis.mV.x != 0.0f || gMaskAspectCorrection.zAxis.mV.y != 0.0f,
+               "Mask Aspect Correction Matrix not initialised.");
+    Vector2 lA, lB;
+    lA.mV = lrv4Rect.mV;
+    lA.mV.z = lA.mV.x; lA.mV.w = lA.mV.x;
+    lB.mV = lrv4Rect.mV;
+    lB.mV.x = lrv4Rect.GetZ().GetFloat(); lB.mV.y = lrv4Rect.GetW().GetFloat();
+    lB.mV.z = lrv4Rect.GetX().GetFloat(); lB.mV.w = lB.mV.z;
+    lA = MapTransform::Transform(lA, MapTransform::GetNormalisedSpace(), gMaskSpace);
+    lB = MapTransform::Transform(lB, MapTransform::GetNormalisedSpace(), gMaskSpace);
+    if (lA.mV.x > lB.mV.x) { const f32 t = lA.mV.x; lA.mV.x = lB.mV.x; lB.mV.x = t; }
+    if (lA.mV.y > lB.mV.y) { const f32 t = lA.mV.y; lA.mV.y = lB.mV.y; lB.mV.y = t; }
     CgsGraphics::Basic2dColouredTexturedVertex laCorners[2];
-    laCorners[0].mv2Pos.x    = lfAX;
-    laCorners[0].mv2Pos.y    = lfAY;
-    laCorners[0].mv2Tex0UV.x = lrv4MaskUVs.x;
-    laCorners[0].mv2Tex0UV.y = lrv4MaskUVs.y;
-    laCorners[1].mv2Pos.x    = lfBX;
-    laCorners[1].mv2Pos.y    = lfBY;
-    laCorners[1].mv2Tex0UV.x = lrv4MaskUVs.z;
-    laCorners[1].mv2Tex0UV.y = lrv4MaskUVs.w;
-    // The colour lane is filler on the console (a NaN bit pattern the dispatcher never reads);
-    // stamped opaque here so the record carries no uninitialised bytes.
+    laCorners[0].mv2Pos.x = lA.mV.x; laCorners[0].mv2Pos.y = lA.mV.y;
+    laCorners[1].mv2Pos.x = lB.mV.x; laCorners[1].mv2Pos.y = lB.mV.y;
+    laCorners[0].mv2Tex0UV.x = lrv4MaskUVs.GetX().GetFloat();
+    laCorners[0].mv2Tex0UV.y = lrv4MaskUVs.GetY().GetFloat();
+    laCorners[1].mv2Tex0UV.x = lrv4MaskUVs.GetZ().GetFloat();
+    laCorners[1].mv2Tex0UV.y = lrv4MaskUVs.GetW().GetFloat();
     *reinterpret_cast<u32*>(&laCorners[0].mv4Colour) = 0xFFFFFFFFu;
     *reinterpret_cast<u32*>(&laCorners[1].mv4Colour) = 0xFFFFFFFFu;
-
     lpRenderBuffer->PushMask(lpTextureState, laCorners);
 }
 
-// ================= SetMaskRect @ 0x82450D28 =================
-// Push a clip mask over a normalised screen rect. The X360 asserts the mask aspect
-// matrix (@0x82FB3220) is initialised, transforms the rect's two corners through the
-// normalised->mask-NDC product (@0x82FB3010), min/max-orders them, then hands
-// Im2dRenderBuffer::PushMask two {pos, colour 0xFFFFFFFF, uv} corner vertices.
-// [H3b PC fold]: the dispatch's mask consumes LOGICAL 1280x720 pixel corners (the
-// scissor + stage-1 alpha fold in CgsImRenderBufferTemplate.cpp), so the corner
-// transform collapses to the logical-screen scale and the matrix dependency drops out.
 void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd,
                  const renderengine::TextureState* lpMaskTextureState,
                  const Vector4& lv4Rect, const Vector4& lv4MaskUv)
 {
-    const f32 KF_LOGICAL_W = 1280.0f;
-    const f32 KF_LOGICAL_H = 720.0f;
-
-    // Corner ordering (the X360's two vcmpgtfp min/max picks).
-    const f32 lfX0 = (lv4Rect.x < lv4Rect.z) ? lv4Rect.x : lv4Rect.z;
-    const f32 lfX1 = (lv4Rect.x < lv4Rect.z) ? lv4Rect.z : lv4Rect.x;
-    const f32 lfY0 = (lv4Rect.y < lv4Rect.w) ? lv4Rect.y : lv4Rect.w;
-    const f32 lfY1 = (lv4Rect.y < lv4Rect.w) ? lv4Rect.w : lv4Rect.y;
-
-    CgsGraphics::Basic2dColouredTexturedVertex laCorners[2];
-    laCorners[0].mv2Pos.x    = lfX0 * KF_LOGICAL_W;
-    laCorners[0].mv2Pos.y    = lfY0 * KF_LOGICAL_H;
-    laCorners[0].mv4Colour.r = 0xFF; laCorners[0].mv4Colour.g = 0xFF;
-    laCorners[0].mv4Colour.b = 0xFF; laCorners[0].mv4Colour.a = 0xFF;
-    laCorners[0].mv2Tex0UV.x = lv4MaskUv.x;
-    laCorners[0].mv2Tex0UV.y = lv4MaskUv.y;
-    laCorners[1].mv2Pos.x    = lfX1 * KF_LOGICAL_W;
-    laCorners[1].mv2Pos.y    = lfY1 * KF_LOGICAL_H;
-    laCorners[1].mv4Colour.r = 0xFF; laCorners[1].mv4Colour.g = 0xFF;
-    laCorners[1].mv4Colour.b = 0xFF; laCorners[1].mv4Colour.a = 0xFF;
-    laCorners[1].mv2Tex0UV.x = lv4MaskUv.z;
-    laCorners[1].mv2Tex0UV.y = lv4MaskUv.w;
-
-    // PushMask binds the mask TEXTURE STATE directly (the DWARF :191 record variant;
-    // the dispatcher unwraps it to its raster exactly like SET_STATE_TEXTURE).
-    lrCmd.PushMask(lpMaskTextureState, laCorners);
+    SetMaskRect(&lrCmd, lpMaskTextureState, lv4Rect, lv4MaskUv);
 }
 
-// ================= SetMaskAspectCorrectionMatrix @ 0x82450A70 =================
-// The X360 builds the mask NDC coord space ({-1,-1,1,1} + the display aspect fold,
-// stored @0x82FB3220) and its composition with the normalised space (@0x82FB3010) --
-// the matrices the console SetMaskRect corner transform consumes. On the PC fold
-// SetMaskRect builds logical-pixel corners directly, so there is no matrix to store;
-// the function remains as the (empty) call-order peer of GuiModule::Construct.
-void SetMaskAspectCorrectionMatrix(GuiCache* lpGuiCache)
+// ARTIST82450A38 reads the Im2d aspect matrix and composes the [-1,1] mask space.
+void SetMaskAspectCorrectionMatrix(GuiCache*)
 {
-    (void)lpGuiCache;
+    const rw::math::fpu::Matrix33Template<float>& a = CgsGraphics::Im2dTransform::GetAspectCorrectionMatrix();
+    gMaskAspectCorrection = Matrix33(Vector3(a.mRow0X, a.mRow0Y, a.mRow0Z),
+        Vector3(a.mRow1X, a.mRow1Y, a.mRow1Z), Vector3(a.mRow2X, a.mRow2Y, a.mRow2Z));
+    const Vector4 lRect(-1.0f, -1.0f, 1.0f, 1.0f);
+    const Matrix33 lSpace = MapTransform::MakeCoordSpaceFromRect(lRect);
+    const __vector4 ax = gMaskAspectCorrection.xAxis.mV;
+    const __vector4 ay = gMaskAspectCorrection.yAxis.mV;
+    const __vector4 az = gMaskAspectCorrection.zAxis.mV;
+    gMaskSpace.xAxis.mV = __vmaddfp(az, __vspltw(lSpace.xAxis.mV, 2),
+        __vmaddfp(ay, __vspltw(lSpace.xAxis.mV, 1), __vmulfp(ax, __vspltw(lSpace.xAxis.mV, 0))));
+    gMaskSpace.yAxis.mV = __vmaddfp(az, __vspltw(lSpace.yAxis.mV, 2),
+        __vmaddfp(ay, __vspltw(lSpace.yAxis.mV, 1), __vmulfp(ax, __vspltw(lSpace.yAxis.mV, 0))));
+    gMaskSpace.zAxis.mV = __vmaddfp(az, __vspltw(lSpace.zAxis.mV, 2),
+        __vmaddfp(ay, __vspltw(lSpace.zAxis.mV, 1), __vmulfp(ax, __vspltw(lSpace.zAxis.mV, 0))));
 }
 
 } // namespace BrnGui

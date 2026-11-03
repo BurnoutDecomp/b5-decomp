@@ -43,7 +43,7 @@ const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* FindOnlinePlayer(
 {
     for (s32 liIndex = 0; liIndex < 8; ++liIndex)
     {
-        const auto* lpPlayer = lpCache->GetOnlinePlayerInfo(liIndex);
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = lpCache->GetOnlinePlayerInfo(liIndex);
         if (lpPlayer->meActiveRaceCarIndex == leCar)
             return lpPlayer;
     }
@@ -60,7 +60,10 @@ f32 AboveCarFontHeight(f32 lfFov, f32 lfDistanceFraction)
     const f32 lfHalfAngle = lfFov * 0.5f;
     const f32 lfSin = static_cast<f32>(std::sin(static_cast<f64>(lfHalfAngle)));
     const f32 lfCos = static_cast<f32>(std::cos(static_cast<f64>(lfHalfAngle)));
-    return std::fma(9.5f, ClampAboveCarUnit((lfSin / lfCos) * lfDistanceFraction), 0.5f);
+    const Vector4 a(9.5f, 9.5f, 9.5f, 9.5f);
+    const f32 f = ClampAboveCarUnit((lfSin / lfCos) * lfDistanceFraction);
+    const Vector4 b(f, f, f, f), c(0.5f, 0.5f, 0.5f, 0.5f);
+    return Vector4(__vmaddfp(a.mV, b.mV, c.mV)).GetX().GetFloat();
 }
 
 void SetAboveCarText(CgsGraphics::TextObject& lrText, const CgsResource::CgsUtf8* lpString,
@@ -70,8 +73,8 @@ void SetAboveCarText(CgsGraphics::TextObject& lrText, const CgsResource::CgsUtf8
     if (lrText.mbAutosize) lrText.CalculateAutosizing();
     lrText.mfFontHeight = lfHeight;
     lrText.mTextColour = luColour;
-    lrText.mv2TopLeft = {0.0f, lfBottom - lfHeight};
-    lrText.mv2BottomRight = {0.0f, lfBottom};
+    lrText.mv2TopLeft.mX = 0.0f; lrText.mv2TopLeft.mY = lfBottom - lfHeight;
+    lrText.mv2BottomRight.mX = 0.0f; lrText.mv2BottomRight.mY = lfBottom;
     lrText.meAlignment = CgsGraphics::TextObject::E_ALIGNMENT_CENTER;
     lrText.mfStringWidth = lfWidth;
     if (lrText.mbAutosize) lrText.CalculateAutosizing();
@@ -81,12 +84,12 @@ void SetAboveCarText(CgsGraphics::TextObject& lrText, const CgsResource::CgsUtf8
 // ARTIST82454B50.
 void AboveCarRenderer::UpdateCachedInfoForRival(EActiveRaceCarIndex leIndex)
 {
-    auto& lrInfo = maCachedPlayerGameTagInfos[leIndex];
+    PlayerGamerTagAboveCarInfo& lrInfo = maCachedPlayerGameTagInfos[leIndex];
     lrInfo.mbUsed = true;
-    char lacName[KI_RIVALNAME_LENGTH] = {};
+    char lacName[KI_RIVALNAME_LENGTH] = {0};
     CgsGraphics::RGBA luColour = 0xFF3070FFu;
     const u32 luPosition = mpGuiCache->GetEventPositionOfRaceCar(leIndex);
-    const auto* lpPlayer = FindOnlinePlayer(mpGuiCache, leIndex);
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = FindOnlinePlayer(mpGuiCache, leIndex);
     if (lpPlayer)
     {
         const char* lpcName = lpPlayer->mPlayerName.GetPlayerName();
@@ -117,9 +120,9 @@ void AboveCarRenderer::UpdateCachedInfoForRival(EActiveRaceCarIndex leIndex)
         if (luPosition && luPosition <= mpGuiCache->GetOpponentsInEvent()+1)
         {
             lrInfo.muRivalPosition = luPosition;
-            const auto* lpText = mpLanguageManager->FindString(KAP_POSITION_STRINGS[luPosition-1]);
+            const CgsResource::CgsUtf8* lpText = mpLanguageManager->FindString(KAP_POSITION_STRINGS[luPosition-1]);
             if (!lpText) lpText = reinterpret_cast<const CgsResource::CgsUtf8*>(KAP_POSITION_FALLBACK[luPosition-1]);
-            const auto* lpcText = reinterpret_cast<const char*>(lpText);
+            const char* lpcText = reinterpret_cast<const char*>(lpText);
             CGS_ASSERT(std::strlen(lpcText) < KI_POSITION_LENGTH, "Position is too long for the16 byte buffer");
             lrInfo.mfPositionStringWidth = mTextObject.mpFont->GetStringWidth(lpText);
             CgsCore::SPrintf(lrInfo.macPositionText, KI_POSITION_LENGTH, "%s", lpcText);
@@ -138,29 +141,24 @@ void AboveCarRenderer::UpdateCachedInfoForRival(EActiveRaceCarIndex leIndex)
 f32 AboveCarRenderer::SetTransformMatrixForCar(CgsGui::ImRendererSet* lpRendererSet,
                                                Vector3 lvPosition)
 {
-    using namespace rw::math::vpu;
-    const auto& lrView = lpRendererSet->mCamera.mView;
-    const Matrix44Affine lView = {
-        {lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w},
-        {lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w},
-        {lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w},
-        {lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w}};
-    const Matrix44Affine lInverse = Inverse(lView);
-    const Vector3 lvDirection = {lvPosition.x-lInverse.wAxis.x,
-        lvPosition.y-lInverse.wAxis.y, lvPosition.z-lInverse.wAxis.z, 0.0f};
-    const f32 lfDistance = std::sqrt(Dot(lvDirection, lvDirection));
-    const Vector3 lvForward = {lvDirection.x/lfDistance, lvDirection.y/lfDistance,
-                              lvDirection.z/lfDistance, 0.0f};
-    const Vector3 lvCross = Cross(lvForward, lInverse.yAxis);
-    const f32 lfCrossLength = std::sqrt(Dot(lvCross, lvCross));
-    const Vector3 lvRight = {lvCross.x/lfCrossLength, lvCross.y/lfCrossLength,
-                            lvCross.z/lfCrossLength, 0.0f};
-    const Vector3 lvUp = Cross(lvRight, lvForward);
-    const Matrix44 lModel = {
-        {lvRight.x, lvRight.y, lvRight.z, 0.0f},
-        {-lvUp.x, -lvUp.y, -lvUp.z, 0.0f},
-        {lvForward.x, lvForward.y, lvForward.z, 0.0f},
-        {lvPosition.x, lvPosition.y, lvPosition.z, 1.0f}};
+    const Matrix44& lrView = lpRendererSet->mCamera.mView;
+    const rw::math::vpu::Matrix44Affine lView(Vector3(lrView.xAxis.mV), Vector3(lrView.yAxis.mV),
+        Vector3(lrView.zAxis.mV), Vector3(lrView.wAxis.mV));
+    const rw::math::vpu::Matrix44Affine lInverse = rw::math::vpu::Inverse(lView);
+    const Vector3 lvDirection(lvPosition.mV.x - lInverse.wAxis.mV.x,
+        lvPosition.mV.y - lInverse.wAxis.mV.y, lvPosition.mV.z - lInverse.wAxis.mV.z);
+    const f32 lfDistance = std::sqrt(rw::math::vpu::Dot(lvDirection, lvDirection));
+    const Vector3 lvForward(lvDirection.mV.x / lfDistance, lvDirection.mV.y / lfDistance,
+                            lvDirection.mV.z / lfDistance);
+    const Vector3 lvCross = rw::math::vpu::Cross(lvForward, lInverse.yAxis);
+    const f32 lfCrossLength = std::sqrt(rw::math::vpu::Dot(lvCross, lvCross));
+    const Vector3 lvRight(lvCross.mV.x / lfCrossLength, lvCross.mV.y / lfCrossLength,
+                          lvCross.mV.z / lfCrossLength);
+    const Vector3 lvUp = rw::math::vpu::Cross(lvRight, lvForward);
+    const Matrix44 lModel(Vector4(lvRight.mV.x, lvRight.mV.y, lvRight.mV.z, 0.0f),
+        Vector4(-lvUp.mV.x, -lvUp.mV.y, -lvUp.mV.z, 0.0f),
+        Vector4(lvForward.mV.x, lvForward.mV.y, lvForward.mV.z, 0.0f),
+        Vector4(lvPosition.mV.x, lvPosition.mV.y, lvPosition.mV.z, 1.0f));
     lpRendererSet->mpIm3dRenderBufferRacePosition->SetTransform(
         lModel, lpRendererSet->mCamera.mViewProjection);
     return lfDistance;
@@ -240,7 +238,7 @@ void AboveCarRenderer::Update()
 {
     using BrnReplays::BaseSerialiser;
     if (!mpGuiModuleSerialiser) return; // ARTIST82446B40..44
-    const auto leMode = mpGuiModuleSerialiser->GetMode();
+    const BaseSerialiser::EMode leMode = mpGuiModuleSerialiser->GetMode();
     const bool lbRecording = leMode == BaseSerialiser::E_MODE_RECORDING_PREPARING ||
         leMode == BaseSerialiser::E_MODE_RECORDING ||
         leMode == BaseSerialiser::E_MODE_RECORDING_STALLED;
@@ -249,7 +247,7 @@ void AboveCarRenderer::Update()
         leMode == BaseSerialiser::E_MODE_PLAYING_STALLED;
     if (lbRecording || lbPlaying)
     {
-        auto* lpLayout = mpGuiModuleSerialiser->GetStaticLayout();
+        BrnReplays::GuiModuleStaticLayout* lpLayout = mpGuiModuleSerialiser->GetStaticLayout();
         CGS_STATIC_ASSERT((sizeof(maAboveCarObjectLayouts) == sizeof(lpLayout->maCarRecordsA)),
                       "Replay copies eight complete32-byte records");
         if (lbRecording)
@@ -267,7 +265,7 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
     {
     case 14:
     {
-        const auto* lpNotification = static_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent);
+        const CgsGui::GuiEventLoadNotification* lpNotification = static_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent);
         CgsResource::SafeResourceHandle<CgsResource::Font> lFont;
         lFont.mpResourceMemory = lpNotification->mResourceHandle.mpResourceMemory;
         lFont.mpSourceEntry = lpNotification->mResourceHandle.mpSourceEntry;
@@ -302,7 +300,7 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
         break;
     case 209:
     {
-        const auto& lrRemoved = reinterpret_cast<const GuiRemovedTrafficEvent*>(lpEvent)->mRemovedTrafficArray;
+        const Array<u16, 25>& lrRemoved = reinterpret_cast<const GuiRemovedTrafficEvent*>(lpEvent)->mRemovedTrafficArray;
         for (u32 luIndex = 0; luIndex < lrRemoved.GetLength(); ++luIndex)
         {
             const u16 luVehicle = lrRemoved.GetItem(luIndex);
@@ -319,8 +317,8 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
             if (!maBankingScores.IsFull())
             {
                 BankingScore lScore;
-                lScore.mv2ScreenSpacePosition = {0.0f, 400.0f, 0.0f, 0.0f};
-                lScore.mv3OriginalWorldSpacePosition = {0.0f, 0.0f, 0.0f, 0.0f};
+                lScore.mv2ScreenSpacePosition = Vector2(0.0f, 400.0f);
+                lScore.mv3OriginalWorldSpacePosition.SetZero();
                 lScore.miBaseScore = miTimeExtension;
                 lScore.miComboBonus = 0;
                 lScore.mbIsRoadRageTimeExtension = true;
@@ -331,18 +329,18 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
         break;
     case 394:
     {
-        const auto* lpHit = reinterpret_cast<const GuiHitVehicleEvent*>(lpEvent);
+        const GuiHitVehicleEvent* lpHit = reinterpret_cast<const GuiHitVehicleEvent*>(lpEvent);
         CGS_ASSERT(mpGuiCache, "mpGuiCache");
         if (!maBankingScores.IsFull())
         {
             const u32 luCount = mpGuiCache->GetScoringTrafficCount();
             for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
             {
-                const auto* lpCar = mpGuiCache->GetScoringTrafficData(luIndex);
+                const BrnTraffic::BrnTrafficIO::VehicleScoreData* lpCar = mpGuiCache->GetScoringTrafficData(luIndex);
                 if (lpCar->muVehicleIndex == lpHit->muVehicleIndex)
                 {
                     BankingScore lScore;
-                    lScore.mv2ScreenSpacePosition = {0.0f, 0.0f, 0.0f, 0.0f};
+                    lScore.mv2ScreenSpacePosition.SetZero();
                     lScore.mv3OriginalWorldSpacePosition = lpCar->mPosition;
                     lScore.miBaseScore = static_cast<s16>(lpHit->miVehicleBaseScore);
                     lScore.miComboBonus = static_cast<s16>(lpHit->miVehicleChainBonus);
@@ -372,17 +370,17 @@ void AboveCarRenderer::RenderTrafficCarScores(CgsGui::ImRendererSet* lpRendererS
         return;
     }
 
-    auto* lpBuffer = lpRendererSet->mpIm3dRenderBufferRacePosition;
-    const auto lPreviousFont = mTextObject.mpFont;
+    CgsGraphics::Im3dRenderBuffer* lpBuffer = lpRendererSet->mpIm3dRenderBufferRacePosition;
+    const CgsResource::SafeResourceHandle<CgsResource::Font> lPreviousFont = mTextObject.mpFont;
     mTextObject.mpFont = mpScoreFont;
     mTextObject.mfFontHeight = 0.5f; // 82F257B8
     mTextObject.mbDropShadow = true;
     mTextObject.mTextColour = mpLanguageManager->GetCurrentLanguage() == 16 ? 0xFF00B4FFu : 0xFFFFFFFFu;
     // CRT82C51BE4 initializes82FB35C0 to1280,720.
-    mTextObject.mv2TopLeft = {-1280.0f, -0.5f};
-    mTextObject.mv2BottomRight = {1280.0f, 720.0f};
+    mTextObject.mv2TopLeft.mX = -1280.0f; mTextObject.mv2TopLeft.mY = -0.5f;
+    mTextObject.mv2BottomRight.mX = 1280.0f; mTextObject.mv2BottomRight.mY = 720.0f;
     mTextObject.meAlignment = CgsGraphics::TextObject::E_ALIGNMENT_CENTER;
-    auto& lrCamera = lpRendererSet->mCamera;
+    CgsGraphics::Camera& lrCamera = lpRendererSet->mCamera;
     const f32 lfNearClip = lrCamera.maProjectionScalars[7];
     lrCamera.maProjectionScalars[7] *= 1.1f;
     lrCamera.UpdatePerspectiveProjectionMatrix();
@@ -390,7 +388,7 @@ void AboveCarRenderer::RenderTrafficCarScores(CgsGui::ImRendererSet* lpRendererS
     char lacScore[32];
     for (u32 luIndex = 0; luIndex < mpGuiCache->GetScoringTrafficCount(); ++luIndex)
     {
-        const auto* lpCar = mpGuiCache->GetScoringTrafficData(luIndex);
+        const BrnTraffic::BrnTrafficIO::VehicleScoreData* lpCar = mpGuiCache->GetScoringTrafficData(luIndex);
         CGS_ASSERT(lpCar->muVehicleIndex < 600, "invalid index < NUMBITS");
         if (mRecentCrashSet.IsBitSet(lpCar->muVehicleIndex))
             continue;
@@ -405,7 +403,7 @@ void AboveCarRenderer::RenderTrafficCarScores(CgsGui::ImRendererSet* lpRendererS
         if (lpCar->miMultiplier > 0)
         {
             CgsCore::SnPrintf(lacScore, 31, "+%d", static_cast<s32>(lpCar->miMultiplier)); //82057CD4
-            const auto lvTopLeft = mTextObject.mv2TopLeft;
+            const CgsGraphics::TextVector2 lvTopLeft = mTextObject.mv2TopLeft;
             mTextObject.mv2TopLeft.mY -= 1.0f;
             mTextObject.mfFontHeight = 1.0f;
             mTextObject.mfStringWidth = mTextObject.mpFont->GetStringWidth(mTextObject.mpUtf8String);
@@ -420,15 +418,15 @@ void AboveCarRenderer::RenderTrafficCarScores(CgsGui::ImRendererSet* lpRendererS
     Vector3 laSums[32];
     f32 lafCounts[32];
     u32 luGroups = 0;
-    const auto& lrSigns = *mpGuiCache->GetVisibleOverheadSignArray();
+    const GuiOverheadSignInfoEvent::VisibleOverheadSignArray& lrSigns = *mpGuiCache->GetVisibleOverheadSignArray();
     for (u32 luIndex = 0; luIndex < lrSigns.GetLength(); ++luIndex)
     {
         const Vector3 lvPosition = lrSigns.GetItem(luIndex).mWorldSpacePosition;
         u32 luGroup = 0;
         for (; luGroup < luGroups; ++luGroup)
         {
-            const f32 lfX = lvPosition.x - laCentres[luGroup].x;
-            const f32 lfZ = lvPosition.z - laCentres[luGroup].z;
+            const f32 lfX = lvPosition.mV.x - laCentres[luGroup].mV.x;
+            const f32 lfZ = lvPosition.mV.z - laCentres[luGroup].mV.z;
             // CRT82C51C10 splats225; vrlimi clears Y before the dot product.
             if (lfX * lfX + lfZ * lfZ < 225.0f)
                 break;
@@ -436,14 +434,12 @@ void AboveCarRenderer::RenderTrafficCarScores(CgsGui::ImRendererSet* lpRendererS
         if (luGroup < luGroups)
         {
             lafCounts[luGroup] += 1.0f;
-            laSums[luGroup].x += lvPosition.x;
-            laSums[luGroup].y += lvPosition.y;
-            laSums[luGroup].z += lvPosition.z;
-            laSums[luGroup].w += lvPosition.w;
+            laSums[luGroup].mV.x += lvPosition.mV.x;
+            laSums[luGroup].mV.y += lvPosition.mV.y;
+            laSums[luGroup].mV.z += lvPosition.mV.z;
+            laSums[luGroup].mV.w += lvPosition.mV.w;
             const f32 lfReciprocal = 1.0f / lafCounts[luGroup];
-            laCentres[luGroup] = {laSums[luGroup].x * lfReciprocal,
-                laSums[luGroup].y * lfReciprocal, laSums[luGroup].z * lfReciprocal,
-                laSums[luGroup].w * lfReciprocal};
+            laCentres[luGroup].mV = __vmulfp(laSums[luGroup].mV, __vspltw(Vector4(lfReciprocal, lfReciprocal, lfReciprocal, lfReciprocal).mV, 0));
         }
         else if (luGroups < 32)
         {
@@ -474,30 +470,30 @@ void AboveCarRenderer::RenderReplayAboveCar(CgsGui::ImRendererSet* lpRendererSet
 {
     if (!mpGuiCache->GetRenderReplayPlayerNames())
         return;
-    const auto* lpLayout = mpGuiModuleSerialiser->GetStaticLayout();
+    const BrnReplays::GuiModuleStaticLayout* lpLayout = mpGuiModuleSerialiser->GetStaticLayout();
     for (s32 liIndex = 0; liIndex < 8; ++liIndex)
     {
-        const auto& lrRecord = maAboveCarObjectLayouts[liIndex];
+        const BrnReplays::GuiModuleAboveCarObjectLayout& lrRecord = maAboveCarObjectLayouts[liIndex];
         if (!lrRecord.mbVisible) continue;
         Vector3 lvPosition = lrRecord.mWorldPosition;
-        lvPosition.y += 1.0f;
+        lvPosition.mV.y += 1.0f;
         const f32 lfDistance = SetTransformMatrixForCar(lpRendererSet, lvPosition);
         const f32 lfFraction = ClampAboveCarUnit(lfDistance * 0.004f);
         if (lfFraction >= 1.0f) continue;
         const f32 lfHeight = AboveCarFontHeight(lpRendererSet->mCamera.maProjectionScalars[3], lfFraction);
         f32 lfBottom = -0.4f;
-        auto* lpBuffer = lpRendererSet->mpIm3dRenderBufferRacePosition;
+        CgsGraphics::Im3dRenderBuffer* lpBuffer = lpRendererSet->mpIm3dRenderBufferRacePosition;
         if (lrRecord.muRacePosition)
         {
-            const auto* lpText = mpLanguageManager->FindString(KAP_POSITION_STRINGS[lrRecord.muRacePosition-1]);
+            const CgsResource::CgsUtf8* lpText = mpLanguageManager->FindString(KAP_POSITION_STRINGS[lrRecord.muRacePosition-1]);
             CGS_ASSERT(lpText, "lpPositionString");
             SetAboveCarText(mTextObject, lpText, lfHeight, lfBottom, lrRecord.mColour,
                 mTextObject.mpFont->GetStringWidth(lpText));
             mpTextRenderer->RenderString(lpBuffer, mTextObject);
             lfBottom -= lfHeight;
         }
-        const auto* lpNames = lpLayout->mbFrameParity ? lpLayout->maCarFlagsBuffer0 : lpLayout->maCarFlagsBuffer1;
-        const auto* lpName = reinterpret_cast<const CgsResource::CgsUtf8*>(lpNames[liIndex]);
+        const u8 (*lpNames)[16] = lpLayout->mbFrameParity ? lpLayout->maCarFlagsBuffer0 : lpLayout->maCarFlagsBuffer1;
+        const CgsResource::CgsUtf8* lpName = reinterpret_cast<const CgsResource::CgsUtf8*>(lpNames[liIndex]);
         CGS_ASSERT(lpName, "lpStaticLayout->maaGamertags[lpStaticLayout->GetGamertagBufferIndexLastFrame()][leActiveRaceCarIndex].GetPlayerName()");
         SetAboveCarText(mTextObject, lpName, lfHeight, lfBottom, lrRecord.mColour,
             mTextObject.mpFont->GetStringWidth(lpName));
@@ -512,7 +508,7 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     if (!mpGuiCache || mTextObject.mpFont.IsNull() || mpScoreFont.IsNull())
         return;
     if (miAboveCarRendererPM >= 0) CgsDev::PerfMonCpu::StartMonitor(miAboveCarRendererPM);
-    auto* lpBuffer = lpRendererSet->mpIm3dRenderBufferRacePosition;
+    CgsGraphics::Im3dRenderBuffer* lpBuffer = lpRendererSet->mpIm3dRenderBufferRacePosition;
     lpBuffer->BeginRendering();
     lpBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);
     lpBuffer->SetState(CgsGui::gpGuiDepthStencilStateZOn);
@@ -532,7 +528,7 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         mpBlendState = renderengine::BlendState::Initialize(mBlendStateResource, lParams);
     }
     lpBuffer->SetState(reinterpret_cast<const renderengine::BlendState*>(mpBlendState));
-    const auto leReplayMode = mpGuiModuleSerialiser->GetMode();
+    const BrnReplays::BaseSerialiser::EMode leReplayMode = mpGuiModuleSerialiser->GetMode();
     if (leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING ||
         leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING ||
         leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_STALLED)
@@ -543,8 +539,8 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         {
             for (s32 liIndex = 0; liIndex < 8; ++liIndex)
             {
-                const auto leCar = static_cast<EActiveRaceCarIndex>(liIndex);
-                auto& lrInfo = maCachedPlayerGameTagInfos[liIndex];
+                const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liIndex);
+                PlayerGamerTagAboveCarInfo& lrInfo = maCachedPlayerGameTagInfos[liIndex];
                 if (!mpGuiCache->IsActiveRaceCarIndexUsed(leCar))
                 {
                     lrInfo.mbUsed = false;
@@ -555,17 +551,17 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                     mpGuiCache->IsActiveRaceCarDisconnected(leCar) || mpGuiCache->GetOnlinePlayerInCarSelect(leCar) ||
                     mpGuiCache->GetOnlinePlayerColourFromARCI(leCar) == 10)
                     continue;
-                const auto& lrPosition = mpGuiCache->GetRaceCarPosition(leCar);
-                const Vector3 lvPosition = {lrPosition.x, lrPosition.y + 1.0f, lrPosition.z, lrPosition.w};
+                const Vector4& lrPosition = mpGuiCache->GetRaceCarPosition(leCar);
+                Vector3 lvPosition(lrPosition.mV); lvPosition.mV.y += 1.0f;
                 const f32 lfDistance = SetTransformMatrixForCar(lpRendererSet, lvPosition);
-                const auto* lpPlayer = FindOnlinePlayer(mpGuiCache, leCar);
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = FindOnlinePlayer(mpGuiCache, leCar);
                 if (!lpPlayer) lrInfo.mbUsed = false;
                 else if (!lrInfo.mbUsed || lrInfo.muRivalPosition != mpGuiCache->GetEventPositionOfRaceCar(leCar) ||
                          _stricmp(lpPlayer->mPlayerName.GetPlayerName(), lrInfo.macRivalName))
                     UpdateCachedInfoForRival(leCar);
                 if (!lrInfo.mbUsed) continue;
-                auto& lrRecord = maAboveCarObjectLayouts[liIndex];
-                lrRecord.mWorldPosition = {lrPosition.x, lrPosition.y, lrPosition.z, lrPosition.w};
+                BrnReplays::GuiModuleAboveCarObjectLayout& lrRecord = maAboveCarObjectLayouts[liIndex];
+                lrRecord.mWorldPosition = Vector3(lrPosition.mV);
                 const f32 lfFraction = ClampAboveCarUnit(lfDistance * 0.004f);
                 if (lfFraction >= 1.0f) continue;
                 if (lfFraction > 0.75f)
@@ -598,48 +594,8 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                 }
             }
         }
-        static s32 siWitnessLines = 96;
-        static s32 siWitnessFrames = 0;
-        static u32 suWitnessCountAfter = 0;
-        BankingScore laWitnessBefore[KI_MAX_BANKING_SCORES];
-        const u32 luWitnessBefore = sbWitness ? maBankingScores.GetLength() : 0;
-        for (u32 luIndex = 0; luIndex < luWitnessBefore; ++luIndex)
-            laWitnessBefore[luIndex] = maBankingScores.GetItem(luIndex);
         RenderTrafficCarScores(lpRendererSet);
         RenderBankingScores(lpRendererSet);
-        if (sbWitness && CgsDev::Log::gpDebugPrint)
-        {
-            const u32 luAfter = maBankingScores.GetLength();
-            if (luWitnessBefore > suWitnessCountAfter && siWitnessLines-- > 0)
-                *CgsDev::Log::gpDebugPrint << "[abovecar] bank add count=" << luWitnessBefore
-                    << " (was " << suWitnessCountAfter << ") scoringTraffic="
-                    << mpGuiCache->GetScoringTrafficCount() << "\n";
-            for (u32 luIndex = 0; luIndex < luWitnessBefore && luIndex < luAfter; ++luIndex)
-            {
-                const Vector3& lrWorld = laWitnessBefore[luIndex].mv3OriginalWorldSpacePosition;
-                const BankingScore& lrNow = maBankingScores.GetItem(luIndex);
-                if ((lrWorld.x != 0.0f || lrWorld.y != 0.0f || lrWorld.z != 0.0f) &&
-                    siWitnessLines-- > 0)
-                    *CgsDev::Log::gpDebugPrint << "[abovecar] bank start value="
-                        << (lrNow.miBaseScore + lrNow.miComboBonus) << " world=(" << lrWorld.x
-                        << "," << lrWorld.y << "," << lrWorld.z << ") screen=("
-                        << lrNow.mv2ScreenSpacePosition.x << "," << lrNow.mv2ScreenSpacePosition.y
-                        << ")\n";
-            }
-            if (luAfter < luWitnessBefore && siWitnessLines-- > 0)
-                *CgsDev::Log::gpDebugPrint << "[abovecar] bank arrive count=" << luAfter
-                    << " (was " << luWitnessBefore << ")\n";
-            suWitnessCountAfter = luAfter;
-            if ((siWitnessFrames++ % 300) == 0 && siWitnessLines-- > 0)
-            {
-                u32 luLabels = 0;
-                for (u32 luIndex = 0; luIndex < mpGuiCache->GetScoringTrafficCount(); ++luIndex)
-                    if (!mRecentCrashSet.IsBitSet(mpGuiCache->GetScoringTrafficData(luIndex)->muVehicleIndex))
-                        ++luLabels;
-                *CgsDev::Log::gpDebugPrint << "[abovecar] frame mode=" << mpGuiCache->GetGameMode()
-                    << " trafficLabels=" << luLabels << " banked=" << luAfter << "\n";
-            }
-        }
     }
     lpBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
     lpBuffer->EndRendering();
@@ -657,14 +613,14 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
         return;
     }
 
-    const auto lpSavedFont = mTextObject.mpFont;
+    const CgsResource::SafeResourceHandle<CgsResource::Font> lpSavedFont = mTextObject.mpFont;
     mTextObject.mpFont = mpScoreFont;
     mTextObject.mfFontHeight = 0.5f; //82F257B8 KF_SCORE_FONT_SIZE_3D
     mTextObject.mbDropShadow = true;
     mTextObject.mTextColour = mpLanguageManager->GetCurrentLanguage() == 16
         ? 0xFF00B4FFu : 0xFFFFFFFFu; //82F25BA8/82F25BA4
-    mTextObject.mv2TopLeft = {-1280.0f, -0.5f};
-    mTextObject.mv2BottomRight = {1280.0f, 720.0f}; //82FB35C0, CRT82C51BE4
+    mTextObject.mv2TopLeft.mX = -1280.0f; mTextObject.mv2TopLeft.mY = -0.5f;
+    mTextObject.mv2BottomRight.mX = 1280.0f; mTextObject.mv2BottomRight.mY = 720.0f; //82FB35C0, CRT82C51BE4
     mTextObject.meAlignment = CgsGraphics::TextObject::E_ALIGNMENT_CENTER;
 
     CgsGraphics::Camera& lrCamera = lpImRenderers->mCamera;
@@ -681,13 +637,13 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
         lpIm2d->SetState(reinterpret_cast<const renderengine::BlendState*>(mpBlendState));
         lpIm2d->SetTexture(CgsGui::gpGuiWhiteTexture); //83010F58, real shared white raster
         CgsGraphics::Im2dTransform lTransform;
-        lTransform.mOriginXYZ = {-1.0f, 1.0f, 0.0f, 0.0f};
-        lTransform.mRightUp = {2.0f/1280.0f, 0.0f, 0.0f, -2.0f/720.0f};
-        lTransform.mColourShift = {0.0f, 0.0f, 0.0f, 0.0f};
-        lTransform.mColourScale = {1.0f, 1.0f, 1.0f, 1.0f};
+        lTransform.mOriginXYZ.Set(-1.0f, 1.0f, 0.0f, 0.0f);
+        lTransform.mRightUp.Set(2.0f/1280.0f, 0.0f, 0.0f, -2.0f/720.0f);
+        lTransform.mColourShift.Set(0.0f, 0.0f, 0.0f, 0.0f);
+        lTransform.mColourScale.Set(1.0f, 1.0f, 1.0f, 1.0f);
         lpIm2d->SetTransform(lTransform); //raw VMX oracle pins all16 lanes
         mTextObject.mfFontHeight = 20.0f; //82F257C0 KF_SCORE_FONT_SIZE_2D
-        mTextObject.mv2BottomRight = {1280.0f, 720.0f};
+        mTextObject.mv2BottomRight.mX = 1280.0f; mTextObject.mv2BottomRight.mY = 720.0f;
         mTextObject.meAlignment = CgsGraphics::TextObject::E_ALIGNMENT_CENTER;
 
         for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
@@ -701,24 +657,24 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
                 ? 0.05f : 0.05f; //82F257CC/82F257C8; separate original constants
             const Vector3 lvWorld = lrScore.mv3OriginalWorldSpacePosition;
             // ARTIST compares abs XYZ with FLT_EPSILON; w is replaced with x.
-            if (std::fabs(lvWorld.x) > 1.1920928955078125e-7f ||
-                std::fabs(lvWorld.y) > 1.1920928955078125e-7f ||
-                std::fabs(lvWorld.z) > 1.1920928955078125e-7f)
+            if (std::fabs(lvWorld.mV.x) > 1.1920928955078125e-7f ||
+                std::fabs(lvWorld.mV.y) > 1.1920928955078125e-7f ||
+                std::fabs(lvWorld.mV.z) > 1.1920928955078125e-7f)
             {
                 Vector2& lvScreen = lrScore.mv2ScreenSpacePosition;
                 if (BrnDirector::Camera::Utils::ProjectWorldSpacePointToScreen(
                         lrCamera.GetViewProjectionMatrix(), lvWorld, lvScreen) &&
-                    lvScreen.x >= -0.9f && lvScreen.x <= 0.9f &&
-                    lvScreen.y >= -1.0f && lvScreen.y <= 1.0f)
+                    lvScreen.mV.x >= -0.9f && lvScreen.mV.x <= 0.9f &&
+                    lvScreen.mV.y >= -1.0f && lvScreen.mV.y <= 1.0f)
                 {
-                    lvScreen.x *= 1280.0f;
+                    lvScreen.mV.x *= 1280.0f;
                     // Separate vector operations in ARTIST: add, mul, mul, sub.
-                    lvScreen.y = ((lvScreen.y + 1.0f) * 0.5f) * 720.0f - 10.0f;
+                    lvScreen.mV.y = ((lvScreen.mV.y + 1.0f) * 0.5f) * 720.0f - 10.0f;
                 }
                 else
                 {
-                    lvScreen.x = lfTargetX;
-                    lvScreen.y = lfTargetY;
+                    lvScreen.mV.x = lfTargetX;
+                    lvScreen.mV.y = lfTargetY;
                 }
                 lrScore.mv3OriginalWorldSpacePosition.SetZero(); //83018100
             }
@@ -733,7 +689,7 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
                     lacAmount, lrScore.miBaseScore + lrScore.miComboBonus, 32);
                 CgsCore::SnPrintf(lacCombo, 32, "%d", lrScore.miComboBonus / 1000); //82F257E8
                 lacCombo[31] = 0;
-                const auto* lpFormat = mpLanguageManager->FindString("SHOWTIME_COMBO"); //82F257F0
+                const CgsResource::CgsUtf8* lpFormat = mpLanguageManager->FindString("SHOWTIME_COMBO"); //82F257F0
                 CgsUnicode::UnicodeBuffer lCombo;
                 CgsUnicode::UnicodeBuffer lAmount;
                 lCombo.Convert(reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacCombo));
@@ -746,7 +702,7 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
                 char lacSeconds[32];
                 CgsCore::SnPrintf(lacSeconds, 32, "%d", lrScore.miBaseScore);
                 lacSeconds[31] = 0;
-                const auto* lpFormat = mpLanguageManager->FindString("TIME_EXTENSION_SECONDS"); //82F257F4
+                const CgsResource::CgsUtf8* lpFormat = mpLanguageManager->FindString("TIME_EXTENSION_SECONDS"); //82F257F4
                 CgsUnicode::UnicodeBuffer lSeconds;
                 lSeconds.Convert(reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSeconds));
                 const CgsUnicode::CgsUtf8* lapArgs[1] = {lSeconds.GetBuffer()};
@@ -758,18 +714,20 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
                     reinterpret_cast<char*>(lauText), lrScore.miBaseScore, 32);
             }
 
-            const f32 lfDeltaX = lfTargetX - lrScore.mv2ScreenSpacePosition.x;
-            const f32 lfDeltaY = lfTargetY - lrScore.mv2ScreenSpacePosition.y;
+            const f32 lfDeltaX = lfTargetX - lrScore.mv2ScreenSpacePosition.mV.x;
+            const f32 lfDeltaY = lfTargetY - lrScore.mv2ScreenSpacePosition.mV.y;
             mTextObject.mpUtf8String = lauText;
             // fmuls x*x then fmadds y*y+x*x; fsel clamps include unordered FP.
-            const f32 lfDistanceSquared = std::fma(lfDeltaY, lfDeltaY, lfDeltaX*lfDeltaX);
+            const Vector4 y(lfDeltaY, lfDeltaY, lfDeltaY, lfDeltaY);
+            const f32 xx = lfDeltaX * lfDeltaX;
+            const Vector4 x2(xx, xx, xx, xx);
+            const f32 lfDistanceSquared = Vector4(__vmaddfp(y.mV, y.mV, x2.mV)).GetX().GetFloat();
             f32 lfFade = lfDistanceSquared / (90.0f*90.0f); //82F257E0
             lfFade = -lfFade >= 0.0f ? 0.0f : lfFade;
             lfFade = 1.0f-lfFade >= 0.0f ? lfFade : 1.0f;
             const u8 luAlpha = static_cast<u8>(lfFade * 255.0f); //82010C20, fctidz
             if (mTextObject.mbAutosize) mTextObject.CalculateAutosizing();
-            mTextObject.mv2TopLeft = {lrScore.mv2ScreenSpacePosition.x,
-                                    lrScore.mv2ScreenSpacePosition.y};
+            mTextObject.mv2TopLeft.mX = lrScore.mv2ScreenSpacePosition.mV.x; mTextObject.mv2TopLeft.mY = lrScore.mv2ScreenSpacePosition.mV.y;
             mTextObject.mfStringWidth = mTextObject.mpFont->GetStringWidth(mTextObject.mpUtf8String);
             if (mTextObject.mbAutosize) mTextObject.CalculateAutosizing();
             mTextObject.mTextColour = (mTextObject.mTextColour & 0x00FFFFFFu) |
@@ -787,8 +745,8 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
             {
                 const f32 lfStepX = lfDeltaX * lfSpeed;
                 const f32 lfStepY = lfDeltaY * lfSpeed;
-                lrScore.mv2ScreenSpacePosition.x += lfStepX;
-                lrScore.mv2ScreenSpacePosition.y += lfStepY;
+                lrScore.mv2ScreenSpacePosition.mV.x += lfStepX;
+                lrScore.mv2ScreenSpacePosition.mV.y += lfStepY;
             }
         }
         lpIm2d->EndRendering();
