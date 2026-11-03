@@ -10,11 +10,7 @@ namespace Deformation {
         const ImpulseParams* lpImpulseParams)
     {
         const Vector3& lrDirection = KA_IMPULSE_DIRECTIONS[lpImpulseParams->meImpulseDirection];
-        const f32 lfMagnitude = lpImpulseParams->mvfImpulseMagnitude.x;
-        const Vector3 liImpulse = {
-            lrDirection.x * lfMagnitude, lrDirection.y * lfMagnitude,
-            lrDirection.z * lfMagnitude, lrDirection.w * lfMagnitude
-        };
+        const Vector3 liImpulse = Vector3(__vmulfp(lrDirection.mV, lpImpulseParams->mvfImpulseMagnitude.mV));
         if (lpVehicle->IsCrashing())
         {
             // ARTIST 0x8260E0B4/0x8260E018 loads the world-contact byte into r6.

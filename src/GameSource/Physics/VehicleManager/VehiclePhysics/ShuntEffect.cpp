@@ -24,9 +24,9 @@ namespace Vehicle
     // i.e. the shunt is active iff its desired speed AND its remaining life are both positive.
     bool VehiclePhysics::ShuntEffect::IsActive() const
     {
-        if ( !(mDirectionPlusDesiredSpeed.w > 0.0f) )
+        if ( !((float)mDirectionPlusDesiredSpeed.GetPlus() > 0.0f) )
             return false;
-        return mv4_Life_SpeedIncreaseToQuit.x > 0.0f;
+        return (float)mv4_Life_SpeedIncreaseToQuit.GetX() > 0.0f;
     }
 }
 }
