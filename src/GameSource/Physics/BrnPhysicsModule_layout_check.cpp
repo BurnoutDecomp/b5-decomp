@@ -45,10 +45,14 @@
 #include "GameSource/Physics/BrnPhysicsModule.h"
 
 #include <cstddef>       // offsetof
-#include <type_traits>   // is_same
 
 namespace BrnPhysics
 {
+    // C++03 exact member-type check; the fallback rejects same-width retypes.
+    template <typename T, typename C> char BrnMemberTypesMatch(T C::*, T C::*);
+    struct BrnMemberTypesDiffer { char bytes[2]; };
+    BrnMemberTypesDiffer BrnMemberTypesMatch(...);
+
     // ==============================================================================================
     // PART 1 -- CONSOLE ARITHMETIC. Pure integer maths over the X360 literals; it does not touch a
     // host type anywhere, so it measures the RECOVERED LAYOUT and nothing else.
@@ -142,7 +146,7 @@ namespace BrnPhysics
 // host sizes, but the SPACING inside the block is width-invariant (no pointer, no vptr), so it must
 // reproduce the console deltas exactly.
 #define BRNPHYS_TAIL_SEAT(member, type, consoleOffset)                                              \
-    CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::member), type>::value),                       \
+    CGS_STATIC_ASSERT((sizeof(BrnMemberTypesMatch(&PhysicsModule::member, (type PhysicsModule::*)0)) == sizeof(char)),                       \
                   #member " must stay a " #type " -- a same-width retype (s32->u32, s32->f32) "     \
                   "would slip past every offset assert in this file");                              \
     CGS_STATIC_ASSERT((offsetof(PhysicsModule, member) - offsetof(PhysicsModule, mePrepareStage)         \
@@ -162,27 +166,20 @@ namespace BrnPhysics
         // members is ever demoted back to a padding blob, or retyped to a base/other class, the
         // corresponding assert fires before a single byte is written.
         // ------------------------------------------------------------------------------------
-        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mSimulationModule),
-                                   CgsPhysics::PhysicsSimulationModule>::value),
+        CGS_STATIC_ASSERT((sizeof(BrnMemberTypesMatch(&PhysicsModule::mSimulationModule, (CgsPhysics::PhysicsSimulationModule PhysicsModule::*)0)) == sizeof(char)),
                       "mSimulationModule must be the real PhysicsSimulationModule (its Construct is "
                       "dispatched through this member's own vtable slot 0)");
-        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mVehicleManager),
-                                   BrnPhysics::Vehicle::VehicleManager>::value),
+        CGS_STATIC_ASSERT((sizeof(BrnMemberTypesMatch(&PhysicsModule::mVehicleManager, (BrnPhysics::Vehicle::VehicleManager PhysicsModule::*)0)) == sizeof(char)),
                       "mVehicleManager must be the real VehicleManager");
-        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mContactData),
-                                   ContactSpy::ContactSpyData>::value),
+        CGS_STATIC_ASSERT((sizeof(BrnMemberTypesMatch(&PhysicsModule::mContactData, (ContactSpy::ContactSpyData PhysicsModule::*)0)) == sizeof(char)),
                       "mContactData must be the real ContactSpyData");
-        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mDeformationManager),
-                                   Deformation::DeformationManager>::value),
+        CGS_STATIC_ASSERT((sizeof(BrnMemberTypesMatch(&PhysicsModule::mDeformationManager, (Deformation::DeformationManager PhysicsModule::*)0)) == sizeof(char)),
                       "mDeformationManager must be the real DeformationManager");
-        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mDeformationInput),
-                                   Deformation::DeformationInputInterface>::value),
+        CGS_STATIC_ASSERT((sizeof(BrnMemberTypesMatch(&PhysicsModule::mDeformationInput, (Deformation::DeformationInputInterface PhysicsModule::*)0)) == sizeof(char)),
                       "mDeformationInput must be the real DeformationInputInterface");
-        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mDeformationOutput),
-                                   Deformation::DeformationOutputInterface>::value),
+        CGS_STATIC_ASSERT((sizeof(BrnMemberTypesMatch(&PhysicsModule::mDeformationOutput, (Deformation::DeformationOutputInterface PhysicsModule::*)0)) == sizeof(char)),
                       "mDeformationOutput must be the real DeformationOutputInterface");
-        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mPropManager),
-                                   Props::PropManager>::value),
+        CGS_STATIC_ASSERT((sizeof(BrnMemberTypesMatch(&PhysicsModule::mPropManager, (Props::PropManager PhysicsModule::*)0)) == sizeof(char)),
                       "mPropManager must be the real PropManager -- this is the seat the retired "
                       "112-byte ContainedListInterface was sitting on");
 
