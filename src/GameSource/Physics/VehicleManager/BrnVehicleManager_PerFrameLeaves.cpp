@@ -88,14 +88,11 @@ namespace Vehicle
                 const u32 luIndex = (luEntityWord >> 10) & 0x3FFFu;
 
                 // v1 carries the raw mDirectionAndMagnitude register (w = magnitude lane);
-                // reproduced lane-for-lane (GetVector3() would zero the w the console keeps).
-                const Vector3 lvDirection = { lEvent.mDirectionAndMagnitude.x,
-                                           lEvent.mDirectionAndMagnitude.y,
-                                           lEvent.mDirectionAndMagnitude.z,
-                                           lEvent.mDirectionAndMagnitude.w };
+                // GetVector3() aliases the full register, including the magnitude lane.
+                const Vector3 lvDirection = lEvent.mDirectionAndMagnitude.GetVector3();
                 maRaceCarVehicles[luIndex].AddAirRam(
                     lEvent.muEffectFlags,                // r4      <- event+0x08
-                    lEvent.mDirectionAndMagnitude.w,     // f1      <- event+0x1C (lfFactor)
+                    lEvent.mDirectionAndMagnitude.GetPlus(),     // f1      <- event+0x1C (lfFactor)
                     lEvent.mfDecay,                      // f2      <- event+0x0C
                     lvDirection,                         // v1      <- event+0x10
                     lEvent.mPosition,                    // v2      <- event+0x20
@@ -123,9 +120,6 @@ namespace Vehicle
     //   * forward to the car's ExternalPhysicsBody base (asm this + 0x750 + idx*0x1460 ==
     //     &maRaceCarVehicles[idx] + 0x10, the base sub-object -- spelled here as the derived
     //     object's member call, which the compiler seats identically).
-    // HOST DIVERGENCE, flagged: for idx >= 8 the console runs the `ldx` compare anyway
-    // (an OOB read past the 8-slot id table whose result feeds an id compare that then almost
-    // surely fails); the host guards it -- the ValidateSimulationContacts precedent.
     // ------------------------------------------------------------------------------------
     void VehicleManager::ReadUpdatedBodyProperties(
         const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia, 200>* lpInertiaQueue)
@@ -145,12 +139,9 @@ namespace Vehicle
             CGS_ASSERT(luIndex < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS),
                        "Received invalid entity index for race car body");   // :4321
 
-            if (luIndex < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS))   // host bounds guard (see banner)
+            if (lEvent.mID == maRaceCarHandlingBodyIDs[luIndex])
             {
-                if (lEvent.mID == maRaceCarHandlingBodyIDs[luIndex])   // asm cmpld -- full 64 bits
-                {
-                    maRaceCarVehicles[luIndex].ReadPropertiesFromChangeInertiaEvent(&lEvent);
-                }
+                maRaceCarVehicles[luIndex].ReadPropertiesFromChangeInertiaEvent(&lEvent);
             }
         }
     }

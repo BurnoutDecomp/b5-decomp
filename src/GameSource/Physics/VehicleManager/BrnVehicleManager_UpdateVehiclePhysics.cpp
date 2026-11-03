@@ -62,12 +62,6 @@ namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
 
-    // [T5-ram] DIAG state, DEFINED in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
-    // NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    extern s32 gT5RamFramesLeft;
-    extern f32 gT5PlayerPos[3];
-    extern f32 gT5PlayerVel[3];
-
     // ------------------------------------------------------------------------------------
     // File-scope statics of the console BrnVehicleManager.cpp translation unit that this
     // slice's bodies read.
@@ -158,7 +152,7 @@ namespace Vehicle
             // The manager decl's EntityId is BrnCommonTypes' packed-id POD (`{ u32 muValue; }`).
             EntityId lVictimId;
             lVictimId.muValue = luEntityId;
-            const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lvZero(0.0f, 0.0f, 0.0f);
             SetRaceCarCrashing(
                 lVictimId,
                 lVictimId,
@@ -227,7 +221,7 @@ namespace Vehicle
 
             const Vector3 lStart = maRaceCarVehicles[liCar].GetPosition();
             Vector3 lEnd = lStart;
-            lEnd.y -= KF_ABOVE_GROUND_RAY_LENGTH;
+            lEnd.SetY(float(lEnd.GetY()) - KF_ABOVE_GROUND_RAY_LENGTH);
 
             CgsSceneManager::SceneManagerIO::InEventLineTestNearest lEvent;
             lEvent.mLineStart          = lStart;
@@ -570,10 +564,10 @@ namespace Vehicle
             lrPlayer.mSlamEffect.mfSlamLife         = 0.0f;    // +0x111C
             lrPlayer.mSlamEffect.mfTotalSlamTime    = 0.0f;    // +0x1120
             lrPlayer.mSlamEffect.mi8SlamNumber      = -1;      // stb @+0x1128
-            const Vector3Plus lvZeroShunt = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3Plus lvZeroShunt(0.0f, 0.0f, 0.0f, 0.0f);
             lrPlayer.mShuntEffect.mDirectionPlusDesiredSpeed = lvZeroShunt; // stvx 0 @+0x1130
-            lrPlayer.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;  // vrlimi 8 @+0x1140
-            lrPlayer.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;   // vrlimi 4 @+0x1140
+            lrPlayer.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.SetX(-1.0f);  // vrlimi 8 @+0x1140
+            lrPlayer.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.SetY(0.0f);   // vrlimi 4 @+0x1140
         }
 
         // Freeze the player car while the update set says "menus own the frame" (bits
@@ -610,8 +604,8 @@ namespace Vehicle
             //      random          = mRandom (r9 = this+16)
             //      v1/v2           = splat(lfSimTimerTimeStep) / splat(lfGameTimerTimeStep)
             CgsDev::PerfMonCpu::StartMonitor(gs_iUpdateVehiclesPM);
-            const VecFloat lvSimTimeStep = { lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep };
-            const VecFloat lvGameTimeStep = { lfGameTimerTimeStep, lfGameTimerTimeStep, lfGameTimerTimeStep, lfGameTimerTimeStep };
+            const VecFloat lvSimTimeStep(lfSimTimerTimeStep);
+            const VecFloat lvGameTimeStep(lfGameTimerTimeStep);
             maRaceCarVehicles[liCar].Update(
                 lvSimTimeStep,
                 lvGameTimeStep,
@@ -647,12 +641,11 @@ namespace Vehicle
                              vpu::Abs(lrCar.mpAttribs->mBaseAttribs.mCOMOffset)),  // attribs+0x20
                     2.0f);                                                          // flt_82001D9C
                 const f32 lfMassOverTwelve =
-                    lrCar.GetMass().x   /* VecFloat == Vector4 splat; lane 0 */ * (1.0f / 12.0f);                // flt_82094724
-                const Vector3 lInertialTensor = {                            // lfOne / (m/12 * (b^2+c^2), ...)
-                    1.0f / (lfMassOverTwelve * (lBoxExtent.y * lBoxExtent.y + lBoxExtent.z * lBoxExtent.z)),
-                    1.0f / (lfMassOverTwelve * (lBoxExtent.x * lBoxExtent.x + lBoxExtent.z * lBoxExtent.z)),
-                    1.0f / (lfMassOverTwelve * (lBoxExtent.x * lBoxExtent.x + lBoxExtent.y * lBoxExtent.y)),
-                    0.0f };
+                    lrCar.GetMass()   /* VecFloat == Vector4 splat; lane 0 */ * (1.0f / 12.0f);                // flt_82094724
+                const Vector3 lInertialTensor(                            // lfOne / (m/12 * (b^2+c^2), ...)
+                    1.0f / (lfMassOverTwelve * (lBoxExtent.GetY() * lBoxExtent.GetY() + lBoxExtent.GetZ() * lBoxExtent.GetZ())),
+                    1.0f / (lfMassOverTwelve * (lBoxExtent.GetX() * lBoxExtent.GetX() + lBoxExtent.GetZ() * lBoxExtent.GetZ())),
+                    1.0f / (lfMassOverTwelve * (lBoxExtent.GetX() * lBoxExtent.GetX() + lBoxExtent.GetY() * lBoxExtent.GetY())));
                 (void)lInertialTensor;   // v127 -- never stored, never passed (see FLAG above)
             }
             CgsDev::PerfMonCpu::StopMonitor(gs_iRBChangePM);
@@ -668,18 +661,6 @@ namespace Vehicle
         }
 
         CgsDev::PerfMonCpu::StopMonitor(gs_iUpdateRaceCarsPM);
-
-        // ---- [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. -----------------
-        // Publish the player car's pose for the traffic-side probe, which runs inside
-        // PhysicalTrafficManager::UpdateTrafficPhysics and has no race car in scope.
-        if (gT5RamFramesLeft > 0 && mePlayerActiveRaceCarIndex >= 0)
-        {
-            const RaceCarPhysics& lrPlayer = maRaceCarVehicles[mePlayerActiveRaceCarIndex];
-            const Vector3 lvPos = lrPlayer.GetTransform().wAxis;
-            const Vector3 lvVel = lrPlayer.GetLinearVelocity();
-            gT5PlayerPos[0] = lvPos.x; gT5PlayerPos[1] = lvPos.y; gT5PlayerPos[2] = lvPos.z;
-            gT5PlayerVel[0] = lvVel.x; gT5PlayerVel[1] = lvVel.y; gT5PlayerVel[2] = lvVel.z;
-        }
 
         // ---- STAGE: traffic physics (dword_82F2A190) -----------------------------------
         CgsDev::PerfMonCpu::StartMonitor(gs_iUpdateTrafficPM);
@@ -707,10 +688,7 @@ namespace Vehicle
         // v1 = the player car's position row (lvx this+5216*player+0x780 == RCP+0x40 ==
         // mTransform.wAxis). As shipped: no player != -1 guard (index -1 reads the tail
         // of the drivers array on the console; reconstructed verbatim).
-        const Vector3 lvPlayerPosition = { maRaceCarVehicles[mePlayerActiveRaceCarIndex].GetTransform().wAxis.x,
-                     maRaceCarVehicles[mePlayerActiveRaceCarIndex].GetTransform().wAxis.y,
-                     maRaceCarVehicles[mePlayerActiveRaceCarIndex].GetTransform().wAxis.z,
-                     0.0f };
+        const Vector3 lvPlayerPosition = maRaceCarVehicles[mePlayerActiveRaceCarIndex].GetTransform().wAxis;
         mPhysicalTrafficManager.PassNearbyCrashingTrafficIdsToRaceCarModule(
             lpVehicleManagerOutputInterface, lvPlayerPosition);
         CgsDev::PerfMonCpu::StopMonitor(gs_iUpdatePassBysPM);
@@ -725,18 +703,18 @@ namespace Vehicle
         {
             RaceCarPhysics& lrPlayer = maRaceCarVehicles[mePlayerActiveRaceCarIndex];
             const f32 lfAngle =
-                -lrPlayer.GetMaxSteeringAngle().x * (-KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE) // flt_8209D0D4 == -1.3
+                -lrPlayer.GetMaxSteeringAngle() * (-KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE) // flt_8209D0D4 == -1.3
                 * KF_DEG_TO_RAD;
-            const VecFloat lvAngle = { lfAngle, lfAngle, lfAngle, lfAngle };
+            const VecFloat lvAngle(lfAngle);
             lrPlayer.OverrideWheelAngle(lvAngle);
         }
         else if (meStationaryPlayerWheelAngle == 1)
         {
             RaceCarPhysics& lrPlayer = maRaceCarVehicles[mePlayerActiveRaceCarIndex];
             const f32 lfAngle =
-                -lrPlayer.GetMaxSteeringAngle().x * KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE   // flt_8208FA8C == 1.3
+                -lrPlayer.GetMaxSteeringAngle() * KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE   // flt_8208FA8C == 1.3
                 * KF_DEG_TO_RAD;
-            const VecFloat lvAngle = { lfAngle, lfAngle, lfAngle, lfAngle };
+            const VecFloat lvAngle(lfAngle);
             lrPlayer.OverrideWheelAngle(lvAngle);
         }
 
@@ -768,7 +746,7 @@ namespace Vehicle
         if (lbPlayerCarUsed)
             DoPlayerTractionLineTestsPostSimulation(lpInputInterface, lfTimeStep);
 
-        const VecFloat lvfTimeStep = {lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep};
+        const VecFloat lvfTimeStep(lfTimeStep);
         for (s32 liRaceCar = mUsedRaceCars.GetFirstNonZeroBit();
              liRaceCar != CgsContainers::BitArray<8>::KI_INVALID_BITINDEX;
              liRaceCar = mUsedRaceCars.GetNextNonZeroBit(liRaceCar))

@@ -52,17 +52,14 @@ namespace Vehicle
         // (Same helper the traffic TU keeps file-locally -- neither is exported.)
         inline VecFloat SplatVecFloat_VM(f32 lfValue)
         {
-            VecFloat lvfResult;
-            lvfResult.x = lfValue; lvfResult.y = lfValue;
-            lvfResult.z = lfValue; lvfResult.w = lfValue;
-            return lvfResult;
+            return VecFloat(lfValue);
         }
 
         // The console's `vmsum3fp128` -- a three-lane dot product left splatted across the
         // register. Every call site here consumes one lane, so it reduces to the scalar sum.
         inline f32 Dot3_VM(const Vector3& lrA, const Vector3& lrB)
         {
-            return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+            return lrA.GetX() * lrB.GetX() + lrA.GetY() * lrB.GetY() + lrA.GetZ() * lrB.GetZ();
         }
 
         // The console's length idiom: dot3 the vector with itself, take an estimated reciprocal
@@ -71,7 +68,7 @@ namespace Vehicle
         // The two Newton steps only chase the estimate's error, so the host takes the exact root.
         inline f32 Length3_VM(const Vector3& lrV)
         {
-            const f32 lfLengthSq = lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z;
+            const f32 lfLengthSq = lrV.GetX() * lrV.GetX() + lrV.GetY() * lrV.GetY() + lrV.GetZ() * lrV.GetZ();
             if (lfLengthSq == 0.0f)
                 return 0.0f;   // asm vcmpeqfp128 + vsel against the zero register
             return std::sqrt(lfLengthSq);
@@ -94,15 +91,15 @@ namespace Vehicle
                                      const Vector3& lrVictimUp,
                                      const Vector3& lrClosingVelocity)
         {
-            const f32 lfAlongUp = lrContactNormal.x * lrVictimUp.x
-                                + lrContactNormal.y * lrVictimUp.y
-                                + lrContactNormal.z * lrVictimUp.z;
-            const f32 lfFlatX = lrContactNormal.x - lrVictimUp.x * lfAlongUp;
-            const f32 lfFlatY = lrContactNormal.y - lrVictimUp.y * lfAlongUp;
-            const f32 lfFlatZ = lrContactNormal.z - lrVictimUp.z * lfAlongUp;
-            return std::fabs(lfFlatX * lrClosingVelocity.x
-                           + lfFlatY * lrClosingVelocity.y
-                           + lfFlatZ * lrClosingVelocity.z);
+            const f32 lfAlongUp = lrContactNormal.GetX() * lrVictimUp.GetX()
+                                + lrContactNormal.GetY() * lrVictimUp.GetY()
+                                + lrContactNormal.GetZ() * lrVictimUp.GetZ();
+            const f32 lfFlatX = lrContactNormal.GetX() - lrVictimUp.GetX() * lfAlongUp;
+            const f32 lfFlatY = lrContactNormal.GetY() - lrVictimUp.GetY() * lfAlongUp;
+            const f32 lfFlatZ = lrContactNormal.GetZ() - lrVictimUp.GetZ() * lfAlongUp;
+            return std::fabs(lfFlatX * lrClosingVelocity.GetX()
+                           + lfFlatY * lrClosingVelocity.GetY()
+                           + lfFlatZ * lrClosingVelocity.GetZ());
         }
 
         // CheckForHittingAlreadyCrashingCar passes a flat 1.0 scale on both arms
@@ -365,16 +362,16 @@ namespace Vehicle
             vpu::Subtract(lContact.mPointOnB, lrCarB.mTransform.Pos()));
         if (!lrCarA.IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIndexB))
             && vpu::Dot(lrCarA.mTransform.At(),
-                vpu::Subtract(lContact.mPointOnA, lrCarA.mTransform.Pos())) > lrCarA.mDeformableAABB.mMin.z * 0.5f
+                vpu::Subtract(lContact.mPointOnA, lrCarA.mTransform.Pos())) > lrCarA.mDeformableAABB.mMin.GetZ() * 0.5f
             && lbPlayerInvolved)
         {
-            lrCarB.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z = 0.0f;
+            lrCarB.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetZ() = 0.0f;
             lrCarB.mi8LastContactedRaceCar = static_cast<s8>(liIndexA);
         }
         if (!lrCarB.IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIndexA))
-            && lfPointBAlongCar > lrCarB.mDeformableAABB.mMin.z * 0.5f && lbPlayerInvolved)
+            && lfPointBAlongCar > lrCarB.mDeformableAABB.mMin.GetZ() * 0.5f && lbPlayerInvolved)
         {
-            lrCarA.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z = 0.0f;
+            lrCarA.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetZ() = 0.0f;
             lrCarA.mi8LastContactedRaceCar = static_cast<s8>(liIndexB);
         }
     }
@@ -671,7 +668,7 @@ namespace Vehicle
                     /*lbRemoveHandlingVolumeFromScene=*/false,
                     lbVictimIsAI,
                     /*lbCarIsNetwork=*/false,
-                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x,
+                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.GetX(),
                     // A pile-on carries no classification of its own.
                     BrnGameState::E_TAKEDOWN_NONE);
             }
@@ -707,7 +704,7 @@ namespace Vehicle
             const Vector3 lvDelta = lrVictimRecord.mTransform.Pos() - lrPlayerRecord.mTransform.Pos();
             const Vector3& lvPlayerForward = lrPlayerRecord.mTransform.At();   // mTransform row 2
             const f32 lfAlongForward =
-                lvDelta.x * lvPlayerForward.x + lvDelta.y * lvPlayerForward.y + lvDelta.z * lvPlayerForward.z;
+                lvDelta.GetX() * lvPlayerForward.GetX() + lvDelta.GetY() * lvPlayerForward.GetY() + lvDelta.GetZ() * lvPlayerForward.GetZ();
             const bool lbBehindPlayer = (0.0f > lfAlongForward);   // asm vcmpgtfp. 0.0f > dot
 
             const bool lbUnclassifiedTakedown = (leTakedownType == BrnGameState::E_TAKEDOWN_NONE)
@@ -786,7 +783,7 @@ namespace Vehicle
                     lbCrashingAfterLatch,
                     lbVictimIsAI,
                     /*lbCarIsNetwork=*/false,
-                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x,
+                    lrVictimRecord.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.GetX(),
                     leTakedownType);
 
                 // Push the 32-byte crash record onto the game-side event queue at the vehicle
@@ -940,9 +937,9 @@ namespace Vehicle
             if (std::fabs(vpu::Dot(lpCarB->mTransform.xAxis, lpCarA->mLastLinearVelocity))
                     > lfMinLateralSpeed)
             {
-                const Vector3 lvBFront = lpCarB->mTransform.zAxis * lpCarB->GetDeformableAABB().mMax.z
+                const Vector3 lvBFront = lpCarB->mTransform.zAxis * lpCarB->GetDeformableAABB().mMax.GetZ()
                                        + lpCarB->mTransform.wAxis - lpCarB->mTransform.zAxis * KF_SLAB_INSET;
-                const Vector3 lvBRear  = lpCarB->mTransform.zAxis * lpCarB->GetDeformableAABB().mMin.z
+                const Vector3 lvBRear  = lpCarB->mTransform.zAxis * lpCarB->GetDeformableAABB().mMin.GetZ()
                                        + lpCarB->mTransform.wAxis + lpCarB->mTransform.zAxis * KF_SLAB_INSET;
                 if (IsPointBetweenTwoParallelPlanes(lpCarA->mTransform.wAxis, lvBFront, lvBRear,
                                                     lpCarB->mTransform.zAxis))
@@ -956,9 +953,9 @@ namespace Vehicle
                 && std::fabs(vpu::Dot(lpCarA->mTransform.xAxis, lpCarB->mLastLinearVelocity))
                        > lfMinLateralSpeed)
             {
-                const Vector3 lvAFront = lpCarA->mTransform.zAxis * lpCarA->GetDeformableAABB().mMax.z
+                const Vector3 lvAFront = lpCarA->mTransform.zAxis * lpCarA->GetDeformableAABB().mMax.GetZ()
                                        + lpCarA->mTransform.wAxis - lpCarA->mTransform.zAxis * KF_SLAB_INSET;
-                const Vector3 lvARear  = lpCarA->mTransform.zAxis * lpCarA->GetDeformableAABB().mMin.z
+                const Vector3 lvARear  = lpCarA->mTransform.zAxis * lpCarA->GetDeformableAABB().mMin.GetZ()
                                        + lpCarA->mTransform.wAxis + lpCarA->mTransform.zAxis * KF_SLAB_INSET;
                 if (IsPointBetweenTwoParallelPlanes(lpCarB->mTransform.wAxis, lvAFront, lvARear,
                                                     lpCarA->mTransform.zAxis))
@@ -1008,8 +1005,8 @@ namespace Vehicle
         const f32 lfMinimumSpeed = mfMinHeadToHeadIndividualSpeed * KF_SPEED_UNIT_SCALE;
         if (!(lpInfo->mfRaceCarASpeed > lfMinimumSpeed) && !(lpInfo->mfRaceCarBSpeed > lfMinimumSpeed))
             return false;
-        const f32 lfMomentumA = lpInfo->mpRaceCarA->GetMass().x * lpInfo->mfRaceCarASpeed;
-        const f32 lfMomentumB = lpInfo->mpRaceCarB->GetMass().x * lpInfo->mfRaceCarBSpeed;
+        const f32 lfMomentumA = lpInfo->mpRaceCarA->GetMass() * lpInfo->mfRaceCarASpeed;
+        const f32 lfMomentumB = lpInfo->mpRaceCarB->GetMass() * lpInfo->mfRaceCarBSpeed;
         EntityId lVictimId;
         EntityId lAggressorId;
         if (lfMomentumA > lfMomentumB)
@@ -1071,9 +1068,9 @@ namespace Vehicle
         // axes of mRaceCarA/BTransform.
         const Vector3 lvPosA = lpInfo->mRaceCarATransform.Pos();
         const Vector3 lvPosB = lpInfo->mRaceCarBTransform.Pos();
-        const f32 ldx = lvPosA.x - lvPosB.x;
-        const f32 ldy = lvPosA.y - lvPosB.y;
-        const f32 ldz = lvPosA.z - lvPosB.z;
+        const f32 ldx = lvPosA.GetX() - lvPosB.GetX();
+        const f32 ldy = lvPosA.GetY() - lvPosB.GetY();
+        const f32 ldz = lvPosA.GetZ() - lvPosB.GetZ();
         const f32 lfDistSq = ldx * ldx + ldy * ldy + ldz * ldz;
         // 0x8263D9DC branches OUT when 0.04 > distance squared.
         if (lfDistSq < 0.040000003f)
@@ -1297,7 +1294,7 @@ namespace Vehicle
         // unconditionally after it, tests B falling onto A and OVERWRITES the pair when it fires.
         if (CheckForVerticalTakedownSituation(lpVehB, lpInfo->mpContact->mPointOnB)
             && lpVehA->IsReallyInAir()
-            && lpVehB->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z == 0.0f)
+            && lpVehB->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.GetZ() == 0.0f)
         {
             lbFired = true;
             lVictimId    = lpInfo->mRaceCarBEntityID; // asm r25 = *(mpContact+4) = idB -> victim (r4)
@@ -1306,7 +1303,7 @@ namespace Vehicle
 
         if (CheckForVerticalTakedownSituation(lpVehA, lpInfo->mpContact->mPointOnA)
             && lpVehB->IsReallyInAir()
-            && lpVehA->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z == 0.0f)
+            && lpVehA->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.GetZ() == 0.0f)
         {
             lbFired = true;
             lVictimId    = lpInfo->mRaceCarAEntityID; // asm r25 = *(mpContact+0) = idA -> victim (r4)
@@ -1354,10 +1351,10 @@ namespace Vehicle
         // 0x82FB7F80 <- flt_8208F834 == 0.25, initializer 0x82C5BB38.
         const bool lbPlayerShovedA = lrCarA.mi8LastAttackersRaceCarIndex == mePlayerActiveRaceCarIndex
             && lrCarA.mi8LastContactedRaceCar == static_cast<s8>(mePlayerActiveRaceCarIndex)
-            && lrCarA.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z < 0.25f;
+            && lrCarA.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetZ() < 0.25f;
         const bool lbPlayerShovedB = lrCarB.mi8LastAttackersRaceCarIndex == mePlayerActiveRaceCarIndex
             && lrCarB.mi8LastContactedRaceCar == static_cast<s8>(mePlayerActiveRaceCarIndex)
-            && lrCarB.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z < 0.25f;
+            && lrCarB.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetZ() < 0.25f;
         if (!lbPlayerShovedA && !lbPlayerShovedB)
             return false;
         const VecFloat lvfImpactSpeed = SplatVecFloat_VM(lpInfo->mfClosingSpeed);
@@ -1404,9 +1401,9 @@ namespace Vehicle
         RaceCarPhysics& lrCarA = maRaceCarVehicles[liA];
         RaceCarPhysics& lrCarB = maRaceCarVehicles[liB];
         const bool lbAIsObstacle = lpInfo->mbRaceCarAIsCrashing
-            && (lrCarA.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y > 1.0f || lpInfo->mbRaceCarAIsNetworkCar);
+            && (lrCarA.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.GetY() > 1.0f || lpInfo->mbRaceCarAIsNetworkCar);
         const bool lbBIsObstacle = lpInfo->mbRaceCarBIsCrashing
-            && (lrCarB.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y > 1.0f || lpInfo->mbRaceCarBIsNetworkCar);
+            && (lrCarB.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.GetY() > 1.0f || lpInfo->mbRaceCarBIsNetworkCar);
         if (!lbAIsObstacle && !lbBIsObstacle)
             return false;
         RaceCarPhysics& lrObstacle = lbAIsObstacle ? lrCarA : lrCarB;
@@ -1421,9 +1418,9 @@ namespace Vehicle
         if (lbAIsObstacle ? lpInfo->mbRaceCarBIsNetworkCar : lpInfo->mbRaceCarAIsNetworkCar)
             return true;
         if (maeRaceCarTypes[liA] == BrnWorld::E_RACE_CAR_TYPE_AI && maeRaceCarTypes[liB] == BrnWorld::E_RACE_CAR_TYPE_AI
-            && lrObstacle.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y < 0.5f
+            && lrObstacle.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.GetY() < 0.5f
             && lrObstacle.mi8LastContactedRaceCar == static_cast<s8>(mePlayerActiveRaceCarIndex)
-            && lrObstacle.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z < 1.0f)
+            && lrObstacle.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetZ() < 1.0f)
         {
             InstantTakedown(MakeRaceCarEntityId(leVictim), MakeRaceCarEntityId(mePlayerActiveRaceCarIndex),
                 lpInfo->mpContact->mNormal, lpInfo->mpContact->mPointOnA, lpInfo->mfNormalStressSq,
@@ -1619,15 +1616,15 @@ void VehicleManager::ReadSurfaceProperties(u64 luSurfaceListKey)
         const f32 lfGrip       = lPhysicsSurface.Grip();
 
         {
-            const VecFloat lAggregateValue = {lfRoughness, lfRoughness, lfRoughness, lfRoughness};
+            const VecFloat lAggregateValue(lfRoughness);
             KAVF_SURFACE_ROUGHNESS[liSurface] = lAggregateValue;
         }
         {
-            const VecFloat lAggregateValue = {lfGrip, lfGrip, lfGrip, lfGrip};
+            const VecFloat lAggregateValue(lfGrip);
             KAVF_SURFACE_GRIP[liSurface] = lAggregateValue;
         }
         {
-            const VecFloat lAggregateValue = {lfLinearDrag, lfLinearDrag, lfLinearDrag, lfLinearDrag};
+            const VecFloat lAggregateValue(lfLinearDrag);
             KAVF_SURFACE_LINEAR_DRAG[liSurface] = lAggregateValue;
         }
         KAB_SURFACE_IS_WATER[liSurface]     = lGameplaySurface.IsWater();
