@@ -28,7 +28,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariableManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                                                // Magnitude, operator+/-/*
 #include "SDKs/XboxMath/XMVectorSin.h"
 #include "SDKs/XboxMath/XMVectorCos.h"
@@ -175,30 +174,17 @@ const char* RaceCarEntityModuleDebugComponent::GetName() const
 // "Apply Ram" menu action.
 void RaceCarEntityModuleDebugComponent::AirRamAddNew(void* lpData)
 {
-    auto* lpComponent = static_cast<RaceCarEntityModuleDebugComponent*>(lpData);
+    RaceCarEntityModuleDebugComponent* lpComponent =
+        static_cast<RaceCarEntityModuleDebugComponent*>(lpData);
     lpComponent->mbAirRam = true; // ARTIST 822A79A8: the callback's sole side effect.
-    static u32 suTraceLines = 0;
-    if (sbTrace && suTraceLines < 4 && CgsDev::Log::gpDebugPrint)
-    {
-        ++suTraceLines;
-        CgsDev::Log::gpDebugPrint->AppendFormat("[debug-racecar-ram] latched=1 magnitude=%g\n", lpComponent->mMag);
-    }
 }
 
 // "Reset average speed" menu action.
 void RaceCarEntityModuleDebugComponent::ResetAverageSpeedCallback(void* lpData)
 {
     RaceCarEntityModuleDebugComponent* lpComponent = static_cast<RaceCarEntityModuleDebugComponent*>(lpData);
-    const s32 liPreviousFrames = sbTrace ? lpComponent->miAverageSpeedFrameCount : 0;
     lpComponent->mfAverageSpeed           = 0.0f;
     lpComponent->miAverageSpeedFrameCount = 0;
-    static u32 suTraceLines = 0;
-    if (sbTrace && suTraceLines < 4 && CgsDev::Log::gpDebugPrint)
-    {
-        ++suTraceLines;
-        CgsDev::Log::gpDebugPrint->AppendFormat("[racecar-hud-reset] samples_before=%d samples_after=%d average_after=%g\n",
-            liPreviousFrames, lpComponent->miAverageSpeedFrameCount, lpComponent->mfAverageSpeed);
-    }
 }
 
 // ================================================================================================
@@ -357,11 +343,11 @@ void RaceCarEntityModuleDebugComponent::Update()
 
     if (lpPlayerCar != 0)
     {
-
+        const f32 lfSpeed = rw::math::vpu::Magnitude(lpPlayerCar->GetVelocity()).GetFloat();
         const s32 liFrameCount = miAverageSpeedFrameCount;
         miAverageSpeedFrameCount = liFrameCount + 1;
 
-        mfAverageSpeed = std::fma(static_cast<f32>(liFrameCount), mfAverageSpeed, lfSpeed)
+        mfAverageSpeed = (static_cast<f32>(liFrameCount) * mfAverageSpeed + lfSpeed)
                        / static_cast<f32>(liFrameCount + 1);
     }
 }
@@ -389,39 +375,6 @@ void RaceCarEntityModuleDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRend
         {
             lpRender->DrawSphere(mLastResetLineTestIntersections.GetItem(luIntersection), KF_RESET_SPHERE_RADIUS, lWhite);
         }
-    }
-
-    static bool sbWasShown = false;
-    static u32 suTraceLines = 0, suShownFrames = 0;
-    if (sbTrace && suTraceLines < 24)
-    {
-        const bool lbChanged = sbWasShown != mbRenderLastResetInfo;
-        if (CgsDev::Log::gpDebugPrint && (lbChanged || (mbRenderLastResetInfo && suShownFrames++ % 120 == 0)))
-        {
-            ++suTraceLines;
-            if (mbRenderLastResetInfo)
-            {
-                const auto lViewProjection = lpRender->GetViewProjectionMatrix();
-                const auto lPosition = mLastResetTransform.wAxis;
-                const auto lCamera = lpRender->GetCameraPosition();
-                const f32 lfClipX = lPosition.x*lViewProjection.xAxis.x + lPosition.y*lViewProjection.yAxis.x + lPosition.z*lViewProjection.zAxis.x + lViewProjection.wAxis.x;
-                const f32 lfClipY = lPosition.x*lViewProjection.xAxis.y + lPosition.y*lViewProjection.yAxis.y + lPosition.z*lViewProjection.zAxis.y + lViewProjection.wAxis.y;
-                const f32 lfClipZ = lPosition.x*lViewProjection.xAxis.z + lPosition.y*lViewProjection.yAxis.z + lPosition.z*lViewProjection.zAxis.z + lViewProjection.wAxis.z;
-                const f32 lfClipW = lPosition.x*lViewProjection.xAxis.w + lPosition.y*lViewProjection.yAxis.w + lPosition.z*lViewProjection.zAxis.w + lViewProjection.wAxis.w;
-                CgsDev::Log::gpDebugPrint->AppendFormat(
-                    "[reset-history] shown count=%u transform=(%g,%g,%g) lineStart=(%g,%g,%g) lineEnd=(%g,%g,%g) clip=(%g,%g,%g,%g) camera=(%g,%g,%g)\n",
-                    mLastResetLineTestIntersections.GetLength(),
-                    mLastResetTransform.wAxis.x, mLastResetTransform.wAxis.y, mLastResetTransform.wAxis.z,
-                    mLastResetLineTestStart.x, mLastResetLineTestStart.y, mLastResetLineTestStart.z,
-                    mLastResetLineTestEnd.x, mLastResetLineTestEnd.y, mLastResetLineTestEnd.z,
-                    lfClipX, lfClipY, lfClipZ, lfClipW, lCamera.x, lCamera.y, lCamera.z);
-            }
-            else
-            {
-                *CgsDev::Log::gpDebugPrint << "[reset-history] hidden\n";
-            }
-        }
-        sbWasShown = mbRenderLastResetInfo;
     }
 
     // The player's reset ring: one sphere at the position row of every recorded transform.
@@ -472,8 +425,7 @@ void RaceCarEntityModuleDebugComponent::RenderTailgateCones(CgsDev::Debug3DImmed
         Matrix44Affine lConeTransform = lpCar->GetTransform();
         const Vector3  lDirection     = lpCar->GetDirection();
 
-        const VecFloat lvfHalfAngle = { KF_TAILGATING_CONE_HALF_ANGLE_RADS, KF_TAILGATING_CONE_HALF_ANGLE_RADS,
-                                        KF_TAILGATING_CONE_HALF_ANGLE_RADS, KF_TAILGATING_CONE_HALF_ANGLE_RADS };
+        const VecFloat lvfHalfAngle(KF_TAILGATING_CONE_HALF_ANGLE_RADS);
 
         RenderSingleDebugCone(lpRender, lConeTransform, lvfHalfAngle, lConeColour, KI_TAILGATE_CONE_SEGMENTS);
     }
@@ -486,30 +438,40 @@ void RaceCarEntityModuleDebugComponent::RenderSingleDebugCone(CgsDev::Debug3DImm
                                                               Matrix44Affine lTransform, VecFloat lvfHalfAngle,
                                                               rw::RGBA lColour, s32 liNumSegments) const
 {
-    const f32 lfLength = vmx::Magnitude3(lTransform.zAxis);
-    const Vector3 lRadius = {
-        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.x)),
-        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.y)),
-        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.z)),
-        vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.w)) };
+    const f32 lfLength = rw::math::vpu::Magnitude(lTransform.zAxis).GetFloat();
+    const f32 lfRadius = lfLength * XboxMath::XMVectorTan(lvfHalfAngle.GetFloat());
+    const VecFloat lvfRadius(lfRadius);
+    const Vector3 lRadius(lvfRadius.GetVector());
     const f32 lfStep   = KF_TWO_PI / static_cast<f32>(liNumSegments);
 
     for (s32 liSegment = 0; liSegment < liNumSegments; ++liSegment)
     {
-        const f32 lfAngle     = vmx::Multiply(lfStep, static_cast<f32>(liSegment));
-        const f32 lfNextAngle = vmx::Add(lfAngle, lfStep);
+        const f32 lfAngle     = lfStep * static_cast<f32>(liSegment);
+        const f32 lfNextAngle = lfAngle + lfStep;
 
-        Vector3 lEdge = vmx::Multiply(lTransform.yAxis, XboxMath::XMVectorSin(lfAngle));
-        lEdge = vmx::MultiplyAdd(lTransform.xAxis, XboxMath::XMVectorCos(lfAngle), lEdge);
-        lEdge = vmx::MultiplyAdd(lRadius, lEdge, lTransform.zAxis);
+        const f32 lfSin = XboxMath::XMVectorSin(lfAngle);
+        const f32 lfCos = XboxMath::XMVectorCos(lfAngle);
+        const rw::math::vpu::VectorIntrinsic lvfSin = __vspltw(__lvlx(&lfSin, 0), 0);
+        const rw::math::vpu::VectorIntrinsic lvfCos = __vspltw(__lvlx(&lfCos, 0), 0);
+        Vector3 lEdge(__vmulfp(lTransform.yAxis.mV, lvfSin));
+        lEdge = Vector3(__vmaddfp(lTransform.xAxis.mV, lvfCos, lEdge.mV));
+        lEdge = Vector3(__vmaddfp(lRadius.mV, lEdge.mV, lTransform.zAxis.mV));
 
-        Vector3 lNextEdge = vmx::Multiply(lTransform.yAxis, XboxMath::XMVectorSin(lfNextAngle));
-        lNextEdge = vmx::MultiplyAdd(lTransform.xAxis, XboxMath::XMVectorCos(lfNextAngle), lNextEdge);
-        lNextEdge = vmx::MultiplyAdd(lRadius, lNextEdge, lTransform.zAxis);
+        const f32 lfNextSin = XboxMath::XMVectorSin(lfNextAngle);
+        const f32 lfNextCos = XboxMath::XMVectorCos(lfNextAngle);
+        const rw::math::vpu::VectorIntrinsic lvfNextSin =
+            __vspltw(__lvlx(&lfNextSin, 0), 0);
+        const rw::math::vpu::VectorIntrinsic lvfNextCos =
+            __vspltw(__lvlx(&lfNextCos, 0), 0);
+        Vector3 lNextEdge(__vmulfp(lTransform.yAxis.mV, lvfNextSin));
+        lNextEdge = Vector3(__vmaddfp(lTransform.xAxis.mV, lvfNextCos, lNextEdge.mV));
+        lNextEdge = Vector3(__vmaddfp(lRadius.mV, lNextEdge.mV, lTransform.zAxis.mV));
 
         const Vector3 lApex = lTransform.wAxis;
-        lpRender->DrawSolidQuad(lApex, lApex, vmx::Add(lApex, lEdge), vmx::Add(lApex, lNextEdge), lColour);
-        lpRender->DrawSolidQuad(lApex, lApex, vmx::Add(lApex, lNextEdge), vmx::Add(lApex, lEdge), lColour);
+        const Vector3 lApexEdge = Vector3(__vaddfp(lApex.mV, lEdge.mV));
+        const Vector3 lApexNextEdge = Vector3(__vaddfp(lApex.mV, lNextEdge.mV));
+        lpRender->DrawSolidQuad(lApex, lApex, lApexEdge, lApexNextEdge, lColour);
+        lpRender->DrawSolidQuad(lApex, lApex, lApexNextEdge, lApexEdge, lColour);
     }
 }
 
@@ -524,8 +486,8 @@ void RaceCarEntityModuleDebugComponent::DrawResetOnWaterHeight(CgsDev::Debug3DIm
 
     Vector3 lLowestPoint = lpPlayerCar->GetPosition();
     Vector3 lWaterLine   = lLowestPoint;
-    lLowestPoint.y = lpPlayerCar->mvfLowestPointWorldSpace.x;
-    lWaterLine.y   = lLowestPoint.y - mpRaceCarEntityModule->mfResetOnWaterHeight;
+    lLowestPoint.SetY(lpPlayerCar->mvfLowestPointWorldSpace.GetFloat());
+    lWaterLine.SetY(lLowestPoint.GetY().GetFloat() - mpRaceCarEntityModule->mfResetOnWaterHeight);
 
     lpRender->DrawArrow(lLowestPoint, lWaterLine, lWhite);
     lpRender->DrawSphere(lLowestPoint, KF_WATER_HEIGHT_SPHERE_RADIUS, lWhite);
@@ -629,20 +591,6 @@ void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender
         RenderTrafficRelated(lpRender);
     }
 
-    static u32 suPreviousMask = 0xffffffffu, suFrames = 0, suTransitionLines = 0, suSampleLines = 0;
-    const u32 luMask = (mbRenderCarDamageState ? 1u : 0u) | (mbRenderCarSreamingState ? 2u : 0u)
-        | (mbShowAverageSpeed ? 4u : 0u) | (mbShowEngineState ? 8u : 0u) | (mbTrafficRelatedData ? 16u : 0u);
-    const bool lbTransition = luMask != suPreviousMask;
-    const bool lbSample = mbShowAverageSpeed && suFrames++ % 120 == 0;
-    if (sbTrace && CgsDev::Log::gpDebugPrint
-        && ((lbTransition && suTransitionLines < 16) || (!lbTransition && lbSample && suSampleLines < 12)))
-    {
-        if (lbTransition) ++suTransitionLines;
-        else ++suSampleLines;
-        CgsDev::Log::gpDebugPrint->AppendFormat("[racecar-hud] mask=%u samples=%d average_mps=%g\n",
-            luMask, miAverageSpeedFrameCount, mfAverageSpeed);
-    }
-    suPreviousMask = luMask;
 }
 
 void RaceCarEntityModuleDebugComponent::RenderEngineState(CgsDev::Debug2DImmediateRender* lpRender)
@@ -653,7 +601,7 @@ void RaceCarEntityModuleDebugComponent::RenderEngineState(CgsDev::Debug2DImmedia
     // A function-local static: constructed on first use, as the console guards it.
     static const rw::RGBA skEngineStateColour(0x14, 0xB4, 0x14, 0xFF);
 
-    const Vector2 lPosition = { KF_ENGINE_STATE_X, KF_ENGINE_STATE_Y, 0.0f, 0.0f };
+    const Vector2 lPosition(KF_ENGINE_STATE_X, KF_ENGINE_STATE_Y);
 
     switch (lpPlayerCar->GetEngineState())
     {
@@ -704,8 +652,9 @@ void RaceCarEntityModuleDebugComponent::RenderTrafficRelated(CgsDev::Debug2DImme
     CollisionTag lCollisionTag;
     lCollisionTag.Construct(static_cast<u16>(luPackedTag >> 16), static_cast<u16>(luPackedTag));
 
-    f32 lfPlayerAngle = static_cast<f32>(atan2(static_cast<f64>(lpRaceCarState->mTransform.zAxis.z),
-                                               static_cast<f64>(lpRaceCarState->mTransform.zAxis.x)));
+    f32 lfPlayerAngle = static_cast<f32>(atan2(
+        static_cast<f64>(lpRaceCarState->mTransform.zAxis.GetZ().GetFloat()),
+        static_cast<f64>(lpRaceCarState->mTransform.zAxis.GetX().GetFloat())));
     if (lfPlayerAngle < 0.0f)
     {
         lfPlayerAngle += KF_TWO_PI;

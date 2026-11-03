@@ -383,13 +383,13 @@ void RouteMapDebugComponent::DrawX(CgsDev::Debug2DImmediateRender* lpDisplay,
                                    Vector2 lv2Centre, f32 lfSize, RGBA lColour) const
 {
     // Arm 1: top-left (-s,-s) to bottom-right (+s,+s).
-    Vector2 lv2A; lv2A.x = lv2Centre.x - lfSize; lv2A.y = lv2Centre.y - lfSize; lv2A.z = 0.0f; lv2A.w = 0.0f;
-    Vector2 lv2B; lv2B.x = lv2Centre.x + lfSize; lv2B.y = lv2Centre.y + lfSize; lv2B.z = 0.0f; lv2B.w = 0.0f;
+    const Vector2 lv2A(lv2Centre.mV.x - lfSize, lv2Centre.mV.y - lfSize);
+    const Vector2 lv2B(lv2Centre.mV.x + lfSize, lv2Centre.mV.y + lfSize);
     lpDisplay->DrawLine(lv2A, lv2B, lColour);
 
     // Arm 2: bottom-left (-s,+s) to top-right (+s,-s).
-    Vector2 lv2C; lv2C.x = lv2Centre.x - lfSize; lv2C.y = lv2Centre.y + lfSize; lv2C.z = 0.0f; lv2C.w = 0.0f;
-    Vector2 lv2D; lv2D.x = lv2Centre.x + lfSize; lv2D.y = lv2Centre.y - lfSize; lv2D.z = 0.0f; lv2D.w = 0.0f;
+    const Vector2 lv2C(lv2Centre.mV.x - lfSize, lv2Centre.mV.y + lfSize);
+    const Vector2 lv2D(lv2Centre.mV.x + lfSize, lv2Centre.mV.y - lfSize);
     lpDisplay->DrawLine(lv2C, lv2D, lColour);
 }
 
@@ -416,9 +416,9 @@ void RouteMapDebugComponent::DrawPortalIds(CgsDev::Debug3DImmediateRender* lpDis
 
         const Vector3 lv3Portal = lpSection->GetPortal(0)->GetPosition();
 
-        const f32 lfDX = lv3Portal.x - lrCamera.x;
-        const f32 lfDY = lv3Portal.y - lrCamera.y;
-        const f32 lfDZ = lv3Portal.z - lrCamera.z;
+        const f32 lfDX = lv3Portal.GetX().GetFloat() - lrCamera.GetX().GetFloat();
+        const f32 lfDY = lv3Portal.GetY().GetFloat() - lrCamera.GetY().GetFloat();
+        const f32 lfDZ = lv3Portal.GetZ().GetFloat() - lrCamera.GetZ().GetFloat();
         const f32 lfDistSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;   // vmsum3fp128
 
         if (lfDistSq > KF_PORTAL_CULL_DIST_SQ)   // vcmpgtfp. -> skip when farther than the cull distance
@@ -437,22 +437,14 @@ void RouteMapDebugComponent::DrawPortalIds(CgsDev::Debug3DImmediateRender* lpDis
 // ====================================================================================================
 Vector2 RouteMapDebugComponent::ToMapCoords(Vector2 lv2World) const
 {
-    Vector2 lv2Map;
-    lv2Map.x = std::fma(lv2World.x, mfMapScale, mfMapOffsetX);
-    lv2Map.y = std::fma(lv2World.y, mfMapScale, mfMapOffsetY);
-    lv2Map.z = 0.0f;
-    lv2Map.w = 0.0f;
-    return lv2Map;
+    return Vector2(lv2World.mV.x * mfMapScale + mfMapOffsetX,
+                   lv2World.mV.y * mfMapScale + mfMapOffsetY);
 }
 
 Vector2 RouteMapDebugComponent::ToMapCoords(Vector3 lv3World) const
 {
-    Vector2 lv2Map;
-    lv2Map.x = std::fma(lv3World.x, mfMapScale, mfMapOffsetX);
-    lv2Map.y = std::fma(lv3World.z, mfMapScale, mfMapOffsetY);
-    lv2Map.z = 0.0f;
-    lv2Map.w = 0.0f;
-    return lv2Map;
+    return Vector2(lv3World.GetX().GetFloat() * mfMapScale + mfMapOffsetX,
+                   lv3World.GetZ().GetFloat() * mfMapScale + mfMapOffsetY);
 }
 
 // ====================================================================================================
@@ -466,19 +458,11 @@ void RouteMapDebugComponent::DrawRouteInMap(CgsDev::Debug2DImmediateRender* lpDi
     for (s32 liNode = 0; liNode < lpRoute->GetNodeCount() - 1; )
     {
         const RouteNode* lpFrom = lpRoute->GetNode(liNode);
-        Vector2 lv2From;
-        lv2From.x = lpFrom->GetX();
-        lv2From.y = lpFrom->GetY();
-        lv2From.z = 0.0f;
-        lv2From.w = 0.0f;
+        const Vector2 lv2From(lpFrom->GetX(), lpFrom->GetY());
 
         ++liNode;
         const RouteNode* lpTo = lpRoute->GetNode(liNode);
-        Vector2 lv2To;
-        lv2To.x = lpTo->GetX();
-        lv2To.y = lpTo->GetY();
-        lv2To.z = 0.0f;
-        lv2To.w = 0.0f;
+        const Vector2 lv2To(lpTo->GetX(), lpTo->GetY());
 
         lpDisplay->DrawLine(ToMapCoords(lv2From), ToMapCoords(lv2To), lColour);
     }
@@ -519,11 +503,7 @@ void RouteMapDebugComponent::DrawAStarInMap(CgsDev::Debug2DImmediateRender* lpDi
             const AStarNode* lpNode = lrNodePool.GetNode(static_cast<u16>(luFirstNode + liNode));
             const AStarVector2 lPosition = lpNode->GetPosition();
 
-            Vector2 lv2Position;
-            lv2Position.x = lPosition.X();
-            lv2Position.y = lPosition.Y();
-            lv2Position.z = 0.0f;
-            lv2Position.w = 0.0f;
+            const Vector2 lv2Position(lPosition.X(), lPosition.Y());
 
             DrawPoint(lpDisplay, ToMapCoords(lv2Position), KF_NODE_POINT_SIZE,
                       lpNode->IsOpen() ? KU_OPEN_NODE_COLOUR : KU_CLOSED_NODE_COLOUR);
@@ -603,7 +583,10 @@ void RouteMapDebugComponent::DrawAISectionInfo(CgsDev::Debug2DImmediateRender* l
 
     lStream << ", Position: ";
     const Vector3 lv3Middle = lpSection->GetMiddle();
-    lStream.AppendFormat("(%f, %f, %f)", lv3Middle.x, lv3Middle.y, lv3Middle.z);
+    lStream.AppendFormat("(%f, %f, %f)",
+                         lv3Middle.GetX().GetFloat(),
+                         lv3Middle.GetY().GetFloat(),
+                         lv3Middle.GetZ().GetFloat());
 
     MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu, false);
 }
@@ -625,9 +608,9 @@ void RouteMapDebugComponent::DrawAISectionMap(CgsDev::Debug2DImmediateRender* lp
 
         const Vector3 lFirstPortal = lpSection->GetPortal(0)->GetPosition();
         const Vector3 lSecondPortal = lpSection->GetPortal(1)->GetPosition();
-        const f32 lfDX = lSecondPortal.x - lFirstPortal.x;
-        const f32 lfDY = lSecondPortal.y - lFirstPortal.y;
-        const f32 lfDZ = lSecondPortal.z - lFirstPortal.z;
+        const f32 lfDX = lSecondPortal.GetX().GetFloat() - lFirstPortal.GetX().GetFloat();
+        const f32 lfDY = lSecondPortal.GetY().GetFloat() - lFirstPortal.GetY().GetFloat();
+        const f32 lfDZ = lSecondPortal.GetZ().GetFloat() - lFirstPortal.GetZ().GetFloat();
         const f32 lfLength = std::sqrt(lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ);
         if (!mbHighDetailMap && (lpSection->miSpanIndex == -1 || (lpSection->mx8Flags & 0xC5) != 0
                                 || lfLength <= 25.0f))
@@ -651,25 +634,25 @@ void RouteMapDebugComponent::DrawAISectionMap(CgsDev::Debug2DImmediateRender* lp
 
                     // These are four independent original comparisons. Multiple
                     // matches increment the u16 section cursor multiple times.
-                    if (lCurrent1.x == lNext0.x && lCurrent1.y == lNext0.y)
+                    if (lCurrent1.mV.x == lNext0.mV.x && lCurrent1.mV.y == lNext0.mV.y)
                     {
                         lStart = lCurrent0;
                         lEnd = lNext1;
                         ++luSection;
                     }
-                    if (lCurrent0.x == lNext1.x && lCurrent0.y == lNext1.y)
+                    if (lCurrent0.mV.x == lNext1.mV.x && lCurrent0.mV.y == lNext1.mV.y)
                     {
                         lStart = lCurrent1;
                         lEnd = lNext0;
                         ++luSection;
                     }
-                    if (lCurrent0.x == lNext0.x && lCurrent0.y == lNext0.y)
+                    if (lCurrent0.mV.x == lNext0.mV.x && lCurrent0.mV.y == lNext0.mV.y)
                     {
                         lStart = lCurrent1;
                         lEnd = lNext1;
                         ++luSection;
                     }
-                    if (lCurrent1.x == lNext1.x && lCurrent1.y == lNext1.y)
+                    if (lCurrent1.mV.x == lNext1.mV.x && lCurrent1.mV.y == lNext1.mV.y)
                     {
                         lStart = lCurrent0;
                         lEnd = lNext0;
@@ -729,11 +712,12 @@ void RouteMapDebugComponent::DrawCarsInMap(CgsDev::Debug2DImmediateRender* lpDis
         const Vector2 lPosition = ToMapCoords(lpCar->GetPosition());
         const Vector2 lFlatDirection = BrnMath::Flatten(lpCar->GetDirection());
         const f32 lfInverseLength = 1.0f / std::sqrt(
-            lFlatDirection.x * lFlatDirection.x + lFlatDirection.y * lFlatDirection.y);
+            lFlatDirection.mV.x * lFlatDirection.mV.x +
+            lFlatDirection.mV.y * lFlatDirection.mV.y);
         // Original normalization has no zero-length fallback.
-        const Vector2 lDirection = {lFlatDirection.x * lfInverseLength,
-                                   lFlatDirection.y * lfInverseLength, 0.0f, 0.0f};
-        const Vector2 lRight = {lDirection.y, -lDirection.x, 0.0f, 0.0f};
+        const Vector2 lDirection(lFlatDirection.mV.x * lfInverseLength,
+                                 lFlatDirection.mV.y * lfInverseLength);
+        const Vector2 lRight(lDirection.mV.y, -lDirection.mV.x);
 
         RGBA lColour = 0xFF000000u;
         if (lpCar->mbIsPlayer)
@@ -743,15 +727,17 @@ void RouteMapDebugComponent::DrawCarsInMap(CgsDev::Debug2DImmediateRender* lpDis
         else if (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
             lColour = lpCar->mbIsCrashing ? 0xC8202020u : 0xC800FF00u;
 
-        const Vector2 lBack = {lPosition.x - lDirection.x * 4.0f,
-                              lPosition.y - lDirection.y * 4.0f, 0.0f, 0.0f};
+        const Vector2 lBack(lPosition.mV.x - lDirection.mV.x * 4.0f,
+                            lPosition.mV.y - lDirection.mV.y * 4.0f);
         const Vector2 laArrow[4] =
         {
-            {std::fma(lDirection.x, 10.0f, lPosition.x),
-             std::fma(lDirection.y, 10.0f, lPosition.y), 0.0f, 0.0f},
-            {lBack.x - lRight.x * 5.0f, lBack.y - lRight.y * 5.0f, 0.0f, 0.0f},
+            Vector2(lDirection.mV.x * 10.0f + lPosition.mV.x,
+                    lDirection.mV.y * 10.0f + lPosition.mV.y),
+            Vector2(lBack.mV.x - lRight.mV.x * 5.0f,
+                    lBack.mV.y - lRight.mV.y * 5.0f),
             lPosition,
-            {std::fma(lRight.x, 5.0f, lBack.x), std::fma(lRight.y, 5.0f, lBack.y), 0.0f, 0.0f},
+            Vector2(lRight.mV.x * 5.0f + lBack.mV.x,
+                    lRight.mV.y * 5.0f + lBack.mV.y),
         };
         lpDisplay->DrawSolidConvexPolygon(laArrow, 4, lColour);
         lpDisplay->DrawWirePolygon(laArrow, 4, 0xFF000000u);
@@ -760,7 +746,7 @@ void RouteMapDebugComponent::DrawCarsInMap(CgsDev::Debug2DImmediateRender* lpDis
         {
             CgsDev::SimpleStrStream lStream;
             lStream << static_cast<s32>(lpCar->mfDistanceToCheckpoint) << "m";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lPosition.x, lPosition.y - 10.0f,
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lPosition.mV.x, lPosition.mV.y - 10.0f,
                           10.0f, 0xFFFFFFFFu, false);
             const u16 luDestination = lpCar->GetDestinationSectionIndex();
             if (luDestination != AICar::KI_INVALID_SECTION_INDEX)
@@ -815,7 +801,7 @@ void RouteMapDebugComponent::DrawEventBlockSectionsInMap(CgsDev::Debug2DImmediat
         }
         lStream << " )";
         MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f,
-                      std::fma(static_cast<f32>(liCheckpoint), 20.0f, 100.0f),
+                      static_cast<f32>(liCheckpoint) * 20.0f + 100.0f,
                       16.0f, 0xFFFFFFFFu, false);
     }
 }
@@ -833,9 +819,9 @@ void RouteMapDebugComponent::DrawPortals(CgsDev::Debug3DImmediateRender* lpDispl
             continue;
 
         const Vector3 lFirstPortal = lpSection->GetPortal(0)->GetPosition();
-        const f32 lfDX = lFirstPortal.x - lCamera.x;
-        const f32 lfDY = lFirstPortal.y - lCamera.y;
-        const f32 lfDZ = lFirstPortal.z - lCamera.z;
+        const f32 lfDX = lFirstPortal.GetX().GetFloat() - lCamera.GetX().GetFloat();
+        const f32 lfDY = lFirstPortal.GetY().GetFloat() - lCamera.GetY().GetFloat();
+        const f32 lfDZ = lFirstPortal.GetZ().GetFloat() - lCamera.GetZ().GetFloat();
         if (lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ > 62500.0f)
             continue;
 
@@ -843,8 +829,12 @@ void RouteMapDebugComponent::DrawPortals(CgsDev::Debug3DImmediateRender* lpDispl
         {
             const Portal* lpPortal = lpSection->GetPortal(luPortal);
             const Vector3 lPosition = lpPortal->GetPosition();
-            const Vector3 lMin = {lPosition.x - 1.0f, lPosition.y - 1.0f, lPosition.z - 1.0f, 0.0f};
-            const Vector3 lMax = {lPosition.x + 1.0f, lPosition.y + 1.0f, lPosition.z + 1.0f, 0.0f};
+            const Vector3 lMin(lPosition.GetX().GetFloat() - 1.0f,
+                               lPosition.GetY().GetFloat() - 1.0f,
+                               lPosition.GetZ().GetFloat() - 1.0f);
+            const Vector3 lMax(lPosition.GetX().GetFloat() + 1.0f,
+                               lPosition.GetY().GetFloat() + 1.0f,
+                               lPosition.GetZ().GetFloat() + 1.0f);
             // ARTIST's unnamed 0x8281E548 is the actual AA solid-box renderer.
             lpDisplay->DrawSolidBox(lMin, lMax, ToWorldColour(0xFF00FF00u));
 
@@ -897,11 +887,11 @@ void RouteMapDebugComponent::DrawHNGSectionAsPlanes(CgsDev::Debug3DImmediateRend
         const u16 luLine = static_cast<u16>(liLine);
         CGS_ASSERT(luLine < lpSection->muNumNoGoLines, "luHNGLineIndex < muNumNoGoLines");
         const BoundaryLine& lrLine = lpSection->mpaNoGoLines[luLine];
-        const f32 lfMiddleY = lpSection->GetMiddle().y;
-        const Vector3 lBottomStart = {lrLine.mfStartX, lfMiddleY - 20.0f, lrLine.mfStartY, 0.0f};
-        const Vector3 lTopStart = {lrLine.mfStartX, lfMiddleY + 10.0f, lrLine.mfStartY, 0.0f};
-        const Vector3 lTopEnd = {lrLine.mfEndX, lfMiddleY + 10.0f, lrLine.mfEndY, 0.0f};
-        const Vector3 lBottomEnd = {lrLine.mfEndX, lfMiddleY - 20.0f, lrLine.mfEndY, 0.0f};
+        const f32 lfMiddleY = lpSection->GetMiddle().GetY().GetFloat();
+        const Vector3 lBottomStart(lrLine.mfStartX, lfMiddleY - 20.0f, lrLine.mfStartY);
+        const Vector3 lTopStart(lrLine.mfStartX, lfMiddleY + 10.0f, lrLine.mfStartY);
+        const Vector3 lTopEnd(lrLine.mfEndX, lfMiddleY + 10.0f, lrLine.mfEndY);
+        const Vector3 lBottomEnd(lrLine.mfEndX, lfMiddleY - 20.0f, lrLine.mfEndY);
         lpDisplay->DrawSolidQuad(lBottomStart, lTopStart, lTopEnd, lBottomEnd,
                                  ToWorldColour(0x800040FFu));
         lpDisplay->DrawSolidQuad(lBottomEnd, lTopEnd, lTopStart, lBottomStart,
@@ -923,9 +913,9 @@ void RouteMapDebugComponent::DrawAllPortalGeometry(CgsDev::Debug3DImmediateRende
             continue;
 
         const Vector3 lMiddle = lpSection->GetMiddle();
-        const f32 lfDX = lMiddle.x - lCamera.x;
-        const f32 lfDY = lMiddle.y - lCamera.y;
-        const f32 lfDZ = lMiddle.z - lCamera.z;
+        const f32 lfDX = lMiddle.GetX().GetFloat() - lCamera.GetX().GetFloat();
+        const f32 lfDY = lMiddle.GetY().GetFloat() - lCamera.GetY().GetFloat();
+        const f32 lfDZ = lMiddle.GetZ().GetFloat() - lCamera.GetZ().GetFloat();
         if (lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ > 62500.0f)
             continue;
 
@@ -946,10 +936,10 @@ void RouteMapDebugComponent::DrawAllPortalGeometry(CgsDev::Debug3DImmediateRende
 void RouteMapDebugComponent::DrawPoint(CgsDev::Debug2DImmediateRender* lpDisplay,
                                       Vector2 lv2Centre, f32 lfSize, RGBA lColour) const
 {
-    const f32 lfMinX = lv2Centre.x - lfSize;
-    const f32 lfMinY = lv2Centre.y - lfSize;
-    const f32 lfMaxX = lv2Centre.x + lfSize;
-    const f32 lfMaxY = lv2Centre.y + lfSize;
+    const f32 lfMinX = lv2Centre.mV.x - lfSize;
+    const f32 lfMinY = lv2Centre.mV.y - lfSize;
+    const f32 lfMaxX = lv2Centre.mV.x + lfSize;
+    const f32 lfMaxY = lv2Centre.mV.y + lfSize;
     lpDisplay->DrawBox(lfMinX, lfMinY, lfMaxX, lfMaxY, lColour);
 }
 
@@ -1034,7 +1024,7 @@ void RouteMapDebugComponent::DrawDeadEndsInMap(CgsDev::Debug2DImmediateRender* l
         DrawX(lpDisplay, lv2MapPosition, 5.0f, lColour);
 
         if (mbHighDetailMap)
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lv2MapPosition.x, lv2MapPosition.y,
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lv2MapPosition.mV.x, lv2MapPosition.mV.y,
                           12.0f, 0xFFFFFFFFu, false);
     }
 }

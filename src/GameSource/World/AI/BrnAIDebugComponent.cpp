@@ -194,7 +194,7 @@ namespace
     }
 
     // Where the section-under-car and drift read-outs are drawn.
-    const Vector2 KV2_HUD_TEXT_POSITION = { 400.0f, 500.0f, 0.0f, 0.0f };
+    const Vector2 KV2_HUD_TEXT_POSITION(400.0f, 500.0f);
 
     const f32 KF_DRIFT_DEBUG_TEXT_SCALE = 20.0f;
 }
@@ -650,11 +650,11 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
         // Position
         const Vector3 lv3Position = lpCar->GetPosition();
         lStream.Reset();
-        lrStream << static_cast<s32>(lv3Position.x);
+        lrStream << static_cast<s32>(lv3Position.GetX().GetFloat());
         lStream << ",";
-        lrStream << static_cast<s32>(lv3Position.y);
+        lrStream << static_cast<s32>(lv3Position.GetY().GetFloat());
         lStream << ",";
-        lrStream << static_cast<s32>(lv3Position.z);
+        lrStream << static_cast<s32>(lv3Position.GetZ().GetFloat());
         StateTableDrawEntry(lpDisplay, lStream.GetBuffer(), lColour);
 
         // Current section
