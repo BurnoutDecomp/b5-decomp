@@ -1,56 +1,11 @@
 #pragma once
 
-// Portable PC reconstruction of the EATech RenderWare physics RigidBody TYPE
-// (rw/physics/rigidbody.h, EATech SDK cmn). The console body stores its pose as an
-// orientation BASIS (right/up/at column/row vectors) plus the centre-of-mass position, with
-// the per-vector w-lanes packing scalar housekeeping fields (id/tag/cooldown/...). We keep the
-// memory LAYOUT faithful -- one 16-byte SIMD register per vector field, in the DWARF member
-// sequence (rigidbody.h:419..) -- so game code that reads a RigidBody by its accessors links.
-//
-// =====================================================================================
-// ⭐ 2026-08-04 -- THE PACKED SCALAR LANES ARE NOW REAL, NAMED MEMBERS.
-//
-// The console packs one 4-byte housekeeping scalar into the w lane of each pose vector.
-// FIVE OF THOSE TEN SCALARS ARE POINTERS, and a 64-bit pointer does not fit in a float
-// lane -- which is why this header used to carry a "DynamicUpdate is NOT BODIED" note and
-// why rw/physics/Simulation.cpp used to carry a matching "the list splice functions are
-// BLOCKED" note. Both notes named the right problem and both are now RETIRED: the ten
-// scalars are declared as their own members, in the DWARF's own names, AFTER the eleven
-// registers. The eleven registers keep their 16-byte stride and DWARF order; their w lanes
-// are now unused padding on the PC (documented at each member).
-//
-// The X360 facts behind that, read out of BURNOUT_X360_ARTIST.XEX this wave:
-//   0x82BC2B80  lwz r10,0x4C(r3) ; lfs f0,0xA0(r10)   -> +0x4C is the owning Simulation*
-//   0x82BC2D3C  lwz r30,0x5C(r3) ; lfs f0,0x1C(r30)   -> +0x5C is the Inertia*
-//   0x82BC2B8C  lwz r11,0x1C(r3) ; lvx128 v8,r0,r11   -> +0x1C is used AS AN ADDRESS
-//   0x82BC2950  RigidBody::RemoveRigidBody's unlink    -> +0x2C is `next`, +0x3C is `prev`
-//
-// ⚠️⚠️ THE DWARF AND THE X360 DISAGREE ABOUT WHERE THE TWO POINTERS LIVE, AND BOTH ARE RIGHT.
-//   The DWARF declares `mPad0`(+0x4C) and `mPad1`(+0x5C) as plain uint32_t and then puts
-//   `mStasis` (Simulation*) and `mInertia` (Inertia*) AFTER `mCool`, i.e. a 184-byte body.
-//   The X360 build has no members at +0xB0/+0xB4 at all (DynamicUpdate never touches them,
-//   and RigidBody::operator= @0x825E3410 copies exactly +0x00..+0xAC) -- it puts the two
-//   pointers in the two `mPadN` lanes and stays 176 bytes, saving a whole cache line.
-//   We follow the X360 for WHAT EXISTS and the DWARF for NAMES: mStasis/mInertia are
-//   declared once, the mPadN names are recorded as the lanes they occupy on the console.
-//
-// ⚠️ mId STAYS 32 BITS -- it is NOT widened. The DWARF types it `uint32_t` and names its
-//   role `GetReactionForcesId()`; the shipping x64 builds keep it 32-bit and resolve
-//   `Simulation::GetReactionForces() + mId*64` (Xbox One 0x1409B31ED: `mov edi,[rcx+1Ch]`,
-//   32-bit, then `shl rdi,6 ; add rdi,[rax+18h]`). X360 caches the ALREADY-RESOLVED address
-//   in the same slot, which is only possible because console pointers are 4 bytes. Same
-//   ⇒ "the gap grew 4->8, so it is a pointer" is necessary but NOT sufficient: this slot is
-//   a pointer on the console and stays 4 bytes on x64.
-// =====================================================================================
-//
-// SCOPE: the read accessors BrnPhysics::ExternallySimulatedBody::ReadFromRenderware and
-// ExternalPhysicsBody::ReadPropertiesFromRenderware use, plus the two methods the X360
-// binary carries as their own TU (operator=, DynamicUpdate), plus every mutator with a
-// witnessed console inline (the ProcessAddRigidBodyQueue set from task #140, and
-// SetCoolDown / AddForce / SetTransform from the 2026-08-05 rigid-body drain group).
-// SDK methods with NO witnessed inline in this image remain intentionally NOT declared.
+// X360 RigidBody uses the SDK's packed FPU triples interleaved with the
+// 32-bit scalar/pointer slots read by ARTIST. DecFIGS rigidbody.h names the
+// members; ARTIST DynamicUpdate and operator= establish the X360 layout.
 
 #include "types.hpp"             // u32 / f32
+#include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h" // fpu::Vector3Template
 #include "rw/math/vpu/types.h"   // rw::math::vpu::{Vector3, Vector4, Matrix44Affine}
 #include "rw/physics/inertia.h"  // rw::physics::Inertia
 
@@ -109,25 +64,8 @@ namespace physics
         RigidBody& operator=(const RigidBody& rOther);   // @ 0x825E3410
         RigidBody* DynamicUpdate();                      // @ 0x82BC2B78
 
-        // ⭐ 2026-08-04 (task #140). DWARF rigidbody.h:387 -- `void InertiaUpdate(Inertia*)`.
-        // The world inverse-inertia rebuild, I_world = sum_k I_k * r_k (x) r_k over the three
-        // basis vectors, stored in the {Ixx,Ixy,Ixz}/{Izz,Iyy,Iyz} split GetInertiaFull() /
-        // GetInertiaSplit() document, plus mInvm from the block's inverse mass.
-        //
-        // ⚠️ IT HAS NO OWN X360 SYMBOL: the console INLINES it, and this header's whole point
-        // is that it inlines it in TWO places -- DynamicUpdate @0x82BC2D60..0x82BC2DE8 and
-        // Simulation::AddRigidBody @0x82BC35A8..0x82BC365C -- as the SAME instruction sequence
-        // (`vpermwi128` 0x97/.zyyw + 0x9B/.zyzw, three `vmulfp128`, four `vmaddfp`). Before
-        // this landed, that sequence existed once in the tree, hand-written inside
-        // DynamicUpdate; AddRigidBody would have made it twice. A tensor written twice is a
-        // tensor transposed once, silently, and nothing in this subsystem asserts on it --
-        // so the DWARF's own factoring is used instead of copying the block.
-        //
-        // ⚠️ mInvm IS PART OF IT. AddRigidBody's copy ends with `lwz r9,0x5C(r11)` +
-        // `lvlx v13,r9,r8(=0x10)` + `vspltw` -> mIfull.w, i.e. mInvm = mInertia->mInvMass,
-        // inside the same `mInertia != NULL` guard. DynamicUpdate's copy does not re-read it
-        // (the value is already live in a register there), which is an inlining artefact, not
-        // a semantic difference: mInvm is a pure function of the block either way.
+        // ARTIST AddRigidBody @0x82BC35A8..365C computes the tensor and
+        // refreshes mInvm. DynamicUpdate's corresponding block preserves mInvm.
         void InertiaUpdate(Inertia* lpInertia);
 
         // ADDITIVE GROW (BrnPhysics::ExternalPhysicsBody::ReadPropertiesFromRenderware
@@ -142,10 +80,9 @@ namespace physics
         // (1,2) products); and the X360 .rdata expansion tables 0x821816A0 = (A.z,B.z,B.x,A.w)
         // and 0x821816B0 = (A.y,B.y,B.z,A.w), which are byte-read and match the Xbox One
         // build's explicit `vinsertps` chain at 0x1409B1DC5.
-        // ⚠️ The console packs mInvm in mIfull.w and mState in mIsplt.w; on the PC both are
-        // their own members (see the banner), so these two getters carry XYZ ONLY.
-        const rw::math::vpu::Vector4& GetInertiaFull() const  { return mIfull; }
-        const rw::math::vpu::Vector4& GetInertiaSplit() const { return mIsplt; }
+        // The packed triples are followed by mInvm and mState respectively.
+        const rw::math::fpu::Vector3Template<f32>& GetInertiaFull() const  { return mIfull; }
+        const rw::math::fpu::Vector3Template<f32>& GetInertiaSplit() const { return mIsplt; }
 
         // DWARF rigidbody.h:174 / :226 / :242 / :331 / :335 / :339 / :351. All inlined away
         // on the console -- no standalone X360 symbol for any of them.
@@ -179,18 +116,17 @@ namespace physics
         // uses `clrlwi r11,r11,29`, which clears bits 3..31. Identical for any legal state,
         // and this is the spelling the binary chose.
         //
-        // The .xyz-only writes are the `vrlimi128 vD,vOld,1,0` w-lane preservation; on the PC
-        // those w payloads are their own members, so leaving them alone IS the faithful copy.
+        // These xyz writes preserve the following scalar in each native row.
         void SetLinearVelocity(const rw::math::vpu::Vector3& lrV)
-        { mVel.mV.x = lrV.mV.x; mVel.mV.y = lrV.mV.y; mVel.mV.z = lrV.mV.z; }
+        { __stvx(__vrlimi(lrV.mV, __lvx(&mVel, 0), 1, 0), &mVel, 0); }
 
         void SetAngularVelocity(const rw::math::vpu::Vector3& lrV)
-        { mOmega.mV.x = lrV.mV.x; mOmega.mV.y = lrV.mV.y; mOmega.mV.z = lrV.mV.z; }
+        { __stvx(__vrlimi(lrV.mV, __lvx(&mOmega, 0), 1, 0), &mOmega, 0); }
 
         void ResetForces(const rw::math::vpu::Vector3& lrForce)
         {
-            mForce.mV.x  = lrForce.mV.x; mForce.mV.y  = lrForce.mV.y; mForce.mV.z  = lrForce.mV.z;   // +0x90
-            mTorque.mV.x = 0.0f;      mTorque.mV.y = 0.0f;      mTorque.mV.z = 0.0f;        // +0xA0
+            __stvx(__vrlimi(lrForce.mV, __lvx(&mForce, 0), 1, 0), &mForce, 0);
+            __stvx(__vrlimi(__vspltisw(0), __lvx(&mTorque, 0), 1, 0), &mTorque, 0);
         }
 
         void SetState(BodyState leState) { mState = leState; }        // +0x8C
@@ -218,9 +154,11 @@ namespace physics
         void AddForce(const rw::math::vpu::Vector3& lrForce, InputSpace leSpace)
         {
             (void)leSpace;   // only WORLD_SPACE witnessed -- see the banner above
-            mForce.mV.x += lrForce.mV.x * mInvm;
-            mForce.mV.y += lrForce.mV.y * mInvm;
-            mForce.mV.z += lrForce.mV.z * mInvm;
+            const __vector4 scale = __vspltw(__lvlx(&mInvm, 0), 0);
+            const __vector4 impulse = __vmulfp(lrForce.mV, scale);
+            mForce.X() += impulse.v[0];
+            mForce.Y() += impulse.v[1];
+            mForce.Z() += impulse.v[2];
         }
 
         // DWARF rigidbody.h:200 (the Matrix44Affine overload; the :203 QuatPos overload has
@@ -246,13 +184,12 @@ namespace physics
         // witnessed as the inline in PhysicsSimulationModule::AddActiveBodiesToOutputQueue
         // @0x828A6D5C..0x828A6D7C -- the world-bounds clamp of the mCom row, whose
         // `vrlimi128 vD,vOld,1,0` before the store-back is exactly "xyz only, keep w":
-        // on the console the mCom w lane packs mId, and the xyz-only setter below IS that
-        // preservation on the host (mId is its own member here).
+        // mId follows the triple and is preserved by the xyz-only setter.
         rw::math::vpu::Vector3 GetPosition() const
-        { { const rw::math::vpu::VectorIntrinsic lResultIntrinsic = { mCom.mV.x, mCom.mV.y, mCom.mV.z, 0.0f }; const rw::math::vpu::Vector3 lResult(lResultIntrinsic); return lResult; } }
+        { return rw::math::vpu::Vector3(__lvx(&mCom, 0)); }
 
         void SetPosition(const rw::math::vpu::Vector3& lrPosition)
-        { mCom.mV.x = lrPosition.mV.x; mCom.mV.y = lrPosition.mV.y; mCom.mV.z = lrPosition.mV.z; }
+        { __stvx(__vrlimi(lrPosition.mV, __lvx(&mCom, 0), 1, 0), &mCom, 0); }
 
     private:
         // The SDK keeps everything private and reaches it through Simulation, the two
@@ -265,32 +202,43 @@ namespace physics
         friend struct DriveJacobian;
         friend struct Contact;
 
-        // ---- the eleven 16-byte pose/inertia registers, DWARF order ----------------------
-        // Each `// w:` note records what the CONSOLE packs in that lane. On the PC the lane
-        // is unused padding and the payload is one of the named scalars below.
-        rw::math::vpu::Quaternion mQuat;  // :419  orientation quaternion  (w: the real part)
-        rw::math::vpu::Vector4 mCom;      // :421  centre of mass          (w: mId)
-        rw::math::vpu::Vector4 mVel;      // :425  linear velocity         (w: mRight)
-        rw::math::vpu::Vector4 mOmega;    // :429  angular velocity        (w: mLeft)
-        rw::math::vpu::Vector4 mRi;       // :433  right basis vector      (w: mPad0 = mStasis)
-        rw::math::vpu::Vector4 mUp;       // :437  up basis vector         (w: mPad1 = mInertia)
-        rw::math::vpu::Vector4 mAt;       // :441  at basis vector         (w: mTag)
-        rw::math::vpu::Vector4 mIfull;    // :445  inertia {Ixx,Ixy,Ixz}   (w: mInvm)
-        rw::math::vpu::Vector4 mIsplt;    // :449  inertia {Izz,Iyy,Iyz}   (w: mState)
-        rw::math::vpu::Vector4 mForce;    // :453  accumulated force       (w: mKine)
-        rw::math::vpu::Vector4 mTorque;   // :457  accumulated torque      (w: mCool)
-
-        // ---- the ten packed scalars, promoted -------------------------------------------
-        u32         mId;        // :423  console mCom.w   +0x1C  reaction-force block index
-        RigidBody*  mRight;     // :427  console mVel.w   +0x2C  intrusive `next`
-        RigidBody*  mLeft;      // :431  console mOmega.w +0x3C  intrusive `prev`
-        Simulation* mStasis;    // :461  console mRi.w    +0x4C  (the DWARF's mPad0 slot)
-        Inertia*    mInertia;   // :463  console mUp.w    +0x5C  (the DWARF's mPad1 slot)
-        u32         mTag;       // :443  console mAt.w    +0x6C
-        f32         mInvm;      // :447  console mIfull.w +0x7C
-        BodyState   mState;     // :451  console mIsplt.w +0x8C
-        f32         mKine;      // :455  console mForce.w +0x9C  last tick's sleep energy
-        u32         mCool;      // :459  console mTorque.w+0xAC  the sleep counter
+        typedef rw::math::fpu::Vector3Template<f32> Vector3U_32;
+        rw::math::vpu::Quaternion mQuat; // +0x00
+        Vector3U_32 mCom;     u32 mId;             // +0x10 / +0x1C
+        Vector3U_32 mVel;     RigidBody* mRight;   // +0x20 / +0x2C
+        Vector3U_32 mOmega;   RigidBody* mLeft;    // +0x30 / +0x3C
+        Vector3U_32 mRi;      Simulation* mStasis; // +0x40 / +0x4C
+        Vector3U_32 mUp;      Inertia* mInertia;   // +0x50 / +0x5C
+        Vector3U_32 mAt;      u32 mTag;            // +0x60 / +0x6C
+        Vector3U_32 mIfull;   f32 mInvm;           // +0x70 / +0x7C
+        Vector3U_32 mIsplt;   BodyState mState;    // +0x80 / +0x8C
+        Vector3U_32 mForce;   f32 mKine;           // +0x90 / +0x9C
+        Vector3U_32 mTorque;  u32 mCool;           // +0xA0 / +0xAC
     };
+    inline void RigidBody::InertiaUpdate(Inertia* lpInertia)
+    {
+        const __vector4 lRi = __lvx(&mRi, 0);
+        const __vector4 lUp = __lvx(&mUp, 0);
+        const __vector4 lAt = __lvx(&mAt, 0);
+        const __vector4 lDiagonal = lpInertia->GetInverseInertia().mV;
+        const __vector4 lRiScaled = __vmulfp(lRi, __vspltw(lDiagonal, 0));
+        const __vector4 lUpScaled = __vmulfp(lUp, __vspltw(lDiagonal, 1));
+        const __vector4 lAtScaled = __vmulfp(lAt, __vspltw(lDiagonal, 2));
+
+        __vector4 lFull = __vmulfp(lUpScaled, __vspltw(lUp, 0));
+        lFull = __vmaddfp(lRiScaled, __vspltw(lRi, 0), lFull);
+        lFull = __vmaddfp(lAtScaled, __vspltw(lAt, 0), lFull);
+        lFull = __vrlimi(lFull, __lvx(&mIfull, 0), 1, 0);
+        __stvx(lFull, &mIfull, 0);
+
+        __vector4 lSplit = __vmulfp(__vpermwi(lUp, 0x97), __vpermwi(lUpScaled, 0x9B));
+        lSplit = __vmaddfp(__vpermwi(lRi, 0x97), __vpermwi(lRiScaled, 0x9B), lSplit);
+        lSplit = __vmaddfp(__vpermwi(lAt, 0x97), __vpermwi(lAtScaled, 0x9B), lSplit);
+        lSplit = __vrlimi(lSplit, __lvx(&mIsplt, 0), 1, 0);
+        __stvx(lSplit, &mIsplt, 0);
+        const __vector4 lMass = __vspltw(__lvlx(&lpInertia->GetInverseMass(), 0), 0);
+        __stvx(__vrlimi(__lvx(&mIfull, 0), lMass, 1, 0), &mIfull, 0);
+    }
+    CGS_STATIC_ASSERT((sizeof(RigidBody) == 0xB0), "ARTIST RigidBody size");
 }
 }

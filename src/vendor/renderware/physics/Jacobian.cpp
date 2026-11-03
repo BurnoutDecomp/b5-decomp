@@ -34,15 +34,10 @@ namespace physics
 Jacobian_RQD* Jacobian_RQD::Create(const rw::math::vpu::Quaternion* lpA,
                                    const rw::math::vpu::Quaternion* lpB)
 {
-    const f32 a0 = lpA->x;   // *v0
-    const f32 a1 = lpA->y;   // *(v0 + 4)
-    const f32 a2 = lpA->z;   // *(v0 + 8)
-    const f32 a3 = lpA->w;   // *(v0 + 12)
-
-    const f32 b0 = lpB->x;   // v1[0]
-    const f32 b1 = lpB->y;   // v1[1]
-    const f32 b2 = lpB->z;   // v1[2]
-    const f32 b3 = lpB->w;   // v1[3]
+    const __vector4 lA = __lvx(lpA, 0);
+    const __vector4 lB = __lvx(lpB, 0);
+    const f32 a0 = lA.v[0], a1 = lA.v[1], a2 = lA.v[2], a3 = lA.v[3];
+    const f32 b0 = lB.v[0], b1 = lB.v[1], b2 = lB.v[2], b3 = lB.v[3];
 
     // Intermediates v2..v27 (verbatim from the asm/pseudocode).
     const f32 v2  = b2 * a3;

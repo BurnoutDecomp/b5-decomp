@@ -22,10 +22,10 @@ namespace physics
     class DriveFrames
     {
     public:
-        const rw::math::vpu::Quaternion& GetChildOrientation() const  { return mQuatA; }
-        const rw::math::vpu::Quaternion& GetParentOrientation() const { return mQuatB; }
-        const rw::math::vpu::Vector3&    GetChildPosition() const     { return mPosA; }
-        const rw::math::vpu::Vector3&    GetParentPosition() const    { return mPosB; }
+        rw::math::vpu::Quaternion GetChildOrientation() const  { return mQuatA; }
+        rw::math::vpu::Quaternion GetParentOrientation() const { return mQuatB; }
+        rw::math::vpu::Vector3 GetChildPosition() const     { return mPosA; }
+        rw::math::vpu::Vector3 GetParentPosition() const    { return mPosB; }
 
     private:
         friend void _rw_physics_DriveFrames_AssertLayout();

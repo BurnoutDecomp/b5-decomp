@@ -1159,11 +1159,7 @@ namespace CgsPhysics
 
             // `lvx128 v0,r0,r29 ; stvx128 v0,r11,144` -- the params' 16-byte gravity lane
             // straight into the simulation's, then the two scalars behind it.
-            rw::math::vpu::Vector3 lGravity;
-            lGravity.x = lrParams.mafGravity[0];
-            lGravity.y = lrParams.mafGravity[1];
-            lGravity.z = lrParams.mafGravity[2];
-            lGravity.w = lrParams.mafGravity[3];
+            const rw::math::vpu::Vector3 lGravity(lrParams.mGravity);
             mpSimulation->SetGravity(lGravity);                                 // +0x90
             mpSimulation->SetFreezingEnergy(lrParams.mfFreezingEnergy);         // +0xA8 <- params+16
             mpSimulation->SetMaxIteration(lrParams.muMaxIterations);            // +0xAC <- params+24
@@ -2358,16 +2354,16 @@ namespace CgsPhysics
             const rw_physics::ContactJacobian& lrJ = lpJ[luI];
             *CgsDev::Log::gpDebugPrint
                 << "[prop-solve] ci=" << luI << " tag=" << lrJ.mTag
-                << " L=(" << lrJ.mLambda.x << "," << lrJ.mLambda.y << "," << lrJ.mLambda.z << ")"
+                << " L=(" << lrJ.mLambda.X() << "," << lrJ.mLambda.Y() << "," << lrJ.mLambda.Z() << ")"
                 << " Lp=" << lrJ.mLambdaPos
-                << " bias=(" << lrJ.mBias.x << "," << lrJ.mBias.y << "," << lrJ.mBias.z << ")"
+                << " bias=(" << lrJ.mBias.X() << "," << lrJ.mBias.Y() << "," << lrJ.mBias.Z() << ")"
                 << " biasP=" << lrJ.mBiasPos
-                << " n=(" << lrJ.mRi.x << "," << lrJ.mRi.y << "," << lrJ.mRi.z << ")"
+                << " n=(" << lrJ.mRi.X() << "," << lrJ.mRi.Y() << "," << lrJ.mRi.Z() << ")"
                 << " invmA=" << lrJ.mInvmA << " invmB=" << lrJ.mInvmB
-                << " rA=(" << lrJ.mRA.x << "," << lrJ.mRA.y << "," << lrJ.mRA.z << ")"
-                << " rB=(" << lrJ.mRB.x << "," << lrJ.mRB.y << "," << lrJ.mRB.z << ")"
-                << " TnA=(" << lrJ.mTnA.x << "," << lrJ.mTnA.y << "," << lrJ.mTnA.z << ")"
-                << " TnB=(" << lrJ.mTnB.x << "," << lrJ.mTnB.y << "," << lrJ.mTnB.z << ")"
+                << " rA=(" << lrJ.mRA.X() << "," << lrJ.mRA.Y() << "," << lrJ.mRA.Z() << ")"
+                << " rB=(" << lrJ.mRB.X() << "," << lrJ.mRB.Y() << "," << lrJ.mRB.Z() << ")"
+                << " TnA=(" << lrJ.mTnA.X() << "," << lrJ.mTnA.Y() << "," << lrJ.mTnA.Z() << ")"
+                << " TnB=(" << lrJ.mTnB.X() << "," << lrJ.mTnB.Y() << "," << lrJ.mTnB.Z() << ")"
                 << "\n";
         }
     }
@@ -2538,8 +2534,8 @@ namespace CgsPhysics
     // same pair by splat + sign-xor from one float. POD aggregates here, so the PC gets
     // static (compile-time) init where the console needed the runtime block -- same values,
     // no init-order hazard.
-    static const rw::math::vpu::Vector3 KV_MAX_POSITION = {  100000.0f,  100000.0f,  100000.0f, 0.0f };
-    static const rw::math::vpu::Vector3 KV_MIN_POSITION = { -100000.0f, -100000.0f, -100000.0f, 0.0f };
+    static const rw::math::vpu::Vector3 KV_MAX_POSITION(100000.0f, 100000.0f, 100000.0f);
+    static const rw::math::vpu::Vector3 KV_MIN_POSITION(-100000.0f, -100000.0f, -100000.0f);
 
     // -------------------------------------------------------------------------------------
     // PhysicsSimulationModule::AddContactSpiesToOutputQueue @ 0x828A4ED8   (641 instructions)
@@ -2640,12 +2636,9 @@ namespace CgsPhysics
             const f32 lfTimeStep = mpSimulation->GetTimeStep();                                      // `lfs 0xA0`
 
             PhysicsSimulationIO::OutContactSpy lEvent;
-            lEvent.mFrictionStress.x = lpSpy->mForceT.x * lfTimeStep;   // spy +0x50 row * splat(ts)
-            lEvent.mFrictionStress.y = lpSpy->mForceT.y * lfTimeStep;
-            lEvent.mFrictionStress.z = lpSpy->mForceT.z * lfTimeStep;
-            lEvent.mNormalStress.x   = lpSpy->mForceN.x * lfTimeStep;   // spy +0x40 row * splat(ts)
-            lEvent.mNormalStress.y   = lpSpy->mForceN.y * lfTimeStep;
-            lEvent.mNormalStress.z   = lpSpy->mForceN.z * lfTimeStep;
+            const __vector4 step = __vspltw(__lvlx(&lfTimeStep, 0), 0);
+            lEvent.mFrictionStress = __vmulfp(lpSpy->mForceT.mV, step);
+            lEvent.mNormalStress = __vmulfp(lpSpy->mForceN.mV, step);
             lEvent.mNormal   = lrEvent.mNormal;                         // drain event +0x20
             lEvent.mPointOnA = lrEvent.mPointOnA;                       // drain event +0x00
             lEvent.mPointOnB = lrEvent.mPointOnB;                       // drain event +0x10
@@ -2708,12 +2701,9 @@ namespace CgsPhysics
 
             PhysicsSimulationIO::OutJointSpy lEvent;
             lEvent.mID = mJointData.GetGameID(liJointIndex).muId;       // h:612/h:613
-            lEvent.mLinearStress.x  = lpSpy->mForce.x  * lfScale;       // spy +0x00 row
-            lEvent.mLinearStress.y  = lpSpy->mForce.y  * lfScale;
-            lEvent.mLinearStress.z  = lpSpy->mForce.z  * lfScale;
-            lEvent.mAngularStress.x = lpSpy->mTorque.x * lfScale;       // spy +0x10 row
-            lEvent.mAngularStress.y = lpSpy->mTorque.y * lfScale;
-            lEvent.mAngularStress.z = lpSpy->mTorque.z * lfScale;
+            const __vector4 scale = __vspltw(__lvlx(&lfScale, 0), 0);
+            lEvent.mLinearStress = __vmulfp(lpSpy->mForce.mV, scale);
+            lEvent.mAngularStress = __vmulfp(lpSpy->mTorque.mV, scale);
             lpQueue->AddEvent(lEvent);                                  // `bl 0x828A1C30`
         }
     }
@@ -2739,12 +2729,8 @@ namespace CgsPhysics
 
             PhysicsSimulationIO::OutDriveSpy lEvent;
             lEvent.mID = mDriveData.GetGameID(liDriveIndex).muId;       // h:648/h:649
-            lEvent.mLinearStress.x  = lpSpy->mForce.x;                  // spy +0x00 row (whole-lane stvx)
-            lEvent.mLinearStress.y  = lpSpy->mForce.y;
-            lEvent.mLinearStress.z  = lpSpy->mForce.z;
-            lEvent.mAngularStress.x = lpSpy->mTorque.x;                 // spy +0x10 row
-            lEvent.mAngularStress.y = lpSpy->mTorque.y;
-            lEvent.mAngularStress.z = lpSpy->mTorque.z;
+            lEvent.mLinearStress = lpSpy->mForce.mV;
+            lEvent.mAngularStress = lpSpy->mTorque.mV;
             lEvent.mLinearDistanceToKey  = lpSpy->mSeparation;          // `lfs 0x20(spy)`
             lEvent.mAngularDistanceToKey = lpSpy->mAngSeparation;       // `lfs 0x24(spy)`
             lpQueue->AddEvent(lEvent);                                  // `bl 0x828A1D90`
@@ -2779,9 +2765,7 @@ namespace CgsPhysics
             CGS_ASSERT(lpBody != NULL, "lpRigidBody != NULL");          // .cpp:2371 -- fire-and-continue
 
             rw::math::vpu::Vector3 lPosition = lpBody->GetPosition();   // `lvx128 body+0x10` (mCom row)
-            lPosition.x = (lPosition.x < KV_MIN_POSITION.x) ? KV_MIN_POSITION.x : (lPosition.x > KV_MAX_POSITION.x) ? KV_MAX_POSITION.x : lPosition.x;
-            lPosition.y = (lPosition.y < KV_MIN_POSITION.y) ? KV_MIN_POSITION.y : (lPosition.y > KV_MAX_POSITION.y) ? KV_MAX_POSITION.y : lPosition.y;
-            lPosition.z = (lPosition.z < KV_MIN_POSITION.z) ? KV_MIN_POSITION.z : (lPosition.z > KV_MAX_POSITION.z) ? KV_MAX_POSITION.z : lPosition.z;
+            lPosition.mV = __vminfp(__vmaxfp(lPosition.mV, KV_MIN_POSITION.mV), KV_MAX_POSITION.mV);
             lpBody->SetPosition(lPosition);                             // xyz only -- w keeps mId
 
             if (lpBody->GetState() & rw_physics::ACTIVE_BODY)           // `lwz 0x8C` & 4

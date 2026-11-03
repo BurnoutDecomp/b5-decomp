@@ -49,26 +49,8 @@ rw::BaseResourceDescriptors<5>* SimulationWorkspace::GetResourceDescriptor(
         lpEntries[luEntry].m_alignment = 1u;
     }
 
-    // CONSOLE: size = (384 * (a1 + a2) + (a3 << 8) + 127) & ~127
-    //
-    // ⚠️⚠️ FIXED 2026-08-04 (task #135) -- THIS WAS A LIVE LATENT BUG, not a cosmetic one.
-    // The 384 here is the CONSOLE jacobian stride, and it sizes the very buffer
-    // Simulation::SetWorkspace then carves with `JacobianStride()` == sizeof(Jacobian) ==
-    // 416 on x64 (the host record grew when the node pointer left its w lane -- see
-    // Jacobian.hpp). Sizing at 384 and carving at 416 leaves the block 32 bytes short per
-    // joint/drive slot -- with the shipping counts (36 joints + 1 drive) the contact buffer
-    // would have started 1,184 bytes past the end of its own allocation. Nothing asserts;
-    // the solver would simply corrupt whatever followed. The stride is `JacobianStride()`
-    // for exactly the reason SetWorkspace's is.
-    // ⚠️⚠️ CORRECTION 2026-08-06 (the pipelines wave): the sentence that stood here -- "the
-    // 256-bytes-per-contact term (`a3 << 8`) is a contact-pair scratch with no pointers in
-    // it and is unchanged" -- was HALF WRONG for the same reason the 384 was. The record's
-    // life cycle DOES carry two RigidBody pointers (the spy path: contact.h's tail banner),
-    // so the host Contact is 272, and sizing at 256 while GetFreeContact and every consumer
-    // walk at sizeof(Contact) would overrun the workspace by 16 bytes per contact -- with
-    // the shipping count (1024 contacts) that is 16 KB of silent corruption. Same class as
-    // the jacobian-stride bug above; the term is sizeof(Contact) for the same reason the
-    // other is JacobianStride(). The 128-byte alignment is a hardware constraint, unchanged.
+    // ARTIST 0x82BC4090: 384 bytes per joint/drive and 256 per contact,
+    // rounded up to the 128-byte workspace alignment.
     const u32 luSize =
         (JacobianStride() * static_cast<u32>(luCountA + luCountB)
          + static_cast<u32>(sizeof(Contact)) * static_cast<u32>(luCountC) + 0x7Fu) & ~0x7Fu;

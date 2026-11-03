@@ -345,10 +345,7 @@ namespace BrnPhysics
             // default and this call overwrites it with the GAME's; both numbers are real and they
             // are not the same number.
             CgsPhysics::PhysicsSimulationModule::SimulationParams lSimulationParams;
-            lSimulationParams.mafGravity[0]    = 0.0f;
-            lSimulationParams.mafGravity[1]    = -9.8100004f;
-            lSimulationParams.mafGravity[2]    = 0.0f;
-            lSimulationParams.mafGravity[3]    = 0.0f;
+            lSimulationParams.mGravity = rw::math::vpu::Vector3(0.0f, -9.8100004f, 0.0f);
             lSimulationParams.mfFreezingEnergy = 0.1f;
             lSimulationParams.mfTimeStep       = 0.016666668f;          // 1/60
             lSimulationParams.muMaxIterations  = 2u;

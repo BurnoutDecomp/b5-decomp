@@ -53,7 +53,7 @@ namespace
 {
     // The three linear/angular "softening" gains a Params block produces, and the switch that
     // picks them. VERIFIED on X360 (0x82BC5860 linear, 0x82BC5D28 angular) and on BurnoutPR.
-    //   SOFT_DRIVE : D = 1 + k*h^2 + c*h ; gains = (k*h^2/D, c*h/D, (c*h + k*h^2)/D)
+    //   SOFT_DRIVE : D = (c*h + k*h^2) + 1 ; gains = (k*h^2/D, c*h/D, (c*h + k*h^2)/D)
     //   NO_DRIVE and HARD_DRIVE : gains = (1/(1 + c*h), 1, 1)
     // `flt_82001C98` (the 1/x numerator) reads 0x3F800000 = 1.0f out of the X360 image.
     struct DriveGains
@@ -65,23 +65,43 @@ namespace
 
     DriveGains ComputeGains(const DriveDynamics::Params& lrParams, f32 lfH)
     {
-        DriveGains lResult;
+        const __vector4 h = __vspltw(__lvlx(&lfH, 0), 0);
+        const f32 dampingValue = lrParams.GetDamping();
+        const __vector4 damping = __vspltw(__lvlx(&dampingValue, 0), 0);
+        const f32 ch = __vmulfp(h, damping).v[0];
+        DriveGains result;
         if (lrParams.GetDriveType() == SOFT_DRIVE)
         {
-            const f32 lfKh2 = lrParams.GetSpring()  * lfH * lfH;
-            const f32 lfCh  = lrParams.GetDamping() * lfH;
-            const f32 lfDen = 1.0f + lfKh2 + lfCh;
-            lResult.mfPos = lfKh2 / lfDen;
-            lResult.mfVel = lfCh  / lfDen;
-            lResult.mfAcc = (lfCh + lfKh2) / lfDen;
+            const f32 springValue = lrParams.GetSpring();
+            const __vector4 spring = __vspltw(__lvlx(&springValue, 0), 0);
+            const f32 kh2 = __vmulfp(__vmulfp(h, spring), h).v[0];
+            const f32 sum = ch + kh2;
+            const f32 denominator = sum + 1.0f;
+            result.mfPos = kh2 / denominator;
+            result.mfVel = ch / denominator;
+            result.mfAcc = sum / denominator;
         }
         else
         {
-            lResult.mfPos = 1.0f / (1.0f + lrParams.GetDamping() * lfH);
-            lResult.mfVel = 1.0f;
-            lResult.mfAcc = 1.0f;
+            result.mfPos = 1.0f / (ch + 1.0f);
+            result.mfVel = 1.0f;
+            result.mfAcc = 1.0f;
         }
-        return lResult;
+        return result;
+    }
+
+    // ARTIST 0x82BC68C8..6958: the drive tail gathers three columns
+    // with distinct controls; W takes the first source row's X lane.
+    V3 GatherDriveColumn(const V3& a, const V3& b, const V3& c, u32 component)
+    {
+        static const CGS_ALIGN(16) u32 kX[4] = {0x00010203, 0x10111213, 0x00010203, 0x00010203};
+        static const CGS_ALIGN(16) u32 kY[4] = {0x04050607, 0x14151617, 0x00010203, 0x00010203};
+        static const CGS_ALIGN(16) u32 kZ[4] = {0x08090A0B, 0x18191A1B, 0x00010203, 0x00010203};
+        if (component == 0u)
+            return V3(__vrlimi(__vperm(a.mV, b.mV, __lvx(kX, 0)), c.mV, 2, 2));
+        if (component == 1u)
+            return V3(__vrlimi(__vperm(a.mV, b.mV, __lvx(kY, 0)), c.mV, 2, 3));
+        return V3(__vrlimi(__vperm(a.mV, b.mV, __lvx(kZ, 0)), c.mV, 2, 0));
     }
 
     // HARD_DRIVE clamps the positional error to a per-step travel limit.
@@ -143,23 +163,41 @@ void DriveJacobian::Build(const Drive& lrDrive, Simulation* lpSim)
     // mRi/mUp/mAt the COLUMNS of the body->world rotation.
     const V3 lvPosA = Xyz(lrF.GetChildPosition());
     const V3 lvPosB = Xyz(lrF.GetParentPosition());
-    const V3 lvRA = Add(Add(Scale(Xyz(lrA.mRi), lvPosA.x), Scale(Xyz(lrA.mUp), lvPosA.y)),
-                        Scale(Xyz(lrA.mAt), lvPosA.z));
-    const V3 lvRB = Add(Add(Scale(Xyz(lrB.mRi), lvPosB.x), Scale(Xyz(lrB.mUp), lvPosB.y)),
-                        Scale(Xyz(lrB.mAt), lvPosB.z));
+    // ARTIST uses one rounded multiply followed by two fused accumulations.
+    __vector4 lRA = __vmulfp(__lvx(&lrA.mRi, 0), __vspltw(lvPosA.mV, 0));
+    lRA = __vmaddfp(__lvx(&lrA.mUp, 0), __vspltw(lvPosA.mV, 1), lRA);
+    lRA = __vmaddfp(__lvx(&lrA.mAt, 0), __vspltw(lvPosA.mV, 2), lRA);
+    __vector4 lRB = __vmulfp(__lvx(&lrB.mRi, 0), __vspltw(lvPosB.mV, 0));
+    lRB = __vmaddfp(__lvx(&lrB.mUp, 0), __vspltw(lvPosB.mV, 1), lRB);
+    lRB = __vmaddfp(__lvx(&lrB.mAt, 0), __vspltw(lvPosB.mV, 2), lRB);
+    const V3 lvRA(lRA), lvRB(lRB);
 
-    const V3 lvAnchorA = Add(Xyz(lrA.mCom), lvRA);
-    const V3 lvAnchorB = Add(Xyz(lrB.mCom), lvRB);
+    const V3 lvAnchorA = Add(V3(__lvx(&lrA.mCom, 0)), lvRA);
+    const V3 lvAnchorB = Add(V3(__lvx(&lrB.mCom, 0)), lvRB);
 
     // ** cross(omega, r), NOT cross(r, omega). ** The sign is READ: table 0x82181680 = YZX and
     // 0x82181670 = ZXY, so the fused pair is omega.yzx*r.zxy - omega.zxy*r.yzx = cross(omega, r).
     // BurnoutPR's `pshufd 9` / `pshufd 12h` pair says the same thing.
     // Unlike the joint builder, the drive keeps velocity and acceleration APART -- it has
     // three separate gains to apply to them.
-    const V3 lvVelA = Scale(Add(Xyz(lrA.mVel), Cross(Xyz(lrA.mOmega), lvRA)), lfH);
-    const V3 lvVelB = Scale(Add(Xyz(lrB.mVel), Cross(Xyz(lrB.mOmega), lvRB)), lfH);
-    const V3 lvAccA = Scale(Add(Xyz(lrA.mForce), Cross(Xyz(lrA.mTorque), lvRA)), lfH * lfH);
-    const V3 lvAccB = Scale(Add(Xyz(lrB.mForce), Cross(Xyz(lrB.mTorque), lvRB)), lfH * lfH);
+    // ARTIST 0x82BC57C8..5828: fused point motion and acceleration;
+    // acceleration is multiplied by the timestep twice, in that order.
+    const __vector4 rAYZ = __vpermwi(lvRA.mV, 0x63), rAZX = __vpermwi(lvRA.mV, 0x87);
+    const __vector4 rBYZ = __vpermwi(lvRB.mV, 0x63), rBZX = __vpermwi(lvRB.mV, 0x87);
+    const __vector4 omegaA = __lvx(&lrA.mOmega, 0), torqueA = __lvx(&lrA.mTorque, 0);
+    const __vector4 omegaB = __lvx(&lrB.mOmega, 0), torqueB = __lvx(&lrB.mTorque, 0);
+    const __vector4 motionA = __vmaddfp(rAZX, __vpermwi(omegaA, 0x63),
+                              __vnmsubfp(rAYZ, __vpermwi(omegaA, 0x87), __lvx(&lrA.mVel, 0)));
+    const __vector4 motionB = __vmaddfp(rBZX, __vpermwi(omegaB, 0x63),
+                              __vnmsubfp(rBYZ, __vpermwi(omegaB, 0x87), __lvx(&lrB.mVel, 0)));
+    const __vector4 accelA = __vmaddfp(rAZX, __vpermwi(torqueA, 0x63),
+                             __vnmsubfp(rAYZ, __vpermwi(torqueA, 0x87), __lvx(&lrA.mForce, 0)));
+    const __vector4 accelB = __vmaddfp(rBZX, __vpermwi(torqueB, 0x63),
+                             __vnmsubfp(rBYZ, __vpermwi(torqueB, 0x87), __lvx(&lrB.mForce, 0)));
+    const __vector4 timestep = __vspltw(__lvlx(&lfH, 0), 0);
+    const V3 lvVelA(__vmulfp(motionA, timestep)), lvVelB(__vmulfp(motionB, timestep));
+    const V3 lvAccA(__vmulfp(__vmulfp(accelA, timestep), timestep));
+    const V3 lvAccB(__vmulfp(__vmulfp(accelB, timestep), timestep));
 
     // =================================================================================
     // BLOCK 3 -- 0x82BC5860..0x82BC5D24   LINEAR HALF.
@@ -168,9 +206,17 @@ void DriveJacobian::Build(const Drive& lrDrive, Simulation* lpSim)
     const DriveGains lLinGains = ComputeGains(lrD.LinearParams(), lfH);
 
     const V3 lvErrL  = ClampHardError(Sub(lvAnchorB, lvAnchorA), lrD.LinearParams(), lfH);
-    const V3 lvBiasL = Add(Add(Scale(lvErrL, lLinGains.mfPos),
-                               Scale(Sub(lvVelB, lvVelA), lLinGains.mfVel)),
-                           Scale(Sub(lvAccB, lvAccA), lLinGains.mfAcc));
+    // ARTIST 0x82BC5B14..5B68: velocity product first, followed by
+    // fused position and acceleration contributions, across all four lanes.
+    const V3 lvDeltaVel = Sub(lvVelB, lvVelA);
+    const V3 lvDeltaAcc = Sub(lvAccB, lvAccA);
+    const __vector4 lGainVel = __vspltw(__lvlx(&lLinGains.mfVel, 0), 0);
+    const __vector4 lGainPos = __vspltw(__lvlx(&lLinGains.mfPos, 0), 0);
+    const __vector4 lGainAcc = __vspltw(__lvlx(&lLinGains.mfAcc, 0), 0);
+    __vector4 lBiasL = __vmulfp(lvDeltaVel.mV, lGainVel);
+    lBiasL = __vmaddfp(lvErrL.mV, lGainPos, lBiasL);
+    lBiasL = __vmaddfp(lvDeltaAcc.mV, lGainAcc, lBiasL);
+    const V3 lvBiasL(lBiasL);
     const V3 lvLocalBiasL = Project(lBasis, lvBiasL);
 
     // =================================================================================
@@ -189,17 +235,26 @@ void DriveJacobian::Build(const Drive& lrDrive, Simulation* lpSim)
     {
         const f32 lfW = lRQD.RowW(luI);
         const f32 lfS = 1.0f / Sqrt(1.0f - lfW * lfW);
-        lavAxis[luI] = Scale(MakeV3(lRQD.RowX(luI), lRQD.RowY(luI), lRQD.RowZ(luI)), lfS);
+        // ARTIST 0x82BC5C94..5D24 scales each complete RQD row, including W.
+        // Assemble from scalar-addressed loads because Jacobian_RQD's declared
+        // float array does not itself promise 16-byte alignment.
+        const f32* const lpRow = &lRQD.mData[4u * luI];
+        __vector4 lRow = __vspltw(__lvlx(lpRow, 0), 0);
+        lRow = __vrlimi(lRow, __vspltw(__lvlx(lpRow + 1, 0), 0), 4, 0);
+        lRow = __vrlimi(lRow, __vspltw(__lvlx(lpRow + 2, 0), 0), 2, 0);
+        lRow = __vrlimi(lRow, __vspltw(__lvlx(lpRow + 3, 0), 0), 1, 0);
+        lavAxis[luI] = Scale(V3(lRow), lfS);
         lafErr[luI]  = lfW * lfS;
     }
 
-    const M33 lAngFrame = { lavAxis[0], lavAxis[1], lavAxis[2] };
+    const M33 lAngFrame(lavAxis[0], lavAxis[1], lavAxis[2]);
 
-    V3 lvErrA = Scale(MakeV3(lafErr[0], lafErr[1], lafErr[2]), KF_ANGLE);
+    // 0x82BC5D54..5D6C writes the three errors and an explicit zero W.
+    V3 lvErrA = Scale(V3(lafErr[0], lafErr[1], lafErr[2]), KF_ANGLE);
     lvErrA = ClampHardError(lvErrA, lrD.AngularParams(), lfH);
 
-    const V3 lvDOmega  = Scale(Sub(Xyz(lrB.mOmega),  Xyz(lrA.mOmega)),  lfH);
-    const V3 lvDTorque = Scale(Sub(Xyz(lrB.mTorque), Xyz(lrA.mTorque)), lfH * lfH);
+    const V3 lvDOmega  = Scale(Sub(V3(__lvx(&lrB.mOmega, 0)),  V3(__lvx(&lrA.mOmega, 0))),  lfH);
+    const V3 lvDTorque = Scale(Sub(V3(__lvx(&lrB.mTorque, 0)), V3(__lvx(&lrA.mTorque, 0))), lfH * lfH);
 
     const DriveGains lAngGains = ComputeGains(lrD.AngularParams(), lfH);
     const V3 lvLocalBiasA = Add(Add(Scale(lvErrA, lAngGains.mfPos),
@@ -233,12 +288,13 @@ void DriveJacobian::Build(const Drive& lrDrive, Simulation* lpSim)
     // that falls out of one `vsel`, because zeroing mIfull also zeroes its w lane (mInvm).
     const f32 lfInvMassA = lbActiveA ? lrA.mInvm : 0.0f;
     const f32 lfInvMassB = lbActiveB ? lrB.mInvm : 0.0f;
-    const M33 lInvIA = lbActiveA ? UnpackInverseInertia(lrA.mIfull, lrA.mIsplt) : ZeroMatrix33();
-    const M33 lInvIB = lbActiveB ? UnpackInverseInertia(lrB.mIfull, lrB.mIsplt) : ZeroMatrix33();
+    const M33 lInvIA = lbActiveA ? UnpackInverseInertia(V4(__lvx(&lrA.mIfull, 0)), V4(__lvx(&lrA.mIsplt, 0))) : ZeroMatrix33();
+    const M33 lInvIB = lbActiveB ? UnpackInverseInertia(V4(__lvx(&lrB.mIfull, 0)), V4(__lvx(&lrB.mIsplt, 0))) : ZeroMatrix33();
 
     V3  lavCrossA[3], lavCrossB[3];      // I_A^-1 . (rA x L_i) and I_B^-1 . (rB x L_i)
     V3  lavAngA[3],   lavAngB[3];        // I_A^-1 . angAxis_i  and I_B^-1 . angAxis_i
-    f32 lafMassL[3],  lafMassA[3];
+    f32 lafLinearA[3], lafLinearB[3];
+    __vector4 lavAngularMassA[3], lavAngularMassB[3];
 
     for (u32 luI = 0u; luI < 3u; ++luI)
     {
@@ -247,18 +303,19 @@ void DriveJacobian::Build(const Drive& lrDrive, Simulation* lpSim)
         // The angular jacobian of a point constraint is r x n.
         const V3 lvCA = Cross(lvRA, lvLinAxis);
         const V3 lvCB = Cross(lvRB, lvLinAxis);
-        lavCrossA[luI] = Transform(lInvIA, lvCA);
-        lavCrossB[luI] = Transform(lInvIB, lvCB);
+        const V3 lZero(__vspltisw(0));
+        lavCrossA[luI] = lbActiveA ? Transform(lInvIA, lvCA) : lZero;
+        lavCrossB[luI] = lbActiveB ? Transform(lInvIB, lvCB) : lZero;
+        lavAngA[luI] = lbActiveA ? Transform(lInvIA, lavAxis[luI]) : lZero;
+        lavAngB[luI] = lbActiveB ? Transform(lInvIB, lavAxis[luI]) : lZero;
 
-        lavAngA[luI] = Transform(lInvIA, lavAxis[luI]);
-        lavAngB[luI] = Transform(lInvIB, lavAxis[luI]);
-
-        // The textbook effective masses, accumulated over both bodies:
-        //     linear  1/mA + 1/mB + (rA x n).I_A^-1(rA x n) + (rB x n).I_B^-1(rB x n)
-        //     angular            axis . (I_A^-1 axis + I_B^-1 axis)      -- no mass term
-        lafMassL[luI] = lfInvMassA + lfInvMassB
-                      + Dot3(lvCA, lavCrossA[luI]) + Dot3(lvCB, lavCrossB[luI]);
-        lafMassA[luI] = Dot3(lavAxis[luI], lavAngA[luI]) + Dot3(lavAxis[luI], lavAngB[luI]);
+        // ARTIST 0x82BC617C..6270 / 64EC..6570: each active body
+        // forms its three dot products separately. Linear mass adds the
+        // body's inverse mass with scalar fadds before the vector sum.
+        lafLinearA[luI] = lbActiveA ? lfInvMassA + Dot3(lvCA, lavCrossA[luI]) : 0.0f;
+        lafLinearB[luI] = lbActiveB ? lfInvMassB + Dot3(lvCB, lavCrossB[luI]) : 0.0f;
+        lavAngularMassA[luI] = lbActiveA ? __vmsum3fp(lavAxis[luI].mV, lavAngA[luI].mV) : __vspltisw(0);
+        lavAngularMassB[luI] = lbActiveB ? __vmsum3fp(lavAxis[luI].mV, lavAngB[luI].mV) : __vspltisw(0);
     }
 
     // =================================================================================
@@ -266,46 +323,64 @@ void DriveJacobian::Build(const Drive& lrDrive, Simulation* lpSim)
     // =================================================================================
     // The six effective masses are inverted once and FOLDED INTO the stored rows -- the
     // record never keeps 1/mEff on its own.
-    const V3 lvInvMassL = MakeV3(1.0f / lafMassL[0], 1.0f / lafMassL[1], 1.0f / lafMassL[2]);
-    const V3 lvInvMassA = MakeV3(1.0f / lafMassA[0], 1.0f / lafMassA[1], 1.0f / lafMassA[2]);
+    static const CGS_ALIGN(16) u32 kMassGather[4] = {0x00010203, 0x14151617, 0x00010203, 0x00010203};
+    const __vector4 lGather = __lvx(kMassGather, 0);
+    const __vector4 lAngA = __vrlimi(__vperm(lavAngularMassA[0], lavAngularMassA[1], lGather), lavAngularMassA[2], 2, 0);
+    const __vector4 lAngB = __vrlimi(__vperm(lavAngularMassB[0], lavAngularMassB[1], lGather), lavAngularMassB[2], 2, 0);
+    const V3 lLinA(lafLinearA[0], lafLinearA[1], lafLinearA[2]);
+    const V3 lLinB(lafLinearB[0], lafLinearB[1], lafLinearB[2]);
+    __vector4 lMassL = __vaddfp(lLinA.mV, lLinB.mV);
+    __vector4 lMassA = __vaddfp(lAngA, lAngB);
 
-    // ---- slots 0 and 1: the two anchor arms, with the reaction-force ids in their w lanes.
-    mRows[0].x = lvRA.x; mRows[0].y = lvRA.y; mRows[0].z = lvRA.z;   // +0x00
-    mIdA = lrA.mId;                                                  // +0x0C
-    mRows[1].x = lvRB.x; mRows[1].y = lvRB.y; mRows[1].z = lvRB.z;   // +0x10
-    mIdB = lrB.mId;                                                  // +0x1C
+    // 0x82BC6624..66EC overwrites only XYZ with fdivs; preserve each
+    // accumulated W, including the angular gather's first-dot payload.
+    const f32 lfLinearX = 1.0f / lMassL.v[0], lfLinearY = 1.0f / lMassL.v[1], lfLinearZ = 1.0f / lMassL.v[2];
+    const f32 lfAngularX = 1.0f / lMassA.v[0], lfAngularY = 1.0f / lMassA.v[1], lfAngularZ = 1.0f / lMassA.v[2];
+    lMassL = __vrlimi(lMassL, __vspltw(__lvlx(&lfLinearX, 0), 0), 8, 0);
+    lMassL = __vrlimi(lMassL, __vspltw(__lvlx(&lfLinearY, 0), 0), 4, 0);
+    lMassL = __vrlimi(lMassL, __vspltw(__lvlx(&lfLinearZ, 0), 0), 2, 0);
+    lMassA = __vrlimi(lMassA, __vspltw(__lvlx(&lfAngularX, 0), 0), 8, 0);
+    lMassA = __vrlimi(lMassA, __vspltw(__lvlx(&lfAngularY, 0), 0), 4, 0);
+    lMassA = __vrlimi(lMassA, __vspltw(__lvlx(&lfAngularZ, 0), 0), 2, 0);
+    const V3 lvInvMassL(lMassL), lvInvMassA(lMassA);
+
+    // ---- slots 0 and 1: the two anchor arms, with resolved reaction-force addresses in their w lanes.
+    mRows[0].mV.v[0] = lvRA.mV.v[0]; mRows[0].mV.v[1] = lvRA.mV.v[1]; mRows[0].mV.v[2] = lvRA.mV.v[2];   // +0x00
+    mRows[0].mV.u[3] = lrA.mId;                                                  // +0x0C
+    mRows[1].mV.v[0] = lvRB.mV.v[0]; mRows[1].mV.v[1] = lvRB.mV.v[1]; mRows[1].mV.v[2] = lvRB.mV.v[2];   // +0x10
+    mRows[1].mV.u[3] = lrB.mId;                                                  // +0x1C
 
     // ---- +0x20 and +0x30: explicit zero triples (X360 0x82BC6A08..0x82BC6A1C, `stfs f31`
     //      with f31 = flt_82001CC0 = 0.0f).
-    mRows[2].x = mRows[2].y = mRows[2].z = 0.0f;
-    mRows[3].x = mRows[3].y = mRows[3].z = 0.0f;
+    mRows[2].mV.v[0] = mRows[2].mV.v[1] = mRows[2].mV.v[2] = 0.0f;
+    mRows[3].mV.v[0] = mRows[3].mV.v[1] = mRows[3].mV.v[2] = 0.0f;
 
     // ⭐ +0x2C and +0x3C: the LINEAR and ANGULAR acceleration gains. CLOSED BY READING this
     // wave: f6 is last defined at X360 line 240 (`fmr f6,f0`, the NO_DRIVE/HARD_DRIVE arm's
     // 1.0) or line 225 (`fdivs f6,f12,f13`, the SOFT arm) and is NOT redefined anywhere before
     // the store at line 1057 `stfs f6,0x2C(r31)`; f11 likewise between lines 546/557 and the
     // store at line 1058 `stfs f11,0x3C(r31)`. A def-use scan over all 1320 lines confirms it.
-    mRows[2].w = lLinGains.mfAcc;   // +0x2C
-    mRows[3].w = lAngGains.mfAcc;   // +0x3C
+    mRows[2].mV.v[3] = lLinGains.mfAcc;   // +0x2C
+    mRows[3].mV.v[3] = lAngGains.mfAcc;   // +0x3C
 
     // ---- the six TRANSPOSED, mass-normalised constraint rows. The solver's inner loop reads
     //      one xyz-component of all three rows at once, so the record stores the transpose:
     //        +0x40/+0x60/+0x80 = (L0, L1, L2) component x/y/z, each scaled by 1/mEffLinear
     //        +0x50/+0x70/+0x90 = (A0, A1, A2) component x/y/z, each scaled by 1/mEffAngular
-    //      The lane order is READ, not inferred -- see GatherComponent() in JacobianMath.hpp.
+    //      The lane order follows the controls used by GatherDriveColumn above.
     for (u32 luC = 0u; luC < 3u; ++luC)
     {
-        const V3 lvLin = MulLanes(GatherComponent(lBasis.xAxis, lBasis.yAxis, lBasis.zAxis, luC),
+        const V3 lvLin = MulLanes(GatherDriveColumn(lBasis.xAxis, lBasis.yAxis, lBasis.zAxis, luC),
                                   lvInvMassL);
-        const V3 lvAng = MulLanes(GatherComponent(lavAxis[0], lavAxis[1], lavAxis[2], luC),
+        const V3 lvAng = MulLanes(GatherDriveColumn(lavAxis[0], lavAxis[1], lavAxis[2], luC),
                                   lvInvMassA);
         rw::math::vpu::Vector4& lrLinRow = mRows[4u + luC * 2u];   // +0x40, +0x60, +0x80
         rw::math::vpu::Vector4& lrAngRow = mRows[5u + luC * 2u];   // +0x50, +0x70, +0x90
-        lrLinRow.x = lvLin.x; lrLinRow.y = lvLin.y; lrLinRow.z = lvLin.z;
-        lrAngRow.x = lvAng.x; lrAngRow.y = lvAng.y; lrAngRow.z = lvAng.z;
+        lrLinRow.mV.v[0] = lvLin.mV.v[0]; lrLinRow.mV.v[1] = lvLin.mV.v[1]; lrLinRow.mV.v[2] = lvLin.mV.v[2];
+        lrAngRow.mV.v[0] = lvAng.mV.v[0]; lrAngRow.mV.v[1] = lvAng.mV.v[1]; lrAngRow.mV.v[2] = lvAng.mV.v[2];
     }
 
-    mSpy = lrDrive.m_spy;   // +0x4C  (X360 stores it RAW; BurnoutPR shifts it left by one)
+    mRows[4].mV.u[3] = lrDrive.m_spy;   // +0x4C  (X360 stores it RAW; BurnoutPR shifts it left by one)
 
     // ---- the six per-row impulse clamps, mStrength * h^2. Three linear lanes and three
     //      angular ones -- NOT "the tail scales the rows by mStrength", which is what an
@@ -314,18 +389,18 @@ void DriveJacobian::Build(const Drive& lrDrive, Simulation* lpSim)
     //      solver, two ways of filling the clamp lanes.
     const f32 lfClampL = lrD.LinearParams().GetMaxStrength()  * lfH * lfH;
     const f32 lfClampA = lrD.AngularParams().GetMaxStrength() * lfH * lfH;
-    mRows[6].w  = lfClampL;   // +0x6C
-    mRows[7].w  = lfClampL;   // +0x7C
-    mRows[8].w  = lfClampA;   // +0x8C
-    mRows[9].w  = lfClampA;   // +0x9C
-    mRows[10].w = lfClampL;   // +0xAC
-    mRows[11].w = lfClampA;   // +0xBC
+    mRows[6].mV.v[3]  = lfClampL;   // +0x6C
+    mRows[7].mV.v[3]  = lfClampL;   // +0x7C
+    mRows[8].mV.v[3]  = lfClampA;   // +0x8C
+    mRows[9].mV.v[3]  = lfClampA;   // +0x9C
+    mRows[10].mV.v[3] = lfClampL;   // +0xAC
+    mRows[11].mV.v[3] = lfClampA;   // +0xBC
 
     // ---- +0xA0 / +0xB0: the PRE-DIVIDED impulses (lambda), one per half.
     const V3 lvImpulseL = MulLanes(lvLocalBiasL, lvInvMassL);
     const V3 lvImpulseA = MulLanes(lvLocalBiasA, lvInvMassA);
-    mRows[10].x = lvImpulseL.x; mRows[10].y = lvImpulseL.y; mRows[10].z = lvImpulseL.z;
-    mRows[11].x = lvImpulseA.x; mRows[11].y = lvImpulseA.y; mRows[11].z = lvImpulseA.z;
+    mRows[10].mV.v[0] = lvImpulseL.mV.v[0]; mRows[10].mV.v[1] = lvImpulseL.mV.v[1]; mRows[10].mV.v[2] = lvImpulseL.mV.v[2];
+    mRows[11].mV.v[0] = lvImpulseA.mV.v[0]; mRows[11].mV.v[1] = lvImpulseA.mV.v[1]; mRows[11].mV.v[2] = lvImpulseA.mV.v[2];
 
     // ---- the three 0x40-byte groups.
     for (u32 luI = 0u; luI < 3u; ++luI)
@@ -333,29 +408,29 @@ void DriveJacobian::Build(const Drive& lrDrive, Simulation* lpSim)
         const u32 luBase = 12u + luI * 4u;                  // rows 12, 16, 20 -> +0xC0/0x100/0x140
         const V3  lvLinAxis = Row(lBasis, luI);
 
-        mRows[luBase + 0u].x = lvLinAxis.x;
-        mRows[luBase + 0u].y = lvLinAxis.y;
-        mRows[luBase + 0u].z = lvLinAxis.z;
+        mRows[luBase + 0u].mV.v[0] = lvLinAxis.mV.v[0];
+        mRows[luBase + 0u].mV.v[1] = lvLinAxis.mV.v[1];
+        mRows[luBase + 0u].mV.v[2] = lvLinAxis.mV.v[2];
 
-        mRows[luBase + 1u].x = lavCrossA[luI].x;
-        mRows[luBase + 1u].y = lavCrossA[luI].y;
-        mRows[luBase + 1u].z = lavCrossA[luI].z;
-        mRows[luBase + 1u].w = lavAngB[luI].x;
+        mRows[luBase + 1u].mV.v[0] = lavCrossA[luI].mV.v[0];
+        mRows[luBase + 1u].mV.v[1] = lavCrossA[luI].mV.v[1];
+        mRows[luBase + 1u].mV.v[2] = lavCrossA[luI].mV.v[2];
+        mRows[luBase + 1u].mV.v[3] = lavAngB[luI].mV.v[0];
 
-        mRows[luBase + 2u].x = lavAngA[luI].x;
-        mRows[luBase + 2u].y = lavAngA[luI].y;
-        mRows[luBase + 2u].z = lavAngA[luI].z;
-        mRows[luBase + 2u].w = lavAngB[luI].y;
+        mRows[luBase + 2u].mV.v[0] = lavAngA[luI].mV.v[0];
+        mRows[luBase + 2u].mV.v[1] = lavAngA[luI].mV.v[1];
+        mRows[luBase + 2u].mV.v[2] = lavAngA[luI].mV.v[2];
+        mRows[luBase + 2u].mV.v[3] = lavAngB[luI].mV.v[1];
 
-        mRows[luBase + 3u].x = lavCrossB[luI].x;
-        mRows[luBase + 3u].y = lavCrossB[luI].y;
-        mRows[luBase + 3u].z = lavCrossB[luI].z;
-        mRows[luBase + 3u].w = lavAngB[luI].z;
+        mRows[luBase + 3u].mV.v[0] = lavCrossB[luI].mV.v[0];
+        mRows[luBase + 3u].mV.v[1] = lavCrossB[luI].mV.v[1];
+        mRows[luBase + 3u].mV.v[2] = lavCrossB[luI].mV.v[2];
+        mRows[luBase + 3u].mV.v[3] = lavAngB[luI].mV.v[2];
     }
 
-    mpNode      = const_cast<Drive*>(&lrDrive);   // +0xCC  the only real pointer in the record
-    mRows[16].w = lfInvMassA;                     // +0x10C (0.0f unless bodyA is ACTIVE)
-    mRows[20].w = lfInvMassB;                     // +0x14C
+    mRows[12].mV.u[3] = reinterpret_cast<u32>(const_cast<Drive*>(&lrDrive));   // +0xCC  drive node pointer
+    mRows[16].mV.v[3] = lfInvMassA;                     // +0x10C (0.0f unless bodyA is ACTIVE)
+    mRows[20].mV.v[3] = lfInvMassB;                     // +0x14C
 
     // ⚠️ +0x5C IS WRITTEN BY NO PATH IN THIS FUNCTION. Every other lane of the 384 bytes is
     // covered by the map above; this one the console genuinely leaves alone (the joint builder

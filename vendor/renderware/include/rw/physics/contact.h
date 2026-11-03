@@ -42,7 +42,6 @@
 #include "rw/physics/rigidbody.h"    // rw::physics::RigidBody, BodyState
 #include "rw/physics/simulation.h"   // rw::physics::Simulation (GetFreeContact's home class)
 
-#include "vendor/renderware/physics/JacobianMath.hpp"   // jacobian_detail:: Cross/Dot3/Sub/...
 
 #include <cstddef>                   // offsetof (the layout pins)
 
@@ -59,7 +58,7 @@ struct CGS_ALIGN(16) Contact
     // The DWARF spells the vector members `RigidBody::Vector3U_32` -- typedef
     // Vector3Template<float>, the PACKED 12-byte triple (rigidbody.h:35), NOT the 16-byte
     // vpu lane register. The 4-byte scalar after each triple completes the 16-byte row.
-    struct Vector3U_32 { f32 x, y, z; };
+    typedef rw::math::fpu::Vector3Template<f32> Vector3U_32;
 
     // ---- the six jacobian-input rows, DWARF names/order (:216..:238) ---------------------
     Vector3U_32 mPosA;      // +0x00  :216  contact point on body A (world)
@@ -114,8 +113,7 @@ struct CGS_ALIGN(16) Contact
     //
     // ⚠️ THE NORMALISATION IS A SINGLE `vrsqrtefp` ESTIMATE -- unlike the jacobian builders
     // (vrsqrtefp + two Newton-Raphson refines, JacobianMath.hpp Sqrt note), the console does
-    // NOT refine here. 1/Sqrt() on the PC is behaviourally identical, not bit-identical
-    // (more precise, same zero->+inf edge as vrsqrtefp(0)).
+    // NOT refine here; this path uses the native estimate directly.
     // -------------------------------------------------------------------------------------
     void GenerateFromCollision(RigidBody* lpBodyA, RigidBody* lpBodyB,
                                const rw::math::vpu::Vector3& lrPointOnA,
@@ -124,104 +122,74 @@ struct CGS_ALIGN(16) Contact
                                f32 lfStaticFriction, f32 lfDynamicFriction,
                                f32 lfRestitution, u32 luTag)
     {
-        using jacobian_detail::V3;
-        using jacobian_detail::Xyz;
-        using jacobian_detail::Sub;
-        using jacobian_detail::Add;
-        using jacobian_detail::Scale;
-        using jacobian_detail::Cross;
-        using jacobian_detail::Dot3;
-        using jacobian_detail::MakeV3;
-        using jacobian_detail::Sqrt;
+        // Permute masks and constants are the words at ARTIST 0x820F1090..1120.
+        static const CGS_ALIGN(16) u32 kXYZ[4] = {~0u, ~0u, ~0u, 0};
+        static const CGS_ALIGN(16) u32 kZXY[4] = {0x08090A0B, 0x00010203, 0x04050607, 0x0C0D0E0F};
+        static const CGS_ALIGN(16) u32 kYZX[4] = {0x04050607, 0x08090A0B, 0x00010203, 0x0C0D0E0F};
+        static const CGS_ALIGN(16) f32 kAxisX[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+        static const CGS_ALIGN(16) f32 kAxisZ[4] = {0.0f, 0.0f, 1.0f, 0.0f};
+        static const CGS_ALIGN(16) u32 kSign[4] = {0x80000000u, 0x80000000u, 0x80000000u, 0x80000000u};
+        static const CGS_ALIGN(16) f32 kSmall[4] = {0.0001f, 0.0001f, 0.0001f, 0.0001f};
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 pA = lrPointOnA.mV, pB = lrPointOnB.mV, normal = lrNormal.mV;
+        const __vector4 rA = __vsubfp(pA, __lvx(&lpBodyA->mCom, 0));
+        const __vector4 rB = __vsubfp(pB, __lvx(&lpBodyB->mCom, 0));
+        const __vector4 yz = __lvx(kYZX, 0), zx = __lvx(kZXY, 0);
+        const __vector4 normalYZ = __vperm(normal, normal, yz);
+        const __vector4 normalZX = __vperm(normal, normal, zx);
+        const __vector4 aYZ = __vperm(rA, rA, yz), aZX = __vperm(rA, rA, zx);
+        const __vector4 bYZ = __vperm(rB, rB, yz), bZX = __vperm(rB, rB, zx);
+        const __vector4 tangentA = __vmaddfp(aYZ, normalZX, __vnmsubfp(aZX, normalYZ, zero));
+        const __vector4 tangentB = __vmaddfp(bYZ, normalZX, __vnmsubfp(bZX, normalYZ, zero));
+        const __vector4 state = __vspltw(__lvx(&lpBodyA->mIsplt, 0), 3);
+        const __vector4 four = __vspltisw(4);
+        const __vector4 active = __vcmpequw(__vand(state, four), four);
+        const __vector4 candidate = __vsel(tangentB, tangentA, active);
+        const __vector4 tx = __vspltw(candidate, 0), ty = __vspltw(candidate, 1), tz = __vspltw(candidate, 2);
+        __vector4 lengthSq = __vmaddfp(tx, tx, zero);
+        lengthSq = __vmaddfp(ty, ty, lengthSq);
+        lengthSq = __vmaddfp(tz, tz, lengthSq);
+        const __vector4 nx = __vspltw(normal, 0), nz = __vspltw(normal, 2);
+        const __vector4 axisX = __vnmsubfp(normal, nx, __lvx(kAxisX, 0));
+        const __vector4 axisZ = __vnmsubfp(normal, nz, __lvx(kAxisZ, 0));
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        const __vector4 chooseX = __vcmpgefp(__vnmsubfp(nx, nx, half), __lvx(kSign, 0));
+        const __vector4 alternative = __vsel(__vxor(axisZ, __lvx(kSign, 0)), axisX, chooseX);
+        const __vector4 alternativeSq = __vsel(__vspltw(axisZ, 2), __vspltw(axisX, 0), chooseX);
+        const __vector4 chooseCandidate = __vcmpgefp(lengthSq, __lvx(kSmall, 0));
+        const __vector4 tangent = __vsel(alternative, candidate, chooseCandidate);
+        const __vector4 inverseLength = __vrsqrtefp(__vsel(alternativeSq, lengthSq, chooseCandidate));
+        const __vector4 tangentYZ = __vperm(tangent, tangent, yz);
+        const __vector4 tangentZX = __vperm(tangent, tangent, zx);
+        const __vector4 upProduct = __vmaddfp(tangentZX, normalYZ, zero);
+        const __vector4 up = __vmulfp(__vnmsubfp(tangentYZ, normalZX, upProduct), inverseLength);
+        const __vector4 at = __vmulfp(tangent, inverseLength);
 
-        const V3 lvPosA = Xyz(lrPointOnA);
-        const V3 lvPosB = Xyz(lrPointOnB);
-        const V3 lvN    = Xyz(lrNormal);
-
-        // rA/rB = contact point minus centre of mass (`vsubfp` on the raw rows, 0x828A3788).
-        const V3 lvRA = Sub(lvPosA, Xyz(lpBodyA->mCom));
-        const V3 lvRB = Sub(lvPosB, Xyz(lpBodyB->mCom));
-
-        // ---- tangent selection (0x828A3790..0x828A38B8) ---------------------------------
-        // T0 = cross(n, r) with r chosen by BODY A's ACTIVE bit alone (the `vspltw v4,v6,3`
-        // + `vand 4` + `vcmpequw` mask on bodyA's mIsplt row w lane -- console mState).
-        const bool lbAActive = (lpBodyA->mState & ACTIVE_BODY) != 0;
-        const V3   lvT0      = Cross(lvN, lbAActive ? lvRA : lvRB);
-        const f32  lfT0LenSq = Dot3(lvT0, lvT0);
-
-        V3  lvT;
-        f32 lfLenSq;
-        if (lfT0LenSq >= 1e-4f)   // splat table 0x820F1110; `vcmpgefp v11, |T0|^2, 1e-4`
-        {
-            lvT     = lvT0;
-            lfLenSq = lfT0LenSq;
-        }
-        else if (lvN.x * lvN.x <= 0.5f)   // `vcmpgefp (0.5 - n.x^2), -0.0` -- tables
-        {                                 //  0x820F1120 (0.5) / 0x820F1100 (-0.0)
-            // xAxis {1,0,0} - n*n.x (table 0x820F10E0); lenSq is that vector's OWN x lane
-            // (`vspltw v9,0` == 1 - n.x^2), exactly as the console takes it.
-            lvT     = Sub(MakeV3(1.0f, 0.0f, 0.0f), Scale(lvN, lvN.x));
-            lfLenSq = lvT.x;
-        }
-        else
-        {
-            // -(zAxis {0,0,1} - n*n.z) (table 0x820F10F0, sign via `vxor` with -0.0); the
-            // console takes lenSq from the PRE-FLIP vector's z lane (`vspltw v3,2` == 1 - n.z^2).
-            const V3 lvZ = Sub(MakeV3(0.0f, 0.0f, 1.0f), Scale(lvN, lvN.z));
-            lfLenSq = lvZ.z;
-            lvT     = Scale(lvZ, -1.0f);
-        }
-
-        // ONE vrsqrtefp estimate of the chosen squared length -- see the banner note.
-        const f32 lfInvLen = 1.0f / Sqrt(lfLenSq);
-
-        const V3 lvUp  = Scale(Cross(lvT, lvN), lfInvLen);   // frame row 1
-        const V3 lvAt  = Scale(lvT, lfInvLen);               // frame row 2
-
-        // Point-relative velocity, B minus A (`vsubfp v2, v9, v2` at 0x828A3834).
-        const V3 lvVel = Sub(Add(Xyz(lpBodyB->mVel), Cross(Xyz(lpBodyB->mOmega), lvRB)),
-                             Add(Xyz(lpBodyA->mVel), Cross(Xyz(lpBodyA->mOmega), lvRA)));
-
-        // ---- the fill -------------------------------------------------------------------
-        mPosA.x = lvPosA.x; mPosA.y = lvPosA.y; mPosA.z = lvPosA.z;   // full event row, 0x828A37B8
-        mBodyA = 0;                                             // dead until the batch mint
-        mPosB.x = lvPosB.x; mPosB.y = lvPosB.y; mPosB.z = lvPosB.z;   // 0x828A37BC
-        mBodyB = 0;
-        mRi.x = lvN.x; mRi.y = lvN.y; mRi.z = lvN.z;            // 0x828A38E4
-        mRes   = lfRestitution;                                 // event +0x48, 0x828A39B4
-        mUp.x = lvUp.x; mUp.y = lvUp.y; mUp.z = lvUp.z;         // 0x828A3900
-        mMus   = lfStaticFriction;                              // event +0x40, 0x828A39A4
-        mAt.x = lvAt.x; mAt.y = lvAt.y; mAt.z = lvAt.z;         // 0x828A390C
-        mMud   = lfDynamicFriction;                             // event +0x44, 0x828A39A8
-        mVel.x = lvVel.x; mVel.y = lvVel.y; mVel.z = lvVel.z;      // 0x828A3928
-        mTag   = luTag;                                         // the CALLER's loop index
-
-        // ---- the snapshot (ten full row copies, 0x828A3930..0x828A3990) -----------------
-        mComA.x = lpBodyA->mCom.x; mComA.y = lpBodyA->mCom.y; mComA.z = lpBodyA->mCom.z;
-        mIdA     = lpBodyA->mId;
-        mComB.x = lpBodyB->mCom.x; mComB.y = lpBodyB->mCom.y; mComB.z = lpBodyB->mCom.z;
-        mIdB     = lpBodyB->mId;
-        mIfullA.x = lpBodyA->mIfull.x; mIfullA.y = lpBodyA->mIfull.y; mIfullA.z = lpBodyA->mIfull.z;
-        mInvmA   = lpBodyA->mInvm;
-        mIfullB.x = lpBodyB->mIfull.x; mIfullB.y = lpBodyB->mIfull.y; mIfullB.z = lpBodyB->mIfull.z;
-        mInvmB   = lpBodyB->mInvm;
-        mIspltA.x = lpBodyA->mIsplt.x; mIspltA.y = lpBodyA->mIsplt.y; mIspltA.z = lpBodyA->mIsplt.z;
-        mStateA  = static_cast<u32>(lpBodyA->mState);
-        mIspltB.x = lpBodyB->mIsplt.x; mIspltB.y = lpBodyB->mIsplt.y; mIspltB.z = lpBodyB->mIsplt.z;
-        mStateB  = static_cast<u32>(lpBodyB->mState);
-        mForceA.x = lpBodyA->mForce.x; mForceA.y = lpBodyA->mForce.y; mForceA.z = lpBodyA->mForce.z;
-        mKineA   = lpBodyA->mKine;
-        mForceB.x = lpBodyB->mForce.x; mForceB.y = lpBodyB->mForce.y; mForceB.z = lpBodyB->mForce.z;
-        mKineB   = lpBodyB->mKine;
-        mTorqueA.x = lpBodyA->mTorque.x; mTorqueA.y = lpBodyA->mTorque.y; mTorqueA.z = lpBodyA->mTorque.z;
-        mCoolA   = lpBodyA->mCool;
-        mTorqueB.x = lpBodyB->mTorque.x; mTorqueB.y = lpBodyB->mTorque.y; mTorqueB.z = lpBodyB->mTorque.z;
-        mCoolB   = lpBodyB->mCool;
-
-        // Carry the body pointers in the event position w lanes.
-        mpBodyA = lpBodyA;
-        mpBodyB = lpBodyB;
+        const __vector4 omegaA = __lvx(&lpBodyA->mOmega, 0), omegaB = __lvx(&lpBodyB->mOmega, 0);
+        const __vector4 velA = __vmaddfp(aYZ, __vperm(omegaA, omegaA, zx),
+                                __vnmsubfp(aZX, __vperm(omegaA, omegaA, yz), __lvx(&lpBodyA->mVel, 0)));
+        const __vector4 velB = __vmaddfp(bYZ, __vperm(omegaB, omegaB, zx),
+                                __vnmsubfp(bZX, __vperm(omegaB, omegaB, yz), __lvx(&lpBodyB->mVel, 0)));
+        const __vector4 velocity = __vsubfp(velB, velA);
+        const __vector4 xyz = __lvx(kXYZ, 0);
+        __stvx(pA, &mPosA, 0); mpBodyA = lpBodyA;
+        __stvx(pB, &mPosB, 0); mpBodyB = lpBodyB;
+        __stvx(__vand(normal, xyz), &mRi, 0); mRes = lfRestitution;
+        __stvx(__vand(up, xyz), &mUp, 0); mMus = lfStaticFriction;
+        __stvx(__vand(at, xyz), &mAt, 0); mMud = lfDynamicFriction;
+        __stvx(__vand(velocity, xyz), &mVel, 0); mTag = luTag;
+        __stvx(__lvx(&lpBodyA->mCom, 0), &mComA, 0);
+        __stvx(__lvx(&lpBodyB->mCom, 0), &mComB, 0);
+        __stvx(__lvx(&lpBodyA->mIfull, 0), &mIfullA, 0);
+        __stvx(__lvx(&lpBodyB->mIfull, 0), &mIfullB, 0);
+        __stvx(__lvx(&lpBodyA->mIsplt, 0), &mIspltA, 0);
+        __stvx(__lvx(&lpBodyB->mIsplt, 0), &mIspltB, 0);
+        __stvx(__lvx(&lpBodyA->mForce, 0), &mForceA, 0);
+        __stvx(__lvx(&lpBodyB->mForce, 0), &mForceB, 0);
+        __stvx(__lvx(&lpBodyA->mTorque, 0), &mTorqueA, 0);
+        __stvx(__lvx(&lpBodyB->mTorque, 0), &mTorqueB, 0);
     }
+
 };
 
 // ---- the layout pins -- console offsets, X360-attested at the cited stores ----------------
