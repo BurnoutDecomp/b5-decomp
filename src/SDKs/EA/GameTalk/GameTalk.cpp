@@ -91,6 +91,17 @@ namespace GameTalk
     // GameTalkMessage bodies (reconstructed from BURNOUT_X360_ARTIST.XEX).
     // ========================================================================
 
+    // Native slot 0 @0x828385D0: run the destructor and, for deleting flag 1,
+    // release the object from the GameTalk package allocator.
+    static GameTalkMessage* DeleteGameTalkMessage(GameTalkMessage* lpMessage, unsigned int luFlags)
+    {
+        lpMessage->~GameTalkMessage();
+        if (luFlags & 1) EA::GameTalk::Free(lpMessage);
+        return lpMessage;
+    }
+
+    static const GameTalkMessageVTable g_GameTalkMessageVTable = { DeleteGameTalkMessage };
+
     // Shared entry-buffer capacity, doubled on grow by AddKeyContent. The seed is a
     // data-segment constant in the console image, NOT zero: a zero seed would make the
     // first AllocateDataBuffer ask for 0 bytes and leave the doubling in AddKeyContent
@@ -116,9 +127,19 @@ namespace GameTalk
 
     // @ 0x828387A8 -- construct a message bound to the named tool channel. Zeroes the
     // flag/entry/count fields, then eagerly allocates the entry-pointer buffer.
+    void* GameTalkMessage::operator new(size_t luSize)
+    {
+        return EA::GameTalk::Alloc(static_cast<s32>(luSize));
+    }
+
+    void GameTalkMessage::operator delete(void* lpBlock)
+    {
+        EA::GameTalk::Free(lpBlock);
+    }
+
     GameTalkMessage::GameTalkMessage(const char* lpcChannel)
-        : mpVTable(0)
-        , mbParsed(0)
+        : mpVTable(&g_GameTalkMessageVTable)
+        , mbParsed(false)
         , mppEntries(0)
         , miNumKeys(0)
         , mpcChannel(lpcChannel)
@@ -131,6 +152,7 @@ namespace GameTalk
     // and content + the slot; built-locally frees only the slots), then the entry table.
     GameTalkMessage::~GameTalkMessage()
     {
+        mpVTable = &g_GameTalkMessageVTable;
         CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
             CgsAttribSys::AttribSysMemoryManager::GetGameTalkAllocator();
 
@@ -304,7 +326,7 @@ namespace GameTalk
         if (lpMessage)
         {
             const char* lpcChannel = ReadString(lpcCursor);
-            new (lpMessage) GameTalkMessage(lpcChannel);
+            ::new (lpMessage) GameTalkMessage(lpcChannel);
         }
 
         // The X360 stores mbParsed=1 unconditionally (even on the null-alloc path);
@@ -731,11 +753,7 @@ namespace GameTalk
 
             GameTalkMessage* lpMessage = GameTalkMessage::Create(lpcRecord);
             ReceiveMessage(lpMessage);
-            if (lpMessage)
-            {
-                lpMessage->~GameTalkMessage();
-                EA::GameTalk::Free(lpMessage);
-            }
+            if (lpMessage) lpMessage->mpVTable->DeletingDestructor(lpMessage, 1);
 
             liOffset += liStep;
         }

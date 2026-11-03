@@ -501,9 +501,8 @@ void GameTalkProtocol::OnMessageReceived(EA::GameTalk::GameTalkMessage* lpMsg)
 // -------------------------------------------------------------------------------------
 // SendPingResponseToGameExplorer @ 0x82838978 -- ship a "PingResponse" to GameExplorer.
 //
-//   The X360 builds the GameTalkMessage through the AttribSys GameTalk package allocator
-//   (placement-construct + AllocateDataBuffer); that is the inlined form of
-//   `new EA::GameTalk::GameTalkMessage("AttribSys")`. Reconstructed in that human form.
+//   The X360 allocates through the GameTalk package and constructs the message;
+//   the constructor allocates its entry buffer.
 // -------------------------------------------------------------------------------------
 void GameTalkProtocol::SendPingResponseToGameExplorer(const char* lpacPingID)
 {
@@ -512,8 +511,6 @@ void GameTalkProtocol::SendPingResponseToGameExplorer(const char* lpacPingID)
     EA::GameTalk::GameTalkMessage* lpMessage =
         new EA::GameTalk::GameTalkMessage(KPAC_GAME_EXPLORER_CHANNEL_ID);
     CGS_ASSERT(lpMessage != 0, "lpMessage != NULL");
-
-    lpMessage->AllocateDataBuffer();
 
     // Length is strlen(lpacPingID): the asm walks to the NUL then subtracts one.
     s32 liLength = static_cast<s32>(std::strlen(lpacPingID));
