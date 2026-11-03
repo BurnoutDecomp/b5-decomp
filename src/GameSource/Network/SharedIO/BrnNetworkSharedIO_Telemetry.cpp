@@ -71,10 +71,10 @@ namespace BrnNetworkModuleIO
     // ----------------------------------------------------------------------------------------
     void TelemetryData::AddParameter(Vector3 lVector)
     {
-        // The host Vector3 (vendor/renderware rw/math/vpu/types.h) names the four lanes directly;
-        // lane 0 == x (`vspltw v0, v1, 0`), lane 2 == z (`vspltw v0, v1, 2`).
-        const f32 lfX = lVector.x;
-        const f32 lfZ = lVector.z;
+        // The native Vector3 lane accessors select the same components as the X360 splats:
+        // lane 0 == X (`vspltw v0, v1, 0`), lane 2 == Z (`vspltw v0, v1, 2`).
+        const f32 lfX = lVector.GetX().GetFloat();
+        const f32 lfZ = lVector.GetZ().GetFloat();
 
         CGS_ASSERT(lfX < 10000.0f,  "lVector.GetX() < 10000.0f");
         CGS_ASSERT(lfZ < 10000.0f,  "lVector.GetZ() < 10000.0f");

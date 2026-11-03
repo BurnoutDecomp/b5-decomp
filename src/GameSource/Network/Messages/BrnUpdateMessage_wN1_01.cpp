@@ -49,17 +49,12 @@ namespace BrnNetwork
         s32 liCameraStatus  = static_cast<s32>(mUpdateData.meCameraStatus);
         s32 liHeadsetStatus = mUpdateData.meHeadsetStatus;
 
-        rw::math::vpu::Vector3 lPositionMin;
-        lPositionMin.x = -KF_UPDATE_POSITION_MAX_XZ;
-        lPositionMin.y = -KF_UPDATE_POSITION_MAX_Y;
-        lPositionMin.z = -KF_UPDATE_POSITION_MAX_XZ;
-        lPositionMin.w = 0.0f;
-
-        rw::math::vpu::Vector3 lPositionMax;
-        lPositionMax.x = KF_UPDATE_POSITION_MAX_XZ;
-        lPositionMax.y = KF_UPDATE_POSITION_MAX_Y;
-        lPositionMax.z = KF_UPDATE_POSITION_MAX_XZ;
-        lPositionMax.w = 0.0f;
+        const rw::math::vpu::Vector3 lPositionMin(-KF_UPDATE_POSITION_MAX_XZ,
+                                                   -KF_UPDATE_POSITION_MAX_Y,
+                                                   -KF_UPDATE_POSITION_MAX_XZ);
+        const rw::math::vpu::Vector3 lPositionMax(KF_UPDATE_POSITION_MAX_XZ,
+                                                   KF_UPDATE_POSITION_MAX_Y,
+                                                   KF_UPDATE_POSITION_MAX_XZ);
 
         lxResult = CgsNetwork::PackOrUnpackMatrix(this, &mUpdateData.mMatrix,
                                                   KI_UPDATE_ROLL_BITS, KI_UPDATE_PITCH_BITS, KI_UPDATE_YAW_BITS,
