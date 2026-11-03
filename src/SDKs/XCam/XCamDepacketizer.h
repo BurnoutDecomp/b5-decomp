@@ -61,10 +61,7 @@ namespace XCAM
 
 // ---- raw Xbox 360 XDK heap + timing API (platform boundary) -----------------
 // The asm calls XMemAlloc(SIZE_T,DWORD)->LPVOID / XMemFree(LPVOID,DWORD) and the
-// XMemAlloc/XMemFree use the XDK declarations. QueryPerformance declarations
-// retain the existing reconstruction pending a separate API review.
-extern "C" u8 QueryPerformanceCounter(s64* pCount);
-extern "C" u8 QueryPerformanceFrequency(s64* pFrequency);
+// Heap and performance-counter APIs use the XDK declarations.
 
 // XMemAlloc/XMemFree attribute word for the depacketizer buffers (lis 0x6090 /
 // ori 0x2068) -- the same tag the sibling CPacketizer uses.
@@ -200,8 +197,8 @@ public:
     RecoveryPacket** mpRecoveryTable;      // +0x18 table of muRecoveryCount packets
     FrameHeader      maHeaders[15];        // +0x20 embedded reorder-list nodes
     FrameHeader*     mpCurrentHeader;      // +0x278 head of the reorder list
-    s64              mPerfFrequency;       // +0x280 QueryPerformanceFrequency
-    s64              mLastDecodeTime;      // +0x288 QPC stamp of last decoded frame
+    LARGE_INTEGER    mPerfFrequency;       // +0x280 QueryPerformanceFrequency
+    LARGE_INTEGER    mLastDecodeTime;      // +0x288 QPC stamp of last decoded frame
     int              miMaxLatencyMs;       // +0x290 latency budget (200 ms)
     int              miAvgDecodeMs;        // +0x294 running decode-interval avg
     u16              muCurrentSeq;         // +0x298 current playback sequence
