@@ -17,7 +17,7 @@ namespace BrnGui
 {
     // Original C++ initialization writes no module/toggle/status/base data.
     SatNavDebugComponent::SatNavDebugComponent()
-        : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag{})
+        : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag())
     {
         mInputQueue.MarkUnconstructed();
     }
@@ -92,10 +92,10 @@ namespace BrnGui
         miSatNavAlpha = 90;
 
         const Vector4& lrv4Rect = MapTransform::GetSatNavViewRect();
-        mfSatNavTopLeftX     = lrv4Rect.x;
-        mfSatNavTopLeftY     = lrv4Rect.y;
-        mfSatNavBottomRightX = lrv4Rect.z;
-        mfSatNavBottomRightY = lrv4Rect.w;
+        mfSatNavTopLeftX     = static_cast<f32>(lrv4Rect.GetX());
+        mfSatNavTopLeftY     = static_cast<f32>(lrv4Rect.GetY());
+        mfSatNavBottomRightX = static_cast<f32>(lrv4Rect.GetZ());
+        mfSatNavBottomRightY = static_cast<f32>(lrv4Rect.GetW());
     }
 
     // Republish the (debug-tunable) view band as the lerp band, read the current view distance
@@ -198,10 +198,10 @@ namespace BrnGui
         }
 
         const Vector4& lrv4Rect = MapTransform::GetSatNavViewRect();
-        const f32 lfX0 = lrv4Rect.x * KF_SATNAV_HUD_WIDTH;   // TopLeftX     * 1280
-        const f32 lfY0 = lrv4Rect.y * KF_SATNAV_HUD_HEIGHT;  // TopLeftY     *  720
-        const f32 lfX1 = lrv4Rect.z * KF_SATNAV_HUD_WIDTH;   // BottomRightX * 1280
-        const f32 lfY1 = lrv4Rect.w * KF_SATNAV_HUD_HEIGHT;  // BottomRightY *  720
+        const f32 lfX0 = static_cast<f32>(lrv4Rect.GetX()) * KF_SATNAV_HUD_WIDTH;   // TopLeftX     * 1280
+        const f32 lfY0 = static_cast<f32>(lrv4Rect.GetY()) * KF_SATNAV_HUD_HEIGHT;  // TopLeftY     *  720
+        const f32 lfX1 = static_cast<f32>(lrv4Rect.GetZ()) * KF_SATNAV_HUD_WIDTH;   // BottomRightX * 1280
+        const f32 lfY1 = static_cast<f32>(lrv4Rect.GetW()) * KF_SATNAV_HUD_HEIGHT;  // BottomRightY *  720
 
         lpRender->DrawFrame( lfX0, lfY0, lfX1, lfY1, 0xFFFF0000u, KF_SATNAV_OUTLINE_BORDER );
     }
@@ -263,10 +263,10 @@ namespace BrnGui
     {
         // Republish the sat-nav viewport rectangle (a single aligned Vector4 store on the X360).
         Vector4 lv4Rect;
-        lv4Rect.x = mfSatNavTopLeftX;
-        lv4Rect.y = mfSatNavTopLeftY;
-        lv4Rect.z = mfSatNavBottomRightX;
-        lv4Rect.w = mfSatNavBottomRightY;
+        lv4Rect.SetX(mfSatNavTopLeftX);
+        lv4Rect.SetY(mfSatNavTopLeftY);
+        lv4Rect.SetZ(mfSatNavBottomRightX);
+        lv4Rect.SetW(mfSatNavBottomRightY);
         MapTransform::SetSatNavRect(lv4Rect);
 
         CGS_ASSERT(miSatNavAlpha <= 100, "miSatNavAlpha <= 100");   // BrnGuiSatNavDebugComponent.cpp:264

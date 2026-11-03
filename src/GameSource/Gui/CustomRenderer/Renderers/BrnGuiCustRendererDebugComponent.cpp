@@ -14,11 +14,11 @@ void GuiCustRendererDebugComponent::UpdateBoostColours()
     const Vector3 lv3Inner = lpRenderer->GetInnerBoostBarColour();
     const Vector3 lv3Outer = lpRenderer->GetOuterBoostBarColour();
 
-    mfBoostInnerRed   = lv3Inner.x;  // guest +0x24
-    mfBoostInnerGreen = lv3Inner.y;  // guest +0x28
-    mfBoostInnerBlue  = lv3Inner.z;  // guest +0x2C
-    mfBoostOuterRed   = lv3Outer.x;  // guest +0x18
-    mfBoostOuterGreen = lv3Outer.y;  // guest +0x1C
-    mfBoostOuterBlue  = lv3Outer.z;  // guest +0x20
+    mfBoostInnerRed   = static_cast<f32>(lv3Inner.GetX());  // guest +0x24
+    mfBoostInnerGreen = static_cast<f32>(lv3Inner.GetY());  // guest +0x28
+    mfBoostInnerBlue  = static_cast<f32>(lv3Inner.GetZ());  // guest +0x2C
+    mfBoostOuterRed   = static_cast<f32>(lv3Outer.GetX());  // guest +0x18
+    mfBoostOuterGreen = static_cast<f32>(lv3Outer.GetY());  // guest +0x1C
+    mfBoostOuterBlue  = static_cast<f32>(lv3Outer.GetZ());  // guest +0x20
 }
 }
