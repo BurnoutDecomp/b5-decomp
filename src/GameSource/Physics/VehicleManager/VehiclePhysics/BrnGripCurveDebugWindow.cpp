@@ -48,10 +48,10 @@ namespace Vehicle
             GripCurveDebugGraph* lpGraph = lapGraphs[liGraph];
             const Vector4& lrCurve = lpGraph->GetGripCurve()->maGripVariables;
             rw::math::vpu::Vector2 lRange;
-            lRange.x = GripMultiply(GripMaximum(lrCurve.x, lrCurve.y), 1.2f);
-            lRange.y = GripMultiply(GripMaximum(lrCurve.z, lrCurve.w), 1.2f);
+            lRange.mV.x = GripMultiply(GripMaximum(lrCurve.GetVector().x, lrCurve.GetVector().y), 1.2f);
+            lRange.mV.y = GripMultiply(GripMaximum(lrCurve.GetVector().z, lrCurve.GetVector().w), 1.2f);
             // ARTIST vperm mask 82CDA350 is {A.x, B.y, A.x, A.x}.
-            lRange.z = lRange.w = lRange.x;
+            lRange.mV.z = lRange.mV.w = lRange.mV.x;
             lpGraph->SetRange(lRange);
         }
         CgsDev::DebugUI::Window::Update(lfTimeStep, leEvent);
@@ -64,23 +64,23 @@ namespace Vehicle
         CgsDev::DebugUI::Window::Render(lpDisplay);
         rw::math::vpu::Vector2 lLongLocation;
         lLongLocation.SetZero();
-        lLongLocation.x = GetX() + 20.0f;
-        lLongLocation.y = GetY() + 40.0f;
+        lLongLocation.mV.x = GetX() + 20.0f;
+        lLongLocation.mV.y = GetY() + 40.0f;
         mLongGripCurveGraph.SetLocation(lLongLocation);
         rw::math::vpu::Vector2 lLatLocation = lLongLocation;
-        lLatLocation.y = (lLongLocation.y + 225.0f) + 60.0f;
-        lLatLocation.z = lLatLocation.w = lLongLocation.x;
+        lLatLocation.mV.y = (lLongLocation.mV.y + 225.0f) + 60.0f;
+        lLatLocation.mV.z = lLatLocation.mV.w = lLongLocation.mV.x;
         mLatGripCurveGraph.SetLocation(lLatLocation);
         mLongGripCurveGraph.Render(lpDisplay);
         mLatGripCurveGraph.Render(lpDisplay);
-        mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.y, 0xFF0000FFu);
-        mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.y, 0xFFFF0000u);
-        mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.x, 0xFF0000FFu);
-        mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.x, 0xFFFF0000u);
+        mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.GetVector().y, 0xFF0000FFu);
+        mLongGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.GetVector().y, 0xFFFF0000u);
+        mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpLeftWheel->mSlipVariables.GetVector().x, 0xFF0000FFu);
+        mLatGripCurveGraph.PlotCurrentValue(lpDisplay, mpRightWheel->mSlipVariables.GetVector().x, 0xFFFF0000u);
         const rw::math::vpu::Vector2 lLongTitle = mLongGripCurveGraph.GetTitleLocation();
-        lpDisplay->DrawText("Long grip curve", lLongTitle.x, lLongTitle.y, 18.0f, 0xFF000000u);
+        lpDisplay->DrawText("Long grip curve", lLongTitle.mV.x, lLongTitle.mV.y, 18.0f, 0xFF000000u);
         const rw::math::vpu::Vector2 lLatTitle = mLatGripCurveGraph.GetTitleLocation();
-        lpDisplay->DrawText("Lateral grip curve", lLatTitle.x, lLatTitle.y, 18.0f, 0xFF000000u);
+        lpDisplay->DrawText("Lateral grip curve", lLatTitle.mV.x, lLatTitle.mV.y, 18.0f, 0xFF000000u);
     }
 
     // Construct: seat both graphs, clear the wheel pair and start hidden. The console inlines the
@@ -127,8 +127,8 @@ namespace Vehicle
         const f32 lfSlipRatioRange = GetSlipRatioRange();
         rw::math::vpu::Vector2 lvGraphRange;
         lvGraphRange.SetZero();
-        lvGraphRange.x = lfSlipRatioRange;
-        lvGraphRange.y = lfCoefficientRange;
+        lvGraphRange.mV.x = lfSlipRatioRange;
+        lvGraphRange.mV.y = lfCoefficientRange;
         mLongGripCurveGraph.SetRange(lvGraphRange);
         mLatGripCurveGraph.SetRange(lvGraphRange);
 
@@ -171,8 +171,10 @@ namespace Vehicle
     {
         const Wheel::TireGripCurve* lpLong = mLongGripCurveGraph.GetGripCurve();
         const Wheel::TireGripCurve* lpLat = mLatGripCurveGraph.GetGripCurve();
-        const f32 lfLongMax = GripMaximum(lpLong->maGripVariables.x, lpLong->maGripVariables.y);
-        const f32 lfLatMax = GripMaximum(lpLat->maGripVariables.x, lpLat->maGripVariables.y);
+        const f32 lfLongMax = GripMaximum(lpLong->maGripVariables.GetVector().x,
+                                          lpLong->maGripVariables.GetVector().y);
+        const f32 lfLatMax = GripMaximum(lpLat->maGripVariables.GetVector().x,
+                                         lpLat->maGripVariables.GetVector().y);
         return InitialGripRange(lfLongMax, lfLatMax);
     }
 
@@ -183,8 +185,10 @@ namespace Vehicle
     {
         const Wheel::TireGripCurve* lpLong = mLongGripCurveGraph.GetGripCurve();
         const Wheel::TireGripCurve* lpLat = mLatGripCurveGraph.GetGripCurve();
-        const f32 lfLongMax = GripMaximum(lpLong->maGripVariables.z, lpLong->maGripVariables.w);
-        const f32 lfLatMax = GripMaximum(lpLat->maGripVariables.z, lpLat->maGripVariables.w);
+        const f32 lfLongMax = GripMaximum(lpLong->maGripVariables.GetVector().z,
+                                          lpLong->maGripVariables.GetVector().w);
+        const f32 lfLatMax = GripMaximum(lpLat->maGripVariables.GetVector().z,
+                                         lpLat->maGripVariables.GetVector().w);
         return InitialGripRange(lfLongMax, lfLatMax);
     }
 }

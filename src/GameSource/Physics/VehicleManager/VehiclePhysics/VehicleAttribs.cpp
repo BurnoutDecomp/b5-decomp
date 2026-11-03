@@ -272,7 +272,9 @@ namespace
 // helper is that vspltw.
 inline VecFloat KVF(f32 lfValue)
 {
-    { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
+    VecFloat lResult;
+    lResult.SetFloat(lfValue);
+    return lResult;
 }
 }
 
@@ -533,28 +535,28 @@ void VehicleAttribs::Construct()
 {
     // ---- mBaseAttribs: the geometry, as four whole-register stores -------------------------
     {
-        const Vector3 lAggregateValue = { KF_WHEEL_POS_X, KF_WHEEL_POS_Y, KF_FRONT_WHEEL_POS_Z, KF_ZERO };
+        const Vector3 lAggregateValue(KF_WHEEL_POS_X, KF_WHEEL_POS_Y, KF_FRONT_WHEEL_POS_Z);
         mBaseAttribs.mFrontRightWheelPos = lAggregateValue;
     }
     {
-        const Vector3 lAggregateValue = { KF_WHEEL_POS_X, KF_WHEEL_POS_Y, KF_REAR_WHEEL_POS_Z,  KF_ZERO };
+        const Vector3 lAggregateValue(KF_WHEEL_POS_X, KF_WHEEL_POS_Y, KF_REAR_WHEEL_POS_Z);
         mBaseAttribs.mRearRightWheelPos = lAggregateValue;
     }
 
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x = KF_MASS;
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y = KF_TIME_FOR_FULL_BRAKE_RECIP;
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z = KF_MAX_SPEED;
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.w = KF_DOWN_FORCE;
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().x = KF_MASS;
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().y = KF_TIME_FOR_FULL_BRAKE_RECIP;
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().z = KF_MAX_SPEED;
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().w = KF_DOWN_FORCE;
 
-    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.x = KF_DOWN_FORCE_Z_OFFSET;
-    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.y = KF_ONE;
-    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.z = KF_ONE;
-    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.w = KF_ONE;
+    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().x = KF_DOWN_FORCE_Z_OFFSET;
+    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().y = KF_ONE;
+    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().z = KF_ONE;
+    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().w = KF_ONE;
 
-    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.x = KF_TRACTION_LINE_LENGTH;
-    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.y = KF_LOW_SPEED_DRIVING_MPH;
-    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.z = KF_LOW_SPEED_TYRE_FRICTION_TC;
-    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.w = KF_LOW_SPEED_THROTTLE_TC;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().x = KF_TRACTION_LINE_LENGTH;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().y = KF_LOW_SPEED_DRIVING_MPH;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().z = KF_LOW_SPEED_TYRE_FRICTION_TC;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().w = KF_LOW_SPEED_THROTTLE_TC;
 
     // 0x825F41DC / 0x825F41F8 -- both with r3 == this+0x60.
     mBaseAttribs.mBrakeScaleToFactorCurve.Construct();
@@ -565,42 +567,42 @@ void VehicleAttribs::Construct()
     mBaseAttribs.miRaceCarID = 0;                                     // 0x825F4250 stw r28,0x50(r31)
 
     // .y (AngularDrag) intentionally absent -- see the banner.
-    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x = KF_LINEAR_DRAG;
-    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.z = KF_HIGH_SPEED_ANGULAR_DAMPING;
-    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.w = KF_WHEEL_MASS;
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().x = KF_LINEAR_DRAG;
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().z = KF_HIGH_SPEED_ANGULAR_DAMPING;
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().w = KF_WHEEL_MASS;
 
-    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.x = KF_WHEEL_MASS;
-    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y = KF_POWER_TO_FRONT;
-    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z = KF_POWER_TO_REAR;
-    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.w = KF_DOWN_FORCE_LIFT_CO;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().x = KF_WHEEL_MASS;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().y = KF_POWER_TO_FRONT;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().z = KF_POWER_TO_REAR;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().w = KF_DOWN_FORCE_LIFT_CO;
 
     {
-        const Vector3 lAggregateValue = { KF_ZERO, KF_COM_OFFSET_Y, KF_COM_OFFSET_Z, KF_ZERO };
+        const Vector3 lAggregateValue(KF_ZERO, KF_COM_OFFSET_Y, KF_COM_OFFSET_Z);
         mBaseAttribs.mCOMOffset = lAggregateValue;
     }
 
-    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x = KF_PITCH_DAMPING_ON_TAKE_OFF;
-    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y = KF_YAW_DAMPING_ON_TAKE_OFF;
-    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z = KF_ROLL_DAMPING_ON_TAKE_OFF;
-    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.w = KF_ROLL_LIMIT_ON_TAKE_OFF;
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().x = KF_PITCH_DAMPING_ON_TAKE_OFF;
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().y = KF_YAW_DAMPING_ON_TAKE_OFF;
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().z = KF_ROLL_DAMPING_ON_TAKE_OFF;
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().w = KF_ROLL_LIMIT_ON_TAKE_OFF;
 
-    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x = KF_SURFACE_FACTOR;
-    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.y = KF_SURFACE_FACTOR;
-    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z = KF_SURFACE_FACTOR;
-    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w = KF_SURFACE_FACTOR;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().x = KF_SURFACE_FACTOR;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().y = KF_SURFACE_FACTOR;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().z = KF_SURFACE_FACTOR;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().w = KF_SURFACE_FACTOR;
 
     {
-        const Vector3Plus lValue = { KF_ZERO,
-                                                           KF_CRASH_EXTRA_VELOCITY_FACTOR,
-                                                           KF_CRASH_EXTRA_VELOCITY_FACTOR,
-                                                           KF_CRASH_EXTRA_VELOCITY_FACTOR };
+        const Vector3Plus lValue(KF_ZERO,
+                                 KF_CRASH_EXTRA_VELOCITY_FACTOR,
+                                 KF_CRASH_EXTRA_VELOCITY_FACTOR,
+                                 KF_CRASH_EXTRA_VELOCITY_FACTOR);
         mBaseAttribs.mCrashExtraVelocityFactors = lValue;
     }
     {
-        const Vector4 lAggregateValue = { KF_DRIVETIME_DEFORM_LIMIT_X,
-                                                   KF_DRIVETIME_DEFORM_LIMIT_Y,
-                                                   KF_DRIVETIME_DEFORM_LIMIT_Z,
-                                                   KF_DRIVETIME_DEFORM_LIMIT_W };
+        const Vector4 lAggregateValue(KF_DRIVETIME_DEFORM_LIMIT_X,
+                                      KF_DRIVETIME_DEFORM_LIMIT_Y,
+                                      KF_DRIVETIME_DEFORM_LIMIT_Z,
+                                      KF_DRIVETIME_DEFORM_LIMIT_W);
         mBaseAttribs.mDrivetimeDeformLimits = lAggregateValue;
     }
 
@@ -610,52 +612,52 @@ void VehicleAttribs::Construct()
     // ---- mSteeringAttribs ------------------------------------------------------------------
     // the asm's single `fdivs f0, f30, f0` is literally 1.0f / <the .y lane just written>,
     // and its quotient goes into the .z lane -- SpeedForMinAngle / SpeedForMinAngleRecip.
-    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.x = KF_STEERING_REACTION_PER_SEC;
-    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y = KF_STEERING_SPEED_FOR_MIN_ANGLE;
-    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.z =
-        KF_ONE / mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y;
-    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.w = KF_STEERING_MIN_ANGLE;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().x = KF_STEERING_REACTION_PER_SEC;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().y = KF_STEERING_SPEED_FOR_MIN_ANGLE;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().z =
+        KF_ONE / mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().y;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().w = KF_STEERING_MIN_ANGLE;
 
-    mSteeringAttribs.mvMaxAngle_StraightReactionBias.x = KF_STEERING_MAX_ANGLE;
-    mSteeringAttribs.mvMaxAngle_StraightReactionBias.y = KF_STEERING_STRAIGHT_REACTION_BIAS;
+    mSteeringAttribs.mvMaxAngle_StraightReactionBias.GetVector().x = KF_STEERING_MAX_ANGLE;
+    mSteeringAttribs.mvMaxAngle_StraightReactionBias.GetVector().y = KF_STEERING_STRAIGHT_REACTION_BIAS;
 
     // ---- mDriftAttribs ---------------------------------------------------------------------
-    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.x = KF_DRIFT_TORQUE_FALL_OFF;
-    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.y = KF_GRIP_FROM_STEERING;
-    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.z = KF_GRIP_FROM_BRAKE;
-    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.w = KF_TIME_FOR_NATURAL_DRIFT;
+    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().x = KF_DRIFT_TORQUE_FALL_OFF;
+    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().y = KF_GRIP_FROM_STEERING;
+    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().z = KF_GRIP_FROM_BRAKE;
+    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().w = KF_TIME_FOR_NATURAL_DRIFT;
 
-    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.x = KF_BRAKING_DRIFT_SCALE_FACTOR;
-    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.y = KF_GAS_DRIFT_SCALE_FACTOR;
-    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.z = KF_TIME_TO_CAP_SCALE;
-    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.w = KF_CAPPED_SCALE;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().x = KF_BRAKING_DRIFT_SCALE_FACTOR;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().y = KF_GAS_DRIFT_SCALE_FACTOR;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().z = KF_TIME_TO_CAP_SCALE;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().w = KF_CAPPED_SCALE;
 
-    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x = KF_MIN_SPEED_FOR_DRIFT;
-    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.y = KF_STEERING_DRIFT_SCALE_FACTOR;
-    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.z = KF_COUNTER_STEERING_DRIFT_SCALE;
-    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.w = KF_BASE_COUNTER_STEERING_DRIFT_SCALE;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().x = KF_MIN_SPEED_FOR_DRIFT;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().y = KF_STEERING_DRIFT_SCALE_FACTOR;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().z = KF_COUNTER_STEERING_DRIFT_SCALE;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().w = KF_BASE_COUNTER_STEERING_DRIFT_SCALE;
 
-    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.x = KF_DRIFT_PUSH_SCALE_LIMIT;
-    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.y = KF_DRIFT_PUSH_BASE_FACTOR;
-    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.z = KF_MAX_POWER_SLIDE_FACTOR;
+    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.GetVector().x = KF_DRIFT_PUSH_SCALE_LIMIT;
+    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.GetVector().y = KF_DRIFT_PUSH_BASE_FACTOR;
+    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.GetVector().z = KF_MAX_POWER_SLIDE_FACTOR;
 
-    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.x = KF_DRIFT_ANGULAR_DAMPING;
-    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.y = KF_MAX_DRIFT_ANGLE;
-    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.z = KF_COUNTER_STEER_TORQUE_SCALE_FACTOR;
-    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.w = KF_DRIFT_PUSH_TIME;
+    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().x = KF_DRIFT_ANGULAR_DAMPING;
+    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().y = KF_MAX_DRIFT_ANGLE;
+    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().z = KF_COUNTER_STEER_TORQUE_SCALE_FACTOR;
+    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().w = KF_DRIFT_PUSH_TIME;
 
-    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.x = KF_NEUTRAL_TIME_TO_REDUCE_DRIFT;
-    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.y = KF_SIDE_FORCE_DRIFT_SCALE_CUT_OFF;
-    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.z = KF_SIDE_FORCE_DRIFT_ANGLE_CUT_OFF;
-    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.w = KF_SIDE_FORCE_DRIFT_SPEED_CUT_OFF;
+    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().x = KF_NEUTRAL_TIME_TO_REDUCE_DRIFT;
+    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().y = KF_SIDE_FORCE_DRIFT_SCALE_CUT_OFF;
+    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().z = KF_SIDE_FORCE_DRIFT_ANGLE_CUT_OFF;
+    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().w = KF_SIDE_FORCE_DRIFT_SPEED_CUT_OFF;
 
-    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.x = KF_SIDE_FORCE_PEAK_DRIFT_ANGLE;
-    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.y = KF_SIDE_FORCE_MAGNITUDE;
-    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.z = KF_NATURAL_DRIFT_DECAY;
-    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.w = KF_NATURAL_DRIFT_DECAY_POWER;
+    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().x = KF_SIDE_FORCE_PEAK_DRIFT_ANGLE;
+    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().y = KF_SIDE_FORCE_MAGNITUDE;
+    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().z = KF_NATURAL_DRIFT_DECAY;
+    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().w = KF_NATURAL_DRIFT_DECAY_POWER;
 
-    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.x = KF_NATURAL_YAW_TORQUE;
-    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.y = KF_NATURAL_YAW_TORQUE_CUT_OFF_ANGLE;
+    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().x = KF_NATURAL_YAW_TORQUE;
+    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().y = KF_NATURAL_YAW_TORQUE_CUT_OFF_ANGLE;
 
     // 0x825F484C / 0x825F486C -- both with r3 == this+0x100.
     mDriftAttribs.mDriftScaleToYawTorque.Construct();
@@ -663,52 +665,52 @@ void VehicleAttribs::Construct()
                                                  KF_DRIFT_YAW_CURVE_PARAM_B,
                                                  KF_DRIFT_YAW_CURVE_PARAM_C);
 
-    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.z = KF_TORQUE_KICK_FROM_GAS_LET_OFF;
-    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.w = KF_DRIFT_SIDEWAYS_DAMPING;
+    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().z = KF_TORQUE_KICK_FROM_GAS_LET_OFF;
+    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().w = KF_DRIFT_SIDEWAYS_DAMPING;
 
     // ---- mSuspensionAttribs ----------------------------------------------------------------
-    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.x = KF_SUSPENSION_REST_DISPLACEMENT;
-    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.y = KF_SUSPENSION_DAMPENING;
-    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z = KF_SUSPENSION_UPWARD_MOVEMENT;
-    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w = KF_SUSPENSION_DOWNWARD_MOVEMENT;
+    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().x = KF_SUSPENSION_REST_DISPLACEMENT;
+    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().y = KF_SUSPENSION_DAMPENING;
+    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().z = KF_SUSPENSION_UPWARD_MOVEMENT;
+    mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().w = KF_SUSPENSION_DOWNWARD_MOVEMENT;
 
-    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x = KF_FRONT_WHEEL_HEIGHT_OFFSET;
-    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y = KF_REAR_WHEEL_HEIGHT_OFFSET;
-    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.z = KF_IN_AIR_DAMPING;
-    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.w = KF_MAX_PITCH_DAMPING_ON_LANDING;
+    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().x = KF_FRONT_WHEEL_HEIGHT_OFFSET;
+    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().y = KF_REAR_WHEEL_HEIGHT_OFFSET;
+    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().z = KF_IN_AIR_DAMPING;
+    mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().w = KF_MAX_PITCH_DAMPING_ON_LANDING;
 
-    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.x = KF_MAX_YAW_DAMPING_ON_LANDING;
-    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.y = KF_MAX_ROLL_DAMPING_ON_LANDING;
-    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.z = KF_MAX_VERT_VELOCITY_DAMPING;
-    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.w = KF_TIME_TO_DAMP_AFTER_LANDING;
+    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.GetVector().x = KF_MAX_YAW_DAMPING_ON_LANDING;
+    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.GetVector().y = KF_MAX_ROLL_DAMPING_ON_LANDING;
+    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.GetVector().z = KF_MAX_VERT_VELOCITY_DAMPING;
+    mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.GetVector().w = KF_TIME_TO_DAMP_AFTER_LANDING;
 
     // ---- mBodyRollAttribs ------------------------------------------------------------------
-    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.x = KF_WEIGHT_TRANSFER_DECAY_X;
-    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.y = KF_WEIGHT_TRANSFER_DECAY_Z;
-    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.z = KF_FACTOR_OF_WEIGHT_X;
-    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.w = KF_FACTOR_OF_WEIGHT_Z;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().x = KF_WEIGHT_TRANSFER_DECAY_X;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().y = KF_WEIGHT_TRANSFER_DECAY_Z;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().z = KF_FACTOR_OF_WEIGHT_X;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().w = KF_FACTOR_OF_WEIGHT_Z;
 
-    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.x = KF_WHEEL_LONG_FORCE_HEIGHT_OFFSET;
-    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.y = KF_WHEEL_LAT_FORCE_HEIGHT_OFFSET;
+    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.GetVector().x = KF_WHEEL_LONG_FORCE_HEIGHT_OFFSET;
+    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.GetVector().y = KF_WHEEL_LAT_FORCE_HEIGHT_OFFSET;
 
     // ---- mCollisionAttribs -----------------------------------------------------------------
     // 0x825F4BD0 `vmulfp128 v0, [unk_83017FE0], splat(150.0f)` -- see the KF_MPH_TO_MPS note.
-    mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.x = KF_CRASH_SPEED_MPH * KF_MPH_TO_MPS;
-    mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y = KF_CAR_ANGULAR_IMPULSE_SCALE;
+    mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.GetVector().x = KF_CRASH_SPEED_MPH * KF_MPH_TO_MPS;
+    mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.GetVector().y = KF_CAR_ANGULAR_IMPULSE_SCALE;
 
     // ---- mBoostAttribs ---------------------------------------------------------------------
-    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.x = KF_BOOST_BASE;
-    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y = KF_MAX_BOOST_SPEED;
-    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.z = KF_BOOST_LINEAR_DRAG;
-    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.w = KF_NORMAL_BOOST_HEIGHT_OFFSET;
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().x = KF_BOOST_BASE;
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().y = KF_MAX_BOOST_SPEED;
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().z = KF_BOOST_LINEAR_DRAG;
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().w = KF_NORMAL_BOOST_HEIGHT_OFFSET;
 
-    mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.x = KF_NORMAL_BOOST_ACCELERATION;
-    mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.y = KF_BOOST_KICK_MAX_START_SPEED;
-    mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.z = KF_BOOST_KICK_MAX_TIME;
-    mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.w = KF_BOOST_KICK_MIN_TIME;
+    mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.GetVector().x = KF_NORMAL_BOOST_ACCELERATION;
+    mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.GetVector().y = KF_BOOST_KICK_MAX_START_SPEED;
+    mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.GetVector().z = KF_BOOST_KICK_MAX_TIME;
+    mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.GetVector().w = KF_BOOST_KICK_MIN_TIME;
 
-    mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.x = KF_BOOST_KICK_ACCELERATION;
-    mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.y = KF_BOOST_KICK_HEIGHT_OFFSET;
+    mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.GetVector().x = KF_BOOST_KICK_ACCELERATION;
+    mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.GetVector().y = KF_BOOST_KICK_HEIGHT_OFFSET;
 
     // ---- the two tires + the validity byte --------------------------------------------------
     mFrontTireAttribs.PrepareDefaultFrontTire();                      // 0x825F4CB4  r3 == this+0x2D0
@@ -770,14 +772,14 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
                                                       BP_VA_SRC_F(lpData, 0x34),
                                                       BP_VA_SRC_F(lpData, 0x38));
 
-        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().x
             = BP_VA_SRC_F(lpData, 0x104);                             // DrivingMass
         // the single fdivs (f31 == 1.0, loaded @0x825F4D98): the reciprocal is LIVE, not baked.
-        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y
+        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().y
             = 1.0f / BP_VA_SRC_F(lpData, 0x48);                       // 1 / TimeForFullBrake
-        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
+        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().z
             = BP_VA_SRC_F(lpData, 0xA8);                              // MaxSpeed
-        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.w
+        mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().w
             = BP_VA_SRC_F(lpData, 0x11C);                             // DownForce
 
         // the wheel positions come through SWAPPED relative to the record (same as the
@@ -786,82 +788,82 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
         mBaseAttribs.mRearRightWheelPos  = *reinterpret_cast<const Vector3*>(lpData + (0x00 >> 2)); // RearRightWheelPosition
 
         mBaseAttribs.mCOMOffset = *reinterpret_cast<const Vector3*>(lpData + (0x20 >> 2));          // CoMOffset
-        mBaseAttribs.mCOMOffset.x = 0.0f;   // the x lane is FORCED to 0 (stack round-trip), as in the SVA streamer
+        mBaseAttribs.mCOMOffset.GetVector().x = 0.0f;   // the x lane is FORCED to 0 (stack round-trip), as in the SVA streamer
 
-        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.x
+        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().x
             = BP_VA_SRC_F(lpData, 0x118);                             // DownForceZOffset
-        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.y
+        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().y
             = BP_VA_SRC_F(lpData, 0xAC);                              // MagicBrakeFactorTurning
-        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.z
+        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().z
             = BP_VA_SRC_F(lpData, 0xB0);                              // MagicBrakeFactorStraightLine
-        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.w
+        mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().w
             = BP_VA_SRC_F(lpData, 0xC0);                              // LockBrakeScale
 
         // fsel: negative traction-line lengths clamp to 0 (same idiom as the SVA streamer).
         {
             const f32 lfLen = BP_VA_SRC_F(lpData, 0x44);              // TractionLineLength
-            mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.x
+            mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().x
                 = (lfLen >= 0.0f) ? lfLen : 0.0f;
         }
-        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.y
+        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().y
             = BP_VA_SRC_F(lpData, 0xBC);                              // LowSpeedDrivingSpeed
-        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.z
+        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().z
             = BP_VA_SRC_F(lpData, 0xB4);                              // LowSpeedTyreFrictionTractionControl
-        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.w
+        mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().w
             = BP_VA_SRC_F(lpData, 0xB8);                              // LowSpeedThrottleTractionControl
 
         // record +0xC4 is LinearDrag's shipped seat (the schema's ALT offset 196; the primary
         // +0x04 seat is NOT what the console reads). The .y lane (AngularDrag) is NOT streamed.
-        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x
+        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().x
             = BP_VA_SRC_F(lpData, 0xC4);                              // LinearDrag (ALT seat 0xC4)
-        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.z
+        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().z
             = BP_VA_SRC_F(lpData, 0xC8);                              // HighSpeedAngularDamping
-        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.w
+        mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().w
             = BP_VA_SRC_F(lpData, 0xCC);                              // FrontWheelMass
 
-        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.x
+        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().x
             = BP_VA_SRC_F(lpData, 0x64);                              // RearWheelMass
-        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y
+        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().y
             = BP_VA_SRC_F(lpData, 0xA0);                              // PowerToFront
-        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z
+        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().z
             = BP_VA_SRC_F(lpData, 0x9C);                              // PowerToRear
         // (.w DownForceLiftCo is streamed from the DRIFT record below.)
 
-        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x
+        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().x
             = BP_VA_SRC_F(lpData, 0xA4);                              // PitchDampingOnTakeOff
-        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y
+        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().y
             = BP_VA_SRC_F(lpData, 0x40);                              // YawDampingOnTakeOff
-        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z
+        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().z
             = BP_VA_SRC_F(lpData, 0x60);                              // RollDampingOnTakeOff
-        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.w
+        mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().w
             = BP_VA_SRC_F(lpData, 0x5C);                              // RollLimitOnTakeOff
 
-        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x
+        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().x
             = BP_VA_SRC_F(lpData, 0x54);                              // SurfaceFrontGripFactor
-        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.y
+        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().y
             = BP_VA_SRC_F(lpData, 0x50);                              // SurfaceRearGripFactor
-        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z
+        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().z
             = BP_VA_SRC_F(lpData, 0x4C);                              // SurfaceRoughnessFactor
-        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w
+        mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().w
             = BP_VA_SRC_F(lpData, 0x58);                              // SurfaceDragFactor
 
         // crash-extra factors: the x (pitch) lane is loaded from record +0x128, then
         // OVERWRITTEN with 0 -- both stores are the console's own.
-        mBaseAttribs.mCrashExtraVelocityFactors.x = BP_VA_SRC_F(lpData, 0x128);   // CrashExtraPitchVelocityFactor
-        mBaseAttribs.mCrashExtraVelocityFactors.y = BP_VA_SRC_F(lpData, 0x120);   // CrashExtraYawVelocityFactor
-        mBaseAttribs.mCrashExtraVelocityFactors.z = BP_VA_SRC_F(lpData, 0x124);   // CrashExtraRollVelocityFactor
-        mBaseAttribs.mCrashExtraVelocityFactors.w = BP_VA_SRC_F(lpData, 0x12C);   // CrashExtraLinearVelocityFactor
-        mBaseAttribs.mCrashExtraVelocityFactors.x = 0.0f;                          // the pitch lane is zeroed
+        mBaseAttribs.mCrashExtraVelocityFactors.GetVector().x = BP_VA_SRC_F(lpData, 0x128);   // CrashExtraPitchVelocityFactor
+        mBaseAttribs.mCrashExtraVelocityFactors.GetVector().y = BP_VA_SRC_F(lpData, 0x120);   // CrashExtraYawVelocityFactor
+        mBaseAttribs.mCrashExtraVelocityFactors.GetVector().z = BP_VA_SRC_F(lpData, 0x124);   // CrashExtraRollVelocityFactor
+        mBaseAttribs.mCrashExtraVelocityFactors.GetVector().w = BP_VA_SRC_F(lpData, 0x12C);   // CrashExtraLinearVelocityFactor
+        mBaseAttribs.mCrashExtraVelocityFactors.GetVector().x = 0.0f;                          // the pitch lane is zeroed
 
-        mBaseAttribs.mDrivetimeDeformLimits.x = BP_VA_SRC_F(lpData, 0x108);       // DriveTimeDeformLimitX
-        mBaseAttribs.mDrivetimeDeformLimits.y = BP_VA_SRC_F(lpData, 0x114);       // DriveTimeDeformLimitNegY
-        mBaseAttribs.mDrivetimeDeformLimits.z = BP_VA_SRC_F(lpData, 0x10C);       // DriveTimeDeformLimitPosZ
-        mBaseAttribs.mDrivetimeDeformLimits.w = BP_VA_SRC_F(lpData, 0x110);       // DriveTimeDeformLimitNegZ
+        mBaseAttribs.mDrivetimeDeformLimits.GetVector().x = BP_VA_SRC_F(lpData, 0x108);       // DriveTimeDeformLimitX
+        mBaseAttribs.mDrivetimeDeformLimits.GetVector().y = BP_VA_SRC_F(lpData, 0x114);       // DriveTimeDeformLimitNegY
+        mBaseAttribs.mDrivetimeDeformLimits.GetVector().z = BP_VA_SRC_F(lpData, 0x10C);       // DriveTimeDeformLimitPosZ
+        mBaseAttribs.mDrivetimeDeformLimits.GetVector().w = BP_VA_SRC_F(lpData, 0x110);       // DriveTimeDeformLimitNegZ
 
         // AS SHIPPED: the drift block's TorqueKickFromGasLetOff lane is streamed from the
         // BASE record's word +0x20 -- the word the schema names CoMOffset.x (whose own dest
         // lane above is force-zeroed). Transcribed exactly; do not "fix" to a drift field.
-        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.z
+        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().z
             = BP_VA_SRC_F(lpData, 0x20);
 
         // 0x825F5138/0x825F5144: the two per-car tire scatters (REAL -- Wheel.cpp).
@@ -881,7 +883,7 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
         // 0x825F51A0 `vmulfp128 v0, splat(record+0x00), [unk_83017FE0]`: the record's crash
         // speed is authored in MPH and stored in m/s. unk_83017FE0 is HOMED: .bss, splatted at
         // static-init by the writer @0x82C6D160 from flt_82F31928 == 0.44704 == KF_MPH_TO_MPS.
-        mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.x
+        mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.GetVector().x
             = BP_VA_SRC_F(lpData, 0x00) * KF_MPH_TO_MPS;              // CrashSpeed (MPH -> m/s)
 
         // the ONE branch in the whole function (vcmpgtfp/beq @0x825F51E0): an authored scale
@@ -900,7 +902,7 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
             {
                 lfLane = 1.0f;                                        // f31 == flt_82001C98
             }
-            mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y = lfLane;
+            mCollisionAttribs.mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.GetVector().y = lfLane;
         }
     }
 
@@ -913,27 +915,27 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
             NULL);
         const f32* lpData = static_cast<const f32*>(lBoost.GetLayoutPointer());
 
-        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.x
+        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().x
             = BP_VA_SRC_F(lpData, 0x28);                              // BoostBase
-        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y
+        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().y
             = BP_VA_SRC_F(lpData, 0x00);                              // MaxBoostSpeed
         // (.z BoostLinearDrag is DERIVED below, after the drift block, from the streamed
         //  LinearDrag; .w here:)
-        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.w
+        mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().w
             = BP_VA_SRC_F(lpData, 0x24);                              // BoostHeightOffset
 
-        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.x
+        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.GetVector().x
             = BP_VA_SRC_F(lpData, 0x2C);                              // BoostAcceleration
-        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.y
+        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.GetVector().y
             = BP_VA_SRC_F(lpData, 0x14);                              // BoostKickMaxStartSpeed
-        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.z
+        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.GetVector().z
             = BP_VA_SRC_F(lpData, 0x10);                              // BoostKickMaxTime
-        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.w
+        mBoostAttribs.mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime.GetVector().w
             = BP_VA_SRC_F(lpData, 0x0C);                              // BoostKickMinTime
 
-        mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.x
+        mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.GetVector().x
             = BP_VA_SRC_F(lpData, 0x1C);                              // BoostKickAcceleration
-        mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.y
+        mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.GetVector().y
             = BP_VA_SRC_F(lpData, 0x18);                              // BoostKickHeightOffset
         // (miBoostRule / BoostKickTime / BoostKick / the Blue* block are NOT streamed.)
     }
@@ -947,18 +949,18 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
             NULL);
         const f32* lpData = static_cast<const f32*>(lRoll.GetLayoutPointer());
 
-        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.x
+        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().x
             = BP_VA_SRC_F(lpData, 0x0C);                              // WeightTransferDecayX
-        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.y
+        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().y
             = BP_VA_SRC_F(lpData, 0x08);                              // WeightTransferDecayZ
-        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.z
+        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().z
             = BP_VA_SRC_F(lpData, 0x24);                              // FactorOfWeightX
-        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.w
+        mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().w
             = BP_VA_SRC_F(lpData, 0x20);                              // FactorOfWeightZ
 
-        mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.x
+        mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.GetVector().x
             = BP_VA_SRC_F(lpData, 0x00);                              // WheelLongForceHeightOffset
-        mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.y
+        mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.GetVector().y
             = BP_VA_SRC_F(lpData, 0x04);                              // WheelLatForceHeightOffset
         // (the spring block, record +0x10..0x1C, is NOT streamed.)
     }
@@ -972,31 +974,31 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
             NULL);
         const f32* lpData = static_cast<const f32*>(lSusp.GetLayoutPointer());
 
-        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.x
+        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().x
             = BP_VA_SRC_F(lpData, 0x0C);                              // SpringLength
-        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.y
+        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().y
             = BP_VA_SRC_F(lpData, 0x30);                              // Dampening
-        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z
+        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().z
             = BP_VA_SRC_F(lpData, 0x00);                              // UpwardMovement
-        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w
+        mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().w
             = BP_VA_SRC_F(lpData, 0x2C);                              // DownwardMovement
 
-        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x
+        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().x
             = BP_VA_SRC_F(lpData, 0x28);                              // FrontHeight
-        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y
+        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().y
             = BP_VA_SRC_F(lpData, 0x10);                              // RearHeight
-        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.z
+        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().z
             = BP_VA_SRC_F(lpData, 0x24);                              // InAirDamping
-        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.w
+        mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().w
             = BP_VA_SRC_F(lpData, 0x20);                              // MaxPitchDampingOnLanding
 
-        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.x
+        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.GetVector().x
             = BP_VA_SRC_F(lpData, 0x14);                              // MaxYawDampingOnLanding
-        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.y
+        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.GetVector().y
             = BP_VA_SRC_F(lpData, 0x1C);                              // MaxRollDampingOnLanding
-        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.z
+        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.GetVector().z
             = BP_VA_SRC_F(lpData, 0x18);                              // MaxVertVelocityDampingOnLanding
-        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.w
+        mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding.GetVector().w
             = BP_VA_SRC_F(lpData, 0x04);                              // TimeToDampAfterLanding
         // (record +0x08 Strength is NOT streamed.)
     }
@@ -1010,20 +1012,20 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
             NULL);
         const f32* lpData = static_cast<const f32*>(lSteer.GetLayoutPointer());
 
-        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y
+        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().y
             = BP_VA_SRC_F(lpData, 0x08);                              // SpeedForMinAngle
-        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.w
+        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().w
             = BP_VA_SRC_F(lpData, 0x10);                              // MinAngle
         // the two LIVE fdivs (f31 == 1.0): the reaction rate is 1/TimeForLock, and the
         // min-angle speed's reciprocal rides in its own lane.
-        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.z
+        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().z
             = 1.0f / BP_VA_SRC_F(lpData, 0x08);                       // 1 / SpeedForMinAngle
-        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.x
+        mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().x
             = 1.0f / BP_VA_SRC_F(lpData, 0x00);                       // 1 / TimeForLock
 
-        mSteeringAttribs.mvMaxAngle_StraightReactionBias.x
+        mSteeringAttribs.mvMaxAngle_StraightReactionBias.GetVector().x
             = BP_VA_SRC_F(lpData, 0x14);                              // MaxAngle
-        mSteeringAttribs.mvMaxAngle_StraightReactionBias.y
+        mSteeringAttribs.mvMaxAngle_StraightReactionBias.GetVector().y
             = BP_VA_SRC_F(lpData, 0x04);                              // StraightReactionBias
     }
 
@@ -1036,72 +1038,72 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
             NULL);
         const f32* lpData = static_cast<const f32*>(lDrift.GetLayoutPointer());
 
-        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.w
+        mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().w
             = BP_VA_SRC_F(lpData, 0x10);   // ⚠️ AS SHIPPED: DownForceLiftCo <- the drift record's
                                            // +0x10 (the word the schema names WheelSlip)
 
-        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x
+        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().x
             = BP_VA_SRC_F(lpData, 0x4C);                              // MinSpeedForDrift
-        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.y
+        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().y
             = BP_VA_SRC_F(lpData, 0x1C);                              // SteeringDriftScaleFactor
-        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.z
+        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().z
             = BP_VA_SRC_F(lpData, 0x88);                              // CounterSteeringDriftScaleFactor
-        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.w
+        mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().w
             = BP_VA_SRC_F(lpData, 0x94);                              // BaseCounterSteeringDriftScaleFactor
 
-        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.x
+        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().x
             = BP_VA_SRC_F(lpData, 0x90);                              // BrakingDriftScaleFactor
-        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.y
+        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().y
             = BP_VA_SRC_F(lpData, 0x6C);                              // GasDriftScaleFactor
-        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.z
+        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().z
             = BP_VA_SRC_F(lpData, 0x14);                              // TimeToCapScale
-        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.w
+        mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().w
             = BP_VA_SRC_F(lpData, 0x8C);                              // CappedScale
 
-        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.x
+        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().x
             = BP_VA_SRC_F(lpData, 0x78);                              // DriftTorqueFallOff
-        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.y
+        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().y
             = BP_VA_SRC_F(lpData, 0x60);                              // GripFromSteering
-        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.z
+        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().z
             = BP_VA_SRC_F(lpData, 0x68);                              // GripFromBrake
-        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.w
+        mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().w
             = BP_VA_SRC_F(lpData, 0x18);                              // TimeForNaturalDrift
 
-        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.x
+        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().x
             = BP_VA_SRC_F(lpData, 0x34);                              // NeutralTimeToReduceDrift
-        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.y
+        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().y
             = BP_VA_SRC_F(lpData, 0x30);                              // SideForceDirftScaleCutOff [sic]
-        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.z
+        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().z
             = BP_VA_SRC_F(lpData, 0x2C);                              // SideForceDriftAngleCutOff
-        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.w
+        mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().w
             = BP_VA_SRC_F(lpData, 0x28);                              // SideForceDriftSpeedCutOff
 
-        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.x
+        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().x
             = BP_VA_SRC_F(lpData, 0x20);                              // SideForcePeakDriftAngle
-        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.y
+        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().y
             = BP_VA_SRC_F(lpData, 0x24);                              // SideForceMagnitude
-        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.z
+        mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().z
             = BP_VA_SRC_F(lpData, 0x48);                              // NaturalDriftScaleDecay
         // (.w NaturalDriftDecayPower is NOT streamed.)
 
-        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.x
+        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().x
             = BP_VA_SRC_F(lpData, 0x3C);                              // NaturalYawTorque
-        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.y
+        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().y
             = BP_VA_SRC_F(lpData, 0x38);                              // NaturalYawTorqueCutOffAngle
         // (.z TorqueKickFromGasLetOff was streamed from the BASE record above.)
-        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.w
+        mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().w
             = BP_VA_SRC_F(lpData, 0x7C);                              // DriftSidewaysDamping
 
-        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.x
+        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().x
             = BP_VA_SRC_F(lpData, 0x84);                              // DriftAngularDamping
-        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.y
+        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().y
             = BP_VA_SRC_F(lpData, 0x80);                              // DriftMaxAngle
-        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.z
+        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().z
             = BP_VA_SRC_F(lpData, 0x74);                              // ForcedDriftStartSlip
-        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.w
+        mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().w
             = BP_VA_SRC_F(lpData, 0x50);                              // InitialDriftPushTime
 
-        mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.z
+        mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.GetVector().z
             = BP_VA_SRC_F(lpData, 0x58);                              // InitialDriftPushDynamicInc
         // (.x DriftPushScaleLimit / .y DriftPushBaseFactor are NOT streamed.)
 
@@ -1114,8 +1116,8 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
 
     // 0x825F5888 `vmulfp128`: BoostLinearDrag is DERIVED, not authored -- 0.75 (flt_82004018)
     // of the LinearDrag lane streamed above.
-    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.z
-        = mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x * 0.75f;
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().z
+        = mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().x * 0.75f;
 
     // ---- the engine record (data+0x30 RefSpec) ---------------------------------------------
     {
@@ -1146,13 +1148,13 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
             ++siMassDumps;
             *CgsDev::Log::gpDebugPrint
                 << "[engine-attribs] mass "
-                << mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
+                << mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().x
                 << " maxSpeed "
-                << mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
+                << mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().z
                 << " powerToFront "
-                << mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y
+                << mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().y
                 << " powerToRear "
-                << mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z
+                << mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().z
                 << "\n";
         }
     }
@@ -1297,57 +1299,57 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
                                                   KF_AI_BRAKE_CURVE_C);
 
     // ---- mBaseAttribs (+0x70..+0xD0) -- fixed AI lanes -------------------------------------
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.w = KF_AI_DOWNFORCE;      // vrlimi(1)
-    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.x = 0.0f;
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x = KF_AI_MASS_PRESEED;   // (overwritten below)
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z = KF_AI_MAX_SPEED_PRESEED;  // (overwritten below)
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y = KF_AI_TIME_FOR_FULL_BRAKE_RECIP;
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().w = KF_AI_DOWNFORCE;      // vrlimi(1)
+    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().x = 0.0f;
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().x = KF_AI_MASS_PRESEED;   // (overwritten below)
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().z = KF_AI_MAX_SPEED_PRESEED;  // (overwritten below)
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().y = KF_AI_TIME_FOR_FULL_BRAKE_RECIP;
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         mBaseAttribs.mCOMOffset = lAggregateValue;
     }   // 0x825F5A34 (re-copied below)
-    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.w = KF_AI_BRAKE_SCALE_TO_LOCK;
-    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.x = KF_AI_TRACTION_LINE_LENGTH;
-    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.y = KF_AI_LOW_SPEED_DRIVING_MPH;
-    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.z = KF_AI_LOW_SPEED_TYRE_FRICTION_TC;
-    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.w = KF_AI_LOW_SPEED_THROTTLE_TC;
-    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.z = KF_AI_HIGH_SPEED_ANGULAR_DAMPING;
-    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.w = KF_AI_WHEEL_MASS;
-    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.x = KF_AI_WHEEL_MASS;
-    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y = 0.0f;   // PowerToFront
-    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z = 1.0f;   // PowerToRear
-    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x = 0.0f;  // LinearDrag
-    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x = KF_AI_PITCH_DAMPING_ON_TAKEOFF;
-    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y = KF_AI_YAW_DAMPING_ON_TAKEOFF;
-    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z = KF_AI_ROLL_DAMPING_ON_TAKEOFF;
+    mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.GetVector().w = KF_AI_BRAKE_SCALE_TO_LOCK;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().x = KF_AI_TRACTION_LINE_LENGTH;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().y = KF_AI_LOW_SPEED_DRIVING_MPH;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().z = KF_AI_LOW_SPEED_TYRE_FRICTION_TC;
+    mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().w = KF_AI_LOW_SPEED_THROTTLE_TC;
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().z = KF_AI_HIGH_SPEED_ANGULAR_DAMPING;
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().w = KF_AI_WHEEL_MASS;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().x = KF_AI_WHEEL_MASS;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().y = 0.0f;   // PowerToFront
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().z = 1.0f;   // PowerToRear
+    mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().x = 0.0f;  // LinearDrag
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().x = KF_AI_PITCH_DAMPING_ON_TAKEOFF;
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().y = KF_AI_YAW_DAMPING_ON_TAKEOFF;
+    mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.GetVector().z = KF_AI_ROLL_DAMPING_ON_TAKEOFF;
 
     // 0x825F5BE4..0x825F5C90: [re-copy] the four surface-factor lanes from the source, one
     // vspltw/vrlimi pair per lane (redundant after operator= -- transcribed as shipped).
-    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x
-        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.x;
-    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.y
-        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.y;
-    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z
-        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z;
-    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w
-        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().x
+        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().x;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().y
+        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().y;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().z
+        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().z;
+    mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().w
+        = lpSource->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.GetVector().w;
 
     // 0x825F5C94..0x825F5CD0: the source-derived seats.
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
-        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;   // Mass [re-copy]
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().x
+        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().x;   // Mass [re-copy]
     mBaseAttribs.mCOMOffset = lpSource->mBaseAttribs.mCOMOffset;                      // [re-copy]
-    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
-        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
+    mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().z
+        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().z
           * KF_AI_MAX_SPEED_SCALE;                              // MaxSpeed = 1.2 * source's
     {
-        const Vector3Plus lValue = { 0.0f, KF_AI_CRASH_EXTRA_VEL_FACTOR,
-                                                           KF_AI_CRASH_EXTRA_VEL_FACTOR,
-                                                           KF_AI_CRASH_EXTRA_VEL_FACTOR };
+        const Vector3Plus lValue(0.0f, KF_AI_CRASH_EXTRA_VEL_FACTOR,
+                                 KF_AI_CRASH_EXTRA_VEL_FACTOR,
+                                 KF_AI_CRASH_EXTRA_VEL_FACTOR);
         mBaseAttribs.mCrashExtraVelocityFactors = lValue;
     }  // +0x30
     {
-        const Vector4 lAggregateValue = { KF_AI_DEFORM_LIMIT_X, KF_AI_DEFORM_LIMIT_Y,
-                                                   KF_AI_DEFORM_LIMIT_ZW, KF_AI_DEFORM_LIMIT_ZW };
+        const Vector4 lAggregateValue(KF_AI_DEFORM_LIMIT_X, KF_AI_DEFORM_LIMIT_Y,
+                                      KF_AI_DEFORM_LIMIT_ZW, KF_AI_DEFORM_LIMIT_ZW);
         mBaseAttribs.mDrivetimeDeformLimits = lAggregateValue;
     }  // +0x40
 
@@ -1359,18 +1361,18 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
     mBoostAttribs = lpSource->mBoostAttribs;
 
     // 0x825F5D04..0x825F5DB8: MaxBoostSpeed = 1.1 * source's (the vspltw-lane-1 * splat(1.1)).
-    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y
-        = lpSource->mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().y
+        = lpSource->mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().y
           * KF_AI_MAX_BOOST_SPEED_SCALE;
-    mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.y = 0.0f;   // +0x2B0 vrlimi(4)
+    mBoostAttribs.mvBoostKickAcceleration_BoostKickHeightOffset.GetVector().y = 0.0f;   // +0x2B0 vrlimi(4)
 
     // ---- mBodyRollAttribs (+0x260/+0x270): all six live lanes zeroed ------------------------
-    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.w = 0.0f;
-    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.z = 0.0f;
-    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.y = 0.0f;
-    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.x = 0.0f;
-    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.x = 0.0f;
-    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.y = 0.0f;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().w = 0.0f;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().z = 0.0f;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().y = 0.0f;
+    mBodyRollAttribs.mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ.GetVector().x = 0.0f;
+    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.GetVector().x = 0.0f;
+    mBodyRollAttribs.mvWheelLongForceHeightOffset_WheelLatForceHeightOffset.GetVector().y = 0.0f;
 
     // 0x825F5E18..0x825F5F36: [re-copy] the whole SuspensionAttribs block, lane by lane
     // (twelve vspltw/vrlimi pairs -- redundant after operator=, transcribed as shipped).
@@ -1382,29 +1384,29 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
         = lpSource->mSuspensionAttribs.mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding;
 
     // ---- mSteeringAttribs (+0xE0/+0xF0) ----------------------------------------------------
-    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.w = KF_AI_STEERING_MIN_ANGLE;
-    mSteeringAttribs.mvMaxAngle_StraightReactionBias.x = KF_AI_STEERING_MAX_ANGLE;
-    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y = KF_AI_SPEED_FOR_MIN_ANGLE;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().w = KF_AI_STEERING_MIN_ANGLE;
+    mSteeringAttribs.mvMaxAngle_StraightReactionBias.GetVector().x = KF_AI_STEERING_MAX_ANGLE;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().y = KF_AI_SPEED_FOR_MIN_ANGLE;
     // 0x825F5F64..0x825F5F7C: recip computed from the lane just written (fdivs 1.0 / 70.0).
-    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.z
-        = 1.0f / mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y;
-    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.x = KF_AI_STEERING_REACTION_PER_SEC;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().z
+        = 1.0f / mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().y;
+    mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.GetVector().x = KF_AI_STEERING_REACTION_PER_SEC;
 
     // ---- mBaseAttribs DownForceLiftCo + mDriftAttribs --------------------------------------
-    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.w = KF_AI_DOWNFORCE_LIFT_CO;
-    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.x = KF_AI_MIN_SPEED_FOR_DRIFT;
-    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.y = KF_AI_STEERING_DRIFT_SCALE;
-    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.w = KF_AI_BASE_COUNTER_STEERING_DRIFT_SCALE;
-    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.z = KF_AI_COUNTER_STEERING_DRIFT_SCALE;
-    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.x = 1.0f;
-    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.y = 1.0f;
-    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.z = 1.0f;
-    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.w = 1.0f;
-    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.x = KF_AI_DRIFT_TORQUE_FALL_OFF;
-    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.x = KF_AI_NEUTRAL_TIME_TO_REDUCE_DRIFT;
-    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.z = KF_AI_NATURAL_DRIFT_DECAY;
-    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.y = KF_AI_SIDE_FORCE_DRIFT_SCALE_CUTOFF;
-    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.y = KF_AI_SIDE_FORCE_MAGNITUDE;
+    mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().w = KF_AI_DOWNFORCE_LIFT_CO;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().x = KF_AI_MIN_SPEED_FOR_DRIFT;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().y = KF_AI_STEERING_DRIFT_SCALE;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().w = KF_AI_BASE_COUNTER_STEERING_DRIFT_SCALE;
+    mDriftAttribs.mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor.GetVector().z = KF_AI_COUNTER_STEERING_DRIFT_SCALE;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().x = 1.0f;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().y = 1.0f;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().z = 1.0f;
+    mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.GetVector().w = 1.0f;
+    mDriftAttribs.mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift.GetVector().x = KF_AI_DRIFT_TORQUE_FALL_OFF;
+    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().x = KF_AI_NEUTRAL_TIME_TO_REDUCE_DRIFT;
+    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().z = KF_AI_NATURAL_DRIFT_DECAY;
+    mDriftAttribs.mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff.GetVector().y = KF_AI_SIDE_FORCE_DRIFT_SCALE_CUTOFF;
+    mDriftAttribs.mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.GetVector().y = KF_AI_SIDE_FORCE_MAGNITUDE;
 
     // 0x825F6164..0x825F6184: the drift-scale-to-yaw-torque curve (this+0x100).
     mDriftAttribs.mDriftScaleToYawTorque.Construct();
@@ -1413,17 +1415,17 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
                                                  KF_AI_DRIFT_YAW_TORQUE_CURVE_C);
 
     // 0x825F6188..0x825F6254: the remaining drift lanes.
-    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.w = KF_AI_DRIFT_SIDEWAYS_DAMPING;
-    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.x = KF_AI_DRIFT_ANGULAR_DAMPING;
-    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.z = KF_AI_COUNTER_STEER_TORQUE_SCALE;
-    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.z = 0.0f;  // TorqueKickFromGasLetOff
-    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.z = 0.0f;       // MaxPowerSlideFactor
+    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().w = KF_AI_DRIFT_SIDEWAYS_DAMPING;
+    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().x = KF_AI_DRIFT_ANGULAR_DAMPING;
+    mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.GetVector().z = KF_AI_COUNTER_STEER_TORQUE_SCALE;
+    mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.GetVector().z = 0.0f;  // TorqueKickFromGasLetOff
+    mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.GetVector().z = 0.0f;       // MaxPowerSlideFactor
 
     // 0x825F6258..0x825F6274: BoostLinearDrag = 0.75 * this LinearDrag. AS SHIPPED this is
     // 0.75 * 0.0 == 0.0 -- LinearDrag was zeroed above -- but the console computes the product
     // from the live lane, so the dependence is kept.
-    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.z
-        = mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x
+    mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.GetVector().z
+        = mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().x
           * KF_AI_BOOST_LINEAR_DRAG_SCALE;
 
     // 0x825F6278: [re-copy] the whole EngineAttribs block (memcpy 0xA0 == sizeof, verified
@@ -1453,29 +1455,29 @@ void SimpleVehicleAttribs::Construct()
     const f32 KF_DEFAULT_UPWARD_MOVEMENT     = 0.11f;      // flt_820047C0 (0.109999999)
     const f32 KF_DEFAULT_DOWNWARD_MOVEMENT   = 0.125f;     // flt_82004010
 
-    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z = KF_DEFAULT_MASS;
-    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w = KF_DEFAULT_TRACTION_LINE;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().z = KF_DEFAULT_MASS;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().w = KF_DEFAULT_TRACTION_LINE;
     miRaceCarID = 0;                                                       // stw 0 -> +0xE0
     {
-        const Vector3 lAggregateValue = { KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
-                                   KF_DEFAULT_FRONT_WHEEL_Z, 0.0f };
+        const Vector3 lAggregateValue(KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
+                                      KF_DEFAULT_FRONT_WHEEL_Z);
         mFrontRightWheelPos = lAggregateValue;
     }       // +0xB0
     {
-        const Vector3 lAggregateValue = { KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
-                                   KF_DEFAULT_REAR_WHEEL_Z, 0.0f };
+        const Vector3 lAggregateValue(KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
+                                      KF_DEFAULT_REAR_WHEEL_Z);
         mRearRightWheelPos = lAggregateValue;
     }        // +0xC0
-    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.x = KF_DEFAULT_WHEEL_MASS;
-    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.y = KF_DEFAULT_WHEEL_MASS;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().x = KF_DEFAULT_WHEEL_MASS;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().y = KF_DEFAULT_WHEEL_MASS;
     {
-        const Vector3 lAggregateValue = { 0.0f, KF_DEFAULT_COM_Y, KF_DEFAULT_COM_Z, 0.0f };
+        const Vector3 lAggregateValue(0.0f, KF_DEFAULT_COM_Y, KF_DEFAULT_COM_Z);
         mCOMOffset = lAggregateValue;
     }  // +0xD0
-    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z = 0.0f;
-    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w = 0.0f;
-    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x = KF_DEFAULT_UPWARD_MOVEMENT;
-    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y = KF_DEFAULT_DOWNWARD_MOVEMENT;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().z = 0.0f;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().w = 0.0f;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().x = KF_DEFAULT_UPWARD_MOVEMENT;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().y = KF_DEFAULT_DOWNWARD_MOVEMENT;
 
     // 0x825E6748..0x825E6764: eight stvx128 of the zero vector -- both tires cleared whole.
     std::memset(&mFrontTireAttribs, 0, sizeof(mFrontTireAttribs));         // +0x20..+0x5F
@@ -1491,26 +1493,26 @@ void SimpleVehicleAttribs::Construct()
 // miRaceCarID is NOT copied -- as shipped.
 void SimpleVehicleAttribs::SetupAttribs(const VehicleAttribs* lpSource)
 {
-    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z
-        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;      // Mass
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().z
+        = lpSource->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.GetVector().x;      // Mass
     mFrontRightWheelPos = lpSource->mBaseAttribs.mFrontRightWheelPos;                    // +0xB0 <- src+0x00
     mRearRightWheelPos  = lpSource->mBaseAttribs.mRearRightWheelPos;                     // +0xC0 <- src+0x10
     mCOMOffset          = lpSource->mBaseAttribs.mCOMOffset;                             // +0xD0 <- src+0x20
-    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
-        = lpSource->mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.x;
-    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.x
-        = lpSource->mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.w;
-    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.y
-        = lpSource->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.x;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().w
+        = lpSource->mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.GetVector().x;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().x
+        = lpSource->mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.GetVector().w;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().y
+        = lpSource->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.GetVector().x;
     mAttribsKey = lpSource->mAttribsKey;                                                 // ld/std +0xA0 <- src+0x358
-    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z
-        = lpSource->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x;
-    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w
-        = lpSource->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y;
-    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x
-        = lpSource->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z;
-    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y
-        = lpSource->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().z
+        = lpSource->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().x;
+    mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().w
+        = lpSource->mSuspensionAttribs.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.GetVector().y;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().x
+        = lpSource->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().z;
+    mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().y
+        = lpSource->mSuspensionAttribs.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.GetVector().w;
 
     // The two 8 x ld/std copy loops (0x40 bytes each).
     mFrontTireAttribs = lpSource->mFrontTireAttribs;                                     // +0x20 <- src+0x2D0
@@ -1548,7 +1550,7 @@ void SimpleVehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandlin
             NULL);
         const f32* lpData = static_cast<const f32*>(lBase.GetLayoutPointer());
 
-        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z
+        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().z
             = BP_SVA_SRC_F(lpData, 0x104);                            // Mass        <- data+0x104
         mFrontRightWheelPos = *reinterpret_cast<const Vector3*>(lpData + (0x10 >> 2));  // <- data+0x10
         mRearRightWheelPos  = *reinterpret_cast<const Vector3*>(lpData + (0x00 >> 2));  // <- data+0x00
@@ -1557,16 +1559,16 @@ void SimpleVehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandlin
         // fsel f0,f0,f0,0.0 -- negative traction-line lengths clamp to 0.
         {
             const f32 lfLen = BP_SVA_SRC_F(lpData, 0x44);
-            mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
+            mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().w
                 = (lfLen >= 0.0f) ? lfLen : 0.0f;                     // TractionLineLength
         }
-        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.x
+        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().x
             = BP_SVA_SRC_F(lpData, 0xCC);                             // FrontWheelMass
-        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.y
+        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().y
             = BP_SVA_SRC_F(lpData, 0x64);                             // RearWheelMass
 
         // The stack round-trip that zeroes the COM x lane (stvx -> stfs 0.0 -> lvx -> stvx).
-        mCOMOffset.x = 0.0f;
+        mCOMOffset.GetVector().x = 0.0f;
 
         // the two tire scatters are REAL (the permute table
         // is homed and both bodies are image-emulated -- see the Wheel.cpp banner).
@@ -1583,13 +1585,13 @@ void SimpleVehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandlin
             NULL);
         const f32* lpData = static_cast<const f32*>(lSusp.GetLayoutPointer());
 
-        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z
+        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().z
             = BP_SVA_SRC_F(lpData, 0x28);                             // FrontWheelHeightOffset
-        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w
+        mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.GetVector().w
             = BP_SVA_SRC_F(lpData, 0x10);                             // RearWheelHeightOffset
-        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x
+        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().x
             = BP_SVA_SRC_F(lpData, 0x00);                             // UpwardMovement
-        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.y
+        mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.GetVector().y
             = BP_SVA_SRC_F(lpData, 0x2C);                             // DownwardMovement
     }
 

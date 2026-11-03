@@ -76,26 +76,38 @@ namespace Vehicle
         }
         Vector3 MakeHandlingVector3(f32 x, f32 y, f32 z, f32 w)
         {
-            const Vector3 value = {x,y,z,w};
-            return value;
+            const __vector4 value = {x,y,z,w};
+            return Vector3(value);
         }
 
         Vector3 HandlingScale(Vector3 lValue, f32 lfScale)
         {
-            { const Vector3 lResult = {HandlingMultiply(lValue.x, lfScale), HandlingMultiply(lValue.y, lfScale),
-                           HandlingMultiply(lValue.z, lfScale), HandlingMultiply(lValue.w, lfScale)}; return lResult; }
+            const __vector4 lResult = {
+                HandlingMultiply(lValue.GetVector().x, lfScale),
+                HandlingMultiply(lValue.GetVector().y, lfScale),
+                HandlingMultiply(lValue.GetVector().z, lfScale),
+                HandlingMultiply(lValue.GetVector().w, lfScale)};
+            return Vector3(lResult);
         }
 
         Vector3 HandlingAdd(Vector3 lA, Vector3 lB)
         {
-            { const Vector3 lResult = {HandlingAdd(lA.x, lB.x), HandlingAdd(lA.y, lB.y),
-                           HandlingAdd(lA.z, lB.z), HandlingAdd(lA.w, lB.w)}; return lResult; }
+            const __vector4 lResult = {
+                HandlingAdd(lA.GetVector().x, lB.GetVector().x),
+                HandlingAdd(lA.GetVector().y, lB.GetVector().y),
+                HandlingAdd(lA.GetVector().z, lB.GetVector().z),
+                HandlingAdd(lA.GetVector().w, lB.GetVector().w)};
+            return Vector3(lResult);
         }
 
         Vector3 HandlingMultiplyAdd(Vector3 lA, f32 lfC, Vector3 lB)
         {
-            { const Vector3 lResult = {HandlingMultiplyAdd(lA.x, lfC, lB.x), HandlingMultiplyAdd(lA.y, lfC, lB.y),
-                           HandlingMultiplyAdd(lA.z, lfC, lB.z), HandlingMultiplyAdd(lA.w, lfC, lB.w)}; return lResult; }
+            const __vector4 lResult = {
+                HandlingMultiplyAdd(lA.GetVector().x, lfC, lB.GetVector().x),
+                HandlingMultiplyAdd(lA.GetVector().y, lfC, lB.GetVector().y),
+                HandlingMultiplyAdd(lA.GetVector().z, lfC, lB.GetVector().z),
+                HandlingMultiplyAdd(lA.GetVector().w, lfC, lB.GetVector().w)};
+            return Vector3(lResult);
         }
 
         Vector3 HandlingNegate(Vector3 lValue)
@@ -112,11 +124,16 @@ namespace Vehicle
         {
             // vmulfp, vnmsubfp, then the YZXW word permutation. Preserve
             // the rounded first product and fused subtraction separately.
-            { const Vector3 lResult = {
-                HandlingNegativeMultiplySubtract(lA.z, lB.y, HandlingMultiply(lA.y, lB.z)),
-                HandlingNegativeMultiplySubtract(lA.x, lB.z, HandlingMultiply(lA.z, lB.x)),
-                HandlingNegativeMultiplySubtract(lA.y, lB.x, HandlingMultiply(lA.x, lB.y)),
-                HandlingNegativeMultiplySubtract(lA.w, lB.w, HandlingMultiply(lA.w, lB.w))}; return lResult; }
+            const __vector4 lResult = {
+                HandlingNegativeMultiplySubtract(lA.GetVector().z, lB.GetVector().y,
+                                                  HandlingMultiply(lA.GetVector().y, lB.GetVector().z)),
+                HandlingNegativeMultiplySubtract(lA.GetVector().x, lB.GetVector().z,
+                                                  HandlingMultiply(lA.GetVector().z, lB.GetVector().x)),
+                HandlingNegativeMultiplySubtract(lA.GetVector().y, lB.GetVector().x,
+                                                  HandlingMultiply(lA.GetVector().x, lB.GetVector().y)),
+                HandlingNegativeMultiplySubtract(lA.GetVector().w, lB.GetVector().w,
+                                                  HandlingMultiply(lA.GetVector().w, lB.GetVector().w))};
+            return Vector3(lResult);
         }
 
         Vector3 HandlingWorldToBodyDirection(const Matrix44Affine& lrTransform, Vector3 lDirection)
@@ -129,33 +146,37 @@ namespace Vehicle
             const f32 lfDeterminant = HandlingDot3(lrTransform.xAxis, lYZ);
             const f32 lfReciprocal = HandlingReciprocal(lfDeterminant);
             // The original merges duplicate the inverse Y component in W.
-            const Vector3 lRowX = HandlingScale(MakeHandlingVector3(lYZ.x, lZX.x, lXY.x, lZX.x), lfReciprocal);
-            const Vector3 lRowY = HandlingScale(MakeHandlingVector3(lYZ.y, lZX.y, lXY.y, lZX.y), lfReciprocal);
-            const Vector3 lRowZ = HandlingScale(MakeHandlingVector3(lYZ.z, lZX.z, lXY.z, lZX.z), lfReciprocal);
-            return HandlingMultiplyAdd(lRowZ, lDirection.z,
-                HandlingMultiplyAdd(lRowY, lDirection.y, HandlingScale(lRowX, lDirection.x)));
+            const Vector3 lRowX = HandlingScale(MakeHandlingVector3(lYZ.GetVector().x, lZX.GetVector().x, lXY.GetVector().x, lZX.GetVector().x), lfReciprocal);
+            const Vector3 lRowY = HandlingScale(MakeHandlingVector3(lYZ.GetVector().y, lZX.GetVector().y, lXY.GetVector().y, lZX.GetVector().y), lfReciprocal);
+            const Vector3 lRowZ = HandlingScale(MakeHandlingVector3(lYZ.GetVector().z, lZX.GetVector().z, lXY.GetVector().z, lZX.GetVector().z), lfReciprocal);
+            return HandlingMultiplyAdd(lRowZ, lDirection.GetVector().z,
+                HandlingMultiplyAdd(lRowY, lDirection.GetVector().y, HandlingScale(lRowX, lDirection.GetVector().x)));
         }
 
         Vector2 HandlingForcePoint(Vector2 lCentre, Vector3 lDirection, f32 lfForce)
         {
             const f32 lfForceScale = HandlingMultiply(0.0001f, lfForce);
-            const f32 lfX = HandlingMultiply(HandlingMultiply(lDirection.x, -30.0f), lfForceScale);
-            const f32 lfZ = HandlingMultiply(HandlingMultiply(lDirection.z, -30.0f), lfForceScale);
+            const f32 lfX = HandlingMultiply(HandlingMultiply(lDirection.GetVector().x, -30.0f), lfForceScale);
+            const f32 lfZ = HandlingMultiply(HandlingMultiply(lDirection.GetVector().z, -30.0f), lfForceScale);
             // vperm mask 82CDA350 is {X,Z,X,X}, followed by vaddfp.
-            { const Vector2 lResult = {HandlingAdd(lCentre.x, lfX), HandlingAdd(lCentre.y, lfZ),
-                           HandlingAdd(lCentre.z, lfX), HandlingAdd(lCentre.w, lfX)}; return lResult; }
+            const __vector4 lResult = {
+                HandlingAdd(lCentre.mV.x, lfX), HandlingAdd(lCentre.mV.y, lfZ),
+                HandlingAdd(lCentre.mV.z, lfX), HandlingAdd(lCentre.mV.w, lfX)};
+            Vector2 lPoint;
+            lPoint.mV = lResult;
+            return lPoint;
         }
 
         void AssertHandlingWheelPosition(Vector3 lPosition)
         {
-            if (!(lPosition.x == lPosition.x && lPosition.y == lPosition.y && lPosition.z == lPosition.z))
+            if (!(lPosition.GetVector().x == lPosition.GetVector().x && lPosition.GetVector().y == lPosition.GetVector().y && lPosition.GetVector().z == lPosition.GetVector().z))
             {
                 CgsDev::Assert::BeginAssert();
                 char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
                 lMessage << "Invalid wheel position: ";
-                lMessage.AppendFormat("(%f, %f, %f)", static_cast<double>(lPosition.x),
-                                      static_cast<double>(lPosition.y), static_cast<double>(lPosition.z));
+                lMessage.AppendFormat("(%f, %f, %f)", static_cast<double>(lPosition.GetVector().x),
+                                      static_cast<double>(lPosition.GetVector().y), static_cast<double>(lPosition.GetVector().z));
                 lMessage << ", please tell Graham D.";
                 CgsDev::Assert::FireAssert(lacMessage,
                     "..\\..\\..\\GameSource\\Physics/VehicleManager/VehiclePhysics/Wheel.h", 412);
@@ -195,22 +216,22 @@ namespace Vehicle
     // menu values are not applied back to the car by this update.
     void DebugComponent::Update()
     {
-        mafInertia[0] = mpRaceCarPhysics->mLocalInverseInertia.xAxis.x * 100.0f;
-        mafInertia[1] = mpRaceCarPhysics->mLocalInverseInertia.yAxis.y * 100.0f;
-        mafInertia[2] = mpRaceCarPhysics->mLocalInverseInertia.zAxis.z * 100.0f;
+        mafInertia[0] = mpRaceCarPhysics->mLocalInverseInertia.xAxis.GetVector().x * 100.0f;
+        mafInertia[1] = mpRaceCarPhysics->mLocalInverseInertia.yAxis.GetVector().y * 100.0f;
+        mafInertia[2] = mpRaceCarPhysics->mLocalInverseInertia.zAxis.GetVector().z * 100.0f;
         // ARTIST loads the same COM-offset X lane three times at 825DA59C,
         // 825DA5A8 and 825DA5B4; retain that original aliasing.
         for (s32 liAxis = 0; liAxis < 3; ++liAxis)
-            mafHackComOffset[liAxis] = mpRaceCarPhysics->mpAttribs->mBaseAttribs.mCOMOffset.x;
+            mafHackComOffset[liAxis] = mpRaceCarPhysics->mpAttribs->mBaseAttribs.mCOMOffset.GetVector().x;
         const Engine& lrEngine = mpRaceCarPhysics->mEngine;
         const Vector4& lrDrive = lrEngine.mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay;
         const Vector4& lrClutch = lrEngine.mvClutchFactor_RPM_CurrentGearChangeTime;
-        mfRPM = lrClutch.y;
-        mfEngineDrive = lrDrive.x;
-        mfReactionTorque = lrDrive.y;
-        mfFlyWheelAngularVelocity = lrDrive.z;
-        mfClutchDelay = lrDrive.w;
-        mfClutchFactor = lrClutch.x;
+        mfRPM = lrClutch.GetVector().y;
+        mfEngineDrive = lrDrive.GetVector().x;
+        mfReactionTorque = lrDrive.GetVector().y;
+        mfFlyWheelAngularVelocity = lrDrive.GetVector().z;
+        mfClutchDelay = lrDrive.GetVector().w;
+        mfClutchFactor = lrClutch.GetVector().x;
         if (mbRenderFrontWheelsGripCurves)
             mFrontWheelsGripCurveWindow.Show();
         else
@@ -227,8 +248,10 @@ namespace Vehicle
     {
         for (s32 liWheel = 0; liWheel < 4; ++liWheel)
         {
-            Vector3 lStart = {};
-            Vector3 lEnd = {};
+            Vector3 lStart;
+            lStart.SetZero();
+            Vector3 lEnd;
+            lEnd.SetZero();
             mpRaceCarPhysics->GetTractionLine(static_cast<EVehicleDrivenWheel>(liWheel), lStart, lEnd);
             lpDisplay->DrawArrow(lStart, lEnd, HandlingColour(0xFFFFFFFFu));
             if (maRoadContacts[liWheel].mbIsOnGround)
@@ -253,7 +276,7 @@ namespace Vehicle
     {
         const Vector3 lStart = mpRaceCarPhysics->GetPosition();
         Vector3 lEnd = lStart;
-        lEnd.y -= 10.0f;
+        lEnd.GetVector().y -= 10.0f;
         lpDisplay->DrawArrow(lStart, lEnd, HandlingColour(0xFFFFFFFFu));
         const AboveGroundTestResult& lrResult = *mpRaceCarPhysics->GetAboveGroundTestResult();
         if (lrResult.mbValid)
@@ -307,7 +330,7 @@ namespace Vehicle
                 const f32 lfScale = HandlingReciprocal(2000.0f); // flt_82F2A504
                 const Vector3 lEnd = HandlingMultiplyAdd(maSuspensionForces[liWheel], lfScale, lStart);
                 lpDisplay->DrawArrow(lStart, lEnd, HandlingColour(0xFFFFFFFFu));
-                lpDisplay->DrawHollowSphere(lStart, mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mSlipVariables.w,
+                lpDisplay->DrawHollowSphere(lStart, mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mSlipVariables.GetVector().w,
                                             HandlingColour(0xFFFFFFFFu));
             }
         }
@@ -323,10 +346,13 @@ namespace Vehicle
         const rw::math::vpu::Matrix44 lInverse = rw::math::vpu::Inverse(
             lpDisplay->GetViewProjectionMatrix(), lDeterminant);
         const Vector2 lScreenSize = lpDisplay->GetVirtualScreenSize();
-        const f32 lfAspectScale = HandlingMultiply(HandlingReciprocal(lScreenSize.x), lScreenSize.y);
+        const f32 lfAspectScale = HandlingMultiply(HandlingReciprocal(lScreenSize.mV.x), lScreenSize.mV.y);
         const Vector3 lCameraRight = HandlingScale(
-            MakeHandlingVector3(lInverse.xAxis.x, lInverse.xAxis.y, lInverse.xAxis.z, lInverse.xAxis.w), lfAspectScale);
-        const Vector3 lCameraUp = {lInverse.yAxis.x, lInverse.yAxis.y, lInverse.yAxis.z, lInverse.yAxis.w};
+            MakeHandlingVector3(lInverse.xAxis.GetVector().x, lInverse.xAxis.GetVector().y, lInverse.xAxis.GetVector().z, lInverse.xAxis.GetVector().w), lfAspectScale);
+        const __vector4 lCameraUpVector = {
+            lInverse.yAxis.GetVector().x, lInverse.yAxis.GetVector().y,
+            lInverse.yAxis.GetVector().z, lInverse.yAxis.GetVector().w};
+        const Vector3 lCameraUp(lCameraUpVector);
         const Matrix44Affine lBodyTransform = mpRaceCarPhysics->GetTransform();
         const Vector3 lAngularVelocity = mpRaceCarPhysics->GetAngularVelocity();
         const f32 lafRates[3] = {
@@ -374,10 +400,10 @@ namespace Vehicle
                 const Matrix44Affine lTransform = mpRaceCarPhysics->GetTransform();
                 AssertHandlingWheelPosition(mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mPosition);
                 const Vector3 lLocalPosition = mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mPosition;
-                Vector3 lWorldPosition = HandlingMultiplyAdd(lTransform.xAxis, lLocalPosition.x, lTransform.wAxis);
-                lWorldPosition = HandlingMultiplyAdd(lTransform.yAxis, lLocalPosition.y, lWorldPosition);
-                lWorldPosition = HandlingMultiplyAdd(lTransform.zAxis, lLocalPosition.z, lWorldPosition);
-                lpDisplay->DrawSphere(lWorldPosition, mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mSlipVariables.w,
+                Vector3 lWorldPosition = HandlingMultiplyAdd(lTransform.xAxis, lLocalPosition.GetVector().x, lTransform.wAxis);
+                lWorldPosition = HandlingMultiplyAdd(lTransform.yAxis, lLocalPosition.GetVector().y, lWorldPosition);
+                lWorldPosition = HandlingMultiplyAdd(lTransform.zAxis, lLocalPosition.GetVector().z, lWorldPosition);
+                lpDisplay->DrawSphere(lWorldPosition, mpRaceCarPhysics->GetWheel(static_cast<EVehicleDrivenWheel>(liWheel)).mSlipVariables.GetVector().w,
                                         HandlingColour(0xFFFFFFFFu));
             }
             lpDisplay->SetZTestEnable(CgsDev::Debug3DImmediateRender::E_ZTEST_ON);
@@ -424,23 +450,23 @@ namespace Vehicle
             const f32 lfX = (liWheel & 1) ? lfMidX - 100.0f : lfMidX + 100.0f;
             const f32 lfY = static_cast<f32>(liWheel >> 1) * 250.0f + lfBaseY;
             lpDisplay->DrawBox(lfX - 5.0f, lfY - 15.0f, lfX + 5.0f, lfY + 15.0f, lWheelColour);
-            const Vector2 lCentre = {lfX, lfY, 0.0f, 0.0f};
-            lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.x),
+            const Vector2 lCentre(lfX, lfY);
+            lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.GetVector().x),
                                   0xFF000000u);
-            const f32 lfNormalLoad = HandlingMultiplyAdd(lrWheel.mSpeedAndMassOnWheelVariables.z,
-                                                          9.81f, mpRaceCarPhysics->GetDownForce().x);
+            const f32 lfNormalLoad = HandlingMultiplyAdd(lrWheel.mSpeedAndMassOnWheelVariables.GetVector().z,
+                                                          9.81f, mpRaceCarPhysics->GetDownForce().GetFloat());
             // These radius stages are scalar fmuls, after the VMX load FMA.
-            const f32 lfFrictionRadius = ((lrTire.maPackedVariables.x * lfNormalLoad) * 0.0001f) * 30.0f;
+            const f32 lfFrictionRadius = ((lrTire.maPackedVariables.GetVector().x * lfNormalLoad) * 0.0001f) * 30.0f;
             lpDisplay->DrawCircle(lCentre, lfFrictionRadius, 64, 0xFFFF0000u);
-            const f32 lfAdhesiveRadius = (lrTire.maPackedVariables.z * 0.0001f) * 30.0f;
+            const f32 lfAdhesiveRadius = (lrTire.maPackedVariables.GetVector().z * 0.0001f) * 30.0f;
             lpDisplay->DrawCircle(lCentre, lfAdhesiveRadius, 64, 0xFF0000FFu);
-            lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLatDirection, lrWheel.mForceVariables.y),
+            lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLatDirection, lrWheel.mForceVariables.GetVector().y),
                                   0xFF000000u);
             if (lrWheel.mbBrokenAdhesiveLimit)
             {
-                lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.z),
+                lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLongDirection, lrWheel.mForceVariables.GetVector().z),
                                       0xFF0000FFu);
-                lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLatDirection, lrWheel.mForceVariables.w),
+                lpDisplay->DrawLine(lCentre, HandlingForcePoint(lCentre, lLatDirection, lrWheel.mForceVariables.GetVector().w),
                                       0xFF0000FFu);
             }
         }
@@ -459,20 +485,20 @@ namespace Vehicle
                 GearStats& lrPrevious = mGearStats[miCurrentGear];
                 if (!lrPrevious.mbDoneUpdating)
                 {
-                    lrPrevious.mfSpeedOutOfGearGoingUp = mpRaceCarPhysics->GetSpeedMPH().x;
+                    lrPrevious.mfSpeedOutOfGearGoingUp = mpRaceCarPhysics->GetSpeedMPH().GetFloat();
                     lrPrevious.mbDoneUpdating = true;
                     lrPrevious.mfRpmWhenChangedOutGoingUp = mfLastFrameRpm;
                 }
                 GearStats& lrCurrent = mGearStats[liGear];
                 if (!lrCurrent.mbDoneUpdating)
                     lrCurrent.mfRpmWhenChangedInGoingUp =
-                        mpRaceCarPhysics->mEngine.mvClutchFactor_RPM_CurrentGearChangeTime.y;
+                        mpRaceCarPhysics->mEngine.mvClutchFactor_RPM_CurrentGearChangeTime.GetVector().y;
             }
             miCurrentGear = liGear;
             if (!mGearStats[liGear].mbDoneUpdating)
                 mGearStats[liGear].mfTimeInGear = 0.0f;
         }
-        mfLastFrameRpm = mpRaceCarPhysics->mEngine.mvClutchFactor_RPM_CurrentGearChangeTime.y;
+        mfLastFrameRpm = mpRaceCarPhysics->mEngine.mvClutchFactor_RPM_CurrentGearChangeTime.GetVector().y;
 
         const s32 KU_STRING_BUFFER_SIZE = 2000;
         char lacText[KU_STRING_BUFFER_SIZE];
@@ -522,36 +548,36 @@ namespace Vehicle
         const CgsDev::RGBA lAxisColour = 0xFF000000u;
         const CgsDev::RGBA lCurveColour = 0xFFFF0000u; // dword_82FBA2A4
         const Vector2 lOrigin = GetPointOnGraph(0.0f, 0.0f);
-        lpDisplay->DrawLine(GetPointOnGraph(0.0f, mAxisRanges.y), lOrigin, lAxisColour);
-        lpDisplay->DrawLine(lOrigin, GetPointOnGraph(mAxisRanges.x, 0.0f), lAxisColour);
+        lpDisplay->DrawLine(GetPointOnGraph(0.0f, mAxisRanges.mV.y), lOrigin, lAxisColour);
+        lpDisplay->DrawLine(lOrigin, GetPointOnGraph(mAxisRanges.mV.x, 0.0f), lAxisColour);
         const Vector4& lrCurve = mpGripCurve->maGripVariables;
-        const Vector2 lPeak = GetPointOnGraph(lrCurve.x, lrCurve.z);
-        const Vector2 lFloor = GetPointOnGraph(lrCurve.y, lrCurve.w);
+        const Vector2 lPeak = GetPointOnGraph(lrCurve.GetVector().x, lrCurve.GetVector().z);
+        const Vector2 lFloor = GetPointOnGraph(lrCurve.GetVector().y, lrCurve.GetVector().w);
         lpDisplay->DrawLine(lOrigin, lPeak, lCurveColour);
         lpDisplay->DrawLine(lPeak, lFloor, lCurveColour);
-        lpDisplay->DrawLine(lFloor, GetPointOnGraph(mAxisRanges.x, lrCurve.w), lCurveColour);
-        PlotSlipRatioLabel(lpDisplay, mAxisRanges.x, lAxisColour);
-        PlotCoefficientLabel(lpDisplay, mAxisRanges.y, lAxisColour);
-        PlotSlipRatioLabel(lpDisplay, lrCurve.x, lAxisColour);
-        PlotSlipRatioLabel(lpDisplay, lrCurve.y, lAxisColour);
-        PlotCoefficientLabel(lpDisplay, lrCurve.z, lAxisColour);
-        PlotCoefficientLabel(lpDisplay, lrCurve.w, lAxisColour);
+        lpDisplay->DrawLine(lFloor, GetPointOnGraph(mAxisRanges.mV.x, lrCurve.GetVector().w), lCurveColour);
+        PlotSlipRatioLabel(lpDisplay, mAxisRanges.mV.x, lAxisColour);
+        PlotCoefficientLabel(lpDisplay, mAxisRanges.mV.y, lAxisColour);
+        PlotSlipRatioLabel(lpDisplay, lrCurve.GetVector().x, lAxisColour);
+        PlotSlipRatioLabel(lpDisplay, lrCurve.GetVector().y, lAxisColour);
+        PlotCoefficientLabel(lpDisplay, lrCurve.GetVector().z, lAxisColour);
+        PlotCoefficientLabel(lpDisplay, lrCurve.GetVector().w, lAxisColour);
     }
 
     // ARTIST 82603B28 (raw-image asm; export hole), DWARF h:185.
     void GripCurveDebugGraph::PlotCoefficientLabel(CgsDev::Debug2DImmediateRender* lpDisplay,
                                                    f32 lfCoefficient, CgsDev::RGBA lColour)
     {
-        lfCoefficient = ClampGripLabel(lfCoefficient, mAxisRanges.y);
+        lfCoefficient = ClampGripLabel(lfCoefficient, mAxisRanges.mV.y);
         char lacText[32];
         CgsCore::SPrintf(lacText, 16, "%4.1f", static_cast<double>(lfCoefficient));
         const Vector2 lPoint = GetPointOnGraph(0.0f, lfCoefficient);
         Vector2 lStart = lPoint;
         Vector2 lEnd = lPoint;
-        lStart.x -= 3.0f;
-        lEnd.x += 3.0f;
+        lStart.mV.x -= 3.0f;
+        lEnd.mV.x += 3.0f;
         lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
-        lpDisplay->DrawText(lacText, lPoint.x - 36.0f, lPoint.y - 9.0f, 18.0f, lColour);
+        lpDisplay->DrawText(lacText, lPoint.mV.x - 36.0f, lPoint.mV.y - 9.0f, 18.0f, lColour);
     }
 
     // ARTIST 82603CA8, DWARF h:192. Tick colour is always the axis colour;
@@ -559,16 +585,16 @@ namespace Vehicle
     void GripCurveDebugGraph::PlotSlipRatioLabel(CgsDev::Debug2DImmediateRender* lpDisplay,
                                                  f32 lfSlipRatio, CgsDev::RGBA lColour)
     {
-        lfSlipRatio = ClampGripLabel(lfSlipRatio, mAxisRanges.x);
+        lfSlipRatio = ClampGripLabel(lfSlipRatio, mAxisRanges.mV.x);
         char lacText[32];
         CgsCore::SPrintf(lacText, 16, "%4.1f", static_cast<double>(lfSlipRatio));
         const Vector2 lPoint = GetPointOnGraph(lfSlipRatio, 0.0f);
         Vector2 lStart = lPoint;
         Vector2 lEnd = lPoint;
-        lStart.y -= 3.0f;
-        lEnd.y += 3.0f;
+        lStart.mV.y -= 3.0f;
+        lEnd.mV.y += 3.0f;
         lpDisplay->DrawLine(lStart, lEnd, 0xFF000000u);
-        lpDisplay->DrawText(lacText, lPoint.x - 18.0f, lPoint.y + 9.0f, 18.0f, lColour);
+        lpDisplay->DrawText(lacText, lPoint.mV.x - 18.0f, lPoint.mV.y + 9.0f, 18.0f, lColour);
     }
 
     // ARTIST 82603E20: evaluate the actual curve at the clamped absolute
@@ -576,8 +602,10 @@ namespace Vehicle
     void GripCurveDebugGraph::PlotCurrentValue(CgsDev::Debug2DImmediateRender* lpDisplay,
                                               f32 lfSlipRatio, CgsDev::RGBA lColour)
     {
-        lfSlipRatio = ClampGripLabel(std::fabs(lfSlipRatio), mAxisRanges.x);
-        const f32 lfCoefficient = mpGripCurve->GetCoefficient(rw::math::vpu::Splat(lfSlipRatio)).x;
+        lfSlipRatio = ClampGripLabel(std::fabs(lfSlipRatio), mAxisRanges.mV.x);
+        VecFloat lvSlipRatio;
+        lvSlipRatio.SetFloat(lfSlipRatio);
+        const f32 lfCoefficient = mpGripCurve->GetCoefficient(lvSlipRatio).GetFloat();
         lpDisplay->DrawCircle(GetPointOnGraph(lfSlipRatio, lfCoefficient), 5.0f, 8, lColour);
         PlotCoefficientLabel(lpDisplay, lfCoefficient, lColour);
         PlotSlipRatioLabel(lpDisplay, lfSlipRatio, lColour);
@@ -704,19 +732,23 @@ namespace Vehicle
         // The last-wall-triangle record: four zero vectors, then the three edge cosines. The
         // console issues the vectors out of address order (the normal first); they are independent.
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            Vector3 lAggregateValue;
+            lAggregateValue.SetZero();
             mLastWallTriangle.mVertex0 = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            Vector3 lAggregateValue;
+            lAggregateValue.SetZero();
             mLastWallTriangle.mVertex1 = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            Vector3 lAggregateValue;
+            lAggregateValue.SetZero();
             mLastWallTriangle.mVertex2 = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            Vector3 lAggregateValue;
+            lAggregateValue.SetZero();
             mLastWallTriangle.mNormal = lAggregateValue;
         }
         mLastWallTriangle.mfEdgeCosine0 = 0.0f;
@@ -754,7 +786,8 @@ namespace Vehicle
         for (u32 luWheel = 0; luWheel < eNumDrivenWheels; ++luWheel)
         {
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                Vector3 lAggregateValue;
+                lAggregateValue.SetZero();
                 maSuspensionForces[luWheel] = lAggregateValue;
             }
             mabSuspensionForceApplied[luWheel] = false;
@@ -806,32 +839,32 @@ namespace Vehicle
         RegisterVariable(&mafInertia[2], "", "Inertia Z");
         RegisterVariable(&mfSpeedMPH, "", "Speed MPH");
 
-        RegisterVariable(&mpRaceCarPhysics->mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w,
+        RegisterVariable(&mpRaceCarPhysics->mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.GetVector().w,
                          "", "Drift Scale");
         RegisterVariable(
-            &mpRaceCarPhysics->mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w,
+            &mpRaceCarPhysics->mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.GetVector().w,
             "", "Drift Angle");
         RegisterVariable(
-            &mpRaceCarPhysics->mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.x,
+            &mpRaceCarPhysics->mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.GetVector().x,
             "", "Side Force Mag");
-        RegisterVariable(&mpRaceCarPhysics->mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x,
+        RegisterVariable(&mpRaceCarPhysics->mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.GetVector().x,
                          "", "Steering Angle");
         RegisterVariable(
-            &mpRaceCarPhysics->mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.w,
+            &mpRaceCarPhysics->mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.GetVector().w,
             "", "Brake Scale");
-        RegisterVariable(&mpRaceCarPhysics->mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y,
+        RegisterVariable(&mpRaceCarPhysics->mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.GetVector().y,
                          "", "Maintained Speed");
         RegisterVariable(
-            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x,
+            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetVector().x,
             "", "Maintain Z");
         RegisterVariable(
-            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y,
+            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetVector().y,
             "", "Maintain Vel");
         SetStep(
-            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x,
+            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetVector().x,
             0.0099999998f);
         SetStep(
-            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y,
+            &mpRaceCarPhysics->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.GetVector().y,
             0.0099999998f);
 
         InitWindows();
@@ -905,7 +938,7 @@ namespace Vehicle
 
         // (3) Mirror the car's speed. The console loads the whole mfSpeedMPH vector and keeps
         //     the x lane.
-        mfSpeedMPH = lpCar->GetSpeedMPH().x;
+        mfSpeedMPH = lpCar->GetSpeedMPH().GetFloat();
     }
 
     // BrnPhysics::Vehicle::DebugComponent::RecordDownForce
@@ -914,7 +947,7 @@ namespace Vehicle
     //   force vector's y lane (the only lane the force has).
     void DebugComponent::RecordDownForce(Vector3 lvDownForce)
     {
-        mfDownForceY = lvDownForce.y;
+        mfDownForceY = lvDownForce.GetVector().y;
     }
 }
 }
