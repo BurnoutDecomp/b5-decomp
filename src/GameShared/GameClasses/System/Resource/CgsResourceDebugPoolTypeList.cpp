@@ -275,17 +275,17 @@ namespace CgsResource
             }
         }
         lfY += 20.0f;
-        const Vector2 lvHeaderStart = { KF_NAME_X + lfX, lfHeaderLineY, 0.0f, 0.0f };
-        const Vector2 lvHeaderEnd = { (KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY, 0.0f, 0.0f };
+        const Vector2 lvHeaderStart = Vector2(KF_NAME_X + lfX, lfHeaderLineY);
+        const Vector2 lvHeaderEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY);
         lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, 0xFF000000u);
-        const Vector2 lvTotalStart = { KF_NAME_X + lfX, lfTotalLineY, 0.0f, 0.0f };
-        const Vector2 lvTotalEnd = { (KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY, 0.0f, 0.0f };
+        const Vector2 lvTotalStart = Vector2(KF_NAME_X + lfX, lfTotalLineY);
+        const Vector2 lvTotalEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY);
         lpRender->DrawLine(lvTotalStart, lvTotalEnd, 0xFF000000u);
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const f32 lfColumnX = (lafSizeX[liColumn] + lfX) - 3.0f;
-            const Vector2 lvStart = { lfColumnX, GetY(), 0.0f, 0.0f };
-            const Vector2 lvEnd = { lfColumnX, lfY, 0.0f, 0.0f };
+            const Vector2 lvStart = Vector2(lfColumnX, GetY());
+            const Vector2 lvEnd = Vector2(lfColumnX, lfY);
             lpRender->DrawLine(lvStart, lvEnd, 0xFF000000u);
         }
         SetSize(KF_WINDOW_WIDTH, lfY - GetY());
@@ -373,17 +373,17 @@ namespace CgsResource
             }
         }
         lfY += 20.0f;
-        const Vector2 lvHeaderStart = { KF_NAME_X + lfX, lfHeaderLineY, 0.0f, 0.0f };
-        const Vector2 lvHeaderEnd = { (KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY, 0.0f, 0.0f };
+        const Vector2 lvHeaderStart = Vector2(KF_NAME_X + lfX, lfHeaderLineY);
+        const Vector2 lvHeaderEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY);
         lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, 0xFF000000u);
-        const Vector2 lvTotalStart = { KF_NAME_X + lfX, lfTotalLineY, 0.0f, 0.0f };
-        const Vector2 lvTotalEnd = { (KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY, 0.0f, 0.0f };
+        const Vector2 lvTotalStart = Vector2(KF_NAME_X + lfX, lfTotalLineY);
+        const Vector2 lvTotalEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY);
         lpRender->DrawLine(lvTotalStart, lvTotalEnd, 0xFF000000u);
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const f32 lfColumnX = (lafSizeX[liColumn] + lfX) - 3.0f;
-            const Vector2 lvStart = { lfColumnX, GetY(), 0.0f, 0.0f };
-            const Vector2 lvEnd = { lfColumnX, lfY, 0.0f, 0.0f };
+            const Vector2 lvStart = Vector2(lfColumnX, GetY());
+            const Vector2 lvEnd = Vector2(lfColumnX, lfY);
             lpRender->DrawLine(lvStart, lvEnd, 0xFF000000u);
         }
         SetSize(KF_WINDOW_WIDTH, lfY - GetY());
@@ -439,8 +439,8 @@ namespace CgsResource
                                                                static_cast<f64>(luCapacity));
                         CgsCore::SPrintf(lacText, sizeof(lacText), "%.2f%%", lfPercent);
                         lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
-                        const Vector2 lvMin = { lafSizeX[liColumn] + GetX(), lfY + 15.0f, 0.0f, 0.0f };
-                        const Vector2 lvMax = { (lafSizeX[liColumn] + GetX()) + 150.0f, lfY + 25.0f, 0.0f, 0.0f };
+                        const Vector2 lvMin = Vector2(lafSizeX[liColumn] + GetX(), lfY + 15.0f);
+                        const Vector2 lvMax = Vector2((lafSizeX[liColumn] + GetX()) + 150.0f, lfY + 25.0f);
                         lpRender->DrawHorizontalBar(lvMin, lvMax, lfPercent, 100.0f, 0x8000B400u, 0x80640064u);
                         lauTotals[liMemType] += luBytes;
                     }
@@ -471,23 +471,23 @@ namespace CgsResource
                                                        static_cast<f64>(luCapacity));
                 CgsCore::SPrintf(lacText, sizeof(lacText), "%.2f%%", lfPercent);
                 lpRender->DrawText(lacText, lafPercentX[liColumn] + lfX, lfY, 14.0f, 0xFF000000u);
-                const Vector2 lvMin = { lafSizeX[liColumn] + GetX(), lfY + 15.0f, 0.0f, 0.0f };
-                const Vector2 lvMax = { (lafSizeX[liColumn] + GetX()) + 150.0f, lfY + 25.0f, 0.0f, 0.0f };
+                const Vector2 lvMin = Vector2(lafSizeX[liColumn] + GetX(), lfY + 15.0f);
+                const Vector2 lvMax = Vector2((lafSizeX[liColumn] + GetX()) + 150.0f, lfY + 25.0f);
                 lpRender->DrawHorizontalBar(lvMin, lvMax, lfPercent, 100.0f, 0x8000B400u, 0x80640064u);
             }
         }
         lfY += 35.0f;
-        const Vector2 lvHeaderStart = { KF_NAME_X + lfX, lfHeaderLineY, 0.0f, 0.0f };
-        const Vector2 lvHeaderEnd = { (KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY, 0.0f, 0.0f };
+        const Vector2 lvHeaderStart = Vector2(KF_NAME_X + lfX, lfHeaderLineY);
+        const Vector2 lvHeaderEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfHeaderLineY);
         lpRender->DrawLine(lvHeaderStart, lvHeaderEnd, 0xFF000000u);
-        const Vector2 lvTotalStart = { KF_NAME_X + lfX, lfTotalLineY, 0.0f, 0.0f };
-        const Vector2 lvTotalEnd = { (KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY, 0.0f, 0.0f };
+        const Vector2 lvTotalStart = Vector2(KF_NAME_X + lfX, lfTotalLineY);
+        const Vector2 lvTotalEnd = Vector2((KF_WINDOW_WIDTH + lfX) - 4.0f, lfTotalLineY);
         lpRender->DrawLine(lvTotalStart, lvTotalEnd, 0xFF000000u);
         for (s32 liColumn = 0; liColumn < 3; ++liColumn)
         {
             const f32 lfColumnX = (lafSizeX[liColumn] + lfX) - 3.0f;
-            const Vector2 lvStart = { lfColumnX, GetY(), 0.0f, 0.0f };
-            const Vector2 lvEnd = { lfColumnX, lfY, 0.0f, 0.0f };
+            const Vector2 lvStart = Vector2(lfColumnX, GetY());
+            const Vector2 lvEnd = Vector2(lfColumnX, lfY);
             lpRender->DrawLine(lvStart, lvEnd, 0xFF000000u);
         }
         SetSize(KF_WINDOW_WIDTH, lfY - GetY());

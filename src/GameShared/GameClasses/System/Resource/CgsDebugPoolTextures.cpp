@@ -269,8 +269,8 @@ namespace CgsResource
         MaybeDrawText(lpRender, lacText, GetX(), lfY + KF_TEXT_LINE_STEP, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
 
         // Draw the selected texture into the display box: from (mfX + 100, mfY) to (mfWidth - 100, mfHeight).
-        const Vector2 lv2Position = { GetX() + KF_DISPLAY_INSET, GetY(),                  0.0f, 0.0f };
-        const Vector2 lv2Size     = { GetWidth() - KF_DISPLAY_INSET, GetHeight(),         0.0f, 0.0f };
+        const Vector2 lv2Position = Vector2(GetX() + KF_DISPLAY_INSET, GetY());
+        const Vector2 lv2Size     = Vector2(GetWidth() - KF_DISPLAY_INSET, GetHeight());
         RenderTextureDisplay(lpRender, lv2Position, lv2Size);
     }
 
@@ -319,24 +319,16 @@ namespace CgsResource
                                           bool lbFlag0, bool lbFlag1)
     {
         const CgsDev::DebugUI::Metrics& lrMetrics = GetMetrics();
-        const Vector2 lv2ScreenSize = { lrMetrics.mfScreenWidth, lrMetrics.mfScreenHeight, 0.0f, 0.0f };
+        const Vector2 lv2ScreenSize = Vector2(lrMetrics.mfScreenWidth, lrMetrics.mfScreenHeight);
 
         if (mpRenderTextureCallback == 0)
             return;
 
         // Normalise the box by the virtual screen size (X360 divides position & size by screen size).
         const Vector2 lv2NormPosition =
-        {
-            lv2Position.x / lv2ScreenSize.x,
-            lv2Position.y / lv2ScreenSize.y,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2Position.mV.x / lv2ScreenSize.mV.x, lv2Position.mV.y / lv2ScreenSize.mV.y);
         const Vector2 lv2NormSize =
-        {
-            lv2Size.x / lv2ScreenSize.x,
-            lv2Size.y / lv2ScreenSize.y,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2Size.mV.x / lv2ScreenSize.mV.x, lv2Size.mV.y / lv2ScreenSize.mV.y);
 
         mpRenderTextureCallback(lpTexture, lv2NormPosition, lv2NormSize,
                                 mpCallbackUserData, lbFlag0, lbFlag1);
@@ -354,24 +346,16 @@ namespace CgsResource
         const u32 luHeight = lpTexture->GetHeight();
 
         // lv2Size carries the box limits: x = max width (a27), y = max height (a28).
-        if (luWidth > static_cast<u32>(lv2Size.x) || luHeight > static_cast<u32>(lv2Size.y))
+        if (luWidth > static_cast<u32>(lv2Size.mV.x) || luHeight > static_cast<u32>(lv2Size.mV.y))
         {
             RenderTextureStretched(lpTexture, lv2Position, lv2Size, true, true);
         }
 
         // Centre the actual-size quad inside the box: position + (size - texelSize) * 0.5.
         const Vector2 lv2TexelSize =
-        {
-            static_cast<f32>(lpTexture->GetWidth()),
-            static_cast<f32>(lpTexture->GetHeight()),
-            0.0f, 0.0f,
-        };
+        Vector2(static_cast<f32>(lpTexture->GetWidth()), static_cast<f32>(lpTexture->GetHeight()));
         const Vector2 lv2Centre =
-        {
-            lv2Position.x + (lv2Size.x - lv2TexelSize.x) * 0.5f,
-            lv2Position.y + (lv2Size.y - lv2TexelSize.y) * 0.5f,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2Position.mV.x + (lv2Size.mV.x - lv2TexelSize.mV.x) * 0.5f, lv2Position.mV.y + (lv2Size.mV.y - lv2TexelSize.mV.y) * 0.5f);
         RenderTexture(lpTexture, lv2Centre, lv2TexelSize, true, true);
     }
 
@@ -390,11 +374,7 @@ namespace CgsResource
 
         // Centre of the box (position + size*0.5).
         const Vector2 lv2Centre =
-        {
-            lv2Position.x + lv2Size.x * 0.5f,
-            lv2Position.y + lv2Size.y * 0.5f,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2Position.mV.x + lv2Size.mV.x * 0.5f, lv2Position.mV.y + lv2Size.mV.y * 0.5f);
 
         // Fit the longer texture axis to the box: scale the box extent by (shorter/longer) on the
         // minor axis. The X360 branch tests texWidth > texHeight and divides the box's longer side by
@@ -402,24 +382,20 @@ namespace CgsResource
         Vector2 lv2Fitted;
         if (lfTexWidth > lfTexHeight)
         {
-            lv2Fitted.x = lv2Size.x;
-            lv2Fitted.y = lv2Size.x * (lfTexHeight / lfTexWidth);
+            lv2Fitted.mV.x = lv2Size.mV.x;
+            lv2Fitted.mV.y = lv2Size.mV.x * (lfTexHeight / lfTexWidth);
         }
         else
         {
-            lv2Fitted.x = lv2Size.y * (lfTexWidth / lfTexHeight);
-            lv2Fitted.y = lv2Size.y;
+            lv2Fitted.mV.x = lv2Size.mV.y * (lfTexWidth / lfTexHeight);
+            lv2Fitted.mV.y = lv2Size.mV.y;
         }
-        lv2Fitted.z = 0.0f;
-        lv2Fitted.w = 0.0f;
+        lv2Fitted.mV.z = 0.0f;
+        lv2Fitted.mV.w = 0.0f;
 
         // Position the fitted quad centred (centre - fitted*0.5).
         const Vector2 lv2FittedPos =
-        {
-            lv2Centre.x - lv2Fitted.x * 0.5f,
-            lv2Centre.y - lv2Fitted.y * 0.5f,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2Centre.mV.x - lv2Fitted.mV.x * 0.5f, lv2Centre.mV.y - lv2Fitted.mV.y * 0.5f);
         RenderTexture(lpTexture, lv2FittedPos, lv2Fitted, lbFlag0, lbFlag1);
     }
 
@@ -444,46 +420,26 @@ namespace CgsResource
         // The outer frame deducts 8 from its extent (82004C88) and adds 4 to its
         // origin (82004EF4). The separate inter-cell gap at 82004270 is 3.
         const Vector2 lv2FrameSize =
-        {
-            lv2Size.x - 8.0f,
-            lv2Size.y - 8.0f,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2Size.mV.x - 8.0f, lv2Size.mV.y - 8.0f);
         const Vector2 lv2FramePosition =
-        {
-            lv2Position.x + 4.0f,
-            lv2Position.y + 4.0f,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2Position.mV.x + 4.0f, lv2Position.mV.y + 4.0f);
 
         // ARTIST 828E61E4 subtracts the three-unit gap. Keep the separate half-
         // stride/half-cell products and subtraction at 828E6230..6264, rather
         // than replacing the rounded inset calculation with a fixed constant.
         const f32 lfInvGrid = 1.0f / static_cast<f32>(liGridSize);
         const Vector2 lv2CellStride =
-        {
-            lv2FrameSize.x * lfInvGrid,
-            lv2FrameSize.y * lfInvGrid,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2FrameSize.mV.x * lfInvGrid, lv2FrameSize.mV.y * lfInvGrid);
         const Vector2 lv2CellSize =
-        {
-            lv2CellStride.x - 3.0f,
-            lv2CellStride.y - 3.0f,
-            0.0f, 0.0f,
-        };
+        Vector2(lv2CellStride.mV.x - 3.0f, lv2CellStride.mV.y - 3.0f);
         // ARTIST828E6230..828E6264 keeps both products before subtracting the inset.
         const f32 lfHalfStrideScale = 0.5f;
-        volatile f32 lfHalfStrideX = lv2CellStride.x * lfHalfStrideScale;
-        volatile f32 lfHalfStrideY = lv2CellStride.y * lfHalfStrideScale;
-        volatile f32 lfHalfCellX = lv2CellSize.x * 0.5f;
-        volatile f32 lfHalfCellY = lv2CellSize.y * 0.5f;
+        volatile f32 lfHalfStrideX = lv2CellStride.mV.x * lfHalfStrideScale;
+        volatile f32 lfHalfStrideY = lv2CellStride.mV.y * lfHalfStrideScale;
+        volatile f32 lfHalfCellX = lv2CellSize.mV.x * 0.5f;
+        volatile f32 lfHalfCellY = lv2CellSize.mV.y * 0.5f;
         const Vector2 lv2CellInset =
-        {
-            lfHalfStrideX - lfHalfCellX,
-            lfHalfStrideY - lfHalfCellY,
-            0.0f, 0.0f,
-        };
+        Vector2(lfHalfStrideX - lfHalfCellX, lfHalfStrideY - lfHalfCellY);
 
         // Background frame for the whole grid (the X360's first RenderTexture call before the loop):
         // position = Position+{4,4}, size = Size-{8,8}, flags (true,false).
@@ -517,30 +473,26 @@ namespace CgsResource
                     {
                         // The selected cell gets a highlight box (X360 sub_8281C3E0, colour
                         // 0xFF0000FF) spanning the full cell stride from its top-left corner.
-                        lpRender->DrawBox(lv2CellOrigin.x, lv2CellOrigin.y,
-                                          lv2CellOrigin.x + lv2CellStride.x,
-                                          lv2CellOrigin.y + lv2CellStride.y, 0xFF0000FFu);
+                        lpRender->DrawBox(lv2CellOrigin.mV.x, lv2CellOrigin.mV.y,
+                                          lv2CellOrigin.mV.x + lv2CellStride.mV.x,
+                                          lv2CellOrigin.mV.y + lv2CellStride.mV.y, 0xFF0000FFu);
                     }
 
                     // Draw this cell's texture, centred in its stride region (origin + inset, size =
                     // cellSize); X360 `vaddfp128 v1,v0,v126` for the position, `vmr128 v2,v127` size.
                     const Vector2 lv2CellPosition =
-                    {
-                        lv2CellOrigin.x + lv2CellInset.x,
-                        lv2CellOrigin.y + lv2CellInset.y,
-                        0.0f, 0.0f,
-                    };
+                    Vector2(lv2CellOrigin.mV.x + lv2CellInset.mV.x, lv2CellOrigin.mV.y + lv2CellInset.mV.y);
                     RenderTextureStretched(mpTextureEntries[liGlobalIndex].mpTexture,
                                            lv2CellPosition, lv2CellSize, false, false);
 
-                    lv2CellOrigin.x += lv2CellStride.x;   // advance one cell stride per column
+                    lv2CellOrigin.mV.x += lv2CellStride.mV.x;   // advance one cell stride per column
                     ++liColumn;
                     ++liCellCounter;
                     ++liGlobalIndex;
                 }
                 // Next row: reset x to the row-start origin, advance y by one stride.
-                lv2CellOrigin.x  = lv2FramePosition.x;
-                lv2CellOrigin.y += lv2CellStride.y;
+                lv2CellOrigin.mV.x  = lv2FramePosition.mV.x;
+                lv2CellOrigin.mV.y += lv2CellStride.mV.y;
             }
         }
 

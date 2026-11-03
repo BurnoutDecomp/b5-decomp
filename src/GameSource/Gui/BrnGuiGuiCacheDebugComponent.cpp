@@ -24,7 +24,7 @@ namespace BrnGui
 {
     // Original C++ initialization writes no module/toggle/status/base data.
     GuiCacheDebugComponent::GuiCacheDebugComponent()
-        : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag{})
+        : CgsDev::DebugComponent(CgsDev::DebugComponent::GuiConstructorTag())
     {
         mInputQueue.MarkUnconstructed();
     }
