@@ -117,11 +117,11 @@ namespace BrnDirector
             if (liNumValues == 6)
             {
                 {
-                    const Vector3 lAggregateValue = { lafValues[0], lafValues[1], lafValues[2], 0.0f };
+                    const Vector3 lAggregateValue(lafValues[0], lafValues[1], lafValues[2]);
                     mpInstance->mFlyCamPosition = lAggregateValue;
                 }
                 {
-                    const Vector3 lAggregateValue = { lafValues[3], lafValues[4], lafValues[5], 0.0f };
+                    const Vector3 lAggregateValue(lafValues[3], lafValues[4], lafValues[5]);
                     mpInstance->mFlyCamTarget = lAggregateValue;
                 }
                 mpInstance->muLiveCamRequest = E_LIVECAMREQUEST_FLY_CAMERA;
@@ -221,8 +221,8 @@ namespace BrnDirector
 
             char lacCameraPos[256];   // X360 sp+0x90 message text
             CgsCore::SPrintf(lacCameraPos, 256, "%4.4f,%4.4f,%4.4f,%4.4f,%4.4f,%4.4f",
-                             lrTransform.wAxis.x, lrTransform.wAxis.y, lrTransform.wAxis.z,
-                             lrTransform.zAxis.x, lrTransform.zAxis.y, lrTransform.zAxis.z);
+                             static_cast<f32>(lrTransform.wAxis.GetX()), static_cast<f32>(lrTransform.wAxis.GetY()), static_cast<f32>(lrTransform.wAxis.GetZ()),
+                             static_cast<f32>(lrTransform.zAxis.GetX()), static_cast<f32>(lrTransform.zAxis.GetY()), static_cast<f32>(lrTransform.zAxis.GetZ()));
 
             EA::GameTalk::GameTalkMessage lMessage("Camera");
 

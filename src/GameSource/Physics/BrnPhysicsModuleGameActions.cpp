@@ -76,7 +76,6 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                         // GameStateModuleIO::GameActionQueue
 #include "GameSource/GameState/BrnGameActions.h"                               // PrepareForModeAction + GameModeParams::KU_FLAG_*
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // gpDebugPrint ([s3-action] witness)
 
 namespace BrnPhysics
 {
@@ -149,62 +148,6 @@ namespace BrnPhysics
         const u32 KU_EV_LEADING_WORD    = 0;      // s32/u32 -- `lwz r11, 0(r29)`
         const u32 KU_EV_IMPACT_DURATION = 0;      // f32 -- case 42 `lfs f1, 0(r29)`
         const u32 KU_EV_IMPACT_ADDITIVE = 4;      // u8  -- case 42 `lbz r5, 4(r29)`
-
-        // -----------------------------------------------------------------------------------------
-        // [s3-action] -- THE PROOF WITNESS. NOT X360. One line per DISTINCT action id, ever.
-        //
-        // ⭐⭐ IT HAS TWO PARTS ON PURPOSE, BECAUSE ONE OF THEM CANNOT SEE THE OTHER'S FAILURE.
-        // A per-id witness that prints nothing is ambiguous: it means either "no action arrived" or
-        // "the witness is broken / the drain never ran". So the FIRST call also prints the queue's
-        // length unconditionally. Between them, silence has exactly one meaning left -- the function
-        // was never called at all, which the conductor gate already disproved.
-        // [[diagnostics-that-lie]] -- ask what the probe cannot see.
-        //
-        // The id table covers 0..255. An id outside it would otherwise be invisible, so it gets a
-        // line of its own (repeating, but such an id is rare) instead of vanishing.
-        // DELETE-WHEN: the showtime chain is proven end to end and no longer under investigation.
-        // -----------------------------------------------------------------------------------------
-        bool gabActionIdSeen[256] = { false };
-
-        void WitnessAction(s32 liAction, s32 liSize)
-        {
-            if (CgsDev::Log::gpDebugPrint == 0)
-                return;
-
-            if (liAction < 0 || liAction > 255)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[s3-action] id " << liAction << " is OUTSIDE the 0..255 witness table"
-                    << " (size " << liSize << ")\n";
-                return;
-            }
-
-            if (!gabActionIdSeen[liAction])
-            {
-                gabActionIdSeen[liAction] = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[s3-action] FIRST arrival of game action id " << liAction
-                    << " (size " << liSize << ")\n";
-            }
-        }
-
-        // ⚠️ ONE-SHOT PER ID: print the leading scalar an offset-read arm actually consumed.
-        // The case-23 OOB read (see the payload banner below) was only visible because the witness
-        // printed the VALUE, not just "the arm ran". The arms that still read the payload by byte
-        // offset get the same treatment for the same reason -- a host record whose first member is
-        // not a 4-byte scalar would show up here as garbage instead of as silent wrong behaviour.
-        bool gabLeadingWordSeen[256] = { false };
-
-        void WitnessLeadingWord(s32 liAction, s32 liValue)
-        {
-            if (CgsDev::Log::gpDebugPrint == 0 || liAction < 0 || liAction > 255)
-                return;
-            if (gabLeadingWordSeen[liAction])
-                return;
-            gabLeadingWordSeen[liAction] = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[s3-action] id " << liAction << " leading word = " << liValue << "\n";
-        }
     }
 
     // =============================================================================================
@@ -216,17 +159,6 @@ namespace BrnPhysics
     {
         CGS_ASSERT(lpGameActionQueue, "lpGameActionQueue");
 
-        // [s3-action] first-call witness -- see the banner on WitnessAction.
-        {
-            static bool sbFirstDrainReported = false;
-            if (!sbFirstDrainReported && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbFirstDrainReported = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[s3-action] first drain: PhysicsModule::HandleGameActions is LIVE, queue length "
-                    << lpGameActionQueue->GetLength() << "\n";
-            }
-        }
 
         const CgsModule::Event* lpEventData = 0;
         s32 liEventSize = 0;
@@ -239,7 +171,6 @@ namespace BrnPhysics
             // WorldModule::HandleGameActions already uses on the same queue).
             const u8* const lpu8Payload = reinterpret_cast<const u8*>(lpEventData);
 
-            WitnessAction(liAction, liEventSize);
 
             switch (liAction)
             {
@@ -255,7 +186,6 @@ namespace BrnPhysics
                     {
                         mVehicleManager.meStationaryPlayerWheelAngle = 2;
                     }
-                    WitnessLeadingWord(liAction, liLeadingWord);
                     break;
                 }
 
@@ -345,44 +275,6 @@ namespace BrnPhysics
 
                     meCurrentGameMode = leGameModeType;
 
-                    // [s3-action] one-shot: the arm that matters, printing BOTH what it read and its
-                    // own post-condition. It is the version of this line that caught the OOB read
-                    // described in the banner above; keep it printing the raw flag word.
-                    {
-                        static bool sbLogged = false;
-                        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            sbLogged = true;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[s3-action] case 23 PREPARE_GAME_MODE: size " << liEventSize
-                                << " hostSizeof "
-                                << static_cast<s32>(
-                                       sizeof(BrnGameState::GameStateModuleIO::PrepareForModeAction))
-                                << " modeType " << static_cast<s32>(leGameModeType)
-                                << " online " << (lpParams->mbIsOnline ? 1 : 0)
-                                // muFlags itself is private; print the five bits this arm reads,
-                                // each through the same GetFlag the code above uses -- so the
-                                // witness cannot disagree with the behaviour it is witnessing.
-                                << " easyCrash "
-                                << (lpParams->GetFlag(BrnGameState::GameModeParams::
-                                                          KU_FLAG_ENABLE_EASY_CRASHING) ? 1 : 0)
-                                << " mustCrash "
-                                << (lpParams->GetFlag(BrnGameState::GameModeParams::
-                                                          KU_FLAG_PLAYER_MUST_BE_CRASHING) ? 1 : 0)
-                                << " noTrafficCheck "
-                                << (lpParams->GetFlag(BrnGameState::GameModeParams::
-                                                          KU_FLAG_TRAFFIC_CHECKING_NOT_ALLOWED) ? 1 : 0)
-                                << " donut "
-                                << (lpParams->GetFlag(BrnGameState::GameModeParams::
-                                                          KU_FLAG_DONUT_START) ? 1 : 0)
-                                << " SHOWTIME="
-                                << (lpParams->GetFlag(BrnGameState::GameModeParams::
-                                                          KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR)
-                                        ? 1 : 0)
-                                << " -> meCurrentGameModeType now "
-                                << mVehicleManager.meCurrentGameModeType << "\n";
-                        }
-                    }
                     break;
                 }
 
@@ -486,16 +378,6 @@ namespace BrnPhysics
                         *reinterpret_cast<const f32*>(lpu8Payload + KU_EV_IMPACT_DURATION);
                     const bool lbAdditive = (lpu8Payload[KU_EV_IMPACT_ADDITIVE] != 0);
                     mVehicleManager.StartImpactTime(lfDuration, lbAdditive);
-                    {
-                        static bool sbLogged = false;
-                        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            sbLogged = true;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[s3-action] case 42 START_IMPACT_TIME: duration " << lfDuration
-                                << " additive " << (lbAdditive ? 1 : 0) << "\n";
-                        }
-                    }
                     break;
                 }
 
@@ -553,7 +435,6 @@ namespace BrnPhysics
                 {
                     const s32 liBehaviour =
                         *reinterpret_cast<const s32*>(lpu8Payload + KU_EV_LEADING_WORD);
-                    WitnessLeadingWord(liAction, liBehaviour);
                     // ⚠️ SetShowtimeBehaviour asserts `< 3`. If that ever fires, read the witness
                     // line above FIRST: a leading word outside 0..2 means the payload was read
                     // wrong, not that the producer sent a bad behaviour.
@@ -577,17 +458,6 @@ namespace BrnPhysics
                 {
                     const Vector3& lrAim = *reinterpret_cast<const Vector3*>(lpu8Payload);
                     Vehicle::RaceCarPhysics::SetShowtimeAimDirection(lrAim);
-                    {
-                        static bool sbLogged = false;
-                        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            sbLogged = true;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[s3-action] case 146 SET_SHOWTIME_AIM_DIRECTION: size "
-                                << liEventSize << " aim " << lrAim.x << " " << lrAim.y
-                                << " " << lrAim.z << "\n";
-                        }
-                    }
                     break;
                 }
 
