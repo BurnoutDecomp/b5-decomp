@@ -470,11 +470,11 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
     lrState.mEntityID           = lEntityID;
     lrState.mTransform          = lrPhysics.GetGraphicsVehicleTransform();
     lrState.mLinearVelocity     = lrPhysics.GetLinearVelocity();
-    lrState.mfSpeed             = lrPhysics.GetSpeed().x;
+    lrState.mfSpeed             = lrPhysics.GetSpeed().GetFloat();
     lrState.mbFrozen            = lrPhysics.IsFrozen();
     lrState.mbIsDeforming       = lrPhysics.HasStartedDeforming();
     lrState.mbIsFatallyCrashing = lrPhysics.IsFatallyCrashing();
-    lrState.mfSteering          = lrPhysics.GetSteeringAngle().x;
+    lrState.mfSteering          = lrPhysics.GetSteeringAngle().GetFloat();
 
     // The four wheel meshes' world matrices. lbHackDontReverseRightWheels is false at every
     // committed call site, this one included (`li r6, 0` before each bl).
@@ -492,24 +492,24 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
         WheelLite&   lrWheelLite = lrState.maWheels[liWheel];
 
         lrWheelLite.mVelocity          = lrWheel.mBodyPointVelocity;
-        lrWheelLite.mfRadiansPerSecond = lrWheel.mIntegrationVariables.x;
-        lrWheelLite.mfRadius           = lrWheel.mSlipVariables.w;
-        lrWheelLite.mfRotation         = lrWheel.mIntegrationVariables.z;
-        lrWheelLite.mfSkidFactor       = lrWheel.mSlipVariables.z;
+        lrWheelLite.mfRadiansPerSecond = lrWheel.mIntegrationVariables.X();
+        lrWheelLite.mfRadius           = lrWheel.mSlipVariables.GetComponent(3);
+        lrWheelLite.mfRotation         = lrWheel.mIntegrationVariables.Z();
+        lrWheelLite.mfSkidFactor       = lrWheel.mSlipVariables.Z();
 
         // The suspension height, normalised by whichever travel limit the wheel is inside. The
         // console emits vrefp + two Newton-Raphson steps + one vmulfp, i.e. a divide, and negates
         // the numerator on the below-rest branch (`vxor` against 0x80000000).
         // (`lvx128 v13, r10, 80` == wheel+0x80 == mPosition, lane .y;
         //  `lvx128 v0, r10, 48` == wheel+0x60 == mSuspensionAndInertiaVariables, lane .y or .x)
-        const f32 lfWheelHeight = lrWheel.mPosition.y;
+        const f32 lfWheelHeight = lrWheel.mPosition.Y();
         if (lfWheelHeight >= 0.0f)
         {
-            lrWheelLite.mfSuspensionHeight = lfWheelHeight / lrWheel.mSuspensionAndInertiaVariables.y;
+            lrWheelLite.mfSuspensionHeight = lfWheelHeight / lrWheel.mSuspensionAndInertiaVariables.Y();
         }
         else
         {
-            lrWheelLite.mfSuspensionHeight = -lfWheelHeight / lrWheel.mSuspensionAndInertiaVariables.x;
+            lrWheelLite.mfSuspensionHeight = -lfWheelHeight / lrWheel.mSuspensionAndInertiaVariables.X();
         }
 
         // `lbz r3, 0xA7(r10)` == Wheel +0xD7 == mu8State; 2 == detached.
@@ -526,16 +526,16 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
         // The world-space traction point: the vmaddfp chain row0*p.x + row1*p.y + row2*p.z + wAxis,
         // with p == maLocalTractionPoints[i] (`r3 = (i + 0x53) << 4` == +0x530 + 16*i).
         const Vector3 lvLocal = lrPhysics.GetLocalTractionPoint(static_cast<u8>(liWheel));
-        lrWheelLite.mRoadContact.mPosition.x =
-            lPhysicsTransform.xAxis.x * lvLocal.x + lPhysicsTransform.yAxis.x * lvLocal.y
-          + lPhysicsTransform.zAxis.x * lvLocal.z + lPhysicsTransform.wAxis.x;
-        lrWheelLite.mRoadContact.mPosition.y =
-            lPhysicsTransform.xAxis.y * lvLocal.x + lPhysicsTransform.yAxis.y * lvLocal.y
-          + lPhysicsTransform.zAxis.y * lvLocal.z + lPhysicsTransform.wAxis.y;
-        lrWheelLite.mRoadContact.mPosition.z =
-            lPhysicsTransform.xAxis.z * lvLocal.x + lPhysicsTransform.yAxis.z * lvLocal.y
-          + lPhysicsTransform.zAxis.z * lvLocal.z + lPhysicsTransform.wAxis.z;
-        lrWheelLite.mRoadContact.mPosition.w = 0.0f;
+        lrWheelLite.mRoadContact.mPosition.X() =
+            lPhysicsTransform.xAxis.X() * lvLocal.X() + lPhysicsTransform.yAxis.X() * lvLocal.Y()
+          + lPhysicsTransform.zAxis.X() * lvLocal.Z() + lPhysicsTransform.wAxis.X();
+        lrWheelLite.mRoadContact.mPosition.Y() =
+            lPhysicsTransform.xAxis.Y() * lvLocal.X() + lPhysicsTransform.yAxis.Y() * lvLocal.Y()
+          + lPhysicsTransform.zAxis.Y() * lvLocal.Z() + lPhysicsTransform.wAxis.Y();
+        lrWheelLite.mRoadContact.mPosition.Z() =
+            lPhysicsTransform.xAxis.Z() * lvLocal.X() + lPhysicsTransform.yAxis.Z() * lvLocal.Y()
+          + lPhysicsTransform.zAxis.Z() * lvLocal.Z() + lPhysicsTransform.wAxis.Z();
+        lrWheelLite.mRoadContact.mPosition.GetComponent(3) = 0.0f;
     }
 
     // ---- the above-ground rebase: physics pose -> the graphics pose just published -------------
@@ -543,12 +543,12 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
         const AboveGroundTestResult& lrAboveGround =
             *lrPhysics.GetAboveGroundTestResult();
 
-        const f32 lfDeltaY = lPhysicsTransform.wAxis.y - lrState.mTransform.wAxis.y;
+        const f32 lfDeltaY = lPhysicsTransform.wAxis.Y() - lrState.mTransform.wAxis.Y();
 
-        lrState.mvRoadTestNormal_HeightAboveRoad.x = lrAboveGround.mIntersectionNormal.x;
-        lrState.mvRoadTestNormal_HeightAboveRoad.y = lrAboveGround.mIntersectionNormal.y;
-        lrState.mvRoadTestNormal_HeightAboveRoad.z = lrAboveGround.mIntersectionNormal.z;
-        lrState.mvRoadTestNormal_HeightAboveRoad.w = lrAboveGround.mfVerticalDistance - lfDeltaY;
+        lrState.mvRoadTestNormal_HeightAboveRoad.X() = lrAboveGround.mIntersectionNormal.X();
+        lrState.mvRoadTestNormal_HeightAboveRoad.Y() = lrAboveGround.mIntersectionNormal.Y();
+        lrState.mvRoadTestNormal_HeightAboveRoad.Z() = lrAboveGround.mIntersectionNormal.Z();
+        lrState.mvRoadTestNormal_HeightAboveRoad.GetComponent(3) = lrAboveGround.mfVerticalDistance - lfDeltaY;
     }
 }
 

@@ -91,27 +91,27 @@ namespace Vehicle
         mbHorn                     = false;
 
         {
-            const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(1.0f, 0.0f, 0.0f);
             mTransform.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 1.0f, 0.0f);
             mTransform.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 1.0f);
             mTransform.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mTransform.wAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mLinearVelocity = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             mAngularVelocity = lAggregateValue;
         }
 

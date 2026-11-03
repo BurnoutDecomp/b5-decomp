@@ -176,8 +176,8 @@ namespace BrnPhysics
                 muStuntActionInProgress |= E_STUNT_ACTION_IN_PROGRESS_JUMP_DISTANCE;
 
             Vector2 lvCurrentPosition = BrnMath::Flatten(lpRaceCarPhysics->GetPosition());
-            const Vector3 lvCurrentFlat = { lvCurrentPosition.x, lvCurrentPosition.y, 0.0f, 0.0f };
-            const Vector3 lvTakeoffFlat = { mvPositionAtTakeoff.x, mvPositionAtTakeoff.y, 0.0f, 0.0f };
+            const Vector3 lvCurrentFlat(lvCurrentPosition.mV.x, lvCurrentPosition.mV.y, 0.0f);
+            const Vector3 lvTakeoffFlat(mvPositionAtTakeoff.mV.x, mvPositionAtTakeoff.mV.y, 0.0f);
             mfDistanceInAirSoFar = vpu::Magnitude(vpu::Subtract(lvCurrentFlat, lvTakeoffFlat));
         }
         else
@@ -248,7 +248,7 @@ namespace BrnPhysics
         else
         {
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
                 mvCurrentInAirRotations = lAggregateValue;
             }
         }
@@ -279,8 +279,8 @@ namespace BrnPhysics
             // (per-lane max with the running accumulator), then test the in-progress thresholds.
             mvStuntRollInProgress = vpu::Max(vpu::Abs(mvCurrentInAirRotations), mvStuntRollInProgress);
 
-            const f32 lfSpinDeg = mvStuntRollInProgress.y * KF_RAD_TO_DEG;   // _R31[5], air-spin axis
-            const f32 lfRollDeg = mvStuntRollInProgress.z * KF_RAD_TO_DEG;   // _R31[6], barrel-roll axis
+            const f32 lfSpinDeg = mvStuntRollInProgress.Y() * KF_RAD_TO_DEG;   // _R31[5], air-spin axis
+            const f32 lfRollDeg = mvStuntRollInProgress.Z() * KF_RAD_TO_DEG;   // _R31[6], barrel-roll axis
 
             // AIR_SPIN in progress takes over from a handbrake turn: the handbrake accumulator and
             // latch are dropped and so is the HANDBREAK_TURN in-progress bit.
@@ -290,13 +290,13 @@ namespace BrnPhysics
                 mfHandBreakAngleSoFar = 0.0f;                                     // +0x54
                 mbHandbreakTurnAttempting = false;                               // +0x5C
                 muStuntActionInProgress &= ~E_STUNT_ACTION_IN_PROGRESS_HANDBREAK_TURN;
-                mfInProgressAirSpinAngle = mvStuntRollInProgress.y;              // +0x1B4
+                mfInProgressAirSpinAngle = mvStuntRollInProgress.Y();              // +0x1B4
             }
             // .z * deg > 35 -> BARREL_ROLL in progress; store barrel-roll angle.
             if (lfRollDeg > KF_MIN_ANGLE_FOR_BARREL_ROLL_IN_PROGRESS)   // 35.0
             {
                 muStuntActionInProgress |= E_STUNT_ACTION_IN_PROGRESS_BARREL_ROLL;   // |= 1
-                mfInProgressBarrelRollAngle = mvStuntRollInProgress.z;               // +0x1B0 _R31[108]
+                mfInProgressBarrelRollAngle = mvStuntRollInProgress.Z();               // +0x1B0 _R31[108]
             }
         }
         else
@@ -306,21 +306,21 @@ namespace BrnPhysics
             if (!lbIsCrashing && !lbReset
                 && (muCurrentRaceCarState & E_CURRENT_CAR_STATE_JUST_LANDED) != 0)
             {
-                const f32 lfSpinDeg = mvStuntRollInProgress.y * KF_RAD_TO_DEG;   // _R31[5], air-spin axis
-                const f32 lfRollDeg = mvStuntRollInProgress.z * KF_RAD_TO_DEG;   // _R31[6], barrel-roll axis
+                const f32 lfSpinDeg = mvStuntRollInProgress.Y() * KF_RAD_TO_DEG;   // _R31[5], air-spin axis
+                const f32 lfRollDeg = mvStuntRollInProgress.Z() * KF_RAD_TO_DEG;   // _R31[6], barrel-roll axis
 
                 // AIR_SPIN complete; store the completed air-spin angle.
                 if (lfSpinDeg > KF_MIN_ANGLE_FOR_AIR_SPIN)
                 {
                     muStuntActionComplete |= E_STUNT_ACTION_COMPLETE_AIR_SPIN;   // |= 2
-                    mfCompletedAirSpinAngle = mvStuntRollInProgress.y;           // +0x18C _R31[99]
+                    mfCompletedAirSpinAngle = mvStuntRollInProgress.Y();           // +0x18C _R31[99]
                 }
                 // BARREL_ROLL complete; store the angle + the whole-roll count, rounded to nearest
                 // (floor of rollDeg * (1/360) + 0.5 -> miCompletedBarrelRolls +0x19C).
                 if (lfRollDeg > KF_MIN_ANGLE_FOR_BARREL_ROLL_COMPLETED)
                 {
                     muStuntActionComplete |= E_STUNT_ACTION_COMPLETE_BARREL_ROLL;   // |= 1
-                    mfCompletedBarrelRollAngle = mvStuntRollInProgress.z;           // +0x188 _R31[98]
+                    mfCompletedBarrelRollAngle = mvStuntRollInProgress.Z();           // +0x188 _R31[98]
                     const f32 lfTurns = (lfRollDeg * 0.0027777778f) + 0.5f;         // flt_82004920 == 1/360
                     miCompletedBarrelRolls = static_cast<s32>(lfTurns);            // +0x19C _R31[103] (truncate)
                 }
@@ -336,7 +336,7 @@ namespace BrnPhysics
             // when crashing or reset and the barrel-roll axis is still spinning (>35deg), fire a
             // training event.
             if ((lbIsCrashing || lbReset)
-                && (mvStuntRollInProgress.z * KF_RAD_TO_DEG) > KF_MIN_ANGLE_FOR_BARREL_ROLL_IN_PROGRESS)   // 35.0
+                && (mvStuntRollInProgress.Z() * KF_RAD_TO_DEG) > KF_MIN_ANGLE_FOR_BARREL_ROLL_IN_PROGRESS)   // 35.0
             {
                 s32 liTrainingId = 49;   // RequestGameTrainingEvent payload (asm v20 = 49)
                 reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(lpGameEventQueue)
@@ -346,7 +346,7 @@ namespace BrnPhysics
             // the finalize branch ALWAYS clears the running roll/spin accumulator at its tail
             // (asm vspltisw v0,0; stvx128 v0,r31,16 -- unconditional).
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
                 mvStuntRollInProgress = lAggregateValue;
             }   // +0x10 cleared
         }
@@ -371,7 +371,7 @@ namespace BrnPhysics
             mfHandBrakeStabiliseTime = 0.0f;
             mbHandbreakTurnAttempting = true;
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
                 mvRaceCarPositionLastFrame = lAggregateValue;
             }
         }
@@ -384,7 +384,7 @@ namespace BrnPhysics
             Matrix44Affine lTransform = lpRaceCarPhysics->GetTransform();
             const Vector3 lvForward = lTransform.zAxis;   // +0x30
             mvRaceCarPositionLastFrame = lTransform.wAxis;   // +0x40 (asm stvx128 v127,r31,+0x40)
-            f32 lfBearing = static_cast<f32>(std::atan2(lvForward.z, lvForward.x));
+            f32 lfBearing = static_cast<f32>(std::atan2(lvForward.Z(), lvForward.X()));
 
             // delta vs last bearing, wrapped to (-pi, pi].
             f32 lfAngleChange;
@@ -459,7 +459,7 @@ namespace BrnPhysics
         if ((muCurrentRaceCarState & E_CURRENT_CAR_STATE_JUST_TAKEN_OFF) != 0)
         {
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
                 mvLandingVector = lAggregateValue;
             }
             mbKeepCheckingForCleanLanding = false;
@@ -486,8 +486,8 @@ namespace BrnPhysics
             {
                 Vector2 lv2TakeOffAtVector = BrnMath::Flatten(mvTakeOffVector);
                 Vector2 lv2LandingAtVector = BrnMath::Flatten(lpRaceCarPhysics->GetTransform().zAxis);
-                const Vector3 lvTakeOffFlat = { lv2TakeOffAtVector.x, lv2TakeOffAtVector.y, 0.0f, 0.0f };
-                const Vector3 lvLandingFlat = { lv2LandingAtVector.x, lv2LandingAtVector.y, 0.0f, 0.0f };
+                const Vector3 lvTakeOffFlat(lv2TakeOffAtVector.mV.x, lv2TakeOffAtVector.mV.y, 0.0f);
+                const Vector3 lvLandingFlat(lv2LandingAtVector.mV.x, lv2LandingAtVector.mV.y, 0.0f);
                 Vector3 lvTakeOff = vpu::Normalize(lvTakeOffFlat);
                 Vector3 lvLanding = vpu::Normalize(lvLandingFlat);
                 const f32 lfFinalLandingAngle = vpu::Dot(lvTakeOff, lvLanding);
@@ -497,11 +497,11 @@ namespace BrnPhysics
                     mbKeepCheckingForCleanLanding = false;
                     muStuntActionComplete |= E_STUNT_ACTION_COMPLETE_CLEANLANDING;
                     {
-                        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
                         mvTakeOffVector = lAggregateValue;
                     }
                     {
-                        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
                         mvLandingVector = lAggregateValue;
                     }
                 }
@@ -594,7 +594,7 @@ namespace BrnPhysics
 
         // DecFIGS names +0x1010 lane 2 GetTimeDrifting; Breaker splats that lane and
         // clamps it to >= 0 (vmaxfp). This is a genuine VecFloat accessor, not an xyz vector.
-        const f32 lfDriftZSpeedRaw = lpRaceCarPhysics->GetTimeDrifting().x;
+        const f32 lfDriftZSpeedRaw = lpRaceCarPhysics->GetTimeDrifting().GetFloat();
         const f32 lfDriftZSpeed = (lfDriftZSpeedRaw > 0.0f) ? lfDriftZSpeedRaw : 0.0f;
         mfTimeDriftingLastFrame = 0.0f;
 
@@ -609,7 +609,7 @@ namespace BrnPhysics
             mfTimeDriftingLastFrame = lfDriftZSpeed;   // +0xB4  (asm stfs v24[0] @0xB4)
             mfInProgressDriftTime   = lfDriftZSpeed;   // +0x1BC (asm stfs v24[0] @0x1BC)
             mfCompletedDriftTime    = lfDriftZSpeed;   // +0x194 (asm stfs v24[0] @0x194)
-            const f32 lfDistInc = lpRaceCarPhysics->GetSpeed().x * lfTimeStep;
+            const f32 lfDistInc = lpRaceCarPhysics->GetSpeed().GetFloat() * lfTimeStep;
             mfCompletedDriftDistance += lfDistInc;                 // +0x198 accumulator
             mfInProgressDriftDistance = mfCompletedDriftDistance;  // +0x1C0 mirrors +0x198
         }
@@ -662,7 +662,7 @@ namespace BrnPhysics
         if (!lpCar) FireAssert("lpRaceCarPhysics", 646);
 
         // require the car to be moving forward fast enough (forward speed @+0x6C0 >= 30).
-        if (!(lpCar->GetSpeedMPH().x >= 30.0f)) return -1;
+        if (!(lpCar->GetSpeedMPH().GetFloat() >= 30.0f)) return -1;
 
         s32 liBest = -1;
         f32 lfBestDistSq = FLT_MAX;
@@ -676,7 +676,7 @@ namespace BrnPhysics
 
             Vehicle::RaceCarPhysics* lpOther = &lpaRaceCarPhysics[li];
             if (!lpOther) FireAssert("lpRaceCarToCheckPhysics", 687);
-            if (!(lpOther->GetSpeedMPH().x >= 30.0f)) continue;
+            if (!(lpOther->GetSpeedMPH().GetFloat() >= 30.0f)) continue;
 
             // Breaker @0x82613C88..0x82613CA0 loads and normalizes the candidate's
             // cached linear-velocity direction inside this loop.
@@ -711,7 +711,7 @@ namespace BrnPhysics
         Vehicle::RaceCarPhysics* lpCar = &lpaRaceCarPhysics[leActiveRaceCarIndex];
         if (!lpCar) FireAssert("lpRaceCarPhysics", 764);
 
-        if (!(lpCar->GetSpeedMPH().x >= 30.0f)) return -1;
+        if (!(lpCar->GetSpeedMPH().GetFloat() >= 30.0f)) return -1;
 
         s32 liBest = -1;
         f32 lfBestDistSq = FLT_MAX;
@@ -728,7 +728,7 @@ namespace BrnPhysics
 
             Vehicle::RaceCarPhysics* lpOther = &lpaRaceCarPhysics[li];
             if (!lpOther) FireAssert("lpRaceCarToCheckPhysics", 831);
-            if (!(lpOther->GetSpeedMPH().x >= 30.0f)) continue;
+            if (!(lpOther->GetSpeedMPH().GetFloat() >= 30.0f)) continue;
 
             const Vector3 lvOtherPos = lpOther->GetPosition();
             if (IsWithinTailgatingCone(lvSelfForward, lvOtherPos, lvSelfPos))
@@ -828,7 +828,7 @@ namespace BrnPhysics
         if (liChainLen > 1)
         {
             Vehicle::RaceCarPhysics* lpLinkCar = &lpaRaceCarPhysics[lePlayerActiveRaceCarIndex];
-            const f32 lfDistInc = lpLinkCar->GetSpeed().x * lfTimeStep;
+            const f32 lfDistInc = lpLinkCar->GetSpeed().GetFloat() * lfTimeStep;
             for (s32 li = 1; li < liChainLen; ++li)
             {
                 maConvoyTimer[li]     += lfDistInc;     // +0xD8[i] += distance increment (asm *(v39-8) += v50)
@@ -1029,27 +1029,4 @@ namespace BrnPhysics
         CGS_STATIC_ASSERT((sizeof(StuntOffencesManager) == 464), "sizeof StuntOffencesManager == 464 (0x1C4 rounded to 16-byte align)");
     }
 
-    // ============================================================================================
-    // [stuntair] -- NOT IN THE X360 BINARY. OPT-IN (BRN_ROLL_PROBE=1). Read-only: it reads this
-    // object's own members and the car's accessors and prints; it changes nothing.
-    //
-    // ⭐ WHY IT EXISTS. Every "does the car barrel roll?" figure this campaign has published was a
-    // POSE-DERIVED proxy taken off the [crash-response] stream -- up.y sign crossings at which
-    // |right.y| > |fwd.y|. That proxy is a TUMBLE counter. It is NOT what this game calls a barrel
-    // roll, and the difference is not a matter of taste: CheckForRollsAndSpins scores the roll only
-    // when `inAirNow && !crashing && !reset`, and SetCurrentCarInAirStatus CLEARS IN_THE_AIR_NOW on
-    // every crashing frame, so mvCurrentInAirRotations is re-zeroed by UpdateInAirRotations for the
-    // whole of any crash. ⇒ THE CONSOLE'S OWN BARREL-ROLL SCORER CANNOT FIRE DURING A CRASH, at any
-    // roll rate, on any build. A frequency measured on wall crashes was therefore measuring a
-    // quantity the game does not have. This prints the game's own numbers instead.
-    //
-    // ⛔ A MAX CANNOT SHOW A STALL. The census prints a BAND HISTOGRAM of the in-progress roll angle
-    // plus a distinct-value count, not just a peak, so a channel pinned at one value is visible as
-    // one. And every zero is decomposed: `airGate` counts the frames the car had NO wheels down and
-    // the physics said HasAir() but the console refused to call it airborne because it was crashing
-    // -- i.e. exactly the frames a crash tumble lives in and the scorer skips. `crashRollDeg`
-    // integrates |omega . at| over those same frames, so the crash tumble is measured on the SAME
-    // axis and in the SAME units as the stunt the console scores, and the two are comparable.
-    // DELETE-WHEN the barrel-roll frequency question is closed and banked.
-    // ============================================================================================
 }
