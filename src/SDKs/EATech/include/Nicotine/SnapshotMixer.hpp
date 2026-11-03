@@ -89,6 +89,7 @@ public:
     void UpdateMixerTargets();                         // @0x82B479A8 (pick + apply winning snapshot)
     void UpdateNicotineChannelData(int liMixChannelId);// @0x82B47760 (refresh cached proc volume)
     void UpdateSnapshotChannelData(int liSnapshotIdx, const void* lpSrc, int liChannelId); // @0x82B47708
+    void Recall(int liSnapshotIdx, float lfDuration); // @0x82B478B8
     void Recall(int liSnapshotIdx);                    // @0x82B477C8 (apply recall-type snapshot)
     void SetSnapshot(int liSnapshotIdx, bool lbActive);// @0x82B46E30 (set active-state bit)
     void SetSnapshotOverride(bool lbOverride);         // @0x82B47020 (freeze/restore all snapshots)
