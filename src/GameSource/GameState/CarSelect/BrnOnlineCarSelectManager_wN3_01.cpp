@@ -22,7 +22,7 @@ namespace BrnGameState
 // The console builds 77 and 7 in one reused stack buffer and writes only the fields listed; the
 // rest of each record is whatever the stack held. No reader looks at those bytes (the director
 // reads +0x10 of 77; the world reads the box region of 7 only for a drive-thru), so the records
-// are value-initialised here.
+// leave the remaining bytes untouched.
 void OnlineCarSelectManager::ExitOnlineCarSelect(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -42,13 +42,13 @@ void OnlineCarSelectManager::ExitOnlineCarSelect(GameStateModuleIO::GameActionQu
                             GameStateModuleIO::E_ACTION_CAR_SELECT_MODIFICATION_SCREEN,
                             sizeof(lModificationScreen));
 
-    GameStateModuleIO::CarSelectExitAction lExitAction = {};
+    GameStateModuleIO::CarSelectExitAction lExitAction;
     lExitAction.mbOnlineCarSelect = true;
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lExitAction),
                             GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED,
                             sizeof(lExitAction));
 
-    GameStateModuleIO::SetPlayerCarDriverAction lDriverAction = {};
+    GameStateModuleIO::SetPlayerCarDriverAction lDriverAction;
     lDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_ENTITY_MODULE;
     lDriverAction.mbIsDriveThru = false;
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lDriverAction),

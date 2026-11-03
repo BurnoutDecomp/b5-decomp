@@ -217,21 +217,6 @@ void CarSelectManager::Prepare(const BrnResource::VehicleList* lpVehicleList,
     mpVehicleList.Set(lpVehicleList);
     mpWheelList.Set(lpWheelList);
 
-    // [diagnostic, one-shot] BOTH ENDS of the store. A non-null pointer going in is not proof
-    // the pointer came back out -- see the HostPointer banner in the header.
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
-    {
-        // ⚠️ NOT via operator<<(void*): CgsStrStream.cpp:83 casts it to `(unsigned)` and so prints
-        // ONLY THE LOW 32 BITS -- which would render a truncated pointer identical to the real one.
-        *CgsDev::Log::gpDebugPrint
-            << "[CarSelectManager::Prepare] in  veh=" << (u64)(uintptr_t)lpVehicleList
-            << " wheel=" << (u64)(uintptr_t)lpWheelList
-            << " | out veh=" << (u64)(uintptr_t)mpVehicleList.Get()
-            << " wheel=" << (u64)(uintptr_t)mpWheelList.Get()
-            << " | module=" << (u64)(uintptr_t)mpGameStateModule.Get()
-            << " roundtrip=" << (mpVehicleList.Get() == lpVehicleList
-                                 && mpWheelList.Get() == lpWheelList ? 1 : 0) << "\n";
-    }
 }
 
 // ============================================================================
@@ -573,7 +558,7 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         // entry 0 (the base car) carries the wait-for-streaming flags (5), the rest carry none.
         if (lDerivedCars.GetLength() > 1)
         {
-            GameStateModuleIO::CarSelectionRequestStreamingAction lRequestAction = {};
+            GameStateModuleIO::CarSelectionRequestStreamingAction lRequestAction;
             lRequestAction.miCount = 0;
             for (u32 luIndex = 0; luIndex < lDerivedCars.GetLength(); ++luIndex)
             {
@@ -1006,7 +991,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
 
     // ARTIST 0x82387C44-0x82387C94: full spawn pose and flags at +0x30/+0x31.
     {
-        GameStateModuleIO::CarSelectionChangedAction lChanged = {};
+        GameStateModuleIO::CarSelectionChangedAction lChanged;
         lChanged.mJunkyardId = mJunkyardId;
         lChanged.mPosition = lpSpawnLocation->mPosition;
         lChanged.mDirection = lpSpawnLocation->mDirection;
@@ -1337,21 +1322,6 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQ
 
     meLastSpawnLocationType = static_cast<s32>(lpSpawnLocation->GetType());   // X360 *(this+60)
 
-    // [diagnostic] the one line that proves the whole chain: WHICH junkyard spawn the player's
-    // car is about to be placed at. Compare it against the position
-    // RaceCarEntityModule::HandleResetPlayerCarAction ends up publishing.
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[CarSelectManager::EnterJunkyardAtStartOfGame] junkyard="
-            << static_cast<u64>(lJunkyardId)
-            << " spawn[1] type=" << meLastSpawnLocationType
-            << " pos=(" << lpSpawnLocation->mPosition.x << ", " << lpSpawnLocation->mPosition.y
-            << ", " << lpSpawnLocation->mPosition.z << ")"
-            << " dir=(" << lpSpawnLocation->mDirection.x << ", " << lpSpawnLocation->mDirection.y
-            << ", " << lpSpawnLocation->mDirection.z << ")\n";
-    }
-
     // ⛔⛔ CORRECTED 2026-08-01 (reset-player-car wave). THE START-OF-GAME RECORD WAS STILL BUILT AT
     // THE OLD WRONG OFFSETS -- the previous wave fixed five ResetPlayerCarAction producers and
     // missed this one, which lives in this file rather than BrnCarSelectManager_CarChange.cpp. It
@@ -1450,18 +1420,6 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameA
     // +0x170 (368), so that byte is Profile +118033 == mbIsNewProfile -- the start-of-game deform
     // is gated on the profile being BRAND NEW. (The old comment here said "Profile + 118401",
     // which is 368 bytes past the real member; see the body in BrnProfile.cpp.)
-    // [deform-preset probe 2026-08-24] one line that settles WHICH gate the start-of-game
-    // deform takes on this build (new-profile byte + record presence + stored amount).
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        BrnProgression::CarData* lpProbeCar = lpProfile->FindCar(mStartCarId);
-        *CgsDev::Log::gpDebugPrint
-            << "[deform-preset] ReallyEnterJunkyard: newProfile="
-            << (lpProfile->IsStartOfGameDeformActive() ? 1 : 0)
-            << " carRecord=" << (lpProbeCar != 0 ? 1 : 0)
-            << " amountBefore=" << (lpProbeCar != 0 ? lpProbeCar->GetUnlockDeformationAmount() : -1.0f)
-            << "\n";
-    }
     if (lpProfile->IsStartOfGameDeformActive())
     {
         BrnProgression::CarData* lpCarData = lpProfile->FindCar(mStartCarId);

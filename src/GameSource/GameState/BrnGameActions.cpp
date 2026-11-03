@@ -34,20 +34,20 @@ namespace GameStateModuleIO
 // in both operands, so this is a faithful 3-lane (V3) compare.
 bool ResetPlayerCarAction::HasToChangeLocation() const
 {
-    if (mPosition.x != 0.0f || mPosition.y != 0.0f || mPosition.z != 0.0f)
+    if (mPosition.GetX() != 0.0f || mPosition.GetY() != 0.0f || mPosition.GetZ() != 0.0f)
     {
         return true;
     }
-    return mDirection.x != 0.0f || mDirection.y != 0.0f || mDirection.z != 0.0f;
+    return mDirection.GetX() != 0.0f || mDirection.GetY() != 0.0f || mDirection.GetZ() != 0.0f;
 }
 
 // X360 0x82355178. Empty iff the query position is (within tolerance) zero AND there is no
 // entity, no result type, and no active-trigger bits.
 bool SoundTriggerAction::IsEmpty()
 {
-    if (std::fabs(mQueryPos.x) > KF_QUERY_POS_EPSILON
-        || std::fabs(mQueryPos.y) > KF_QUERY_POS_EPSILON
-        || std::fabs(mQueryPos.z) > KF_QUERY_POS_EPSILON)
+    if (std::fabs(static_cast<f32>(mQueryPos.GetX())) > KF_QUERY_POS_EPSILON
+        || std::fabs(static_cast<f32>(mQueryPos.GetY())) > KF_QUERY_POS_EPSILON
+        || std::fabs(static_cast<f32>(mQueryPos.GetZ())) > KF_QUERY_POS_EPSILON)
     {
         return false;
     }
@@ -150,7 +150,7 @@ void RankInfoResponseAction::SetProgressionRanks(s32 liPlayerRank, s32 liRankCou
 void RankInfoResponseAction::SetProgressionRankEventWins(s32 liOfflineRaceRankWins, s32 liRoadRageRankWins,
                                                          s32 liStuntAttackRankWins, s32 liMarkedManRankWins)
 {
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
         *CgsDev::Log::gpDebugPrint << "liOfflineRaceRankWins : " << liOfflineRaceRankWins << "\n";
         *CgsDev::Log::gpDebugPrint << "liRoadRageRankWins : "    << liRoadRageRankWins    << "\n";

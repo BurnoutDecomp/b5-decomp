@@ -159,7 +159,7 @@ void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::Gam
         return;
     }
 
-    GameStateModuleIO::CarSelectionRequestStreamingAction lRequestAction = {};
+    GameStateModuleIO::CarSelectionRequestStreamingAction lRequestAction;
     lRequestAction.maCars[0]            = lCurrentVehicle;
     s32 liCount                         = 1;
     lRequestAction.maiPriorities[0]     = 0;
@@ -171,10 +171,6 @@ void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::Gam
         // A colour livery is not in the list itself: look up its parent car instead.
         const BrnResource::VehicleListEntry* lpCurrentVehicleData = mpVehicleList->GetVehicleData(lCurrentVehicle);
         CGS_ASSERT(lpCurrentVehicleData != 0, "lpCurrentVehicleData != NULL");
-        if (lpCurrentVehicleData == 0)
-        {
-            return;   // [PC GUARD] the console reads the entry straight after the assert
-        }
         if (lpCurrentVehicleData->IsLiveryColour())
         {
             CGS_ASSERT(lpCurrentVehicleData->GetParentId() != 0,
@@ -187,10 +183,6 @@ void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::Gam
     char lacUncompressedID[KI_CGSID_STRING_LEN];
     CgsIDUnCompress(lCurrentVehicle, lacUncompressedID);
     CGS_ASSERT(liCurrentVehicleIndex != -1, " was not found in the vehicle list");
-    if (liCurrentVehicleIndex == -1)
-    {
-        return;   // [PC GUARD] the console walks on with index -1 and reads past the list
-    }
 
     const u32 luCurrentVehicleIndex = static_cast<u32>(liCurrentVehicleIndex);
     const u32 luMaxNeighbours       = E_ACTIVE_RACE_CAR_INDEX_COUNT - 1;
@@ -262,11 +254,6 @@ void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::Gam
 
     lRequestAction.miCount = liCount;
     CGS_ASSERT(liCount <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "liCount <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
-
-    if (IsCarSelPrestreamWithheld())
-    {
-        return;
-    }
 
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequestAction),
                             GameStateModuleIO::E_ACTION_CAR_SELECTION_REQUEST_STREAMING,

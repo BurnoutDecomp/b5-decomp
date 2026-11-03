@@ -135,7 +135,7 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
     miVehicleClassLimit    = liVehicleClassLimit;
 
     // The console writes only the control word and the drive-thru byte of this record.
-    GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction = {};
+    GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction;
     lSetPlayerCarDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_NONE;
     lSetPlayerCarDriverAction.mbIsDriveThru = false;
 
@@ -248,7 +248,7 @@ void OnlineCarSelectManager::StartCarModificationState(GameStateModuleIO::GameAc
 
     if (lDerivedCarArray.GetLength() > 1)
     {
-        GameStateModuleIO::CarSelectionRequestStreamingAction lRequestStreaming = {};
+        GameStateModuleIO::CarSelectionRequestStreamingAction lRequestStreaming;
         lRequestStreaming.miCount = 0;
         for (u32 luCarIndex = 0; luCarIndex < lDerivedCarArray.GetLength(); ++luCarIndex)
         {
