@@ -24,7 +24,6 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
-#include <cstdlib>   // getenv (BRN_CAM_INPUT_DIAG)
 
 #include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
                                                         // VehicleTracker::GetImplicitVelocity()
@@ -56,7 +55,7 @@
 
 #include <cmath>                                        // std::acos -- the console's XMVectorACos
                                                         //   + std::atan / std::sqrt (Update)
-                                                        //   + std::signbit (VecFloatMax / Min)
+                                                        //   + the VMX sign-bit tie rule (VecFloatMax / Min)
 
 // ----------------------------------------------------------------------------
 // rw::math::vpu Min / Max / Clamp on a VecFloat, one broadcast lane (rwmath 1.02.00
@@ -70,11 +69,32 @@
 // ----------------------------------------------------------------------------
 namespace
 {
+    Vector3 MakeVector3WithLanes(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    {
+        rw::math::vpu::VectorIntrinsic lvValue;
+        lvValue.x = lfX;
+        lvValue.y = lfY;
+        lvValue.z = lfZ;
+        lvValue.w = lfW;
+        return Vector3(lvValue);
+    }
+
+    bool HasNegativeSign(f32 lfValue)
+    {
+        union FloatBitPattern
+        {
+            f32 mfValue;
+            u32 muBits;
+        } lBits;
+        lBits.mfValue = lfValue;
+        return (lBits.muBits & 0x80000000u) != 0;
+    }
+
     f32 VecFloatMax(f32 lfA, f32 lfB)
     {
         if (lfA != lfA) return lfA;
         if (lfB != lfB) return lfB;
-        if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;   // +0 is the larger zero
+        if (lfA == lfB) return HasNegativeSign(lfA) ? lfB : lfA; // +0 is the larger zero
         return (lfA > lfB) ? lfA : lfB;
     }
 
@@ -82,7 +102,7 @@ namespace
     {
         if (lfA != lfA) return lfA;
         if (lfB != lfB) return lfB;
-        if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;   // -0 is the smaller zero
+        if (lfA == lfB) return HasNegativeSign(lfA) ? lfA : lfB; // -0 is the smaller zero
         return (lfA < lfB) ? lfA : lfB;
     }
 
@@ -461,14 +481,14 @@ void BehaviourGameplayExternal::ModifyTargetAngles(const Parameters& lrCameraAtt
 
     // .cpp:625 / :626 -- Min(+bound, Max(-bound, v)), in that order on both builds. The DWARF's
     // vpu::Clamp on VecFloats (vmaxfp / vminfp above), so a NaN angle stays NaN.
-    lrTargetAngles.x = VecFloatClamp(lrTargetAngles.x, -lfPitchBound, lfPitchBound);
-    lrTargetAngles.z = VecFloatClamp(lrTargetAngles.z, -lfRollBound,  lfRollBound);
+    lrTargetAngles.SetX(VecFloatClamp(lrTargetAngles.GetX().GetFloat(), -lfPitchBound, lfPitchBound));
+    lrTargetAngles.SetZ(VecFloatClamp(lrTargetAngles.GetZ().GetFloat(), -lfRollBound,  lfRollBound));
 
     // A separate statement AFTER both clamps (the X360 stores the clamped vector, then
     // multiplies and stores lane Z again). Its DecFIGS line is absorbed into the inlined
     // VecFloat spans -- the own-line set for this function is {625, 626, 634}, and 634 is
     // the closing brace -- so no .cpp:NNN is claimed for it.
-    lrTargetAngles.z *= lrCameraAttribs.mrRollCoeff;
+    lrTargetAngles.SetZ(lrTargetAngles.GetZ().GetFloat() * lrCameraAttribs.mrRollCoeff);
 }
 
 // ============================================================================
@@ -527,16 +547,16 @@ void BehaviourGameplayExternal::CalcSpringCoeffs(f32 lfSpeedMPH,
     const f32 lfSpeedFactor =
         rw::math::fpu::Min(rw::math::fpu::Abs(lfSpeedMPH) * 0.019999999f, 1.0f);
 
-    lInverseSpring.x = (1.0f - rw::math::fpu::Clamp(lfXSpringCoeff, 0.0f, 1.0f)) * lfSpeedFactor;
-    lInverseSpring.y = (1.0f - rw::math::fpu::Clamp(lfYSpringCoeff, 0.0f, 1.0f));
-    lInverseSpring.z = 0.0f;
-    lInverseSpring.w = 0.0f;
+    lInverseSpring.SetX((1.0f - rw::math::fpu::Clamp(lfXSpringCoeff, 0.0f, 1.0f)) * lfSpeedFactor);
+    lInverseSpring.SetY(1.0f - rw::math::fpu::Clamp(lfYSpringCoeff, 0.0f, 1.0f));
+    lInverseSpring.SetZ(0.0f);
+    lInverseSpring.GetVector().w = 0.0f;
 
     // .cpp:664 -- one `vsubfp` against a splatted 1.0f, so all four lanes.
-    lSpring.x = 1.0f - lInverseSpring.x;
-    lSpring.y = 1.0f - lInverseSpring.y;
-    lSpring.z = 1.0f - lInverseSpring.z;
-    lSpring.w = 1.0f - lInverseSpring.w;
+    lSpring.SetX(1.0f - lInverseSpring.GetX().GetFloat());
+    lSpring.SetY(1.0f - lInverseSpring.GetY().GetFloat());
+    lSpring.SetZ(1.0f - lInverseSpring.GetZ().GetFloat());
+    lSpring.GetVector().w = 1.0f - lInverseSpring.GetVector().w;
 }
 
 // ============================================================================
@@ -687,9 +707,9 @@ void BehaviourGameplayExternal::InterpolateLastPlayerTransform(Matrix44Affine lP
     // camera does not chase the car's heading at all; the response then grows with the SQUARE
     // of the excess speed, so it saturates (Clamp below) at about 8 m/s at 60 fps.
     const f32 lfExcessSpeed =
-        VecFloatMax(lvfCarSpeed.x - KVF_LAST_PLAYER_TRANSFORM_SPEED_TO_INTERP_MPS, 0.0f);
+        VecFloatMax(lvfCarSpeed.GetFloat() - KVF_LAST_PLAYER_TRANSFORM_SPEED_TO_INTERP_MPS, 0.0f);
     f32 lfSpeedMod = (lfExcessSpeed * lfExcessSpeed)
-                   * KVF_LAST_PLAYER_TRANSFORM_CAR_SPEED_FACTOR * lvfTimestep.x;
+                   * KVF_LAST_PLAYER_TRANSFORM_CAR_SPEED_FACTOR * lvfTimestep.GetFloat();
     CGS_ASSERT(rw::math::fpu::IsValid(lfSpeedMod), "IsValid( lvfSpeedMod )");   // .cpp:585
 
     // .cpp:589 / :590 -- turn that fraction into an ANGLE, then rate-limit the angle into
@@ -1152,44 +1172,42 @@ void BehaviourGameplayExternal::ApplySlideyEffects(const Parameters& lrCameraAtt
     // .cpp:856 -- the car's implicit velocity in the CAR's own axes (the console's inlined
     // 3x3 transpose; see the banner -- these three dots ARE that transpose's cascade).
     const Vector3 lVelocity = lrSharedInfo.mpPlayerTracker->GetImplicitVelocity();
-    Vector3 lDisplacement;
-    lDisplacement.x = rw::math::vpu::Dot(lCarMatrix.xAxis, lVelocity);
-    lDisplacement.y = rw::math::vpu::Dot(lCarMatrix.yAxis, lVelocity);
-    lDisplacement.z = rw::math::vpu::Dot(lCarMatrix.zAxis, lVelocity);
-    lDisplacement.w = 0.0f;
+    Vector3 lDisplacement(0.0f, 0.0f, 0.0f);
+    lDisplacement.SetX(rw::math::vpu::Dot(lCarMatrix.xAxis, lVelocity));
+    lDisplacement.SetY(rw::math::vpu::Dot(lCarMatrix.yAxis, lVelocity));
+    lDisplacement.SetZ(rw::math::vpu::Dot(lCarMatrix.zAxis, lVelocity));
     CGS_ASSERT(rw::math::vpu::IsValid(lDisplacement), "IsValid(lDisplacement)");  // .cpp:857
 
     mLastDisplacement = lDisplacement;                                           // .cpp:859
 
     // .cpp:862 -- lane Y only, and from a SECOND call: world-space vertical velocity.
-    lDisplacement.y = lrSharedInfo.mpPlayerTracker->GetImplicitVelocity().y;
+    lDisplacement.SetY(lrSharedInfo.mpPlayerTracker->GetImplicitVelocity().GetY().GetFloat());
     CGS_ASSERT(rw::math::vpu::IsValid(lDisplacement), "IsValid(lDisplacement)");  // .cpp:863
 
     // .cpp:869 -- flt_82004F5C == 30.0f, flt_820047C4 == 15.0f, both dumped.
-    lDisplacement.y = Utils::TendToLimits(lDisplacement.y,
+    lDisplacement.SetY(Utils::TendToLimits(lDisplacement.GetY().GetFloat(),
                                           30.0f, mfSlideYScale,
-                                          15.0f, 0.0f);
+                                          15.0f, 0.0f));
 
     // .cpp:873 -- the fore/aft term starts life as an acceleration proxy.
-    lDisplacement.z = lrSharedInfo.GetTimestep(GetTimestepType())
-                    * (lfSpeedMPH - STATIC_last_mph);
+    lDisplacement.SetZ(lrSharedInfo.GetTimestep(GetTimestepType())
+                     * (lfSpeedMPH - STATIC_last_mph));
 
     // .cpp:87x (no own line) -- the authored per-axis slide scales, Y left alone.
     lDisplacement = rw::math::vpu::Mult(lDisplacement,
-                                        Vector3{ lrCameraAttribs.mrSlideXScale,
-                                                 1.0f,
-                                                 lrCameraAttribs.mrSlideZScale,
-                                                 0.0f });
+                                        Vector3(lrCameraAttribs.mrSlideXScale,
+                                                1.0f,
+                                                lrCameraAttribs.mrSlideZScale));
 
     // .cpp:885
-    lDisplacement.z = Utils::TendToLimits(lDisplacement.z,
+    lDisplacement.SetZ(Utils::TendToLimits(lDisplacement.GetZ().GetFloat(),
                                           lrCameraAttribs.mrSlideZInputForHalf,  1.0f,
-                                          lrCameraAttribs.mrSlideZInputForHalf, -1.0f);
+                                          lrCameraAttribs.mrSlideZInputForHalf, -1.0f));
 
     // .cpp:888
-    mfDesiredZDisplacement += (lDisplacement.z - mfDesiredZDisplacement)
+    mfDesiredZDisplacement += (lDisplacement.GetZ().GetFloat() - mfDesiredZDisplacement)
                             * lrCameraAttribs.mfAccelZLerpAmount;
-    lDisplacement.z = mfDesiredZDisplacement;
+    lDisplacement.SetZ(mfDesiredZDisplacement);
 
     // .cpp:894..:904 -- flt_82004014 == 0.1f. NOTE mpParameters, not lrCameraAttribs.
     if (lrSharedInfo.mPlayerInfo.mRaceCarState.mfAbsDriftScale > 0.1f)
@@ -1210,20 +1228,21 @@ void BehaviourGameplayExternal::ApplySlideyEffects(const Parameters& lrCameraAtt
     // .cpp:909 -- above the cutoff speed the fore/aft slide is switched off entirely.
     if (lfSpeedMPH > mpParameters->mfZAndTiltCutoffSpeedMPH)
     {
-        lDisplacement.z = 0.0f;
+        lDisplacement.SetZ(0.0f);
     }
 
     // .cpp:919
-    mfSmoothedZDisplacement += (lDisplacement.z - mfSmoothedZDisplacement)
+    mfSmoothedZDisplacement += (lDisplacement.GetZ().GetFloat() - mfSmoothedZDisplacement)
         * (Utils::SineLerp(KF_SLIDEY_STATIC_MIN_LERP, 1.0f,
-                           rw::math::fpu::Abs(lDisplacement.z) * mOverrideScale)
+                           rw::math::fpu::Abs(lDisplacement.GetZ().GetFloat()) * mOverrideScale)
            * lrCameraAttribs.mfZLerpAmount);
 
     STATIC_last_mph = lfSpeedMPH;                                                // .cpp:922
 
     // .cpp:927 / :930
-    lDisplacement.z  = lrCameraAttribs.mrSlideZOutputMax * mfSmoothedZDisplacement;
-    lDisplacement.z += lrCameraAttribs.mfZDistanceScale * lrCameraAttribs.mrSlideZOutputMax;
+    lDisplacement.SetZ(lrCameraAttribs.mrSlideZOutputMax * mfSmoothedZDisplacement);
+    lDisplacement.SetZ(lDisplacement.GetZ().GetFloat()
+                     + lrCameraAttribs.mfZDistanceScale * lrCameraAttribs.mrSlideZOutputMax);
 
     // .cpp:934 / :935 -- into camera space, then swung by the free-look pitch and yaw.
     Vector3 lPush = rw::math::vpu::TransformVector(lrCameraMatrix, lDisplacement);
@@ -1439,16 +1458,16 @@ void BehaviourGameplayExternal::UpdateLooking(f32& lfFOVInOut,
     // the centering factor moves. See the banner: the repetition is the console's, not ours.
     if (mRotationController.IsLookback())
     {
-        lRotation.y += mRotationController.GetYawRotationAngleRads();             // .cpp:681
-        lRotation.x += mRotationController.GetPitchRotationAngleRads();           // .cpp:683
+        lRotation.SetY(lRotation.GetY().GetFloat() + mRotationController.GetYawRotationAngleRads());   // .cpp:681
+        lRotation.SetX(lRotation.GetX().GetFloat() + mRotationController.GetPitchRotationAngleRads()); // .cpp:683
         CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid( lRotation )");    // .cpp:685
 
         mfCenteringFactor = 1.0f;                                                 // .cpp:688
     }
     else
     {
-        lRotation.y += mRotationController.GetYawRotationAngleRads();             // .cpp:692
-        lRotation.x += mRotationController.GetPitchRotationAngleRads();           // .cpp:694
+        lRotation.SetY(lRotation.GetY().GetFloat() + mRotationController.GetYawRotationAngleRads());   // .cpp:692
+        lRotation.SetX(lRotation.GetX().GetFloat() + mRotationController.GetPitchRotationAngleRads()); // .cpp:694
         CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid( lRotation )");    // .cpp:696
 
         if (mRotationController.IsRotated() || mRotationController.IsLookback())
@@ -1471,12 +1490,12 @@ void BehaviourGameplayExternal::UpdateLooking(f32& lfFOVInOut,
     // once per trig call (two `lbz`+`fmuls` pairs, 0x82225B48 and 0x82225B6C) and computes
     // cos before sin; the value is the same either way.
     const f32 lfYawRads = mRotationController.GetYawRotationAngleRads();
-    const Vector2 lLookDirection = Vector2{ rw::math::fpu::Sin(lfYawRads),
-                                            rw::math::fpu::Cos(lfYawRads), 0.0f, 0.0f };
+    const Vector2 lLookDirection(rw::math::fpu::Sin(lfYawRads),
+                                 rw::math::fpu::Cos(lfYawRads));
 
     // The car's own footprint, from the look-target box Update passes down.
-    f32 lfLength = lrAABBox.mMax.z - lrAABBox.mMin.z;
-    f32 lfWidth  = lrAABBox.mMax.x - lrAABBox.mMin.x;
+    f32 lfLength = lrAABBox.mMax.GetZ().GetFloat() - lrAABBox.mMin.GetZ().GetFloat();
+    f32 lfWidth  = lrAABBox.mMax.GetX().GetFloat() - lrAABBox.mMin.GetX().GetFloat();
     CGS_ASSERT(!rw::math::fpu::IsZero(lfLength),
                "!rw::math::fpu::IsZero(lfLength)");                               // .cpp:721
     CGS_ASSERT(!rw::math::fpu::IsZero(lfWidth),
@@ -1492,7 +1511,7 @@ void BehaviourGameplayExternal::UpdateLooking(f32& lfFOVInOut,
     // it in f30 across all THREE of its uses, here and at :753 and :781.
     const f32 lrSideScaleAmount =
         rw::math::fpu::Abs(rw::math::vpu::Dot(lLookDirection,
-                                              Vector2{ 1.0f, 0.0f, 0.0f, 0.0f }));
+                                              Vector2(1.0f, 0.0f)));
     lPivot = lPivot * (1.0f + (lfWidth - 1.0f) * lrSideScaleAmount * 0.25f);
     CGS_ASSERT(!rw::math::vpu::IsZero(lPivot, rw::math::fpu::KF_IS_ZERO_TOLERANCE),
                "!IsZero(lPivot)");                                                // .cpp:733
@@ -1500,7 +1519,7 @@ void BehaviourGameplayExternal::UpdateLooking(f32& lfFOVInOut,
     // How far behind the car the player is looking, 0..1.
     const f32 lrDotBackwards =
         rw::math::fpu::Clamp(rw::math::vpu::Dot(lLookDirection,
-                                                Vector2{ 0.0f, -1.0f, 0.0f, 0.0f }),
+                                                Vector2(0.0f, -1.0f)).GetFloat(),
                              0.0f, 1.0f);
     CGS_ASSERT(!rw::math::vpu::IsZero(lPivot, rw::math::fpu::KF_IS_ZERO_TOLERANCE),
                "!IsZero(lPivot)");                                                // .cpp:745
@@ -1534,7 +1553,8 @@ void BehaviourGameplayExternal::UpdateLooking(f32& lfFOVInOut,
     }
 
     // .cpp:776 -- and drop the orbit centre, proportionally to how high it already is.
-    lPivot.y -= lPivot.y * mpParameters->mfDropFactor * mfDropAmount;
+    const f32 lfPivotY = lPivot.GetY().GetFloat();
+    lPivot.SetY(lfPivotY - lfPivotY * mpParameters->mfDropFactor * mfDropAmount);
 
     // .cpp:780/:781 -- widen the FOV toward "Look Front FOV Offset" by the same side/back
     // weighting, then latch or ease it in exactly as the drop above.
@@ -1756,15 +1776,6 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
             -10.0f,
             mbJumping ? 20.0f : (10.0f - lfPitchLimitReduction));
 
-        // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The far end of the rear-view
-        // chain: this is THE camera the player drives behind, and these are the values it
-        // rotates by a few lines below (.cpp:681 / :692). Prints on change only.
-        {
-            static s32 siLastLookState = -1;
-            const s32 liLookState = (mRotationController.IsLookback() ? 1 : 0)
-                                  + (mRotationController.IsRotated()  ? 2 : 0);
-        }
-
         // ---- .cpp:230..:240 -- THE VELOCITY FRAME -------------------------------------
         // A right-handed frame whose forward IS the car's velocity direction. Its up axis is
         // Lerp(world-up, -car.zAxis, velocity.y): level ground gives world-up, and the more
@@ -1772,10 +1783,12 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         const Matrix44Affine& lrEyeTarget = lrSharedInfo.GetEyeTarget();
 
         const Vector3 lUpReference =                                       // .cpp:238
-            rw::math::vpu::Lerp(Vector3{ 0.0f, 1.0f, 0.0f, 0.0f },
-                                Vector3{ -lrEyeTarget.zAxis.x, -lrEyeTarget.zAxis.y,
-                                         -lrEyeTarget.zAxis.z, -lrEyeTarget.zAxis.w },
-                                lPlayerDirection.y);
+            rw::math::vpu::Lerp(Vector3(0.0f, 1.0f, 0.0f),
+                                MakeVector3WithLanes(-lrEyeTarget.zAxis.GetX().GetFloat(),
+                                                     -lrEyeTarget.zAxis.GetY().GetFloat(),
+                                                     -lrEyeTarget.zAxis.GetZ().GetFloat(),
+                                                     -lrEyeTarget.zAxis.GetVector().w),
+                                lPlayerDirection.GetY().GetFloat());
 
         const Vector3 lVelocityRight =                                     // .cpp:238
             rw::math::vpu::NormalizeFast(rw::math::vpu::Cross(lUpReference, lPlayerDirection));
@@ -1841,10 +1854,8 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
 
         // .cpp:287 -- drag mLastPlayerTransform toward that frame, rate-limited in ANGLE.
         InterpolateLastPlayerTransform(lVelocityTransform,
-                                       ::VecFloat{ lfPlayerSpeed, lfPlayerSpeed,
-                                                   lfPlayerSpeed, lfPlayerSpeed },
-                                       ::VecFloat{ lfTimestep, lfTimestep,
-                                                   lfTimestep, lfTimestep });
+                                       ::VecFloat(lfPlayerSpeed),
+                                       ::VecFloat(lfTimestep));
 
         // .cpp:290..:296 -- the drift crossfade. Drifting hard drives mfDriftScale to 1 (at
         // 0.1 per frame), releasing lets it decay to 0 (at 0.05) -- and mfDriftScale is what
@@ -1857,7 +1868,7 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // .cpp:301 -- ⚠️ A FUNCTION-LOCAL STATIC, with a real guard variable on console
         // (unk_82FAAD40 behind the bit-0 guard at dword_82FAAD50). It is PER-CLASS, not
         // per-instance: both shared gameplay cameras run through this same storage.
-        static Vector3 sLastCameraAngles = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        static Vector3 sLastCameraAngles(0.0f, 0.0f, 0.0f);
 
         // .cpp:307 -- the lagged frame's ZXY Euler angles, disambiguated toward last frame's.
         Vector3 lTargetAngles =
@@ -1900,7 +1911,10 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // error, and .cpp:346 hands the REMAINDER to the free-look pass as its base rotation.
         sLastCameraAngles = sLastCameraAngles + rw::math::vpu::Mult(lAngleDelta, lSpring);
         Vector3 lRotation = rw::math::vpu::Mult(                            // .cpp:346
-            Vector3{ -lAngleDelta.x, -lAngleDelta.y, -lAngleDelta.z, -lAngleDelta.w },
+            MakeVector3WithLanes(-lAngleDelta.GetX().GetFloat(),
+                                 -lAngleDelta.GetY().GetFloat(),
+                                 -lAngleDelta.GetZ().GetFloat(),
+                                 -lAngleDelta.GetVector().w),
             lInverseSpring);
         CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid(lRotation)");                 // :348
 
@@ -1908,10 +1922,9 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // ⚠️ THE PIVOT'S Z IS NEGATED and its X is dropped: the orbit centre sits ABOVE and
         // BEHIND the car's origin. The scale vector is a literal (1,1,1) here -- the hook
         // CalculateCameraTransform multiplies both arms by.
-        Vector3 lPivot          = Vector3{ 0.0f, lrCameraAttribs.mrPivotY,
-                                           -lrCameraAttribs.mrPivotZ, 0.0f };
-        const Vector3 lCarScale = Vector3{ 1.0f, 1.0f, 1.0f, 0.0f };
-        Vector3 lCarSpaceOffset = Vector3{ 0.0f, 0.0f, lrCameraAttribs.mrPivotZOffset, 0.0f };
+        Vector3 lPivot(0.0f, lrCameraAttribs.mrPivotY, -lrCameraAttribs.mrPivotZ);
+        const Vector3 lCarScale(1.0f, 1.0f, 1.0f);
+        Vector3 lCarSpaceOffset(0.0f, 0.0f, lrCameraAttribs.mrPivotZOffset);
 
         // .cpp:364..:375 -- THE DEBUG-RENDER ARM, gated on mbEnableDebugRender (X360
         // `lbz r7, 0xB5E` then `beq` over the whole arm). Nothing on this build raises that
@@ -1921,15 +1934,15 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         if (mbEnableDebugRender)
         {
             CgsDev::DebugInterface lDebugInterface;
-            lDebugInterface.GetRender().DrawBox(&lrEyeTarget.xAxis.x, 0xFF00FF00u,
-                                                Vector4{ 0.0f, lrCameraAttribs.mrPivotY,
-                                                         -lrCameraAttribs.mrPivotZ, 0.0f },
-                                                Vector4{ 0.0f, 0.0f,
-                                                         lrCameraAttribs.mrPivotZOffset, 0.0f });
+            lDebugInterface.GetRender().DrawBox(&lrEyeTarget.xAxis.GetVector().x, 0xFF00FF00u,
+                                                Vector4(0.0f, lrCameraAttribs.mrPivotY,
+                                                        -lrCameraAttribs.mrPivotZ, 0.0f),
+                                                Vector4(0.0f, 0.0f,
+                                                        lrCameraAttribs.mrPivotZOffset, 0.0f));
 
             const Vector3 lDebugFrom = rw::math::vpu::TransformPoint(lrEyeTarget, lPivot);
             lDebugInterface.GetRender().DrawLine(0xFF00FF00u, lDebugFrom,
-                                                 lDebugFrom + Vector3{ 0.0f, 2.0f, 0.0f, 0.0f });
+                                                 lDebugFrom + Vector3(0.0f, 2.0f, 0.0f));
         }
 
         // .cpp:375/:377 -- the FOV this frame: the authored FOV lerped toward the authored
@@ -1954,11 +1967,6 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // and the car-space offset, and adjusts lfFOV through its in/out reference.
         UpdateLooking(lfFOV, lRotation, lPivot, lCarSpaceOffset, lrSharedInfo.GetLookTarget());
 
-        // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The pose inputs while looking back.
-        {
-            static u32 suPoseCalls = 0;
-        }
-
         CGS_ASSERT(rw::math::vpu::IsValid(lTargetAngles), "IsValid(lTargetAngles)");         // :399
         CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid(lRotation)");                 // :400
 
@@ -1972,10 +1980,6 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
                                  lTargetAngles, lCarScale, lPivot,
                                  lRotation, lInverseSpring, lCarSpaceOffset,
                                  lrCarState.mfSpeedMPH, lfTimestep);
-        // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. Where the eye landed, car-relative.
-        {
-            static u32 suEyeCalls = 0;
-        }
         CGS_ASSERT(rw::math::vpu::IsValid(lCameraMatrix.xAxis)                               // :411
                    && rw::math::vpu::IsValid(lCameraMatrix.yAxis)
                    && rw::math::vpu::IsValid(lCameraMatrix.zAxis)

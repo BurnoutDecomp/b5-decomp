@@ -30,19 +30,41 @@
 #include "rw/math/vpu/vector4_operation.h"                      // Splat (the VecFloat broadcast)
 #include "rw/math/vpu/matrix44affine_operation.h"               // MakeRotationX/Y/Z, Mult,
                                                                 //   TransformVector, SLerp
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log::gpDebugPrint (the
-                                                                //   BRN_CAMRIG_DIAG witness only)
-
 #include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"       // Utils::ConsoleVpu::Mult / TransformVector (fused)
 #include "SDKs/XboxMath/XMVectorSinCos.h"                        // XboxMath::XMVectorSinCos (the three inlined SinCos)
 #include "SDKs/XboxMath/XMScalarSinCos.h"                        // XboxMath::XMScalarSinCos (XMMatrixRotationY's)
 
-#include <cmath>                                                // std::fmaf / std::fabs / std::signbit
-#include <cstdlib>                                              // getenv (BRN_CAMRIG_DIAG)
+#include <cmath>                                                // std::fabs / std::sqrt
 #include <limits>                                               // Dot3's QNaN (ROUNDING_RULE 1 overflow)
 
 namespace
 {
+    // Preserve the full native VMX register when a source expression supplies W explicitly.
+    // Vector3(float, float, float) clears W, so it is not equivalent in those cases.
+    Vector3 MakeVector3WithLanes(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    {
+        rw::math::vpu::VectorIntrinsic lvValue;
+        lvValue.x = lfX;
+        lvValue.y = lfY;
+        lvValue.z = lfZ;
+        lvValue.w = lfW;
+        return Vector3(lvValue);
+    }
+
+    // ARTIST uses vmaxfp128/vminfp128 for the VecFloat clamps (attested in
+    // BehaviourGameplayExternal::Update at 0x82240CC0/0x82240CC4). The tie between signed zeros
+    // depends on the sign bit, and NaN operands must pass through; x < 0 loses those cases.
+    bool HasNegativeSign(f32 lfValue)
+    {
+        union FloatBitPattern
+        {
+            f32 mfValue;
+            u32 muBits;
+        } lBits;
+        lBits.mfValue = lfValue;
+        return (lBits.muBits & 0x80000000u) != 0;
+    }
+
     // The console's vector IsZero, inlined at every Update site: the three lanes' magnitudes
     // (vandc against the sign mask) are compared `> tolerance` by ONE vcmpgtfp. over the lanes
     // (x, y, z, x) -- vrlimi128 copies x into w -- and CR6's "no lane true" bit is read back
@@ -51,9 +73,9 @@ namespace
     // AI lane's IsZeroVmx (FX-AINAN2).
     bool IsZeroVmx(const Vector3& lrVector, f32 lfTolerance)
     {
-        return !(std::fabs(lrVector.x) > lfTolerance
-                 || std::fabs(lrVector.y) > lfTolerance
-                 || std::fabs(lrVector.z) > lfTolerance);
+        return !(std::fabs(lrVector.GetX().GetFloat()) > lfTolerance
+                 || std::fabs(lrVector.GetY().GetFloat()) > lfTolerance
+                 || std::fabs(lrVector.GetZ().GetFloat()) > lfTolerance);
     }
 
     // rw::math::vpu Min / Max / Clamp on a VecFloat, one broadcast lane (rwmath 1.02.00
@@ -65,7 +87,7 @@ namespace
     {
         if (lfA != lfA) return lfA;
         if (lfB != lfB) return lfB;
-        if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;   // +0 is the larger zero
+        if (lfA == lfB) return HasNegativeSign(lfA) ? lfB : lfA; // +0 is the larger zero
         return (lfA > lfB) ? lfA : lfB;
     }
 
@@ -73,7 +95,7 @@ namespace
     {
         if (lfA != lfA) return lfA;
         if (lfB != lfB) return lfB;
-        if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;   // -0 is the smaller zero
+        if (lfA == lfB) return HasNegativeSign(lfA) ? lfA : lfB; // -0 is the smaller zero
         return (lfA < lfB) ? lfA : lfB;
     }
 
@@ -89,7 +111,7 @@ namespace
     // CgsCore::K_V3D_YAXIS @0x83017FA0 -- a .bss constant the CRT thunk @0x82C6CDC0 fills with
     // (0.0f, 1.0f, 0.0f, 0): flt_82001CC0 / flt_82001C98 / flt_82001CC0 / `li r9, 0`. It has no
     // home in this tree; the value is the thunk's.
-    const Vector3 K_V3D_YAXIS = { 0.0f, 1.0f, 0.0f, 0.0f };
+    const Vector3 K_V3D_YAXIS(0.0f, 1.0f, 0.0f);
 
     // flt_82001744 (0x3C8EFA35) -- degrees to radians, the rig's pitch conversion.
     const f32 KF_DEGS_TO_RADS = 0.017453292f;
@@ -111,7 +133,7 @@ namespace
         f32 lfSin;
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
-        { const Vector3 lResult = { lfSin, 0.0f, lfCos, 0.0f }; return lResult; }
+        return Vector3(lfSin, 0.0f, lfCos);
     }
 
     // The pitch: rows (1,0,0) / (0,c,s) / (0,-s,c) / (0,0,0).
@@ -122,19 +144,19 @@ namespace
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
         Matrix44Affine lResult;
         {
-            const Vector3 lAggregateValue = { 1.0f,   0.0f,  0.0f, 0.0f };
+            const Vector3 lAggregateValue(1.0f, 0.0f, 0.0f);
             lResult.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f,  lfCos, lfSin, 0.0f };
+            const Vector3 lAggregateValue(0.0f, lfCos, lfSin);
             lResult.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, -lfSin, lfCos, 0.0f };
+            const Vector3 lAggregateValue(0.0f, -lfSin, lfCos);
             lResult.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f,   0.0f,  0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             lResult.wAxis = lAggregateValue;
         }
         return lResult;
@@ -148,19 +170,19 @@ namespace
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
         Matrix44Affine lResult;
         {
-            const Vector3 lAggregateValue = {  lfCos, lfSin, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(lfCos, lfSin, 0.0f);
             lResult.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { -lfSin, lfCos, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(-lfSin, lfCos, 0.0f);
             lResult.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {   0.0f,  0.0f, 1.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 1.0f);
             lResult.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {   0.0f,  0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             lResult.wAxis = lAggregateValue;
         }
         return lResult;
@@ -168,26 +190,26 @@ namespace
 
     // XMMatrixRotationY @0x82203560: XMScalarSinCos (0x8220357C), then rows (c,0,-s,0) / (0,1,0,0) / (s,0,c,0) /
     // (0,0,0,1) (the -s is the fneg at 0x822035B4).
-    Matrix44Affine XMMatrixRotationY(f32 lfAngleRads)
+    Matrix44Affine BuildXMMatrixRotationY(f32 lfAngleRads)
     {
         f32 lfSin;
         f32 lfCos;
         XboxMath::XMScalarSinCos(&lfSin, &lfCos, lfAngleRads);
         Matrix44Affine lResult;
         {
-            const Vector3 lAggregateValue = { lfCos, 0.0f, -lfSin, 0.0f };
+            const Vector3 lAggregateValue(lfCos, 0.0f, -lfSin);
             lResult.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {  0.0f, 1.0f,   0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 1.0f, 0.0f);
             lResult.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { lfSin, 0.0f,  lfCos, 0.0f };
+            const Vector3 lAggregateValue(lfSin, 0.0f, lfCos);
             lResult.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {  0.0f, 0.0f,   0.0f, 1.0f };
+            const Vector3 lAggregateValue = MakeVector3WithLanes(0.0f, 0.0f, 0.0f, 1.0f);
             lResult.wAxis = lAggregateValue;
         }
         return lResult;
@@ -203,10 +225,13 @@ namespace
     // 0x82228AB0 |look|^2 (the look length), 0x82228C70 the SLerp result's |z|^2, 0x82229154 the smoothing's |move|^2.
     f32 Dot3(const Vector3& lrA, const Vector3& lrB)
     {
-        const f64 ldSum = static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
-                        + static_cast<f64>(lrA.z) * lrB.z;
+        const f64 ldSum = static_cast<f64>(lrA.GetX().GetFloat()) * lrB.GetX().GetFloat()
+                        + static_cast<f64>(lrA.GetY().GetFloat()) * lrB.GetY().GetFloat()
+                        + static_cast<f64>(lrA.GetZ().GetFloat()) * lrB.GetZ().GetFloat();
         const f32 lfSum = static_cast<f32>(ldSum);
-        if (std::isinf(lfSum) && std::isfinite(ldSum))
+        const f32 lfMax = (std::numeric_limits<f32>::max)();
+        const f64 ldMax = (std::numeric_limits<f64>::max)();
+        if ((lfSum > lfMax || lfSum < -lfMax) && (ldSum <= ldMax && ldSum >= -ldMax))
         {
             return std::numeric_limits<f32>::quiet_NaN();
         }
@@ -244,8 +269,15 @@ namespace
     // vmaddfp over four lanes, a * b + c with ONE rounding per lane (ROUNDING_RULE 3), b a full vector.
     Vector3 MultiplyAddLanes(const Vector3& lrA, const ::VecFloat& lrB, const Vector3& lrC)
     {
-        { const Vector3 lResult = { std::fmaf(lrA.x, lrB.x, lrC.x), std::fmaf(lrA.y, lrB.y, lrC.y),
-                        std::fmaf(lrA.z, lrB.z, lrC.z), std::fmaf(lrA.w, lrB.w, lrC.w) }; return lResult; }
+        const rw::math::vpu::VectorIntrinsic lvA = lrA.GetVector();
+        const rw::math::vpu::VectorIntrinsic lvC = lrC.GetVector();
+        const f32 lfScalar = lrB.GetFloat();
+        rw::math::vpu::VectorIntrinsic lvResult;
+        lvResult.x = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lvA.x, lfScalar, lvC.x);
+        lvResult.y = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lvA.y, lfScalar, lvC.y);
+        lvResult.z = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lvA.z, lfScalar, lvC.z);
+        lvResult.w = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lvA.w, lfScalar, lvC.w);
+        return Vector3(lvResult);
     }
 
     // The height / distance ease (both arms of the framing): target = (fast - slow) * framing + slow (fmadds),
@@ -253,8 +285,9 @@ namespace
     // 0x82228A4C (the debug camera), 0x82228A84 / 0x82228A8C, 0x82228AA4 / 0x82228AAC (by speed).
     f32 EaseTowardFraming(f32 lfValue, f32 lfSlow, f32 lfFast, f32 lfFraming, f32 lfBlend)
     {
-        const f32 lfTarget = std::fmaf(lfFast - lfSlow, lfFraming, lfSlow);
-        return std::fmaf(lfTarget - lfValue, lfBlend, lfValue);
+        const f32 lfTarget = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(
+            lfFast - lfSlow, lfFraming, lfSlow);
+        return BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lfTarget - lfValue, lfBlend, lfValue);
     }
 }
 
@@ -288,11 +321,11 @@ f32 BehaviourAftertouchCrash::KF_CRASHBREAKER_BLEND_OUT_SIM_SPEED = 0.33f; // 0x
 f32 BehaviourAftertouchCrash::KF_RECIPROCAL_CRASHBREAKER_BLEND_OUT_SIM_SPEED_BLEND_TIME = 10.0f; // 0x82CDA73C
 f32 BehaviourAftertouchCrash::KF_LOOK_DOWN_SCALE               = 0.6f;    // 0x82CDA740
 
-::VecFloat BehaviourAftertouchCrash::KF_MIN_CAMERA_LOOK_TAN_SQ_ANGLE   = { 0.1f,  0.1f,  0.1f,  0.1f  }; // 0x82FAA960 <- flt_82004014 (thunk 0x82C494B8)
-::VecFloat BehaviourAftertouchCrash::KF_MAX_CAMERA_LOOK_TAN_SQ_ANGLE   = { 0.6f,  0.6f,  0.6f,  0.6f  }; // 0x82FAA8F0 <- flt_82004D00 (thunk 0x82C494E0)
-::VecFloat BehaviourAftertouchCrash::KF_SMOOTHING_FACTOR               = { 0.5f,  0.5f,  0.5f,  0.5f  }; // 0x82FAA7F0 <- flt_82001DA0 (thunk 0x82C49508)
-::VecFloat BehaviourAftertouchCrash::KF_SMOOTHING_STOP_DISTANCE_SQ     = { 25.0f, 25.0f, 25.0f, 25.0f }; // 0x82FAA9C0 <- flt_82004FD8 (thunk 0x82C49530)
-::VecFloat BehaviourAftertouchCrash::KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK = { 2.0f,  2.0f,  2.0f,  2.0f  }; // 0x82FAA710 <- flt_82001D9C (thunk 0x82C49558)
+::VecFloat BehaviourAftertouchCrash::KF_MIN_CAMERA_LOOK_TAN_SQ_ANGLE   = ::VecFloat(0.1f);  // 0x82FAA960 <- flt_82004014 (thunk 0x82C494B8)
+::VecFloat BehaviourAftertouchCrash::KF_MAX_CAMERA_LOOK_TAN_SQ_ANGLE   = ::VecFloat(0.6f);  // 0x82FAA8F0 <- flt_82004D00 (thunk 0x82C494E0)
+::VecFloat BehaviourAftertouchCrash::KF_SMOOTHING_FACTOR               = ::VecFloat(0.5f);  // 0x82FAA7F0 <- flt_82001DA0 (thunk 0x82C49508)
+::VecFloat BehaviourAftertouchCrash::KF_SMOOTHING_STOP_DISTANCE_SQ     = ::VecFloat(25.0f); // 0x82FAA9C0 <- flt_82004FD8 (thunk 0x82C49530)
+::VecFloat BehaviourAftertouchCrash::KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK = ::VecFloat(2.0f);  // 0x82FAA710 <- flt_82001D9C (thunk 0x82C49558)
 
 // ----------------------------------------------------------------------------
 // BehaviourAftertouchCrash::Construct @0x822461F8 -- seed a freshly pooled instance.
@@ -358,7 +391,7 @@ void BehaviourAftertouchCrash::Construct()
     mbIsTempDebugCrashCamera            = false;        // stb 0, +0x3C3
     mbIsRandomStartTempDebugCrashCamera = false;        // stb 0, +0x3C4
 
-    mfManualHeightAdjustment = rw::math::vpu::Splat(0.0f);  // stvx128 v13 (vspltw of 0.0f), +0x3B0
+    mfManualHeightAdjustment.SetFloat(0.0f);                // stvx128 v13 (vspltw of 0.0f), +0x3B0
 
     mfBounceShakeMultiplier = 1.0f;                     // stfs +0x3CC
     mfRollAngleRads         = 0.0f;                     // stfs +0x3D0
@@ -462,8 +495,6 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     mPositionLag.Update(lrParameters.mLagParams, lfTimestep, lCarTransform);
     const Vector3 lCarPosition = lCarTransform.wAxis;
 
-    const bool lbDiagFirstFrame = !IsPrepared();   // [DIAG] BRN_CAMRIG_DIAG only (see the tail)
-
     // .cpp:179..:207 -- the first frame after Prepare seeds the rig (lbz +0x08; bne 0x822285B0).
     if (!IsPrepared())
     {
@@ -496,14 +527,14 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
             // Moving: sit against the direction of travel, never below the car
             // (vxor128 with the sign mask, then vandc on the y lane and vrlimi128 it back).
             mDesiredWorldSpaceNormalizedVectorFromCar = rw::math::vpu::Negate(lVelocityDirection);
-            mDesiredWorldSpaceNormalizedVectorFromCar.y =
-                std::fabs(mDesiredWorldSpaceNormalizedVectorFromCar.y);
+            mDesiredWorldSpaceNormalizedVectorFromCar.SetY(
+                std::fabs(mDesiredWorldSpaceNormalizedVectorFromCar.GetY().GetFloat()));
         }
         mWorldSpaceNormalizedVectorFromCar = mDesiredWorldSpaceNormalizedVectorFromCar;   // +0x2C0
 
         // The aim point starts one metre below the lagged car origin: (0.0, -1.0, 0.0, 0) built
         // from flt_82001CC0 / flt_820037C8 at var_240, added to v123, stored to +0x2E0 / +0x2B0.
-        const Vector3 lOneMetreDown = { 0.0f, -1.0f, 0.0f, 0.0f };
+        const Vector3 lOneMetreDown(0.0f, -1.0f, 0.0f);
         mCrashPoint       = lCarPosition + lOneMetreDown;                         // +0x2E0
         mCurrentTargetPos = lCarPosition + lOneMetreDown;                         // +0x2B0
 
@@ -565,16 +596,17 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
         // multiply-add ONE rounding (ROUNDING_RULE 3) -- Utils::ConsoleVpu::TransformVector, which the real
         // words run on emu64 match on 1000 random matrices / directions, FX-GATE 2026-09-25).
         mManualCameraDirection = Utils::ConsoleVpu::TransformVector(
-            XMMatrixRotationY(lOrbitStick.x * KF_CAMERA_X_ROTATION_SPEED),
+            BuildXMMatrixRotationY(lOrbitStick.mV.x * KF_CAMERA_X_ROTATION_SPEED),
             mManualCameraDirection);
 
         // .cpp:254 -- raise / lower by stick y * KF_CAMERA_Y_ROTATION_SPEED, clamped to
         // +-KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK: `vmaddfp v12, v12, v9, v11` (stick*rate + tweak, ONE
         // rounding: ROUNDING_RULE 3), `vmaxfp v12, -K, v12` then `vminfp v13, K, v12` (0x822287A8..0x822287B8).
-        mfManualHeightAdjustment = rw::math::vpu::Splat(VecFloatClamp(
-            std::fmaf(lOrbitStick.y, KF_CAMERA_Y_ROTATION_SPEED, mfManualHeightAdjustment.x),
-            -KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK.x,
-            KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK.x));
+        mfManualHeightAdjustment.SetFloat(VecFloatClamp(
+            BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(
+                lOrbitStick.mV.y, KF_CAMERA_Y_ROTATION_SPEED, mfManualHeightAdjustment.GetFloat()),
+            -KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK.GetFloat(),
+            KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK.GetFloat()));
 
         lLookDirection = mManualCameraDirection;
     }
@@ -582,7 +614,8 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     {
         // .cpp:260 -- let the height tweak die away (vmulfp128 by splat(KF_CAMERA_RESET_SPEED)),
         // and look along the car's travel (v0 == the velocity, reloaded at 0x822286C4).
-        mfManualHeightAdjustment = mfManualHeightAdjustment * rw::math::vpu::Splat(KF_CAMERA_RESET_SPEED);
+        const rw::math::vpu::Vector4 lvResetSpeed = rw::math::vpu::Splat(KF_CAMERA_RESET_SPEED);
+        mfManualHeightAdjustment.mV = __vmulfp(mfManualHeightAdjustment.GetVector(), lvResetSpeed.GetVector());
 
         lLookDirection = lrCarState.mLinearVelocity;
     }
@@ -592,12 +625,16 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // (0x822287F8..0x822288B8: z^2 by vmulfp128, then x * x + z^2 by ONE vmaddfp @0x8222883C, the two VecFloat
     // scales, `vmaxfp v12, lo, y^2` then `vminfp v13, hi, v12`, the root as GuardedRoot (0x82228878..0x822288B0),
     // the multiply by splat(-KF_LOOK_DOWN_SCALE) (`fneg` @0x82228844) and `vrlimi128 v0, v13, 4, 0` into the y lane).
-    const f32 lfHorizontalSq = std::fmaf(lLookDirection.x, lLookDirection.x, lLookDirection.z * lLookDirection.z);
-    const f32 lfVerticalSq   = lLookDirection.y * lLookDirection.y;
-    lLookDirection.y = GuardedRoot(VecFloatClamp(lfVerticalSq,
-                                                 KF_MIN_CAMERA_LOOK_TAN_SQ_ANGLE.x * lfHorizontalSq,
-                                                 KF_MAX_CAMERA_LOOK_TAN_SQ_ANGLE.x * lfHorizontalSq))
-                     * -KF_LOOK_DOWN_SCALE;
+    const f32 lfLookX = lLookDirection.GetX().GetFloat();
+    const f32 lfLookY = lLookDirection.GetY().GetFloat();
+    const f32 lfLookZ = lLookDirection.GetZ().GetFloat();
+    const f32 lfHorizontalSq = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(
+        lfLookX, lfLookX, lfLookZ * lfLookZ);
+    const f32 lfVerticalSq = lfLookY * lfLookY;
+    lLookDirection.SetY(GuardedRoot(VecFloatClamp(lfVerticalSq,
+                                                 KF_MIN_CAMERA_LOOK_TAN_SQ_ANGLE.GetFloat() * lfHorizontalSq,
+                                                 KF_MAX_CAMERA_LOOK_TAN_SQ_ANGLE.GetFloat() * lfHorizontalSq))
+                     * -KF_LOOK_DOWN_SCALE);
 
     // .cpp:273..:276 -- the desired direction FROM the car TO the camera (0x822288C4..0x82228998): |look|^2 by
     // vmsum3fp128 @0x822288F0, the refined estimate (NO zero guard: IsZero was tested), look * it, then the sign flip.
@@ -616,7 +653,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     {
         // The debug crash camera (the takedown state raises this flag): stick y walks a 0..1
         // parameter between the authored slow and fast framing (0x822289A8..0x82228A50).
-        f32 lfAdjust = lrSharedInfo.mSphericalRotationController.GetRawStickVector().y;
+        f32 lfAdjust = lrSharedInfo.mSphericalRotationController.GetRawStickVector().mV.y;
         if (rw::math::fpu::Abs(lfAdjust) < sfDeadzone)                            // fcmpu ; bge
         {
             lfAdjust = 0.0f;
@@ -660,8 +697,9 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
                                                   : lrParameters.mfMaximumBlendFactor;
         }
         // (manual - blend) * blend-blend + blend: fsubs, then ONE fmadds @0x82228BB4 (ROUNDING_RULE 3).
-        mfBlendFactor = std::fmaf(lrParameters.mfManualBlendFactor - mfBlendFactor,
-                                  lrParameters.mfBlendFactorBlendFactor, mfBlendFactor);
+        mfBlendFactor = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(
+            lrParameters.mfManualBlendFactor - mfBlendFactor,
+            lrParameters.mfBlendFactorBlendFactor, mfBlendFactor);
 
         // .cpp:343..:360 -- blend two look-at frames from the lagged car origin, one along the
         // current direction and one along the desired, by the blend factor (vmaddcfp128
@@ -718,7 +756,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // fused vmaddfp cascade 0x822290C0..0x82229144 (ROUNDING_RULE 3), Utils::ConsoleVpu::Mult: the whole block
     // 0x82228EA4..0x82229154 (the height lift, the SinCos, the rows and the product) run on emu64 matches it on
     // 1000 random frames (FX-GATE 2026-09-25).
-    lCameraTransform.wAxis.y += mfHeight;
+    lCameraTransform.wAxis.SetY(lCameraTransform.wAxis.GetY().GetFloat() + mfHeight);
     lCameraTransform = Utils::ConsoleVpu::Mult(
         RotationX(lrParameters.mfPitch * KF_DEGS_TO_RADS), lCameraTransform);
 
@@ -727,7 +765,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // @0x82229158 over the vmsum3fp128 @0x82229154; `vmaddfp v12, d, last, factor` == d * factor + last
     // with one rounding per lane @0x8222917C).
     const Vector3 lCameraMove = lCameraTransform.wAxis - mCameraPositionLastFrame;
-    if (KF_SMOOTHING_STOP_DISTANCE_SQ.x > Dot3(lCameraMove, lCameraMove))
+    if (KF_SMOOTHING_STOP_DISTANCE_SQ.GetFloat() > Dot3(lCameraMove, lCameraMove))
     {
         lCameraTransform.wAxis = MultiplyAddLanes(lCameraMove, KF_SMOOTHING_FACTOR, mCameraPositionLastFrame);
     }
@@ -784,7 +822,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // is fused with the add (ROUNDING_RULE 3; exact doubling, so it rounds as the two-step form did)).
     const Vector3 lCloseupTarget = lCarPosition - rw::math::vpu::GetVector3_YAxis() * 0.5f;
     Vector3 lFlatVectorFromCar = GetWorldSpaceVectorFromCar();                    // .h:104
-    lFlatVectorFromCar.y = 0.0f;
+    lFlatVectorFromCar.SetY(0.0f);
     const Vector3 lCloseupEye = Utils::ConsoleVpu::MultiplyAdd(lFlatVectorFromCar * 2.0f, 2.0f, lCloseupTarget);
 
     // .cpp:449..:455 -- blend the published camera into the close-up by the eased close-up amount
@@ -796,21 +834,6 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
                                                Utils::SineLerp(0.0f, 1.0f, mfCloseupAmount0To1),
                                                &lUnusedAngle));
     lrCamera.ValidateTransformWithDebugInfo();
-
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_CAMRIG_DIAG, the FX-CAMRIG live witness: proves this
-    // body ran and shows what it published against the lagged car origin it follows. The first
-    // ten frames after each Prepare, then every 15th -- and at most 240 lines per session (HARD
-    // CAP 2026-09-24, crash-parity diag hygiene: the rate limit alone grew with every crash
-    // camera a long drive raised). Prints only.
-    {
-        static s32 siDiagFrame = 0;
-        static s32 siDiagLinesLeft = 240;
-        if (lbDiagFirstFrame)
-        {
-            siDiagFrame = 0;
-        }
-        ++siDiagFrame;
-    }
 
     return true;                                                                  // li r3, 1
 }
@@ -827,7 +850,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
 // ----------------------------------------------------------------------------
 bool BehaviourAftertouchCrash::CheckForPlayerCarBouncing(const BehaviourSharedInfo& lrSharedInfo)
 {
-    const f32 lfVerticalSpeed = lrSharedInfo.mPlayerInfo.mRaceCarState.mLinearVelocity.y;
+    const f32 lfVerticalSpeed = lrSharedInfo.mPlayerInfo.mRaceCarState.mLinearVelocity.GetY().GetFloat();
 
     if (lfVerticalSpeed >= 0.0f)
     {

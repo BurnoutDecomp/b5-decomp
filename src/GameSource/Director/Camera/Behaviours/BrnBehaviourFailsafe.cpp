@@ -29,13 +29,21 @@
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"             // ICE::CameraSpaceHandler
 #include "SDKs/XboxMath/XMVectorSinCos.h"                          // XboxMath::XMVectorSinCos
 #include "SDKs/XboxMath/XMVectorACos.h"                            // XboxMath::XMVectorACos
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include <cmath>     // std::signbit
-#include <cstdlib>
+#include <cmath>
 namespace
 {
-    using rw::math::vpu::Matrix44Affine;
     using rw::math::vpu::Vector3;
+
+    bool HasNegativeSign(f32 lfValue)
+    {
+        union FloatBitPattern
+        {
+            f32 mfValue;
+            u32 muBits;
+        } lBits;
+        lBits.mfValue = lfValue;
+        return (lBits.muBits & 0x80000000u) != 0;
+    }
 
     // Degrees to radians (0x3C8EFA35), the spin's conversion.
     const f32 KF_DEGS_TO_RADS = 0.017453292f;
@@ -46,7 +54,7 @@ namespace
     {
         if (lfA != lfA) return lfA;
         if (lfB != lfB) return lfB;
-        if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;
+        if (lfA == lfB) return HasNegativeSign(lfA) ? lfB : lfA;
         return (lfA > lfB) ? lfA : lfB;
     }
 
@@ -54,33 +62,33 @@ namespace
     {
         if (lfA != lfA) return lfA;
         if (lfB != lfB) return lfB;
-        if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;
+        if (lfA == lfB) return HasNegativeSign(lfA) ? lfA : lfB;
         return (lfA < lfB) ? lfA : lfB;
     }
 
     // rw::math::vpu::Matrix44AffineFromYRotationAngle with the XDK sine and cosine: rows
     // (c,0,-s) / (0,1,0) / (s,0,c) / 0, packed with vperm / vrlimi128 (no arithmetic). The
     // console's w lanes carry copies; the transforms that read this matrix use x, y and z only.
-    Matrix44Affine RotationY(f32 lfAngleRads)
+    rw::math::vpu::Matrix44Affine RotationY(f32 lfAngleRads)
     {
         f32 lfSin;
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
-        Matrix44Affine lResult;
+        rw::math::vpu::Matrix44Affine lResult;
         {
-            const Vector3 lAggregateValue = { lfCos, 0.0f, -lfSin, 0.0f };
+            const Vector3 lAggregateValue(lfCos, 0.0f, -lfSin);
             lResult.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {  0.0f, 1.0f,   0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 1.0f, 0.0f);
             lResult.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { lfSin, 0.0f,  lfCos, 0.0f };
+            const Vector3 lAggregateValue(lfSin, 0.0f, lfCos);
             lResult.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {  0.0f, 0.0f,   0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             lResult.wAxis = lAggregateValue;
         }
         return lResult;
@@ -88,32 +96,31 @@ namespace
 
     // rw::math::vpu::Matrix44AffineFromZRotationAngle, the same way: rows (c,s,0) / (-s,c,0) /
     // (0,0,1) / 0.
-    Matrix44Affine RotationZ(f32 lfAngleRads)
+    rw::math::vpu::Matrix44Affine RotationZ(f32 lfAngleRads)
     {
         f32 lfSin;
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
-        Matrix44Affine lResult;
+        rw::math::vpu::Matrix44Affine lResult;
         {
-            const Vector3 lAggregateValue = {  lfCos, lfSin, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(lfCos, lfSin, 0.0f);
             lResult.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { -lfSin, lfCos, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(-lfSin, lfCos, 0.0f);
             lResult.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {   0.0f,  0.0f, 1.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 1.0f);
             lResult.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {   0.0f,  0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             lResult.wAxis = lAggregateValue;
         }
         return lResult;
     }
 
-    s32 siCamBodyDiagLinesLeft = 64;
 }
 
 namespace BrnDirector
@@ -195,7 +202,7 @@ bool BehaviourFailsafe::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSh
 
     lrCamera.GetState().SetFlag(CameraState::E_FLAG_VALID, true);
 
-    const Matrix44Affine& lrCarToWorld = lrSharedInfo.mPlayerInfo.mRaceCarState.mTransform;
+    const rw::math::vpu::Matrix44Affine& lrCarToWorld = lrSharedInfo.mPlayerInfo.mRaceCarState.mTransform;
 
     ICE::CameraSpaceHandler lSpaceHandler(*lrSharedInfo.GetCameraSpaceHandler());
     lSpaceHandler.SetCarToWorld(lrCarToWorld);
@@ -207,11 +214,11 @@ bool BehaviourFailsafe::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSh
     lShotContext.mpTimestep           = &lrSharedInfo.GetTimestep();
     mKeyAnimController.Update(lShotContext, &lrCamera);
 
-    const Matrix44Affine lTransform  = lrCamera.GetTransform();
-    const Matrix44Affine lWorldToCar = Utils::ConsoleVpu::InverseOfMatrixWithOrthonormal3x3(lrCarToWorld);
+    const rw::math::vpu::Matrix44Affine lTransform  = lrCamera.GetTransform();
+    const rw::math::vpu::Matrix44Affine lWorldToCar = Utils::ConsoleVpu::InverseOfMatrixWithOrthonormal3x3(lrCarToWorld);
 
     // The take's dutch.
-    const Matrix44Affine lUprightCamera = Utils::CreateLookAt(lTransform.wAxis, lTransform.wAxis + lTransform.zAxis);
+    const rw::math::vpu::Matrix44Affine lUprightCamera = Utils::CreateLookAt(lTransform.wAxis, lTransform.wAxis + lTransform.zAxis);
     const f32 lfUpDot = Utils::ConsoleVpu::Dot3(lUprightCamera.yAxis, lTransform.yAxis);
     f32 lfDutch = XboxMath::XMVectorACos(VecFloatMin(1.0f, VecFloatMax(0.0f, lfUpDot)));
     if (0.0f > lfUpDot)
@@ -220,24 +227,24 @@ bool BehaviourFailsafe::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSh
     }
 
     // The car's frame stood upright, then lagged.
-    const Matrix44Affine lUprightCarToWorld = Utils::CreateLookAt(lrCarToWorld.wAxis, lrCarToWorld.wAxis + lrCarToWorld.zAxis);
+    const rw::math::vpu::Matrix44Affine lUprightCarToWorld = Utils::CreateLookAt(lrCarToWorld.wAxis, lrCarToWorld.wAxis + lrCarToWorld.zAxis);
     const f32 lfTimestep = lrSharedInfo.GetTimestep(BrnDirector::Timestep::E_WORLD_NO_SLOMO);
     mOrientationLag.Update(lfTimestep, lUprightCarToWorld);
-    const Matrix44Affine lLaggedCarToWorld = mOrientationLag.GetTransform();
+    const rw::math::vpu::Matrix44Affine lLaggedCarToWorld = mOrientationLag.GetTransform();
 
     // The take's eye and view direction in the car's frame.
-    const Vector3 lLocalEye       = Utils::ConsoleVpu::TransformPoint(lWorldToCar, lTransform.wAxis);
-    const Vector3 lLocalDirection = Utils::ConsoleVpu::TransformVector(lWorldToCar, lTransform.zAxis);
+    const ::Vector3 lLocalEye       = Utils::ConsoleVpu::TransformPoint(lWorldToCar, lTransform.wAxis);
+    const ::Vector3 lLocalDirection = Utils::ConsoleVpu::TransformVector(lWorldToCar, lTransform.zAxis);
 
     // The spin.
     mfRotationOffset = Utils::ConsoleVpu::MultiplyAdd(lfTimestep, sfRotationRate, mfRotationOffset);
-    const Matrix44Affine lSpin = RotationY(mfRotationOffset * KF_DEGS_TO_RADS);
+    const rw::math::vpu::Matrix44Affine lSpin = RotationY(mfRotationOffset * KF_DEGS_TO_RADS);
 
-    const Vector3 lEye = Utils::ConsoleVpu::TransformPoint(
+    const ::Vector3 lEye = Utils::ConsoleVpu::TransformPoint(
         lLaggedCarToWorld, Utils::ConsoleVpu::TransformPoint(lSpin, lLocalEye));
-    const Vector3 lDirection = Utils::ConsoleVpu::TransformVector(
+    const ::Vector3 lDirection = Utils::ConsoleVpu::TransformVector(
         lLaggedCarToWorld, Utils::ConsoleVpu::TransformVector(lSpin, lLocalDirection));
-    const Matrix44Affine lUprightTransform = Utils::CreateLookAt(lEye, lEye + lDirection);
+    const rw::math::vpu::Matrix44Affine lUprightTransform = Utils::CreateLookAt(lEye, lEye + lDirection);
 
     lrCamera.SetTransform(Utils::ConsoleVpu::Mult(RotationZ(lfDutch), lUprightTransform));
     lrCamera.ValidateTransformWithDebugInfo();
