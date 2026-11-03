@@ -26,10 +26,6 @@
                                                               //   function, which is a different mangled
                                                               //   symbol from the real non-static 2-arg
                                                               //   member. See the RETIRED note below.
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] CgsDev::Log::WriteToLog (the BYSTANDER look witness)
-#include <cstdio>                                             // [DIAG] snprintf
-#include <cstdlib>                                            // [DIAG] getenv (BRN_CRASHCAM_DIAG)
-#include <math.h>                                             // [DIAG] sqrtf / acosf (the witness's aim angle)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.cpp
@@ -156,14 +152,10 @@ namespace Camera
             static_cast<const VehicleInfo*>(lpVehicle)->mRaceCarState.mTransform;
 
         // Vector3(zAxis.x, 0, zAxis.z) -- the forward axis flattened to horizontal.
-        const rw::math::vpu::Vector3 lFlatHeading =
-            { lrTransform.zAxis.x, 0.0f, lrTransform.zAxis.z, 0.0f };
-
-        const rw::math::vpu::Vector3 lEye    = lrTransform.wAxis;
-        const rw::math::vpu::Vector3 lTarget = { lEye.x + lFlatHeading.x,   // target = eye + flat
-                                                 lEye.y + lFlatHeading.y,
-                                                 lEye.z + lFlatHeading.z,
-                                                 0.0f };
+        const rw::math::vpu::Vector3 lFlatHeading(
+            lrTransform.zAxis.GetX().GetFloat(), 0.0f, lrTransform.zAxis.GetZ().GetFloat());
+        const rw::math::vpu::Vector3 lEye = lrTransform.wAxis;
+        const rw::math::vpu::Vector3 lTarget = lEye + lFlatHeading;
 
         return Utils::CreateLookAt(lEye, lTarget);
     }
@@ -228,12 +220,12 @@ namespace Camera
         // (it is never read downstream).
         const rw::math::vpu::Vector3& lrMin = lrTargetBounds.mMin;
         const rw::math::vpu::Vector3& lrMax = lrTargetBounds.mMax;
-        const f32 lfLoX = lrMin.x * KF_TARGET_BOX_SCALE;
-        const f32 lfLoY = lrMin.y * KF_TARGET_BOX_SCALE;
-        const f32 lfLoZ = lrMin.z * KF_TARGET_BOX_SCALE;
-        const f32 lfHiX = lrMax.x * KF_TARGET_BOX_SCALE;
-        const f32 lfHiY = lrMax.y * KF_TARGET_BOX_SCALE;
-        const f32 lfHiZ = lrMax.z * KF_TARGET_BOX_SCALE;
+        const f32 lfLoX = lrMin.GetX().GetFloat() * KF_TARGET_BOX_SCALE;
+        const f32 lfLoY = lrMin.GetY().GetFloat() * KF_TARGET_BOX_SCALE;
+        const f32 lfLoZ = lrMin.GetZ().GetFloat() * KF_TARGET_BOX_SCALE;
+        const f32 lfHiX = lrMax.GetX().GetFloat() * KF_TARGET_BOX_SCALE;
+        const f32 lfHiY = lrMax.GetY().GetFloat() * KF_TARGET_BOX_SCALE;
+        const f32 lfHiZ = lrMax.GetZ().GetFloat() * KF_TARGET_BOX_SCALE;
 
         // The console emits the eight corners in this exact order (the store sequence runs
         // in ascending stack address).
@@ -253,10 +245,13 @@ namespace Camera
             const f32 lfSY = laSelectY[liCorner];
             const f32 lfSZ = laSelectZ[liCorner];
 
-            laCorners[liCorner].x = lrW.x + lrX.x * lfSX + lrY.x * lfSY + lrZ.x * lfSZ;
-            laCorners[liCorner].y = lrW.y + lrX.y * lfSX + lrY.y * lfSY + lrZ.y * lfSZ;
-            laCorners[liCorner].z = lrW.z + lrX.z * lfSX + lrY.z * lfSY + lrZ.z * lfSZ;
-            laCorners[liCorner].w = lrW.w + lrX.w * lfSX + lrY.w * lfSY + lrZ.w * lfSZ;
+            const rw::math::vpu::VecFloat lSX(lfSX), lSY(lfSY), lSZ(lfSZ);
+            const rw::math::vpu::Vector3 lCorner(__vmaddfp(lrZ.mV, lSZ.mV,
+                __vmaddfp(lrY.mV, lSY.mV, __vmaddfp(lrX.mV, lSX.mV, lrW.mV))));
+            laCorners[liCorner].x = lCorner.GetX().GetFloat();
+            laCorners[liCorner].y = lCorner.GetY().GetFloat();
+            laCorners[liCorner].z = lCorner.GetZ().GetFloat();
+            laCorners[liCorner].w = lCorner.GetComponent(3).GetFloat();
         }
 
         return rw::collision::Frustum::IsBoxInFrustum(
@@ -309,67 +304,6 @@ static const f32 KF_BYSTANDER_LOOKER_MIN_FOV_VELOCITY    = 20.0f;
 static const f32 KF_BYSTANDER_LOOKER_MAX_FOV_VELOCITY    = 130.0f;
 static const f32 KF_BYSTANDER_LOOKER_DISTANCE_FROM_IDEAL = 5.0f;
 static const f32 KF_BYSTANDER_LOOKER_SUBJECT_SIZE        = 0.5f;
-
-// [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The BYSTANDER look space's live witness (CC-13): how many degrees
-// the camera's forward (its z row) is off the bystander's position before and after the looker, and the FOV the looker
-// left, with the take's guid and name. One line on each of a take's first four frames, then every 30th. Reads only.
-struct BystanderLookDiag
-{
-    bool        mbOn;
-    const void* mpBehaviour;
-    s32         miGuid;
-    u32         muFrame;
-    f32         mfAimBefore;
-    f32         mfFovBefore;
-};
-
-// [DIAG] NOT IN THE X360 BINARY. The line budget of the two FX-LASTFIX witnesses below (L3, 2026-09-28): a flat
-// 96-line cap was used up by the junkyard's three CarSelect takes, which re-prepare every few seconds, before a run
-// reached the take its case waits for (fxlastfix_ice_spaces/20260928_072030: 3 x 32 lines, no Takendown line).
-// Now every take guid gets KU_DIAG_LINES_PER_TAKE lines, for up to KU_DIAG_TAKES guids and
-// KU_DIAG_LINES_PER_RUN lines in all.
-static const u32 KU_DIAG_LINES_PER_TAKE = 12u;
-static const u32 KU_DIAG_TAKES          = 32u;
-static const u32 KU_DIAG_LINES_PER_RUN  = 256u;
-
-struct DiagTakeBudget
-{
-    s32 maiGuid[KU_DIAG_TAKES];
-    u32 mauLines[KU_DIAG_TAKES];
-    u32 muGuids;
-    u32 muLines;
-};
-
-// [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The heading space's live witness (FX-LASTFIX): on a take's frames
-// 0..5, how many degrees mHeadingSpaceTransform's forward (its z row) is off the look-at's before and after the SLerp,
-// and the SLerp's own remaining angle (its angle out, angle - angle * 0.2). The console eases 20% a frame: on a frame
-// whose look-at moved, after == 0.8 x before (the arc arm; under 2 degrees the lerp arm is within a hair of it). The
-// line budget is per take (DiagTakeBudget above). Reads only.
-struct HeadingEaseDiag
-{
-    bool        mbOn;
-    const void* mpBehaviour;
-    s32         miGuid;
-    u32         muFrame;
-    u32         muLines;
-    f32         mfBefore;
-    f32         mfAfter;
-    f32         mfRemaining;
-};
-
-// [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The take's reference spaces (FX-LASTFIX item 1b): on a take's frames
-// 0..5, where the handler the take evaluator reads puts CAR and CAR2 -- metres off the behaviour's primary / secondary
-// vehicle, for the take's copy and for the MainDirector's shared handler (the player / the race car nearest the player)
-// -- and the yaw of HEADING2 in the copy (the eased heading space), in the shared handler (the nearest car's raw
-// transform) and of the secondary vehicle itself. The line budget is per take (DiagTakeBudget above). Reads only.
-struct SpacesDiag
-{
-    bool        mbOn;
-    const void* mpBehaviour;
-    s32         miGuid;
-    u32         muFrame;
-    u32         muLines;
-};
 
 // The source path string the asserts report.
 static const char* const KPC_SOURCE_FILE =
@@ -724,10 +658,8 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // var_390 -- an angle-out slot Update never reads (the looker block re-uses var_390 as scratch). The four result rows
     // go back into mHeadingSpaceTransform.
     rw::math::vpu::Vector3 lUnusedAngle;
-                            // [DIAG] NOT X360
     mHeadingSpaceTransform =
         rw::math::vpu::SLerp(mHeadingSpaceTransform, lLookAt, KF_HEADING_SPACE_2_SLERP_AMOUNT, &lUnusedAngle);
-               // [DIAG] NOT X360
 
     // The take evaluator resolves its reference spaces through its own copy of the shared
     // per-frame handler (through its copy constructor, 0x82247384 into var_2B0).
@@ -799,7 +731,6 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // --- Pick the look space + motion-blur amount ---
     const ICE::eICESpace leLookSpace = mKeyAnimController.GetLookSpace();
     const bool lbHasLookSpace = IsLooseHeadingSpace(leLookSpace) || IsLookAtVehicleSpace(leLookSpace);
-         // [DIAG] NOT X360
 
     // A take anchored to a car gets NO extra motion blur; a free/world take gets it all. The
     // two amounts and both enable flags are one operation on the camera's effects block.
@@ -850,14 +781,13 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         lLookerParams.mfToleranceForDistanceFromIdeal  = KF_BYSTANDER_LOOKER_DISTANCE_FROM_IDEAL;
         lLookerParams.mfTargetSubjectXSize             = KF_BYSTANDER_LOOKER_SUBJECT_SIZE;
         lLookerParams.mfTargetSubjectYSize             = KF_BYSTANDER_LOOKER_SUBJECT_SIZE;
-        lLookerParams.mfTargetSubjectXScreenOffset     = mKeyAnimController.GetLookPos().x * KF_BYSTANDER_LOOKER_TOLERANCE;
-        lLookerParams.mfTargetSubjectYScreenOffset     = mKeyAnimController.GetLookPos().y * KF_BYSTANDER_LOOKER_TOLERANCE;
+        lLookerParams.mfTargetSubjectXScreenOffset     = mKeyAnimController.GetLookPos().GetX().GetFloat() * KF_BYSTANDER_LOOKER_TOLERANCE;
+        lLookerParams.mfTargetSubjectYScreenOffset     = mKeyAnimController.GetLookPos().GetY().GetFloat() * KF_BYSTANDER_LOOKER_TOLERANCE;
 
         const f32 lfLookerTimeStep = lrSharedInfo.GetTimestep().Get(GetTimestepType());
         const VehicleInfo& lrBystanderBox      = mBystanderRef.GetVehicle(lrSharedInfo);
         const VehicleInfo& lrBystanderVelocity = mBystanderRef.GetVehicle(lrSharedInfo);
         const VehicleInfo& lrBystanderPlace    = mBystanderRef.GetVehicle(lrSharedInfo);
-   // [DIAG] NOT X360
         mLooker.Update(VecFloat(lfLookerTimeStep), *lrSharedInfo.GetRandom(), lLookerParams, lrCamera,
                        lrBystanderPlace.mRaceCarState.mTransform, lrBystanderVelocity.mRaceCarState.mLinearVelocity,
                        lrBystanderBox.mAABB);
