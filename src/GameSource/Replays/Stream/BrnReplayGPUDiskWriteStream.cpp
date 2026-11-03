@@ -10,16 +10,17 @@
 // console build; no original header or source exists for this TU. See the header for the
 // offset map.
 
-// Use the XDK critical-section declarations. The original maLock declaration
-// still needs recovery; no replacement storage or alignment is assumed here.
+// ARTIST 8265C38C passes the embedded critical section at +0x3180.
 
 namespace BrnReplays
 {
     GPUDiskWriteStream::GPUDiskWriteStream()
     {
-        CGS_STATIC_ASSERT((sizeof(maLock) >= sizeof(CRITICAL_SECTION)), "native stream lock storage");
-        CGS_STATIC_ASSERT((__alignof(GPUDiskWriteStream) >= __alignof(CRITICAL_SECTION)), "native stream lock alignment");
-        RtlInitializeCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        CGS_STATIC_ASSERT((sizeof(FutexPlatformStorage) == 0x20), "native futex storage");
+        CGS_STATIC_ASSERT((offsetof(GPUDiskWriteStream, mLock) == 0x3180), "native stream lock offset");
+        CGS_STATIC_ASSERT((offsetof(GPUDiskWriteStream, macFileName) == 0x31A0), "native stream filename offset");
+        CGS_STATIC_ASSERT((offsetof(GPUDiskWriteStream, miState) == 0x35D0), "native stream state offset");
+        RtlInitializeCriticalSection(&mLock.mCriticalSection);
     }
 
     // ---- file-scope debug toggles / state (three byte toggles and one state word). ----
@@ -83,7 +84,7 @@ namespace BrnReplays
     // =====================================================================================
     bool GPUDiskWriteStream::AddBlock(s32 la2Offset, const u8* lpData, s32 la4Size)
     {
-        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlEnterCriticalSection(&mLock.mCriticalSection);
 
         CGS_ASSERT((la4Size % KI_BLOCK_SIZE) == 0, "Data size must be a multiple of 0x10000");
 
@@ -99,7 +100,7 @@ namespace BrnReplays
         // Reject if it would overflow the pool or the free budget.
         if (liNumBlocks > (miNumGlobalBlocks - miBlocksInPrimary) || liNumBlocks > miGlobalBlocksFree)
         {
-            RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+            RtlLeaveCriticalSection(&mLock.mCriticalSection);
             return false;
         }
 
@@ -134,7 +135,7 @@ namespace BrnReplays
         }
 
         Service();
-        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlLeaveCriticalSection(&mLock.mCriticalSection);
         return true;
     }
 
@@ -218,7 +219,7 @@ namespace BrnReplays
     // =====================================================================================
     void GPUDiskWriteStream::Dispatch()
     {
-        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlEnterCriticalSection(&mLock.mCriticalSection);
 
         if (mRelocator.Update(true, true))
         {
@@ -378,7 +379,7 @@ namespace BrnReplays
             mRelocator.Execute(&mRelocatorParams);
         }
 
-        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlLeaveCriticalSection(&mLock.mCriticalSection);
     }
 
     // =====================================================================================
@@ -387,11 +388,11 @@ namespace BrnReplays
     // =====================================================================================
     void GPUDiskWriteStream::Close()
     {
-        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlEnterCriticalSection(&mLock.mCriticalSection);
         CGS_ASSERT(miState != 0, "Invalid state to perform operation");
         mbClosePending = true;
         Service();
-        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlLeaveCriticalSection(&mLock.mCriticalSection);
     }
 
     // =====================================================================================
@@ -425,7 +426,7 @@ namespace BrnReplays
     {
         (void)lHandle;
         (void)luSize;
-        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlEnterCriticalSection(&mLock.mCriticalSection);
 
         CGS_ASSERT(miState != 0, "Incorrect stream state");
         CGS_ASSERT(miPendingOps > 0, "Received file event with 0 pending operations");
@@ -467,7 +468,7 @@ namespace BrnReplays
 
         --miPendingOps;
         Service();
-        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlLeaveCriticalSection(&mLock.mCriticalSection);
         return 0; // the console returned `this`; the callback result is discarded
     }
 
@@ -477,7 +478,7 @@ namespace BrnReplays
     s32 GPUDiskWriteStream::OnClose(s32 liResult, void* lpStream)
     {
         (void)lpStream;
-        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlEnterCriticalSection(&mLock.mCriticalSection);
 
         CGS_ASSERT(miState != 0, "Incorrect stream state");
         CGS_ASSERT(miPendingOps > 0, "Received stream event with 0 pending operations");
@@ -504,7 +505,7 @@ namespace BrnReplays
         }
 
         --miPendingOps;
-        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(maLock));
+        RtlLeaveCriticalSection(&mLock.mCriticalSection);
         return 0; // the console returned `this`; the callback result is discarded
     }
 

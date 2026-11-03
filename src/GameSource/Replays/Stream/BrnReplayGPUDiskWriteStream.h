@@ -36,6 +36,7 @@
 //     data ptrs +0x2100+     Relocator +0x2180   ops +0x2580    lock +0x3180
 //     filename +0x31A0       free-list +0x32A0   tail scalars +0x35A0+ (handle +0x35E0)
 
+#include <xtl.h>  // RTL_CRITICAL_SECTION
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperation.h"  // CgsFileSystem::Handle
@@ -182,7 +183,15 @@ namespace BrnReplays
         CgsMemory::Relocator   mRelocator;                            // +0x2180
         CgsMemory::RelocateOp  maRelocatorOps[KI_NUM_GLOBAL_BLOCKS];  // +0x2580
 
-       // X360 +0x3180
+        // EAThread Microsoft futex platform storage: vendor eathread_futex.h
+        // specifies four u64 words (32 bytes) for the 28-byte X360 critical section.
+        // ARTIST initializes this storage directly at +0x3180.
+        union FutexPlatformStorage
+        {
+            u64 mCRITICAL_SECTION[4];
+            RTL_CRITICAL_SECTION mCriticalSection;
+        };
+        FutexPlatformStorage mLock; // +0x3180
 
         char        macFileName[256];      // +0x31A0  the stream file name (for asserts)
         s32         maGlobalBlockFreeList[KI_NUM_GLOBAL_BLOCKS]; // +0x32A0
