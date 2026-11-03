@@ -643,9 +643,9 @@ void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
             const Portal* lpPortal = lpEndSection->GetPortal(luPortalIndex);
 
             // Direction from the route's last node to this portal, on the ground plane.
-            const Vector3 lPortalPos3 = { lpPortal->GetPositionX(),
+            const Vector3 lPortalPos3(lpPortal->GetPositionX(),
                                        lpPortal->GetPositionY(),
-                                       lpPortal->GetPositionZ(), 0.0f };
+                                       lpPortal->GetPositionZ());
             const Vector2 lPortalFlat = BrnMath::Flatten(lPortalPos3);
             const f32 lfDeltaX = lpPortal->GetPositionX() - lpLast->GetX();
             const f32 lfDeltaY = lpPortal->GetPositionZ() - lpLast->GetY();

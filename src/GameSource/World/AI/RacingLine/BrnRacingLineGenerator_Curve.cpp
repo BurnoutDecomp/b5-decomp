@@ -87,14 +87,14 @@ inline bool IsZero2D(f32 lfX, f32 lfY)
 // duplicates x/y into z/w with `vrlimi128 v, v, 3, 2` so all four compared lanes are the pair.
 inline bool IsSimilar2D(const Vector2& lrA, const Vector2& lrB)
 {
-    return !(std::fabs(lrA.x - lrB.x) > KF_PORTAL_MATCH_EPSILON)
-        && !(std::fabs(lrA.y - lrB.y) > KF_PORTAL_MATCH_EPSILON);
+    return !(std::fabs(lrA.mV.x - lrB.mV.x) > KF_PORTAL_MATCH_EPSILON)
+        && !(std::fabs(lrA.mV.y - lrB.mV.y) > KF_PORTAL_MATCH_EPSILON);
 }
 
 // The lane-wise `vcmpeqfp.` self-compare the console uses as "is this finite / not-NaN".
 inline bool IsValid2D(const Vector2& lrVector)
 {
-    return (lrVector.x == lrVector.x) && (lrVector.y == lrVector.y);
+    return (lrVector.mV.x == lrVector.mV.x) && (lrVector.mV.y == lrVector.mV.y);
 }
 
 // ---- the streamed asserts (BeginAssert ; StrStream ; FireAssert ; EndAssert) ---------------
@@ -213,7 +213,7 @@ void RacingLineGenerator::SetUpIncomingPortalTarget(RacingLine* lpRacingLine, s3
         lpSectionData->SetSectionEntrance(lpPreviousSectionData->GetSectionExit());
 
         const Vector2 lEntrance = lpSectionData->GetSectionEntrance();
-        if (lEntrance.x == 0.0f && lEntrance.y == 0.0f)
+        if (lEntrance.mV.x == 0.0f && lEntrance.mV.y == 0.0f)
         {
             FireStreamedTextAssert("Zero EXit created.\n", 1159);
         }
@@ -232,15 +232,13 @@ void RacingLineGenerator::SetUpIncomingPortalTarget(RacingLine* lpRacingLine, s3
         // The vaddfp / vmulfp pair combines all four SIMD lanes; SetSectionEntrance consumes only
         // x and y.
         Vector2 lMidPoint;
-        lMidPoint.x = (lLeftEdge.x + lRightEdge.x) * 0.5f;
-        lMidPoint.y = (lLeftEdge.y + lRightEdge.y) * 0.5f;
-        lMidPoint.z = (lLeftEdge.z + lRightEdge.z) * 0.5f;
-        lMidPoint.w = (lLeftEdge.w + lRightEdge.w) * 0.5f;
+        const VecFloat lHalf(0.5f);
+        lMidPoint.mV = __vmulfp(__vaddfp(lLeftEdge.mV, lRightEdge.mV), lHalf.mV);
 
         lpSectionData->SetSectionEntrance(lMidPoint);
 
         const Vector2 lEntrance = lpSectionData->GetSectionEntrance();
-        if (lEntrance.x == 0.0f && lEntrance.y == 0.0f)
+        if (lEntrance.mV.x == 0.0f && lEntrance.mV.y == 0.0f)
         {
             FireStreamedTextAssert("Zero EXit created.\n", 1178);
         }
@@ -318,10 +316,10 @@ void RacingLineGenerator::GetPointAndNormalOnCurve(RacingLine* lpRacingLine, s32
             // 0x82781070: the default normal is the literal pair (flt_82001C98, flt_82001CC0) with
             // z/w zeroed, and the console branches STRAIGHT to the store at 0x827815C4 -- it is
             // published UNNORMALISED (it is already unit length).
-            lrNormal.x = 1.0f;
-            lrNormal.y = 0.0f;
-            lrNormal.z = 0.0f;
-            lrNormal.w = 0.0f;
+            lrNormal.mV.x = 1.0f;
+            lrNormal.mV.y = 0.0f;
+            lrNormal.mV.z = 0.0f;
+            lrNormal.mV.w = 0.0f;
             return;
         }
 
@@ -330,9 +328,9 @@ void RacingLineGenerator::GetPointAndNormalOnCurve(RacingLine* lpRacingLine, s32
 
         if (IsSimilar2D(lLineStart, lLineEnd))
         {
-            lrNormal.y = 0.0f;
-            lrNormal.z = 0.0f;
-            lrNormal.w = 0.0f;
+            lrNormal.mV.y = 0.0f;
+            lrNormal.mV.z = 0.0f;
+            lrNormal.mV.w = 0.0f;
             return;
         }
     }
@@ -358,7 +356,7 @@ void RacingLineGenerator::GetPointAndNormalOnCurve(RacingLine* lpRacingLine, s32
         lbSteppedBackwards = true;
     }
 
-    const VecFloat lAheadVector = { lfAheadParam, lfAheadParam, lfAheadParam, lfAheadParam };
+    const VecFloat lAheadVector(lfAheadParam);
     Vector2 lPointAhead;
     GetSimpleHermite(lLineStart, lLineEnd, lInVector, lOutVector, lAheadVector, lPointAhead);
 
@@ -371,36 +369,32 @@ void RacingLineGenerator::GetPointAndNormalOnCurve(RacingLine* lpRacingLine, s32
     // negations of one another, i.e. the same forward tangent turned 90 degrees.
     if (lbSteppedBackwards)
     {
-        lrNormal.y = lrPoint.x     - lPointAhead.x;
-        lrNormal.x = lPointAhead.y - lrPoint.y;
+        lrNormal.mV.y = lrPoint.mV.x     - lPointAhead.mV.x;
+        lrNormal.mV.x = lPointAhead.mV.y - lrPoint.mV.y;
     }
     else
     {
-        lrNormal.y = lPointAhead.x - lrPoint.x;
-        lrNormal.x = lrPoint.y     - lPointAhead.y;
+        lrNormal.mV.y = lPointAhead.mV.x - lrPoint.mV.x;
+        lrNormal.mV.x = lrPoint.mV.y     - lPointAhead.mV.y;
     }
 
-    // The console's vrlimi128 pair leaves the caller's own z/w bytes alone and the closing
-    // normalise then scales them; on this host those bytes are an uninitialised local in every
-    // caller, so they are published as zero (the standing z/w convention of this class).
-    lrNormal.z = 0.0f;
-    lrNormal.w = 0.0f;
+    // The console retains the existing z/w lanes until the full-register normalization.
 
-    if (IsZero2D(lrNormal.x, lrNormal.y))
+    if (IsZero2D(lrNormal.mV.x, lrNormal.mV.y))
     {
-        lrNormal.y = lLineStart.x - lLineEnd.x;
-        lrNormal.x = lLineEnd.y   - lLineStart.y;
+        lrNormal.mV.y = lLineStart.mV.x - lLineEnd.mV.x;
+        lrNormal.mV.x = lLineEnd.mV.y   - lLineStart.mV.y;
     }
 
-    if (IsZero2D(lrNormal.x, lrNormal.y))
+    if (IsZero2D(lrNormal.mV.x, lrNormal.mV.y))
     {
         FireZeroNormalAssert(lfAheadParam, 2267);
     }
 
     // vrsqrtefp + two Newton-Raphson refinements + vmulfp128, with no zero guard.
-    const f32 lfLengthSq  = (lrNormal.x * lrNormal.x) + (lrNormal.y * lrNormal.y);
+    const f32 lfLengthSq  = (lrNormal.mV.x * lrNormal.mV.x) + (lrNormal.mV.y * lrNormal.mV.y);
     const f32 lfInvLength = 1.0f / std::sqrt(lfLengthSq);
-    lrNormal.x *= lfInvLength;
-    lrNormal.y *= lfInvLength;
+    const VecFloat lInvLength(lfInvLength);
+    lrNormal.mV = __vmulfp(lrNormal.mV, lInvLength.mV);
 }
 }
