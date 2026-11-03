@@ -425,13 +425,13 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
     // matrix row to the stack, zeroing its Y word in place, reloading it, and running the two-step
     // Newton-Raphson rsqrt that Normalize() de-optimises back to.
     Vector3 lCameraX = lCameraTransform.xAxis;
-    lCameraX.y = 0.0f;
+    lCameraX.SetY( 0.0f );
     CGS_ASSERT( rw::math::vpu::MagnitudeSquared( lCameraX ) > 0.0f,
                 "RwMath::MagnitudeSquared(lCameraX) > 0.0f" );                                 // :290
     lCameraX = rw::math::vpu::Normalize( lCameraX );
 
     Vector3 lCameraZ = lCameraTransform.zAxis;
-    lCameraZ.y = 0.0f;
+    lCameraZ.SetY( 0.0f );
     CGS_ASSERT( rw::math::vpu::MagnitudeSquared( lCameraZ ) > 0.0f,
                 "RwMath::MagnitudeSquared(lCameraZ) > 0.0f" );                                 // :298
     lCameraZ = rw::math::vpu::Normalize( lCameraZ );
@@ -488,9 +488,9 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
 // a NaN lane non-zero. Spelled locally, as BrnAICar_Update.cpp / BrnAIBuzzBy.cpp do (crash parity).
 static inline bool IsZeroVmx( const Vector3& lrVector )
 {
-    return !( std::fabs( lrVector.x ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE ) &&
-           !( std::fabs( lrVector.y ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE ) &&
-           !( std::fabs( lrVector.z ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE );
+    return !( std::fabs( lrVector.GetX().GetFloat() ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE ) &&
+           !( std::fabs( lrVector.GetY().GetFloat() ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE ) &&
+           !( std::fabs( lrVector.GetZ().GetFloat() ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE );
 }
 
 // =================================================================================================
@@ -908,8 +908,8 @@ void CrashPlayManager::HandlePlayerToVehicleImpact(
     {
         const Vector3& lrNormal = lpContact->mNormal;
 
-        if( ( lrNormal.y * lrNormal.y )
-            >= ( lrNormal.x * lrNormal.x ) + ( lrNormal.z * lrNormal.z ) )
+        if( ( lrNormal.GetY().GetFloat() * lrNormal.GetY().GetFloat() )
+            >= ( lrNormal.GetX().GetFloat() * lrNormal.GetX().GetFloat() ) + ( lrNormal.GetZ().GetFloat() * lrNormal.GetZ().GetFloat() ) )
         {
             mfTimeSinceLastTrafficStomp = 0.0f;
         }

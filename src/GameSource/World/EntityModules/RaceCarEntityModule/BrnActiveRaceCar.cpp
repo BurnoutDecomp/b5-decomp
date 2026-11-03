@@ -103,19 +103,19 @@ namespace
     {
         Matrix44Affine lIdentity;
         {
-            const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(1.0f, 0.0f, 0.0f);
             lIdentity.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 1.0f, 0.0f);
             lIdentity.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 1.0f);
             lIdentity.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
             lIdentity.wAxis = lAggregateValue;
         }
         return lIdentity;
@@ -153,11 +153,11 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     mbIsTouchingPlayer           = false;                         // 0x773
     mbIsTouchingWorld            = false;                         // 0x774
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         mDeferredResetPosition = lAggregateValue;
     }  // 0x700
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         mDeferredResetDirection = lAggregateValue;
     }  // 0x710
     muPrevAISection              = 0x7FFF;                        // 0x73C
@@ -168,7 +168,7 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     mbCarSelectOnlineStateChanged   = false;                      // 0x79B
     mbReceivedNetworkDriverControls = false;                      // 0x79C
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         mCurrentInAirRotations = lAggregateValue;
     }  // 0x750
     mbRenderThisFrame            = true;                          // 0x79D
@@ -219,7 +219,7 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     mfTimeSinceLastStable        = 0.0f;                          // 0x760
     mbCurrentlyRotating          = false;                         // 0x764
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         mCurrentInAirRotations = lAggregateValue;
     }  // 0x750 (again, asm order)
 }
@@ -245,7 +245,7 @@ bool ActiveRaceCar::Prepare()
     mPrevTransforms.Clear();                                       // 0x598/0x59C/0x5A0
     mbUncrashedThisFrame     = false;                              // 0x77A
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         mLastRecordedPosition = lAggregateValue;
     }  // 0x6B0
     mbAddedForCollision      = false;                              // 0x78B
@@ -258,7 +258,7 @@ bool ActiveRaceCar::Prepare()
     mRenderParams.Reset();                                         // 0x7E0
 
     {
-        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
         mCurrentInAirRotations = lAggregateValue;
     }  // 0x750
     mfPlaceOnTrackSpeed      = 0.0f;                               // 0x7C0
@@ -275,11 +275,11 @@ bool ActiveRaceCar::Prepare()
     // 0x7A0 / 0x7B0: both seeded to (-1, -1, -1, 0) from the shared rodata -1.0f
     // (flt_820037C8), i.e. "no place-on-track request pending".
     {
-        const Vector3 lAggregateValue = { -1.0f, -1.0f, -1.0f, 0.0f };
+        const Vector3 lAggregateValue(-1.0f, -1.0f, -1.0f);
         mPlaceOnTrackPosition = lAggregateValue;
     }
     {
-        const Vector3 lAggregateValue = { -1.0f, -1.0f, -1.0f, 0.0f };
+        const Vector3 lAggregateValue(-1.0f, -1.0f, -1.0f);
         mPlaceOnTrackDirection = lAggregateValue;
     }
 
@@ -335,7 +335,7 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
     // 0x430 == mPhysicsState + 848 == RaceCarState::mHalfExtent. The console's default
     // car box until the physics module publishes a real one.
     {
-        const Vector3 lAggregateValue = { 1.1f, 0.75f, 1.8f, 0.0f };
+        const Vector3 lAggregateValue(1.1f, 0.75f, 1.8f);
         mPhysicsState.mHalfExtent = lAggregateValue;
     }
 
@@ -1207,7 +1207,7 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
                                       bool                  lbResettingPhysicsState,
                                       u8                    lu8CarStrengthStat )
 {
-    const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lZeroVelocity(0.0f, 0.0f, 0.0f);
 
     CGS_ASSERT(IsActive(), "IsActive()");                             // BrnActiveRaceCar.cpp:1153
     CGS_ASSERT(lpVehicleInterface != 0, "lpVehicleInterface != NULL"); // :1154
@@ -1409,272 +1409,27 @@ void ActiveRaceCar::UpdateDeformationState(
     const BrnPhysics::Deformation::CarState* lpCarState =
         lpDeformationState->GetCarStateF(mPhysicsState.mEntityId.muValue);
 
-    CGS_ASSERT(lpCarState != 0, "lpCarState != NULL [PC bring-up guard]");
-    if (lpCarState == 0)
-    {
-        static bool sbReportedNoCarState = false;
-        if (!sbReportedNoCarState)
-        {
-            sbReportedNoCarState = true;
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[deform-readback] UpdateDeformationState: no live CarState for entity "
-                    << mPhysicsState.mEntityId.muValue
-                    << " -- deformation readback skipped for this car\n";
-            }
-        }
-        return;
-    }
-
     // Summed squared sensor displacement -> the render damage scalar.
     mRenderParams.SetDeformationSquared(lpCarState->GetSummedDisplacementSquared());
 
-
-    // [deform-readback] one-shot measurement: the first NON-ZERO summed displacement seen
-    // (the deform-land wave's acceptance metric -- prove the dents are real numbers, not a
-    // texture trick). Prints once per boot.
-    //
-    // ⛔⛔ READ THIS BEFORE QUOTING THE LINE IT PRINTS. It is a ONE-SHOT, it says "first",
-    // and it fires at the junkyard 0.85 deform preset. It therefore proves EXACTLY one
-    // thing: the sensor pipeline came alive once. It is NOT a series, it says NOTHING about
-    // whether a value ever changes, and quoting it as "the deformation number in a crash run"
-    // is a category error (2026-08-27: nearly concluded "crashes don't deform" from it).
-    // ⭐ THE SERIES IS THE [deform-trace] BLOCK BELOW -- use that.
-    {
-        static bool sbReportedDisplacement = false;
-        if (!sbReportedDisplacement && lpCarState->GetSummedDisplacementSquared() > 0.0f
-            && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbReportedDisplacement = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[deform-readback] first non-zero CarState: summedDispSq="
-                << lpCarState->GetSummedDisplacementSquared()
-                << " sensor0Disp=(" << lpCarState->maSensors[0].mDisplacement.x
-                << ", " << lpCarState->maSensors[0].mDisplacement.y
-                << ", " << lpCarState->maSensors[0].mDisplacement.z
-                << ") numSensors=" << static_cast<u32>(lpCarState->mu8NumSensors) << "\n";
-        }
-    }
-
-    // =========================================================================================
-    // [deform-trace] PER-FRAME deformation witness. NOT X360 -- a host-side instrument, opt-in
-    // via BRN_DEFORM_TRACE (a sampling PERIOD in calls; 0/unset = inert, 1 = every call).
-    //
-    // WHY IT EXISTS: the one-shot above cannot answer "does the car deform IN A CRASH", because
-    // a single sample cannot show growth. This block emits a SERIES, and pins every axis the
-    // question turns on so no line of it can be read as being about something else:
-    //   WHICH CAR   -- entity id, plus IsPlayer()/IsCrashing() read AT THIS CALL (not inferred
-    //                  from a branch elsewhere in the frame).
-    //   WHICH VALUE -- BOTH ends of the chain on one line:
-    //                    dispSq  = CarState::mfSummedDisplacementSquared, the SIM's summed
-    //                              squared sensor displacement (-> mfDeformationSquared, the
-    //                              damage SCALAR: shading, lights-out, audio).
-    //                    maxVer  = max |xyz| over RenderParams::maVerletOffsets[128], the array
-    //                              that becomes shader constant 22 and is the ONLY thing that
-    //                              actually MOVES A VERTEX (BrnRaceCarEntityModule_Render.cpp:503).
-    //                  ⭐ These are DIFFERENT QUANTITIES. A run where dispSq climbs and maxVer
-    //                  stays 0 is a car that is "damaged" in every scalar sense and visibly
-    //                  undented. Reporting one as the other is the trap this block exists to
-    //                  make impossible.
-    //   WHEN        -- a monotone call counter, so growth is orderable without trusting a clock.
-    //
-    // ⚠️ ONE-FRAME SKEW, NAMED: maVerletOffsets is filled by the L4 skinned-model copy in
-    // RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics (BrnRaceCarEntityModule.cpp
-    // L4, ~:3652). Whether that leg runs before or after this one within a frame decides whether
-    // maxVer here is this frame's or last frame's. Either way it is the array constant 22 gets;
-    // the skew is at most one frame and cannot manufacture or hide a sustained change.
-    // ⭐ THE CONTROL for "you measured the wrong array" is the low-rate [deform-upload] line at
-    // the constant-22 upload site itself; the two maxVer values must agree.
-    //
-    // Emission rule: print when (calls % period == 0) OR when either measured quantity has
-    // MOVED since this car's last printed line -- so flat stretches stay cheap and every change
-    // is captured at full resolution.
-    // DELETE-WHEN the crash-deformation question is closed and banked.
-    // =========================================================================================
-    {
-        static s32 siTracePeriod = -1;
-        if (siTracePeriod < 0)
-        {
-            if (siTracePeriod < 0) { siTracePeriod = 0; }
-        }
-
-        if (siTracePeriod > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const f32 lfDispSq = lpCarState->GetSummedDisplacementSquared();
-
-            // max |xyz| over the 128 verlet rows -- the uploaded vertex offset magnitude.
-            // (w is the scratch AMOUNT lane, not a position: DEBUG_OverrideScratchAmount owns
-            // it, and constant 22's consumer offsets a vertex by xyz. Including w here would
-            // report the debug lane as if it were a dent.)
-            // ⛔⛔ A MAX ALONE IS THE WRONG STATISTIC HERE, and reading it as "the mesh did not
-            // move" is a false negative waiting to happen: the junkyard preset pins ONE row
-            // (row 41) at a value the running dents never exceed, so max stays flat while any
-            // number of other rows change underneath it. The SUM and the non-zero ROW COUNT are
-            // what actually move when the mesh moves; max is kept only to name the worst row.
-            // (2026-08-27: caught mid-campaign, before the flat max was reported as an answer.)
-            const Vector3Plus* lpVerlet = mRenderParams.GetVerletOffsets();
-            f32 lfMaxVerlet = 0.0f;
-            f32 lfSumVerlet = 0.0f;
-            s32 liMaxVerletRow = -1;
-            s32 liNonZeroRows  = 0;
-            for (u32 luRow = 0; luRow < 128u; ++luRow)
-            {
-                const f32 lfRow = std::fabs(lpVerlet[luRow].x)
-                                + std::fabs(lpVerlet[luRow].y)
-                                + std::fabs(lpVerlet[luRow].z);
-                lfSumVerlet += lfRow;
-                if (lfRow > 1.0e-6f) { ++liNonZeroRows; }
-                if (lfRow > lfMaxVerlet) { lfMaxVerlet = lfRow; liMaxVerletRow = static_cast<s32>(luRow); }
-            }
-
-            // ---- [deform-rows] THE SHAPE, NOT THE SCALAR. NOT X360; opt-in BRN_DEFORM_ROWS=1
-            // (needs BRN_DEFORM_TRACE too -- it lives inside that block).
-            // ⭐ WHY A WHOLE-ARRAY DUMP EXISTS AT ALL: sumVerlet / nnzVerlet / maxVerlet answer
-            // "how much" and "the worst row". They cannot answer the OWNER'S question, which is
-            // WHERE the displacement goes -- a dent that smears across a panel and a dent that
-            // folds it have the SAME sum and can have the same max. Constant 22's rows are the
-            // vehicle's only vertex mover, and each row has a fixed authored identity (the
-            // console packs [every skinned TagPoint in tag order][then each IK part's driven
-            // points], DeformableObject::UpdateSkinningOffsets @0x825DFA90), so a row index IS a
-            // place on the car and the array IS the deformed shape.
-            // Prints ONCE per car per new sumVerlet HIGH-WATER MARK, so a wreck emits a handful
-            // of lines at its worst frames instead of one per frame.
-            // DELETE-WHEN the deformation-shape question is closed and banked.
-            {
-                static s32 siRowsOn = -1;
-                if (siRowsOn < 0)
-                {
-                }
-                static f32 sfRowsHighWater = 0.0f;
-                if (siRowsOn == 1 && IsPlayer() && lfSumVerlet > sfRowsHighWater + 0.25f
-                    && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sfRowsHighWater = lfSumVerlet;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[deform-rows] present " << static_cast<s32>(renderengine::guPresentCount)
-                        << " crashing " << (IsCrashing() ? 1 : 0)
-                        << " sumVerlet " << lfSumVerlet << " rows>=0.02m:";
-                    for (u32 luRow = 0; luRow < 128u; ++luRow)
-                    {
-                        const f32 lfRow = std::sqrt(lpVerlet[luRow].x * lpVerlet[luRow].x
-                                                  + lpVerlet[luRow].y * lpVerlet[luRow].y
-                                                  + lpVerlet[luRow].z * lpVerlet[luRow].z);
-                        if (lfRow >= 0.02f)
-                        {
-                            *CgsDev::Log::gpDebugPrint
-                                << " " << static_cast<s32>(luRow) << "=("
-                                << lpVerlet[luRow].x << "," << lpVerlet[luRow].y << ","
-                                << lpVerlet[luRow].z << ")|" << lfRow;
-                        }
-                    }
-                    *CgsDev::Log::gpDebugPrint << "\n";
-                }
-            }
-
-            // max |displacement| over the live sensors, and which sensor carries it.
-            f32 lfMaxSensor = 0.0f;
-            s32 liMaxSensor = -1;
-            const u32 luNumSensors = static_cast<u32>(lpCarState->mu8NumSensors);
-            const u32 luScan = (luNumSensors < BrnPhysics::Deformation::CarState::KU_MAX_SENSORS)
-                             ? luNumSensors : BrnPhysics::Deformation::CarState::KU_MAX_SENSORS;
-            for (u32 luSensor = 0; luSensor < luScan; ++luSensor)
-            {
-                const f32 lfMag = std::fabs(lpCarState->maSensors[luSensor].mDisplacement.x)
-                                + std::fabs(lpCarState->maSensors[luSensor].mDisplacement.y)
-                                + std::fabs(lpCarState->maSensors[luSensor].mDisplacement.z);
-                if (lfMag > lfMaxSensor) { lfMaxSensor = lfMag; liMaxSensor = static_cast<s32>(luSensor); }
-            }
-
-            // Per-car "did it move" memory. Eight slots, keyed by entity id; a car whose id is
-            // not resident evicts the least-recently-seen slot. Purely diagnostic storage --
-            // NOT a member, so no attested ActiveRaceCar/RenderParams offset is disturbed.
-            static u32 sauTraceIds[8]   = { 0, 0, 0, 0, 0, 0, 0, 0 };
-            static f32 safTraceDisp[8]  = { 0, 0, 0, 0, 0, 0, 0, 0 };
-            static f32 safTraceVer[8]   = { 0, 0, 0, 0, 0, 0, 0, 0 };
-            static bool sabTraceUsed[8] = { false, false, false, false, false, false, false, false };
-            static u32 sluTraceNext     = 0;
-            static u32 sluTraceCalls    = 0;
-
-            ++sluTraceCalls;
-
-            const u32 luId = mPhysicsState.mEntityId.muValue;
-            s32 liSlot = -1;
-            for (u32 luS = 0; luS < 8u; ++luS)
-            {
-                if (sabTraceUsed[luS] && sauTraceIds[luS] == luId) { liSlot = static_cast<s32>(luS); break; }
-            }
-            if (liSlot < 0)
-            {
-                liSlot = static_cast<s32>(sluTraceNext % 8u);
-                ++sluTraceNext;
-                sauTraceIds[liSlot]  = luId;
-                sabTraceUsed[liSlot] = true;
-                safTraceDisp[liSlot] = -1.0f;   // force a first print for a newly seen car
-                safTraceVer[liSlot]  = -1.0f;
-            }
-
-            // ⚠️ CHANGE-DETECTION IS PLAYER-ONLY, AND THAT IS A MEASUREMENT DECISION, not tidiness.
-            // maVerletOffsets moves EVERY frame on every car even when nothing is dented -- the
-            // suspension leg (DeformableObject::UpdateIKSuspensionOffsets) writes the four wheel
-            // tag rows from live suspension compression. So "changed" is true ~always, and with
-            // eight cars that is ~480 log lines a second. This build is FRAME-COUPLED (above 60 fps
-            // the game speeds up), so an instrument heavy enough to move the frame rate changes the
-            // very sim it is measuring. Player car gets full resolution; the rest get the period.
-            const bool lbIsPlayer = IsPlayer();
-            const bool lbMoved = lbIsPlayer
-                              && ( (std::fabs(lfDispSq    - safTraceDisp[liSlot]) > 1.0e-6f)
-                                || (std::fabs(lfSumVerlet - safTraceVer[liSlot])  > 1.0e-6f) );
-            const bool lbPeriodic = ((sluTraceCalls % static_cast<u32>(siTracePeriod)) == 0u);
-
-            if (lbMoved || lbPeriodic)
-            {
-                safTraceDisp[liSlot] = lfDispSq;
-                safTraceVer[liSlot]  = lfSumVerlet;
-
-                *CgsDev::Log::gpDebugPrint
-                    << "[deform-trace] call " << static_cast<s32>(sluTraceCalls)
-                    << " present " << static_cast<s32>(renderengine::guPresentCount)
-                    << " ent " << luId
-                    << " player " << (lbIsPlayer ? 1 : 0)
-                    << " crashing " << (IsCrashing() ? 1 : 0)
-                    << " wrecked " << (IsWrecked() ? 1 : 0)
-                    << " dispSq " << lfDispSq
-                    << " maxSensor " << lfMaxSensor << " @" << liMaxSensor
-                    << " nSensors " << static_cast<s32>(luNumSensors)
-                    << " sumVerlet " << lfSumVerlet
-                    << " nnzVerlet " << liNonZeroRows
-                    << " maxVerlet " << lfMaxVerlet << " @" << liMaxVerletRow
-                    << "\n";
-            }
-        }
-    }
 
     // Oriented-box lowest world-space Y (the vandc-ABS + three vsubfp splat chain).
     {
         const Matrix44Affine& lrT = mPhysicsState.mTransform;
         const Vector3&        lrE = mPhysicsState.mHalfExtent;
-        const f32 lfLowestY = lrT.wAxis.y
-                            - std::fabs(lrT.xAxis.y * lrE.x)
-                            - std::fabs(lrT.yAxis.y * lrE.y)
-                            - std::fabs(lrT.zAxis.y * lrE.z);
+        const f32 lfLowestY = lrT.wAxis.GetY().GetFloat()
+                            - std::fabs(lrT.xAxis.GetY().GetFloat() * lrE.GetX().GetFloat())
+                            - std::fabs(lrT.yAxis.GetY().GetFloat() * lrE.GetY().GetFloat())
+                            - std::fabs(lrT.zAxis.GetY().GetFloat() * lrE.GetZ().GetFloat());
         {
-            const VecFloat lAggregateValue = { lfLowestY, lfLowestY, lfLowestY, lfLowestY };
+            const VecFloat lAggregateValue( lfLowestY );
             mvfLowestPointWorldSpace = lAggregateValue;
         }
     }
 
-    // The deformed-bbox pair (carState+0x640, 32 bytes -- four ld/std on console).
-    {
-        const Vector4 lAggregateValue = { lpCarState->mDeformedBBoxMin.x, lpCarState->mDeformedBBoxMin.y,
-                                  lpCarState->mDeformedBBoxMin.z, lpCarState->mDeformedBBoxMin.w };
-        mDeformedBBox.mMin = lAggregateValue;
-    }
-    {
-        const Vector4 lAggregateValue = { lpCarState->mDeformedBBoxMax.x, lpCarState->mDeformedBBoxMax.y,
-                                  lpCarState->mDeformedBBoxMax.z, lpCarState->mDeformedBBoxMax.w };
-        mDeformedBBox.mMax = lAggregateValue;
-    }
+    // The console copies both full four-lane registers.
+    mDeformedBBox.mMin = lpCarState->mDeformedBBoxMin;
+    mDeformedBBox.mMax = lpCarState->mDeformedBBoxMax;
 
     // The four wheel tag points -> the render-side axle rows.
     for (u32 luWheel = 0; luWheel < 4u; ++luWheel)
@@ -2043,7 +1798,7 @@ void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
         {
             mbCurrentlyRotating    = false;
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue(0.0f, 0.0f, 0.0f);
                 mCurrentInAirRotations = lAggregateValue;
             }  // +0x750, a full 16-byte clear
         }
@@ -2151,18 +1906,18 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
             else if (IsPlayer() && mbDriveAwayCheckRequired)
             {
                 // The VMX validity checks compare each planar lane with itself (NaN test).
-                if ((lrCurrentRouteNode.x == lrCurrentRouteNode.x) && (lrCurrentRouteNode.y == lrCurrentRouteNode.y) &&
-                    (lrNextRouteNode.x == lrNextRouteNode.x) && (lrNextRouteNode.y == lrNextRouteNode.y))
+                if ((lrCurrentRouteNode.mV.x == lrCurrentRouteNode.mV.x) && (lrCurrentRouteNode.mV.y == lrCurrentRouteNode.mV.y) &&
+                    (lrNextRouteNode.mV.x == lrNextRouteNode.mV.x) && (lrNextRouteNode.mV.y == lrNextRouteNode.mV.y))
                 {
                     const Vector2 lvDirection = BrnMath::Flatten(GetDirection());
-                    const f32 lfX = lrNextRouteNode.x - lrCurrentRouteNode.x;
-                    const f32 lfY = lrNextRouteNode.y - lrCurrentRouteNode.y;
+                    const f32 lfX = lrNextRouteNode.mV.x - lrCurrentRouteNode.mV.x;
+                    const f32 lfY = lrNextRouteNode.mV.y - lrCurrentRouteNode.mV.y;
                     const f32 lfInvLength = 1.0f / std::sqrt(lfX * lfX + lfY * lfY);
                     const f32 lfRouteX = lfX * lfInvLength;
                     const f32 lfRouteY = lfY * lfInvLength;
                     CGS_ASSERT((lfRouteX == lfRouteX) && (lfRouteY == lfRouteY),
                                "RwMathVPU::IsValid( lCurrentRouteVec )");
-                    if (!(lvDirection.x * lfRouteX + lvDirection.y * lfRouteY >= 0.0f))
+                    if (!(lvDirection.mV.x * lfRouteX + lvDirection.mV.y * lfRouteY >= 0.0f))
                     {
                         mbIsWrecked = true;
                         mbCanDriveAwayFromCrash = false;
@@ -2369,7 +2124,7 @@ bool ActiveRaceCar::IsDriveableAfterCrash() const
     // The console builds the world-up constant on the stack as (0,1,0,0) and splats the 0.0f
     // comparand from the adjacent stack slot; both are read from the image, not assumed.
     const Matrix44Affine lTransform = GetTransform();
-    const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+    const Vector3 lWorldUp(0.0f, 1.0f, 0.0f);
     if( 0.0f > rw::math::vpu::Dot( lTransform.Up(), lWorldUp ) )
     {
         return false;
@@ -2434,7 +2189,7 @@ void ActiveRaceCar::ResetVerletOffsets()
     CGS_ASSERT( !IsInactive(), "!IsInactive()" );   // BrnActiveRaceCar.cpp:1128
 
     Vector3Plus* lpVerletOffsets = mRenderParams.GetVerletOffsets();
-    const Vector3Plus lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3Plus lZero(0.0f, 0.0f, 0.0f, 0.0f );
     for( u32 luPartIndex = 0; luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS; ++luPartIndex )
     {
         CGS_ASSERT( luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS,
@@ -2685,13 +2440,10 @@ void ActiveRaceCar::UpdateResetTransform()
 
     if( mPrevTransforms.GetLength() != 0 )
     {
-        const Vector3 lDelta = { mLastRecordedPosition.x - lPosition.x,
-                                 mLastRecordedPosition.y - lPosition.y,
-                                 mLastRecordedPosition.z - lPosition.z,
-                                 0.0f };
+        const Vector3 lDelta(mLastRecordedPosition.GetX().GetFloat() - lPosition.GetX().GetFloat(), mLastRecordedPosition.GetY().GetFloat() - lPosition.GetY().GetFloat(), mLastRecordedPosition.GetZ().GetFloat() - lPosition.GetZ().GetFloat());
         // `vmsum3fp128 v0, v0, v0` -- the THREE-lane squared magnitude (not the XZ one).
         const f32 lfDistanceSquared =
-            lDelta.x * lDelta.x + lDelta.y * lDelta.y + lDelta.z * lDelta.z;
+            lDelta.GetX().GetFloat() * lDelta.GetX().GetFloat() + lDelta.GetY().GetFloat() * lDelta.GetY().GetFloat() + lDelta.GetZ().GetFloat() * lDelta.GetZ().GetFloat();
 
         if( lfDistanceSquared <= KF_RESET_TRANSFORM_MIN_DISTANCE_SQUARED )
         {
@@ -2945,7 +2697,7 @@ namespace
     // 0 for a zero input, which sqrtf(0) also does.
     f32 Length3(const Vector3& lrV)
     {
-        return sqrtf(lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z);
+        return sqrtf(lrV.GetX().GetFloat() * lrV.GetX().GetFloat() + lrV.GetY().GetFloat() * lrV.GetY().GetFloat() + lrV.GetZ().GetFloat() * lrV.GetZ().GetFloat());
     }
 }
 
@@ -3074,9 +2826,9 @@ void ActiveRaceCar::AddToScene(
     // 0.05 m pad, and (leg 2) its centre is dropped by the same amount so the growth is
     // downward. Note both operands are SPLATS of one lane each in the asm -- the vector
     // arithmetic is scalar arithmetic on Y.
-    const f32 lfComY      = mCentreOfMassTransform.wAxis.y;                       // this + 0xC0
+    const f32 lfComY      = mCentreOfMassTransform.wAxis.GetY().GetFloat();                       // this + 0xC0
     const f32 lfAbsComY   = fabsf(lfComY);                                        // vandc <sign mask>
-    const f32 lfOverhang  = lfAbsComY - lrHandlingBodyDimensions.y;               // vsubfp
+    const f32 lfOverhang  = lfAbsComY - lrHandlingBodyDimensions.GetY().GetFloat();               // vsubfp
     // `vmaxfp128 v13, v13, v127` @0x822EB848 with v127 = vspltisw128 0 (@0x822EB800). vmaxfp is NOT
     // `(x > 0) ? x : 0`: the maximum of anything and a NaN is a QNaN (AltiVec PEM), and +0 is the
     // larger of +-0 -- so a NaN overhang stays NaN (GetPropCollisionBox @0x822D3DB0 has the same vmaxfp).
@@ -3088,7 +2840,7 @@ void ActiveRaceCar::AddToScene(
         0.5f * (lfOverhangOrZero + KF_HANDLING_BODY_Y_PAD);                      // vaddfp ; vmulfp128 (0.5)
 
     Vector3 lHalfExtents = lrHandlingBodyDimensions;
-    lHalfExtents.y = lrHandlingBodyDimensions.y + lfHalfDelta;   // vrlimi128 v9, v0, 4, 0
+    lHalfExtents.SetY( lrHandlingBodyDimensions.GetY().GetFloat() + lfHalfDelta );   // vrlimi128 v9, v0, 4, 0
 
     const f32 lfBoundingRadius = Length3(lHalfExtents);          // vmsum3fp128 + rsqrt refine
 
@@ -3136,7 +2888,7 @@ void ActiveRaceCar::AddToScene(
     lVolumeResource.m_baseResources[0] = laVolumeStorage;         // stw r11, var_260(r1)
 
     rw::collision::BoxVolume* lpVolume = rw::collision::BoxVolume::Initialize(
-        lVolumeResource, lHalfExtents.x, lHalfExtents.y, lHalfExtents.z);
+        lVolumeResource, lHalfExtents.GetX().GetFloat(), lHalfExtents.GetY().GetFloat(), lHalfExtents.GetZ().GetFloat());
 
     CGS_ASSERT(IsAttached(), "IsAttached()");                    // BrnActiveRaceCar.h:1089
 
@@ -3193,7 +2945,7 @@ void ActiveRaceCar::AddToScene(
     // instruction earlier and carries on), and so does this -- no PC null guard is added,
     // because Initialize only returns NULL for a resource with no block and the resource above
     // always carries one.
-    lpVolume->maTransform[3].y -= lfHalfDelta;
+    lpVolume->GetRelativeTransform()->wAxis.SetY( lpVolume->GetRelativeTransform()->wAxis.GetY().GetFloat() - lfHalfDelta );
 
     // ---- the AddDynamicVolume post (UNPARKED 2026-08-18, wave Q5 finisher) -----------
     // 0x822EBBFC..0x822EBC08: `ld r11, 0xD0(r30) ; std ; ld r4, 0(r10)` -- the WHOLE 8-byte
@@ -3251,52 +3003,29 @@ void ActiveRaceCar::AddToScene(
 // ============================================================================
 rw::collision::BoxVolume* ActiveRaceCar::GetPropCollisionBox(void* lpVolumeBuffer)
 {
-    const Vector4& lrMin = mDeformedBBox.mMin;                   // lvx128 +0x6C0
-    const Vector4& lrMax = mDeformedBBox.mMax;                   // lvx128 +0x6D0
-    const Vector3& lrComOffset = mPhysicsState.mComOffset;       // lvx128 +0x440
+    const Vector3& lrMin = mDeformedBBox.mMin;
+    const Vector3& lrMax = mDeformedBBox.mMax;
+    const Vector3& lrComOffset = mPhysicsState.mComOffset;
+    const VecFloat lHalf( 0.5f );
+    const Vector3 lCentre( __vmulfp( __vaddfp( lrMin.mV, lrMax.mV ), lHalf.mV ) );
+    Vector3 lHalfExtents( __vsubfp( lrMax.mV, lCentre.mV ) );
+    Vector3 lPos( __vmaddfp( __vaddfp( lrMin.mV, lrMax.mV ), lHalf.mV, lrComOffset.mV ) );
 
-    Vector3 lCentre;                                             // (min + max) * 0.5, every lane
-    lCentre.x = (lrMin.x + lrMax.x) * 0.5f;
-    lCentre.y = (lrMin.y + lrMax.y) * 0.5f;
-    lCentre.z = (lrMin.z + lrMax.z) * 0.5f;
-    lCentre.w = (lrMin.w + lrMax.w) * 0.5f;
-
-    Vector3 lHalfExtents;                                        // vsubfp v13 = max - centre
-    lHalfExtents.x = lrMax.x - lCentre.x;
-    lHalfExtents.y = lrMax.y - lCentre.y;
-    lHalfExtents.z = lrMax.z - lCentre.z;
-    lHalfExtents.w = lrMax.w - lCentre.w;
-
-    Vector3 lPos;                                                // vmaddfp v12 = (min+max)*0.5 + com
-    lPos.x = lCentre.x + lrComOffset.x;
-    lPos.y = lCentre.y + lrComOffset.y;
-    lPos.z = lCentre.z + lrComOffset.z;
-    lPos.w = lCentre.w + lrComOffset.w;
-
-    // The lane-y chain (every term is a splat of one lane, so it is scalar arithmetic).
     const f32 lfBoxHeightAboveRoad =
-        (mCentreOfMassTransform.wAxis.y + lCentre.y) - lHalfExtents.y;          // vaddfp ; vsubfp
-    const f32 lfExtraHeightForWheels =                                          // vmaxfp v10, v10, v9(0)
-        (lfBoxHeightAboveRoad != lfBoxHeightAboveRoad) ? lfBoxHeightAboveRoad
-        : ((lfBoxHeightAboveRoad > 0.0f) ? lfBoxHeightAboveRoad : 0.0f);
-    const f32 lfExtraHeight     = lfExtraHeightForWheels + KF_HANDLING_BODY_Y_PAD; // vaddfp unk_82FAD550
-    const f32 lfHalfExtraHeight = lfExtraHeight * 0.5f;                          // vmulfp128 v0 (0.5)
+        ( mCentreOfMassTransform.wAxis.GetY().GetFloat() + lCentre.GetY().GetFloat() )
+        - lHalfExtents.GetY().GetFloat();
+    const f32 lfExtraHeightForWheels =
+        ( lfBoxHeightAboveRoad != lfBoxHeightAboveRoad ) ? lfBoxHeightAboveRoad
+        : ( ( lfBoxHeightAboveRoad > 0.0f ) ? lfBoxHeightAboveRoad : 0.0f );
+    const f32 lfHalfExtraHeight = ( lfExtraHeightForWheels + KF_HANDLING_BODY_Y_PAD ) * 0.5f;
+    lHalfExtents.SetY( lHalfExtents.GetY().GetFloat() + lfHalfExtraHeight );
+    lPos.SetY( lPos.GetY().GetFloat() - lfHalfExtraHeight );
 
-    lHalfExtents.y = lHalfExtents.y + lfHalfExtraHeight;         // vaddfp ; vrlimi128 v6, v13, 4, 0
-    lPos.y         = lPos.y - lfHalfExtraHeight;                 // vsubfp ; vrlimi128 v7, v0, 4, 0
-
-    rw::Resource lVolumeResource;                           // stw 0, 0x70..0x80(r1)
-    lVolumeResource.m_baseResources[0] = lpVolumeBuffer;         // stw r4, 0x70(r1)
-
-    const rw::collision::Vec4 lvHalfExtents = { lHalfExtents.x, lHalfExtents.y, lHalfExtents.z,
-                                                lHalfExtents.w };
+    rw::Resource lVolumeResource;
+    lVolumeResource.m_baseResources[0] = lpVolumeBuffer;
     rw::collision::BoxVolume* lpVolume =
-        rw::collision::BoxVolume::Initialize(lVolumeResource, lvHalfExtents);   // bl 0x82BAA188
-
-    lpVolume->maTransform[3].x = lPos.x;                         // stvx128 v127, r3, 0x30
-    lpVolume->maTransform[3].y = lPos.y;
-    lpVolume->maTransform[3].z = lPos.z;
-    lpVolume->maTransform[3].w = lPos.w;
+        rw::collision::BoxVolume::Initialize( lVolumeResource, lHalfExtents );
+    lpVolume->GetRelativeTransform()->wAxis = lPos;
 
     return lpVolume;
 }
@@ -3372,7 +3101,7 @@ void ActiveRaceCar::AddToCollision(
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
 {
-    const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lZeroVelocity(0.0f, 0.0f, 0.0f);
 
     CGS_ASSERT(IsActive(), "IsActive()");                                // X360 :1387
     CGS_ASSERT(lpSceneInterface != 0, "lpSceneInterface != NULL");       // X360 :1388

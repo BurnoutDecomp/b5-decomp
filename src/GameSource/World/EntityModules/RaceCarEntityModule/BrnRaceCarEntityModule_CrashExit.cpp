@@ -63,171 +63,7 @@ namespace
     // (Also TU-local in BrnRaceCarEntityModule.cpp for SetupCarColour -- the DWARF home.)
     const s32 KI_BLACK_CAR_COLOUR_INDEX = 6;
 
-    // =============================================================================================
-    // [PC HARNESS + DIAG, NOT X360] THE RE-COLOUR SCENARIO (crash parity FX-FOLLOWUPS item 4, 2026-09-25).
-    // Called once per PostScene frame from the top of ProcessRaceCarCrashCompleteEvents; nothing in the
-    // console body below is touched.
-    //
-    // 1. HARNESS -- BRN_PERSIST_DAMAGE_PRELOAD=wrap|clean. The console re-colours a taken-down rival in a
-    //    persistent-damage mode on two legs: its carried damage wraps past 1.0 (0x822F4298 -- the FOURTH
-    //    credited takedown of one rival, 0.3 each) or it is clean while three race cars already carry damage
-    //    (0x822F4174). A Road Rage run seldom gets there (fxrcem4_live 20260924_195203: two credited takedowns
-    //    in 200 s, both first ones). This knob waits for the FIRST credited AI takedown (an attached AI slot
-    //    with ActiveRaceCar::IsTakenDown(), set by ProcessTakedownEvents; its crash-complete event follows
-    //    later) and then, ONCE, runs the console's own IncreasePersistentDamage three times (0.9, the most
-    //    one rival carries unwrapped) on three attached AI race cars:
-    //      wrap   the victim and the next two attached AI slots  -> the victim's crash complete wraps (leg 2)
-    //      clean  three attached AI slots other than the victim  -> the clean victim meets three damaged cars
-    //                                                              (leg 1)
-    //    Both states are ones the console reaches organically (at most three rivals carry damage, at most
-    //    0.9 each). The preload waits for a takedown rather than the mode start because the rivals are set up
-    //    again between the mode's flag and IN_PROGRESS: RaceCar::Prepare zeroes the damage (measured,
-    //    fxfollowups_recolour 20260925_173429: a mode-start preload of cars 1-3 was gone when car 2 was taken
-    //    down, `damage 0.000000 -> 0.300000`). One [persist-preload] line per preloaded car. Off unless set;
-    //    flow_run wipes BRN_*. DELETE-WHEN the re-colour is witnessed from organic play.
-    // 2. DIAG -- BRN_CRASH_EXIT_DIAG: the re-colour's far end. Every PostPhysics update,
-    //    UpdateActiveRaceCarColours (0x823076C4) repaints each attached car from its palette / colour index.
-    //    While a persistent-damage mode runs, a change of an AI slot's colour index from one colour to another
-    //    (not the first pick from -1: SetupCarColour) arms a watch holding the slot's render paint
-    //    (RenderParams::mPaintColour, the value shader constant 20 takes) AS SEEN ON THE PREVIOUS PostScene
-    //    frame -- the re-colour lands in one PostScene and the repaint in the next PostPhysics, so by the
-    //    time the new index is seen the paint may already be new; the watch prints once the paint differs
-    //    from that earlier one ("after 0 frame(s)": already repainted), or after 600 frames without a
-    //    change. Capped at 16 lines. (fxfollowups_recolour 20260925_173429 armed with the CURRENT paint and
-    //    so reported every re-colour as "NOT repainted": the repaint had already happened.)
-    // =============================================================================================
-    enum EPersistDamagePreload
-    {
-        E_PERSIST_DAMAGE_PRELOAD_OFF,
-        E_PERSIST_DAMAGE_PRELOAD_WRAP,
-        E_PERSIST_DAMAGE_PRELOAD_CLEAN
-    };
 
-    EPersistDamagePreload GetPersistDamagePreload()
-    {
-        static const EPersistDamagePreload seMode = []() {
-            return E_PERSIST_DAMAGE_PRELOAD_OFF;
-        }();
-        return seMode;
-    }
-
-    struct RecolourWatch
-    {
-        bool    mbArmed;
-        s32     miColourBefore;
-        s32     miColourAfter;
-        s32     miFrames;
-        Vector4 mPaintBefore;
-    };
-
-    void RecolourScenarioHarness( RaceCarEntityModule& lrModule )
-    {
-        static const s32 KI_PRELOAD_TAKEDOWNS = 3;   // 3 x 0.3 = 0.9: one more takedown wraps
-
-        // ---- 1. the preload, on the first credited AI takedown -------------------------------------------
-        static bool sbPreloaded = false;
-        const EPersistDamagePreload leMode = GetPersistDamagePreload();
-        if( !sbPreloaded && leMode != E_PERSIST_DAMAGE_PRELOAD_OFF &&
-            lrModule.GetGameModeFlag( BrnGameState::GameModeParams::KU_FLAG_AI_PERSISTENT_DAMAGE ) )
-        {
-            s32 liVictim = -1;
-            for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT && liVictim < 0; ++liSlot )
-            {
-                ActiveRaceCar* lpCar = lrModule.GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liSlot ) );
-                if( lpCar->IsAttached() && lpCar->IsTakenDown() &&
-                    lpCar->GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_AI )
-                {
-                    liVictim = liSlot;
-                }
-            }
-
-            s32 laiSlots[3] = { -1, -1, -1 };
-            s32 liFound = 0;
-            if( liVictim >= 0 && leMode == E_PERSIST_DAMAGE_PRELOAD_WRAP )
-            {
-                laiSlots[liFound++] = liVictim;
-            }
-            for( s32 liSlot = 0; liVictim >= 0 && liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT && liFound < 3; ++liSlot )
-            {
-                ActiveRaceCar* lpCar = lrModule.GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liSlot ) );
-                if( liSlot != liVictim && lpCar->IsAttached() &&
-                    lpCar->GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_AI )
-                {
-                    laiSlots[liFound++] = liSlot;
-                }
-            }
-            if( liFound == 3 )
-            {
-                sbPreloaded = true;
-                for( s32 liPick = 0; liPick < 3; ++liPick )
-                {
-                    RaceCar* lpRaceCar = lrModule.GetActiveRaceCar(
-                        static_cast<EActiveRaceCarIndex>( laiSlots[liPick] ) )->GetGlobalRaceCar();
-                    const f32 lfBefore = lpRaceCar->GetPersistentDamage();
-                    for( s32 liTakedown = 0; liTakedown < KI_PRELOAD_TAKEDOWNS; ++liTakedown )
-                    {
-                        lpRaceCar->IncreasePersistentDamage();   // the console's own increment (0.3; wraps at 1.0)
-                    }
-                    if( CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                    }
-                }
-            }
-        }
-
-        // ---- 2. the repaint witness ---------------------------------------------------------------------
-        static RecolourWatch saWatch[E_ACTIVE_RACE_CAR_INDEX_COUNT];
-        static s32 saiLastColour[E_ACTIVE_RACE_CAR_INDEX_COUNT];   // -2 = not seen yet
-        static Vector4 saLastPaint[E_ACTIVE_RACE_CAR_INDEX_COUNT];
-        static bool sbWatchInitialised = false;
-        static s32 siLines = 0;
-        if( !sbWatchInitialised )
-        {
-            sbWatchInitialised = true;
-            for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
-            {
-                saiLastColour[liSlot] = -2;
-            }
-        }
-        for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
-        {
-            ActiveRaceCar* lpCar = lrModule.GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liSlot ) );
-            if( !lpCar->IsAttached() || lpCar->GetGlobalRaceCar()->GetType() != E_RACE_CAR_TYPE_AI )
-            {
-                saiLastColour[liSlot] = -2;
-                saWatch[liSlot].mbArmed = false;
-                continue;
-            }
-            const s32      liColour = lpCar->GetGlobalRaceCar()->GetColourIndex();
-            const Vector4& lrPaint  = lpCar->GetRenderParams()->GetPaintColour();
-            RecolourWatch& lrWatch  = saWatch[liSlot];
-            if( saiLastColour[liSlot] >= 0 && liColour != saiLastColour[liSlot] )
-            {
-                lrWatch.mbArmed        = true;
-                lrWatch.miColourBefore = saiLastColour[liSlot];
-                lrWatch.miColourAfter  = liColour;
-                lrWatch.miFrames       = 0;
-                lrWatch.mPaintBefore   = saLastPaint[liSlot];   // the paint the slot had BEFORE the change
-            }
-            saiLastColour[liSlot] = liColour;
-            saLastPaint[liSlot]   = lrPaint;
-            if( !lrWatch.mbArmed )
-            {
-                continue;
-            }
-            const bool lbRepainted = lrPaint.x != lrWatch.mPaintBefore.x || lrPaint.y != lrWatch.mPaintBefore.y ||
-                                     lrPaint.z != lrWatch.mPaintBefore.z;
-            if( lbRepainted || ++lrWatch.miFrames >= 600 )
-            {
-                lrWatch.mbArmed = false;
-                ++siLines;
-            }
-        }
-    }
-
-    // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE X360 BINARY. ProcessPowerParking's witness: one capped
-    // line whenever the published bit 0 flips, and one whenever the nearby-parked counts it hands the
-    // scorer change while a park is in progress (crash parity FX-SCENEMGR item 4, 2026-09-24).
 }
 
 // =================================================================================================
@@ -318,8 +154,6 @@ s32 RaceCarEntityModule::GetPersistentDamageCarCount() const
 void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
     const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput )
 {
-    // [PC HARNESS + DIAG, NOT X360] BRN_PERSIST_DAMAGE_PRELOAD / the repaint witness (see RecolourScenarioHarness).
-    RecolourScenarioHarness( *this );
 
     const CrashIO::RaceCarOutputInterface* lpCrashInterface = lpInput->GetCrashInterface();
     const CrashIO::RaceCarOutputInterface::RaceCarCrashCompleteEventQueue* lpQueue =
@@ -362,8 +196,6 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
                 {
                     lbRecolour = lpTakenDownCar->IncreasePersistentDamage();
                 }
-
-                const s32 liColourBefore = lpTakenDownCar->GetColourIndex();   // [DIAG] only
 
                 if( lbRecolour )
                 {
@@ -485,7 +317,6 @@ void RaceCarEntityModule::ProcessLeapedAndStompedCars(
 
         // [DIAG] BRN_STOMP_DIAG -- NOT IN THE X360 BINARY. First-N capped proof the leg was
         // DISPATCHED with a non-empty traffic list (Showtime + airborne + candidates).
-        static u32 suStompDiagLines = 0u;
     }
 }
 
@@ -630,14 +461,7 @@ void RaceCarEntityModule::PostSceneUpdate(
         lpRaceCarToTraffic->SetShowtimeTrafficDensityScale(
             mCrashPlayManager.GetShowtimeTrafficDensityScale() );
 
-        // [DIAG] BRN_SHOWTIME_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. One capped line per change
-        // of the published pair, so a run proves the publish is DISPATCHED and shows its values.
-        static s32 siLastOnGround = -1;
-        static f32 sfLastScale = -1.0f;
-        static u32 suShowtimeTrafficLines = 0u;
-        const s32 liOnGround = lpRaceCarToTraffic->IsFlagSet(
-            RaceCarEntityModuleIO::RaceCarToTrafficInterface::E_FLAG_PLAYER_IS_IN_SHOWTIME_ON_GROUND ) ? 1 : 0;
-        const f32 lfScale = lpRaceCarToTraffic->GetShowtimeTrafficDensityScale();
+
     }
 
     // 0x822FE558..0x822FE588 -- THE POWER PARKING CONSUMER (crash parity FX-SCENEMGR item 4,

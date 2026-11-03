@@ -80,35 +80,6 @@ void RaceCarEntityModule::UpdateRaceCarCollisionTagging(
                 "liActiveRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS" );                          // :5776
     CGS_ASSERT( lpRaceCarState != 0, "lpRaceCarState" );                                     // :5777
 
-    if( lpRaceCarState == 0 )
-    {
-        return;
-    }
-
-    // ⭐⭐ [DIAG collision-tag] NOT IN THE X360 BINARY. THE WITNESS THAT OBSERVES THE RIGHT
-    // BRANCH. The gate below is an EARLY RETURN, so a silent "nothing happened" is
-    // indistinguishable from "this function never ran" -- print BEFORE it, on both outcomes,
-    // and print the raw tag so a valid-but-sectionless surface is distinguishable from an
-    // invalid ray. Rate-limited to one line per 512 calls.
-    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        static s32 siTagTick = 0;
-        if( ( siTagTick++ & 0x1FF ) == 0 )
-        {
-            const ::CollisionTag& lrTag = lpRaceCarState->mAboveGroundTestResult.mCollisionTag;
-            *CgsDev::Log::gpDebugPrint
-                << "[collision-tag] car " << liActiveRaceCarIndex
-                << " aboveGroundValid=" << ( lpRaceCarState->mAboveGroundTestResult.mbValid ? 1 : 0 )
-                << " tag=0x" << static_cast<s32>( lrTag.muValue )
-                << " section=" << static_cast<s32>( TagAISectionIndex( lrTag ) )
-                << " wheel0OnGround="
-                << ( lpRaceCarState->maWheels[0].mRoadContact.mbIsOnGround ? 1 : 0 )
-                << " wheel0Tag=0x"
-                << static_cast<s32>( lpRaceCarState->maWheels[0].mRoadContact.mCollisionTag.muValue )
-                << " timeInAir=" << lpRaceCarState->mfTimeInAir << "\n";
-        }
-    }
-
     // The console's own first gate: no valid ground under the car means no tag to read, and it
     // returns WITHOUT touching the section (so the last known section survives one bad frame).
     if( !lpRaceCarState->mAboveGroundTestResult.mbValid )
@@ -121,8 +92,8 @@ void RaceCarEntityModule::UpdateRaceCarCollisionTagging(
         const u32 luPackedTag = lpRaceCarState->mAboveGroundTestResult.mCollisionTag.muValue;
         BrnWorld::CollisionTag lTag;
         lTag.Construct(static_cast<u16>(luPackedTag >> 16), static_cast<u16>(luPackedTag));
-        f32 lfHeading = std::atan2(lpRaceCarState->mTransform.zAxis.z,
-                                    lpRaceCarState->mTransform.zAxis.x);
+        f32 lfHeading = std::atan2(lpRaceCarState->mTransform.zAxis.GetZ().GetFloat(),
+                                    lpRaceCarState->mTransform.zAxis.GetX().GetFloat());
         if (lfHeading < 0.0f) lfHeading += 6.2831855f;
         f32 lfLaneAngle = 0.0f;
         const TrafficDirection leTraffic = lTag.GetTrafficInfo(&lfLaneAngle);
@@ -158,14 +129,6 @@ void RaceCarEntityModule::UpdateRaceCarCollisionTagging(
             }
         }
         lpStrategy->SetOncomingState(leState);
-        static u32 luSample = 0;
-        if (sbTrace && (++luSample % 12) == 0 && CgsDev::Log::gpDebugPrint)
-            *CgsDev::Log::gpDebugPrint << "[oncoming] tag=" << luPackedTag
-                << " traffic=" << static_cast<s32>(leTraffic) << " heading=" << lfHeading
-                << " lane=" << lfLaneAngle << " state=" << static_cast<s32>(leState)
-                << " active=" << (lpStrategy->IsOncoming() ? 1 : 0)
-                << " speed=" << lpRaceCarState->mfSpeedMPH
-                << " boost=" << lpStrategy->GetBoostAmount() << "\n";
 
     }
 
@@ -195,36 +158,7 @@ void RaceCarEntityModule::UpdateActiveRaceCarTransforms()
         GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) )->UpdateResetTransform();
     }
 
-    // ⭐⭐ [DIAG rot-ring] NOT IN THE X360 BINARY. THE CONTROL FOR "THE RING IS REAL".
-    //
-    // A ring that is being Push()ed is not the same claim as a ring that HOLDS A GOOD RESET POSE,
-    // and the difference is invisible from a depth counter alone: an empty ring makes
-    // GetResetCoords silently fall back to the car's LIVE transform, which for a crashed car is
-    // the wreck's own pose -- a "recovery" that puts the car back exactly where it is stuck.
-    // ⇒ this prints the depth AND the oldest entry's position, so a later crash-recovery run can
-    // be checked against a position that was recorded BEFORE the crash rather than assumed.
-    // Rate-limited to one line per 256 calls so a 275 s drive run yields a readable handful.
-    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        static s32 siTick = 0;
-        if( ( siTick++ & 0xFF ) == 0 )
-        {
-            const ActiveRaceCar* lpPlayer =
-                GetActiveRaceCar( mePlayerActiveRaceCarIndex );
-            if( lpPlayer != 0 && lpPlayer->IsActive() )
-            {
-                Vector3 lPosition    = { 0.0f, 0.0f, 0.0f, 0.0f };
-                Vector3 lDirection   = { 0.0f, 0.0f, 0.0f, 0.0f };
-                lpPlayer->GetResetCoords( &lPosition, &lDirection );
-                *CgsDev::Log::gpDebugPrint
-                    << "[rot-ring] player depth=" << lpPlayer->GetResetTransformCount()
-                    << " aiSection=" << static_cast<s32>( lpPlayer->GetCurrentAISection() )
-                    << " inSystem=" << ( lpPlayer->IsInsideAISectionSystem() ? 1 : 0 )
-                    << " resetPos=(" << lPosition.x << "," << lPosition.y << "," << lPosition.z
-                    << ")\n";
-            }
-        }
-    }
+
 }
 
 }
