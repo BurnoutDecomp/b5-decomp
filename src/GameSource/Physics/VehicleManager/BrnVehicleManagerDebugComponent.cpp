@@ -227,15 +227,15 @@ namespace Vehicle
         RegisterVariable(&mbRenderWallContacts, "Crashes", "Draw wall contacts");
         RegisterVariable(&mbRenderGroundContacts, "Crashes", "Draw ground contacts");
 
-        RegisterVariable(&gvMaxCrashAngularVelocity.x, "Crashes", "Max X Angular Velocity");
-        SetStep(&gvMaxCrashAngularVelocity.x, 0.1f);
-        SetRange(&gvMaxCrashAngularVelocity.x, 0.0f, 100.0f);
-        RegisterVariable(&gvMaxCrashAngularVelocity.y, "Crashes", "Max Y Angular Velocity");
-        SetStep(&gvMaxCrashAngularVelocity.y, 0.1f);
-        SetRange(&gvMaxCrashAngularVelocity.y, 0.0f, 100.0f);
-        RegisterVariable(&gvMaxCrashAngularVelocity.z, "Crashes", "Max Z Angular Velocity");
-        SetStep(&gvMaxCrashAngularVelocity.z, 0.1f);
-        SetRange(&gvMaxCrashAngularVelocity.z, 0.0f, 100.0f);
+        RegisterVariable(&gvMaxCrashAngularVelocity.GetVector().x, "Crashes", "Max X Angular Velocity");
+        SetStep(&gvMaxCrashAngularVelocity.GetVector().x, 0.1f);
+        SetRange(&gvMaxCrashAngularVelocity.GetVector().x, 0.0f, 100.0f);
+        RegisterVariable(&gvMaxCrashAngularVelocity.GetVector().y, "Crashes", "Max Y Angular Velocity");
+        SetStep(&gvMaxCrashAngularVelocity.GetVector().y, 0.1f);
+        SetRange(&gvMaxCrashAngularVelocity.GetVector().y, 0.0f, 100.0f);
+        RegisterVariable(&gvMaxCrashAngularVelocity.GetVector().z, "Crashes", "Max Z Angular Velocity");
+        SetStep(&gvMaxCrashAngularVelocity.GetVector().z, 0.1f);
+        SetRange(&gvMaxCrashAngularVelocity.GetVector().z, 0.0f, 100.0f);
 
         RegisterVariable(&mpVehicleManager->mfVerticalTakedownAngleDeg,
                          "Takedowns", "Max vertical TD angle degrees");
@@ -387,13 +387,24 @@ namespace Vehicle
 
         const f32 KF_RADIANS_TO_DEGREES = 57.2957763671875f;
 
+        Vector3 MakeVector3FromLanes(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+        {
+            Vector3 lResult;
+            rw::math::vpu::VectorIntrinsic& lvValue = lResult.GetVector();
+            lvValue.v[0] = lfX;
+            lvValue.v[1] = lfY;
+            lvValue.v[2] = lfZ;
+            lvValue.v[3] = lfW;
+            return lResult;
+        }
+
         rw::math::vpu::Vector2 MakeVector2(f32 lfX, f32 lfY)
         {
             rw::math::vpu::Vector2 lv2Result;
-            lv2Result.x = lfX;
-            lv2Result.y = lfY;
-            lv2Result.z = 0.0f;
-            lv2Result.w = 0.0f;
+            lv2Result.mV.x = lfX;
+            lv2Result.mV.y = lfY;
+            lv2Result.mV.z = 0.0f;
+            lv2Result.mV.w = 0.0f;
             return lv2Result;
         }
     }
@@ -525,13 +536,13 @@ namespace Vehicle
         if (lfGroundingDuration > 0.0f)
         {
             CgsCore::SPrintf(lacText, sizeof(lacText), "Ground by %u! %.1f", luGroundingCar, lfGroundingDuration);
-            lrRender.Draw2DTextJustified(lacText, MakeVector2(lPosition.x, 380.0f),
+            lrRender.Draw2DTextJustified(lacText, MakeVector2(lPosition.mV.x, 380.0f),
                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT, 16.0f, 0xFF00FF80u);
         }
         if (lfRubbingDuration > 0.0f)
         {
             CgsCore::SPrintf(lacText, sizeof(lacText), "Rubbing %u: %.1f", luRubbingCar, lfRubbingDuration);
-            lrRender.Draw2DTextJustified(lacText, MakeVector2(lPosition.x, 400.0f),
+            lrRender.Draw2DTextJustified(lacText, MakeVector2(lPosition.mV.x, 400.0f),
                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT, 16.0f, 0xFF80FF00u);
         }
     }
@@ -583,48 +594,48 @@ namespace Vehicle
         const Vector3& lrFrontLeft = lrCar.GetWheel(eFrontLeftWheel).GetPosition();
         const Vector3& lrRearRight = lrCar.GetWheel(eRearRightWheel).GetPosition();
         const Vector3& lrRearLeft = lrCar.GetWheel(eRearLeftWheel).GetPosition();
-        CGS_ASSERT((lrFrontRight.x == lrFrontRight.x) && (lrFrontRight.y == lrFrontRight.y)
-                       && (lrFrontRight.z == lrFrontRight.z),
+        CGS_ASSERT((lrFrontRight.GetVector().x == lrFrontRight.GetVector().x) && (lrFrontRight.GetVector().y == lrFrontRight.GetVector().y)
+                       && (lrFrontRight.GetVector().z == lrFrontRight.GetVector().z),
                    "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
-        CGS_ASSERT((lrFrontLeft.x == lrFrontLeft.x) && (lrFrontLeft.y == lrFrontLeft.y)
-                       && (lrFrontLeft.z == lrFrontLeft.z),
+        CGS_ASSERT((lrFrontLeft.GetVector().x == lrFrontLeft.GetVector().x) && (lrFrontLeft.GetVector().y == lrFrontLeft.GetVector().y)
+                       && (lrFrontLeft.GetVector().z == lrFrontLeft.GetVector().z),
                    "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
-        CGS_ASSERT((lrRearRight.x == lrRearRight.x) && (lrRearRight.y == lrRearRight.y)
-                       && (lrRearRight.z == lrRearRight.z),
+        CGS_ASSERT((lrRearRight.GetVector().x == lrRearRight.GetVector().x) && (lrRearRight.GetVector().y == lrRearRight.GetVector().y)
+                       && (lrRearRight.GetVector().z == lrRearRight.GetVector().z),
                    "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
-        CGS_ASSERT((lrRearLeft.x == lrRearLeft.x) && (lrRearLeft.y == lrRearLeft.y)
-                       && (lrRearLeft.z == lrRearLeft.z),
+        CGS_ASSERT((lrRearLeft.GetVector().x == lrRearLeft.GetVector().x) && (lrRearLeft.GetVector().y == lrRearLeft.GetVector().y)
+                       && (lrRearLeft.GetVector().z == lrRearLeft.GetVector().z),
                    "Invalid wheel position: , please tell Graham D."); // Wheel.h:412
 
-        const Vector3 lvFrontMidpointCarSpace = {
-            (lrFrontRight.x + lrFrontLeft.x) * 0.5f,
-            (lrFrontRight.y + lrFrontLeft.y) * 0.5f,
-            (lrFrontRight.z + lrFrontLeft.z) * 0.5f,
-            (lrFrontRight.w + lrFrontLeft.w) * 0.5f };
-        const Vector3 lvRearMidpointCarSpace = {
-            (lrRearRight.x + lrRearLeft.x) * 0.5f,
-            (lrRearRight.y + lrRearLeft.y) * 0.5f,
-            (lrRearRight.z + lrRearLeft.z) * 0.5f,
-            (lrRearRight.w + lrRearLeft.w) * 0.5f };
+        const Vector3 lvFrontMidpointCarSpace = MakeVector3FromLanes(
+            (lrFrontRight.GetVector().x + lrFrontLeft.GetVector().x) * 0.5f,
+            (lrFrontRight.GetVector().y + lrFrontLeft.GetVector().y) * 0.5f,
+            (lrFrontRight.GetVector().z + lrFrontLeft.GetVector().z) * 0.5f,
+            (lrFrontRight.GetVector().w + lrFrontLeft.GetVector().w) * 0.5f);
+        const Vector3 lvRearMidpointCarSpace = MakeVector3FromLanes(
+            (lrRearRight.GetVector().x + lrRearLeft.GetVector().x) * 0.5f,
+            (lrRearRight.GetVector().y + lrRearLeft.GetVector().y) * 0.5f,
+            (lrRearRight.GetVector().z + lrRearLeft.GetVector().z) * 0.5f,
+            (lrRearRight.GetVector().w + lrRearLeft.GetVector().w) * 0.5f);
 
-        const Vector3 lvFrontStart = {
-            lrTransform.wAxis.x + lrTransform.xAxis.x * lvFrontMidpointCarSpace.x
-                + lrTransform.yAxis.x * lvFrontMidpointCarSpace.y + lrTransform.zAxis.x * lvFrontMidpointCarSpace.z,
-            lrTransform.wAxis.y + lrTransform.xAxis.y * lvFrontMidpointCarSpace.x
-                + lrTransform.yAxis.y * lvFrontMidpointCarSpace.y + lrTransform.zAxis.y * lvFrontMidpointCarSpace.z,
-            lrTransform.wAxis.z + lrTransform.xAxis.z * lvFrontMidpointCarSpace.x
-                + lrTransform.yAxis.z * lvFrontMidpointCarSpace.y + lrTransform.zAxis.z * lvFrontMidpointCarSpace.z,
-            lrTransform.wAxis.w + lrTransform.xAxis.w * lvFrontMidpointCarSpace.x
-                + lrTransform.yAxis.w * lvFrontMidpointCarSpace.y + lrTransform.zAxis.w * lvFrontMidpointCarSpace.z };
-        const Vector3 lvRearStart = {
-            lrTransform.wAxis.x + lrTransform.xAxis.x * lvRearMidpointCarSpace.x
-                + lrTransform.yAxis.x * lvRearMidpointCarSpace.y + lrTransform.zAxis.x * lvRearMidpointCarSpace.z,
-            lrTransform.wAxis.y + lrTransform.xAxis.y * lvRearMidpointCarSpace.x
-                + lrTransform.yAxis.y * lvRearMidpointCarSpace.y + lrTransform.zAxis.y * lvRearMidpointCarSpace.z,
-            lrTransform.wAxis.z + lrTransform.xAxis.z * lvRearMidpointCarSpace.x
-                + lrTransform.yAxis.z * lvRearMidpointCarSpace.y + lrTransform.zAxis.z * lvRearMidpointCarSpace.z,
-            lrTransform.wAxis.w + lrTransform.xAxis.w * lvRearMidpointCarSpace.x
-                + lrTransform.yAxis.w * lvRearMidpointCarSpace.y + lrTransform.zAxis.w * lvRearMidpointCarSpace.z };
+        const Vector3 lvFrontStart = MakeVector3FromLanes(
+            lrTransform.wAxis.GetVector().x + lrTransform.xAxis.GetVector().x * lvFrontMidpointCarSpace.GetVector().x
+                + lrTransform.yAxis.GetVector().x * lvFrontMidpointCarSpace.GetVector().y + lrTransform.zAxis.GetVector().x * lvFrontMidpointCarSpace.GetVector().z,
+            lrTransform.wAxis.GetVector().y + lrTransform.xAxis.GetVector().y * lvFrontMidpointCarSpace.GetVector().x
+                + lrTransform.yAxis.GetVector().y * lvFrontMidpointCarSpace.GetVector().y + lrTransform.zAxis.GetVector().y * lvFrontMidpointCarSpace.GetVector().z,
+            lrTransform.wAxis.GetVector().z + lrTransform.xAxis.GetVector().z * lvFrontMidpointCarSpace.GetVector().x
+                + lrTransform.yAxis.GetVector().z * lvFrontMidpointCarSpace.GetVector().y + lrTransform.zAxis.GetVector().z * lvFrontMidpointCarSpace.GetVector().z,
+            lrTransform.wAxis.GetVector().w + lrTransform.xAxis.GetVector().w * lvFrontMidpointCarSpace.GetVector().x
+                + lrTransform.yAxis.GetVector().w * lvFrontMidpointCarSpace.GetVector().y + lrTransform.zAxis.GetVector().w * lvFrontMidpointCarSpace.GetVector().z);
+        const Vector3 lvRearStart = MakeVector3FromLanes(
+            lrTransform.wAxis.GetVector().x + lrTransform.xAxis.GetVector().x * lvRearMidpointCarSpace.GetVector().x
+                + lrTransform.yAxis.GetVector().x * lvRearMidpointCarSpace.GetVector().y + lrTransform.zAxis.GetVector().x * lvRearMidpointCarSpace.GetVector().z,
+            lrTransform.wAxis.GetVector().y + lrTransform.xAxis.GetVector().y * lvRearMidpointCarSpace.GetVector().x
+                + lrTransform.yAxis.GetVector().y * lvRearMidpointCarSpace.GetVector().y + lrTransform.zAxis.GetVector().y * lvRearMidpointCarSpace.GetVector().z,
+            lrTransform.wAxis.GetVector().z + lrTransform.xAxis.GetVector().z * lvRearMidpointCarSpace.GetVector().x
+                + lrTransform.yAxis.GetVector().z * lvRearMidpointCarSpace.GetVector().y + lrTransform.zAxis.GetVector().z * lvRearMidpointCarSpace.GetVector().z,
+            lrTransform.wAxis.GetVector().w + lrTransform.xAxis.GetVector().w * lvRearMidpointCarSpace.GetVector().x
+                + lrTransform.yAxis.GetVector().w * lvRearMidpointCarSpace.GetVector().y + lrTransform.zAxis.GetVector().w * lvRearMidpointCarSpace.GetVector().z);
 
         const Vector3 lvFrontEnd = lvFrontStart + lrTransform.zAxis * lrManager.mfFrontRayLength;
         const Vector3 lvRearEnd = lvRearStart - lrTransform.zAxis * lrManager.mfRearRayLength;
@@ -642,12 +653,14 @@ namespace Vehicle
 
         const Vector3 lvRaceCarHalfExtent = mLastTrafficContact_RaceCarHalfExt;
         const Vector3 lvTrafficHalfExtent = mLastTrafficContact_TrafficHalfExt;
-        const Vector3 lvRaceCarMinimum = { -lvRaceCarHalfExtent.x, -lvRaceCarHalfExtent.y,
-                                           -lvRaceCarHalfExtent.z, -lvRaceCarHalfExtent.w };
+        const Vector3 lvRaceCarMinimum = MakeVector3FromLanes(
+            -lvRaceCarHalfExtent.GetVector().x, -lvRaceCarHalfExtent.GetVector().y,
+            -lvRaceCarHalfExtent.GetVector().z, -lvRaceCarHalfExtent.GetVector().w);
         lpRender->DrawBox(lvRaceCarMinimum,
                           lvRaceCarHalfExtent, mLastTrafficContact_RaceCarTransform, WorldDebugColour(0xFF0000FFu));
-        const Vector3 lvTrafficMinimum = { -lvTrafficHalfExtent.x, -lvTrafficHalfExtent.y,
-                                           -lvTrafficHalfExtent.z, -lvTrafficHalfExtent.w };
+        const Vector3 lvTrafficMinimum = MakeVector3FromLanes(
+            -lvTrafficHalfExtent.GetVector().x, -lvTrafficHalfExtent.GetVector().y,
+            -lvTrafficHalfExtent.GetVector().z, -lvTrafficHalfExtent.GetVector().w);
         lpRender->DrawBox(lvTrafficMinimum,
                           lvTrafficHalfExtent, mLastTrafficContact_TrafficTransform, WorldDebugColour(0xFF00FF00u));
 
@@ -666,7 +679,7 @@ namespace Vehicle
                             mLastTrafficContact_TrafficTransform.wAxis + lvTrafficVelocityOffset,
                             WorldDebugColour(0xFF00FF00u));
 
-        const Vector3 lvWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lvWorldUp( 0.0f, 1.0f, 0.0f );
         const Vector3 lvActualTextPosition = lvContactNormalEnd - lvWorldUp * 0.1f;
         lpRender->DrawText(lvActualTextPosition, "actual", 17.0f);
     }
@@ -679,7 +692,9 @@ namespace Vehicle
         CGS_ASSERT(lpRender != 0, "lpDisplay != NULL"); // :1006
 
         const Vector3 lvHalfExtent = mLastCrashContact_RaceCarHalfExt;
-        const Vector3 lvMinimum = { -lvHalfExtent.x, -lvHalfExtent.y, -lvHalfExtent.z, -lvHalfExtent.w };
+        const Vector3 lvMinimum = MakeVector3FromLanes(
+            -lvHalfExtent.GetVector().x, -lvHalfExtent.GetVector().y,
+            -lvHalfExtent.GetVector().z, -lvHalfExtent.GetVector().w);
         lpRender->DrawBox(lvMinimum,
                           lvHalfExtent, mLastCrashContact_RaceCarTransform, WorldDebugColour(0xFF0000FFu));
 
@@ -711,21 +726,22 @@ namespace Vehicle
             Matrix44Affine lTargetTransform = lrDriver.GetCatchupTargetTransform();
             const Vector3 lvCOMOffset = lrCar.GetSimpleAttribs()->mCOMOffset;
             const Vector3 lvTargetCOMOffset =
-                lTargetTransform.zAxis * lvCOMOffset.z
-                + lTargetTransform.xAxis * lvCOMOffset.x
-                + lTargetTransform.yAxis * lvCOMOffset.y;
+                lTargetTransform.zAxis * lvCOMOffset.GetVector().z
+                + lTargetTransform.xAxis * lvCOMOffset.GetVector().x
+                + lTargetTransform.yAxis * lvCOMOffset.GetVector().y;
             lTargetTransform.wAxis = lTargetTransform.wAxis - lvTargetCOMOffset;
 
             const Vector3 lvHalfExtent = lrCar.GetHalfExtent();
-            const Vector3 lvBoxMinimum = { -lvHalfExtent.x, -lvHalfExtent.y,
-                                        -lvHalfExtent.z, -lvHalfExtent.w };
+            const Vector3 lvBoxMinimum = MakeVector3FromLanes(
+                -lvHalfExtent.GetVector().x, -lvHalfExtent.GetVector().y,
+                -lvHalfExtent.GetVector().z, -lvHalfExtent.GetVector().w);
             const Vector3 lvBoxMaximum = lvHalfExtent;
             lpRender->DrawBox(lvBoxMinimum, lvBoxMaximum, lTargetTransform, WorldDebugColour(0xFFFFFFFFu));
 
             const Vector3 lvCurrentPosition = lrCar.GetGraphicsVehicleTransform().wAxis;
             lpRender->DrawArrow(lvCurrentPosition, lTargetTransform.wAxis, WorldDebugColour(0xFFFFFFFFu));
 
-            const Vector3 lvWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector3 lvWorldUp( 0.0f, 1.0f, 0.0f );
             const Vector3 lvTextPosition = lTargetTransform.wAxis + lvWorldUp * 1.5f;
             lpRender->DrawText(lvTextPosition, lrCar.IsFrozen() ? "Frozen" : "Not frozen", 20.0f);
         }
@@ -751,8 +767,9 @@ namespace Vehicle
 
         Vector3 lvCacheSphere;
         std::memcpy(&lvCacheSphere, lrManager.mStuckInCollisionTestCacheSphere, sizeof(lvCacheSphere));
-        const Vector3 lvSphereCentre = { lvCacheSphere.x, lvCacheSphere.y, lvCacheSphere.z, 0.0f };
-        lpRender->DrawHollowSphere(lvSphereCentre, lvCacheSphere.w, WorldDebugColour(0xFFFFFFFFu));
+        const Vector3 lvSphereCentre = MakeVector3FromLanes(
+            lvCacheSphere.GetVector().x, lvCacheSphere.GetVector().y, lvCacheSphere.GetVector().z, 0.0f);
+        lpRender->DrawHollowSphere(lvSphereCentre, lvCacheSphere.GetVector().w, WorldDebugColour(0xFFFFFFFFu));
 
         for (s32 liLine = 0; liLine < KI_MAX_WORLD_CONTACT_SPIES; ++liLine)
         {
@@ -780,7 +797,7 @@ namespace Vehicle
                          mbDisplayContact ? &mClosingVelocityPlayerCarSpace : 0,
                          mbDisplayContact ? &mPlayerCarVelocity : 0);
 
-        lv2Position.y += 120.0f;
+        lv2Position.mV.y += 120.0f;
         RenderCarDiagram(lpRender, lv2Position, 0xFF00FF00u,
                          mbDisplayContact ? &mOtherCarContactPosition : 0,
                          mbDisplayContact ? &mClosingVelocityOtherCarSpace : 0,
@@ -818,10 +835,10 @@ namespace Vehicle
 
         const rw::math::vpu::Vector2 lv2WheelSize = MakeVector2(KF_WHEEL_WIDTH, KF_WHEEL_LENGTH);
 
-        const f32 lfLeftWheelX  = lrPosition.x - KF_WHEEL_WIDTH;
-        const f32 lfFrontWheelY = lrPosition.y + KF_WHEEL_FRONT;
+        const f32 lfLeftWheelX  = lrPosition.mV.x - KF_WHEEL_WIDTH;
+        const f32 lfFrontWheelY = lrPosition.mV.y + KF_WHEEL_FRONT;
         const f32 lfRightWheelX = lfLeftWheelX + KF_CAR_WIDTH + KF_WHEEL_WIDTH;
-        const f32 lfRearWheelY  = lrPosition.y + KF_CAR_LENGTH - KF_WHEEL_REAR;
+        const f32 lfRearWheelY  = lrPosition.mV.y + KF_CAR_LENGTH - KF_WHEEL_REAR;
 
         lpRender->DrawBox(lrPosition, MakeVector2(KF_CAR_WIDTH, KF_CAR_LENGTH), lColour);
         lpRender->DrawBox(MakeVector2(lfLeftWheelX, lfFrontWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
@@ -831,8 +848,8 @@ namespace Vehicle
 
         if (lpContactPosition != 0)
         {
-            const f32 lfContactX = (lpContactPosition->x + 0.5f) * (lfRightWheelX - lfLeftWheelX) + lfLeftWheelX;
-            const f32 lfContactY = (-lpContactPosition->z + 0.5f) * (lfRearWheelY - lfFrontWheelY) + lfFrontWheelY;
+            const f32 lfContactX = (lpContactPosition->GetVector().x + 0.5f) * (lfRightWheelX - lfLeftWheelX) + lfLeftWheelX;
+            const f32 lfContactY = (-lpContactPosition->GetVector().z + 0.5f) * (lfRearWheelY - lfFrontWheelY) + lfFrontWheelY;
 
             lpRender->DrawBox(MakeVector2(lfContactX, lfContactY), lv2WheelSize, 0xFF0000FFu);
         }
@@ -842,13 +859,13 @@ namespace Vehicle
             CGS_ASSERT(lpCarVelocity != NULL, "lpCarVelocity != NULL");
 
             const rw::math::vpu::Vector2 lv2Centre =
-                MakeVector2(lrPosition.x + KF_CAR_WIDTH * 0.5f, lrPosition.y + KF_CAR_LENGTH * 0.5f);
+                MakeVector2(lrPosition.mV.x + KF_CAR_WIDTH * 0.5f, lrPosition.mV.y + KF_CAR_LENGTH * 0.5f);
 
-            lpRender->DrawLine(MakeVector2(lv2Centre.x - lpClosingVelocity->x * KF_VELOCITY_SCALE,
-                                           lv2Centre.y - lpClosingVelocity->z * KF_VELOCITY_SCALE),
+            lpRender->DrawLine(MakeVector2(lv2Centre.mV.x - lpClosingVelocity->GetVector().x * KF_VELOCITY_SCALE,
+                                           lv2Centre.mV.y - lpClosingVelocity->GetVector().z * KF_VELOCITY_SCALE),
                                lv2Centre, 0xFFFFFF00u);
-            lpRender->DrawLine(MakeVector2(lv2Centre.x - lpCarVelocity->x * KF_VELOCITY_SCALE,
-                                           lv2Centre.y - lpCarVelocity->z * KF_VELOCITY_SCALE),
+            lpRender->DrawLine(MakeVector2(lv2Centre.mV.x - lpCarVelocity->GetVector().x * KF_VELOCITY_SCALE,
+                                           lv2Centre.mV.y - lpCarVelocity->GetVector().z * KF_VELOCITY_SCALE),
                                lv2Centre, 0xFF00FFFFu);
         }
     }
@@ -893,20 +910,20 @@ namespace Vehicle
 
             const CgsGeometric::AxisAlignedBox& lrRaceCarAABB = lrRaceCar.GetDeformableAABB();
             {
-                const Vector3 lAggregateValue = {
-                (lrRaceCarAABB.mMax.x - lrRaceCarAABB.mMin.x) * 0.5f,
-                (lrRaceCarAABB.mMax.y - lrRaceCarAABB.mMin.y) * 0.5f,
-                (lrRaceCarAABB.mMax.z - lrRaceCarAABB.mMin.z) * 0.5f,
-                (lrRaceCarAABB.mMax.w - lrRaceCarAABB.mMin.w) * 0.5f };
+                const Vector3 lAggregateValue = MakeVector3FromLanes(
+                    (lrRaceCarAABB.mMax.GetVector().x - lrRaceCarAABB.mMin.GetVector().x) * 0.5f,
+                    (lrRaceCarAABB.mMax.GetVector().y - lrRaceCarAABB.mMin.GetVector().y) * 0.5f,
+                    (lrRaceCarAABB.mMax.GetVector().z - lrRaceCarAABB.mMin.GetVector().z) * 0.5f,
+                    (lrRaceCarAABB.mMax.GetVector().w - lrRaceCarAABB.mMin.GetVector().w) * 0.5f);
                 mLastTrafficContact_RaceCarHalfExt = lAggregateValue;
             }
             const CgsGeometric::AxisAlignedBox& lrTrafficAABB = lpTrafficBody->GetDeformableAABB();
             {
-                const Vector3 lAggregateValue = {
-                (lrTrafficAABB.mMax.x - lrTrafficAABB.mMin.x) * 0.5f,
-                (lrTrafficAABB.mMax.y - lrTrafficAABB.mMin.y) * 0.5f,
-                (lrTrafficAABB.mMax.z - lrTrafficAABB.mMin.z) * 0.5f,
-                (lrTrafficAABB.mMax.w - lrTrafficAABB.mMin.w) * 0.5f };
+                const Vector3 lAggregateValue = MakeVector3FromLanes(
+                    (lrTrafficAABB.mMax.GetVector().x - lrTrafficAABB.mMin.GetVector().x) * 0.5f,
+                    (lrTrafficAABB.mMax.GetVector().y - lrTrafficAABB.mMin.GetVector().y) * 0.5f,
+                    (lrTrafficAABB.mMax.GetVector().z - lrTrafficAABB.mMin.GetVector().z) * 0.5f,
+                    (lrTrafficAABB.mMax.GetVector().w - lrTrafficAABB.mMin.GetVector().w) * 0.5f);
                 mLastTrafficContact_TrafficHalfExt = lAggregateValue;
             }
 
@@ -930,10 +947,10 @@ namespace Vehicle
                 mabStuckInCollisionIntersection[liLine] = true;
                 const Vector4& lrHit = lpResult->maHitPosition[liLine];
                 Vector3& lrPoint = maStuckInCollisionLineTestPoint[liLine];
-                lrPoint.x = lrHit.x;
-                lrPoint.y = lrHit.y;
-                lrPoint.z = lrHit.z;
-                lrPoint.w = lrHit.w;
+                lrPoint.GetVector().x = lrHit.GetVector().x;
+                lrPoint.GetVector().y = lrHit.GetVector().y;
+                lrPoint.GetVector().z = lrHit.GetVector().z;
+                lrPoint.GetVector().w = lrHit.GetVector().w;
             }
         }
     }
@@ -996,10 +1013,11 @@ namespace Vehicle
 
         const CgsGeometric::AxisAlignedBox& lrBox = lrRaceCar.GetDeformableAABB();         // rec +0x6D0 / +0x6E0
         {
-            const Vector3 lAggregateValue = { (lrBox.mMax.x - lrBox.mMin.x) / 2.0f,   // -> +0x3B0
-                                                    (lrBox.mMax.y - lrBox.mMin.y) / 2.0f,
-                                                    (lrBox.mMax.z - lrBox.mMin.z) / 2.0f,
-                                                    (lrBox.mMax.w - lrBox.mMin.w) / 2.0f };
+            const Vector3 lAggregateValue = MakeVector3FromLanes(
+                (lrBox.mMax.GetVector().x - lrBox.mMin.GetVector().x) / 2.0f,   // -> +0x3B0
+                (lrBox.mMax.GetVector().y - lrBox.mMin.GetVector().y) / 2.0f,
+                (lrBox.mMax.GetVector().z - lrBox.mMin.GetVector().z) / 2.0f,
+                (lrBox.mMax.GetVector().w - lrBox.mMin.GetVector().w) / 2.0f);
             mLastCrashContact_RaceCarHalfExt = lAggregateValue;
         }
 

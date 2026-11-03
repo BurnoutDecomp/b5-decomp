@@ -116,40 +116,40 @@ namespace Props
         RegisterVariable(&mfAntiHerdUpwardScale, KPC_ANTI_HERDING_GROUP, "Upward Scale");
         SetStep(&mfAntiHerdUpwardScale, 0.01f);
         SetChangeCallback(&mfAntiHerdUpwardScale, OnChangeAntiHerdUpwardScale, this);
-        mfAntiHerdUpwardScale = KVF_ANTI_HERD_UPWARD_SCALE.x;
+        mfAntiHerdUpwardScale = KVF_ANTI_HERD_UPWARD_SCALE.GetFloat();
 
         RegisterVariable(&mfAntiHerdSideScale, KPC_ANTI_HERDING_GROUP, "Side Scale");
         SetStep(&mfAntiHerdSideScale, 0.01f);
         SetChangeCallback(&mfAntiHerdSideScale, OnChangeAntiHerdSideScale, this);
-        mfAntiHerdSideScale = KVF_ANTI_HERD_SIDE_SCALE.x;
+        mfAntiHerdSideScale = KVF_ANTI_HERD_SIDE_SCALE.GetFloat();
 
         RegisterVariable(&mfAntiHerdHighSpeedSideScale, KPC_ANTI_HERDING_GROUP,
                          "High Speed Side Scale");
         SetStep(&mfAntiHerdHighSpeedSideScale, 0.01f);
         SetChangeCallback(&mfAntiHerdHighSpeedSideScale,
                           OnChangeAntiHerdHighSpeedSideScale, this);
-        mfAntiHerdHighSpeedSideScale = KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE.x;
+        mfAntiHerdHighSpeedSideScale = KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE.GetFloat();
 
         RegisterVariable(&mfMaxSpeedForSideForce, KPC_ANTI_HERDING_GROUP,
                          "Max Speed for side force");
         SetChangeCallback(&mfMaxSpeedForSideForce, OnChangeMaxSpeedForSideForce, this);
-        mfMaxSpeedForSideForce = KVF_MAX_SPEED_FOR_SIDE_FORCE.x;
+        mfMaxSpeedForSideForce = KVF_MAX_SPEED_FOR_SIDE_FORCE.GetFloat();
 
         RegisterVariable(&mfAntiHerdSpeedClamp, KPC_ANTI_HERDING_GROUP, "Speed Clamp");
         SetChangeCallback(&mfAntiHerdSpeedClamp, OnChangeAntiHerdSpeedClamp, this);
-        mfAntiHerdSpeedClamp = KVF_SPEED_CLAMP.x;
+        mfAntiHerdSpeedClamp = KVF_SPEED_CLAMP.GetFloat();
 
         RegisterVariable(&mfInertiaScale, "Inertia Scale");
         SetRange(&mfInertiaScale, 0.0f, 10.0f);
         SetStep(&mfInertiaScale, 0.1f);
         SetChangeCallback(&mfInertiaScale, OnChangeInertiaScale, this);
-        mfInertiaScale = KVF_INERTIA_SCALE.x;
+        mfInertiaScale = KVF_INERTIA_SCALE.GetFloat();
 
         RegisterVariable(&mfGravityScale, "Gravity Scale");
         SetRange(&mfGravityScale, 0.0f, 10.0f);
         SetStep(&mfGravityScale, 0.1f);
         SetChangeCallback(&mfGravityScale, OnChangeGravityScale, this);
-        mfGravityScale = KVF_GRAVITY_SCALE.x;
+        mfGravityScale = KVF_GRAVITY_SCALE.GetFloat();
 
         RegisterVariable(&KF_PROP_LINEAR_DRAG, "Linear Drag");
         SetRange(&KF_PROP_LINEAR_DRAG, 0.0f, 1.0f);
@@ -254,49 +254,49 @@ namespace Props
     {
         const PropDebugComponent* lpThis = static_cast<const PropDebugComponent*>(lpUserData);
         const f32 lfValue = lpThis->mfGravityScale;
-        KVF_GRAVITY_SCALE = ::VecFloat{ lfValue, lfValue, lfValue, lfValue };
+        KVF_GRAVITY_SCALE = ::VecFloat( lfValue );
     }
 
     void PropDebugComponent::OnChangeInertiaScale(void* /*lpValue*/, void* lpUserData)
     {
         const PropDebugComponent* lpThis = static_cast<const PropDebugComponent*>(lpUserData);
         const f32 lfValue = lpThis->mfInertiaScale;
-        KVF_INERTIA_SCALE = ::VecFloat{ lfValue, lfValue, lfValue, lfValue };
+        KVF_INERTIA_SCALE = ::VecFloat( lfValue );
     }
 
     void PropDebugComponent::OnChangeAntiHerdUpwardScale(void* /*lpValue*/, void* lpUserData)
     {
         const PropDebugComponent* lpThis = static_cast<const PropDebugComponent*>(lpUserData);
         const f32 lfValue = lpThis->mfAntiHerdUpwardScale;
-        KVF_ANTI_HERD_UPWARD_SCALE = ::VecFloat{ lfValue, lfValue, lfValue, lfValue };
+        KVF_ANTI_HERD_UPWARD_SCALE = ::VecFloat( lfValue );
     }
 
     void PropDebugComponent::OnChangeAntiHerdSideScale(void* /*lpValue*/, void* lpUserData)
     {
         const PropDebugComponent* lpThis = static_cast<const PropDebugComponent*>(lpUserData);
         const f32 lfValue = lpThis->mfAntiHerdSideScale;
-        KVF_ANTI_HERD_SIDE_SCALE = ::VecFloat{ lfValue, lfValue, lfValue, lfValue };
+        KVF_ANTI_HERD_SIDE_SCALE = ::VecFloat( lfValue );
     }
 
     void PropDebugComponent::OnChangeAntiHerdHighSpeedSideScale(void* /*lpValue*/, void* lpUserData)
     {
         const PropDebugComponent* lpThis = static_cast<const PropDebugComponent*>(lpUserData);
         const f32 lfValue = lpThis->mfAntiHerdHighSpeedSideScale;
-        KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE = ::VecFloat{ lfValue, lfValue, lfValue, lfValue };
+        KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE = ::VecFloat( lfValue );
     }
 
     void PropDebugComponent::OnChangeMaxSpeedForSideForce(void* /*lpValue*/, void* lpUserData)
     {
         const PropDebugComponent* lpThis = static_cast<const PropDebugComponent*>(lpUserData);
         const f32 lfValue = lpThis->mfMaxSpeedForSideForce;
-        KVF_MAX_SPEED_FOR_SIDE_FORCE = ::VecFloat{ lfValue, lfValue, lfValue, lfValue };
+        KVF_MAX_SPEED_FOR_SIDE_FORCE = ::VecFloat( lfValue );
     }
 
     void PropDebugComponent::OnChangeAntiHerdSpeedClamp(void* /*lpValue*/, void* lpUserData)
     {
         const PropDebugComponent* lpThis = static_cast<const PropDebugComponent*>(lpUserData);
         const f32 lfValue = lpThis->mfAntiHerdSpeedClamp;
-        KVF_SPEED_CLAMP = ::VecFloat{ lfValue, lfValue, lfValue, lfValue };
+        KVF_SPEED_CLAMP = ::VecFloat( lfValue );
     }
 }
 }

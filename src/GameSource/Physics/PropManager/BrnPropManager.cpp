@@ -190,8 +190,7 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"      // InputBuffer + the write-side queue getter
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"// InSceneUpdateInterface + mRemoveFromCacheQueue
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManagerIO.h" // InEventRemoveFromCache
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // [DIAG] gpDebugPrint only
-#include <stdlib.h>                                                            // getenv -- [DIAG] BRN_PROP_DIAG only, host-side
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // console warnings
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"          // UpdatePropEvent
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include <cmath>     // std::cos -- the console `bl cos` @0x8260FC10 / @0x8261096C
@@ -248,19 +247,19 @@ namespace Props
 //    force (scale - 1 == -1), i.e. smashed props were being pushed UP.
 // =========================================================================================
 // Splat(3.0f). Thunk 0x82C5E6E8, tbl slot 0x82CD19A4, rodata flt_82004270 = 0x40400000.
-::VecFloat KVF_GRAVITY_SCALE                   = { 3.0f, 3.0f, 3.0f, 3.0f };
+::VecFloat KVF_GRAVITY_SCALE                   = ::VecFloat( 3.0f );
 // Splat(3.0f). Thunk 0x82C5E6C0, tbl slot 0x82CD19A0, rodata flt_82004270 = 0x40400000.
-::VecFloat KVF_INERTIA_SCALE                   = { 3.0f, 3.0f, 3.0f, 3.0f };
+::VecFloat KVF_INERTIA_SCALE                   = ::VecFloat( 3.0f );
 // Splat(2.0f). Thunk 0x82C5EA00, tbl slot 0x82CD19F0, rodata flt_82001D9C = 0x40000000.
-::VecFloat KVF_ANTI_HERD_UPWARD_SCALE          = { 2.0f, 2.0f, 2.0f, 2.0f };
+::VecFloat KVF_ANTI_HERD_UPWARD_SCALE          = ::VecFloat( 2.0f );
 // Splat(0.05f). Thunk 0x82C5EA28, tbl slot 0x82CD19F4, rodata flt_820047C8 = 0x3D4CCCCD.
-::VecFloat KVF_ANTI_HERD_SIDE_SCALE            = { 0.05f, 0.05f, 0.05f, 0.05f };
+::VecFloat KVF_ANTI_HERD_SIDE_SCALE            = ::VecFloat( 0.05f );
 // Splat(1.5f). Thunk 0x82C5EA50, tbl slot 0x82CD19F8, rodata flt_820945DC = 0x3FC00000.
-::VecFloat KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE = { 1.5f, 1.5f, 1.5f, 1.5f };
+::VecFloat KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE = ::VecFloat( 1.5f );
 // Splat(60.0f). Thunk 0x82C5EA78, tbl slot 0x82CD19FC, rodata flt_82092BC4 = 0x42700000.
-::VecFloat KVF_MAX_SPEED_FOR_SIDE_FORCE        = { 60.0f, 60.0f, 60.0f, 60.0f };
+::VecFloat KVF_MAX_SPEED_FOR_SIDE_FORCE        = ::VecFloat( 60.0f );
 // Splat(120.0f). Thunk 0x82C5EAA0, tbl slot 0x82CD1A00, rodata flt_82092BC8 = 0x42F00000.
-::VecFloat KVF_SPEED_CLAMP                     = { 120.0f, 120.0f, 120.0f, 120.0f };
+::VecFloat KVF_SPEED_CLAMP                     = ::VecFloat( 120.0f );
 
 f32 KF_PROP_ANGULAR_DRAG   = 0.005f;
 f32 KF_PROP_LINEAR_DRAG    = 0.004f;
@@ -298,19 +297,19 @@ f32 KF_PROP_RESTITUTION     = 0.02f;
 // =========================================================================================
 // (0.0f, -9.8f, 0.0f), w == 0. Vector3 thunk 0x82C5E710, tbl slot 0x82CD19A8; lanes
 // x/z <- flt_82001CC0 = 0x00000000, y <- flt_82013FC8 = 0xC11CCCCD, w <- `stw r9` (r9 == 0).
-const Vector3  K_DEFAULT_GRAVITY        = { 0.0f, -9.8f, 0.0f, 0.0f };   // X360 0x82FB93F0
+const Vector3  K_DEFAULT_GRAVITY        = Vector3( 0.0f, -9.8f, 0.0f );   // X360 0x82FB93F0
 // (0.0f, 0.0f, -0.2f), w == 0. Vector3 thunk 0x82C5E7F0, tbl slot 0x82CD19BC; lanes
 // x/y <- flt_82001CC0 = 0x00000000, z <- flt_82020A84 = 0xBE4CCCCD, w <- `stw r9` (r9 == 0).
-const Vector3  K_PROP_EXTRA_COM_OFFSET  = { 0.0f, 0.0f, -0.2f, 0.0f };   // X360 0x82FB93C0
+const Vector3  K_PROP_EXTRA_COM_OFFSET  = Vector3( 0.0f, 0.0f, -0.2f );   // X360 0x82FB93C0
 // (2.0f, 1.0f, 2.0f), w == 0. Vector3 thunk 0x82C5EAC8, tbl slot 0x82CD1A04; lanes
 // x/z <- flt_82001D9C = 0x40000000, y <- flt_82001C98 = 0x3F800000, w <- `stw r9` (r9 == 0).
 // Decoded per lane -- x and z share one rodata word and y another, so it is NOT a splat.
-const Vector3  K_LAMPOST_INERTIA_BOX    = { 2.0f, 1.0f, 2.0f, 0.0f };    // X360 0x82FB9420
+const Vector3  K_LAMPOST_INERTIA_BOX    = Vector3( 2.0f, 1.0f, 2.0f );    // X360 0x82FB9420
 
 // Splat(30.0f). Thunk 0x82C5E830, tbl slot 0x82CD19C0, rodata flt_82004F5C = 0x41F00000.
-const ::VecFloat KVF_MAX_LINEAR_ACCELERATION      = { 30.0f, 30.0f, 30.0f, 30.0f };      // X360 0x82FB94B0
+const ::VecFloat KVF_MAX_LINEAR_ACCELERATION      = ::VecFloat( 30.0f );                 // X360 0x82FB94B0
 // Splat(80.0f). Thunk 0x82C5E858, tbl slot 0x82CD19C4, rodata flt_82004A18 = 0x42A00000.
-const ::VecFloat KVF_MAX_ANGULAR_ACCELERATION     = { 80.0f, 80.0f, 80.0f, 80.0f };      // X360 0x82FB9490
+const ::VecFloat KVF_MAX_ANGULAR_ACCELERATION     = ::VecFloat( 80.0f );                 // X360 0x82FB9490
 
 // ⚠️ THE TWO _SQ CONSTANTS ARE SEATED AS LITERALS, DELIBERATELY. Their thunks carry NO rodata
 // word of their own -- they are the self-product shape:
@@ -325,14 +324,14 @@ const ::VecFloat KVF_MAX_ANGULAR_ACCELERATION     = { 80.0f, 80.0f, 80.0f, 80.0f
 // are evaluated here instead: 30^2 == 900 and 80^2 == 6400, both exact in f32, both equal to
 // what the console computes at startup. NOT invented values -- derived ones, with the derivation
 // and its inputs above.
-const ::VecFloat KVF_MAX_LINEAR_ACCELERATION_SQ   = { 900.0f, 900.0f, 900.0f, 900.0f };  // X360 0x82FB9F40
-const ::VecFloat KVF_MAX_ANGULAR_ACCELERATION_SQ  = { 6400.0f, 6400.0f, 6400.0f, 6400.0f }; // X360 0x82FB94D0
+const ::VecFloat KVF_MAX_LINEAR_ACCELERATION_SQ   = ::VecFloat( 900.0f );                // X360 0x82FB9F40
+const ::VecFloat KVF_MAX_ANGULAR_ACCELERATION_SQ  = ::VecFloat( 6400.0f );               // X360 0x82FB94D0
 
 // ⚠️ AUTHORED NAME -- see the declaration's block in BrnPropManager.h. The VALUE is recovered:
 // Splat(-1000.0f), thunk 0x82C5B570, tbl slot 0x82CD15E8, rodata flt_8200D4F8 = 0xC47A0000.
 // (That slot is ~950 entries before this file's own contiguous run, i.e. a different TU emits
 // the initialiser -- which is the standing lead on the missing name; see the header.)
-const ::VecFloat KVF_PROP_OUT_OF_WORLD_HEIGHT     = { -1000.0f, -1000.0f, -1000.0f, -1000.0f }; // X360 0x82FB94C0
+const ::VecFloat KVF_PROP_OUT_OF_WORLD_HEIGHT     = ::VecFloat( -1000.0f );               // X360 0x82FB94C0
 
 // ⭐⭐ NAME RECOVERED 2026-08-18 (wave Q4). This line read `KVF_MAX_CONTACT_GEN_PADDING` and was
 // flagged AUTHORED; the DWARF names it (dwarfdump BrnPropManager.cpp:54 `const VecFloat
@@ -341,7 +340,7 @@ const ::VecFloat KVF_PROP_OUT_OF_WORLD_HEIGHT     = { -1000.0f, -1000.0f, -1000.
 // HEADER REQUEST D, landed. Splat(0.3f), thunk 0x82C5E750, tbl slot 0x82CD19AC, rodata
 // flt_82004740 = 0x3E99999A. (Request D's other half, KB_USE_CONTACT_GEN_STREAM, is NOT landed --
 // no address, no thunk, nothing to measure. It stays open.)
-const ::VecFloat KVF_MAX_PROP_PADDING             = { 0.3f, 0.3f, 0.3f, 0.3f };          // X360 0x82FB94F0
+const ::VecFloat KVF_MAX_PROP_PADDING             = ::VecFloat( 0.3f );                   // X360 0x82FB94F0
 
 // ⭐ ADDED 2026-08-18 (wave Q4) -- the declaration landed in BrnPropManager.h this wave with NO
 // definition anywhere, i.e. a latent LNK2001 the moment SetupAndValidatePropContact's real body
@@ -353,7 +352,7 @@ const ::VecFloat KVF_MAX_PROP_PADDING             = { 0.3f, 0.3f, 0.3f, 0.3f }; 
 // and flt_82002138 == 0x3C23D70A == 0.01f. 0x82FB93B0 is the exact address
 // SetupAndValidatePropContact loads at 0x826285AC before its `vcmpgtfp.`, so the reader and the
 // writer are pinned to one another, not matched by plausibility.
-const ::VecFloat KVF_MAX_LEAN_PROP_WORLD_PENETRATION = { 0.01f, 0.01f, 0.01f, 0.01f };   // X360 0x82FB93B0
+const ::VecFloat KVF_MAX_LEAN_PROP_WORLD_PENETRATION = ::VecFloat( 0.01f );                // X360 0x82FB93B0
 
 // =========================================================================================
 // ⭐ ADDED 2026-08-18 (round 3, fix round). THE SIX REMAINING ZERO-PAGE TUNABLES -- the five
@@ -375,20 +374,20 @@ const ::VecFloat KVF_MAX_LEAN_PROP_WORLD_PENETRATION = { 0.01f, 0.01f, 0.01f, 0.
 // on the declarations in BrnPropManager.h.
 // =========================================================================================
 // Splat(0.1f). Thunk 0x82C5E778, tbl slot 0x82CD19B0, rodata flt_82004014 = 0x3DCCCCCD.
-const ::VecFloat KVF_LEAN_PROP_LERP_SPEED           = { 0.1f, 0.1f, 0.1f, 0.1f };    // X360 0x82FB9500
+const ::VecFloat KVF_LEAN_PROP_LERP_SPEED           = ::VecFloat( 0.1f );             // X360 0x82FB9500
 // Splat(0.01f). Thunk 0x82C5E7A0, tbl slot 0x82CD19B4, rodata flt_82002138 = 0x3C23D70A.
-const ::VecFloat KVF_LEAN_PROP_MIN_LERP             = { 0.01f, 0.01f, 0.01f, 0.01f }; // X360 0x82FB9F30
+const ::VecFloat KVF_LEAN_PROP_MIN_LERP             = ::VecFloat( 0.01f );            // X360 0x82FB9F30
 // Splat(0.1f). Thunk 0x82C5E7C8, tbl slot 0x82CD19B8, rodata flt_82004014 = 0x3DCCCCCD.
-const ::VecFloat KVF_LEAN_PROP_ORTHOGONAL_TOLERANCE = { 0.1f, 0.1f, 0.1f, 0.1f };   // X360 0x82FB9390
+const ::VecFloat KVF_LEAN_PROP_ORTHOGONAL_TOLERANCE = ::VecFloat( 0.1f );            // X360 0x82FB9390
 
 // Splat(1.0f). Thunk 0x82C5E9B0, tbl slot 0x82CD19E8, rodata flt_82001C98 = 0x3F800000.
-::VecFloat       KVF_BREAK_JOINT_LINEAR_VEL         = { 1.0f, 1.0f, 1.0f, 1.0f };    // X360 0x82FB9440
+::VecFloat       KVF_BREAK_JOINT_LINEAR_VEL         = ::VecFloat( 1.0f );             // X360 0x82FB9440
 // Splat(1.0f). Thunk 0x82C5E9D8, tbl slot 0x82CD19EC, rodata flt_82001C98 = 0x3F800000.
-::VecFloat       KVF_BREAK_JOINT_ANGULAR_VEL        = { 1.0f, 1.0f, 1.0f, 1.0f };    // X360 0x82FB9460
+::VecFloat       KVF_BREAK_JOINT_ANGULAR_VEL        = ::VecFloat( 1.0f );             // X360 0x82FB9460
 
 // ⚠️ INFERRED ADDRESS<->NAME MAPPING -- see the declaration's block in BrnPropManager.h.
 // Splat(10.0f). Thunk 0x82C5E8E8, tbl slot 0x82CD19D4, rodata flt_82004A20 = 0x41200000.
-::VecFloat       KVF_MAX_PROP_SPEED_MPS             = { 10.0f, 10.0f, 10.0f, 10.0f }; // X360 0x82FB9470
+::VecFloat       KVF_MAX_PROP_SPEED_MPS             = ::VecFloat( 10.0f );            // X360 0x82FB9470
 
 // =========================================================================================
 // BrnPhysics::Props::PropManager::Construct @ 0x82627390 (82 asm).
@@ -1104,7 +1103,7 @@ PropManager::SetupAndValidatePropContact(
         {
             // ⭐ THE SMASH-GATE BREAK. DWARF block :1497/:1499.
             Vector3 lFlatNormal = lpInPotentialContact->mNormal;
-            lFlatNormal.y = 0.0f;   // the DWARF spells this SetY(GetVecFloat_Zero()); this
+            lFlatNormal.GetVector().y = 0.0f;   // the DWARF spells this SetY(GetVecFloat_Zero()); this
                                     // tree's Vector3 has named lanes and no SetY -- same store.
 
             // `vmsum3fp128` is the 3-lane dot and it BROADCASTS, so the console's all-lanes
@@ -1114,7 +1113,7 @@ PropManager::SetupAndValidatePropContact(
                                                       lpInPotentialContact->mPointOnA ) );
 
             // gotcha 4: `vcmpgtfp.` + "all lanes true" -- an unordered compare DROPS the contact.
-            if ( !( lvfPenetration > KVF_MAX_LEAN_PROP_WORLD_PENETRATION.x ) )
+            if ( !( lvfPenetration > KVF_MAX_LEAN_PROP_WORLD_PENETRATION.GetVector().x ) )
             {
                 return false;                                         // 0x826285D8 beq
             }
@@ -1207,7 +1206,7 @@ PropManager::SetupAndValidatePropContact(
                                        lpRaceCar,
                                        lPropRigidBodyId,
                                        lpProp->GetTransform().wAxis,          // lvx +0x30
-                                       vpu::Splat( lpPropType->GetMass() ),   // lvlx +0x38 / vspltw
+                                       VecFloat( lpPropType->GetMass() ),     // lvlx +0x38 / vspltw
                                        lpProp->GetLinearVelocity(),           // lvx +0x40
                                        lpInPotentialContact->mNormal );       // the UNREAD 7th
             }
@@ -1263,7 +1262,7 @@ PropManager::SetupAndValidatePropContact(
                                    lpRaceCar,
                                    lPartRigidBodyId,
                                    lpPart->GetPosition(),              // lvx +0x00
-                                   vpu::Splat( lfMass ),               // lfs +0x20 / vspltw
+                                   VecFloat( lfMass ),                 // lfs +0x20 / vspltw
                                    lpPart->GetLinearVelocity(),        // lvx +0x10
                                    lpInPotentialContact->mNormal );    // the UNREAD 7th
 
@@ -1783,11 +1782,10 @@ namespace
         return ( lfA > lfB ) ? lfA : lfB;
     }
 
-    // Vector3 is four adjacent f32 lanes {x,y,z,w} (rw/math/vpu/types.h:24) and lane 0/1/2 ==
-    // x/y/z. This is the re-roll of the source's own VectorAxisX/Y/Z templates, not a layout
-    // guess.
-    inline f32&       Lane( Vector3& lrVector, u32 luAxis )       { return ( &lrVector.x )[ luAxis ]; }
-    inline const f32& Lane( const Vector3& lrVector, u32 luAxis ) { return ( &lrVector.x )[ luAxis ]; }
+    // Vector3 wraps the four-lane register and exposes it through GetVector(). This re-rolls
+    // the source's VectorAxisX/Y/Z selects while retaining the stored W lane.
+    inline f32&       Lane( Vector3& lrVector, u32 luAxis )       { return lrVector.GetVector().v[ luAxis ]; }
+    inline const f32& Lane( const Vector3& lrVector, u32 luAxis ) { return lrVector.GetVector().v[ luAxis ]; }
 
     static const u32 KU_AXIS_COUNT = 3u;
 
@@ -1898,25 +1896,25 @@ namespace
     // -------------------------------------------------------------------------------------
     Vector3 FoldBoxInertia( const Vector3& lrDims, f32 lfMass )
     {
-        const f32 lfXSq = lrDims.x * lrDims.x;
-        const f32 lfYSq = lrDims.y * lrDims.y;
-        const f32 lfZSq = lrDims.z * lrDims.z;
+        const f32 lfXSq = lrDims.GetVector().x * lrDims.GetVector().x;
+        const f32 lfYSq = lrDims.GetVector().y * lrDims.GetVector().y;
+        const f32 lfZSq = lrDims.GetVector().z * lrDims.GetVector().z;
 
         Vector3 lInertia;
-        lInertia.x = ( lfYSq + lfZSq ) * KF_BOX_INERTIA_SCALE;
-        lInertia.y = ( lfXSq + lfZSq ) * KF_BOX_INERTIA_SCALE;
-        lInertia.z = ( lfXSq + lfYSq ) * KF_BOX_INERTIA_SCALE;
+        lInertia.GetVector().x = ( lfYSq + lfZSq ) * KF_BOX_INERTIA_SCALE;
+        lInertia.GetVector().y = ( lfXSq + lfZSq ) * KF_BOX_INERTIA_SCALE;
+        lInertia.GetVector().z = ( lfXSq + lfYSq ) * KF_BOX_INERTIA_SCALE;
 
-        lInertia.x *= lfMass;
-        lInertia.y *= lfMass;
-        lInertia.z *= lfMass;
+        lInertia.GetVector().x *= lfMass;
+        lInertia.GetVector().y *= lfMass;
+        lInertia.GetVector().z *= lfMass;
 
         // ⚠️ INFERRED, not measured -- see the W-lane note in the banner. The console's W lane
         // is `<stale var_C0> * lfMass` (the vector is loaded ONE instruction before the mass is
         // stored into that slot in GetPropInertia @0x82612A44/0x82612A48, and two instructions
         // before it in GetPartInertia @0x82612E74/0x82612E7C), so it is undefined in the
         // shipped build. Zeroed here; nothing reads it.
-        lInertia.w = 0.0f;
+        lInertia.GetVector().w = 0.0f;
 
         return lInertia;
     }
@@ -2216,9 +2214,9 @@ namespace Props
         // 0x825E35B4 / 0x825E35B8. Only separation counts: a prop moving away from the car
         // along the contact normal contributes nothing. Operand order matches `vmaxfp v13,
         // v11, v13` (zero first).
-        const VecFloat lRelativeSpeedAlongNormal =
+        const Vector4 lRelativeSpeedAlongNormal =
             vpu::Max( vpu::Splat( 0.0f ),
-                      vpu::Splat( vpu::Dot( lRelativeVelocity, lNormal ) ) );
+                      Vector4( vpu::Dot( lRelativeVelocity, lNormal ).GetVector() ) );
 
         // 0x825E356C / 0x825E3574 / 0x825E35BC / 0x825E35C0. The debug mass override wins over
         // the prop type's own mass.
@@ -2231,19 +2229,19 @@ namespace Props
         // 0x825E35C4 / 0x825E3600 / 0x825E3610 / 0x825E3614. A fast-moving prop hands the car
         // proportionally less back. See the CONSOLE-VALUE WARNING in the banner: with the
         // shipped (zero) constant this modifier is identically zero.
-        const VecFloat lSquaredPropSpeed =
-            vpu::Splat( vpu::MagnitudeSquared( lpProp->GetLinearVelocity() ) );
+        const Vector4 lSquaredPropSpeed =
+            Vector4( vpu::MagnitudeSquared( lpProp->GetLinearVelocity() ).GetVector() );
 
-        const VecFloat lPropSpeedModifier =
+        const Vector4 lPropSpeedModifier =
             vpu::Clamp( KVF_MAX_PROP_SPEED_MPS - lSquaredPropSpeed,
                         vpu::Splat( 0.0f ),
                         vpu::GetVector4_One() );
 
         // 0x825E360C / 0x825E3618 / 0x825E361C.
-        const VecFloat lImpulseMagnitude =
+        const Vector4 lImpulseMagnitude =
             lRelativeSpeedAlongNormal * vpu::Splat( lfPropMass ) * lPropSpeedModifier;
 
-        const Vector3 lImpulse = vpu::Mult( lNormal, lImpulseMagnitude.x );
+        const Vector3 lImpulse = vpu::Mult( lNormal, lImpulseMagnitude.GetVector().x );
 
         // 0x825E35E8/0x825E35FC/0x825E361C/0x825E3620 -- the inlined
         // `mPropCollisionImpulseSum += lImpulse`, flushed later by ApplyPropCollisionImpulseSum.
@@ -2508,18 +2506,6 @@ namespace Props
 
         lpEvent->mu8OwnerId = static_cast<u8>( BrnWorld::E_ENTITYTYPE_PROP );   // li r11,3 ; stb
 
-        // [DIAG] NOT IN THE X360 BINARY. Opt in with BRN_PROP_DIAG; budgeted to the first four
-        // teardowns (a world unload is a rare event, so a strict one-shot would hide the
-        // second junkyard). Until this wave the whole function was an inert BRN_CONDUCTOR_GATE,
-        // so the counts below are the first evidence that (a) the teardown request reaches
-        // physics at all and (b) how many bodies and cache slots the gate was discarding with no trace.
-        // They are also the direct cross-check on the three ~163 s assert families
-        // (scout.md §0.3): a NON-ZERO count here on a frame the world is also posting
-        // RemovePropInstance events is the double-retire the asserts are reporting.
-        static s32        siDiagBudget  = 4;
-        s32               liDiagProps   = 0;
-        s32               liDiagParts   = 0;
-
         // Step 2 -- evict every live PROP's triangle-cache slot. 0x8260F040..0x8260F2C8.
         // The loop guard is the console's own `cmpwi r31,-1 ; bne` at 0x8260F2C0/0x8260F2C4;
         // its `cmpwi r31,0xF ; bge` companion at 0x8260F0CC is the same exit, already folded
@@ -2533,7 +2519,6 @@ namespace Props
 
             lpSceneInput->mRemoveFromCacheQueue.AddEvent( lRemoveFromCacheEvent );
 
-            ++liDiagProps;   // [DIAG]
         }
 
         // Step 3 -- the same for every live PART. 0x8260F2CC..0x8260F518. Every bound in this
@@ -2547,21 +2532,6 @@ namespace Props
 
             lpSceneInput->mRemoveFromCacheQueue.AddEvent( lRemoveFromCacheEvent );
 
-            ++liDiagParts;   // [DIAG]
-        }
-
-        // [DIAG] NOT IN THE X360 BINARY -- emitted before the wipe so the counts describe what
-        // was actually live. `jointsUsed` is read here rather than counted in a loop because
-        // the joint bit-set is cleared by step 4 without ever being walked, which is itself
-        // worth seeing: any jointed prop (lamppost/pole) loses its joint on unload with nothing logging it.
-        if ( lbDiag )
-        {
-            --siDiagBudget;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-rmall] world unload: props=" << liDiagProps
-                << " parts=" << liDiagParts
-                << " jointsUsed=" << static_cast<s32>( mUsedPropJoints.CountSetBits() )
-                << " (one InRemoveAllRigidBodies owner=3 posted)\n";
         }
 
         // Step 4 -- the six zero stores at 0x8260F51C..0x8260F530, in emission order.
@@ -2694,10 +2664,10 @@ namespace Props
         // (`vmulfp128 v1, v0, v13` @0x8260FCCC). INFERENCE only in that the DWARF does not pin a
         // name to an address.
         // -----------------------------------------------------------------------------------
-        const VecFloat KVF_ROTATION_FACTOR               = { 0.07f, 0.07f, 0.07f, 0.07f };
-        const VecFloat KVF_MAX_ROTATION                  = { 0.05f, 0.05f, 0.05f, 0.05f };
-        const VecFloat KVF_PENETRATION_RESOLUTION_FACTOR = { 0.5f,  0.5f,  0.5f,  0.5f  };
-        const VecFloat KVF_MOMENTUM_RESOLUTION_FACTOR    = { 0.5f,  0.5f,  0.5f,  0.5f  };
+const VecFloat KVF_ROTATION_FACTOR               = VecFloat( 0.07f );
+const VecFloat KVF_MAX_ROTATION                  = VecFloat( 0.05f );
+const VecFloat KVF_PENETRATION_RESOLUTION_FACTOR = VecFloat( 0.5f );
+const VecFloat KVF_MOMENTUM_RESOLUTION_FACTOR    = VecFloat( 0.5f );
 
         // `lfs f0, flt_8208F5F4` @0x8260FC08 == 0.01745329238474369f -- degrees to radians, used
         // only by the mbUseOverides debug path.
@@ -2712,48 +2682,7 @@ namespace Props
         // ⚠️ The console keeps the scalar K_EPSILON only to BUILD the Vector3 (the `vperm` +
         // `vrlimi128` pair @0x8260FFCC/D4 packs the splat into {e,e,e,0}); it is never compared
         // against anything, so only the Vector3 form is reproduced.
-        const Vector3 K_EPSILON3 = { 0.001f, 0.001f, 0.001f, 0.0f };
-
-        // -----------------------------------------------------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 bring-up probe, opt-in via BRN_PROP_DIAG.
-        // ONE-SHOT PER ARM -- the question it answers is "does a car-vs-jointed-prop contact reach
-        // this response at all?", which is a yes/no, and these two run per contact per frame once
-        // a pole is being leaned on. The getenv latch is a function-local static so it costs one
-        // predicted branch, never a per-contact syscall.
-        //
-        // ⚠️ TWO LATCHES, ONE PER JOINT KIND -- and that is a fix, not a preference. It was a
-        // SINGLE TU-scope bool until 2026-08-19 (wave Q7), which meant a run that leaned could
-        // never report whether TILT also ran: the first LEAN contact consumed the only latch and
-        // the TILT arm went silent for the rest of the run. That is exactly how the wave-Q6
-        // campaign closed with the TILT arm UNEXERCISED and nobody able to tell. Now the first
-        // LEAN contact and the first TILT contact each print once, independently.
-        //
-        // ⚠️⚠️ WHY THIS LINE STAYED SILENT FOR A WHOLE CAMPAIGN: LEAN/TILT IS A SPEED GATE, and it
-        // is a slow-speed one. PropEntityModule::GetDesiredState hands a prop E_LEANING only when
-        //     mfLeanThreshold < carSpeedMPH <= mfMoveThreshold
-        // and the shipped PROPS/PROPPHYSICS.BUNDLE says all 35 jointed types (of 219) carry
-        // leanThreshold 0.0 with moveThreshold 20 / 35 / 40 / 70 mph. So a full-throttle 80-130 mph
-        // drive classifies EVERY prop E_PHYSICAL, mu8JointIndex stays KU_NOT_JOINTED, IsJointed()
-        // is false, and the contact always takes the ApplyPropRaceCarCollisionImpulse arm instead
-        // of either of these two bodies. It was never a code defect.
-        // ⚠️ TWO TRAPS THAT LOOK LIKE DEFECTS AND ARE NOT:
-        //   * prop type 6 (a TILT type, and the FIRST prop on the straight junkyard route) ships
-        //     moveThreshold 0.0, so GetDesiredState early-returns E_PHYSICAL and it can NEVER
-        //     lean. "We hit a jointed prop and nothing happened" is correct behaviour there.
-        //   * the [prop-diag] "speed=" field is the NORMAL COMPONENT
-        //     (|Dot(carVel, contactNormal)| * MPS_TO_MPH), NOT the car speed GetDesiredState is
-        //     fed (GetRaceCarSpeed == mfSpeedMPH). A glancing 130 mph pass logs speed=0.10 and
-        //     still classifies E_PHYSICAL. Do not read one for the other.
-        // PROVEN AT RUN TIME 2026-08-19: this line fired twice, on two different lamppost
-        // instances (both type 53, joint=LEAN), at 7.6 mph and at 22.1 mph, with no new assert --
-        // evidence and the throttle/steer schedules that reached it are in scratchpad/waveQ7/
-        // leantest/. TILT types (3,4,6,10,29,30,38,51,52,58) all have a <= 20 mph window, tighter
-        // than the type 53 that was reached, so a TILT run needs a slower schedule still.
-        // -----------------------------------------------------------------------------------
-        bool gbQ6LeanDiagFiredLean = false;
-        bool gbQ6LeanDiagFiredTilt = false;
-
-        enum EQ6JointKind { E_Q6_JOINT_LEAN, E_Q6_JOINT_TILT };
+const Vector3 K_EPSILON3 = Vector3( 0.001f, 0.001f, 0.001f );
 
     }
 
@@ -2769,8 +2698,7 @@ namespace Props
     //   lbPropIsEntityA are NEVER READ BY THE CONSOLE BODY. r5 is dead after the prologue and r9
     //   is overwritten at 0x8260FBD4 by `lbz r9, 0x49(r18)` (this->mbUseOverides) before any use.
     //   The Tilt twin DOES read both (it queues an UpdatePropEvent). The two share a declaration
-    //   block, so the parameters are present here and unused -- except by the [DIAG] line, which
-    //   is not in the X360 binary and is called out as such at its site.
+    //   block, so the parameters are present here even though this body does not use them.
     // =============================================================================================
     void
     PropManager::HandleContactWithLeanProp(
@@ -2787,9 +2715,7 @@ namespace Props
     {
         // §A: genuinely unread by the console body. Kept named, not renamed away.
         (void)liPropIndex;
-
-        // [DIAG] NOT IN THE X360 BINARY -- the wave-Q6 one-shot. This is the ONLY reader of
-        // lbPropIsEntityA in this function; see §A.
+        (void)lbPropIsEntityA;
 
         // `lfs f0, flt_82001CC0(==0.0f)` ; `stfs f0, 0x48(r8)` @0x8260FBA0/0x8260FBA8.
         // +0x48 in InAddPotentialContact is mRestitution (CgsPhysicsSimulationIO_Events.h:143,
@@ -2817,10 +2743,10 @@ namespace Props
         // is PropTypeData::mfMaxJointAngleCos (console +0x48; the host packs it elsewhere --
         // gotcha 1, the console offset is a COMMENT and the code goes by name). Overridden from
         // the debug knob when this->mbUseOverides (`lbz r9, 0x49(r18)` @0x8260FBD4) is set.
-        VecFloat lMaxAngleCos = vpu::Splat( lpType->GetLeanCosAngle() );
+        VecFloat lMaxAngleCos( lpType->GetLeanCosAngle() );
         if ( mbUseOverides )
         {
-            lMaxAngleCos = vpu::Splat( std::cos( mfMaxLeanAngleOverride * KF_DEG_TO_RAD ) );
+            lMaxAngleCos = VecFloat( std::cos( mfMaxLeanAngleOverride * KF_DEG_TO_RAD ) );
         }
 
         // lbRotatedTooFar: `vmsum3fp128 v0, v118, jVector` (dot3 of the prop's UP row with the
@@ -2830,7 +2756,7 @@ namespace Props
         // what vendor CompLessThan reproduces. Consumed only at the very end
         // (`vcmpeqfp128. v0, v114, v126` @0x82610654).
         const vpu::MaskScalar lbRotatedTooFar =
-            vpu::CompLessThan( vpu::Splat( vpu::Dot( lTransform.yAxis, vpu::GetVector3_YAxis() ) ),
+            vpu::CompLessThan( vpu::Dot( lTransform.yAxis, vpu::GetVector3_YAxis() ),
                                lMaxAngleCos );
 
         // ---- 1. how fast the car is closing on the prop AT the contact point -------------------
@@ -2875,8 +2801,9 @@ namespace Props
         // `vmsum3fp128 v12, v12, -lNormal` -> `vmaxfp128 v12, v12, 0` (Lean's copy is scheduled
         // into the 0x8260FD20..0x8260FE00 stretch; the Tilt twin shows the same pair cleanly at
         // 0x82610AD8/0x82610B10).
-        const VecFloat lVelocityAlongNormal =
-            vpu::Max( vpu::Splat( vpu::Dot( lPointVelocity, -lNormal ) ), vpu::Splat( 0.0f ) );
+        const Vector4 lVelocityAlongNormal =
+            vpu::Max( Vector4( vpu::Dot( lPointVelocity, -lNormal ).GetVector() ),
+                      vpu::Splat( 0.0f ) );
 
         // ---- 2. bleed the car's momentum along the contact normal into the prop ---------------
         // MEASURED @0x8260FCA4..0x8260FCD0: GetLinearMomentum(dt) dotted with -lNormal, clamped
@@ -2885,24 +2812,24 @@ namespace Props
         // ⚠️ The ARTIST image `bl`s the symbol BrnPhysics__ExternalPhysicsBody__AddWorldSpaceImpulse
         // (@0x8260FCD0); the DWARF spells the same sink `ExternalPhysicsBody::AddImpulse` (:1507).
         // The ARTIST spelling is the one this tree has, and it is what is called.
-        const VecFloat lMomentumTowardsProp =
-            vpu::Max( vpu::Splat( vpu::Dot( lpRaceCar->GetLinearMomentum( vpu::Splat( lfTimeStep ) ),
-                                            -lNormal ) ),
+        const Vector4 lMomentumTowardsProp =
+            vpu::Max( Vector4( vpu::Dot( lpRaceCar->GetLinearMomentum( VecFloat( lfTimeStep ) ),
+                                         -lNormal ).GetVector() ),
                       vpu::Splat( 0.0f ) );
 
         lpRaceCar->AddWorldSpaceImpulse(
-            lNormal * ( lMomentumTowardsProp.x * KVF_MOMENTUM_RESOLUTION_FACTOR.x ) );
+            lNormal * ( lMomentumTowardsProp.GetVector().x * KVF_MOMENTUM_RESOLUTION_FACTOR.GetVector().x ) );
 
         // ---- 3. push the car back out of the prop ---------------------------------------------
         // MEASURED @0x8260FCD4..0x8260FD10: Max(Dot(n, pOnCar - pOnProp) * K, 0) along n, added
         // straight into the car's mTransform.wAxis (`vmaddfp128 v13, v127, v0, v13` then
         // `stvx128 v13, r0, lpRaceCar+0x40`), i.e. ExternallySimulatedBody::Translate -- which the
         // DWARF names at :1510 and which is the LINK HOLE recorded in this file's banner.
-        const VecFloat lResolveDistance =
-            vpu::Max( vpu::Splat( vpu::Dot( lNormal, lPointOnCar - lPointOnProp )
-                                  * KVF_PENETRATION_RESOLUTION_FACTOR.x ),
+        const Vector4 lResolveDistance =
+            vpu::Max( Vector4( vpu::Dot( lNormal, lPointOnCar - lPointOnProp ).GetVector() )
+                          * KVF_PENETRATION_RESOLUTION_FACTOR,
                       vpu::Splat( 0.0f ) );
-        const Vector3 lResolveVector = lNormal * lResolveDistance.x;
+        const Vector3 lResolveVector = lNormal * lResolveDistance.GetVector().x;
         lpRaceCar->Translate( lResolveVector );
 
         // ---- 4. the joint ---------------------------------------------------------------------
@@ -2937,11 +2864,11 @@ namespace Props
         //     vminfp128 v123, v13, v12         Min(that, KVF_MAX_ROTATION) (unk_82FB9410)
         // 0x360 == maWheels(+0x130) + 2*0xE0 + 0x70, i.e. the REAR-LEFT wheel specifically -- not
         // an average, not the driven pair. Reproduced as written.
-        const VecFloat lfAngleToRotate =
-            vpu::Min( vpu::Max( lpRaceCar->GetWheel( BrnPhysics::Vehicle::eRearLeftWheel )
-                                    .GetRoadLongSpeed(),
+        const Vector4 lfAngleToRotate =
+            vpu::Min( vpu::Max( Vector4( lpRaceCar->GetWheel( BrnPhysics::Vehicle::eRearLeftWheel )
+                                            .GetRoadLongSpeed().GetVector() ),
                                 lVelocityAlongNormal ) * KVF_ROTATION_FACTOR,
-                      KVF_MAX_ROTATION );
+                      Vector4( KVF_MAX_ROTATION.GetVector() ) );
 
         // Cross(YAxis, -lNormal): the two `vpermwi128(_, 0x63)` (the .yzx swizzle) around a
         // vmulfp/vnmsubfp pair @0x8260FEC4..0x8260FF2C is the canonical VMX cross product, with
@@ -2955,7 +2882,7 @@ namespace Props
         // below the normalise: the stored value is an angular RATE consumed elsewhere
         // (BrnPropManager.h:417), and normalising it first would change its magnitude.
         maLastJointRotation[ liJointIndex ] =
-            lRotationAxis * ( lfAngleToRotate.x * lfInvTimeStep );
+            lRotationAxis * ( lfAngleToRotate.GetVector().x * lfInvTimeStep );
 
         // "is the axis (near) zero in all three lanes" -- the SDK's per-lane compares reduced by
         // three GetX/GetY/GetZ lane broadcasts and FIVE Ands @0x82610018..0x82610048. The count
@@ -3081,8 +3008,6 @@ namespace Props
         bool                                                     lbPropIsEntityA,
         f32                                                      lfTimeStep )
     {
-        // [DIAG] NOT IN THE X360 BINARY -- the wave-Q6 one-shot, shared with the Lean arm.
-
         // `stfs f0(flt_82001CC0 == 0.0f), 0x48(r16)` @0x826108F8/0x82610900 -- mRestitution.
         lpOutContact->mRestitution = 0.0f;
 
@@ -3102,16 +3027,16 @@ namespace Props
         // `lvlx v0, r27, 0x48` + `vspltw v11, v0, 0` @0x82610934/0x82610948 ==
         // PropTypeData::mfMaxJointAngleCos. Debug override behind `lbz r8, 0x49(r18)` ==
         // this->mbUseOverides.
-        VecFloat lMaxAngleCos = vpu::Splat( lpType->GetLeanCosAngle() );
+        VecFloat lMaxAngleCos( lpType->GetLeanCosAngle() );
         if ( mbUseOverides )
         {
-            lMaxAngleCos = vpu::Splat( std::cos( mfMaxLeanAngleOverride * KF_DEG_TO_RAD ) );
+            lMaxAngleCos = VecFloat( std::cos( mfMaxLeanAngleOverride * KF_DEG_TO_RAD ) );
         }
 
         // `vmsum3fp128 v0, v118, jVector` -> `vcmpgefp v0, v0, v11` -> `vnot128 v115, v0`
         // @0x826109C8/0x826109F8/0x82610A04. Same construction as Lean; consumed at the very end.
         const vpu::MaskScalar lbRotatedTooFar =
-            vpu::CompLessThan( vpu::Splat( vpu::Dot( lTransform.yAxis, vpu::GetVector3_YAxis() ) ),
+            vpu::CompLessThan( vpu::Dot( lTransform.yAxis, vpu::GetVector3_YAxis() ),
                                lMaxAngleCos );
 
         // ---- 1. closing speed at the contact point ----------------------------------------------
@@ -3128,31 +3053,32 @@ namespace Props
 
         // `vmsum3fp128 v12, v12, v11(-lNormal)` @0x82610AD8 -> `vmaxfp128 v12, v12, v127(0)`
         // @0x82610B10.
-        const VecFloat lVelocityAlongNormal =
-            vpu::Max( vpu::Splat( vpu::Dot( lPointVelocity, -lNormal ) ), vpu::Splat( 0.0f ) );
+        const Vector4 lVelocityAlongNormal =
+            vpu::Max( Vector4( vpu::Dot( lPointVelocity, -lNormal ).GetVector() ),
+                      vpu::Splat( 0.0f ) );
 
         // ---- 2. bleed the car's momentum along the contact normal --------------------------------
         // `vmulfp128 v0, mTotalLinearForce, dt` ; `vmaddfp v0, mLinearVelocity, v0, mfMass` ;
         // `vaddfp v0, v0, mTotalLinearImpulse` ; dot with -lNormal ; Max(0) ; * lNormal *
         // KVF_MOMENTUM_RESOLUTION_FACTOR -> AddWorldSpaceImpulse @0x82610A08..0x82610A2C.
-        const VecFloat lMomentumTowardsProp =
-            vpu::Max( vpu::Splat( vpu::Dot( lpRaceCar->GetLinearMomentum( vpu::Splat( lfTimeStep ) ),
-                                            -lNormal ) ),
+        const Vector4 lMomentumTowardsProp =
+            vpu::Max( Vector4( vpu::Dot( lpRaceCar->GetLinearMomentum( VecFloat( lfTimeStep ) ),
+                                         -lNormal ).GetVector() ),
                       vpu::Splat( 0.0f ) );
 
         lpRaceCar->AddWorldSpaceImpulse(
-            lNormal * ( lMomentumTowardsProp.x * KVF_MOMENTUM_RESOLUTION_FACTOR.x ) );
+            lNormal * ( lMomentumTowardsProp.GetVector().x * KVF_MOMENTUM_RESOLUTION_FACTOR.GetVector().x ) );
 
         // ---- 3. push the car back out of the prop ------------------------------------------------
         // `vmsum3fp128 v13, v126, (lPointOnCar - lPointOnProp)` @0x82610A64 ; *
         // KVF_PENETRATION_RESOLUTION_FACTOR @0x82610A6C ; Max(0) @0x82610A74 ;
         // `vmaddfp128 v13, v126, v0, v13` @0x82610A78 into the car's position row, stored at
         // 0x82610A7C == ExternallySimulatedBody::Translate (the LINK HOLE, see the banner).
-        const VecFloat lResolveDistance =
-            vpu::Max( vpu::Splat( vpu::Dot( lNormal, lPointOnCar - lPointOnProp )
-                                  * KVF_PENETRATION_RESOLUTION_FACTOR.x ),
+        const Vector4 lResolveDistance =
+            vpu::Max( Vector4( vpu::Dot( lNormal, lPointOnCar - lPointOnProp ).GetVector() )
+                          * KVF_PENETRATION_RESOLUTION_FACTOR,
                       vpu::Splat( 0.0f ) );
-        const Vector3 lResolveVector = lNormal * lResolveDistance.x;
+        const Vector3 lResolveVector = lNormal * lResolveDistance.GetVector().x;
         lpRaceCar->Translate( lResolveVector );
 
         // ---- 4. the tilt axis ---------------------------------------------------------------------
@@ -3162,8 +3088,8 @@ namespace Props
         // with lbRotatedTooFar above is deliberately asymmetric). DWARF local `MaskScalar
         // lNormalPointsAlongZ` @BrnPropManager.cpp:1964.
         const vpu::MaskScalar lNormalPointsAlongZ =
-            vpu::CompGreaterThan( vpu::Splat( vpu::Dot( lNormal, vpu::GetVector3_ZAxis() ) ),
-                                  vpu::Splat( 0.0f ) );
+            vpu::CompGreaterThan( vpu::Dot( lNormal, vpu::GetVector3_ZAxis() ),
+                                  VecFloat( 0.0f ) );
 
         // `vsel128 v126, v6, v9, v126` @0x82610AF4 with v6 == lTransform.xAxis (`vmr128 v6, v120`
         // @0x82610A58) and v9 == its sign flip (`vxor128 v9, v120, v9` @0x82610AEC, v9 being the
@@ -3181,11 +3107,11 @@ namespace Props
         // `vminfp128 v124, v13, v0` @0x82610B14/B18/B1C, with v10 == `vspltw v10, v12, 0` on the
         // register loaded from `addi r10, r30, 0x360` (@0x82610A48) ==
         // maWheels[eRearLeftWheel].mSpeedAndMassOnWheelVariables, lane .x.
-        const VecFloat lfAngleToRotate =
-            vpu::Min( vpu::Max( lpRaceCar->GetWheel( BrnPhysics::Vehicle::eRearLeftWheel )
-                                    .GetRoadLongSpeed(),
+        const Vector4 lfAngleToRotate =
+            vpu::Min( vpu::Max( Vector4( lpRaceCar->GetWheel( BrnPhysics::Vehicle::eRearLeftWheel )
+                                            .GetRoadLongSpeed().GetVector() ),
                                 lVelocityAlongNormal ) * KVF_ROTATION_FACTOR,
-                      KVF_MAX_ROTATION );
+                      Vector4( KVF_MAX_ROTATION.GetVector() ) );
 
         // `stvx128 v123, r11, r18` with r11 == (jointIndex + 0x1B) << 4 @0x82610B4C..0x82610B54,
         // i.e. this + 0x1B0 + 16*jointIndex == maLastJointRotation[jointIndex]. The `cmplwi 0xFF`
@@ -3193,7 +3119,7 @@ namespace Props
         // GetJointIndex()'s own baked tripwire and rides the by-name call.
         const s32 liJointIndex = lpPropInstance->GetJointIndex();
         maLastJointRotation[ liJointIndex ] =
-            lRotationAxis * ( lfAngleToRotate.x * lfInvTimeStep );
+            lRotationAxis * ( lfAngleToRotate.GetVector().x * lfInvTimeStep );
 
         const Matrix44Affine lRotationMatrix =
             vpu::Matrix44AffineFromAxisRotationAngle( lRotationAxis, lfAngleToRotate );
@@ -3647,19 +3573,6 @@ void PropManager::ProcessAddPartInstanceEvents(
     {
         const AddPhysicalPartEvent* lpEvent = &lpQueue->GetEvent( static_cast<s32>( luEventIndex ) );
 
-        // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 pre-flight probe (opt in with BRN_PROP_DIAG),
-        // FIRST EIGHT events only. It answers the wave's cheapest open question, scout.md §4.1:
-        // "has a PART rigid body ever reached the simulation on this build?" -- every
-        // `prop fell out of the world` id in the 2026-08-19 drive log has part index 0, i.e. all
-        // six were WHOLE props, so no part had been PROVEN to reach the sim. If this line never
-        // prints, the AddPartInstance events are not surviving the buffer hop and the whole
-        // read-back cluster is looking at the wrong seam. Printed BEFORE CreatePart so it fires
-        // even if CreatePart asserts. The env latch is a function-local static: a getenv per
-        // event would be a syscall inside the drain loop.
-        {
-            static u32        suDiagCount = 0;
-        }
-
         // 0x8262816C -- r7 is the event pointer itself, which IS &lpEvent->mTransform (the event
         // starts with the affine); the by-value Matrix44Affine parameter is passed by hidden
         // reference, and the DWARF's `Matrix44Affine::Matrix44Affine` entry is that copy.
@@ -4030,14 +3943,6 @@ void PropManager::ClampAcceleration( Vector3                                    
 {
     namespace vpu = rw::math::vpu;
 
-    // [DIAG] NOT IN THE X360 BINARY -- 2026-09-02 props-at-speed EXPERIMENT KNOB. BRN_PROP_NOCLAMP=1
-    // skips this whole clamp (and its re-post) so a boot-drive can measure what the 30 m/s^2 /
-    // 80 rad/s^2 ceiling costs a flung prop. The console value and argument order were re-verified
-    // against the image the same day (thunk 0x82C5E830 = 30.0f; v3 = dt, v4 = 1/dt), so with the
-    // knob OFF this function is the console's. DELETE-WHEN the prop-launch question is settled.
-    {
-    }
-
     // :1191
     bool lbUpdateBody = false;
 
@@ -4045,19 +3950,19 @@ void PropManager::ClampAcceleration( Vector3                                    
     {
         // :1193 / :1194
         const Vector3  lAcceleration =
-            vpu::Mult(vpu::Subtract(lUpdatedLinearVelocity, lLinearVelocity), lvfOneOverTimeStep.x);
-        const VecFloat lvfAccelerationMagnitudeSquared = vpu::Splat(vpu::MagnitudeSquared(lAcceleration));
+            vpu::Mult(vpu::Subtract(lUpdatedLinearVelocity, lLinearVelocity), lvfOneOverTimeStep.GetVector().x);
+        const Vector4 lvfAccelerationMagnitudeSquared = vpu::Splat(vpu::MagnitudeSquared(lAcceleration));
 
-        if (lvfAccelerationMagnitudeSquared.x > KVF_MAX_LINEAR_ACCELERATION_SQ.x)
+        if (lvfAccelerationMagnitudeSquared.GetVector().x > KVF_MAX_LINEAR_ACCELERATION_SQ.GetVector().x)
         {
             // :1199  accel * (MAX / |accel|) * dt + lastVelocity -- see the "renormalise" note.
             // vpu::Magnitude is an UNGUARDED std::sqrt; the branch above is what makes the
             // zero-length lane unreachable.
             const f32 lfClampScale =
-                KVF_MAX_LINEAR_ACCELERATION.x / vpu::Magnitude(lAcceleration);
+                KVF_MAX_LINEAR_ACCELERATION.GetVector().x / vpu::Magnitude(lAcceleration);
 
             lUpdatedLinearVelocity =
-                vpu::Add(vpu::Mult(vpu::Mult(lAcceleration, lfClampScale), lvfTimeStep.x),
+                vpu::Add(vpu::Mult(vpu::Mult(lAcceleration, lfClampScale), lvfTimeStep.GetVector().x),
                          lLinearVelocity);
             lbUpdateBody = true;
         }
@@ -4067,18 +3972,18 @@ void PropManager::ClampAcceleration( Vector3                                    
     {
         // :1211 / :1212
         const Vector3  lAngularAcceleration =
-            vpu::Mult(vpu::Subtract(lUpdatedAngularVelocity, lAngularVelocity), lvfOneOverTimeStep.x);
-        const VecFloat lvfAngularAccelerationMagnitudeSquared =
+            vpu::Mult(vpu::Subtract(lUpdatedAngularVelocity, lAngularVelocity), lvfOneOverTimeStep.GetVector().x);
+        const Vector4 lvfAngularAccelerationMagnitudeSquared =
             vpu::Splat(vpu::MagnitudeSquared(lAngularAcceleration));
 
-        if (lvfAngularAccelerationMagnitudeSquared.x > KVF_MAX_ANGULAR_ACCELERATION_SQ.x)
+        if (lvfAngularAccelerationMagnitudeSquared.GetVector().x > KVF_MAX_ANGULAR_ACCELERATION_SQ.GetVector().x)
         {
             // :1217
             const f32 lfClampScale =
-                KVF_MAX_ANGULAR_ACCELERATION.x / vpu::Magnitude(lAngularAcceleration);
+                KVF_MAX_ANGULAR_ACCELERATION.GetVector().x / vpu::Magnitude(lAngularAcceleration);
 
             lUpdatedAngularVelocity =
-                vpu::Add(vpu::Mult(vpu::Mult(lAngularAcceleration, lfClampScale), lvfTimeStep.x),
+                vpu::Add(vpu::Mult(vpu::Mult(lAngularAcceleration, lfClampScale), lvfTimeStep.GetVector().x),
                          lAngularVelocity);
             lbUpdateBody = true;
         }
@@ -4099,20 +4004,7 @@ void PropManager::ClampAcceleration( Vector3                                    
 
         // @0x826280E0 `bl sub_825BCCB8` then @0x826280E8 the one-arg AddEvent. The accessor is the
         // NON-const twin landed at CgsPhysicsSimulationModuleIO.h:190 this round.
-        const bool lbPosted =
-            lpSimModuleInputBuffer->GetUpdateRigidBodyQueue()->AddEvent(lOutUpdateRigidBodyEvent);
-
-        // [DIAG] NOT IN THE X360 BINARY -- 2026-09-06 props lane (b5-decomp#2). The POST side of
-        // the pair whose CONSUMER side is the [prop-updrb] line in
-        // PhysicsSimulationModule::ProcessUpdateRigidBodyQueue. Measured on run
-        // scratch\bugtest\runs\props_hit_lean\20260906_101608: a hit prop's position keeps
-        // tracking the SIM's velocity (~17.7 m/s) while this clamped value creeps at the
-        // console's 30 m/s^2 -- i.e. the correction is computed and stored into the
-        // PropInstance but never reaches the rigid body. These two lines say which half fails.
-        // Opt-in, first-N. DELETE-WHEN b5-decomp#2 is closed.
-        {
-            static s32        siPostLinesLeft = 400;
-        }
+        lpSimModuleInputBuffer->GetUpdateRigidBodyQueue()->AddEvent(lOutUpdateRigidBodyEvent);
     }
 }
 
@@ -4277,8 +4169,9 @@ void PropManager::ApplyAntiHerdingForce( CgsPhysics::PhysicsSimulationIO::InputB
     // an omission.
 
     // :2120  |speedMPH| clamped -- `vandc` (sign-bit clear) then `vminfp`.
-    const VecFloat lvfRaceCarSpeed =
-        vpu::Min(vpu::Splat(std::fabs(lpRaceCar->GetSpeedMPH().x)), KVF_SPEED_CLAMP);
+    const Vector4 lvfRaceCarSpeed =
+        vpu::Min(vpu::Splat(std::fabs(lpRaceCar->GetSpeedMPH().GetFloat())),
+                 Vector4(KVF_SPEED_CLAMP.GetVector()));
 
     // :2116  the car basis, with the centre-of-mass offset taken back out of the position
     // (`Pos() -= TransformVector(transform, mCOMOffset)`).
@@ -4312,51 +4205,39 @@ void PropManager::ApplyAntiHerdingForce( CgsPhysics::PhysicsSimulationIO::InputB
     // :2121 / :2122  is the prop riding ABOVE the car's roof line? (only lane .y is read)
     // The DWARF's type for this is MaskScalar; the scalar bool is exact -- see the banner's
     // helper-by-helper note.
-    const VecFloat lvfPropHeightAboveCar =
-        vpu::Splat(lPropRelativePosition.y - lpRaceCar->GetHalfExtent().y);
-    const bool lAboveRaceCar = (lvfPropHeightAboveCar.x > 0.0f);
+    const Vector4 lvfPropHeightAboveCar =
+        vpu::Splat(lPropRelativePosition.GetVector().y - lpRaceCar->GetHalfExtent().GetVector().y);
+    const bool lAboveRaceCar = (lvfPropHeightAboveCar.GetVector().x > 0.0f);
 
     // :2114 / :2125  the sideways shove, before either scale.
     const Vector3 lForceDirection = vpu::Mult(lCarTransform.Right(), lSidewaysDirection);
     const Vector3 lSideForce      =
-        vpu::Mult(vpu::Mult(lForceDirection, lvfRaceCarSpeed.x), lvfPropMass.x);
+        vpu::Mult(vpu::Mult(lForceDirection, lvfRaceCarSpeed.GetVector().x), lvfPropMass.GetVector().x);
 
     // :2117..:2119 / :2115  the upward component: only ever pushes the prop up towards the target
     // relative velocity, never down (`vmaxfp` against zero).
     const Vector3  lCarsWorldLinearVelocity = lpRaceCar->GetLinearVelocity();
-    const VecFloat lvfPropsUpwardVelocity   = vpu::Splat(
+    const Vector4 lvfPropsUpwardVelocity   = vpu::Splat(
         vpu::Dot(vpu::Subtract(lPropLinearVelocity, lCarsWorldLinearVelocity), lCarTransform.Up()));
-    const VecFloat lvfTargetUpwardVel =
-        vpu::Splat(lvfRaceCarSpeed.x * KVF_ANTI_HERD_UPWARD_SCALE.x);
-    const VecFloat lForceMagnitude = vpu::Splat(
-        vpu::Max(vpu::Splat(lvfTargetUpwardVel.x - lvfPropsUpwardVelocity.x), vpu::Splat(0.0f)).x
-        * lvfPropMass.x);
+    const Vector4 lvfTargetUpwardVel =
+        vpu::Splat(lvfRaceCarSpeed.GetVector().x * KVF_ANTI_HERD_UPWARD_SCALE.GetVector().x);
+    const Vector4 lForceMagnitude = vpu::Splat(
+        vpu::Max(vpu::Splat(lvfTargetUpwardVel.GetVector().x - lvfPropsUpwardVelocity.GetVector().x), vpu::Splat(0.0f)).GetVector().x
+        * lvfPropMass.GetVector().x);
 
     // :2126  the two `vsel`s, in the console's order.
     Vector3 lFinalForce =
-        (lvfRaceCarSpeed.x > KVF_MAX_SPEED_FOR_SIDE_FORCE.x)
-            ? vpu::Add(vpu::Mult(lCarTransform.Up(), lForceMagnitude.x),
-                       vpu::Mult(lSideForce, KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE.x))
-            : vpu::Mult(lSideForce, KVF_ANTI_HERD_SIDE_SCALE.x);
+        (lvfRaceCarSpeed.GetVector().x > KVF_MAX_SPEED_FOR_SIDE_FORCE.GetVector().x)
+            ? vpu::Add(vpu::Mult(lCarTransform.Up(), lForceMagnitude.GetVector().x),
+                       vpu::Mult(lSideForce, KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE.GetVector().x))
+            : vpu::Mult(lSideForce, KVF_ANTI_HERD_SIDE_SCALE.GetVector().x);
 
     if (lAboveRaceCar)
     {
         {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lAggregateValue( 0.0f, 0.0f, 0.0f );
             lFinalForce = lAggregateValue;
         }
-    }
-
-    // [DIAG] NOT IN THE X360 BINARY -- 2026-09-06 props lane (bug #2, "props sent flying way too
-    // much at medium/high speed"). This function is the only place the game deliberately BLASTS a
-    // prop upward, and the blast is speed-gated at exactly the speed the report names
-    // (KVF_MAX_SPEED_FOR_SIDE_FORCE == 60 mph), so a run has to be able to say whether it fired
-    // and how big it was. Every value printed is already computed above; the acceleration column
-    // is force/mass because InApplyForce is scaled by the body's INVERSE MASS at the consumer
-    // (RigidBody::AddForce, witnessed inline in ProcessApplyForceQueue @0x828A6C1C).
-    // Opt-in (BRN_PROP_DIAG), first-N, never per-frame unbounded. DELETE-WHEN bug #2 is closed.
-    {
-        static s32        siHerdLinesLeft = 400;
     }
 
     // :2113  the event: the 8-byte handle at +0x00, the force at +0x10 (`std r6, sp+0x70`,
@@ -4619,27 +4500,12 @@ void PropManager::ReadUpdatedBodies(
     // `stw r27,0x688(r29)` before the loop -- mUpdatedProps.miLength = 0. FIRST, not last.
     mUpdatedProps.Clear();
 
-    // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 read-back census (opt in with BRN_PROP_DIAG),
-    // rate-limited to ONE line per simulated second. scout.md §5: until wave Q6 this loop ran with
-    // a non-empty queue every physics frame and threw the whole result away, because its only
-    // consumer -- OutputUpdatedProps -- was an inert gate. These three counts are the first proof
-    // the read-back is alive at all, and their SHAPE is the diagnosis:
-    //   parts=0 with props>0  -> no part body ever reached the sim (scout.md §4.1);
-    //   frozen climbing        -> bodies are being retired, i.e. cluster B's missing prop-vs-world
-    //                             contacts are letting them free-fall past the out-of-world floor.
-    // The clock is the SIMULATED one (lvfTimeStep), not a host clock: it stays meaningful under a
-    // paused or stepped sim, and it costs no syscall.
-    s32               liDiagProps  = 0;
-    s32               liDiagParts  = 0;
-    s32               liDiagFrozen = 0;
-
     // :974  `vrefp128 v0,dt` + two Newton refinement steps, x 1.0f (v127 == vcsxwfp128 of
     // vspltisw 1). DWARF `VecFloat lvfOneOverTimeStep`, produced by rw::math::vpu::operator/ over
     // GetVecFloat_One(). De-optimised to an exact reciprocal, broadcast over the four lanes --
     // VecFloat is a broadcast lane quad in this tree.
-    const f32 lfOneOverTimeStep = 1.0f / lvfTimeStep.x;
-    const VecFloat lvfOneOverTimeStep = { lfOneOverTimeStep, lfOneOverTimeStep,
-                                          lfOneOverTimeStep, lfOneOverTimeStep };
+    const f32 lfOneOverTimeStep = 1.0f / lvfTimeStep.GetVector().x;
+    const VecFloat lvfOneOverTimeStep( lfOneOverTimeStep );
 
     // :964
     for ( s32 liIndex = 0; liIndex < lpUpdatedBodies->GetLength(); ++liIndex )
@@ -4675,7 +4541,7 @@ void PropManager::ReadUpdatedBodies(
             ( lpUpdateBodyEvent->mRigidBody.GetState() & rw::physics::FROZEN_BODY ) != 0;
 
         // Out-of-world floor. See decode (D) for the compare polarity.
-        if ( lUpdatedPosition.y < KVF_PROP_OUT_OF_WORLD_HEIGHT.x )
+        if ( lUpdatedPosition.GetVector().y < KVF_PROP_OUT_OF_WORLD_HEIGHT.GetVector().x )
         {
             if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
             {
@@ -4688,17 +4554,6 @@ void PropManager::ReadUpdatedBodies(
                                            << static_cast<u64>( lRigidBodyId )
                                            << "\n";
 
-                // [DIAG] NOT IN THE X360 BINARY -- a wave-Q6 SUFFIX on the console's own warning
-                // (opt in with BRN_PROP_DIAG), first 16 only. scout.md §4.7: the floor constant
-                // KVF_PROP_OUT_OF_WORLD_HEIGHT is not printed anywhere, yet it decides how long a
-                // part falls before the freeze deletes it -- i.e. how much of the motion a drive
-                // test can even observe. Printing the threshold NEXT TO the y that tripped it also
-                // makes the memory-file's recurring failure ("a console constant read as a host
-                // value", here Splat(-1000.0f) recovered from a dyn-init thunk) checkable in one
-                // glance instead of by re-deriving the initialiser.
-                {
-                    static u32        suDiagCount = 0;
-                }
             }
             lbFrozen = true;
         }
@@ -4708,9 +4563,6 @@ void PropManager::ReadUpdatedBodies(
         lbFrozen = lbFrozen && !mbDisableFreezing;
 
         lUpdatePropEvent.mbFrozen = lbFrozen;
-
-        // [DIAG] see the census note at the top of this function. Counted here, after the
-        // mbDisableFreezing fold, so the number matches what the event actually carries.
 
         // :1035  The explicit PropEntityID(u32) ctor stores the word then fires AssertIsProp --
         // owner tripwire #1 of four, BrnPropEntityID.h:278. See decode (H).
@@ -4729,7 +4581,7 @@ void PropManager::ReadUpdatedBodies(
             {
                 CgsPhysics::PhysicsSimulationIO::InApplyForce lApplyForceEvent;
                 lApplyForceEvent.mID    = lRigidBodyId;
-                lApplyForceEvent.mForce = K_DEFAULT_GRAVITY * ( KVF_GRAVITY_SCALE.x - 1.0f );
+                lApplyForceEvent.mForce = K_DEFAULT_GRAVITY * ( KVF_GRAVITY_SCALE.GetVector().x - 1.0f );
 
                 // @0x82632D44 `bl sub_825BCD60` -> the NON-const accessor; @0x82632D4C the
                 // ONE-ARG AddEvent(const T&), which has been committed all along. (Round 1 filed
@@ -4758,8 +4610,6 @@ void PropManager::ReadUpdatedBodies(
         if ( lEntityId.GetPartIndex() != 0 )
         {
             // ---- one shed PART of a smashed prop -------------------------------------------
-            // [DIAG] see the census note at the top of this function.
-
             // :1041
             const s32 liPartIndex = static_cast<s32>( lRigidBodyId.GetIndex() );
 
@@ -4805,8 +4655,6 @@ void PropManager::ReadUpdatedBodies(
         else
         {
             // ---- a whole prop ----------------------------------------------------------------
-            // [DIAG] see the census note at the top of this function.
-
             // :1078
             const s32 liPropIndex = static_cast<s32>( lRigidBodyId.GetIndex() );
 
@@ -4826,9 +4674,9 @@ void PropManager::ReadUpdatedBodies(
             if ( lpProp->HasExtraComOffset() )
             {
                 lUpdatedPosition = lUpdatedPosition
-                                 - ( lUpdatedTransform.Right() * K_PROP_EXTRA_COM_OFFSET.x
-                                   + lUpdatedTransform.Up()    * K_PROP_EXTRA_COM_OFFSET.y
-                                   + lUpdatedTransform.At()    * K_PROP_EXTRA_COM_OFFSET.z );
+                                 - ( lUpdatedTransform.Right() * K_PROP_EXTRA_COM_OFFSET.GetVector().x
+                                   + lUpdatedTransform.Up()    * K_PROP_EXTRA_COM_OFFSET.GetVector().y
+                                   + lUpdatedTransform.At()    * K_PROP_EXTRA_COM_OFFSET.GetVector().z );
 
                 lUpdatedTransform.Pos()     = lUpdatedPosition;
                 lUpdatePropEvent.mTransform = lUpdatedTransform;
@@ -4859,7 +4707,7 @@ void PropManager::ReadUpdatedBodies(
                 lpEvent->mID        = lRigidBodyId;
                 lpEvent->mRigidBody = lpUpdateBodyEvent->mRigidBody;   // RigidBody::operator=
 
-                const Vector3 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector3 lZero( 0.0f, 0.0f, 0.0f );
 
                 // `vrlimi128 vD,vOld,1,0` + `stvx128` into +0xA0 then +0x90 -- the DWARF's
                 // SetAngularAcceleration(0) / SetLinearAcceleration(0) pair. The committed
@@ -4912,25 +4760,12 @@ void PropManager::ReadUpdatedBodies(
             }
             else
             {
-                // [DIAG] NOT IN THE X360 BINARY -- 2026-09-02 props-at-speed: the raw sim
-                // velocity BEFORE the acceleration clamp, next to the stored previous one and
-                // the step, so a boot-drive can see who changes a flung prop's velocity (the
-                // sim, or the clamp's re-post). Whole props only, BRN_PROP_DIAG, first-N.
-                // DELETE-WHEN the high-speed prop reaction is confirmed on screen.
-                const Vector3 lDiagSimLinearVelocity = lUpdatedLinearVelocity;
-
                 // v1 = lpProp->mLinearVelocity (+0x40), v2 = lpProp->mAngularVelocity (+0x50).
                 ClampAcceleration( lpProp->GetLinearVelocity(), lpProp->GetAngularVelocity(),
                                    lRigidBodyId, lpUpdateBodyEvent,
                                    lUpdatedLinearVelocity, lUpdatedAngularVelocity,
                                    lvfTimeStep, lvfOneOverTimeStep, lpSimModuleInputBuffer );
 
-                {
-                    // 200 -> 6000, 2026-09-06 (props lane, bug #2). 200 lines is ~40 physics
-                    // frames with five props in the queue -- 0.7 s, far too short a window to
-                    // measure how far a hit prop actually travels. Still first-N, still opt-in.
-                    static s32 siDiagClampLinesLeft = 6000;
-                }
             }
 
             lpProp->SetTransform( lUpdatedTransform );
@@ -4945,10 +4780,6 @@ void PropManager::ReadUpdatedBodies(
     mUpdatedProps.Append( mUpdatedJointedProps );
     mUpdatedJointedProps.Clear();
 
-    // [DIAG] NOT IN THE X360 BINARY. The once-per-simulated-second census line -- see the note at
-    // the top of this function for what its shape means. Emitted AFTER the jointed fold so
-    // `queued` is the exact length OutputUpdatedProps is about to publish, which is what the
-    // matching one-shot `[Q6-out] first publish` should agree with on the frame it fires.
 }
 
 }
@@ -5460,17 +5291,11 @@ void PropManager::AddContactResultsToQueue(
             // Full 16-byte lane copies (lvx/stvx on the console): Vector3Plus source, Vector3
             // destination, w lane carried verbatim -- the committed twin's spelling.
             {
-                const Vector3 lAggregateValue = { lrResult.mPrimitive0Contact.x,
-                                          lrResult.mPrimitive0Contact.y,
-                                          lrResult.mPrimitive0Contact.z,
-                                          lrResult.mPrimitive0Contact.w };
+                const Vector3 lAggregateValue( lrResult.mPrimitive0Contact.GetVector() );
                 lContact.mPointOnA = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { lrResult.mPrimitive1Contact.x,
-                                          lrResult.mPrimitive1Contact.y,
-                                          lrResult.mPrimitive1Contact.z,
-                                          lrResult.mPrimitive1Contact.w };
+                const Vector3 lAggregateValue( lrResult.mPrimitive1Contact.GetVector() );
                 lContact.mPointOnB = lAggregateValue;
             }
 
@@ -5503,17 +5328,11 @@ void PropManager::AddContactResultsToQueue(
                     mpDebugWorldContacts[miNumDebugWorldContacts % KI_MAX_DEBUG_WORLD_CONTACTS];
 
                 {
-                    const Vector3 lAggregateValue = { lrResult.mPrimitive0Contact.x,
-                                                  lrResult.mPrimitive0Contact.y,
-                                                  lrResult.mPrimitive0Contact.z,
-                                                  lrResult.mPrimitive0Contact.w };
+                    const Vector3 lAggregateValue( lrResult.mPrimitive0Contact.GetVector() );
                     lrDebugContact.mPoint0 = lAggregateValue;
                 }
                 {
-                    const Vector3 lAggregateValue = { lrResult.mPrimitive1Contact.x,
-                                                  lrResult.mPrimitive1Contact.y,
-                                                  lrResult.mPrimitive1Contact.z,
-                                                  lrResult.mPrimitive1Contact.w };
+                    const Vector3 lAggregateValue( lrResult.mPrimitive1Contact.GetVector() );
                     lrDebugContact.mPoint1 = lAggregateValue;
                 }
                 lrDebugContact.mNormal = lrResult.mPrimitive0Normal;
@@ -5714,12 +5533,12 @@ void PropManager::DoPartWorldContactGeneration(
     // |linear| + |angular| * boundingRadius, scaled by the timestep and capped. See the banner for
     // the vmaddfp/vnmsubfp operand-order rule that makes this the right reading of the console's
     // rsqrt+2NR+vsel block.
-    VecFloat lvfPadding = vpu::Splat( vpu::Magnitude( lpPart->GetLinearVelocity() ) );
+    Vector4 lvfPadding = vpu::Splat( vpu::Magnitude( lpPart->GetLinearVelocity() ) );
     lvfPadding = lvfPadding
                + vpu::Splat( vpu::Magnitude( lpPart->GetAngularVelocity() ) )
                      * vpu::Splat( lpPartType->GetBoundingRadius() );         // lfs 0x28
     lvfPadding = lvfPadding * lvfTimeStep;
-    lvfPadding = vpu::Min( lvfPadding, KVF_MAX_PROP_PADDING );                // vminfp
+    lvfPadding = vpu::Min( lvfPadding, Vector4( KVF_MAX_PROP_PADDING.GetVector() ) ); // vminfp
 
     // The bound is RE-READ every iteration (lbz 0x2C at both 0x82611DA0 and 0x82611F4C) and the
     // counter is an 8-bit value compared UNSIGNED -- the DWARF's `uint8_t lu8Vol`.
@@ -5728,7 +5547,7 @@ void PropManager::DoPartWorldContactGeneration(
         ::rw::collision::Volume* lpPartVolume = lpPartType->GetCollisionVolume( lu8Vol );
 
         const Matrix44Affine lPartTransform =
-            lpPartVolume->GetRelativeTransform() * lUpdatePartEvent.mTransform;
+            *lpPartVolume->GetRelativeTransform() * lUpdatePartEvent.mTransform;
 
         lPrimPairList.AddPrimitive( lpPartVolume, lPartTransform,
                                     vpu::GetComponent( lvfPadding, 0 ),   // VecFloat -> f32, in f1
@@ -5882,12 +5701,12 @@ void PropManager::DoPropInstanceWorldContactGeneration(
     PrimitivePairListBuilder lPrimPairList;                                       // DWARF :2613
     lPrimPairList.Prepare( lpMalloc, lpPropType->GetNumberOfVolumes() );          // lbz 0x5E
 
-    VecFloat lvfPadding = vpu::Splat( vpu::Magnitude( lpProp->GetLinearVelocity() ) );
+    Vector4 lvfPadding = vpu::Splat( vpu::Magnitude( lpProp->GetLinearVelocity() ) );
     lvfPadding = lvfPadding
                + vpu::Splat( vpu::Magnitude( lpProp->GetAngularVelocity() ) )
                      * vpu::Splat( lpPropType->GetBoundingRadius() );             // lfs 0x44
     lvfPadding = lvfPadding * lvfTimeStep;
-    lvfPadding = vpu::Min( lvfPadding, KVF_MAX_PROP_PADDING );                    // vminfp
+    lvfPadding = vpu::Min( lvfPadding, Vector4( KVF_MAX_PROP_PADDING.GetVector() ) ); // vminfp
 
     // The bound is RE-READ every iteration (lbz 0x5E at both 0x82612328 and 0x826124A8).
     for ( u8 lu8Vol = 0; lu8Vol < lpPropType->GetNumberOfVolumes(); ++lu8Vol )
@@ -5896,7 +5715,7 @@ void PropManager::DoPropInstanceWorldContactGeneration(
         // static_assert'd in BrnPhysicsPropTypeData.h, so the typed index is exact.
         ::rw::collision::Volume* lpVolume = lpPropType->GetCollisionVolume( lu8Vol ); // DWARF :2624
 
-        const Matrix44Affine& lrRelativeTransform = lpVolume->GetRelativeTransform();
+        const Matrix44Affine& lrRelativeTransform = *lpVolume->GetRelativeTransform();
 
         const Matrix44Affine lVolumeMatrix =
             lrRelativeTransform * lUpdatePropEvent.mTransform;                    // DWARF :2626
@@ -6344,13 +6163,6 @@ void PropManager::BeginPropWorldContactGeneration(
 
     miNumPropsAddedToContactGen = 0;                                        // stw 0x6570
 
-    // [DIAG] NOT IN THE X360 BINARY -- the two counters below and the one-shot print after the
-    // loop. They are plain s32 locals bumped in the two dispatch arms (one add each, no branch,
-    // no store outside this frame), so the shipped path is unchanged whether the probe is on or
-    // off; only the PRINT is gated. See the block after the loop for what the line answers.
-    s32 liDiagProps = 0;
-    s32 liDiagParts = 0;
-
     // The bound is re-read every iteration (lwz 0x688 at both 0x82628D30 and 0x82628DA0).
     for ( s32 liEvent = 0; liEvent < mUpdatedProps.GetLength(); ++liEvent )
     {
@@ -6364,48 +6176,15 @@ void PropManager::BeginPropWorldContactGeneration(
         // 0x82628D6C -- bare `clrlwi r11,r11,22`; see the divergence note above.
         if ( lrEvent.mEntityId.GetPartIndex() != 0u )
         {
-            ++liDiagParts;                                                  // [DIAG]
             DoPartWorldContactGeneration( lpCollisionGenerator, lpTriangleCacheInterface,
                                           lrEvent, miNumJobsAdded, lpLinearMalloc, lvfTimeStep );
         }
         else
         {
-            ++liDiagProps;                                                  // [DIAG]
             DoPropInstanceWorldContactGeneration( lpCollisionGenerator, lpTriangleCacheInterface,
                                                   lrEvent, miNumJobsAdded, lpLinearMalloc,
                                                   lvfTimeStep );
         }
-    }
-
-    // =============================================================================================
-    // [DIAG] NOT IN THE X360 BINARY -- ONE-SHOT, behind BRN_PROP_DIAG.
-    //
-    // This is the line that says cluster B is ALIVE: the wave's user-visible complaint is that
-    // smashed parts do not visibly move, and today's boot log shows the second half of that story
-    // -- six "Warning!! prop fell out of the world" prints, because prop and part rigid bodies are
-    // created, integrated, and then FREE-FALL, since this whole function was an inert
-    // BRN_CONDUCTOR_GATE and no prop-vs-world contact was ever generated.
-    // ⚠️ READ IT AS A PAIR WITH THAT WARNING. `props`/`parts` non-zero here and the fall-out
-    // warning still firing used to be explained by the narrow phase being gated. IT IS NOT ANY
-    // MORE: ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849), the
-    // primitive-vs-triangle NARROW PHASE the type-12 stream arm delegates to, has been REAL since
-    // wave Q6 round 3 (2026-08-19) in GameShared/Jobs/ContactGenerator/ContactGeneratorJob.cpp,
-    // and its own closure landed with it -- ::BuildGPInstance @0x829222A0 and
-    // ::CollideGPInstances @0x829253C8, in the sibling partfile ContactGeneratorJob_wQ6_01.cpp.
-    // So counts here plus a surviving fall-out warning now means something further down.
-    // ✅ NOT the explanation any more (both landed 2026-08-19, wave Q6 round 2):
-    // BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream is a REAL BODY in the
-    // mounted CgsCollisionGenerator.cpp, and PrimitivePairListBuilder::AddPrimitive(const
-    // rw::collision::Volume*) @0x82814AB8 is a real body in the mounted
-    // CgsPrimitivePairListBuilder.cpp (bat:867) -- the pair list it posts is no longer empty.
-    // `parts` staying 0 while `props` climbs is scout.md's
-    // honest unknown 1 firing: no PART rigid body has ever reached the simulation.
-    //
-    // The latch is evaluated ONCE -- a getenv per frame would be a syscall on the hot path -- and
-    // the print is one-shot, so it costs one predicted branch per frame forever after.
-    // =============================================================================================
-    {
-        static bool       sbFirstPass = true;
     }
 
     // 0x82628DB0..0x82628DF4 -- SimpleDataStreamProducer::Begin() inlined by the console.
@@ -7166,9 +6945,9 @@ void PropManager::CreatePart( PropEntityID                                      
     //    bytes are zero, but the initialiser is a dynamic-initialiser thunk outside every IDA
     //    function. The divisions are now by 3x the raw inertia.
     Vector3 lInverseInertia;
-    lInverseInertia.x = 1.0f / ( lInertia.x * KVF_INERTIA_SCALE.x );
-    lInverseInertia.y = 1.0f / ( lInertia.y * KVF_INERTIA_SCALE.x );
-    lInverseInertia.z = 1.0f / ( lInertia.z * KVF_INERTIA_SCALE.x );
+    lInverseInertia.GetVector().x = 1.0f / ( lInertia.GetVector().x * KVF_INERTIA_SCALE.GetVector().x );
+    lInverseInertia.GetVector().y = 1.0f / ( lInertia.GetVector().y * KVF_INERTIA_SCALE.GetVector().x );
+    lInverseInertia.GetVector().z = 1.0f / ( lInertia.GetVector().z * KVF_INERTIA_SCALE.GetVector().x );
 
     // 0x82627E38..0x82627E70 -- mInvTens := lInverseInertia, then
     // mSpherical := 1.0f / min(x, min(y, z)), which is rw::physics::Inertia::SetInverseInertia
@@ -7181,19 +6960,6 @@ void PropManager::CreatePart( PropEntityID                                      
     //    0x82627E70 lands. Same final value, one fewer dead store. Not a reason to hand-spell the
     //    two lines instead of calling the named setter.
     lSimulationAddBodyEvent.mRigidBody.mInertia.SetInverseInertia( lInverseInertia );
-
-    // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 pre-flight probe (opt in with BRN_PROP_DIAG), FIRST
-    // EIGHT parts only. Its twin at PropManager_wQ_02.cpp proves the ADD EVENT reached the drain;
-    // this one proves the drain turned it into an InAddRigidBody on the SIM queue. Together they
-    // bracket scout.md §4.1 ("has a part rigid body ever reached the simulation?"): if the wQ_02
-    // line prints and this one does not, the loss is inside CreatePart's assert chain above; if
-    // both print and no part ever moves, the loss is downstream of the solver.
-    // meState is printed as the literal ACTIVE_BODY only when it really is -- a state that is not
-    // ACTIVE means the part is asleep and will never be integrated, which is the exact failure
-    // this line has to be able to show.
-    {
-        static u32        suDiagCount = 0;
-    }
 
     // 0x82627EA0 `bl CgsPhysics::PhysicsSimulationIO::InputBuffer::GetAddRigidBodyQueue @0x825BCE08`
     // (the write-lock-guarded producer overload -- its "Not locked for writing\n" assert bakes
@@ -7387,9 +7153,9 @@ void PropManager::RemoveProp( PropEntityID                                      
         lStrStream << lpProp->GetEntityId().GetValue();
         lStrStream << " Position: ";
         lStrStream.AppendFormat( "(%f, %f, %f)",
-                                 lpProp->GetTransform().Pos().x,
-                                 lpProp->GetTransform().Pos().y,
-                                 lpProp->GetTransform().Pos().z );
+                                 lpProp->GetTransform().Pos().GetVector().x,
+                                 lpProp->GetTransform().Pos().GetVector().y,
+                                 lpProp->GetTransform().Pos().GetVector().z );
         lStrStream << "\n";
 
         CgsDev::Assert::BeginAssert();
@@ -7618,9 +7384,9 @@ namespace Props
 // file-local `static` (internal linkage) here because rw::math::vpu::detail has no home in this
 // tree -- reported as a header request rather than left as three bare literals inside the assert.
 // =================================================================================================
-static const Vector3 K_RW_I_VECTOR = { 1.0f, 0.0f, 0.0f, 0.0f };   // X360 0x82181500
-static const Vector3 K_RW_J_VECTOR = { 0.0f, 1.0f, 0.0f, 0.0f };   // X360 0x82181510
-static const Vector3 K_RW_K_VECTOR = { 0.0f, 0.0f, 1.0f, 0.0f };   // X360 0x82181520
+static const Vector3 K_RW_I_VECTOR = Vector3( 1.0f, 0.0f, 0.0f );   // X360 0x82181500
+static const Vector3 K_RW_J_VECTOR = Vector3( 0.0f, 1.0f, 0.0f );   // X360 0x82181510
+static const Vector3 K_RW_K_VECTOR = Vector3( 0.0f, 0.0f, 1.0f );   // X360 0x82181520
 
 // =================================================================================================
 // BrnPhysics::Props::PropManager::AddPropToSim @ 0x826274D8   (167 instructions)
@@ -7789,9 +7555,9 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     //    as a dynamic-initialiser thunk. The divisions are now by 3x the raw inertia, which is what
     //    an INERTIA SCALE of 3 means: props resist spin three times as hard as their box tensor.
     Vector3 lInverseInertia;
-    lInverseInertia.x = 1.0f / ( lInertia.x * KVF_INERTIA_SCALE.x );
-    lInverseInertia.y = 1.0f / ( lInertia.y * KVF_INERTIA_SCALE.x );
-    lInverseInertia.z = 1.0f / ( lInertia.z * KVF_INERTIA_SCALE.x );
+    lInverseInertia.GetVector().x = 1.0f / ( lInertia.GetVector().x * KVF_INERTIA_SCALE.GetVector().x );
+    lInverseInertia.GetVector().y = 1.0f / ( lInertia.GetVector().y * KVF_INERTIA_SCALE.GetVector().x );
+    lInverseInertia.GetVector().z = 1.0f / ( lInertia.GetVector().z * KVF_INERTIA_SCALE.GetVector().x );
 
     // :617. 0x82627698..0x826276EC -- mInvTens := lInverseInertia, then
     // mSpherical := 1.0f / min(x, min(y, z)), which IS rw::physics::Inertia::SetInverseInertia
@@ -7944,7 +7710,7 @@ void PropManager::BreakJoint( PropEntityID                                  lEnt
     // name), multiplied lane-by-lane by the whole KVF_BREAK_JOINT_ANGULAR_VEL register. The
     // constant is a broadcast VecFloat, so taking lane 0 is identical -- the same treatment
     // PropManager_wQ2_04.cpp gives KVF_INERTIA_SCALE.
-    const Vector3 lAngularVelocity = maLastJointRotation[ liJointIndex ] * KVF_BREAK_JOINT_ANGULAR_VEL.x;
+    const Vector3 lAngularVelocity = maLastJointRotation[ liJointIndex ] * KVF_BREAK_JOINT_ANGULAR_VEL.GetVector().x;
 
     // :2073. 0x82628BD0..0x82628C28. `lvx128 v0, r30, 0x30` is the prop's own world position
     // (PropInstance::mWorldTransform.wAxis, +0x30 inside the affine at +0x00) and
@@ -7961,7 +7727,7 @@ void PropManager::BreakJoint( PropEntityID                                  lEnt
     const Vector3 lLinearVelocity =
         Cross( lAngularVelocity,
                lpProp->GetTransform().Pos() - maPropJointPositions[ liJointIndex ] )
-        * KVF_BREAK_JOINT_LINEAR_VEL.x;
+        * KVF_BREAK_JOINT_LINEAR_VEL.GetVector().x;
 
     // 0x82628C04..0x82628C60 -- `lwz r11, 0x58(r27)` == PropTypeData::muSceneUriId, compared
     // against 0x6894C == 428364 and 0x68964 == 428388, and the boolean drives an OR-2 / AND-~2 on
@@ -8169,7 +7935,7 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
         // not silently absorbed.
         const bool lbNeedsRotating =
             !IsZero( Abs( lDeltaXAxis ) + Abs( lDeltaYAxis ) + Abs( lDeltaZAxis ) + Abs( lDeltaWAxis ),
-                     KVF_LEAN_PROP_MIN_LERP.x );
+                     KVF_LEAN_PROP_MIN_LERP.GetVector().x );
 
         if ( lbNeedsRotating )
         {
@@ -8184,10 +7950,10 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
             // tighter than the console's estimate, never a placeholder. Standing convention of
             // that vendor home.
             Matrix44Affine lLerpMatrix;
-            lLerpMatrix.xAxis = NormalizeFast( lTransform.xAxis + lDeltaXAxis * KVF_LEAN_PROP_LERP_SPEED.x );
-            lLerpMatrix.yAxis = NormalizeFast( lTransform.yAxis + lDeltaYAxis * KVF_LEAN_PROP_LERP_SPEED.x );
-            lLerpMatrix.zAxis = NormalizeFast( lTransform.zAxis + lDeltaZAxis * KVF_LEAN_PROP_LERP_SPEED.x );
-            lLerpMatrix.wAxis = lTransform.wAxis + lDeltaWAxis * KVF_LEAN_PROP_LERP_SPEED.x;
+            lLerpMatrix.xAxis = NormalizeFast( lTransform.xAxis + lDeltaXAxis * KVF_LEAN_PROP_LERP_SPEED.GetVector().x );
+            lLerpMatrix.yAxis = NormalizeFast( lTransform.yAxis + lDeltaYAxis * KVF_LEAN_PROP_LERP_SPEED.GetVector().x );
+            lLerpMatrix.zAxis = NormalizeFast( lTransform.zAxis + lDeltaZAxis * KVF_LEAN_PROP_LERP_SPEED.GetVector().x );
+            lLerpMatrix.wAxis = lTransform.wAxis + lDeltaWAxis * KVF_LEAN_PROP_LERP_SPEED.GetVector().x;
 
             // :392. 0x82631A98..0x82631C4C -- twelve `vspltw` + `vcmpeqfp.` self-equality tests
             // (three lanes x four rows, COUNTED: the first pair is 0x82631A98/0x82631AA4 and the
@@ -8220,10 +7986,10 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
                 lStrStream << "Transform: ";
                 lStrStream.AppendFormat(
                     "\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n",
-                    lLerpMatrix.xAxis.x, lLerpMatrix.xAxis.y, lLerpMatrix.xAxis.z, lLerpMatrix.xAxis.w,
-                    lLerpMatrix.yAxis.x, lLerpMatrix.yAxis.y, lLerpMatrix.yAxis.z, lLerpMatrix.yAxis.w,
-                    lLerpMatrix.zAxis.x, lLerpMatrix.zAxis.y, lLerpMatrix.zAxis.z, lLerpMatrix.zAxis.w,
-                    lLerpMatrix.wAxis.x, lLerpMatrix.wAxis.y, lLerpMatrix.wAxis.z, lLerpMatrix.wAxis.w );
+                    lLerpMatrix.xAxis.GetVector().x, lLerpMatrix.xAxis.GetVector().y, lLerpMatrix.xAxis.GetVector().z, lLerpMatrix.xAxis.GetVector().w,
+                    lLerpMatrix.yAxis.GetVector().x, lLerpMatrix.yAxis.GetVector().y, lLerpMatrix.yAxis.GetVector().z, lLerpMatrix.yAxis.GetVector().w,
+                    lLerpMatrix.zAxis.GetVector().x, lLerpMatrix.zAxis.GetVector().y, lLerpMatrix.zAxis.GetVector().z, lLerpMatrix.zAxis.GetVector().w,
+                    lLerpMatrix.wAxis.GetVector().x, lLerpMatrix.wAxis.GetVector().y, lLerpMatrix.wAxis.GetVector().z, lLerpMatrix.wAxis.GetVector().w );
                 lStrStream << "\n";
 
                 CgsDev::Assert::BeginAssert();
@@ -8253,27 +8019,23 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
             //   0x82631DB4..0x82631DC4  a FOURTH vmsum3fp128 over that vector, `vandc` (abs) and
             //       `vcmpgtfp` against KVF_LEAN_PROP_ORTHOGONAL_TOLERANCE -- i.e. IsZero(.., tol)
             //       inlined again, on a broadcast scalar.
-            const Vector3 lGramErrorX = Vector3{ Dot( lLerpMatrix.xAxis, lLerpMatrix.xAxis ),
-                                                 Dot( lLerpMatrix.yAxis, lLerpMatrix.xAxis ),
-                                                 Dot( lLerpMatrix.zAxis, lLerpMatrix.xAxis ),
-                                                 0.0f } - K_RW_I_VECTOR;
-            const Vector3 lGramErrorY = Vector3{ Dot( lLerpMatrix.xAxis, lLerpMatrix.yAxis ),
-                                                 Dot( lLerpMatrix.yAxis, lLerpMatrix.yAxis ),
-                                                 Dot( lLerpMatrix.zAxis, lLerpMatrix.yAxis ),
-                                                 0.0f } - K_RW_J_VECTOR;
-            const Vector3 lGramErrorZ = Vector3{ Dot( lLerpMatrix.xAxis, lLerpMatrix.zAxis ),
-                                                 Dot( lLerpMatrix.yAxis, lLerpMatrix.zAxis ),
-                                                 Dot( lLerpMatrix.zAxis, lLerpMatrix.zAxis ),
-                                                 0.0f } - K_RW_K_VECTOR;
+            const Vector3 lGramErrorX = Vector3( Dot( lLerpMatrix.xAxis, lLerpMatrix.xAxis ),
+                                                  Dot( lLerpMatrix.yAxis, lLerpMatrix.xAxis ),
+                                                  Dot( lLerpMatrix.zAxis, lLerpMatrix.xAxis ) ) - K_RW_I_VECTOR;
+            const Vector3 lGramErrorY = Vector3( Dot( lLerpMatrix.xAxis, lLerpMatrix.yAxis ),
+                                                  Dot( lLerpMatrix.yAxis, lLerpMatrix.yAxis ),
+                                                  Dot( lLerpMatrix.zAxis, lLerpMatrix.yAxis ) ) - K_RW_J_VECTOR;
+            const Vector3 lGramErrorZ = Vector3( Dot( lLerpMatrix.xAxis, lLerpMatrix.zAxis ),
+                                                  Dot( lLerpMatrix.yAxis, lLerpMatrix.zAxis ),
+                                                  Dot( lLerpMatrix.zAxis, lLerpMatrix.zAxis ) ) - K_RW_K_VECTOR;
 
-            const Vector3 lOrthogonalError = Vector3{ MagnitudeSquared( lGramErrorX ),
-                                                      MagnitudeSquared( lGramErrorY ),
-                                                      MagnitudeSquared( lGramErrorZ ),
-                                                      0.0f };
+            const Vector3 lOrthogonalError( MagnitudeSquared( lGramErrorX ),
+                                            MagnitudeSquared( lGramErrorY ),
+                                            MagnitudeSquared( lGramErrorZ ) );
             const f32 lfOrthogonalError = MagnitudeSquared( lOrthogonalError );
 
-            if ( !IsZero( Vector3{ lfOrthogonalError, lfOrthogonalError, lfOrthogonalError, 0.0f },
-                          KVF_LEAN_PROP_ORTHOGONAL_TOLERANCE.x ) )
+            if ( !IsZero( Vector3( lfOrthogonalError, lfOrthogonalError, lfOrthogonalError ),
+                          KVF_LEAN_PROP_ORTHOGONAL_TOLERANCE.GetVector().x ) )
             {
                 // 0x82631DDC..0x82631E60 -- the same StrStream message and the same un-homed matrix
                 // printer as the :392 arm; see that block's flag.
@@ -8283,10 +8045,10 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
                 lStrStream << "Transform: ";
                 lStrStream.AppendFormat(
                     "\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n",
-                    lLerpMatrix.xAxis.x, lLerpMatrix.xAxis.y, lLerpMatrix.xAxis.z, lLerpMatrix.xAxis.w,
-                    lLerpMatrix.yAxis.x, lLerpMatrix.yAxis.y, lLerpMatrix.yAxis.z, lLerpMatrix.yAxis.w,
-                    lLerpMatrix.zAxis.x, lLerpMatrix.zAxis.y, lLerpMatrix.zAxis.z, lLerpMatrix.zAxis.w,
-                    lLerpMatrix.wAxis.x, lLerpMatrix.wAxis.y, lLerpMatrix.wAxis.z, lLerpMatrix.wAxis.w );
+                    lLerpMatrix.xAxis.GetVector().x, lLerpMatrix.xAxis.GetVector().y, lLerpMatrix.xAxis.GetVector().z, lLerpMatrix.xAxis.GetVector().w,
+                    lLerpMatrix.yAxis.GetVector().x, lLerpMatrix.yAxis.GetVector().y, lLerpMatrix.yAxis.GetVector().z, lLerpMatrix.yAxis.GetVector().w,
+                    lLerpMatrix.zAxis.GetVector().x, lLerpMatrix.zAxis.GetVector().y, lLerpMatrix.zAxis.GetVector().z, lLerpMatrix.zAxis.GetVector().w,
+                    lLerpMatrix.wAxis.GetVector().x, lLerpMatrix.wAxis.GetVector().y, lLerpMatrix.wAxis.GetVector().z, lLerpMatrix.wAxis.GetVector().w );
                 lStrStream << "\n";
 
                 CgsDev::Assert::BeginAssert();
@@ -8994,15 +8756,6 @@ void PropManager::OutputUpdatedProps( BrnPhysics::PhysicsModuleIO::OutputBuffer*
 {
     // 0x82627EDC / 0x82627EE0 -- lpOutput is handed over as the callee's `this`.
     PropOutputInterface* lpOutputQueue = lpOutput->GetPropManagerOutputInterface();   // DWARF :945
-
-    // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 one-shot: the single line that means the
-    // UpdatePropEvent stream is alive. Opt in with BRN_PROP_DIAG. It is read BEFORE the append
-    // because AppendUpdatedProps is the console's own merge-and-translate pass and this is the
-    // producer-side count -- exactly the number of poses this frame hands to the world module.
-    // The env latch is a function-local static: getenv per physics frame would be a syscall.
-    {
-        static bool       sbLogged   = false;
-    }
 
     // 0x82627EE4 / 0x82627EE8 -- `addi r4, r31, 0x680` == &mUpdatedProps, passed by pointer
     // (AppendUpdatedProps takes `const UpdatePropEventQueue*`, BrnPropOutputInterface.h:68).
