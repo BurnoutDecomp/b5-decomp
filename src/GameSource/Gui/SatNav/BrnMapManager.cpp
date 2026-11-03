@@ -165,17 +165,17 @@ namespace BrnGui
         // second runs on (1,1) into words 2/3 (0x82458748..0x82458770). The matrix pointers
         // are r3 = a copy of smm33NormalisedSpace @0x82FB2FA0 (the FROM space) and
         // r4 = a copy of smm33WorldSpace @0x82FB3610 (the TO space).
-        const Vector2 lv2UnitMin = { 0.0f, 0.0f, 0.0f, 0.0f };
-        const Vector2 lv2UnitMax = { 1.0f, 1.0f, 0.0f, 0.0f };
+        const Vector2 lv2UnitMin(0.0f, 0.0f);
+        const Vector2 lv2UnitMax(1.0f, 1.0f);
         const Vector2 lv2WorldMin = MapTransform::Transform(
             lv2UnitMin, MapTransform::GetNormalisedSpace(), MapTransform::GetWorldSpace());
         const Vector2 lv2WorldMax = MapTransform::Transform(
             lv2UnitMax, MapTransform::GetNormalisedSpace(), MapTransform::GetWorldSpace());
 
-        mLowResTexture.mBBWorld.mfLeft   = lv2WorldMin.x;
-        mLowResTexture.mBBWorld.mfTop    = lv2WorldMin.y;
-        mLowResTexture.mBBWorld.mfRight  = lv2WorldMax.x;
-        mLowResTexture.mBBWorld.mfBottom = lv2WorldMax.y;
+        mLowResTexture.mBBWorld.mfLeft   = lv2WorldMin.mV.x;
+        mLowResTexture.mBBWorld.mfTop    = lv2WorldMin.mV.y;
+        mLowResTexture.mBBWorld.mfRight  = lv2WorldMax.mV.x;
+        mLowResTexture.mBBWorld.mfBottom = lv2WorldMax.mV.y;
     }
 
     // @0x82448760 -- the bundle-load state of the requested-tile slot owning luID.

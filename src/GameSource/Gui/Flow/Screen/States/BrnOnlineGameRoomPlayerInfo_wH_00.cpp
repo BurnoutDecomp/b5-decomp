@@ -475,10 +475,10 @@ namespace BrnGui
                         // unk_82CDA450 == 00010203 18191A1B 00010203 00010203, i.e. the
                         // (X,Y,Z,W) world vector becomes (X,Z,X,X).
                         Vector2 lv2MapLocation;
-                        lv2MapLocation.x = lpPlayerInfo->x;
-                        lv2MapLocation.y = lpPlayerInfo->z;
-                        lv2MapLocation.z = lpPlayerInfo->x;
-                        lv2MapLocation.w = lpPlayerInfo->x;
+                        lv2MapLocation.mV.x = lpPlayerInfo->mV.x;
+                        lv2MapLocation.mV.y = lpPlayerInfo->mV.z;
+                        lv2MapLocation.mV.z = lpPlayerInfo->mV.x;
+                        lv2MapLocation.mV.w = lpPlayerInfo->mV.x;
                         mMainMapComponent.SnapToLocation(lv2MapLocation);
 
                         if (CrashNavMap::PlaceCursorOnPlayer())
