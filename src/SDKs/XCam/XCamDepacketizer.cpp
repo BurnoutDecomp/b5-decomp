@@ -127,8 +127,8 @@ int CDepacketizer::Initialize(int iReserved, int iPayloadSize)
     }
 
     Reset();
-    QueryPerformanceFrequency(&mPerfFrequency);
-    mLastDecodeTime = 0;
+    ::QueryPerformanceFrequency(&mPerfFrequency);
+    mLastDecodeTime.QuadPart = 0;
     return 0;
 }
 
@@ -232,7 +232,7 @@ u8 CDepacketizer::SubmitPacket_Init(const u8* pPacket)
     mpFrameSlots[WrapSlot(muCurrentSeq)].muType = 1;
 
     miMaxLatencyMs = 200;
-    const u8 bResult = QueryPerformanceCounter(&mLastDecodeTime);
+    const u8 bResult = static_cast<u8>(::QueryPerformanceCounter(&mLastDecodeTime));
     miRequestKeyFrame    = 0;
     miLostPacketCount    = 0;
     miResendRequestCount = 0;
@@ -417,14 +417,14 @@ int CDepacketizer::SubmitPacket(const u8* pPacket, int iLength, XOVERLAPPED* pOv
 // @ 0x82987228
 int CDepacketizer::FrameReadyToDecode(int* piCodecType)
 {
-    s64 iNow;
-    QueryPerformanceCounter(&iNow);
+    LARGE_INTEGER iNow;
+    ::QueryPerformanceCounter(&iNow);
 
     int iFrameReady = 0;
     int iSeq = muCurrentSeq;
     FrameHeader* pNode = mpCurrentHeader;
     const int iMsSinceDecode =
-        static_cast<int>((iNow - mLastDecodeTime) * 1000 / mPerfFrequency);
+        static_cast<int>((iNow.QuadPart - mLastDecodeTime.QuadPart) * 1000 / mPerfFrequency.QuadPart);
     int iNodeLatencyMs = 0;
 
     // Walk the reorder list looking for a complete, in-budget frame.
@@ -434,7 +434,7 @@ int CDepacketizer::FrameReadyToDecode(int* piCodecType)
         iSeq = pNode->muSeq;
         if (iReceive != 0)
         {
-            iNodeLatencyMs = static_cast<int>((iNow - iReceive) * 1000 / mPerfFrequency);
+            iNodeLatencyMs = static_cast<int>((iNow.QuadPart - iReceive) * 1000 / mPerfFrequency.QuadPart);
             if (iNodeLatencyMs >= miMaxLatencyMs || iMsSinceDecode >= 3 * miAvgDecodeMs)
             {
                 if (pNode->mExpected == pNode->mReceived)

@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "target": "xbox360-ppc-be",
+  "sdk_package": "6534.4 portable XDK",
+  "status": "selected native SDK provider; source copies are reference only",
+  "inventory_change": {
+    "previous_eligible_sources": 3617,
+    "new_eligible_sources": 3615,
+    "compile_gains": 0,
+    "dispositions": [
+      {
+        "former_source": "src/SDKs/D3D/D3DBlocker.cpp",
+        "status": "SDK_PROVIDED_REFERENCE",
+        "reference": "reference/x360-sdk/D3D/D3DBlocker.cpp"
+      },
+      {
+        "former_source": "src/SDKs/D3D/GPUTimingMarkerSmall.cpp",
+        "status": "SDK_PROVIDED_REFERENCE",
+        "reference": "reference/x360-sdk/D3D/GPUTimingMarkerSmall.cpp"
+      }
+    ]
+  },
+  "provider": {
+    "archive": "lib/xbox/d3d9i.lib",
+    "archive_sha256": "8e99265d718d761c834bab95cb43ed1bb9f743ceb6cb7e9a4611d0987aa25daf",
+    "members": [
+      {
+        "name": "obj/xbox/device.obj",
+        "sha256": "42c6426208e720d663652b650e03092047ecb43553ce0e13030c68972a33cee7"
+      },
+      {
+        "name": "obj/xbox/draw.obj",
+        "sha256": "b50ba450213b39cbaa668cc70568d94e720029d0de8bed4e939551a41efbc9c6"
+      }
+    ],
+    "symbols": [
+      {
+        "mangled": "??0CBlocker@D3D@@QAA@PAVCDevice@1@W4_D3DBLOCKTYPE@@@Z",
+        "member": "obj/xbox/device.obj",
+        "code_sha256": "f883d16f7bea740afcec5ef7a7269f5071dbd92515ad189cbe520447bfaec0b0"
+      },
+      {
+        "mangled": "??1CBlocker@D3D@@QAA@XZ",
+        "member": "obj/xbox/device.obj",
+        "code_sha256": "7b793cd598ec9b51f7545e5b4fccf9dd32ab133120dca09652e50c8be78bfdb0"
+      },
+      {
+        "mangled": "?Check@CBlocker@D3D@@QAAHXZ",
+        "member": "obj/xbox/device.obj",
+        "code_sha256": "13d82f0a7fb0fd1c7cd0e81ffd35c46116e5ca64c01d86e149ba58e9edeeb6f8"
+      },
+      {
+        "mangled": "??0GPUTimingMarkerSmall@D3D@@QAA@W4_PixSmallOpcodesType@@PAVCDevice@1@@Z",
+        "member": "obj/xbox/draw.obj",
+        "code_sha256": "6677c12e31ba9702c8e54efb99153b0e7bbdae23b240bc252f5b9e43975f4f2f"
+      },
+      {
+        "mangled": "??1GPUTimingMarkerSmall@D3D@@QAA@XZ",
+        "member": "obj/xbox/draw.obj",
+        "code_sha256": "4dac604a8b34004a3b66a5c326b3328022ebbe32f4089e44f1bddab65b8549db"
+      }
+    ]
+  },
+  "proof": {
+    "artist": "BURNOUT_X360_ARTIST.XEX",
+    "comparison_sha256": "278e0555985b7fb7fb2e5af8c6529ca56abced1fb34127a63960bb3b045a9fba",
+    "comparison_script_sha256": "1de407023d721d0bb09a85c84e4be1ea49ab08eb76678579204c2dc2269b56d0",
+    "function_relocations_sha256": "643c73806de82f3a3bf755cef86559c1f807c0de7f44914017eab957912fed1b",
+    "map_sha256": "934a46cdbc1ccfcaca1ccaf8ea84a65b4b4bd96aceb5df0373d8c08b607cd6cb",
+    "link_log_sha256": "0e10f1e5ebae49a43790d14413c6bac64c95a8ec630d6ce9fd48739bab6e31c0",
+    "link_rsp_sha256": "c06c7ba9fe4948e58799291ae45d1689e8155c878f59e60327636060b22c51a8",
+    "result": "Five helper bodies match all unrelocated instruction bits; relocated call/data targets, 80-byte PIX table and float constant checked against ARTIST. SDK-only strict NOENTRY link succeeded."
+  },
+  "sdk_only_link_libraries": [
+    {
+      "path": "lib/xbox/xapilibi.lib",
+      "sha256": "fcff996efcf6e3461861ab980f73a715db740bca467e9f079a596a7f812c230e"
+    },
+    {
+      "path": "lib/xbox/xboxkrnl.lib",
+      "sha256": "8a91250695e7aa6e079ef1a5b99bd0d0bb71e9dee03902e489596c9a01182f1e"
+    },
+    {
+      "path": "lib/xbox/libcMT.lib",
+      "sha256": "55af4a701977e1f803a5f001c4b01f319db9544cfa984d190aeabecf1b3ed8f5"
+    },
+    {
+      "path": "lib/xbox/libcpMT.lib",
+      "sha256": "9625855e07021caf07a0b11da03077e7efb818bb18a6b50226aa40696d9cc7e0"
+    },
+    {
+      "path": "lib/xbox/xnet.lib",
+      "sha256": "0359ce8cf42d13fe415c6a9aa24ade72f3a5699b36873c951f45b819d03b5da5"
+    },
+    {
+      "path": "lib/xbox/xgraphics.lib",
+      "sha256": "634ebcc1f1deac880e326b7ff583a782275db7cb0137d56ffa1c58c11a3c4e82"
+    },
+    {
+      "path": "lib/xbox/xbdm.lib",
+      "sha256": "b8871fb850656f6b60da6beb2b0adbc56b46cdc2b12de7f649c263fb9f028113"
+    }
+  ],
+  "runtime_requirements": [
+    "Instrumented d3d9i/xapilibi archive members require __CAP_Enter_Function and __CAP_Exit_Function, supplied by xbdm.lib imports.",
+    "No game-wide SDK duplicate/provider policy is selected here.",
+    "The SDK-only probe is not a game link or runtime validation."
+  ],
+  "notes": [
+    "XDK package version and COFF timestamps do not establish original compiler flags.",
+    "Do not link the superseded reconstructed reference copies as competing providers."
+  ]
+}
