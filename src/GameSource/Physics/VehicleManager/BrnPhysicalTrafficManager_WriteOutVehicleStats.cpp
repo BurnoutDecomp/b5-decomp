@@ -59,7 +59,7 @@ namespace
     // NaN compares unequal to itself. The console tests three lanes per row and ignores .w.
     inline bool IsRowFinite(const Vector3& lvRow)
     {
-        return (lvRow.x == lvRow.x) && (lvRow.y == lvRow.y) && (lvRow.z == lvRow.z);
+        return (lvRow.mV.x == lvRow.mV.x) && (lvRow.mV.y == lvRow.mV.y) && (lvRow.mV.z == lvRow.mV.z);
     }
 
     inline bool IsTransformFinite(const Matrix44Affine& lrTransform)
@@ -74,14 +74,6 @@ namespace
 // -------------------------------------------------------------------------------------------------
 void PhysicalTrafficManager::WriteOutVehicleStats(Vehicle::VehicleOutputInterface* lpOutputInterface)
 {
-    // DIVERGENCE (named): the console has no null guard -- VehicleManager::WriteOutVehicleStats
-    // always forwards the buffer it was handed.
-    CGS_ASSERT(lpOutputInterface != 0, "lpOutputInterface != NULL");
-    if (lpOutputInterface == 0)
-    {
-        return;
-    }
-
     for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
          liVehicle >= 0;
          liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
@@ -99,14 +91,8 @@ void PhysicalTrafficManager::WriteOutVehicleStats(Vehicle::VehicleOutputInterfac
         const PhysicalTrafficVehicle* lpVehicle = &mpaTrafficVehicles[liVehicle];
         const EntityId                lEntityId = maTrafficEntityIDs[liVehicle];
 
-        CGS_ASSERT(lpVehicle->mpVehicleBody != 0, "lpVehicle->mpVehicleBody != NULL");
-
-        if (lpVehicle->mpVehicleBody != 0)
-        {
-            // NON-GATING tripwire, BrnPhysicalTrafficManager.cpp:2493. See simplification 1.
-            CGS_ASSERT(IsTransformFinite(lpVehicle->mpVehicleBody->GetTransform()),
-                       "Traffic has invalid transfrm");                                // :2493
-        }
+        CGS_ASSERT(IsTransformFinite(lpVehicle->mpVehicleBody->GetTransform()),
+                   "Traffic has invalid transfrm");                                // :2493
 
         lpOutputInterface->AddTrafficState(lEntityId, lpVehicle);
     }

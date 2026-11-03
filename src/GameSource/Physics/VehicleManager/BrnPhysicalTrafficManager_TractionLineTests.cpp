@@ -181,18 +181,9 @@ s32 PhysicalTrafficManager::AddTrafficTractionLineTests(
             Vector3 lvLineEnd;
             lpBody->GetTractionLine(static_cast<EVehicleDrivenWheel>(liWheel),
                                     lvLineStart, lvLineEnd);
-            // The command's line arrays are Vector4 and GetTractionLine hands back Vector3; both
-            // are the same 16-byte four-lane register, but distinct C++ types here, so all four
-            // lanes are copied explicitly -- the console's lvx128/stvx128 pair moves the whole
-            // register and the w lane must travel with it.
-            lpCommand->maLineStart[liWheel].x = lvLineStart.x;
-            lpCommand->maLineStart[liWheel].y = lvLineStart.y;
-            lpCommand->maLineStart[liWheel].z = lvLineStart.z;
-            lpCommand->maLineStart[liWheel].w = lvLineStart.w;
-            lpCommand->maLineEnd[liWheel].x   = lvLineEnd.x;
-            lpCommand->maLineEnd[liWheel].y   = lvLineEnd.y;
-            lpCommand->maLineEnd[liWheel].z   = lvLineEnd.z;
-            lpCommand->maLineEnd[liWheel].w   = lvLineEnd.w;
+            // ARTIST 0x8261D580: both transfers retain the full VMX register.
+            lpCommand->maLineStart[liWheel] = lvLineStart.mV;
+            lpCommand->maLineEnd[liWheel] = lvLineEnd.mV;
         }
 
         // 5. the fifth line: the body-origin straight-down above-ground probe.
@@ -200,13 +191,14 @@ s32 PhysicalTrafficManager::AddTrafficTractionLineTests(
         //    carried through unchanged (the vrlimi128 mask-4 insert).
         const Matrix44Affine& lrBodyTransform = lpBody->GetTransform();
         const s32 liGroundLine = KI_TRAFFIC_LINES_PER_COMMAND - 1;   // == 4
-        lpCommand->maLineStart[liGroundLine].x = lrBodyTransform.wAxis.x;
-        lpCommand->maLineStart[liGroundLine].y = lrBodyTransform.wAxis.y;
-        lpCommand->maLineStart[liGroundLine].z = lrBodyTransform.wAxis.z;
-        lpCommand->maLineStart[liGroundLine].w = lrBodyTransform.wAxis.w;
-        lpCommand->maLineEnd[liGroundLine]     = lpCommand->maLineStart[liGroundLine];
-        lpCommand->maLineEnd[liGroundLine].y   =
-            lrBodyTransform.wAxis.y - KF_TRAFFIC_ABOVE_GROUND_PROBE_LENGTH;
+        const __vector4 lvGroundStart = lrBodyTransform.wAxis.mV;
+        const __vector4 lvGroundOffset = Vector4(KF_TRAFFIC_ABOVE_GROUND_PROBE_LENGTH,
+                                                  KF_TRAFFIC_ABOVE_GROUND_PROBE_LENGTH,
+                                                  KF_TRAFFIC_ABOVE_GROUND_PROBE_LENGTH,
+                                                  KF_TRAFFIC_ABOVE_GROUND_PROBE_LENGTH).mV;
+        lpCommand->maLineStart[liGroundLine] = lvGroundStart;
+        lpCommand->maLineEnd[liGroundLine] = __vrlimi(lvGroundStart,
+                                                      __vsubfp(lvGroundStart, lvGroundOffset), 4, 0);
 
         // 6. AS SHIPPED: traffic posts all FIVE of the command's line slots.
         lpCommand->miNumLines = KI_TRAFFIC_LINES_PER_COMMAND;
@@ -271,10 +263,8 @@ void PhysicalTrafficManager::ReadTrafficTractionLineTestResults(
 
             const f32* const lpfPosition = lpResult->mafHitPosition[liWheel];
             const f32* const lpfNormal   = lpResult->mafHitNormal[liWheel];
-            const Vector3 lvPosition = { lpfPosition[0], lpfPosition[1],
-                                         lpfPosition[2], lpfPosition[3] };
-            const Vector3 lvNormal   = { lpfNormal[0],   lpfNormal[1],
-                                         lpfNormal[2],   lpfNormal[3] };
+            const Vector3 lvPosition(__lvx(lpfPosition, 0));
+            const Vector3 lvNormal(__lvx(lpfNormal, 0));
 
             lpBody->AddTractionPoint(static_cast<EVehicleDrivenWheel>(liWheel),
                                      lvPosition, lvNormal,
@@ -286,10 +276,8 @@ void PhysicalTrafficManager::ReadTrafficTractionLineTestResults(
         {
             const f32* const lpfPosition = lpResult->mafHitPosition[liGroundLine];
             const f32* const lpfNormal   = lpResult->mafHitNormal[liGroundLine];
-            const Vector3 lvPosition = { lpfPosition[0], lpfPosition[1],
-                                         lpfPosition[2], lpfPosition[3] };
-            const Vector3 lvNormal   = { lpfNormal[0],   lpfNormal[1],
-                                         lpfNormal[2],   lpfNormal[3] };
+            const Vector3 lvPosition(__lvx(lpfPosition, 0));
+            const Vector3 lvNormal(__lvx(lpfNormal, 0));
 
             const u32 luTag = lpResult->mauSurfaceTag[liGroundLine];
             lpBody->SetAboveGroundTestResult(lvPosition, lvNormal,

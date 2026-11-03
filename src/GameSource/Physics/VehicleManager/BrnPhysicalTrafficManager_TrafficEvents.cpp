@@ -154,12 +154,6 @@ void PhysicalTrafficManager::ProcessSetTrafficCrashingEvents(
         CGS_ASSERT(luGlobalIndex < sizeof(mu8GlobalToPhysicalEntityIndexMap),
                    "lGlobalEntityId.GetEntityIndex() < sizeof(mu8GlobalToPhysicalEntityIndexMap)");  // h:944
 
-        // HOST DIVERGENCE, flagged: for an index >= 600 the console runs the map read anyway (an
-        // OOB read feeding the sentinel test); the host guards it. Same accepted divergence as
-        // ProcessAddAirRamEvent @0x8261DC08 in BrnPhysicalTrafficManager.cpp.
-        if (luGlobalIndex >= sizeof(mu8GlobalToPhysicalEntityIndexMap))
-            continue;
-
         const u8 lu8PhysicalIndex = mu8GlobalToPhysicalEntityIndexMap[luGlobalIndex];
         if (lu8PhysicalIndex == KU8_INVALID_MAP)
             continue;   // this global traffic entity owns no physical slot -- drop the event
@@ -226,10 +220,6 @@ void PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents(
         CGS_ASSERT(luGlobalIndex < sizeof(mu8GlobalToPhysicalEntityIndexMap),
                    "lGlobalEntityId.GetEntityIndex() < sizeof(mu8GlobalToPhysicalEntityIndexMap)");  // h:944
 
-        // HOST DIVERGENCE, flagged -- see the sibling drain above.
-        if (luGlobalIndex >= sizeof(mu8GlobalToPhysicalEntityIndexMap))
-            continue;
-
         const u8 lu8PhysicalIndex = mu8GlobalToPhysicalEntityIndexMap[luGlobalIndex];
         if (lu8PhysicalIndex == KU8_INVALID_MAP)
             continue;
@@ -240,9 +230,6 @@ void PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents(
         EntityId lPhysicsId;
         lPhysicsId.muValue =
             (static_cast<u32>(lu8PhysicalIndex) << 10) | (KU_ENTITYTYPE_TRAFFIC_VEHICLE << 24);
-
-        PhysicalTrafficVehicle* lpWitnessVehicle = 0;
-        Vector3 lvBefore = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         UpdateNetworkTrafficVehicle(&lrEvent, lPhysicsId);
 
@@ -333,11 +320,7 @@ void PhysicalTrafficManager::ClearSnappedNetworkTrafficContacts(
             lpDeformationManager->FindModelIndexByEntityID(GetPhysicsEntityId(liVehicle));   // 0x825F3948
         CGS_ASSERT(liModelIndex != -1, "liModelIndex != -1");                         // BrnDeformationManager.h:878
 
-        // HOST DIVERGENCE, flagged (the race-car twin in ClearSnappedNetworkCarContacts carries the
-        // same one): on the asserted miss the console indexes the model array at -1; on the host that
-        // is a wild pointer, so only the asserted-impossible miss is skipped.
-        if (liModelIndex != -1)
-            lpDeformationManager->GetDeformableObject(liModelIndex)->ClearStoredContacts();   // 0x825F3984
+        lpDeformationManager->GetDeformableObject(liModelIndex)->ClearStoredContacts();   // 0x825F3984
 
     }
 }
