@@ -53,11 +53,12 @@ namespace BrnGui
         CgsGraphics::Basic2dColouredTexturedVertex laVertices[4] = {};
         const f32 lafUv[4][2] = { { 0.0f, 0.0f }, { 0.0f, 1.0f },
                                  { 1.0f, 0.0f }, { 1.0f, 1.0f } };
+        const CgsGraphics::RGBA8 lBlackColour = { 0, 0, 0, 255 };
         for (u32 luVertex = 0; luVertex < 4; ++luVertex)
         {
             laVertices[luVertex].mv2Pos.x = lafUv[luVertex][0];
             laVertices[luVertex].mv2Pos.y = lafUv[luVertex][1] * mfBarHeight;
-            laVertices[luVertex].mv4Colour = CgsGraphics::RGBA8{ 0, 0, 0, 255 };
+            laVertices[luVertex].mv4Colour = lBlackColour;
             laVertices[luVertex].mv2Tex0UV.x = lafUv[luVertex][0];
             laVertices[luVertex].mv2Tex0UV.y = lafUv[luVertex][1];
         }

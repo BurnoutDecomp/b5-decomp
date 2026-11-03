@@ -30,7 +30,6 @@
 // ============================================================================
 
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"
-#include <cstdlib>   // getenv ([cnav-diag])
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 #include "GameSource/Gui/BrnGuiCache.h"                          // BrnGui::GuiCache (resource pump + GetTime)
@@ -309,21 +308,12 @@ void CrashNavIconRenderer::Construct()
     //   +0x30 colour scale (1, 1, 1, 1)
     const f32 KF_SCREEN_TO_NDC_X =  0.0015625f;     // flt_8203A474 == 1/640
     const f32 KF_SCREEN_TO_NDC_Y = -0.0027777778f;  // flt_8203A478 == -1/360
-    mTextTransform.mOriginXYZ.x = -1.0f;
-    mTextTransform.mOriginXYZ.y =  1.0f;
-    mTextTransform.mOriginXYZ.z =  0.0f;
-    mTextTransform.mOriginXYZ.w =  0.0f;
+    mTextTransform.mOriginXYZ.Set(-1.0f, 1.0f, 0.0f, 0.0f);
     // 82463810/1C vperm masks CDA350/CDA3C0 then82463828 vsldoi8:
     // {right.x,right.y,up.x,up.y} = {1/640,0,0,-1/360}.
-    mTextTransform.mRightUp.x   = KF_SCREEN_TO_NDC_X;
-    mTextTransform.mRightUp.y   = 0.0f;
-    mTextTransform.mRightUp.z   = 0.0f;
-    mTextTransform.mRightUp.w   = KF_SCREEN_TO_NDC_Y;
+    mTextTransform.mRightUp.Set(KF_SCREEN_TO_NDC_X, 0.0f, 0.0f, KF_SCREEN_TO_NDC_Y);
     mTextTransform.mColourShift.SetZero();
-    mTextTransform.mColourScale.x = 1.0f;
-    mTextTransform.mColourScale.y = 1.0f;
-    mTextTransform.mColourScale.z = 1.0f;
-    mTextTransform.mColourScale.w = 1.0f;
+    mTextTransform.mColourScale.Set(1.0f, 1.0f, 1.0f, 1.0f);
     mTextTransform.TransformByAspectRatio();
 }
 
@@ -704,8 +694,6 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
         break;
     }
 
-    // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] which map records reach this renderer.
-    // BRN_SATNAV_DIAG only; first 3 arrivals per id.
     case KI_EVENT_RENDER_MAIN_MAP:
         // The console memcpy's 48 bytes into +0x60. On this host the record is
         // native-width (it carries a pointer), so a literal 48-byte copy would truncate it
@@ -986,8 +974,7 @@ namespace
     // flt_82FB3898.. -- its atlas rect (the one rect the earlier pass could already name).
     const f32 KF_SIGN_POLE_HALFWIDTH  = 24.0f;   // flt_82FB39A0 (guard bit 0x20)
     const f32 KF_SIGN_POLE_HALFHEIGHT = 50.0f;   // flt_82FB39A4
-    const Vector4 KV4_SIGN_POLE_UV =
-        { 0.30078125f, 0.65625f, 0.39453125f, 0.87109375f };   // flt_82FB3898 (guard 0x200000)
+    const Vector4 KV4_SIGN_POLE_UV( 0.30078125f, 0.65625f, 0.39453125f, 0.87109375f );   // flt_82FB3898 (guard 0x200000)
 
     // The plate half-extents, one pair per RoadSign::ESignSize, from the four guarded init
     // arms (bits 0x10 / 0x8 / 0x4 / 0x2 in dword_82FB39D0, in SMALL..LARGE order):
@@ -1010,28 +997,28 @@ namespace
     const Vector4 KAV4_SIGN_PLATE_UV[RoadSign::E_SIGNSIZE_COUNT][4] =
     {
         {   // E_SIGNSIZE_SMALL  (jpt_82464D20)
-            { 0.7109375f,  0.21875f,   0.9375f,     0.3203125f  },  // flt_82FB3888
-            { 0.4765625f,  0.21875f,   0.703125f,   0.3203125f  },  // flt_82FB38D8
-            { 0.67578125f, 0.328125f,  0.90234375f, 0.4296875f  },  // flt_82FB3848
-            { 0.0f,        0.875f,     0.2265625f,  0.9765625f  },  // flt_82FB3918
+            Vector4(0.7109375f,  0.21875f,   0.9375f,     0.3203125f),  // flt_82FB3888
+            Vector4(0.4765625f,  0.21875f,   0.703125f,   0.3203125f),  // flt_82FB38D8
+            Vector4(0.67578125f, 0.328125f,  0.90234375f, 0.4296875f),  // flt_82FB3848
+            Vector4(0.0f,        0.875f,     0.2265625f,  0.9765625f),  // flt_82FB3918
         },
         {   // E_SIGNSIZE_MID_1  (jpt_82464AC8)
-            { 0.0f,        0.65625f,   0.29296875f, 0.7578125f  },  // flt_82FB38B8
-            { 0.35546875f, 0.53515625f,0.6484375f,  0.63671875f },  // flt_82FB38F8
-            { 0.0f,        0.765625f,  0.29296875f, 0.8671875f  },  // flt_82FB3868
-            { 0.35546875f, 0.42578125f,0.6484375f,  0.52734375f },  // flt_82FB3938
+            Vector4(0.0f,        0.65625f,   0.29296875f, 0.7578125f),  // flt_82FB38B8
+            Vector4(0.35546875f, 0.53515625f,0.6484375f,  0.63671875f),  // flt_82FB38F8
+            Vector4(0.0f,        0.765625f,  0.29296875f, 0.8671875f),  // flt_82FB3868
+            Vector4(0.35546875f, 0.42578125f,0.6484375f,  0.52734375f),  // flt_82FB3938
         },
         {   // E_SIGNSIZE_MID_2  (jpt_82464BF4)
-            { 0.0f,        0.4375f,    0.34765625f, 0.5390625f  },  // flt_82FB38A8
-            { 0.0f,        0.328125f,  0.34765625f, 0.4296875f  },  // flt_82FB38E8
-            { 0.0f,        0.546875f,  0.34765625f, 0.6484375f  },  // flt_82FB3858
-            { 0.4765625f,  0.109375f,  0.82421875f, 0.2109375f  },  // flt_82FB3928
+            Vector4(0.0f,        0.4375f,    0.34765625f, 0.5390625f),  // flt_82FB38A8
+            Vector4(0.0f,        0.328125f,  0.34765625f, 0.4296875f),  // flt_82FB38E8
+            Vector4(0.0f,        0.546875f,  0.34765625f, 0.6484375f),  // flt_82FB3858
+            Vector4(0.4765625f,  0.109375f,  0.82421875f, 0.2109375f),  // flt_82FB3928
         },
         {   // E_SIGNSIZE_LARGE  (jpt_8246499C)
-            { 0.4765625f,  0.0f,       0.9453125f,  0.1015625f  },  // flt_82FB38C8
-            { 0.0f,        0.109375f,  0.46875f,    0.2109375f  },  // flt_82FB3908
-            { 0.0f,        0.21875f,   0.46875f,    0.3203125f  },  // flt_82FB3878
-            { 0.0f,        0.0f,       0.46875f,    0.1015625f  },  // flt_82FB3948
+            Vector4(0.4765625f,  0.0f,       0.9453125f,  0.1015625f),  // flt_82FB38C8
+            Vector4(0.0f,        0.109375f,  0.46875f,    0.2109375f),  // flt_82FB3908
+            Vector4(0.0f,        0.21875f,   0.46875f,    0.3203125f),  // flt_82FB3878
+            Vector4(0.0f,        0.0f,       0.46875f,    0.1015625f),  // flt_82FB3948
         },
     };
     // FLAG (recovered but unreferenced): the eighteenth guarded rect, flt_82FB3838 (guard bit
@@ -1046,10 +1033,10 @@ namespace
     // to mTextObject.mTextColour after a [0,1] clamp.
     const Vector4 KAV4_SIGN_TEXT_COLOUR[4] =
     {
-        { 0.90196079f, 0.90196079f, 0.90196079f, 1.0f },   // unk_82FB3990
-        { 0.90196079f, 0.90196079f, 0.90196079f, 1.0f },   // unk_82FB3980
-        { 0.0f,        0.0f,        0.0f,        1.0f },   // unk_82FB3970
-        { 0.0f,        0.0f,        0.0f,        1.0f },   // unk_82FB3960
+        Vector4(0.90196079f, 0.90196079f, 0.90196079f, 1.0f),   // unk_82FB3990
+        Vector4(0.90196079f, 0.90196079f, 0.90196079f, 1.0f),   // unk_82FB3980
+        Vector4(0.0f,        0.0f,        0.0f,        1.0f),   // unk_82FB3970
+        Vector4(0.0f,        0.0f,        0.0f,        1.0f),   // unk_82FB3960
     };
 
     // The two loose .rdata text constants the earlier banner also listed as missing.
@@ -1061,10 +1048,7 @@ namespace
     // out), and the copy is spelled out rather than cast so every lane travels.
     inline void CopyPositionLane(Vector3& lrv3Out, const Vector4& lrv4Lane)
     {
-        lrv3Out.x = lrv4Lane.x;
-        lrv3Out.y = lrv4Lane.y;
-        lrv3Out.z = lrv4Lane.z;
-        lrv3Out.w = lrv4Lane.w;
+        lrv3Out.SetVector(lrv4Lane.GetVector());
     }
 
     // -----------------------------------------------------------------------
@@ -1154,10 +1138,10 @@ namespace
     CgsGraphics::RGBA8 PackVertexColour(const Vector4& lrv4Colour)
     {
         CgsGraphics::RGBA8 lColour;
-        lColour.r = ColourLaneToByte(lrv4Colour.x);
-        lColour.g = ColourLaneToByte(lrv4Colour.y);
-        lColour.b = ColourLaneToByte(lrv4Colour.z);
-        lColour.a = ColourLaneToByte(lrv4Colour.w);
+        lColour.r = ColourLaneToByte(lrv4Colour.GetX().GetFloat());
+        lColour.g = ColourLaneToByte(lrv4Colour.GetY().GetFloat());
+        lColour.b = ColourLaneToByte(lrv4Colour.GetZ().GetFloat());
+        lColour.a = ColourLaneToByte(lrv4Colour.GetW().GetFloat());
         return lColour;
     }
 
@@ -1184,9 +1168,7 @@ namespace
 
     Vector4 MakeV4(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
     {
-        Vector4 lv4;
-        lv4.x = lfX; lv4.y = lfY; lv4.z = lfZ; lv4.w = lfW;
-        return lv4;
+        return Vector4(lfX, lfY, lfZ, lfW);
     }
 
     // The console's opaque-white quad colour: `vspltisw v0,1` + `vcfsx`/`vcsxwfp128`,
@@ -1216,17 +1198,17 @@ namespace
     // The PLAYER_* row (states 1..13) and the RIVAL_* row (states 14..25) share the same
     // eleven colours; states 1/2/3 and 14/15/16 collapse onto their row's first entry the
     // way the console's `default:` arm does.
-    const Vector4 KAV4_ICON_COLOUR_YELLOW = { 1.0f,        0.95294118f, 0.023529412f, 1.0f }; // unk_82FB3A90
-    const Vector4 KAV4_ICON_COLOUR_RED    = { 0.91764706f, 0.082352944f,0.19607843f,  1.0f }; // unk_82FB3A80
-    const Vector4 KAV4_ICON_COLOUR_BLUE   = { 0.18431373f, 0.38431373f, 0.66274512f,  1.0f }; // unk_82FB3A70
-    const Vector4 KAV4_ICON_COLOUR_PINK   = { 0.79215688f, 0.50980395f, 0.73333335f,  1.0f }; // unk_82FB3A60
-    const Vector4 KAV4_ICON_COLOUR_GREEN  = { 0.3137255f,  0.72156864f, 0.24313726f,  1.0f }; // unk_82FB3A50
-    const Vector4 KAV4_ICON_COLOUR_ORANGE = { 0.82745099f, 0.3764706f,  0.14901961f,  1.0f }; // unk_82FB3A40
-    const Vector4 KAV4_ICON_COLOUR_PURPLE = { 0.43137255f, 0.18039216f, 0.78823531f,  1.0f }; // unk_82FB3A30
-    const Vector4 KAV4_ICON_COLOUR_CYAN   = { 0.10588235f, 0.97647059f, 0.88627452f,  1.0f }; // unk_82FB3A20
-    const Vector4 KAV4_ICON_COLOUR_WHITE  = { 1.0f,        1.0f,        1.0f,         1.0f }; // unk_82FB3A10
-    const Vector4 KAV4_ICON_COLOUR_GRAY   = { 0.58823532f, 0.58823532f, 0.58823532f,  1.0f }; // unk_82FB3A00
-    const Vector4 KAV4_ICON_COLOUR_BLACK  = { 0.0f,        0.0f,        0.0f,         1.0f }; // unk_82FB39F0
+    const Vector4 KAV4_ICON_COLOUR_YELLOW( 1.0f,        0.95294118f, 0.023529412f, 1.0f ); // unk_82FB3A90
+    const Vector4 KAV4_ICON_COLOUR_RED( 0.91764706f, 0.082352944f,0.19607843f,  1.0f ); // unk_82FB3A80
+    const Vector4 KAV4_ICON_COLOUR_BLUE( 0.18431373f, 0.38431373f, 0.66274512f,  1.0f ); // unk_82FB3A70
+    const Vector4 KAV4_ICON_COLOUR_PINK( 0.79215688f, 0.50980395f, 0.73333335f,  1.0f ); // unk_82FB3A60
+    const Vector4 KAV4_ICON_COLOUR_GREEN( 0.3137255f,  0.72156864f, 0.24313726f,  1.0f ); // unk_82FB3A50
+    const Vector4 KAV4_ICON_COLOUR_ORANGE( 0.82745099f, 0.3764706f,  0.14901961f,  1.0f ); // unk_82FB3A40
+    const Vector4 KAV4_ICON_COLOUR_PURPLE( 0.43137255f, 0.18039216f, 0.78823531f,  1.0f ); // unk_82FB3A30
+    const Vector4 KAV4_ICON_COLOUR_CYAN( 0.10588235f, 0.97647059f, 0.88627452f,  1.0f ); // unk_82FB3A20
+    const Vector4 KAV4_ICON_COLOUR_WHITE( 1.0f,        1.0f,        1.0f,         1.0f ); // unk_82FB3A10
+    const Vector4 KAV4_ICON_COLOUR_GRAY( 0.58823532f, 0.58823532f, 0.58823532f,  1.0f ); // unk_82FB3A00
+    const Vector4 KAV4_ICON_COLOUR_BLACK( 0.0f,        0.0f,        0.0f,         1.0f ); // unk_82FB39F0
 
     // Returns the icon colour and reports whether the state is a LOCAL-PLAYER one (the
     // console's `v43`, raised on exactly states 1..13 -- the flag that adds the pulsing
@@ -1264,14 +1246,14 @@ namespace
 
     // RenderDriveThrough's per-state atlas rect (guarded statics flt_82FB37EC..flt_82FB3828
     // behind dword_82FB3834). All four are RECOVERED image values.
-    const Vector4 KAV4_DRIVETHROUGH_UV_JUNKYARD   = { 0.59375f,  0.26171875f, 0.890625f, 0.625f };      // flt_82FB37FC
-    const Vector4 KAV4_DRIVETHROUGH_UV_BODYSHOP   = { 0.296875f, 0.625f,      0.59375f,  0.98828125f }; // flt_82FB381C
-    const Vector4 KAV4_DRIVETHROUGH_UV_GASSTATION = { 0.59375f,  0.625f,      0.890625f, 0.98828125f }; // flt_82FB380C
-    const Vector4 KAV4_DRIVETHROUGH_UV_PAINTSHOP  = { 0.0f,      0.625f,      0.296875f, 0.98828125f }; // flt_82FB37EC
+    const Vector4 KAV4_DRIVETHROUGH_UV_JUNKYARD( 0.59375f,  0.26171875f, 0.890625f, 0.625f );      // flt_82FB37FC
+    const Vector4 KAV4_DRIVETHROUGH_UV_BODYSHOP( 0.296875f, 0.625f,      0.59375f,  0.98828125f ); // flt_82FB381C
+    const Vector4 KAV4_DRIVETHROUGH_UV_GASSTATION( 0.59375f,  0.625f,      0.890625f, 0.98828125f ); // flt_82FB380C
+    const Vector4 KAV4_DRIVETHROUGH_UV_PAINTSHOP( 0.0f,      0.625f,      0.296875f, 0.98828125f ); // flt_82FB37EC
 
     // RenderStartFinish's two atlas rects (flt at sp; literals in the body).
-    const Vector4 KAV4_STARTFINISH_UV_START  = { 0.25f, 0.5f, 0.5f,  0.75f };   // IconState 51
-    const Vector4 KAV4_STARTFINISH_UV_FINISH = { 0.5f,  0.5f, 0.75f, 0.75f };   // IconState 52
+    const Vector4 KAV4_STARTFINISH_UV_START( 0.25f, 0.5f, 0.5f,  0.75f );   // IconState 51
+    const Vector4 KAV4_STARTFINISH_UV_FINISH( 0.5f,  0.5f, 0.75f, 0.75f );   // IconState 52
 
     // The drive-through icon's static screen nudge: flt_82FB37E4 == KF_DRIVETHROUGH_HALFWIDTH
     // * -0.5, flt_82FB37E8 == 0 (the guarded init arm computes the first from the .rdata
@@ -1296,13 +1278,13 @@ void CrashNavIconRenderer::RotatateRect(Vector4 lv4Rect, f32 lfRotationInRadians
     const f32 lfCos = static_cast<f32>(std::cos(static_cast<double>(lfRotationInRadians)));
     const f32 lfSin = static_cast<f32>(std::sin(static_cast<double>(lfRotationInRadians)));
 
-    const f32 lfCentreX = lv4Rect.x + (lv4Rect.z - lv4Rect.x) * 0.5f;
-    const f32 lfCentreY = lv4Rect.y + (lv4Rect.w - lv4Rect.y) * 0.5f;
+    const f32 lfCentreX = lv4Rect.GetX().GetFloat() + (lv4Rect.GetZ().GetFloat() - lv4Rect.GetX().GetFloat()) * 0.5f;
+    const f32 lfCentreY = lv4Rect.GetY().GetFloat() + (lv4Rect.GetW().GetFloat() - lv4Rect.GetY().GetFloat()) * 0.5f;
 
-    const f32 lfLeft   = lv4Rect.x - lfCentreX;
-    const f32 lfRight  = lv4Rect.z - lfCentreX;
-    const f32 lfTop    = lv4Rect.y - lfCentreY;
-    const f32 lfBottom = lv4Rect.w - lfCentreY;
+    const f32 lfLeft   = lv4Rect.GetX().GetFloat() - lfCentreX;
+    const f32 lfRight  = lv4Rect.GetZ().GetFloat() - lfCentreX;
+    const f32 lfTop    = lv4Rect.GetY().GetFloat() - lfCentreY;
+    const f32 lfBottom = lv4Rect.GetW().GetFloat() - lfCentreY;
 
     // x' = centre.x + (x * cos - y * sin), y' = centre.y + (x * sin + y * cos)
     lrv2TopLeft.x     = lfCentreX + (lfLeft  * lfCos - lfTop    * lfSin);
@@ -1342,19 +1324,19 @@ void CrashNavIconRenderer::RenderQuad(Im2dCommandBuffer* lpRenderBuffer,
 
     laVertices[0].mv2Pos    = lrv2TopLeft;
     laVertices[0].mv4Colour = lColour;
-    laVertices[0].mv2Tex0UV = MakeV2(lrv4UvRect.x, lrv4UvRect.y);
+    laVertices[0].mv2Tex0UV = MakeV2(lrv4UvRect.GetX().GetFloat(), lrv4UvRect.GetY().GetFloat());
 
     laVertices[1].mv2Pos    = lrv2BottomLeft;
     laVertices[1].mv4Colour = lColour;
-    laVertices[1].mv2Tex0UV = MakeV2(lrv4UvRect.x, lrv4UvRect.w);
+    laVertices[1].mv2Tex0UV = MakeV2(lrv4UvRect.GetX().GetFloat(), lrv4UvRect.GetW().GetFloat());
 
     laVertices[2].mv2Pos    = lrv2TopRight;
     laVertices[2].mv4Colour = lColour;
-    laVertices[2].mv2Tex0UV = MakeV2(lrv4UvRect.z, lrv4UvRect.y);
+    laVertices[2].mv2Tex0UV = MakeV2(lrv4UvRect.GetZ().GetFloat(), lrv4UvRect.GetY().GetFloat());
 
     laVertices[3].mv2Pos    = lrv2BottomRight;
     laVertices[3].mv4Colour = lColour;
-    laVertices[3].mv2Tex0UV = MakeV2(lrv4UvRect.z, lrv4UvRect.w);
+    laVertices[3].mv2Tex0UV = MakeV2(lrv4UvRect.GetZ().GetFloat(), lrv4UvRect.GetW().GetFloat());
 
     lpRenderBuffer->SetState(lpTextureState);   // X360 Basic2dColouredTexturedVertex_::SetState
     lpRenderBuffer->SetState(lpBlendState);     // X360 sub_82458EC0
@@ -1707,8 +1689,8 @@ void CrashNavIconRenderer::RenderCursor(Im2dCommandBuffer* lpRenderBuffer)
     if (mGuiEventMapCursorStatus.miAnimationState == 4)
         return;
 
-    const f32 lfPosX = mGuiEventMapCursorStatus.mv2Position.x;   // device pixels
-    const f32 lfPosY = mGuiEventMapCursorStatus.mv2Position.y;
+    const f32 lfPosX = mGuiEventMapCursorStatus.mv2Position.mV.v[0];   // device pixels
+    const f32 lfPosY = mGuiEventMapCursorStatus.mv2Position.mV.v[1];
 
     f32 lfHalfWidth;
     f32 lfHalfHeight;
@@ -1858,8 +1840,8 @@ void CrashNavIconRenderer::RenderDriveThrough(Im2dCommandBuffer* lpRenderBuffer,
 
     // flt_82FB37E4 == KF_DRIVETHROUGH_HALFWIDTH * -0.5, flt_82FB37E8 == 0.
     const Vector2 lv2Position = lrIcon.GetPosition();   // device pixels
-    f32 lfCentreX = lv2Position.x * KF_DEVICE_TO_NORMALISED_X + (KF_DRIVETHROUGH_HALFWIDTH * -0.5f);
-    f32 lfCentreY = lv2Position.y * KF_DEVICE_TO_NORMALISED_Y + KF_DRIVETHROUGH_OFFSET_Y;
+    f32 lfCentreX = lv2Position.mV.v[0] * KF_DEVICE_TO_NORMALISED_X + (KF_DRIVETHROUGH_HALFWIDTH * -0.5f);
+    f32 lfCentreY = lv2Position.mV.v[1] * KF_DEVICE_TO_NORMALISED_Y + KF_DRIVETHROUGH_OFFSET_Y;
 
     f32 lfHalfWidth;
     f32 lfHalfHeight;
@@ -1998,13 +1980,13 @@ void CrashNavIconRenderer::RenderStartFinish(Im2dCommandBuffer* lpRenderBuffer)
 
         const Vector2 lv2Position = lrIcon.GetPosition();   // device pixels
 
-        const f32 lfLeft = (lv2Position.x - KF_STARTFINISH_HALFWIDTH + KF_STARTFINISH_OFFSET_X) *
+        const f32 lfLeft = (lv2Position.mV.v[0] - KF_STARTFINISH_HALFWIDTH + KF_STARTFINISH_OFFSET_X) *
                            KF_DEVICE_TO_NORMALISED_X;
-        const f32 lfRight = (lv2Position.x + KF_STARTFINISH_HALFWIDTH + KF_STARTFINISH_OFFSET_X) *
+        const f32 lfRight = (lv2Position.mV.v[0] + KF_STARTFINISH_HALFWIDTH + KF_STARTFINISH_OFFSET_X) *
                             KF_DEVICE_TO_NORMALISED_X;
-        const f32 lfTop = (lv2Position.y - KF_STARTFINISH_HALFHEIGHT + KF_STARTFINISH_OFFSET_Y) *
+        const f32 lfTop = (lv2Position.mV.v[1] - KF_STARTFINISH_HALFHEIGHT + KF_STARTFINISH_OFFSET_Y) *
                           KF_DEVICE_TO_NORMALISED_Y;
-        const f32 lfBottom = (lv2Position.y + KF_STARTFINISH_HALFHEIGHT + KF_STARTFINISH_OFFSET_Y) *
+        const f32 lfBottom = (lv2Position.mV.v[1] + KF_STARTFINISH_HALFHEIGHT + KF_STARTFINISH_OFFSET_Y) *
                              KF_DEVICE_TO_NORMALISED_Y;
 
         RenderQuad(lpRenderBuffer,
@@ -2083,15 +2065,15 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
         }
 
         const Vector2 lv2Position = lrIcon.GetPosition();   // device pixels
-        const f32 lfLeft   = lv2Position.x - KF_RIVAL_HALFWIDTH;
-        const f32 lfRight  = lv2Position.x + KF_RIVAL_HALFWIDTH;
-        const f32 lfTop    = lv2Position.y - KF_RIVAL_HALFHEIGHT;
-        const f32 lfBottom = lv2Position.y + KF_RIVAL_HALFHEIGHT;
+        const f32 lfLeft   = lv2Position.mV.v[0] - KF_RIVAL_HALFWIDTH;
+        const f32 lfRight  = lv2Position.mV.v[0] + KF_RIVAL_HALFWIDTH;
+        const f32 lfTop    = lv2Position.mV.v[1] - KF_RIVAL_HALFHEIGHT;
+        const f32 lfBottom = lv2Position.mV.v[1] + KF_RIVAL_HALFHEIGHT;
 
         // The icon's own colour takes its ALPHA from the icon's fade (icon alpha is
         // authored 0..100; the console scales by 0.01).
         Vector4 lv4MainColour = lv4IconColour;
-        lv4MainColour.w = lrIcon.GetAlpha() * 0.0099999998f;
+        lv4MainColour.SetW(lrIcon.GetAlpha() * 0.0099999998f);
 
         CgsGraphics::Vector2 lv2TL;
         CgsGraphics::Vector2 lv2BL;
@@ -2118,15 +2100,15 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
 
             // ...and fades out as it does (alpha = 2 - scale).
             Vector4 lv4HaloColour = lv4IconColour;
-            lv4HaloColour.w = 2.0f - mfPlayerIconPulseScale;
+            lv4HaloColour.SetW(2.0f - mfPlayerIconPulseScale);
 
             const f32 lfHaloHalfWidth  = mfPlayerIconPulseScale * KF_RIVAL_HALFWIDTH;
             const f32 lfHaloHalfHeight = mfPlayerIconPulseScale * KF_RIVAL_HALFHEIGHT;
 
-            RotatateRect(MakeV4(lv2Position.x - lfHaloHalfWidth,
-                                lv2Position.y - lfHaloHalfHeight,
-                                lv2Position.x + lfHaloHalfWidth,
-                                lv2Position.y + lfHaloHalfHeight),
+            RotatateRect(MakeV4(lv2Position.mV.v[0] - lfHaloHalfWidth,
+                                lv2Position.mV.v[1] - lfHaloHalfHeight,
+                                lv2Position.mV.v[0] + lfHaloHalfWidth,
+                                lv2Position.mV.v[1] + lfHaloHalfHeight),
                          lrIcon.GetRotation(), lv2TL, lv2BL, lv2TR, lv2BR);
 
             lv2TL.x *= KF_DEVICE_TO_NORMALISED_X;  lv2TL.y *= KF_DEVICE_TO_NORMALISED_Y;
@@ -2245,29 +2227,26 @@ void CrashNavIconRenderer::RenderEventIcon(Im2dCommandBuffer* lpRenderBuffer,
     // MakeCoordSpaceFromRect(mv4ViewRect) inline as two VMX 3x3s and hands both to
     // Transform(point, from, to) == inverse(from) o to. The (x, z) flatten is the
     // unk_82CDA450 vperm lane pick -- the same one BrnSatNavRenderer.cpp documents.
-    Vector2 lv2Flat;
-    lv2Flat.x = lv3Position.x;
-    lv2Flat.y = lv3Position.z;
-    lv2Flat.z = 0.0f;
-    lv2Flat.w = 0.0f;
+    const Vector2 lv2Flat(lv3Position.GetX().GetFloat(),
+                          lv3Position.GetZ().GetFloat());
 
     const Vector2 lv2Screen = MapTransform::Transform(
         lv2Flat,
         MapTransform::MakeCoordSpaceFromRect(mRenderMainMapEvent.mv4MapRect),
         MapTransform::MakeCoordSpaceFromRect(mRenderMainMapEvent.mv4ViewRect));
 
-    const f32 lfLeft   = lv2Screen.x - lfHalfWidth;
-    const f32 lfRight  = lv2Screen.x + lfHalfWidth;
-    const f32 lfTop    = lv2Screen.y - lfHalfHeight;
-    const f32 lfBottom = lv2Screen.y + lfHalfHeight;
+    const f32 lfLeft   = lv2Screen.mV.v[0] - lfHalfWidth;
+    const f32 lfRight  = lv2Screen.mV.v[0] + lfHalfWidth;
+    const f32 lfTop    = lv2Screen.mV.v[1] - lfHalfHeight;
+    const f32 lfBottom = lv2Screen.mV.v[1] + lfHalfHeight;
 
     // ---- the four-way overlap test against the view rect ------------------------------
     // (@0x8245D5xx: four vcmpgtfp. against lanes 0..3 of mv4ViewRect, chained; the whole
     // chain is guarded on top by `!lbFiltered`.)
-    if (!(lfRight > mRenderMainMapEvent.mv4ViewRect.x)) return;
-    if (!(mRenderMainMapEvent.mv4ViewRect.z > lfLeft))  return;
-    if (!(lfBottom > mRenderMainMapEvent.mv4ViewRect.y)) return;
-    if (!(mRenderMainMapEvent.mv4ViewRect.w > lfTop))    return;
+    if (!(lfRight > mRenderMainMapEvent.mv4ViewRect.GetX().GetFloat())) return;
+    if (!(mRenderMainMapEvent.mv4ViewRect.GetZ().GetFloat() > lfLeft))  return;
+    if (!(lfBottom > mRenderMainMapEvent.mv4ViewRect.GetY().GetFloat())) return;
+    if (!(mRenderMainMapEvent.mv4ViewRect.GetW().GetFloat() > lfTop))    return;
     if (lbFiltered) return;
 
     // ---- the atlas cell ---------------------------------------------------------------
@@ -2317,8 +2296,8 @@ void CrashNavIconRenderer::RenderEventIcon(Im2dCommandBuffer* lpRenderBuffer,
         lv2Screen, MapTransform::GetNormalisedSpace(), MapTransform::GetDeviceSpace());
 
     lpaIcon2D[*lpiIconCount].muEventID       = luEventId;
-    lpaIcon2D[*lpiIconCount].mfEventIconPosX = lv2Device.x;
-    lpaIcon2D[*lpiIconCount].mfEventIconPosY = lv2Device.y;
+    lpaIcon2D[*lpiIconCount].mfEventIconPosX = lv2Device.mV.v[0];
+    lpaIcon2D[*lpiIconCount].mfEventIconPosY = lv2Device.mV.v[1];
     ++(*lpiIconCount);
 }
 
@@ -2692,19 +2671,16 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
 
     // The icon's 2D world lane unflattened to {x, 0, z}, as Update and
     // GetRoadSignIconPositions do, then WorldToDevice(v, false).
-    Vector3 lv3World;
-    lv3World.x = lrIcon.mv4WorldPosition.x;
-    lv3World.y = 0.0f;
-    lv3World.z = lrIcon.mv4WorldPosition.y;
-    lv3World.w = 0.0f;
+    const Vector3 lv3World(lrIcon.mv4WorldPosition.GetX().GetFloat(), 0.0f,
+                           lrIcon.mv4WorldPosition.GetY().GetFloat());
     const Vector2 lv2Device = MapTransform::WorldToDevice(lv3World, false);
 
     // ---- the POLE quad -----------------------------------------------------------------
     {
-        const f32 lfLeft   = lv2Device.x + lfScale * (lrSign.mvPoleOffset.x - KF_SIGN_POLE_HALFWIDTH);
-        const f32 lfRight  = lv2Device.x + lfScale * (lrSign.mvPoleOffset.x + KF_SIGN_POLE_HALFWIDTH);
-        const f32 lfTop    = lv2Device.y + lfScale * (lrSign.mvPoleOffset.y - KF_SIGN_POLE_HALFHEIGHT);
-        const f32 lfBottom = lv2Device.y + lfScale * (lrSign.mvPoleOffset.y + KF_SIGN_POLE_HALFHEIGHT);
+        const f32 lfLeft   = lv2Device.mV.v[0] + lfScale * (lrSign.mvPoleOffset.x - KF_SIGN_POLE_HALFWIDTH);
+        const f32 lfRight  = lv2Device.mV.v[0] + lfScale * (lrSign.mvPoleOffset.x + KF_SIGN_POLE_HALFWIDTH);
+        const f32 lfTop    = lv2Device.mV.v[1] + lfScale * (lrSign.mvPoleOffset.y - KF_SIGN_POLE_HALFHEIGHT);
+        const f32 lfBottom = lv2Device.mV.v[1] + lfScale * (lrSign.mvPoleOffset.y + KF_SIGN_POLE_HALFHEIGHT);
 
         RenderQuad(lpRenderBuffer,
                    MakeV2(lfLeft  * KF_DEVICE_TO_NORMALISED_X, lfTop    * KF_DEVICE_TO_NORMALISED_Y),
@@ -2735,10 +2711,10 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     const Vector4& lrv4PlateUv = KAV4_SIGN_PLATE_UV[liSignSize][liSignColour];
     const Vector4& lrv4SignColour = KAV4_SIGN_TEXT_COLOUR[liSignColour];
 
-    const f32 lfPlateLeft   = lv2Device.x + lfScale * (lrSign.mvSignOffset.x - lrv2HalfExtents.x);
-    const f32 lfPlateRight  = lv2Device.x + lfScale * (lrSign.mvSignOffset.x + lrv2HalfExtents.x);
-    const f32 lfPlateTop    = lv2Device.y + lfScale * (lrSign.mvSignOffset.y - lrv2HalfExtents.y);
-    const f32 lfPlateBottom = lv2Device.y + lfScale * (lrSign.mvSignOffset.y + lrv2HalfExtents.y);
+    const f32 lfPlateLeft   = lv2Device.mV.v[0] + lfScale * (lrSign.mvSignOffset.x - lrv2HalfExtents.x);
+    const f32 lfPlateRight  = lv2Device.mV.v[0] + lfScale * (lrSign.mvSignOffset.x + lrv2HalfExtents.x);
+    const f32 lfPlateTop    = lv2Device.mV.v[1] + lfScale * (lrSign.mvSignOffset.y - lrv2HalfExtents.y);
+    const f32 lfPlateBottom = lv2Device.mV.v[1] + lfScale * (lrSign.mvSignOffset.y + lrv2HalfExtents.y);
 
     RenderQuad(lpRenderBuffer,
                MakeV2(lfPlateLeft  * KF_DEVICE_TO_NORMALISED_X, lfPlateTop    * KF_DEVICE_TO_NORMALISED_Y),
@@ -2760,8 +2736,8 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
         (static_cast<u32>(lTextRgba.b) << 16) |
         (static_cast<u32>(lTextRgba.g) << 8) | lTextRgba.r;
 
-    const f32 lfTextAnchorX = lv2Device.x + lfScale * lrSign.mvTextOffset.x;
-    const f32 lfTextAnchorY = lv2Device.y + lfScale * lrSign.mvTextOffset.y;
+    const f32 lfTextAnchorX = lv2Device.mV.v[0] + lfScale * lrSign.mvTextOffset.x;
+    const f32 lfTextAnchorY = lv2Device.mV.v[1] + lfScale * lrSign.mvTextOffset.y;
 
     // Line 0 -- RIGHT-aligned inside the authored text box, which is offset by the record's
     // first individual-text offset and sized by mavTextBoxBounds[0].
@@ -2790,7 +2766,8 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     if (mTextObject.mbAutosize)
         mTextObject.CalculateAutosizing();
 
-    mpTextRenderer->RenderStringBuffered(lpRenderBuffer, mTextObject);
+    mpTextRenderer->RenderString(
+        static_cast<CgsGui::AptIm2dRenderBuffer*>(lpRenderBuffer), mTextObject);
 
     // Line 1 -- LEFT-aligned at a bare anchor point. The console writes the SAME point into
     // both corners (v121 == v123, v122 == v124), i.e. a degenerate box; reproduced.
@@ -2813,7 +2790,8 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     if (mTextObject.mbAutosize)
         mTextObject.CalculateAutosizing();
 
-    mpTextRenderer->RenderStringBuffered(lpRenderBuffer, mTextObject);
+    mpTextRenderer->RenderString(
+        static_cast<CgsGui::AptIm2dRenderBuffer*>(lpRenderBuffer), mTextObject);
 
     // Put the shared 2D screen transform back for everything that draws after us.
     lpRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform);   // unk_83011090

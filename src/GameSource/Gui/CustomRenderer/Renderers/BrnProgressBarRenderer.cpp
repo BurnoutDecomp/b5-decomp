@@ -137,10 +137,10 @@ void ProgressBarRenderer::RenderQuadUntex(CgsGraphics::Im3dRenderBufferUntex* lp
     using CgsGraphics::BasicColouredVertex;
 
     // Clamp the float colour to [0,1], scale to 0..255 and pack to one shared RGBA8 word.
-    const f32 lfRed   = (lrColour.x < 0.0f ? 0.0f : (lrColour.x > 1.0f ? 1.0f : lrColour.x)) * KF_COLOUR_SCALE;
-    const f32 lfGreen = (lrColour.y < 0.0f ? 0.0f : (lrColour.y > 1.0f ? 1.0f : lrColour.y)) * KF_COLOUR_SCALE;
-    const f32 lfBlue  = (lrColour.z < 0.0f ? 0.0f : (lrColour.z > 1.0f ? 1.0f : lrColour.z)) * KF_COLOUR_SCALE;
-    const f32 lfAlpha = (lrColour.w < 0.0f ? 0.0f : (lrColour.w > 1.0f ? 1.0f : lrColour.w)) * KF_COLOUR_SCALE;
+    const f32 lfRed   = (lrColour.GetX().GetFloat() < 0.0f ? 0.0f : (lrColour.GetX().GetFloat() > 1.0f ? 1.0f : lrColour.GetX().GetFloat())) * KF_COLOUR_SCALE;
+    const f32 lfGreen = (lrColour.GetY().GetFloat() < 0.0f ? 0.0f : (lrColour.GetY().GetFloat() > 1.0f ? 1.0f : lrColour.GetY().GetFloat())) * KF_COLOUR_SCALE;
+    const f32 lfBlue  = (lrColour.GetZ().GetFloat() < 0.0f ? 0.0f : (lrColour.GetZ().GetFloat() > 1.0f ? 1.0f : lrColour.GetZ().GetFloat())) * KF_COLOUR_SCALE;
+    const f32 lfAlpha = (lrColour.GetW().GetFloat() < 0.0f ? 0.0f : (lrColour.GetW().GetFloat() > 1.0f ? 1.0f : lrColour.GetW().GetFloat())) * KF_COLOUR_SCALE;
 
     CgsGraphics::RGBA8 lColour;
     lColour.r = PackChannel(lfRed);
@@ -150,27 +150,27 @@ void ProgressBarRenderer::RenderQuadUntex(CgsGraphics::Im3dRenderBufferUntex* lp
 
     // Rectangle corners. The asm builds the four positions from the bounds lanes:
     //   left = x, top = y, right = z, bottom = w (the unused 3rd position lane stays 0).
-    const f32 lfLeft   = lrBounds.x;
-    const f32 lfTop    = lrBounds.y;
-    const f32 lfRight  = lrBounds.z;
-    const f32 lfBottom = lrBounds.w;
+    const f32 lfLeft   = lrBounds.GetX().GetFloat();
+    const f32 lfTop    = lrBounds.GetY().GetFloat();
+    const f32 lfRight  = lrBounds.GetZ().GetFloat();
+    const f32 lfBottom = lrBounds.GetW().GetFloat();
 
     // Triangle-strip order matching the asm vertex build: TL, BL, TR, BR.
     BasicColouredVertex laVertices[4];
     {
-        const Vector3 lAggregateValue = { lfLeft,  lfTop,    0.0f, 0.0f };
+        const Vector3 lAggregateValue(lfLeft, lfTop, 0.0f);
         laVertices[0].mv3Pos = lAggregateValue;
     }  // top-left
     {
-        const Vector3 lAggregateValue = { lfLeft,  lfBottom, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(lfLeft, lfBottom, 0.0f);
         laVertices[1].mv3Pos = lAggregateValue;
     }  // bottom-left
     {
-        const Vector3 lAggregateValue = { lfRight, lfTop,    0.0f, 0.0f };
+        const Vector3 lAggregateValue(lfRight, lfTop, 0.0f);
         laVertices[2].mv3Pos = lAggregateValue;
     }  // top-right
     {
-        const Vector3 lAggregateValue = { lfRight, lfBottom, 0.0f, 0.0f };
+        const Vector3 lAggregateValue(lfRight, lfBottom, 0.0f);
         laVertices[3].mv3Pos = lAggregateValue;
     }  // bottom-right
     for (int i = 0; i < 4; ++i)
