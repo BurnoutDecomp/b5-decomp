@@ -3,11 +3,7 @@
 // =====================================================================================
 // rw::audio::core::Dac -- the engine's output (digital-to-analogue converter) plug-in:
 // the terminal stage that interleaves the Mixer's planar master buffer into the
-// speaker-ordered output frame the platform device consumes. On the X360 it owns the
-// XAudio source voice, the double packet ring and the "RWAudioCore Dac" worker thread;
-// on the PC the console's own EXTERNAL-DAC configuration is used (see sExternalDacMode
-// in Dac.cpp) and CgsSystem::AudioOutputPC is the external device, its fill callback
-// standing in for the Xenon worker loop.
+// speaker-ordered output frame. The X360 owns an XAudio voice, packet ring and worker.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the
 // asm is authoritative for every member offset and store. Full register-level decode:
@@ -23,15 +19,16 @@
 //   XenonDownMix          @0x82B97178     Mix                  @0x82B96E80*
 //   ReleaseEvent (vt[0])  @0x82B9DAE0     (* = recovered from raw XEX bytes; these
 //                                          three sit in IDA-exporter gaps)
-// Console-only, documented in Dac.cpp but NOT ported (the external-DAC configuration
-// skips them on the console too): XenonThread @0x82B96F40 / XenonThreadFunc @0x82B97150
-// / XenonProcessCb / XenonPacketCompleteCb and every XAudio* call.
+// XenonThread @0x82B96F40 / XenonThreadFunc @0x82B97150 /
+// XenonProcessCb @0x82B97208 / XenonPacketCompleteCb @0x82B97228.
 //
 // Lowercase rw::audio:: namespaces match the third-party middleware API (per
 // CXX_NAMING_CONVENTIONS: lowercase namespaces are acceptable to match a third-party API).
 // =====================================================================================
 
 #include "types.hpp"
+#include <xtl.h>
+#include <xaudio.h>
 #include "rw/audio/core/PlugIn.h" // PlugIn (the base header the console instance shares)
 
 namespace rw
@@ -120,20 +117,23 @@ public:
     static int SetModeHandler(void *apCommand);       // @0x82B9DB78
     static int SetSampleRateHandler(void *apCommand); // @0x82B9DCE8 (return-size no-op)
 
+    static intptr_t XenonThreadFunc(void *pContext);
+    void XenonThread();
+    static void CALLBACK XenonProcessCb(LPCXAUDIOVOICEPROCESSCALLBACK pData);
+    static void CALLBACK XenonPacketCompleteCb(LPCXAUDIOVOICEPACKETCALLBACK pData);
+
     // ---- layout (X360 offsets in comments; x64 widths, by-name access) ----
     Mixer *mpMixer;               // +0x24 -- the 0x30080 mix block (CreateInstance allocates)
     Attribute_t maAttributes[3];  // +0x28 -- the inline attribute table CreateInstance
                                   //   repoints PlugIn::mpAttribute at: [0] +0x28 the
                                   //   output mode (3.0 == 5.1), [1] +0x30 the sample
                                   //   rate (48000.0), [2] +0x38 (0.0)
-    void *mpXAudioVoice;          // +0x40 -- console XAudio source voice; PC: never
-                                  //   created (external-DAC mode), stays null
+    IXAudioSourceVoice *mpXAudioVoice; // +0x40 -- XAudio source voice
     u8 mau8PacketPcm[2][0x1800];  // +0x44 -- the console double packet PCM store
     s32 miSubmitPacketIndex;      // +0x3044 -- console packet-ring submit cursor
     s32 miWritePacketIndex;       // +0x3048 -- console packet-ring write cursor
-    void *mpPacketEvent;          // +0x304C -- console XAudio packet event; PC null
-    u8 mau8PacketDesc[2][0x58];   // +0x3050 -- the console XAUDIOPACKET pair (opaque;
-                                  //   only the console submit path reads it)
+    XAUDIOEVENT mpPacketEvent;      // +0x304C -- XAudio packet event
+    XAUDIOPACKET maPacketDesc[2];  // +0x3050 -- packet pair
     u32 mauPacketState[2];        // +0x3100 -- console packet states (0 free / 1
                                   //   ready / 2 submitted)
 };

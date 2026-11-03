@@ -8,20 +8,8 @@
 // the rodata recovery tables: progress/scratch_dossiers/dac_plugin_decode_codex.md.
 // Static names are the ProStreet08Milestone.pdb rw::audio::core::Dac names.
 //
-// ⭐ THE PC RUNS THE CONSOLE'S OWN EXTERNAL-DAC CONFIGURATION (sExternalDacMode below):
-// every XAudio/worker-thread site in this TU is guarded by the SAME console flag
-// (dword_8327EE58) -- with it set, the console itself creates no voice, no packet
-// event and no "RWAudioCore Dac" thread, and start/stop skip the voice-volume calls.
-// The PC's external device is CgsSystem::AudioOutputPC; its engine fill callback
-// (CgsDacOutputPC.cpp) stands in for the XenonThread @0x82B96F40 worker loop, whose
-// per-packet shape it inverts:
-//   ExecuteCommandsLock -> { wait packet slot -> ExecuteCommands -> Mix -> ok ?
-//   XMemCpy(packet, interleave, 0x1800) : XMemSet(packet, 0, 0x1800) -> submit }
-//   -> ExecuteCommandsUnlock
-// (the console holds the commands lock for the thread's whole life; the PC fill takes
-// it per 256-frame callback -- the same mutual exclusion at the same granularity the
-// packet ring imposed). XenonProcessCb / XenonPacketCompleteCb / XenonThreadFunc are
-// console-only XAudio callbacks and are not ported.
+// ARTIST owns the XAudio voice, two-packet ring, callbacks and worker when
+// the mutable shared-XAudio mode word at 0x8327EE58 is zero.
 // =====================================================================================
 
 #include "rw/audio/core/plugins/Dac.h"
@@ -31,6 +19,12 @@
 
 #include <cstring> // memset (the fresh-page-parity mixer clear)
 #include <new> // placement new (the vtable install in the create thunk)
+#include <xaudfx.h>
+#include "SDKs/EATech/eathread/BrnEAThreadX360.h"
+
+CGS_STATIC_ASSERT((sizeof(XAUDIOPACKET) == 0x58), "ARTIST packet stride");
+CGS_STATIC_ASSERT((offsetof(XAUDIOPACKET, pContext) == 0x54), "ARTIST packet context");
+CGS_STATIC_ASSERT((sizeof(XAUDIOSOURCEVOICEINIT) == 0x5C), "ARTIST voice-init size");
 
 namespace rw
 {
@@ -38,6 +32,12 @@ namespace audio
 {
 namespace core
 {
+
+CGS_STATIC_ASSERT((sizeof(Dac) == 0x3108), "ARTIST Dac size");
+CGS_STATIC_ASSERT((offsetof(Dac, mpXAudioVoice) == 0x40), "ARTIST voice offset");
+CGS_STATIC_ASSERT((offsetof(Dac, mpPacketEvent) == 0x304C), "ARTIST event offset");
+CGS_STATIC_ASSERT((offsetof(Dac, maPacketDesc) == 0x3050), "ARTIST packet offset");
+CGS_STATIC_ASSERT((offsetof(Dac, mauPacketState) == 0x3100), "ARTIST packet-state offset");
 
 // The System singleton pointer (X360 off_83271928; defined in System.cpp).
 extern "C" System *off_83271928;
@@ -52,6 +52,19 @@ u32 GetCpuCycle();
 // =====================================================================================
 namespace
 {
+    // ARTIST dword_8327EE58 is a mutable 32-bit shared-XAudio mode word; its
+    // initial image is zero. All four observed consumers are in this TU.
+    u32 sExternalDacMode = 0;
+
+    // ARTIST 0x82108F08 / 0x82108F38, native XAudio effect table.
+    const XAUDIOFXTABLEENTRY sEffects[4] = {
+        { 0, XAudioQuerySourceEffectSize, XAudioCreateSourceEffect },
+        { 1, XAudioQueryRouterEffectSize, XAudioCreateRouterEffect },
+        { 2, XAudioQueryNativeRenderEffectSize, XAudioCreateNativeRenderEffect },
+        { 3, XAudioQueryReverbEffectSize, XAudioCreateReverbEffect }
+    };
+    const XAUDIOFXTABLE sEffectTable = { 4, sEffects };
+
     // dword_8327A580 -- the Profiler CreateInstance caches (a null fetch fails create).
     Profiler *spProfiler = 0;
 
@@ -329,17 +342,49 @@ int Dac::CreateInstance(Dac *self)
 
     if (!sExternalDacMode)
     {
-        // Console-only device creation, external-DAC-guarded (`if (!dword_8327EE58)`):
-        // XAudioInitialize (submix param unk_82108F38); XAudioCreateSourceVoice (6ch,
-        // 48000 Hz, 2 packets, XenonProcessCb / XenonPacketCompleteCb, ctx = the Dac)
-        // -> +0x40; zero the packet-descriptor block (+0x3050, 0xB0) and wire packet i
-        // {buffer = +0x44 + i*0x1800, size 0x1800, status word = +0x3100 + i*4}; zero
-        // the PCM store (+0x44, 0x3000); submit/write cursors = 0; the packet event
-        // (XAudioCreateEvent(0, 1)) -> +0x304C; spawn "RWAudioCore Dac"
-        // (EA::Thread::Thread::Begin(XenonThreadFunc, this) with the System's
-        // priority/stack/processor triple, SetRwAudioCoreThreadId) and
-        // XAudioSourceVoice_Start. NOT PORTED -- the PC external device is
-        // CgsSystem::AudioOutputPC and its engine fill drives the frame loop.
+        XAUDIOENGINEINIT lEngineInit = {};
+        lEngineInit.pEffectTable = &sEffectTable;
+        XAudioInitialize(&lEngineInit);
+
+        XAUDIOSOURCEVOICEINIT lVoiceInit = {};
+        lVoiceInit.Format.SampleType = 0;
+        lVoiceInit.Format.ChannelCount = 6;
+        lVoiceInit.Format.SampleRate = 48000;
+        lVoiceInit.MaxPacketCount = 2;
+        lVoiceInit.MaxPitchShift = 0.0f;
+        lVoiceInit.Flags = 1;
+        lVoiceInit.pfnProcessCallback = &Dac::XenonProcessCb;
+        lVoiceInit.pfnPacketCompletionCallback = &Dac::XenonPacketCompleteCb;
+        lVoiceInit.pContext = self;
+        XAudioCreateSourceVoice(&lVoiceInit, &self->mpXAudioVoice);
+
+        std::memset(self->maPacketDesc, 0, sizeof(self->maPacketDesc));
+        for (int i = 0; i < 2; ++i)
+        {
+            self->mauPacketState[i] = 0;
+            self->maPacketDesc[i].pContext = &self->mauPacketState[i];
+            self->maPacketDesc[i].pBuffer = self->mau8PacketPcm[i];
+            self->maPacketDesc[i].BufferSize = 0x1800;
+        }
+        std::memset(self->mau8PacketPcm, 0, sizeof(self->mau8PacketPcm));
+        self->miSubmitPacketIndex = 0;
+        self->miWritePacketIndex = 0;
+        self->mpPacketEvent = XAudioCreateEvent(0, 1);
+
+        {
+        EA::Thread::Thread lThread;
+        EA::Thread::ThreadParameters lParameters;
+        lParameters.mnPriority = lpSystem->miThreadPriority;
+        lParameters.mnStackSize = lpSystem->muThreadStackSize;
+        lParameters.mnProcessor = lpSystem->mucThreadProcessor;
+        lParameters.mbSuspended = false;
+        lParameters.mpName = "RWAudioCore Dac";
+        EA::Thread::ThreadId lId = lThread.Begin(&Dac::XenonThreadFunc, self,
+            &lParameters, EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
+        u32 luThreadId = reinterpret_cast<u32>(lId);
+        System::SetRwAudioCoreThreadId(lpSystem, &luThreadId);
+        }
+        XAudioSourceVoice_Start(self->mpXAudioVoice, 0);
     }
     return 1;
 }
@@ -402,7 +447,8 @@ Dac *Dac::StartImmediate(Dac *self)
         sStartRequested = 1;   // arm the 128-frame up-ramp
         if (!sExternalDacMode)
         {
-            // Console-only: XAudioSourceVoice_SetVolume(+0x40 voice, 1.0).
+            if (self->mpXAudioVoice)
+                XAudioSourceVoice_SetVolume(self->mpXAudioVoice, 1.0f);
         }
         sStarted = 1;
     }
@@ -416,7 +462,8 @@ Dac *Dac::StopImmediate(Dac *self)
         sStarted = 0;
         if (!sExternalDacMode)
         {
-            // Console-only: XAudioSourceVoice_SetVolume(+0x40 voice, 0.0).
+            if (self->mpXAudioVoice)
+                XAudioSourceVoice_SetVolume(self->mpXAudioVoice, 0.0f);
         }
     }
     return self;
@@ -594,14 +641,96 @@ Dac::~Dac()
     sThreadRunning = 0;
     if (!sExternalDacMode)
     {
-        // Console-only: XAudioVoice_Release(+0x40) + null it; XAudioFreeEvent(+0x304C)
-        // + null it; XAudioShutDown.
+        XAudioVoice_Release(mpXAudioVoice);
+        mpXAudioVoice = 0;
+        XAudioFreeEvent(mpPacketEvent);
+        mpPacketEvent = 0;
+        XAudioShutDown();
     }
     u32 luZeroThreadId = 0;
     System::SetRwAudioCoreThreadId(mpSystemUseGetSystemAccessor, &luZeroThreadId);
     StopImmediate(this);
     if (mpMixer)
         System::Free(mpSystemUseGetSystemAccessor, mpMixer, 0);
+}
+
+// ARTIST 82B97208 / 82B97228: XAudio supplies the voice and packet contexts.
+void CALLBACK Dac::XenonProcessCb(LPCXAUDIOVOICEPROCESSCALLBACK pData)
+{
+    if (sThreadRunning)
+        XAudioSetEvent(static_cast<Dac *>(pData->pVoiceContext)->mpPacketEvent);
+}
+
+void CALLBACK Dac::XenonPacketCompleteCb(LPCXAUDIOVOICEPACKETCALLBACK pData)
+{
+    *static_cast<u32 *>(pData->pPacketContext) = 0;
+    Dac *self = static_cast<Dac *>(pData->pVoiceContext);
+    if (self->mpPacketEvent)
+        XAudioSetEvent(self->mpPacketEvent);
+}
+
+intptr_t Dac::XenonThreadFunc(void *pContext)
+{
+    static_cast<Dac *>(pContext)->XenonThread();
+    return 0;
+}
+
+// ARTIST 82B96F40: one execute-commands lock around the packet worker.
+void Dac::XenonThread()
+{
+    System *system = mpSystemUseGetSystemAccessor;
+    System::ExecuteCommandsLock(system);
+    while (sThreadRunning)
+    {
+        XAudioWaitForSingleObject(mpPacketEvent, static_cast<DWORD>(-1), 0);
+        while (mauPacketState[miWritePacketIndex] == 0)
+        {
+            if (!sThreadRunning)
+                break;
+            // 82B6A9C8: Profiler::Start stores GetCpuCycle at +0x1C.
+            spProfiler->muBeginCycle = GetCpuCycle();
+            const bool wasStarted = sStarted != 0;
+            if (wasStarted)
+                sCpuLoadBalancer.muLastStamp = GetCpuCycle();
+            System::ExecuteCommands(system);
+            if (!sThreadRunning)
+                goto unlock;
+            if (wasStarted && sStarted)
+            {
+                int status = Mix(this);
+                XAUDIOPACKET &packet = maPacketDesc[miWritePacketIndex];
+                if (status == 1)
+                    std::memcpy(packet.pBuffer, sInterleaveBuffer, 0x1800);
+                else
+                    std::memset(packet.pBuffer, 0, 0x1800);
+                mauPacketState[miWritePacketIndex] = 1;
+                while (mauPacketState[miSubmitPacketIndex] == 1)
+                {
+                    XAUDIOSOURCESTATE state;
+                    XAudioVoice_GetVoiceState(mpXAudioVoice, &state);
+                    if (!(state & XAUDIOSOURCESTATE_READYPACKET))
+                        break;
+                    mauPacketState[miSubmitPacketIndex] = 2;
+                    XAudioSourceVoice_SubmitPacket(mpXAudioVoice,
+                        &maPacketDesc[miSubmitPacketIndex], 0);
+                    if (++miSubmitPacketIndex == 2)
+                        miSubmitPacketIndex = 0;
+                }
+                if (++miWritePacketIndex == 2)
+                    miWritePacketIndex = 0;
+            }
+            if (!sStarted)
+            {
+                Profiler::End(spProfiler);
+                break;
+            }
+            const u32 now = GetCpuCycle();
+            sCpuLoadBalancer.muFrameCycles += now - sCpuLoadBalancer.muLastStamp;
+            Profiler::End(spProfiler);
+        }
+    }
+unlock:
+    System::ExecuteCommandsUnlock(system);
 }
 
 // =====================================================================================
