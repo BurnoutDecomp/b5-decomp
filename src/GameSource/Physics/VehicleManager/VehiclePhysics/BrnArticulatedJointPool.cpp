@@ -69,12 +69,12 @@ namespace
     }
     Vector3 JointRotate(Vector3 lvRow, const Vector3& lvX, const Vector3& lvY, const Vector3& lvZ)
     {
-        const Vector3 result = {
-            JointMultiplyAdd(lvRow.z, lvZ.x, JointMultiplyAdd(lvRow.y, lvY.x, JointMultiply(lvRow.x, lvX.x))),
-            JointMultiplyAdd(lvRow.z, lvZ.y, JointMultiplyAdd(lvRow.y, lvY.y, JointMultiply(lvRow.x, lvX.y))),
-            JointMultiplyAdd(lvRow.z, lvZ.z, JointMultiplyAdd(lvRow.y, lvY.z, JointMultiply(lvRow.x, lvX.z))),
-            JointMultiplyAdd(lvRow.z, lvZ.w, JointMultiplyAdd(lvRow.y, lvY.w, JointMultiply(lvRow.x, lvX.w)))};
-        return result;
+        const __vector4 result = {
+            JointMultiplyAdd(lvRow.GetVector().z, lvZ.GetVector().x, JointMultiplyAdd(lvRow.GetVector().y, lvY.GetVector().x, JointMultiply(lvRow.GetVector().x, lvX.GetVector().x))),
+            JointMultiplyAdd(lvRow.GetVector().z, lvZ.GetVector().y, JointMultiplyAdd(lvRow.GetVector().y, lvY.GetVector().y, JointMultiply(lvRow.GetVector().x, lvX.GetVector().y))),
+            JointMultiplyAdd(lvRow.GetVector().z, lvZ.GetVector().z, JointMultiplyAdd(lvRow.GetVector().y, lvY.GetVector().z, JointMultiply(lvRow.GetVector().x, lvX.GetVector().z))),
+            JointMultiplyAdd(lvRow.GetVector().z, lvZ.GetVector().w, JointMultiplyAdd(lvRow.GetVector().y, lvY.GetVector().w, JointMultiply(lvRow.GetVector().x, lvX.GetVector().w)))};
+        return Vector3(result);
     }
 
     // ARTIST 0x825D8024..0x825D81AC inlines the orthonormal-body inverse and
@@ -84,39 +84,47 @@ namespace
     Matrix44Affine JointFrameInBodySpace(const Matrix44Affine& lrJoint,
                                          const Matrix44Affine& lrBody)
     {
-        const Vector3 lvX = {lrBody.xAxis.x, lrBody.yAxis.x, lrBody.zAxis.x, 0.0f};
-        const Vector3 lvY = {lrBody.xAxis.y, lrBody.yAxis.y, lrBody.zAxis.y, 0.0f};
-        const Vector3 lvZ = {lrBody.xAxis.z, lrBody.yAxis.z, lrBody.zAxis.z, 0.0f};
-        const Vector3 lvNegativePosition = {
-            JointSubtract(0.0f, lrBody.wAxis.x),
-            JointSubtract(0.0f, lrBody.wAxis.y),
-            JointSubtract(0.0f, lrBody.wAxis.z),
-            JointSubtract(0.0f, lrBody.wAxis.w)};
-        const Vector3 lvInversePosition = {
-            JointMultiplyAdd(lvNegativePosition.x, lvX.x,
-                JointMultiplyAdd(lvNegativePosition.y, lvY.x, JointMultiply(lvNegativePosition.z, lvZ.x))),
-            JointMultiplyAdd(lvNegativePosition.x, lvX.y,
-                JointMultiplyAdd(lvNegativePosition.y, lvY.y, JointMultiply(lvNegativePosition.z, lvZ.y))),
-            JointMultiplyAdd(lvNegativePosition.x, lvX.z,
-                JointMultiplyAdd(lvNegativePosition.y, lvY.z, JointMultiply(lvNegativePosition.z, lvZ.z))),
-            JointMultiplyAdd(lvNegativePosition.x, lvX.w,
-                JointMultiplyAdd(lvNegativePosition.y, lvY.w, JointMultiply(lvNegativePosition.z, lvZ.w)))};
+        const __vector4 lvXVector = {
+            lrBody.xAxis.GetVector().x, lrBody.yAxis.GetVector().x, lrBody.zAxis.GetVector().x, 0.0f};
+        const Vector3 lvX(lvXVector);
+        const __vector4 lvYVector = {
+            lrBody.xAxis.GetVector().y, lrBody.yAxis.GetVector().y, lrBody.zAxis.GetVector().y, 0.0f};
+        const Vector3 lvY(lvYVector);
+        const __vector4 lvZVector = {
+            lrBody.xAxis.GetVector().z, lrBody.yAxis.GetVector().z, lrBody.zAxis.GetVector().z, 0.0f};
+        const Vector3 lvZ(lvZVector);
+        const __vector4 lvNegativePositionVector = {
+            JointSubtract(0.0f, lrBody.wAxis.GetVector().x),
+            JointSubtract(0.0f, lrBody.wAxis.GetVector().y),
+            JointSubtract(0.0f, lrBody.wAxis.GetVector().z),
+            JointSubtract(0.0f, lrBody.wAxis.GetVector().w)};
+        const Vector3 lvNegativePosition(lvNegativePositionVector);
+        const __vector4 lvInversePositionVector = {
+            JointMultiplyAdd(lvNegativePosition.GetVector().x, lvX.GetVector().x,
+                JointMultiplyAdd(lvNegativePosition.GetVector().y, lvY.GetVector().x, JointMultiply(lvNegativePosition.GetVector().z, lvZ.GetVector().x))),
+            JointMultiplyAdd(lvNegativePosition.GetVector().x, lvX.GetVector().y,
+                JointMultiplyAdd(lvNegativePosition.GetVector().y, lvY.GetVector().y, JointMultiply(lvNegativePosition.GetVector().z, lvZ.GetVector().y))),
+            JointMultiplyAdd(lvNegativePosition.GetVector().x, lvX.GetVector().z,
+                JointMultiplyAdd(lvNegativePosition.GetVector().y, lvY.GetVector().z, JointMultiply(lvNegativePosition.GetVector().z, lvZ.GetVector().z))),
+            JointMultiplyAdd(lvNegativePosition.GetVector().x, lvX.GetVector().w,
+                JointMultiplyAdd(lvNegativePosition.GetVector().y, lvY.GetVector().w, JointMultiply(lvNegativePosition.GetVector().z, lvZ.GetVector().w)))};
+        const Vector3 lvInversePosition(lvInversePositionVector);
         const Vector3 lvPosition = lrJoint.wAxis;
         Matrix44Affine lResult;
         lResult.xAxis = JointRotate(lrJoint.xAxis, lvX, lvY, lvZ);
         lResult.yAxis = JointRotate(lrJoint.yAxis, lvX, lvY, lvZ);
         lResult.zAxis = JointRotate(lrJoint.zAxis, lvX, lvY, lvZ);
         {
-            const Vector3 lAggregateValue = {
-            JointMultiplyAdd(lvPosition.z, lvZ.x, JointMultiplyAdd(lvPosition.y, lvY.x,
-                JointMultiplyAdd(lvPosition.x, lvX.x, lvInversePosition.x))),
-            JointMultiplyAdd(lvPosition.z, lvZ.y, JointMultiplyAdd(lvPosition.y, lvY.y,
-                JointMultiplyAdd(lvPosition.x, lvX.y, lvInversePosition.y))),
-            JointMultiplyAdd(lvPosition.z, lvZ.z, JointMultiplyAdd(lvPosition.y, lvY.z,
-                JointMultiplyAdd(lvPosition.x, lvX.z, lvInversePosition.z))),
-            JointMultiplyAdd(lvPosition.z, lvZ.w, JointMultiplyAdd(lvPosition.y, lvY.w,
-                JointMultiplyAdd(lvPosition.x, lvX.w, lvInversePosition.w)))};
-            lResult.wAxis = lAggregateValue;
+            const __vector4 lAggregateValue = {
+            JointMultiplyAdd(lvPosition.GetVector().z, lvZ.GetVector().x, JointMultiplyAdd(lvPosition.GetVector().y, lvY.GetVector().x,
+                JointMultiplyAdd(lvPosition.GetVector().x, lvX.GetVector().x, lvInversePosition.GetVector().x))),
+            JointMultiplyAdd(lvPosition.GetVector().z, lvZ.GetVector().y, JointMultiplyAdd(lvPosition.GetVector().y, lvY.GetVector().y,
+                JointMultiplyAdd(lvPosition.GetVector().x, lvX.GetVector().y, lvInversePosition.GetVector().y))),
+            JointMultiplyAdd(lvPosition.GetVector().z, lvZ.GetVector().z, JointMultiplyAdd(lvPosition.GetVector().y, lvY.GetVector().z,
+                JointMultiplyAdd(lvPosition.GetVector().x, lvX.GetVector().z, lvInversePosition.GetVector().z))),
+            JointMultiplyAdd(lvPosition.GetVector().z, lvZ.GetVector().w, JointMultiplyAdd(lvPosition.GetVector().y, lvY.GetVector().w,
+                JointMultiplyAdd(lvPosition.GetVector().x, lvX.GetVector().w, lvInversePosition.GetVector().w)))};
+            lResult.wAxis = Vector3(lAggregateValue);
         }
         return lResult;
     }
@@ -302,11 +310,11 @@ void ArticulatedJointPool::ConstructArticulatedJoint(
     lrLimits.mTwista = mfTwistAngleDegrees * kfDegreesToRadians;
     lrLimits.mTwistc = XboxMath::XMVectorCos(lrLimits.mTwista);
     {
-        const Vector3 lAggregateValue = {0.1f, 0.1f, 0.1f, 0.0f};
+        const Vector3 lAggregateValue(0.1f, 0.1f, 0.1f);
         lrLimits.mPprism = lAggregateValue;
     }
     {
-        const Vector3 lAggregateValue = {0.1f, 0.1f, 0.1f, 0.0f};
+        const Vector3 lAggregateValue(0.1f, 0.1f, 0.1f);
         lrLimits.mVprism = lAggregateValue;
     }
     lrLimits.mVtwist = mfMaxTwistVelocityDegrees * kfDegreesToRadians;
@@ -346,11 +354,17 @@ void ArticulatedJointPool::ConstructArticulatedJoint(
     const Matrix44Affine lParentToJointTransform = JointFrameInBodySpace(lJointTransform, lrCabWorldTransform);
     const Matrix44Affine lChildToJointTransform = JointFrameInBodySpace(lJointTransform, lrTrailerWorldTransform);
     rw::physics::JointFrames& lrFrames = lpOutAddJointEvent->mJointFrames;
-    const Matrix33 lChildAngular = {lChildToJointTransform.xAxis, lChildToJointTransform.yAxis, lChildToJointTransform.zAxis};
+    const Matrix33 lChildAngular(lChildToJointTransform.xAxis,
+                                 lChildToJointTransform.yAxis,
+                                 lChildToJointTransform.zAxis);
     lrFrames.SetChildAngularFrame(lChildAngular);
-    const Matrix33 lParentAngular = {lParentToJointTransform.xAxis, lParentToJointTransform.yAxis, lParentToJointTransform.zAxis};
+    const Matrix33 lParentAngular(lParentToJointTransform.xAxis,
+                                  lParentToJointTransform.yAxis,
+                                  lParentToJointTransform.zAxis);
     lrFrames.SetParentAngularFrame(lParentAngular);
-    const Matrix33 lParentLinear = {lrCabWorldTransform.xAxis, lrCabWorldTransform.yAxis, lrCabWorldTransform.zAxis};
+    const Matrix33 lParentLinear(lrCabWorldTransform.xAxis,
+                                 lrCabWorldTransform.yAxis,
+                                 lrCabWorldTransform.zAxis);
     lrFrames.SetParentLinearFrame(lParentLinear);
     lrFrames.SetChildPosition(lChildToJointTransform.wAxis);
     lrFrames.SetParentPosition(lParentToJointTransform.wAxis);

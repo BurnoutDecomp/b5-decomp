@@ -58,8 +58,8 @@ namespace Vehicle
 
         // Lanes z/w of +0x30 are NOT touched: the console load-modify-stores the quadword and
         // only replaces the two lanes it sets.
-        mAxisDimensions.x = 300.0f;   // box width, pixels
-        mAxisDimensions.y = 225.0f;   // box height, pixels
+        mAxisDimensions.mV.x = 300.0f;   // box width, pixels
+        mAxisDimensions.mV.y = 225.0f;   // box height, pixels
     }
 
     // GetOrigin @0x825E8D00: the two 36-unit insets leave room for labels.
@@ -67,8 +67,8 @@ namespace Vehicle
     rw::math::vpu::Vector2 GripCurveDebugGraph::GetOrigin() const
     {
         rw::math::vpu::Vector2 lOrigin = mAxisTopLeft;
-        lOrigin.x = GraphAdd(mAxisTopLeft.x, 36.0f);
-        lOrigin.y = GraphAdd(mAxisTopLeft.y, GraphSubtract(mAxisDimensions.y, 36.0f));
+        lOrigin.mV.x = GraphAdd(mAxisTopLeft.mV.x, 36.0f);
+        lOrigin.mV.y = GraphAdd(mAxisTopLeft.mV.y, GraphSubtract(mAxisDimensions.mV.y, 36.0f));
         return lOrigin;
     }
 
@@ -77,20 +77,20 @@ namespace Vehicle
     rw::math::vpu::Vector2 GripCurveDebugGraph::GetPointOnGraph(f32 lfSlipRatio,
                                                                 f32 lfGripCoefficient) const
     {
-        const f32 lfNormX = lfSlipRatio       / mAxisRanges.x;   // a3 / (+0x20)
-        const f32 lfNormY = lfGripCoefficient / mAxisRanges.y;   // a4 / (+0x24)
+        const f32 lfNormX = lfSlipRatio       / mAxisRanges.mV.x;   // a3 / (+0x20)
+        const f32 lfNormY = lfGripCoefficient / mAxisRanges.mV.y;   // a4 / (+0x24)
 
-        const f32 lfHeight = GraphSubtract(mAxisDimensions.y, 36.0f);
-        const f32 lfWidth = GraphSubtract(mAxisDimensions.x, 36.0f);
+        const f32 lfHeight = GraphSubtract(mAxisDimensions.mV.y, 36.0f);
+        const f32 lfWidth = GraphSubtract(mAxisDimensions.mV.x, 36.0f);
         const f32 lfOffsetY = GraphMultiply(GraphFlipSign(lfNormY), lfHeight);
         const f32 lfOffsetX = GraphMultiply(lfNormX, lfWidth);
         const rw::math::vpu::Vector2 lOrigin = GetOrigin();
         rw::math::vpu::Vector2 lPoint;
-        lPoint.x = GraphAdd(lOrigin.x, lfOffsetX);
-        lPoint.y = GraphAdd(lOrigin.y, lfOffsetY);
+        lPoint.mV.x = GraphAdd(lOrigin.mV.x, lfOffsetX);
+        lPoint.mV.y = GraphAdd(lOrigin.mV.y, lfOffsetY);
         // The original vperm mask 82CDA350 supplies {X, Y, X, X}.
-        lPoint.z = GraphAdd(lOrigin.z, lfOffsetX);
-        lPoint.w = GraphAdd(lOrigin.w, lfOffsetX);
+        lPoint.mV.z = GraphAdd(lOrigin.mV.z, lfOffsetX);
+        lPoint.mV.w = GraphAdd(lOrigin.mV.w, lfOffsetX);
         return lPoint;
     }
 }
