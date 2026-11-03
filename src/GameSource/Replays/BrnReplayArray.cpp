@@ -45,9 +45,9 @@ namespace BrnReplays
     {
         static bool AreDifferent(const Vector3& lrA, const Vector3& lrB)
         {
-            return LaneDiffers(lrA.x, lrB.x)
-                || LaneDiffers(lrA.y, lrB.y)
-                || LaneDiffers(lrA.z, lrB.z);
+            return LaneDiffers(static_cast<float>(lrA.GetX()), static_cast<float>(lrB.GetX()))
+                || LaneDiffers(static_cast<float>(lrA.GetY()), static_cast<float>(lrB.GetY()))
+                || LaneDiffers(static_cast<float>(lrA.GetZ()), static_cast<float>(lrB.GetZ()));
         }
     };
 

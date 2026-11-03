@@ -11,7 +11,7 @@ GuiModuleAboveCarObjectLayout* GuiModuleAboveCarObjectLayout::Clear()
 {
     mbVisible = false;
     muRacePosition = 0;
-    mWorldPosition.x = mWorldPosition.y = mWorldPosition.z = mWorldPosition.w = 0.0f;
+    mWorldPosition.SetZero();
 
     return this;
 }

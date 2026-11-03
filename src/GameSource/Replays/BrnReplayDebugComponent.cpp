@@ -35,12 +35,7 @@ namespace BrnReplays
     // Build the vpu screen-space point DrawLine takes from an (x,y) pair.
     static inline Vector2 MakePoint(f32 lfX, f32 lfY)
     {
-        Vector2 lv2Point;
-        lv2Point.x = lfX;
-        lv2Point.y = lfY;
-        lv2Point.z = 0.0f;
-        lv2Point.w = 0.0f;
-        return lv2Point;
+        return Vector2(lfX, lfY);
     }
 
     static void* AllocateDebugStorage(rw::IResourceAllocator* lpAllocator, u32 luSize)
