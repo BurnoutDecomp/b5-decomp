@@ -103,17 +103,15 @@ namespace
 
     inline f32 Dot3(const Vector3& lrA, const Vector3& lrB)
     {
-        return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+        return rw::math::vpu::Dot(lrA, lrB);
     }
     inline Vector3 Sub3(const Vector3& lrA, const Vector3& lrB)
     {
-        Vector3 lvR; lvR.x = lrA.x - lrB.x; lvR.y = lrA.y - lrB.y;
-        lvR.z = lrA.z - lrB.z; lvR.w = lrA.w - lrB.w; return lvR;
+        return lrA - lrB;
     }
     inline Vector3 Scale3(const Vector3& lrV, f32 lfS)
     {
-        Vector3 lvR; lvR.x = lrV.x * lfS; lvR.y = lrV.y * lfS;
-        lvR.z = lrV.z * lfS; lvR.w = lrV.w * lfS; return lvR;
+        return lrV * lfS;
     }
     inline bool IsUnitLength(const Vector3& lrV)
     {
@@ -129,13 +127,9 @@ namespace
     {
         return static_cast<u16>((luEntityWord >> 10) & 0x3FFFu);
     }
-    // VecFloat is Vector4 here and has no scalar constructor; the console's `vspltw` splat.
     inline VecFloat SplatVecFloat(f32 lfValue)
     {
-        VecFloat lvfResult;
-        lvfResult.x = lfValue; lvfResult.y = lfValue;
-        lvfResult.z = lfValue; lvfResult.w = lfValue;
-        return lvfResult;
+        return VecFloat(lfValue);
     }
 }
 
@@ -156,43 +150,18 @@ bool VehicleManager::ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimA
                                                    const SimpleVehiclePhysics* lpOtherBody,
                                                    VecFloat lvfImpactSpeed, VecFloat lvfScale) const
 {
-    const f32 lfVictimMass = lpVictim->GetMass().x;
-    f32 lfOtherMass = lpOtherBody->GetMass().x;
+    const f32 lfVictimMass = lpVictim->GetMass().GetFloat();
+    f32 lfOtherMass = lpOtherBody->GetMass().GetFloat();
     if (lfOtherMass > KF_MAX_IMPACT_MASS)
         lfOtherMass = KF_MAX_IMPACT_MASS;                       // vminfp against 5000
 
     const f32 lfVulnerability =
         mafVulnerabilityFactor[static_cast<s32>(leVictimActiveRaceCarIndex)];
     const f32 lfThreshold =
-        lpVictim->GetAttribs()->mCollisionAttribs.GetCrashSpeedMPS().x * lvfScale.x;
+        lpVictim->GetAttribs()->mCollisionAttribs.GetCrashSpeedMPS().GetFloat() * lvfScale.GetFloat();
 
-    const f32 lfStress = (lvfImpactSpeed.x * lfOtherMass / lfVictimMass) * lfVulnerability;
+    const f32 lfStress = (lvfImpactSpeed.GetFloat() * lfOtherMass / lfVictimMass) * lfVulnerability;
 
-    // ---- [T4-crash-test] BOTH SIDES of the race-car crash compare -----------------------------
-    // DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG), budget 60 lines. This compare is
-    // what decides CRASH_TRAFFIC (both cars crash) against SLAM/CHECK (the traffic car is shoved),
-    // so "the traffic car did not crash hard" has to be read against these operands, not guessed.
-    // DELETE-WHEN-STABLE.
-    {
-        // Budget 200, and only for an impact of >= 5 m/s: the low-speed contact tail of one
-        // shove (60 rows of 0.3 m/s in run tw_ram1) used to exhaust the budget before the hit
-        // that mattered, so the 109 mph CHECK in that run has no operands on record.
-        //
-        // ⭐⭐ AND THE BUDGET ALONE IS STILL NOT ENOUGH -- measured 2026-09-03, run tsev_hard1. The
-        // player grinds along two traffic cars for ~40 s generating one contact per frame; the 200
-        // rows were spent on 10-19 m/s shoves, and when the run finally reached an 89.4 mph hit
-        // ([T5-arm] slot=9 playerSpeed=39.97) THE HARDEST HIT OF THE RUN HAD NO OPERANDS ON RECORD.
-        // A budget answers "what did the first N contacts do"; the question is "what did the
-        // HARDEST contact do", and those are different questions. So the gate is now
-        // budget OR a new running maximum: the max arm is monotonic, so it is self-limiting (a run
-        // cannot emit more lines than it has distinct record impacts), and it GUARANTEES that the
-        // single row a severity claim rests on is present in every log. DELETE-WHEN-STABLE.
-        static f32 s_fCrashTestMaxImpact = 0.0f;
-        const bool lbNewHardest = (lvfImpactSpeed.x > s_fCrashTestMaxImpact + 0.5f);
-        if (lbNewHardest) { s_fCrashTestMaxImpact = lvfImpactSpeed.x; }
-
-        static s32 s_iCrashTestBudget = 200;
-    }
     return lfStress > lfThreshold;
 }
 
@@ -268,34 +237,32 @@ namespace
         const CgsGeometric::AxisAlignedBox& lrBox = lpBody->GetDeformableAABB();
 
         Vector3 lvHalf;
-        lvHalf.x = (lrBox.mMax.x - lrBox.mMin.x) * 0.5f;
-        lvHalf.y = (lrBox.mMax.y - lrBox.mMin.y) * 0.5f;
-        lvHalf.z = (lrBox.mMax.z - lrBox.mMin.z) * 0.5f;
-        lvHalf.w = (lrBox.mMax.w - lrBox.mMin.w) * 0.5f;
+        lvHalf.mV.v[0] = (lrBox.mMax.mV.v[0] - lrBox.mMin.mV.v[0]) * 0.5f;
+        lvHalf.mV.v[1] = (lrBox.mMax.mV.v[1] - lrBox.mMin.mV.v[1]) * 0.5f;
+        lvHalf.mV.v[2] = (lrBox.mMax.mV.v[2] - lrBox.mMin.mV.v[2]) * 0.5f;
+        lvHalf.mV.v[3] = (lrBox.mMax.mV.v[3] - lrBox.mMin.mV.v[3]) * 0.5f;
 
-        const f32 lfRadius = lvHalf.x - lvHalf.x * KF_PREDICT_BOX_WIDTH_FRACTION;
+        const f32 lfRadius = lvHalf.mV.v[0] - lvHalf.mV.v[0] * KF_PREDICT_BOX_WIDTH_FRACTION;
 
         rw::collision::Vec4 lvDims;
-        lvDims.x = (lvHalf.x - lfRadius) - lfRadius;     // vrlimi128 mask 8: the x lane only
-        lvDims.y = lvHalf.y - lfRadius;
-        lvDims.z = lvHalf.z - lfRadius;
-        lvDims.w = lvHalf.w - lfRadius;
+        lvDims.x = (lvHalf.mV.v[0] - lfRadius) - lfRadius;     // vrlimi128 mask 8: the x lane only
+        lvDims.y = lvHalf.mV.v[1] - lfRadius;
+        lvDims.z = lvHalf.mV.v[2] - lfRadius;
+        lvDims.w = lvHalf.mV.v[3] - lfRadius;
 
         rw::Resource lResource;
         lResource.m_baseResources[0] = lrStorage.maBytes;
-        rw::collision::BoxVolume* const lpVolume = rw::collision::BoxVolume::Initialize(lResource, lvDims);
+        rw::collision::BoxVolume* const lpVolume = rw::collision::BoxVolume::Initialize(lResource, Vector3(lvDims.x, lvDims.y, lvDims.z));
 
-        const rw::collision::Vec4 lvAxis0 = { 1.0f, 0.0f, 0.0f, 0.0f };
-        lpVolume->maTransform[0] = lvAxis0;
-        const rw::collision::Vec4 lvAxis1 = { 0.0f, 1.0f, 0.0f, 0.0f };
-        lpVolume->maTransform[1] = lvAxis1;
-        const rw::collision::Vec4 lvAxis2 = { 0.0f, 0.0f, 1.0f, 0.0f };
-        lpVolume->maTransform[2] = lvAxis2;
-        const rw::collision::Vec4 lvCentre = { (lrBox.mMin.x + lrBox.mMax.x) * 0.5f,
-                                                        (lrBox.mMin.y + lrBox.mMax.y) * 0.5f,
-                                                        (lrBox.mMin.z + lrBox.mMax.z) * 0.5f,
-                                                        (lrBox.mMin.w + lrBox.mMax.w) * 0.5f };
-        lpVolume->maTransform[3] = lvCentre;
+        lpVolume->mTransform.xAxis = Vector3(1.0f, 0.0f, 0.0f);
+        lpVolume->mTransform.yAxis = Vector3(0.0f, 1.0f, 0.0f);
+        lpVolume->mTransform.zAxis = Vector3(0.0f, 0.0f, 1.0f);
+        const rw::collision::Vec4 lvCentre = { (lrBox.mMin.mV.v[0] + lrBox.mMax.mV.v[0]) * 0.5f,
+                                                        (lrBox.mMin.mV.v[1] + lrBox.mMax.mV.v[1]) * 0.5f,
+                                                        (lrBox.mMin.mV.v[2] + lrBox.mMax.mV.v[2]) * 0.5f,
+                                                        (lrBox.mMin.mV.v[3] + lrBox.mMax.mV.v[3]) * 0.5f };
+        lpVolume->mTransform.wAxis = Vector3(lvCentre.x, lvCentre.y, lvCentre.z);
+        lpVolume->mTransform.wAxis.mV.v[3] = lvCentre.w;
         lpVolume->mfRadius = lfRadius;                   // stfs f0/f13, 0x50(box)
         return lpVolume;
     }
@@ -364,10 +331,7 @@ bool VehicleManager::PredictCarCarIntersection(const SimpleVehiclePhysics* lpBod
         return false;
     }
 
-    mCachedCarCarPredictionNormal.x = lResult.normal.x;
-    mCachedCarCarPredictionNormal.y = lResult.normal.y;
-    mCachedCarCarPredictionNormal.z = lResult.normal.z;
-    mCachedCarCarPredictionNormal.w = lResult.normal.w;
+    mCachedCarCarPredictionNormal = lResult.normal;
     CGS_ASSERT(IsUnitLength(mCachedCarCarPredictionNormal),
                "Bad calculated normal in PredictCarCarIntersection: ");          // :0x18A8
     mbCachedCarCarPredictionResult = true;
@@ -415,10 +379,7 @@ void VehicleManager::DecideOutcomeOfRaceCarTrafficContact(u16 luActiveRaceCarInd
     CGS_ASSERT(lpxOutResponseFlags != 0, "lpxOutResponseFlags != NULL");
 
     *lpxOutResponseFlags = 0;
-    lpTrafficSlamMagnitude->x = 0.0f;
-    lpTrafficSlamMagnitude->y = 0.0f;
-    lpTrafficSlamMagnitude->z = 0.0f;
-    lpTrafficSlamMagnitude->w = 0.0f;
+    *lpTrafficSlamMagnitude = VecFloat(0.0f);
 
     const BrnWorld::ERaceCarType leRaceCarType = maeRaceCarTypes[luActiveRaceCarIndex];
     const bool lbRaceCarIsPlayer  = (leRaceCarType == BrnWorld::E_RACE_CAR_TYPE_PLAYER);
@@ -454,7 +415,7 @@ void VehicleManager::DecideOutcomeOfRaceCarTrafficContact(u16 luActiveRaceCarInd
 
     const bool lbCanBeChecked =
         !lbTrafficIsTrailer
-        && (KF_MAX_MASS_FOR_TRAFFIC_CHECKING > lpTrafficBody->GetMass().x);
+        && (KF_MAX_MASS_FOR_TRAFFIC_CHECKING > lpTrafficBody->GetMass().GetFloat());
 
     // The impact speed the crash test and the slam magnitude both use: the closing speed along
     // the contact normal with the race car's UP component projected out (0x825C7374..0x825C73C4).
@@ -489,7 +450,7 @@ void VehicleManager::DecideOutcomeOfRaceCarTrafficContact(u16 luActiveRaceCarInd
             // crashes with it; the SLAM/CHECK arms do not read it.
             const f32 lfHeadingDot = Dot3(lRaceCarTransform.zAxis, lpTrafficBody->GetTransform().zAxis);
             const f32 lfAlign      = (lfHeadingDot + 1.0f) * 0.25f + 0.5f;   // vmaddcfp128 @0x825C7408
-            f32 lfTrafficSpeed     = lpTrafficBody->GetSpeedMPH().x * 0.447039992f * 0.5f * 0.5f;
+            f32 lfTrafficSpeed     = lpTrafficBody->GetSpeedMPH().GetFloat() * 0.447039992f * 0.5f * 0.5f;
             if (lfTrafficSpeed < 0.0f) lfTrafficSpeed = 0.0f;              // vmaxfp against 0
             if (lfTrafficSpeed > 1.0f) lfTrafficSpeed = 1.0f;              // vminfp against 1
             const f32 lfBlend = (1.0f - lfAlign) * (1.0f - lfTrafficSpeed) + lfAlign;
@@ -527,11 +488,8 @@ void VehicleManager::DecideOutcomeOfRaceCarTrafficContact(u16 luActiveRaceCarInd
         // the traffic mass). The subfic/subfe/rlwinm/addi tail at 0x825C7500 selects
         //     magnitude > 30  ->  CHECK (8)      magnitude <= 30  ->  SLAM (4)
         const f32 lfSlamMagnitude =
-            lfImpactSpeed * lpRaceCarPhysics->GetMass().x / lpTrafficBody->GetMass().x;
-        lpTrafficSlamMagnitude->x = lfSlamMagnitude;
-        lpTrafficSlamMagnitude->y = lfSlamMagnitude;
-        lpTrafficSlamMagnitude->z = lfSlamMagnitude;
-        lpTrafficSlamMagnitude->w = lfSlamMagnitude;
+            lfImpactSpeed * lpRaceCarPhysics->GetMass().GetFloat() / lpTrafficBody->GetMass().GetFloat();
+        *lpTrafficSlamMagnitude = VecFloat(lfSlamMagnitude);
         luFlags = (lfSlamMagnitude > KF_TRAFFIC_CHECK_MAGNITUDE) ? KU_RCTIR_CHECK_TRAFFIC
                                                                  : KU_RCTIR_SLAM_TRAFFIC;
     }
@@ -799,10 +757,10 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
         lCrashAggressorID.muValue = lTrafficPhysicsID.muValue;
 
         Vector3 lvVictimNormal;
-        lvVictimNormal.x = -lContactNormal.x;
-        lvVictimNormal.y = -lContactNormal.y;
-        lvVictimNormal.z = -lContactNormal.z;
-        lvVictimNormal.w = -lContactNormal.w;
+        lvVictimNormal.mV.v[0] = -lContactNormal.mV.v[0];
+        lvVictimNormal.mV.v[1] = -lContactNormal.mV.v[1];
+        lvVictimNormal.mV.v[2] = -lContactNormal.mV.v[2];
+        lvVictimNormal.mV.v[3] = -lContactNormal.mV.v[3];
 
         SetRaceCarCrashing(lCrashVictimID, lCrashAggressorID,
                            lvVictimNormal, lPointOnRaceCar,
@@ -844,11 +802,11 @@ bool VehicleManager::IsFrontCornerClip(const SimpleVehiclePhysics& lrBody, Vecto
 
     const CgsGeometric::AxisAlignedBox& lrBox = lrBody.GetDeformableAABB();
 
-    if (!(lfAlongForward > lrBox.mMax.z - KF_FRONT_CORNER_EPSILON))
+    if (!(lfAlongForward > lrBox.mMax.mV.v[2] - KF_FRONT_CORNER_EPSILON))
         return false;
-    if (lfAlongRight > lrBox.mMax.x - KF_FRONT_CORNER_EPSILON)
+    if (lfAlongRight > lrBox.mMax.mV.v[0] - KF_FRONT_CORNER_EPSILON)
         return true;
-    return (lrBox.mMin.x + KF_FRONT_CORNER_EPSILON) > lfAlongRight;
+    return (lrBox.mMin.mV.v[0] + KF_FRONT_CORNER_EPSILON) > lfAlongRight;
 }
 
 // -------------------------------------------------------------------------------------------
@@ -906,7 +864,7 @@ void VehicleManager::DoCrashPredictionForRaceCarAndTrafficVehicle(
     CGS_ASSERT(lpDeformationInterface != 0, "lpDeformationInterface");
 
     const Vector3& lrNormal = lpContact->mNormal;
-    CGS_ASSERT(lrNormal.x == lrNormal.x && lrNormal.y == lrNormal.y && lrNormal.z == lrNormal.z,
+    CGS_ASSERT(lrNormal.mV.v[0] == lrNormal.mV.v[0] && lrNormal.mV.v[1] == lrNormal.mV.v[1] && lrNormal.mV.v[2] == lrNormal.mV.v[2],
                "Invalid contact: ");
 
     if (!lpContactPairAverager->AddContactPair(*lpContact))

@@ -52,8 +52,6 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
 #include "GameSource/World/BrnEntityTypes.h"                                       // BrnWorld::E_ENTITYTYPE_*
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [world-crash] diag (opt-in)
-#include <cstdlib>   // getenv (BRN_WORLD_CRASH_DIAG)
 #include <cmath>     // sqrtf / fabsf
 
 namespace BrnPhysics
@@ -105,10 +103,9 @@ namespace
     inline Vector3 ToCarFrame(const Matrix44Affine& lrTransform, const Vector3& lrWorldPoint)
     {
         const Vector3 lvDelta = lrWorldPoint - lrTransform.wAxis;
-        { const Vector3 lResult = { rw::math::vpu::Dot(lvDelta, lrTransform.xAxis),
-                        rw::math::vpu::Dot(lvDelta, lrTransform.yAxis),
-                        rw::math::vpu::Dot(lvDelta, lrTransform.zAxis),
-                        0.0f }; return lResult; }
+        return Vector3(rw::math::vpu::Dot(lvDelta, lrTransform.xAxis),
+                       rw::math::vpu::Dot(lvDelta, lrTransform.yAxis),
+                       rw::math::vpu::Dot(lvDelta, lrTransform.zAxis));
     }
 }
 
@@ -197,9 +194,9 @@ void VehicleManager::HandleRaceCarWorldPotentialContact(
     // ---- 0x8263E8E4..0x8263E970: is the WORLD point on the car's front face?  Within the box's
     //      width, and within 0.3 of its front plane.
     const bool lbOnFrontFace =
-           lvWorldPointLocal.x >= lrBox.mMin.x                          // vcmpgefp. v13(Bx), v10(min.x)
-        && lrBox.mMax.x >= lvWorldPointLocal.x                          // vcmpgefp. v6(max.x), v13
-        && lvWorldPointLocal.z >= lrBox.mMax.z - KF_FRONT_FACE_DEPTH;   // vcmpgefp. v5(Bz), max.z - 0.3
+           lvWorldPointLocal.GetX() >= lrBox.mMin.GetX()                          // vcmpgefp. v13(Bx), v10(min.x)
+        && lrBox.mMax.GetX() >= lvWorldPointLocal.GetX()                          // vcmpgefp. v6(max.x), v13
+        && lvWorldPointLocal.GetZ() >= lrBox.mMax.GetZ() - KF_FRONT_FACE_DEPTH;   // vcmpgefp. v5(Bz), max.z - 0.3
 
     // 0x8263E974..0x8263E990: `lfsx f0, 4*(idx + 0xA7C0), this` == mafVulnerabilityFactor[idx].
     const f32 lfVulnerabilityFactor = mafVulnerabilityFactor[lu16RaceCarIndex];
@@ -223,7 +220,7 @@ void VehicleManager::HandleRaceCarWorldPotentialContact(
             rw::math::vpu::Dot(rw::math::vpu::Negate(lContactNormal), lvPointVelocity);   // vmsum3fp128 v7, v6, v7
         if ((lfPointClosingSpeed * lfVulnerabilityFactor) >= mfSideOnWorldCrashThreshold)  // +172216
         {
-            lbSideOnCrash = lvWorldPointLocal.y > 0.0f;                             // flt_82001CC0 (f13)
+            lbSideOnCrash = lvWorldPointLocal.GetY() > 0.0f;                             // flt_82001CC0 (f13)
         }
     }
 
@@ -231,10 +228,10 @@ void VehicleManager::HandleRaceCarWorldPotentialContact(
     //      up, and the surface it is touching faces upward (n.y > 0.1) -- it is landing on the world.
     bool lbRolledOntoWorld = false;                                                 // r10
     {
-        const Vector3 lvWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };               // unk_82181510
+        const Vector3 lvWorldUp(0.0f, 1.0f, 0.0f);               // unk_82181510
         if (KF_ROLLED_CRASH_UP_COSINE > rw::math::vpu::Dot(lTransform.yAxis, lvWorldUp))   // flt_82FB914C > up.y
         {
-            lbRolledOntoWorld = lContactNormal.y > KF_ROLLED_CRASH_MIN_NORMAL_Y;    // vspltw128 v9, v125, 1 ; > unk_82FB82B0
+            lbRolledOntoWorld = lContactNormal.GetY() > KF_ROLLED_CRASH_MIN_NORMAL_Y;    // vspltw128 v9, v125, 1 ; > unk_82FB82B0
         }
     }
 
@@ -255,8 +252,8 @@ void VehicleManager::HandleRaceCarWorldPotentialContact(
     bool lbPlayerCornerClip = false;                                                // r11
     if (lbHeadOnCrash)
     {
-        const f32 lfFromRightSide = lrBox.mMax.x - lvWorldPointLocal.x;             // vsubfp v0, max.x, Bx
-        const f32 lfFromLeftSide  = lvWorldPointLocal.x - lrBox.mMin.x;             // vsubfp v12, Bx, min.x
+        const f32 lfFromRightSide = lrBox.mMax.GetX() - lvWorldPointLocal.GetX();             // vsubfp v0, max.x, Bx
+        const f32 lfFromLeftSide  = lvWorldPointLocal.GetX() - lrBox.mMin.GetX();             // vsubfp v12, Bx, min.x
         const f32 lfFromNearestSide = (lfFromRightSide < lfFromLeftSide) ? lfFromRightSide : lfFromLeftSide;   // vminfp
         if (KF_CORNER_CLIP_WIDTH > lfFromNearestSide                                // vcmpgtfp128. v123(0.5), v0
             && static_cast<u32>(mePlayerActiveRaceCarIndex) == lu16RaceCarIndex)   // lwzx this+0x2A0AC ; cmpw r4
@@ -339,7 +336,7 @@ VecFloat VehicleManager::PredictCarWorldContactTime(const CgsSceneManager::Scene
         lfImpactTime += 1.0f;                                             // vaddfp v0, v0, v12 (vcfsx 1)
     }
 
-    { const VecFloat lResult = { lfImpactTime, lfImpactTime, lfImpactTime, lfImpactTime }; return lResult; }
+    return VecFloat(lfImpactTime);
 }
 
 }   // namespace Vehicle
