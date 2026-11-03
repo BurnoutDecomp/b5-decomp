@@ -122,39 +122,39 @@ namespace
 
     // rw::math::vpu::Normalize, lowered. The console does vmsum3fp128 (dot3) + vrsqrtefp with
     // two Newton-Raphson steps; the refined reciprocal square root is full float precision.
-    inline Vector3 Normalize( const Vector3& lrV )
+    inline Vector3 NormalizeIrradianceVector3( const Vector3& lrV )
     {
-        const f32 lfLenSq = lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z;
+        const f32 lfLenSq = lrV.mV.x * lrV.mV.x + lrV.mV.y * lrV.mV.y + lrV.mV.z * lrV.mV.z;
         const f32 lfInvLen = 1.0f / sqrtf( lfLenSq );
         Vector3 lResult;
-        lResult.x = lrV.x * lfInvLen;
-        lResult.y = lrV.y * lfInvLen;
-        lResult.z = lrV.z * lfInvLen;
-        lResult.w = lrV.w * lfInvLen;   // the console multiplies the whole register
+        lResult.mV.x = lrV.mV.x * lfInvLen;
+        lResult.mV.y = lrV.mV.y * lfInvLen;
+        lResult.mV.z = lrV.mV.z * lfInvLen;
+        lResult.mV.w = lrV.mV.w * lfInvLen;   // the console multiplies the whole register
         return lResult;
     }
 
     // rw::math::vpu::Cross, lowered (the console builds it out of two YZX vpermwi128 + a
     // vnmsubfp at 0x827C52F8-0x827C5348, then re-permutes -- the classic 3-op VMX cross).
-    inline Vector3 Cross( const Vector3& lrA, const Vector3& lrB )
+    inline Vector3 CrossIrradianceVector3( const Vector3& lrA, const Vector3& lrB )
     {
         Vector3 lResult;
-        lResult.x = lrA.y * lrB.z - lrA.z * lrB.y;
-        lResult.y = lrA.z * lrB.x - lrA.x * lrB.z;
-        lResult.z = lrA.x * lrB.y - lrA.y * lrB.x;
-        lResult.w = 0.0f;
+        lResult.mV.x = lrA.mV.y * lrB.mV.z - lrA.mV.z * lrB.mV.y;
+        lResult.mV.y = lrA.mV.z * lrB.mV.x - lrA.mV.x * lrB.mV.z;
+        lResult.mV.z = lrA.mV.x * lrB.mV.y - lrA.mV.y * lrB.mV.x;
+        lResult.mV.w = 0.0f;
         return lResult;
     }
 
     // Unary minus. The console flips the sign bit of all four lanes
     // (`vspltisw v7,-1 ; vslw v0,v7,v7` builds 0x80000000, then vxor128).
-    inline Vector3 Negate( const Vector3& lrV )
+    inline Vector3 NegateIrradianceVector3( const Vector3& lrV )
     {
         Vector3 lResult;
-        lResult.x = -lrV.x;
-        lResult.y = -lrV.y;
-        lResult.z = -lrV.z;
-        lResult.w = -lrV.w;
+        lResult.mV.x = -lrV.mV.x;
+        lResult.mV.y = -lrV.mV.y;
+        lResult.mV.z = -lrV.mV.z;
+        lResult.mV.w = -lrV.mV.w;
         return lResult;
     }
 
@@ -163,18 +163,18 @@ namespace
     // `lvsl v0,0,r10 ; vspltw v,v0,0 ; vperm`).
     inline f32 Component( const Vector3& lrV, s32 liChannel )
     {
-        return ( liChannel == 0 ) ? lrV.x
-             : ( liChannel == 1 ) ? lrV.y
-                                  : lrV.z;
+        return ( liChannel == 0 ) ? lrV.mV.x
+             : ( liChannel == 1 ) ? lrV.mV.y
+                                  : lrV.mV.z;
     }
 
     // One `vmaddfp` of the accumulate loop: coeff += colour * basis, all four lanes.
     inline void AccumulateCoefficient( Vector3& lrCoeff, const Vector3& lrColour, f32 lfBasis )
     {
-        lrCoeff.x += lrColour.x * lfBasis;
-        lrCoeff.y += lrColour.y * lfBasis;
-        lrCoeff.z += lrColour.z * lfBasis;
-        lrCoeff.w += lrColour.w * lfBasis;
+        lrCoeff.mV.x += lrColour.mV.x * lfBasis;
+        lrCoeff.mV.y += lrColour.mV.y * lfBasis;
+        lrCoeff.mV.z += lrColour.mV.z * lfBasis;
+        lrCoeff.mV.w += lrColour.mV.w * lfBasis;
     }
 }
 
@@ -202,9 +202,9 @@ namespace
 void
 GlobalIrradianceManager::UpdateCoefficients( const Vector3& lColour, const Vector3& lVector )
 {
-    const f32 lfX = lVector.x;
-    const f32 lfY = lVector.y;
-    const f32 lfZ = lVector.z;
+    const f32 lfX = lVector.mV.x;
+    const f32 lfY = lVector.mV.y;
+    const f32 lfZ = lVector.mV.z;
 
     // The nine order-2 real spherical harmonics evaluated at lVector, in the storage order the
     // matrix builder expects (L00, L1-1, L10, L11, L2-2, L2-1, L20, L21, L22).
@@ -252,26 +252,27 @@ GlobalIrradianceManager::ComputeFrameCoeffs( const Vector3& lKeyLightDirection,
                                              const Vector3& lUpFillColour,
                                              const Vector3& lDownFillColour )
 {
-    CGS_ASSERT( lKeyLightDirection.y <  KF_KEY_LIGHT_Y_LIMIT, "lKeyLightDirection.Y() < 0.99f" );
-    CGS_ASSERT( lKeyLightDirection.y > -KF_KEY_LIGHT_Y_LIMIT, "lKeyLightDirection.Y() > -0.99f" );
+    CGS_ASSERT( lKeyLightDirection.mV.y <  KF_KEY_LIGHT_Y_LIMIT, "lKeyLightDirection.Y() < 0.99f" );
+    CGS_ASSERT( lKeyLightDirection.mV.y > -KF_KEY_LIGHT_Y_LIMIT, "lKeyLightDirection.Y() > -0.99f" );
 
-    const Vector3 lUpDirection = { 0.0f, 1.0f, 0.0f, 0.0f };
+    const Vector3 lUpDirection(0.0f, 1.0f, 0.0f);
 
-    Vector3 lSunFillDirection = { lKeyLightDirection.x, 0.0f, lKeyLightDirection.z, 0.0f };
-    lSunFillDirection = Normalize( lSunFillDirection );
+    Vector3 lSunFillDirection(lKeyLightDirection.mV.x, 0.0f, lKeyLightDirection.mV.z);
+    lSunFillDirection = NormalizeIrradianceVector3( lSunFillDirection );
 
-    const Vector3 lRightDirection = Normalize( Cross( lUpDirection, lSunFillDirection ) );
+    const Vector3 lRightDirection = NormalizeIrradianceVector3(
+        CrossIrradianceVector3( lUpDirection, lSunFillDirection ) );
 
     for ( s32 liCoeff = 0; liCoeff < E_NUM_COEFFS; ++liCoeff )
     {
         maFrameIrradianceCoeffs[liCoeff].SetZero();
     }
 
-    UpdateCoefficients( lSunFillColour,    Negate( lSunFillDirection ) );
+    UpdateCoefficients( lSunFillColour,    NegateIrradianceVector3( lSunFillDirection ) );
     UpdateCoefficients( lShadowFillColour, lSunFillDirection );
-    UpdateCoefficients( lUpFillColour,     Negate( lUpDirection ) );
+    UpdateCoefficients( lUpFillColour,     NegateIrradianceVector3( lUpDirection ) );
     UpdateCoefficients( lDownFillColour,   lUpDirection );
-    UpdateCoefficients( lRightFillColour,  Negate( lRightDirection ) );
+    UpdateCoefficients( lRightFillColour,  NegateIrradianceVector3( lRightDirection ) );
     UpdateCoefficients( lLeftFillColour,   lRightDirection );
 }
 
@@ -307,25 +308,25 @@ GlobalIrradianceManager::ComputeIrradianceMatrix( s32 liChannel,
     const f32 lfL21  = Component( lpIrradianceCoeffs[7], liChannel );
     const f32 lfL22  = Component( lpIrradianceCoeffs[8], liChannel );
 
-    lrMatrixOut.xAxis.x =  KF_COMPUTE_MATRIX_C1 * lfL22;
-    lrMatrixOut.xAxis.y =  KF_COMPUTE_MATRIX_C1 * lfL2m2;
-    lrMatrixOut.xAxis.z =  KF_COMPUTE_MATRIX_C1 * lfL21;
-    lrMatrixOut.xAxis.w =  KF_COMPUTE_MATRIX_C2 * lfL11;
+    lrMatrixOut.xAxis.mV.x =  KF_COMPUTE_MATRIX_C1 * lfL22;
+    lrMatrixOut.xAxis.mV.y =  KF_COMPUTE_MATRIX_C1 * lfL2m2;
+    lrMatrixOut.xAxis.mV.z =  KF_COMPUTE_MATRIX_C1 * lfL21;
+    lrMatrixOut.xAxis.mV.w =  KF_COMPUTE_MATRIX_C2 * lfL11;
 
-    lrMatrixOut.yAxis.x =  KF_COMPUTE_MATRIX_C1 * lfL2m2;
-    lrMatrixOut.yAxis.y = -KF_COMPUTE_MATRIX_C1 * lfL22;
-    lrMatrixOut.yAxis.z =  KF_COMPUTE_MATRIX_C1 * lfL2m1;
-    lrMatrixOut.yAxis.w =  KF_COMPUTE_MATRIX_C2 * lfL1m1;
+    lrMatrixOut.yAxis.mV.x =  KF_COMPUTE_MATRIX_C1 * lfL2m2;
+    lrMatrixOut.yAxis.mV.y = -KF_COMPUTE_MATRIX_C1 * lfL22;
+    lrMatrixOut.yAxis.mV.z =  KF_COMPUTE_MATRIX_C1 * lfL2m1;
+    lrMatrixOut.yAxis.mV.w =  KF_COMPUTE_MATRIX_C2 * lfL1m1;
 
-    lrMatrixOut.zAxis.x =  KF_COMPUTE_MATRIX_C1 * lfL21;
-    lrMatrixOut.zAxis.y =  KF_COMPUTE_MATRIX_C1 * lfL2m1;
-    lrMatrixOut.zAxis.z =  KF_COMPUTE_MATRIX_C3 * lfL20;
-    lrMatrixOut.zAxis.w =  KF_COMPUTE_MATRIX_C2 * lfL10;
+    lrMatrixOut.zAxis.mV.x =  KF_COMPUTE_MATRIX_C1 * lfL21;
+    lrMatrixOut.zAxis.mV.y =  KF_COMPUTE_MATRIX_C1 * lfL2m1;
+    lrMatrixOut.zAxis.mV.z =  KF_COMPUTE_MATRIX_C3 * lfL20;
+    lrMatrixOut.zAxis.mV.w =  KF_COMPUTE_MATRIX_C2 * lfL10;
 
-    lrMatrixOut.wAxis.x =  KF_COMPUTE_MATRIX_C2 * lfL11;
-    lrMatrixOut.wAxis.y =  KF_COMPUTE_MATRIX_C2 * lfL1m1;
-    lrMatrixOut.wAxis.z =  KF_COMPUTE_MATRIX_C2 * lfL10;
-    lrMatrixOut.wAxis.w =  KF_COMPUTE_MATRIX_C4 * lfL00 - KF_COMPUTE_MATRIX_C5 * lfL20;
+    lrMatrixOut.wAxis.mV.x =  KF_COMPUTE_MATRIX_C2 * lfL11;
+    lrMatrixOut.wAxis.mV.y =  KF_COMPUTE_MATRIX_C2 * lfL1m1;
+    lrMatrixOut.wAxis.mV.z =  KF_COMPUTE_MATRIX_C2 * lfL10;
+    lrMatrixOut.wAxis.mV.w =  KF_COMPUTE_MATRIX_C4 * lfL00 - KF_COMPUTE_MATRIX_C5 * lfL20;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -358,10 +359,10 @@ GlobalIrradianceManager::ComputeIrradiance( const Vector3& lKeyLightDirection,
         ComputeIrradianceMatrix( liColour, maFrameIrradianceCoeffs, maIrradianceMatrix[liColour] );
     }
 
-    mAverageIrradianceColour.x = maIrradianceMatrix[0].wAxis.w;
-    mAverageIrradianceColour.y = maIrradianceMatrix[1].wAxis.w;
-    mAverageIrradianceColour.z = maIrradianceMatrix[2].wAxis.w;
-    mAverageIrradianceColour.w = maIrradianceMatrix[0].wAxis.w;
+    mAverageIrradianceColour.mV.x = maIrradianceMatrix[0].wAxis.mV.w;
+    mAverageIrradianceColour.mV.y = maIrradianceMatrix[1].wAxis.mV.w;
+    mAverageIrradianceColour.mV.z = maIrradianceMatrix[2].wAxis.mV.w;
+    mAverageIrradianceColour.mV.w = maIrradianceMatrix[0].wAxis.mV.w;
 }
 
 // ---------------------------------------------------------------------------------------------

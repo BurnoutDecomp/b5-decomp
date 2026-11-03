@@ -57,18 +57,17 @@ namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 namespace BrnWorld
 {
 
-    // C++03 spelling of a four-lane aggregate; this keeps the original values
-    // at scalar call sites without relying on C++11 temporary-list syntax.
+    // Native vector construction for scalar call sites. Vector3's float3
+    // constructor clears W, so the four-lane form uses the raw register ctor.
     static __forceinline Vector4 MakeShadowVector4(f32 x, f32 y, f32 z, f32 w)
     {
-        const Vector4 value = { x, y, z, w };
-        return value;
+        return Vector4(x, y, z, w);
     }
 
     static __forceinline Vector3 MakeShadowVector3(f32 x, f32 y, f32 z, f32 w)
     {
-        const Vector3 value = { x, y, z, w };
-        return value;
+        const rw::math::vpu::VectorIntrinsic value = { x, y, z, w };
+        return Vector3(value);
     }
 
     static Matrix44 MakeShadowMatrix(const Vector4& x, const Vector4& y,
@@ -130,11 +129,11 @@ namespace BrnWorld
     {
         if (!sbOptimiseShadowLodDistances)
         {
-            { const VecFloat lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
+            { const VecFloat lResult = VecFloat(0.0f); return lResult; }
         }
 
         const f32 lfModifier = KA_SHADOWMAP_LOD_DISTANCE_MODIFIER[muCurrentShadowMap];
-        { const VecFloat lResult = { lfModifier, lfModifier, lfModifier, lfModifier }; return lResult; }
+        { const VecFloat lResult = VecFloat(lfModifier); return lResult; }
     }
 
     // ========================================================================
@@ -234,19 +233,19 @@ namespace BrnWorld
             // (the four stvx128 @r9-0x20/-0x10/+0/+0x10, stride 0x40): rows
             // {1,0,0,0} {0,1,0,0} {0,0,1,0} {0,0,0,0} exactly as stored.
             {
-                const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue = MakeShadowVector3( 1.0f, 0.0f, 0.0f, 0.0f );
                 maCachedMatrix[luMap].xAxis = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue = MakeShadowVector3( 0.0f, 1.0f, 0.0f, 0.0f );
                 maCachedMatrix[luMap].yAxis = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+                const Vector3 lAggregateValue = MakeShadowVector3( 0.0f, 0.0f, 1.0f, 0.0f );
                 maCachedMatrix[luMap].zAxis = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue = MakeShadowVector3( 0.0f, 0.0f, 0.0f, 0.0f );
                 maCachedMatrix[luMap].wAxis = lAggregateValue;
             }
         }
@@ -533,12 +532,12 @@ namespace BrnWorld
         Vector4 MultRow(const Vector4& lrV, const Matrix44& lrM)
         {
             const Vector4* lapRows[4] = { &lrM.xAxis, &lrM.yAxis, &lrM.zAxis, &lrM.wAxis };
-            const f32 lafLanes[4] = { lrV.x, lrV.y, lrV.z, lrV.w };
+            const f32 lafLanes[4] = { lrV.mV.x, lrV.mV.y, lrV.mV.z, lrV.mV.w };
             Vector4 lvOut; lvOut.SetZero();
-            f32* lpfOut = &lvOut.x;
+            f32* lpfOut = &lvOut.mV.x;
             for (int liRow = 0; liRow < 4; ++liRow)
             {
-                const f32* lpfRow = &lapRows[liRow]->x;
+                const f32* lpfRow = &lapRows[liRow]->mV.x;
                 for (int liLane = 0; liLane < 4; ++liLane)
                 {
                     lpfOut[liLane] += lafLanes[liRow] * lpfRow[liLane];
@@ -562,7 +561,7 @@ namespace BrnWorld
         // (x, y, z, 1) with the inverse rows.
         Vector4 LightToWorldPoint(const Matrix44& lrInv, f32 lfX, f32 lfY, f32 lfZ)
         {
-            Vector4 lvP; lvP.x = lfX; lvP.y = lfY; lvP.z = lfZ; lvP.w = 1.0f;
+            Vector4 lvP; lvP.mV.x = lfX; lvP.mV.y = lfY; lvP.mV.z = lfZ; lvP.mV.w = 1.0f;
             return MultRow(lvP, lrInv);
         }
 
@@ -578,15 +577,15 @@ namespace BrnWorld
                                          f32 lfDirX, f32 lfDirY)
         {
             const f32 lfDenom = lfDirY * lfNx - lfDirX * lfNy;   // == dot(dir, U)
-            const f32 lfNumer = lfDirX * (lrLinePoint.y - lrRayPoint.y)
-                              - lfDirY * (lrLinePoint.x - lrRayPoint.x);
+            const f32 lfNumer = lfDirX * (lrLinePoint.mV.y - lrRayPoint.mV.y)
+                              - lfDirY * (lrLinePoint.mV.x - lrRayPoint.mV.x);
             const f32 lfS = lfNumer / lfDenom;
 
             Vector4 lvOut;
-            lvOut.x = lrLinePoint.x + lfNx * lfS;
-            lvOut.y = lrLinePoint.y + lfNy * lfS;
-            lvOut.z = 0.0f;
-            lvOut.w = 1.0f;
+            lvOut.mV.x = lrLinePoint.mV.x + lfNx * lfS;
+            lvOut.mV.y = lrLinePoint.mV.y + lfNy * lfS;
+            lvOut.mV.z = 0.0f;
+            lvOut.mV.w = 1.0f;
             return lvOut;
         }
     }
@@ -649,17 +648,17 @@ namespace BrnWorld
             for (int liVert = 0; liVert < 8; ++liVert)
             {
                 const Vector4& lrP = laVerts[liVert];
-                const f32 lafLanes[4] = { lrP.x, lrP.y, lrP.z, 1.0f }; // affine seed = row3
+                const f32 lafLanes[4] = { lrP.mV.x, lrP.mV.y, lrP.mV.z, 1.0f }; // affine seed = row3
                 Vector4 lvQ; lvQ.SetZero();
-                f32* lpfQ = &lvQ.x;
+                f32* lpfQ = &lvQ.mV.x;
                 for (int liRow = 0; liRow < 4; ++liRow)
                 {
-                    const f32* lpfRow = &lapRows[liRow]->x;
+                    const f32* lpfRow = &lapRows[liRow]->mV.x;
                     lpfQ[0] += lafLanes[liRow] * lpfRow[0];
                     lpfQ[1] += lafLanes[liRow] * lpfRow[1];
                     lpfQ[3] += lafLanes[liRow] * lpfRow[3];
                 }
-                lvQ.z = 0.0f;   // the cleared Z column
+                lvQ.mV.z = 0.0f;   // the cleared Z column
                 laQ[liVert] = lvQ;
             }
         }
@@ -673,40 +672,40 @@ namespace BrnWorld
         Vector4 lvCf; lvCf.SetZero();
         for (int liVert = 0; liVert < 4; ++liVert)
         {
-            lvCn.x += laQ[liVert].x;     lvCn.y += laQ[liVert].y;     lvCn.w += laQ[liVert].w;
-            lvCf.x += laQ[liVert + 4].x; lvCf.y += laQ[liVert + 4].y; lvCf.w += laQ[liVert + 4].w;
+            lvCn.mV.x += laQ[liVert].mV.x;     lvCn.mV.y += laQ[liVert].mV.y;     lvCn.mV.w += laQ[liVert].mV.w;
+            lvCf.mV.x += laQ[liVert + 4].mV.x; lvCf.mV.y += laQ[liVert + 4].mV.y; lvCf.mV.w += laQ[liVert + 4].mV.w;
         }
-        lvCn.x *= 0.25f; lvCn.y *= 0.25f; lvCn.w *= 0.25f;   // flt_82004EF4 == 4.0
-        lvCf.x *= 0.25f; lvCf.y *= 0.25f; lvCf.w *= 0.25f;
+        lvCn.mV.x *= 0.25f; lvCn.mV.y *= 0.25f; lvCn.mV.w *= 0.25f;   // flt_82004EF4 == 4.0
+        lvCf.mV.x *= 0.25f; lvCf.mV.y *= 0.25f; lvCf.mV.w *= 0.25f;
 
         Vector4 lvMid;
-        lvMid.x = (lvCn.x + lvCf.x) * 0.5f;                  // flt_82001DA0 == 0.5
-        lvMid.y = (lvCn.y + lvCf.y) * 0.5f;
-        lvMid.z = 0.0f;
-        lvMid.w = (lvCn.w + lvCf.w) * 0.5f;
+        lvMid.mV.x = (lvCn.mV.x + lvCf.mV.x) * 0.5f;                  // flt_82001DA0 == 0.5
+        lvMid.mV.y = (lvCn.mV.y + lvCf.mV.y) * 0.5f;
+        lvMid.mV.z = 0.0f;
+        lvMid.mV.w = (lvCn.mV.w + lvCf.mV.w) * 0.5f;
 
         Vector4 lvU;
         {
-            const f32 lfDx = lvCf.x - lvCn.x;
-            const f32 lfDy = lvCf.y - lvCn.y;
+            const f32 lfDx = lvCf.mV.x - lvCn.mV.x;
+            const f32 lfDy = lvCf.mV.y - lvCn.mV.y;
             // vmsum3fp128 + vrsqrtefp + 2x NR -> exact reciprocal length (z lane 0).
             const f32 lfInvLen = 1.0f / std::sqrt(lfDx * lfDx + lfDy * lfDy);
-            lvU.x = lfDx * lfInvLen;
-            lvU.y = lfDy * lfInvLen;
-            lvU.z = 0.0f;
-            lvU.w = (lvCf.w - lvCn.w) * lfInvLen;
+            lvU.mV.x = lfDx * lfInvLen;
+            lvU.mV.y = lfDy * lfInvLen;
+            lvU.mV.z = 0.0f;
+            lvU.mV.w = (lvCf.mV.w - lvCn.mV.w) * lfInvLen;
         }
-        const f32 lfNx = lvU.y;    // N = perp(U)
-        const f32 lfNy = -lvU.x;
+        const f32 lfNx = lvU.mV.y;    // N = perp(U)
+        const f32 lfNy = -lvU.mV.x;
 
         // ---- 5. Min/max along the centre line (loop @0x827C036C..0x827C03C0) --
-        f32 lfMinDot = lvU.x * laQ[0].x + lvU.y * laQ[0].y;
+        f32 lfMinDot = lvU.mV.x * laQ[0].mV.x + lvU.mV.y * laQ[0].mV.y;
         f32 lfMaxDot = lfMinDot;
         Vector4 lvMinPoint = laQ[0];   // kn
         Vector4 lvMaxPoint = laQ[0];   // kx
         for (int liVert = 1; liVert < 8; ++liVert)
         {
-            const f32 lfDot = lvU.x * laQ[liVert].x + lvU.y * laQ[liVert].y;
+            const f32 lfDot = lvU.mV.x * laQ[liVert].mV.x + lvU.mV.y * laQ[liVert].mV.y;
             if (lfMinDot > lfDot) { lfMinDot = lfDot; lvMinPoint = laQ[liVert]; }   // vcmpgtfp
             if (lfDot > lfMaxDot) { lfMaxDot = lfDot; lvMaxPoint = laQ[liVert]; }
         }
@@ -715,40 +714,40 @@ namespace BrnWorld
         // Pfar/Pnear = Cn + U*(dot - dot(Cn,U)); delta = dot(M,U) - min;
         // L = max-min; eye offset = L*delta*(1 + sb) / (L - 2*delta - L*sb);
         // E = Pnear - U*offset.
-        const f32 lfCnDot = lvCn.x * lvU.x + lvCn.y * lvU.y;
+        const f32 lfCnDot = lvCn.mV.x * lvU.mV.x + lvCn.mV.y * lvU.mV.y;
         Vector4 lvPfar, lvPnear, lvEye;
         {
             const f32 lfTF = lfMaxDot - lfCnDot;
-            lvPfar.x = lvCn.x + lvU.x * lfTF;  lvPfar.y = lvCn.y + lvU.y * lfTF;
-            lvPfar.z = 0.0f;                   lvPfar.w = lvCn.w + lvU.w * lfTF;
+            lvPfar.mV.x = lvCn.mV.x + lvU.mV.x * lfTF;  lvPfar.mV.y = lvCn.mV.y + lvU.mV.y * lfTF;
+            lvPfar.mV.z = 0.0f;                   lvPfar.mV.w = lvCn.mV.w + lvU.mV.w * lfTF;
 
             const f32 lfTN = lfMinDot - lfCnDot;
-            lvPnear.x = lvCn.x + lvU.x * lfTN; lvPnear.y = lvCn.y + lvU.y * lfTN;
-            lvPnear.z = 0.0f;                  lvPnear.w = lvCn.w + lvU.w * lfTN;
+            lvPnear.mV.x = lvCn.mV.x + lvU.mV.x * lfTN; lvPnear.mV.y = lvCn.mV.y + lvU.mV.y * lfTN;
+            lvPnear.mV.z = 0.0f;                  lvPnear.mV.w = lvCn.mV.w + lvU.mV.w * lfTN;
 
             const f32 lfSlideBack = lrTsm.mfTsmSlideBack;                 // tsm+0x310
-            const f32 lfDelta     = lvMid.x * lvU.x + lvMid.y * lvU.y - lfMinDot;
+            const f32 lfDelta     = lvMid.mV.x * lvU.mV.x + lvMid.mV.y * lvU.mV.y - lfMinDot;
             const f32 lfLength    = lfMaxDot - lfMinDot;
             const f32 lfDenom     = lfLength - lfDelta * 2.0f             // flt_82001D9C
                                   - lfLength * lfSlideBack;
             const f32 lfLD        = lfLength * lfDelta;
             const f32 lfOffset    = (lfLD * lfSlideBack + lfLD) / lfDenom; // vrefp + 2x NR
-            lvEye.x = lvPnear.x - lvU.x * lfOffset;   // vxor sign flip + vmaddcfp128
-            lvEye.y = lvPnear.y - lvU.y * lfOffset;
-            lvEye.z = 0.0f;
-            lvEye.w = lvPnear.w - lvU.w * lfOffset;
+            lvEye.mV.x = lvPnear.mV.x - lvU.mV.x * lfOffset;   // vxor sign flip + vmaddcfp128
+            lvEye.mV.y = lvPnear.mV.y - lvU.mV.y * lfOffset;
+            lvEye.mV.z = 0.0f;
+            lvEye.mV.w = lvPnear.mV.w - lvU.mV.w * lfOffset;
         }
 
         // ---- 7. Silhouette scan (8x8 loop @0x827C04BC..0x827C05BC) ------------
         // Defaults: both silhouette points = Pnear, both ray dirs = U.
         Vector4 lvSilA = lvPnear, lvSilB = lvPnear;
-        f32 lfDirAx = lvU.x, lfDirAy = lvU.y;
-        f32 lfDirBx = lvU.x, lfDirBy = lvU.y;
+        f32 lfDirAx = lvU.mV.x, lfDirAy = lvU.mV.y;
+        f32 lfDirBx = lvU.mV.x, lfDirBy = lvU.mV.y;
         for (u32 luI = 0; luI < 8; ++luI)
         {
             // n = normalize2(q_i - E) (vrsqrtefp + 2x NR, exact here; q.z==E.z==0).
-            const f32 lfDx = laQ[luI].x - lvEye.x;
-            const f32 lfDy = laQ[luI].y - lvEye.y;
+            const f32 lfDx = laQ[luI].mV.x - lvEye.mV.x;
+            const f32 lfDy = laQ[luI].mV.y - lvEye.mV.y;
             const f32 lfInvLen = 1.0f / std::sqrt(lfDx * lfDx + lfDy * lfDy);
             const f32 lfRx = lfDx * lfInvLen;
             const f32 lfRy = lfDy * lfInvLen;
@@ -756,7 +755,7 @@ namespace BrnWorld
             // shuffle with vrlimi z <- splat(n,2).
             const f32 lfPx = lfRy;
             const f32 lfPy = -lfRx;
-            const f32 lfThreshold = lfPx * laQ[luI].x + lfPy * laQ[luI].y;
+            const f32 lfThreshold = lfPx * laQ[luI].mV.x + lfPy * laQ[luI].mV.y;
 
             bool lbAnyGE = false, lbAnyLT = false;
             for (u32 luJ = 0; luJ < 8; ++luJ)
@@ -765,7 +764,7 @@ namespace BrnWorld
                 {
                     continue;
                 }
-                const f32 lfSide = lfPx * laQ[luJ].x + lfPy * laQ[luJ].y;
+                const f32 lfSide = lfPx * laQ[luJ].mV.x + lfPy * laQ[luJ].mV.y;
                 if (lfSide >= lfThreshold)   // vcmpgefp.
                 {
                     lbAnyGE = true;
@@ -806,51 +805,51 @@ namespace BrnWorld
 
         // mid-top + T1 (translate mid-top to origin)
         Vector4 lvMidTop;
-        lvMidTop.x = (lvC2.x + lvC3.x) * 0.5f;
-        lvMidTop.y = (lvC2.y + lvC3.y) * 0.5f;
-        lvMidTop.z = 0.0f;
-        lvMidTop.w = 1.0f;
+        lvMidTop.mV.x = (lvC2.mV.x + lvC3.mV.x) * 0.5f;
+        lvMidTop.mV.y = (lvC2.mV.y + lvC3.mV.y) * 0.5f;
+        lvMidTop.mV.z = 0.0f;
+        lvMidTop.mV.w = 1.0f;
         Matrix44 lT1; lT1.SetIdentity();
-        lT1.wAxis.x = -lvMidTop.x;
-        lT1.wAxis.y = -lvMidTop.y;
+        lT1.wAxis.mV.x = -lvMidTop.mV.x;
+        lT1.wAxis.mV.y = -lvMidTop.mV.y;
 
         // R (rotate the top edge onto the x axis); u = normalize(c2 - c3) via
         // vmsum4fp128 + vrsqrtefp + 2x NR (z/w differences are zero).
         f32 lfUx, lfUy;
         {
-            const f32 lfDx = lvC2.x - lvC3.x;
-            const f32 lfDy = lvC2.y - lvC3.y;
+            const f32 lfDx = lvC2.mV.x - lvC3.mV.x;
+            const f32 lfDy = lvC2.mV.y - lvC3.mV.y;
             const f32 lfInvLen = 1.0f / std::sqrt(lfDx * lfDx + lfDy * lfDy);
             lfUx = lfDx * lfInvLen;
             lfUy = lfDy * lfInvLen;
         }
         Matrix44 lR; lR.SetIdentity();
-        lR.xAxis.x =  lfUx; lR.xAxis.y = lfUy;
-        lR.yAxis.x = -lfUy; lR.yAxis.y = lfUx;
+        lR.xAxis.mV.x =  lfUx; lR.xAxis.mV.y = lfUy;
+        lR.yAxis.mV.x = -lfUy; lR.yAxis.mV.y = lfUx;
 
         const Matrix44 lM2 = MultMatrix(lT1, lR);
 
         // T2 (translate the transformed eye to the origin)
-        Vector4 lvEyeH = lvEye; lvEyeH.w = 1.0f;      // vrlimi w <- 1
+        Vector4 lvEyeH = lvEye; lvEyeH.mV.w = 1.0f;      // vrlimi w <- 1
         const Vector4 lvEyeT = MultRow(lvEyeH, lM2);
         Matrix44 lT2; lT2.SetIdentity();
-        lT2.wAxis.x = -lvEyeT.x;
-        lT2.wAxis.y = -lvEyeT.y;
+        lT2.wAxis.mV.x = -lvEyeT.mV.x;
+        lT2.wAxis.mV.y = -lvEyeT.mV.y;
         const Matrix44 lM3 = MultMatrix(lM2, lT2);
 
         // H (shear so the transformed mid-top sits on the y axis):
         // a = -midTop'.x / midTop'.y (vrefp + 2x NR).
         const Vector4 lvMidTopT = MultRow(lvMidTop, lM3);
         Matrix44 lH; lH.SetIdentity();
-        lH.yAxis.x = -lvMidTopT.x / lvMidTopT.y;
+        lH.yAxis.mV.x = -lvMidTopT.mV.x / lvMidTopT.mV.y;
         const Matrix44 lM4 = MultMatrix(lM3, lH);
 
         // S1 (scale the transformed top corner c2 to (1,1)) -- both reciprocals
         // vrefp + 2x NR, multiplied by the GetVecFloat_One numerator.
         const Vector4 lvC2T = MultRow(lvC2, lM4);
         Matrix44 lS1; lS1.SetIdentity();
-        lS1.xAxis.x = 1.0f / lvC2T.x;
-        lS1.yAxis.y = 1.0f / lvC2T.y;
+        lS1.xAxis.mV.x = 1.0f / lvC2T.mV.x;
+        lS1.yAxis.mV.y = 1.0f / lvC2T.mV.y;
         const Matrix44 lM5 = MultMatrix(lM4, lS1);
 
         // N (the projective trapezoid map): rows (1,0,0,0)/(0,1,0,1)/(0,0,1,0)/
@@ -858,8 +857,8 @@ namespace BrnWorld
         // the evaluated store stream (perm-constant routing algebraically
         // forced; see the banner).
         Matrix44 lN; lN.SetIdentity();
-        lN.yAxis.w = 1.0f;
-        lN.wAxis.x = 0.0f; lN.wAxis.y = 1.0f; lN.wAxis.z = 0.0f; lN.wAxis.w = 0.0f;
+        lN.yAxis.mV.w = 1.0f;
+        lN.wAxis.mV.x = 0.0f; lN.wAxis.mV.y = 1.0f; lN.wAxis.mV.z = 0.0f; lN.wAxis.mV.w = 0.0f;
         const Matrix44 lM6 = MultMatrix(lM5, lN);
 
         // T3 (centre the projective y range between base corner c0 and top
@@ -867,16 +866,16 @@ namespace BrnWorld
         // (vrefp + 2x NR).
         const Vector4 lvC0N = MultRow(lvC0, lM6);
         const Vector4 lvC2N = MultRow(lvC2, lM6);
-        const f32 lfTy = (lvC0N.y / lvC0N.w + lvC2N.y / lvC2N.w) * -0.5f;
+        const f32 lfTy = (lvC0N.mV.y / lvC0N.mV.w + lvC2N.mV.y / lvC2N.mV.w) * -0.5f;
         Matrix44 lT3; lT3.SetIdentity();
-        lT3.wAxis.y = lfTy;
+        lT3.wAxis.mV.y = lfTy;
         const Matrix44 lM7 = MultMatrix(lM6, lT3);
 
         // S2 (final projective y scale, mapping the base corner to the far
         // edge): s = -(c0*M7).w / (c0*M7).y (vrefp + 2x NR, negated numerator).
         const Vector4 lvC0T = MultRow(lvC0, lM7);
         Matrix44 lS2; lS2.SetIdentity();
-        lS2.yAxis.y = -lvC0T.w / lvC0T.y;
+        lS2.yAxis.mV.y = -lvC0T.mV.w / lvC0T.mV.y;
         lrTsm.mBestFitMatrix = MultMatrix(lM7, lS2);   // stores @0x827C0F48..0x827C0F60
 
         // ---- 10. Cull-mode fixup (0x827C0F64..0x827C1044) ----------------------
@@ -886,7 +885,7 @@ namespace BrnWorld
         if (!lrTsm.mbInvertCullMode)   // lbz 0x240(tsm)
         {
             Matrix44 lFlipX; lFlipX.SetIdentity();
-            lFlipX.xAxis.x = -1.0f;
+            lFlipX.xAxis.mV.x = -1.0f;
             lrTsm.mBestFitMatrix = MultMatrix(lrTsm.mBestFitMatrix, lFlipX);
         }
 
@@ -925,8 +924,8 @@ namespace BrnWorld
             // The debug depth: vert0 through the FULL (z-intact) world-to-light
             // rows; its light-space z is broadcast into the z lane of every 2D
             // point below (vperm zero + vrlimi128 insert @0x827C1254..0x827C1268).
-            const Vector4 lvVert0H = { laVerts[0].x, laVerts[0].y, laVerts[0].z, 1.0f };
-            const f32 lfZ = MultRow(lvVert0H, lrTsm.mWorldToLight).z;
+            const Vector4 lvVert0H = Vector4( laVerts[0].mV.x, laVerts[0].mV.y, laVerts[0].mV.z, 1.0f );
+            const f32 lfZ = MultRow(lvVert0H, lrTsm.mWorldToLight).mV.z;
 
             // light -> world (rw::math::vpu::Inverse @ 0x825B2628, bl at
             // 0x827C123C; determinant out is a dead local here).
@@ -936,8 +935,8 @@ namespace BrnWorld
 
             std::memcpy(&lrBlob.mFrustum, &lFrustum, sizeof(CgsGeometric::Frustum)); // @0x827C1274
 
-            lrBlob.mFarCentreWorld  = LightToWorldPoint(lLightToWorld, lvPfar.x,  lvPfar.y,  lfZ);
-            lrBlob.mNearCentreWorld = LightToWorldPoint(lLightToWorld, lvPnear.x, lvPnear.y, lfZ);
+            lrBlob.mFarCentreWorld  = LightToWorldPoint(lLightToWorld, lvPfar.mV.x,  lvPfar.mV.y,  lfZ);
+            lrBlob.mNearCentreWorld = LightToWorldPoint(lLightToWorld, lvPnear.mV.x, lvPnear.mV.y, lfZ);
 
             // Per-corner: (a) corner/w -> world; (b) corner through the selected
             // stage matrix, /w' -> world (loop @0x827C1310..0x827C1428).
@@ -946,34 +945,34 @@ namespace BrnWorld
             for (int liCorner = 0; liCorner < 4; ++liCorner)
             {
                 const Vector4& lrC = lavCorners[liCorner];
-                const f32 lfInvW = 1.0f / lrC.w;   // vrefp + 2x NR (w == 1 here)
+                const f32 lfInvW = 1.0f / lrC.mV.w;   // vrefp + 2x NR (w == 1 here)
                 lrBlob.maTrapezoidCornersWorld[liCorner] =
-                    LightToWorldPoint(lLightToWorld, lrC.x * lfInvW, lrC.y * lfInvW,
-                                      lrC.z * lfInvW + lfZ);
+                    LightToWorldPoint(lLightToWorld, lrC.mV.x * lfInvW, lrC.mV.y * lfInvW,
+                                      lrC.mV.z * lfInvW + lfZ);
 
                 const Vector4 lvStaged = MultRow(lrC, lrStage);
-                const f32 lfInvW2 = 1.0f / lvStaged.w;
+                const f32 lfInvW2 = 1.0f / lvStaged.mV.w;
                 lrBlob.maStageCornersWorld[liCorner] =
-                    LightToWorldPoint(lLightToWorld, lvStaged.x * lfInvW2,
-                                      lvStaged.y * lfInvW2,
-                                      lvStaged.z * lfInvW2 + lfZ);
+                    LightToWorldPoint(lLightToWorld, lvStaged.mV.x * lfInvW2,
+                                      lvStaged.mV.y * lfInvW2,
+                                      lvStaged.mV.z * lfInvW2 + lfZ);
             }
 
             // Eye / midpoint / silhouette / extreme points (0x827C142C..0x827C15EC).
-            lrBlob.mEyeWorld      = LightToWorldPoint(lLightToWorld, lvEye.x, lvEye.y, lfZ);
-            lrBlob.mMidPointWorld = LightToWorldPoint(lLightToWorld, lvMid.x, lvMid.y, lfZ);
-            lrBlob.mSilhouetteAWorld    = LightToWorldPoint(lLightToWorld, lvSilA.x, lvSilA.y, lfZ);
-            lrBlob.mSilhouetteADirWorld = LightToWorldPoint(lLightToWorld, lvSilA.x + lfDirAx,
-                                                            lvSilA.y + lfDirAy, lfZ);
-            lrBlob.mSilhouetteBWorld    = LightToWorldPoint(lLightToWorld, lvSilB.x, lvSilB.y, lfZ);
-            lrBlob.mSilhouetteBDirWorld = LightToWorldPoint(lLightToWorld, lvSilB.x + lfDirBx,
-                                                            lvSilB.y + lfDirBy, lfZ);
-            lrBlob.mMaxPointWorld = LightToWorldPoint(lLightToWorld, lvMaxPoint.x, lvMaxPoint.y, lfZ);
-            lrBlob.mMaxPerpWorld  = LightToWorldPoint(lLightToWorld, lvMaxPoint.x + lfNx,
-                                                      lvMaxPoint.y + lfNy, lfZ);
-            lrBlob.mMinPointWorld = LightToWorldPoint(lLightToWorld, lvMinPoint.x, lvMinPoint.y, lfZ);
-            lrBlob.mMinPerpWorld  = LightToWorldPoint(lLightToWorld, lvMinPoint.x + lfNx,
-                                                      lvMinPoint.y + lfNy, lfZ);
+            lrBlob.mEyeWorld      = LightToWorldPoint(lLightToWorld, lvEye.mV.x, lvEye.mV.y, lfZ);
+            lrBlob.mMidPointWorld = LightToWorldPoint(lLightToWorld, lvMid.mV.x, lvMid.mV.y, lfZ);
+            lrBlob.mSilhouetteAWorld    = LightToWorldPoint(lLightToWorld, lvSilA.mV.x, lvSilA.mV.y, lfZ);
+            lrBlob.mSilhouetteADirWorld = LightToWorldPoint(lLightToWorld, lvSilA.mV.x + lfDirAx,
+                                                            lvSilA.mV.y + lfDirAy, lfZ);
+            lrBlob.mSilhouetteBWorld    = LightToWorldPoint(lLightToWorld, lvSilB.mV.x, lvSilB.mV.y, lfZ);
+            lrBlob.mSilhouetteBDirWorld = LightToWorldPoint(lLightToWorld, lvSilB.mV.x + lfDirBx,
+                                                            lvSilB.mV.y + lfDirBy, lfZ);
+            lrBlob.mMaxPointWorld = LightToWorldPoint(lLightToWorld, lvMaxPoint.mV.x, lvMaxPoint.mV.y, lfZ);
+            lrBlob.mMaxPerpWorld  = LightToWorldPoint(lLightToWorld, lvMaxPoint.mV.x + lfNx,
+                                                      lvMaxPoint.mV.y + lfNy, lfZ);
+            lrBlob.mMinPointWorld = LightToWorldPoint(lLightToWorld, lvMinPoint.mV.x, lvMinPoint.mV.y, lfZ);
+            lrBlob.mMinPerpWorld  = LightToWorldPoint(lLightToWorld, lvMinPoint.mV.x + lfNx,
+                                                      lvMinPoint.mV.y + lfNy, lfZ);
 
             // Raw world frustum verts + the inverse itself (0x827C15F0..0x827C161C).
             for (int liVert = 0; liVert < 8; ++liVert)
@@ -1065,12 +1064,10 @@ namespace BrnWorld
 
     // The half-texel row-3 add applied to every result. Init thunk @0x82C6AF60
     // (lanes 2/3 written from flt_82001CC0 == 0.0).
-    static Vector4 gShadowConstantRowOffset =   // unk_8300FB00
-    {
+    static Vector4 gShadowConstantRowOffset = MakeShadowVector4(
         0.000390625f,      // flt_820CD728 (0x39CCCCCD)
         0.00025510203f,    // flt_820CD724 (0x3985BF37)
-        0.0f, 0.0f,
-    };
+        0.0f, 0.0f);       // unk_8300FB00
 
     namespace
     {
@@ -1120,14 +1117,14 @@ namespace BrnWorld
                                        const Vector4& lrUpReference)
         {
             // ---- Z axis (0x8220C990..0x8220CA14) ----------------------------
-            const f32 lfDx = lrEyePoint.x - lrFocus.x;
-            const f32 lfDy = lrEyePoint.y - lrFocus.y;
-            const f32 lfDz = lrEyePoint.z - lrFocus.z;
+            const f32 lfDx = lrEyePoint.mV.x - lrFocus.mV.x;
+            const f32 lfDy = lrEyePoint.mV.y - lrFocus.mV.y;
+            const f32 lfDz = lrEyePoint.mV.z - lrFocus.mV.z;
             Vector4 lvZ;
             if (IsZero3(lfDx, lfDy, lfDz))
             {
                 {
-                    const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+                    const Vector4 lAggregateValue = Vector4( 0.0f, 0.0f, 1.0f, 0.0f );
                     lvZ = lAggregateValue;
                 }   // unk_82181520
             }
@@ -1135,22 +1132,22 @@ namespace BrnWorld
             {
                 const f32 lfInvLen = 1.0f / std::sqrt(lfDx * lfDx + lfDy * lfDy + lfDz * lfDz); // vrsqrtefp + 2x NR
                 {
-                    const Vector4 lAggregateValue = { lfDx * lfInvLen, lfDy * lfInvLen, lfDz * lfInvLen, 0.0f };
+                    const Vector4 lAggregateValue = Vector4( lfDx * lfInvLen, lfDy * lfInvLen, lfDz * lfInvLen, 0.0f );
                     lvZ = lAggregateValue;
                 }
             }
-            CGS_ASSERT(IsValid3(lvZ.x, lvZ.y, lvZ.z),
+            CGS_ASSERT(IsValid3(lvZ.mV.x, lvZ.mV.y, lvZ.mV.z),
                        "Invalid Z Axis after normalisation, pre-normalised: ");   // CameraUtils.cpp:779
 
             // ---- X axis (0x8220CB00..0x8220CB98) ----------------------------
-            const f32 lfCx = lrUpReference.y * lvZ.z - lrUpReference.z * lvZ.y;
-            const f32 lfCy = lrUpReference.z * lvZ.x - lrUpReference.x * lvZ.z;
-            const f32 lfCz = lrUpReference.x * lvZ.y - lrUpReference.y * lvZ.x;
+            const f32 lfCx = lrUpReference.mV.y * lvZ.mV.z - lrUpReference.mV.z * lvZ.mV.y;
+            const f32 lfCy = lrUpReference.mV.z * lvZ.mV.x - lrUpReference.mV.x * lvZ.mV.z;
+            const f32 lfCz = lrUpReference.mV.x * lvZ.mV.y - lrUpReference.mV.y * lvZ.mV.x;
             Vector4 lvX;
             if (IsZero3(lfCx, lfCy, lfCz))
             {
                 {
-                    const Vector4 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+                    const Vector4 lAggregateValue = Vector4( 1.0f, 0.0f, 0.0f, 0.0f );
                     lvX = lAggregateValue;
                 }   // w::math::vpu::detail::gIVector
             }
@@ -1158,19 +1155,19 @@ namespace BrnWorld
             {
                 const f32 lfInvLen = 1.0f / std::sqrt(lfCx * lfCx + lfCy * lfCy + lfCz * lfCz);
                 {
-                    const Vector4 lAggregateValue = { lfCx * lfInvLen, lfCy * lfInvLen, lfCz * lfInvLen, 0.0f };
+                    const Vector4 lAggregateValue = Vector4( lfCx * lfInvLen, lfCy * lfInvLen, lfCz * lfInvLen, 0.0f );
                     lvX = lAggregateValue;
                 }
             }
-            CGS_ASSERT(IsValid3(lvX.x, lvX.y, lvX.z), "IsValid(lXaxis)");        // CameraUtils.cpp:793
+            CGS_ASSERT(IsValid3(lvX.mV.x, lvX.mV.y, lvX.mV.z), "IsValid(lXaxis)");        // CameraUtils.cpp:793
 
             // ---- Y axis (0x8220CC1C..0x8220CC50, unnormalised) --------------
             Vector4 lvY;
-            lvY.x = lvZ.y * lvX.z - lvZ.z * lvX.y;
-            lvY.y = lvZ.z * lvX.x - lvZ.x * lvX.z;
-            lvY.z = lvZ.x * lvX.y - lvZ.y * lvX.x;
-            lvY.w = 0.0f;
-            CGS_ASSERT(!IsZero3(lvY.x, lvY.y, lvY.z), "!IsZero(lYaxis)");        // CameraUtils.cpp:797
+            lvY.mV.x = lvZ.mV.y * lvX.mV.z - lvZ.mV.z * lvX.mV.y;
+            lvY.mV.y = lvZ.mV.z * lvX.mV.x - lvZ.mV.x * lvX.mV.z;
+            lvY.mV.z = lvZ.mV.x * lvX.mV.y - lvZ.mV.y * lvX.mV.x;
+            lvY.mV.w = 0.0f;
+            CGS_ASSERT(!IsZero3(lvY.mV.x, lvY.mV.y, lvY.mV.z), "!IsZero(lYaxis)");        // CameraUtils.cpp:797
 
             // ---- row stores (0x8220CC80..0x8220CC9C) ------------------------
             lapRowsOut[0] = lvX;
@@ -1256,10 +1253,10 @@ namespace BrnWorld
 
         // ---- 1. the light-direction eye offset (vmulfp128 v127, v1, splat) --
         Vector4 lvLightOffset;
-        lvLightOffset.x = lv3LightDirection.x * mfEyeOffset;
-        lvLightOffset.y = lv3LightDirection.y * mfEyeOffset;
-        lvLightOffset.z = lv3LightDirection.z * mfEyeOffset;
-        lvLightOffset.w = lv3LightDirection.w * mfEyeOffset;
+        lvLightOffset.mV.x = lv3LightDirection.mV.x * mfEyeOffset;
+        lvLightOffset.mV.y = lv3LightDirection.mV.y * mfEyeOffset;
+        lvLightOffset.mV.z = lv3LightDirection.mV.z * mfEyeOffset;
+        lvLightOffset.mV.w = lv3LightDirection.mV.w * mfEyeOffset;
 
         const rw::math::vpu::Vector3& lrAt  = lpRenderCamera->mTransform.At();   // r4+0x20
         const rw::math::vpu::Vector3& lrPos = lpRenderCamera->mTransform.Pos();  // r4+0x30
@@ -1276,36 +1273,36 @@ namespace BrnWorld
             // focus = At * atOffset + Pos (vmaddfp v0, v0, v13, v12)
             const f32 lfAtOffset = mafShadowMapAtOffset[luConfig];
             Vector4 lvFocus;
-            lvFocus.x = lrAt.x * lfAtOffset + lrPos.x;
-            lvFocus.y = lrAt.y * lfAtOffset + lrPos.y;
-            lvFocus.z = lrAt.z * lfAtOffset + lrPos.z;
-            lvFocus.w = lrAt.w * lfAtOffset + lrPos.w;
-            mShadowMapFocusPoint.x = lvFocus.x;                  // stvx this+0x14E0
-            mShadowMapFocusPoint.y = lvFocus.y;
-            mShadowMapFocusPoint.z = lvFocus.z;
-            mShadowMapFocusPoint.w = lvFocus.w;
+            lvFocus.mV.x = lrAt.mV.x * lfAtOffset + lrPos.mV.x;
+            lvFocus.mV.y = lrAt.mV.y * lfAtOffset + lrPos.mV.y;
+            lvFocus.mV.z = lrAt.mV.z * lfAtOffset + lrPos.mV.z;
+            lvFocus.mV.w = lrAt.mV.w * lfAtOffset + lrPos.mV.w;
+            mShadowMapFocusPoint.mV.x = lvFocus.mV.x;                  // stvx this+0x14E0
+            mShadowMapFocusPoint.mV.y = lvFocus.mV.y;
+            mShadowMapFocusPoint.mV.z = lvFocus.mV.z;
+            mShadowMapFocusPoint.mV.w = lvFocus.mV.w;
 
-            const Vector4 lvEyePoint = { lvFocus.x + lvLightOffset.x, lvFocus.y + lvLightOffset.y,
-                                      lvFocus.z + lvLightOffset.z, lvFocus.w + lvLightOffset.w };
-            const Vector4 lvUpReference = { lrAt.x, lrAt.y, lrAt.z, lrAt.w };
+            const Vector4 lvEyePoint = Vector4( lvFocus.mV.x + lvLightOffset.mV.x, lvFocus.mV.y + lvLightOffset.mV.y,
+                                      lvFocus.mV.z + lvLightOffset.mV.z, lvFocus.mV.w + lvLightOffset.mV.w );
+            const Vector4 lvUpReference = Vector4( lrAt.mV.x, lrAt.mV.y, lrAt.mV.z, lrAt.mV.w );
 
             // the outlined CameraUtils builder (bl sub_8220C960) -> mTransform rows
             Vector4 laRows[4];
             BuildLightCameraTransform(laRows, lvFocus, lvEyePoint, lvUpReference);
             {
-                const rw::math::vpu::Vector3 lAggregateValue = { laRows[0].x, laRows[0].y, laRows[0].z, laRows[0].w };
+                const rw::math::vpu::Vector3 lAggregateValue = MakeShadowVector3( laRows[0].mV.x, laRows[0].mV.y, laRows[0].mV.z, laRows[0].mV.w );
                 lrDirCamera.mTransform.xAxis = lAggregateValue;
             }
             {
-                const rw::math::vpu::Vector3 lAggregateValue = { laRows[1].x, laRows[1].y, laRows[1].z, laRows[1].w };
+                const rw::math::vpu::Vector3 lAggregateValue = MakeShadowVector3( laRows[1].mV.x, laRows[1].mV.y, laRows[1].mV.z, laRows[1].mV.w );
                 lrDirCamera.mTransform.yAxis = lAggregateValue;
             }
             {
-                const rw::math::vpu::Vector3 lAggregateValue = { laRows[2].x, laRows[2].y, laRows[2].z, laRows[2].w };
+                const rw::math::vpu::Vector3 lAggregateValue = MakeShadowVector3( laRows[2].mV.x, laRows[2].mV.y, laRows[2].mV.z, laRows[2].mV.w );
                 lrDirCamera.mTransform.zAxis = lAggregateValue;
             }
             {
-                const rw::math::vpu::Vector3 lAggregateValue = { laRows[3].x, laRows[3].y, laRows[3].z, laRows[3].w };
+                const rw::math::vpu::Vector3 lAggregateValue = MakeShadowVector3( laRows[3].mV.x, laRows[3].mV.y, laRows[3].mV.z, laRows[3].mV.w );
                 lrDirCamera.mTransform.wAxis = lAggregateValue;
             }
 
@@ -1438,8 +1435,8 @@ namespace BrnWorld
             for (int liVert = 0; liVert < 8; ++liVert)
             {
                 Vector4 lvVert = laVerts[liVert];
-                lvVert.w = 1.0f;                                 // vrlimi128 mask=1
-                const f32 lfClipZ = MultRow(lvVert, lCascadeVP).z;
+                lvVert.mV.w = 1.0f;                                 // vrlimi128 mask=1
+                const f32 lfClipZ = MultRow(lvVert, lCascadeVP).mV.z;
                 lfMaxZ = (lfClipZ > lfMaxZ) ? lfClipZ : lfMaxZ;  // vmaxfp
             }
 
@@ -1459,8 +1456,8 @@ namespace BrnWorld
             for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
             {
                 CgsGraphics::Camera& lrCgsCamera = maCgsShadowMapCamera[luMap];
-                lrCgsCamera.mProjection.zAxis.z = lfInvSpan;
-                lrCgsCamera.mProjection.wAxis.z = lfWzTerm;
+                lrCgsCamera.mProjection.zAxis.mV.z = lfInvSpan;
+                lrCgsCamera.mProjection.wAxis.mV.z = lfWzTerm;
                 lrCgsCamera.UpdateViewProjectionMatrix();
             }
         }
@@ -1506,10 +1503,10 @@ namespace BrnWorld
         // ---- 1. the cached world offset (0x827C1700..0x827C1750) ------------
         const rw::math::vpu::Vector3& lrAt = lpCamera->mTransform.At();   // lvx r4+0x20
         const f32 lfOffsetDelta = mafShadowMapAtOffset[0] - mafShadowMapAtOffset[1];
-        mCachedOffsetWorld.x = lrAt.x * lfOffsetDelta;
-        mCachedOffsetWorld.y = lrAt.y * lfOffsetDelta;
-        mCachedOffsetWorld.z = lrAt.z * lfOffsetDelta;
-        mCachedOffsetWorld.w = lrAt.w * lfOffsetDelta;
+        mCachedOffsetWorld.mV.x = lrAt.mV.x * lfOffsetDelta;
+        mCachedOffsetWorld.mV.y = lrAt.mV.y * lfOffsetDelta;
+        mCachedOffsetWorld.mV.z = lrAt.mV.z * lfOffsetDelta;
+        mCachedOffsetWorld.mV.w = lrAt.mV.w * lfOffsetDelta;
 
         // ---- 2. the c14 matrix triple (loop @0x827C17F0..) ------------------
         Matrix44 laMatrices[KU_NUM_SHADOW_MAPS];
@@ -1522,10 +1519,10 @@ namespace BrnWorld
             {
                 laMatrices[luMap] = gShadowDisabledConstantMatrix;
             }
-            laMatrices[luMap].wAxis.x += gShadowConstantRowOffset.x;
-            laMatrices[luMap].wAxis.y += gShadowConstantRowOffset.y;
-            laMatrices[luMap].wAxis.z += gShadowConstantRowOffset.z;
-            laMatrices[luMap].wAxis.w += gShadowConstantRowOffset.w;
+            laMatrices[luMap].wAxis.mV.x += gShadowConstantRowOffset.mV.x;
+            laMatrices[luMap].wAxis.mV.y += gShadowConstantRowOffset.mV.y;
+            laMatrices[luMap].wAxis.mV.z += gShadowConstantRowOffset.mV.z;
+            laMatrices[luMap].wAxis.mV.w += gShadowConstantRowOffset.mV.w;
         }
 
         // ---- 3. upload (bl sub_827BAE60 == the Matrix44* array overload) ----
@@ -1603,8 +1600,8 @@ namespace BrnWorld
         // compare in vector clothing; spelled per-lane to keep the semantics.
         bool operator<(const CandidateViewVolumePlane& lrOther) const
         {
-            return lrOther.mScore.x > mScore.x && lrOther.mScore.y > mScore.y
-                && lrOther.mScore.z > mScore.z && lrOther.mScore.w > mScore.w;
+            return lrOther.mScore.mV.x > mScore.mV.x && lrOther.mScore.mV.y > mScore.mV.y
+                && lrOther.mScore.mV.z > mScore.mV.z && lrOther.mScore.mV.w > mScore.mV.w;
         }
     };
 
@@ -1638,7 +1635,7 @@ namespace BrnWorld
     // BrnShadowMap.cpp:1219 (DWARF) -- unk_8300F630. The value was previously
     // only DERIVED; now CONFIRMED 2026-08-12 from the init thunk @0x82C6B328,
     // which splats flt_82003F40 == 0x3E800000 == 0.25 into unk_8300F630.
-    const VecFloat K_1_OVER_4 = { 0.25f, 0.25f, 0.25f, 0.25f };   // unk_8300F630 (dumped)
+    const VecFloat K_1_OVER_4 = VecFloat(0.25f);   // unk_8300F630 (dumped)
 
     // BrnShadowMap.cpp:78/79 (DWARF) -- unk_8300F980 / unk_8300F5C0, the two
     // terms of the ideal-aspect-ratio area penalty `t = clamp01((err - 1 - A) * B)`.
@@ -1646,9 +1643,8 @@ namespace BrnWorld
     // thunks: @0x82C6AFA0 splats flt_82003F40 == 0.25 into unk_8300F980, and
     // @0x82C6AFC8 splats flt_82058310 == 0x3FAAAAAB == 1.3333334 (== 1/0.75) into
     // unk_8300F5C0. The derivation was exactly right.
-    const VecFloat K_VECFLOAT_ZEROPOINTTWOFIVE            = { 0.25f, 0.25f, 0.25f, 0.25f };   // unk_8300F980 (dumped)
-    const VecFloat K_VECFLOAT_ONE_OVER_ZEROPOINTSEVENFIVE = { 1.3333334f, 1.3333334f,
-                                                              1.3333334f, 1.3333334f };       // unk_8300F5C0 (dumped)
+    const VecFloat K_VECFLOAT_ZEROPOINTTWOFIVE            = VecFloat(0.25f);   // unk_8300F980 (dumped)
+    const VecFloat K_VECFLOAT_ONE_OVER_ZEROPOINTSEVENFIVE = VecFloat(1.3333334f);       // unk_8300F5C0 (dumped)
 
     // BrnShadowMap.cpp:1589-1592 (DWARF) -- unk_8300F990 / unk_8300E9A0 /
     // unk_8300E9D0 / unk_8300F460.
@@ -1676,10 +1672,10 @@ namespace BrnWorld
     // camera's near face is the least useful supporting plane. The existing
     // `(luI < 4) ? K_LOW_PRIORITY : K_HIGH_PRIORITY` binding is therefore CORRECT
     // and is left as it stands.
-    const VecFloat K_VERY_SMALL       = {  0.01f,  0.01f,  0.01f,  0.01f }; // unk_8300F990 (dumped)
-    const VecFloat K_MINUS_VERY_SMALL = { -0.01f, -0.01f, -0.01f, -0.01f }; // unk_8300E9A0 (dumped)
-    const VecFloat K_LOW_PRIORITY     = { 10.0f, 10.0f, 10.0f, 10.0f };     // unk_8300E9D0 (dumped)
-    const VecFloat K_HIGH_PRIORITY    = {  1.0f,  1.0f,  1.0f,  1.0f };     // unk_8300F460 (dumped)
+    const VecFloat K_VERY_SMALL       = VecFloat(0.01f); // unk_8300F990 (dumped)
+    const VecFloat K_MINUS_VERY_SMALL = VecFloat(-0.01f); // unk_8300E9A0 (dumped)
+    const VecFloat K_LOW_PRIORITY     = VecFloat(10.0f);     // unk_8300E9D0 (dumped)
+    const VecFloat K_HIGH_PRIORITY    = VecFloat(1.0f);     // unk_8300F460 (dumped)
 
     // BrnShadowMap.cpp:256 (DWARF `const CgsGeometric::Frustum::Vertices[24]`).
     // The twelve (start, end) vertex-index pairs of the sub-frustum's edge list.
@@ -1710,11 +1706,11 @@ namespace BrnWorld
         // rw::math::vpu::TransformPoint(Vector3, Matrix44) -- affine seed from row 3.
         Vector4 TransformPoint(const Vector4& lrPoint, const Matrix44& lrMatrix)
         {
-            const f32* lapRows[4] = { &lrMatrix.xAxis.x, &lrMatrix.yAxis.x,
-                                      &lrMatrix.zAxis.x, &lrMatrix.wAxis.x };
-            const f32 lafLanes[3] = { lrPoint.x, lrPoint.y, lrPoint.z };
+            const f32* lapRows[4] = { &lrMatrix.xAxis.mV.x, &lrMatrix.yAxis.mV.x,
+                                      &lrMatrix.zAxis.mV.x, &lrMatrix.wAxis.mV.x };
+            const f32 lafLanes[3] = { lrPoint.mV.x, lrPoint.mV.y, lrPoint.mV.z };
             Vector4 lvOut;
-            f32* lpfOut = &lvOut.x;
+            f32* lpfOut = &lvOut.mV.x;
             for (int liLane = 0; liLane < 4; ++liLane)
             {
                 lpfOut[liLane] = lapRows[3][liLane];
@@ -1732,10 +1728,10 @@ namespace BrnWorld
         // rw::math::vpu::TransformVector(Vector3, Matrix44Affine) -- no translation.
         Vector4 TransformVector(const Vector4& lrVector, const Matrix44Affine& lrMatrix)
         {
-            const f32* lapRows[3] = { &lrMatrix.xAxis.x, &lrMatrix.yAxis.x, &lrMatrix.zAxis.x };
-            const f32 lafLanes[3] = { lrVector.x, lrVector.y, lrVector.z };
+            const f32* lapRows[3] = { &lrMatrix.xAxis.mV.x, &lrMatrix.yAxis.mV.x, &lrMatrix.zAxis.mV.x };
+            const f32 lafLanes[3] = { lrVector.mV.x, lrVector.mV.y, lrVector.mV.z };
             Vector4 lvOut; lvOut.SetZero();
-            f32* lpfOut = &lvOut.x;
+            f32* lpfOut = &lvOut.mV.x;
             for (int liRow = 0; liRow < 3; ++liRow)
             {
                 for (int liLane = 0; liLane < 4; ++liLane)
@@ -1751,10 +1747,10 @@ namespace BrnWorld
         // each stage fused; TransformPoint above is the older non-fused form.
         Vector4 TransformShadowDebugPointFma(const Vector4& lrPoint, const Matrix44& lrMatrix)
         {
-            XMVECTOR value = __vmaddfp(XMVectorReplicate(lrPoint.x),
+            XMVECTOR value = __vmaddfp(XMVectorReplicate(lrPoint.mV.x),
                                       __lvx(&lrMatrix.xAxis, 0), __lvx(&lrMatrix.wAxis, 0));
-            value = __vmaddfp(XMVectorReplicate(lrPoint.y), __lvx(&lrMatrix.yAxis, 0), value);
-            value = __vmaddfp(XMVectorReplicate(lrPoint.z), __lvx(&lrMatrix.zAxis, 0), value);
+            value = __vmaddfp(XMVectorReplicate(lrPoint.mV.y), __lvx(&lrMatrix.yAxis, 0), value);
+            value = __vmaddfp(XMVectorReplicate(lrPoint.mV.z), __lvx(&lrMatrix.zAxis, 0), value);
             Vector4 lvOut;
             __stvx(value, &lvOut, 0);
             return lvOut;
@@ -1762,7 +1758,7 @@ namespace BrnWorld
 
         Vector3 ToShadowDebugVector3(const Vector4& lrVector)
         {
-            { const Vector3 lResult = { lrVector.x, lrVector.y, lrVector.z, lrVector.w }; return lResult; }
+            { const Vector3 lResult = MakeShadowVector3( lrVector.mV.x, lrVector.mV.y, lrVector.mV.z, lrVector.mV.w ); return lResult; }
         }
 
         // ARTIST DebugRender transforms the three +/-20 axis pairs, then a
@@ -1792,10 +1788,10 @@ namespace BrnWorld
 
             const Vector4 KAA_PLANE_CORNERS[4] =
             {
-                { -1.0f, -1.0f, lfPlaneZ, -1.0f },
-                {  1.0f, -1.0f, lfPlaneZ,  1.0f },
-                {  1.0f,  1.0f, lfPlaneZ,  1.0f },
-                { -1.0f,  1.0f, lfPlaneZ, -1.0f },
+                Vector4(-1.0f, -1.0f, lfPlaneZ, -1.0f),
+                Vector4( 1.0f, -1.0f, lfPlaneZ,  1.0f),
+                Vector4( 1.0f,  1.0f, lfPlaneZ,  1.0f),
+                Vector4(-1.0f,  1.0f, lfPlaneZ, -1.0f),
             };
 
             for (u32 luCorner = 0; luCorner < 4; ++luCorner)
@@ -1812,35 +1808,35 @@ namespace BrnWorld
         // rw::math::vpu::Normalize(Vector3) -- vmsum3fp + vrsqrtefp + 2x NR.
         Vector4 Normalize3(const Vector4& lrVector)
         {
-            const f32 lfLenSq = lrVector.x * lrVector.x + lrVector.y * lrVector.y
-                              + lrVector.z * lrVector.z;
+            const f32 lfLenSq = lrVector.mV.x * lrVector.mV.x + lrVector.mV.y * lrVector.mV.y
+                              + lrVector.mV.z * lrVector.mV.z;
             const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
-            { const Vector4 lResult = { lrVector.x * lfInvLen, lrVector.y * lfInvLen,
-                            lrVector.z * lfInvLen, lrVector.w * lfInvLen }; return lResult; }
+            { const Vector4 lResult = Vector4( lrVector.mV.x * lfInvLen, lrVector.mV.y * lfInvLen,
+                            lrVector.mV.z * lfInvLen, lrVector.mV.w * lfInvLen ); return lResult; }
         }
 
         // rw::math::vpu::Magnitude(Vector4) -- vmsum4fp + rsqrt NR, with the
         // vcmpeqfp/vsel guard that returns exactly 0 for a zero-length input.
         f32 Magnitude4(const Vector4& lrVector)
         {
-            const f32 lfLenSq = lrVector.x * lrVector.x + lrVector.y * lrVector.y
-                              + lrVector.z * lrVector.z + lrVector.w * lrVector.w;
+            const f32 lfLenSq = lrVector.mV.x * lrVector.mV.x + lrVector.mV.y * lrVector.mV.y
+                              + lrVector.mV.z * lrVector.mV.z + lrVector.mV.w * lrVector.mV.w;
             return (lfLenSq == 0.0f) ? 0.0f : lfLenSq * (1.0f / std::sqrt(lfLenSq));
         }
 
         f32 Dot3(const Vector4& lrA, const Vector4& lrB)
         {
-            return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+            return lrA.mV.x * lrB.mV.x + lrA.mV.y * lrB.mV.y + lrA.mV.z * lrB.mV.z;
         }
 
         // rw::math::vpu::Cross(Vector3, Vector3) -- the vpermwi128-0x63 (y,z,x)
         // rotate pair the X360 emits.
         Vector4 Cross3(const Vector4& lrA, const Vector4& lrB)
         {
-            { const Vector4 lResult = { lrA.y * lrB.z - lrA.z * lrB.y,
-                            lrA.z * lrB.x - lrA.x * lrB.z,
-                            lrA.x * lrB.y - lrA.y * lrB.x,
-                            0.0f }; return lResult; }
+            { const Vector4 lResult = Vector4( lrA.mV.y * lrB.mV.z - lrA.mV.z * lrB.mV.y,
+                            lrA.mV.z * lrB.mV.x - lrA.mV.x * lrB.mV.z,
+                            lrA.mV.x * lrB.mV.y - lrA.mV.y * lrB.mV.x,
+                            0.0f ); return lResult; }
         }
 
         // BrnShadowMap.cpp:356 (DWARF `BrnWorld::_LineIntersection2d`). The XY
@@ -1852,16 +1848,16 @@ namespace BrnWorld
         Vector4 _LineIntersection2d(const Vector4& lrLine0Start, const Vector4& lrLine0Vec,
                                     const Vector4& lrLine1Start, const Vector4& lrLine1Vec)
         {
-            const f32 lfDenom = lrLine1Vec.y * lrLine0Vec.x - lrLine1Vec.x * lrLine0Vec.y;
-            const f32 lfNumer = lrLine1Vec.x * (lrLine0Start.y - lrLine1Start.y)
-                              - lrLine1Vec.y * (lrLine0Start.x - lrLine1Start.x);
+            const f32 lfDenom = lrLine1Vec.mV.y * lrLine0Vec.mV.x - lrLine1Vec.mV.x * lrLine0Vec.mV.y;
+            const f32 lfNumer = lrLine1Vec.mV.x * (lrLine0Start.mV.y - lrLine1Start.mV.y)
+                              - lrLine1Vec.mV.y * (lrLine0Start.mV.x - lrLine1Start.mV.x);
             const f32 lfS = lfNumer / lfDenom;
 
             Vector4 lvOut;
-            lvOut.x = lrLine0Start.x + lrLine0Vec.x * lfS;
-            lvOut.y = lrLine0Start.y + lrLine0Vec.y * lfS;
-            lvOut.z = lrLine0Start.z + lrLine0Vec.z * lfS;
-            lvOut.w = 1.0f;
+            lvOut.mV.x = lrLine0Start.mV.x + lrLine0Vec.mV.x * lfS;
+            lvOut.mV.y = lrLine0Start.mV.y + lrLine0Vec.mV.y * lfS;
+            lvOut.mV.z = lrLine0Start.mV.z + lrLine0Vec.mV.z * lfS;
+            lvOut.mV.w = 1.0f;
             return lvOut;
         }
     }
@@ -1913,19 +1909,19 @@ namespace BrnWorld
             {   // the four lvx/stvx rows of the cascade view matrix
                 const Matrix44& lrView = maCgsShadowMapCamera[luMapIndex].mView;
                 {
-                    const Vector3 lAggregateValue = { lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w };
+                    const Vector3 lAggregateValue = MakeShadowVector3( lrView.xAxis.mV.x, lrView.xAxis.mV.y, lrView.xAxis.mV.z, lrView.xAxis.mV.w );
                     lTsmBBInfo.mWorldToLightView.xAxis = lAggregateValue;
                 }
                 {
-                    const Vector3 lAggregateValue = { lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w };
+                    const Vector3 lAggregateValue = MakeShadowVector3( lrView.yAxis.mV.x, lrView.yAxis.mV.y, lrView.yAxis.mV.z, lrView.yAxis.mV.w );
                     lTsmBBInfo.mWorldToLightView.yAxis = lAggregateValue;
                 }
                 {
-                    const Vector3 lAggregateValue = { lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w };
+                    const Vector3 lAggregateValue = MakeShadowVector3( lrView.zAxis.mV.x, lrView.zAxis.mV.y, lrView.zAxis.mV.z, lrView.zAxis.mV.w );
                     lTsmBBInfo.mWorldToLightView.zAxis = lAggregateValue;
                 }
                 {
-                    const Vector3 lAggregateValue = { lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w };
+                    const Vector3 lAggregateValue = MakeShadowVector3( lrView.wAxis.mV.x, lrView.wAxis.mV.y, lrView.wAxis.mV.z, lrView.wAxis.mV.w );
                     lTsmBBInfo.mWorldToLightView.wAxis = lAggregateValue;
                 }
             }
@@ -1970,9 +1966,9 @@ namespace BrnWorld
         {
             lFrustumPointsLightSpace3d[luI] = TransformPoint(lFrustumPoints[luI], lWorldToLight);
             {
-                const Vector4 lAggregateValue = { lFrustumPointsLightSpace3d[luI].x,
-                                                       lFrustumPointsLightSpace3d[luI].y,
-                                                       0.0f, 0.0f };
+                const Vector4 lAggregateValue = Vector4( lFrustumPointsLightSpace3d[luI].mV.x,
+                                                       lFrustumPointsLightSpace3d[luI].mV.y,
+                                                       0.0f, 0.0f );
                 lFrustumPointsLightSpace[luI] = lAggregateValue;
             }
         }
@@ -1985,30 +1981,30 @@ namespace BrnWorld
             Vector4 lvFar  = lFrustumPointsLightSpace[4];
             for (u32 luI = 1; luI < 4; ++luI)
             {
-                lvNear.x += lFrustumPointsLightSpace[luI].x;
-                lvNear.y += lFrustumPointsLightSpace[luI].y;
-                lvNear.z += lFrustumPointsLightSpace[luI].z;
-                lvNear.w += lFrustumPointsLightSpace[luI].w;
-                lvFar.x  += lFrustumPointsLightSpace[luI + 4].x;
-                lvFar.y  += lFrustumPointsLightSpace[luI + 4].y;
-                lvFar.z  += lFrustumPointsLightSpace[luI + 4].z;
-                lvFar.w  += lFrustumPointsLightSpace[luI + 4].w;
+                lvNear.mV.x += lFrustumPointsLightSpace[luI].mV.x;
+                lvNear.mV.y += lFrustumPointsLightSpace[luI].mV.y;
+                lvNear.mV.z += lFrustumPointsLightSpace[luI].mV.z;
+                lvNear.mV.w += lFrustumPointsLightSpace[luI].mV.w;
+                lvFar.mV.x  += lFrustumPointsLightSpace[luI + 4].mV.x;
+                lvFar.mV.y  += lFrustumPointsLightSpace[luI + 4].mV.y;
+                lvFar.mV.z  += lFrustumPointsLightSpace[luI + 4].mV.z;
+                lvFar.mV.w  += lFrustumPointsLightSpace[luI + 4].mV.w;
             }
             {
-                const Vector4 lAggregateValue = { lvNear.x * K_1_OVER_4.x, lvNear.y * K_1_OVER_4.y,
-                                        lvNear.z * K_1_OVER_4.z, lvNear.w * K_1_OVER_4.w };
+                const Vector4 lAggregateValue = Vector4( lvNear.mV.x * K_1_OVER_4.mV.x, lvNear.mV.y * K_1_OVER_4.mV.y,
+                                        lvNear.mV.z * K_1_OVER_4.mV.z, lvNear.mV.w * K_1_OVER_4.mV.w );
                 lCentreLineStart = lAggregateValue;
             }
             {
-                const Vector4 lAggregateValue = { lvFar.x * K_1_OVER_4.x, lvFar.y * K_1_OVER_4.y,
-                                        lvFar.z * K_1_OVER_4.z, lvFar.w * K_1_OVER_4.w };
+                const Vector4 lAggregateValue = Vector4( lvFar.mV.x * K_1_OVER_4.mV.x, lvFar.mV.y * K_1_OVER_4.mV.y,
+                                        lvFar.mV.z * K_1_OVER_4.mV.z, lvFar.mV.w * K_1_OVER_4.mV.w );
                 lCentreLineEnd = lAggregateValue;
             }
         }
         const Vector4 lCentreLineVec = Normalize3(MakeShadowVector4(                   // :1291
-            lCentreLineEnd.x - lCentreLineStart.x, lCentreLineEnd.y - lCentreLineStart.y,
-            lCentreLineEnd.z - lCentreLineStart.z, lCentreLineEnd.w - lCentreLineStart.w ));
-        const Vector4 lOriginalBaseLineVec = { lCentreLineVec.y, -lCentreLineVec.x, 0.0f, 0.0f }; // :1305
+            lCentreLineEnd.mV.x - lCentreLineStart.mV.x, lCentreLineEnd.mV.y - lCentreLineStart.mV.y,
+            lCentreLineEnd.mV.z - lCentreLineStart.mV.z, lCentreLineEnd.mV.w - lCentreLineStart.mV.w ));
+        const Vector4 lOriginalBaseLineVec = Vector4( lCentreLineVec.mV.y, -lCentreLineVec.mV.x, 0.0f, 0.0f ); // :1305
 
         // ---- 5. the rotation search (0x827D95C4..0x827DA004) ----------------
         // BOTH DUMPED 2026-08-12 (the previous "values not in this dossier" FLAG
@@ -2046,24 +2042,24 @@ namespace BrnWorld
             const f32 lfCos = lCos.x;
             Matrix44Affine lRotationAroundZMatrix;                             // :1310
             {
-                const Vector3 lAggregateValue = {  lfCos, lfSin, 0.0f, 0.0f };
+                const Vector3 lAggregateValue = MakeShadowVector3(  lfCos, lfSin, 0.0f, 0.0f );
                 lRotationAroundZMatrix.xAxis = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { -lfSin, lfCos, 0.0f, 0.0f };
+                const Vector3 lAggregateValue = MakeShadowVector3( -lfSin, lfCos, 0.0f, 0.0f );
                 lRotationAroundZMatrix.yAxis = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+                const Vector3 lAggregateValue = MakeShadowVector3( 0.0f, 0.0f, 1.0f, 0.0f );
                 lRotationAroundZMatrix.zAxis = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3 lAggregateValue = MakeShadowVector3( 0.0f, 0.0f, 0.0f, 0.0f );
                 lRotationAroundZMatrix.wAxis = lAggregateValue;
             }
 
             const Vector4 lvBase = TransformVector(lOriginalBaseLineVec, lRotationAroundZMatrix);
-            const Vector4 lvSide = { -lvBase.y, lvBase.x, 0.0f, 0.0f };
+            const Vector4 lvSide = Vector4( -lvBase.mV.y, lvBase.mV.x, 0.0f, 0.0f );
 
             // support points along the side vector -> the base / top lines
             f32 lfSideMin = Dot3(lvSide, lFrustumPointsLightSpace[0]);
@@ -2087,8 +2083,8 @@ namespace BrnWorld
             // support points along the negated base vector -> the two side lines.
             // (Both side lines take the SAME direction vector -- the X360 keeps
             // two copies of it, matching the two named locals.)
-            const Vector4 lvSideLineVec = { -lvSide.x, -lvSide.y, -lvSide.z, -lvSide.w };
-            const Vector4 lvNegBase = { -lvBase.x, -lvBase.y, -lvBase.z, 0.0f };
+            const Vector4 lvSideLineVec = Vector4( -lvSide.mV.x, -lvSide.mV.y, -lvSide.mV.z, -lvSide.mV.w );
+            const Vector4 lvNegBase = Vector4( -lvBase.mV.x, -lvBase.mV.y, -lvBase.mV.z, 0.0f );
             f32 lfBaseMax = Dot3(lvNegBase, lFrustumPointsLightSpace[0]);
             f32 lfBaseMin = lfBaseMax;
             u32 luMaxIndex = 0;
@@ -2115,8 +2111,8 @@ namespace BrnWorld
                 const f32 lfHi = (lfRatio > lIdealAspectRatio) ? lfRatio : lIdealAspectRatio;
                 const f32 lfLo = (lfRatio > lIdealAspectRatio) ? lIdealAspectRatio : lfRatio;
                 f32 lfWeight = std::fabs(lfHi / lfLo) - 1.0f
-                             - K_VECFLOAT_ZEROPOINTTWOFIVE.x;
-                lfWeight *= K_VECFLOAT_ONE_OVER_ZEROPOINTSEVENFIVE.x;
+                             - K_VECFLOAT_ZEROPOINTTWOFIVE.mV.x;
+                lfWeight *= K_VECFLOAT_ONE_OVER_ZEROPOINTSEVENFIVE.mV.x;
                 lfWeight = (lfWeight > 0.0f) ? lfWeight : 0.0f;  // vmaxfp 0
                 lfWeight = (lfWeight > 1.0f) ? 1.0f : lfWeight;  // vminfp 1
                 lfArea *= 1.0f + lfWeight;
@@ -2147,11 +2143,11 @@ namespace BrnWorld
                                                  lBestBoxSideLineLeftStart,  lBestBoxSideLineLeftVec);
 
         const f32 lHeight = Magnitude4(MakeShadowVector4(                                // :1436
-            laBestBoxPoints[0].x - laBestBoxPoints[1].x, laBestBoxPoints[0].y - laBestBoxPoints[1].y,
-            laBestBoxPoints[0].z - laBestBoxPoints[1].z, laBestBoxPoints[0].w - laBestBoxPoints[1].w ));
+            laBestBoxPoints[0].mV.x - laBestBoxPoints[1].mV.x, laBestBoxPoints[0].mV.y - laBestBoxPoints[1].mV.y,
+            laBestBoxPoints[0].mV.z - laBestBoxPoints[1].mV.z, laBestBoxPoints[0].mV.w - laBestBoxPoints[1].mV.w ));
         const f32 lWidth = Magnitude4(MakeShadowVector4(                                 // :1437
-            laBestBoxPoints[0].x - laBestBoxPoints[3].x, laBestBoxPoints[0].y - laBestBoxPoints[3].y,
-            laBestBoxPoints[0].z - laBestBoxPoints[3].z, laBestBoxPoints[0].w - laBestBoxPoints[3].w ));
+            laBestBoxPoints[0].mV.x - laBestBoxPoints[3].mV.x, laBestBoxPoints[0].mV.y - laBestBoxPoints[3].mV.y,
+            laBestBoxPoints[0].mV.z - laBestBoxPoints[3].mV.z, laBestBoxPoints[0].mV.w - laBestBoxPoints[3].mV.w ));
 
         if (mbPreferShortAndFatProjection && lWidth > lHeight)                 // lbz 0x1503(this)
         {
@@ -2173,38 +2169,38 @@ namespace BrnWorld
         if (sbCentreBox)
         {
             const f32 lfQuarter = 0.25f;                       // flt_82003F40 (centroid of 4)
-            lvCentre.x = (laBestBoxPoints[0].x + laBestBoxPoints[1].x
-                        + laBestBoxPoints[2].x + laBestBoxPoints[3].x) * lfQuarter;
-            lvCentre.y = (laBestBoxPoints[0].y + laBestBoxPoints[1].y
-                        + laBestBoxPoints[2].y + laBestBoxPoints[3].y) * lfQuarter;
+            lvCentre.mV.x = (laBestBoxPoints[0].mV.x + laBestBoxPoints[1].mV.x
+                        + laBestBoxPoints[2].mV.x + laBestBoxPoints[3].mV.x) * lfQuarter;
+            lvCentre.mV.y = (laBestBoxPoints[0].mV.y + laBestBoxPoints[1].mV.y
+                        + laBestBoxPoints[2].mV.y + laBestBoxPoints[3].mV.y) * lfQuarter;
         }
         else
         {
             const f32 lfHalf = 0.5f;                           // flt_82001DA0
-            lvCentre.x = (laBestBoxPoints[2].x + laBestBoxPoints[3].x) * lfHalf;
-            lvCentre.y = (laBestBoxPoints[2].y + laBestBoxPoints[3].y) * lfHalf;
+            lvCentre.mV.x = (laBestBoxPoints[2].mV.x + laBestBoxPoints[3].mV.x) * lfHalf;
+            lvCentre.mV.y = (laBestBoxPoints[2].mV.y + laBestBoxPoints[3].mV.y) * lfHalf;
         }
-        lvCentre.z = 0.0f; lvCentre.w = 0.0f;
+        lvCentre.mV.z = 0.0f; lvCentre.mV.w = 0.0f;
 
         const Vector4 lVecU = Normalize3(MakeShadowVector4(                              // :1460
-            laBestBoxPoints[2].x - laBestBoxPoints[3].x, laBestBoxPoints[2].y - laBestBoxPoints[3].y,
-            laBestBoxPoints[2].z - laBestBoxPoints[3].z, laBestBoxPoints[2].w - laBestBoxPoints[3].w ));
+            laBestBoxPoints[2].mV.x - laBestBoxPoints[3].mV.x, laBestBoxPoints[2].mV.y - laBestBoxPoints[3].mV.y,
+            laBestBoxPoints[2].mV.z - laBestBoxPoints[3].mV.z, laBestBoxPoints[2].mV.w - laBestBoxPoints[3].mV.w ));
 
         Matrix44 lTransformT1;                                                 // :1472
         {
-            const Vector4 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( 1.0f, 0.0f, 0.0f, 0.0f );
             lTransformT1.xAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( 0.0f, 1.0f, 0.0f, 0.0f );
             lTransformT1.yAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( 0.0f, 0.0f, 1.0f, 0.0f );
             lTransformT1.zAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { -lvCentre.x, -lvCentre.y, 0.0f, 1.0f };
+            const Vector4 lAggregateValue = Vector4( -lvCentre.mV.x, -lvCentre.mV.y, 0.0f, 1.0f );
             lTransformT1.wAxis = lAggregateValue;
         }
 
@@ -2228,21 +2224,21 @@ namespace BrnWorld
 
         Matrix44 lTransformR;                                                  // :1485
         {
-            const Vector4 lAggregateValue = { lVecU.x * XMult[0] + lVecU.y * YMult[0],
-                                     lVecU.x * XMult[1] + lVecU.y * YMult[1], 0.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( lVecU.mV.x * XMult[0] + lVecU.mV.y * YMult[0],
+                                     lVecU.mV.x * XMult[1] + lVecU.mV.y * YMult[1], 0.0f, 0.0f );
             lTransformR.xAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { lVecU.x * XMult[2] + lVecU.y * YMult[2],
-                                     lVecU.x * XMult[3] + lVecU.y * YMult[3], 0.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( lVecU.mV.x * XMult[2] + lVecU.mV.y * YMult[2],
+                                     lVecU.mV.x * XMult[3] + lVecU.mV.y * YMult[3], 0.0f, 0.0f );
             lTransformR.yAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( 0.0f, 0.0f, 1.0f, 0.0f );
             lTransformR.zAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+            const Vector4 lAggregateValue = Vector4( 0.0f, 0.0f, 0.0f, 1.0f );
             lTransformR.wAxis = lAggregateValue;
         }
 
@@ -2251,19 +2247,19 @@ namespace BrnWorld
 
         Matrix44 lTransformS2;                                                 // :1496
         {
-            const Vector4 lAggregateValue = { 1.0f / lvCorner.x, 0.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( 1.0f / lvCorner.mV.x, 0.0f, 0.0f, 0.0f );
             lTransformS2.xAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 1.0f / lvCorner.y, 0.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( 0.0f, 1.0f / lvCorner.mV.y, 0.0f, 0.0f );
             lTransformS2.yAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            const Vector4 lAggregateValue = Vector4( 0.0f, 0.0f, 1.0f, 0.0f );
             lTransformS2.zAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+            const Vector4 lAggregateValue = Vector4( 0.0f, 0.0f, 0.0f, 1.0f );
             lTransformS2.wAxis = lAggregateValue;
         }
 
@@ -2273,19 +2269,19 @@ namespace BrnWorld
         {
             Matrix44 lMirrorX;
             {
-                const Vector4 lAggregateValue = { -1.0f, 0.0f, 0.0f, 0.0f };
+                const Vector4 lAggregateValue = Vector4( -1.0f, 0.0f, 0.0f, 0.0f );
                 lMirrorX.xAxis = lAggregateValue;
             }
             {
-                const Vector4 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+                const Vector4 lAggregateValue = Vector4( 0.0f, 1.0f, 0.0f, 0.0f );
                 lMirrorX.yAxis = lAggregateValue;
             }
             {
-                const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+                const Vector4 lAggregateValue = Vector4( 0.0f, 0.0f, 1.0f, 0.0f );
                 lMirrorX.zAxis = lAggregateValue;
             }
             {
-                const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+                const Vector4 lAggregateValue = Vector4( 0.0f, 0.0f, 0.0f, 1.0f );
                 lMirrorX.wAxis = lAggregateValue;
             }
             lTsmBBInfo.mBestFitMatrix = MultMatrix(lTsmBBInfo.mBestFitMatrix, lMirrorX);
@@ -2297,9 +2293,9 @@ namespace BrnWorld
         // then the translation row = -wAxis through that basis.
         {
             const Matrix44Affine& lrView = lTsmBBInfo.mWorldToLightView;
-            const Vector4 lvX = { lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w };
-            const Vector4 lvY = { lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w };
-            const Vector4 lvZ = { lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w };
+            const Vector4 lvX = Vector4( lrView.xAxis.mV.x, lrView.xAxis.mV.y, lrView.xAxis.mV.z, lrView.xAxis.mV.w );
+            const Vector4 lvY = Vector4( lrView.yAxis.mV.x, lrView.yAxis.mV.y, lrView.yAxis.mV.z, lrView.yAxis.mV.w );
+            const Vector4 lvZ = Vector4( lrView.zAxis.mV.x, lrView.zAxis.mV.y, lrView.zAxis.mV.z, lrView.zAxis.mV.w );
             const Vector4 lvCrossYZ = Cross3(lvY, lvZ);
             const Vector4 lvCrossXY = Cross3(lvX, lvY);
             const Vector4 lvCrossZX = Cross3(lvZ, lvX);
@@ -2307,24 +2303,24 @@ namespace BrnWorld
 
             Matrix44Affine& lrInv = lTsmBBInfo.mLightToWorldView;
             {
-                const Vector3 lAggregateValue = { lvCrossYZ.x * lfInvDet, lvCrossZX.x * lfInvDet,
-                                   lvCrossXY.x * lfInvDet, lvCrossZX.x * lfInvDet };
+                const Vector3 lAggregateValue = MakeShadowVector3( lvCrossYZ.mV.x * lfInvDet, lvCrossZX.mV.x * lfInvDet,
+                                   lvCrossXY.mV.x * lfInvDet, lvCrossZX.mV.x * lfInvDet );
                 lrInv.xAxis = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { lvCrossYZ.y * lfInvDet, lvCrossZX.y * lfInvDet,
-                                   lvCrossXY.y * lfInvDet, lvCrossZX.y * lfInvDet };
+                const Vector3 lAggregateValue = MakeShadowVector3( lvCrossYZ.mV.y * lfInvDet, lvCrossZX.mV.y * lfInvDet,
+                                   lvCrossXY.mV.y * lfInvDet, lvCrossZX.mV.y * lfInvDet );
                 lrInv.yAxis = lAggregateValue;
             }
             {
-                const Vector3 lAggregateValue = { lvCrossYZ.z * lfInvDet, lvCrossZX.z * lfInvDet,
-                                   lvCrossXY.z * lfInvDet, lvCrossZX.z * lfInvDet };
+                const Vector3 lAggregateValue = MakeShadowVector3( lvCrossYZ.mV.z * lfInvDet, lvCrossZX.mV.z * lfInvDet,
+                                   lvCrossXY.mV.z * lfInvDet, lvCrossZX.mV.z * lfInvDet );
                 lrInv.zAxis = lAggregateValue;
             }
             // translation = -mWorldToLightView.wAxis through the inverse basis
-            const f32* lpfNegPos = &lrView.wAxis.x;
-            const f32* lapInvRows[3] = { &lrInv.xAxis.x, &lrInv.yAxis.x, &lrInv.zAxis.x };
-            f32* lpfOut = &lrInv.wAxis.x;
+            const f32* lpfNegPos = &lrView.wAxis.mV.x;
+            const f32* lapInvRows[3] = { &lrInv.xAxis.mV.x, &lrInv.yAxis.mV.x, &lrInv.zAxis.mV.x };
+            f32* lpfOut = &lrInv.wAxis.mV.x;
             for (int liLane = 0; liLane < 4; ++liLane)
             {
                 lpfOut[liLane] = -lpfNegPos[0] * lapInvRows[0][liLane]
@@ -2356,7 +2352,7 @@ namespace BrnWorld
             Vector4 lvDeterminant;
             const Matrix44 lLightToWorld =                                     // :1538
                 rw::math::vpu::Inverse(lWorldToLight, lvDeterminant);
-            const Vector4 lZOffset = { 0.0f, 0.0f, lFrustumPointsLightSpace3d[0].z, 0.0f }; // :1539
+            const Vector4 lZOffset = Vector4( 0.0f, 0.0f, lFrustumPointsLightSpace3d[0].mV.z, 0.0f ); // :1539
             BoundingBoxDebugRenderInfo& lDebugInfo = gBoundingBoxDebugRenderInfo[luMapIndex]; // :1540
 
             std::memcpy(&lDebugInfo.mLightFrustum, &maFrustum[luMapIndex],
@@ -2367,37 +2363,37 @@ namespace BrnWorld
             for (u32 luI = 0; luI < 4; ++luI)
             {
                 const Vector4& lrCorner = laBestBoxPoints[luI];
-                const f32 lfInvW = 1.0f / lrCorner.w;
+                const f32 lfInvW = 1.0f / lrCorner.mV.w;
                 lDebugInfo.maBoxPointsWorld[luI] = TransformPoint(
-                    MakeShadowVector4( lrCorner.x * lfInvW, lrCorner.y * lfInvW,
-                             lrCorner.z * lfInvW, lrCorner.w * lfInvW ), lLightToWorld);
+                    MakeShadowVector4( lrCorner.mV.x * lfInvW, lrCorner.mV.y * lfInvW,
+                             lrCorner.mV.z * lfInvW, lrCorner.mV.w * lfInvW ), lLightToWorld);
 
                 const Vector4 lvStage = MultRow(lrCorner, *lpMatrices[siBoxMatrixIndex]);
-                const f32 lfInvStageW = 1.0f / lvStage.w;
+                const f32 lfInvStageW = 1.0f / lvStage.mV.w;
                 lDebugInfo.maBoxPointsSquare[luI] = TransformPoint(
-                    MakeShadowVector4( lvStage.x * lfInvStageW, lvStage.y * lfInvStageW,
-                             lvStage.z * lfInvStageW, lvStage.w * lfInvStageW ), lLightToWorld);
+                    MakeShadowVector4( lvStage.mV.x * lfInvStageW, lvStage.mV.y * lfInvStageW,
+                             lvStage.mV.z * lfInvStageW, lvStage.mV.w * lfInvStageW ), lLightToWorld);
             }
 
             // The side / base line pairs, each a light-space point offset by the
             // stored line vector, mapped back to world.
             const Vector4 laLinePoints[8] =
             {
-                MakeShadowVector4( lBestBoxSideLineLeftStart.x + lBestBoxSideLineLeftVec.x,
-                         lBestBoxSideLineLeftStart.y + lBestBoxSideLineLeftVec.y,
-                         lZOffset.z, 0.0f ),
-                MakeShadowVector4( lBestBoxSideLineLeftStart.x, lBestBoxSideLineLeftStart.y, lZOffset.z, 0.0f ),
-                MakeShadowVector4( lBestBoxSideLineRightStart.x + lBestBoxSideLineRightVec.x,
-                         lBestBoxSideLineRightStart.y + lBestBoxSideLineRightVec.y,
-                         lZOffset.z, 0.0f ),
-                MakeShadowVector4( lBestBoxSideLineRightStart.x, lBestBoxSideLineRightStart.y, lZOffset.z, 0.0f ),
+                MakeShadowVector4( lBestBoxSideLineLeftStart.mV.x + lBestBoxSideLineLeftVec.mV.x,
+                         lBestBoxSideLineLeftStart.mV.y + lBestBoxSideLineLeftVec.mV.y,
+                         lZOffset.mV.z, 0.0f ),
+                MakeShadowVector4( lBestBoxSideLineLeftStart.mV.x, lBestBoxSideLineLeftStart.mV.y, lZOffset.mV.z, 0.0f ),
+                MakeShadowVector4( lBestBoxSideLineRightStart.mV.x + lBestBoxSideLineRightVec.mV.x,
+                         lBestBoxSideLineRightStart.mV.y + lBestBoxSideLineRightVec.mV.y,
+                         lZOffset.mV.z, 0.0f ),
+                MakeShadowVector4( lBestBoxSideLineRightStart.mV.x, lBestBoxSideLineRightStart.mV.y, lZOffset.mV.z, 0.0f ),
                 // the base-parallel pair: slot 0 is the TOP line, slot 1 the BASE line
-                MakeShadowVector4( lBestBoxTopLineStart.x, lBestBoxTopLineStart.y, lZOffset.z, 0.0f ),
-                MakeShadowVector4( lBestBoxTopLineStart.x + lBaseLineVec.x,
-                         lBestBoxTopLineStart.y + lBaseLineVec.y, lZOffset.z, 0.0f ),
-                MakeShadowVector4( lBestBoxBaseLineStart.x, lBestBoxBaseLineStart.y, lZOffset.z, 0.0f ),
-                MakeShadowVector4( lBestBoxBaseLineStart.x + lBaseLineVec.x,
-                         lBestBoxBaseLineStart.y + lBaseLineVec.y, lZOffset.z, 0.0f ),
+                MakeShadowVector4( lBestBoxTopLineStart.mV.x, lBestBoxTopLineStart.mV.y, lZOffset.mV.z, 0.0f ),
+                MakeShadowVector4( lBestBoxTopLineStart.mV.x + lBaseLineVec.mV.x,
+                         lBestBoxTopLineStart.mV.y + lBaseLineVec.mV.y, lZOffset.mV.z, 0.0f ),
+                MakeShadowVector4( lBestBoxBaseLineStart.mV.x, lBestBoxBaseLineStart.mV.y, lZOffset.mV.z, 0.0f ),
+                MakeShadowVector4( lBestBoxBaseLineStart.mV.x + lBaseLineVec.mV.x,
+                         lBestBoxBaseLineStart.mV.y + lBaseLineVec.mV.y, lZOffset.mV.z, 0.0f ),
             };
             lDebugInfo.mSideLineEnd[0]   = TransformPoint(laLinePoints[0], lLightToWorld);
             lDebugInfo.mSideLineStart[0] = TransformPoint(laLinePoints[1], lLightToWorld);
@@ -2409,7 +2405,7 @@ namespace BrnWorld
             lDebugInfo.mBaseLineEnd[1]   = TransformPoint(laLinePoints[7], lLightToWorld);
 
             {
-                const VecFloat lAggregateValue = { lZOffset.z, lZOffset.z, lZOffset.z, lZOffset.z };
+                const VecFloat lAggregateValue = VecFloat(lZOffset.mV.z);
                 lDebugInfo.mZOffset = lAggregateValue;
             }
 
@@ -2486,18 +2482,18 @@ namespace BrnWorld
             Vector3Plus laPlanes[12];                                 // :1627
             for (u32 luI = 0; luI < 12; ++luI)                        // :1628
             {
-                const Vector4 lLineVec = { lLineEndLight[luI].x - lLineStartLight[luI].x,   // :1630
-                                        lLineEndLight[luI].y - lLineStartLight[luI].y,
-                                        lLineEndLight[luI].z - lLineStartLight[luI].z,
-                                        lLineEndLight[luI].w - lLineStartLight[luI].w };
+                const Vector4 lLineVec = Vector4( lLineEndLight[luI].mV.x - lLineStartLight[luI].mV.x,   // :1630
+                                        lLineEndLight[luI].mV.y - lLineStartLight[luI].mV.y,
+                                        lLineEndLight[luI].mV.z - lLineStartLight[luI].mV.z,
+                                        lLineEndLight[luI].mV.w - lLineStartLight[luI].mV.w );
                 const Vector4 lLineVecNormalised = Normalize3(lLineVec);                 // :1631
                 // the light points down +Z in light space
                 const Vector4 lPlaneNormalLight = Cross3(MakeShadowVector4( 0.0f, 0.0f, 1.0f, 0.0f ),
                                                          lLineVecNormalised);            // :1632
                 const Vector4 lPlaneNormalWorld = TransformVector(lPlaneNormalLight,
                                                                   lLightToWorld);        // :1636
-                laPlanes[luI].SetVector3(MakeShadowVector3( lPlaneNormalWorld.x, lPlaneNormalWorld.y,
-                                                  lPlaneNormalWorld.z, 0.0f ));
+                laPlanes[luI].SetVector3(MakeShadowVector3( lPlaneNormalWorld.mV.x, lPlaneNormalWorld.mV.y,
+                                                  lPlaneNormalWorld.mV.z, 0.0f ));
                 laPlanes[luI].SetPlus(Dot3(lPlaneNormalWorld, lLineStartWorld[luI]));
             }
 
@@ -2506,12 +2502,12 @@ namespace BrnWorld
                 bool lbPointsBehind  = false;                         // :1646
                 bool lbPointsInFront = false;                         // :1647
                 Vector3Plus& lPlane  = laPlanes[luI];                 // :1648
-                const Vector4 lPlaneVec4 = { lPlane.x, lPlane.y, lPlane.z, lPlane.w };  // :1649
+                const Vector4 lPlaneVec4 = Vector4( lPlane.mV.x, lPlane.mV.y, lPlane.mV.z, lPlane.mV.w );  // :1649
 
                 f32 laDistances[8];                                   // :1652
                 for (u32 luJ = 0; luJ < 8; ++luJ)
                 {
-                    laDistances[luJ] = Dot3(lPlaneVec4, laFrustumPoints[luJ]) - lPlane.w;
+                    laDistances[luJ] = Dot3(lPlaneVec4, laFrustumPoints[luJ]) - lPlane.mV.w;
                 }
                 f32 lMinDist = laDistances[0];                        // :1662
                 f32 lMaxDist = laDistances[0];                        // :1670
@@ -2520,8 +2516,8 @@ namespace BrnWorld
                     lMinDist = (laDistances[luJ] < lMinDist) ? laDistances[luJ] : lMinDist;
                     lMaxDist = (laDistances[luJ] > lMaxDist) ? laDistances[luJ] : lMaxDist;
                 }
-                lbPointsInFront = lMaxDist > K_VERY_SMALL.x;
-                lbPointsBehind  = K_MINUS_VERY_SMALL.x > lMinDist;
+                lbPointsInFront = lMaxDist > K_VERY_SMALL.mV.x;
+                lbPointsBehind  = K_MINUS_VERY_SMALL.mV.x > lMinDist;
 
                 if (lbPointsBehind)
                 {
@@ -2531,8 +2527,8 @@ namespace BrnWorld
                     }
                     // flip it so the whole set is in front (the vxor sign-bit
                     // negation, written back through the laPlanes reference)
-                    lPlane.x = -lPlane.x; lPlane.y = -lPlane.y;
-                    lPlane.z = -lPlane.z; lPlane.w = -lPlane.w;
+                    lPlane.mV.x = -lPlane.mV.x; lPlane.mV.y = -lPlane.mV.y;
+                    lPlane.mV.z = -lPlane.mV.z; lPlane.mV.w = -lPlane.mV.w;
                 }
                 else if (!lbPointsInFront)
                 {
@@ -2558,11 +2554,11 @@ namespace BrnWorld
                                         lLightVector);                         // :1716
                 if (0.0f > lNDotL)
                 {
-                    const Vector3Plus lCandidatePlane = { lPlane.x, lPlane.y, lPlane.z, lPlane.w };
+                    const Vector3Plus lCandidatePlane = Vector3Plus( lPlane.x, lPlane.y, lPlane.z, lPlane.w );
                     laCandidatePlanes[luNumCandidatePlanes].mPlane = lCandidatePlane;
                     const f32 lfScore = 2.0f - lNDotL;    // vspltisw 2 + vcfsx
                     {
-                        const VecFloat lAggregateValue = { lfScore, lfScore, lfScore, lfScore };
+                        const VecFloat lAggregateValue = VecFloat(lfScore);
                         laCandidatePlanes[luNumCandidatePlanes].mScore = lAggregateValue;
                     }
                     ++luNumCandidatePlanes;
@@ -2574,13 +2570,13 @@ namespace BrnWorld
         if (sbAddNearClipPlane)
         {
             Vector3Plus& lNearPlane = laCandidatePlanes[luNumCandidatePlanes].mPlane; // :1732
-            const Vector4 lLightPosWorldSpace = { lLightToWorld.wAxis.x, lLightToWorld.wAxis.y,
-                                               lLightToWorld.wAxis.z, lLightToWorld.wAxis.w }; // :1735
+            const Vector4 lLightPosWorldSpace = Vector4( lLightToWorld.wAxis.mV.x, lLightToWorld.wAxis.mV.y,
+                                               lLightToWorld.wAxis.mV.z, lLightToWorld.wAxis.mV.w ); // :1735
             const f32 lNearClip = mfShadowMapNearPlane;                        // :1736
-            lNearPlane.SetVector3(MakeShadowVector3( lLightVector.x, lLightVector.y, lLightVector.z, 0.0f ));
+            lNearPlane.SetVector3(MakeShadowVector3( lLightVector.mV.x, lLightVector.mV.y, lLightVector.mV.z, 0.0f ));
             lNearPlane.SetPlus(Dot3(lLightPosWorldSpace, lLightVector) + lNearClip);
             {
-                const VecFloat lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const VecFloat lAggregateValue = VecFloat(0.0f);
                 laCandidatePlanes[luNumCandidatePlanes].mScore = lAggregateValue;
             }
             ++luNumCandidatePlanes;
@@ -2598,14 +2594,14 @@ namespace BrnWorld
         // guard word is exactly the C++ function-local-static init guard).
         static const Vector3Plus saClearPlanes[8] =                            // :1755
         {
-            {  0.0f,  1.0f,  0.0f, -1000000.0f },
-            {  0.0f, -1.0f,  0.0f, -1000000.0f },
-            {  1.0f,  0.0f,  0.0f, -1000000.0f },
-            { -1.0f,  0.0f,  0.0f, -1000000.0f },
-            {  0.0f,  0.0f,  1.0f, -1000000.0f },
-            {  0.0f,  0.0f, -1.0f, -1000000.0f },
-            {  0.0f,  1.0f,  0.0f, -1000000.0f },
-            {  0.0f, -1.0f,  0.0f, -1000000.0f },
+            Vector3Plus( 0.0f,  1.0f,  0.0f, -1000000.0f),
+            Vector3Plus( 0.0f, -1.0f,  0.0f, -1000000.0f),
+            Vector3Plus( 1.0f,  0.0f,  0.0f, -1000000.0f),
+            Vector3Plus(-1.0f,  0.0f,  0.0f, -1000000.0f),
+            Vector3Plus( 0.0f,  0.0f,  1.0f, -1000000.0f),
+            Vector3Plus( 0.0f,  0.0f, -1.0f, -1000000.0f),
+            Vector3Plus( 0.0f,  1.0f,  0.0f, -1000000.0f),
+            Vector3Plus( 0.0f, -1.0f,  0.0f, -1000000.0f),
         };
 
         u32 luNumPlanesOut = luNumPlanes;
@@ -2634,7 +2630,7 @@ namespace BrnWorld
         {
             const Vector3Plus& lrPlane = laCandidatePlanes[luI].mPlane;
             lViewVolumeOut.SetPlaneByIndex(luI, rw::collision::Plane(
-                MakeShadowVector4( lrPlane.x, lrPlane.y, lrPlane.z, lrPlane.w )));
+                MakeShadowVector4( lrPlane.mV.x, lrPlane.mV.y, lrPlane.mV.z, lrPlane.mV.w )));
         }
     }
 

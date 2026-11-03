@@ -315,10 +315,10 @@ bool ConsumeFieldValue( Vector2& lrv2Value, FILE* lpFile )
     if ( !ConsumeFieldValue( lfX, lfY, lpFile ) )
         return false;
 
-    lrv2Value.x = lfX;
-    lrv2Value.y = lfY;
-    lrv2Value.z = 0.0f;
-    lrv2Value.w = 0.0f;
+    lrv2Value.mV.x = lfX;
+    lrv2Value.mV.y = lfY;
+    lrv2Value.mV.z = 0.0f;
+    lrv2Value.mV.w = 0.0f;
     return true;
 }
 

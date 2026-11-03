@@ -26,8 +26,8 @@ uint8_t WorldMap2D::GetValue(Vector2 lPosition) const
     // Normalised position within the world rect (0..1 across the grid).
     // X360 computes 1/size via vrefp + two Newton-Raphson refinement steps
     // (vnmsubfp/vmaddfp); a plain divide is the equivalent reconstruction.
-    const float lfRatioX = (lPosition.x - mWorldOrigin.x) / mWorldSize.x;
-    const float lfRatioY = (lPosition.y - mWorldOrigin.y) / mWorldSize.y;
+    const float lfRatioX = (lPosition.mV.x - mWorldOrigin.mV.x) / mWorldSize.mV.x;
+    const float lfRatioY = (lPosition.mV.y - mWorldOrigin.mV.y) / mWorldSize.mV.y;
 
     const int32_t liX = static_cast<int32_t>(lfRatioX * muWidth);
     const int32_t liY = static_cast<int32_t>(lfRatioY * muHeight);
@@ -46,10 +46,10 @@ uint8_t WorldMap2D::GetValue(Vector2 lPosition) const
 uint8_t WorldMap2D::GetValue(Vector3 lPosition) const
 {
     Vector2 lFlat;
-    lFlat.x = lPosition.x;
-    lFlat.y = lPosition.z;
-    lFlat.z = 0.0f;
-    lFlat.w = 0.0f;
+    lFlat.mV.x = lPosition.mV.x;
+    lFlat.mV.y = lPosition.mV.z;
+    lFlat.mV.z = 0.0f;
+    lFlat.mV.w = 0.0f;
     return GetValue(lFlat);
 }
 
