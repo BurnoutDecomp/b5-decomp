@@ -255,8 +255,8 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
             case E_TRIGGERTYPE_PLANE_SEGMENT:   // 0
             {
                 const TriggerEntityModuleIO::InAddPlaneSegmentTriggerEvent* lpPlane = static_cast<const TriggerEntityModuleIO::InAddPlaneSegmentTriggerEvent*>(lpEvent);
-                const f32 lfDimX = lpPlane->mDimensions.x;
-                const f32 lfDimY = lpPlane->mDimensions.y;
+                const f32 lfDimX = lpPlane->mDimensions.mV.x;
+                const f32 lfDimY = lpPlane->mDimensions.mV.y;
                 if (!(lfDimX > 0.0f) || !(lfDimY > 0.0f))
                 {
                     CgsDev::Assert::BeginAssert();
@@ -309,9 +309,9 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
             {
                 // Box: BoxVolume::Initialize gets the HALVED dims (the asm vmulfp128 by 0.5).
                 const TriggerEntityModuleIO::InAddBoxTriggerEvent* lpBox = static_cast<const TriggerEntityModuleIO::InAddBoxTriggerEvent*>(lpEvent);
-                const f32 lfHX = lpBox->mDimensions.x * 0.5f;
-                const f32 lfHY = lpBox->mDimensions.y * 0.5f;
-                const f32 lfHZ = lpBox->mDimensions.z * 0.5f;
+                const f32 lfHX = static_cast<f32>(lpBox->mDimensions.GetX()) * 0.5f;
+                const f32 lfHY = static_cast<f32>(lpBox->mDimensions.GetY()) * 0.5f;
+                const f32 lfHZ = static_cast<f32>(lpBox->mDimensions.GetZ()) * 0.5f;
                 // Staged rw::Resource, 0x822D9520..0x822D9554 (this is the branch whose
                 // `vmulfp128 v1, v0, 0.5` builds the halved-extent Vector3 in v1).
                 rw::Resource lResource;

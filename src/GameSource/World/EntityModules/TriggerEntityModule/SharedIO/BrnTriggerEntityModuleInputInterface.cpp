@@ -10,7 +10,6 @@
 
 #include "SharedClasses/Trigger/BrnGenericRegion.h"  // BrnTrigger::TriggerRegion / GenericRegion / BoxRegion
 
-#include <cmath>   // fabsf (X360 vandc == per-lane sign-bit clear == fabs)
 
 namespace BrnWorld
 {
@@ -29,10 +28,11 @@ namespace TriggerEntityModuleIO
         // event +0x50: abs(box dimensions). X360 loads [dimX,dimY,dimZ,0] then `vandc` clears each
         // lane's sign bit -> fabs per lane (the 4th lane stays 0.0).
         Vector3 lDimensions = lpBox->GetDimensions();
-        lEvent.mDimensions.x = fabsf(lDimensions.x);
-        lEvent.mDimensions.y = fabsf(lDimensions.y);
-        lEvent.mDimensions.z = fabsf(lDimensions.z);
-        lEvent.mDimensions.w = 0.0f;
+        const Vector3 lPackedDimensions(static_cast<f32>(lDimensions.GetX()),
+                                        static_cast<f32>(lDimensions.GetY()),
+                                        static_cast<f32>(lDimensions.GetZ()));
+        const __vector4 lSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        lEvent.mDimensions = __vandc(lPackedDimensions.mV, lSign);
 
         // event +0x40: (queryFlags << 24) | sign-extended region index (asm: slwi r8,r4,24 /
         // lhz+extsh r9 / or r9,r8,r9). GetRegionIndex() is the sign-extended 16-bit index.

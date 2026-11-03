@@ -54,10 +54,10 @@ namespace
 
         mbCommunicateWithApt = lbCommunicateWithApt;
         mRoadId              = 0;
-        mv4WorldPosition.x   = 0.0f;
-        mv4WorldPosition.y   = 0.0f;
-        mv4WorldPosition.z   = 0.0f;
-        mv4WorldPosition.w   = 0.0f;
+        mv4WorldPosition.mV.x   = 0.0f;
+        mv4WorldPosition.mV.y   = 0.0f;
+        mv4WorldPosition.mV.z   = 0.0f;
+        mv4WorldPosition.mV.w   = 0.0f;
         meSignColour         = E_SIGN_COLOUR_GREEN;
         meIconType           = E_ICON_TYPE_COUNT;
         mbSignVisible        = false;
@@ -73,10 +73,10 @@ namespace
         CGS_ASSERT(leIcon >= 0 && leIcon < E_ROADICON_COUNT,
                    "leIcon >= 0 && leIcon < E_ROADICON_COUNT");   // assert line 182
 
-        mv4WorldPosition.x = lpv2WorldPos->x;
-        mv4WorldPosition.y = lpv2WorldPos->y;
-        mv4WorldPosition.z = lpv2WorldPos->z;
-        mv4WorldPosition.w = lpv2WorldPos->w;
+        mv4WorldPosition.mV.x = lpv2WorldPos->mV.x;
+        mv4WorldPosition.mV.y = lpv2WorldPos->mV.y;
+        mv4WorldPosition.mV.z = lpv2WorldPos->mV.z;
+        mv4WorldPosition.mV.w = lpv2WorldPos->mV.w;
         meIconType         = leIconType;
         mRoadId            = lRoadId;
     }
@@ -157,9 +157,9 @@ namespace
         if (mbCommunicateWithApt)
         {
             char lacValue[32];
-            CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2ScreenPos.x));
+            CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2ScreenPos.mV.x));
             AddOutputAptViewState("_x", lacValue, true);
-            CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2ScreenPos.y));
+            CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2ScreenPos.mV.y));
             AddOutputAptViewState("_y", lacValue, true);
         }
     }
@@ -182,9 +182,9 @@ namespace
         if (mbCommunicateWithApt)
         {
             char lacValue[32];
-            CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2Scale.x));
+            CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2Scale.mV.x));
             AddOutputAptViewState("_xscale", lacValue, true);
-            CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2Scale.y));
+            CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2Scale.mV.y));
             AddOutputAptViewState("_yscale", lacValue, true);
         }
     }
@@ -300,10 +300,10 @@ namespace
             lfScaleFactor = lfMaxScaleFactor;
 
         Vector2 lv2ScaleFactor;
-        lv2ScaleFactor.x = lfScaleFactor;
-        lv2ScaleFactor.y = lfScaleFactor;
-        lv2ScaleFactor.z = 0.0f;
-        lv2ScaleFactor.w = 0.0f;
+        lv2ScaleFactor.mV.x = lfScaleFactor;
+        lv2ScaleFactor.mV.y = lfScaleFactor;
+        lv2ScaleFactor.mV.z = 0.0f;
+        lv2ScaleFactor.mV.w = 0.0f;
 
         for (u32 luIndex = 0; luIndex < KU_NUM_SIGN_ICONS; ++luIndex)
         {
@@ -311,10 +311,10 @@ namespace
 
             // The 2D world lane unflattened to {x, 0, z}.
             Vector3 lv3World;
-            lv3World.x = lpIcon->mv4WorldPosition.x;
-            lv3World.y = 0.0f;
-            lv3World.z = lpIcon->mv4WorldPosition.y;
-            lv3World.w = 0.0f;
+            lv3World.mV.x = lpIcon->mv4WorldPosition.mV.x;
+            lv3World.mV.y = 0.0f;
+            lv3World.mV.z = lpIcon->mv4WorldPosition.mV.y;
+            lv3World.mV.w = 0.0f;
             const Vector2 lv2ScreenPos = MapTransform::WorldToDevice(lv3World, false);
             lpIcon->SetScreenPosition(lv2ScreenPos);
             lpIcon->SetScale(lv2ScaleFactor);
@@ -432,9 +432,9 @@ namespace
     void RoadSignIconManager::SetupComponent()
     {
         Vector4 lv4StageRect;
-        lv4StageRect.y = -141.8f;
-        lv4StageRect.z = 2425.3f;
-        lv4StageRect.w = 2115.5f;
+        lv4StageRect.mV.y = -141.8f;
+        lv4StageRect.mV.z = 2425.3f;
+        lv4StageRect.mV.w = 2115.5f;
 
         for (s32 liIndex = 0; liIndex < GetNumIcons(); ++liIndex)
         {
@@ -445,10 +445,10 @@ namespace
             Vector2 lv2WorldPos;
             if (mbIconsTransformed)
             {
-                lv2WorldPos.x = lrIcon.mv4WorldPosition.x;
-                lv2WorldPos.y = lrIcon.mv4WorldPosition.y;
-                lv2WorldPos.z = lrIcon.mv4WorldPosition.z;
-                lv2WorldPos.w = lrIcon.mv4WorldPosition.w;
+                lv2WorldPos.mV.x = lrIcon.mv4WorldPosition.mV.x;
+                lv2WorldPos.mV.y = lrIcon.mv4WorldPosition.mV.y;
+                lv2WorldPos.mV.z = lrIcon.mv4WorldPosition.mV.z;
+                lv2WorldPos.mV.w = lrIcon.mv4WorldPosition.mV.w;
             }
             else
             {
@@ -506,10 +506,10 @@ namespace
             const Vector4& lv4Lane = mIcons[luIcon].mv4WorldPosition;
 
             Vector3 lv3World;
-            lv3World.x = lv4Lane.x;
-            lv3World.y = 0.0f;
-            lv3World.z = lv4Lane.y;
-            lv3World.w = 0.0f;
+            lv3World.mV.x = lv4Lane.mV.x;
+            lv3World.mV.y = 0.0f;
+            lv3World.mV.z = lv4Lane.mV.y;
+            lv3World.mV.w = 0.0f;
 
             lpav2Positions[luIcon] = MapTransform::WorldToDevice(lv3World, false);
         }
