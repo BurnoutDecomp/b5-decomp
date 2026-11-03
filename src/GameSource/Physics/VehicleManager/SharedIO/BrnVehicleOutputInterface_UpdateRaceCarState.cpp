@@ -144,10 +144,8 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Engine.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] gpDebugPrint (BRN_VFXFEED_PROBE)
 
 #include <cmath>
-#include <stdlib.h>                                          // [DIAG] getenv (BRN_VFXFEED_PROBE)
 
 namespace BrnPhysics
 {
@@ -161,20 +159,20 @@ namespace
     inline Vector3 TransformPoint(const Matrix44Affine& lrTransform, const Vector3& lvPoint)
     {
         Vector3 lvResult;
-        lvResult.x = lrTransform.xAxis.x * lvPoint.x + lrTransform.yAxis.x * lvPoint.y
-                   + lrTransform.zAxis.x * lvPoint.z + lrTransform.wAxis.x;
-        lvResult.y = lrTransform.xAxis.y * lvPoint.x + lrTransform.yAxis.y * lvPoint.y
-                   + lrTransform.zAxis.y * lvPoint.z + lrTransform.wAxis.y;
-        lvResult.z = lrTransform.xAxis.z * lvPoint.x + lrTransform.yAxis.z * lvPoint.y
-                   + lrTransform.zAxis.z * lvPoint.z + lrTransform.wAxis.z;
-        lvResult.w = 0.0f;
+        lvResult.X() = lrTransform.xAxis.X() * lvPoint.X() + lrTransform.yAxis.X() * lvPoint.Y()
+                   + lrTransform.zAxis.X() * lvPoint.Z() + lrTransform.wAxis.X();
+        lvResult.Y() = lrTransform.xAxis.Y() * lvPoint.X() + lrTransform.yAxis.Y() * lvPoint.Y()
+                   + lrTransform.zAxis.Y() * lvPoint.Z() + lrTransform.wAxis.Y();
+        lvResult.Z() = lrTransform.xAxis.Z() * lvPoint.X() + lrTransform.yAxis.Z() * lvPoint.Y()
+                   + lrTransform.zAxis.Z() * lvPoint.Z() + lrTransform.wAxis.Z();
+        lvResult.GetComponent(3) = 0.0f;
         return lvResult;
     }
 
     // `vmsum3fp128 vD, vA, vB` -- the 3-lane dot product the crash-recovery test uses twice.
     inline f32 Dot3(const Vector3& lvA, const Vector3& lvB)
     {
-        return lvA.x * lvB.x + lvA.y * lvB.y + lvA.z * lvB.z;
+        return lvA.X() * lvB.X() + lvA.Y() * lvB.Y() + lvA.Z() * lvB.Z();
     }
 
     // flt_82F2A24C / flt_82F2A250 -- both 0x3F000000 == 0.5f, read out of the ARTIST image.
@@ -247,7 +245,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     lrState.mi8LastAttackersRaceCarIndex = lrPhysics.mi8LastAttackersRaceCarIndex;
     lrState.mi8LastContactedRaceCar      = lrPhysics.mi8LastContactedRaceCar;
     lrState.mfTimeSinceLastRaceCarContact =
-        lrPhysics.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z;
+        lrPhysics.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.Z();
     lrState.mCarAssetAttribKey = lrSpec.mAttribsKey;
 
     // ---- THE POSE (0x825EC8F8..0x825EC944) ------------------------------------------------------
@@ -258,14 +256,14 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     lrState.mAngularVelocity = lrPhysics.GetAngularVelocity();
 
     // ---- the speed / drive-envelope block (0x825EC958..0x825EC9E0) -------------------------------
-    lrState.mfSpeedMPH         = lrPhysics.GetSpeedMPH().x;
-    lrState.mfMaxSpeedMPH      = lrSpec.mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z;
+    lrState.mfSpeedMPH         = lrPhysics.GetSpeedMPH().GetFloat();
+    lrState.mfMaxSpeedMPH      = lrSpec.mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.Z();
     lrState.mfMaxBoostSpeedMPH =
-        lrSpec.mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y;
+        lrSpec.mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.Y();
     lrState.mfAbsDriftScale    =
-        std::fabs(lrPhysics.mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w);
+        std::fabs(lrPhysics.mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.GetComponent(3));
     lrState.mfTimeInAir        =
-        lrPhysics.mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z;
+        lrPhysics.mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.Z();
 
     // ---- the four contact/deformation latches (0x825EC9E4..0x825ECA00) ---------------------------
     lrState.mbIsWedgedInWorld    = lrPhysics.mbIsWedgedInWorld;
@@ -278,7 +276,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     if (lrPhysics.mu8DriftState != VehiclePhysics::eDriftState_None)
     {
         const f32 lfTimeDrifting =
-            lrPhysics.mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z;
+            lrPhysics.mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.Z();
         lrState.mfTimeDrifting = (lfTimeDrifting > 0.0f) ? lfTimeDrifting : 0.0f;   // vmaxfp against 0
     }
     else
@@ -293,11 +291,11 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     lrState.meDriverType = lrDriver.meDriverType;
 
     // ---- steering: the vtable slot-0 dispatch (0x825ECA6C..0x825ECA84) ---------------------------
-    lrState.mfSteering = lrPhysics.GetSteeringAngle().x;
+    lrState.mfSteering = lrPhysics.GetSteeringAngle().GetFloat();
 
     // ---- boost + crash latches (0x825ECA88..0x825ECAE8) -------------------------------------------
     lrState.mfTimeBoosting =
-        lrPhysics.mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.y;
+        lrPhysics.mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.Y();
     lrState.mbCrashing          = lrPhysics.IsCrashing();
     lrState.mbStartedDeforming  = lrPhysics.HasStartedDeforming();
     lrState.mbIsFatalyCrashing  = lrPhysics.IsFatallyCrashing();
@@ -305,7 +303,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     if (lrPhysics.IsCrashing())
     {
         lrState.mfTimeCrashing =
-            lrPhysics.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y;
+            lrPhysics.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.Y();
     }
     else
     {
@@ -321,7 +319,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     lrState.mi8Gear = static_cast<s8>(liGear);
     lrState.mfUpShiftRPM   = lrSpec.mEngineAttribs.GetGearUpRPM(liGear);
     lrState.mfDownShiftRPM =
-        lrSpec.mEngineAttribs.mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.w;
+        lrSpec.mEngineAttribs.mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.GetComponent(3);
     for (s32 liRatio = 0; liRatio < VehicleAttribs::EngineAttribs::KI_MAX_NUM_GEARS; ++liRatio)
     {
         lrState.mafGearRatios[liRatio] = lrSpec.mEngineAttribs.GetGearRatio(liRatio);
@@ -340,22 +338,22 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
         WheelLite&       lrWheelLite = lrState.maWheels[liWheel];
 
         lrWheelLite.mVelocity          = lrWheel.mBodyPointVelocity;
-        lrWheelLite.mfRadiansPerSecond = lrWheel.mIntegrationVariables.x;
-        lrWheelLite.mfRotation         = lrWheel.mIntegrationVariables.z;
-        lrWheelLite.mfRadius           = lrWheel.mSlipVariables.w;
-        lrWheelLite.mfSkidFactor       = lrWheel.mSlipVariables.z;
+        lrWheelLite.mfRadiansPerSecond = lrWheel.mIntegrationVariables.X();
+        lrWheelLite.mfRotation         = lrWheel.mIntegrationVariables.Z();
+        lrWheelLite.mfRadius           = lrWheel.mSlipVariables.GetComponent(3);
+        lrWheelLite.mfSkidFactor       = lrWheel.mSlipVariables.Z();
 
         // The suspension height, normalised by whichever travel limit the wheel is inside.
-        const f32 lfWheelHeight = lrWheel.mPosition.y;
+        const f32 lfWheelHeight = lrWheel.mPosition.Y();
         const f32 lfTravel      = (lfWheelHeight >= 0.0f)
-                                      ? lrWheel.mSuspensionAndInertiaVariables.y
-                                      : lrWheel.mSuspensionAndInertiaVariables.x;
+                                      ? lrWheel.mSuspensionAndInertiaVariables.Y().GetFloat()
+                                      : lrWheel.mSuspensionAndInertiaVariables.X().GetFloat();
         lrWheelLite.mfSuspensionHeight = std::fabs(lfWheelHeight) / lfTravel;
 
         lrWheelLite.mbAttached        = (lrWheel.mu8State != KU8_WHEEL_STATE_DETACHED);
-        lrWheelLite.mfWheelLongSpeed  = lrWheel.mSpeedAndMassOnWheelVariables.w;
-        lrWheelLite.mfRoadLatSpeed    = lrWheel.mSpeedAndMassOnWheelVariables.y;
-        lrWheelLite.mfRoadLongSpeed   = lrWheel.mSpeedAndMassOnWheelVariables.x;
+        lrWheelLite.mfWheelLongSpeed  = lrWheel.mSpeedAndMassOnWheelVariables.GetComponent(3);
+        lrWheelLite.mfRoadLatSpeed    = lrWheel.mSpeedAndMassOnWheelVariables.Y();
+        lrWheelLite.mfRoadLongSpeed   = lrWheel.mSpeedAndMassOnWheelVariables.X();
         lrWheelLite.mbHasTraction     = lrWheel.mbHasTraction;
 
         // `and r9, r9, r14` -- the car stays driveable only while every wheel is in state 0.
@@ -383,23 +381,23 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
         // delta == this frame's translation minus the previous frame's (the console differences
         // mTransform.wAxis against mPreviousTransform.wAxis directly).
         Vector3 lvDelta;
-        lvDelta.x = lPhysicsTransform.wAxis.x - lrPhysics.mPreviousTransform.wAxis.x;
-        lvDelta.y = lPhysicsTransform.wAxis.y - lrPhysics.mPreviousTransform.wAxis.y;
-        lvDelta.z = lPhysicsTransform.wAxis.z - lrPhysics.mPreviousTransform.wAxis.z;
-        lvDelta.w = 0.0f;
+        lvDelta.X() = lPhysicsTransform.wAxis.X() - lrPhysics.mPreviousTransform.wAxis.X();
+        lvDelta.Y() = lPhysicsTransform.wAxis.Y() - lrPhysics.mPreviousTransform.wAxis.Y();
+        lvDelta.Z() = lPhysicsTransform.wAxis.Z() - lrPhysics.mPreviousTransform.wAxis.Z();
+        lvDelta.GetComponent(3) = 0.0f;
 
         AboveGroundTestResult& lrDest = lrState.mAboveGroundTestResult;
-        lrDest.mIntersectionPosition.x = lrSource.mIntersectionPosition.x + lvDelta.x;
-        lrDest.mIntersectionPosition.y = lrSource.mIntersectionPosition.y + lvDelta.y;
-        lrDest.mIntersectionPosition.z = lrSource.mIntersectionPosition.z + lvDelta.z;
-        lrDest.mIntersectionPosition.w = lrSource.mIntersectionPosition.w;
+        lrDest.mIntersectionPosition.X() = lrSource.mIntersectionPosition.X() + lvDelta.X();
+        lrDest.mIntersectionPosition.Y() = lrSource.mIntersectionPosition.Y() + lvDelta.Y();
+        lrDest.mIntersectionPosition.Z() = lrSource.mIntersectionPosition.Z() + lvDelta.Z();
+        lrDest.mIntersectionPosition.GetComponent(3) = lrSource.mIntersectionPosition.GetComponent(3);
         lrDest.mIntersectionNormal     = lrSource.mIntersectionNormal;
         lrDest.mCollisionTag           = lrSource.mCollisionTag;
-        lrDest.mfVerticalDistance      = lrSource.mfVerticalDistance + lvDelta.y;
+        lrDest.mfVerticalDistance      = lrSource.mfVerticalDistance + lvDelta.Y();
         lrDest.mbValid                 = lrSource.mbValid;
 
         // The second correction: from the PHYSICS pose to the GRAPHICS pose just published.
-        lrDest.mfVerticalDistance -= (lPhysicsTransform.wAxis.y - lrState.mTransform.wAxis.y);
+        lrDest.mfVerticalDistance -= (lPhysicsTransform.wAxis.Y() - lrState.mTransform.wAxis.Y());
     }
 
     // ---- the two flags the console writes unconditionally (0x825ECF64 / 0x825ECF6C) ---------------
@@ -429,95 +427,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
         }
     }
 
-    // ================================================================================================
-    // [DIAG] NOT IN THE X360 BINARY -- the DRIVABLE-INPUTS witness.  Opt in with
-    // BRN_DRIVABLE_DIAG=1 (or =N for one line every N crashing frames; 1 == every frame).
-    //
-    // WHAT IT MEASURES, and nothing else: the RAW OPERANDS of the two booleans this function
-    // publishes and that the whole crash verdict hangs off --
-    //   mbIsDriveable  = !GetDeformedBeyondDriveTimeLimitsInCrash()  AND  (wheel[i].mu8State == 0)
-    //   mbFullyDrivableFromCrash = crashing && timeCrashing > K && 4x mbHasTraction
-    //                              && mbIsDriveable && |roll|,|yaw| < K
-    // ActiveRaceCar::IsWrecked returns TRUE the instant mbIsDriveable is false, so "every crash
-    // ends wrecked" is answerable only by seeing WHICH term went false -- the deformation gate
-    // (`beyond`) or a TWISTED/DETACHED wheel (`wst`).  Printing the verdict again would say
-    // nothing new.  One line per crashing frame (sampled), player or not; nothing prints when no
-    // car is crashing, which is the control.  DELETE-WHEN-STABLE.
-    // ================================================================================================
-    {
-        static s32 siDrivableDiag = -1;
-        if (siDrivableDiag < 0)
-        {
-        }
-        if (siDrivableDiag > 0 && lrState.mbCrashing && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static s32 siDrivableFrames = 0;
-            ++siDrivableFrames;
-            if ((siDrivableFrames % siDrivableDiag) == 0)
-            {
-                const f32 lfRollRate = Dot3(lrState.mAngularVelocity, lPhysicsTransform.xAxis);
-                const f32 lfYawRate  = Dot3(lrState.mAngularVelocity, lPhysicsTransform.zAxis);
-                *CgsDev::Log::gpDebugPrint
-                    << "[drivable] car=" << liRaceCarIndex
-                    << " tCrash=" << lrState.mfTimeCrashing
-                    << " beyond=" << (lrPhysics.GetDeformedBeyondDriveTimeLimitsInCrash() ? 1 : 0)
-                    << " wst=" << static_cast<s32>(lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(0)).mu8State)
-                    << ","     << static_cast<s32>(lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(1)).mu8State)
-                    << ","     << static_cast<s32>(lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(2)).mu8State)
-                    << ","     << static_cast<s32>(lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(3)).mu8State)
-                    << " trac=" << (lrState.maWheels[0].mbHasTraction ? 1 : 0)
-                    << ","      << (lrState.maWheels[1].mbHasTraction ? 1 : 0)
-                    << ","      << (lrState.maWheels[2].mbHasTraction ? 1 : 0)
-                    << ","      << (lrState.maWheels[3].mbHasTraction ? 1 : 0)
-                    << " drivable=" << (lrState.mbIsDriveable ? 1 : 0)
-                    << " fully=" << (lrState.mbFullyDrivableFromCrash ? 1 : 0)
-                    << " roll=" << lfRollRate << " yaw=" << lfYawRate
-                    << " up.y=" << lrState.mTransform.yAxis.y
-                    << " mph=" << lrState.mfSpeedMPH
-                    << "\n";
-            }
-        }
-    }
 
-    // ================================================================================================
-    // [DIAG] NOT IN THE X360 BINARY -- the VFX-FEED WITNESS.  Opt in with BRN_VFXFEED_PROBE=1.
-    //
-    // WHY IT IS HERE AND NOWHERE ELSE.  This function is the console's ONLY writer of RaceCarState,
-    // so it is the exact boundary at which the effects lane's two state-driven effects read their
-    // inputs.  Both of those effects are currently DEAD on screen, and "the producer never produces"
-    // and "the consumer was never written" are indistinguishable from the effects side:
-    //
-    //   JUMP / LANDING.  EffectsModule::UpdateActiveRaceCars (EffectsModule.cpp:1528) computes
-    //     CarState::mbJumping = !mbCrashing && mfTimeInAir > 0.0f, and JumpStateMachine::
-    //     OnDetermineNextState @0x8229B9F8 uses exactly that byte (`*(a2+78)`) as the ONLY entry
-    //     transition out of state 0.  So `air.edges` below is the number of times the jump machine
-    //     was offered a start this run.  mfTimeInAir is published a few lines above from
-    //     RaceCarPhysics' TimeWithoutTraction lane, accumulated by VehiclePhysics::UpdateInAirStats
-    //     @0x825D0A50 (`+= dt` while no wheel is on the ground and |speed| > 1.8 m/s).
-    //
-    //   WHEEL SKID SMOKE.  WheelStateMachine::Update @0x82293EB8 early-outs unless mbAttached &&
-    //     mbHasTraction && mRoadContact.mbIsOnGround, then drives its two layers off mfSkidFactor
-    //     (layer 0) and |mfRoadLatSpeed| (layer 1) and indexes the module's surfacelist with
-    //     (mRoadContact.mCollisionTag >> 4) & 0x3F.  `skid.*` below is that whole input set,
-    //     measured where it is written rather than where it is read.
-    //
-    // ⚠️ WHAT MAKES THIS NOT A LYING DIAGNOSTIC (the three traps this project keeps hitting):
-    //   1. It prints an ARMED line on its FIRST execution.  A run with the variable set and no
-    //      "[vfxfeed] ARMED" line means the publish itself never ran -- which is a completely
-    //      different finding from "the numbers are zero", and a probe that only prints when it has
-    //      something to say cannot tell you which one happened.
-    //   2. It reports PEAKS AND COUNTS OVER THE WHOLE RUN, not a sample.  The existing
-    //      `[collision-tag]` rung prints timeInAir on its first ~30 frames and reads 0.000000 every
-    //      time; that is a first-N sample of a car that has not jumped yet, and reading it as
-    //      "mfTimeInAir is always zero" is exactly the mistake this replaces.
-    //   3. Every quantity is accompanied by the count of samples it was drawn from, so "one row at
-    //      the cap" and "every row" are distinguishable.
-    //
-    // COST WHEN OFF: one already-initialised bool test per published car per frame.
-    // ================================================================================================
-    {
-
-    }
 }
 
 }
