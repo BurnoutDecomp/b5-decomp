@@ -108,11 +108,10 @@ namespace BrnWorld
                 {
                     // Half-extents from the trigger dimensions, with the Z (depth) collapsed to the
                     // thin plane-segment depth.
-                    rw::math::vpu::Vector3 lHalfDimensions;
-                    lHalfDimensions.x = lrTrigger.mDimensions.x * 0.5f;
-                    lHalfDimensions.y = lrTrigger.mDimensions.y * 0.5f;
-                    lHalfDimensions.z = KF_PLANE_SEGMENT_TRIGGER_DEPTH * 0.5f;
-                    lHalfDimensions.w = 0.0f;
+                    const rw::math::vpu::Vector3 lHalfDimensions(
+                        lrTrigger.mDimensions.GetX().GetFloat() * 0.5f,
+                        lrTrigger.mDimensions.GetY().GetFloat() * 0.5f,
+                        KF_PLANE_SEGMENT_TRIGGER_DEPTH * 0.5f);
 
                     lpDisplay->DrawBox(lHalfDimensions, lHalfDimensions, lrTrigger.mTransform, rw::RGBA(100, 100, 100, 100));
                     ++miPlaneTriggerCount;
@@ -128,17 +127,14 @@ namespace BrnWorld
 
                 case E_TRIGGERTYPE_BOX:
                 {
-                    rw::math::vpu::Vector3 lHalfDimensions;
-                    lHalfDimensions.x = lrTrigger.mDimensions.x * 0.5f;
-                    lHalfDimensions.y = lrTrigger.mDimensions.y * 0.5f;
-                    lHalfDimensions.z = lrTrigger.mDimensions.z * 0.5f;
-                    lHalfDimensions.w = 0.0f;
-
-                    rw::math::vpu::Vector3 lNegHalfDimensions;
-                    lNegHalfDimensions.x = -lHalfDimensions.x;
-                    lNegHalfDimensions.y = -lHalfDimensions.y;
-                    lNegHalfDimensions.z = -lHalfDimensions.z;
-                    lNegHalfDimensions.w = 0.0f;
+                    const rw::math::vpu::Vector3 lHalfDimensions(
+                        lrTrigger.mDimensions.GetX().GetFloat() * 0.5f,
+                        lrTrigger.mDimensions.GetY().GetFloat() * 0.5f,
+                        lrTrigger.mDimensions.GetZ().GetFloat() * 0.5f);
+                    const rw::math::vpu::Vector3 lNegHalfDimensions(
+                        -lHalfDimensions.GetX().GetFloat(),
+                        -lHalfDimensions.GetY().GetFloat(),
+                        -lHalfDimensions.GetZ().GetFloat());
 
                     lpDisplay->DrawBox(lNegHalfDimensions, lHalfDimensions, lrTrigger.mTransform, KU_BOX_TRIGGER_COLOUR);
                     ++miBoxTriggerCount;
