@@ -146,16 +146,8 @@ void BrnMassiveDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRende
 
         const f32 lfNextY = lfY + 15.0f;
 
-        Vector2 lv2BarMin;
-        lv2BarMin.x = 300.0f;
-        lv2BarMin.y = lfY;
-        lv2BarMin.z = 0.0f;
-        lv2BarMin.w = 0.0f;
-        Vector2 lv2BarMax;
-        lv2BarMax.x = 450.0f;
-        lv2BarMax.y = lfNextY;
-        lv2BarMax.z = 0.0f;
-        lv2BarMax.w = 0.0f;
+        const Vector2 lv2BarMin(300.0f, lfY);
+        const Vector2 lv2BarMax(450.0f, lfNextY);
         lpRender->DrawHorizontalBar(lv2BarMin, lv2BarMax, static_cast<f32>(mpSubscriberStates[liName]),
                                     KF_MAX_STATE, KU_COLOUR_BAR_BACK, KU_COLOUR_BAR_FRONT);
 

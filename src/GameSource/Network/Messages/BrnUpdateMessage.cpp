@@ -57,11 +57,8 @@ namespace BrnNetwork
         {
             const Vector3 lUnit = rw::math::vpu::Normalize(mUpdateData.mLinearVelocity);
             {
-                const Vector3 lAggregateValue = {
-                lUnit.x * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
-                lUnit.y * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
-                lUnit.z * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
-                lUnit.w * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE };
+                const Vector3 lAggregateValue =
+                    (lUnit * KF_UPDATE_MAX_LINEAR_VELOCITY) * KF_UPDATE_VELOCITY_CLAMP_SCALE;
                 mUpdateData.mLinearVelocity = lAggregateValue;
             }
         }
@@ -70,19 +67,16 @@ namespace BrnNetwork
         {
             const Vector3 lUnit = rw::math::vpu::Normalize(mUpdateData.mAngularVelocity);
             {
-                const Vector3 lAggregateValue = {
-                lUnit.x * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
-                lUnit.y * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
-                lUnit.z * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
-                lUnit.w * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE };
+                const Vector3 lAggregateValue =
+                    (lUnit * KF_UPDATE_MAX_ANGULAR_VELOCITY) * KF_UPDATE_VELOCITY_CLAMP_SCALE;
                 mUpdateData.mAngularVelocity = lAggregateValue;
             }
         }
 
-        const Vector3 lPositionMax = {  KF_UPDATE_POSITION_MAX_XZ,  KF_UPDATE_POSITION_MAX_Y,
-                                        KF_UPDATE_POSITION_MAX_XZ, 0.0f };
-        const Vector3 lPositionMin = { -KF_UPDATE_POSITION_MAX_XZ, -KF_UPDATE_POSITION_MAX_Y,
-                                       -KF_UPDATE_POSITION_MAX_XZ, 0.0f };
+        const Vector3 lPositionMax(KF_UPDATE_POSITION_MAX_XZ, KF_UPDATE_POSITION_MAX_Y,
+                                   KF_UPDATE_POSITION_MAX_XZ);
+        const Vector3 lPositionMin(-KF_UPDATE_POSITION_MAX_XZ, -KF_UPDATE_POSITION_MAX_Y,
+                                   -KF_UPDATE_POSITION_MAX_XZ);
         mUpdateData.mMatrix.wAxis = rw::math::vpu::Max(rw::math::vpu::Min(mUpdateData.mMatrix.wAxis, lPositionMax),
                                                        lPositionMin);
 

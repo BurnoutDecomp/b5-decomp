@@ -37,12 +37,12 @@ namespace BrnResource
 {
     namespace
     {
-        constexpr s32 KI_ALLOCATOR_STATS_BUFFER_SIZE = 0x2AEC;
-        constexpr s32 KI_ALLOCATOR_STATS_ROW_COUNT = 67;
-        constexpr s32 KI_RESOURCE_STAT_ROWS_LINEAR = 7;
-        constexpr s32 KI_RESOURCE_STAT_ROWS_HEAP = 8;
-        constexpr s32 KI_RESOURCE_STAT_ROWS_RWLINEAR = 4;
-        constexpr s32 KI_RESOURCE_STAT_ROWS_RWGENERAL = 4;
+        const s32 KI_ALLOCATOR_STATS_BUFFER_SIZE = 0x2AEC;
+        const s32 KI_ALLOCATOR_STATS_ROW_COUNT = 67;
+        const s32 KI_RESOURCE_STAT_ROWS_LINEAR = 7;
+        const s32 KI_RESOURCE_STAT_ROWS_HEAP = 8;
+        const s32 KI_RESOURCE_STAT_ROWS_RWLINEAR = 4;
+        const s32 KI_RESOURCE_STAT_ROWS_RWGENERAL = 4;
 
         const char* const KAPC_ALLOCATOR_TYPE_NAMES[5] = {
             "RAW", "LINEAR", "HEAP", "RWLINEAR", "RWHEAP"
@@ -334,19 +334,19 @@ namespace BrnResource
             guResourceHudVideoForeColour = 0x4B6464C8u;
         }
 
-        constexpr f32 lfNameX = 75.0f;
-        constexpr f32 lfTypeX = 250.0f;
-        constexpr f32 lfMainSizeX = 350.0f;
-        constexpr f32 lfMainCurrentX = 450.0f;
-        constexpr f32 lfMainPeakX = 550.0f;
-        constexpr f32 lfVideoSizeX = 650.0f;
-        constexpr f32 lfVideoCurrentX = 750.0f;
-        constexpr f32 lfVideoPeakX = 850.0f;
-        constexpr f32 lfHeaderY = 40.0f;
-        constexpr f32 lfTextYStep = 12.0f;
-        constexpr f32 lfTextScale = 12.0f;
-        constexpr f32 lfColumnGap = 2.0f;
-        constexpr f32 lfHeaderScale = lfTextYStep + lfColumnGap;
+        const f32 lfNameX = 75.0f;
+        const f32 lfTypeX = 250.0f;
+        const f32 lfMainSizeX = 350.0f;
+        const f32 lfMainCurrentX = 450.0f;
+        const f32 lfMainPeakX = 550.0f;
+        const f32 lfVideoSizeX = 650.0f;
+        const f32 lfVideoCurrentX = 750.0f;
+        const f32 lfVideoPeakX = 850.0f;
+        const f32 lfHeaderY = 40.0f;
+        const f32 lfTextYStep = 12.0f;
+        const f32 lfTextScale = 12.0f;
+        const f32 lfColumnGap = 2.0f;
+        const f32 lfHeaderScale = lfTextYStep + lfColumnGap;
 
         MaybeDrawText(lpRender, "Name", lfNameX, lfHeaderY, lfHeaderScale,
                       guResourceHudTextColour, false);
@@ -394,8 +394,8 @@ namespace BrnResource
             if (lrRow.mMainMemInfo.miSize > 0)
             {
                 lpRender->DrawHorizontalBar(
-                    Vector2{lfMainPeakX - 10.0f, lfBarTopY, 0.0f, 0.0f},
-                    Vector2{lfMainCurrentX, lfBarBottomY, 0.0f, 0.0f},
+                    Vector2(lfMainPeakX - 10.0f, lfBarTopY),
+                    Vector2(lfMainCurrentX, lfBarBottomY),
                     static_cast<f32>(lrRow.mMainMemInfo.miCurrUsed),
                     static_cast<f32>(lrRow.mMainMemInfo.miSize),
                     guResourceHudMainForeColour, guResourceHudMainBackColour);
@@ -406,8 +406,8 @@ namespace BrnResource
                 const CgsDev::RGBA luForeColour = InterpolateColours(
                     guResourceHudMainForeColour, guResourceHudVideoForeColour, lfFactor);
                 lpRender->DrawHorizontalBar(
-                    Vector2{lfVideoSizeX - 10.0f, lfBarTopY, 0.0f, 0.0f},
-                    Vector2{lfMainPeakX, lfBarBottomY, 0.0f, 0.0f},
+                    Vector2(lfVideoSizeX - 10.0f, lfBarTopY),
+                    Vector2(lfMainPeakX, lfBarBottomY),
                     static_cast<f32>(lrRow.mMainMemInfo.miMaxUsed),
                     static_cast<f32>(lrRow.mMainMemInfo.miSize),
                     luForeColour, luBackColour);
@@ -416,8 +416,8 @@ namespace BrnResource
             if (lrRow.mVideoMemInfo.miSize > 0)
             {
                 lpRender->DrawHorizontalBar(
-                    Vector2{lfVideoPeakX - 10.0f, lfBarTopY, 0.0f, 0.0f},
-                    Vector2{lfVideoCurrentX, lfBarBottomY, 0.0f, 0.0f},
+                    Vector2(lfVideoPeakX - 10.0f, lfBarTopY),
+                    Vector2(lfVideoCurrentX, lfBarBottomY),
                     static_cast<f32>(lrRow.mVideoMemInfo.miCurrUsed),
                     static_cast<f32>(lrRow.mVideoMemInfo.miSize),
                     guResourceHudMainForeColour, guResourceHudMainBackColour);
@@ -428,8 +428,8 @@ namespace BrnResource
                 const CgsDev::RGBA luForeColour = InterpolateColours(
                     guResourceHudMainForeColour, guResourceHudVideoForeColour, lfFactor);
                 lpRender->DrawHorizontalBar(
-                    Vector2{950.0f - 10.0f, lfBarTopY, 0.0f, 0.0f},
-                    Vector2{lfVideoPeakX, lfBarBottomY, 0.0f, 0.0f},
+                    Vector2(950.0f - 10.0f, lfBarTopY),
+                    Vector2(lfVideoPeakX, lfBarBottomY),
                     static_cast<f32>(lrRow.mVideoMemInfo.miMaxUsed),
                     static_cast<f32>(lrRow.mVideoMemInfo.miSize),
                     luForeColour, luBackColour);
