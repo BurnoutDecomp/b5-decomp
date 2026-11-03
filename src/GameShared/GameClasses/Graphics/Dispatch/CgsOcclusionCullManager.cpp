@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
-#include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/vector4_operation.h"            // Splat / lane-wise * and +
@@ -11,27 +13,6 @@
 #include <cstdlib>
 #include <cstdio>
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-
-struct IDirect3DDevice9;
-extern IDirect3DDevice9* gpD3DDevice;
-
-// The Xenon indexed draw (pc/gcm/renderengine/XenonD3D9Shims.cpp), the call the console makes.
-extern "C" void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* lpDevice,
-                                               u32 lePrimitiveType,
-                                               u32 luBaseVertexIndex,
-                                               u32 luMinVertexIndex,
-                                               u32 luNumVertices);
-
-extern "C"
-{
-    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice,
-                                   u32 luStreamNumber,
-                                   const void* lpStreamData,
-                                   u32 luOffsetInBytes,
-                                   u32 luStride,
-                                   u32 luFlags);
-    void D3DDevice_SetIndices(IDirect3DDevice9* lpDevice, void* lpIndexData);
-}
 
 // CgsOcclusionCullManager.cpp - the hardware-occlusion-query manager's query
 // bracket, conditional-render path, and trivial-accept handling.
@@ -115,31 +96,32 @@ namespace CgsGraphics
         const f32 lfPositiveExtent = 1.001f;
         const Vector3 laCubeCorners[8] =
         {
-            { lfNegativeExtent, lfPositiveExtent, lfNegativeExtent, 0.0f },
-            { lfPositiveExtent, lfPositiveExtent, lfNegativeExtent, 0.0f },
-            { lfPositiveExtent, lfNegativeExtent, lfNegativeExtent, 0.0f },
-            { lfNegativeExtent, lfNegativeExtent, lfNegativeExtent, 0.0f },
-            { lfNegativeExtent, lfNegativeExtent, lfPositiveExtent, 0.0f },
-            { lfPositiveExtent, lfNegativeExtent, lfPositiveExtent, 0.0f },
-            { lfPositiveExtent, lfPositiveExtent, lfPositiveExtent, 0.0f },
-            { lfNegativeExtent, lfPositiveExtent, lfPositiveExtent, 0.0f }
+            Vector3(lfNegativeExtent, lfPositiveExtent, lfNegativeExtent),
+            Vector3(lfPositiveExtent, lfPositiveExtent, lfNegativeExtent),
+            Vector3(lfPositiveExtent, lfNegativeExtent, lfNegativeExtent),
+            Vector3(lfNegativeExtent, lfNegativeExtent, lfNegativeExtent),
+            Vector3(lfNegativeExtent, lfNegativeExtent, lfPositiveExtent),
+            Vector3(lfPositiveExtent, lfNegativeExtent, lfPositiveExtent),
+            Vector3(lfPositiveExtent, lfPositiveExtent, lfPositiveExtent),
+            Vector3(lfNegativeExtent, lfPositiveExtent, lfPositiveExtent)
         };
         for (u32 luVertex = 0u; luVertex < 8u; ++luVertex)
         {
             maCubeVertices[luVertex].mv3Pos = laCubeCorners[luVertex];
-            maCubeVertices[luVertex].mv4Colour =
-                RGBA8{ 0xFFu, static_cast<u8>(luVertex * 8u), 0u, 0xFFu };
+            RGBA8& lrColour = maCubeVertices[luVertex].mv4Colour;
+            lrColour.r = 0xFFu; lrColour.g = static_cast<u8>(luVertex * 8u);
+            lrColour.b = 0u; lrColour.a = 0xFFu;
             maCubeVerticesZOnly[luVertex].mv3Pos = maCubeVertices[luVertex].mv3Pos;
         }
 
-        mAlwaysFailMatrix.xAxis = { -10.0f, 0.0f, 0.0f, 0.0f };
-        mAlwaysFailMatrix.yAxis = { 0.0f, 0.05f, 0.0f, 0.0f };
-        mAlwaysFailMatrix.zAxis = { 0.0f, 0.0f, 0.05f, 0.0f };
-        mAlwaysFailMatrix.wAxis = { 0.0f, 0.0f, 0.0f, 1.0f };
-        mAlwaysPassMatrix.xAxis = { 0.02f, 0.0f, 0.0f, 0.0f };
-        mAlwaysPassMatrix.yAxis = { 0.0f, 0.02f, 0.0f, 0.0f };
-        mAlwaysPassMatrix.zAxis = { 0.0f, 0.0f, 0.02f, 0.0f };
-        mAlwaysPassMatrix.wAxis = { 0.0f, 0.0f, 0.0f, 1.0f };
+        mAlwaysFailMatrix.xAxis.Set(-10.0f, 0.0f, 0.0f, 0.0f);
+        mAlwaysFailMatrix.yAxis.Set(0.0f, 0.05f, 0.0f, 0.0f);
+        mAlwaysFailMatrix.zAxis.Set(0.0f, 0.0f, 0.05f, 0.0f);
+        mAlwaysFailMatrix.wAxis.Set(0.0f, 0.0f, 0.0f, 1.0f);
+        mAlwaysPassMatrix.xAxis.Set(0.02f, 0.0f, 0.0f, 0.0f);
+        mAlwaysPassMatrix.yAxis.Set(0.0f, 0.02f, 0.0f, 0.0f);
+        mAlwaysPassMatrix.zAxis.Set(0.0f, 0.0f, 0.02f, 0.0f);
+        mAlwaysPassMatrix.wAxis.Set(0.0f, 0.0f, 0.0f, 1.0f);
 
         const u16 lauCubeIndices[24] =
         {
@@ -158,36 +140,29 @@ namespace CgsGraphics
         const u8 luPositionStride = lpDescriptorData->GetElementStrides()[0];
 
         renderengine::VertexBuffer::Parameters lVertexBufferParameters;
-        lVertexBufferParameters.muFormat = 0u;
-        lVertexBufferParameters.muLength = 8u * static_cast<u32>(sizeof(PositionOnlyVertex));
+        lVertexBufferParameters.type = 0u;
+        lVertexBufferParameters.bufferSize = 8u * static_cast<u32>(sizeof(PositionOnlyVertex));
         rw::ResourceDescriptor lVertexBufferDescriptor;
-        renderengine::VertexBuffer::GetResourceDescriptor(&lVertexBufferDescriptor,
-                                                          &lVertexBufferParameters);
+        lVertexBufferDescriptor = renderengine::VertexBuffer::GetResourceDescriptor(lVertexBufferParameters);
         rw::Resource lVertexBufferResource = lpAllocator->DoAllocate(lVertexBufferDescriptor, 0);
         CGS_ASSERT(lVertexBufferResource.m_baseResources[0],
                    "couldn't allocate memory for vertex descriptor");
 
-        renderengine::VertexBufferHeader* const lpVertexBufferHeader =
-            renderengine::VertexBuffer::Initialize(
-                reinterpret_cast<renderengine::VertexBuffer::Wrapper*>(&lVertexBufferResource),
-                &lVertexBufferParameters, 0, 0);
-        mpVertexBuffer = reinterpret_cast<renderengine::VertexBuffer*>(lpVertexBufferHeader);
-        CGS_ASSERT(lpVertexBufferHeader, "couldn't create a mpVertexBuffer");
-
-        renderengine::VertexBuffer_Xbox2UnSet(lpVertexBufferHeader);
-        u8* const lpVertexBufferBytes = reinterpret_cast<u8*>(static_cast<usize>(
-            static_cast<u32>(renderengine::D3DVertexBuffer_Lock(lpVertexBufferHeader, 0, 0, 0))));
+        mpVertexBuffer = renderengine::VertexBuffer::Initialize(lVertexBufferResource, lVertexBufferParameters);
+        CGS_ASSERT(mpVertexBuffer, "couldn't create a mpVertexBuffer");
+        mpVertexBuffer->Xbox2UnSet();
+        u8* const lpVertexBufferBytes = static_cast<u8*>(D3DVertexBuffer_Lock(mpVertexBuffer, 0, 0, 0));
         for (u32 luVertex = 0u; luVertex < 8u; ++luVertex)
         {
             std::memcpy(lpVertexBufferBytes + luPositionOffset + luVertex * luPositionStride,
                         &maCubeVerticesZOnly[luVertex], sizeof(PositionOnlyVertex));
         }
-        renderengine::D3DVertexBuffer_Unlock(lpVertexBufferHeader);
+        D3DVertexBuffer_Unlock(mpVertexBuffer);
 
-        renderengine::IndexBufferParameters lIndexBufferParameters;
-        lIndexBufferParameters.muField00 = 0u;
-        lIndexBufferParameters.muFormat = 16u;
-        lIndexBufferParameters.muCount = 24u;
+        renderengine::IndexBuffer::Parameters lIndexBufferParameters;
+        lIndexBufferParameters.type = 0u;
+        lIndexBufferParameters.depth = 16u;
+        lIndexBufferParameters.numIndices = 24u;
         rw::ResourceDescriptor lIndexBufferDescriptor;
         for (u32 luLane = 0u; luLane < 5u; ++luLane)
         {
@@ -202,19 +177,13 @@ namespace CgsGraphics
         CGS_ASSERT(lIndexBufferResource.m_baseResources[0],
                    "couldn't allocate memory for index buffer");
 
-        renderengine::IndexBufferHeader* const lpIndexBufferHeader =
-            renderengine::IndexBuffer::Initialize(
-                reinterpret_cast<renderengine::IndexBufferWrapper*>(&lIndexBufferResource),
-                &lIndexBufferParameters);
-        mpIndexBuffer = reinterpret_cast<renderengine::IndexBuffer*>(lpIndexBufferHeader);
-        CGS_ASSERT(lpIndexBufferHeader, "couldn't create mpIndexBuffer");
-
-        renderengine::IndexBufferLockInfo lIndexBufferLockInfo;
-        const int liIndexBufferLocked = renderengine::IndexBuffer::Lock(
-            lpIndexBufferHeader, 2, &lIndexBufferLockInfo);
-        CGS_ASSERT(liIndexBufferLocked, "couldn't lock mpIndexBuffer");
-        std::memcpy(lIndexBufferLockInfo.mpBits, mau16CubeIndices, sizeof(mau16CubeIndices));
-        renderengine::IndexBuffer::Unlock(lpIndexBufferHeader, &lIndexBufferLockInfo);
+        mpIndexBuffer = renderengine::IndexBuffer::Initialize(lIndexBufferResource, lIndexBufferParameters);
+        CGS_ASSERT(mpIndexBuffer, "couldn't create mpIndexBuffer");
+        renderengine::IndexBuffer::Locked lIndexBufferLockInfo;
+        const bool lbIndexBufferLocked = mpIndexBuffer->Lock(2, lIndexBufferLockInfo);
+        CGS_ASSERT(lbIndexBufferLocked, "couldn't lock mpIndexBuffer");
+        std::memcpy(lIndexBufferLockInfo.indices, mau16CubeIndices, sizeof(mau16CubeIndices));
+        mpIndexBuffer->Unlock(lIndexBufferLockInfo);
 
         mDrawParameters.SetPrimitiveType(static_cast<renderengine::PrimitiveType>(13));
         mDrawParameters.SetBaseVertexIndex(0u);
@@ -329,7 +298,7 @@ namespace CgsGraphics
         const s16 li16QueryId = static_cast<s16>(maQueryIds[miOccludeeIndex]);
         if (li16QueryId != -1)
         {
-            D3DDevice_BeginConditionalRendering(gpXboxD3DDevice, static_cast<u32>(li16QueryId));
+            ::D3DDevice_BeginConditionalRendering(gpD3DDevice, static_cast<u32>(li16QueryId));
         }
     }
 
@@ -344,7 +313,7 @@ namespace CgsGraphics
 
         if (maQueryIds[miOccludeeIndex] != 0xFFFF)
         {
-            D3DDevice_EndConditionalRendering(gpXboxD3DDevice);
+            ::D3DDevice_EndConditionalRendering(gpD3DDevice);
         }
         ++miOccludeeIndex;
     }
@@ -364,11 +333,11 @@ namespace CgsGraphics
         rw::math::vpu::Vector4 TransformRow(const rw::math::vpu::Vector4& lrRow,
                                             const rw::math::vpu::Matrix44& lrMatrix)
         {
-            rw::math::vpu::Vector4 lvResult = rw::math::vpu::Splat(lrRow.x) * lrMatrix.xAxis;
-            lvResult = rw::math::vpu::Splat(lrRow.y) * lrMatrix.yAxis + lvResult;
-            lvResult = rw::math::vpu::Splat(lrRow.z) * lrMatrix.zAxis + lvResult;
-            lvResult = rw::math::vpu::Splat(lrRow.w) * lrMatrix.wAxis + lvResult;
-            return lvResult;
+            __vector4 lvResult = __vmulfp(__vspltw(lrRow.mV, 0), lrMatrix.xAxis.mV);
+            lvResult = __vmaddfp(__vspltw(lrRow.mV, 1), lrMatrix.yAxis.mV, lvResult);
+            lvResult = __vmaddfp(__vspltw(lrRow.mV, 2), lrMatrix.zAxis.mV, lvResult);
+            lvResult = __vmaddfp(__vspltw(lrRow.mV, 3), lrMatrix.wAxis.mV, lvResult);
+            return rw::math::vpu::Vector4(lvResult);
         }
     }
 
@@ -396,23 +365,23 @@ namespace CgsGraphics
         lBoxToClip.wAxis = TransformRow(lOccludeeBoxMatrix.wAxis, *lpWorldViewProjection);
 
         const rw::math::vpu::Vector4 lvCentre = lBoxToClip.wAxis - mNearClipOffset;
-        const f32 lfCentreDepth = lvCentre.z + lvCentre.w;
-        const f32 lfHalfExtent  = std::fabs(lBoxToClip.xAxis.z + lBoxToClip.xAxis.w)
-                                + std::fabs(lBoxToClip.yAxis.z + lBoxToClip.yAxis.w)
-                                + std::fabs(lBoxToClip.zAxis.z + lBoxToClip.zAxis.w);
+        const f32 lfCentreDepth = static_cast<f32>(lvCentre.GetZ()) + static_cast<f32>(lvCentre.GetW());
+        const f32 lfHalfExtent  = std::fabs(static_cast<f32>(lBoxToClip.xAxis.GetZ()) + static_cast<f32>(lBoxToClip.xAxis.GetW()))
+                                + std::fabs(static_cast<f32>(lBoxToClip.yAxis.GetZ()) + static_cast<f32>(lBoxToClip.yAxis.GetW()))
+                                + std::fabs(static_cast<f32>(lBoxToClip.zAxis.GetZ()) + static_cast<f32>(lBoxToClip.zAxis.GetW()));
 
         if (lfCentreDepth >= lfHalfExtent)
         {
-            mpOccludeeIm3dZOnly->SetTransform(&lBoxToClip);
+            static_cast<Im3dZOnly*>(mpOccludeeIm3dZOnly)->SetTransform(lBoxToClip);
 
             maQueryIds[miOccludeeIndex] = static_cast<u16>(miNextQueryIndex);
-            D3DDevice_BeginConditionalSurvey(gpXboxD3DDevice, static_cast<u32>(miNextQueryIndex), 1u);
+            ::D3DDevice_BeginConditionalSurvey(gpD3DDevice, static_cast<u32>(miNextQueryIndex), 1u);
             D3DDevice_DrawIndexedVertices(gpD3DDevice,
-                                          mDrawParameters.GetPrimitiveType(),
+                                          static_cast<D3DPRIMITIVETYPE>(mDrawParameters.GetPrimitiveType()),
                                           mDrawParameters.GetBaseVertexIndex(),
                                           mDrawParameters.GetStartIndex(),
                                           mDrawParameters.GetIndexCount());
-            D3DDevice_EndConditionalSurvey(gpXboxD3DDevice, 0u);
+            ::D3DDevice_EndConditionalSurvey(gpD3DDevice, 0u);
 
             ++miNextQueryIndex;
             ++miOccludeeIndex;

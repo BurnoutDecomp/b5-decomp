@@ -62,6 +62,22 @@ namespace renderengine
     extern u32 gDeviceTileCount83271620;
     extern D3DRECT gDeviceTileRects83271628[8];
 
+    // ARTIST82B61D78: depth/stencil-only clear or the first tile pass.
+    void Device::Clear(const ClearDepthStencilParameters& lrDepthStencil)
+    {
+        if (gDeviceTileCount83271620 && !guTilingEnabled && UsingGlobalRasters())
+        {
+            D3DDevice_BeginTiling(gpD3DDevice, 0, gDeviceTileCount83271620, gDeviceTileRects83271628,
+                                  0, lrDepthStencil.m_depth, lrDepthStencil.m_stencil);
+            guTilingEnabled = 1;
+        }
+        else
+        {
+            D3DDevice_ClearF(gpD3DDevice, lrDepthStencil.m_clearFlags, 0, 0,
+                             lrDepthStencil.m_depth, lrDepthStencil.m_stencil);
+        }
+    }
+
     // ARTIST82B61C88: colour-only clear uses depth 1 and stencil 0 directly.
     void Device::Clear(const ClearColorParameters& lrColor, RenderTargetState::TargetID leTarget)
     {
