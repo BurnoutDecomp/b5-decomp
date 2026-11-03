@@ -11,16 +11,16 @@
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"
 #include "SharedClasses/Trigger/BrnTriggerBase.h"
 #include "SharedClasses/Trigger/BrnTriggerData.h"
-#include <cmath>
+#include <xtl.h>
 
 namespace
 {
     f32 DistanceSquared(const rw::math::vpu::Vector3& lrPoint,
                         const rw::math::vpu::Vector3& lrOrigin)
     {
-        const f32 lfX = lrPoint.x - lrOrigin.x;
-        const f32 lfY = lrPoint.y - lrOrigin.y;
-        const f32 lfZ = lrPoint.z - lrOrigin.z;
+        const f32 lfX = lrPoint.GetX().GetFloat() - lrOrigin.GetX().GetFloat();
+        const f32 lfY = lrPoint.GetY().GetFloat() - lrOrigin.GetY().GetFloat();
+        const f32 lfZ = lrPoint.GetZ().GetFloat() - lrOrigin.GetZ().GetFloat();
         // ARTIST RenderWorld uses vmsum3fp128 for each squared-distance test: the three
         // products are accumulated in one rounded result rather than three scalar additions.
         return static_cast<f32>(static_cast<f64>(lfX) * lfX +
@@ -32,10 +32,8 @@ namespace
                                              const rw::math::vpu::Vector3& lrDirection,
                                              f32 lfScale)
     {
-        { const rw::math::vpu::Vector3 lResult = {std::fma(lrDirection.x, lfScale, lrPosition.x),
-                                      std::fma(lrDirection.y, lfScale, lrPosition.y),
-                                      std::fma(lrDirection.z, lfScale, lrPosition.z),
-                                      std::fma(lrDirection.w, lfScale, lrPosition.w)}; return lResult; }
+        return rw::math::vpu::Vector3(__vmaddfp(
+            lrDirection.GetVector(), XMVectorReplicate(lfScale), lrPosition.GetVector()));
     }
 }
 
@@ -197,20 +195,13 @@ namespace BrnGameState
                                 }
                             }
 
-                            const rw::math::vpu::Vector3 lHalfDimensions =
-                            {
-                                lDimensions.x * 0.5f,
-                                lDimensions.y * 0.5f,
-                                lDimensions.z * 0.5f,
-                                0.0f
-                            };
-                            const rw::math::vpu::Vector3 lMin =
-                            {
-                                -lHalfDimensions.x,
-                                -lHalfDimensions.y,
-                                -lHalfDimensions.z,
-                                0.0f
-                            };
+                            const f32 lfHalfX = lDimensions.GetX().GetFloat() * 0.5f;
+                            const f32 lfHalfY = lDimensions.GetY().GetFloat() * 0.5f;
+                            const f32 lfHalfZ = lDimensions.GetZ().GetFloat() * 0.5f;
+                            const rw::math::vpu::Vector3 lHalfDimensions(
+                                lfHalfX, lfHalfY, lfHalfZ);
+                            const rw::math::vpu::Vector3 lMin(
+                                -lfHalfX, -lfHalfY, -lfHalfZ);
                             const rw::math::vpu::Vector3 lMax = lHalfDimensions;
 
                             lpRender->DrawBox(lMin, lMax, lpBox->ComputeTransform(), lColour);

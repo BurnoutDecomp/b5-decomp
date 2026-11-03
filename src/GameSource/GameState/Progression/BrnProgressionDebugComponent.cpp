@@ -28,7 +28,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
-#include <cmath>
+#include <float.h>
 #include <limits>
 
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
@@ -67,29 +67,29 @@ namespace BrnProgression
 
         Vector2 MakeVector2(f32 lfX, f32 lfY)
         {
-            Vector2 lv2Result;
-            lv2Result.x = lfX;
-            lv2Result.y = lfY;
-            lv2Result.z = 0.0f;
-            lv2Result.w = 0.0f;
-            return lv2Result;
+            return Vector2(lfX, lfY);
+        }
+
+        f32 FlushRankBarSubnormal(f32 lfValue)
+        {
+            if (lfValue != 0.0f && lfValue > -FLT_MIN && lfValue < FLT_MIN)
+            {
+                return lfValue < 0.0f ? -0.0f : 0.0f;
+            }
+            return lfValue;
         }
 
         f32 AddRankBarVectorLane(f32 lfA, f32 lfB)
         {
             // ARTIST vaddfp: flush subnormal inputs and the rounded result.
-            const auto Flush = [](f32 lfValue)
-            {
-                return std::fpclassify(lfValue) == FP_SUBNORMAL
-                    ? std::copysign(0.0f, lfValue) : lfValue;
-            };
-            return Flush(Flush(lfA) + Flush(lfB));
+            return FlushRankBarSubnormal(FlushRankBarSubnormal(lfA) +
+                                         FlushRankBarSubnormal(lfB));
         }
 
         s32 TruncateRankBarPercentage(f32 lfValue)
         {
             // ARTIST 8237EA2C fctiwz: truncate, saturate, and map NaN to INT_MIN.
-            if (std::isnan(lfValue) || lfValue <= -2147483648.0f)
+            if (_isnan(lfValue) || lfValue <= -2147483648.0f)
                 return (std::numeric_limits<s32>::min)();
             if (lfValue >= 2147483648.0f)
                 return (std::numeric_limits<s32>::max)();
@@ -179,17 +179,21 @@ namespace BrnProgression
         const f32 lfRank = mpProgressionManager->GetProgressionRankForGameModeNormalised(leGameModeType);
         lpDisplay->DrawText(lpcName, lv2Position, 16.0f, 0xFFFFFFFFu, false);
 
-        lv2Position.y = AddRankBarVectorLane(lv2Position.y, 15.0f);
+        lv2Position.mV.y = AddRankBarVectorLane(lv2Position.mV.y, 15.0f);
         char lacText[KI_HUD_TEXT_LENGTH];
         CgsDev::StrStream lText(lacText, sizeof(lacText));
         lText << "\nDifficulty : " << TruncateRankBarPercentage(lfRank * 100.0f) << "%\n";
         lpDisplay->DrawText(lText.GetBuffer(), lv2Position, 16.0f, 0xFFFFFFFFu, false);
 
-        lv2Position.y = AddRankBarVectorLane(lv2Position.y, 15.0f);
-        const f32 lfMaxX = AddRankBarVectorLane(lv2Position.x, 140.0f);
-        const f32 lfMaxY = AddRankBarVectorLane(lv2Position.y, 10.0f);
+        lv2Position.mV.y = AddRankBarVectorLane(lv2Position.mV.y, 15.0f);
+        const f32 lfMaxX = AddRankBarVectorLane(lv2Position.mV.x, 140.0f);
+        const f32 lfMaxY = AddRankBarVectorLane(lv2Position.mV.y, 10.0f);
         // ARTIST vperm mask 82CDA350 selects {A.x, B.y, A.x, A.x}.
-        const Vector2 lv2Max = {lfMaxX, lfMaxY, lfMaxX, lfMaxX};
+        Vector2 lv2Max;
+        lv2Max.mV.x = lfMaxX;
+        lv2Max.mV.y = lfMaxY;
+        lv2Max.mV.z = lfMaxX;
+        lv2Max.mV.w = lfMaxX;
         lpDisplay->DrawHorizontalBar(lv2Position, lv2Max, lfRank, 1.0f, lColour, 0xFF000000u);
     }
 
@@ -856,11 +860,11 @@ namespace BrnProgression
 
             Vector2 lv2BarPosition = MakeVector2(1000.0f, 250.0f);
             DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE, 0xFFFF0000u, lv2BarPosition, "RACE");
-            lv2BarPosition.y += KF_RANK_BAR_SPACING;
+            lv2BarPosition.mV.y += KF_RANK_BAR_SPACING;
             DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE, 0xFF0000FFu, lv2BarPosition, "ROAD RAGE");
-            lv2BarPosition.y += KF_RANK_BAR_SPACING;
+            lv2BarPosition.mV.y += KF_RANK_BAR_SPACING;
             DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN, 0xFF00FFFFu, lv2BarPosition, "MARKED MAN");
-            lv2BarPosition.y += KF_RANK_BAR_SPACING;
+            lv2BarPosition.mV.y += KF_RANK_BAR_SPACING;
             DrawRankAsBar(lpDisplay, BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK, 0xFF00FF00u, lv2BarPosition, "STUNT RUN");
 
             RenderProfileEvents(lpDisplay, lpProfile);
@@ -1004,7 +1008,7 @@ namespace BrnProgression
     {
         char lacText[KI_HUD_TEXT_LENGTH];
         CgsDev::StrStream lStream(lacText, sizeof(lacText));
-        lStream.Append("Events:\n");
+        lStream << "Events:\n";
 
         const ProgressionData* lpProgressionData = GetLoadedProgressionData(mpProgressionManager->mpProgressionData);
         CgsDev::StrStreamBase& lrStream = lStream;
@@ -1125,7 +1129,7 @@ namespace BrnProgression
         char lacText[KI_HUD_TEXT_LENGTH];
         CgsDev::StrStream lStream(lacText, sizeof(lacText));
         const u32 luEventCount = static_cast<u32>(lpProfile->miEventCount);
-        lStream.Append("-------------------------------------------------\n");
+        lStream << "-------------------------------------------------\n";
 
         if (mpProgressionManager->mi8ProgressionRank ==
             static_cast<s32>(mpProgressionManager->mpProgressionData->GetProgressionRankCount()))
@@ -1230,7 +1234,7 @@ namespace BrnProgression
         char lacText[KI_HUD_TEXT_LENGTH];
         CgsDev::StrStream lStream(lacText, sizeof(lacText));
         CgsDev::StrStreamBase& lrStream = lStream;
-        lStream.Append("Unlocked Rivals:\n----------------------------------\n");
+        lStream << "Unlocked Rivals:\n----------------------------------\n";
 
         for (s32 liRival = 0; liRival < lpProfile->GetRivalCount(); ++liRival)
         {
