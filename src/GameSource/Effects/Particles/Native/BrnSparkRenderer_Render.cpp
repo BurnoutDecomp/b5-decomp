@@ -38,8 +38,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
-#include <cstdio>   // [diag] snprintf (the draw-side texture witness)
-#include <cstdlib>  // [diag] getenv / atoi (BRN_SPARK_FILM_VERTS)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"                 // CgsGraphics::Im3d (Dispatch drives it)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"           // ImRendererBase::mgpActiveRenderer
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the 24-byte stride
@@ -73,39 +71,13 @@ namespace
 {
     typedef rw::math::vpu::Vector4 Vector4;
 
-    inline Vector4 VecSplat(f32 lfValue)
-    {
-        Vector4 lResult = { lfValue, lfValue, lfValue, lfValue };
-        return lResult;
-    }
-    inline Vector4 VecAdd(const Vector4& lrA, const Vector4& lrB)
-    {
-        Vector4 lResult = { lrA.x + lrB.x, lrA.y + lrB.y, lrA.z + lrB.z, lrA.w + lrB.w };
-        return lResult;
-    }
-    inline Vector4 VecSub(const Vector4& lrA, const Vector4& lrB)
-    {
-        Vector4 lResult = { lrA.x - lrB.x, lrA.y - lrB.y, lrA.z - lrB.z, lrA.w - lrB.w };
-        return lResult;
-    }
-    inline Vector4 VecMul(const Vector4& lrA, const Vector4& lrB)
-    {
-        Vector4 lResult = { lrA.x * lrB.x, lrA.y * lrB.y, lrA.z * lrB.z, lrA.w * lrB.w };
-        return lResult;
-    }
-    inline Vector4 VecScale(const Vector4& lrA, f32 lfScale)
-    {
-        Vector4 lResult = { lrA.x * lfScale, lrA.y * lfScale, lrA.z * lfScale, lrA.w * lfScale };
-        return lResult;
-    }
-
-    // vmaddfp on four lanes: A * splat(s) + B.
-    inline Vector4 VecMulAdd(const Vector4& lrA, f32 lfScale, const Vector4& lrB)
-    {
-        Vector4 lResult = { lrA.x * lfScale + lrB.x, lrA.y * lfScale + lrB.y,
-                            lrA.z * lfScale + lrB.z, lrA.w * lfScale + lrB.w };
-        return lResult;
-    }
+    inline Vector4 VecSplat(f32 value) { return Vector4(value, value, value, value); }
+    inline Vector4 VecAdd(const Vector4& a, const Vector4& b) { return Vector4(__vaddfp(a.mV, b.mV)); }
+    inline Vector4 VecSub(const Vector4& a, const Vector4& b) { return Vector4(__vsubfp(a.mV, b.mV)); }
+    inline Vector4 VecMul(const Vector4& a, const Vector4& b) { return Vector4(__vmulfp(a.mV, b.mV)); }
+    inline Vector4 VecScale(const Vector4& a, f32 scale) { return VecMul(a, VecSplat(scale)); }
+    inline Vector4 VecMulAdd(const Vector4& a, f32 scale, const Vector4& b)
+    { return Vector4(__vmaddfp(a.mV, VecSplat(scale).mV, b.mV)); }
 
     // The console's row-vector transform: out = m.xAxis*v.x + m.yAxis*v.y + m.zAxis*v.z + m.wAxis
     // (four vmaddfp against splatted lanes, wAxis seeded first).
@@ -114,9 +86,9 @@ namespace
                                   const Vector4& lrPoint)
     {
         Vector4 lResult = lrRow3;
-        lResult = VecMulAdd(lrRow0, lrPoint.x, lResult);
-        lResult = VecMulAdd(lrRow1, lrPoint.y, lResult);
-        lResult = VecMulAdd(lrRow2, lrPoint.z, lResult);
+        lResult = VecMulAdd(lrRow0, lrPoint.GetX().GetFloat(), lResult);
+        lResult = VecMulAdd(lrRow1, lrPoint.GetY().GetFloat(), lResult);
+        lResult = VecMulAdd(lrRow2, lrPoint.GetZ().GetFloat(), lResult);
         return lResult;
     }
 
@@ -133,10 +105,10 @@ namespace
     // built by the `rotlwi 8 / or / slwi 8 / or / slwi 8 / or` chain at 0x8291FF7C..0x8291FFC4.
     inline u32 PackColour(const Vector4& lrColour)
     {
-        const u32 luRed   = static_cast<u32>(static_cast<s64>(lrColour.x)) & 0xFFu;
-        const u32 luGreen = static_cast<u32>(static_cast<s64>(lrColour.y)) & 0xFFu;
-        const u32 luBlue  = static_cast<u32>(static_cast<s64>(lrColour.z)) & 0xFFu;
-        const u32 luAlpha = static_cast<u32>(static_cast<s64>(lrColour.w)) & 0xFFu;
+        const u32 luRed   = static_cast<u32>(static_cast<s64>(lrColour.GetX().GetFloat())) & 0xFFu;
+        const u32 luGreen = static_cast<u32>(static_cast<s64>(lrColour.GetY().GetFloat())) & 0xFFu;
+        const u32 luBlue  = static_cast<u32>(static_cast<s64>(lrColour.GetZ().GetFloat())) & 0xFFu;
+        const u32 luAlpha = static_cast<u32>(static_cast<s64>(lrColour.GetW().GetFloat())) & 0xFFu;
         return (luAlpha << 24) | (luBlue << 16) | (luGreen << 8) | luRed;
     }
 
@@ -223,33 +195,27 @@ rw::math::vpu::Vector4 SparkArray::CalculateSparkPosition(
     rw::math::vpu::Vector4::InParam lDragParams)
 {
     // vmaxfp / vminfp, per lane.
-    Vector4 lHi = { (lAge.x > lDragDuration.x) ? lAge.x : lDragDuration.x,
-                    (lAge.y > lDragDuration.y) ? lAge.y : lDragDuration.y,
-                    (lAge.z > lDragDuration.z) ? lAge.z : lDragDuration.z,
-                    (lAge.w > lDragDuration.w) ? lAge.w : lDragDuration.w };
-    Vector4 lLo = { (lAge.x < lDragDuration.x) ? lAge.x : lDragDuration.x,
-                    (lAge.y < lDragDuration.y) ? lAge.y : lDragDuration.y,
-                    (lAge.z < lDragDuration.z) ? lAge.z : lDragDuration.z,
-                    (lAge.w < lDragDuration.w) ? lAge.w : lDragDuration.w };
+    Vector4 lHi(__vmaxfp(lAge.mV, lDragDuration.mV));
+    Vector4 lLo(__vminfp(lAge.mV, lDragDuration.mV));
 
-    const Vector4 lInitial  = VecSplat(lDragParams.x);
-    const Vector4 lTerminal = VecSplat(lDragParams.y);
-    const Vector4 lHalfSlope= VecSplat(lDragParams.z);
-    const Vector4 lRampArea = VecSplat(lDragParams.w);
+    const Vector4 lInitial  = VecSplat(lDragParams.GetX().GetFloat());
+    const Vector4 lTerminal = VecSplat(lDragParams.GetY().GetFloat());
+    const Vector4 lHalfSlope= VecSplat(lDragParams.GetZ().GetFloat());
+    const Vector4 lRampArea = VecSplat(lDragParams.GetW().GetFloat());
 
     const Vector4 lAgeSquared = VecMul(lAge, lAge);
     const Vector4 lLoSquared  = VecMul(lLo, lLo);
 
-    Vector4 lScale = VecAdd(VecMul(lLo, lInitial), VecMul(lHi, lTerminal));
-    lScale = VecAdd(VecMul(lLoSquared, lHalfSlope), lScale);
+    Vector4 lScale(__vmaddfp(lLo.mV, lInitial.mV, VecMul(lHi, lTerminal).mV));
+    lScale = Vector4(__vmaddfp(lLoSquared.mV, lHalfSlope.mV, lScale.mV));
     lScale = VecSub(lScale, lRampArea);
 
-    Vector4 lResult = VecAdd(VecMul(lVelocity, lScale), lPosition);
-    lResult = VecAdd(VecMul(lHalfGravity, lAgeSquared), lResult);
+    Vector4 lResult(__vmaddfp(lVelocity.mV, lScale.mV, lPosition.mV));
+    lResult = Vector4(__vmaddfp(lHalfGravity.mV, lAgeSquared.mV, lResult.mV));
 
     // The lane-1 insert: y := max(y, w) -- the un-bounced and bounced tracks.
-    if (!(lResult.y > lResult.w))
-        lResult.y = lResult.w;
+    if (!(lResult.GetY().GetFloat() > lResult.GetW().GetFloat()))
+        lResult.SetY(lResult.GetW());
 
     return lResult;
 }
@@ -284,7 +250,7 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
     // The gravity vector every CalculateSparkPosition call is handed: (0, g/2, 0, g/2). The
     // duplicated w lane is what makes the bounce track fall at the same rate as the direct one.
     const f32     lfHalfGravity  = mfGravityStrength * 0.5f;
-    const Vector4 lHalfGravityVec = { 0.0f, lfHalfGravity, 0.0f, lfHalfGravity };
+    const Vector4 lHalfGravityVec( 0.0f, lfHalfGravity, 0.0f, lfHalfGravity );
 
     const f32 lfNewestTime = lrFrameData.GetFrame(0).mfTimeStamp;
 
@@ -321,28 +287,25 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
     // colour * (wl*255.9, wl*255.9, wl*255.9, 255.9), clamped to (255.9, 255.9, 255.9, 255.9)
     // -- the alpha lane is NOT scaled by the white level, only the three colour lanes are.
     const f32     lfWhiteScale = lfWhiteLevel * KF_COLOUR_SCALE;
-    const Vector4 lColourScale = { lfWhiteScale, lfWhiteScale, lfWhiteScale, KF_COLOUR_SCALE };
-    const Vector4 lColourCeil  = { KF_COLOUR_SCALE, KF_COLOUR_SCALE, KF_COLOUR_SCALE, KF_COLOUR_SCALE };
+    const Vector4 lColourScale( lfWhiteScale, lfWhiteScale, lfWhiteScale, KF_COLOUR_SCALE );
+    const Vector4 lColourCeil(KF_COLOUR_SCALE, KF_COLOUR_SCALE, KF_COLOUR_SCALE, KF_COLOUR_SCALE);
 
     f32 lafLifetimes[4];
     u32 lauPackedColours[4];
     for (u32 luColour = 0; luColour < 4; ++luColour)
     {
         Vector4 lScaled = VecMul(maColours[luColour], lColourScale);
-        lScaled.x = (lScaled.x < lColourCeil.x) ? lScaled.x : lColourCeil.x;   // vminfp
-        lScaled.y = (lScaled.y < lColourCeil.y) ? lScaled.y : lColourCeil.y;
-        lScaled.z = (lScaled.z < lColourCeil.z) ? lScaled.z : lColourCeil.z;
-        lScaled.w = (lScaled.w < lColourCeil.w) ? lScaled.w : lColourCeil.w;
+        lScaled = Vector4(__vminfp(lScaled.mV, lColourCeil.mV));
         lauPackedColours[luColour] = PackColour(lScaled);
         lafLifetimes[luColour]     = mafLifetimes[luColour];   // the stack copy at var_7D0
     }
 
     // ---- 3. the drag-parameter vector, built once ------------------------------------------
-    const Vector4 lDragParams = { mfDragInitialVelocityScale,
+    const Vector4 lDragParams( mfDragInitialVelocityScale,
                                   mfDragTerminalVelocityScale,
                                   (mfDragTerminalVelocityScale - mfDragInitialVelocityScale)
                                       / (mfDragDuration * 2.0f),
-                                  mfDragDuration * mfDragTerminalVelocityScale };
+                                  mfDragDuration * mfDragTerminalVelocityScale );
     const Vector4 lDragDurationVec = VecSplat(mfDragDuration);
 
     // The two ages the cull pass evaluates at: the newest frame and frames[luLastFrame - 1].
@@ -364,28 +327,28 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
         const rw::math::vpu::Matrix44& lrProjection = lrNewestFrame.mProjectionMatrix;
 
         const Vector4 laViewA[4] = {
-            { lrNewestFrame.mViewMatrix.xAxis.x, lrNewestFrame.mViewMatrix.xAxis.y, lrNewestFrame.mViewMatrix.xAxis.z, 0.0f },
-            { lrNewestFrame.mViewMatrix.yAxis.x, lrNewestFrame.mViewMatrix.yAxis.y, lrNewestFrame.mViewMatrix.yAxis.z, 0.0f },
-            { lrNewestFrame.mViewMatrix.zAxis.x, lrNewestFrame.mViewMatrix.zAxis.y, lrNewestFrame.mViewMatrix.zAxis.z, 0.0f },
-            { lrNewestFrame.mViewMatrix.wAxis.x, lrNewestFrame.mViewMatrix.wAxis.y, lrNewestFrame.mViewMatrix.wAxis.z, 1.0f },
+            Vector4(lrNewestFrame.mViewMatrix.xAxis, 0.0f),
+            Vector4(lrNewestFrame.mViewMatrix.yAxis, 0.0f),
+            Vector4(lrNewestFrame.mViewMatrix.zAxis, 0.0f),
+            Vector4(lrNewestFrame.mViewMatrix.wAxis, 1.0f),
         };
         const Vector4 laViewB[4] = {
-            { lrOldestFrame.mViewMatrix.xAxis.x, lrOldestFrame.mViewMatrix.xAxis.y, lrOldestFrame.mViewMatrix.xAxis.z, 0.0f },
-            { lrOldestFrame.mViewMatrix.yAxis.x, lrOldestFrame.mViewMatrix.yAxis.y, lrOldestFrame.mViewMatrix.yAxis.z, 0.0f },
-            { lrOldestFrame.mViewMatrix.zAxis.x, lrOldestFrame.mViewMatrix.zAxis.y, lrOldestFrame.mViewMatrix.zAxis.z, 0.0f },
-            { lrOldestFrame.mViewMatrix.wAxis.x, lrOldestFrame.mViewMatrix.wAxis.y, lrOldestFrame.mViewMatrix.wAxis.z, 1.0f },
+            Vector4(lrOldestFrame.mViewMatrix.xAxis, 0.0f),
+            Vector4(lrOldestFrame.mViewMatrix.yAxis, 0.0f),
+            Vector4(lrOldestFrame.mViewMatrix.zAxis, 0.0f),
+            Vector4(lrOldestFrame.mViewMatrix.wAxis, 1.0f),
         };
 
         for (u32 luRow = 0; luRow < 4; ++luRow)
         {
-            laCullMatrixA[luRow] = VecMulAdd(lrProjection.wAxis, laViewA[luRow].w,
-                                   VecMulAdd(lrProjection.zAxis, laViewA[luRow].z,
-                                   VecMulAdd(lrProjection.yAxis, laViewA[luRow].y,
-                                             VecScale(lrProjection.xAxis, laViewA[luRow].x))));
-            laCullMatrixB[luRow] = VecMulAdd(lrProjection.wAxis, laViewB[luRow].w,
-                                   VecMulAdd(lrProjection.zAxis, laViewB[luRow].z,
-                                   VecMulAdd(lrProjection.yAxis, laViewB[luRow].y,
-                                             VecScale(lrProjection.xAxis, laViewB[luRow].x))));
+            laCullMatrixA[luRow] = VecMulAdd(lrProjection.wAxis, laViewA[luRow].GetW().GetFloat(),
+                                   VecMulAdd(lrProjection.zAxis, laViewA[luRow].GetZ().GetFloat(),
+                                   VecMulAdd(lrProjection.yAxis, laViewA[luRow].GetY().GetFloat(),
+                                             VecScale(lrProjection.xAxis, laViewA[luRow].GetX().GetFloat()))));
+            laCullMatrixB[luRow] = VecMulAdd(lrProjection.wAxis, laViewB[luRow].GetW().GetFloat(),
+                                   VecMulAdd(lrProjection.zAxis, laViewB[luRow].GetZ().GetFloat(),
+                                   VecMulAdd(lrProjection.yAxis, laViewB[luRow].GetY().GetFloat(),
+                                             VecScale(lrProjection.xAxis, laViewB[luRow].GetX().GetFloat()))));
         }
     }
 
@@ -434,15 +397,15 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
             // left of -w, right of +w, below -w, above +w. The console spells each pair as
             // vcmpgtfp./vcmpgefp. on splatted lanes with the sign flipped by vxor against
             // 0x80000000 (`vslw v9, -1, -1`).
-            if (!(lClipA.w > 0.0f) && !(lClipB.w > 0.0f))
+            if (!(lClipA.GetW().GetFloat() > 0.0f) && !(lClipB.GetW().GetFloat() > 0.0f))
                 continue;
-            if (!(lClipA.x >= -lClipA.w) && !(lClipB.x >= -lClipB.w))
+            if (!(lClipA.GetX().GetFloat() >= -lClipA.GetW().GetFloat()) && !(lClipB.GetX().GetFloat() >= -lClipB.GetW().GetFloat()))
                 continue;
-            if (!(lClipA.w >= lClipA.x) && !(lClipB.w >= lClipB.x))
+            if (!(lClipA.GetW().GetFloat() >= lClipA.GetX().GetFloat()) && !(lClipB.GetW().GetFloat() >= lClipB.GetX().GetFloat()))
                 continue;
-            if (!(lClipA.y >= -lClipA.w) && !(lClipB.y >= -lClipB.w))
+            if (!(lClipA.GetY().GetFloat() >= -lClipA.GetW().GetFloat()) && !(lClipB.GetY().GetFloat() >= -lClipB.GetW().GetFloat()))
                 continue;
-            if (!(lClipA.w >= lClipA.y) && !(lClipB.w >= lClipB.y))
+            if (!(lClipA.GetW().GetFloat() >= lClipA.GetY().GetFloat()) && !(lClipB.GetW().GetFloat() >= lClipB.GetY().GetFloat()))
                 continue;
 
             CGS_ASSERT(luVisibleCount < SparkBucket::KuMaxNumParticles,
@@ -458,7 +421,8 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
         const u32 luVerticesNeeded = (luFrameCount + 1) * luVisibleCount * 2;
         if (luVerticesFree < luVerticesNeeded)
         {
-            CgsDev::Log::WriteToLog("Sparks: Particle vertex buffer full.");
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "Sparks: Particle vertex buffer full.";
             return;
         }
         if (luVisibleCount == 0)
@@ -493,10 +457,10 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
 
                 const rw::math::vpu::Matrix44Affine& lrView = lrFrame.mViewMatrix;
                 const Vector4 laViewRows[4] = {
-                    { lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w },
-                    { lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w },
-                    { lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w },
-                    { lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w },
+                    Vector4(lrView.xAxis.mV),
+                    Vector4(lrView.yAxis.mV),
+                    Vector4(lrView.zAxis.mV),
+                    Vector4(lrView.wAxis.mV),
                 };
                 laPoints[luFrame].mViewPosition = TransformPoint(
                     laViewRows[0], laViewRows[1], laViewRows[2], laViewRows[3], lWorld);
@@ -523,15 +487,15 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
             {
                 const Vector4& lrP = laPoints[luFrame].mViewPosition;
                 const Vector4& lrT = laPoints[luFrame].mTangent;
-                Vector4 lCross = { lrP.y * lrT.z - lrP.z * lrT.y,
-                                   lrP.z * lrT.x - lrP.x * lrT.z,
-                                   lrP.x * lrT.y - lrP.y * lrT.x,
-                                   0.0f };
-                const f32 lfLenSquared = lCross.x * lCross.x + lCross.y * lCross.y
-                                       + lCross.z * lCross.z;
-                if (std::fabs(lCross.x) > KF_TANGENT_EPSILON
-                    || std::fabs(lCross.y) > KF_TANGENT_EPSILON
-                    || std::fabs(lCross.z) > KF_TANGENT_EPSILON)
+                Vector4 lCross( lrP.GetY().GetFloat() * lrT.GetZ().GetFloat() - lrP.GetZ().GetFloat() * lrT.GetY().GetFloat(),
+                                   lrP.GetZ().GetFloat() * lrT.GetX().GetFloat() - lrP.GetX().GetFloat() * lrT.GetZ().GetFloat(),
+                                   lrP.GetX().GetFloat() * lrT.GetY().GetFloat() - lrP.GetY().GetFloat() * lrT.GetX().GetFloat(),
+                                   0.0f);
+                const f32 lfLenSquared = lCross.GetX().GetFloat() * lCross.GetX().GetFloat() + lCross.GetY().GetFloat() * lCross.GetY().GetFloat()
+                                       + lCross.GetZ().GetFloat() * lCross.GetZ().GetFloat();
+                if (std::fabs(lCross.GetX().GetFloat()) > KF_TANGENT_EPSILON
+                    || std::fabs(lCross.GetY().GetFloat()) > KF_TANGENT_EPSILON
+                    || std::fabs(lCross.GetZ().GetFloat()) > KF_TANGENT_EPSILON)
                 {
                     if (lfLenSquared > 0.0f)
                         laPoints[luFrame].mTangent = VecScale(lCross, 1.0f / std::sqrt(lfLenSquared));
@@ -581,30 +545,6 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
             // with a duplicate of edge B's last, so consecutive sparks in the same batch are
             // joined by degenerate triangles.
             const u32 luColourWord = VertexColourWordRGBA(lauPackedColours[luParticle & 3]);
-            // [DIAG] NOT IN THE X360 BINARY. ONE-SHOT GEOMETRY WITNESS. "The batch count and
-            // the vertex count are healthy and the picture is empty" has four possible causes
-            // and only two of them are visible from the counters: the ribbon can be off
-            // screen, behind the eye, zero-width, or shaded away. This prints the first
-            // ribbon it ever emits -- the two edge points in VIEW SPACE, the half width and
-            // the packed colour -- which separates all four. DELETE-WHEN-STABLE.
-            {
-                static bool sbLoggedGeometry = false;
-                if (!sbLoggedGeometry)
-                {
-                    sbLoggedGeometry = true;
-                    char lacMsg[256];
-                    _snprintf(lacMsg, sizeof(lacMsg),
-                        "[spark] ribbon0 edges=%u halfWidth=%.5f colour=%08X "
-                        "A0{%.3f %.3f %.3f} B0{%.3f %.3f %.3f}\n",
-                        luEdgeCount, static_cast<double>(lfHalfWidth), luColourWord,
-                        static_cast<double>(laEdgeA[0].x), static_cast<double>(laEdgeA[0].y),
-                        static_cast<double>(laEdgeA[0].z),
-                        static_cast<double>(laEdgeB[0].x), static_cast<double>(laEdgeB[0].y),
-                        static_cast<double>(laEdgeB[0].z));
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
-
             f32 lafUv[2];
 
             lafUv[0] = lafEdgeU[0];
@@ -737,10 +677,6 @@ void SparkVertexBufferBuilder::BuildDispatchData(EffectsVertexBufferLocked* lpLo
 // emits each ribbon with duplicated end vertices.
 static const u32 KU_SPARK_PRIMITIVE_TYPE = 6u;
 
-// [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-u32 gauSparkDrawnBatches  = 0;
-u32 gauSparkDrawnVertices = 0;
-
 void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMatrix,
                              renderengine::VertexBuffer* lpVertexBuffer,
                              const SparkBatchArray& lrBatches)
@@ -749,20 +685,6 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
     CGS_ASSERT(lnBatches != -1, "Array used before Construct/Clear was called");
     if (lnBatches <= 0)
     {
-        return;
-    }
-
-    // ⛔ The renderer is the one thing Dispatch cannot do without: its BeginRendering binds the
-    // program pair and the vertex declaration. A null one is a crash, not a missing effect.
-    if (mpRenderer == 0)
-    {
-        static bool sbLogged = false;
-        if (!sbLogged)
-        {
-            sbLogged = true;
-            CgsDev::Log::WriteToLog("[spark] Dispatch SKIPPED: mpRenderer is null "
-                                    "(ParticleModule::mImmediateModeRenderer was not Constructed)\n");
-        }
         return;
     }
 
@@ -789,28 +711,6 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
 
         renderengine::Texture* const lpTexture = SparkArray::GetTexture(lrBatch.meArrayId);
 
-        // [DIAG] NOT IN THE X360 BINARY. THE TEXTURE WITNESS, once per array id.
-        // A null texture here is INVISIBLE in every other measurement: the batch count, the
-        // vertex count and the draw count all stay perfect and the pass simply produces no
-        // pixels, because tex2D of nothing multiplied into an ADDITIVE blend adds nothing.
-        // That is the silent-drop shape exactly, and it is the first thing to rule out when
-        // "drew=N/M" is healthy and the picture is empty. DELETE-WHEN-STABLE.
-        {
-            static u32 suLoggedArrays = 0;
-            const u32 luBit = 1u << static_cast<u32>(lrBatch.meArrayId);
-            if ((suLoggedArrays & luBit) == 0)
-            {
-                suLoggedArrays |= luBit;
-                char lacMsg[160];
-                _snprintf(lacMsg, sizeof(lacMsg),
-                    "[spark] draw array %d: texture=%p verts=%u start=%u\n",
-                    static_cast<int>(lrBatch.meArrayId),
-                    static_cast<const void*>(lpTexture),
-                    lrBatch.muVertexCount, lrBatch.muStartVertex);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-
         if (lpTexture != lpCachedTexture)
         {
             D3DDevice_SetTexture(gpD3DDevice, 0, lpTexture, 0x80000000u);
@@ -820,49 +720,6 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
         shadow::Device::FlushVertexProgramState();
         D3DDevice_DrawVertices(gpD3DDevice, static_cast<D3DPRIMITIVETYPE>(KU_SPARK_PRIMITIVE_TYPE),
                                lrBatch.muStartVertex, lrBatch.muVertexCount);
-
-        // [DIAG] NOT IN THE X360 BINARY. The DRAW-side witness -- the [spark] line at the
-        // BeginParticleRenderJob tail counts what was BUILT, and "built 2108 vertices" and
-        // "drew 2108 vertices" are two different claims. Change-gated + periodic, the same
-        // shape the build-side probe had to be given. DELETE-WHEN-STABLE.
-        gauSparkDrawnBatches += 1u;
-        gauSparkDrawnVertices += lrBatch.muVertexCount;
-
-        // [DIAG] NOT IN THE X360 BINARY. THE FILM ARM (BRN_FRAME_DUMP_ARM=spark). Sticky; see
-        // BrnDiagFilmLatch.h. DELETE-WHEN-STABLE with the rest of this file's [spark] family.
-        //
-        // ⚠️ IT IS A CUMULATIVE-VERTEX THRESHOLD, NOT "THE FIRST DRAW", AND THE FIRST VERSION OF
-        // THIS LATCH WAS THE FIRST DRAW. That version armed correctly and filmed the LOADING
-        // SCREEN: sparks are drawn during the junkyard hand-off too (the previous run's first
-        // draws were at render frame ~1530, three seconds before DRIVING), so "the first spark
-        // ribbon" is not "the first crash". The threshold below is the smallest quantity that
-        // separates them -- the junkyard burst totalled 2,664 vertices over its whole life while
-        // one crash burst carried 2,580 in a SINGLE frame -- and it is overridable so the number
-        // never has to be argued about:
-        //     BRN_SPARK_FILM_VERTS=<n>   cumulative drawn vertices before the strip opens
-        //
-        // ⛔⛔ MEASURED 2026-09-07, AND IT DEFEATS THIS ARM: DO NOT TRUST THE THRESHOLD TO
-        // REACH A CRASH. A CUMULATIVE counter cannot separate boot from driving, because the
-        // game's FIRST frame runs a ~9.8 s simulation catch-up in one present (the first
-        // [spark] prod sample of a run reads `rdt=9.81669` against 0.016667 for every sample
-        // after it). Contact sparks spawn and draw throughout that catch-up, so the count is
-        // already large before the world is ever on screen. Two runs, same build:
-        //     BRN_SPARK_FILM_VERTS=8000  -> latched 0.9 s into a 200 s run; all 240 frames
-        //                                   were the LOADING SCREEN.
-        //     BRN_SPARK_FILM_VERTS=20000 -> latched before present 0 (the strip is named
-        //                                   bb_000000..); frames spanned t=1.1 s..8.6 s.
-        // Raising the number does not help -- the boot reaches any threshold first, and on a
-        // run whose boot does NOT catch up (measured: `drew=0/0 line=0` still at t=31.6 s)
-        // the same threshold instead fires far too late. The behaviour is a property of the
-        // boot, not of the number, so no value of this variable is correct for both.
-        // ⭐ THE FIX IS A DIFFERENT SHAPE, NOT A DIFFERENT NUMBER: arm on a PER-FRAME burst
-        // (this frame drew >= N spark vertices), which is bounded by one present and so cannot
-        // be saturated by a catch-up, and/or gate the latch on the game being in DRIVING.
-        // ⚠️ Until that lands, `BRN_FRAME_DUMP_ARM=spark` is only usable for filming the BOOT
-        // spark path. To film a crash, use `slomo` -- but note it latches at IMPACT, where the
-        // ladder still reads `drew=0/0 line=0`, so the grinding sparks come AFTER it and the
-        // strip needs a budget long enough to reach them (400 frames was measured too short).
-        static u32 suFilmThreshold = 0u;
 
     }
 
