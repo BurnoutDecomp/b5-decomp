@@ -23,10 +23,7 @@ namespace
     void CopyVector(rw::math::vpu::Vector4& lrDestination,
                     const FloatVector4& lrSource)
     {
-        lrDestination.x = lrSource.x;
-        lrDestination.y = lrSource.y;
-        lrDestination.z = lrSource.z;
-        lrDestination.w = lrSource.w;
+        lrDestination.Set(lrSource.x, lrSource.y, lrSource.z, lrSource.w);
     }
 
     // Compose a draw item's local Im2dTransform onto the renderer's current (parent)
@@ -55,34 +52,28 @@ namespace
 
         // Affine basis: world 2x2 = parent 2x2 * child 2x2 (column-vector convention,
         // M = [x z; y w]).
-        lpWorld->mRightUp.x = lrParent.mRightUp.x * lrLocal.mRightUp.x
-                            + lrParent.mRightUp.z * lrLocal.mRightUp.y;
-        lpWorld->mRightUp.y = lrParent.mRightUp.y * lrLocal.mRightUp.x
-                            + lrParent.mRightUp.w * lrLocal.mRightUp.y;
-        lpWorld->mRightUp.z = lrParent.mRightUp.x * lrLocal.mRightUp.z
-                            + lrParent.mRightUp.z * lrLocal.mRightUp.w;
-        lpWorld->mRightUp.w = lrParent.mRightUp.y * lrLocal.mRightUp.z
-                            + lrParent.mRightUp.w * lrLocal.mRightUp.w;
+        lpWorld->mRightUp.SetX(lrParent.mRightUp.GetX().GetFloat() * lrLocal.mRightUp.GetX().GetFloat()
+                            + lrParent.mRightUp.GetZ().GetFloat() * lrLocal.mRightUp.GetY().GetFloat());
+        lpWorld->mRightUp.SetY(lrParent.mRightUp.GetY().GetFloat() * lrLocal.mRightUp.GetX().GetFloat()
+                            + lrParent.mRightUp.GetW().GetFloat() * lrLocal.mRightUp.GetY().GetFloat());
+        lpWorld->mRightUp.SetZ(lrParent.mRightUp.GetX().GetFloat() * lrLocal.mRightUp.GetZ().GetFloat()
+                            + lrParent.mRightUp.GetZ().GetFloat() * lrLocal.mRightUp.GetW().GetFloat());
+        lpWorld->mRightUp.SetW(lrParent.mRightUp.GetY().GetFloat() * lrLocal.mRightUp.GetZ().GetFloat()
+                            + lrParent.mRightUp.GetW().GetFloat() * lrLocal.mRightUp.GetW().GetFloat());
 
         // Translation: world origin = parent 2x2 * child origin + parent origin.
-        lpWorld->mOriginXYZ.x = lrParent.mRightUp.x * lrLocal.mOriginXYZ.x
-                              + lrParent.mRightUp.z * lrLocal.mOriginXYZ.y
-                              + lrParent.mOriginXYZ.x;
-        lpWorld->mOriginXYZ.y = lrParent.mRightUp.y * lrLocal.mOriginXYZ.x
-                              + lrParent.mRightUp.w * lrLocal.mOriginXYZ.y
-                              + lrParent.mOriginXYZ.y;
-        lpWorld->mOriginXYZ.z = lrParent.mOriginXYZ.z;   // 2D depth inherited from parent
-        lpWorld->mOriginXYZ.w = 0.0f;
+        lpWorld->mOriginXYZ.SetX(lrParent.mRightUp.GetX().GetFloat() * lrLocal.mOriginXYZ.GetX().GetFloat()
+                              + lrParent.mRightUp.GetZ().GetFloat() * lrLocal.mOriginXYZ.GetY().GetFloat()
+                              + lrParent.mOriginXYZ.GetX().GetFloat());
+        lpWorld->mOriginXYZ.SetY(lrParent.mRightUp.GetY().GetFloat() * lrLocal.mOriginXYZ.GetX().GetFloat()
+                              + lrParent.mRightUp.GetW().GetFloat() * lrLocal.mOriginXYZ.GetY().GetFloat()
+                              + lrParent.mOriginXYZ.GetY().GetFloat());
+        lpWorld->mOriginXYZ.SetZ(lrParent.mOriginXYZ.GetZ().GetFloat());   // 2D depth inherited from parent
+        lpWorld->mOriginXYZ.SetW(0.0f);
 
         // Colour transform: scale multiplies, shift adds (component-wise).
-        lpWorld->mColourScale.x = lrParent.mColourScale.x * lrLocal.mColourScale.x;
-        lpWorld->mColourScale.y = lrParent.mColourScale.y * lrLocal.mColourScale.y;
-        lpWorld->mColourScale.z = lrParent.mColourScale.z * lrLocal.mColourScale.z;
-        lpWorld->mColourScale.w = lrParent.mColourScale.w * lrLocal.mColourScale.w;
-        lpWorld->mColourShift.x = lrParent.mColourShift.x + lrLocal.mColourShift.x;
-        lpWorld->mColourShift.y = lrParent.mColourShift.y + lrLocal.mColourShift.y;
-        lpWorld->mColourShift.z = lrParent.mColourShift.z + lrLocal.mColourShift.z;
-        lpWorld->mColourShift.w = lrParent.mColourShift.w + lrLocal.mColourShift.w;
+        lpWorld->mColourScale.Set(lrParent.mColourScale.GetX().GetFloat() * lrLocal.mColourScale.GetX().GetFloat(), lrParent.mColourScale.GetY().GetFloat() * lrLocal.mColourScale.GetY().GetFloat(), lrParent.mColourScale.GetZ().GetFloat() * lrLocal.mColourScale.GetZ().GetFloat(), lrParent.mColourScale.GetW().GetFloat() * lrLocal.mColourScale.GetW().GetFloat());
+        lpWorld->mColourShift.Set(lrParent.mColourShift.GetX().GetFloat() + lrLocal.mColourShift.GetX().GetFloat(), lrParent.mColourShift.GetY().GetFloat() + lrLocal.mColourShift.GetY().GetFloat(), lrParent.mColourShift.GetZ().GetFloat() + lrLocal.mColourShift.GetZ().GetFloat(), lrParent.mColourShift.GetW().GetFloat() + lrLocal.mColourShift.GetW().GetFloat());
     }
 }
 
@@ -164,22 +155,10 @@ void MovieClipInstance::Construct(const MovieClip* lpMovieClip, const char* lpcN
     for (u32 luTransform = 0; luTransform < luNumTransforms; ++luTransform)
     {
         CgsGraphics::Im2dTransform& lrTransform = mpaTransforms[luTransform];
-        lrTransform.mOriginXYZ.x = 0.0f;
-        lrTransform.mOriginXYZ.y = 0.0f;
-        lrTransform.mOriginXYZ.z = 0.0f;
-        lrTransform.mOriginXYZ.w = 0.0f;
-        lrTransform.mRightUp.x = 1.0f;
-        lrTransform.mRightUp.y = 0.0f;
-        lrTransform.mRightUp.z = 0.0f;
-        lrTransform.mRightUp.w = 1.0f;
-        lrTransform.mColourShift.x = 0.0f;
-        lrTransform.mColourShift.y = 0.0f;
-        lrTransform.mColourShift.z = 0.0f;
-        lrTransform.mColourShift.w = 0.0f;
-        lrTransform.mColourScale.x = 1.0f;
-        lrTransform.mColourScale.y = 1.0f;
-        lrTransform.mColourScale.z = 1.0f;
-        lrTransform.mColourScale.w = 1.0f;
+        lrTransform.mOriginXYZ.Set(0.0f, 0.0f, 0.0f, 0.0f);
+        lrTransform.mRightUp.Set(1.0f, 0.0f, 0.0f, 1.0f);
+        lrTransform.mColourShift.Set(0.0f, 0.0f, 0.0f, 0.0f);
+        lrTransform.mColourScale.Set(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
     mfTimeTillNextFrame   = mpMovieClip->mpFile->mfTimePerFrame;
@@ -363,14 +342,8 @@ void MovieClipInstance::GotoFrame(u32 luFrame)
     for (u32 luObject = 0; luObject < luNumObjects; ++luObject)
     {
         CgsGraphics::Im2dTransform& lrTransform = mpaTransforms[luObject];
-        lrTransform.mColourShift.x = 0.0f;
-        lrTransform.mColourShift.y = 0.0f;
-        lrTransform.mColourShift.z = 0.0f;
-        lrTransform.mColourShift.w = 0.0f;
-        lrTransform.mColourScale.x = 1.0f;
-        lrTransform.mColourScale.y = 1.0f;
-        lrTransform.mColourScale.z = 1.0f;
-        lrTransform.mColourScale.w = 1.0f;
+        lrTransform.mColourShift.Set(0.0f, 0.0f, 0.0f, 0.0f);
+        lrTransform.mColourScale.Set(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
     ApplyKeyFrame(mpMovieClip->GetKeyframeForFrame(luFrame));
@@ -405,16 +378,6 @@ void MovieClipInstance::GotoAndStopLabel(u32 luLabelHash,
     CGS_ASSERT(mpMovieClip != 0, "mpMovieClip");
     const u32 luFrame = static_cast<u32>(
         mpMovieClip->FindLabelledFrameIndex(luLabelHash, lpcLabel));
-    // [DIAG] NOT IN THE X360 BINARY -- a label that does not exist in the bound clip
-    // resolves to an out-of-range frame and the CGS_ASSERT below is a NO-OP in this
-    // build, so the goto silently does nothing and the component never appears. Say so.
-    if (luFrame >= mpMovieClip->muNumFramesInTimeline && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[flapt] GotoAndStopLabel: label '" << (lpcLabel != 0 ? lpcLabel : "?")
-            << "' NOT FOUND in clip (frames=" << mpMovieClip->muNumFramesInTimeline
-            << ")\n";
-    }
     CGS_ASSERT(luFrame < mpMovieClip->muNumFramesInTimeline,
                "luFrame < mpMovieClip->muNumFramesInTimeline");
     muLastKeyFrameApplied = static_cast<u16>(-1);
@@ -772,7 +735,7 @@ void MovieClipInstance::Render(FlaptRenderer* lpRenderer)
                 const CgsGraphics::Im2dTransform& lrLocal = mpaTransforms[luChild];
 
                 // Cull fully-transparent (colour alpha scale+shift <= 0) or hidden children.
-                const f32 lfAlpha = lrLocal.mColourScale.w + lrLocal.mColourShift.w;
+                const f32 lfAlpha = lrLocal.mColourScale.GetW().GetFloat() + lrLocal.mColourShift.GetW().GetFloat();
                 if (lfAlpha > 0.0f && (lpChild->mxFlags & 2u) != 0)
                 {
                     ComposeDrawTransform(lpRenderer, lrLocal);

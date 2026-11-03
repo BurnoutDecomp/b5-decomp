@@ -213,10 +213,10 @@ Vector2 MovieClipRef::GetPosition() const
         static_cast<const CgsGraphics::Im2dTransform*>(mpTransform);
 
     Vector2 lPosition;
-    lPosition.x = lpTransform->mOriginXYZ.x;
-    lPosition.y = lpTransform->mOriginXYZ.y;
-    lPosition.z = 0.0f;
-    lPosition.w = 0.0f;
+    lPosition.mV.x = lpTransform->mOriginXYZ.GetX().GetFloat();
+    lPosition.mV.y = lpTransform->mOriginXYZ.GetY().GetFloat();
+    lPosition.mV.z = 0.0f;
+    lPosition.mV.w = 0.0f;
     return lPosition;
 }
 
@@ -231,10 +231,7 @@ void MovieClipRef::SetPosition(Vector2 lPosition)
     CgsGraphics::Im2dTransform* lpTransform =
         static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
 
-    lpTransform->mOriginXYZ.x = lPosition.x;
-    lpTransform->mOriginXYZ.y = lPosition.y;
-    lpTransform->mOriginXYZ.z = 0.0f;
-    lpTransform->mOriginXYZ.w = 0.0f;
+    lpTransform->mOriginXYZ.Set(lPosition.mV.x, lPosition.mV.y, 0.0f, 0.0f);
 }
 
 // ---- SetPositionY @ 0x8241E228 -------------------------------------------
@@ -249,9 +246,9 @@ void MovieClipRef::SetPositionY(VecFloat lvfPositionY)
         static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
 
     // VecFloat is a broadcast scalar; its x lane carries the value.
-    lpTransform->mOriginXYZ.y = lvfPositionY.x;
-    lpTransform->mOriginXYZ.z = 0.0f;
-    lpTransform->mOriginXYZ.w = 0.0f;
+    lpTransform->mOriginXYZ.SetY(lvfPositionY.GetFloat());
+    lpTransform->mOriginXYZ.SetZ(0.0f);
+    lpTransform->mOriginXYZ.SetW(0.0f);
     // mOriginXYZ.x is preserved (the X360 reloads and re-stores it).
 }
 
@@ -270,15 +267,15 @@ void MovieClipRef::SetRotation(f32 lfAngle)
     const f32 lfCos = std::cos(lfAngle);
     const f32 lfSin = std::sin(lfAngle);
 
-    lpTransform->mRightUp.x = lfCos;    // Right.x
-    lpTransform->mRightUp.y = lfSin;    // Right.y
-    lpTransform->mRightUp.z = -lfSin;   // Up.x
-    lpTransform->mRightUp.w = lfCos;    // Up.y
+    lpTransform->mRightUp.SetX(lfCos);    // Right.x
+    lpTransform->mRightUp.SetY(lfSin);    // Right.y
+    lpTransform->mRightUp.SetZ(-lfSin);   // Up.x
+    lpTransform->mRightUp.SetW(lfCos);    // Up.y
 }
 
 // ---- SetSizeScale @ 0x82428518 -------------------------------------------
 // Normalise the existing right/up basis directions to unit length, then scale
-// Right by lScale.x and Up by lScale.y, writing the result back to mRightUp. The
+// Right by lScale.mV.x and Up by lScale.mV.y, writing the result back to mRightUp. The
 // X360 uses vrsqrtefp + a Newton-Raphson step for the 1/sqrt; the semantic intent
 // is the unit-length normalise, so std::sqrt is used here.
 void MovieClipRef::SetSizeScale(Vector2 lScale)
@@ -290,20 +287,20 @@ void MovieClipRef::SetSizeScale(Vector2 lScale)
         static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
 
     // Right = (mRightUp.x, mRightUp.y), Up = (mRightUp.z, mRightUp.w).
-    const f32 lfRightX = lpTransform->mRightUp.x;
-    const f32 lfRightY = lpTransform->mRightUp.y;
-    const f32 lfUpX    = lpTransform->mRightUp.z;
-    const f32 lfUpY    = lpTransform->mRightUp.w;
+    const f32 lfRightX = lpTransform->mRightUp.GetX().GetFloat();
+    const f32 lfRightY = lpTransform->mRightUp.GetY().GetFloat();
+    const f32 lfUpX    = lpTransform->mRightUp.GetZ().GetFloat();
+    const f32 lfUpY    = lpTransform->mRightUp.GetW().GetFloat();
 
     // Reciprocal lengths (de-SIMD'd vrsqrtefp + Newton-Raphson refinement).
     const f32 lfInvRightLen = 1.0f / std::sqrt(lfRightX * lfRightX + lfRightY * lfRightY);
     const f32 lfInvUpLen    = 1.0f / std::sqrt(lfUpX * lfUpX + lfUpY * lfUpY);
 
     // Unit basis directions, then scaled by the requested size.
-    lpTransform->mRightUp.x = lfRightX * lfInvRightLen * lScale.x;   // Right.x
-    lpTransform->mRightUp.y = lfRightY * lfInvRightLen * lScale.x;   // Right.y
-    lpTransform->mRightUp.z = lfUpX * lfInvUpLen * lScale.y;         // Up.x
-    lpTransform->mRightUp.w = lfUpY * lfInvUpLen * lScale.y;         // Up.y
+    lpTransform->mRightUp.SetX(lfRightX * lfInvRightLen * lScale.mV.x);   // Right.x
+    lpTransform->mRightUp.SetY(lfRightY * lfInvRightLen * lScale.mV.x);   // Right.y
+    lpTransform->mRightUp.SetZ(lfUpX * lfInvUpLen * lScale.mV.y);         // Up.x
+    lpTransform->mRightUp.SetW(lfUpY * lfInvUpLen * lScale.mV.y);         // Up.y
 }
 
 // ---- SetColour @ 0x8241E0D0 ----------------------------------------------
@@ -319,14 +316,14 @@ void MovieClipRef::SetColour(Vector4 lColour)
         static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
 
     // Zero the multiplicative scale's RGB (alpha preserved).
-    lpTransform->mColourScale.x = 0.0f;
-    lpTransform->mColourScale.y = 0.0f;
-    lpTransform->mColourScale.z = 0.0f;
+    lpTransform->mColourScale.SetX(0.0f);
+    lpTransform->mColourScale.SetY(0.0f);
+    lpTransform->mColourScale.SetZ(0.0f);
 
     // Write the flat colour into the additive shift's RGB (alpha preserved).
-    lpTransform->mColourShift.x = lColour.x;
-    lpTransform->mColourShift.y = lColour.y;
-    lpTransform->mColourShift.z = lColour.z;
+    lpTransform->mColourShift.SetX(lColour.GetX().GetFloat());
+    lpTransform->mColourShift.SetY(lColour.GetY().GetFloat());
+    lpTransform->mColourShift.SetZ(lColour.GetZ().GetFloat());
 }
 
 // ---- SetColourScale @ 0x8240E588 -----------------------------------------
@@ -339,10 +336,7 @@ void MovieClipRef::SetColourScale(Vector4 lColourScale)
     CgsGraphics::Im2dTransform* lpTransform =
         static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
 
-    lpTransform->mColourScale.x = lColourScale.x;
-    lpTransform->mColourScale.y = lColourScale.y;
-    lpTransform->mColourScale.z = lColourScale.z;
-    lpTransform->mColourScale.w = lColourScale.w;
+    lpTransform->mColourScale.Set(lColourScale.GetX().GetFloat(), lColourScale.GetY().GetFloat(), lColourScale.GetZ().GetFloat(), lColourScale.GetW().GetFloat());
 }
 
 }

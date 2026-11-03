@@ -264,9 +264,9 @@ void TextFieldRef::SetColour(Vector4 lv4Colour)
 {
     CGS_ASSERT(mpTextFieldInstance != 0, "mpTextFieldInst");   // cpp:423 (non-gating)
 
-    const u32 luRed   = static_cast<u32>(static_cast<s64>(lv4Colour.x * 255.0f)) & 0xFFu;
-    const u32 luGreen = static_cast<u32>(static_cast<s64>(lv4Colour.y * 255.0f)) & 0xFFu;
-    const u32 luBlue  = static_cast<u32>(static_cast<s64>(lv4Colour.z * 255.0f)) & 0xFFu;
+    const u32 luRed   = static_cast<u32>(static_cast<s64>(lv4Colour.GetX().GetFloat() * 255.0f)) & 0xFFu;
+    const u32 luGreen = static_cast<u32>(static_cast<s64>(lv4Colour.GetY().GetFloat() * 255.0f)) & 0xFFu;
+    const u32 luBlue  = static_cast<u32>(static_cast<s64>(lv4Colour.GetZ().GetFloat() * 255.0f)) & 0xFFu;
 
     CgsGraphics::TextObject& lrTextObject =
         static_cast<TextFieldInstance*>(mpTextFieldInstance)->GetTextObject();
