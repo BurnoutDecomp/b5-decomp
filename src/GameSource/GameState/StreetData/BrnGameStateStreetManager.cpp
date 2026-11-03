@@ -1558,14 +1558,14 @@ namespace BrnGameState
         const BrnAI::AISection* lpSection = mpAISectionData.operator->()->GetAISection( luSectionIndex );
 
         const Vector3 lPlayerDirection = lpActiveRaceCarInterface->GetPlayerDirection();
-        const f32 lfPlayerDirX = lPlayerDirection.x;
-        const f32 lfPlayerDirY = lPlayerDirection.y;
-        const f32 lfPlayerDirZ = lPlayerDirection.z;
+        const f32 lfPlayerDirX = lPlayerDirection.mV.x;
+        const f32 lfPlayerDirY = lPlayerDirection.mV.y;
+        const f32 lfPlayerDirZ = lPlayerDirection.mV.z;
 
         const Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
-        const f32 lfPlayerPosX = lPlayerPosition.x;
-        const f32 lfPlayerPosY = lPlayerPosition.y;
-        const f32 lfPlayerPosZ = lPlayerPosition.z;
+        const f32 lfPlayerPosX = lPlayerPosition.mV.x;
+        const f32 lfPlayerPosY = lPlayerPosition.mV.y;
+        const f32 lfPlayerPosZ = lPlayerPosition.mV.z;
 
         u16 luBestPortalSectionIndex = 0x7FFF;
         f32 lfBestPortalDot = 0.0f;
@@ -1695,9 +1695,9 @@ namespace BrnGameState
                                                 lfExitRightInvLen * lfEdgeDirZ );
 
             const BrnPhysics::Vehicle::RaceCarState* lpPlayerRaceCarState = lpActiveRaceCarInterface->GetPlayerRaceCarState();
-            if ( ( lpPlayerRaceCarState->mTransform.xAxis.x * mCurrentPlayerSectionExitRight.X() )
-               + ( mCurrentPlayerSectionExitRight.Z() * lpPlayerRaceCarState->mTransform.xAxis.z )
-               + ( mCurrentPlayerSectionExitRight.Y() * lpPlayerRaceCarState->mTransform.xAxis.y ) < 0.0f )
+            if ( ( lpPlayerRaceCarState->mTransform.xAxis.mV.x * mCurrentPlayerSectionExitRight.X() )
+               + ( mCurrentPlayerSectionExitRight.Z() * lpPlayerRaceCarState->mTransform.xAxis.mV.z )
+               + ( mCurrentPlayerSectionExitRight.Y() * lpPlayerRaceCarState->mTransform.xAxis.mV.y ) < 0.0f )
             {
                 mCurrentPlayerSectionExitRight.Set( mCurrentPlayerSectionExitRight.X() * -1.0f,
                                                     mCurrentPlayerSectionExitRight.Y() * -1.0f,
@@ -1852,11 +1852,11 @@ namespace BrnGameState
 
                 // Player position with its vertical lane dropped (v15[1] = 0).
                 Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
-                lPlayerPosition.y = 0.0f;
+                lPlayerPosition.mV.y = 0.0f;
 
-                const f32 lfDeltaX = lPlayerPosition.x - lfTargetNodeX;
-                const f32 lfDeltaY = lPlayerPosition.y - 0.0f;
-                const f32 lfDeltaZ = lPlayerPosition.z - lfTargetNodeZ;
+                const f32 lfDeltaX = lPlayerPosition.mV.x - lfTargetNodeX;
+                const f32 lfDeltaY = lPlayerPosition.mV.y - 0.0f;
+                const f32 lfDeltaZ = lPlayerPosition.mV.z - lfTargetNodeZ;
                 const f32 lfDistanceSquared = ( lfDeltaX * lfDeltaX )
                                             + ( lfDeltaY * lfDeltaY )
                                             + ( lfDeltaZ * lfDeltaZ );
@@ -2343,17 +2343,9 @@ namespace BrnGameState
 
         // The two 16-byte vector slots: mFirstJunctionPosition promoted to a
         // 4-lane vector twice (the two staging buffers at var_210 and var_220).
-        Vector3 lJunctionPosition;
-        lJunctionPosition.x = mFirstJunctionPosition.X();
-        lJunctionPosition.y = mFirstJunctionPosition.Y();
-        lJunctionPosition.z = mFirstJunctionPosition.Z();
-        lJunctionPosition.w = 0.0f;
+        Vector3 lJunctionPosition(mFirstJunctionPosition.X(), mFirstJunctionPosition.Y(), mFirstJunctionPosition.Z());
 
-        Vector3 lSecondJunctionPosition;
-        lSecondJunctionPosition.x = mFirstJunctionPosition.X();
-        lSecondJunctionPosition.y = mFirstJunctionPosition.Y();
-        lSecondJunctionPosition.z = mFirstJunctionPosition.Z();
-        lSecondJunctionPosition.w = 0.0f;
+        Vector3 lSecondJunctionPosition(mFirstJunctionPosition.X(), mFirstJunctionPosition.Y(), mFirstJunctionPosition.Z());
 
         lMessage.miCurrentRoadIndex = miLastPlayerRoadIndex;
         lMessage.miLeftRoadIndex    = mLeftRoadIndex;

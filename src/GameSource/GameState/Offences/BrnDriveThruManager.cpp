@@ -902,9 +902,8 @@ void DriveThruManager::Update(GameStateModuleIO::GameActionQueue*  lpActionQueue
                 const Vector3 lPlayerPos = lpRcOutputInterface->GetPlayerPosition();
                 const Vector3 lDelta = rw::math::vpu::operator-(lrEntry.mPosition, lPlayerPos);
                 // vmsum3fp128 at 8239F1C0 includes the vertical component.
-                const f32 lfSeparationSq = (lDelta.x * lDelta.x) +
-                    (lDelta.y * lDelta.y) + (lDelta.z * lDelta.z);
-                const f32 lfSeparationY    = (lDelta.y < 0.0f) ? -lDelta.y : lDelta.y;
+                const f32 lfSeparationSq = __vmsum3fp(lDelta.mV, lDelta.mV).v[0];
+                const f32 lfSeparationY    = (lDelta.mV.y < 0.0f) ? -lDelta.mV.y : lDelta.mV.y;
 
                 if (lfSeparationSq < KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ &&
                     lfSeparationY < KF_DRIVE_THRU_DISCOVERY_MAX_Y)

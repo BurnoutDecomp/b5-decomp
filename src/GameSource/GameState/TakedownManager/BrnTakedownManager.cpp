@@ -360,15 +360,15 @@ namespace BrnGameState
         // for up x (0,1,0) the Y lane is identically zero, so the sign -- and the angle -- is always
         // 0 here; the tilt arm can only fire if the up axis carries a non-zero product, which it
         // never does. Kept as the console computes it.
-        const Vector3 lWorldUp      = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lWorldUp(0.0f, 1.0f, 0.0f);
         const Vector3 lCrossProduct = rw::math::vpu::Cross(lpPlayerState->mTransform.yAxis, lWorldUp);
 
         f32 lfSign = 0.0f;
-        if (lCrossProduct.y > 0.0f)
+        if (lCrossProduct.mV.y > 0.0f)
         {
             lfSign = 1.0f;
         }
-        else if (lCrossProduct.y < 0.0f)
+        else if (lCrossProduct.mV.y < 0.0f)
         {
             lfSign = -1.0f;
         }
