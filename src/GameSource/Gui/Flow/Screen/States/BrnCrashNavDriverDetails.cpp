@@ -180,8 +180,8 @@ namespace
     // movie authored it, on top of the stat labels.
     // The console loads each with a single `lvx128 v1` -- one 16-byte VMX quad, which is
     // what a by-value rw Vector2 is -- and passes it straight to LicenseComponent::SetPosition.
-    const Vector2 KV2_LICENSE_POSITION    = { 500.0f, 420.0f, 0.0f, 0.0f };   // 0x82FB4A90 (HD)
-    const Vector2 KV2_LICENSE_POSITION_SD = { 517.0f, 420.0f, 0.0f, 0.0f };   // 0x82FB4C00 (SD)
+    const Vector2 KV2_LICENSE_POSITION(500.0f, 420.0f);   // 0x82FB4A90 (HD)
+    const Vector2 KV2_LICENSE_POSITION_SD(517.0f, 420.0f);   // 0x82FB4C00 (SD)
 
     // The HelpItem button-icon slot the console passes for "no button" (`li 15`); the
     // empty text is X360 unk_820046A7, the image's shared "" literal.

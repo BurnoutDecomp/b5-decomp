@@ -66,10 +66,10 @@ namespace BrnGui
         Vector2 KV2_ZOOMED_OUT_MAP_CENTRE()
         {
             Vector2 lv2Centre;
-            lv2Centre.x = -460.0f;
-            lv2Centre.y = -915.0f;
-            lv2Centre.z = 0.0f;
-            lv2Centre.w = 0.0f;
+            lv2Centre.mV.x = -460.0f;
+            lv2Centre.mV.y = -915.0f;
+            lv2Centre.mV.z = 0.0f;
+            lv2Centre.mV.w = 0.0f;
             return lv2Centre;
         }
 
