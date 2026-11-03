@@ -60,6 +60,9 @@ namespace CgsResource
         // (lpGameTalk is the Construct arg a2 -- the reply channel.)
         void Construct(CgsGameTalk::GameTalk* lpGameTalk);
 
+        // X360 0x828E65D8. Register the LiveUpdate handler once and prepare state.
+        virtual bool Prepare();
+
         // X360 0x828E6708. Clear the receiver queue and chain the base Destruct.
         void Destruct();
 

@@ -63,11 +63,11 @@ namespace BrnResource
         {
             E_PREPARE_START = 0, E_PREPARE_BASE = 1, E_PREPARE_RESOURCE = 2, E_PREPARE_BANKS = 3,
             E_PREPARE_POOLS = 4, E_PREPARE_ALLOCATORS = 5, E_PREPARE_ATTRIBSYS = 6,
-            E_PREPARE_DONE = 19,
+            E_PREPARE_GAMETALK = 7, E_PREPARE_LIVE_UPDATE = 8, E_PREPARE_DONE = 19,
             // The X360 numbers its data-table stages 9..14 (PrepareVehicleList 9,
             // PrepareFreeburnChallengeList 10, PrepareICEList 11, PrepareWheelList 12,
             // PrepareHudMessages 13, PreparePopups 14). The ones that are live here keep the
-            // console's numbers; the DLC 16-18 / GameTalk 7 stages are still skipped
+            // console's numbers; the DLC 16-18 stages are still skipped
             // between ATTRIBSYS and DONE. (Order of execution comes from the switch's
             // fall-through order below, not from the numeric value.)
             E_PREPARE_VEHICLE_LIST = 9,

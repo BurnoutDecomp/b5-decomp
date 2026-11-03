@@ -91,17 +91,6 @@ namespace GameTalk
     // GameTalkMessage bodies (reconstructed from BURNOUT_X360_ARTIST.XEX).
     // ========================================================================
 
-    // Native slot 0 @0x828385D0: run the destructor and, for deleting flag 1,
-    // release the object from the GameTalk package allocator.
-    static GameTalkMessage* DeleteGameTalkMessage(GameTalkMessage* lpMessage, unsigned int luFlags)
-    {
-        lpMessage->~GameTalkMessage();
-        if (luFlags & 1) EA::GameTalk::Free(lpMessage);
-        return lpMessage;
-    }
-
-    static const GameTalkMessageVTable g_GameTalkMessageVTable = { DeleteGameTalkMessage };
-
     // Shared entry-buffer capacity, doubled on grow by AddKeyContent. The seed is a
     // data-segment constant in the console image, NOT zero: a zero seed would make the
     // first AllocateDataBuffer ask for 0 bytes and leave the doubling in AddKeyContent
@@ -138,8 +127,7 @@ namespace GameTalk
     }
 
     GameTalkMessage::GameTalkMessage(const char* lpcChannel)
-        : mpVTable(&g_GameTalkMessageVTable)
-        , mbParsed(false)
+        : mbParsed(false)
         , mppEntries(0)
         , miNumKeys(0)
         , mpcChannel(lpcChannel)
@@ -152,7 +140,6 @@ namespace GameTalk
     // and content + the slot; built-locally frees only the slots), then the entry table.
     GameTalkMessage::~GameTalkMessage()
     {
-        mpVTable = &g_GameTalkMessageVTable;
         CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
             CgsAttribSys::AttribSysMemoryManager::GetGameTalkAllocator();
 
@@ -478,15 +465,6 @@ namespace GameTalk
 
     // The published singleton (X360 off_8303577C).
     GameTalkManager* GameTalkManager::spInstance = 0;
-    const GameTalkManagerVTable GameTalkManager::sVTable = { &GameTalkManager::DeletingDestructor };
-
-    GameTalkManager* GameTalkManager::DeletingDestructor(GameTalkManager* lpManager, unsigned int luFlags)
-    {
-        lpManager->~GameTalkManager();
-        if (luFlags & 1) EA::GameTalk::Free(lpManager);
-        return lpManager;
-    }
-
     // @ 0x82836CF8 -- return the process-wide singleton.
     GameTalkManager* GameTalkManager::GetInstance()
     {
@@ -503,8 +481,7 @@ namespace GameTalk
     // receive trampoline into it, allocates + zeroes the handler table, then (when the
     // transport is connected) emits the platform/version/initialize config handshake.
     GameTalkManager::GameTalkManager(void* lpOwner, s32 liMaxChannels, const char* lpcName)
-        : mpVTable(&sVTable)
-        , mpcName(lpcName)
+        : mpcName(lpcName)
         , mpProtocol(static_cast<IGameTalkProtocol*>(lpOwner))
         , mppHandlers(0)
         , miNumHandlers(0)
@@ -533,10 +510,15 @@ namespace GameTalk
         }
     }
 
+    // The deleting-destructor slot releases managers through GameTalk::Free.
+    void GameTalkManager::operator delete(void* lpBlock)
+    {
+        EA::GameTalk::Free(lpBlock);
+    }
+
     // @ 0x828384A0 -- restore the table and free the handler table.
     GameTalkManager::~GameTalkManager()
     {
-        mpVTable = &sVTable;
         EA::GameTalk::Free(mppHandlers);
         mppHandlers = 0;
     }
@@ -767,7 +749,7 @@ namespace GameTalk
 
             GameTalkMessage* lpMessage = GameTalkMessage::Create(lpcRecord);
             ReceiveMessage(lpMessage);
-            if (lpMessage) lpMessage->mpVTable->DeletingDestructor(lpMessage, 1);
+            delete lpMessage;
 
             liOffset += liStep;
         }
