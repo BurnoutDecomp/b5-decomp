@@ -820,15 +820,21 @@ namespace Camera
         if (velocityJournal.GetSize() > 0)
         {
             const Vector3 velocity = velocityJournal[0];
-            const bool stationary = std::fabs(velocity.x) <= 1.0f &&
-                std::fabs(velocity.y) <= 1.0f && std::fabs(velocity.z) <= 1.0f;
+            // ARTIST 82251B00..2C subtracts zero, clears the sign bits, then tests
+            // whether any XYZ lane is greater than one. Its fourth compare lane is X.
+            const __vector4 allOnes = __vspltisw(-1);
+            const __vector4 signBits = __vslw(allOnes, allOnes);
+            const __vector4 absolute = __vandc(__vsubfp(velocity.GetVector(), __vspltisw(0)), signBits);
+            const __vector4 greater = __vcmpgtfp(absolute, __vcfsx(__vspltisw(1), 0));
+            const bool stationary = (greater.u[0] | greater.u[1] | greater.u[2]) == 0;
             const bool crashing = info.mpAllVehicleData->GetPlayer().mRaceCarState.mbCrashing;
             info.mbUseControlPauseBehaviour = paused || stationary || crashing;
             info.mbLookback = controller.mbLookback && !crashing;
         }
         // VMX vperm 82CDA350 selects {-x, y, -x, -x}.
-        const Vector2 carModifier = {-controller.mCarModifier.x, controller.mCarModifier.y,
-                                     -controller.mCarModifier.x, -controller.mCarModifier.x};
+        Vector2 carModifier;
+        carModifier.mV = XMVectorSet(-controller.mCarModifier.mV.x, controller.mCarModifier.mV.y,
+                                     -controller.mCarModifier.mV.x, -controller.mCarModifier.mV.x);
         info.mCarModifier = carModifier;
 
 

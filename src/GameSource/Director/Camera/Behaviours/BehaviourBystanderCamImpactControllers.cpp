@@ -129,7 +129,7 @@ void ImpactSlomoController::Update(Camera& lrCamera, f32 lfTimestep,
         if (rw::math::vpu::MagnitudeSquared(lCurrentVelocity) > KF_MIN_VELOCITY_SQUARED_MPS)
         {
             // vspltw lane 1 (.y) of each sample: rising last frame, falling this frame.
-            if (lrLinearVelocity.GetPrevious(0).y > 0.0f && lCurrentVelocity.y < 0.0f)
+            if (lrLinearVelocity.GetPrevious(0).GetY() > 0.0f && lCurrentVelocity.GetY() < 0.0f)
             {
                 const VehicleInfo& lrPlayer = lrVehicles.GetPlayer();
                 const BrnPhysics::Vehicle::AboveGroundTestResult& lrGround =
