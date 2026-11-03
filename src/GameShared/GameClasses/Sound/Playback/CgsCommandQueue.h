@@ -101,6 +101,8 @@ struct CsisReleaseCommand : public CsisCommand
 
     explicit CsisReleaseCommand(uintptr_t ahClass)
         : CsisCommand(E_CSIS_COMMAND_RELEASE), mhClass(ahClass) {}
+
+    CsisReleaseCommand(uintptr_t luCommandCount, uintptr_t* lpuCommandBuffer);
 };
 
 // CgsAemsFactory.h:230 (DWARF). The CSIS command queue: a 255-deep uintptr_t ring.

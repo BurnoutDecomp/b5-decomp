@@ -44,7 +44,7 @@ void ICEMemory::Construct(void* lpBuffer, s32 lnBufferSize)
 
     // Describe the debug-memory pool: a single base resource of 1.75 MB at 4-byte
     // alignment (the remaining base-resource slots stay empty -- alignment 1).
-    rw::ResourceDescriptor lDescriptor = {};
+    rw::ResourceDescriptor lDescriptor;
     lDescriptor.m_baseResourceDescriptors[0].m_size      = (u32)KI_ICE_DEBUG_MEMORY_SIZE;
     lDescriptor.m_baseResourceDescriptors[0].m_alignment = (u32)KI_ICE_DEBUG_MEMORY_ALIGNMENT;
     for (u32 luIndex = 1; luIndex < rw::KU_RESOURCE_LANE_COUNT; ++luIndex)
