@@ -319,7 +319,7 @@ void Slot::Release(Voice& arVoice)
 
     CGS_ASSERT(mpImpl, "mpImpl");
     Factory& lrFactory = const_cast<Factory&>(arVoice.GetFactory());
-    rw::Resource lResource = {};
+    rw::Resource lResource;
     lResource.m_baseResources[0] = mpImpl;
     lrFactory.GetEnvironment().GetAllocator()->DoFree(lResource);
     mpImpl = 0;
@@ -614,7 +614,7 @@ void Voice::DoDispose()
     Factory& lrFactory = const_cast<Factory&>(mFactory);
     this->~Voice();
 
-    rw::Resource lResource = {};
+    rw::Resource lResource;
     lResource.m_baseResources[0] = this;
     lrFactory.GetEnvironment().GetAllocator()->DoFree(lResource);
 }

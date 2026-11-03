@@ -18,7 +18,7 @@
 
 extern "C" CgsSound::Playback::IStreamProvider* off_82FFBA0C;
 
-CgsSound::Playback::IStreamProvider::StreamSpec::StreamSpec() = default;
+CgsSound::Playback::IStreamProvider::StreamSpec::StreamSpec() {}
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x8268CD20
 //   (rw::audio::core::SndPlayer1_CgsStreamMod::AdvanceCurrentRequest)

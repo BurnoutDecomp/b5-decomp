@@ -46,6 +46,18 @@ namespace CgsSound
 {
 namespace Playback
 {
+    namespace
+    {
+        void AddStage(rw::audio::core::VoiceStageConfig* apStages, u32& arStage,
+                      void* apContext, uintptr_t auHandle, u32 auOutputChannels)
+        {
+            apStages[arStage].mpContext = apContext;
+            apStages[arStage].mpDesc = reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(auHandle);
+            apStages[arStage].mFlagAndField8 = auOutputChannels;
+            ++arStage;
+        }
+    }
+
     AemsRWSamplePlayer::~AemsRWSamplePlayer()
     {
         // All members are trivially destructible and the base dtor is empty: the only
@@ -244,30 +256,20 @@ namespace Playback
         rw::audio::core::VoiceStageConfig laMain[10] = {};
         u32 luStage = 0;
         const u32 luChannels = lpPlayer->mNumChannels;
-        auto AddStage = [&](void* apContext, uintptr_t auHandle,
-                            u32 auOutputChannels)
-        {
-            laMain[luStage].mpContext = apContext;
-            laMain[luStage].mpDesc = reinterpret_cast<
-                rw::audio::core::PlugInDescRunTime*>(auHandle);
-            laMain[luStage].mFlagAndField8 = auOutputChannels;
-            ++luStage;
-        };
-
-        AddStage(&lfOne, mSndPlayer1Handle, luChannels);
-        AddStage(0, mRechannelHandle, luChannels);
-        AddStage(0, mResampleHandle, luChannels);
-        AddStage(0, mGainHandle, luChannels);
+        AddStage(laMain, luStage, &lfOne, mSndPlayer1Handle, luChannels);
+        AddStage(laMain, luStage, 0, mRechannelHandle, luChannels);
+        AddStage(laMain, luStage, 0, mResampleHandle, luChannels);
+        AddStage(laMain, luStage, 0, mGainHandle, luChannels);
         if (luChannels == 1)
         {
-            AddStage(0, mPan2DHandle, 6);
-            AddStage(0, mSendHandle, 6);
+            AddStage(laMain, luStage, 0, mPan2DHandle, 6);
+            AddStage(laMain, luStage, 0, mSendHandle, 6);
         }
         else
         {
             for (u32 luChannel = 0; luChannel < luChannels; ++luChannel)
                 // ARTIST 826C2B24..28: each Route sees every source channel.
-                AddStage(0, mRouteHandle, luChannels);
+                AddStage(laMain, luStage, 0, mRouteHandle, luChannels);
         }
 
         rw::audio::core::PlugIn** lppMainPlugins = 0;
