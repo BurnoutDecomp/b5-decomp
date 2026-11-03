@@ -109,13 +109,13 @@ namespace
     Vector4 TransformPointAffine(const Matrix44Affine& lrMatrix, const Vector4& lvPoint)
     {
         Vector4 lvOut;
-        lvOut.x = lrMatrix.xAxis.x * lvPoint.x + lrMatrix.yAxis.x * lvPoint.y
-                + lrMatrix.zAxis.x * lvPoint.z + lrMatrix.wAxis.x;
-        lvOut.y = lrMatrix.xAxis.y * lvPoint.x + lrMatrix.yAxis.y * lvPoint.y
-                + lrMatrix.zAxis.y * lvPoint.z + lrMatrix.wAxis.y;
-        lvOut.z = lrMatrix.xAxis.z * lvPoint.x + lrMatrix.yAxis.z * lvPoint.y
-                + lrMatrix.zAxis.z * lvPoint.z + lrMatrix.wAxis.z;
-        lvOut.w = 1.0f;
+        lvOut.mV.x = lrMatrix.xAxis.mV.x * lvPoint.mV.x + lrMatrix.yAxis.mV.x * lvPoint.mV.y
+                + lrMatrix.zAxis.mV.x * lvPoint.mV.z + lrMatrix.wAxis.mV.x;
+        lvOut.mV.y = lrMatrix.xAxis.mV.y * lvPoint.mV.x + lrMatrix.yAxis.mV.y * lvPoint.mV.y
+                + lrMatrix.zAxis.mV.y * lvPoint.mV.z + lrMatrix.wAxis.mV.y;
+        lvOut.mV.z = lrMatrix.xAxis.mV.z * lvPoint.mV.x + lrMatrix.yAxis.mV.z * lvPoint.mV.y
+                + lrMatrix.zAxis.mV.z * lvPoint.mV.z + lrMatrix.wAxis.mV.z;
+        lvOut.mV.w = 1.0f;
         return lvOut;
     }
 
@@ -125,13 +125,13 @@ namespace
     {
         const Vector4* lpRows = lrMatrix.maRows;
         Vector4 lvOut;
-        lvOut.x = lpRows[0].x * lvPoint.x + lpRows[1].x * lvPoint.y
-                + lpRows[2].x * lvPoint.z + lpRows[3].x;
-        lvOut.y = lpRows[0].y * lvPoint.x + lpRows[1].y * lvPoint.y
-                + lpRows[2].y * lvPoint.z + lpRows[3].y;
-        lvOut.z = lpRows[0].z * lvPoint.x + lpRows[1].z * lvPoint.y
-                + lpRows[2].z * lvPoint.z + lpRows[3].z;
-        lvOut.w = 1.0f;
+        lvOut.mV.x = lpRows[0].mV.x * lvPoint.mV.x + lpRows[1].mV.x * lvPoint.mV.y
+                + lpRows[2].mV.x * lvPoint.mV.z + lpRows[3].mV.x;
+        lvOut.mV.y = lpRows[0].mV.y * lvPoint.mV.x + lpRows[1].mV.y * lvPoint.mV.y
+                + lpRows[2].mV.y * lvPoint.mV.z + lpRows[3].mV.y;
+        lvOut.mV.z = lpRows[0].mV.z * lvPoint.mV.x + lpRows[1].mV.z * lvPoint.mV.y
+                + lpRows[2].mV.z * lvPoint.mV.z + lpRows[3].mV.z;
+        lvOut.mV.w = 1.0f;
         return lvOut;
     }
 }
@@ -163,16 +163,16 @@ void ICEController::ToBubble()
 
     // The two take points (w == 0). Element value getter is the keyed GetValueFloat.
     Vector4 lvFrom;
-    lvFrom.x = mEditTake.GetValueFloat(0, lu16Key);
-    lvFrom.y = mEditTake.GetValueFloat(1, lu16Key);
-    lvFrom.z = mEditTake.GetValueFloat(2, lu16Key);
-    lvFrom.w = 0.0f;
+    lvFrom.mV.x = mEditTake.GetValueFloat(0, lu16Key);
+    lvFrom.mV.y = mEditTake.GetValueFloat(1, lu16Key);
+    lvFrom.mV.z = mEditTake.GetValueFloat(2, lu16Key);
+    lvFrom.mV.w = 0.0f;
 
     Vector4 lvTo;
-    lvTo.x = mEditTake.GetValueFloat(3, lu16Key);
-    lvTo.y = mEditTake.GetValueFloat(4, lu16Key);
-    lvTo.z = mEditTake.GetValueFloat(5, lu16Key);
-    lvTo.w = 0.0f;
+    lvTo.mV.x = mEditTake.GetValueFloat(3, lu16Key);
+    lvTo.mV.y = mEditTake.GetValueFloat(4, lu16Key);
+    lvTo.mV.z = mEditTake.GetValueFloat(5, lu16Key);
+    lvTo.mV.w = 0.0f;
 
     // Reference spaces: element 30 names the "from" space, element 31 the "to" space.
     const u8 lu8FromSpace = static_cast<u8>(mEditTake.GetValueInt(30));
@@ -189,9 +189,9 @@ void ICEController::ToBubble()
     // Project both points and take the world-space difference (the look direction).
     const Vector4 lvWorldFrom = TransformPointAffine(lFromToWorld, lvFrom);
     const Vector4 lvWorldTo   = TransformPointAffine(lToToWorld, lvTo);
-    const f32 lfDx = lvWorldFrom.x - lvWorldTo.x;
-    const f32 lfDy = lvWorldFrom.y - lvWorldTo.y;
-    const f32 lfDz = lvWorldFrom.z - lvWorldTo.z;
+    const f32 lfDx = lvWorldFrom.mV.x - lvWorldTo.mV.x;
+    const f32 lfDy = lvWorldFrom.mV.y - lvWorldTo.mV.y;
+    const f32 lfDz = lvWorldFrom.mV.z - lvWorldTo.mV.z;
 
     // Heading: yaw = atan2(D.x, D.z). ICEMath::ATan(f32 lfY, f32 lfX) returns
     // atan2(lfY, lfX), so the heading is ATan(lfDx, lfDz) (lfY = D.x, lfX = D.z).
@@ -241,10 +241,10 @@ void ICEController::FromBubble()
 
     const f32 lfRadiusCosPitch = mfBubbleRadius * lfCosPitch;
     Vector4 lvBubbleDir;
-    lvBubbleDir.x = lfRadiusCosPitch * lfSinYaw;
-    lvBubbleDir.y = mfBubbleRadius   * lfSinPitch;
-    lvBubbleDir.z = lfRadiusCosPitch * lfCosYaw;
-    lvBubbleDir.w = 0.0f;
+    lvBubbleDir.mV.x = lfRadiusCosPitch * lfSinYaw;
+    lvBubbleDir.mV.y = mfBubbleRadius   * lfSinPitch;
+    lvBubbleDir.mV.z = lfRadiusCosPitch * lfCosYaw;
+    lvBubbleDir.mV.w = 0.0f;
 
     // Seed the destination-orientation scratch with identity (overwritten below).
     Matrix4 lDestOrient;
@@ -261,10 +261,10 @@ void ICEController::FromBubble()
     {
         // Anchor = world "to" point (elements 3,4,5) in the space element 31 names.
         Vector4 lvAnchor;
-        lvAnchor.x = mEditTake.GetValueFloat(3, lu16Key);
-        lvAnchor.y = mEditTake.GetValueFloat(4, lu16Key);
-        lvAnchor.z = mEditTake.GetValueFloat(5, lu16Key);
-        lvAnchor.w = 0.0f;
+        lvAnchor.mV.x = mEditTake.GetValueFloat(3, lu16Key);
+        lvAnchor.mV.y = mEditTake.GetValueFloat(4, lu16Key);
+        lvAnchor.mV.z = mEditTake.GetValueFloat(5, lu16Key);
+        lvAnchor.mV.w = 0.0f;
 
         const u8 lu8AnchorSpace = static_cast<u8>(mEditTake.GetValueInt(31));
         const Matrix44Affine lAnchorToWorld =
@@ -278,24 +278,24 @@ void ICEController::FromBubble()
 
         // target = anchor + D, expressed in the destination orientation.
         Vector4 lvTarget;
-        lvTarget.x = lvWorldAnchor.x + lvBubbleDir.x;
-        lvTarget.y = lvWorldAnchor.y + lvBubbleDir.y;
-        lvTarget.z = lvWorldAnchor.z + lvBubbleDir.z;
-        lvTarget.w = 0.0f;
+        lvTarget.mV.x = lvWorldAnchor.mV.x + lvBubbleDir.mV.x;
+        lvTarget.mV.y = lvWorldAnchor.mV.y + lvBubbleDir.mV.y;
+        lvTarget.mV.z = lvWorldAnchor.mV.z + lvBubbleDir.mV.z;
+        lvTarget.mV.w = 0.0f;
         const Vector4 lvLocal = TransformPointMatrix4(lDestOrient, lvTarget);
 
-        lpAuthor->SetKeyElementValue(0, lvLocal.x);
-        lpAuthor->SetKeyElementValue(1, lvLocal.y);
-        lpAuthor->SetKeyElementValue(2, lvLocal.z);
+        lpAuthor->SetKeyElementValue(0, lvLocal.mV.x);
+        lpAuthor->SetKeyElementValue(1, lvLocal.mV.y);
+        lpAuthor->SetKeyElementValue(2, lvLocal.mV.z);
         return;
     }
 
     // orient clear: anchor = world "from" point (elements 0,1,2) in space element 30.
     Vector4 lvAnchor;
-    lvAnchor.x = mEditTake.GetValueFloat(0, lu16Key);
-    lvAnchor.y = mEditTake.GetValueFloat(1, lu16Key);
-    lvAnchor.z = mEditTake.GetValueFloat(2, lu16Key);
-    lvAnchor.w = 0.0f;
+    lvAnchor.mV.x = mEditTake.GetValueFloat(0, lu16Key);
+    lvAnchor.mV.y = mEditTake.GetValueFloat(1, lu16Key);
+    lvAnchor.mV.z = mEditTake.GetValueFloat(2, lu16Key);
+    lvAnchor.mV.w = 0.0f;
 
     const u8 lu8AnchorSpace = static_cast<u8>(mEditTake.GetValueInt(30));
     const Matrix44Affine lAnchorToWorld =
@@ -309,15 +309,15 @@ void ICEController::FromBubble()
 
     // target = anchor - D, expressed in the destination orientation.
     Vector4 lvTarget;
-    lvTarget.x = lvWorldAnchor.x - lvBubbleDir.x;
-    lvTarget.y = lvWorldAnchor.y - lvBubbleDir.y;
-    lvTarget.z = lvWorldAnchor.z - lvBubbleDir.z;
-    lvTarget.w = 0.0f;
+    lvTarget.mV.x = lvWorldAnchor.mV.x - lvBubbleDir.mV.x;
+    lvTarget.mV.y = lvWorldAnchor.mV.y - lvBubbleDir.mV.y;
+    lvTarget.mV.z = lvWorldAnchor.mV.z - lvBubbleDir.mV.z;
+    lvTarget.mV.w = 0.0f;
     const Vector4 lvLocal = TransformPointMatrix4(lDestOrient, lvTarget);
 
-    lpAuthor->SetKeyElementValue(3, lvLocal.x);
-    lpAuthor->SetKeyElementValue(4, lvLocal.y);
-    lpAuthor->SetKeyElementValue(5, lvLocal.z);
+    lpAuthor->SetKeyElementValue(3, lvLocal.mV.x);
+    lpAuthor->SetKeyElementValue(4, lvLocal.mV.y);
+    lpAuthor->SetKeyElementValue(5, lvLocal.mV.z);
 }
 
 } // namespace ICE

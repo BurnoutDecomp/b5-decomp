@@ -24,7 +24,7 @@
 //
 // ROUNDING (scratch/CRASHPARITY_0922/ROUNDING_RULE.md): scalar fmuls / fadds / fsubs round once each
 // (rule 4); vmaddfp / vnmsubfp lanes are FUSED (rule 3, std::fma); vmsum3fp128 is one rounding of
-// the f64 sum (rule 1); the vrsqrtefp estimate is modelled as the correctly rounded 1/sqrt (rule 5).
+// the f64 sum (rule 1); the vrsqrtefp estimate uses the native hardware instruction.
 // Every fsel clamp is spelled through rw::math::fpu::Min / Max / Clamp, which ARE the fsel forms
 // (the DWARF names those same helpers at these sites).
 // ============================================================================
@@ -153,10 +153,10 @@ void ICECameraMover::Construct(s32 /*liViewIndex*/, ICECameraAnchor* lpCar, ICEC
 
     for (s32 liRow = 0; liRow < 4; ++liRow)
     {
-        mWorldToCamera.maRows[liRow].x = (liRow == 0) ? 1.0f : 0.0f;
-        mWorldToCamera.maRows[liRow].y = (liRow == 1) ? 1.0f : 0.0f;
-        mWorldToCamera.maRows[liRow].z = (liRow == 2) ? 1.0f : 0.0f;
-        mWorldToCamera.maRows[liRow].w = 0.0f;
+        mWorldToCamera.maRows[liRow].mV.x = (liRow == 0) ? 1.0f : 0.0f;
+        mWorldToCamera.maRows[liRow].mV.y = (liRow == 1) ? 1.0f : 0.0f;
+        mWorldToCamera.maRows[liRow].mV.z = (liRow == 2) ? 1.0f : 0.0f;
+        mWorldToCamera.maRows[liRow].mV.w = 0.0f;
     }
 
     // stb 1, 4(camera). FLAG (the setter's polarity): see ICECamera::SetHideOverlay.
@@ -274,16 +274,16 @@ void ICECameraMover::UpdateFrameEnd(f32 lfTimeStep)
 void ICECameraMover::UpdateTransformationMatrix(f32 /*lfTimeStep*/)
 {
     Vector3 lEye;
-    lEye.x = GetElementFloat(mpTake, E_ICE_EYE_X);
-    lEye.y = GetElementFloat(mpTake, E_ICE_EYE_Y);
-    lEye.z = GetElementFloat(mpTake, E_ICE_EYE_Z);
-    lEye.w = 0.0f;
+    lEye.mV.x = GetElementFloat(mpTake, E_ICE_EYE_X);
+    lEye.mV.y = GetElementFloat(mpTake, E_ICE_EYE_Y);
+    lEye.mV.z = GetElementFloat(mpTake, E_ICE_EYE_Z);
+    lEye.mV.w = 0.0f;
 
     Vector3 lLook;
-    lLook.x = GetElementFloat(mpTake, E_ICE_LOOK_X);
-    lLook.y = GetElementFloat(mpTake, E_ICE_LOOK_Y);
-    lLook.z = GetElementFloat(mpTake, E_ICE_LOOK_Z);
-    lLook.w = 0.0f;
+    lLook.mV.x = GetElementFloat(mpTake, E_ICE_LOOK_X);
+    lLook.mV.y = GetElementFloat(mpTake, E_ICE_LOOK_Y);
+    lLook.mV.z = GetElementFloat(mpTake, E_ICE_LOOK_Z);
+    lLook.mV.w = 0.0f;
 
     const CameraSpaceHandler& lrSpace = mpCar->GetSpace();
 
@@ -311,28 +311,28 @@ void ICECameraMover::UpdateTransformationMatrix(f32 /*lfTimeStep*/)
     const Vector3& lrY = lLookAt.yAxis;
 
     Vector4& lrRow0 = mWorldToCamera.maRows[0];
-    lrRow0.x = std::fma(lrY.x, lfSin, lrX.x * lfCos);
-    lrRow0.y = std::fma(lrY.y, lfSin, lrX.y * lfCos);
-    lrRow0.z = std::fma(lrY.z, lfSin, lrX.z * lfCos);
-    lrRow0.w = std::fma(lrY.w, lfSin, lrX.w * lfCos);
+    lrRow0.mV.x = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lrY.mV.x, lfSin, lrX.mV.x * lfCos);
+    lrRow0.mV.y = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lrY.mV.y, lfSin, lrX.mV.y * lfCos);
+    lrRow0.mV.z = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lrY.mV.z, lfSin, lrX.mV.z * lfCos);
+    lrRow0.mV.w = BrnDirector::Camera::Utils::ConsoleVpu::MultiplyAdd(lrY.mV.w, lfSin, lrX.mV.w * lfCos);
 
     Vector4& lrRow1 = mWorldToCamera.maRows[1];
-    lrRow1.x = (lrY.x * lfCos) - (lrX.x * lfSin);
-    lrRow1.y = (lrY.y * lfCos) - (lrX.y * lfSin);
-    lrRow1.z = (lrY.z * lfCos) - (lrX.z * lfSin);
-    lrRow1.w = (lrY.w * lfCos) - (lrX.w * lfSin);
+    lrRow1.mV.x = (lrY.mV.x * lfCos) - (lrX.mV.x * lfSin);
+    lrRow1.mV.y = (lrY.mV.y * lfCos) - (lrX.mV.y * lfSin);
+    lrRow1.mV.z = (lrY.mV.z * lfCos) - (lrX.mV.z * lfSin);
+    lrRow1.mV.w = (lrY.mV.w * lfCos) - (lrX.mV.w * lfSin);
 
     Vector4& lrRow2 = mWorldToCamera.maRows[2];
-    lrRow2.x = lLookAt.zAxis.x;
-    lrRow2.y = lLookAt.zAxis.y;
-    lrRow2.z = lLookAt.zAxis.z;
-    lrRow2.w = lLookAt.zAxis.w;
+    lrRow2.mV.x = lLookAt.zAxis.mV.x;
+    lrRow2.mV.y = lLookAt.zAxis.mV.y;
+    lrRow2.mV.z = lLookAt.zAxis.mV.z;
+    lrRow2.mV.w = lLookAt.zAxis.mV.w;
 
     Vector4& lrRow3 = mWorldToCamera.maRows[3];
-    lrRow3.x = lLookAt.wAxis.x;
-    lrRow3.y = lLookAt.wAxis.y;
-    lrRow3.z = lLookAt.wAxis.z;
-    lrRow3.w = lLookAt.wAxis.w;
+    lrRow3.mV.x = lLookAt.wAxis.mV.x;
+    lrRow3.mV.y = lLookAt.wAxis.mV.y;
+    lrRow3.mV.z = lLookAt.wAxis.mV.z;
+    lrRow3.mV.w = lLookAt.wAxis.mV.w;
 }
 
 // ============================================================================
@@ -362,10 +362,10 @@ void ICECameraMover::UpdateForwardVector(f32 lfTimeStep)
     const f32 fDrift   = 0.0f;   // the 0.0 splat (flt_82001CC0)
 
     Vector3 v;
-    v.x = 0.0f;
-    v.y = 0.0f;
-    v.z = 0.0f;
-    v.w = 0.0f;
+    v.mV.x = 0.0f;
+    v.mV.y = 0.0f;
+    v.mV.z = 0.0f;
+    v.mV.w = 0.0f;
 
     const Vector3 lFwd = mpCar->GetForwardVector();
 
@@ -373,36 +373,30 @@ void ICECameraMover::UpdateForwardVector(f32 lfTimeStep)
     if (!(fDot >= 0.0f))
     {
         const f32 lfScale = fDot * KF_DOT_FLIP;
-        v.x = (v.x + lFwd.x) * lfScale;
-        v.y = (v.y + lFwd.y) * lfScale;
-        v.z = (v.z + lFwd.z) * lfScale;
-        v.w = (v.w + lFwd.w) * lfScale;
+        v.mV.x = (v.mV.x + lFwd.mV.x) * lfScale;
+        v.mV.y = (v.mV.y + lFwd.mV.y) * lfScale;
+        v.mV.z = (v.mV.z + lFwd.mV.z) * lfScale;
+        v.mV.w = (v.mV.w + lFwd.mV.w) * lfScale;
     }
 
-    // ICEMath::Normalize as the console inlines it.
-    const f32 lfLengthSquared = BrnDirector::Camera::Utils::ConsoleVpu::Dot3(v, v);
-    f32 lfReciprocal = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfLengthSquared)));   // vrsqrtefp
+    // The original keeps all four lanes through the hardware estimate and
+    // both Newton refinements, including the zero-vector NaN behavior.
+    const __vector4 lvLengthSquared = __vmsum3fp(v.mV, v.mV);
+    const __vector4 lvOne = XMVectorReplicate(KF_ONE);
+    const __vector4 lvHalf = XMVectorReplicate(KF_HALF);
+    __vector4 lvEstimate = __vrsqrtefp(lvLengthSquared);
     for (s32 liStep = 0; liStep < 2; ++liStep)
     {
-        const f32 lfSquare   = lfReciprocal * lfReciprocal;
-        const f32 lfHalf     = lfReciprocal * KF_HALF;
-        const f32 lfResidual = BrnDirector::Camera::Utils::ConsoleVpu::NegativeMultiplySubtract(
-            lfLengthSquared, lfSquare, KF_ONE);
-        lfReciprocal = std::fma(lfHalf, lfResidual, lfReciprocal);
+        const __vector4 lvSquare = __vmulfp(lvEstimate, lvEstimate);
+        const __vector4 lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+        const __vector4 lvResidual = __vnmsubfp(lvLengthSquared, lvSquare, lvOne);
+        lvEstimate = __vmaddfp(lvHalfEstimate, lvResidual, lvEstimate);
     }
-    Vector3 lNormal;
-    lNormal.x = v.x * lfReciprocal;
-    lNormal.y = v.y * lfReciprocal;
-    lNormal.z = v.z * lfReciprocal;
-    lNormal.w = v.w * lfReciprocal;
+    const __vector4 lvNormal = __vmulfp(v.mV, lvEstimate);
+    const __vector4 lvBlended = __vmaddfp(lvNormal, XMVectorReplicate(fDrift), lFwd.mV);
+    v.mV = __vmulfp(lvBlended, XMVectorReplicate(KF_ONE - fDrift));
 
-    const f32 lfKeep = KF_ONE - fDrift;
-    v.x = std::fma(lNormal.x, fDrift, lFwd.x) * lfKeep;
-    v.y = std::fma(lNormal.y, fDrift, lFwd.y) * lfKeep;
-    v.z = std::fma(lNormal.z, fDrift, lFwd.z) * lfKeep;
-    v.w = std::fma(lNormal.w, fDrift, lFwd.w) * lfKeep;
-
-    const f32 lafDesired[3] = { v.x, v.y, v.z };
+    const f32 lafDesired[3] = { v.mV.x, v.mV.y, v.mV.z };
     for (s32 liComponent = 0; liComponent < 3; ++liComponent)
     {
         Cubic1D& lrCubic = mForward.maComponents[liComponent];

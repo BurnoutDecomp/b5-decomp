@@ -45,14 +45,10 @@ namespace ICE
 // ---------------------------------------------------------------------------
 static void AffineToMatrix4(Matrix4* lpDst, const Matrix44Affine& lrSrc)
 {
-    lpDst->maRows[0].x = lrSrc.xAxis.x; lpDst->maRows[0].y = lrSrc.xAxis.y;
-    lpDst->maRows[0].z = lrSrc.xAxis.z; lpDst->maRows[0].w = lrSrc.xAxis.w;
-    lpDst->maRows[1].x = lrSrc.yAxis.x; lpDst->maRows[1].y = lrSrc.yAxis.y;
-    lpDst->maRows[1].z = lrSrc.yAxis.z; lpDst->maRows[1].w = lrSrc.yAxis.w;
-    lpDst->maRows[2].x = lrSrc.zAxis.x; lpDst->maRows[2].y = lrSrc.zAxis.y;
-    lpDst->maRows[2].z = lrSrc.zAxis.z; lpDst->maRows[2].w = lrSrc.zAxis.w;
-    lpDst->maRows[3].x = lrSrc.wAxis.x; lpDst->maRows[3].y = lrSrc.wAxis.y;
-    lpDst->maRows[3].z = lrSrc.wAxis.z; lpDst->maRows[3].w = lrSrc.wAxis.w;
+    lpDst->maRows[0].SetVector(lrSrc.xAxis.GetVector());
+    lpDst->maRows[1].SetVector(lrSrc.yAxis.GetVector());
+    lpDst->maRows[2].SetVector(lrSrc.zAxis.GetVector());
+    lpDst->maRows[3].SetVector(lrSrc.wAxis.GetVector());
 }
 
 // ---------------------------------------------------------------------------
@@ -80,10 +76,10 @@ static void TransformPoint(f32* lpfPoint, const Matrix4& lrMatrix)
 
     for (s32 liLane = 0; liLane < 4; ++liLane)
     {
-        const f32* lpfRow0 = &lrMatrix.maRows[0].x;
-        const f32* lpfRow1 = &lrMatrix.maRows[1].x;
-        const f32* lpfRow2 = &lrMatrix.maRows[2].x;
-        const f32* lpfRow3 = &lrMatrix.maRows[3].x;
+        const f32* lpfRow0 = &lrMatrix.maRows[0].mV.x;
+        const f32* lpfRow1 = &lrMatrix.maRows[1].mV.x;
+        const f32* lpfRow2 = &lrMatrix.maRows[2].mV.x;
+        const f32* lpfRow3 = &lrMatrix.maRows[3].mV.x;
         lpfPoint[liLane] = lfX * lpfRow0[liLane]
                          + lfY * lpfRow1[liLane]
                          + lfZ * lpfRow2[liLane]

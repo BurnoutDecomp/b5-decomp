@@ -26,6 +26,7 @@
 #include "rw/core/stdc/stdc.h"                        // rw::core::stdc::Vsprintf
 
 #include "SDKs/XboxMath/XMVectorATan.h"          // XboxMath::XMVectorATan (the XDK routine ATan calls, 0x821F0A70)
+#include "SDKs/XboxMath/XMVectorSinCos.h"
 #include <cmath>     // std::sin / std::cos / std::sqrt / std::fma (XMVector stand-ins; the ATan refinement)
 #include <cstdarg>   // va_list (StringPrintf)
 
@@ -95,7 +96,7 @@ namespace
 
 void Angle::SetFromVecFloat(VecFloat lvfRadians)
 {
-    const f32 lfRadians = lvfRadians.x;
+    const f32 lfRadians = lvfRadians.mV.x;
 
     // radians -> degrees -> revolutions -> angle units: three separately rounded multiplies.
     const f32 lfDegrees = lfRadians * KF_RADIANS_TO_DEGREES;
@@ -119,8 +120,8 @@ Angle::Angle(f32 lfRadians)
     : mu16Angle(0)
 {
     VecFloat lvfRadians;
-    lvfRadians.x = lfRadians;
-    lvfRadians.y = lvfRadians.z = lvfRadians.w = lfRadians;
+    lvfRadians.mV.x = lfRadians;
+    lvfRadians.mV.y = lvfRadians.mV.z = lvfRadians.mV.w = lfRadians;
     SetFromVecFloat(lvfRadians);
 }
 
@@ -157,25 +158,18 @@ s32 Max(s32 liA, s32 liB)
 // ===========================================================================
 // Sin  @0x8252AA50
 //
-// Sine of a fixed-point ICE::Angle. Zero short-circuits to 0. Otherwise:
+// Sine of a fixed-point ICE::Angle. Zero selects 0 radians. Otherwise:
 //   revs    = angle * (1/65536)     (flt_8207ACF0 = 0.000015258789)
 //   radians = revs  * TWO_PI        (flt_82001C94 = 6.2831855)
 //   result  = XMVectorSin(radians)
 //
-// FLAG: the XMVectorSin polynomial coefficient table lives in platform .rodata not
-// present in the exports -- it cannot be recovered byte-exactly. Modelled with the
-// C library sinf, which is the same mathematical function the polynomial
-// approximates (semantic parity).
 // ===========================================================================
 f32 Sin(Angle leAngle)
 {
     const u16 lu16Angle = (u16)leAngle;
-    if (lu16Angle == 0)
-    {
-        return 0.0f;
-    }
-    const f32 lfRadians = ((f32)lu16Angle * (1.0f / 65536.0f)) * TWO_PI;
-    return std::sin(lfRadians);   // FLAG: XMVectorSin poly table un-recovered
+    const f32 lfRadians = lu16Angle == 0 ? 0.0f :
+        ((f32)lu16Angle * (1.0f / 65536.0f)) * TWO_PI;
+    return ::XMVectorSin(::XMVectorReplicate(lfRadians)).x;
 }
 
 // ===========================================================================
@@ -198,12 +192,6 @@ f32 Cos(Angle leAngle)
 // The angle is scaled to radians exactly as in Sin (zero short-circuits the scale
 // to 0 radians), then the X360 XMVectorSinCos polynomial fills both lanes.
 //
-// FLAG: the SinCos coefficient tables (unk_82000C60 / unk_82000C00 / unk_82000C10 /
-// unk_82000BD0 / unk_82000BE0 / unk_82000BF0 / unk_82000C20 and the XMVector
-// permute masks unk_82CDA400 / unk_82CDA3C0) are platform .rodata NOT in the
-// per-function exports -- un-recoverable. The structure (single radians input ->
-// two outputs) is reconstructed; the polynomial is modelled with the C library
-// sinf/cosf (semantic parity with the intended result).
 // ===========================================================================
 void SinCos(f32* lpfSin, f32* lpfCos, Angle leAngle)
 {
@@ -213,9 +201,7 @@ void SinCos(f32* lpfSin, f32* lpfCos, Angle leAngle)
     {
         lfRadians = ((f32)lu16Angle * (1.0f / 65536.0f)) * TWO_PI;
     }
-    // FLAG: XMVectorSinCos polynomial tables un-recovered; library trig stands in.
-    *lpfSin = std::sin(lfRadians);
-    *lpfCos = std::cos(lfRadians);
+    XboxMath::XMVectorSinCos(lpfSin, lpfCos, lfRadians);
 }
 
 // ===========================================================================
@@ -316,8 +302,8 @@ f32 Sqrt(f32 lfValue)
 void Identity(Matrix4* lpMatrix)
 {
     static const Vector4 kaIdentity[4] = {
-        { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f },
-        { 0.0f, 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }
+        Vector4(1.0f, 0.0f, 0.0f, 0.0f), Vector4(0.0f, 1.0f, 0.0f, 0.0f),
+        Vector4(0.0f, 0.0f, 1.0f, 0.0f), Vector4(0.0f, 0.0f, 0.0f, 1.0f)
     };
     for (int liRow = 0; liRow < 4; ++liRow)
         lpMatrix->maRows[liRow] = kaIdentity[liRow];
@@ -346,16 +332,16 @@ void InvertTransformationMatrix(Matrix4* lpDst, const Matrix4* lpSrc)
     const Vector4& lrT = lpSrc->maRows[3];   // translation
 
     // Inverse rotation = transpose of the 3x3 basis.
-    Vector4 lInvX = { lrX.x, lrY.x, lrZ.x, 0.0f };
-    Vector4 lInvY = { lrX.y, lrY.y, lrZ.y, 0.0f };
-    Vector4 lInvZ = { lrX.z, lrY.z, lrZ.z, 0.0f };
+    Vector4 lInvX(lrX.mV.x, lrY.mV.x, lrZ.mV.x, 0.0f);
+    Vector4 lInvY(lrX.mV.y, lrY.mV.y, lrZ.mV.y, 0.0f);
+    Vector4 lInvZ(lrX.mV.z, lrY.mV.z, lrZ.mV.z, 0.0f);
 
     // Inverse translation = -(t . R) projected onto each original basis axis.
     Vector4 lInvT;
-    lInvT.x = -(lrT.x * lrX.x + lrT.y * lrX.y + lrT.z * lrX.z);
-    lInvT.y = -(lrT.x * lrY.x + lrT.y * lrY.y + lrT.z * lrY.z);
-    lInvT.z = -(lrT.x * lrZ.x + lrT.y * lrZ.y + lrT.z * lrZ.z);
-    lInvT.w = 1.0f;
+    lInvT.mV.x = -(lrT.mV.x * lrX.mV.x + lrT.mV.y * lrX.mV.y + lrT.mV.z * lrX.mV.z);
+    lInvT.mV.y = -(lrT.mV.x * lrY.mV.x + lrT.mV.y * lrY.mV.y + lrT.mV.z * lrY.mV.z);
+    lInvT.mV.z = -(lrT.mV.x * lrZ.mV.x + lrT.mV.y * lrZ.mV.y + lrT.mV.z * lrZ.mV.z);
+    lInvT.mV.w = 1.0f;
 
     lpDst->maRows[0] = lInvX;
     lpDst->maRows[1] = lInvY;
@@ -400,8 +386,8 @@ Angle DegToAng(f32 lfDegrees)
 
     Angle leResult;
     VecFloat lvfRadians;
-    lvfRadians.x = lfRadians;
-    lvfRadians.y = lvfRadians.z = lvfRadians.w = lfRadians;
+    lvfRadians.mV.x = lfRadians;
+    lvfRadians.mV.y = lvfRadians.mV.z = lvfRadians.mV.w = lfRadians;
     leResult.SetFromVecFloat(lvfRadians);
     return leResult;
 }
