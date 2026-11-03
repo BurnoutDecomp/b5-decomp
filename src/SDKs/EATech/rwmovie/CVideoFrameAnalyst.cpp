@@ -114,17 +114,11 @@ int CVideoFrameAnalyst::detectHighTextureBand(s32* pOutBand)
 {
     const s32* lpHistogram = maActivityHistogram;
 
-    // A single weighted bin term: (weight * count) truncated to 32 bits, then zero-extended.
-    auto lWeightedBin = [](u32 luWeight, s32 liCount) -> u64
-    {
-        return static_cast<u64>(static_cast<u32>(luWeight * static_cast<u32>(liCount)));
-    };
-
     // Seed the running total and the window with bins 1..9 (weights 1..9).
     u64 luTotal = 0;
     for (u32 luWeight = 1; luWeight <= 9; ++luWeight)
     {
-        luTotal += lWeightedBin(luWeight, lpHistogram[luWeight]);
+        luTotal += static_cast<u64>(static_cast<u32>(luWeight * static_cast<u32>(lpHistogram[luWeight])));
     }
 
     u64 luWindow   = luTotal;
@@ -133,9 +127,9 @@ int CVideoFrameAnalyst::detectHighTextureBand(s32* pOutBand)
 
     for (u32 luPos = 10; luPos < 3072; ++luPos)
     {
-        u64 luAdd = lWeightedBin(luPos, lpHistogram[luPos]);
+        u64 luAdd = static_cast<u64>(static_cast<u32>(luPos * static_cast<u32>(lpHistogram[luPos])));
         luTotal  += luAdd;
-        luWindow += luAdd - lWeightedBin(luPos - 10, lpHistogram[luPos - 10]);
+        luWindow += luAdd - static_cast<u64>(static_cast<u32>((luPos - 10) * static_cast<u32>(lpHistogram[luPos - 10])));
         if (luWindow > luBest)
         {
             luBest    = luWindow;

@@ -333,16 +333,6 @@ int CWMVideoPerceptionModel::decideApplyIDquanBlocks(int iMBRow, int iMBCol, int
             }
         }
     }
-    auto lReference = [this, lbTemporal](s32 iIndex) -> CVideoFrameAnalyst*
-    {
-        if (lbTemporal)
-        {
-            return reinterpret_cast<CVideoFrameAnalyst*>(
-                static_cast<uintptr_t>(static_cast<u32>(mpTemporal[iIndex])));
-        }
-        return (&mpFrameAnalysts)[iIndex];
-    };
-
     const u32 luSadLimit = (KU_IDQUAN_SAD_WEIGHT * luNumRef * (luNumRef - 1)) / 2;
 
     int liPasses = 1;
@@ -368,7 +358,7 @@ int CWMVideoPerceptionModel::decideApplyIDquanBlocks(int iMBRow, int iMBCol, int
             liIndex -= miNumAnalysts;
         }
 
-        const u32* lpActivity  = lpAnalystWords(lReference(liIndex)->muField04);
+        const u32* lpActivity  = lpAnalystWords((lbTemporal ? reinterpret_cast<CVideoFrameAnalyst*>(static_cast<uintptr_t>(static_cast<u32>(mpTemporal[liIndex]))) : (&mpFrameAnalysts)[liIndex])->muField04);
         const u32  luRowOffset = 2 * static_cast<u32>(miWidthInBlocks);
         const u32  luThreshold = static_cast<u32>(miTextureThreshold);
 
@@ -424,8 +414,8 @@ int CWMVideoPerceptionModel::decideApplyIDquanBlocks(int iMBRow, int iMBCol, int
             liNext -= miNumAnalysts;
         }
 
-        const u8* lpAverages     = lpAnalystBytes(lReference(liIndex)->muField08);
-        const u8* lpNextAverages = lpAnalystBytes(lReference(liNext)->muField08);
+        const u8* lpAverages     = lpAnalystBytes((lbTemporal ? reinterpret_cast<CVideoFrameAnalyst*>(static_cast<uintptr_t>(static_cast<u32>(mpTemporal[liIndex]))) : (&mpFrameAnalysts)[liIndex])->muField08);
+        const u8* lpNextAverages = lpAnalystBytes((lbTemporal ? reinterpret_cast<CVideoFrameAnalyst*>(static_cast<uintptr_t>(static_cast<u32>(mpTemporal[liNext]))) : (&mpFrameAnalysts)[liNext])->muField08);
         const int liDelta = static_cast<int>(lpNextAverages[luAvgIndex]) - static_cast<int>(lpAverages[luAvgIndex]);
         luSad += static_cast<u32>(std::abs(liDelta)) * (luNumRef - luPair - 1);
         liIndex = liNext;
