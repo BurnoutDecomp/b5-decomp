@@ -43,20 +43,20 @@ namespace ICE
         // R in the high byte through A in the low byte -- the X360 fctidz/insrwi pack.
         inline CgsDev::RGBA PackColourRGBA(const Vector4& lrColour)
         {
-            const u32 luR = (u32)(s32)ClampColourChannel(lrColour.x);
-            const u32 luG = (u32)(s32)ClampColourChannel(lrColour.y);
-            const u32 luB = (u32)(s32)ClampColourChannel(lrColour.z);
-            const u32 luA = (u32)(s32)ClampColourChannel(lrColour.w);
+            const u32 luR = (u32)(s32)ClampColourChannel(lrColour.mV.x);
+            const u32 luG = (u32)(s32)ClampColourChannel(lrColour.mV.y);
+            const u32 luB = (u32)(s32)ClampColourChannel(lrColour.mV.z);
+            const u32 luA = (u32)(s32)ClampColourChannel(lrColour.mV.w);
             return (CgsDev::RGBA)((luR << 24) | (luG << 16) | (luB << 8) | luA);
         }
 
         inline Vector2 MakeVector2(f32 lfX, f32 lfY)
         {
             Vector2 lv2Result;
-            lv2Result.x = lfX;
-            lv2Result.y = lfY;
-            lv2Result.z = 0.0f;
-            lv2Result.w = 0.0f;
+            lv2Result.mV.x = lfX;
+            lv2Result.mV.y = lfY;
+            lv2Result.mV.z = 0.0f;
+            lv2Result.mV.w = 0.0f;
             return lv2Result;
         }
     }
@@ -76,10 +76,10 @@ namespace ICE
         const Vector3& lrV2 = lpPoly->maVertices[2];
 
         // 1st Draw2DBox vector: vertex 0 + the ICE menu anchor shift.
-        const Vector2 lv2Corner = MakeVector2(lrV0.x + (f32)KI_ICE_MENU_SHIFT_X,
-                                              lrV0.y + (f32)KI_ICE_MENU_SHIFT_Y);
+        const Vector2 lv2Corner = MakeVector2(lrV0.mV.x + (f32)KI_ICE_MENU_SHIFT_X,
+                                              lrV0.mV.y + (f32)KI_ICE_MENU_SHIFT_Y);
         // 2nd Draw2DBox vector: the V2 - V0 delta, with NO menu shift.
-        const Vector2 lv2Extent = MakeVector2(lrV2.x - lrV0.x, lrV2.y - lrV0.y);
+        const Vector2 lv2Extent = MakeVector2(lrV2.mV.x - lrV0.mV.x, lrV2.mV.y - lrV0.mV.y);
 
         // Box colour = clamp(*lpColour0) packed to RGBA. The X360 reads ONLY colour0
         // (the 255.0 it subtracts is the [0,255] clamp upper bound, not a 2nd colour
@@ -116,7 +116,7 @@ namespace ICE
     void ICERender::ScrPrintf(s32 liX, s32 liY, f32 lfSize, const char* lpcFormat, ...)
     {
         Vector4 lWhite;
-        lWhite.x = lWhite.y = lWhite.z = lWhite.w = 255.0f;
+        lWhite.mV.x = lWhite.mV.y = lWhite.mV.z = lWhite.mV.w = 255.0f;
 
         va_list lArgs;
         va_start(lArgs, lpcFormat);
@@ -133,11 +133,11 @@ namespace ICE
     void ICERender::ScrShadowPrintf(s32 liX, s32 liY, f32 lfSize, const char* lpcFormat, ...)
     {
         Vector4 lWhite;
-        lWhite.x = lWhite.y = lWhite.z = lWhite.w = 255.0f;
+        lWhite.mV.x = lWhite.mV.y = lWhite.mV.z = lWhite.mV.w = 255.0f;
 
         Vector4 lShadow;          // black, opaque (RGB 0, A 255)
-        lShadow.x = lShadow.y = lShadow.z = 0.0f;
-        lShadow.w = 255.0f;
+        lShadow.mV.x = lShadow.mV.y = lShadow.mV.z = 0.0f;
+        lShadow.mV.w = 255.0f;
 
         va_list lArgs;
 
