@@ -50,10 +50,7 @@ namespace BrnGui
         miNumUsedItems  = 0;
         mbItemInfoValid = false;
         mCurrentTime    = 0.0f;
-        mBasePosition.x = 0.0f;
-        mBasePosition.y = 0.0f;
-        mBasePosition.z = 0.0f;
-        mBasePosition.w = 0.0f;
+        mBasePosition.SetZero();
         mfAnimationTime     = KF_DEFAULT_ANIMATION_TIME;
         mfDelayBetweenItems = KF_DEFAULT_DELAY_BETWEEN_ITEMS;
         mfSpacer            = KF_DEFAULT_SPACER;
@@ -154,7 +151,7 @@ namespace BrnGui
     {
         CGS_ASSERT(mbItemInfoValid, "Cannot transition in before all the item info is set");
 
-        f32 lfX = mBasePosition.x;
+        f32 lfX = mBasePosition.mV.x;
 
         f32 lfTotalWidth = 0.0f;
         for (s32 liItem = 0; liItem < miNumUsedItems; ++liItem)
@@ -196,20 +193,11 @@ namespace BrnGui
     void HelpBar::Update(CgsGui::AnimChannelData::Time lTime)
     {
         UpdateItemInfo();
-        s32 liTraceCompleted = 0;
         for (s32 liItem = 0; liItem < miNumUsedItems; ++liItem)
         {
             maAnimators[liItem].Update(lTime);
-            if (lbTrace)
-                ++liTraceCompleted;
         }
         mCurrentTime = lTime;
-        if (lbTrace)
-        {
-            bool lbWidthsReady = miNumUsedItems > 0 && miNumUsedItems <= KI_MAX_HELPITEMS;
-            for (s32 liItem = 0; lbWidthsReady && liItem < miNumUsedItems; ++liItem)
-                lbWidthsReady = mafItemWidths[liItem] != KF_ITEMWIDTH_INVALID;
-        }
     }
 
     // ------------------------------------------------------------ InvalidateItemInfo

@@ -88,7 +88,7 @@ namespace
     const f32 KF_MAP_BASE_ASPECT_RATIO = 1.7777778f;   // flt_82F2693C, the 16:9 map base
     // ARTIST K_MAP_LONG_DISPLAY_RECT, initialized at 0x82C53A10 and consumed at
     // OnlineSelectRoute::CalculateZoomFactor @0x8248F4AC.
-    const Vector2 K_MAP_LONG_DISPLAY_RECT = { 591.0f, 411.0f, 0.0f, 0.0f };
+    const Vector2 K_MAP_LONG_DISPLAY_RECT(591.0f, 411.0f);
     const f32 KF_ROUTE_METRES_TO_SECONDS = 0.03f;      // 1 / average route speed
     const f32 KF_SECONDS_ROUND_VALUE = 5.0f;
     const char KAC_APT_TRANSITION[] = "apt_Transition";
@@ -248,9 +248,9 @@ namespace
         mpStateInterface->RegisterForEvents(maiEventToObserve, 10);
 
         MainMapComponent::MainMapParameterBundle lMapParameters;
-        const Vector4 lViewRect = { 0.0f, 0.175f, 1.0f, 0.84027779f };
+        const Vector4 lViewRect(0.0f, 0.175f, 1.0f, 0.84027779f);
         lMapParameters.mv4ViewRect = lViewRect;
-        const Vector4 lPaddingRect = { 0.4f, 0.18055555f, 0.95f, 0.83333331f };
+        const Vector4 lPaddingRect(0.4f, 0.18055555f, 0.95f, 0.83333331f);
         lMapParameters.mv4PaddingRect = lPaddingRect;
         lMapParameters.meMapType      = GuiEventRenderMainMap::E_MAPTYPE_MAINMAP;
         mMainMapComponent.Construct(mpStateInterface, &lMapParameters);
@@ -286,7 +286,7 @@ namespace
         mbWaitingForRoute         = false;
         mbEditingNewCheckpoint    = false;
         mbRouteEdited             = false;
-        const rw::math::vpu::Vector2 lWorldCenter = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::Vector2 lWorldCenter(0.0f, 0.0f);
         mv2WorldCenterPoint = lWorldCenter;
         mRandom.Construct();
         // ARTIST repeats this active latch after Prepare; it is a real store on the map
@@ -1217,10 +1217,7 @@ namespace
                 GuiEventUpdateSatNav::SatNavIconInfo lIconInfo;
                 mpGuiCache->GetLandmarkInfoAtPositionInList(liIndex, &lIconInfo);
                 const Vector4& lrv4Position = lIconInfo.GetPositionLane();
-                lv3Position.x = lrv4Position.x;
-                lv3Position.y = lrv4Position.y;
-                lv3Position.z = lrv4Position.z;
-                lv3Position.w = lrv4Position.w;
+                lv3Position.SetVector(lrv4Position.GetVector());
             }
             return lv3Position;
         }
@@ -1247,10 +1244,7 @@ namespace
             mSelectRoutes.GetCheckpointLandmark(mSelectRoutes.GetCurrentRound(), liIndex);
         mpGuiCache->GetLandmarkInfoFromIndex(lLandmark, &lIconInfo);
         const Vector4& lrv4Position = lIconInfo.GetPositionLane();
-        lv3Position.x = lrv4Position.x;
-        lv3Position.y = lrv4Position.y;
-        lv3Position.z = lrv4Position.z;
-        lv3Position.w = lrv4Position.w;
+        lv3Position.SetVector(lrv4Position.GetVector());
         return lv3Position;
     }
 
@@ -1263,17 +1257,17 @@ namespace
         for (s32 liIndex = 1; liIndex < liNumCoords; ++liIndex)
         {
             const Vector2 lv2Point = MapTransform::Flatten(GetZoomBoundingBoxCoord(liIndex));
-            if (lv2Point.x < lv2Min.x) lv2Min.x = lv2Point.x;
-            if (lv2Point.y < lv2Min.y) lv2Min.y = lv2Point.y;
-            if (lv2Point.x > lv2Max.x) lv2Max.x = lv2Point.x;
-            if (lv2Point.y > lv2Max.y) lv2Max.y = lv2Point.y;
+            if (lv2Point.mV.x < lv2Min.mV.x) lv2Min.mV.x = lv2Point.mV.x;
+            if (lv2Point.mV.y < lv2Min.mV.y) lv2Min.mV.y = lv2Point.mV.y;
+            if (lv2Point.mV.x > lv2Max.mV.x) lv2Max.mV.x = lv2Point.mV.x;
+            if (lv2Point.mV.y > lv2Max.mV.y) lv2Max.mV.y = lv2Point.mV.y;
         }
 
         Vector2 lv2Centre;
-        lv2Centre.x = (lv2Min.x + lv2Max.x) * 0.5f;
-        lv2Centre.y = (lv2Min.y + lv2Max.y) * 0.5f;
-        lv2Centre.z = lv2Centre.x;
-        lv2Centre.w = lv2Centre.x;
+        lv2Centre.mV.x    = (lv2Min.mV.x + lv2Max.mV.x) * 0.5f;
+        lv2Centre.mV.y    = (lv2Min.mV.y + lv2Max.mV.y) * 0.5f;
+        lv2Centre.mV.u[2] = lv2Centre.mV.x;
+        lv2Centre.mV.u[3] = lv2Centre.mV.x;
         mMainMapComponent.SetDesiredWorldCentre(lv2Centre);
 
         return MapTransform::CalculateZoomFactor(lv2Min, lv2Max,
@@ -1310,10 +1304,7 @@ namespace
                     mSelectRoutes.GetCurrentlySelectedCheckpointLandmark(mSelectRoutes.GetCurrentRound());
                 mpGuiCache->GetLandmarkInfoFromIndex(lLandmark, &lIconInfo);
                 const Vector4& lrv4Position = lIconInfo.GetPositionLane();
-                lv3WorldPosition.x = lrv4Position.x;
-                lv3WorldPosition.y = lrv4Position.y;
-                lv3WorldPosition.z = lrv4Position.z;
-                lv3WorldPosition.w = lrv4Position.w;
+                lv3WorldPosition.SetVector(lrv4Position.GetVector());
                 mCursor.SetActive();
                 lbPlaceCursor = true;
             }
@@ -1409,10 +1400,7 @@ namespace
                 lSetTrackerEvent.mTrackedDataInfo[liCheckpoint];
             lrItem.meIconType = GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK;
             const Vector4& lv4Position = lIconInfo.GetPositionLane();
-            lrItem.mv3Position.x = lv4Position.x;
-            lrItem.mv3Position.y = lv4Position.y;
-            lrItem.mv3Position.z = lv4Position.z;
-            lrItem.mv3Position.w = lv4Position.w;
+            lrItem.mv3Position.SetVector(lv4Position.GetVector());
             lrItem.mTargetJunctionId = 0;
             const s16 li16LandmarkIndex = lIconInfo.GetLandmarkIndexHalf();
             lrItem.mTargetLandmarkIndex = static_cast<u16>(li16LandmarkIndex);
