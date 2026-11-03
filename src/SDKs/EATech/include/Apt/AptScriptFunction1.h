@@ -59,22 +59,18 @@ class AptValue;
 // extra dword before the constant pool / bytecode), so it has its own record type;
 // this struct is the v1 form only.
 // ---------------------------------------------------------------------------
-// The GUIAPT64 48-byte serialized record (8-aligned; verified against the libapt2
-// converter's DefineFunction writer + the XB1 _parseStream walk). The two trailing
-// qwords carry serialized signatures (0x98765432 / 0x12345678) that the runtime
-// DefineFunction handler overwrites with the live constant-pool registers.
+// ARTIST DefineFunction: 24-byte header followed by the bytecode.
 struct AptScriptFunction1ByteCode
 {
-    const char*  mpName;               // +0x00  the function's name (movie string; "" for anonymous)
-    uint32_t     mnNumArguments;       // +0x08  declared parameter count (xb1 parse: dword cmp; zero pad follows)
-    uint32_t     mPad0C;               // +0x0C  writer align-8 pad (zero-filled)
-    const char** mppArgumentNames;     // +0x10  array[mnNumArguments] of qword name pointers
-    uint32_t     mnByteCodeSize;       // +0x18  length in bytes of the action bytecode (u32; libapt2 Write<u32>)
-    uint32_t     mPad1C;               // +0x1C  writer align-8 pad (zero-filled)
-    const char** mppConstantPool;      // +0x20  sig1 slot -> the constant-pool table (patched in)
-    int64_t      mnConstantPoolCount;  // +0x28  sig2 slot -> number of entries (patched in)
-    uint8_t      maByteCode[1];        // +0x30  the action bytecode (flexible; mnByteCodeSize bytes)
+    const char* mpName;                // ARTIST +0x00
+    int32_t mnNumArguments;           // +0x04
+    const char** mppArgumentNames;     // +0x08, four-byte entries
+    uint32_t mnByteCodeSize;           // +0x0C
+    int32_t mnConstantPoolCount;       // +0x10
+    AptValue** mppConstantPool;      // +0x14
+    uint8_t maByteCode[1];             // +0x18
 };
+CGS_STATIC_ASSERT((offsetof(AptScriptFunction1ByteCode, maByteCode) == 0x18), "ARTIST function record");
 
 class AptScriptFunction1 : public AptScriptFunctionBase
 {
@@ -102,7 +98,7 @@ public:
     virtual void*           GetByteCodeBase() const;  // @0x82AF1360
     virtual int32_t         GetByteCodeSize() const;  // @0x82AF1370
     virtual AptConstantPool GetConstantPool() const;  // @0x82AF1380
-    virtual void            SetArgument(int32_t nArgIndex, AptValue* pValue);  // @0x82AF5338
+    virtual void            SetArgument(AptValue* pValue, int32_t nArgIndex);  // @0x82AF5338
 
     // Deep-copy this function value, re-binding the copy to pCIH.   @ 0x82B024A8
     virtual AptScriptFunction1* Duplicate(AptValue* pCIH) const;

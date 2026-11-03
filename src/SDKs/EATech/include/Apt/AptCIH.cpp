@@ -522,7 +522,7 @@ int AptCIH::tick()
         AptRenderItem* pRenderItem = pInst->mpRenderItem;   // v14 = v6[1]
         // A stopped render item (mFlags bit 0x08000000; console *(v14+24) bit27) holds
         // frame 0; else step to the next frame.
-        if ((pRenderItem->mFlags & 0x10u) != 0)   // x64 bit 4 (X360 bit27)
+        if ((pRenderItem->mFlags & 0x08000000u) != 0)   // x64 bit 4 (X360 bit27)
             pInst->mnGotoFrame = 0;
         else
             ++pInst->mnGotoFrame;

@@ -93,7 +93,7 @@ struct AptCharacterAnimation
     // base), tears down the imports, and stamps the freed characters. nBase is the
     // load base (r4). Returns the last sub-result. Body in the .cpp.
     // nBase is the 32-bit load address.
-    void* Unresolve(intptr_t nBase);
+    void Unresolve(intptr_t nBase);
 
     // @0x82AD92A8 (PS3 @0x7E37A4) -- restore the init-indicator list (declared above
     // as ResetInitIndicators); body now in the .cpp.
@@ -101,11 +101,11 @@ struct AptCharacterAnimation
     // --- .apt load resolution (D) ------------------------------------------
     // @0x80EEC4 -- resolve this (serialised) movie root against the load base:
     // clear the resolve scratch + run the recursive Fixup. Returns the root.
-    AptCharacterAnimation* Resolve(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+    void Resolve(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
     // @0x82AFF268 (PS3 @0xF44D40) -- relocate the serialised movie root IN PLACE against
     // the load base (the aptDataOffset memory address). The remaining PC
     // record accesses in this body still require native recovery.
-    AptCharacterAnimation* Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+    void Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
     // @0x82AFF... (PS3 @0xF44894, DecFIGS AptCharacterAnimation::Link(AptCharacter*, void*)) --
     // bind a just-loaded movie root into the scene (AptLoader::Update's state 3->4 import/
     // cross-reference resolution pass). Console args a2/a3 are never read; kept as the raw

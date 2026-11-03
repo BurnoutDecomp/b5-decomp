@@ -210,25 +210,17 @@ void AptActionInterpreter::_FunctionAptActionInitObject(AptActionInterpreter* pI
 void AptActionInterpreter::_FunctionAptActionDefineFunction(AptActionInterpreter* pInterp,
                                                             LocalContextT* pContext)
 {
-    // The GUIAPT64 record begins at the 8-aligned PC; the body follows its 48-byte
-    // header (verified vs the libapt2 writer + _parseStream).
+    // ARTIST aligns the PC to four bytes and consumes the 24-byte header.
     AptScriptFunction1ByteCode* pByteCode = reinterpret_cast<AptScriptFunction1ByteCode*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
 
-    // Advance the PC past the header (48 bytes) + the inline bytecode body.
+    // Advance past the native header and inline bytecode body.
     pContext->mpProgramCounter =
-        reinterpret_cast<const unsigned char*>(pByteCode) + 48 + pByteCode->mnByteCodeSize;
+        pByteCode->maByteCode + pByteCode->mnByteCodeSize;
 
-    // Patch the interpreter's constant-pool registers (the movie string dictionary)
-    // into the record. The console writes the interpreter's +0x40 slot into the
-    // record's +0x10 field and +0x44 into +0x14; the record is the x64 _parseStream
-    // transcode of the serialized .apt function record, where the dictionary base is
-    // a native 8-byte pointer -- kept in the pointer-typed mppConstantPool and the
-    // count in mnConstantPoolCount (phase-0 native-8 regime; the literal console
-    // slot order would truncate the pointer).
-    pByteCode->mppConstantPool     = reinterpret_cast<const char**>(
-                                         reinterpret_cast<uintptr_t>(pInterp->mpConstantPool));
+    // ARTIST stores the count then the table pointer in the native record.
     pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
+    pByteCode->mppConstantPool = pInterp->mpConstantPool;
 
     EAStringC name(pByteCode->mpName);   // console InitFromBuffer(&v10, mpName)
 
@@ -269,16 +261,15 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
                                                              LocalContextT* pContext)
 {
     AptScriptFunction2ByteCode* pByteCode = reinterpret_cast<AptScriptFunction2ByteCode*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
 
-    // Advance the PC past the GUIAPT64 header (48 bytes) + the inline bytecode body.
+    // Advance past the native 28-byte header and inline bytecode body.
     pContext->mpProgramCounter =
-        reinterpret_cast<const unsigned char*>(pByteCode) + 48 + pByteCode->mnBodyLength;
+        pByteCode->maByteCode + pByteCode->mnBodyLength;
 
-    // Patch the constant-pool registers in (same x64 pointer-width note as v1).
-    pByteCode->mppConstantPool     = reinterpret_cast<const char**>(
-                                         reinterpret_cast<uintptr_t>(pInterp->mpConstantPool));
+    // ARTIST stores the count then the table pointer.
     pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
+    pByteCode->mppConstantPool = pInterp->mpConstantPool;
 
     // x64 FIX (2026-07-05): sizeof, not the console's 52 -- see the v1 handler note.
     void* pMem = AptScriptFunction2::operator new(sizeof(AptScriptFunction2));
@@ -317,7 +308,7 @@ void AptActionInterpreter::_FunctionAptActionDefineDictionary(AptActionInterpret
     // AptValue** table @+8}; advance the PC by 16 (the form _parseStream produces --
     // the table entries are live AptValue*s post-parse).
     const uintptr_t* pPair = reinterpret_cast<const uintptr_t*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPair + 2);
 
     // mnConstantPoolCount (console +0x40) <- the entry count; mpConstantPool (console +0x44) <- the

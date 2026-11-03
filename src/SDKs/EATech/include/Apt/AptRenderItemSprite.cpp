@@ -18,7 +18,7 @@ AptRenderItemSprite::AptRenderItemSprite(AptCharacter* pCharacter, int nCreatedO
 {
     // Console encoding: rotate-mask of mFlags, 0x140000 == 5 << 18 (the X360
     // render-type field); the x64 twin is the bits-8-13 field, XB1-verified.
-    mFlags |= 0x500u;   // sprite=5; x64 type field (XB1 factory 0x14083C0D0 `or 500h`)
+    mFlags = (mFlags & ~0xFC0000u) | 0x140000u;   // sprite=5; ARTIST type field bits 18-23
 }
 
 // Clone copy-ctor @0x82AEC040 -- base copy + the instance name + (re)stamp the
@@ -28,7 +28,7 @@ AptRenderItemSprite::AptRenderItemSprite(const AptRenderItemSprite* pSource, int
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
     , mInstanceName(pSource->mInstanceName)
 {
-    mFlags = (mFlags & ~0x3F00u) | 0x500u;   // sprite=5; x64 type field
+    mFlags = (mFlags & ~0xFC0000u) | 0x140000u;   // sprite=5; ARTIST type field bits 18-23
 }
 
 // Clone @0x82AEC890 -- pool-allocate a fresh sprite copy-initialised from this one.

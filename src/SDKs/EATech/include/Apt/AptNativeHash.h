@@ -67,7 +67,7 @@ struct AptHashItem
 // `friend class StringPool`), not a namespace. Only its saConstant key (the
 // __proto__ key) is needed here; the mini declaration below matches the full
 // class (AptString/StringPool.h), whose saConstant is defined in AptStringPool.cpp.
-class StringPool { public: enum { KU_CONSTANT_COUNT = 88 }; static EAStringC saConstant[KU_CONSTANT_COUNT]; };
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 extern const EAStringC gAptKeyPrototype;
 
 struct AptNativeHash

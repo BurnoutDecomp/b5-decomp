@@ -994,7 +994,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
             const bool bSpriteOrAnim = (nTag == 5 || nTag == 9);
 
             // An AS-owned sprite/animation node (render-item bit27) is left as-is.
-            if (bSpriteOrAnim && (pRenderItem->mFlags & 0x10u) != 0u)
+            if (bSpriteOrAnim && (pRenderItem->mFlags & 0x08000000u) != 0u)
             {
                 pNode = pNode->GetDisplayListNext();
                 pSrc  = pSrc->mpNext;
@@ -1334,7 +1334,7 @@ int AptCIH::AssociateInstToClass()
     const bool bSpriteLike = (nTag == 5u || nTag == 16u);
     if (!bSpriteLike && (pInst->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
         return 0;
-    if ((pInst->GetRenderItem()->mFlags & 0x10u) != 0u)   // already class-bound (x64 bit 4; X360 bit27)
+    if ((pInst->GetRenderItem()->mFlags & 0x08000000u) != 0u)   // already class-bound (x64 bit 4; X360 bit27)
         return 0;
 
     // ---- the class-binding tail (UN-DEFERRED 2026-07-05: the AS framework is live,

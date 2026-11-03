@@ -76,8 +76,8 @@ struct AptFrameStack;   // SDKs/EATech/include/Apt/AptFrameStack.h (the captured
 // pointer; modelled here as a by-value POD).
 struct AptConstantPool
 {
-    const char** mppEntries;   // the constant-pool string table
-    int32_t      mnCount;      // number of entries
+    int32_t      mnCount;      // ARTIST first return word
+    AptValue** mppEntries;   // ARTIST second return word
 };
 
 struct AptScriptFunctionBase : public AptObject
@@ -105,7 +105,7 @@ public:
     virtual void*       GetByteCodeBase() const;
     virtual int32_t     GetByteCodeSize() const;
     virtual AptConstantPool GetConstantPool() const;
-    virtual void        SetArgument(int32_t nArgIndex, AptValue* pValue);
+    virtual void        SetArgument(AptValue* pValue, int32_t nArgIndex);
 
     // Deep-copy this function value, re-binding it to pCIH (used when a closure is
     // captured into a new character context). Returns null if the pool allocation

@@ -220,7 +220,7 @@ AptRenderTreeManager::_AptRenderItemRootList::Get(int nTick)
         // which the prune predicate does not test (that would mis-keep a look-ahead
         // root created this tick with bit 25 clear).
         const bool lbExpired = (nTick - lpItem->GetCreatedOnTick()) >= 0
-                            && (lpItem->mFlags & 0x40u) == 0;   // x64 bit 6 (0x14083B330 `test [rcx+2Ch], 40h`)
+                            && (lpItem->mFlags & 0x02000000u) == 0;   // x64 bit 6 (0x14083B330 `test [rcx+2Ch], 40h`)
         if (!lbExpired)
             break;
 
@@ -755,7 +755,7 @@ AptRenderItem* AptRenderTreeManager::Render_GetRoot(_AptRenderItemRootList** ppH
     // @0x82AE560C-0x82AE5630: aged-in (nTick - mCreatedOnTick >= 0) AND NOT the
     // writable revision (mFlags bit25 clear). When that does NOT hold, return null.
     const bool lbRenderable = (nTick - lpRoot->GetCreatedOnTick()) >= 0
-                           && (lpRoot->mFlags & 0x40u) == 0;   // x64 bit 6 (0x14083B330 `test [rcx+2Ch], 40h`)
+                           && (lpRoot->mFlags & 0x02000000u) == 0;   // x64 bit 6 (0x14083B330 `test [rcx+2Ch], 40h`)
     if (!lbRenderable)
         return 0;
 
