@@ -4,11 +4,8 @@
 #include "GameSource/Effects/Particles/Native/BrnIm3dTexPlusLighting.h" // the borrowed renderer
 #include "GameSource/Effects/BrnEffectsUtils.h"                      // BrnEffects::Utils::SinCosCycles
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [diag] CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h" // shadow::Device
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h" // renderengine::BlendState*
-#include <cstdio>   // [diag] snprintf (the first-draw witness)
-#include <cstdlib>  // [diag] getenv (the per-array draw witness, BRN_DEBRIS_DIAG)
 
 // The two shared render states the debris pass binds (ImmediateMode.cpp), declared
 // `extern void*` exactly as BrnSparkRenderer_Render.cpp / BrnTrailRender.cpp declare theirs.
@@ -63,17 +60,14 @@ namespace Native
     {
         // The bounce-damping base every preset scales. Per-axis: the debris keeps 70% of its
         // horizontal speed and 60% of its vertical speed across a bounce.
-        const rw::math::vpu::Vector3 KV_DEBRIS_BOUNCINESS = { 0.7f, 0.6f, 0.7f, 0.0f };
+        const rw::math::vpu::Vector3 KV_DEBRIS_BOUNCINESS(0.7f, 0.6f, 0.7f);
 
         rw::math::vpu::Vector3 ScaledBounciness(f32 lfScale)
         {
-            { const rw::math::vpu::Vector3 lResult = { KV_DEBRIS_BOUNCINESS.x * lfScale,
-                                           KV_DEBRIS_BOUNCINESS.y * lfScale,
-                                           KV_DEBRIS_BOUNCINESS.z * lfScale,
-                                           KV_DEBRIS_BOUNCINESS.w * lfScale }; return lResult; }
+            return KV_DEBRIS_BOUNCINESS * lfScale;
         }
 
-        const rw::math::vpu::Vector4 KV_DEBRIS_WHITE = { 1.0f, 1.0f, 1.0f, 1.0f };
+        const rw::math::vpu::Vector4 KV_DEBRIS_WHITE(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
     extern const BrnDebrisArrayParams _gaDebrisArrayParams[eDebrisArray_Max] =
@@ -86,7 +80,7 @@ namespace Native
           KV_DEBRIS_WHITE,                  ScaledBounciness( 0.9f ),    0.1f,   0.8f },
         // eDebrisArray_Dark
         { "lowres_debris.rf3",     400,  1.0f,  0.01f, 0.5f, 0.2f,
-          { 0.5f, 0.5f, 0.5f, 1.0f },       ScaledBounciness( 0.8f ),    0.1f,   0.8f },
+          rw::math::vpu::Vector4(0.5f, 0.5f, 0.5f, 1.0f), ScaledBounciness( 0.8f ),    0.1f,   0.8f },
         // eDebrisArray_HighDetail
         { "highres_debris_02.rf3", 100, 10.0f,  0.2f,  1.0f, 0.2f,
           KV_DEBRIS_WHITE,                  ScaledBounciness( 0.5f ),    0.1f,   0.8f },
@@ -163,19 +157,6 @@ namespace Native
                                         Vector3           /*lAmbientColour*/,
                                         Vector3           lEye)
     {
-        if (mpRenderer == 0)
-        {
-            // A null renderer is a crash, not a missing effect: BeginRendering binds the
-            // program pair. Same guard, same reason, as SparkRenderer::Dispatch's.
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog("[debrispass] BeginRender SKIPPED: mpRenderer is null\n");
-            }
-            return;
-        }
-
         mpRenderer->BeginRendering();
         mpRenderer->SetState(reinterpret_cast<const CgsGraphics::BlendState*>(mpBlendState));
         ImDeviceSetRasterizerState(gpImDebrisRasterizerState);       // dword_83010F44
@@ -185,11 +166,7 @@ namespace Native
         mpRenderer->SetViewProjection(lViewProjection);
         mpRenderer->SetEye(lEye);
 
-        Vector3 lNegatedLightDirection;
-        lNegatedLightDirection.x = -lLightDirection.x;
-        lNegatedLightDirection.y = -lLightDirection.y;
-        lNegatedLightDirection.z = -lLightDirection.z;
-        lNegatedLightDirection.w = -lLightDirection.w;
+        Vector3 lNegatedLightDirection = -lLightDirection;
         mpRenderer->SetLightDirection(lNegatedLightDirection);
 
         mpRenderer->SetLightColour(lLightColour);
@@ -262,15 +239,11 @@ namespace Native
         enum EVFXMeshCollectionDword
         {
             E_MESHCOLLECTION_MESHHELPER   = 33,  // 0x84 -- MeshHelper* (rebased at FixUp)
-            E_MESHCOLLECTION_NUM_INDICES  = 34,  // 0x88 -- muNumIndices
-            E_MESHCOLLECTION_NUM_VERTICES = 35   // 0x8C -- muNumVertices ([diag] the draw witness only)
+            E_MESHCOLLECTION_NUM_INDICES  = 34   // 0x88 -- muNumIndices
         };
 
         inline f32 MinF(f32 lfA, f32 lfB) { return (lfA < lfB) ? lfA : lfB; }
 
-        // [DIAG] BRN_DEBRIS_DIAG=1 -- NOT IN THE X360 BINARY. The per-array draw witness's arm and budget.
-        const u32 KU_DEBRIS_DRAW_WITNESS_LINES = 60u;
-        u32 suDebrisDrawWitnessLines = 0;
     }
 
 }

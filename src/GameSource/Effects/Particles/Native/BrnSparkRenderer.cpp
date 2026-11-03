@@ -25,7 +25,6 @@
 
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // the one NOT-RECONSTRUCTED announcement
 #include <cmath>                                            // std::sqrt (the console's fsqrts)
 
 namespace BrnParticle
@@ -115,14 +114,6 @@ void SparkFrameDataSet::Update(rw::math::vpu::Matrix44Affine::InParam lViewMatri
 
     if (lfDeltaTime == 0.0f)
     {
-        static bool sbLogged = false;
-        if (!sbLogged)
-        {
-            sbLogged = true;
-            CgsDev::Log::WriteToLog(
-                "[NOT RECONSTRUCTED] SparkFrameDataSet::Update's lfDeltaTime == 0 arm "
-                "(X360 0x82283C5C, the debug ring re-derivation)\n");
-        }
         return;
     }
 
@@ -184,14 +175,6 @@ void SparkArray::SparkBank::Construct(FXBucketManager* lpBucketManager, bool lbI
 //     their old values, so the recycled bucket keeps reporting a full particle count while its
 //     slots are overwritten from the start. That is the console's behaviour, not an omission.
 // =============================================================================================
-// [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Which ARM of GetNewSpark each call takes:
-// a frozen live count cannot say whether the head was full, the cap was reached or the manager
-// was empty, and those are three different defects.
-u32 gauSparkBankHead   = 0;   // took the head bucket
-u32 gauSparkBankAlloc  = 0;   // borrowed a new bucket
-u32 gauSparkBankRecycle= 0;   // recycled the oldest
-u32 gauSparkBankNull   = 0;   // returned nothing
-
 BrnSpark* SparkArray::SparkBank::GetNewSpark(f32 lfBirthTime)
 {
     SparkBucket* lpHeadBucket = mpBuckets;
@@ -199,7 +182,6 @@ BrnSpark* SparkArray::SparkBank::GetNewSpark(f32 lfBirthTime)
     if (lpHeadBucket != 0
         && lpHeadBucket->mu16NextPositionInBucket < SparkBucket::KuMaxNumParticles)
     {
-        ++gauSparkBankHead;   // [diag]
         return lpHeadBucket->GetNewParticle(lfBirthTime);
     }
 
@@ -209,10 +191,8 @@ BrnSpark* SparkArray::SparkBank::GetNewSpark(f32 lfBirthTime)
         SparkBucket* const lpNewBucket = mpBucketManager->AllocateBucket<SparkBucket>();
         if (lpNewBucket == 0)
         {
-            ++gauSparkBankNull;   // [diag]
             return 0;
         }
-        ++gauSparkBankAlloc;   // [diag]
 
         SparkBucket* const lpOldHead = mpBuckets;
         lpNewBucket->mpNextBucket = lpOldHead;
@@ -236,10 +216,8 @@ BrnSpark* SparkArray::SparkBank::GetNewSpark(f32 lfBirthTime)
 
     if (lpHeadBucket == 0)
     {
-        ++gauSparkBankNull;   // [diag]
         return 0;
     }
-    ++gauSparkBankRecycle;   // [diag]
 
     // At the cap: walk to the list tail (the oldest bucket) and recycle it.
     SparkBucket* lpOldestBucket = lpHeadBucket;
@@ -425,10 +403,10 @@ void SparkArray::UpdateParams(f32 lfGravityStrength, f32 lfBounceStrength, f32 l
     maColours[2] = lColour2;
     maColours[3] = lColour3;
 
-    mafLifetimes[0] = lLifetimes.x;
-    mafLifetimes[1] = lLifetimes.y;
-    mafLifetimes[2] = lLifetimes.z;
-    mafLifetimes[3] = lLifetimes.w;
+    mafLifetimes[0] = lLifetimes.GetX().GetFloat();
+    mafLifetimes[1] = lLifetimes.GetY().GetFloat();
+    mafLifetimes[2] = lLifetimes.GetZ().GetFloat();
+    mafLifetimes[3] = lLifetimes.GetW().GetFloat();
 
     mfGravityStrength           = lfGravityStrength;
     mfBounceStrength            = lfBounceStrength;
@@ -517,11 +495,11 @@ void SparkArray::SpawnSpark(rw::math::vpu::Vector3::InParam lPosition,
     const f32 lfScaleDelta    = lfTerminalScale - lfInitialScale;
     const f32 lfDragDuration  = mfDragDuration;               // +0x88
     const f32 lfGravity       = mfGravityStrength;            // +0x70
-    const f32 lfVelocityY     = lVelocity.y;                  // lfs f0, arg_34 -- v2's homed y
+    const f32 lfVelocityY     = lVelocity.GetY().GetFloat();                  // lfs f0, arg_34 -- v2's homed y
 
     // The SDK Vector3 -> Vector4 widening (w := y) both stores start from.
-    rw::math::vpu::Vector4 lPositionOut = { lPosition.x, lPosition.y, lPosition.z, lPosition.y };
-    rw::math::vpu::Vector4 lVelocityOut = { lVelocity.x, lVelocity.y, lVelocity.z, lVelocity.y };
+    rw::math::vpu::Vector4 lPositionOut(lPosition, lPosition.GetY().GetFloat());
+    rw::math::vpu::Vector4 lVelocityOut(lVelocity, lVelocity.GetY().GetFloat());
 
     const f32 lfHalfGravity = lfGravity * KF_HALF;
 
@@ -544,15 +522,15 @@ void SparkArray::SpawnSpark(rw::math::vpu::Vector3::InParam lPosition,
             const f32 lfNegBounce   = -mfBounceStrength;                          // +0x74
             const f32 lfScaleAtTime = (lfScaleDelta * lfRampTime) + (lfDragDuration * lfInitialScale);
 
-            lVelocityOut.w = (lfVelocityY * lfNegBounce)
+            lVelocityOut.SetW((lfVelocityY * lfNegBounce)
                            + ((((lfNegBounce - KF_ONE) * lfRampTime) * lfDragDuration * lfGravity)
-                              / lfScaleAtTime);
+                              / lfScaleAtTime));
 
-            const f32 lfVelocityDelta = lfVelocityY - lVelocityOut.w;
-            lPositionOut.w = lPosition.y
+            const f32 lfVelocityDelta = lfVelocityY - lVelocityOut.GetW().GetFloat();
+            lPositionOut.SetW(lPosition.GetY().GetFloat()
                            + ((lfVelocityDelta * lfRampTime) * lfInitialScale)
                            + ((((lfVelocityDelta * lfScaleDelta) * lfRampTime) * lfRampTime)
-                              / (lfDragDuration * KF_TWO));
+                              / (lfDragDuration * KF_TWO)));
             lbSolved = true;
         }
     }
@@ -571,10 +549,10 @@ void SparkArray::SpawnSpark(rw::math::vpu::Vector3::InParam lPosition,
             // untouched on this path), i.e. the velocity scale at t. Phase 1 spells the same
             // quantity as (scaleDelta*t + duration*init) / duration, so both arms are
             // (-bounce - 1) * t * gravity / scale(t).
-            lVelocityOut.w = ((((lfNegBounce - KF_ONE) / lfTerminalScale) * lfTermTime) * lfGravity)
-                           + (lfVelocityY * lfNegBounce);
+            lVelocityOut.SetW(((((lfNegBounce - KF_ONE) / lfTerminalScale) * lfTermTime) * lfGravity)
+                           + (lfVelocityY * lfNegBounce));
 
-            lPositionOut.w = lPosition.y + (lfRampArea * (lVelocityOut.w - lfVelocityY));
+            lPositionOut.SetW(lPosition.GetY().GetFloat() + (lfRampArea * (lVelocityOut.GetW().GetFloat() - lfVelocityY)));
         }
     }
 

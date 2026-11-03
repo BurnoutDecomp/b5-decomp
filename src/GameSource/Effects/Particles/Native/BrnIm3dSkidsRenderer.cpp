@@ -26,10 +26,8 @@
 
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] CgsDev::Log::WriteToLog
 
 #include <cstring>   // memcpy (the raw shader-constant row copies)
-#include <cstdio>    // [diag] snprintf (the skid-constant resolve line)
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
 // surface BrnIm3d.cpp / BrnSunCorona.cpp / BrnPostFxBloom.cpp declare (defined in
@@ -85,26 +83,6 @@ namespace BrnGraphics
             renderengine::ProgramBuffer::GetVariableHandleByName(
                 lpVertexProgram, reinterpret_cast<const u8*>("gEndColour"), &mEndColourStateHandle);
 
-            // [DIAG] DID THE THREE CONSTANTS RESOLVE? mu8RegisterCount == 0 is
-            // BeginShaderStates sends a zero-count handle to a DISCARD row -- so an
-            // unresolved gWorldViewProj means SetTransform writes the matrix into a bin and
-            // the strips transform by whatever c0..c3 happen to hold. That is invisible
-            // both in the log and in the picture, which is why it is worth one line.
-            // DELETE-WHEN-STABLE.
-            char lacMsg[280];
-            _snprintf(lacMsg, sizeof(lacMsg),
-                "[trailpass] skid constants: wvp{set=%u idx=%u type=%u count=%u} "
-                "start{set=%u idx=%u type=%u count=%u} end{set=%u idx=%u type=%u count=%u} "
-                "vars=%u\n",
-                mWorldViewProjStateHandle.mu8RegisterSet, mWorldViewProjStateHandle.mu8RegisterIndex,
-                mWorldViewProjStateHandle.mu8ShaderType, mWorldViewProjStateHandle.mu8RegisterCount,
-                mStartColourStateHandle.mu8RegisterSet, mStartColourStateHandle.mu8RegisterIndex,
-                mStartColourStateHandle.mu8ShaderType, mStartColourStateHandle.mu8RegisterCount,
-                mEndColourStateHandle.mu8RegisterSet, mEndColourStateHandle.mu8RegisterIndex,
-                mEndColourStateHandle.mu8ShaderType, mEndColourStateHandle.mu8RegisterCount,
-                static_cast<unsigned>(
-                    reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram)->mu16NumVariables));
-            CgsDev::Log::WriteToLog(lacMsg);
         }
     }
 

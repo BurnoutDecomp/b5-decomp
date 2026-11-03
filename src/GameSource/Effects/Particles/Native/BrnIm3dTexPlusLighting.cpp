@@ -15,9 +15,7 @@
 
 #include "GameSource/Effects/Particles/Native/BrnIm3dTexPlusLighting.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::WriteToLog
 
-#include <cstdio>    // [diag] snprintf (the constant-resolve line)
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr): open one shader-constant
 // row for a named program constant and return the write cursor. Shared declaration with the
@@ -70,26 +68,6 @@ namespace BrnGraphics
                 &mShinyParamsStateHandle);
         }
 
-        // [DIAG] DID THE SIX CONSTANTS RESOLVE? mu8RegisterCount == 0 is
-        // GetVariableHandleByName's "not found" answer, and a zero-count handle sends its
-        // shader-state row to a DISCARD bin -- so an unresolved gaWorldTransforms would let
-        // every debris instance transform by whatever c0..c127 happen to hold, which is
-        // invisible both in the log and (until something draws) in the picture.
-        // DELETE-WHEN-STABLE.
-        {
-            char lacMsg[256];
-            _snprintf(lacMsg, sizeof(lacMsg),
-                "[debrispass] worldtex constants: transforms{idx=%u cnt=%u} vp{idx=%u cnt=%u} "
-                "eye{idx=%u cnt=%u} lightdir{idx=%u cnt=%u} lightcol{idx=%u cnt=%u} "
-                "shiny{idx=%u cnt=%u}\n",
-                mTransformArrayStateHandle.mu8RegisterSet,      mTransformArrayStateHandle.mu8RegisterCount,
-                mViewProjectionMatrixStateHandle.mu8RegisterSet, mViewProjectionMatrixStateHandle.mu8RegisterCount,
-                mEyeStateHandle.mu8RegisterSet,                 mEyeStateHandle.mu8RegisterCount,
-                mWorldLightDirectionStateHandle.mu8RegisterSet, mWorldLightDirectionStateHandle.mu8RegisterCount,
-                mLightColourStateHandle.mu8RegisterSet,         mLightColourStateHandle.mu8RegisterCount,
-                mShinyParamsStateHandle.mu8RegisterSet,         mShinyParamsStateHandle.mu8RegisterCount);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
     }
 
     // =====================================================================================
@@ -170,21 +148,21 @@ namespace BrnGraphics
     {
         void* lpShaderState = 0;
         RenderEngineDeviceBeginShaderStates(&mEyeStateHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lEye.x, lEye.y, lEye.z, 1.0f);
+        WriteShaderRow(lpShaderState, lEye.GetX().GetFloat(), lEye.GetY().GetFloat(), lEye.GetZ().GetFloat(), 1.0f);
     }
 
     void Im3dTexPlusLighting::SetLightDirection(Vector3 lDirection)
     {
         void* lpShaderState = 0;
         RenderEngineDeviceBeginShaderStates(&mWorldLightDirectionStateHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lDirection.x, lDirection.y, lDirection.z, 1.0f);
+        WriteShaderRow(lpShaderState, lDirection.GetX().GetFloat(), lDirection.GetY().GetFloat(), lDirection.GetZ().GetFloat(), 1.0f);
     }
 
     void Im3dTexPlusLighting::SetLightColour(Vector3 lColour)
     {
         void* lpShaderState = 0;
         RenderEngineDeviceBeginShaderStates(&mLightColourStateHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lColour.x, lColour.y, lColour.z, 1.0f);
+        WriteShaderRow(lpShaderState, lColour.GetX().GetFloat(), lColour.GetY().GetFloat(), lColour.GetZ().GetFloat(), 1.0f);
     }
 
     void Im3dTexPlusLighting::SetShinyParams(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
