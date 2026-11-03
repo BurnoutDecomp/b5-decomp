@@ -44,9 +44,9 @@ namespace
     Matrix44Affine Matrix44AffineFromEulerXYZ(const Vector3& lrAngles)
     {
         f32 lfSinX, lfCosX, lfSinY, lfCosY, lfSinZ, lfCosZ;
-        XboxMath::XMVectorSinCos(&lfSinX, &lfCosX, lrAngles.x);
-        XboxMath::XMVectorSinCos(&lfSinY, &lfCosY, lrAngles.y);
-        XboxMath::XMVectorSinCos(&lfSinZ, &lfCosZ, lrAngles.z);
+        XboxMath::XMVectorSinCos(&lfSinX, &lfCosX, lrAngles.GetX());
+        XboxMath::XMVectorSinCos(&lfSinY, &lfCosY, lrAngles.GetY());
+        XboxMath::XMVectorSinCos(&lfSinZ, &lfCosZ, lrAngles.GetZ());
 
         // ARTIST 0x8221B860..8E0 performs the matrix products in VMX.
         // Replicated lanes preserve vmulfp/vsubfp/vmaddfp rounding and denormal rules.
@@ -62,20 +62,11 @@ namespace
         const XMVECTOR cosXCosZ = __vmulfp(cosX, cosZ);
 
         Matrix44Affine lResult;
-        lResult.xAxis.x = __vmulfp(cosY, cosZ).x;
-        lResult.xAxis.y = __vmulfp(cosY, sinZ).x;
-        lResult.xAxis.z = -lfSinY;
-        lResult.xAxis.w = 0.0f;
-
-        lResult.yAxis.x = __vsubfp(__vmulfp(sinY, sinXCosZ), cosXSinZ).x;
-        lResult.yAxis.y = __vmaddfp(sinY, sinXSinZ, cosXCosZ).x;
-        lResult.yAxis.z = __vmulfp(cosY, sinX).x;
-        lResult.yAxis.w = 0.0f;
-
-        lResult.zAxis.x = __vmaddfp(sinY, cosXCosZ, sinXSinZ).x;
-        lResult.zAxis.y = __vsubfp(__vmulfp(sinY, cosXSinZ), sinXCosZ).x;
-        lResult.zAxis.z = __vmulfp(cosY, cosX).x;
-        lResult.zAxis.w = 0.0f;
+        lResult.xAxis = Vector3(__vmulfp(cosY, cosZ).x, __vmulfp(cosY, sinZ).x, -lfSinY);
+        lResult.yAxis = Vector3(__vsubfp(__vmulfp(sinY, sinXCosZ), cosXSinZ).x,
+                                __vmaddfp(sinY, sinXSinZ, cosXCosZ).x, __vmulfp(cosY, sinX).x);
+        lResult.zAxis = Vector3(__vmaddfp(sinY, cosXCosZ, sinXSinZ).x,
+                                __vsubfp(__vmulfp(sinY, cosXSinZ), sinXCosZ).x, __vmulfp(cosY, cosX).x);
         return lResult;
     }
 }
@@ -90,8 +81,8 @@ namespace
 void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
 {
     const Vector2 lScreenSize = lpRender->GetVirtualScreenSize();
-    const f32 lfX = lScreenSize.x - lScreenSize.x * KF_X_INSET_FRACTION;
-    f32       lfY = lScreenSize.y * KF_Y_OFFSET_FRACTION;
+    const f32 lfX = lScreenSize.mV.x - lScreenSize.mV.x * KF_X_INSET_FRACTION;
+    f32       lfY = lScreenSize.mV.y * KF_Y_OFFSET_FRACTION;
 
     if (!mbShowCameraPos)
     {
@@ -125,8 +116,8 @@ void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     lfY += KF_LINE_SIZE;
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f %.2f %.2f : LookAt ",
-                     static_cast<f64>(lrInfo.mAt.x), static_cast<f64>(lrInfo.mAt.y),
-                     static_cast<f64>(lrInfo.mAt.z));
+                     static_cast<f64>(lrInfo.mAt.GetX()), static_cast<f64>(lrInfo.mAt.GetY()),
+                     static_cast<f64>(lrInfo.mAt.GetZ()));
     lpRender->DrawAlignedText(lacMessage, lfX, lfY, KF_TEXT_SIZE, KU_TEXT_COLOUR, KF_TEXT_JUSTIFICATION);
 
     CgsCore::SPrintf(lacMessage, KI_MESSAGE_LENGTH, "%.2f : N Clip  ", static_cast<f64>(lrInfo.mfNearClip));
@@ -152,11 +143,7 @@ void DebugComponent::UpdatePanoramaScreenshots(Camera::Camera* lpCamera)
                         static_cast<f32>(miPanoramaStepPitch) * KF_PANORAMA_PITCH_STEP;
     const f32 lfYaw   = static_cast<f32>(miPanoramaStepYaw) * KF_PANORAMA_YAW_STEP;
 
-    Vector3 lAngles;
-    lAngles.x = lfPitch;
-    lAngles.y = lfYaw;
-    lAngles.z = KF_PANORAMA_ROLL;
-    lAngles.w = 0.0f;
+    const Vector3 lAngles(lfPitch, lfYaw, KF_PANORAMA_ROLL);
 
     Matrix44Affine lCameraMatrix = Matrix44AffineFromEulerXYZ(lAngles);
     lCameraMatrix.wAxis = lpCamera->GetTransform().wAxis;

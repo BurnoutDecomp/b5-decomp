@@ -29,7 +29,7 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"              // Utils::CreateLookAt
 #include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"            // ConsoleVpu:: the SDK inlines, rounded as the console
 #include "rw/math/vpu/matrix44affine_operation.h"                      // Mult / InverseOfMatrixWithOrthonormal3x3 / TransformVector
-#include "rw/math/vpu/vector3_operation.h"                             // Vector3 + / - / * and Mult
+#include "rw/math/vpu/vector3_operation.h"                             // rw::math::vpu::Vector3 + / - / * and Mult
 #include "rw/math/fpu/scalar_operation.h"                              // rw::math::fpu::IsZero / Clamp / Max
 
 namespace BrnDirector
@@ -320,7 +320,7 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
         if (IsTweakerAttached())
         {
             // Where the preset's target offset lands on the car (the box size scales it, no centre term).
-            Matrix44Affine lTargetOffset;
+            rw::math::vpu::Matrix44Affine lTargetOffset;
             lTargetOffset.SetIdentity();
             lTargetOffset.Pos() = Mult(mpParameters->mRigParams.mOffsetFromTarget,
                                        lAttachedTo.mAABB.mMax - lAttachedTo.mAABB.mMin);
@@ -350,7 +350,7 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
         mAccelSpring.Update(lfTimestep);
     }
 
-    Matrix44Affine lWork;
+    rw::math::vpu::Matrix44Affine lWork;
     if (mbDetached)
     {
         lWork = mLastAttachedToTransform;
@@ -376,13 +376,13 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
         mPositionLag.Update(mpParameters->mPositionLagParams, lfTimestep, lWork);
     }
 
-    Matrix44Affine lRig;
+    rw::math::vpu::Matrix44Affine lRig;
     if (mbLooking)
     {
         // The looked-at car, in the working frame's space.
-        const Matrix44Affine lInverseWork   = Utils::ConsoleVpu::InverseOfMatrixWithOrthonormal3x3(lWork);
-        const Matrix44Affine lLookedAtLocal = Utils::ConsoleVpu::Mult(mLookingAtRef.GetTransform(lrInfo), lInverseWork);
-        const Vector3        lLookedAtVelocityLocal = Utils::ConsoleVpu::TransformVector(
+        const rw::math::vpu::Matrix44Affine lInverseWork   = Utils::ConsoleVpu::InverseOfMatrixWithOrthonormal3x3(lWork);
+        const rw::math::vpu::Matrix44Affine lLookedAtLocal = Utils::ConsoleVpu::Mult(mLookingAtRef.GetTransform(lrInfo), lInverseWork);
+        const rw::math::vpu::Vector3        lLookedAtVelocityLocal = Utils::ConsoleVpu::TransformVector(
             lInverseWork, mLookingAtRef.GetVehicle(lrInfo).mRaceCarState.mLinearVelocity);
 
         if (mbSnap && mbLooking != mbLookingLast)
@@ -407,7 +407,7 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
     }
 
     mbLookingLast = mbLooking;
-    const Matrix44Affine lCameraTransform = Utils::ConsoleVpu::Mult(lRig, lWork);   // held in v124..v127 below
+    const rw::math::vpu::Matrix44Affine lCameraTransform = Utils::ConsoleVpu::Mult(lRig, lWork);   // held in v124..v127 below
     lrCamera.SetTransform(lCameraTransform);
     lrCamera.ValidateTransformWithDebugInfo();
 
@@ -434,21 +434,21 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
         // vmaddfp onto the running sum (fused), every "-" a vmulfp128 then a vsubfp (0x82243214..0x822432E8 far,
         // 0x82243484..0x82243540 near).
         static u8 lu8Alpha = 7;
-        const Matrix44Affine& lrView = lCameraTransform;
-        const Vector3 lRight = lrView.Right() * KF_TWEAK_DOF_PLANE_HALF_SIZE;
-        const Vector3 lUp    = lrView.Up() * KF_TWEAK_DOF_PLANE_HALF_SIZE;
+        const rw::math::vpu::Matrix44Affine& lrView = lCameraTransform;
+        const rw::math::vpu::Vector3 lRight = lrView.Right() * KF_TWEAK_DOF_PLANE_HALF_SIZE;
+        const rw::math::vpu::Vector3 lUp    = lrView.Up() * KF_TWEAK_DOF_PLANE_HALF_SIZE;
 
         CgsDev::DebugInterface lDebug;
-        const Vector3 lFar      = Utils::ConsoleVpu::MultiplyAdd(lrView.At(), lrTweaked.mfDOFFar, lrView.Pos());
-        const Vector3 lFarLeft  = lFar - lRight;
-        const Vector3 lFarRight = Utils::ConsoleVpu::MultiplyAdd(lrView.Right(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lFar);
+        const rw::math::vpu::Vector3 lFar      = Utils::ConsoleVpu::MultiplyAdd(lrView.At(), lrTweaked.mfDOFFar, lrView.Pos());
+        const rw::math::vpu::Vector3 lFarLeft  = lFar - lRight;
+        const rw::math::vpu::Vector3 lFarRight = Utils::ConsoleVpu::MultiplyAdd(lrView.Right(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lFar);
         lDebug.GetRender().DrawSolidQuad(
             Utils::ConsoleVpu::MultiplyAdd(lrView.Up(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lFarLeft),
             Utils::ConsoleVpu::MultiplyAdd(lrView.Up(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lFarRight),
             lFarRight - lUp, lFarLeft - lUp, (static_cast<CgsDev::RGBA>(lu8Alpha) << 24) | 0x00FF0000u);
-        const Vector3 lNear      = Utils::ConsoleVpu::MultiplyAdd(lrView.At(), lrTweaked.mfDOFNear, lrView.Pos());
-        const Vector3 lNearLeft  = lNear - lRight;
-        const Vector3 lNearRight = Utils::ConsoleVpu::MultiplyAdd(lrView.Right(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lNear);
+        const rw::math::vpu::Vector3 lNear      = Utils::ConsoleVpu::MultiplyAdd(lrView.At(), lrTweaked.mfDOFNear, lrView.Pos());
+        const rw::math::vpu::Vector3 lNearLeft  = lNear - lRight;
+        const rw::math::vpu::Vector3 lNearRight = Utils::ConsoleVpu::MultiplyAdd(lrView.Right(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lNear);
         lDebug.GetRender().DrawSolidQuad(
             Utils::ConsoleVpu::MultiplyAdd(lrView.Up(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lNearLeft),
             Utils::ConsoleVpu::MultiplyAdd(lrView.Up(), KF_TWEAK_DOF_PLANE_HALF_SIZE, lNearRight),

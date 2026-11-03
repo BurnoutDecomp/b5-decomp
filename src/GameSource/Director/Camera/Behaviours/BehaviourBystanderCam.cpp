@@ -209,15 +209,15 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
         if (mpParameters->mbUseTargetSpaceInsteadOfPositionFinder)
         {
             mbGotPosition = true;
-            const Vector3 lTargetSpacePosition = { mpParameters->mfTargetSpaceX, mpParameters->mfTargetSpaceY,
-                                                   mpParameters->mfTargetSpaceZ, 0.0f };
+            const rw::math::vpu::Vector3 lTargetSpacePosition(mpParameters->mfTargetSpaceX, mpParameters->mfTargetSpaceY,
+                                                               mpParameters->mfTargetSpaceZ);
             mTransform.wAxis = TransformPoint(mTarget.GetTransform(lrInfo), lTargetSpacePosition);
         }
         else
         {
             if (!mPositionFinder.IsInitialised())
             {
-                const Vector3 lTargetVelocity = mTarget.GetVehicle(lrInfo).mRaceCarState.mLinearVelocity;
+                const rw::math::vpu::Vector3 lTargetVelocity = mTarget.GetVehicle(lrInfo).mRaceCarState.mLinearVelocity;
                 mPositionFinder.FindPosition(mTarget.GetTransform(lrInfo).wAxis,
                                              lTargetVelocity * mpParameters->mfVelocityInfluenceOnPosition);
             }
