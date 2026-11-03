@@ -74,9 +74,6 @@
 #include "rw/math/vpu/vector3_operation.h"
 
 #include <cmath>    // std::fabs (abs-spin / abs-roll magnitudes)
-#include <stdlib.h> // getenv (the [stunt-boost] BRN_PROP_DIAG rung -- not in the X360 binary)
-
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint (same rung)
 
 namespace BrnGameState
 {
@@ -465,18 +462,6 @@ namespace BrnGameState
         {
             if ((muStuntTypesInProgress & (1u << E_STUNT_TYPE_BOOST)) == 0u)
             {
-                // [DIAG] NOT IN THE X360 BINARY -- the boost-link arm's own tripwire, on the
-                // console's OWN once-per-boost-run edge (the BOOST bit is set by the
-                // UpdateScore below and cleared only when the buffer banks), so it cannot
-                // flood; first-N capped on top of that. It exists because the D2 symptom
-                // ("boost does not keep the combo alive") is invisible in the log otherwise:
-                // this rung firing is the proof that RegisterStunt() is reached from boosting
-                // and therefore that UpdateCombo holds mfTimeSinceLastStunt at 0.
-                {
-                    static s32        siBoostLines = 0;
-                    const s32         KI_BOOST_DIAG_MAX = 16;
-                }
-
                 UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST * KF_STUNT_ATTACK_MIN_BOOST_TIME,
                             E_STUNT_TYPE_BOOST, true);
             }
