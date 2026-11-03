@@ -124,7 +124,7 @@ namespace CgsNetwork
         }
         else
         {
-            lStream.Append("ACK / NACKS");
+            lStream << "ACK / NACKS";
         }
 
         lStream << " (kbps)\n";
