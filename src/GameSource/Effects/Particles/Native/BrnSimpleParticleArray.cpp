@@ -101,8 +101,6 @@ namespace Native
         { eParticleArray_SkidSmokeGrass2,  256, 0 },
     };
 
-    // [DIAG] NOT IN THE X360 BINARY -- the ladder's first rung (see the header). DELETE-WHEN-STABLE.
-    u32 gauSimpleParticleSpawned = 0;
 
     // The two static per-type tables (DWARF :372 / :373). maTextures @0x82FAC150 (13 x 8-byte
     // handles), maStandardParams @0x82FABA80 (13 x 0x80). Zero-initialised .bss on the console.
@@ -115,16 +113,6 @@ namespace Native
     //   count == 0 -> mpaParticles = NULL, return 0;
     //   else mpaParticles = Malloc(count * 48, 16) (asserted), return count * 48.
     //
-    // ⚠ CONSOLE-QUIRK, AND THE ONE PC DEVIATION IN THIS FILE: the console asks the heap for
-    // `count * 48` bytes (`slwi r10, r11, 1 ; add r11, r11, r10 ; slwi r30, r11, 4`) but sizes
-    // the ring by the ROUNDED count, and both SpawnParticle's cursor and the Prepare stamp walk
-    // the rounded count. For every array but one the count is already a multiple of 16; for
-    // eParticleArray_ImpactSmoke it is 200, so the console's ring is 208 records over a
-    // 200-record block and writes 8 records (384 bytes) past the end of its allocation --
-    // silently, into whatever the heap put next. On the host that same write corrupts the CRT
-    // heap, so the block is sized to the ring the cursor actually walks (muNumParticles
-    // records). Nothing the console computes changes: the ring length, the cursor sequence,
-    // the stamp and the returned byte count are all the console's.
     // =========================================================================================
     u32 BrnSimpleParticleArray::CB4ParticleBank::Construct(CgsMemory::HeapMalloc* lpHeapMalloc,
                                                            u32 luNumParticles)
@@ -139,9 +127,8 @@ namespace Native
         }
 
         const u32 luConsoleSize = luNumParticles * static_cast<u32>(sizeof(CB4Particle));
-        const u32 luRingSize    = muNumParticles * static_cast<u32>(sizeof(CB4Particle));
         mpaParticles = static_cast<CB4Particle*>(
-            lpHeapMalloc->Malloc(static_cast<s32>(luRingSize), KI_PARTICLE_ALIGNMENT));
+            lpHeapMalloc->Malloc(static_cast<s32>(luConsoleSize), KI_PARTICLE_ALIGNMENT));
         CGS_ASSERT(mpaParticles != 0, "mpaParticles");   // BrnSimpleParticleRenderer.cpp:293
         return luConsoleSize;
     }
@@ -321,7 +308,6 @@ namespace Native
             lpBank->muNextParticle = lpBank->muNumParticles;
         }
         --lpBank->muNextParticle;
-        ++gauSimpleParticleSpawned;   // [diag] NOT IN THE X360 BINARY -- see the header
         return true;
     }
 

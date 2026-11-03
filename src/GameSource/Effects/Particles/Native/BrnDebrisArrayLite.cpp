@@ -33,10 +33,6 @@ namespace BrnParticle
 {
 namespace Native
 {
-    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. See the header.
-    u32 gauDebrisSimIntegrated   = 0;
-    u32 gauDebrisSimCollideCalls = 0;
-    u32 gauDebrisSimBounces      = 0;
 
     namespace
     {
@@ -152,7 +148,6 @@ namespace Native
                 lau8LiveIndex[luNumLive] = static_cast<u8>(luIndex);
                 BrnEffects::BrnCrashLineTriangleCacheFormat& lrLine = laLines[luNumLive];
                 ++luNumLive;
-                ++gauDebrisSimIntegrated;   // [DIAG] DELETE-WHEN-STABLE
 
                 const rw::math::vpu::Vector3Plus lvPosition = lDebrisToUpdate.mPositionPlusRotVel;
                 const rw::math::vpu::Vector3Plus lvVelocity = lDebrisToUpdate.mVelocityPlusScale;
@@ -206,7 +201,6 @@ namespace Native
                 return true;
 
             lpTriCache->CollideWithTriangleCache(laLines, luNumLive);
-            ++gauDebrisSimCollideCalls;   // [DIAG] DELETE-WHEN-STABLE
 
             for (u32 luLine = 0; luLine < luNumLive; ++luLine)
             {
@@ -252,7 +246,6 @@ namespace Native
                 lrVelocity.mV.v[2] = BrnParticleMath::VpuMultiplyAdd(lfDrawZ - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.mV.v[2]);
 
                 lDebrisToUpdate.muBounceCount = static_cast<u8>(lDebrisToUpdate.muBounceCount - 1u);
-                ++gauDebrisSimBounces;   // [DIAG] DELETE-WHEN-STABLE
             }
             return true;
         }

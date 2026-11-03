@@ -34,9 +34,6 @@
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // TrailEmitter / TrailParams
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [diag] CgsDev::Log::WriteToLog
-#include <cstdio>   // [diag] snprintf (the [trailpass] transform probe)
-#include <cstdlib>  // [diag] getenv / atoi (the BRN_SKID_LOUD discriminator)
 #include "rw/math/vpu/vector3_operation.h"                             // rw::math::vpu::{operator+,operator*}
 
 // The immediate-mode state library's three trail states, built by CgsGraphics::ImRendererBase::
@@ -57,11 +54,6 @@ extern void* gpSkyDomeRasterizerState;     // dword_83010F3C
 void ImDeviceSetDepthStencilState(void* lpState);
 void ImDeviceSetBlendState(void* lpState);
 void ImDeviceSetRasterizerState(void* lpState);
-
-// [DIAG] NOT IN THE X360 BINARY -- the two override state objects the BRN_SKID_LOUD discriminator
-// binds instead of the two above (ImmediateMode.cpp). DELETE-WHEN-STABLE.
-extern void* gpDiagSkidNoDepthState;
-extern void* gpDiagSkidNoBlendState;
 
 namespace BrnParticle
 {
@@ -118,53 +110,6 @@ namespace Native
         // .rdata unk_82181510 == {0, 1, 0, 0}: the uv.y step to the second edge vertex.
         const ::Vector4 K_UV_SECOND_EDGE(0.0f, 1.0f, 0.0f, 0.0f);
 
-        // ============================================================================================
-        // [DIAG] BRN_SKID_LOUD -- THE DISCRIMINATOR. NOT IN THE X360 BINARY, inert unless the
-        // variable names a non-zero bit. DELETE-WHEN-STABLE.
-        //
-        // The trail pass has been measured correct at every point that can be measured from the
-        // CPU side: 12 real vertices in a triangle strip, gWorldViewProj resolved to c0..c3 and
-        // read back off the device, an on-screen NDC, a real DXT5 tread texture in sampler 0,
-        // SRCALPHA/INVSRCALPHA, cull none, full viewport, no scissor, hr == S_OK -- and no pixels.
-        // What remains between the vertex program and the frame buffer is a small set, and this
-        // takes its members out of the experiment ONE BIT AT A TIME so the survivor is named
-        // rather than guessed:
-        //
-        //   bit 0 (1)  depth test OFF   -- if the mark appears, the road's depth was rejecting it
-        //   bit 1 (2)  alpha blend OFF  -- if the mark appears, the source alpha was ~0 (texture
-        //                                  alpha, the age lerp, or the strength lane)
-        //   bit 2 (4)  colour OVERRIDE  -- opaque magenta start AND end, so the strip cannot be
-        //                                  lost in the road's own near-black
-        //
-        // BRN_SKID_LOUD=7 makes the geometry impossible to miss. If SEVEN still shows nothing,
-        // every remaining explanation is about the SURFACE, not the fragment -- which is the one
-        // half of the search this campaign has never been able to close.
-        // ⚠ WHAT THIS DOES NOT COVER: it changes only the depth-stencil and blend binds and the
-        // two colour constants. It does not touch the vertex positions, the declaration, the
-        // shaders, the texture bind or the render target -- so a null result convicts none of
-        // those individually, it only excludes depth and blend.
-        // ============================================================================================
-        u32 SkidLoudMask()
-        {
-            static s32 siMask = -1;
-            if (siMask < 0)
-            {
-                if (siMask < 0)
-                    siMask = 0;
-                if (siMask != 0)
-                {
-                    char lacMsg[160];
-                    _snprintf(lacMsg, sizeof(lacMsg),
-                        "[trailpass] BRN_SKID_LOUD=%d ARMED: depth%s blend%s colour%s\n", siMask,
-                        (siMask & 1) ? "=OFF" : "=normal",
-                        (siMask & 2) ? "=OFF" : "=normal",
-                        (siMask & 4) ? "=MAGENTA" : "=authored");
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
-            return static_cast<u32>(siMask);
-        }
-
         inline ::Vector4 MakeUvTimeAlpha(f32 lfU, f32 lfV, f32 lfAge, f32 lfStrength)
         {
             const ::Vector4 lResult(lfU, lfV, lfAge, lfStrength);
@@ -183,41 +128,6 @@ namespace Native
             return lResult;
         }
 
-        // [DIAG] BRN_SKID_LIFT -- a world-space +Y offset in METRES added to every strip vertex.
-        // NOT IN THE X360 BINARY, zero unless the variable names a value. DELETE-WHEN-STABLE.
-        //
-        // The depth test is now known to reject the strip (it draws with the test off and not with
-        // it on, everything else held). The console's own state is the same LESSEQUAL/test-on/
-        // write-off object -- ConstructOnceOnly @0x827F1C20 builds dword_83010F4C as
-        // ConstructDepthStencilState(alloc, 1, 0, 3) and TrailRenderer::BeginRender @0x82284468
-        // binds exactly that -- so the state is faithful and the DEPTH VALUES are what disagree.
-        //
-        // This measures the disagreement in metres instead of guessing it: TrailSystem lays each
-        // segment at the wheel contact point plus kTrailHeightAdjustment (0.03 m), so if the strip
-        // becomes visible at a lift of L, the strip is sitting L below the surface the world wrote
-        // depth for, and 0.03 + L is what it would have taken to clear it. A value near zero means
-        // a precision tie; a value of centimetres means the visible road and the collision surface
-        // the contact point comes from are not at the same height on this build.
-        // ⚠ IT IS A MEASURING STICK, NOT A FIX. Shipping a lift would be exactly the "tune until it
-        // looks right" the project forbids; the number it produces is what points at the real cause.
-        f32 SkidLiftMetres()
-        {
-            static f32 sfLift = -1.0f;
-            if (sfLift < 0.0f)
-            {
-                if (sfLift < 0.0f)
-                    sfLift = 0.0f;
-                if (sfLift > 0.0f)
-                {
-                    char lacMsg[128];
-                    _snprintf(lacMsg, sizeof(lacMsg),
-                                  "[trailpass] BRN_SKID_LIFT=%.4f m ARMED (diagnostic only)\n",
-                                  static_cast<double>(sfLift));
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
-            return sfLift;
-        }
     }
 
     // =========================================================================================
@@ -243,10 +153,8 @@ namespace Native
         mpRenderer->SetTransform(mViewProjectionMatrix);     // BeginShaderStates(this+88) + 4 x stvx128
 
         // sub_82276DA8(base, dword_83010F4C) / SetState(base, dword_83010F20) / sub_82276E48(base, dword_83010F3C)
-        // [DIAG] the two BRN_SKID_LOUD bits swap the bound object, not the applier -- see SkidLoudMask().
-        const u32 luLoud = SkidLoudMask();
-        ImDeviceSetDepthStencilState((luLoud & 1u) ? gpDiagSkidNoDepthState : gpSkyDomeDepthStencilState);
-        ImDeviceSetBlendState((luLoud & 2u) ? gpDiagSkidNoBlendState : gpImStandardAlphaBlendState);
+        ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState);
+        ImDeviceSetBlendState(gpImStandardAlphaBlendState);
         ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
 
         mpRenderer->SetTexture(lpTexture);                   // ImRendererBase::SetTexture @0x82276EE8
@@ -276,42 +184,12 @@ namespace Native
         (void)lu8TrailTypeID;
 
         // The two colour constants: RGB scaled by the white level, alpha kept.
-        // [DIAG] BRN_SKID_LOUD bit 2 replaces both with opaque magenta so the strip cannot hide in
-        // the road's own near-black. Same two setters, same two registers -- only the value differs.
-        if ((SkidLoudMask() & 4u) != 0u)
-        {
-            const ::Vector4 lMagenta(1.0f, 0.0f, 1.0f, 1.0f);
-            mpRenderer->SetBlendStartColour(lMagenta);
-            mpRenderer->SetBlendEndColour(lMagenta);
-        }
-        else
-        {
-            mpRenderer->SetBlendStartColour(ScaleRgb(lpParams->mStartColour, lfWhiteLevel));
-            mpRenderer->SetBlendEndColour(ScaleRgb(lpParams->mEndColour, lfWhiteLevel));
-        }
+        mpRenderer->SetBlendStartColour(ScaleRgb(lpParams->mStartColour, lfWhiteLevel));
+        mpRenderer->SetBlendEndColour(ScaleRgb(lpParams->mEndColour, lfWhiteLevel));
 
         BrnGraphics::SkidVertex laVertices[KN_MAX_STRIP_VERTICES];
         s32                     lnVertexCount = 0;
         const f32               lfNow         = mfCurrentTime;                 // v125
-        const f32               lfDiagLift    = SkidLiftMetres();               // [diag] 0.0 normally
-
-        // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAIL_HEIGHT_DIAG's render half. issue #21.
-        // The [trailht] line in HandleWheels measures where a segment was LAID; this measures
-        // what the strip builder then DRAWS from it, because those are not the same claim: a
-        // segment laid on the road still draws in the air if the quad is extruded along the
-        // wrong axis. Per segment it prints the segment position, the half-width axis (the
-        // tangent AddTrailSegment stored, which the console builds as
-        // Cross(direction, contactNormal) @0x8227AAE0 -- so it must lie IN the contact plane,
-        // i.e. its y is ~0 on flat road and tilts with a bank), and BOTH extruded vertices.
-        // The two vertices' y difference is the quad's own tilt in metres across its 0.25 m
-        // width; a quad in the road plane has |dy| <= the road's own slope over 0.25 m.
-        // Rate-limited to one whole emitter every KU_QUAD_DIAG_PERIOD render calls.
-        // The emitter/type and laid/now timestamps distinguish a fixed segment from a
-        // recycled slot during a held-view fade capture; they do not alter draw inputs.
-        // DELETE-WHEN-STABLE.
-        static u32 suQuadDiagCall = 0u;
-        const u32  KU_QUAD_DIAG_PERIOD = 120u;
-        bool lbQuadDiagSpent = false;
 
         for (s32 lnEmitter = 0; lnEmitter < lnEmitterCount; ++lnEmitter)
         {
@@ -327,8 +205,6 @@ namespace Native
             {
                 mpRenderer->Render(static_cast<renderengine::PrimitiveType>(KI_PRIMITIVE_TRIANGLE_STRIP),
                                    laVertices, static_cast<u32>(lnVertexCount));
-                guProbeVertices += static_cast<u32>(lnVertexCount);   // [diag]
-                ++guProbeDraws;                                        // [diag]
                 lnVertexCount = 0;
             }
 
@@ -337,7 +213,6 @@ namespace Native
             // ---- segment 0: its +half edge vertex is written twice (the strip join) ----------
             {
                 ::Vector3       lPosition  = lpSegments->ReadSegmentPosition(0);
-                lPosition.mV.v[1] += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
                 const ::Vector3 lTangent   = lpSegments->ReadSegmentTangent(0);
                 const f32     lfStrength = lpSegments->ReadSegmentStrength(0);
                 f32           lfAge      = (lfNow - lpSegments->ReadSegmentTime(0)) * KF_ONE_OVER_TRAIL_BASE_LIFE;
@@ -364,7 +239,6 @@ namespace Native
             for (s32 lnSegment = 1; lnSegment < lnNumSegments; ++lnSegment, lfSegmentU += 1.0f)
             {
                 ::Vector3       lPosition  = lpSegments->ReadSegmentPosition(lnSegment);
-                lPosition.mV.v[1] += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
                 const ::Vector3 lTangent   = lpSegments->ReadSegmentTangent(lnSegment);
                 const f32     lfStrength = lpSegments->ReadSegmentStrength(lnSegment);
                 f32           lfAge      = (lfNow - lpSegments->ReadSegmentTime(lnSegment)) * KF_ONE_OVER_TRAIL_BASE_LIFE;
@@ -384,7 +258,6 @@ namespace Native
                 laVertices[lnVertexCount + 1].mv4UvTimeAlpha = lUvB;
                 lnVertexCount += 2;
 
-                // [DIAG] see the banner at lbQuadDiag. DELETE-WHEN-STABLE.
 
             }
 
@@ -397,69 +270,9 @@ namespace Native
         {
             mpRenderer->Render(static_cast<renderengine::PrimitiveType>(KI_PRIMITIVE_TRIANGLE_STRIP),
                                laVertices, static_cast<u32>(lnVertexCount));
-            guProbeVertices += static_cast<u32>(lnVertexCount);   // [diag]
-            ++guProbeDraws;                                        // [diag]
 
-            // [DIAG] RUN THE VERTEX PROGRAM'S OWN TRANSFORM ON ONE REAL VERTEX.
-            // 8.4 million submitted vertices and an empty road is the classic
-            // valid-call/invalid-data shape: the strips are being drawn somewhere the
-            // camera is not. The skid vertex program's whole position math is
-            //     oPos = pos.x*c0 + pos.y*c1 + pos.z*c2 + c3        (gWorldViewProj rows)
-            // so doing exactly that here, on the first vertex of the batch, says whether
-            // the fault is upstream (the matrix) or downstream (states/shader/blend).
-            // A zero or identity matrix, a w <= 0, or |x/w| > 1 convicts the matrix;
-            // sane NDC inside the frustum clears it and moves the search below the draw.
-            // Read the matrix as its 16 floats -- it is being handed to the shader as raw
-            // bytes by SetTransform, so this reads it exactly as the program does.
-            const f32* const lpM = reinterpret_cast<const f32*>(&mViewProjectionMatrix);
-            const ::Vector3& lrP = laVertices[0].mv3Pos;
-            const f32 lfX = lrP.mV.v[0] * lpM[0] + lrP.mV.v[1] * lpM[4] + lrP.mV.v[2] * lpM[8]  + lpM[12];
-            const f32 lfY = lrP.mV.v[0] * lpM[1] + lrP.mV.v[1] * lpM[5] + lrP.mV.v[2] * lpM[9]  + lpM[13];
-            const f32 lfZ = lrP.mV.v[0] * lpM[2] + lrP.mV.v[1] * lpM[6] + lrP.mV.v[2] * lpM[10] + lpM[14];
-            const f32 lfW = lrP.mV.v[0] * lpM[3] + lrP.mV.v[1] * lpM[7] + lrP.mV.v[2] * lpM[11] + lpM[15];
-
-            // Stamp the NDC into the film latch so frames.csv carries the SCREEN position of
-            // a submitted mark (columns 15-17). See BrnDiagFilmLatch.h.
-            //
-            // ⭐ The point transformed here is the MOST RECENTLY LAID segment
-            // (gFilmLatch.mfLastSeg*, written by HandleWheels beside AddTrailSegment), NOT the
-            // batch's first vertex. Both are real submitted geometry, but the first vertex of
-            // the last batch belongs to an arbitrary emitter that may be nine seconds old and
-            // therefore faded to nothing -- pointing a marker at it and finding bare tarmac
-            // proves only that old marks fade. The freshest segment is the one whose alpha is
-            // at its highest, so it is the honest place to aim.
-
-            (void)lfZ;
-
-            if (guProbeFirstVertex != 0u)
-            {
-                --guProbeFirstVertex;
-                char lacMsg[400];
-                _snprintf(lacMsg, sizeof(lacMsg),
-                    "[trailpass] xform: v0=(%.2f,%.2f,%.2f) clip=(%.3f,%.3f,%.3f,%.3f) "
-                    "ndc=(%.3f,%.3f,%.3f) m0=[%.4f %.4f %.4f %.4f] m3=[%.3f %.3f %.3f %.3f] "
-                    "start=(%.3f,%.3f,%.3f,%.3f) end=(%.3f,%.3f,%.3f,%.3f) uvta0=(%.2f,%.2f,%.3f,%.3f)\n",
-                    static_cast<double>(lrP.mV.v[0]), static_cast<double>(lrP.mV.v[1]), static_cast<double>(lrP.mV.v[2]),
-                    static_cast<double>(lfX), static_cast<double>(lfY), static_cast<double>(lfZ), static_cast<double>(lfW),
-                    static_cast<double>(lfW != 0.0f ? lfX / lfW : 0.0f),
-                    static_cast<double>(lfW != 0.0f ? lfY / lfW : 0.0f),
-                    static_cast<double>(lfW != 0.0f ? lfZ / lfW : 0.0f),
-                    static_cast<double>(lpM[0]), static_cast<double>(lpM[1]), static_cast<double>(lpM[2]), static_cast<double>(lpM[3]),
-                    static_cast<double>(lpM[12]), static_cast<double>(lpM[13]), static_cast<double>(lpM[14]), static_cast<double>(lpM[15]),
-                    static_cast<double>(lpParams->mStartColour.red), static_cast<double>(lpParams->mStartColour.green),
-                    static_cast<double>(lpParams->mStartColour.blue), static_cast<double>(lpParams->mStartColour.alpha),
-                    static_cast<double>(lpParams->mEndColour.red), static_cast<double>(lpParams->mEndColour.green),
-                    static_cast<double>(lpParams->mEndColour.blue), static_cast<double>(lpParams->mEndColour.alpha),
-                    static_cast<double>(laVertices[0].mv4UvTimeAlpha.mV.v[0]), static_cast<double>(laVertices[0].mv4UvTimeAlpha.mV.v[1]),
-                    static_cast<double>(laVertices[0].mv4UvTimeAlpha.mV.v[2]), static_cast<double>(laVertices[0].mv4UvTimeAlpha.mV.v[3]));
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
         }
     }
 
-    // [DIAG] the two running totals the [trailpass] line reads. See BrnTrailRender.h.
-    u32 TrailRenderer::guProbeVertices    = 0;
-    u32 TrailRenderer::guProbeDraws       = 0;
-    u32 TrailRenderer::guProbeFirstVertex = 8;   // print the first EIGHT batches, then stop
 }
 }
