@@ -454,7 +454,7 @@ namespace
                              "%d", static_cast<s32>(lpLandmark->GetDesignIndex()));
         }
 
-        const Vector2 lv2Position = { lrMetrics.mfScreenWidth - 30.0f, 145.0f, 0.0f, 0.0f };
+        const Vector2 lv2Position(lrMetrics.mfScreenWidth - 30.0f, 145.0f);
         lrRender.Draw2DTextJustified(lacLandmarkText, lv2Position,
                                      CgsDev::DebugRender::E_JUSTIFY_RIGHT,
                                      18.0f, 0xFF0080FFu);
@@ -462,8 +462,7 @@ namespace
         {
             CgsCore::SPrintf(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH,
                              "ID: %d", liRegionIndex);
-            const Vector2 lv2RegionIndexPosition =
-                { lrMetrics.mfScreenWidth - 30.0f, 165.0f, 0.0f, 0.0f };
+            const Vector2 lv2RegionIndexPosition(lrMetrics.mfScreenWidth - 30.0f, 165.0f);
             lrRender.Draw2DTextJustified(lacLandmarkText, lv2RegionIndexPosition,
                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT,
                                          18.0f, 0xFF0080FFu);
@@ -471,8 +470,7 @@ namespace
             const BrnTrigger::TriggerRegion* lpRegion = lpTriggerData->GetRegion(liRegionIndex);
             CgsCore::SPrintf(lacLandmarkText, KI_LANDMARK_TEXT_LENGTH,
                              "CGSID: %u", static_cast<u32>(lpRegion->GetId()));
-            const Vector2 lv2RegionIdPosition =
-                { lrMetrics.mfScreenWidth - 30.0f, 185.0f, 0.0f, 0.0f };
+            const Vector2 lv2RegionIdPosition(lrMetrics.mfScreenWidth - 30.0f, 185.0f);
             lrRender.Draw2DTextJustified(lacLandmarkText, lv2RegionIdPosition,
                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT,
                                          18.0f, 0xFF0080FFu);
@@ -513,8 +511,7 @@ namespace
             CgsCore::SPrintf(lacLandmarkText, 256, "Next LM: %d (%u/%u)",
                              static_cast<s32>(lpLabelLandmark->GetDesignIndex()),
                              static_cast<u32>(liNextLandmarkIndex + 1), luNumLandmarks);
-            const Vector2 lv2LabelPosition =
-                { lrMetrics.mfScreenWidth - 30.0f, 125.0f, 0.0f, 0.0f };
+            const Vector2 lv2LabelPosition(lrMetrics.mfScreenWidth - 30.0f, 125.0f);
             lrRender.Draw2DTextJustified(lacLandmarkText, lv2LabelPosition,
                                          CgsDev::DebugRender::E_JUSTIFY_RIGHT,
                                          18.0f, 0xFF0080FFu);
@@ -525,7 +522,7 @@ namespace
         const Matrix44Affine& lrPlayerCarTransform = mpGameStateModule->mPlayerCarTransform;
         const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
         Vector3 lv3Displacement = vmx::Subtract(lv3LandmarkPosition, lrPlayerCarTransform.wAxis);
-        lv3Displacement.w = 0.0f;
+        lv3Displacement.SetComponent(3, 0.0f);
 
         // ARTIST8236C55C..5C4: one unconditional rsqrt refinement for
         // each normalization, then the original VMX max/min and XDK ACos.
@@ -545,20 +542,14 @@ namespace
         const f32 lfSide = lfRightDot > 0.0f ? 1.0f : (lfRightDot >= 0.0f ? 0.0f : -1.0f);
         const f32 lfArrowHalfX = (lfSide * lfSin) * 30.0f;
         const f32 lfArrowHalfY = lfCos * 30.0f;
-        const Vector2 lv2ArrowCentre =
-            { lrMetrics.mfScreenWidth - 80.0f, 60.0f, 0.0f, 0.0f };
-        const Vector2 lv2ArrowTip =
-        {
-            vmx::Subtract(lv2ArrowCentre.x, lfArrowHalfX),
-            vmx::Subtract(lv2ArrowCentre.y, lfArrowHalfY),
-            0.0f, 0.0f
-        };
-        const Vector2 lv2ArrowTail =
-        {
-            vmx::Subtract(vmx::Multiply(lv2ArrowCentre.x, 2.0f), lv2ArrowTip.x),
-            vmx::Subtract(vmx::Multiply(lv2ArrowCentre.y, 2.0f), lv2ArrowTip.y),
-            0.0f, 0.0f
-        };
+        const f32 lfArrowCentreX = lrMetrics.mfScreenWidth - 80.0f;
+        const f32 lfArrowCentreY = 60.0f;
+        const f32 lfArrowTipX = vmx::Subtract(lfArrowCentreX, lfArrowHalfX);
+        const f32 lfArrowTipY = vmx::Subtract(lfArrowCentreY, lfArrowHalfY);
+        const Vector2 lv2ArrowTip(lfArrowTipX, lfArrowTipY);
+        const Vector2 lv2ArrowTail(
+            vmx::Subtract(vmx::Multiply(lfArrowCentreX, 2.0f), lfArrowTipX),
+            vmx::Subtract(vmx::Multiply(lfArrowCentreY, 2.0f), lfArrowTipY));
         lrRender.Draw2DArrow(lv2ArrowTail, lv2ArrowTip, 0xFF00FFFFu);
 
         // ARTIST8236C710..75C computes the displayed magnitude separately,
@@ -569,8 +560,7 @@ namespace
             static_cast<u32>(liNextLandmarkIndex) == luNumLandmarks ? "Finish" : "Next";
         CgsCore::SPrintf(lacDistanceText, 256, "%s: %d M", lpcDistancePrefix,
                          static_cast<s32>(lfDistance));
-        const Vector2 lv2DistancePosition =
-            { lrMetrics.mfScreenWidth - 50.0f, 105.0f, 0.0f, 0.0f };
+        const Vector2 lv2DistancePosition(lrMetrics.mfScreenWidth - 50.0f, 105.0f);
         lrRender.Draw2DTextJustified(lacDistanceText, lv2DistancePosition,
                                      CgsDev::DebugRender::E_JUSTIFY_CENTRE,
                                      18.0f, 0xFF0080FFu);

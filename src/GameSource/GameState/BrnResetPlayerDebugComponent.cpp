@@ -15,6 +15,8 @@
 #include "SharedClasses/World/BrnWorldRegion.h"                      // BrnWorld::WorldRegion district/county helpers
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"
+#include <xtl.h>
+#include <xboxmath.h>
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"           // DebugUI::IsVisible
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
@@ -428,7 +430,7 @@ namespace BrnGameState
             // Sample the district map at the region's centre (a w lane of 0 is filled before the
             // GetValue(Vector3) call; an off-map sample reads back as E_DISTRICT_INVALID).
             Vector3 lSamplePos = lpRegion->GetBoxRegion()->GetPosition();
-            lSamplePos.w = 0.0f;
+            lSamplePos.SetComponent(3, 0.0f);
 
             CgsWorld::WorldMap2D* lpDistrictMap = mpGameStateModule->GetDistrictMap();
             const u8 luDistrictByte = lpDistrictMap->GetValue(lSamplePos);
@@ -490,11 +492,9 @@ namespace BrnGameState
             const Vector3 lPosition = lpBox->GetPosition();
             const f32     lfDimZ    = lpBox->GetDimensionZ();
 
-            Vector3 lSpawnPoint;
-            lSpawnPoint.x = lFacing.x * lfDimZ + lPosition.x;
-            lSpawnPoint.y = lFacing.y * lfDimZ + lPosition.y;
-            lSpawnPoint.z = lFacing.z * lfDimZ + lPosition.z;
-            lSpawnPoint.w = lFacing.w * lfDimZ + lPosition.w;
+            // ARTIST 0x8239140C uses one fused four-lane multiply-add, facing * dimensionZ + position.
+            const Vector3 lSpawnPoint(__vmaddfp(lFacing.mV, ::XMVectorReplicate(lfDimZ),
+                                                lPosition.mV));
 
             maLocationDirections[liLocationCount] = lFacing;       // X360 +0x37A0
             maLocationPositions[liLocationCount]  = lSpawnPoint;   // X360 +0x2FA0

@@ -64,34 +64,34 @@ namespace BrnGameState
         // +0x308 mfDistanceTravelled (f32), printed as an integer metre count (X360 fctiwz -> %d).
         CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "Distance = %dm",
                          static_cast<s32>(mpCrashScoring->GetDistanceTravelled()));
-        lpRender->DrawText(lacBuffer, Vector2{ 190.0f, 120.0f, 0.0f, 0.0f }, 30.0f, KU_INFO_TEXT_COLOUR, false);
+        lpRender->DrawText(lacBuffer, Vector2(190.0f, 120.0f), 30.0f, KU_INFO_TEXT_COLOUR, false);
 
         // +0x2F8 miNumCarsLeaped.
         CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "Cars leaped = %d",
                          mpCrashScoring->GetNumCarsLeapt());
-        lpRender->DrawText(lacBuffer, Vector2{ 190.0f, 150.0f, 0.0f, 0.0f }, 20.0f, KU_INFO_TEXT_COLOUR, false);
+        lpRender->DrawText(lacBuffer, Vector2(190.0f, 150.0f), 20.0f, KU_INFO_TEXT_COLOUR, false);
 
         // +0x2E0 miCurrentComboCount.
         CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "Current combo count = %d",
                          mpCrashScoring->GetCurrentComboCount());
-        lpRender->DrawText(lacBuffer, Vector2{ 190.0f, 170.0f, 0.0f, 0.0f }, 20.0f, KU_INFO_TEXT_COLOUR, false);
+        lpRender->DrawText(lacBuffer, Vector2(190.0f, 170.0f), 20.0f, KU_INFO_TEXT_COLOUR, false);
 
         // +0x2E4 miScoreMultiplier.
         CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "Score multiplier = %d",
                          mpCrashScoring->GetScoreMultiplier());
-        lpRender->DrawText(lacBuffer, Vector2{ 190.0f, 190.0f, 0.0f, 0.0f }, 20.0f, KU_INFO_TEXT_COLOUR, false);
+        lpRender->DrawText(lacBuffer, Vector2(190.0f, 190.0f), 20.0f, KU_INFO_TEXT_COLOUR, false);
 
         // +0x31C mfLongestJumpAirTime (f32), printed as %.0f seconds.
         CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "Longest air time = %.0f seconds",
                          static_cast<f64>(mpCrashScoring->GetBestAirTime()));
-        lpRender->DrawText(lacBuffer, Vector2{ 190.0f, 210.0f, 0.0f, 0.0f }, 20.0f, KU_INFO_TEXT_COLOUR, false);
+        lpRender->DrawText(lacBuffer, Vector2(190.0f, 210.0f), 20.0f, KU_INFO_TEXT_COLOUR, false);
 
         // +0x320 mfHighestJump (f32), printed as %.0f metres. CrashModeScoring exposes no accessor for
         // this member (its getter set is closed); the X360 reads the field directly inline, so this
         // component (a friend of CrashModeScoring) reads it directly too.
         CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "Highest jump = %.0f metres",
                          static_cast<f64>(mpCrashScoring->mfHighestJump));
-        lpRender->DrawText(lacBuffer, Vector2{ 190.0f, 230.0f, 0.0f, 0.0f }, 20.0f, KU_INFO_TEXT_COLOUR, false);
+        lpRender->DrawText(lacBuffer, Vector2(190.0f, 230.0f), 20.0f, KU_INFO_TEXT_COLOUR, false);
     }
 
     // @ 0x8231EB90 - assert the scoring object is wired, then draw the readout if "Display score" is on.

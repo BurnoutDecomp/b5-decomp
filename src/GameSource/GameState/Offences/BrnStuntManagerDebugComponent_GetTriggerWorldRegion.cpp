@@ -40,7 +40,8 @@ StuntManagerDebugComponent::GetTriggerWorldRegion(const BrnTrigger::GenericRegio
     // BoxRegion::GetPosition produces the x/y/z trigger centre with a zero w lane,
     // matching the three scalar loads + vector staging in ARTIST.
     const Vector3 lSamplePosition = lpGenericRegion->GetBoxRegion()->GetPosition();
-    const Vector2 lv2Sample = { lSamplePosition.x, lSamplePosition.z, 0.0f, 0.0f };
+    const Vector2 lv2Sample(lSamplePosition.GetX().GetFloat(),
+                            lSamplePosition.GetZ().GetFloat());
 
     const u8 luValue =
         mpStuntManager->GetDistrictMap().GetValue(lv2Sample);
