@@ -139,8 +139,10 @@ struct CGS_ALIGN(16) Contact
         const __vector4 normalZX = __vperm(normal, normal, zx);
         const __vector4 aYZ = __vperm(rA, rA, yz), aZX = __vperm(rA, rA, zx);
         const __vector4 bYZ = __vperm(rB, rB, yz), bZX = __vperm(rB, rB, zx);
-        const __vector4 tangentA = __vmaddfp(aYZ, normalZX, __vnmsubfp(aZX, normalYZ, zero));
-        const __vector4 tangentB = __vmaddfp(bYZ, normalZX, __vnmsubfp(bZX, normalYZ, zero));
+        // IDA displays VMX VA, VB (addend), VC (multiplier); intrinsics
+        // take VA, VC, VB. ARTIST 0x828A37F0..3810 forms normal x r.
+        const __vector4 tangentA = __vmaddfp(aZX, normalYZ, __vnmsubfp(aYZ, normalZX, zero));
+        const __vector4 tangentB = __vmaddfp(bZX, normalYZ, __vnmsubfp(bYZ, normalZX, zero));
         const __vector4 state = __vspltw(__lvx(&lpBodyA->mIsplt, 0), 3);
         const __vector4 four = __vspltisw(4);
         const __vector4 active = __vcmpequw(__vand(state, four), four);
@@ -161,15 +163,17 @@ struct CGS_ALIGN(16) Contact
         const __vector4 inverseLength = __vrsqrtefp(__vsel(alternativeSq, lengthSq, chooseCandidate));
         const __vector4 tangentYZ = __vperm(tangent, tangent, yz);
         const __vector4 tangentZX = __vperm(tangent, tangent, zx);
-        const __vector4 upProduct = __vmaddfp(tangentZX, normalYZ, zero);
-        const __vector4 up = __vmulfp(__vnmsubfp(tangentYZ, normalZX, upProduct), inverseLength);
+        // ARTIST 0x828A38C8..38EC forms tangent x normal.
+        const __vector4 upProduct = __vmaddfp(tangentYZ, normalZX, zero);
+        const __vector4 up = __vmulfp(__vnmsubfp(tangentZX, normalYZ, upProduct), inverseLength);
         const __vector4 at = __vmulfp(tangent, inverseLength);
 
         const __vector4 omegaA = __lvx(&lpBodyA->mOmega, 0), omegaB = __lvx(&lpBodyB->mOmega, 0);
-        const __vector4 velA = __vmaddfp(aYZ, __vperm(omegaA, omegaA, zx),
-                                __vnmsubfp(aZX, __vperm(omegaA, omegaA, yz), __lvx(&lpBodyA->mVel, 0)));
-        const __vector4 velB = __vmaddfp(bYZ, __vperm(omegaB, omegaB, zx),
-                                __vnmsubfp(bZX, __vperm(omegaB, omegaB, yz), __lvx(&lpBodyB->mVel, 0)));
+        // ARTIST 0x828A3800..3820 forms velocity + omega x r.
+        const __vector4 velA = __vmaddfp(aZX, __vperm(omegaA, omegaA, yz),
+                                __vnmsubfp(aYZ, __vperm(omegaA, omegaA, zx), __lvx(&lpBodyA->mVel, 0)));
+        const __vector4 velB = __vmaddfp(bZX, __vperm(omegaB, omegaB, yz),
+                                __vnmsubfp(bYZ, __vperm(omegaB, omegaB, zx), __lvx(&lpBodyB->mVel, 0)));
         const __vector4 velocity = __vsubfp(velB, velA);
         const __vector4 xyz = __lvx(kXYZ, 0);
         __stvx(pA, &mPosA, 0); mpBodyA = lpBodyA;
