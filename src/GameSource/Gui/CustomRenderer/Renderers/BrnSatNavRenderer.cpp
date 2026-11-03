@@ -112,6 +112,77 @@ void FireSatNavAssert(const char* lpcExpression, s32 liLine)
     CgsDev::Assert::EndAssert();
 }
 
+// FLAG owner-requested original-game bug fix: helpers for RenderComponent's map-quad split.
+// A map polygon corner: renderer-space position plus map-texture UV.
+struct SatNavMapClipVertex
+{
+    f32 mfX;
+    f32 mfY;
+    f32 mfU;
+    f32 mfV;
+};
+
+const u32 KU_MAX_MAP_CLIP_VERTICES = 12;   // a quad cut by four edges needs 8
+
+// One Sutherland-Hodgman pass: keep the part of a convex polygon on the lbKeepAbove side
+// of the line (U or V) == lfBound. Both sides interpolate identically, so they share edges.
+u32 ClipSatNavMapPolygon(const SatNavMapClipVertex* lapIn, u32 luCount, bool lbAxisV,
+                         f32 lfBound, bool lbKeepAbove, SatNavMapClipVertex* lapOut)
+{
+    u32 luOutCount = 0;
+    for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+    {
+        const SatNavMapClipVertex& lrFrom = lapIn[(luIndex + luCount - 1) % luCount];
+        const SatNavMapClipVertex& lrTo   = lapIn[luIndex];
+        const f32 lfFrom = (lbAxisV ? lrFrom.mfV : lrFrom.mfU) - lfBound;
+        const f32 lfTo   = (lbAxisV ? lrTo.mfV   : lrTo.mfU)   - lfBound;
+        const bool lbFromIn = lbKeepAbove ? (lfFrom >= 0.0f) : (lfFrom <= 0.0f);
+        const bool lbToIn   = lbKeepAbove ? (lfTo   >= 0.0f) : (lfTo   <= 0.0f);
+
+        if (lbFromIn != lbToIn && luOutCount < KU_MAX_MAP_CLIP_VERTICES)
+        {
+            const f32 lfT = lfFrom / (lfFrom - lfTo);
+            SatNavMapClipVertex& lrCut = lapOut[luOutCount++];
+            lrCut.mfX = lrFrom.mfX + (lrTo.mfX - lrFrom.mfX) * lfT;
+            lrCut.mfY = lrFrom.mfY + (lrTo.mfY - lrFrom.mfY) * lfT;
+            lrCut.mfU = lrFrom.mfU + (lrTo.mfU - lrFrom.mfU) * lfT;
+            lrCut.mfV = lrFrom.mfV + (lrTo.mfV - lrFrom.mfV) * lfT;
+        }
+        if (lbToIn && luOutCount < KU_MAX_MAP_CLIP_VERTICES)
+        {
+            lapOut[luOutCount++] = lrTo;
+        }
+    }
+    return luOutCount;
+}
+
+// Draw a convex polygon as a fanned triangle list (prim type 4).
+void RenderSatNavMapPolygon(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd,
+                            const SatNavMapClipVertex* lapPolygon, u32 luCount,
+                            const CgsGraphics::RGBA8& lrColour)
+{
+    if (luCount < 3)
+        return;
+
+    CgsGraphics::Basic2dColouredTexturedVertex laVerts[(KU_MAX_MAP_CLIP_VERTICES - 2) * 3];
+    u32 luVertCount = 0;
+    for (u32 luIndex = 1; luIndex + 1 < luCount; ++luIndex)
+    {
+        const SatNavMapClipVertex* lapCorner[3] =
+            { &lapPolygon[0], &lapPolygon[luIndex], &lapPolygon[luIndex + 1] };
+        for (u32 luCorner = 0; luCorner < 3; ++luCorner)
+        {
+            CgsGraphics::Basic2dColouredTexturedVertex& lrVert = laVerts[luVertCount++];
+            lrVert.mv2Pos.x    = lapCorner[luCorner]->mfX;
+            lrVert.mv2Pos.y    = lapCorner[luCorner]->mfY;
+            lrVert.mv4Colour   = lrColour;
+            lrVert.mv2Tex0UV.x = lapCorner[luCorner]->mfU;
+            lrVert.mv2Tex0UV.y = lapCorner[luCorner]->mfV;
+        }
+    }
+    lrCmd.Render(static_cast<renderengine::PrimitiveType>(4), laVerts, luVertCount);
+}
+
 // PC fold of the X360's lazy texture-state creation in RenderComponent (@0x82466288 /
 // @0x8246645C): descriptor {2,2,0,1,1,2,0,0,13,0,1, lod 0.0, flags 0,0,0,1,1} + the
 // payload texture, through renderengine::TextureState::Initialize (font precedent).
@@ -1377,9 +1448,67 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         SetMaskRect(lrCmd, mpMaskTextureState, MapTransform::GetSatNavViewRect(), lv4MaskUv);
     }
 
-    // The map quad (prim type 6 == triangle strip, 4 vertices), then the icons, then
-    // pop the mask and restore the default states (X360 @0x82466554-0x82466598).
-    lrCmd.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
+    // The map quad, then the icons, then pop the mask and restore the default states
+    // (X360 @0x82466554-0x82466598; the console draws laVerts as one 4-vertex strip).
+    //
+    // FLAG owner-requested original-game bug fix: near the world's west edge the zoomed
+    // window runs past the map texture (u < 0) and the console's clamp addressing smears
+    // its left column across the minimap. Split the quad at the texture's unit square:
+    // the inside draws textured, the off-map remainder flat black at the quad's alpha
+    // (matching the texture's own black letterbox rows).
+    {
+        SatNavMapClipVertex laInside[KU_MAX_MAP_CLIP_VERTICES];
+        u32 luInsideCount = 0;
+        static const u32 KAU_PERIMETER[4] = { 0, 1, 3, 2 };   // strip TL,BL,TR,BR -> TL,BL,BR,TR
+        for (u32 lu = 0; lu < 4; ++lu)
+        {
+            const CgsGraphics::Basic2dColouredTexturedVertex& lrVert = laVerts[KAU_PERIMETER[lu]];
+            SatNavMapClipVertex& lrCorner = laInside[luInsideCount++];
+            lrCorner.mfX = lrVert.mv2Pos.x;
+            lrCorner.mfY = lrVert.mv2Pos.y;
+            lrCorner.mfU = lrVert.mv2Tex0UV.x;
+            lrCorner.mfV = lrVert.mv2Tex0UV.y;
+        }
+
+        // Peel off the piece beyond each texture edge; the pieces partition the quad.
+        struct TextureEdge { bool mbAxisV; f32 mfBound; bool mbInsideAbove; };
+        static const TextureEdge KA_EDGES[4] =
+            { { false, 0.0f, true }, { false, 1.0f, false }, { true, 0.0f, true }, { true, 1.0f, false } };
+
+        SatNavMapClipVertex laOutside[4][KU_MAX_MAP_CLIP_VERTICES];
+        u32 lauOutsideCount[4] = { 0, 0, 0, 0 };
+        bool lbAnyOutside = false;
+        for (u32 luEdge = 0; luEdge < 4; ++luEdge)
+        {
+            const TextureEdge& lrEdge = KA_EDGES[luEdge];
+            lauOutsideCount[luEdge] = ClipSatNavMapPolygon(
+                laInside, luInsideCount, lrEdge.mbAxisV, lrEdge.mfBound, !lrEdge.mbInsideAbove,
+                laOutside[luEdge]);
+            lbAnyOutside = lbAnyOutside || lauOutsideCount[luEdge] >= 3;
+
+            SatNavMapClipVertex laKept[KU_MAX_MAP_CLIP_VERTICES];
+            luInsideCount = ClipSatNavMapPolygon(
+                laInside, luInsideCount, lrEdge.mbAxisV, lrEdge.mfBound, lrEdge.mbInsideAbove,
+                laKept);
+            for (u32 lu = 0; lu < luInsideCount; ++lu)
+                laInside[lu] = laKept[lu];
+        }
+
+        if (lbAnyOutside)
+        {
+            CgsGraphics::RGBA8 lOffMapColour = lColour;
+            lOffMapColour.r = 0;
+            lOffMapColour.g = 0;
+            lOffMapColour.b = 0;
+
+            lrCmd.SetTexture(0);
+            for (u32 luEdge = 0; luEdge < 4; ++luEdge)
+                RenderSatNavMapPolygon(lrCmd, laOutside[luEdge], lauOutsideCount[luEdge], lOffMapColour);
+            lrCmd.SetState(mpMapTextureState);
+        }
+
+        RenderSatNavMapPolygon(lrCmd, laInside, luInsideCount, lColour);
+    }
     RenderIconsForSatNav(&lrCmd);
     lrCmd.PopMask();
     lrCmd.SetState(gpDefaultImBlendState);
