@@ -1102,7 +1102,7 @@ namespace Deformation
             u8  lu8MinIndex   = 0xFFu;           // li r15, 0xFF sentinel
             for (s32 liSensor = 0; liSensor < liNumSensors; ++liSensor)
             {
-                const Sphere* lpWorldSphere = maDeformationSensors[liSensor].GetWorldSpaceSphere();
+                const CgsGeometric::Sphere* lpWorldSphere = maDeformationSensors[liSensor].GetWorldSpaceSphere();
                 const Vector3Plus& lrCentre = lpWorldSphere->mData;
                 const Vector3 lvDelta(__vsubfp(lrCentre.mV, lvWheelWorld.mV));
                 // vmsum3fp128 + vrsqrtefp/2xNewton + vsel zero-guard == the guarded Magnitude.
