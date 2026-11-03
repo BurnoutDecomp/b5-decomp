@@ -128,13 +128,13 @@ AStarDistanceFunction RouteRequestManager::ChooseDistanceFunction(
     const Vector2 lEnd   = BrnMath::Flatten(lEndPos3);     // (x, z) of the destination middle
 
     // diff = end - start (XZ); absDiff = |diff| componentwise.
-    const Vector2 lDiff    = { lEnd.x - lStart.x, lEnd.y - lStart.y };
-    const Vector2 lAbsDiff = { (lDiff.x < 0.0f) ? -lDiff.x : lDiff.x,
-                               (lDiff.y < 0.0f) ? -lDiff.y : lDiff.y };
+    const Vector2 lDiff(lEnd.mV.x - lStart.mV.x, lEnd.mV.y - lStart.mV.y);
+    const Vector2 lAbsDiff((lDiff.mV.x < 0.0f) ? -lDiff.mV.x : lDiff.mV.x,
+                           (lDiff.mV.y < 0.0f) ? -lDiff.mV.y : lDiff.mV.y);
 
     const Vector2 lDir    = BrnMath::Flatten(lpAICar->GetDirection());
-    const Vector2 lAbsDir = { (lDir.x < 0.0f) ? -lDir.x : lDir.x,
-                              (lDir.y < 0.0f) ? -lDir.y : lDir.y };
+    const Vector2 lAbsDir((lDir.mV.x < 0.0f) ? -lDir.mV.x : lDir.mV.x,
+                          (lDir.mV.y < 0.0f) ? -lDir.mV.y : lDir.mV.y);
 
     // The X360 self-equality NaN cascades on every Flatten output are rw::math::vpu::IsValid
     // tripwires (folded out, like BrnMathUtils.cpp); behaviour is unchanged.
@@ -147,30 +147,30 @@ AStarDistanceFunction RouteRequestManager::ChooseDistanceFunction(
     // dot` (CR6 all-true, extrwi 1,24 @0x82788DB8) -- and flt_820C4318 (200.0) is stored into it
     // only AFTER, at 0x82788DBC/0x82788DC0, for the countryside test. A NaN dot is not > (false,
     // as below).
-    const f32  lfHeadingDot  = lDiff.x * lDir.x + lDiff.y * lDir.y;
+    const f32  lfHeadingDot  = lDiff.mV.x * lDir.mV.x + lDiff.mV.y * lDir.mV.y;
     const bool lbDrivingAway = 0.0f > lfHeadingDot;
 
     // Both endpoints in the countryside half -> plain Euclidean.
-    if (KF_HACK_CONTRYSIDE_DIVIDE > lEnd.x && KF_HACK_CONTRYSIDE_DIVIDE > lStart.x)
+    if (KF_HACK_CONTRYSIDE_DIVIDE > lEnd.mV.x && KF_HACK_CONTRYSIDE_DIVIDE > lStart.mV.x)
         return E_ASTAR_DISTANCE_EUCLIDEAN;
 
     if (lbDrivingAway)
     {
         // Bias along the dominant offset axis (X when |dx| > |dy|, else Y).
-        return (lAbsDiff.x > lAbsDiff.y) ? E_ASTAR_DISTANCE_EUCLIDEAN_X_BIASED
+        return (lAbsDiff.mV.x > lAbsDiff.mV.y) ? E_ASTAR_DISTANCE_EUCLIDEAN_X_BIASED
                                          : E_ASTAR_DISTANCE_EUCLIDEAN_Y_BIASED;
     }
 
     // Heading roughly toward the destination: only bias when one axis dominates by > 2x.
-    if (lAbsDiff.x > 2.0f * lAbsDiff.y)
+    if (lAbsDiff.mV.x > 2.0f * lAbsDiff.mV.y)
         return E_ASTAR_DISTANCE_EUCLIDEAN_X_BIASED;
-    if (lAbsDiff.y > 2.0f * lAbsDiff.x)
+    if (lAbsDiff.mV.y > 2.0f * lAbsDiff.mV.x)
         return E_ASTAR_DISTANCE_EUCLIDEAN_Y_BIASED;
 
     // Neither offset axis dominates: fall back to the car heading's dominant axis.
     // X360 (@0x82789028..): `vcmpgtfp absDir.y > absDir.x` -> result = (that ? 2 : 1), i.e.
     // absDir.y > absDir.x -> Y_BIASED(2), else X_BIASED(1).
-    return (lAbsDir.y > lAbsDir.x) ? E_ASTAR_DISTANCE_EUCLIDEAN_Y_BIASED
+    return (lAbsDir.mV.y > lAbsDir.mV.x) ? E_ASTAR_DISTANCE_EUCLIDEAN_Y_BIASED
                                    : E_ASTAR_DISTANCE_EUCLIDEAN_X_BIASED;
 }
 
@@ -186,7 +186,7 @@ u16 RouteRequestManager::ComputeSectionBehind(const AICar* lpAICar, const AISect
     // trio flips the sign bits = negate), v1 = Flatten(GetPosition()). Looking BACKWARDS along
     // the car's heading, the "forward" portal is the one behind the car.
     const Vector3 lDirection = lpAICar->GetDirection();
-    const Vector3 lNegatedDirection = { -lDirection.x, -lDirection.y, -lDirection.z, -lDirection.w };
+    const Vector3 lNegatedDirection = rw::math::vpu::Negate(lDirection);
     const Vector2 lCarDirection2D = BrnMath::Flatten(lNegatedDirection);
     const Vector2 lCarPosition2D  = BrnMath::Flatten(lpAICar->GetPosition());
 
@@ -340,9 +340,7 @@ Vector3 RouteRequestManager::GetFleeVector(AICar* lpCarToAvoid, AICar* lpAICar)
 
     const Vector3 lAICarPos  = lpAICar->GetPosition();
     const Vector3 lThreatPos = lpCarToAvoid->GetPosition();
-    { const Vector3 lResult = { lAICarPos.x - lThreatPos.x,
-                    lAICarPos.y - lThreatPos.y,
-                    lAICarPos.z - lThreatPos.z }; return lResult; }
+    return rw::math::vpu::Subtract(lAICarPos, lThreatPos);
 }
 
 // X360 @0x827891A0. A look-ahead request whose direction is GetFleeVector (away from the threat),

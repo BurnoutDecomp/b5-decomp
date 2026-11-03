@@ -79,13 +79,13 @@ namespace BrnAI
     //       6: 820C8BEC / 820C8BF4 / 820C8BE8
     static const Vector3 KA_NO_BUZZ_ZONE_CENTRES[KI_NUM_NO_BUZZ_ZONES] =   // unk_8300DB30
     {
-        { -2430.80005f,  60.0f,        1906.59998f, 0.0f },
-        { -2604.80005f,  82.0f,        1900.59998f, 0.0f },
-        { -2229.80005f,  19.5f,        625.400024f, 0.0f },
-        { -2205.80005f,  19.5f,        808.400024f, 0.0f },
-        { -1981.80005f,  96.5f,        698.400024f, 0.0f },
-        { -1059.69995f,  105.199997f, -1509.30005f, 0.0f },
-        { -1054.69995f,  105.199997f, -1270.30005f, 0.0f },
+        Vector3(-2430.80005f, 60.0f, 1906.59998f),
+        Vector3(-2604.80005f, 82.0f, 1900.59998f),
+        Vector3(-2229.80005f, 19.5f, 625.400024f),
+        Vector3(-2205.80005f, 19.5f, 808.400024f),
+        Vector3(-1981.80005f, 96.5f, 698.400024f),
+        Vector3(-1059.69995f, 105.199997f, -1509.30005f),
+        Vector3(-1054.69995f, 105.199997f, -1270.30005f),
     };
     static const f32 KAF_NO_BUZZ_ZONE_RADII[KI_NUM_NO_BUZZ_ZONES] =        // unk_820C4334
     {
@@ -141,9 +141,9 @@ namespace BrnAI
     // so the console form is spelled here (the BrnAICar_Update.cpp IsZeroVmx precedent).
     static inline bool IsZeroVmx(const Vector3& lrVector)
     {
-        return !(std::fabs(lrVector.x) > rw::math::fpu::KF_IS_ZERO_TOLERANCE) &&
-               !(std::fabs(lrVector.y) > rw::math::fpu::KF_IS_ZERO_TOLERANCE) &&
-               !(std::fabs(lrVector.z) > rw::math::fpu::KF_IS_ZERO_TOLERANCE);
+        return !(std::fabs(static_cast<float>(lrVector.GetX())) > rw::math::fpu::KF_IS_ZERO_TOLERANCE) &&
+               !(std::fabs(static_cast<float>(lrVector.GetY())) > rw::math::fpu::KF_IS_ZERO_TOLERANCE) &&
+               !(std::fabs(static_cast<float>(lrVector.GetZ())) > rw::math::fpu::KF_IS_ZERO_TOLERANCE);
     }
 
     // ------------------------------------------------------------------------
