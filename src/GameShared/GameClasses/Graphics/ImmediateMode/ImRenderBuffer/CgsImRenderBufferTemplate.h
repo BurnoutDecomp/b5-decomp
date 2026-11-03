@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <ppcintrinsics.h>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator / ResourceDescriptor / Resource
@@ -253,8 +254,23 @@ namespace CgsGraphics
 
     struct ImCommandSetClear : public ImCommand                      // DWARF :167
     {
-        renderengine::ClearColorParameters* mClearParams;            // [c:0x08] (by-value on console; kept a ptr to avoid pulling the heavy param type)
+        renderengine::ClearColorParameters mClearParams;             // ARTIST8245904C: aligned by value at +0x10
     };
+
+    CGS_STATIC_ASSERT((offsetof(ImCommandSetClear, mClearParams) == 16), "ARTIST clear payload offset");
+    CGS_STATIC_ASSERT((sizeof(ImCommandSetClear) == 32), "ARTIST clear command size");
+
+    // ARTIST827F9F18: Xbox resolve flag, source pixel buffer and target texture.
+    struct ImCommandResolve : public ImCommand
+    {
+        bool mbResolve;
+        renderengine::PixelBuffer* mpPixelBuffer;
+        renderengine::Texture* mpTexture;
+    };
+
+    CGS_STATIC_ASSERT((offsetof(ImCommandResolve, mbResolve) == 8), "ARTIST resolve flag");
+    CGS_STATIC_ASSERT((offsetof(ImCommandResolve, mpPixelBuffer) == 12), "ARTIST resolve source");
+    CGS_STATIC_ASSERT((offsetof(ImCommandResolve, mpTexture) == 16), "ARTIST resolve destination");
 
     struct ImCommandSetTexture : public ImCommand                    // DWARF :183
     {
@@ -428,6 +444,39 @@ namespace CgsGraphics
                        const V* lpVerticesFromRenderStart, u32 luNumVertices);              // @0x57E5DC
 
         // ----- state setters (append a command) -----
+        // ARTIST82458FB8: opcode 13, 32-byte command with the aligned
+        // four-float colour copied into the stream (the caller may be temporary).
+        void SetClear(renderengine::ClearColorParameters lClear)
+        {
+            const char* lpFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h";
+            if (!mbInRenderBlock)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", lpFile, 1216);
+                CgsDev::Assert::EndAssert();
+            }
+            __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u), mpWriteBuffer->mpu8CommandBuffer);
+            const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+            const u32 luNext = luPos + 32u;
+            if (luNext <= muCommandBufferSize)
+            {
+                ImCommandSetClear* lpCommand = reinterpret_cast<ImCommandSetClear*>(mpWriteBuffer->mpu8CommandBuffer + luPos);
+                lpCommand->muSize = 32;
+                lpCommand->muType = IM_CMD_SET_CLEAR;
+                mpWriteBuffer->muCommandBufferWritePos = luNext;
+                lpCommand->mClearParams = lClear;
+            }
+            else
+            {
+                SetBufferFullRewindToLastEndRender();
+                if (!mbFailGracefully)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", lpFile, 1254);
+                    CgsDev::Assert::EndAssert();
+                }
+            }
+        }
         void SetTexture(renderengine::Texture* lpTexture);                                   // @0x24ED54
         void SetProgram(s8 li8Program);                                                      // @0x24ECC8
         // Append a 16-byte {type:IM_CMD_SET_STATE_RASTERIZER} command binding a rasterizer

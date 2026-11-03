@@ -420,6 +420,69 @@ void ImRendererBase::SetState(const DepthStencilState* lpState)
     shadow::Device::SetState(reinterpret_cast<const renderengine::DepthStencilState*>(lpState));
 }
 
+// ARTIST827DB558 / 82B61B50: apply the complete depth state with an
+// explicit stencil reference, then invalidate its ordinary shadow cache.
+void ImRendererBase::SetState(const DepthStencilState* p, u32 luStencilRef)
+{
+    if (mgpActiveRenderer != this)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
+            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 754);
+        CgsDev::Assert::EndAssert();
+    }
+    D3DDevice* d = gpD3DDevice;
+    D3DDevice_SetRenderState_ZEnable(d, p->muZEnable);
+    D3DDevice_SetRenderState_ZWriteEnable(d, p->muZWriteEnable);
+    D3DDevice_SetRenderState_ZFunc(d, p->muZFunc);
+    D3DDevice_SetRenderState_StencilEnable(d, p->muStencilEnable);
+    D3DDevice_SetRenderState_TwoSidedStencilMode(d, p->muTwoSidedStencilMode);
+    D3DDevice_SetRenderState_StencilFunc(d, p->muStencilFunc);
+    D3DDevice_SetRenderState_StencilFail(d, p->muStencilFail);
+    D3DDevice_SetRenderState_StencilZFail(d, p->muStencilZFail);
+    D3DDevice_SetRenderState_StencilPass(d, p->muStencilPass);
+    D3DDevice_SetRenderState_CCWStencilFunc(d, p->muCcwStencilFunc);
+    D3DDevice_SetRenderState_CCWStencilFail(d, p->muCcwStencilFail);
+    D3DDevice_SetRenderState_CCWStencilZFail(d, p->muCcwStencilZFail);
+    D3DDevice_SetRenderState_CCWStencilPass(d, p->muCcwStencilPass);
+    D3DDevice_SetRenderState_StencilRef(d, luStencilRef);
+    D3DDevice_SetRenderState_StencilMask(d, p->muStencilMask);
+    D3DDevice_SetRenderState_StencilWriteMask(d, p->muStencilWriteMask);
+    D3DDevice_SetRenderState_CCWStencilRef(d, p->muCcwStencilRef);
+    D3DDevice_SetRenderState_CCWStencilMask(d, p->muCcwStencilMask);
+    D3DDevice_SetRenderState_CCWStencilWriteMask(d, p->muCcwStencilWriteMask);
+    D3DDevice_SetRenderState_HiStencilEnable(d, p->muHiStencilEnable);
+    D3DDevice_SetRenderState_HiStencilWriteEnable(d, p->muHiStencilWriteEnable);
+    D3DDevice_SetRenderState_HiStencilFunc(d, p->muHiStencilFunc);
+    D3DDevice_SetRenderState_HiStencilRef(d, p->muHiStencilRef);
+    shadow::Device::mpDepthStencilState = 0;
+}
+
+// ARTIST827DB5D8 and 823A6118 share the existing shadow state homes.
+void ImRendererBase::SetState(const RenderTargetState* lpState)
+{
+    if (mgpActiveRenderer != this)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
+            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 797);
+        CgsDev::Assert::EndAssert();
+    }
+    shadow::Device::SetState(lpState);
+}
+
+void ImRendererBase::SetState(const SamplerState* lpState)
+{
+    if (mgpActiveRenderer != this)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
+            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 818);
+        CgsDev::Assert::EndAssert();
+    }
+    shadow::Device::SetState(lpState, 0);
+}
+
 // X360 CgsGraphics::ImRendererBase::SetState(const RasterizerState*) @0x82276E48.
 // Its active-renderer assertion is followed by the shadow device's rasterizer lock,
 // compare, low-level apply, and cache update (the same stages as shadow::Device::SetState

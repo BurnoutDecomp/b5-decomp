@@ -28,7 +28,7 @@ namespace CgsGraphics
     typedef renderengine::BlendState BlendState;
     typedef renderengine::DepthStencilState DepthStencilState;
     typedef renderengine::RasterizerState RasterizerState;
-    class RenderTargetState;
+    using renderengine::RenderTargetState;
     using renderengine::SamplerState;
     class ProgramBuffer;
 

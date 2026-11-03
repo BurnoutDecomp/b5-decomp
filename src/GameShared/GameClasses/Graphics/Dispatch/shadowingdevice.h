@@ -6,7 +6,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 
 struct RenderableMesh;                                   // renderablemesh.h
-namespace CgsGraphics { struct MaterialTechniqueView; }  // CgsDispatcherCommands.h
+namespace CgsGraphics { struct MaterialTechniqueView; struct ImRendererBase; }  // CgsDispatcherCommands.h
 
 // The three render-state objects the triple binds. Pointer-only use in this header, so these are
 // forward declarations rather than includes (the documented cascade-avoidance exception) --
@@ -30,6 +30,7 @@ namespace shadow
 {
     class Device
     {
+        friend struct CgsGraphics::ImRendererBase;
     public:
         struct DrawIndexedParameters
         {
