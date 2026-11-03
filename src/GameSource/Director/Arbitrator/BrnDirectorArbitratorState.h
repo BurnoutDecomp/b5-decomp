@@ -26,6 +26,8 @@
 // opaque span and parity is BY NAME (the same convention as BrnICEMoviePlayer.h /
 // BrnDirectorICEWrapper.h). The +0x171 quote is provenance only.
 // ----------------------------------------------------------------------------
+namespace CgsNumeric { class Random; }
+
 namespace BrnDirector
 {
     // ---- pointee types the shared-context holds by pointer (declaration-only) -------------
@@ -47,7 +49,6 @@ namespace BrnDirector
     struct NamedParameters;
     class  MomentController;
     struct GameState;
-    struct Random;
     class  DirectorResourceManager;
     struct EffectInterface;
     // ⛔ RETIRED 2026-08-29 -- `struct PlayerCrashInfo;` at BrnDirector scope was the SECOND
@@ -94,7 +95,7 @@ namespace BrnDirector
         const NamedParameters*                  mpNamedParameters;            // +0x1C
         MomentController*                       mpMomentController;           // +0x20
         GameState*                              mpGameState;                  // +0x24
-        Random*                                 mpRandom;                     // +0x28
+        CgsNumeric::Random*                     mpRandom;                     // +0x28
         const DirectorResourceManager*          mpDirectorResourceManager;    // +0x2C
         const EffectInterface*                  mpEffectInterface;            // +0x30
         const Camera::PlayerCrashInfo*          mpPlayerCrashInfo;            // +0x34

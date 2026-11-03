@@ -111,7 +111,7 @@ void DirectorModule::Construct(f32 lfTime)
     mVolumeTestFinePostOffice.Construct();
     mVolumeTestDeepestPostOffice.Construct();
 
-    mCamera.Construct();
+    mReplayDirector.mLastCamera.Construct();
 
     mMainDirector.Construct(&mDirectorResourceManager, lfTime);
 
@@ -122,6 +122,7 @@ void DirectorModule::Construct(f32 lfTime)
         /* liStaticBufferSize */ 384,
         /* lpcName            */ "DirectorModule",
         /* lbSkipModuleSerialise */ false);
+    mDirectorSerialiser.mbStaticCameraConstructed = false; // ARTIST 8225C6AC
 
     // Budget literals are the X360 rodata floats flt_82004014 (Pre SQ / Post Gui) and
     // flt_82001C98 (Main) -- both cross-confirmed elsewhere in this codebase as 0.1f and
@@ -377,7 +378,7 @@ void DirectorModule::ProcessSceneQueryResults(
 //
 // Body:
 //   1. latch the incoming "is replaying" flag into mbIsReplaying, taking the
-//      false->true EDGE to clear mbReplayRestoring and raise mbReplayStartedThisFrame;
+//      false->true EDGE to clear mbReplayRestoring and raise mReplayDirector.mbStartedThisFrame;
 //   2. (GATED) the director-serialiser mode bookkeeping -- see the gate note below;
 //   3. build the per-frame scene-query post office with ALL SIX post offices live (this is
 //      the pass that may issue queries) and Clear() it;
@@ -410,7 +411,7 @@ s32 DirectorModule::PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputStack, 
     if (lbIsReplaying != mbIsReplaying && lbIsReplaying)
     {
         mbReplayRestoring        = false;   // this+232193
-        mbReplayStartedThisFrame = 1;       // this+231716
+        mReplayDirector.mbStartedThisFrame = 1;       // this+231716
     }
     mbIsReplaying = lbIsReplaying;          // this+232192
 
@@ -666,7 +667,7 @@ s32 DirectorModule::PostGuiUpdate(CgsModule::IOBufferStack* lpInputStack, CgsMod
 
     // ✅ GATE CLOSED (fly-by wave). The X360 finishes with
     //     s32 liIndex = *(s32*)((u8*)lpInputBuffer + 0x7AB8);   // a4[7854]
-    //     if ( liIndex > -1 )  miPostGuiCarIndexLatch = liIndex;
+    //     if ( liIndex > -1 )  mReplayDirector.miCameraType = liIndex;
     // -- a sticky latch that is only updated when the published word is not the -1 "none"
     // sentinel. The source word is now the NAMED DirectorIO::InputBuffer::miCameraType (the
     // slot BridgeGuiToDirector's command-591 arm writes, whose own assert calls it a "camera
@@ -674,7 +675,7 @@ s32 DirectorModule::PostGuiUpdate(CgsModule::IOBufferStack* lpInputStack, CgsMod
     {
         const s32 liCameraType = lpInputBuffer->GetCameraType();
         if (liCameraType > -1)
-            miPostGuiCarIndexLatch = liCameraType;
+            mReplayDirector.miCameraType = liCameraType;
     }
 
     lpOutputBuffer->UnlockForWrite();

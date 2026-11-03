@@ -288,7 +288,7 @@ namespace Camera
             const char* GetDebugName() const { return mpcDebugName; }       // :279
 
         protected:
-            Parameters() : mType(0), mpcDebugName(0) {}                     // :285
+            Parameters() {} // ARTIST 827E2020 / 827E26A8 preserve default parameter words.                     // :285
             void Construct() { mType = 0; mpcDebugName = 0; }               // :290
 
             u32 mType;                                                      // :287 +0x00

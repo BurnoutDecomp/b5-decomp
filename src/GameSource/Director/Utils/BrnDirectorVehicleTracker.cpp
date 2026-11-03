@@ -57,23 +57,16 @@ f32 VehicleTracker::sfMinSpeedBelowMaxMPHForNormalCrash    = 50.0f;
 f32 VehicleTracker::sfMinSpeedBelowMaxMPHForHighSpeedCrash = 20.0f;
 
 // ----------------------------------------------------------------------------
-// BrnDirector::VehicleTracker::Construct
-//   Clear the score block and reset all four history journals to empty. (The console body
-//   clears CarScoreData then resets the four journals' cursor/size; the journals' Construct
-//   does the cursor/size reset.)
+// BrnDirector::VehicleTracker::Construct @0x821F77A8.
+// Preserve the history journals and crash-class word; this reset only writes
+// the five native fields below and calls the real score-data clear.
 // ----------------------------------------------------------------------------
 void VehicleTracker::Construct()
 {
-    mScoreData = CarScoreData();
-
-    mPositionJournal.Construct();
-    mLinearVelocityJournal.Construct();
-    mMphJournal.Construct();
-    mTimestepJournal.Construct();
-
-    meCrashType           = E_CRASH_NOT_CRASHING;
+    mbFirstFrame = true;
+    miVehicleIndex = -1;
+    mScoreData.ClearData();
     mfRaceEndEffectAmount = 0.0f;
-    mbFirstFrame          = true;
     mbIsFirstFrameOfCrash = false;
 }
 
@@ -193,7 +186,7 @@ void VehicleTracker::Update(
     }
     else
     {
-        const f32 lfDistanceToFinish = mScoreData.GetDistanceToFinish();
+        const f32 lfDistanceToFinish = mScoreData.GetDistanceToFinishLive(); // ARTIST 8223B6A4: tracker+0x188
 
         f32 lfDesiredRaceEndAmount;
         if (lfDistanceToFinish >= KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS)

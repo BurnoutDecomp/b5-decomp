@@ -253,7 +253,7 @@ namespace BrnDirector
     //   * (MomentController::Construct -- REAL since 2026-09-24: the controller is a member.)
     //   * the camera-shake LCG seed pipeline (+0x32EE0..) -- a multi-stage VMX + 1284865837
     //     multiplier LCG the reconstruction rules forbid paraphrasing to scalar, writing into
-    //     the un-homed maRandom region. CONSEQUENCE: the shake RNG table starts zeroed.
+    //     the uninitialised mRandom member. CONSEQUENCE: the shake RNG table starts zeroed.
     //   * KeyAnimShakeController::Construct / ShotSelector::Construct -- un-homed.
     //   * GameState::Clear + the three DebugPrinter::Constructs + the flag/latch tail seeds --
     //     un-homed regions (maGameState / maDebugPrinter* / maStateFlagTail).
@@ -321,7 +321,7 @@ namespace BrnDirector
         // (crash-nav / ATTRACT MODE / render-metrics).
         mArbitrator.Construct();
 
-        // ⚠️ GATE: the VMX/LCG camera-shake seed pipeline into maRandom.
+        // ⚠️ GATE: the VMX/LCG camera-shake seed pipeline into mRandom.
 
         // ⭐ REAL (2026-09-06, camera-shake lane): the camera finaliser's own seed --
         // InertiaController::miFrame = 0, mfShakeScale = 0 and
@@ -395,7 +395,7 @@ namespace BrnDirector
         maStateFlagTail[E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP]                = 0;    // +0x3543D
         maStateFlagTail[E_FLAG_TAIL_EVENT_END_REQUEST]                    = 0;    // +0x3543E
         maStateFlagTail[E_FLAG_TAIL_EVENT_END_FORCED]                     = 0;    // +0x3543F
-        maAllVehicleDataReadyLatch[0]                                     = 0;    // +0x12160
+        mbUseIceWrapperCamera                                     = 0;    // +0x12160
     }
 
     // ------------------------------------------------------------------------
@@ -711,8 +711,7 @@ namespace BrnDirector
             &mBehaviourManager.GetBehaviourParameterBank().GetNamedParameters();    // +0x1C
         lrSharedInfo.mpMomentController      = const_cast<MomentController*>(&mMomentController); // +0x20
         lrSharedInfo.mpGameState             = const_cast<GameState*>(&maGameState);            // +0x24
-        lrSharedInfo.mpRandom                = reinterpret_cast<Random*>(
-                                                  const_cast<u8*>(maRandom));                   // +0x28
+        lrSharedInfo.mpRandom                = const_cast<CgsNumeric::Random*>(&mRandom);                   // +0x28
         lrSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;                       // +0x2C
         lrSharedInfo.mpEffectInterface       = reinterpret_cast<const EffectInterface*>(
                                                   maEffectInterface);                           // +0x30
@@ -2554,8 +2553,7 @@ namespace BrnDirector
         lSharedInfo.mpBehaviourManager        = &mBehaviourManager;
         lSharedInfo.mpWorldMap                = lpIO->mpWorldMap;
         lSharedInfo.mpSceneQueryInterface     = lpIO->mpSceneQueryInterface;
-        lSharedInfo.mpRandom                  = reinterpret_cast<CgsNumeric::Random*>(
-                                                    const_cast<u8*>(maRandom));
+        lSharedInfo.mpRandom                  = const_cast<CgsNumeric::Random*>(&mRandom);
 
         // ---- the six slots that used to be published as null (see the banner) --------------
         // Each is the console's own `this + <offset>`, reached through the named member.
@@ -2634,7 +2632,7 @@ namespace BrnDirector
     //   mUsedRaceCars       = *input->GetUsedRaceCars()            (ld / std)
     //   mpRaceCars          = input->GetRaceCarInfo()              (sub_82207040)
     //   mePlayerCarIndex    = the player index
-    //   mpRandom            = this + 0x32EE0                       (the camera Random -- maRandom)
+    //   mpRandom            = this + 0x32EE0                       (the camera Random -- mRandom)
     //   mpPlayerCar         = mpRaceCars + 0x4F0 * index           (mulli 0x4F0 = sizeof VehicleInfo)
     //   mpPlayerCarTransform= mpPlayerCar + 0x1F0                  (mRaceCarState.mTransform)
     //   mTimestep           = the 64-byte timestep block the BehaviourSharedInfo was built from
@@ -2655,7 +2653,7 @@ namespace BrnDirector
         lrPolicyInfo.mUsedRaceCars        = *lpInput->GetUsedRaceCars();
         lrPolicyInfo.mpRaceCars           = lpInput->GetRaceCarInfo();
         lrPolicyInfo.mePlayerCarIndex     = static_cast<EActiveRaceCarIndex>(liPlayerCarIndex);
-        lrPolicyInfo.mpRandom             = reinterpret_cast<CgsNumeric::Random*>(const_cast<u8*>(maRandom));
+        lrPolicyInfo.mpRandom             = const_cast<CgsNumeric::Random*>(&mRandom);
         lrPolicyInfo.mpPlayerCar          = (lrPolicyInfo.mpRaceCars != 0 && liPlayerCarIndex >= 0)
                                                 ? &lrPolicyInfo.mpRaceCars[liPlayerCarIndex] : 0;
         lrPolicyInfo.mpPlayerCarTransform = (lrPolicyInfo.mpPlayerCar != 0)
@@ -2807,7 +2805,7 @@ namespace BrnDirector
         MomentSharedInfo lSharedInfo;
         lSharedInfo.mPlayerInfo              = lrPlayerCar;                     // VehicleInfo::operator=
         lSharedInfo.mUsedRaceCars            = *lpInput->GetUsedRaceCars();     // ld / std var_90
-        lSharedInfo.mpRandom                 = reinterpret_cast<CgsNumeric::Random*>(maRandom);          // +0x32EE0
+        lSharedInfo.mpRandom                 = &mRandom;          // +0x32EE0
         lSharedInfo.mpDebugLog               = const_cast<DebugLog*>(&mDebugLog);                        // +0x33108
         lSharedInfo.mpDebugPrinter           = reinterpret_cast<DebugPrinter*>(maDebugPrinterB);         // +0x3378C
         lSharedInfo.mpGameState              = &maGameState;                                             // +0x337E0

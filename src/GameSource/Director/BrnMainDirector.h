@@ -2,6 +2,8 @@
 #define GAMESOURCE_DIRECTOR_BRN_MAIN_DIRECTOR_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
+#include "GameSource/Director/BrnDirectorDevTools.h"
 #include <cstddef>   // offsetof
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"          // CgsGraphics::Camera (mCgsCamera)
 #include "GameSource/Director/BrnDirectorICEWrapper.h"          // BrnDirector::ICEWrapper (mICEWrapper)
@@ -35,41 +37,11 @@ namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Dir
 // home of the ENGINE source file path is "..\..\..\GameSource\Director/BrnMainDirector.cpp"
 // (the X360 asserts quote it), so the reconstructed .cpp mirrors that path.
 //
-// ----------------------------------------------------------------------------
-// ⚠️ LAYOUT MODEL -- REWRITTEN (BehaviourManager wave). READ THIS BEFORE EDITING.
-//
-// This class used to be `alignas(16) u8 maStorage[0x35450];` -- a CONSOLE-sized opaque
-// buffer -- with every sub-object reached at its CONSOLE byte offset through a char* view.
-// That model is UNSOUND on the x64 host and it is exactly why the previous wave had to hold
-// `ICEWrapper::Construct` and `Arbitrator::Construct` back:
-//
-//     the host types are WIDER than their console placement windows (every embedded
-//     pointer, vptr and Camera widens 4 -> 8), so constructing a host ICEWrapper at
-//     console +0x50 or a host Arbitrator at console +0x12DC0 silently OVERRUNS the next
-//     console region -- a memory stomp that would be extremely expensive to find later.
-//
-// It is NOT fixable by "sizing the window": the windows are defined by console offsets the
-// host cannot honour. So the buffer is RETIRED. MainDirector is now a NAMED-MEMBER class
-// declared in CONSOLE ORDER with HOST-NATIVE sizes -- the project's x64 rule ("semantic
-// parity by named members, not byte offsets") and exactly the model the committed
-// BrnDirectorModule.h already uses for the module itself.
-//
-// Consequences, all intended:
-//   * `sizeof(MainDirector)` is NO LONGER 0x35450 and the old placement-window
-//     static_assert is gone. Nothing depends on it: DirectorModule embeds MainDirector as a
-//     named member (`MainDirector mMainDirector;`) and its own following members are named
-//     too, so the module's layout re-flows automatically.
-//   * The X360 CONSOLE offsets quoted per member below are PROVENANCE ONLY -- the evidence
-//     for the member's identity and its position in the order. NOTHING indexes by them.
-//   * Sub-objects whose types are not homed yet are declared as NAMED opaque regions sized
-//     by their console span, with a named accessor where a reconstructed body has to hand
-//     the region on (e.g. to ArbStateSharedInfo). That keeps them honest storage instead of
-//     raw offsets, and each becomes a one-line swap when its type lands.
-//
-// FLAG: this class is NON-POLYMORPHIC -- the X360 ctor installs the embedded sub-objects'
-//   vtables but stores NO vtable pointer at MainDirector +0x00 (DirectorDevTools occupies
-//   the head; the lifecycle methods are called directly by DirectorModule, not virtually).
-// ----------------------------------------------------------------------------
+// Native containment uses the actual dev-tools and Random types. The previous
+// editor-state flag belongs to MainDirector, after ICEWrapper. The remaining
+// ICEController declaration gaps keep this object short of ARTIST's 0x35450
+// extent; DirectorModule and GameModule retain their hard native layout gates.
+// Older opaque members and incomplete lifecycle operations are recorded below.
 
 namespace BrnGameState { namespace GameStateModuleIO { struct PrepareForModeAction; } }  // GameSource/GameState/BrnGameActions.h
 
@@ -335,6 +307,7 @@ namespace BrnDirector
     private:
         // The director debug page registers the moment, debug-output and misc tweakables below.
         friend class DebugComponent;
+        friend class DirectorDevTools;
 
         // ================================================================================
         // LAYOUT -- named members in CONSOLE ORDER, HOST-NATIVE sizes.
@@ -345,16 +318,9 @@ namespace BrnDirector
         // lands, and delete the matching accessor's FLAG.
         // ================================================================================
 
-        // +0x00000  BrnDirector::DirectorDevTools -- occupies the head (its Construct takes
-        //           `this`, i.e. the dev-tools object IS at MainDirector +0).
-        //           FLAG: un-homed; named opaque storage (console span 0x00 .. 0x40).
-        CGS_ALIGN(16) u8 maDirectorDevTools[0x40];
-
-        // +0x00040  the DirectorModule's DebugComponent back-pointer.
+        // ARTIST 8225B478 / 82250EDC: real dev-tools head and debug owner.
+        DirectorDevTools mDirectorDevTools;
         DebugComponent* mpDebugComponent;
-
-        // +0x00044 .. +0x0004F  dev-tools tail (untouched by any reconstructed body).
-        u8 maDirectorDevToolsTail[0x0C];
 
         // +0x00050  the embedded ICE wrapper. Console span 0x50 .. 0x12160.
         ICEWrapper mICEWrapper;
@@ -378,7 +344,7 @@ namespace BrnDirector
         // that a scene-space take projects through a ZERO matrix on the console too. Both were wrong.
         // The 0x82274A64 write is NOT the ICE editor's: it is the unconditional-but-for-flag-13
         // follow, so the space is the last camera before a scene-space take (see Update).
-        u8             maAllVehicleDataReadyLatch[0x12170 - 0x12160];   // +0x12160
+        bool           mbUseIceWrapperCamera;                         // +0x12160
         Matrix44Affine mICESceneSpace;                                  // +0x12170
         // +0x121B0 .. +0x12480, CARVED 2026-09-24 at the three console sub-object bases the moment
         // tick publishes (MainDirector::UpdateMoments @0x82250268 hands +0x121F0 and +0x1245C to every
@@ -436,20 +402,8 @@ namespace BrnDirector
         //           (its own last field, mbDebugDisplayAllCameras, is at manager +91076).
         Camera::BehaviourManager mBehaviourManager;
 
-        // +0x32ED8 .. +0x32EE0  (untouched)
-        u8 maPad_0x32ED8[0x08];
-
-        // +0x32EE0 .. +0x32F10  the camera-shake RNG: an 8-slot float table (+0x32EE0), the
-        //           64-bit LCG state (+0x32F00) and its index (+0x32F08). This IS the
-        //           `Random* mpRandom` slot ArbStateSharedInfo carries. FLAG: BrnDirector::
-        //           Random is un-homed; named opaque span.
-        //           ALIGNED 2026-09-17: the console seats it 16-aligned (+0x32EE0) and
-        //           CgsNumeric::Random is a 16-byte-aligned type; every by-value copy of
-        //           it (Looker::Update takes `Random` by value) is a movaps, which #GP-faults
-        //           on the 8-aligned host offset this span used to land on (the deathcam's
-        //           first Update: ACCESS_VIOLATION reading 0xFFFFFFFFFFFFFFFF). The next
-        //           member (mLastCamera) is already 16-aligned, so nothing after it moves.
-        CGS_ALIGN(16) u8 maRandom[0x32F10 - 0x32EE0];
+        // ARTIST 8225B580..8225B790: actual eight-slot RNG and its seed/index.
+        CgsNumeric::Random mRandom;
 
         // +0x32F10  the frame camera the director carries over between frames.
         Camera::Camera mLastCamera;
