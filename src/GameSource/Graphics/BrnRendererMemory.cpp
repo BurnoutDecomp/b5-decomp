@@ -527,14 +527,14 @@ void BrnRendererMemory::BlitComposite(CgsGraphics::Im2d& im2d,
         { { 1.0f, 0.0f }, { 255, 255, 255, 255 }, { 1.0f, 0.0f } },
         { { 1.0f, 1.0f }, { 255, 255, 255, 255 }, { 1.0f, 1.0f } }
     };
-    Vector4 uvOffsets = { 0.0f, 0.0f, 0.0f, 0.0f };
-    const Vector4 uvScales = { 1.0f, 1.0f, 1.0f, 1.0f };
+    Vector4 uvOffsets(0.0f, 0.0f, 0.0f, 0.0f);
+    const Vector4 uvScales(1.0f, 1.0f, 1.0f, 1.0f);
     if (gBlitHalfPixelOffset82F2423E)
     {
-        uvOffsets.x = (1.0f / static_cast<f32>(base->muWidth)) * 0.5f;
-        uvOffsets.y = (1.0f / static_cast<f32>(base->muHeight)) * 0.5f;
-        uvOffsets.z = (1.0f / static_cast<f32>(overlay->muWidth)) * 0.5f;
-        uvOffsets.w = (1.0f / static_cast<f32>(overlay->muHeight)) * 0.5f;
+        uvOffsets.SetX((1.0f / static_cast<f32>(base->muWidth)) * 0.5f);
+        uvOffsets.SetY((1.0f / static_cast<f32>(base->muHeight)) * 0.5f);
+        uvOffsets.SetZ((1.0f / static_cast<f32>(overlay->muWidth)) * 0.5f);
+        uvOffsets.SetW((1.0f / static_cast<f32>(overlay->muHeight)) * 0.5f);
     }
 
     renderengine::ProgramVariableHandle offsetsHandle;
@@ -551,11 +551,10 @@ void BrnRendererMemory::BlitComposite(CgsGraphics::Im2d& im2d,
 
     const f32 inverseWidth = 1.0f / static_cast<f32>(base->muWidth);
     const f32 inverseHeight = 1.0f / static_cast<f32>(base->muHeight);
-    const Vector4 quincunxOffsets =
-    {
+    const Vector4 quincunxOffsets(
         0.166f * inverseWidth, -0.166f * inverseHeight,
         0.0f * inverseWidth, 0.0f * inverseHeight
-    };
+    );
     renderengine::ProgramVariableHandle quincunxHandle;
     renderengine::ProgramBuffer::GetVariableHandleByName(mpCompositeBlitPixelProgramBuffer,
         reinterpret_cast<const u8*>("gQuincunxOffsets"), &quincunxHandle);

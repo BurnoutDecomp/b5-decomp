@@ -73,7 +73,7 @@ namespace BrnParticle
         const f32 KF_ROTATION_AMOUNT_MAX = 4.0f;
 
         // The colour-shaping constants recovered from the CRT init thunks (see the banner).
-        const Vector4 KV_RGB_MEAN_WEIGHTS = { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f, 0.0f };
+        const Vector4 KV_RGB_MEAN_WEIGHTS(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f, 0.0f);
         const f32     KF_COLOUR_SATURATION_LOW  = 0.25f;
         const f32     KF_COLOUR_SATURATION_HIGH = 0.75f;
         const f32     KF_COLOUR_BRIGHTNESS_LOW  = 0.5f;
@@ -101,18 +101,12 @@ namespace BrnParticle
             static_cast<DebrisBatchSpawnEvent::DebrisSpawnData*>(mpSparkSpawnBuffer)
             + mu16SpawnBufferCount;
 
-        lpRecord->mvPositionPlusSize.x = lvPosition.x;
-        lpRecord->mvPositionPlusSize.y = lvPosition.y;
-        lpRecord->mvPositionPlusSize.z = lvPosition.z;
-        lpRecord->mvPositionPlusSize.w = lfSize;
-        lpRecord->mvVelocityPlusSpawnTime.x = lvVelocity.x;
-        lpRecord->mvVelocityPlusSpawnTime.y = lvVelocity.y;
-        lpRecord->mvVelocityPlusSpawnTime.z = lvVelocity.z;
-        lpRecord->mvVelocityPlusSpawnTime.w = lfSpawnTime;
-        lpRecord->mvRotationAxisPlusRotationAmount.x = lvRotationAxis.x;
-        lpRecord->mvRotationAxisPlusRotationAmount.y = lvRotationAxis.y;
-        lpRecord->mvRotationAxisPlusRotationAmount.z = lvRotationAxis.z;
-        lpRecord->mvRotationAxisPlusRotationAmount.w = lfRotationAmount;
+        lpRecord->mvPositionPlusSize.SetVector(lvPosition.GetVector());
+        lpRecord->mvPositionPlusSize.SetPlus(lfSize);
+        lpRecord->mvVelocityPlusSpawnTime.SetVector(lvVelocity.GetVector());
+        lpRecord->mvVelocityPlusSpawnTime.SetPlus(lfSpawnTime);
+        lpRecord->mvRotationAxisPlusRotationAmount.SetVector(lvRotationAxis.GetVector());
+        lpRecord->mvRotationAxisPlusRotationAmount.SetPlus(lfRotationAmount);
         lpRecord->meType                           = leDebrisType;
 
         if (leDebrisType != Native::eDebrisArray_Coloured)
@@ -125,22 +119,22 @@ namespace BrnParticle
             // Desaturate the caller's colour toward its own RGB mean, once for each bound, then
             // draw inside the pair. The mean is a 4-lane dot with a zero w weight, i.e. the plain
             // mean of R, G and B, splatted across all four lanes.
-            const f32 lfMean = lvColour.x * KV_RGB_MEAN_WEIGHTS.x
-                             + lvColour.y * KV_RGB_MEAN_WEIGHTS.y
-                             + lvColour.z * KV_RGB_MEAN_WEIGHTS.z
-                             + lvColour.w * KV_RGB_MEAN_WEIGHTS.w;
+            const f32 lfMean = static_cast<f32>(lvColour.GetX()) * static_cast<f32>(KV_RGB_MEAN_WEIGHTS.GetX())
+                             + static_cast<f32>(lvColour.GetY()) * static_cast<f32>(KV_RGB_MEAN_WEIGHTS.GetY())
+                             + static_cast<f32>(lvColour.GetZ()) * static_cast<f32>(KV_RGB_MEAN_WEIGHTS.GetZ())
+                             + static_cast<f32>(lvColour.GetW()) * static_cast<f32>(KV_RGB_MEAN_WEIGHTS.GetW());
 
-            const Vector4 lvDeviation = { lvColour.x - lfMean, lvColour.y - lfMean,
-                                          lvColour.z - lfMean, lvColour.w - lfMean };
+            const Vector4 lvDeviation( static_cast<f32>(lvColour.GetX()) - lfMean, static_cast<f32>(lvColour.GetY()) - lfMean,
+                                          static_cast<f32>(lvColour.GetZ()) - lfMean, static_cast<f32>(lvColour.GetW()) - lfMean );
 
-            const Vector4 lvLow  = { lvDeviation.x * KF_COLOUR_SATURATION_LOW  + lfMean,
-                                     lvDeviation.y * KF_COLOUR_SATURATION_LOW  + lfMean,
-                                     lvDeviation.z * KF_COLOUR_SATURATION_LOW  + lfMean,
-                                     KF_COLOUR_BRIGHTNESS_LOW };
-            const Vector4 lvHigh = { lvDeviation.x * KF_COLOUR_SATURATION_HIGH + lfMean,
-                                     lvDeviation.y * KF_COLOUR_SATURATION_HIGH + lfMean,
-                                     lvDeviation.z * KF_COLOUR_SATURATION_HIGH + lfMean,
-                                     KF_COLOUR_BRIGHTNESS_HIGH };
+            const Vector4 lvLow( static_cast<f32>(lvDeviation.GetX()) * KF_COLOUR_SATURATION_LOW  + lfMean,
+                                     static_cast<f32>(lvDeviation.GetY()) * KF_COLOUR_SATURATION_LOW  + lfMean,
+                                     static_cast<f32>(lvDeviation.GetZ()) * KF_COLOUR_SATURATION_LOW  + lfMean,
+                                     KF_COLOUR_BRIGHTNESS_LOW );
+            const Vector4 lvHigh( static_cast<f32>(lvDeviation.GetX()) * KF_COLOUR_SATURATION_HIGH + lfMean,
+                                     static_cast<f32>(lvDeviation.GetY()) * KF_COLOUR_SATURATION_HIGH + lfMean,
+                                     static_cast<f32>(lvDeviation.GetZ()) * KF_COLOUR_SATURATION_HIGH + lfMean,
+                                     KF_COLOUR_BRIGHTNESS_HIGH );
 
             BrnEffects::Utils::DebrisColourRandomiser lRandomiser;
             lRandomiser.Prepare(lvLow, lvHigh);

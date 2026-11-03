@@ -93,7 +93,7 @@ namespace Native
         // VertexColourWordRGBA carries, for the same element word).
         inline u32 PackCornerColour(const Vector4& lrColour)
         {
-            const f32 lafLanes[4] = { lrColour.x, lrColour.y, lrColour.z, lrColour.w };
+            const f32 lafLanes[4] = { static_cast<f32>(lrColour.GetX()), static_cast<f32>(lrColour.GetY()), static_cast<f32>(lrColour.GetZ()), static_cast<f32>(lrColour.GetW()) };
             u8 lau8Bytes[4];
             for (u32 luLane = 0; luLane < 4; ++luLane)
             {
@@ -120,7 +120,7 @@ namespace Native
 
         inline Vector4 MakeVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
         {
-            Vector4 lResult = { lfX, lfY, lfZ, lfW };
+            Vector4 lResult(lfX, lfY, lfZ, lfW);
             return lResult;
         }
     }
@@ -137,19 +137,19 @@ namespace Native
     {
         // vrlimi128 v12, v5, 1, 0 -- the colour's alpha lane is REPLACED by the caller's alpha.
         Vector4 lColour = lvColour;
-        lColour.w = lvAlpha.w;
+        lColour.SetW(lvAlpha.GetW());
 
         // v30 = splat(record.mVelocityRotation.w) * v4 (splat age); lanes 2/3 repeat lanes 0/1.
         const f32 lfRotationalVelocity = lpParticle->mVelocityRotation.GetPlus();
-        const f32 lfAngle0 = lfRotationalVelocity * lvAge.x;
-        const f32 lfAngle1 = lfRotationalVelocity * lvAge.y;
+        const f32 lfAngle0 = lfRotationalVelocity * static_cast<f32>(lvAge.GetX());
+        const f32 lfAngle1 = lfRotationalVelocity * static_cast<f32>(lvAge.GetY());
 
         const f32 lfSin = RotationLane(lfAngle0, -KF_QUARTER);   // lane 0 (phase -0.25)
         const f32 lfCos = RotationLane(lfAngle1, KF_ZERO);       // lane 1 (phase 0)
 
         // v11 = s * this->mvCornerScale (splat sqrt 2): the rotated half-diagonal.
-        const f32 lfR0 = lfSin * mvCornerScale.x;
-        const f32 lfR1 = lfCos * mvCornerScale.y;
+        const f32 lfR0 = lfSin * static_cast<f32>(mvCornerScale.GetX());
+        const f32 lfR1 = lfCos * static_cast<f32>(mvCornerScale.GetY());
 
         // The four corners, through the A.x/B.y/A.x/A.x gather at 0x82CDA350 with lane 2 then
         // zeroed (vrlimi128 ..., v13 = 0, 2, 0). c2 and c3 are c0 and c1 with EVERY lane's sign
@@ -157,17 +157,17 @@ namespace Native
         Vector4 laCorners[4];
         laCorners[0] = MakeVector(-lfR0, lfR1, KF_ZERO, -lfR0);
         laCorners[1] = MakeVector(lfR1, lfR0, KF_ZERO, lfR1);
-        laCorners[2] = MakeVector(-laCorners[0].x, -laCorners[0].y, -laCorners[0].z, -laCorners[0].w);
-        laCorners[3] = MakeVector(-laCorners[1].x, -laCorners[1].y, -laCorners[1].z, -laCorners[1].w);
+        laCorners[2] = MakeVector(-static_cast<f32>(laCorners[0].GetX()), -static_cast<f32>(laCorners[0].GetY()), -static_cast<f32>(laCorners[0].GetZ()), -static_cast<f32>(laCorners[0].GetW()));
+        laCorners[3] = MakeVector(-static_cast<f32>(laCorners[1].GetX()), -static_cast<f32>(laCorners[1].GetY()), -static_cast<f32>(laCorners[1].GetZ()), -static_cast<f32>(laCorners[1].GetW()));
 
         // positions[k] = corner_k * size + position (a vmulfp128 then a vaddfp, stored per corner).
         for (u32 luCorner = 0; luCorner < 4; ++luCorner)
         {
             const Vector4& lrCorner = laCorners[luCorner];
-            lpaPositions[luCorner] = MakeVector(lrCorner.x * lvSize.x + lvPosition.x,
-                                                lrCorner.y * lvSize.y + lvPosition.y,
-                                                lrCorner.z * lvSize.z + lvPosition.z,
-                                                lrCorner.w * lvSize.w + lvPosition.w);
+            lpaPositions[luCorner] = MakeVector(static_cast<f32>(lrCorner.GetX()) * static_cast<f32>(lvSize.GetX()) + static_cast<f32>(lvPosition.GetX()),
+                                                static_cast<f32>(lrCorner.GetY()) * static_cast<f32>(lvSize.GetY()) + static_cast<f32>(lvPosition.GetY()),
+                                                static_cast<f32>(lrCorner.GetZ()) * static_cast<f32>(lvSize.GetZ()) + static_cast<f32>(lvPosition.GetZ()),
+                                                static_cast<f32>(lrCorner.GetW()) * static_cast<f32>(lvSize.GetW()) + static_cast<f32>(lvPosition.GetW()));
         }
 
         // THE SHADING. range * splat(sin) and range * splat(cos) around the lighting base:
@@ -176,26 +176,26 @@ namespace Native
         // (0x8291E2E4..0x8291E330; the stores to 0/4/8/0xC(r5) at 0x8291E3F8 / E3B8 / E428 / E46C.)
         const Vector4& lrBase  = mvLightingBase;
         const Vector4& lrRange = mvLightingRange;
-        const Vector4 lRangeSin = MakeVector(lrRange.x * lfSin, lrRange.y * lfSin,
-                                             lrRange.z * lfSin, lrRange.w * lfSin);
-        const Vector4 lRangeCos = MakeVector(lrRange.x * lfCos, lrRange.y * lfCos,
-                                             lrRange.z * lfCos, lrRange.w * lfCos);
+        const Vector4 lRangeSin = MakeVector(static_cast<f32>(lrRange.GetX()) * lfSin, static_cast<f32>(lrRange.GetY()) * lfSin,
+                                             static_cast<f32>(lrRange.GetZ()) * lfSin, static_cast<f32>(lrRange.GetW()) * lfSin);
+        const Vector4 lRangeCos = MakeVector(static_cast<f32>(lrRange.GetX()) * lfCos, static_cast<f32>(lrRange.GetY()) * lfCos,
+                                             static_cast<f32>(lrRange.GetZ()) * lfCos, static_cast<f32>(lrRange.GetW()) * lfCos);
 
         const Vector4 laShade[4] =
         {
-            MakeVector(lrBase.x + lRangeCos.x, lrBase.y + lRangeCos.y, lrBase.z + lRangeCos.z, lrBase.w + lRangeCos.w),
-            MakeVector(lrBase.x + lRangeSin.x, lrBase.y + lRangeSin.y, lrBase.z + lRangeSin.z, lrBase.w + lRangeSin.w),
-            MakeVector(lrBase.x - lRangeCos.x, lrBase.y - lRangeCos.y, lrBase.z - lRangeCos.z, lrBase.w - lRangeCos.w),
-            MakeVector(lrBase.x - lRangeSin.x, lrBase.y - lRangeSin.y, lrBase.z - lRangeSin.z, lrBase.w - lRangeSin.w),
+            MakeVector(static_cast<f32>(lrBase.GetX()) + static_cast<f32>(lRangeCos.GetX()), static_cast<f32>(lrBase.GetY()) + static_cast<f32>(lRangeCos.GetY()), static_cast<f32>(lrBase.GetZ()) + static_cast<f32>(lRangeCos.GetZ()), static_cast<f32>(lrBase.GetW()) + static_cast<f32>(lRangeCos.GetW())),
+            MakeVector(static_cast<f32>(lrBase.GetX()) + static_cast<f32>(lRangeSin.GetX()), static_cast<f32>(lrBase.GetY()) + static_cast<f32>(lRangeSin.GetY()), static_cast<f32>(lrBase.GetZ()) + static_cast<f32>(lRangeSin.GetZ()), static_cast<f32>(lrBase.GetW()) + static_cast<f32>(lRangeSin.GetW())),
+            MakeVector(static_cast<f32>(lrBase.GetX()) - static_cast<f32>(lRangeCos.GetX()), static_cast<f32>(lrBase.GetY()) - static_cast<f32>(lRangeCos.GetY()), static_cast<f32>(lrBase.GetZ()) - static_cast<f32>(lRangeCos.GetZ()), static_cast<f32>(lrBase.GetW()) - static_cast<f32>(lRangeCos.GetW())),
+            MakeVector(static_cast<f32>(lrBase.GetX()) - static_cast<f32>(lRangeSin.GetX()), static_cast<f32>(lrBase.GetY()) - static_cast<f32>(lRangeSin.GetY()), static_cast<f32>(lrBase.GetZ()) - static_cast<f32>(lRangeSin.GetZ()), static_cast<f32>(lrBase.GetW()) - static_cast<f32>(lRangeSin.GetW())),
         };
 
         for (u32 luCorner = 0; luCorner < 4; ++luCorner)
         {
             const Vector4& lrShade = laShade[luCorner];
-            lpauColours[luCorner] = PackCornerColour(MakeVector(lColour.x * lrShade.x,
-                                                                lColour.y * lrShade.y,
-                                                                lColour.z * lrShade.z,
-                                                                lColour.w * lrShade.w));
+            lpauColours[luCorner] = PackCornerColour(MakeVector(static_cast<f32>(lColour.GetX()) * static_cast<f32>(lrShade.GetX()),
+                                                                static_cast<f32>(lColour.GetY()) * static_cast<f32>(lrShade.GetY()),
+                                                                static_cast<f32>(lColour.GetZ()) * static_cast<f32>(lrShade.GetZ()),
+                                                                static_cast<f32>(lColour.GetW()) * static_cast<f32>(lrShade.GetW())));
         }
     }
 }

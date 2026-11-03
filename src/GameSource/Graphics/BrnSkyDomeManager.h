@@ -11,7 +11,7 @@
 namespace rw { class IResourceAllocator; namespace math { namespace fpu {
     template<class T> struct Vector3Template; } } }
 namespace BrnGraphics { class Im3dSkyDome; }
-namespace renderengine { class Texture; }
+namespace renderengine { class Texture; class VertexBuffer; class IndexBuffer; }
 struct BrnShaderConstantsFrame;
 
 // The env-map face selector. The real enum is BrnGraphics::EEnvironmentMapFace

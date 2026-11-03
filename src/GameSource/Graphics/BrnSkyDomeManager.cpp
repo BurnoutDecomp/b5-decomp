@@ -1,5 +1,7 @@
-#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "GameSource/Graphics/BrnSkyDomeManager.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include "BrnCommonTypes.h"                                          // Matrix44 / Vector3 / Vector3Plus / Vector4
@@ -139,25 +141,21 @@ void BrnSkyDomeManager::CreateGeometry(
 
     // ---- Vertex buffer -------------------------------------------------------------------
     renderengine::VertexBuffer::Parameters lVbParams;
-    lVbParams.muFormat = 0u;
-    lVbParams.muLength = static_cast<u32>(20 * liVertexCount);
+    lVbParams.SetType(0u);
+    lVbParams.SetBufferSize(static_cast<u32>(20 * liVertexCount));
 
-    CgsResource::ResourceDescriptor lVbResDesc;
-    renderengine::VertexBuffer::GetResourceDescriptor(&lVbResDesc, &lVbParams);
-
-    rw::Resource lVbResource = AllocateSkyBuffer(lpAlloc, lVbResDesc);
+    rw::ResourceDescriptor lVbResDesc = renderengine::VertexBuffer::GetResourceDescriptor(lVbParams);
+    rw::Resource lVbResource = lpAlloc->DoAllocate(lVbResDesc, 0);
     CGS_ASSERT(lVbResource.m_baseResources[0], "vbResource.GetMemoryResource()");
 
-    renderengine::VertexBufferHeader* lpVbHeader = renderengine::VertexBuffer::Initialize(
-        reinterpret_cast<renderengine::VertexBuffer::Wrapper*>(&lVbResource), &lVbParams, 0, 0);
-    *lppVertexBuffer = reinterpret_cast<renderengine::VertexBuffer*>(lpVbHeader);
+    renderengine::VertexBuffer* lpVbHeader = renderengine::VertexBuffer::Initialize(lVbResource, lVbParams);
+    *lppVertexBuffer = lpVbHeader;
     CGS_ASSERT(*lppVertexBuffer, "NULL != (*lppVertexBuffer)");
 
     lpDrawIndexedParams->SetBaseVertexIndex(0u);
 
-    renderengine::VertexBuffer_Xbox2UnSet(lpVbHeader);
-    u8* const lpVertexBase = reinterpret_cast<u8*>(static_cast<usize>(static_cast<u32>(
-        renderengine::D3DVertexBuffer_Lock(lpVbHeader, 0, 0, 0))));
+    lpVbHeader->Xbox2UnSet();
+    u8* const lpVertexBase = static_cast<u8*>(D3DVertexBuffer_Lock(lpVbHeader, 0, 0, 0));
 
     float laCurrent[9] = { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f };   // identity
     int32_t liVertex = 0;
@@ -235,7 +233,7 @@ void BrnSkyDomeManager::CreateGeometry(
     }
     CGS_ASSERT(liVertex + 1 == liVertexCount, "liVertex == liVertexCount");
 
-    renderengine::D3DVertexBuffer_Unlock(lpVbHeader);
+    D3DVertexBuffer_Unlock(lpVbHeader);
 
     // Cache the horizon (+X) and zenith (+Y) ray-sphere distances on the manager.
     {
@@ -254,10 +252,10 @@ void BrnSkyDomeManager::CreateGeometry(
     }
 
     // ---- Index buffer --------------------------------------------------------------------
-    renderengine::IndexBufferParameters lIbParams;
-    lIbParams.muField00 = 0u;
-    lIbParams.muFormat = 16u;                            // 16-bit indices
-    lIbParams.muCount = static_cast<u32>(liIndexCount);
+    renderengine::IndexBuffer::Parameters lIbParams;
+    lIbParams.type = 0u;
+    lIbParams.depth = 16u;                            // 16-bit indices
+    lIbParams.numIndices = static_cast<u32>(liIndexCount);
 
     // Inlined IndexBuffer::GetResourceDescriptor: five {size, alignment} entries, identity by
     // default, with slot 0 = the 0x24-byte header and slot 2 = the rounded index bytes.
@@ -276,22 +274,20 @@ void BrnSkyDomeManager::CreateGeometry(
     rw::Resource lIbResource = AllocateSkyBuffer(lpAlloc, lIbResDesc);
     CGS_ASSERT(lIbResource.m_baseResources[0], "ibResource.GetMemoryResource()");
 
-    renderengine::IndexBufferHeader* lpIbHeader = renderengine::IndexBuffer::Initialize(
-        reinterpret_cast<renderengine::IndexBufferWrapper*>(&lIbResource), &lIbParams);
-    *lppIndexBuffer = reinterpret_cast<renderengine::IndexBuffer*>(lpIbHeader);
+    renderengine::IndexBuffer* lpIbHeader = renderengine::IndexBuffer::Initialize(lIbResource, lIbParams);
+    *lppIndexBuffer = lpIbHeader;
     CGS_ASSERT(*lppIndexBuffer, "(*lppIndexBuffer)");
 
     lpDrawIndexedParams->SetStartIndex(0u);
     lpDrawIndexedParams->SetIndexCount(static_cast<u32>(liIndexCount));
     lpDrawIndexedParams->SetPrimitiveType(static_cast<renderengine::PrimitiveType>(6));
 
-    renderengine::IndexBufferLockInfo lLockInfo;
-    const int liLocked = renderengine::IndexBuffer::Lock(
-        reinterpret_cast<renderengine::IndexBufferHeader*>(*lppIndexBuffer), 2, &lLockInfo);
+    renderengine::IndexBuffer::Locked lLockInfo;
+    const bool liLocked = lpIbHeader->Lock(renderengine::IndexBuffer::LOCK_WRITE, lLockInfo);
     CGS_ASSERT(liLocked,
                "(*lppIndexBuffer)->Lock(renderengine::IndexBuffer::LOCK_WRITE, lLockedBuffer)");
 
-    u16* const lpIndices = reinterpret_cast<u16*>(lLockInfo.mpBits);
+    u16* const lpIndices = reinterpret_cast<u16*>(lLockInfo.indices);
     int32_t liInd = 0;
     int32_t liSlice = 0;
     if (liSliceCountMinusOne > 0)
@@ -373,8 +369,7 @@ void BrnSkyDomeManager::CreateGeometry(
     lpIndices[liCap + 2] = static_cast<u16>(liLastRowBase);
     CGS_ASSERT(liCap + 3 == liIndexCount, "liInd == liIndexCount");
 
-    renderengine::IndexBuffer::Unlock(
-        reinterpret_cast<renderengine::IndexBufferHeader*>(*lppIndexBuffer), &lLockInfo);
+    lpIbHeader->Unlock(lLockInfo);
 }
 
 // =============================================================================================
@@ -434,15 +429,6 @@ void ImDeviceSetDepthStencilState(void* lpState);
 struct IDirect3DDevice9;
 extern IDirect3DDevice9* gpD3DDevice;
 
-extern "C"
-{
-    void D3DDevice_SetIndices(IDirect3DDevice9* lpDevice, void* lpIndexData);
-    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice, u32 luStreamNumber,
-                                   const void* lpStreamData, u32 luOffsetInBytes,
-                                   u32 luStride, u32 luFlags);
-    void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* lpDevice, u32 lePrimitiveType,
-                                       u32 luBaseVertexIndex, u32 luStartIndex, u32 luIndexCount);
-}
 
 namespace
 {
@@ -473,11 +459,8 @@ namespace
     // dead store; only the final value is modelled.)
     Vector4 MakeCloudDomeRanges(f32 lrZenithDistance, f32 lrHorizonDistance, f32 lfCloudDistanceCurve)
     {
-        Vector4 lRanges;
-        lRanges.x = lrZenithDistance;
-        lRanges.y = 1.0f / (lrHorizonDistance - lrZenithDistance);
-        lRanges.z = lfCloudDistanceCurve;
-        lRanges.w = 0.0f;
+        Vector4 lRanges(lrZenithDistance, 1.0f / (lrHorizonDistance - lrZenithDistance),
+                        lfCloudDistanceCurve, 0.0f);
         return lRanges;
     }
 
@@ -492,10 +475,8 @@ namespace
     Vector3Plus MakeViewPositionAndSkyScale(const Vector3& lrViewPosition, f32 lfSkyScale)
     {
         Vector3Plus lPacked;
-        lPacked.x = lrViewPosition.x;
-        lPacked.y = lrViewPosition.y;
-        lPacked.z = lrViewPosition.z;
-        lPacked.w = lfSkyScale;
+        lPacked.SetVector(lrViewPosition.GetVector());
+        lPacked.SetPlus(lfSkyScale);
         return lPacked;
     }
 
@@ -504,10 +485,10 @@ namespace
     Matrix44 MakeIdentityMatrix44()
     {
         Matrix44 lM;
-        lM.xAxis.x = 1.0f; lM.xAxis.y = 0.0f; lM.xAxis.z = 0.0f; lM.xAxis.w = 0.0f;
-        lM.yAxis.x = 0.0f; lM.yAxis.y = 1.0f; lM.yAxis.z = 0.0f; lM.yAxis.w = 0.0f;
-        lM.zAxis.x = 0.0f; lM.zAxis.y = 0.0f; lM.zAxis.z = 1.0f; lM.zAxis.w = 0.0f;
-        lM.wAxis.x = 0.0f; lM.wAxis.y = 0.0f; lM.wAxis.z = 0.0f; lM.wAxis.w = 1.0f;
+        lM.xAxis.Set(1.0f, 0.0f, 0.0f, 0.0f);
+        lM.yAxis.Set(0.0f, 1.0f, 0.0f, 0.0f);
+        lM.zAxis.Set(0.0f, 0.0f, 1.0f, 0.0f);
+        lM.wAxis.Set(0.0f, 0.0f, 0.0f, 1.0f);
         return lM;
     }
 
@@ -515,20 +496,14 @@ namespace
     // vmaddfp chain). Mirrors BrnShadowMap.cpp's committed MultRow.
     Vector4 MultRow(const Vector4& lrRow, const Matrix44& lrM)
     {
-        const f32 lafLanes[4] = { lrRow.x, lrRow.y, lrRow.z, lrRow.w };
+        const f32 lafLanes[4] = { static_cast<f32>(lrRow.GetX()), static_cast<f32>(lrRow.GetY()),
+                                  static_cast<f32>(lrRow.GetZ()), static_cast<f32>(lrRow.GetW()) };
         const Vector4* const lapRows[4] = { &lrM.xAxis, &lrM.yAxis, &lrM.zAxis, &lrM.wAxis };
-
-        Vector4 lvOut;
-        f32* const lpfOut = &lvOut.x;
-        lpfOut[0] = 0.0f; lpfOut[1] = 0.0f; lpfOut[2] = 0.0f; lpfOut[3] = 0.0f;
+        f32 lafOut[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         for (int liRow = 0; liRow < 4; ++liRow)
-        {
-            const f32* const lpfRow = &lapRows[liRow]->x;
             for (int liLane = 0; liLane < 4; ++liLane)
-            {
-                lpfOut[liLane] += lafLanes[liRow] * lpfRow[liLane];
-            }
-        }
+                lafOut[liLane] += lafLanes[liRow] * static_cast<f32>(lapRows[liRow]->GetComponent(liLane));
+        Vector4 lvOut(lafOut);
         return lvOut;
     }
 
@@ -556,11 +531,8 @@ namespace
     // vmulfp128 of a whole 4-lane vector by a broadcast scalar.
     Vector4 ScaleVector4(const Vector4& lrV, f32 lfScale)
     {
-        Vector4 lOut;
-        lOut.x = lrV.x * lfScale;
-        lOut.y = lrV.y * lfScale;
-        lOut.z = lrV.z * lfScale;
-        lOut.w = lrV.w * lfScale;
+        Vector4 lOut(static_cast<f32>(lrV.GetX()) * lfScale, static_cast<f32>(lrV.GetY()) * lfScale,
+                     static_cast<f32>(lrV.GetZ()) * lfScale, static_cast<f32>(lrV.GetW()) * lfScale);
         return lOut;
     }
 
@@ -592,7 +564,7 @@ namespace
     void DrawSkyDome(const DrawIndexedParameters& lrParameters)
     {
         D3DDevice_DrawIndexedVertices(gpD3DDevice,
-                                      lrParameters.GetPrimitiveType(),
+                                      static_cast<D3DPRIMITIVETYPE>(lrParameters.GetPrimitiveType()),
                                       lrParameters.GetBaseVertexIndex(),
                                       lrParameters.GetStartIndex(),
                                       lrParameters.GetIndexCount());
@@ -674,7 +646,7 @@ void BrnSkyDomeManager::Render(
     ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState);
 
     const Matrix44 lWorldViewProjection = MultMatrix(lWorldTransform, lViewProjectionMatrix);
-    lpRenderer->SetTransform(&lWorldViewProjection);
+    lpRenderer->SetTransform(lWorldViewProjection);
 
     lpRenderer->SetConstants(
         lViewPositionAndSkyScale,
@@ -753,7 +725,7 @@ void BrnSkyDomeManager::RenderToEnvironmentMap(
     ImDeviceSetDepthStencilState(gpSkyDomeEnvMapDepthStencilState);
 
     const Matrix44 lWorldViewProjection = MultMatrix(lWorldTransform, lViewProjectionMatrix);
-    lpRenderer->SetTransform(&lWorldViewProjection);
+    lpRenderer->SetTransform(lWorldViewProjection);
 
     lpRenderer->SetConstants(
         lViewPositionAndSkyScale,
