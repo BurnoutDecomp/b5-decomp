@@ -1,6 +1,4 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsPackedOobb.h"
-#include <cmath>
-#include <cstring>   // memcpy (the bit-pattern reads below)
 
 // ===========================================================================
 // CgsGraphics::PackedOobb::ToMatrix @ 0x827EE300 -- reconstructed from
@@ -53,8 +51,8 @@
 //   [0..1] position scale (top 16 bits of a float)   [2..7] s16 position x/y/z
 //   [8] shared scale exponent (2^(b-127))            [9..11] u8 scale mantissa x/y/z
 //   [12..15] u8 quaternion x/y/z/w
-// The quaternion->matrix algebra below was already correct and is unchanged; only
-// the three unpacks are. LESSON: "the export has no data section" is a statement
+// The same recovered quaternion-to-matrix formula is now expressed through native
+// four-lane operations. LESSON: "the export has no data section" is a statement
 // about the EXPORT -- the same one CgsFrustum.cpp records for SetFromRwFrustum.
 // ===========================================================================
 
@@ -63,130 +61,116 @@ namespace CgsGraphics
 
 namespace
 {
-    // One byte of the packed register, in the CONSOLE's byte order.
-    //
-    // mPackedBB is ONE 16-byte big-endian VMX value on the X360 and every vperm mask
-    // below indexes it BYTE BY BYTE (0..15). The world porter transcodes it as four u32
-    // LANES -- tools/assets/bundles/renderable_transcode.py reads `>4I` (:229) and writes
-    // `<4I` (:386) -- so each lane's NUMERIC value is the console's word, and console
-    // byte k is the (k & 3)-th byte of lane (k >> 2) counted from the TOP.
-    inline u32 PackedByte(const u32* lpauLane, u32 luIndex)
+    inline rw::math::vpu::VectorIntrinsic VectorFromWords(u32 lu0, u32 lu1, u32 lu2, u32 lu3)
     {
-        return (lpauLane[luIndex >> 2] >> (8u * (3u - (luIndex & 3u)))) & 0xFFu;
+        rw::math::vpu::detail::VectorIntrinsicUnion lValue;
+        lValue.scalarUInt[0] = lu0;
+        lValue.scalarUInt[1] = lu1;
+        lValue.scalarUInt[2] = lu2;
+        lValue.scalarUInt[3] = lu3;
+        return lValue.vector;
     }
 
-    // Reinterpret a word as a float (the console simply keeps it in a VMX lane and
-    // multiplies; the bit pattern IS the float).
-    inline f32 BitsToFloat(u32 luBits)
+    inline rw::math::vpu::VectorIntrinsic SplatFloat(f32 lfValue)
     {
-        f32 lfValue;
-        std::memcpy(&lfValue, &luBits, sizeof(lfValue));
-        return lfValue;
-    }
-
-    // `vcfsx vD, vS, 0x1F` -- signed int -> float, scaled by 2^-31.
-    inline f32 SignedFixed31(u32 luWord)
-    {
-        return static_cast<f32>(static_cast<s32>(luWord)) * (1.0f / 2147483648.0f);
-    }
-
-    // `vcfux vD, vS, 0x18` -- unsigned int -> float, scaled by 2^-24.
-    inline f32 UnsignedFixed24(u32 luWord)
-    {
-        return static_cast<f32>(luWord) * (1.0f / 16777216.0f);
+        return __vspltw(__lvlx(&lfValue, 0), 0);
     }
 }
 
 void PackedOobb::ToMatrix(rw::math::vpu::Matrix44& roMatrix) const
 {
-    const u32* const lpauLane = mPackedBB.mauLane;
+    using namespace rw::math::vpu;
 
-    // --- unpack the quaternion: vperm stru_83011130 -> vcfsx 0x1F ---
-    // stru_83011130 = { 0C0C0C0C, 0D0D0D0D, 0E0E0E0E, 0F0F0F0F } -- byte 12/13/14/15
-    // broadcast across its own word, so each component is ONE byte read as a signed
-    // fraction. (The absolute scale is irrelevant: the quaternion is normalised below.)
-    f32 lfQx = SignedFixed31(PackedByte(lpauLane, 12) * 0x01010101u);
-    f32 lfQy = SignedFixed31(PackedByte(lpauLane, 13) * 0x01010101u);
-    f32 lfQz = SignedFixed31(PackedByte(lpauLane, 14) * 0x01010101u);
-    f32 lfQw = SignedFixed31(PackedByte(lpauLane, 15) * 0x01010101u);
+    const VectorIntrinsic lvPacked = __loadunalignedvector(&mPackedBB);
+    const VectorIntrinsic lvZero = __vspltisw(0);
 
-    // normalise: lenSq = dot4(q,q); inv = 1/sqrt(lenSq) (vrsqrtefp + 2 NR).
-    // The asm is straight-line VMX with no compare/branch guarding lenSq == 0
-    // (vrsqrtefp is evaluated unconditionally), so no zero-guard belongs here.
-    const f32 lfLenSq = lfQx * lfQx + lfQy * lfQy + lfQz * lfQz + lfQw * lfQw;
-    const f32 lfInv = 1.0f / std::sqrt(lfLenSq);
-    lfQx *= lfInv;
-    lfQy *= lfInv;
-    lfQz *= lfInv;
-    lfQw *= lfInv;
+    // The CRT vperm controls are materialised from their recovered words. Indices 0x10+
+    // select the zero source; this preserves the exact byte and zero-fill behavior.
+    const VectorIntrinsic lvQuaternionPermute = VectorFromWords(
+        0x0C0C0C0Cu, 0x0D0D0D0Du, 0x0E0E0E0Eu, 0x0F0F0F0Fu);
+    const VectorIntrinsic lvScalePermute = VectorFromWords(
+        0x11090909u, 0x110A0A0Au, 0x110B0B0Bu, 0x11111111u);
+    const VectorIntrinsic lvExponentPermute = VectorFromWords(
+        0x08111111u, 0x08111111u, 0x08111111u, 0x08111111u);
+    const VectorIntrinsic lvPositionPermute = VectorFromWords(
+        0x02030203u, 0x04050405u, 0x06070607u, 0x11111111u);
+    const VectorIntrinsic lvPositionScalePermute = VectorFromWords(
+        0x00011111u, 0x00011111u, 0x00011111u, 0x00011111u);
 
-    // --- unpack the per-axis scale: mantissa vperm stru_83011370 -> vcfux 0x18,
-    //     times the shared exponent vperm stru_83011220 -> vsrw 1 ---
-    // stru_83011370 = { 11090909, 110A0A0A, 110B0B0B, 11111111 } -- byte 9/10/11 into the
-    // low THREE bytes of its word (mask index 0x11 >= 16 selects the vperm's ZERO source),
-    // i.e. a u8 mantissa that vcfux 0x18 turns into [0, 1).
-    // stru_83011220 = { 08111111 x4 } -- byte 8 into the TOP byte of every word; `vsrw v0,
-    // v7, 1` then lands it at bit 23, which IS the IEEE single exponent field, so the three
-    // axes share one exponent and the scale is mantissa * 2^(byte8 - 127).
-    const f32 lfScaleExponent = BitsToFloat(PackedByte(lpauLane, 8) << 23);
-    const f32 lfScaleX = UnsignedFixed24(PackedByte(lpauLane,  9) * 0x00010101u) * lfScaleExponent;
-    const f32 lfScaleY = UnsignedFixed24(PackedByte(lpauLane, 10) * 0x00010101u) * lfScaleExponent;
-    const f32 lfScaleZ = UnsignedFixed24(PackedByte(lpauLane, 11) * 0x00010101u) * lfScaleExponent;
+    // Signed fixed quaternion bytes are gathered and converted in one four-lane VMX op.
+    const VectorIntrinsic lvQuaternionFixed = __vcfsx(
+        __vperm(lvPacked, lvZero, lvQuaternionPermute), 0x1F);
+    const Vector4 lvQuaternionUnit = Normalize(Vector4(lvQuaternionFixed));
+    const VectorIntrinsic lvQuaternion = __vmulfp(
+        lvQuaternionUnit.GetVector(), SplatFloat(1.4142135623730951f));
+    const VectorIntrinsic lvQx = __vspltw(lvQuaternion, 0);
+    const VectorIntrinsic lvQy = __vspltw(lvQuaternion, 1);
+    const VectorIntrinsic lvQz = __vspltw(lvQuaternion, 2);
+    const VectorIntrinsic lvQw = __vspltw(lvQuaternion, 3);
 
-    // --- build the scaled rotation rows (standard unit-quaternion -> 3x3) ---
-    // The asm forms these via component permutes and fused multiply-adds with
-    // the lane sign masks; reproduced here as the canonical q->R algebra, with
-    // each row scaled by its axis extent.
-    const f32 lfXx = lfQx * lfQx;
-    const f32 lfYy = lfQy * lfQy;
-    const f32 lfZz = lfQz * lfQz;
-    const f32 lfXy = lfQx * lfQy;
-    const f32 lfXz = lfQx * lfQz;
-    const f32 lfYz = lfQy * lfQz;
-    const f32 lfWx = lfQw * lfQx;
-    const f32 lfWy = lfQw * lfQy;
-    const f32 lfWz = lfQw * lfQz;
+    // Mantissas are unsigned fixed 0.24; exponent byte 8 is shifted into the IEEE exponent
+    // position before the native float multiply. The three resulting lanes are axis scales.
+    const VectorIntrinsic lvScaleMantissa = __vcuxwfp(
+        __vperm(lvPacked, lvZero, lvScalePermute), 0x18);
+    const VectorIntrinsic lvScaleExponent = __vsrw(
+        __vperm(lvPacked, lvZero, lvExponentPermute), __vspltisw(1));
+    const VectorIntrinsic lvScale = __vmulfp(lvScaleMantissa, lvScaleExponent);
+    const VectorIntrinsic lvScaleX = __vspltw(lvScale, 0);
+    const VectorIntrinsic lvScaleY = __vspltw(lvScale, 1);
+    const VectorIntrinsic lvScaleZ = __vspltw(lvScale, 2);
 
-    // xAxis (this+0x00) -- scaled by lfScaleX.
-    roMatrix.xAxis.x = (1.0f - 2.0f * (lfYy + lfZz)) * lfScaleX;
-    roMatrix.xAxis.y = (2.0f * (lfXy + lfWz)) * lfScaleX;
-    roMatrix.xAxis.z = (2.0f * (lfXz - lfWy)) * lfScaleX;
-    roMatrix.xAxis.w = 0.0f;
+    const VectorIntrinsic lvOne = __vcfsx(__vspltisw(1), 0);
+    const VectorIntrinsic lvXX = __vmulfp(lvQx, lvQx);
+    const VectorIntrinsic lvYY = __vmulfp(lvQy, lvQy);
+    const VectorIntrinsic lvZZ = __vmulfp(lvQz, lvQz);
+    const VectorIntrinsic lvXY = __vmulfp(lvQx, lvQy);
+    const VectorIntrinsic lvXZ = __vmulfp(lvQx, lvQz);
+    const VectorIntrinsic lvYZ = __vmulfp(lvQy, lvQz);
+    const VectorIntrinsic lvWX = __vmulfp(lvQw, lvQx);
+    const VectorIntrinsic lvWY = __vmulfp(lvQw, lvQy);
+    const VectorIntrinsic lvWZ = __vmulfp(lvQw, lvQz);
 
-    // yAxis (this+0x10) -- scaled by lfScaleY.
-    roMatrix.yAxis.x = (2.0f * (lfXy - lfWz)) * lfScaleY;
-    roMatrix.yAxis.y = (1.0f - 2.0f * (lfXx + lfZz)) * lfScaleY;
-    roMatrix.yAxis.z = (2.0f * (lfYz + lfWx)) * lfScaleY;
-    roMatrix.yAxis.w = 0.0f;
+    const VectorIntrinsic lvR00 = __vsubfp(lvOne, __vaddfp(lvYY, lvZZ));
+    const VectorIntrinsic lvR01 = __vaddfp(lvXY, lvWZ);
+    const VectorIntrinsic lvR02 = __vsubfp(lvXZ, lvWY);
+    const VectorIntrinsic lvR10 = __vsubfp(lvXY, lvWZ);
+    const VectorIntrinsic lvR11 = __vsubfp(lvOne, __vaddfp(lvXX, lvZZ));
+    const VectorIntrinsic lvR12 = __vaddfp(lvYZ, lvWX);
+    const VectorIntrinsic lvR20 = __vaddfp(lvXZ, lvWY);
+    const VectorIntrinsic lvR21 = __vsubfp(lvYZ, lvWX);
+    const VectorIntrinsic lvR22 = __vsubfp(lvOne, __vaddfp(lvXX, lvYY));
 
-    // zAxis (this+0x20) -- scaled by lfScaleZ.
-    roMatrix.zAxis.x = (2.0f * (lfXz + lfWy)) * lfScaleZ;
-    roMatrix.zAxis.y = (2.0f * (lfYz - lfWx)) * lfScaleZ;
-    roMatrix.zAxis.z = (1.0f - 2.0f * (lfXx + lfYy)) * lfScaleZ;
-    roMatrix.zAxis.w = 0.0f;
+    const VectorIntrinsic lvX00 = __vmulfp(lvR00, lvScaleX);
+    const VectorIntrinsic lvX01 = __vmulfp(lvR01, lvScaleX);
+    const VectorIntrinsic lvX02 = __vmulfp(lvR02, lvScaleX);
+    const VectorIntrinsic lvY10 = __vmulfp(lvR10, lvScaleY);
+    const VectorIntrinsic lvY11 = __vmulfp(lvR11, lvScaleY);
+    const VectorIntrinsic lvY12 = __vmulfp(lvR12, lvScaleY);
+    const VectorIntrinsic lvZ20 = __vmulfp(lvR20, lvScaleZ);
+    const VectorIntrinsic lvZ21 = __vmulfp(lvR21, lvScaleZ);
+    const VectorIntrinsic lvZ22 = __vmulfp(lvR22, lvScaleZ);
 
-    // --- unpack the position into the translation row (this+0x30, stored first in the
-    //     asm): vperm stru_830113A0 -> vcfsx 0x1F, times vperm unk_830113C0.
-    //     w lane forced to 1.0 (vrlimi128 v13, v11, 1, 0). ---
-    // stru_830113A0 = { 02030203, 04050405, 06070607, 11111111 } -- a 16-BIT signed fixed
-    // component per axis, from byte pairs (2,3) / (4,5) / (6,7), the halfword duplicated
-    // into both halves of the word (which is what makes vcfsx 0x1F read it as ~h/2^15).
-    // unk_830113C0 = { 00011111 x4 } -- bytes 0 and 1 become the TOP 16 bits of a float
-    // (the rest zero), i.e. the position's own scale, and `vmulfp128 v13, v3, v13` applies
-    // it. So the box centre is NOT a unit-range number: it is a real model-space position.
-    const f32 lfPositionScale = BitsToFloat(  ( PackedByte(lpauLane, 0) << 24 )
-                                            | ( PackedByte(lpauLane, 1) << 16 ) );
-    const u32 luPosX = ( PackedByte(lpauLane, 2) << 24 ) | ( PackedByte(lpauLane, 3) << 16 )
-                     | ( PackedByte(lpauLane, 2) <<  8 ) |   PackedByte(lpauLane, 3);
-    const u32 luPosY = ( PackedByte(lpauLane, 4) << 24 ) | ( PackedByte(lpauLane, 5) << 16 )
-                     | ( PackedByte(lpauLane, 4) <<  8 ) |   PackedByte(lpauLane, 5);
-    const u32 luPosZ = ( PackedByte(lpauLane, 6) << 24 ) | ( PackedByte(lpauLane, 7) << 16 )
-                     | ( PackedByte(lpauLane, 6) <<  8 ) |   PackedByte(lpauLane, 7);
+    // Position words are signed fixed 16-bit values. The scale comes from the packed top
+    // halfword as an IEEE float; the translation w lane is explicitly one.
+    const VectorIntrinsic lvPositionFixed = __vcfsx(
+        __vperm(lvPacked, lvZero, lvPositionPermute), 0x1F);
+    const VectorIntrinsic lvPositionScale = __vperm(lvPacked, lvZero, lvPositionScalePermute);
+    const VectorIntrinsic lvPosition = __vmulfp(lvPositionFixed, lvPositionScale);
+    roMatrix.wAxis = Vector4(lvPosition);
+    roMatrix.wAxis.SetW(1.0f);
 
-    roMatrix.wAxis.x = SignedFixed31(luPosX) * lfPositionScale;
-    roMatrix.wAxis.y = SignedFixed31(luPosY) * lfPositionScale;
-    roMatrix.wAxis.z = SignedFixed31(luPosZ) * lfPositionScale;
-    roMatrix.wAxis.w = 1.0f;
+    roMatrix.xAxis.SetZero();
+    roMatrix.xAxis.SetX(VecFloat(lvX00, 0));
+    roMatrix.xAxis.SetY(VecFloat(lvX01, 0));
+    roMatrix.xAxis.SetZ(VecFloat(lvX02, 0));
+    roMatrix.yAxis.SetZero();
+    roMatrix.yAxis.SetX(VecFloat(lvY10, 0));
+    roMatrix.yAxis.SetY(VecFloat(lvY11, 0));
+    roMatrix.yAxis.SetZ(VecFloat(lvY12, 0));
+    roMatrix.zAxis.SetZero();
+    roMatrix.zAxis.SetX(VecFloat(lvZ20, 0));
+    roMatrix.zAxis.SetY(VecFloat(lvZ21, 0));
+    roMatrix.zAxis.SetZ(VecFloat(lvZ22, 0));
 }
 
 // ===========================================================================
@@ -195,13 +179,8 @@ void PackedOobb::ToMatrix(rw::math::vpu::Matrix44& roMatrix) const
 // roOut = ToMatrix(this) * roIn  (row-vector convention: output row i is the
 // linear combination of roIn's four rows weighted by oobb-matrix row i).
 //
-// The X360 body first calls ToMatrix(this, &stackMatrix) to decode the packed
-// OOBB into a 4x4 (the recovered ToMatrix above), then does a full VMX 4x4
-// multiply: each oobb-matrix row's four lanes (vspltw) scale the four roIn rows
-// (vmulfp + vmaddfp chains), and the four result rows are stored to roOut in row
-// order (out+0x00, +0x10, +0x20, +0x30). vmaddfp on PPC is vD = vA*vC + vB, so
-// each chain accumulates oobbRow.x*roIn0 + oobbRow.y*roIn1 + oobbRow.z*roIn2 +
-// oobbRow.w*roIn3. Reproduced here as the equivalent named-member 4x4 multiply.
+    // The X360 body first calls ToMatrix(this, &stackMatrix), then multiplies each
+    // OOBB row against all four input rows with native VMX multiply/add chains.
 //
 // The asm returns r3 (this); the recovered class declares this `void` (the
 // chained-call return is incidental), so the meaningful effect -- writing roOut
@@ -214,7 +193,7 @@ void PackedOobb::MultiplyByMatrix(const rw::math::vpu::Matrix44& roIn,
     ToMatrix(lOobb);
 
     // ARTIST loads all four input rows before its first output store. Preserve
-    // that snapshot on the scalar path too: roIn and roOut may be the same matrix.
+    // that snapshot on the native path too: roIn and roOut may be the same matrix.
     const rw::math::vpu::Matrix44 lInput = roIn;
 
     const rw::math::vpu::Vector4* lapOobbRows[4] =
@@ -226,17 +205,13 @@ void PackedOobb::MultiplyByMatrix(const rw::math::vpu::Matrix44& roIn,
 
     for (int liRow = 0; liRow < 4; ++liRow)
     {
-        const rw::math::vpu::Vector4& lrW = *lapOobbRows[liRow]; // row weights
-        rw::math::vpu::Vector4&       lrO = *lapOutRows[liRow];
-
-        lrO.x = lrW.x * lapInRows[0]->x + lrW.y * lapInRows[1]->x
-              + lrW.z * lapInRows[2]->x + lrW.w * lapInRows[3]->x;
-        lrO.y = lrW.x * lapInRows[0]->y + lrW.y * lapInRows[1]->y
-              + lrW.z * lapInRows[2]->y + lrW.w * lapInRows[3]->y;
-        lrO.z = lrW.x * lapInRows[0]->z + lrW.y * lapInRows[1]->z
-              + lrW.z * lapInRows[2]->z + lrW.w * lapInRows[3]->z;
-        lrO.w = lrW.x * lapInRows[0]->w + lrW.y * lapInRows[1]->w
-              + lrW.z * lapInRows[2]->w + lrW.w * lapInRows[3]->w;
+        const rw::math::vpu::VectorIntrinsic& lrWeights = lapOobbRows[liRow]->GetVector();
+        rw::math::vpu::VectorIntrinsic lvResult = __vmulfp(
+            __vspltw(lrWeights, 0), lapInRows[0]->GetVector());
+        lvResult = __vmaddfp(__vspltw(lrWeights, 1), lapInRows[1]->GetVector(), lvResult);
+        lvResult = __vmaddfp(__vspltw(lrWeights, 2), lapInRows[2]->GetVector(), lvResult);
+        lvResult = __vmaddfp(__vspltw(lrWeights, 3), lapInRows[3]->GetVector(), lvResult);
+        lapOutRows[liRow]->SetVector(lvResult);
     }
 }
 

@@ -6,8 +6,7 @@
 
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetViewProjectionMatrixModified devs)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint (the
-                                                            // off-axis projection log-once gate)
+#include "rw/math/vpu/matrix44_operation.h"            // native affine view-projection multiply
 
 #include <cmath>    // tanf/atanf (SetFovHorizontal -- the XMVectorTan/ATan lowering), sqrt (LookAt / frustum normalizes)
 #include <cstring>  // memcpy (Clone)
@@ -123,75 +122,82 @@ namespace CgsGraphics
 
     namespace
     {
-        struct Vec3 { f32 x, y, z; };
-
-        inline Vec3 Cross3(const Vec3& lrA, const Vec3& lrB)
+        inline Vector3 Cross3(const Vector3& lrA, const Vector3& lrB)
         {
-            // the vpermwi128-0x63 cross shape: perm(a*perm(b) - perm(a)*b)
-            Vec3 lvOut;
-            lvOut.x = lrA.y * lrB.z - lrA.z * lrB.y;
-            lvOut.y = lrA.z * lrB.x - lrA.x * lrB.z;
-            lvOut.z = lrA.x * lrB.y - lrA.y * lrB.x;
-            return lvOut;
+            return rw::math::vpu::Cross(lrA, lrB);
         }
 
-        inline f32 Dot3(const Vec3& lrA, const Vec3& lrB)
+        inline f32 Dot3(const Vector3& lrA, const Vector3& lrB)
         {
-            return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;   // vmsum3fp128
+            return static_cast<f32>(rw::math::vpu::Dot(lrA, lrB));
         }
 
-        inline Vec3 Sub3(const Vec3& lrA, const Vec3& lrB)
+        inline Vector3 Sub3(const Vector3& lrA, const Vector3& lrB)
         {
-            Vec3 lvOut; lvOut.x = lrA.x - lrB.x; lvOut.y = lrA.y - lrB.y; lvOut.z = lrA.z - lrB.z;
-            return lvOut;
+            return rw::math::vpu::Subtract(lrA, lrB);
         }
 
-        inline Vec3 Normalize3(const Vec3& lrA)
+        inline Vector3 Normalize3(const Vector3& lrA)
         {
-            // vmsum3fp128 + vrsqrtefp + 2x Newton-Raphson -> exact
-            const f32 lfInvLen = 1.0f / std::sqrt(Dot3(lrA, lrA));
-            Vec3 lvOut; lvOut.x = lrA.x * lfInvLen; lvOut.y = lrA.y * lfInvLen; lvOut.z = lrA.z * lfInvLen;
-            return lvOut;
+            return rw::math::vpu::Normalize(lrA);
         }
 
-        inline Vec3 RowXYZ(const Vector4& lrRow)
+        inline Vector3 RowXYZ(const Vector4& lrRow)
         {
-            Vec3 lvOut; lvOut.x = lrRow.x; lvOut.y = lrRow.y; lvOut.z = lrRow.z;
+            Vector3 lvOut(0.0f, 0.0f, 0.0f);
+            lvOut.Set(lrRow.GetX(), lrRow.GetY(), lrRow.GetZ());
             return lvOut;
         }
 
         // The shared inlined head of both frustum writers (see the banner):
         // world right/up/dir basis + eye from the view matrix inverse.
-        struct CameraWorldBasis { Vec3 mRight, mUp, mDir, mEye; };
+        struct CameraWorldBasis { Vector3 mRight, mUp, mDir, mEye; };
 
         CameraWorldBasis ComputeWorldBasisAndEye(const Matrix44& lrView)
         {
-            const Vec3 lvRow0 = RowXYZ(lrView.xAxis);
-            const Vec3 lvRow1 = RowXYZ(lrView.yAxis);
-            const Vec3 lvRow2 = RowXYZ(lrView.zAxis);
-            const Vec3 lvRowW = RowXYZ(lrView.wAxis);
+            const Vector3 lvRow0 = RowXYZ(lrView.xAxis);
+            const Vector3 lvRow1 = RowXYZ(lrView.yAxis);
+            const Vector3 lvRow2 = RowXYZ(lrView.zAxis);
+            const Vector3 lvRowW = RowXYZ(lrView.wAxis);
 
-            const Vec3 lvC12 = Cross3(lvRow1, lvRow2);
-            const Vec3 lvC20 = Cross3(lvRow2, lvRow0);
-            const Vec3 lvC01 = Cross3(lvRow0, lvRow1);
-            const f32  lfInvDet = 1.0f / Dot3(lvRow0, lvC12);   // vrefp + 2x NR
+            const Vector3 lvC12 = Cross3(lvRow1, lvRow2);
+            const Vector3 lvC20 = Cross3(lvRow2, lvRow0);
+            const Vector3 lvC01 = Cross3(lvRow0, lvRow1);
+            const Vector3 lvOne(1.0f, 1.0f, 1.0f);
+            const Vector3 lvInvDet = rw::math::vpu::Divide(
+                lvOne, rw::math::vpu::Dot(lvRow0, lvC12));  // vrefp + two fused refinements
+            const Vector3 lvC12Scaled = rw::math::vpu::Mult(lvC12, lvInvDet);
+            const Vector3 lvC20Scaled = rw::math::vpu::Mult(lvC20, lvInvDet);
+            const Vector3 lvC01Scaled = rw::math::vpu::Mult(lvC01, lvInvDet);
 
             CameraWorldBasis lBasis;
             // inverse rows == transposed crosses * 1/det (the vmrghw/vmrglw block)
-            lBasis.mRight.x = lvC12.x * lfInvDet; lBasis.mRight.y = lvC20.x * lfInvDet; lBasis.mRight.z = lvC01.x * lfInvDet;
-            lBasis.mUp.x    = lvC12.y * lfInvDet; lBasis.mUp.y    = lvC20.y * lfInvDet; lBasis.mUp.z    = lvC01.y * lfInvDet;
-            lBasis.mDir.x   = lvC12.z * lfInvDet; lBasis.mDir.y   = lvC20.z * lfInvDet; lBasis.mDir.z   = lvC01.z * lfInvDet;
+            lBasis.mRight.SetX(lvC12Scaled.GetX());
+            lBasis.mRight.SetY(lvC20Scaled.GetX());
+            lBasis.mRight.SetZ(lvC01Scaled.GetX());
+            lBasis.mUp.SetX(lvC12Scaled.GetY());
+            lBasis.mUp.SetY(lvC20Scaled.GetY());
+            lBasis.mUp.SetZ(lvC01Scaled.GetY());
+            lBasis.mDir.SetX(lvC12Scaled.GetZ());
+            lBasis.mDir.SetY(lvC20Scaled.GetZ());
+            lBasis.mDir.SetZ(lvC01Scaled.GetZ());
 
             // eye = -(w-row through the inverse) -- the vmaddfp accumulate + vxor sign flip
-            lBasis.mEye.x = -(lvRowW.x * lBasis.mRight.x + lvRowW.y * lBasis.mUp.x + lvRowW.z * lBasis.mDir.x);
-            lBasis.mEye.y = -(lvRowW.x * lBasis.mRight.y + lvRowW.y * lBasis.mUp.y + lvRowW.z * lBasis.mDir.y);
-            lBasis.mEye.z = -(lvRowW.x * lBasis.mRight.z + lvRowW.y * lBasis.mUp.z + lvRowW.z * lBasis.mDir.z);
+            const rw::math::vpu::VectorIntrinsic lvNegW = rw::math::vpu::Negate(lvRowW).GetVector();
+            rw::math::vpu::VectorIntrinsic lvEye = __vmulfp(
+                lBasis.mRight.GetVector(), __vspltw(lvNegW, 0));
+            lvEye = __vmaddfp(lBasis.mUp.GetVector(), __vspltw(lvNegW, 1), lvEye);
+            lvEye = __vmaddfp(lBasis.mDir.GetVector(), __vspltw(lvNegW, 2), lvEye);
+            lBasis.mEye.SetVector(lvEye);
             return lBasis;
         }
 
-        inline void StorePlane(Vector4& lrOut, const Vec3& lrN, f32 lfD)
+        inline void StorePlane(Vector4& lrOut, const Vector3& lrN, f32 lfD)
         {
-            lrOut.x = lrN.x; lrOut.y = lrN.y; lrOut.z = lrN.z; lrOut.w = lfD;
+            lrOut.SetX(lrN.GetX());
+            lrOut.SetY(lrN.GetY());
+            lrOut.SetZ(lrN.GetZ());
+            lrOut.SetW(lfD);
         }
     }
 
@@ -217,43 +223,49 @@ namespace CgsGraphics
     void Camera::GetFrustumParallel(CameraRwFrustum& lrOut) const
     {
         const CameraWorldBasis lBasis = ComputeWorldBasisAndEye(mView);
-        const Vec3& lrRight = lBasis.mRight;
-        const Vec3& lrUp    = lBasis.mUp;
-        const Vec3& lrDir   = lBasis.mDir;
+        const Vector3& lrRight = lBasis.mRight;
+        const Vector3& lrUp    = lBasis.mUp;
+        const Vector3& lrDir   = lBasis.mDir;
 
-        const f32 lfSx   = 1.0f / mProjection.xAxis.x;   // fdivs 1.0 / [0][0]
-        const f32 lfSy   = 1.0f / mProjection.yAxis.y;   // fdivs 1.0 / [1][1]
+        const f32 lfSx   = 1.0f / static_cast<f32>(mProjection.xAxis.GetX());   // fdivs 1.0 / [0][0]
+        const f32 lfSy   = 1.0f / static_cast<f32>(mProjection.yAxis.GetY());   // fdivs 1.0 / [1][1]
         const f32 lfNear = maProjectionScalars[7];       // lfs 0x15C
         const f32 lfFar  = maProjectionScalars[8];       // lfs 0x160
         const f32 lfSpan = lfFar - lfNear;
 
         // near corners: (+r+u), (-r+u), (-r-u), (+r-u); far = +span*dir.
-        Vec3 laNear[4], laFar[4];
-        laNear[0].x = lBasis.mEye.x + lrRight.x * lfSx + lrUp.x * lfSy + lrDir.x * lfNear;
-        laNear[0].y = lBasis.mEye.y + lrRight.y * lfSx + lrUp.y * lfSy + lrDir.y * lfNear;
-        laNear[0].z = lBasis.mEye.z + lrRight.z * lfSx + lrUp.z * lfSy + lrDir.z * lfNear;
-        laNear[1] = Sub3(laNear[0], Vec3{ lrRight.x * (2.0f * lfSx), lrRight.y * (2.0f * lfSx), lrRight.z * (2.0f * lfSx) });
-        laNear[2] = Sub3(laNear[1], Vec3{ lrUp.x * (2.0f * lfSy), lrUp.y * (2.0f * lfSy), lrUp.z * (2.0f * lfSy) });
-        laNear[3].x = laNear[2].x + lrRight.x * (2.0f * lfSx);
-        laNear[3].y = laNear[2].y + lrRight.y * (2.0f * lfSx);
-        laNear[3].z = laNear[2].z + lrRight.z * (2.0f * lfSx);
+        Vector3 laNear[4], laFar[4];
+        const Vector3 lvSx(lfSx, lfSx, lfSx);
+        const Vector3 lvSy(lfSy, lfSy, lfSy);
+        const Vector3 lvNear(lfNear, lfNear, lfNear);
+        const Vector3 lvSpan(lfSpan, lfSpan, lfSpan);
+        const f32 lfTwoSx = 2.0f * lfSx;
+        const f32 lfTwoSy = 2.0f * lfSy;
+        laNear[0] = rw::math::vpu::MultAdd(
+            lrDir, lvNear,
+            rw::math::vpu::MultAdd(lrUp, lvSy,
+                rw::math::vpu::MultAdd(lrRight, lvSx, lBasis.mEye)));
+        laNear[1] = rw::math::vpu::Subtract(
+            laNear[0], rw::math::vpu::Mult(lrRight, lfTwoSx));
+        laNear[2] = rw::math::vpu::Subtract(
+            laNear[1], rw::math::vpu::Mult(lrUp, lfTwoSy));
+        laNear[3] = rw::math::vpu::Add(
+            laNear[2], rw::math::vpu::Mult(lrRight, lfTwoSx));
         for (int liCorner = 0; liCorner < 4; ++liCorner)   // the 4x far loop
         {
-            laFar[liCorner].x = laNear[liCorner].x + lrDir.x * lfSpan;
-            laFar[liCorner].y = laNear[liCorner].y + lrDir.y * lfSpan;
-            laFar[liCorner].z = laNear[liCorner].z + lrDir.z * lfSpan;
+            laFar[liCorner] = rw::math::vpu::MultAdd(lrDir, lvSpan, laNear[liCorner]);
         }
 
         StorePlane(lrOut.maPlanes[0], lrDir, Dot3(lrDir, laNear[0]));                       // near
-        const Vec3 lvNegDir{ -lrDir.x, -lrDir.y, -lrDir.z };                                // vxor
+        const Vector3 lvNegDir = rw::math::vpu::Negate(lrDir);                              // vxor
         StorePlane(lrOut.maPlanes[1], lvNegDir, -Dot3(lrDir, laFar[0]));                    // far
-        const Vec3 lvLeft   = Normalize3(Cross3(Sub3(laNear[1], laFar[1]), Sub3(laFar[2], laFar[1])));
+        const Vector3 lvLeft   = Normalize3(Cross3(Sub3(laNear[1], laFar[1]), Sub3(laFar[2], laFar[1])));
         StorePlane(lrOut.maPlanes[2], lvLeft, Dot3(lvLeft, laNear[1]));                     // left
-        const Vec3 lvRightN = Normalize3(Cross3(Sub3(laNear[3], laFar[3]), Sub3(laFar[0], laFar[3])));
+        const Vector3 lvRightN = Normalize3(Cross3(Sub3(laNear[3], laFar[3]), Sub3(laFar[0], laFar[3])));
         StorePlane(lrOut.maPlanes[3], lvRightN, Dot3(lvRightN, laNear[3]));                 // right
-        const Vec3 lvTop    = Normalize3(Cross3(Sub3(laNear[0], laFar[0]), Sub3(laFar[1], laFar[0])));
+        const Vector3 lvTop    = Normalize3(Cross3(Sub3(laNear[0], laFar[0]), Sub3(laFar[1], laFar[0])));
         StorePlane(lrOut.maPlanes[4], lvTop, Dot3(lvTop, laNear[0]));                       // top
-        const Vec3 lvBottom = Normalize3(Cross3(Sub3(laNear[2], laFar[2]), Sub3(laFar[3], laFar[2])));
+        const Vector3 lvBottom = Normalize3(Cross3(Sub3(laNear[2], laFar[2]), Sub3(laFar[3], laFar[2])));
         StorePlane(lrOut.maPlanes[5], lvBottom, Dot3(lvBottom, laNear[2]));                 // bottom
     }
 
@@ -271,9 +283,9 @@ namespace CgsGraphics
     void Camera::GetFrustumPerspective(CameraRwFrustum& lrOut, bool lbNegateNearFar) const
     {
         const CameraWorldBasis lBasis = ComputeWorldBasisAndEye(mView);
-        const Vec3& lrRight = lBasis.mRight;
-        const Vec3& lrUp    = lBasis.mUp;
-        const Vec3& lrDir   = lBasis.mDir;
+        const Vector3& lrRight = lBasis.mRight;
+        const Vector3& lrUp    = lBasis.mUp;
+        const Vector3& lrDir   = lBasis.mDir;
 
         const f32 lfTanH = maProjectionScalars[2];   // lfs 0x148 (m_tanHalfFovHorizontal)
         const f32 lfTanV = maProjectionScalars[5];   // lfs 0x154 (m_tanHalfFovVertical)
@@ -286,32 +298,30 @@ namespace CgsGraphics
         }
 
         static const f32 KAF_SIGNS[4][2] = { { 1.0f, 1.0f }, { -1.0f, 1.0f }, { -1.0f, -1.0f }, { 1.0f, -1.0f } };
-        Vec3 laNear[4], laFar[4];
+        Vector3 laNear[4], laFar[4];
         for (int liCorner = 0; liCorner < 4; ++liCorner)
         {
             const f32 lfS = KAF_SIGNS[liCorner][0] * lfTanH;
             const f32 lfT = KAF_SIGNS[liCorner][1] * lfTanV;
-            const Vec3 lvRay{ lrDir.x + lfS * lrRight.x + lfT * lrUp.x,
-                              lrDir.y + lfS * lrRight.y + lfT * lrUp.y,
-                              lrDir.z + lfS * lrRight.z + lfT * lrUp.z };
-            laNear[liCorner].x = lBasis.mEye.x + lfNear * lvRay.x;
-            laNear[liCorner].y = lBasis.mEye.y + lfNear * lvRay.y;
-            laNear[liCorner].z = lBasis.mEye.z + lfNear * lvRay.z;
-            laFar[liCorner].x  = lBasis.mEye.x + lfFar * lvRay.x;
-            laFar[liCorner].y  = lBasis.mEye.y + lfFar * lvRay.y;
-            laFar[liCorner].z  = lBasis.mEye.z + lfFar * lvRay.z;
+            const Vector3 lvRay = rw::math::vpu::MultAdd(
+                lrUp, Vector3(lfT, lfT, lfT),
+                rw::math::vpu::MultAdd(lrRight, Vector3(lfS, lfS, lfS), lrDir));
+            laNear[liCorner] = rw::math::vpu::MultAdd(
+                lvRay, Vector3(lfNear, lfNear, lfNear), lBasis.mEye);
+            laFar[liCorner] = rw::math::vpu::MultAdd(
+                lvRay, Vector3(lfFar, lfFar, lfFar), lBasis.mEye);
         }
 
         StorePlane(lrOut.maPlanes[0], lrDir, Dot3(lrDir, laNear[0]));                       // near
-        const Vec3 lvNegDir{ -lrDir.x, -lrDir.y, -lrDir.z };
+        const Vector3 lvNegDir = rw::math::vpu::Negate(lrDir);
         StorePlane(lrOut.maPlanes[1], lvNegDir, -Dot3(lrDir, laFar[0]));                    // far
-        const Vec3 lvLeft   = Normalize3(Cross3(Sub3(laNear[1], laFar[1]), Sub3(laFar[2], laFar[1])));
+        const Vector3 lvLeft   = Normalize3(Cross3(Sub3(laNear[1], laFar[1]), Sub3(laFar[2], laFar[1])));
         StorePlane(lrOut.maPlanes[2], lvLeft, Dot3(lvLeft, laNear[1]));                     // left
-        const Vec3 lvRightN = Normalize3(Cross3(Sub3(laNear[3], laFar[3]), Sub3(laFar[0], laFar[3])));
+        const Vector3 lvRightN = Normalize3(Cross3(Sub3(laNear[3], laFar[3]), Sub3(laFar[0], laFar[3])));
         StorePlane(lrOut.maPlanes[3], lvRightN, Dot3(lvRightN, laNear[3]));                 // right
-        const Vec3 lvTop    = Normalize3(Cross3(Sub3(laNear[0], laFar[0]), Sub3(laFar[1], laFar[0])));
+        const Vector3 lvTop    = Normalize3(Cross3(Sub3(laNear[0], laFar[0]), Sub3(laFar[1], laFar[0])));
         StorePlane(lrOut.maPlanes[4], lvTop, Dot3(lvTop, laNear[0]));                       // top
-        const Vec3 lvBottom = Normalize3(Cross3(Sub3(laNear[2], laFar[2]), Sub3(laFar[3], laFar[2])));
+        const Vector3 lvBottom = Normalize3(Cross3(Sub3(laNear[2], laFar[2]), Sub3(laFar[3], laFar[2])));
         StorePlane(lrOut.maPlanes[5], lvBottom, Dot3(lvBottom, laNear[2]));                 // bottom
 
         if (lbNegateNearFar)   // the 6-plane negate loop @0x827F1104
@@ -319,8 +329,7 @@ namespace CgsGraphics
             for (int liPlane = 0; liPlane < 6; ++liPlane)
             {
                 Vector4& lrPlane = lrOut.maPlanes[liPlane];
-                lrPlane.x = -lrPlane.x; lrPlane.y = -lrPlane.y;
-                lrPlane.z = -lrPlane.z; lrPlane.w = -lrPlane.w;
+                lrPlane = rw::math::vpu::Negate(lrPlane);
             }
         }
     }
@@ -336,7 +345,7 @@ namespace CgsGraphics
     // ------------------------------------------------------------------------
     void Camera::GetFrustum(CameraRwFrustum& lrOut) const
     {
-        if (mProjection.wAxis.w == 1.0f)
+        if (static_cast<f32>(mProjection.wAxis.GetW()) == 1.0f)
         {
             GetFrustumParallel(lrOut);
         }
@@ -373,124 +382,81 @@ namespace CgsGraphics
     //   for index 0..3: frustumVerts[index] = d * lrNear + Pos and frustumVerts[index + 4] = d * lrFar + Pos, each
     //     a vmaddfp (ONE rounding): 0x827E72C0 / 0x827E72D0
     // Every lane is computed, the w lanes too, as the console stores all four.
-    // FLAG (model, rule 5): the vrefp estimate is taken as the correctly rounded 1 / det.
-    // FLAG (rule 6, not modelled): VMX flushes denormals. A lane gets there only when a camera axis component is
-    // below ~1e-19, and a flushed lane then moves a corner by less than 1e-30 m, which the cell walk cannot see.
+    // The reconstruction below uses the native VPU reciprocal and four-lane operations, including the same two
+    // fused reciprocal refinements and all four result lanes as the X360 path.
     // ========================================================================
     namespace
     {
-        // One VMX register's four lanes, so that no rw::math operator rounds between the console's instructions.
-        struct FrustumVertexLanes { f32 maf[4]; };
-
-        FrustumVertexLanes FrustumVertexLanesOf(const Vector4& lrRow)
+        inline Vector4 FrustumVertexCross(const Vector4& lrA, const Vector4& lrB)
         {
-            const FrustumVertexLanes lLanes = { { lrRow.x, lrRow.y, lrRow.z, lrRow.w } };
-            return lLanes;
-        }
-
-        // vmaddfp lane: a * c + b, ONE rounding (rule 3; IDA prints the operands D, A, B, C).
-        inline f32 FrustumVertexMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
-        {
-            return std::fma(lfA, lfC, lfB);
-        }
-
-        // vnmsubfp lane: -(a * c - b), rounded ONCE and then negated -- an exact cancellation is -0 and a NaN keeps
-        // its sign (the EffectsModule.cpp Vnmsub / ConsoleVpu::NegativeMultiplySubtract convention, rule 3).
-        inline f32 FrustumVertexNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
-        {
-            const f32 lfDifference = std::fma(lfA, lfC, -lfB);
-            return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
-        }
-
-        // a x b as the console forms it: c = a * b.yzxw ; c = -(a.yzxw * b - c) ; then c.yzxw.
-        FrustumVertexLanes FrustumVertexCross(const FrustumVertexLanes& lrA, const FrustumVertexLanes& lrB)
-        {
-            static const s32 KAI_YZXW[4] = { 1, 2, 0, 3 };   // vpermwi128 0x63
-            f32 lafC[4];
-            for (s32 liLane = 0; liLane < 4; ++liLane)
-            {
-                const f32 lfProduct = lrA.maf[liLane] * lrB.maf[KAI_YZXW[liLane]];                      // vmulfp128
-                lafC[liLane] = FrustumVertexNegativeMultiplySubtract(lrA.maf[KAI_YZXW[liLane]], lrB.maf[liLane],
-                                                                     lfProduct);                         // vnmsubfp
-            }
-            const FrustumVertexLanes lCross = { { lafC[1], lafC[2], lafC[0], lafC[3] } };               // vpermwi128
-            return lCross;
+            const rw::math::vpu::VectorIntrinsic lvAyzx = __vpermwi(lrA.GetVector(), 0x63);
+            const rw::math::vpu::VectorIntrinsic lvByzx = __vpermwi(lrB.GetVector(), 0x63);
+            const rw::math::vpu::VectorIntrinsic lvProduct = __vmulfp(lrA.GetVector(), lvByzx);
+            return Vector4(__vpermwi(__vnmsubfp(lvAyzx, lrB.GetVector(), lvProduct), 0x63));
         }
     }
 
     void Camera::GetFrustumPerspectiveVertices(Vector3* frustumVerts) const
     {
-        const f32 KF_ONE = 1.0f;   // vcfsx(vspltisw 1, 0) at 0x827E70E4 / 0x827E7100
         const f32 KF_TWO = 2.0f;   // flt_82001D9C (0x40000000)
+        const VecFloat lvTwo(KF_TWO);
 
-        const FrustumVertexLanes lX = FrustumVertexLanesOf(mView.xAxis);   // lvx128 +0x00
-        const FrustumVertexLanes lY = FrustumVertexLanesOf(mView.yAxis);   // lvx128 +0x10
-        const FrustumVertexLanes lZ = FrustumVertexLanesOf(mView.zAxis);   // lvx128 +0x20
-        const FrustumVertexLanes lW = FrustumVertexLanesOf(mView.wAxis);   // lvx128 +0x30
+        const Vector4& lX = mView.xAxis;   // lvx128 +0x00
+        const Vector4& lY = mView.yAxis;   // lvx128 +0x10
+        const Vector4& lZ = mView.zAxis;   // lvx128 +0x20
+        const Vector4& lW = mView.wAxis;   // lvx128 +0x30
 
-        const FrustumVertexLanes lZCrossX = FrustumVertexCross(lZ, lX);
-        const FrustumVertexLanes lYCrossZ = FrustumVertexCross(lY, lZ);
-        const FrustumVertexLanes lXCrossY = FrustumVertexCross(lX, lY);
+        const Vector4 lZCrossX = FrustumVertexCross(lZ, lX);
+        const Vector4 lYCrossZ = FrustumVertexCross(lY, lZ);
+        const Vector4 lXCrossY = FrustumVertexCross(lX, lY);
 
-        // det = X . (Y x Z): the three f32 products are exact in f64, summed left to right, rounded once (rule 1).
-        const f32 lfDeterminant = static_cast<f32>(static_cast<f64>(lX.maf[0]) * lYCrossZ.maf[0]
-                                                 + static_cast<f64>(lX.maf[1]) * lYCrossZ.maf[1]
-                                                 + static_cast<f64>(lX.maf[2]) * lYCrossZ.maf[2]);
-        f32 lfReciprocal = static_cast<f32>(1.0 / static_cast<f64>(lfDeterminant));   // vrefp, FLAG (model)
-        for (s32 liStep = 0; liStep < 2; ++liStep)
-        {
-            const f32 lfResidual = FrustumVertexNegativeMultiplySubtract(lfReciprocal, lfDeterminant, KF_ONE);
-            lfReciprocal = FrustumVertexMultiplyAdd(lfReciprocal, lfResidual, lfReciprocal);
-        }
+        const Vector3 lvDeterminant(lX.GetVector());
+        const Vector3 lvCrossForDot(lYCrossZ.GetVector());
+        const Vector3 lvInverseDeterminant = rw::math::vpu::Divide(
+            Vector3(1.0f, 1.0f, 1.0f), rw::math::vpu::Dot(lvDeterminant, lvCrossForDot));
+        const rw::math::vpu::VectorIntrinsic lvReciprocal =
+            __vspltw(lvInverseDeterminant.GetVector(), 0);
 
         // transform: rows (Y x Z, Z x X, X x Y, Z x X) transposed, each * 1/det; Pos = -W through them.
-        FrustumVertexLanes laTransform[3];
-        for (s32 liRow = 0; liRow < 3; ++liRow)
-        {
-            laTransform[liRow].maf[0] = lYCrossZ.maf[liRow] * lfReciprocal;
-            laTransform[liRow].maf[1] = lZCrossX.maf[liRow] * lfReciprocal;
-            laTransform[liRow].maf[2] = lXCrossY.maf[liRow] * lfReciprocal;
-            laTransform[liRow].maf[3] = lZCrossX.maf[liRow] * lfReciprocal;
-        }
-        FrustumVertexLanes lPos;
-        for (s32 liLane = 0; liLane < 4; ++liLane)
-        {
-            const f32 lfFromX = -lW.maf[0] * laTransform[0].maf[liLane];
-            const f32 lfFromXY = FrustumVertexMultiplyAdd(-lW.maf[1], laTransform[1].maf[liLane], lfFromX);
-            lPos.maf[liLane] = FrustumVertexMultiplyAdd(-lW.maf[2], laTransform[2].maf[liLane], lfFromXY);
-        }
+        const Vector4 lRow0(lYCrossZ.GetX(), lZCrossX.GetX(), lXCrossY.GetX(), lZCrossX.GetX());
+        const Vector4 lRow1(lYCrossZ.GetY(), lZCrossX.GetY(), lXCrossY.GetY(), lZCrossX.GetY());
+        const Vector4 lRow2(lYCrossZ.GetZ(), lZCrossX.GetZ(), lXCrossY.GetZ(), lZCrossX.GetZ());
+        const Vector4 lTransform0(__vmulfp(lRow0.GetVector(), lvReciprocal));
+        const Vector4 lTransform1(__vmulfp(lRow1.GetVector(), lvReciprocal));
+        const Vector4 lTransform2(__vmulfp(lRow2.GetVector(), lvReciprocal));
+
+        const Vector4 lNegW = rw::math::vpu::Negate(lW);
+        rw::math::vpu::VectorIntrinsic lvPos = __vmulfp(
+            lTransform0.GetVector(), __vspltw(lNegW.GetVector(), 0));
+        lvPos = __vmaddfp(lTransform1.GetVector(), __vspltw(lNegW.GetVector(), 1), lvPos);
+        lvPos = __vmaddfp(lTransform2.GetVector(), __vspltw(lNegW.GetVector(), 2), lvPos);
+        const Vector4 lPos(lvPos);
 
         const f32 lrNear        = maProjectionScalars[7];   // m_nearClipPlane
         const f32 lrFar         = maProjectionScalars[8];   // m_farClipPlane
         const f32 lrTanHalfFovX = maProjectionScalars[2];   // m_tanHalfFovHorizontal
         const f32 lrTanHalfFovY = maProjectionScalars[5];   // m_tanHalfFovVertical
 
-        FrustumVertexLanes laDirections[4];
-        for (s32 liLane = 0; liLane < 4; ++liLane)
-        {
-            const f32 lfRightVec = laTransform[0].maf[liLane] * lrTanHalfFovX;
-            const f32 lfUpVec    = laTransform[1].maf[liLane] * lrTanHalfFovY;
-            const f32 lfRight2   = lfRightVec * KF_TWO;
-            const f32 lfUp2      = lfUpVec * KF_TWO;
-            laDirections[0].maf[liLane] = (lfRightVec + lfUpVec) + laTransform[2].maf[liLane];
-            laDirections[1].maf[liLane] = laDirections[0].maf[liLane] - lfRight2;
-            laDirections[2].maf[liLane] = laDirections[1].maf[liLane] - lfUp2;
-            laDirections[3].maf[liLane] = laDirections[2].maf[liLane] + lfRight2;
-        }
+        const Vector4 lRightVec(__vmulfp(lTransform0.GetVector(), VecFloat(lrTanHalfFovX).GetVector()));
+        const Vector4 lUpVec(__vmulfp(lTransform1.GetVector(), VecFloat(lrTanHalfFovY).GetVector()));
+        const Vector4 lRight2(__vmulfp(lRightVec.GetVector(), lvTwo.GetVector()));
+        const Vector4 lUp2(__vmulfp(lUpVec.GetVector(), lvTwo.GetVector()));
+        Vector4 laDirections[4];
+        laDirections[0] = Vector4(__vaddfp(__vaddfp(lRightVec.GetVector(), lUpVec.GetVector()),
+                                            lTransform2.GetVector()));
+        laDirections[1] = Vector4(__vsubfp(laDirections[0].GetVector(), lRight2.GetVector()));
+        laDirections[2] = Vector4(__vsubfp(laDirections[1].GetVector(), lUp2.GetVector()));
+        laDirections[3] = Vector4(__vaddfp(laDirections[2].GetVector(), lRight2.GetVector()));
+
+        const rw::math::vpu::VectorIntrinsic lvNear = VecFloat(lrNear).GetVector();
+        const rw::math::vpu::VectorIntrinsic lvFar = VecFloat(lrFar).GetVector();
 
         for (u32 index = 0; index < 4; ++index)
         {
-            const FrustumVertexLanes& tmpVec3 = laDirections[index];
             Vector3& lrNearVertex = frustumVerts[index];
             Vector3& lrFarVertex  = frustumVerts[index + 4];
-            lrNearVertex.x = FrustumVertexMultiplyAdd(tmpVec3.maf[0], lrNear, lPos.maf[0]);
-            lrNearVertex.y = FrustumVertexMultiplyAdd(tmpVec3.maf[1], lrNear, lPos.maf[1]);
-            lrNearVertex.z = FrustumVertexMultiplyAdd(tmpVec3.maf[2], lrNear, lPos.maf[2]);
-            lrNearVertex.w = FrustumVertexMultiplyAdd(tmpVec3.maf[3], lrNear, lPos.maf[3]);
-            lrFarVertex.x  = FrustumVertexMultiplyAdd(tmpVec3.maf[0], lrFar, lPos.maf[0]);
-            lrFarVertex.y  = FrustumVertexMultiplyAdd(tmpVec3.maf[1], lrFar, lPos.maf[1]);
-            lrFarVertex.z  = FrustumVertexMultiplyAdd(tmpVec3.maf[2], lrFar, lPos.maf[2]);
-            lrFarVertex.w  = FrustumVertexMultiplyAdd(tmpVec3.maf[3], lrFar, lPos.maf[3]);
+            lrNearVertex.SetVector(__vmaddfp(laDirections[index].GetVector(), lvNear, lPos.GetVector()));
+            lrFarVertex.SetVector(__vmaddfp(laDirections[index].GetVector(), lvFar, lPos.GetVector()));
         }
     }
 
@@ -539,7 +505,7 @@ namespace CgsGraphics
     const CgsGeometric::Frustum& Camera::GetFrustum()
     {
         // the @0x82277298 dispatch through the bridge pair
-        if (mProjection.wAxis.w == 1.0f)
+        if (static_cast<f32>(mProjection.wAxis.GetW()) == 1.0f)
         {
             return GetFrustumParallel();
         }
@@ -599,19 +565,19 @@ namespace CgsGraphics
         maProjectionScalars[8] = lfFarClipPlane;   // m_farClipPlane
 
         {
-            const Vector4 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( 1.0f, 0.0f, 0.0f, 0.0f );
             mView.xAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, 1.0f, 0.0f, 0.0f );
             mView.yAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, 0.0f, 1.0f, 0.0f );
             mView.zAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, 0.0f, 0.0f, 0.0f );
             mView.wAxis = lAggregateValue;
         }
 
@@ -702,21 +668,21 @@ namespace CgsGraphics
         const f32 lfNearTimesFar = lfNear * lfFar;   // v10
 
         {
-            const Vector4 lAggregateValue = { maProjectionScalars[1], 0.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( maProjectionScalars[1], 0.0f, 0.0f, 0.0f );
             mProjection.xAxis = lAggregateValue;
         }  // v15
         {
-            const Vector4 lAggregateValue = { 0.0f, maProjectionScalars[4], 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, maProjectionScalars[4], 0.0f, 0.0f );
             mProjection.yAxis = lAggregateValue;
         }  // v14
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f,
-                                     (lfNear + lfFar) / (lfFar - lfNear), 1.0f };
+            const Vector4 lAggregateValue ( 0.0f, 0.0f,
+                                     (lfNear + lfFar) / (lfFar - lfNear), 1.0f );
             mProjection.zAxis = lAggregateValue;
         } // v17
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f,
-                                     (-2.0f * lfNearTimesFar) / (lfFar - lfNear), 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, 0.0f,
+                                     (-2.0f * lfNearTimesFar) / (lfFar - lfNear), 0.0f );
             mProjection.wAxis = lAggregateValue;
         } // v16
 
@@ -744,19 +710,19 @@ namespace CgsGraphics
         const f32 lfInvScale = 1.0f / lfOrthoScale;  // f11
 
         {
-            const Vector4 lAggregateValue = { lfInvScale, 0.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( lfInvScale, 0.0f, 0.0f, 0.0f );
             mProjection.xAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, lfInvScale, 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, lfInvScale, 0.0f, 0.0f );
             mProjection.yAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f / (lfFar - lfNear), 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, 0.0f, 1.0f / (lfFar - lfNear), 0.0f );
             mProjection.zAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f, lfNear / (lfNear - lfFar), 1.0f };
+            const Vector4 lAggregateValue ( 0.0f, 0.0f, lfNear / (lfNear - lfFar), 1.0f );
             mProjection.wAxis = lAggregateValue;
         }
 
@@ -818,59 +784,41 @@ namespace CgsGraphics
         #define RWMATH_IS_SIMILAR(a, b) \
             (((a) - (b) < 0.0f ? -((a) - (b)) : ((a) - (b))) <= KF_RWMATH_IS_SIMILAR_EPSILON)
 
-        // The four RwMath::IsSimilar(m_projectionMatrix.GetElem(..), 0.0f) devs
-        // (CgsCamera.cpp:0xB6..0xB9) -- DEGRADED TO A LOG-ONCE GATE 2026-08-12 (conductor).
-        //
-        // These are faithful console dev tripwires, and with the real epsilon now recovered
-        // (above) they are also correctly TUNED -- but they are still firing, which means the
-        // off-axis terms are NOT sub-epsilon residue: some caller genuinely hands this
-        // function a projection with real z/w terms in its x/y rows. That is a REAL BUG and
-        // it is NOT in this function; this function is only where it is detected.
-        //
-        // MEASURED: 432 halts in one ~2.5-minute run, four per call, every frame, from the
-        // shadow-cascade leg (BrnWorldModule.cpp:5550). As hard asserts they made the build
-        // unplayable on their own. Agent B9 pinned the frontier: cascade 0's projection is
-        // CLEAN, so the offender is cascade 1/2 or a non-cascade shadow map, and since every
-        // writer of Camera::mProjection stores literal 0.0f into those slots, the non-zero can
-        // only enter via the TSM / bounding-box post-multiply at BrnShadowMap.cpp:1241/1249.
-        //
-        // So: log the OFFENDING VALUES once (which is strictly more useful than halting -- a
-        // halt tells you nothing about magnitude) and keep running. ⛔ RESTORE THE HARD
-        // ASSERTS once that post-multiply is fixed; they are correct as written.
-        if ( !RWMATH_IS_SIMILAR(mProjection.xAxis.z, 0.0f) ||
-             !RWMATH_IS_SIMILAR(mProjection.yAxis.z, 0.0f) ||
-             !RWMATH_IS_SIMILAR(mProjection.xAxis.w, 0.0f) )
-        {
-            static bool s_bLoggedOffAxis = false;
-            if ( !s_bLoggedOffAxis && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                s_bLoggedOffAxis = true;
-            }
-        }
+        // The X360 has four native assertion tripwires here. The fourth deliberately
+        // repeats [1][2] with the same source message as the second assertion.
+        CGS_ASSERT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.xAxis.GetZ()), 0.0f),
+                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 2), 0.0f )");
+        CGS_ASSERT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.yAxis.GetZ()), 0.0f),
+                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )");
+        CGS_ASSERT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.xAxis.GetW()), 0.0f),
+                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 3), 0.0f )");
+        CGS_ASSERT(RWMATH_IS_SIMILAR(static_cast<f32>(mProjection.yAxis.GetZ()), 0.0f),
+                   "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )");
 
         #undef RWMATH_IS_SIMILAR
 
         Matrix44 lResult;
         // row0/row1 = VP columns 0/1 (the vmrghw ladder)
         {
-            const Vector4 lAggregateValue = { mViewProjection.xAxis.x, mViewProjection.yAxis.x,
-                                 mViewProjection.zAxis.x, mViewProjection.wAxis.x };
+            const Vector4 lAggregateValue ( mViewProjection.xAxis.GetX(), mViewProjection.yAxis.GetX(),
+                                            mViewProjection.zAxis.GetX(), mViewProjection.wAxis.GetX() );
             lResult.xAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { mViewProjection.xAxis.y, mViewProjection.yAxis.y,
-                                 mViewProjection.zAxis.y, mViewProjection.wAxis.y };
+            const Vector4 lAggregateValue ( mViewProjection.xAxis.GetY(), mViewProjection.yAxis.GetY(),
+                                            mViewProjection.zAxis.GetY(), mViewProjection.wAxis.GetY() );
             lResult.yAxis = lAggregateValue;
         }
         // row2 = mView column 2 (the vmrglw pair over the view rows)
         {
-            const Vector4 lAggregateValue = { mView.xAxis.z, mView.yAxis.z, mView.zAxis.z, mView.wAxis.z };
+            const Vector4 lAggregateValue ( mView.xAxis.GetZ(), mView.yAxis.GetZ(),
+                                            mView.zAxis.GetZ(), mView.wAxis.GetZ() );
             lResult.zAxis = lAggregateValue;
         }
         // row3 = the projection z/w coefficient quartet (vperm/vsldoi combine)
         {
-            const Vector4 lAggregateValue = { mProjection.zAxis.z, mProjection.wAxis.z,
-                                 mProjection.zAxis.w, mProjection.wAxis.w };
+            const Vector4 lAggregateValue ( mProjection.zAxis.GetZ(), mProjection.wAxis.GetZ(),
+                                            mProjection.zAxis.GetW(), mProjection.wAxis.GetW() );
             lResult.wAxis = lAggregateValue;
         }
         return lResult;
@@ -889,21 +837,21 @@ namespace CgsGraphics
         const f32 lfNearTimesFar = lfNear * lfFar;   // v10
 
         {
-            const Vector4 lAggregateValue = { maProjectionScalars[1], 0.0f, 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( maProjectionScalars[1], 0.0f, 0.0f, 0.0f );
             mProjection.xAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, maProjectionScalars[4], 0.0f, 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, maProjectionScalars[4], 0.0f, 0.0f );
             mProjection.yAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f,
-                                     (lfNear + lfFar) / (lfNear - lfFar), -1.0f };
+            const Vector4 lAggregateValue ( 0.0f, 0.0f,
+                                     (lfNear + lfFar) / (lfNear - lfFar), -1.0f );
             mProjection.zAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { 0.0f, 0.0f,
-                                     (lfNearTimesFar * 2.0f) / (lfNear - lfFar), 0.0f };
+            const Vector4 lAggregateValue ( 0.0f, 0.0f,
+                                     (lfNearTimesFar * 2.0f) / (lfNear - lfFar), 0.0f );
             mProjection.wAxis = lAggregateValue;
         }
 
@@ -924,10 +872,20 @@ namespace CgsGraphics
                         rw::math::vpu::Vector3 lUpVector,
                         rw::math::vpu::Vector3 lTargetPosition)
     {
+        const f32 lfEyeX = static_cast<f32>(lEyePosition.GetX());
+        const f32 lfEyeY = static_cast<f32>(lEyePosition.GetY());
+        const f32 lfEyeZ = static_cast<f32>(lEyePosition.GetZ());
+        const f32 lfUpX = static_cast<f32>(lUpVector.GetX());
+        const f32 lfUpY = static_cast<f32>(lUpVector.GetY());
+        const f32 lfUpZ = static_cast<f32>(lUpVector.GetZ());
+        const f32 lfTargetX = static_cast<f32>(lTargetPosition.GetX());
+        const f32 lfTargetY = static_cast<f32>(lTargetPosition.GetY());
+        const f32 lfTargetZ = static_cast<f32>(lTargetPosition.GetZ());
+
         // dir = normalize(target - eye)   (v39/v38/v40 -> v42/v44/v43)
-        const f64 lfDx = static_cast<f64>(lTargetPosition.x) - lEyePosition.x;
-        const f64 lfDy = static_cast<f64>(lTargetPosition.y) - lEyePosition.y;
-        const f64 lfDz = static_cast<f64>(lTargetPosition.z) - lEyePosition.z;
+        const f64 lfDx = static_cast<f64>(lfTargetX) - lfEyeX;
+        const f64 lfDy = static_cast<f64>(lfTargetY) - lfEyeY;
+        const f64 lfDz = static_cast<f64>(lfTargetZ) - lfEyeZ;
         const f64 lfInvLen = 1.0 / std::sqrt(lfDx * lfDx + lfDz * lfDz + lfDy * lfDy);   // v41
         const f64 lfDirX = lfDx * lfInvLen;   // v42
         const f64 lfDirZ = lfDz * lfInvLen;   // v43
@@ -937,9 +895,9 @@ namespace CgsGraphics
         //   v45 = dir.z*up.x - up.z*dir.x
         //   v46 = up.z*dir.y - up.y*dir.z
         //   v47 = up.y*dir.x - dir.y*up.x
-        const f64 lfCx = lfDirZ * lUpVector.x - static_cast<f64>(lUpVector.z) * lfDirX;  // v45
-        const f64 lfCy = static_cast<f64>(lUpVector.z) * lfDirY - static_cast<f64>(lUpVector.y) * lfDirZ; // v46
-        const f64 lfCz = static_cast<f64>(lUpVector.y) * lfDirX - lfDirY * lUpVector.x;  // v47
+        const f64 lfCx = lfDirZ * lfUpX - static_cast<f64>(lfUpZ) * lfDirX;  // v45
+        const f64 lfCy = static_cast<f64>(lfUpZ) * lfDirY - static_cast<f64>(lfUpY) * lfDirZ; // v46
+        const f64 lfCz = static_cast<f64>(lfUpY) * lfDirX - lfDirY * lfUpX;  // v47
         const f64 lfInvLenC = 1.0 / std::sqrt(lfCy * lfCy + lfCz * lfCz + lfCx * lfCx);  // v48
         const f64 lfB0y = lfCx * lfInvLenC;   // v49 -> [1][0]
         const f64 lfB0x = lfInvLenC * lfCy;   // v50 -> [0][0]
@@ -970,30 +928,30 @@ namespace CgsGraphics
         maClipState[9]  = lfB1z;                                                        // +0x108
         maClipState[10] = lfDirZ;                                                       // +0x110
         maClipState[11] = 0.0;                                                          // +0x118
-        maClipState[12] = -(lfB0x * lEyePosition.x + lfB0z * lEyePosition.z + lfB0y * lEyePosition.y); // +0x120
-        maClipState[13] = -(lfB1x * lEyePosition.x + lfB1z * lEyePosition.z + lfB1y * lEyePosition.y); // +0x128
-        maClipState[14] = -(lfDirX * lEyePosition.x + lfDirZ * lEyePosition.z + lfDirY * lEyePosition.y); // +0x130
+        maClipState[12] = -(lfB0x * lfEyeX + lfB0z * lfEyeZ + lfB0y * lfEyeY); // +0x120
+        maClipState[13] = -(lfB1x * lfEyeX + lfB1z * lfEyeZ + lfB1y * lfEyeY); // +0x128
+        maClipState[14] = -(lfDirX * lfEyeX + lfDirZ * lfEyeZ + lfDirY * lfEyeY); // +0x130
         maClipState[15] = 1.0;                                                          // +0x138 (0x3FF0...)
 
         // Narrow into the float view rows (w lanes zero), then rebuild the VP.
         {
-            const Vector4 lAggregateValue = { static_cast<f32>(maClipState[0]),  static_cast<f32>(maClipState[1]),
-                               static_cast<f32>(maClipState[2]),  0.0f };
+            const Vector4 lAggregateValue ( static_cast<f32>(maClipState[0]),  static_cast<f32>(maClipState[1]),
+                               static_cast<f32>(maClipState[2]),  0.0f );
             mView.xAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { static_cast<f32>(maClipState[4]),  static_cast<f32>(maClipState[5]),
-                               static_cast<f32>(maClipState[6]),  0.0f };
+            const Vector4 lAggregateValue ( static_cast<f32>(maClipState[4]),  static_cast<f32>(maClipState[5]),
+                               static_cast<f32>(maClipState[6]),  0.0f );
             mView.yAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { static_cast<f32>(maClipState[8]),  static_cast<f32>(maClipState[9]),
-                               static_cast<f32>(maClipState[10]), 0.0f };
+            const Vector4 lAggregateValue ( static_cast<f32>(maClipState[8]),  static_cast<f32>(maClipState[9]),
+                               static_cast<f32>(maClipState[10]), 0.0f );
             mView.zAxis = lAggregateValue;
         }
         {
-            const Vector4 lAggregateValue = { static_cast<f32>(maClipState[12]), static_cast<f32>(maClipState[13]),
-                               static_cast<f32>(maClipState[14]), 0.0f };
+            const Vector4 lAggregateValue ( static_cast<f32>(maClipState[12]), static_cast<f32>(maClipState[13]),
+                               static_cast<f32>(maClipState[14]), 0.0f );
             mView.wAxis = lAggregateValue;
         }
 
@@ -1030,22 +988,26 @@ namespace CgsGraphics
     // ------------------------------------------------------------------------
     Vector3 Camera::GetPosition() const
     {
-        const Vector4& lrW = mView.wAxis;
-        Vector3 lvPosition;
-        lvPosition.x = -(lrW.x * mView.xAxis.x + lrW.y * mView.xAxis.y + lrW.z * mView.xAxis.z);
-        lvPosition.y = -(lrW.x * mView.yAxis.x + lrW.y * mView.yAxis.y + lrW.z * mView.yAxis.z);
-        lvPosition.z = -(lrW.x * mView.zAxis.x + lrW.y * mView.zAxis.y + lrW.z * mView.zAxis.z);
-        lvPosition.w = 0.0f;
-        return lvPosition;
+        const Vector3 lvW(mView.wAxis.GetVector());
+        const Vector3 lvRow0(mView.xAxis.GetVector());
+        const Vector3 lvRow1(mView.yAxis.GetVector());
+        const Vector3 lvRow2(mView.zAxis.GetVector());
+        Vector3 lvPosition = rw::math::vpu::Mult(lvRow0, static_cast<f32>(lvW.GetX()));
+        lvPosition = rw::math::vpu::MultAdd(
+            lvRow1, Vector3(static_cast<f32>(lvW.GetY()), static_cast<f32>(lvW.GetY()),
+                            static_cast<f32>(lvW.GetY())), lvPosition);
+        lvPosition = rw::math::vpu::MultAdd(
+            lvRow2, Vector3(static_cast<f32>(lvW.GetZ()), static_cast<f32>(lvW.GetZ()),
+                            static_cast<f32>(lvW.GetZ())), lvPosition);
+        return rw::math::vpu::Negate(lvPosition);
     }
 
     Vector3 Camera::GetDirection() const
     {
-        Vector3 lvDirection;
-        lvDirection.x = mView.xAxis.z;   // view column 2 == the LookAt dir
-        lvDirection.y = mView.yAxis.z;
-        lvDirection.z = mView.zAxis.z;
-        lvDirection.w = 0.0f;
+        Vector3 lvDirection(0.0f, 0.0f, 0.0f);
+        lvDirection.SetX(mView.xAxis.GetZ());   // view column 2 == the LookAt dir
+        lvDirection.SetY(mView.yAxis.GetZ());
+        lvDirection.SetZ(mView.zAxis.GetZ());
         return lvDirection;
     }
 
@@ -1065,43 +1027,13 @@ namespace CgsGraphics
     // Instruction accounting (vmaddfp vD,vA,vB,vC == vD = vA*vC + vB, validated against the
     // affine-Mult reference): vmulfp128 seeds rows 0..2 @0x827E7070/7C/88; vmaddfp seeds row 3
     // with proj3 @0x827E7090; the y*proj1 madds @0x827E70AC..70B8; the z*proj2 madds
-    // @0x827E70CC..70D8 store to +0x80..+0xB0. blr with r3 untouched -> void. Scalar lowering
-    // matches the committed SDK reference (SDKs/EATech/include/rw/math/vpu/detail/
-    // matrix44_operation_platform_inline.h, Mult(Matrix44Affine, Matrix44)) lane for lane.
+    // @0x827E70CC..70D8 store to +0x80..+0xB0. blr with r3 untouched -> void. The native
+    // implementation below calls that same affine multiply directly.
     void Camera::UpdateViewProjectionMatrix()
     {
-        const Vector4* lapViewRows[4] =
-        {
-            &mView.xAxis, &mView.yAxis, &mView.zAxis, &mView.wAxis
-        };
-        Vector4* lapOutRows[4] =
-        {
-            &mViewProjection.xAxis, &mViewProjection.yAxis,
-            &mViewProjection.zAxis, &mViewProjection.wAxis
-        };
-
-        for (int liRow = 0; liRow < 4; ++liRow)
-        {
-            // vspltw broadcasts of the view row's X/Y/Z lanes.
-            const f32 lfX = lapViewRows[liRow]->x;
-            const f32 lfY = lapViewRows[liRow]->y;
-            const f32 lfZ = lapViewRows[liRow]->z;
-
-            const f32* lpfProj0 = &mProjection.xAxis.x;
-            const f32* lpfProj1 = &mProjection.yAxis.x;
-            const f32* lpfProj2 = &mProjection.zAxis.x;
-            const f32* lpfProj3 = &mProjection.wAxis.x;
-            f32*       lpfOut   = &lapOutRows[liRow]->x;
-
-            for (int liLane = 0; liLane < 4; ++liLane)
-            {
-                // rows 0..2: vmulfp128 seed; row 3: vmaddfp seeded with proj.wAxis.
-                f32 lfAcc = (liRow == 3) ? lpfProj3[liLane] : 0.0f;
-                lfAcc += lfX * lpfProj0[liLane];
-                lfAcc += lfY * lpfProj1[liLane];
-                lfAcc += lfZ * lpfProj2[liLane];
-                lpfOut[liLane] = lfAcc;
-            }
-        }
+        const Matrix44Affine lView(
+            Vector3(mView.xAxis.GetVector()), Vector3(mView.yAxis.GetVector()),
+            Vector3(mView.zAxis.GetVector()), Vector3(mView.wAxis.GetVector()));
+        mViewProjection = rw::math::vpu::Mult(lView, mProjection);
     }
 }

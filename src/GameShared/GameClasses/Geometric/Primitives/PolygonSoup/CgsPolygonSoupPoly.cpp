@@ -18,6 +18,8 @@
 
 namespace CgsGeometric
 {
+    using rw::math::vpu::VectorIntrinsic;
+
     // ------------------------------------------------------------------------
     // Every constant below was read out of the X360 image.
     //
@@ -60,37 +62,14 @@ namespace CgsGeometric
         const f32 KF_EDGE_COSINE_TOLERANCE_HI =  1.1920928955078125e-07f;
         const f32 KF_EDGE_COSINE_TOLERANCE_LO = -1.1920928955078125e-07f;
 
-        // The VMX arm of LoadEdgeCosines, per edge code.
-        //   vand  -> code & 0x1F
-        //   vminuw-> min(code, 0x1C)
-        //   vslw  -> 8u << code            (32-bit, hence the clamp)
-        //   vcuxwfp128 (UNSIGNED convert, UIMM 0)
-        //   vrefp128 + two Newton-Raphson steps -> 1/x
-        //   vmulfp128 by the numerator, then vsubfp128 from 1.0f
-        // ⚠️ PC LOWERING, FLAGGED: `vrefp128` + 2 NR is a ~23-bit reciprocal. A
-        // true divide is used instead -- an x86 `rcpps` is a DIFFERENT estimate,
-        // so imitating the shape would not be more faithful than being exact. The
-        // MULTIPLY is kept (`K * (1/x)`, two roundings) rather than folded into a
-        // divide, because the console multiplies and because that is precisely
-        // what the tolerance assert below compares against the true divide.
-        inline f32 DecodeEdgeCosineVMX(u8 lu8Code)
+        inline VectorIntrinsic VectorFromWords(u32 lu0, u32 lu1, u32 lu2, u32 lu3)
         {
-            u32 luCode = static_cast<u32>(lu8Code) & KU32_EDGE_COSINE_CODE_MASK;
-            if (luCode > KU32_EDGE_COSINE_CODE_CLAMP)
-            {
-                luCode = KU32_EDGE_COSINE_CODE_CLAMP;
-            }
-            const u32 luDenominator = KU32_EDGE_COSINE_SHIFT_BASE << luCode;
-            const f32 lfDenominator = static_cast<f32>(luDenominator);
-            return 1.0f - KF_EDGE_COSINE_NUMERATOR * (1.0f / lfDenominator);
-        }
-
-        inline void SplatInto(VecFloat& lrOut, f32 lfValue)
-        {
-            lrOut.x = lfValue;   // vspltw + stvx128 -- all four lanes equal
-            lrOut.y = lfValue;
-            lrOut.z = lfValue;
-            lrOut.w = lfValue;
+            rw::math::vpu::detail::VectorIntrinsicUnion lValue;
+            lValue.scalarUInt[0] = lu0;
+            lValue.scalarUInt[1] = lu1;
+            lValue.scalarUInt[2] = lu2;
+            lValue.scalarUInt[3] = lu3;
+            return lValue.vector;
         }
     }
 
@@ -157,10 +136,44 @@ namespace CgsGeometric
     {
         VecFloat* const lapOut[4] = { &lOutEdge0, &lOutEdge1, &lOutEdge2, &lOutEdge3 };
 
-        for (s32 liEdge = 0; liEdge < 4; ++liEdge)
+        // The 12-byte record can start at any four-byte boundary. Match the native
+        // lvlx/lvrx pair, then use the recovered CRT vperm words to gather code bytes
+        // 8..11 into the four VMX lanes.
+        const VectorIntrinsic lvPoly = __loadunalignedvector(this);
+        const VectorIntrinsic lvCodePermute = VectorFromWords(
+            0x08080808u, 0x09090909u, 0x0A0A0A0Au, 0x0B0B0B0Bu);
+        const VectorIntrinsic lvCodeMask = VectorFromWords(
+            KU32_EDGE_COSINE_CODE_MASK, KU32_EDGE_COSINE_CODE_MASK,
+            KU32_EDGE_COSINE_CODE_MASK, KU32_EDGE_COSINE_CODE_MASK);
+        const VectorIntrinsic lvCodeClamp = VectorFromWords(
+            KU32_EDGE_COSINE_CODE_CLAMP, KU32_EDGE_COSINE_CODE_CLAMP,
+            KU32_EDGE_COSINE_CODE_CLAMP, KU32_EDGE_COSINE_CODE_CLAMP);
+        const VectorIntrinsic lvShiftBase = VectorFromWords(
+            KU32_EDGE_COSINE_SHIFT_BASE, KU32_EDGE_COSINE_SHIFT_BASE,
+            KU32_EDGE_COSINE_SHIFT_BASE, KU32_EDGE_COSINE_SHIFT_BASE);
+        const u32 luNumeratorBits = 0x411DE9E7u;
+        const VectorIntrinsic lvNumerator = VectorFromWords(
+            luNumeratorBits, luNumeratorBits, luNumeratorBits, luNumeratorBits);
+        const VectorIntrinsic lvOne = __vcfsx(__vspltisw(1), 0);
+
+        const VectorIntrinsic lvCodes = __vminuw(
+            __vand(__vperm(lvPoly, lvPoly, lvCodePermute), lvCodeMask), lvCodeClamp);
+        const VectorIntrinsic lvIntegerDenominator = __vslw(lvShiftBase, lvCodes);
+        const VectorIntrinsic lvDenominator = __vcuxwfp(lvIntegerDenominator, 0);
+
+        VectorIntrinsic lvReciprocal = __vrefp(lvDenominator);
+        for (s32 liStep = 0; liStep < 2; ++liStep)
         {
-            SplatInto(*lapOut[liEdge], DecodeEdgeCosineVMX(mauCompressedEdgeCosines[liEdge]));
+            const VectorIntrinsic lvResidual = __vnmsubfp(lvReciprocal, lvDenominator, lvOne);
+            lvReciprocal = __vmaddfp(lvReciprocal, lvResidual, lvReciprocal);
         }
+        const VectorIntrinsic lvProduct = __vmulfp(lvNumerator, lvReciprocal);
+        const VectorIntrinsic lvEdgeCosines = __vsubfp(lvOne, lvProduct);
+
+        lOutEdge0 = VecFloat(lvEdgeCosines, 0);
+        lOutEdge1 = VecFloat(lvEdgeCosines, 1);
+        lOutEdge2 = VecFloat(lvEdgeCosines, 2);
+        lOutEdge3 = VecFloat(lvEdgeCosines, 3);
 
         // --- the debug half -------------------------------------------------
         // The console recomputes all four scalars first (0x8283A214..0x8283A29C),
@@ -183,12 +196,11 @@ namespace CgsGeometric
 
         // `vsubfp` the stored output against a splat of the scalar, then compare
         // lane 0 against +/-FLT_EPSILON. CgsPolygonSoupPoly.h:244 / :245 / :246 / :247.
-        // ⭐ NOT a vacuous self-comparison on this port: the two arms still differ
-        // (`K * (1/x)` is two roundings, `K / x` is one), and the scalar arm has
-        // no shift clamp.
+        // The native vector arm and scalar arm retain their separate X360 shift and
+        // reciprocal paths; compare their stored values with the original epsilon.
         for (s32 liEdge = 0; liEdge < 4; ++liEdge)
         {
-            const f32 lfDelta = lapOut[liEdge]->x - lafScalar[liEdge];
+            const f32 lfDelta = lapOut[liEdge]->GetFloat() - lafScalar[liEdge];
             CGS_ASSERT(lfDelta <= KF_EDGE_COSINE_TOLERANCE_HI
                     && lfDelta >= KF_EDGE_COSINE_TOLERANCE_LO,
                        "LoadEdgeCosines: vector and scalar edge cosines disagree");
