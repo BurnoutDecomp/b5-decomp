@@ -60,31 +60,16 @@ void TagPoint::Construct(const TagPointSpec* lpType, const DeformationSensor* lp
     const Vector3Plus& lOffAndWeightA = lpType->GetOffsetAndWeightA(); // xyz=offsetA, w=weightA
     const Vector3Plus& lOffAndWeightB = lpType->GetOffsetAndWeightB(); // xyz=offsetB, w=weightB
 
-    // Per-bone weights are the w lanes of the packed offset records (vspltw ...,3).
-    const f32 lfWeightA = lOffAndWeightA.w;
-    const f32 lfWeightB = lOffAndWeightB.w;
-
-    // Centre of each sensor's local-space collision sphere (the lvx128 off the +412
-    // sphere ptr loads its leading Vector4: centre.xyz + radius.w). Read as a Vector4
-    // view so we don't depend on the Sphere's full layout.
+    // The console operates on all four lanes, including the packed weights.
     const Vector4& lCentreA = *reinterpret_cast<const Vector4*>(mpSensorA->GetLocalSpaceSphere());
     const Vector4& lCentreB = *reinterpret_cast<const Vector4*>(mpSensorB->GetLocalSpaceSphere());
-
-    // posA = sphereA.centre + offsetA ; posB = sphereB.centre + offsetB (vaddfp).
-    // blend = posA*weightA + posB*weightB (vmul / vmaddfp).
-    Vector3 lBlend;
-    lBlend.x = (lCentreA.x + lOffAndWeightA.x) * lfWeightA + (lCentreB.x + lOffAndWeightB.x) * lfWeightB;
-    lBlend.y = (lCentreA.y + lOffAndWeightA.y) * lfWeightA + (lCentreB.y + lOffAndWeightB.y) * lfWeightB;
-    lBlend.z = (lCentreA.z + lOffAndWeightA.z) * lfWeightA + (lCentreB.z + lOffAndWeightB.z) * lfWeightB;
-    lBlend.w = (lCentreA.w + lOffAndWeightA.w) * lfWeightA + (lCentreB.w + lOffAndWeightB.w) * lfWeightB;
-
-    // delta = blend - initialPosition ; mPos = delta*1.0 + initialPosition (== blend).
-    // Reproduced verbatim (the sub/add round-trips) so the read/write data flow matches
-    // the console; net effect is mPos = blend.
-    mPos.x = (lBlend.x - lInitial.x) * 1.0f + lInitial.x;
-    mPos.y = (lBlend.y - lInitial.y) * 1.0f + lInitial.y;
-    mPos.z = (lBlend.z - lInitial.z) * 1.0f + lInitial.z;
-    mPos.w = (lBlend.w - lInitial.w) * 1.0f + lInitial.w;
+    const __vector4 vA = __vaddfp(lCentreA.mV, lOffAndWeightA.mV);
+    const __vector4 vB = __vaddfp(lCentreB.mV, lOffAndWeightB.mV);
+    const __vector4 vWeightedB = __vmulfp(vB, __vspltw(lOffAndWeightB.mV, 3));
+    const __vector4 vBlend = __vmaddfp(vA, __vspltw(lOffAndWeightA.mV, 3), vWeightedB);
+    const __vector4 vDelta = __vsubfp(vBlend, lInitial.mV);
+    const float lfOne = 1.0f;
+    mPos = __vmaddfp(vDelta, __vspltw(__lvlx(&lfOne, 0), 0), lInitial.mV);
 
     // --- combined scratch amount (result word 7) ------------------------------------
     // *(result+7) = sensorA.scratch@+420 * spec.weightA@+48 + sensorB.scratch@+420 * spec.weightB@+52

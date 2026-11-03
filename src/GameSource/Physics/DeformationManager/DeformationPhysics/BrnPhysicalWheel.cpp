@@ -1,5 +1,4 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::SetVolumeInstanceTransform (pulls in CgsSceneManager::EntityId)
 #include "vendor/renderware/collision/CylinderVolume.hpp"   // rw::collision::CylinderVolume (AddToScene's volume)
@@ -151,20 +150,10 @@ namespace Deformation
         mRenderTransform.zAxis = lTransform.zAxis;
         mRenderTransform.wAxis = lTransform.wAxis;
 
-        // Rotate mComOffset into world space by the transform's basis (vmulfp128 + two vmaddfp): the
-        // per-axis weighted sum xAxis*com.x + yAxis*com.y + zAxis*com.z.
-        const Vector3 lvRotatedCom = {
-            lTransform.xAxis.x * mComOffset.x + lTransform.yAxis.x * mComOffset.y + lTransform.zAxis.x * mComOffset.z,
-            lTransform.xAxis.y * mComOffset.x + lTransform.yAxis.y * mComOffset.y + lTransform.zAxis.y * mComOffset.z,
-            lTransform.xAxis.z * mComOffset.x + lTransform.yAxis.z * mComOffset.y + lTransform.zAxis.z * mComOffset.z,
-            lTransform.xAxis.w * mComOffset.x + lTransform.yAxis.w * mComOffset.y + lTransform.zAxis.w * mComOffset.z
-        };
-
-        // mRenderTransform.wAxis = wAxis - rotatedCom (vsubfp v0 = v13 - v0; stvx128 -> this+48).
-        mRenderTransform.wAxis.x = lTransform.wAxis.x - lvRotatedCom.x;
-        mRenderTransform.wAxis.y = lTransform.wAxis.y - lvRotatedCom.y;
-        mRenderTransform.wAxis.z = lTransform.wAxis.z - lvRotatedCom.z;
-        mRenderTransform.wAxis.w = lTransform.wAxis.w - lvRotatedCom.w;
+        __vector4 vRotated = __vmulfp(lTransform.xAxis.mV, __vspltw(mComOffset.mV, 0));
+        vRotated = __vmaddfp(lTransform.yAxis.mV, __vspltw(mComOffset.mV, 1), vRotated);
+        vRotated = __vmaddfp(lTransform.zAxis.mV, __vspltw(mComOffset.mV, 2), vRotated);
+        mRenderTransform.wAxis = __vsubfp(lTransform.wAxis.mV, vRotated);
 
         // if ( mbAddedToScene ) push the new render transform out to the scene under this wheel's
         // scene-entity id. The asm passes the entity word (this+112 == mWheelBodyId.muEntityWord,
@@ -260,11 +249,6 @@ namespace Deformation
     // =============================================================================================
     void PhysicalWheel::RemoveFromScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput)
     {
-        if ( lpSceneInput == 0 )
-        {
-            return;   // PC-safety guard (the console has no null test here)
-        }
-
         const CgsSceneManager::VolumeInstanceId lVolumeInstanceId = GetVolumeInstanceId();
         const u64 luHandle     = lVolumeInstanceId.muId;
         const u32 luEntityWord = static_cast<u32>(luHandle >> 32);
@@ -305,16 +289,9 @@ namespace Deformation
     // wheel handle, and the AddVolumeInstance transform argument is `mr r6, r31` -- the wheel
     // pointer itself, i.e. &mRenderTransform, which is the class's first member.
     //
-    // PC-SAFETY GUARD (not console behaviour, stated so): the early return on a null scene
-    // interface mirrors the sibling body-part AddToScene and BrnActiveRaceCar_wQ5_01.cpp.
     // =============================================================================================
     void PhysicalWheel::AddToScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput)
     {
-        if ( lpSceneInput == 0 )
-        {
-            return;
-        }
-
         // ---- 1. build the cylinder ---------------------------------------------------------------
         // The native rw::Resource constructor clears the five resource words; the
         // static buffer goes in word 0, which CylinderVolume::Initialize reads directly
@@ -323,23 +300,11 @@ namespace Deformation
         lVolumeResource.m_baseResources[0] = gCylinderInitialiseStorage.maCylinderInitialiseBuffer;
 
         rw::collision::CylinderVolume* lpVolume = rw::collision::CylinderVolume::Initialize(
-            reinterpret_cast<rw::collision::CylinderVolume**>(&lVolumeResource.m_baseResources[0]),
+            lVolumeResource,
             mfRadius, mfHalfHeight, KF_WHEEL_VOLUME_FATNESS);
-        if ( lpVolume == 0 )
-        {
-            return;   // Initialize's own empty-slot arm (`lwz r11,0(r3) ; beq -> return 0`)
-        }
-
-        // Rows 0 and 2 only (rows 1 and 3 keep what Initialize stamped).
-        lpVolume->maFrame[0].x = 0.0f;
-        lpVolume->maFrame[0].y = 0.0f;
-        lpVolume->maFrame[0].z = KF_WHEEL_FRAME_MINUS_ONE;
-        lpVolume->maFrame[0].w = 0.0f;
-
-        lpVolume->maFrame[2].x = KF_WHEEL_FRAME_PLUS_ONE;
-        lpVolume->maFrame[2].y = 0.0f;
-        lpVolume->maFrame[2].z = 0.0f;
-        lpVolume->maFrame[2].w = 0.0f;
+        // Rows 1 and 3 retain the initialized values.
+        lpVolume->mTransform.xAxis = Vector3(0.0f, 0.0f, KF_WHEEL_FRAME_MINUS_ONE);
+        lpVolume->mTransform.zAxis = Vector3(KF_WHEEL_FRAME_PLUS_ONE, 0.0f, 0.0f);
 
         // ---- 2. the five scene posts -------------------------------------------------------------
         const CgsSceneManager::VolumeInstanceId lVolumeInstanceId = GetVolumeInstanceId();
@@ -357,7 +322,7 @@ namespace Deformation
 
         lpSceneInput->AddVolumeInstance(lVolumeInstanceId, lVolumeId, mRenderTransform);  // mr r6, r31
 
-        const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lZeroVelocity(__vspltisw(0));
         lpSceneInput->AddForCollision(
             lVolumeInstanceId,
             static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(
@@ -413,10 +378,8 @@ namespace Deformation
         Matrix44Affine lCylinderTransform;
         // The vxor sign-flip is a full 16-byte lane operation on the console -- all four lanes,
         // w included -- so it is spelled that way here rather than as a Vector3 negate.
-        lCylinderTransform.xAxis.x = -mRenderTransform.zAxis.x;   // row 0 <- NEGATED render row 2
-        lCylinderTransform.xAxis.y = -mRenderTransform.zAxis.y;
-        lCylinderTransform.xAxis.z = -mRenderTransform.zAxis.z;
-        lCylinderTransform.xAxis.w = -mRenderTransform.zAxis.w;
+        const __vector4 vAllBits = __vspltisw(-1);
+        lCylinderTransform.xAxis = __vxor(mRenderTransform.zAxis.mV, __vslw(vAllBits, vAllBits));
         lCylinderTransform.yAxis   =  mRenderTransform.yAxis;     // row 1 <- render row 1
         lCylinderTransform.zAxis   =  mRenderTransform.xAxis;     // row 2 <- render row 0
         lCylinderTransform.wAxis   =  mRenderTransform.wAxis;     // row 3 <- render row 3
@@ -445,10 +408,7 @@ namespace Deformation
         mfRadius         = lfRadius;
         mbFrozen         = false;
         mbAddedToScene   = false;
-        {
-            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
-            mLinearVelocity = lAggregateValue;
-        }
+        mLinearVelocity = __vspltisw(0);
     }
 
     // ==============================================================================================
@@ -460,10 +420,10 @@ namespace Deformation
     //   0x82C5DE40  lfs flt_8208F834 -> unk_82FB9510   0x3E800000 = 0.25        kvfOneOverFour
     //   0x82C5DE68  lfs flt_82020A90 -> unk_82FB9710   0x3F7AE148 = 0.98        kvfInnerRadiusProportion
     // ==============================================================================================
-    static const VecFloat kvfMass                  = { 10.0f, 10.0f, 10.0f, 10.0f };                              // :116
-    static const VecFloat kvfOneOverTwelve         = { 0.0833333358f, 0.0833333358f, 0.0833333358f, 0.0833333358f }; // :117
-    static const VecFloat kvfOneOverFour           = { 0.25f, 0.25f, 0.25f, 0.25f };                              // :118
-    static const VecFloat kvfInnerRadiusProportion = { 0.98f, 0.98f, 0.98f, 0.98f };                              // :119
+    static const VecFloat kvfMass                  (10.0f);                              // :116
+    static const VecFloat kvfOneOverTwelve         (0.0833333358f); // :117
+    static const VecFloat kvfOneOverFour           (0.25f);                              // :118
+    static const VecFloat kvfInnerRadiusProportion (0.98f);                              // :119
 
     // ==============================================================================================
     // AddToSim @ 0x8260C7B8 (156 insns) -- bodied 2026-09-02 (deform close-out wave). Register the
@@ -498,19 +458,19 @@ namespace Deformation
         CgsPhysics::PhysicsSimulationIO::InAddRigidBody lAddRigidBodyEvent;   // :126
 
         const f32 lfOuterRadiusSquared = mfRadius * mfRadius;                                   // :128
-        const f32 lfInnerRadius        = kvfInnerRadiusProportion.x * mfRadius;                 // :129
+        const f32 lfInnerRadius        = static_cast<f32>(kvfInnerRadiusProportion) * mfRadius;                 // :129
         const f32 lfInnerRadiusSquared = lfInnerRadius * lfInnerRadius;                         // :130
         const f32 lfHeight             = 2.0f * mfHalfHeight;
         const f32 lfHeightSquared      = lfHeight * lfHeight;                                   // :127
         const f32 lfRadiiSquaredSum    = lfInnerRadiusSquared + lfOuterRadiusSquared;           // vmaddfp v10
 
-        const f32 lfAxialInertia      = (0.5f * kvfMass.x) * lfRadiiSquaredSum;                 // v12
-        const f32 lfTransverseInertia = (kvfOneOverTwelve.x * kvfMass.x) * lfHeightSquared
-                                      + (kvfOneOverFour.x   * kvfMass.x) * lfRadiiSquaredSum;   // v13
+        const f32 lfAxialInertia      = (0.5f * static_cast<f32>(kvfMass)) * lfRadiiSquaredSum;                 // v12
+        const f32 lfTransverseInertia = (static_cast<f32>(kvfOneOverTwelve) * static_cast<f32>(kvfMass)) * lfHeightSquared
+                                      + (static_cast<f32>(kvfOneOverFour)   * static_cast<f32>(kvfMass)) * lfRadiiSquaredSum;   // v13
 
         // The three vrefp + Newton reciprocals, converged (see inertia.h precedent).
-        const Vector3 lInverseInertia = { 1.0f / lfAxialInertia, 1.0f / lfTransverseInertia,
-                                          1.0f / lfTransverseInertia, 0.0f };
+        const Vector3 lInverseInertia(1.0f / lfAxialInertia, 1.0f / lfTransverseInertia,
+                                      1.0f / lfTransverseInertia);
 
         lAddRigidBodyEvent.mID = GetVolumeInstanceId().muId;                 // ld 0x70 -> +0x00 (the packed id IS the rigid-body id)
         lAddRigidBodyEvent.mRigidBody.mTransform       = mRenderTransform;   // +0x10..+0x40

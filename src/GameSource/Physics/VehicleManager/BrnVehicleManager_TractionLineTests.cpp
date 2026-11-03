@@ -45,10 +45,7 @@
 #include "SharedClasses/World/BrnCollisionTag.h"   // KU_COLLISION_MASK_SURFACE_ID (the assert bound)
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"         // gpDebugPrint ([traction] probe)
 #include <cstddef>                                                 // offsetof (the layout gates)
-#include <cstdlib>                                                 // getenv/atoi ([traction] opt-in)
-#include <cmath>                                                   // sqrtf ([traction] line length)
 
 namespace BrnPhysics
 {
@@ -89,50 +86,7 @@ namespace
         u8  mau8UnreadTail[8];                                          // +0xB8 (not read here)
     };
 
-    // -----------------------------------------------------------------------------------------
-    // ---- [traction] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide --
-    //
-    // OPT-IN (BRN_TRACTION_PROBE=<period in frames>) exactly like [tricache] in
-    // CgsTriangleCacheManager_Update.cpp: the latch reads 0 on its first call in a default run and
-    // every print below is unreachable thereafter, so a default run and every golden gate stay
-    // byte-identical to a build without it.
-    //
-    // WHY THIS INSTRUMENT. The [tricache] leg proved the cache is INNOCENT -- it tracks the car
-    // and holds 8-10 batches through the frames where the car sinks. The one link it could not see
-    // is the LINE ITSELF: a batch count says triangles were offered, not that a wheel's probe
-    // segment ever reached them. This prints, per wheel, the two endpoints
-    // SimpleVehiclePhysics::GetTractionLine @0x825D85C0 produced, the segment length, and the hit
-    // flag + hit height the job wrote back -- i.e. the question "did the probe reach ground" is
-    // answered by the probe's own geometry rather than inferred from a downstream number.
-    //
-    // THE HALVES ARE CAPTURED IN DIFFERENT FUNCTIONS AND PRINTED ONCE. The line geometry only
-    // exists in AddRaceCarTractionLineTests (Start half) and the results only in
-    // ReadRaceCarTractionLineTestResults (End half); both walk mUsedRaceCars in the same order in
-    // the same frame, so Add stashes into the array below and Read prints the pair. Nothing here
-    // is console state -- `len` is derived for the probe.
-    //
-    // IT PRINTS THE CAR INDEX ON EVERY LINE, AND EVERY LIVE CAR. Cars 0 and 1 sit at the junkyard
-    // all session and the local player is car 2, so a probe that omits the index can truthfully
-    // report a PARKED car while the player drives 165 m away.
-    // -----------------------------------------------------------------------------------------
-    const s32 KI_TRACTION_PROBE_MAX_CARS = 8;   // == BitArray<8u>, mUsedRaceCars' width
 
-    struct TractionProbeCarRecord
-    {
-        s32 miBatches;
-        f32 mafStart[BrnPhysics::Vehicle::eNumDrivenWheels][3];
-        f32 mafEnd[BrnPhysics::Vehicle::eNumDrivenWheels][3];
-    };
-
-    TractionProbeCarRecord s_aTractionProbe[KI_TRACTION_PROBE_MAX_CARS] = {};
-    u32  s_uTractionProbeFrame  = 0u;
-    bool s_bTractionProbeSample = false;   // this frame is a sample frame (set in Add, read in Read)
-
-    // The sampling PERIOD in frames. BRN_TRACTION_PROBE=<n> with n >= 1 is the period, so `1` is
-    // EVERY frame. ⚠️ Until 2026-09-02 this treated `<= 1` as "use the default 60": a switch the
-    // harness documents as "-TractionProbe 1 = every frame" silently sampled every 60th frame,
-    // which is 29 m at top speed -- one wave lost a kerb crossing to it. Only a non-numeric or
-    // zero value (the bare "on" spelling) falls back to the default.
 }
 
     // =============================================================================================
@@ -236,50 +190,7 @@ namespace
 
             RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
 
-            // ---- [traction] the pair: the line Add posted, and what came back for it ----------
-            if (s_bTractionProbeSample && liCar >= 0 && liCar < KI_TRACTION_PROBE_MAX_CARS)
-            {
-                const TractionProbeCarRecord& lrRec = s_aTractionProbe[liCar];
-                for (s32 liW = 0; liW < eNumDrivenWheels; ++liW)
-                {
-                    const f32 lfDx = lrRec.mafEnd[liW][0] - lrRec.mafStart[liW][0];
-                    const f32 lfDy = lrRec.mafEnd[liW][1] - lrRec.mafStart[liW][1];
-                    const f32 lfDz = lrRec.mafEnd[liW][2] - lrRec.mafStart[liW][2];
-                    const f32 lfLen = sqrtf(lfDx * lfDx + lfDy * lfDy + lfDz * lfDz);
-                    const bool lbHit = (lpResult->mau8HitFlags[liW] != 0);
-                    *CgsDev::Log::gpDebugPrint
-                        << "[traction] n " << static_cast<s32>(s_uTractionProbeFrame)
-                        << " car " << liCar << " w " << liW
-                        << " batches " << lrRec.miBatches
-                        << " start " << lrRec.mafStart[liW][0] << " " << lrRec.mafStart[liW][1]
-                        << " " << lrRec.mafStart[liW][2]
-                        << " end " << lrRec.mafEnd[liW][0] << " " << lrRec.mafEnd[liW][1]
-                        << " " << lrRec.mafEnd[liW][2]
-                        << " len " << lfLen
-                        << (lbHit ? " HIT y " : " MISS y ")
-                        << lpResult->mafHitPosition[liW][1]
-                        << "\n";
-                }
-            }
-            // ---- end [traction] ---------------------------------------------------------------
 
-            // ---- [DIAG] NOT IN THE X360 BINARY -- the issue #21 mark-height latch. ------------
-            // The RAW road hit, stamped before AddTractionPoint re-expresses it. This is the only
-            // place in the program where the road surface under a wheel exists as a world point;
-            // everything downstream carries a body-frame copy. Write-only here, read only by the
-            // [trailht] line in EffectsModule::HandleWheels. DELETE-WHEN-STABLE.
-            //
-            // ⚠ THE KEY IS THE CAR'S OWN ID, NOT THE VEHICLE-MANAGER SLOT. The first cut of this
-            // latch keyed on `liCar` (the mUsedRaceCars bit index) while the reader keys on
-            // RaceCarState::miRaceCarID, and those are DIFFERENT INDEX SPACES: with two live race
-            // cars, run i21c_B differenced the player's mark against the OTHER car's road hit and
-            // reported dy up to 3.9 m with dxz ~270 m. Both sides now use
-            // `mpAttribs->mBaseAttribs.miRaceCarID`, which is literally what
-            // VehicleOutputInterface::UpdateRaceCarState @0x825EC808 copies into miRaceCarID.
-            const VehicleAttribs* const lpDiagAttribs = lrCar.mpAttribs;
-            const s32 liDiagCarId = (lpDiagAttribs != 0)
-                                    ? lpDiagAttribs->mBaseAttribs.miRaceCarID : -1;
-            // ---- end the mark-height latch ---------------------------------------------------
 
             for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             {
@@ -294,10 +205,8 @@ namespace
                 // the console's v1/v2.
                 const f32* const lpfPosition = lpResult->mafHitPosition[liWheel];
                 const f32* const lpfNormal   = lpResult->mafHitNormal[liWheel];
-                const Vector3 lvPosition = { lpfPosition[0], lpfPosition[1],
-                                             lpfPosition[2], lpfPosition[3] };
-                const Vector3 lvNormal   = { lpfNormal[0],   lpfNormal[1],
-                                             lpfNormal[2],   lpfNormal[3] };
+                const Vector3 lvPosition(__lvx(lpfPosition, 0));
+                const Vector3 lvNormal(__lvx(lpfNormal, 0));
 
                 lrCar.AddTractionPoint(leWheel, lvPosition, lvNormal,
                                        lpResult->mauSurfaceTag[liWheel]);
@@ -371,9 +280,6 @@ namespace
 
         s32 liNumCommands = 0;
 
-        // ---- [traction] one sample decision per frame; Add is the frame's first half ----------
-        ++s_uTractionProbeFrame;
-        // ---- end [traction] -------------------------------------------------------------------
 
         for (s32 liCar = mUsedRaceCars.GetFirstNonZeroBit();
              liCar != CgsContainers::BitArray<8u>::KI_INVALID_BITINDEX;
@@ -412,37 +318,10 @@ namespace
                 Vector3 lvLineEnd;
                 lrCar.GetTractionLine(static_cast<EVehicleDrivenWheel>(liWheel),
                                       lvLineStart, lvLineEnd);
-                // The command's line arrays are Vector4 and GetTractionLine hands back
-                // Vector3; both are the same 16-byte four-lane register (rw/math/vpu/types.h),
-                // but they are distinct C++ types here, so all four lanes are copied explicitly
-                // rather than reinterpret_cast -- the console's `lvx128`/`stvx128` pair moves the
-                // whole register and the w lane must travel with it.
-                lpCommand->maLineStart[liWheel].x = lvLineStart.x;
-                lpCommand->maLineStart[liWheel].y = lvLineStart.y;
-                lpCommand->maLineStart[liWheel].z = lvLineStart.z;
-                lpCommand->maLineStart[liWheel].w = lvLineStart.w;
-                lpCommand->maLineEnd[liWheel].x   = lvLineEnd.x;
-                lpCommand->maLineEnd[liWheel].y   = lvLineEnd.y;
-                lpCommand->maLineEnd[liWheel].z   = lvLineEnd.z;
-                lpCommand->maLineEnd[liWheel].w   = lvLineEnd.w;
+                lpCommand->maLineStart[liWheel] = lvLineStart.mV;
+                lpCommand->maLineEnd[liWheel] = lvLineEnd.mV;
             }
 
-            // ---- [traction] stash this car's half; printed by the harvest in End --------------
-            if (s_bTractionProbeSample && liCar >= 0 && liCar < KI_TRACTION_PROBE_MAX_CARS)
-            {
-                TractionProbeCarRecord& lrRec = s_aTractionProbe[liCar];
-                lrRec.miBatches = liNumBatches;
-                for (s32 liW = 0; liW < eNumDrivenWheels; ++liW)
-                {
-                    lrRec.mafStart[liW][0] = lpCommand->maLineStart[liW].x;
-                    lrRec.mafStart[liW][1] = lpCommand->maLineStart[liW].y;
-                    lrRec.mafStart[liW][2] = lpCommand->maLineStart[liW].z;
-                    lrRec.mafEnd[liW][0]   = lpCommand->maLineEnd[liW].x;
-                    lrRec.mafEnd[liW][1]   = lpCommand->maLineEnd[liW].y;
-                    lrRec.mafEnd[liW][2]   = lpCommand->maLineEnd[liW].z;
-                }
-            }
-            // ---- end [traction] ---------------------------------------------------------------
 
             // 4. AS SHIPPED: a race car posts FOUR of the command's five line slots.
             lpCommand->miNumLines = eNumDrivenWheels;
