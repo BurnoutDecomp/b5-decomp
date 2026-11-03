@@ -137,6 +137,10 @@ namespace renderengine
         static bool Initialize();
         static bool Start(const Parameters& lrParameters);
 
+        // Reconstruction access helper for the ARTIST 82F87B40 read.
+        static u32 GetSecondaryRingBufferSizeForReconstruction()
+        { return m_parameterCopy.secondaryRingBufferSize; }
+
         struct DirectDraw
         {
             struct Parameters
