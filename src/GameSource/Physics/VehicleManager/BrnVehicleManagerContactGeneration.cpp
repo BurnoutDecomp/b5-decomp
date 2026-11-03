@@ -165,10 +165,7 @@ namespace Vehicle
         // Box::Set consumes only xyz, the w lane rides along).
         inline Vector3 ScaleHalfExtentForUnhideTest(Vector3 lHalfExtent)
         {
-            { const Vector3 lResult = { lHalfExtent.x * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
-                            lHalfExtent.y * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
-                            lHalfExtent.z * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
-                            lHalfExtent.w * KF_UNHIDE_OVERLAP_EXTENT_SCALE }; return lResult; }
+            return lHalfExtent * KF_UNHIDE_OVERLAP_EXTENT_SCALE;
         }
     }
 
@@ -648,14 +645,6 @@ namespace Vehicle
                                        MakeEntityId( static_cast<u32>(lCarIdB) ),
                                        KU8_CARCAR_VOL_INST_OFFSET, KU8_CARCAR_VOL_INST_OFFSET);
 
-            // ---- [Q7-carcar] bring-up witness, one line PER QUEUE ID ---------------------------
-            // [DIAG] NOT IN THE CONSOLE BINARY. Opt-in (BRN_PROP_DIAG or BRN_SHOWTIME_WATCH), never
-            // per frame. One line for the whole process could never report queue 7: the first
-            // pair of any race is race-car-vs-traffic (queue 8).
-            {
-                static bool       sabFirstForQueue[14] = { false };
-                const u32         luDiagQueue = (lu16QueueID < 14u) ? lu16QueueID : 13u;
-            }
         }
         else
         {
@@ -752,40 +741,6 @@ namespace Vehicle
         const bool lbUseSweptSpheres =
             lpDeformationManager->IsUsingSweptSpheres(MakeEntityId( luEntityWord ));
 
-        // ---- [cgen] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide ----
-        // OPT-IN (BRN_WALL_PROBE=1), same latch as [cvalid] downstream.
-        //
-        // WHY: [cvalid] proved raw world-contact candidates stop the moment the car leaves the
-        // junkyard, and the run log shows exactly ONE contact-generator gate firing --
-        // ExecuteSweptSphereListWithTriangleListStream @0x82925238, the kernel behind the SWEPT
-        // branch below. That makes "the car went fast, took the swept branch, and the swept kernel
-        // is a gate" the obvious story, but it is still an INFERENCE from two separate numbers,
-        // and walls leg 12's control reverses into a wall at 31 m/s and DOES collide, which the
-        // story does not obviously explain. This prints the branch actually taken, per car, so the
-        // selector is WITNESSED rather than reasoned about.
-        {
-            static s32 siCGenProbe = -1;
-            if (siCGenProbe < 0)
-            {
-            }
-            static u32 suCGenFrame = 0u;
-            static bool sabWasSwept[8] = { false, false, false, false, false, false, false, false };
-            ++suCGenFrame;
-            const s32 liSlot = (liRaceCarIndex >= 0 && liRaceCarIndex < 8) ? liRaceCarIndex : 0;
-            const bool lbEdge = (lbUseSweptSpheres != sabWasSwept[liSlot]);
-            sabWasSwept[liSlot] = lbUseSweptSpheres;
-            if (siCGenProbe == 1 && CgsDev::Log::gpDebugPrint != 0
-                && (lbEdge || (suCGenFrame % 300u) == 0u))
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[cgen] n " << static_cast<s32>(suCGenFrame)
-                    << " car " << liRaceCarIndex
-                    << (lbEdge ? " EDGE" : "")
-                    << (lbUseSweptSpheres ? " SWEPT(real kernel)" : " INPLACE(real kernel)")
-                    << " batches " << liNumTriangleBatches << "\n";
-            }
-        }
-        // ---- end [cgen] --------------------------------------------------------------------------
 
         if (!lbUseSweptSpheres)
         {
@@ -1086,30 +1041,15 @@ namespace Vehicle
                 PotentialContact lContact;
                 // Full 16-byte lane copies (lvx/stvx on the console) -- Vector3Plus source,
                 // Vector3 destination, w lane carried verbatim.
-                {
-                    const Vector3 lAggregateValue = { lrRecord.mPrimitive0Contact.x,
-                                              lrRecord.mPrimitive0Contact.y,
-                                              lrRecord.mPrimitive0Contact.z,
-                                              lrRecord.mPrimitive0Contact.w };
-                    lContact.mPointOnA = lAggregateValue;
-                }   // triangle point
-                {
-                    const Vector3 lAggregateValue = { lrRecord.mPrimitive1Contact.x,
-                                              lrRecord.mPrimitive1Contact.y,
-                                              lrRecord.mPrimitive1Contact.z,
-                                              lrRecord.mPrimitive1Contact.w };
-                    lContact.mPointOnB = lAggregateValue;
-                }   // sphere point
+                lContact.mPointOnA = lrRecord.mPrimitive0Contact.GetVector3();   // triangle point
+                lContact.mPointOnB = lrRecord.mPrimitive1Contact.GetVector3();   // sphere point
 
                 // vxor with the 0x80000000 splat == all-four-lane sign flip (the SwapEntityOrder
                 // precedent), of the tag-selected source normal.
                 const Vector3& lrNormalSrc = (lResultList.mu16UserTagB != 0)
                     ? lrRecord.mPrimitive0Normal
                     : lrRecord.mPrimitive1Normal;
-                lContact.mNormal.x = -lrNormalSrc.x;
-                lContact.mNormal.y = -lrNormalSrc.y;
-                lContact.mNormal.z = -lrNormalSrc.z;
-                lContact.mNormal.w = -lrNormalSrc.w;
+                lContact.mNormal = rw::math::vpu::Negate(lrNormalSrc);
 
                 CGS_ASSERT(!(lResultList.mu32UserTagA == 1u && lrRecord.muPrimitive0Tag >= 50u),
                            "Bad Part index: ");                                  // :1317
@@ -1214,7 +1154,7 @@ namespace Vehicle
                 const RaceCarPhysics& lrHiddenPhysics = maRaceCarVehicles[liHiddenCar];
                 const RaceCarPhysics& lrOtherPhysics  = maRaceCarVehicles[liOtherCar];
 
-                const VecFloat lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const VecFloat lvZero(0.0f);
                 CgsGeometric::Box lHiddenBox;
                 lHiddenBox.Set(lrHiddenPhysics.GetGraphicsVehicleTransform(),
                                ScaleHalfExtentForUnhideTest(lrHiddenPhysics.GetHalfExtent()),
@@ -1455,20 +1395,8 @@ namespace Vehicle
                 const PrimitiveTestResult& lrRecord = lpaResults[lu16Result];
 
                 PotentialContact lContact;
-                {
-                    const Vector3 lAggregateValue = { lrRecord.mPrimitive0Contact.x,
-                                              lrRecord.mPrimitive0Contact.y,
-                                              lrRecord.mPrimitive0Contact.z,
-                                              lrRecord.mPrimitive0Contact.w };
-                    lContact.mPointOnA = lAggregateValue;
-                }   // +0x20, triangle point
-                {
-                    const Vector3 lAggregateValue = { lrRecord.mPrimitive1Contact.x,
-                                              lrRecord.mPrimitive1Contact.y,
-                                              lrRecord.mPrimitive1Contact.z,
-                                              lrRecord.mPrimitive1Contact.w };
-                    lContact.mPointOnB = lAggregateValue;
-                }   // +0x30, part point
+                lContact.mPointOnA = lrRecord.mPrimitive0Contact.GetVector3();   // +0x20, triangle point
+                lContact.mPointOnB = lrRecord.mPrimitive1Contact.GetVector3();   // +0x30, part point
 
                 // ALWAYS +0x10, negated only when tag B is zero -- see the banner.
                 if (lResultList.mu16UserTagB != 0)
@@ -1477,10 +1405,7 @@ namespace Vehicle
                 }
                 else
                 {
-                    lContact.mNormal.x = -lrRecord.mPrimitive1Normal.x;
-                    lContact.mNormal.y = -lrRecord.mPrimitive1Normal.y;
-                    lContact.mNormal.z = -lrRecord.mPrimitive1Normal.z;
-                    lContact.mNormal.w = -lrRecord.mPrimitive1Normal.w;
+                    lContact.mNormal = rw::math::vpu::Negate(lrRecord.mPrimitive1Normal);
                 }
 
                 // The two ids verbatim out of the entry (`ld`/`ld` at entry+0 and entry+8).
@@ -1509,9 +1434,6 @@ namespace Vehicle
     // slice TU BrnVehicleManager_ValidateRaceCarWorldContact.cpp (banner + definitions there);
     // declared locally here rather than in the manager header because a probe has no business in
     // the class's declaration.
-    extern u32 guKerbProbeFrame;
-    bool KerbProbeArmed();
-    bool KerbProbeTake(u32& lruUsed, const char* lpcTag);
 
     // ==============================================================================================
     // DoRaceCarWorldContactValidation @0x825EB6C8 (416). PS3 DecFIGS 0x70FA74 (804).
@@ -1553,15 +1475,10 @@ namespace Vehicle
 
         const Queue& lrRawQueue = lpPotentialContactInterface->GetRaceCarWithWorldQueue();   // [5]
         const s32 liNumContacts = lrRawQueue.GetLength();
-        s32 liValidatedContacts = 0;
 
         // [kerb] the shared frame counter for the three-tag probe (armed-only bump).
-        if (KerbProbeArmed())
-        {
-            ++guKerbProbeFrame;
-        }
 
-        for (s32 liContact = 0; liContact < liNumContacts; ++liContact)
+for (s32 liContact = 0; liContact < liNumContacts; ++liContact)
         {
             PotentialContact lContact = lrRawQueue.GetEvent(liContact);          // 80-byte copy
 
@@ -1577,9 +1494,9 @@ namespace Vehicle
             CGS_ASSERT(mUsedRaceCars.IsBitSet(luRaceCarIndex),
                        "Recieved a potential contact for an inactive race car");  // :1409 [sic]
 
-            CGS_ASSERT(lContact.mNormal.x == lContact.mNormal.x
-                           && lContact.mNormal.y == lContact.mNormal.y
-                           && lContact.mNormal.z == lContact.mNormal.z,
+            CGS_ASSERT(lContact.mNormal.GetX() == lContact.mNormal.GetX()
+                           && lContact.mNormal.GetY() == lContact.mNormal.GetY()
+                           && lContact.mNormal.GetZ() == lContact.mNormal.GetZ(),
                        "Normal is invalid before call to Validate\n");            // :1410
 
             // The console's own line-8273 bound rides inside IsRaceCarCrashing (slice TU).
@@ -1589,104 +1506,13 @@ namespace Vehicle
                 continue;   // rejected — nothing appended
             }
 
-            CGS_ASSERT(lContact.mNormal.x == lContact.mNormal.x
-                           && lContact.mNormal.y == lContact.mNormal.y
-                           && lContact.mNormal.z == lContact.mNormal.z,
+            CGS_ASSERT(lContact.mNormal.GetX() == lContact.mNormal.GetX()
+                           && lContact.mNormal.GetY() == lContact.mNormal.GetY()
+                           && lContact.mNormal.GetZ() == lContact.mNormal.GetZ(),
                        "Normal is invalid after call to Validate\n");             // :1415
 
             // The console inlines exactly the AddEvent(6, ...) shape here (warning literal 6).
             lpPotentialContactInterface->AddEvent(6u, lContact);
-            ++liValidatedContacts;
-        }
-
-        // ---- [kerb-car] one line per MOVING car per frame (the [kerb] banner in the slice TU) ----
-        // The car's vertical/angular response the kerb probe is measured against: position, velocity
-        // (world), the angular velocity dotted onto the body axes (pitch about Right, yaw about Up,
-        // roll about At), the wheel-plane and above-ground inputs the culls read, the four wheels'
-        // on-ground / line-valid bits and contact heights, and this frame's raw/valid contact counts.
-        if (KerbProbeArmed())
-        {
-            static u32 suKerbCarLines = 0u;
-            for (s32 liCar = 0; liCar < 8; ++liCar)
-            {
-                if (!mUsedRaceCars.IsBitSet(static_cast<u32>(liCar)))
-                {
-                    continue;
-                }
-                const RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
-                const f32 lfMph = lrCar.GetSpeedMPH().x;
-                if (lfMph < 0.5f && liNumContacts == 0)
-                {
-                    continue;   // parked cars say nothing
-                }
-                if (!KerbProbeTake(suKerbCarLines, "[kerb-car]"))
-                {
-                    break;
-                }
-                const Matrix44Affine& lrT = lrCar.GetTransform();
-                const Vector3& lrV = lrCar.GetLinearVelocity();
-                const Vector3& lrW = lrCar.GetAngularVelocity();
-                const AboveGroundTestResult& lrAg = *lrCar.GetAboveGroundTestResult();
-                s32 liOnGround  = 0;
-                s32 liLineValid = 0;
-                f32 lafWheelY[eNumDrivenWheels];
-                for (s32 liW = 0; liW < eNumDrivenWheels; ++liW)
-                {
-                    const Wheel::RoadContact& lrRc =
-                        lrCar.GetWheel(static_cast<EVehicleDrivenWheel>(liW)).GetRoadContact();
-                    liOnGround  |= (lrRc.mbIsOnGround ? 1 : 0) << liW;
-                    liLineValid |= (lrRc.mbLineTestIsValid ? 1 : 0) << liW;
-                    lafWheelY[liW] = lrRc.mPosition.y;
-                }
-                *CgsDev::Log::gpDebugPrint
-                    << "[kerb-car] f " << guKerbProbeFrame << " car " << liCar
-                    << " pos " << lrT.wAxis.x << " " << lrT.wAxis.y << " " << lrT.wAxis.z
-                    << " vel " << lrV.x << " " << lrV.y << " " << lrV.z
-                    << " mph " << lfMph
-                    << " angPYR " << (lrW.x * lrT.xAxis.x + lrW.y * lrT.xAxis.y + lrW.z * lrT.xAxis.z)
-                    << " " << (lrW.x * lrT.yAxis.x + lrW.y * lrT.yAxis.y + lrW.z * lrT.yAxis.z)
-                    << " " << (lrW.x * lrT.zAxis.x + lrW.y * lrT.zAxis.y + lrW.z * lrT.zAxis.z)
-                    << " upY " << lrT.yAxis.y << " atY " << lrT.zAxis.y << " rightY " << lrT.xAxis.y
-                    << " hasAir " << (lrCar.HasAir() ? 1 : 0)
-                    << " crash " << (lrCar.IsCrashing() ? 1 : 0)
-                    << " mwdv " << (lrCar.mbMinWheelDistValid ? 1 : 0)
-                    << " wpH " << lrCar.mWheelPlanePosAndHeight.w
-                    << " agValid " << (lrAg.mbValid ? 1 : 0)
-                    << " agNy " << lrAg.mIntersectionNormal.y << " agPy " << lrAg.mIntersectionPosition.y
-                    << " onG " << liOnGround << " lineV " << liLineValid
-                    << " wy " << lafWheelY[0] << " " << lafWheelY[1] << " " << lafWheelY[2] << " " << lafWheelY[3]
-                    << " raw " << liNumContacts << " valid " << liValidatedContacts << "\n";
-            }
-        }
-        // ---- end [kerb-car] -----------------------------------------------------------------------
-
-        // ---- [cvalid] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide ---
-        // OPT-IN (BRN_WALL_PROBE=1, the switch that already arms the body-shell trace it pairs
-        // with), so a default run and every golden gate stay byte-identical to a build without it.
-        //
-        // WHY HERE. [wall] proved the driven car contributes ZERO world contacts to the
-        // penetration solver from the moment it starts moving -- it drives through the wall of a
-        // solid structure at 30 m/s without one contact, and the EDGE latch rules out sampling.
-        // This line is the SPLIT that says which half is at fault, and it is the only place both
-        // numbers exist at once:
-        //     raw 0                -> the GENERATION half never produced a candidate;
-        //     raw > 0, valid 0     -> ValidateRaceCarWorldContact is eating them.
-        // Printed only on frames that actually have raw candidates, so it is near-silent while the
-        // car drives on open road (the body shell touches nothing) and dense exactly at an impact.
-        {
-            static s32 siCValidProbe = -1;
-            if (siCValidProbe < 0)
-            {
-            }
-            static u32 suCValidFrame = 0u;
-            ++suCValidFrame;
-            if (siCValidProbe == 1 && liNumContacts > 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[cvalid] n " << static_cast<s32>(suCValidFrame)
-                    << " raw " << liNumContacts
-                    << " valid " << liValidatedContacts << "\n";
-            }
         }
 
         CgsDev::PerfMonCpu::StopMonitor(miRaceCarWorldContactValidationPM);

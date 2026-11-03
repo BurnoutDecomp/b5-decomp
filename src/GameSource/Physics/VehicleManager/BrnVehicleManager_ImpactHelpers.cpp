@@ -118,13 +118,13 @@ namespace Vehicle
         const f32 lfForward = vpu::Dot(lvOffset, lrTransform.zAxis);   // vmsum3fp (row2)
         const f32 lfLateral = vpu::Dot(lvOffset, lrTransform.xAxis);   // vmsum3fp (row0)
 
-        if (!(lrAABB.mMax.z * KF_FOOTPRINT_SCALE > lfForward))   // vcmpgtfp (max.z splat)
+        if (!(lrAABB.mMax.GetZ() * KF_FOOTPRINT_SCALE > lfForward))   // vcmpgtfp (max.z splat)
             return false;
-        if (!(lfForward > lrAABB.mMin.z * KF_FOOTPRINT_SCALE))   // vcmpgtfp (min.z splat)
+        if (!(lfForward > lrAABB.mMin.GetZ() * KF_FOOTPRINT_SCALE))   // vcmpgtfp (min.z splat)
             return false;
-        if (!(lrAABB.mMax.x * KF_FOOTPRINT_SCALE > lfLateral))   // vcmpgtfp (max.x splat)
+        if (!(lrAABB.mMax.GetX() * KF_FOOTPRINT_SCALE > lfLateral))   // vcmpgtfp (max.x splat)
             return false;
-        if (!(lfLateral > lrAABB.mMin.x * KF_FOOTPRINT_SCALE))   // vcmpgtfp (min.x splat)
+        if (!(lfLateral > lrAABB.mMin.GetX() * KF_FOOTPRINT_SCALE))   // vcmpgtfp (min.x splat)
             return false;
 
         return true;
@@ -321,7 +321,7 @@ namespace Vehicle
         const f32 lfSteer   = -((lfLateral >= 0.0f) ? 1.0f : -1.0f);
 
         // Mass ratio, clamped [0.9, 1.1] (vrefp + Newton against mfMass, both lanes splat).
-        f32 lfMassRatio = lpAggressorCar->GetMass().x / lpVictimCar->GetMass().x;       // +0xE0
+        f32 lfMassRatio = lpAggressorCar->GetMass().GetFloat() / lpVictimCar->GetMass().GetFloat();       // +0xE0
         if (lfMassRatio < 0.9f) lfMassRatio = 0.9f;    // 0x82FB9D10 <- splat(0.9)
         if (lfMassRatio > 1.1f) lfMassRatio = 1.1f;    // 0x82FB9D20 <- splat(1.1)
 
@@ -359,7 +359,7 @@ namespace Vehicle
         if (lfMagnitude > 5.0f) lfMagnitude = 5.0f;     // vminfp vs 0x82FB83A0 <- splat(5.0)
 
         *lpvWorldDirection    = lvDirection;                   // stvx -> out r5
-        *lpvfMagnitude        = vpu::Splat(lfMagnitude);       // stvx -> out r6 (uniform lanes)
+        *lpvfMagnitude        = VecFloat(lfMagnitude);       // stvx -> out r6 (uniform lanes)
         *lpfVulnerableTime    = lfVulnerableTime;              // stfs -> out r7
         *lpfSteeringDirection = lfSteer;                       // stfs -> out r8
 
@@ -410,7 +410,7 @@ namespace Vehicle
         // Mass ratio, clamped [0.9, 1.1] (vrefp + Newton on the splat mfMass registers).
         // The clamp is two fsel (0x825C7764 max 0.9 flt_82005450, 0x825C7770 min 1.1 flt_82004A1C):
         // rwmath's Clamp, whose fsel takes its ELSE operand on a NaN -- a NaN ratio comes back as 1.1.
-        const f32 lfMassRatio = rw::math::fpu::Clamp(lpAggressorCar->GetMass().x / lpVictimCar->GetMass().x,
+        const f32 lfMassRatio = rw::math::fpu::Clamp(lpAggressorCar->GetMass().GetFloat() / lpVictimCar->GetMass().GetFloat(),
                                                      0.9f, 1.1f);                          // +0xE0
 
         // The steering-derived ease: cap |steer| at 1.2, then 1 - (1 - cap)^4 (the console
@@ -494,7 +494,7 @@ namespace Vehicle
                               mePlayerActiveRaceCarIndex,                             // +172204
                               lpInfo->meVictimActiveRaceCarIndex,
                               lvWorldDirection,
-                              lvfMagnitude.x,        // lfs of the magnitude vector
+                              lvfMagnitude.GetFloat(),        // lfs of the magnitude vector
                               0.2f,                  // flt_82004744 -- the fixed shunt-slam duration
                               lfSteer,
                               1.0f,                  // flt_82001C98 -- the fixed recovery time
@@ -510,7 +510,7 @@ namespace Vehicle
 
         // The physical push (speed-increase-to-quit is the fixed splat(10.0) @0x82FB8050).
         const s8 li8ShuntSlot = lpVictimCar->AddShunt(lvfMagnitude, lvWorldDirection,
-                                                      vpu::Splat(10.0f),
+                                                      VecFloat(10.0f),
                                                       static_cast<s8>(liAggressor));
         maiPhysicsSlamIndex[liVictim] = li8ShuntSlot;                       // stbx @+171716
 

@@ -67,7 +67,7 @@ namespace Vehicle
         // triple, used four times in this body).
         inline bool IsValidVec3Lanes(const Vector3& lrV)
         {
-            return lrV.x == lrV.x && lrV.y == lrV.y && lrV.z == lrV.z;
+            return lrV.mV.v[0] == lrV.mV.v[0] && lrV.mV.v[1] == lrV.mV.v[1] && lrV.mV.v[2] == lrV.mV.v[2];
         }
     }
 
@@ -370,28 +370,6 @@ namespace Vehicle
     //     traffic car parked across the approach at (~3390, -1639). The log alone was persuasive and
     //     wrong. Open the frames.
     // ==============================================================================================
-    u32 guKerbProbeFrame = 0u;
-
-    // One budget per tag; the (budget+1)th call prints the exhaustion notice, later calls are silent.
-    bool KerbProbeTake(u32& lruUsed, const char* lpcTag)
-    {
-        const u32 KU_KERB_PROBE_BUDGET = 150000u;
-        if (lruUsed < KU_KERB_PROBE_BUDGET)
-        {
-            ++lruUsed;
-            return true;
-        }
-        if (lruUsed == KU_KERB_PROBE_BUDGET)
-        {
-            ++lruUsed;
-            *CgsDev::Log::gpDebugPrint
-                << lpcTag << " BUDGET EXHAUSTED (" << KU_KERB_PROBE_BUDGET << " lines) at frame "
-                << guKerbProbeFrame << " -- this tag prints nothing further; a later silence is "
-                   "the budget, not the physics\n";
-        }
-        return false;
-    }
-    // ---- end [kerb] globals ------------------------------------------------------------------------
 
     // ==========================================================================================
     // ValidateRaceCarWorldContact @0x825C6088   (DWARF h:938; asserts BrnVehicleManager.cpp
@@ -417,22 +395,17 @@ namespace Vehicle
 
         CGS_ASSERT(IsValidVec3Lanes(lpInOutContact->mNormal),
                    "Normal invalid on entry to validate\n");                       // :7421
-        CGS_ASSERT(fabsf(lpInOutContact->mNormal.x) > KF_NORMAL_ZERO_EPSILON
-                       || fabsf(lpInOutContact->mNormal.y) > KF_NORMAL_ZERO_EPSILON
-                       || fabsf(lpInOutContact->mNormal.z) > KF_NORMAL_ZERO_EPSILON,
+        CGS_ASSERT(fabsf(lpInOutContact->mNormal.mV.v[0]) > KF_NORMAL_ZERO_EPSILON
+                       || fabsf(lpInOutContact->mNormal.mV.v[1]) > KF_NORMAL_ZERO_EPSILON
+                       || fabsf(lpInOutContact->mNormal.mV.v[2]) > KF_NORMAL_ZERO_EPSILON,
                    "Normal zero on entry to validate\n");                          // :7422
 
-        // [kerb] probe captures (no behaviour): the harvest normal as it arrived (already
-        // sign-flipped by the caller's SwapEntityOrder, i.e. pointing OUT of the world into the car),
-        // and this TU's line budget.
-        const Vector3 lKerbNormalIn = lpInOutContact->mNormal;
-        static u32    suKerbLines   = 0u;
 
         // ---- the wall-normal flatten: near-horizontal normals become PURE horizontal ----------
-        if (KF_WALL_NORMAL_DOT_THRESHOLD > fabsf(lpInOutContact->mNormal.y))
+        if (KF_WALL_NORMAL_DOT_THRESHOLD > fabsf(lpInOutContact->mNormal.mV.v[1]))
         {
             Vector3 lFlat = lpInOutContact->mNormal;
-            lFlat.y = 0.0f;                              // vrlimi zero-insert on lane 1
+            lFlat.mV.v[1] = 0.0f;                              // vrlimi zero-insert on lane 1
             lpInOutContact->mNormal = vpu::Normalize(lFlat);   // vmsum3fp + vrsqrtefp 2-Newton
             CGS_ASSERT(IsValidVec3Lanes(lpInOutContact->mNormal),
                        "Normal invalid after clearing Y component\n");             // :7432
@@ -453,7 +426,7 @@ namespace Vehicle
 
         // speed in MPH off the cached velocity magnitude (mNormLinearVelocityMag.w, car+0x1340
         // lane 3, m/s) -- distinct from the mfSpeedMPH read the final gate makes.
-        const f32 lfSpeedMph = lrCar.mNormLinearVelocityMag.w * KF_MPS_TO_MPH;
+        const f32 lfSpeedMph = lrCar.mNormLinearVelocityMag.mV.v[3] * KF_MPS_TO_MPH;
 
         // ---- the contact's triangle, re-fetched from the car's cache window --------------------
         const u16 lu16TriangleIndex = lpInOutContact->mu16PrimitiveIndexB;   // +0x4A (the WORLD side)
@@ -475,15 +448,15 @@ namespace Vehicle
         // ---- curb / wall classification --------------------------------------------------------
         // Heights of the triangle's three vertices above the road plane(s) under the car's
         // on-ground wheels (GetHeightAboveRoad -- the real query-point overload, fixed this wave).
-        const f32 lfHeight0 = lrCar.GetHeightAboveRoad(lTriangle.mVertex0).x;
-        const f32 lfHeight1 = lrCar.GetHeightAboveRoad(lTriangle.mVertex1).x;
-        const f32 lfHeight2 = lrCar.GetHeightAboveRoad(lTriangle.mVertex2).x;
+        const f32 lfHeight0 = lrCar.GetHeightAboveRoad(lTriangle.mVertex0).GetFloat();
+        const f32 lfHeight1 = lrCar.GetHeightAboveRoad(lTriangle.mVertex1).GetFloat();
+        const f32 lfHeight2 = lrCar.GetHeightAboveRoad(lTriangle.mVertex2).GetFloat();
 
         const bool lbIsCurb = kvfMaxCurbHeight > lfHeight0
                            && kvfMaxCurbHeight > lfHeight1
                            && kvfMaxCurbHeight > lfHeight2;
         const bool lbIsWall = !lbIsCurb
-                           && (kvfWallNormalMaxHeight > fabsf(lTriangle.mNormal.y));
+                           && (kvfWallNormalMaxHeight > fabsf(lTriangle.mNormal.mV.v[1]));
 
         // ARTIST 825C67B0..825C6998: one buffered triangle and three solid
         // spheres for each enabled classification. Only the triangle is offset
@@ -491,7 +464,7 @@ namespace Vehicle
         if ((mDebugComponent.RenderWallContacts() && lbIsWall)
             || (mDebugComponent.RenderGroundContacts() && lbIsCurb))
         {
-            const Vector3 lvScale = { 0.05f, 0.05f, 0.05f, 0.05f };
+            const Vector3 lvScale(VecFloat(0.05f).GetVector());
             const Vector3 lvVertex0 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex0);
             const Vector3 lvVertex1 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex1);
             const Vector3 lvVertex2 = vpu::MultAdd(lTriangle.mNormal, lvScale, lTriangle.mVertex2);
@@ -531,12 +504,6 @@ namespace Vehicle
         // ---- the two ground-cull candidates (both suppressed for walls) ------------------------
         bool lbCullToPlane = false;   // r30
 
-        // [kerb] both-sides captures of the two culls (probe only; no behaviour).
-        f32  lfKerbDistA = 0.0f;
-        bool lbKerbCullA = false;
-        f32  lfKerbDistB = 0.0f;
-        bool lbKerbCullB = false;
-        f32  lfKerbHeightAbovePlane = 0.0f;
 
         // (a) the wheel-plane test, gated on mbMinWheelDistValid (car+0x714): is the world-side
         //     point within the (scaled) cull height of the car's wheel plane?
@@ -545,17 +512,14 @@ namespace Vehicle
             const Vector3 lDelta = vpu::Subtract(lPointOnWorld,
                                                  lrCar.mWheelPlanePosAndHeight.GetVector3());
             const f32 lfDist = vpu::Dot(lDelta, lUpAxis);
-            lfKerbDistA = lfDist;                                    // [kerb]
-            if (lrCar.mWheelPlanePosAndHeight.w + lfCullHeight > lfDist && !lbIsWall)
+            if (lrCar.mWheelPlanePosAndHeight.mV.v[3] + lfCullHeight > lfDist && !lbIsWall)
             {
                 lbCullToPlane = true;
-                lbKerbCullA   = true;                                // [kerb]
             }
         }
 
         // (b) the above-ground-test plane (car+0x570), when its normal is up-ish (dot > 0.8).
         const AboveGroundTestResult& lrAboveGround = *lrCar.GetAboveGroundTestResult();
-        const f32 lfKerbUpDotAg = vpu::Dot(lUpAxis, lrAboveGround.mIntersectionNormal);   // [kerb] the gate's raw operand
         if (vpu::Dot(lUpAxis, lrAboveGround.mIntersectionNormal) > KF_UP_DOT_GROUND_NORMAL_MIN)
         {
             // The console re-reads mPointOnB here and asserts it against the register-cached
@@ -565,11 +529,9 @@ namespace Vehicle
             const f32 lfDist = vpu::Dot(
                 vpu::Subtract(lPointOnWorld, lrAboveGround.mIntersectionPosition),
                 lrAboveGround.mIntersectionNormal);
-            lfKerbDistB = lfDist;                                    // [kerb]
             if (lfCullHeight > lfDist && !lbIsWall)
             {
                 lbCullToPlane = true;
-                lbKerbCullB   = true;                                // [kerb]
             }
         }
 
@@ -584,13 +546,13 @@ namespace Vehicle
             const Vector3Plus& lrLocal =
                 lrCar.GetWheel(eFrontLeftWheel).mStreamedPositionPlusTwistAmount;
             Vector3 lPlanePoint;
-            lPlanePoint.x = lrTransform.wAxis.x + lrTransform.xAxis.x * lrLocal.x
-                          + lrTransform.yAxis.x * lrLocal.y + lrTransform.zAxis.x * lrLocal.z;
-            lPlanePoint.y = lrTransform.wAxis.y + lrTransform.xAxis.y * lrLocal.x
-                          + lrTransform.yAxis.y * lrLocal.y + lrTransform.zAxis.y * lrLocal.z;
-            lPlanePoint.z = lrTransform.wAxis.z + lrTransform.xAxis.z * lrLocal.x
-                          + lrTransform.yAxis.z * lrLocal.y + lrTransform.zAxis.z * lrLocal.z;
-            lPlanePoint.w = 0.0f;
+            lPlanePoint.mV.v[0] = lrTransform.wAxis.mV.v[0] + lrTransform.xAxis.mV.v[0] * lrLocal.mV.v[0]
+                          + lrTransform.yAxis.mV.v[0] * lrLocal.mV.v[1] + lrTransform.zAxis.mV.v[0] * lrLocal.mV.v[2];
+            lPlanePoint.mV.v[1] = lrTransform.wAxis.mV.v[1] + lrTransform.xAxis.mV.v[1] * lrLocal.mV.v[0]
+                          + lrTransform.yAxis.mV.v[1] * lrLocal.mV.v[1] + lrTransform.zAxis.mV.v[1] * lrLocal.mV.v[2];
+            lPlanePoint.mV.v[2] = lrTransform.wAxis.mV.v[2] + lrTransform.xAxis.mV.v[2] * lrLocal.mV.v[0]
+                          + lrTransform.yAxis.mV.v[2] * lrLocal.mV.v[1] + lrTransform.zAxis.mV.v[2] * lrLocal.mV.v[2];
+            lPlanePoint.mV.v[3] = 0.0f;
 
             // mNormal := the car's up axis; mPointOnA := its projection onto the wheel plane
             // (shifted by the zero KVF_CAR_BOTTOM_PLANE_MODIFIER, kept for fidelity).
@@ -598,11 +560,10 @@ namespace Vehicle
             const f32 lfHeightAbovePlane =
                 vpu::Dot(vpu::Subtract(lPointOnCar, lPlanePoint), lUpAxis)
                 - KVF_CAR_BOTTOM_PLANE_MODIFIER;
-            lfKerbHeightAbovePlane = lfHeightAbovePlane;             // [kerb]
-            lpInOutContact->mPointOnA.x = lPointOnCar.x - lUpAxis.x * lfHeightAbovePlane;
-            lpInOutContact->mPointOnA.y = lPointOnCar.y - lUpAxis.y * lfHeightAbovePlane;
-            lpInOutContact->mPointOnA.z = lPointOnCar.z - lUpAxis.z * lfHeightAbovePlane;
-            lpInOutContact->mPointOnA.w = lPointOnCar.w - lUpAxis.w * lfHeightAbovePlane;
+            lpInOutContact->mPointOnA.mV.v[0] = lPointOnCar.mV.v[0] - lUpAxis.mV.v[0] * lfHeightAbovePlane;
+            lpInOutContact->mPointOnA.mV.v[1] = lPointOnCar.mV.v[1] - lUpAxis.mV.v[1] * lfHeightAbovePlane;
+            lpInOutContact->mPointOnA.mV.v[2] = lPointOnCar.mV.v[2] - lUpAxis.mV.v[2] * lfHeightAbovePlane;
+            lpInOutContact->mPointOnA.mV.v[3] = lPointOnCar.mV.v[3] - lUpAxis.mV.v[3] * lfHeightAbovePlane;
 
             CGS_ASSERT(IsValidVec3Lanes(lpInOutContact->mNormal),
                        "Normal invalid after setting to wheel plane normal\n");    // :7615
@@ -616,22 +577,19 @@ namespace Vehicle
         const f32 lfLocalY = vpu::Dot(lDiff, lrTransform.yAxis);
         const f32 lfLocalZ = vpu::Dot(lDiff, lrTransform.zAxis);
 
-        const Vector3 lDisplacement = { lrCar.mLinearVelocity.x * lfTimeStep,
-                                     lrCar.mLinearVelocity.y * lfTimeStep,
-                                     lrCar.mLinearVelocity.z * lfTimeStep,
-                                     lrCar.mLinearVelocity.w * lfTimeStep };
+        const Vector3 lDisplacement = lrCar.mLinearVelocity * lfTimeStep;
         const f32 lfDispX = vpu::Dot(lDisplacement, lrTransform.xAxis);   // v10 (kept SIGNED for the recheck)
         const f32 lfDispY = vpu::Dot(lDisplacement, lrTransform.yAxis);
         const f32 lfDispZ = vpu::Dot(lDisplacement, lrTransform.zAxis);
 
         // upper = max + (0.1, 0.1, 0.0) + |disp| ; lower = min - (0.1, 0.1, 0.0) - |disp|
         // (margin lanes raw-word verified: x/y == flt_82004014, z == flt_82001CC0 == 0).
-        const f32 lfUpperX = lrCar.mDeformableAABB.mMax.x + KF_AABB_MARGIN_XY + fabsf(lfDispX);
-        const f32 lfUpperY = lrCar.mDeformableAABB.mMax.y + KF_AABB_MARGIN_XY + fabsf(lfDispY);
-        const f32 lfUpperZ = lrCar.mDeformableAABB.mMax.z + 0.0f            + fabsf(lfDispZ);
-        const f32 lfLowerX = lrCar.mDeformableAABB.mMin.x - KF_AABB_MARGIN_XY - fabsf(lfDispX);
-        const f32 lfLowerY = lrCar.mDeformableAABB.mMin.y - KF_AABB_MARGIN_XY - fabsf(lfDispY);
-        const f32 lfLowerZ = lrCar.mDeformableAABB.mMin.z - 0.0f            - fabsf(lfDispZ);
+        const f32 lfUpperX = lrCar.mDeformableAABB.mMax.mV.v[0] + KF_AABB_MARGIN_XY + fabsf(lfDispX);
+        const f32 lfUpperY = lrCar.mDeformableAABB.mMax.mV.v[1] + KF_AABB_MARGIN_XY + fabsf(lfDispY);
+        const f32 lfUpperZ = lrCar.mDeformableAABB.mMax.mV.v[2] + 0.0f            + fabsf(lfDispZ);
+        const f32 lfLowerX = lrCar.mDeformableAABB.mMin.mV.v[0] - KF_AABB_MARGIN_XY - fabsf(lfDispX);
+        const f32 lfLowerY = lrCar.mDeformableAABB.mMin.mV.v[1] - KF_AABB_MARGIN_XY - fabsf(lfDispY);
+        const f32 lfLowerZ = lrCar.mDeformableAABB.mMin.mV.v[2] - 0.0f            - fabsf(lfDispZ);
 
         // CONSOLE QUIRK REPRODUCED, raw-word verified: the three LOWER-bound compares all
         // test the LOCAL-Y coordinate (0x825C6DAC == 0x825C6DE4 == word 112C4EC6 -> vcmpgtfp.
@@ -659,7 +617,7 @@ namespace Vehicle
         else
         {
             // slow-ish cars keep out-of-AABB contacts too (mfSpeedMPH is a lane splat).
-            lbAccept = KF_FINAL_ACCEPT_MAX_SPEED_MPH > lrCar.GetSpeedMPH().x;
+            lbAccept = KF_FINAL_ACCEPT_MAX_SPEED_MPH > lrCar.GetSpeedMPH().GetFloat();
         }
 
         // ---- the velocity-expanded LATERAL recheck (always runs; can only REJECT) --------------
@@ -671,13 +629,13 @@ namespace Vehicle
         f32 lfBandLowerX;
         if (lfDispX > 0.0f)
         {
-            lfBandUpperX = lrCar.mDeformableAABB.mMax.x + KF_LATERAL_RECHECK_MARGIN + lfDispX;
-            lfBandLowerX = lrCar.mDeformableAABB.mMin.x - KF_LATERAL_RECHECK_MARGIN;
+            lfBandUpperX = lrCar.mDeformableAABB.mMax.mV.v[0] + KF_LATERAL_RECHECK_MARGIN + lfDispX;
+            lfBandLowerX = lrCar.mDeformableAABB.mMin.mV.v[0] - KF_LATERAL_RECHECK_MARGIN;
         }
         else if (0.0f > lfDispX)
         {
-            lfBandUpperX = lrCar.mDeformableAABB.mMax.x + KF_LATERAL_RECHECK_MARGIN;
-            lfBandLowerX = lrCar.mDeformableAABB.mMin.x - KF_LATERAL_RECHECK_MARGIN + lfDispX;
+            lfBandUpperX = lrCar.mDeformableAABB.mMax.mV.v[0] + KF_LATERAL_RECHECK_MARGIN;
+            lfBandLowerX = lrCar.mDeformableAABB.mMin.mV.v[0] - KF_LATERAL_RECHECK_MARGIN + lfDispX;
         }
         else
         {
