@@ -1055,9 +1055,14 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     if (mRenderSatNavEvent.mpMapTexture == 0 || mRenderSatNavEvent.mpMaskTexture == 0)
     {
         lrCmd.BeginRendering();
-        renderengine::ClearColorParameters lClear;
-        lClear.m_color = __vspltisw(0);
-        lrCmd.SetClear(lClear);
+        static renderengine::ClearColorParameters sClear;
+        static bool sbClearInitialised = false;
+        if (!sbClearInitialised)
+        {
+            sbClearInitialised = true;
+            sClear.m_color = __vspltisw(0);
+        }
+        lrCmd.SetClear(sClear);
         lrCmd.EndRendering();
         return;
     }

@@ -732,10 +732,16 @@ void MainMapRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     else if (mRenderMainMapEvent.meMapType == GuiEventRenderMainMap::E_MAPTYPE_LOADING_MAP)
     {
         // ARTIST's function-local clear colour is opaque black.
-        renderengine::ClearColorParameters lClear;
-        lClear.m_color = __vspltisw(0);
-        lClear.m_color.w = 1.0f;
-        lpRenderBuffer->SetClear(lClear);
+        static renderengine::ClearColorParameters sClear;
+        static bool sbClearInitialised = false;
+        if (!sbClearInitialised)
+        {
+            sbClearInitialised = true;
+            __vector4 lColour = __vspltisw(0);
+            lColour.w = 1.0f;
+            sClear.m_color = lColour;
+        }
+        lpRenderBuffer->SetClear(sClear);
     }
     else if (mRenderMainMapEvent.meMapType != GuiEventRenderMainMap::E_MAPTYPE_MAINMAP)
     {
