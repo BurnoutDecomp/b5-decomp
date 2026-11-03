@@ -33,12 +33,9 @@ public:
     // PDB: IDynamicMixer::MAP_CREATE_PARAMS (the mixer-create config, +0x10).
     struct MAP_CREATE_PARAMS
     {
-        // DWARF (DynamicMixer.hpp): MixerAllocator is an EA::Allocator::ICoreAllocator*;
-        // modelled here as the project's MixerAllocator (the same vtable shape, slot 2 =
-        // Allocate, slot 3 = Free -- it is what CreateInstance installs into off_83250004).
         int             mPrintSelect;    // +0x00
         int             NumMixStates;    // +0x04
-        MixerAllocator* MixerAllocator;  // +0x08
+        EA::Allocator::ICoreAllocator* MixerAllocator;  // +0x08
     };
 
     IDynamicMixer();                    // @0x82B44A78 -- zero-init + install the global instance

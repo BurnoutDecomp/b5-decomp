@@ -65,7 +65,7 @@ NFSMixMaster::~NFSMixMaster()
 // NFSMixMaster::CreateMainMainMap @0x82B45868 -- CreateMainMainMap(this, a2, a3)
 //   m_pMixMaster = this;        (+0x7C, stw r30)
 //   m_bMapReady  = 0;           (+0x70, stb)
-//   r3 = mixerSystem->Allocate(0x234, 0, "NFSMixMap");   (off_83250004 vtable+8)
+//   r3 = mixerSystem->Alloc(0x234, "NFSMixMap", 0);   (off_83250004 vtable+8)
 //   if (r3) NFSMixMap::NFSMixMap(r3);                     (placement ctor)
 //   m_pMainMixMap = r3;         (+0x00)
 //   NFSMixMap::Init(r3, this);                            (Init(map, this))
@@ -83,10 +83,10 @@ NFSMixMap* NFSMixMaster::CreateMainMainMap(int* lpMapData, int* lpSBActiveMasks)
     m_pMixMaster = this;        // +0x7C
     m_bMapReady  = false;       // +0x70
 
-    // X360: mixerSystem->Allocate(0x234, 0, "NFSMixMap") + placement ctor. On PC we
+    // X360: mixerSystem->Alloc(0x234, "NFSMixMap", 0) + placement ctor. On PC we
     // allocate sizeof(NFSMixMap) (the x64 size; X360 was 0x234 with 4-byte pointers)
     // through the mixer allocator and placement-construct.
-    void* lpMem = g_pMixerAllocator->Allocate(sizeof(NFSMixMap), 16, "NFSMixMap");
+    void* lpMem = g_pMixerAllocator->Alloc(sizeof(NFSMixMap), "NFSMixMap", 0);
     NFSMixMap* lpMap = lpMem ? new (lpMem) NFSMixMap() : 0;
     m_pMainMixMap = lpMap;      // +0x00
 

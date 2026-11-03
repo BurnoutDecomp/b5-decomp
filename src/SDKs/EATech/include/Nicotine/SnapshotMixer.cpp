@@ -486,7 +486,7 @@ namespace Nicotine {
                 ? 0xFFFFFFFFu
                 : static_cast<u32>(sizeof(SnapshotChannel)) * static_cast<u32>(miNumChannels);
             SnapshotChannel* const lpChannels = static_cast<SnapshotChannel*>(
-                g_pMixerAllocator->Allocate(luSize, 16, "SnapshotChannels"));   // off_83250004 vtbl+8
+                g_pMixerAllocator->Alloc(luSize, "SnapshotChannels", 0));   // off_83250004 vtbl+8
             if (lpChannels)
                 std::memset(lpChannels, 0, luSize);
             mpChannels = lpChannels;         // +0x0C (null on alloc failure, as shipped)
@@ -512,7 +512,7 @@ namespace Nicotine {
                 ? 0xFFFFFFFFu
                 : static_cast<u32>(sizeof(SnapshotStatus)) * static_cast<u32>(miNumSnapshots);
             SnapshotStatus* const lpStatuses = static_cast<SnapshotStatus*>(
-                g_pMixerAllocator->Allocate(luSize, 16, "SnapshotStatuses"));   // off_83250004 vtbl+8
+                g_pMixerAllocator->Alloc(luSize, "SnapshotStatuses", 0));   // off_83250004 vtbl+8
             if (lpStatuses)
                 std::memset(lpStatuses, 0, luSize);
             mpSnapshots = lpStatuses;        // +0x10

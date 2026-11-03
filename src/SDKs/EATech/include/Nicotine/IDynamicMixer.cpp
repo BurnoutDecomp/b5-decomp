@@ -19,8 +19,7 @@
 //  and constructs NFSLiveLink(block, this); the dtor runs CgsSceneManager::CgsCollision::
 //  BaseCollisionGenerator::Destruct on it (NFSLiveLink derives from that generator);
 //  ProcessMixMap forwards to NFSLiveLink::ProcessLiveLink. Until NFSLiveLink is homed,
-//  mLiveLink stays null, so every NFSLiveLink branch is a faithful no-op (the binary's
-//  null-guard makes the same choice when the alloc fails). Each is FLAGGED at its site.
+//  mLiveLink stays null in this incomplete implementation. Each omitted path is FLAGGED.
 // ===========================================================================
 
 namespace Nicotine
@@ -75,7 +74,7 @@ IDynamicMixer::~IDynamicMixer()
     //   if (mLiveLink) { CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct(mLiveLink);
     //                    g_pMixerAllocator->Free(mLiveLink, 0); }
     // NFSLiveLink is not yet homed, so mLiveLink is always null and this branch is a
-    // faithful no-op. Wired in once NFSLiveLink lands.
+    // missing behavior. Wire it in once NFSLiveLink lands.
 }
 
 // ---------------------------------------------------------------------------
@@ -100,31 +99,28 @@ IDynamicMixer* IDynamicMixer::GetInstance()
 //   mLiveLink    = allocator->Allocate(6332, "NFSLiveLink")
 //                  ? NFSLiveLink(block, this) : 0;            (+0x0C)  [FLAG: deferred]
 //
-// FLAG (PC boundary): the X360 Allocate is the mixer-system vtable slot 2
-// (size, debug-name, 0); the project MixerAllocator matches that shape (alignment arg
-// added). Sizes 128/32/6332 are the exact X360 immediates (0x80/0x20/0x18BC).
+// X360 calls ICoreAllocator::Alloc(size, debug-name, 0) via vtable slot 2.
 // ---------------------------------------------------------------------------
 void IDynamicMixer::CreateInstance(const MAP_CREATE_PARAMS* lpParams)
 {
     // off_83250004 = the create-params' allocator (asm stores it UNCONDITIONALLY).
     g_pMixerAllocator = lpParams->MixerAllocator;
 
+    void* lpMasterMem = g_pMixerAllocator->Alloc(sizeof(NFSMixMaster), "NFSMixMaster", 0);
     mMixMaster = lpMasterMem ? new (lpMasterMem) NFSMixMaster() : 0;
-    if (mMixMaster)
-        mMixMaster->mNumStates = lpParams->NumMixStates; // *(v4+8) = *(a2+4)
+    mMixMaster->mNumStates = lpParams->NumMixStates; // *(v4+8) = *(a2+4)
 
+    void* lpSnapMem = g_pMixerAllocator->Alloc(sizeof(SnapshotMixer), "SnapshotMixer", 0);
     if (lpSnapMem)
         std::memset(lpSnapMem, 0, sizeof(SnapshotMixer));
     mpSnapshot = static_cast<SnapshotMixer*>(lpSnapMem);
-    if (mpSnapshot)
-        mpSnapshot->Construct(this);     // owner = this
+    mpSnapshot->Construct(this);         // owner = this
 
     // --- NFSLiveLink (0x18BC == 6332 bytes) ---
     // FLAG (deferred): the X360 does
     //   void* m = allocator->Allocate(6332, "NFSLiveLink");
     //   mLiveLink = m ? new(m) NFSLiveLink(this) : 0;
-    // NFSLiveLink is not yet homed; mLiveLink stays null (the same result the binary
-    // produces on a failed alloc). Wired in once NFSLiveLink lands.
+    // NFSLiveLink is not yet homed; this remains an incomplete native path.
     mLiveLink = 0;
 }
 
@@ -189,7 +185,7 @@ void IDynamicMixer::InitSnapshots(void* apSnapshotData)
 void IDynamicMixer::ProcessMixMap(int /*liUnused*/, float lfDeltaTime)
 {
     // FLAG (deferred): NFSLiveLink::ProcessLiveLink(mLiveLink, mpSnapshot) -- mLiveLink
-    // is null until NFSLiveLink is homed, so this branch is a faithful no-op.
+    // is null until NFSLiveLink is homed; this is incomplete native behavior.
     if (mpSnapshot)
         mpSnapshot->Update(lfDeltaTime);                    // FLAG: DSP rodata-blocked
     if (mMixMaster)
