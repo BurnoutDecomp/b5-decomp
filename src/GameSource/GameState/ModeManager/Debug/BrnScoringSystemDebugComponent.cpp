@@ -59,12 +59,7 @@ namespace BrnGameState
 
         inline Vector2 MakeVector2(f32 lfX, f32 lfY)
         {
-            Vector2 lv2Result;
-            lv2Result.x = lfX;
-            lv2Result.y = lfY;
-            lv2Result.z = 0.0f;
-            lv2Result.w = 0.0f;
-            return lv2Result;
+            return Vector2(lfX, lfY);
         }
 
         inline u32 StringLength(const char* lpcString)
