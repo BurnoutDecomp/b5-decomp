@@ -56,18 +56,38 @@ namespace
     // times in this body. Lanes z/w are never summed here (that is vmsum3fp128, below).
     f32 Dot2DTraffic(const Vector2& lA, const Vector2& lB)
     {
-        return lA.x * lB.x + lA.y * lB.y;
+        const __vector4 lProduct = __vmulfp(lA.mV, lB.mV);
+        const __vector4 lSum = __vaddfp(__vspltw(lProduct, 0), __vspltw(lProduct, 1));
+        return lSum.x;
     }
 
-    // vrsqrtefp + Newton refinement + `vsel v0, v0, 0, (x == 0)`, i.e. sqrt with a zero guard.
-    // The console spells it with ONE Newton step where the DWARF says SqrtFast and TWO where the
-    // DWARF says Magnitude/Sqrt; on the host both lower to the same exact std::sqrt.
-    // [FLAG VMX->portable] estimate + Newton -> exact std::sqrt. Numerically TIGHTER than the
-    // console, not a placeholder -- the same substitution BrnMathUtils.cpp's Magnitude/IsNormal
-    // already made. DELETE-WHEN a bit-exact VMX emulation layer exists.
-    f32 SqrtTraffic(f32 lfValue)
+    // ARTIST 82787704..28 uses one refinement; 82787758..90 and
+    // 827878B0..82787940 use two. Zero is selected after the multiply.
+    __vector4 SqrtVectorTraffic(__vector4 lValue, bool lbSecondStep)
     {
-        return (lfValue == 0.0f) ? 0.0f : std::sqrt(lfValue);
+        const __vector4 lZero = __vspltisw(0);
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        __vector4 lEstimate = __vrsqrtefp(lValue);
+        __vector4 lSquare = __vmulfp(lEstimate, lEstimate);
+        __vector4 lHalfEstimate = __vmulfp(lEstimate, lHalf);
+        __vector4 lCorrection = __vnmsubfp(lValue, lSquare, lOne);
+        lEstimate = __vmaddfp(lHalfEstimate, lCorrection, lEstimate);
+        if (lbSecondStep)
+        {
+            lSquare = __vmulfp(lEstimate, lEstimate);
+            lHalfEstimate = __vmulfp(lEstimate, lHalf);
+            lCorrection = __vnmsubfp(lValue, lSquare, lOne);
+            lEstimate = __vmaddfp(lHalfEstimate, lCorrection, lEstimate);
+        }
+        return __vsel(__vmulfp(lValue, lEstimate), lZero, __vcmpeqfp(lZero, lValue));
+    }
+
+    f32 SqrtTraffic(f32 lfValue, bool lbSecondStep)
+    {
+        __vector4 lValue;
+        lValue.x = lfValue;
+        return SqrtVectorTraffic(__vspltw(lValue, 0), lbSecondStep).x;
     }
 
     // fsel f0, f13, f29, f0 / fsubs+fsel f0, f13, f0, f31 -- the console's branchless clamp of a
@@ -105,7 +125,7 @@ namespace
     // term reduces to the traffic entity's own velocity z lane.
     f32 Magnitude3Traffic(const Vector3& lVector)
     {
-        return SqrtTraffic(lVector.x * lVector.x + lVector.y * lVector.y + lVector.z * lVector.z);
+        return SqrtVectorTraffic(__vmsum3fp(lVector.mV, lVector.mV), true).x;
     }
 }
 
@@ -165,14 +185,10 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
     CGS_ASSERT(lfAllowedPassingSpace != 0.0f, "Passing Space is zero\n");             // :1512
     const f32 lfReciprocalAllowedPassingSpace = 1.0f / lfAllowedPassingSpace;         // :1513
 
-    // :1507 -- the inline XZ flatten of the car position (lanes z/w are dead, so they are zeroed
-    // here rather than carrying the console's leftover lanes).
+    // ARTIST 827874C0/CC: flatten XZ, retaining the original Z/W lanes.
     const Vector3 lCarPosition = lpCar->GetPosition();
     Vector2 lPlayerPosition;
-    lPlayerPosition.x = lCarPosition.x;
-    lPlayerPosition.y = lCarPosition.z;
-    lPlayerPosition.z = 0.0f;
-    lPlayerPosition.w = 0.0f;
+    lPlayerPosition.mV = __vrlimi(lCarPosition.mV, lCarPosition.mV, 4, 1);
 
     const Vector2 lPlayerDirection = BrnMath::Flatten(lpCar->GetDirection());         // :1521
 
@@ -190,10 +206,9 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
         // the very end via lRelativeVelocity).
         const Vector2& lUnitDirection = mUnitDirection[liFanIndex];
         Vector2 lPlayerMotion;
-        lPlayerMotion.x = lUnitDirection.x * lfPlayerSpeed;
-        lPlayerMotion.y = lUnitDirection.y * lfPlayerSpeed;
-        lPlayerMotion.z = lUnitDirection.z * lfPlayerSpeed;
-        lPlayerMotion.w = lUnitDirection.w * lfPlayerSpeed;
+        __vector4 lSpeed;
+        lSpeed.x = lfPlayerSpeed;
+        lPlayerMotion.mV = __vmulfp(lUnitDirection.mV, __vspltw(lSpeed, 0));
 
         f32* lfAvoidTraffic         = &mfWeighting[eFan_AvoidTraffic][liFanIndex];         // :1537
         f32* lfAvoidOncomingTraffic = &mfWeighting[eFan_AvoidOncomingTraffic][liFanIndex]; // :1538
@@ -218,18 +233,12 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
 
             // vsubfp128 v123, v0, v122 @0x827875E0 -- all four lanes (see Magnitude3Traffic).
             Vector2 lRelativeVelocity;                                                // :1550
-            lRelativeVelocity.x = lpTraffic->mVelocity.x - lPlayerMotion.x;
-            lRelativeVelocity.y = lpTraffic->mVelocity.y - lPlayerMotion.y;
-            lRelativeVelocity.z = lpTraffic->mVelocity.z - lPlayerMotion.z;
-            lRelativeVelocity.w = lpTraffic->mVelocity.w - lPlayerMotion.w;
+            lRelativeVelocity.mV = __vsubfp(lpTraffic->mVelocity.mV, lPlayerMotion.mV);
 
             // vsubfp128 v1, v0, v121 @0x827875F0 (mCentre is entry+0x10, reached as r11 - 0x10
             // with r11 == entry+0x20). Lanes z/w are dead in every consumer.
             Vector2 lRelativePosition;                                                // :1551
-            lRelativePosition.x = lpTraffic->mCentre.x - lPlayerPosition.x;
-            lRelativePosition.y = lpTraffic->mCentre.y - lPlayerPosition.y;
-            lRelativePosition.z = 0.0f;
-            lRelativePosition.w = 0.0f;
+            lRelativePosition.mV = __vsubfp(lpTraffic->mCentre.mV, lPlayerPosition.mV);
 
             // 0x827875F4..0x82787610: a positive dot means the gap is opening. Only closing
             // vehicles are considered.
@@ -249,10 +258,8 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
             }
 
             // 0x82787674..0x827876B4. Both magnitudes are 2-lane (vspltw 0 + vspltw 1).
-            const f32 lfRelativeSpeedSquared = lRelativeVelocity.x * lRelativeVelocity.x
-                                             + lRelativeVelocity.y * lRelativeVelocity.y;
-            const f32 lfDistanceSquared      = lRelativePosition.x * lRelativePosition.x   // :1578
-                                             + lRelativePosition.y * lRelativePosition.y;
+            const f32 lfRelativeSpeedSquared = Dot2DTraffic(lRelativeVelocity, lRelativeVelocity);
+            const f32 lfDistanceSquared = Dot2DTraffic(lRelativePosition, lRelativePosition);
             const f32 lfTimeToCollisionSquared = lfDistanceSquared / lfRelativeSpeedSquared;
 
             // 0x827876C4: the .bss constant this lane recovered. Note the console tests the
@@ -261,7 +268,7 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
             if (lfTimeToCollisionSquared > KF_TRAFFIC_IMPACT_TIME_SQUARED)
                 continue;
 
-            const f32 lfTimeToCollision = SqrtTraffic(lfTimeToCollisionSquared);      // :1579
+            const f32 lfTimeToCollision = SqrtTraffic(lfTimeToCollisionSquared, false);      // :1579
 
             // 0x82787730..0x82787738: 1 at the moment of impact, 0 at KF_TRAFFIC_IMPACT_TIME out.
             const f32 lfRisk = 1.0f - (lfTimeToCollision / KF_TRAFFIC_IMPACT_TIME);
@@ -272,7 +279,7 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
             const f32 lfClosestApproach = DistancePosVelToOrigin(lRelativePosition, lRelativeVelocity);
 
             // 0x82787740..0x827877A0 (two Newton steps -- rw::math::vpu::Magnitude in the DWARF).
-            const f32 lfSeparation = SqrtTraffic(lfDistanceSquared);                  // :1615
+            const f32 lfSeparation = SqrtTraffic(lfDistanceSquared, true);                  // :1615
             if (lfSeparation > KF_MAX_TRAFFIC_CONSIDERATION_RANGE)
                 continue;
 
@@ -307,10 +314,7 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
                 {
                     lpRacingLine->mfImmediateDistanceToTrafficImpact = lfDistance;
                     lfClosestCollision = lfDistance;
-                    lImmmediateApproachSpeedOfTrafficAhead.x = lRelativeVelocity.x;
-                    lImmmediateApproachSpeedOfTrafficAhead.y = lRelativeVelocity.y;
-                    lImmmediateApproachSpeedOfTrafficAhead.z = lRelativeVelocity.z;
-                    lImmmediateApproachSpeedOfTrafficAhead.w = lRelativeVelocity.w;
+                    lImmmediateApproachSpeedOfTrafficAhead.mV = lRelativeVelocity.mV;
                 }
             }
         }
@@ -327,7 +331,7 @@ void SteeringFan::IncludeConstantBearing(RacingLine* lpRacingLine, AICar* lpCar,
 
     // 0x8278790C..0x8278794C -- the squared distance accumulated above becomes a real distance.
     lpRacingLine->mfImmediateDistanceToTrafficImpact =
-        SqrtTraffic(lpRacingLine->mfImmediateDistanceToTrafficImpact);
+        SqrtTraffic(lpRacingLine->mfImmediateDistanceToTrafficImpact, true);
 }
 
 }

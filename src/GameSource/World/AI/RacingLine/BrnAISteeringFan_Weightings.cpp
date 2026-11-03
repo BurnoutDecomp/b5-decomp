@@ -9,12 +9,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameSource/World/AI/RacingLine/BrnAISteeringFan_TrafficConstants.h" // KF_GUESSED_MAX_SPEED (CalculateFanAngle)
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [DIAG] CgsDev::Log::gpDebugPrint
 
 #include "SDKs/XboxMath/XMVectorSinCos.h"  // XboxMath::XMVectorSinCos (GenerateFanVectors' inlined SinCos)
 
 #include <cmath>    // std::fmaf (the fmadds / vmaddfp sites), std::fabs, std::sqrt
-#include <cstdlib>  // [DIAG] getenv (the BRN_AI_NAN witness below)
 
 // BrnAI::SteeringFan -- partfile 2 of 2 for the weighting half (aiwave R6 lane). This TU owns the
 // per-round-robin weighting pass AIDriver::DoRoundRobinWork @0x82796340 drives:
@@ -44,37 +42,41 @@ namespace BrnAI
 {
 namespace
 {
-    // The X360 spells these as inline vrsqrtefp/vrlimi/vsubfp sequences; the TU-local helpers keep
-    // the bodies readable. Same pattern (and same names + "Fan" suffix to stay ODR-clean) as the
-    // BrnAIDriver.cpp / BrnAIDriver_Update.cpp partfiles.
+    // ARTIST 82779328..58: replace Y with Z while retaining the other lanes.
     Vector2 To2DFan(Vector3 lVector)
     {
         Vector2 lOut;
-        lOut.x = lVector.x;
-        lOut.y = lVector.z;   // XZ ground plane (Flatten mask @0x82CDA450 = x,z,x,x -- lane R7); was .y
-        lOut.z = 0.0f;
-        lOut.w = 0.0f;
+        lOut.mV = __vrlimi(lVector.mV, lVector.mV, 4, 1);
         return lOut;
     }
 
-    // vmulfp/vspltw/vaddfp (x*x + y*y) then the two-step vrsqrtefp Newton refinement, i.e. a
-    // plain 2D normalise. The console does NOT guard a zero length here -- callers do (see the
-    // KF_TINY epsilon tests in IncludeCentreLineTracking / IncludeRouteParallelTracking).
+    // ARTIST 82779370..B0, 82786CF4..D58, 82786EF8..F58.
+    // Keep the estimate, two VMX refinements and the complete register.
     Vector2 Normalize2DFan(Vector2 lVector)
     {
-        const f32 lfLengthSq = lVector.x * lVector.x + lVector.y * lVector.y;
-        const f32 lfScale    = 1.0f / std::sqrt(lfLengthSq);
+        const __vector4 lSquares = __vmulfp(lVector.mV, lVector.mV);
+        const __vector4 lLength = __vaddfp(__vspltw(lSquares, 0), __vspltw(lSquares, 1));
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        __vector4 lEstimate = __vrsqrtefp(lLength);
+        __vector4 lSquare = __vmulfp(lEstimate, lEstimate);
+        __vector4 lHalfEstimate = __vmulfp(lEstimate, lHalf);
+        __vector4 lCorrection = __vnmsubfp(lLength, lSquare, lOne);
+        lEstimate = __vmaddfp(lHalfEstimate, lCorrection, lEstimate);
+        lSquare = __vmulfp(lEstimate, lEstimate);
+        lHalfEstimate = __vmulfp(lEstimate, lHalf);
+        lCorrection = __vnmsubfp(lLength, lSquare, lOne);
+        lEstimate = __vmaddfp(lHalfEstimate, lCorrection, lEstimate);
         Vector2 lOut;
-        lOut.x = lVector.x * lfScale;
-        lOut.y = lVector.y * lfScale;
-        lOut.z = 0.0f;
-        lOut.w = 0.0f;
+        lOut.mV = __vmulfp(lVector.mV, lEstimate);
         return lOut;
     }
 
     f32 Dot2DFan(const Vector2& lA, const Vector2& lB)
     {
-        return lA.x * lB.x + lA.y * lB.y;
+        const __vector4 lProduct = __vmulfp(lA.mV, lB.mV);
+        const __vector4 lSum = __vaddfp(__vspltw(lProduct, 0), __vspltw(lProduct, 1));
+        return lSum.x;
     }
 
     // flt_820C3B70 == 1.1920929e-07 (FLT_EPSILON) -- the "is this delta vector zero" epsilon both
@@ -165,39 +167,12 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
     const Vector3 lUseful      = lpCar->GetUsefulDirection();     // @0x82770028
 
     mFanOrigin      = lCarPosition;                               // stvx128 v127, r29, 0x340
-    mFanOrigin2D.x  = lCarPosition.x;                             // vrlimi128 v0,v127,8,0
-    mFanOrigin2D.y  = lCarPosition.z;                             // vrlimi128 v0,v127,4,1 -- rotate 1: lane 2 (Z) into lane 1
-    // CORRECTED 2026-09-05 (aiwave2 conductor): this wrote lCarPosition.y (the HEIGHT). The
-    // asm @0x82779340/0x82779354 is the (x, Z) ground-plane flatten every other 2D site uses, so
-    // every mTarget[i] sat at world z ~ 0, the steering angle read ~pi and the rivals spun round
-    // and drove the wrong way (run2/run3 of scratch/aiwave2).
+    // ARTIST 82779340/54 updates only X and Y, retaining Z and W.
+    mFanOrigin2D.mV = __vrlimi(mFanOrigin2D.mV, lCarPosition.mV, 8, 0);
+    mFanOrigin2D.mV = __vrlimi(mFanOrigin2D.mV, lCarPosition.mV, 4, 1);
+    const Vector2 lReference(0.0f, 1.0f);
 
-    Vector2 lReference;                                           // the (0,1) the angle is from
-    lReference.x = 0.0f;
-    lReference.y = 1.0f;
-    lReference.z = 0.0f;
-    lReference.w = 0.0f;
-
-    // [DIAG ai-nan, issue #31] NOT IN THE X360 BINARY. Env-gated (BRN_AI_NAN=1) witness that names
-    // the PRODUCER of the non-finite 2D heading the console's own asserts then report from inside
-    // FindSignedAngleBetween2DVectors (its two "NAN error in AIDriver::..." gates, X360
-    // BrnAIUtils.cpp:65 / :70). It measures exactly one thing
-    // -- the squared length of the (x,z) useful direction that GenerateFanVectors is about to feed
-    // to the unguarded 2D normalise @0x82779370 -- and prints the whole upstream state that decided
-    // it. The POSITIVE CONTROL is the `first` line: it fires on the first fan pass of the run
-    // whatever the numbers are, so a run with no `degenerate` line is a run where the probe was
-    // live and the length was healthy, not a run where the probe was dead.
-    // Members are read directly (never through the GetX() accessors) so the witness cannot itself
-    // fire the console's validity asserts and change what the run reports.
-    // DELETE-WHEN issue #31 is closed.
     const Vector2 lCarDirection2DRaw = To2DFan(lUseful);
-    {
-        static s32 siReported = 0;
-        static bool sbFirstDone = false;
-        const f32 lfLengthSq2D = lCarDirection2DRaw.x * lCarDirection2DRaw.x
-                               + lCarDirection2DRaw.y * lCarDirection2DRaw.y;
-        const bool lbDegenerate = !(lfLengthSq2D > 0.0f);   // 0, underflowed-to-0, or NaN
-    }
 
     const Vector2 lCarDirection2D = Normalize2DFan(lCarDirection2DRaw);
     const f32 lfBaseAngle = FindSignedAngleBetween2DVectors(lCarDirection2D, lReference);
@@ -222,11 +197,7 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngle);
 
-        Vector2 lUnit;
-        lUnit.x =  lfSin;
-        lUnit.y =  lfCos;
-        lUnit.z = 0.0f;
-        lUnit.w = 0.0f;
+        const Vector2 lUnit(lfSin, lfCos);
         mUnitDirection[liStep] = lUnit;
 
         // 0x827796F4 / 0x82779724 `vmaddfp` (raw D,A,B,C = v13, v0, v13, v12 / v0, v0, v13, v12) = unit * radius +
@@ -322,15 +293,15 @@ void SteeringFan::IncludeCentreLineTracking(RacingLineGenerator* lpRacingLineGen
     }
 
     Vector2 lDelta;
-    lDelta.x = mCentreHere.x - mFanOrigin.x;
-    lDelta.y = mCentreHere.y - mFanOrigin.z; // ARTIST 82786C4C: world Z into planar Y
-    lDelta.z = 0.0f;
-    lDelta.w = 0.0f;
+    lDelta.mV.x = mCentreHere.mV.x - mFanOrigin.mV.x;
+    lDelta.mV.y = mCentreHere.mV.y - mFanOrigin.mV.z; // ARTIST 82786C4C: world Z into planar Y
+    lDelta.mV.z = 0.0f;
+    lDelta.mV.w = 0.0f;
 
     // IsZero is a per-lane non-dot vcmpgtfp |d| > eps gathered by vperm + `cmpwi ; bne/beq`
     // (0x82786C88..0x82786CF0): a NaN lane is never "greater", so a NaN delta counts as zero and
     // returns here (FX-AINAN2; `fabs <= tiny` called it non-zero and wrote a 0.0 row).
-    if (!(std::fabs(lDelta.x) > KF_FAN_TINY) && !(std::fabs(lDelta.y) > KF_FAN_TINY))
+    if (!(std::fabs(lDelta.mV.x) > KF_FAN_TINY) && !(std::fabs(lDelta.mV.y) > KF_FAN_TINY))
         return;                                            // bnelr: the row keeps its old values
 
     const f32 lfAhead      = lpRacingLine->mfCentreLineAhead;
@@ -346,15 +317,7 @@ void SteeringFan::IncludeCentreLineTracking(RacingLineGenerator* lpRacingLineGen
             mfWeighting[eFan_SteerToCentre][liStep] = 0.0f;
     }
 
-    // [DIAG] NOT IN THE X360 BINARY (BRN_AI_FAN_DIAG=1). Crash-parity G03-D1 witness: until
-    // 2026-09-22 AIDriver::Prepare skipped its RandomFloat draw, so every rival reached this loop
-    // with mfCentreLineAhead/Recip == 0/0 and wrote -((dot - 0) * 0) == 0 into every ray -- the
-    // eFan_SteerToCentre row was dead. The line reports the threshold the loop just used and
-    // whether the row came out non-zero, so a live run shows the draw reached the rivals.
-    // Members are read only; nothing here feeds back into the weights.
-    {
-        static u32 suComputed = 0, suLive = 0, suPrinted = 0;
-    }
+
 }
 
 // ========================================================================================
@@ -388,14 +351,11 @@ void SteeringFan::IncludeRouteParallelTracking(RacingLineGenerator* lpRacingLine
     }
 
     Vector2 lDelta;
-    lDelta.x = mCentreHere.x - mCentreAhead.x;
-    lDelta.y = mCentreHere.y - mCentreAhead.y;
-    lDelta.z = 0.0f;
-    lDelta.w = 0.0f;
+    lDelta.mV = __vsubfp(mCentreHere.mV, mCentreAhead.mV); // ARTIST 82786E38
 
     // IsZero: the same vperm-gathered vcmpgtfp (0x82786E6C / 0x82786EA4) -- a NaN delta counts as
     // zero and zeroes the row (FX-AINAN2; `fabs <= tiny` called it non-zero).
-    if (!(std::fabs(lDelta.x) > KF_FAN_TINY) && !(std::fabs(lDelta.y) > KF_FAN_TINY))
+    if (!(std::fabs(lDelta.mV.x) > KF_FAN_TINY) && !(std::fabs(lDelta.mV.y) > KF_FAN_TINY))
     {
         for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
             mfWeighting[eFan_DriveParallel][liStep] = 0.0f;

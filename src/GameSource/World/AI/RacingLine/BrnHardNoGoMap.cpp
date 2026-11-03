@@ -151,15 +151,14 @@ void HardNoGoMap::Prepare(s32 liSectionIndex)
 void HardNoGoMap::SetCorners(Vector2 lCurrentLeft, Vector2 lCurrentRight,
                              Vector2 lPreviousLeft, Vector2 lPreviousRight)
 {
-    mCurrentAndPreviousLeft.x = lCurrentLeft.x;    // vrlimi128 v12, v1, 8, 0
-    mCurrentAndPreviousLeft.y = lCurrentLeft.y;    // vrlimi128 v12, v1, 4, 0
-    mCurrentAndPreviousLeft.z = lPreviousLeft.x;   // vrlimi128 v12, v3, 2, 2
-    mCurrentAndPreviousLeft.w = lPreviousLeft.y;   // vrlimi128 v12, v3, 1, 2
-
-    mCurrentAndPreviousRight.x = lCurrentRight.x;  // vrlimi128 v10, v2, 8, 0
-    mCurrentAndPreviousRight.y = lCurrentRight.y;  // vrlimi128 v10, v2, 4, 0
-    mCurrentAndPreviousRight.z = lPreviousRight.x; // vrlimi128 v10, v4, 2, 2
-    mCurrentAndPreviousRight.w = lPreviousRight.y; // vrlimi128 v10, v4, 1, 2
+    mCurrentAndPreviousLeft.mV = __vrlimi(mCurrentAndPreviousLeft.mV, lCurrentLeft.mV, 8, 0);
+    mCurrentAndPreviousLeft.mV = __vrlimi(mCurrentAndPreviousLeft.mV, lCurrentLeft.mV, 4, 0);
+    mCurrentAndPreviousLeft.mV = __vrlimi(mCurrentAndPreviousLeft.mV, lPreviousLeft.mV, 2, 2);
+    mCurrentAndPreviousLeft.mV = __vrlimi(mCurrentAndPreviousLeft.mV, lPreviousLeft.mV, 1, 2);
+    mCurrentAndPreviousRight.mV = __vrlimi(mCurrentAndPreviousRight.mV, lCurrentRight.mV, 8, 0);
+    mCurrentAndPreviousRight.mV = __vrlimi(mCurrentAndPreviousRight.mV, lCurrentRight.mV, 4, 0);
+    mCurrentAndPreviousRight.mV = __vrlimi(mCurrentAndPreviousRight.mV, lPreviousRight.mV, 2, 2);
+    mCurrentAndPreviousRight.mV = __vrlimi(mCurrentAndPreviousRight.mV, lPreviousRight.mV, 1, 2);
 
     mfAverageWidth  = Distance2D(lCurrentLeft, lCurrentRight);    // stfs 0x44 @0x827778F0
     mfAverageWidth += Distance2D(lPreviousLeft, lPreviousRight);  // stfs 0x44 @0x82777940
@@ -193,8 +192,8 @@ bool HardNoGoMap::MakeMap(const AISection* lpSection, s32 liStart, s32 liEnd)
 
         // The whole 16-byte line is loaded once (lvx128) and re-lane-selected into the two
         // Vector2 arguments, whose z/w lanes are explicitly zeroed (the two `std r29, 0(rN)`).
-        const Vector2 lStart = { lrLine.mfStartX, lrLine.mfStartY, 0.0f, 0.0f };
-        const Vector2 lEnd   = { lrLine.mfEndX,   lrLine.mfEndY,   0.0f, 0.0f };
+        const Vector2 lStart(lrLine.mfStartX, lrLine.mfStartY);
+        const Vector2 lEnd(lrLine.mfEndX, lrLine.mfEndY);
 
         WriteIntoMap(lStart, lEnd);
     }
@@ -418,8 +417,8 @@ void HardNoGoMap::FindMaximalEdges(Vector2& lLeftEdge, Vector2& lRightEdge, f32 
 
         const Vector3 lTopRight =
             GetSquareTopRight(static_cast<u32>(liWidth), static_cast<u32>(liHeightIndex), 0.0f);
-        lRightEdge.x = lTopRight.x;
-        lRightEdge.y = lTopRight.z;
+        lRightEdge.mV = __vrlimi(lRightEdge.mV, lTopRight.mV, 8, 0);
+        lRightEdge.mV = __vrlimi(lRightEdge.mV, lTopRight.mV, 4, 1);
         lbFoundRight = true;
         break;
     }
@@ -427,8 +426,8 @@ void HardNoGoMap::FindMaximalEdges(Vector2& lLeftEdge, Vector2& lRightEdge, f32 
     if (!lbFoundRight)
     {
         const Vector3 lTopRight = GetSquareTopRight(0u, static_cast<u32>(liHeightIndex), 0.0f);
-        lRightEdge.x = lTopRight.x;
-        lRightEdge.y = lTopRight.z;
+        lRightEdge.mV = __vrlimi(lRightEdge.mV, lTopRight.mV, 8, 0);
+        lRightEdge.mV = __vrlimi(lRightEdge.mV, lTopRight.mV, 4, 1);
     }
 
     bool lbFoundLeft = false;
@@ -441,8 +440,8 @@ void HardNoGoMap::FindMaximalEdges(Vector2& lLeftEdge, Vector2& lRightEdge, f32 
 
         const Vector3 lTopLeft =
             GetSquareTopLeft(static_cast<u32>(liWidth), static_cast<u32>(liHeightIndex), 0.0f);
-        lLeftEdge.x = lTopLeft.x;
-        lLeftEdge.y = lTopLeft.z;
+        lLeftEdge.mV = __vrlimi(lLeftEdge.mV, lTopLeft.mV, 8, 0);
+        lLeftEdge.mV = __vrlimi(lLeftEdge.mV, lTopLeft.mV, 4, 1);
         lbFoundLeft = true;
         break;
     }
@@ -451,8 +450,8 @@ void HardNoGoMap::FindMaximalEdges(Vector2& lLeftEdge, Vector2& lRightEdge, f32 
     {
         const Vector3 lTopLeft = GetSquareTopLeft(static_cast<u32>(KI_HNG_MAP_WIDTH - 1),
                                                   static_cast<u32>(liHeightIndex), 0.0f);
-        lLeftEdge.x = lTopLeft.x;
-        lLeftEdge.y = lTopLeft.z;
+        lLeftEdge.mV = __vrlimi(lLeftEdge.mV, lTopLeft.mV, 8, 0);
+        lLeftEdge.mV = __vrlimi(lLeftEdge.mV, lTopLeft.mV, 4, 1);
     }
 }
 
@@ -599,21 +598,18 @@ Vector3 HardNoGoMap::GetSquareTopLeft(u32 luWidth, u32 luHeight, f32 lfHeight)
     const Vector2 lCurrentRight  = GetCurrentRight();
     const Vector2 lPreviousRight = GetPreviousRight();
 
-    const Vector3 lLeft = {
-        (lCurrentLeft.x - lPreviousLeft.x) * lfHeightInterp + lPreviousLeft.x,
+    const Vector3 lLeft(
+        (lCurrentLeft.mV.x - lPreviousLeft.mV.x) * lfHeightInterp + lPreviousLeft.mV.x,
         lfHeight,
-        (lCurrentLeft.y - lPreviousLeft.y) * lfHeightInterp + lPreviousLeft.y,
-        0.0f };
-    const Vector3 lRight = {
-        (lCurrentRight.x - lPreviousRight.x) * lfHeightInterp + lPreviousRight.x,
+        (lCurrentLeft.mV.y - lPreviousLeft.mV.y) * lfHeightInterp + lPreviousLeft.mV.y);
+    const Vector3 lRight(
+        (lCurrentRight.mV.x - lPreviousRight.mV.x) * lfHeightInterp + lPreviousRight.mV.x,
         lfHeight,
-        (lCurrentRight.y - lPreviousRight.y) * lfHeightInterp + lPreviousRight.y,
-        0.0f };
+        (lCurrentRight.mV.y - lPreviousRight.mV.y) * lfHeightInterp + lPreviousRight.mV.y);
 
-    { const Vector3 lResult = { (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
-                    (lRight.y - lLeft.y) * lfWidthInterp + lLeft.y,
-                    (lRight.z - lLeft.z) * lfWidthInterp + lLeft.z,
-                    0.0f }; return lResult; }
+    { const Vector3 lResult( (lRight.mV.x - lLeft.mV.x) * lfWidthInterp + lLeft.mV.x,
+                    (lRight.mV.y - lLeft.mV.y) * lfWidthInterp + lLeft.mV.y,
+                    (lRight.mV.z - lLeft.mV.z) * lfWidthInterp + lLeft.mV.z); return lResult; }
 }
 
 // @0x82783228 (assert at BrnHardNoGoMap.cpp:918)
@@ -631,21 +627,18 @@ Vector3 HardNoGoMap::GetSquareTopRight(u32 luWidth, u32 luHeight, f32 lfHeight)
     const Vector2 lCurrentRight  = GetCurrentRight();
     const Vector2 lPreviousRight = GetPreviousRight();
 
-    const Vector3 lLeft = {
-        (lCurrentLeft.x - lPreviousLeft.x) * lfHeightInterp + lPreviousLeft.x,
+    const Vector3 lLeft(
+        (lCurrentLeft.mV.x - lPreviousLeft.mV.x) * lfHeightInterp + lPreviousLeft.mV.x,
         lfHeight,
-        (lCurrentLeft.y - lPreviousLeft.y) * lfHeightInterp + lPreviousLeft.y,
-        0.0f };
-    const Vector3 lRight = {
-        (lCurrentRight.x - lPreviousRight.x) * lfHeightInterp + lPreviousRight.x,
+        (lCurrentLeft.mV.y - lPreviousLeft.mV.y) * lfHeightInterp + lPreviousLeft.mV.y);
+    const Vector3 lRight(
+        (lCurrentRight.mV.x - lPreviousRight.mV.x) * lfHeightInterp + lPreviousRight.mV.x,
         lfHeight,
-        (lCurrentRight.y - lPreviousRight.y) * lfHeightInterp + lPreviousRight.y,
-        0.0f };
+        (lCurrentRight.mV.y - lPreviousRight.mV.y) * lfHeightInterp + lPreviousRight.mV.y);
 
-    { const Vector3 lResult = { (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
-                    (lRight.y - lLeft.y) * lfWidthInterp + lLeft.y,
-                    (lRight.z - lLeft.z) * lfWidthInterp + lLeft.z,
-                    0.0f }; return lResult; }
+    { const Vector3 lResult( (lRight.mV.x - lLeft.mV.x) * lfWidthInterp + lLeft.mV.x,
+                    (lRight.mV.y - lLeft.mV.y) * lfWidthInterp + lLeft.mV.y,
+                    (lRight.mV.z - lLeft.mV.z) * lfWidthInterp + lLeft.mV.z); return lResult; }
 }
 
 // @0x827833D0 (assert at BrnHardNoGoMap.cpp:939)
@@ -663,21 +656,18 @@ Vector3 HardNoGoMap::GetSquareCentre(u32 luWidth, u32 luHeight, f32 lfHeight)
     const Vector2 lCurrentRight  = GetCurrentRight();
     const Vector2 lPreviousRight = GetPreviousRight();
 
-    const Vector3 lLeft = {
-        (lCurrentLeft.x - lPreviousLeft.x) * lfHeightInterp + lPreviousLeft.x,
+    const Vector3 lLeft(
+        (lCurrentLeft.mV.x - lPreviousLeft.mV.x) * lfHeightInterp + lPreviousLeft.mV.x,
         lfHeight,
-        (lCurrentLeft.y - lPreviousLeft.y) * lfHeightInterp + lPreviousLeft.y,
-        0.0f };
-    const Vector3 lRight = {
-        (lCurrentRight.x - lPreviousRight.x) * lfHeightInterp + lPreviousRight.x,
+        (lCurrentLeft.mV.y - lPreviousLeft.mV.y) * lfHeightInterp + lPreviousLeft.mV.y);
+    const Vector3 lRight(
+        (lCurrentRight.mV.x - lPreviousRight.mV.x) * lfHeightInterp + lPreviousRight.mV.x,
         lfHeight,
-        (lCurrentRight.y - lPreviousRight.y) * lfHeightInterp + lPreviousRight.y,
-        0.0f };
+        (lCurrentRight.mV.y - lPreviousRight.mV.y) * lfHeightInterp + lPreviousRight.mV.y);
 
-    { const Vector3 lResult = { (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
-                    (lRight.y - lLeft.y) * lfWidthInterp + lLeft.y,
-                    (lRight.z - lLeft.z) * lfWidthInterp + lLeft.z,
-                    0.0f }; return lResult; }
+    { const Vector3 lResult( (lRight.mV.x - lLeft.mV.x) * lfWidthInterp + lLeft.mV.x,
+                    (lRight.mV.y - lLeft.mV.y) * lfWidthInterp + lLeft.mV.y,
+                    (lRight.mV.z - lLeft.mV.z) * lfWidthInterp + lLeft.mV.z); return lResult; }
 }
 
 // @0x82782BC0
@@ -767,56 +757,42 @@ void HardNoGoMap::WriteIntoMap(Vector2 lStart, Vector2 lEnd)
 // points coincident to within FLT_EPSILON -- reports 0.0 rather than dividing.
 void HardNoGoMap::GetHNGInterpXY(Vector2 lPos, f32& lfInterpX, f32& lfInterpY)
 {
-    const Vector2 lCurrentLeft   = GetCurrentLeft();
-    const Vector2 lCurrentRight  = GetCurrentRight();
-    const Vector2 lPreviousLeft  = GetPreviousLeft();
-    const Vector2 lPreviousRight = GetPreviousRight();
-
-    // vcfsx v13, 1, 1 == 0.5 seeds both the parameter and (squared) the first step.
-    f32 lfInterp = 0.5f;
-    f32 lfStep   = 0.5f * 0.5f;
-
-    // Kept outside the loop: the post-loop length uses the LAST iteration's two points, which
-    // are the ones computed before the final parameter update (vsubfp v11, v9, v11 @0x82777C20).
-    f32 lfCurrentX = 0.0f;
-    f32 lfCurrentY = 0.0f;
-    f32 lfPreviousX = 0.0f;
-    f32 lfPreviousY = 0.0f;
-
+    // ARTIST 82777BA0..C20: retain all packed lanes through the five-step search.
+    const __vector4 lLeft = mCurrentAndPreviousLeft.mV;
+    const __vector4 lRight = mCurrentAndPreviousRight.mV;
+    const __vector4 lPreviousLeft = __vpermwi(lLeft, 0xBF);
+    const __vector4 lPreviousRight = __vpermwi(lRight, 0xBF);
+    const __vector4 lCurrentDelta = __vsubfp(lRight, lLeft);
+    const __vector4 lPreviousDelta = __vsubfp(lPreviousRight, lPreviousLeft);
+    const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+    const __vector4 lZero = __vspltisw(0);
+    __vector4 lInterp = lHalf;
+    __vector4 lStep = __vmulfp(lHalf, lHalf);
+    __vector4 lCurrent;
+    __vector4 lPrevious;
     for (s32 liIteration = 0; liIteration < KI_HNG_INTERP_ITERATIONS; ++liIteration)
     {
-        // vmaddfp v11, (right - left), left, t  == (right - left) * t + left
-        lfCurrentX = (lCurrentRight.x - lCurrentLeft.x) * lfInterp + lCurrentLeft.x;
-        lfCurrentY = (lCurrentRight.y - lCurrentLeft.y) * lfInterp + lCurrentLeft.y;
-
-        lfPreviousX = (lPreviousRight.x - lPreviousLeft.x) * lfInterp + lPreviousLeft.x;
-        lfPreviousY = (lPreviousRight.y - lPreviousLeft.y) * lfInterp + lPreviousLeft.y;
-
-        const f32 lfNextUp   = lfInterp + lfStep;
-        const f32 lfNextDown = lfInterp - lfStep;
-        lfStep *= 0.5f;
-
-        // A = lPos - current point, B = previous point - current point; the side test is
-        // cross(B, A) = B.x * A.y - B.y * A.x.
-        const f32 lfAx = lPos.x - lfCurrentX;
-        const f32 lfAy = lPos.y - lfCurrentY;
-        const f32 lfBx = lfPreviousX - lfCurrentX;
-        const f32 lfBy = lfPreviousY - lfCurrentY;
-
-        const f32 lfCross = lfBx * lfAy - lfBy * lfAx;
-
-        lfInterp = (lfCross > 0.0f) ? lfNextUp : lfNextDown;   // vcmpgtfp + vsel
+        lCurrent = __vmaddfp(lCurrentDelta, lInterp, lLeft);
+        lPrevious = __vmaddfp(lPreviousDelta, lInterp, lPreviousLeft);
+        const __vector4 lUp = __vaddfp(lInterp, lStep);
+        const __vector4 lDown = __vsubfp(lInterp, lStep);
+        lStep = __vmulfp(lStep, lHalf);
+        const __vector4 lA = __vsubfp(lPos.mV, lCurrent);
+        const __vector4 lB = __vsubfp(lPrevious, lCurrent);
+        const __vector4 lCross = __vsubfp(__vmulfp(__vspltw(lB, 0), __vspltw(lA, 1)),
+                                          __vmulfp(__vspltw(lB, 1), __vspltw(lA, 0)));
+        lInterp = __vsel(lDown, lUp, __vcmpgtfp(lCross, lZero));
     }
-
-    lfInterpX = lfInterp;   // stfs 0(r4) @0x82777C40, before the length branch
-
-    const Vector2 lPrevious = { lfPreviousX, lfPreviousY, 0.0f, 0.0f };
-    const Vector2 lCurrent = { lfCurrentX, lfCurrentY, 0.0f, 0.0f };
-    const f32 lfSectionLength = Distance2D(lPrevious, lCurrent);
+    lfInterpX = lInterp.x;
+    Vector2 lPreviousPoint;
+    lPreviousPoint.mV = lPrevious;
+    Vector2 lCurrentPoint;
+    lCurrentPoint.mV = lCurrent;
+    const f32 lfSectionLength = Distance2D(lPreviousPoint, lCurrentPoint);
 
     if (fabsf(lfSectionLength) > KF_EPSILON)   // vandc (fabs) then vcmpgtfp vs flt_820C3B70
     {
-        const f32 lfAlong = Distance2D(lPos, lPrevious);
+        const f32 lfAlong = Distance2D(lPos, lPreviousPoint);
 
         lfInterpY = Divide2D(lfAlong, lfSectionLength);   // vrefp + 2x Newton-Raphson == the divide
     }
@@ -866,7 +842,7 @@ void HardNoGoMap::Render(Vector3 lPosition)
 {
     CGS_ASSERT(mbReady, "Hard No Go Secton not ready for rendering\n");
 
-    const f32 lfHeight = lPosition.y;
+    const f32 lfHeight = lPosition.mV.y;
 
     const Vector3 lCentre = GetSquareCentre(static_cast<u32>(KI_HNG_MAP_WIDTH / 2),
                                             static_cast<u32>(KI_HNG_MAP_HEIGHT / 2), lfHeight);
@@ -908,7 +884,7 @@ void HardNoGoMap::Render(Vector3 lPosition)
     // The map plane is world (x, z).
     f32 lfInterpX = 0.0f;
     f32 lfInterpY = 0.0f;
-    const Vector2 lMapPosition = { lPosition.x, lPosition.z, 0.0f, 0.0f };
+    const Vector2 lMapPosition(lPosition.mV.x, lPosition.mV.z);
     GetHNGInterpXY(lMapPosition, lfInterpX, lfInterpY);
 
     const bool lbInsideMap = !(lfInterpX < 0.0f) && !(lfInterpX > 1.0f)
@@ -944,10 +920,10 @@ void HardNoGoMap::RenderHNGSquare(s32 liWidth, s32 liStartHeight, s32 liEndHeigh
     const Vector2 lPreviousLeft  = GetPreviousLeft();
     const Vector2 lPreviousRight = GetPreviousRight();
 
-    const Vector3 lCurrentRight3 = { lCurrentRight.x, lfHeight, lCurrentRight.y, 0.0f };
-    const Vector3 lPreviousRight3 = { lPreviousRight.x, lfHeight, lPreviousRight.y, 0.0f };
-    const Vector3 lCurrentLeft3 = { lCurrentLeft.x, lfHeight, lCurrentLeft.y, 0.0f };
-    const Vector3 lPreviousLeft3 = { lPreviousLeft.x, lfHeight, lPreviousLeft.y, 0.0f };
+    const Vector3 lCurrentRight3( lCurrentRight.mV.x, lfHeight, lCurrentRight.mV.y);
+    const Vector3 lPreviousRight3( lPreviousRight.mV.x, lfHeight, lPreviousRight.mV.y);
+    const Vector3 lCurrentLeft3( lCurrentLeft.mV.x, lfHeight, lCurrentLeft.mV.y);
+    const Vector3 lPreviousLeft3( lPreviousLeft.mV.x, lfHeight, lPreviousLeft.mV.y);
     lDebugInterface.GetRender().DrawLine(lCurrentRight3, lPreviousRight3, KRGBA_HNG_RIGHT_EDGE);
     lDebugInterface.GetRender().DrawLine(lCurrentLeft3, lPreviousLeft3, KRGBA_HNG_LEFT_EDGE);
 }

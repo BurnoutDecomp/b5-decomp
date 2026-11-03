@@ -180,17 +180,12 @@ inline bool IsSimilar2D(f32 lfAX, f32 lfAY, f32 lfBX, f32 lfBY)
 // The lane-wise `vcmpeqfp.` self-compare the console uses as "is this finite/not-NaN".
 inline bool IsValid2D(const Vector2& lrVector)
 {
-    return (lrVector.x == lrVector.x) && (lrVector.y == lrVector.y);
+    return (lrVector.mV.x == lrVector.mV.x) && (lrVector.mV.y == lrVector.mV.y);
 }
 
 inline Vector2 Make2D(f32 lfX, f32 lfY)
 {
-    Vector2 lResult;
-    lResult.x = lfX;
-    lResult.y = lfY;
-    lResult.z = 0.0f;
-    lResult.w = 0.0f;
-    return lResult;
+    return Vector2(lfX, lfY);
 }
 
 // One 2D normalise. The console spells it vrsqrtefp + two Newton-Raphson steps with a
@@ -338,7 +333,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
                  ++liSection)
             {
                 if (IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSection),
-                                        lPosition.x, lPosition.y))
+                                        lPosition.mV.x, lPosition.mV.y))
                 {
                     CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
                     return liSection;
@@ -348,7 +343,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
         else
         {
             if (IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSectionID),
-                                    lPosition.x, lPosition.y))
+                                    lPosition.mV.x, lPosition.mV.y))
             {
                 CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
                 return liSectionID;
@@ -356,7 +351,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
 
             if (CacheUpToDate(lpRacingLine, liSectionID + 1)
                 && IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSectionID + 1),
-                                       lPosition.x, lPosition.y))
+                                       lPosition.mV.x, lPosition.mV.y))
             {
                 CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
                 return liSectionID + 1;
@@ -364,7 +359,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
 
             if (CacheUpToDate(lpRacingLine, liSectionID - 1)
                 && IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSectionID - 1),
-                                       lPosition.x, lPosition.y))
+                                       lPosition.mV.x, lPosition.mV.y))
             {
                 CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
                 return liSectionID - 1;
@@ -375,7 +370,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
                  ++liSection)
             {
                 if (IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSection),
-                                        lPosition.x, lPosition.y))
+                                        lPosition.mV.x, lPosition.mV.y))
                 {
                     CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
                     return liSection;
@@ -387,7 +382,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
                  --liSection)
             {
                 if (IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSection),
-                                        lPosition.x, lPosition.y))
+                                        lPosition.mV.x, lPosition.mV.y))
                 {
                     CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
                     return liSection;
@@ -421,7 +416,7 @@ s32 RacingLineGenerator::GetNearSectionID(RacingLine* lpRacingLine, Vector2 lPos
     if (lpRacingLine->mbIsInitialised)
     {
         if (IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSectionID),
-                                lPosition.x, lPosition.y))
+                                lPosition.mV.x, lPosition.mV.y))
         {
             CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
             return liSectionID;
@@ -429,7 +424,7 @@ s32 RacingLineGenerator::GetNearSectionID(RacingLine* lpRacingLine, Vector2 lPos
 
         if (CacheUpToDate(lpRacingLine, liSectionID + 1)
             && IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSectionID + 1),
-                                   lPosition.x, lPosition.y))
+                                   lPosition.mV.x, lPosition.mV.y))
         {
             CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
             return liSectionID + 1;
@@ -437,7 +432,7 @@ s32 RacingLineGenerator::GetNearSectionID(RacingLine* lpRacingLine, Vector2 lPos
 
         if (CacheUpToDate(lpRacingLine, liSectionID - 1)
             && IsInsideSectionFast(GetSectionPointer(lpRacingLine, liSectionID - 1),
-                                   lPosition.x, lPosition.y))
+                                   lPosition.mV.x, lPosition.mV.y))
         {
             CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
             return liSectionID - 1;
@@ -502,8 +497,8 @@ void RacingLineGenerator::GuessInwardsSectionPortal(SectionData* lpSectionData, 
         const Vector2 lCurrentCorner  = GetSectionCorner(lpLineSection, liEdge);
         const Vector2 lPreviousCorner = GetSectionCorner(lpLineSection, liPrevious);
 
-        if (IsSimilar2D(lPreviousCorner.x, lPreviousCorner.y, lrLeft.x, lrLeft.y)
-            && IsSimilar2D(lCurrentCorner.x, lCurrentCorner.y, lrRight.x, lrRight.y))
+        if (IsSimilar2D(lPreviousCorner.mV.x, lPreviousCorner.mV.y, lrLeft.mV.x, lrLeft.mV.y)
+            && IsSimilar2D(lCurrentCorner.mV.x, lCurrentCorner.mV.y, lrRight.mV.x, lrRight.mV.y))
         {
             liMatchedEdge = liEdge;
             break;
@@ -625,8 +620,8 @@ void RacingLineGenerator::GetSimpleHermite(Vector2 lInVectorA, Vector2 lInVector
     {
         FireStreamedTextAssert("Bad in vector B in simple\n", 1807);
     }
-    if (!(lInterp.x == lInterp.x && lInterp.y == lInterp.y
-          && lInterp.z == lInterp.z && lInterp.w == lInterp.w))
+    if (!(lInterp.mV.x == lInterp.mV.x && lInterp.mV.y == lInterp.mV.y
+          && lInterp.mV.z == lInterp.mV.z && lInterp.mV.w == lInterp.mV.w))
     {
         FireStreamedTextAssert("Bad in interp in simple\n", 1808);
     }
@@ -639,23 +634,23 @@ void RacingLineGenerator::GetSimpleHermite(Vector2 lInVectorA, Vector2 lInVector
         FireStreamedTextAssert("Bad out vector in simple\n", 1810);
     }
 
-    const f32 lfT  = lInterp.x;
-    const f32 lfT2 = lfT * lfT;
-    const f32 lfT3 = lfT2 * lfT;
-
-    const f32 lfH1 = (2.0f * lfT3) - (3.0f * lfT2) + 1.0f;
-    const f32 lfH2 = 1.0f - lfH1;
-    const f32 lfH3 = lfT3 - (2.0f * lfT2) + lfT;
-    const f32 lfH4 = lfT3 - lfT2;
-
-    lrResult.x = (lInVectorA.x * lfH1) + (lInVectorB.x * lfH2)
-               + (lInVector.x  * lfH3) + (lOutVector.x * lfH4);
-    lrResult.y = (lInVectorA.y * lfH1) + (lInVectorB.y * lfH2)
-               + (lInVector.y  * lfH3) + (lOutVector.y * lfH4);
-    lrResult.z = (lInVectorA.z * lfH1) + (lInVectorB.z * lfH2)
-               + (lInVector.z  * lfH3) + (lOutVector.z * lfH4);
-    lrResult.w = (lInVectorA.w * lfH1) + (lInVectorB.w * lfH2)
-               + (lInVector.w  * lfH3) + (lOutVector.w * lfH4);
+    // ARTIST 82776B40..BAC: preserve the packed operations and their rounding.
+    const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+    const __vector4 lTwo = __vcfsx(__vspltisw(2), 0);
+    const __vector4 lT2 = __vmulfp(lInterp.mV, lInterp.mV);
+    const __vector4 lT3 = __vmulfp(lT2, lInterp.mV);
+    const __vector4 lH3 = __vaddfp(__vsubfp(lT3, __vmulfp(lTwo, lT2)), lInterp.mV);
+    const __vector4 lH4 = __vsubfp(lT3, lT2);
+    const __vector4 lH1 = __vaddfp(__vsubfp(__vmulfp(lTwo, lT3),
+                                             __vmulfp(__vaddfp(lOne, lTwo), lT2)), lOne);
+    const __vector4 lH2 = __vsubfp(lOne, lH1);
+    const f32 lfH1 = lH1.x;
+    const f32 lfH2 = lH2.x;
+    const f32 lfH3 = lH3.x;
+    __vector4 lSum = __vmulfp(lInVectorB.mV, lH2);
+    lSum = __vmaddfp(lInVectorA.mV, lH1, lSum);
+    lSum = __vmaddfp(lInVector.mV, lH3, lSum);
+    lrResult.mV = __vmaddfp(lOutVector.mV, lH4, lSum);
 
     if (!IsValid2D(lrResult))
     {
@@ -666,9 +661,9 @@ void RacingLineGenerator::GetSimpleHermite(Vector2 lInVectorA, Vector2 lInVector
         CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStream << "NAN rsult in simple hermite : h1=" << lfH1
                 << " h2=" << lfH2 << " h3=" << lfH3 << " In=";
-        lStream.AppendFormat("(%f, %f)", lInVector.x, lInVector.y);
+        lStream.AppendFormat("(%f, %f)", lInVector.mV.x, lInVector.mV.y);
         lStream << " Out=";
-        lStream.AppendFormat("(%f, %f)", lOutVector.x, lOutVector.y);
+        lStream.AppendFormat("(%f, %f)", lOutVector.mV.x, lOutVector.mV.y);
         lStream << "\n";
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, 1826);
@@ -728,8 +723,8 @@ f32 RacingLineGenerator::GetIterativeHermite(Vector2 lInVectorA, Vector2 lInVect
         FireStreamedTextAssert("Bad out vector\n", 1851);
     }
 
-    const f32 lfDeltaX  = lInVectorB.x - lInVectorA.x;
-    const f32 lfDeltaY  = lInVectorB.y - lInVectorA.y;
+    const f32 lfDeltaX  = lInVectorB.mV.x - lInVectorA.mV.x;
+    const f32 lfDeltaY  = lInVectorB.mV.y - lInVectorA.mV.y;
     const f32 lfLengthSq = (lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY);
 
     if (KF_ITERATIVE_HERMITE_MIN_CHORD_SQ > lfLengthSq)
@@ -748,11 +743,11 @@ f32 RacingLineGenerator::GetIterativeHermite(Vector2 lInVectorA, Vector2 lInVect
     f32 lfBestGuess = lInterp;
     for (s32 liIterate = 0; liIterate < KI_ITERATIVE_HERMITE_ITERATIONS; ++liIterate)
     {
-        const VecFloat lGuessVector = { lfBestGuess, lfBestGuess, lfBestGuess, lfBestGuess };
+        const VecFloat lGuessVector(lfBestGuess);
         GetSimpleHermite(lInVectorA, lInVectorB, lInVector, lOutVector, lGuessVector, lrResult);
 
-        const Vector2 lPointLine = Make2D(lrResult.x - lInVectorA.x, lrResult.y - lInVectorA.y);
-        const f32 lfNewInterp = (lVectorLine.x * lPointLine.x) + (lVectorLine.y * lPointLine.y);
+        const Vector2 lPointLine = Make2D(lrResult.mV.x - lInVectorA.mV.x, lrResult.mV.y - lInVectorA.mV.y);
+        const f32 lfNewInterp = (lVectorLine.mV.x * lPointLine.mV.x) + (lVectorLine.mV.y * lPointLine.mV.y);
         const f32 lfError     = lfNewInterp - lInterp;
 
         if (!(lfError == lfError))
@@ -762,9 +757,9 @@ f32 RacingLineGenerator::GetIterativeHermite(Vector2 lInVectorA, Vector2 lInVect
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << "'Error' is a NAN in iterative hermite lfBestGuess=" << lfBestGuess
                     << " liIterate=" << liIterate << " lVectorLine=";
-            lStream.AppendFormat("(%f, %f)", lVectorLine.x, lVectorLine.y);
+            lStream.AppendFormat("(%f, %f)", lVectorLine.mV.x, lVectorLine.mV.y);
             lStream << " lPointLine=";
-            lStream.AppendFormat("(%f, %f)", lPointLine.x, lPointLine.y);
+            lStream.AppendFormat("(%f, %f)", lPointLine.mV.x, lPointLine.mV.y);
             lStream << " lNewInterp=" << lfNewInterp << " lInterp=" << lInterp << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, 1899);
@@ -788,15 +783,15 @@ f32 RacingLineGenerator::GetIterativeHermite(Vector2 lInVectorA, Vector2 lInVect
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << "NAN in iterative hermite :Iteration" << liIterate
                     << " lError " << lfError << " vertA=";
-            lStream.AppendFormat("(%f, %f)", lInVectorA.x, lInVectorA.y);
+            lStream.AppendFormat("(%f, %f)", lInVectorA.mV.x, lInVectorA.mV.y);
             lStream << " vertB=";
-            lStream.AppendFormat("(%f, %f)", lInVectorB.x, lInVectorB.y);
+            lStream.AppendFormat("(%f, %f)", lInVectorB.mV.x, lInVectorB.mV.y);
             lStream << " In=";
-            lStream.AppendFormat("(%f, %f)", lInVector.x, lInVector.y);
+            lStream.AppendFormat("(%f, %f)", lInVector.mV.x, lInVector.mV.y);
             lStream << " Out=";
-            lStream.AppendFormat("(%f, %f)", lOutVector.x, lOutVector.y);
+            lStream.AppendFormat("(%f, %f)", lOutVector.mV.x, lOutVector.mV.y);
             lStream << " Result=";
-            lStream.AppendFormat("(%f, %f)", lrResult.x, lrResult.y);
+            lStream.AppendFormat("(%f, %f)", lrResult.mV.x, lrResult.mV.y);
             lStream << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, 1906);
@@ -810,7 +805,7 @@ f32 RacingLineGenerator::GetIterativeHermite(Vector2 lInVectorA, Vector2 lInVect
         return 0.0f;
     }
 
-    const VecFloat lFinalVector = { lfBestGuess, lfBestGuess, lfBestGuess, lfBestGuess };
+    const VecFloat lFinalVector(lfBestGuess);
     GetSimpleHermite(lInVectorA, lInVectorB, lInVector, lOutVector, lFinalVector, lrResult);
     return lfBestGuess;
 }
@@ -834,20 +829,20 @@ f32 RacingLineGenerator::GetSectionInterpPosition(RacingLine* lpRacingLine, s32 
     const Vector2 lEntrance = lpSectionData->GetSectionEntrance();
     const Vector2 lExit     = lpSectionData->GetSectionExit();
 
-    const f32 lfAxisX = lExit.x - lEntrance.x;
-    const f32 lfAxisY = lExit.y - lEntrance.y;
-
-    if (IsZero2D(lfAxisX, lfAxisY))
-    {
+    // ARTIST 82781640..8174C: packed deltas, dot products and reciprocal refinement.
+    const __vector4 lAxis = __vsubfp(lExit.mV, lEntrance.mV);
+    if (IsZero2D(lAxis.x, lAxis.y))
         return 0.0f;
-    }
-
-    const f32 lfFromEntranceX = lPosition.x - lEntrance.x;
-    const f32 lfFromEntranceY = lPosition.y - lEntrance.y;
-
-    const f32 lfAxisLengthSq = (lfAxisX * lfAxisX) + (lfAxisY * lfAxisY);
-    const f32 lfProjection   = (lfAxisX * lfFromEntranceX) + (lfAxisY * lfFromEntranceY);
-    const f32 lfInterp       = lfProjection / lfAxisLengthSq;
+    const __vector4 lFromEntrance = __vsubfp(lPosition.mV, lEntrance.mV);
+    const __vector4 lAxisSquare = __vmulfp(lAxis, lAxis);
+    const __vector4 lAxisLength = __vaddfp(__vspltw(lAxisSquare, 0), __vspltw(lAxisSquare, 1));
+    const __vector4 lProduct = __vmulfp(lAxis, lFromEntrance);
+    const __vector4 lProjection = __vaddfp(__vspltw(lProduct, 0), __vspltw(lProduct, 1));
+    const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+    __vector4 lReciprocal = __vrefp(lAxisLength);
+    lReciprocal = __vmaddfp(lReciprocal, __vnmsubfp(lReciprocal, lAxisLength, lOne), lReciprocal);
+    lReciprocal = __vmaddfp(lReciprocal, __vnmsubfp(lReciprocal, lAxisLength, lOne), lReciprocal);
+    const f32 lfInterp = __vmulfp(lReciprocal, lProjection).x;
 
     if (!(lfInterp == lfInterp))
     {
@@ -925,10 +920,9 @@ void RacingLineGenerator::GetRouteCentre(RacingLine* lpRacingLine, s32 liSection
 
     lpSectionData->mHardNoGoMap.FindMaximalEdges(lLeftEdge, lRightEdge, 1.0f);
 
-    lrCentre.x = (lLeftEdge.x + lRightEdge.x) * 0.5f;
-    lrCentre.y = (lLeftEdge.y + lRightEdge.y) * 0.5f;
-    lrCentre.z = (lLeftEdge.z + lRightEdge.z) * 0.5f;
-    lrCentre.w = (lLeftEdge.w + lRightEdge.w) * 0.5f;
+    // ARTIST 8278F510/534: packed add followed by packed multiply.
+    const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+    lrCentre.mV = __vmulfp(__vaddfp(lLeftEdge.mV, lRightEdge.mV), lHalf);
 }
 
 // =================================================================================================
@@ -985,31 +979,30 @@ void RacingLineGenerator::CalculateIntersectionWithProjectedRoute(RacingLine* lp
     Vector2 lIntersection;
     if (!lbIntersects || lfRouteParam < 0.0f || lfRouteParam > 1.0f)
     {
-        lIntersection.x = (lLeftEdge.x + lRightEdge.x) * 0.5f;
-        lIntersection.y = (lLeftEdge.y + lRightEdge.y) * 0.5f;
-        lIntersection.z = (lLeftEdge.z + lRightEdge.z) * 0.5f;
-        lIntersection.w = (lLeftEdge.w + lRightEdge.w) * 0.5f;
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        lIntersection.mV = __vmulfp(__vaddfp(lLeftEdge.mV, lRightEdge.mV), lHalf);
     }
     else if (lfEdgeParam < 0.0f)
     {
-        lIntersection.x = lLeftEdge.x + ((lRightEdge.x - lLeftEdge.x) * KF_ROUTE_EDGE_INSET);
-        lIntersection.y = lLeftEdge.y + ((lRightEdge.y - lLeftEdge.y) * KF_ROUTE_EDGE_INSET);
-        lIntersection.z = lLeftEdge.z + ((lRightEdge.z - lLeftEdge.z) * KF_ROUTE_EDGE_INSET);
-        lIntersection.w = lLeftEdge.w + ((lRightEdge.w - lLeftEdge.w) * KF_ROUTE_EDGE_INSET);
+        __vector4 lInset;
+        lInset.x = KF_ROUTE_EDGE_INSET;
+        lIntersection.mV = __vmaddfp(__vsubfp(lRightEdge.mV, lLeftEdge.mV),
+                                      __vspltw(lInset, 0), lLeftEdge.mV);
     }
     else if (lfEdgeParam > 1.0f)
     {
-        lIntersection.x = lRightEdge.x + ((lLeftEdge.x - lRightEdge.x) * KF_ROUTE_EDGE_INSET);
-        lIntersection.y = lRightEdge.y + ((lLeftEdge.y - lRightEdge.y) * KF_ROUTE_EDGE_INSET);
-        lIntersection.z = lRightEdge.z + ((lLeftEdge.z - lRightEdge.z) * KF_ROUTE_EDGE_INSET);
-        lIntersection.w = lRightEdge.w + ((lLeftEdge.w - lRightEdge.w) * KF_ROUTE_EDGE_INSET);
+        __vector4 lInset;
+        lInset.x = KF_ROUTE_EDGE_INSET;
+        lIntersection.mV = __vmaddfp(__vsubfp(lLeftEdge.mV, lRightEdge.mV),
+                                      __vspltw(lInset, 0), lRightEdge.mV);
     }
     else
     {
-        lIntersection.x = lFrom.x + ((lTo.x - lFrom.x) * lfRouteParam);
-        lIntersection.y = lFrom.y + ((lTo.y - lFrom.y) * lfRouteParam);
-        lIntersection.z = lFrom.z + ((lTo.z - lFrom.z) * lfRouteParam);
-        lIntersection.w = lFrom.w + ((lTo.w - lFrom.w) * lfRouteParam);
+        __vector4 lParam;
+        lParam.x = lfRouteParam;
+        // VMX128 vmaddcfp at 8278F374; XDK xboxmath.h maps it to __vmaddfp.
+        lIntersection.mV = __vmaddfp(__vsubfp(lTo.mV, lFrom.mV),
+                                      __vspltw(lParam, 0), lFrom.mV);
     }
 
     lrEntry.SetSectionExit(lIntersection);
@@ -1042,14 +1035,14 @@ void RacingLineGenerator::GenerateInOutVectors(RacingLine* lpRacingLine, s32 liS
     const Vector2 lEntrance = lpSectionData->GetSectionEntrance();
     const Vector2 lExit     = lpSectionData->GetSectionExit();
 
-    if (IsSimilar2D(lEntrance.x, lEntrance.y, lExit.x, lExit.y))
+    if (IsSimilar2D(lEntrance.mV.x, lEntrance.mV.y, lExit.mV.x, lExit.mV.y))
     {
         lrInVector.SetZero();
         lrOutVector.SetZero();
         return;
     }
 
-    const f32 lfChordLength = Magnitude2D(lEntrance.x - lExit.x, lEntrance.y - lExit.y);
+    const f32 lfChordLength = Magnitude2D(lEntrance.mV.x - lExit.mV.x, lEntrance.mV.y - lExit.mV.y);
     const f32 lfScale = (lfChordLength > KF_IN_OUT_VECTOR_MAX_LENGTH)
                             ? KF_IN_OUT_VECTOR_MAX_LENGTH
                             : lfChordLength;
@@ -1060,29 +1053,29 @@ void RacingLineGenerator::GenerateInOutVectors(RacingLine* lpRacingLine, s32 liS
         const SectionData* lpPrevious = GetSectionPointer(lpRacingLine, liSectionIndex - 1);
         const Vector2 lPreviousEntrance = lpPrevious->GetSectionEntrance();
 
-        if (IsSimilar2D(lEntrance.x, lEntrance.y, lPreviousEntrance.x, lPreviousEntrance.y))
+        if (IsSimilar2D(lEntrance.mV.x, lEntrance.mV.y, lPreviousEntrance.mV.x, lPreviousEntrance.mV.y))
         {
-            lrInVector = Make2D(lExit.x - lEntrance.x, lExit.y - lEntrance.y);
+            lrInVector = Make2D(lExit.mV.x - lEntrance.mV.x, lExit.mV.y - lEntrance.mV.y);
         }
         else
         {
-            lrInVector = Make2D(lEntrance.x - lPreviousEntrance.x,
-                                lEntrance.y - lPreviousEntrance.y);
+            lrInVector = Make2D(lEntrance.mV.x - lPreviousEntrance.mV.x,
+                                lEntrance.mV.y - lPreviousEntrance.mV.y);
         }
     }
     else
     {
-        lrInVector = Make2D(lExit.x - lEntrance.x, lExit.y - lEntrance.y);
+        lrInVector = Make2D(lExit.mV.x - lEntrance.mV.x, lExit.mV.y - lEntrance.mV.y);
     }
 
-    if (IsZero2D(lrInVector.x, lrInVector.y))
+    if (IsZero2D(lrInVector.mV.x, lrInVector.mV.y))
     {
         FireStreamedTextAssert("!RwMath::IsZero(lInVector)", 1984);
     }
 
     {
-        const Vector2 lNormalised = Normalise2D(lrInVector.x, lrInVector.y);
-        lrInVector = Make2D(lNormalised.x * lfScale, lNormalised.y * lfScale);
+        const Vector2 lNormalised = Normalise2D(lrInVector.mV.x, lrInVector.mV.y);
+        lrInVector = Make2D(lNormalised.mV.x * lfScale, lNormalised.mV.y * lfScale);
     }
 
     // ---- the outgoing tangent ------------------------------------------------------------
@@ -1091,28 +1084,28 @@ void RacingLineGenerator::GenerateInOutVectors(RacingLine* lpRacingLine, s32 liS
         const SectionData* lpNext = GetSectionPointer(lpRacingLine, liSectionIndex + 1);
         const Vector2 lNextExit = lpNext->GetSectionExit();
 
-        if (IsSimilar2D(lExit.x, lExit.y, lNextExit.x, lNextExit.y))
+        if (IsSimilar2D(lExit.mV.x, lExit.mV.y, lNextExit.mV.x, lNextExit.mV.y))
         {
-            lrOutVector = Make2D(lExit.x - lEntrance.x, lExit.y - lEntrance.y);
+            lrOutVector = Make2D(lExit.mV.x - lEntrance.mV.x, lExit.mV.y - lEntrance.mV.y);
         }
         else
         {
-            lrOutVector = Make2D(lNextExit.x - lExit.x, lNextExit.y - lExit.y);
+            lrOutVector = Make2D(lNextExit.mV.x - lExit.mV.x, lNextExit.mV.y - lExit.mV.y);
         }
     }
     else
     {
-        lrOutVector = Make2D(lExit.x - lEntrance.x, lExit.y - lEntrance.y);
+        lrOutVector = Make2D(lExit.mV.x - lEntrance.mV.x, lExit.mV.y - lEntrance.mV.y);
     }
 
-    if (IsZero2D(lrOutVector.x, lrOutVector.y))
+    if (IsZero2D(lrOutVector.mV.x, lrOutVector.mV.y))
     {
         FireStreamedTextAssert("!RwMath::IsZero(lOutVector)", 2010);
     }
 
     {
-        const Vector2 lNormalised = Normalise2D(lrOutVector.x, lrOutVector.y);
-        lrOutVector = Make2D(lNormalised.x * lfScale, lNormalised.y * lfScale);
+        const Vector2 lNormalised = Normalise2D(lrOutVector.mV.x, lrOutVector.mV.y);
+        lrOutVector = Make2D(lNormalised.mV.x * lfScale, lNormalised.mV.y * lfScale);
     }
 }
 
@@ -1256,7 +1249,7 @@ bool RacingLineGenerator::GetCentreCentreLineHere(RacingLine* lpRacingLine, Vect
         const Vector2 lEntrance = lpSectionData->GetSectionEntrance();
         const Vector2 lExit     = lpSectionData->GetSectionExit();
 
-        if (IsSimilar2D(lEntrance.x, lEntrance.y, lExit.x, lExit.y))
+        if (IsSimilar2D(lEntrance.mV.x, lEntrance.mV.y, lExit.mV.x, lExit.mV.y))
         {
             continue;
         }
@@ -1272,8 +1265,8 @@ bool RacingLineGenerator::GetCentreCentreLineHere(RacingLine* lpRacingLine, Vect
         const f32 lfCurveInterp = GetIterativeHermite(lEntrance, lExit, lInVector, lOutVector,
                                                       lfClampedInterp, lPointOnCurve);
 
-        const f32 lfDistance = Magnitude2D(lPointOnCurve.x - lTargetPos2D.x,
-                                           lPointOnCurve.y - lTargetPos2D.y);
+        const f32 lfDistance = Magnitude2D(lPointOnCurve.mV.x - lTargetPos2D.mV.x,
+                                           lPointOnCurve.mV.y - lTargetPos2D.mV.y);
         if (lfDistance > lfBestDistance)
         {
             continue;
@@ -1290,18 +1283,15 @@ bool RacingLineGenerator::GetCentreCentreLineHere(RacingLine* lpRacingLine, Vect
             lbMirrorAhead = true;
         }
 
-        const VecFloat lAheadVector = { lfAheadInterp, lfAheadInterp,
-                                        lfAheadInterp, lfAheadInterp };
+        const VecFloat lAheadVector(lfAheadInterp);
         GetSimpleHermite(lEntrance, lExit, lInVector, lOutVector, lAheadVector, lrCentreAhead);
 
         if (lbMirrorAhead)
         {
             // 0x8278EBB4: ahead = here - (ahead - here) -- reflect the backwards sample
             // through the "here" point so the direction still leads forwards.
-            lrCentreAhead.x = lrCentreHere.x - (lrCentreAhead.x - lrCentreHere.x);
-            lrCentreAhead.y = lrCentreHere.y - (lrCentreAhead.y - lrCentreHere.y);
-            lrCentreAhead.z = lrCentreHere.z - (lrCentreAhead.z - lrCentreHere.z);
-            lrCentreAhead.w = lrCentreHere.w - (lrCentreAhead.w - lrCentreHere.w);
+            lrCentreAhead.mV = __vsubfp(lrCentreHere.mV,
+                                         __vsubfp(lrCentreAhead.mV, lrCentreHere.mV));
         }
     }
 
@@ -1459,10 +1449,8 @@ void RacingLineGenerator::SetupSectionExit(RacingLine* lpRacingLine, s32 liNodeI
     // Midpoint of the two maximal edges (flt_820C4168 == 0.5f). The vaddfp/vmulfp combine all
     // four SIMD lanes; SetSectionExit only consumes x and y.
     Vector2 lMidPoint;
-    lMidPoint.x = (lLeftEdge.x + lRightEdge.x) * 0.5f;
-    lMidPoint.y = (lLeftEdge.y + lRightEdge.y) * 0.5f;
-    lMidPoint.z = (lLeftEdge.z + lRightEdge.z) * 0.5f;
-    lMidPoint.w = (lLeftEdge.w + lRightEdge.w) * 0.5f;
+    lMidPoint.mV = __vmulfp(__vaddfp(lLeftEdge.mV, lRightEdge.mV),
+                              __vcfsx(__vspltisw(1), 1));
 
     lpCurrentSectionData->SetSectionExit(lMidPoint);
 }
