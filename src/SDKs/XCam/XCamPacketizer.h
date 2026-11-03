@@ -64,14 +64,7 @@
 namespace XCAM
 {
 
-// ---- raw Xbox 360 XDK heap API (platform externs) -----------------------------------
-// The asm calls XMemAlloc(SIZE_T,DWORD)->LPVOID / XMemFree(LPVOID,DWORD) directly
-// (r3=size/pAddress, r4=attributes), matching the sibling rwmovie codec TUs.
-extern void* XMemAlloc(u32 uSize, u32 uAttributes);
-extern void  XMemFree(void* pAddress, u32 uAttributes);
-
-// Win32/X360 millisecond tick used to timestamp the stream (lis/ori attr aside).
-
+// XMemAlloc, XMemFree and GetTickCount come from the XDK.
 
 // XMemAlloc/XMemFree attribute word for the packetizer buffers (lis 0x6090 / ori 0x2068).
 static const u32 KU_PACKETIZER_XMEM_ATTRIBUTES = 0x60902068u;

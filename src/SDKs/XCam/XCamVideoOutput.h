@@ -46,6 +46,11 @@
 #include "types.hpp"
 #include <xtl.h>
 
+// Kernel import ABI is attested by ARTIST's calls and xboxkrnl.lib imports.
+// XDK exposes KSPIN_LOCK but not these kernel declarations.
+extern "C" unsigned char KfAcquireSpinLock(KSPIN_LOCK* pSpinLock);
+extern "C" void KfReleaseSpinLock(KSPIN_LOCK* pSpinLock, unsigned char uNewIrql);
+
 namespace XCAM
 {
 
@@ -55,12 +60,6 @@ using ::D3DResource;
 using ::D3DVertexBuffer;
 using ::D3DVertexDeclaration;
 using ::D3DVertexShader;
-
-// --- Xbox-360 kernel spin-lock primitives (platform boundary) --------------
-typedef u32 KSPIN_LOCK;
-typedef u8  KIRQL;
-KIRQL KfAcquireSpinLock(KSPIN_LOCK* pSpinLock);
-void  KfReleaseSpinLock(KSPIN_LOCK* pSpinLock, KIRQL uNewIrql);
 
 // The attribute word baked into the no-device Shutdown path (`lis r4,0x6090 ;
 // ori r4,r4,0x2068` -> 0x60902068) when freeing a ring block through XMemFree.

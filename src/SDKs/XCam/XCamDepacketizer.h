@@ -53,6 +53,7 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include <xtl.h>
 #include "SDKs/XCam/XCamOverlappedIO.h"
 
 namespace XCAM
@@ -60,11 +61,8 @@ namespace XCAM
 
 // ---- raw Xbox 360 XDK heap + timing API (platform boundary) -----------------
 // The asm calls XMemAlloc(SIZE_T,DWORD)->LPVOID / XMemFree(LPVOID,DWORD) and the
-// Win32/X360 QueryPerformance* directly. Supplied by the platform layer; NOT
-// reconstructed here. (XMemAlloc/XMemFree already declared by the sibling XCam
-// headers; re-declared identically here for a standalone include.)
-extern void* XMemAlloc(u32 uSize, u32 uAttributes);
-extern void  XMemFree(void* pAddress, u32 uAttributes);
+// XMemAlloc/XMemFree use the XDK declarations. QueryPerformance declarations
+// retain the existing reconstruction pending a separate API review.
 extern "C" u8 QueryPerformanceCounter(s64* pCount);
 extern "C" u8 QueryPerformanceFrequency(s64* pFrequency);
 
