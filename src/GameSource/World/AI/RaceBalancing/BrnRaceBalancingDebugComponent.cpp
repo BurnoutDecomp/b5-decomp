@@ -48,8 +48,8 @@ namespace
     // The speed-ratio graph (top-left): a 150x100 frame whose origin (bottom-left, screen coords) is
     // (200,180). The speed ratio (0..1) is drawn as 0..100 up the Y axis (y = 180 - ratio*100); the
     // race-progress fraction (0..1) is drawn 0..150 along the X axis (x = 200 + frac*150).
-    const Vector2 KV2_SPEED_GRAPH_ORIGIN = { 200.0f, 180.0f, 0.0f, 0.0f }; // *&v308 / *(&v308+1)
-    const Vector2 KV2_SPEED_GRAPH_SIZE   = { 150.0f, 100.0f, 0.0f, 0.0f }; // v302 / v303
+    const Vector2 KV2_SPEED_GRAPH_ORIGIN(200.0f, 180.0f); // *&v308 / *(&v308+1)
+    const Vector2 KV2_SPEED_GRAPH_SIZE(150.0f, 100.0f);   // v302 / v303
     const f32 KF_SPEED_GRAPH_ORIGIN_X = 200.0f;
     const f32 KF_SPEED_GRAPH_ORIGIN_Y = 180.0f;
     const f32 KF_SPEED_GRAPH_WIDTH    = 150.0f;
@@ -60,8 +60,8 @@ namespace
     const f32 KF_SPEED_GRAPH_STEP     = 1.0f / 24.0f; // 0.041666668
 
     // The race-balancing time graph (bottom-right): a 400x400 frame with origin (700,480).
-    const Vector2 KV2_TIME_GRAPH_ORIGIN = { 700.0f, 480.0f, 0.0f, 0.0f }; // v302 / v303
-    const Vector2 KV2_TIME_GRAPH_SIZE   = { 400.0f, 400.0f, 0.0f, 0.0f }; // v305 / v306
+    const Vector2 KV2_TIME_GRAPH_ORIGIN(700.0f, 480.0f); // v302 / v303
+    const Vector2 KV2_TIME_GRAPH_SIZE(400.0f, 400.0f);   // v305 / v306
     const f32 KF_TIME_GRAPH_ORIGIN_X  = 700.0f;
     const f32 KF_TIME_GRAPH_ORIGIN_Y  = 480.0f;
     const f32 KF_TIME_GRAPH_WIDTH     = 400.0f;
@@ -168,7 +168,7 @@ void RaceBalancingDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lp
 
     // Lift the marker 2 units up the Y axis above the car position (offset (0,2,0)).
     Vector3 lv3Centre = lpCar->GetPosition();
-    lv3Centre.y += 2.0f;            // flt_820C41F4 == 2.0 (added to the y lane)
+    lv3Centre.SetY(lv3Centre.GetY().GetFloat() + 2.0f); // flt_820C41F4 == 2.0 (added to the y lane)
 
     // ARTIST passes 0xFF0000FF. rw::RGBA packs (alpha<<24)|(blue<<16)|(green<<8)|red, so this is
     // the same packed value for red (255,0,0,255).
@@ -187,23 +187,24 @@ void RaceBalancingDebugComponent::DrawGraphFrame(CgsDev::Debug2DImmediateRender*
                                                  const char* lpcXAxisLabel, const char* lpcYAxisLabel)
 {
     // X axis: a horizontal white line along the bottom of the frame.
-    const Vector2 lv2XAxisEnd = { lv2Origin.x + lv2Size.x, lv2Origin.y, 0.0f, 0.0f };
+    const Vector2 lv2XAxisEnd(lv2Origin.mV.x + lv2Size.mV.x, lv2Origin.mV.y);
     lpDisplay->DrawLine(lv2Origin, lv2XAxisEnd, K_WHITE);
 
     // Y axis: a vertical white line up the left edge (screen-y decreases upward).
-    const Vector2 lv2YAxisEnd = { lv2Origin.x, lv2Origin.y - lv2Size.y, 0.0f, 0.0f };
+    const Vector2 lv2YAxisEnd(lv2Origin.mV.x, lv2Origin.mV.y - lv2Size.mV.y);
     lpDisplay->DrawLine(lv2Origin, lv2YAxisEnd, K_WHITE);
 
     // The plot-area background (external helper sub_8281C3E0; bodied in its own TU).
-    DrawGraphBackground(lpDisplay, lv2Origin.x, lv2Origin.y, lv2Size.x, lv2Size.y);
+    DrawGraphBackground(lpDisplay, lv2Origin.mV.x, lv2Origin.mV.y,
+                        lv2Size.mV.x, lv2Size.mV.y);
 
     // The two axis-name labels, offset from the origin (DrawGraphFrame @0x827747F8). X-label:
     // (origin.x + 50, origin.y + 10) -- vaddfp, asm-confirmed. Y-label: (origin.x - 50,
     // origin.y - flt_820C3FAC) -- vsubfp origin.x - var_70(=50.0) @0x827749F0, vsubfp origin.y -
     // flt_820C3FAC @0x827749FC. Raw word 0x42C80000 pins flt_820C3FAC as 100.0.
-    MaybeDrawText(lpDisplay, lpcXAxisLabel, lv2Origin.x + 50.0f, lv2Origin.y + 10.0f,
+    MaybeDrawText(lpDisplay, lpcXAxisLabel, lv2Origin.mV.x + 50.0f, lv2Origin.mV.y + 10.0f,
                   KF_TEXT_SCALE, K_WHITE, false);
-    MaybeDrawText(lpDisplay, lpcYAxisLabel, lv2Origin.x - 50.0f, lv2Origin.y - 100.0f,
+    MaybeDrawText(lpDisplay, lpcYAxisLabel, lv2Origin.mV.x - 50.0f, lv2Origin.mV.y - 100.0f,
                   KF_TEXT_SCALE, K_WHITE, false);
 }
 
@@ -273,12 +274,12 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
             const f32 lfAheadA = lrGraph.ComputeSpeedRatio(E_GRAPH_TYPE_AHEAD, lfFractionA) * 100.0f;
             const f32 lfAheadB = lrGraph.ComputeSpeedRatio(E_GRAPH_TYPE_AHEAD, lfFractionB) * 100.0f;
 
-            const Vector2 lv2BehindA = { lfXA, KF_SPEED_GRAPH_ORIGIN_Y - lfBehindA, 0.0f, 0.0f };
-            const Vector2 lv2BehindB = { lfXB, KF_SPEED_GRAPH_ORIGIN_Y - lfBehindB, 0.0f, 0.0f };
+            const Vector2 lv2BehindA(lfXA, KF_SPEED_GRAPH_ORIGIN_Y - lfBehindA);
+            const Vector2 lv2BehindB(lfXB, KF_SPEED_GRAPH_ORIGIN_Y - lfBehindB);
             lpDisplay->DrawLine(lv2BehindA, lv2BehindB, K_BLUE);
 
-            const Vector2 lv2AheadA = { lfXA, KF_SPEED_GRAPH_ORIGIN_Y - lfAheadA, 0.0f, 0.0f };
-            const Vector2 lv2AheadB = { lfXB, KF_SPEED_GRAPH_ORIGIN_Y - lfAheadB, 0.0f, 0.0f };
+            const Vector2 lv2AheadA(lfXA, KF_SPEED_GRAPH_ORIGIN_Y - lfAheadA);
+            const Vector2 lv2AheadB(lfXB, KF_SPEED_GRAPH_ORIGIN_Y - lfAheadB);
             lpDisplay->DrawLine(lv2AheadA, lv2AheadB, K_GREEN);
         }
 
@@ -310,8 +311,8 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
 
             // A vertical white tick at the live completion fraction, from the baseline up 100 units.
             const f32 lfX = lfCompletionRatio * KF_SPEED_GRAPH_WIDTH + KF_SPEED_GRAPH_ORIGIN_X;
-            const Vector2 lv2TickTop = { lfX, 80.0f, 0.0f, 0.0f };
-            const Vector2 lv2TickBottom = { lfX, KF_SPEED_GRAPH_ORIGIN_Y, 0.0f, 0.0f };
+            const Vector2 lv2TickTop(lfX, 80.0f);
+            const Vector2 lv2TickBottom(lfX, KF_SPEED_GRAPH_ORIGIN_Y);
             lpDisplay->DrawLine(lv2TickTop, lv2TickBottom, K_WHITE);
 
             lStream.Reset();
@@ -478,15 +479,15 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     // white line at the marker X, and a red circle at their crossing.
     const f32 lfMarkerY = KF_TIME_GRAPH_ORIGIN_Y - lfMarkerYOffset;
 
-    const Vector2 lv2MarkerVTop = { lfMarkerX, 80.0f, 0.0f, 0.0f };
-    const Vector2 lv2MarkerVBottom = { lfMarkerX, KF_TIME_GRAPH_ORIGIN_Y, 0.0f, 0.0f };
+    const Vector2 lv2MarkerVTop(lfMarkerX, 80.0f);
+    const Vector2 lv2MarkerVBottom(lfMarkerX, KF_TIME_GRAPH_ORIGIN_Y);
     lpDisplay->DrawLine(lv2MarkerVTop, lv2MarkerVBottom, K_WHITE);
 
-    const Vector2 lv2MarkerHLeft = { KF_TIME_GRAPH_ORIGIN_X, lfMarkerY, 0.0f, 0.0f };
-    const Vector2 lv2MarkerHRight = { 1100.0f, lfMarkerY, 0.0f, 0.0f };
+    const Vector2 lv2MarkerHLeft(KF_TIME_GRAPH_ORIGIN_X, lfMarkerY);
+    const Vector2 lv2MarkerHRight(1100.0f, lfMarkerY);
     lpDisplay->DrawLine(lv2MarkerHLeft, lv2MarkerHRight, K_WHITE);
 
-    const Vector2 lv2MarkerCentre = { lfMarkerX, lfMarkerY, 0.0f, 0.0f };
+    const Vector2 lv2MarkerCentre(lfMarkerX, lfMarkerY);
     lpDisplay->DrawCircle(lv2MarkerCentre, KF_RACE_MARKER_RADIUS, KI_RACE_MARKER_SEGMENTS, K_RED);
 
     if (liTimeCount <= 0)
@@ -513,13 +514,13 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         const f32 lfXCur = static_cast<f32>(liIndex) * lfXStep + KF_TIME_GRAPH_ORIGIN_X;
 
         // AHEAD curve -> green.
-        const Vector2 lv2AheadPrev = { lfXPrev, KF_TIME_GRAPH_ORIGIN_Y - lfPrevAhead * lfYStep, 0.0f, 0.0f };
-        const Vector2 lv2AheadCur = { lfXCur, KF_TIME_GRAPH_ORIGIN_Y - lfAhead * lfYStep, 0.0f, 0.0f };
+        const Vector2 lv2AheadPrev(lfXPrev, KF_TIME_GRAPH_ORIGIN_Y - lfPrevAhead * lfYStep);
+        const Vector2 lv2AheadCur(lfXCur, KF_TIME_GRAPH_ORIGIN_Y - lfAhead * lfYStep);
         lpDisplay->DrawLine(lv2AheadPrev, lv2AheadCur, K_GREEN);
 
         // BEHIND curve -> blue.
-        const Vector2 lv2BehindPrev = { lfXPrev, KF_TIME_GRAPH_ORIGIN_Y - lfPrevBehind * lfYStep, 0.0f, 0.0f };
-        const Vector2 lv2BehindCur = { lfXCur, KF_TIME_GRAPH_ORIGIN_Y - lfBehind * lfYStep, 0.0f, 0.0f };
+        const Vector2 lv2BehindPrev(lfXPrev, KF_TIME_GRAPH_ORIGIN_Y - lfPrevBehind * lfYStep);
+        const Vector2 lv2BehindCur(lfXCur, KF_TIME_GRAPH_ORIGIN_Y - lfBehind * lfYStep);
         lpDisplay->DrawLine(lv2BehindPrev, lv2BehindCur, K_BLUE);
 
         lfPrevBehind = lfBehind;
@@ -530,12 +531,12 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         {
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_AHEAD, liIndex)) << "s";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2AheadPrev.y - 24.0f,
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2AheadPrev.mV.y - 24.0f,
                           KF_TEXT_SCALE, K_WHITE, false);
 
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_BEHIND, liIndex)) << "s";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2BehindPrev.y + 8.0f,
+            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2BehindPrev.mV.y + 8.0f,
                           KF_TEXT_SCALE, K_WHITE, false);
         }
     }

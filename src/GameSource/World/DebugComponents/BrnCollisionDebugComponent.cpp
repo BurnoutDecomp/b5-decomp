@@ -36,16 +36,6 @@ namespace
         return lColour;
     }
 
-    Vector3 AddPositions(Vector3 lA, Vector3 lB)
-    {
-        { const Vector3 lResult = {lA.x + lB.x, lA.y + lB.y, lA.z + lB.z, 0.0f}; return lResult; }
-    }
-
-    Vector3 Scale(Vector3 lValue, f32 lfScale)
-    {
-        { const Vector3 lResult = {lValue.x * lfScale, lValue.y * lfScale,
-                       lValue.z * lfScale, 0.0f}; return lResult; }
-    }
 }
 
 // ARTIST 0x822F9F40. BaseCollisionGenerator::Destruct, called at entry by the
@@ -222,10 +212,13 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
     CGS_ASSERT(liNumPolyPoints >= 2, "liNumPolyPoints >= 2");
 
     Vector3 laPoints[4];
+    const f32 lfNormalOffset = 0.05f;
+    const rw::math::vpu::VectorIntrinsic lvfNormalOffset =
+        __vspltw(__lvlx(&lfNormalOffset, 0), 0);
     for (s32 liPoint = 0; liPoint < 4; ++liPoint)
     {
-        const Vector3 lOffset = Scale(lNormal, 0.05f);
-        laPoints[liPoint] = AddPositions(lpaPolyPoints[liPoint], lOffset);
+        laPoints[liPoint] = Vector3(__vmaddfp(lNormal.mV, lvfNormalOffset,
+                                              lpaPolyPoints[liPoint].mV));
     }
 
     // ARTIST 0x822EE884/0x822EE8A4 stores the high half at material +2 and
@@ -245,8 +238,11 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
         }
         lpDisplay->DrawQuad(laPoints[0], laPoints[1], laPoints[3], laPoints[2],
                             RenderColour(0xFFFFFFFFu));
-        lPolyCentre = Scale(AddPositions(AddPositions(laPoints[0], laPoints[1]),
-                                AddPositions(laPoints[2], laPoints[3])), 0.25f);
+        const Vector3 lFirstPair(__vaddfp(laPoints[0].mV, laPoints[1].mV));
+        const Vector3 lSecondPair(__vaddfp(laPoints[2].mV, laPoints[3].mV));
+        const Vector3 lPointSum(__vaddfp(lFirstPair.mV, lSecondPair.mV));
+        const f32 lfQuarter = 0.25f;
+        lPolyCentre = Vector3(__vmulfp(lPointSum.mV, __vspltw(__lvlx(&lfQuarter, 0), 0)));
     }
     else if (liNumPolyPoints == 3)
     {
@@ -257,8 +253,10 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
         }
         lpDisplay->DrawHollowTriangle(laPoints[0], laPoints[1], laPoints[2],
                                       RenderColour(0xFFFFFFFFu));
-        lPolyCentre = Scale(AddPositions(AddPositions(laPoints[0], laPoints[1]), laPoints[2]),
-                            1.0f / 3.0f);
+        const Vector3 lFirstPair(__vaddfp(laPoints[0].mV, laPoints[1].mV));
+        const Vector3 lPointSum(__vaddfp(lFirstPair.mV, laPoints[2].mV));
+        const f32 lfThird = 1.0f / 3.0f;
+        lPolyCentre = Vector3(__vmulfp(lPointSum.mV, __vspltw(__lvlx(&lfThird, 0), 0)));
     }
     else
     {
@@ -268,17 +266,21 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
 
     if (sbDrawNormals)
     {
-        lpDisplay->DrawArrow(lPolyCentre, AddPositions(lPolyCentre, lNormal), RenderColour(0xFFFFFFFFu));
+        const Vector3 lNormalEnd(__vaddfp(lPolyCentre.mV, lNormal.mV));
+        lpDisplay->DrawArrow(lPolyCentre, lNormalEnd, RenderColour(0xFFFFFFFFu));
     }
 
     if (sbDrawTags)
     {
-        const Vector3 lTagPosition =
-            Scale(AddPositions(AddPositions(laPoints[0], laPoints[1]), laPoints[2]), 0.333f);
+        const Vector3 lFirstPair(__vaddfp(laPoints[0].mV, laPoints[1].mV));
+        const Vector3 lPointSum(__vaddfp(lFirstPair.mV, laPoints[2].mV));
+        const f32 lfThird = 0.333f;
+        const Vector3 lTagPosition(
+            __vmulfp(lPointSum.mV, __vspltw(__lvlx(&lfThird, 0), 0)));
         const Vector3 lCameraPosition = lpDisplay->GetCameraPosition();
-        const f32 lfDX = lTagPosition.x - lCameraPosition.x;
-        const f32 lfDY = lTagPosition.y - lCameraPosition.y;
-        const f32 lfDZ = lTagPosition.z - lCameraPosition.z;
+        const f32 lfDX = lTagPosition.GetX().GetFloat() - lCameraPosition.GetX().GetFloat();
+        const f32 lfDY = lTagPosition.GetY().GetFloat() - lCameraPosition.GetY().GetFloat();
+        const f32 lfDZ = lTagPosition.GetZ().GetFloat() - lCameraPosition.GetZ().GetFloat();
         if (sqrtf(lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ) < 20.0f)
         {
             CgsDev::SimpleStrStream lStream;

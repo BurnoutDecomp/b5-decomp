@@ -55,15 +55,6 @@ namespace
         "AwayFromPlayer",
     };
 
-    Vector3 Add(Vector3 lA, Vector3 lB)
-    {
-        { const Vector3 lResult = {lA.x + lB.x, lA.y + lB.y, lA.z + lB.z, 0.0f}; return lResult; }
-    }
-
-    Vector3 Scale(Vector3 lValue, f32 lfScale)
-    {
-        { const Vector3 lResult = {lValue.x * lfScale, lValue.y * lfScale, lValue.z * lfScale, 0.0f}; return lResult; }
-    }
 }
 
 // The two fixed rings and counters are initialized in this order by the inlined X360
@@ -168,18 +159,24 @@ void ResetOnTrackDebugComponent::PushResetInfo(
 
     const Vector3 lCarDirection = lpRequestCar->GetDirection();
     const Vector3 lResetDirection = lpResult->GetResetDirection();
+    const f32 lfCarDirectionX = lCarDirection.GetX().GetFloat();
+    const f32 lfCarDirectionY = lCarDirection.GetY().GetFloat();
+    const f32 lfCarDirectionZ = lCarDirection.GetZ().GetFloat();
+    const f32 lfResetDirectionX = lResetDirection.GetX().GetFloat();
+    const f32 lfResetDirectionY = lResetDirection.GetY().GetFloat();
+    const f32 lfResetDirectionZ = lResetDirection.GetZ().GetFloat();
     const f32 lfCarDirectionLength = sqrtf(
-        lCarDirection.x * lCarDirection.x +
-        lCarDirection.y * lCarDirection.y +
-        lCarDirection.z * lCarDirection.z);
+        lfCarDirectionX * lfCarDirectionX +
+        lfCarDirectionY * lfCarDirectionY +
+        lfCarDirectionZ * lfCarDirectionZ);
     const f32 lfResetDirectionLength = sqrtf(
-        lResetDirection.x * lResetDirection.x +
-        lResetDirection.y * lResetDirection.y +
-        lResetDirection.z * lResetDirection.z);
+        lfResetDirectionX * lfResetDirectionX +
+        lfResetDirectionY * lfResetDirectionY +
+        lfResetDirectionZ * lfResetDirectionZ);
     const f32 lfDirectionDot =
-        (lCarDirection.x * lResetDirection.x +
-         lCarDirection.y * lResetDirection.y +
-         lCarDirection.z * lResetDirection.z) /
+        (lfCarDirectionX * lfResetDirectionX +
+         lfCarDirectionY * lfResetDirectionY +
+         lfCarDirectionZ * lfResetDirectionZ) /
         (lfCarDirectionLength * lfResetDirectionLength);
 
     f32 lfClampedDot = lfDirectionDot;
@@ -194,9 +191,9 @@ void ResetOnTrackDebugComponent::PushResetInfo(
 
     const Vector3 lCarPosition = lpResult->GetResetPosition();
     const Vector3 lPlayerPosition = lpPlayerCar->GetPosition();
-    const f32 lfDX = lCarPosition.x - lPlayerPosition.x;
-    const f32 lfDY = lCarPosition.y - lPlayerPosition.y;
-    const f32 lfDZ = lCarPosition.z - lPlayerPosition.z;
+    const f32 lfDX = lCarPosition.GetX().GetFloat() - lPlayerPosition.GetX().GetFloat();
+    const f32 lfDY = lCarPosition.GetY().GetFloat() - lPlayerPosition.GetY().GetFloat();
+    const f32 lfDZ = lCarPosition.GetZ().GetFloat() - lPlayerPosition.GetZ().GetFloat();
 
     ResetEntry lEntry;
     lEntry.mRequest = *lpRequest;
@@ -220,11 +217,15 @@ void ResetOnTrackDebugComponent::PushHngTestInfo(
 
     HngTestEntry lEntry;
     {
-        const Vector3 lAggregateValue = {lStartPosition.x, lReferencePosition.y, lStartPosition.y, 0.0f};
+        const Vector3 lAggregateValue(lStartPosition.mV.x,
+                                      lReferencePosition.GetY().GetFloat(),
+                                      lStartPosition.mV.y);
         lEntry.mStartPosition = lAggregateValue;
     }
     {
-        const Vector3 lAggregateValue = {lEndPosition.x, lReferencePosition.y, lEndPosition.y, 0.0f};
+        const Vector3 lAggregateValue(lEndPosition.mV.x,
+                                      lReferencePosition.GetY().GetFloat(),
+                                      lEndPosition.mV.y);
         lEntry.mEndPosition = lAggregateValue;
     }
     lEntry.mbHit = lbHit;
@@ -327,7 +328,9 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
 
             const Vector3 lPosition = lpCar->GetPosition();
             const Vector3 lDirection = lpCar->GetDirection();
-            const Vector3 lEndPosition = Add(lPosition, Scale(lDirection, lfLineLength));
+            const Vector3 lScaledDirection(
+                __vmulfp(lDirection.mV, __vspltw(__lvlx(&lfLineLength, 0), 0)));
+            const Vector3 lEndPosition(__vaddfp(lPosition.mV, lScaledDirection.mV));
             const Vector2 lStart2D = BrnMath::Flatten(lPosition);
             const Vector2 lEnd2D = BrnMath::Flatten(lEndPosition);
             const AISection* lpSection =
@@ -395,16 +398,14 @@ void ResetOnTrackDebugComponent::DrawResetOnTrackAISection(
 
         lpDisplay->DrawLine(lStart, lEnd, RenderColour(lbIsPlayer ? K_GREEN : K_CYAN));
 
-        const Vector3 lStartExtent = {3.0f, 3.0f, 3.0f, 0.0f};
-        const Vector3 lEndExtent = {0.25f, 0.25f, 0.25f, 0.0f};
-        const Vector3 lStartMin = {lStart.x - lStartExtent.x,
-                                   lStart.y - lStartExtent.y,
-                                   lStart.z - lStartExtent.z, 0.0f};
-        const Vector3 lEndMin = {lEnd.x - lEndExtent.x,
-                                 lEnd.y - lEndExtent.y,
-                                 lEnd.z - lEndExtent.z, 0.0f};
-        lpDisplay->DrawSolidBox(lStartMin, Add(lStart, lStartExtent), RenderColour(0x800000FFu));
-        lpDisplay->DrawSolidBox(lEndMin, Add(lEnd, lEndExtent), RenderColour(0x80FF0000u));
+        const Vector3 lStartExtent(3.0f, 3.0f, 3.0f);
+        const Vector3 lEndExtent(0.25f, 0.25f, 0.25f);
+        const Vector3 lStartMin(__vsubfp(lStart.mV, lStartExtent.mV));
+        const Vector3 lStartMax(__vaddfp(lStart.mV, lStartExtent.mV));
+        const Vector3 lEndMin(__vsubfp(lEnd.mV, lEndExtent.mV));
+        const Vector3 lEndMax(__vaddfp(lEnd.mV, lEndExtent.mV));
+        lpDisplay->DrawSolidBox(lStartMin, lStartMax, RenderColour(0x800000FFu));
+        lpDisplay->DrawSolidBox(lEndMin, lEndMax, RenderColour(0x80FF0000u));
     }
 }
 
