@@ -60,7 +60,7 @@ namespace Deformation
     namespace
     {
         // gJVector @0x82181510 == (0, 1, 0, 0) -- the world up axis the roll gates dot against.
-        const Vector3 KV_AXIS_Y = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 KV_AXIS_Y(0.0f, 1.0f, 0.0f);
 
         // rw::math::fpu::EPSILON, lane 0 of stru_8208F620 == FLT_EPSILON (1.1920929e-07f).
         const f32 KF_RW_EPSILON = 1.1920928955078125e-07f;
@@ -89,30 +89,27 @@ namespace Deformation
             return lfValue > 0.0f ? 1.0f : (lfValue >= 0.0f ? 0.0f : -1.0f);
         }
 
-        // The deformation sensor's local-space sphere as {centre.xyz, radius.w}. The sensor
-        // holds a forward-declared BrnPhysics::Deformation::Sphere*; its leading 16 bytes are
-        // the same {xyz centre, w radius} vector CgsGeometric::Sphere carries (the
-        // BrnDeformableObject_BBox.cpp SphereVec precedent).
-        inline const Vector4& LocalSphereVec(const DeformationSensor& lrSensor)
+        // ARTIST 0x82604A84..0x82604A88 loads the complete packed sphere row.
+        inline Vector4 LocalSphereVec(const DeformationSensor& lrSensor)
         {
-            return *reinterpret_cast<const Vector4*>(lrSensor.GetLocalSpaceSphere());
+            return Vector4(lrSensor.GetLocalSpaceSphere()->mData.mV);
         }
 
         inline Vector3 SphereCentre(const Vector4& lrPosRadius)
         {
-            return Vector3(lrPosRadius.mV.x, lrPosRadius.mV.y, lrPosRadius.mV.z);
+            return Vector3(lrPosRadius.mV);
         }
 
         inline bool IsValid3(const Vector3& lrV)   // per-lane self-compare NaN tripwire
         {
-            return lrV.x == lrV.x && lrV.y == lrV.y && lrV.z == lrV.z;
+            return lrV.mV.x == lrV.mV.x && lrV.mV.y == lrV.mV.y && lrV.mV.z == lrV.mV.z;
         }
 
         // v.y = 0 then Normalize -- the vrlimi(4, zero) + vrsqrtefp idiom both interpolation
         // fallback arms share.
         inline Vector3 NormalizeFlattened(Vector3 lVector)
         {
-            lVector.y = 0.0f;
+            lVector.mV = __vrlimi(lVector.mV, __vspltisw(0), 4, 0);
             return rw::math::vpu::Normalize(lVector);
         }
     }
@@ -127,9 +124,18 @@ namespace Deformation
     Vector3 DeformationManager::ProjectLineOntoPlane(Vector3 lPointOnLine, Vector3 lLineDir,
                                                      Vector3 lPointOnPlane, Vector3 lPlaneNormal)
     {
-        const f32 lfDirDot   = rw::math::vpu::Dot(lLineDir, lPlaneNormal);
-        const f32 lfPointDot = rw::math::vpu::Dot(lPointOnPlane - lPointOnLine, lPlaneNormal);
-        return lPointOnLine + lLineDir * (lfPointDot / lfDirDot);
+        // ARTIST 0x82605340..0x826053B8: VMX dot products, two reciprocal
+        // refinements, multiply and fused point reconstruction (all four lanes).
+        const __vector4 dirDot = __vmsum3fp(lLineDir.mV, lPlaneNormal.mV);
+        const __vector4 pointDot = __vmsum3fp(__vsubfp(lPointOnPlane.mV, lPointOnLine.mV), lPlaneNormal.mV);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        __vector4 reciprocal = __vrefp(dirDot);
+        __vector4 error = __vnmsubfp(reciprocal, dirDot, one);
+        reciprocal = __vmaddfp(reciprocal, error, reciprocal);
+        error = __vnmsubfp(reciprocal, dirDot, one);
+        reciprocal = __vmaddfp(reciprocal, error, reciprocal);
+        const __vector4 distance = __vmulfp(reciprocal, pointDot);
+        return Vector3(__vmaddfp(lLineDir.mV, distance, lPointOnLine.mV));
     }
 
     // ==========================================================================================
@@ -183,7 +189,7 @@ namespace Deformation
         const Vector3 lFromCentre = lResult - lSpherePos;
         const f32     lfLimit     = lfRadius - KF_PROJECTSPHERE_RADIUS_PADDING;
 
-        Vector3 lSum = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3 lSum(__vspltisw(0));
         const f32 lfAxisDotX = rw::math::vpu::Dot(lFromCentre, lBoxTransform.xAxis);
         if (std::fabs(lfAxisDotX) > lfLimit) lSum = lSum + lBoxTransform.xAxis * Sign(lfAxisDotX);
         const f32 lfAxisDotY = rw::math::vpu::Dot(lFromCentre, lBoxTransform.yAxis);
@@ -210,41 +216,60 @@ namespace Deformation
                                                     Vector3 lPointOnSide, Vector3* lpResultA,
                                                     Vector3* lpResultB, Vector3* lpOutNormal)
     {
-        // Flatten both centres to the average height (vrefp(2.0) reciprocal -> * 0.5).
-        const f32 lfAverageY = (lSphereAIn.mData.mV.y + lSphereBIn.mData.mV.y) * 0.5f;
-        const f32 lfRadiusA  = lSphereAIn.mData.mV.w;
-        const f32 lfRadiusB  = lSphereBIn.mData.mV.w;
-        const Vector3 lCentreA = { lSphereAIn.mData.mV.x, lfAverageY, lSphereAIn.mData.mV.z, 0.0f };
-        const Vector3 lCentreB = { lSphereBIn.mData.mV.x, lfAverageY, lSphereBIn.mData.mV.z, 0.0f };
+        // ARTIST 0x825DB430..0x825DB4E8: retain the sphere's radius lane
+        // while inserting the mean Y computed via the reciprocal estimate sequence.
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 two = __vcfsx(__vspltisw(2), 0);
+        __vector4 half = __vrefp(two);
+        __vector4 error = __vnmsubfp(half, two, one);
+        half = __vmaddfp(half, error, half);
+        error = __vnmsubfp(half, two, one);
+        half = __vmaddfp(half, error, half);
+        const __vector4 meanY = __vmulfp(half, __vaddfp(__vspltw(lSphereAIn.mData.mV, 1),
+                                                        __vspltw(lSphereBIn.mData.mV, 1)));
+        const Vector3 lCentreA(__vrlimi(lSphereAIn.mData.mV, meanY, 4, 0));
+        const Vector3 lCentreB(__vrlimi(lSphereBIn.mData.mV, meanY, 4, 0));
+        const f32 lfRadiusA = lSphereAIn.mData.mV.w;
+        const f32 lfRadiusB = lSphereBIn.mData.mV.w;
 
-        const Vector3 lAToB     = lCentreB - lCentreA;
-        const f32     lfAToBDistSq = rw::math::vpu::Dot(lAToB, lAToB);
-        const f32     lfAToBDist   = lfAToBDistSq == 0.0f ? 0.0f : std::sqrt(lfAToBDistSq);   // vsel zero guard
-        const Vector3 lAToBDir  = lAToB * (1.0f / lfAToBDist);                                 // vrefp + 2x NR
-
-        // lCosTheta = (rA - rB) / dist, clamped to [-1, 1] (vmaxfp -1 / vminfp +1), then acos.
-        f32 lfCosTheta = (lfRadiusA - lfRadiusB) * (1.0f / lfAToBDist);
-        if (lfCosTheta < -1.0f) lfCosTheta = -1.0f;
-        if (lfCosTheta >  1.0f) lfCosTheta =  1.0f;
-        // 0x825DB5B8 vmaxfp / 0x825DB5BC vminfp128 (the clamp above, a NaN kept), then 0x825DB5C4
-        // bl XMVectorACos (crash parity FX-GATE: the console's own arc-cosine, not std::acos).
-        const f32 lfTheta = XboxMath::XMVectorACos(lfCosTheta);
+        // ARTIST 0x825DB4F4..0x825DB5C4: magnitude with the zero guard,
+        // reciprocal refinement and component clamp before XMVectorACos.
+        const __vector4 delta = __vsubfp(lCentreB.mV, lCentreA.mV);
+        const __vector4 lenSq = __vmsum3fp(delta, delta);
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 halfFloat = __vcfsx(__vspltisw(1), 1);
+        __vector4 rsqrt = __vrsqrtefp(lenSq);
+        __vector4 rsqrtError = __vnmsubfp(lenSq, __vmulfp(rsqrt, rsqrt), one);
+        rsqrt = __vmaddfp(__vmulfp(rsqrt, halfFloat), rsqrtError, rsqrt);
+        rsqrtError = __vnmsubfp(lenSq, __vmulfp(rsqrt, rsqrt), one);
+        rsqrt = __vmaddfp(__vmulfp(rsqrt, halfFloat), rsqrtError, rsqrt);
+        const __vector4 distance = __vsel(__vmulfp(lenSq, rsqrt), zero, __vcmpeqfp(zero, lenSq));
+        __vector4 invDistance = __vrefp(distance);
+        error = __vnmsubfp(invDistance, distance, one);
+        invDistance = __vmaddfp(invDistance, error, invDistance);
+        error = __vnmsubfp(invDistance, distance, one);
+        invDistance = __vmaddfp(invDistance, error, invDistance);
+        const Vector3 lAToBDir(__vmulfp(invDistance, delta));
+        const __vector4 radiusDelta = __vsubfp(__vspltw(lCentreA.mV, 3), __vspltw(lCentreB.mV, 3));
+        const __vector4 cosTheta = __vminfp(one, __vmaxfp(__vcfsx(__vspltisw(-1), 0),
+                                                          __vmulfp(invDistance, radiusDelta)));
+        const f32 lfTheta = XboxMath::XMVectorACos(cosTheta.x);
 
         // Rotate lAToBDir about the world Y axis by theta; if the rotated direction points away
         // from lPointOnSide (Dot(lPointOnSide - lCentreA, rotated) < 0), rotate by -theta instead
         // (the console re-runs the sin/cos polynomial on the negated angle).
         f32 lfSin = std::sin(lfTheta);
         const f32 lfCos = std::cos(lfTheta);
-        Vector3 lRotated = { lAToBDir.x * lfCos + lAToBDir.z * lfSin,
-                             lAToBDir.y,
-                             lAToBDir.z * lfCos - lAToBDir.x * lfSin, 0.0f };
+        Vector3 lRotated(lAToBDir.mV.x * lfCos + lAToBDir.mV.z * lfSin,
+                             lAToBDir.mV.y,
+                             lAToBDir.mV.z * lfCos - lAToBDir.mV.x * lfSin);
         if (rw::math::vpu::Dot(lPointOnSide - lCentreA, lRotated) < 0.0f)
         {
             lfSin    = -lfSin;   // sin(-theta); cos unchanged
             {
-                const Vector3 lAggregateValue = { lAToBDir.x * lfCos + lAToBDir.z * lfSin,
-                                lAToBDir.y,
-                                lAToBDir.z * lfCos - lAToBDir.x * lfSin, 0.0f };
+                const Vector3 lAggregateValue(lAToBDir.mV.x * lfCos + lAToBDir.mV.z * lfSin,
+                                lAToBDir.mV.y,
+                                lAToBDir.mV.z * lfCos - lAToBDir.mV.x * lfSin);
                 lRotated = lAggregateValue;
             }
         }
@@ -328,7 +353,7 @@ namespace Deformation
             // No neighbour faces the other car: plain sphere-surface point along the flattened
             // direction from the sensor centre to the incoming point.
             lLocalNormal = NormalizeFlattened(lLocalPosIn - lLocalCentre);
-            lLocalPoint  = lLocalCentre + lLocalNormal * lLocalSphere.w;
+            lLocalPoint  = lLocalCentre + lLocalNormal * lLocalSphere.mV.w;
         }
         else
         {
@@ -336,12 +361,12 @@ namespace Deformation
             const Vector3  lNeighbourCentre = SphereCentre(lNeighbourSphere);
 
             // Which sphere is the other car closer to (flattened distances to each surface)?
-            Vector3 lToThis = lLocalOtherPos - lLocalCentre;      lToThis.y = 0.0f;
-            Vector3 lToNbr  = lLocalOtherPos - lNeighbourCentre;  lToNbr.y  = 0.0f;
+            Vector3 lToThis = lLocalOtherPos - lLocalCentre;      lToThis.mV = __vrlimi(lToThis.mV, __vspltisw(0), 4, 0);
+            Vector3 lToNbr  = lLocalOtherPos - lNeighbourCentre;  lToNbr.mV = __vrlimi(lToNbr.mV, __vspltisw(0), 4, 0);
             const f32 lfDistThisSq = rw::math::vpu::Dot(lToThis, lToThis);
             const f32 lfDistNbrSq  = rw::math::vpu::Dot(lToNbr, lToNbr);
-            const f32 lfDistThis   = (lfDistThisSq == 0.0f ? 0.0f : std::sqrt(lfDistThisSq)) - lLocalSphere.w;
-            const f32 lfDistNbr    = (lfDistNbrSq  == 0.0f ? 0.0f : std::sqrt(lfDistNbrSq))  - lNeighbourSphere.w;
+            const f32 lfDistThis   = (lfDistThisSq == 0.0f ? 0.0f : std::sqrt(lfDistThisSq)) - lLocalSphere.mV.w;
+            const f32 lfDistNbr    = (lfDistNbrSq  == 0.0f ? 0.0f : std::sqrt(lfDistNbrSq))  - lNeighbourSphere.mV.w;
 
             if (lfDistThis > lfDistNbr)
             {
@@ -354,12 +379,12 @@ namespace Deformation
             {
                 CgsGeometric::Sphere lSphereA;
                 {
-                    const Vector4 lAggregateValue = { lLocalCentre.x, lLocalCentre.y, lLocalCentre.z, lLocalSphere.w };
+                    const Vector4 lAggregateValue(lLocalSphere.mV);
                     lSphereA.mData.mV = lAggregateValue.mV;
                 }
                 CgsGeometric::Sphere lSphereB;
                 {
-                    const Vector4 lAggregateValue = { lNeighbourCentre.x, lNeighbourCentre.y, lNeighbourCentre.z, lNeighbourSphere.w };
+                    const Vector4 lAggregateValue(lNeighbourSphere.mV);
                     lSphereB.mData.mV = lAggregateValue.mV;
                 }
 
@@ -562,8 +587,8 @@ namespace Deformation
         const Matrix44Affine& lTrafficTransform = lpTrafficModel->GetVehiclePhysics()->GetTransform();
 
         const Vector3 lNormal = lrContact.mNormal;
-        Vector3 lRaceCarNormal = { 0.0f, 0.0f, 0.0f, 0.0f };
-        Vector3 lTrafficNormal = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3 lRaceCarNormal(__vspltisw(0));
+        Vector3 lTrafficNormal(__vspltisw(0));
 
         lrContact.mPointOnA = ProjectSphereContactOntoBox(lRaceCarSphere, rw::math::vpu::Negate(lNormal),
                                                           lrContact.mPointOnA, lRaceCarTransform,
@@ -592,15 +617,15 @@ namespace Deformation
         // three axes would be a containment test, and would snap the normal to +-xAxis for
         // head-on hits too.)
         const bool lbRaceCarHitSideOfTraffic =
-            std::fabs(lPointOnRaceCarLocal.x) >= lHalfExtents.x &&
-            lHalfExtents.y >= std::fabs(lPointOnRaceCarLocal.y) &&
-            lHalfExtents.z >= std::fabs(lPointOnRaceCarLocal.z) &&
-            (lPointOnRaceCarLocal.x * lNormalTrafficLocal.x) > 0.0f;
+            std::fabs(lPointOnRaceCarLocal.mV.x) >= lHalfExtents.mV.x &&
+            lHalfExtents.mV.y >= std::fabs(lPointOnRaceCarLocal.mV.y) &&
+            lHalfExtents.mV.z >= std::fabs(lPointOnRaceCarLocal.mV.z) &&
+            (lPointOnRaceCarLocal.mV.x * lNormalTrafficLocal.mV.x) > 0.0f;
 
         if (lbRaceCarHitSideOfTraffic)
         {
             // Snap the normal to the traffic box's lateral axis, signed by which side was hit.
-            lrContact.mNormal = lTrafficTransform.xAxis * Sign(lPointOnRaceCarLocal.x);
+            lrContact.mNormal = lTrafficTransform.xAxis * Sign(lPointOnRaceCarLocal.mV.x);
         }
         else
         {
@@ -666,8 +691,8 @@ namespace Deformation
         const Matrix44Affine& lCarBTransform = lpCarBModel->GetVehiclePhysics()->GetTransform();
 
         const Vector3 lNormal = lrContact.mNormal;
-        Vector3 lCarANormal = { 0.0f, 0.0f, 0.0f, 0.0f };
-        Vector3 lCarBNormal = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3 lCarANormal(__vspltisw(0));
+        Vector3 lCarBNormal(__vspltisw(0));
 
         lrContact.mPointOnA = ProjectSphereContactOntoBox(lCarASphere, rw::math::vpu::Negate(lNormal),
                                                           lrContact.mPointOnA, lCarATransform,

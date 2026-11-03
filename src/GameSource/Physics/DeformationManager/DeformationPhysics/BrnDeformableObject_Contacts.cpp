@@ -93,7 +93,7 @@ namespace Deformation
     // abs(normal.y) >= 0 is true for every contact, so the restitution branch was taken always --
     // and then returned 0 restitution. A 0.5 threshold is the usual "is this surface floor-like".
     static const f32     KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD = 0.5f;   // unk_82FB7FF0 @82C5D3E0 <- flt_82001DA0
-    static const VecFloat KVF_WORLD_RESTITUTION_VALUE = { 1.10000002f, 1.10000002f, 1.10000002f, 1.10000002f };  // unk_82FB8260 @82C5D3B4 <- flt_82004A1C
+    static const VecFloat KVF_WORLD_RESTITUTION_VALUE(1.10000002f);  // unk_82FB8260 @82C5D3B4 <- flt_82004A1C
 
     // The global "spy world-contact mode" selector byte the two Do*WorldContactGeneration methods
     // branch on (asm: DoBodyPart `*(v77 - 23737)`, DoDetachedWheel `byte_82F2A347`): when set, the
@@ -229,64 +229,15 @@ namespace Deformation
         const bool lbPredicate = (lpRaceCarPhysics != 0) &&
                                  lpRaceCarPhysics->IsPlayerVehicleInShowtime();
 
-        // ---- [restit] NOT IN THE X360 BINARY. OPT-IN (BRN_ROLL_PROBE=1). Read-only census of THIS
-        // routine's own two gates. The super-elastic 1.1 arm is the only bounce restitution a
-        // vehicle-vs-world contact can get, and it is SHOWTIME-GATED, so on every crash measurement
-        // this campaign has ever taken it returned 0.0 -- and a routine that always returns zero is
-        // indistinguishable in a log from a routine that never ran. The three counters decompose it:
-        //   calls    -- the routine ran at all
-        //   noShow   -- rejected by the showtime predicate (slot +0x10, the three-term one)
-        //   flatRej  -- past showtime, rejected by |normal.y| < threshold (a WALL, not a floor)
-        //   fired    -- returned the 1.1
-        // ⛔ It is a CENSUS, not a max: a run with calls>0 and fired==0 is a measurement, not a gap.
-        // DELETE-WHEN the barrel-roll frequency question is closed and banked.
-        {
-            static s32 siArmed = -1;
-            if (siArmed < 0)
-            {
-            }
-            if (siArmed == 1)
-            {
-                static u32 suCalls = 0u, suNoShow = 0u, suFlatRej = 0u, suFired = 0u;
-                ++suCalls;
-                if (!lbPredicate) { ++suNoShow; }
-                else if (std::fabs(lContact.mNormal.y) < KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD)
-                { ++suFlatRej; }
-                else { ++suFired; }
-                // ⛔⛔ THE PERIOD IS CHECKED AGAINST THE EVENT RATE, and the first version FAILED
-                // that check: a plain `% 2000` printed NOTHING on a 75 s wall-hit boot, because
-                // this routine is called a few hundred times in a whole crash. A census whose
-                // period exceeds its event rate is indistinguishable in the log from a routine
-                // that never ran -- the exact misreading this campaign has paid for three times.
-                // First call, then a geometric ladder, then every 2000.
-                const bool lbDue = (suCalls == 1u) || (suCalls == 25u) || (suCalls == 100u)
-                                || (suCalls == 500u) || ((suCalls % 2000u) == 0u);
-                if (lbDue && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[restit] calls=" << static_cast<s32>(suCalls)
-                        << " noShowtime=" << static_cast<s32>(suNoShow)
-                        << " flatRejected=" << static_cast<s32>(suFlatRej)
-                        << " FIRED=" << static_cast<s32>(suFired)
-                        << " thresh=" << KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD
-                        << " value=" << KVF_WORLD_RESTITUTION_VALUE.x
-                        << "\n";
-                }
-            }
-        }
-
         if (!lbPredicate)
-            { const VecFloat lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
+            return VecFloat(__vspltisw(0));
 
-        // abs(normal.y) (asm: vspltw word-1 then vandc the sign bit) compared against the rodata
-        // threshold. asm @0x825E0C78: vcmpgefp(absY, threshold) then vnot -> mask = (absY < threshold),
-        // then vsel(VALUE, ZERO, mask) = mask ? ZERO : VALUE. So the routine returns ZERO when absY is
-        // BELOW the threshold and the rodata restitution VALUE when absY >= threshold (Select).
-        const f32 lfAbsNormalY = std::fabs(lContact.mNormal.y);
-        if (lfAbsNormalY < KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD)
-            { const VecFloat lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
-
-        return KVF_WORLD_RESTITUTION_VALUE;
+        // ARTIST 0x825E0CD4..0x825E0CFC: clear the sign bit, compare and select
+        // the restitution for ordered >=; unordered values select zero as well.
+        const __vector4 sign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const __vector4 absY = __vandc(__vspltw(lContact.mNormal.mV, 1), sign);
+        const __vector4 ge = __vcmpgefp(absY, VecFloat(KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD).mV);
+        return VecFloat(__vsel(__vspltisw(0), KVF_WORLD_RESTITUTION_VALUE.mV, ge));
     }
 
     // =================================================================================================
@@ -528,100 +479,12 @@ namespace Deformation
             // THE PADDING BAND (see the banner). vminfp reduction of the three half-extent lanes,
             // compared against 0.15; the pad is 0.5 for a thin box and min(extent, 0.5) for a fat one.
             const Vector3 lBoxHalfDimensions = lPartBox.GetDimensions();
-            f32 lfSmallestHalfExtent = lBoxHalfDimensions.x;
-            if (lBoxHalfDimensions.y < lfSmallestHalfExtent) { lfSmallestHalfExtent = lBoxHalfDimensions.y; }
-            if (lBoxHalfDimensions.z < lfSmallestHalfExtent) { lfSmallestHalfExtent = lBoxHalfDimensions.z; }
-
-            const bool lbBoxIsFat = (lfSmallestHalfExtent > KF_FAT_BOX_HALF_EXTENT_THRESHOLD);
-            const f32  lfContactPadding =
-                lbBoxIsFat
-                    ? ((lfSmallestHalfExtent < KF_MAX_PART_CONTACT_PADDING) ? lfSmallestHalfExtent
-                                                                            : KF_MAX_PART_CONTACT_PADDING)
-                    : KF_MAX_PART_CONTACT_PADDING;
-
-            // ---- [part-pad] READ-ONLY WITNESS. NOT IN THE X360 BINARY. Opt-in via
-            //      BRN_DEFORM_TRACE. DELETE-WHEN the part-box question is banked.
-            //
-            // ⭐⭐ THIS IS THE ONLY PLACE THE BOX'S *SIZE* CHANGES BEHAVIOUR. The refresh landed in
-            // PhysicalBodyPartPool::UpdateABoundingBox @0x8260CC88 can only move a box's EXTENTS,
-            // never its orientation -- so it cannot stand a panel up. What it CAN do is move a part
-            // across the `min-half > 0.15` fat test three lines above, and the pad is INVERSELY
-            // gated on box size: a thin box gets the flat 0.5 m, a fat one only min(extent, 0.5).
-            // lbBoxIsFat is ALSO the `lbUseFatPath` argument of the stream entry point below, so a
-            // crossing changes which generator path the part takes, not merely a number.
-            //
-            // ⚠️ IT COUNTS TRANSITIONS, NOT STATES, AND IT KEYS ON THE PART -- NOT THE SLOT. The
-            // part pool is SHARED across every deformable object (one DetachedPartManager, whose
-            // single mPartPool member is why the console passes the manager address as the pool's
-            // `this`), and slots are REUSED: one run routinely puts three different panels, from
-            // different cars, through slot 5. A per-slot latch would score every reuse as a gate
-            // crossing. The latch therefore stores the part's whole ENTITY WORD -- owner, entity
-            // index AND part index, not the IK index alone, because two cars' parts can share an
-            // IK index in the same recycled slot -- and treats a change of it as a NEW EPISODE
-            // with no transition.
-            {
-                static s32 siPadProbe = -1;
-                if ( siPadProbe < 0 )
-                {
-                }
-                static s8  saPadLastFat[64];        // -1 unseen, 0 thin, 1 fat
-                static u32 saPadLastPart[64];       // the ENTITY WORD that state belongs to
-                static bool sbPadInit = false;
-                static u32 suPadSamples = 0u, suPadFat = 0u, suPadEpisodes = 0u;
-                static u32 suPadToFat = 0u, suPadToThin = 0u, suPadRows = 0u;
-                if ( !sbPadInit )
-                {
-                    sbPadInit = true;
-                    for ( s32 liInit = 0; liInit < 64; ++liInit )
-                    {
-                        saPadLastFat[liInit] = -1;
-                        saPadLastPart[liInit] = 0xFFFFFFFFu;
-                    }
-                }
-
-                const s32 liPadSlot = static_cast<s32>(lpCurrentPart->GetPoolIndex()) & 63;
-                // The whole entity word -- owner byte, entity index and part index in one u32
-                // (BurnoutBodyPartID's own packing; see its GetBaseRigidBodyID banner).
-                const u32 luPadKey =
-                    static_cast<u32>(lpCurrentPart->GetRigidBodyId().GetBaseRigidBodyID() >> 32);
-                const s8  li8Fat = lbBoxIsFat ? 1 : 0;
-                ++suPadSamples;
-                if ( lbBoxIsFat ) { ++suPadFat; }
-
-                const bool lbNewEpisode = ( saPadLastPart[liPadSlot] != luPadKey );
-                const bool lbCrossed = ( !lbNewEpisode && saPadLastFat[liPadSlot] >= 0
-                                         && saPadLastFat[liPadSlot] != li8Fat );
-                if ( lbNewEpisode ) { ++suPadEpisodes; }
-                if ( lbCrossed )
-                {
-                    if ( li8Fat != 0 ) { ++suPadToFat; } else { ++suPadToThin; }
-                }
-                saPadLastPart[liPadSlot] = luPadKey;
-                saPadLastFat[liPadSlot]  = li8Fat;
-
-                if ( siPadProbe == 1 && CgsDev::Log::gpDebugPrint != 0
-                     && ( lbCrossed || lbNewEpisode || (suPadSamples % 900u) == 0u )
-                     && suPadRows < 600u )
-                {
-                    ++suPadRows;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[part-pad] slot " << liPadSlot
-                        << " ik " << liIKPartIndex
-                        << " half (" << lBoxHalfDimensions.x << ", " << lBoxHalfDimensions.y
-                        << ", " << lBoxHalfDimensions.z << ")"
-                        << " minHalf " << lfSmallestHalfExtent
-                        << (lbBoxIsFat ? " FAT" : " THIN")
-                        << " pad " << lfContactPadding
-                        << (lbCrossed ? " CROSSED" : (lbNewEpisode ? " NEW" : " -"))
-                        << " | samples " << static_cast<s32>(suPadSamples)
-                        << " fat " << static_cast<s32>(suPadFat)
-                        << " episodes " << static_cast<s32>(suPadEpisodes)
-                        << " toFat " << static_cast<s32>(suPadToFat)
-                        << " toThin " << static_cast<s32>(suPadToThin)
-                        << "\n";
-                }
-            }
-            // ---- end [part-pad] ------------------------------------------------------------
+            const __vector4 lMinYZ = __vminfp(__vspltw(lBoxHalfDimensions.mV, 1),
+                                              __vspltw(lBoxHalfDimensions.mV, 2));
+            const __vector4 lMinExtent = __vminfp(__vspltw(lBoxHalfDimensions.mV, 0), lMinYZ);
+            const bool lbBoxIsFat = (lMinExtent.x > KF_FAT_BOX_HALF_EXTENT_THRESHOLD);
+            const __vector4 lFatPadding = __vminfp(lMinExtent, VecFloat(KF_MAX_PART_CONTACT_PADDING).mV);
+            const f32 lfContactPadding = lbBoxIsFat ? lFatPadding.x : KF_MAX_PART_CONTACT_PADDING;
 
             // One fresh single-primitive list per detached part. Prepare fully re-initialises the
             // builder (pointer / used / count / capacity), which is why the console Constructs only
@@ -676,34 +539,6 @@ namespace Deformation
             const s32 liCacheSlot = static_cast<s32>(lHandlingEntityId.GetEntityIndex());
             const s32 liNumCachedBatches = lpTriCache->GetNumCachedTriangleBatches(liCacheSlot);
 
-            // ---- [hinge-cache] READ-ONLY WITNESS. NOT IN THE X360 BINARY. Opt-in via
-            //      BRN_DEFORM_TRACE. DELETE-WHEN the hinged block is banked.
-            // It prints BOTH candidate slot sources side by side so the correction above is a
-            // measurement rather than a claim: `slot` is the console's (handling body) and
-            // `globalSlot` is the one this file used to use. On the player they can agree; on
-            // traffic they must not.
-            {
-                static s32 siHingeProbe = -1;
-                if ( siHingeProbe < 0 )
-                {
-                }
-                static u32 suHingeLines = 0u;
-                if ( siHingeProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suHingeLines < 400u )
-                {
-                    ++suHingeLines;
-                    const CgsSceneManager::EntityId lGlobal(
-                        const_cast<DeformableObject*>(this)->GetGlobalEntityId().muValue);
-                    *CgsDev::Log::gpDebugPrint
-                        << "[hinge-cache] ent " << static_cast<s32>(lGlobal.GetEntityIndex() & 0xFFFFu)
-                        << " owner " << static_cast<s32>(lHandlingEntityId.GetOwner())
-                        << " slot " << liCacheSlot
-                        << " globalSlot " << static_cast<s32>(lGlobal.GetEntityIndex())
-                        << " batches " << liNumCachedBatches
-                        << " tests " << static_cast<s32>(lHingedPartBuilder.GetNumTests())
-                        << "\n";
-                }
-            }
-            // ---- end [hinge-cache] ---------------------------------------------------------
             if (liNumCachedBatches > 0)
             {
                 TriangleList lTriangleList;
@@ -773,29 +608,6 @@ namespace Deformation
 
         PrimitivePairListBuilder lWheelBuilder;
         lWheelBuilder.Construct();
-
-        // ============================================================================================
-        // [wheelspy] NOT IN THE X360 BINARY -- THE DETACHED-WHEEL CONTACT LADDER. BRN_VFXFEED_PROBE=1.
-        //
-        // WHY. PhysicsModule::StoreContact's `case 9 / case 10` arm (the DETACHED_RACECAR_WHEEL /
-        // DETACHED_TRAFFIC_WHEEL bucket) counted ZERO over a 40,000-store census, and this routine
-        // plus StartPartContactGeneration's wheel-vs-car entry are its only two feeds. A zero at the
-        // far end cannot say WHICH of five rungs is empty, and the five have completely different
-        // meanings: no wheel ever went DETACHED (a drive-recipe limit, not a defect) / the
-        // DetachedWheelManager lookup missed (the SILENT wrong-key class this very loop was fixed
-        // for on 2026-09-05 -- GetWheel is a match-walk, so a wrong key just returns null) / the
-        // body was frozen / the triangle cache slot was empty / the entry really was appended and
-        // the loss is downstream. So every rung gets its own counter and the line prints the
-        // FIRST-EVER appended entry's key owner byte, which is the one fact that says whether owner
-        // 9/10 (BurnoutWheelBodyID::Set @0x825C1D40 rewrites the owning vehicle's owner byte to 9
-        // for a player car and 10 for traffic) actually reaches the contact-generation list.
-        // ⚠️ It prints the ZEROS as well, on a fixed period, for the same reason the [propvfx]
-        // witness does: a rung that speaks only when it has something to say cannot separate "no
-        // wheel detached" from "the probe never armed". [[diagnostics-that-lie]]
-        // COST WHEN OFF: one bool test per call. DELETE-WHEN the wheel bucket is proven to fill.
-        // ============================================================================================
-        static s32 siWsCalls = 0, siWsDetached = 0, siWsNullLookup = 0, siWsFrozen = 0;
-        static s32 siWsNoTris = 0, siWsEntries = 0, siWsLines = 0, siWsFirstOwner = -1;
 
         for (s32 liWheel = 0; liWheel < KI_NUM_DETACHABLE_WHEELS; ++liWheel)
         {
