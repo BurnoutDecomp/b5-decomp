@@ -56,8 +56,8 @@ namespace BrnAI
 
             const BoundaryLine& lrLine = lpSection->mpaNoGoLines[luHNGLineIndex];
 
-            const Vector2 lLineStart = { lrLine.mfStartX, lrLine.mfStartY, 0.0f, 0.0f };
-            const Vector2 lLineEnd   = { lrLine.mfEndX,   lrLine.mfEndY,   0.0f, 0.0f };
+            const Vector2 lLineStart(lrLine.mfStartX, lrLine.mfStartY);
+            const Vector2 lLineEnd(lrLine.mfEndX, lrLine.mfEndY);
 
             // Parameter along the no-go edge (lfParamAlongEdge) and along the query segment
             // (lfParamAlongSegment). A parallel pair (zero denominator) returns false and is
@@ -125,10 +125,10 @@ namespace BrnAI
         // CRT writer, only this function's reader at 0x8277A998.
         static const f32 KF_TOO_CLOSE_TOO_TRAFFIC = 5.0f;
 
-        const f32 lfAX          = lAttemptStartPos.x;
-        const f32 lfAY          = lAttemptStartPos.y;
-        const f32 lfBXMinuslfAX = lAttemptEndPos.x - lAttemptStartPos.x;
-        const f32 lfBYMinuslfAY = lAttemptEndPos.y - lAttemptStartPos.y;
+        const f32 lfAX          = lAttemptStartPos.mV.x;
+        const f32 lfAY          = lAttemptStartPos.mV.y;
+        const f32 lfBXMinuslfAX = lAttemptEndPos.mV.x - lAttemptStartPos.mV.x;
+        const f32 lfBYMinuslfAY = lAttemptEndPos.mV.y - lAttemptStartPos.mV.y;
 
         for (s32 liTrafficIndex = 0; liTrafficIndex < lpNearbyTraffic->GetCount(); ++liTrafficIndex)
         {
@@ -143,14 +143,14 @@ namespace BrnAI
             }
 
             // The foot of the perpendicular must lie strictly between A and B.
-            const f32 lfAlongFromStart = (lPointOnLine.x - lAttemptStartPos.x) * lfBXMinuslfAX
-                                       + (lPointOnLine.y - lAttemptStartPos.y) * lfBYMinuslfAY;
+            const f32 lfAlongFromStart = (lPointOnLine.mV.x - lAttemptStartPos.mV.x) * lfBXMinuslfAX
+                                       + (lPointOnLine.mV.y - lAttemptStartPos.mV.y) * lfBYMinuslfAY;
             if (!(lfAlongFromStart > 0.0f))
             {
                 continue;
             }
-            const f32 lfAlongFromEnd = (lPointOnLine.x - lAttemptEndPos.x) * lfBXMinuslfAX
-                                     + (lPointOnLine.y - lAttemptEndPos.y) * lfBYMinuslfAY;
+            const f32 lfAlongFromEnd = (lPointOnLine.mV.x - lAttemptEndPos.mV.x) * lfBXMinuslfAX
+                                     + (lPointOnLine.mV.y - lAttemptEndPos.mV.y) * lfBYMinuslfAY;
             if (!(lfAlongFromEnd < 0.0f))
             {
                 continue;

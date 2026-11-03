@@ -38,11 +38,11 @@ namespace BrnAI
 
     // 0x82771800 - 2D line-line intersection parameters for segments (lP1->lP2) and (lQ1->lQ2).
     // asm names the deltas:
-    //   dQy = lQ2.y - lQ1.y   dPx = lP2.x - lP1.x
-    //   dQx = lQ2.x - lQ1.x   dPy = lP2.y - lP1.y
+    //   dQy = lQ2.mV.y - lQ1.mV.y   dPx = lP2.mV.x - lP1.mV.x
+    //   dQx = lQ2.mV.x - lQ1.mV.x   dPy = lP2.mV.y - lP1.mV.y
     //   denom = dPx*dQy - dPy*dQx
     // When denom == 0 the segments are parallel: write 0 to both outputs and return false.
-    // Otherwise (with rPx = lP1.x - lQ1.x, rPy = lP1.y - lQ1.y, inv = 1/denom):
+    // Otherwise (with rPx = lP1.mV.x - lQ1.mV.x, rPy = lP1.mV.y - lQ1.mV.y, inv = 1/denom):
     //   *lpfParamA = (rPy*dQx - rPx*dQy) * inv
     //   *lpfParamB = (rPy*dPx - rPx*dPy) * inv
     bool Calc2DIntersectionEquationData(Vector2 lP1,
@@ -52,10 +52,10 @@ namespace BrnAI
                                         f32*    lpfParamA,
                                         f32*    lpfParamB)
     {
-        const f32 lfDQy = lQ2.y - lQ1.y;
-        const f32 lfDPx = lP2.x - lP1.x;
-        const f32 lfDQx = lQ2.x - lQ1.x;
-        const f32 lfDPy = lP2.y - lP1.y;
+        const f32 lfDQy = lQ2.mV.y - lQ1.mV.y;
+        const f32 lfDPx = lP2.mV.x - lP1.mV.x;
+        const f32 lfDQx = lQ2.mV.x - lQ1.mV.x;
+        const f32 lfDPy = lP2.mV.y - lP1.mV.y;
 
         const f32 lfDenom = (lfDPx * lfDQy) - (lfDPy * lfDQx);
 
@@ -66,8 +66,8 @@ namespace BrnAI
             return false;
         }
 
-        const f32 lfRPx = lP1.x - lQ1.x;
-        const f32 lfRPy = lP1.y - lQ1.y;
+        const f32 lfRPx = lP1.mV.x - lQ1.mV.x;
+        const f32 lfRPy = lP1.mV.y - lQ1.mV.y;
         const f32 lfInv = 1.0f / lfDenom;
 
         *lpfParamA = ((lfRPy * lfDQx) - (lfRPx * lfDQy)) * lfInv;
@@ -95,20 +95,20 @@ namespace BrnAI
     f32 DistancePosVelToOrigin(Vector2 lPosition, Vector2 lVelocity)
     {
         // |lVelocity.xy| via len2 * rsqrt(len2); the vsel yields 0 for a zero-length vector.
-        const f32 lfVelLenSq = (lVelocity.x * lVelocity.x) + (lVelocity.y * lVelocity.y);
+        const f32 lfVelLenSq = (lVelocity.mV.x * lVelocity.mV.x) + (lVelocity.mV.y * lVelocity.mV.y);
         const f32 lfVelLen   = (lfVelLenSq == 0.0f) ? 0.0f : (lfVelLenSq * (1.0f / std::sqrt(lfVelLenSq)));
 
         f32 lfResult;
         if (lfVelLen == 0.0f)
         {
             // Fallback: |lPosition.xy| the same way (zero-length -> 0).
-            const f32 lfPosLenSq = (lPosition.x * lPosition.x) + (lPosition.y * lPosition.y);
+            const f32 lfPosLenSq = (lPosition.mV.x * lPosition.mV.x) + (lPosition.mV.y * lPosition.mV.y);
             lfResult = (lfPosLenSq == 0.0f) ? 0.0f : (lfPosLenSq * (1.0f / std::sqrt(lfPosLenSq)));
         }
         else
         {
             // cross(lPosition, lVelocity) scaled by 1/|lVelocity.xy|.
-            const f32 lfCross = (lPosition.x * lVelocity.y) - (lPosition.y * lVelocity.x);
+            const f32 lfCross = (lPosition.mV.x * lVelocity.mV.y) - (lPosition.mV.y * lVelocity.mV.x);
             lfResult = lfCross * (1.0f / lfVelLen);
         }
 
@@ -129,10 +129,10 @@ namespace BrnAI
     //   (BrnAIUtils.cpp:117, StrStream-formatted; the retail build emits it).
     f32 DistancePointToLine(Vector2 lPoint, Vector2 lLineStart, Vector2 lLineEnd)
     {
-        const f32 lfLineX    = lLineEnd.x - lLineStart.x;
-        const f32 lfLineY    = lLineEnd.y - lLineStart.y;
-        const f32 lfToPointX = lPoint.x   - lLineStart.x;
-        const f32 lfToPointY = lPoint.y   - lLineStart.y;
+        const f32 lfLineX    = lLineEnd.mV.x - lLineStart.mV.x;
+        const f32 lfLineY    = lLineEnd.mV.y - lLineStart.mV.y;
+        const f32 lfToPointX = lPoint.mV.x   - lLineStart.mV.x;
+        const f32 lfToPointY = lPoint.mV.y   - lLineStart.mV.y;
 
         const f32 lfLineLenSq = (lfLineX * lfLineX) + (lfLineY * lfLineY);
         const f32 lfLineLen   = (lfLineLenSq == 0.0f) ? 0.0f : (lfLineLenSq * (1.0f / std::sqrt(lfLineLenSq)));
@@ -174,10 +174,10 @@ namespace BrnAI
     f32 DistancePointToLine(Vector2 l2DPoint, Vector2 l2DStartLine, Vector2 l2DEndLine,
                             Vector2& l2DPointOnLine)
     {
-        const f32 lfBX = l2DEndLine.x - l2DStartLine.x;   // lB
-        const f32 lfBY = l2DEndLine.y - l2DStartLine.y;
-        const f32 lfAX = l2DPoint.x   - l2DStartLine.x;   // lA
-        const f32 lfAY = l2DPoint.y   - l2DStartLine.y;
+        const f32 lfBX = l2DEndLine.mV.x - l2DStartLine.mV.x;   // lB
+        const f32 lfBY = l2DEndLine.mV.y - l2DStartLine.mV.y;
+        const f32 lfAX = l2DPoint.mV.x   - l2DStartLine.mV.x;   // lA
+        const f32 lfAY = l2DPoint.mV.y   - l2DStartLine.mV.y;
 
         const f32 lfSelfDot = (lfBX * lfBX) + (lfBY * lfBY);
         if (lfSelfDot == 0.0f)
@@ -193,10 +193,11 @@ namespace BrnAI
         const f32 lfParam      = lfDot * (1.0f / lfSelfDot);
 
         // The whole 16-byte register is stored: every lane is lB * lfParam + start.
-        l2DPointOnLine.x = l2DStartLine.x + lfBX * lfParam;
-        l2DPointOnLine.y = l2DStartLine.y + lfBY * lfParam;
-        l2DPointOnLine.z = l2DStartLine.z + (l2DEndLine.z - l2DStartLine.z) * lfParam;
-        l2DPointOnLine.w = l2DStartLine.w + (l2DEndLine.w - l2DStartLine.w) * lfParam;
+        const __vector4 lDelta = __vsubfp(l2DEndLine.mV, l2DStartLine.mV);
+        __vector4 lParam;
+        lParam.x = lfParam;
+        l2DPointOnLine.mV = __vmaddfp(lDelta, __vspltw(lParam, 0), l2DStartLine.mV);
+
 
         const f32 lfCross = (lfBX * lfAY) - (lfBY * lfAX);
         return lfCross * (1.0f / lfLineLength);

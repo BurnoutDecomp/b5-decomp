@@ -462,9 +462,9 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
 
             // asm 0x82798D28..0x82798D84: three `vspltw` + `vcmpeqfp. v,v` self-compares over the
             // x/y/z lanes of the event's POSITION (r31 == event + 0x10).
-            CGS_ASSERT(IsNotNaN(lpSetUp->mPosition.x) &&
-                       IsNotNaN(lpSetUp->mPosition.y) &&
-                       IsNotNaN(lpSetUp->mPosition.z),
+            CGS_ASSERT(IsNotNaN(static_cast<float>(lpSetUp->mPosition.GetX())) &&
+                       IsNotNaN(static_cast<float>(lpSetUp->mPosition.GetY())) &&
+                       IsNotNaN(static_cast<float>(lpSetUp->mPosition.GetZ())),
                        "Invalid car position being passed");                                // :1925
 
             // asm 0x82798DA8..0x82798DC0: v1 = event+0x10 (position), v2 = event+0x20 (at),
