@@ -178,14 +178,14 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // empty pass.
         AptRenderItemDynamicText* pItem2 =
             static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem());
-        const int nBoxAlign = (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 2)) >> 28;
+        const int nBoxAlign = (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 26)) >> 28;
         if (nBoxAlign != 3)   // != AptStringAlignment_None (X360: (flags & 0x3C) != 0xC)
         {
             // The console collapses the empty auto-sized field's box to a fixed 4-pixel edge
             // inset: right = left + 4.0 (unless word-wrapped), bottom = top + 4.0 (always --
             // flt_82004EF4 == 4.0; the literal is inline in the X360 pseudocode).
             const float fEdgeInset = 4.0f;   // flt_82004EF4
-            if ((pItem2->mFlagsAndBorderColor & 0x40000000u) == 0u)   // not word-wrapped
+            if ((pItem2->mFlagsAndBorderColor & 2u) == 0u)   // not word-wrapped
             {
                 pWritable->mBounds.fRight = pItem2->mBounds.fLeft + fEdgeInset;
             }
@@ -205,14 +205,14 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
 
         // Alignment fields (from the render item's two packed flag dwords).
         const int nAlignment =
-            (static_cast<int32_t>(pItem->mFlagsAndBackColor << 3)) >> 28;   // GetAlignment
+            (static_cast<int32_t>(pItem->mFlagsAndBackColor << 25)) >> 28;   // GetAlignment
         const int nBoxAlignment =
-            (static_cast<int32_t>(pItem->mFlagsAndBorderColor << 2)) >> 28; // box alignment (bits 2-5)
+            (static_cast<int32_t>(pItem->mFlagsAndBorderColor << 26)) >> 28; // box alignment (bits 2-5)
         params.eAlignment    = static_cast<AptStringAlignment>(nAlignment);
         params.eBoxAlignment = static_cast<AptStringAlignment>(nBoxAlignment);
 
-        params.bMultiline = static_cast<int>((pItem->mFlagsAndBorderColor >> 31) & 1u); // GetMultiline (x64 bit 31)
-        params.bWordWrap  = static_cast<int>((pItem->mFlagsAndBorderColor >> 30) & 1u);  // GetWordWrap (x64 bit 30)
+        params.bMultiline = static_cast<int>((pItem->mFlagsAndBorderColor >> 0) & 1u); // GetMultiline
+        params.bWordWrap  = static_cast<int>((pItem->mFlagsAndBorderColor >> 1) & 1u);  // GetWordWrap
 
         // Text colour: overridden by the TextFormat record when it carries a valid
         // colour (console +8 == mnColor; -1 == "no override"), else the render item's
@@ -224,10 +224,10 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             nColour = static_cast<unsigned int>(pFmt->mnColor) | 0xFF000000u;
         params.nColour = nColour;
 
-        params.nBackColor   = (pItem->mFlagsAndBackColor   & 0xFFFFFFu) | 0xFF000000u;   // GetBackgroundColor (x64 low-24)
-        params.nBorderColor = (pItem->mFlagsAndBorderColor & 0xFFFFFFu) | 0xFF000000u;   // GetBorderColor (x64 low-24)
-        params.bBackground  = static_cast<int>((pItem->mFlagsAndBackColor  >> 24) & 1u); // GetDrawsBackground (x64 bit 24)
-        params.bBorder      = static_cast<int>((pItem->mFlagsAndBorderColor >> 24) & 1u); // GetDrawsBorder (x64 bit 24)
+        params.nBackColor   = (pItem->mFlagsAndBackColor   >> 8) | 0xFF000000u;   // GetBackgroundColor
+        params.nBorderColor = (pItem->mFlagsAndBorderColor >> 8) | 0xFF000000u;   // GetBorderColor
+        params.bBackground  = static_cast<int>((pItem->mFlagsAndBackColor  >> 7) & 1u); // GetDrawsBackground
+        params.bBorder      = static_cast<int>((pItem->mFlagsAndBorderColor >> 7) & 1u); // GetDrawsBorder
 
         // Field-edge rect (the layout bounds; console x0=left y0=top x1=right y1=bottom).
         params.x0 = pItem->mBounds.fLeft;
@@ -314,25 +314,9 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             }
         }
 
-        // pnNumLines is a by-ref out-slot the console leaves uninitialised (Prepare owns
-        // it); model as null (no line-count output requested here).
-        params.pnNumLines = 0;
-
-        // The measured OUTPUT fields Prepare writes back (width/height/length/max-scroll).
-        // Seed them to safe defaults so that -- if the host callback does NOT run / cannot
-        // lay the string out (no FontCollection wired on this bring-up path -> pfnAllocateString
-        // returns 0 without touching the params) -- the measure-fold below does not read
-        // UNINITIALISED stack (the console relies on Prepare filling these; when it is skipped
-        // they must not be garbage, or the SetProceduralProperty box nudge writes a wild matrix).
-        params.fTextWidth  = params.x1 - params.x0;
-        params.fTextHeight = params.y1 - params.y0;
-        params.fStrLen     = 0.0f;
-        params.nMaxScroll  = static_cast<uint32_t>(pTextInst->mMaxScroll);
-
-        // ---- call the host string-layout callback (X360 dword_8324E860 == pfnAllocateString) ----
-        AptAssetString hHandle = 0;
-        if (gAptFuncs.pfnAllocateString != 0)
-            hHandle = gAptFuncs.pfnAllocateString(&params);
+        // ARTIST calls the layout hook unconditionally; its measured outputs are
+        // written by the callback and then consumed below.
+        AptAssetString hHandle = gAptFuncs.pfnAllocateString(&params);
 
         // Store the returned host render-data handle on the render item (X360 SetZID(v22)).
         // On x64 the handle is a host id (see AptRenderItemDynamicText.h mZID note); the
@@ -341,10 +325,12 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         AptRenderItemDynamicText* pWritable =
             static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable());
         pWritable->SetZID(reinterpret_cast<intptr_t>(hHandle));
+        AptRenderItemDynamicText* pItem2 =
+            static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem());
 
         const int nBoxAlign2 =
-            (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 2)) >> 28;
-        if (hHandle != 0 && nBoxAlign2 != 3)
+            (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 26)) >> 28;
+        if (nBoxAlign2 != 3)
         {
             // X360 fold operands:
             //   v26        = the item's CURRENT field width (item +0x58 - +0x50 re-read
@@ -369,30 +355,24 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             }
         }
 
-        const intptr_t diagnosticID = reinterpret_cast<intptr_t>(hHandle);
-
-        // ---- fold the measured layout back onto the render item (X360 LABEL_34) ----
-        // Only when the host laid the string out (hHandle != 0 -> Prepare wrote the measured
-        // width/height/length/max-scroll back into the params). Skipped on the unresolved
-        // (no-FontCollection) path so no unmeasured value reaches the render item.
-        if (hHandle != 0)
+        // Fold the measured layout back onto the render item (X360 LABEL_34).
         {
-            if (pItem2->mBounds.fLeft != params.x0)
-                pWritable->mBounds.fLeft = params.x0;
-            if (pItem2->mBounds.fRight != params.x1)
-                pWritable->mBounds.fRight = params.x1;
-            if (pItem2->mBounds.fTop != params.y0)
-                pWritable->mBounds.fTop = params.y0;
-            if (pItem2->mBounds.fBottom != params.y1)
-                pWritable->mBounds.fBottom = params.y1;
+            if (static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem())->mBounds.fLeft != params.x0)
+                static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItemWritable())->mBounds.fLeft = params.x0;
+            if (static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem())->mBounds.fRight != params.x1)
+                static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItemWritable())->mBounds.fRight = params.x1;
+            if (static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem())->mBounds.fTop != params.y0)
+                static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItemWritable())->mBounds.fTop = params.y0;
+            if (static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem())->mBounds.fBottom != params.y1)
+                static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItemWritable())->mBounds.fBottom = params.y1;
 
             // Max-scroll (v63) -> AptCharacterTextInst::mMaxScroll; clamp the render item's
             // scroll down to it.
             const int nMaxScroll = static_cast<int>(params.nMaxScroll);
             if (pTextInst->mMaxScroll != nMaxScroll)
                 pTextInst->mMaxScroll = nMaxScroll;
-            if (static_cast<int>(pItem2->mScroll) > pTextInst->mMaxScroll)
-                pWritable->mScroll = pTextInst->mMaxScroll;
+            if (static_cast<unsigned int>(static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem())->mScroll) > static_cast<unsigned int>(pTextInst->mMaxScroll))
+                static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItemWritable())->mScroll = pTextInst->mMaxScroll;
 
             // Measured text width / height / length -> the text-inst cache (v60/v61/v62).
             if (pTextInst->mTextWidth != params.fTextWidth)
