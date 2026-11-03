@@ -1,4 +1,5 @@
 #pragma once
+#include "GameShared/GameClasses/Network/Players/X360/CgsUniquePlayerIDX360.h"
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h
@@ -61,16 +62,12 @@ namespace BrnGameState
 // types when those TUs land (offsets must not move).
 // ---------------------------------------------------------------------------
 
-// Read by HandleImageSaveEvent (X360 0x82391AA8). The X360 reads: a 16-byte unique-player-id at
-// +0x00, the road id at *(a2+0)..its slots, the EImageType at +0x18 (a2[6]), and the texture
-// pointer at +0x1C (a2[7]). Built by the mugshot-capture path; modelled as the words this sink reads.
+// ARTIST 0x82391C08-14 passes all 24 bytes to Profile::AddMugshot.
 struct ImageToSaveEvent
 {
-    u64                           mu64UniqueIdLo;     // +0x00 (UniquePlayerID lo)  -> AddMugshot arg0/1
-    u64                           mu64UniqueIdHi;     // +0x08 (UniquePlayerID hi)
-    u8                            maPad0x10[0x18 - 0x10];
-    GameStateModuleIO::EImageType meImageType;        // +0x18 (a2[6]) -> gallery-type mapping
-    CgsNetwork::NetworkTexture*   mpTexture;           // +0x1C (a2[7]) -> RequestImageSave
+    CgsNetwork::UniquePlayerIDX360 mUniquePlayerID;  // +0x00
+    GameStateModuleIO::EImageType meImageType;       // +0x18
+    CgsNetwork::NetworkTexture*   mpTexture;         // +0x1C on X360
 };
 
 // Read by HandleImageFilesLoadedEvent (X360 0x82384548). One per-slot file-info record (the X360

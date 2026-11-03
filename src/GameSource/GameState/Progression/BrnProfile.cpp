@@ -139,10 +139,7 @@ void Profile::Construct()
     macName[0]      = 0;                            // empty name
 
     mCarPosition.SetZero();                         // (0,0,0,0)
-    mCarDirection.x = 1.0f;                          // (1,0,0,0)
-    mCarDirection.y = 0.0f;
-    mCarDirection.z = 0.0f;
-    mCarDirection.w = 0.0f;
+    mCarDirection = Vector3(1.0f, 0.0f, 0.0f);
 
     mSpawnCarId   = 0;
     mSpawnWheelId = 0;
@@ -310,7 +307,6 @@ void Profile::Construct()
     maEventScoresToUpload.Clear();             // X360 stw 0 @ +120824
     mDeveloperChallengesCompleted.Construct(); // X360 8-byte zero @ +120832
 
-    RunProfileSelfTest(*this);
 }
 
 // ====================================================================================
@@ -779,18 +775,13 @@ u8  MugshotInfo::GetLockedFlag() const { return mbLocked ? 1u : 0u; }           
 // (`GetFirstNonZeroBit` + `andc`, see Profile::Construct).
 // Hex-Rays suffered a local-allocation failure on this function; the asm is the spine.
 // ====================================================================================
-s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
-                        CgsSystem::DateAndTime lDateTaken, s32 leWorldRegion)
+s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
+                        CgsSystem::DateAndTime lDateTaken, BrnWorld::WorldRegion lRegion)
 {
     CGS_ASSERT(leMugshotType != 5, "leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:758
 
     CgsContainers::BitArray<20u>& lrFileIds = maAvailableMugshotFileIDs[leMugshotType];
     Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
-
-    memcpy(&lPlayerID.macName[0], &lUniqueID, sizeof(lPlayerID.macName));
-    lPlayerID.mqXuid = 0;
-    BrnWorld::WorldRegion lRegion;
-    lRegion.Construct(static_cast<BrnWorld::EDistrict>(leWorldRegion));
 
     MugshotInfo lRecord;
 
@@ -804,7 +795,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
 
         // X360 `mulli r8, r28, 0x3E8 ; add r30, r8, r31` -- the file id is namespaced per gallery.
         const s32 liFileID = 1000 * leMugshotType + liFreeFileIdBit;
-        lRecord.Construct(lPlayerID, lDateTaken, lRegion, static_cast<u16>(liFileID));
+        lRecord.Construct(lUniqueID, lDateTaken, lRegion, static_cast<u16>(liFileID));
         lrGallery.Append(lRecord);
         return liFileID;
     }
@@ -821,7 +812,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
         {
             const s32 liFileID = static_cast<s32>(lrVictim.mu16FileID);   // X360 `lhz 0x30`
             lrGallery.Erase(static_cast<u32>(liIndex));
-            lRecord.Construct(lPlayerID, lDateTaken, lRegion, static_cast<u16>(liFileID));
+            lRecord.Construct(lUniqueID, lDateTaken, lRegion, static_cast<u16>(liFileID));
             lrGallery.Append(lRecord);
             return liFileID;
         }
