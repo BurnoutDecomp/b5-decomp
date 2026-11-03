@@ -134,10 +134,12 @@ namespace
 
     // Triangle4::mValidMasks (+0x90), ANDed into the hit mask (`vand v12, v12, v6` @0x82618CB4 with
     // v6 == lvx128 base+0x90; `vand v11, v11, v7` @0x825C48F0 likewise). Non-zero == real triangle.
-    inline bool IsLaneEnabled(const Vector4& lrMasks, s32 liLane)
+    inline bool IsLaneEnabled(const CgsGeometric::Triangle4::Mask4& lrMasks, s32 liLane)
     {
         u32 luBits = 0;
-        std::memcpy(&luBits, &(&lrMasks.x)[liLane], sizeof(u32));
+        u32 lauLanes[4];
+        std::memcpy(lauLanes, &lrMasks.mV, sizeof(lauLanes));
+        luBits = lauLanes[liLane];
         return luBits != 0u;
     }
 
@@ -146,7 +148,9 @@ namespace
     inline u32 LaneBits(const Vector4& lrV, s32 liLane)
     {
         u32 luBits = 0;
-        std::memcpy(&luBits, &(&lrV.x)[liLane], sizeof(u32));
+        u32 lauLanes[4];
+        std::memcpy(lauLanes, &lrV.mV, sizeof(lauLanes));
+        luBits = lauLanes[liLane];
         return luBits;
     }
 
@@ -188,10 +192,10 @@ namespace
             lpaOut[liLine].mbHit        = false;
             lpaOut[liLine].mfBestT      = KF_NO_HIT_DISTANCE;
             lpaOut[liLine].muSurfaceTag = 0u;
-            lpaOut[liLine].mNormal.x = 0.0f;
-            lpaOut[liLine].mNormal.y = 0.0f;
-            lpaOut[liLine].mNormal.z = 0.0f;
-            lpaOut[liLine].mNormal.w = 0.0f;
+            lpaOut[liLine].mNormal.GetComponent(0) = 0.0f;
+            lpaOut[liLine].mNormal.GetComponent(1) = 0.0f;
+            lpaOut[liLine].mNormal.GetComponent(2) = 0.0f;
+            lpaOut[liLine].mNormal.GetComponent(3) = 0.0f;
         }
 
         for (s32 liBatch = 0; liBatch < liNumBatches; ++liBatch)
@@ -201,12 +205,12 @@ namespace
             Vector4 laNormal[4];
             for (s32 liLane = 0; liLane < 4; ++liLane)
             {
-                const f32 lfAx = (&lrBlock.mVertex0X.x)[liLane] - (&lrBlock.mVertex1X.x)[liLane];
-                const f32 lfAy = (&lrBlock.mVertex0Y.x)[liLane] - (&lrBlock.mVertex1Y.x)[liLane];
-                const f32 lfAz = (&lrBlock.mVertex0Z.x)[liLane] - (&lrBlock.mVertex1Z.x)[liLane];
-                const f32 lfBx = (&lrBlock.mVertex0X.x)[liLane] - (&lrBlock.mVertex2X.x)[liLane];
-                const f32 lfBy = (&lrBlock.mVertex0Y.x)[liLane] - (&lrBlock.mVertex2Y.x)[liLane];
-                const f32 lfBz = (&lrBlock.mVertex0Z.x)[liLane] - (&lrBlock.mVertex2Z.x)[liLane];
+                const f32 lfAx = lrBlock.mVertex0X.GetComponent(liLane).GetFloat() - lrBlock.mVertex1X.GetComponent(liLane).GetFloat();
+                const f32 lfAy = lrBlock.mVertex0Y.GetComponent(liLane).GetFloat() - lrBlock.mVertex1Y.GetComponent(liLane).GetFloat();
+                const f32 lfAz = lrBlock.mVertex0Z.GetComponent(liLane).GetFloat() - lrBlock.mVertex1Z.GetComponent(liLane).GetFloat();
+                const f32 lfBx = lrBlock.mVertex0X.GetComponent(liLane).GetFloat() - lrBlock.mVertex2X.GetComponent(liLane).GetFloat();
+                const f32 lfBy = lrBlock.mVertex0Y.GetComponent(liLane).GetFloat() - lrBlock.mVertex2Y.GetComponent(liLane).GetFloat();
+                const f32 lfBz = lrBlock.mVertex0Z.GetComponent(liLane).GetFloat() - lrBlock.mVertex2Z.GetComponent(liLane).GetFloat();
 
                 const f32 lfCx = (lfAy * lfBz) - (lfAz * lfBy);
                 const f32 lfCy = (lfAz * lfBx) - (lfAx * lfBz);
@@ -215,10 +219,10 @@ namespace
                 const f32 lfLenSq  = (lfCx * lfCx) + (lfCy * lfCy) + (lfCz * lfCz);
                 const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);   // vrsqrtefp + 2 NR
 
-                laNormal[liLane].x = lfCx * lfInvLen;
-                laNormal[liLane].y = lfCy * lfInvLen;
-                laNormal[liLane].z = lfCz * lfInvLen;
-                laNormal[liLane].w = 0.0f;
+                laNormal[liLane].GetComponent(0) = lfCx * lfInvLen;
+                laNormal[liLane].GetComponent(1) = lfCy * lfInvLen;
+                laNormal[liLane].GetComponent(2) = lfCz * lfInvLen;
+                laNormal[liLane].GetComponent(3) = 0.0f;
             }
 
             for (s32 liLine = 0; liLine < liNumLines; ++liLine)
@@ -226,22 +230,22 @@ namespace
                 const Vector3& lrStart = lpaStart[liLine];
                 const Vector3& lrEnd   = lpaEnd[liLine];
 
-                const f32 lfDx = lrEnd.x - lrStart.x;
-                const f32 lfDy = lrEnd.y - lrStart.y;
-                const f32 lfDz = lrEnd.z - lrStart.z;
+                const f32 lfDx = lrEnd.GetComponent(0) - lrStart.GetComponent(0);
+                const f32 lfDy = lrEnd.GetComponent(1) - lrStart.GetComponent(1);
+                const f32 lfDz = lrEnd.GetComponent(2) - lrStart.GetComponent(2);
 
                 for (s32 liLane = 0; liLane < 4; ++liLane)
                 {
-                    const f32 lfP0x = (&lrBlock.mVertex0X.x)[liLane];
-                    const f32 lfP0y = (&lrBlock.mVertex0Y.x)[liLane];
-                    const f32 lfP0z = (&lrBlock.mVertex0Z.x)[liLane];
+                    const f32 lfP0x = lrBlock.mVertex0X.GetComponent(liLane).GetFloat();
+                    const f32 lfP0y = lrBlock.mVertex0Y.GetComponent(liLane).GetFloat();
+                    const f32 lfP0z = lrBlock.mVertex0Z.GetComponent(liLane).GetFloat();
 
-                    const f32 lfE1x = (&lrBlock.mVertex1X.x)[liLane] - lfP0x;
-                    const f32 lfE1y = (&lrBlock.mVertex1Y.x)[liLane] - lfP0y;
-                    const f32 lfE1z = (&lrBlock.mVertex1Z.x)[liLane] - lfP0z;
-                    const f32 lfE2x = (&lrBlock.mVertex2X.x)[liLane] - lfP0x;
-                    const f32 lfE2y = (&lrBlock.mVertex2Y.x)[liLane] - lfP0y;
-                    const f32 lfE2z = (&lrBlock.mVertex2Z.x)[liLane] - lfP0z;
+                    const f32 lfE1x = lrBlock.mVertex1X.GetComponent(liLane).GetFloat() - lfP0x;
+                    const f32 lfE1y = lrBlock.mVertex1Y.GetComponent(liLane).GetFloat() - lfP0y;
+                    const f32 lfE1z = lrBlock.mVertex1Z.GetComponent(liLane).GetFloat() - lfP0z;
+                    const f32 lfE2x = lrBlock.mVertex2X.GetComponent(liLane).GetFloat() - lfP0x;
+                    const f32 lfE2y = lrBlock.mVertex2Y.GetComponent(liLane).GetFloat() - lfP0y;
+                    const f32 lfE2z = lrBlock.mVertex2Z.GetComponent(liLane).GetFloat() - lfP0z;
 
                     // P = cross(dir, e2)
                     const f32 lfPx = (lfE2z * lfDy) - (lfE2y * lfDz);
@@ -249,9 +253,9 @@ namespace
                     const f32 lfPz = (lfE2y * lfDx) - (lfE2x * lfDy);
 
                     // T = start - P0
-                    const f32 lfTx = lrStart.x - lfP0x;
-                    const f32 lfTy = lrStart.y - lfP0y;
-                    const f32 lfTz = lrStart.z - lfP0z;
+                    const f32 lfTx = lrStart.GetComponent(0) - lfP0x;
+                    const f32 lfTy = lrStart.GetComponent(1) - lfP0y;
+                    const f32 lfTz = lrStart.GetComponent(2) - lfP0z;
 
                     const f32 lfDet = (lfE1x * lfPx) + (lfE1y * lfPy) + (lfE1z * lfPz);
                     const f32 lfU   = (lfTx * lfPx) + (lfTy * lfPy) + (lfTz * lfPz);
@@ -303,25 +307,25 @@ namespace
                                      EVehicleDrivenWheel leWheelA, EVehicleDrivenWheel leWheelB)
     {
         const Vector3& lrA = lrCar.GetWheel(leWheelA).GetPosition();
-        CGS_ASSERT((lrA.x == lrA.x) && (lrA.y == lrA.y) && (lrA.z == lrA.z),
+        CGS_ASSERT((lrA.GetComponent(0) == lrA.GetComponent(0)) && (lrA.GetComponent(1) == lrA.GetComponent(1)) && (lrA.GetComponent(2) == lrA.GetComponent(2)),
                    "Invalid wheel position: , please tell Graham D.");            // Wheel.h:412
         const Vector3& lrB = lrCar.GetWheel(leWheelB).GetPosition();
-        CGS_ASSERT((lrB.x == lrB.x) && (lrB.y == lrB.y) && (lrB.z == lrB.z),
+        CGS_ASSERT((lrB.GetComponent(0) == lrB.GetComponent(0)) && (lrB.GetComponent(1) == lrB.GetComponent(1)) && (lrB.GetComponent(2) == lrB.GetComponent(2)),
                    "Invalid wheel position: , please tell Graham D.");            // Wheel.h:412
 
         // (B + A) * 0.5 -- the console adds the SECOND-loaded wheel into the first
         // (`vaddfp128 v0, v0, v127`); the order is immaterial to the sum.
-        const f32 lfLx = (lrB.x + lrA.x) * KF_STUCK_LINE_MIDPOINT;
-        const f32 lfLy = (lrB.y + lrA.y) * KF_STUCK_LINE_MIDPOINT;
-        const f32 lfLz = (lrB.z + lrA.z) * KF_STUCK_LINE_MIDPOINT;
+        const f32 lfLx = (lrB.GetComponent(0) + lrA.GetComponent(0)) * KF_STUCK_LINE_MIDPOINT;
+        const f32 lfLy = (lrB.GetComponent(1) + lrA.GetComponent(1)) * KF_STUCK_LINE_MIDPOINT;
+        const f32 lfLz = (lrB.GetComponent(2) + lrA.GetComponent(2)) * KF_STUCK_LINE_MIDPOINT;
 
         const Matrix44Affine& lrM = lrCar.GetTransform();
         // pos + xAxis*lx ; + yAxis*ly ; + zAxis*lz  (vmaddfp128 v123,v125,.. ; v124 ; v126)
         Vector3 lvWorld;
-        lvWorld.x = lrM.wAxis.x + (lrM.xAxis.x * lfLx) + (lrM.yAxis.x * lfLy) + (lrM.zAxis.x * lfLz);
-        lvWorld.y = lrM.wAxis.y + (lrM.xAxis.y * lfLx) + (lrM.yAxis.y * lfLy) + (lrM.zAxis.y * lfLz);
-        lvWorld.z = lrM.wAxis.z + (lrM.xAxis.z * lfLx) + (lrM.yAxis.z * lfLy) + (lrM.zAxis.z * lfLz);
-        lvWorld.w = lrM.wAxis.w + (lrM.xAxis.w * lfLx) + (lrM.yAxis.w * lfLy) + (lrM.zAxis.w * lfLz);
+        lvWorld.GetComponent(0) = lrM.wAxis.GetComponent(0) + (lrM.xAxis.GetComponent(0) * lfLx) + (lrM.yAxis.GetComponent(0) * lfLy) + (lrM.zAxis.GetComponent(0) * lfLz);
+        lvWorld.GetComponent(1) = lrM.wAxis.GetComponent(1) + (lrM.xAxis.GetComponent(1) * lfLx) + (lrM.yAxis.GetComponent(1) * lfLy) + (lrM.zAxis.GetComponent(1) * lfLz);
+        lvWorld.GetComponent(2) = lrM.wAxis.GetComponent(2) + (lrM.xAxis.GetComponent(2) * lfLx) + (lrM.yAxis.GetComponent(2) * lfLy) + (lrM.zAxis.GetComponent(2) * lfLz);
+        lvWorld.GetComponent(3) = lrM.wAxis.GetComponent(3) + (lrM.xAxis.GetComponent(3) * lfLx) + (lrM.yAxis.GetComponent(3) * lfLy) + (lrM.zAxis.GetComponent(3) * lfLz);
         return lvWorld;
     }
 }
@@ -389,22 +393,22 @@ namespace
 
         Vector4 lSphere;
         std::memcpy(&lSphere, mStuckInCollisionTestCacheSphere, sizeof(lSphere));
-        lSphere.w = KF_STUCK_IN_COLLISION_CACHE_SPHERE_RADIUS;                      // vrlimi128 ..,1,0
+        lSphere.GetComponent(3) = KF_STUCK_IN_COLLISION_CACHE_SPHERE_RADIUS;                      // vrlimi128 ..,1,0
         std::memcpy(mStuckInCollisionTestCacheSphere, &lSphere, sizeof(lSphere));   // stvx128 (before the compare)
 
-        const f32 lfDx = lrPos.x - lSphere.x;
-        const f32 lfDy = lrPos.y - lSphere.y;
-        const f32 lfDz = lrPos.z - lSphere.z;
+        const f32 lfDx = lrPos.GetComponent(0) - lSphere.GetComponent(0);
+        const f32 lfDy = lrPos.GetComponent(1) - lSphere.GetComponent(1);
+        const f32 lfDz = lrPos.GetComponent(2) - lSphere.GetComponent(2);
         const f32 lfDistSq = (lfDx * lfDx) + (lfDy * lfDy) + (lfDz * lfDz);
         // vrsqrtefp(0) is +inf and 0*inf is NaN, which is why the console vsel's a 0 in for an
         // exactly-zero dot (`vcmpeqfp v12, v12(0), v0 ; vsel v0, v0, v8(0), v12`). sqrt(0) is 0.
         const f32 lfDist = (lfDistSq == 0.0f) ? 0.0f : std::sqrt(lfDistSq);
 
-        if (lfDist > lSphere.w)
+        if (lfDist > lSphere.GetComponent(3))
         {
-            lSphere.x = lrPos.x;
-            lSphere.y = lrPos.y;
-            lSphere.z = lrPos.z;                                                      // w lane kept
+            lSphere.GetComponent(0) = lrPos.GetComponent(0);
+            lSphere.GetComponent(1) = lrPos.GetComponent(1);
+            lSphere.GetComponent(2) = lrPos.GetComponent(2);                                                      // w lane kept
             std::memcpy(mStuckInCollisionTestCacheSphere, &lSphere, sizeof(lSphere));
             lrCar.SetTimeUntilStuckInCollisionTest(KF_STUCK_IN_COLLISION_TEST_INTERVAL);
         }
@@ -464,7 +468,8 @@ namespace
         // The console's four stack vectors are uninitialised before GetWheelTagPoints fills them
         // (it skips a wheel with no tag point). Zeroed here so a tagless wheel posts a
         // deterministic degenerate line rather than stack garbage.
-        Vector3 laTagPoints[eNumDrivenWheels] = {};
+        Vector3 laTagPoints[eNumDrivenWheels];
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel) laTagPoints[liWheel].SetZero();
         Deformation::DeformableObject* const lpPlayerModel = lpDeformationManager->GetPlayerCarModel();
         lpPlayerModel->GetWheelTagPoints(laTagPoints);
 
@@ -484,14 +489,14 @@ namespace
             const Vector3& lrStart = laTagPoints[laiStartTag[liLine]];
             const Vector3& lrEnd   = laTagPoints[laiEndTag[liLine]];
             // Whole 16-byte registers move on the console; all four lanes travel.
-            lpCommand->maLineStart[liLine].x = lrStart.x;
-            lpCommand->maLineStart[liLine].y = lrStart.y;
-            lpCommand->maLineStart[liLine].z = lrStart.z;
-            lpCommand->maLineStart[liLine].w = lrStart.w;
-            lpCommand->maLineEnd[liLine].x   = lrEnd.x;
-            lpCommand->maLineEnd[liLine].y   = lrEnd.y;
-            lpCommand->maLineEnd[liLine].z   = lrEnd.z;
-            lpCommand->maLineEnd[liLine].w   = lrEnd.w;
+            lpCommand->maLineStart[liLine].GetComponent(0) = lrStart.GetComponent(0);
+            lpCommand->maLineStart[liLine].GetComponent(1) = lrStart.GetComponent(1);
+            lpCommand->maLineStart[liLine].GetComponent(2) = lrStart.GetComponent(2);
+            lpCommand->maLineStart[liLine].GetComponent(3) = lrStart.GetComponent(3);
+            lpCommand->maLineEnd[liLine].GetComponent(0)   = lrEnd.GetComponent(0);
+            lpCommand->maLineEnd[liLine].GetComponent(1)   = lrEnd.GetComponent(1);
+            lpCommand->maLineEnd[liLine].GetComponent(2)   = lrEnd.GetComponent(2);
+            lpCommand->maLineEnd[liLine].GetComponent(3)   = lrEnd.GetComponent(3);
         }
 
         lpCommand->mpTriangles          = lpTriangles;
@@ -607,16 +612,16 @@ namespace
         // s = -dot3(linear velocity, body up); lift every probe start by up * s * dt when s > 0.
         const Vector3& lrUp  = lrCar.GetUpAxis();
         const Vector3& lrVel = lrCar.GetLinearVelocity();
-        const f32 lfSink = -((lrVel.x * lrUp.x) + (lrVel.y * lrUp.y) + (lrVel.z * lrUp.z));
+        const f32 lfSink = -((lrVel.GetComponent(0) * lrUp.GetComponent(0)) + (lrVel.GetComponent(1) * lrUp.GetComponent(1)) + (lrVel.GetComponent(2) * lrUp.GetComponent(2)));
         if (lfSink > 0.0f)
         {
             for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             {
                 // vmaddfp v12, v12(up*s), v10(start), v11(dt)  ==  (up*s) * dt + start, all lanes
-                laStart[liWheel].x = (lrUp.x * lfSink) * lfTimeStep + laStart[liWheel].x;
-                laStart[liWheel].y = (lrUp.y * lfSink) * lfTimeStep + laStart[liWheel].y;
-                laStart[liWheel].z = (lrUp.z * lfSink) * lfTimeStep + laStart[liWheel].z;
-                laStart[liWheel].w = (lrUp.w * lfSink) * lfTimeStep + laStart[liWheel].w;
+                laStart[liWheel].GetComponent(0) = (lrUp.GetComponent(0) * lfSink) * lfTimeStep + laStart[liWheel].GetComponent(0);
+                laStart[liWheel].GetComponent(1) = (lrUp.GetComponent(1) * lfSink) * lfTimeStep + laStart[liWheel].GetComponent(1);
+                laStart[liWheel].GetComponent(2) = (lrUp.GetComponent(2) * lfSink) * lfTimeStep + laStart[liWheel].GetComponent(2);
+                laStart[liWheel].GetComponent(3) = (lrUp.GetComponent(3) * lfSink) * lfTimeStep + laStart[liWheel].GetComponent(3);
             }
         }
 
@@ -642,12 +647,12 @@ namespace
             const f32      lfT     = lrHit.mfBestT;
 
             // vsubfp v13, end, start ; vmaddfp v1, v13, v0(start), v12(t) -- all four lanes.
-            const Vector3 lvPosition = { ((lrEnd.x - lrStart.x) * lfT) + lrStart.x,
-                                         ((lrEnd.y - lrStart.y) * lfT) + lrStart.y,
-                                         ((lrEnd.z - lrStart.z) * lfT) + lrStart.z,
-                                         ((lrEnd.w - lrStart.w) * lfT) + lrStart.w };
-            const Vector3 lvNormal   = { lrHit.mNormal.x, lrHit.mNormal.y,
-                                         lrHit.mNormal.z, lrHit.mNormal.w };
+            const Vector3 lvPosition(Vector4( ((lrEnd.GetComponent(0) - lrStart.GetComponent(0)) * lfT) + lrStart.GetComponent(0),
+                                         ((lrEnd.GetComponent(1) - lrStart.GetComponent(1)) * lfT) + lrStart.GetComponent(1),
+                                         ((lrEnd.GetComponent(2) - lrStart.GetComponent(2)) * lfT) + lrStart.GetComponent(2),
+                                         ((lrEnd.GetComponent(3) - lrStart.GetComponent(3)) * lfT) + lrStart.GetComponent(3) ).mV);
+            const Vector3 lvNormal(Vector4( lrHit.mNormal.GetComponent(0), lrHit.mNormal.GetComponent(1),
+                                         lrHit.mNormal.GetComponent(2), lrHit.mNormal.GetComponent(3) ).mV);
 
             lrCar.AddTractionPoint(static_cast<EVehicleDrivenWheel>(liWheel),
                                    lvPosition, lvNormal, lrHit.muSurfaceTag);
@@ -703,8 +708,8 @@ namespace
         // ---- moving car: forget everything and restart the round robin at the front sensor ----
         const Vector3& lrAngVel = lrCar.GetAngularVelocity();
         const Vector3& lrLinVel = lrCar.GetLinearVelocity();
-        const f32 lfAngSq = (lrAngVel.x * lrAngVel.x) + (lrAngVel.y * lrAngVel.y) + (lrAngVel.z * lrAngVel.z);
-        const f32 lfLinSq = (lrLinVel.x * lrLinVel.x) + (lrLinVel.y * lrLinVel.y) + (lrLinVel.z * lrLinVel.z);
+        const f32 lfAngSq = (lrAngVel.GetComponent(0) * lrAngVel.GetComponent(0)) + (lrAngVel.GetComponent(1) * lrAngVel.GetComponent(1)) + (lrAngVel.GetComponent(2) * lrAngVel.GetComponent(2));
+        const f32 lfLinSq = (lrLinVel.GetComponent(0) * lrLinVel.GetComponent(0)) + (lrLinVel.GetComponent(1) * lrLinVel.GetComponent(1)) + (lrLinVel.GetComponent(2) * lrLinVel.GetComponent(2));
         if ((lfAngSq > KF_STUCK_LINETEST_ANGULARCUTOFF_SQ) || (lfLinSq > KF_STUCK_LINETEST_LINEARCUTOFF_SQ))
         {
             lrCar.SetIsWedgedInWorld(false);
@@ -715,36 +720,36 @@ namespace
         // ---- which probe this frame ------------------------------------------------------------
         const u32 luPlane = static_cast<u32>(mn8RoundRobinControlWord) & knVehicleRoundRobinNextTest;
 
-        Vector3 lvStart = { 0.0f, 0.0f, 0.0f, 0.0f };
-        Vector3 lvEnd   = { 0.0f, 0.0f, 0.0f, 0.0f };
+        Vector3 lvStart(0.0f, 0.0f, 0.0f);
+        Vector3 lvEnd(0.0f, 0.0f, 0.0f);
         const Matrix44Affine& lrM = lrCar.GetTransform();
 
         if (luPlane == knVehicleRoundRobinFrontPlaneToTest)
         {
             lvStart = WorldMidpointOfWheelPair(lrCar, eFrontLeftWheel, eFrontRightWheel);
             const f32 lfLen = mfFrontRayLength;                                       // +171472
-            lvEnd.x = (lfLen * lrM.zAxis.x) + lvStart.x;                             // vmaddcfp128
-            lvEnd.y = (lfLen * lrM.zAxis.y) + lvStart.y;
-            lvEnd.z = (lfLen * lrM.zAxis.z) + lvStart.z;
-            lvEnd.w = (lfLen * lrM.zAxis.w) + lvStart.w;
+            lvEnd.GetComponent(0) = (lfLen * lrM.zAxis.GetComponent(0)) + lvStart.GetComponent(0);                             // vmaddcfp128
+            lvEnd.GetComponent(1) = (lfLen * lrM.zAxis.GetComponent(1)) + lvStart.GetComponent(1);
+            lvEnd.GetComponent(2) = (lfLen * lrM.zAxis.GetComponent(2)) + lvStart.GetComponent(2);
+            lvEnd.GetComponent(3) = (lfLen * lrM.zAxis.GetComponent(3)) + lvStart.GetComponent(3);
         }
         else if (luPlane == knVehicleRoundRobinRearPlaneToTest)
         {
             lvStart = WorldMidpointOfWheelPair(lrCar, eRearLeftWheel, eRearRightWheel);
             const f32 lfLen = mfRearRayLength;                                        // +171476
-            lvEnd.x = lvStart.x - (lrM.zAxis.x * lfLen);                             // vsubfp128
-            lvEnd.y = lvStart.y - (lrM.zAxis.y * lfLen);
-            lvEnd.z = lvStart.z - (lrM.zAxis.z * lfLen);
-            lvEnd.w = lvStart.w - (lrM.zAxis.w * lfLen);
+            lvEnd.GetComponent(0) = lvStart.GetComponent(0) - (lrM.zAxis.GetComponent(0) * lfLen);                             // vsubfp128
+            lvEnd.GetComponent(1) = lvStart.GetComponent(1) - (lrM.zAxis.GetComponent(1) * lfLen);
+            lvEnd.GetComponent(2) = lvStart.GetComponent(2) - (lrM.zAxis.GetComponent(2) * lfLen);
+            lvEnd.GetComponent(3) = lvStart.GetComponent(3) - (lrM.zAxis.GetComponent(3) * lfLen);
         }
         else if (luPlane == knVehicleRoundRobinFrontSensorToTest)
         {
             lvStart = WorldMidpointOfWheelPair(lrCar, eFrontLeftWheel, eFrontRightWheel);
             const f32 lfLen = mfFrontRaySensorLength;                                 // +171468
-            lvEnd.x = (lfLen * lrM.zAxis.x) + lvStart.x;                             // vmaddcfp128
-            lvEnd.y = (lfLen * lrM.zAxis.y) + lvStart.y;
-            lvEnd.z = (lfLen * lrM.zAxis.z) + lvStart.z;
-            lvEnd.w = (lfLen * lrM.zAxis.w) + lvStart.w;
+            lvEnd.GetComponent(0) = (lfLen * lrM.zAxis.GetComponent(0)) + lvStart.GetComponent(0);                             // vmaddcfp128
+            lvEnd.GetComponent(1) = (lfLen * lrM.zAxis.GetComponent(1)) + lvStart.GetComponent(1);
+            lvEnd.GetComponent(2) = (lfLen * lrM.zAxis.GetComponent(2)) + lvStart.GetComponent(2);
+            lvEnd.GetComponent(3) = (lfLen * lrM.zAxis.GetComponent(3)) + lvStart.GetComponent(3);
         }
         else
         {

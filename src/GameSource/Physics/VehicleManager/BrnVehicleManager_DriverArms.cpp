@@ -455,7 +455,7 @@ namespace Vehicle
         //   HandleRaceCarRaceCarContact ..PNS0_22VehicleOutputInterfaceE PNS0_29VehicleManagerOutputInterfaceE ..
 
         // 0x8263D11C..0x8263D180. Victim == the nearest car (r4), aggressor == the player (r5).
-        const Vector3 lvWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const Vector3 lvWorldUp(0.0f, 1.0f, 0.0f);
         InstantTakedown(MakeRaceCarEntityId(static_cast<u32>(liNearestRaceCarIndex)),
                         MakeRaceCarEntityId(static_cast<u32>(liPlayerRaceCarIndex)),
                         lvWorldUp,                           // v1: world up

@@ -177,8 +177,8 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
         // v2 = (1 / massA) * (massB * closing): vrefp + two Newton steps on A's mass (+0xE0), B's
         // mass scaled by the closing speed, multiplied. v1 = the contact point ON A (arg_20).
         const f32 lfSlamMagnitude =
-            lfClosingSpeed * lpBodyB->GetMass().x / lpBodyA->GetMass().x;
-        const VecFloat lvSlamMagnitude = { lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude };
+            lfClosingSpeed * lpBodyB->GetMass().GetFloat() / lpBodyA->GetMass().GetFloat();
+        const VecFloat lvSlamMagnitude(lfSlamMagnitude);
         mPhysicalTrafficManager.SetTrafficVehicleSlammed(
             lTrafficAPhysicsID, lTrafficBPhysicsID, lpBodyB,
             lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface,
@@ -198,8 +198,8 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
     {
         // v2 = (1 / massB) * (massA * closing); v1 = the contact point ON B (arg_30).
         const f32 lfSlamMagnitude =
-            lfClosingSpeed * lpBodyA->GetMass().x / lpBodyB->GetMass().x;
-        const VecFloat lvSlamMagnitude = { lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude, lfSlamMagnitude };
+            lfClosingSpeed * lpBodyA->GetMass().GetFloat() / lpBodyB->GetMass().GetFloat();
+        const VecFloat lvSlamMagnitude(lfSlamMagnitude);
         mPhysicalTrafficManager.SetTrafficVehicleSlammed(
             lTrafficBPhysicsID, lTrafficAPhysicsID, lpBodyA,
             lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface,

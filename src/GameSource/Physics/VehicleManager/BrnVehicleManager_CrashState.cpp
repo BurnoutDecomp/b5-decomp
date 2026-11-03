@@ -62,11 +62,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                       // CgsSceneManager::EntityId
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                                         // vpu::Subtract / Normalize
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // [td-probe] PC harness witness
 
 #include <cmath>
-#include <cstdlib>                                                                 // std::getenv / atof ([td-probe])
-#include <cstring>                                                                 // strchr ([td-probe])
 
 namespace BrnPhysics
 {
@@ -368,10 +365,10 @@ namespace Vehicle
                 lrPlayerCar.mSlamEffect.mfSlamLife         = 0.0f;   // stfs +0x111C
                 lrPlayerCar.mSlamEffect.mfTotalSlamTime    = 0.0f;   // stfs +0x1120
                 lrPlayerCar.mSlamEffect.mi8SlamNumber      = -1;     // stb  +0x1128
-                const Vector3Plus lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+                const Vector3Plus lvZero(0.0f, 0.0f, 0.0f, 0.0f);
                 lrPlayerCar.mShuntEffect.mDirectionPlusDesiredSpeed = lvZero;   // stvx128 v0(0) +0x1130
-                lrPlayerCar.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = 0.0f;    // vrlimi128 mask 4 (lane y) <- 0.0
-                lrPlayerCar.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;   // vrlimi128 mask 8 (lane x) <- -1.0 ; z/w kept
+                lrPlayerCar.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.SetY(0.0f);    // vrlimi128 mask 4 (lane y) <- 0.0
+                lrPlayerCar.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.SetX(-1.0f);   // vrlimi128 mask 8 (lane x) <- -1.0 ; z/w kept
             }
 
             maeImpactType[liOther]          = leType;                                              // 0x82635E8C
@@ -399,8 +396,8 @@ namespace Vehicle
                 if (lbTypeIsShunt)                                                                 // 0x82636020..28
                 {
                     const f32 lfMagnitude = lEvent.mfMagnitude;                                    // lvlx 0x1C(ev) ; vspltw
-                    const VecFloat lvMagnitude = { lfMagnitude, lfMagnitude, lfMagnitude, lfMagnitude };
-                    const VecFloat lvQuitSpeed = { KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT, KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT, KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT, KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT };
+                    const VecFloat lvMagnitude(lfMagnitude);
+                    const VecFloat lvQuitSpeed(KF_IMPACT_SHUNT_SPEED_INCREASE_TO_QUIT);
                     lrPlayerCar.AddShunt(lvMagnitude,   // v1
                                          lEvent.mDirection,                                               // v2 lvx128 0(ev)
                                          lvQuitSpeed,
@@ -478,32 +475,6 @@ namespace Vehicle
     {
         AggressiveDrivingFlags&   lrFlags = lpVehicleOutputInterface->GetAggressiveDrivingFlags();          // +0x6C00
         VehicleGuiOutputMessages& lrGui   = lpVehicleManagerOutputInterface->GetVehicleGuiOutputMessages(); // +0x79C
-
-        // =========================================================================================
-        // [PC HARNESS, NOT X360] BRN_TD_PROBE=<firstSeconds>[:<periodSeconds>] -- the TAKEDOWN-TYPE
-        // LADDER PROBE.
-        //
-        // ⭐ WHY IT EXISTS, and what it does NOT do. The eight physics classifiers were walked
-        // against the ARTIST asm this wave and they are faithful; what could not be answered from
-        // code is whether a classified type SURVIVES the publication chain
-        //     InstantTakedown -> SetRaceCarCrashing -> RaceCarCrashEvent.meInstantTakedownType
-        //     -> TakedownManager::DetectInstantTakedown -> TakedownEvent.meType
-        //     -> TranslateTakedownsToGuiEvents -> GuiTakedownEvent (363)
-        //     -> HudMessageAnalyzer::HandleTakedown -> KAPC_TAKEDOWN_TYPES[type]
-        // for every type, because a scripted drive cannot be made to produce a vertical, a T-bone
-        // and a traffic check on demand -- run td_A drove for 200 s with rivals on the map and
-        // produced ZERO race-car-vs-race-car contacts, so the ladder never even ran.
-        // This probe FAKES NO CLASSIFICATION: it calls the console's own InstantTakedown, the exact
-        // entry point every classifier funnels through, with the exact operands the grinding arm
-        // twenty lines below builds, and walks the takedown TYPE through the enum. Everything after
-        // that call is the console's own code. A type that does not come out the far end is a
-        // genuine defect in the chain; a type that does is proven end to end.
-        // ⛔ It is a CAPABILITY, not an instrument: it wrecks cars that were not hit. Off unless the
-        // variable is set, and it must be in the harness wipe list.
-        // DELETE-WHEN every takedown type is proven on film from organic play.
-        // =========================================================================================
-        {
-        }
 
         for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
         {
@@ -646,7 +617,7 @@ namespace Vehicle
 
         EntityId lVictimId;
         lVictimId.muValue = static_cast<u32>(maRaceCarHandlingBodyIDs[leRaceCarIndex] >> 32);      // ld ; srdi 32
-        const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lvZero(0.0f, 0.0f, 0.0f);
         SetRaceCarCrashing(lVictimId,
                            lAggressorEntityId,                                                     // mr r5, r9
                            lvZero,                                      // v1 (vspltisw 0)
@@ -807,13 +778,13 @@ namespace Vehicle
         const Vector3 lvShunterPosition = lpShunter->GetGraphicsVehicleTransform().wAxis;          // 0x82619DB4/DC8 (v127)
         const Vector3 lvTrafficPosition = lpTraffic->GetGraphicsVehicleTransform().wAxis;          // 0x82619DCC/DD4 (v12)
         Vector3 lvOffset = vpu::Subtract(lvTrafficPosition, lvShunterPosition);                    // 0x82619DDC vsubfp
-        lvOffset.y = 0.0f;                                                                         // 0x82619E20 vrlimi128 lane y
+        lvOffset.SetY(0.0f);                                                                         // 0x82619E20 vrlimi128 lane y
 
-        if (!(std::fabs(lvOffset.x) > KF_SHOWTIME_SHUNT_MIN_HORIZONTAL_OFFSET
-              || std::fabs(lvOffset.z) > KF_SHOWTIME_SHUNT_MIN_HORIZONTAL_OFFSET))                 // 0x82619E24..40
+        if (!(std::fabs(lvOffset.GetX().GetFloat()) > KF_SHOWTIME_SHUNT_MIN_HORIZONTAL_OFFSET
+              || std::fabs(lvOffset.GetZ().GetFloat()) > KF_SHOWTIME_SHUNT_MIN_HORIZONTAL_OFFSET))                 // 0x82619E24..40
             return;
 
-        const f32 lfRatio = lpShunter->GetMass().x / lpTraffic->GetMass().x;                       // 0x82619E54..78 (vrefp cascade)
+        const f32 lfRatio = lpShunter->GetMass().GetFloat() / lpTraffic->GetMass().GetFloat();                       // 0x82619E54..78 (vrefp cascade)
         f32 lfScale;
         if (1.0f >= lfRatio)                                                                       // 0x82619E7C vcmpgefp.
         {
@@ -828,10 +799,8 @@ namespace Vehicle
             if (lfScale > 1.5f)  lfScale = 1.5f;                                                   // vminfp 1.5
         }
 
-        const VecFloat lvfScaledMagnitude = { lfScale * lvfMagnitude.x, lfScale * lvfMagnitude.y,     // 0x82619EBC vmulfp128 v1, v10, v126
-                                           lfScale * lvfMagnitude.z, lfScale * lvfMagnitude.w };
-        const VecFloat lvfSpeedIncreaseToQuit = { KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT, KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT,
-                                               KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT, KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT };   // unk_82FB9C30
+        const VecFloat lvfScaledMagnitude(__vmulfp(VecFloat(lfScale).mV, lvfMagnitude.mV));
+        const VecFloat lvfSpeedIncreaseToQuit(KF_SHOWTIME_SHUNT_SPEED_INCREASE_TO_QUIT);   // unk_82FB9C30
 
         lpTraffic->AddShunt(lvfScaledMagnitude,                                                    // v1
                             vpu::Normalize(lvOffset),                                              // v2
@@ -883,10 +852,8 @@ namespace Vehicle
         if (!lrPlayerCar.IsPlayerVehicleInShowtime())                                              // 0x82629F84..9C (vtable +0x10)
             return;
 
-        const VecFloat lvfRaceCarTrafficMagnitude = { KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE,
-                                                   KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE };   // unk_82FB7F30
-        const VecFloat lvfTrafficTrafficMagnitude = { KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE,
-                                                   KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE, KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE };   // unk_82FB7FB0
+        const VecFloat lvfRaceCarTrafficMagnitude(KF_SHOWTIME_RACECAR_TRAFFIC_SHUNT_MAGNITUDE);   // unk_82FB7F30
+        const VecFloat lvfTrafficTrafficMagnitude(KF_SHOWTIME_TRAFFIC_TRAFFIC_SHUNT_MAGNITUDE);   // unk_82FB7FB0
 
         // ---- race car vs traffic ----------------------------------------------------------------
         const ContactSpy::ContactSpyData::RaceCarContactQueue* lpRaceCarSpies = lpContactSpies->GetRaceCarContacts();

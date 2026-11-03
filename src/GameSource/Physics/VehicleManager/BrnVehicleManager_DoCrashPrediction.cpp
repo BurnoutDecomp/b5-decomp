@@ -44,11 +44,9 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"  // VehicleInputInterface::GetTriangleCacheInterface (the console's inlined `+128016`)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h"  // TriangleCacheInterface::GetCache / GetNumCachedTriangleBatches
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"             // CgsGeometric::Triangle4 (the SoA batch the cache stores)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // gpDebugPrint ([noslowmo] probe only)
 
 #include <cmath>     // std::sqrt  (the vrsqrtefp + 2 Newton normalise, lowered)
 #include <cstring>   // std::memcpy (Triangle4 lane masks / surface tags are raw words)
-#include <cstdlib>   // getenv      ([noslowmo] probe only)
 
 // =================================================================================================
 // THE FORCE-NO-SLOW-MO TRIANGLE-CACHE KERNEL  (inlined by the console into DoCrashPrediction at
@@ -98,10 +96,12 @@ namespace
     // A Triangle4 lane's enable bit (+0x90, `vand v11, v11, v7` @0x82646988). The producer side
     // writes 0xFFFFFFFF or 0x00000000 per lane (CgsPolygonSoupTests.cpp), so a non-zero word means
     // "this lane holds a real triangle". Same helper, same reason, as ContactGeneratorJob.cpp:193.
-    inline bool IsLaneEnabled(const Vector4& lrMasks, s32 liLane)
+    inline bool IsLaneEnabled(const CgsGeometric::Triangle4::Mask4& lrMasks, s32 liLane)
     {
         u32 luBits = 0;
-        std::memcpy(&luBits, &(&lrMasks.x)[liLane], sizeof(u32));
+        u32 lauLanes[4];
+        std::memcpy(lauLanes, &lrMasks.mV, sizeof(lauLanes));
+        luBits = lauLanes[liLane];
         return luBits != 0u;
     }
 
@@ -111,7 +111,9 @@ namespace
     inline u32 LaneBits(const Vector4& lrV, s32 liLane)
     {
         u32 luBits = 0;
-        std::memcpy(&luBits, &(&lrV.x)[liLane], sizeof(u32));
+        u32 lauLanes[4];
+        std::memcpy(lauLanes, &lrV.mV, sizeof(lauLanes));
+        luBits = lauLanes[liLane];
         return luBits;
     }
 
@@ -123,7 +125,6 @@ namespace
         f32     mfNearestT;     // v59
         Vector4 mNormal;        // v58 -- the unit face normal of the winning triangle
         u32     muSurfaceTag;   // v57 -- carried by the console, read by nothing (see below)
-        s32     miAccepted;     // NOT the console's: the [noslowmo] probe's armed-counter only
     };
 
     // 0x826466C0..0x82646AF8. `lpaBatches` is TriangleCacheInterface::GetCache(slot) and
@@ -138,7 +139,6 @@ namespace
         lResult.mfNearestT   = KF_NO_HIT_DISTANCE;
         lResult.mNormal.SetZero();
         lResult.muSurfaceTag = 0u;
-        lResult.miAccepted   = 0;
 
         for (s32 liBatch = 0; liBatch < liNumBatches; ++liBatch)
         {
@@ -146,29 +146,29 @@ namespace
 
             for (s32 liLane = 0; liLane < 4; ++liLane)
             {
-                const f32 lfP0x = (&lrBlock.mVertex0X.x)[liLane];
-                const f32 lfP0y = (&lrBlock.mVertex0Y.x)[liLane];
-                const f32 lfP0z = (&lrBlock.mVertex0Z.x)[liLane];
+                const f32 lfP0x = lrBlock.mVertex0X.GetComponent(liLane).GetFloat();
+                const f32 lfP0y = lrBlock.mVertex0Y.GetComponent(liLane).GetFloat();
+                const f32 lfP0z = lrBlock.mVertex0Z.GetComponent(liLane).GetFloat();
 
                 // e1 = P1 - P0, e2 = P2 - P0   (0x82646824 / 0x8264682C / 0x82646830 and
                 // 0x8264681C / 0x82646810 / 0x82646818 -- the SoA vsubfp pairs).
-                const f32 lfE1x = (&lrBlock.mVertex1X.x)[liLane] - lfP0x;
-                const f32 lfE1y = (&lrBlock.mVertex1Y.x)[liLane] - lfP0y;
-                const f32 lfE1z = (&lrBlock.mVertex1Z.x)[liLane] - lfP0z;
-                const f32 lfE2x = (&lrBlock.mVertex2X.x)[liLane] - lfP0x;
-                const f32 lfE2y = (&lrBlock.mVertex2Y.x)[liLane] - lfP0y;
-                const f32 lfE2z = (&lrBlock.mVertex2Z.x)[liLane] - lfP0z;
+                const f32 lfE1x = lrBlock.mVertex1X.GetComponent(liLane).GetFloat() - lfP0x;
+                const f32 lfE1y = lrBlock.mVertex1Y.GetComponent(liLane).GetFloat() - lfP0y;
+                const f32 lfE1z = lrBlock.mVertex1Z.GetComponent(liLane).GetFloat() - lfP0z;
+                const f32 lfE2x = lrBlock.mVertex2X.GetComponent(liLane).GetFloat() - lfP0x;
+                const f32 lfE2y = lrBlock.mVertex2Y.GetComponent(liLane).GetFloat() - lfP0y;
+                const f32 lfE2z = lrBlock.mVertex2Z.GetComponent(liLane).GetFloat() - lfP0z;
 
                 // P = cross(delta, e2)   (0x8264683C..0x826468BC)
-                const f32 lfPx = (lfE2z * lrDelta.y) - (lfE2y * lrDelta.z);
-                const f32 lfPy = (lfE2x * lrDelta.z) - (lfE2z * lrDelta.x);
-                const f32 lfPz = (lfE2y * lrDelta.x) - (lfE2x * lrDelta.y);
+                const f32 lfPx = (lfE2z * lrDelta.GetComponent(1)) - (lfE2y * lrDelta.GetComponent(2));
+                const f32 lfPy = (lfE2x * lrDelta.GetComponent(2)) - (lfE2z * lrDelta.GetComponent(0));
+                const f32 lfPz = (lfE2y * lrDelta.GetComponent(0)) - (lfE2x * lrDelta.GetComponent(1));
 
                 // T = origin - P0   (0x826468DC / 0x826468E0 / 0x82646834; the last one is
                 // `vsubfp128 v10, v95, v10` -- v95 is v63 once IDA's vA high-bit swap is undone).
-                const f32 lfTx = lrOrigin.x - lfP0x;
-                const f32 lfTy = lrOrigin.y - lfP0y;
-                const f32 lfTz = lrOrigin.z - lfP0z;
+                const f32 lfTx = lrOrigin.GetComponent(0) - lfP0x;
+                const f32 lfTy = lrOrigin.GetComponent(1) - lfP0y;
+                const f32 lfTz = lrOrigin.GetComponent(2) - lfP0z;
 
                 // det = dot(e1, P)  (0x826468D4 / D8 / E4) ; u = dot(T, P)  (0x826468F4 / 0x82646908
                 // / 0x82646920). u/v/tnum stay UNNORMALISED; the real barycentric is u/det.
@@ -182,7 +182,7 @@ namespace
 
                 // v = dot(Q, delta)  (0x82646918 / 0x82646928 / 0x82646938)
                 // tnum = dot(e2, Q)  (0x8264691C / 0x8264692C / 0x8264695C)
-                const f32 lfV    = (lfQx * lrDelta.x) + (lfQy * lrDelta.y) + (lfQz * lrDelta.z);
+                const f32 lfV    = (lfQx * lrDelta.GetComponent(0)) + (lfQy * lrDelta.GetComponent(1)) + (lfQz * lrDelta.GetComponent(2));
                 const f32 lfTNum = (lfE2x * lfQx) + (lfE2y * lfQy) + (lfE2z * lfQz);
 
                 // The acceptance test in the console's own shape (0x82646900..0x82646988):
@@ -213,7 +213,6 @@ namespace
                 // and ABOVE the vsel cascade). An accepted lane that then loses the race still
                 // counts, and the epilogue's `if (r25)` therefore still runs.
                 lResult.mbHit = true;
-                ++lResult.miAccepted;
 
                 // t = tnum / det   (0x82646A0C vrefp + TWO Newton steps + 0x82646A3C vmulfp).
                 // ⚠️ PC LOWERING, FLAGGED: a divide, same precedent/reason as the rsqrt below.
@@ -238,12 +237,12 @@ namespace
                     // ⚠️ The console's dot is `vmsum4fp128` (four components). The transpose sets
                     // the w lane of both vertex differences to 1.0f - 1.0f == 0, so c.w is 0 and
                     // the three-component dot below is the same number.
-                    const f32 lfAx = lfP0x - (&lrBlock.mVertex1X.x)[liLane];
-                    const f32 lfAy = lfP0y - (&lrBlock.mVertex1Y.x)[liLane];
-                    const f32 lfAz = lfP0z - (&lrBlock.mVertex1Z.x)[liLane];
-                    const f32 lfBx = lfP0x - (&lrBlock.mVertex2X.x)[liLane];
-                    const f32 lfBy = lfP0y - (&lrBlock.mVertex2Y.x)[liLane];
-                    const f32 lfBz = lfP0z - (&lrBlock.mVertex2Z.x)[liLane];
+                    const f32 lfAx = lfP0x - lrBlock.mVertex1X.GetComponent(liLane).GetFloat();
+                    const f32 lfAy = lfP0y - lrBlock.mVertex1Y.GetComponent(liLane).GetFloat();
+                    const f32 lfAz = lfP0z - lrBlock.mVertex1Z.GetComponent(liLane).GetFloat();
+                    const f32 lfBx = lfP0x - lrBlock.mVertex2X.GetComponent(liLane).GetFloat();
+                    const f32 lfBy = lfP0y - lrBlock.mVertex2Y.GetComponent(liLane).GetFloat();
+                    const f32 lfBz = lfP0z - lrBlock.mVertex2Z.GetComponent(liLane).GetFloat();
 
                     const f32 lfCx = (lfAy * lfBz) - (lfAz * lfBy);
                     const f32 lfCy = (lfAz * lfBx) - (lfAx * lfBz);
@@ -253,10 +252,10 @@ namespace
                     const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
 
                     lResult.mfNearestT = lfT;
-                    lResult.mNormal.x  = lfCx * lfInvLen;
-                    lResult.mNormal.y  = lfCy * lfInvLen;
-                    lResult.mNormal.z  = lfCz * lfInvLen;
-                    lResult.mNormal.w  = 0.0f;
+                    lResult.mNormal.GetComponent(0)  = lfCx * lfInvLen;
+                    lResult.mNormal.GetComponent(1)  = lfCy * lfInvLen;
+                    lResult.mNormal.GetComponent(2)  = lfCz * lfInvLen;
+                    lResult.mNormal.GetComponent(3)  = 0.0f;
                     // Carried in v57 across the whole cascade and read by NOTHING on this path --
                     // the epilogue only ever touches v58. Reproduced because the console does it
                     // and because the [noslowmo] probe reports it; do not "clean it up".
@@ -482,9 +481,7 @@ void VehicleManager::DoCrashPrediction(
         lHit.mfNearestT   = KF_NO_HIT_DISTANCE;
         lHit.mNormal.SetZero();
         lHit.muSurfaceTag = 0u;
-        lHit.miAccepted   = 0;
         f32  lfUprightDot = 0.0f;
-        bool lbCleared    = false;
 
         if (lbEntered)
         {
@@ -506,19 +503,19 @@ void VehicleManager::DoCrashPrediction(
             const Vector3         lvPos       = lTransform.Pos();    // +0x40
             const Vector3         lvHalfExtent = lrPlayerCar.GetHalfExtent();  // +0x6A0
 
-            const f32 lfNoseOffset = lvHalfExtent.z * KF_NO_SLOW_MO_NOSE_FRACTION;
+            const f32 lfNoseOffset = lvHalfExtent.GetComponent(2) * KF_NO_SLOW_MO_NOSE_FRACTION;
 
             Vector3 lvOrigin;
-            lvOrigin.x = lvPos.x + lvAt.x * lfNoseOffset;
-            lvOrigin.y = lvPos.y + lvAt.y * lfNoseOffset;
-            lvOrigin.z = lvPos.z + lvAt.z * lfNoseOffset;
-            lvOrigin.w = 0.0f;
+            lvOrigin.GetComponent(0) = lvPos.GetComponent(0) + lvAt.GetComponent(0) * lfNoseOffset;
+            lvOrigin.GetComponent(1) = lvPos.GetComponent(1) + lvAt.GetComponent(1) * lfNoseOffset;
+            lvOrigin.GetComponent(2) = lvPos.GetComponent(2) + lvAt.GetComponent(2) * lfNoseOffset;
+            lvOrigin.GetComponent(3) = 0.0f;
 
             Vector3 lvDelta;
-            lvDelta.x = lvAt.x * KF_NO_SLOW_MO_RAY_LENGTH;
-            lvDelta.y = lvAt.y * KF_NO_SLOW_MO_RAY_LENGTH;
-            lvDelta.z = lvAt.z * KF_NO_SLOW_MO_RAY_LENGTH;
-            lvDelta.w = 0.0f;
+            lvDelta.GetComponent(0) = lvAt.GetComponent(0) * KF_NO_SLOW_MO_RAY_LENGTH;
+            lvDelta.GetComponent(1) = lvAt.GetComponent(1) * KF_NO_SLOW_MO_RAY_LENGTH;
+            lvDelta.GetComponent(2) = lvAt.GetComponent(2) * KF_NO_SLOW_MO_RAY_LENGTH;
+            lvDelta.GetComponent(3) = 0.0f;
 
             // `ble cr6, loc_82646AFC` @0x82646624 -- a zero-batch slot skips straight to the
             // epilogue, where the any-hit byte is still 0 and nothing is cleared.
@@ -532,80 +529,17 @@ void VehicleManager::DoCrashPrediction(
             // car's forward axis, and `vcmpgtfp.` + the CR6 "all lanes" bit is a strict >.
             if (lHit.mbHit)
             {
-                lfUprightDot = (-lHit.mNormal.x) * lvAt.x
-                             + (-lHit.mNormal.y) * lvAt.y
-                             + (-lHit.mNormal.z) * lvAt.z;
+                lfUprightDot = (-lHit.mNormal.GetComponent(0)) * lvAt.GetComponent(0)
+                             + (-lHit.mNormal.GetComponent(1)) * lvAt.GetComponent(1)
+                             + (-lHit.mNormal.GetComponent(2)) * lvAt.GetComponent(2);
 
                 if (lfUprightDot > KF_NO_SLOW_MO_UPRIGHT_DOT)
                 {
                     mbForceNoSlowMo = false;   // `stb r30, 0(r22)`, r30 == 0  @0x82646B84
-                    lbCleared = true;
                 }
             }
         }
 
-        // ---- [noslowmo] the attributable measurement --------------------------------------
-        // OPT-IN via the EXISTING BRN_SLOMO_DIAG (already in flow_run.ps1's DEFAULT-run clear
-        // list, and already the name for "where the slow-motion decision comes from" in
-        // BrnMainDirector.cpp / BrnGameModule.cpp). Reusing it is deliberate: registering a NEW
-        // engine getenv means editing flow_run.ps1 in the same commit, and that file is another
-        // wave's dirty file this week -- the exact situation that cost f92879f1 its instrument.
-        //
-        // ⭐ IT REPORTS REACH, NOT JUST VERDICT. A block guarded by "crashed this frame AND the
-        // traffic arm asked for no slow-mo" can be silent for four different reasons, and a
-        // ray/triangle test that silently answers "no hit" is indistinguishable from the gate
-        // being absent -- which is precisely why three waves declined to land it without a run.
-        // The periodic line separates all of them: calls / crashed / forced / entered are the
-        // ladder down to the gate, batches is whether there was anything to test, accepted is
-        // whether the kernel ever accepted a lane, and cleared is the verdict.
-        {
-            static s32 siSlowMoDiag = -1;
-            if (siSlowMoDiag < 0)
-            {
-            }
-            if (siSlowMoDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                static u32 suCalls = 0, suCrashed = 0, suForced = 0, suEntered = 0;
-                static u32 suBatchesSeen = 0, suAccepted = 0, suAnyHit = 0, suCleared = 0;
-                ++suCalls;
-                if (lbCrashedThisFrame) ++suCrashed;
-                if (mbForceNoSlowMo || lbCleared) ++suForced;
-                if (lbEntered)
-                {
-                    ++suEntered;
-                    suBatchesSeen += static_cast<u32>(liNumBatches);
-                    suAccepted    += static_cast<u32>(lHit.miAccepted);
-                    if (lHit.mbHit) ++suAnyHit;
-                    if (lbCleared)  ++suCleared;
-
-                    // Every entry gets its own line -- the gate fires a handful of times per
-                    // crash, so this cannot storm the harness the way a per-frame probe would.
-                    *CgsDev::Log::gpDebugPrint
-                        << "[noslowmo] ENTER batches " << liNumBatches
-                        << "  accepted " << lHit.miAccepted
-                        << "  hit "      << static_cast<s32>(lHit.mbHit ? 1 : 0)
-                        << "  t "        << lHit.mfNearestT
-                        << "  dot "      << lfUprightDot
-                        << "  tag "      << lHit.muSurfaceTag
-                        << "  -> "       << (lbCleared ? "CLEARED (slow-mo allowed)"
-                                                       : "kept (slow-mo suppressed)")
-                        << "\n";
-                }
-                if ((suCalls % 600u) == 0u)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[noslowmo] calls "  << static_cast<s32>(suCalls)
-                        << "  crashed "         << static_cast<s32>(suCrashed)
-                        << "  forced "          << static_cast<s32>(suForced)
-                        << "  entered "         << static_cast<s32>(suEntered)
-                        << "  batchesSeen "     << static_cast<s32>(suBatchesSeen)
-                        << "  lanesAccepted "   << static_cast<s32>(suAccepted)
-                        << "  anyHit "          << static_cast<s32>(suAnyHit)
-                        << "  cleared "         << static_cast<s32>(suCleared)
-                        << "\n";
-                }
-            }
-        }
     }
 
     // ---- (4) traffic-vs-world, custom queue [9] (0x82646B8C..0x82646C08) ----------------------
