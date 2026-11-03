@@ -392,19 +392,62 @@ CarScoreData::CarScoreData()
         new (&maStorage8C[i * sizeof(CgsSystem::Time)]) CgsSystem::Time;
 }
 
-// X360 0x821F2B28. Reset to event-start defaults: zero the record, then seed mTotalTime = Time(0),
-// the count fields (8/9/9) and the two slot-index sentinels (-1). All other fields are 0 (memset).
+// X360 0x821F2B28 resets only the named fields below, preserving the rest of the score record.
 // (The +0x5C sentinel is now the named miOnlineStandingsPosition, carved out for the online scorers;
 // ClearData still seeds it to -1, matching the X360 stw r11,0x5C with r11 == -1.)
 void CarScoreData::ClearData()
 {
-    memset(this, 0, sizeof(*this));
-    mTotalTime                = CgsSystem::Time(0.0f);
-    miRacePosition            = 8;   // ClearData: +0x08 = 8 (last-of-8)
-    miHighestRacePosition     = 9;   // ClearData: +0x0C = 9
-    miFinishPosition          = 9;   // ClearData: +0x14 = 9
-    miOnlineStandingsPosition = -1;  // ClearData: +0x5C = -1
-    meEliminatorRaceCarIndex  = E_ACTIVE_RACE_CAR_INDEX_INVALID; // ClearData: +0x60 = -1
+    miCompletedLaps = 0;
+    miRacePosition = 8;
+    mbRacePositionImproved = false;
+    miFinishPosition = 9;
+    miHighestRacePosition = 9;
+    miTakedowns = 0;
+    miTakedownsAgainst = 0;
+    miTraitorousTakedownsFor = 0;
+    miTraitorousTakedownsAgainst = 0;
+    miMarkedManTakedownsFor = 0;
+    miOnlineFinishPositionScore = 0;
+    miOnlineStandingsPosition = -1;
+    meEliminatorRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    miNumEliminations = 0;
+    mbTimedOut = false;
+    mbHasFinished = false;
+    mbEliminated = false;
+
+    mTotalTime = CgsSystem::Time(0.0f);
+    mfDistanceToFinishLive = 0.0f;
+    mbCompletedBurningHomeRun = false;
+    mfDistanceToPlayer = 0.0f;
+    muOnlinePostEventValueC0 = 0;
+    mfDistanceToNextCheckpointLive = 0.0f;
+    miCumulativeCheckpoints = 0;
+    mfDistanceToFinish = 0.0f;
+    miChainableScore = 0;
+    mfDistanceAccumulator = 0.0f;
+    miChainableField = 0;
+    mfLongestDrift = 0.0f;
+    miCurrentChainableMultiplier = 0;
+    miOnlineStuntScore = 0;
+    mbChainActive = 0;
+    // These existing eight storage bytes are the two words cleared at100/104.
+    memset(maStoragePad100, 0, sizeof(maStoragePad100));
+    miMarkedManTakedownEventsFor = 0;
+    miMarkedManTakedownEventsAgainst = 0;
+    miPaybackTakedownsType2For = 0;
+    miPaybackTakedownsType2Against = 0;
+    miPaybackTakedownsType4For = 0;
+    miPaybackTakedownsType4Against = 0;
+    miBarrelRollCount = 0;
+    mbHasNetworkResults = false;
+    mTimeInFirstPlace.SetFloatVal(0.0f);
+    mTimeInLastPlace.SetFloatVal(0.0f);
+    mTimeBoosting.SetFloatVal(0.0f);
+    // Preserve ARTIST's positive-zero fractions. XDK folds the inlined
+    // SetFloatVal(0) loop's subtraction to negative zero under its FP mode.
+    const CgsSystem::Time lZeroLapTime(0, 0.0f);
+    for (u32 i = 0; i < 4; ++i)
+        maaLapTimes[i] = lZeroLapTime;
 }
 
 // X360 0x821F4740. The X360 emits explicit per-word/per-byte stores through +292; a full memcpy of

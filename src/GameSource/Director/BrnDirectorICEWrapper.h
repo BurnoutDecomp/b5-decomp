@@ -201,11 +201,6 @@ public:
         return *reinterpret_cast<ICE::ICEAuthor*>(&mICEManager.GetEditor());
     }
     void SetAcceptInput(bool lbAcceptInput) { mbAcceptInput = lbAcceptInput; }
-    bool WasEditorActive() const { return mbWasEditorActive; }
-    void SetWasEditorActive(bool lbWasEditorActive)
-    {
-        mbWasEditorActive = lbWasEditorActive;
-    }
 
     // Snapshot the currently-playing movie (id + playback position + validity).
     ICEPlayingMovie GetCurrentMovie();
@@ -299,10 +294,6 @@ private:
 
     // +0x12108  Dev-tools input gate -- UpdateAction only queues actions while this is set.
     bool mbAcceptInput;
-    u8 maAcceptInputPadding[7];
-
-    // +0x12110  Previous-frame editor state used to detect editor activation.
-    bool mbWasEditorActive;
 };
 
 } // namespace BrnDirector

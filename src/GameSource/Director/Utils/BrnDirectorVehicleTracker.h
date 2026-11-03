@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_VEHICLE_TRACKER_H
 
 #include "types.hpp"
+#include "GameSource/GameState/BrnGameStateSharedIO.h"
 #include "rw/math/vpu/types.h"                                // rw::math::vpu::Vector3 (journal entry type)
 #include "rw/math/vpu/vector3_operation.h"                    // operator- / operator/ (GetImplicitVelocity)
 #include "rw/math/fpu/scalar_operation.h"                    // timestep IsZero assertion
@@ -53,28 +54,7 @@ namespace BrnDirector
 // ----------------------------------------------------------------------------
 
 
-// ----------------------------------------------------------------------------
-// FLAG: minimal slice of the per-car score block the tracker embeds (CarScoreData has a real
-//   reconstructed home at GameSource/GameState/BrnGameStateSharedIO.h, but pulling that whole
-//   GameState IO tree into this per-TU `cl /c` gate would drag an unrelated dependency cone;
-//   the tracker only reads ONE field of it -- the distance-to-finish at +0x18 -- and copies
-//   the whole block via op=). Modelled here as a fixed-size opaque span with exactly that one
-//   named field at its pinned offset, copied wholesale by op=. Replace with the real
-//   CarScoreData when this TU links against the GameState IO home; the field NAME and the
-//   block size are stable.
-// ----------------------------------------------------------------------------
-class CarScoreData
-{
-public:
-    // Distance from the tracked car to the finish line (CarScoreData +0x18). The race-end
-    // effect ramp reads only this field.
-    f32 GetDistanceToFinish() const { return mfDistanceToFinish; }
-
-    u8  maHead[0x18];          // +0x00  opaque score fields ahead of the distance
-    f32 mfDistanceToFinish;    // +0x18  distance to the finish line
-    u8  maTail[0x128 - 0x1C];  // +0x1C  remaining score block (whole block is 0x128 bytes)
-};
-
+// ARTIST 827E2080 constructs the actual score record at tracker+0x170.
 // ----------------------------------------------------------------------------
 // FLAG: minimal slices of the two director-IO inputs Update reads. The runtime InputBuffer /
 //   GameState have real homes under GameSource/Director and GameSource/GameState, but Update
@@ -181,7 +161,7 @@ private:
     FloatJournal   mMphJournal;             // +0x120
     FloatJournal   mTimestepJournal;        // +0x148
 
-    CarScoreData   mScoreData;              // +0x170
+    BrnGameState::GameStateModuleIO::CarScoreData mScoreData;              // +0x170
 
     ECrashType     meCrashType;             // +0x298
     f32            mfRaceEndEffectAmount;   // +0x29C

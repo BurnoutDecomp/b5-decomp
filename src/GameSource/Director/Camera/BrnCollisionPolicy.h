@@ -193,7 +193,7 @@ private:
 class CollisionPolicy
 {
 public:
-    virtual ~CollisionPolicy() {}
+    // ARTIST 8200A150 / 8200A158 hold Generate and Process only; no destructor slot.
 
     // DWARF :333 / :338 -- the two per-frame virtuals, in the console's slot order. The base
     // bodies do nothing: a policy that does not override them issues and consumes no queries.

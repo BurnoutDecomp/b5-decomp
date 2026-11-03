@@ -24,7 +24,7 @@
 // set and not declared.
 // ============================================================================
 
-namespace BrnDirector { namespace Camera { class Camera; } }
+namespace BrnDirector { class DirectorModule; namespace Camera { class Camera; } }
 
 namespace BrnReplays
 {
@@ -62,10 +62,14 @@ namespace BrnReplays
         void Write();
 
     private:
+        // The native module lifecycle clears this owned latch at ARTIST 8225C6AC.
+        friend class BrnDirector::DirectorModule;
+
         // X360 +0x5C (right after the base's mbAllowStreaming @0x5A): raised by
         // Write's one-time in-place Camera::Construct on the static buffer.
         bool mbStaticCameraConstructed;
     };
+    CGS_STATIC_ASSERT((sizeof(DirectorSerialiser) == 0x60), "ARTIST DirectorSerialiser native extent");
 }
 
 #endif // GAMESOURCE_REPLAYS_SERIALISERS_BRNREPLAYDIRECTORSERIALISER_H

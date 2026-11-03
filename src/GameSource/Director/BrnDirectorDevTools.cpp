@@ -42,10 +42,10 @@ namespace BrnDirector
         lrICEWrapper.SetAcceptInput(!lrDebugUI.IsVisible());
 
         const bool lbEditorActive = lrICEWrapper.IsEditorActive();
-        if (!lrICEWrapper.WasEditorActive() && lbEditorActive)
+        if (!mpDirectorModule->mbUseIceWrapperCamera && lbEditorActive)
             lrICEWrapper.ReconstructCameraMover(
                 mpDirectorResourceManager->GetIceResourceManager());
-        lrICEWrapper.SetWasEditorActive(lbEditorActive);
+        mpDirectorModule->mbUseIceWrapperCamera = lbEditorActive;
 
         if (!lrDebugUI.IsVisible() && lbEditorActive)
             lrICEWrapper.UpdateAction(lpInput->GetControll()->mDebugController);
