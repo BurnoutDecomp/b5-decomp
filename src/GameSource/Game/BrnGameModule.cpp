@@ -953,7 +953,7 @@ namespace BrnGame
         if (mbStreamingStalled && sbShowStreamStallMessage)
         {
             CgsDev::DebugInterface lDebug;
-            const Vector2 lPosition = {200.0f, 40.0f};
+            const Vector2 lPosition(200.0f, 40.0f);
             lDebug.Get2dRender().Draw2DText(
                 "STREAM STALL: Stalling game while streaming catches up",
                 lPosition, 16.0f, 0xFF0000FFu);
@@ -3106,19 +3106,19 @@ namespace BrnGame
         const Matrix44& lrView = lrCamera.mView;
         Matrix44Affine lView;
         {
-            const Vector3 lAggregateValue = {lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w};
+            const Vector3 lAggregateValue(lrView.xAxis.mV);
             lView.xAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w};
+            const Vector3 lAggregateValue(lrView.yAxis.mV);
             lView.yAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w};
+            const Vector3 lAggregateValue(lrView.zAxis.mV);
             lView.zAxis = lAggregateValue;
         }
         {
-            const Vector3 lAggregateValue = {lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w};
+            const Vector3 lAggregateValue(lrView.wAxis.mV);
             lView.wAxis = lAggregateValue;
         }
         const Matrix44Affine lInverseView = rw::math::vpu::Inverse(lView);
