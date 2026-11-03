@@ -82,14 +82,14 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
     mFontID    = pText->mnDefaultGlyphIndex;                          // char +0x20
 
     // Packed back-colour dword: background colour forced white (bits 8-31), the
-    // alignment field (x64 bits 25-28) from the character's authored align dword.
+    // alignment field (ARTIST bits 3-6) from the character's authored align dword.
     // The console preserved the (uninitialised) draws-background bit here; it is
     // initialised deterministically to 0 (the portable de-opt).
-    mFlagsAndBackColor = 0x00FFFFFFu;                                 // backColor = 0xFFFFFF (x64 low-24)
+    mFlagsAndBackColor = 0xFFFFFF00u;                                 // ARTIST white RGB, low flag byte
     SetAlignment(pText->mnAuthoredReserved0);                         // char +0x24
 
     // Packed border-colour dword: border colour + draws-border 0, box alignment 3
-    // (x64 bits 26-29), mouse-wheel flag (x64 bit 25) from the global authored default.
+    // (ARTIST bits 2-5), mouse-wheel flag (bit 6) from the global authored default.
     mFlagsAndBorderColor = 0u;
     SetBoxAlignment(3);
     SetMouseWheelEnabled(gAptDefaultTextMouseWheelEnabled);

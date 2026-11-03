@@ -17,9 +17,11 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptCharacter.h"        // AptCharacter base (mnType + 16-byte base)
+#include "SDKs/EATech/include/Apt/Apt.h"
 #include "SDKs/EATech/include/Apt/AptStd/AptRect.h"       // AptRect mBounds
 
 struct AptCharacterShape : public AptCharacter
 {
     AptRect mBounds;   // [+0x10] authored bounding rectangle (left/top/right/bottom)
+    AptAssetRenderingUnit mRenderingUnit; // [+0x20] ARTIST Unresolve 0x82AF77B0
 };
