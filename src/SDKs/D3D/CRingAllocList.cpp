@@ -2,7 +2,9 @@
 #include "SDKs/D3D/CDevice.h"
 
 #include <cstddef> // offsetof (uncalled _CRingAllocListAssertLayout)
-#include <xtl.h> // MemoryBarrier (host mapping of the X360 eieio ordering op)
+#include <xtl.h>
+#include <d3d9gpu.h>
+#include <ppcintrinsics.h>
 
 // ===========================================================================
 // D3D::CRingAllocList -- reconstructed from BURNOUT_X360_ARTIST.XEX. See
@@ -46,7 +48,7 @@ u32 CRingAllocList::Initialize(CDevice* pDevice)
 u32 CRingAllocList::MakeSpace()
 {
     if (muCurrentNode != 0)
-        *reinterpret_cast<u32*>(muCurrentNode) = ToGpuPhysical(muWritePtr);
+        *reinterpret_cast<u32*>(muCurrentNode) = (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(muWritePtr)) - 0x40000000u);
 
     u32 uChunk = static_cast<u32>(mpDevice->BeginRingAlloc(0x1080, 0x80));
     u32 uBase  = uChunk;
@@ -54,14 +56,14 @@ u32 CRingAllocList::MakeSpace()
     if (uChunk != 0)
     {
         // Seed the new chunk's link header to its own body start.
-        *reinterpret_cast<u32*>(uChunk) = ToGpuPhysical(uChunk + 4);
+        *reinterpret_cast<u32*>(uChunk) = (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(uChunk + 4)) - 0x40000000u);
 
         if (muWritePtr != 0)
-            *reinterpret_cast<u32*>(muWritePtr) = ToGpuPhysical(uChunk);
+            *reinterpret_cast<u32*>(muWritePtr) = (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(uChunk)) - 0x40000000u);
         else
             muHeadChunk = uChunk;
 
-        u32 uPhys = ToGpuPhysical(uChunk);
+        u32 uPhys = (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(uChunk)) - 0x40000000u);
         FlushCachedMemory(uPhys, uPhys + 0x1080, 0);
     }
     else
@@ -86,22 +88,22 @@ s32 CRingAllocList::AddChunkNode(u32 uNode, u32 uNextWrite)
 {
     u32 uPrevWrite = muWritePtr;
 
-    u32 uNodePhys  = ToGpuPhysical(uNode);
-    u32 uWritePhys = ToGpuPhysical(uNextWrite);
+    u32 uNodePhys  = (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(uNode)) - 0x40000000u);
+    u32 uWritePhys = (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(uNextWrite)) - 0x40000000u);
 
     *reinterpret_cast<u32*>(uNode) = uWritePhys;
 
     muCurrentNode = uNode;
     muWritePtr    = uNextWrite - 4;
 
-    u32 uPrevPhys = ToGpuPhysical(uPrevWrite);
+    u32 uPrevPhys = (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(uPrevWrite)) - 0x40000000u);
 
-    ::MemoryBarrier(); // eieio: order the node-link store ahead of the flush
+    __eieio(); // eieio: order the node-link store ahead of the flush
     FlushCachedMemory(uNodePhys, uWritePhys, 0);
 
     *reinterpret_cast<u32*>(uPrevWrite) = uNodePhys;
 
-    ::MemoryBarrier(); // eieio: order the write-slot patch ahead of the flush
+    __eieio(); // eieio: order the write-slot patch ahead of the flush
     return FlushCachedMemory(uPrevPhys, uPrevPhys + 16, 0);
 }
 
@@ -110,7 +112,7 @@ s32 CRingAllocList::AddChunkNode(u32 uNode, u32 uNextWrite)
 u32 CRingAllocList::GetFirstChunk()
 {
     if (muHeadChunk != 0)
-        return ToGpuPhysical(muHeadChunk);
+        return (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(muHeadChunk)) - 0x40000000u);
     return 0;
 }
 
@@ -122,7 +124,7 @@ void CRingAllocList::Finalize()
 {
     if (muCurrentNode != 0)
     {
-        *reinterpret_cast<u32*>(muCurrentNode) = ToGpuPhysical(muWritePtr);
+        *reinterpret_cast<u32*>(muCurrentNode) = (GPU_CONVERT_CPU_TO_GPU_ADDRESS(reinterpret_cast<void*>(muWritePtr)) - 0x40000000u);
         *reinterpret_cast<u32*>(muWritePtr)    = 0xC0000000u;
     }
     muWriteEnd = 0;
