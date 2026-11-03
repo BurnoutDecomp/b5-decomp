@@ -80,7 +80,7 @@ public:
     // FindInst @ 0x82AD99A0 -- the ordered-position finder (owned by another TU;
     // declared so Insert links). Given a context key, fills *ppPred with the node
     // to insert after and *ppExisting with any node already holding that key.
-    void FindInst(void* lpKey, AptPseudoCIH_t** ppExisting, AptPseudoCIH_t** ppPred);
+    void FindInst(void* lpKey, AptPseudoCIH_t** ppPred, AptPseudoCIH_t** ppExisting);
 
     AptPseudoCIH_t* mpHead;    // +0x00 zeroed sentinel/head node
     void*           mpOwner;   // +0x04 owning context (ctor arg)

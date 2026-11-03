@@ -1020,14 +1020,14 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     {
     case 0:   // _x -- store translation X (position matrix tx @0x10)
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
         pPos->tx = f31;
         return;
     }
     case 1:   // _y -- store translation Y (position matrix ty @0x14)
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
         pPos->ty = f31;
         return;
@@ -1035,7 +1035,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     case 2:   // _xscale (percent) -- scale the first column (a,b)
     {
         f31 *= KF_AptProcHundredth;          // percent -> ratio
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         if (f31 == KF_AptProcZero)
             f31 = KF_AptProcScaleFloor;       // never let the column collapse
         AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
@@ -1055,7 +1055,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     case 3:   // _yscale (percent) -- scale the second column (c,d)
     {
         f31 *= KF_AptProcHundredth;
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         if (f31 == KF_AptProcZero)
             f31 = KF_AptProcScaleFloor;
         AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
@@ -1074,7 +1074,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 4:   // _width -- drive _xscale so the world width matches f31
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         if (f31 < KF_AptProcZero)
             return;
         if (f31 == KF_AptProcZero)
@@ -1114,7 +1114,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 5:   // _height -- drive _yscale so the world height matches f31
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         if (f31 < KF_AptProcZero)
             return;
         if (f31 == KF_AptProcZero)
@@ -1152,7 +1152,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 6:   // _rotation (degrees) -- wrap to (-180,180], cache, rebuild the rotation
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         // Wrap into [-180, 180] via fmod 360 then a 360 subtract for the high half.
         // fmod only when outside [-180, 180] (f31 > 180 || f31 < -180).
         if (f31 > KF_AptProc180 || f31 < KF_AptProcNeg180)
@@ -1181,7 +1181,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 7:   // _alpha (percent) -- colour-scale alpha, rounded to 0..255 then clamped
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         if (f31 < KF_AptProcZero)
         {
@@ -1204,7 +1204,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 8:   // colour translate Red -- clamp [-255, 255], store at translate.Red (@0x1C)
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         float fVal = f31;
         if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
@@ -1214,7 +1214,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 9:   // colour translate Green (@0x20)
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         float fVal = f31;
         if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
@@ -1224,7 +1224,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 10:  // colour translate Blue (@0x24)
     {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
+        mFlagsA = (mFlagsA & ~0x80000000u) | (bASChanged ? 0x80000000u : 0u);
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         float fVal = f31;
         if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
@@ -1995,7 +1995,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 
             if (GetZombieCount() > 0)   // re-check: the scrub may have drained it
             {
-                mFlagsA &= ~0x1u;   // AS-changed clear (x64 bit 0; the X360 rlwinm 1,31)
+                mFlagsA &= ~0x80000000u;   // AS-changed clear (x64 bit 0; the X360 rlwinm 1,31)
                 SetHasClass(0);            // vtable slot 5
                 SetReleaseAtEnd();
                 // Push onto the zombie vector (family-(B): count == mnCapacity,
@@ -2037,7 +2037,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         // same slot on the LE flag layout). The previous transcription mislabeled
         // the slot-5 call as Release(), which fabricated an extra reference drop
         // on every cleared node.
-        mFlagsA &= ~0x1u;
+        mFlagsA &= ~0x80000000u;
         SetHasClass(0);
         return;
     }
@@ -2079,7 +2079,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 
         // AS-changed clear (x64 bit 0) + vtable slot 5 == SetHasClass(0) (see the
         // null-inst arm note above).
-        mFlagsA &= ~0x1u;
+        mFlagsA &= ~0x80000000u;
         SetHasClass(0);
     }
 }

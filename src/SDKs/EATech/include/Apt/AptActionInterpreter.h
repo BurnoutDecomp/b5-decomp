@@ -68,8 +68,8 @@ public:
     {
         const unsigned char* mpProgramCounter;     // the action-bytecode read pointer
         AptCIH*              mpCIH;                 // the current movie-clip scope
-        AptValue*            mpPendingReleaseValue; // temp released when the PC reaches...
-   // ...this position
+        AptValue*            mpPendingReleaseValue; // scope released at the end marker
+        const unsigned char* mpPendingReleaseEnd;   // ARTIST context +0x0C
         AptValue*            mpScopeVariable;       // the run's resolved "super" value (console ctx+0x10;
                                                     // CallMethod's supercall identity test reads it)
         bool                 mbStop;                // a stop/end op sets this -> end execution

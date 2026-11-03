@@ -1,3 +1,4 @@
+#include "SDKs/EATech/include/Apt/AptPseudoData.h"
 #include "SDKs/EATech/include/Apt/AptCharacterMorph.h"
 #include "SDKs/EATech/include/Apt/AptCharacterShape.h"
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"
@@ -37,28 +38,9 @@ extern void* gAptDeferredReleaseQueue;
 #include "SDKs/EATech/include/Apt/AptCIH.h"                 // AptCIH (ExecuteInitActions' typed CIH chase)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"       // AptCharacterInst::mpRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"          // AptRenderItem::mpCharacter
-#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"  // native-8 shape-geometry rebase
 
 #include "types.hpp"
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
-
-// ===========================================================================
-// Fixup walk -- serialised-blob access.   The serialised .apt records are the
-// in-place file blob (no recovered runtime struct), so this TU addresses them by
-// their [c:0xNN] byte offsets through the BlobI32/BlobPtr accessors below, exactly
-// as the sibling AptMovie::resolve does for the timeline command records. The
-// callees the walk recurses into are homed now (AptLoader::Load, AptMovie::resolve64,
-// AptCharacter::SetupCharacter, the VM singleton -- see the notes below).
-// ===========================================================================
-
-// (The X360 AptLoader::Load @0x82AEEA70 by-value-return wrapper extern was
-// DELETED 2026-07-10 -- the import pass below calls the homed member
-// `lpLoader->Load(lName)` directly.)
-
-// The AptData resource span the host stashes (x64 native-8 relocation bounds) so the
-// Fixup case-5/9 -> AptMovie::resolve64 walk can bounds-check every serialised offset slot.
-// HOMED: defined in CgsAptAux.cpp; declared here by name to avoid the heavy CgsAptAux.h.
-namespace CgsGui {   }
 
 // ===========================================================================
 // Init-action execution (the ActionScript VM path).   The init-action passes
@@ -107,33 +89,6 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // AptFile_::operator_ == AptSharedPtr<AptFile>::operator= (homed in AptSharedPtr.cpp);
 // the import slot at entry+0x0C aliases an AptFilePtr (a single AptFile* word), so
 // the assignment target is reinterpreted as one.
-
-// ---------------------------------------------------------------------------
-// Serialised-record byte accessors. The .apt record layout is the in-place file
-// blob (console byte offsets); these keep the access pointer-width-safe on x64
-// while documenting the [c:0xNN] offset, matching AptMovie.cpp's CmdI32/CmdPtr.
-// ---------------------------------------------------------------------------
-namespace
-{
-    inline int32_t  BlobI32(void* pRec, int nOff)            { return *reinterpret_cast<int32_t*>(reinterpret_cast<char*>(pRec) + nOff); }
-    inline int32_t& BlobI32Ref(void* pRec, int nOff)         { return *reinterpret_cast<int32_t*>(reinterpret_cast<char*>(pRec) + nOff); }
-    // BlobPtr reads a (already-relocated) pointer slot from a serialised record.
-    // The records are addressed by their console byte offsets; on x64 every host
-    // pointer slot the runtime touches is a full 8-byte word (the native-8 GUIAPT64
-    // form -- the 4-byte console slot widens under the 8-byte pointer rule, the
-    // same resolved fork the Fixup walk documents).
-    inline void*    BlobPtr(void* pRec, int nOff)            { return *reinterpret_cast<void**>(reinterpret_cast<char*>(pRec) + nOff); }
-    inline void*&   BlobPtrRef(void* pRec, int nOff)         { return *reinterpret_cast<void**>(reinterpret_cast<char*>(pRec) + nOff); }
-    inline char*    BlobAt(void* pRec, int nOff)             { return reinterpret_cast<char*>(pRec) + nOff; }
-}
-
-// FAITHFULNESS (2026-06-30): the invented native-8 defensive apparatus (gAptFixupBound* /
-// FixupInBounds / gAptFixupSkipped* + the CgsApt_*Probe sinks + gAptTimeline* + the
-// AptRelocateTimeline8* routines) was REMOVED. It only existed because the old FixupWalk used a
-// WRONG relocation base (the resource start, not aptDataOffset) so relocations produced garbage that
-// had to be skipped; and it wrongly relocated the frame timeline inside Fixup (that is
-// AptMovie::resolve's job). With the correct base + verified 64-bit offsets the walk is exact -- no
-// guards, no skips, no timeline relocation here.
 
 // IsImport @0x7E3738 -- find the import slot whose local id matches nId.
 int32_t AptCharacterAnimation::IsImport(int32_t nId)
@@ -363,254 +318,86 @@ int32_t AptCharacterAnimation::GetIDFromImportFile(int32_t nImportIndex)
     return -1;
 }
 
-// ===========================================================================
-// The init-action passes (the "__Packages" class bootstrap + the per-character
-// onClipEvent init streams). Both walk the serialised .apt timeline command records
-// by their native-8 byte offsets (via Blob*) -- the in-place blob records have no
-// recovered runtime struct, exactly the opaque-record handling the Fixup walk uses.
-// The VM side (gAptActionInterpreter + the AS register-block window) is typed + live.
-// ===========================================================================
+// Native frame-0 init actions. ARTIST 0x82AEA8C8 / 0x82AEE2D8 / 0x82AF4340.
 namespace
 {
-    // The scope the runStream calls bind: the character inst of the level the
-    // supplied CIH lives at. Shared verbatim by ExportClassDefinitionAssets /
-    // ExecuteInitAction -- both inline the AptCIH::GetRootAnimation walk (CIHNone
-    // value tag 0x25 -> the level-0 root, else chase the display-list parent
-    // [c:+0x1C] until the char-inst type tag is 9/15), then read the level node's
-    // char inst ([c:+0x20]). The console read the tag as charInst[c:+0x08]>>26 (the
-    // X360 big-endian position); on x64 the tag is mTypeFlags & 0x3F, so the walk
-    // goes through the TYPED members (GetRootAnimation, AptCIH.cpp). pA2==0 -> 0.
-    AptCharacterInst* ResolveAnimationScope(void* pA2)
+    AptCharacterInst* ResolveAnimationScope(void* pCIH)
     {
-        if (!pA2)
-            return 0;
-        AptCIH* const pLevel = static_cast<AptCIH*>(pA2)->GetRootAnimation();
-        return pLevel ? pLevel->GetCharacterInst() : 0;   // v14 = *(pLevel+0x20)
+        return pCIH ? static_cast<AptCIH*>(pCIH)->GetRootAnimation()->GetCharacterInst() : 0;
     }
 }
 
-// ExportClassDefinitionAssets @0x82AEA8C8 -- run each pending "__Packages." class-
-// definition frame-label exactly once (then mark it consumed by negating its
-// indicator). this[c:0x28]/[c:0x2C] is the label/indicator list (an AptInitEntry list:
-// {name@+0, indicator@8}); this[c:+4] is the timeline-command table the matching action
-// stream lives in. The def-base head fields are read through the serialized 64-bit struct
-// (initCount@0x40, initList@0x48, framesOffset@0x08). FAITHFUL to the asm; the VM
-// singleton is the homed gAptActionInterpreter (AptGlobals.cpp).
-void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
+void AptCharacterAnimation::ExportClassDefinitionAssets(void* pCIH)
 {
-    void* result = 0;
-
-    const int32_t nLabels = mnInitListCount;                // [c:0x28] initCount
-    for (int32_t iLabel = 0; iLabel < nLabels; ++iLabel)
+    for (int32_t i = 0; i < mnInitListCount; ++i)
     {
-        AptInitEntry& rEntry = mpInitList[iLabel];          // [c:0x2C] initList (stride 0x10)
-
-        // indicator < 0 -> already consumed -> stop the whole walk (asm: blt -> exit).
-        if (rEntry.mnIndicator < 0)
-            break;
-
-        // strstr(name, "__Packages.") -- only the package-definition labels qualify.
-        // (the label entry reuses the init-entry ptr slot as the frame-label name)
-        result = const_cast<char*>(::strstr(reinterpret_cast<const char*>(rEntry.mpInitObject), "__Packages."));
-        if (result)
+        AptInitEntry& entry = mpInitList[i];
+        if (entry.mnIndicator < 0) break;
+        if (::strstr(static_cast<const char*>(entry.mpInitObject), "__Packages."))
         {
-            // Find the type-8 timeline command whose id [+4] == this label's indicator.
-            // NATIVE-8 (frame record {i32 count@0, pad, u64 cmds@8}; console was {count@0, cmds@4}).
-            const int32_t nIndicator = rEntry.mnIndicator;
-            void* pCmdHdr = mpFrames;                        // frame[0] == the init command table
-            const int32_t nCmds = BlobI32(pCmdHdr, 0x00);
-            if (nCmds > 0)
+            AptMovieFrame* first = static_cast<AptMovieFrame*>(mpFrames);
+            for (int32_t k = 0; k < first->mnCommandCount; ++k)
             {
-                void** pCmdTable = reinterpret_cast<void**>(BlobPtr(pCmdHdr, 0x08));   // native-8 cmds@+8
-                int32_t iCmd = 0;
-                while (BlobI32(pCmdTable[iCmd], 0x00) != 8 ||
-                       BlobI32(pCmdTable[iCmd], 0x04) != nIndicator)
-                {
-                    if (++iCmd >= nCmds)
-                        goto consumeLabel;
-                }
-
-                // Run the matched command's action stream on the VM singleton.
-                {
-                    // Push a fresh register-block window (inlined PushStaticData on the console).
-                    void* pSavedScratch = AptScriptFunctionBase::PushStaticData();
-
-                    void* pScope  = ResolveAnimationScope(pA2);
-                    void* pStream = BlobPtr(pCmdTable[iCmd], 0x10);   // native-8 tag-8 stream @cmd+0x10
-                    // X360 runStream(&dword_8324E760, stream, a2, -1, scope) -> the member
-                    // (pStream, pCIH = a2, nLength = -1, pCharInst = the resolved scope).
-                    gAptActionInterpreter.runStream(
-                        static_cast<const unsigned char*>(pStream),
-                        reinterpret_cast<AptCIH*>(pA2), -1,
-                        reinterpret_cast<AptCharacterInst*>(pScope));
-
-                    // Pop the register-block window (the X360 2-arg CleanupAfterExecution;
-                    // r3 carries PopStaticData's incidental return -- every caller ignores it).
-                    gAptActionInterpreter.CleanupAfterExecution(pSavedScratch);
-                    result = pSavedScratch;
-                }
-            }
-
-        consumeLabel:
-            // Mark the label consumed: indicator = -indicator.
-            int32_t& rIndicator = mpInitList[iLabel].mnIndicator;
-            rIndicator = -rIndicator;
-        }
-    }
-    return result;
-}
-
-// ExecuteInitAction @0x82AEE2D8 -- find the type-8 init command whose id == nId, run
-// its class-definition assets, run that command's action stream once, then mark it
-// consumed (negate the id). this[c:+4] is the timeline-command table. FAITHFUL.
-void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
-{
-    void* result = 0;
-
-    void* pCmdHdr = mpFrames;                            // frame[0] == the init command table
-    const int32_t nCmds = BlobI32(pCmdHdr, 0x00);        // NATIVE-8 frame record (count@0, cmds@8)
-    if (nCmds <= 0)
-        return result;
-
-    void** pCmdTable = reinterpret_cast<void**>(BlobPtr(pCmdHdr, 0x08));   // native-8 cmds@+8
-    int32_t iCmd = 0;
-    void* pEntry;
-    for (;;)
-    {
-        pEntry = pCmdTable[iCmd];
-        if (BlobI32(pEntry, 0x00) == 8 && BlobI32(pEntry, 0x04) == nId)
-            break;
-        if (++iCmd >= nCmds)
-            return result;                               // LABEL_17 (no match)
-    }
-
-    // Export this class's __Packages assets first, then run the init stream.
-    ExportClassDefinitionAssets(pA2);
-
-    // Push a fresh register-block window (inlined PushStaticData on the console).
-    void* pSavedScratch = AptScriptFunctionBase::PushStaticData();
-
-    void* pScope = ResolveAnimationScope(pA2);
-
-    // stream = the matched command's action stream -- re-read the table (the asm reloads
-    // it after the call). NATIVE-8: cmds@frame+8, tag-8 stream @cmd+0x10.
-    void** pCmdTable2 = reinterpret_cast<void**>(BlobPtr(mpFrames, 0x08));
-    void* pStream = BlobPtr(pCmdTable2[iCmd], 0x10);
-    // X360 runStream(&dword_8324E760, stream, a2, -1, scope) -> the member.
-    gAptActionInterpreter.runStream(
-        static_cast<const unsigned char*>(pStream),
-        reinterpret_cast<AptCIH*>(pA2), -1,
-        reinterpret_cast<AptCharacterInst*>(pScope));
-
-    // Pop the register-block window (X360 2-arg CleanupAfterExecution; the incidental
-    // r3 return is ignored by every caller).
-    gAptActionInterpreter.CleanupAfterExecution(pSavedScratch);
-    result = pSavedScratch;
-
-    // Mark consumed: entry[1] = -entry[1].
-    BlobI32Ref(pEntry, 0x04) = -BlobI32(pEntry, 0x04);
-    return result;
-}
-
-// ExecuteInitActions @0x82AF4340 -- locate the init-list bucket for character nId
-// (either directly in mpImportTable [c:0x24]/[c:0x20], or by chasing the import via
-// GetIDFromImportFile), then run every pending type-3 init command in that bucket and
-// finally the import-resolved init action. FAITHFUL to the asm; the def-base head fields
-// are read through the serialized 64-bit struct (importCount@0x34, importTable@0x38 stride
-// 0x20), and the import->AptFile->embedded-movie chase is the TYPED native-8 walk below
-// (file->mpData -> def base @root+0x20 -> charTable[id] -> char+0x20), guarded on the
-// real data bounds -- the whole path runs on the widened records.
-void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
-{
-    void* result = 0;
-    int32_t nResolvedId = nId;                            // v5 (r27)
-    void* pBucketOwner  = this;                           // v6 (r28)
-
-    // Locate nId in mpImportTable (the serialized 64-bit import entry: id at +0x10).
-    int32_t iSlot = -1;
-    const int32_t nImports = mnImportCount;
-    // Default bucket = the supplied CIH's clip movie (console chase *(*(*(pA2+0x20)+4)+4)+0x10
-    // == CIH -> charInst -> renderItem -> character -> embedded movie). NATIVE-8: the typed
-    // chain with the widened body offset (KU_AptEmbeddedMovieOff).
-    void* pBucket = 0;
-    {
-        AptCIH* pCIH = reinterpret_cast<AptCIH*>(pA2);
-        AptCharacterInst* pCI = pCIH ? pCIH->GetCharacterInst() : 0;
-        AptRenderItem* pRI = pCI ? pCI->mpRenderItem : 0;
-        AptCharacter* pChar = pRI ? pRI->mpCharacter : 0;
-        if (pChar != 0)
-            pBucket = reinterpret_cast<char*>(pChar) + 0x20;   // the embedded AptMovie
-    }
-    if (nImports > 0)
-    {
-        for (int32_t i = 0; i < nImports; ++i)
-        {
-            if (mpImportTable[i].mnId == nId)
-            {
-                iSlot = i;
+                AptTimelineInitAction* command = static_cast<AptTimelineInitAction*>(first->mpCommands[k]);
+                if (command->mnTag != 8 || command->mnIndicator != entry.mnIndicator) continue;
+                void* saved = AptScriptFunctionBase::PushStaticData();
+                gAptActionInterpreter.runStream(command->mpStream, static_cast<AptCIH*>(pCIH), -1, ResolveAnimationScope(pCIH));
+                gAptActionInterpreter.CleanupAfterExecution(saved);
                 break;
             }
+            entry.mnIndicator = -entry.mnIndicator;
         }
     }
+}
 
-    if (iSlot != -1)
+void AptCharacterAnimation::ExecuteInitAction(void* pCIH, int32_t nId)
+{
+    AptMovieFrame* first = static_cast<AptMovieFrame*>(mpFrames);
+    for (int32_t i = 0; i < first->mnCommandCount; ++i)
     {
-        // Chase the import: id of the named export inside the imported movie.
-        nResolvedId = GetIDFromImportFile(iSlot);
-        if (nResolvedId != -1)
+        AptTimelineInitAction* command = static_cast<AptTimelineInitAction*>(first->mpCommands[i]);
+        if (command->mnTag != 8 || command->mnIndicator != nId) continue;
+        ExportClassDefinitionAssets(pCIH);
+        void* saved = AptScriptFunctionBase::PushStaticData();
+        first = static_cast<AptMovieFrame*>(mpFrames);
+        AptTimelineInitAction* current = static_cast<AptTimelineInitAction*>(first->mpCommands[i]);
+        gAptActionInterpreter.runStream(current->mpStream, static_cast<AptCIH*>(pCIH), -1, ResolveAnimationScope(pCIH));
+        gAptActionInterpreter.CleanupAfterExecution(saved);
+        command->mnIndicator = -command->mnIndicator;
+        return;
+    }
+}
+
+void AptCharacterAnimation::ExecuteInitActions(void* pCIH, int32_t nId)
+{
+    int32_t resolvedId = nId;
+    AptCharacterAnimation* owner = this;
+    AptCharacter* currentCharacter = static_cast<AptCIH*>(pCIH)->GetCharacterInst()->GetRenderItem()->mpCharacter;
+    AptMovie* movie = reinterpret_cast<AptMovie*>(AptGetMovieCharacterAnimation(currentCharacter));
+    const int32_t importIndex = IsImport(nId);
+    if (importIndex != -1)
+    {
+        resolvedId = GetIDFromImportFile(importIndex);
+        if (resolvedId != -1)
         {
-            // pBucketOwner = imported movie DEF BASE; pBucket = the exported character's
-            // embedded movie. NATIVE-8 typed walk (console: file+0x14 -> root+0x10 ->
-            // *(def+0x10)[id*4] -> char+0x10).
-            AptImportEntry& rImportEntry = mpImportTable[iSlot];
-            AptFile* pFile = reinterpret_cast<AptFile*>(rImportEntry.mpFile);
-            void* pImportedRoot = pFile ? pFile->mpData : 0;             // the root char header
-            if (pImportedRoot != 0)
+            AptCharacter* importedRoot = static_cast<AptCharacter*>(mpImportTable[importIndex].mpFile->mpData);
+            owner = AptGetMovieCharacterAnimation(importedRoot);
+            movie = reinterpret_cast<AptMovie*>(AptGetMovieCharacterAnimation(owner->mpCharacterTable[resolvedId]));
+        }
+    }
+    if (movie->mnFrameCount > 0)
+    {
+        for (int32_t i = 0; i < movie->mpFrames[0].mnCommandCount; ++i)
+        {
+            AptTimelineCommand* command = static_cast<AptTimelineCommand*>(movie->mpFrames[0].mpCommands[i]);
+            if (command->mnTag == 3)
             {
-                pBucketOwner = reinterpret_cast<char*>(pImportedRoot) + 0x20;  // def base (native-8)
-                AptCharacterAnimation* pOwner =
-                    reinterpret_cast<AptCharacterAnimation*>(pBucketOwner);
-                if (nResolvedId >= 0 && nResolvedId < pOwner->mnCharacterCount &&
-                    pOwner->mpCharacterTable != 0 &&
-                    pOwner->mpCharacterTable[nResolvedId] != 0)
-                {
-                    pBucket = reinterpret_cast<char*>(pOwner->mpCharacterTable[nResolvedId]) + 0x20;
-                }
+                AptPlaceObjectBody_t* body = reinterpret_cast<AptPlaceObjectInfo_t*>(command)->GetBody();
+                if (body->mi32CharacterId != -1) owner->ExecuteInitAction(pCIH, body->mi32CharacterId);
             }
         }
     }
-    if (pBucket == 0)
-        return result;
-
-    // Run every pending type-3 (PLACE) init command in the bucket's frame 0.
-    // NATIVE-8: movie {fc@0, frames@8}; frame record {i32 count@0, pad, u64 cmds@8};
-    // PLACE body at align8(cmd+4)=cmd+8 with charId @body+8 (== cmd+0x10).
-    if (BlobI32(pBucket, 0x00) > 0)
-    {
-        void* pHdr    = BlobPtr(pBucket, 0x08);                          // frames -> frame[0]
-        void** pCmds  = reinterpret_cast<void**>(BlobPtr(pHdr, 0x08));   // frame[0].cmds
-        int32_t nCmds = BlobI32(pHdr, 0x00);                            // frame[0].count
-        if (pHdr != 0 && pCmds != 0 && nCmds > 0)
-        {
-            int32_t iCmd = 0;
-            do
-            {
-                void* pCmd = pCmds[iCmd];
-                if (BlobI32(pCmd, 0x00) == 3 && BlobI32(pCmd, 0x10) != -1)
-                    result = reinterpret_cast<AptCharacterAnimation*>(pBucketOwner)->ExecuteInitAction(pA2, BlobI32(pCmd, 0x10));
-                pHdr  = BlobPtr(pBucket, 0x08);                          // reload (asm re-reads)
-                pCmds = reinterpret_cast<void**>(BlobPtr(pHdr, 0x08));
-                ++iCmd;
-            }
-            while (iCmd < BlobI32(pHdr, 0x00));
-        }
-    }
-
-    // Finally the import-resolved init action.
-    if (nResolvedId != -1)
-        result = reinterpret_cast<AptCharacterAnimation*>(pBucketOwner)->ExecuteInitAction(pA2, nResolvedId);
-
-    return result;
+    if (resolvedId != -1) owner->ExecuteInitAction(pCIH, resolvedId);
 }
 
 // ARTIST 0x82AF77B0: inverse relocation of the native 32-bit records.

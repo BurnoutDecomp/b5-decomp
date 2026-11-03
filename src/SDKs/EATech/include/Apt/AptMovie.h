@@ -34,6 +34,12 @@ struct AptCIH;
 // One frame: its display-list commands (place/remove/action/label). The command
 // records are part of the serialised .apt timeline (resolved by AptMovie::resolve);
 // kept opaque here.
+// ARTIST timeline command headers; all pointers are native 32-bit slots.
+struct AptTimelineCommand { int32_t mnTag; };
+struct AptTimelineAction { int32_t mnTag; unsigned char* mpStream; };
+struct AptTimelineInitAction { int32_t mnTag; int32_t mnIndicator; unsigned char* mpStream; };
+struct AptTimelineWord { int32_t mnTag; int32_t mnValue; };
+
 struct AptMovieFrame
 {
     int32_t mnCommandCount;   // [0]
@@ -58,7 +64,7 @@ struct AptMovie
 
     // @0x82AEEB98 -- build the interpreter's pseudo display list for frame nFrame
     // (place/remove commands), for AptCIH::jumpToFrame's skip path.
-    AptMovie* DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, int nFrame, int a4, void* a5);
+    void DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, int nFrame, int a4, void* a5);
 
     // @0x82B0B7A0 -- run frame nFrame's commands against a live CIH: run its action
     // streams, then apply its place/remove/back-to-script commands. pDisplayList is the
@@ -66,10 +72,10 @@ struct AptMovie
     // owning sprite CIH (a3). Native-8: the frame table + command records are read at the
     // relocated native-8 offsets (mpFrames now a live pointer via resolve64), and the
     // movie char-anim def-base is reached through pParent's named char-inst chain.
-    AptMovie* doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParent, int nFrame);
+    void doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParent, int nFrame);
 
     // @0x82AE0228 -- queue frame nFrame's action commands onto the director queue.
-    AptMovie* queueFrameActions(void* pCIH, int nFrame);
+    void* queueFrameActions(void* pCIH, int nFrame);
 
     // @PS3 0x820FA4 -- run frame nFrame's tag-1 action commands IMMEDIATELY on the
     // VM singleton (push a register-block window, runStream each action stream with

@@ -244,8 +244,8 @@ struct AptCIH : public AptValueGC
 
     // ActionScript-changed flag (bit 0; x64 GetASChanged @0x140838000 `and eax,1`).
     // The old bit-31 form was the X360 big-endian bitfield reversal. @0x82AD50E8/0x82AD50C8
-    bool GetASChanged() const  { return (mFlagsA & 1u) != 0; }
-    void SetASChanged(bool b)  { mFlagsA = (mFlagsA & ~1u) | (b ? 1u : 0u); }
+    bool GetASChanged() const  { return (mFlagsA & 0x80000000u) != 0; }
+    void SetASChanged(bool b)  { mFlagsA = (mFlagsA & ~0x80000000u) | (b ? 0x80000000u : 0u); }
     // Dirty-state flag (bit 6; x64 GetDirtyState @0x140838870 mask 0x40). @0x82AD5C10 / @0x82AD76B8
     bool GetDirtyState() const { return (mFlagsA & 0x40u) != 0; }
     // SetDirtyState @0x82AD76B8 -- set/clear the dirty bit; container/leaf types

@@ -255,7 +255,7 @@ AptValue* AptScriptColour::sMethod_setRGB(AptScriptColour* pThis, int /*nArgCoun
         pColorMatrix->scale.SetValuef(AptColorHelper::Blue,  0.0f);   // ColorMatrix[4] = 0
 
         // Mark the clip's render/colour state AS-changed (x64 mFlagsA bit 0).
-        static_cast<AptCIH*>(pTarget)->mFlagsA |= 0x1u;               // X360 reversed form |= 0x80000000
+        static_cast<AptCIH*>(pTarget)->mFlagsA |= 0x80000000u;               // X360 reversed form |= 0x80000000
     }
 
     return gpUndefinedValue;
@@ -445,7 +445,7 @@ AptValue* AptScriptColour::sMethod_setTransform(AptScriptColour* pThis, int nArg
             if (bAnySet)
             {
                 // Mark the clip's render/colour state AS-changed (x64 mFlagsA bit 0).
-                pTargetCIH->mFlagsA |= 0x1u;
+                pTargetCIH->mFlagsA |= 0x80000000u;
             }
         }
     }

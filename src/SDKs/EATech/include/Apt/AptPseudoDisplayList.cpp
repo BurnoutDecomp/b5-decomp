@@ -97,11 +97,11 @@ void AptPseudoDisplayList::Insert(AptPseudoCIH_t* lpNode)
     AptPseudoCIH_t* lpExisting = 0;
     AptPseudoCIH_t* lpPred     = 0;
 
-    FindInst(lpNode->mpContext, &lpExisting, &lpPred);
+    FindInst(lpNode->mpContext, &lpPred, &lpExisting);
     if (lpExisting)
     {
         Remove(lpExisting);
-        FindInst(lpNode->mpContext, &lpExisting, &lpPred);
+        FindInst(lpNode->mpContext, &lpPred, &lpExisting);
     }
 
     AptPseudoCIH_t* lpNext = static_cast<AptPseudoCIH_t*>(lpPred->mpNext);
@@ -146,8 +146,8 @@ AptPseudoDisplayList::~AptPseudoDisplayList()
 // since the context is a raw pointer/id used purely as an ordering key (raw-ptr
 // ordering key, faithful to the asm's signed scalar compare).
 // ---------------------------------------------------------------------------
-void AptPseudoDisplayList::FindInst(void* lpKey, AptPseudoCIH_t** ppExisting,
-                                    AptPseudoCIH_t** ppPred)
+void AptPseudoDisplayList::FindInst(void* lpKey, AptPseudoCIH_t** ppPred,
+                                    AptPseudoCIH_t** ppExisting)
 {
     const intptr_t nKey = reinterpret_cast<intptr_t>(lpKey);
 
