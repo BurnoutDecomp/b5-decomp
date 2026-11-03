@@ -46,9 +46,6 @@
 #include "GameSource/AttribSys/Generated/classes/visualfxsurface.h"  // Attrib::Gen::visualfxsurface
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"  // Attrib::{Collection, DefaultDataArea}
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the NaN-accumulator line)
-#include <cstdio>   // snprintf
-#include <cstdlib>  // std::getenv (the [wheel-smoke] witness switch)
 #include "rw/math/vpu/vector3_operation.h"                    // rw::math::vpu::{operator*, operator-}
 #include "rw/math/fpu/scalar_operation.h"                     // rw::math::fpu::{Max, Clamp, Abs}
 
@@ -138,8 +135,8 @@ namespace
     // is not modelled: here the operand is a wheel velocity, and |v|^2 near 1.8e19 would need |v| ~ 4e9 m/s.
     f32 Dot3(const Vector3& lrA, const Vector3& lrB)
     {
-        return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
-                              + static_cast<f64>(lrA.z) * lrB.z);
+        return static_cast<f32>(static_cast<f64>(lrA.mV.x) * lrB.mV.x + static_cast<f64>(lrA.mV.y) * lrB.mV.y
+                              + static_cast<f64>(lrA.mV.z) * lrB.mV.z);
     }
 
     // `vnmsubfp`: -(a * c - b), fused, a NaN keeping its sign.
@@ -164,45 +161,6 @@ namespace
         return lfEstimate;
     }
 
-    // [DIAG] BRN_WHEEL_SMOKE_DIAG -- NOT IN THE X360 BINARY. Default OFF (armed when the variable is set to anything
-    // that does not start with '0', read once per process), capped. DELETE-WHEN-STABLE. The live witness of the tyre
-    // smoke (FX-CRASHVFX C1): one line per HandleSmokeLayer call that spawned (48 lines), one per wheel the crash gate
-    // silenced (8 lines), and a running per-car tally (below). Reads only.
-
-    // [DIAG] the running tally, per race car (CarState::muRaceCarIndex, 0..7): particles spawned and wheel-frames the
-    // crash gate silenced, cumulative, at most one line per second of effects time (and again when the time runs
-    // backwards), 600 lines -- so a long run reads crash by crash after the detail lines are spent.
-    struct WheelSmokeTally
-    {
-        u32 mauSpawned[8];
-        u32 mauGated[8];
-        f32 mfNextLine;
-        u32 muLines;
-    };
-
-    WheelSmokeTally& Tally()
-    {
-        static WheelSmokeTally sTally = {};
-        return sTally;
-    }
-
-    void WheelSmokeTallyLine(f32 lfTime)
-    {
-        WheelSmokeTally& lrTally = Tally();
-        const bool lbDue = (lfTime >= lrTally.mfNextLine) || (lfTime < lrTally.mfNextLine - 2.0f);
-        if (lrTally.muLines >= 600u || !lbDue)
-            return;
-        ++lrTally.muLines;
-        lrTally.mfNextLine = lfTime + 1.0f;
-        const u32* const lpuS = lrTally.mauSpawned;
-        const u32* const lpuG = lrTally.mauGated;
-        char lacLine[256];
-        _snprintf(lacLine, sizeof(lacLine),
-                      "[wheel-smoke] tally t=%.1f spawned %u %u %u %u %u %u %u %u gated %u %u %u %u %u %u %u %u\n",
-                      lfTime, lpuS[0], lpuS[1], lpuS[2], lpuS[3], lpuS[4], lpuS[5], lpuS[6], lpuS[7],
-                      lpuG[0], lpuG[1], lpuG[2], lpuG[3], lpuG[4], lpuG[5], lpuG[6], lpuG[7]);
-        CgsDev::Log::WriteToLog(lacLine);
-    }
 
     // Update's wheel speed (0x82293F6C..0x82293FDC): |v|^2, times its refined rsqrt (`vmulfp128 v0, v0, v13`),
     // ZERO where |v|^2 == 0 (`vcmpeqfp` against the zero splat, then `vsel`) -- the product there is 0 * inf.
@@ -219,8 +177,8 @@ namespace
 // each init thunk:
 //   unk_82FAB7E0 (thunk 0x82C4AAF8): x = z = flt_82004D04 (1.5), y = flt_82004D00 (0.6), w = 0
 //   unk_82FAB810 (thunk 0x82C4AB38): x = y = z = flt_82011C18 (0.4), w = 0
-const rw::math::vpu::Vector3 K_VELOCITY_SPREAD      = { 1.5f, 0.6f, 1.5f, 0.0f };
-const rw::math::vpu::Vector3 K_VELOCITY_INHERITANCE = { 0.4f, 0.4f, 0.4f, 0.0f };
+const rw::math::vpu::Vector3 K_VELOCITY_SPREAD      (1.5f, 0.6f, 1.5f);
+const rw::math::vpu::Vector3 K_VELOCITY_INHERITANCE (0.4f, 0.4f, 0.4f);
 
 // =============================================================================
 // HandleSmokeLayer @ 0x82288E38
@@ -255,29 +213,6 @@ void WheelStateMachine::HandleSmokeLayer(u32 luLayer, CarState& lCarState,
         return;
     }
 
-    // [DIAG] ALWAYS ON, ONE LINE PER PROCESS -- NOT IN THE X360 BINARY -- diagnostic only; the console loops
-    // forever here (0x82289030 / 0x82289034). A NaN accumulator never leaves the spawn loop below (NaN - 1 is
-    // NaN, and `bge` is taken on unordered), exactly as on the console, so the game freezes -- deliberately: the
-    // PC hangs where the console would. This line, written and flushed BEFORE the loop, is the only trace such a
-    // hang can leave in BrnGame.log. It reads only, costs one compare per call and changes no behaviour.
-    // Upstream, the NaN can only arrive through the distance travelled, dt x max(|v|, surface speed): the
-    // wheel's surface speed (mfRadius x mfRadiansPerSecond, WheelStateMachine::Update) or the step dt (CarState
-    // +0x10). The skid gate above turns a NaN skid factor away, and the fsel max drops a NaN |v|.
-    if (lrfAccumulator != lrfAccumulator)
-    {
-        static bool sbSaid = false;
-        if (!sbSaid)
-        {
-            sbSaid = true;
-            char lacLine[384];
-            _snprintf(lacLine, sizeof(lacLine),
-                          "[wheel-smoke] NaN ACCUMULATOR -- NOT IN THE X360 BINARY -- diagnostic only; the console "
-                          "loops forever here (0x82289030 / 0x82289034): wheel %u layer %u skid=%.6g travel=%.6g "
-                          "perMetre=%.6g; upstream source: the wheel surface speed (radius x rad/s) or dt\n",
-                          mWheelIndex, luLayer, lfSkidFactor, lfMaxWheelTravel, lfParticlesPerMetre);
-            CgsDev::Log::WriteToLog(lacLine);   // fputs + fflush
-        }
-    }
 
     const f32 lfTimeStep    = lCarState.GetDt();           // CarState +0x10 (EffectsModuleParams::mDt)
     const f32 lfCurrentTime = lCarState.GetTime();         // CarState +0x14 (EffectsModuleParams::mTime)
@@ -444,24 +379,24 @@ void WheelStateMachine::FireNativeParticle(Vector3 /*lWheelPosition*/, Vector3 l
     const bool lbReverseRotation = (mWheelIndex == 2u) || (mWheelIndex == 0u);
 
     Vector3 lvZero, lvOne;
-    lvZero.x = 0.0f; lvZero.y = 0.0f; lvZero.z = 0.0f; lvZero.w = 0.0f;
-    lvOne.x  = 1.0f; lvOne.y  = 1.0f; lvOne.z  = 1.0f; lvOne.w  = 1.0f;
+    lvZero.mV.x = 0.0f; lvZero.mV.y = 0.0f; lvZero.mV.z = 0.0f; lvZero.mV.w = 0.0f;
+    lvOne.mV.x  = 1.0f; lvOne.mV.y  = 1.0f; lvOne.mV.z  = 1.0f; lvOne.mV.w  = 1.0f;
     const Vector3 lvUnit = lRandom.RandomVector(lvZero, lvOne);   // (1 - 0) * t + 0 == t, all four lanes
 
     Vector3 lvKick;
-    lvKick.x = 0.0f;
-    lvKick.y = lRandom.RandomFloat() * lfKickUpSpeed;
-    lvKick.z = 0.0f;
-    lvKick.w = 0.0f;
+    lvKick.mV.x = 0.0f;
+    lvKick.mV.y = lRandom.RandomFloat() * lfKickUpSpeed;
+    lvKick.mV.z = 0.0f;
+    lvKick.mV.w = 0.0f;
 
-    const f32 lafUnit[4]    = { lvUnit.x, lvUnit.y, lvUnit.z, lvUnit.w };
-    const f32 lafWheelVel[4]= { lWheelVelocity.x, lWheelVelocity.y, lWheelVelocity.z, lWheelVelocity.w };
-    const f32 lafKick[4]    = { lvKick.x, lvKick.y, lvKick.z, lvKick.w };
-    const f32 lafInherit[4] = { K_VELOCITY_INHERITANCE.x, K_VELOCITY_INHERITANCE.y,
-                                K_VELOCITY_INHERITANCE.z, K_VELOCITY_INHERITANCE.w };
-    const f32 lafSpread[4]  = { K_VELOCITY_SPREAD.x, K_VELOCITY_SPREAD.y, K_VELOCITY_SPREAD.z, K_VELOCITY_SPREAD.w };
-    const f32 lafBias[4]    = { lvBackwardEmissionBias.x, lvBackwardEmissionBias.y,
-                                lvBackwardEmissionBias.z, lvBackwardEmissionBias.w };
+    const f32 lafUnit[4]    = { lvUnit.mV.x, lvUnit.mV.y, lvUnit.mV.z, lvUnit.mV.w };
+    const f32 lafWheelVel[4]= { lWheelVelocity.mV.x, lWheelVelocity.mV.y, lWheelVelocity.mV.z, lWheelVelocity.mV.w };
+    const f32 lafKick[4]    = { lvKick.mV.x, lvKick.mV.y, lvKick.mV.z, lvKick.mV.w };
+    const f32 lafInherit[4] = { K_VELOCITY_INHERITANCE.mV.x, K_VELOCITY_INHERITANCE.mV.y,
+                                K_VELOCITY_INHERITANCE.mV.z, K_VELOCITY_INHERITANCE.mV.w };
+    const f32 lafSpread[4]  = { K_VELOCITY_SPREAD.mV.x, K_VELOCITY_SPREAD.mV.y, K_VELOCITY_SPREAD.mV.z, K_VELOCITY_SPREAD.mV.w };
+    const f32 lafBias[4]    = { lvBackwardEmissionBias.mV.x, lvBackwardEmissionBias.mV.y,
+                                lvBackwardEmissionBias.mV.z, lvBackwardEmissionBias.mV.w };
     f32 lafVelocity[4];
     for (u32 luLane = 0; luLane < 4u; ++luLane)
     {
@@ -470,10 +405,10 @@ void WheelStateMachine::FireNativeParticle(Vector3 /*lWheelPosition*/, Vector3 l
         lafVelocity[luLane]   = BrnParticleMath::VpuMultiplyAdd(lfCentred, lafSpread[luLane], lfInherited) + lafBias[luLane];
     }
     Vector3 lvVelocity;
-    lvVelocity.x = lafVelocity[0];
-    lvVelocity.y = lafVelocity[1];
-    lvVelocity.z = lafVelocity[2];
-    lvVelocity.w = lafVelocity[3];
+    lvVelocity.mV.x = lafVelocity[0];
+    lvVelocity.mV.y = lafVelocity[1];
+    lvVelocity.mV.z = lafVelocity[2];
+    lvVelocity.mV.w = lafVelocity[3];
 
     lEffectHelper.ParticleModule().SpawnWheelSmoke(
         lSpawnPosition, lvVelocity, static_cast<BrnParticle::Native::ENativeParticleType>(leParticleType),

@@ -44,7 +44,6 @@
 #include "GameSource/Effects/Particles/ParticleCpuMonitors.h"            // gRaceCpuMonitors / gCrashCpuMonitors
 #include "GameSource/Effects/BrnEffectsUtils.h"                          // Vector3Randomiser
 #include "GameSource/Effects/BrnEffectsDebrisColourRandomiser.h"         // Utils::DebrisColourRandomiser (the burst's colours)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"               // the announcements
 
 #include <cmath>    // sqrtf
 #include <cstdio>   // snprintf (the announcements)
@@ -93,7 +92,7 @@ namespace BrnParticle
     // initialiser that lives in one of the export set's known holes; nothing is invented here, the
     // console's own word is used. If it ever turns out non-zero the ONLY visible change is that
     // non-body-part sparks gain a symmetric spawn-position jitter.
-    static const Vector3 KV_SPARK_SPAWN_JITTER = { 0.0f, 0.0f, 0.0f, 0.0f };   // unk_82FAB950
+    static const Vector3 KV_SPARK_SPAWN_JITTER(0.0f, 0.0f, 0.0f);   // unk_82FAB950
 
     // ---------------------------------------------------------------------------------------------
     // HandleSpawnSparkShowerFromPointEvent's constants and VMX idioms (FX-CRASHVFX 2026-09-24).
@@ -150,8 +149,8 @@ namespace BrnParticle
         // then vrsqrtefp + two steps, and the vcmpeqfp / vsel that maps a zero vector to 0.
         inline f32 ShowerGuardedLength3(const Vector3& lrv)
         {
-            const f32 lfSquared = static_cast<f32>(static_cast<f64>(lrv.x) * lrv.x + static_cast<f64>(lrv.y) * lrv.y
-                                                 + static_cast<f64>(lrv.z) * lrv.z);
+            const f32 lfSquared = static_cast<f32>(static_cast<f64>(lrv.mV.x) * lrv.mV.x + static_cast<f64>(lrv.mV.y) * lrv.mV.y
+                                                 + static_cast<f64>(lrv.mV.z) * lrv.mV.z);
             if (lfSquared == 0.0f)
                 return 0.0f;
             f32 lfEstimate = static_cast<f32>(1.0 / std::sqrt(static_cast<f64>(lfSquared)));
@@ -166,8 +165,8 @@ namespace BrnParticle
 
         inline f32 ShowerDot3(const Vector3& lrA, const Vector3& lrB)
         {
-            return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
-                                  + static_cast<f64>(lrA.z) * lrB.z);
+            return static_cast<f32>(static_cast<f64>(lrA.mV.x) * lrB.mV.x + static_cast<f64>(lrA.mV.y) * lrB.mV.y
+                                  + static_cast<f64>(lrA.mV.z) * lrB.mV.z);
         }
 
         // One lane of the sin/cos polynomial, step for step and FUSED where the console fuses:
@@ -190,10 +189,10 @@ namespace BrnParticle
         inline Vector3 ShowerMulAdd(const Vector3& lrA, f32 lfScale, const Vector3& lrB)
         {
             Vector3 lv;
-            lv.x = BrnParticleMath::VpuMultiplyAdd(lrA.x, lfScale, lrB.x);
-            lv.y = BrnParticleMath::VpuMultiplyAdd(lrA.y, lfScale, lrB.y);
-            lv.z = BrnParticleMath::VpuMultiplyAdd(lrA.z, lfScale, lrB.z);
-            lv.w = BrnParticleMath::VpuMultiplyAdd(lrA.w, lfScale, lrB.w);
+            lv.mV.x = BrnParticleMath::VpuMultiplyAdd(lrA.mV.x, lfScale, lrB.mV.x);
+            lv.mV.y = BrnParticleMath::VpuMultiplyAdd(lrA.mV.y, lfScale, lrB.mV.y);
+            lv.mV.z = BrnParticleMath::VpuMultiplyAdd(lrA.mV.z, lfScale, lrB.mV.z);
+            lv.mV.w = BrnParticleMath::VpuMultiplyAdd(lrA.mV.w, lfScale, lrB.mV.w);
             return lv;
         }
 
@@ -201,27 +200,14 @@ namespace BrnParticle
         inline Vector3 ShowerScale(const Vector3& lrA, f32 lfScale)
         {
             Vector3 lv;
-            lv.x = lrA.x * lfScale;
-            lv.y = lrA.y * lfScale;
-            lv.z = lrA.z * lfScale;
-            lv.w = lrA.w * lfScale;
+            lv.mV.x = lrA.mV.x * lfScale;
+            lv.mV.y = lrA.mV.y * lfScale;
+            lv.mV.z = lrA.mV.z * lfScale;
+            lv.mV.w = lrA.mV.w * lfScale;
             return lv;
         }
     }
 
-    // The once-only announcement helper every not-reconstructed arm in this file shares.
-    namespace
-    {
-        void LogSparkEventNotReconstructed(bool& lrbLogged, const char* lpcWhat)
-        {
-            if (lrbLogged)
-                return;
-            lrbLogged = true;
-            char lacMsg[320];
-            _snprintf(lacMsg, sizeof(lacMsg), "[particle] NOT RECONSTRUCTED: %s\n", lpcWhat);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 
     // ---------------------------------------------------------------------------------------------
     // ProcessEventQueue @0x8229C418 (DWARF ParticleModule.h:576).
@@ -242,7 +228,6 @@ namespace BrnParticle
 
         while (lpEvent != 0)
         {
-            ++gauSparkEventsDrained;   // [DIAG] DELETE-WHEN-STABLE
 
             switch (liType)
             {
@@ -303,9 +288,9 @@ namespace BrnParticle
                             lrData.mvVelocityPlusSpawnTime.GetVector3(),
                             lrData.mvRotationAxisPlusRotationAmount.GetVector3(),
                             lrData.mvColour,
-                            lrData.mvRotationAxisPlusRotationAmount.w,
-                            lrData.mvPositionPlusSize.w,
-                            lrData.mvVelocityPlusSpawnTime.w);
+                            lrData.mvRotationAxisPlusRotationAmount.mV.w,
+                            lrData.mvPositionPlusSize.mV.w,
+                            lrData.mvVelocityPlusSpawnTime.mV.w);
                     }
                 }
                 break;
@@ -373,9 +358,9 @@ namespace BrnParticle
 
         // (1) the speed ramp.
         const Vector3& lrEventVelocity = lpEvent->mvVelocity;
-        const f32 lfSpeed = sqrtf(lrEventVelocity.x * lrEventVelocity.x
-                                + lrEventVelocity.y * lrEventVelocity.y
-                                + lrEventVelocity.z * lrEventVelocity.z);
+        const f32 lfSpeed = sqrtf(lrEventVelocity.mV.x * lrEventVelocity.mV.x
+                                + lrEventVelocity.mV.y * lrEventVelocity.mV.y
+                                + lrEventVelocity.mV.z * lrEventVelocity.mV.z);
         const f32 lfSpreadScale = (lfSpeed > KF_SPARK_SPREAD_FULL_SPEED)
                                 ? 1.0f
                                 : lfSpeed * KF_SPARK_SPREAD_SPEED_RECIP;
@@ -387,31 +372,31 @@ namespace BrnParticle
         Vector3 lvSpreadMax;
         if (lbIsBodyPartContact)
         {
-            lvSpreadMin.x = KF_BODYPART_SPREAD_MIN_X; lvSpreadMin.y = KF_BODYPART_SPREAD_MIN_Y;
-            lvSpreadMin.z = KF_BODYPART_SPREAD_MIN_Z; lvSpreadMin.w = 0.0f;
-            lvSpreadMax.x = KF_BODYPART_SPREAD_MAX_X; lvSpreadMax.y = KF_BODYPART_SPREAD_MAX_Y;
-            lvSpreadMax.z = KF_BODYPART_SPREAD_MAX_Z; lvSpreadMax.w = 0.0f;
+            lvSpreadMin.mV.x = KF_BODYPART_SPREAD_MIN_X; lvSpreadMin.mV.y = KF_BODYPART_SPREAD_MIN_Y;
+            lvSpreadMin.mV.z = KF_BODYPART_SPREAD_MIN_Z; lvSpreadMin.mV.w = 0.0f;
+            lvSpreadMax.mV.x = KF_BODYPART_SPREAD_MAX_X; lvSpreadMax.mV.y = KF_BODYPART_SPREAD_MAX_Y;
+            lvSpreadMax.mV.z = KF_BODYPART_SPREAD_MAX_Z; lvSpreadMax.mV.w = 0.0f;
         }
         else
         {
-            lvSpreadMin.x = KF_GRIND_SPREAD_MIN_X;    lvSpreadMin.y = KF_GRIND_SPREAD_MIN_Y;
-            lvSpreadMin.z = KF_GRIND_SPREAD_MIN_Z;    lvSpreadMin.w = 0.0f;
-            lvSpreadMax.x = KF_GRIND_SPREAD_MAX_X;    lvSpreadMax.y = KF_GRIND_SPREAD_MAX_Y;
-            lvSpreadMax.z = KF_GRIND_SPREAD_MAX_Z;    lvSpreadMax.w = 0.0f;
+            lvSpreadMin.mV.x = KF_GRIND_SPREAD_MIN_X;    lvSpreadMin.mV.y = KF_GRIND_SPREAD_MIN_Y;
+            lvSpreadMin.mV.z = KF_GRIND_SPREAD_MIN_Z;    lvSpreadMin.mV.w = 0.0f;
+            lvSpreadMax.mV.x = KF_GRIND_SPREAD_MAX_X;    lvSpreadMax.mV.y = KF_GRIND_SPREAD_MAX_Y;
+            lvSpreadMax.mV.z = KF_GRIND_SPREAD_MAX_Z;    lvSpreadMax.mV.w = 0.0f;
         }
 
         Vector3 lvScaledMin, lvScaledMax;
-        lvScaledMin.x = lvSpreadMin.x * lfSpreadScale; lvScaledMin.y = lvSpreadMin.y * lfSpreadScale;
-        lvScaledMin.z = lvSpreadMin.z * lfSpreadScale; lvScaledMin.w = lvSpreadMin.w * lfSpreadScale;
-        lvScaledMax.x = lvSpreadMax.x * lfSpreadScale; lvScaledMax.y = lvSpreadMax.y * lfSpreadScale;
-        lvScaledMax.z = lvSpreadMax.z * lfSpreadScale; lvScaledMax.w = lvSpreadMax.w * lfSpreadScale;
+        lvScaledMin.mV.x = lvSpreadMin.mV.x * lfSpreadScale; lvScaledMin.mV.y = lvSpreadMin.mV.y * lfSpreadScale;
+        lvScaledMin.mV.z = lvSpreadMin.mV.z * lfSpreadScale; lvScaledMin.mV.w = lvSpreadMin.mV.w * lfSpreadScale;
+        lvScaledMax.mV.x = lvSpreadMax.mV.x * lfSpreadScale; lvScaledMax.mV.y = lvSpreadMax.mV.y * lfSpreadScale;
+        lvScaledMax.mV.z = lvSpreadMax.mV.z * lfSpreadScale; lvScaledMax.mV.w = lvSpreadMax.mV.w * lfSpreadScale;
 
         BrnEffects::Utils::Vector3Randomiser lVelocitySpread;      // var_150 / var_140
         lVelocitySpread.Prepare(lvScaledMin, lvScaledMax);
 
         Vector3 lvJitterMin, lvJitterMax;
-        lvJitterMin.x = -KV_SPARK_SPAWN_JITTER.x; lvJitterMin.y = -KV_SPARK_SPAWN_JITTER.y;
-        lvJitterMin.z = -KV_SPARK_SPAWN_JITTER.z; lvJitterMin.w = -KV_SPARK_SPAWN_JITTER.w;
+        lvJitterMin.mV.x = -KV_SPARK_SPAWN_JITTER.mV.x; lvJitterMin.mV.y = -KV_SPARK_SPAWN_JITTER.mV.y;
+        lvJitterMin.mV.z = -KV_SPARK_SPAWN_JITTER.mV.z; lvJitterMin.mV.w = -KV_SPARK_SPAWN_JITTER.mV.w;
         lvJitterMax = KV_SPARK_SPAWN_JITTER;
 
         BrnEffects::Utils::Vector3Randomiser lPositionJitter;      // var_170 / var_160
@@ -422,14 +407,14 @@ namespace BrnParticle
         // console keeps this pair in registers instead of on the stack, which is why its Prepare
         // shows up as two vmulfp128s and a vsubfp rather than two stvx128s).
         Vector3 lvInheritMin, lvInheritMax;
-        lvInheritMin.x = lrEventVelocity.x * lpEvent->mfVelocityInheritanceMin;
-        lvInheritMin.y = lrEventVelocity.y * lpEvent->mfVelocityInheritanceMin;
-        lvInheritMin.z = lrEventVelocity.z * lpEvent->mfVelocityInheritanceMin;
-        lvInheritMin.w = lrEventVelocity.w * lpEvent->mfVelocityInheritanceMin;
-        lvInheritMax.x = lrEventVelocity.x * lpEvent->mfVelocityInheritanceMax;
-        lvInheritMax.y = lrEventVelocity.y * lpEvent->mfVelocityInheritanceMax;
-        lvInheritMax.z = lrEventVelocity.z * lpEvent->mfVelocityInheritanceMax;
-        lvInheritMax.w = lrEventVelocity.w * lpEvent->mfVelocityInheritanceMax;
+        lvInheritMin.mV.x = lrEventVelocity.mV.x * lpEvent->mfVelocityInheritanceMin;
+        lvInheritMin.mV.y = lrEventVelocity.mV.y * lpEvent->mfVelocityInheritanceMin;
+        lvInheritMin.mV.z = lrEventVelocity.mV.z * lpEvent->mfVelocityInheritanceMin;
+        lvInheritMin.mV.w = lrEventVelocity.mV.w * lpEvent->mfVelocityInheritanceMin;
+        lvInheritMax.mV.x = lrEventVelocity.mV.x * lpEvent->mfVelocityInheritanceMax;
+        lvInheritMax.mV.y = lrEventVelocity.mV.y * lpEvent->mfVelocityInheritanceMax;
+        lvInheritMax.mV.z = lrEventVelocity.mV.z * lpEvent->mfVelocityInheritanceMax;
+        lvInheritMax.mV.w = lrEventVelocity.mV.w * lpEvent->mfVelocityInheritanceMax;
 
         BrnEffects::Utils::Vector3Randomiser lVelocityInheritance;
         lVelocityInheritance.Prepare(lvInheritMin, lvInheritMax);
@@ -452,10 +437,10 @@ namespace BrnParticle
 
                 const f32 lfOneOverCount = 1.0f / static_cast<f32>(liRemaining);
                 Vector3 lvStep;
-                lvStep.x = (lpEvent->mvEndPos.x - lvPoint.x) * lfOneOverCount;
-                lvStep.y = (lpEvent->mvEndPos.y - lvPoint.y) * lfOneOverCount;
-                lvStep.z = (lpEvent->mvEndPos.z - lvPoint.z) * lfOneOverCount;
-                lvStep.w = (lpEvent->mvEndPos.w - lvPoint.w) * lfOneOverCount;
+                lvStep.mV.x = (lpEvent->mvEndPos.mV.x - lvPoint.mV.x) * lfOneOverCount;
+                lvStep.mV.y = (lpEvent->mvEndPos.mV.y - lvPoint.mV.y) * lfOneOverCount;
+                lvStep.mV.z = (lpEvent->mvEndPos.mV.z - lvPoint.mV.z) * lfOneOverCount;
+                lvStep.mV.w = (lpEvent->mvEndPos.mV.w - lvPoint.mV.w) * lfOneOverCount;
 
                 do
                 {
@@ -467,19 +452,19 @@ namespace BrnParticle
                     const Vector3 lvSpread    = lVelocitySpread.RandomiseXYZ(mRandom);
 
                     Vector3 lvVelocity;
-                    lvVelocity.x = lvSpread.x + lvInherited.x;
-                    lvVelocity.y = lvSpread.y + lvInherited.y;
-                    lvVelocity.z = lvSpread.z + lvInherited.z;
-                    lvVelocity.w = lvSpread.w + lvInherited.w;
+                    lvVelocity.mV.x = lvSpread.mV.x + lvInherited.mV.x;
+                    lvVelocity.mV.y = lvSpread.mV.y + lvInherited.mV.y;
+                    lvVelocity.mV.z = lvSpread.mV.z + lvInherited.mV.z;
+                    lvVelocity.mV.w = lvSpread.mV.w + lvInherited.mV.w;
 
                     Vector3 lvSpawnPosition = lvPoint;
                     if (!lbIsBodyPartContact)
                     {
                         const Vector3 lvJitter = lPositionJitter.RandomiseXYZ(mRandom);
-                        lvSpawnPosition.x += lvJitter.x;
-                        lvSpawnPosition.y += lvJitter.y;
-                        lvSpawnPosition.z += lvJitter.z;
-                        lvSpawnPosition.w += lvJitter.w;
+                        lvSpawnPosition.mV.x += lvJitter.mV.x;
+                        lvSpawnPosition.mV.y += lvJitter.mV.y;
+                        lvSpawnPosition.mV.z += lvJitter.mV.z;
+                        lvSpawnPosition.mV.w += lvJitter.mV.w;
                     }
 
                     // The monitor set is re-selected per spark (the console reloads muFlags each
@@ -503,13 +488,12 @@ namespace BrnParticle
                                        lbUseCrashBank);          // r9
 
                     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
-                    ++gauSparkLineSpawned;   // [DIAG] DELETE-WHEN-STABLE
 
-                    lfHeightAbove += lvStep.y;
-                    lvPoint.x += lvStep.x;
-                    lvPoint.y += lvStep.y;
-                    lvPoint.z += lvStep.z;
-                    lvPoint.w += lvStep.w;
+                    lfHeightAbove += lvStep.mV.y;
+                    lvPoint.mV.x += lvStep.mV.x;
+                    lvPoint.mV.y += lvStep.mV.y;
+                    lvPoint.mV.z += lvStep.mV.z;
+                    lvPoint.mV.w += lvStep.mV.w;
                 }
                 while (liRemaining-- != 0);   // (2) N + 1 samples -- see the banner
             }
@@ -530,10 +514,6 @@ namespace BrnParticle
     void ParticleModule::HandleSpawnSparksFromPointEvent(const SpawnSparksFromPointEvent* /*lpEvent*/,
                                                          const ParticleRenderData& /*lrRenderData*/)
     {
-        static bool sbLogged = false;
-        LogSparkEventNotReconstructed(sbLogged,
-            "ParticleModule::HandleSpawnSparksFromPointEvent @0x82299840 (290 instr) -- a type-1 "
-            "record reached ProcessEventQueue and was dropped");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -587,30 +567,30 @@ namespace BrnParticle
 
         // The direction randomiser (var_B0 / var_C0).
         Vector4 lvDirectionMin;
-        lvDirectionMin.x = lrLateral.x;
-        lvDirectionMin.y = lrLateral.z;
-        lvDirectionMin.z = lrSpeeds.x * lfSpeedScale;
-        lvDirectionMin.w = lrSpeeds.z;
+        lvDirectionMin.mV.x = lrLateral.mV.x;
+        lvDirectionMin.mV.y = lrLateral.mV.z;
+        lvDirectionMin.mV.z = lrSpeeds.mV.x * lfSpeedScale;
+        lvDirectionMin.mV.w = lrSpeeds.mV.z;
         Vector4 lvDirectionMax;
-        lvDirectionMax.x = lrLateral.y;
-        lvDirectionMax.y = lrLateral.w;
-        lvDirectionMax.z = lrSpeeds.y * lfSpeedScale;
-        lvDirectionMax.w = lrSpeeds.w;
+        lvDirectionMax.mV.x = lrLateral.mV.y;
+        lvDirectionMax.mV.y = lrLateral.mV.w;
+        lvDirectionMax.mV.z = lrSpeeds.mV.y * lfSpeedScale;
+        lvDirectionMax.mV.w = lrSpeeds.mV.w;
         BrnEffects::Utils::Vector4Randomiser lDirectionRandomiser;
         lDirectionRandomiser.Prepare(lvDirectionMin, lvDirectionMax);
 
         // The position / size randomiser (var_D0 / var_E0): the radii's negations are sign-bit
         // flips (`vxor` with splat(0x80000000)).
         Vector4 lvOffsetMin;
-        lvOffsetMin.x = -lrSizes.z;
-        lvOffsetMin.y = -lrSizes.w;
-        lvOffsetMin.z = -lrSizes.w;
-        lvOffsetMin.w = lrSizes.x;
+        lvOffsetMin.mV.x = -lrSizes.mV.z;
+        lvOffsetMin.mV.y = -lrSizes.mV.w;
+        lvOffsetMin.mV.z = -lrSizes.mV.w;
+        lvOffsetMin.mV.w = lrSizes.mV.x;
         Vector4 lvOffsetMax;
-        lvOffsetMax.x = lrSizes.z;
-        lvOffsetMax.y = lrSizes.w;
-        lvOffsetMax.z = lrSizes.w;
-        lvOffsetMax.w = lrSizes.y;
+        lvOffsetMax.mV.x = lrSizes.mV.z;
+        lvOffsetMax.mV.y = lrSizes.mV.w;
+        lvOffsetMax.mV.z = lrSizes.mV.w;
+        lvOffsetMax.mV.w = lrSizes.mV.y;
         BrnEffects::Utils::Vector4Randomiser lOffsetRandomiser;
         lOffsetRandomiser.Prepare(lvOffsetMin, lvOffsetMax);
 
@@ -628,10 +608,10 @@ namespace BrnParticle
             const Vector4 lvOffsetDraw    = lOffsetRandomiser.RandomiseXYZW(mRandom);      // var_70
 
             // (sinL, cosL, sinF, cosF): vmrghw (lat, lat, fwd, fwd) against the phase splat.
-            const f32 lfSinLateral = ShowerSinCosLane(lvDirectionDraw.x, KF_SHOWER_SIN_PHASE);
-            const f32 lfCosLateral = ShowerSinCosLane(lvDirectionDraw.x, KF_SHOWER_COS_PHASE);
-            const f32 lfSinForward = ShowerSinCosLane(lvDirectionDraw.y, KF_SHOWER_SIN_PHASE);
-            const f32 lfCosForward = ShowerSinCosLane(lvDirectionDraw.y, KF_SHOWER_COS_PHASE);
+            const f32 lfSinLateral = ShowerSinCosLane(lvDirectionDraw.mV.x, KF_SHOWER_SIN_PHASE);
+            const f32 lfCosLateral = ShowerSinCosLane(lvDirectionDraw.mV.x, KF_SHOWER_COS_PHASE);
+            const f32 lfSinForward = ShowerSinCosLane(lvDirectionDraw.mV.y, KF_SHOWER_SIN_PHASE);
+            const f32 lfCosForward = ShowerSinCosLane(lvDirectionDraw.mV.y, KF_SHOWER_COS_PHASE);
 
             // direction = (x * sinL + y * cosL) * cosF + z * sinF (0x8229A078..0x8229A08C).
             const Vector3 lvAcross    = ShowerMulAdd(lrFrame.xAxis, lfSinLateral, ShowerScale(lrFrame.yAxis, lfCosLateral));
@@ -639,21 +619,21 @@ namespace BrnParticle
 
             // velocity = direction * speed + inherit * share, then the reflection (0x8229A034,
             // 0x8229A090..0x8229A0A0).
-            const Vector3 lvInherited = ShowerScale(lpEvent->mVelocityToInherit, lvDirectionDraw.w);
-            const Vector3 lvLaunch    = ShowerMulAdd(lvDirection, lvDirectionDraw.z, lvInherited);
+            const Vector3 lvInherited = ShowerScale(lpEvent->mVelocityToInherit, lvDirectionDraw.mV.w);
+            const Vector3 lvLaunch    = ShowerMulAdd(lvDirection, lvDirectionDraw.mV.z, lvInherited);
             const f32 lfInto          = ShowerVMin(ShowerDot3(lvLaunch, lrFrame.xAxis), 0.0f);
             const Vector3 lvBounce    = ShowerScale(lvReflectionAxis, lfInto);
             Vector3 lvVelocity;
-            lvVelocity.x = lvLaunch.x - lvBounce.x;
-            lvVelocity.y = lvLaunch.y - lvBounce.y;
-            lvVelocity.z = lvLaunch.z - lvBounce.z;
-            lvVelocity.w = lvLaunch.w - lvBounce.w;
+            lvVelocity.mV.x = lvLaunch.mV.x - lvBounce.mV.x;
+            lvVelocity.mV.y = lvLaunch.mV.y - lvBounce.mV.y;
+            lvVelocity.mV.z = lvLaunch.mV.z - lvBounce.mV.z;
+            lvVelocity.mV.w = lvLaunch.mV.w - lvBounce.mV.w;
 
             // position = w + x * ox + y * oy + z * oz (three fused steps, 0x8229A0A8..0x8229A0B8).
-            Vector3 lvPosition = ShowerMulAdd(lrFrame.xAxis, lvOffsetDraw.x, lrFrame.wAxis);
-            lvPosition = ShowerMulAdd(lrFrame.yAxis, lvOffsetDraw.y, lvPosition);
-            lvPosition = ShowerMulAdd(lrFrame.zAxis, lvOffsetDraw.z, lvPosition);
-            const f32 lfHeightAbove = lvPosition.y - lfGroundY;                         // f29
+            Vector3 lvPosition = ShowerMulAdd(lrFrame.xAxis, lvOffsetDraw.mV.x, lrFrame.wAxis);
+            lvPosition = ShowerMulAdd(lrFrame.yAxis, lvOffsetDraw.mV.y, lvPosition);
+            lvPosition = ShowerMulAdd(lrFrame.zAxis, lvOffsetDraw.mV.z, lvPosition);
+            const f32 lfHeightAbove = lvPosition.mV.y - lfGroundY;                         // f29
 
             const ParticleCpuMonitors& lrMonitors =
                 ((lrRenderData.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0)
@@ -663,7 +643,7 @@ namespace BrnParticle
 
             lrArray.SpawnSpark(lvPosition,
                                lvVelocity,
-                               lvOffsetDraw.w,      // f1 -- the drawn size
+                               lvOffsetDraw.mV.w,      // f1 -- the drawn size
                                lfSpawnTime,         // f2
                                lfRenderTime,        // f3
                                lfRingTime,          // f4
@@ -671,7 +651,6 @@ namespace BrnParticle
                                false);              // r9 -- the regular bank
 
             CgsDev::PerfMonCpu::StopMonitor(liMonitor);
-            ++gauSparkShowerSpawned;   // [DIAG] DELETE-WHEN-STABLE
             lfSpawnTime -= lfTimeStep;
         }
     }
@@ -760,8 +739,8 @@ namespace BrnParticle
         // vmsum4fp128 (one rounding of the four-term dot -- FLAG (model), as ShowerDot3).
         inline f32 BurstDot4(const Vector4& lrA, const Vector4& lrB)
         {
-            return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
-                                  + static_cast<f64>(lrA.z) * lrB.z + static_cast<f64>(lrA.w) * lrB.w);
+            return static_cast<f32>(static_cast<f64>(lrA.mV.x) * lrB.mV.x + static_cast<f64>(lrA.mV.y) * lrB.mV.y
+                                  + static_cast<f64>(lrA.mV.z) * lrB.mV.z + static_cast<f64>(lrA.mV.w) * lrB.mV.w);
         }
 
         // [DIAG] BRN_DEBRIS_BURST_DIAG=1 -- NOT IN THE X360 BINARY, capped at 40 lines. DELETE-WHEN-STABLE.
@@ -787,10 +766,10 @@ namespace BrnParticle
             } while (!(lfLengthSquared < KF_DEBRIS_BURST_ONE));   // `fcmpu ; bge` loops on a NaN too
             const f32 lfScale = std::sqrt(KF_DEBRIS_BURST_ONE - lfLengthSquared) * KF_DEBRIS_BURST_TWO;
             Vector3 lv;
-            lv.x = lfScale * lfX;
-            lv.y = lfScale * lfY;
-            lv.z = BrnParticleMath::ScalarMultiplyAdd(lfLengthSquared, KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
-            lv.w = 0.0f;
+            lv.mV.x = lfScale * lfX;
+            lv.mV.y = lfScale * lfY;
+            lv.mV.z = BrnParticleMath::ScalarMultiplyAdd(lfLengthSquared, KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
+            lv.mV.w = 0.0f;
             return lv;
         }
     }
@@ -810,15 +789,10 @@ namespace BrnParticle
         // the default arm -- unreachable, the loop runs over 0..3 -- would reuse the previous type's.
         s32     liNumParticles = 0;
         Vector4 lvBaseColour;
-        lvBaseColour.x = 0.0f; lvBaseColour.y = 0.0f; lvBaseColour.z = 0.0f; lvBaseColour.w = 0.0f;
+        lvBaseColour.mV.x = 0.0f; lvBaseColour.mV.y = 0.0f; lvBaseColour.mV.z = 0.0f; lvBaseColour.mV.w = 0.0f;
         f32     lfSizeMin = 0.0f;
         f32     lfSizeMax = 0.0f;
 
-        u32     lauDiagPieces[4] = { 0u, 0u, 0u, 0u };          // [DIAG] DELETE-WHEN-STABLE
-        u32     luDiagAtCamera = 0u;                            // [DIAG]
-        Vector3 lvDiagFirstPosition, lvDiagFirstVelocity;       // [DIAG]
-        lvDiagFirstPosition.x = lvDiagFirstPosition.y = lvDiagFirstPosition.z = lvDiagFirstPosition.w = 0.0f;
-        lvDiagFirstVelocity = lvDiagFirstPosition;
 
         for (u32 luType = 0; luType < 4u; ++luType)
         {
@@ -847,18 +821,18 @@ namespace BrnParticle
             // The colour bounds: the grey of the base colour pushed 25% / 75% of the way back to it, alpha
             // 0.5 / 0.9 (vmsum4fp128, vsubfp128, two vmaddfp, two vrlimi128 of w -- 0x8229A8F0..0x8229A92C).
             Vector4 lvWeights;
-            lvWeights.x = KF_DEBRIS_BURST_GREY_WEIGHT; lvWeights.y = KF_DEBRIS_BURST_GREY_WEIGHT;
-            lvWeights.z = KF_DEBRIS_BURST_GREY_WEIGHT; lvWeights.w = 0.0f;
+            lvWeights.mV.x = KF_DEBRIS_BURST_GREY_WEIGHT; lvWeights.mV.y = KF_DEBRIS_BURST_GREY_WEIGHT;
+            lvWeights.mV.z = KF_DEBRIS_BURST_GREY_WEIGHT; lvWeights.mV.w = 0.0f;
             const f32 lfGrey = BurstDot4(lvWeights, lvBaseColour);
             Vector4 lvLow, lvHigh;
-            lvLow.x  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.x - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
-            lvLow.y  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.y - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
-            lvLow.z  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.z - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
-            lvLow.w  = KF_DEBRIS_BURST_ALPHA_LOW;
-            lvHigh.x = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.x - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
-            lvHigh.y = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.y - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
-            lvHigh.z = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.z - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
-            lvHigh.w = KF_DEBRIS_BURST_ALPHA_HIGH;
+            lvLow.mV.x  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.mV.x - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.mV.y  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.mV.y - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.mV.z  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.mV.z - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.mV.w  = KF_DEBRIS_BURST_ALPHA_LOW;
+            lvHigh.mV.x = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.mV.x - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.mV.y = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.mV.y - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.mV.z = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.mV.z - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.mV.w = KF_DEBRIS_BURST_ALPHA_HIGH;
             BrnEffects::Utils::DebrisColourRandomiser lColourRandomiser;
             lColourRandomiser.Prepare(lvLow, lvHigh);
 
@@ -875,14 +849,14 @@ namespace BrnParticle
             {
                 // The spot in the emitter box: RandomFloat(-h, h) per axis, z drawn first, then y, then x
                 // (the range `h - (-h)`, the negation a `vxor` of the sign bit), added to the spawn position.
-                const f32 lfOffsetZ = mRandom.RandomFloat(-lrHalf.z, lrHalf.z);
-                const f32 lfOffsetY = mRandom.RandomFloat(-lrHalf.y, lrHalf.y);
-                const f32 lfOffsetX = mRandom.RandomFloat(-lrHalf.x, lrHalf.x);
+                const f32 lfOffsetZ = mRandom.RandomFloat(-lrHalf.mV.z, lrHalf.mV.z);
+                const f32 lfOffsetY = mRandom.RandomFloat(-lrHalf.mV.y, lrHalf.mV.y);
+                const f32 lfOffsetX = mRandom.RandomFloat(-lrHalf.mV.x, lrHalf.mV.x);
                 Vector3 lvPosition;
-                lvPosition.x = lpEvent->mSpawnPosition.x + lfOffsetX;
-                lvPosition.y = lpEvent->mSpawnPosition.y + lfOffsetY;
-                lvPosition.z = lpEvent->mSpawnPosition.z + lfOffsetZ;
-                lvPosition.w = lpEvent->mSpawnPosition.w + 0.0f;
+                lvPosition.mV.x = lpEvent->mSpawnPosition.mV.x + lfOffsetX;
+                lvPosition.mV.y = lpEvent->mSpawnPosition.mV.y + lfOffsetY;
+                lvPosition.mV.z = lpEvent->mSpawnPosition.mV.z + lfOffsetZ;
+                lvPosition.mV.w = lpEvent->mSpawnPosition.mV.w + 0.0f;
 
                 Vector3 lvVelocity;
                 const f32 lfAimDraw = mRandom.RandomFloat();
@@ -901,36 +875,35 @@ namespace BrnParticle
                     // (00010203 14151617 00010203 00010203 -- A.x, B.y, A.x, A.x) and the vrlimi of z
                     // (0x8229AD68 / 0x8229AD8C), exactly as built -- z pairs sin az with cos lat, not sin lat.
                     Vector3 lvDirection;
-                    lvDirection.x = lfCosAzimuth * lfSinLateral;
-                    lvDirection.y = lfCosLateral;
-                    lvDirection.z = lfSinAzimuth * lfCosLateral;
-                    lvDirection.w = lvDirection.x;
+                    lvDirection.mV.x = lfCosAzimuth * lfSinLateral;
+                    lvDirection.mV.y = lfCosLateral;
+                    lvDirection.mV.z = lfSinAzimuth * lfCosLateral;
+                    lvDirection.mV.w = lvDirection.mV.x;
                     const f32 lfSpeed   = mRandom.RandomFloat(lfSpeedMin, lfSpeedMax);
                     const f32 lfInherit = BrnParticleMath::ScalarMultiplyAdd(mRandom.RandomFloat(), KF_DEBRIS_BURST_INHERIT_RANGE,
                                                    KF_DEBRIS_BURST_INHERIT_MIN);
                     // v127 = V * splat(inherit), then vmaddfp128 v127 = dir * splat(speed) + v127.
-                    lvVelocity.x = BrnParticleMath::VpuMultiplyAdd(lvDirection.x, lfSpeed, lrInherit.x * lfInherit);
-                    lvVelocity.y = BrnParticleMath::VpuMultiplyAdd(lvDirection.y, lfSpeed, lrInherit.y * lfInherit);
-                    lvVelocity.z = BrnParticleMath::VpuMultiplyAdd(lvDirection.z, lfSpeed, lrInherit.z * lfInherit);
-                    lvVelocity.w = BrnParticleMath::VpuMultiplyAdd(lvDirection.w, lfSpeed, lrInherit.w * lfInherit);
+                    lvVelocity.mV.x = BrnParticleMath::VpuMultiplyAdd(lvDirection.mV.x, lfSpeed, lrInherit.mV.x * lfInherit);
+                    lvVelocity.mV.y = BrnParticleMath::VpuMultiplyAdd(lvDirection.mV.y, lfSpeed, lrInherit.mV.y * lfInherit);
+                    lvVelocity.mV.z = BrnParticleMath::VpuMultiplyAdd(lvDirection.mV.z, lfSpeed, lrInherit.mV.z * lfInherit);
+                    lvVelocity.mV.w = BrnParticleMath::VpuMultiplyAdd(lvDirection.mV.w, lfSpeed, lrInherit.mV.w * lfInherit);
                 }
                 else
                 {
                     // ---- at the camera: 0.5 above it, 7 m/s, lifted by half a gravity drop (0x8229AB50) ----
                     Vector3 lvToTarget;
-                    lvToTarget.x = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[0], KF_DEBRIS_BURST_HALF, lrCamera.x) - lvPosition.x;
-                    lvToTarget.y = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[1], KF_DEBRIS_BURST_HALF, lrCamera.y) - lvPosition.y;
-                    lvToTarget.z = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[2], KF_DEBRIS_BURST_HALF, lrCamera.z) - lvPosition.z;
-                    lvToTarget.w = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[3], KF_DEBRIS_BURST_HALF, lrCamera.w) - lvPosition.w;
+                    lvToTarget.mV.x = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[0], KF_DEBRIS_BURST_HALF, lrCamera.mV.x) - lvPosition.mV.x;
+                    lvToTarget.mV.y = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[1], KF_DEBRIS_BURST_HALF, lrCamera.mV.y) - lvPosition.mV.y;
+                    lvToTarget.mV.z = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[2], KF_DEBRIS_BURST_HALF, lrCamera.mV.z) - lvPosition.mV.z;
+                    lvToTarget.mV.w = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[3], KF_DEBRIS_BURST_HALF, lrCamera.mV.w) - lvPosition.mV.w;
                     const f32 lfDistance   = ShowerGuardedLength3(lvToTarget);
                     const f32 lfFlightTime = lfDistance * KF_DEBRIS_BURST_SECONDS_PER_M;   // fmuls
                     const f32 lfSpeedScale = KF_DEBRIS_BURST_CAMERA_SPEED / lfDistance;    // fdivs
                     const f32 lfLift       = (lfFlightTime * KF_DEBRIS_BURST_HALF) * KF_DEBRIS_BURST_GRAVITY;
-                    lvVelocity.x = lvToTarget.x * lfSpeedScale - lfLift;
-                    lvVelocity.y = lvToTarget.y * lfSpeedScale - lfLift;
-                    lvVelocity.z = lvToTarget.z * lfSpeedScale - lfLift;
-                    lvVelocity.w = lvToTarget.w * lfSpeedScale - lfLift;
-                    ++luDiagAtCamera;                                                       // [DIAG]
+                    lvVelocity.mV.x = lvToTarget.mV.x * lfSpeedScale - lfLift;
+                    lvVelocity.mV.y = lvToTarget.mV.y * lfSpeedScale - lfLift;
+                    lvVelocity.mV.z = lvToTarget.mV.z * lfSpeedScale - lfLift;
+                    lvVelocity.mV.w = lvToTarget.mV.w * lfSpeedScale - lfLift;
                 }
 
                 const f32 lfSize     = mRandom.RandomFloat(lfSizeMin, lfSizeMax);          // f28
@@ -941,12 +914,6 @@ namespace BrnParticle
                 lrArray.SpawnDebris(lvPosition, lvVelocity, lvAxis, lvColour,
                                     BrnParticleMath::VpuMultiplyAdd(lfSpin, KF_DEBRIS_BURST_SPIN_RANGE, KF_DEBRIS_BURST_SPIN_MIN),
                                     lfSize, lpEvent->mfCurrentTime);
-                if ((lauDiagPieces[0] | lauDiagPieces[1] | lauDiagPieces[2] | lauDiagPieces[3]) == 0u)   // [DIAG]
-                {
-                    lvDiagFirstPosition = lvPosition;
-                    lvDiagFirstVelocity = lvVelocity;
-                }
-                ++lauDiagPieces[luType];                                                    // [DIAG]
             }
         }
    // [DIAG]

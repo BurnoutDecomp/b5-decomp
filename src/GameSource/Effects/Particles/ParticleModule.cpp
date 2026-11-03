@@ -6,7 +6,6 @@
 #include <cstdlib>                                   // getenv / atoi ([diag] gates)
 #include <cstring>                                   // memcpy (PreRenderUpdate's batch publish)
 #include <cmath>                                     // cos / sin ([diag] BRN_SPARK_TEST)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the NOT-RECONSTRUCTED announcements)
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"   // BrnParticle::ParticleIO::DispatchInputBuffer
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"    // BrnGame::DispatchThreadInputBuffer
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"   // cLionFX::Update / Render / Dispatch -- the Lion core
@@ -311,16 +310,6 @@ namespace BrnParticle
                 // RECONSTRUCTED: the Lion runtime core has no committed body. The pointer
                 // is still cleared, which is what every reader of this array tests, so the
                 // suspended module cannot hand a stale instance to the dispatch thread.
-                // Announced once so a run that suspends effects says so.
-                static bool sbLogged = false;
-                if (!sbLogged)
-                {
-                    sbLogged = true;
-                    CgsDev::Log::WriteToLog(
-                        "[particles] NOT RECONSTRUCTED: cLionFX::EffectDestroy in "
-                        "ParticleModule::SuspendPlayingEffects @0x8227A2B8 (the Lion core is not landed); "
-                        "the dispatch-thread instance pointer is cleared without it\n");
-                }
                 mapDispatchThreadLionEffects[luSlot] = 0;
             }
             // maPlayingEffects[luSlot] + 0x08 -- the cached description lane. Cleared the
@@ -358,16 +347,6 @@ namespace BrnParticle
             // walk. The flag store below IS reproduced, so a resumed slot is still marked
             // for re-creation -- it just re-creates from a null description until the
             // collection's layout lands. Announced once.
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog(
-                    "[particles] NOT RECONSTRUCTED: the description re-resolve in "
-                    "ParticleModule::ResumePlayingEffects @0x8228A320 "
-                    "(ParticleDescriptionCollection has no committed layout); slots resume flagged "
-                    "CREATE|CHANGED with a null description\n");
-            }
 
             lrEffect.muFlags |= (LionEffect::EPPE_FLAG_CHANGED | LionEffect::EPPE_FLAG_CREATE);   // 0xC
         }
@@ -449,33 +428,6 @@ namespace BrnParticle
     const u32 KAU_SIMPLE_PRE_LION_TYPES[10]  = { 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u };
     const u32 KAU_SIMPLE_POST_LION_TYPES[2]  = { 1u, 2u };
 
-    // [DIAG] how many times the BRN_SPARK_TEST control actually called SparkArray::SpawnSpark.
-    // A live count that never moves cannot say whether the producer stopped producing or the
-    // bank stopped accepting; this is the first half of that question. DELETE-WHEN-STABLE.
-    u32 gauSparkTestSpawnCalls = 0;
-    // [DIAG] how many times ParticleModule::Prepare re-built the spark banks. Prepare is a
-    // STAGE machine that is re-entered until it reports done, so a stage that never completes
-    // re-runs its constructors -- and a re-run bank looks exactly like a bank that never
-    // accepts more than one frame of sparks. DELETE-WHEN-STABLE.
-    u32 gauSparkPrepareCount = 0;
-
-    // [DIAG] the contact-producer ladder -- see the block comment on the declarations in
-    // ParticleModule.h. DELETE-WHEN-STABLE.
-    u32 gauSparkContactQueueCalls = 0;
-    u32 gauSparkHingedSeen        = 0;
-    u32 gauSparkHingedTyped       = 0;
-    u32 gauSparkHingedStress      = 0;
-    u32 gauSparkContactCalls      = 0;
-    u32 gauSparkContactPosted     = 0;
-    u32 gauSparkContactRejected   = 0;
-    u32 gauSparkEventsDrained     = 0;
-    u32 gauSparkLineSpawned       = 0;
-    u32 gauSparkShowerSpawned     = 0;
-
-    u32 muCreatedLionInstances   = 0;
-    u32 muDestroyedLionInstances = 0;
-    u32 suLastReportedCreates    = 0xFFFFFFFFu;
-
     // flt_82004D00 == 0x3F19999A == 0.6 -- the depth-fade DISTANCE cLionFX::Dispatch is handed
     // in BOTH of the console's two dispatch arms (@0x8229B238 and @0x82294BC0). Read out of the
     // image with tools/re/x360rd.py.
@@ -504,30 +456,8 @@ namespace BrnParticle
         return lOut;
     }
 
-    namespace
-    {
-        bool sbQuarterResRoutingLive = false;
 
-        bool QuarterResRoutingLive()
-        {
-            return sbQuarterResRoutingLive;
-        }
-    }
 
-    // One line, once, for an arm this build does not carry. Never an assert. (The twin in
-    // ParticleModule_Lifecycle.cpp is in that TU anonymous namespace, hence the local copy.)
-    namespace
-    {
-        void LogNotReconstructed(bool& lrbLogged, const char* lpcWhat)
-        {
-            if (lrbLogged)
-                return;
-            lrbLogged = true;
-            char lacMsg[256];
-            _snprintf(lacMsg, sizeof(lacMsg), "[particles] NOT RECONSTRUCTED: %s\n", lpcWhat);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 
     namespace
     {
@@ -795,7 +725,6 @@ namespace BrnParticle
             {
                 cLionFX::EffectDestroy(mapDispatchThreadLionEffects[luArrayIndex]);
                 mapDispatchThreadLionEffects[luArrayIndex] = 0;
-                ++muDestroyedLionInstances;   // [lionhandoff]
                 continue;
             }
 
@@ -815,7 +744,6 @@ namespace BrnParticle
                         static_cast<const cLionEffectDefinition*>(lrRecord.mpDescription)),
                     lpLocator, lpScaler, lpTrigger, 0);
 
-                ++muCreatedLionInstances;   // [lionhandoff]
             }
 
             cLionEffectInstance* const lpInstance = mapDispatchThreadLionEffects[luArrayIndex];
@@ -893,18 +821,6 @@ namespace BrnParticle
         if (lpRenderData == 0)
             return;
 
-        // [DIAG] the bank state AT ENTRY, before anything in this function runs. A state that
-        // reads post-Prepare here every frame means the module's memory is being restored
-        // between frames -- which no code in this file does. DELETE-WHEN-STABLE.
-        const u32 luEntryNumBuckets = maSparks[0].mRegularBank.muNumBuckets;
-        const u32 luEntryHead       = (maSparks[0].mRegularBank.mpBuckets != 0) ? 1u : 0u;
-        const u32 luEntryMgrFree    = mBucketManager.muNumFreeBuckets;
-        const f32 lfEntryRing       = mParticleRenderJobDataSparks.mSparkFrameDataSet.GetFrame(0).mfTimeStamp;
-
-        // [DIAG] the delta actually handed to the ring this frame (see the banner at the
-        // Update call below). Function scope so the probe at the tail can print it.
-        static f32 sfDiagRingDelta = 0.0f;
-
         // dword_82CDB404 -- a module-scope static on the console too, not a member.
         static u32 suLastRenderedFrame = 0;
         const bool lbFrameChanged = (lpRenderData->muCurrentFrame != suLastRenderedFrame);
@@ -948,7 +864,6 @@ namespace BrnParticle
             // this took its FIRST DIFFERENCE (sfLastConsumedTimeStepSum). With the clear restored the
             // difference would be wrong, and it is gone.
             const f32 lfRingDelta = lpRenderData->mfCurrentTimeStep;
-            sfDiagRingDelta = lfRingDelta;
 
             mParticleRenderJobDataSparks.mSparkFrameDataSet.Update(lrView, lrProj, lfRingDelta);
 
@@ -977,88 +892,6 @@ namespace BrnParticle
             }
         }
 
-        // =====================================================================================
-        // [DIAG] BRN_SPARK_TEST=<n> -- NOT IN THE X360 BINARY. OFF BY DEFAULT. DELETE-WHEN the
-        // producers land.
-        //
-        // The same shape as BRN_CRUMPLE_FORCE (XenonD3D9Shims.cpp): a control that drives the
-        // console's OWN entry point so a chain can be measured before its natural producer
-        // exists. It calls SparkArray::SpawnSpark -- the real body, with the real array
-        // parameters -- <n> times a frame in front of the camera, which exercises exactly what
-        // 2dac4368 and this build landed: the bank ladder, the two-phase bounce solve,
-        // FreeUnusedBuckets, the frustum cull, CalculateSparkPosition, the ribbon and the
-        // vertex writer. It does NOT stand in for a producer and nothing about it is the
-        // console's behaviour; the POSITIONS and VELOCITIES below are this instrument's, and
-        // they are the only invented numbers in the spark lane.
-        {
-            static bool sbTestProbed = false;
-            static u32  suTestCount  = 0;
-            if (!sbTestProbed)
-            {
-                sbTestProbed = true;
-                if (suTestCount != 0)
-                {
-                    char lacMsg[160];
-                    _snprintf(lacMsg, sizeof(lacMsg),
-                        "[spark] TEST CONTROL ARMED (BRN_SPARK_TEST=%u sparks/frame) -- this is "
-                        "an INSTRUMENT, not a producer\n", suTestCount);
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
-            if (suTestCount != 0)
-            {
-                gauSparkTestSpawnCalls += suTestCount;
-                const rw::math::vpu::Matrix44Affine& lrCam = lpRenderData->mCameraTransform;
-                const f32 lfNow = mParticleRenderJobDataSparks.mSparkFrameDataSet.GetFrame(0).mfTimeStamp;
-                for (u32 luSpark = 0; luSpark < suTestCount; ++luSpark)
-                {
-                    const f32 lfPhase = static_cast<f32>(luSpark) * 0.7391f
-                                      + static_cast<f32>(luSpark & 7u);
-                    // 6 m in front of the camera, 2 m to its RIGHT and 0.6 m above it --
-                    // and every one of those three numbers was MEASURED into place, not
-                    // chosen. Reading 1 put them at camera + 6 m forward, which is inside the
-                    // player car, and the pass is depth-TESTED (dword_83010F4C: test on,
-                    // write off), so every spark drew and was then occluded by the car body.
-                    // Reading 2 lifted them 2 m and the one-shot geometry witness in
-                    // RenderBank answered with the view-space point it was actually emitting:
-                    //     [spark] ribbon0 edges=2 halfWidth=0.02000 colour=FFE1ADFF
-                    //             A0{-0.120 2.108 3.992} B0{-0.141 2.077 4.008}
-                    // z = +3.99 (in front -- the view basis is left-handed) and y = +2.11,
-                    // while the top of the frame at that depth is 4 * tan(vfov/2) ~= 2.08.
-                    // They were a couple of centimetres ABOVE THE TOP EDGE. Perfect batch,
-                    // vertex and draw counts, hr = S_OK, and off screen by 3 cm.
-                    rw::math::vpu::Vector3 lPosition;
-                    lPosition.mV.x = lrCam.wAxis.mV.x + lrCam.zAxis.mV.x * 6.0f + lrCam.xAxis.mV.x * 2.0f;
-                    lPosition.mV.y = lrCam.wAxis.mV.y + lrCam.zAxis.mV.y * 6.0f + lrCam.xAxis.mV.y * 2.0f + 0.6f;
-                    lPosition.mV.z = lrCam.wAxis.mV.z + lrCam.zAxis.mV.z * 6.0f + lrCam.xAxis.mV.z * 2.0f;
-                    lPosition.mV.w = lPosition.mV.y - 3.0f;
-
-                    rw::math::vpu::Vector3 lVelocity;
-                    lVelocity.mV.x = std::cos(lfPhase) * 4.0f;
-                    lVelocity.mV.y = 3.0f + static_cast<f32>(luSpark & 3u);
-                    lVelocity.mV.z = std::sin(lfPhase) * 4.0f;
-                    lVelocity.mV.w = lVelocity.mV.y;
-
-                    maSparks[BrnParticle::Native::eSparkArray_GrindingWorld].SpawnSpark(
-                        lPosition, lVelocity,
-                        // ⭐ THE SIZE IS 1.0 -- THE CONSOLE'S OWN SCALE -- AND THAT IS WHY THE
-                        // FIRST FRAMES LOOKED EMPTY. mfSize multiplies the array's authored
-                        // mfSparkRadius (0.02 m out of the ported vault), so one spark ribbon is
-                        // 4 cm x 8 cm: about 5 x 10 PIXELS at the 6 m this instrument spawns at.
-                        // "I cannot see it" and "it is not drawn" are indistinguishable at that
-                        // size, so the reading was taken with this literal temporarily at 25.0f
-                        // (a metre-wide ribbon) -- run22, frame bb_005400: warm additive streaks
-                        // tapering off across the overpass, exactly a motion-blurred spark. The
-                        // whole chain draws. Edit this one literal to re-take that reading.
-                        1.0f,      // lfSize
-                        lfNow,     // lfCurrentTime
-                        0.0f,      // lfTimeSinceEvent
-                        0.0f,      // lfBirthTimeOffset
-                        1.5f,      // lfHeightAbovePlane
-                        false);    // the regular bank
-                }
-            }
-        }
 
         // The console clears BOTH jobs' batch lists here, every frame, before the flips: the simple
         // list's count and pre-Lion split (`stw r28(=0), 0xD0 / 0xD4` off module+0x25C00,
