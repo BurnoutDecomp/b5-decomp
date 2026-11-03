@@ -62,6 +62,8 @@ struct CsisSetClassHandleCommand : public CsisCommand
         maOperands[2] = auSystemId;
         maOperands[3] = auClassId;
     }
+
+    CsisSetClassHandleCommand(uintptr_t luCommandCount, uintptr_t* lpuCommandBuffer);
 };
 
 // CgsAemsFactory.h:160 (DWARF). Create command: 4 words (tag + 3 operands).
@@ -78,6 +80,8 @@ struct CsisCreateCommand : public CsisCommand
         maOperands[1] = apParameters;
         maOperands[2] = apRequestHandle;
     }
+
+    CsisCreateCommand(uintptr_t luCommandCount, uintptr_t* lpuCommandBuffer);
 };
 
 // CgsAemsFactory.h:212 (DWARF). Update command: 3 words (tag + 2 operands).
@@ -92,6 +96,8 @@ struct CsisUpdateCommand : public CsisCommand
         maOperands[0] = ahRequest;
         maOperands[1] = apParameters;
     }
+
+    CsisUpdateCommand(uintptr_t luCommandCount, uintptr_t* lpuCommandBuffer);
 };
 
 // CgsAemsFactory.h:240 (DWARF). Post a typed CSIS command record onto the queue and

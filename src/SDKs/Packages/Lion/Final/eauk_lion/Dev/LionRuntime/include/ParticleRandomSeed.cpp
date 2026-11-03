@@ -165,7 +165,7 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::BuildLerp(rw::math::vpu::Vector4
 
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 
-    return Vector3Plus{ lvResult.x, lvResult.y, lvResult.z, lvResult.w };
+    return Vector3Plus(lvResult.GetVector());
 }
 
 // ================================================================================================
@@ -268,12 +268,11 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::Build(rw::math::vpu::Vector4 avB
     const f32 lfT2 = mafRandom[luSlot + 2] - 1.0f;
     const f32 lfT3 = mafRandom[luSlot + 3] - 1.0f;
 
-    const Vector3Plus lvResult = {
-        avBase.x + avVariance.x * lfT0,
-        avBase.y + avVariance.y * lfT1,
-        avBase.z + avVariance.z * lfT2,
-        avBase.w + avVariance.w * lfT3,
-    };
+    const Vector3Plus lvResult(
+        static_cast<f32>(avBase.GetX()) + static_cast<f32>(avVariance.GetX()) * lfT0,
+        static_cast<f32>(avBase.GetY()) + static_cast<f32>(avVariance.GetY()) * lfT1,
+        static_cast<f32>(avBase.GetZ()) + static_cast<f32>(avVariance.GetZ()) * lfT2,
+        static_cast<f32>(avBase.GetW()) + static_cast<f32>(avVariance.GetW()) * lfT3);
 
     // Three LCG steps; their three high dwords are the 96-bit stream cut into four mantissas.
     const u64 lu64S0 = mu64State;

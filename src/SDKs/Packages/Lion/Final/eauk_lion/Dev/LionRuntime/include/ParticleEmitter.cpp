@@ -155,20 +155,21 @@ void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
 // -- which is why the original could hand one to the other with no conversion at all.
 //
 // These two adapters exist ONLY because our tree has not unified those two spellings. They are
-// pure lane copies and compile to nothing. They are NOT a conversion the console performs, and
-// they are not a place to put behaviour: if the two homes are ever unified, both disappear and
-// the call sites below read exactly as they do now.
+// pure 16-byte lane copies. They are NOT a conversion the console performs, and they are not a
+// place to put behaviour: if the two homes are ever unified, both disappear and the call sites
+// below read exactly as they do now.
 // ------------------------------------------------------------------------------------------
 namespace
 {
     inline rw::math::vpu::Vector4 LaneCast(const cVector& arV)
     {
-        { const rw::math::vpu::Vector4 lResult = { arV.x, arV.y, arV.z, arV.w }; return lResult; }
+        return rw::math::vpu::Vector4(__lvx(&arV, 0));
     }
 
     inline cVector LaneCast(const rw::math::vpu::Vector3Plus& arV)
     {
-        const cVector lResult = { arV.x, arV.y, arV.z, arV.w };
+        cVector lResult;
+        __stvx(arV.GetVector(), &lResult, 0);
         return lResult;
     }
 
@@ -563,10 +564,10 @@ const f32 KF_DRAG_FRAME_RATE_CONST = 0.05f;   // flt_820FEC48, the second lane
 // no shifting at all.
 inline void NormaliseColour(rw::math::vpu::Vector3Plus& arOut, const cColour8& arColour)
 {
-    arOut.x = static_cast<f32>(arColour.r) * KF_COLOUR_U8_TO_UNIT;
-    arOut.y = static_cast<f32>(arColour.g) * KF_COLOUR_U8_TO_UNIT;
-    arOut.z = static_cast<f32>(arColour.b) * KF_COLOUR_U8_TO_UNIT;
-    arOut.w = static_cast<f32>(arColour.a) * KF_COLOUR_U8_TO_UNIT;
+    arOut.SetX(static_cast<f32>(arColour.r) * KF_COLOUR_U8_TO_UNIT);
+    arOut.SetY(static_cast<f32>(arColour.g) * KF_COLOUR_U8_TO_UNIT);
+    arOut.SetZ(static_cast<f32>(arColour.b) * KF_COLOUR_U8_TO_UNIT);
+    arOut.SetPlus(static_cast<f32>(arColour.a) * KF_COLOUR_U8_TO_UNIT);
 }
 }  // namespace
 
@@ -578,32 +579,30 @@ void cParticleEmitter::PrecalculateParticleBuildData()
     // --- slot 1: mvAlphaFadeInAndFadeOut (+0x230) -- asm 0x8290E058 / 0x8290E084.
     // Two lane inserts, so the z/w lanes keep whatever the previous behaviour left; that is
     // what a Vector2 member assignment compiles to and it is reproduced, not tidied.
-    lrData.mvAlphaFadeInAndFadeOut.x = lrBehaviour.mAlphaFadeIn;
-    lrData.mvAlphaFadeInAndFadeOut.y = lrBehaviour.mAlphaFadeOut;
+    lrData.mvAlphaFadeInAndFadeOut.mV.x = lrBehaviour.mAlphaFadeIn;
+    lrData.mvAlphaFadeInAndFadeOut.mV.y = lrBehaviour.mAlphaFadeOut;
 
     // --- slot 2: mvScaleAndProportionalScaleYXAndZX (+0x240) -- asm 0x8290E0A4..0x8290E0EC.
     // Plain `fdivs`, no zero guard: a behaviour authored with mSizeXYZBase.x == 0 divides by
     // zero on the console too.
-    lrData.mvScaleAndProportionalScaleYXAndZX.x = lrBehaviour.mScale;
-    lrData.mvScaleAndProportionalScaleYXAndZX.y =
-        lrBehaviour.mSizeXYZBase.y / lrBehaviour.mSizeXYZBase.x;
-    lrData.mvScaleAndProportionalScaleYXAndZX.z =
-        lrBehaviour.mSizeXYZBase.z / lrBehaviour.mSizeXYZBase.x;
+    lrData.mvScaleAndProportionalScaleYXAndZX.SetX(lrBehaviour.mScale);
+    lrData.mvScaleAndProportionalScaleYXAndZX.SetY(
+        lrBehaviour.mSizeXYZBase.y / lrBehaviour.mSizeXYZBase.x);
+    lrData.mvScaleAndProportionalScaleYXAndZX.SetZ(
+        lrBehaviour.mSizeXYZBase.z / lrBehaviour.mSizeXYZBase.x);
 
     // --- slot 3: mvOrientStepAndDragFrameRateConstants (+0x250) -- asm 0x8290E108, a full
     // 16-byte store of the vector built at the top of the function: (K, K, 0, 0).
-    lrData.mvOrientStepAndDragFrameRateConstants.x = KF_ORIENT_STEP;
-    lrData.mvOrientStepAndDragFrameRateConstants.y = KF_DRAG_FRAME_RATE_CONST;
-    lrData.mvOrientStepAndDragFrameRateConstants.z = 0.0f;
-    lrData.mvOrientStepAndDragFrameRateConstants.w = 0.0f;
+    lrData.mvOrientStepAndDragFrameRateConstants =
+        rw::math::vpu::Vector2(KF_ORIENT_STEP, KF_DRAG_FRAME_RATE_CONST);
 
     // --- slot 5: mvRGBADiff (+0x270) -- asm 0x8290E110..0x8290E11C. The behaviour's mRGBADiff
     // is already a float vector in 0..255 units (cParticleBehaviour::Build @0x8290B15C writes
     // it as (c1/255 - c0/255) * 255); this normalises it to 0..1.
-    lrData.mvRGBADiff.x = lrBehaviour.mRGBADiff.x * KF_COLOUR_U8_TO_UNIT;
-    lrData.mvRGBADiff.y = lrBehaviour.mRGBADiff.y * KF_COLOUR_U8_TO_UNIT;
-    lrData.mvRGBADiff.z = lrBehaviour.mRGBADiff.z * KF_COLOUR_U8_TO_UNIT;
-    lrData.mvRGBADiff.w = lrBehaviour.mRGBADiff.w * KF_COLOUR_U8_TO_UNIT;
+    lrData.mvRGBADiff.SetX(lrBehaviour.mRGBADiff.x * KF_COLOUR_U8_TO_UNIT);
+    lrData.mvRGBADiff.SetY(lrBehaviour.mRGBADiff.y * KF_COLOUR_U8_TO_UNIT);
+    lrData.mvRGBADiff.SetZ(lrBehaviour.mRGBADiff.z * KF_COLOUR_U8_TO_UNIT);
+    lrData.mvRGBADiff.SetPlus(lrBehaviour.mRGBADiff.w * KF_COLOUR_U8_TO_UNIT);
 
     // --- slots 6..8: the three packed colours (+0x280 / +0x290 / +0x2A0) -- asm 0x8290E120,
     // 0x8290E15C and 0x8290E1C0. Note the ORDER: the console reads mRGBA0, then mRGBAVar, then
@@ -619,24 +618,20 @@ void cParticleEmitter::PrecalculateParticleBuildData()
     const cParticleMaterial& lrMaterial = *mpDescriptor->Material();
     const f32 lfFrameCount = static_cast<f32>(lrMaterial.mFrameCount);
 
-    lrData.mvfFrameCount.x = lfFrameCount;
-    lrData.mvfFrameCount.y = lfFrameCount;
-    lrData.mvfFrameCount.z = lfFrameCount;
-    lrData.mvfFrameCount.w = lfFrameCount;
+    lrData.mvfFrameCount = rw::math::vpu::Vector4(
+        lfFrameCount, lfFrameCount, lfFrameCount, lfFrameCount);
 
     const f32 lfOneOverFrameCount = 1.0f / lfFrameCount;
-    lrData.mvfOneOverFrameCount.x = lfOneOverFrameCount;
-    lrData.mvfOneOverFrameCount.y = lfOneOverFrameCount;
-    lrData.mvfOneOverFrameCount.z = lfOneOverFrameCount;
-    lrData.mvfOneOverFrameCount.w = lfOneOverFrameCount;
+    lrData.mvfOneOverFrameCount = rw::math::vpu::Vector4(
+        lfOneOverFrameCount, lfOneOverFrameCount,
+        lfOneOverFrameCount, lfOneOverFrameCount);
 
     // --- slot 4: mvDragFactorsVelRotScale (+0x260) -- asm 0x8290E25C..0x8290E280, and LAST in
     // the console's own store order, which is why it is last here. A full 16-byte store, so the
     // w lane is written zero rather than left alone.
-    lrData.mvDragFactorsVelRotScale.x = lrBehaviour.mDragFactorVel;
-    lrData.mvDragFactorsVelRotScale.y = lrBehaviour.mDragFactorRot;
-    lrData.mvDragFactorsVelRotScale.z = lrBehaviour.mDragFactorScale;
-    lrData.mvDragFactorsVelRotScale.w = 0.0f;
+    lrData.mvDragFactorsVelRotScale = rw::math::vpu::Vector3(
+        lrBehaviour.mDragFactorVel, lrBehaviour.mDragFactorRot,
+        lrBehaviour.mDragFactorScale);
 }
 
 // ================================================================================================
@@ -1113,10 +1108,8 @@ void BaseColourWithVarianceBehaviour::Process(const cParticleEmitter::ParticleBu
     // and `lvx128 v2, r31, 0x50`); Vector3Plus and Vector4 are one and the same 16-byte lane
     // register there, and only the host's type vocabulary distinguishes them, so the four lanes
     // are carried across by name.
-    const rw::math::vpu::Vector4 lvBase = { arData.mvRGBA0.x, arData.mvRGBA0.y,
-                                            arData.mvRGBA0.z, arData.mvRGBA0.w };
-    const rw::math::vpu::Vector4 lvDiff = { arData.mvRGBADiff.x, arData.mvRGBADiff.y,
-                                            arData.mvRGBADiff.z, arData.mvRGBADiff.w };
+    const rw::math::vpu::Vector4 lvBase(arData.mvRGBA0.GetVector());
+    const rw::math::vpu::Vector4 lvDiff(arData.mvRGBADiff.GetVector());
 
     rw::math::vpu::Vector3Plus lvColour;
     if (arBehaviour.mRGBAVarianceMode == 1)
@@ -1134,10 +1127,10 @@ void BaseColourWithVarianceBehaviour::Process(const cParticleEmitter::ParticleBu
         lvColour = arData.mvRGBA0;
     }
 
-    arParticle.mvColour.x = lvColour.x;
-    arParticle.mvColour.y = lvColour.y;
-    arParticle.mvColour.z = lvColour.z;
-    arParticle.mvColour.w = lvColour.w;
+    arParticle.mvColour.x = static_cast<f32>(lvColour.GetX());
+    arParticle.mvColour.y = static_cast<f32>(lvColour.GetY());
+    arParticle.mvColour.z = static_cast<f32>(lvColour.GetZ());
+    arParticle.mvColour.w = static_cast<f32>(lvColour.GetPlus());
 
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 }
@@ -1184,8 +1177,8 @@ void AlphaFadeBehaviour::Process(const cParticleEmitter::ParticleBuildData& arDa
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     const f32 lfLife    = arParticle.mvTimeScaleAndLifeScale.y;
-    const f32 lfFadeIn  = arData.mvAlphaFadeInAndFadeOut.x;
-    const f32 lfFadeOut = arData.mvAlphaFadeInAndFadeOut.y;
+    const f32 lfFadeIn  = arData.mvAlphaFadeInAndFadeOut.mV.x;
+    const f32 lfFadeOut = arData.mvAlphaFadeInAndFadeOut.mV.y;
 
     f32 lfAlpha = 1.0f;
     if (lfFadeIn > lfLife)
@@ -1359,7 +1352,7 @@ void SizeBehaviour::Process(const cParticleBehaviour& arBehaviour,
 
     // data +0x20 lane x -- the emitter's overall scale, splatted in every arm
     // (`lvx128 v0, r0, <data+0x20>` then `vspltw v11, v0, 0`).
-    const f32 lfScale = arData.mvScaleAndProportionalScaleYXAndZX.x;
+    const f32 lfScale = arData.mvScaleAndProportionalScaleYXAndZX.GetX();
 
     if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_SIZE_FULL) != 0)
     {
@@ -1399,9 +1392,9 @@ void SizeBehaviour::Process(const cParticleBehaviour& arBehaviour,
         const f32 lfScaledX = lfSizeX * lfScale;
         arParticle.mvSizePlusNextFrame.x = lfScaledX;
         arParticle.mvSizePlusNextFrame.y =
-            lfScaledX * arData.mvScaleAndProportionalScaleYXAndZX.y;   // proportional Y:X
+            lfScaledX * static_cast<f32>(arData.mvScaleAndProportionalScaleYXAndZX.GetY()); // proportional Y:X
         arParticle.mvSizePlusNextFrame.z =
-            lfScaledX * arData.mvScaleAndProportionalScaleYXAndZX.z;   // proportional Z:X
+            lfScaledX * static_cast<f32>(arData.mvScaleAndProportionalScaleYXAndZX.GetZ()); // proportional Z:X
         // .w (the next frame) is carried through untouched.
 
         arNucleus.mSize.x    = lfSizeX;
@@ -1535,7 +1528,7 @@ void DragBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // data +0x30 lane y -- the fixed drag time step (the member's name says so).
-    const f32 lfStep = arData.mvOrientStepAndDragFrameRateConstants.y;
+    const f32 lfStep = arData.mvOrientStepAndDragFrameRateConstants.mV.y;
 
     // asm 0x8290DC14..0x8290DC2C -- the accumulator is read out of mAcc's w lane and advanced
     // BEFORE the loop test, so a step can be taken on the very first frame.
@@ -1546,7 +1539,8 @@ void DragBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
         // ---- velocity (asm 0x8290DC58..0x8290DCF0) --------------------------------------
         if (AnyChannelAboveDragEpsilon(arNucleus.mVel))
         {
-            DragVectorChannel(arNucleus.mVel, arData.mvDragFactorsVelRotScale.x);
+            DragVectorChannel(arNucleus.mVel,
+                              static_cast<f32>(arData.mvDragFactorsVelRotScale.GetX()));
         }
 
         // ---- rotation velocity (asm 0x8290DCF4..0x8290DDEC) ----------------------------
@@ -1554,13 +1548,15 @@ void DragBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
         {
             // The single-angle arm: only lane z, and the SCALAR form of the drag.
             arNucleus.mRotVel.z =
-                DragScalarChannel(arNucleus.mRotVel.z, arData.mvDragFactorsVelRotScale.y);
+                DragScalarChannel(arNucleus.mRotVel.z,
+                                  static_cast<f32>(arData.mvDragFactorsVelRotScale.GetY()));
         }
         else if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_ROTVELACC) != 0)
         {
             if (AnyChannelAboveDragEpsilon(arNucleus.mRotVel))
             {
-                DragVectorChannel(arNucleus.mRotVel, arData.mvDragFactorsVelRotScale.y);
+                DragVectorChannel(arNucleus.mRotVel,
+                                  static_cast<f32>(arData.mvDragFactorsVelRotScale.GetY()));
             }
         }
 
@@ -1569,14 +1565,16 @@ void DragBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
         {
             if (AnyChannelAboveDragEpsilon(arNucleus.mSizeVel))
             {
-                DragVectorChannel(arNucleus.mSizeVel, arData.mvDragFactorsVelRotScale.z);
+                DragVectorChannel(arNucleus.mSizeVel,
+                                  static_cast<f32>(arData.mvDragFactorsVelRotScale.GetZ()));
             }
         }
         else
         {
             // ⚠ NO epsilon guard on this arm -- see the banner.
             arNucleus.mSizeVel.x =
-                DragScalarChannel(arNucleus.mSizeVel.x, arData.mvDragFactorsVelRotScale.z);
+                DragScalarChannel(arNucleus.mSizeVel.x,
+                                  static_cast<f32>(arData.mvDragFactorsVelRotScale.GetZ()));
         }
 
         lfAccumulator = lfAccumulator - lfStep;   // asm 0x8290DEEC
@@ -1777,7 +1775,7 @@ void MultiFrameBehaviour::Process(const cParticleEmitter::ParticleBuildData& arD
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // data +0x90 -- the atlas cell count as a float (`lvx128 v127, r27, 0x90`).
-    const f32 lfFrameCount = arData.mvfFrameCount.x;
+    const f32 lfFrameCount = arData.mvfFrameCount.GetX();
 
     // The two frame numbers, parked in the nucleus's two spare w lanes.
     f32 lfFrame     = arNucleus.mRotAcc.w;         // `vspltw128 v125, <n+0x50>, 3`
@@ -1847,7 +1845,8 @@ void MultiFrameBehaviour::Process(const cParticleEmitter::ParticleBuildData& arD
         else if (arMaterial.mAnimTexOptions == eTEX_ANIM_PLAY_OVER_LIFTIME)
         {
             // asm 0x8290FEF4..0x82910064 -- the atlas is stretched over the particle's life.
-            const f32 lfSecondsPerCell = arNucleus.LifeTime() * arData.mvfOneOverFrameCount.x;
+            const f32 lfSecondsPerCell =
+                arNucleus.LifeTime() * static_cast<f32>(arData.mvfOneOverFrameCount.GetX());
 
             arNucleus.FrameTime() = arNucleus.FrameTime() + afDeltaTime;
             if (arNucleus.FrameTime() >= lfSecondsPerCell)
@@ -2120,8 +2119,8 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
 
     // ---- 1. the life gate (asm 0x82910160..0x829101F8) ------------------------------------
     const f32 lvfLifeTime    = arSimulatedParticle.LifeTime();
-    const f32 lvfDeltaTime   = arParticleBuildData.mvDeltaTimeAndCurrentTime.x;
-    const f32 lvfCurrentTime = arParticleBuildData.mvDeltaTimeAndCurrentTime.y;
+    const f32 lvfDeltaTime   = arParticleBuildData.mvDeltaTimeAndCurrentTime.GetX();
+    const f32 lvfCurrentTime = arParticleBuildData.mvDeltaTimeAndCurrentTime.GetY();
 
     f32 lvfParticleAge = lvfCurrentTime - arSimulatedParticle.BirthTime();
 
@@ -2237,7 +2236,8 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
         // asm 0x829103E8..0x82910418. The velocity step is scaled by the behaviour's overall
         // SCALE (build data slot 2 lane x == cParticleBehaviour::mScale, the authoring token
         // table's SCALE at +0x2BC), so a scaled-up effect moves proportionally faster.
-        const f32 lfStep = lvfScaledDeltaTime * arParticleBuildData.mvScaleAndProportionalScaleYXAndZX.x;
+        const f32 lfStep = lvfScaledDeltaTime * static_cast<f32>(
+            arParticleBuildData.mvScaleAndProportionalScaleYXAndZX.GetX());
         const cVector lvPos = arSimulatedParticle.mPos;
         const cVector lvVel = arSimulatedParticle.mVel;
 
@@ -2263,7 +2263,7 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
         if (lfVelLen2 > KF_DRAG_EPSILON)
         {
             // The step is the build data's ORIENT STEP (slot 3 lane x, 0.05s).
-            const f32 lfOrientStep = arParticleBuildData.mvOrientStepAndDragFrameRateConstants.x;
+            const f32 lfOrientStep = arParticleBuildData.mvOrientStepAndDragFrameRateConstants.mV.x;
             lvTip.x = lrVel.x * lfOrientStep + arSimulatedParticle.mPos.x;
             lvTip.y = lrVel.y * lfOrientStep + arSimulatedParticle.mPos.y;
             lvTip.z = lrVel.z * lfOrientStep + arSimulatedParticle.mPos.z;
@@ -2316,7 +2316,7 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
             // asm 0x82910ABC..0x82910F84 -- a SECOND Euler triple, one orient step ahead, applied
             // to the ribbon tip this function already wrote into mPos1. The step is the build
             // data's orient step again.
-            const f32 lfOrientStep = arParticleBuildData.mvOrientStepAndDragFrameRateConstants.x;
+            const f32 lfOrientStep = arParticleBuildData.mvOrientStepAndDragFrameRateConstants.mV.x;
             const cVector lTipRot = { lRotVel.x * lfOrientStep + lRot.x,
                                       lRotVel.y * lfOrientStep + lRot.y,
                                       lRotVel.z * lfOrientStep + lRot.z,
@@ -2560,9 +2560,9 @@ u32 cParticleEmitter::Update(const cTime& arTime)
             // into the two live lanes of build-data slot 0. PrecalculateParticleBuildData
             // deliberately leaves that slot alone (it is per-frame, not per-behaviour); this
             // is the only writer.
-            mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.x = mDt;
-            mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.y =
-                static_cast<f32>(arTime.GetTicks()) * KF_TICKS_TO_SECONDS;
+            mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.SetX(mDt);
+            mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.SetY(
+                static_cast<f32>(arTime.GetTicks()) * KF_TICKS_TO_SECONDS);
 
             // asm 0x82915640..0x82915654 -- re-simulate the parent particle into a scratch
             // render record. Only its EFFECT on mParentEmitterNucleus matters here; the
@@ -2656,9 +2656,9 @@ void cParticleEmitter::ParentMatrixCurrentBuild(cMatrix& arOutMatrix,
     const cParticleDescriptor& lrParentDes = *mpDescriptor->mpParent.Get();
 
     // asm 0x82911444..0x82911494 -- this frame's delta time and absolute time.
-    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.x = afDeltaTime;
-    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.y =
-        static_cast<f32>(arTime.GetTicks()) * KF_TICKS_TO_SECONDS;
+    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.SetX(afDeltaTime);
+    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.SetY(
+        static_cast<f32>(arTime.GetTicks()) * KF_TICKS_TO_SECONDS);
 
     RenderedParticle lParticle;
     ParticleBuild(lParticle, lSeed, mParentEmitterNucleus, lrParentDes, *mpCurrentBehaviour,
@@ -3291,9 +3291,8 @@ u32 cParticleEmitter::SimulateParticlesInBucketGeneral(T lHelper,
     cParticleRandomSeed lBucketSeed = lpBucket->GetRandomSeed();
 
     // ---- this frame's two build-data lanes (asm 0x82912284..0x829122D4) ----------------------
-    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.x = mDt;
-    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.y =
-        aTime.GetTimeSeconds();
+    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.SetX(mDt);
+    mPrecalculatedParticleBuildData.mvDeltaTimeAndCurrentTime.SetY(aTime.GetTimeSeconds());
 
     sParticleNucleus* const laNuclei = lpBucket->GetParticles();
 

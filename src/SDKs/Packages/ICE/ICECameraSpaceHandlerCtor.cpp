@@ -3,11 +3,10 @@
 //
 // Compile anchor for the ICE::CameraSpaceHandler TU that owns the copy
 // constructor (@0x821FAA88) and copy-assignment operator (@0x8252B5A8). Both are
-// `= default` in the home header (ICECameraSpaceHandler.hpp) -- the eight
-// Matrix44Affine members and the mpGamePlayCam pointer are all trivially
-// copyable, so the defaulted special members generate the IDENTICAL flat copy
-// the X360 asm performs (32 lvx128/stvx128 16-byte vector moves over the 512-byte
-// matrix block, then the lwz/stw word copy of the +0x200 pointer).
+// `= default` in the home header (ICECameraSpaceHandler.hpp). The X360 copy
+// constructor and assignment flatten eight Matrix44Affine values into 32
+// lvx128/stvx128 moves over the 512-byte matrix block, then copy the +0x200
+// pointer word.
 //
 // This .cpp gives the compile gate a real TU: it pulls the header and ODR-uses
 // both special members (so they are instantiated and checked), and pins the
@@ -44,10 +43,11 @@ CGS_STATIC_ASSERT((8 * sizeof(rw::math::vpu::Matrix44Affine) == 512),
 CGS_STATIC_ASSERT((sizeof(CameraSpaceHandler) >= 512),
               "CameraSpaceHandler embeds the 512-byte matrix block");
 
-// CameraSpaceHandler is trivially copyable, which is WHY the defaulted copy
-// ctor / operator= reproduce the X360 flat (lvx/stvx + lwz/stw) copy exactly.
-CGS_STATIC_ASSERT((__is_trivially_copyable(CameraSpaceHandler)),
-              "the flat-copy parity relies on CameraSpaceHandler being trivially copyable");
+// No type-trait assertion here: XDK 6534.4 does not define
+// __is_trivially_copyable (baseline C3861), and Matrix44Affine has a user-provided
+// copy constructor, so CameraSpaceHandler is not trivially copyable in the
+// language-trait sense. The size/layout assertions above remain; the native
+// special members are compiler-generated from the attested field sequence.
 
 // ODR-use both special members so the gate instantiates and checks the copy
 // ctor and copy-assignment this TU owns.
