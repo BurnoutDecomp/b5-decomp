@@ -49,11 +49,9 @@
 #include "GameSource/Math/BrnMathUtils.h"                    // BrnMath::Flatten (XZ)
 #include "SharedClasses/AI/AISectionsResourceType.h"         // AISection / AISectionsData
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 #include <math.h>     // sqrtf
-#include <cstdlib>    // std::getenv (the BRN_ROT_TRAFFIC_DIAG witness only)
 
 namespace BrnAI
 {
@@ -81,29 +79,7 @@ namespace
     // the inner loop walks r29 upwards from var_E0.
     const s32 KI_SWEEP_SIDE_COUNT = 2;
 
-    // [DIAG] NOT IN THE X360 BINARY (BRN_ROT_TRAFFIC_DIAG=1). Crash-parity G07-D1 witness: proves
-    // TestCarHNG reached its two traffic legs (a nearby set was passed and neither section leg
-    // hit), how many vehicles the set held, and which leg answered. Budgeted: the first 16 calls,
-    // the first 32 hits, then every 64th call. Reads only; changes nothing it reports on.
-    void NoteTrafficLegs(const NearbyVehicles* lpaNearbyVehicles, f32 lfSpeed, bool lbAheadHit, bool lbHit)
-    {
-        static u32 suCalls = 0;
-        static u32 suHits  = 0;
-        ++suCalls;
-        if (lbHit)
-        {
-            ++suHits;
-        }
-        if (suCalls <= 16 || (lbHit && suHits <= 32) || (suCalls % 64) == 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[rot-hng] traffic legs call " << suCalls
-                << " nearby " << lpaNearbyVehicles->miCount
-                << " speed " << lfSpeed
-                << " -> " << (lbAheadHit ? "AHEAD hit" : (lbHit ? "ACROSS hit" : "clear"))
-                << " hits " << suHits << "/" << suCalls << "\n";
-        }
-    }
+
 }
 
 // =================================================================================================
@@ -132,9 +108,9 @@ bool ResetOnTrackManager::TestRecentResets(Vector3 lTestPosition)
     {
         const RecentResetEntry& lrEntry = mRecentResets[static_cast<u32>(liIndex)];
 
-        const f32 lfDX = lTestPosition.x - lrEntry.mPosition.x;
-        const f32 lfDY = lTestPosition.y - lrEntry.mPosition.y;
-        const f32 lfDZ = lTestPosition.z - lrEntry.mPosition.z;
+        const f32 lfDX = lTestPosition.mV.x - lrEntry.mPosition.mV.x;
+        const f32 lfDY = lTestPosition.mV.y - lrEntry.mPosition.mV.y;
+        const f32 lfDZ = lTestPosition.mV.z - lrEntry.mPosition.mV.z;
 
         const f32 lfSeparationSquared = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
 
@@ -191,8 +167,8 @@ bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
 
     const AISectionsData* lpAISectionsData = mpAISectionData.operator->();
 
-    const AISection::Vector2 lPackedStart = { lStartPos.x, lStartPos.y };
-    const AISection::Vector2 lPackedEnd   = { lEndPos.x,   lEndPos.y   };
+    const AISection::Vector2 lPackedStart = { lStartPos.mV.x, lStartPos.mV.y };
+    const AISection::Vector2 lPackedEnd   = { lEndPos.mV.x,   lEndPos.mV.y   };
 
     for (s32 liPortal = 0; liPortal < static_cast<s32>(lpAISection->mu8NumPortals); ++liPortal)
     {
@@ -263,14 +239,21 @@ bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
     const f32 KF_CAR_HNG_HALF         = 0.5f;   // flt_820C4168
 
     const f32 lfLookAhead = lfSpeed + KF_CAR_HNG_LOOK_AHEAD;
-    const Vector2 lFront  = { lPosition.x + lDirection.x * lfLookAhead,
-                              lPosition.y + lDirection.y * lfLookAhead, 0.0f, 0.0f };
-    const Vector2 lMiddle = { lPosition.x + lDirection.x * KF_CAR_HNG_MIDDLE,
-                              lPosition.y + lDirection.y * KF_CAR_HNG_MIDDLE, 0.0f, 0.0f };
-    const Vector2 lHalfWidth = { (lDirection.y * KF_CAR_HNG_WIDTH) * KF_CAR_HNG_HALF,
-                                 (-lDirection.x * KF_CAR_HNG_WIDTH) * KF_CAR_HNG_HALF, 0.0f, 0.0f };
-    const Vector2 lAcrossStart = { lMiddle.x + lHalfWidth.x, lMiddle.y + lHalfWidth.y, 0.0f, 0.0f };
-    const Vector2 lAcrossEnd   = { lMiddle.x - lHalfWidth.x, lMiddle.y - lHalfWidth.y, 0.0f, 0.0f };
+    const rw::math::vpu::VecFloat lLookAhead(lfLookAhead);
+    const rw::math::vpu::VecFloat lMiddleDistance(KF_CAR_HNG_MIDDLE);
+    const rw::math::vpu::VecFloat lWidth(KF_CAR_HNG_WIDTH);
+    const rw::math::vpu::VecFloat lHalf(KF_CAR_HNG_HALF);
+    Vector2 lFront, lMiddle, lHalfWidth, lAcrossStart, lAcrossEnd;
+    lFront.mV = __vmaddfp(lDirection.mV, lLookAhead.mV, lPosition.mV);
+    lMiddle.mV = __vmaddfp(lDirection.mV, lMiddleDistance.mV, lPosition.mV);
+    __vector4 lPerpendicular = lDirection.mV;
+    lPerpendicular.x = lDirection.mV.y;
+    lPerpendicular.u[1] = lDirection.mV.u[0] ^ 0x80000000u;
+    lPerpendicular.z = lDirection.mV.y;
+    lPerpendicular.w = lDirection.mV.y;
+    lHalfWidth.mV = __vmulfp(__vmulfp(lPerpendicular, lWidth.mV), lHalf.mV);
+    lAcrossStart.mV = __vaddfp(lMiddle.mV, lHalfWidth.mV);
+    lAcrossEnd.mV = __vsubfp(lMiddle.mV, lHalfWidth.mV);
 
     if (TestSectionHNG(lpAISection, lPosition, lFront))              // 0x82790D60
     {
@@ -289,7 +272,6 @@ bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
     const bool lbAheadHit = LineTestTrafficHNG(lpaNearbyVehicles, lPosition, lFront);              // 0x82790DB8
     const bool lbHit      = lbAheadHit
                          || LineTestTrafficHNG(lpaNearbyVehicles, lAcrossStart, lAcrossEnd);    // 0x82790DD4
-    NoteTrafficLegs(lpaNearbyVehicles, lfSpeed, lbAheadHit, lbHit);   // [DIAG] BRN_ROT_TRAFFIC_DIAG only
     return lbHit;
 }
 
@@ -352,17 +334,17 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
     // `lenSq != 0` test kept a zero direction (0, 0).
     Vector2 lDirection2D = BrnMath::Flatten(lpResetData->mDirection);
     {
-        const f32 lfLengthSquared = lDirection2D.x * lDirection2D.x + lDirection2D.y * lDirection2D.y;
+        const f32 lfLengthSquared = lDirection2D.mV.x * lDirection2D.mV.x + lDirection2D.mV.y * lDirection2D.mV.y;
         const f32 lfInverse = 1.0f / sqrtf(lfLengthSquared);
-        lDirection2D.x *= lfInverse;
-        lDirection2D.y *= lfInverse;
+        const rw::math::vpu::VecFloat lInverse(lfInverse);
+        lDirection2D.mV = __vmulfp(lDirection2D.mV, lInverse.mV);
     }
 
     // v124 == Cross(worldUp, mDirection) == (dir.z, 0, -dir.x) -- X360 0x8279428C..0x827942C0; see
     // the file banner for why this is written as a cross product rather than transcribed from the
     // shuffle pair, and why it is NOT (-dir.z, 0, dir.x) (the pre-2026-09-22 sign).
     const Vector3 lResetDirection = lpResetData->mDirection;
-    const Vector3 lLateral = { lResetDirection.z, 0.0f, -lResetDirection.x, 0.0f };
+    const Vector3 lLateral( lResetDirection.mV.z, 0.0f, -lResetDirection.mV.x);
 
     const bool lbIsNotRaceStart =
         (lpRequest->GetResetType() != E_RESET_TYPE_BEHIND_PLAYER_RACE_START);
@@ -370,17 +352,6 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
     if (!lpAICar->IsActive())
     {
         // The console's own gate: an AICar the AI is not modelling gets no pose at all.
-        static bool sbReportedInactive = false;
-        if (!sbReportedInactive && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbReportedInactive = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[rot] AvoidObstacles refused: AICar for global car "
-                << static_cast<s32>(lpRequest->GetGlobalRaceCarIndex())
-                << " is not IN_RANGE/OUT_OF_RANGE (state "
-                << static_cast<s32>(lpAICar->meCarState)
-                << ") -- this is the console's own gate at X360 0x82794318, not a park.\n";
-        }
         return false;
     }
 
@@ -424,8 +395,9 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
 
     Vector3 laLateral[KI_SWEEP_SIDE_COUNT];
     {
-        const Vector3 lAggregateValue = { -lLateral.x, -lLateral.y, -lLateral.z, 0.0f };
-        laLateral[0] = lAggregateValue;
+        __vector4 lSignMask;
+        lSignMask.u[0] = lSignMask.u[1] = lSignMask.u[2] = lSignMask.u[3] = 0x80000000u;
+        laLateral[0].mV = __vxor(lLateral.mV, lSignMask);
     }   // var_E0 (the xor)
     laLateral[1] = lLateral;                                                 // var_D0
 
@@ -439,13 +411,12 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
             }
 
             const f32 lfStep = static_cast<f32>(liAttempt) * KF_SWEEP_DISTANCE;
-            const Vector3 lOffset = { laLateral[liSide].x * lfStep,
-                                      laLateral[liSide].y * lfStep,
-                                      laLateral[liSide].z * lfStep, 0.0f };
+            const rw::math::vpu::VecFloat lStep(lfStep);
+            const Vector3 lOffset(__vmulfp(laLateral[liSide].mV, lStep.mV));
 
             const Vector2 lOffset2D  = BrnMath::Flatten(lOffset);
-            const Vector2 lCandidate2D = { lPosition2D.x + lOffset2D.x,
-                                           lPosition2D.y + lOffset2D.y, 0.0f, 0.0f };
+            const Vector2 lCandidate2D( lPosition2D.mV.x + lOffset2D.mV.x,
+                                           lPosition2D.mV.y + lOffset2D.mV.y);
 
             if (TestSectionHNG(lpAISection, lPosition2D, lCandidate2D))
             {
@@ -455,9 +426,7 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
 
             if (lbIsNotRaceStart)
             {
-                const Vector3 lCandidate = { lpResetData->mPosition.x + lOffset.x,
-                                             lpResetData->mPosition.y + lOffset.y,
-                                             lpResetData->mPosition.z + lOffset.z, 0.0f };
+                const Vector3 lCandidate(__vaddfp(lpResetData->mPosition.mV, lOffset.mV));
                 if (TestRecentResets(lCandidate))
                 {
                     continue;
@@ -468,9 +437,7 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
                             lpRequest->GetResetSpeed()))
             {
                 {
-                    const Vector3 lAggregateValue = { lpResetData->mPosition.x + lOffset.x,
-                                                  lpResetData->mPosition.y + lOffset.y,
-                                                  lpResetData->mPosition.z + lOffset.z, 0.0f };
+                    const Vector3 lAggregateValue(__vaddfp(lpResetData->mPosition.mV, lOffset.mV));
                     lpResetData->mPosition = lAggregateValue;
                 }
                 return true;
@@ -489,9 +456,8 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
             * KF_FALLBACK_SPREAD_SCALE * KF_SWEEP_DISTANCE;
 
         {
-            const Vector3 lAggregateValue = { lLateral.x * lfSpread + lpResetData->mPosition.x,
-                                          lLateral.y * lfSpread + lpResetData->mPosition.y,
-                                          lLateral.z * lfSpread + lpResetData->mPosition.z, 0.0f };
+            const rw::math::vpu::VecFloat lSpread(lfSpread);
+            const Vector3 lAggregateValue(__vmaddfp(lLateral.mV, lSpread.mV, lpResetData->mPosition.mV));
             lpResetData->mPosition = lAggregateValue;
         }
     }

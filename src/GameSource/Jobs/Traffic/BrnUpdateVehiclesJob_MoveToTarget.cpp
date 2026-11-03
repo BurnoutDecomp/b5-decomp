@@ -80,27 +80,27 @@ void UpdateVehiclesJob::MoveToTarget(Vector3 lTargetPos, bool lbPartialUpdate)
     const Vector3 lParamDir = lpParamTransform->GetDirection();
 
     // 0x8291C46C: 0.1f (flt_82004014, the same value as E_TUNE_LIMITS.w) over Param+0x3C.
-    const f32 lfPitchFactor = maTuning[E_TUNE_LIMITS].w / lpParam->mfFrontDist;
+    const f32 lfPitchFactor = maTuning[E_TUNE_LIMITS].mV.w / lpParam->mfFrontDist;
 
     const Vector3 lAt = lVehicleTransform.At();
 
     // 0x8291C464/0x8291C4B4: Dot(lMoveVector, At) minus E_TUNE_SWERVE.z.
     const f32 lfSpeedModifier =
-        rw::math::vpu::Dot(lMoveVector, lAt) - maTuning[E_TUNE_SWERVE].z;
+        rw::math::vpu::Dot(lMoveVector, lAt) - maTuning[E_TUNE_SWERVE].mV.z;
 
-    const f32 lfSimTimeStep = maTuning[E_TUNE_TIME].z;
+    const f32 lfSimTimeStep = maTuning[E_TUNE_TIME].mV.z;
 
     // 0x8291C4C0..0x8291C524: cubic shaping, E_TUNE_SWERVE.w gain, integrated over one step.
     const f32 lfSpeedShaped =
         (lfSpeedModifier * lfSpeedModifier * lfSpeedModifier) + lfSpeedModifier;
-    const f32 lfNewSpeed = lpVehicle->GetSpeed().x
-                           + (lfSpeedShaped * maTuning[E_TUNE_SWERVE].w) * lfSimTimeStep;
+    const f32 lfNewSpeed = lpVehicle->GetSpeed().GetFloat()
+                           + (lfSpeedShaped * maTuning[E_TUNE_SWERVE].mV.w) * lfSimTimeStep;
 
     // 0x8291C514..0x8291C584: both speeds below E_TUNE_MOVE.x hold the vehicle still. Both
     // compares splat LANE 0 (lvsl with r31 == 0 at 0x8291C4D4 and 0x8291C4E0).
-    const f32 lfStoppedSpeed = maTuning[E_TUNE_MOVE].x;
+    const f32 lfStoppedSpeed = maTuning[E_TUNE_MOVE].mV.x;
     const bool lbStopped = (lfNewSpeed < lfStoppedSpeed)
-                           && (lpParamTransform->GetSpeed().x < lfStoppedSpeed);
+                           && (lpParamTransform->GetSpeed().GetFloat() < lfStoppedSpeed);
 
     // 0x8291C59C..0x8291C5A8: the length ceiling collapses to 0 when stopped, and the whole
     // distance collapses to 0 under mpParams->mbDEBUGStopTrafficMoving (params+0x77).
@@ -115,7 +115,7 @@ void UpdateVehiclesJob::MoveToTarget(Vector3 lTargetPos, bool lbPartialUpdate)
     const f32 lfDot = rw::math::vpu::Dot(lParamDir, lAt);
     const f32 lfTurningFactor = lfDot < 0.0f ? -lfDot : lfDot;
     const Vector3 lAmortizedParamDir =
-        lParamDir * (lfDistanceToMove * lfNewSpeed * maTuning[E_TUNE_LANE].x * lfTurningFactor);
+        lParamDir * (lfDistanceToMove * lfNewSpeed * maTuning[E_TUNE_LANE].mV.x * lfTurningFactor);
 
     CGS_ASSERT(rw::math::vpu::IsValid(lMoveVector), "RwMath::IsValid( lMoveVector )");
     CGS_ASSERT(rw::math::vpu::IsValid(lAmortizedParamDir), "RwMath::IsValid( lAmortizedParamDir )");
@@ -130,44 +130,44 @@ void UpdateVehiclesJob::MoveToTarget(Vector3 lTargetPos, bool lbPartialUpdate)
     // DELTA against the previous steering is rate-limited to +/- E_TUNE_ANGLES.w.
     const Vector3 lCrossProduct = rw::math::vpu::Cross(lNewDirection, lAt);
     const f32 lfSinThetaRaw =
-        rw::math::vpu::Magnitude(lCrossProduct) * SgnF(lCrossProduct.y);
+        rw::math::vpu::Magnitude(lCrossProduct) * SgnF(lCrossProduct.mV.y);
 
-    const f32 lfOldSteering = lPitch_Roll_Steering_WheelRot.z;
-    const f32 lfMaxSteeringDelta = maTuning[E_TUNE_ANGLES].w;   // 0.025
+    const f32 lfOldSteering = lPitch_Roll_Steering_WheelRot.mV.z;
+    const f32 lfMaxSteeringDelta = maTuning[E_TUNE_ANGLES].mV.w;   // 0.025
     const f32 lfSteeringDelta =
         ClampF(lfSinThetaRaw - lfOldSteering, -lfMaxSteeringDelta, lfMaxSteeringDelta);
 
     // 0x8291C89C..0x8291C918: the second GetCurrentVehicleTypeRuntime call. The absolute
     // steering limit lerps E_TUNE_ANGLES.x -> .y by (mBBoxHalfSize.z * E_TUNE_ANGLES.z).
     const VehicleTypeRuntime* lpSteeringTypeRuntime = GetCurrentVehicleTypeRuntime();
-    const f32 lfLerp = lpSteeringTypeRuntime->GetBBoxHalfSize().z * maTuning[E_TUNE_ANGLES].z;
-    const f32 lfMaxSteering = maTuning[E_TUNE_ANGLES].x
-                              + (maTuning[E_TUNE_ANGLES].y - maTuning[E_TUNE_ANGLES].x) * lfLerp;
+    const f32 lfLerp = lpSteeringTypeRuntime->GetBBoxHalfSize().mV.z * maTuning[E_TUNE_ANGLES].mV.z;
+    const f32 lfMaxSteering = maTuning[E_TUNE_ANGLES].mV.x
+                              + (maTuning[E_TUNE_ANGLES].mV.y - maTuning[E_TUNE_ANGLES].mV.x) * lfLerp;
 
     const f32 lfSinTheta =
         ClampF(lfOldSteering + lfSteeringDelta, -lfMaxSteering, lfMaxSteering);
-    lPitch_Roll_Steering_WheelRot.z = lfSinTheta;
+    lPitch_Roll_Steering_WheelRot.mV.z = lfSinTheta;
 
     // 0x8291C930..0x8291C9CC: cos from sqrt(1 - sin^2), then the heading rebuilt in XZ.
     const f32 lfCosTheta = std::sqrt(1.0f - (lfSinTheta * lfSinTheta));
-    lNewDirection.x = (lAt.x * lfCosTheta) - (lAt.z * lfSinTheta);
-    lNewDirection.z = (lAt.x * lfSinTheta) + (lAt.z * lfCosTheta);
+    lNewDirection.mV.x = (lAt.mV.x * lfCosTheta) - (lAt.mV.z * lfSinTheta);
+    lNewDirection.mV.z = (lAt.mV.x * lfSinTheta) + (lAt.mV.z * lfCosTheta);
 
     // 0x8291C988..0x8291C9F0: roll. Steering doubled and clamped, scaled by
     // newSpeed * E_TUNE_FILTERS.x and clamped again, weighted by E_TUNE_FILTERS.y, then
     // filtered toward the old roll by E_TUNE_FILTERS.z.
     const f32 lfDesiredRoll0 = ClampF(lfSinTheta * 2.0f, -1.0f, 1.0f);
     const f32 lfDesiredRoll1 =
-        ClampF(lfDesiredRoll0 * (lfNewSpeed * maTuning[E_TUNE_FILTERS].x), -1.0f, 1.0f);
-    const f32 lfDesiredRoll = lfDesiredRoll1 * maTuning[E_TUNE_FILTERS].y;
-    const f32 lfOldRoll = lPitch_Roll_Steering_WheelRot.y;
-    lPitch_Roll_Steering_WheelRot.y =
-        lfOldRoll + (lfDesiredRoll - lfOldRoll) * maTuning[E_TUNE_FILTERS].z;
+        ClampF(lfDesiredRoll0 * (lfNewSpeed * maTuning[E_TUNE_FILTERS].mV.x), -1.0f, 1.0f);
+    const f32 lfDesiredRoll = lfDesiredRoll1 * maTuning[E_TUNE_FILTERS].mV.y;
+    const f32 lfOldRoll = lPitch_Roll_Steering_WheelRot.mV.y;
+    lPitch_Roll_Steering_WheelRot.mV.y =
+        lfOldRoll + (lfDesiredRoll - lfOldRoll) * maTuning[E_TUNE_FILTERS].mV.z;
 
     // 0x8291CA18..0x8291CA24: pitch is only re-clamped. The ship computes no desired pitch;
     // ParamTransform::GetSpeed feeds the stopped test above instead.
-    lPitch_Roll_Steering_WheelRot.x =
-        ClampF(lPitch_Roll_Steering_WheelRot.x, -lfPitchFactor, lfPitchFactor);
+    lPitch_Roll_Steering_WheelRot.mV.x =
+        ClampF(lPitch_Roll_Steering_WheelRot.mV.x, -lfPitchFactor, lfPitchFactor);
 
     CGS_ASSERT(rw::math::vpu::IsValid(lNewDirection), "RwMath::IsValid( lNewDirection )");
     CGS_ASSERT(lfDistanceToMove == lfDistanceToMove, "RwMath::IsValid( lfDistanceToMove )");
@@ -194,9 +194,9 @@ void UpdateVehiclesJob::MoveToTarget(Vector3 lTargetPos, bool lbPartialUpdate)
 
     // 0x8291CDF8..0x8291CE0C: distance over radius, wrapped once at E_TUNE_LIMITS.y (2*pi).
     const f32 lfNewRotationUnclamped =
-        lPitch_Roll_Steering_WheelRot.w + (lfDistanceToMove / lfWheelRadius);
-    const f32 lfTwoPi = maTuning[E_TUNE_LIMITS].y;
-    lPitch_Roll_Steering_WheelRot.w = lfNewRotationUnclamped > lfTwoPi
+        lPitch_Roll_Steering_WheelRot.mV.w + (lfDistanceToMove / lfWheelRadius);
+    const f32 lfTwoPi = maTuning[E_TUNE_LIMITS].mV.y;
+    lPitch_Roll_Steering_WheelRot.mV.w = lfNewRotationUnclamped > lfTwoPi
                                           ? lfNewRotationUnclamped - lfTwoPi
                                           : lfNewRotationUnclamped;
 

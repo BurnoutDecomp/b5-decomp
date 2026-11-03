@@ -128,8 +128,8 @@ namespace
         // lPossiblePortalCentre2D = (x, z) of the portal; lCentreOfNextSection2D = (x, z) of
         // the section middle; lPortalLeadsToDirection = centre - portal.
         const Vector3 lCentreOfNextSection3D = lpNextSection->GetMiddle();
-        const f32 lfLeadsToX = lCentreOfNextSection3D.x - lpPossibleNextPortal->GetPositionX();
-        const f32 lfLeadsToY = lCentreOfNextSection3D.z - lpPossibleNextPortal->GetPositionZ();
+        const f32 lfLeadsToX = lCentreOfNextSection3D.mV.x - lpPossibleNextPortal->GetPositionX();
+        const f32 lfLeadsToY = lCentreOfNextSection3D.mV.z - lpPossibleNextPortal->GetPositionZ();
 
         if (IsZero2D(lfLeadsToX, lfLeadsToY))
         {
@@ -140,8 +140,8 @@ namespace
         // Normalize (vrsqrtefp + 2 x Newton-Raphson == exact) then Dot with the reference.
         const f32 lfInvLength =
             1.0f / sqrtf((lfLeadsToX * lfLeadsToX) + (lfLeadsToY * lfLeadsToY));
-        lrfAheadness = (lfLeadsToX * lfInvLength * lReferenceDirection.x)
-                     + (lfLeadsToY * lfInvLength * lReferenceDirection.y);
+        lrfAheadness = (lfLeadsToX * lfInvLength * lReferenceDirection.mV.x)
+                     + (lfLeadsToY * lfInvLength * lReferenceDirection.mV.y);
         return true;
     }
 
@@ -226,7 +226,10 @@ s32 RacingLineGenerator::ExtrapolateRouteBackwards(s32 liNumSectionsToGenerate,
     const bool lbUseShortcuts   = lpCurrentSection->IsShortcut();     // :3092
     const bool lbUseAIShortcuts = lpCurrentSection->IsAIShortcut();   // :3093
 
-    const Vector2 lCarBackwardsDirection = { -lCarDirection.x, -lCarDirection.y };   // :3097
+    Vector2 lCarBackwardsDirection;
+    __vector4 lSignMask;
+    lSignMask.u[0] = lSignMask.u[1] = lSignMask.u[2] = lSignMask.u[3] = 0x80000000u;
+    lCarBackwardsDirection.mV = __vxor(lCarDirection.mV, lSignMask);   // :3097
 
     s32 liBlockedSection     = -1;
     s32 liPreviousSection    = -1;
