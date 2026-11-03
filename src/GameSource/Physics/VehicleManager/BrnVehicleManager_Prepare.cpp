@@ -145,9 +145,7 @@ namespace Vehicle
             const RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
 
             const Vector3 lvHalfExtent = lrCar.GetHalfExtent();
-            const Vector3 lvPadded = { lvHalfExtent.x + KVF_VEHICLE_TRIANGLE_CACHE_PADDING,     // 0x82615D70 vaddfp
-                                       lvHalfExtent.y + KVF_VEHICLE_TRIANGLE_CACHE_PADDING,
-                                       lvHalfExtent.z + KVF_VEHICLE_TRIANGLE_CACHE_PADDING, 0.0f };
+            const Vector3 lvPadded = rw::math::vpu::Add(lvHalfExtent, Vector3(KVF_VEHICLE_TRIANGLE_CACHE_PADDING, KVF_VEHICLE_TRIANGLE_CACHE_PADDING, KVF_VEHICLE_TRIANGLE_CACHE_PADDING));
             const f32 lfRadiusSq = rw::math::vpu::MagnitudeSquared(lvPadded);               // vmsum3fp128: xyz
             const f32 lfRadius   = (lfRadiusSq != 0.0f) ? std::sqrt(lfRadiusSq) : 0.0f;
 
@@ -155,10 +153,8 @@ namespace Vehicle
 
             CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition lEvent;
             lEvent.miCacheSlot                  = liCar;
-            lEvent.mNewPositionAndRadius.x      = lrPosition.x;
-            lEvent.mNewPositionAndRadius.y      = lrPosition.y;
-            lEvent.mNewPositionAndRadius.z      = lrPosition.z;
-            lEvent.mNewPositionAndRadius.w      = lfRadius;
+            lEvent.mNewPositionAndRadius.SetVector3(lrPosition);
+            lEvent.mNewPositionAndRadius.SetPlus(lfRadius);
             lpSceneUpdate->mUpdateCachedPositionQueue.AddEvent(lEvent);
         }
 
