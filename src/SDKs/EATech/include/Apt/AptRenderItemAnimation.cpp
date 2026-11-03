@@ -10,14 +10,14 @@ AptRenderItemAnimation::AptRenderItemAnimation(AptCharacter* pCharacter, int nCr
 {
     // Console encoding: rotate-mask of mFlags, 0x240000 == 9 << 18 (the X360
     // render-type field); the x64 twin is the bits-8-13 field, XB1-verified.
-    mFlags = (mFlags & ~0x3F00u) | 0x900u;   // animation=9; x64 type field (XB1 ctor 0x140826AC0 `or 900h`)
+    mFlags = (mFlags & ~0xFC0000u) | 0x240000u;   // animation=9; ARTIST type field bits 18-23
 }
 
 // Clone copy-ctor -- sprite copy then re-stamp the animation render-type bits.
 AptRenderItemAnimation::AptRenderItemAnimation(const AptRenderItemAnimation* pSource, int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItemSprite(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & ~0x3F00u) | 0x900u;   // animation=9; x64 type field
+    mFlags = (mFlags & ~0xFC0000u) | 0x240000u;   // animation=9; ARTIST type field bits 18-23
 }
 
 // Clone @0x82AEFD70

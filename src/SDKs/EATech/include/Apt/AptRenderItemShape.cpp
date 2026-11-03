@@ -20,14 +20,14 @@ AptRenderItemShape::AptRenderItemShape(AptCharacter* pCharacter, int nCreatedOnT
 {
     // Console encoding: rotate-mask of mFlags, 0x40000 == 1 << 18 (the X360
     // render-type field); the x64 twin is the bits-8-13 field, XB1-verified.
-    mFlags |= 0x100u;   // shape=1; x64 type field (XB1 ctor 0x140826F20 `or 100h`)
+    mFlags = (mFlags & ~0xFC0000u) | 0x40000u;   // shape=1; ARTIST type field bits 18-23
 }
 
 // Clone copy-ctor -- base copy + (re)stamp the shape render-type bits.
 AptRenderItemShape::AptRenderItemShape(const AptRenderItemShape* pSource, int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & ~0x3F00u) | 0x100u;   // shape=1; x64 type field
+    mFlags = (mFlags & ~0xFC0000u) | 0x40000u;   // shape=1; ARTIST type field bits 18-23
 }
 
 // Clone @0x82AECB10 -- pool-allocate a fresh shape render item copy-initialised

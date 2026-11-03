@@ -19,11 +19,8 @@
 //   +0x18 mpColorMatrix         AptCXForm* (lazily allocated; null -> identity)
 //   +0x20 mpMaskPositionMatrix  AptMatrix*
 //   +0x28 mDepth:i16 +0x2A mClipDepth:i16   (both -1 at ctor)
-//   +0x2C mFlags                x64 bits: 0 isVisible / 1 isMask / 2 hasMask /
-//                               3 deletionMark / 4 clone-copied / 5 tree-vis state /
-//                               6 writable-revision / 7 tree-vis companion /
-//                               8-13 render-type (shape=1 sprite=5 morph=8 anim=9
-//                               statictext=0xA level=0xF custom=0x10)
+//   ARTIST mFlags: bits 31..24 hold visibility, mask, deletion and revision
+//   state; bits 18..23 hold the render type.
 //   +0x30 mpMask                AptRenderItem* (the mask item; ref-counted)
 //   +0x38 mCreatedOnTick        int
 //   +0x3C mRefCount             int (Add/ReleaseReference mutate it atomically)
@@ -61,7 +58,7 @@ struct AptRenderItem
     AptMatrix*     mpMaskPositionMatrix; // +0x20
     int16_t        mDepth;            // +0x28
     int16_t        mClipDepth;        // +0x2A
-    uint32_t       mFlags;            // +0x2C (x64 bit layout -- see header comment)
+    uint32_t       mFlags;            // ARTIST render type in bits 18..23
     AptRenderItem* mpMask;            // +0x30
     int32_t        mCreatedOnTick;    // +0x38
     volatile int32_t mRefCount;       // +0x3C

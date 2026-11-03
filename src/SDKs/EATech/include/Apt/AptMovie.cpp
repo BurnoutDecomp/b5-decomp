@@ -27,6 +27,8 @@
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::placeObjectNCXForm (the homed place spine)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (the parent node + char-inst chain)
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // findInst (MOVE tween keyframes + tag-4 removes)
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"
+#include "SDKs/EATech/include/Apt/AptPseudoData.h"
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"            // AptRenderItem::mpCharacter
 #include "SDKs/EATech/include/Apt/AptCharacter.h"             // AptCharacter (the movie character + mpAnimationFile)
@@ -379,269 +381,136 @@ const AptMovie* AptMovie::runFrameActions(AptCIH* pCIH, int nFrame) const
 // context. Returns the last value cl held in r3 (the last sub-call result), faithful
 // to the asm.
 // ===========================================================================
-void* AptMovie::resolve(int nBase, void* a3, int a4)
+namespace
 {
-    void* result;
-
-    // ---- allocate + init the label hash (5 dwords, tag 2) ------------------
-    void* pHash = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
-    void* pHashOut;
-    if (pHash)
+    // Native command records: ARTIST 0x82AF80B0 and 0x82AF4830.
+    struct AptTimelineCommand { int32_t mnTag; };
+    struct AptTimelineAction { int32_t mnTag; unsigned char* mpStream; };
+    struct AptTimelineInitAction { int32_t mnTag; int32_t mnIndicator; unsigned char* mpStream; };
+    template<class T> void AptTimelineRelocate(T*& p, intptr_t base, bool unresolve)
     {
-        CmdSetI32(pHash, 0x04, 0);
-        CmdSetI32(pHash, 0x08, 0);
-        CmdSetI32(pHash, 0x0C, 0);
-        CmdSetI32(pHash, 0x10, 0);
-        CmdSetI32(pHash, 0x00, 2);
-        pHashOut = pHash;
+        if (p) p = reinterpret_cast<T*>(unresolve ? reinterpret_cast<intptr_t>(p) - base : reinterpret_cast<intptr_t>(p) + base);
     }
-    else
-    {
-        pHashOut = 0;
-    }
-    result = pHashOut;
-
-    // a1[2] = hash; a1[1] = relocate(a1[1]) (the frame table base).
-    int32_t nFrames = this->mnFrameCount;              // *a1
-    this->mpLabelHash = reinterpret_cast<AptNativeHash*>(pHashOut);
-    {
-        int32_t v10 = reinterpret_cast<intptr_t>(this->mpFrames);   // a1[1]
-        int32_t v11 = v10 ? (v10 + nBase) : 0;
-        this->mpFrames = reinterpret_cast<AptMovieFrame*>(static_cast<intptr_t>(v11));
-    }
-
-    if (nFrames <= 0)
-        return result;
-
-    for (int32_t f = 0; f < nFrames; ++f)
-    {
-        AptMovieFrame* pFrame = &mpFrames[f];          // v15 + a1[1]
-
-        // relocate the frame's command-list pointer.
-        {
-            int32_t v17 = reinterpret_cast<intptr_t>(pFrame->mpCommands);
-            int32_t v18 = v17 ? (v17 + nBase) : 0;
-            pFrame->mpCommands = reinterpret_cast<void**>(static_cast<intptr_t>(v18));
-        }
-
-        int32_t nCmds = pFrame->mnCommandCount;        // *(v15 + a1[1])
-        for (int32_t i = 0; i < nCmds; ++i)
-        {
-            // relocate the command-pointer slot itself.
-            void** pSlot = &pFrame->mpCommands[i];      // *(v21 + v20)
-            {
-                int32_t v22 = reinterpret_cast<intptr_t>(*pSlot);
-                int32_t v23 = v22 ? (v22 + nBase) : 0;
-                *pSlot = reinterpret_cast<void*>(static_cast<intptr_t>(v23));
-            }
-
-            void* pCmd = *pSlot;                         // v24
-            int32_t eTag = CmdI32(pCmd, 0x00);           // *v24
-
-            switch (eTag)
-            {
-                case 1:   // action command
-                {
-                    // relocate the inline action-stream pointer (+4), then re-parse.
-                    int32_t v46 = CmdI32(pCmd, 0x04);
-                    int32_t v47 = v46 ? (v46 + nBase) : 0;
-                    CmdSetI32(pCmd, 0x04, v47);
-                    result = const_cast<unsigned char*>(gAptActionInterpreter._parseStream(
-                                 reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x04)),
-                                 nBase, reinterpret_cast<AptValue*>(a3),
-                                 a4));
-                    break;
-                }
-                case 2:   // label command
-                {
-                    // relocate the label-name pointer (+4), register name -> frame f.
-                    int32_t v43 = CmdI32(pCmd, 0x04);
-                    int32_t v44 = v43 ? (v43 + nBase) : 0;
-                    CmdSetI32(pCmd, 0x04, v44);
-
-                    // console: InitFromBuffer(&scratch, name) ... Set ...
-                    // DecreaseInternalRefCount(scratch) -- the RAII EAStringC pair.
-                    EAStringC label(reinterpret_cast<const char*>(CmdPtr(pCmd, 0x04)));
-                    AptInteger* pIdx = AptInteger::Create(f);
-                    this->mpLabelHash->Set(label, pIdx);
-                    result = pIdx;
-                    break;
-                }
-                case 3:   // place command
-                {
-                    // relocate the place record's name pointer (+0x34) and its
-                    // init-action block pointer (+0x3C); parse each init stream.
-                    int32_t v29 = CmdI32(pCmd, 0x34);
-                    int32_t v30 = v29 ? (v29 + nBase) : 0;
-                    CmdSetI32(pCmd, 0x34, v30);
-
-                    int32_t v32 = CmdI32(pCmd, 0x3C);
-                    int32_t v33 = v32 ? (v32 + nBase) : 0;
-                    CmdSetI32(pCmd, 0x3C, v33);
-
-                    void* pInit = CmdPtr(pCmd, 0x3C);    // v34
-                    if (pInit)
-                    {
-                        // relocate the init block's body pointer (+4), then walk
-                        // its records (12 bytes each), relocating + parsing the
-                        // stream pointer at +8 of each.
-                        int32_t v35 = CmdI32(pInit, 0x04);
-                        int32_t v36 = v35 ? (v35 + nBase) : 0;
-                        int32_t v37 = CmdI32(pInit, 0x00);
-                        CmdSetI32(pInit, 0x04, v36);
-                        for (int32_t k = 0; k < v37; ++k)
-                        {
-                            char* pRec = reinterpret_cast<char*>(CmdPtr(pInit, 0x04)) + 12 * k;
-                            int32_t v41 = CmdI32(pRec, 8);   // serialized .apt init-block record: stream ptr @+8
-                            int32_t v42 = v41 ? (v41 + nBase) : 0;
-                            CmdSetI32(pRec, 8, v42);
-                            result = const_cast<unsigned char*>(gAptActionInterpreter._parseStream(
-                                         reinterpret_cast<const unsigned char*>(CmdPtr(pRec, 8)),
-                                         nBase, reinterpret_cast<AptValue*>(a3),
-                                         a4));
-                        }
-                    }
-                    break;
-                }
-                case 8:   // morph / action-bearing command
-                {
-                    // relocate the inline stream pointer (+8), then parse it.
-                    int32_t v26 = CmdI32(pCmd, 0x08);
-                    int32_t v27 = v26 ? (v26 + nBase) : 0;
-                    CmdSetI32(pCmd, 0x08, v27);
-                    result = const_cast<unsigned char*>(gAptActionInterpreter._parseStream(
-                                 reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x08)),
-                                 nBase, reinterpret_cast<AptValue*>(a3),
-                                 a4));
-                    break;
-                }
-                default:
-                    break;
-            }
-        }
-    }
-    return result;
 }
 
-// ===========================================================================
-// unresolve @ 0x82AF4830 -- the inverse of resolve: walk the timeline subtracting
-// nBase from every relocated pointer slot (un-parsing each action stream first),
-// then tear down the label hash. `this`/a1 is the AptMovie*, nBase the base (a2),
-// a3 the parse context. Returns the (deleted) label-hash pointer, faithful to the
-// asm (the X360 returns r3 from the scalar-deleting destructor / the relocated
-// frame-table pointer when no hash existed).
-// ===========================================================================
-void* AptMovie::unresolve(int nBase, int a3)
+void AptMovie::resolve(int nBase, AptConstFile* pConstFile, int32_t* pValueCount)
 {
-    int32_t nFrames = this->mnFrameCount;              // *a1
-    if (nFrames > 0)
+    void* memory = gpAptPseudoDataPool->Allocate(sizeof(AptNativeHash));
+    mpLabelHash = memory ? ::new (memory) AptNativeHash(2) : 0;
+    AptTimelineRelocate(mpFrames, nBase, false);
+    for (int32_t f = 0; f < mnFrameCount; ++f)
     {
-        for (int32_t f = 0; f < nFrames; ++f)
+        AptMovieFrame& frame = mpFrames[f];
+        AptTimelineRelocate(frame.mpCommands, nBase, false);
+        for (int32_t i = 0; i < frame.mnCommandCount; ++i)
         {
-            AptMovieFrame* pFrame = &mpFrames[f];      // v7 + a1[1]
-
-            int32_t nCmds = pFrame->mnCommandCount;    // *(v7 + a1[1])
-            for (int32_t i = 0; i < nCmds; ++i)
+            AptTimelineRelocate(frame.mpCommands[i], nBase, false);
+            AptTimelineCommand* command = static_cast<AptTimelineCommand*>(frame.mpCommands[i]);
+            switch (command->mnTag)
             {
-                void* pCmd = pFrame->mpCommands[i];    // *(*(v7+a1[1]+4) + v9)
-                int32_t eTag = CmdI32(pCmd, 0x00);     // *v10
-
-                if (eTag == 1)
-                {
-                    // action: un-parse then un-relocate the stream pointer (+4).
-                    gAptActionInterpreter._parseStream(
-                        reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x04)),
-                        nBase, 0, a3);
-                    int32_t v34 = CmdI32(pCmd, 0x04);
-                    int32_t v35 = v34 ? (v34 - nBase) : 0;
-                    CmdSetI32(pCmd, 0x04, v35);
-                }
-                else if (eTag == 2)
-                {
-                    // label: un-relocate the name pointer (+4).
-                    int32_t v10 = CmdI32(pCmd, 0x04);
-                    int32_t v17 = v10 ? (v10 - nBase) : 0;
-                    CmdSetI32(pCmd, 0x04, v17);
-                }
-                else if (eTag == 3)
-                {
-                    // place: un-parse + un-relocate the init-action block (+0x3C),
-                    // then un-relocate the place name pointers (+0x34, +0x3C).
-                    void* pInit = CmdPtr(pCmd, 0x3C);  // v18
-                    if (pInit)
-                    {
-                        int32_t v19 = CmdI32(pInit, 0x00);
-                        for (int32_t k = 0; k < v19; ++k)
-                        {
-                            char* pRec = reinterpret_cast<char*>(CmdPtr(pInit, 0x04)) + 12 * k;
-                            gAptActionInterpreter._parseStream(
-                                reinterpret_cast<const unsigned char*>(CmdPtr(pRec, 8)),   // serialized .apt init record stream ptr @+8
-                                nBase, 0, a3);
-                            int32_t v22 = CmdI32(pRec, 8);
-                            int32_t v23 = v22 ? (v22 - nBase) : 0;
-                            CmdSetI32(pRec, 8, v23);
-                        }
-                        int32_t v24 = CmdI32(pInit, 0x04);
-                        int32_t v25 = v24 ? (v24 - nBase) : 0;
-                        CmdSetI32(pInit, 0x04, v25);
-                    }
-
-                    int32_t v27 = CmdI32(pCmd, 0x34);
-                    int32_t v28 = v27 ? (v27 - nBase) : 0;
-                    CmdSetI32(pCmd, 0x34, v28);
-
-                    int32_t v30 = CmdI32(pCmd, 0x3C);
-                    int32_t v31 = v30 ? (v30 - nBase) : 0;
-                    CmdSetI32(pCmd, 0x3C, v31);
-                }
-                else if (eTag == 8)
-                {
-                    // morph: un-parse + un-relocate the stream pointer (+8); if the
-                    // command's id (+4) is negative (run this frame), restore it.
-                    gAptActionInterpreter._parseStream(
-                        reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x08)),
-                        nBase, 0, a3);
-                    int32_t v13 = CmdI32(pCmd, 0x08);
-                    int32_t v14 = v13 ? (v13 - nBase) : 0;
-                    CmdSetI32(pCmd, 0x08, v14);
-
-                    void* pCmd2 = pFrame->mpCommands[i];
-                    if (CmdI32(pCmd2, 0x04) < 0)
-                        CmdSetI32(pCmd2, 0x04, -CmdI32(pCmd2, 0x04));
-                }
-
-                // un-relocate the command-pointer slot itself (subf; note the asm
-                // here guards on the ORIGINAL value being non-zero before write).
-                void** pSlot = &pFrame->mpCommands[i];
-                int32_t v37 = reinterpret_cast<intptr_t>(*pSlot) - nBase;
-                if (*pSlot == 0)
-                    v37 = 0;
-                *pSlot = reinterpret_cast<void*>(static_cast<intptr_t>(v37));
+            case 1:
+            {
+                AptTimelineAction* action = reinterpret_cast<AptTimelineAction*>(command);
+                AptTimelineRelocate(action->mpStream, nBase, false);
+                AptActionInterpreter::_parseStream(action->mpStream, nBase, pConstFile, pValueCount);
+                break;
             }
-
-            // un-relocate the frame's command-list pointer.
-            int32_t v39 = reinterpret_cast<intptr_t>(pFrame->mpCommands);
-            int32_t v40 = v39 ? (v39 - nBase) : 0;
-            pFrame->mpCommands = reinterpret_cast<void**>(static_cast<intptr_t>(v40));
+            case 2:
+            {
+                AptTimelineAction* label = reinterpret_cast<AptTimelineAction*>(command);
+                AptTimelineRelocate(label->mpStream, nBase, false);
+                EAStringC name(reinterpret_cast<const char*>(label->mpStream));
+                mpLabelHash->Set(name, AptInteger::Create(f));
+                break;
+            }
+            case 3:
+            {
+                AptPlaceObjectBody_t* place = reinterpret_cast<AptPlaceObjectInfo_t*>(command)->GetBody();
+                AptTimelineRelocate(place->mpName, nBase, false);
+                AptTimelineRelocate(place->mpClipActions, nBase, false);
+                AptClipEventHandlerList* list = static_cast<AptClipEventHandlerList*>(place->mpClipActions);
+                if (list)
+                {
+                    AptTimelineRelocate(list->mpHandlers, nBase, false);
+                    for (int32_t k = 0; k < list->mnCount; ++k)
+                    {
+                        AptTimelineRelocate(list->mpHandlers[k].mpActionStream, nBase, false);
+                        AptActionInterpreter::_parseStream(const_cast<unsigned char*>(list->mpHandlers[k].mpActionStream), nBase, pConstFile, pValueCount);
+                    }
+                }
+                break;
+            }
+            case 8:
+            {
+                AptTimelineInitAction* action = reinterpret_cast<AptTimelineInitAction*>(command);
+                AptTimelineRelocate(action->mpStream, nBase, false);
+                AptActionInterpreter::_parseStream(action->mpStream, nBase, pConstFile, pValueCount);
+                break;
+            }
+            default: break;
+            }
         }
     }
+}
 
-    // un-relocate the frame-table base, then destroy + free the label hash.
-    int32_t v41 = reinterpret_cast<intptr_t>(this->mpFrames);
-    int32_t v42 = v41 ? (v41 - nBase) : 0;
-    void* result = this->mpLabelHash;                  // a1[2]
-    this->mpFrames = reinterpret_cast<AptMovieFrame*>(static_cast<intptr_t>(v42));
-    if (this->mpLabelHash)
+void AptMovie::unresolve(int nBase, int32_t* pValueCount)
+{
+    for (int32_t f = 0; f < mnFrameCount; ++f)
     {
-        AptNativeHash* pHash = this->mpLabelHash;
-        pHash->DestroyGCPointers();
-        // X360: the 'scalar deleting destructor' (@0x82AF0918) = ~AptNativeHash()
-        // (a no-op now mpTable is freed) + Deallocate(this, sizeof). It returns the
-        // freed pointer in r3; reproduced as that pointer.
-        pHash->~AptNativeHash();
-        gpNonGCPoolManager->Deallocate(pHash, sizeof(AptNativeHash));
-        result = pHash;
-        this->mpLabelHash = 0;
+        AptMovieFrame& frame = mpFrames[f];
+        for (int32_t i = 0; i < frame.mnCommandCount; ++i)
+        {
+            AptTimelineCommand* command = static_cast<AptTimelineCommand*>(frame.mpCommands[i]);
+            switch (command->mnTag)
+            {
+            case 1:
+            {
+                AptTimelineAction* action = reinterpret_cast<AptTimelineAction*>(command);
+                AptActionInterpreter::_parseStream(action->mpStream, nBase, 0, pValueCount);
+                AptTimelineRelocate(action->mpStream, nBase, true);
+                break;
+            }
+            case 2:
+                AptTimelineRelocate(reinterpret_cast<AptTimelineAction*>(command)->mpStream, nBase, true);
+                break;
+            case 3:
+            {
+                AptPlaceObjectBody_t* place = reinterpret_cast<AptPlaceObjectInfo_t*>(command)->GetBody();
+                AptClipEventHandlerList* list = static_cast<AptClipEventHandlerList*>(place->mpClipActions);
+                if (list)
+                {
+                    for (int32_t k = 0; k < list->mnCount; ++k)
+                    {
+                        AptActionInterpreter::_parseStream(const_cast<unsigned char*>(list->mpHandlers[k].mpActionStream), nBase, 0, pValueCount);
+                        AptTimelineRelocate(list->mpHandlers[k].mpActionStream, nBase, true);
+                    }
+                    AptTimelineRelocate(list->mpHandlers, nBase, true);
+                }
+                AptTimelineRelocate(place->mpName, nBase, true);
+                AptTimelineRelocate(place->mpClipActions, nBase, true);
+                break;
+            }
+            case 8:
+            {
+                AptTimelineInitAction* action = reinterpret_cast<AptTimelineInitAction*>(command);
+                AptActionInterpreter::_parseStream(action->mpStream, nBase, 0, pValueCount);
+                AptTimelineRelocate(action->mpStream, nBase, true);
+                if (action->mnIndicator < 0) action->mnIndicator = -action->mnIndicator;
+                break;
+            }
+            default: break;
+            }
+            AptTimelineRelocate(frame.mpCommands[i], nBase, true);
+        }
+        AptTimelineRelocate(frame.mpCommands, nBase, true);
     }
-    return result;
+    AptTimelineRelocate(mpFrames, nBase, true);
+    if (mpLabelHash)
+    {
+        mpLabelHash->DestroyGCPointers();
+        AptNativeHash* hash = mpLabelHash;
+        hash->~AptNativeHash();
+        gpAptPseudoDataPool->Deallocate(hash, sizeof(AptNativeHash));
+        mpLabelHash = 0;
+    }
 }

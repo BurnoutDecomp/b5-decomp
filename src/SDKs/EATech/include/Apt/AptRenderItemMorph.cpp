@@ -17,7 +17,7 @@ AptRenderItemMorph::AptRenderItemMorph(AptCharacter* pCharacter, int nCreatedOnT
     : AptRenderItem(pCharacter, nCreatedOnTick)
     , mfRatio(0.0f)
 {
-    mFlags = (mFlags & ~0x3F00u) | 0x800u;   // morph=8; x64 type field (XB1 ctor 0x140826EF0 `or 800h`)
+    mFlags = (mFlags & ~0xFC0000u) | 0x200000u;   // morph=8; ARTIST type field bits 18-23
 }
 
 // Clone copy-ctor -- base clone copy + re-stamp the morph render-type flag.
@@ -25,7 +25,7 @@ AptRenderItemMorph::AptRenderItemMorph(const AptRenderItemMorph* pSource, int nC
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
     , mfRatio(0.0f)
 {
-    mFlags = (mFlags & ~0x3F00u) | 0x800u;   // morph=8; x64 type field (XB1 ctor 0x140826EF0 `or 800h`)
+    mFlags = (mFlags & ~0xFC0000u) | 0x200000u;   // morph=8; ARTIST type field bits 18-23
 }
 
 AptRenderItemMorph::~AptRenderItemMorph() {}

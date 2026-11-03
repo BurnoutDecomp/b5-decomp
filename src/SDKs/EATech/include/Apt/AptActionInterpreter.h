@@ -100,13 +100,9 @@ public:
     const unsigned char* runStream(const unsigned char* pStream, AptCIH* pCIH,
                                    int nLength, AptCharacterInst* pCharInst);
 
-    // _parseStream (XB1 sub_14084A920) -- resolve an action stream's serialized
-    // inline operands IN PLACE (offsets -> pointers, constant indices -> live
-    // AptValue*s); pConstCtx == 0 runs the exact inverse (movie unload). A stream
-    // must pass through this before runStream may dispatch it. pnValueCount is the
-    // threaded resolved-value counter. Body in AptActionInterpreterParseStream.cpp.
+    // ARTIST 0x82AF3440: stream, base, constant file and 32-bit value counter.
     static void _parseStream(unsigned char* pStream, uintptr_t nBase,
-                             void* pConstCtx, int64_t* pnValueCount);
+                             struct AptConstFile* pConstCtx, int32_t* pnValueCount);
 
     // getVariable @0x82B03430 (X360) / 0x819814 (PS3) -- resolve a variable/property
     // by name against a scope: dynamic "$" vars, the path context (getContext +
@@ -229,13 +225,6 @@ public:
     // replace the stack top with a null marker, then push each enumerable member
     // name of the target's native hash (skipping the two reserved keys).
     void _doEnumerate(AptValue* pScope, AptValue* pTarget);
-
-    // _parseStream @0x82AF3440 -- relocate/transcode an action bytecode stream's
-    // inline pointer/constant operands between the on-disk (.apt) form and the live
-    // form (the resolve / unresolve pass). a2 is the relocation base; a4 the live/
-    // disk direction (0 = resolve). FLAG: faithful transcode is a follow-on (see body).
-    const unsigned char* _parseStream(const unsigned char* pStream, int nRelocBase,
-                                      AptValue* pResolveCtx, int nDirection);
 
     // getObject @0x82B07F18 -- resolve a path name (pName) under (pScope, pTarget)
     // to the AptValue object it designates (findChild on the parsed context), or

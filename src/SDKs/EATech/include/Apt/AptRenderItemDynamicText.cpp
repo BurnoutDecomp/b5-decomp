@@ -69,7 +69,7 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
     const AptCharacterDynamicText* pText = static_cast<const AptCharacterDynamicText*>(pCharacter);
 
     // Dynamic-text render-type flag: bit 19 (console __ROR4__(1,13) & 0x00FC0000).
-    mFlags = (mFlags & ~0x3F00u) | 0x200u;   // dynamic-text=2; x64 type field bits 8-13
+    mFlags = (mFlags & ~0xFC0000u) | 0x80000u;   // dynamic-text=2; ARTIST type field bits 18-23
 
     mZID         = 0;          // no render-data handle yet
     mScroll      = 1;          // console seeds the scroll offset to 1
@@ -115,7 +115,7 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicTex
                                                    int nCreatedOnTick, bool bCopyExtended)
     : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
 {
-    mFlags = (mFlags & ~0x3F00u) | 0x200u;   // dynamic-text=2; x64 type field bits 8-13
+    mFlags = (mFlags & ~0xFC0000u) | 0x80000u;   // dynamic-text=2; ARTIST type field bits 18-23
 
     mTextValue           = pSource->mTextValue;
     mVarValue            = pSource->mVarValue;

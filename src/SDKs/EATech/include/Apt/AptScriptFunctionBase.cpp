@@ -213,7 +213,7 @@ AptConstantPool AptScriptFunctionBase::GetConstantPool() const
     return pool;
 }
 
-void AptScriptFunctionBase::SetArgument(int32_t /*nArgIndex*/, AptValue* /*pValue*/)
+void AptScriptFunctionBase::SetArgument(AptValue* /*pValue*/, int32_t /*nArgIndex*/)
 {
     abort();           // _purecall
 }

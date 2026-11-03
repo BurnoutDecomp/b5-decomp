@@ -133,7 +133,7 @@ AptConstantPool AptScriptFunction2::GetConstantPool() const
 // in a temporary EAStringC key that releases its reference on scope exit) into the
 // frame's local-variable hash.
 // ---------------------------------------------------------------------------
-void AptScriptFunction2::SetArgument(int32_t nArgIndex, AptValue* pValue)
+void AptScriptFunction2::SetArgument(AptValue* pValue, int32_t nArgIndex)
 {
     const AptScriptFunction2Arg& arg = mpByteCode->mpArgTable[nArgIndex];
 

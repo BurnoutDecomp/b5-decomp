@@ -1700,7 +1700,7 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
             return 0;
         const uint32_t nItemFlags = mpCharacterInst->GetRenderItem()->mFlags;
         // X360: v5 >= 0 && (v5 & 0x40000000) == 0  ->  skip  (a non-dirty render item).
-        if ((nItemFlags & 0x1u) == 0u && (nItemFlags & 0x2u) == 0u)   // neither visible nor a mask (x64 bits 0/1)
+        if ((nItemFlags & 0x80000000u) == 0u && (nItemFlags & 0x40000000u) == 0u)   // neither visible nor a mask (x64 bits 0/1)
             return 0;
     }
 
@@ -2290,7 +2290,7 @@ bool AptCIH::ProcessCustomControls(AptCIH* /*pRoot*/)
         AptRenderItem* pOriginal = pInst->mpRenderItem;
         // `(*(*(v2+4)+24) & 0xFC0000) == 0x140000` -- render-type SPRITE (x64
         // mFlags bits 8-13 == 5, the same test AptRenderWalk uses).
-        if (pOriginal != 0 && (pOriginal->mFlags & 0x3F00u) == 0x0500u)
+        if (pOriginal != 0 && (pOriginal->mFlags & 0xFC0000u) == 0x140000u)
         {
             AptRenderItem* pPromoted =
                 AptRenderItemCustomControl::CopyFromSprite(pOriginal, gnCurrUpdateTick,
@@ -2362,7 +2362,7 @@ bool AptCIH::ProcessCustomControls(AptCIH* /*pRoot*/)
         // whole. bForce: created this tick, or the writable-revision bit (x64 mFlags
         // bit 6; console bit 25 -- the flags relayout the render-item header records).
         const bool bForce = (pItem->mCreatedOnTick == gnCurrUpdateTick) ||
-                            ((pItem->mFlags & 0x40u) != 0);
+                            ((pItem->mFlags & 0x02000000u) != 0);
 
         AptString* pTargetStr = (pTargetVar != 0) ? pTargetVar->c_string() : 0;
         if (gAptFuncs.pfnCreateCustomControlZid != 0 && pTargetStr != 0)

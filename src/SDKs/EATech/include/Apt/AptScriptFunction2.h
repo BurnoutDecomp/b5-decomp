@@ -56,11 +56,10 @@ class AptValue;
 // or passed by name (mnRegister == 0 -> bound into the frame's locals under
 // mpName). Serialised in the movie data; 8 bytes per entry.
 // ---------------------------------------------------------------------------
-struct AptScriptFunction2Arg      // the GUIAPT64 16-byte arg record (8-aligned)
+struct AptScriptFunction2Arg
 {
-    int32_t     mnRegister;   // +0x00  target register (0 -> bind by name instead)
-    int32_t     mPad04;       // +0x04  (alignment)
-    const char* mpName;       // +0x08  the parameter name (qword movie-string pointer)
+    int32_t mnRegister;                // ARTIST +0x00
+    const char* mpName;                // +0x04
 };
 
 // ---------------------------------------------------------------------------
@@ -78,24 +77,21 @@ struct AptScriptFunction2Arg      // the GUIAPT64 16-byte arg record (8-aligned)
 // patched in place by the interpreter when the DefineFunction2 action runs (from
 // the interpreter's two constant-pool registers).
 // ---------------------------------------------------------------------------
-// The GUIAPT64 48-byte serialized record (8-aligned; verified against the libapt2
-// converter's DefineFunction2 writer + the XB1 _parseStream walk): name qword,
-// {u32 params, u16 registers, u16 preload-flags}, arg-table qword, u32 body length
-// (+pad), then the two signature qwords (0x98765432/0x12345678) the runtime handler
-// overwrites with the live constant-pool registers.
+// ARTIST DefineFunction2: 28-byte header followed by the bytecode.
 struct AptScriptFunction2ByteCode
 {
-    const char*           mpName;              // +0x00  the function's name ("" for anonymous)
-    uint32_t              mnNumArguments;      // +0x08  declared parameter count
-    uint16_t              mnRegisters;         // +0x0C  declared register count
-    uint16_t              muPreloadFlags;      // +0x0E  preload-register flags (KU_PRELOAD_*)
-    AptScriptFunction2Arg* mpArgTable;         // +0x10  array[mnNumArguments] of register/name entries
-    uint32_t              mnBodyLength;        // +0x18  record-body length (u32; libapt2 Write<u32>)
-    uint32_t              mPad1C;              // +0x1C  writer align-8 pad (zero-filled)
-    const char**          mppConstantPool;     // +0x20  sig1 slot -> the constant-pool table (patched in)
-    int64_t               mnConstantPoolCount; // +0x28  sig2 slot -> number of entries (patched in)
-    uint8_t               maByteCode[1];       // +0x30  the action bytecode (flexible)
+    const char* mpName;                // ARTIST +0x00
+    int32_t mnNumArguments;           // +0x04
+    uint16_t mnRegisters;              // +0x08
+    uint16_t muPreloadFlags;           // +0x0A
+    AptScriptFunction2Arg* mpArgTable; // +0x0C, eight-byte entries
+    uint32_t mnBodyLength;             // +0x10
+    int32_t mnConstantPoolCount;       // +0x14
+    AptValue** mppConstantPool;      // +0x18
+    uint8_t maByteCode[1];             // +0x1C
 };
+CGS_STATIC_ASSERT((sizeof(AptScriptFunction2Arg) == 8), "ARTIST function argument");
+CGS_STATIC_ASSERT((offsetof(AptScriptFunction2ByteCode, maByteCode) == 0x1C), "ARTIST function2 record");
 
 // DefineFunction2 register-preload flag bits (SetupBeforeExecution masks against
 // muPreloadFlags). Named for the register each requests be pre-bound on entry.
@@ -156,7 +152,7 @@ public:
     // SetArgument @0x82AF53A0 -- bind call argument nArgIndex to pValue: into the
     // pre-declared register slot when the record declares one for this index,
     // otherwise into the current frame stack's locals under the declared name.
-    virtual void SetArgument(int32_t nArgIndex, AptValue* pValue);
+    virtual void SetArgument(AptValue* pValue, int32_t nArgIndex);
 
     // SetupBeforeExecution @0x82B02558 -- snapshot + clear the current frame stack /
     // register window into pSaved, then pre-bind the registers the record's preload

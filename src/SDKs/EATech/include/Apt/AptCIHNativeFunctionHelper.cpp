@@ -995,7 +995,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
     // A node flagged "resolve symbols against the parent's library" (render-item
     // mFlags bit 27) looks the symbol up in its display-list parent instead.
     AptCIH* pScope = pNode;
-    if (pNode->GetCharacterInst()->GetRenderItem()->mFlags & 0x10u)   // x64 bit 4 (X360 bit27)
+    if (pNode->GetCharacterInst()->GetRenderItem()->mFlags & 0x08000000u)   // x64 bit 4 (X360 bit27)
         pScope = pNode->GetDisplayListParent();
 
     AptCharacter* const pCharacter = findCharacterInLibrary(pScope, &lLibName, 1);

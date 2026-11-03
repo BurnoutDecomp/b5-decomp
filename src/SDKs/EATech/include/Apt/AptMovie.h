@@ -79,10 +79,10 @@ struct AptMovie
 
     // @0x82AF80B0 -- relocate the just-loaded timeline against the load base (and
     // build the label hash + parse each action stream). Returns the last sub-result.
-    void* resolve(int nBase, void* a3, int a4);
+    void resolve(int nBase, AptConstFile* pConstFile, int32_t* pValueCount);
 
     // @0x82AF4830 -- the inverse of resolve (un-relocate + tear down the label hash).
-    void* unresolve(int nBase, int a3);
+    void unresolve(int nBase, int32_t* pValueCount);
 };
 
 // AptValue_toInteger removed -- it was a forwarder to the real member

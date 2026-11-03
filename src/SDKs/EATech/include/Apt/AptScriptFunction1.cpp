@@ -163,7 +163,7 @@ AptConstantPool AptScriptFunction1::GetConstantPool() const
 // key releases its string reference when it goes out of scope (the X360's trailing
 // EAStringC::DecreaseInternalRefCount).
 // ---------------------------------------------------------------------------
-void AptScriptFunction1::SetArgument(int32_t nArgIndex, AptValue* pValue)
+void AptScriptFunction1::SetArgument(AptValue* pValue, int32_t nArgIndex)
 {
     if (!AptScriptFunctionBase::spFrameStack)
         CreateFrameStack();

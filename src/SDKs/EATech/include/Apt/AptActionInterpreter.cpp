@@ -560,27 +560,6 @@ AptValue* AptActionInterpreter::callFunction(AptValue* pScope, AptValue* pFuncti
 }
 
 // ---------------------------------------------------------------------------
-// _parseStream @0x82AF3440 -- relocate/transcode an action bytecode stream's inline
-// pointer/constant operands between the on-disk (.apt) and live forms (the resolve /
-// unresolve pass; nDirection 0 = resolve). FLAG: the body is a 0x42-entry jump-table
-// dispatch (console word_82145280) over the opcode operand shapes, rebasing each
-// inline pointer by nRelocBase and swapping the constant-pool / function-record
-// fields against the live value tables (StringPool / AptFloat / AptInteger / the
-// gpUndefinedValue & boolean singletons). That jump-table + the .apt operand-shape
-// records are binary DATA not in the code-only IDA exports; deferred to the resolve
-// transcode helper so this entry layer is faithful and links. (Same deferral the
-// header documents.)
-// ---------------------------------------------------------------------------
-// AptActionInterpreter::ResolveTranscode is now a member (declared in the header);
-// _parseStream() below forwards to it.
-
-const unsigned char* AptActionInterpreter::_parseStream(const unsigned char* pStream, int nRelocBase,
-                                                        AptValue* pResolveCtx, int nDirection)
-{
-    return ResolveTranscode(pStream, nRelocBase, pResolveCtx, nDirection);  // the opcode-length walk (this member)
-}
-
-// ---------------------------------------------------------------------------
 // cbCallMethod_setInterval @0x82B019D8 -- setInterval(fn|obj, method, ms, ...args):
 // claim a free AptIntervalTimer slot in the animation target's timer table, bind the
 // callback (a function value, or an object + method-name pair resolved via findChild),

@@ -788,7 +788,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
         const AptConstantPool pool = pFunc->GetConstantPool();                           // vtbl 0x50
         pInterp->mnConstantPoolCount = static_cast<uint32_t>(pool.mnCount);              // [0x40] = count
         pInterp->mpConstantPool =
-            reinterpret_cast<AptValue**>(const_cast<char**>(pool.mppEntries));           // [0x44] = base
+            pool.mppEntries;           // [0x44] = base
 
         // Scope guard (0x82AE3CF4): a function bound to an undefined -- or a dead/zombie CIH --
         // reduces to `undefined` rather than running.
@@ -836,9 +836,9 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
             }
             int i = 0;
             for (; i < nBind; ++i)
-                pFunc->SetArgument(i, pInterp->mpStack[pInterp->mnStackTop - 1 - i]);    // vtbl 0x58
+                pFunc->SetArgument(pInterp->mpStack[pInterp->mnStackTop - 1 - i], i);    // vtbl 0x58
             for (; i < nDeclared; ++i)
-                pFunc->SetArgument(i, gpUndefinedValue);
+                pFunc->SetArgument(gpUndefinedValue, i);
             pInterp->stackSafePop(nArgs);                                               // drop the consumed args
 
             // Resolve the animation context for the run (0x82AE3EA8): a CIHNone parent resolves to
