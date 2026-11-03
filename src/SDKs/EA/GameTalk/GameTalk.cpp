@@ -478,6 +478,14 @@ namespace GameTalk
 
     // The published singleton (X360 off_8303577C).
     GameTalkManager* GameTalkManager::spInstance = 0;
+    const GameTalkManagerVTable GameTalkManager::sVTable = { &GameTalkManager::DeletingDestructor };
+
+    GameTalkManager* GameTalkManager::DeletingDestructor(GameTalkManager* lpManager, unsigned int luFlags)
+    {
+        lpManager->~GameTalkManager();
+        if (luFlags & 1) EA::GameTalk::Free(lpManager);
+        return lpManager;
+    }
 
     // @ 0x82836CF8 -- return the process-wide singleton.
     GameTalkManager* GameTalkManager::GetInstance()
@@ -485,11 +493,18 @@ namespace GameTalk
         return spInstance;
     }
 
+    // CgsGameTalk::GameTalk::Update @0x82837740 dispatches transport slot 3.
+    void GameTalkManager::Update()
+    {
+        mpProtocol->Poll();
+    }
+
     // @ 0x828392F8 -- construct the manager. Stores the transport, installs the
     // receive trampoline into it, allocates + zeroes the handler table, then (when the
     // transport is connected) emits the platform/version/initialize config handshake.
     GameTalkManager::GameTalkManager(void* lpOwner, s32 liMaxChannels, const char* lpcName)
-        : mpcName(lpcName)
+        : mpVTable(&sVTable)
+        , mpcName(lpcName)
         , mpProtocol(static_cast<IGameTalkProtocol*>(lpOwner))
         , mppHandlers(0)
         , miNumHandlers(0)
@@ -518,11 +533,10 @@ namespace GameTalk
         }
     }
 
-    // @ 0x828384A0 -- free the handler table (the vtable restore is the implicit
-    // dtor prologue; the deleting variant that also frees the object is the compiler
-    // vtable thunk). EA::GameTalk::Free tolerates a null table.
+    // @ 0x828384A0 -- restore the table and free the handler table.
     GameTalkManager::~GameTalkManager()
     {
+        mpVTable = &sVTable;
         EA::GameTalk::Free(mppHandlers);
         mppHandlers = 0;
     }

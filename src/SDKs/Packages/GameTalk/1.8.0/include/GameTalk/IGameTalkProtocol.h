@@ -60,6 +60,9 @@ namespace GameTalk
         // outgoing message through here.
         virtual bool Send(void* lpaBuffer, s32 liMsgSize) = 0;
 
+        // vtable slot 3 (+0x0C): pump incoming transport data.
+        virtual void Poll() = 0;
+
         // +0x04: the raw-wire receive callback. GameTalkManager installs its
         // ReceiverCallback trampoline here at construction; the transport backend
         // fans each complete inbound message out through it (a no-op if null). Owned

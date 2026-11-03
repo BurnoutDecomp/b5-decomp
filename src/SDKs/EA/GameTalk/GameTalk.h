@@ -191,6 +191,12 @@ namespace GameTalk
     // GameTalkProtocol::OnMessageReceived is registered through this.
     typedef void (*MessageHandler)(GameTalkMessage* lpMessage);
 
+    class GameTalkManager;
+    struct GameTalkManagerVTable
+    {
+        GameTalkManager* (*DeletingDestructor)(GameTalkManager*, unsigned int);
+    };
+
     class GameTalkManager
     {
     public:
@@ -263,10 +269,10 @@ namespace GameTalk
         // platform / version / initialize config handshake.
         GameTalkManager(void* lpOwner, s32 liMaxChannels, const char* lpcName);
 
-        // X360 @0x828384A0. Free the handler table and restore the vtable. The
-        // scalar-deleting variant that also releases the manager object is the
-        // compiler-emitted vtable thunk (not written by hand).
-        virtual ~GameTalkManager();
+        // X360 @0x828384A0: slot zero frees the handler table and optionally this.
+        ~GameTalkManager();
+        static GameTalkManager* DeletingDestructor(GameTalkManager* lpManager, unsigned int luFlags);
+        static const GameTalkManagerVTable sVTable;
 
         // X360 @0x82837770. Build a keyword message ([key][value], each length-
         // prefixed big-endian) in the shared scratch buffer and send it over the
@@ -288,7 +294,7 @@ namespace GameTalk
         static void ReceiverCallback(const char* lpacMessage, u32 luLength);
 
         // --- members (X360 offsets 0x00..0x18; pointers widened to x64) ---
-        // +0x00 is the implicit vtable (the class is polymorphic via ~GameTalkManager).
+        const GameTalkManagerVTable* mpVTable; // +0x00
         const char*           mpcName;        // +0x04  instance name ("Game.Xenon")
         IGameTalkProtocol*    mpProtocol;     // +0x08  transport the manager drives
         MessageHandlerEntry** mppHandlers;    // +0x0C  handler table (miMaxChannels slots)
