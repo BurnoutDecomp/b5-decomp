@@ -3,6 +3,8 @@
 #include "GameSource/Graphics/BrnRendererMemory.h"                  // BrnRendererMemory::GetShadowMapBuffer
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"        // CgsRenderTarget (Get*/SetRenderTargetState/GetRenderTarget)
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
+#include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h" // RenderTarget::mDepthTarget.Resolve()
@@ -12,25 +14,6 @@
 // BrnGraphics::ShadowMapRenderManager -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //   BeginRenderShadowMap @ 0x823F7858
 //   EndRenderShadowMap   @ 0x823FD708
-
-// ---- BrnShadowMapRenderManager.cpp file-local reconstruction preamble ----
-// X360 D3D9 viewport/scissor intrinsics (platform externals; off_83271608 device == renderengine::gpD3DDevice).
-// Same declarations as CgsRenderTarget.cpp / rwgpfxrendertarget.cpp; defined in XenonD3D9Shims.cpp.
-extern "C" void D3DDevice_SetViewportF(void* lpDevice, const void* lpViewport);
-extern "C" void D3DDevice_SetScissorRect(void* lpDevice, const void* lpRect);
-
-namespace
-{
-    // The X360 float viewport descriptor D3DDevice_SetViewportF consumes (mirrors CgsRenderTarget.cpp).
-    // Both of these stay TU-local: they cross the boundary as `const void*`, so their linkage never
-    // reaches a mangled name. (The clear descriptor that used to sit here did NOT -- it was the
-    // parameter type of an external-linkage function, which made that function's decorated name
-    // unique to this object file and therefore unsatisfiable by any other TU. It now lives at
-    // namespace scope in ShadowPass.h as renderengine::ClearDepthStencilParameters.)
-    struct ViewportF   { f32 mfX, mfY, mfWidth, mfHeight, mfMinZ, mfMaxZ; u32 mu32Pad; };
-    // The integer scissor rectangle D3DDevice_SetScissorRect consumes.
-    struct ScissorRect { s32 miLeft, miTop, miRight, miBottom; };
-}
 
 // X360 byte_82F2423F. Read out of the ARTIST image by the shadow-map wave's data dump as 0x01,
 // alongside the shadow target's geometry (1280x1920, three 640-row sections) -- so the
@@ -121,27 +104,28 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
             // Multi-section combined target: bind the whole target (section == liIndex) and use the
             // full extent as the viewport/scissor.
             lpShadowBuffer->SetRenderTargetState(static_cast<u32>(liIndex));
-            ImDeviceSetDepthStencilState(gpShadowDepthStencilState);
+            shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+                E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON));
 
             const u32 luWidth  = lpShadowBuffer->GetWidth();
             const u32 luHeight = lpShadowBuffer->GetHeight();
 
-            ViewportF lViewport;
-            lViewport.mfX      = 0.0f;
-            lViewport.mfY      = 0.0f;
-            lViewport.mfWidth  = static_cast<f32>(luWidth);
-            lViewport.mfHeight = static_cast<f32>(luHeight);
-            lViewport.mfMinZ   = 0.0f;
-            lViewport.mfMaxZ   = 1.0f;
-            lViewport.mu32Pad  = 0;
-            D3DDevice_SetViewportF(renderengine::gpD3DDevice, &lViewport);
+            D3DVIEWPORTF9 lViewport;
+            lViewport.X      = 0.0f;
+            lViewport.Y      = 0.0f;
+            lViewport.Width  = static_cast<f32>(luWidth);
+            lViewport.Height = static_cast<f32>(luHeight);
+            lViewport.MinZ   = 0.0f;
+            lViewport.MaxZ   = 1.0f;
+            lViewport.Flags  = 0;
+            D3DDevice_SetViewportF(gpD3DDevice, &lViewport);
 
-            ScissorRect lScissor;
-            lScissor.miLeft   = 0;
-            lScissor.miTop    = 0;
-            lScissor.miRight  = static_cast<s32>(luWidth);
-            lScissor.miBottom = static_cast<s32>(luHeight);
-            D3DDevice_SetScissorRect(renderengine::gpD3DDevice, &lScissor);
+            RECT lScissor;
+            lScissor.left   = 0;
+            lScissor.top    = 0;
+            lScissor.right  = static_cast<s32>(luWidth);
+            lScissor.bottom = static_cast<s32>(luHeight);
+            D3DDevice_SetScissorRect(gpD3DDevice, &lScissor);
         }
         else
         {
@@ -153,24 +137,25 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
             const u32 luOffsetY    = luTileHeight * static_cast<u32>(liIndex);
 
             lpShadowBuffer->SetRenderTargetState(0);
-            ImDeviceSetDepthStencilState(gpShadowDepthStencilState);
+            shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+                E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON));
 
-            ViewportF lViewport;
-            lViewport.mfX      = 0.0f;
-            lViewport.mfY      = static_cast<f32>(luOffsetY);
-            lViewport.mfWidth  = static_cast<f32>(luWidth);
-            lViewport.mfHeight = static_cast<f32>(luTileHeight);
-            lViewport.mfMinZ   = 0.0f;
-            lViewport.mfMaxZ   = 1.0f;
-            lViewport.mu32Pad  = 0;
-            D3DDevice_SetViewportF(renderengine::gpD3DDevice, &lViewport);
+            D3DVIEWPORTF9 lViewport;
+            lViewport.X      = 0.0f;
+            lViewport.Y      = static_cast<f32>(luOffsetY);
+            lViewport.Width  = static_cast<f32>(luWidth);
+            lViewport.Height = static_cast<f32>(luTileHeight);
+            lViewport.MinZ   = 0.0f;
+            lViewport.MaxZ   = 1.0f;
+            lViewport.Flags  = 0;
+            D3DDevice_SetViewportF(gpD3DDevice, &lViewport);
 
-            ScissorRect lScissor;
-            lScissor.miLeft   = 0;
-            lScissor.miTop    = static_cast<s32>(luOffsetY);
-            lScissor.miRight  = static_cast<s32>(luWidth);
-            lScissor.miBottom = static_cast<s32>(luOffsetY + luTileHeight);
-            D3DDevice_SetScissorRect(renderengine::gpD3DDevice, &lScissor);
+            RECT lScissor;
+            lScissor.left   = 0;
+            lScissor.top    = static_cast<s32>(luOffsetY);
+            lScissor.right  = static_cast<s32>(luWidth);
+            lScissor.bottom = static_cast<s32>(luOffsetY + luTileHeight);
+            D3DDevice_SetScissorRect(gpD3DDevice, &lScissor);
         }
     }
     else
@@ -182,7 +167,8 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
                    "lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->GetRenderTarget()");
 
         lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->SetRenderTargetState(0);
-        ImDeviceSetDepthStencilState(gpShadowDepthStencilState);
+        shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+                E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON));
     }
 
     if (lbClear)
@@ -190,10 +176,10 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
         // Clear the shadow depth/stencil (Xenon D3DCLEAR flags 0x30 = ZBUFFER|STENCIL,
         // Z = 1.0, stencil = 0).
         renderengine::ClearDepthStencilParameters lClearZbuffer;
-        lClearZbuffer.mu32Flags   = 0x30;
-        lClearZbuffer.mfDepth     = 1.0f;
-        lClearZbuffer.mu32Stencil = 0;
-        DeviceClearDepthStencil(&lClearZbuffer);
+        lClearZbuffer.m_clearFlags   = 0x30;
+        lClearZbuffer.m_depth     = 1.0f;
+        lClearZbuffer.m_stencil = 0;
+        renderengine::Device::Clear(lClearZbuffer);
     }
 }
 

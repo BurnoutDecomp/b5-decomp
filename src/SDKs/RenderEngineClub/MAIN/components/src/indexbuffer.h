@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include <xtl.h>
 
+namespace rw { struct Resource; }
+
 namespace renderengine
 {
 // ARTIST 82B62100 initializes the SDK header and appends the index count.
@@ -17,6 +19,12 @@ public:
         u32 numIndices;
     };
 
+    // DecFIGS names; ARTIST 82B60760 writes both words on a successful lock.
+    struct Locked { void* indices; u32 indexStride; };
+    enum { LOCK_READ = 1, LOCK_WRITE = 2, LOCK_NOOVERWRITE = 8 };
+    static IndexBuffer* Initialize(const rw::Resource&, const Parameters&);
+    bool Lock(u32 flags, Locked& locked);
+    void Unlock(const Locked& locked);
     void GetParameters(Parameters&) const;
     void Xbox2CheckPhysicalMemoryFlags();
 

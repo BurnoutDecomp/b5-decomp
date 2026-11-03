@@ -3,6 +3,7 @@
 #include "SDKs/EATech/eajobs/job.h"
 #include "GameShared/Jobs/MovieTexture/MovieTexture.h"
 #include "rw/rwcore_structs.h"
+namespace renderengine { class Texture2D; class TextureState; }
 namespace BrnGui { class MovieManager; }
 namespace CgsGraphics
 {
