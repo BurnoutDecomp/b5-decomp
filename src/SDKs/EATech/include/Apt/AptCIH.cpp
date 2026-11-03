@@ -477,10 +477,8 @@ int AptCIH::jumpToFrame(int nFrame)
         }
 
         pInst->mnLastActionFrame = pInst->mnGotoFrame;
-        // x64 narrowing (resolved): the X360 returns r3 -- the queueFrameActions
-        // result pointer -- as the int result the callers ignore. Carried as a
-        // non-zero "ran" marker so no 8->4-byte pointer truncation exists on x64.
-        nResult = pMovie->queueFrameActions(this, pInst->mnGotoFrame) != 0;
+        // ARTIST returns queueFrameActions' r3 value.
+        nResult = static_cast<int>(reinterpret_cast<intptr_t>(pMovie->queueFrameActions(this, pInst->mnGotoFrame)));
     }
     return nResult;
 }

@@ -212,24 +212,18 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
 {
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
-            (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
+            (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));   // four-byte ARTIST operand
     const unsigned char* pBlockEnd = *reinterpret_cast<const unsigned char* const*>(pAligned);
+    pContext->mpProgramCounter = pAligned + 4;
 
     AptValue* pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];
     if (pTarget->getIsDefined())
     {
-        pContext->mpProgramCounter = pAligned + 8;   // consume the qword operand (GUIAPT64)
-
-        AptValue* pObject = 0;   // x64 hardening: the console leaves the out slot
-                                       // uninitialised on a no-object value and AddRefs it
-                                       // regardless; the null init + guard keep that hazard out.
+        AptValue* pObject;
         pInterp->valueToObject(pContext->mpCIH, 0, pTarget, &pObject);
-        if (pObject)
-        {
-            pContext->mpPendingReleaseValue = pObject;    // ctx[2] -- the with-scope
-  // ctx[3] -- released at block end
-            pObject->AddRef();                            // console (**v13)(v13)
-        }
+        pContext->mpPendingReleaseEnd = pBlockEnd;
+        pContext->mpPendingReleaseValue = pObject;
+        pObject->AddRef();
     }
     else
     {
@@ -326,9 +320,7 @@ namespace
         int32_t        mnTryLen;        // [+0x00] try block byte length
         int32_t        mnCatchLen;      // [+0x04] catch block byte length
         int32_t        mnFinallyLen;    // [+0x08] finally block byte length
-        uint8_t        mFlags;          // [+0x0C] bit0=has catch, bit1=has finally, bit2=catch-to-register
-        uint8_t        mPad0D[2];       // [+0x0D]
-        uint8_t        mnCatchRegister; // [+0x0F] catch register index (mFlags bit2)
+        uint32_t       mFlagsAndRegister; // [+0x0C] ARTIST reads flags byte and register byte
         const char*    mpCatchName;     // [+0x10] catch variable name (mFlags bit2 == 0)
                                         // [+0x14] -> the try sub-stream begins here.
     };
@@ -346,13 +338,11 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
 {
     const int nEntryStackTop = pInterp->mnStackTop;   // console v4 = *a1 (unwind target)
 
-    // The try record sits at the 8-aligned PC (GUIAPT64); the three sub-streams follow
-    // its 24-byte header (the console's 20-byte form had a 4-byte name slot). The PC is
-    // advanced past the whole try/catch/finally body.
+    // ARTIST aligns to four bytes and advances past the 20-byte header and streams.
     AptTryRecordT* const pRecord = reinterpret_cast<AptTryRecordT*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
 
-    const unsigned char* const pTryStream     = reinterpret_cast<const unsigned char*>(pRecord) + 24;
+    const unsigned char* const pTryStream     = reinterpret_cast<const unsigned char*>(pRecord) + 20;
     const unsigned char* const pCatchStream   = pTryStream + pRecord->mnTryLen;
     const unsigned char* const pFinallyStream = pCatchStream + pRecord->mnCatchLen;
     pContext->mpProgramCounter = pFinallyStream + pRecord->mnFinallyLen;
@@ -362,12 +352,12 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
 
     // --- catch: a pending throw + a catch clause binds the thrown value + runs it ---
     AptValue* const pThrown = pInterp->mpAbortValue;   // console v9 = a1[24]
-    if (pThrown && (pRecord->mFlags & KU_TRY_HAS_CATCH))
+    if (pThrown && ((pRecord->mFlagsAndRegister >> 24) & KU_TRY_HAS_CATCH))
     {
-        if (pRecord->mFlags & KU_TRY_CATCH_TO_REG)
+        if ((pRecord->mFlagsAndRegister >> 24) & KU_TRY_CATCH_TO_REG)
         {
             // catch into a register slot.
-            AptScriptFunctionBase::SetRegisterValue(pRecord->mnCatchRegister, pThrown);
+            AptScriptFunctionBase::SetRegisterValue(static_cast<uint8_t>(pRecord->mFlagsAndRegister), pThrown);
         }
         else
         {
@@ -398,7 +388,7 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
     }
 
     // --- finally: always runs; preserve + re-raise a pending throw across it ---
-    if (pRecord->mFlags & KU_TRY_HAS_FINALLY)
+    if ((pRecord->mFlagsAndRegister >> 24) & KU_TRY_HAS_FINALLY)
     {
         AptValue* const pPending = pInterp->mpAbortValue;   // console v12
         if (pPending)

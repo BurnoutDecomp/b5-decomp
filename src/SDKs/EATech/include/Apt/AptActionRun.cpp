@@ -65,6 +65,7 @@ const unsigned char* AptActionInterpreter::runStream(
     LocalContextT ctx;
     ctx.mpProgramCounter      = pStream;
     ctx.mpPendingReleaseValue = 0;
+    ctx.mpPendingReleaseEnd = 0;
     ctx.mpCIH                 = pCIH;
     ctx.mpScopeVariable       = getVariable(pCIH, 0, &gAptKeySuper, 1, 1, 0);  // console: the "super" resolve @ctx+0x10
     ctx.mbStop                = false;
@@ -85,6 +86,12 @@ const unsigned char* AptActionInterpreter::runStream(
             // Drop the pending temporary once the PC reaches its release marker.
             // (Null-guarded: a handler on a not-yet-complete x64 path can set the PC
             // marker with no value; the console always pairs them. FLAG hardening.)
+            if (ctx.mpPendingReleaseEnd && ctx.mpProgramCounter == ctx.mpPendingReleaseEnd)
+            {
+                ctx.mpPendingReleaseValue->Release();
+                ctx.mpPendingReleaseValue = 0;
+                ctx.mpPendingReleaseEnd = 0;
+            }
             if (ctx.mbStop)
                 break;
 
