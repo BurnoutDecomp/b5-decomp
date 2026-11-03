@@ -55,10 +55,10 @@ namespace Native
         rw::math::vpu::Vector4 ConvertColour(const u8 laColour[4])
         {
             rw::math::vpu::Vector4 lResult;
-            lResult.x = static_cast<f32>(laColour[0]) * KF_COLOUR_BYTE_TO_UNIT;
-            lResult.y = static_cast<f32>(laColour[1]) * KF_COLOUR_BYTE_TO_UNIT;
-            lResult.z = static_cast<f32>(laColour[2]) * KF_COLOUR_BYTE_TO_UNIT;
-            lResult.w = static_cast<f32>(laColour[3]) * KF_COLOUR_BYTE_TO_UNIT;
+            lResult.mV.v[0] = static_cast<f32>(laColour[0]) * KF_COLOUR_BYTE_TO_UNIT;
+            lResult.mV.v[1] = static_cast<f32>(laColour[1]) * KF_COLOUR_BYTE_TO_UNIT;
+            lResult.mV.v[2] = static_cast<f32>(laColour[2]) * KF_COLOUR_BYTE_TO_UNIT;
+            lResult.mV.v[3] = static_cast<f32>(laColour[3]) * KF_COLOUR_BYTE_TO_UNIT;
             return lResult;
         }
 
@@ -68,10 +68,10 @@ namespace Native
         // modulo 256 rather than saturating; that is the console's store and it is kept.
         void ConvertColour(const rw::math::vpu::Vector4& lrColour, u8 laColour[4])
         {
-            laColour[0] = static_cast<u8>(static_cast<s64>(lrColour.x * KF_COLOUR_UNIT_TO_BYTE));
-            laColour[1] = static_cast<u8>(static_cast<s64>(lrColour.y * KF_COLOUR_UNIT_TO_BYTE));
-            laColour[2] = static_cast<u8>(static_cast<s64>(lrColour.z * KF_COLOUR_UNIT_TO_BYTE));
-            laColour[3] = static_cast<u8>(static_cast<s64>(lrColour.w * KF_COLOUR_UNIT_TO_BYTE));
+            laColour[0] = static_cast<u8>(static_cast<s64>(lrColour.mV.v[0] * KF_COLOUR_UNIT_TO_BYTE));
+            laColour[1] = static_cast<u8>(static_cast<s64>(lrColour.mV.v[1] * KF_COLOUR_UNIT_TO_BYTE));
+            laColour[2] = static_cast<u8>(static_cast<s64>(lrColour.mV.v[2] * KF_COLOUR_UNIT_TO_BYTE));
+            laColour[3] = static_cast<u8>(static_cast<s64>(lrColour.mV.v[3] * KF_COLOUR_UNIT_TO_BYTE));
         }
 
         // dword_82FACBA0 / dword_82FACBA4 -- the handle AcquireTexture publishes for an array
@@ -211,10 +211,10 @@ namespace Native
 
         // (0, gravity, 0, 0): `stfs f13(0.0), var_40 ; stfs 0x38(r11), var_40+4 ;
         // stfs f13, var_38 ; stw r9(0), var_34` -- the w lane is an INTEGER zero store.
-        mParticleData.mAcceleration.x = KF_ZERO;
-        mParticleData.mAcceleration.y = lpParams->mrGravity;
-        mParticleData.mAcceleration.z = KF_ZERO;
-        mParticleData.mAcceleration.w = KF_ZERO;
+        mParticleData.mAcceleration.mV.v[0] = KF_ZERO;
+        mParticleData.mAcceleration.mV.v[1] = lpParams->mrGravity;
+        mParticleData.mAcceleration.mV.v[2] = KF_ZERO;
+        mParticleData.mAcceleration.mV.v[3] = KF_ZERO;
 
         mParticleData.mrLifeTime  = lpParams->mrLifeTime;    // +0x70 <- +0x08
         mParticleData.mrMidTime   = lpParams->mrMidTime;     // +0x74 <- +0x0C
@@ -225,10 +225,10 @@ namespace Native
 
         mbIsReady = false;                                   // `stb r9(0), 0(r3)`
 
-        mParticleData.mSizeParams.x = lpParams->mrStartSize;      // +0x1C
-        mParticleData.mSizeParams.y = lpParams->mrMidSize;        // +0x20
-        mParticleData.mSizeParams.z = lpParams->mrEndSize;        // +0x24
-        mParticleData.mSizeParams.w = lpParams->mrMaxScreenSize;  // +0x50
+        mParticleData.mSizeParams.mV.v[0] = lpParams->mrStartSize;      // +0x1C
+        mParticleData.mSizeParams.mV.v[1] = lpParams->mrMidSize;        // +0x20
+        mParticleData.mSizeParams.mV.v[2] = lpParams->mrEndSize;        // +0x24
+        mParticleData.mSizeParams.mV.v[3] = lpParams->mrMaxScreenSize;  // +0x50
     }
 
     // =========================================================================================
@@ -249,10 +249,10 @@ namespace Native
         lpParams->meBlendMode     = static_cast<EParticleBlend>(lParams.BlendMode());   // +0x44 -> +0x04
 
         // (+0x64, +0x68, 0, 0): two lfs/stfs then `std r8(0)` over the upper half, one stvx.
-        lpParams->mLightingMinMax.x = lParams.LightingMin();
-        lpParams->mLightingMinMax.y = lParams.LightingMax();
-        lpParams->mLightingMinMax.z = KF_ZERO;
-        lpParams->mLightingMinMax.w = KF_ZERO;
+        lpParams->mLightingMinMax.mV.v[0] = lParams.LightingMin();
+        lpParams->mLightingMinMax.mV.v[1] = lParams.LightingMax();
+        lpParams->mLightingMinMax.mV.v[2] = KF_ZERO;
+        lpParams->mLightingMinMax.mV.v[3] = KF_ZERO;
 
         lpParams->mrDragDuration              = lParams.DragDuration();              // +0x88 -> +0x64
         lpParams->mrDragInitialVelocityScale  = lParams.DragInitialVelocityScale();  // +0x84 -> +0x5C
@@ -306,10 +306,10 @@ namespace Native
         lpParticle->mVelocityRotation.SetVector3(lSpawnVelocity);
         lpParticle->mVelocityRotation.SetPlus(lrRotationalVelocity * KF_TWO_PI);
 
-        lpParticle->mScaleAlpha.x = KF_ZERO;
-        lpParticle->mScaleAlpha.y = KF_ZERO;
-        lpParticle->mScaleAlpha.z = lrSizeScale;
-        lpParticle->mScaleAlpha.w = lrAlpha;
+        lpParticle->mScaleAlpha.mV.v[0] = KF_ZERO;
+        lpParticle->mScaleAlpha.mV.v[1] = KF_ZERO;
+        lpParticle->mScaleAlpha.mV.v[2] = lrSizeScale;
+        lpParticle->mScaleAlpha.mV.v[3] = lrAlpha;
 
         // `fsubs f13, last, t ; fsel f0, f13, last, t` -- Max<float>, with fsel's NaN polarity
         // (an unordered difference selects the new time).

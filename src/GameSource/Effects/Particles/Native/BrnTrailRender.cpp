@@ -116,7 +116,7 @@ namespace Native
         const s32 KI_PRIMITIVE_TRIANGLE_STRIP = 6;
 
         // .rdata unk_82181510 == {0, 1, 0, 0}: the uv.y step to the second edge vertex.
-        const ::Vector4 K_UV_SECOND_EDGE = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const ::Vector4 K_UV_SECOND_EDGE(0.0f, 1.0f, 0.0f, 0.0f);
 
         // ============================================================================================
         // [DIAG] BRN_SKID_LOUD -- THE DISCRIMINATOR. NOT IN THE X360 BINARY, inert unless the
@@ -167,19 +167,19 @@ namespace Native
 
         inline ::Vector4 MakeUvTimeAlpha(f32 lfU, f32 lfV, f32 lfAge, f32 lfStrength)
         {
-            const ::Vector4 lResult = { lfU, lfV, lfAge, lfStrength };
+            const ::Vector4 lResult(lfU, lfV, lfAge, lfStrength);
             return lResult;
         }
-        inline ::Vector4 Add(::Vector4 lLhs, ::Vector4 lRhs)
+        inline ::Vector4 AddTrailVectors(::Vector4 lLhs, ::Vector4 lRhs)
         {
-            const ::Vector4 lResult = { lLhs.x + lRhs.x, lLhs.y + lRhs.y, lLhs.z + lRhs.z, lLhs.w + lRhs.w };
+            const ::Vector4 lResult(lLhs.mV.v[0] + lRhs.mV.v[0], lLhs.mV.v[1] + lRhs.mV.v[1], lLhs.mV.v[2] + lRhs.mV.v[2], lLhs.mV.v[3] + lRhs.mV.v[3]);
             return lResult;
         }
         inline ::Vector4 ScaleRgb(const RwRGBAReal& lColour, f32 lfWhiteLevel)
         {
             // v55 = {wl, wl, wl, 1.0}; colour * v55 (vmulfp128 @0x822959E4 / @0x82295A14).
-            const ::Vector4 lResult = { lColour.red * lfWhiteLevel, lColour.green * lfWhiteLevel,
-                                      lColour.blue * lfWhiteLevel, lColour.alpha * 1.0f };
+            const ::Vector4 lResult(lColour.red * lfWhiteLevel, lColour.green * lfWhiteLevel,
+                                      lColour.blue * lfWhiteLevel, lColour.alpha * 1.0f);
             return lResult;
         }
 
@@ -280,7 +280,7 @@ namespace Native
         // the road's own near-black. Same two setters, same two registers -- only the value differs.
         if ((SkidLoudMask() & 4u) != 0u)
         {
-            const ::Vector4 lMagenta = { 1.0f, 0.0f, 1.0f, 1.0f };
+            const ::Vector4 lMagenta(1.0f, 0.0f, 1.0f, 1.0f);
             mpRenderer->SetBlendStartColour(lMagenta);
             mpRenderer->SetBlendEndColour(lMagenta);
         }
@@ -337,7 +337,7 @@ namespace Native
             // ---- segment 0: its +half edge vertex is written twice (the strip join) ----------
             {
                 ::Vector3       lPosition  = lpSegments->ReadSegmentPosition(0);
-                lPosition.y += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
+                lPosition.mV.v[1] += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
                 const ::Vector3 lTangent   = lpSegments->ReadSegmentTangent(0);
                 const f32     lfStrength = lpSegments->ReadSegmentStrength(0);
                 f32           lfAge      = (lfNow - lpSegments->ReadSegmentTime(0)) * KF_ONE_OVER_TRAIL_BASE_LIFE;
@@ -346,7 +346,7 @@ namespace Native
                     lfAge = 1.0f;                                                  // vminfp128 with 1.0
                 }
                 const ::Vector4 lUvA = MakeUvTimeAlpha(0.0f, 0.0f, lfAge, lfStrength);   // u == segment index 0
-                const ::Vector4 lUvB = Add(lUvA, K_UV_SECOND_EDGE);
+                const ::Vector4 lUvB = AddTrailVectors(lUvA, K_UV_SECOND_EDGE);
                 // uv.y == 0 is the MINUS edge (v122 == unk_82FAB940 == -0.125) -- see the banner.
                 const ::Vector3 lEdgeA = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition; // vmaddcfp128 v10 = v11 * v122 + v12
                 const ::Vector3 lEdgeB = lTangent * KR_HALF_TRAIL_SIZE + lPosition;       // vmaddfp128  v12 = v11 * v121 + v12
@@ -364,7 +364,7 @@ namespace Native
             for (s32 lnSegment = 1; lnSegment < lnNumSegments; ++lnSegment, lfSegmentU += 1.0f)
             {
                 ::Vector3       lPosition  = lpSegments->ReadSegmentPosition(lnSegment);
-                lPosition.y += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
+                lPosition.mV.v[1] += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
                 const ::Vector3 lTangent   = lpSegments->ReadSegmentTangent(lnSegment);
                 const f32     lfStrength = lpSegments->ReadSegmentStrength(lnSegment);
                 f32           lfAge      = (lfNow - lpSegments->ReadSegmentTime(lnSegment)) * KF_ONE_OVER_TRAIL_BASE_LIFE;
@@ -373,7 +373,7 @@ namespace Native
                     lfAge = 1.0f;
                 }
                 const ::Vector4 lUvA = MakeUvTimeAlpha(lfSegmentU, 0.0f, lfAge, lfStrength);
-                const ::Vector4 lUvB = Add(lUvA, K_UV_SECOND_EDGE);
+                const ::Vector4 lUvB = AddTrailVectors(lUvA, K_UV_SECOND_EDGE);
                 // uv.y == 0 is the MINUS edge (0x82295BC8/0x82295BD8) -- see the banner.
                 const ::Vector3 lEdgeA = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition;
                 const ::Vector3 lEdgeB = lTangent * KR_HALF_TRAIL_SIZE + lPosition;
@@ -413,10 +413,10 @@ namespace Native
             // bytes by SetTransform, so this reads it exactly as the program does.
             const f32* const lpM = reinterpret_cast<const f32*>(&mViewProjectionMatrix);
             const ::Vector3& lrP = laVertices[0].mv3Pos;
-            const f32 lfX = lrP.x * lpM[0] + lrP.y * lpM[4] + lrP.z * lpM[8]  + lpM[12];
-            const f32 lfY = lrP.x * lpM[1] + lrP.y * lpM[5] + lrP.z * lpM[9]  + lpM[13];
-            const f32 lfZ = lrP.x * lpM[2] + lrP.y * lpM[6] + lrP.z * lpM[10] + lpM[14];
-            const f32 lfW = lrP.x * lpM[3] + lrP.y * lpM[7] + lrP.z * lpM[11] + lpM[15];
+            const f32 lfX = lrP.mV.v[0] * lpM[0] + lrP.mV.v[1] * lpM[4] + lrP.mV.v[2] * lpM[8]  + lpM[12];
+            const f32 lfY = lrP.mV.v[0] * lpM[1] + lrP.mV.v[1] * lpM[5] + lrP.mV.v[2] * lpM[9]  + lpM[13];
+            const f32 lfZ = lrP.mV.v[0] * lpM[2] + lrP.mV.v[1] * lpM[6] + lrP.mV.v[2] * lpM[10] + lpM[14];
+            const f32 lfW = lrP.mV.v[0] * lpM[3] + lrP.mV.v[1] * lpM[7] + lrP.mV.v[2] * lpM[11] + lpM[15];
 
             // Stamp the NDC into the film latch so frames.csv carries the SCREEN position of
             // a submitted mark (columns 15-17). See BrnDiagFilmLatch.h.
@@ -439,7 +439,7 @@ namespace Native
                     "[trailpass] xform: v0=(%.2f,%.2f,%.2f) clip=(%.3f,%.3f,%.3f,%.3f) "
                     "ndc=(%.3f,%.3f,%.3f) m0=[%.4f %.4f %.4f %.4f] m3=[%.3f %.3f %.3f %.3f] "
                     "start=(%.3f,%.3f,%.3f,%.3f) end=(%.3f,%.3f,%.3f,%.3f) uvta0=(%.2f,%.2f,%.3f,%.3f)\n",
-                    static_cast<double>(lrP.x), static_cast<double>(lrP.y), static_cast<double>(lrP.z),
+                    static_cast<double>(lrP.mV.v[0]), static_cast<double>(lrP.mV.v[1]), static_cast<double>(lrP.mV.v[2]),
                     static_cast<double>(lfX), static_cast<double>(lfY), static_cast<double>(lfZ), static_cast<double>(lfW),
                     static_cast<double>(lfW != 0.0f ? lfX / lfW : 0.0f),
                     static_cast<double>(lfW != 0.0f ? lfY / lfW : 0.0f),
@@ -450,8 +450,8 @@ namespace Native
                     static_cast<double>(lpParams->mStartColour.blue), static_cast<double>(lpParams->mStartColour.alpha),
                     static_cast<double>(lpParams->mEndColour.red), static_cast<double>(lpParams->mEndColour.green),
                     static_cast<double>(lpParams->mEndColour.blue), static_cast<double>(lpParams->mEndColour.alpha),
-                    static_cast<double>(laVertices[0].mv4UvTimeAlpha.x), static_cast<double>(laVertices[0].mv4UvTimeAlpha.y),
-                    static_cast<double>(laVertices[0].mv4UvTimeAlpha.z), static_cast<double>(laVertices[0].mv4UvTimeAlpha.w));
+                    static_cast<double>(laVertices[0].mv4UvTimeAlpha.mV.v[0]), static_cast<double>(laVertices[0].mv4UvTimeAlpha.mV.v[1]),
+                    static_cast<double>(laVertices[0].mv4UvTimeAlpha.mV.v[2]), static_cast<double>(laVertices[0].mv4UvTimeAlpha.mV.v[3]));
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }

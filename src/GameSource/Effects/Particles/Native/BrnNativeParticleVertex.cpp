@@ -67,9 +67,9 @@ void NativeParticleVertex::VertexIterator::Write(
 
     // Position xyz. The three stvewx write the stream WITHOUT advancing the cursor.
     float* const lpPosition = reinterpret_cast<float*>( lpWrite );
-    lpPosition[0] = lv3Position.x;
-    lpPosition[1] = lv3Position.y;
-    lpPosition[2] = lv3Position.z;
+    lpPosition[0] = lv3Position.mV.v[0];
+    lpPosition[1] = lv3Position.mV.v[1];
+    lpPosition[2] = lv3Position.mV.v[2];
     lpWrite += 3 * sizeof( float );
 
     // Colour: the cursor lands on this slot and the word is stored into it.

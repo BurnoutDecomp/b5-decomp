@@ -111,7 +111,7 @@ namespace Native
 
         inline Vector4 MakeVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
         {
-            Vector4 lResult = { lfX, lfY, lfZ, lfW };
+            Vector4 lResult(lfX, lfY, lfZ, lfW);
             return lResult;
         }
         inline Vector4 Splat(f32 lfValue)
@@ -145,8 +145,8 @@ namespace Native
         // middle (w = 1.0) and its half-width (w = 0.0).
         ShadedRotatingRenderMethod lRenderMethod;
         {
-            const f32 lfLightingMin = VMin(KF_ONE, lrParams.mLightingMinMax.x);
-            const f32 lfLightingMax = VMin(KF_ONE, lrParams.mLightingMinMax.y);
+            const f32 lfLightingMin = VMin(KF_ONE, lrParams.mLightingMinMax.mV.v[0]);
+            const f32 lfLightingMax = VMin(KF_ONE, lrParams.mLightingMinMax.mV.v[1]);
             const f32 lfHalfRange   = (lfLightingMax - lfLightingMin) * KF_HALF;
             const f32 lfMiddle      = lfLightingMin + lfHalfRange;
             lRenderMethod.mvCornerScale   = Splat(KF_SQRT_TWO);
@@ -184,7 +184,7 @@ namespace Native
         const f32 lfScreenScale = lfCotHorizontal * KF_SCREEN_SIZE_SCALE;
         const f32 lfAspect      = lfCotVertical / lfCotHorizontal;
         // The max screen size is authored in PIXELS of a 1280-wide screen: size.w * (1 / 1280).
-        const f32 lfMaxScreenSize = lrData.mSizeParams.w * RefinedReciprocal(lrState.mvScreenSize.x);
+        const f32 lfMaxScreenSize = lrData.mSizeParams.mV.v[3] * RefinedReciprocal(lrState.mvScreenSize.mV.v[0]);
 
         // ---- the per-lane lifetimes (0x8291E8D4..0x8291E9B4) -----------------------------------
         f32 lafLifetime[4];
@@ -217,12 +217,12 @@ namespace Native
 
         // ---- the colour keys, white-levelled (0x8291EA34..0x8291EA94) --------------------------
         const f32 lfWhite = lrState.mfWhiteLevel;
-        const Vector4 lStartColour = MakeVector(lrData.mStartColour.x * lfWhite, lrData.mStartColour.y * lfWhite,
-                                                lrData.mStartColour.z * lfWhite, lrData.mStartColour.w * KF_ONE);
-        const Vector4 lMidColour   = MakeVector(lrData.mMidColour.x * lfWhite, lrData.mMidColour.y * lfWhite,
-                                                lrData.mMidColour.z * lfWhite, lrData.mMidColour.w * KF_ONE);
-        const Vector4 lEndColour   = MakeVector(lrData.mEndColour.x * lfWhite, lrData.mEndColour.y * lfWhite,
-                                                lrData.mEndColour.z * lfWhite, lrData.mEndColour.w * KF_ONE);
+        const Vector4 lStartColour = MakeVector(lrData.mStartColour.mV.v[0] * lfWhite, lrData.mStartColour.mV.v[1] * lfWhite,
+                                                lrData.mStartColour.mV.v[2] * lfWhite, lrData.mStartColour.mV.v[3] * KF_ONE);
+        const Vector4 lMidColour   = MakeVector(lrData.mMidColour.mV.v[0] * lfWhite, lrData.mMidColour.mV.v[1] * lfWhite,
+                                                lrData.mMidColour.mV.v[2] * lfWhite, lrData.mMidColour.mV.v[3] * KF_ONE);
+        const Vector4 lEndColour   = MakeVector(lrData.mEndColour.mV.v[0] * lfWhite, lrData.mEndColour.mV.v[1] * lfWhite,
+                                                lrData.mEndColour.mV.v[2] * lfWhite, lrData.mEndColour.mV.v[3] * KF_ONE);
 
         // ---- the tile table, var_2B0 (0x8291EAF4..0x8291ECA4) ----------------------------------
         const u32 luTilesWide     = lrParams.muTilesWide;
@@ -255,8 +255,8 @@ namespace Native
         const f32 lfTileOriginU = lfTileExtent * KF_ZERO;   // f30
         const f32 lfTileOriginV = lfTileExtent * KF_ZERO;   // f29
 
-        const Vector4 lAcceleration = MakeVector(lrData.mAcceleration.x, lrData.mAcceleration.y,
-                                                 lrData.mAcceleration.z, lrData.mAcceleration.w);
+        const Vector4 lAcceleration = MakeVector(lrData.mAcceleration.mV.v[0], lrData.mAcceleration.mV.v[1],
+                                                 lrData.mAcceleration.mV.v[2], lrData.mAcceleration.mV.v[3]);
         const Vector4& lrRow0 = lrCamera.mViewProjection.xAxis;   // camera +0x80
         const Vector4& lrRow1 = lrCamera.mViewProjection.yAxis;   // +0x90
         const Vector4& lrRow2 = lrCamera.mViewProjection.zAxis;   // +0xA0
@@ -307,10 +307,10 @@ namespace Native
 
                     const f32 lfAgeSquared = lfAge * lfAge;
                     const Vector4 lPosition = MakeVector(
-                        lAcceleration.x * lfAgeSquared + (lrParticle.mVelocityRotation.x * lfDistance + lrParticle.mPositionTime.x),
-                        lAcceleration.y * lfAgeSquared + (lrParticle.mVelocityRotation.y * lfDistance + lrParticle.mPositionTime.y),
-                        lAcceleration.z * lfAgeSquared + (lrParticle.mVelocityRotation.z * lfDistance + lrParticle.mPositionTime.z),
-                        lAcceleration.w * lfAgeSquared + (lrParticle.mVelocityRotation.w * lfDistance + lrParticle.mPositionTime.w));
+                        lAcceleration.mV.v[0] * lfAgeSquared + (lrParticle.mVelocityRotation.mV.v[0] * lfDistance + lrParticle.mPositionTime.mV.v[0]),
+                        lAcceleration.mV.v[1] * lfAgeSquared + (lrParticle.mVelocityRotation.mV.v[1] * lfDistance + lrParticle.mPositionTime.mV.v[1]),
+                        lAcceleration.mV.v[2] * lfAgeSquared + (lrParticle.mVelocityRotation.mV.v[2] * lfDistance + lrParticle.mPositionTime.mV.v[2]),
+                        lAcceleration.mV.v[3] * lfAgeSquared + (lrParticle.mVelocityRotation.mV.v[3] * lfDistance + lrParticle.mPositionTime.mV.v[3]));
 
                     // The three-key ramp: before the mid key the segment runs start -> mid over
                     // [0, mid); after it, end -> mid over [life, mid) (the fraction runs BACKWARDS
@@ -322,28 +322,28 @@ namespace Native
 
                     const Vector4& lrBaseColour = lbBeforeMid ? lStartColour : lEndColour;
                     const Vector4 lColour = MakeVector(
-                        (lMidColour.x - lrBaseColour.x) * lfFraction + lrBaseColour.x,
-                        (lMidColour.y - lrBaseColour.y) * lfFraction + lrBaseColour.y,
-                        (lMidColour.z - lrBaseColour.z) * lfFraction + lrBaseColour.z,
-                        (lMidColour.w - lrBaseColour.w) * lfFraction + lrBaseColour.w);
+                        (lMidColour.mV.v[0] - lrBaseColour.mV.v[0]) * lfFraction + lrBaseColour.mV.v[0],
+                        (lMidColour.mV.v[1] - lrBaseColour.mV.v[1]) * lfFraction + lrBaseColour.mV.v[1],
+                        (lMidColour.mV.v[2] - lrBaseColour.mV.v[2]) * lfFraction + lrBaseColour.mV.v[2],
+                        (lMidColour.mV.v[3] - lrBaseColour.mV.v[3]) * lfFraction + lrBaseColour.mV.v[3]);
 
-                    const f32 lfBaseSize = lbBeforeMid ? lrData.mSizeParams.x : lrData.mSizeParams.z;
-                    const f32 lfSize = (lfFraction * (lrData.mSizeParams.y - lfBaseSize) + lfBaseSize)
-                                     * lrParticle.mScaleAlpha.z;
+                    const f32 lfBaseSize = lbBeforeMid ? lrData.mSizeParams.mV.v[0] : lrData.mSizeParams.mV.v[2];
+                    const f32 lfSize = (lfFraction * (lrData.mSizeParams.mV.v[1] - lfBaseSize) + lfBaseSize)
+                                     * lrParticle.mScaleAlpha.mV.v[2];
 
                     // The projection: row-vector clip = row3 + row0*x + row1*y + row2*z, then the
                     // divide by w through the refined reciprocal.
                     Vector4 lClip = lrRow3;
-                    lClip = MakeVector(lrRow0.x * lPosition.x + lClip.x, lrRow0.y * lPosition.x + lClip.y,
-                                       lrRow0.z * lPosition.x + lClip.z, lrRow0.w * lPosition.x + lClip.w);
-                    lClip = MakeVector(lrRow1.x * lPosition.y + lClip.x, lrRow1.y * lPosition.y + lClip.y,
-                                       lrRow1.z * lPosition.y + lClip.z, lrRow1.w * lPosition.y + lClip.w);
-                    lClip = MakeVector(lrRow2.x * lPosition.z + lClip.x, lrRow2.y * lPosition.z + lClip.y,
-                                       lrRow2.z * lPosition.z + lClip.z, lrRow2.w * lPosition.z + lClip.w);
-                    const f32 lfDepth = lClip.w;
+                    lClip = MakeVector(lrRow0.mV.v[0] * lPosition.mV.v[0] + lClip.mV.v[0], lrRow0.mV.v[1] * lPosition.mV.v[0] + lClip.mV.v[1],
+                                       lrRow0.mV.v[2] * lPosition.mV.v[0] + lClip.mV.v[2], lrRow0.mV.v[3] * lPosition.mV.v[0] + lClip.mV.v[3]);
+                    lClip = MakeVector(lrRow1.mV.v[0] * lPosition.mV.v[1] + lClip.mV.v[0], lrRow1.mV.v[1] * lPosition.mV.v[1] + lClip.mV.v[1],
+                                       lrRow1.mV.v[2] * lPosition.mV.v[1] + lClip.mV.v[2], lrRow1.mV.v[3] * lPosition.mV.v[1] + lClip.mV.v[3]);
+                    lClip = MakeVector(lrRow2.mV.v[0] * lPosition.mV.v[2] + lClip.mV.v[0], lrRow2.mV.v[1] * lPosition.mV.v[2] + lClip.mV.v[1],
+                                       lrRow2.mV.v[2] * lPosition.mV.v[2] + lClip.mV.v[2], lrRow2.mV.v[3] * lPosition.mV.v[2] + lClip.mV.v[3]);
+                    const f32 lfDepth = lClip.mV.v[3];
                     const f32 lfOneOverDepth = RefinedReciprocal(lfDepth) * KF_ONE;
-                    const Vector4 lProjected = MakeVector(lClip.x * lfOneOverDepth, lClip.y * lfOneOverDepth,
-                                                          lClip.z * lfOneOverDepth, lClip.w * lfOneOverDepth);
+                    const Vector4 lProjected = MakeVector(lClip.mV.v[0] * lfOneOverDepth, lClip.mV.v[1] * lfOneOverDepth,
+                                                          lClip.mV.v[2] * lfOneOverDepth, lClip.mV.v[3] * lfOneOverDepth);
 
                     // Screen-space size, clamped to the max, and its vertical twin.
                     const f32 lfSizeX = VMin((lfSize * lfOneOverDepth) * lfScreenScale, lfMaxScreenSize);
@@ -353,14 +353,14 @@ namespace Native
                     const f32 lfFade = VMin(VMin((lfDepth - lfNearPlane) * lfOneOverNearFade,
                                                  (lfFarPlane - lfDepth) * lfOneOverFarFade),
                                             KF_ONE);
-                    const f32 lfAlpha = (lrParticle.mScaleAlpha.w * lColour.w) * lfFade;
+                    const f32 lfAlpha = (lrParticle.mScaleAlpha.mV.v[3] * lColour.mV.v[3]) * lfFade;
 
                     // The visibility mask, verbatim: note the depth term is an OR -- (w > near) OR
                     // NOT (w >= far) -- so a particle nearer than the near plane still passes it and
                     // is removed only by its (negative) fade alpha. Off-screen means the quad lies
                     // wholly beyond an edge: max(|x| - sizeX, |y| - sizeY) >= 1.
-                    const f32 lfEdge = VMax(AbsoluteValue(lProjected.x) - lfSizeX,
-                                            AbsoluteValue(lProjected.y) - lfSizeY);
+                    const f32 lfEdge = VMax(AbsoluteValue(lProjected.mV.v[0]) - lfSizeX,
+                                            AbsoluteValue(lProjected.mV.v[1]) - lfSizeY);
                     const bool lbVisible = labAlive[luLane]
                                         && ((lfDepth > lfNearPlane) || !(lfDepth >= lfFarPlane))
                                         && !(lfEdge >= KF_ONE)

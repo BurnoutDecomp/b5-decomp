@@ -70,8 +70,8 @@ namespace Native
         template <class TA, class TB>
         inline f32 SimDot3(const TA& lrA, const TB& lrB)
         {
-            return static_cast<f32>(static_cast<f64>(lrA.x) * lrB.x + static_cast<f64>(lrA.y) * lrB.y
-                                  + static_cast<f64>(lrA.z) * lrB.z);
+            return static_cast<f32>(static_cast<f64>(lrA.mV.v[0]) * lrB.mV.v[0] + static_cast<f64>(lrA.mV.v[1]) * lrB.mV.v[1]
+                                  + static_cast<f64>(lrA.mV.v[2]) * lrB.mV.v[2]);
         }
 
         // The distance a chunk moved this step: vmsum3fp128, vrsqrtefp + two Newton steps with the
@@ -120,10 +120,10 @@ namespace Native
             // v123 = 1 - drag * dt (the per-step velocity damping), v124 = gravity * dt.
             const f32 lfDamping = 1.0f - lfDragResistance * lfTimeStep;
             Vector3 lvGravityStep;
-            lvGravityStep.x = KF_DEBRIS_GRAVITY_X * lfTimeStep;
-            lvGravityStep.y = KF_DEBRIS_GRAVITY_Y * lfTimeStep;
-            lvGravityStep.z = KF_DEBRIS_GRAVITY_Z * lfTimeStep;
-            lvGravityStep.w = KF_DEBRIS_GRAVITY_W * lfTimeStep;
+            lvGravityStep.mV.v[0] = KF_DEBRIS_GRAVITY_X * lfTimeStep;
+            lvGravityStep.mV.v[1] = KF_DEBRIS_GRAVITY_Y * lfTimeStep;
+            lvGravityStep.mV.v[2] = KF_DEBRIS_GRAVITY_Z * lfTimeStep;
+            lvGravityStep.mV.v[3] = KF_DEBRIS_GRAVITY_W * lfTimeStep;
 
             // The live particles' indices (var_1370 bytes) and their line segments (var_1310, stride 0x30).
             u8 lau8LiveIndex[DebrisBucket::KuMaxNumParticles];
@@ -159,45 +159,45 @@ namespace Native
 
                 // velocity (+ gravity step), then damped: vaddfp128, vmulfp128.
                 Vector3 lvDamped;
-                lvDamped.x = (lvVelocity.x + lvGravityStep.x) * lfDamping;
-                lvDamped.y = (lvVelocity.y + lvGravityStep.y) * lfDamping;
-                lvDamped.z = (lvVelocity.z + lvGravityStep.z) * lfDamping;
-                lvDamped.w = (lvVelocity.w + lvGravityStep.w) * lfDamping;
+                lvDamped.mV.v[0] = (lvVelocity.mV.v[0] + lvGravityStep.mV.v[0]) * lfDamping;
+                lvDamped.mV.v[1] = (lvVelocity.mV.v[1] + lvGravityStep.mV.v[1]) * lfDamping;
+                lvDamped.mV.v[2] = (lvVelocity.mV.v[2] + lvGravityStep.mV.v[2]) * lfDamping;
+                lvDamped.mV.v[3] = (lvVelocity.mV.v[3] + lvGravityStep.mV.v[3]) * lfDamping;
 
                 // new position = damped * dt + old (ONE vmaddcfp128).
                 Vector3 lvNewPosition;
-                lvNewPosition.x = BrnParticleMath::VpuMultiplyAdd(lvDamped.x, lfTimeStep, lvPosition.x);
-                lvNewPosition.y = BrnParticleMath::VpuMultiplyAdd(lvDamped.y, lfTimeStep, lvPosition.y);
-                lvNewPosition.z = BrnParticleMath::VpuMultiplyAdd(lvDamped.z, lfTimeStep, lvPosition.z);
-                lvNewPosition.w = BrnParticleMath::VpuMultiplyAdd(lvDamped.w, lfTimeStep, lvPosition.w);
+                lvNewPosition.mV.v[0] = BrnParticleMath::VpuMultiplyAdd(lvDamped.mV.v[0], lfTimeStep, lvPosition.mV.v[0]);
+                lvNewPosition.mV.v[1] = BrnParticleMath::VpuMultiplyAdd(lvDamped.mV.v[1], lfTimeStep, lvPosition.mV.v[1]);
+                lvNewPosition.mV.v[2] = BrnParticleMath::VpuMultiplyAdd(lvDamped.mV.v[2], lfTimeStep, lvPosition.mV.v[2]);
+                lvNewPosition.mV.v[3] = BrnParticleMath::VpuMultiplyAdd(lvDamped.mV.v[3], lfTimeStep, lvPosition.mV.v[3]);
 
-                lrLine.mLineStartPosition.x = lvPosition.x;   // the whole quadword, w (the spin rate) too
-                lrLine.mLineStartPosition.y = lvPosition.y;
-                lrLine.mLineStartPosition.z = lvPosition.z;
-                lrLine.mLineStartPosition.w = lvPosition.w;
+                lrLine.mLineStartPosition.mV.v[0] = lvPosition.mV.v[0];   // the whole quadword, w (the spin rate) too
+                lrLine.mLineStartPosition.mV.v[1] = lvPosition.mV.v[1];
+                lrLine.mLineStartPosition.mV.v[2] = lvPosition.mV.v[2];
+                lrLine.mLineStartPosition.mV.v[3] = lvPosition.mV.v[3];
                 lrLine.mLineEndPos          = lvNewPosition;
-                lrLine.mLineIntersectNormalPlusLineParms.x = 0.0f;   // {0, 0, 0, 1}: vspltisw 0 + vrlimi of 1.0
-                lrLine.mLineIntersectNormalPlusLineParms.y = 0.0f;
-                lrLine.mLineIntersectNormalPlusLineParms.z = 0.0f;
-                lrLine.mLineIntersectNormalPlusLineParms.w = 1.0f;
+                lrLine.mLineIntersectNormalPlusLineParms.mV.v[0] = 0.0f;   // {0, 0, 0, 1}: vspltisw 0 + vrlimi of 1.0
+                lrLine.mLineIntersectNormalPlusLineParms.mV.v[1] = 0.0f;
+                lrLine.mLineIntersectNormalPlusLineParms.mV.v[2] = 0.0f;
+                lrLine.mLineIntersectNormalPlusLineParms.mV.v[3] = 1.0f;
 
                 // The spin: angle += rotational velocity * |step| (ONE vmaddfp).
                 Vector3 lvStep;
-                lvStep.x = lvNewPosition.x - lvPosition.x;
-                lvStep.y = lvNewPosition.y - lvPosition.y;
-                lvStep.z = lvNewPosition.z - lvPosition.z;
-                lvStep.w = lvNewPosition.w - lvPosition.w;
+                lvStep.mV.v[0] = lvNewPosition.mV.v[0] - lvPosition.mV.v[0];
+                lvStep.mV.v[1] = lvNewPosition.mV.v[1] - lvPosition.mV.v[1];
+                lvStep.mV.v[2] = lvNewPosition.mV.v[2] - lvPosition.mV.v[2];
+                lvStep.mV.v[3] = lvNewPosition.mV.v[3] - lvPosition.mV.v[3];
                 const f32 lfDistance = SimGuardedLength3(lvStep);
-                lDebrisToUpdate.mAxisPlusAngle.w =
-                    BrnParticleMath::VpuMultiplyAdd(lvPosition.w, lfDistance, lDebrisToUpdate.mAxisPlusAngle.w);
+                lDebrisToUpdate.mAxisPlusAngle.mV.v[3] =
+                    BrnParticleMath::VpuMultiplyAdd(lvPosition.mV.v[3], lfDistance, lDebrisToUpdate.mAxisPlusAngle.mV.v[3]);
 
                 // Position / velocity written back with their w lanes (rotational velocity, scale) kept.
-                lDebrisToUpdate.mPositionPlusRotVel.x = lvNewPosition.x;
-                lDebrisToUpdate.mPositionPlusRotVel.y = lvNewPosition.y;
-                lDebrisToUpdate.mPositionPlusRotVel.z = lvNewPosition.z;
-                lDebrisToUpdate.mVelocityPlusScale.x  = lvDamped.x;
-                lDebrisToUpdate.mVelocityPlusScale.y  = lvDamped.y;
-                lDebrisToUpdate.mVelocityPlusScale.z  = lvDamped.z;
+                lDebrisToUpdate.mPositionPlusRotVel.mV.v[0] = lvNewPosition.mV.v[0];
+                lDebrisToUpdate.mPositionPlusRotVel.mV.v[1] = lvNewPosition.mV.v[1];
+                lDebrisToUpdate.mPositionPlusRotVel.mV.v[2] = lvNewPosition.mV.v[2];
+                lDebrisToUpdate.mVelocityPlusScale.mV.v[0]  = lvDamped.mV.v[0];
+                lDebrisToUpdate.mVelocityPlusScale.mV.v[1]  = lvDamped.mV.v[1];
+                lDebrisToUpdate.mVelocityPlusScale.mV.v[2]  = lvDamped.mV.v[2];
             }
 
             if (luNumLive == 0)
@@ -213,43 +213,43 @@ namespace Native
                 const BrnEffects::BrnCrashLineTriangleCacheFormat& lrLine = laLines[luLine];
                 const rw::math::vpu::Vector3Plus& lrHit = lrLine.mLineIntersectNormalPlusLineParms;
                 // vcmpeqfp128. of (x, y, z, x) against zero: no normal written == no hit.
-                if (lrHit.x == 0.0f && lrHit.y == 0.0f && lrHit.z == 0.0f)
+                if (lrHit.mV.v[0] == 0.0f && lrHit.mV.v[1] == 0.0f && lrHit.mV.v[2] == 0.0f)
                     continue;
 
                 BrnDebris& lDebrisToUpdate = DebrisToUpdate(lpBucket, lau8LiveIndex[luLine]);
                 CGS_ASSERT(lDebrisToUpdate.muBounceCount != 0, "lDebrisToUpdate.muBounceCount != 0");
 
                 // Back to 95% of the way to the contact (ONE vmaddfp), the spin rate kept.
-                const f32 lfFraction = lrHit.w * KF_DEBRIS_CONTACT_FRACTION;
-                lDebrisToUpdate.mPositionPlusRotVel.x =
-                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.x - lrLine.mLineStartPosition.x, lfFraction, lrLine.mLineStartPosition.x);
-                lDebrisToUpdate.mPositionPlusRotVel.y =
-                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.y - lrLine.mLineStartPosition.y, lfFraction, lrLine.mLineStartPosition.y);
-                lDebrisToUpdate.mPositionPlusRotVel.z =
-                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.z - lrLine.mLineStartPosition.z, lfFraction, lrLine.mLineStartPosition.z);
+                const f32 lfFraction = lrHit.mV.v[3] * KF_DEBRIS_CONTACT_FRACTION;
+                lDebrisToUpdate.mPositionPlusRotVel.mV.v[0] =
+                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.mV.v[0] - lrLine.mLineStartPosition.mV.v[0], lfFraction, lrLine.mLineStartPosition.mV.v[0]);
+                lDebrisToUpdate.mPositionPlusRotVel.mV.v[1] =
+                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.mV.v[1] - lrLine.mLineStartPosition.mV.v[1], lfFraction, lrLine.mLineStartPosition.mV.v[1]);
+                lDebrisToUpdate.mPositionPlusRotVel.mV.v[2] =
+                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.mV.v[2] - lrLine.mLineStartPosition.mV.v[2], lfFraction, lrLine.mLineStartPosition.mV.v[2]);
 
                 // Reflect: v - (2n) * (n . v) -- vmsum3fp128, two vmulfp128, vsubfp.
                 rw::math::vpu::Vector3Plus& lrVelocity = lDebrisToUpdate.mVelocityPlusScale;
                 const f32 lfInto = SimDot3(lrHit, lrVelocity);
-                lrVelocity.x = lrVelocity.x - (lrHit.x * 2.0f) * lfInto;
-                lrVelocity.y = lrVelocity.y - (lrHit.y * 2.0f) * lfInto;
-                lrVelocity.z = lrVelocity.z - (lrHit.z * 2.0f) * lfInto;
+                lrVelocity.mV.v[0] = lrVelocity.mV.v[0] - (lrHit.mV.v[0] * 2.0f) * lfInto;
+                lrVelocity.mV.v[1] = lrVelocity.mV.v[1] - (lrHit.mV.v[1] * 2.0f) * lfInto;
+                lrVelocity.mV.v[2] = lrVelocity.mV.v[2] - (lrHit.mV.v[2] * 2.0f) * lfInto;
 
                 // Lose energy: the array's per-axis bounciness, then a random 60%..100% (fmadds).
                 const f32 lfFactor = BrnParticleMath::ScalarMultiplyAdd(lpRandom->RandomFloat(), KF_DEBRIS_BOUNCE_FACTOR_RANGE,
                                               KF_DEBRIS_BOUNCE_FACTOR_MIN);
-                lrVelocity.x = (lrVelocity.x * lrBounciness.x) * lfFactor;
-                lrVelocity.y = (lrVelocity.y * lrBounciness.y) * lfFactor;
-                lrVelocity.z = (lrVelocity.z * lrBounciness.z) * lfFactor;
+                lrVelocity.mV.v[0] = (lrVelocity.mV.v[0] * lrBounciness.mV.v[0]) * lfFactor;
+                lrVelocity.mV.v[1] = (lrVelocity.mV.v[1] * lrBounciness.mV.v[1]) * lfFactor;
+                lrVelocity.mV.v[2] = (lrVelocity.mV.v[2] * lrBounciness.mV.v[2]) * lfFactor;
 
                 // A random sideways kick scaled by the rebound speed: (drawX - 0.5, 0, drawZ - 0.5) * vy
                 // + v (ONE vmaddfp). The console draws z FIRST (var_68), then x (var_60).
                 const f32 lfDrawZ = lpRandom->RandomFloat();
                 const f32 lfDrawX = lpRandom->RandomFloat();
-                const f32 lfUp    = lrVelocity.y;
-                lrVelocity.x = BrnParticleMath::VpuMultiplyAdd(lfDrawX - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.x);
-                lrVelocity.y = BrnParticleMath::VpuMultiplyAdd(KF_DEBRIS_KICK_CENTRE - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.y);
-                lrVelocity.z = BrnParticleMath::VpuMultiplyAdd(lfDrawZ - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.z);
+                const f32 lfUp    = lrVelocity.mV.v[1];
+                lrVelocity.mV.v[0] = BrnParticleMath::VpuMultiplyAdd(lfDrawX - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.mV.v[0]);
+                lrVelocity.mV.v[1] = BrnParticleMath::VpuMultiplyAdd(KF_DEBRIS_KICK_CENTRE - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.mV.v[1]);
+                lrVelocity.mV.v[2] = BrnParticleMath::VpuMultiplyAdd(lfDrawZ - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.mV.v[2]);
 
                 lDebrisToUpdate.muBounceCount = static_cast<u8>(lDebrisToUpdate.muBounceCount - 1u);
                 ++gauDebrisSimBounces;   // [DIAG] DELETE-WHEN-STABLE
