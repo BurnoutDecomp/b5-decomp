@@ -90,6 +90,9 @@ namespace BrnReplays
         // The queue base initializes its marker before later members.
         // ARTIST827E0448..046C constructs four default-named jobs in slot
         // order, then the final job. Job's default name is the original null.
+        // Native storage intervals retain their existing bytes. On the game
+        // startup path DebugMemoryInit zeroes Game before this constructor;
+        // this constructor itself adds no initialization for those intervals.
     }
 
     // ARTIST 0x82656E20. Initialize the named ReplayModule members and invoke

@@ -238,7 +238,12 @@ namespace BrnReplays
         // DecFIGS member names; ARTIST access widths and consumers pin the frame counter.
         char*                mpcHeaderBuffer;          // +0x8F8, file buffer (0x20000)
         char*                mpcPrimaryStreamBuffer;   // +0x8FC, linear allocation (0x80000)
+        // Native lifetime storage between the pointer at 8FC and the pointer
+        // at 908 (Prepare 82652820/2C). No original private type is assigned.
+        u8                   mNativeStorage0900[8];
         char*                mpcHeaderStreamBuffer;    // +0x908, linear allocation (0x4000)
+        // The next live pointer is 910 (Prepare 82652854); preserve 90C..90F.
+        u8                   mNativeStorage090C[4];
         MemBuffer*           mpSecondaryStreamBuffer;  // +0x910, memory-resource result
         s32                  miHeaderStreamPos;        // +0x914
         s64                  miCurrentFrame;           // +0x918, ARTIST loads/stores as a qword
@@ -248,10 +253,10 @@ namespace BrnReplays
         f32                  mfEndTime;                // +0x92C
 
         CgsFileSystem::FileHandle mHeaderFile;
-        // Native contained objects follow. Some dormant native members still
-        // require recovery: the documented offsets are ARTIST evidence, and
-        // are not an assertion that this entire current declaration matches.
-        // No storage is added merely to fill the remaining native spans.
+        // The byte-storage intervals in this declaration preserve native bytes
+        // whose original private types are unidentified. Native main zeroes
+        // the whole containing Game before its constructor; neither the native
+        // Replay constructor nor Construct initializes these intervals.
 
         // @0x980 (2432): the embedded GPU disk write stream (Update_Dispatch dispatches it).
         GPUDiskWriteStream   mGpuWriteStream;          // @0x980
@@ -265,6 +270,10 @@ namespace BrnReplays
         DiskReadStream       mPrimaryDiskReadStream;   // @0x3F80
         // @0x4518: the game-data receiver queue  the file opens reply into.
         GameDataReceiverQueue mGameDataReceiverQueue;  // @0x4518
+
+        // The native receiver has a 24-byte head and 1024-byte buffer, ending 4930.
+        // The independently constructed first Job begins 4940 (827E0440).
+        u8                   mNativeStorage4930[0x10];
 
         // Four original Job subobjects: constructor 827E0440..0460 walks slots 0..3.
         // Their submission roles are not assigned a new policy by this source recovery.
@@ -280,11 +289,21 @@ namespace BrnReplays
         // SimpleDataStreamProducer; its End preserves that call/store order.
         CgsMemory::SimpleDataStreamProducer mSerialiseStream; // native +0x5A00
 
+        // Complete native producer storage ends 5B80; the first ready byte is
+        // 5C30 (8264B588). Preserve this bounded lifetime interval without
+        // enlarging the producer or assigning an unobserved private type.
+        u8                   mNativeStorage5B80[0xB0];
+
         // DecFIGS names the three readiness flags in this order; ARTIST 8264B57C..B598
         // reads them at+5C32/+5C30/+5C31 and writes the playback-ready result at+5C31.
         bool                 mbReadyToPlay;             // ARTIST +0x5C30
         bool                 mbPlaybackDataReady;       // ARTIST +0x5C31
         bool                 mbStreamDataReady;         // ARTIST +0x5C32
+
+        // The next live bytes are GUI payload 5C38/39 (8265FDF8/FE00).
+        // DecFIGS names dormant waiting/frame members here, but ARTIST does
+        // not establish their types; retain the five native bytes themselves.
+        u8                   mNativeStorage5C33[5];
 
         // ARTIST GUI event 526 copies these payload bytes without masking. Their
         // widths/owners are proven; no new semantic role is assigned here.
@@ -322,5 +341,68 @@ namespace BrnReplays
         // This member records only the proven width and ownership, not an inferred role.
         u32                  mUnidentified6260;
         DebugComponent       mDebugComponent;            // ARTIST +0x6264
+
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, meState) == 0x230), "ARTIST replay state");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, meStreamStage) == 0x234), "ARTIST replay stream stage");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, meMode) == 0x238), "ARTIST replay mode");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mGameEventCache) == 0x23C), "ARTIST replay event cache");
+            CGS_STATIC_ASSERT((sizeof(GameEventQueue) == 0x610), "ARTIST replay event cache extent");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mapSerialisers) == 0x84C), "ARTIST replay serialiser slots");
+            CGS_STATIC_ASSERT((sizeof(static_cast<ReplayModule*>(0)->mapSerialisers) / sizeof(static_cast<ReplayModule*>(0)->mapSerialisers[0]) == 11), "ARTIST replay serialiser count");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mpLinearMalloc) == 0x878), "ARTIST replay allocator");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mpcHeaderBuffer) == 0x8F8), "ARTIST replay header buffer");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mpcPrimaryStreamBuffer) == 0x8FC), "ARTIST replay primary buffer");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mpcHeaderStreamBuffer) == 0x908), "ARTIST replay header stream");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mpSecondaryStreamBuffer) == 0x910), "ARTIST replay secondary buffer");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, miHeaderStreamPos) == 0x914), "ARTIST replay header position");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, miCurrentFrame) == 0x918), "ARTIST replay frame");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mfCurrentTime) == 0x920), "ARTIST replay current time");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, miKeyFrameInterval) == 0x924), "ARTIST replay key interval");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mfStartTime) == 0x928), "ARTIST replay start time");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mfEndTime) == 0x92C), "ARTIST replay end time");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mHeaderFile) == 0x930), "ARTIST replay header handle");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mWriteStream) == 0x880), "ARTIST replay write stream");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mReadStream) == 0x8E0), "ARTIST replay read stream");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mGpuWriteStream) == 0x980), "ARTIST replay GPU stream");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mPrimaryDiskReadStream) == 0x3F80), "ARTIST replay disk read stream");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mGameDataReceiverQueue) == 0x4518), "ARTIST replay receiver");
+            CGS_STATIC_ASSERT((sizeof(GameDataReceiverQueue) == 0x418), "ARTIST replay receiver extent");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, maJobs4940) == 0x4940), "ARTIST replay jobs");
+            CGS_STATIC_ASSERT((sizeof(EA::Jobs::Job) == 0x350), "ARTIST replay job stride");
+            CGS_STATIC_ASSERT((sizeof(static_cast<ReplayModule*>(0)->maJobs4940) / sizeof(static_cast<ReplayModule*>(0)->maJobs4940[0]) == 4), "ARTIST replay job count");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mSerialiseJob) == 0x5680), "ARTIST replay serialise job");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbSerialiseActive) == 0x59D0), "ARTIST replay serialise active");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mSerialiseStream) == 0x5A00), "ARTIST replay producer");
+            CGS_STATIC_ASSERT((sizeof(CgsMemory::SimpleDataStreamProducer) == 0x180), "ARTIST replay producer extent");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbReadyToPlay) == 0x5C30), "ARTIST replay ready");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbPlaybackDataReady) == 0x5C31), "ARTIST replay playback ready");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbStreamDataReady) == 0x5C32), "ARTIST replay stream ready");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mUnidentified5C38) == 0x5C38), "ARTIST replay GUI byte0");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mUnidentified5C39) == 0x5C39), "ARTIST replay GUI byte1");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mUnidentified5C3A) == 0x5C3A), "ARTIST replay byte3A");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mUnidentified5C3B) == 0x5C3B), "ARTIST replay byte3B");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mUnidentified5C3C) == 0x5C3C), "ARTIST replay byte3C");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mUnidentified5C3D) == 0x5C3D), "ARTIST replay byte3D");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mUnidentified5C3E) == 0x5C3E), "ARTIST replay byte3E");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbStartPlaying) == 0x5C3F), "ARTIST replay start playing");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbStopPlaying) == 0x5C40), "ARTIST replay stop playing");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbStartRecording) == 0x5C41), "ARTIST replay start recording");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbStopRecording) == 0x5C42), "ARTIST replay stop recording");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbMarkActionReplay) == 0x5C43), "ARTIST replay mark action");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbStartActionReplay) == 0x5C44), "ARTIST replay start action");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbAutoStart) == 0x5C45), "ARTIST replay auto start");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, maReels) == 0x5C47), "ARTIST replay reels");
+            CGS_STATIC_ASSERT((sizeof(Reel) == 0x101), "ARTIST replay reel stride");
+            CGS_STATIC_ASSERT((sizeof(static_cast<ReplayModule*>(0)->maReels) / sizeof(static_cast<ReplayModule*>(0)->maReels[0]) == 6), "ARTIST replay reel count");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, miCurrentRecordReel) == 0x6250), "ARTIST replay record reel");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, miCurrentPlayReel) == 0x6254), "ARTIST replay play reel");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mbStopPlayingRequestReceived) == 0x6258), "ARTIST replay stop request");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mfDebugHudAlpha) == 0x625C), "ARTIST replay HUD alpha");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mUnidentified6260) == 0x6260), "ARTIST replay event word");
+            CGS_STATIC_ASSERT((offsetof(ReplayModule, mDebugComponent) == 0x6264), "ARTIST replay debug component");
+            CGS_STATIC_ASSERT((sizeof(ReplayModule) == 0x6300), "ARTIST replay occupied extent");
+        }
     };
 }
