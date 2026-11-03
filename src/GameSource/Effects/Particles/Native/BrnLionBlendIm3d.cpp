@@ -254,28 +254,6 @@ void ImRenderer<V>::BeginRendering(s8 li8Program)
     // vertex-program state dirty when it changed.
     const renderengine::VertexDescriptorData* lpVertexDescriptor =
         reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor);
-    // ---- [lionprog] witness. NOT console behaviour: ours, one-shot, log-only. ----------------
-    // MEASURED 2026-09-05: the Lion dispatch's first real draw went out as
-    // `[lionfx] DrawVertices: hr=0 xenosPrim=13 verts=4 stride=36 prims=2 vs=0 ps=1 decl=1` --
-    // S_OK, a pixel shader, a declaration, and NO VERTEX SHADER. shadow::Device::
-    // FlushVertexProgramState binds one only when BOTH its shadows are non-null, and this is the
-    // function that sets them, so this line says which of the three inputs was missing.
-    // DELETE-WHEN-STABLE.
-    {
-        static bool sbDiagOnce = false;
-        if (!sbDiagOnce)
-        {
-            sbDiagOnce = true;
-            char lacMsg[224];
-            _snprintf(lacMsg, sizeof(lacMsg),
-                "[lionprog] BeginRendering(slot=%d) vp=%p pp=%p vertexDescriptor=%p"
-                " (a NULL descriptor makes FlushVertexProgramState bind nothing)\n",
-                (int)li8Program, static_cast<const void*>(lpVertexProgram),
-                static_cast<const void*>(lpPixelProgram),
-                static_cast<const void*>(lpVertexDescriptor));
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 
     shadow::Device::SetVertexDescriptor(lpVertexDescriptor);
 }
@@ -625,26 +603,6 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
             &mDepthFadeStateHandle_ZFade);                                    // +0xDC
     }
 
-    // [DIAG] DID THE EIGHT CONSTANTS RESOLVE? mu8RegisterCount == 0 is GetVariableHandleByName's
-    // DISCARD row -- so an unresolved worldViewProj means BeginRendering writes the matrix into a
-    // bin and every particle transforms by whatever c0..c3 happen to hold. That is invisible both
-    // in the log and in the picture, which is why it is worth one line. Same shape, and the same
-    // reason, as the skid renderer's (BrnIm3dSkidsRenderer.cpp). DELETE-WHEN-STABLE.
-    {
-        char lacMsg[320];
-        _snprintf(lacMsg, sizeof(lacMsg),
-            "[lionblend] Im3dBlend::Construct: p0{wvp=%u cs=%u} "
-            "p1{wvp=%u cs=%u off=%u scl=%u dconv=%u dfade=%u} (register counts; 0 == UNRESOLVED)\n",
-            mViewProjectionMatrixStateHandle_Normal.mu8RegisterCount,
-            mColourScaleStateHandle_Normal.mu8RegisterCount,
-            mViewProjectionMatrixStateHandle_ZFade.mu8RegisterCount,
-            mColourScaleStateHandle_ZFade.mu8RegisterCount,
-            mOffsetStateHandle_ZFade.mu8RegisterCount,
-            mScaleStateHandle_ZFade.mu8RegisterCount,
-            mDepthConversionStateHandle_ZFade.mu8RegisterCount,
-            mDepthFadeStateHandle_ZFade.mu8RegisterCount);
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
 }
 
 void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
