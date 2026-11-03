@@ -364,17 +364,17 @@ void CreditsTextRenderer::Update()
     const f32 lfAngle = KF_TEXTBOX_ANGLE * 0.01745329238474369f;
     const f32 lfSin = std::sin(lfAngle);
     const f32 lfCos = std::cos(lfAngle);
-    const Vector4 lRightUp = {lfCos / 640.0f, lfSin / 360.0f,
-                                 lfSin / 640.0f, -lfCos / 360.0f};
+    const Vector4 lRightUp(lfCos / 640.0f, lfSin / 360.0f,
+                           lfSin / 640.0f, -lfCos / 360.0f);
     mScreenTransform.mRightUp = lRightUp;
-    const Vector4 lOrigin = {
+    const Vector4 lOrigin(
         (KF_TEXTBOX_CENTRE_X - 640.0f - 0.5f * (KF_TEXTBOX_WIDTH * lfCos + KF_TEXTBOX_HEIGHT * lfSin)) / 640.0f,
         -(KF_TEXTBOX_CENTRE_Y - 360.0f + 0.5f * (KF_TEXTBOX_WIDTH * lfSin - KF_TEXTBOX_HEIGHT * lfCos)) / 360.0f,
-        0.0f, 0.0f};
+        0.0f, 0.0f);
     mScreenTransform.mOriginXYZ = lOrigin;
-    const Vector4 lShift = {0.0f, 0.0f, 0.0f, 0.0f};
+    const Vector4 lShift(0.0f, 0.0f, 0.0f, 0.0f);
     mScreenTransform.mColourShift = lShift;
-    const Vector4 lScale = {1.0f, 1.0f, 1.0f, 1.0f};
+    const Vector4 lScale(1.0f, 1.0f, 1.0f, 1.0f);
     mScreenTransform.mColourScale = lScale;
     mScreenTransform.TransformByAspectRatio();
     if (mbRenderEnabled)
