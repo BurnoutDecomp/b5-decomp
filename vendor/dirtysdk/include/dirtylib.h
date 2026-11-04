@@ -13,6 +13,7 @@ extern "C" {
 #endif
 
 s32 NetPrintfCode(const char* pFormat, ...);
+s32 NetPrintfVerboseCode(s32 iVerbosity, s32 iThreshold, const char* pFormat, ...);
 
 #ifdef __cplusplus
 }

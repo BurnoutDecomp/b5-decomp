@@ -5,6 +5,7 @@
 // writer of the hook, is not part of the build, so the hook is always unset.
 
 #include "dirtylib.h"
+#include "platform.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -38,4 +39,16 @@ extern "C" s32 NetPrintfCode(const char* pFormat, ...)
         OutputDebugStringA(pText);
     }
     return 0;
+}
+
+// ARTIST 0x82B2FFA0 formats before testing the signed verbosity threshold.
+extern "C" s32 NetPrintfVerboseCode(s32 iVerbosity, s32 iThreshold, const char* pFormat, ...)
+{
+    char strText[1024];
+    va_list Args;
+    va_start(Args, pFormat);
+    const s32 iLength = ds_vsnzprintf(strText, sizeof(strText), pFormat, Args);
+    va_end(Args);
+
+    return iVerbosity > iThreshold ? NetPrintfCode("%s", strText) : iLength;
 }

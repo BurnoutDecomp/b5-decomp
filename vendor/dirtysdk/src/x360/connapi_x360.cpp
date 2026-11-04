@@ -1,6 +1,7 @@
 // DirtySDK ConnApi native X360 state and entry points; ARTIST 0x82B15430,
 // 0x82B155D8 and 0x82B162B0; declaration names cross-checked with DecFIGS.
 #include "connapi.h"
+#include "prototunnel.h"
 #include "dirtymem.h"
 #include "dirtylib.h"
 #include "platform.h"
@@ -9,9 +10,7 @@
 #include <cstring>
 
 struct ProtoMangleRefT;
-struct ProtoTunnelRefT;
 extern "C" s32 ProtoMangleControl(ProtoMangleRefT*, s32, s32, s32, const void*);
-extern "C" ProtoTunnelRefT* ProtoTunnelCreate(s32, s32);
 extern "C" VoipRefT* VoipStartup(s32);
 extern "C" void VoipSetLocalUser(VoipRefT*, const char*);
 extern "C" char* ds_strnzcpy(char*, const char*, s32);
@@ -158,7 +157,6 @@ extern "C" s32 ConnApiStatus(ConnApiRefT* ref, s32 select, void* buffer, s32 siz
 #include "netconn.h"
 extern "C" ProtoMangleRefT* ProtoMangleCreate(const char*, s32, const char*, const char*);
 extern "C" void ProtoMangleDestroy(ProtoMangleRefT*);
-extern "C" void ProtoTunnelDestroy(ProtoTunnelRefT*);
 
 namespace {
 // ARTIST 0x82B14348, with strings and pointer-table ordering recovered from the image.
@@ -243,7 +241,6 @@ extern "C" void ConnApiDestroy(ConnApiRefT* ref)
 struct NetGameUtilRefT;
 extern "C" void NetGameLinkDestroy(NetGameLinkRefT*);
 extern "C" void NetGameUtilDestroy(NetGameUtilRefT*);
-extern "C" void ProtoTunnelFree(ProtoTunnelRefT*, u32, const char*);
 
 namespace {
 // ARTIST 0x82B14210.
@@ -319,7 +316,6 @@ extern "C" s32 ConnApiDisconnect(ConnApiRefT* ref)
 struct SocketT;
 extern "C" s32 SocketControl(SocketT*, s32, s32, void*, void*);
 extern "C" const char* SocketInAddrGetText(s32);
-extern "C" s32 ProtoTunnelControl(ProtoTunnelRefT*, s32, s32, s32, const void*);
 
 // ARTIST 0x82B158B8.
 extern "C" s32 ConnApiControl(ConnApiRefT* ref, s32 control, s32 value,
@@ -429,27 +425,13 @@ extern "C" s32 ConnApiControl(ConnApiRefT* ref, s32 control, s32 value,
 }
 
 // ARTIST lifecycle helpers shared by ConnApiHost/Connect/AddClient/RemoveClient/Start/Update.
-struct ConnApiTunnelClientInfoT
-{
-    u32 uClientId;                 // +0x00
-    u32 uAddr;                     // +0x04
-    u32 uReserved08;               // +0x08
-    u16 uGamePort;                 // +0x0c
-    u16 uVoipPort;                 // +0x0e
-    u8  aReserved10[12];           // +0x10
-    u8  bSecure;                   // +0x1c
-    u8  aReserved1d[3];             // +0x1d
-    u32 uReserved20;               // +0x20
-};
-CGS_STATIC_ASSERT((sizeof(ConnApiTunnelClientInfoT) == 0x24), "ConnApi tunnel request size");
-CGS_STATIC_ASSERT((offsetof(ConnApiTunnelClientInfoT, uGamePort) == 0x0c), "ConnApi tunnel game port");
-CGS_STATIC_ASSERT((offsetof(ConnApiTunnelClientInfoT, bSecure) == 0x1c), "ConnApi tunnel secure flag");
+CGS_STATIC_ASSERT((sizeof(ProtoTunnelInfoT) == 0x24), "ConnApi tunnel request size");
+CGS_STATIC_ASSERT((offsetof(ProtoTunnelInfoT, aRemotePortList) == 0x0c), "ConnApi tunnel ports");
+CGS_STATIC_ASSERT((offsetof(ProtoTunnelInfoT, aPortFlags) == 0x1c), "ConnApi tunnel flags");
 
 extern "C" void ProtoMangleConnect(ProtoMangleRefT*, s32, const char*);
 extern "C" s32 ProtoMangleComplete(ProtoMangleRefT*, s32*, s32*);
 extern "C" void ProtoMangleUpdate(ProtoMangleRefT*);
-extern "C" s32 ProtoTunnelAlloc(ProtoTunnelRefT*, ConnApiTunnelClientInfoT*, const char*);
-extern "C" void ProtoTunnelUpdate(ProtoTunnelRefT*);
 extern "C" s32 VoipConnect4(VoipRefT*, s32, const char*, u32, u32, u32, u32, u32);
 extern "C" s32 VoipRemote(VoipRefT*, s32);
 extern "C" void VoipRemove(VoipRefT*, s32);
@@ -684,13 +666,13 @@ s32 ConnApiCheckGameServerFallback(ConnApiRefT* ref, ConnApiClientT* client,
 
 void ConnApiAllocTunnel(ConnApiRefT* ref, ConnApiClientT* client, s32 address)
 {
-    ConnApiTunnelClientInfoT info;
+    ProtoTunnelInfoT info;
     std::memset(&info, 0, sizeof(info));
-    info.uClientId = client->UserInfo.uClientId;
-    info.uAddr = static_cast<u32>(address);
-    info.uGamePort = ref->uGamePort;
-    info.uVoipPort = ref->uVoipPort;
-    info.bSecure = 1;
+    info.uRemoteClientId = client->UserInfo.uClientId;
+    info.uRemoteAddr = static_cast<u32>(address);
+    info.aRemotePortList[0] = ref->uGamePort;
+    info.aRemotePortList[1] = ref->uVoipPort;
+    info.aPortFlags[0] = 1;
     client->iTunnelId = ProtoTunnelAlloc(ref->pProtoTunnel, &info,
                                          ConnApiTunnelKey);
 }
