@@ -54,6 +54,12 @@ namespace CgsInput
         // class to this one -- the stub's Construct was the base's alone.
         virtual void Construct();
 
+        // X360 0x828EEFD8. Resumable boot prepare: run the manager (base ModuleSingleBuffered::Prepare,
+        // the no-arg base virtual -- a DISTINCT vtable slot from this Prepare(rw::IResourceAllocator*))
+        // then the controller pads, tracking mePrepareStage so a partial prepare resumes. Clears the two
+        // published result queues on the first stage. Returns true only when fully DONE.
+        virtual bool Prepare(rw::IResourceAllocator* lpAllocator);
+
         // X360 0x82903328 (vtable slot 17 -- the `+0x44` BrnGameModule::DoUpdate_InputPreWorld calls;
         // DWARF CgsInputModule.cpp:212, export hole -> ppcdis). The output buffer's write lock is taken
         // around the whole body and the pre-world buffer's read lock around ProcessRumbleRequests; with
@@ -82,12 +88,6 @@ namespace CgsInput
             E_INPUTRELEASESTAGE_MANAGER   = 2,
             E_INPUTRELEASESTAGE_DONE      = 3,
         };
-
-        // X360 0x828EEFD8. Resumable boot prepare: run the manager (base ModuleSingleBuffered::Prepare,
-        // the no-arg base virtual -- a DISTINCT vtable slot from this Prepare(rw::IResourceAllocator*))
-        // then the controller pads, tracking mePrepareStage so a partial prepare resumes. Clears the two
-        // published result queues on the first stage. Returns true only when fully DONE.
-        virtual bool Prepare(rw::IResourceAllocator* lpAllocator);
 
         // X360 0x828EF100. Resumable boot release: tear down the pads then the manager (base
         // ModuleSingleBuffered::Release), tracking meReleaseStage. Resets mePrepareStage + the two result
