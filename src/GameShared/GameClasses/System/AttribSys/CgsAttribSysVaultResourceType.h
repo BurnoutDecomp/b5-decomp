@@ -6,14 +6,15 @@
 namespace CgsResource
 {
 // Resource-type handler for a serialised attribute-system vault. Derives from the real
-// CgsResource::Type. FixUp/GetImportCount are sibling virtuals owned by other recon
-// passes; GetSerialisedResourceDescriptor and GetTypeID are owned here. Base/signatures
+// CgsResource::Type. ARTIST vtable slot +0x10 shares the schema pointer FixUp.
+// Base/signatures
 // recovered from the DecFIGS DWARF (CgsAttribSysVaultResourceType.h:50).
 class AttribSysVaultResourceType : public Type
 {
 public:
     uint32_t           GetTypeID() const ;
     ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
+    void               FixUp(void* lpResource, const rw::Resource& lrResource) const ;
 };
 }
 
