@@ -97,19 +97,56 @@ namespace CgsDev
         return false;
     }
 
-    // ARTIST 0x8281A318. A segment is visible when either endpoint is on-screen or
-    // its axis-aligned bounds overlap the virtual-screen rectangle.
+    // ARTIST 82818988: calculate both segment parameters using the original
+    // vector reciprocal estimate and its two refinement steps.
+    bool Debug2DImmediateRender::Do2DLinesIntersect(Vector2 lv2StartA, Vector2 lv2EndA,
+                                                    Vector2 lv2StartB, Vector2 lv2EndB) const
+    {
+        const __vector4 ax = __vspltw(lv2StartA.mV, 0), ay = __vspltw(lv2StartA.mV, 1);
+        const __vector4 bx = __vspltw(lv2EndA.mV, 0), by = __vspltw(lv2EndA.mV, 1);
+        const __vector4 cx = __vspltw(lv2StartB.mV, 0), cy = __vspltw(lv2StartB.mV, 1);
+        const __vector4 dx = __vspltw(lv2EndB.mV, 0), dy = __vspltw(lv2EndB.mV, 1);
+        const __vector4 daX = __vsubfp(bx, ax), daY = __vsubfp(by, ay);
+        const __vector4 dbX = __vsubfp(dx, cx), dbY = __vsubfp(dy, cy);
+        const __vector4 determinant = __vsubfp(__vmulfp(daX, dbY), __vmulfp(daY, dbX));
+        const __vector4 zero = __vspltisw(0);
+        unsigned int condition = 0;
+        __vcmpeqfpR(determinant, zero, &condition);
+        if ((_rotl(condition, 25) & 1u) != 0) return false;
+
+        const __vector4 acX = __vsubfp(ax, cx), acY = __vsubfp(ay, cy);
+        const __vector4 numeratorA = __vsubfp(__vmulfp(acY, dbX), __vmulfp(acX, dbY));
+        const __vector4 numeratorB = __vsubfp(__vmulfp(acY, daX), __vmulfp(acX, daY));
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        __vector4 reciprocal = __vrefp(determinant);
+        reciprocal = __vmaddfp(reciprocal, __vnmsubfp(reciprocal, determinant, one), reciprocal);
+        reciprocal = __vmaddfp(reciprocal, __vnmsubfp(reciprocal, determinant, one), reciprocal);
+        const __vector4 parameterA = __vmulfp(reciprocal, numeratorA);
+        const __vector4 parameterB = __vmulfp(reciprocal, numeratorB);
+        condition = 0; __vcmpgefpR(parameterA, zero, &condition);
+        if ((_rotl(condition, 25) & 1u) == 0) return false;
+        condition = 0; __vcmpgefpR(one, parameterA, &condition);
+        if ((_rotl(condition, 25) & 1u) == 0) return false;
+        condition = 0; __vcmpgefpR(parameterB, zero, &condition);
+        if ((_rotl(condition, 25) & 1u) == 0) return false;
+        condition = 0; __vcmpgefpR(one, parameterB, &condition);
+        return (_rotl(condition, 25) & 1u) != 0;
+    }
+
+    // ARTIST 8281A318: test endpoints, then the four viewport edges in order.
     bool Debug2DImmediateRender::Is2DLineOnScreen(Vector2 lv2Start, Vector2 lv2End) const
     {
         if (Is2DPointOnScreen(lv2Start) || Is2DPointOnScreen(lv2End))
             return true;
 
-        const f32 lfMinX = (lv2Start.mV.x < lv2End.mV.x) ? lv2Start.mV.x : lv2End.mV.x;
-        const f32 lfMinY = (lv2Start.mV.y < lv2End.mV.y) ? lv2Start.mV.y : lv2End.mV.y;
-        const f32 lfMaxX = (lv2Start.mV.x > lv2End.mV.x) ? lv2Start.mV.x : lv2End.mV.x;
-        const f32 lfMaxY = (lv2Start.mV.y > lv2End.mV.y) ? lv2Start.mV.y : lv2End.mV.y;
-        return lfMaxX >= 0.0f && lfMaxY >= 0.0f &&
-               lfMinX <= mfVirtualScreenWidth && lfMinY <= mfVirtualScreenHeight;
+        const Vector2 topLeft = MakeDebugVector2(0.0f, 0.0f, 0.0f, 0.0f);
+        const Vector2 bottomLeft = MakeDebugVector2(0.0f, mfVirtualScreenHeight, 0.0f, 0.0f);
+        const Vector2 bottomRight = MakeDebugVector2(mfVirtualScreenWidth, mfVirtualScreenHeight, 0.0f, 0.0f);
+        const Vector2 topRight = MakeDebugVector2(mfVirtualScreenWidth, 0.0f, 0.0f, 0.0f);
+        return Do2DLinesIntersect(lv2Start, lv2End, topLeft, bottomLeft) ||
+               Do2DLinesIntersect(lv2Start, lv2End, bottomLeft, bottomRight) ||
+               Do2DLinesIntersect(lv2Start, lv2End, bottomRight, topRight) ||
+               Do2DLinesIntersect(lv2Start, lv2End, topRight, topLeft);
     }
 
     bool Debug2DImmediateRender::Is2DBoxOnScreen(Vector2 lv2Min, Vector2 lv2Max) const
@@ -118,23 +155,34 @@ namespace CgsDev
                lv2Min.mV.x <= mfVirtualScreenWidth && lv2Min.mV.y <= mfVirtualScreenHeight;
     }
 
-    // ARTIST 0x828188F8. Build the polygon bounds and intersect them with the
-    // virtual-screen rectangle.
+    // ARTIST 0x828188F8 reads the first vertex unconditionally. The draw callers
+    // require at least two vertices. The second bound uses the updated minimum
+    // and the current vertex, then the original adds the two vectors.
     bool Debug2DImmediateRender::Is2DPolygonOnScreen(const Vector2* lpaPoints, u32 luCount) const
     {
-        if (!lpaPoints || luCount == 0)
-            return false;
-
-        Vector2 lMin = lpaPoints[0];
-        Vector2 lMax = lpaPoints[0];
-        for (u32 luIndex = 1; luIndex < luCount; ++luIndex)
+        Vector2 lv2Minimum = lpaPoints[0];
+        Vector2 lv2Upper = lv2Minimum;
+        if (luCount > 1)
         {
-            if (lpaPoints[luIndex].mV.x < lMin.mV.x) lMin.mV.x = lpaPoints[luIndex].mV.x;
-            if (lpaPoints[luIndex].mV.y < lMin.mV.y) lMin.mV.y = lpaPoints[luIndex].mV.y;
-            if (lpaPoints[luIndex].mV.x > lMax.mV.x) lMax.mV.x = lpaPoints[luIndex].mV.x;
-            if (lpaPoints[luIndex].mV.y > lMax.mV.y) lMax.mV.y = lpaPoints[luIndex].mV.y;
+            const Vector2* lpPoint = lpaPoints + 1;
+            u32 luRemaining = luCount - 1;
+            do
+            {
+                const __vector4 lvPoint = lpPoint->mV;
+                lv2Minimum.mV = __vminfp(lv2Minimum.mV, lvPoint);
+                lv2Upper.mV = __vmaxfp(lv2Minimum.mV, lvPoint);
+                ++lpPoint;
+            }
+            while (--luRemaining != 0);
         }
-        return Is2DBoxOnScreen(lMin, lMax);
+
+        Vector2 lv2ScreenMin;
+        lv2ScreenMin.SetZero();
+        Vector2 lv2ScreenMax = lv2ScreenMin;
+        lv2ScreenMax.mV.x = mfVirtualScreenWidth;
+        lv2ScreenMax.mV.y = mfVirtualScreenHeight;
+        lv2Upper.mV = __vaddfp(lv2Minimum.mV, lv2Upper.mV);
+        return Do2DBoxesIntersect(lv2ScreenMin, lv2ScreenMax, lv2Minimum, lv2Upper);
     }
 
     // Faithful port of X360 0x823B13A8 -- the debug-font handoff. The game's GamePrepare loads the
