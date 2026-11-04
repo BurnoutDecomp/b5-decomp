@@ -2,6 +2,7 @@
 #define SDKS_EATECH_SND_SNDHAL_H
 
 #include "types.hpp"
+#include <cstddef>
 
 // ============================================================================
 // SDKs/EATech/include/snd/sndhal.h  (Snd9::Hal channel volume/pan home)
@@ -25,11 +26,7 @@
 // are an EATech vendor boundary, so those identifiers are preserved verbatim per
 // the naming convention.
 //
-// LAYOUT: the +0xNN annotations are the X360 (32-bit-pointer) offsets proven by the
-// asm and are documentary only; pointer members are declared with x64 widths so only
-// member ORDER is load-bearing (no offset asserts on pointer-bearing structs, same
-// rule sndaems.h uses). SpeakerVol is all-f32 so it is byte-exact on both platforms
-// and does carry a size assert.
+// Layout follows the Xbox 360 channel and mixer array strides.
 // ============================================================================
 
 namespace Snd9
@@ -49,9 +46,11 @@ struct Channel
     f32  mfVolume;            // +0x48  linear channel volume
     u8   mPad4C[0x63 - 0x4C]; // +0x4C
     s8   mcLevel;             // +0x63  signed sample level (0..127)
-    f32* mpSourceGains;       // +0x64  per-output source gains (x64-widened pointer)
-    // remaining bytes to +0x84 are unmodelled HAL state
+    f32* mpSourceGains;       // +0x64  per-output source gains
+    u8   mPad68[0x84 - 0x68];
 };
+CGS_STATIC_ASSERT((sizeof(Channel) == 0x84), "ARTIST HAL channel stride");
+CGS_STATIC_ASSERT((offsetof(Channel, mpSourceGains) == 0x64), "ARTIST HAL channel gains");
 
 // A channel's per-speaker pan gains (0x18 = 24 bytes, all f32 -> byte-exact). The
 // reset path zeroes mafGain[0 .. numSpeakers-1] and forces mafGain[5] (+0x14) to
@@ -70,10 +69,14 @@ struct MixChannel
     u8   mPad00;              // +0x00
     u8   mucDirty;            // +0x01  set to 1 whenever the gains are recomputed
     u8   mPad02[0x1C - 0x02]; // +0x02
-    f32  mafSpeakerGain[7];   // +0x1C  computed per-speaker gains (+0x1C..+0x37)
-    f32* mpOutputBuffer;      // +0x38  destination gain buffer (x64-widened pointer)
-    // remaining bytes to +0x5C are unmodelled HAL state
+    f32  mafSpeakerGain[6];   // +0x1C  computed per-speaker gains
+    u8   mPad34[4];           // +0x34  the first per-output buffer pointer in MIX_create
+    f32* mpOutputBuffer;      // +0x38  destination gain buffer
+    u8   mPad3C[0x5C - 0x3C];
 };
+CGS_STATIC_ASSERT((sizeof(MixChannel) == 0x5C), "ARTIST mixer channel stride");
+CGS_STATIC_ASSERT((offsetof(MixChannel, mafSpeakerGain) == 0x1C), "ARTIST mixer speaker gains");
+CGS_STATIC_ASSERT((offsetof(MixChannel, mpOutputBuffer) == 0x38), "ARTIST mixer output gains");
 
 // The shared per-channel HAL tables + speaker/output counts. Owned here; the Snd9
 // HAL setup path (its own not-yet-reconstructed TU) allocates/populates them, the
