@@ -379,18 +379,19 @@ namespace CgsModule
         lpInputBuffer->UnlockForWrite();
     }
 
-    // Single-buffer overloads (the X360 also emits the pair against one module
-    // buffer, e.g. WorldModule::Prepare's prop-module Lock/UnlockBuffersForIO).
+    // ARTIST 823B6F30 / 823B6F88
     template <typename TBuffer>
-    inline void LockBuffersForIO( TBuffer* lpBuffer )
+    inline void LockBuffersForIO(TBuffer* lpInputBuffer)
     {
-        lpBuffer->LockForWrite();
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 238);
+        lpInputBuffer->LockForWrite();
     }
 
     template <typename TBuffer>
-    inline void UnlockBuffersForIO( TBuffer* lpBuffer )
+    inline void UnlockBuffersForIO(TBuffer* lpInputBuffer)
     {
-        lpBuffer->UnlockForWrite();
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 248);
+        lpInputBuffer->UnlockForWrite();
     }
 }
 
