@@ -41,6 +41,7 @@
 // ============================================================================
 
 #include "SDKs/EATech/include/snd/CMpegBase.h"
+#include "SDKs/EATech/include/snd/sndmix.h"
 
 #include <cstring> // std::memset (the X360 XMemSet)
 
@@ -49,12 +50,6 @@ namespace Snd
 
 // ARTIST 0x83277C9C. The startup initializer at 0x82C73B80 stores zero.
 u32 guSynthBypass = 0;
-
-namespace
-{
-// dword_83277830 -- the shared Snd allocator hook (a function pointer). Takes a
-// byte count and returns the block. Also owned elsewhere; referenced by extern.
-extern "C" void* (*dword_83277830)(u32 auSize);
 
 // The MPEG frame-header lookup tables (X360 rodata). ProcessHeader only *indexes*
 // them -- their contents (the standard MPEG sample-rate Hz and bitrate values) live
@@ -79,7 +74,6 @@ namespace
         0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0,
         0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0
     };
-}
 } // namespace
 
 // ----------------------------------------------------------------------------
@@ -278,7 +272,7 @@ void* CMpegBase::OpenSynth()
         return this;
 
     const u32 luSize = 2304u * mucChannelCount;
-    void* lpHistory = dword_83277830(luSize);
+    void* lpHistory = gpfnSndAlloc(luSize);
     mpPolySynthHistory = lpHistory;
     return std::memset(lpHistory, 0, 2304u * mucChannelCount);
 }

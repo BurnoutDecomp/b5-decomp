@@ -18,6 +18,9 @@
 #include "rw/audio/core/PlugIn.h"        // rw::audio::core::System (mpSystem->mTimerManager, Alloc/Free/RemoveTimer)
 #include "rw/audio/core/TimerManager.h"  // rw::audio::core::TimerManager::AddTimer
 #include "rw/audio/core/Iir2Filters.h"   // AudioProcessContext / AudioChannelBuffer (Process context)
+#include "SDKs/EATech/include/snd/sndmix.h"
+#include "SDKs/EATech/include/snd/sndpacket.h"
+#include "SDKs/EATech/include/snd/sndsys.h"
 
 #include <cstring> // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 
@@ -68,33 +71,6 @@ enum
 // semantics) rather than reconstructed. The r3 threading the ARTIST asm shows between the
 // void-ish service calls is preserved via int returns so the observable data flow matches.
 // -------------------------------------------------------------------------------------
-extern "C" int  SNDSYS_service(void);
-extern "C" int  SNDSYS_restore(void);
-extern "C" int  SNDSYSI_100hzserver(int status);
-extern "C" int  SNDSYSI_variabletimerservice(int status);
-extern "C" int  SNDPKTPLAYI_flushcallbackdata(int status);
-extern "C" int  MIX_audio(void *channels, int sampleCount);
-extern "C" int  MIX_destroy(void);
-extern "C" int  MIX_create(void *params);
-extern "C" void SNDVOICEI_free(void); // the voice-free callback stored in the MIX_create params
-
-// The Snd9 driver's global channel-config region (byte_83277838). UpdateSnd9SampleRate reads
-// three of its bytes into the MIX_create params. Un-homed driver storage; declared as an
-// opaque byte region and indexed exactly as the asm's `lbz` loads read it (endian-neutral).
-extern "C" unsigned char byte_83277838[];
-
-
-// The 11-byte parameter block UpdateSnd9SampleRate builds on the stack for MIX_create.
-// Grounded in the store sequence at 0x82B9BC00..0x82B9BC1C.
-struct Snd9MixCreateParams
-{
-    s32   miSampleRate;  // +0x00  rounded target rate
-    void *mpVoiceFree;   // +0x04  &SNDVOICEI_free
-    u8    mbChannelCfg0; // +0x08  byte_83277838[0x0A]
-    u8    mbChannelCfg1; // +0x09  byte_83277838[0x10] + byte_83277838[0x0F]
-    u8    mbChannelCfg2; // +0x0A  0
-};
-
 // -------------------------------------------------------------------------------------
 // GetPlugInDescRunTime @0x82B9BB28 -- return the address of the registered descriptor
 // record (its label is the string "Snd9Service").
@@ -145,11 +121,8 @@ int Snd9Service::CreateInstance(Snd9Service *self)
     self->miSamplesRemaining = 0;                  // +0x64
 
     // Register the 100 Hz pump timer in the System's TimerManager (collection 1, visible).
-    // The asm passes RwacTimerClient's address directly as the callback; the timer's
-    // (context, time) signature differs from the body's single-arg use, so cast the address.
     if (TimerManager::AddTimer(&self->mpSystem->mTimerManager, &self->mTimerHandle,
-                               reinterpret_cast<TimerManager::TimerCallback>(
-                                   &Snd9Service::RwacTimerClient),
+                               &Snd9Service::RwacTimerClient,
                                self, "Snd9Service", 1, 1) & 0xFF)
     {
         return 0; // AddTimer failed (non-zero low byte)
@@ -220,13 +193,13 @@ int Snd9Service::ReleaseEvent(Snd9Service *self)
 //   the packet player, advance the cursors, and repeat until the window is drained.
 // (The timer's time value is ignored -- the asm uses only r3 = the service context.)
 // -------------------------------------------------------------------------------------
-int Snd9Service::RwacTimerClient(Snd9Service *self)
+void Snd9Service::RwacTimerClient(void* apContext, f32)
 {
-    // Local read cursors over the six channel buffers (advanced as samples are consumed;
-    // the members themselves are not moved). Byte pointers: advanced by 4 bytes/sample.
-    unsigned char *channelCursors[6];
+    Snd9Service* self = static_cast<Snd9Service*>(apContext);
+    // Advance local sample cursors, leaving the member pointers at their buffer starts.
+    f32* channelCursors[6];
     for (int i = 0; i < 6; ++i)
-        channelCursors[i] = static_cast<unsigned char *>(self->mpMixChannels[i]);
+        channelCursors[i] = static_cast<f32*>(self->mpMixChannels[i]);
 
     if (self->mfSampleRate != KF_SND9_SAMPLE_RATE)
     {
@@ -237,15 +210,15 @@ int Snd9Service::RwacTimerClient(Snd9Service *self)
         self->miSamplesRemaining = 0;                   // +0x64
     }
 
-    int result = SNDSYS_service();
+    SNDSYS_service();
     int remaining = KI_SND9_FRAME_SAMPLES; // 256
     do
     {
         if (self->miSamplesRemaining <= 0)
         {
             ++self->miSampleCounter;
-            int hz = SNDSYSI_100hzserver(result);
-            SNDSYSI_variabletimerservice(hz);
+            SNDSYSI_100hzserver();
+            SNDSYSI_variabletimerservice();
 
             int counter = self->miSampleCounter;
             int accum   = self->miSampleAccum;
@@ -266,14 +239,12 @@ int Snd9Service::RwacTimerClient(Snd9Service *self)
         remaining -= chunk;
         self->miSamplesRemaining = owed - chunk;
 
-        int mixed = MIX_audio(channelCursors, chunk);
-        result = SNDPKTPLAYI_flushcallbackdata(mixed);
+        MIX_audio(channelCursors, chunk);
+        SNDPKTPLAYI_flushcallbackdata();
 
         for (int i = 0; i < 6; ++i)
-            channelCursors[i] += 4 * chunk;
+            channelCursors[i] += chunk;
     } while (remaining > 0);
-
-    return result;
 }
 
 // -------------------------------------------------------------------------------------
@@ -281,28 +252,29 @@ int Snd9Service::RwacTimerClient(Snd9Service *self)
 // `sampleRate` (rounded to nearest), wiring the voice-free callback and the driver's
 // channel-config bytes into the MIX_create parameter block.
 //   MIX_destroy();
-//   params.mbChannelCfg0 = byte_83277838[0x0A];
-//   params.mbChannelCfg1 = byte_83277838[0x10] + byte_83277838[0x0F];
-//   params.miSampleRate  = (int)(sampleRate < 0 ? sampleRate - 0.5 : sampleRate + 0.5);
-//   params.mpVoiceFree   = &SNDVOICEI_free;   params.mbChannelCfg2 = 0;
-//   return MIX_create(&params);
+//   params.mucVoiceCount comes from the current Snd9 options.
+//   params.mucOutputCount is the sum of direct and auxiliary output counts.
+//   params.miSampleRate  = the signed integer conversion of the rounded single-precision rate;
+//   params.mpVoiceFree   = &SNDVOICEI_free;   params.mucFlags = 0;
+//   MIX_create(&params);
 // (The asm passes the rate in f1 only; r3 into MIX_destroy is a stale caller register.)
 // -------------------------------------------------------------------------------------
-int Snd9Service::UpdateSnd9SampleRate(f64 sampleRate)
+void Snd9Service::UpdateSnd9SampleRate(f64 sampleRate)
 {
     MIX_destroy();
 
-    Snd9MixCreateParams params;
-    params.mbChannelCfg0 = byte_83277838[0x0A];
-    params.mbChannelCfg1 = static_cast<u8>(byte_83277838[0x10] + byte_83277838[0x0F]);
+    Snd9::Mix::CreateParams params;
+    const Snd9::OutputOptions& lrOptions = Snd9::gOptions.mOutput;
+    params.mucVoiceCount = lrOptions.mucVoiceCount;
+    params.mucOutputCount = lrOptions.mucDirectOutputCount + lrOptions.mucAuxOutputCount;
 
-    // Round-to-nearest via the classic +/-0.5-then-truncate the asm performs (fctiwz).
-    f64 rounded = (sampleRate < 0.0) ? (sampleRate - 0.5) : (sampleRate + 0.5);
+    // ARTIST uses a single-precision sum before truncating with fctiwz.
+    const f32 rounded = static_cast<f32>((sampleRate < 0.0) ? (sampleRate - 0.5) : (sampleRate + 0.5));
     params.miSampleRate = static_cast<s32>(rounded);
-    params.mpVoiceFree  = reinterpret_cast<void *>(&SNDVOICEI_free);
-    params.mbChannelCfg2 = 0;
+    params.mpVoiceFree = SNDVOICEI_free;
+    params.mucFlags = 0;
 
-    return MIX_create(&params);
+    MIX_create(&params);
 }
 
 // -------------------------------------------------------------------------------------

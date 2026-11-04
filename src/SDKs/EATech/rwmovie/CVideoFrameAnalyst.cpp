@@ -11,7 +11,7 @@
 //   CVideoFrameAnalyst::`vector deleting destructor'   @0x82A490C8  (bodied here)
 //
 //   CVideoFrameAnalyst::computeBlockAvg                @0x82A47450  (bodied here)
-//   CVideoFrameAnalyst::computeFrameTextureMap         @0x82A47640  (NOT bodied -- blocked)
+//   CVideoFrameAnalyst::computeFrameTextureMap         @0x82A47640  (bodied here)
 // The analysis kernels dispatch through the ARTIST virtual routine table.
 //
 // The four leading words are heap-buffer pointers stored X360-width (32-bit), matching the
@@ -20,7 +20,8 @@
 // =====================================================================================
 #include "types.hpp"
 
-#include "types.hpp"
+#include <cstdlib>
+#include <cstring>
 
 #include "CVideoFrameAnalyst.h"
 #include "CWMVFARoutines.h"
@@ -244,4 +245,153 @@ int CVideoFrameAnalyst::computeBlockAvg(u8* pY, u8* pU, u8* pV)
         pY += 15 * muField4020;
     }
     return reinterpret_cast<int>(result);
+}
+
+// The scalar border and tail paths use the neighbors that stay inside the plane.
+static u32 lPixelGradient(const u8* pixel, s32 stride, s32 x, s32 y, s32 height)
+{
+    u32 sum = 0;
+    if (x > 0)
+        sum += std::abs(pixel[0] - pixel[-1]);
+    if (x < stride - 1)
+        sum += std::abs(pixel[0] - pixel[1]);
+    if (y > 0)
+        sum += std::abs(pixel[0] - pixel[-stride]);
+    if (y < height - 1)
+        sum += std::abs(pixel[0] - pixel[stride]);
+    return sum;
+}
+
+// ARTIST 0x82A47640
+void CVideoFrameAnalyst::computeFrameTextureMap(u8* pSource)
+{
+    const s32 width = static_cast<s32>((muField4020 + 1) >> 1);
+    const s32 height = static_cast<s32>((muField4024 + 1) >> 1);
+    const u32 planeSize = width * height;
+    u8* planes = static_cast<u8*>(std::malloc(3 * planeSize));
+    if (!planes)
+        return;
+
+    // ARTIST advances past the final pair only for an even source width.
+    u8* luma = planes;
+    for (s32 row = 0; row < height; ++row)
+    {
+        for (s32 col = 0; col < width - 1; ++col)
+        {
+            const u8* nextRow = pSource + muField4020;
+            *luma++ = static_cast<u8>((pSource[0] + pSource[1] + nextRow[0] + nextRow[1]) >> 2);
+            pSource += 2;
+        }
+        const u8* nextRow = pSource + muField4020;
+        *luma = static_cast<u8>((pSource[0] + pSource[1] + nextRow[0] + nextRow[1]) >> 2);
+        if (2 * static_cast<u32>(width) == muField4020)
+        {
+            ++luma;
+            pSource += 2;
+        }
+        pSource += muField4020;
+    }
+    std::memcpy(luma, pSource, planeSize);
+    std::memcpy(luma + planeSize, pSource + planeSize, planeSize);
+
+    u32* activity = static_cast<u32*>(std::malloc(planeSize * sizeof(u32)));
+    if (!activity)
+    {
+        std::free(planes);
+        return;
+    }
+
+    const s32 gradientCols = width >> 3;
+    const s32 gradientCount = gradientCols * (height >> 3);
+    u32* gradientDifference = static_cast<u32*>(lToPtr(muField0C));
+    std::memset(gradientDifference, 0, gradientCount * sizeof(u32));
+
+    const u8* cb = planes + planeSize;
+    const u8* cr = cb + planeSize;
+    const s32 gradientRun = (width - 2) & ~7;
+    // ARTIST's virtual kernel overwrites word 0 and leaves words 1–7 as
+    // prior stack contents. Only gradientDifference depends on those words.
+    u32 lumaScratch[8];
+    const volatile u32* lumaTerms = lumaScratch;
+    for (s32 y = 0; y < height; ++y)
+    {
+        const s32 rowStart = y * width;
+        const s32 gradientRow = (y >> 3) * gradientCols;
+        s32 x = 0;
+        while (x < width)
+        {
+            if (y > 0 && y < height - 1 && x == 1)
+            {
+                for (s32 run = 0; run < gradientRun; run += 8)
+                {
+                    const s32 pixel = rowStart + x;
+                    gpWMVFARoutines->calcGradient8x1B(
+                        lumaScratch, activity + pixel,
+                        reinterpret_cast<int>(planes + pixel),
+                        reinterpret_cast<int>(cb + pixel),
+                        reinterpret_cast<int>(cr + pixel), 0, width);
+                    u32& difference = gradientDifference[gradientRow + (run >> 3)];
+                    for (s32 lane = 0; lane < 8; ++lane)
+                        difference -= 2 * lumaTerms[lane];
+                    for (s32 lane = 0; lane < 8; ++lane)
+                        difference += activity[pixel + lane];
+                    x += 8;
+                }
+            }
+
+            const s32 pixel = rowStart + x;
+            const u32 yGradient = lPixelGradient(planes + pixel, width, x, y, height);
+            const u32 chromaGradient = lPixelGradient(cb + pixel, width, x, y, height)
+                                     + lPixelGradient(cr + pixel, width, x, y, height);
+            activity[pixel] = yGradient + chromaGradient;
+            // The bottom-left sample uses the byte count passed to memset as its offset.
+            const s32 gradientIndex = y == height - 1 && x == 0
+                ? gradientCount : gradientRow + (x >> 3);
+            gradientDifference[gradientIndex] -= yGradient;
+            gradientDifference[gradientIndex] += chromaGradient;
+            ++x;
+        }
+    }
+
+    const s32 blockCols = (width + 3) >> 2;
+    const s32 blockRows = (height + 3) >> 2;
+    const s32 groupedCols = (blockCols - 1) & ~3;
+    u32* blockActivity = static_cast<u32*>(lToPtr(muField04));
+    u32* mean = blockActivity;
+    for (s32 y = 0; y < blockRows; ++y)
+    {
+        s32 x = 0;
+        const s32 rowStart = 4 * y * width;
+        if (y < blockRows - 1)
+        {
+            for (; x < groupedCols; x += 4, mean += 4)
+            {
+                gpWMVFARoutines->calcMean4x4x4(
+                    mean, reinterpret_cast<int>(activity), rowStart + 4 * x, width);
+            }
+        }
+        for (; x < blockCols; ++x, ++mean)
+        {
+            const s32 pixel = rowStart + 4 * x;
+            if (4 * y + 3 < height && 4 * x + 3 < width)
+                gpWMVFARoutines->calcMean4x4(mean, reinterpret_cast<int>(activity), pixel, width);
+            else
+                *mean = activity[pixel];
+        }
+    }
+
+    std::memset(maActivityHistogram, 0, sizeof(maActivityHistogram));
+    const s32 blocks = blockCols * blockRows;
+    for (s32 block = 0; block < blocks; ++block)
+        ++maActivityHistogram[blockActivity[block]];
+
+    u8* textureMap = static_cast<u8*>(lToPtr(muField00));
+    for (s32 block = 0; block < blocks; ++block)
+    {
+        const u32 value = blockActivity[block];
+        textureMap[block] = value <= 60 ? static_cast<u8>(value < 14) : 2;
+    }
+
+    std::free(activity);
+    std::free(planes);
 }

@@ -31,6 +31,7 @@
 
 namespace Snd9
 {
+namespace Mix { struct FilterState; }
 namespace Hal
 {
 
@@ -38,18 +39,37 @@ namespace Hal
 // gain/pan path touches are modelled; the rest is unmodelled HAL state.
 struct Channel
 {
-    u8   mPad00[0x1C];        // +0x00
+    s32  miVoiceHandle;       // +0x00
+    s16  maiSampleVoices[6];   // +0x04
+    u8   mPad10[0x1C - 0x10];
     u16  muPanPosition;       // +0x1C  azimuth handed to SNDI_aztospkrvol
     u8   mPad1E;              // +0x1E
     u8   mucPanActive;        // +0x1F  nonzero => channel carries an explicit per-speaker pan
-    u8   mPad20[0x48 - 0x20]; // +0x20
+    u8   mPad20[4];            // +0x20
+    u8   mucVoiceGroup;       // +0x24
+    u8   mucGroupPrimary;     // +0x25
+    u8   mPad26[2];
+    s16  miParentVoice;       // +0x28, -1 for the primary voice
+    u8   mPad2A;
+    u8   mucPacketFlags;      // +0x2B
+    u32  muLastVoiceTick;     // +0x2C
+    u8   mPad30[0x48 - 0x30];
     f32  mfVolume;            // +0x48  linear channel volume
     u8   mPad4C[0x63 - 0x4C]; // +0x4C
     s8   mcLevel;             // +0x63  signed sample level (0..127)
     f32* mpSourceGains;       // +0x64  per-output source gains
-    u8   mPad68[0x84 - 0x68];
+    u8   mPad68;
+    u8   mucVoiceState;       // +0x69
+    u8   mPad6A[0x84 - 0x6A];
 };
 CGS_STATIC_ASSERT((sizeof(Channel) == 0x84), "ARTIST HAL channel stride");
+CGS_STATIC_ASSERT((offsetof(Channel, maiSampleVoices) == 4), "ARTIST sample voice group");
+CGS_STATIC_ASSERT((offsetof(Channel, mucVoiceGroup) == 0x24), "ARTIST voice group");
+CGS_STATIC_ASSERT((offsetof(Channel, mucGroupPrimary) == 0x25), "ARTIST voice group primary");
+CGS_STATIC_ASSERT((offsetof(Channel, miParentVoice) == 0x28), "ARTIST parent voice");
+CGS_STATIC_ASSERT((offsetof(Channel, mucPacketFlags) == 0x2B), "ARTIST packet flags");
+CGS_STATIC_ASSERT((offsetof(Channel, muLastVoiceTick) == 0x2C), "ARTIST voice tick");
+CGS_STATIC_ASSERT((offsetof(Channel, mucVoiceState) == 0x69), "ARTIST voice state");
 CGS_STATIC_ASSERT((offsetof(Channel, mpSourceGains) == 0x64), "ARTIST HAL channel gains");
 
 // A channel's per-speaker pan gains (0x18 = 24 bytes, all f32 -> byte-exact). The
@@ -66,16 +86,23 @@ CGS_STATIC_ASSERT((sizeof(SpeakerVol) == 24), "Snd9::Hal::SpeakerVol must be 24 
 // buffer SetVol writes through.
 struct MixChannel
 {
-    u8   mPad00;              // +0x00
+    u8   mucState;            // +0x00  native mixer voice state
     u8   mucDirty;            // +0x01  set to 1 whenever the gains are recomputed
-    u8   mPad02[0x1C - 0x02]; // +0x02
+    u8   mPad02[2];           // +0x02
+    f32  mafPreviousSpeakerGain[6]; // +0x04  previous ramp gains
     f32  mafSpeakerGain[6];   // +0x1C  computed per-speaker gains
-    u8   mPad34[4];           // +0x34  the first per-output buffer pointer in MIX_create
+    f32* mpPreviousOutputGains; // +0x34  first per-output buffer from MIX_create
     f32* mpOutputBuffer;      // +0x38  destination gain buffer
-    u8   mPad3C[0x5C - 0x3C];
+    f32  mfLastSample;        // +0x3C
+    Mix::FilterState* mpFilter; // +0x40
+    u8   mPad44[0x5C - 0x44];
 };
 CGS_STATIC_ASSERT((sizeof(MixChannel) == 0x5C), "ARTIST mixer channel stride");
+CGS_STATIC_ASSERT((offsetof(MixChannel, mafPreviousSpeakerGain) == 0x04), "ARTIST mixer previous gains");
+CGS_STATIC_ASSERT((offsetof(MixChannel, mfLastSample) == 0x3C), "ARTIST mixer last sample");
+CGS_STATIC_ASSERT((offsetof(MixChannel, mpFilter) == 0x40), "ARTIST mixer filter");
 CGS_STATIC_ASSERT((offsetof(MixChannel, mafSpeakerGain) == 0x1C), "ARTIST mixer speaker gains");
+CGS_STATIC_ASSERT((offsetof(MixChannel, mpPreviousOutputGains) == 0x34), "ARTIST mixer previous output gains");
 CGS_STATIC_ASSERT((offsetof(MixChannel, mpOutputBuffer) == 0x38), "ARTIST mixer output gains");
 
 // The shared per-channel HAL tables + speaker/output counts. Owned here; the Snd9

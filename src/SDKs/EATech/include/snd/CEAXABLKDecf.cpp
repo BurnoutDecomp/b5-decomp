@@ -10,6 +10,7 @@
 // ============================================================================
 
 #include "SDKs/EATech/include/snd/CEAXABLKDecf.h"
+#include <cstddef>
 
 namespace Snd
 {
@@ -140,5 +141,57 @@ namespace Snd
             apState->mfHist0 = apState->mpDest[-1];
         }
         return apState;
+    }
+
+    CGS_STATIC_ASSERT((offsetof(CEAXABLKDecf, mafBlock) == 0x1C), "ARTIST XA block history");
+    CGS_STATIC_ASSERT((offsetof(CEAXABLKDecf, mBlock) == 0x94), "ARTIST XA decoder state");
+    CGS_STATIC_ASSERT((sizeof(CEAXABLKDecf) == 0xA8), "ARTIST XA decoder");
+
+    // ARTIST 0x82B80978.
+    s32 CEAXABLKDecf::Decode(f32* const* appDest, s32 aiCount)
+    {
+        mBlock.mpDest = *appDest;
+        if (miRemaining == 0)
+            return 0;
+
+        s32 liRequested = (aiCount < miRemaining) ? aiCount : miRemaining;
+        s32 liProduced = 0;
+        if (miBufferedCount)
+        {
+            const s32 liCopy = (miBufferedCount < liRequested) ? miBufferedCount : liRequested;
+            for (s32 i = 0; i < liCopy; ++i)
+                *mBlock.mpDest++ = *mpBuffered++;
+            liRequested -= liCopy;
+            liProduced = liCopy;
+            miRemaining -= liCopy;
+            miBufferedCount -= liCopy;
+        }
+
+        const s32 liWhole = (liRequested / 28) * 28;
+        const s32 liTail = liRequested - liWhole;
+        mBlock.miCount = liWhole;
+        if (liWhole > 0)
+        {
+            decodexac(&mBlock);
+            liProduced += liWhole;
+            miRemaining -= liWhole;
+        }
+        if (liTail > 0)
+        {
+            f32* const lpDest = mBlock.mpDest;
+            mBlock.miCount = liTail;
+            mBlock.mpDest = mafBlock + 2;
+            decodexac(&mBlock);
+            miRemaining -= liTail;
+            miBufferedCount = -mBlock.miCount;
+            mpBuffered = mBlock.mpDest + mBlock.miCount;
+            mBlock.mpDest -= 28;
+            for (s32 i = 0; i < liTail; ++i)
+                lpDest[i] = mBlock.mpDest[i];
+            liProduced += liTail;
+        }
+        if (miRemaining <= 0)
+            miBufferedCount = 0;
+        return liProduced;
     }
 } // namespace Snd

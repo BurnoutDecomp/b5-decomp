@@ -87,12 +87,12 @@ public:
     // then pump the mixer/packet-player in <=256-sample chunks for one 100 Hz service window,
     // advancing the per-channel read cursors. (The timer passes a time value the body
     // ignores -- the asm uses only r3 = the service context.) @0x82B9BC38.
-    static int RwacTimerClient(Snd9Service *self);
+    static void RwacTimerClient(void* apContext, f32 afTime);
 
     // Retune the Snd9 mixer to `sampleRate`: destroy the current mixer, then recreate it with
     // the rounded rate, the voice-free callback, and the driver's channel-config bytes. (The
     // asm passes the rate in f1 only; r3 is stale.) @0x82B9BB98.
-    static int UpdateSnd9SampleRate(f64 sampleRate);
+    static void UpdateSnd9SampleRate(f64 sampleRate);
 
     // Compiler `vector deleting destructor': destruct the embedded TimerHandle sub-object,
     // reinstall the base-Service v-table, then conditionally free. @0x82BA00D0.

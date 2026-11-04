@@ -38,6 +38,21 @@ namespace Snd
         f32*      mpDest;    // +0x10  output float cursor
     };
 
+    class CEAXABLKDecf
+    {
+    public:
+        s32 Decode(f32* const* appDest, s32 aiCount);
+
+        u8 mauUnknown00[4];
+        s32 miBufferedCount;       // +0x04
+        s32 miRemaining;           // +0x08
+        s32 miCapacity;            // +0x0C
+        const f32* mpBuffered;     // +0x10
+        u8 mauUnknown14[8];
+        f32 mafBlock[2 + 28];      // +0x1C, two predictor samples before the block
+        XaBlockDecoder mBlock;     // +0x94
+    };
+
     // Decode one uncompressed ("raw") XA block: verify the 0xEE block
     // marker (return unchanged if absent), seed the two history slots from the
     // next two big-endian s16 samples, then decode 28 further big-endian s16
