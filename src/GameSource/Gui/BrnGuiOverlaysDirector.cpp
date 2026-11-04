@@ -245,6 +245,77 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
     }
 }
 
+// Keep overlay dispatch separate from queue traversal for the native emulator build.
+__declspec(noinline) void GuiOverlaysDirector::DispatchOverlayEvent(const CgsModule::Event* lpEvent,
+                                                                   s32 liEventType)
+{
+    switch (liEventType)
+    {
+    case 64:   // the GuiCache is ready (payload = GuiCache*)
+        CGS_ASSERT(lpEvent != NULL, "lpCacheEvent");
+        mpGuiCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
+        break;
+
+    case 184:
+        HandleOverlayRequest(reinterpret_cast<const GuiOverlayRequest*>(lpEvent));
+        break;
+
+    case 186:
+        HandleOverlayFullInfoRequest();
+        break;
+
+    case 188:
+        HandleWaitFinishRequest(reinterpret_cast<const GuiOverlayWaitFinishRequest*>(lpEvent));
+        break;
+
+    case 189:  // the overlay state left: the record leads with the overlay id
+    {
+        const GuiOverlayHiddenNotification* lpCompleteEvent =
+            reinterpret_cast<const GuiOverlayHiddenNotification*>(lpEvent);
+        if (lpCompleteEvent->mOverlayId == mCurrentOverlay.mNameId)
+        {
+            mbInOverlay          = false;
+            mbIsWaitRequestValid = false;
+
+            if (mBufferedOverlay.mNameId != 0)
+            {
+                // Promote the buffered overlay; an online transition overlay also arms
+                // the entering-online splash countdown.
+                if (IsOnlineTransitionOverlay(mBufferedOverlay.mNameId))
+                    miFramesToShowEnteringOnline = KI_FRAMES_TO_SHOW_ENTERING_FREEBURN;
+
+                std::memcpy(&mCurrentOverlay, &mBufferedOverlay,
+                            sizeof(GuiOverlayFullInfoResponse));
+                mBufferedOverlay.mNameId = 0;
+                StartCurrentOverlay();
+            }
+        }
+        break;
+    }
+
+    case 190:
+        HandleOverlayShowingNotification(
+            reinterpret_cast<const GuiOverlayShowingNotification*>(lpEvent));
+        break;
+
+    case 279:
+        HandleShowFreeBurnIntroRequest(
+            reinterpret_cast<const GuiEventNetworkShowFreeBurnIntro*>(lpEvent));
+        break;
+
+    case 322:  // a mode stopped: drop a buffered online-transition overlay
+        if (mBufferedOverlay.mNameId != 0 &&
+            IsOnlineTransitionOverlay(mBufferedOverlay.mNameId))
+        {
+            mBufferedOverlay.mNameId = 0;
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
 void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
 {
     // The whole update is gated on a bound controller.
@@ -264,72 +335,7 @@ void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput
     s32 liEventType = lpEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
     while (lpEvent != NULL)
     {
-        switch (liEventType)
-        {
-        case 64:   // the GuiCache is ready (payload = GuiCache*)
-            CGS_ASSERT(lpEvent != NULL, "lpCacheEvent");
-            mpGuiCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-            break;
-
-        case 184:
-            HandleOverlayRequest(reinterpret_cast<const GuiOverlayRequest*>(lpEvent));
-            break;
-
-        case 186:
-            HandleOverlayFullInfoRequest();
-            break;
-
-        case 188:
-            HandleWaitFinishRequest(reinterpret_cast<const GuiOverlayWaitFinishRequest*>(lpEvent));
-            break;
-
-        case 189:  // the overlay state left: the record leads with the overlay id
-        {
-            const GuiOverlayHiddenNotification* lpCompleteEvent =
-                reinterpret_cast<const GuiOverlayHiddenNotification*>(lpEvent);
-            if (lpCompleteEvent->mOverlayId == mCurrentOverlay.mNameId)
-            {
-                mbInOverlay          = false;
-                mbIsWaitRequestValid = false;
-
-                if (mBufferedOverlay.mNameId != 0)
-                {
-                    // Promote the buffered overlay; an online transition overlay also arms
-                    // the entering-online splash countdown.
-                    if (IsOnlineTransitionOverlay(mBufferedOverlay.mNameId))
-                        miFramesToShowEnteringOnline = KI_FRAMES_TO_SHOW_ENTERING_FREEBURN;
-
-                    std::memcpy(&mCurrentOverlay, &mBufferedOverlay,
-                                sizeof(GuiOverlayFullInfoResponse));
-                    mBufferedOverlay.mNameId = 0;
-                    StartCurrentOverlay();
-                }
-            }
-            break;
-        }
-
-        case 190:
-            HandleOverlayShowingNotification(
-                reinterpret_cast<const GuiOverlayShowingNotification*>(lpEvent));
-            break;
-
-        case 279:
-            HandleShowFreeBurnIntroRequest(
-                reinterpret_cast<const GuiEventNetworkShowFreeBurnIntro*>(lpEvent));
-            break;
-
-        case 322:  // a mode stopped: drop a buffered online-transition overlay
-            if (mBufferedOverlay.mNameId != 0 &&
-                IsOnlineTransitionOverlay(mBufferedOverlay.mNameId))
-            {
-                mBufferedOverlay.mNameId = 0;
-            }
-            break;
-
-        default:
-            break;
-        }
-
+        DispatchOverlayEvent(lpEvent, liEventType);
         liEventType = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 

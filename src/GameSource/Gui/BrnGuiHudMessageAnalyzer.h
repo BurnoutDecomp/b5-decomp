@@ -132,6 +132,8 @@ namespace BrnGui
         // keep the module-IO header out of this class home.
         void Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGuiEventQueue,
                     CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpViewOutputQueue);
+        __declspec(noinline) void ProcessInputEvent(const CgsModule::Event* lpEvent,
+                                                    s32 liEventType, bool& lbHadWreckEvent);
 
         // DWARF h:75 -- adopt the shared access-pointer block (its own ledger row).
         void SetAccessPointers(CgsGui::GuiAccessPointers* lpAccessPointers);
