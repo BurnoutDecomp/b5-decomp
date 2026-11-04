@@ -58,3 +58,5 @@ extern "C" void SNDI_Delete(void* apBlock);
 extern "C" void MIX_create(const Snd9::Mix::CreateParams* apParams);
 extern "C" void MIX_destroy();
 extern "C" void MIX_audio(f32* const* appChannels, s32 aiSampleCount);
+extern "C" void MIX_setpitch(s32 aiVoice, s32 aiPitch);
+extern "C" void MIX_stop(s32 aiVoice);
