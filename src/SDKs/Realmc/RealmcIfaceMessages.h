@@ -27,9 +27,14 @@ namespace RealmcIface
 class MessageBootupDone : public RealmcCore::Message
 {
 public:
+    explicit MessageBootupDone(u32 uResult)
+        : RealmcCore::Message(), muField08(uResult) {}
+
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x3C slot.
     void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
+
+    u32 GetResult() const { return muField08; }
 
     // The deleting destructor restores the vtable and frees the object through
     // the Realmc backend with its size (the class operator delete).
@@ -45,3 +50,5 @@ private:
 };
 
 } // namespace RealmcIface
+
+CGS_STATIC_ASSERT((sizeof(RealmcIface::MessageBootupDone) == 12), "ARTIST MessageBootupDone size");

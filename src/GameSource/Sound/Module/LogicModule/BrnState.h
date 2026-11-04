@@ -23,12 +23,8 @@
 // derives the REAL canonical State (members, IsAttached(), DestroyEffects()/
 // Attach() declarations, RTTI virtuals) via the include above.
 //
-// This TU's ONLY X360-attested function is the scalar deleting destructor
-// @0x826C84D8 (class:BrnSound::Logic::BrnState dossier confirmed — no
-// GetTypeInfo/GetTypeName override is attested for BrnState itself, so neither
-// is declared/bodied here; those per-class RTTI hooks are each derived leaf's
-// own concern). The destructor tears down the state's attached effects via the
-// inherited State::DestroyEffects() by name.
+// ARTIST 0x820B1260 supplies BrnState's own type-info virtuals. The
+// destructor inherits the effect teardown from State.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): no member offsets are touched by
 // this TU's function (the destructor's only named side effect is the
@@ -46,6 +42,11 @@ struct BrnState : public CgsSound::Logic::State
 {
     BrnState() {}
     virtual ~BrnState();
+
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+    static CgsSound::Logic::State* CreateObject(u32 luFlavour);
 };
 
 } // namespace Logic

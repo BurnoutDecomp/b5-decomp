@@ -29,10 +29,9 @@ namespace Logic
 // (GameSource/Sound/BrnResourceRegistrar.h, included above) -- folded out of here to resolve the
 // cross-header ODR.
 
-// BrnEffectControl.h:56 (DWARF). Multiply inherits the engine effect-control base
-// (primary vptr @ this+0) and IResourceRequester (sub-object vptr @ this+4).
-struct BrnEffectControl : public CgsSound::Logic::EffectControl,
-                          public IResourceRequester
+// The ARTIST effect methods receive the EffectControl view at +4.
+struct BrnEffectControl : public IResourceRequester,
+                          public CgsSound::Logic::EffectControl
 {
     BrnEffectControl();
     virtual ~BrnEffectControl();

@@ -68,6 +68,30 @@ Trc::Trc(int iMessageId, int iPackedCodes)
     _SetMsgOptions(iPackedCodes);
 }
 
+// Unlabelled formatter helper @0x82C469C0: Locale::GetString(id,"s",text.begin),
+// then copy the formatted localized text into the Trc message string.
+Trc::Trc(int iMessageId, int iPackedCodes, const String16& rString)
+    : miMessageId(iMessageId)
+    , mMessage(reinterpret_cast<const char16_t*>(Locale::GetString(
+          iMessageId, "s", reinterpret_cast<u16*>(rString.Begin()))), allocator())
+{
+    _SetMsgOptions(iPackedCodes);
+}
+
+// Unlabelled formatter helper @0x82C46A58: it passes the begin pointers of two
+// String16 values through the locale varargs path; the native format spec is
+// "s", so the first range is the consumed string and the second vararg is kept
+// for call-shape fidelity.
+Trc::Trc(int iMessageId, int iPackedCodes,
+         const String16& rString1, const String16& rString2)
+    : miMessageId(iMessageId)
+    , mMessage(reinterpret_cast<const char16_t*>(Locale::GetString(
+          iMessageId, "s", reinterpret_cast<u16*>(rString1.Begin()),
+          reinterpret_cast<u16*>(rString2.Begin()))), allocator())
+{
+    _SetMsgOptions(iPackedCodes);
+}
+
 // ---------------------------------------------------------------------------
 // Trc::~Trc @ 0x82B555D8
 //

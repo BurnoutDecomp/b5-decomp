@@ -29,10 +29,9 @@ namespace Logic
 // (GameSource/Sound/BrnResourceRegistrar.h, included above) -- folded out of here to resolve the
 // cross-header ODR (they were duplicated in BrnEffectControl.h + BrnStateManager.h too).
 
-// BrnEffectObject.h:51 (DWARF). Multiply inherits the engine effect-object base
-// (primary vptr @ this+0) and IResourceRequester (sub-object vptr @ this+4).
-struct BrnEffectObject : public CgsSound::Logic::EffectObject,
-                         public IResourceRequester
+// The ARTIST factory returns the EffectObject view at +4.
+struct BrnEffectObject : public IResourceRequester,
+                         public CgsSound::Logic::EffectObject
 {
     // BrnEffectObject.h:87 (DWARF). A resolved sample reference.
     struct SampleTag
@@ -49,6 +48,8 @@ struct BrnEffectObject : public CgsSound::Logic::EffectObject,
     // — per-class RTTI.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char*                                                    GetTypeName() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luFlavour);
 
     // BrnEffectObject.h:139 — IResourceRequester override, bodied inline in this
     // DWARF home. ASM @ 0x82696778: mark resources-ready, assert the effect is

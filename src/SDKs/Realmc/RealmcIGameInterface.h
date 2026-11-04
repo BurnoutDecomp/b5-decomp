@@ -3,6 +3,7 @@
 
 namespace RealmcIface
 {
+class LoadEntryInfo;
 // ARTIST base table 820CDC58, derived SaveLoad table 820CF148 (17 entries).
 // The IGameInterface name is attested by the scalar deleting destructor's IDA
 // symbol at 827DB478. Argument registers are corroborated by the corresponding
@@ -20,7 +21,7 @@ public:
     virtual void SaveDone(u32, u32, const char*) = 0;            // +18
     virtual void SetAutosaveDone(s32, s32, s32) = 0;             // +1C
     virtual void CardRemoved() = 0;                            // +20
-    virtual bool CheckLoadedData(u32, u32) = 0;                 // +24
+    virtual bool CheckLoadedData(u32, LoadEntryInfo*) = 0;       // +24
     virtual void LoadDone(u32, s32, u32, void*) = 0;             // +28
     virtual void DeleteDone() = 0;                             // +2C
     virtual void ClearEntries() = 0;                           // +30

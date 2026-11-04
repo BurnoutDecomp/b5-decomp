@@ -126,3 +126,49 @@ extern "C" u32 SocketGetLocalAddr()
                reinterpret_cast<const sockaddr*>(&destination), sizeof(destination));
     return SocketReadAddress(&host);
 }
+// ARTIST82B2D2D8 export hole: compare the six IPv4 bytes after the family.
+extern "C" s32 SockaddrCompare(const sockaddr* a, const sockaddr* b)
+{
+    if (a->sa_family != b->sa_family) return s32(a->sa_family) - s32(b->sa_family);
+    const u8* pa = reinterpret_cast<const u8*>(a) + 2;
+    const u8* pb = reinterpret_cast<const u8*>(b) + 2;
+    const s32 length = a->sa_family == AF_INET ? 6 : 14;
+    for (s32 i = 0; i < length; ++i) if (pa[i] != pb[i]) return s32(pa[i]) - s32(pb[i]);
+    return 0;
+}
+// ARTIST82B2D5D8: native compact address:local-port:peer-port parser.
+extern "C" s32 SockaddrInParse2(u32* address, s32* localPort, s32* peerPort, const char* text)
+{
+    const u8* p = reinterpret_cast<const u8*>(text);
+    while (*p > 0 && *p <= 32) ++p;
+    u32 addr = 0;
+    while ((*p >= '0' && *p <= '9') || *p == '.')
+    {
+        if (*p == '.') addr <<= 8;
+        else addr += 9 * (addr & 0xffu) + (*p & 15);
+        ++p;
+    }
+    *address = addr;
+    s32 result = addr ? 1 : 0;
+    while (*p && *p != ':') ++p;
+    u32 local = 0;
+    if (*p == ':')
+    {
+        ++p;
+        while (*p >= '0' && *p <= '9') { local = local * 10 + (*p & 15); ++p; }
+        result |= 2;
+    }
+    *localPort = static_cast<s32>(local);
+    if (peerPort)
+    {
+        u32 peer = 0;
+        if (*p == ':')
+        {
+            ++p;
+            while (*p >= '0' && *p <= '9') { peer = peer * 10 + (*p & 15); ++p; }
+            result |= 4;
+        }
+        *peerPort = static_cast<s32>(peer);
+    }
+    return result;
+}

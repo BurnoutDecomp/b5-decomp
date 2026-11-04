@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "BrnAboveCarRenderer.h"
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
@@ -510,8 +511,8 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     if (miAboveCarRendererPM >= 0) CgsDev::PerfMonCpu::StartMonitor(miAboveCarRendererPM);
     CgsGraphics::Im3dRenderBuffer* lpBuffer = lpRendererSet->mpIm3dRenderBufferRacePosition;
     lpBuffer->BeginRendering();
-    lpBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);
-    lpBuffer->SetState(CgsGui::gpGuiDepthStencilStateZOn);
+    lpBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
+    lpBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOn);
     if (!mpBlendState)
     {
         renderengine::BlendStateParameters lParams;
@@ -597,7 +598,7 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         RenderTrafficCarScores(lpRendererSet);
         RenderBankingScores(lpRendererSet);
     }
-    lpBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
+    lpBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
     lpBuffer->EndRendering();
     if (miAboveCarRendererPM >= 0) CgsDev::PerfMonCpu::StopMonitor(miAboveCarRendererPM);
 }
@@ -633,9 +634,9 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
     {
         CgsGraphics::Im2dRenderBuffer* lpIm2d = lpImRenderers->mpIm2dRenderBuffer;
         lpIm2d->BeginRendering();
-        lpIm2d->SetState(CgsGui::gpGuiRasterizerStateCullNone); //83010F3C
+        lpIm2d->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone); //83010F3C
         lpIm2d->SetState(reinterpret_cast<const renderengine::BlendState*>(mpBlendState));
-        lpIm2d->SetTexture(CgsGui::gpGuiWhiteTexture); //83010F58, real shared white raster
+        lpIm2d->SetTexture(CgsGraphics::ImRendererBase::GetStateLibrary().mpTexture_White); //83010F58, real shared white raster
         CgsGraphics::Im2dTransform lTransform;
         lTransform.mOriginXYZ.Set(-1.0f, 1.0f, 0.0f, 0.0f);
         lTransform.mRightUp.Set(2.0f/1280.0f, 0.0f, 0.0f, -2.0f/720.0f);

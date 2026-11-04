@@ -76,6 +76,18 @@ class MessageLoadDone;
 class MessageSaveDone;
 class MessageBootupDone;
 class MessageShowAutosaveIcon;
+// ARTIST identifies these eight receiver slots by dispatch order and payload
+// accesses, but the corresponding native C++ class names are absent from the
+// export/vtable cluster. The Payload spellings below are inferred local tags;
+// they are not claims about original vendor class names.
+class MessageSlot08Payload;
+class MessageClearEntriesPayload;
+class MessageSlot1CPayload;
+class MessageCallback3CPayload;
+class MessageFoundEntryPayload;
+class MessageFindEntriesDonePayload;
+class MessageSlot2CPayload;
+class MessageSaveCheckDonePayload;
 } // namespace RealmcIface
 
 namespace RealmcCore
@@ -304,19 +316,11 @@ public:
 // GameCallbackProcessor's Response handler), so every handler is a
 // ProcessMessage overload. Slot -> message type, read off each message's Apply
 // thunk:
-//   +0x04 MessageSetActiveCardDone   +0x0C MessageCardRemoved
-//   +0x10 MessageCheckLoadedData     +0x18 MessageSetAutosaveDone
-//   +0x30 MessageLoadDone            +0x34 MessageSaveDone
-//   +0x3C MessageBootupDone          +0x40 MessageShowAutosaveIcon
-//   +0x44 MessageClear               +0x48 MessageTrc
-//   +0x4C MessageString              +0x50 Response
-//   +0x54 Message
-// Native recovery debt: eight message types at +0x08, +0x14, +0x1C, +0x20,
-// +0x24, +0x28, +0x2C and +0x38 remain undeclared. This partial interface has
-// 14 entries rather than ARTIST's 22; the comments below identify ARTIST slots,
-// not this declaration's emitted offsets. Recover the genuine message types
-// and MSVC overload ordering before using this processor as a native ABI.
-// Do not fill the gaps with invented reserved virtual methods.
+// MSVC emits this same-name overload group in reverse declaration order. The
+// declarations therefore run from ARTIST slot +0x54 down to +0x04 so the
+// compiler's emitted vtable runs in native order. Eight payload class names are
+// absent from the X360 export/vtable cluster; their explicitly inferred local
+// Payload tags identify only the proven slot and handler-access shape.
 //
 // The handlers return nothing the callers read: Apply tail-calls them and every
 // Apply caller (MessageFilter::FilterMessage, the interface's update loop)
@@ -325,20 +329,28 @@ public:
 class IMessageProcessor
 {
 public:
-    virtual ~IMessageProcessor() {}                                                    // +0x00
-    virtual void ProcessMessage(RealmcIface::MessageSetActiveCardDone* pMessage) = 0;  // +0x04
-    virtual void ProcessMessage(RealmcIface::MessageCardRemoved* pMessage) = 0;        // +0x0C
-    virtual void ProcessMessage(RealmcIface::MessageCheckLoadedData* pMessage) = 0;    // +0x10
-    virtual void ProcessMessage(RealmcIface::MessageSetAutosaveDone* pMessage) = 0;    // +0x18
-    virtual void ProcessMessage(RealmcIface::MessageLoadDone* pMessage) = 0;           // +0x30
-    virtual void ProcessMessage(RealmcIface::MessageSaveDone* pMessage) = 0;           // +0x34
-    virtual void ProcessMessage(RealmcIface::MessageBootupDone* pMessage) = 0;         // +0x3C
-    virtual void ProcessMessage(RealmcIface::MessageShowAutosaveIcon* pMessage) = 0;   // +0x40
-    virtual void ProcessMessage(MessageClear* pMessage) = 0;                           // +0x44
-    virtual void ProcessMessage(MessageTrc* pMessage) = 0;                             // +0x48
-    virtual void ProcessMessage(MessageString* pMessage) = 0;                          // +0x4C
-    virtual void ProcessMessage(Response* pMessage) = 0;                               // +0x50
-    virtual void ProcessMessage(Message* pMessage) = 0;                                // +0x54
+    virtual ~IMessageProcessor() {}                                                                     // +0x00
+    virtual void ProcessMessage(Message* pMessage) = 0;                                                 // +0x54
+    virtual void ProcessMessage(Response* pMessage) = 0;                                                // +0x50
+    virtual void ProcessMessage(MessageString* pMessage) = 0;                                           // +0x4C
+    virtual void ProcessMessage(MessageTrc* pMessage) = 0;                                              // +0x48
+    virtual void ProcessMessage(MessageClear* pMessage) = 0;                                            // +0x44
+    virtual void ProcessMessage(RealmcIface::MessageShowAutosaveIcon* pMessage) = 0;                    // +0x40
+    virtual void ProcessMessage(RealmcIface::MessageBootupDone* pMessage) = 0;                          // +0x3C
+    virtual void ProcessMessage(RealmcIface::MessageSaveCheckDonePayload* pMessage) = 0;                // +0x38
+    virtual void ProcessMessage(RealmcIface::MessageSaveDone* pMessage) = 0;                            // +0x34
+    virtual void ProcessMessage(RealmcIface::MessageLoadDone* pMessage) = 0;                            // +0x30
+    virtual void ProcessMessage(RealmcIface::MessageSlot2CPayload* pMessage) = 0;                       // +0x2C
+    virtual void ProcessMessage(RealmcIface::MessageFindEntriesDonePayload* pMessage) = 0;              // +0x28
+    virtual void ProcessMessage(RealmcIface::MessageFoundEntryPayload* pMessage) = 0;                   // +0x24
+    virtual void ProcessMessage(RealmcIface::MessageCallback3CPayload* pMessage) = 0;                    // +0x20
+    virtual void ProcessMessage(RealmcIface::MessageSlot1CPayload* pMessage) = 0;                       // +0x1C
+    virtual void ProcessMessage(RealmcIface::MessageSetAutosaveDone* pMessage) = 0;                     // +0x18
+    virtual void ProcessMessage(RealmcIface::MessageClearEntriesPayload* pMessage) = 0;                 // +0x14
+    virtual void ProcessMessage(RealmcIface::MessageCheckLoadedData* pMessage) = 0;                      // +0x10
+    virtual void ProcessMessage(RealmcIface::MessageCardRemoved* pMessage) = 0;                         // +0x0C
+    virtual void ProcessMessage(RealmcIface::MessageSlot08Payload* pMessage) = 0;                       // +0x08
+    virtual void ProcessMessage(RealmcIface::MessageSetActiveCardDone* pMessage) = 0;                   // +0x04
 };
 
 // ---------------------------------------------------------------------------
@@ -393,6 +405,9 @@ public:
 
     // slot +8 -- pProcessor->ProcessMessage(this), the processor's +0x4C slot.
     void Apply(IMessageProcessor* pProcessor) ;
+
+    uint32_t GetId() const { return muId; }
+    const char* GetText() const { return maText.Begin(); }
 
 private:
     uint32_t muId;    // +8
@@ -515,11 +530,19 @@ public:
     ~MessageFilter() ;
 
     void ProcessMessage(RealmcIface::MessageSetActiveCardDone*)  {}
+    void ProcessMessage(RealmcIface::MessageSlot08Payload*)  {}
     void ProcessMessage(RealmcIface::MessageCardRemoved*)  {}
     void ProcessMessage(RealmcIface::MessageCheckLoadedData*)  {}
+    void ProcessMessage(RealmcIface::MessageClearEntriesPayload*)  {}
     void ProcessMessage(RealmcIface::MessageSetAutosaveDone*)  {}
+    void ProcessMessage(RealmcIface::MessageSlot1CPayload*)  {}
+    void ProcessMessage(RealmcIface::MessageCallback3CPayload*)  {}
+    void ProcessMessage(RealmcIface::MessageFoundEntryPayload*)  {}
+    void ProcessMessage(RealmcIface::MessageFindEntriesDonePayload*)  {}
+    void ProcessMessage(RealmcIface::MessageSlot2CPayload*)  {}
     void ProcessMessage(RealmcIface::MessageLoadDone*)  {}
     void ProcessMessage(RealmcIface::MessageSaveDone*)  {}
+    void ProcessMessage(RealmcIface::MessageSaveCheckDonePayload*)  {}
     void ProcessMessage(RealmcIface::MessageBootupDone*)  {}
     void ProcessMessage(RealmcIface::MessageShowAutosaveIcon*)  {}
     void ProcessMessage(MessageClear*)  {}

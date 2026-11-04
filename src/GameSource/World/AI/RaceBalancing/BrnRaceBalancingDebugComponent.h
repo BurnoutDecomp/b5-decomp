@@ -22,12 +22,6 @@
 //     DebugComponent vtable order [Update, RenderWorld, RenderHUD, GetName, GetPath, IsSimple,
 //     OnActivate, OnRegister].
 //
-// Construct / Destruct / GetPath / DrawGraphBackground are part of the DWARF declaration surface but
-// have no standalone X360 symbol in this TU's func set (Construct/Destruct/GetPath are inlined-away
-// or live elsewhere; DrawGraphBackground is an external helper). They are declared here for the
-// vtable / call surface but bodied in their own TUs -- this TU owns only the 6 functions whose
-// bodies live in BrnRaceBalancingDebugComponent.cpp (DrawGraphFrame, FindAICar, GetName, OnActivate,
-// RenderHUD, RenderWorld).
 
 namespace BrnAI
 {
@@ -50,7 +44,7 @@ class RaceBalancingDebugComponent : public CgsDev::DebugComponent
 public:
     RaceBalancingDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::AIConstructorTag()) {}
     // Two-phase init: wire up the AI module + race-balancing manager pointers and seed the state.
-    // (No standalone X360 symbol in this TU; declared for the call surface, bodied elsewhere.)
+    // Inlined into AIModule::Construct on Xbox 360.
     void Construct(AIModule* lpAIModule, RaceBalancingManager* lpRaceBalancingManager);
 
     // Base teardown (bodied in its own TU; declared for the DWARF surface).
@@ -73,17 +67,12 @@ public:
 protected:
     // @0x82767668  "Race Balancing"
     virtual const char* GetName() const;
-    // Bodied in its own TU (DWARF :90); declared for the vtable surface.
+    // @0x82767678  "AI"
     virtual const char* GetPath() const;
     // @0x82767688  Register the "Show data" toggle and the "Current rival" slider (range 0..6).
     virtual void OnActivate();
 
 private:
-    // Bodied in its own TU (DWARF BrnRaceBalancingDebugComponent.h:97); declared for the call
-    // surface. Fills the graph plot area behind the axes.
-    void DrawGraphBackground(CgsDev::Debug2DImmediateRender* lpDisplay, f32 lfX, f32 lfY,
-                             f32 lfWidth, f32 lfHeight);
-
     // @0x827676F8  Find the active AI car whose opponent-index matches miCurrentRival (skipping the
     // player car and cars with no assigned opponent index). Returns null when none matches.
     const AICar* FindAICar(s32 liRivalIndex) const;

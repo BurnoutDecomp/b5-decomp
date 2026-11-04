@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "BrnBoostBarRenderer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include <cfloat>
@@ -877,10 +878,8 @@ void BoostBarRenderer::DetermineBoostBarMultiplier()
 // quad into the set's 2D command buffer: clamp the colour to [0,1], scale to bytes (the
 // 255-splat at &unk_8305A950) and pack it, build the four tristrip corners from the rect
 // {x0,y0,x1,y1} and the by-value UV window {u0,v0,u1,v1}, bind the texture + blend states,
-// publish the shared screen transform (&unk_83011090 == gBillboardScreenTransform's console
-// original), submit as a 4-vertex strip (primitive 6). The corner positions stay in the
-// console's 0..1 screen proportions -- the shared transform carries the screen mapping, exactly
-// as on the console (see gBillboardScreenTransform's PC-fold note in CgsBillboardRenderer.cpp).
+// publish the shared aspect-corrected transform (83011090), and submit as a
+// 4-vertex strip (primitive 6). The corners stay in 0..1 screen proportions.
 // ---------------------------------------------------------------------------------------------
 namespace
 {
@@ -964,7 +963,7 @@ void BoostBarRenderer::RenderQuad(const Vector4& lv4Rect, const Vector4& lv4Colo
 
     lrCmd.SetState(lpTextureState);
     lrCmd.SetState(lpBlendState);
-    lrCmd.SetTransform(CgsGui::gBillboardScreenTransform);   // console &unk_83011090
+    lrCmd.SetTransform(CgsGraphics::Im2dTransform::GetAspectCorrected());   // console &unk_83011090
     lrCmd.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
 }
 
@@ -1133,7 +1132,7 @@ void BoostBarRenderer::RenderDebugFireGlow(const Vector4& lv4FireRect,
     const Vector4 lv4Colour( lfGlow, lfGlow, lfGlow, 1.0f );
     const Vector4 lv4UVs( 0.0f, 0.0f, 1.0f, 1.0f );
     RenderQuad(lv4FireRect, lv4Colour, mpGlowTextureState,
-               CgsGui::gpGuiBlendStateAdditive,   // X360 dword_83010F24
+               CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Additive,   // X360 dword_83010F24
                lv4UVs);
 }
 
@@ -1496,7 +1495,7 @@ void BoostBarRenderer::RenderFire(const Vector4& lv4Rect, const Vector4& lv4Colo
 //     byte is replaced by CalculateBoostShardAlpha(life, colour.w);
 //   * UVs straight from the stored lattice.
 // Submit: SetState(mpBackgroundTextureState), SetState(standard blend dword_83010F20),
-// SetTransform(&unk_83011090 == gBillboardScreenTransform), Render(TRIANGLES(4), verts, 144).
+// SetTransform(83011090), Render(TRIANGLES(4), verts, 144).
 //
 // (The PS3-only standalone CalculateBoostShardTransformation @0x401668 -- an uncalled sibling
 // of the open-coded transform here, using a 0.3 edge-lerp centroid and a /48 column derivation
@@ -1594,8 +1593,8 @@ void BoostBarRenderer::RenderShatteredBar(const rw::math::fpu::Vector4Template<f
     }
 
     lpRenderBuffer->SetState(mpBackgroundTextureState);
-    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);   // X360 dword_83010F20
-    lpRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform);   // console &unk_83011090
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);   // X360 dword_83010F20
+    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetAspectCorrected());   // console &unk_83011090
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(4),   // TRIANGLES
                            laVerts, static_cast<u32>(KI_CHUNK_LOSS_NUM_VERTS));
 }
@@ -1646,7 +1645,7 @@ void BoostBarRenderer::SetBackground(Im2dCommandBuffer* lpRenderBuffer, Vector4 
 
         const Vector4 lv4QuadColour( 0.0f, 0.0f, 0.0f, lfAlpha );
         RenderQuad(lv4MultiplierRect, lv4QuadColour, mpMultiplierTextureState,
-                   CgsGui::gpGuiBlendStateStandard,   // X360 dword_83010F20
+                   CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard,   // X360 dword_83010F20
                    lb2X ? KV4_MULTIPLIER_2X_IMAGE_UV : KV4_MULTIPLIER_3X_IMAGE_UV);
     }
 
@@ -1701,11 +1700,11 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
     mfLastTime = lfTimeNow;
 
     lpRenderBuffer->BeginRendering();
-    lpRenderBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
     // The shared 2D screen transform the console stamps once for the whole bar stream
     // (Im2dTransform::mgAspectCorrected == the &unk_83011090 block; the PC fold is the
     // proportion -> logical-pixel scale).
-    lpRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform);
+    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetAspectCorrected());
 
     // ---- the shaken bar rect ------------------------------------------------------------
     Vector4 lv4Rect = KV4_BOOSTBAR_RECT;
@@ -1941,7 +1940,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
                 Vector4 lv4GlowColour = KV4_GLOW_COLOUR;
                 lv4GlowColour.SetW(lfBaseAlpha);
                 RenderQuad(lv4BoostRect, lv4GlowColour, mpGlowTextureState,
-                           CgsGui::gpGuiBlendStateAdditive, lv4FullUVs);
+                           CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Additive, lv4FullUVs);
                 lpRenderBuffer->PopMask();
 
                 // The function-local static the console keeps at RenderComponent::
@@ -1982,7 +1981,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
                 const f32 lfGlow = KF_BOOSTING_GLOW_INTENSITY * mfIsBoostingProp;
                 const Vector4 lv4GlowColour( lfGlow, lfGlow, lfGlow, lfBaseAlpha );
                 RenderQuad(lv4BoostRect, lv4GlowColour, mpGlowTextureState,
-                           CgsGui::gpGuiBlendStateAdditive, lv4FullUVs);
+                           CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Additive, lv4FullUVs);
             }
         }
 
@@ -2055,7 +2054,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
                     laVerts[liVert].mv2Tex0UV.y = lafV[liVert];
                     *reinterpret_cast<u32*>(&laVerts[liVert].mv4Colour) = luColour;
                 }
-                lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateAdditive);
+                lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Additive);
                 lpRenderBuffer->SetState(mpEarnFlameTextureState);
                 lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6),
                                        laVerts, 4);
@@ -2090,7 +2089,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
                   lv4BoostRect.GetZ().GetFloat() - KF_DANGER_END_GLOW_WIDTH, lv4BoostRect.GetW().GetFloat() );
             const Vector4 lv4EndGlowColour( 1.0f, 1.0f, 1.0f, mGuiEventBoostInfo.mfBoostAmount / lfMaxBoost );
             RenderQuad(lv4EndGlowRect, lv4EndGlowColour, mpEndGlowTextureState,
-                       CgsGui::gpGuiBlendStateAdditive, lv4FullUVs);
+                       CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Additive, lv4FullUVs);
             lpRenderBuffer->PopMask();
         }
 
@@ -2103,14 +2102,14 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
                   lfBarCentreY + lfHalfHeight );
             const Vector4 lv4CapColour( 1.0f, 1.0f, 1.0f, lfBaseAlpha );
             RenderQuad(lv4CapRect, lv4CapColour, mpBackgroundEndCapTextureState,
-                       CgsGui::gpGuiBlendStateStandard, lv4FullUVs);
+                       CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard, lv4FullUVs);
         }
     }
 
     // ---- epilogue -----------------------------------------------------------------------
     if (mbShowDebugScreen)
         ShowDebugScreen();
-    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
     lpRenderBuffer->EndRendering();
 
     if (miBoostBarPM >= 0)

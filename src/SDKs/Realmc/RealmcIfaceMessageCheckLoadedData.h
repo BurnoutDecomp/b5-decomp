@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "SDKs/Realmc/RealmcCore.h"   // RealmcCore::Message base, IMessageProcessor, FreeMemSize
+#include "SDKs/Realmc/RealmcLoadEntryInfo.h" // LoadTask passes its entry array at +0x0C
 
 // ===========================================================================
 // RealmcIface::MessageCheckLoadedData -- the Realmc interface message that asks for the loaded data to be checked.
@@ -27,9 +28,15 @@ namespace RealmcIface
 class MessageCheckLoadedData : public RealmcCore::Message
 {
 public:
+    MessageCheckLoadedData(u32 uCount, LoadEntryInfo* pEntries)
+        : RealmcCore::Message(), muField08(uCount), mpEntries(pEntries) {}
+
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x10 slot.
     void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
+
+    u32 GetCount() const { return muField08; }
+    LoadEntryInfo* GetEntries() const { return mpEntries; }
 
     // The deleting destructor restores the vtable and frees the object through
     // the Realmc backend with its size (the class operator delete).
@@ -42,7 +49,9 @@ public:
 
 private:
     u32 muField08;  // +0x08
-    u32 muField0C;  // +0x0C
+    LoadEntryInfo* mpEntries; // +0x0C
 };
 
 } // namespace RealmcIface
+
+CGS_STATIC_ASSERT((sizeof(RealmcIface::MessageCheckLoadedData) == 16), "ARTIST MessageCheckLoadedData size");

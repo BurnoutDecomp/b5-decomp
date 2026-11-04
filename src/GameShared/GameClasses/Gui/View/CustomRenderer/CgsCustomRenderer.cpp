@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "types.hpp"
@@ -51,9 +52,9 @@ namespace CgsGui
     {
         CgsGraphics::Im2dRenderBuffer& lrBuffer = *lpRendererSet->mpIm2dRenderBuffer;
         lrBuffer.BeginRendering();
-        lrBuffer.SetState(gpGuiBlendStateStandard);
-        lrBuffer.SetState(gpGuiRasterizerStateCullNone);
-        lrBuffer.SetState(gpBillboardDepthStencilState);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOff);
         lrBuffer.EndRendering();
         RenderComponent(lpRendererSet);
     }

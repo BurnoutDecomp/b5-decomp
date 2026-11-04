@@ -5,6 +5,7 @@
 #include "protoname.h"
 #include "cryptarc4.h"
 #include "cryptsha1.h"
+#include "cryptrsa.h"
 #include "dirtymem.h"
 #include "dirtylib.h"
 #include <xtl.h>
@@ -719,4 +720,119 @@ extern "C" void ProtoSSLUpdate(ProtoSSLRefT* state)
         if (!progress || !state->pSock)
             break;
     } while (true);
+}
+
+// ARTIST 82B37580/82B37720: SSLv3 finished hash over a copy of the transcript.
+static void MakeFinished(SecureStateT* secure, const char* sender, u8 output[36])
+{
+    u8 innerPad[48], outerPad[48], digest[20];
+    std::memset(innerPad, 0x36, sizeof(innerPad));
+    std::memset(outerPad, 0x5c, sizeof(outerPad));
+    CryptMD5T md5 = secure->HandshakeMD5;
+    CryptMD5Update(&md5, sender, 4);
+    CryptMD5Update(&md5, secure->MasterKey, 48);
+    CryptMD5Update(&md5, innerPad, 48);
+    CryptMD5Final(&md5, digest, 16);
+    CryptMD5Init(&md5);
+    CryptMD5Update(&md5, secure->MasterKey, 48);
+    CryptMD5Update(&md5, outerPad, 48);
+    CryptMD5Update(&md5, digest, 16);
+    CryptMD5Final(&md5, output, 16);
+    CryptSha1T sha = secure->HandshakeSHA;
+    CryptSha1Update(&sha, reinterpret_cast<const u8*>(sender), 4);
+    CryptSha1Update(&sha, secure->MasterKey, 48);
+    CryptSha1Update(&sha, innerPad, 40);
+    CryptSha1Final(&sha, digest, 20);
+    CryptSha1Init(&sha);
+    CryptSha1Update(&sha, secure->MasterKey, 48);
+    CryptSha1Update(&sha, outerPad, 40);
+    CryptSha1Update(&sha, digest, 20);
+    CryptSha1Final(&sha, output + 16, 20);
+}
+
+extern "C" s32 ProtoSSLUpdateSendClientFinish(ProtoSSLRefT* state)
+{
+    u8 body[36];
+    MakeFinished(state->pSecure, "CLNT", body);
+    const u8 header[4] = { 20, 0, 0, 36 };
+    SendPacket(state, 22, header, 4, body, 36);
+    return 25;
+}
+
+extern "C" void NetPrintMemCode(const void*, s32, const char*);
+extern "C" s32 ProtoSSLUpdateRecvServerFinish(ProtoSSLRefT* state, const u8* data)
+{
+    u8 expected[36];
+    MakeFinished(state->pSecure, "SRVR", expected);
+    if (std::memcmp(expected, data, 16) != 0 || std::memcmp(expected + 16, data + 16, 20) != 0)
+    {
+        NetPrintMemCode(expected, 16, "Server Final MD5 Calc");
+        NetPrintMemCode(data, 16, "Server Final MD5 Recv");
+        NetPrintMemCode(expected + 16, 20, "Server Final SHA Calc");
+        NetPrintMemCode(data + 16, 20, "Server Final SHA Recv");
+        return 4100;
+    }
+    return 30;
+}
+
+CGS_STATIC_ASSERT((offsetof(SecureStateT, Cert) + offsetof(X509CertificateT, iKeyModSize) == 1992), "ARTIST certificate modulus size");
+CGS_STATIC_ASSERT((offsetof(SecureStateT, Cert) + offsetof(X509CertificateT, KeyModData) == 1996), "ARTIST certificate modulus");
+CGS_STATIC_ASSERT((offsetof(SecureStateT, Cert) + offsetof(X509CertificateT, iKeyExpSize) == 2128), "ARTIST certificate exponent size");
+CGS_STATIC_ASSERT((offsetof(SecureStateT, Cert) + offsetof(X509CertificateT, KeyExpData) == 2132), "ARTIST certificate exponent");
+
+// ARTIST 82B37318: RSA-encrypt the real pre-master secret and derive SSLv3 keys.
+extern "C" s32 ProtoSSLUpdateSendClientKey(ProtoSSLRefT* state)
+{
+    SecureStateT* const secure = state->pSecure;
+    ProtoSSLGenerateRandom(secure->PreMasterKey, 48, &secure->ReadArc4);
+    secure->PreMasterKey[0] = 3;
+    secure->PreMasterKey[1] = 0;
+    CryptRSAT rsa;
+    CryptRSAInit(&rsa, secure->Cert.KeyModData, secure->Cert.iKeyModSize,
+        secure->Cert.KeyExpData, secure->Cert.iKeyExpSize);
+    CryptRSAInitMaster(&rsa, secure->PreMasterKey, 48);
+    CryptRSAEncrypt(&rsa);
+    u8 digest[20];
+    u8 pad[8];
+    for (s32 i = 1; i <= 3; ++i)
+    {
+        CryptMD5T md5;
+        CryptSha1T sha;
+        CryptMD5Init(&md5);
+        CryptMD5Update(&md5, secure->PreMasterKey, 48);
+        CryptSha1Init(&sha);
+        std::memset(pad, 'A' + i - 1, i);
+        CryptSha1Update(&sha, pad, i);
+        CryptSha1Update(&sha, secure->PreMasterKey, 48);
+        CryptSha1Update(&sha, secure->ClientRandom, 32);
+        CryptSha1Update(&sha, secure->ServerRandom, 32);
+        CryptSha1Final(&sha, digest, 20);
+        CryptMD5Update(&md5, digest, 20);
+        CryptMD5Final(&md5, secure->MasterKey + (i - 1) * 16, 16);
+    }
+    std::memset(secure->PreMasterKey, 0, 48);
+    for (s32 i = 1; i <= 8; ++i)
+    {
+        CryptMD5T md5;
+        CryptSha1T sha;
+        CryptMD5Init(&md5);
+        CryptMD5Update(&md5, secure->MasterKey, 48);
+        CryptSha1Init(&sha);
+        std::memset(pad, 'A' + i - 1, i);
+        CryptSha1Update(&sha, pad, i);
+        CryptSha1Update(&sha, secure->MasterKey, 48);
+        CryptSha1Update(&sha, secure->ServerRandom, 32);
+        CryptSha1Update(&sha, secure->ClientRandom, 32);
+        CryptSha1Final(&sha, digest, 20);
+        CryptMD5Update(&md5, digest, 20);
+        CryptMD5Final(&md5, secure->KeyBlock + (i - 1) * 16, 16);
+    }
+    secure->pClientMAC = secure->KeyBlock;
+    secure->pServerMAC = secure->pClientMAC + secure->pCipher->uMac;
+    secure->pClientKey = secure->pServerMAC + secure->pCipher->uMac;
+    secure->pServerKey = secure->pClientKey + 16;
+    const s32 length = secure->Cert.iKeyModSize;
+    const u8 header[4] = { 16, 0, static_cast<u8>(length >> 8), static_cast<u8>(length) };
+    SendPacket(state, 22, header, 4, rsa.EncryptBlock, length);
+    return 23;
 }

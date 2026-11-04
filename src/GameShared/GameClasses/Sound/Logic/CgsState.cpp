@@ -67,15 +67,20 @@ ClassTypeInfo<State>* State::GetRegisteredTypeInfo(u32 auIndex)
     return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapStateTypeInfo[auIndex] : 0;
 }
 
+ClassTypeInfo<State>* State::GetStaticTypeInfo()
+{
+    static ClassTypeInfo<State> sTypeInfo(-1, "State", 0, 0); // ARTIST 0x82F2FA90
+    return &sTypeInfo;
+}
+
 ClassTypeInfo<State>* State::GetTypeInfo() const
 {
-    static ClassTypeInfo<State> sTypeInfo(0, "State", 0, 0);
-    return &sTypeInfo;
+    return GetStaticTypeInfo(); // ARTIST 0x8268D410
 }
 
 const char* State::GetTypeName() const
 {
-    return "State";
+    return GetStaticTypeInfo()->typeName; // ARTIST 0x8268D420
 }
 
 // CgsState.h:370. Zero/seed the State base members. This mirrors the inline base
@@ -482,18 +487,20 @@ bool State::Detach()
 
 void State::DestroyEffects()
 {
-    while (mpHeadEffectControl)
+    for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect;)
     {
-        EffectBase* lpNext = mpHeadEffectControl->mpNextEffectBase;
-        mpHeadEffectControl->Destroy();
-        mpHeadEffectControl = lpNext;
+        EffectBase* lpNext = lpEffect->mpNextEffectBase;
+        delete lpEffect;
+        lpEffect = lpNext;
     }
-    while (mpHeadEffectObject)
+    for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect;)
     {
-        EffectBase* lpNext = mpHeadEffectObject->mpNextEffectBase;
-        mpHeadEffectObject->Destroy();
-        mpHeadEffectObject = lpNext;
+        EffectBase* lpNext = lpEffect->mpNextEffectBase;
+        delete lpEffect;
+        lpEffect = lpNext;
     }
+    mpHeadEffectControl = 0;
+    mpHeadEffectObject = 0;
     miNumLoadedEffectControls = 0;
     miNumLoadedEffectObjects = 0;
 }
@@ -524,23 +531,6 @@ void State::DestroyEffects()
 State::~State()
 {
     DestroyEffects();
-}
-
-// ---------------------------------------------------------------------------
-// State::G  @ 0x8268D410
-//
-//   lis  r11, unk_82F2FA90@ha
-//   addi r3,  r11, unk_82F2FA90@l   ; r3 = &unk_82F2FA90 (rodata sentinel)
-//   blr
-//
-// Returns a pointer to the rodata sentinel unk_82F2FA90. Per the &unk_XXXX
-// convention (HARD RULE 5), a raw IDA rodata sentinel reconstructs as the empty
-// string literal. FLAG (confidence low): the meaning of G() is not recoverable from
-// this one instruction pair; only the observable return (the sentinel) is modelled.
-// ---------------------------------------------------------------------------
-void* State::G()
-{
-    return (void*)"";
 }
 
 } // namespace Logic

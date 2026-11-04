@@ -28,6 +28,7 @@
 // FONT HEIGHT and the TEXT Y. The wide-glyph override (28/629) is unchanged.
 // ============================================================================
 
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 
@@ -1405,8 +1406,8 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
 
     // ARTIST82469DA8..DC8 owns one bracket around the complete ticker batch.
     lrCmd.BeginRendering();
-    lrCmd.SetState(CgsGui::gpGuiRasterizerStateCullNone);
-    lrCmd.SetTexture(CgsGui::gpGuiWhiteTexture);
+    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
+    lrCmd.SetTexture(CgsGraphics::ImRendererBase::GetStateLibrary().mpTexture_White);
 
     // ARTIST82469DD0: screen pixels to clip space, then apply display aspect.
     {
@@ -1597,7 +1598,7 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
             CGS_ASSERT(false, "Unhandled state in InGameMessageRenderer::Update\n");   // :1067
             break;
     }
-    lrCmd.SetState(CgsGui::gpGuiBlendStateStandard); // ARTIST8246A3EC
+    lrCmd.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard); // ARTIST8246A3EC
     lrCmd.EndRendering();                          // ARTIST8246A3F4
 }
 }   // namespace BrnGui

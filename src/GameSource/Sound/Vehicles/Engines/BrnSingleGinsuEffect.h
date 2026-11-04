@@ -36,25 +36,12 @@ namespace Vehicles
 namespace Engines
 {
 
-// BrnSingleGinsuEffect.h:81 (DWARF). The hybrid-exhaust controller the effect
-// latches onto in AttachController. Its full surface is reconstructed in its own
-// home; here only the polymorphic effect-base relationship needed to recover the
-// controller pointer by name is modelled.
-// FLAG: HybridExhaustControl is not yet homed anywhere. The X360 AttachController
-// recovers the controller's primary object from the EffectBase sub-object pointer
-// it is handed; modelled here as `HybridExhaustControl : CgsSound::Logic::EffectBase`
-// so that recovery is a by-name downcast rather than raw pointer arithmetic. Only
-// the inheritance is asserted; no controller-specific members are fabricated.
-struct HybridExhaustControl : public CgsSound::Logic::EffectBase
-{
-    HybridExhaustControl() {}
-    virtual ~HybridExhaustControl() {}
-};
+struct HybridExhaustControl;
 
 // BrnSingleGinsuEffect.h:41 (DWARF). Single-voice Ginsu engine effect.
 struct SingleGinsuEffect : public BrnSound::Logic::BrnEffectObject
 {
-    SingleGinsuEffect() : mpHybridControl(0) {}
+    SingleGinsuEffect() {}
 
     // @ 0x826AFAF0 — the X360 `scalar deleting destructor'. Bodied out-of-line in
     // BrnSingleGinsuEffect.cpp. Its teardown is the inherited BrnEffectObject
@@ -65,9 +52,9 @@ struct SingleGinsuEffect : public BrnSound::Logic::BrnEffectObject
     // writes only +0/+4/+0x24/+0x28/+0x31 — no +0x34 store).
     virtual ~SingleGinsuEffect();
 
-    // — per-class RTTI. DEFERRED bodies (declared for
-    // the effect vtable shape; the sTypeInfo static-init lives in its own slice).
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
+    static CgsSound::Logic::EffectObject* CreateObject(u32 luFlavour);
 
     // @ 0x82685098 — per-class RTTI type name. Bodied.
     virtual const char* GetTypeName() const;

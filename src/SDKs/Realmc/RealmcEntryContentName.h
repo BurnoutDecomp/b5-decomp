@@ -31,6 +31,10 @@ public:
     // SetFileName(rOther.macFileName). muField130/muField134 are NOT copied here;
     EntryContentName(const EntryContentName& rOther);
 
+    const u16* GetTitle() const { return macTitle; }
+    const char* GetFileName() const { return macFileName; }
+    int GetSize() const { return mnSize; }
+
 private:
     u16 macTitle[128];
     char macFileName[0x2A];

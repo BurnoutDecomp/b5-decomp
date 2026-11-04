@@ -31,59 +31,41 @@ void ExplosionState::Attach(void* lpvAttachment)
     CGS_ASSERT(lpvAttachment != 0, "lpvAttachment");
 }
 
-// ---------------------------------------------------------------------------
-// ~ExplosionState  @ 0x826D5740  (vector deleting destructor)
-//
-//   stw  off_820AE1F4, 0(this)                     ; install ExplosionState's own vtable
-//   bl   CgsSound::Logic::State::DestroyEffects     ; (this in r3) tear down attached effects
-//   stw  off_820AA820, 0(this)                      ; re-install the MemBase base vtable
-//   if (a2 & 1)                                     ; deleting flavour
-//       <sound allocator>.Free(this)                ; via off_82FFB954, vtable slot +0x14
-//
-// Store-for-store identical to the committed sibling GlobalState::~GlobalState
-// (@ 0x826D2250, BrnGlobalState.cpp) modulo the leaf vtable constant: the same
-// off_820AE1F4 (leaf vtable) / DestroyEffects / off_820AA820 (MemBase base
-// vtable) sequence. The single observable source-level side effect is the
-// DestroyEffects() call on the State base (declared on BrnState, reused BY NAME).
-// The two vtable installs and the conditional allocator-routed free are the
-// compiler-synthesised parts of MSVC's vector-deleting-destructor thunk;
-// off_82FFB954 (the sound allocator) is not homed in this group, so the host
-// toolchain's `delete` stands in for the custom-allocator dispatch.
-//
-// FLAG: State::DestroyEffects() is declaration-only in BrnState.h (its own body
-// is a separate un-homed sound-logic recon slice). Called BY NAME here to match
-// the X360 `bl` exactly; no body is fabricated for it.
-// ---------------------------------------------------------------------------
+// ARTIST 0x826D5740 uses the base State teardown.
 ExplosionState::~ExplosionState()
 {
-    DestroyEffects();
 }
 
-// ---------------------------------------------------------------------------
-// GetStaticTypeInfo  @ 0x82689198
-//
-//   lis   r11, unk_82F2F9AC@ha
-//   addi  r3,  r11, unk_82F2F9AC@l   ; r3 = &sTypeInfo (the rodata descriptor)
-//   blr
-//
-// Returns ExplosionState's per-class static RTTI descriptor. The 2-instruction &unk_X; blr
-// shape is the committed per-class GetStaticTypeInfo() accessor form (PassbyState @0x82688FC8).
-// Mirrors that reconstruction: a function-local static, aggregate-initialised
-// ClassTypeInfo<State>.
-//
-// FLAG (confidence medium): typeName "ExplosionState" is inferred from the class identity,
-// NOT proven from a committed GetTypeName dereferencing 0x82F2F9B0. ObjectID is unrecovered
-// -> seeded 0 and FLAGGED; base/createObject deferred (BrnState descriptor chain un-homed).
-// ---------------------------------------------------------------------------
+#if defined(_XBOX)
+CGS_STATIC_ASSERT((sizeof(ExplosionState) == 0x54), "ExplosionState allocation size");
+#endif
+
+// ARTIST descriptor 0x82F2F9AC.
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* ExplosionState::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0,                // ObjectID        (FLAG: State-side id unrecovered)
-        "ExplosionState", // mpcTypeName     (FLAG: inferred from class, not GetTypeName-proven)
-        0,          // mpBaseTypeInfo  (DEFERRED — BrnState descriptor chain)
-        0);         // mpfnCreateObject(DEFERRED)
+        0x80000, "ExplosionState", BrnState::GetStaticTypeInfo(), &ExplosionState::CreateObject);
     return &sTypeInfo;
 }
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* ExplosionState::GetTypeInfo() const
+{
+    return GetStaticTypeInfo(); // ARTIST 0x82689198
+}
+
+const char* ExplosionState::GetTypeName() const
+{
+    return GetStaticTypeInfo()->typeName; // ARTIST 0x826891A8
+}
+
+CgsSound::Logic::State* ExplosionState::CreateObject(u32 luFlavour)
+{
+    return new (GetStaticTypeInfo()->typeName, luFlavour != 0) ExplosionState(); // ARTIST 0x826D55F8
+}
+
+// ARTIST 0x82C633D0 registers descriptor 0x82F2F9AC.
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpExplosionStateReg =
+    CgsSound::Logic::State::AddToClassTypeInfoArray(ExplosionState::GetStaticTypeInfo());
 
 } // namespace Explosion
 } // namespace Logic

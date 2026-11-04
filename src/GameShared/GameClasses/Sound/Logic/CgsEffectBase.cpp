@@ -223,7 +223,7 @@ ClassTypeInfo<EffectControl>* EffectControl::GetRegisteredTypeInfo(u32 auIndex)
 // ---------------------------------------------------------------------------
 ClassTypeInfo<EffectObject>* EffectObject::GetStaticTypeInfo()
 {
-    static ClassTypeInfo<EffectObject> sTypeInfo(0, "EffectObject", 0, 0);
+    static ClassTypeInfo<EffectObject> sTypeInfo(-1, "EffectObject", 0, 0); // ARTIST 0x82F2FA60
     return &sTypeInfo;
 }
 

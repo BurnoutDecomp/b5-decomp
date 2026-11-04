@@ -34,6 +34,7 @@
 // __FILE__/__LINE__ of THIS file).
 // ============================================================================
 
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnMainMapRenderer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
@@ -626,8 +627,8 @@ void MainMapRenderer::ClearBackgroundFadeToMapEdges(Im2dCommandBuffer* lpRenderB
 
     // ---- the three quads --------------------------------------------------------------
     // ARTIST binds the shared white texture and the native default transform.
-    lpRenderBuffer->SetTexture(CgsGui::gpGuiWhiteTexture);
-    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
+    lpRenderBuffer->SetTexture(CgsGraphics::ImRendererBase::GetStateLibrary().mpTexture_White);
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
     lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetDefault());
 
     const CgsGraphics::RGBA8 lBlack       = MakeBlackWithAlpha(lu8Alpha);
@@ -842,8 +843,8 @@ void MainMapRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                                   luTextureCount, lm33MapToView);
 
     // (7) the tile pass state.
-    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateAdditive);      // sub_82458EC0(v3+4, dword_83010F24)
-    lpRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform); // SetTransform(v3, unk_83011090)
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Additive);      // sub_82458EC0(v3+4, dword_83010F24)
+    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetAspectCorrected()); // SetTransform(v3, unk_83011090)
 
     // (8) one quad per active texture.
     const CgsGraphics::RGBA8 lColour = MakeWhiteWithAlpha(lu8Alpha);

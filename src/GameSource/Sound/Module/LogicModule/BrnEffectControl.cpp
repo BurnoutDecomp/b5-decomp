@@ -25,8 +25,8 @@ namespace Logic
 {
 
 BrnEffectControl::BrnEffectControl()
-    : CgsSound::Logic::EffectControl()
-    , IResourceRequester()
+    : IResourceRequester()
+    , CgsSound::Logic::EffectControl()
 {
 }
 

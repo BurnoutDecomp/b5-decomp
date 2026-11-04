@@ -11,24 +11,36 @@ namespace BrnSound
 namespace Logic
 {
 
-// ---------------------------------------------------------------------------
-// `scalar deleting destructor'  @ 0x826C84D8  (the ONLY function this TU's
-// dossier attests for BrnState)
-//
-//   *a1 = off_820AE1F4              ; re-install BrnState's own vtable
-//   CgsSound::Logic::State::DestroyEffects()
-//   *a1 = &off_820AA820             ; re-install State's vtable before free
-//   if (a2 & 1) operator delete(a1) ; the "deleting" half of the thunk
-//
-// The two vtable-pointer stores + the conditional operator-delete call are the
-// standard scalar-deleting-destructor thunk shape (compiler-synthesized here
-// from `virtual ~BrnState()`); the one real, named side effect is the call
-// into the base's DestroyEffects(), reproduced below by name.
-// ---------------------------------------------------------------------------
+// ARTIST 0x826C84D8 uses the base State teardown.
 BrnState::~BrnState()
 {
-    DestroyEffects();
 }
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* BrnState::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
+        -1, "BrnState", CgsSound::Logic::State::GetStaticTypeInfo(), &BrnState::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* BrnState::GetTypeInfo() const
+{
+    return GetStaticTypeInfo(); // ARTIST 0x82682A88
+}
+
+const char* BrnState::GetTypeName() const
+{
+    return GetStaticTypeInfo()->typeName; // ARTIST 0x82682A98
+}
+
+CgsSound::Logic::State* BrnState::CreateObject(u32 luFlavour)
+{
+    return new (GetStaticTypeInfo()->typeName, luFlavour != 0) BrnState(); // ARTIST 0x826C8390
+}
+
+// ARTIST 0x82C61B48 registers descriptor 0x82F2E7DC.
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpBrnStateReg =
+    CgsSound::Logic::State::AddToClassTypeInfoArray(BrnState::GetStaticTypeInfo());
 
 } // namespace Logic
 } // namespace BrnSound

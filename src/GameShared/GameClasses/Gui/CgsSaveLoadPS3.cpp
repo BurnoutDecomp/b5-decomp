@@ -314,7 +314,7 @@ void SaveLoadSystem::SaveDone(u32 result, u32, const char*)
 }
 // Folded bodies in table820CF148, not synthesized defaults.
 void SaveLoadSystem::SaveCheckDone(u32, u32, u32, u32, const int*, s32) {} // 8284CB38
-bool SaveLoadSystem::CheckLoadedData(u32, u32) { return false; }        // 827E2F38
+bool SaveLoadSystem::CheckLoadedData(u32, RealmcIface::LoadEntryInfo*) { return false; } // ARTIST +0x24 receives count and entry array.
 void SaveLoadSystem::Callback3C(u32, u32, const void*) {}               // 8284CB38
 void SaveLoadSystem::SetActiveCardDone(u32, u32) {}                    // 8284CB38
 void SaveLoadSystem::ClearEntries()                                  // 8284CB40

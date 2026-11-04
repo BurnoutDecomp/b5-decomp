@@ -284,9 +284,8 @@ public:
     AICar*          GetAICar(u32 luIndex) const;          // BrnAI::AIModule::GetAICar(this, index)
     AISectionsData* GetAISectionsData() const;            // BrnAI::AIModule::GetAISectionsData(this)
 
-    // The current AI difficulty scalar (0..1), read by RaceBalancingDebugComponent::RenderHUD as the
-    // float at this+0x4EBA4 (322404). Declared-only; body lives in the AIModule TU.
-    f32             GetDifficulty() const;                // *(this + 0x4EBA4)
+    // RenderHUD reads this scalar at 0x82796EDC and displays it as the difficulty percentage.
+    f32 GetProgressionRankAsRatio() const { return mfProgressionRankAsRatio; }
 
 private:
     // X360 0x82795340 (167 insns) -- stage 2 of Prepare. LoadBundle("AI.dat") then acquire

@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "CgsBillboardRenderer.h"
 
 #include <cmath>
@@ -20,9 +21,6 @@ namespace CgsGui
 {
 namespace
 {
-    // (The X360 data-segment globals the draw binds -- dword_83010F54 and unk_83011090 -- are
-    // defined at namespace scope below as their PC folds; see the block comment there.)
-
     // Repack a billboard's stored RGBA colour word into the vertex colour word. The X360 swaps the
     // outermost bytes and keeps the middle two -- verbatim the pseudocode expression
     //   ((((c << 8) | BYTE2(c)) << 8 | BYTE1(c)) << 8) | HIBYTE(c)   ==  new = [b0 b2 b1 b3].
@@ -32,37 +30,6 @@ namespace
                  | ((luColour >> 8) & 0xFFu)) << 8) | ((luColour >> 24) & 0xFFu);
     }
 }
-
-// ---------------------------------------------------------------------------------------------
-// The X360 data-segment globals the GUI billboard/boost-bar draws bind (the dword_83010F20..F54
-// state-library block + the shared unk_83011090 screen transform), DEFINED here as their PC
-// folds (declared in CgsBillboardRenderer.h for the other GUI-renderer TUs):
-//
-namespace
-{
-    // Opaque sentinel storage for the two GUI blend identities (see the block comment above --
-    // the pointers are compared, never dereferenced).
-    const u32 sauGuiBlendStandardSentinel[4] = { 0u, 0u, 0u, 0u };
-    const u32 sauGuiBlendAdditiveSentinel[4] = { 1u, 0u, 0u, 0u };
-}
-const renderengine::BlendState*        gpGuiBlendStateStandard       =    // dword_83010F20
-    reinterpret_cast<const renderengine::BlendState*>(sauGuiBlendStandardSentinel);
-const renderengine::BlendState*        gpGuiBlendStateAdditive       =    // dword_83010F24
-    reinterpret_cast<const renderengine::BlendState*>(sauGuiBlendAdditiveSentinel);
-const renderengine::DepthStencilState* gpBillboardDepthStencilState  = 0;  // dword_83010F54
-const renderengine::RasterizerState*   gpGuiRasterizerStateCullNone  = 0;  // (same PC fold: the dispatch runs cull-none unconditionally)
-
-namespace
-{
-    CgsGraphics::Im2dTransform MakeBillboardScreenTransform()
-    {
-        CgsGraphics::Im2dTransform lTransform = {};
-        lTransform.mRightUp.Set(1280.0f, 0.0f, 0.0f, 720.0f); // x' = 1280*x, y' = 720*y
-        lTransform.mColourScale.Set(255.0f, 255.0f, 255.0f, 255.0f);
-        return lTransform;
-    }
-}
-const CgsGraphics::Im2dTransform gBillboardScreenTransform = MakeBillboardScreenTransform();  // unk_83011090
 
 // The shared full-texture default UV set (guest &unk_820E08B8): the four corners of the whole
 // texture, in the same [u,v, u,v2, u2,v, u2,v2] corner order SetUVTable's grid generator emits.
@@ -313,8 +280,8 @@ void BillboardRenderer::Render(
 
     lpRenderBuffer->SetState(mpTextureState);
     lpRenderBuffer->SetState(mpBlendState);
-    lpRenderBuffer->SetState(gpBillboardDepthStencilState);
-    lpRenderBuffer->SetTransform(gBillboardScreenTransform);
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOff);
+    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetAspectCorrected());
 
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), // PRIMITIVETYPE_TRIANGLESTRIPS
                            maVertexList, static_cast<u32>(6 * liRenderedCount - 2));

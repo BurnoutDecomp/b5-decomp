@@ -29,6 +29,7 @@
 // contents are unambiguous -- see the comment on the seed).
 // ============================================================================
 
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCrashNavIconRenderer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
@@ -1753,7 +1754,7 @@ void CrashNavIconRenderer::RenderCursor(Im2dCommandBuffer* lpRenderBuffer)
         laVertices[li].mv4Colour = lColour;
 
     lpRenderBuffer->SetState(mpIconsTextureState);
-    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);   // X360 dword_83010F20
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);   // X360 dword_83010F20
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
 
     mGuiEventMapCursorStatus.miAnimationState = 4;
@@ -1908,7 +1909,7 @@ void CrashNavIconRenderer::RenderDriveThrough(Im2dCommandBuffer* lpRenderBuffer,
                MakeV2(lfRight, lfBottom),   // BR
                OpaqueWhite(),
                mpIconsTextureState,
-               CgsGui::gpGuiBlendStateStandard,   // X360 dword_83010F20
+               CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard,   // X360 dword_83010F20
                lv4Uv);
 }
 
@@ -2004,7 +2005,7 @@ void CrashNavIconRenderer::RenderStartFinish(Im2dCommandBuffer* lpRenderBuffer)
                    // not a global fold. With the wrong page both start/finish markers
                    // sampled UVs authored for another atlas.
                    mapIconTextureStates[E_CRASHNAVICON_EVENT_NOTATTEMPTED],
-                   CgsGui::gpGuiBlendStateStandard,
+                   CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard,
                    lv4Uv);
     }
 }
@@ -2121,7 +2122,7 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
             RenderQuad(lpRenderBuffer, lv2TL, lv2BL, lv2TR, lv2BR,
                        lv4HaloColour,
                        mapIconTextureStates[E_CRASHNAVICON_EVENT_NOTATTEMPTED],
-                       CgsGui::gpGuiBlendStateStandard,
+                       CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard,
                        lv4PlayerOverlayUV);
         }
 
@@ -2138,7 +2139,7 @@ void CrashNavIconRenderer::RenderRivals(Im2dCommandBuffer* lpRenderBuffer)
         RenderQuad(lpRenderBuffer, lv2TL, lv2BL, lv2TR, lv2BR,
                    lv4MainColour,
                    mapIconTextureStates[E_CRASHNAVICON_EVENT_NOTATTEMPTED],
-                   CgsGui::gpGuiBlendStateStandard,
+                   CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard,
                    lv4PlayerUV);
     }
 }
@@ -2285,7 +2286,7 @@ void CrashNavIconRenderer::RenderEventIcon(Im2dCommandBuffer* lpRenderBuffer,
         laVertices[li].mv4Colour = lColour;
 
     lpRenderBuffer->SetState(mapIconTextureStates[leIconType]);
-    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
 
     // ---- publish the icon's DEVICE-space position -------------------------------------
@@ -2516,8 +2517,8 @@ void CrashNavIconRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     }
 
     lpRenderBuffer->BeginRendering();                                   // X360 sub_824587B0
-    lpRenderBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);     // X360 dword_83010F3C
-    lpRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform);    // X360 unk_83011090
+    lpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);     // X360 dword_83010F3C
+    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetAspectCorrected());    // X360 unk_83011090
 
     const renderengine::TextureState* lpMaskTextureState;
     if (mRenderMainMapEvent.meMapType == GuiEventRenderMainMap::E_MAPTYPE_MAINMAP)
@@ -2689,7 +2690,7 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
                    MakeV2(lfRight * KF_DEVICE_TO_NORMALISED_X, lfBottom * KF_DEVICE_TO_NORMALISED_Y),
                    OpaqueWhite(),                    // vmr128 v1, v126 (the 1.0 splat)
                    mpRoadSignsTextureState,          // lwz r9, 0x128(r31)
-                   CgsGui::gpGuiBlendStateStandard,  // dword_83010F20
+                   CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard,  // dword_83010F20
                    KV4_SIGN_POLE_UV);
     }
 
@@ -2723,7 +2724,7 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
                MakeV2(lfPlateRight * KF_DEVICE_TO_NORMALISED_X, lfPlateBottom * KF_DEVICE_TO_NORMALISED_Y),
                OpaqueWhite(),                    // vmr128 v1, v126 again -- the PLATE is white;
                mpRoadSignsTextureState,          // the sign colour drives the TEXT, not this quad
-               CgsGui::gpGuiBlendStateStandard,
+               CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard,
                lrv4PlateUv);
 
     // ---- the two text lines -------------------------------------------------------------
@@ -2794,7 +2795,7 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
         static_cast<CgsGui::AptIm2dRenderBuffer*>(lpRenderBuffer), mTextObject);
 
     // Put the shared 2D screen transform back for everything that draws after us.
-    lpRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform);   // unk_83011090
+    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransform::GetAspectCorrected());   // unk_83011090
 }
 
 } // namespace BrnGui
