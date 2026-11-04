@@ -31,7 +31,7 @@
 //
 // ⭐ MOUNTED 2026-08-01 (Prepare wave). The blocker was never this file's own code: it was
 // that the five ICE-cone bodies dragged six unresolved externals (MakeICEMovieId,
-// ICEWrapper::GetICETakeData / GetShakeGroup / GetAuthor,
+// ICEWrapper::GetICETakeData / GetAuthor,
 // ICEAuthor::FindEditedTakeFromGuid, ICEList::GetICETakeDataFromGuid) into the link. Those
 // five moved VERBATIM to BrnDirectorResourceManagerICE.cpp, which stays out of the link;
 // nothing was stubbed and nothing was invented. What is left here -- GetEventIntroShots and
@@ -101,7 +101,7 @@ namespace
 
 
 // ⚠️ THE FIVE ICE-CONE BODIES MOVED OUT 2026-08-01, verbatim, to the sibling
-// BrnDirectorResourceManagerICE.cpp (GetKeyAnim x2 / GetShakeTakes / GetICEAuthor /
+// BrnDirectorResourceManagerICE.cpp (GetKeyAnim / GetICEAuthor /
 // GetKeyAnimFromGuid). They are ONE console TU with what is left here; the split exists
 // only so this file can be mounted for Prepare without pulling six unresolved ICE externals
 // into the link, and it must be merged back when the ICE take-runtime group lands. See that

@@ -10,7 +10,6 @@
 #include "GameSource/AttribSys/Generated/classes/cameradefaults.h"         // Attrib::Gen::cameradefaults (the 65th)
 
 namespace BrnResource { class ICEList; struct VehicleList; }   // mpICEDictionaryList / mpVehicleList (by pointer)
-namespace ICE { struct ICEGroup; }    // GetShakeTakes' return type (pointer only; no full home yet)
 namespace ICE { struct ICEAuthor; }   // SDKs/Packages/ICE/ICEAuthor.hpp -- GetICEAuthor's return type.
                                       // ⚠️ IT IS A `struct` THERE. The ICE-anim fork this header
                                       // replaces spelled it `class`, which MSVC mangles differently
@@ -19,9 +18,7 @@ namespace ICE { struct ICEAuthor; }   // SDKs/Packages/ICE/ICEAuthor.hpp -- GetI
 namespace BrnDirector
 {
 
-// The director-side ICE owner GetKeyAnim / GetShakeTakes reach through. Forward-declared
-// (the inlines below only call its methods through a pointer; a using-TU includes the
-// full home GameSource/Director/BrnDirectorICEWrapper.h before instantiating them).
+// The director-side ICE owner used for take lookup.
 class ICEWrapper;
 class DirectorResourceManager;
 
@@ -426,10 +423,8 @@ public:
     // list has exactly one of it (`GetKeyAnim(ID)`), so out-of-line is also the faithful
     // shape -- and exactly one is what the console has: the resource id is carried
     // straight into the take dictionary lookup, with no name formatting anywhere.
-    // GetKeyAnim's body sits beside GetKeyAnimFromGuid in BrnDirectorResourceManagerICE.cpp
-    // (they share both members); GetShakeTakes is still in the unmounted ICEWrapper sibling.
+    // GetKeyAnim's body sits beside GetKeyAnimFromGuid in BrnDirectorResourceManagerICE.cpp.
     ICE::ICETakeData* GetKeyAnim(CgsResource::ID lKeyAnimID) const;
-    ICE::ICEGroup*    GetShakeTakes() const;
 
     // @0x821F69A8 (own ledger fn -- declared for the dev-tools GameTalk handler
     // @0x822095A0). Resolve an ICE take GUID to its take data: the wrapper editor's

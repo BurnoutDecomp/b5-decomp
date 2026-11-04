@@ -7,7 +7,6 @@ target_sources(${PROJECT_NAME}
         BrnDirectorModule.cpp
         BrnDirectorResourceManager.cpp
         BrnDirectorResourceManagerICE.cpp
-        BrnDirectorResourceManagerICEWrapper.cpp
         BrnMainDirector.cpp
         BrnMainDirector_wM_01.cpp
         BrnReplayDirector.cpp
