@@ -36,15 +36,16 @@ struct CGS_ALIGN(128) TrafficJobData
 // one out of a fixed table by worker id and calls Execute on it. Layout from the X360:
 // mpData at +0 (`stw r30, 0(r28)` @0x8291752C) and the embedded UpdateVehiclesJob at +0x80
 // (`addi r3, r29, 0x80` @0x829174A0); the console record is 1280 bytes (TrafficJobEntry
-// strides the table by 1280 @0x829172E0). ExecuteUpdateVehicles also hands the job a third
-// argument at this+0x300 that neither Execute nor Initialise reads -- not modelled.
-struct TrafficJob
+// strides the table by 1280 @0x829172E0). ExecuteUpdateVehicles passes the
+// workspace at +0x300 even though the current ARTIST worker does not read it.
+struct CGS_ALIGN(128) TrafficJob
 {
     void Execute(JobParams* lpData);                  // @0x829174B0 (TrafficJob.cpp:51/:69)
     void ExecuteUpdateVehicles(JobParams* lpParams);  // @0x82917420 (TrafficJob.cpp:89)
 
-    JobParams*        mpData;              // +0x000
-    UpdateVehiclesJob mUpdateVehiclesJob;  // +0x080
+    JobParams* mpData;                                  // +0x000
+    CGS_ALIGN(128) UpdateVehiclesJob mUpdateVehiclesJob; // +0x080
+    CGS_ALIGN(128) u8 mau8Workspace[0x200];              // +0x300
 };
 
 // TrafficJobEntry @0x829172E0 asserts the worker id is < 6 ("SPU Id out of range: ",

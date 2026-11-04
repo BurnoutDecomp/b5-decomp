@@ -4,6 +4,9 @@
 #include "SDKs/EATech/eajobs/job_scheduler.h"                 // EA::Jobs::JobScheduler::AddJobs
 #include "SDKs/EATech/eajobs/job_types.h"                     // EA::Jobs::JOB_ENVIRONMENT_LOCAL
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/Jobs/CgsJobAssertBuffer.h"
+#include "SDKs/EATech/eathread/BrnEAThreadX360.h"
 
 #include <cstring>   // std::memcpy (models the X360 memcpy intrinsic)
 #include <cstdlib>
@@ -36,6 +39,37 @@ namespace
 
 // X360 unk_831B9C80.
 TrafficJob gaTrafficJobs[KU_MAX_TRAFFIC_JOB_WORKERS];
+
+CGS_STATIC_ASSERT((sizeof(TrafficJob) == 0x500), "ARTIST traffic worker stride");
+CGS_STATIC_ASSERT((offsetof(TrafficJob, mUpdateVehiclesJob) == 0x80), "ARTIST update worker offset");
+CGS_STATIC_ASSERT((offsetof(TrafficJob, mau8Workspace) == 0x300), "ARTIST worker workspace offset");
+
+// ARTIST 0x829172E0.
+void TrafficJobEntry(EA::Jobs::Param, EA::Jobs::Param lJobData,
+                     EA::Jobs::Param, EA::Jobs::Param)
+{
+    const u64 luThreadId = static_cast<u64>(reinterpret_cast<uintptr_t>(EA::Thread::GetThreadId()));
+    const u64 luWorkerIndex = (luThreadId - 0xF8000088ull) >> 2;
+    if (luWorkerIndex >= KU_MAX_TRAFFIC_JOB_WORKERS)
+    {
+        CgsDev::StrStream lMessage(byte_83015F20, sizeof(byte_83015F20));
+        const u64 luReportedThreadId = static_cast<u64>(
+            reinterpret_cast<uintptr_t>(EA::Thread::GetThreadId()));
+        lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
+        const char* lpcSource =
+            "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameSource\\Jobs\\Traffic\\Traffic.cpp";
+        CgsDev::Assert::PrintStringed(lpcSource, 0, 57, lMessage.GetBuffer());
+        __asm { mfmsr r12 }
+        __asm { ori r12, r12, 0x400 }
+        __asm { mtmsr r12 }
+        CgsDev::Assert::PrintStringed(lpcSource, 0, 57, lMessage.GetBuffer());
+        __asm { mfmsr r12 }
+        __asm { ori r12, r12, 0x400 }
+        __asm { mtmsr r12 }
+    }
+    gaTrafficJobs[static_cast<u32>(luWorkerIndex)].Execute(
+        static_cast<JobParams*>(lJobData.mpValue));
+}
 
 // BrnTrafficJob.cpp:39 / DWARF BrnTrafficJob.h:55.
 void TrafficJobStub::Construct()
@@ -113,13 +147,12 @@ void TrafficJob::Execute(JobParams* lpData)
     ExecuteUpdateVehicles(lpData);
 }
 
-// X360 @0x82917420 (TrafficJob.cpp:89). The console also passes this+0x300 in r5; neither
-// UpdateVehiclesJob::Execute nor ::Initialise reads it, so it is not modelled.
+// ARTIST 0x82917420, with the workspace passed at 0x82917498.
 void TrafficJob::ExecuteUpdateVehicles(JobParams* lpParams)
 {
     CGS_ASSERT(lpParams, "lpParams");
 
-    mUpdateVehiclesJob.Execute(&lpParams->mUpdateVehicles);
+    mUpdateVehiclesJob.Execute(&lpParams->mUpdateVehicles, mau8Workspace);
 }
 
 }
