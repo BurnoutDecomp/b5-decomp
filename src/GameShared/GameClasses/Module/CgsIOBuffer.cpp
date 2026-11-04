@@ -36,7 +36,10 @@ namespace CgsModule
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            stream << "Already locked for read, flags: " << CgsDev::E_PRINTMODE_HEXONCE << static_cast<s32>(mxStatusFlags.GetFlags()) << "\n";
+            stream << "Already locked for read, flags: ";
+            stream << CgsDev::E_PRINTMODE_HEXONCE;
+            stream << static_cast<s32>(mxStatusFlags.GetFlags());
+            stream << "\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, "..\\..\\..\\GameShared\\GameClasses\\Module/CgsIOBuffer.h", 218);
             CgsDev::Assert::EndAssert();
         }
@@ -44,7 +47,10 @@ namespace CgsModule
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            stream << "Already locked for write, flags: " << CgsDev::E_PRINTMODE_HEXONCE << static_cast<s32>(mxStatusFlags.GetFlags()) << "\n";
+            stream << "Already locked for write, flags: ";
+            stream << CgsDev::E_PRINTMODE_HEXONCE;
+            stream << static_cast<s32>(mxStatusFlags.GetFlags());
+            stream << "\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, "..\\..\\..\\GameShared\\GameClasses\\Module/CgsIOBuffer.h", 219);
             CgsDev::Assert::EndAssert();
         }
