@@ -187,6 +187,7 @@ namespace BrnGui
         mGuiCache.SetChallengeManager(&mFreeburnChallengeManager);
 
         mGuiAccessPointers.Construct();
+        mGuiAccessPointers.mpAptAux = mViewModule.GetAptAux();  // ARTIST 0x82518C9C
         mGuiAccessPointers.mpLanguageManager = mViewModule.GetLanguageManager();
         mGuiAccessPointers.SetFlaptManager(mViewModule.GetFlaptManager());
         mGuiAccessPointers.SetGuiCache(&mGuiCache);
