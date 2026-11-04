@@ -240,12 +240,20 @@ void ParticleModule::Construct()
     mRenderData.mfCurrentTimeStep = 0.0f;    // +0x8E0C
     mbHasCameraSwitched           = true;    // +0x23137 (seeded SET)
 
-    // The two render EA::Jobs::Job objects and the five debris-update jobs (Clear /
-    // EntryPoint::SetCode / SetName / the zeroed job data / SetData). The Job type is an
-    // asm-sized placeholder in ParticleModule.h, so there is no named destination for those
-    // stores -- EXCEPT the debris jobs' data: each of the five DebrisUpdateJobData is zeroed
-    // (16 x `std` of 0 per job, 0x822946C4..0x822946DC) before Job::SetData binds it, and that is
-    // reproduced. The debris jobs themselves run in place inside BeginSimulateDebris.
+    // ARTIST 82294220: bind the two render records to real scheduler entries.
+    mParticleRenderJobSparks.Clear();
+    mParticleRenderJobSparks.mEntryPoint.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+        reinterpret_cast<const void*>(&ParticleRenderEntry), 0);
+    mParticleRenderJobSparks.mEntryPoint.SetName("ParticleRender_Sparks");
+    std::memset(&mParticleRenderJobDataSparks, 0, sizeof(mParticleRenderJobDataSparks));
+    mParticleRenderJobSparks.SetData(&mParticleRenderJobDataSparks, sizeof(mParticleRenderJobDataSparks));
+    mParticleRenderJobParticles.Clear();
+    mParticleRenderJobParticles.mEntryPoint.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+        reinterpret_cast<const void*>(&ParticleRenderEntry), 0);
+    mParticleRenderJobParticles.mEntryPoint.SetName("ParticleRender_Particles");
+    std::memset(&mParticleRenderJobDataParticles, 0, sizeof(mParticleRenderJobDataParticles));
+    mParticleRenderJobParticles.SetData(&mParticleRenderJobDataParticles, sizeof(mParticleRenderJobDataParticles));
+
     for (s32 liJob = 0; liJob < KI_NUM_DEBRIS_UPDATE_JOBS; ++liJob)
         std::memset(&maDebrisUpdateJobData[liJob], 0, sizeof(maDebrisUpdateJobData[liJob]));
 

@@ -53,6 +53,27 @@ namespace CgsGraphics
 
     // Pointer-only in the (out-of-scope) AddToDispatchBinFromStatePointers declaration.
     struct DispatchObjectContext;
+
+    // CgsShaderConstants.h:765 (DecFIGS). The X360 caller reserves this
+    // context on its stack and passes it as the mesh dispatch user data.
+    struct DispatchMeshContext
+    {
+        struct ShaderState
+        {
+            const rw::math::vpu::Vector4* lpPushBufferAddress;
+            u32 luPushBufferTimeStamp;
+        };
+
+        ShaderState maExternalConstantState[50][2];
+        ShaderState maInternalConstantState[50][2];
+        void* mpMaterialShadowingAddress;
+        const renderengine::ProgramBuffer* mpActiveShader[2];
+        u32 muActiveShaderTimeStamp[2];
+    };
+    CGS_STATIC_ASSERT((sizeof(DispatchMeshContext::ShaderState) == 8), "Mesh shader state");
+    CGS_STATIC_ASSERT((offsetof(DispatchMeshContext, maInternalConstantState) == 0x320), "Mesh internal constants");
+    CGS_STATIC_ASSERT((offsetof(DispatchMeshContext, mpMaterialShadowingAddress) == 0x640), "Mesh material shadow");
+    CGS_STATIC_ASSERT((sizeof(DispatchMeshContext) == 0x654), "Mesh dispatch context");
 }
 
 // CgsShaderConstants.h:97

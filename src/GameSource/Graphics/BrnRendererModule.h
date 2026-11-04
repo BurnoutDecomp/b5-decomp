@@ -359,10 +359,7 @@ public:
     // Prepare the renderer-owned buffers from GameData bank 31 and register its debug page.
     bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
-    // Render one frame from the dispatch-thread input buffer the game side
-    // published (the console's own lpDispatchThreadInputBuffer). The loading-screen overlay path
-    // is reconstructed; the gameplay-render path (shadows/world/cars/particles/post-fx) is
-    // data-gated off during boot and reconstructed incrementally.
+    // ARTIST 8240BFA8. Dispatch and present one published renderer frame.
     void Render(BrnEffects::EffectsModule* lpEffectsModule,
                 const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
 

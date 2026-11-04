@@ -17,6 +17,7 @@
 
 #include <xtl.h>
 #include <xonline.h>
+#include "xnfriends_x360.h"
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -39,7 +40,7 @@ struct HLBApiRefT
 {
     HLBMemAllocFnT          pMemAlloc;                 // +0x00 (DirtyMemAlloc)
     HLBMemFreeFnT           pMemFree;                  // +0x04 (DirtyMemFree)
-    void*                   pXnFriends;                // +0x08 (opaque native XnFriends handle)
+    XnFriendsRef*           pXnFriends;                // +0x08 (opaque native XnFriends handle)
     s32                     iMemGroup;                 // +0x0c
     s32                     iConnectState;             // +0x10 (HLBApiConnect/Disconnect)
     void*                   pChangeUserData;            // +0x14
@@ -186,22 +187,8 @@ extern "C" s32 HLBListSendChatMsg(HLBApiRefT* /*pApi*/, const void* /*pName*/, s
     return HLB_ERROR_UNSUPPORTED;
 }
 
-// Remaining native HLB providers recovered from ARTIST R1. The XnFriends and
-// Hasher providers are separate native owners; these declarations are private to
-// this translation unit and do not create alternate implementations.
-typedef void (*XnFriendsChangedCallbackT)(void* pFriendRef, s32 iChangeCount,
-                                           void* pUnused, const void* pChanges,
-                                           HLBApiRefT* pApi);
-extern "C" void* XnFriendsCreate(s32 iUserIndex, void* pCallback);
-extern "C" void XnFriendsDestroy(void* pFriendRef);
-extern "C" void XnFriendsDisconnect(void* pFriendRef);
-extern "C" void XnFriendsUpdate(void* pFriendRef);
-extern "C" s32 XnFriendsSetUserIndex(void* pFriendRef, s32 iUserIndex);
-extern "C" void XnFriendsConnect(void* pFriendRef, s32 iUserIndex,
-                                   XnFriendsChangedCallbackT pCallback,
-                                   HLBApiRefT* pApi);
-extern "C" void* XnFriendsGetFriend(void* pFriendRef, s32 iIndex);
-extern "C" void* XnFriendsGetFriendByName(void* pFriendRef, const char* pName);
+// XnFriends declarations are shared with its implementation in xnfriends_x360.h.
+// Hasher remains a separate native owner.
 
 extern "C" HasherRef* HasherCreate(s32 iInitial, s32 iHashLength);
 extern "C" void HasherDestroy(HasherRef* pHasher);
@@ -220,9 +207,9 @@ namespace
     const s32 KI_HLB_NAME_NOT_FOUND = -8;
 
     s32 HLBApiConnect(HLBApiRefT* pApi);
-    void HLBApiFriendsChanged(void* pFriendRef, s32 iChangeCount,
-                              void* pUnused, const void* pChanges,
-                              HLBApiRefT* pApi);
+    void HLBApiFriendsChanged(XnFriendsRef* pFriendRef, s32 iChangeCount,
+                              s32 iInitialised, const void* pChanges,
+                              void* pUserData);
     void* HLBUpdateFriendInRoster(HLBApiRefT* pApi, const void* pFriend);
     void HLBReloadFriends(HLBApiRefT* pApi);
     void HLBRosterDestroy(HLBApiRefT* pApi);
@@ -428,10 +415,11 @@ namespace
         return iAction;
     }
 
-    void HLBApiFriendsChanged(void* /*pFriendRef*/, s32 iChangeCount,
-                              void* /*pUnused*/, const void* pChanges,
-                              HLBApiRefT* pApi)
+    void HLBApiFriendsChanged(XnFriendsRef* /*pFriendRef*/, s32 iChangeCount,
+                              s32 /*iInitialised*/, const void* pChanges,
+                              void* pUserData)
     {
+        HLBApiRefT* pApi = static_cast<HLBApiRefT*>(pUserData);
         s32 i;
         const u8* pChange = static_cast<const u8*>(pChanges);
         void* pFriend;

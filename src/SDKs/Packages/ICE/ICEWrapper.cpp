@@ -11,8 +11,7 @@
 // The ctor / EditorOn / EditorOff / ReconstructCameraMover bodies live in the sibling
 // TU GameSource/Director/BrnDirectorICEWrapper.cpp (same home); Construct, Destruct,
 // PlayMovie, GetCurrentMovie and IsPlayingMovie are split into ICEWrapper_wG_11.cpp so
-// they can be on the link while this TU cannot -- the two converter tables UpdateAction
-// indexes are still unhomed (see the FLAG below).
+// they can be on the link independently of the debug-controller input path.
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
@@ -23,21 +22,24 @@
 namespace BrnDirector
 {
 
-// ----------------------------------------------------------------------------
-// FLAG (unhomed dev-tools dependency): the two control->action converter tables
-// UpdateAction maps inputs through. The recorded code reads them as two file-scope
-// arrays (NOT this-relative members) indexed by control 0..21: the press table for
-// just-pressed controls, the pad/held table for is-pressed controls. Their element is
-// ICE::EControlToICEAction (a single action id). Their CONTENTS are not recovered, so
-// they are declared extern (the definitions are the not-yet-reconstructed static
-// tables; the per-TU `cl /c` gate does not link). Replace with the real homed tables
-// when the dev-tools ICE-input mapping TU lands.
-// ----------------------------------------------------------------------------
-extern const ICE::EControlToICEAction maPressConverter[];
-extern const ICE::EControlToICEAction maPadConverter[];
-
 namespace
 {
+    // ARTIST 0x82F28718
+    const ICE::EControlToICEAction maPressConverter[] =
+    {
+        {13}, {11}, {15}, {17}, {5}, {3}, {7}, {9},
+        {23}, {25}, {19}, {21}, {32}, {31}, {29}, {30},
+        {36}, {35}, {33}, {34}, {26}, {27}
+    };
+
+    // ARTIST 0x82F28770
+    const ICE::EControlToICEAction maPadConverter[] =
+    {
+        {12}, {10}, {14}, {16}, {4}, {2}, {6}, {8},
+        {22}, {24}, {18}, {20}, {32}, {31}, {29}, {30},
+        {36}, {35}, {33}, {34}, {26}, {27}
+    };
+
     // Control loop bounds + the release-only control / its action, from UpdateAction's
     // recorded loop (controls 0..21 inclusive; control 21 also handles just-released).
     const s32 KI_NUM_INPUT_CONTROLS    = 22;

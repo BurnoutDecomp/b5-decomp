@@ -17,21 +17,11 @@
 // Declaration shape (virtual-ness, return types, vtable order) comes from the
 // original header: a single-vptr polymorphic class, no base, no
 // non-static data member, and the table as a PRIVATE STATIC member declared in the
-// header and defined in the .cpp. Destruct / Prepare / GetState are NOT in the
-// ledger for this TU -- only Construct is attested. They are declared
-// here to preserve the original vtable order, and they are three different
-// situations, which is worth spelling out:
+// header and defined in the .cpp. The ARTIST vtable at 0x820CDC34 names
+// Construct and the shared Destruct and Prepare bodies.
 //
-//   * Destruct / Prepare have NO console body and never will from the binary: a scan of
-//     the whole image finds no symbol for either, on this class or on the blend and
-//     rasterizer twins, and no callee's cross-references name one. They are DEFINED -- as
-//     flagged, never-called, link-closure fillers -- at the end of
-//     CgsDepthStencilStateFactory.cpp. Those fillers are not decoration:
-//     this class is polymorphic, so its vtable is emitted in whatever TU
-//     constructs it and names every virtual, and the day BrnRendererModule stops using
-//     its empty placeholder and embeds the real class by value (it is reached from
-//     `static BrnGame::BrnGameModule gGameModule;` in BrnMain.cpp) an undefined virtual
-//     is an LNK2019 in the boot link. The per-TU gate is `cl /c`, which cannot see that.
+// Accessor details:
+//
 //   * GetState IS NOW BODIED, and the table it reads is now the original's private static
 //     member rather than a TU-local array in the .cpp. That is this wave's change, and
 //     it exists for one reason: BrnPostFx::Render pushes saDepthStencilStates[1] into
@@ -100,8 +90,8 @@ public:
     // Build the 5 depth/stencil states into saDepthStencilStates.
     virtual void Construct(rw::IResourceAllocator* lpAllocator);
 
-    virtual void Destruct();   // declared in the original header; declared-only here
-    virtual bool Prepare();    // declared in the original header; declared-only here
+    virtual void Destruct();
+    virtual bool Prepare();
 
     // An accessor defined inline in the original header. `static` is an INFERENCE --
     // see the banner above.

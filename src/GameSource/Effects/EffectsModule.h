@@ -247,9 +247,9 @@ namespace BrnEffects
         void Construct() ;
         // @0x8229E690 (DWARF :415). `bool Prepare(const AllocatorList*, IOBufferStack*,
         // OutputBuffer*)`: the 5-stage ladder. Returns false while still preparing.
-        bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
-                     CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
-                     EffectsIO::OutputBuffer* lpOutputBuffer);
+        virtual bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
+                             CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                             EffectsIO::OutputBuffer* lpOutputBuffer);
         // @0x822902F0 (DWARF :556). The loading spine's LoadWorldCollision tail: re-point
         // the surface list at the world's collection and push every surface's skid-mark
         // colour pair into the trail system (TrailSystem::UpdateTrailType).
@@ -258,11 +258,11 @@ namespace BrnEffects
         bool Release() ;
         void Destruct() ;
         // @0x8229EC28 (DWARF :852). One simulation sub-step of the whole effects system.
-        void Update(CgsModule::IOBufferStack* lpInputBufferStack,
-                    CgsModule::IOBufferStack* lpOutputBufferStack,
-                    const EffectsIO::InputBuffer* lpInputBuffer,
-                    EffectsIO::OutputBuffer* lpOutputBuffer,
-                    BrnUpdateSet leUpdateSet);
+        virtual void Update(CgsModule::IOBufferStack* lpInputBufferStack,
+                            CgsModule::IOBufferStack* lpOutputBufferStack,
+                            const EffectsIO::InputBuffer* lpInputBuffer,
+                            EffectsIO::OutputBuffer* lpOutputBuffer,
+                            BrnUpdateSet leUpdateSet);
         // @0x82296668 (DWARF :1345). Once per frame from DoDispatch: the render requests,
         // then the particle module's dispatch input + its render-data publish.
         void GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBufferStack,

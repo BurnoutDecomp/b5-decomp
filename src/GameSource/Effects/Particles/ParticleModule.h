@@ -450,24 +450,18 @@ namespace BrnParticle
         // X360 0x8228A7C0 -- render thread, immediately BEFORE BuildLionVertexBuffers
         // (BrnRendererModule::Render @0x8240BFA8 :453-454 calls the pair under one gate).
         // Advances the spark motion-blur ring, retires the banks' expired buckets, flips and
-        // locks the two vertex buffers and starts the two particle render jobs. The jobs are
-        // run inline on this single-threaded build -- see the .cpp.
-        void BeginParticleRenderJob(const ParticleRenderData* lpRenderData);
+        // locks both vertex buffers and submits the two native particle render jobs.
+        void BeginParticleRenderJob(const ParticleRenderData& lrRenderData);
+        void WaitOnParticleRenderJob(const ParticleRenderData& lrRenderData);
         // X360 0x8228AC20 -- render thread: the trail system's per-frame time + view-projection
         // (+ the Lion vertex buffers, carved out on PC -- see the .cpp).
-        void BuildLionVertexBuffers(const ParticleRenderData* lpRenderData);
+        void BuildLionVertexBuffers(const ParticleRenderData& lrRenderData);
         // X360 0x8229AFD0 -- render thread: the trail strips (RenderTrails), debris, sparks, Lion.
-        void RenderFullResParticles(const ParticleRenderData* lpRenderData);
+        void RenderFullResParticles(const ParticleRenderData& lrRenderData);
 
-        // X360 0x82294A20 -- render thread: THE OTHER HALF OF THE SAME PASS. The console splits the
-        // particle draw across two render targets and the selector is mbIsInJunkyard: the full-res
-        // arm above draws into the scene target when it is SET, and this one draws into the cleared
-        // quarter-res particle buffer (BrnRendererModule::BeginQuarterResBuffer @0x82408C38 opens it,
-        // EndRenderAntiAliased @0x82408B00 composites it back) when it is CLEAR -- i.e. everywhere
-        // except the junkyard. The two Lion dispatches are ARGUMENT-IDENTICAL; only the bound target
-        // differs. Its two BrnSimpleParticleRenderer::Dispatch calls (the debris halves either side
-        // of the Lion dispatch) reach the same asm-sized placeholders the full-res arm's do.
-        void RenderQuarterResParticles(const ParticleRenderData* lpRenderData);
+        // ARTIST 0x82294A20: render the two simple batches around the Lion draw,
+        // forwarding the original depth target to each simple-particle dispatch.
+        void RenderQuarterResParticles(const ParticleRenderData& lrRenderData, CgsRenderTarget* lpZFadeRenderTarget);
 
         // ⭐⭐ THE TWO HALVES OF THE EFFECT HAND-OFF, and between them the ONLY route in the whole
         // program from a stamped maPlayingEffects slot to a live Lion emitter. Everything else on

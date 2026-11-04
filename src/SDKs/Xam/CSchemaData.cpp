@@ -1,5 +1,7 @@
 #include "SDKs/Xam/CSchemaData.h"
 
+#include <cstring>
+
 // ===========================================================================
 // CSchemaData -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -9,6 +11,19 @@
 
 // E_FAIL HRESULT the failure path returns (lis r3,-0x8000 ; ori r3,r3,0x4005).
 static const s32 KI_E_FAIL = (s32)0x80004005;
+
+// ---------------------------------------------------------------------------
+// CSchemaData::GetSchemaEntry @ 0x8297F228
+s32 CSchemaData::GetSchemaEntry(u32 luSchemaId, void* lpEntry)
+{
+    if (luSchemaId >= muEntryCount)
+    {
+        return KI_E_FAIL;
+    }
+
+    memcpy(lpEntry, mpEntryTable + luSchemaId * muEntryStride, KU_SCHEMA_ENTRY_SIZE);
+    return 0;
+}
 
 // ---------------------------------------------------------------------------
 // CSchemaData::LookupConstantFromTable @ 0x8297F280

@@ -1,6 +1,10 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
 #include "GameSource/Effects/Particles/ParticleModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Effects/Particles/ParticleCpuMonitors.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h"
 #include <cstddef>                                   // offsetof
 #include <cstdio>                                    // snprintf (the announcement)
 #include <cstdlib>                                   // getenv / atoi ([diag] gates)
@@ -833,198 +837,85 @@ namespace BrnParticle
     //   2. clear the two batch arrays, flip and lock the spark and simple-particle vertex
     //      buffers, fill the two job parameter blocks and AddJobs both.
     //
-    void ParticleModule::BeginParticleRenderJob(const ParticleRenderData* lpRenderData)
+    // ARTIST 8228A7C0: prepare both jobs while their vertex buffers remain locked.
+    void ParticleModule::BeginParticleRenderJob(const ParticleRenderData& data)
     {
-        if (lpRenderData == 0)
-            return;
-
-        // dword_82CDB404 -- a module-scope static on the console too, not a member.
-        static u32 suLastRenderedFrame = 0;
-        const bool lbFrameChanged = (lpRenderData->muCurrentFrame != suLastRenderedFrame);
-        suLastRenderedFrame = lpRenderData->muCurrentFrame;
-
-        if (lbFrameChanged)
+        ParticleCpuMonitors& monitors = (data.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate)
+            ? gCrashCpuMonitors : gRaceCpuMonitors;
+        CgsDev::PerfMonCpu::StartMonitor(monitors.miBeginParticleRenderJob);
+        static u32 lastFrame = 0xFFFFFFFFu; // ARTIST 82CDB404 initial image
+        const bool changed = data.muCurrentFrame != lastFrame;
+        lastFrame = data.muCurrentFrame;
+        if (changed)
         {
-            // The console copies four 16-byte rows out of renderData+0x60 (mCgsCamera.mView)
-            // and four out of +0xA0 (mProjection) onto the stack and hands the two blocks
-            // straight to Update -- it has no type to disagree with. In C++ the destination
-            // is a Matrix44Affine (SparkFrameData::mViewMatrix, DWARF) while CgsCamera models
-            // its own view as a Matrix44, so the four rows are re-typed here, row by row,
-            // rather than punned. Same 64 bytes, same order.
-            const rw::math::vpu::Matrix44& lrCameraView = lpRenderData->mCgsCamera.mView;
-            rw::math::vpu::Matrix44Affine  lView;
-            lView.xAxis.mV.x = lrCameraView.xAxis.mV.x; lView.xAxis.mV.y = lrCameraView.xAxis.mV.y;
-            lView.xAxis.mV.z = lrCameraView.xAxis.mV.z; lView.xAxis.mV.w = lrCameraView.xAxis.mV.w;
-            lView.yAxis.mV.x = lrCameraView.yAxis.mV.x; lView.yAxis.mV.y = lrCameraView.yAxis.mV.y;
-            lView.yAxis.mV.z = lrCameraView.yAxis.mV.z; lView.yAxis.mV.w = lrCameraView.yAxis.mV.w;
-            lView.zAxis.mV.x = lrCameraView.zAxis.mV.x; lView.zAxis.mV.y = lrCameraView.zAxis.mV.y;
-            lView.zAxis.mV.z = lrCameraView.zAxis.mV.z; lView.zAxis.mV.w = lrCameraView.zAxis.mV.w;
-            lView.wAxis.mV.x = lrCameraView.wAxis.mV.x; lView.wAxis.mV.y = lrCameraView.wAxis.mV.y;
-            lView.wAxis.mV.z = lrCameraView.wAxis.mV.z; lView.wAxis.mV.w = lrCameraView.wAxis.mV.w;
-
-            const rw::math::vpu::Matrix44Affine& lrView = lView;
-            const rw::math::vpu::Matrix44&       lrProj = lpRenderData->mCgsCamera.mProjection;
-
-            // ⭐ THE RING STEP IS THE FIELD, VERBATIM: the console writes `lfs f1, 0xC(r30)` at
-            // 0x8228A82C, handing SparkFrameDataSet::Update the render data's mfCurrentTimeStep --
-            // the update frame's SUM of scaled sim sub-steps. ParticleModule::Update adds each one
-            // (0x8228185C..0x82281870) and ParticleModule::StartOfFrame, inlined into
-            // BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0, clears it at the start of every update
-            // frame (`stfsx f0(0.0), r11, r9`, r9 = 0x88194C = the particle module's +0x8E0C in the
-            // game module). The callee's own arithmetic wants exactly that per-frame quantity:
-            //   * 0x822842D8-E0  `lfs f0, 0x80(r3); fadds f0, f0, f1` -- the ring head is ADVANCED BY f1;
-            //   * 0x822842F4-FC  the shift is gated on `head - *(r3+0x150) >= flt_8200DD54` (1/64 s);
-            //   * 0x82283C20-28  `f1 == flt_82001CC0 (0.0)` selects the "no time has passed" rebuild --
-            //     a frame that ran no sub-step.
-            // CORRECTED 2026-09-25 (FX-CRASHVFX): the PC dropped that clear (the earlier +0x8E0C scans
-            // looked module-relative; the store is game-module-relative), so the field grew from boot and
-            // this took its FIRST DIFFERENCE (sfLastConsumedTimeStepSum). With the clear restored the
-            // difference would be wrong, and it is gone.
-            const f32 lfRingDelta = lpRenderData->mfCurrentTimeStep;
-
-            mParticleRenderJobDataSparks.mSparkFrameDataSet.Update(lrView, lrProj, lfRingDelta);
-
-            // `*(a1 + 151728)` == +0x250B0 == mParticleRenderJobDataSparks.mSparkFrameDataSet.maFrames[0].mfTimeStamp.
-            f32 lfRetireTime = mParticleRenderJobDataSparks.mSparkFrameDataSet.GetFrame(0).mfTimeStamp;
-
-            bool lbAnyBucketsLive = false;
-            for (u32 luArray = 0; luArray < KU_NUM_SPARK_ARRAYS; ++luArray)
+            const Matrix44& source = data.mCgsCamera.mView;
+            rw::math::vpu::Matrix44Affine view;
+            view.xAxis = Vector3(source.xAxis.mV);
+            view.yAxis = Vector3(source.yAxis.mV);
+            view.zAxis = Vector3(source.zAxis.mV);
+            view.wAxis = Vector3(source.wAxis.mV);
+            const Matrix44& projection = data.mCgsCamera.mProjection;
+            mParticleRenderJobDataSparks.mSparkFrameDataSet.Update(view, projection, data.mfCurrentTimeStep);
+            f32 time = mParticleRenderJobDataSparks.mSparkFrameDataSet.maFrames[0].mfTimeStamp;
+            bool anyBuckets = false;
+            for (u32 i = 0; i < KU_NUM_SPARK_ARRAYS; ++i)
             {
-                maSparks[luArray].FreeUnusedBuckets(lfRetireTime);
-                if (maSparks[luArray].mRegularBank.mpBuckets != 0
-                    || maSparks[luArray].mCrashBank.mpBuckets != 0)
-                {
-                    lbAnyBucketsLive = true;
-                }
+                maSparks[i].FreeUnusedBuckets(time);
+                if (maSparks[i].mRegularBank.mpBuckets || maSparks[i].mCrashBank.mpBuckets)
+                    anyBuckets = true;
             }
-
-            if (!lbAnyBucketsLive)
-            {
-                lfRetireTime = 0.0f;
-                mParticleRenderJobDataSparks.mSparkFrameDataSet.Reset(lrView, lrProj, lfRetireTime);
-            }
-            else if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagCameraSwitched) != 0)
-            {
-                mParticleRenderJobDataSparks.mSparkFrameDataSet.Reset(lrView, lrProj, lfRetireTime);
-            }
+            if (!anyBuckets)
+                mParticleRenderJobDataSparks.mSparkFrameDataSet.Reset(view, projection, 0.0f);
+            else if (data.muFlags & ParticleRenderData::eRenderDataFlagCameraSwitched)
+                mParticleRenderJobDataSparks.mSparkFrameDataSet.Reset(view, projection, time);
         }
-
-
-        // The console clears BOTH jobs' batch lists here, every frame, before the flips: the simple
-        // list's count and pre-Lion split (`stw r28(=0), 0xD0 / 0xD4` off module+0x25C00,
-        // 0x8228A9B0..0x8228A9B4) and then the spark list's count (`stwx r28, r31, 0x25008`). So a
-        // frame whose simple job does not run replays NOTHING, never last frame's batches.
         mParticleRenderJobDataParticles.mSimpleParticleBatchArray.Clear();
         mParticleRenderJobDataSparks.mSparkBatchArray.Clear();
-
-        // The console's `*(this+143752) = (*(this+143752) - 1) & 1` pair, one per manager,
-        // each preceded by its own !mbLocked assert (EffectsVertexBufferManager.h:104).
         mVertexBufferManagerSparks.FlipBuffer();
         mVertexBufferManagerParticles.FlipBuffer();
-
-        EffectsVertexBufferLocked& lrLockedSparkBuffer = mVertexBufferManagerSparks.Lock();
-
-        // ---- ParticleRenderJob::Execute @0x8291DF38, the spark arm, run inline ------------
-        if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderSparks) != 0)
-        {
-            Native::SparkVertexBufferBuilder::BuildDispatchData(
-                &lrLockedSparkBuffer,
-                mParticleRenderJobDataSparks.mSparkBatchArray,
-                maSparks,
-                KU_NUM_SPARK_ARRAYS,
-                lpRenderData->mfTimeStepMultiplier,
-                mParticleRenderJobDataSparks.mSparkFrameDataSet,
-                lpRenderData->mfWhiteLevel,
-                (lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0);
-        }
-
-        // ⭐ THE UNLOCK IS THE PC FOLD'S, AND IT IS NOT OPTIONAL. On the console the two
-        // buffers stay locked across the AddJobs and each JOB closes its own; here the job
-        // body ran inline, so the bracket closes here -- exactly as BuildLionVertexBuffers
-        // does with its own manager. Leaving it locked would trip the `!mbLocked` assert at
-        // the NEXT frame's FlipBuffer, once per frame for ever, which on this box is an
-        // assert storm that starves the harness rather than a missing effect.
-        mVertexBufferManagerSparks.UnLock();
-
-        // ---- ParticleRenderJob::Execute @0x8291DF38, the SIMPLE-PARTICLE arm, run inline -------
-        // ⭐ 2026-09-24 (FX-CRASHVFX): BODIED (was announced while BrnSimpleParticleArray was a
-        // partial layout). The console locks mVertexBufferManagerParticles right after the spark
-        // manager (0x8228AA74) and stages the second job block (module +0x25A80) with:
-        //     +0x000 the render data's camera (Camera::operator= from renderData+0x60, 0x8228AB50)
-        //     +0x170 the locked particle vertex buffer      +0x28C &maSimpleParticles[0] (+0x228D0)
-        //     +0x294 renderData+0x08 mfCurrentTime          +0x298 renderData+0x10 (unread here)
-        //     +0x29C renderData+0x208 mfWhiteLevel          +0x2A0 (muFlags >> 6) & 1
-        //     +0x2A1 (muFlags >> 3) & 1 -- run the simple job    +0x2A2 0 -- no sparks in this job
-        // and Execute's `if (*(a2 + 673))` arm is ParticleRenderJob::RenderSimpleParticles @0x8291DE88:
-        //     batches.Clear();                                      (count AND pre-Lion split)
-        //     BuildDispatchData(buffer, batches, arrays, {3..12}, 10, time, camera, white, crash);
-        //     batches.SetPreLionCount();
-        //     BuildDispatchData(buffer, batches, arrays, {1, 2},  2, time, camera, white, crash);
-        // The crash banks render only when the reduced-frame-rate bit is set -- the same byte the
-        // spark job's crash-bank argument is.
-        // Locked and unlocked here for the reason the spark bracket above states: the job body ran
-        // inline, so the bracket closes inline, before RenderQuarterResParticles' !mbLocked assert.
-        {
-            EffectsVertexBufferLocked& lrLockedParticleBuffer = mVertexBufferManagerParticles.Lock();
-
-            if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderSimple) != 0)
-            {
-                const bool lbRenderCrashBanks =
-                    (lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0;
-
-                mParticleRenderJobDataParticles.mSimpleParticleBatchArray.Clear();
-                mParticleRenderJobDataParticles.mSimpleParticleBatchArray.SetPreLionCount();
-            }
-
-            mVertexBufferManagerParticles.UnLock();
-        }
-
-        // =====================================================================================
-        // [DIAG] BRN_SPARK_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-        //
-        // Placed HERE, at the point the geometry is CONSUMED, and reporting the numbers a
-        // reader could otherwise only assume:
-        //   live   -- sparks actually held by the eight banks RIGHT NOW, counted by walking
-        //             the bucket lists (mu16NumberOfParticlesInBucket), not a spawn tally;
-        //   batches/verts -- what BuildDispatchData actually wrote this frame, read back off
-        //             mParticleRenderJobDataSparks.mSparkBatchArray AFTER it ran, so a frame that culled everything reads 0
-        //             rather than inheriting last frame's number;
-        //   ring   -- how many motion-blur frames the ring currently spans and its newest
-        //             timestamp, which is what makes "nothing drawn" separable into "no
-        //             sparks", "no ring" and "all culled".
-        // Printed only on frames where something changed, so an idle run does not flood.
-
+        mParticleRenderJobDataSparks.mDestinationVertexBuffer = mVertexBufferManagerSparks.Lock();
+        mParticleRenderJobDataParticles.mDestinationVertexBuffer = mVertexBufferManagerParticles.Lock();
+        ParticleRenderJobData& sparks = mParticleRenderJobDataSparks;
+        sparks.mCamera = data.mCgsCamera;
+        sparks.mpaSimpleParticleArrays = 0;
+        sparks.mpaSparkArrays = maSparks;
+        sparks.mfCurrentTime = data.mfCurrentTime;
+        sparks.mfTimeMultiplier = data.mfTimeStepMultiplier;
+        sparks.mfWhiteLevel = data.mfWhiteLevel;
+        sparks.mbIsCrash = (data.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0;
+        sparks.mbRenderParticles = false;
+        sparks.mbRenderSparks = (data.muFlags & ParticleRenderData::eRenderDataFlagRenderSparks) != 0;
+        ParticleRenderJobData& particles = mParticleRenderJobDataParticles;
+        particles.mCamera = data.mCgsCamera;
+        particles.mpaSimpleParticleArrays = maSimpleParticles;
+        particles.mpaSparkArrays = 0;
+        particles.mfCurrentTime = data.mfCurrentTime;
+        particles.mfTimeMultiplier = data.mfTimeStepMultiplier;
+        particles.mfWhiteLevel = data.mfWhiteLevel;
+        particles.mbIsCrash = sparks.mbIsCrash;
+        particles.mbRenderParticles = (data.muFlags & ParticleRenderData::eRenderDataFlagRenderSimple) != 0;
+        particles.mbRenderSparks = false;
+        CgsSystem::JobManager()->AddJobs(&mParticleRenderJobSparks, 1);
+        CgsSystem::JobManager()->AddJobs(&mParticleRenderJobParticles, 1);
+        CgsDev::PerfMonCpu::StopMonitor(monitors.miBeginParticleRenderJob);
     }
 
-    // =========================================================================
-    // BuildLionVertexBuffers  @0x8228AC20 -- render thread, BEFORE the world passes.
-    //   BrnRendererModule::Render @0x8240BFA8 :453-454 calls BeginParticleRenderJob and
-    //   then this, both under the same v295 gate, well before the scene geometry. The
-    //   console body builds the Lion batches' vertex buffers -- and, INLINED at its head,
-    //   runs TrailSystem::Update:
-    //       *(trailSystem + 102644) = renderData->mfCurrentTimeStep;
-    //       *(trailSystem + 102640) = renderData->mfCurrentTime;
-    //       TrailRenderer::Update(currentTime, viewProjection);
-    //
-    //   WHERE THE MATRIX COMES FROM, pinned by offsets rather than guessed: the asm loads
-    //   four 16-byte rows from `a2 + 224` (renderData +0xE0) and four more from `a2 + 96`
-    //   (+0x60). ParticleRenderData::mCgsCamera sits at +0x60, and CgsGraphics::Camera
-    //   carries `static_assert(offsetof(Camera, mViewProjection) == 0x80)` -- so +0x60+0x80
-    //   == +0xE0 IS mViewProjection, and +0x60 itself is the view matrix. The trail
-    //   renderer wants the view-projection.
-    //
-    //   ⭐ WHY THIS MATTERS FOR A TYRE MARK: TrailRenderer::Update is the ONLY writer of the
-    //   matrix TrailRenderer::Render transforms its strips by, and of the time the strips
-    //   fade against. Without it TrailSystem::Render draws every segment through a matrix
-    //   that was never written. AddTrailSegment can be laying segments perfectly and
-    //   nothing appears -- a silent, plausible nothing, which is exactly the failure shape
-    //   this project keeps finding.
-    //
-    //   THE LION HALF IS NOT LANDED (the batch/vertex-buffer members are asm-sized
-    //   placeholders and cLionFX is absent) and says so once.
-    // =========================================================================
-    void ParticleModule::BuildLionVertexBuffers(const ParticleRenderData* lpRenderData)
+    // ARTIST 8227A320: finish both jobs before unlocking either destination.
+    void ParticleModule::WaitOnParticleRenderJob(const ParticleRenderData& data)
     {
+        ParticleCpuMonitors& monitors = (data.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate)
+            ? gCrashCpuMonitors : gRaceCpuMonitors;
+        CgsDev::PerfMonCpu::StartMonitor(monitors.miWaitOnParticleRenderJob);
+        mParticleRenderJobSparks.WaitOn(0, 0, -1);
+        mParticleRenderJobParticles.WaitOn(0, 0, -1);
+        mVertexBufferManagerSparks.UnLock();
+        mVertexBufferManagerParticles.UnLock();
+        CgsDev::PerfMonCpu::StopMonitor(monitors.miWaitOnParticleRenderJob);
+    }
+
+    void ParticleModule::BuildLionVertexBuffers(const ParticleRenderData& lrRenderData)
+    {
+        const ParticleRenderData* const lpRenderData = &lrRenderData;
         if (lpRenderData == 0)
             return;
 
@@ -1149,8 +1040,9 @@ namespace BrnParticle
     //   both monitor blocks is 0 and a bracket here would time one shared id. (Same call
     //   BrnRendererModule.cpp makes for the corona pass, same paragraph.)
     // =========================================================================
-    void ParticleModule::RenderFullResParticles(const ParticleRenderData* lpRenderData)
+    void ParticleModule::RenderFullResParticles(const ParticleRenderData& lrRenderData)
     {
+        const ParticleRenderData* const lpRenderData = &lrRenderData;
         if (lpRenderData == 0)
             return;
 
@@ -1364,100 +1256,42 @@ namespace BrnParticle
         miNumDebrisUpdateJobsToWaitOn = -1;
     }
 
-    // =========================================================================
-    // RenderQuarterResParticles  @0x82294A20 -- THE OTHER HALF OF THE PARTICLE PASS.
-    //   Its ONLY caller is BrnRendererModule::Render @0x8240BFA8, on the render thread,
-    //   INSIDE the bracket BeginQuarterResBuffer @0x82408C38 opens and EndRenderAntiAliased
-    //   @0x82408B00 closes -- i.e. the cleared, half-by-half particle buffer is bound. Same
-    //   argument shape as the full-res arm: (this, renderData, ...).
-    //
-    //   The console body, in order (asm/pseudocode 0x82294A20):
-    //     v6 = (flags & 0x40) ? &unk_82FAB5D8 : &unk_82FAB598   -- the "Crash"/"Race" monitor set
-    //     StartMonitor(v6[13])
-    //     assert(!mbLocked)                                     -- EffectsVertexBufferManager.h:97
-    //     v7 = the Lion vertex-buffer manager's CURRENT slot     (the inlined GetVertexBuffer)
-    //     v8 = mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetPreLionCount() ; v10 = its count
-    //     assert(count != -1)                                   -- CgsArray.h:336
-    //     v13 = (flags & 0x40) || mbZFadeEnabled                -- the z-fade argument
-    //     BrnSimpleParticleRenderer::Dispatch(..., 0,  v8, ...)  -- the skid smoke (pre-Lion)
-    //     if (!mbIsInJunkyard) { cLionFX::Dispatch(GetVertexBuffer(), ...) }
-    //     BrnSimpleParticleRenderer::Dispatch(..., v8, v10, ...) -- impact smoke + crash dust
-    //     StopMonitor(v6[13])
-    //
-    //   ⭐ THE LION GATE IS THE FULL-RES ARM'S, INVERTED, ON THE SAME BYTE. RenderFullResParticles
-    //   reads `lbzx r11, r25, 0x23136 ; beq` and this one reads the same byte with `bne`; the two
-    //   dispatch calls are ARGUMENT-IDENTICAL, verified instruction for instruction (same batch
-    //   array, f1 = mfWhiteLevel, r6 = 0, f2/f3 = the camera's near/far, f4 = 0.6, f5 = f6 = 0,
-    //   a null depth texture state on the stack). ONLY THE BOUND TARGET DIFFERS -- which is the
-    //   whole content of the fix this function is part of: on the console a plume accumulates on a
-    //   CLEARED buffer and is composited OVER the scene with a (1 - alpha) term, so a saturating
-    //   flame REPLACES its background instead of adding to it.
-    //
-    //   THE TWO SIMPLE-PARTICLE DISPATCHES RUN (2026-09-24, FX-CRASHVFX). They were announced while
-    //   BrnSimpleParticleRenderer's frame arrays were asm-sized placeholders ("the debris halves" in
-    //   the old wording -- they are the SIMPLE particles: skid smoke before the Lion pass, impact
-    //   smoke and crash dust after it, split by SimpleParticleBatchArray's pre-Lion count).
-    //
-    //   THE PERFMON BRACKET IS NOT REPRODUCED, this file's standing reason (every id is 0).
-    // =========================================================================
-    void ParticleModule::RenderQuarterResParticles(const ParticleRenderData* lpRenderData)
+    // ARTIST 82294A20: r5 is the z-fade target consumed by both simple passes.
+    void ParticleModule::RenderQuarterResParticles(const ParticleRenderData& data, CgsRenderTarget* target)
     {
-        if (lpRenderData == 0)
-            return;
-
-        const f32 lfWhiteLevel = lpRenderData->mfWhiteLevel;   // renderData +0x208
-        const bool lbZFade =
-            (lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0 || mbZFadeEnabled;
-
-
-        // ---- the simple particles' two halves (0x82294A70..0x82294B64 and 0x82294BD8..0x82294C04) --
-        // ⭐ 2026-09-24 (FX-CRASHVFX): BODIED. The inlined GetVertexBuffer of the PARTICLE manager
-        // (the !mbLocked assert at EffectsVertexBufferManager.h:97, then maVertexBuffers[current]),
-        // the batch list's constructed-assert and its pre-Lion split, the camera's two clip planes
-        // (renderData+0x1BC / +0x1C0 == mCgsCamera.maProjectionScalars[7] / [8]) and the z-fade byte
-        //     r27 = (muFlags & 0x40) != 0 || mbZFadeEnabled
-        // feed BrnSimpleParticleRenderer::Dispatch TWICE: batches [0, preLion) -- the ten skid-smoke
-        // types -- BEFORE the Lion dispatch, and [preLion, count) -- impact smoke and crash dust --
-        // AFTER it. The r5 render target the console passes (`*(renderer + 0x25C)`) is not handed to
-        // this function on this build; Dispatch's banner says what that costs (the z-fade arm).
-        renderengine::VertexBuffer* const lpParticleVertexBuffer =
-            mVertexBufferManagerParticles.GetVertexBuffer();
-        CGS_ASSERT(mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetCount() != -1, "Array used before Construct/Clear was called");
-        const u32 luPreLionCount   = mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetPreLionCount();
-        const u32 luSimpleBatches  = static_cast<u32>(mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetCount());
-        const f32 lfNearPlane      = lpRenderData->mCgsCamera.maProjectionScalars[7];
-        const f32 lfFarPlane       = lpRenderData->mCgsCamera.maProjectionScalars[8];
-
-        mSimpleParticleRenderer.Dispatch(lpParticleVertexBuffer, mParticleRenderJobDataParticles.mSimpleParticleBatchArray,
-                                         0u, luPreLionCount, 0, lfNearPlane, lfFarPlane, lbZFade);
-
+        ParticleCpuMonitors& monitors = (data.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate)
+            ? gCrashCpuMonitors : gRaceCpuMonitors;
+        CgsDev::PerfMonCpu::StartMonitor(monitors.miRenderQuarterResParticles);
+        renderengine::VertexBuffer* const vertexBuffer = mVertexBufferManagerParticles.GetVertexBuffer();
+        const u32 preLion = mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetPreLionCount();
+        if (mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetCount() == -1)
         {
-            renderengine::VertexBuffer* const lpVertexBuffer =
-                mVertexBufferManagerLion.GetVertexBuffer();
-
-            cLionFX::Dispatch(lpVertexBuffer,
-                              mLionBatchArray,
-                              lfWhiteLevel,
-                              false,                       // li r6, 0 -- z-fade off
-                              lpRenderData->mCgsCamera.maProjectionScalars[7],  // near
-                              lpRenderData->mCgsCamera.maProjectionScalars[8],  // far
-                              KF_LION_DEPTH_FADE_DISTANCE, // f4 == flt_82004D00 == 0.6
-                              0.0f,                        // f5 == flt_82001CC0
-                              0.0f,                        // f6 == the same 0.0
-                              0);                          // the stack slot, written 0
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Array used before Construct/Clear was called",
+                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h", 336);
+            CgsDev::Assert::EndAssert();
         }
-
-        mSimpleParticleRenderer.Dispatch(lpParticleVertexBuffer, mParticleRenderJobDataParticles.mSimpleParticleBatchArray,
-                                         luPreLionCount, luSimpleBatches, 0, lfNearPlane, lfFarPlane,
-                                         lbZFade);
-
-        // =====================================================================================
-        // [DIAG] BRN_SIMPLEFX_DIAG=1 -- NOT IN THE X360 BINARY. OFF BY DEFAULT. DELETE-WHEN-STABLE.
-        // The simple-particle ladder in one line, at the point the batches are CONSUMED: quads
-        // Render wrote, batches BuildDispatchData appended, batches / vertices Dispatch handed the
-        // device -- all running totals -- plus this frame's list (count, pre-Lion split). Change-
-        // gated and capped at 200 lines so an idle run does not flood.
-
+        const u32 count = static_cast<u32>(mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetCount());
+        const f32 whiteLevel = data.mfWhiteLevel;
+        const f32 nearPlane = data.mCgsCamera.maProjectionScalars[7];
+        const f32 farPlane = data.mCgsCamera.maProjectionScalars[8];
+        const bool zFade = (data.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0 || mbZFadeEnabled;
+        CgsDev::PerfMonCpu::StartMonitor(monitors.miSimpleParticlesDispatch);
+        mSimpleParticleRenderer.Dispatch(vertexBuffer, mParticleRenderJobDataParticles.mSimpleParticleBatchArray,
+                                         0, preLion, target, nearPlane, farPlane, zFade);
+        CgsDev::PerfMonCpu::StopMonitor(monitors.miSimpleParticlesDispatch);
+        if (!mbIsInJunkyard)
+        {
+            CgsDev::PerfMonCpu::StartMonitor(monitors.miLionDispatch);
+            cLionFX::Dispatch(mVertexBufferManagerLion.GetVertexBuffer(), mLionBatchArray,
+                whiteLevel, false, nearPlane, farPlane, KF_LION_DEPTH_FADE_DISTANCE, 0.0f, 0.0f, 0);
+            CgsDev::PerfMonCpu::StopMonitor(monitors.miLionDispatch);
+        }
+        CgsDev::PerfMonCpu::StartMonitor(monitors.miSimpleParticlesDispatch);
+        mSimpleParticleRenderer.Dispatch(vertexBuffer, mParticleRenderJobDataParticles.mSimpleParticleBatchArray,
+                                         preLion, count, target, nearPlane, farPlane, zFade);
+        CgsDev::PerfMonCpu::StopMonitor(monitors.miSimpleParticlesDispatch);
+        CgsDev::PerfMonCpu::StopMonitor(monitors.miRenderQuarterResParticles);
     }
 
     // Native absolute layout pin. Never executed (offsetof checks resolved at compile time inside an

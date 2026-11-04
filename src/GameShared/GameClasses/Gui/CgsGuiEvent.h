@@ -217,7 +217,10 @@ namespace CgsGui
         bool Release();
         void Destruct();
         void Clear();
-        s32  GetLength() const;
+        s32 GetLength() const
+        {
+            return CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::GetLength();
+        }
         void AddGuiEvent(const CgsModule::Event* lpEvent, s32 liType, s32 liSize);
         s32  GetFirstEvent(const CgsModule::Event** lppEvent, s32* lpiSize) const;
         s32  GetNextEvent(const CgsModule::Event* lpEvent, const CgsModule::Event** lppNextEvent, s32* lpiSize) const;

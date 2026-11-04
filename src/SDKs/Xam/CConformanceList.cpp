@@ -99,6 +99,31 @@ s32 CConformanceList::AcquireConformanceInfo(u32 luIndex, Entry** lppOut)
 }
 
 // ---------------------------------------------------------------------------
+// CConformanceList::ReleaseConformanceInfo @ 0x829803A0
+s32 CConformanceList::ReleaseConformanceInfo(u32 luIndex)
+{
+    if (luIndex >= KU_MAX_ENTRIES)
+    {
+        return KI_E_INVALIDARG;
+    }
+
+    if (luIndex == KU_MAX_ENTRIES - 1)
+    {
+        return KI_S_OK;
+    }
+
+    Entry& lEntry = maEntries[luIndex];
+    const u32 luRequired = KU_FLAG_ESTABLISHED | KU_FLAG_ACQUIRED;
+    if ((lEntry.muFlags & luRequired) != luRequired)
+    {
+        return KI_E_FAIL;
+    }
+
+    lEntry.muFlags &= ~KU_FLAG_ACQUIRED;
+    return KI_S_OK;
+}
+
+// ---------------------------------------------------------------------------
 // CConformanceList::GetConformingScopeAndValue @ 0x82980400
 //
 // Resolve the conforming field whose descriptor is read from `lpAccess`. The low

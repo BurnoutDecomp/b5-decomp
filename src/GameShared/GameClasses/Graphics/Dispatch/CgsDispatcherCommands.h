@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/EATech/include/rw/math/vpu/vec_float.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"  // DispatchCommand base + DispatchFrame/DispatchBin/DispatchList
 
 // =============================================================================
@@ -17,10 +18,8 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (authoritative for behaviour and
 // member offsets) gated on the X360 ledger, with declaration shape from the
 // DecFIGS DWARF (.../Dispatch/CgsDispatcherCommands.h). Only methods attested in
-// the X360 ledger are declared here; the DWARF also lists PS3-only setters
-// (SetPreZMode/SetSortByDistance/Prefetch/SetMaterialShadowingAddress/
-// InterpretOcclusionQuery_Bulk/...) that the X360 build folded inline and never
-// emits as standalone functions, so they are intentionally omitted (X360 gate).
+// the X360 ledger are declared here, along with the Pre-Z setters inlined in
+// BrnRendererModule::Render.
 //
 // CALLING-CONVENTION NOTE (read off the X360 prologues): the Interpret entry
 // points are *static* command-stream interpreters of shape
@@ -120,6 +119,14 @@ struct CallbackFn : public DispatchCommand
 // -----------------------------------------------------------------------------
 struct DrawRenderable : public DispatchCommand
 {
+    // ARTIST 8240C060, 8240C06C and 8240C0D4, inlined in Render.
+    static void SetPreZMode(bool enabled) { sbPreZEnabled = enabled; }
+    static void SetPreZAlpha(bool enabled) { sbPreZAlpha = enabled; }
+    static void SetPreZNearThreshold(f32 distance)
+    {
+        sPreZNearThreshold.mV = __vspltw(__lvlx(&distance, 0), 0);
+    }
+
     // X360 0x827FA0D0. The Hex-Rays 34-arg signature is a struct-by-value artefact;
     // the real source passes the per-object dispatch-thread-info + routing bytes by
     // value. ARGUMENT ROLES PINNED FROM THE ASM (word1 packing + the trailer stores
@@ -143,6 +150,11 @@ struct DrawRenderable : public DispatchCommand
     // X360 0x827FCDA0 -- the static command-stream interpreter (slot 1).
     static void Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFrame,
                           void* lpUserData, f32 lfTime);
+
+private:
+    static bool sbPreZEnabled;
+    static bool sbPreZAlpha;
+    static rw::math::vpu::VecFloat sPreZNearThreshold;
 };
 
 // -----------------------------------------------------------------------------

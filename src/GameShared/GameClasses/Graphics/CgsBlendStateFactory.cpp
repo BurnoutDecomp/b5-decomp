@@ -5,9 +5,7 @@
 //   CgsBlendStateFactory::Construct  (2248 bytes, 562 instructions)
 //
 // Builds the fixed set of nine blend states the renderer, the post-fx chain and the
-// dispatch interpreter select between. Only Construct is console-attested for this TU;
-// Destruct / Prepare have no body anywhere in the image and GetState is inlined into
-// its readers (see the header).
+// dispatch interpreter select between. GetState is inlined into its readers.
 //
 // BrnRendererModule initializes this factory before dispatch. Slots 7/8 are
 // the original depth-only states at 83010F8C/83010F90, selected by the mesh
@@ -221,4 +219,15 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
         CreateBlendState(lpAllocator, &lParameters);
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_ALPHA_TEST],
                "saBlendStates[ eFactoryBlendState_NoColourWrite_AlphaTest ]");
+}
+
+// ARTIST vtable 0x820CDC1C, slot +0x04 targets the shared return at 0x8284CB38.
+void CgsBlendStateFactory::Destruct()
+{
+}
+
+// ARTIST vtable slot +0x08 targets the shared true return at 0x82C296C8.
+bool CgsBlendStateFactory::Prepare()
+{
+    return true;
 }

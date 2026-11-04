@@ -182,6 +182,12 @@ s32 LobbyApiControl(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iValue);
 // Pump: completes queued requests and delivers queued events. Every callback runs from here.
 void LobbyApiUpdate(LobbyApiRefT* pLobbyApi);
 
+// Begin the X360 lobby connection sequence. pCallback is optional and receives
+// the connection event once; the return value is its callback id, or -1 on
+// allocation/registration failure.
+s32 LobbyApiConnect(LobbyApiRefT* pLobbyApi, const char* pServerName, s32 iPort,
+                    LobbyApiCallbackT* pCallback, void* pUserData, u32 uConnTimeout);
+
 void LobbyApiSuspend(LobbyApiRefT* pLobbyApi);
 void LobbyApiResume(LobbyApiRefT* pLobbyApi);
 

@@ -190,6 +190,8 @@ namespace renderengine
         static void UnSetResource(D3DResource* lpResource);
 
     protected:
+        // ARTIST 8240C404 updates m_parameterCopy.numVsyncs from Render.
+        friend class ::BrnRendererModule;
         static void InitializeGlobalBuffers();
         static bool UsingGlobalRasters();
         static void EnsureDefaultRenderTarget();
