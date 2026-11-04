@@ -115,7 +115,7 @@ extern float gAptAnalogAxis1[];   // flt_8324E204 (axis1 view @+4 of the same re
 // The interned "controller" property key the getAnalog* methods store the pad
 // index under (X360 unk_8324E614). Defined in AptGlobals.cpp ("controller").
 // ---------------------------------------------------------------------------
-extern const EAStringC gAptKeyControllerKey;   // unk_8324E614
+extern const EAStringC& gAptKeyControllerKey;   // unk_8324E614
 
 // ---- the nine class-wide cached native-method singletons -------------------
 AptNativeFunction* AptKey::spMethod_isDown               = 0;   // off_8324E394

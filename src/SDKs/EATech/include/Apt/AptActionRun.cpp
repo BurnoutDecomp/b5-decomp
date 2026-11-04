@@ -37,7 +37,7 @@ extern AptValue* gpUndefinedValue;
 // stored at ctx+0x10). ⚠ CORRECTED 2026-08-05: this was previously resolved as
 // "this" (gpAptThisKey), which broke CallMethod's supercall identity test (it
 // compares call receivers against this slot) -- see AptGlobals.cpp gAptKeySuper.
-extern const EAStringC gAptKeySuper;   // unk_8324E6B8 -- "super"
+extern const EAStringC& gAptKeySuper;   // unk_8324E6B8 -- "super"
 
 // The GC deferred-release drain (gValuesToRelease.ReleaseValues), homed in
 // AptGC.cpp; runStream's exit flush calls it under the console's stack-empty gate.

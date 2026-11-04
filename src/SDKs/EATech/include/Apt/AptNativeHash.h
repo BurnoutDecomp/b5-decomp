@@ -68,7 +68,7 @@ struct AptHashItem
 // __proto__ key) is needed here; the mini declaration below matches the full
 // class (AptString/StringPool.h), whose saConstant is defined in AptStringPool.cpp.
 #include "SDKs/EATech/include/Apt/AptString/StringPool.h"
-extern const EAStringC gAptKeyPrototype;
+extern const EAStringC& gAptKeyPrototype;
 
 struct AptNativeHash
 {

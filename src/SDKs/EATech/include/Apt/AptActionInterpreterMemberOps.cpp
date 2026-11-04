@@ -227,14 +227,14 @@ extern const int       gAptPropertyIndexRemap[];  // dword_82F73010
 
 // The AS typeof() type-name literals (entries of the same dword_8324E580 EAStringC
 // table) -- defined with their literal contents in AptGlobals.cpp.
-extern const EAStringC gAptTypeName_Undefined;   // dword_8324E6C8 "undefined"
-extern const EAStringC gAptTypeName_Number;      // dword_8324E64C "number"
-extern const EAStringC gAptTypeName_Boolean;     // dword_8324E608 "boolean"
-extern const EAStringC gAptTypeName_String;      // dword_8324E6B4 "string"
-extern const EAStringC gAptTypeName_Object;      // dword_8324E650 "object"
-extern const EAStringC gAptTypeName_MovieClip;   // dword_8324E640 "movieclip"
-extern const EAStringC gAptTypeName_Null;        // dword_8324E648 "null"
-extern const EAStringC gAptTypeName_Function;    // dword_8324E624 "function"
+extern const EAStringC& gAptTypeName_Undefined;   // dword_8324E6C8 "undefined"
+extern const EAStringC& gAptTypeName_Number;      // dword_8324E64C "number"
+extern const EAStringC& gAptTypeName_Boolean;     // dword_8324E608 "boolean"
+extern const EAStringC& gAptTypeName_String;      // dword_8324E6B4 "string"
+extern const EAStringC& gAptTypeName_Object;      // dword_8324E650 "object"
+extern const EAStringC& gAptTypeName_MovieClip;   // dword_8324E640 "movieclip"
+extern const EAStringC& gAptTypeName_Null;        // dword_8324E648 "null"
+extern const EAStringC& gAptTypeName_Function;    // dword_8324E624 "function"
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionGetProperty @0x82B08B58 (0x22) -- AS `obj.prop` read.

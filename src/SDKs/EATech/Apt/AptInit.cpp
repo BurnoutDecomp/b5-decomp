@@ -404,26 +404,6 @@ extern AptValue* gpAptFnIsNaN;                // off_8324D824 ("")
 extern AptValue* gpAptFnUnescape;             // off_8324E1FC ("")
 extern AptValue* gpAptFnEscape;               // off_8324D80C ("")
 extern AptValue* gpAptFnBoolean;              // off_8324D74C ("")
-extern const EAStringC gAptObjectClassName;   // &dword_8324E650 "Object"
-extern const EAStringC gAptStringClassName;   // &dword_8324E6B4 "String"
-extern const EAStringC gAptSpriteClassKey;    // dword_8324E640 "MovieClip"
-
-// The six remaining builtin class-name constants (X360 unk_8324E5FC/E610/E618/E6BC/
-// E6D4/E61C -- .data EAStringC constants X360-xref'd ONLY by the AS-globals bootstrap
-// @0x82AF6B68, so homed file-local here). The name SET {Array, Date, TextFormat,
-// Color, XML, Error} is grounded by the XB1 new-object dispatcher (sub_1408485A0's
-// stricmp ladder: Array/String/Date/TextFormat/Color/MovieClip/XML/Error, + Object)
-// and the B4Extern sibling's packed class-name rodata block; the per-address name
-// ORDER within the six is unrecovered (no other xref exists on either platform) and
-// is immaterial to the unordered hash install below (every entry gets the identical
-// stub + prototype treatment).
-static const EAStringC gAptArrayClassName     ("Array");        // unk_8324E5FC (Set slot 2)
-static const EAStringC gAptDateClassName      ("Date");         // unk_8324E610 (Set slot 3)
-static const EAStringC gAptTextFormatClassName("TextFormat");   // unk_8324E618 (Set slot 4)
-static const EAStringC gAptColorClassName     ("Color");        // unk_8324E6BC (Set slot 5)
-static const EAStringC gAptXMLClassName       ("XML");          // unk_8324E6D4 (Set slot 7)
-static const EAStringC gAptErrorClassName     ("Error");        // unk_8324E61C (Set slot 8)
-
 // off_8324E378 -- the ASSetPropFlags native-fn singleton slot (X360-xref'd only by
 // this TU's init/teardown pair, so file-local).
 static AptValue* gpAptFnASSetPropFlags = 0;
@@ -531,23 +511,22 @@ int AptValueInitialize()
     if (gpAptGlobalFallback != 0)
     {
         AptNativeHash* const pGlobals = gpAptGlobalFallback->GetNativeHashVirtual();
-        if (pGlobals != 0 && pGlobals->Lookup(gAptObjectClassName) == 0)
+        if (pGlobals != 0 && pGlobals->Lookup(*StringPool::GetString(StringPool::KU_NAME_OBJECT)) == 0)
         {
             gpValuesToRelease->ReleaseValues();   // bootstrap-entry drain (off_8324E51C)
 
-            // The nine-entry builtin class table, in the console's Set order
-            // (E650, E5FC, E610, E618, E6BC, E640, E6D4, E61C, E6B4).
+            // ARTIST 0x82AF6B68 uses the initialized StringPool slots directly.
             const EAStringC* const lakNames[9] =
             {
-                &gAptObjectClassName,       // dword_8324E650 "Object"    (slot 1: the root)
-                &gAptArrayClassName,        // unk_8324E5FC   (slots 2-5/7-8: see the six-name note above)
-                &gAptDateClassName,         // unk_8324E610
-                &gAptTextFormatClassName,   // unk_8324E618
-                &gAptColorClassName,        // unk_8324E6BC
-                &gAptSpriteClassKey,        // dword_8324E640 "MovieClip" (slot 6: the D818 pin)
-                &gAptXMLClassName,          // unk_8324E6D4
-                &gAptErrorClassName,        // unk_8324E61C
-                &gAptStringClassName,       // dword_8324E6B4 "String"
+                StringPool::GetString(StringPool::KU_NAME_OBJECT),
+                StringPool::GetString(StringPool::KU_NAME_ARRAY),
+                StringPool::GetString(StringPool::KU_NAME_COLOR),
+                StringPool::GetString(StringPool::KU_NAME_DATE),
+                StringPool::GetString(StringPool::KU_NAME_TEXTFORMAT),
+                StringPool::GetString(StringPool::KU_NAME_MOVIECLIP),
+                StringPool::GetString(StringPool::KU_NAME_XML),
+                StringPool::GetString(StringPool::KU_NAME_ERROR),
+                StringPool::GetString(StringPool::KU_NAME_STRING),
             };
             for (int li = 0; li < 9; ++li)
             {
@@ -615,7 +594,7 @@ int AptValueInitialize()
             // Object builtin's hash -- observable-identical for AS lookups; revisit
             // if the value class tree is re-based onto AptObject.
             {
-                AptValue* const pObjectClass = pGlobals->Lookup(gAptObjectClassName);
+                AptValue* const pObjectClass = pGlobals->Lookup(*StringPool::GetString(StringPool::KU_NAME_OBJECT));
                 AptNativeHash* const pObjHash =
                     pObjectClass ? pObjectClass->GetNativeHashVirtual() : 0;
                 if (pObjHash && gpObjRegistrationFunc)
