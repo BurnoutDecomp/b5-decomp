@@ -680,18 +680,14 @@ namespace CgsResource
         CGS_STATIC_ASSERT(sizeof(ResourceModule) == 0x58280, "ARTIST CheckClassSizes823BEBF0 resource module span");
     }
 
-    // ARTIST82907268: native event sizes are carried by the queue. Pool and
-    // memory tags below are the original switch values, not resource tags.
-    void ResourceModule::ProcessResourceRequests(const ResourceIO::InputBuffer* lpResIn,
-        CgsMemory::MemoryIO::InputBuffer* lpMemIn,
-        BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn)
+    namespace
     {
-        const ResourceIO::ResourceRequestQueue<16384>* lpQueue = static_cast<const ResourceIO::InputBuffer*>(lpResIn)->GetResourceQueue();
-        PoolIO::InputBuffer::PoolInputQueue* lpPoolQueue = lpPoolIn->GetPoolInputQueue();
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent)
+        // Keep the switch separate from the iterator for native emulator testing.
+        __declspec(noinline) void DispatchResourceRequest(ResourceModule& lrModule,
+            s32 liTag, const CgsModule::Event* lpEvent, s32 liSize,
+            CgsMemory::MemoryIO::InputBuffer* lpMemIn,
+            BundleLoaderIO::InputBuffer_Update* lpLoaderIn,
+            PoolIO::InputBuffer::PoolInputQueue* lpPoolQueue)
         {
             switch (liTag)
             {
@@ -707,17 +703,34 @@ namespace CgsResource
             case 8: lpPoolQueue->AddEvent(lpEvent, 12, liSize); break;
             case 9: case 10: case 11: case 12: case 13: case 14: case 15:
                 lpMemIn->GetMemoryRequestQueue()->AddEvent(lpEvent, 1, liSize); break;
-            case 16: AddOpenReadStreamRequest(reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent)); break;
-            case 17: AddOpenWriteStreamRequest(reinterpret_cast<const Events::OpenWriteStreamRequest*>(lpEvent)); break;
-            case 18: AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent)); break;
-            case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
-            case 20: AddOpenFileRequest(reinterpret_cast<const Events::OpenFileRequest*>(lpEvent)); break;
-            case 21: AddCloseFileRequest(reinterpret_cast<const Events::CloseFileRequest*>(lpEvent)); break;
-            case 22: AddRegisterMemFileRequest(reinterpret_cast<const Events::RegisterMemFileRequest*>(lpEvent)); break;
-            case 23: AddUnregisterMemFileRequest(reinterpret_cast<const Events::UnregisterMemFileRequest*>(lpEvent)); break;
-            case 25: AddAddPatchRequest(reinterpret_cast<const Events::AddPatchRequest*>(lpEvent)); break;
+            case 16: lrModule.AddOpenReadStreamRequest(reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent)); break;
+            case 17: lrModule.AddOpenWriteStreamRequest(reinterpret_cast<const Events::OpenWriteStreamRequest*>(lpEvent)); break;
+            case 18: lrModule.AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent)); break;
+            case 19: lrModule.AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
+            case 20: lrModule.AddOpenFileRequest(reinterpret_cast<const Events::OpenFileRequest*>(lpEvent)); break;
+            case 21: lrModule.AddCloseFileRequest(reinterpret_cast<const Events::CloseFileRequest*>(lpEvent)); break;
+            case 22: lrModule.AddRegisterMemFileRequest(reinterpret_cast<const Events::RegisterMemFileRequest*>(lpEvent)); break;
+            case 23: lrModule.AddUnregisterMemFileRequest(reinterpret_cast<const Events::UnregisterMemFileRequest*>(lpEvent)); break;
+            case 25: lrModule.AddAddPatchRequest(reinterpret_cast<const Events::AddPatchRequest*>(lpEvent)); break;
             default: CGS_ASSERT(false, "Invalid event id\n"); break;
             }
+        }
+    }
+
+    // ARTIST82907268: native event sizes are carried by the queue. Pool and
+    // memory tags below are the original switch values, not resource tags.
+    void ResourceModule::ProcessResourceRequests(const ResourceIO::InputBuffer* lpResIn,
+        CgsMemory::MemoryIO::InputBuffer* lpMemIn,
+        BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn)
+    {
+        const ResourceIO::ResourceRequestQueue<16384>* lpQueue = static_cast<const ResourceIO::InputBuffer*>(lpResIn)->GetResourceQueue();
+        PoolIO::InputBuffer::PoolInputQueue* lpPoolQueue = lpPoolIn->GetPoolInputQueue();
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent)
+        {
+            DispatchResourceRequest(*this, liTag, lpEvent, liSize, lpMemIn, lpLoaderIn, lpPoolQueue);
             const CgsModule::Event* lpNext = 0;
             liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;

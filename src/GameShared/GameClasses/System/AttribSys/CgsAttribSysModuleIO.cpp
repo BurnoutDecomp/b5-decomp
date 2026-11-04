@@ -22,6 +22,24 @@ namespace CgsAttribSys
 {
 namespace AttribSysIO
 {
+    // ARTIST 0x82807818 initializes the request queue and then clears both queues.
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mEventQueue.Construct();
+        mVaultRequestInterface.mRequestQueue.Construct();
+        mVaultRequestInterface.mRequestQueue.Clear();
+        mEventQueue.Clear();
+        mVaultRequestInterface.mRequestQueue.Clear();
+    }
+
+    // ARTIST 0x82807880 tears down the generic queue before the buffer.
+    void InputBuffer::Destruct()
+    {
+        mEventQueue.Destruct();
+        CgsModule::IOBuffer::Destruct();
+    }
+
     // @ 0x828042D8 -- assert the input buffer is locked for reading (IOBuffer status bit 4),
     // then hand back the embedded request queue (this+2068 == &mVaultRequestInterface, whose
     // first member mRequestQueue is the drained VariableEventQueue). Return type is the committed

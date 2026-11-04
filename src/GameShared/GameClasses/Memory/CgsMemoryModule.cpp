@@ -2,6 +2,9 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"   // MemoryIO request/response types (dispatch)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"       // CgsMemory::HeapMalloc::Destruct (destroy-allocator)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "rw/rwcore_general_alloc.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstring>
 #include "rw/rwcore_structs.h"                        // rw::Resource / ResourceDescriptor / IResourceAllocator_vtbl
 
 // CgsMemory::MemoryModule -- see the header. This pass reconstructs the two pure stage-machine lifecycle
@@ -301,15 +304,113 @@ namespace CgsMemory
         lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lResponse.GetEventType(),
                                                      static_cast<s32>(sizeof(lResponse)));
     }
-    // [DEFERRED with the rwcore allocator middleware] the rw-allocator-CREATING handlers (Linear/General/
-    // Resource). Shape decoded: build a CreateBankRequest from the request's rw::ResourceDescriptor ->
-    // CreateBank -> create the rw allocator over the bank's data via rw::LinearResourceAllocator::
-    // GetResourceDescriptor/Initialize or rw::core::GeneralResourceAllocator::Initialize -> return the
-    // allocator in the response. The required allocator primitives are now reconstructed; these request
-    // handlers themselves remain reconstruction debt. A closed rwcore archive is deliberately not a
-    // fallback link provider. Kept as inert stubs (the dispatch isn't driven until the GameDataModule runs).
-    void MemoryModule::ProcessCreateLinearAllocatorRequest(const MemoryIO::MemoryRequest*, MemoryIO::OutputBuffer*) {}
-    void MemoryModule::ProcessCreateGeneralAllocatorRequest(const MemoryIO::MemoryRequest*, MemoryIO::OutputBuffer*) {}
+    // ARTIST 0x8286D130: create the backing bank and construct the requested allocator.
+    void MemoryModule::ProcessCreateLinearAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    {
+        const MemoryIO::CreateLinearAllocatorRequest* lpReq = static_cast<const MemoryIO::CreateLinearAllocatorRequest*>(lpRequest);
+        const rw::ResourceDescriptor lCapacity = *lpReq->GetDescriptor();
+        rw::ResourceDescriptor lBackingDescriptor;
+        rw::LinearResourceAllocator::GetResourceDescriptor(&lBackingDescriptor, &lCapacity);
+        rw::Resource lBacking;
+        MemoryBank::Params lParams = {};
+        std::strncpy(lParams.macName, lpReq->GetBankName(), sizeof(lParams.macName));
+        lParams.macName[sizeof(lParams.macName) - 1] = 0;
+        lParams.mnBankId = lpReq->GetBankId();
+        lParams.mnParentBankId = lpReq->GetParentBankId();
+        lParams.mbIsLeaf = true;
+        MemoryIO::CreateLinearAllocatorResponse lResponse;
+        lResponse.Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+        s32 liType = 0;
+        for (; liType < MemoryBank::KI_NUM_TYPES; ++liType)
+        {
+            const MemoryBank* lpParent = GetBank(GetBankIndexFromId(static_cast<u32>(lParams.mnParentBankId)));
+            const u32 luSize = lBackingDescriptor.m_baseResourceDescriptors[liType].m_size;
+            const u32 luAlignment = lBackingDescriptor.m_baseResourceDescriptors[liType].m_alignment;
+            const u32 luGranule = static_cast<u32>(lpParent->GetBlockSize(liType)) << 10;
+            if (luSize != 0)
+            {
+                if (luGranule < luAlignment) break;
+                const u32 luRounded = (static_cast<u32>(static_cast<s32>(luSize - 1u) /
+                    static_cast<s32>(luGranule)) + 1u) * luGranule;
+                lParams.mauBankSize[liType] = luRounded;
+                CGS_ASSERT(luRounded < 0x4000000, "Allocators larger than or equal to 64mb or not currently supported\n");
+                const s32 liWaste = static_cast<s32>(luRounded - luSize);
+                if (liWaste >= 1024 && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "WARNING : You are waisting " << liWaste
+                        << " bytes when getting a linear allocator of size " << luSize
+                        << " due to the parent bank size being " << luGranule << "\n";
+                lParams.mauBankBlocks[liType] = 1;
+            }
+        }
+        const MemoryIO::ResultCodes leResult = liType != MemoryBank::KI_NUM_TYPES
+            ? MemoryIO::E_RESULT_INVALID_ALIGNMENT
+            : static_cast<MemoryIO::ResultCodes>(CreateBank(&lParams));
+        lResponse.SetResult(leResult);
+        if (leResult == MemoryIO::E_RESULT_OK)
+        {
+            for (s32 li = 0; li < MemoryBank::KI_NUM_TYPES; ++li)
+                lBacking.m_baseResources[li] = GetBank(GetBankIndexFromId(static_cast<u32>(lParams.mnBankId)))->GetData(li);
+        }
+        lResponse.SetLinearAllocator(rw::LinearResourceAllocator::Initialize(lBacking, lCapacity));
+        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lpRequest->GetEventType(),
+                                                     static_cast<s32>(sizeof(lResponse)));
+    }
+
+    // ARTIST 0x8286D550: create the backing bank and construct the requested allocator.
+    void MemoryModule::ProcessCreateGeneralAllocatorRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    {
+        const MemoryIO::CreateGeneralAllocatorRequest* lpReq = static_cast<const MemoryIO::CreateGeneralAllocatorRequest*>(lpRequest);
+        const rw::ResourceDescriptor lCapacity = *lpReq->GetDescriptor();
+        rw::BaseResourceDescriptors<5> lBackingBase;
+        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lBackingBase, &lCapacity);
+        rw::ResourceDescriptor lBackingDescriptor;
+        for (s32 li = 0; li < MemoryBank::KI_NUM_TYPES; ++li)
+            lBackingDescriptor.m_baseResourceDescriptors[li] = lBackingBase.m_baseResourceDescriptors[li];
+        rw::Resource lBacking;
+        MemoryBank::Params lParams = {};
+        std::strncpy(lParams.macName, lpReq->GetBankName(), sizeof(lParams.macName));
+        lParams.macName[sizeof(lParams.macName) - 1] = 0;
+        lParams.mnBankId = lpReq->GetBankId();
+        lParams.mnParentBankId = lpReq->GetParentBankId();
+        lParams.mbIsLeaf = true;
+        MemoryIO::CreateGeneralAllocatorResponse lResponse;
+        lResponse.Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+        s32 liType = 0;
+        for (; liType < MemoryBank::KI_NUM_TYPES; ++liType)
+        {
+            const MemoryBank* lpParent = GetBank(GetBankIndexFromId(static_cast<u32>(lParams.mnParentBankId)));
+            const u32 luSize = lBackingDescriptor.m_baseResourceDescriptors[liType].m_size;
+            const u32 luAlignment = lBackingDescriptor.m_baseResourceDescriptors[liType].m_alignment;
+            const u32 luGranule = static_cast<u32>(lpParent->GetBlockSize(liType)) << 10;
+            if (luSize != 0)
+            {
+                if (luGranule < luAlignment) break;
+                const u32 luRounded = (static_cast<u32>(static_cast<s32>(luSize - 1u) /
+                    static_cast<s32>(luGranule)) + 1u) * luGranule;
+                lParams.mauBankSize[liType] = luRounded;
+                CGS_ASSERT(luRounded < 0x4000000, "Allocators larger than or equal to 64mb or not currently supported\n");
+                const s32 liWaste = static_cast<s32>(luRounded - luSize);
+                if (liWaste >= 1024 && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "WARNING : You are waisting " << liWaste
+                        << " bytes when getting a general allocator of size " << luSize
+                        << " due to the parent bank size being " << luGranule << "\n";
+                lParams.mauBankBlocks[liType] = 1;
+            }
+        }
+        const MemoryIO::ResultCodes leResult = liType != MemoryBank::KI_NUM_TYPES
+            ? MemoryIO::E_RESULT_INVALID_ALIGNMENT
+            : static_cast<MemoryIO::ResultCodes>(CreateBank(&lParams));
+        lResponse.SetResult(leResult);
+        if (leResult == MemoryIO::E_RESULT_OK)
+        {
+            for (s32 li = 0; li < MemoryBank::KI_NUM_TYPES; ++li)
+                lBacking.m_baseResources[li] = GetBank(GetBankIndexFromId(static_cast<u32>(lParams.mnBankId)))->GetData(li);
+        }
+        lResponse.SetAllocator(rw::core::GeneralResourceAllocator::Initialize(lBacking, lCapacity));
+        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lpRequest->GetEventType(),
+                                                     static_cast<s32>(sizeof(lResponse)));
+    }
+
     // @ 0x8286D9F0 - create a bank sized for the caller's allocator, then construct that (caller-supplied)
     // heap or linear allocator over the new bank's memory. Does NOT touch the AllocatorList (the caller owns
     // the allocator object). Field accessors + the round-up-to-parent-granule sizing are from the X360.
