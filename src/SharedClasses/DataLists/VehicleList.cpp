@@ -21,7 +21,7 @@
 // The X360 inlined BaseResourcePtr::CreateFromHandle(&maStaticDataLists[i], &sentinel) at
 // each Construct/Destruct iteration; the DecFIGS DWARF renders the pre-inline call as
 // ResourcePtr<VehicleListResource>::operator=(...), i.e. the source was
-// `maStaticDataLists[i] = skInvalidHandle;`. That public assignment is the faithful
+// `maStaticDataLists[i] = CgsResource::NULLResourcePtr;`. That public assignment is the faithful
 // source-level form and the exact observable operation; reconstructed as such.
 
 #include "SharedClasses/DataLists/VehicleList.h"
@@ -35,12 +35,6 @@ namespace BrnResource
 
 namespace
 {
-    // X360: &dword_82FFB25C -- the invalid/default resource-handle sentinel each slot is
-    // reset to. Same sentinel the WheelList/ChallengeList siblings use; modelled here as a
-    // file-local default-constructed (zero) ResourceHandle, which is that null handle's
-    // value. (CgsResource::NULLResourcePtr is not yet a defined global in this port.)
-    const CgsResource::ResourceHandle skInvalidHandle = {};
-
     // The serialised entry stride the X360 multiplies by (`mulli r11,r11,0xF0`).
     const u32 KU_VEHICLE_LIST_ENTRY_STRIDE = 240;
 
@@ -109,7 +103,7 @@ void VehicleList::Construct()
     // (marching pointer v2 += 8 dwords == 32-byte ResourcePtr stride).
     for ( s32 liIndex = 0; liIndex < KI_MAX_VEHICLE_LISTS; ++liIndex )
     {
-        maStaticDataLists[ liIndex ] = skInvalidHandle;
+        maStaticDataLists[ liIndex ] = CgsResource::NULLResourcePtr;
     }
 
     // X360: each slot's bought-flag <- 0, both indices <- -1 (marching pointer v4 walks the
@@ -139,7 +133,7 @@ void VehicleList::Destruct()
     // X360: 32x reset of each static-data-list ResourcePtr to the invalid handle.
     for ( s32 liIndex = 0; liIndex < KI_MAX_VEHICLE_LISTS; ++liIndex )
     {
-        maStaticDataLists[ liIndex ] = skInvalidHandle;
+        maStaticDataLists[ liIndex ] = CgsResource::NULLResourcePtr;
     }
 }
 
