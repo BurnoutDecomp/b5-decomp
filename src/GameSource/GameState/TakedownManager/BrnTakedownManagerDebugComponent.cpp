@@ -11,7 +11,7 @@
 
 #include <cstdlib>
 
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The takedown debug menu registers three display

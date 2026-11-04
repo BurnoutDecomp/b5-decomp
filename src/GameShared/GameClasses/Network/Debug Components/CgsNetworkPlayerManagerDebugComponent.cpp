@@ -24,7 +24,7 @@
 //   MaybeDrawText (X360 0x82824048) -- "draw debug text iff on-screen" -> the renderer's
 //     DrawText(text, x, y, scale, colour) gated on a bounds test. The extra register args the
 //     decompiler shows are artifacts.
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 

@@ -36,8 +36,7 @@
 // directly (r3=size/pAddress, r4=attributes), with NO `this` argument -- the raw
 // platform API, matching the sibling rwmovie / XCam TUs. Supplied by the
 // platform layer.
-extern void* XMemAlloc(u32 uSize, u32 uAttributes);
-extern void  XMemFree(void* pAddress, u32 uAttributes);
+#include <xtl.h> // XDK XMemAlloc / XMemFree
 
 // Attribute word baked into every XMemAlloc/XMemFree call site of this TU
 // (lis 0x248C / ori 0x8000 -> 0x248C8000).

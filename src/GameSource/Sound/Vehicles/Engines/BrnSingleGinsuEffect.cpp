@@ -109,6 +109,11 @@ void SingleGinsuEffect::AttachController(CgsSound::Logic::EffectBase* apControll
     }
 }
 
+// ARTIST secondary vtable 820B12C0 slots +0x18/+0x1c both point to
+// 8284CB38, whose entire body is blr.
+void SingleGinsuEffect::UpdateParams(f32) {}
+void SingleGinsuEffect::ProcessUpdate() {}
+
 } // namespace Engines
 } // namespace Vehicles
 } // namespace BrnSound

@@ -24,10 +24,9 @@ namespace Logic
 namespace World
 {
 
-// DWARF BrnEmitterEffect.cpp:42. A .bss bool (0x82FFB8CB) the console's sound debug menu toggles
-// ("Emitters"/"Debug"); it defaults to false, so a shipped-default console never fires Attach's
-// luEmitter assert. [DIAG] NOT IN THE X360 BINARY: that menu (BrnSound::Debug::DebugComponent::
-// OnActivate @0x826D5CB0) is not reconstructed on PC, so BRN_EMITTER_DIAG=1 stands in for it.
+// DWARF BrnEmitterEffect.cpp:42; ARTIST 82FFB8CB is a zero-initialized
+// debug-menu variable, read by EmitterEffect and EmitterStateManager.
+bool KB_DEBUG_WORLD_EMITTERS = false;
 
 namespace
 {

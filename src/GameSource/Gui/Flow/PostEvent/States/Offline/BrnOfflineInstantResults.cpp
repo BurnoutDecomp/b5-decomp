@@ -59,7 +59,7 @@ CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 8),
 CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40>) == 20),
               "X360 channel-40 menu-music record is {8,23,12}+8");
 
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
 
 namespace BrnGui

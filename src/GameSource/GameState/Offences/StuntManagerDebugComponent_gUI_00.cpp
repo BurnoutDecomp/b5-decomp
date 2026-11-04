@@ -9,7 +9,7 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 #include "SharedClasses/Trigger/BrnTriggerData.h"
 
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, u32 luColour, bool lbCentred);
 
 namespace BrnGameState

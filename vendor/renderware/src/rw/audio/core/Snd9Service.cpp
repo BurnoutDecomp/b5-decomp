@@ -83,10 +83,6 @@ extern "C" void SNDVOICEI_free(void); // the voice-free callback stored in the M
 // opaque byte region and indexed exactly as the asm's `lbz` loads read it (endian-neutral).
 extern "C" unsigned char byte_83277838[];
 
-// The embedded TimerHandle sub-object's destructor, invoked on (self+0x24) by the vector
-// deleting destructor. IDA renders the callee as an unresolved STUB and it is un-exported
-// with no disassembly, so it is declared here and left to link rather than fabricated.
-void Snd9Service_DestructTimerHandle(TimerHandle *handle);
 
 // The 11-byte parameter block UpdateSnd9SampleRate builds on the stack for MIX_create.
 // Grounded in the store sequence at 0x82B9BC00..0x82B9BC1C.
@@ -318,7 +314,7 @@ int Snd9Service::UpdateSnd9SampleRate(f64 sampleRate)
 // -------------------------------------------------------------------------------------
 void *Snd9Service::VectorDeletingDestructor(Snd9Service *self, char flags)
 {
-    Snd9Service_DestructTimerHandle(&self->mTimerHandle); // STUB(self+0x24)
+    // ARTIST 82AD5078 is a single blr: the embedded handle destructor has no effect.
     self->mpVTable = KSND9_BaseVTable;                    // off_820AA810
     if ((flags & 1) != 0)
         ::operator delete(self);

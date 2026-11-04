@@ -7,11 +7,12 @@
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"               // NetworkPlayer::(Un)RegisterMessageType
 #include "GameSource/Network/BrnNetworkManager.h"                                  // BrnNetworkManager accessors
 
-// ---- XDK entry points -------------------------------------------------------
-// Real prototypes live in the Xbox 360 XDK (<xapi.h>); declared here as extern "C" free
-// functions, mirroring the sibling BrnNetworkBuddyManagerX360.cpp / CgsXOverlappedX360.cpp glue
-// precedent. XCamGetStatus returns the camera readiness code (2 == up and producing frames).
+// Use the public XDK declaration on Xbox; the host retains its existing shim.
+#if defined(_XBOX)
+#include <xcam.h>
+#else
 extern "C" u32 XCamGetStatus();
+#endif
 
 namespace BrnNetwork
 {

@@ -17,7 +17,7 @@
 
 // X360 0x82824048: the shared debug-HUD text helper already lives in
 // CgsDebug2DImmediateRender.cpp; keep its original no-screen-check behavior.
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
 
 namespace BrnGui

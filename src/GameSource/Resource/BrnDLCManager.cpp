@@ -21,7 +21,7 @@
 // Prepare remains unactivated; the selected constructor does not start the monitor.
 
 // The shared debug-HUD text helper (a global function, bodied in CgsDebug2DImmediateRender.cpp).
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 namespace BrnResource

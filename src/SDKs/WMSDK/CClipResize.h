@@ -80,6 +80,6 @@ private:
 };
 
 // Free-function initialiser used by WMSDKRESIZER::Reset (X360 `bl CClipResize_Init`
-// @ 0x82A44D94): sets up the clip resampler for (dstWidth, height, srcWidth).
+// @ 0x82A44D94): sets up dst width/height and src width/height.
 // Declared here; bodied by its own slice.
-CClipResize* CClipResize_Init(CClipResize* pThis, int iDstWidth, int iHeight, int iSrcWidth);
+extern "C" void CClipResize_Init(CClipResize* pThis, int iDstWidth, int iDstHeight, int iSrcWidth, int iSrcHeight);

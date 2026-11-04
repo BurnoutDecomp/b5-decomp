@@ -20,9 +20,8 @@
 class CMSMtoN
 {
 public:
-    // Re-initialise the resampler for (dstWidth, height, srcWidth). The X360
-    // call ignores the return value (r3 == this).
-    void* Reset(int iDstWidth, int iHeight, int iSrcWidth);
+    // ARTIST 0x82AB4A28: dst width/height and src width/height.
+    void Reset(int iDstWidth, int iDstHeight, int iSrcWidth, int iSrcHeight);
 
     ~CMSMtoN();
 };

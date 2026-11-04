@@ -13,13 +13,13 @@
 // Opaque statbook module handle.
 struct LobbyStatbookT;
 
-// Per-row info record returned by LobbyStatbookRowInfo (0x114 bytes, one per view row).
-// The CGS player-info component reads only the row type at +0x110; the preceding bytes
-// are the row's name / description text.
+// Per-row info record returned by LobbyStatbookRowInfo (0x114 bytes).
 struct LobbyStatbookRowInfoT
 {
-    u8  _reserved[0x110];   // +0x000  row name / description text
-    s32 iType;              // +0x110  row type
+    char strName[48];       // +0x000
+    char strDesc[96];       // +0x030
+    char strParams[128];    // +0x090
+    s32 iType;              // +0x110
 };
 
 // Result codes (the CGS player-info component maps each one to a server-interface error).

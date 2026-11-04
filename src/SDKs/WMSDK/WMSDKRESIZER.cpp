@@ -98,10 +98,10 @@ int WMSDKRESIZER::Reset()
 
     if (mUseClipResize)                             // this[85] (0x154)
         CClipResize_Init(reinterpret_cast<CClipResize*>(&mClipResizeState),
-                         mDstWidth, pOut->biHeight, mSrcWidth);
+                         mDstWidth, pOut->biHeight, mSrcWidth, iSrcHeight);
     else
         reinterpret_cast<CMSMtoN*>(&mMStoNState)->Reset(
-            mDstWidth, pOut->biHeight, mSrcWidth);
+            mDstWidth, pOut->biHeight, mSrcWidth, iSrcHeight);
 
     return 1;
 }

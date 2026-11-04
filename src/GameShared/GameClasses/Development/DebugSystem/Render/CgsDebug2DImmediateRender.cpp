@@ -17,6 +17,15 @@ namespace
     }
 }
 
+// X360 0x82824048. Preserve the native global helper boundary: pack (x,y,0,0), then delegate
+// to the real member overload with screen checking disabled. The helper result is not consumed.
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool /*lbCheckScreen*/)
+{
+    const rw::math::vpu::Vector2 lv2Position = MakeDebugVector2(lfX, lfY, 0.0f, 0.0f);
+    lpDisplay->DrawText(lpcText, lv2Position, lfScale, lColour, false);
+}
+
 namespace CgsDev
 {
     void Debug2DImmediateRender::Construct(rw::IResourceAllocator* /*lpAllocator*/, f32 lfVirtualScreenWidth, f32 lfVirtualScreenHeight)

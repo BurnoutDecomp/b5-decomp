@@ -123,6 +123,13 @@ namespace CgsGraphics
         }
     }
 
+    // ARTIST8244FF30 emits the same opcode-16/80-byte record as the
+    // generic buffer writer, on the base subobject at this+4.
+    void Im2dRenderBuffer::SetTransform(const Im2dTransform& transform)
+    {
+        Im2dColouredTexturedRenderBuffer::SetTransform(transform);
+    }
+
     // ARTIST824501C8: the command buffer is the base subobject at this+4.
     void Im2dRenderBuffer::PopMask()
     {

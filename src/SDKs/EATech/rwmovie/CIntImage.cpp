@@ -8,12 +8,8 @@
 //
 // See CIntImage.h for the layout note. The RTCMV/WMV codec's integer-sample image buffer.
 
-// CIntImage::CIntImage @0x82AC1718 -- construct an empty integer image and immediately
-// allocate its pixel buffer. The rectangle is initialised to an inverted/empty extent
-// (left=top=0, right=bottom=-1) so allocate() sees a zero-or-negative size unless the
-// caller has filled the rect beforehand. The status returned by allocate() is written
-// back through the caller-supplied out-parameter.
-CIntImage::CIntImage(s32* lpiResult)
+// ARTIST 0x82AC1718 forwards the caller rectangle and flags to allocate.
+CIntImage::CIntImage(s32* lpiResult, const CRct& lrRect, s32 iFlags)
 {
     mpAddress = 0;               // +0x00
     mRect.miTop = 0;             // +0x08
@@ -22,22 +18,22 @@ CIntImage::CIntImage(s32* lpiResult)
     mRect.miRight = -1;          // +0x0C
     muRawAllocation = 0;         // +0x14
 
-    *lpiResult = allocate();
+    *lpiResult = allocate(lrRect, iFlags);
 }
 
 // CIntImage::allocate @0x82AC1620 -- (re)allocate the pixel buffer for the current rect.
 //
-//   * Normalises the rect through CRct::operator= (the asm passes only &mRect to the
-//     copy-assign; here it is a self-normalise of mRect).
+//   * Copies the caller's rectangle through CRct::operator= (r4).
 //   * Frees any previously held buffer.
 //   * A degenerate rect (left>=right or top>=bottom) allocates nothing and returns 0.
 //   * Byte size = width*height + 64 slack; the buffer is over-allocated to 2x that size
 //     (16-bit / two-byte samples) with a 32-bit overflow guard that forces an impossible
 //     0xFFFFFFFF (-1) request. The raw pointer is kept in muRawAllocation and mpAddress
 //     holds the same block rounded up to a 64-byte boundary.
-s32 CIntImage::allocate()
+s32 CIntImage::allocate(const CRct& lrRect, s32 iFlags)
 {
-    mRect = mRect;
+    (void)iFlags;
+    mRect = lrRect;
 
     if (mpAddress)
     {

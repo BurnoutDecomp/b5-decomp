@@ -50,6 +50,8 @@ namespace BrnGui
     class ViewModule : public CgsGui::ViewModule
     {
     public:
+        ViewModule();
+
         // Two-phase Prepare state machine (DWARF BrnGuiViewModule.h:110). Prepare()
         // advances one stage per call: base-class Prepare, then the FlaptManager, then
         // DONE. (The X360 enum is shared with the asm switch: 0->1 on entry, 2 after the

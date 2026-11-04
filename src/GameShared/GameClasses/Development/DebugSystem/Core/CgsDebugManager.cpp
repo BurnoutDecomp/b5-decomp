@@ -17,6 +17,7 @@
 
 #include <cstring>   // strlen (the fps stack-string asserts)
 #include <cstdlib>
+#include <xtl.h>
 
 // [PC] Build provenance for RenderBuildInfo: generated into the exe build's obj\gen by
 // tools/build/compile_exe.py (B5_BUILD_COMMIT = short b5-decomp HEAD, "+dirty" with local edits).
@@ -211,6 +212,61 @@ namespace CgsDev
 
         CalculateBuildDate();
         ConstructRenderer();
+    }
+
+    // X360 0x828224B8. Resolve the executable path from the command line under D:\,
+    // use its last-write time for the on-screen build date, and retain the image's
+    // Jan 30 2008 / 18:46:29 fallback when the file cannot be opened.
+    void DebugManager::CalculateBuildDate()
+    {
+        char lacExecutablePath[260];
+        const char* lpCommandLine = ::GetCommandLineA();
+        if (lpCommandLine[0] == '"')
+            ++lpCommandLine;
+
+        CgsCore::SPrintf(lacExecutablePath, 260, "D:\\%s", lpCommandLine);
+
+        char* lpExecutablePathEnd = lacExecutablePath;
+        while (*lpExecutablePathEnd)
+            ++lpExecutablePathEnd;
+        if (lpExecutablePathEnd != lacExecutablePath && lpExecutablePathEnd[-1] == '"')
+            lpExecutablePathEnd[-1] = '\0';
+
+        HANDLE lhExecutable = ::CreateFileA(lacExecutablePath,
+                                             GENERIC_READ,
+                                             FILE_SHARE_READ,
+                                             0,
+                                             OPEN_EXISTING,
+                                             FILE_ATTRIBUTE_NORMAL,
+                                             0);
+        if (lhExecutable == INVALID_HANDLE_VALUE)
+        {
+            CgsCore::SPrintf(macBuildDate, sizeof(macBuildDate),
+                             "Build Date: %s %s", "18:46:29", "Jan 30 2008");
+            return;
+        }
+
+        FILETIME lLastWriteTime;
+        if (!::GetFileTime(lhExecutable, 0, 0, &lLastWriteTime))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lbGetTimeSuccess",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp",
+                1143);
+            CgsDev::Assert::EndAssert();
+        }
+
+        ::CloseHandle(lhExecutable);
+
+        FILETIME lLocalFileTime;
+        SYSTEMTIME lSystemTime;
+        ::FileTimeToLocalFileTime(&lLastWriteTime, &lLocalFileTime);
+        ::FileTimeToSystemTime(&lLocalFileTime, &lSystemTime);
+        CgsCore::SPrintf(macBuildDate, sizeof(macBuildDate),
+                         "Build Date: %02d:%02d:%02d %02d/%02d/%02d",
+                         lSystemTime.wHour, lSystemTime.wMinute, lSystemTime.wSecond,
+                         lSystemTime.wDay, lSystemTime.wMonth, lSystemTime.wYear);
     }
 
     // Faithful port of X360 ConstructRenderer @0x8281ADD0: read the virtual screen size out of the

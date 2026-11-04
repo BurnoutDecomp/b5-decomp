@@ -2,6 +2,7 @@
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"     // CgsGui::AptDataHeader (named layout + relocation)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::AptDataHeaderType::FixDown          @ 0x8285D980
@@ -37,5 +38,51 @@ namespace CgsResource
         static_cast<CgsGui::AptDataHeader*>(lpResource)->FixUp(CgsResource::GetLoadBase(lrResource));
     }
 
+
+    // ARTIST 0x8284BB18: count only meshes with a texture mode.
+    uint32_t AptDataHeaderType::GetImportCount(const void* lpResource) const
+    {
+        const CgsGui::AptDataHeader* lpHeader = static_cast<const CgsGui::AptDataHeader*>(lpResource);
+        const GuiGeometryObject* lpGeometry = lpHeader->mpGeomStruct;
+        uint32_t luCount = 0;
+        for (u32 luFile = 0; luFile < lpGeometry->muNumberOfFiles; ++luFile)
+        {
+            const GuiGeometryFile* lpFile = lpGeometry->mppGeometryFiles[luFile];
+            for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
+                if (lpFile->mppGeometryMeshes[luMesh]->mMeshHeader.miTextureMode != 0)
+                    ++luCount;
+        }
+        return luCount;
+    }
+
+    // ARTIST 0x8284BB80: enumerate the same subset in file/mesh order.
+    void AptDataHeaderType::GetImportPointer(const void* lpResource, uint32_t luIndex,
+                                              uint32_t* lpuOffset, const void** lppValue) const
+    {
+        *lppValue = 0;
+        *lpuOffset = 0;
+        const CgsGui::AptDataHeader* lpHeader = static_cast<const CgsGui::AptDataHeader*>(lpResource);
+        const GuiGeometryObject* lpGeometry = lpHeader->mpGeomStruct;
+        u32 luImport = 0;
+        for (u32 luFile = 0; luFile < lpGeometry->muNumberOfFiles; ++luFile)
+        {
+            const GuiGeometryFile* lpFile = lpGeometry->mppGeometryFiles[luFile];
+            for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
+            {
+                const GuiGeometryMesh* lpMesh = lpFile->mppGeometryMeshes[luMesh];
+                if (lpMesh->mMeshHeader.miTextureMode != 0)
+                {
+                    if (luImport == luIndex)
+                    {
+                        *lppValue = lpMesh->mMeshHeader.mpTexture;
+                        *lpuOffset = static_cast<u32>(reinterpret_cast<const char*>(&lpMesh->mMeshHeader.mpTexture)
+                                                     - reinterpret_cast<const char*>(lpResource));
+                        return;
+                    }
+                    ++luImport;
+                }
+            }
+        }
+    }
 
 }

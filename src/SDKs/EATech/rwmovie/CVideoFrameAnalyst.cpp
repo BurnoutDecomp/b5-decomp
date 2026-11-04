@@ -10,15 +10,9 @@
 //   CVideoFrameAnalyst::~CVideoFrameAnalyst            @0x82A487E8  (bodied here)
 //   CVideoFrameAnalyst::`vector deleting destructor'   @0x82A490C8  (bodied here)
 //
-//   CVideoFrameAnalyst::computeBlockAvg                @0x82A47450  (NOT bodied -- blocked)
+//   CVideoFrameAnalyst::computeBlockAvg                @0x82A47450  (bodied here)
 //   CVideoFrameAnalyst::computeFrameTextureMap         @0x82A47640  (NOT bodied -- blocked)
-// The two compute* routines dispatch every block kernel through the global analysis-routine
-// object `off_8322634C`, calling its VIRTUAL vtable slots 0/1/2/3 (`(*(*g + 4*N))(g, ...)`)
-// as well as the non-virtual CWMVFARoutines::calcMean4x4. The committed CWMVFARoutines home
-// (CWMVFARoutines.cpp) models that class as NON-virtual with no vtable and no such global,
-// and two of its kernels are explicitly unverified -- so the slot-to-method mapping cannot
-// be grounded here without guessing a vtable layout. Left out pending a real CWMVFARoutines
-// vtable + `off_8322634C` recovery.
+// The analysis kernels dispatch through the ARTIST virtual routine table.
 //
 // The four leading words are heap-buffer pointers stored X360-width (32-bit), matching the
 // asm `stw`/`lwz`; the record keeps X360 widths so its array stride stays byte-exact (see
@@ -29,13 +23,13 @@
 #include "types.hpp"
 
 #include "CVideoFrameAnalyst.h"
+#include "CWMVFARoutines.h"
 
 // ---- raw Xbox 360 XDK heap API (platform externs) -----------------------------------
 // The asm calls XMemAlloc(SIZE_T,DWORD)->LPVOID / XMemFree(LPVOID,DWORD) directly (r3 =
 // size/pAddress, r4 = attributes), with no `this` argument -- matching the sibling
 // CVideoAnalyst / CIntImage / CQueue rwmovie TUs.
-extern void* XMemAlloc(u32 uSize, u32 uAttributes);
-extern void  XMemFree(void* pAddress, u32 uAttributes);
+#include <xtl.h> // XDK XMemAlloc / XMemFree
 
 // XMemAlloc/XMemFree attribute word for this codec's analysis pools (lis 0x248C / ori 0x8000).
 static const u32 KU_VIDEOFRAMEANALYST_XMEM_ATTRIBUTES = 0x248C8000u;
@@ -210,4 +204,44 @@ void* CVideoFrameAnalyst::_vector_deleting_destructor_(u32 uFlags)
         XMemFree(this, KU_VIDEOFRAMEANALYST_XMEM_ATTRIBUTES);
     }
     return this;
+}
+
+// ARTIST 0x82A47450: per-macroblock Y, U and V means.
+int CVideoFrameAnalyst::computeBlockAvg(u8* pY, u8* pU, u8* pV)
+{
+    const int rows = static_cast<int>((muField4024 + 15u) >> 4);
+    const int cols = static_cast<int>((muField4020 + 15u) >> 4);
+    const u32 chromaStride = (muField4020 + 1u) >> 1;
+    if (muField08)
+    {
+        XMemFree(reinterpret_cast<void*>(muField08), KU_VIDEOFRAMEANALYST_XMEM_ATTRIBUTES);
+        muField08 = 0;
+    }
+    const s32 area = static_cast<s32>(muArea);
+    u8* result = static_cast<u8*>(XMemAlloc(3 * (area >> 2), KU_VIDEOFRAMEANALYST_XMEM_ATTRIBUTES));
+    muField08 = reinterpret_cast<u32>(result);
+    u8* yMean = result;
+    u8* uMean = result + (area >> 2);
+    u8* vMean = result + (area >> 1);
+    for (int row = 0; row < rows; ++row)
+    {
+        for (int col = 0; col < cols; ++col)
+        {
+            const int width = col == cols - 1 ? static_cast<int>(muField4020) - 16 * cols + 16 : 16;
+            const int height = row == rows - 1 ? static_cast<int>(muField4024) - 16 * rows + 16 : 16;
+            if (width == 16 && height == 16)
+            {
+                gpWMVFARoutines->calcMean16x16B(yMean, reinterpret_cast<int>(pY), 0, muField4020);
+                gpWMVFARoutines->calcMean8x8B(uMean, reinterpret_cast<int>(pU), 0, chromaStride);
+                result = gpWMVFARoutines->calcMean8x8B(vMean, reinterpret_cast<int>(pV), 0, chromaStride);
+            }
+            else { *yMean = *pY; *uMean = *pU; *vMean = *pV; }
+            pY += width; pU += width >> 1; pV += width >> 1;
+            ++yMean; ++uMean; ++vMean;
+        }
+        pU += 7 * chromaStride;
+        pV += 7 * chromaStride;
+        pY += 15 * muField4020;
+    }
+    return reinterpret_cast<int>(result);
 }

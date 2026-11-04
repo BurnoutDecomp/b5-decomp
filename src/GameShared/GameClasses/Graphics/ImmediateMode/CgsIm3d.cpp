@@ -394,6 +394,27 @@ void Im3d::SetMaskPixelShaderState()
         ImRendererBase::SetTexture(lrLayer.mpMaskTexture, mu32NumMasks);
 }
 
+// ARTIST827DD028: clear the popped mask lane, upload the current mask
+// flags, then restore the unmasked shader/transform when the last layer ends.
+void Im3d::PopMask()
+{
+    if (!mu32NumMasks)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mu32NumMasks",
+            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm3d.h", 407);
+        CgsDev::Assert::EndAssert();
+    }
+    --mu32NumMasks;
+    maMask[0].mvPixelMask.SetComponent(mu32NumMasks, 0.0f);
+    Im3dMask& mask = maMask[static_cast<s8>((mi8CurrentProgram - 1) / 2)];
+    renderengine::FloatShaderStateIterator iterator;
+    renderengine::Device::BeginShaderStates(mask.mPixelMaskUseHandle, iterator);
+    *iterator.m_dest = mask.mvPixelMask;
+    if (!mu32NumMasks && ImRenderer<BasicColouredTexturedVertex>::SetProgram(static_cast<s8>(mi8CurrentProgram - 1)))
+        Im3dBase<BasicColouredTexturedVertex>::SetTransform(mCurrentTransform);
+}
+
 void Im3d::PushMask(renderengine::TextureState* lpTextureState, renderengine::Texture* lpTexture,
                      const BasicColouredTexturedVertex* lpVertices)
 {

@@ -135,6 +135,23 @@ namespace BrnParticle
     // 7 bits are the slot index (clrlwi r30,handle,25 == handle & 0x7F); that index is
     // asserted < KU_MAX_PLAYING_EFFECTS, then the slot is fetched and returned only if
     // its stored handle still equals the queried handle (else the slot was recycled).
+    // ARTIST 0x8228A238: retire a slot immediately if creation is still pending;
+    // otherwise publish the kill and changed flags to the dispatch thread.
+    void ParticleModule::StopLionEffect(LionEffect* lpEffect)
+    {
+        CGS_ASSERT(lpEffect != 0, "lpEffect != NULL");
+        CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_IN_USE) != 0,
+                   "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagInUse ) != 0");
+        CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_KILL) == 0,
+                   "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0");
+        if (lpEffect->muFlags & LionEffect::EPPE_FLAG_CREATE)
+            lpEffect->Construct();
+        else
+            lpEffect->muFlags |= LionEffect::EPPE_FLAG_KILL | LionEffect::EPPE_FLAG_CHANGED;
+        lpEffect->muHandle = (lpEffect->muHandle + LionEffect::KU_HANDLE_INCREMENT) &
+                             LionEffect::KU_HANDLE_VALID_MASK;
+    }
+
     LionEffect* ParticleModule::GetLionEffect(u32 luHandle)
     {
         const u32 luArrayIndex = luHandle & LionEffect::KU_HANDLE_INDEX_MASK;

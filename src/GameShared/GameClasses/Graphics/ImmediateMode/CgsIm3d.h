@@ -58,6 +58,7 @@ namespace CgsGraphics
 
         void PushMask(renderengine::TextureState* lpTextureState, renderengine::Texture* lpTexture,
                       const BasicColouredTexturedVertex* lpVertices);
+        void PopMask();
 
         void SaveMaskShaderConstants(const BasicColouredTexturedVertex* lpVertices,
                                      renderengine::TextureState* lpTextureState, renderengine::Texture* lpTexture);

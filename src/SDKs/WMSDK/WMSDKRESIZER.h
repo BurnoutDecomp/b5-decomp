@@ -49,8 +49,7 @@ struct BITMAPINFOHEADER
 
 // --- Xbox-360 XDK heap entry points (platform boundary; NOT reconstructed). --
 // Declared with the shapes the X360 call sites use so the bodies compile.
-void* XMemAlloc(u32 uSize, u32 uAttributes);
-void  XMemFree(void* pAddress, u32 uAttributes);
+#include <xtl.h> // XDK XMemAlloc / XMemFree
 
 class WMSDKRESIZER
 {

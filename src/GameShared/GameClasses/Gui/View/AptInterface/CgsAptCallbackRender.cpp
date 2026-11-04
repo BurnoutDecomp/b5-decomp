@@ -257,6 +257,12 @@ namespace CgsGui
         return 0;
     }
 
+    // ARTIST AptAux::ConstructApt @0x8285EE68 installs the shared empty
+    // BaseCollisionGenerator::Destruct body @0x8284CB38 in pfnFreeTexture (+0x58).
+    void AptCallbackRender::FreeTexture(AptAssetTexture /*lpAssetTexture*/)
+    {
+    }
+
     // The bsearch comparator (PS3 0x5BAE94, CgsGui::_FindGeometryFile): compare the two records'
     // leading id words (`**a - **b`). Both the search key and each table entry are a one-word
     // record whose first word is the file id.
@@ -288,6 +294,12 @@ namespace CgsGui
                                 static_cast<size_t>(lpObject->muNumberOfFiles),
                                 12u, &FindGeometryFileCompare);
         return reinterpret_cast<AptAssetRenderingUnit>(lpFound);
+    }
+
+    // ARTIST AptAux::ConstructApt @0x8285EE68 installs the same empty
+    // BaseCollisionGenerator::Destruct body @0x8284CB38 in pfnFreeRenderingUnit (+0x64).
+    void AptCallbackRender::FreeRenderingUnit(AptAssetRenderingUnit /*lpRenderingUnit*/)
+    {
     }
 
     // -------------------------------------------------------------------------

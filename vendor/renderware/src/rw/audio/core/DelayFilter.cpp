@@ -46,7 +46,7 @@ DelayFilter *DelayFilter::DelayFilter_ctor(DelayFilter *self)
 // -------------------------------------------------------------------------------------
 // DelayFilter::DelayFilterApplyFunc @0x82B67DD0
 //
-// When a feedback change is in flight (ctx->miInactive != 0) it hands off to the
+// When a feedback change is in flight (ctx->mpCrossfadeSource != 0) it hands off to the
 // crossfade recurrence. Otherwise it runs the delay loop over `count` samples: the
 // delayed input (mpBase) mixed with the fed-back "work" stream (mpFeedback) scaled by the
 // current feedback gain lands in the accumulate buffer, and the raw work sample is copied
@@ -61,19 +61,43 @@ void *DelayFilter::DelayFilterApplyFunc(DelayFilter *self, s32 count, s32 src,
     (void)src;
     (void)extra;
 
-    if (ctx->miInactive)
-        return DelayFilterCrossFadeFunc(count, self->mfFeedback, self->mfPrevFeedback,
-                                        ctx->mpBase, ctx->mpFeedback, ctx->miInactive,
-                                        ctx->miField0C, ctx->mpAccum, ctx->mpFeedforward);
+    if (ctx->mpCrossfadeSource)
+        return reinterpret_cast<void *>(DelayFilterCrossFadeFunc(count, self->mfFeedback, self->mfPrevFeedback,
+                                        ctx->mpBase, ctx->mpFeedback, ctx->mpCrossfadeSource,
+                                        ctx->mpCrossfadeWeight, ctx->mpAccum, ctx->mpFeedforward));
 
     const f32 feedback = self->mfFeedback;
     for (s32 n = 0; n < count; ++n)
     {
         f32 work = ctx->mpFeedback[n];
         ctx->mpAccum[n] = (work * feedback) + ctx->mpBase[n]; // fmadds
-        ctx->mpFeedforward[n] = work;                         // re-read of the same sample
+        ctx->mpFeedforward[n] = static_cast<volatile f32 *>(ctx->mpFeedback)[n]; // re-read after store
     }
     return self;
+}
+
+// ARTIST 82B67D40: each output is computed separately, with source streams
+// re-read after the accumulation store (the buffers may alias).
+s32 DelayFilterCrossFadeFunc(s32 count, f32 feedback, f32 prevFeedback,
+                            f32 *base, f32 *primary, f32 *secondary,
+                            f32 *weight, f32 *accum, f32 *feedforward)
+{
+    for (s32 i = 0; i < count; ++i)
+    {
+        const f32 blend = weight[i];
+        const f32 inverse = 1.0f - blend;
+        volatile f32 oldTerm = secondary[i] * blend;
+        volatile f32 newTerm = inverse * primary[i];
+        volatile f32 weightedOld = oldTerm * prevFeedback;
+        const f32 combined = newTerm * feedback + weightedOld;
+        accum[i] = combined + base[i];
+
+        const f32 blendAgain = weight[i];
+        const f32 inverseAgain = 1.0f - blendAgain;
+        volatile f32 oldAgain = secondary[i] * blendAgain;
+        feedforward[i] = inverseAgain * primary[i] + oldAgain;
+    }
+    return count;
 }
 
 // -------------------------------------------------------------------------------------

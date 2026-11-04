@@ -34,8 +34,11 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX; the raw `assembly` listing of each address
 // arbitrates over the Hex-Rays pseudocode throughout.
 //
-// This partfile also carries EVERY out-of-line definition of PreRaceFlyByState's static
+// This partfile carries the out-of-line definitions for PreRaceFlyByState's static data
 // members (the wave-J spec assigns them to group 1 so the six partfiles cannot collide).
+// The two in-class-initialized integral constants keep their class initializers only: the
+// XDK emits select-any COMDATs for them in consumers such as BrnHudFlow.cpp, and strong
+// out-of-line definitions here conflict with those compiler-owned symbols.
 // Every value below was read out of the image -- the dumps live in
 // scratchpad/waveJ/prfb_rodata.txt (tables), prfb_init.txt (the runtime-initialised
 // rects' initialiser stubs) and prfb_flts.txt (the individual float slots).
@@ -182,12 +185,6 @@ namespace BrnGui
     // zero pair in both stubs.
     const Vector2 PreRaceFlyByState::K_PRERACE_LONG_DISPLAY_RECT(638.0f, 349.79999f);
     const Vector2 PreRaceFlyByState::K_PRERACE_TALL_DISPLAY_RECT(638.0f, 349.79999f);
-
-    // The two in-class-initialised integral statics still need a definition for the
-    // link (both are odr-used: KI_PRERACEMAP_NUMICONS by the icon loops, and
-    // KI_MAX_LINES_DESCRIPTION_TEXT bounds maEventDescriptionText).
-    const s32 PreRaceFlyByState::KI_MAX_LINES_DESCRIPTION_TEXT;
-    const s32 PreRaceFlyByState::KI_PRERACEMAP_NUMICONS;
 
     // ===============================================================================
     // Bodies

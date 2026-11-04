@@ -24,8 +24,7 @@
 #include "CWMVFARoutines.h"
 
 // ---- raw Xbox 360 XDK heap API (platform externs, as the sibling rwmovie TUs) --------
-extern void* XMemAlloc(u32 uSize, u32 uAttributes);
-extern void  XMemFree(void* pAddress, u32 uAttributes);
+#include <xtl.h> // XDK XMemAlloc / XMemFree
 
 // XMemAlloc/XMemFree attribute word for this codec's analysis pools (lis 0x248C / ori 0x8000).
 static const u32 KU_PERCEPTIONMODEL_XMEM_ATTRIBUTES = 0x248C8000u;

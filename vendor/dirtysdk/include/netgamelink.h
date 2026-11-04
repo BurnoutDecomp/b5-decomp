@@ -46,11 +46,17 @@ CGS_STATIC_ASSERT((sizeof(NetGamePacketT) == 1220), "NetGamePacketT is the 1220-
 
 // Link statistics (NetGameLinkStatus). The per-second rates are recomputed once a second from
 // the bytes and packets sent since the previous sample.
+typedef struct NetGameLinkHistT
+{
+    u16 min, max, avg, cnt;
+} NetGameLinkHistT;
+
 typedef struct NetGameLinkStatT
 {
-    u32 tick;           // +0x00  time of this snapshot (ms)
-    u32 tickseqn;       // +0x04  bumped on every link update
-    u8  aReserved08[0x2C];  // +0x08  link timing / latency block (not read by the game)
+    volatile u32 tick;  // +0x00  time of this snapshot (ms)
+    volatile u32 tickseqn; // +0x04  bumped on every link update
+    u32 ping, late, conn, sent, rcvd;
+    u32 sentlast, rcvdlast, sentshow, rcvdshow, senthide, rcvdhide;
     s32 outbps;         // +0x34  game payload bytes sent per second
     s32 outrps;         // +0x38  bytes per second handed to the transport (payload + link framing)
     s32 outnps;         // +0x3C  bytes per second on the wire (+ datagram overhead)
@@ -61,7 +67,14 @@ typedef struct NetGameLinkStatT
     u8  isconn;         // +0x58  link established
     u8  isopen;         // +0x59  link established or still opening
     u8  aPad5A[2];      // +0x5A
+    u32 pingtick;       // +0x5C
+    u32 pingslot;       // +0x60
+    u32 pad1[3];        // +0x64, DecFIGS netgamelink.h
+    NetGameLinkHistT pinghist[32]; // +0x70
 } NetGameLinkStatT;
+
+CGS_STATIC_ASSERT((sizeof(NetGameLinkHistT) == 8), "NetGameLinkHistT stride");
+CGS_STATIC_ASSERT((sizeof(NetGameLinkStatT) == 0x170), "NetGameLinkStatT native size");
 
 #ifdef __cplusplus
 extern "C" {

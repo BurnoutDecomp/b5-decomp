@@ -76,10 +76,6 @@ static const f32 KF_S16_SCALE = 32767.0f;
 // bytes (the interleaved s16 span), carved off the System object table's scratch cursor.
 enum { KI_AIFF_SCRATCH_BYTES = 3072, KI_AIFF_BLOCK_SAMPLES = 256 };
 
-// The embedded TimerHandle sub-object's destructor, invoked on (self+0x24) by the scalar
-// deleting destructor. IDA renders the callee as an unresolved STUB and it is un-exported
-// with no disassembly, so it is declared here and left to link rather than fabricated.
-void AiffWriter_DestructTimerHandle(TimerHandle *handle);
 
 // The deferred-command ring records EventEvent posts. The "start" record is variable length
 // (a header + the NUL-terminated path, rounded up so the next record stays aligned); the
@@ -519,6 +515,18 @@ int AiffWriter::ReleaseEvent(AiffWriter *self)
 }
 
 // -------------------------------------------------------------------------------------
+// ARTIST 82B968C0: the timer writes one 256-frame interleaved block.
+int AiffWriter::RwacTimerClient(AiffWriter *self)
+{
+    const u32 bytes = static_cast<u32>(self->muChannelCount) << 9;
+    if (!self->mbDataWritten)
+        std::memset(self->mpBuf, 0, bytes);
+    const int written = static_cast<int>(std::fwrite(self->mpBuf, 1, bytes, self->mpFile));
+    self->mbDataWritten = 0;
+    self->muSampleFrameCount += 256;
+    return written;
+}
+
 // `scalar deleting destructor' @0x82B9D428
 //   AiffWriter_DestructTimerHandle(&self->mTimerHandle); // STUB(self+0x24)
 //   self->mpVTable = off_820AA810;   // reinstall the base v-table
@@ -527,7 +535,7 @@ int AiffWriter::ReleaseEvent(AiffWriter *self)
 // -------------------------------------------------------------------------------------
 void *AiffWriter::ScalarDeletingDestructor(AiffWriter *self, char flags)
 {
-    AiffWriter_DestructTimerHandle(&self->mTimerHandle); // STUB(self+0x24)
+    // ARTIST 82AD5078 is a single blr: the embedded handle destructor has no effect.
     self->mpVTable = KAIFF_BaseVTable;                   // off_820AA810
     if ((flags & 1) != 0)
         ::operator delete(self);

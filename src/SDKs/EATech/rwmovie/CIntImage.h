@@ -15,7 +15,7 @@
 //   +0x04 mRect            CRct extent {left,top,right,bottom} driving the alloc size
 //   +0x14 muRawAllocation  raw XMemAlloc pointer (what is actually freed)
 //
-// allocate() sizes the buffer as ((bottom-top)*(right-left) + 64) two-byte samples, i.e.
+// allocate(rect, flags) sizes the buffer as ((bottom-top)*(right-left) + 64) two-byte samples, i.e.
 // 2*that many bytes, then keeps the raw pointer in muRawAllocation and the 64-byte-aligned
 // pointer in mpAddress. Both clean() and the destructor free muRawAllocation (the raw
 // pointer). XMemAlloc/XMemFree are the raw XDK heap API called with attributes 0x248C8000
@@ -27,8 +27,7 @@
 #include "types.hpp"
 
 // ---- raw Xbox 360 XDK heap API (platform externs) -----------------------------------
-extern void* XMemAlloc(u32 uSize, u32 uAttributes);
-extern void  XMemFree(void* pAddress, u32 uAttributes);
+#include <xtl.h> // XDK XMemAlloc / XMemFree
 
 // XMemAlloc/XMemFree attribute word for this codec's image buffers (lis 0x248C / ori 0x8000).
 static const u32 KU_INTIMAGE_XMEM_ATTRIBUTES = 0x248C8000u;
@@ -49,22 +48,14 @@ public:
 class CIntImage
 {
 public:
-    // Constructs the image and immediately calls allocate(); the resulting status code
-    // is written back through lpiResult.
-    explicit CIntImage(s32* lpiResult);
-
-    // Extent-taking constructor used by CPictureFYUV420: copies lrRect into mRect and
-    // allocates, writing the status back through lpiResult. This overload is attested only
-    // by its call site (CPictureFYUV420::CPictureFYUV420 @0x82A7DC..: bl CIntImage__CIntImage
-    // with r4=s32* result, r5=CRct*, r6=0); its body lives in the CIntImage TU. iFlags is
-    // passed 0 at every attested call.
+    // ARTIST 0x82AC1718 receives status, rectangle and flags in r4-r6.
     CIntImage(s32* lpiResult, const CRct& lrRect, s32 iFlags);
 
     ~CIntImage();
 
-    // (Re)allocates the pixel buffer for the current mRect. Returns 0 on success (or on a
+    // Copies the supplied rectangle and (re)allocates its pixel buffer. Returns 0 on success (or on a
     // degenerate rect), -3 on allocation failure.
-    s32 allocate();
+    s32 allocate(const CRct& lrRect, s32 iFlags);
 
     // Frees the raw pixel allocation if present.
     void clean();
