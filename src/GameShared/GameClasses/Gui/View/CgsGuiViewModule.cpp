@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // GuiEventLoadNotification (the load-notification record)
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResource (the string-table load)
 #include "GameShared/GameClasses/Fonts/CgsFont.h"                          // CgsResource::Font (the loaded-font trace)
+#include "rw/rwcore_structs.h"                                                // ResourceAllocatorRegistry
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint / gxMessageFilterFlags (the font trace)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h" // Im2dTransform::GetDefault (ARTIST 0x830112D0)
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // the clear-quad vertices
@@ -756,13 +757,16 @@ namespace CgsGui
         }
     }
 
-    // AddFont -- collect a loaded font handle into the module's font collection. The X360
-    // emits the call in ProcessIncomingLoadNotification (`bl CgsGui__ViewModule__AddFont`);
-    // the body itself is un-exported (no per-address dossier), so it is reconstructed as
-    // the observable forward into the collection's slot registration (FontCollection::
-    // AddFont @0x82853030, the only collection insert point).
+    // ARTIST 0x82858C10: create the font texture state before registration.
     void ViewModule::AddFont(CgsResource::SafeResourceHandle<CgsResource::Font>& lrTypeface)
     {
+        CGS_ASSERT(lrTypeface != CgsResource::NULLResourceHandle,
+                   "Invalid font pointer sent to ViewModule::AddFont");
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Adding font " << lrTypeface->macTypefaceFamilyName << "\n";
+        rw::IResourceAllocator* lpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
+        lrTypeface->CreateTextureState(lpAllocator);
         mFonts.AddFont(lrTypeface);
     }
+
 }

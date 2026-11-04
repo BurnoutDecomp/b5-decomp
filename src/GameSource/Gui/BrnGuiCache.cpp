@@ -1320,6 +1320,11 @@ namespace BrnGui
 
         switch (liEventId)
         {
+        case 26: // ARTIST 0x8250E768: cache the frame delta and game time.
+            std::memcpy(&mfTimeStep, lpEvent, sizeof(mfTimeStep));
+            std::memcpy(&mfTimeNow, reinterpret_cast<const u8*>(lpEvent) + 4, sizeof(mfTimeNow));
+            break;
+
         // ARTIST8250F1F8..F220; native jump index is event id minus4.
         // CP15's canonical notifications are raw enum payloads at+0.
         case 27:
