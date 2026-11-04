@@ -38,14 +38,6 @@ namespace CgsSound
 {
 namespace Playback
 {
-    // X360: the invalid/default resource-handle sentinel used to reset mpResource to
-    // "no resource" (X360 &dword_830086E0). Modelled as a file-local zero ResourceHandle
-    // (same idiom as WheelList/ChallengeList).
-    namespace
-    {
-        const CgsResource::ResourceHandle skNullResourceHandle = {};
-    }
-
     template <class ResType>
     void* ContentLoader<ResType>::GetData()
     {
@@ -102,7 +94,7 @@ namespace Playback
 
         // X360: CreateFromHandle(&mpResource, &NULLResourcePtr-sentinel) -- rebind mpResource to
         // the null resource. Modelled via the public ResourcePtr assignment.
-        mpResource = skNullResourceHandle;
+        mpResource = CgsResource::NULLResourcePtr;
         return true;
     }
 
@@ -346,7 +338,7 @@ namespace Playback
             if (mpLoadData)
                 CancelResourceModuleLoading(arContent, arSpec);
             PurgeLoadData(arContent, arSpec);
-            mpResource = skNullResourceHandle;
+            mpResource = CgsResource::NULLResourcePtr;
         }
         else
         {

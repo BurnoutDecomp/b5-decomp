@@ -13,11 +13,6 @@
 namespace BrnWorld
 {
 
-// The default/empty resource handle the X360 binds into every slot at
-// Construct and on unload (dword_8300FAA0): a default-constructed handle whose
-// bound ResourcePtr reads back as the empty/default pointer.
-static const CgsResource::ResourceHandle KS_DEFAULT_INSTANCE_LIST_HANDLE;
-
 // The static empty/default resource pointer each slot is compared against in
 // GetInstanceList (dword_82FAD94C).
 static const CgsResource::BaseResourcePtr KS_EMPTY_INSTANCE_LIST_PTR;
@@ -36,7 +31,7 @@ WorldGraphicsStreamer::Construct( WorldEntityModule* lpWorldEntityModule )
 
     for ( s32 liList = 0; liList < KI_MAX_INSTANCE_LISTS; liList++ )
     {
-        maInstanceLists[ liList ] = KS_DEFAULT_INSTANCE_LIST_HANDLE;
+        maInstanceLists[ liList ] = CgsResource::NULLResourcePtr;
     }
 }
 
@@ -140,7 +135,7 @@ void
 WorldGraphicsStreamer::OnUnloadComplete( const BrnResource::GameDataIO::UnloadGameDataResponse* lpEvent,
                                          s32 liListIndex )
 {
-    maInstanceLists[ liListIndex ] = KS_DEFAULT_INSTANCE_LIST_HANDLE;
+    maInstanceLists[ liListIndex ] = CgsResource::NULLResourcePtr;
 
     mpWorldEntityModule->OnWorldGraphicsUnloadComplete( lpEvent );
 }
