@@ -261,6 +261,10 @@ namespace BrnGui
         // `stw r24, 0x4058(r31)` @0x8250593C.
         mpSystemUserProfile = lpSystemUserProfile;
 
+        // ARTIST82505970..74: clear the world-data and progression-profile pointers.
+        mpWorldDataController = 0;
+        mpProfile = 0;
+
         // ARTIST Construct 0x82505A68: freeburn is E_MODE_NONE, not race (zero).
         meGameModeType = -1;
         mbAreRoadRulesAvailable = false; // 0x82505A3C
@@ -447,6 +451,7 @@ namespace BrnGui
         // (the only two stores to that word in the image are @0x82505934 here and none
         // elsewhere), which is why the tracker binding above is permanent.
         mpSystemUserProfile = 0;   // stw r30(==0), 0x4058(r31)  @0x82506058
+        miSatNavZoomLevel = 0; // ARTIST 0x825062A8
     }
 
     // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,

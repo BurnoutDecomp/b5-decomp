@@ -1632,26 +1632,10 @@ namespace
     // removed when the partfiles were folded back (issue #20).
 }
 
-// @ 0x82525FC0
-void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGuiEventQueue,
-                                CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpViewOutputQueue)
+// Keep the event switch separate from the queue iterator.
+__declspec(noinline) void HudMessageAnalyzer::ProcessInputEvent(const CgsModule::Event* lpEvent,
+                                                          s32 liEventType, bool& lbHadWreckEvent)
 {
-    // Entry tripwires (cpp:535 streamed / cpp:538) and adopt the view output queue.
-    CGS_ASSERT(lpViewOutputQueue != NULL,
-               "View output queue is not valid. Is it definately locked for writing?");
-    mpViewOutputQueue = lpViewOutputQueue;
-    CGS_ASSERT(lpGuiEventQueue != NULL, "lpEventQueue != NULL");
-
-    bool lbHadWreckEvent = false;   // v84
-
-    const CgsModule::Event* lpEvent = NULL;
-    s32 liEventSize = 0;
-    s32 liEventType = lpGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
-
-    if (lpEvent != NULL)
-    {
-        do
-        {
             switch (liEventType)
             {
                 case 64:   // adopt the shared GuiCache pointer delivered by the first record
@@ -2174,6 +2158,29 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                 default:
                     break;
             }
+}
+
+// @ 0x82525FC0
+void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGuiEventQueue,
+                                CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpViewOutputQueue)
+{
+    // Entry tripwires (cpp:535 streamed / cpp:538) and adopt the view output queue.
+    CGS_ASSERT(lpViewOutputQueue != NULL,
+               "View output queue is not valid. Is it definately locked for writing?");
+    mpViewOutputQueue = lpViewOutputQueue;
+    CGS_ASSERT(lpGuiEventQueue != NULL, "lpEventQueue != NULL");
+
+    bool lbHadWreckEvent = false;   // v84
+
+    const CgsModule::Event* lpEvent = NULL;
+    s32 liEventSize = 0;
+    s32 liEventType = lpGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+    if (lpEvent != NULL)
+    {
+        do
+        {
+            ProcessInputEvent(lpEvent, liEventType, lbHadWreckEvent);
 
             liEventType = lpGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }

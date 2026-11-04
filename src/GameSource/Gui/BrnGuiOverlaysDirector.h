@@ -42,6 +42,7 @@ namespace BrnGui
         }
 
     private:
+        void DispatchOverlayEvent(const CgsModule::Event* lpEvent, s32 liEventType);
         void HandleOverlayRequest(const GuiOverlayRequest* lpEvent);
 
         // Inlined into Update's id-186 arm: publish the current overlay description (187).
