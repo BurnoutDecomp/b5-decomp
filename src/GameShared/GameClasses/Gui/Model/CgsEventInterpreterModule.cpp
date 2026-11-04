@@ -437,42 +437,11 @@ void EventInterpreterModule::ProcessInEvents(GuiEventInputQueue* lpCurrentEvents
 //   E_GUI_OUT_INTERNAL_EVENT   -> push the boxed raw event onto the interpreter's internal queue;
 //   anything else (only during pre-world-update) -> push onto the output event queue.
 // ---------------------------------------------------------------------------------------
-void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsPreWorldUpdate)
+// Keep event dispatch separate from staging-queue traversal.
+__declspec(noinline) void EventInterpreterModule::ProcessOneOutEvent(
+    OutputBuffer* lpOutput, const CgsModule::Event* lpEvent, s32 liEventType,
+    s32 liEventSize, bool lbIsPreWorldUpdate)
 {
-    // The X360 staging queue is a CgsModule::VariableEventQueue<65536,16> (the large GUI queue);
-    // it gathers every observer's output queue then is drained by type below.
-    CgsModule::VariableEventQueue<65536, 16> lStagingQueue;
-    lStagingQueue.Construct();
-
-    // Gather every observer's outbound queue into the staging queue. The X360 reaches each
-    // observer's queue at mpObserver+16 (its StateInterface's large output queue); accessed here
-    // by name through EventObserver::GetOutputEventQueue().
-    const s32 liObserverCount = mnNumberEventObservers;
-    for (s32 liObserver = 0; liObserver < liObserverCount; ++liObserver)
-    {
-        ObjectEventObserver& lrSlot = maEventObservers[liObserver];
-        CGS_ASSERT(lrSlot.mpObserver != 0, "Invalid Observer within an ObjectEventObserver");
-
-        GuiStackEventQueue::GuiEventQueueLarge* lpObserverOutQueue =
-            lrSlot.mpObserver->GetOutputEventQueue();
-        CGS_ASSERT(lpObserverOutQueue != 0,
-                   "Invalid observer output Queue in EventInterpreterModule::ProcessOutEvents");
-
-        lStagingQueue.Append(*lpObserverOutQueue);
-        lpObserverOutQueue->CgsModule::VariableEventQueue<65536, 16>::Clear();
-    }
-
-    // The E_GUI_OUT_* records below are external serialised event blobs the GUI states packed
-    // into the variable event queue (each record's field offsets are baked by the producing
-    // StateInterface emitter, not by any C++ type visible here). They are read by word offset
-    // off the queue record exactly as the X360 does -- this is the documented serialised-blob
-    // exception, not a member-access offset hack.
-    const CgsModule::Event* lpEvent = 0;
-    s32 liEventSize = 0;
-    s32 liEventType = lStagingQueue.GetFirstEvent(&lpEvent, &liEventSize);
-
-    while (lpEvent != 0)
-    {
         switch (liEventType)
         {
         case E_GUI_OUT_REGISTER_FOR_EVENT:
@@ -574,6 +543,45 @@ void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsP
             }
             break;
         }
+}
+
+void EventInterpreterModule::ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsPreWorldUpdate)
+{
+    // The X360 staging queue is a CgsModule::VariableEventQueue<65536,16> (the large GUI queue);
+    // it gathers every observer's output queue then is drained by type below.
+    CgsModule::VariableEventQueue<65536, 16> lStagingQueue;
+    lStagingQueue.Construct();
+
+    // Gather every observer's outbound queue into the staging queue. The X360 reaches each
+    // observer's queue at mpObserver+16 (its StateInterface's large output queue); accessed here
+    // by name through EventObserver::GetOutputEventQueue().
+    const s32 liObserverCount = mnNumberEventObservers;
+    for (s32 liObserver = 0; liObserver < liObserverCount; ++liObserver)
+    {
+        ObjectEventObserver& lrSlot = maEventObservers[liObserver];
+        CGS_ASSERT(lrSlot.mpObserver != 0, "Invalid Observer within an ObjectEventObserver");
+
+        GuiStackEventQueue::GuiEventQueueLarge* lpObserverOutQueue =
+            lrSlot.mpObserver->GetOutputEventQueue();
+        CGS_ASSERT(lpObserverOutQueue != 0,
+                   "Invalid observer output Queue in EventInterpreterModule::ProcessOutEvents");
+
+        lStagingQueue.Append(*lpObserverOutQueue);
+        lpObserverOutQueue->CgsModule::VariableEventQueue<65536, 16>::Clear();
+    }
+
+    // The E_GUI_OUT_* records below are external serialised event blobs the GUI states packed
+    // into the variable event queue (each record's field offsets are baked by the producing
+    // StateInterface emitter, not by any C++ type visible here). They are read by word offset
+    // off the queue record exactly as the X360 does -- this is the documented serialised-blob
+    // exception, not a member-access offset hack.
+    const CgsModule::Event* lpEvent = 0;
+    s32 liEventSize = 0;
+    s32 liEventType = lStagingQueue.GetFirstEvent(&lpEvent, &liEventSize);
+
+    while (lpEvent != 0)
+    {
+        ProcessOneOutEvent(lpOutput, lpEvent, liEventType, liEventSize, lbIsPreWorldUpdate);
 
         liEventType = lStagingQueue.GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
