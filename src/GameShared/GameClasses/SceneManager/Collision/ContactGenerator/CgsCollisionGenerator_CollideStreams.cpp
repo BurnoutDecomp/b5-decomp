@@ -68,8 +68,10 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithSphereListJobDesc.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
 
 #include "SDKs/EATech/eajobs/job.h"        // EA::Jobs::Job
+#include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "SDKs/EATech/eajobs/job_types.h"  // EA::Jobs::Param / JOB_ENVIRONMENT_LOCAL
 
 // The contact-generator job entry every collide-stream batch is wired to
@@ -329,16 +331,10 @@ namespace CgsCollision
                            static_cast<int>(CollisionJobDescriptionStorage::KU_CONSOLE_BYTES));
             lpJob->SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);
             lpParentJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);   // li r5, 1
-
-            ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
-                                  EA::Jobs::Param(static_cast<void*>(lpDesc)),
-                                  EA::Jobs::Param(),
-                                  EA::Jobs::Param());
         }
 
-        // The console brackets the AddTree call with the StartJobs perfmon; the dispatch itself
-        // ran inline above, so on PC the bracket closes over the (replaced) AddTree site only.
         CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);   // 0x82811668
+        CgsSystem::JobManager()->AddTree(lpParentJob);          // 0x82811678
         CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);    // 0x82811680
 
         return lpParentJob;
@@ -390,13 +386,9 @@ namespace CgsCollision
             lpParentJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);
 
             CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
-
-            ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
-                                  EA::Jobs::Param(static_cast<void*>(lpDesc)),
-                                  EA::Jobs::Param(),
-                                  EA::Jobs::Param());
         }
 
+        CgsSystem::JobManager()->AddTree(lpParentJob);
         return lpParentJob;
     }
 
@@ -446,13 +438,9 @@ namespace CgsCollision
             lpParentJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);
 
             CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
-
-            ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
-                                  EA::Jobs::Param(static_cast<void*>(lpDesc)),
-                                  EA::Jobs::Param(),
-                                  EA::Jobs::Param());
         }
 
+        CgsSystem::JobManager()->AddTree(lpParentJob);
         return lpParentJob;
     }
 }

@@ -240,5 +240,11 @@ namespace Jobs
 
         static_cast<LocalBackend::LocalBackend*>(mSchedulers[0])->WakeThreads();
     }
+
+    // ARTIST 0x82BC9B48.
+    void JobScheduler::WakeThreads(JobEnvironment leEnvironment)
+    {
+        mSchedulers[leEnvironment]->WakeThreads();
+    }
 }
 }
