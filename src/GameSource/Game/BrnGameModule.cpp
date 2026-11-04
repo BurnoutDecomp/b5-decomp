@@ -1390,15 +1390,6 @@ namespace BrnGame
     //   the helper's DestroyIOBuffer (asserting "mpStack->DestroyIOBuffer( &mpBuffer )",
     //     CgsModuleIOHelper.h:57).
     //
-    // The director pause-request and controller-disconnect producers below are source-recovered.
-    // The Replay append remains null-guarded because the active caller still passes null; its
-    // PostSim dispatch and lifetime are a separate prerequisite. The current PC full-cascade
-    // caller also supplies ConstructUpdateSetFromFsm(), whose body never sets bit 0x4, so the
-    // event-10 transition remains dormant until the existing incomplete late-set path is wired.
-    // BridgeGuiToGameState takes the GUI module's own out-event queue and the game-state module
-    // (its signature is adapted, see its declaration), so its game events reach the module's
-    // carry queue directly rather than through this buffer's game-event queue. They land ahead
-    // of the buffer's events either way, which is the console's order.
     // ------------------------------------------------------------------------------------
     void BrnGameModule::DoUpdate_GameStatePostWorld(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
                                                     CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
@@ -1417,14 +1408,8 @@ namespace BrnGame
 
         CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
 
-        // LockBuffersForIO: the buffer write-locked, the five sources read-locked. The replay
-        // post-sim source is the only one this build can pass as null.
-        lpPostWorldInput->LockForWrite();
-        lpInputOutputBuffer->LockForRead();
-        lpWorldUpdateOutputBuffer->LockForRead();
-        lpGuiOutputBuffer->LockForRead();
-        if (lpReplaysPostSimOutputBuffer != 0) lpReplaysPostSimOutputBuffer->LockForRead();
-        lpDirectorOutputBuffer->LockForRead();
+        CgsModule::LockBuffersForIO(lpPostWorldInput, lpInputOutputBuffer, lpWorldUpdateOutputBuffer,
+            lpGuiOutputBuffer, lpReplaysPostSimOutputBuffer, lpDirectorOutputBuffer);
 
         BridgeGuiToGameState(lpPostWorldInput, lpGuiOutputBuffer);
 
@@ -1435,24 +1420,18 @@ namespace BrnGame
 
         // ARTIST 0x823E9390..0x823E93CC: event 43 follows the World bridge and precedes
         // Replay's queue append. The typed accessor asserts the Director output read lock.
-        const BrnDirector::DirectorOutputInterface* lpDirectorOutputInterface =
-            lpDirectorOutputBuffer->GetDirectorOutputInterface();
-        if (lpDirectorOutputInterface->GetPauseRequest())
+        if (lpDirectorOutputBuffer->GetDirectorOutputInterface()->GetPauseRequest())
         {
             BrnGameState::GameStateModuleIO::TrainingPauseStateChangedEvent lPauseEvent;
-            lPauseEvent.mbActivated = lpDirectorOutputInterface->GetPauseRequestState();
+            lPauseEvent.mbActivated = lpDirectorOutputBuffer->GetDirectorOutputInterface()->GetPauseRequestState();
             lpPostWorldInput->GetGameEventQueue()->AddEvent(
                 &lPauseEvent,
                 BrnGameState::GameStateModuleIO::E_EVENT_TRAINING_PAUSE_STATE_CHANGED);
         }
 
-        // ARTIST 0x823E93D0..0x823E93E4: append Replay events after event 43 and before
-        // event 10. The active PC caller currently passes null for this output.
-        if (lpReplaysPostSimOutputBuffer != 0)
-        {
-            lpPostWorldInput->GetGameEventQueue()->Append(
-                *lpReplaysPostSimOutputBuffer->GetGameEventQueue());
-        }
+        // ARTIST 823E93D0 appends the Replay queue between events 43 and 10.
+        lpPostWorldInput->GetGameEventQueue()->Append(
+            *lpReplaysPostSimOutputBuffer->GetGameEventQueue());
 
         // ARTIST 0x823E93F8..0x823E9450: sample update-set bit 0x4 only when neither
         // loading-screen visibility nor disk error suppresses the controller event.
@@ -1474,12 +1453,8 @@ namespace BrnGame
             lpDirectorOutputBuffer->GetCameraOutput()->GetState().IsFlagSet(
                 BrnDirector::Camera::CameraState::E_FLAG_IS_PICTURE_PARADISE));
 
-        lpDirectorOutputBuffer->UnlockForRead();
-        if (lpReplaysPostSimOutputBuffer != 0) lpReplaysPostSimOutputBuffer->UnlockForRead();
-        lpGuiOutputBuffer->UnlockForRead();
-        lpWorldUpdateOutputBuffer->UnlockForRead();
-        lpInputOutputBuffer->UnlockForRead();
-        lpPostWorldInput->UnlockForWrite();
+        CgsModule::UnlockBuffersForIO(lpPostWorldInput, lpInputOutputBuffer, lpWorldUpdateOutputBuffer,
+            lpGuiOutputBuffer, lpReplaysPostSimOutputBuffer, lpDirectorOutputBuffer);
 
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState_Bridge);
 
