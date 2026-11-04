@@ -1045,78 +1045,35 @@ namespace BrnGame
         CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Sound);
         CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_SoundUpdate);
 
-        // The self-carved "Sound" root input (console @0x823DCF20, the CgsModuleIOHelper
-        // create/destroy pair with the h:52/h:57 asserts).
-        RootIn* lpSoundInputBuffer = 0;
-        const bool lbCreated = lpInputBufferStack->CreateIOBuffer(&lpSoundInputBuffer, "Sound");
-        CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
-        (void)lbCreated;
+        CgsModule::IOHelper<RootIn> lSoundInput(lpInputBufferStack, "Sound");
+        RootIn* const lpSoundInputBuffer = lSoundInput;
+        CgsModule::LockBuffersForIO(lpSoundInputBuffer, lpDirectorOutputBuffer, lpWorldOutputBuffer,
+            lpGameStateOutputBuffer, lpGuiOutputBuffer, lpReplaysPreSimOutputBuffer);
+        lpEffectsOutputBuffer->LockForRead();
 
-        // sub_823B7620 (bracket A), then the effects read lock (bracket B, interleaved).
-        lpSoundInputBuffer->LockForWrite();
-        if (lpDirectorOutputBuffer != 0)     lpDirectorOutputBuffer->LockForRead();
-        if (lpWorldOutputBuffer != 0)        lpWorldOutputBuffer->LockForRead();
-        if (lpGameStateOutputBuffer != 0)    lpGameStateOutputBuffer->LockForRead();
-        if (lpGuiOutputBuffer != 0)          lpGuiOutputBuffer->LockForRead();
-        if (lpReplaysPreSimOutputBuffer != 0) lpReplaysPreSimOutputBuffer->LockForRead();
-        if (lpEffectsOutputBuffer != 0)      lpEffectsOutputBuffer->LockForRead();
+        BridgeWorldToSound(lpSoundInputBuffer, lpWorldOutputBuffer, leUpdateSet);
+        lpSoundInputBuffer->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
+        BridgeGameStateToSound(lpSoundInputBuffer, lpGameStateOutputBuffer);
+        BridgeGuiToSound(lpSoundInputBuffer, mpGuiOutputBuffer);
 
-        // @0x823DCF98 -- the world -> sound copy + installs (the update set feeds the
-        // bit-0x100 replay-source select).
-        if (lpWorldOutputBuffer != 0)
-            BridgeWorldToSound(lpSoundInputBuffer, lpWorldOutputBuffer, leUpdateSet);
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpcReplayOutputBuffer = lpReplaysPreSimOutputBuffer;
+        lpSoundInputBuffer->SetReplayStatusInterface(
+            reinterpret_cast<const RootIn::ReplayStatusInterface*>(lpcReplayOutputBuffer->GetStatusInterface()));
 
-        // @0x823DCFA0/AC -- the director camera into the root input (+0x2F20 on console).
-        // SetCameraInput invokes Camera::operator= on the complete by-value camera,
-        // matching the console root-input member at +0x2F20.
-        if (lpDirectorOutputBuffer != 0)
-            lpSoundInputBuffer->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
+        CgsModule::UnlockBuffersForIO(lpSoundInputBuffer, lpDirectorOutputBuffer, lpWorldOutputBuffer,
+            lpGameStateOutputBuffer, lpGuiOutputBuffer, lpReplaysPreSimOutputBuffer);
+        lpEffectsOutputBuffer->UnlockForRead();
 
-        // @0x823DCFBC -- the game-state bridge (this leg is its ONLY console caller).
-        if (lpGameStateOutputBuffer != 0)
-            BridgeGameStateToSound(lpSoundInputBuffer, lpGameStateOutputBuffer);
-
-        // @0x823DCFD4 -- the GUI out-queue install (console reloads the gm+0x9A0BD8
-        // member; on PC the caller passes the same static buffer).
-        if (lpGuiOutputBuffer != 0)
-            BridgeGuiToSound(lpSoundInputBuffer, lpGuiOutputBuffer);
-
-        // @0x823DCFDC/E8 -- the replay status interface into the root input (+0x4).
-        if (lpReplaysPreSimOutputBuffer != 0)
-            lpSoundInputBuffer->SetReplayStatusInterface(
-                reinterpret_cast<const RootIn::ReplayStatusInterface*>(
-                    lpReplaysPreSimOutputBuffer->GetStatusInterface()));
-
-        // sub_823B7760 (reverse of bracket A), then the effects unlock (bracket B).
-        if (lpReplaysPreSimOutputBuffer != 0) lpReplaysPreSimOutputBuffer->UnlockForRead();
-        if (lpGuiOutputBuffer != 0)          lpGuiOutputBuffer->UnlockForRead();
-        if (lpGameStateOutputBuffer != 0)    lpGameStateOutputBuffer->UnlockForRead();
-        if (lpWorldOutputBuffer != 0)        lpWorldOutputBuffer->UnlockForRead();
-        if (lpDirectorOutputBuffer != 0)     lpDirectorOutputBuffer->UnlockForRead();
-        lpSoundInputBuffer->UnlockForWrite();
-        if (lpEffectsOutputBuffer != 0)      lpEffectsOutputBuffer->UnlockForRead();
-
-        // @0x823DD054 -- the pump, with the console's exact timer products (identical to
-        // the loading spine's @0x823F2AC8; cross-confirmed in the decode).
-        {
-            const CgsSystem::Timer& lrGameTimer = mGameTimer;
-            const CgsSystem::Timer& lrSimTimer  = mSimTimer;
-            mSoundModule.Update(
-                lrGameTimer.GetScaleCurrent() * lrGameTimer.GetRate(),
-                lrSimTimer.GetScaleCurrent() * lrSimTimer.GetRate(),
-                lpInputBufferStack,
-                lpOutputBufferStack,
-                lpSoundInputBuffer,
-                lpSoundOutputBuffer,
-                leUpdateSet);
-        }
+        // ARTIST 823DD054 uses the two scaled timer rates.
+        const CgsSystem::Timer& lrGameTimer = mGameTimer;
+        const CgsSystem::Timer& lrSimTimer = mSimTimer;
+        mSoundModule.Update(lrGameTimer.GetScaleCurrent() * lrGameTimer.GetRate(),
+                           lrSimTimer.GetScaleCurrent() * lrSimTimer.GetRate(),
+                           lpInputBufferStack, lpOutputBufferStack,
+                           lpSoundInputBuffer, lpSoundOutputBuffer, leUpdateSet);
 
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_SoundUpdate);
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Sound);
-
-        const bool lbDestroyed = lpInputBufferStack->DestroyIOBuffer(&lpSoundInputBuffer);
-        CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");  // CgsModuleIOHelper.h:57
-        (void)lbDestroyed;
     }
 
     // ARTIST 0x823DD2A0. The update thread creates the phase input, merges the game-action
@@ -2006,7 +1963,7 @@ namespace BrnGame
         // ARTIST 823DD180 reads pad 0 action 3's pressed bit.
         const CgsInput::InputIO::PadOutputInformation* lpPad = lpInputOutputBuffer->GetPadInfo(0);
         if ((lpPad->maActionInfo[3].muStatus & 2u) != 0)
-            BrnEffects::EffectsModule::RestartEffects();
+            mEffectsModule.RestartEffects();
 
         BridgeEntityToEffects(lpWorldOutputBuffer, lEffectsInput, leUpdateSet);
 
