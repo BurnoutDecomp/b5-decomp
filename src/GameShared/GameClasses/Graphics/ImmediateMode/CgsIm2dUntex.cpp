@@ -33,6 +33,32 @@ namespace shadow
 namespace CgsGraphics
 {
 
+namespace
+{
+static const u32 kaIm2dUntexVertex[102] = {
+    0x102A1101u, 0x00000120u, 0x00000078u, 0x00000000u, 0x00000024u, 0x00000000u, 0x000000E8u, 0x00000000u,
+    0x00000000u, 0x000000C0u, 0x0000001Cu, 0x000000B4u, 0xFFFE0300u, 0x00000004u, 0x0000001Cu, 0x00000008u,
+    0x000000ADu, 0x0000006Cu, 0x00020003u, 0x00010000u, 0x0000007Cu, 0x00000000u, 0x0000008Cu, 0x00020002u,
+    0x00010000u, 0x0000007Cu, 0x00000000u, 0x00000099u, 0x00020000u, 0x00010000u, 0x0000007Cu, 0x00000000u,
+    0x000000A4u, 0x00020001u, 0x00010000u, 0x0000007Cu, 0x00000000u, 0x67436F6Cu, 0x6F757253u, 0x63616C65u,
+    0x00ABABABu, 0x00010003u, 0x00010004u, 0x00010000u, 0x00000000u, 0x67436F6Cu, 0x6F757253u, 0x68696674u,
+    0x00674F66u, 0x66736574u, 0x58595A00u, 0x67526967u, 0x68745570u, 0x0076735Fu, 0x335F3000u, 0x322E302Eu,
+    0x36353334u, 0x2E3100ABu, 0x00000000u, 0x00000078u, 0x00010000u, 0x00000000u, 0x00000000u, 0x00001021u,
+    0x00000001u, 0x00000002u, 0x00000001u, 0x00000290u, 0x00000003u, 0x0000A007u, 0x0000F0A0u, 0x00001008u,
+    0x10011003u, 0x00001200u, 0xC2000000u, 0x00003004u, 0x00001200u, 0xC4000000u, 0x10092007u, 0x00002200u,
+    0x00000000u, 0x05F80000u, 0x00000E47u, 0x00000000u, 0x14C8C03Eu, 0x000000C6u, 0xC2000000u, 0xC801803Eu,
+    0x00B26E6Cu, 0x91000100u, 0xC802803Eu, 0x00B2B3B1u, 0x91000100u, 0x05F80000u, 0x00000688u, 0x00000000u,
+    0xC80F8000u, 0x00000000u, 0x8B000302u, 0x00000000u, 0x00000000u, 0x00000000u,
+};
+static const u32 kaIm2dUntexPixel[40] = {
+    0x102A1100u, 0x0000007Cu, 0x00000024u, 0x00000000u, 0x00000024u, 0x00000000u, 0x00000058u, 0x00000000u,
+    0x00000000u, 0x00000030u, 0x0000001Cu, 0x00000023u, 0xFFFF0300u, 0x00000000u, 0x00000000u, 0x00000008u,
+    0x0000001Cu, 0x70735F33u, 0x5F300032u, 0x2E302E36u, 0x3533342Eu, 0x3100ABABu, 0x00000000u, 0x00000024u,
+    0x10000000u, 0x00000000u, 0x00000000u, 0x00001021u, 0x00000001u, 0x00000001u, 0x0000F0A0u, 0x00000000u,
+    0x1001C400u, 0x22000000u, 0xC80F8000u, 0x00000000u, 0xE2000000u, 0x00000000u, 0x00000000u, 0x00000000u,
+};
+}
+
 template <typename V>
 s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                              const void* lpVertexProgramBinary, u32 luVertexProgramSize,
@@ -159,6 +185,34 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
         AddProgram(lpAllocator,
                    lapVertexProgramBinary[liProgram], lauVertexProgramSize[liProgram],
                    lapPixelProgramBinary[liProgram], lauPixelProgramSize[liProgram]);
+    }
+}
+
+// ARTIST827FC5C0: one recovered vertex/pixel package, then the four
+// shader handles used by the 2D transform.
+void Im2dUntex::Construct(rw::IResourceAllocator* allocator)
+{
+    mCurrentTransform = Im2dTransform::GetDefault();
+    const void* vertices[1] = { kaIm2dUntexVertex };
+    const void* pixels[1] = { kaIm2dUntexPixel };
+    const u32 vertexSizes[1] = { sizeof(kaIm2dUntexVertex) };
+    const u32 pixelSizes[1] = { sizeof(kaIm2dUntexPixel) };
+    ImRenderer<Basic2dColouredVertex>::Construct(allocator, vertices, vertexSizes, pixels, pixelSizes, 1);
+    const char* names[4] = { "gOffsetXYZ", "gRightUp", "gColourShift", "gColourScale" };
+    renderengine::ProgramVariableHandle* handles[4] = { &maHandleOffsetXYZ[0], &maHandleRightUp[0],
+        &maHandleColourShift[0], &maHandleColourScale[0] };
+    for (u32 i = 0; i < 4; ++i)
+    {
+        if (!mapVertexProgramBuffer[0])
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mapVertexProgramBuffer[ li8Program ] != NULL",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 570);
+            CgsDev::Assert::EndAssert();
+        }
+        renderengine::ProgramBuffer::GetVariableHandleByName(
+            reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]),
+            reinterpret_cast<const u8*>(names[i]), handles[i]);
     }
 }
 

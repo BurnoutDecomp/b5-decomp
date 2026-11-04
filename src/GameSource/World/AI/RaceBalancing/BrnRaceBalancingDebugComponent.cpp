@@ -94,7 +94,7 @@ namespace
 // MaybeDrawText (X360 0x82824048) -- the shared "draw debug text iff on-screen" helper used by the
 // HUD draw loops. External to this TU (its own TU); declared so the compile gate sees its shape.
 // Signature recovered from the call sites: (display, text, x, y, scale, colour, centred).
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 namespace BrnAI

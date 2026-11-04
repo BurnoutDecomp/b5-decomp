@@ -18,6 +18,7 @@
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"           // AptValueGC_PoolManager + gAptValueGCSizeOffset
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"             // AptValueGC_MemItem
 #include "SDKs/EATech/include/Apt/AptDefine.h"               // gpGCPoolManager
+#include <xtl.h>   // interlocked reservation lock used by ARTIST
 
 // The two global scope tables _global member resolution consults, built by
 // AptValueInitialize (AptInit.cpp): gpAptGlobalFallback is the AptGlobal fallback
@@ -26,6 +27,7 @@
 // is inert. (See AptGlobal.h.)
 AptValueWithHash* gpAptNativeGlobals  = 0;   // X360 off_8324E37C
 AptValueWithHash* gpAptGlobalFallback = 0;   // X360 off_8324E380
+extern volatile LONG gAptGlobalExtensionLock; // shared ARTIST unk_8324E71C lock
 
 // ---------------------------------------------------------------------------
 // operator new @ 0x82AE6538
@@ -84,4 +86,34 @@ AptGlobal::AptGlobal()
 // ---------------------------------------------------------------------------
 AptGlobal::~AptGlobal()
 {
+}
+
+// ---------------------------------------------------------------------------
+// objectMemberLookup @0x82AE23B8 -- query native globals under their shared
+// reservation lock, then consult the fallback scope only on a null/undefined miss.
+// ---------------------------------------------------------------------------
+AptValue* AptGlobal::objectMemberLookup(AptValue* const /*pThis*/,
+                                        const AptNativeString* const pName) const
+{
+    while (_InterlockedCompareExchange(&gAptGlobalExtensionLock, 1, 0) != 0) {}
+    AptValue* lpResult = gpAptNativeGlobals->Lookup(*pName);
+    _InterlockedExchange(&gAptGlobalExtensionLock, 0);
+
+    if (lpResult == 0 || !lpResult->getIsDefined())
+        lpResult = gpAptGlobalFallback->Lookup(*pName);
+
+    return lpResult;
+}
+
+// ---------------------------------------------------------------------------
+// objectMemberSet @0x82AF5500 -- native globals cannot be shadowed; all other
+// names are stored in this AptGlobal object's inherited property hash.
+// ---------------------------------------------------------------------------
+bool AptGlobal::objectMemberSet(AptValue* const /*pThis*/,
+                                const AptNativeString* const pName,
+                                AptValue* const pValue)
+{
+    if (gpAptNativeGlobals->Lookup(*pName) == 0)
+        Set(*pName, pValue);
+    return true;
 }

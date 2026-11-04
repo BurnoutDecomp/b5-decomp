@@ -50,8 +50,8 @@ struct DelayFilterContext
 {
     f32 *mpBase;        // +0x00 -- delay-line base (kernel `base`)
     f32 *mpFeedback;    // +0x04 -- the "work" buffer the apply loop iterates
-    s32  miInactive;    // +0x08 -- when nonzero the filter takes the crossfade path
-    s32  miField0C;     // +0x0C -- forwarded to the crossfade helper
+    f32 *mpCrossfadeSource; // +0x08 -- non-null selects crossfade
+    f32 *mpCrossfadeWeight; // +0x0C -- per-sample crossfade weight
     f32 *mpAccum;       // +0x10 -- accumulate buffer (the delayed-mix destination)
     f32 *mpFeedforward; // +0x14 -- feedforward / delay-write output buffer
 };
@@ -89,16 +89,11 @@ public:
 };
 
 // -------------------------------------------------------------------------------------
-// The crossfade recurrence the apply func tail-calls when ctx->miInactive is set (a
-// feedback change is in flight). It has its own X360 address and is a separate TU; only
-// its declaration is needed here so the two share ONE signature. The apply func unpacks
-// the context into the argument registers exactly as below (r3=count, f1=feedback,
-// f2=prevFeedback, r6=base, r7=feedbackBuf, r8=crossFadeFlag [the reused miInactive],
-// r9=field0C, r10=accum, stack=feedforward).
-// -------------------------------------------------------------------------------------
-void *DelayFilterCrossFadeFunc(s32 count, f32 feedback, f32 prevFeedback,
-                               f32 *base, f32 *feedbackBuf, s32 crossFadeFlag,
-                               s32 field0C, f32 *accum, f32 *feedforward);
+// ARTIST 82B67D40: r6 base, r7 primary, r8 secondary, r9 weight,
+// r10 accumulation destination and stack argument feedforward destination.
+s32 DelayFilterCrossFadeFunc(s32 count, f32 feedback, f32 prevFeedback,
+                            f32 *base, f32 *primary, f32 *secondary,
+                            f32 *weight, f32 *accum, f32 *feedforward);
 
 } // namespace core
 } // namespace audio

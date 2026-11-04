@@ -8,11 +8,11 @@
 // stood these pieces up with an invented facade, which this TU retires.
 //
 // PHYSICALLY-REQUIRED PC DEVIATIONS (each // FLAG'd at its site):
-//   * The X360 brackets its global-state mutations with an interrupt-disabling
-//     lwarx/stwcx. test-and-set spin lock (the mfmsr/mtmsree idiom). On the
-//     single-threaded PC bring-up path there is no contention; the acquire/release
-//     is a no-op and is elided (the same treatment AptTarget.cpp / AptStringPool.cpp
-//     already apply to the Apt spin locks). EA::Thread::GetThreadId still runs.
+//   * The X360 protects the shared render/simulation thread ids with the
+//     interrupt-disabling lwarx/stwcx. lock (the mfmsr/mtmsree idiom), and uses
+//     the same atomic reservation for the common-init latch. This TU preserves
+//     those operations through the XDK interlocked intrinsics; the separate
+//     PC-only lock elisions in AptTarget.cpp / AptStringPool.cpp do not apply here.
 //   * The console stores 4-byte pointers into its .data slots; on x64 those slots
 //     hold sizeof(ptr) -- the pervasive Apt x64-port rule. All storage here is
 //     x64-native (the globals are C++ objects, not a serialised image).
@@ -72,12 +72,6 @@
 #include "SDKs/EATech/include/Apt/AptGlobalExtensionObject.h"   // AptGlobalExtensionObject (_global extension)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"         // AptString::Create (the shared empty string)
 
-// StringPool::Initialize is reached through this free wrapper (AptStringPool.cpp): the
-// full StringPool.h cannot be included here (the interpreter headers already carry
-// AptNativeHash.h's incompatible mini `class StringPool`).
-void AptStringPool_Initialize(int nBucketCount);   // AptStringPool.cpp (== StringPool::Initialize @0x82AE3630)
-void AptStringPool_Teardown();                     // AptStringPool.cpp (== StringPool::Teardown @0x82AE3720)
-void AptStringPool_ClearTemporaryPool();           // AptStringPool.cpp (== StringPool::ClearTemporaryPool @0x82AD8E20)
 
 // ---- the AptTarget context (AptUpdateInitialize's a2 branch) ---------------
 #include "SDKs/EATech/include/Apt/AptTarget.h"                  // AptTarget (ctor) + AptChangeTargetInstance
@@ -116,10 +110,11 @@ EA::Thread::ThreadId gAptSimThreadId = EA::Thread::ThreadId();
 namespace
 {
     // ---- the once-only init guard (dword_8324E6E0) -------------------------
-    int gbAptCommonInitDone = 0;   // dword_8324E6E0
+    volatile LONG gbAptCommonInitDone = 0;   // dword_8324E6E0
     // ---- the render / sim "initialized" latches ----------------------------
     int gbAptRenderInitDone = 0;   // dword_8324E510
     int gbAptUpdateInitDone = 0;   // dword_8324E50C
+    volatile LONG gAptThreadIdLock = 0;   // unk_8324E724
 
     // ---- the render-item pointer pool (off_8324E2C8) -----------------------
     void* gpAptRenderItemPool = 0;   // off_8324E2C8
@@ -301,8 +296,21 @@ void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogma
 
 int AptSetRenderThreadID(int /*a1*/)
 {
+    // X360 unk_8324E724 reservation lock protects both recorded thread ids.
+    while (_InterlockedCompareExchange(&gAptThreadIdLock, 1, 0) != 0) {}
     EA::Thread::ThreadId id = EA::Thread::GetThreadId();
     gAptRenderThreadId = id;                    // dword_8324E504 = result
+    _InterlockedExchange(&gAptThreadIdLock, 0);
+    return static_cast<int>(reinterpret_cast<intptr_t>(id));
+}
+
+int AptSetSimulationThreadID(int /*a1*/)
+{
+    // ARTIST 0x82AD8F90 calls the zero-argument GetThreadId and stores dword_8324E500.
+    while (_InterlockedCompareExchange(&gAptThreadIdLock, 1, 0) != 0) {}
+    EA::Thread::ThreadId id = EA::Thread::GetThreadId();
+    gAptSimThreadId = id;
+    _InterlockedExchange(&gAptThreadIdLock, 0);
     return static_cast<int>(reinterpret_cast<intptr_t>(id));
 }
 
@@ -320,6 +328,9 @@ int AptSetRenderThreadID(int /*a1*/)
 // ===========================================================================
 void* AptCommonInitialize(void* pConfig)
 {
+    // X360 reservation-lock set of dword_8324E6E0 before shared table setup.
+    _InterlockedExchange(&gbAptCommonInitDone, 1);
+
     unsigned int* lpCfg = static_cast<unsigned int*>(pConfig);
 
     // AptAnimationTarget::SetupStaticData(pConfig) -- count == pConfig word[6] (+0x18).
@@ -330,8 +341,7 @@ void* AptCommonInitialize(void* pConfig)
     gpAptCommonFuncsSlot = &gAptFuncs;
 
     // StringPool::Initialize(pConfig word[11] == +0x2C): the string-pool bucket count.
-    // (reached via the free wrapper -- see the AptStringPool_Initialize decl above.)
-    AptStringPool_Initialize(static_cast<int>(lpCfg[11]));
+    StringPool::Initialize(static_cast<int>(lpCfg[11]));
 
     // off_8324E51C = AptValueVector(pool->Allocate(12), pConfig word[10] == +0x28).
     // (The console's 12-byte alloc is the AptValueVector {cap,top,items} header; on x64
@@ -721,6 +731,62 @@ extern unsigned char gbAptInShutdown;   // byte_8324E7C9
 extern void* AptUpdateZombieVector(char bClear);
 
 // ===========================================================================
+// AptCommonShutdown @0x82B0AC08 -- release the shared Apt runtime state.
+//
+// Keep the ARTIST order: refresh the render/simulation thread ids, clean the
+// animation target statics, shut down and free the current target, clear the
+// target globals/TLS, tear down the AS value singletons and config string,
+// drain/free the common deferred-release vector, then clear the integer/float
+// pools and temporary strings before resetting the common-init latch.
+// ===========================================================================
+int AptCommonShutdown()
+{
+    AptSetSimulationThreadID(AptSetRenderThreadID(0));
+    gbAptRenderInitDone = 0;
+    AptAnimationTarget::CleanupStaticData();
+
+    AptTarget* lpTarget = gpAptTargetCurrent;
+    if (lpTarget != 0)
+    {
+        lpTarget->Shutdown();
+        gpAptPseudoDataPool->Deallocate(lpTarget, sizeof(AptTarget));
+    }
+
+    gpAptTarget = 0;
+    gpAptTargetCurrent = 0;
+    gpAptTargetTLS = 0;
+    gAptTargetTls.SetValue(0);
+
+    AptValueShutdownRemaining();
+
+    EAStringC::DecreaseInternalRefCount(
+        static_cast<EAStringC::StringDataC*>(gpAptConfigDefault));
+    gpAptConfigDefault = &gAptEmptyDefaultSentinel[0];
+    StringPool::Teardown();
+
+    AptValueVector* lpValuesToRelease = gpValuesToRelease;
+    lpValuesToRelease->ReleaseValues();
+    if (lpValuesToRelease != 0)
+    {
+        // The X360 family-B vector has capacity at +0, live top at +4, and
+        // items at +8. In this shared named struct, family-B capacity is mnTop.
+        gpAptPseudoDataPool->Deallocate(
+            lpValuesToRelease->mppItems,
+            sizeof(AptValue*) * static_cast<size_t>(lpValuesToRelease->mnTop));
+        gpAptPseudoDataPool->Deallocate(lpValuesToRelease, sizeof(AptValueVector));
+    }
+    gpValuesToRelease = 0;
+
+    AptInteger::ClearPool();
+    AptFloat::ClearPool();
+    StringPool::ClearTemporaryPool();
+
+    gpAptCommonFuncsSlot = 0;
+    _InterlockedExchange(&gbAptCommonInitDone, 0);
+    return 0;
+}
+
+// ===========================================================================
 // AptRenderInitialize @0x82AEDE90 -- bring up the Apt render side.
 //
 // X360: Mutex::Lock(unk_8324E7E0, unk_82143270); if (!dword_8324E6E0)
@@ -987,7 +1053,7 @@ void AptActionInterpreter::shutdown()
 }
 
 // ARTIST unk_8324E71C: shared native-global extension-object lock.
-static volatile LONG gAptGlobalExtensionLock = 0;
+volatile LONG gAptGlobalExtensionLock = 0;
 
 // AptValueShutdown @82AF2BE0: destroy GC references before releasing each pinned
 // singleton. The extension object is protected by the original reservation lock.

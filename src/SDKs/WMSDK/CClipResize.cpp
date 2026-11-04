@@ -29,7 +29,7 @@
 
 // XDK physical allocator leaf used by the destructor (0x82AB4810 `bl XMemFree`);
 // same prototype as the other WMSDK/D3D reconstructions.
-extern void XMemFree(void* pAddress, u32 uAttributes);
+#include <xtl.h> // XDK XMemFree
 
 // File-static FourCC flag written at 0x8323ED10 by ClipResizeHighQuality: set when
 // the requested format is 'P411' (a planar passthrough that skips resampling).

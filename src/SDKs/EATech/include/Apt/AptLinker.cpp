@@ -1,6 +1,7 @@
 #include "SDKs/EATech/include/Apt/AptLinker.h"
 
 #include <new>   // placement new for the pool-allocated AptCIH/AptCharacterInst
+#include <xtl.h>   // X360 interlocked refcount intrinsics
 
 #include "SDKs/EATech/include/Apt/AptFile.h"
 #include "SDKs/EATech/include/Apt/AptLoader.h"
@@ -76,11 +77,9 @@ extern AptUserFunctions gAptFuncs;                             // dword_8324E818
 extern int      gAptInputRecorderEnabled;                      // dword_8324E518
 extern uint32_t gAptInputRecorderTag;                          // dword_8324D820
 
-// The intrusive refcount on AptLinkerThingy (mirroring AptSharedPtrIncRef/DecRef
-// for AptFile -- the thingy carries its count at +0x00). Bodies BELOW in this TU
-// (the out-of-line helper section).
-int  AptSharedPtrIncRefThingy(AptLinkerThingy* pThingy);
-int  AptSharedPtrDecRefThingy(AptLinkerThingy* pThingy);
+// X360 increments/decrements AptLinkerThingy::mnRefCount inline with lwarx/stwcx.
+// Use the native interlocked intrinsics directly at each typed member access; these
+// operations are not standalone AptSharedPtr API symbols.
 
 // The singly-linked thingy-list ops (the compiler-emitted SingleList<>); bodies
 // below in this TU:
@@ -137,7 +136,7 @@ void* AptLinker::ScalarDeletingDestructor(char flags)
         // node dtor (AptSingleL): release node[0] -> at 0, AptLinkerThingy dtor;
         // then free the 8-byte node.
         AptLinkerThingy* pThingy = pHead->mpThingy;
-        if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+        if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
             pThingy->ScalarDeletingDestructor(1);
         gpAptSharedPtrPool->Deallocate(pHead, sizeof(AptSingleListNode));
         mpThingyListHead = pNext;                             // *a1 = v3
@@ -264,7 +263,7 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
 
     // Pin the thingy across the work (it may be popped below).
     if (pThingy != 0)
-        AptSharedPtrIncRefThingy(pThingy);
+        _InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount));
 
     // Resolve the owned file: bump+drop its ref (a balanced touch the X360 emits)
     // and read its state.
@@ -319,7 +318,7 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
     ReplaceReferences(pValue, pNew, 0, 0);                          // ReplaceReferences(v25, v20, 0, 0)
 
     // Drop our pin on the thingy; destroy at count 0.
-    if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+    if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
         pThingy->ScalarDeletingDestructor(1);
 
     return pNew;                                                    // result = v20
@@ -438,9 +437,9 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                 pThingy = MakeLinkerThingy(held, pValue);                  // AptLinkerThingy::AptLinkerThingy(&file, value)
             }
             if (pThingy != 0)
-                AptSharedPtrIncRefThingy(pThingy);
+                _InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount));
             ListPushFront(&mpThingyListHead, pThingy);                     // AptSingleLis(a1, &v97)
-            if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+            if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
                 pThingy->ScalarDeletingDestructor(1);
         }
         else
@@ -479,9 +478,9 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                     AptFilePtr held; held.pData = pLinkedFile;
                     pThingy = MakeLinkerThingy(held, pValue);
                 }
-                if (pThingy != 0) AptSharedPtrIncRefThingy(pThingy);
+                if (pThingy != 0) _InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount));
                 ListPushFront(&mpThingyListHead, pThingy);
-                if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+                if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
                     pThingy->ScalarDeletingDestructor(1);
 
                 if (pStub != 0 && AptSharedPtrDecRef(pStub) == 0)
@@ -511,9 +510,9 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                     AptFilePtr held; held.pData = pStub;
                     pThingy = MakeLinkerThingy(held, pValue);
                 }
-                if (pThingy != 0) AptSharedPtrIncRefThingy(pThingy);
+                if (pThingy != 0) _InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount));
                 ListPushFront(&mpThingyListHead, pThingy);
-                if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+                if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
                     pThingy->ScalarDeletingDestructor(1);
 
                 if (pStub != 0 && AptSharedPtrDecRef(pStub) == 0)
@@ -557,7 +556,7 @@ void AptLinker::Update()
     for (AptSingleListNode* pNode = mpThingyListHead; pNode != 0; )
     {
         AptLinkerThingy* pThingy = pNode->mpThingy;                 // _R28 = *v5
-        if (pThingy != 0) AptSharedPtrIncRefThingy(pThingy);
+        if (pThingy != 0) _InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount));
 
         bool bReady = false;
         if (pThingy->mpValue != 0)                            // *(_R28+8) != 0 (active)
@@ -617,7 +616,7 @@ void AptLinker::Update()
 
         // Release + (at 0) destroy this thingy, then advance.
         AptSingleListNode* pNext = pNode->mpNext;                          // v5 = v5[1]
-        if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+        if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
             pThingy->ScalarDeletingDestructor(1);
         pNode = pNext;
     }
@@ -632,7 +631,7 @@ void AptLinker::Update()
         for (AptSingleListNode* pNode = mpThingyListHead; pNode != 0; pNode = pNode->mpNext)
         {
             AptLinkerThingy* pThingy = pNode->mpThingy;                    // _R29 = *i
-            if (pThingy != 0) AptSharedPtrIncRefThingy(pThingy);
+            if (pThingy != 0) _InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount));
 
             AptFile* pThingyFile = pThingy->mpFile.pData;                  // result = *(_R29+4)
             if (pThingyFile != 0) AptSharedPtrIncRef(pThingyFile);
@@ -689,13 +688,13 @@ void AptLinker::Update()
                 {
                     pEntry = mPendingFiles.begin();                       // v8 = *(a1+12) (bAdvance=false keeps it at begin)
                     bAdvance = false;
-                    if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+                    if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
                         pThingy->ScalarDeletingDestructor(1);
                     break;
                 }
             }
 
-            if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+            if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
                 pThingy->ScalarDeletingDestructor(1);
         }
 
@@ -719,18 +718,14 @@ void AptLinker::Update()
     }
 }
 
-int AptSharedPtrDecRefThingy(AptLinkerThingy* pThingy)
-{
-    return --pThingy->mnRefCount;   // lwarx r9; r9-1; stwcx. -> return r9
-}
 
 // ---------------------------------------------------------------------
 // ListPushFront -- push a new node holding a COUNTED reference to pThingy onto the
 // front of the thingy list. X360 AptSingleLis @0x82AF4F88:
 //   node = Allocate(pool, 8); if(node){ node[0]=thingy; if(thingy) AddRef(thingy);
 //   node[1]=0; } v10=node; v10[1]=*head; *head=v10;
-// The AddRef is the same lwarx/+1/stwcx. atomic as AptSharedPtrIncRefThingy. Note
-// the console links the (possibly null on OOM) node either way.
+// The console inlines the lwarx/+1/stwcx. AddRef on the named mnRefCount; this
+// source uses the equivalent interlocked intrinsic on that member.
 // ---------------------------------------------------------------------
 void ListPushFront(AptSingleListNode** ppHead, AptLinkerThingy* pThingy)
 {
@@ -740,7 +735,7 @@ void ListPushFront(AptSingleListNode** ppHead, AptLinkerThingy* pThingy)
     {
         pNode->mpThingy = pThingy;                 // *result = *a2
         if (pThingy != 0)
-            AptSharedPtrIncRefThingy(pThingy);     // the lwarx/+1/stwcx. AddRef loop
+            _InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount));     // the lwarx/+1/stwcx. AddRef loop
         pNode->mpNext = 0;                   // result[1] = 0
     }
     pNode->mpNext = *ppHead;                        // v10[1] = *a1   (== old head)
@@ -780,7 +775,7 @@ void ListErase(AptSingleListNode** ppHead, AptSingleListNode** ppNode)
     // Release the unlinked node's counted thingy (destroy at 0), then free the node.
     AptLinkerThingy* pThingy = pTarget->mpThingy;   // *node
     pTarget->mpThingy = 0;                     // *node = 0
-    if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
+    if (pThingy != 0 && _InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pThingy->mnRefCount)) == 0)
         pThingy->ScalarDeletingDestructor(1);        // == PS3 AptSharedPtrDelete(AptLinkerThingy*) @0xF43114 (dispose file + free 16-byte block)
     gpAptSharedPtrPool->Deallocate(pTarget, sizeof(AptSingleListNode));   // Deallocate(pool,node,8)
 }

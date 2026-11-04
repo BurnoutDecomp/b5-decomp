@@ -3,6 +3,7 @@
 #include <cstring>              // memcpy
 #include "rw/rwcore_structs.h"  // rw::BaseResourceDescriptors<5> + its operator+=
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // shared decl surface
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   renderengine::ProgramBuffer::GetResourceDescriptor    @ 0x82B634B0
@@ -301,13 +302,22 @@ namespace renderengine
         return 0;
     }
 
-    // X360 0x82B625F8.
-    // Tears the buffer down (sub_82B62088 = the renderengine resource-release helper) and marks the
-    // object freed by writing -1 into the leading shader-type word. The helper lives outside this TU.
+    // ARTIST 0x82B625F8 and 0x82B62088: the shader resource follows the
+    // five-word metadata header. Unbind it only when it is currently set.
     void ProgramBuffer::Release(ProgramBufferData* lpData)
     {
-        extern void ProgramBuffer_ReleaseResource(ProgramBufferData* lpData);  // sub_82B62088 (external)
-        ProgramBuffer_ReleaseResource(lpData);
+        CGS_STATIC_ASSERT((sizeof(ProgramBufferData) == 0x14), "ARTIST shader header offset");
+        const u32 luShaderType = lpData->muShaderType;
+        D3DDevice* const lpDevice = ::gpD3DDevice;
+        D3DResource* const lpResource = reinterpret_cast<D3DResource*>(lpData + 1);
+        if (D3DResource_IsSet(lpResource, lpDevice))
+        {
+            if (luShaderType)
+                D3DDevice_SetPixelShader(lpDevice, 0);
+            else
+                D3DDevice_SetVertexShader(lpDevice, 0);
+        }
         lpData->muShaderType = static_cast<u32>(-1);
     }
+
 }

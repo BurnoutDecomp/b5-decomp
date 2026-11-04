@@ -23,7 +23,7 @@
 
 #include <cstring>   // strncmp, memcpy
 
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The "Reset Player Car" debug menu

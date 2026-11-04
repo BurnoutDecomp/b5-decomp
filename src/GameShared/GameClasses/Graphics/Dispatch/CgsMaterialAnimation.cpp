@@ -32,8 +32,9 @@ ICPUShader* MaterialAnimationFactory::Create(f32 lfPeriod, f32 lfStepsU, f32 lfS
 
 MaterialAnimationFactory& MaterialAnimationFactory::Instance()
 {
-    extern MaterialAnimationFactory mInstance;
-    return mInstance;
+    // ARTIST 0x827FBAC8..0x827FBB0C lazily constructs the three shader members.
+    static MaterialAnimationFactory instance;
+    return instance;
 }
 
 void ShaderConstantsCPU::SetCPUShader(ICPUShader* lpShader,

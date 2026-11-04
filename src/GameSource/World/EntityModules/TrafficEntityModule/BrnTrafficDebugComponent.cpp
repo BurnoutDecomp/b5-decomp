@@ -2071,7 +2071,7 @@ void DebugComponent::RenderVerticalMeter(CgsDev::Debug3DImmediateRender* lpDispl
 
 } // namespace BrnTraffic
 
-int MaybeDrawText(CgsDev::Debug2DImmediateRender*, const char*, f32, f32, f32,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender*, const char*, f32, f32, f32,
                   CgsDev::RGBA, bool);
 
 namespace BrnTraffic

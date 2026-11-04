@@ -16,8 +16,7 @@
 // The asm calls the XDK XMemAlloc(SIZE_T,DWORD)->LPVOID / XMemFree(LPVOID,DWORD) directly
 // (r3 = size/pAddress, r4 = attributes), with NO `this` argument -- matching the sibling
 // CIntImage / CQueue / CLocalHuffman rwmovie TUs.
-extern void* XMemAlloc(u32 uSize, u32 uAttributes);
-extern void  XMemFree(void* pAddress, u32 uAttributes);
+#include <xtl.h> // XDK XMemAlloc / XMemFree
 
 // XMemAlloc/XMemFree attribute word for this codec's analysis pools (lis 0x248C / ori 0x8000).
 static const u32 KU_VIDEOANALYST_XMEM_ATTRIBUTES = 0x248C8000u;

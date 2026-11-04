@@ -95,6 +95,17 @@ DelayLine::~DelayLine()
 // -------------------------------------------------------------------------------------
 // DelayLine::SetFilter @0x82B67F30 -- install the unit filter dispatched by ApplyFilter.
 // -------------------------------------------------------------------------------------
+// ARTIST 82B67F38: retain the previous delay for the next crossfade.
+void DelayLine::SetDelay(s32 delaySamples)
+{
+    if (delaySamples != miReadPosition)
+    {
+        miFilterReadPosition = miReadPosition;
+        miReadPosition = delaySamples;
+        mbFilterChanged = 1;
+    }
+}
+
 void DelayLine::SetFilter(IFilter *pFilter)
 {
     mpFilter = pFilter; // stw @ +0x04

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h" // Internal::DebugInternal (Widget base)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Widgets/CgsWidget.h" // native debug widget base
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"                // Palette / RGBA
 
 // CgsDev::DebugUI::WidgetLineGraph -- a debug-UI widget that plots up to miFloatCount rolling
@@ -17,9 +17,7 @@
 //   miColoursArraySize  @+0x18  (s32, colour table length)
 //   mColourBackground   @+0x1C  (RGBA, background box fill)
 //
-// The Widget base mirrors the committed MenuItem / Window pattern: an empty (vptr-only)
-// CgsDev::Internal::DebugInternal-derived base that exposes the debug-UI palette/metrics/
-// renderer accessors (declaration-only; bodies live in their own TU).
+// Widget base declaration and virtual slot order live in CgsWidget.h.
 
 namespace CgsDev
 {
@@ -27,19 +25,6 @@ namespace CgsDev
 
     namespace DebugUI
     {
-        struct Metrics;
-
-        // The debug-widget base (empty, vptr-only) -- mirrors MenuItem/Window: derives from
-        // DebugInternal and exposes the palette/metrics/renderer to derived widgets.
-        struct Widget : public Internal::DebugInternal
-        {
-            virtual ~Widget();
-
-        protected:
-            const Palette&          GetPalette() const;
-            const Metrics&          GetMetrics() const;
-            Debug2DImmediateRender* Get2DRenderer() const;
-        };
 
         struct WidgetLineGraph : public Widget
         {
@@ -59,7 +44,7 @@ namespace CgsDev
             void SetCustomBackgroundColour(RGBA lColour);
 
             // @0x82824558 -- plot the widget into the background box (lfX,lfY,lfWidth,lfHeight).
-            void Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight);
+            virtual void Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight);
 
         private:
             f32*  mpaaiValuesArray;    // +0x04

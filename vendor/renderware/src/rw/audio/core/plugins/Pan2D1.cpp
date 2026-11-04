@@ -447,6 +447,67 @@ void Pan2D1::ComputePerimeterTerm(int index)
 // ComputeLevels @0x82B991D8 -- build each virtual source's 5-speaker gain vector. The stereo
 // fast path (miNumSpeakers == 2) derives a constant-power L/R pair straight from the target's
 // y coordinate; otherwise it sums the interior + perimeter terms and normalises the 5-vector.
+// ARTIST 82B98DB8: interior speaker gains for one pan target.
+int Pan2D1::ComputeInteriorTerm(int index)
+{
+    const f32 x = mPanTarget[index].x;
+    const f32 y = mPanTarget[index].y;
+    const f32 dx0 = mSpeakerDir[0].x - x;
+    const f32 dy0 = mSpeakerDir[0].y - y;
+    const f32 dx2 = mSpeakerDir[2].x - x;
+    const f32 dy2 = mSpeakerDir[2].y - y;
+    const f32 dx3 = mSpeakerDir[3].x - x;
+    const f32 dy3 = mSpeakerDir[3].y - y;
+    const f32 dx4 = mSpeakerDir[4].x - x;
+    const f32 dy4 = mSpeakerDir[4].y - y;
+    volatile f32 x0sq = dx0 * dx0;
+    volatile f32 x2sq = dx2 * dx2;
+    volatile f32 x3sq = dx3 * dx3;
+    volatile f32 x4sq = dx4 * dx4;
+    const f32 front0 = 1.0f - 0.5f * std::sqrt(dy0 * dy0 + x0sq);
+    const f32 front2 = 1.0f - 0.5f * std::sqrt(dy2 * dy2 + x2sq);
+    const f32 rear3 = 1.0f - 0.5f * std::sqrt(dy3 * dy3 + x3sq);
+    const f32 rear4 = 1.0f - 0.5f * std::sqrt(dy4 * dy4 + x4sq);
+    f32 frontWeight = (x + 1.0f) * 0.5f;
+    if (std::fabs(frontWeight) < 0.0005f)
+        frontWeight = 0.0f;
+    f32 rearWeight = 1.0f - frontWeight;
+    if (std::fabs(rearWeight) < 0.0005f)
+        rearWeight = 0.0f;
+    f32 center = 0.0f;
+    f32 g0, g1;
+    if (miNumSpeakers == 5)
+    {
+        const f32 dx1 = mSpeakerDir[1].x - x;
+        const f32 dy1 = mSpeakerDir[1].y - y;
+        volatile f32 x1sq = dx1 * dx1;
+        center = (1.0f - 0.5f * std::sqrt(dy1 * dy1 + x1sq)) * mfFocus;
+        volatile f32 p0 = front0 * front0;
+        const f32 sum01 = front2 * front2 + p0;
+        const f32 scale = std::sqrt(frontWeight / (center * center + sum01));
+        g0 = scale * front0;
+        g1 = scale * front2;
+        center *= scale;
+    }
+    else
+    {
+        volatile f32 p0 = front0 * front0;
+        const f32 scale = std::sqrt(frontWeight / (front2 * front2 + p0));
+        g0 = scale * front0;
+        g1 = scale * front2;
+    }
+    volatile f32 p3 = rear3 * rear3;
+    const f32 spreadScale = std::sqrt(1.0f - mPanTarget[index].mag * mPanTarget[index].mag);
+    const f32 rearScale = std::sqrt(rearWeight / (rear4 * rear4 + p3));
+    volatile f32 *g = &mfGains[index * 5];
+    g[0] = spreadScale * g0;
+    g[2] = spreadScale * g1;
+    g[1] = spreadScale * center;
+    g[3] = (rearScale * rear3) * spreadScale;
+    g[4] = (rearScale * rear4) * spreadScale;
+    return reinterpret_cast<int>(this);
+}
+
 // ---------------------------------------------------------------------------
 int Pan2D1::ComputeLevels()
 {

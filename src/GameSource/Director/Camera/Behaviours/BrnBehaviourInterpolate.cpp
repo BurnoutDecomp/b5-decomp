@@ -11,9 +11,7 @@
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // BehaviourManager (the two GetCamera resolves)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log::gpDebugPrint (bring-up measurement)
 
-namespace renderengine { extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 (device.cpp)
 
 namespace BrnDirector
 {
@@ -352,30 +350,6 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
     // removed special case was never doing anything Update does not also do; it was only
     // ever the *rest* of the ramp that was missing.
     mInterpolator.Update(lrCamera, lTo, lrInfo.GetEyeTarget());
-
-    // [BRING-UP MEASUREMENT, camera 1:1 wave] the blend's two endpoints and the parametric
-    // time, so a frozen or mis-framed shot can be attributed to the SOURCE camera, the TARGET
-    // camera or the blend without another boot. Burst window (first 4, then every 600th
-    // ~= 10 s) rather than a modulo sample, so the print cannot alias with a per-frame loop.
-    // Remove once the junkyard shot is settled.
-    {
-        static u32 suBlendTraceCount = 0;
-        ++suBlendTraceCount;
-        static u32 suBlackTrace = 0u;   // [DIAG] issue #30: also print while the last present was black
-        const bool lbBlackPresent = renderengine::gbDiagLastPresentBlack && suBlackTrace < 64u;
-        if (lbBlackPresent) ++suBlackTrace;
-        if ((suBlendTraceCount <= 4u || (suBlendTraceCount % 600u) == 0u || lbBlackPresent)
-            && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << (lbBlackPresent ? "[interp] BLACK-PRESENT #" : "[interp] #") << static_cast<s32>(suBlendTraceCount)
-                << " t=" << lfParametricTime
-                << " from (" << lFrom.mTransform.wAxis.mV.v[0] << ", " << lFrom.mTransform.wAxis.mV.v[1]
-                << ", " << lFrom.mTransform.wAxis.mV.v[2] << ") fov " << lFrom.mfFOV
-                << " -> to (" << lTo.mTransform.wAxis.mV.v[0] << ", " << lTo.mTransform.wAxis.mV.v[1]
-                << ", " << lTo.mTransform.wAxis.mV.v[2] << ") fov " << lTo.mfFOV << "\n";
-        }
-    }
 
     return true;
 }

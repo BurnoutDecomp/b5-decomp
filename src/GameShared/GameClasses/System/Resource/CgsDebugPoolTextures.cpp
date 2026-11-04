@@ -57,7 +57,7 @@ namespace
 // extra register args the decompiler shows are artifacts; the real call is the renderer's
 // DrawText(text, x, y, scale, colour) gated on an on-screen test. Signature recovered from the
 // sibling DebugComponent reconstructions: (display, text, x, y, scale, colour, centred).
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 namespace CgsResource

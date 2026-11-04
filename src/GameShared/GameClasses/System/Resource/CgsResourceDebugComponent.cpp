@@ -13,7 +13,7 @@
 
 // ARTIST82824048 always disables screen checking; the last native compatibility
 // parameter is ignored by its existing PC wrapper.
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
 
 // CgsResource::DebugComponent -- Construct, GetPath ("Core"), DumpPoolStatistics, UpdateShareTest.

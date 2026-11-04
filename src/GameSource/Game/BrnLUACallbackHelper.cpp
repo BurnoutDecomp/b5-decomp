@@ -2,6 +2,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
+extern "C" int lua_gettop(lua_State* lpLuaState);
+
 // BrnGame::LUACallbackHelper -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //   GetParamType    @ 0x823C0370
 //   GetInt32Param   @ 0x823C5D70
@@ -10,6 +12,19 @@
 
 namespace BrnGame
 {
+    // Inlined at ARTIST 0x823C6160..0x823C6174 in LUACBPressButton.
+    LUACallbackHelper::LUACallbackHelper(lua_State* lpLUAHandle)
+    {
+        mpLUAHandle = lpLUAHandle;
+        miNumParams = lua_gettop(lpLUAHandle);
+        miNumResults = 0;
+    }
+
+    s32 LUACallbackHelper::GetNumParams() const
+    {
+        return miNumParams;
+    }
+
     // @ 0x823C0370
     LUACallbackHelper::EArgType LUACallbackHelper::GetParamType(s32 liParamIndex) const
     {

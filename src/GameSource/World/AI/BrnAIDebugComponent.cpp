@@ -13,7 +13,7 @@
 #include "GameSource/World/AI/Route/BrnRoute.h"                                    // Route / RouteNode (state table)
 #include "rw/math/vpu/vector3_operation.h"                                         // Magnitude / operator-
 
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 // BrnAI::AIDebugComponent -- the in-game "Main AI" debug overlay. Reconstructed from the X360
