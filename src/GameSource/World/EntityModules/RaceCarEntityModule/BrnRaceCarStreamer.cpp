@@ -271,7 +271,7 @@ void RaceCarStreamer::OnGraphicsUnloading( s32 liActiveRaceCar )
         *CgsDev::Log::gpDebugPrint << "STRM: " << "Graphics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDGFX );
-    maGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
+    maGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
 }
 
 // @ 0x822B75E8.
@@ -281,7 +281,7 @@ void RaceCarStreamer::OnPhysicsUnloading( s32 liActiveRaceCar )
         *CgsDev::Log::gpDebugPrint << "STRM: " << "Physics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDPHYSICS );
-    maPhysicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
+    maPhysicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
 }
 
 // @ 0x822B7698.
@@ -301,7 +301,7 @@ void RaceCarStreamer::OnWheelGraphicsUnloading( s32 liActiveRaceCar )
         *CgsDev::Log::gpDebugPrint << "STRM: " << "Wheel graphics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDWHEELGFX );
-    maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
+    maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
 }
 
 // @ 0x822B77E8.
@@ -405,10 +405,10 @@ void RaceCarStreamer::Construct()
     {
         maxLoadFlags[liActiveRaceCar] = 0;
 
-        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourceHandle;
-        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourceHandle;
+        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourcePtr;
+        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourcePtr;
         mabAttribsLoaded[liActiveRaceCar]         = false;
-        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
+        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
         mabAudioLoaded[liActiveRaceCar]           = false;
 
         maDesiredCarIds[liActiveRaceCar]    = 0;
@@ -438,10 +438,10 @@ void RaceCarStreamer::Destruct()
 
     for( s32 liActiveRaceCar = 0; liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS; liActiveRaceCar++ )
     {
-        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourceHandle;
-        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourceHandle;
+        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourcePtr;
+        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourcePtr;
         mabAudioLoaded[liActiveRaceCar]           = false;
-        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
+        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
     }
 }
 

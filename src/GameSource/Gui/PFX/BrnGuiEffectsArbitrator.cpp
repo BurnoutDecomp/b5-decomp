@@ -5,7 +5,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                // CgsGuiModuleIO::InputBuffer / OutputBuffer
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"        // ModelIO::InputBuffer / OutputBuffer
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"  // GuiEventLoadRequest / GuiEventLoadNotification
-#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::NULLResourceHandle
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"  // CgsDev::DebugInterface
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
@@ -55,7 +54,7 @@ namespace BrnGui
     void EffectsArbitrator::Construct()
     {
         mpGuiCache = 0;
-        mpHookInfo = CgsResource::ResourcePtr<PFXHookBundle>(CgsResource::NULLResourceHandle);   // CreateFromHandle(&dword_82FB55C4)
+        mpHookInfo = CgsResource::NULLResourcePtr;
         muColourCubeCount = 0;
         mpCurrent            = &mBlender1;
         mpOutgoing           = &mBlender2;

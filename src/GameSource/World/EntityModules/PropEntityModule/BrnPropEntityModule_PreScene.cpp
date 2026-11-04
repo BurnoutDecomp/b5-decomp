@@ -158,7 +158,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress / CgsIDUnCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
-#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // NULLResourceHandle
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // resource handle declarations
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"               // GetGameDataEvent
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"         // RequestInterface<1024>
 #include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h" // PropEntitySerialiser
@@ -437,7 +437,7 @@ namespace BrnWorld
                             "luZone < KU_MAX_ZONES" );          // cpp:549
 
                 mabWaitingForGraphics.UnSetBit( luZone );
-                mapGraphicsLists[luZone] = CgsResource::NULLResourceHandle;
+                mapGraphicsLists[luZone] = CgsResource::NULLResourcePtr;
 
                 CGS_ASSERT( mabLoadedWorldGraphics.IsBitSet( luZone ),
                             "Graphics not loaded\n" );                             // cpp:559
