@@ -133,6 +133,17 @@ void CoronaRenderer::Initialize(rw::IResourceAllocator& lrAllocator)
     s_vertexDescriptor = VertexDescriptor::Initialize(&gsVertexDescriptorResource, &lVertexDecl);
 }
 
+// ARTIST 0x8227B490
+void CoronaRenderer::Release(rw::IResourceAllocator& lrAllocator)
+{
+    VertexDescriptor::Release(s_vertexDescriptor);
+    ProgramBuffer::Release(s_vertexProgram);
+    ProgramBuffer::Release(s_pixelProgram);
+    lrAllocator.DoFree(gsVertexDescriptorResource);
+    lrAllocator.DoFree(gsVertexProgramResource);
+    lrAllocator.DoFree(gsPixelProgramResource);
+}
+
 void CoronaRenderer::SetBlendState(const BlendMaterialState* lpState) { s_blendState = lpState; }
 void CoronaRenderer::SetDepthStencilStates(const DepthStencilState* lpEnabled, const DepthStencilState* lpDisabled)
 {

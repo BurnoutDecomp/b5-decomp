@@ -15,11 +15,8 @@
 
 namespace CgsResource
 {
-    ResourceDescriptor RwMaterialCRC32ResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    ResourceDescriptor RwMaterialCRC32ResourceType::GetSerialisedResourceDescriptor(const void*) const
     {
-        // X360 0x828A88B0: mr r31,r3 (save sret); bl MaterialCRC32::GetResourceDescriptor; mr r3,r31.
-        // The serialised resource IS the MaterialCRC32 object; forward to its descriptor builder.
-        MaterialCRC32* lpMaterial = const_cast<MaterialCRC32*>(static_cast<const MaterialCRC32*>(lpResource));
-        return lpMaterial->GetResourceDescriptor();
+        return MaterialCRC32::GetResourceDescriptor();
     }
 }

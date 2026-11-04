@@ -155,10 +155,8 @@ public:
     // is not reconstructed on PC -- see the .cpp. Declared only.
     bool Prepare();
 
-    // BrnCoronaManager.h:193. Not X360-attested for this TU (attested elsewhere: ledger TU
-    // SDKs/EATech/include/cmn/rw/core/resource/resourceallocator.h @ 0x823F7720, not bodied there
-    // either) -- declared only here.
-    bool Release(const rw::IResourceAllocator& lpAllocator);
+    // ARTIST 0x823F7720. Release buffer, atlas state and shared shader resources.
+    bool Release(rw::IResourceAllocator& lrAllocator);
 
     // BrnCoronaManager.h:196. INLINED into BrnRendererModule::StartOfFrame @0x823FC160. Bodied.
     void Clear();

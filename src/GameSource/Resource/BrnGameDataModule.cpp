@@ -1135,6 +1135,46 @@ namespace BrnResource
         mDLCManager.Construct();
         mDLCDebugComponent.Construct();
     }
+    // ARTIST 82664380. GameTalk release folds to the side-effect-free true
+    // leaf at 82C296C8.
+    bool GameDataModule::Release()
+    {
+        switch (meReleaseStage)
+        {
+        case E_RELEASE_START:
+        case E_RELEASE_DLC:
+            meReleaseStage = E_RELEASE_DLC;
+            if (!mDLCManager.Release()) return false;
+        case E_RELEASE_GAMETALK:
+            meReleaseStage = E_RELEASE_GAMETALK;
+        case E_RELEASE_ATTRIBSYS:
+            meReleaseStage = E_RELEASE_ATTRIBSYS;
+            if (!mAttribSysModule.Release()) return false;
+        case E_RELEASE_DESTROY_ALLOCATORS:
+            meReleaseStage = E_RELEASE_DESTROY_ALLOCATORS;
+        case E_RELEASE_DESTROY_POOLS:
+            meReleaseStage = E_RELEASE_DESTROY_POOLS;
+        case E_RELEASE_DESTROY_BANKS:
+            meReleaseStage = E_RELEASE_DESTROY_BANKS;
+        case E_RELEASE_RESOURCE:
+            meReleaseStage = E_RELEASE_RESOURCE;
+            if (!mResourceModule.Release()) return false;
+            mReceiverQueue.Clear();
+        case E_RELEASE_BASE:
+            meReleaseStage = E_RELEASE_BASE;
+            if (!CgsModule::ModuleSingleBuffered::Release()) return false;
+        case E_RELEASE_DONE:
+            meReleaseStage = E_RELEASE_BASE;
+            mePrepareStage = E_PREPARE_START;
+            return true;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid Stage\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 1682);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+    }
+
     // ARTIST8266D570. Every allocation preserves its original resource lane;
     // no debug-heap substitution or host-sized memory allowance participates.
     void GameDataModule::ConstructResourceModule()
@@ -1142,7 +1182,7 @@ namespace BrnResource
         mpMemoryMap = &MemoryMapImageInitializer::GetMemoryMap();
         CgsResource::ResourceModule::InitOptions lOptions;
         memset(&lOptions, 0, sizeof(lOptions));
-        RegisterResourceTypes();
+        RegisterResourceTypes(GetGlobalResourceAllocator());
         lOptions.mDebugParams.mpTextureRenderCallback = TextureRenderCallback;
         lOptions.mDebugParams.mpTextureRenderUserData = this;
         lOptions.mDebugParams.mpDebugAllocator = GetDebugAllocator();

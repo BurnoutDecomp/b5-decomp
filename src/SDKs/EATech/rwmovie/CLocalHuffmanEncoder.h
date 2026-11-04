@@ -24,25 +24,10 @@
 
 class CAltTablesEncoder;   // forward: the ctor takes an owning back-pointer (breaks the cycle)
 
-// Object referenced through CLocalHuffmanEncoder::mpState (+0x48): the owning
-// CAltTablesEncoder, reached here through this opaque stand-in so the encoder header does not
-// have to include CAltTablesEncoder.h (that would close the include cycle). Only the three
-// words the encode/check path touches are named; everything else stays documented padding.
-// The named offsets match the fields the X360 asm reaches inside the parent object.
-struct SLocalHuffmanEncoderState
-{
-    u8   mPad00[8];         // +0x00  (unobserved)
-    u32  muDirty;           // +0x08  tested by updateHistory / checkFrame / encodeHeader
-    u8   mPad0C[0x18];      // +0x0C .. +0x23  (unobserved)
-    u32  muMvSearchBits;    // +0x24  MV search range = (128 >> this) + 30; also a mode flag
-    u8   mPad28[0x30];      // +0x28 .. +0x57  (unobserved)
-    u32* mpuSymbolRecord;   // +0x58  -> the current packed 32-bit symbol record word
-};
-
 class CLocalHuffmanEncoder : public CLocalHuffman
 {
 public:
-    // (table index, owning CAltTablesEncoder, error out). Body is a separate X360 TU.
+    // ARTIST 0x82A7DDD0. Allocate the encoder-side code and count arrays.
     CLocalHuffmanEncoder(int liTableIndex, CAltTablesEncoder* lpParent, u32* lpuError);
 
     // --- methods invoked by CAltTablesEncoder (bodies in CLocalHuffmanEncoder.cpp) --------
@@ -62,7 +47,7 @@ public:
     u32*                       mpauCodes;       // +0x3C  per-symbol code words (generateHuffman_balanced output)
     u32                        muHistoryCode;   // +0x40  = muCurrentCode when the table is dirty
     u32                        muEmittedCode;   // +0x44  muCurrentCode as emitted by encodeHeader
-    SLocalHuffmanEncoderState* mpState;         // +0x48  owning CAltTablesEncoder (via the stand-in above)
+    CAltTablesEncoder*          mpState;         // +0x48  owning CAltTablesEncoder
 
 private:
     // Frame header written ahead of the first symbol; called only by encodeSymbol. Returns the

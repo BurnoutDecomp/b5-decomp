@@ -67,6 +67,7 @@ public:
 class ParticleDescriptionResourceType : public CgsResource::Type
 {
 public:
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const;
     uint32_t GetTypeID() const ;
 
     // ⭐ ADDED 2026-09-03. This override was MISSING, and its absence is why every .lef

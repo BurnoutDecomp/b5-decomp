@@ -86,6 +86,7 @@ namespace renderengine
         };
 
         static void Initialize(rw::IResourceAllocator& lrAllocator);                       // :73
+        static void Release(rw::IResourceAllocator& lrAllocator);
         static void SetBlendState(const BlendMaterialState* lpBlendState);                 // :75
         static void SetDepthStencilStates(const DepthStencilState* lpEnabledZTest,
                                           const DepthStencilState* lpDisabledZTest);       // :77
@@ -111,13 +112,7 @@ namespace renderengine
         static const BlendMaterialState* s_blendState;                 // :117  dword_82FAB6C0
         static const DepthStencilState*  s_enabledZTestState;          // :118  dword_82FAB6C4
         static const DepthStencilState*  s_disabledZTestState;         // :119  dword_82FAB6C8
-        // :111/:112/:113 s_vertexDescriptorResource / s_pixelProgramResource / s_vertexProgramResource
-        // are the three FIVE-WORD rw::Resource handle arrays the console's allocator route fills
-        // (dword_82FAC1B8 / dword_82FAB850 / dword_82FAC1CC). The PC route adopts pre-built images
-        // and carves the descriptor from the immediate-mode leaf's own arena, so no resource is ever
-        // issued -- they are deliberately NOT declared here rather than declared and left null.
-        // (Same call as BrnPostFxShader.cpp:910, "a slot built by ProgramBufferPC_Adopt owns NOTHING
-        // the allocator ever issued".)
+        // Initialize and Release own the three resource records in rwgcoronarenderer.cpp.
     };
 }
 

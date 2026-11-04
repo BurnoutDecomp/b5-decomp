@@ -16,9 +16,15 @@ struct HostentT
     s32  (*Done)(HostentT* pHost);
     void (*Free)(HostentT* pHost);
     char name[64];
+#if defined(_XBOX)
+    void* pDns;           // ARTIST HostentT +0x50: XNDNS*
+    void* pPlatformData;  // ARTIST HostentT +0x54: event or DirtyLSP query
+    u32   timeout;        // +0x58
+#else
     s32  sema;
     s32  thread;
     u32  timeout;
+#endif
 };
 
 #ifdef __cplusplus

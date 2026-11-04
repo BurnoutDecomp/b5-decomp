@@ -40,7 +40,7 @@ public:
     // an allocation failure, or whatever the queue ctor / frame init flag). On any failure the
     // partially built library is torn down through CloseReferenceLibrary. Returns non-zero on
     // success, 0 on failure (the meaningful channel is *lpiResult).
-    s32 SetupReferenceLibrary(s32* lpiResult, s32 liParam2, s32 liParam3, s32 liNumFrames,
+    s32 SetupReferenceLibrary(s32* lpiResult, const CRct* lpLumaRect, const CRct* lpChromaRect, s32 liNumFrames,
                               s32 liParam5, s32 liParam6, s32 liParam7);
 
     // Cleans + frees every queued frame, then destroys and frees the CQueue and nulls it.

@@ -8,6 +8,8 @@ namespace CgsResource
 class TextFileResourceType : public Type
 {
 public:
+    virtual uint32_t GetTypeID() const;
+    virtual EDebugResourceCategory GetDebugResourceCategory() const;
     ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
 };
 }
