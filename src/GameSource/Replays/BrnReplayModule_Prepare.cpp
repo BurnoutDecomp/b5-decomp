@@ -1,7 +1,7 @@
 // ============================================================================
 // GameSource/Replays/BrnReplayModule_Prepare.cpp
 //
-// BrnReplays::ReplayModule::Prepare and ::StoreSerialisers.
+// BrnReplays::ReplayModule prepare, release and serialiser registration.
 //
 // WHAT THEY ARE FOR: StoreSerialisers is the ONLY place in the engine that gives any
 // BrnReplays::BaseSerialiser its stream buffer and its STATIC buffer, and Prepare is what
@@ -51,6 +51,34 @@ namespace BrnReplays
 
         mePrepareStage = E_PREPARE_STAGE_MANAGER;
         meReleaseStage = E_RELEASE_STAGE_START;
+        return true;
+    }
+
+    // ARTIST 8264B400 uses the Replay release stage before the base release.
+    bool ReplayModule::Release()
+    {
+        switch (meReleaseStage)
+        {
+        case E_RELEASE_STAGE_START:
+        case E_RELEASE_STAGE_MANAGER:
+            meReleaseStage = E_RELEASE_STAGE_MANAGER;
+            if (!CgsModule::ModuleSingleBuffered::Release())
+                return false;
+            break;
+
+        case E_RELEASE_STAGE_DONE:
+            break;
+
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid Stage\n",
+                "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 268);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+
+        meReleaseStage = E_RELEASE_STAGE_MANAGER;
+        mePrepareStage = E_PREPARE_STAGE_START;
         return true;
     }
 
