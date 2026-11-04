@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
@@ -556,9 +557,9 @@ namespace CgsGui
         lrBuffer.SetTransform(CgsGraphics::Im2dTransform::GetDefault());
 
         // ARTIST frame-clear states from the shared immediate-mode state library.
-        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpTextureState_Untextured);
         lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
-        lrBuffer.SetTexture(0);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
 
         // The unit-square strip: (0,0) (0,1) (1,0) (1,1), UV == position, colour black
         // at the clear-screen alpha (the X360 packs (alpha*255) into the byte-swizzled
@@ -611,11 +612,8 @@ namespace CgsGui
         }
 
         lrBuffer.BeginRendering();
-        // The MenusAndHud Im3d buffer bracket (guest +0x260: BeginRendering here, its
-        // EndRendering below). The 3D immediate buffers are not wired on the PC-minimal
-        // path -- the slot carries the host's non-null assert-satisfier, not a real
-        // buffer (the boot/title movies are 2D-only) -- so the bracket is STRUCTURALLY
-        // GATED on the Im3d render-buffer instantiations landing.
+        // ARTIST @ 0x82858B80-88 brackets the MenusAndHud Im3d buffer.
+        mImRenderers.mpIm3dRenderBufferMenusAndHud->BeginRendering();
 
         // ARTIST 0x82858AF8: reset the movie states after layer-1 custom renderers.
         // The map tile pass leaves additive blending in the same command stream.
@@ -625,17 +623,15 @@ namespace CgsGui
 
         mAptAux.Render(liDeltaMs);
 
-        // ⭐ [tut-ticker] the LAYER-2 render (guest: the same +0x18 dispatch with layer 2,
-        // AFTER AptAux::Render, before the buffer close) -- the ticker draws HERE, over
-        // the movie. Its submissions ride the same open command buffer the Apt walk just
-        // filled, so they dispatch in this frame's EndRendering.
+        // ARTIST closes both blocks before the layer-2 custom-renderer callback.
+        lrBuffer.EndRendering();
+        mImRenderers.mpIm3dRenderBufferMenusAndHud->EndRendering();
+
         if (mpCustomRendererManager != 0)
         {
             mpCustomRendererManager->Render(
                 reinterpret_cast<ImRendererSet*>(&mImRenderers), E_CUSTOMRENDERLAYER_2);
         }
-
-        lrBuffer.EndRendering();
     }
 
     // Render @0x82858810 -- the public per-frame render entry (CgsGui::GuiModule::Render

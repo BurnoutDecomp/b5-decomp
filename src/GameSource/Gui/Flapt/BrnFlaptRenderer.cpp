@@ -51,6 +51,10 @@ void FlaptRenderer::StartRenderingFrame()
     mpCurrentTexture = 0;
     mpCurrentBlendState = 0;
 
+    CgsGraphics::Im2dRenderBuffer* lpBuffer = mpImRenderSet->mpIm2dRenderBuffer;
+    lpBuffer->BeginRendering();
+    lpBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
+    lpBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOff);
 }
 
 // ---- SetShader @ 0x82470718 ----------------------------------------------
