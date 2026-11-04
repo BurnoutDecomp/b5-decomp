@@ -44,7 +44,7 @@
 // The generic "Object" class name InitObject hands to _createObject (console
 // &dword_8324E650, an entry of the dword_8324E580 class-name table) -- defined
 // with its literal contents ("Object") in AptGlobals.cpp.
-extern const EAStringC gAptObjectClassName;   // &dword_8324E650
+extern const EAStringC& gAptObjectClassName;   // &dword_8324E650
 
 namespace
 {

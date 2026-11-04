@@ -35,6 +35,30 @@ public:
     // by the CRT initializer sub_82C71F10 (string literals recovered from its
     // store set); StringPool::Initialize points each entry at its record.
     enum { KU_CONSTANT_COUNT = 88 };
+
+    // Constant codes used by the native class bootstrap and name aliases.
+    enum ConstantName
+    {
+        KU_NAME_GLOBAL = 7,
+        KU_NAME_ARRAY = 31,
+        KU_NAME_BOOLEAN = 34,
+        KU_NAME_COLOR = 36,
+        KU_NAME_CONTROLLER = 37,
+        KU_NAME_DATE = 38,
+        KU_NAME_ERROR = 39,
+        KU_NAME_FUNCTION = 41,
+        KU_NAME_MOVIECLIP = 48,
+        KU_NAME_NULL = 50,
+        KU_NAME_NUMBER = 51,
+        KU_NAME_OBJECT = 52,
+        KU_NAME_PROTOTYPE = 70,
+        KU_NAME_STRING = 77,
+        KU_NAME_SUPER = 78,
+        KU_NAME_TEXTFORMAT = 79,
+        KU_NAME_THIS = 80,
+        KU_NAME_UNDEFINED = 82,
+        KU_NAME_XML = 85,
+    };
     static EAStringC saConstant[KU_CONSTANT_COUNT];
 
     // GetString @PS3 0x7DF664 -- `return &saConstant[code]` (the StringCode

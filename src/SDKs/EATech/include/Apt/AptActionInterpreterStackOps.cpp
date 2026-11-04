@@ -530,7 +530,7 @@ extern AptValue* AptFrameStackFirstLocal(AptValue* pFrameStack);
 // The static EAStringC "String" class-name key (console &dword_8324E6B4, an entry
 // of the engine name table at dword_8324E580). _createObject's String branch uses it
 // as the hash key to fetch the global String class from gpAptGlobalFallback.
-extern const EAStringC gAptStringClassName;   // &dword_8324E6B4 ("String"; AptGlobals.cpp)
+extern const EAStringC& gAptStringClassName;  // &dword_8324E6B4 (AptGlobals.cpp)
 
 // ---------------------------------------------------------------------------
 // initialize @0x82AE39D8 -- allocate the interpreter's five {count,capacity,array}
@@ -672,13 +672,8 @@ extern AptValue* gpAptDestroyedClipValue;   // dword_8324D818 (AptGlobals.cpp)
 // undefined-object path seeds v10 with (unk_8324E6B8 -- the AS "super" key, the
 // 2026-08-05 identification), and the "this" key (dword_8324E6C0) the supercall
 // path re-resolves the bound function name under.
-extern const EAStringC gAptEmptyMethodName;   // unk_8324E6B8 ("super"; AptGlobals.cpp)
-extern const EAStringC gAptThisKey;           // dword_8324E6C0 ("this"; AptGlobals.cpp)
-// The apply()/call() method-name keys the console stricmp's inline (rodata literals).
-static const EAStringC gAptApplyKey("apply");
-static const EAStringC gAptPopKey  ("pop");
-static const EAStringC gAptShiftKey("shift");
-static const EAStringC gAptCallKey ("call");
+extern const EAStringC& gAptEmptyMethodName;  // unk_8324E6B8 ("super"; AptGlobals.cpp)
+extern const EAStringC& gAptThisKey;          // dword_8324E6C0 ("this"; AptGlobals.cpp)
 
 // The method-name hash lookup is now the static AptActionInterpreter::HashLookupName
 // member (AptNativeHash::Lookup over the +8 slot; declared in the header).
@@ -815,12 +810,11 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // name is "apply" or "call", the method retargets to the original name value and
     // the call's argument layout is rewritten: call() shifts off the explicit `this`
     // arg; apply() flattens the trailing array argument onto the stack.
+    const EAStringC* const pResolvedName = reinterpret_cast<const EAStringC*>(pNameSlot);
     if ((!pMethod || !pMethod->getIsDefined())
-                && (AptActionInterpreter::NameEquals(pNameSlot, &gAptApplyKey)   // console stricmp(*v10+8,"apply")
-            || AptActionInterpreter::NameEquals(pNameSlot, &gAptCallKey)))  // console stricmp(*v10+8,"call")
+        && (_stricmp(pResolvedName->GetBuffer(), "apply") == 0
+            || _stricmp(pResolvedName->GetBuffer(), "call") == 0))
     {
-        // NOTE: the two console stricmp's are against "apply"/"call"; encapsulated as
-        // the AptInterp_NameEquals name compare (the EAStringC == the console folds in).
         pMethod = pMethodName;   // console v12 = v7
 
         const int nCountType = (static_cast<int>(pCountValue->getVtblIndex()) << 25) >> 25;   // v28
@@ -859,7 +853,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         }
 
         // apply(): flatten the trailing array argument's elements onto the stack.
-        if (AptActionInterpreter::NameEquals(pNameSlot, &gAptApplyKey))  // console stricmp(*v10+8,"apply")
+        if (_stricmp(pResolvedName->GetBuffer(), "apply") == 0)
         {
             AptValue* const pTopArg = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v34
             if (pTopArg->getVtblIndex() == AptVFT_Array && pTopArg->getIsDefined())
@@ -1065,8 +1059,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     if (pResult != gpUndefinedValue)
     {
         if (pMethodName->getVtblIndex() == AptVFT_Array && pMethodName->getIsDefined()
-                        && (AptActionInterpreter::NameEquals(pNameSlot, &gAptPopKey)     // console stricmp(*v10+8,"pop")
-                || AptActionInterpreter::NameEquals(pNameSlot, &gAptShiftKey)))  // console stricmp(*v10+8,"shift")
+            && (_stricmp(pResolvedName->GetBuffer(), "pop") == 0
+                || _stricmp(pResolvedName->GetBuffer(), "shift") == 0))
         {
             pInterp->mpStack[pInterp->mnStackTop - 1]->Release();   // console (*(*v67+4))(v67)
         }

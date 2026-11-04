@@ -654,7 +654,7 @@ extern void    AptCloneClassMembers(AptCIH* pNode, AptValue* pClassObject);
 // The class-binding tail's collaborators (see AptCIH_AssociateInstToClass below).
 extern AptNativeHash* gpAptClassRegistry;             // dword_8324E2D4 (AptObject.cpp)
 extern AptValueWithHash* gpAptGlobalFallback;         // off_8324E380 (the live _global)
-extern const EAStringC gAptSpriteClassKey;            // dword_8324E640 "MovieClip"
+extern const EAStringC& gAptSpriteClassKey;            // dword_8324E640 "MovieClip"
 extern AptActionInterpreter gAptActionInterpreter;    // &dword_8324E760
 
 // ---------------------------------------------------------------------------

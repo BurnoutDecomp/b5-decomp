@@ -50,8 +50,8 @@ extern AptValueWithHash* gpAptGlobalFallback;
 // `super.X()` call silently no-opped (the invisible learner-permit card).
 // Defined in AptGlobals.cpp.
 // ---------------------------------------------------------------------------
-extern const EAStringC gAptKeyThis;        // unk_8324E6C0 -- "this"
-extern const EAStringC gAptKeySuper;       // unk_8324E6B8 -- "super"
+extern const EAStringC& gAptKeyThis;        // unk_8324E6C0 -- "this"
+extern const EAStringC& gAptKeySuper;       // unk_8324E6B8 -- "super"
 
 // ---------------------------------------------------------------------------
 // operator new @ 0x82AE61C8

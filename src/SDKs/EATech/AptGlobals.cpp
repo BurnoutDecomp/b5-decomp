@@ -32,6 +32,7 @@
 // that symbol). Layout-bearing value types include their real headers.
 // ===========================================================================
 
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 #include "types.hpp"
 
 // --- value-typed globals need the real layout -----------------------------
@@ -217,61 +218,29 @@ AptCXForm              gIdentityCXForm = AptMakeIdentityCXForm();
 extern const AptCXForm gAptNullCXForm  = AptMakeIdentityCXForm();   // off_82F73388
 
 // ===========================================================================
-// 8. Interned AS-name string constants (EAStringC), constructed from the literal
-//    AS identifier each name encodes.  Faithful: the X360 builds these into the
-//    engine constant-string table; here the EAStringC ctor builds the same value.
-//    ("TypeName_X" -> the lowercase AS typeof() string; "ClassName"/"ClassKey" ->
-//     the AS class name; the key names -> the AS identifier.)
+// 8. Named views of ARTIST's interned AS strings. StringPool::Initialize
+//    publishes their backing records after the Apt allocator is ready.
 // ===========================================================================
-extern const EAStringC gAptKeyThis           ("this");       // unk_8324E6C0
-extern const EAStringC gAptThisKey           ("this");       // dword_8324E6C0 (alias name for the same key)
-extern const EAStringC gAptKeyGlobal         ("_global");    // unk_8324E59C
-// ⚠ CORRECTED 2026-08-05 (the licence-card dead-super root cause): unk_8324E6B8
-// is the AS "super" key, NOT "arguments". Three console consumers prove it:
-//   * AptScriptFunction2::SetupBeforeExecution's flag-0x10 branch (the SWF
-//     PreloadSuper bit -- flags algebra: super-calling methods carry 0x119
-//     [preload], non-super ones 0x129 [suppress 0x20]) resolves this key via
-//     findChild when no pre-resolved super arrives -- and findChild's
-//     ObjectIndex wordlist has "super" -> special-name id 18 (the super arm).
-//   * runStream resolves this key ONCE per stream into the context slot
-//     (LocalContextT::mpScopeVariable, console ctx+0x10) that CallMethod's
-//     supercall identity test reads.
-//   * CallMethod seeds its default method-name slot with this same object.
-// The old "arguments" guess sent the resolve down the generic hash path (no
-// such child), so every AS `super.X()` silently no-opped -- the learner-permit
-// card never left its 'invisible' frame.
-extern const EAStringC gAptKeySuper          ("super");      // unk_8324E6B8
-extern const EAStringC gAptKeyPrototype      ("prototype"); // dword_8324E698 -- the AS "prototype" key
-                                                            // (hash 1689; AptNativeHash's fast-slot gates
-                                                            // key it against mpPrototype. The old literal
-                                                            // "__proto__" (hash 27581) made every
-                                                            // fn.prototype Lookup return null -> no class
-                                                            // methods ever landed. "__proto__" itself is
-                                                            // StringPool::saConstant[0].)
-extern const EAStringC gAptKeyControllerKey  ("controller"); // unk_8324E614
-extern const EAStringC gAptEmptyMethodName   ("super");      // unk_8324E6B8 -- the SAME console object as
-                                                             // gAptKeySuper ("super"); CallMethod seeds its
-                                                             // default name slot with it and NameEquals-tests
-                                                             // against it ("is the slot still the default").
-                                                             // Kept as a distinct PC symbol, but the CONTENT
-                                                             // must match gAptKeySuper (2026-08-05 fix).
-extern const EAStringC gAptObjectClassName   ("Object");     // &dword_8324E650
-extern const EAStringC gAptStringClassName   ("String");     // &dword_8324E6B4
-extern const EAStringC gAptSpriteClassKey    ("MovieClip");  // dword_8324E640 (the Sprite/MovieClip class key)
-extern const EAStringC gAptTypeName_Undefined("undefined");  // dword_8324E6C8
-extern const EAStringC gAptTypeName_Number   ("number");     // dword_8324E64C
-extern const EAStringC gAptTypeName_Boolean  ("boolean");    // dword_8324E608
-extern const EAStringC gAptTypeName_String   ("string");     // dword_8324E6B4
-extern const EAStringC gAptTypeName_Object   ("object");     // dword_8324E650
-extern const EAStringC gAptTypeName_MovieClip("movieclip");  // dword_8324E640
-extern const EAStringC gAptTypeName_Null     ("null");       // dword_8324E648
-extern const EAStringC gAptTypeName_Function ("function");   // dword_8324E624
+extern const EAStringC& gAptKeyThis = StringPool::saConstant[StringPool::KU_NAME_THIS]; // 8324E6C0
+extern const EAStringC& gAptThisKey = StringPool::saConstant[StringPool::KU_NAME_THIS]; // 8324E6C0
+extern const EAStringC& gAptKeyGlobal = StringPool::saConstant[StringPool::KU_NAME_GLOBAL]; // 8324E59C
+extern const EAStringC& gAptKeySuper = StringPool::saConstant[StringPool::KU_NAME_SUPER]; // 8324E6B8
+extern const EAStringC& gAptKeyPrototype = StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE]; // 8324E698
+extern const EAStringC& gAptKeyControllerKey = StringPool::saConstant[StringPool::KU_NAME_CONTROLLER]; // 8324E614
+extern const EAStringC& gAptEmptyMethodName = StringPool::saConstant[StringPool::KU_NAME_SUPER]; // 8324E6B8
+extern const EAStringC& gAptObjectClassName = StringPool::saConstant[StringPool::KU_NAME_OBJECT]; // 8324E650
+extern const EAStringC& gAptStringClassName = StringPool::saConstant[StringPool::KU_NAME_STRING]; // 8324E6B4
+extern const EAStringC& gAptSpriteClassKey = StringPool::saConstant[StringPool::KU_NAME_MOVIECLIP]; // 8324E640
+extern const EAStringC& gAptTypeName_Undefined = StringPool::saConstant[StringPool::KU_NAME_UNDEFINED]; // 8324E6C8
+extern const EAStringC& gAptTypeName_Number = StringPool::saConstant[StringPool::KU_NAME_NUMBER]; // 8324E64C
+extern const EAStringC& gAptTypeName_Boolean = StringPool::saConstant[StringPool::KU_NAME_BOOLEAN]; // 8324E608
+extern const EAStringC& gAptTypeName_String = StringPool::saConstant[StringPool::KU_NAME_STRING]; // 8324E6B4
+extern const EAStringC& gAptTypeName_Object = StringPool::saConstant[StringPool::KU_NAME_OBJECT]; // 8324E650
+extern const EAStringC& gAptTypeName_MovieClip = StringPool::saConstant[StringPool::KU_NAME_MOVIECLIP]; // 8324E640
+extern const EAStringC& gAptTypeName_Null = StringPool::saConstant[StringPool::KU_NAME_NULL]; // 8324E648
+extern const EAStringC& gAptTypeName_Function = StringPool::saConstant[StringPool::KU_NAME_FUNCTION]; // 8324E624
 
-// gpAptThisKey -- the pointer the AptActionRun path reads. The reference
-// (AptActionRun.cpp:39 `extern const EAStringC* gpAptThisKey`) is a NON-const
-// pointer-to-const (mangles ?...@@3PEBVEAStringC@@EB); a top-level-const pointer
-// would mangle Q (?...@@3QEB...) and not resolve. Points at interned gAptKeyThis.
-const EAStringC* gpAptThisKey = &gAptKeyThis;
+const EAStringC* gpAptThisKey = &StringPool::saConstant[StringPool::KU_NAME_THIS];
 
 // ===========================================================================
 // 9. Name / lookup rodata TABLES.  FLAG: zeroed correctly-typed storage with the

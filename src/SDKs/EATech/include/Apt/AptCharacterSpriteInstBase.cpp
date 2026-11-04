@@ -38,7 +38,7 @@
 // ("MovieClip"). (The neighbouring dword_8324E580/0x8324E698 are the "prototype"
 // key bodies -- see AptNativeHash.h -- this is a distinct adjacent key.)
 // ---------------------------------------------------------------------------
-extern const EAStringC gAptSpriteClassKey;   // X360 dword_8324E640 ("MovieClip", AptGlobals.cpp)
+extern const EAStringC& gAptSpriteClassKey;   // X360 dword_8324E640 ("MovieClip", AptGlobals.cpp)
 
 // ---------------------------------------------------------------------------
 // ctor @0x82AFF820

@@ -48,8 +48,8 @@
 
 // The pooled "this"/"_global" keys -- defined with their literal contents in
 // AptGlobals.cpp.
-extern const EAStringC gAptKeyThis;     // unk_8324E6C0
-extern const EAStringC gAptKeyGlobal;   // unk_8324E59C
+extern const EAStringC& gAptKeyThis;     // unk_8324E6C0
+extern const EAStringC& gAptKeyGlobal;   // unk_8324E59C
 
 // The counter GetTimer reads (console dword_8324D820) IS the per-banked-frame tick
 // AptUpdate advances -- one dword, one PC symbol: gAptInputRecorderTag
