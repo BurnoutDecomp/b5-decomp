@@ -404,7 +404,7 @@ bool Module::Release()
         for (u32 lu = 0; lu < 3; ++lu)
         {
             void* lpBuffer = maStreamBuffers[lu].mpBuffer;
-            maStreamBuffers[lu].mReadStream = CgsFileSystem::ReadStream();   // the console +8 word zero
+            maStreamBuffers[lu].mReadStream = static_cast<CgsFileSystem::StreamDeviceDiskRead*>(0);   // the console +8 word zero
             maStreamBuffers[lu].mpBuffer    = 0;
             if (mbStreamsUsingMainAllocator)
             {
@@ -1017,7 +1017,7 @@ void Module::UpdateStreamBuffers(Io::OutputBuffer::FreedBuffersArray& arFreedBuf
             {
                 arFreedBuffers.Append(lrBuffer.mVoiceId);
                 lrBuffer.mfGraceWaitTime  = 0.0f;
-                lrBuffer.mReadStream      = CgsFileSystem::ReadStream();
+                lrBuffer.mReadStream      = static_cast<CgsFileSystem::StreamDeviceDiskRead*>(0);
                 lrBuffer.mVoiceId         = 0;
                 lrBuffer.mbQueuedForClose = false;
                 lrBuffer.mBufferStatus    = StreamBuffer::E_FREE_BUFFER;
@@ -1116,7 +1116,7 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
     // Seed the record and hand the carve buffer back through the spec.
     StreamBuffer& lrBuffer = maStreamBuffers[liIndex];
     lrBuffer.mfGraceWaitTime  = 0.0f;
-    lrBuffer.mReadStream      = CgsFileSystem::ReadStream();
+    lrBuffer.mReadStream      = static_cast<CgsFileSystem::StreamDeviceDiskRead*>(0);
     lrBuffer.mBufferStatus    = StreamBuffer::E_USING_BUFFER;
     lrBuffer.mVoiceId         = lhVoice.GetObject()->GetIdent();
     lrBuffer.mbQueuedForClose = false;

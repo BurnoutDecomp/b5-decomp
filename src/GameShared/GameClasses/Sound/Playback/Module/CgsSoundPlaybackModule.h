@@ -207,7 +207,7 @@ public:
         {
             mpBuffer         = 0;
             mBufferStatus    = E_FREE_BUFFER;
-            mReadStream      = CgsFileSystem::ReadStream();
+            mReadStream      = static_cast<CgsFileSystem::StreamDeviceDiskRead*>(0);
             mVoiceId         = 0;
             mbQueuedForClose = false;
             mfGraceWaitTime  = 0.0f;
