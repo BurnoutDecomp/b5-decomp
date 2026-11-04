@@ -4,8 +4,13 @@
 #include "lobbytagfield.h"
 #include "dirtylib.h"
 #include "dirtymem.h"
+#include "protofilter.h"
 #include "platform.h"
 
+#include <xtl.h>
+#include <xonline.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 extern "C"
@@ -15,9 +20,19 @@ extern "C"
     HasherRef* HasherCreate(s32 iInitial, s32 iHashLength);
     void HasherDestroy(HasherRef* pHash);
     DispListT* HasherFlush(HasherRef* pHash);
+    s32 HashNumAdd(HasherRef* pHash, s32 iKey, void* pData);
+    void* HashNumFind(HasherRef* pHash, s32 iKey);
+    void* HashNumDel(HasherRef* pHash, s32 iKey);
+    s32 HashStrAdd(HasherRef* pHash, const char* pKey, void* pData);
     s32 TagFieldGetFlags(const char* pData, s32 iDefault);
+    s32 TagFieldGetRaw(const char* pData, char* pBuffer, s32 iBufLen, const char* pDefault);
+    s32 TagFieldGetStructure(const char* pData, void* pBuffer, s32 iLength,
+                             const char* pPattern);
+    s32 TagFieldGetToken(const char* pData, s32 iDefault);
+    s32 NetConnQuery(const char* pName, const u8* pXuid);
     u32 NetTick(void* pCommRef);
     u32 CommUDPTick(void* pCommRef);
+    void* DirtyErrGetName(s32 iError);
     s32 ProtoAriesStatus(ProtoAriesRefT* pProtoAries, s32 iSelect, void* pBuf, s32 iBufLen);
     ProtoAriesRefT* ProtoAriesCreate(s32 iMaxBuffer);
     void ProtoAriesDestroy(ProtoAriesRefT* pProtoAries);
@@ -48,9 +63,20 @@ extern "C"
     void LobbyApiAriesRequest(LobbyApiRefT* pLobbyApi, s32 iKind,
                               const char* pRequest, s32 iCallbackID);
     void LobbyApiListUpdate(LobbyApiRefT* pLobbyApi);
-    void LobbyApiAsyncProcess(LobbyApiRefT* pLobbyApi, const char* pData);
-    void LobbyApiAsyncMoveRoom(LobbyApiRefT* pLobbyApi, const char* pData);
+    s32 LobbyApiAsyncProcess(LobbyApiRefT* pLobbyApi, const char* pData,
+                             s32 iKind, s32 iCode);
+    s32 LobbyApiAsyncMoveRoom(LobbyApiRefT* pLobbyApi, const char* pData);
     void LobbyApiExtractUserAddr(LobbyApiUserT* pUser, const char* pData);
+    void LobbyApiExtractRoomRecord(LobbyApiRoomRecordPrefixT* pRoom, const char* pData);
+    s32 LobbyApiExtractRankRecord(LobbyApiRankRecordT* pRank, const char* pData,
+                                  const char* pSelfName);
+    void LobbyApiExtractUserSet(LobbyApiUserSetT* pUserSet, const char* pData);
+    void LobbyApiExtractUserSetMember(LobbyApiUserSetMemberT* pMember,
+                                      const char* pData);
+    s32 LobbyApiListObjectUpdate(LobbyApiRefT* pLobbyApi, s32 iListType,
+                                 void* pRecord, s32 iOperation);
+    s32 LobbyApiPopul(LobbyApiRefT* pLobbyApi, s32 iRoomIdent, s32 iPopulation,
+                      s32 iGameCount, s32 iGamePopulation);
     s32 LobbyApiPrintfCode(LobbyApiRefT* pLobbyApi, const char* pFormat, ...);
     void PingManagerUpdate(PingManagerRefT* pPingManager);
     PingManagerRefT* PingManagerCreate(s32 iCapacity);
@@ -930,7 +956,7 @@ extern "C" void LobbyApiUpdate(LobbyApiRefT* pLobbyApi)
 
                     if (((u32)iKind & 0xff000000) == 0x2b000000)
                     {
-                        LobbyApiAsyncProcess(pLobbyApi, pData);
+                        LobbyApiAsyncProcess(pLobbyApi, pData, iKind, iCode);
                     }
                     if ((((u32)iKind == 0x6d6f7665) || ((u32)iKind == 0x726f6f6d)) &&
                         (iCode == 0))
@@ -1706,4 +1732,1299 @@ extern "C" void LobbyApiExtractUserRecord(LobbyApiUserT* pUser, const char* pDat
     TagFieldGetString(TagFieldFind(pData, "CT"), pUser->strClubTag,
                       sizeof(pUser->strClubTag), "");
     LobbyApiExtractUserAddr(pUser, pData);
+}
+
+extern "C" s32 LobbyApiPrintfCode(LobbyApiRefT* pLobbyApi, const char* pFormat, ...)
+{
+    char strMessage[4096];
+    const char* pMessage = strMessage;
+    s32 iResult = 0;
+    va_list Args;
+    va_start(Args, pFormat);
+
+    if ((pFormat[0] == '%') && (pFormat[1] == 's') && (pFormat[2] == '\0'))
+    {
+        pMessage = va_arg(Args, const char*);
+    }
+    else
+    {
+        iResult = vsprintf(strMessage, pFormat, Args);
+    }
+    va_end(Args);
+
+    if (pLobbyApi->debugptr != NULL)
+    {
+        pLobbyApi->debugptr(pLobbyApi->debugref, pMessage);
+    }
+    return iResult;
+}
+
+extern "C" void LobbyApiExtractRoomRecord(LobbyApiRoomRecordPrefixT* pRoom,
+                                             const char* pData)
+{
+    memset(pRoom, 0, sizeof(*pRoom));
+    pRoom->iIdent = TagFieldGetNumber(TagFieldFind(pData, "I"), -1);
+    TagFieldGetString(TagFieldFind(pData, "N"), pRoom->strName,
+                      sizeof(pRoom->strName), "");
+    TagFieldGetString(TagFieldFind(pData, "DN"), pRoom->strDisplayName,
+                      sizeof(pRoom->strDisplayName), "");
+    TagFieldGetString(TagFieldFind(pData, "H"), pRoom->strHost,
+                      sizeof(pRoom->strHost), "");
+    TagFieldGetString(TagFieldFind(pData, "D"), pRoom->strDescription,
+                      sizeof(pRoom->strDescription), "");
+    pRoom->iFlags = TagFieldGetFlags(TagFieldFind(pData, "F"), -1);
+    pRoom->iLimit = TagFieldGetNumber(TagFieldFind(pData, "L"), 0);
+    pRoom->iPopulation = TagFieldGetNumber(TagFieldFind(pData, "T"), 0);
+    pRoom->iGamePopulation = TagFieldGetNumber(TagFieldFind(pData, "GT"), 0);
+    pRoom->iGameCount = TagFieldGetNumber(TagFieldFind(pData, "G"), 0);
+    pRoom->uLocality = (u32)TagFieldGetToken(TagFieldFind(pData, "LO"), 0);
+    ds_snzprintf(pRoom->strPopulation, sizeof(pRoom->strPopulation), "%d",
+                 pRoom->iPopulation);
+    ds_strnzcpy(pRoom->strPublic,
+                ((pRoom->iFlags & 0x10000) == 0) ? "Yes" : "No",
+                sizeof(pRoom->strPublic));
+    TagFieldGetStructure(TagFieldFind(pData, "C"), pRoom->aStructure,
+                         sizeof(pRoom->aStructure), "l*");
+}
+
+extern "C" s32 LobbyApiExtractRankRecord(LobbyApiRankRecordT* pRank,
+                                            const char* pData,
+                                            const char* pSelfName)
+{
+    memset(pRank, 0, sizeof(*pRank));
+    pRank->iRank = TagFieldGetNumber(TagFieldFind(pData, "R"), 0);
+    pRank->iPoints = TagFieldGetNumber(TagFieldFind(pData, "P"), 0);
+    if (TagFieldGetNumber(TagFieldFind(pData, "O"), 0) != 0)
+    {
+        pRank->uFlags |= 4;
+    }
+    TagFieldGetString(TagFieldFind(pData, "N"), pRank->strName,
+                      sizeof(pRank->strName), "");
+    TagFieldGetRaw(TagFieldFind(pData, "S"), pRank->strStats,
+                   sizeof(pRank->strStats), "");
+    const s32 iCompare = LobbyNameCmp(pRank->strName, pSelfName);
+    if (iCompare == 0)
+    {
+        pRank->uFlags |= 1;
+    }
+    return iCompare;
+}
+
+extern "C" void LobbyApiExtractUserSet(LobbyApiUserSetT* pUserSet,
+                                         const char* pData)
+{
+    pUserSet->iIdent = TagFieldGetNumber(TagFieldFind(pData, "I"), 0);
+    pUserSet->iType = TagFieldGetNumber(TagFieldFind(pData, "T"), 0);
+    pUserSet->uSysFlags = (u32)TagFieldGetFlags(TagFieldFind(pData, "SF"), 0);
+    pUserSet->uCustFlags = (u32)TagFieldGetFlags(TagFieldFind(pData, "CF"), 0);
+    TagFieldGetString(TagFieldFind(pData, "O"), pUserSet->strOwner,
+                      sizeof(pUserSet->strOwner), "");
+    pUserSet->iSize = TagFieldGetNumber(TagFieldFind(pData, "S"), 0);
+    pUserSet->iCount = TagFieldGetNumber(TagFieldFind(pData, "C"), 0);
+    TagFieldGetString(TagFieldFind(pData, "N"), pUserSet->strName,
+                      sizeof(pUserSet->strName), "");
+    TagFieldGetString(TagFieldFind(pData, "D"), pUserSet->strDesc,
+                      sizeof(pUserSet->strDesc), "");
+    TagFieldGetString(TagFieldFind(pData, "P"), pUserSet->strParams,
+                      sizeof(pUserSet->strParams), "");
+}
+
+extern "C" void LobbyApiExtractUserSetMember(LobbyApiUserSetMemberT* pMember,
+                                               const char* pData)
+{
+    memset(pMember, 0, sizeof(*pMember));
+    pMember->iIdent = TagFieldGetNumber(TagFieldFind(pData, "I"), 0);
+    TagFieldGetString(TagFieldFind(pData, "N"), pMember->strName,
+                      sizeof(pMember->strName), "");
+    pMember->iFlags = TagFieldGetFlags(TagFieldFind(pData, "F"), 0);
+    pMember->iGameIdent = TagFieldGetNumber(TagFieldFind(pData, "G"), 0);
+    TagFieldGetString(TagFieldFind(pData, "X"), pMember->strAux,
+                      sizeof(pMember->strAux), "");
+    pMember->uAddr = TagFieldGetAddress(TagFieldFind(pData, "A"), 0);
+    pMember->uLocalAddr = TagFieldGetAddress(TagFieldFind(pData, "LA"), 0);
+    TagFieldGetString(TagFieldFind(pData, "MA"), pMember->strMachineAddr,
+                      sizeof(pMember->strMachineAddr), "");
+}
+
+extern "C" s32 LobbyApiListObjectUpdate(LobbyApiRefT* pLobbyApi, s32 iListType,
+                                           void* pRecord, s32 iOperation)
+{
+    LobbyListRefT* pListRef = pLobbyApi->pListRef;
+    if ((pListRef != NULL) && (pLobbyApi->bEnableDispElemCb != 0))
+    {
+        LobbyDispListT* pList = &pListRef->Lists[iListType];
+        if (pList->pCallback != NULL)
+        {
+            LobbyApiMsgT Msg;
+            Msg.id = 0;
+            Msg.type = LOBBYAPI_CBTYPE_DISP;
+            Msg.kind = iListType;
+            Msg.code = iOperation;
+            Msg.pData = (const char*)pList->pDisp;
+            Msg.pMisc = pRecord;
+            pList->pCallback(pLobbyApi, &Msg, pList->pUserData);
+        }
+    }
+    return (s32)pLobbyApi;
+}
+
+extern "C" s32 LobbyApiPopul(LobbyApiRefT* pLobbyApi, s32 iRoomIdent,
+                                s32 iPopulation, s32 iGameCount,
+                                s32 iGamePopulation)
+{
+    LobbyListRefT* pListRef = pLobbyApi->pListRef;
+    if (pListRef != NULL)
+    {
+        LobbyDispListT* pList = &pListRef->Lists[0];
+        if (pList->pHash != NULL)
+        {
+            DispListT* pItem = (DispListT*)HashNumFind(pList->pHash, iRoomIdent);
+            if (pItem != NULL)
+            {
+                LobbyApiRoomRecordPrefixT* pRoom =
+                    (LobbyApiRoomRecordPrefixT*)DispListGet(pList->pDisp, pItem);
+                if (pRoom != NULL)
+                {
+                    if (iGameCount == -1)
+                    {
+                        iGameCount = pRoom->iGameCount;
+                    }
+                    if (iGamePopulation == -1)
+                    {
+                        iGamePopulation = pRoom->iGamePopulation;
+                    }
+                    if ((iPopulation != pRoom->iPopulation) ||
+                        (iGameCount != pRoom->iGameCount) ||
+                        (iGamePopulation != pRoom->iGamePopulation))
+                    {
+                        pRoom->iPopulation = iPopulation;
+                        pRoom->iGameCount = iGameCount;
+                        pRoom->iGamePopulation = iGamePopulation;
+                        ds_snzprintf(pRoom->strPopulation,
+                                     sizeof(pRoom->strPopulation), "%d", iPopulation);
+                        DispListSet(pList->pDisp, pItem, pRoom);
+                        LobbyApiListObjectUpdate(pLobbyApi, 0, pRoom, 0);
+                    }
+                }
+            }
+        }
+    }
+    return (s32)pLobbyApi;
+}
+
+static const s32 KI_LOBBY_LIST_RECORD_MEMID = 0x6c617363; // lasc
+
+extern "C" s32 LobbyApiAsyncMoveRoom(LobbyApiRefT* pLobbyApi, const char* pData)
+{
+    const s32 iLobbyIdent = TagFieldGetNumber(TagFieldFind(pData, "LIDENT"), -1);
+    if (iLobbyIdent >= 0)
+    {
+        const s32 iLobbyGameCount = TagFieldGetNumber(TagFieldFind(pData, "LGC"), -1);
+        const s32 iLobbyGames = TagFieldGetNumber(TagFieldFind(pData, "LGCOUNT"), -1);
+        const s32 iLobbyUsers = TagFieldGetNumber(TagFieldFind(pData, "LCOUNT"), 0);
+        LobbyApiPopul(pLobbyApi, iLobbyIdent, iLobbyUsers,
+                      iLobbyGames, iLobbyGameCount);
+    }
+
+    const s32 iRoomIdent = TagFieldGetNumber(TagFieldFind(pData, "IDENT"), 0);
+    const s32 iPopulation = TagFieldGetNumber(TagFieldFind(pData, "COUNT"), 0);
+    const s32 iGameCount = TagFieldGetNumber(TagFieldFind(pData, "GCOUNT"), -1);
+    const s32 iGamePopulation = TagFieldGetNumber(TagFieldFind(pData, "GC"), -1);
+    if (iRoomIdent != pLobbyApi->roomidx)
+    {
+        char strRoomName[36];
+        TagFieldGetString(TagFieldFind(pData, "NAME"), strRoomName,
+                          sizeof(strRoomName), "");
+        const s32 iRoomFlags = TagFieldGetFlags(TagFieldFind(pData, "FLAGS"), 0);
+
+        pLobbyApi->roomidx = iRoomIdent;
+        LobbyApiPopul(pLobbyApi, iRoomIdent, iPopulation,
+                      iGameCount, iGamePopulation);
+        ds_strnzcpy(pLobbyApi->roomname, strRoomName, sizeof(pLobbyApi->roomname));
+        pLobbyApi->roomflags = iRoomFlags;
+        LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                               0x6d6f7665, 0, pLobbyApi->roomname); // move
+        LobbyApiListFlush(pLobbyApi, 1);
+        LobbyApiListFlush(pLobbyApi, 4);
+    }
+    return 0;
+}
+
+static s32 _LobbyApiAsyncPlay(LobbyApiRefT* pLobbyApi, const char* pData, s32 iCode)
+{
+    LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                           0x706c6179, iCode, pData); // play
+    return 0;
+}
+
+static s32 _LobbyApiAsyncGame(LobbyApiRefT* pLobbyApi, const char* pData, s32 iCode)
+{
+    LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                           0x67616d65, iCode, pData); // game
+    return 0;
+}
+
+static s32 _LobbyApiAsyncChat(LobbyApiRefT* pLobbyApi, const char* pData, s32 iCode)
+{
+    u32 uKind = 0x63686174; // chat
+    const u32 uFlags = (u32)TagFieldGetFlags(TagFieldFind(pData, "F"), 0);
+    if ((uFlags & 0x4) != 0)
+    {
+        uKind = 0x63617374; // cast
+    }
+    if ((uFlags & 0x10000) != 0)
+    {
+        uKind = 0x70726976; // priv
+    }
+    LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_CHAT,
+                           (s32)uKind, iCode, pData);
+    return 0;
+}
+
+static s32 _LobbyApiAsyncWho(LobbyApiRefT* pLobbyApi, const char* pData, s32 iCode)
+{
+    LobbyApiExtractUserRecord(&pLobbyApi->user, pData);
+    TagFieldGetStructure(TagFieldFind(pData, "C"), &pLobbyApi->roomcrit,
+                         sizeof(pLobbyApi->roomcrit), "l*");
+    const s32 iRoomIdent = TagFieldGetNumber(TagFieldFind(pData, "RI"), 0);
+    const s32 iPopulation = TagFieldGetNumber(TagFieldFind(pData, "RT"), 0);
+    const s32 iGameCount = TagFieldGetNumber(TagFieldFind(pData, "RG"), -1);
+    const s32 iGamePopulation = TagFieldGetNumber(TagFieldFind(pData, "RGC"), -1);
+
+    if (pLobbyApi->UserSet.iIdent != pLobbyApi->user.iUserSetIdent)
+    {
+        memset(&pLobbyApi->UserSet, 0, sizeof(pLobbyApi->UserSet));
+    }
+    LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                           0x75736572, iCode, pData); // user
+
+    if (iRoomIdent != pLobbyApi->roomidx)
+    {
+        char strRoomName[36];
+        TagFieldGetString(TagFieldFind(pData, "RM"), strRoomName,
+                          sizeof(strRoomName), "");
+        const s32 iRoomFlags = TagFieldGetFlags(TagFieldFind(pData, "RF"), 0);
+
+        pLobbyApi->roomidx = iRoomIdent;
+        LobbyApiPopul(pLobbyApi, iRoomIdent, iPopulation,
+                      iGameCount, iGamePopulation);
+        ds_strnzcpy(pLobbyApi->roomname, strRoomName, sizeof(pLobbyApi->roomname));
+        pLobbyApi->roomflags = iRoomFlags;
+        LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                               0x6d6f7665, 0, pLobbyApi->roomname); // move
+        LobbyApiListFlush(pLobbyApi, 1);
+        LobbyApiListFlush(pLobbyApi, 4);
+    }
+    return 0;
+}
+
+static s32 _LobbyApiAsyncRooms(LobbyApiRefT* pLobbyApi, const char* pData, s32 iCode)
+{
+    HasherRef* pHash = LobbyApiListGetHash(pLobbyApi, 0);
+    if (pHash == NULL)
+    {
+        return 0;
+    }
+
+    DispListRef* pDisp = LobbyApiListGetDisp(pLobbyApi, 0);
+    if (TagFieldFind(pData, "N") != NULL)
+    {
+        LobbyApiRoomRecordPrefixT* pRoom = (LobbyApiRoomRecordPrefixT*)DirtyMemAlloc(
+            sizeof(*pRoom), KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+        LobbyApiExtractRoomRecord(pRoom, pData);
+        DispListT* pItem = LobbyApiListFindByName(pLobbyApi, 0, pRoom->strName);
+        s32 iOperation;
+        if (pItem != NULL)
+        {
+            LobbyApiRoomRecordPrefixT* pOldRoom =
+                (LobbyApiRoomRecordPrefixT*)DispListGet(pDisp, pItem);
+            if ((pRoom->iIdent == 0) && (pOldRoom->iIdent != 0))
+            {
+                DirtyMemFree(pRoom, KI_LOBBY_LIST_RECORD_MEMID,
+                             pLobbyApi->iMemGroup);
+                return 0;
+            }
+            HashNumDel(pHash, pOldRoom->iIdent);
+            DirtyMemFree(pOldRoom, KI_LOBBY_LIST_RECORD_MEMID,
+                         pLobbyApi->iMemGroup);
+            DispListSet(pDisp, pItem, pRoom);
+            HashNumAdd(pHash, pRoom->iIdent, pItem);
+            iOperation = 0;
+        }
+        else
+        {
+            if (pRoom->iIdent == 0)
+            {
+                --pLobbyApi->iAutoRoomID;
+                pRoom->iIdent = pLobbyApi->iAutoRoomID;
+            }
+            pItem = DispListAdd(pDisp, pRoom);
+            HashNumAdd(pHash, pRoom->iIdent, pItem);
+            iOperation = 1;
+        }
+        LobbyApiListObjectUpdate(pLobbyApi, 0, pRoom, iOperation);
+        LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                               0x2b726f6d, iCode, pData); // +rom
+        return 0;
+    }
+
+    const s32 iRoomIdent = TagFieldGetNumber(TagFieldFind(pData, "I"), -1);
+    if (iRoomIdent != 0)
+    {
+        DispListT* pItem = (DispListT*)HashNumFind(pHash, iRoomIdent);
+        if (pItem != NULL)
+        {
+            LobbyApiRoomRecordPrefixT* pRoom =
+                (LobbyApiRoomRecordPrefixT*)DispListGet(pDisp, pItem);
+            if ((pRoom->iFlags & 2) != 0)
+            {
+                HashNumDel(pHash, iRoomIdent);
+                --pLobbyApi->iAutoRoomID;
+                pRoom->iIdent = pLobbyApi->iAutoRoomID;
+                DispListSet(pDisp, pItem, pRoom);
+                HashNumAdd(pHash, pRoom->iIdent, pItem);
+                LobbyApiListObjectUpdate(pLobbyApi, 0, pRoom, 0);
+            }
+            else
+            {
+                HashNumDel(pHash, iRoomIdent);
+                pRoom = (LobbyApiRoomRecordPrefixT*)DispListDel(pDisp, pItem);
+                LobbyApiListObjectUpdate(pLobbyApi, 0, pRoom, -1);
+                DirtyMemFree(pRoom, KI_LOBBY_LIST_RECORD_MEMID,
+                             pLobbyApi->iMemGroup);
+            }
+        }
+    }
+    return 0;
+}
+
+static s32 _LobbyApiAsyncPlayList(LobbyApiRefT* pLobbyApi, const char* pData,
+                                  s32 iCode, s32 iListType,
+                                  bool bNotifyWhenUnallocated,
+                                  bool bRequireNonnegativeDelete)
+{
+    HasherRef* pHash = LobbyApiListGetHash(pLobbyApi, iListType);
+    if (pHash == NULL)
+    {
+        if (bNotifyWhenUnallocated)
+        {
+            LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                                   0x676c7374, iCode, pData); // glst
+        }
+        return 0;
+    }
+
+    DispListRef* pDisp = LobbyApiListGetDisp(pLobbyApi, iListType);
+    if (TagFieldFind(pData, "NAME") != NULL)
+    {
+        LobbyApiPlayT* pPlay = (LobbyApiPlayT*)DirtyMemAlloc(
+            sizeof(*pPlay), KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+        LobbyApiExtractPlayRecord(pPlay, pData);
+        DispListT* pItem = (DispListT*)HashNumFind(pHash, pPlay->iIdent);
+        s32 iOperation;
+        if (pItem != NULL)
+        {
+            LobbyApiPlayT* pOldPlay = (LobbyApiPlayT*)DispListGet(pDisp, pItem);
+            memcpy(pOldPlay, pPlay, sizeof(*pPlay));
+            DispListSet(pDisp, pItem, pOldPlay);
+            DirtyMemFree(pPlay, KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+            pPlay = pOldPlay;
+            iOperation = 0;
+        }
+        else
+        {
+            pItem = DispListAdd(pDisp, pPlay);
+            HashNumAdd(pHash, pPlay->iIdent, pItem);
+            iOperation = 1;
+        }
+        LobbyApiListObjectUpdate(pLobbyApi, iListType, pPlay, iOperation);
+    }
+    else
+    {
+        const s32 iPlayIdent = TagFieldGetNumber(TagFieldFind(pData, "IDENT"), -1);
+        if ((!bRequireNonnegativeDelete) || (iPlayIdent >= 0))
+        {
+            DispListT* pItem = (DispListT*)HashNumFind(pHash, iPlayIdent);
+            if (pItem != NULL)
+            {
+                HashNumDel(pHash, iPlayIdent);
+                LobbyApiPlayT* pPlay = (LobbyApiPlayT*)DispListDel(pDisp, pItem);
+                LobbyApiListObjectUpdate(pLobbyApi, iListType, pPlay, -1);
+                DirtyMemFree(pPlay, KI_LOBBY_LIST_RECORD_MEMID,
+                             pLobbyApi->iMemGroup);
+            }
+        }
+    }
+    return 0;
+}
+
+static s32 _LobbyApiAsyncRoomsPopulation(LobbyApiRefT* pLobbyApi,
+                                         const char* pData, s32 iCode)
+{
+    (void)iCode;
+    if (LobbyApiListGetHash(pLobbyApi, 0) == NULL)
+    {
+        return 0;
+    }
+
+    char strRooms[768];
+    char strPopulation[384];
+    char strGamePopulation[384];
+    TagFieldGetString(TagFieldFind(pData, "Z"), strRooms, sizeof(strRooms), "");
+    TagFieldGetString(TagFieldFind(pData, "G"), strPopulation,
+                      sizeof(strPopulation), "");
+    TagFieldGetString(TagFieldFind(pData, "GC"), strGamePopulation,
+                      sizeof(strGamePopulation), "");
+
+    char* pRoomCursor = strRooms;
+    char* pPopulationCursor = strPopulation;
+    char* pGamePopulationCursor = strGamePopulation;
+    while (*pRoomCursor != '\0')
+    {
+        const s32 iRoomIdent = (s8)*pRoomCursor;
+        if (iRoomIdent < '0')
+        {
+            break;
+        }
+
+        s32 iRoomValue = 0;
+        s32 iCharacter = (s8)*pRoomCursor;
+        do
+        {
+            if (iCharacter > '9')
+            {
+                break;
+            }
+            ++pRoomCursor;
+            iRoomValue = (iCharacter & 0xf) + 10 * iRoomValue;
+            iCharacter = (s8)*pRoomCursor;
+        }
+        while (iCharacter >= '0');
+        if (iRoomValue == 0)
+        {
+            break;
+        }
+        if (*pRoomCursor != '\0')
+        {
+            ++pRoomCursor;
+        }
+
+        s32 iPopulation = 0;
+        while (((s8)*pRoomCursor >= '0') && ((s8)*pRoomCursor <= '9'))
+        {
+            iPopulation = (((s8)*pRoomCursor & 0xf) + 10 * iPopulation);
+            ++pRoomCursor;
+        }
+        if (*pRoomCursor != '\0')
+        {
+            ++pRoomCursor;
+        }
+
+        s32 iGameCount = 0;
+        while (((s8)*pPopulationCursor >= '0') &&
+               ((s8)*pPopulationCursor <= '9'))
+        {
+            iGameCount = (((s8)*pPopulationCursor & 0xf) + 10 * iGameCount);
+            ++pPopulationCursor;
+        }
+        if (*pPopulationCursor != '\0')
+        {
+            ++pPopulationCursor;
+        }
+
+        s32 iGamePopulation = 0;
+        while (((s8)*pGamePopulationCursor >= '0') &&
+               ((s8)*pGamePopulationCursor <= '9'))
+        {
+            iGamePopulation = (((s8)*pGamePopulationCursor & 0xf) +
+                               10 * iGamePopulation);
+            ++pGamePopulationCursor;
+        }
+        if (*pGamePopulationCursor != '\0')
+        {
+            ++pGamePopulationCursor;
+        }
+
+        LobbyApiPopul(pLobbyApi, iRoomValue, iPopulation,
+                      iGameCount, iGamePopulation);
+    }
+    return 0;
+}
+
+static s32 _LobbyApiAsyncUsers(LobbyApiRefT* pLobbyApi, const char* pData, s32 iCode)
+{
+    (void)iCode;
+    HasherRef* pHash = LobbyApiListGetHash(pLobbyApi, 1);
+    if ((pHash == NULL) || (TagFieldGetNumber(TagFieldFind(pData, "I"), -1) < 0))
+    {
+        return 0;
+    }
+
+    DispListRef* pDisp = LobbyApiListGetDisp(pLobbyApi, 1);
+    if (TagFieldFind(pData, "N") != NULL)
+    {
+        LobbyApiUserT* pUser = (LobbyApiUserT*)DirtyMemAlloc(
+            sizeof(*pUser), KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+        LobbyApiExtractUserRecord(pUser, pData);
+        DispListT* pItem = (DispListT*)HashNumFind(pHash, pUser->ident);
+        s32 iOperation;
+        if (pItem != NULL)
+        {
+            LobbyApiUserT* pOldUser = (LobbyApiUserT*)DispListGet(pDisp, pItem);
+            memcpy(pOldUser, pUser, sizeof(*pUser));
+            DispListSet(pDisp, pItem, pOldUser);
+            DirtyMemFree(pUser, KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+            pUser = pOldUser;
+            iOperation = 0;
+        }
+        else
+        {
+            pItem = DispListAdd(pDisp, pUser);
+            HashNumAdd(pHash, pUser->ident, pItem);
+            iOperation = 1;
+        }
+        if (((u32)pUser->flags & 0x200000) != 0)
+        {
+            memcpy(&pLobbyApi->user, pUser, sizeof(*pUser));
+        }
+        LobbyApiListObjectUpdate(pLobbyApi, 1, pUser, iOperation);
+    }
+    else
+    {
+        const s32 iUserIdent = TagFieldGetNumber(TagFieldFind(pData, "I"), -1);
+        DispListT* pItem = (DispListT*)HashNumFind(pHash, iUserIdent);
+        if (pItem != NULL)
+        {
+            HashNumDel(pHash, iUserIdent);
+            LobbyApiUserT* pUser = (LobbyApiUserT*)DispListDel(pDisp, pItem);
+            LobbyApiListObjectUpdate(pLobbyApi, 1, pUser, -1);
+            DirtyMemFree(pUser, KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+        }
+    }
+
+    const s32 iGamePopulation = TagFieldGetNumber(TagFieldFind(pData, "R"), 0);
+    const s32 iGameCount = TagFieldGetNumber(TagFieldFind(pData, "RG"), -1);
+    const s32 iPopulation = TagFieldGetNumber(TagFieldFind(pData, "RGC"), -1);
+    return LobbyApiPopul(pLobbyApi, pLobbyApi->roomidx,
+                         iGamePopulation, iGameCount, iPopulation);
+}
+
+static s32 _LobbyApiAsyncUserSets(LobbyApiRefT* pLobbyApi, const char* pData,
+                                  s32 iCode)
+{
+    (void)iCode;
+    HasherRef* pHash = LobbyApiListGetHash(pLobbyApi, 9);
+    if (pHash == NULL)
+    {
+        return 0;
+    }
+
+    LobbyApiUserSetT* pUserSet = (LobbyApiUserSetT*)DirtyMemAlloc(
+        sizeof(*pUserSet), KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+    LobbyApiExtractUserSet(pUserSet, pData);
+    DispListRef* pDisp = LobbyApiListGetDisp(pLobbyApi, 9);
+    DispListT* pItem = (DispListT*)HashStrFind(pHash, pUserSet->strName);
+    s32 iOperation;
+    if (pItem != NULL)
+    {
+        LobbyApiUserSetT* pOldSet = (LobbyApiUserSetT*)DispListGet(pDisp, pItem);
+        memcpy(pOldSet, pUserSet, sizeof(*pUserSet));
+        DispListSet(pDisp, pItem, pOldSet);
+        DirtyMemFree(pUserSet, KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+        pUserSet = pOldSet;
+        iOperation = 0;
+    }
+    else
+    {
+        pItem = DispListAdd(pDisp, pUserSet);
+        HashStrAdd(pHash, pUserSet->strName, pItem);
+        iOperation = 1;
+    }
+    LobbyApiListObjectUpdate(pLobbyApi, 9, pUserSet, iOperation);
+    return 0;
+}
+
+static s32 _LobbyApiAsyncUserSet(LobbyApiRefT* pLobbyApi, const char* pData,
+                                 s32 iCode)
+{
+    const s32 iIdent = TagFieldGetNumber(TagFieldFind(pData, "I"), 0);
+    if (TagFieldFind(pData, "N") != NULL)
+    {
+        if ((pLobbyApi->UserSet.iIdent == 0) ||
+            (pLobbyApi->UserSet.iIdent == iIdent))
+        {
+            LobbyApiExtractUserSet(&pLobbyApi->UserSet, pData);
+        }
+    }
+    else if (pLobbyApi->UserSet.iIdent == iIdent)
+    {
+        memset(&pLobbyApi->UserSet, 0, sizeof(pLobbyApi->UserSet));
+    }
+    LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                           0x75736574, iCode, pData); // uset
+    return 0;
+}
+
+static s32 _LobbyApiAsyncUserSetMembers(LobbyApiRefT* pLobbyApi,
+                                        const char* pData, s32 iCode)
+{
+    (void)iCode;
+    HasherRef* pHash = LobbyApiListGetHash(pLobbyApi, 10);
+    if (pHash == NULL)
+    {
+        return 0;
+    }
+
+    DispListRef* pDisp = LobbyApiListGetDisp(pLobbyApi, 10);
+    if (TagFieldFind(pData, "N") != NULL)
+    {
+        LobbyApiPrintfCode(pLobbyApi, "lobbyapiasync: received +usm - %s\n", pData);
+        LobbyApiUserSetMemberT* pMember = (LobbyApiUserSetMemberT*)DirtyMemAlloc(
+            sizeof(*pMember), KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+        LobbyApiExtractUserSetMember(pMember, pData);
+        DispListT* pItem = (DispListT*)HashNumFind(pHash, pMember->iIdent);
+        s32 iOperation;
+        if (pItem != NULL)
+        {
+            LobbyApiUserSetMemberT* pOldMember =
+                (LobbyApiUserSetMemberT*)DispListGet(pDisp, pItem);
+            memcpy(pOldMember, pMember, sizeof(*pMember));
+            DispListSet(pDisp, pItem, pOldMember);
+            DirtyMemFree(pMember, KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+            pMember = pOldMember;
+            iOperation = 0;
+        }
+        else
+        {
+            pItem = DispListAdd(pDisp, pMember);
+            HashNumAdd(pHash, pMember->iIdent, pItem);
+            iOperation = 1;
+        }
+        LobbyApiListObjectUpdate(pLobbyApi, 10, pMember, iOperation);
+    }
+    else
+    {
+        const s32 iIdent = TagFieldGetNumber(TagFieldFind(pData, "I"), 0);
+        DispListT* pItem = (DispListT*)HashNumFind(pHash, iIdent);
+        if (pItem != NULL)
+        {
+            HashNumDel(pHash, iIdent);
+            LobbyApiUserSetMemberT* pMember =
+                (LobbyApiUserSetMemberT*)DispListDel(pDisp, pItem);
+            LobbyApiListObjectUpdate(pLobbyApi, 10, pMember, -1);
+            DirtyMemFree(pMember, KI_LOBBY_LIST_RECORD_MEMID,
+                         pLobbyApi->iMemGroup);
+        }
+    }
+
+    // ARTIST's call target at 0x82AD5228 is the ICF-folded one-instruction
+    // accessor lwz r3,4(r3); HasherRef::items is the field at that offset.
+    pLobbyApi->UserSet.iCount = pHash->items;
+    return pLobbyApi->UserSet.iCount;
+}
+
+static s32 _LobbyApiAsyncServerStats(LobbyApiRefT* pLobbyApi,
+                                     const char* pData, s32 iCode)
+{
+    LobbyApiServerStatT* pStats = &pLobbyApi->serverStats;
+    pStats->iUpdate = 1;
+    pStats->uUsersInLobby = (u32)TagFieldGetNumber(
+        TagFieldFind(pData, "UIL"), (s32)pStats->uUsersInLobby);
+    pStats->uUsersInRooms = (u32)TagFieldGetNumber(
+        TagFieldFind(pData, "UIR"), (s32)pStats->uUsersInRooms);
+    pStats->uUsersInGames = (u32)TagFieldGetNumber(
+        TagFieldFind(pData, "UIG"), (s32)pStats->uUsersInGames);
+    pStats->uGamesInProgress = (u32)TagFieldGetNumber(
+        TagFieldFind(pData, "GIP"), (s32)pStats->uGamesInProgress);
+    pStats->uGamesCreated = (u32)TagFieldGetNumber(
+        TagFieldFind(pData, "GCR"), (s32)pStats->uGamesCreated);
+    pStats->uGamesCompleted = (u32)TagFieldGetNumber(
+        TagFieldFind(pData, "GCM"), (s32)pStats->uGamesCompleted);
+    LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                           0x73746174, iCode, pData); // stat
+    return 0;
+}
+
+static s32 _LobbyApiAsyncRanks(LobbyApiRefT* pLobbyApi, const char* pData,
+                               s32 iCode)
+{
+    (void)iCode;
+    const s32 iListType = pLobbyApi->snapchan;
+    if ((iListType < 5) || (iListType > 8))
+    {
+        return 0;
+    }
+
+    HasherRef* pHash = LobbyApiListGetHash(pLobbyApi, iListType);
+    if (pHash == NULL)
+    {
+        return 0;
+    }
+
+    LobbyApiRankRecordT* pRank = (LobbyApiRankRecordT*)DirtyMemAlloc(
+        sizeof(*pRank), KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+    LobbyApiExtractRankRecord(pRank, pData, pLobbyApi->user.name);
+    DispListRef* pDisp = LobbyApiListGetDisp(pLobbyApi, iListType);
+    DispListT* pItem = (DispListT*)HashStrFind(pHash, pRank->strName);
+    s32 iOperation;
+    if (pItem != NULL)
+    {
+        LobbyApiRankRecordT* pOldRank = (LobbyApiRankRecordT*)DispListGet(pDisp, pItem);
+        memcpy(pOldRank, pRank, sizeof(*pRank));
+        DispListSet(pDisp, pItem, pOldRank);
+        DirtyMemFree(pRank, KI_LOBBY_LIST_RECORD_MEMID, pLobbyApi->iMemGroup);
+        pRank = pOldRank;
+        iOperation = 0;
+    }
+    else
+    {
+        pItem = DispListAdd(pDisp, pRank);
+        HashStrAdd(pHash, pRank->strName, pItem);
+        iOperation = 1;
+    }
+    LobbyApiListObjectUpdate(pLobbyApi, iListType, pRank, iOperation);
+    return 0;
+}
+
+static s32 _LobbyApiAsyncGameList4(LobbyApiRefT* pLobbyApi,
+                                   const char* pData, s32 iCode)
+{
+    return _LobbyApiAsyncPlayList(pLobbyApi, pData, iCode, 4, false, true);
+}
+
+static s32 _LobbyApiAsyncGameList3(LobbyApiRefT* pLobbyApi,
+                                   const char* pData, s32 iCode)
+{
+    return _LobbyApiAsyncPlayList(pLobbyApi, pData, iCode, 3, true, false);
+}
+
+typedef s32 (LobbyApiAsyncHandlerT)(LobbyApiRefT*, const char*, s32);
+
+struct LobbyApiAsyncEntryT
+{
+    s32 iRequestKind;
+    s32 iEventKind;
+    LobbyApiAsyncHandlerT* pHandler;
+};
+
+static const LobbyApiAsyncEntryT _LobbyApiAsyncEntries[] =
+{
+    { 0x2b736573, 0x706c6179, NULL }, // +ses -> play
+    { 0x2b6d676d, 0x67616d65, NULL }, // +mgm -> game
+    { 0x2b6d7367, 0, _LobbyApiAsyncChat },
+    { 0x2b77686f, 0, _LobbyApiAsyncWho },
+    { 0x2b726f6d, 0, _LobbyApiAsyncRooms },
+    { 0x2b706f70, 0, _LobbyApiAsyncRoomsPopulation },
+    { 0x2b757372, 0, _LobbyApiAsyncUsers },
+    { 0x2b757373, 0, _LobbyApiAsyncUserSets },
+    { 0x2b757374, 0, _LobbyApiAsyncUserSet },
+    { 0x2b75736d, 0, _LobbyApiAsyncUserSetMembers },
+    { 0x2b736e70, 0, _LobbyApiAsyncRanks },
+    { 0x2b61676d, 0, _LobbyApiAsyncGameList4 },
+    { 0x2b67616d, 0, _LobbyApiAsyncGameList3 },
+    { 0x2b737374, 0, _LobbyApiAsyncServerStats },
+    { 0x2b627564, 0x62756464, NULL }, // +bud -> budd
+    { 0x2b6d6c67, 0x6d6c6f67, NULL }, // +mlg -> mlog
+    { 0x2b6b6f68, 0x6b6f7468, NULL }, // +koh -> koth
+    { 0x2b6b696b, 0x6b69636b, NULL }, // +kik -> kick
+    { 0x2b63746c, 0x6374726c, NULL }, // +ctl -> ctrl
+    { 0x2b696c73, 0x696c7367, NULL }, // +ils -> ilsg
+    { 0, 0, NULL }
+};
+
+extern "C" s32 LobbyApiAsyncProcess(LobbyApiRefT* pLobbyApi, const char* pData,
+                                      s32 iKind, s32 iCode)
+{
+    const LobbyApiAsyncEntryT* pEntry = _LobbyApiAsyncEntries;
+    while (pEntry->iRequestKind != 0)
+    {
+        if (pEntry->iRequestKind == iKind)
+        {
+            if (pEntry->pHandler != NULL)
+            {
+                return pEntry->pHandler(pLobbyApi, pData, iCode);
+            }
+            LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
+                                   pEntry->iEventKind, iCode, pData);
+            return 0;
+        }
+        ++pEntry;
+    }
+
+    return LobbyApiPrintfCode(
+        pLobbyApi,
+        "lobbyapi: warning, unhandled async server message '%c%c%c%c'\n",
+        ((u32)iKind >> 24) & 0xff, ((u32)iKind >> 16) & 0xff,
+        ((u32)iKind >> 8) & 0xff, (u32)iKind & 0xff);
+}
+
+CGS_STATIC_ASSERT(sizeof(XOVERLAPPED) == 28, "XDK XOVERLAPPED size");
+CGS_STATIC_ASSERT(sizeof(XUSER_CONTEXT) == 8, "XDK XUSER_CONTEXT size");
+CGS_STATIC_ASSERT(sizeof(XSESSION_SEARCHRESULT) == 92,
+                  "XDK XSESSION_SEARCHRESULT stride");
+CGS_STATIC_ASSERT(offsetof(XSESSION_SEARCHRESULT, info) +
+                  offsetof(XSESSION_INFO, hostAddress) +
+                  offsetof(XNADDR, abEnet) == 0x12,
+                  "XDK XNADDR abEnet ARTIST offset");
+
+static const s32 KI_LOBBY_XENON_MEMID = 0x6c617070; // lapp
+
+static s32 _LobbyApiXenonApplyFilter(LobbyApiXenonRefT* pXenon, s32 iKind,
+                                     const char* pField, const char* pRequest,
+                                     s32 iFilterAction, s32 iCallbackID)
+{
+    char strProfane[32];
+    memset(strProfane, 0, sizeof(strProfane));
+    const char* pConfig = (const char*)LobbyApiInfo(pXenon->pLobbyApi, 0x636f6e66); // conf
+    TagFieldGetString(TagFieldFind(pConfig, "PROFANE_STRING"), strProfane,
+                      sizeof(strProfane), "");
+    ProtoFilterControl(pXenon->pProtoFilter, 0x70737472, 0, 0, strProfane); // pstr
+    ProtoFilterApplyFilter(pXenon->pProtoFilter, iFilterAction,
+                           pXenon->strFilterText);
+
+    char strModifiedRequest[1024];
+    TagFieldDupl(strModifiedRequest, sizeof(strModifiedRequest), pRequest);
+    TagFieldSetString(strModifiedRequest, sizeof(strModifiedRequest), pField,
+                      pXenon->strFilterText);
+    const char* pWireRequest = strModifiedRequest;
+
+    if ((u32)iKind == 0x726f6f6d) // room
+    {
+        char strCategory[32];
+        char strName[32];
+        char strQualifiedName[64];
+        TagFieldGetString(TagFieldFind(strModifiedRequest, "CAT"),
+                          strCategory, sizeof(strCategory), "");
+        TagFieldGetString(TagFieldFind(strModifiedRequest, "NAME"),
+                          strName, sizeof(strName), "");
+        ds_snzprintf(strQualifiedName, sizeof(strQualifiedName), "%s.%s",
+                     strCategory, strName);
+
+        char strRoomRequest[256];
+        TagFieldDupl(strRoomRequest, sizeof(strRoomRequest), strModifiedRequest);
+        TagFieldSetString(strRoomRequest, sizeof(strRoomRequest), "NAME",
+                          strQualifiedName);
+        TagFieldDelete(strRoomRequest, "CAT");
+        pWireRequest = strRoomRequest;
+        LobbyApiAriesRequest(pXenon->pLobbyApi, iKind, pWireRequest, iCallbackID);
+        return 0;
+    }
+
+    LobbyApiAriesRequest(pXenon->pLobbyApi, iKind, pWireRequest, iCallbackID);
+    return 0;
+}
+
+static s32 _LobbyApiXenonQueueFilter(LobbyApiXenonRefT* pXenon, s32 iKind,
+                                     const char* pRequest, const char* pField,
+                                     s32 iFilterAction, s32 iCallbackID)
+{
+    s32 iSlot = 0;
+    while ((iSlot < 2) && pXenon->aFilterRequests[iSlot].bPending)
+    {
+        ++iSlot;
+    }
+
+    if (iSlot >= 2)
+    {
+        NetPrintfCode("lobbyapi: error initiating xenon string verification - text will be squelched\n");
+        _LobbyApiXenonApplyFilter(pXenon, iKind, pField, pRequest, 1, iCallbackID);
+        return 1;
+    }
+
+    LobbyApiXenonFilterRequestT* pRequestState = &pXenon->aFilterRequests[iSlot];
+    pRequestState->iCallbackID = iCallbackID;
+    pRequestState->iKind = iKind;
+    TagFieldDupl(pRequestState->strRequest, sizeof(pRequestState->strRequest), pRequest);
+    ds_strnzcpy(pRequestState->strField, pField, sizeof(pRequestState->strField));
+    pRequestState->bSquelchOnError = (u8)iFilterAction;
+
+    TagFieldGetString(TagFieldFind(pRequest, pField), pXenon->strFilterText,
+                      sizeof(pXenon->strFilterText), "");
+    NetPrintfCode("lobbyapixenon: [%d] validating field %s in '%c%c%c%c' request\n",
+                  iSlot, pField, ((u32)iKind >> 24) & 0xff,
+                  ((u32)iKind >> 16) & 0xff, ((u32)iKind >> 8) & 0xff,
+                  (u32)iKind & 0xff);
+    const s32 iRequestResult = ProtoFilterRequest(
+        pXenon->pProtoFilter, pXenon->strFilterText,
+        &pRequestState->iRequest);
+    if (iRequestResult != -1)
+    {
+        NetPrintfCode("lobbyapi: error initiating xenon string verification - text will be squelched\n");
+        _LobbyApiXenonApplyFilter(pXenon, iKind, pField, pRequest, 1, iCallbackID);
+    }
+    else
+    {
+        pRequestState->bPending = 1;
+    }
+    return 1;
+}
+
+static s32 _LobbyApiXenonSearch(LobbyApiXenonRefT* pXenon, s32 iKind,
+                                const char* pRequest, s32 iCallbackID)
+{
+    LobbyApiXenonSearchStateT* pSearch = &pXenon->Search;
+    if (pSearch->bPending != 0)
+    {
+        return 0;
+    }
+
+    const char* pConfig = (const char*)LobbyApiInfo(pXenon->pLobbyApi,
+                                                    0x636f6e66); // conf
+    const char* pMachint = TagFieldFind(pConfig, "MACHINT");
+    const s32 iMaxResults = TagFieldGetNumber(pMachint, 5);
+    if ((iMaxResults == 0) || (TagFieldFind(pRequest, "MACHINT") != NULL))
+    {
+        return 0;
+    }
+
+    const s32 iRequestMode = TagFieldGetNumber(TagFieldFind(pRequest, "XNMODE"), 0);
+    const s32 iMode = TagFieldGetNumber(TagFieldFind(pConfig, "XNMODE"), iRequestMode);
+    const s32 iRequestProcedure = TagFieldGetNumber(
+        TagFieldFind(pRequest, "XNPROC"), 0);
+    const s32 iProcedure = TagFieldGetNumber(TagFieldFind(pConfig, "XNPROC"),
+                                             iRequestProcedure);
+    const s32 bRank = (TagFieldGetNumber(TagFieldFind(pRequest, "XNRANK"), 1) != 0);
+    s32 iContextCount = TagFieldGetNumber(TagFieldFind(pRequest, "XNCONTEXTS"), 0);
+    if (iContextCount > 10)
+    {
+        NetPrintfCode("lobbyapixenon: clamping %d contexts to max %d\n",
+                      iContextCount, 10);
+        iContextCount = 10;
+    }
+
+    ds_strnzcpy(pSearch->strRequest, pRequest, sizeof(pSearch->strRequest));
+    char strUserName[16];
+    LobbyApiStatus(pXenon->pLobbyApi, 0x70657273, strUserName, sizeof(strUserName));
+    const s32 iUserIndex = NetConnQuery(strUserName, 0);
+    if (iUserIndex < 0)
+    {
+        NetPrintfCode("lobbyapixenon: unable to dereference user index for session search - user not currently logged in?\n");
+        return 0;
+    }
+
+    DWORD uRequiredBufferSize = 0;
+    const DWORD uSearchResult = XSessionSearch(
+        (DWORD)iProcedure, (DWORD)iUserIndex, (DWORD)iMaxResults,
+        0, 0, 0, NULL, &uRequiredBufferSize, NULL, NULL);
+    if ((uSearchResult != ERROR_INSUFFICIENT_BUFFER) ||
+        (uRequiredBufferSize == 0))
+    {
+        NetPrintfCode("lobbyapixenon: XSessionSearch() failed: %s\n",
+                      DirtyErrGetName((s32)uSearchResult));
+        return 0;
+    }
+
+    if (uRequiredBufferSize != pSearch->uResultsBufferSize)
+    {
+        if (pSearch->pResultsBuffer != NULL)
+        {
+            NetPrintfCode("lobbyapixenon: freeing old search buffer (size=%d)\n",
+                          pSearch->uResultsBufferSize);
+            DirtyMemFree(pSearch->pResultsBuffer, KI_LOBBY_XENON_MEMID,
+                         pXenon->iMemGroup);
+        }
+        NetPrintfCode("lobbyapixenon: allocating new search buffer (size=%d)\n",
+                      uRequiredBufferSize);
+        pSearch->pResultsBuffer = DirtyMemAlloc(
+            (s32)uRequiredBufferSize, KI_LOBBY_XENON_MEMID, pXenon->iMemGroup);
+        pSearch->uResultsBufferSize = uRequiredBufferSize;
+    }
+    memset(pSearch->pResultsBuffer, 0, pSearch->uResultsBufferSize);
+
+    if (iContextCount <= 0)
+    {
+        iContextCount = 2;
+        pSearch->aContexts[0].uContextID = 0x800a;
+        pSearch->aContexts[0].uValue = (u32)!bRank;
+        pSearch->aContexts[1].uContextID = 0x800b;
+        pSearch->aContexts[1].uValue = (u32)iMode;
+    }
+    else
+    {
+        for (s32 iContext = 0; iContext < iContextCount; ++iContext)
+        {
+            char strContextName[32];
+            ds_snzprintf(strContextName, sizeof(strContextName),
+                         "XNCONTEXTID%d", iContext);
+            pSearch->aContexts[iContext].uContextID = (u32)TagFieldGetNumber(
+                TagFieldFind(pRequest, strContextName), 0);
+            ds_snzprintf(strContextName, sizeof(strContextName),
+                         "XNCONTEXTVALUE%d", iContext);
+            pSearch->aContexts[iContext].uValue = (u32)TagFieldGetNumber(
+                TagFieldFind(pRequest, strContextName), 0);
+        }
+    }
+
+    const DWORD uStartResult = XSessionSearch(
+        (DWORD)iProcedure, (DWORD)iUserIndex, (DWORD)iMaxResults,
+        0, (WORD)iContextCount, NULL,
+        (PXUSER_CONTEXT)pSearch->aContexts,
+        &pSearch->uResultsBufferSize,
+        (PXSESSION_SEARCHRESULT_HEADER)pSearch->pResultsBuffer,
+        (PXOVERLAPPED)pSearch->aOverlapped);
+    if (uStartResult != ERROR_IO_PENDING)
+    {
+        NetPrintfCode("lobbyapixenon: XSessionSearch() failed: %s\n",
+                      DirtyErrGetName((s32)uStartResult));
+        return 0;
+    }
+
+    NetPrintfCode("lobbyapixenon: search started\n");
+    pSearch->iKind = iKind;
+    pSearch->iCallbackID = iCallbackID;
+    pSearch->bPending = 1;
+    return 1;
+}
+
+static s32 _LobbyApiXenonSnoopMessageRequest(LobbyApiXenonRefT* pXenon,
+                                              const char* pRequest,
+                                              s32 iCallbackID)
+{
+    const u32 uAttributes = (u32)TagFieldGetFlags(TagFieldFind(pRequest, "ATTR"), 0);
+    if ((uAttributes & 8) == 0)
+    {
+        return 0;
+    }
+    if ((uAttributes & 0x4000) != 0)
+    {
+        return 0;
+    }
+
+    BOOL bPrivilege = FALSE;
+    if (XUserCheckPrivilege(0xff, (XPRIVILEGE_TYPE)0xfc, &bPrivilege) != ERROR_SUCCESS)
+    {
+        NetPrintfCode("lobbyapixenon: error trying to retrieve communications privilege\n");
+        return 0;
+    }
+    if (!bPrivilege)
+    {
+        NetPrintfCode("lobbyapixenon: squelching message as user does not have communications privilege\n");
+        return -1;
+    }
+
+    const char* pConfig = (const char*)LobbyApiInfo(pXenon->pLobbyApi,
+                                                    0x636f6e66); // conf
+    if (TagFieldGetNumber(TagFieldFind(pConfig, "XNFILT"), 1) == 0)
+    {
+        return 0;
+    }
+    return _LobbyApiXenonQueueFilter(pXenon, 0x6d657367, pRequest,
+                                     "TEXT", 1, iCallbackID); // msg
+}
+
+static s32 _LobbyApiXenonSnoopRoomRequest(LobbyApiXenonRefT* pXenon,
+                                           const char* pRequest,
+                                           s32 iCallbackID)
+{
+    if (TagFieldGetNumber(TagFieldFind(pRequest, "IGNPROFANE"), 0) == 1)
+    {
+        return 0;
+    }
+
+    char strModifiedRequest[256];
+    const char* pWireRequest = pRequest;
+    if (TagFieldFind(pRequest, "CAT") == NULL)
+    {
+        TagFieldDupl(strModifiedRequest, sizeof(strModifiedRequest), pRequest);
+        char strQualifiedName[64];
+        TagFieldGetString(TagFieldFind(strModifiedRequest, "NAME"),
+                          strQualifiedName, sizeof(strQualifiedName), "");
+        char* pSeparator = strchr(strQualifiedName, '.');
+        if (pSeparator != NULL)
+        {
+            *pSeparator = '\0';
+            TagFieldSetString(strModifiedRequest, sizeof(strModifiedRequest),
+                              "CAT", strQualifiedName);
+            TagFieldSetString(strModifiedRequest, sizeof(strModifiedRequest),
+                              "NAME", pSeparator + 1);
+            pWireRequest = strModifiedRequest;
+        }
+    }
+    return _LobbyApiXenonQueueFilter(pXenon, 0x726f6f6d, pWireRequest,
+                                     "NAME", 2, iCallbackID); // room
+}
+
+extern "C" LobbyApiXenonRefT* LobbyApiXenonCreate(LobbyApiRefT* pLobbyApi)
+{
+    const s32 iMemGroup = DirtyMemGroupQuery();
+    LobbyApiXenonRefT* pXenon = (LobbyApiXenonRefT*)DirtyMemAlloc(
+        sizeof(*pXenon), KI_LOBBY_XENON_MEMID, iMemGroup);
+    if (pXenon == NULL)
+    {
+        NetPrintfCode("lobbyapixenon: unable to allocate module state\n");
+        return NULL;
+    }
+
+    memset(pXenon, 0, sizeof(*pXenon));
+    pXenon->iMemGroup = iMemGroup;
+    pXenon->pLobbyApi = pLobbyApi;
+    pXenon->pProtoFilter = ProtoFilterCreate();
+    return pXenon;
+}
+
+extern "C" void LobbyApiXenonDestroy(LobbyApiXenonRefT* pXenon)
+{
+    if (pXenon->pProtoFilter != NULL)
+    {
+        ProtoFilterDestroy(pXenon->pProtoFilter);
+    }
+    if (pXenon->Search.pResultsBuffer != NULL)
+    {
+        DirtyMemFree(pXenon->Search.pResultsBuffer, KI_LOBBY_XENON_MEMID,
+                     pXenon->iMemGroup);
+    }
+    DirtyMemFree(pXenon, KI_LOBBY_XENON_MEMID, pXenon->iMemGroup);
+}
+
+extern "C" void LobbyApiXenonDisconnect(LobbyApiXenonRefT* pXenon)
+{
+    if (pXenon->pProtoFilter != NULL)
+    {
+        ProtoFilterRequestCancel(pXenon->pProtoFilter, -1);
+    }
+    memset(pXenon->aFilterRequests, 0, 2144);
+    if (pXenon->Search.bPending != 0)
+    {
+        if (XCancelOverlapped((PXOVERLAPPED)pXenon->Search.aOverlapped) != 0)
+        {
+            NetPrintfCode("lobbyapixenon: error cancelling overlapped operation\n");
+        }
+        pXenon->Search.bPending = 0;
+    }
+    memset(&pXenon->Search, 0, 2144);
+}
+
+extern "C" s32 LobbyApiXenonSnoopRequest(LobbyApiXenonRefT* pXenon, s32 iKind,
+                                           const char* pRequest, s32 iCallbackID)
+{
+    if (((u32)iKind == 0x6771776b) || ((u32)iKind == 0x67737461)) // gqwk/gsta
+    {
+        return _LobbyApiXenonSearch(pXenon, iKind, pRequest, iCallbackID);
+    }
+    if ((u32)iKind == 0x6d657367) // msg
+    {
+        return _LobbyApiXenonSnoopMessageRequest(pXenon, pRequest, iCallbackID);
+    }
+    if ((u32)iKind == 0x726f6f6d) // room
+    {
+        return _LobbyApiXenonSnoopRoomRequest(pXenon, pRequest, iCallbackID);
+    }
+    return 0;
+}
+
+static s32 _LobbyApiXenonSnoopMessageResponse(LobbyApiXenonRefT* pXenon,
+                                               const char* pData)
+{
+    BOOL bMuted = FALSE;
+    if (((u32)TagFieldGetFlags(TagFieldFind(pData, "F"), 0) & 8) != 0)
+    {
+        char strUserName[16];
+        LobbyApiStatus(pXenon->pLobbyApi, 0x70657273,
+                       strUserName, sizeof(strUserName)); // pers
+        const s32 iUserIndex = NetConnQuery(strUserName, 0);
+        if (iUserIndex >= 0)
+        {
+            BOOL bPrivilege = FALSE;
+            if (XUserCheckPrivilege(0xff, (XPRIVILEGE_TYPE)0xfc,
+                                    &bPrivilege) != ERROR_SUCCESS)
+            {
+                NetPrintfCode("lobbyapixenon: error trying to retrieve communications privilege\n");
+            }
+            else
+            {
+                bMuted = (bPrivilege == FALSE);
+            }
+            if (!bMuted)
+            {
+                XUID xuidRemoteTalker = 0;
+                TagFieldGetBinary(TagFieldFind(pData, "U"),
+                                  &xuidRemoteTalker, sizeof(xuidRemoteTalker));
+                XUserMuteListQuery((DWORD)iUserIndex, xuidRemoteTalker, &bMuted);
+            }
+        }
+    }
+
+    if (bMuted)
+    {
+        char strUserName[16];
+        TagFieldGetString(TagFieldFind(pData, "N"), strUserName,
+                          sizeof(strUserName), "");
+        NetPrintfCode("lobbyapi: muting message from user %s\n", strUserName);
+    }
+    return bMuted ? 1 : 0;
+}
+
+extern "C" s32 LobbyApiXenonSnoopResponse(LobbyApiXenonRefT* pXenon,
+                                            s32 iKind, s32 iCode,
+                                            const char* pData)
+{
+    (void)iCode;
+    if ((u32)iKind == 0x2b6d7367) // +msg
+    {
+        return _LobbyApiXenonSnoopMessageResponse(pXenon, pData);
+    }
+    return 0;
+}
+
+extern "C" s32 LobbyApiXenonUpdate(LobbyApiXenonRefT* pXenon)
+{
+    s32 iResult = 0;
+    for (s32 iIndex = 0; iIndex < 2; ++iIndex)
+    {
+        LobbyApiXenonFilterRequestT* pRequest = &pXenon->aFilterRequests[iIndex];
+        if (pRequest->bPending != 0)
+        {
+            const s32 iFilterResult = ProtoFilterResult(
+                pXenon->pProtoFilter, pRequest->iRequest);
+            if (iFilterResult != -1)
+            {
+                NetPrintfCode("lobbyapixenon: [%d] message validation complete\n",
+                              iIndex);
+                const s32 iAction = (iFilterResult != 0)
+                    ? pRequest->bSquelchOnError : 0;
+                _LobbyApiXenonApplyFilter(pXenon, pRequest->iKind,
+                                          pRequest->strField,
+                                          pRequest->strRequest, iAction,
+                                          pRequest->iCallbackID);
+                pRequest->bPending = 0;
+            }
+        }
+    }
+
+    LobbyApiXenonSearchStateT* pSearch = &pXenon->Search;
+    if (pSearch->bPending != 0)
+    {
+        const DWORD uSearchStatus = XGetOverlappedExtendedError(
+            (PXOVERLAPPED)pSearch->aOverlapped);
+        if (uSearchStatus != ERROR_IO_INCOMPLETE)
+        {
+            NetPrintfCode("lobbyapixenon: search complete\n");
+            XSESSION_SEARCHRESULT_HEADER* pResults =
+                (XSESSION_SEARCHRESULT_HEADER*)pSearch->pResultsBuffer;
+            const s32 iResultCount = (s32)pResults->dwSearchResults;
+            if (iResultCount >= 0)
+            {
+                TagFieldPrintf(pSearch->strRequest,
+                               sizeof(pSearch->strRequest), "~MACHINT=");
+                for (s32 iIndex = 0; iIndex < iResultCount; ++iIndex)
+                {
+                    char strMachineAddress[16];
+                    const BYTE* pEthernet =
+                        pResults->pResults[iIndex].info.hostAddress.abEnet;
+                    ds_snzprintf(strMachineAddress, sizeof(strMachineAddress),
+                                 "$%02x%02x%02x%02x%02x%02x",
+                                 pEthernet[0], pEthernet[1], pEthernet[2],
+                                 pEthernet[3], pEthernet[4], pEthernet[5]);
+                    TagFieldPrintf(pSearch->strRequest,
+                                   sizeof(pSearch->strRequest), ",%s",
+                                   strMachineAddress);
+                }
+            }
+            LobbyApiAriesRequest(pXenon->pLobbyApi, pSearch->iKind,
+                                 pSearch->strRequest, pSearch->iCallbackID);
+            iResult = 0;
+            pSearch->bPending = 0;
+        }
+    }
+    return iResult;
 }

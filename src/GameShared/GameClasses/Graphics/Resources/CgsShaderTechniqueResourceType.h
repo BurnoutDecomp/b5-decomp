@@ -11,7 +11,7 @@
 namespace CgsGraphics
 {
     class ShaderConstantHashTable;
-    class ShaderTechnique;
+    struct ShaderTechnique;
 }
 struct ShaderConstantsInternal;
 struct ShaderConstantsExternal;

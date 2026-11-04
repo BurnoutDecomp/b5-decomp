@@ -98,12 +98,15 @@ struct DrawRenderableDispatchThreadInfo
     u8              mu8ExcludeMeshBits;     // +0x04
     RenderableMesh* mpLastRenderableMesh;   // +0x08
 };
+CGS_STATIC_ASSERT((sizeof(DrawRenderableDispatchThreadInfo) == 12), "ARTIST object command trailer");
+CGS_STATIC_ASSERT((offsetof(DrawRenderableDispatchThreadInfo, mpLastRenderableMesh) == 8),
+    "ARTIST object command trailer mesh");
 
 // -----------------------------------------------------------------------------
 // CallbackFn (CgsDispatcherCommands.h:165) -- a command that re-invokes an
 // arbitrary callback over its custom section when interpreted.
-//   custom section: [+0] padding, [+2] fn pointer void(*)(void*,u32) ...
-// Interpret calls (word0+8 word) as fn(this+16, GetPacketLength()).
+// Interpret calls the native function pointer in header word 2 with the
+// custom section and packet length.
 // -----------------------------------------------------------------------------
 struct CallbackFn : public DispatchCommand
 {
@@ -127,20 +130,8 @@ struct DrawRenderable : public DispatchCommand
         sPreZNearThreshold.mV = __vspltw(__lvlx(&distance, 0), 0);
     }
 
-    // X360 0x827FA0D0. The Hex-Rays 34-arg signature is a struct-by-value artefact;
-    // the real source passes the per-object dispatch-thread-info + routing bytes by
-    // value. ARGUMENT ROLES PINNED FROM THE ASM (word1 packing + the trailer stores
-    // + DrawRenderable::Interpret's consumption; renderer_wave_log.md has the
-    // per-store decode -- the earlier "sort/exclude/final" naming was wrong):
-    //   word1 = opaqueList<<24 | technique<<16 | transparentList<<8 | frustumEnable
-    //   trailer DrawRenderableDispatchThreadInfo:
-    //     [0]=lbZOnly [1]=preZList [2]=instanceCount [3]=preZTechnique [4]=excludeMeshBits
-    // Positions are unchanged from the previous declaration, so existing call sites
-    // keep their (asm-pinned) argument VALUES.
-    // ⭐ Parameters 5 and 7 were NAMED the wrong way round until 2026-07-31: word1 is
-    // opaqueList<<24 | transparentList<<16 | technique<<8 | frustumEnable (Interpret
-    // @0x827FCE94 adds the list base to the top TWO bytes), so the 5th argument is the
-    // TRANSPARENT list and the 7th is the technique. See the note in Interpret.
+    // ARTIST 827FA0D0. Header word 1 packs opaque list, transparent list,
+    // technique and frustum enable. Words 2 and 3 point to the renderable and trailer.
     static bool AddToBin(const Renderable* lpRenderable, DispatchFrame* lpFrame,
                          bool lbMarkAllConstantsDirty, s8 li8OpaqueList, s8 li8TransparentList,
                          u8 lu8FrustumEnable, u8 lu8Technique, bool lbZOnly,

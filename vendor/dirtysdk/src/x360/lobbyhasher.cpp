@@ -1,34 +1,21 @@
 // DirtySDK 5.5.3 LobbyHasher: X360 ARTIST PPC32; DecFIGS declarations.
 #include "dirtymem.h"
+#include "lobbyapi_x360_internal.h"
 #include "lobbyname.h"
 #include <stddef.h>
 #include <string.h>
 
-struct HasherT
-{
- HasherT* next;
- void* data;
- union { s32 val; const char* ptr; } key;
-};
-struct HashEnumT { s32 idx; HasherT* curr; };
-typedef s32 (HasherCompareF)(const char*, const char*);
-struct HasherRef
-{
- s32 memgroup;
- s32 items;
- s32 flush;
- HashEnumT iter;
- s32 hashlen;
- HasherT** hashbuf;
- HasherT* list;
- HasherT* avail;
- HasherCompareF* compare;
-};
-typedef char HasherItemSize[(sizeof(HasherT)==12)?1:-1];
-typedef char HasherRefSize[(sizeof(HasherRef)==40)?1:-1];
-typedef char HasherHashOffset[(offsetof(HasherRef,hashbuf)==24)?1:-1];
-typedef char HasherCompareOffset[(offsetof(HasherRef,compare)==36)?1:-1];
 static const s32 HASHER_MEMID = 1818784616;
+
+static s32 HashNumBucket(HasherRef* ref, s32 key)
+{
+    u32 uKey = (u32)key;
+    if (key < 0)
+    {
+        uKey = 0u - uKey;
+    }
+    return (s32)(uKey % (u32)ref->hashlen);
+}
 
 extern "C" s32 HasherExpand(HasherRef* ref, s32 expand)
 {
@@ -106,6 +93,61 @@ extern "C" void* HashStrDel(HasherRef* ref, const char* key)
  }
  return 0;
 }
+
+extern "C" s32 HashNumAdd(HasherRef* ref, s32 key, void* data)
+{
+    const s32 iBucket = HashNumBucket(ref, key);
+    if (!ref->avail && HasherExpand(ref, (3 * ref->items + 10) / 2) <= 0)
+    {
+        return -1;
+    }
+
+    HasherT* pItem = ref->avail;
+    ref->avail = pItem->next;
+    pItem->key.val = key;
+    pItem->data = data;
+    pItem->next = ref->hashbuf[iBucket];
+    ref->hashbuf[iBucket] = pItem;
+    ++ref->items;
+    return 1;
+}
+
+extern "C" void* HashNumFind(HasherRef* ref, s32 key)
+{
+    for (HasherT* pItem = ref->hashbuf[HashNumBucket(ref, key)];
+         pItem != NULL; pItem = pItem->next)
+    {
+        if (pItem->key.val == key)
+        {
+            return pItem->data;
+        }
+    }
+    return NULL;
+}
+
+extern "C" void* HashNumDel(HasherRef* ref, s32 key)
+{
+    HasherT** ppItem = &ref->hashbuf[HashNumBucket(ref, key)];
+    while (*ppItem != NULL)
+    {
+        HasherT* pItem = *ppItem;
+        if (pItem->key.val == key)
+        {
+            *ppItem = pItem->next;
+            if (ref->iter.curr == pItem)
+            {
+                ref->iter.curr = pItem->next;
+            }
+            pItem->next = ref->avail;
+            ref->avail = pItem;
+            --ref->items;
+            return pItem->data;
+        }
+        ppItem = &pItem->next;
+    }
+    return NULL;
+}
+
 extern "C" void HasherEnumInit(HasherRef* ref) { ref->iter.idx=0; ref->iter.curr=0; }
 extern "C" void* HasherEnum(HasherRef* ref, void** key)
 {

@@ -8,9 +8,41 @@
 
 struct ProtoAriesRefT;
 struct PingManagerRefT;
+struct ProtoFilterRefT;
 struct LobbyApiXenonRefT;
 struct LobbyListRefT;
-struct HasherRef;
+
+struct HasherT
+{
+    HasherT* next;
+    void* data;
+    union
+    {
+        s32 val;
+        const char* ptr;
+    } key;
+};
+
+struct HashEnumT
+{
+    s32 idx;
+    HasherT* curr;
+};
+
+typedef s32 (HasherCompareF)(const char*, const char*);
+
+struct HasherRef
+{
+    s32 memgroup;
+    s32 items;
+    s32 flush;
+    HashEnumT iter;
+    s32 hashlen;
+    HasherT** hashbuf;
+    HasherT* list;
+    HasherT* avail;
+    HasherCompareF* compare;
+};
 
 struct LobbyApiRoomCriteriaT
 {
@@ -79,6 +111,72 @@ struct LobbyApiRoomRecordPrefixT
     char strPopulation[4];
     char strPublic[4];
     char strName[36];
+    char strDisplayName[36];
+    char strHost[16];
+    char strDescription[132];
+    u32 uLocality;
+    u8  aStructure[44];
+};
+
+struct LobbyApiRankRecordT
+{
+    s32  iPoints;
+    s32  iRank;
+    u32  uFlags;
+    char strName[20];
+    char strStats[260];
+};
+
+struct LobbyApiUserSetMemberT
+{
+    s32  iIdent;
+    char strName[16];
+    s32  iFlags;
+    s32  iGameIdent;
+    char strAux[132];
+    u32  uAddr;
+    u32  uLocalAddr;
+    char strMachineAddr[64];
+};
+
+struct LobbyApiXenonFilterRequestT
+{
+    s32  iCallbackID;
+    s32  iKind;
+    s32  iRequest;
+    u8   bPending;
+    u8   bSquelchOnError;
+    u8   aPad[2];
+    char strField[32];
+    char strRequest[1024];
+};
+
+struct LobbyApiXenonContextT
+{
+    u32 uContextID;
+    u32 uValue;
+};
+
+struct LobbyApiXenonSearchStateT
+{
+    LobbyApiXenonContextT aContexts[10];
+    u32                   aOverlapped[7];
+    void*                 pResultsBuffer;
+    unsigned long         uResultsBufferSize;
+    s32                   iKind;
+    s32                   iCallbackID;
+    u32                   bPending;
+    char                  strRequest[1024];
+};
+
+struct LobbyApiXenonRefT
+{
+    LobbyApiRefT*                  pLobbyApi;
+    struct ProtoFilterRefT*        pProtoFilter;
+    s32                            iMemGroup;
+    LobbyApiXenonFilterRequestT    aFilterRequests[2];
+    LobbyApiXenonSearchStateT      Search;
+    char                           strFilterText[1024];
 };
 
 // Private X360 SDK layout. The ARTIST constructor allocates 8,388 bytes and
@@ -152,10 +250,56 @@ CGS_STATIC_ASSERT(sizeof(LobbyCBQueueRefT) == 0x18, "LobbyCBQueueRefT");
 CGS_STATIC_ASSERT(sizeof(LobbyApiServerStatT) == 0x20, "LobbyApiServerStatT");
 CGS_STATIC_ASSERT(sizeof(LobbyDispListT) == 0x14, "LobbyDispListT");
 CGS_STATIC_ASSERT(sizeof(LobbyListRefT) == 0xe0, "LobbyListRefT");
+CGS_STATIC_ASSERT(sizeof(LobbyApiRoomRecordPrefixT) == 304,
+                  "LobbyApiRoomRecordPrefixT");
+CGS_STATIC_ASSERT(sizeof(LobbyApiRankRecordT) == 292, "LobbyApiRankRecordT");
+CGS_STATIC_ASSERT(sizeof(LobbyApiUserSetMemberT) == 232,
+                  "LobbyApiUserSetMemberT");
+CGS_STATIC_ASSERT(sizeof(LobbyApiXenonFilterRequestT) == 1072,
+                  "LobbyApiXenonFilterRequestT");
+CGS_STATIC_ASSERT(sizeof(LobbyApiXenonContextT) == 8, "LobbyApiXenonContextT");
+CGS_STATIC_ASSERT(sizeof(LobbyApiXenonSearchStateT) == 1152,
+                  "LobbyApiXenonSearchStateT");
+CGS_STATIC_ASSERT(sizeof(LobbyApiXenonRefT) == 4332, "LobbyApiXenonRefT");
+CGS_STATIC_ASSERT(sizeof(HasherT) == 12, "HasherT");
+CGS_STATIC_ASSERT(sizeof(HashEnumT) == 8, "HashEnumT");
+CGS_STATIC_ASSERT(sizeof(HasherRef) == 40, "HasherRef");
+CGS_STATIC_ASSERT(offsetof(HasherRef, items) == 4, "HasherRef::items");
+CGS_STATIC_ASSERT(offsetof(HasherRef, hashbuf) == 24, "HasherRef::hashbuf");
 CGS_STATIC_ASSERT(offsetof(LobbyApiRoomRecordPrefixT, iPopulation) == 0x10,
                   "LobbyApiRoomRecordPrefixT::iPopulation");
 CGS_STATIC_ASSERT(offsetof(LobbyApiRoomRecordPrefixT, strName) == 0x24,
                   "LobbyApiRoomRecordPrefixT::strName");
+CGS_STATIC_ASSERT(offsetof(LobbyApiRoomRecordPrefixT, strDisplayName) == 0x48,
+                  "LobbyApiRoomRecordPrefixT::strDisplayName");
+CGS_STATIC_ASSERT(offsetof(LobbyApiRoomRecordPrefixT, strDescription) == 0x7c,
+                  "LobbyApiRoomRecordPrefixT::strDescription");
+CGS_STATIC_ASSERT(offsetof(LobbyApiRoomRecordPrefixT, uLocality) == 0x100,
+                  "LobbyApiRoomRecordPrefixT::uLocality");
+CGS_STATIC_ASSERT(offsetof(LobbyApiRankRecordT, strName) == 0x0c,
+                  "LobbyApiRankRecordT::strName");
+CGS_STATIC_ASSERT(offsetof(LobbyApiRankRecordT, strStats) == 0x20,
+                  "LobbyApiRankRecordT::strStats");
+CGS_STATIC_ASSERT(offsetof(LobbyApiUserSetMemberT, strName) == 0x04,
+                  "LobbyApiUserSetMemberT::strName");
+CGS_STATIC_ASSERT(offsetof(LobbyApiUserSetMemberT, strAux) == 0x1c,
+                  "LobbyApiUserSetMemberT::strAux");
+CGS_STATIC_ASSERT(offsetof(LobbyApiUserSetMemberT, strMachineAddr) == 0xa8,
+                  "LobbyApiUserSetMemberT::strMachineAddr");
+CGS_STATIC_ASSERT(offsetof(LobbyApiXenonRefT, aFilterRequests) == 0x0c,
+                  "LobbyApiXenonRefT::aFilterRequests");
+CGS_STATIC_ASSERT(offsetof(LobbyApiXenonRefT, Search) == 0x86c,
+                  "LobbyApiXenonRefT::Search");
+CGS_STATIC_ASSERT(offsetof(LobbyApiXenonSearchStateT, aOverlapped) == 0x50,
+                  "LobbyApiXenonSearchStateT::aOverlapped");
+CGS_STATIC_ASSERT(offsetof(LobbyApiXenonSearchStateT, pResultsBuffer) == 0x6c,
+                  "LobbyApiXenonSearchStateT::pResultsBuffer");
+CGS_STATIC_ASSERT(offsetof(LobbyApiXenonSearchStateT, bPending) == 0x7c,
+                  "LobbyApiXenonSearchStateT::bPending");
+CGS_STATIC_ASSERT(offsetof(LobbyApiXenonSearchStateT, strRequest) == 0x80,
+                  "LobbyApiXenonSearchStateT::strRequest");
+CGS_STATIC_ASSERT(offsetof(LobbyApiXenonRefT, strFilterText) == 0xCEC,
+                  "LobbyApiXenonRefT::strFilterText");
 CGS_STATIC_ASSERT(offsetof(LobbyApiRefT, pXenon) == 0x10, "LobbyApiRefT::pXenon");
 CGS_STATIC_ASSERT(offsetof(LobbyApiRefT, strVersion) == 0x54, "LobbyApiRefT::strVersion");
 CGS_STATIC_ASSERT(offsetof(LobbyApiRefT, strPartition) == 0x754, "LobbyApiRefT::strPartition");

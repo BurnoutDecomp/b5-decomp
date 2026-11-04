@@ -61,7 +61,6 @@ extern "C" void CryptMD5Update(CryptMD5T*, const void*, s32);
 extern "C" void CryptMD5Final(CryptMD5T*, void*, s32);
 extern "C" s32 SocketSendto(SocketT*, const char*, s32, s32, const sockaddr*, s32);
 extern "C" s32 SocketRecvfrom(SocketT*, char*, s32, s32, sockaddr*, s32*);
-extern "C" void ProtoSSLUpdate(ProtoSSLRefT*);
 // ARTIST 82B356A0: genuine entropy routine; provider remains separately unresolved
 // until its stack-sampling contract is reconstructed and verified on PPC.
 extern "C" void ProtoSSLGenerateRandom(u8*, s32, CryptArc4T*);
@@ -372,4 +371,352 @@ extern "C" s32 ProtoSSLRecv(ProtoSSLRefT* state, char* buffer, s32 length)
     if (result > 0 && result < length)
         buffer[result] = 0;
     return result;
+}
+
+// ARTIST 82B35B30: decrypt and authenticate a complete SSLv3 record.
+static s32 RecvPacket(ProtoSSLRefT* state)
+{
+    SecureStateT* const secure = state->pSecure;
+    secure->iRecvBase = secure->iRecvSize;
+    if (secure->iRecvProg != secure->iRecvSize) return -1;
+    const u8 type = secure->RecvData[0];
+    if (type < 20 || type > 23) return -2;
+    if (secure->RecvData[1] != 3 || secure->RecvData[2] != 0) return -3;
+    if (secure->iRecvSize != ((s32(secure->RecvData[3]) << 8) | secure->RecvData[4]) + 5) return -4;
+    secure->iRecvBase = 5;
+    if (state->iState >= 26 && state->iState <= 30 && secure->pCipher)
+    {
+        if (secure->pCipher->uEnc == 1)
+            CryptArc4Apply(&secure->ReadArc4, secure->RecvData + 5, secure->iRecvSize - 5);
+        s32 length = secure->iRecvSize - secure->iRecvBase;
+        if (length < secure->pCipher->uMac) return -4;
+        length -= secure->pCipher->uMac;
+        const u32 sequence = secure->uRecvSeqn;
+        const u8 macHeader[11] = { 0, 0, 0, 0, static_cast<u8>(sequence >> 24),
+            static_cast<u8>(sequence >> 16), static_cast<u8>(sequence >> 8),
+            static_cast<u8>(sequence), type, static_cast<u8>(length >> 8), static_cast<u8>(length) };
+        secure->iRecvSize = secure->iRecvBase + length;
+        secure->iRecvProg = secure->iRecvSize;
+        u8 innerPad[48], outerPad[48], digest[20];
+        std::memset(innerPad, 0x36, sizeof(innerPad));
+        std::memset(outerPad, 0x5c, sizeof(outerPad));
+        if (secure->pCipher->uMac == 16)
+        {
+            CryptMD5T context;
+            CryptMD5Init(&context);
+            CryptMD5Update(&context, secure->pServerMAC, 16);
+            CryptMD5Update(&context, innerPad, 48);
+            CryptMD5Update(&context, macHeader, 11);
+            CryptMD5Update(&context, secure->RecvData + secure->iRecvBase, length);
+            CryptMD5Final(&context, digest, 16);
+            CryptMD5Init(&context);
+            CryptMD5Update(&context, secure->pServerMAC, 16);
+            CryptMD5Update(&context, outerPad, 48);
+            CryptMD5Update(&context, digest, 16);
+            CryptMD5Final(&context, digest, 16);
+            if (std::memcmp(digest, secure->RecvData + secure->iRecvSize, 16) != 0)
+            {
+                NetPrintfCode("protossl: _RecvPacket: bad MD5 MAC\n");
+                return -5;
+            }
+        }
+        if (secure->pCipher->uMac == 20)
+        {
+            CryptSha1T context;
+            CryptSha1Init(&context);
+            CryptSha1Update(&context, secure->pServerMAC, 20);
+            CryptSha1Update(&context, innerPad, 40);
+            CryptSha1Update(&context, macHeader, 11);
+            CryptSha1Update(&context, secure->RecvData + secure->iRecvBase, length);
+            CryptSha1Final(&context, digest, 20);
+            CryptSha1Init(&context);
+            CryptSha1Update(&context, secure->pServerMAC, 20);
+            CryptSha1Update(&context, outerPad, 40);
+            CryptSha1Update(&context, digest, 20);
+            CryptSha1Final(&context, digest, 20);
+            if (std::memcmp(digest, secure->RecvData + secure->iRecvSize, 20) != 0)
+            {
+                NetPrintfCode("protossl: _RecvPacket: bad SHA MAC\n");
+                return -6;
+            }
+        }
+    }
+    if (type == 22 && state->iState < 26)
+    {
+        const s32 length = secure->iRecvSize - secure->iRecvBase;
+        CryptMD5Update(&secure->HandshakeMD5, secure->RecvData + secure->iRecvBase, length);
+        CryptSha1Update(&secure->HandshakeSHA, secure->RecvData + secure->iRecvBase, length);
+    }
+    ++secure->uRecvSeqn;
+    return 0;
+}
+
+// ARTIST 82B35F08: consume one matching handshake message from the record.
+static const u8* RecvHandshake(ProtoSSLRefT* state, u8 type)
+{
+    SecureStateT* const secure = state->pSecure;
+    const s32 base = secure->iRecvBase;
+    const u8* const record = secure->RecvData + base;
+    if (record[0] != type) return 0;
+    const s32 length = (s32(record[1]) << 16) | (s32(record[2]) << 8) | record[3];
+    const s32 end = base + length + 4;
+    if (end > secure->iRecvSize)
+    {
+        NetPrintfCode("protossl: _RecvHandshake: packet at base %d is too long (%d vs %d)\n",
+            base, length, secure->iRecvSize - base - 4);
+        return 0;
+    }
+    secure->iRecvBase = end;
+    return record + 4;
+}
+
+// Original cipher suite records at ARTIST 82146F10, each five bytes.
+static const CipherSuiteT kCipherSuites[2] = {
+    { { 0, 5 }, 1, 1, 20 }, { { 0, 4 }, 1, 1, 16 }
+};
+
+// These are real remaining ARTIST handshake providers, not fallback behavior.
+extern "C" s32 ProtoSSLParseCertificate(ProtoSSLRefT*, X509CertificateT*, const u8*, s32); // 82B360D8
+extern "C" s32 ProtoSSLUpdateSendClientKey(ProtoSSLRefT*); // 82B37318
+extern "C" s32 ProtoSSLUpdateSendClientFinish(ProtoSSLRefT*); // 82B37580
+extern "C" s32 ProtoSSLUpdateRecvServerFinish(ProtoSSLRefT*, const u8*); // 82B37720
+extern "C" s32 SocketConnect(SocketT*, const sockaddr*, s32);
+
+// ARTIST 82B37188.
+static s32 RecvServerHello(ProtoSSLRefT* state, const u8* data)
+{
+    if (data[0] != 3 || data[1] != 0)
+    {
+        NetPrintfCode("protossl: _ServerHello: version %d,%d\n", data[0], data[1]);
+        return 4100;
+    }
+    SecureStateT* const secure = state->pSecure;
+    std::memcpy(secure->ServerRandom, data + 2, 32);
+    const u8* const cipher = data + 35 + data[34];
+    secure->pCipher = 0;
+    for (u32 i = 0; i < 2; ++i)
+    {
+        if (cipher[0] == kCipherSuites[i].uIdent[0] && cipher[1] == kCipherSuites[i].uIdent[1])
+        {
+            secure->pCipher = &kCipherSuites[i];
+            break;
+        }
+    }
+    return 21;
+}
+
+// ARTIST 82B37268; certificate verification itself remains a genuine edge.
+static s32 RecvServerCert(ProtoSSLRefT* state, const u8* data)
+{
+    const s32 envelope = (s32(data[0]) << 16) | (s32(data[1]) << 8) | data[2];
+    const s32 certSize = (s32(data[3]) << 16) | (s32(data[4]) << 8) | data[5];
+    if (certSize > envelope - 3)
+    {
+        NetPrintfCode("protossl: _ServerCert: first certificate is larger than envelope (%d/%d)\n", certSize, envelope - 3);
+        return 4100;
+    }
+    const s32 result = ProtoSSLParseCertificate(state, &state->pSecure->Cert, data + 6, certSize);
+    if (result < 0)
+    {
+        NetPrintfCode("protossl: _ServerCert: x509 cert invalid (error=%d)\n", result);
+        return 4099;
+    }
+    return 21;
+}
+
+// ARTIST 82B37938: resolver and socket transitions followed by record dispatch.
+extern "C" void ProtoSSLUpdate(ProtoSSLRefT* state)
+{
+    SecureStateT* const secure = state->pSecure;
+    if (state->iState == 1)
+    {
+        HostentT* const host = state->pHost;
+        if (host->Done(host))
+        {
+            if (host->addr == 0)
+                state->iState = 4097;
+            else
+            {
+                state->iState = 2;
+                u8* const bytes = reinterpret_cast<u8*>(state->PeerAddr.sa_data);
+                bytes[2] = static_cast<u8>(host->addr >> 24);
+                bytes[3] = static_cast<u8>(host->addr >> 16);
+                bytes[4] = static_cast<u8>(host->addr >> 8);
+                bytes[5] = static_cast<u8>(host->addr);
+            }
+            host->Free(host);
+            state->pHost = 0;
+        }
+    }
+    if (state->iState == 2)
+    {
+        SocketConnect(state->pSock, &state->PeerAddr, 16);
+        state->iState = 3;
+    }
+    if (state->iState == 3)
+    {
+        const s32 result = SocketInfo(state->pSock, 0x73746174, 0, 0, 0);
+        if (result > 0)
+        {
+            state->iClosed = 0;
+            state->iState = secure ? 20 : 31;
+        }
+        if (result < 0)
+        {
+            state->iClosed = 1;
+            state->iState = 4098;
+        }
+    }
+    if (!state->pSock)
+        return;
+    do
+    {
+        const s32 current = state->iState;
+        if (current < 20 || current > 30)
+            break;
+        bool progress = false;
+        if (secure->iSendProg == secure->iSendSize)
+        {
+            if (current == 20)
+            {
+                u8 body[43];
+                body[0] = 3; body[1] = 0;
+                ProtoSSLGenerateRandom(secure->ClientRandom, 32, &secure->ReadArc4);
+                std::memcpy(body + 2, secure->ClientRandom, 32);
+                body[34] = 0; body[35] = 0; body[36] = 4;
+                body[37] = kCipherSuites[0].uIdent[0]; body[38] = kCipherSuites[0].uIdent[1];
+                body[39] = kCipherSuites[1].uIdent[0]; body[40] = kCipherSuites[1].uIdent[1];
+                body[41] = 1; body[42] = 0;
+                const u8 header[4] = { 1, 0, 0, 43 };
+                SendPacket(state, 22, header, 4, body, 43);
+                state->iState = 21;
+            }
+            else if (current == 22)
+                state->iState = ProtoSSLUpdateSendClientKey(state);
+            else if (current == 23)
+            {
+                CryptArc4Init(&secure->WriteArc4, secure->pClientKey, 16, 1);
+                const u8 change = 1;
+                SendPacket(state, 20, &change, 1, 0, 0);
+                secure->uSendSeqn = 0;
+                state->iState = 24;
+            }
+            else if (current == 24)
+                state->iState = ProtoSSLUpdateSendClientFinish(state);
+        }
+        if (secure->iSendProg < secure->iSendSize)
+        {
+            const s32 sent = SocketSendto(state->pSock,
+                reinterpret_cast<const char*>(secure->SendData + secure->iSendProg),
+                secure->iSendSize - secure->iSendProg, 0, 0, 0);
+            if (sent > 0)
+            {
+                progress = true;
+                secure->iSendProg += sent;
+            }
+            if (secure->iSendProg == secure->iSendSize)
+            {
+                secure->iSendSize = 0;
+                secure->iSendProg = 0;
+            }
+        }
+        if (secure->iRecvSize < 5)
+        {
+            const s32 received = SocketRecvfrom(state->pSock,
+                reinterpret_cast<char*>(secure->RecvData + secure->iRecvSize),
+                5 - secure->iRecvSize, 0, 0, 0);
+            if (received > 0)
+            {
+                secure->iRecvSize += received;
+                secure->iRecvProg = secure->iRecvSize;
+            }
+            if (received < 0) state->iClosed = 1;
+        }
+        if (secure->iRecvSize == 5)
+        {
+            if (secure->RecvData[1] != 3 || secure->RecvData[2] != 0)
+                secure->RecvData[3] = secure->RecvData[4] = 0;
+            secure->iRecvSize = (s32(secure->RecvData[3]) << 8) | secure->RecvData[4];
+            secure->iRecvSize += 5;
+        }
+        if (secure->iRecvProg < secure->iRecvSize)
+        {
+            const s32 received = SocketRecvfrom(state->pSock,
+                reinterpret_cast<char*>(secure->RecvData + secure->iRecvProg),
+                secure->iRecvSize - secure->iRecvProg, 0, 0, 0);
+            if (received > 0)
+            {
+                progress = true;
+                secure->iRecvProg += received;
+                if (secure->iRecvProg == secure->iRecvSize)
+                    RecvPacket(state);
+            }
+            if (received < 0) state->iClosed = 1;
+        }
+        if (secure->iRecvProg == secure->iRecvSize && secure->iRecvBase < secure->iRecvSize)
+        {
+            const u8 type = secure->RecvData[0];
+            if (type == 21)
+            {
+                if (secure->RecvData[5] != 1 || secure->RecvData[6] != 0)
+                {
+                    NetPrintfCode("protossl: ALERT: level=%d, type=%d\n", secure->RecvData[5], secure->RecvData[6]);
+                    state->iState = 4100;
+                }
+                else
+                {
+                    state->iClosed = 1;
+                    secure->iRecvBase = 0;
+                    secure->iRecvSize = 0;
+                    secure->iRecvProg = 0;
+                }
+            }
+            else if (state->iState == 21)
+            {
+                const u8* message = RecvHandshake(state, 2);
+                if (message)
+                    state->iState = RecvServerHello(state, message);
+                else if ((message = RecvHandshake(state, 11)) != 0)
+                    state->iState = RecvServerCert(state, message);
+                else if ((message = RecvHandshake(state, 12)) != 0)
+                {
+                    if (message[0] == 1)
+                        state->iState = 21;
+                    else
+                    {
+                        NetPrintfCode("protossl: _ServerKey: wrong key alg %d\n", message[0]);
+                        state->iState = 4100;
+                    }
+                }
+                else if (RecvHandshake(state, 13))
+                {
+                    NetPrintfCode("protossl: server wants our cert\n");
+                    state->iState = 4100;
+                }
+                else if (RecvHandshake(state, 14))
+                    state->iState = 22;
+            }
+            else if (state->iState == 25 && type == 20)
+            {
+                CryptArc4Init(&secure->ReadArc4, secure->pServerKey, 16, 1);
+                secure->uRecvSeqn = 0;
+                state->iState = 26;
+                secure->iRecvBase = secure->iRecvSize;
+            }
+            else if (state->iState == 26)
+            {
+                const u8* const message = RecvHandshake(state, 20);
+                if (message)
+                    state->iState = ProtoSSLUpdateRecvServerFinish(state, message);
+            }
+            if (secure->iRecvBase >= secure->iRecvSize)
+            {
+                secure->iRecvBase = 0;
+                secure->iRecvSize = 0;
+                secure->iRecvProg = 0;
+            }
+        }
+        if (!progress || !state->pSock)
+            break;
+    } while (true);
 }

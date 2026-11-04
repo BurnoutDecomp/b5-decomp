@@ -182,3 +182,13 @@ extern "C" s32 SocketRecvfrom(SocketT* entry, char* data, s32 length, s32 flags,
     if (!received) return -1;
     return SocketTranslateErrorCode(received, error);
 }
+// ARTIST82B2C5F8: install the socket's real callback and idle interval.
+extern "C" s32 SocketCallback(SocketT* entry, s32 flags, s32 interval, void* context,
+                               s32 (*callback)(SocketT*, s32, void*))
+{
+    entry->callbackInterval = interval;
+    entry->callbackFlags = flags;
+    entry->callbackRef = context;
+    entry->callback = callback;
+    return 0;
+}

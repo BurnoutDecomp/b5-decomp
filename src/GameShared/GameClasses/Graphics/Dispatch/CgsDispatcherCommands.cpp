@@ -22,27 +22,9 @@
 // the no-raw-offset rule (AGENTS.md). Accesses into real game *objects*
 // (Renderable / RenderableMesh / MaterialAssembly) go through named members.
 //
-// ---------------------------------------------------------------------------
-// [x64 command image] The command stream is built AND consumed on the PC (it
-// never round-trips through serialised data), so on the LLP64 gate the stream
-// carries host pointers, packed as follows (each a documented deviation from
-// the 32-bit X360 image; the stream stays self-consistent):
-//   * DRAWRENDERABLE       word2..3 = Renderable* (u64). The trailer pointer is
-//     derived (cmd + 16 + dirtyQw*16), not stored. The trailer's last-mesh
-//     pointer is a u64 at trailer+8.
-//   * DRAWRENDERABLEMESH / ...ZONLY  word2..3 = RenderableMesh* (u64); the
-//     shader-constant scratch pointer moves into the FIRST payload qword
-//     (X360 kept it in word3); the SECOND..FIFTH payload qwords carry the
-//     object's world-view-projection matrix -- a PC BRING-UP SHIM (loudly
-//     flagged below) so the fallback-shader path can transform geometry before
-//     the shader-constant machinery is fully online. The external-sampler
-//     payload follows.
-//   * The dirty-shader-constant block after a DRAWRENDERABLE header uses the
-//     committed x64 AddDirtyConstantsToDispatchBin layout (8-byte pointers), so
-//     the fixed worst-case reservation grows from the X360's 16 qwords to 29.
-// ---------------------------------------------------------------------------
-// =============================================================================
-
+// The native command header holds four words. The object command uses words 2
+// and 3 for its renderable and trailer. Mesh commands use the same words for
+// the mesh and shader-constant pointer array.
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"        // DispatchBin / DispatchFrame / DispatchList
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsOcclusionCullManager.h"
@@ -50,6 +32,9 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"      // shadow::Device (the GPU flush leaf)
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsMaterialTechnique.h"
+#include "GameShared/GameClasses/Graphics/CgsShaderTechnique.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsMaterialAnimation.h"
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"            // ShaderConstantTable
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -100,17 +85,17 @@ static uintptr_t                    suLastTechniqueAux = ~uintptr_t(0);   // dwo
 
 namespace
 {
-    // ---- x64 command-image helpers (see the header note) --------------------
-    inline void WriteCommandPointer(u32* lpWords, const void* lpPointer)
+    const char kDispatcherSource[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/CgsDispatcherCommands.cpp";
+
+    void AssertDispatcher(bool condition, const char* expression, s32 line)
     {
-        const u64 lu64 = static_cast<u64>(reinterpret_cast<uintptr_t>(lpPointer));
-        std::memcpy(lpWords, &lu64, sizeof(lu64));
-    }
-    inline void* ReadCommandPointer(const u32* lpWords)
-    {
-        u64 lu64 = 0;
-        std::memcpy(&lu64, lpWords, sizeof(lu64));
-        return reinterpret_cast<void*>(static_cast<uintptr_t>(lu64));
+        if (!condition)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(expression, kDispatcherSource, line);
+            CgsDev::Assert::EndAssert();
+        }
     }
 
     // The command id lives in word0's HIGH byte, not its low bits:
@@ -132,23 +117,12 @@ namespace
             reinterpret_cast<u8*>(lpBinBase) + (static_cast<u32>(luRecord) & 0xFFFFFu) * 16u);
     }
 
-    // The dirty-constant block size in qwords for `count` constants under the
-    // committed host layout ({count u8, idx bytes, aligned pointer array}).
-    inline u32 DirtyBlockQwords(u32 luCount)
+    // Count and index bytes, aligned native pointer array, then quad-word padding.
+    inline u32 DirtyBlockQwords(u32 count)
     {
-        const u32 luPtrBytes = static_cast<u32>(sizeof(void*));
-        return ((((luCount + 4u) & ~3u) + luPtrBytes * luCount) + 15u) / 16u;
+        return (((count + 4u) & ~3u) + sizeof(Vector4*) * count + 15u) >> 4;
     }
 
-    // Worst-case dirty block (all 50 table constants) -- the X360 reserves this
-    // on every DRAWRENDERABLE allocation (16 qwords there; 29 on the host).
-    inline u32 DirtyBlockQwordsMax() { return DirtyBlockQwords(50u); }
-
-    // PC mesh-command payload layout (qwords after the 16-byte header):
-    //   [0]     scratch-pointer qword (u64 shader-constant scratch, 8B spare)
-    //   [1..4]  the object WVP matrix  [PC bring-up shim -- see header note]
-    //   [5..]   external-sampler payload (X360 layout, currently unconsumed)
-    const u32 KU_MESH_PAYLOAD_FIXED_QW = 5u;
 }
 
 // AddShaderTechniqueConstantsToDispatchBin @ 0x827F9FB8 (CgsDispatcherCommands.cpp:709).
@@ -175,19 +149,18 @@ void DispatchObjectContext::ResetShadowing()
 // CgsGraphics::CallbackFn::Interpret  @ 0x827E92F0
 // Re-invoke the callback stored in the command. word0's command id must be
 // CALLBACKFN(0); the callback is fn(custom section, GetPacketLength()).
-// [x64] the callback pointer spans words 2..3 of the command.
+// Word 2 is the native callback pointer.
 // =============================================================================
 void CallbackFn::Interpret(DispatchCommand* lpCommand, DispatchFrame* /*lpFrame*/,
                            void* /*lpUserData*/, f32 /*lfTime*/)
 {
     u32* lpWords = reinterpret_cast<u32*>(lpCommand);
 
-    CGS_ASSERT(CommandIdOf(lpWords[0]) == DispatchCommand::E_CALLBACKFN,
-               "lpCommand->GetCommandID() == CALLBACKFN");
-
+    AssertDispatcher(lpCommand->GetCommandID() == DispatchCommand::E_CALLBACKFN,
+        "lpCommand->GetCommandID() == CALLBACKFN", 693);
     typedef void (*CallbackProc)(void*, u32);
-    CallbackProc lpfnCallback = reinterpret_cast<CallbackProc>(ReadCommandPointer(&lpWords[2]));
-    lpfnCallback(&lpWords[4], lpWords[0] & 0x00FFFFFFu);
+    CallbackProc lpfnCallback = reinterpret_cast<CallbackProc>(lpWords[2]);
+    lpfnCallback(lpCommand + 1, lpCommand->GetPacketLength());
 }
 
 // =============================================================================
@@ -312,15 +285,10 @@ Vector4* ShaderConstantsExternal::AddToDispatchBinFromStatePointers(
         CgsGraphics::DispatchObjectContext* lpContext, Vector4* lpDest,
         Vector4**& lrpStatePointers) const
 {
-    const u32* const lpBlock = reinterpret_cast<const u32*>(this);
-    const u32* const lpaSourceIndices =
-        reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpBlock[1]));
-    for (u32 luIndex = 0; luIndex < lpBlock[0]; ++luIndex)
-    {
-        lrpStatePointers[luIndex] = const_cast<Vector4*>(reinterpret_cast<const Vector4*>(
-            lpContext->mapConstantData[lpaSourceIndices[luIndex]]));
-    }
-    lrpStatePointers += lpBlock[0];
+    const u32* const sourceIndices = reinterpret_cast<const u32*>(mppaConstantsInstanceData);
+    for (u32 i = 0; i < muNumConstantsInstances; ++i)
+        lrpStatePointers[i] = const_cast<Vector4*>(lpContext->mapConstantData[sourceIndices[i]]);
+    lrpStatePointers += muNumConstantsInstances;
     return lpDest;
 }
 
@@ -340,46 +308,29 @@ Vector4** AddShaderTechniqueConstantsToDispatchBin(DispatchBin* lpBin,
                                                    const MaterialAssembly* /*lpAssembly*/,
                                                    bool lbZOnly)
 {
-    // *technique (+0x00 u32 slot) = the ShaderTechnique image (SHADERS bundle).
-    const u32 luShaderTechnique = *reinterpret_cast<const u32*>(lpTechnique);
-    if (luShaderTechnique == 0)
-    {
-        // [PC bring-up gate] SHADERS.BNDL not yet loaded/fixed on this path: no
-        // technique constant tables exist. Return a live empty scratch so the
-        // command stream stays well-formed (the walk skips constant upload).
-        // The reservation MUST go through the same Begin/EndAllocateMemory bracket
-        // the real path uses: this runs inside the caller's open packet, and
-        // AllocateMemoryFast asserts m_pPacketStart == NULL.
-        Vector4** lppEmpty = reinterpret_cast<Vector4**>(lpBin->BeginAllocateMemory(1));
-        lpBin->EndAllocateMemory(1);
-        return lppEmpty;
-    }
-
-    const u8*  lpST    = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luShaderTechnique));
-    const u32* lpBlkA  = reinterpret_cast<const u32*>(lpST + 28);
-    const u32* lpBlkB  = reinterpret_cast<const u32*>(lpST + 44);
-    const u32* lpBlkC  = reinterpret_cast<const u32*>(lpST + 80);
-    const u32* lpBlkD  = reinterpret_cast<const u32*>(lpST + 96);
-
-    u32 luTotal = lpBlkA[0] + lpBlkB[0];
+    const ShaderTechnique& shader = *lpTechnique->mpShaderTechnique;
+    const ShaderConstantsExternal& objectVertex = shader.mExternalObjectVertexShaderConstants;
+    const ShaderConstantsExternal& objectPixel = shader.mExternalObjectPixelShaderConstants;
+    const ShaderConstantsExternal& globalVertex = shader.mExternalGlobalVertexShaderConstants;
+    const ShaderConstantsExternal& globalPixel = shader.mExternalGlobalPixelShaderConstants;
+    u32 count = objectVertex.muNumConstantsInstances + globalVertex.muNumConstantsInstances;
     if (!lbZOnly)
-        luTotal += lpBlkC[0] + lpBlkD[0];
+        count += objectPixel.muNumConstantsInstances + globalPixel.muNumConstantsInstances;
 
-    // X360 reserves 4*total bytes (u32 pointers); the host uses pointer-width slots.
-    const u32 luQwords = (static_cast<u32>(sizeof(void*)) * luTotal + 15u) >> 4;
-    Vector4** lppScratch = reinterpret_cast<Vector4**>(lpBin->BeginAllocateMemory(luQwords));
-    CGS_ASSERT(lppScratch != 0, "lMemoryForShaderConstantsVoid != NULL");
+    const u32 quadWords = (sizeof(Vector4*) * count + 15u) >> 4;
+    Vector4** const lppScratch = static_cast<Vector4**>(lpBin->BeginAllocateMemory(quadWords));
+    AssertDispatcher(lppScratch != 0, "lMemoryForShaderConstantsVoid != NULL", 796);
 
-    Vector4** lppCursor = lppScratch;
-    Vector4*  lpDest    = reinterpret_cast<Vector4*>(lppScratch) + luQwords;
-    lpDest = reinterpret_cast<const ShaderConstantsExternal*>(lpBlkA)->AddToDispatchBinFromStatePointers(lpContext, lpDest, lppCursor);
+    Vector4** cursor = lppScratch;
+    Vector4* end = reinterpret_cast<Vector4*>(lppScratch) + quadWords;
+    end = objectVertex.AddToDispatchBinFromStatePointers(lpContext, end, cursor);
     if (!lbZOnly)
-        lpDest = reinterpret_cast<const ShaderConstantsExternal*>(lpBlkC)->AddToDispatchBinFromStatePointers(lpContext, lpDest, lppCursor);
-    lpDest = reinterpret_cast<const ShaderConstantsExternal*>(lpBlkB)->AddToDispatchBinFromStatePointers(lpContext, lpDest, lppCursor);
+        end = objectPixel.AddToDispatchBinFromStatePointers(lpContext, end, cursor);
+    end = globalVertex.AddToDispatchBinFromStatePointers(lpContext, end, cursor);
     if (!lbZOnly)
-        lpDest = reinterpret_cast<const ShaderConstantsExternal*>(lpBlkD)->AddToDispatchBinFromStatePointers(lpContext, lpDest, lppCursor);
+        end = globalPixel.AddToDispatchBinFromStatePointers(lpContext, end, cursor);
 
-    lpBin->EndAllocateMemory(static_cast<u32>(lpDest - reinterpret_cast<Vector4*>(lppScratch)));
+    lpBin->EndAllocateMemory(static_cast<u32>(end - reinterpret_cast<Vector4*>(lppScratch)));
     return lppScratch;
 }
 
@@ -406,8 +357,8 @@ bool DrawRenderable::AddToBin(const Renderable* lpRenderable, DispatchFrame* lpF
                               u8 lu8PreZList, u8 lu8PreZTechnique,
                               s32 liInstanceCount, u8 lu8ExcludeMeshBits)
 {
-    CGS_ASSERT(lpRenderable != 0, "Adding null renderable pointer to bin");
-    CGS_ASSERT(lpFrame != 0,      "Trying to use a NULL dispatch frame");
+    AssertDispatcher(lpRenderable != 0, "Adding null renderable pointer to bin", 875);
+    AssertDispatcher(lpFrame != 0, "Trying to use a NULL dispatch frame", 876);
 
     // Refresh the dirty list to "every used constant" when requested.
     u8 lu8DirtyCount;
@@ -424,34 +375,29 @@ bool DrawRenderable::AddToBin(const Renderable* lpRenderable, DispatchFrame* lpF
         lu8DirtyCount = mShaderConstantTable.mu8NumDirtyConstants;
     }
 
-    // Dirty-constant block length in quad-words (host pointer width).
+    // Native dirty-constant block length in quad-words.
     const u16 lu16DirtyQw = static_cast<u16>(DirtyBlockQwords(lu8DirtyCount));
 
-    // Allocate the command: header + dirty block + trailer + the worst-case
-    // dirty-block headroom the X360 reserves on top (16 qwords there; the host
-    // equivalent here).
+    // Reserve the trailer and sixteen quad-words of dirty-block headroom.
     DispatchBin& lrBin = lpFrame->GetBin();
     u32* lpCommand = reinterpret_cast<u32*>(
-        lrBin.AllocateCommand(lu16DirtyQw + 1u + DirtyBlockQwordsMax()));
-    CGS_ASSERT(lpCommand != 0, "lpCmd");
+        lrBin.AllocateCommand(lu16DirtyQw + 17u));
+    AssertDispatcher(lpCommand != 0, "lpCmd", 899);
 
-    // The thread-info trailer sits after the dirty block.
-    u8* lpTrailer = reinterpret_cast<u8*>(lpCommand) + (static_cast<u32>(lu16DirtyQw) << 4) + 16;
-    lpTrailer[0] = lbZOnly ? 1u : 0u;                       // mbRenderZOnly
-    lpTrailer[1] = lu8PreZList;                             // mu8PreZList (255 = none)
-    lpTrailer[2] = static_cast<u8>(liInstanceCount);        // mi8InstanceCount
-    lpTrailer[3] = lu8PreZTechnique;                        // mu8PreZTechniqueIndex
-    lpTrailer[4] = lu8ExcludeMeshBits;                      // mu8ExcludeMeshBits
-    // trailer+8: the renderable's last-mesh table entry (mppMeshes[nMeshes-1]).
-    WriteCommandPointer(reinterpret_cast<u32*>(lpTrailer) + 2,
-                        lpRenderable->mppMeshes[lpRenderable->mu16NumMeshes - 1]);
+    __dcbz128(128, lpCommand);
+    DrawRenderableDispatchThreadInfo* const trailer =
+        reinterpret_cast<DrawRenderableDispatchThreadInfo*>(lpCommand + 4 * (lu16DirtyQw + 1u));
+    trailer->mbRenderZOnly = lbZOnly;
+    trailer->mu8PreZList = lu8PreZList;
+    trailer->mi8InstanceCount = static_cast<s8>(liInstanceCount);
+    trailer->mu8PreZTechniqueIndex = lu8PreZTechnique;
+    trailer->mu8ExcludeMeshBits = lu8ExcludeMeshBits;
+    trailer->mpLastRenderableMesh = lpRenderable->mppMeshes[lpRenderable->mu16NumMeshes - 1];
 
-    // Drain the dirty shader constants into the block at cmd+16.
-    mShaderConstantTable.AddDirtyConstantsToDispatchBin(
-        reinterpret_cast<Vector4*>(lpCommand + (0x10 / 4)));
-
-    WriteCommandPointer(&lpCommand[2], lpRenderable);       // [x64] words 2..3
-    lpCommand[0] = (lu16DirtyQw + 1u) | 0x01000000u;        // DRAWRENDERABLE id + length
+    mShaderConstantTable.AddDirtyConstantsToDispatchBin(reinterpret_cast<Vector4*>(lpCommand + 4));
+    lpCommand[2] = reinterpret_cast<u32>(lpRenderable);
+    lpCommand[3] = reinterpret_cast<u32>(trailer);
+    lpCommand[0] = (lu16DirtyQw + 1u) | (DispatchCommand::E_DRAWRENDERABLE << DispatchCommand::KU_SIZE_BITS);
     // X360 @0x827FA264..0x827FA294: r11 = (extsb(arg4) << 8) | extsb(arg5);
     //                                 insrwi arg7, r11, 24, 0;  insrwi arg6, arg7, 24, 0
     // i.e. arg4<<24 | arg5<<16 | arg7<<8 | arg6.
@@ -462,79 +408,54 @@ bool DrawRenderable::AddToBin(const Renderable* lpRenderable, DispatchFrame* lpF
     return true;
 }
 
-// =============================================================================
-// DrawRenderableMesh / DrawRenderableMeshZOnly AddToBin -- stamp a single mesh
-// draw command. Shared validation; the differences are the command id word and
-// the payload size (the X360 Z-only command carries no payload; the PC image
-// carries the fixed scratch/WVP qwords on both -- see the header note).
-// =============================================================================
-static bool AddMeshCommandToBin(const RenderableMesh* lpMesh, DispatchBin* lpBin,
-                                DispatchObjectContext* lpContext, u8 lu8TechniqueIndex,
-                                u8 lu8InstanceCount, bool lbZOnly,
-                                const rw::math::vpu::Matrix44* lpWorldViewProjection)
+// ARTIST 827FA2A0 and 827FA4B0. Both headers carry the original two
+// native pointers. The Z-only command has no extra payload.
+static bool AddMeshCommandToBin(const RenderableMesh* mesh, DispatchBin* bin,
+    DispatchObjectContext* context, u8 techniqueIndex, u8 instanceCount, bool zOnly)
 {
-    CGS_ASSERT(lpMesh != 0, "Adding null mesh pointer to bin");
-    CGS_ASSERT(lpBin != 0,  "Trying to fill null bin");
-    const MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
-    CGS_ASSERT(lpAssembly != 0, "lpMesh->mpMaterialAssembly");
-    CGS_ASSERT(lu8TechniqueIndex < lpAssembly->GetLength(),
-               "lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()");
+    const s32 line = zOnly ? 2462 : 1835;
+    AssertDispatcher(mesh != 0, "Adding null mesh pointer to bin", line);
+    AssertDispatcher(bin != 0, "Trying to fill null bin", line + 1);
+    const MaterialAssembly* assembly = mesh->mpMaterialAssembly;
+    AssertDispatcher(assembly != 0, "lpMesh->mpMaterialAssembly", line + 2);
+    AssertDispatcher(techniqueIndex < assembly->GetLength(),
+        "lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()", line + 3);
+    const MaterialTechnique* technique = assembly->GetMaterial(techniqueIndex);
+    AssertDispatcher(technique != 0, "Null material technique on mesh", zOnly ? 2468 : 1843);
 
-    const MaterialTechnique* lpTechnique = lpAssembly->GetMaterial(lu8TechniqueIndex);
-    CGS_ASSERT(lpTechnique != 0, "Null material technique on mesh");
+    Vector4** const constants =
+        AddShaderTechniqueConstantsToDispatchBin(bin, context, technique, assembly, zOnly);
+    AssertDispatcher(constants != 0, "lpMemoryForShaderConstantPointers != NULL", zOnly ? 2491 : 1854);
+    u32 payloadQuadWords = 0;
+    if (!zOnly)
+    {
+        const s32 samplerCount = technique->mi8NumExternalSamplers;
+        payloadQuadWords = static_cast<u32>(((4 * samplerCount + 15) & ~15) + 48 * samplerCount) >> 4;
+    }
 
-    Vector4** lpConstScratch = AddShaderTechniqueConstantsToDispatchBin(
-        lpBin, lpContext, lpTechnique, lpAssembly, lbZOnly);
-    CGS_ASSERT(lpConstScratch != 0, "lpMemoryForShaderConstantPointers != NULL");
-
-    // External-sampler payload (X360 formula): technique byte +0x23 ==
-    // mi8NumExternalSamplers -- serialised read of the CgsMaterialTechnique image.
-    const s8  li8NumExternal = reinterpret_cast<const s8*>(lpTechnique)[0x23];
-    const u32 luExternQw = lbZOnly ? 0u
-        : ((((4 * li8NumExternal + 15) & 0xFFFFFFF0u) + 48 * li8NumExternal) >> 4);
-
-    const u32 luPayloadQw = KU_MESH_PAYLOAD_FIXED_QW + luExternQw;
-    u32* lpCommand = reinterpret_cast<u32*>(lpBin->AllocateCommand(luPayloadQw));
-    CGS_ASSERT(lpCommand != 0, "lpCmd != NULL");
-
-    lpCommand[0] = luPayloadQw | (lbZOnly ? 0x03000000u : 0x02000000u);
-    WriteCommandPointer(&lpCommand[2], lpMesh);            // [x64] words 2..3
-    lpCommand[1] = ((static_cast<u32>(lu8InstanceCount) << 8) & 0xFF00u) | lu8TechniqueIndex;
-
-    // Payload qword 0: the shader-constant scratch pointer ([x64]: X360 word3).
-    WriteCommandPointer(&lpCommand[4], lpConstScratch);
-    lpCommand[6] = 0;
-    lpCommand[7] = 0;
-    // Payload qwords 1..4: the object WVP. FLAG [PC bring-up shim]: carried in
-    // the command so the fallback-shader dispatch can transform geometry before
-    // the real shader-constant dispatch machinery is online. Remove when the
-    // technique constant path is verified end-to-end.
-    std::memcpy(&lpCommand[8], lpWorldViewProjection, 64);
+    DispatchCommand* const command = bin->AllocateCommand(payloadQuadWords);
+    AssertDispatcher(command != 0, "lpCmd != NULL", zOnly ? 2494 : 1860);
+    const u32 id = zOnly ? DispatchCommand::E_DRAWRENDERABLEMESHZONLY : DispatchCommand::E_DRAWRENDERABLEMESH;
+    command->muWords[0] = payloadQuadWords | (id << DispatchCommand::KU_SIZE_BITS);
+    AssertDispatcher(constants != 0, "lpMemoryForShaderConstantPointers != NULL", zOnly ? 2507 : 2028);
+    command->muWords[2] = reinterpret_cast<u32>(mesh);
+    command->muWords[3] = reinterpret_cast<u32>(constants);
+    command->muWords[1] = (static_cast<u32>(instanceCount) << 8) | techniqueIndex;
     return true;
 }
 
-bool DrawRenderableMesh::AddToBin(const RenderableMesh* lpMesh, DispatchBin* lpBin,
-                                  DispatchObjectContext* lpContext, u8 lu8TechniqueIndex,
-                                  u8 lu8InstanceCount,
-                                  const DrawRenderableDispatchThreadInfo* /*lpThreadInfo*/)
+__declspec(noinline) bool DrawRenderableMesh::AddToBin(const RenderableMesh* mesh, DispatchBin* bin,
+    DispatchObjectContext* context, u8 techniqueIndex, u8 instanceCount,
+    const DrawRenderableDispatchThreadInfo*)
 {
-    // The WVP shim lane is filled by DrawRenderable::Interpret (the only caller
-    // on the world path); direct callers pass identity via the overload below.
-    rw::math::vpu::Matrix44 lIdentity;
-    lIdentity.SetIdentity();
-    return AddMeshCommandToBin(lpMesh, lpBin, lpContext, lu8TechniqueIndex,
-                               lu8InstanceCount, false, &lIdentity);
+    return AddMeshCommandToBin(mesh, bin, context, techniqueIndex, instanceCount, false);
 }
 
-bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* lpMesh, DispatchBin* lpBin,
-                                       DispatchObjectContext* lpContext, u8 lu8TechniqueIndex,
-                                       u8 lu8InstanceCount,
-                                       const DrawRenderableDispatchThreadInfo* /*lpThreadInfo*/)
+__declspec(noinline) bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* mesh, DispatchBin* bin,
+    DispatchObjectContext* context, u8 techniqueIndex, u8 instanceCount,
+    const DrawRenderableDispatchThreadInfo*)
 {
-    rw::math::vpu::Matrix44 lIdentity;
-    lIdentity.SetIdentity();
-    return AddMeshCommandToBin(lpMesh, lpBin, lpContext, lu8TechniqueIndex,
-                               lu8InstanceCount, true, &lIdentity);
+    return AddMeshCommandToBin(mesh, bin, context, techniqueIndex, instanceCount, true);
 }
 
 namespace
@@ -577,9 +498,8 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
                "pCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY");
 
     const RenderableMesh* lpMesh =
-        reinterpret_cast<const RenderableMesh*>(ReadCommandPointer(&lpWords[2]));
-    // [x64] the shader-constant scratch pointer is payload qword 0 (console word 3).
-    Vector4** lppConstScratch = reinterpret_cast<Vector4**>(ReadCommandPointer(&lpWords[4]));
+        reinterpret_cast<const RenderableMesh*>(lpWords[2]);
+    Vector4** lppConstScratch = reinterpret_cast<Vector4**>(lpWords[3]);
 
     if (lpMesh->mu8InstanceCount != 0
         || lpMesh->mDrawIndexedParameters.GetIndexCount() < suOcclusionCullIndexCountThreshold)
@@ -603,11 +523,10 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
 
     // *lpMaterial (+0x00 u32 slot) is the ShaderTechnique image; its external object vertex
     // constants are the serialised {count, instance-index array} block at +0x1C.
-    const u32  luShaderTechnique = *reinterpret_cast<const u32*>(lpMaterial);
-    const u32* lpObjectVertexConstants =
-        reinterpret_cast<const u32*>(static_cast<uintptr_t>(luShaderTechnique) + 0x1C);
+    const ShaderConstantsExternal& objectConstants =
+        lpMaterial->mpShaderTechnique->mExternalObjectVertexShaderConstants;
     const u32* lpaConstantsInstanceData =
-        reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpObjectVertexConstants[1]));
+        reinterpret_cast<const u32*>(objectConstants.mppaConstantsInstanceData);
     CGS_ASSERT(lpaConstantsInstanceData[0] == KU_SHADER_CONSTANT_WORLD_MATRIX,
                "lpMaterial->GetShaderTechnique()->GetExternalObjectVertexShaderConstants()"
                ".mppaConstantsInstanceData[0] == ShaderConstantTable::E_WORLD_MATRIX");
@@ -627,61 +546,216 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
     spOcclusionCullManager->RenderOccludeeBoundingBox(&lWorldViewProjection, lOccludeeBox);
 }
 
-// =============================================================================
-// The per-WVP half of DrawRenderable::Interpret: the object bounding-sphere test
-// and the per-mesh emit loop. Lifted verbatim out of Interpret so that ONE object
-// command can be walked more than once with a different world matrix -- see the
-// [PC bring-up shim] instancing note in Interpret below. With a single instance
-// this is called exactly once and the code path is bit-for-bit what it was.
-//
-// lu8MeshInstanceCount is the instance byte stamped into each emitted mesh command
-// (the console forwards the trailer's byte unchanged; the PC expansion forwards 1
-// because it has already unrolled the instances).
-// =============================================================================
-// Inlined key construction in DrawRenderable::Interpret, ARTIST
-// 0x827FD4CC..0x827FD5D4. Keys occupy up to 44 bits BEFORE Submit appends the
-// 20-bit packet offset. The pseudocode loses the high half of the PPC registers.
-static u64 MeshSortKey(const MaterialTechniqueView& lrTechnique, bool lbZOnly, f32 lfClipZ)
+namespace
 {
-    const u64 luVertex = lrTechnique.mu16VertexProgramHash12 & 0xFFFu;
-    const u64 luPixel = lrTechnique.mu16PixelProgramHash12 & 0xFFFu;
-    const u64 luMaterial = lrTechnique.mu16MaterialHash16;
-    const u64 luPriority = lrTechnique.mu16Flags2 & 7u;
-    if (!lbZOnly)
-        return (luPriority << 41) | (luPixel << 25) | (luMaterial << 9) | (luVertex >> 3);
-
-    // unk_83011230: CRT @0x82C6C718..73C splats flt_820AD310 = 32767.0f.
-    // fctiwz then signed clamp [0,32767]. Compare before the host conversion
-    // to preserve PPC saturation for infinities and avoid an out-of-range cast.
-    const f32 lfScaledDepth = lfClipZ * 32767.0f;
-    const u64 luDepth = !(lfScaledDepth > 0.0f) ? 0u :
-        lfScaledDepth >= 32767.0f ? 32767u : static_cast<u32>(lfScaledDepth);
-    if (lrTechnique.mu16Flags & 8u)
+    void AssertMeshPacket(const RenderableMesh* mesh, u32 technique, const char* pass, s32 line)
     {
-        // @0x827FD570 rlwinm r10,r9,12,4,15 keeps pixel-hash bits 4..11;
-        // do not "fix" this to a full 12-bit hash. Alpha-tested draws prioritize
-        // material over depth, unlike the opaque Z path below.
-        return (u64(1) << 43) | ((luPixel & 0xFF0u) << 27) | (luMaterial << 15) | luDepth;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        stream << "Failed to add mesh to dispatch bin. Mesh=" << const_cast<RenderableMesh*>(mesh)
+               << pass << " technique=" << technique;
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, kDispatcherSource, line);
+        CgsDev::Assert::EndAssert();
     }
-    return (luPixel << 31) | (luDepth << 16) | luMaterial;
+
+    // ARTIST 827FCF5C..827FD014. The affine axes have an implicit W of
+    // zero. The translation row seeds its product with viewProjection.W.
+    __vector4 ProjectAffineRow(const __vector4 row, const Matrix44& viewProjection, bool translation)
+    {
+        const __vector4 x = __vspltw(row, 0);
+        __vector4 projected = translation
+            ? __vmaddfp(x, viewProjection.xAxis.mV, viewProjection.wAxis.mV)
+            : __vmulfp(x, viewProjection.xAxis.mV);
+        projected = __vmaddfp(__vspltw(row, 1), viewProjection.yAxis.mV, projected);
+        return __vmaddfp(__vspltw(row, 2), viewProjection.zAxis.mV, projected);
+    }
+
+    // ARTIST 827FD024..827FD118. Only a fully contained object sphere
+    // suppresses the individual mesh box tests.
+    bool SphereInsideFrustum(Vector3Plus sphere, const Matrix44& clip)
+    {
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 sign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        const __vector4 radius = __vspltw(sphere.mV, 3);
+        const __vector4 center = __vrlimi(sphere.mV, one, 1, 0);
+        const __vector4 x = __vmulfp(clip.xAxis.mV, radius);
+        const __vector4 y = __vmulfp(clip.yAxis.mV, radius);
+        const __vector4 z = __vmulfp(clip.zAxis.mV, radius);
+        const __vector4 xw = __vspltw(x, 3);
+        const __vector4 yw = __vspltw(y, 3);
+        const __vector4 zw = __vspltw(z, 3);
+
+        __vector4 projected = __vmulfp(clip.xAxis.mV, __vspltw(center, 0));
+        projected = __vmaddfp(clip.yAxis.mV, __vspltw(center, 1), projected);
+        projected = __vmaddfp(clip.zAxis.mV, __vspltw(center, 2), projected);
+        projected = __vmaddfp(clip.wAxis.mV, __vspltw(center, 3), projected);
+
+        const __vector4 plusExtent = __vaddfp(__vaddfp(__vandc(__vaddfp(x, xw), sign),
+            __vandc(__vaddfp(y, yw), sign)), __vandc(__vaddfp(z, zw), sign));
+        const __vector4 minusExtent = __vaddfp(__vaddfp(__vandc(__vsubfp(x, xw), sign),
+            __vandc(__vsubfp(y, yw), sign)), __vandc(__vsubfp(z, zw), sign));
+        const __vector4 w = __vspltw(projected, 3);
+        const __vector4 containedPlus = __vcmpgefp(__vaddfp(projected, w), plusExtent);
+        const __vector4 outsideMinus = __vcmpgtfp(__vsubfp(projected, w), __vxor(minusExtent, sign));
+        const __vector4 outside = __vor(outsideMinus, __vnor(containedPlus, containedPlus));
+        unsigned int compare;
+        __vcmpeqfpR(__vsel(zero, one, outside), zero, &compare);
+        return XMComparisonAllTrue(compare);
+    }
+
+    // ARTIST 827FD4CC..827FD5D4. Submit appends the low 20 packet bits.
+    u64 MeshSortKey(const MaterialTechnique& technique, bool zOnly, const Vector4& clipCenter)
+    {
+        const u64 vertex = technique.mu16VertexProgramHash12 & 0xFFFu;
+        const u64 pixel = technique.mu16PixelProgramHash12 & 0xFFFu;
+        const u64 material = technique.mu16MaterialHash16;
+        const u64 priority = technique.mu16Flags2 & 7u;
+        if (!zOnly)
+            return (priority << 41) | (pixel << 25) | (material << 9) | (vertex >> 3);
+
+        // ARTIST 83011230 is a 32767.0f broadcast. fctiwz writes the
+        // converted integer into the low word of its result register.
+        const f32 depthScale = 32767.0f;
+        const __vector4 center = __lvx(&clipCenter, 0);
+        const __vector4 scale = __vspltw(__lvlx(&depthScale, 0), 0);
+        const f64 converted = __fctiwz(__vmulfp(__vspltw(center, 2), scale).x);
+        u64 integerBits;
+        std::memcpy(&integerBits, &converted, sizeof(integerBits));
+        s32 depth = static_cast<s32>(integerBits);
+        if (depth < 0)
+            depth = 0;
+        else if (depth > 32767)
+            depth = 32767;
+
+        if (technique.mu16StateFlags & 8u)
+            return (u64(1) << 43) | ((pixel & 0xFF0u) << 27) | (material << 15) | depth;
+        return (pixel << 31) | (static_cast<u64>(depth) << 16) | material;
+    }
+
+    u64 PreZSortKey(const MaterialTechnique& technique)
+    {
+        return (static_cast<u64>(technique.mu16PixelProgramHash12 & 0xFFFu) << 24)
+            | (static_cast<u64>(technique.mu16MaterialHash16 & 0xFFFu) << 12)
+            | (technique.mu16VertexProgramHash12 & 0xFFFu);
+    }
+
+    void CheckMeshPacketSpace(DispatchBin& bin)
+    {
+        if (bin.GetUsedQwords() + 256 >= bin.GetSizeQwords())
+            bin.HandleMemoryOverflow(256);
+    }
 }
 
-// ARTIST 0x827FD768..0x827FD794: three 12-bit fields, not a u32 key.
-static u64 PreZSortKey(const MaterialTechniqueView& lrTechnique)
+// ARTIST 827FCDA0.
+void DrawRenderable::Interpret(DispatchCommand* command, DispatchFrame* meshFrame,
+    void* userData, f32)
 {
-    return (static_cast<u64>(lrTechnique.mu16PixelProgramHash12 & 0xFFFu) << 24)
-        | (static_cast<u64>(lrTechnique.mu16MaterialHash16 & 0xFFFu) << 12)
-        | (lrTechnique.mu16VertexProgramHash12 & 0xFFFu);
-}
+    AssertDispatcher(command != 0, "lpCommand", 1298);
+    AssertDispatcher(meshFrame != 0, "lpMeshOnlyDispatchFrame", 1299);
+    AssertDispatcher(userData != 0, "lpDispatchObjectContextVoid", 1300);
+    AssertDispatcher(command->GetCommandID() == E_DRAWRENDERABLE,
+        "lpCommand->GetCommandID() == DRAWRENDERABLE", 1339);
 
-// =============================================================================
-// CgsGraphics::DrawRenderable::Interpret  @ 0x827FCDA0
-//
-// The object -> mesh expansion: restore the command's dirty shader constants
-// into the object context, build the object's WVP, frustum-cull, then emit one
-// DRAWRENDERABLEMESH[ZONLY] command + sort record per surviving mesh into the
-// mesh-only frame's lists (EmitObjectMeshCommands above).
-// =============================================================================
+    const Renderable* const renderable = reinterpret_cast<const Renderable*>(command->muWords[2]);
+    const DrawRenderableDispatchThreadInfo* const trailer =
+        reinterpret_cast<const DrawRenderableDispatchThreadInfo*>(command->muWords[3]);
+    AssertDispatcher(renderable != 0, "lpRenderable", 1356);
+
+    DispatchObjectContext* const context = static_cast<DispatchObjectContext*>(userData);
+    const u32 routing = command->muWords[1];
+    const u8 opaqueList = static_cast<u8>((routing >> 24) + context->miListIdBase);
+    const u8 transparentList = static_cast<u8>((routing >> 16) + context->miListIdBase);
+    const u8 requestedTechnique = static_cast<u8>(routing >> 8);
+    bool testMeshFrustum = static_cast<u8>(routing) != 0;
+
+    const u8* const dirty = reinterpret_cast<const u8*>(command + 1);
+    const u32 count = dirty[0];
+    const Vector4* const* const values = reinterpret_cast<const Vector4* const*>(dirty + ((count + 4) & ~3u));
+    for (u32 i = 0; i < count; ++i)
+        context->mapConstantData[dirty[i + 1]] = values[i];
+
+    const Matrix44Affine* const world = reinterpret_cast<const Matrix44Affine*>(context->mapConstantData[0]);
+    const Matrix44* const viewProjection = reinterpret_cast<const Matrix44*>(context->mapConstantData[3]);
+    AssertDispatcher(world != 0, "lpWorldMatrix != NULL", 1427);
+    AssertDispatcher(viewProjection != 0, "lpViewProjectionMatrix != NULL", 1428);
+
+    Matrix44 worldViewProjection;
+    worldViewProjection.xAxis.mV = ProjectAffineRow(world->xAxis.mV, *viewProjection, false);
+    worldViewProjection.yAxis.mV = ProjectAffineRow(world->yAxis.mV, *viewProjection, false);
+    worldViewProjection.zAxis.mV = ProjectAffineRow(world->zAxis.mV, *viewProjection, false);
+    worldViewProjection.wAxis.mV = ProjectAffineRow(world->wAxis.mV, *viewProjection, true);
+    if (testMeshFrustum && renderable->mu16NumMeshes >= 3
+        && SphereInsideFrustum(renderable->mBoundingSphere, worldViewProjection))
+    {
+        testMeshFrustum = false;
+    }
+
+    DispatchBin& bin = meshFrame->GetBin();
+    // ARTIST's depth/Pre-Z loads read the translation row of this same
+    // culling scratch. The binary only writes it when testing a mesh box.
+    Matrix44 meshClip;
+    for (u32 i = 0; i < renderable->mu16NumMeshes; ++i)
+    {
+        const RenderableMesh* const mesh = renderable->mppMeshes[i];
+        if (mesh->mu8Flags & trailer->mu8ExcludeMeshBits)
+            continue;
+        if (testMeshFrustum)
+        {
+            mesh->mPackedBoundingBox.MultiplyByMatrix(worldViewProjection, meshClip);
+            if (FrustumTest(meshClip) != 0)
+                continue;
+        }
+
+        const MaterialAssembly* const assembly = mesh->mpMaterialAssembly;
+        const s32 lastTechnique = static_cast<s32>(mesh->mu8NumVertexDescriptors) - 1;
+        const u32 techniqueIndex = lastTechnique < requestedTechnique ? lastTechnique : requestedTechnique;
+        AssertDispatcher(mesh->mu8NumVertexDescriptors == assembly->GetLength(),
+            "lpRenderableMesh->GetNumVertexDescriptors() == lpMaterialAssembly->GetLength()", 1563);
+        const MaterialTechnique* const technique = assembly->GetMaterial(techniqueIndex);
+        DispatchList* const list = meshFrame->GetList(
+            (technique->mu16StateFlags & 1u) ? transparentList : opaqueList);
+        list->ReserveKey();
+        CheckMeshPacketSpace(bin);
+        bin.BeginPacket();
+        const u8 instances = static_cast<u8>(trailer->mi8InstanceCount);
+        const bool added = trailer->mbRenderZOnly
+            ? DrawRenderableMeshZOnly::AddToBin(mesh, &bin, context, static_cast<u8>(techniqueIndex), instances, trailer)
+            : DrawRenderableMesh::AddToBin(mesh, &bin, context, static_cast<u8>(techniqueIndex), instances, trailer);
+        DispatchCommand* const packet = bin.EndPacket();
+        if (!added || !packet)
+            AssertMeshPacket(mesh, techniqueIndex, trailer->mbRenderZOnly ? " zonly" : " ", 1647);
+        list->Submit(MeshSortKey(*technique, trailer->mbRenderZOnly, meshClip.wAxis), packet);
+
+        if (!context->mbPreZEnabled || trailer->mu8PreZList == 255
+            || (technique->mu16StateFlags & 1u)
+            || ((technique->mu16StateFlags & 8u) && !context->mbPreZAlphaEnabled))
+        {
+            continue;
+        }
+
+        const u32 preZTechnique = lastTechnique < trailer->mu8PreZTechniqueIndex
+            ? lastTechnique : trailer->mu8PreZTechniqueIndex;
+        unsigned int beyondThreshold;
+        const __vector4 center = __lvx(&meshClip.wAxis, 0);
+        __vcmpgtfpR(__vspltw(center, 3), __lvx(context->mvPreZDistanceThreshold, 0), &beyondThreshold);
+        if (XMComparisonAllTrue(beyondThreshold))
+            continue;
+
+        const MaterialTechnique* const preZMaterial = assembly->GetMaterial(preZTechnique);
+        DispatchList* const preZList = meshFrame->GetList(trailer->mu8PreZList + context->miListIdBase);
+        preZList->ReserveKey();
+        CheckMeshPacketSpace(bin);
+        bin.BeginPacket();
+        AssertDispatcher(!trailer->mbRenderZOnly, "Why would you ever want to do a preZ pass for Z only rendering?!", 1751);
+        const bool addedPreZ = DrawRenderableMeshZOnly::AddToBin(mesh, &bin, context,
+            static_cast<u8>(preZTechnique), instances, trailer);
+        DispatchCommand* const preZPacket = bin.EndPacket();
+        if (!addedPreZ || !packet)
+            AssertMeshPacket(mesh, preZTechnique, " (pre-z)", 1765);
+        preZList->Submit(PreZSortKey(*preZMaterial), preZPacket);
+    }
+}
 
 // =============================================================================
 // CgsGraphics::DispatchList::DispatchAllObjectToMesh  @ 0x827FD7D0
@@ -780,7 +854,7 @@ s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpret
                    "lpCommand->GetCommandID() == DRAWRENDERABLEMESH");
 
         RenderableMesh* lpMesh =
-            reinterpret_cast<RenderableMesh*>(ReadCommandPointer(&lpPacket[2]));
+            reinterpret_cast<RenderableMesh*>(lpPacket[2]);
         const u32 luWord1        = lpPacket[1];
         const u8  lu8Technique   = static_cast<u8>(luWord1 & 0xFFu);
 
@@ -798,7 +872,7 @@ s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpret
         CGS_ASSERT(lpTechnique != 0, "lpMaterial");
 
         Vector4** lppConstScratch =
-            reinterpret_cast<Vector4**>(ReadCommandPointer(&lpPacket[4]));
+            reinterpret_cast<Vector4**>(lpPacket[3]);
 
         // Technique-change path: states + programs + technique constants.
         if (lpTechnique != spLastTechnique)
@@ -814,9 +888,6 @@ s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpret
         if (const ShaderConstantsCPU* lpCPU = lpAssembly->GetCPUShaderConstants())
             lpCPU->Dispatch(lpInterpreter->GetTime(), lpAssembly,
                             lpAssembly->GetMaterial(luTechnique));
-
-        // [PC bring-up shim] the per-object WVP carried in the command
-        // (payload qwords 1..4) feeds the fallback-shader transform.
 
         // Bind the mesh geometry + draw.
         // ARTIST @0x827F59EC-0x827F5A30 enters the manager's per-mesh
@@ -935,7 +1006,7 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
                "lpCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY");
 
     RenderableMesh* lpMesh =
-        reinterpret_cast<RenderableMesh*>(ReadCommandPointer(&lpPacket[2]));
+        reinterpret_cast<RenderableMesh*>(lpPacket[2]);
     const u32 luWord1      = lpPacket[1];
     const u8  lu8Technique = static_cast<u8>(luWord1 & 0xFFu);
 
@@ -954,7 +1025,7 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
     CGS_ASSERT(lpTechnique != 0, "lpMaterial");
 
     Vector4** lppConstScratch =
-        reinterpret_cast<Vector4**>(ReadCommandPointer(&lpPacket[4]));
+        reinterpret_cast<Vector4**>(lpPacket[3]);
 
     if (reinterpret_cast<uintptr_t>(lpTechnique) != suLastTechniqueAux)
     {
@@ -964,8 +1035,6 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
     // ARTIST 827F68EC..6920: the same animation time/UV offset in depth passes.
     if (const ShaderConstantsCPU* lpCPU = lpAssembly->GetCPUShaderConstants())
         lpCPU->Dispatch(lfTime, lpAssembly, lpAssembly->GetMaterial(luTechnique));
-
-    // [PC bring-up shim] the per-object WVP carried in the command (payload qwords 1..4).
 
 }
 
