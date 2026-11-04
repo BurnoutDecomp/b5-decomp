@@ -182,26 +182,35 @@ namespace TestBed
     // -------------------------------------------------------------------------------------------
     void Allocator::Header::SanityCheck(History& lrHistory, const char* lpcAllocatorName)
     {
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-        {
-            *CgsDev::Log::gpDebugPrint << "ERROR START GUEARD TRAMPLE:";
-        }
+        // ARTIST 0x82695F50: distinguish damaged start/link from the end guard.
+        const uintptr_t luNext = reinterpret_cast<uintptr_t>(mpNext);
+        const bool lbStartValid = mStartGuard.IsValid() &&
+                                  (luNext == 0 || luNext > 0x80000000u);
+        if (lbStartValid && GetEndGuard().IsValid())
+            return;
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << (lbStartValid ? "ERROR END GUARD TRAMPLE:"
+                                                        : "ERROR START GUEARD TRAMPLE:");
             *CgsDev::Log::gpDebugPrint << "<" << GetClientAddress() << ">";
 
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-        {
-            *CgsDev::Log::gpDebugPrint << "[" << static_cast<void*>(const_cast<char*>(lpcAllocatorName)) << "]";
-        }
+            const uintptr_t luAllocatorName = reinterpret_cast<uintptr_t>(lpcAllocatorName);
+            *CgsDev::Log::gpDebugPrint << "[";
+            if (luAllocatorName >= 0x80000000u)
+                *CgsDev::Log::gpDebugPrint << lpcAllocatorName;
+            else
+                *CgsDev::Log::gpDebugPrint << static_cast<void*>(const_cast<char*>(lpcAllocatorName));
+            *CgsDev::Log::gpDebugPrint << "]";
 
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-        {
-            *CgsDev::Log::gpDebugPrint << "Name [BadPtr]" << static_cast<void*>(const_cast<char*>(mpcName));
-        }
+            const uintptr_t luName = reinterpret_cast<uintptr_t>(mpcName);
+            if (luName >= 0x80000000u)
+                *CgsDev::Log::gpDebugPrint << "\"" << mpcName << "\" ";
+            else
+                *CgsDev::Log::gpDebugPrint << "Name [BadPtr]" << static_cast<void*>(const_cast<char*>(mpcName));
 
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << " which is " << (u32)muSize << " bytes in size.\n";
+        }
 
         lrHistory.DumpAllPossibleDanglers(static_cast<u8*>(GetClientAddress()));
         CGS_ASSERT(false, "Error");

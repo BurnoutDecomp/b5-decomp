@@ -84,7 +84,7 @@ Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
 {
     // mCollections: zero the table header in place, then reserve when the load
     // record carries a seed (X360 TablePolicy_1_96_::Rebuild gated on it).
-    mCollections = CollectionHashMap();
+    mCollections.Construct();
     if (lrLoad.mCollectionReserve != 0)
         mCollections.RebuildTable(lrLoad.mCollectionReserve);
 
