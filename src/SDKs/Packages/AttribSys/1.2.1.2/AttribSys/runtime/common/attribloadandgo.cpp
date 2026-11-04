@@ -231,9 +231,8 @@ Attrib::Vault::Vault(ExportManager& lExportMgr, AssetID lAssetId, void* lpData,
     mExportData = mDepData + mNumDependencies;
     for (unsigned int luIndex = 0; luIndex < luTotalBlocks; ++luIndex)
     {
-        // X360 zeroes each block's payload pointer and packed kind|size word in
-        // place; value-initialization is that same two-field zero.
-        mDepData[luIndex] = DataBlock();
+        // ARTIST clears both fields before binding any dependency.
+        mDepData[luIndex].Clear();
     }
 
     mDepIDs = static_cast<AssetID*>(
