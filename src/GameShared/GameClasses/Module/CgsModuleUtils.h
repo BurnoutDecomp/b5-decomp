@@ -98,7 +98,7 @@ namespace CgsModule
         lpDestBuffer->UnlockForWrite();
     }
 
-    static __forceinline void AssertFiveSourceIOBuffer(const void* lpBuffer,
+    static __forceinline void AssertIOBuffer(const void* lpBuffer,
                                                      const char* lpcExpression, int liLine)
     {
         if (!lpBuffer)
@@ -117,12 +117,12 @@ namespace CgsModule
         TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
         TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4)
     {
-        AssertFiveSourceIOBuffer(lpInputBuffer, "lpInputBuffer", 403);
-        AssertFiveSourceIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 404);
-        AssertFiveSourceIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 405);
-        AssertFiveSourceIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 406);
-        AssertFiveSourceIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 407);
-        AssertFiveSourceIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 408);
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 403);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 404);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 405);
+        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 406);
+        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 407);
+        AssertIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 408);
 
         lpInputBuffer->LockForWrite();
         lpOutputBuffer0->LockForRead();
@@ -138,13 +138,60 @@ namespace CgsModule
         TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
         TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4)
     {
-        AssertFiveSourceIOBuffer(lpInputBuffer, "lpInputBuffer", 428);
-        AssertFiveSourceIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 429);
-        AssertFiveSourceIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 430);
-        AssertFiveSourceIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 431);
-        AssertFiveSourceIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 432);
-        AssertFiveSourceIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 433);
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 428);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 429);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 430);
+        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 431);
+        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 432);
+        AssertIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 433);
 
+        lpOutputBuffer4->UnlockForRead();
+        lpOutputBuffer3->UnlockForRead();
+        lpOutputBuffer2->UnlockForRead();
+        lpOutputBuffer1->UnlockForRead();
+        lpOutputBuffer0->UnlockForRead();
+        lpInputBuffer->UnlockForWrite();
+    }
+
+    // ARTIST 823B78A0 / 823B7A10 guards the six effects inputs and their destination.
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
+              typename TSourceD, typename TSourceE, typename TSourceF>
+    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
+        TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
+        TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4, TSourceF* lpOutputBuffer5)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 454);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 455);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 456);
+        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 457);
+        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 458);
+        AssertIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 459);
+        AssertIOBuffer(lpOutputBuffer5, "lpOutputBuffer5", 460);
+
+        lpInputBuffer->LockForWrite();
+        lpOutputBuffer0->LockForRead();
+        lpOutputBuffer1->LockForRead();
+        lpOutputBuffer2->LockForRead();
+        lpOutputBuffer3->LockForRead();
+        lpOutputBuffer4->LockForRead();
+        lpOutputBuffer5->LockForRead();
+    }
+
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
+              typename TSourceD, typename TSourceE, typename TSourceF>
+    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
+        TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
+        TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4, TSourceF* lpOutputBuffer5)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 482);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 483);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 484);
+        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 485);
+        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 486);
+        AssertIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 487);
+        AssertIOBuffer(lpOutputBuffer5, "lpOutputBuffer5", 488);
+
+        lpOutputBuffer5->UnlockForRead();
         lpOutputBuffer4->UnlockForRead();
         lpOutputBuffer3->UnlockForRead();
         lpOutputBuffer2->UnlockForRead();

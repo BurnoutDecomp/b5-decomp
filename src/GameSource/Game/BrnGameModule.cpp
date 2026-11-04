@@ -1979,10 +1979,7 @@ namespace BrnGame
     // =========================================================================================
     // DoUpdate_Effects  @0x823DD0A8 -- the EFFECTS leg of the per-frame cascade.
     //
-    // The console order (asm 0x823DD0A8-0x823DD29C), statement for statement. The lock helper
-    // sub_823B78A0 is LockBuffersForIO(effectsIn, out0..out5) -- W(effectsIn) then R(out0..out5)
-    // in argument order, with sub_823B7A10 the exact reverse; both are reproduced inline, the
-    // same idiom DoUpdate_Sound already uses in this file.
+    // The ARTIST helper checks and locks the six source buffers before copying into the effects input.
     //
     void BrnGameModule::DoUpdate_Effects(CgsModule::IOBufferStack* lpInputBufferStack,
                                          CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -1996,106 +1993,38 @@ namespace BrnGame
                                          bool lbSuspendEffects,
                                          BrnUpdateSet leUpdateSet)
     {
-        typedef BrnEffects::EffectsIO::InputBuffer EffectsIn;
-
         CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Effects);
 
-        // The self-carved "Effects" input (console @0x823DD0F8, the CgsModuleIOHelper
-        // create/destroy pair with the h:52/h:57 asserts).
-        EffectsIn* lpEffectsInputBuffer = 0;
-        const bool lbCreated = lpInputBufferStack->CreateIOBuffer(&lpEffectsInputBuffer, "Effects");
-        CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
-        (void)lbCreated;
-        if (lpEffectsInputBuffer == 0)
-        {
-            CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Effects);
-            return;
-        }
+        CgsModule::IOHelper<BrnEffects::EffectsIO::InputBuffer> lEffectsInput(lpInputBufferStack, "Effects");
+        CgsModule::LockBuffersForIO(static_cast<BrnEffects::EffectsIO::InputBuffer*>(lEffectsInput),
+            lpDirectorOutputBuffer, lpInputOutputBuffer, lpWorldOutputBuffer, lpGameStateOutputBuffer,
+            lpReplaysPreSimOutputBuffer, lpSoundPreUpdateOutputBuffer);
 
-        // sub_823B78A0(effectsIn, director, input, world, gameState, replays, soundPreUpdate)
-        lpEffectsInputBuffer->LockForWrite();
-        if (lpDirectorOutputBuffer != 0)       lpDirectorOutputBuffer->LockForRead();
-        if (lpInputOutputBuffer != 0)          const_cast<CgsInput::InputIO::OutputBuffer*>(lpInputOutputBuffer)->LockForRead();
-        if (lpWorldOutputBuffer != 0)          lpWorldOutputBuffer->LockForRead();
-        if (lpGameStateOutputBuffer != 0)      lpGameStateOutputBuffer->LockForRead();
-        if (lpReplaysPreSimOutputBuffer != 0)  lpReplaysPreSimOutputBuffer->LockForRead();
-        if (lpSoundPreUpdateOutputBuffer != 0) lpSoundPreUpdateOutputBuffer->LockForRead();
+        lEffectsInput->SetTimerStatusInterface(&mTimerStatusInterface);
+        lEffectsInput->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
 
-        // @0x823DD154/60 -- the game module own timer status (gm + 0x9A0B0C).
-        lpEffectsInputBuffer->SetTimerStatusInterface(&mTimerStatusInterface);
+        // ARTIST 823DD180 reads pad 0 action 3's pressed bit.
+        const CgsInput::InputIO::PadOutputInformation* lpPad = lpInputOutputBuffer->GetPadInfo(0);
+        if ((lpPad->maActionInfo[3].muStatus & 2u) != 0)
+            BrnEffects::EffectsModule::RestartEffects();
 
-        // @0x823DD164/74 -- the director finalised camera.
-        if (lpDirectorOutputBuffer != 0)
-            lpEffectsInputBuffer->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
+        BridgeEntityToEffects(lpWorldOutputBuffer, lEffectsInput, leUpdateSet);
 
-        // @0x823DD178/A0 -- pad 0 button word bit 1 raises the QA "restart effects" latch:
-        //   `lwz r11, 0x34(padInfo); extrwi r11, r11, 1,30` == (buttons >> 1) & 1.
-        if (lpInputOutputBuffer != 0)
-        {
-            // `lwz r11, 0x34(padInfo)` == maActionInfo[3].muStatus (+0x18 + 3*8 + 4), and
-            // `extrwi r11,r11,1,30` is its bit 1 == pressed-this-frame.
-            const CgsInput::InputIO::PadOutputInformation* lpPad = lpInputOutputBuffer->GetPadInfo(0);
-            if (lpPad != 0 && ((lpPad->maActionInfo[3].muStatus >> 1) & 1u) != 0)
-                BrnEffects::EffectsModule::RestartEffects();
-        }
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpcGameStateOutputBuffer = lpGameStateOutputBuffer;
+        lEffectsInput->GetGameActionQueue()->Append<13312, 16>(*lpcGameStateOutputBuffer->GetGameActionQueue());
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpcReplayOutputBuffer = lpReplaysPreSimOutputBuffer;
+        lEffectsInput->SetReplayStatusInterface(lpcReplayOutputBuffer->GetStatusInterface());
+        lEffectsInput->SetAudioEffectsMessageQueue(
+            &lpSoundPreUpdateOutputBuffer->GetPreUpdateOutput().GetAudioEffectsMessageQueue());
+        lEffectsInput->SetSuspendEffects(lbSuspendEffects);
 
-        // @0x823DD1A4/B8 -- the world -> effects bridge (it takes the update set, not the
-        // buffer own copy).
-        if (lpWorldOutputBuffer != 0)
-            BridgeEntityToEffects(lpWorldOutputBuffer, lpEffectsInputBuffer, leUpdateSet);
+        CgsModule::UnlockBuffersForIO(static_cast<BrnEffects::EffectsIO::InputBuffer*>(lEffectsInput),
+            lpDirectorOutputBuffer, lpInputOutputBuffer, lpWorldOutputBuffer, lpGameStateOutputBuffer,
+            lpReplaysPreSimOutputBuffer, lpSoundPreUpdateOutputBuffer);
 
-        // @0x823DD1BC/D4 -- the game-state action queue, appended (NOT replaced).
-        if (lpGameStateOutputBuffer != 0)
-        {
-            // ⚠ THE CONST OVERLOAD, DELIBERATELY. MEASURED (runs 4-6, 2026-09-02): the
-            // non-const GetGameActionQueue @0x8231D4B8 asserts "Not locked for writing" and
-            // this buffer is read-locked three lines up -- 15,333 firings in one boot, which
-            // by themselves slowed the boot roughly four-fold (13.6s -> 53s to the new-profile
-            // mark) and left the flow parked at CARSELECT. The console calls the READ-lock
-            // accessor here (sub_823B96F0, BrnGameStateModuleIO.h:265): this leg only COPIES
-            // the queue out of the game-state output buffer.
-            const BrnGameState::GameStateModuleIO::OutputBuffer* lpcGameStateOutputBuffer =
-                lpGameStateOutputBuffer;
-            lpEffectsInputBuffer->GetGameActionQueue()->Append<13312, 16>(
-                *lpcGameStateOutputBuffer->GetGameActionQueue());
-        }
-
-        // @0x823DD1D8/E8 -- the replay status interface.
-        if (lpReplaysPreSimOutputBuffer != 0)
-        {
-            lpEffectsInputBuffer->SetReplayStatusInterface(
-                lpReplaysPreSimOutputBuffer->GetStatusInterface());
-        }
-
-        // @0x823DD1EC/200 -- the sound pre-update block audio-effects message queue
-        // (`addi r4, r11, 0x2A0`).
-        if (lpSoundPreUpdateOutputBuffer != 0)
-        {
-            lpEffectsInputBuffer->SetAudioEffectsMessageQueue(
-                &lpSoundPreUpdateOutputBuffer->GetPreUpdateOutput().GetAudioEffectsMessageQueue());
-        }
-
-        // @0x823DD228 -- `stbx r10, r31, 0xE494`: the suspend flag.
-        lpEffectsInputBuffer->SetSuspendEffects(lbSuspendEffects);
-
-        // sub_823B7A10 -- the exact reverse of the lock helper.
-        if (lpSoundPreUpdateOutputBuffer != 0) lpSoundPreUpdateOutputBuffer->UnlockForRead();
-        if (lpReplaysPreSimOutputBuffer != 0)  lpReplaysPreSimOutputBuffer->UnlockForRead();
-        if (lpGameStateOutputBuffer != 0)      lpGameStateOutputBuffer->UnlockForRead();
-        if (lpWorldOutputBuffer != 0)          lpWorldOutputBuffer->UnlockForRead();
-        if (lpInputOutputBuffer != 0)          const_cast<CgsInput::InputIO::OutputBuffer*>(lpInputOutputBuffer)->UnlockForRead();
-        if (lpDirectorOutputBuffer != 0)       lpDirectorOutputBuffer->UnlockForRead();
-        lpEffectsInputBuffer->UnlockForWrite();
-
-        // @0x823DD234/58 -- the module own step, through vtable +0x44.
         mEffectsModule.Update(lpInputBufferStack, lpOutputBufferStack,
-                              lpEffectsInputBuffer, lpEffectsOutputBuffer, leUpdateSet);
-
+                              lEffectsInput, lpEffectsOutputBuffer, leUpdateSet);
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Effects);
-
-        const bool lbDestroyed = lpInputBufferStack->DestroyIOBuffer(&lpEffectsInputBuffer);
-        CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");  // CgsModuleIOHelper.h:57
-        (void)lbDestroyed;
     }
 
     //
