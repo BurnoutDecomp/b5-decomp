@@ -107,6 +107,11 @@ namespace BrnReplays
         ReplayModule();
         void Construct() ;
 
+        bool Release();
+
+        // ARTIST 82652768 occupies vtable slot 16, before the two simulation updates.
+        virtual bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+
         // ARTIST 0x82660E78; the public virtual pre-sim entry owns IO locks and dispatch.
         virtual void Update_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
                            ReplayIO::OutputBuffer_PreSim* lpOutputBuffer,
@@ -139,11 +144,6 @@ namespace BrnReplays
 
         // X360 0x8265D1B0. Dispatch the GPU disk write stream (BrnGameModule::DispatchThread).
         void Update_Dispatch();
-
-        // X360 0x82652768 -- the module prepare: base prepare, then the linear allocator and
-        // the module's own stream buffers. Takes the game-data allocator list, exactly as the
-        // scripted load's stage 8 passes it.
-        bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
 
         // X360 0x8264B600 -- adopt every serialiser the request interface has collected and
         // give each one its stream buffer and its STATIC buffer out of the module's linear
