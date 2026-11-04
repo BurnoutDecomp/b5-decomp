@@ -149,6 +149,10 @@ namespace BrnFlapt
         void* mpFrameTriggerUserData;
         u16 muParameterIndex;
         u8 mxFlags;
+
+    private:
+        void ProcessFScriptCommand(const struct FScriptCommand& lrCommand,
+                                   u32 luCurrentKeyFrame);
     };
 }
 

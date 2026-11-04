@@ -126,10 +126,8 @@ namespace CgsGui
         // creates + registers it); null until then so UpdateComponents can gate on it.
         mpAptCommunicator = 0;
 
-        // Construct the embedded APT data registry/allocator front-end (guest a1+12).
-        // FLAG: AptDataHandler::Construct is homed by the data-handler's own ledger TU (the DWARF
-        // marks it so); its bring-up is not reconstructed in this slice. The member exists at the
-        // faithful offset; its internal state is brought up by that TU when it lands.
+        // ARTIST @ 0x82860020-28 initializes the allocator and loaded count.
+        mAptDataHandler.Construct();
 
         // Construct the embedded render handler (guest a1+0x420). This is where the render-state
         // field seeds the wave-3 slice deferred land (mpImRenderers / mpTextRenderer /
