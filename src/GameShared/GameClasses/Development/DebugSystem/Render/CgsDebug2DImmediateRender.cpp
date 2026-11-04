@@ -6,7 +6,10 @@
 #include <math.h>
 #include <cstring>
 
+#include <stdlib.h>
 #include <vectorintrinsics.h>
+
+#pragma intrinsic(_rotl)
 
 namespace
 {
@@ -62,6 +65,7 @@ namespace CgsDev
     //   4) mfVirtualScreenHeight >= point.y   (member @0x38 vs point.y)
     // The two compared members are the virtual-screen extents, reached here by name
     // (mfVirtualScreenWidth / mfVirtualScreenHeight) rather than by the X360 0x34/0x38 offsets.
+    // ARTIST rotates the CR6 all-true bit from bit 7 to bit 0 before each test.
     bool Debug2DImmediateRender::Is2DPointOnScreen(Vector2 lv2Point) const
     {
         const __vector4 lvZero = __vspltisw(0);
@@ -72,20 +76,20 @@ namespace CgsDev
 
         unsigned int luCondition = 0;
         __vcmpgefpR(lvX, __vspltw(lvZero, 0), &luCondition);
-        if (((luCondition >> 7) & 1u) != 0)
+        if ((_rotl(luCondition, 25) & 1u) != 0)
         {
             const __vector4 lvY = __vspltw(lv2Point.mV, 1);
             luCondition = 0;
             __vcmpgefpR(lvY, __vspltw(lvZero, 1), &luCondition);
-            if (((luCondition >> 7) & 1u) != 0)
+            if ((_rotl(luCondition, 25) & 1u) != 0)
             {
                 luCondition = 0;
                 __vcmpgefpR(__vspltw(lvExtent, 0), lvX, &luCondition);
-                if (((luCondition >> 7) & 1u) != 0)
+                if ((_rotl(luCondition, 25) & 1u) != 0)
                 {
                     luCondition = 0;
                     __vcmpgefpR(__vspltw(lvExtent, 1), lvY, &luCondition);
-                    if (((luCondition >> 7) & 1u) != 0)
+                    if ((_rotl(luCondition, 25) & 1u) != 0)
                         return true;
                 }
             }
@@ -248,10 +252,23 @@ namespace CgsDev
     bool Debug2DImmediateRender::Do2DBoxesIntersect(Vector2 lv2MinA, Vector2 lv2MaxA,
                                                    Vector2 lv2MinB, Vector2 lv2MaxB) const
     {
-        if (lv2MinB.mV.x > lv2MaxA.mV.x || lv2MinA.mV.x > lv2MaxB.mV.x)
-            return false;
-        if (lv2MinB.mV.y > lv2MaxA.mV.y || lv2MinA.mV.y > lv2MaxB.mV.y)
-            return false;
+        for (s32 liOffset = 0; liOffset < 8; liOffset += 4)
+        {
+            const __vector4 lvLane = __vspltw(__lvsl(0, liOffset), 0);
+            const __vector4 lvMaxA = __vperm(lv2MaxA.mV, lv2MaxA.mV, lvLane);
+            const __vector4 lvMinB = __vperm(lv2MinB.mV, lv2MinB.mV, lvLane);
+            unsigned int luCondition = 0;
+            __vcmpgtfpR(lvMinB, lvMaxA, &luCondition);
+            if ((_rotl(luCondition, 25) & 1u) != 0)
+                return false;
+
+            const __vector4 lvMaxB = __vperm(lv2MaxB.mV, lv2MaxB.mV, lvLane);
+            const __vector4 lvMinA = __vperm(lv2MinA.mV, lv2MinA.mV, lvLane);
+            luCondition = 0;
+            __vcmpgtfpR(lvMinA, lvMaxB, &luCondition);
+            if ((_rotl(luCondition, 25) & 1u) != 0)
+                return false;
+        }
         return true;
     }
 

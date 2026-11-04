@@ -414,8 +414,17 @@ namespace BrnGame
         const f32 lfAlpha = static_cast<f32>(__fsel(mfBlackOverlayFade - 1.0f, 1.0f, mfBlackOverlayFade));
         const RGBA8 lBlack = { 0, 0, 0, static_cast<u8>(static_cast<s32>(lfAlpha * 255.0f + 0.5f)) };
         lpIm2d->SetTexture(mpCarTexture);
-        EmitQuad(lpIm2d, Point(0.0f,0.0f), Point(KF_SCREEN_W,0.0f), Point(0.0f,KF_SCREEN_H), Point(KF_SCREEN_W,KF_SCREEN_H),
-                 0.0f, 0.0f, KF_BG_U, KF_BG_V, lBlack);
+        // ARTIST computes these from the 1280-by-720 source constants with
+        // single-precision multiplies; the resulting bounds are exactly 0 and 720.
+        const f32 lfTop = 0.0f;
+        const f32 lfBottom = KF_SCREEN_H;
+        const Basic2dColouredTexturedVertex laVerts[4] = {
+            { { 0.0f, lfTop },        lBlack, { 0.0f,    0.0f } },
+            { { 0.0f, lfBottom },     lBlack, { 0.0f,    KF_BG_V } },
+            { { KF_SCREEN_W, lfTop }, lBlack, { KF_BG_U, 0.0f } },
+            { { KF_SCREEN_W, lfBottom }, lBlack, { KF_BG_U, KF_BG_V } }
+        };
+        lpIm2d->Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
         lpIm2d->EndRendering();
     }
 
