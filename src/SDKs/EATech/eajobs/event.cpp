@@ -23,6 +23,16 @@ namespace EA
 {
 namespace Jobs
 {
+
+    namespace
+    {
+        // Keep the counter update out of line for the native emulator build.
+        __declspec(noinline) long DecrementEventCounter(u32* lpCounter)
+        {
+            return _InterlockedDecrement(reinterpret_cast<volatile long*>(lpCounter));
+        }
+    }
+
     Event::Event() : mType(EVENT_TYPE_NONE), mDecrementerLocation(0)
     {
         mWritePtrValue=0; mWritePtrLocation=0;
@@ -48,8 +58,7 @@ namespace Jobs
         if (mDecrementerLocation)
         {
             // Atomic decrement; fire only when we are the one that reaches zero.
-            long liRemaining = _InterlockedDecrement(
-                reinterpret_cast<volatile long*>(mDecrementerLocation));
+            const long liRemaining = DecrementEventCounter(mDecrementerLocation);
             if (liRemaining != 0)
                 return;
         }
@@ -61,9 +70,11 @@ namespace Jobs
         }
         else if (mType == EVENT_TYPE_WRITE)
         {
+            *mWriteLocation = mWriteValue;
         }
         else if (mType == EVENT_TYPE_WRITE_PTR)
         {
+            *mWritePtrLocation = mWritePtrValue;
         }
     }
 }
