@@ -341,9 +341,9 @@ void ImRendererBase::ConstructOnceOnly(rw::IResourceAllocator* lpAllocator)
 
     mgStateLibrary.mpRasterizerState_CullNone = ConstructRasteriserState(
         lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(0));
-    mgStateLibrary.mpRasterizerState_CullCCW = ConstructRasteriserState(
-        lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(2));
     mgStateLibrary.mpRasterizerState_CullCW = ConstructRasteriserState(
+        lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(2));
+    mgStateLibrary.mpRasterizerState_CullCCW = ConstructRasteriserState(
         lpAllocator, static_cast<renderengine::RasterizerState::CullMode>(1));
 
     mgStateLibrary.mpDepthStencilState_ZBufferOn = ConstructDepthStencilState(

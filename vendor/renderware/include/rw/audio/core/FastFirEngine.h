@@ -41,9 +41,17 @@ namespace core
 //   FFT_ForwardReal(handle, buffer)
 //   FFT_InverseReal(handle, buffer)
 // -------------------------------------------------------------------------------------
-void  FFT_Alloc(s32 sizeLog2, char flag, void **outHandle);
-void  FFT_Init(void *handle);
-void *FFT_Free(void **handle);
+struct FFTState;
+
+struct FFTAllocation
+{
+    FFTState* mpContext;
+    u32 muBytes;
+};
+
+s32 FFT_Alloc(s32 sizeLog2, char flag, FFTAllocation* pAllocation);
+s32 FFT_Init(FFTState* pState);
+s32 FFT_Free(FFTAllocation* pAllocation);
 void *FFT_ForwardReal(void *handle, f32 *buffer);
 void *FFT_InverseReal(void *handle, f32 *buffer);
 
@@ -143,8 +151,7 @@ public:
     f32   mfField60;          // +0x60  ((blockSize-a4)/blockSize) * 100 (overlap %)
     s32   miPingA;            // +0x64  output double-buffer toggle
     s32   miPingB;            // +0x68  input double-buffer toggle
-    void *mpFft;              // +0x6C  the FFT context handle (FFT_Alloc/FFT_Free)
-    s32   miField70;          // +0x70  (cleared by ctor; unused by the bodied members)
+    FFTAllocation mFft;      // +0x6C context, +0x70 allocation bytes
     s32   miInputChannels;    // +0x74  SetChannels arg1
     s32   miOutputChannels;   // +0x78  SetChannels arg2
     LoadRecord *mpDist;       // +0x7C  per-pass work-distribution table (into mpBuffer)

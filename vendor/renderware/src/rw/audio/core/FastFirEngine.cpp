@@ -63,8 +63,8 @@ const s32 KI_MAC_BINS_PER_STEP = 16;
 // -------------------------------------------------------------------------------------
 FastFirEngine::FastFirEngine()
 {
-    mpFft = 0;    // +0x6C
-    miField70 = 0;      // +0x70
+    mFft.mpContext = 0;
+    mFft.muBytes = 0;
     mpBuffer = 0; // +0x00
     miCurPass = 0;      // +0x5C
     miWriteBlock = 0;   // +0x30
@@ -85,8 +85,8 @@ FastFirEngine::~FastFirEngine()
     if (mpBuffer)
         System::Free(off_83271928, mpBuffer, 0); // allocator->Free(buf, 0)
 
-    if (mpFft)
-        FFT_Free(&mpFft);
+    if (mFft.mpContext)
+        FFT_Free(&mFft);
 }
 
 // -------------------------------------------------------------------------------------
@@ -95,17 +95,15 @@ FastFirEngine::~FastFirEngine()
 // -------------------------------------------------------------------------------------
 FastFirEngine *FastFirEngine::Reset(FastFirEngine *self)
 {
-    void *result = self;
-
     if (self->mpBuffer)
     {
         System::Free(off_83271928, self->mpBuffer, 0);
         self->mpBuffer = 0;
     }
-    if (self->mpFft)
+    if (self->mFft.mpContext)
     {
-        result = FFT_Free(&self->mpFft);
-        self->mpFft = 0;
+        FFT_Free(&self->mFft);
+        self->mFft.mpContext = 0;
     }
 
     self->miCurPass = 0;    // +0x5C
@@ -116,7 +114,6 @@ FastFirEngine *FastFirEngine::Reset(FastFirEngine *self)
     self->miMacDone = 0;    // +0x84
     self->miIfftDone = 0;   // +0x88
 
-    (void)result;
     return self;
 }
 
@@ -225,10 +222,10 @@ int FastFirEngine::Configure(FastFirEngine *self, s32 channels, s32 blockSize, s
     for (s32 n = 2 * blockSize; n > 1; n /= 2)
         ++sizeLog2;
 
-    if (!self->mpFft)
+    if (!self->mFft.mpContext)
     {
-        FFT_Alloc(sizeLog2, 0, &self->mpFft);
-        FFT_Init(self->mpFft);
+        FFT_Alloc(sizeLog2, 0, &self->mFft);
+        FFT_Init(self->mFft.mpContext);
     }
 
     self->miField28 = a6;             // +0x28
@@ -286,7 +283,7 @@ void *FastFirEngine::Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNod
     if (self->mpDist[self->miCurPass].miFftCount > 0)
     {
         s32 block = self->miFftDone;
-        void *fft = self->mpFft;
+        void *fft = self->mFft.mpContext;
         const s32 inSel = (self->miPingB == 0) ? 1 : 0; // mpInput[!pingB]
         do
         {
@@ -354,7 +351,7 @@ void *FastFirEngine::Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNod
     if (self->mpDist[self->miCurPass].miIfftCount > 0)
     {
         s32 block = self->miIfftDone;
-        void *fft = self->mpFft;
+        void *fft = self->mFft.mpContext;
         for (; block < self->mpDist[self->miCurPass].miIfftCount + self->miIfftDone; ++block)
             result = FFT_InverseReal(fft, self->mpConv + self->miBlockFftLen * block);
         self->miIfftDone += self->mpDist[self->miCurPass].miIfftCount;

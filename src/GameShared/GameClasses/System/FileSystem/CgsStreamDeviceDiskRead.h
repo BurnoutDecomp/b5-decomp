@@ -136,7 +136,12 @@ namespace CgsFileSystem
         s32                 GetCurrentFilePriority();                           // :191
         bool                IsEndOfFile() const;                                // :194
         u32                 GetBufferSize() const;                              // :197
-        EReadStreamStatus   GetStatus() const;                                  // :200
+        EReadStreamStatus   GetStatus() const                                  // :200
+        {
+            if (miPendingOperationCount > 0)
+                return E_STATUS_PENDING;
+            return meStatus;
+        }
         void                LogAmountOfDataInBuffer() const;                    // :203
 
     private:

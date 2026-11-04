@@ -36,16 +36,6 @@ struct IDirect3DDevice9;
 extern IDirect3DDevice9* gpD3DDevice;
 
 
-// The shared-library rasteriser and depth-stencil states Dispatch binds (ImmediateMode.cpp).
-extern void* gpSkyDomeRasterizerState;      // X360 dword_83010F3C  mpRasterizerState_CullNone
-extern void* gpSkyDomeDepthStencilState;    // X360 dword_83010F4C  mpDepthStencilState_ZBufferOnWriteOff
-void ImDeviceSetRasterizerState(void* lpState);
-void ImDeviceSetDepthStencilState(void* lpState);
-
-// X360 dword_83010F20 -- the immediate-mode library's STANDARD blend template (LionParticleRender.cpp
-// owns the PC word; it reads null on this build, see Construct).
-extern renderengine::BlendMaterialState* dword_83010F20;
-
 namespace BrnParticle
 {
 namespace Native
@@ -92,22 +82,6 @@ namespace Native
             lrParameters.mbState16 = 0u;
         }
 
-        void ReadTemplateParameters(const renderengine::BlendMaterialState* lpTemplate,
-                                    u32 luSourceFactor, u32 luDestinationFactor, u32 luBlendOp,
-                                    renderengine::BlendStateParameters& lrParameters)
-        {
-            if (lpTemplate != 0)
-            {
-                lpTemplate->GetParameters(lrParameters);
-                return;
-            }
-            lrParameters.maBlendFactor[0] =
-                (luSourceFactor & 0x1Fu)
-                | (32u * (((luDestinationFactor * 8u) & 0x7F8u) | (luBlendOp & 0xFFFFF807u))) & 0xFFE0u
-                | 0x07060000u;
-            lrParameters.mbHasCustomBlendFactors = 1u;
-        }
-
         // The per-template edit (0x822845B0..0x822845DC, and twice more): the ALPHA half of word 0
         // becomes source ONE (1), op ADD (0), destination INVSRCALPHA (7) -- `stb r28(=7)` into the
         // word's top byte, `rlwinm 0,11,7` + `insrwi r29(=1),5,11` into bits 11..15 -- and the alpha
@@ -142,15 +116,15 @@ namespace Native
         renderengine::BlendStateParameters lParameters;
 
         DefaultConstructBlendParameters(lParameters);
-        ReadTemplateParameters(dword_83010F20, 6u, 7u, 0u, lParameters);   // Standard
+        CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard->GetParameters(lParameters);   // Standard
         mpStandardBlend = BuildBlendState(lParameters);                     // `stw r3, 4(r26)`
 
         DefaultConstructBlendParameters(lParameters);
-        ReadTemplateParameters(0, 6u, 1u, 0u, lParameters);                // dword_83010F24, Additive
+        CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Additive->GetParameters(lParameters);                // dword_83010F24, Additive
         mpAdditiveBlend = BuildBlendState(lParameters);                     // `stw r3, 8(r26)`
 
         DefaultConstructBlendParameters(lParameters);
-        ReadTemplateParameters(0, 6u, 7u, 1u, lParameters);                // dword_83010F28, Subtractive
+        CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Subtractive->GetParameters(lParameters);                // dword_83010F28, Subtractive
         mpSubtractiveBlend = BuildBlendState(lParameters);                  // `stw r3, 0xC(r26)`
     }
 
@@ -208,8 +182,8 @@ namespace Native
         }
 
         shadow::Device::ResetShadowing();
-        ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);     // dword_83010F3C (cull none)
-        ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState); // dword_83010F4C (test on, write off)
+        shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);     // dword_83010F3C (cull none)
+        shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOnWriteOff); // dword_83010F4C (test on, write off)
           // dword_83010F60 on unit 0
 
         (void)lfNearPlane;

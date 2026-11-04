@@ -36,25 +36,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                             // rw::math::vpu::{operator+,operator*}
 
-// The immediate-mode state library's three trail states, built by CgsGraphics::ImRendererBase::
-// ConstructOnceOnly @0x827F1C20 (read out of its asm -- the ImmediateMode.cpp note that
-// dword_83010F4C's initialiser "was never recovered" is stale):
-//   dword_83010F4C = ConstructDepthStencilState(alloc, test=1, write=0, func=3 LESSEQUAL)
-//   dword_83010F20 = ConstructBlendState(alloc, 6, 7, 0)   -- the standard alpha blend
-//   dword_83010F3C = ConstructRasteriserState(alloc, 0)     -- cull none
-// The X360 binds them through the renderer's three ImRendererBase::SetState overloads
-// (sub_82276DA8 depth/stencil, 0x82276D08 blend, sub_82276E48 rasteriser). On this build the
-// same PC objects the sky dome binds (gpSkyDomeDepthStencilState IS dword_83010F4C,
-// gpSkyDomeRasterizerState IS dword_83010F3C) plus the standard alpha blend
-// (gpImStandardAlphaBlendState IS dword_83010F20) -- all three defined by
-// ImmediateMode.cpp and declared `extern void*` here exactly as BrnSkyDomeManager.cpp
-extern void* gpSkyDomeDepthStencilState;   // dword_83010F4C
-extern void* gpImStandardAlphaBlendState;  // dword_83010F20
-extern void* gpSkyDomeRasterizerState;     // dword_83010F3C
-void ImDeviceSetDepthStencilState(void* lpState);
-void ImDeviceSetBlendState(void* lpState);
-void ImDeviceSetRasterizerState(void* lpState);
-
 namespace BrnParticle
 {
 namespace Native
@@ -153,9 +134,9 @@ namespace Native
         mpRenderer->SetTransform(mViewProjectionMatrix);     // BeginShaderStates(this+88) + 4 x stvx128
 
         // sub_82276DA8(base, dword_83010F4C) / SetState(base, dword_83010F20) / sub_82276E48(base, dword_83010F3C)
-        ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState);
-        ImDeviceSetBlendState(gpImStandardAlphaBlendState);
-        ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
+        mpRenderer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOnWriteOff);
+        mpRenderer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
+        mpRenderer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
 
         mpRenderer->SetTexture(lpTexture);                   // ImRendererBase::SetTexture @0x82276EE8
     }

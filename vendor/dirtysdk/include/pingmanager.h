@@ -26,6 +26,10 @@ void PingManagerDestroy(PingManagerRefT* pPingManager);
 s32  PingManagerPingServer2(PingManagerRefT* pPingManager, u32 uServerAddress,
                             PingManagerCallbackT* pCallback, void* pCallbackData);
 
+// ARTIST default-server request, preserving the legacy address argument slot.
+s32 PingManagerPingServer(PingManagerRefT* pPingManager, u32 uServerAddress,
+                          PingManagerCallbackT* pCallback, void* pCallbackData);
+
 // Cancel the server ping request uSeqn (0: all).
 void PingManagerCancelServerRequest(PingManagerRefT* pPingManager, u32 uSeqn);
 

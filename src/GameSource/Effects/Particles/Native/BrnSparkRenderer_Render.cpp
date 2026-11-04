@@ -53,15 +53,6 @@ extern IDirect3DDevice9* gpD3DDevice;
 
 
 
-// The three shared-library render states Dispatch binds (ImmediateMode.cpp), declared
-// `extern void*` exactly as BrnTrailRender.cpp / BrnSkyDomeManager.cpp declare theirs.
-extern void* gpImAdditiveBlendState;        // X360 dword_83010F24  mpBlendState_Additive
-extern void* gpSkyDomeRasterizerState;      // X360 dword_83010F3C  mpRasterizerState_CullNone
-extern void* gpSkyDomeDepthStencilState;    // X360 dword_83010F4C  mpDepthStencilState_ZBufferOnWriteOff
-void ImDeviceSetDepthStencilState(void* lpState);
-void ImDeviceSetBlendState(void* lpState);
-void ImDeviceSetRasterizerState(void* lpState);
-
 namespace BrnParticle
 {
 namespace Native
@@ -689,9 +680,9 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
     }
 
     shadow::Device::ResetShadowing();
-    ImDeviceSetBlendState(gpImAdditiveBlendState);            // dword_83010F24
-    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);     // dword_83010F3C (cull none)
-    ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState); // dword_83010F4C (test on, write off)
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Additive);            // dword_83010F24
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);     // dword_83010F3C (cull none)
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOnWriteOff); // dword_83010F4C (test on, write off)
           // dword_83010F60 on unit 0
 
     mpRenderer->BeginRendering();

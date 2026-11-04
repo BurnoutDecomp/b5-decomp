@@ -12,7 +12,7 @@
 // NetGamePacketT on its stack, fills head.len / head.kind / body.data and sends it; it receives
 // into a sizeof(NetGamePacketT) buffer and reads head.len and body.data. The player registry reads
 // three per-second rates out of NetGameLinkStatT.
-// Bodies (PC backend): ../src/pc/netgamelinkpc.cpp.
+// Native bodies are in ../src/x360/netgamelink_x360.cpp.
 
 // Opaque link handle (defined by the backend).
 typedef struct NetGameLinkRefT NetGameLinkRefT;
@@ -79,6 +79,9 @@ CGS_STATIC_ASSERT((sizeof(NetGameLinkStatT) == 0x170), "NetGameLinkStatT native 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+NetGameLinkRefT* NetGameLinkCreate(void* pCommRef, s32 owner, s32 buflen);
+void NetGameLinkDestroy(NetGameLinkRefT* pRef);
 
 // Send packets. With iLen == 1, pPacket is exactly one packet (head.len payload bytes); otherwise
 // iLen is the byte length of a run of packets laid out head.size apart. Each sent packet's

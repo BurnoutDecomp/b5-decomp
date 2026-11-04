@@ -333,6 +333,26 @@ namespace BrnResource
         return &maPackages[liPackage];   // mulli r11,liPackage,0x4C; add r3,r11,this
     }
 
+    // ARTIST 0x82662DA0
+    bool DLCManager::Release()
+    {
+        switch (meReleaseStage)
+        {
+        case E_RELEASE_START:
+            meReleaseStage = E_RELEASE_START;
+            // Fall through to mark the release complete.
+        case E_RELEASE_DONE:
+            meReleaseStage = E_RELEASE_DONE;
+            return true;
+
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid stage", "..\\..\\..\\GameSource\\Resource/BrnDLCManager.cpp", 642);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+    }
+
     // X360 0x82662E18. The version check for the current DLC package failed: shift-remove that
     // package from the inline package array, decrement the package count, then set the monitor
     // stage. The removal is a memmove of the (count - current - 1) trailing records down one slot

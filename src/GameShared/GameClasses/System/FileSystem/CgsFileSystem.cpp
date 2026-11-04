@@ -204,9 +204,7 @@ namespace CgsFileSystem
     StreamDeviceDiskRead::EReadStreamStatus
         FileSystem::GetEffectiveStreamStatus(const StreamDeviceDiskRead* lpStream)
     {
-        if (lpStream->miPendingOperationCount > 0)
-            return StreamDeviceDiskRead::E_STATUS_PENDING;
-        return lpStream->meStatus;
+        return lpStream->GetStatus();
     }
 
     // @0x828D6650. Receives the ReadStream by value (= the StreamDeviceDiskRead*).

@@ -44,3 +44,7 @@ CGS_STATIC_ASSERT((offsetof(SocketStateX360, memGroup) == 3916), "socket group")
 CGS_STATIC_ASSERT((offsetof(SocketStateX360, recvEventCrit) == 3948), "socket event lock");
 CGS_STATIC_ASSERT((sizeof(SocketStateX360) == 3996), "ARTIST module size");
 extern SocketStateX360* gSocketStateX360;
+// Shared ARTIST 82B2B150 / 82B2B2D8 native socket helpers.
+const sockaddr* SocketMapAddress(sockaddr* output, const sockaddr* input);
+s32 SocketTranslateError(s32 value);
+s32 SocketTranslateErrorCode(s32 value, s32 error);
