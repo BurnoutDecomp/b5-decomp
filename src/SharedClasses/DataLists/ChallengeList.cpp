@@ -14,7 +14,7 @@
 // The X360 inlined BaseResourcePtr::CreateFromHandle(&maStaticDataLists[i],
 // &sentinel) at each iteration; the DecFIGS DWARF for both bodies shows the
 // pre-inline call as ResourcePtr<ChallengeListResource>::operator=(...), i.e. the
-// source was `maStaticDataLists[i] = skInvalidHandle;` (assign-from-ResourceHandle,
+// source was `maStaticDataLists[i] = CgsResource::NULLResourcePtr;` (assign-from-ResourceHandle,
 // which resets the ResourcePtr to that handle). That public assignment is the
 // faithful source-level form and exactly the observable operation; reconstructed
 // as such rather than calling the protected CreateFromHandle.
@@ -33,17 +33,6 @@ namespace BrnResource
 
 namespace
 {
-    // X360: &dword_82FFB25C -- the invalid/default resource-handle sentinel used to
-    // reset each ResourcePtr to "no resource". PS3 DecFIGS resolves this sentinel:
-    // ChallengeList::Construct/Destruct (0x811BF8 / 0x811AE4) call
-    // BaseResourcePtr::CreateFromHandle(slot, &CgsResource::NULLResourcePtr.mHandle),
-    // i.e. the X360 dword_82FFB25C IS CgsResource::NULLResourcePtr.mHandle -- the
-    // engine's canonical null/invalid ResourceHandle. Modeled here as a file-local
-    // default-constructed (zero) ResourceHandle, which is that null handle's value.
-    // (CgsResource::NULLResourcePtr is not yet a defined global in this port; once it
-    //  lands it should be referenced directly instead of this local.)
-    const CgsResource::ResourceHandle skInvalidHandle = {};
-
     // The serialised entry stride the X360 multiplies by inside GetChallengeData
     // (`mulli r11, r11, 0xD8`), == sizeof(ChallengeListEntry).
     const u32 KU_CHALLENGE_LIST_ENTRY_STRIDE = 216;
@@ -105,7 +94,7 @@ void ChallengeList::Construct()
     // X360: 32x reset of each static-data-list ResourcePtr to the invalid handle.
     for ( s32 liIndex = 0; liIndex < KI_MAX_CHALLENGE_LISTS; ++liIndex )
     {
-        maStaticDataLists[ liIndex ] = skInvalidHandle;
+        maStaticDataLists[ liIndex ] = CgsResource::NULLResourcePtr;
     }
 
     // X360: each slot's bought-flag <- 0, both indices <- -1.
@@ -127,7 +116,7 @@ void ChallengeList::Destruct()
     // X360: 32x reset of each static-data-list ResourcePtr to the invalid handle.
     for ( s32 liIndex = 0; liIndex < KI_MAX_CHALLENGE_LISTS; ++liIndex )
     {
-        maStaticDataLists[ liIndex ] = skInvalidHandle;
+        maStaticDataLists[ liIndex ] = CgsResource::NULLResourcePtr;
     }
 }
 

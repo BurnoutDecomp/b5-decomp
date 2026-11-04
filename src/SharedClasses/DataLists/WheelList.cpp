@@ -18,7 +18,7 @@
 // The X360 inlined BaseResourcePtr::CreateFromHandle(&maStaticDataLists[i],
 // &sentinel) at each Construct/Destruct iteration; the DecFIGS DWARF renders the
 // pre-inline call as ResourcePtr<WheelListResource>::operator=(...), i.e. the source
-// was `maStaticDataLists[i] = skInvalidHandle;` (assign-from-ResourceHandle, which
+// was `maStaticDataLists[i] = CgsResource::NULLResourcePtr;` (assign-from-ResourceHandle, which
 // resets the ResourcePtr). That public assignment is the faithful source-level form
 // and the exact observable operation; reconstructed as such rather than calling the
 // protected CreateFromHandle.
@@ -31,20 +31,6 @@
 namespace BrnResource
 {
 
-namespace
-{
-    // X360: &dword_82FFB25C -- the invalid/default resource-handle sentinel used to
-    // reset each ResourcePtr to "no resource". PS3 DecFIGS resolves this sentinel:
-    // WheelList::Construct/Destruct (0x811CA4 / 0x811B9C) call
-    // BaseResourcePtr::CreateFromHandle(slot, &CgsResource::NULLResourcePtr.mHandle),
-    // i.e. the X360 dword_82FFB25C IS CgsResource::NULLResourcePtr.mHandle -- the
-    // engine's canonical null/invalid ResourceHandle (same sentinel the ChallengeList
-    // sibling uses). Modeled here as a file-local default-constructed (zero)
-    // ResourceHandle, which is that null handle's value. (CgsResource::NULLResourcePtr
-    // is not yet a defined global in this port; reference it directly once it lands.)
-    const CgsResource::ResourceHandle skInvalidHandle = {};
-}
-
 // WheelList::Construct @ 0x82677DB8
 void WheelList::Construct()
 {
@@ -52,7 +38,7 @@ void WheelList::Construct()
     // (marching pointer v2 += 8 dwords == 32-byte ResourcePtr stride).
     for ( s32 liIndex = 0; liIndex < KI_MAX_WHEEL_LISTS; ++liIndex )
     {
-        maStaticDataLists[ liIndex ] = skInvalidHandle;
+        maStaticDataLists[ liIndex ] = CgsResource::NULLResourcePtr;
     }
 
     // X360: each slot's bought-flag <- 0, both indices <- -1 (marching pointer v5
@@ -77,7 +63,7 @@ void WheelList::Destruct()
     // (marching pointer a1 += 32 bytes per iteration).
     for ( s32 liIndex = 0; liIndex < KI_MAX_WHEEL_LISTS; ++liIndex )
     {
-        maStaticDataLists[ liIndex ] = skInvalidHandle;
+        maStaticDataLists[ liIndex ] = CgsResource::NULLResourcePtr;
     }
 }
 
