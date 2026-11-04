@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/core/stdc/stdc.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (AppendFormat copy guard)
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -38,7 +38,10 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(const char* lpcText)
     {
-        Append(lpcText ? lpcText : "<NULLSTRING>");
+        if (lpcText)
+            Append(lpcText);
+        else
+            Append("<NULLSTRING>");
         return *this;
     }
 
@@ -113,11 +116,8 @@ namespace CgsDev
         return *this << (lbValue ? "true" : "false");
     }
 
-    // 0x82817720 - render a printf-style format into a 256-byte stack buffer (X360 `v18[288]`,
-    // formatted with vsnprintf capped at 256) and forward it to the virtual char* sink. The X360
-    // guards that the formatted length did not exceed the destination (CgsStringUtils copy guard:
-    // `lNumBytesCopied < (int32_t)luBytes`); CGS_ASSERT carries that bound here. The sink call
-    // `(*(*this+4))(this, buffer)` is virtual Append.
+    // ARTIST 0x82817720 formats into 256 bytes, checks the result against the buffer
+    // size, and passes the formatted text directly to the virtual sink.
     void StrStreamBase::AppendFormat(const char* lpcFormat, ...)
     {
         char lacBuffer[256];
@@ -127,10 +127,14 @@ namespace CgsDev
         const int liWritten = ::vsnprintf(lacBuffer, sizeof(lacBuffer), lpcFormat, lArgs);
         va_end(lArgs);
 
-        CGS_ASSERT(liWritten < static_cast<int>(sizeof(lacBuffer)),
-                   "lNumBytesCopied<(int32_t)luBytes");
-
-        *this << lacBuffer;
+        if (liWritten >= static_cast<int>(sizeof(lacBuffer)))
+        {
+            Assert::BeginAssert();
+            Assert::FireAssert("lNumBytesCopied<(int32_t)luBytes",
+                               "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96);
+            Assert::EndAssert();
+        }
+        Append(lacBuffer);
     }
 
     void StrStreamBase::Append64IntDecimal(u64 luValue)

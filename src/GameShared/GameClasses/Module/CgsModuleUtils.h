@@ -98,35 +98,59 @@ namespace CgsModule
         lpDestBuffer->UnlockForWrite();
     }
 
-    // five-source variant (X360 sub_823B7620 / sub_823B7760) -- the widest set the
-    // world drive uses (WorldModule::Update @0x827D63E8's entity-modules -> scene
-    // staging locks the scene input plus five module outputs).
+    static __forceinline void AssertFiveSourceIOBuffer(const void* lpBuffer,
+                                                     const char* lpcExpression, int liLine)
+    {
+        if (!lpBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lpcExpression,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", liLine);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    // ARTIST 823B7620 / 823B7760 checks every buffer before locking or unlocking.
     template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
               typename TSourceD, typename TSourceE>
-    inline void LockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
-                                  TSourceB* lpSourceB, TSourceC* lpSourceC,
-                                  TSourceD* lpSourceD, TSourceE* lpSourceE )
+    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
+        TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
+        TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4)
     {
-        lpDestBuffer->LockForWrite();
-        lpSourceA->LockForRead();
-        lpSourceB->LockForRead();
-        lpSourceC->LockForRead();
-        lpSourceD->LockForRead();
-        lpSourceE->LockForRead();
+        AssertFiveSourceIOBuffer(lpInputBuffer, "lpInputBuffer", 403);
+        AssertFiveSourceIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 404);
+        AssertFiveSourceIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 405);
+        AssertFiveSourceIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 406);
+        AssertFiveSourceIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 407);
+        AssertFiveSourceIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 408);
+
+        lpInputBuffer->LockForWrite();
+        lpOutputBuffer0->LockForRead();
+        lpOutputBuffer1->LockForRead();
+        lpOutputBuffer2->LockForRead();
+        lpOutputBuffer3->LockForRead();
+        lpOutputBuffer4->LockForRead();
     }
 
     template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
               typename TSourceD, typename TSourceE>
-    inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
-                                    TSourceB* lpSourceB, TSourceC* lpSourceC,
-                                    TSourceD* lpSourceD, TSourceE* lpSourceE )
+    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
+        TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
+        TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4)
     {
-        lpSourceE->UnlockForRead();
-        lpSourceD->UnlockForRead();
-        lpSourceC->UnlockForRead();
-        lpSourceB->UnlockForRead();
-        lpSourceA->UnlockForRead();
-        lpDestBuffer->UnlockForWrite();
+        AssertFiveSourceIOBuffer(lpInputBuffer, "lpInputBuffer", 428);
+        AssertFiveSourceIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 429);
+        AssertFiveSourceIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 430);
+        AssertFiveSourceIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 431);
+        AssertFiveSourceIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 432);
+        AssertFiveSourceIOBuffer(lpOutputBuffer4, "lpOutputBuffer4", 433);
+
+        lpOutputBuffer4->UnlockForRead();
+        lpOutputBuffer3->UnlockForRead();
+        lpOutputBuffer2->UnlockForRead();
+        lpOutputBuffer1->UnlockForRead();
+        lpOutputBuffer0->UnlockForRead();
+        lpInputBuffer->UnlockForWrite();
     }
 
     // ARTIST 823B7B80 / 823B7D20: resource input with seven producer outputs.
