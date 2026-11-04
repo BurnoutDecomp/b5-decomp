@@ -27,6 +27,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsFillTriangleCacheStreamJobDesc.h" // the descriptor RunFillTriangleCacheStream prepares
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h" // the descriptor RunLineWithTriangleListStream prepares
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithPolySoupListJobDesc.h"
 #include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"   // PolySoupLineNearestResult (the stream's 112-byte record)
 
 // The polygon-soup tester job entry every fill batch is wired to
@@ -134,6 +135,51 @@ namespace CgsCollision
 
         mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);
         return lpProducer;
+    }
+
+    // ARTIST 0x82811198.
+    EA::Jobs::Job* BaseCollisionGenerator::RunCollideLineAgainstPolySoupStream(
+        const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+        CgsMemory::SimpleDataStreamProducer* lpStream,
+        s32 liMaxResultsPerLine, bool lbTestNearest, bool lbTestDoubleSided)
+    {
+        const s32 liCommandCount = lpStream->GetNumCommands();
+        if (liCommandCount == 0)
+            return 0;
+
+        const s32 liBatchCount = liCommandCount > 3 ? 3 : liCommandCount;
+        EA::Jobs::Job* lpRootJob = AllocateJob();
+        for (s32 liBatch = 0; liBatch < liBatchCount; ++liBatch)
+        {
+            const u16 luBatchIndex = CreateNewBatch();
+            CollisionBatch& lrBatch = maCollisionBatches[luBatchIndex];
+            LineWithPolySoupStreamJobDesc* lpDescription =
+                static_cast<LineWithPolySoupStreamJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+            lpDescription->Prepare(lpSpatialMap, lpStream, liMaxResultsPerLine,
+                                   lbTestNearest, lbTestDoubleSided);
+
+            EA::Jobs::Job* lpJob = lrBatch.GetJob();
+            lpJob->Clear();
+            lpJob->SetName("CollisionBatch");
+            lpJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                           reinterpret_cast<const void*>(&PolygonSoupTesterEntry), 0);
+            lpJob->SetData(lpDescription, CollisionJobDescriptionStorage::KU_CONSOLE_BYTES);
+            lpJob->SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);
+            lpRootJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            mabUsedBatches[luBatchIndex] = false;
+        }
+
+        CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);
+        EA::Jobs::JobScheduler* lpScheduler = CgsSystem::JobManager();
+        lpScheduler->AddTree(lpRootJob);
+        CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
+
+        // ARTIST loads the writable debug flag at 0x83011F10.
+        static volatile bool _lbWakeThreads;
+        if (_lbWakeThreads)
+            lpScheduler->WakeThreads(EA::Jobs::JOB_ENVIRONMENT_LOCAL);
+        lpRootJob->WaitOn();
+        return lpRootJob;
     }
 
     EA::Jobs::Job* BaseCollisionGenerator::RunFillTriangleCacheStream(

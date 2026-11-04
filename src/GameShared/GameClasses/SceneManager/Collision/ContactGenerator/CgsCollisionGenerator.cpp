@@ -12,8 +12,9 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitivePairListJobDesc.h" // the type-10 descriptor (CollidePrimitivePairList)
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.h" // the type-13 descriptor (CollideSweptSphereListWithTriangleList)
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"        // SimpleDataStreamProducer (CreateFillTriangleCacheStream)
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "SDKs/EATech/eajobs/job.h"                                                       // EA::Jobs::Job (AllocateJob)
-#include "SDKs/EATech/eajobs/job_types.h"                                                 // EA::Jobs::Param (the inline dispatch)
+#include "SDKs/EATech/eajobs/job_scheduler.h"
 
 // includes folded in from the CgsCollisionGenerator_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"            // AxisAlignedBox
@@ -26,12 +27,6 @@
 #include "rw/math/vpu/vector4_operation.h"                                            // vpu::operator+ / operator- (the sphere's box)
 #include <cstring>   // std::memcpy (the 14-qword result copy)
 #include <vectorintrinsics.h> // native line-box vminfp / vmaxfp
-
-// The contact-generator job entry every CollisionBatch is wired to
-// (GameShared/Jobs/ContactGenerator/ContactGenerator.cpp; X360 0x82920F10). GLOBAL scope, exactly
-// as CgsCollisionGenerator_CollideStreams.cpp:84 declares it and as ContactGenerator.cpp:64
-// defines it.
-void ContactGeneratorEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
 
 // GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp
 //
@@ -80,7 +75,7 @@ s32  BaseCollisionGenerator::_miStartJobsPerfMon    = 0;
 // KF_TRIANGLE_CACHE_PADDING (PropManager_wQ_03.cpp:60) and for byte_82F2A39C's twin in
 // PropManager_wQ2_03.cpp. If a real home appears, collapse it there.
 // =================================================================================================
-static const bool KB_OPTIMISED_BOX_TESTS_ENABLED = true;   // byte_82F310B0 == 0x01, measured
+static volatile bool sbOptimisedBoxTestsEnabled = true;
 
 // X360 0x828105F8. Register the shared "StartJobs" CPU perfmon exactly once (guarded by the
 // static latch).
@@ -225,6 +220,69 @@ CgsMemory::SimpleDataStreamProducer* BaseCollisionGenerator::CreateFillTriangleC
 
     mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);
     return lpProducer;
+}
+
+// ARTIST 0x82814080.
+u16 BaseCollisionGenerator::CollideSweptSphereListWithTriangleList(
+    const SweptSphereList* lpSweptSphereList, const TriangleList* lpTriangleList,
+    u16 lu16MaxNumCollisions, f32 lfPadding, u32 luUserTagA, u16 lu16UserTagB)
+{
+    const u16 lu16ResultListIndex = static_cast<u16>(
+        PrepareNewPrimitiveTestResultsList(lu16MaxNumCollisions, luUserTagA, lu16UserTagB));
+    CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];
+    SweptSphereListWithTriangleListJobDesc* lpDescription =
+        static_cast<SweptSphereListWithTriangleListJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+    lpDescription->Prepare(lpSweptSphereList, lpTriangleList,
+                           mapCollisionResultLists[lu16ResultListIndex], lfPadding);
+
+    CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);
+    EA::Jobs::Job* lpJob = lrBatch.SetupJob();
+    CgsSystem::JobManager()->AddJobs(lpJob, 1);
+    CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
+    return lu16ResultListIndex;
+}
+
+// ARTIST 0x82814138.
+u16 BaseCollisionGenerator::CollidePrimitivePairList(
+    const PrimitivePairList* lpPrimitiveList, u16 lu16MaxNumCollisions,
+    u32 luUserTagA, u16 lu16UserTagB)
+{
+    const u16 lu16ResultListIndex = static_cast<u16>(
+        PrepareNewPrimitiveTestResultsList(lu16MaxNumCollisions, luUserTagA, lu16UserTagB));
+    CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];
+    PrimitivePairListJobDesc* lpDescription =
+        static_cast<PrimitivePairListJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+    lpDescription->Prepare(lpPrimitiveList, mapCollisionResultLists[lu16ResultListIndex]);
+
+    CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);
+    EA::Jobs::Job* lpJob = lrBatch.SetupJob();
+    CgsSystem::JobManager()->AddJobs(lpJob, 1);
+    CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
+    return lu16ResultListIndex;
+}
+
+// ARTIST 0x828141D8.
+u16 BaseCollisionGenerator::CollidePrimitiveListAgainstTriangleList(
+    const PrimitivePairList* lpPrimitiveList, const TriangleList* lpTriangleList,
+    u16 lu16MaxResults, u32 luUserTagA, u16 lu16UserTagB, bool lbUseOptimisedBoxTests)
+{
+    CGS_ASSERT(lpPrimitiveList != 0, "lpPrimitiveList != NULL");
+    CGS_ASSERT(lpTriangleList != 0, "lpTriangleList != NULL");
+    CGS_ASSERT(lpPrimitiveList->GetNumTests() > 0, "lpPrimitiveList->GetNumTests() > 0");
+
+    const u16 lu16ResultListIndex = static_cast<u16>(
+        PrepareNewPrimitiveTestResultsList(lu16MaxResults, luUserTagA, lu16UserTagB));
+    CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];
+    PrimitiveListWithTriangleListJobDesc* lpDescription =
+        static_cast<PrimitiveListWithTriangleListJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+    lpDescription->Prepare(lpPrimitiveList, lpTriangleList, mapCollisionResultLists[lu16ResultListIndex],
+                           sbOptimisedBoxTestsEnabled && lbUseOptimisedBoxTests);
+
+    CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);
+    EA::Jobs::Job* lpJob = lrBatch.SetupJob();
+    CgsSystem::JobManager()->AddJobs(lpJob, 1);
+    CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
+    return lu16ResultListIndex;
 }
 
 // =================================================================================================
@@ -392,6 +450,32 @@ BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream(s32 liM
 
     mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);                  // 0x82811F48
     return lpProducer;                                                          // 0x82811F4C mr r3, r22
+}
+
+// ARTIST 0x82811F58.
+EA::Jobs::Job* BaseCollisionGenerator::RunCollidePrimitiveListWithTriangleListStream(
+    CgsMemory::SimpleDataStreamProducer* lpStream)
+{
+    const s32 liCommandCount = lpStream->GetNumCommands();
+    if (liCommandCount == 0)
+        return 0;
+
+    const s32 liBatchCount = liCommandCount > 3 ? 3 : liCommandCount;
+    EA::Jobs::Job* lpRootJob = AllocateJob();
+    for (s32 liBatch = 0; liBatch < liBatchCount; ++liBatch)
+    {
+        CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];
+        PrimitiveListWithTriangleListStreamJobDesc* lpDescription =
+            static_cast<PrimitiveListWithTriangleListStreamJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+        lpDescription->Prepare(lpStream);
+
+        CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);
+        lpRootJob->DependsOn(*lrBatch.SetupJob(), EA::Jobs::Event::EVENT_WHEN_JOB_END);
+        CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
+    }
+
+    CgsSystem::JobManager()->AddTree(lpRootJob);
+    return lpRootJob;
 }
 
 }
