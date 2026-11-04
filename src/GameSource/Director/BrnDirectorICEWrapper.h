@@ -89,10 +89,8 @@ namespace BrnResource { class ICEList; namespace GameDataIO { class AllocatorLis
 // FLAG: forward declarations for pointer-only references in this header.
 //   * CgsSystem::TimerStatusInterface -- the Update frame-timer argument (referenced by
 //     pointer only here; the .cpp includes its home for the timestep accessors).
-//   * ICE::ICEGroup -- GetShakeGroup's return type; no reconstructed home yet (see the
-//     ICEData.hpp ICEGroup note), referenced by pointer only.
 namespace CgsSystem { class TimerStatusInterface; }
-namespace ICE       { struct ICEGroup; struct ICEAuthor; }
+namespace ICE       { struct ICEAuthor; }
 
 namespace BrnDirector
 {
@@ -231,13 +229,7 @@ public:
     // ------------------------------------------------------------------------
     const Camera::Camera* GetCamera() const { return mICECamera.GetCamera(); }
 
-    // FLAG: minimal-slice decls reached through the ICEWrapper* by the sibling header
-    // BrnDirectorResourceManager.h (its inline GetKeyAnim / GetShakeTakes). They are
-    // DECLARATION-ONLY here -- their bodies land with the ICE take-data accessor
-    // follow-on; the per-TU `cl /c` gate does not link. ICEGroup has no reconstructed
-    // home yet, so GetShakeGroup's return type is forward-declared (pointer-only).
     ICE::ICETakeData* GetICETakeData(CgsResource::ID lTakeId);
-    ICE::ICEGroup*    GetShakeGroup();
 
 private:
     // +0x00000  The ICE memory manager: the ICE heap (its HeapMalloc base, at offset 0 -- so

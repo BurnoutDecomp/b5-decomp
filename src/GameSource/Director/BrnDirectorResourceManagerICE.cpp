@@ -10,11 +10,6 @@
 // shot-group slot builds -- the whole point of the class) without dragging unresolved
 // externals into the link.
 //
-// ⚠️ RE-SPLIT 2026-08-01 (ICE camera-family closure wave): the three bodies that reach an
-// ICEWrapper method with no mounted home -- GetKeyAnim x2 and GetShakeTakes -- moved on
-// again, to BrnDirectorResourceManagerICEWrapper.cpp. The split boundary now follows the
-// BLOCKER instead of the topic, and what is left costs NOTHING to mount:
-//
 //     GetICEAuthor       -> ICEWrapper::GetAuthor              header inline, free
 //     GetKeyAnimFromGuid -> ICEAuthor::FindEditedTakeFromGuid  ICEAuthorTakeOps.cpp
 //                           ICEList::GetICETakeDataFromGuid    ICEList.cpp (mounted)
@@ -22,10 +17,6 @@
 // Both are needed by the ICE camera family (BehaviourIceAnim reaches GetICEAuthor,
 // KeyAnimController reaches GetKeyAnimFromGuid), which is why they are carved out.
 //
-// ⚠️ STILL A SPLIT. Merge this AND BrnDirectorResourceManagerICEWrapper.cpp back into
-// BrnDirectorResourceManager.cpp the moment the ICEWrapper group lands -- neither split
-// has a reason to outlive its blocker.
-// DELETE-WHEN: BrnDirectorICEWrapper.cpp mounts.
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorResourceManager.h"
