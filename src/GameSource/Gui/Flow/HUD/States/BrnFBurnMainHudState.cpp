@@ -522,8 +522,7 @@ namespace BrnGui
     }
 
     // =======================================================================
-    //  Update -- the phase dispatch (header-inline on X360, not exported; composed
-    //  from the phase bodies' advance returns; UpdatePermenant runs every frame)
+    //  Update  @ 0x82481A10 -- the phase dispatch
     // =======================================================================
     // Stage-transition log (the [BootLegal]/[BootProfile]-style diagnostic every boot/HUD
     // state carries).
@@ -534,33 +533,48 @@ namespace BrnGui
         CgsDev::Log::WriteToLog(lac);
     }
 
+    // Each phase that completes FALLS THROUGH into the next one in the same frame (the jump
+    // table's case 0..3 bodies store the phase, call it, and on true branch to the next case
+    // label), so a re-entered HUD whose setup / loading / wf-init are already satisfied is
+    // RUNNING on its first frame. The in-queue is cleared at frame end whatever the phase, so
+    // a phase-per-frame dispatch drops every GUI event posted while it climbs back -- the
+    // "JumpFailed" message (GUI 549, posted the frame the player leaves the crash) among them.
     void FBurnMainHudState::Update()
     {
         const EInternalState lePrevState = meInternalState;
         switch (meInternalState)
         {
         case E_INTERNALSTATE_SETUP:
-            if (UpdateSetupState())
-                meInternalState = E_INTERNALSTATE_LOADING;
-            break;
+            meInternalState = E_INTERNALSTATE_SETUP;
+            if (!UpdateSetupState())
+                break;
+            // fall through
         case E_INTERNALSTATE_LOADING:
-            if (UpdateLoading())
-                meInternalState = E_INTERNALSTATE_WFINIT;
-            break;
+            meInternalState = E_INTERNALSTATE_LOADING;
+            if (!UpdateLoading())
+                break;
+            // fall through
         case E_INTERNALSTATE_WFINIT:
-            if (UpdateWFInit())
-                meInternalState = E_INTERNALSTATE_RUNNING;
-            break;
+            meInternalState = E_INTERNALSTATE_WFINIT;
+            if (!UpdateWFInit())
+                break;
+            // fall through
         case E_INTERNALSTATE_RUNNING:
+            meInternalState = E_INTERNALSTATE_RUNNING;
             UpdateRunning();
             break;
+        case E_INTERNALSTATE_LEAVING:
+            meInternalState = E_INTERNALSTATE_LEAVING;
+            break;
         default:
+            CGS_ASSERT(false, "Should never call update in the following state");   // cpp:1282
             break;
         }
         if (meInternalState != lePrevState)
             LogFBurnStage(lePrevState, meInternalState);
 
-        UpdatePermenant();
+        if (meInternalState != E_INTERNALSTATE_LEAVING)
+            UpdatePermenant();
 
         // The pumps read without consuming; the state clears its in-queue at frame end
         // (the shared boot/HUD-state idiom).
