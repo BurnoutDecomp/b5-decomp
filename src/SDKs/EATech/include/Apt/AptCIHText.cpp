@@ -266,7 +266,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // when the character carries a font index (>= 0) -- resolved off the parent
         // movie's font-character table; else null.
         const char* pFontName = 0;
-        if (pFmt != 0)
+        if (pFmt != 0 && !pFmt->mFontName.IsEmpty())
         {
             pFontName = pFmt->mFontName.GetBuffer();
         }
@@ -302,6 +302,8 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
                 }
             }
         }
+
+        params.szFontName = pFontName;  // ARTIST 82B06F08: first callback parameter
 
         // ARTIST calls the layout hook unconditionally; its measured outputs are
         // written by the callback and then consumed below.
