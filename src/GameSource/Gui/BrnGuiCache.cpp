@@ -264,6 +264,10 @@ namespace BrnGui
         // ARTIST Construct 0x82505A68: freeburn is E_MODE_NONE, not race (zero).
         meGameModeType = -1;
         mbAreRoadRulesAvailable = false; // 0x82505A3C
+        mu8EasyDriveGateState = 0; // ARTIST82505A24
+        mu8EATraxChyronActive = 0; // ARTIST82505A54
+        mbGameplayHudReadyC = false;
+        mbReplayExporting = false;
         mbFriendsListOpen = false;
         mbFriendsListChangePending = false;
 
@@ -1345,6 +1349,13 @@ namespace BrnGui
             break;
         }
         // ARTIST RecEvent 94 / 106: EasyDrive's open state and pending-change icon.
+        // ARTIST8250DDF0: both payloads write one cache byte.
+        case 96:
+            mu8EasyDriveGateState = *reinterpret_cast<const u8*>(lpEvent);
+            break;
+        case 471:
+            mu8EATraxChyronActive = *reinterpret_cast<const u8*>(lpEvent);
+            break;
         case 94:
             mbFriendsListOpen = *reinterpret_cast<const u8*>(lpEvent) != 0;
             mbFriendsListChangePending = false;
@@ -1416,6 +1427,23 @@ namespace BrnGui
             --miOpponentsInEvent;
             break;
 
+        // ARTIST8250DDF0, event 192: completing car select owns the final HUD-ready byte.
+        case 192:
+        {
+            if (*reinterpret_cast<const s32*>(lpEvent) != 4)
+                break;
+            meCarSelectType = 0;
+            if (mpProfile)
+            {
+                CGS_ASSERT(mLocalPlayerOriginalCarId != 0, "mGuiPlayerInfo.mOriginalCarId != kCGSID_NULL");
+                if (mpProfile->FindCar(mLocalPlayerOriginalCarId))
+                    mbShowNearestBodyShop = mpProfile->FindCar(mLocalPlayerOriginalCarId)->GetUnlockDeformationAmount() > 0.0f;
+                else
+                    mbShowNearestBodyShop = true;
+            }
+            mbGameplayHudReadyC = true;
+            break;
+        }
         case 194:
             // [map-event exit wave 2026-09-12] the preset-race response
             // (BrnGui::GuiEventSpecificPresetRaces): the payload is a whole per-mode

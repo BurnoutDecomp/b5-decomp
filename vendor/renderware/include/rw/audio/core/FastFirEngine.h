@@ -52,8 +52,8 @@ struct FFTAllocation
 s32 FFT_Alloc(s32 sizeLog2, char flag, FFTAllocation* pAllocation);
 s32 FFT_Init(FFTState* pState);
 s32 FFT_Free(FFTAllocation* pAllocation);
-void *FFT_ForwardReal(void *handle, f32 *buffer);
-void *FFT_InverseReal(void *handle, f32 *buffer);
+void FFT_ForwardReal(FFTState* pState, f32* pBuffer);
+void FFT_InverseReal(FFTState* pState, f32* pBuffer);
 
 class FastFirEngine
 {

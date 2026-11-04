@@ -52,6 +52,14 @@ namespace CgsGui
         s32 GetEventType() const { return 89; }
     };
 
+    // ARTIST8243A014: channel 40 wraps this one-byte tag in a 16-byte event.
+    template <>
+    struct GuiEvent<106> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 106; }
+    };
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<106>) == 1), "ARTIST invite-finished tag is one byte");
+
     // ARTIST AddGuiEvent<GuiEvent<91>> posts one unwritten byte (0x823D2660: AddEvent id 91,
     // size 1), so this tag is the empty event representation rather than the generic 12-byte
     // header above. The local object remains uninitialized, matching the original payload.
