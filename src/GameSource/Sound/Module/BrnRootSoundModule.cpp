@@ -825,5 +825,59 @@ namespace Module
         lpRootOutputBuffer->GetReplayRequestInterface()->Append(
             lpLogicOutputBuffer->GetReplayRequestInterface());
     }
+
+    // ARTIST 0x826829C8.
+    void RootSoundModule::Destruct()
+    {
+        mLogicModule.Destruct();
+        mLogicModule.GetPlaybackModule().Destruct();
+        CgsModule::ModuleSingleBuffered::Destruct();
+    }
+
+    // ARTIST 0x82682898. Pending releases resume at the recorded stage.
+    bool RootSoundModule::Release()
+    {
+        switch (meReleaseStage)
+        {
+        case E_RELEASESTAGE_START:
+        case E_RELEASESTAGE_LOGIC_MODULE:
+            meReleaseStage = E_RELEASESTAGE_LOGIC_MODULE;
+            mePrepareStage = E_PREPARESTAGE_LOGIC_MODULE;
+            // fall through
+        case E_RELEASESTAGE_PLAYBACK_MODULE:
+        case E_RELEASESTAGE_REGISTRY_LOAD:
+            meReleaseStage = E_RELEASESTAGE_PLAYBACK_MODULE;
+            if (!mLogicModule.GetPlaybackModule().Release())
+                return false;
+            mePrepareStage = E_PREPARESTAGE_PLAYBACK_MODULE;
+            // fall through
+        case E_RELEASESTAGE_RWAC:
+            meReleaseStage = E_RELEASESTAGE_SELF;
+            if (mpSystem)
+            {
+                rw::audio::core::System::Release(mpSystem);
+                mpSystem = 0;
+            }
+            mePrepareStage = E_PREPARESTAGE_RWAC;
+            // fall through
+        case E_RELEASESTAGE_SELF:
+            meReleaseStage = E_RELEASESTAGE_SELF;
+            if (!CgsModule::ModuleSingleBuffered::Release())
+                return false;
+            mePrepareStage = E_PREPARESTAGE_SELF;
+            // fall through
+        case E_RELEASESTAGE_DONE:
+            mePrepareStage = E_PREPARESTAGE_START;
+            meReleaseStage = E_RELEASESTAGE_DONE;
+            return true;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid Stage\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Module/BrnRootSoundModule.cpp",
+                779);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+    }
 }
 }

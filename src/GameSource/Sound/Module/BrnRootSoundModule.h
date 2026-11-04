@@ -115,6 +115,9 @@ namespace Module
                              Io::RootInputBuffer* lpSoundModuleInputBuffer,
                              Io::RootOutputBuffer* lpSoundModuleOutputBuffer);
 
+        virtual bool Release();
+        virtual void Destruct();
+
         bool PrepareOnEnteringGameplay(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                                        CgsModule::IOBufferStack* lpInputBufferStack,
                                        CgsModule::IOBufferStack* lpOutputBufferStack,
