@@ -49,10 +49,8 @@ public:
     // (re)size the symbol buffer to hold at least luCount records; *lpuError = 1 on failure.
     void allocateSymbolArray(u32 luCount, u32* lpuError);
 
-    // Reset for a new frame at the given table mode: (re)sizes the buffer to liSymbolCount,
-    // clears every table's code buffer and rebuilds its codes. Returns the last table's
-    // setCodes result.
-    int  clear(int liMode, int liSymbolCount);
+    // Reset for a new frame, clear every code buffer and select the packed tables.
+    void clear(int liMode, int liSymbolCount);
 
     // Measure the frame: sum every table's checkFrame(), record the buffered symbol count,
     // rewind the cursor. Returns the total symbol count contributed by the tables.
@@ -73,6 +71,8 @@ public:
     void updateHistory();
 
 private:
+    friend class CLocalHuffmanEncoder;
+
     static const int KI_NUM_TABLES = 11;
 
     u32                   muReady;            // +0x00
@@ -84,7 +84,7 @@ private:
     u32                   muCounter18;        // +0x18
     u32                   muPad1C;            // +0x1C  (unobserved)
     u32                   muPad20;            // +0x20  (unobserved)
-    u32                   muPad24;            // +0x24  (unobserved)
+    u32                   muMvSearchBits;     // +0x24  motion-vector search range bits
     CLocalHuffmanEncoder* mpaTables[KI_NUM_TABLES];  // +0x28
     u32*                  mpSymbolBase;       // +0x54
     u32*                  mpSymbolCursor;     // +0x58

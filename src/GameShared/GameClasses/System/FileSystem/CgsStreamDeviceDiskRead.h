@@ -18,8 +18,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperation.h"
-// Committed vendor Futex: CRITICAL_SECTION-backed fast mutex.
-#include "eathread/eathread_futex.h"
+#include <xtl.h>
 
 namespace CgsFileSystem
 {
@@ -72,7 +71,22 @@ namespace CgsFileSystem
         // ---- instance layout (DWARF CgsStreamDeviceDiskRead.h:217-270) ----
         // DECLARE-ONLY shape: faithful DWARF order + types. Bodies for the streaming API live in
         // CgsStreamDeviceDiskRead.cpp (a follow-on TU).
-        EA::Thread::Futex     mFutex;                  // :217
+        // ARTIST MoviePlayer (0x827DD3A8) and FileSystem (0x827DF360)
+        // initialize these stream locks with the plain XDK entry point.
+        struct __declspec(align(8)) StreamFutex
+        {
+            StreamFutex() { RtlInitializeCriticalSection(&mCriticalSection); }
+            ~StreamFutex() { RtlDeleteCriticalSection(&mCriticalSection); }
+
+            CRITICAL_SECTION mCriticalSection;
+
+        private:
+            StreamFutex(const StreamFutex&);
+            StreamFutex& operator=(const StreamFutex&);
+        };
+        CGS_STATIC_ASSERT(sizeof(StreamFutex) == 0x20, "ARTIST stream lock extent");
+
+        mutable StreamFutex   mFutex;                  // :217
         FileSystem*           mpFileSystem;            // :219
         FileLog*              mpLog;                   // :220
         char                  macFileName[256];        // :221
@@ -146,5 +160,7 @@ namespace CgsFileSystem
         static void ReadCallback (s32 liResult, Handle lHandle, u64 luSize, void* lpContext);
         static void CloseCallback(s32 liResult, Handle lHandle, u64 luSize, void* lpContext);
     };
+
+    CGS_STATIC_ASSERT(sizeof(StreamDeviceDiskRead) == 0x5A0, "ARTIST stream stride");
 
 } // namespace CgsFileSystem

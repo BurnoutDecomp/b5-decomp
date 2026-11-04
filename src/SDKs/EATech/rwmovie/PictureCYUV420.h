@@ -8,19 +8,10 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is authoritative. No reference
 // source and no DecFIGS DWARF hints exist for this TU.
 //
-// Layout (0x94 = 148 bytes). Only the fields that CReferenceLibrary::SetupReferenceLibrary
-// attests are named here: five CRct regions initialised to the empty rect {0,0,-1,-1} at
-// +0x00 / +0x10 / +0x48 / +0x60 / +0x78. The remaining bytes are filled by
-// PictureCYUV420_init and are preserved as opaque padding until that TU recovers them.
-//   +0x00 mrcRegion0   CRct  (empty-initialised at construct)
-//   +0x10 mrcRegion1   CRct  (empty-initialised)
-//   +0x20 ..+0x47      init-owned fields (padding)
-//   +0x48 mrcRegion2   CRct  (empty-initialised)
-//   +0x58 ..+0x5F      init-owned fields (padding)
-//   +0x60 mrcRegion3   CRct  (empty-initialised)
-//   +0x70 ..+0x77      init-owned fields (padding)
-//   +0x78 mrcRegion4   CRct  (empty-initialised)
-//   +0x88 ..+0x93      init-owned fields (padding)
+// Layout (0x94 = 148 bytes) and allocation ownership recovered from ARTIST
+// PictureCYUV420_init 82AA0420, Plane_allocate 82AA0340, and Clean 82AA02B0.
+// Five CRct values are initialized by the caller; three plane views and their raw
+// allocations occupy the gaps between the last three rectangles.
 // =====================================================================================
 #pragma once
 
@@ -33,13 +24,25 @@ struct PictureCYUV420
 {
     CRct mrcRegion0;   // +0x00
     CRct mrcRegion1;   // +0x10
-    u8   mPad0[40];    // +0x20 .. +0x47  (filled by PictureCYUV420_init)
-    CRct mrcRegion2;   // +0x48
-    u8   mPad1[8];     // +0x58 .. +0x5F
-    CRct mrcRegion3;   // +0x60
-    u8   mPad2[8];     // +0x70 .. +0x77
-    CRct mrcRegion4;   // +0x78
-    u8   mPad3[12];    // +0x88 .. +0x93
+    s32 miLumaArea;       // +0x20
+    s32 miChromaArea;     // +0x24
+    s32 miLumaWidth;      // +0x28
+    s32 miLumaHeight;     // +0x2C
+    s32 miChromaWidth;    // +0x30
+    s32 miChromaHeight;   // +0x34
+    s32 miDisplayWidth;   // +0x38
+    s32 miDisplayHeight;  // +0x3C
+    u8* mpLuma;           // +0x40 aligned plane
+    void* mpLumaAllocation; // +0x44 raw allocation
+    CRct mrcRegion2;       // +0x48 luma allocation rectangle
+    u8* mpChromaU;         // +0x58
+    void* mpChromaUAllocation; // +0x5C
+    CRct mrcRegion3;       // +0x60 chroma U allocation rectangle
+    u8* mpChromaV;         // +0x70
+    void* mpChromaVAllocation; // +0x74
+    CRct mrcRegion4;       // +0x78 chroma V allocation rectangle
+    u8* mapPlanes[3];      // +0x88 luma, chroma U, chroma V
+
 
     // The X360 performs exactly these stores inline (each region's four words set to
     // {0,0,-1,-1}) in SetupReferenceLibrary before calling PictureCYUV420_init; no other
@@ -60,6 +63,10 @@ struct PictureCYUV420
         CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mrcRegion2) == 0x48), "mrcRegion2 @ +0x48");
         CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mrcRegion3) == 0x60), "mrcRegion3 @ +0x60");
         CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mrcRegion4) == 0x78), "mrcRegion4 @ +0x78");
+        CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mpLuma) == 0x40), "luma plane");
+        CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mpChromaU) == 0x58), "chroma U plane");
+        CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mpChromaV) == 0x70), "chroma V plane");
+        CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mapPlanes) == 0x88), "plane map");
         CGS_STATIC_ASSERT((sizeof(PictureCYUV420) == 0x94), "PictureCYUV420 size == 148");
     }
 };
@@ -69,5 +76,6 @@ struct PictureCYUV420
 // lpiResult (0 on success); Clean() releases whatever init() allocated. The parameter set
 // after lpiResult is forwarded verbatim by CReferenceLibrary::SetupReferenceLibrary.
 extern void PictureCYUV420_init(PictureCYUV420* lpPicture, s32* lpiResult,
-                                s32 liParam2, s32 liParam3, s32 liParam4, s32 liParam5, s32 liParam6);
+                                const CRct* lpLumaRect, const CRct* lpChromaRect,
+                                s32 liParam4, s32 liParam5, s32 liParam6);
 extern void PictureCYUV420_Clean(PictureCYUV420* lpPicture);

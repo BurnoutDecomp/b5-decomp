@@ -32,6 +32,13 @@ extern "C" void NetCritInit(NetCritT* crit, const char*)
     InitializeCriticalSection(&crit->section);
 }
 
+// ARTIST82B29A90: the native kill operation only releases the spin flag.
+extern "C" void NetCritKill(NetCritT* crit)
+{
+    if (!crit) crit = &gGlobalCrit;
+    crit->lock = 0;
+}
+
 extern "C" s32 NetCritTry(NetCritT* crit)
 {
     if (!crit) crit = &gGlobalCrit;

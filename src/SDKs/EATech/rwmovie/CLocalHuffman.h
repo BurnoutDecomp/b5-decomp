@@ -13,12 +13,6 @@
 // (attributes 0x248C8000), zeroes it, and fills the second numSymbols-word half with the
 // per-symbol max-code masks (1<<codeLength)-1. The destructor frees that one buffer.
 //
-// The five code-length tables (KAU_CODE_LENGTHS_*) and the two secondary byte tables
-// (KAU_SECONDARY_LENGTHS_*) are static rodata blobs in the XEX (unk_82123DB0 / _82123DC0
-// / _82123E10 / _82123E38 and byte_82F70CF8 / byte_82F70D90). Their byte contents are not
-// reproduced here and are declared extern (unsized) so the definitions can be dropped in
-// when the rodata is extracted -- note unk_82123DB0 is shared by the 4-bit (12-symbol) and
-// 10-bit (64-symbol) cases, so it must NOT be bounded at 12.
 // =====================================================================================
 #pragma once
 
@@ -36,14 +30,6 @@
 // XMemAlloc/XMemFree attribute word used for this codec's tables (lis 0x248C / ori 0x8000).
 static const u32 KU_HUFFMAN_XMEM_ATTRIBUTES = 0x248C8000u;
 
-// ---- static code-length / secondary tables (XEX rodata) -----------------------------
-extern const u8 KAU_CODE_LENGTHS_A0[];           // unk_82123DB0 (shared: 4-bit=12, 10-bit=64)
-extern const u8 KAU_CODE_LENGTHS_C0[];           // unk_82123DC0 (bits < 4, 77 symbols)
-extern const u8 KAU_CODE_LENGTHS_E10[];          // unk_82123E10 (default, 34 symbols)
-extern const u8 KAU_CODE_LENGTHS_E38[];          // unk_82123E38 (8-bit, 73 symbols)
-extern const u8 KAU_SECONDARY_LENGTHS_CF8[];     // byte_82F70CF8 (8-bit secondary table)
-extern const u8 KAU_SECONDARY_LENGTHS_D90[];     // byte_82F70D90 (10-bit secondary table)
-
 class CLocalHuffman
 {
 public:
@@ -56,10 +42,8 @@ public:
     // 4 * numSymbols to size the per-table code-buffer memset.
     u32 GetNumSymbols() const { return muNumSymbols; }
 
-    // CLocalHuffman::setCodes -- (re)builds this table's canonical code words for the
-    // requested table-selection mode. It is a separate (not-yet-reconstructed) X360 TU;
-    // declared here so CAltTablesEncoder::clear can call it through a CLocalHuffmanEncoder.
-    int setCodes(int liMode);
+    // Select the mode's packed code table for this index width.
+    void setCodes(int liMode);
 
 protected:
     // Reached by name from the derived CLocalHuffmanEncoder encode path (WriteSymbol /

@@ -23,7 +23,6 @@
 
 #include "GameShared/GameClasses/System/FileSystem/CgsStreamDeviceDiskRead.h"
 
-#include "GameShared/GameClasses/System/FileSystem/CgsFile.h"           // FileFutexHelper
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"  // DeviceManager / GetDeviceManager / Handle
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT / Assert::{Begin,Fire,End}Assert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (dynamic assert messages)
@@ -34,11 +33,27 @@
 
 namespace CgsFileSystem
 {
-    // Build a formatted assert message via StrStream (as the X360 did with the shared assert
-    // buffer) and fire it. Used for the asserts whose text embeds a runtime value; the plain-text
-    // asserts use CGS_ASSERT directly.
     namespace
     {
+        class StreamLockGuard
+        {
+        public:
+            explicit StreamLockGuard(CRITICAL_SECTION& lrCriticalSection)
+                : mrCriticalSection(lrCriticalSection)
+            {
+                RtlEnterCriticalSection(&mrCriticalSection);
+            }
+
+            ~StreamLockGuard()
+            {
+                RtlLeaveCriticalSection(&mrCriticalSection);
+            }
+
+        private:
+            CRITICAL_SECTION& mrCriticalSection;
+        };
+
+        // Asserts that embed a runtime value use the shared formatted assertion path.
         void FireFormattedAssert(const char* lpcMessage)
         {
             CgsDev::Assert::BeginAssert();
@@ -71,7 +86,7 @@ namespace CgsFileSystem
         miLogIndex = liLogIndex;
         rw::core::stdc::StringnCopy(macFileName, lpcName, 255);
 
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
         CGS_ASSERT((luBufferSize % luNumBlocks) == 0,
                    "Buffer size must be divisible by number of blocks\n");
@@ -120,7 +135,7 @@ namespace CgsFileSystem
     // filter) if the stream is already closed or a close is already pending.
     void StreamDeviceDiskRead::Close()
     {
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
         if (meStatus == E_STATUS_CLOSED || mbWaitingToClose)
         {
@@ -139,7 +154,7 @@ namespace CgsFileSystem
     // ring reset happens in Service (only valid on an OPEN stream not currently locked for read).
     void StreamDeviceDiskRead::Seek(u64 luPosition)
     {
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
         CGS_ASSERT(meStatus == E_STATUS_OPEN, "Invalid state to do seek\n");
         CGS_ASSERT(!mbIsOutputing, "Can not seek while locked for read\n");
@@ -158,7 +173,7 @@ namespace CgsFileSystem
         (void)luSize;
         (void)lpContext;
 
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
         CGS_ASSERT(meStatus == E_STATUS_OPENING, "Incorrect stream state\n");
         CGS_ASSERT(miPendingOperationCount > 0,
@@ -204,13 +219,13 @@ namespace CgsFileSystem
     // the ring's locked-block flags protect the exposed bytes between calls.
     bool StreamDeviceDiskRead::StartAsyncRead(void** lppData, u32* lpuAmount)
     {
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
         return StartAsyncReadInternal(lppData, lpuAmount);
     }
 
     void StreamDeviceDiskRead::StopAsyncRead(u32 luAmount)
     {
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
         StopAsyncReadInternal(luAmount);
     }
 
@@ -226,7 +241,7 @@ namespace CgsFileSystem
     // success, the partial count if the stream ended first).
     u32 StreamDeviceDiskRead::Read(u32 luAmount, void* lpDest)
     {
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
         u32   luBytesRead = 0;
         u32   luRemaining = luAmount;
@@ -268,13 +283,13 @@ namespace CgsFileSystem
     // 64-bit output position at+0x570, unlock, then return the snapshot.
     u64 StreamDeviceDiskRead::Tell()
     {
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
         return muOutputPosition;
     }
 
     u32 StreamDeviceDiskRead::GetAmountOfDataInBuffer() const
     {
-        FileFutexHelper lGuard(const_cast<EA::Thread::Futex&>(mFutex));
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
         s32 liTotalAvailable = 0;
         s32 liBlockCount     = 0;
@@ -526,7 +541,7 @@ namespace CgsFileSystem
     {
         (void)lHandle;   // the device handle is not used by the read completion
 
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
         ReadStreamBlock* lpBlock = static_cast<ReadStreamBlock*>(lpContext);
 
@@ -596,7 +611,7 @@ namespace CgsFileSystem
         (void)luSize;
         (void)lpContext;
 
-        FileFutexHelper lGuard(mFutex);
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
         CGS_ASSERT(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
         CGS_ASSERT(miPendingOperationCount > 0,

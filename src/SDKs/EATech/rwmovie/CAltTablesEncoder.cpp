@@ -25,10 +25,8 @@
 
 #include "SDKs/EATech/rwmovie/CLocalHuffmanEncoder.h"
 
-// Foreign codec global (X360 dword_8322C3F0) written by clear(): 1 when the requested table
-// mode is "short" (<= 5), else 0. It is owned by another TU; declared extern here so the
-// store side-effect is preserved.
-extern int g_iAltTablesShortCodeFlag;
+// ARTIST dword_8322C3F0 biases the emitted short-code lengths.
+int g_iAltTablesShortCodeFlag = 0;
 
 // -------------------------------------------------------------------------------------
 // CAltTablesEncoder::CAltTablesEncoder  @0x82A7ECD0
@@ -119,10 +117,9 @@ void CAltTablesEncoder::allocateSymbolArray(u32 luCount, u32* lpuError)
 //
 // Prepare for a fresh frame at table mode liMode: publish the short-code global, (re)size the
 // buffer to liSymbolCount records, rewind the cursor, reset the two counters and the ready
-// flag, then for every table clear its code buffer and rebuild its code words. Returns the
-// last table's setCodes result.
+// flag, then for every table clear its code buffer and select its packed code set.
 // -------------------------------------------------------------------------------------
-int CAltTablesEncoder::clear(int liMode, int liSymbolCount)
+void CAltTablesEncoder::clear(int liMode, int liSymbolCount)
 {
     g_iAltTablesShortCodeFlag = (liMode <= 5) ? 1 : 0;
 
@@ -137,7 +134,6 @@ int CAltTablesEncoder::clear(int liMode, int liSymbolCount)
     muCounter14    = 0;
     muReady        = 1;
 
-    int liResult = 0;
     for (int liTable = 0; liTable < static_cast<int>(muNumTables); ++liTable)
     {
         CLocalHuffmanEncoder* lpEnc = mpaTables[liTable];
@@ -145,9 +141,8 @@ int CAltTablesEncoder::clear(int liMode, int liSymbolCount)
         u32 luByteSize = 4u * lpEnc->GetNumSymbols();
         lpEnc->muDirtyFlag = 0;
         memset(lpEnc->mpauCodeBuffer, 0, luByteSize);
-        liResult = lpEnc->setCodes(liMode);
+        lpEnc->setCodes(liMode);
     }
-    return liResult;
 }
 
 // -------------------------------------------------------------------------------------
@@ -162,7 +157,7 @@ void CAltTablesEncoder::updateHistory()
     for (int liTable = 0; liTable < static_cast<int>(muNumTables); ++liTable)
     {
         CLocalHuffmanEncoder* lpEnc = mpaTables[liTable];
-        if (lpEnc->muDirtyFlag != 0 || lpEnc->mpState->muDirty != 0)
+        if (lpEnc->muDirtyFlag != 0 || lpEnc->mpState->muFrameFlag != 0)
             lpEnc->muHistoryCode = lpEnc->muCurrentCode;
     }
 }

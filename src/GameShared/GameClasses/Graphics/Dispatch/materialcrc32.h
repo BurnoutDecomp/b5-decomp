@@ -16,11 +16,8 @@
 struct MaterialCRC32
 {
 public:
-    // materialcrc32.h:47 -- the serialised-resource descriptor for this material (X360
-    // 0x827F7878). The body computes the packed serialised size and seeds the descriptor; the
-    // exact sizing is owned by the engine SDK home (materialcrc32.cpp) and is not reconstructed
-    // here -- this declaration is the surface the resource-type handler forwards to.
-    rw::BaseResourceDescriptors<5> GetResourceDescriptor();
+    // ARTIST 0x827F7878. The descriptor depends only on the serialized layout.
+    static rw::BaseResourceDescriptors<5> GetResourceDescriptor();
 
     // materialcrc32.h:48 -- build/initialise the material from its loaded rw::Resource.
     MaterialCRC32* Initialize(const rw::Resource& lrResource);

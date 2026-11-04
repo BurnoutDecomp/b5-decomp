@@ -8,6 +8,8 @@ namespace CgsResource
 class VoiceHierarchyResourceType : public Type
 {
 public:
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const;
+    void FixUp(void* lpResource, const rw::Resource& lrResource) const;
     uint32_t GetTypeID() const ;
 };
 }

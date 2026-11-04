@@ -122,7 +122,7 @@ s32 CReferenceLibrary::CloseReferenceLibrary()
 // CloseReferenceLibrary. The parameters after liNumFrames are forwarded verbatim to the frame
 // init (liNumFrames itself is only the queue capacity / loop count and is not passed on).
 // ---------------------------------------------------------------------------
-s32 CReferenceLibrary::SetupReferenceLibrary(s32* lpiResult, s32 liParam2, s32 liParam3,
+s32 CReferenceLibrary::SetupReferenceLibrary(s32* lpiResult, const CRct* lpLumaRect, const CRct* lpChromaRect,
                                              s32 liNumFrames, s32 liParam5, s32 liParam6,
                                              s32 liParam7)
 {
@@ -153,7 +153,7 @@ s32 CReferenceLibrary::SetupReferenceLibrary(s32* lpiResult, s32 liParam2, s32 l
         }
 
         PictureCYUV420* lpFrame = new (lpFrameMem) PictureCYUV420();
-        PictureCYUV420_init(lpFrame, lpiResult, liParam2, liParam3, liParam5, liParam6, liParam7);
+        PictureCYUV420_init(lpFrame, lpiResult, lpLumaRect, lpChromaRect, liParam5, liParam6, liParam7);
         if (*lpiResult != 0)
         {
             // This frame's init failed: release the orphan, then tear down the rest.

@@ -1,4 +1,5 @@
 #include "GameSource/World/AI/BrnAICar.h"
+#include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAICar_Constants.h"       // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/Route/BrnRoute.h"                 // BrnAI::Route, RouteNode, Route::GetNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h" // RaceBalancingManager::ComputeTargetSpeed
@@ -31,6 +32,17 @@
 namespace BrnAI
 {
     namespace vpu = rw::math::vpu;
+
+    // ARTIST race-balancing HUD checks the driver before reading forced speed.
+    bool AICar::IsSpeedMatching() const
+    {
+        return mpDriver != 0 && mpDriver->UseForcedSpeed();
+    }
+
+    f32 AICar::GetSpeedMatchSpeed() const
+    {
+        return mpDriver->GetForcedSpeed();
+    }
 
     // ===== file-local tuning constants =====
     // The .bss tunables (0x8300Dxxx) live in BrnAICar_Constants.h -- KF_DESIRED_*,

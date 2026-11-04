@@ -14,8 +14,7 @@
 //       CArrayLookahead::DetectEventInArray            @ 0x82A05710
 //
 //   The last two drive the embedded CSeqDissolveDetector; its
-//   Reset/Detect/ComputeLocalFeature engine bodies live in a separate TU and are
-//   only DECLARED (in CSeqDissolveDetector.h) -- declarations are all that the
+//   The detector engine methods live in CSeqDissolveDetector.cpp.
 //   per-TU `cl /c` compile gate needs.
 // ============================================================================
 
@@ -493,13 +492,13 @@ void CArrayLookahead::DetectEventInArray()
                     // miMaxDissolveLength (+0x08) is deliberately preserved.
                     mDissolveDetector.miDissolveDetected = 0;
                     mDissolveDetector.miDissolveLength   = 0;
-                    mDissolveDetector.mfReset0C          = 0.0f;
-                    mDissolveDetector.mfReset10          = 0.0f;
-                    mDissolveDetector.miReset14          = 0;
-                    mDissolveDetector.miReset18          = 0;
-                    mDissolveDetector.miReset1C          = 0;
-                    mDissolveDetector.miReset20          = 0;
-                    mDissolveDetector.miReset24          = 0;
+                    mDissolveDetector.mfMaxRecoveryDelta          = 0.0f;
+                    mDissolveDetector.mfMinVarianceDelta          = 0.0f;
+                    mDissolveDetector.miNonIncreasingCount          = 0;
+                    mDissolveDetector.miConsecutiveNonIncreasingCount          = 0;
+                    mDissolveDetector.miMeanSignChanges          = 0;
+                    mDissolveDetector.miFallingSamples          = 0;
+                    mDissolveDetector.miRisingSamples          = 0;
                 }
             }
 

@@ -11,6 +11,7 @@ namespace CgsResource
 class AptDataHeaderType : public Type
 {
 public:
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const;
     uint32_t GetTypeID() const ;
     void     FixDown(void* lpResource, const rw::Resource& lrResource) const ;
     void     FixUp(void* lpResource, const rw::Resource& lrResource) const ;

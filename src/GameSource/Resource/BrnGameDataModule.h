@@ -119,7 +119,7 @@ namespace BrnResource
 
     private:
         void ConstructResourceModule(); // ARTIST8266D570
-        void RegisterResourceTypes(); // ARTIST82667EA8; native implementation remains unresolved
+        void RegisterResourceTypes(rw::IResourceAllocator* lpAllocator); // ARTIST82667EA8
         static void TextureRenderCallback(renderengine::Texture* lpTexture, Vector2 lvPosition,
             Vector2 lvSize, void* lpUserData, bool lbFlag0, bool lbFlag1); // ARTIST8266ACC8
 

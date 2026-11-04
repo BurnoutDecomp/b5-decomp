@@ -208,6 +208,19 @@ void BrnCoronaManager::Construct(rw::IResourceAllocator& lrAllocator)
     mSubmissionInterface[1].mpBuffer = m_coronaBuffer1;
 }
 
+// ARTIST 0x823F7720
+bool BrnCoronaManager::Release(rw::IResourceAllocator& lrAllocator)
+{
+    if (m_textureStateAtlas != 0)
+        lrAllocator.DoFree(m_textureStateAtlasResource);
+    m_coronaBuffer1->Release();
+    m_coronaBuffer0->Release();
+    lrAllocator.DoFree(m_coronaBuffer1Resource);
+    lrAllocator.DoFree(m_coronaBuffer0Resource);
+    renderengine::CoronaRenderer::Release(lrAllocator);
+    return true;
+}
+
 // Inlined by ARTIST Renderer StartOfFrame/SwapBuffers/Update.
 void BrnCoronaManager::Clear()
 {

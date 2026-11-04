@@ -14,12 +14,12 @@
 // Byte-addressed in the asm (this[N] == byte offset N*4); pointer members widen on this
 // PC/x64 target, so the documented offsets are documentary and all access is by name. The
 // symbol record, the owning-encoder dirty/config words and the walk cursor are reached
-// through CLocalHuffmanEncoder::mpState (the owning CAltTablesEncoder, modelled by the opaque
-// SLocalHuffmanEncoderState in the header to keep the include cycle open).
+// through CLocalHuffmanEncoder::mpState, the owning CAltTablesEncoder.
 // =====================================================================================
 
 #include "SDKs/EATech/rwmovie/CLocalHuffmanEncoder.h"
 
+#include "SDKs/EATech/rwmovie/CAltTablesEncoder.h"
 #include "SDKs/EATech/rwmovie/COutBitStream.h"
 
 // Foreign codec global (X360 dword_8322C3F0): 1 when the active table mode is "short" (<= 5),
@@ -30,23 +30,168 @@ extern int g_iAltTablesShortCodeFlag;
 // Length-limited canonical-Huffman builder shared by the rwmovie codec: given the per-symbol
 // code-length array (lpauLengths, luNumSymbols entries) it writes the canonical code words into
 // lpauCodesOut and returns a pointer into the rebuilt table (r3, discarded by encodeHeader).
-// A separate, not-yet-reconstructed X360 TU (generateHuffman_balanced @todo).
+// Defined with the native decoder tables at ARTIST 0x82AC17D0.
 extern u32* generateHuffman_balanced(u32* lpauLengths, int liA2, u32 luNumSymbols,
                                      u32* lpauCodesOut, int liA5);
 
-// -------------------------------------------------------------------------------------
-// Per-motion-vector-component variable-length-code lookups (X360 sub_82A7E1A0 /
-// sub_82A7E258). Each takes one signed MV component and writes three ints -- a symbol-index
-// contribution, the packed code bits, and the shift/length -- that the check-in packers below
-// combine into the 32-bit symbol record. Their bodies live between WriteSymbol and checkInMV
-// in the XEX but are NOT in this reconstruction packet (no asm recovered), so they are
-// declared here and defined by a separate rwmovie TU. FLAG: un-recovered helper bodies.
-// The RTCMV variant additionally takes the MV search-range bit count.
-// -------------------------------------------------------------------------------------
-extern int EncodeMvComponent(int liComponent, int* lpiIndexOut, int* lpiCodeOut,
-                             int* lpiShiftOut);
-extern int EncodeRtcmvComponent(int liComponent, int* lpiIndexOut, int* lpiCodeOut,
-                                int* lpiShiftOut, int liBits);
+namespace
+{
+    const u32 KAU_MV_CODE_BITS[] = { 0, 2, 3, 4, 5, 8 };
+    const u32 KAU_RTC_EXTRA_BITS[] = { 1, 2, 3, 3 };
+    const u32 KAU_RTC_PREFIX[] = { 1, 1, 1, 0 };
+
+    // ARTIST 0x82A7E1A0
+    void EncodeMvComponent(int liComponent, int* lpiIndexOut, int* lpiCodeOut, int* lpiShiftOut)
+    {
+        const u32 luComponent = static_cast<u32>(liComponent);
+        const u32 luSign = (luComponent >> 16) & 1u;
+        const u32 luMagnitude = liComponent < 0 ? 0u - luComponent : luComponent;
+        const s32 liMagnitude = static_cast<s32>(luMagnitude);
+
+        u32 luCode = 0;
+        s32 liIndex = 0;
+        if (liMagnitude != 0)
+        {
+            if (liMagnitude < 3)
+            {
+                liIndex = 1;
+                luCode = (luMagnitude << 1) - 2u;
+            }
+            else if (liMagnitude < 7)
+            {
+                liIndex = 2;
+                luCode = (luMagnitude - 3u) << 1;
+            }
+            else if (liMagnitude < 15)
+            {
+                liIndex = 3;
+                luCode = (luMagnitude - 7u) << 1;
+            }
+            else if (liMagnitude < 31)
+            {
+                liIndex = 4;
+                luCode = (luMagnitude - 15u) << 1;
+            }
+            else
+            {
+                liIndex = 5;
+                luCode = (luMagnitude - 31u) << 1;
+            }
+            luCode |= luSign;
+        }
+
+        *lpiCodeOut = static_cast<s32>(luCode);
+        *lpiIndexOut = liIndex;
+        *lpiShiftOut = KAU_MV_CODE_BITS[liIndex];
+    }
+
+    // ARTIST 0x82A7E258
+    void EncodeRtcmvComponent(int liComponent, int* lpiIndexOut, int* lpiCodeOut,
+                              int* lpiShiftOut, int liBits)
+    {
+        const u32 luComponent = static_cast<u32>(liComponent);
+        const u32 luSign = (luComponent >> 16) & 1u;
+        const u32 luMagnitude = liComponent < 0 ? 0u - luComponent : luComponent;
+        const s32 liMagnitude = static_cast<s32>(luMagnitude);
+
+        if (liMagnitude == 0)
+        {
+            *lpiCodeOut = 0;
+            *lpiIndexOut = 0;
+            *lpiShiftOut = 0;
+            return;
+        }
+        if (liMagnitude < 3)
+        {
+            *lpiCodeOut = static_cast<s32>(((luMagnitude << 1) - 2u) | luSign);
+            *lpiIndexOut = 1;
+            *lpiShiftOut = 2;
+            return;
+        }
+
+        s32 liIndex;
+        u32 luGroup;
+        u32 luShift;
+        u32 luSuffix;
+        if (liMagnitude < 7)
+        {
+            liIndex = 2;
+            luGroup = luMagnitude - 3u;
+            luShift = 1;
+            luSuffix = 0;
+        }
+        else if (liMagnitude < 15)
+        {
+            liIndex = 3;
+            luGroup = (luMagnitude - 7u) >> 1;
+            luShift = 2;
+            luSuffix = (~luMagnitude & 1u) << 1;
+        }
+        else if (liMagnitude < 31)
+        {
+            liIndex = 4;
+            luGroup = (luMagnitude - 15u) >> 2;
+            luShift = 3;
+            luSuffix = ((luMagnitude + 1u) << 1) & 0x06u;
+        }
+        else
+        {
+            liIndex = 5;
+            luShift = liBits != 0 ? 5u : 6u;
+            luGroup = (luMagnitude - 31u) >> (luShift - 1u);
+            luSuffix = ((luMagnitude + 1u) << 1) & ((1u << luShift) - 2u);
+        }
+
+        *lpiIndexOut = liIndex;
+        *lpiCodeOut = static_cast<s32>((KAU_RTC_PREFIX[luGroup] << luShift) | luSuffix | luSign);
+        *lpiShiftOut = luShift + KAU_RTC_EXTRA_BITS[luGroup];
+    }
+}
+
+CGS_STATIC_ASSERT((sizeof(CLocalHuffmanEncoder) == 0x4C), "ARTIST encoder layout");
+
+// ARTIST 0x82A7DDD0
+CLocalHuffmanEncoder::CLocalHuffmanEncoder(int liTableIndex, CAltTablesEncoder* lpParent, u32* lpuError)
+    : CLocalHuffman(static_cast<u32>(liTableIndex), lpuError)
+{
+    mpState = lpParent;
+    muCurrentCode = 0;
+    mpauCodeBuffer = 0;
+    mpauCodeData = 0;
+    muEmittedCode = 0xFFFFFFFFu;
+
+    u32 luLengthBytes = muNumSymbols * sizeof(u32);
+    if (muNumSymbols > 0x3FFFFFFFu)
+        luLengthBytes = 0xFFFFFFFFu;
+    mpauCodeData = static_cast<u32*>(XMemAlloc(luLengthBytes, KU_HUFFMAN_XMEM_ATTRIBUTES));
+
+    const u32 luCount = 2u * muNumSymbols;
+    u32 luBufferBytes = luCount * sizeof(u32);
+    if (luCount > 0x3FFFFFFFu)
+        luBufferBytes = 0xFFFFFFFFu;
+    mpauCodeBuffer = static_cast<u32*>(XMemAlloc(luBufferBytes, KU_HUFFMAN_XMEM_ATTRIBUTES));
+
+    if (mpauCodeData != 0 && mpauCodeBuffer != 0)
+    {
+        muNeedHeader = 0;
+        muHistoryCode = 0;
+        muDirtyFlag = 0;
+        mpauCodes = mpauCodeBuffer + muNumSymbols;
+        return;
+    }
+
+    if (mpauCodeData != 0)
+    {
+        XMemFree(mpauCodeData, KU_HUFFMAN_XMEM_ATTRIBUTES);
+        mpauCodeData = 0;
+    }
+    if (mpauCodeBuffer != 0)
+    {
+        XMemFree(mpauCodeBuffer, KU_HUFFMAN_XMEM_ATTRIBUTES);
+        mpauCodeBuffer = 0;
+    }
+    *lpuError = 1;
+}
 
 // -------------------------------------------------------------------------------------
 // CLocalHuffmanEncoder::encodeHeader  @0x82A7DEE8
@@ -65,7 +210,7 @@ u32* CLocalHuffmanEncoder::encodeHeader(void* lpStream)
     if (muSecondaryTableSize > 1)
     {
         bool lbEmitCode = true;
-        if (mpState->muDirty == 0)
+        if (mpState->muFrameFlag == 0)
         {
             if (muCurrentCode == muReferenceCode)
             {
@@ -123,7 +268,7 @@ int CLocalHuffmanEncoder::encodeSymbol(void* lpStream)
     }
 
     const int liBits    = static_cast<int>(muBits);
-    u32*      lpRecord  = mpState->mpuSymbolRecord;
+    u32*      lpRecord  = mpState->mpSymbolCursor;
     const u32 luSymbol  = static_cast<u8>(*lpRecord >> 24);   // leading byte = symbol index
     const u32 luExtra   = (*lpRecord >> 1) & 0x1FFFF;
     const u32 luCode    = mpauCodes[luSymbol];
@@ -164,7 +309,7 @@ u32* CLocalHuffmanEncoder::WriteSymbol(void* lpStream)
 {
     COutBitStream* lpBitStream = static_cast<COutBitStream*>(lpStream);
 
-    u32*      lpRecord = mpState->mpuSymbolRecord;
+    u32*      lpRecord = mpState->mpSymbolCursor;
     const u32 luSymbol = static_cast<u8>(*lpRecord >> 24);   // leading byte = symbol index
 
     void* lpResult = this;   // r3 is left as `this` when muBits == 10 emits nothing
@@ -190,7 +335,7 @@ u32* CLocalHuffmanEncoder::WriteSymbol(void* lpStream)
 int CLocalHuffmanEncoder::checkInMV(void* lpContext)
 {
     const int liMotion = *static_cast<int*>(lpContext);
-    u32*      lpRecord = mpState->mpuSymbolRecord;
+    u32*      lpRecord = mpState->mpSymbolCursor;
 
     int liSymbol;
     if ((liMotion & 4) != 0)
@@ -252,7 +397,7 @@ int CLocalHuffmanEncoder::checkInMV(void* lpContext)
 int CLocalHuffmanEncoder::checkInRTCMV(void* lpContext)
 {
     const int liMotion = *static_cast<int*>(lpContext);
-    u32*      lpRecord = mpState->mpuSymbolRecord;
+    u32*      lpRecord = mpState->mpSymbolCursor;
 
     int liSymbol;
     if ((liMotion & 4) != 0)
@@ -311,7 +456,7 @@ int CLocalHuffmanEncoder::checkInRTCMV(void* lpContext)
 int CLocalHuffmanEncoder::checkFrame()
 {
     muReferenceCode = muHistoryCode;
-    if (mpState->muDirty)
+    if (mpState->muFrameFlag)
     {
         muCurrentCode   = 0;
         muReferenceCode = 0;

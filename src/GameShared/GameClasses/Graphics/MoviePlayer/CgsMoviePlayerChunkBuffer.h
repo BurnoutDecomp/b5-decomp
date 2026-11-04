@@ -56,7 +56,7 @@ namespace CgsGraphics
     // that forwards onto a RenderWare resource allocator and counts outstanding blocks.
     struct MoviePlayerCoreAllocator : public EA::Allocator::ICoreAllocator
     {
-        MoviePlayerCoreAllocator();
+        MoviePlayerCoreAllocator() {}
         ~MoviePlayerCoreAllocator() ;
 
         void Construct(rw::IResourceAllocator* lpAllocator);
