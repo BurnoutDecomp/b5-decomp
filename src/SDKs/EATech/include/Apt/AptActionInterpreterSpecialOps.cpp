@@ -122,7 +122,7 @@ void AptActionInterpreter::_FunctionAptActionStoreRegister(AptActionInterpreter*
                                                            LocalContextT* pContext)
 {
     const int32_t* pRegIndex = reinterpret_cast<const int32_t*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));   // ARTIST: align to 4
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pRegIndex + 1);
     AptScriptFunctionBase::SetRegisterValue(*pRegIndex, pInterp->mpStack[pInterp->mnStackTop - 1]);
 }
@@ -247,7 +247,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
 {
     // Align the PC up to 4, read the inline frame dword, advance the PC by 4.
     const int32_t* pFrame = reinterpret_cast<const int32_t*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));   // ARTIST: align to 4
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pFrame + 1);
 
     // Pick the target node: the current-target slot when it is a clip / CIHNone,
@@ -509,7 +509,7 @@ void AptActionInterpreter::_FunctionAptActionSetTarget(AptActionInterpreter* pIn
 {
     // Align the PC up to 4, read the inline string pointer, advance the PC by 4.
     const unsigned char* const pAligned = reinterpret_cast<const unsigned char*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));   // ARTIST: align to 4
     const char* const szPath = *reinterpret_cast<const char* const*>(pAligned);
     pContext->mpProgramCounter = pAligned + 4;
 

@@ -48,7 +48,7 @@ namespace
     {
         const unsigned char* pAligned =
             reinterpret_cast<const unsigned char*>(
-                (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
+                (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));   // ARTIST: align to 4
         int32_t offset = *reinterpret_cast<const int32_t*>(pAligned);
         pCtx->mpProgramCounter = pAligned + 4;
         return offset;
