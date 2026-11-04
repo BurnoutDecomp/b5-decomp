@@ -36,6 +36,13 @@ namespace CgsGui
 
         // ----- methods bodied by class:CgsGui::AptDataHandler (CgsAptDataHandler.cpp) -----
 
+        // Inlined in ARTIST AptAux::Construct @ 0x82860020-28.
+        void Construct()
+        {
+            mpAllocator = 0;
+            miNumLoadedAptData = 0;
+        }
+
         // CgsAptDataHandler.h:86 (DWARF). X360 0x82847250: asserts the data allocator is
         // valid (mpAllocator != null), allocates lnSize bytes 4-aligned from it, asserts
         // the allocation succeeded, returns the block. The X360 calls the member
@@ -66,8 +73,7 @@ namespace CgsGui
         // CgsAptDataHandler.cpp.
         void RemoveAptData(u32 luNameHash);
 
-        // The remaining methods (Construct / Prepare / Release / Destruct) are homed by their
-        // own ledger TUs; declared there.
+
 
     private:
         s32                 miNumLoadedAptData;                      // +0x000 (h:97)

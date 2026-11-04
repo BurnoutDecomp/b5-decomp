@@ -38,7 +38,7 @@
 // resolves to CgsModule::VariableEventQueue<18432,16> (the GUI module-IO queue the X360
 // GetFirstEvent walks). Modelled by the real homed template; opaque here (stored/forwarded
 // by SetInEventQueue, only walked by the BLOCKED Update body).
-namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }
+namespace CgsModule { struct Event; template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }
 
 namespace BrnGui
 {
@@ -86,6 +86,8 @@ namespace BrnGui
         void UpdateTimedComponents();
 
     private:
+        void ProcessIncomingEvent(const CgsModule::Event* lpEvent, s32 liId);
+
         // The five always-available GUI components, embedded by value. Guest offsets
         // (relative to `this`) are noted for provenance only.
         EATraxInGameComponent         mEATraxInGameComponent;          // +0x10020

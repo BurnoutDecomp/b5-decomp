@@ -425,70 +425,76 @@ void MovieClipInstance::ProcessFScript(const FScriptCommand* lpStream,
     for (u32 luCommand = 0; luCommand < luCommandCount; ++luCommand)
     {
         const FScriptCommand& lrCommand = lpStream[luCommand];
-        switch (lrCommand.muCommand)
+        ProcessFScriptCommand(lrCommand, luCurrentKeyFrame);
+    }
+}
+
+__declspec(noinline) void MovieClipInstance::ProcessFScriptCommand(
+    const FScriptCommand& lrCommand, u32 luCurrentKeyFrame)
+{
+    switch (lrCommand.muCommand)
+    {
+    case 0:
+        mxFlags = static_cast<u8>(mxFlags | 1u);
+        break;
+
+    case 1:
+    case 2:
+    {
+        MovieClipInstance* lpTarget = this;
+        if (lrCommand.muParam8 != 0xFFu)
         {
-        case 0:
-            mxFlags = static_cast<u8>(mxFlags | 1u);
-            break;
-
-        case 1:
-        case 2:
-        {
-            MovieClipInstance* lpTarget = this;
-            if (lrCommand.muParam8 != 0xFFu)
-            {
-                CGS_ASSERT(lrCommand.muParam8 < mpMovieClip->muNumChildren,
-                           "lpCommand->muParam8 < mpMovieClip->muNumChildren");
-                lpTarget = &mpaChildInstances[lrCommand.muParam8];
-            }
-
-            if (lrCommand.muCommand == 1)
-                lpTarget->mxFlags = static_cast<u8>(lpTarget->mxFlags & 0xFEu);
-            else
-                lpTarget->mxFlags = static_cast<u8>(lpTarget->mxFlags | 1u);
-
-            CGS_ASSERT(lpTarget->mpMovieClip->GetKeyframeForFrame(
-                           lrCommand.muParam16) != luCurrentKeyFrame,
-                       "MovieClip tried to jump to the frame it's already on");
-            lpTarget->GotoFrame(lrCommand.muParam16);
-            break;
-        }
-
-        case 3:
-        {
-            CGS_ASSERT(lrCommand.muParam8 == 0 || lrCommand.muParam8 == 1,
-                       "lpCommand->muParam8 == 0 || lpCommand->muParam8 == 1");
-            MovieClipInstance* lpTarget = this;
-            if (lrCommand.muParam16 != 0xFFFFu)
-            {
-                CGS_ASSERT(lrCommand.muParam16 < mpMovieClip->muNumChildren,
-                           "lpCommand->muParam16 < mpMovieClip->muNumChildren");
-                lpTarget = &mpaChildInstances[lrCommand.muParam16];
-            }
-            lpTarget->mxFlags = lrCommand.muParam8 != 0
-                ? static_cast<u8>(lpTarget->mxFlags | 0x02u)
-                : static_cast<u8>(lpTarget->mxFlags & 0xFDu);
-            break;
-        }
-
-        case 4:
-            CGS_ASSERT(lrCommand.muParam8 < FScriptCommand::E_TRIGGERTYPE_COUNT,
-                       "lpCommand->muParam8 < FScriptCommand::E_TRIGGERTYPE_COUNT");
-            FireTrigger(lrCommand.muParam8, lrCommand.muParam16);
-            break;
-
-        case 5:
-            CGS_ASSERT(mpaChildInstances != 0, "Child movie clip pointer is NULL");
             CGS_ASSERT(lrCommand.muParam8 < mpMovieClip->muNumChildren,
-                       "Trying to set animation parameters on a missing child movie clip");
-            mpaChildInstances[lrCommand.muParam8].muParameterIndex =
-                lrCommand.muParam16;
-            break;
-
-        default:
-            CGS_ASSERT(false, "Got invalid keyframe command");
-            break;
+                       "lpCommand->muParam8 < mpMovieClip->muNumChildren");
+            lpTarget = &mpaChildInstances[lrCommand.muParam8];
         }
+
+        if (lrCommand.muCommand == 1)
+            lpTarget->mxFlags = static_cast<u8>(lpTarget->mxFlags & 0xFEu);
+        else
+            lpTarget->mxFlags = static_cast<u8>(lpTarget->mxFlags | 1u);
+
+        CGS_ASSERT(lpTarget->mpMovieClip->GetKeyframeForFrame(
+                       lrCommand.muParam16) != luCurrentKeyFrame,
+                   "MovieClip tried to jump to the frame it's already on");
+        lpTarget->GotoFrame(lrCommand.muParam16);
+        break;
+    }
+
+    case 3:
+    {
+        CGS_ASSERT(lrCommand.muParam8 == 0 || lrCommand.muParam8 == 1,
+                   "lpCommand->muParam8 == 0 || lpCommand->muParam8 == 1");
+        MovieClipInstance* lpTarget = this;
+        if (lrCommand.muParam16 != 0xFFFFu)
+        {
+            CGS_ASSERT(lrCommand.muParam16 < mpMovieClip->muNumChildren,
+                       "lpCommand->muParam16 < mpMovieClip->muNumChildren");
+            lpTarget = &mpaChildInstances[lrCommand.muParam16];
+        }
+        lpTarget->mxFlags = lrCommand.muParam8 != 0
+            ? static_cast<u8>(lpTarget->mxFlags | 0x02u)
+            : static_cast<u8>(lpTarget->mxFlags & 0xFDu);
+        break;
+    }
+
+    case 4:
+        CGS_ASSERT(lrCommand.muParam8 < FScriptCommand::E_TRIGGERTYPE_COUNT,
+                   "lpCommand->muParam8 < FScriptCommand::E_TRIGGERTYPE_COUNT");
+        FireTrigger(lrCommand.muParam8, lrCommand.muParam16);
+        break;
+
+    case 5:
+        CGS_ASSERT(mpaChildInstances != 0, "Child movie clip pointer is NULL");
+        CGS_ASSERT(lrCommand.muParam8 < mpMovieClip->muNumChildren,
+                   "Trying to set animation parameters on a missing child movie clip");
+        mpaChildInstances[lrCommand.muParam8].muParameterIndex =
+            lrCommand.muParam16;
+        break;
+
+    default:
+        CGS_ASSERT(false, "Got invalid keyframe command");
+        break;
     }
 }
 

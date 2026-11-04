@@ -216,231 +216,237 @@ namespace BrnGui
              lpEvent != 0;
              liId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
-            switch (liId)
+            ProcessIncomingEvent(lpEvent, liId);
+        }
+    }
+
+    __declspec(noinline) void AlwaysAvailableComponentsManager::ProcessIncomingEvent(
+        const CgsModule::Event* lpEvent, s32 liId)
+    {
+        switch (liId)
+        {
+        case 64:   // connect: latch the GuiCache (the far members the in-game cases read)
+            if (!mpGuiCache)
             {
-            case 64:   // connect: latch the GuiCache (the far members the in-game cases read)
-                if (!mpGuiCache)
-                {
-                    GuiCache* lpCache = static_cast<const AacGuiEventCache*>(lpEvent)->mpGuiCache;
-                    CGS_ASSERT(lpCache != 0, "Invalid cache in AlwaysAvailableComponentsManager::Update");
-                    mpGuiCache = lpCache;
-                }
-                break;
-
-            case 26:   // per-frame time-step: stamp the timed (in-game) overlays
-                // ⭐ RESTORED 2026-09-16. The old FLAG said GuiEventTimeInfo::GetTime()
-                // "is not committed to the link". Its body was in the tree all along
-                // (CgsGuiEventTypeDefs.cpp:14) -- the TU simply was not MOUNTED, so the
-                // flag was stale rather than true. Mounted, and the console's two stamps
-                // restored. Without them mfCurrentGameTime_Seconds never advances, so the
-                // EATrax chyron's anim-out timer can never expire and the overlay could
-                // never hide itself even once something showed it.
-                //   82509840  stbx r10, r28, 0x101B9   ; mbGameLoadStateCompleted = true
-                //   82509844  bl 0x8240E328            ; GuiEventTimeInfo::GetTime
-                //   82509848  add r3, r28, r27         ; r27 == 0x10020, the EATrax chyron
-                //   8250984C  bl 0x82415C18            ; EATraxInGameComponent::SetTime
-                //   82509854  bl 0x8240E328            ; GetTime again (the console re-reads)
-                //   82509858  add r3, r28, r31         ; r31 == 0x10060, the achievement popup
-                //   8250985C  bl 0x82415D60            ; AchievementPopupComponent::SetTime
-                mbGameLoadStateCompleted = true;
-                {
-                    // GuiEventTimeInfo is a PLAIN 8-byte payload, not GuiEvent<N>-derived,
-                    // so the queue pointer IS the record -- the console passes r25 straight
-                    // to GetTime. Same reinterpret the tree already uses at
-                    // BrnGuiModule.cpp:1936 and BrnOnlineScoreboards_wI_06.cpp:328.
-                    const CgsGui::GuiEventTimeInfo* lpTimeInfo =
-                        reinterpret_cast<const CgsGui::GuiEventTimeInfo*>(lpEvent);
-                    // The console calls GetTime once per consumer (826E: two separate bl's);
-                    // it is a pure accessor, so the two reads are the same value.
-                    mEATraxInGameComponent.SetTime(
-                        static_cast<f32>(lpTimeInfo->GetTime()));
-                    mAchievementPopupComponent.SetTime(
-                        static_cast<f32>(lpTimeInfo->GetTime()));
-                }
-                break;
-
-            case 44:   // buddy notification cleared
-                mbShowNewsNotification = false;
-                break;
-
-            case 72:   // external resource dependencies loaded
-                mbExternalResourcesDependenciesLoaded = true;
-                break;
-
-            case 355:  // autosave icon: show (payload==1) / hide the top-left save spinner
-                if (*reinterpret_cast<const u8*>(lpEvent) == 1)
-                    mSaveIconComponent.ShowSaveIcon();
-                else
-                    mSaveIconComponent.HideSaveIcon();
-                break;
-
-            case 392:  // showtime banner: show / hide
-                if (*reinterpret_cast<const u8*>(lpEvent) == 1)
-                    mShowtimeMessageComponent.Show();
-                else
-                    mShowtimeMessageComponent.Hide(true);
-                break;
-
-            case 191:  // showtime hide (immediate) when the payload flag is clear
-                if (*reinterpret_cast<const u8*>(lpEvent) == 0)
-                    mShowtimeMessageComponent.Hide(true);
-                break;
-
-            case 9:    // fall-through hide: only once fully prepared
-            case 516:
-                if (mePrepareStage == E_PREPARE_DONE)
-                    mShowtimeMessageComponent.Hide(true);
-                break;
-
-            case 586:  // new achievement unlocked
-                mAchievementPopupComponent.DisplayNewAchievementNotification(
-                    reinterpret_cast<const AchievementPopupComponent::AchievementsBitArray*>(lpEvent));
-                break;
-
-            // ⭐ RESTORED 2026-09-16 -- the EATrax "now playing" chyron. The old FLAG said
-            // BrnSound::Module::Io::EaTraxHelper had "no committed type home"; that was true
-            // when it was written and is not any more (the EA Trax wave gave it a home at
-            // BrnPreUpdateSharedIo.h:80, with all three getters bodied and the TU mounted).
-            // The stale flag was the only thing keeping the chyron off the screen.
-            //
-            // Console @0x82509908 (the 0x1F6 arm of the id dispatch at 0x82509884):
-            //   82509910  bl 0x826B0420   ; EaTraxHelper::GetAlbumName (event->miSong)
-            //   82509920  bl 0x826B0380   ; EaTraxHelper::GetSongName
-            //   82509930  bl 0x826B03D0   ; EaTraxHelper::GetArtistName
-            //   82509934  lbzx r11, r28, r23   ; r23 == 0x101BA, mbContainerMovieClipPlaying
-            //   82509940  beq  -> 0x82509958   ; ...the chyron only shows while it is set
-            //   82509944  li r7, 0             ; lbLocalised = false (raw metadata strings)
-            //   82509950  add r3, r28, r27     ; r27 == 0x10020, mEATraxInGameComponent
-            //   82509954  bl 0x82439F08        ; DisplayNewTrackNotification(artist,song,album)
-            // Argument order is settled by the register assignment: r4 artist, r5 song,
-            // r6 album -- note the GETTERS are called album/song/artist, the reverse.
-            // The producer is already in the tree: MusicEffect posts this record as event
-            // 502, 24 bytes, with miSong at +0x10 and the set flag at +0x14
-            // (BrnMusicEffect.cpp:699-713), and 502 is already in this manager's
-            // RegisterForEvents list above.
-            case 502:
-            {
-                const GuiEATraxNewTrackEvent* lpNewTrack =
-                    reinterpret_cast<const GuiEATraxNewTrackEvent*>(lpEvent);
-                const BrnSound::Module::Io::EaTraxHelper lHelper;   // stateless (static key)
-                const char* lpcAlbum  = lHelper.GetAlbumName(lpNewTrack->miSongIndex);
-                const char* lpcSong   = lHelper.GetSongName(lpNewTrack->miSongIndex);
-                const char* lpcArtist = lHelper.GetArtistName(lpNewTrack->miSongIndex);
-                if (mbContainerMovieClipPlaying)
-                    mEATraxInGameComponent.DisplayNewTrackNotification(
-                        lpcArtist, lpcSong, lpcAlbum, false);
-
-                // [DIAG] NOT IN THE X360 BINARY (BRN_MUSIC_DIAG=1). The producer's own
-                // witness only proves the event was POSTED; this one proves it arrived,
-                // survived the sound->GUI append, and that the chyron was actually asked to
-                // draw with real metadata. Rare by construction (one per track change).
-
-                // 82509958..82509960 -- an AUDITION stops here; only a real track change
-                // persists to the profile.
-                if (lpNewTrack->mbPreview != 0)
-                    break;
-
-                // 8250996C..825099CC -- the profile tail. This was FLAG'd too, on the same
-                // stale "OptionsDataProfile has no committed type home" claim; it has a home
-                // (BrnGuiOptionsDataProfile.h) and GetOptionsDataProfile/SetTraxRemaining are
-                // both bodied. The console reaches the profile as a GuiCache FAR member --
-                // `addi r31, r31, -0x4788` on cache+0x10000 is cache+0xB878, which is exactly
-                // where GetOptionsDataProfile() points (BrnGuiCache.h:1001/:2116).
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                       // cpp:486
-                OptionsDataProfile* lpOptionsDataProfile =
-                    mpGuiCache->GetOptionsDataProfile();
-                CGS_ASSERT(lpOptionsDataProfile != 0, "lpOptionsDataProfile");   // cpp:489
-                // 825099C8  stw r11, 0x7344(r31) -- the setter, inlined by the console.
-                lpOptionsDataProfile->SetLastPlayedSongIndex(lpNewTrack->miSongIndex);
-                // 825099CC  bl 0x824F0180
-                lpOptionsDataProfile->SetTraxRemaining(&lpNewTrack->mRemainingSongs);
-                break;
+                GuiCache* lpCache = static_cast<const AacGuiEventCache*>(lpEvent)->mpGuiCache;
+                CGS_ASSERT(lpCache != 0, "Invalid cache in AlwaysAvailableComponentsManager::Update");
+                mpGuiCache = lpCache;
             }
+            break;
 
-            case 175:   // host-start notification
+        case 26:   // per-frame time-step: stamp the timed (in-game) overlays
+            // ⭐ RESTORED 2026-09-16. The old FLAG said GuiEventTimeInfo::GetTime()
+            // "is not committed to the link". Its body was in the tree all along
+            // (CgsGuiEventTypeDefs.cpp:14) -- the TU simply was not MOUNTED, so the
+            // flag was stale rather than true. Mounted, and the console's two stamps
+            // restored. Without them mfCurrentGameTime_Seconds never advances, so the
+            // EATrax chyron's anim-out timer can never expire and the overlay could
+            // never hide itself even once something showed it.
+            //   82509840  stbx r10, r28, 0x101B9   ; mbGameLoadStateCompleted = true
+            //   82509844  bl 0x8240E328            ; GuiEventTimeInfo::GetTime
+            //   82509848  add r3, r28, r27         ; r27 == 0x10020, the EATrax chyron
+            //   8250984C  bl 0x82415C18            ; EATraxInGameComponent::SetTime
+            //   82509854  bl 0x8240E328            ; GetTime again (the console re-reads)
+            //   82509858  add r3, r28, r31         ; r31 == 0x10060, the achievement popup
+            //   8250985C  bl 0x82415D60            ; AchievementPopupComponent::SetTime
+            mbGameLoadStateCompleted = true;
+            {
+                // GuiEventTimeInfo is a PLAIN 8-byte payload, not GuiEvent<N>-derived,
+                // so the queue pointer IS the record -- the console passes r25 straight
+                // to GetTime. Same reinterpret the tree already uses at
+                // BrnGuiModule.cpp:1936 and BrnOnlineScoreboards_wI_06.cpp:328.
+                const CgsGui::GuiEventTimeInfo* lpTimeInfo =
+                    reinterpret_cast<const CgsGui::GuiEventTimeInfo*>(lpEvent);
+                // The console calls GetTime once per consumer (826E: two separate bl's);
+                // it is a pure accessor, so the two reads are the same value.
+                mEATraxInGameComponent.SetTime(
+                    static_cast<f32>(lpTimeInfo->GetTime()));
+                mAchievementPopupComponent.SetTime(
+                    static_cast<f32>(lpTimeInfo->GetTime()));
+            }
+            break;
+
+        case 44:   // buddy notification cleared
+            mbShowNewsNotification = false;
+            break;
+
+        case 72:   // external resource dependencies loaded
+            mbExternalResourcesDependenciesLoaded = true;
+            break;
+
+        case 355:  // autosave icon: show (payload==1) / hide the top-left save spinner
+            if (*reinterpret_cast<const u8*>(lpEvent) == 1)
+                mSaveIconComponent.ShowSaveIcon();
+            else
+                mSaveIconComponent.HideSaveIcon();
+            break;
+
+        case 392:  // showtime banner: show / hide
+            if (*reinterpret_cast<const u8*>(lpEvent) == 1)
+                mShowtimeMessageComponent.Show();
+            else
+                mShowtimeMessageComponent.Hide(true);
+            break;
+
+        case 191:  // showtime hide (immediate) when the payload flag is clear
+            if (*reinterpret_cast<const u8*>(lpEvent) == 0)
+                mShowtimeMessageComponent.Hide(true);
+            break;
+
+        case 9:    // fall-through hide: only once fully prepared
+        case 516:
+            if (mePrepareStage == E_PREPARE_DONE)
+                mShowtimeMessageComponent.Hide(true);
+            break;
+
+        case 586:  // new achievement unlocked
+            mAchievementPopupComponent.DisplayNewAchievementNotification(
+                reinterpret_cast<const AchievementPopupComponent::AchievementsBitArray*>(lpEvent));
+            break;
+
+        // ⭐ RESTORED 2026-09-16 -- the EATrax "now playing" chyron. The old FLAG said
+        // BrnSound::Module::Io::EaTraxHelper had "no committed type home"; that was true
+        // when it was written and is not any more (the EA Trax wave gave it a home at
+        // BrnPreUpdateSharedIo.h:80, with all three getters bodied and the TU mounted).
+        // The stale flag was the only thing keeping the chyron off the screen.
+        //
+        // Console @0x82509908 (the 0x1F6 arm of the id dispatch at 0x82509884):
+        //   82509910  bl 0x826B0420   ; EaTraxHelper::GetAlbumName (event->miSong)
+        //   82509920  bl 0x826B0380   ; EaTraxHelper::GetSongName
+        //   82509930  bl 0x826B03D0   ; EaTraxHelper::GetArtistName
+        //   82509934  lbzx r11, r28, r23   ; r23 == 0x101BA, mbContainerMovieClipPlaying
+        //   82509940  beq  -> 0x82509958   ; ...the chyron only shows while it is set
+        //   82509944  li r7, 0             ; lbLocalised = false (raw metadata strings)
+        //   82509950  add r3, r28, r27     ; r27 == 0x10020, mEATraxInGameComponent
+        //   82509954  bl 0x82439F08        ; DisplayNewTrackNotification(artist,song,album)
+        // Argument order is settled by the register assignment: r4 artist, r5 song,
+        // r6 album -- note the GETTERS are called album/song/artist, the reverse.
+        // The producer is already in the tree: MusicEffect posts this record as event
+        // 502, 24 bytes, with miSong at +0x10 and the set flag at +0x14
+        // (BrnMusicEffect.cpp:699-713), and 502 is already in this manager's
+        // RegisterForEvents list above.
+        case 502:
+        {
+            const GuiEATraxNewTrackEvent* lpNewTrack =
+                reinterpret_cast<const GuiEATraxNewTrackEvent*>(lpEvent);
+            const BrnSound::Module::Io::EaTraxHelper lHelper;   // stateless (static key)
+            const char* lpcAlbum  = lHelper.GetAlbumName(lpNewTrack->miSongIndex);
+            const char* lpcSong   = lHelper.GetSongName(lpNewTrack->miSongIndex);
+            const char* lpcArtist = lHelper.GetArtistName(lpNewTrack->miSongIndex);
+            if (mbContainerMovieClipPlaying)
+                mEATraxInGameComponent.DisplayNewTrackNotification(
+                    lpcArtist, lpcSong, lpcAlbum, false);
+
+            // [DIAG] NOT IN THE X360 BINARY (BRN_MUSIC_DIAG=1). The producer's own
+            // witness only proves the event was POSTED; this one proves it arrived,
+            // survived the sound->GUI append, and that the chyron was actually asked to
+            // draw with real metadata. Rare by construction (one per track change).
+
+            // 82509958..82509960 -- an AUDITION stops here; only a real track change
+            // persists to the profile.
+            if (lpNewTrack->mbPreview != 0)
+                break;
+
+            // 8250996C..825099CC -- the profile tail. This was FLAG'd too, on the same
+            // stale "OptionsDataProfile has no committed type home" claim; it has a home
+            // (BrnGuiOptionsDataProfile.h) and GetOptionsDataProfile/SetTraxRemaining are
+            // both bodied. The console reaches the profile as a GuiCache FAR member --
+            // `addi r31, r31, -0x4788` on cache+0x10000 is cache+0xB878, which is exactly
+            // where GetOptionsDataProfile() points (BrnGuiCache.h:1001/:2116).
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                       // cpp:486
+            OptionsDataProfile* lpOptionsDataProfile =
+                mpGuiCache->GetOptionsDataProfile();
+            CGS_ASSERT(lpOptionsDataProfile != 0, "lpOptionsDataProfile");   // cpp:489
+            // 825099C8  stw r11, 0x7344(r31) -- the setter, inlined by the console.
+            lpOptionsDataProfile->SetLastPlayedSongIndex(lpNewTrack->miSongIndex);
+            // 825099CC  bl 0x824F0180
+            lpOptionsDataProfile->SetTraxRemaining(&lpNewTrack->mRemainingSongs);
+            break;
+        }
+
+        case 175:   // host-start notification
+            if (mbContainerMovieClipPlaying)
+                mOnlineNotificationMessageComponent.ShowMessage(
+                    gacOnlineInviteArgument820046A7,
+                    OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_HOST_START_EVENT);
+            break;
+
+        case 43:    // network-connected/news notification
+        {
+            CGS_ASSERT(lpEvent != 0, "lpConnectedEvent");
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            const CgsGui::GuiEventNetworkConnected* lpConnectedEvent =
+                reinterpret_cast<const CgsGui::GuiEventNetworkConnected*>(lpEvent);
+            if (lpConnectedEvent->maData[1] != 0 && !mbShowNewsNotification)
+            {
+                mbShowNewsNotification = true;
                 if (mbContainerMovieClipPlaying)
                     mOnlineNotificationMessageComponent.ShowMessage(
                         gacOnlineInviteArgument820046A7,
-                        OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_HOST_START_EVENT);
-                break;
-
-            case 43:    // network-connected/news notification
-            {
-                CGS_ASSERT(lpEvent != 0, "lpConnectedEvent");
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
-                const CgsGui::GuiEventNetworkConnected* lpConnectedEvent =
-                    reinterpret_cast<const CgsGui::GuiEventNetworkConnected*>(lpEvent);
-                if (lpConnectedEvent->maData[1] != 0 && !mbShowNewsNotification)
-                {
-                    mbShowNewsNotification = true;
-                    if (mbContainerMovieClipPlaying)
-                        mOnlineNotificationMessageComponent.ShowMessage(
-                            gacOnlineInviteArgument820046A7,
-                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_NEW_NEWS);
-                }
-                break;
+                        OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_NEW_NEWS);
             }
+            break;
+        }
 
-            case 105:    // invite, buddy-online or online-buddy-count notification
+        case 105:    // invite, buddy-online or online-buddy-count notification
+        {
+            const GuiEventBuddyNotification* lpBuddyNotification =
+                reinterpret_cast<const GuiEventBuddyNotification*>(lpEvent);
+            const s32 liNotification =
+                static_cast<s32>(lpBuddyNotification->meBuddyNotification);
+            if (liNotification == 0)
             {
-                const GuiEventBuddyNotification* lpBuddyNotification =
-                    reinterpret_cast<const GuiEventBuddyNotification*>(lpEvent);
-                const s32 liNotification =
-                    static_cast<s32>(lpBuddyNotification->meBuddyNotification);
-                if (liNotification == 0)
+                if (mbContainerMovieClipPlaying)
+                    mOnlineNotificationMessageComponent.ShowMessage(
+                        lpBuddyNotification->mBuddyName.GetPlayerName(),
+                        OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED);
+            }
+            else if (static_cast<u32>(liNotification) < 3u)
+            {
+                if (mbContainerMovieClipPlaying)
                 {
-                    if (mbContainerMovieClipPlaying)
+                    if (liNotification == 1)
                         mOnlineNotificationMessageComponent.ShowMessage(
                             lpBuddyNotification->mBuddyName.GetPlayerName(),
-                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED);
-                }
-                else if (static_cast<u32>(liNotification) < 3u)
-                {
-                    if (mbContainerMovieClipPlaying)
-                    {
-                        if (liNotification == 1)
-                            mOnlineNotificationMessageComponent.ShowMessage(
-                                lpBuddyNotification->mBuddyName.GetPlayerName(),
-                                OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_BUDDY_ONLINE);
-                        else
-                            mOnlineNotificationMessageComponent.ShowMessage(
-                                lpBuddyNotification->miNumBuddies,
-                                OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_NUM_BUDDIES_ONLINE);
-                    }
-                }
-                else
-                {
-                    CgsDev::Assert::BeginAssert();
-                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
-                                                CgsDev::Assert::giMessageBufferSize);
-                    lMessage << "Invalid buddy notification type : " << liNotification << "\n";
-                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                        "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp", 426);
-                    CgsDev::Assert::EndAssert();
-                    if (mbContainerMovieClipPlaying)
+                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_BUDDY_ONLINE);
+                    else
                         mOnlineNotificationMessageComponent.ShowMessage(
-                            "Invalid Buddy Name",
-                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED);
+                            lpBuddyNotification->miNumBuddies,
+                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_NUM_BUDDIES_ONLINE);
                 }
-                break;
             }
-
-            case 503:
+            else
             {
-                const GuiClassicalChyronEvent* lpClassical = reinterpret_cast<const GuiClassicalChyronEvent*>(lpEvent);
-                CopyClassicalTextId(macComposerTextId, lpClassical->macComposerTextId);
-                CopyClassicalTextId(macWorkTextId, lpClassical->macWorkTextId);
+                CgsDev::Assert::BeginAssert();
+                CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                            CgsDev::Assert::giMessageBufferSize);
+                lMessage << "Invalid buddy notification type : " << liNotification << "\n";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp", 426);
+                CgsDev::Assert::EndAssert();
                 if (mbContainerMovieClipPlaying)
-                    mEATraxInGameComponent.DisplayNewTrackNotification(macComposerTextId, macWorkTextId,
-                        gacOnlineInviteArgument820046A7, true);
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
-                mpGuiCache->GetOptionsDataProfile()->SetLastPlayedPictureParadiseMusicIndex(lpClassical->miPieceIndex);
-                break;
+                    mOnlineNotificationMessageComponent.ShowMessage(
+                        "Invalid Buddy Name",
+                        OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED);
             }
+            break;
+        }
 
-            default:
-                break;
-            }
+        case 503:
+        {
+            const GuiClassicalChyronEvent* lpClassical = reinterpret_cast<const GuiClassicalChyronEvent*>(lpEvent);
+            CopyClassicalTextId(macComposerTextId, lpClassical->macComposerTextId);
+            CopyClassicalTextId(macWorkTextId, lpClassical->macWorkTextId);
+            if (mbContainerMovieClipPlaying)
+                mEATraxInGameComponent.DisplayNewTrackNotification(macComposerTextId, macWorkTextId,
+                    gacOnlineInviteArgument820046A7, true);
+            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+            mpGuiCache->GetOptionsDataProfile()->SetLastPlayedPictureParadiseMusicIndex(lpClassical->miPieceIndex);
+            break;
+        }
+
+        default:
+            break;
         }
     }
 
