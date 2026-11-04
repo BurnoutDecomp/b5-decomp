@@ -48,7 +48,7 @@ namespace CgsModule { class BaseEventReceiverQueue; }   // referenced by pointer
 
 namespace BrnResource
 {
-    class VehicleList;
+    struct VehicleList;
     class ICEList;
     class WheelList;
     class ChallengeList;

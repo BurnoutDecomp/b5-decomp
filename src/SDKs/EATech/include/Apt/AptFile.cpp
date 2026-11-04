@@ -132,7 +132,7 @@ AptCharacter* AptFile::FindExport(const char* pName) const
 // name equals the candidate's, then DISPOSE the candidate (consuming the passed
 // reference) regardless of the result. Returns whether the file was an import.
 // ---------------------------------------------------------------------------
-bool AptFile::isFileImported(AptFile** ppCandidate) const
+bool AptFile::isFileImported(AptFilePtr candidate)
 {
     const AptCharacterAnimation* pMovie = AptGetMovieCharacterAnimation(static_cast<AptCharacter*>(mpData));
 
@@ -147,15 +147,10 @@ bool AptFile::isFileImported(AptFile** ppCandidate) const
         // The asm comparator (the IDA-unnamed (EAStringC,EAStringC) -> bool sub
         // @...0040_0) is the EAStringC equality operator -- identified and wired.
         EAStringC importName(pMovie->mpImportTable[iImport].mpImportFileName);
-        bImported = (importName == (*ppCandidate)->mFileName);
+        bImported = (importName == candidate.pData->mFileName);
         if (bImported)
             break;
     }
 
-    // Consume the candidate either way: dispose the AptFile and null the slot (the asm
-    // does this on both the matched and the exhausted exit).
-    AptFile* pConsumed = *ppCandidate;
-    *ppCandidate = 0;
-    AptSharedPtr<AptFile>::Dispose(pConsumed);
     return bImported;
 }

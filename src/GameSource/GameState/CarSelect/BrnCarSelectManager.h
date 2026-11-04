@@ -35,7 +35,7 @@
 
 namespace BrnGameState     { class GameStateModule; class TriggerQueryManager; }
 namespace BrnProgression   { class ProgressionManager; struct CarData; }
-namespace BrnResource      { struct VehicleList; struct WheelList; }
+namespace BrnResource      { struct VehicleList; class WheelList; }
 namespace BrnTrigger       { struct SpawnLocation; }
 
 namespace BrnGameState

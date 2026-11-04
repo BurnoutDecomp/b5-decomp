@@ -23,6 +23,7 @@
 
 #include <cstddef>
 #include "types.hpp"
+#include "SDKs/EATech/include/Apt/AptSharedPtr.h"
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC mFileName member
 
@@ -71,7 +72,7 @@ struct AptFile
     // isFileImported @0x82AEB1C8 -- true when (*ppCandidate)'s file name appears in this
     // movie's import table. CONSUMES the candidate either way: disposes the AptFile and
     // nulls *ppCandidate (matching the asm). Called by AptLinker::isFileImported.
-    bool isFileImported(AptFile** ppCandidate) const;
+    bool isFileImported(AptFilePtr candidate);
 };
 
 // ---------------------------------------------------------------------------

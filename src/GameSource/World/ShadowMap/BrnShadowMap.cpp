@@ -380,6 +380,12 @@ namespace BrnWorld
     }
 
     // @0x827C96D8: `*(ShadowMap+0x14F4) = luCascade` at the top of each cascade pass.
+    // ARTIST 822E7C98 and 822E821C read the active slot before indexing the cull distances.
+    u32 ShadowMap::GetCurrentShadowMap()
+    {
+        return muCurrentShadowMap;
+    }
+
     void ShadowMap::SetCurrentCascadeIndex( u32 luCascade ) { muCurrentShadowMap = luCascade; }
 
     // @0x827C96D8: `*(ShadowMap+0) = 1` before the cascade dispatch (and the

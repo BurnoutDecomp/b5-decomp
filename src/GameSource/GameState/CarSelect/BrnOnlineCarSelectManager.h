@@ -15,7 +15,7 @@
 
 namespace BrnGameState   { class GameStateModule; }
 namespace BrnProgression { class ProgressionManager; }
-namespace BrnResource    { struct VehicleList; struct WheelList; }
+namespace BrnResource    { struct VehicleList; class WheelList; }
 
 namespace BrnGameState
 {

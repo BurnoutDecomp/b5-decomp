@@ -43,6 +43,8 @@ struct AptLinkerThingy
     AptValue*  mpValue;      // [0x08] the linked AptValue (list key; null == inactive)
     bool       mbLinked;     // [0x0C] "already linked into the scene" flag (+3 pad)
 
+    AptLinkerThingy(AptFilePtr file, AptValue* pValue);
+
     // X360 @0x82AE5128 -- MSVC scalar deleting destructor: dispose+zero mpFile,
     // then (flags&1) free the 16-byte block. Returns `this`.
     void* ScalarDeletingDestructor(char flags);
@@ -57,8 +59,6 @@ struct AptSingleListNode
 };
 
 // MakeLinkerThingy -- the AptLinkerThingy::AptLinkerThingy ctor @0x82ADBF58 wrapped
-// as the AptLinker::Load factory: pool-allocate a 16-byte node, then MOVE the held
-// file reference from rFile into mpFile (incref into the thingy, dispose the source)
-// and key it on pValue. Body in AptLinkerThingy.cpp (the X360 ctor is folded -- no
-// own export symbol -- and was disassembled from the decrypted ARTIST.XEX).
-AptLinkerThingy* MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue);
+// as the AptLinker::Load factory. Form the constructor's owning copy after the
+// pool allocation succeeds.
+AptLinkerThingy* MakeLinkerThingy(const AptFilePtr& file, AptValue* pValue);

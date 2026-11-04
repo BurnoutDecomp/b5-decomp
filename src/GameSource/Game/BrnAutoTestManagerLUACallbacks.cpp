@@ -57,4 +57,92 @@ namespace BrnGame
         lua_settop(lpLua, 0);
         return 0;
     }
+    s32 AutoTestManager::LUACBCallDebugFunction(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        if (lHelper.GetNumParams() != 1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 581);
+            CgsDev::Assert::EndAssert();
+        }
+        gpBurnoutGame->GetDebugManager().CallFunction(lHelper.GetStringParam(0));
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBRecordLog(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        const s32 liNumParams = lHelper.GetNumParams();
+        if (liNumParams > 1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() <= 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 605);
+            CgsDev::Assert::EndAssert();
+        }
+        gpBurnoutGame->mAutoTestManager.DumpGameState(liNumParams ? lHelper.GetStringParam(0) : 0);
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBAcquirePad(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        if (lHelper.GetNumParams() != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 693);
+            CgsDev::Assert::EndAssert();
+        }
+        gpBurnoutGame->mAutoTestManager.mbControlPad = true;
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBRelinquishPad(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        if (lHelper.GetNumParams() != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 667);
+            CgsDev::Assert::EndAssert();
+        }
+        gpBurnoutGame->mAutoTestManager.mbControlPad = false;
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBActivateDebugComponent(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        if (lHelper.GetNumParams() != 1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 719);
+            CgsDev::Assert::EndAssert();
+        }
+        CgsDev::DebugManager& lrManager = gpBurnoutGame->GetDebugManager();
+        CgsDev::DebugComponent* lpComponent = lrManager.FindComponentByName(lHelper.GetStringParam(0));
+        if (lpComponent)
+            lrManager.ActivateComponent(lpComponent);
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
+    s32 AutoTestManager::LUACBDeactivateDebugComponent(lua_State* lpLua)
+    {
+        LUACallbackHelper lHelper(lpLua);
+        if (lHelper.GetNumParams() != 1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 747);
+            CgsDev::Assert::EndAssert();
+        }
+        gpBurnoutGame->GetDebugManager().DeactivateComponent(lHelper.GetStringParam(0));
+        lua_settop(lpLua, 0);
+        return 0;
+    }
+
 }

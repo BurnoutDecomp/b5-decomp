@@ -7,6 +7,29 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+extern "C" {
+    typedef int (*AutoTestLuaFunction)(lua_State*);
+    lua_State* lua_newstate(void* (*)(void*, void*, size_t, size_t), void*);
+    void lua_pushcclosure(lua_State*, AutoTestLuaFunction, int);
+    void lua_pushstring(lua_State*, const char*);
+    void lua_call(lua_State*, int, int);
+    void lua_setfield(lua_State*, int, const char*);
+    void lua_settop(lua_State*, int);
+    int luaopen_base(lua_State*);
+    int luaopen_package(lua_State*);
+    int luaopen_table(lua_State*);
+    int luaopen_io(lua_State*);
+    int luaopen_string(lua_State*);
+    int luaopen_math(lua_State*);
+    int luaopen_debug(lua_State*);
+}
+
 // BrnGame::AutoTestManager::AutoTestManager @ 0x827DB4C0 (BURNOUT_X360_ARTIST.XEX).
 //
 // The X360 constructor is nothing but member sub-object construction of the three log streams, in
@@ -30,6 +53,115 @@ namespace BrnGame
     AutoTestManager::AutoTestManager()
     {
     }
+    // ARTIST 823C0438. The log sinks are already constructed by the constructor.
+    void AutoTestManager::Init(BrnGameModule* lpGameModule)
+    {
+        mpGameModule = lpGameModule;
+        miFramesSinceLastGameStateSave = 0;
+        miNumScriptsLoaded = 0;
+        mpLuaHandle = 0;
+        meScriptState = eScriptLoading;
+        mbControlPad = true;
+        mAutoTestLogChannel.SetChannel(static_cast<CgsDev::Log::LogChannelOutput::EUserChannel>(0));
+        mAutoTestLog.AddStream(&mAutoTestLogFile);
+        mAutoTestLog.AddStream(&mAutoTestLogChannel);
+        for (s32 i = 0; i < 61; ++i)
+            maActions[i] = 0.0f;
+        LoadScripts();
+    }
+
+    void* AutoTestManager::LuaAllocator(void*, void* lpPtr, size_t, size_t luNewSize)
+    {
+        if (luNewSize != 0)
+            return realloc(lpPtr, luNewSize);
+        free(lpPtr);
+        return 0;
+    }
+
+    void AutoTestManager::LoadScripts()
+    {
+        if (CgsSystem::HardwareInit::HasDetectedAutomaticTestingFile())
+        {
+            char lacFileName[1024];
+            char lacLine[1024];
+            const char* lpcDirectory = CgsSystem::HardwareInit::GetFOPENDirectory();
+            CgsCore::SPrintf(lacFileName, sizeof(lacFileName), "%sTESTINGSCRIPTS%c%s",
+                lpcDirectory, lpcDirectory[strlen(lpcDirectory) - 1],
+                CgsSystem::HardwareInit::GetAutoScriptToRun());
+            const size_t luNameLength = strlen(lacFileName);
+            for (size_t i = 0; i < luNameLength; ++i)
+                if (lacFileName[i] == '\r' || lacFileName[i] == '\n')
+                    lacFileName[i] = 0;
+
+            FILE* lpFile = fopen(lacFileName, "r");
+            if (lpFile)
+            {
+                memset(macScript, 0, sizeof(macScript));
+                while (!feof(lpFile))
+                {
+                    fgets(lacLine, sizeof(lacLine), lpFile);
+                    if (!feof(lpFile))
+                    {
+                        if (strlen(lacLine) + strlen(macScript) >= sizeof(macScript) - 1)
+                        {
+                            CgsDev::Assert::BeginAssert();
+                            CgsDev::Assert::FireAssert("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1", "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75);
+                            CgsDev::Assert::EndAssert();
+                        }
+                        strcat(macScript, lacLine);
+                    }
+                }
+                fclose(lpFile);
+                ++miNumScriptsLoaded;
+                mpLuaHandle = lua_newstate(&AutoTestManager::LuaAllocator, 0);
+                luaopen_base(mpLuaHandle);
+                struct LuaLibrary { const char* mpcName; AutoTestLuaFunction mpFunction; };
+                static const LuaLibrary kaLibraries[] = {
+                    { "package", luaopen_package }, { "table", luaopen_table },
+                    { "io", luaopen_io }, { "string", luaopen_string },
+                    { "math", luaopen_math }, { "debug", luaopen_debug }, { 0, 0 }
+                };
+                for (const LuaLibrary* p = kaLibraries; p->mpFunction; ++p)
+                {
+                    lua_pushcclosure(mpLuaHandle, p->mpFunction, 0);
+                    lua_pushstring(mpLuaHandle, p->mpcName);
+                    lua_call(mpLuaHandle, 1, 0);
+                }
+                if (!mpLuaHandle)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("mpLuaHandle", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 238);
+                    CgsDev::Assert::EndAssert();
+                }
+            }
+            struct LuaCallback { const char* mpcName; AutoTestLuaFunction mpFunction; };
+            static const LuaCallback kaCallbacks[] = {
+                { "CallDebugFunction", &AutoTestManager::LUACBCallDebugFunction },
+                { "RecordLog", &AutoTestManager::LUACBRecordLog },
+                { "PressButton", &AutoTestManager::LUACBPressButton },
+                { "AcquirePad", &AutoTestManager::LUACBAcquirePad },
+                { "RelinquishPad", &AutoTestManager::LUACBRelinquishPad },
+                { "ActivateDebugComponent", &AutoTestManager::LUACBActivateDebugComponent },
+                { "DeactivateDebugComponent", &AutoTestManager::LUACBDeactivateDebugComponent },
+                { 0, 0 }
+            };
+            for (const LuaCallback* p = kaCallbacks; p->mpcName; ++p)
+            {
+                if (!mpLuaHandle)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("mpLuaHandle", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 245);
+                    CgsDev::Assert::EndAssert();
+                }
+                lua_pushcclosure(mpLuaHandle, p->mpFunction, 0);
+                lua_setfield(mpLuaHandle, -10002, p->mpcName);
+                lua_settop(mpLuaHandle, 0);
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "Registered function " << p->mpcName << "\n";
+            }
+        }
+    }
+
     namespace
     {
         // The GUI page the game is on while driving; the gamestate dump only runs there.

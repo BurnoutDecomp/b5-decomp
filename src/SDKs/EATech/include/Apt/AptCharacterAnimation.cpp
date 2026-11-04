@@ -178,7 +178,12 @@ void AptCharacterAnimation::Link(void* pData, void* pDataBlock)
         AptCharacter* character = mpCharacterTable[entry.mnId];
         if (character)
         {
-            *reinterpret_cast<AptFilePtr*>(&character->mpAnimationFile) = *reinterpret_cast<AptFilePtr*>(&entry.mpFile);
+            AptFile* oldFile = character->mpAnimationFile;
+            character->mpAnimationFile = entry.mpFile;
+            if (entry.mpFile != 0)
+                AptSharedPtrIncRef(entry.mpFile);
+            if (oldFile != 0 && AptSharedPtrDecRef(oldFile) == 0)
+                AptSharedPtrDelete(oldFile);
             mpCharacterTable[entry.mnId]->AddCharacterReference();
         }
     }
@@ -275,7 +280,6 @@ void AptCharacterAnimation::Fixup(void* pBase, AptConstFile* pConstFile, void* p
         EAStringC name(entry.mpImportFileName);
         AptFilePtr loaded = gpAptTarget->mpLoader->Load(name);
         *reinterpret_cast<AptFilePtr*>(&entry.mpFile) = loaded;
-        AptFilePtr::Dispose(loaded.pData);
     }
 }
 
@@ -491,9 +495,8 @@ void AptCharacterAnimation::Unresolve(intptr_t nBase)
     for (int32_t i = 0; i < mnImportCount; ++i)
     {
         AptFilePtr* slot = reinterpret_cast<AptFilePtr*>(&mpImportTable[i].mpFile);
-        AptFilePtr empty = { 0 };
+        AptFilePtr empty;
         *slot = empty;
-        AptFilePtr::Dispose(empty.pData);
         mpCharacterTable[mpImportTable[i].mnId] = 0;
     }
     for (int32_t i = 0; i < mnCharacterCount; ++i)

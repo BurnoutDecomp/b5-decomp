@@ -73,7 +73,7 @@
 // ============================================================================
 
 namespace CgsMemory   { class HeapMalloc; }
-namespace CgsModule   { class IOBufferStack; }
+namespace CgsModule   { struct IOBufferStack; }
 namespace CgsResource { namespace Events { struct AcquireResourceResponse; } }
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }
 namespace BrnGame     { struct DispatchThreadInputBuffer; }

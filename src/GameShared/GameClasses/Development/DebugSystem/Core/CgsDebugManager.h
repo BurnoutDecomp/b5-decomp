@@ -100,6 +100,8 @@ namespace CgsDev
 
         bool IsComponentRegistered(DebugComponent* lpComponent);
         void ActivateComponent(DebugComponent* lpComponent);
+        void DeactivateComponent(const char* lpcName);
+        void CallFunction(const char* lpcPath);
 
         // Add a component to the menu tree. RegisterComponent builds the full menu hierarchy;
         // RegisterComponentSimple registers it as a flat ("simple") entry. Both assert the
@@ -128,11 +130,11 @@ namespace CgsDev
         // X360 Render @0x8282F770: assert both renderers exist, point them at this frame's debug
         // render buffers, then RenderWorld (3D) + RenderHUD (2D). Nothing else - the overlay
         // QUEUEING (build info / fps / memory) is BrnGameModule::DebugManagerRender's job.
-        void Render(const Matrix44& lViewProjection, const Vector3& lCameraPosition,
+        void Render(const Matrix44& lViewProjection, Vector3 lCameraPosition,
                     CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2dRenderBuffer* lp2dRenderBuffer);
         // X360 @0x8282E030: 3D Begin -> Dispatch3D the buffered world-space prims -> each active
         // component's RenderWorld -> End. (The 3D draw bodies are the Debug3D render follow-on.)
-        void RenderWorld(const Matrix44& lViewProjection, const Vector3& lCameraPosition);
+        void RenderWorld(const Matrix44& lViewProjection, Vector3 lCameraPosition);
 
         // X360 0x8282D998. Queue the on-screen frame-rate readout ("%d fps") into the buffered renderer,
         // coloured by framerate (low->mid->high, e.g. red->yellow->green) via _InterpolateColour. Colours

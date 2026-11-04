@@ -73,11 +73,11 @@ AptSharedPtr<AptFile>& AptSharedPtr<AptFile>::operator=(const AptSharedPtr<AptFi
         this->pData = rhs.pData;
 
         if (newp)
-            _InterlockedIncrement(reinterpret_cast<volatile long*>(newp));
+            _InterlockedIncrement(reinterpret_cast<volatile long*>(&newp->mnRefCount));
 
         if (oldp)
         {
-            if (_InterlockedDecrement(reinterpret_cast<volatile long*>(oldp)) == 0)
+            if (_InterlockedDecrement(reinterpret_cast<volatile long*>(&oldp->mnRefCount)) == 0)
                 AptSharedPtrDelete(oldp);
         }
     }
@@ -114,8 +114,7 @@ AptSharedPtr<AptFile>& AptSharedPtr<AptFile>::operator=(const AptSharedPtr<AptFi
 // ---------------------------------------------------------------------------
 void* AptSharedPtr<AptFile>::VectorDeletingDestructor(char flags)
 {
-    // The object is laid out as a contiguous array of AptFile* slots.
-    AptFile** const base = reinterpret_cast<AptFile**>(this);
+    AptSharedPtr<AptFile>* const base = this;
 
     if ((flags & 2) != 0)
     {
@@ -123,13 +122,11 @@ void* AptSharedPtr<AptFile>::VectorDeletingDestructor(char flags)
         uint32_t* const pCount = reinterpret_cast<uint32_t*>(base) - 1;
         const uint32_t count = *pCount;
 
-        AptFile** p = base + count;
+        AptSharedPtr<AptFile>* p = base + count;
         for (int32_t i = static_cast<int32_t>(count) - 1; i >= 0; --i)
         {
             --p;
-            AptFile* elem = *p;
-            *p = 0;
-            AptSharedPtr<AptFile>::Dispose(elem);
+            p->~AptSharedPtr();
         }
 
         if ((flags & 1) != 0)
@@ -145,9 +142,7 @@ void* AptSharedPtr<AptFile>::VectorDeletingDestructor(char flags)
     else
     {
         // Scalar form: a single AptFile* slot.
-        AptFile* elem = *base;
-        *base = 0;
-        AptSharedPtr<AptFile>::Dispose(elem);
+        base->~AptSharedPtr();
 
         if ((flags & 1) != 0)
             gpAptSharedPtrPool->Deallocate(base, 4);
@@ -167,12 +162,12 @@ void* AptSharedPtr<AptFile>::VectorDeletingDestructor(char flags)
 // ---------------------------------------------------------------------------
 int AptSharedPtrIncRef(AptFile* pData)
 {
-    return static_cast<int>(_InterlockedIncrement(reinterpret_cast<volatile long*>(pData)));
+    return static_cast<int>(_InterlockedIncrement(reinterpret_cast<volatile long*>(&pData->mnRefCount)));
 }
 
 int AptSharedPtrDecRef(AptFile* pData)
 {
-    return static_cast<int>(_InterlockedDecrement(reinterpret_cast<volatile long*>(pData)));
+    return static_cast<int>(_InterlockedDecrement(reinterpret_cast<volatile long*>(&pData->mnRefCount)));
 }
 
 int AptSharedPtrDelete(AptFile* pData)
@@ -180,8 +175,7 @@ int AptSharedPtrDelete(AptFile* pData)
     if (pData)
     {
         pData->~AptFile();
-        // Console frees a literal 28 bytes; sizeof(AptFile) is the width-correct
-        // equivalent on x64 (the block was allocated by Load as sizeof(AptFile)).
+        // ARTIST frees the 0x1C-byte AptFile allocated by Load.
         gpNonGCPoolManager->Deallocate(pData, sizeof(AptFile));
     }
     return 0;

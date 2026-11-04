@@ -171,7 +171,7 @@ static AptSharedPtr<AptFile>* StringAsVector_AllocSharedPtrArray(uint32_t nNewCo
         reinterpret_cast<AptSharedPtr<AptFile>*>(pBlock + 2);
 
     for (uint32_t i = 0; i < nNewCount; ++i)
-        pElems[i].pData = 0;   // asm zero-inits each pointer slot
+        ::new (static_cast<void*>(pElems + i)) AptFilePtr();
     return pElems;
 }
 

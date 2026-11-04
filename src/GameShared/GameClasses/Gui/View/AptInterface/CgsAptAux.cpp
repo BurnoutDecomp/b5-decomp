@@ -195,6 +195,7 @@ namespace CgsGui
         gAptFuncs.pfnDebugPrint            = &AptCallbackDebug::Print;
         gAptFuncs.pfnDebugAddSavedInput    = &AptCallbackDebug::AddSavedInput;
         gAptFuncs.pfnDebugSetScreenGrabPending = &AptCallbackDebug::SetScreenGrabPending;
+        gAptFuncs.pfnLoadAnimation          = &AptCallbackFile::LoadAnimation;
         gAptFuncs.pfnFreeAnimation          = &AptCallbackFile::FreeAnimation;
         gAptFuncs.pfnLoadAnimationCompleted = &AptCallbackFile::LoadAnimationCompleted;
         gAptFuncs.pfnGetBytesTotal          = &AptCallbackFile::GetBytesTotal;
@@ -211,7 +212,7 @@ namespace CgsGui
 
         // FLAG: the remaining gAptFuncs slots ConstructApt @0x5BA0F8 also installs --
         //   Debug       (pfnAssertFail -- its host body is not in the ARTIST export set)
-        //   File        (pfnLoadAnimation / pfnFreeConstantTable)
+        //   File        (pfnFreeConstantTable)
         //   Custom      (pfnCustomControlUpdate / the Zid family -- pfnCustomControlRender
         //                IS installed now, see above)
         //   Deprecated  (pfnUninitializedVarAccess / pfnCustomSavedInputHandler /
@@ -612,7 +613,7 @@ namespace CgsGui
     // AptData[1]/AptData[2] are the header's mpAptData / mpConstData; AptData (the header)
     // is threaded as a5 all the way to Fixup (LoadRenderingUnit reads AptData+12 = geometry).
     //
-    void AptCallbackFile::LoadAnimation(const char* lpacName, AptFilePtr* lpHandle)
+    void AptCallbackFile::LoadAnimation(const char* lpacName, AptFilePtr context)
     {
         AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
         CGS_ASSERT(lpAptAux != 0, "Invalid AptDataHandler in AptCallbackFile::LoadAnimation");
@@ -620,47 +621,18 @@ namespace CgsGui
         AptDataHeader* lpAptData = lpAptAux->mAptDataHandler.FindAptData(lpacName);
         CGS_ASSERT(lpAptData != 0,
                    "Could not locate AptDataHeader in AptCallbackFile::LoadAnimation Check file has been loaded");
-        if (lpAptData == 0)
-            return;
 
         CGS_ASSERT(lpAptData->meCurrentState == AptDataHeader::E_APTDATASTATE_LOADED ||
                    lpAptData->meCurrentState == AptDataHeader::E_APTDATASTATE_ACTIVE,
                    "File not in a state to be loaded in AptCallbackFile::LoadAnimation");
 
-        // Resolve the header's serialised offset fields to real pointers (x64 substitute for the
-        // console's relocated mpAptData/mpConstData -- see the leaf note above). The header sits at the resource base,
-        // so base == the header address.
-        //
-        // UN-COLLAPSED (2026-07-01): the native-8 (libapt2 SerializeChunks) header carries SIX
-        // 8-byte fields [name@0, baseName@8, aptData@0x10, const@0x18, geom@0x20, size@0x28] -- the
-        // extra baseName shifts every field one slot past the console's [name, aptData, const, ...]
-        // order (native-8 header field order, see APT_CONVERTER_BUGS.md #2). pBase = the
-        // "Apt Data:1:7:8" chunk (every serialised offset is chunk-relative), pConstFile = the
-        // "Apt constant file" chunk (movieOffset@+0x18 locates the root; itemStart@+0x28 is the
-        // constant-record table _parseStream resolves Push/DefineDictionary entries through) --
-        // exactly the console's AptData[1]/AptData[2] pair and the XB1 CompleteLoad's a3/a4 pair.
+        // ARTIST passes the resolved data and const chunks directly.
         void* lpBase = reinterpret_cast<void*>(lpAptData->mpAptData);
         void* lpConstFile = reinterpret_cast<void*>(lpAptData->mpConstData);
 
-        // Pin the caller's handle (the asm's leading lwarx/stwcx. IncRef on *a2).
-        AptFilePtr laHandle;
-        laHandle.pData = lpHandle->pData;
-        if (laHandle.pData)
-            AptSharedPtrIncRef(laHandle.pData);
-
-        // Forward to the async-completion glue (-> AptLoader::CompleteLoad -> Resolve -> Fixup).
-        AptCompleteAnimationAsyncLoad(&laHandle, lpBase,
-                                      reinterpret_cast<AptConstFile*>(lpConstFile),
-                                      /*pAptDataHeader (a5)*/ lpAptData);
-
-        // XB1 sub_1400C90F0 +0x58: the native x64 state slot is +0x2C.
+        AptCompleteAnimationAsyncLoad(context, lpBase,
+            reinterpret_cast<AptConstFile*>(lpConstFile), lpAptData);
         lpAptData->meCurrentState = AptDataHeader::E_APTDATASTATE_ACTIVE;
-
-        // Drop the caller's original handle reference (the asm's trailing DecRef + null on *a2).
-        AptFile* lpConsumed = lpHandle->pData;
-        lpHandle->pData = 0;
-        if (lpConsumed && AptSharedPtrDecRef(lpConsumed) == 0)
-            AptSharedPtrDelete(lpConsumed);
     }
 
     // ---- Variable -----------------------------------------------------------
