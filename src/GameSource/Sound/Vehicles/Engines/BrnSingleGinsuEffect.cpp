@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnSingleGinsuEffect.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::SingleGinsuEffect — out-of-line bodies.
@@ -41,6 +42,34 @@ SingleGinsuEffect::~SingleGinsuEffect()
 {
 }
 
+#if defined(_XBOX)
+CGS_STATIC_ASSERT((sizeof(BrnSound::Logic::BrnEffectObject) == 0x38), "BrnEffectObject allocation size");
+CGS_STATIC_ASSERT((sizeof(SingleGinsuEffect) == 0x3C), "SingleGinsuEffect allocation size");
+#endif
+
+// ARTIST descriptor 0x82F2F608.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SingleGinsuEffect::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        0x10000, "SingleGinsuEffect", BrnSound::Logic::BrnEffectObject::GetStaticTypeInfo(),
+        &SingleGinsuEffect::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SingleGinsuEffect::GetTypeInfo() const
+{
+    return GetStaticTypeInfo(); // ARTIST 0x82685088
+}
+
+CgsSound::Logic::EffectObject* SingleGinsuEffect::CreateObject(u32 luFlavour)
+{
+    return new (GetStaticTypeInfo()->typeName, luFlavour != 0) SingleGinsuEffect(); // ARTIST 0x826B3FB8
+}
+
+// ARTIST 0x82C62448 registers descriptor 0x82F2F608.
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpSingleGinsuEffectReg =
+    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(SingleGinsuEffect::GetStaticTypeInfo());
+
 // The controller-class test in AttachController. The X360 masks the controller's
 // object-id (`*(controller+0x14) & 0x7F0`) and compares it to the HybridExhaust
 // controller-class tag (0x50). PS3 DecFIGS confirms this: AttachController (0x8297FC)
@@ -63,7 +92,7 @@ static const s32 KI_HYBRID_EXHAUST_CONTROLLER_TAG = 0x50;
 // ---------------------------------------------------------------------------
 const char* SingleGinsuEffect::GetTypeName() const
 {
-    return "SingleGinsuEffect";
+    return GetStaticTypeInfo()->typeName;
 }
 
 // ---------------------------------------------------------------------------

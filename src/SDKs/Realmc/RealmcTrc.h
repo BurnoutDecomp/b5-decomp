@@ -71,6 +71,14 @@ public:
     // which zeroes it first.
     Trc(int iMessageId, int iPackedCodes);
 
+    // Inline ARTIST helpers 0x82C469C0/0x82C46A58 format one localized string
+    // argument before building the same Trc payload. The two-string overload
+    // preserves the native helper's extra second vararg; the locale spec uses
+    // the first one.
+    Trc(int iMessageId, int iPackedCodes, const String16& rString);
+    Trc(int iMessageId, int iPackedCodes,
+        const String16& rString1, const String16& rString2);
+
     // @ 0x82C465C0 -- copy construct: copy miMessageId and miNumOptions verbatim,
     //                 RangeInitialize mMessage from the source range, and copy each
     //                 of the four options (code + a self-guarded range-assign of the
@@ -93,6 +101,8 @@ public:
     // The number of active options (read by RealmcIface::XenonMessageFilter's
     // MessageTrc handler).
     int GetNumOptions() const { return miNumOptions; }
+    const char16_t* GetMessageText() const { return mMessage.Begin(); }
+    const char16_t* GetOptionText(int iIndex) const { return maOptions[iIndex].mText.Begin(); }
 
 private:
     int              miMessageId;    // +0x00

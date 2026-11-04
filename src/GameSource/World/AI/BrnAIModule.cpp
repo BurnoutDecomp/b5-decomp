@@ -65,6 +65,7 @@ void AIModule::AssertNativeLayout()
     CGS_STATIC_ASSERT((offsetof(AIModule, mePlayerActiveRaceCarIndex) == 0x4E9F8), "mePlayerActiveRaceCarIndex native offset");
     CGS_STATIC_ASSERT((offsetof(AIModule, mCamera) == 0x4EA00), "mCamera native offset");
     CGS_STATIC_ASSERT((offsetof(AIModule, miLineUpdateTokenCounter) == 0x4EB60), "miLineUpdateTokenCounter native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mfProgressionRankAsRatio) == 0x4EB64), "mfProgressionRankAsRatio native offset");
     CGS_STATIC_ASSERT((offsetof(AIModule, mContactSpyInterface) == 0x4EB68), "mContactSpyInterface native offset");
     CGS_STATIC_ASSERT((offsetof(AIModule, muNumAggressiveCars) == 0x4EB78), "muNumAggressiveCars native offset");
     CGS_STATIC_ASSERT((offsetof(AIModule, maWayPointDistance) == 0x4EB84), "maWayPointDistance native offset");

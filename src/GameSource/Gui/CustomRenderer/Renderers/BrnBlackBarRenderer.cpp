@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBlackBarRenderer.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -64,9 +65,9 @@ namespace BrnGui
         }
 
         lpIm2dRenderBuffer->BeginRendering();
-        lpIm2dRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
-        lpIm2dRenderBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);
-        lpIm2dRenderBuffer->SetState(CgsGui::gpBillboardDepthStencilState);
+        lpIm2dRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
+        lpIm2dRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
+        lpIm2dRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOff);
         lpIm2dRenderBuffer->SetTexture(0);
         lpIm2dRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
 

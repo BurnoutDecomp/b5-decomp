@@ -32,17 +32,6 @@ namespace CgsGraphics { template <typename V> struct ImRenderBuffer; struct Im2d
 
 namespace CgsGui
 {
-    // The X360 GUI render-state-table entries + the shared 2D screen transform the billboard/
-    // boost-bar draws bind (dword_83010F20 / dword_83010F24 / dword_83010F54 / unk_83011090).
-    // Defined in CgsBillboardRenderer.cpp as their PC folds -- see the block comment there.
-    extern const renderengine::BlendState*        gpGuiBlendStateStandard;       // dword_83010F20
-    extern const renderengine::BlendState*        gpGuiBlendStateAdditive;       // dword_83010F24
-    extern const renderengine::DepthStencilState* gpBillboardDepthStencilState;  // dword_83010F54
-    extern const renderengine::DepthStencilState* gpGuiDepthStencilStateZOn;     // dword_83010F48
-    extern renderengine::Texture* gpGuiWhiteTexture;                           // dword_83010F58
-    extern const renderengine::RasterizerState*   gpGuiRasterizerStateCullNone;  // the state table's cull-none entry
-    extern const CgsGraphics::Im2dTransform       gBillboardScreenTransform;     // unk_83011090
-
     struct BillboardInfo;  // real home: CustomRenderer/CgsGuiBillboardInfo.h (pointer-only here)
 
     class BillboardRenderer

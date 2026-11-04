@@ -55,10 +55,21 @@ namespace RealmcIface
 class MessageSaveDone : public RealmcCore::MessageString
 {
 public:
+    // SaveTask::Execute builds this payload inline in ARTIST after formatting
+    // the save file name, then stores the final status word at +0x1C.
+    MessageSaveDone(uint32_t uId, const RealmcCore::RealmcString& rText,
+                    u32 uField1C)
+        : RealmcCore::MessageString(uId, rText)
+        , muField1C(uField1C)
+    {
+    }
+
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x34 slot (the thunk swaps its two arguments so
     //                       the processor becomes `this`).
     void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
+
+    u32 GetField1C() const { return muField1C; }
 
     // Backs the X360 `vector deleting destructor' @0x82B560A8: it restores this
     // class's vtable (off_821488D0), chains the RealmcCore::MessageString base
@@ -77,3 +88,5 @@ private:
 };
 
 } // namespace RealmcIface
+
+CGS_STATIC_ASSERT((sizeof(RealmcIface::MessageSaveDone) == 32), "ARTIST MessageSaveDone size");

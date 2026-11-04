@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
@@ -553,8 +554,8 @@ namespace CgsGui
         lrBuffer.SetTransform(CgsGraphics::Im2dTransform::GetDefault());
 
         // ARTIST frame-clear states from the shared immediate-mode state library.
-        lrBuffer.SetState(gpGuiBlendStateStandard);
-        lrBuffer.SetState(gpGuiRasterizerStateCullNone);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
         lrBuffer.SetTexture(0);
 
         // The unit-square strip: (0,0) (0,1) (1,0) (1,1), UV == position, colour black
@@ -616,9 +617,9 @@ namespace CgsGui
 
         // ARTIST 0x82858AF8: reset the movie states after layer-1 custom renderers.
         // The map tile pass leaves additive blending in the same command stream.
-        lrBuffer.SetState(gpGuiBlendStateStandard);
-        lrBuffer.SetState(gpGuiRasterizerStateCullNone);
-        lrBuffer.SetState(gpBillboardDepthStencilState);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
+        lrBuffer.SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOff);
 
         mAptAux.Render(liDeltaMs);
 

@@ -100,22 +100,22 @@ struct EffectBase : public CgsSound::MemBase
 
     virtual ~EffectBase() {}
 
+    virtual s32 GetController(s32 /*aiIndex*/) { return -1; }
+    virtual void AttachController(EffectBase* /*apController*/) {}
+
     // @ 0x8268CEC8. Latch the controlling State and pull the
     // owning logic module from it. The X360 reads State+0x24 (the state's owner
     // back-link) and then +0x2C off that to recover the Module*; reconstructed by
     // name via the State accessor below.
     virtual bool Prepare(State* apState);
 
-    // @ 0x826A1138. Reset the detach state and bump the
-    // attach count. Returns true.
-    virtual bool Attach();
-
-    virtual s32  GetController(s32 /*aiIndex*/) { return -1; }
-    virtual void AttachController(EffectBase* /*apController*/) {}
     virtual void SetupLoadData()
     {
         meAttachState = E_ATTACH_STATE_PREPARING;
     }
+
+    // @ 0x826A1138. Reset the detach state and bump the attach count.
+    virtual bool Attach();
     virtual void UpdateParams(f32 /*af32DeltaTime*/) {}
     virtual void ProcessUpdate() {}
     virtual bool Detach()
@@ -126,7 +126,7 @@ struct EffectBase : public CgsSound::MemBase
         return true;
     }
     virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {}
-    virtual void Destroy() { delete this; }
+    virtual void Destroy() {} // ARTIST default 0x8284CB38
 
     s32 GetStateId() const;
     s32 GetInstanceId() const;
@@ -227,10 +227,8 @@ struct EffectControl : public EffectBase
     // helper EffectBase::ResetOnDestroy() so no raw-offset cast is needed.
     virtual ~EffectControl();
 
-    // CgsEffectBase.cpp @ 0x8268CEB8. Returns the static type name "EffectControl".
+    virtual ClassTypeInfo<EffectControl>* GetTypeInfo() const { return GetStaticTypeInfo(); }
     virtual const char* GetTypeName() const;
-
-    ClassTypeInfo<EffectControl>* GetTypeInfo() const { return GetStaticTypeInfo(); }
     static ClassTypeInfo<EffectControl>* GetStaticTypeInfo();
 
     static const u16 KU_SIZEOF_CLASS_ARRAY = 64; // CgsEffectBase.h:765 (DWARF)
@@ -253,10 +251,8 @@ struct EffectObject : public EffectBase
     // EffectControl (identical store sequence in the X360 build).
     virtual ~EffectObject();
 
-    // CgsEffectBase.cpp @ 0x8268CE98. Returns the static type name "EffectObject".
+    virtual ClassTypeInfo<EffectObject>* GetTypeInfo() const { return GetStaticTypeInfo(); }
     virtual const char* GetTypeName() const;
-
-    ClassTypeInfo<EffectObject>* GetTypeInfo() const { return GetStaticTypeInfo(); }
     static ClassTypeInfo<EffectObject>* GetStaticTypeInfo();
 
     static const u16 KU_SIZEOF_CLASS_ARRAY = 64; // CgsEffectBase.h:774 (DWARF)

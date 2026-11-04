@@ -64,6 +64,10 @@ public:
     //                       the processor becomes `this`).
     void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
 
+    u32 GetField1C() const { return muField1C; }
+    void* GetField20() const { return mpField20; }
+    int GetField24() const { return miField24; }
+
     // Backs the X360 `vector deleting destructor' @0x82B570D8: it restores this
     // class's vtable (off_8214896C), chains the RealmcCore::MessageString base
     // dtor, then frees 40 bytes when the delete flag bit0 is set. The virtual

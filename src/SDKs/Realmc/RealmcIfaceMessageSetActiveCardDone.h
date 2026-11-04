@@ -40,6 +40,9 @@ public:
     //                       +0x04 slot.
     void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
 
+    u32 GetField08() const { return muField08; }
+    u32 GetField0C() const { return muField0C; }
+
     // The deleting destructor restores the vtable and frees the object through
     // the Realmc backend with its size (the class operator delete).
     ~MessageSetActiveCardDone()  {}

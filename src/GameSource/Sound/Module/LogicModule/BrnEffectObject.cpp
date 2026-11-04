@@ -20,15 +20,33 @@ void BrnEffectObject::SampleTag::Construct()
 }
 
 BrnEffectObject::BrnEffectObject()
-    : CgsSound::Logic::EffectObject()
-    , IResourceRequester()
+    : IResourceRequester()
+    , CgsSound::Logic::EffectObject()
 {
+    mbEnabled = false;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* BrnEffectObject::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
+        -1, "BrnEffectObject", CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
+        &BrnEffectObject::CreateObject);
+    return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* BrnEffectObject::GetTypeInfo() const
 {
-    return CgsSound::Logic::EffectObject::GetStaticTypeInfo();
+    return GetStaticTypeInfo(); // ARTIST 0x82682BE8
 }
+
+CgsSound::Logic::EffectObject* BrnEffectObject::CreateObject(u32 luFlavour)
+{
+    return new (GetStaticTypeInfo()->typeName, luFlavour != 0) BrnEffectObject(); // ARTIST 0x826AF570
+}
+
+// ARTIST 0x82C61B68 registers descriptor 0x82F2E7FC.
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpBrnEffectObjectReg =
+    CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(BrnEffectObject::GetStaticTypeInfo());
 
 // ---------------------------------------------------------------------------
 // GetTypeName  @ 0x82682BF8
@@ -44,7 +62,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* BrnEffectObject::
 // ---------------------------------------------------------------------------
 const char* BrnEffectObject::GetTypeName() const
 {
-    return "BrnEffectObject";
+    return GetStaticTypeInfo()->typeName;
 }
 
 // ---------------------------------------------------------------------------

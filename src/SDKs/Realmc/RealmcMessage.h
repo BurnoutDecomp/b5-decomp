@@ -29,16 +29,32 @@ namespace RealmcIface
 {
 
 // ---------------------------------------------------------------------------
-// RealmcIface::MessageShowAutosaveIcon -- a Realmc "show autosave icon" message.
-// Only its Apply thunk is in this TU; Apply reads none of the message's own
-// fields, so none are declared here.
+// RealmcIface::MessageShowAutosaveIcon -- the +8 byte carries the visibility
+// value stored by BootupCheckTask::Execute; Apply dispatches the message.
 // ---------------------------------------------------------------------------
 class MessageShowAutosaveIcon : public RealmcCore::Message
 {
 public:
+    explicit MessageShowAutosaveIcon(bool bVisible)
+        : RealmcCore::Message(), mbVisible(bVisible) {}
+
+    ~MessageShowAutosaveIcon() {}
+
+    static void operator delete(void* lpBlock, size_t luSize)
+    {
+        RealmcCore::FreeMemSize(lpBlock, static_cast<u32>(luSize));
+    }
+
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x40 slot.
     void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
+
+    bool IsVisible() const { return mbVisible; }
+
+private:
+    bool mbVisible; // +0x08; BootupCheckTask stores this byte with stb.
 };
 
 } // namespace RealmcIface
+
+CGS_STATIC_ASSERT((sizeof(RealmcIface::MessageShowAutosaveIcon) == 12), "ARTIST MessageShowAutosaveIcon size");

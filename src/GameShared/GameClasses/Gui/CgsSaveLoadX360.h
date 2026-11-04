@@ -82,7 +82,7 @@ public:
     virtual void BootupCheckDone(u32);
     virtual void SaveCheckDone(u32, u32, u32, u32, const int*, s32);
     virtual void SaveDone(u32, u32, const char*);
-    virtual bool CheckLoadedData(u32, u32);
+    virtual bool CheckLoadedData(u32, RealmcIface::LoadEntryInfo*);
     virtual void LoadDone(u32, s32, u32, void*);
     virtual void SetAutosaveDone(s32, s32, s32);
     virtual void CardRemoved();

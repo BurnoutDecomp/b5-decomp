@@ -84,12 +84,9 @@ struct State : public CgsSound::MemBase
     // synthesised from (body = DestroyEffects()). Was an inline no-op.
     virtual ~State();
 
-    // Per-class RTTI hooks the derived leaves override (declared on the base for
-    // the virtual dispatch shape; the DWARF leaves each list both as virtual
-    // overrides). FLAG: declaration-only un-homed base virtuals (each leaf's
-    // override is that leaf's own recon slice; no base body is attested).
     virtual ClassTypeInfo<State>* GetTypeInfo() const;
     virtual const char*           GetTypeName() const;
+    static ClassTypeInfo<State>* GetStaticTypeInfo();
 
     // CgsSound::Logic::State::DestroyEffects -- tears down the state's attached
     // effect objects. Called by the State-derived scalar deleting destructors
@@ -119,12 +116,6 @@ struct State : public CgsSound::MemBase
     // (StreamingState::GetRequest @0x82683A00, EmitterState::IsAttachedToThis
     // @0x826BADA0 via its inlined GetSoundEntity()/IsAttached() assert).
     bool IsAttached() const { return mbIsAttached; }
-
-    // @ 0x8268D410. Returns the class rodata sentinel unk_82F2FA90 (reconstructed as
-    // the empty string literal per the &unk_XXXX convention). Semantics (likely a
-    // type-name/empty-name accessor) not recoverable from the one-instruction body --
-    // confidence low.
-    void* G();
 
     // CgsState.h:363 (DWARF) @ 0x8268DF08. Register a per-class RTTI descriptor into
     // State's static ClassTypeInfo<State> array. Scans for the first empty slot

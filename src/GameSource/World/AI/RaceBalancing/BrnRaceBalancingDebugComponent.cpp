@@ -108,6 +108,12 @@ const char* RaceBalancingDebugComponent::GetName() const
     return "Race Balancing";
 }
 
+// ARTIST vtable 0x820CDF80 shares the GetPath body with AIDebugComponent.
+const char* RaceBalancingDebugComponent::GetPath() const
+{
+    return "AI";
+}
+
 // ====================================================================================================
 // OnActivate  @0x82767688
 // ----------------------------------------------------------------------------------------------------
@@ -194,9 +200,9 @@ void RaceBalancingDebugComponent::DrawGraphFrame(CgsDev::Debug2DImmediateRender*
     const Vector2 lv2YAxisEnd(lv2Origin.mV.x, lv2Origin.mV.y - lv2Size.mV.y);
     lpDisplay->DrawLine(lv2Origin, lv2YAxisEnd, K_WHITE);
 
-    // The plot-area background (external helper sub_8281C3E0; bodied in its own TU).
-    DrawGraphBackground(lpDisplay, lv2Origin.mV.x, lv2Origin.mV.y,
-                        lv2Size.mV.x, lv2Size.mV.y);
+    // ARTIST 0x827748E0 calls the scalar-corner DrawBox overload at 0x8281C3E0.
+    lpDisplay->DrawBox(lv2Origin.mV.x, lv2Origin.mV.y, lv2XAxisEnd.mV.x, lv2YAxisEnd.mV.y,
+                       0x40FFFFFFu);
 
     // The two axis-name labels, offset from the origin (DrawGraphFrame @0x827747F8). X-label:
     // (origin.x + 50, origin.y + 10) -- vaddfp, asm-confirmed. Y-label: (origin.x - 50,
@@ -284,10 +290,9 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         }
 
         // --- 2a. difficulty % --------------------------------------------------------------------
-        // The AI module's current difficulty scalar (this+0x18 region of the module) as a percent.
         lStream.Reset();
         lOut << "Difficulty: ";
-        const f32 lfDifficultyPercent = mpAIModule->GetDifficulty() * 100.0f;
+        const f32 lfDifficultyPercent = mpAIModule->GetProgressionRankAsRatio() * 100.0f;
         lOut << static_cast<s32>(lfDifficultyPercent); //ARTIST82796EE4: fctiwz, signed%d
         lOut << "%";
         MaybeDrawText(lpDisplay, lStream.GetBuffer(), 200.0f, 280.0f, KF_TEXT_SCALE, K_WHITE, false);
