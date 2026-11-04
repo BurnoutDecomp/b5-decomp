@@ -124,7 +124,8 @@ namespace CgsLanguage
     //   4. a pending language notification publishes GuiEventSetLanguageNotification
     //      (event 29).
     // The request record carries the hashed RESOURCE name ("english.lang") as the
-    // resource id and the BUNDLE name ("0001") as the file to load.
+    // resource id and the BUNDLE name ("0001") as the file to load. ARTIST
+    // zero-extends the CRC32 before storing the 64-bit resource id.
     void Sku::Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer,
                      CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
     {
@@ -135,9 +136,9 @@ namespace CgsLanguage
             lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_UNLOAD;
             lRequest.mpacFileToLoad  = mapcSupportedLanguageFilenames[meLoadedLanguage];
             lRequest.muLoadRequestId = 0;
-            lRequest.muResourceId    =
+            lRequest.muResourceId    = static_cast<u32>(
                 CgsResource::ID::HashString(
-                    reinterpret_cast<const u8*>(mapcSupportedLanguageResources[meLoadedLanguage]));
+                    reinterpret_cast<const u8*>(mapcSupportedLanguageResources[meLoadedLanguage])));
             lpModelInputBuffer->AddResourceRequests(lRequest);
             mbLoaded        = false;
             miWaitForUnload = 10;
@@ -152,9 +153,9 @@ namespace CgsLanguage
                 lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
                 lRequest.mpacFileToLoad  = mapcSupportedLanguageFilenames[meLanguage];
                 lRequest.muLoadRequestId = 0;
-                lRequest.muResourceId    =
+                lRequest.muResourceId    = static_cast<u32>(
                     CgsResource::ID::HashString(
-                        reinterpret_cast<const u8*>(mapcSupportedLanguageResources[meLanguage]));
+                        reinterpret_cast<const u8*>(mapcSupportedLanguageResources[meLanguage])));
                 lpModelInputBuffer->AddResourceRequests(lRequest);
                 mbLoaded         = true;
                 mbLoadRequest    = false;

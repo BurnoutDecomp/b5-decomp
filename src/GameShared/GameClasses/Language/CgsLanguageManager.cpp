@@ -256,8 +256,6 @@ namespace CgsLanguage
     // mStrings, UTF-8-validating each string. Records the resource (mpResource), re-derives
     // the formatting strings, picks the language's default font ("dfheic" only for language
     // 16, the wide-glyph locale), and stamps meLanguage last (the X360 store order).
-    // The entry/offset widths are the x64-widened data layout (see CgsLanguageResourceType.h);
-    // parity is by named member.
     void LanguageManager::LoadStringTable(CgsResource::LanguageResource* lpResource)
     {
         CGS_ASSERT(lpResource->meLanguageID < 0x18u, "Language ID is invalid");
@@ -275,7 +273,7 @@ namespace CgsLanguage
         if (lpResource->muSize)
         {
             const CgsResource::LanguageResourceHashEntry* lpEntries = lpResource->GetEntries();
-            for (s32 li = 0; li < lpResource->muSize; ++li)
+            for (u32 li = 0; li < lpResource->muSize; ++li)
             {
                 const u8* lpcString = reinterpret_cast<const u8*>(
                     static_cast<uintptr_t>(lpEntries[li].mpString));
