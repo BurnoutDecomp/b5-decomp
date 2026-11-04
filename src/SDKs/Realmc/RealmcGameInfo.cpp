@@ -20,8 +20,8 @@ namespace RealmcIface
 // GameInfo::GameInfo @ 0x82B51940
 //
 //   li   r30, 0
-//   stw  r30, 0x44(r31)                         -> muField44 = 0
-//   stw  r30, 0x48(r31)                         -> muField48 = 0
+//   stw  r30, 0x44(r31)                         -> mThumbnail.mpbData = 0
+//   stw  r30, 0x48(r31)                         -> mThumbnail.mcbData = 0
 //   stw  r30, 0x4C(r31)                         -> muField4C = 0
 //   li   r5, 0x42 ; bl memcpy                    -> memcpy(this, pSource, 66)
 //   sth  r30, 0x40(r31)                          -> muField40 = 0
@@ -32,10 +32,20 @@ namespace RealmcIface
 // ---------------------------------------------------------------------------
 GameInfo::GameInfo(const void* pSource)
 {
-    muField44 = 0;
-    muField48 = 0;
+    mThumbnail.mpbData = 0;
+    mThumbnail.mcbData = 0;
     muField4C = 0;
     std::memcpy(maName, pSource, sizeof(maName) + sizeof(muField40)); // 66 bytes
+    muField40 = 0;
+}
+
+// GameInfo copy helper @0x82B51990 (unlabelled in ARTIST): copy the thumbnail
+// pair and content-area word, copy the 66-byte head, then clear muField40.
+GameInfo::GameInfo(const GameInfo& rOther)
+{
+    mThumbnail = rOther.mThumbnail;
+    muField4C = rOther.muField4C;
+    std::memcpy(maName, rOther.maName, sizeof(maName) + sizeof(muField40));
     muField40 = 0;
 }
 

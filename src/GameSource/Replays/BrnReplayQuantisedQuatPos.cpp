@@ -1,3 +1,4 @@
+#include "GameSource/Replays/BrnReplayBaseSerialiser.h"
 // BrnReplays::QuantisedQuatPos -- packs/unpacks a quaternion-orientation + position pair into a
 // compact 12-byte replay record.
 //
@@ -198,5 +199,23 @@ namespace QuantisedQuatPos
         ValidateQuatPos(const_cast<void*>(lpSource12), lpfDest);
         return lpfDest;
     }
+    s32 Read(void* lpSerialiser, float* lpWorkingSet8)
+    {
+        BaseSerialiser* lpStream = static_cast<BaseSerialiser*>(lpSerialiser);
+        s32 liBytes = 0;
+        for (int i = 4; i < 7; ++i) liBytes += lpStream->ReadFloat(&lpWorkingSet8[i]);
+        for (int i = 0; i < 4; ++i) liBytes += lpStream->ReadFloat(&lpWorkingSet8[i]);
+        return liBytes;
+    }
+
+    s32 Write(void* lpSerialiser, const float* lpWorkingSet8)
+    {
+        BaseSerialiser* lpStream = static_cast<BaseSerialiser*>(lpSerialiser);
+        s32 liBytes = 0;
+        for (int i = 4; i < 7; ++i) liBytes += lpStream->WriteFloat(&lpWorkingSet8[i]);
+        for (int i = 0; i < 4; ++i) liBytes += lpStream->WriteFloat(&lpWorkingSet8[i]);
+        return liBytes;
+    }
+
 }
 }

@@ -116,15 +116,30 @@ namespace CgsGui
 
     // ---- folded from CgsSaveLoadX360_wB_02.cpp (wave B, spec group G3 -- the state setters) ----
 
-    // X360 0x8284C210. Cache the signed-in user index. A valid index (>= 0) tail-forwards
-    // UserSignedIn() to the memory-card interface; a negative index clears the bootup-check flag.
+    // X360 0x8284C210. Cache the signed-in user index. A valid index is passed
+    // in r4 through vtable slot +0x10 to MemcardInterfaceImpl::SetSignedUserIndex;
+    // a negative index clears the bootup-check flag.
     void SaveLoadSystem::SetSignedInUserIndex(s32 liUserIndex)
     {
         miField210 = liUserIndex;                            // stw r4,0x210
         if (liUserIndex >= 0)                                // bge -> tail call
-            mpMemcardInterface->UserSignedIn();              // slot 4 +0x10
+            mpMemcardInterface->SetSignedUserIndex(liUserIndex); // slot 4 +0x10, r4 = index
         else
             mbField183 = false;                              // stb 0,0x183
+    }
+
+    // X360 0x82473110. Change the interface message-state mode only when the
+    // requested silent state differs, then cache the new byte. The native calls
+    // are slot +0x18 with (0|-1) or (1|-1).
+    void SaveLoadSystem::SetSilentMode(bool bSilent)
+    {
+        if (mbSilentMode && !bSilent)
+            mpMemcardInterface->SetMessageState(0, -1);
+
+        if (!mbSilentMode && bSilent)
+            mpMemcardInterface->SetMessageState(1, -1);
+
+        mbSilentMode = bSilent;
     }
 
     // X360 0x8284CC00. Realmc set-autosave result callback (the +4 interface sub-object; raw

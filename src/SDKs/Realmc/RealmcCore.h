@@ -586,11 +586,11 @@ public:
     IRunnableTask(MessageQueue* pMessageQueue, MemcardState* pMemcardState);
 
     // Register this task as running on its MemcardState:
-    // return mpMemcardState->StartTask(GetTaskType()).
+    // return mpMemcardState->StartTask(GetTaskId()).
     int Starting();
 
     // Run the task once, synchronously: Starting(); the two task-body virtuals
-    // (+0x0C then +0x08); then StopTask(GetTaskType()). Returns 0.
+    // (+0x0C then +0x08); then StopTask(GetTaskId()). Returns 0.
     int InvokeSynchronously();
 
     // The async run loop a worker thread enters through ThrFunction<T>: reset
@@ -618,14 +618,14 @@ public:
 
     // slot +0x0C -- first task-body virtual dispatched per run. Pure; concrete
     //               tasks implement it. FLAG: name inferred from dispatch role.
-    virtual void OnTaskRun() = 0;
+    virtual void Execute() = 0;
 
     // slot +0x10 -- the task-type id the MemcardState tracks (passed to
     //               StartTask / StopTask / StopAndStartTask). Pure; concrete
     //               tasks implement it. FLAG: name inferred from dispatch role.
-    virtual int GetTaskType() = 0;
+    virtual int GetTaskId() = 0;
 
-private:
+protected:
     MessageQueue* mpMessageQueue;  // +0x08 (the task's message queue)
     MemcardState* mpMemcardState;  // +0x0C (owning card-task state machine)
 };

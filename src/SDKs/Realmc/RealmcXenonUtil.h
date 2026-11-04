@@ -41,6 +41,10 @@
 namespace RealmcIface
 {
 
+// The one process-wide signed user index used by the Realmc worker and all
+// four Xenon states. ARTIST stores it at dword_82F8797C.
+extern s32 gSignedUserIndex;
+
 // Content descriptors and overlapped operations use the genuine XDK types.
 CGS_STATIC_ASSERT((sizeof(XCONTENT_DATA) == 0x134), "XCONTENT_DATA size");
 CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, szDisplayName) == 0x08), "XCONTENT_DATA display name offset");
@@ -87,15 +91,27 @@ public:
         u8       maPad0B2[2];          // +0x0B2
         HANDLE   mhNotification;       // +0x0B4  XNotify listener / open file handle (-1 == none)
         XOVERLAPPED mOverlapped;       // +0x0B8  device-selector async op (X360 28 bytes)
-        u8       maPad0D4[5];          // +0x0D4  .. +0x0D8 (X360 reserved; untouched here)
+        u8       maPad0D4[4];          // +0x0D4  .. +0x0D7
+        u8       mbFieldD8;            // +0x0D8  read by SetSignedUserIndex; cleared on card change
         u8       mbContainerOpen;      // +0x0D9  a content container is currently open
-        u8       mbFieldDA;            // +0x0DA  cleared by SelectDevice when the selector
-                                       //         yields a card (FLAG: role unrecovered)
+        u8       mbFieldDA;            // +0x0DA  selector/card-change state byte
+        u8       maOpaqueTailDB[5];   // +0x0DB  .. +0x0DF, untouched by the audited ARTIST users
     };
+
+    CGS_STATIC_ASSERT((sizeof(State) == 0xE0), "ARTIST Xenon state stride");
+
+    // @0x82B53350 -- initialize one per-user Xenon state. The listener mask is
+    // the high-word system area plus the low-word content-area value from
+    // GameInfo::muField4C. The four-state caller uses the exact 0xE0 stride.
+    static void InitState(State* lpState, u32 luContentArea);
 
     // @ 0x82B53A18 -- 0 if the device *lpuDeviceId names is present (XContentGetDeviceState
     //                 succeeds), 2 if the id is 0 or the device is gone.
     static int CardExists(const XCONTENTDEVICEID* lpuDeviceId);
+
+    // @ 0x82B53A58 -- consume one card-change notification. Return 1 when the
+    //                 active card's device was removed; otherwise return 0.
+    static int CheckCardChanged(State* lpState);
 
     // @ 0x82B53AD8 -- map an internal card RESULT code (the values above) to the
     //                 public card STATUS code the worker tasks report. A 16-entry
@@ -105,7 +121,7 @@ public:
     //                 every caller does `lwz r4, 0x10(r31)` before the call).
     static int CardResultToCardStatus(u32 luResult, const State* lpState);
 
-    // @ 0x82B53460 -- 0 if a user is signed in (dwUserIndex valid and XUserGetSigninState
+    // @ 0x82B53460 -- 0 if a user is signed in (gSignedUserIndex valid and XUserGetSigninState
     //                 non-zero), else 13; stashes the code in State::miResult.
     static int CheckState(State* lpState);
 

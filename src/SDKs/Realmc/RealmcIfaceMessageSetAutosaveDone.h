@@ -27,6 +27,16 @@ namespace RealmcIface
 class MessageSetAutosaveDone : public RealmcCore::Message
 {
 public:
+    // SetAutosaveTask::Execute constructs this message inline in ARTIST and
+    // stores the three result words at +8, +0xC and +0x10.
+    MessageSetAutosaveDone(u32 uField08, u32 uField0C, u32 uField10)
+        : RealmcCore::Message()
+        , muField08(uField08)
+        , muField0C(uField0C)
+        , muField10(uField10)
+    {
+    }
+
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x18 slot.
     void Apply(RealmcCore::IMessageProcessor* pProcessor) ;

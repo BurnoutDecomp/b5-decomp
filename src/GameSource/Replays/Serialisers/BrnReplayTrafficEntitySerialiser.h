@@ -32,7 +32,7 @@ namespace BrnReplays
         void WriteAsQuatPos(const void* lpTransform);
 
         // @ ReadPhysicsInfo (external TU) / @0x8265AE98 WritePhysicsInfo.
-        void ReadPhysicsInfo(TrafficPhysicsInfoRecord* lpInfo, u32 luIndex, s32 liArg4);
+        void ReadPhysicsInfo(TrafficPhysicsInfoRecord* lpInfo, u8 luIndex, s32 liArg4);
         void WritePhysicsInfo(const u8* lpInfo, u8 luIndex);
 
         // --- per-vehicle accessors (return pointers into the chunked static layout) ---

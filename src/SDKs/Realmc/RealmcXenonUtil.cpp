@@ -125,6 +125,10 @@ u32 Crc32(const void* lpData, u32 luLength)
 namespace RealmcIface
 {
 
+// Shared ARTIST global dword_82F8797C. The Impl vtable setter, InitState,
+// CloseState, CheckState and the Xenon content calls all access this one word.
+s32 gSignedUserIndex = -1;
+
 namespace
 {
     // The X360 file-scope memory-card globals this TU owns. dword_82F8797C is the
@@ -132,15 +136,52 @@ namespace
     // storage-device-present state. FLAGGED: modelled as internal-linkage statics;
     // the not-yet-homed XenonRunnableTask TUs share the same X360 globals and must,
     // when landed, promote these to a shared home so the symbol is single.
-    const u32 KU_NO_USER = 0xFFFFFFFFu;   // dword_82F8797C sentinel (X360 cmpwi -1)
+    const s32 KU_NO_USER = -1;            // dword_82F8797C sentinel (X360 cmpwi -1)
 
-    u32  sDwUserIndex   = KU_NO_USER;   // dword_82F8797C
     bool sbDeviceChanged = false;       // byte_83250194
 
     // off_82F87978 -- the content mount root the XContent* APIs virtual-mount and
     // OpenFile prefixes onto its "<root>:\\<file>" path. IDA resolved the pointer's
     // value to the literal "rmcsave".
     const char* const KPSZ_XENON_ROOT = "rmcsave";
+}
+
+// ---------------------------------------------------------------------------
+// InitState @ 0x82B53350 -- initialize one 0xE0 per-user state record. ARTIST
+// subscribes to system notifications and sets the content flags separately,
+// resets the shared signed-user index, clears the XDK overlapped record, and
+// starts the selector state with mbFieldDA set. Bytes +0xDB..+0xDF are not
+// written by this function and remain the bounded opaque tail in State.
+// ---------------------------------------------------------------------------
+void XenonUtil::InitState(State* lpState, u32 luContentArea)
+{
+    lpState->mbCancel = 0;
+    lpState->miResult = 0;
+    gSignedUserIndex = KU_NO_USER;
+    lpState->muNextContentFlags = 0;
+    lpState->muContentFlags = 0;
+
+    lpState->mhNotification = XNotifyCreateListener(XNOTIFY_SYSTEM);
+    lpState->mCardData = CardData::Empty();
+
+    lpState->mbContainerOpen = 0;
+    std::memset(lpState->maPad0D4, 0, sizeof(lpState->maPad0D4));
+    lpState->mbDeviceMounted = 0;
+    lpState->mbFieldB1 = 0;
+    lpState->mbFieldD8 = 0;
+    lpState->mbFieldDA = 1;
+    std::memset(&lpState->mOverlapped, 0, sizeof(lpState->mOverlapped));
+
+    u32 luContentFlags;
+    if (luContentArea == 0x100)
+        luContentFlags = 0x100;
+    else if (luContentArea == 0x200)
+        luContentFlags = 0x200;
+    else
+        luContentFlags = 0;
+
+    lpState->muNextContentFlags = luContentFlags;
+    lpState->muContentFlags = luContentFlags;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +195,28 @@ int XenonUtil::CardExists(const XCONTENTDEVICEID* lpuDeviceId)
     if (XContentGetDeviceState(luDeviceId, 0) == 0)
         return 0;
     return 2;
+}
+
+// ---------------------------------------------------------------------------
+// CheckCardChanged @ 0x82B53A58 -- consume the card-change notification. When
+// the active card's device is still present the event is ignored; otherwise
+// latch the 0x200 selector content flags and report the change.
+// ---------------------------------------------------------------------------
+int XenonUtil::CheckCardChanged(State* lpState)
+{
+    DWORD luNotificationId = 0;
+    ULONG_PTR laNotificationData[3];
+    if (!XNotifyGetNext(lpState->mhNotification, 11, &luNotificationId, laNotificationData))
+        return 0;
+    if (luNotificationId != 11)
+        return 0;
+
+    const u32 luDeviceId = lpState->mCardData.maCurrent.DeviceID;
+    if (luDeviceId != 0 && XContentGetDeviceState(luDeviceId, 0) == 0)
+        return 0;
+
+    lpState->muContentFlags = 0x200;
+    return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +261,7 @@ int XenonUtil::CardResultToCardStatus(u32 luResult, const State* lpState)
 int XenonUtil::CheckState(State* lpState)
 {
     int liResult;
-    if (sDwUserIndex == KU_NO_USER || XUserGetSigninState(sDwUserIndex) == 0)
+    if (gSignedUserIndex == KU_NO_USER || XUserGetSigninState(gSignedUserIndex) == 0)
         liResult = 13;
     else
         liResult = 0;
@@ -217,7 +280,7 @@ BOOL XenonUtil::CloseState(State* lpState)
     BOOL lResult = CloseHandle(lHandle);
     lpState->mhNotification = INVALID_HANDLE_VALUE;   // -1
     std::memset(&lpState->mOverlapped, 0, sizeof(lpState->mOverlapped));        // zero the 28-byte async descriptor
-    sDwUserIndex = KU_NO_USER;                    // dword_82F8797C = -1
+    gSignedUserIndex = KU_NO_USER;                // dword_82F8797C = -1
     lpState->miResult = 0;
     return lResult;
 }
@@ -293,7 +356,7 @@ int XenonUtil::DeviceSelectorShow(State* lpState, u64 luBytesRequested, int liMo
     DWORD luShow;
     do
     {
-        luShow = XShowDeviceSelectorUI(sDwUserIndex, dwContentType, lpState->muContentFlags,
+        luShow = XShowDeviceSelectorUI(gSignedUserIndex, dwContentType, lpState->muContentFlags,
                                        lBytesRequested, &luDeviceId, &lpState->mOverlapped);
     } while (!lpState->mbCancel && luShow != 997);
 
@@ -354,7 +417,7 @@ int XenonUtil::OpenContainer(State* lpState, const void* lpName, s16 lsFlags, in
         dwContentFlags |= 0x10u;
 
     DWORD luDisposition = 0;
-    DWORD luErr = XContentCreate(sDwUserIndex, KPSZ_XENON_ROOT, lpContentData, dwContentFlags,
+    DWORD luErr = XContentCreate(gSignedUserIndex, KPSZ_XENON_ROOT, lpContentData, dwContentFlags,
                                  &luDisposition, 0, 0);
     if (lpbCreatedNew)
         *lpbCreatedNew = (luDisposition == 2);
@@ -398,7 +461,7 @@ int XenonUtil::CloseContainer(State* lpState, const XCONTENT_DATA* lpContentData
         DWORD luSize = lpThumbnail->mcbData;
         if (luSize != 0)
         {
-            DWORD luErr = XContentSetThumbnail(sDwUserIndex, lpContentData,
+            DWORD luErr = XContentSetThumbnail(gSignedUserIndex, lpContentData,
                                                lpThumbnail->mpbData, luSize, 0);
             if (luErr == 1617 || luErr == 1110)
                 liResult = 2;
@@ -417,7 +480,7 @@ int XenonUtil::DeleteContainer(State* lpState, const XCONTENT_DATA* lpContentDat
     int liResult = CheckState(lpState);
     if (liResult == 0)
     {
-        DWORD luErr = XContentDelete(sDwUserIndex, lpContentData, 0);
+        DWORD luErr = XContentDelete(gSignedUserIndex, lpContentData, 0);
         if (luErr == 0)
             return 0;
         if (luErr == 2)
@@ -462,7 +525,7 @@ int XenonUtil::SetThumbnail(State* lpState, const XCONTENT_DATA* lpContentData,
     if (luSize == 0)
         return 0;
 
-    DWORD luErr = XContentSetThumbnail(sDwUserIndex, lpContentData,
+    DWORD luErr = XContentSetThumbnail(gSignedUserIndex, lpContentData,
                                        lpThumbnail->mpbData, luSize, 0);
     if (luErr == 1617 || luErr == 1110)
         return 2;

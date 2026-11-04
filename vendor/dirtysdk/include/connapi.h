@@ -137,17 +137,31 @@ void ConnApiOnline(ConnApiRefT* pConnApi, const char* pGameName, const char* pSe
 
 // Start a session as host / as a member with the given members (pClientList is iNumClients
 // ConnApiUserInfoT entries, the local player among them). iSessFlags bit 0 = ranked. The fourth
-// argument is not used. Returns 0, or a negative value when a session is already running.
+// argument is not used. ARTIST X360 callers ignore r3 for these void lifecycle entries.
+#if defined(_XBOX)
+void ConnApiHost(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iUnused, s32 iSessFlags);
+void ConnApiConnect(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iUnused, s32 iSessFlags);
+#else
 s32 ConnApiHost(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iUnused, s32 iSessFlags);
 s32 ConnApiConnect(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iUnused, s32 iSessFlags);
+#endif
 
 // Add a member to / remove a member from the running session. RemoveClient finds the member
-// by name, or by iClientIndex when pClientName is null. Return 0, or a negative value.
+// by name, or by iClientIndex when pClientName is null.
+#if defined(_XBOX)
+void ConnApiAddClient(ConnApiRefT* pConnApi, ConnApiUserInfoT* pUserInfo);
+void ConnApiRemoveClient(ConnApiRefT* pConnApi, const char* pClientName, s32 iClientIndex);
+#else
 s32 ConnApiAddClient(ConnApiRefT* pConnApi, ConnApiUserInfoT* pUserInfo);
 s32 ConnApiRemoveClient(ConnApiRefT* pConnApi, const char* pClientName, s32 iClientIndex);
+#endif
 
 // Start / stop the game on the session (arbitration); connections stay up.
-s32  ConnApiStart(ConnApiRefT* pConnApi, s32 iFlags);
+#if defined(_XBOX)
+void ConnApiStart(ConnApiRefT* pConnApi, s32 iFlags);
+#else
+s32 ConnApiStart(ConnApiRefT* pConnApi, s32 iFlags);
+#endif
 void ConnApiStop(ConnApiRefT* pConnApi);
 
 // Close every connection and leave the session.

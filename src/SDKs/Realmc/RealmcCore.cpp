@@ -592,7 +592,7 @@ IRunnableTask::~IRunnableTask()
 // ---------------------------------------------------------------------------
 int IRunnableTask::Starting()
 {
-    return mpMemcardState->StartTask(GetTaskType());  // vtable slot +0x10
+    return mpMemcardState->StartTask(GetTaskId());  // vtable slot +0x10
 }
 
 // ---------------------------------------------------------------------------
@@ -605,9 +605,9 @@ int IRunnableTask::Starting()
 int IRunnableTask::InvokeSynchronously()
 {
     Starting();
-    OnTaskRun();       // vtable slot +0x0C (called first)
+    Execute();         // vtable slot +0x0C (called first)
     OnTaskComplete();  // vtable slot +0x08 (called second)
-    mpMemcardState->StopTask(GetTaskType());  // vtable slot +0x10
+    mpMemcardState->StopTask(GetTaskId());  // vtable slot +0x10
     return 0;
 }
 
@@ -615,13 +615,13 @@ int IRunnableTask::InvokeSynchronously()
 // IRunnableTask::operator()
 //
 //   filter = mpMemcardState->GetMessageFilter() ; filter->Reset()   (+0x5C)
-//   this->OnTaskRun() (+0x0C) ; this->OnTaskComplete() (+0x08)
-//   type = this->GetTaskType() (+0x10)
+//   this->Execute() (+0x0C) ; this->OnTaskComplete() (+0x08)
+//   type = this->GetTaskId() (+0x10)
 //   while (next = mpMemcardState->GetWaitingToStartTask()) {
-//     mpMemcardState->StopAndStartTask(type, next->GetTaskType())
-//     type = next->GetTaskType()
+//     mpMemcardState->StopAndStartTask(type, next->GetTaskId())
+//     type = next->GetTaskId()
 //     mpMemcardState->GetMessageFilter()->Reset()
-//     next->OnTaskRun() ; next->OnTaskComplete()
+//     next->Execute() ; next->OnTaskComplete()
 //     RefCount::Release(next)
 //   }
 //   mpMemcardState->StopTask(type) ; return 0
@@ -632,18 +632,18 @@ int IRunnableTask::InvokeSynchronously()
 int IRunnableTask::operator()()
 {
     mpMemcardState->GetMessageFilter()->Reset();  // vtable slot +0x5C
-    OnTaskRun();                                   // vtable slot +0x0C
+    Execute();                                     // vtable slot +0x0C
     OnTaskComplete();                              // vtable slot +0x08
-    int liTaskType = GetTaskType();                // vtable slot +0x10
+    int liTaskType = GetTaskId();                  // vtable slot +0x10
 
     for (IRunnableTask* lpNext = mpMemcardState->GetWaitingToStartTask();
          lpNext != 0;
          lpNext = mpMemcardState->GetWaitingToStartTask())
     {
-        mpMemcardState->StopAndStartTask(liTaskType, lpNext->GetTaskType());
-        liTaskType = lpNext->GetTaskType();
+        mpMemcardState->StopAndStartTask(liTaskType, lpNext->GetTaskId());
+        liTaskType = lpNext->GetTaskId();
         mpMemcardState->GetMessageFilter()->Reset();
-        lpNext->OnTaskRun();
+        lpNext->Execute();
         lpNext->OnTaskComplete();
         lpNext->Release();
     }

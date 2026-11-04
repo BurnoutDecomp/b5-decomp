@@ -74,6 +74,10 @@ public:
     // 10 sleeps of 10ms) until the response list has drained. Returns 0.
     int ShutDown();
 
+    // @0x82B52490 -- the interface update loop samples the initialized byte
+    // directly before draining one queued message.
+    bool IsInitialized() const { return mbInitialized; }
+
     // Take the oldest message off the message list (game thread). Returns the
     // empty message when the list is empty.
     MessagePtr GetMessage();

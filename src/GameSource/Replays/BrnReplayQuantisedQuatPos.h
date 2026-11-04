@@ -38,13 +38,9 @@ namespace BrnReplays
         // liUnused is a dead pass-through argument in the shipped build. TU-internal.
         void PrintQuatPos(void* lpContext, const float* lpQuatPos, int liUnused = 0);
 
-        // COMBINED stream+quantise entry points the SoundSerialiser drives, DISTINCT from
-        // the buffer-only Pack/UnPack. Read pops a
-        // 12-byte record off the serialiser stream and UnPacks it into the 8-float working set;
-        // Write Packs the 8-float working set into a 12-byte record and writes it. lpSerialiser
-        // is the driving BaseSerialiser-derived channel (opaque here to avoid a cyclic include).
-        // Bodies live in their own TU. Do NOT alias onto Pack/UnPack.
-        void Read(void* lpSerialiser, float* lpWorkingSet8);
-        void Write(void* lpSerialiser, const float* lpWorkingSet8);
+        // ARTIST 82652640 / 826525A0: stream seven aligned native floats in
+        // position-then-quaternion order (indices 4,5,6,0,1,2,3).
+        s32 Read(void* lpSerialiser, float* lpWorkingSet8);
+        s32 Write(void* lpSerialiser, const float* lpWorkingSet8);
     }
 }

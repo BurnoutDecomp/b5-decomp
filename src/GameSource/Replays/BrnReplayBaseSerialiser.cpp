@@ -159,6 +159,53 @@ namespace BrnReplays
         return 0;
     }
 
+    namespace
+    {
+        void AssertReplayData(const char* lpcMessage, int liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStream << lpcMessage;
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\BrnReplayBaseSerialiserDataFunctions.h", liLine);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    // ARTIST 82650130. Floating-point transfers use the native PPC representation.
+    s32 BaseSerialiser::ReadFloat(void* lpDest)
+    {
+        if (meMode != E_MODE_PLAYING) AssertReplayData("Not playing\n", 325);
+        if (!mbLocked) AssertReplayData("Not locked\n", 326);
+        if (!mpBuffer) AssertReplayData("Buffer not allocated\n", 327);
+        if (static_cast<u32>(miBufferSize - ((miBufferRead + 3) & ~3)) < 4u)
+            AssertReplayData("Not enough data in buffer\n", 329);
+        const s32 liOld = miBufferRead;
+        miBufferRead = (miBufferRead + 3) & ~3;
+        *static_cast<float*>(lpDest) = *reinterpret_cast<const float*>(static_cast<const u8*>(mpBuffer) + miBufferRead);
+        miBufferRead += 4;
+        return miBufferRead - liOld;
+    }
+
+    // ARTIST 8264FEE8; validation runs even for recording preparing/stalled.
+    s32 BaseSerialiser::WriteFloat(const void* lpSrc)
+    {
+        if (!IsRecording()) AssertReplayData("Not recording\n", 281);
+        if (!mbLocked) AssertReplayData("Not locked\n", 282);
+        if (!mpBuffer) AssertReplayData("Buffer not allocated\n", 283);
+        if (static_cast<u32>(miBufferSize - ((miBufferUsed + 3) & ~3)) < 4u)
+            AssertReplayData("Not enough space in buffer\n", 284);
+        if (meMode == E_MODE_RECORDING)
+        {
+            const s32 liOld = miBufferUsed;
+            miBufferUsed = (miBufferUsed + 3) & ~3;
+            *reinterpret_cast<float*>(static_cast<u8*>(mpBuffer) + miBufferUsed) = *static_cast<const float*>(lpSrc);
+            miBufferUsed += 4;
+            return miBufferUsed - liOld;
+        }
+        return 0;
+    }
+
     // @ 0x8264C470
     // Mode-directed serialise dispatch. The X360 body switches on meMode (read at
     // *this+0): in E_MODE_RECORDING it tail-calls Write(buffer, size); in
