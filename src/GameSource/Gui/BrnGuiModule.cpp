@@ -206,6 +206,9 @@ namespace BrnGui
         mGuiModel.AddGuiEventObserver(&mOverlayFlow, 0);
         mGuiModel.AddGuiEventObserver(&mAlwaysAvailableComponentsManager, 0);
         mFsmController.Construct();
+        mFsmController.AddFlow(E_GUIFLOW_HUD, &mHudFlow);
+        mFsmController.AddFlow(E_GUIFLOW_SCREEN, &mScreenFlow);
+        mFsmController.AddFlow(E_GUIFLOW_OVERLAY, &mOverlayFlow);
 
         mHudMessageDirector.Construct(&mGuiModel, &mGuiCache);
         mHudMessageAnalyzer.Construct(&mHudMessageDirector);

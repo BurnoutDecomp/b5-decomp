@@ -221,6 +221,9 @@ namespace BrnGui
     {
         if (lpGuiCache == 0)
             return false;
+        if (static_cast<s32>(lpGuiCache->GetLanguage()) == 16)
+            return PreloadResourcesReady(lpGuiCache, KA_PRELOAD_FONTS_CJK, 2);
+        return PreloadResourcesReady(lpGuiCache, KA_PRELOAD_FONTS_WESTERN, 3);
     }
 
     // @ 0x82477F28 -- consume the cache event, then walk the preload stage machine.
@@ -261,6 +264,7 @@ namespace BrnGui
                 !PreloadFontsReady(mpGuiCache))
                 break;
             mpStateInterface->PlayAptMovie("main", 0);
+            PreloadResourcesReady(mpGuiCache, KA_PRELOAD_FLAPTHUD, 1);
             meUpdateStage = E_PRELOAD_LOADING_SCREEN;
             lpInQueue->Clear();
             return;
@@ -271,6 +275,8 @@ namespace BrnGui
             if (!PreloadResourcesReady(mpGuiCache, KA_PRELOAD_FLAPTHUD, 1))
                 break;
             mpStateInterface->PlayLoadingScreen();
+            PreloadResourcesReady(mpGuiCache, maSecondPhaseResourcesToLoad,
+                                  muSecondPhaseNumResourcesToLoad);
             meUpdateStage = E_PRELOAD_SETTLE;
             lpInQueue->Clear();
             return;
