@@ -438,6 +438,7 @@ private:
     void EndRenderPostFx(rw::graphics::postfx::RenderTarget* lpRenderTarget);
 
     void ClearDispatchCounters();
+    void ClearGraphicsContext(); // ARTIST 0x823F6690
     void ClearScreenshotState();
     void MemoryUsage();
     void ConstructRenderSwitches();

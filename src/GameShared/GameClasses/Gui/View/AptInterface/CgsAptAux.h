@@ -265,9 +265,8 @@ namespace CgsGui
         // the data handler, FindAptData(name), assert its state, then drive the faithful async
         // completion (AptCompleteAnimationAsyncLoad -> AptLoader::CompleteLoad -> Resolve ->
         // Fixup) with the header's mpAptData/mpConstData and the AptDataHeader (a5). The handle
-        // is passed by reference (the asm's `*a2` reads); the gAptFuncs slot passes it by value
-        // -- installing this into the slot on x64 is a follow-on (the by-value/by-ref ABI differ).
-        void LoadAnimation(const char* lpacName, AptFilePtr* lpHandle);
+        // is an owning by-value parameter; the native ABI passes its address in r4.
+        void LoadAnimation(const char* lpacName, AptFilePtr context);
     }
 
 

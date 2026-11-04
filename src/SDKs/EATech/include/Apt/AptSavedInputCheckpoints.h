@@ -95,6 +95,11 @@ namespace AptSavedInputCheckpoints
     // new record, LINKED(3) when the file is already loaded or PENDING(1) when it
     // is not (queried through the current AptTarget's loader).
     void Checkpoint(AptFileSavedInputStateVector& rList, const EAStringC& name);
+
+    // @0x82AFD318 -- update the named record if its state matches, or append it.
+    void updateState(AptFileSavedInputStateVector& rList, const EAStringC& name,
+                     E_APT_SAVED_INPUT_STATE expected, E_APT_SAVED_INPUT_STATE next,
+                     E_APT_SAVED_INPUT_STATE initial);
 }
 
 // ---------------------------------------------------------------------------

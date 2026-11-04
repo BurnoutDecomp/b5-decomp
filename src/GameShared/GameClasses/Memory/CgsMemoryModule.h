@@ -9,7 +9,7 @@
 
 // Pointer/parameter-only types -> forward declarations.
 namespace rw { struct IResourceAllocator; struct Resource; }
-namespace CgsModule { class IOBufferStack; }
+namespace CgsModule { struct IOBufferStack; }
 
 // CgsMemory::MemoryModule -- the engine's memory-bank manager (one of the four sub-modules embedded by
 // value in CgsResource::ResourceModule, which the GameDataModule embeds; see [[gamedatamodule-scoping]]).

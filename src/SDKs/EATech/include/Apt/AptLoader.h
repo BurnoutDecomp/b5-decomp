@@ -105,7 +105,7 @@ struct AptLoader
 
     // @0x82B02030 -- publish a just-linked AptFile to the global Apt notification
     // hook, then consume the passed handle. Body in AptLoader.cpp.
-    void notify(AptFilePtr* pFile);
+    void notify(AptFilePtr file);
 
     // @0x82AFEA40 -- cancel a preloaded movie animation by file name: drop its load
     // (and, recursively, any of its imports that no other linked movie still
@@ -125,5 +125,5 @@ struct AptLoader
 // pBase, pConstFile, pAptDataHeader), then drops the pin. Body in AptLoader.cpp.
 // pAptDataHeader is the AptDataHeader (X360 a4 -> CompleteLoad a5 -> Resolve/Fixup a4).
 struct AptConstFile;
-void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, struct AptConstFile* pConstFile,
+void AptCompleteAnimationAsyncLoad(AptFilePtr handle, void* pBase, struct AptConstFile* pConstFile,
                                    void* pAptDataHeader);

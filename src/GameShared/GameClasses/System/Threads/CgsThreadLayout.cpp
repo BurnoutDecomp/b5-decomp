@@ -114,6 +114,18 @@ namespace CgsSystem
         mbUpdatingResourceSystem = false;
     }
 
+    // ARTIST BrnGameModule::Prepare publishes these words at 0x9A1198 and 0x9A119C.
+    void ThreadLayout::SetFrameRate(EFrameRate leFrameRate)
+    {
+        meFrameRate = leFrameRate;
+    }
+
+    void ThreadLayout::SetResourcePercentageOfFrame(s32 liPercentage)
+    {
+        miResourcePercentageOfFrame = liPercentage;
+    }
+
+
     intptr_t ThreadLayout::GlobalThreadBeginWrapper(EA::Thread::RunnableFunction pRunnable, void* pContext)
     {
         return pRunnable(pContext);

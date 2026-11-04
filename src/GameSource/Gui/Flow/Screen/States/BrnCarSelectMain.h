@@ -43,7 +43,7 @@
 
 namespace CgsModule { struct Event; }
 namespace CgsFsm    { class  ScriptedFsm; }
-namespace BrnResource { struct VehicleList; struct WheelList; }
+namespace BrnResource { struct VehicleList; class WheelList; }
 
 namespace BrnGui
 {

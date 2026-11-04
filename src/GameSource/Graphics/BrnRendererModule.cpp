@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 
 // ARTIST byte_82FAEDD0: shared with Render's present-interval change check.
 // The original data image initializes this byte to zero.
@@ -805,4 +806,102 @@ void BrnRendererModule::BeginQuarterResBuffer()
         E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST));
     mAllocatedRenderTargets.BlitDepth(mIm2dRenderer, mAllocatedRenderTargets.GetDownSampleBuffer());
     mAllocatedRenderTargets.GetParticleBuffer()->SetRenderTargetState(0);
+}
+
+// ARTIST 0x82405E28: publish the update-side renderer resources.
+void BrnRendererModule::Update(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*,
+                               RendererIO::InputBuffer* lpInput, RendererIO::OutputBuffer* lpOutput)
+{
+    const char* const file = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
+    if (!lpOutput) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpOutput", file, 4519); CgsDev::Assert::EndAssert(); }
+    if (!lpInput) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpInput", file, 4520); CgsDev::Assert::EndAssert(); }
+    lpInput->LockForRead();
+    lpOutput->LockForWrite();
+    lpOutput->SetBrnCamera(lpInput->GetBrnCamera());
+    lpOutput->SetReusableLoadingScreenAllocator(GetReusableLoadingScreenAllocator());
+    const BrnDirector::Camera::Camera& camera = lpInput->GetBrnCamera();
+    if (camera.GetFOV() > 0.1f)
+    {
+        CgsGraphics::Camera graphicsCamera;
+        camera.CopyToCgsCamera(&graphicsCamera);
+        const f32 horizontal = graphicsCamera.maProjectionScalars[1];
+        const f32 vertical = graphicsCamera.maProjectionScalars[4];
+        const f32 scale = horizontal >= 1.0f ? horizontal : 1.0f;
+        const Vector4 viewScale(scale, (vertical / horizontal) * scale, 0.0f, 0.0f);
+        mCoronaManager.GetSubmissionInterface()->SetCameraInfo(
+            graphicsCamera.GetViewProjectionMatrix(), camera.GetPosition(), viewScale);
+    }
+    if (camera.GetEffects().mbRequestingScreenshot)
+        mbUpdateThreadTakeScreenshot = true;
+    lpInput->UnlockForRead();
+    lpOutput->SetDispatchFrame(&mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite());
+    lpOutput->SetIm2dRenderBuffer(&mIm2dRenderBuffer);
+    lpOutput->SetIm3dRenderBuffer(&mIm3dRenderBuffer);
+    lpOutput->SetIm3dRenderBufferUntex(&mIm3dRenderBufferUntex);
+    lpOutput->SetIm3dDebugRenderBuffer(&mIm3dDebugRenderBuffer);
+    lpOutput->SetIm2dDebugRenderBuffer(&mIm2dDebugRenderBuffer);
+    lpOutput->SetBaseEffectsFrame(mEffectsArbitrator.GetExternalEffectsFrame(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_BASE, 0));
+    for (u8 slot = 0; slot < 4; ++slot)
+        lpOutput->SetWorldEffectsFrame(slot, mEffectsArbitrator.GetExternalEffectsFrame(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_WORLD, slot));
+    for (u8 slot = 0; slot < 2; ++slot)
+        lpOutput->SetFXEventsEffectsFrame(slot, mEffectsArbitrator.GetExternalEffectsFrame(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_FX_EVENTS, slot));
+    lpOutput->SetShaderConstantsFrame(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
+    lpOutput->SetBlobbyShadowBuffer(mBlobbyShadowManager.GetExternalBuffer());
+    lpOutput->SetCoronaSubmissionInterface(mCoronaManager.GetSubmissionInterface());
+    lpOutput->SetIm3dRenderBufferRacePosition(&mIm3dBufferRacePosition);
+    lpOutput->SetIm3dRenderBufferMenusAndHud(&mIm3dBufferMenusAndHud);
+    lpOutput->SetRenderSwitches(mRenderSwitches);
+    RendererIO::ExternallyVisiblePerformanceMonitors monitors;
+    monitors.miCPU_DT_RenderShadowmapNear = mCpuMonitors.miDispatchShadowmapNearCSMList;
+    monitors.miCPU_DT_RenderShadowmapFar = mCpuMonitors.miDispatchShadowmapFarCSMList;
+    monitors.miCPU_DT_RenderEnvmap = mCpuMonitors.miDispatchEnvmapLists;
+    monitors.miCPU_DT_RenderPreZ = mCpuMonitors.miDispatchPreZ;
+    monitors.miCPU_DT_RenderWorldOpaque = mCpuMonitors.miDispatchWorldOpaqueList;
+    monitors.miCPU_DT_RenderWorldTransparent = mCpuMonitors.miDispatchWorldTransparentList;
+    monitors.miGPU_RenderShadowmaps = mGpuMonitors.miShadowmap;
+    monitors.miGPU_RenderEnvmap = mGpuMonitors.miEnvironmentMap;
+    monitors.miGPU_RenderPreZ = mGpuMonitors.miPreZ;
+    monitors.miGPU_RenderWorldOpaque = mGpuMonitors.miWorldOpaque;
+    monitors.miGPU_RenderWorldTransparent = mGpuMonitors.miWorldTransparent;
+    *lpOutput->GetExternallyVisiblePerformanceMonitors() = monitors;
+    lpOutput->UnlockForWrite();
+}
+void BrnRendererModule::RenderAssert(const CgsDev::Assert::AssertData* lpAssertData)
+{
+    D3DDevice_AcquireThreadOwnership(gpD3DDevice);
+    for (;;)
+    {
+        mIm3dDebugRenderBuffer.Clear();
+        mIm2dDebugRenderBuffer.Clear();
+        Matrix44 identity;
+        identity.SetIdentity();
+        CgsDev::DebugInterface debug;
+        debug.GetDebugManager().RenderAssert(lpAssertData);
+        const Vector3 cameraPosition(0.0f, 0.0f, 0.0f);
+        debug.GetDebugManager().Render(identity, cameraPosition,
+            &mIm3dDebugRenderBuffer, &mIm2dDebugRenderBuffer);
+        mIm3dDebugRenderBuffer.Swap();
+        mIm2dDebugRenderBuffer.Swap();
+        D3DVIEWPORTF9 viewport;
+        viewport.X = 0.0f; viewport.Y = 0.0f;
+        viewport.Width = 1280.0f; viewport.Height = 720.0f;
+        viewport.MinZ = 0.0f; viewport.MaxZ = 1.0f; viewport.Flags = 0;
+        D3DDevice_SetViewportF(gpD3DDevice, &viewport);
+        RECT scissor = { 0, 0, 1280, 720 };
+        D3DDevice_SetScissorRect(gpD3DDevice, &scissor);
+        mIm2dDebugRenderBuffer.Dispatch(&mIm2dRenderer);
+        ++renderengine::gDeviceFrameCounter83271624;
+        renderengine::Device::ShowPixelBuffer(&renderengine::gOriginalColorBuffer);
+    }
+}
+
+// ARTIST 0x823F6690: clear the texture, vertex-stream and index bindings.
+void BrnRendererModule::ClearGraphicsContext()
+{
+    D3DDevice* const device = gpD3DDevice;
+    for (u32 sampler = 0; sampler < 16; ++sampler)
+        D3DDevice_SetTexture(device, sampler, 0, 0x80000000ULL >> sampler);
+    for (u32 stream = 0; stream < 5; ++stream)
+        D3DDevice_SetStreamSource(device, stream, 0, 0, 0, 1ULL << (stream / 3));
+    D3DDevice_SetIndices(device, 0);
 }

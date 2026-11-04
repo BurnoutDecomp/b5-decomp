@@ -631,7 +631,7 @@ namespace CgsDev
     // inline), then RenderWorld (3D) + RenderHUD (2D). The overlay QUEUEING - build info, frame
     // rate, memory - lives with the caller (BrnGameModule::DebugManagerRender @0x823BCB88), which
     // also gates the whole pass on the debug font having arrived.
-    void DebugManager::Render(const Matrix44& lViewProjection, const Vector3& lCameraPosition,
+    void DebugManager::Render(const Matrix44& lViewProjection, Vector3 lCameraPosition,
                              CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2dRenderBuffer* lp2dRenderBuffer)
     {
         CGS_ASSERT(mp3dRender != 0, "mp3dRender");
@@ -650,7 +650,7 @@ namespace CgsDev
     // batch, replay the buffered world-space prims, run each ACTIVE component's RenderWorld, close.
     // (The 3D renderer's draw bodies are the Debug3D render follow-on; the pass shape is the
     // console's.) lCameraPosition is carried for the components' distance culls.
-    void DebugManager::RenderWorld(const Matrix44& lViewProjection, const Vector3& lCameraPosition)
+    void DebugManager::RenderWorld(const Matrix44& lViewProjection, Vector3 lCameraPosition)
     {
         CGS_ASSERT(mp3dRender != 0, "must call ConstructRenderer");
 

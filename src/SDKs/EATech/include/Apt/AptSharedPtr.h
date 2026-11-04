@@ -3,8 +3,8 @@
 // ===========================================================================
 // EATech Apt (ActionScript / Flash player) -- AptSharedPtr<AptFile>.
 //
-// Reconstructed from the Feb-2007 leak SHAPE (SDKs/EATech/include/Apt/Apt.h
-// DWARF: `struct AptSharedPtr<AptFile> { AptFile* pData; ... }`) plus the X360
+// Declaration shape is corroborated by the DecFIGS Apt.h DWARF
+// (`struct AptSharedPtr<AptFile> { AptFile* pData; ... }`) plus the X360
 // ARTIST.XEX pseudocode for the three method BODIES this TU owns:
 //     AptSharedPtr<AptFile>::Dispose(AptFile*)                  @ 0x8284D158
 //     AptSharedPtr<AptFile>::`vector deleting destructor'       @ 0x82AEC678
@@ -68,6 +68,34 @@ template <>
 struct AptSharedPtr<AptFile>
 {
     AptFile* pData;
+
+    AptSharedPtr(AptFile* value = 0) : pData(value)
+    {
+        if (pData)
+            AptSharedPtrIncRef(pData);
+    }
+
+    AptSharedPtr(const AptSharedPtr<AptFile>& rhs) : pData(rhs.pData)
+    {
+        if (pData)
+            AptSharedPtrIncRef(pData);
+    }
+
+    // ARTIST by-value parameters own their incoming copy. The compiler passes
+    // its address and destroys it in the callee (e.g. 0x82AFFD98..0x82AFFDD0).
+    ~AptSharedPtr()
+    {
+        AptFile* oldp = pData;
+        pData = 0;
+        Dispose(oldp);
+    }
+
+    void Reset()
+    {
+        AptFile* oldp = pData;
+        pData = 0;
+        Dispose(oldp);
+    }
 
     // X360 @0x8284D158. Static: the asm takes the AptFile object pointer
     // directly in r3 (no AptSharedPtr `this`).

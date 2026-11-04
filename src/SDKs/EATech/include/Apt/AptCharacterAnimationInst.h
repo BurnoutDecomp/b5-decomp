@@ -88,6 +88,8 @@ AptCharacterAnimation* AptGetMovieCharacterAnimation(AptCharacter* pCharacter);
 
 struct AptCharacterAnimationInst : public AptCharacterSpriteInstBase
 {
+    AptCharacterAnimationInst(AptCharacter* pCharacter, AptFilePtr file);
+
     // +0x24 -- the banked update milliseconds the AptUpdate frame pacer accumulates
     // (AptUpdate @0x82B0DB68 / its per-target driver @0x82B0D608 read v7[9], add the
     // elapsed ms, subtract one authored frame per tick, and store the remainder
@@ -127,5 +129,4 @@ struct AptCharacterAnimationInst : public AptCharacterSpriteInstBase
 // Body in AptCharacterAnimationInst.cpp (the X360 ctor is folded -- no own export
 // symbol -- disassembled from the decrypted ARTIST.XEX, cross-checked vs the PS3 lift).
 // ---------------------------------------------------------------------------
-struct AptFile;
-AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);
+AptCharacterAnimationInst* MakeCharacterAnimationInst(const AptFilePtr& file);

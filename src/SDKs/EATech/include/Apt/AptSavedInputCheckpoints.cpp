@@ -176,15 +176,8 @@ void Checkpoint(AptFileSavedInputStateVector& rList, const EAStringC& name)
     }
 
     // 2. Not present -- is the file already loaded?
-    AptLoader*  pLoader = gpAptTarget->GetLoader();
-    AptFilePtr  loaded  = pLoader->IsLoaded(name);
-    const bool  bLoaded = (loaded.pData != 0);
-
-    // Release the reference IsLoaded handed back (we only needed the yes/no).
-    AptFile* pTmp = loaded.pData;
-    loaded.pData = 0;
-    if (pTmp && AptSharedPtrDecRef(pTmp) == 0)
-        AptSharedPtrDelete(pTmp);
+    AptLoader* pLoader = gpAptTarget->GetLoader();
+    const bool bLoaded = (pLoader->IsLoaded(name).pData != 0);
 
     // Append a fresh record (its mInputName copy-ctors from `name`).
     AptFileSavedInputState newRecord;
@@ -193,6 +186,27 @@ void Checkpoint(AptFileSavedInputStateVector& rList, const EAStringC& name)
     rList.PushBack(newRecord);
     // newRecord goes out of scope here -> ~EAStringC releases its name (the asm's
     // trailing EAStringC::DecreaseInternalRefCount on the temp's first word).
+}
+
+// ARTIST @0x82AFD318. The first match either changes state or ends the scan.
+void updateState(AptFileSavedInputStateVector& rList, const EAStringC& name,
+                 E_APT_SAVED_INPUT_STATE expected, E_APT_SAVED_INPUT_STATE next,
+                 E_APT_SAVED_INPUT_STATE initial)
+{
+    for (AptFileSavedInputState* record = rList.begin(); record != rList.end(); ++record)
+    {
+        if (record->mInputName == name)
+        {
+            if (record->meState == expected)
+                record->meState = next;
+            return;
+        }
+    }
+
+    AptFileSavedInputState record;
+    record.mInputName = name;
+    record.meState = initial;
+    rList.PushBack(record);
 }
 
 }   // namespace AptSavedInputCheckpoints

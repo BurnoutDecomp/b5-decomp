@@ -62,6 +62,9 @@ struct AptLinker
         AptFilePtr* mpData;             // [+0x0C] storage (-> mInlineStorage when small)
         AptFilePtr mInlineStorage[2];   // [+0x10] inline SBO buffer (ctor zeroes both)
 
+        PendingFileVector();
+        ~PendingFileVector();
+
         AptFilePtr*       begin()       { return mpData; }
         AptFilePtr*       end()         { return mpData + mnSize; }
         const AptFilePtr* begin() const { return mpData; }
@@ -92,7 +95,7 @@ struct AptLinker
 
     // @0x82B00938 -- record that an AptFile shared ptr should be (un)linked: if the
     // file is already in mPendingFiles drop the incoming ref, else push_back it.
-    void Notify(AptFilePtr* pFile);
+    void Notify(AptFilePtr file);
 
     // @0x82B0CC68 -- per-frame: tick the loader, walk the thingy list resolving any
     // file that finished loading (linking it into the scene or converting the old
@@ -110,9 +113,7 @@ struct AptLinker
     void CancelLoad(AptValue* pValue);
 
     // isFileImported @0x82AECC58 (AptLinker__isFileImported) -- true when
-    // *ppCandidate's file is imported by ANY movie the linker tracks: for each
-    // thingy, hand its file a fresh counted copy of the candidate (AptFile::
-    // isFileImported consumes it). CONSUMES the candidate handle either way
-    // (disposes + nulls ppCandidate->pData). Body in AptLinker.cpp.
-    bool isFileImported(AptFilePtr* ppCandidate);
+    // the candidate file is imported by any movie the linker tracks. Each
+    // AptFile::isFileImported call receives its own counted copy.
+    bool isFileImported(AptFilePtr candidate);
 };
