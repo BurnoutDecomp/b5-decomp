@@ -277,6 +277,20 @@ void FireSectionIndexAssert(const char* lpcPrefix, s32 liValue, const char* lpcS
 //   0x827656C0  UNCONDITIONALLY returns r27 + 0x10 == &maSectionCache[liIndex & 15]
 // The assert is a report, not a guard: the console returns the (stale) slot either way.
 // =================================================================================================
+// ARTIST82790278: render each cached, ready hard-no-go map at the car position.
+void RacingLineGenerator::RenderHardNoGoMap(RacingLine* lpRacingLine)
+{
+    for (s32 i = lpRacingLine->mFirstSectionInCache; i <= lpRacingLine->mLastSectionInCache; ++i)
+    {
+        if (lpRacingLine->maSectionCache[i & 15].mCachedSectionIndex == i)
+        {
+            SectionData* lpSection = GetSectionPointer(lpRacingLine, i);
+            if (lpSection->mHardNoGoMap.IsReady())
+                lpSection->mHardNoGoMap.Render(lpRacingLine->mCarPos);
+        }
+    }
+}
+
 SectionData* RacingLineGenerator::GetSectionPointer(RacingLine* lpRacingLine, s32 liIndex)
 {
     const s32 liCacheIndex = liIndex & KI_SECTION_CACHE_MASK;

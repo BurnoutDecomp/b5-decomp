@@ -47,6 +47,22 @@ bool Route::AddNode(const RouteNode& lrNode)
     return true;
 }
 
+// ARTIST8230F4D0: report an invalid index, then return the indexed node.
+const RouteNode* Route::GetNode(s32 liNodeIndex) const
+{
+    if (liNodeIndex < 0 || liNodeIndex >= miNodeCount)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Error accesing route node: index = " << liNodeIndex
+                << ", node count = " << miNodeCount << "\n";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+            "..\\..\\..\\GameSource\\World/AI/Route/BrnRoute.h", 325);
+        CgsDev::Assert::EndAssert();
+    }
+    return &maNodes[liNodeIndex];
+}
+
 // @0x82767B28  Copy-construct this route from lpSource. The X360 asm copies, in
 // order: miNodeCount (0x1400), miDefaultStartNode (0x1404) -- stored BEFORE the
 // node loop -- then if miNodeCount > 0 the populated node prefix (all four 32-bit

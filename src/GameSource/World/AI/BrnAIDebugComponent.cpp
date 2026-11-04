@@ -5,9 +5,14 @@
 #include "GameSource/World/AI/BrnAICar_Constants.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAIAggression.h"
+#include "GameSource/World/AI/BrnAIPortal.h"
+#include "GameSource/World/AI/BrnAIDebugUtils.h"
+#include "SDKs/XboxMath/XMVectorACos.h"
+#include <cmath>
 #include "GameSource/World/AI/BrnAIBuzzBy.h"
 #include "GameSource/BurnoutConstants.h"                                           // EActiveRaceCarIndex operator++
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // CgsDev::SimpleStrStream
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
@@ -36,8 +41,448 @@ void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcTex
 namespace BrnAI
 {
 
+// ARTIST82773B48: active fighting drivers with an aggression target draw both primitives.
+void AIDebugComponent::DrawAggressiveTargetPoints(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    {
+        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
+        if (lrDriver.mbIsActive && lrDriver.mpCar->meBehaviour == E_AI_BEHAVIOUR_FIGHTING &&
+            lrDriver.mAggression.mbTargetPosValid)
+        {
+            const Vector3 lPosition = lrDriver.mpCar->GetPosition();
+            rw::RGBA lColour; lColour.m_rgba = 0xFF0000FFu;
+            lpDisplay->DrawSphere(lrDriver.mAggression.mTargetPos, 1.5f, lColour);
+            lpDisplay->DrawLine(lPosition, lrDriver.mAggression.mTargetPos, lColour);
+        }
+    }
+}
+
+// ARTIST82773C18: warn over the targeted car while the fighting driver is in its slam state.
+void AIDebugComponent::DrawAggressiveWarning(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    {
+        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
+        if (lrDriver.mbIsActive && lrDriver.mpCar->meBehaviour == E_AI_BEHAVIOUR_FIGHTING &&
+            lrDriver.mAggression.meAggressionState == E_AI_AGGRESSION_STATE_ATTACK_SLAM &&
+            lrDriver.mAggression.mpTargetCar)
+        {
+            Vector3 lPosition = lrDriver.mAggression.mpTargetCar->GetPosition();
+            lPosition.mV.y += 2.0f;
+            rw::RGBA lColour; lColour.m_rgba = 0xFF0000FFu;
+            lpDisplay->DrawText(lPosition, "DANGER", 40.0f, lColour);
+        }
+    }
+}
+
+// ARTIST827743A0: the active-driver ordinal is the printed index, with * for speed matching.
+void AIDebugComponent::DrawCarIndices(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    {
+        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
+        if (lrDriver.mbIsActive)
+        {
+            const Vector3 lPosition = lrDriver.mpCar->GetPosition();
+            char lacText[16];
+            CgsCore::SPrintf(lacText, 10, "%d", i);
+            rw::RGBA lColour;
+            f32 lfSize;
+            if (lrDriver.mpCar->meBehaviour == E_AI_BEHAVIOUR_FIGHTING)
+            {
+                if (lrDriver.mAggression.meSpeedMatchType != 0)
+                    CgsCore::SPrintf(lacText, 10, "%d*", i);
+                lfSize = 40.0f;
+                lColour.m_rgba = 0xFF0000FFu;
+            }
+            else
+            {
+                lfSize = 24.0f;
+                lColour.m_rgba = 0xFF4062FFu;
+            }
+            lpDisplay->DrawText(lPosition, lacText, lfSize, lColour);
+        }
+    }
+}
+
+namespace
+{
+    __vector4 DebugRcpSqrt2(__vector4 lSquared)
+    {
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        __vector4 lEstimate = __vrsqrtefp(lSquared);
+        __vector4 lCorrection = __vnmsubfp(lSquared, __vmulfp(lEstimate, lEstimate), lOne);
+        lEstimate = __vmaddfp(__vmulfp(lEstimate, lHalf), lCorrection, lEstimate);
+        lCorrection = __vnmsubfp(lSquared, __vmulfp(lEstimate, lEstimate), lOne);
+        return __vmaddfp(__vmulfp(lEstimate, lHalf), lCorrection, lEstimate);
+    }
+    __vector4 DebugDot2(__vector4 lLeft, __vector4 lRight)
+    {
+        const __vector4 lProduct = __vmulfp(lLeft, lRight);
+        return __vaddfp(__vspltw(lProduct, 0), __vspltw(lProduct, 1));
+    }
+}
+
+// ARTIST8277F390: find section edges at this portal, then draw the direction marker.
+void AIDebugComponent::DrawAISectionEdge(CgsDev::Debug3DImmediateRender* lpDisplay,
+    const AISection* lpSection, s32 liPortal, Vector3 lDirection, s32 liAlpha) const
+{
+    const Portal* lpPortal = lpSection->GetPortal(static_cast<u8>(liPortal));
+    const Vector3 lPortalPosition = lpPortal->GetPosition();
+    const __vector4 lPortal2 = {lPortalPosition.mV.x, lPortalPosition.mV.z, 0.0f, 0.0f};
+    const __vector4 lDirection2 = {lDirection.mV.x, lDirection.mV.z, 0.0f, 0.0f};
+    for (u32 i = 0; i < 4; ++i)
+    {
+        const AISection::Vector2& lrStart = lpSection->mpaCorners[i];
+        const AISection::Vector2& lrEnd = lpSection->mpaCorners[(i + 1) % 4];
+        const __vector4 lStart = {lrStart.x, lrStart.y, 0.0f, 0.0f};
+        const __vector4 lEnd = {lrEnd.x, lrEnd.y, 0.0f, 0.0f};
+        const __vector4 lEdge = __vsubfp(lStart, lEnd);
+        const __vector4 lNormal = __vmulfp(lEdge, DebugRcpSqrt2(DebugDot2(lEdge, lEdge)));
+        const f32 lfDirection = DebugDot2(lNormal, lDirection2).x;
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        const __vector4 lCentre = __vmulfp(__vaddfp(lStart, lEnd), lHalf);
+        const __vector4 lDelta = __vsubfp(lCentre, lPortal2);
+        const __vector4 lSquared = DebugDot2(lDelta, lDelta);
+        f32 lfDistance = __vmulfp(lSquared, DebugRcpSqrt2(lSquared)).x;
+        if (lSquared.x == 0.0f) lfDistance = 0.0f;
+        if (lfDistance < 1.0f)
+        {
+            const f32 lfHeight = lpSection->GetPortal(static_cast<u8>(liPortal))->GetPositionY();
+            const Vector3 lStartBottom(lrStart.x, lfHeight - 40.0f, lrStart.y);
+            const Vector3 lStartTop(lrStart.x, lfHeight, lrStart.y);
+            const Vector3 lEndTop(lrEnd.x, lfHeight, lrEnd.y);
+            const Vector3 lEndBottom(lrEnd.x, lfHeight - 40.0f, lrEnd.y);
+            rw::RGBA lColour;
+            if (std::fabs(lfDirection) < 0.1f)
+            {
+                lColour.m_rgba = (static_cast<u32>(liAlpha) << 24) | 0x004040FFu;
+                lpDisplay->DrawSolidQuad(lStartBottom, lStartTop, lEndTop, lEndBottom, lColour);
+            }
+            else
+            {
+                lColour.m_rgba = (static_cast<u32>(liAlpha) << 24) | 0x0000FF00u;
+                lpDisplay->DrawSolidQuad(lStartBottom, lStartTop, lEndTop, lEndBottom, lColour);
+                lColour.m_rgba = (static_cast<u32>(liAlpha) << 24) | 0x000000FFu;
+                if (lfDirection < 0.0f)
+                    lpDisplay->DrawSolidTriangle(Vector3(lrStart.x, lfHeight - 12.0f, lrStart.y),
+                        Vector3(lrStart.x, lfHeight - 2.0f, lrStart.y), Vector3(lrEnd.x, lfHeight - 6.0f, lrEnd.y), lColour);
+                else
+                    lpDisplay->DrawSolidTriangle(Vector3(lrStart.x, lfHeight - 6.0f, lrStart.y),
+                        Vector3(lrEnd.x, lfHeight - 2.0f, lrEnd.y), Vector3(lrEnd.x, lfHeight - 12.0f, lrEnd.y), lColour);
+            }
+        }
+    }
+}
+
+namespace
+{
+    Vector3 NormalizeDebugVector(Vector3 lVector);
+    // ARTIST8278BE6C..AC and 8278C020..3C use one rsqrt refinement.
+    Vector3 NormalizeDebugVectorOne(Vector3 lVector)
+    {
+        const __vector4 lDot = __vmsum3fp(lVector.mV, lVector.mV);
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        __vector4 lEstimate = __vrsqrtefp(lDot);
+        const __vector4 lCorrection = __vnmsubfp(lDot, __vmulfp(lEstimate, lEstimate), lOne);
+        lEstimate = __vmaddfp(__vmulfp(lEstimate, lHalf), lCorrection, lEstimate);
+        Vector3 lResult; lResult.mV = __vmulfp(lVector.mV, lEstimate);
+        return lResult;
+    }
+    f32 DebugLength3(Vector3 lVector)
+    {
+        const __vector4 lSquared = __vmsum3fp(lVector.mV, lVector.mV);
+        const __vector4 lZero = __vspltisw(0);
+        return __vsel(__vmulfp(lSquared, DebugRcpSqrt2(lSquared)), lZero,
+                      __vcmpeqfp(lZero, lSquared)).x;
+    }
+    f32 DebugClampedDot3(Vector3 lLeft, Vector3 lRight)
+    {
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lMinusOne = __vcfsx(__vspltisw(-1), 0);
+        return __vminfp(__vmaxfp(__vmsum3fp(lLeft.mV, lRight.mV), lMinusOne), lOne).x;
+    }
+}
+
+// ARTIST8278BBE0: draw alternate portals at junctions ahead of car zero.
+void AIDebugComponent::DrawChevrons(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    const AICar& lrCar = mpAIModule->maAICars[0];
+    const Vector3 lCarPosition = lrCar.GetPosition();
+    const Vector3 lCarDirection = lrCar.GetDirection();
+    const Route* lpRoute = lrCar.GetRoute();
+    if (!lrCar.HasValidRoute()) return;
+    Vector3 lPreviousPortal(0.0f, 0.0f, 0.0f);
+    for (s32 i = 0; i < lpRoute->GetNodeCount() - 1; ++i)
+    {
+        const RouteNode* lpNode = lpRoute->GetNode(i);
+        const RouteNode* lpNext = lpRoute->GetNode(i + 1);
+        const AISection* lpSection = mpAISectionsData->GetAISection(lpNode->GetSectionIndex());
+        if (lpSection->mu8NumPortals > 2)
+        {
+            for (u32 j = 0; j < lpSection->mu8NumPortals; ++j)
+            {
+                const Portal* lpPortal = lpSection->GetPortal(static_cast<u8>(j));
+                const Vector3 lPortalPosition = lpPortal->GetPosition();
+                if (j != lpNode->GetPortalIndex() && DebugLength3(lPreviousPortal - lPortalPosition) > 10.0f &&
+                    lpSection->GetPortal(static_cast<u8>(j))->mu8NumBoundaryLines)
+                {
+                    const Vector3 lToPortal = lPortalPosition - lCarPosition;
+                    const f32 lfForwardAngle = XboxMath::XMVectorACos(DebugClampedDot3(
+                        NormalizeDebugVectorOne(lToPortal), NormalizeDebugVectorOne(lCarDirection))) * 57.295780181884766f;
+                    if (!(lfForwardAngle > 90.0f))
+                    {
+                        const BoundaryLine* lpBoundary = lpSection->GetPortal(static_cast<u8>(j))->GetBoundaryLine(0);
+                        CGS_ASSERT(lpBoundary != 0, "lpBoundry != NULL");
+                        const Vector3 lBoundary(lpBoundary->mfStartX - lpBoundary->mfEndX, 0.0f,
+                            lpBoundary->mfStartY - lpBoundary->mfEndY);
+                        const Vector3 lBoundaryDirection = NormalizeDebugVectorOne(NormalizeDebugVector(lBoundary));
+                        f32 lfAngle = std::fabs(XboxMath::XMVectorACos(DebugClampedDot3(
+                            lBoundaryDirection, NormalizeDebugVectorOne(lCarDirection))) * 57.295780181884766f);
+                        CGS_ASSERT(lfAngle <= 180.0f, "lfAlphaProportion <= KF_STRAIGHT_ANGLE");
+                        if (lfAngle > 90.0f) lfAngle = 180.0f - lfAngle;
+                        __vector4 lScale; lScale.x = 128.0f; lScale.y = lScale.z = lScale.w = 128.0f;
+                        __vector4 lFraction; lFraction.x = lfAngle * 0.011111111380159855f;
+                        lFraction.y = lFraction.z = lFraction.w = lFraction.x;
+                        const __vector4 lZero = __vspltisw(0);
+                        const s32 liAlpha = static_cast<s32>(__vmaddfp(lScale, lFraction, lZero).x);
+                        const Vector3 lNode(lpNode->GetPositionX(), 0.0f, lpNode->GetPositionZ());
+                        const Vector3 lNext(lpNext->GetPositionX(), 0.0f, lpNext->GetPositionZ());
+                        DrawAISectionEdge(lpDisplay, lpSection, static_cast<s32>(j),
+                            NormalizeDebugVector(lNext - lNode), liAlpha);
+                    }
+                }
+            }
+        }
+        lPreviousPortal = lpSection->GetPortal(lpNode->GetPortalIndex())->GetPosition();
+    }
+}
+
+// ARTIST82773D28 (export hole): four nearby-vehicle boundary lines at car height + 0.3.
+void AIDebugComponent::DrawNearbyVehicles(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    {
+        AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
+        if (lrDriver.mpCar)
+        {
+            // The original makes this initial position call before iterating the nearby list.
+            lrDriver.mpCar->GetPosition();
+            for (s32 j = 0; j < lrDriver.mNearbyVehicles.GetCount(); ++j)
+            {
+                const NearbyVehicle* lpVehicle = lrDriver.mNearbyVehicles.GetVehiclePointer(j);
+                for (s32 k = 0; k < NearbyVehicle::KI_TRAFFIC_NUM_HNG_LINES; ++k)
+                {
+                    const BoundaryLine& lrLine = lpVehicle->maHNGLines[k];
+                    const f32 lfStartHeight = lrDriver.mpCar->GetPosition().mV.y + 0.3f;
+                    const Vector3 lStart(lrLine.mfStartX, lfStartHeight, lrLine.mfStartY);
+                    const f32 lfEndHeight = lrDriver.mpCar->GetPosition().mV.y + 0.3f;
+                    const Vector3 lEnd(lrLine.mfEndX, lfEndHeight, lrLine.mfEndY);
+                    rw::RGBA lColour; lColour.m_rgba = 0xFFFFFF00u;
+                    lpDisplay->DrawLine(lStart, lEnd, lColour);
+                }
+            }
+        }
+    }
+}
+
+namespace
+{
+    // ARTIST827738F8 uses an unguarded rsqrt estimate and two refinements.
+    Vector3 NormalizeDebugVector(Vector3 lVector)
+    {
+        const __vector4 lDot = __vmsum3fp(lVector.mV, lVector.mV);
+        const __vector4 lOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lHalf = __vcfsx(__vspltisw(1), 1);
+        __vector4 lEstimate = __vrsqrtefp(lDot);
+        __vector4 lCorrection = __vnmsubfp(lDot, __vmulfp(lEstimate, lEstimate), lOne);
+        lEstimate = __vmaddfp(__vmulfp(lEstimate, lHalf), lCorrection, lEstimate);
+        lCorrection = __vnmsubfp(lDot, __vmulfp(lEstimate, lEstimate), lOne);
+        lEstimate = __vmaddfp(__vmulfp(lEstimate, lHalf), lCorrection, lEstimate);
+        Vector3 lResult; lResult.mV = __vmulfp(lVector.mV, lEstimate);
+        return lResult;
+    }
+}
+
+// ARTIST827738F8: draw steering-target and velocity directions for ready drivers.
+void AIDebugComponent::DrawCarControlData(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    {
+        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
+        if (lrDriver.mpCar)
+        {
+            const Vector3 lPosition = lrDriver.mpCar->GetPosition();
+            if (lrDriver.mbIsActive && lrDriver.mbIsRacingLineInitialised)
+            {
+                Vector3 lDirection(lrDriver.mSteeringTargetVector.mV.x, 0.0f,
+                    lrDriver.mSteeringTargetVector.mV.y);
+                lDirection = NormalizeDebugVector(NormalizeDebugVector(lDirection));
+                const __vector4 lLength = __vspltw(__vcfsx(__vspltisw(15), 0), 0);
+                Vector3 lEnd; lEnd.mV = __vmaddfp(lDirection.mV, lLength, lPosition.mV);
+                rw::RGBA lSteeringColour; lSteeringColour.m_rgba = 0xFFFFFF00u;
+                lpDisplay->DrawLine(lPosition, lEnd, lSteeringColour);
+                Vector3 lVelocity = lrDriver.mpCar->GetVelocity();
+                lVelocity.mV.y = 0.0f;
+                lVelocity = NormalizeDebugVector(lVelocity);
+                lEnd.mV = __vmaddfp(lVelocity.mV, lLength, lPosition.mV);
+                rw::RGBA lVelocityColour; lVelocityColour.m_rgba = 0xFFFF00FFu;
+                lpDisplay->DrawLine(lPosition, lEnd, lVelocityColour);
+            }
+        }
+    }
+}
+
+// ARTIST82773798: the cached portal targets are plotted at car height plus eight.
+void AIDebugComponent::DrawPortalTargets(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    {
+        AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
+        if (lrDriver.mbIsActive && lrDriver.mbIsRacingLineInitialised)
+        {
+            const Vector3 lCarPosition = lrDriver.mpCar->GetPosition();
+            RacingLine& lrLine = lrDriver.mRacingLine;
+            for (s32 j = lrLine.mFirstSectionInCache; j < lrLine.mLastSectionInCache; ++j)
+            {
+                const SectionData* lpSection = lrDriver.mRacingLineGenerator.GetSectionPointer(&lrLine, j);
+                const Vector3 lTarget(lpSection->mPortalEntranceAndExit.mV.z,
+                    lCarPosition.mV.y + 8.0f, lpSection->mPortalEntranceAndExit.mV.w);
+                rw::RGBA lColour; lColour.m_rgba = 0xFF0000F0u;
+                lpDisplay->DrawSolidSphere(lTarget, 2.0f, lColour);
+            }
+        }
+    }
+}
+
+// ARTIST827735D8: the selected car marker and successive route-node segments.
+void AIDebugComponent::DrawAICarRoute(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    const AICar& lrCar = mpAIModule->maAICars[miCurrentAICar];
+    Vector3 lCarPosition = lrCar.GetPosition();
+    lCarPosition.mV.y -= 2.0f;
+    // ARTIST CRT initializer 82C69108 sets 8300D730 to {3, 200, 3, 0}.
+    const Vector3 lExtent(3.0f, 200.0f, 3.0f);
+    rw::RGBA lMarker; lMarker.m_rgba = 0xFFAAAAAAu;
+    lpDisplay->DrawSolidBox(lCarPosition + lExtent, lCarPosition - lExtent, lMarker);
+    const Route* lpRoute = lrCar.GetRoute();
+    Vector3 lPrevious(0.0f, 0.0f, 0.0f);
+    for (s32 i = 0; i < lpRoute->GetNodeCount(); ++i)
+    {
+        const RouteNode* lpNode = lpRoute->GetNode(i);
+        const Vector3 lCurrent(lpNode->GetPositionX(), 2.0f, lpNode->GetPositionZ());
+        if (i)
+        {
+            rw::RGBA lColour;
+            lColour.m_rgba = i == lrCar.miNextRouteNodeIndex ? 0xFFFF0000u : 0xFF0000F0u;
+            lpDisplay->DrawLine(lPrevious, lCurrent, lColour);
+        }
+        lPrevious = lCurrent;
+    }
+}
+
+// ARTIST827671C8: draw the current car's reset section portal pair and their boxes.
+void AIDebugComponent::DrawResetOnTrackAISection(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    const AICar& lrCar = mpAIModule->maAICars[miCurrentAICar];
+    if (lrCar.muResetOnTrackSectionIndex != 0x7FFF)
+    {
+        const AISection* lpSection = mpAISectionsData->GetAISection(lrCar.muResetOnTrackSectionIndex);
+        const Vector3 lStart = lpSection->GetPortal(lrCar.muResetOnTrackStartPortal)->GetPosition();
+        const Vector3 lEnd = lpSection->GetPortal(lrCar.muResetOnTrackEndPortal)->GetPosition();
+        rw::RGBA lLine; lLine.m_rgba = 0xFF00FFFFu;
+        rw::RGBA lStartColour; lStartColour.m_rgba = 0xFF0000FFu;
+        rw::RGBA lEndColour; lEndColour.m_rgba = 0xFFFF0000u;
+        const Vector3 lStartExtent(3.0f, 3.0f, 3.0f);
+        const Vector3 lEndExtent(0.25f, 0.25f, 0.25f);
+        lpDisplay->DrawLine(lStart, lEnd, lLine);
+        lpDisplay->DrawSolidBox(lStart - lStartExtent, lStart + lStartExtent, lStartColour);
+        lpDisplay->DrawSolidBox(lEnd - lEndExtent, lEnd + lEndExtent, lEndColour);
+    }
+}
+
+// ARTIST8278BAC8: draw at most two route sections starting at the current node.
+void AIDebugComponent::DrawAICarSection(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    const AICar& lrCar = mpAIModule->maAICars[miCurrentAICar];
+    if (lrCar.HasValidRoute())
+    {
+        const Route* lpRoute = lrCar.GetRoute();
+        const s32 liRemaining = lpRoute->GetNodeCount() - lrCar.miNextRouteNodeIndex;
+        const s32 liCount = liRemaining < 2 ? liRemaining : 2;
+        const s32 liEnd = lrCar.miNextRouteNodeIndex + liCount;
+        for (s32 i = lrCar.miNextRouteNodeIndex; i < liEnd; ++i)
+        {
+            const u32 luSection = lpRoute->GetNode(i)->GetSectionIndex();
+            const bool lbBest = lrCar.GetBestSectionIndex() == luSection;
+            BrnAIDebugUtils::DrawAllSectionData(lpDisplay, mpAISectionsData->GetAISection(luSection), lbBest);
+        }
+    }
+}
+
+// ARTIST8277F228: draw the first portal of each driver's final route section to its car.
+void AIDebugComponent::DrawDirectDestinationVector(CgsDev::Debug3DImmediateRender* lpDisplay) const
+{
+    for (s32 i = 0; i < KI_MAX_ACTIVE_RACE_CARS; ++i)
+    {
+        const AIDriver& lrDriver = mpAIModule->maAIDrivers[i];
+        const AICar* lpCar = lrDriver.mpCar;
+        if (lpCar && lpCar->HasValidRoute() && lpCar->GetRoute()->GetNodeCount() > 1)
+        {
+            const u16 luSection = lpCar->GetSectionIndexOfLastSectionInRoute();
+            const AISectionsData* lpSections = mpAIModule->GetAISectionsData();
+            const Vector3 lPortal = lpSections->GetAISection(luSection)->GetPortal(0)->GetPosition();
+            const Vector3 lCar = lpCar->GetPosition();
+            rw::RGBA lColour; lColour.m_rgba = 0xFFFFFF00u;
+            lpDisplay->DrawLine(lPortal, lCar, lColour);
+        }
+    }
+}
+
+// ARTIST82796A08: preserve each original flag and per-draw call in console order.
+void AIDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
+{
+    CGS_ASSERT(mpAIModule != 0, "mpAIModule != NULL");
+    if (mbDrawAllDriverData)
+    {
+        mbDrawRacingLines = true;
+        mbDrawPortalTargets = true;
+        mbDrawDirectVector = true;
+        mbDrawControlData = true;
+    }
+    if (mbDrawAICarStatesOnCar) DrawAIStatesOnCar(lpDisplay);
+    if (mbDrawHNGMap && mpAIModule->maAIDrivers[0].mbIsActive &&
+        mpAIModule->maAIDrivers[0].mbIsRacingLineInitialised)
+    {
+        AIDriver& lrDriver = mpAIModule->maAIDrivers[0];
+        lrDriver.mRacingLineGenerator.RenderHardNoGoMap(&lrDriver.mRacingLine);
+    }
+    if (mbDrawAICarRoute) DrawAICarRoute(lpDisplay);
+    if (mbDrawCurrentSection) DrawAICarSection(lpDisplay);
+    if (mbDrawResetOnTrackSection) DrawResetOnTrackAISection(lpDisplay);
+    if (mbDrawPortalTargets) DrawPortalTargets(lpDisplay);
+    if (mbDrawDestinationVector) DrawDirectDestinationVector(lpDisplay);
+    if (mbDrawControlData) DrawCarControlData(lpDisplay);
+    if (mbDrawAggressiveTargetPoints) DrawAggressiveTargetPoints(lpDisplay);
+    if (mbDrawAggressiveWarning) DrawAggressiveWarning(lpDisplay);
+    if (mbDrawAICarStatesTable) DrawCarIndices(lpDisplay);
+    if (mbDrawNearbyVehicles) DrawNearbyVehicles(lpDisplay);
+    if (mbDrawCarIndices && !mbDrawAICarStatesTable) DrawCarIndices(lpDisplay);
+    if (mbDrawChevrons) DrawChevrons(lpDisplay);
+}
+
 void AIDebugComponent::AssertNativeLayout()
 {
+    CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mbDrawAICarStatesTable) == 0x19), "ARTIST states table flag");
+    CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mbDrawAICarStatesOnCar) == 0x1D), "ARTIST states on car flag");
+    CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mbDrawAICarRoute) == 0x29), "ARTIST route flag");
+    CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mbDrawAllDriverData) == 0x2C), "ARTIST all driver flag");
+    CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mbDrawPortalTargets) == 0x2E), "ARTIST portal flag");
+    CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mbDrawControlData) == 0x31), "ARTIST controls flag");
+    CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mbDrawHNGMap) == 0x37), "ARTIST HNG flag");
     CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mPIDCoefficientsGraph) == 0x48), "PID graph offset");
     CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mSteerAngleVsPIDOutputGraph) == 0x1C98), "steering graph offset");
     CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mPIDDebugData) == 0x38E8), "PID debug data offset");

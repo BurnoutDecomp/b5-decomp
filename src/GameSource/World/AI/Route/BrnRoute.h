@@ -63,7 +63,7 @@ struct Route
     s32 GetNodeCount() const { return miNodeCount; }
     s32 GetDefaultStartNode() const { return miDefaultStartNode; }
     Status GetStatus() const { return meStatus; }
-    const RouteNode* GetNode(s32 liNodeIndex) const { return &maNodes[liNodeIndex]; }
+    const RouteNode* GetNode(s32 liNodeIndex) const; // ARTIST8230F4D0
     f32 GetDistance() const { return maNodes[0].GetDistanceLeft(); }
 
     RouteNode maNodes[KI_MAX_NODES];
