@@ -652,11 +652,7 @@ namespace BrnWorldIO
             CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
             return &mGuiEventQueue;
         }
-        GuiEventInputQueue* GetGuiEventQueue()
-        {
-            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-            return &mGuiEventQueue;
-        }
+        GuiEventInputQueue* GetGuiEventQueue();                                           // X360 0x827A4E08
 
         // ---- prop physical/update notifications ----
         void AppendPropBecamePhysicalEventQueue(const PropBecamePhysicalEventQueue* lpQueue); // :614 W (0x827AA938)

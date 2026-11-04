@@ -12,6 +12,7 @@
 // Sibling file of BrnWorldModuleIO.cpp (the UpdateInputBuffer bodies).
 #include "GameSource/World/BrnWorldModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstring>   // memcpy
 
@@ -604,6 +605,20 @@ void UpdateOutputBuffer::SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQue
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
     mPropVFXLocatorQueue.Clear();
     mPropVFXLocatorQueue.Append(*lpQueue);
+}
+
+// X360 0x827A4E08 checks the write lock and returns mGuiEventQueue at +170176.
+UpdateOutputBuffer::GuiEventInputQueue* UpdateOutputBuffer::GetGuiEventQueue()
+{
+    if (!IsBufferLockedForWriting())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Not locked for writing\n";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 608);
+        CgsDev::Assert::EndAssert();
+    }
+    return &mGuiEventQueue;
 }
 
 // ---- prop physical/update notifications ------------------------------------------------------

@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
@@ -2089,13 +2090,12 @@ WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
                                    const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer,
                                    BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer )
 {
-    WorldEntityIO::OutputBuffer_PostPhysics* lpWorldEntityOutput_PostPhysics = 0;
-    BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInput_PostPhysics = 0;
-    BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutput_PostPhysics = 0;
-
-    lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput_PostPhysics, "WorldEntityPostPhysics" );
-    lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PostPhysics, "TrafficPostPhysics" );
-    lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PostPhysics, "TrafficPostPhysics" );
+    CgsModule::IOHelper<WorldEntityIO::OutputBuffer_PostPhysics> lWorldEntityOutput_PostPhysics(
+        lpOutputBufferStack, "WorldEntityPostPhysics" );
+    CgsModule::IOHelper<BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics> lTrafficInput_PostPhysics(
+        lpInputBufferStack, "TrafficPostPhysics" );
+    CgsModule::IOHelper<BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics> lTrafficOutput_PostPhysics(
+        lpOutputBufferStack, "TrafficPostPhysics" );
 
     // Drain the world in-event queue into the traffic post-physics action queue.
     // FLAG cross-home cast (the committed bridge precedent): the traffic input's
@@ -2103,11 +2103,11 @@ WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
     // same CgsModule::VariableEventQueue<13312,16> the world input publishes (the
     // X360 calls VariableEventQueue<13312,16>::Append on it directly).
     lpUpdateInputBuffer->LockForRead();
-    lpTrafficInput_PostPhysics->LockForWrite();
+    lTrafficInput_PostPhysics->LockForWrite();
     reinterpret_cast<BrnWorldIO::GameActionQueue*>(
-        lpTrafficInput_PostPhysics->GetGameActionQueue() )->Append(
+        lTrafficInput_PostPhysics->GetGameActionQueue() )->Append(
             *lpUpdateInputBuffer->GetGameActionQueue() );
-    lpTrafficInput_PostPhysics->UnlockForWrite();
+    lTrafficInput_PostPhysics->UnlockForWrite();
     lpUpdateInputBuffer->UnlockForRead();
 
     // The world-entity validation protocol.
@@ -2121,35 +2121,31 @@ WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
             lpUpdateInputBuffer->GetWorldEntityRequestInterface() ) );
     lpUpdateInputBuffer->UnlockForRead();
 
-    lpWorldEntityOutput_PostPhysics->LockForWrite();
-    mWorldEntityModule.UpdateCollisionValidation( lpWorldEntityOutput_PostPhysics );
-    lpWorldEntityOutput_PostPhysics->UnlockForWrite();
+    lWorldEntityOutput_PostPhysics->LockForWrite();
+    mWorldEntityModule.UpdateCollisionValidation( lWorldEntityOutput_PostPhysics );
+    lWorldEntityOutput_PostPhysics->UnlockForWrite();
 
     mTrafficEntityModule.PostPhysicsUpdate( lpInputBufferStack, lpOutputBufferStack,
-                                            lpTrafficInput_PostPhysics,
-                                            lpTrafficOutput_PostPhysics, lUpdateSet );
+                                            lTrafficInput_PostPhysics,
+                                            lTrafficOutput_PostPhysics, lUpdateSet );
 
     // Flush the world-entity requests + status and the traffic GUI events out.
-    lpWorldEntityOutput_PostPhysics->LockForWrite();
-    lpTrafficOutput_PostPhysics->LockForWrite();
+    lWorldEntityOutput_PostPhysics->LockForWrite();
+    lTrafficOutput_PostPhysics->LockForWrite();
     lpUpdateOutputBuffer->LockForWrite();
 
     // The source is write-locked above; these mutable accessors match the X360 calls
     // at 0x822BA810 and 0x822BA8B8.
     lpUpdateOutputBuffer->GetResourceRequestResourceInterface()->Append(
-        *lpWorldEntityOutput_PostPhysics->GetResourceRequestInterface());
+        *lWorldEntityOutput_PostPhysics->GetResourceRequestInterface());
     lpUpdateOutputBuffer->SetWorldEntityStatusInterface(
-        lpWorldEntityOutput_PostPhysics->GetStatusInterface());
+        lWorldEntityOutput_PostPhysics->GetStatusInterface());
     BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics::GuiEventInputQueue* const lpTrafficGuiEvents =
-        lpTrafficOutput_PostPhysics->GetGuiEventQueue();
+        lTrafficOutput_PostPhysics->GetGuiEventQueue();
     lpUpdateOutputBuffer->GetGuiEventQueue()->Append(*lpTrafficGuiEvents);
     lpUpdateOutputBuffer->UnlockForWrite();
-    lpTrafficOutput_PostPhysics->UnlockForWrite();
-    lpWorldEntityOutput_PostPhysics->UnlockForWrite();
-
-    lpOutputBufferStack->DestroyIOBuffer( &lpTrafficOutput_PostPhysics );
-    lpInputBufferStack->DestroyIOBuffer( &lpTrafficInput_PostPhysics );
-    lpOutputBufferStack->DestroyIOBuffer( &lpWorldEntityOutput_PostPhysics );
+    lTrafficOutput_PostPhysics->UnlockForWrite();
+    lWorldEntityOutput_PostPhysics->UnlockForWrite();
 }
 
 // ============================================================================
