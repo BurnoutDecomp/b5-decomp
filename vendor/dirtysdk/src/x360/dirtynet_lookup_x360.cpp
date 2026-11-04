@@ -70,7 +70,7 @@ static SocketNameMapX360* SocketFindName(SocketStateX360* state, const char* nam
 }
 
 // ARTIST82B2B150: name remapping precedes the native address/port map.
-static const sockaddr* SocketMapAddress(sockaddr* output, const sockaddr* input)
+const sockaddr* SocketMapAddress(sockaddr* output, const sockaddr* input)
 {
     const volatile u8* source = reinterpret_cast<const volatile u8*>(input);
     const u32 a = source[4], b = source[5], c = source[6];
@@ -219,9 +219,8 @@ extern "C" HostentT* SocketLookup(const char* name, s32 timeout)
     return host;
 }
 // ARTIST82B2B2D8, translate native socket errors into DirtySock results.
-static s32 SocketTranslateError(s32 value)
+s32 SocketTranslateErrorCode(s32 value, s32 error)
 {
-    const s32 error = WSAGetLastError();
     if (value >= 0) return value;
     switch (error)
     {
@@ -232,6 +231,10 @@ static s32 SocketTranslateError(s32 value)
     case 10022: return -11;
     default: return -7;
     }
+}
+s32 SocketTranslateError(s32 value)
+{
+    return SocketTranslateErrorCode(value, WSAGetLastError());
 }
 static void SocketFdAdd(fd_set* set, SOCKET nativeSocket)
 {

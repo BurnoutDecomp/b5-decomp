@@ -63,8 +63,25 @@ extern "C" void* (*dword_83277830)(u32 auSize);
 // in the audio rodata TU, so they are referenced as externs and never fabricated
 // here. The sample-rate table is read with `lhzx` (unsigned u16); the bitrate table
 // with `lhax` (signed s16).
-extern "C" const u16 word_8214B6A8[]; // sample-rate table (Hz), indexed by mucSampleRateIndex
-extern "C" const s16 word_8214B5E8[]; // bitrate table, indexed by the derived slot
+namespace
+{
+    // ARTIST 0x8214B6A8
+    const u16 KAU_SAMPLE_RATE_HZ[10] =
+    {
+        44100, 48000, 32000, 22050, 24000, 16000, 11025, 12000, 8000, 0
+    };
+
+    // ARTIST 0x8214B5E8
+    const s16 KAI_BIT_RATE_KBPS[96] =
+    {
+        0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0,
+        0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0,
+        0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0,
+        0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0,
+        0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0,
+        0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0
+    };
+}
 } // namespace
 
 // ----------------------------------------------------------------------------
@@ -193,7 +210,7 @@ s32 CMpegBase::ProcessHeader(u32 auHeader)
     // Mono when the channel mode == 3, stereo otherwise.
     mucChannelCount = static_cast<u8>((mucMode == 3) ? 1 : 2);
 
-    const u32 luSampleRate = word_8214B6A8[mucSampleRateIndex];
+    const u32 luSampleRate = KAU_SAMPLE_RATE_HZ[mucSampleRateIndex];
     muSampleRate = luSampleRate;
     muSampleRateCopy = luSampleRate;
 
@@ -203,7 +220,7 @@ s32 CMpegBase::ProcessHeader(u32 auHeader)
 
     const u8 lucLsf = mucIsLsf;
     const s32 liBitRateSlot = 48 * lucLsf + 16 * lucLayerValue - 16 + lucBitRateIndex;
-    const s32 liBitRate = word_8214B5E8[liBitRateSlot];
+    const s32 liBitRate = KAI_BIT_RATE_KBPS[liBitRateSlot];
     miBitRate = liBitRate;
 
     if (lucLayerValue == 1) // Layer I

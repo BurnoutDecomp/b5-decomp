@@ -7,13 +7,6 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h" // shadow::Device
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h" // renderengine::BlendState*
 
-// The two shared render states the debris pass binds (ImmediateMode.cpp), declared
-// `extern void*` exactly as BrnSparkRenderer_Render.cpp / BrnTrailRender.cpp declare theirs.
-extern void* gpImDebrisRasterizerState;      // dword_83010F44  cull BACK
-extern void* gpImDebrisDepthStencilState;    // dword_83010F48  Z test + Z write, LESSEQUAL
-void ImDeviceSetDepthStencilState(void* lpState);
-void ImDeviceSetRasterizerState(void* lpState);
-
 // BrnParticle::Native::BrnDebrisRenderer::Construct @ 0x82281DA8
 //
 // Reconstructed store-for-store from the X360 ARTIST asm. The original built a
@@ -159,8 +152,8 @@ namespace Native
     {
         mpRenderer->BeginRendering();
         mpRenderer->SetState(reinterpret_cast<const CgsGraphics::BlendState*>(mpBlendState));
-        ImDeviceSetRasterizerState(gpImDebrisRasterizerState);       // dword_83010F44
-        ImDeviceSetDepthStencilState(gpImDebrisDepthStencilState);   // dword_83010F48
+        mpRenderer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullCW);       // dword_83010F44
+        mpRenderer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOn);   // dword_83010F48
              // dword_83010F60 on unit 0
 
         mpRenderer->SetViewProjection(lViewProjection);

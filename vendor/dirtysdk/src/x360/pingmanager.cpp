@@ -81,6 +81,13 @@ extern "C" s32 PingManagerPingServer2(PingManagerRefT* pRef, u32 uAddress, PingM
     return r.uSeqn;
 }
 
+// ARTIST 82B27BF0 clears the address slot and forwards the callback and data.
+extern "C" s32 PingManagerPingServer(PingManagerRefT* pRef, u32,
+                                     PingManagerCallbackT* pCallback, void* pData)
+{
+    return PingManagerPingServer2(pRef, 0, pCallback, pData);
+}
+
 // ARTIST 82B27798; singleton references are shared with PingManagerCreate.
 extern "C" void ProtoPingDestroy(ProtoPingRefT* pRef);
 extern "C" void PingManagerDestroy(PingManagerRefT* pRef)

@@ -21,8 +21,6 @@
 // pure-virtuals return void); the Hex-Rays "int __fastcall ... return result" is the
 // PPC r3 pass-through artefact and is dropped.
 //
-// NOT in this TU (see the header): ~AemsStandardSamplePlayer (the ledger's deleting
-// destructor address belongs to AemsRWSamplePlayer), Pause (own TU).
 // ============================================================================
 
 #include "SDKs/EATech/include/snd/sndaemssampleplayer.h"
@@ -80,6 +78,11 @@ AemsStandardSamplePlayer::AemsStandardSamplePlayer()
     muNumVoices      = 0;
 }
 
+// ARTIST 0x82B72380. The base destructor restores the interface vtable.
+AemsStandardSamplePlayer::~AemsStandardSamplePlayer()
+{
+}
+
 // ----------------------------------------------------------------------------
 // Snd9::AemsStandardSamplePlayer::Release @ 0x82B723C8
 // ----------------------------------------------------------------------------
@@ -103,6 +106,16 @@ void AemsStandardSamplePlayer::Release()
     }
 
     rw::audio::core::System::Free(off_83271928, this, 0);
+}
+
+// ARTIST 0x82B72060
+void AemsStandardSamplePlayer::Pause()
+{
+    rw::audio::core::PlugIn::SetAttribute(mpGain, 0, 0.0f);
+    if (mpSendWet)
+        rw::audio::core::PlugIn::SetAttribute(mpSendWet, 0, 0.0f);
+    rw::audio::core::PlugIn::SetAttribute(mpResample, 0, 0.0f);
+    mPauseState = 1;
 }
 
 // ----------------------------------------------------------------------------

@@ -43,15 +43,6 @@
 // widths so only member ORDER is load-bearing (no offset asserts on the
 // pointer-bearing tail -- same rule sndaems.h / sndhal.h use).
 //
-// FLAG (methods declared here for vtable shape, NOT defined in this TU):
-//   * ~AemsStandardSamplePlayer -- the ledger's `vector deleting destructor'
-//     @ 0x82B72380 stores off_820AB14C, which is
-//     CgsSound::Playback::AemsRWSamplePlayer's vtable (see the done
-//     CgsAemsInterfaceImplementation TU), NOT this class's own ctor-installed vtable
-//     off_8214B310. It is a mis-attributed AemsRWSamplePlayer thunk, so it is BLOCKED
-//     (reconstructing it here would install the wrong vtable). Declared virtual so the
-//     base's virtual dtor slot is satisfied; its real definition is not in this TU.
-//   * Pause -- its own (not-yet-done) TU.
 // ============================================================================
 
 namespace rw
@@ -81,13 +72,12 @@ struct AemsStandardSamplePlayer : public Snd9::IAemsSamplePlayer
     // wet = 0.0, start-threshold = -1.0, length = 0.0, unpaused, 0 panner voices).
     AemsStandardSamplePlayer();
 
-    // @ 0x82B72380 -- BLOCKED (mis-attributed AemsRWSamplePlayer thunk; see file header).
-    // Declared for the base virtual-dtor slot; NOT defined in this TU.
+    // ARTIST 0x82B72380 restores the IAemsSamplePlayer vtable before deletion.
     virtual ~AemsStandardSamplePlayer();
 
     // ---- Snd9::IAemsSamplePlayer control surface ----
     virtual void Release();                                       // @ 0x82B723C8
-    virtual void Pause();                                         // own TU (declared for slot)
+    virtual void Pause();                                         // @ 0x82B72060
     virtual void Unpause();                                       // @ 0x82B720D8
     virtual void SetInput(InputSelector aeSelector, int aiValue); // @ 0x82B71D10
     virtual void SetAzimuth(int aiAzimuth, int* apLegacyAzimuths); // @ 0x82B71E98

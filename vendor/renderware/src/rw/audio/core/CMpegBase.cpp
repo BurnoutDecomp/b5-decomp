@@ -55,8 +55,25 @@ static void *const KMPG_VTable = 0; // &off_8215A8E8
 // never fabricated here, exactly as Xas1Dec references its off_82F8A544 descriptor. The
 // sample-rate table is read with `lhzx` (unsigned u16); the bitrate table with `lhax`
 // (signed s16).
-extern "C" const u16 word_8215A66C[]; // sample-rate table (Hz), indexed by mucSampleRateIndex
-extern "C" const s16 word_8215A680[]; // bitrate table (kbps), indexed by the derived slot
+namespace
+{
+    // ARTIST 0x8215A66C
+    const u16 KAU_SAMPLE_RATE_HZ[10] =
+    {
+        44100, 48000, 32000, 22050, 24000, 16000, 11025, 12000, 8000, 0
+    };
+
+    // ARTIST 0x8215A680
+    const s16 KAI_BIT_RATE_KBPS[96] =
+    {
+        0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0,
+        0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0,
+        0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0,
+        0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0,
+        0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0,
+        0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0
+    };
+}
 
 // XMemSet @ the X360 build = byte-wise memset; reproduced with std::memset.
 inline void XMemSet(void *dst, int value, u32 bytes)
@@ -193,7 +210,7 @@ s32 CMpegBase::ProcessHeader(u32 uHeader)
     // Mono when channel mode == 3, stereo otherwise.
     mucChannelCount = static_cast<u8>((mucMode == 3) ? 1 : 2);
 
-    const u32 uSampleRate = word_8215A66C[mucSampleRateIndex];
+    const u32 uSampleRate = KAU_SAMPLE_RATE_HZ[mucSampleRateIndex];
     muSampleRate = uSampleRate;
     muSampleRateCopy = uSampleRate;
 
@@ -204,7 +221,7 @@ s32 CMpegBase::ProcessHeader(u32 uHeader)
     const u8 ucLsf = mucIsLsf;
     const s32 iBitRateSlot =
         48 * ucLsf + 16 * ucLayerValue - 16 + ucBitRateIndex;
-    const s32 iBitRate = word_8215A680[iBitRateSlot];
+    const s32 iBitRate = KAI_BIT_RATE_KBPS[iBitRateSlot];
     miBitRate = iBitRate;
 
     s32 iResult;

@@ -7,6 +7,7 @@
 #include "BrnCommonTypes.h"                                          // Matrix44 / Vector3 / Vector3Plus / Vector4
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // the per-frame sky/cloud constants
 #include "GameSource/Graphics/ImmediateMode/BrnIm3d.h"               // BrnGraphics::Im3dSkyDome
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h" // shadow::Device
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"  // CgsResource::ResourceDescriptor
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator, rw::Resource
@@ -393,36 +394,6 @@ void BrnSkyDomeManager::CreateGeometry(
 // member-for-member identical across the two platforms.
 // =============================================================================================
 
-// ---- the three shared immediate-mode render states the sky pass installs ----------------------
-// X360 .data slots off dword_83010F20: the sky binds a blend state, a rasteriser state and a
-// depth/stencil state through CgsGraphics::ImRendererBase::SetState's three overloads
-// (sub_82276A68 blend / sub_82276B38 rasteriser / sub_82276AD0 depth-stencil, each a shadow-cached
-// compare-then-apply). The MAIN pass and the ENV-MAP pass share the blend and rasteriser states
-// and differ only in the depth/stencil state.
-//
-// These are engine-wide state objects built by the Cgs*StateFactory modules; no project TU homes
-// them yet, so they are named externals exactly like gpBillboardDepthStencilState
-// (CgsBillboardRenderer.cpp) and gpLionParticleSamplerState (ParticleRender.cpp).
-
-// X360 dword_83010F38 -- the sky pass blend state (shared by both passes).
-extern void* gpSkyDomeBlendState;
-// X360 dword_83010F3C -- the cull-none rasteriser state (shared by both passes; the same object
-// CgsGuiViewModule.cpp names as the shared cull-none rasteriser).
-extern void* gpSkyDomeRasterizerState;
-// X360 dword_83010F4C -- the MAIN sky pass depth/stencil state.
-extern void* gpSkyDomeDepthStencilState;
-// X360 dword_83010F50 -- the ENV-MAP sky pass depth/stencil state (a different object).
-extern void* gpSkyDomeEnvMapDepthStencilState;
-
-// CgsGraphics::ImRendererBase::SetState's three state overloads (X360 sub_82276A68 /
-// sub_82276B38 / sub_82276AD0). Each compares against a module-static shadow and, on a change,
-// pushes the object through the matching shadow::Device::Xbox2Set*LowLevelShadowed. Declared as
-// the minimal external surface, mirroring BrnShadowMapRenderManager.cpp's
-// ImDeviceSetDepthStencilState.
-void ImDeviceSetBlendState(void* lpState);
-void ImDeviceSetRasterizerState(void* lpState);
-void ImDeviceSetDepthStencilState(void* lpState);
-
 // The renderengine D3D device singleton the fast-path binders drive (X360 off_83271608), and the
 // two Xenon D3DDevice_* thunks the sky draw binds through. Declared as the minimal extern surface,
 // matching MeshHelper.cpp / ParticleRender.cpp / shadowingdevice.cpp.
@@ -641,9 +612,9 @@ void BrnSkyDomeManager::Render(
     // previous binding, then with the descriptor's real stride.
     BindSkyDomeStreams(lpRenderer, mpMainVertexBuffer, mpMainIndexBuffer);
 
-    ImDeviceSetBlendState(gpSkyDomeBlendState);
-    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
-    ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState);
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_NoBlendNoAlphaTest);
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOnWriteOff);
 
     const Matrix44 lWorldViewProjection = MultMatrix(lWorldTransform, lViewProjectionMatrix);
     lpRenderer->SetTransform(lWorldViewProjection);
@@ -720,9 +691,9 @@ void BrnSkyDomeManager::RenderToEnvironmentMap(
 
     BindSkyDomeStreams(lpRenderer, mpCubeVertexBuffer, mpCubeIndexBuffer);
 
-    ImDeviceSetBlendState(gpSkyDomeBlendState);
-    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
-    ImDeviceSetDepthStencilState(gpSkyDomeEnvMapDepthStencilState);
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_NoBlendNoAlphaTest);
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullNone);
+    shadow::Device::SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferGreaterEqWriteOff);
 
     const Matrix44 lWorldViewProjection = MultMatrix(lWorldTransform, lViewProjectionMatrix);
     lpRenderer->SetTransform(lWorldViewProjection);

@@ -1,0 +1,375 @@
+// DirtySDK ProtoSSL native object lifecycle and status, ARTIST 82B35758,
+// 82B36E58..82B36F9C, 82B37150 and 82B38108. Secure protocol functions
+// require the native handshake and crypto providers and are not substituted here.
+#include "protossl.h"
+#include "protoname.h"
+#include "cryptarc4.h"
+#include "cryptsha1.h"
+#include "dirtymem.h"
+#include "dirtylib.h"
+#include <xtl.h>
+#include <cstddef>
+#include <cstring>
+#include <cstdlib>
+
+struct SocketT;
+extern "C" SocketT* SocketAccept(SocketT*, sockaddr*, s32*);
+extern "C" s32 SocketClose(SocketT*);
+extern "C" s32 SocketInfo(SocketT*, s32, s32, void*, s32);
+extern "C" SocketT* SocketOpen(s32, s32, s32);
+extern "C" HostentT* SocketLookup(const char*, s32);
+extern "C" s32 SockaddrInSetAddrText(sockaddr*, const char*);
+
+// Native type shape from DirtySDK 5.5.3 DWARF, gated by ARTIST offsets.
+struct CryptMD5T { u8 strData[72]; u32 uCount; u32 uRegs[4]; };
+struct CipherSuiteT { u8 uIdent[2], uKey, uEnc, uMac; };
+struct X509NameT { char strCountry[32], strState[32], strCity[32], strOrg[32], strUnit[32], strCommon[32]; };
+struct X509CertificateT
+{
+    s32 version;
+    X509NameT Issuer, Subject;
+    char strGoodFrom[32], strGoodTill[32];
+    s32 iSerialSize; u8 SerialData[32];
+    s32 iSigType, iSigSize; u8 SigData[128];
+    s32 iKeyType; u8 KeyParm[64]; s32 iKeySize; u8 KeyData[256];
+    s32 iKeyModSize; u8 KeyModData[129]; s32 iKeyExpSize; u8 KeyExpData[129];
+};
+struct SecureStateT
+{
+    u32 uTimer, uSendSeqn;
+    s32 iSendProg, iSendSize;
+    u32 uRecvSeqn;
+    s32 iRecvProg, iRecvSize, iRecvBase;
+    const CipherSuiteT* pCipher;
+    u8 ClientRandom[32], ServerRandom[32], PreMasterKey[48], MasterKey[48], KeyBlock[128];
+    u8 *pServerMAC, *pClientMAC, *pServerKey, *pClientKey;
+    CryptMD5T HandshakeMD5;
+    CryptSha1T HandshakeSHA;
+    CryptArc4T ReadArc4, WriteArc4;
+    X509CertificateT Cert;
+    u8 SendData[16384], RecvData[16384];
+};
+CGS_STATIC_ASSERT((offsetof(SecureStateT, HandshakeMD5) == 0x154), "ARTIST MD5 context");
+CGS_STATIC_ASSERT((offsetof(SecureStateT, HandshakeSHA) == 0x1b0), "ARTIST SHA1 context");
+CGS_STATIC_ASSERT((offsetof(SecureStateT, ReadArc4) == 0x20c), "ARTIST read cipher");
+CGS_STATIC_ASSERT((offsetof(SecureStateT, WriteArc4) == 0x30e), "ARTIST write cipher");
+CGS_STATIC_ASSERT((offsetof(SecureStateT, SendData) == 0x8d8), "ARTIST send record");
+CGS_STATIC_ASSERT((offsetof(SecureStateT, RecvData) == 0x48d8), "ARTIST receive record");
+CGS_STATIC_ASSERT((sizeof(SecureStateT) == 0x88d8), "ARTIST secure allocation");
+extern "C" void CryptMD5Init(CryptMD5T*);
+extern "C" void CryptMD5Update(CryptMD5T*, const void*, s32);
+extern "C" void CryptMD5Final(CryptMD5T*, void*, s32);
+extern "C" s32 SocketSendto(SocketT*, const char*, s32, s32, const sockaddr*, s32);
+extern "C" s32 SocketRecvfrom(SocketT*, char*, s32, s32, sockaddr*, s32*);
+extern "C" void ProtoSSLUpdate(ProtoSSLRefT*);
+// ARTIST 82B356A0: genuine entropy routine; provider remains separately unresolved
+// until its stack-sampling contract is reconstructed and verified on PPC.
+extern "C" void ProtoSSLGenerateRandom(u8*, s32, CryptArc4T*);
+
+struct ProtoSSLRefT
+{
+    SocketT* pSock;
+    HostentT* pHost;
+    s32 iMemGroup;
+    char strHost[256];
+    sockaddr PeerAddr;
+    s32 iState;
+    s32 iClosed;
+    SecureStateT* pSecure;
+};
+CGS_STATIC_ASSERT((sizeof(ProtoSSLRefT) == 0x128), "ARTIST ProtoSSL state size");
+CGS_STATIC_ASSERT((offsetof(ProtoSSLRefT, PeerAddr) == 0x10c), "ARTIST SSL peer");
+CGS_STATIC_ASSERT((offsetof(ProtoSSLRefT, iState) == 0x11c), "ARTIST SSL state");
+CGS_STATIC_ASSERT((offsetof(ProtoSSLRefT, pSecure) == 0x124), "ARTIST secure state pointer");
+static const s32 kProtoSSLMemId = 0x7073736c;
+
+// ARTIST 82B35758: reset transport, then preserve or allocate real secure state.
+static s32 ResetState(ProtoSSLRefT* state, s32 secure)
+{
+    if (state->pSock)
+    {
+        SocketClose(state->pSock);
+        state->pSock = 0;
+    }
+    if (state->pHost)
+    {
+        state->pHost->Free(state->pHost);
+        state->pHost = 0;
+    }
+    state->iState = 0;
+    state->iClosed = 1;
+    if (secure)
+    {
+        if (!state->pSecure)
+        {
+            state->pSecure = static_cast<SecureStateT*>(DirtyMemAlloc(0x88d8, kProtoSSLMemId, state->iMemGroup));
+            if (state->pSecure)
+                std::memset(state->pSecure, 0, 0x88d8);
+        }
+    }
+    else if (state->pSecure)
+    {
+        DirtyMemFree(state->pSecure, kProtoSSLMemId, state->iMemGroup);
+        state->pSecure = 0;
+    }
+    SecureStateT* const data = state->pSecure;
+    if (data)
+    {
+        ProtoSSLGenerateRandom(0, 0, &data->ReadArc4);
+        data->iSendProg = 0;
+        data->iSendSize = 0;
+        data->uSendSeqn = 0;
+        data->iRecvProg = 0;
+        data->iRecvSize = 0;
+        data->uRecvSeqn = 0;
+        CryptMD5Init(&data->HandshakeMD5);
+        CryptSha1Init(&data->HandshakeSHA);
+    }
+    return secure && !data ? -8 : 0;
+}
+
+extern "C" ProtoSSLRefT* ProtoSSLCreate(void)
+{
+    const s32 group = DirtyMemGroupQuery();
+    ProtoSSLRefT* const state = static_cast<ProtoSSLRefT*>(DirtyMemAlloc(0x128, kProtoSSLMemId, group));
+    if (!state)
+    {
+        NetPrintfCode("protossl: could not allocate module state\n");
+        return 0;
+    }
+    std::memset(state, 0, 0x128);
+    state->iMemGroup = group;
+    return state;
+}
+
+extern "C" void ProtoSSLDestroy(ProtoSSLRefT* state)
+{
+    ResetState(state, 0);
+    DirtyMemFree(state, kProtoSSLMemId, state->iMemGroup);
+}
+
+extern "C" ProtoSSLRefT* ProtoSSLAccept(ProtoSSLRefT* state, s32 secure, sockaddr* address, s32* addressLength)
+{
+    if (secure)
+        return 0;
+    SocketT* const socket = SocketAccept(state->pSock, address, addressLength);
+    if (!socket)
+        return 0;
+    ProtoSSLRefT* const client = ProtoSSLCreate();
+    if (!client)
+    {
+        SocketClose(socket);
+        return 0;
+    }
+    client->pSock = socket;
+    std::memcpy(&client->PeerAddr, address, *addressLength);
+    client->iState = 31;
+    return client;
+}
+
+// ARTIST 82B36FA0: start the native socket/resolver transition.
+extern "C" s32 ProtoSSLConnect(ProtoSSLRefT* state, s32 secure, const char* address, u32 numericAddress, s32 port)
+{
+    const s32 reset = ResetState(state, secure);
+    if (reset != 0)
+        return reset;
+    state->pSock = SocketOpen(2, 1, 0);
+    if (!state->pSock)
+        return -9;
+    state->PeerAddr.sa_family = 2;
+    std::memset(state->PeerAddr.sa_data, 0, sizeof(state->PeerAddr.sa_data));
+    if (!address)
+        address = "";
+    u32 i = 0;
+    while (address[i] && address[i] != ':' && i < 255)
+    {
+        state->strHost[i] = address[i];
+        ++i;
+    }
+    state->strHost[i] = 0;
+    SockaddrInSetAddrText(&state->PeerAddr, state->strHost);
+    u8* const bytes = reinterpret_cast<u8*>(state->PeerAddr.sa_data);
+    if ((u32(bytes[2]) | u32(bytes[3]) | u32(bytes[4]) | u32(bytes[5])) == 0)
+    {
+        bytes[2] = static_cast<u8>(numericAddress >> 24);
+        bytes[3] = static_cast<u8>(numericAddress >> 16);
+        bytes[4] = static_cast<u8>(numericAddress >> 8);
+        bytes[5] = static_cast<u8>(numericAddress);
+    }
+    if (address[i] == ':')
+    {
+        bytes[0] = static_cast<u8>(std::atoi(address + i + 1) >> 8);
+        bytes[1] = static_cast<u8>(std::atoi(address + i + 1));
+    }
+    else
+    {
+        bytes[0] = static_cast<u8>(port >> 8);
+        bytes[1] = static_cast<u8>(port);
+    }
+    if ((u32(bytes[2]) | u32(bytes[3]) | u32(bytes[4]) | u32(bytes[5])) != 0)
+        state->iState = 2;
+    else
+    {
+        state->pHost = SocketLookup(state->strHost, 30000);
+        state->iState = 1;
+    }
+    return 0;
+}
+
+extern "C" s32 ProtoSSLDisconnect(ProtoSSLRefT* state)
+{
+    ResetState(state, state->pSecure != 0);
+    return 0;
+}
+
+extern "C" s32 ProtoSSLStat(ProtoSSLRefT* state, s32 selector, void* buffer, s32 length)
+{
+    if (selector == 0x736f636b)
+    {
+        if (!buffer || length != 4)
+            return -1;
+        std::memcpy(buffer, &state->pSock, 4);
+        return 0;
+    }
+    if (!state->pSock)
+        return -1;
+    s32 result = SocketInfo(state->pSock, selector, 0, buffer, length);
+    if (selector == 0x73746174)
+    {
+        if (state->iState >= 4096)
+            result = -1;
+        if (state->iState == 1)
+            result = 0;
+        if (result > 0 && state->iState != 31 && state->iState != 30)
+            return 0;
+    }
+    return result;
+}
+
+// ARTIST 82B35880: construct one SSLv3 record and its negotiated MAC/cipher.
+static s32 SendPacket(ProtoSSLRefT* state, u8 type, const void* header, s32 headerSize,
+                       const void* body, s32 bodySize)
+{
+    SecureStateT* const secure = state->pSecure;
+    secure->SendData[0] = type;
+    secure->SendData[1] = 3;
+    secure->SendData[2] = 0;
+    std::memcpy(secure->SendData + 5, header, headerSize);
+    std::memcpy(secure->SendData + 5 + headerSize, body, bodySize);
+    s32 length = headerSize + bodySize;
+    u8* const payload = secure->SendData + 5;
+    if (type == 22)
+    {
+        CryptMD5Update(&secure->HandshakeMD5, payload, length);
+        CryptSha1Update(&secure->HandshakeSHA, payload, length);
+    }
+    if (state->iState >= 24 && state->iState <= 30 && secure->pCipher)
+    {
+        const u32 sequence = secure->uSendSeqn;
+        const u8 macHeader[11] = { 0, 0, 0, 0, static_cast<u8>(sequence >> 24),
+            static_cast<u8>(sequence >> 16), static_cast<u8>(sequence >> 8),
+            static_cast<u8>(sequence), type, static_cast<u8>(length >> 8), static_cast<u8>(length) };
+        u8 innerPad[48], outerPad[48], digest[20];
+        std::memset(innerPad, 0x36, sizeof(innerPad));
+        std::memset(outerPad, 0x5c, sizeof(outerPad));
+        if (secure->pCipher->uMac == 16)
+        {
+            CryptMD5T context;
+            CryptMD5Init(&context);
+            CryptMD5Update(&context, secure->pClientMAC, 16);
+            CryptMD5Update(&context, innerPad, 48);
+            CryptMD5Update(&context, macHeader, 11);
+            CryptMD5Update(&context, payload, length);
+            CryptMD5Final(&context, digest, 16);
+            CryptMD5Init(&context);
+            CryptMD5Update(&context, secure->pClientMAC, 16);
+            CryptMD5Update(&context, outerPad, 48);
+            CryptMD5Update(&context, digest, 16);
+            CryptMD5Final(&context, payload + length, 16);
+            length += 16;
+        }
+        if (secure->pCipher->uMac == 20)
+        {
+            CryptSha1T context;
+            CryptSha1Init(&context);
+            CryptSha1Update(&context, secure->pClientMAC, 20);
+            CryptSha1Update(&context, innerPad, 40);
+            CryptSha1Update(&context, macHeader, 11);
+            CryptSha1Update(&context, payload, length);
+            CryptSha1Final(&context, digest, 20);
+            CryptSha1Init(&context);
+            CryptSha1Update(&context, secure->pClientMAC, 20);
+            CryptSha1Update(&context, outerPad, 40);
+            CryptSha1Update(&context, digest, 20);
+            CryptSha1Final(&context, payload + length, 20);
+            length += 20;
+        }
+        if (secure->pCipher->uEnc == 1)
+            CryptArc4Apply(&secure->WriteArc4, payload, length);
+    }
+    secure->SendData[3] = static_cast<u8>(length >> 8);
+    secure->SendData[4] = static_cast<u8>(length);
+    secure->iSendProg = 0;
+    secure->iSendSize = length + 5;
+    ++secure->uSendSeqn;
+    return 0;
+}
+
+// ARTIST 82B37F00. State 30 uses the genuine record path; 31 is native raw mode.
+extern "C" s32 ProtoSSLSend(ProtoSSLRefT* state, const char* data, s32 length)
+{
+    s32 result = -1;
+    SecureStateT* const secure = state->pSecure;
+    if (length < 0)
+        length = static_cast<s32>(std::strlen(data));
+    if (state->iState == 30)
+    {
+        result = 0;
+        if (secure->iSendSize == 0)
+        {
+            if (length > 16000)
+                length = 16000;
+            SendPacket(state, 23, 0, 0, data, length);
+            result = length;
+            ProtoSSLUpdate(state);
+        }
+    }
+    if (state->iState == 31)
+        result = SocketSendto(state->pSock, data, length, 0, 0, 0);
+    return result;
+}
+
+// ARTIST 82B37FD8: consume only completed application-data records.
+extern "C" s32 ProtoSSLRecv(ProtoSSLRefT* state, char* buffer, s32 length)
+{
+    s32 result = -1;
+    SecureStateT* const secure = state->pSecure;
+    if (state->iState == 30)
+    {
+        result = 0;
+        if (secure->iRecvProg != secure->iRecvSize)
+            ProtoSSLUpdate(state);
+        const s32 size = secure->iRecvSize;
+        if ((size < 5 || secure->iRecvProg < size) && state->iClosed)
+            result = -1;
+        else if (secure->iRecvProg == size && secure->iRecvBase < size && secure->RecvData[0] == 23)
+        {
+            result = size - secure->iRecvBase;
+            if (result > length)
+                result = length;
+            std::memcpy(buffer, secure->RecvData + secure->iRecvBase, result);
+            secure->iRecvBase += result;
+            if (secure->iRecvBase >= secure->iRecvSize)
+            {
+                secure->iRecvBase = 0;
+                secure->iRecvSize = 0;
+                secure->iRecvProg = 0;
+            }
+        }
+    }
+    if (state->iState == 31)
+        result = SocketRecvfrom(state->pSock, buffer, length, 0, 0, 0);
+    if (result > 0 && result < length)
+        buffer[result] = 0;
+    return result;
+}
