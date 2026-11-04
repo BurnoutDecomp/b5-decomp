@@ -146,31 +146,18 @@ namespace CgsDev
         AppendFormat("%08X", static_cast<u32>(luValue));
     }
 
-    // @ 0x821F0158 - construct over a fixed buffer (cleared to the empty string).
+    // ARTIST 0x821F0158 clears the first byte of the caller's buffer.
     StrStream::StrStream(char* lpcBuffer, s32 liBufferSize)
         : mpcBuffer(lpcBuffer)
         , miBufferSize(liBufferSize)
     {
-        if (mpcBuffer && miBufferSize > 0)
-            mpcBuffer[0] = '\0';
+        lpcBuffer[0] = '\0';
     }
 
-    // 0x82815E80 - the buffer sink. Walk to the NUL terminator in mpcBuffer, then strncat the new
-    // text with the remaining room (miBufferSize - usedLength), exactly as the X360 does
-    // (`v3 = *(this+8); while(*v4++); strncat(v3, text, *(this+12) - (v4-v3-1))`).
+    // ARTIST 0x82815E80 scans through the terminator and gives strncat the full remaining count.
     void StrStream::Append(const char* lpcText)
     {
-        if (mpcBuffer && lpcText && miBufferSize > 0)
-        {
-            const size_t luUsed = std::strlen(mpcBuffer);
-            // X360 store-for-store: strncat count = *(this+12) - (v4-v3-1) = miBufferSize - usedLength
-            // (NOT miBufferSize-1; the console passes the full remaining count).
-            if ((size_t)miBufferSize > luUsed)
-            {
-                const size_t luRoom = (size_t)miBufferSize - luUsed;
-                std::strncat(mpcBuffer, lpcText, luRoom);
-            }
-        }
+        std::strncat(mpcBuffer, lpcText, miBufferSize - std::strlen(mpcBuffer));
     }
 
     // @ 0x827DB6E8-loop init. Resets the inline buffer to the empty string (the X360 `stb 0,8(this)`).
