@@ -2,22 +2,13 @@
 #define CGS_MODULE_UTILS_H
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"
 
-// ============================================================================
-// GameShared/GameClasses/Module/CgsModuleUtils.h  (original-source home: the
-// Feb-2007 tree includes "Module/CgsModuleUtils.h"; the sound-module TU's
-// gated-bridge comment cites LockBuffersForIO at CgsModuleUtils.h:259.)
-//
-// The buffer-pair IO lock helpers the X360 emits as the sub_823B6FE0 /
-// sub_823B7060 pair around every cross-module bridge call: the DESTINATION
-// buffer is locked for write and the SOURCE buffer for read, then both are
-// released in reverse. (WorldModule::Prepare @0x827D53B0 brackets each of its
-// failure-path bridges with them.)
-// ============================================================================
-
+// ARTIST 823B6F30 through 823B7EBC uses shared overloads for one destination and
+// zero to seven read-only sources. Check the buffers before taking or releasing locks.
 namespace CgsModule
 {
-    static __forceinline void AssertIOBuffer(const void* lpBuffer,
+    __forceinline void AssertIOBuffer(const void* lpBuffer,
                                                      const char* lpcExpression, int liLine)
     {
         if (!lpBuffer)
@@ -30,8 +21,7 @@ namespace CgsModule
     }
 
     // ARTIST 823B6FE0 / 823B7060
-    template <typename TDest, typename TSourceA>
-    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0)
+    inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 259);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 260);
@@ -40,8 +30,7 @@ namespace CgsModule
         lpOutputBuffer0->LockForRead();
     }
 
-    template <typename TDest, typename TSourceA>
-    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0)
+    inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 272);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 273);
@@ -51,9 +40,8 @@ namespace CgsModule
     }
 
     // ARTIST 823B70E0 / 823B7190
-    template <typename TDest, typename TSourceA, typename TSourceB>
-    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
-        TSourceB* lpOutputBuffer1)
+    inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
+        const IOBuffer* lpOutputBuffer1)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 286);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 287);
@@ -64,9 +52,8 @@ namespace CgsModule
         lpOutputBuffer1->LockForRead();
     }
 
-    template <typename TDest, typename TSourceA, typename TSourceB>
-    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
-        TSourceB* lpOutputBuffer1)
+    inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
+        const IOBuffer* lpOutputBuffer1)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 302);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 303);
@@ -78,9 +65,8 @@ namespace CgsModule
     }
 
     // ARTIST 823B7240 / 823B7320
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC>
-    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0, TSourceB* lpOutputBuffer1,
-        TSourceC* lpOutputBuffer2)
+    inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0, const IOBuffer* lpOutputBuffer1,
+        const IOBuffer* lpOutputBuffer2)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 319);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 320);
@@ -93,9 +79,8 @@ namespace CgsModule
         lpOutputBuffer2->LockForRead();
     }
 
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC>
-    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0, TSourceB* lpOutputBuffer1,
-        TSourceC* lpOutputBuffer2)
+    inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0, const IOBuffer* lpOutputBuffer1,
+        const IOBuffer* lpOutputBuffer2)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 338);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 339);
@@ -109,9 +94,8 @@ namespace CgsModule
     }
 
     // ARTIST 823B7400 / 823B7510
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC, typename TSourceD>
-    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0, TSourceB* lpOutputBuffer1,
-        TSourceC* lpOutputBuffer2, TSourceD* lpOutputBuffer3)
+    inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0, const IOBuffer* lpOutputBuffer1,
+        const IOBuffer* lpOutputBuffer2, const IOBuffer* lpOutputBuffer3)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 358);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 359);
@@ -126,9 +110,8 @@ namespace CgsModule
         lpOutputBuffer3->LockForRead();
     }
 
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC, typename TSourceD>
-    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0, TSourceB* lpOutputBuffer1,
-        TSourceC* lpOutputBuffer2, TSourceD* lpOutputBuffer3)
+    inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0, const IOBuffer* lpOutputBuffer1,
+        const IOBuffer* lpOutputBuffer2, const IOBuffer* lpOutputBuffer3)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 380);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 381);
@@ -144,11 +127,9 @@ namespace CgsModule
     }
 
     // ARTIST 823B7620 / 823B7760 checks every buffer before locking or unlocking.
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
-              typename TSourceD, typename TSourceE>
-    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
-        TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
-        TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4)
+    inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
+        const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2,
+        const IOBuffer* lpOutputBuffer3, const IOBuffer* lpOutputBuffer4)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 403);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 404);
@@ -165,11 +146,9 @@ namespace CgsModule
         lpOutputBuffer4->LockForRead();
     }
 
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
-              typename TSourceD, typename TSourceE>
-    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
-        TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
-        TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4)
+    inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
+        const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2,
+        const IOBuffer* lpOutputBuffer3, const IOBuffer* lpOutputBuffer4)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 428);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 429);
@@ -187,11 +166,9 @@ namespace CgsModule
     }
 
     // ARTIST 823B78A0 / 823B7A10 guards the six effects inputs and their destination.
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
-              typename TSourceD, typename TSourceE, typename TSourceF>
-    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
-        TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
-        TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4, TSourceF* lpOutputBuffer5)
+    inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
+        const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2,
+        const IOBuffer* lpOutputBuffer3, const IOBuffer* lpOutputBuffer4, const IOBuffer* lpOutputBuffer5)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 454);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 455);
@@ -210,11 +187,9 @@ namespace CgsModule
         lpOutputBuffer5->LockForRead();
     }
 
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
-              typename TSourceD, typename TSourceE, typename TSourceF>
-    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
-        TSourceB* lpOutputBuffer1, TSourceC* lpOutputBuffer2,
-        TSourceD* lpOutputBuffer3, TSourceE* lpOutputBuffer4, TSourceF* lpOutputBuffer5)
+    inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
+        const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2,
+        const IOBuffer* lpOutputBuffer3, const IOBuffer* lpOutputBuffer4, const IOBuffer* lpOutputBuffer5)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 482);
         AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 483);
@@ -234,11 +209,9 @@ namespace CgsModule
     }
 
     // ARTIST 823B7B80 / 823B7D20: resource input with seven producer outputs.
-    template <typename TDest, typename TA, typename TB, typename TC, typename TD,
-              typename TE, typename TF, typename TG>
-    inline void LockBuffersForIO(TDest* lpInputBuffer, TA* lpOutputBuffer0,
-        TB* lpOutputBuffer1, TC* lpOutputBuffer2, TD* lpOutputBuffer3,
-        TE* lpOutputBuffer4, TF* lpOutputBuffer5, TG* lpOutputBuffer6)
+    inline void LockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
+        const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2, const IOBuffer* lpOutputBuffer3,
+        const IOBuffer* lpOutputBuffer4, const IOBuffer* lpOutputBuffer5, const IOBuffer* lpOutputBuffer6)
     {
         if (!lpInputBuffer)
         {
@@ -307,11 +280,9 @@ namespace CgsModule
     }
 
     // ARTIST 823B7B80 / 823B7D20: resource input with seven producer outputs.
-    template <typename TDest, typename TA, typename TB, typename TC, typename TD,
-              typename TE, typename TF, typename TG>
-    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TA* lpOutputBuffer0,
-        TB* lpOutputBuffer1, TC* lpOutputBuffer2, TD* lpOutputBuffer3,
-        TE* lpOutputBuffer4, TF* lpOutputBuffer5, TG* lpOutputBuffer6)
+    inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer, const IOBuffer* lpOutputBuffer0,
+        const IOBuffer* lpOutputBuffer1, const IOBuffer* lpOutputBuffer2, const IOBuffer* lpOutputBuffer3,
+        const IOBuffer* lpOutputBuffer4, const IOBuffer* lpOutputBuffer5, const IOBuffer* lpOutputBuffer6)
     {
         if (!lpInputBuffer)
         {
@@ -380,15 +351,13 @@ namespace CgsModule
     }
 
     // ARTIST 823B6F30 / 823B6F88
-    template <typename TBuffer>
-    inline void LockBuffersForIO(TBuffer* lpInputBuffer)
+    inline void LockBuffersForIO(IOBuffer* lpInputBuffer)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 238);
         lpInputBuffer->LockForWrite();
     }
 
-    template <typename TBuffer>
-    inline void UnlockBuffersForIO(TBuffer* lpInputBuffer)
+    inline void UnlockBuffersForIO(IOBuffer* lpInputBuffer)
     {
         AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 248);
         lpInputBuffer->UnlockForWrite();
