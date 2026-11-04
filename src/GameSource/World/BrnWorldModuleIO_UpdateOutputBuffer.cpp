@@ -561,7 +561,14 @@ const UpdateOutputBuffer::StatusInterface* UpdateOutputBuffer::GetWorldEntitySta
 // five status bools) == this struct's implicit copy-assignment.
 void UpdateOutputBuffer::SetWorldEntityStatusInterface(const StatusInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    if (!IsBufferLockedForWriting())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Not locked for writing\n";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 592);
+        CgsDev::Assert::EndAssert();
+    }
     mWorldEntityStatusInterface = *lpInterface;
 }
 
