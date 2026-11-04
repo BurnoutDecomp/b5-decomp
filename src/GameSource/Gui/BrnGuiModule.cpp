@@ -1104,96 +1104,14 @@ void GuiModule::Destruct()
         }
     }
 
-    void GuiModule::Update(BrnUpdateSet luUpdateSet,
-        CgsModule::IOBufferStack* lpInputBufferStack,
-        CgsModule::IOBufferStack* lpOutputBufferStack,
-        CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
+    // Keep the event switch separate from the incoming queue traversal.
+    __declspec(noinline) void GuiModule::ProcessIncomingEvent(
+        const CgsModule::Event* lpEvent, s32 liId, s32 liSize,
         CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
         CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer,
         CgsGui::ViewIO::InputBuffer* lpViewInputBuffer,
-        BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
-        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput,
-        bool lbSerialise)
+        bool& lbForceAutosave, bool& lbHasSaveImage, CgsGui::ImageFileInfo& lSaveImageInfo)
     {
-        CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
-        CGS_ASSERT(lpOutput != NULL, "lpOutput != NULL");
-        CGS_ASSERT(lpInputBufferStack != NULL, "lpInputBufferStack != NULL");
-        CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
-        bool lbForceAutosave = false;
-        bool lbHasSaveImage = false;
-        CgsGui::ImageFileInfo lSaveImageInfo;
-        lSaveImageInfo.Construct();
-
-        lpInput->LockForWrite();
-        lpOutput->LockForWrite();
-        CGS_ASSERT(mpOutputBuffer == NULL, "mpOutputBuffer == NULL");
-        mpOutputBuffer = lpOutput;
-        mGuiCache.mbGameplayUpdateActive = (luUpdateSet & 8) != 0;
-        mGuiAccessPointers.SetGDMInput(lpGameDataInput);
-
-        if (lbSerialise)
-        {
-            if (mGuiModuleSerialiser.IsPlaying())
-                mGuiModuleSerialiser.Read();
-            else if (mGuiModuleSerialiser.IsRecording())
-                mGuiModuleSerialiser.GetStaticLayout()->SetupStartOfFrame();
-            CGS_ASSERT(!mGuiModuleSerialiser.IsRecording() ||
-                mGuiModuleSerialiser.GetBufferUsed() == 0,
-                "( mReplayGuiModuleSerialiser.IsRecording() == false ) || ( mReplayGuiModuleSerialiser.GetBufferUsed() == 0 )");
-        }
-
-        CgsGui::ViewIO::OutputBuffer* lpViewOutputBuffer = NULL;
-        lpOutputBufferStack->CreateIOBuffer(&lpViewOutputBuffer, "GUIView");
-        CgsGui::ModelIO::InputBuffer* lpModelInputBuffer = NULL;
-        lpInputBufferStack->CreateIOBuffer(&lpModelInputBuffer, "GUIModel");
-        if (mSystemUserProfile.miState == 1 && mGuiCache.mbPerformingInvite)
-            PerformInvite(lpInput, lpOutput);
-
-        CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModuleEventPump);
-        CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue = lpInput->GetGuiEvents();
-        CGS_ASSERT(lpEventQueue != NULL, "lpEventQueue != NULL");
-        lpEventQueue->Append(mStoredGuiEvents);
-        mStoredGuiEvents.Clear();
-        if (mGDMReceiverQueue.GetLength() > 0)
-            mGDMReceiverQueue.Clear();
-
-        if (gbGuiToolStartHookRequested)
-        {
-            GuiPFXHookEvent lHook;
-            lHook.mfMaximumBloomWeight = 1.0f;
-            lHook.mfMaximumVignetteWeight = 1.0f;
-            lHook.mfMaximumBlurWeight = 1.0f;
-            lHook.mfMaximumDepthOfFieldWeight = 1.0f;
-            lHook.mfMaximum2DTintWeight = 1.0f;
-            lHook.mfMaximum3DTintWeight = 1.0f;
-            CGS_ASSERT(std::strlen(gacGuiToolHookName) < 32, "String too long: ");
-            std::strncpy(lHook.macName, gacGuiToolHookName, 32);
-            lpEventQueue->AddEvent(&lHook, 495, sizeof(lHook));
-            gbGuiToolStartHookRequested = false;
-        }
-        else if (gbGuiToolStopHookRequested)
-        {
-            if (gacGuiToolHookName[0])
-            {
-                GuiPFXHookStopEvent lStop;
-                CGS_ASSERT(std::strlen(gacGuiToolHookName) < 32, "String too long: ");
-                std::strncpy(lStop.macName, gacGuiToolHookName, 32);
-                lpEventQueue->AddEvent(&lStop, 496, sizeof(lStop));
-            }
-            else
-            {
-                CgsGui::GuiEvent<497> lStop;
-                lpEventQueue->AddEvent(&lStop, 497, sizeof(lStop));
-            }
-            gbGuiToolStopHookRequested = false;
-        }
-        mDebugComponent.UpdateWorstCaseHUD(lpInput);
-
-        const CgsModule::Event* lpEvent = NULL;
-        s32 liSize = 0;
-        s32 liId = lpEventQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent)
-        {
             const u32* lpWords = reinterpret_cast<const u32*>(lpEvent);
             const u8* lpBytes = reinterpret_cast<const u8*>(lpEvent);
             switch (liId)
@@ -1501,6 +1419,100 @@ void GuiModule::Destruct()
                 break;
             }
             }
+    }
+
+    void GuiModule::Update(BrnUpdateSet luUpdateSet,
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+        CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer,
+        CgsGui::ViewIO::InputBuffer* lpViewInputBuffer,
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+        const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput,
+        bool lbSerialise)
+    {
+        CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
+        CGS_ASSERT(lpOutput != NULL, "lpOutput != NULL");
+        CGS_ASSERT(lpInputBufferStack != NULL, "lpInputBufferStack != NULL");
+        CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
+        bool lbForceAutosave = false;
+        bool lbHasSaveImage = false;
+        CgsGui::ImageFileInfo lSaveImageInfo;
+        lSaveImageInfo.Construct();
+
+        lpInput->LockForWrite();
+        lpOutput->LockForWrite();
+        CGS_ASSERT(mpOutputBuffer == NULL, "mpOutputBuffer == NULL");
+        mpOutputBuffer = lpOutput;
+        mGuiCache.mbGameplayUpdateActive = (luUpdateSet & 8) != 0;
+        mGuiAccessPointers.SetGDMInput(lpGameDataInput);
+
+        if (lbSerialise)
+        {
+            if (mGuiModuleSerialiser.IsPlaying())
+                mGuiModuleSerialiser.Read();
+            else if (mGuiModuleSerialiser.IsRecording())
+                mGuiModuleSerialiser.GetStaticLayout()->SetupStartOfFrame();
+            CGS_ASSERT(!mGuiModuleSerialiser.IsRecording() ||
+                mGuiModuleSerialiser.GetBufferUsed() == 0,
+                "( mReplayGuiModuleSerialiser.IsRecording() == false ) || ( mReplayGuiModuleSerialiser.GetBufferUsed() == 0 )");
+        }
+
+        CgsGui::ViewIO::OutputBuffer* lpViewOutputBuffer = NULL;
+        lpOutputBufferStack->CreateIOBuffer(&lpViewOutputBuffer, "GUIView");
+        CgsGui::ModelIO::InputBuffer* lpModelInputBuffer = NULL;
+        lpInputBufferStack->CreateIOBuffer(&lpModelInputBuffer, "GUIModel");
+        if (mSystemUserProfile.miState == 1 && mGuiCache.mbPerformingInvite)
+            PerformInvite(lpInput, lpOutput);
+
+        CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModuleEventPump);
+        CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpEventQueue = lpInput->GetGuiEvents();
+        CGS_ASSERT(lpEventQueue != NULL, "lpEventQueue != NULL");
+        lpEventQueue->Append(mStoredGuiEvents);
+        mStoredGuiEvents.Clear();
+        if (mGDMReceiverQueue.GetLength() > 0)
+            mGDMReceiverQueue.Clear();
+
+        if (gbGuiToolStartHookRequested)
+        {
+            GuiPFXHookEvent lHook;
+            lHook.mfMaximumBloomWeight = 1.0f;
+            lHook.mfMaximumVignetteWeight = 1.0f;
+            lHook.mfMaximumBlurWeight = 1.0f;
+            lHook.mfMaximumDepthOfFieldWeight = 1.0f;
+            lHook.mfMaximum2DTintWeight = 1.0f;
+            lHook.mfMaximum3DTintWeight = 1.0f;
+            CGS_ASSERT(std::strlen(gacGuiToolHookName) < 32, "String too long: ");
+            std::strncpy(lHook.macName, gacGuiToolHookName, 32);
+            lpEventQueue->AddEvent(&lHook, 495, sizeof(lHook));
+            gbGuiToolStartHookRequested = false;
+        }
+        else if (gbGuiToolStopHookRequested)
+        {
+            if (gacGuiToolHookName[0])
+            {
+                GuiPFXHookStopEvent lStop;
+                CGS_ASSERT(std::strlen(gacGuiToolHookName) < 32, "String too long: ");
+                std::strncpy(lStop.macName, gacGuiToolHookName, 32);
+                lpEventQueue->AddEvent(&lStop, 496, sizeof(lStop));
+            }
+            else
+            {
+                CgsGui::GuiEvent<497> lStop;
+                lpEventQueue->AddEvent(&lStop, 497, sizeof(lStop));
+            }
+            gbGuiToolStopHookRequested = false;
+        }
+        mDebugComponent.UpdateWorstCaseHUD(lpInput);
+
+        const CgsModule::Event* lpEvent = NULL;
+        s32 liSize = 0;
+        s32 liId = lpEventQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent)
+        {
+            ProcessIncomingEvent(lpEvent, liId, liSize, lpOutput, lpModelOutputBuffer,
+                lpViewInputBuffer, lbForceAutosave, lbHasSaveImage, lSaveImageInfo);
             mGuiCache.RecEvent(lpEvent, liId);
             if (liId == 232 || liId == 165 || liId == 211 || liId == 64 || liId == 233)
                 mGuiTracker.RecEvent(lpEvent, liId, liSize);

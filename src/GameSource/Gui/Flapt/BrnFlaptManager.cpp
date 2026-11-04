@@ -192,9 +192,8 @@ FileRef* FlaptManager::GetFile(FileRef* lpOutRef, u32 luFile)
 }
 
 // ---- Update @ 0x82472120 -------------------------------------------------
-// The X360 brackets the region in two monitors: the enclosing GUI-page handle
-// (dword_82F2765C, registered by the un-homed BrnGui::GuiPerfmons::Initialise --
-// still -1 here) and the "FUpdate" handle Construct registers (dword_82FB3B0C).
+// GuiPerfmons::Initialise registers the enclosing monitor (dword_82F2765C).
+// FlaptManager::Construct registers the inner "FUpdate" monitor (dword_82FB3B0C).
 // Per-frame tick: bracket the work in the two CPU perf monitors, then -- if the single
 // (HUD) file instance is active -- advance it by the time step. The X360 returns the
 // inner StopMonitor's r3; the caller (BrnGui::ViewModule::Update) ignores it, and the

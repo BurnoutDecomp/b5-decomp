@@ -461,8 +461,8 @@ __declspec(noinline) void EventInterpreterModule::ProcessOneOutEvent(
         }
         case E_GUI_OUT_PRIORITY_REGISTER_FOR_EVENT:
         {
-            // payload: { s32 eventType@+0; EventObserver* observer@+0x964;
-            //            const s32 overrides[]@+4; u32 overrideCount@+0x968 }
+            // X360 payload uses the event type at +0x0 and overrides at +0x4.
+            // The override count is at +0x964 and the observer is at +0x968.
             const GuiEventPriorityRegisterForEvents* lpRecord =
                 reinterpret_cast<const GuiEventPriorityRegisterForEvents*>(lpEvent);
             RegisterPriorityEvent(lpRecord->lpEventObserver, lpRecord->miEventType,

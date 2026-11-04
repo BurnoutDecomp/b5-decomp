@@ -144,6 +144,12 @@ namespace BrnGui
             mbCollisionWorldValidateForNetworking = false;
             return lbPending;
         }
+        __declspec(noinline) void ProcessIncomingEvent(
+            const CgsModule::Event* lpEvent, s32 liId, s32 liSize,
+            CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+            CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer,
+            CgsGui::ViewIO::InputBuffer* lpViewInputBuffer,
+            bool& lbForceAutosave, bool& lbHasSaveImage, CgsGui::ImageFileInfo& lSaveImageInfo);
         void AutosaveProfile(const CgsGui::ImageFileInfo* lpImageFileInfo);
         void UpdatePlayerName(CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpViewStateQueue);
         void HandleControllerPressed(const CgsModule::Event* lpEvent);
