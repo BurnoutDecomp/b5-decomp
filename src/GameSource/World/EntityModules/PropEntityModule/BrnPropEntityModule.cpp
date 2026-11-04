@@ -32,7 +32,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::AddMonitor
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // InSceneUpdateInterface
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"             // CgsSceneManager::EntityId
-#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"    // NULLResourceHandle
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"    // resource handle declarations
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // PropInputInterface
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"        // RequestInterface<1024>
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"              // LoadGameDataEvent (the reply)
@@ -234,14 +234,10 @@ namespace BrnWorld
 
         mu8PlayerIndex = 0;                        // stbx 0 @0xD3210
 
-        // 500 x CgsResource::BaseResourcePtr::CreateFromHandle(slot, &dword_82FAD960).
-        // dword_82FAD960 == &NULLResourcePtr + 0x14, i.e. the sentinel's
-        // {mpThis, muThreadId} pair -- which IS a ResourceHandle. Spelled through the
-        // committed assign-from-handle overload against CgsResource::NULLResourceHandle
-        // (see the note on ResourcePtr::operator=(const BaseResourcePtr&)).
+        // ARTIST passes the persistent NULLResourcePtr handle at +0x14 for each slot.
         for (u32 luZone = 0; luZone < KU_MAX_ZONES; ++luZone)
         {
-            mapGraphicsLists[luZone] = CgsResource::NULLResourceHandle;
+            mapGraphicsLists[luZone] = CgsResource::NULLResourcePtr;
         }
 
         // 8 x `stvx128 v0(zero)` over 0xD3230..0xD32A0 -- one 16-byte lane per car slot.
