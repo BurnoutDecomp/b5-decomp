@@ -262,6 +262,8 @@ namespace CgsGui
 
         void ProcessInEvents(GuiEventInputQueue* lpCurrentEvents);
         void ProcessOutEvents(OutputBuffer* lpOutput, bool lbIsPreWorldUpdate);
+        __declspec(noinline) void ProcessOneOutEvent(OutputBuffer* lpOutput,
+            const CgsModule::Event* lpEvent, s32 liEventType, s32 liEventSize, bool lbIsPreWorldUpdate);
 
         // True iff some plain observer owns liEvent as a priority event; on a hit, the owning
         // slot's observer pointer is written through lppOwnerObserver (via FindObserver...).

@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"
+#include "GameSource/Gui/BrnGuiPerfmons.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu
@@ -26,12 +27,6 @@
 namespace BrnFlapt
 {
 
-// The two enclosing flapt CPU monitors ("      FLApt - Update"/"      FLApt - Render",
-// GUI page 3, budget 0.5f) are registered by BrnGui::GuiPerfmons::Initialise
-// @0x824EF050 into dword_82F2765C/dword_82F27680 -- that TU is not yet homed, so the
-// handles stay -1 here (Start/StopMonitor no-op on an invalid handle) until it lands.
-s32 giFlaptUpdateMonitor = -1;
-s32 giFlaptRenderMonitor = -1;
 // The inner "FUpdate"/"FRender" pair (X360 dword_82FB3B0C/dword_82FB3B10) is
 // registered below by FlaptManager::Construct.
 s32 giFlaptUpdateMonitorTotal = -1;
@@ -206,21 +201,20 @@ FileRef* FlaptManager::GetFile(FileRef* lpOutRef, u32 luFile)
 // header declares Update void, so the return is dropped.
 void FlaptManager::Update(f32 lfTimeStep)
 {
-    CgsDev::PerfMonCpu::StartMonitor(giFlaptUpdateMonitor);
+    CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miFlaptUpdate);
     const s32 liTotalMonitor = giFlaptUpdateMonitorTotal;
     CgsDev::PerfMonCpu::StartMonitor(liTotalMonitor);
 
     if (maFlaptFileInstances[0].mbIsActive)
         maFlaptFileInstances[0].Update(lfTimeStep);
 
-    CgsDev::PerfMonCpu::StopMonitor(giFlaptUpdateMonitor);
+    CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miFlaptUpdate);
     CgsDev::PerfMonCpu::StopMonitor(liTotalMonitor);
 }
 
 // ---- Render @ 0x82472908 -------------------------------------------------
-// Bracketed like Update: the enclosing GUI-page handle (dword_82F27680, registered by
-// the un-homed BrnGui::GuiPerfmons::Initialise -- still -1 here) plus the "FRender"
-// handle Construct registers (dword_82FB3B10).
+// Bracketed like Update: the GUI-page monitor and the "FRender" handle
+// registered by Construct (dword_82FB3B10).
 // Per-frame draw: bracket in the two CPU perf monitors; start the frame on the embedded
 // renderer; draw the single active (HUD) file instance through it; close the recorded-
 // mode render buffer (EndRendering); then clear the renderer's per-frame texture/blend
@@ -229,7 +223,7 @@ void FlaptManager::Update(f32 lfTimeStep)
 // to the named buffer on the PC Im2d; its int return is dropped (header declares void).
 void FlaptManager::Render()
 {
-    CgsDev::PerfMonCpu::StartMonitor(giFlaptRenderMonitor);
+    CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miFlaptRender);
     const s32 liTotalMonitor = giFlaptRenderMonitorTotal;
     CgsDev::PerfMonCpu::StartMonitor(liTotalMonitor);
 
@@ -244,7 +238,7 @@ void FlaptManager::Render()
     mRenderer.mpCurrentTexture    = 0;
     mRenderer.mpCurrentBlendState = 0;
 
-    CgsDev::PerfMonCpu::StopMonitor(giFlaptRenderMonitor);
+    CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miFlaptRender);
     CgsDev::PerfMonCpu::StopMonitor(liTotalMonitor);
 }
 

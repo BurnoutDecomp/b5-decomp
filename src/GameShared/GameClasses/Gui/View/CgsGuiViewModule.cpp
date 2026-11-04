@@ -380,6 +380,8 @@ namespace CgsGui
                 mpCustomRendererManager->RecvEvent(lpEvent, liEventId);
             }
 
+            liEventId = lpEvents->CgsModule::VariableEventQueue<65536, 16>::GetNextEvent(
+                lpEvent, &lpEvent, &liSize);
         }
     }
 
