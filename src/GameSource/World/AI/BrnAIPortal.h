@@ -27,6 +27,7 @@ namespace BrnAI
     // DWARF AISectionsData.h:140. 20-byte stride.
     struct Portal
     {
+        friend class AIDebugComponent; // ARTIST8278BDCC reads boundary count inline.
         // @0x82764480 -- return the lu8BoundryIndex'th boundary line of this portal.
         // Asserts the index is in range (CGS_ASSERT folds the original dev-assert),
         // then returns &mpaBoundaryLines[lu8BoundryIndex]. Called by

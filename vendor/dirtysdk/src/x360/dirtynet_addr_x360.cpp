@@ -172,3 +172,22 @@ extern "C" s32 SockaddrInParse2(u32* address, s32* localPort, s32* peerPort, con
     }
     return result;
 }
+
+// ARTIST 0x82B2D718; DecFIGS dirtynet.c:397.
+extern "C" s32 SockaddrInParse(sockaddr* address, const char* text)
+{
+    memset(address, 0, sizeof(*address));
+    address->sa_family = AF_INET;
+
+    u32 ip;
+    s32 port;
+    const s32 result = SockaddrInParse2(&ip, &port, 0, text);
+    u8* bytes = reinterpret_cast<u8*>(address);
+    bytes[7] = static_cast<u8>(ip);
+    bytes[3] = static_cast<u8>(port);
+    bytes[2] = static_cast<u8>(port >> 8);
+    bytes[6] = static_cast<u8>(ip >> 8);
+    bytes[5] = static_cast<u8>(ip >> 16);
+    bytes[4] = static_cast<u8>(ip >> 24);
+    return result;
+}

@@ -44,10 +44,11 @@ namespace
 // reached from Decoder.cpp / Collection.cpp.
 extern "C" System *off_83271928;
 
-// off_8215A8E8 -- the CMpegBase v-table reinstalled by the deleting destructor before any
-// free. An opaque data symbol in the XEX (its function-pointer contents are not exported);
-// modelled as an honest placeholder so the body links without fabricating the table.
-static void *const KMPG_VTable = 0; // &off_8215A8E8
+// ARTIST 0x8215A8E8 has one entry, the vector deleting destructor.
+void *(*kMpegBaseVtable[])(CMpegBase *, char) =
+{
+    &CMpegBase::VectorDeletingDestructor
+};
 
 // The MPEG frame-header lookup tables (off_8215A66C / off_8215A680 in the X360 rodata).
 // ProcessHeader only *indexes* them -- their contents (the standard MPEG sample-rate Hz and
@@ -259,7 +260,7 @@ s32 CMpegBase::ProcessHeader(u32 uHeader)
 void *CMpegBase::VectorDeletingDestructor(CMpegBase *self, char flags)
 {
     void *pHistory = self->mpPolySynthHistory;
-    self->mpVTable = KMPG_VTable; // &off_8215A8E8
+    self->mpVTable = kMpegBaseVtable;
 
     if (pHistory)
         System::Free(off_83271928, pHistory, 0);
