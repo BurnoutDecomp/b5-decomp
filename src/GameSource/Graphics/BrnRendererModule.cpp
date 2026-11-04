@@ -1,6 +1,11 @@
 #include "GameSource/Graphics/BrnRendererModule.h"
+#include "GameSource/Graphics/BrnAntiAliasTiling.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 #include "GameSource/Game/BrnGlobalCpuMonitors.h"
 #include "GameSource/Resource/BrnResourceAllocator.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h"
+#include "SDKs/EATech/eajobs/jobs.h"
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
@@ -13,7 +18,11 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+#include <cstring>
+#include <cstdio>
+#include <xgraphics.h>
 
 // ARTIST byte_82FAEDD0: shared with Render's present-interval change check.
 // The original data image initializes this byte to zero.
@@ -732,6 +741,349 @@ void BrnRendererModule::EndRenderEnvironmentMapFace(u32 face)
     mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()->maColourTargets[0].Resolve(face);
 }
 
+namespace
+{
+
+// ARTIST .data 82F2423C and 82F2423D.
+bool gbObjectToMeshJobsEnabled = true;
+bool gbObjectToMeshJobsWide = true;
+
+// ARTIST 82FAEDD4, 82FAEDD8 and 82FAEE00.
+u32 guSharedMemoryBlockMax;
+CgsGraphics::DispatchCommand* gpSharedMemoryStart;
+CGS_ALIGN(128) u32 guSharedMemoryBlockNextFree;
+
+const char* const kRendererSource =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
+
+// ARTIST 823F5670.
+void FillInObjectToMeshJobData(EA::Jobs::Job* job, ObjectToMeshJobInfo* outData,
+                               const ObjectToMeshJobInfo& data)
+{
+    if (!outData)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpOutJobData", kRendererSource, 1734);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!job)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpOutJob", kRendererSource, 1735);
+        CgsDev::Assert::EndAssert();
+    }
+    std::memcpy(outData, &data, sizeof(data));
+    job->Clear();
+    job->GetEntryPoint().SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+        reinterpret_cast<const void*>(&ObjectToMeshEntry), 0);
+    job->SetData(outData, sizeof(*outData));
+    job->GetEntryPoint().SetName("ObjectToMesh");
+}
+
+}
+
+// ARTIST 823F5748. Each job owns its 240-byte context and a 25-list output array.
+void BrnRendererModule::CreateObjectToMeshJob(ERendererModelOnlyDispatchJob jobIndex,
+    const CgsGraphics::DispatchObjectContext& context, CgsGraphics::DispatchPacketInterpreter* interpreter,
+    ERendererDoubleBufferedDispatchListID inputList, s32 groupIndex, s32 groupSize)
+{
+    CgsGraphics::DispatchList* const input = mDoubleBufferedDispatchFrame.GetDispatchFrameForRead()
+        .GetList(inputList);
+    CgsGraphics::DispatchObjectContext& jobContext = maObjectToMeshJobContext[jobIndex];
+    std::memcpy(&jobContext, &context, sizeof(jobContext));
+    jobContext.miListIdBase = groupIndex;
+
+    ObjectToMeshJobInfo data;
+    data.muListID = jobIndex;
+    data.mpDispatchInterpreter = interpreter;
+    data.mpDispatchObjectContext = &jobContext;
+    data.mpDispatchListInput = input;
+    data.mpaDispatchListOutputArray = mapaObjectToMeshJobOutputDispatchLists[jobIndex];
+    data.muDispatchListOutputCount = 25;
+    data.mpDispatchBinMasterAddress = interpreter->GetSingleBufferedDispatchFrame()->GetBin().GetBase();
+    data.muSharedMemoryStartAddress = reinterpret_cast<uintptr_t>(gpSharedMemoryStart);
+    data.mpSharedMemoryBlockNextFreeAtomic = &guSharedMemoryBlockNextFree;
+    data.muSharedMemoryBlockMax = guSharedMemoryBlockMax;
+
+    if (groupIndex < 0 || static_cast<u32>(groupIndex) >= static_cast<u32>(groupSize))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("0 <= luGroupIndex && luGroupIndex < luGroupSize", kRendererSource, 1794);
+        CgsDev::Assert::EndAssert();
+    }
+
+    const u32 blocks = (input->GetCount() + 127u) >> 7;
+    data.miStartIndex = (blocks * static_cast<u32>(groupIndex) / static_cast<u32>(groupSize)) << 7;
+    data.miEndIndex = (blocks * static_cast<u32>(groupIndex + 1) / static_cast<u32>(groupSize)) << 7;
+    data.mbSoftwareBreakpointOnEntry = false;
+    FillInObjectToMeshJobData(&maObjectToMeshJob[jobIndex], &maObjectToMeshJobData[jobIndex], data);
+}
+
+// ARTIST 823F5898. Keep the two producer modes and the original list merge order.
+void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame& gdlFrames,
+    CgsGraphics::DispatchFrame& meshFrame, CgsGraphics::DispatchPacketInterpreter* interpreter,
+    const CgsGraphics::DispatchObjectContext& context)
+{
+    using namespace CgsGraphics;
+    DispatchBin& bin = interpreter->GetSingleBufferedDispatchFrame()->GetBin();
+    if (gbObjectToMeshJobsEnabled)
+    {
+        const u32 cacheLine = 128;
+        const u32 outputLists = 25;
+        for (u32 job = 0; job < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++job)
+        {
+            bin.Align(cacheLine);
+            mapaObjectToMeshJobOutputDispatchLists[job] = static_cast<DispatchList*>(
+                bin.AllocateMemoryFast(outputLists * sizeof(DispatchList) / sizeof(DispatchCommand)));
+        }
+
+        bin.Align(cacheLine);
+        DispatchCommand* const binEnd = bin.GetBase() + bin.GetSizeQwords();
+        const ptrdiff_t bytesAvailable =
+            reinterpret_cast<const u8*>(binEnd) - reinterpret_cast<const u8*>(bin.GetBinCurrent());
+        const ptrdiff_t alignedBytes = bytesAvailable & -static_cast<ptrdiff_t>(cacheLine);
+        const u32 quadWordsAvailable = static_cast<u32>(
+            alignedBytes / static_cast<ptrdiff_t>(sizeof(DispatchCommand)) - 1);
+        gpSharedMemoryStart = static_cast<DispatchCommand*>(bin.AllocateMemoryFast(quadWordsAvailable));
+        EA::Jobs::AtomicStore(&guSharedMemoryBlockNextFree, 0);
+        guSharedMemoryBlockMax = quadWordsAvailable / DispatchBin::KU_BLOCK_SIZE_IN_QUAD_WORDS;
+
+        for (s32 group = 0; group < 4; ++group)
+            CreateObjectToMeshJob(static_cast<ERendererModelOnlyDispatchJob>(group),
+                context, interpreter, eRendererModelOnlyDispatchListWorld, group, 4);
+        CreateObjectToMeshJob(eRendererModelOnlyDispatchJob_Car_Part0,
+            context, interpreter, eRendererModelOnlyDispatchListCar, 0, 1);
+        for (u32 list = eRendererModelOnlyDispatchListShadow0;
+             list <= eRendererModelOnlyDispatchListEnvmapNegZ; ++list)
+        {
+            CreateObjectToMeshJob(static_cast<ERendererModelOnlyDispatchJob>(eRendererModelOnlyDispatchJob_Shadow0 + list),
+                context, interpreter, static_cast<ERendererDoubleBufferedDispatchListID>(list), 0, 1);
+        }
+
+        EA::Jobs::JobScheduler& scheduler = *CgsSystem::JobManager();
+        if (gbObjectToMeshJobsWide)
+        {
+            for (u32 job = 0; job < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++job)
+                scheduler.AddJobs(&maObjectToMeshJob[job], 1);
+        }
+        else
+        {
+            for (u32 job = 1; job < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++job)
+                maObjectToMeshJob[job].DependsOn(maObjectToMeshJob[job - 1], EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            scheduler.AddTree(&maObjectToMeshJob[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS - 1]);
+        }
+        for (u32 job = 0; job < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++job)
+            maObjectToMeshJob[job].WaitOn();
+
+        u32 blocksUsed = guSharedMemoryBlockNextFree;
+        if (blocksUsed > guSharedMemoryBlockMax)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Object-to-mesh conversion jobs failed due to insufficient memory.",
+                kRendererSource, 2001);
+            CgsDev::Assert::EndAssert();
+            blocksUsed = guSharedMemoryBlockMax;
+        }
+        bin.SetBinCurrent(gpSharedMemoryStart + blocksUsed * DispatchBin::KU_BLOCK_SIZE_IN_QUAD_WORDS);
+
+        for (u32 job = 0; job < KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS; ++job)
+        {
+            DispatchList* const jobLists = mapaObjectToMeshJobOutputDispatchLists[job];
+            for (u32 list = 0; list < outputLists; ++list)
+            {
+                jobLists[list].ReconnectChainBlocks();
+                meshFrame.GetList(list)->Append(&jobLists[list]);
+            }
+        }
+
+        const u32 mainLists[] = { 11, 15, 21 };
+        for (u32 i = 0; i < sizeof(mainLists) / sizeof(mainLists[0]); ++i)
+        {
+            for (u32 group = 1; group <= 3; ++group)
+            {
+                DispatchList* const other = meshFrame.GetList(mainLists[i] + group);
+                meshFrame.GetList(mainLists[i])->Append(other);
+            }
+        }
+    }
+    else
+    {
+        for (u32 list = 0; list < eRendererModelOnlyDispatchListEnd; ++list)
+        {
+            mShaderConstantTable.ResetShadowingForDispatch();
+            gTextureScopeTable.ClearDispatchThreadPointers();
+            DispatchObjectContext localContext;
+            std::memcpy(&localContext, &context, sizeof(localContext));
+            DispatchFrame* const output = interpreter->GetSingleBufferedDispatchFrame();
+            gdlFrames.GetDispatchFrameForRead().GetList(list)->DispatchAllObjectToMesh(
+                interpreter, output, &localContext, 0, -1);
+        }
+    }
+}
+
+namespace
+{
+
+// ARTIST 823F5EA0. Both key addresses describe the flat in-place sort buffer.
+void PrepareRadixSortJob(EA::Jobs::Job* job, SortInfo* data, CgsGraphics::DispatchList* list)
+{
+    list->PrepareSortJobInfo(&data->mInputOutputInfo);
+    const char* const file = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
+    if (!data)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpOutJobData", file, 3573);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!job)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpOutJob", file, 3574);
+        CgsDev::Assert::EndAssert();
+    }
+
+    const u32 address = reinterpret_cast<u32>(data->mInputOutputInfo.mpaFlatKeys);
+    data->mu64KeyInAddress = address;
+    data->mu16Count = static_cast<u16>(data->mInputOutputInfo.muKeyCount);
+    data->mu64KeyOutAddress = address;
+    job->Clear();
+    job->GetEntryPoint().SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+        reinterpret_cast<const void*>(&RadixSortEntry), 0);
+    job->SetData(data, sizeof(*data));
+    job->GetEntryPoint().SetName("RadixSort");
+}
+
+}
+
+// ARTIST 823F5F70. The wide path submits four shadow jobs; the chained path
+// links all five before attaching the first environment-map job.
+void BrnRendererModule::SortDispatchLists(CgsGraphics::DispatchFrame& meshFrame)
+{
+    const u32 shadowLists[] = { 0, 2, 1, 3, 4 };
+    for (u32 i = 0; i < KU_NUM_SHADOWMAP_DISPATCH_JOBS; ++i)
+        PrepareRadixSortJob(&maShadowMapSortJob[i], &maShadowMapSortJobData[i],
+            meshFrame.GetList(shadowLists[i]));
+
+    for (u32 i = 0; i < KU_NUM_ENVMAP_SORT_JOBS; ++i)
+        PrepareRadixSortJob(&maEnvmapSortJobs[i], &maEnvmapSortJobData[i], meshFrame.GetList(5 + i));
+
+    PrepareRadixSortJob(&mPreZSortJob, &mPreZSortJobData, meshFrame.GetList(21));
+    PrepareRadixSortJob(&mWorldOpaqueSortJob, &mWorldOpaqueSortJobData, meshFrame.GetList(11));
+    PrepareRadixSortJob(&mCarOpaqueSortJob, &mCarOpaqueSortJobData, meshFrame.GetList(19));
+    PrepareRadixSortJob(&mWorldTransparentSortJob, &mWorldTransparentSortJobData, meshFrame.GetList(15));
+    PrepareRadixSortJob(&mCarTransparentSortJob, &mCarTransparentSortJobData, meshFrame.GetList(20));
+
+    EA::Jobs::Job* const sceneJobs[] = {
+        &mPreZSortJob, &mWorldOpaqueSortJob, &mCarOpaqueSortJob,
+        &mWorldTransparentSortJob, &mCarTransparentSortJob
+    };
+    EA::Jobs::JobScheduler& scheduler = *CgsSystem::JobManager();
+    if (mbSortDisplayListsWideNotLong)
+    {
+        for (u32 i = 0; i < 4; ++i)
+            scheduler.AddJobs(&maShadowMapSortJob[i], 1);
+        for (u32 i = 0; i < KU_NUM_ENVMAP_SORT_JOBS; ++i)
+            scheduler.AddJobs(&maEnvmapSortJobs[i], 1);
+        for (u32 i = 0; i < sizeof(sceneJobs) / sizeof(sceneJobs[0]); ++i)
+            scheduler.AddJobs(sceneJobs[i], 1);
+    }
+    else
+    {
+        EA::Jobs::Job* previous = &maShadowMapSortJob[0];
+        for (u32 i = 1; i < KU_NUM_SHADOWMAP_DISPATCH_JOBS; ++i)
+        {
+            maShadowMapSortJob[i].DependsOn(*previous, EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            previous = &maShadowMapSortJob[i];
+        }
+        for (u32 i = 0; i < KU_NUM_ENVMAP_SORT_JOBS; ++i)
+        {
+            maEnvmapSortJobs[i].DependsOn(*previous, EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            previous = &maEnvmapSortJobs[i];
+        }
+        for (u32 i = 0; i < sizeof(sceneJobs) / sizeof(sceneJobs[0]); ++i)
+        {
+            sceneJobs[i]->DependsOn(*previous, EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            previous = sceneJobs[i];
+        }
+        scheduler.AddTree(previous);
+    }
+}
+
+// ARTIST 823FFA18. The Xbox 360 path does not read the clear-stencil boolean.
+void BrnRendererModule::BeginRenderAntiAliased(f32 whiteLevel, bool, u8 stencil)
+{
+    if (mbGreyBackgroundColour)
+    {
+        const f32 grey = whiteLevel * 0.3f;
+        mvBackgroundColour.Set(grey, grey, grey, 0.0f);
+    }
+    else
+        mvBackgroundColour.Set(whiteLevel * 0.72f, whiteLevel * 0.83f, whiteLevel * 0.89f, 0.0f);
+
+    if (mbMultisampledBackbuffer)
+    {
+        const D3DVECTOR4 colour = { mvBackgroundColour.X().GetFloat(),
+            mvBackgroundColour.Y().GetFloat(), mvBackgroundColour.Z().GetFloat(),
+            mvBackgroundColour.W().GetFloat() };
+        const BrnGraphics::AntiAliasTilingPlan& plan = BrnGraphics::KMSAA_TILING_PLAN;
+        D3DRECT tiles[2];
+        for (u32 i = 0; i < plan.mu32NumTiles; ++i)
+        {
+            const BrnGraphics::AntiAliasTilingPlan::TileRect& tile = plan.maTile[i];
+            tiles[i].x1 = tile.mu32Left;
+            tiles[i].y1 = tile.mu32Top;
+            tiles[i].x2 = tile.mu32Right;
+            tiles[i].y2 = tile.mu32Bottom;
+        }
+
+        D3DDevice* const device = gpD3DDevice;
+        shadow::Device::SetState(mAllocatedRenderTargets.GetAntiAliasBuffer()
+            ->GetRenderTarget()->mpSection0State);
+        D3DDevice_BeginTiling(device, 0, plan.mu32NumTiles, tiles, &colour, 1.0f, stencil);
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miScreenClear);
+        D3DDevice_SetPredication(device, 0);
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miScreenClear);
+    }
+    else
+    {
+        CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miScreenClear);
+        shadow::Device::SetState(mAllocatedRenderTargets.GetAntiAliasBuffer()
+            ->GetRenderTarget()->mpSection0State);
+        CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miScreenClear);
+    }
+}
+
+// ARTIST 823FFBE0. Resolve fragment zero for depth before resolving and clearing colour.
+void BrnRendererModule::ResolveMSAA(f32, u8 stencil)
+{
+    const D3DVECTOR4 colour = { mvBackgroundColour.X().GetFloat(),
+        mvBackgroundColour.Y().GetFloat(), mvBackgroundColour.Z().GetFloat(),
+        mvBackgroundColour.W().GetFloat() };
+    D3DDevice* const device = gpD3DDevice;
+    const bool tiled = mbMultisampledBackbuffer;
+    const BrnGraphics::AntiAliasTilingPlan& plan = tiled
+        ? BrnGraphics::KMSAA_TILING_PLAN : BrnGraphics::KNO_MSAA_TILING_PLAN;
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
+    for (u32 i = 0; i < plan.mu32NumTiles; ++i)
+    {
+        if (tiled)
+            D3DDevice_SetPredication(device, 3u << (2 * i));
+
+        const BrnGraphics::AntiAliasTilingPlan::TileRect& tile = plan.maTile[i];
+        const D3DRECT rect = { tile.mu32Left, tile.mu32Top, tile.mu32Right, tile.mu32Bottom };
+        const D3DPOINT dest = { tile.mu32Left, tile.mu32Top };
+        D3DDevice_Resolve(device, D3DRESOLVE_DEPTHSTENCIL | D3DRESOLVE_FRAGMENT0, &rect,
+            mAllocatedRenderTargets.GetDownSampleBuffer()->GetDepthTexture(), &dest,
+            0, 0, 0, 1.0f, stencil, 0);
+        D3DDevice_Resolve(device, D3DRESOLVE_CLEARRENDERTARGET | D3DRESOLVE_CLEARDEPTHSTENCIL, &rect,
+            mAllocatedRenderTargets.GetDownSampleBuffer()->GetTexture(0), &dest,
+            0, 0, &colour, 1.0f, stencil, 0);
+    }
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
+    if (tiled)
+        D3DDevice_EndTiling(device, 0, 0, 0, 0, 1.0f, stencil, 0);
+}
+
 // ARTIST 82408B00. Keep the down-sample target saved across state and blit calls.
 void BrnRendererModule::EndRenderAntiAliased()
 {
@@ -806,6 +1158,181 @@ void BrnRendererModule::BeginQuarterResBuffer()
         E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST));
     mAllocatedRenderTargets.BlitDepth(mIm2dRenderer, mAllocatedRenderTargets.GetDownSampleBuffer());
     mAllocatedRenderTargets.GetParticleBuffer()->SetRenderTargetState(0);
+}
+
+// ARTIST 823F6730. Export bottom-up BGR rows from the native tiled front buffer.
+void BrnRendererModule::TakeScreenshot()
+{
+    if (!mbDispatchThreadTakeScreenshot)
+        return;
+
+    renderengine::Device::LockedFrontBuffer frontBuffer;
+    if (renderengine::Device::LockFrontBuffer(frontBuffer))
+    {
+        char name[256];
+        CgsCore::SPrintf(name, sizeof(name), "%sscreenshot%d_%s.tga",
+            "d:\\", muScreenshotCounter++, macScreenShotText);
+        for (char* character = name; *character; ++character)
+        {
+            if (*character == ' ' || *character == ':')
+                *character = '_';
+        }
+
+        FILE* const file = std::fopen(name, "wb");
+        if (file)
+        {
+            u8 header[18] = {};
+            header[2] = 2;
+            header[12] = static_cast<u8>(frontBuffer.width);
+            header[13] = static_cast<u8>(frontBuffer.width >> 8);
+            header[14] = static_cast<u8>(frontBuffer.height);
+            header[15] = static_cast<u8>(frontBuffer.height >> 8);
+            header[16] = 24;
+            std::fwrite(header, sizeof(header), 1, file);
+
+            CGS_ALIGN(16) u8 row[0x1400];
+            for (s32 y = static_cast<s32>(frontBuffer.height) - 1; y >= 0; --y)
+            {
+                if (frontBuffer.pitch > sizeof(row))
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lLockedFrontBuffer.pitch <= kiMaxRowSize",
+                        kRendererSource, 4752);
+                    CgsDev::Assert::EndAssert();
+                }
+                const RECT source = { 0, y, frontBuffer.width, y + 1 };
+                XGUntileSurface(row, frontBuffer.pitch, 0, frontBuffer.pixelData,
+                    frontBuffer.width, frontBuffer.height, &source, 4);
+                for (u32 x = 0; x < frontBuffer.width; ++x)
+                {
+                    const u8* const pixel = row + 4 * x;
+                    const u8 bgr[] = { pixel[0], pixel[1], pixel[2] };
+                    std::fwrite(bgr, sizeof(bgr), 1, file);
+                }
+            }
+            std::fclose(file);
+        }
+        renderengine::Device::UnlockFrontBuffer(frontBuffer);
+    }
+    mbDispatchThreadTakeScreenshot = false;
+}
+
+// ARTIST 82405D80. The shader bank provides both VMX eye and light vectors.
+void BrnRendererModule::ComputeSunCoronaVisibility()
+{
+    CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miSunCoronaVisibilityTest);
+    const BrnShaderConstantsFrame& shaderFrame = maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
+    const Matrix44 viewProjection = shaderFrame.GetViewProjectionMatrix();
+    const Vector3 viewPosition = shaderFrame.GetViewPosition();
+    mSunCorona.ComputeSunPositionOnScreen(viewProjection, viewPosition,
+        shaderFrame.GetUnbiasedKeyLightDirection());
+    mSunCorona.GenerateOcclusionBuffer(mAllocatedRenderTargets.GetSunCoronaBuffer(),
+        mAllocatedRenderTargets.GetDownSampleBuffer());
+    CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miSunCoronaVisibilityTest);
+}
+
+// ARTIST 82406208. Reuse the allocated preview sampler resource with the selected texture.
+void BrnRendererModule::DebugDisplayRenderTarget(renderengine::Texture* texture,
+    Vector2 position, Vector2 size, CgsDev::RGBA colour)
+{
+    using namespace CgsGraphics;
+    mIm2dRenderer.BeginRendering();
+    mTextureStateParams.mpTexture = texture;
+    mpTextureState = renderengine::TextureState::Initialize(mTextureStateResource, mTextureStateParams);
+    mIm2dRenderer.SetState(mpTextureState);
+
+    const f32 x0 = position.mV.x;
+    const f32 y0 = position.mV.y;
+    const f32 x1 = x0 + size.mV.x;
+    const f32 y1 = y0 + size.mV.y;
+    const RGBA8 rgba = { static_cast<u8>(colour), static_cast<u8>(colour >> 8),
+        static_cast<u8>(colour >> 16), static_cast<u8>(colour >> 24) };
+    const Basic2dColouredTexturedVertex vertices[] = {
+        { { x0, y0 }, rgba, { 0.0f, 0.0f } },
+        { { x0, y1 }, rgba, { 0.0f, 1.0f } },
+        { { x1, y0 }, rgba, { 1.0f, 0.0f } },
+        { { x1, y1 }, rgba, { 1.0f, 1.0f } }
+    };
+
+    const ImRendererBase::StateLibrary& states = ImRendererBase::GetStateLibrary();
+    mIm2dRenderer.SetTransform(Im2dTransform::GetDefault());
+    mIm2dRenderer.SetState(states.mpBlendState_Standard);
+    mIm2dRenderer.SetState(states.mpRasterizerState_CullNone);
+    mIm2dRenderer.Render(static_cast<renderengine::PrimitiveType>(D3DPT_TRIANGLESTRIP), vertices, 4);
+    mIm2dRenderer.EndRendering();
+}
+
+// ARTIST 82406410. The first six UV words inherit bytes from the shared default
+// transform, which the original writes into the vertex scratch area before drawing.
+void BrnRendererModule::RenderLetterBoxBars(CgsGraphics::Im2d& im2d, f32 aspectRatio)
+{
+    using namespace CgsGraphics;
+    const f32 edge = (1.0f - aspectRatio) * 0.5f;
+    const Im2dTransform transform = Im2dTransform::GetDefault();
+    Basic2dColouredTexturedVertex vertices[4] = {};
+    std::memcpy(vertices, &transform, sizeof(transform));
+    im2d.BeginRendering();
+    im2d.SetTransform(transform);
+
+    const RGBA8 black = { 0, 0, 0, 0 };
+    vertices[0].mv2Pos.x = 0.0f;
+    vertices[0].mv2Pos.y = 0.0f;
+    vertices[1].mv2Pos.x = 0.0f;
+    vertices[1].mv2Pos.y = edge;
+    vertices[2].mv2Pos.x = 1.0f;
+    vertices[2].mv2Pos.y = 0.0f;
+    vertices[3].mv2Pos.x = 1.0f;
+    vertices[3].mv2Pos.y = edge;
+    for (u32 i = 0; i < 4; ++i)
+        vertices[i].mv4Colour = black;
+
+    const renderengine::PrimitiveType strip = static_cast<renderengine::PrimitiveType>(D3DPT_TRIANGLESTRIP);
+    im2d.Render(strip, vertices, 4);
+    vertices[0].mv2Pos.y = 1.0f - edge;
+    vertices[1].mv2Pos.y = 1.0f;
+    vertices[2].mv2Pos.y = 1.0f - edge;
+    vertices[3].mv2Pos.y = 1.0f;
+    im2d.Render(strip, vertices, 4);
+    im2d.EndRendering();
+}
+
+// ARTIST 82405A30. Three untextured strips in the standard 2D state.
+void BrnRendererModule::RenderThreeThreadMonitors(bool thread0, bool thread1, bool thread2)
+{
+    using namespace CgsGraphics;
+    const ImRendererBase::StateLibrary& states = ImRendererBase::GetStateLibrary();
+    mIm2dRendererUntex.BeginRendering();
+    mIm2dRendererUntex.SetState(states.mpBlendState_Standard);
+    mIm2dRendererUntex.SetState(states.mpRasterizerState_CullNone);
+
+    const f32 left[] = { 0.55f, 0.57f, 0.59f };
+    const f32 right[] = { 0.565f, 0.585f, 0.605f };
+    const bool overBudget[] = { thread0, thread1, thread2 };
+    Basic2dColouredVertex vertices[3][4];
+    for (u32 i = 0; i < 3; ++i)
+    {
+        const RGBA8 red = { 255, 0, 0, 255 };
+        const RGBA8 green = { 0, 255, 0, 255 };
+        const RGBA8 colour = overBudget[i] ? red : green;
+        const Basic2dColouredVertex quad[] = {
+            { { left[i], 0.91f }, colour }, { { left[i], 0.94f }, colour },
+            { { right[i], 0.91f }, colour }, { { right[i], 0.94f }, colour }
+        };
+        std::memcpy(vertices[i], quad, sizeof(quad));
+    }
+
+    mIm2dRendererUntex.SetTransform(Im2dTransform::GetDefault());
+    mIm2dRendererUntex.SetProgram(0);
+    for (u32 i = 0; i < 3; ++i)
+        mIm2dRendererUntex.Render(static_cast<renderengine::PrimitiveType>(D3DPT_TRIANGLESTRIP), vertices[i], 4);
+    if (ImRendererBase::mgpActiveRenderer != static_cast<ImRendererBase*>(&mIm2dRendererUntex))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
+            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 645);
+        CgsDev::Assert::EndAssert();
+    }
+    ImRendererBase::mgpActiveRenderer = 0;
 }
 
 // ARTIST 0x82405E28: publish the update-side renderer resources.

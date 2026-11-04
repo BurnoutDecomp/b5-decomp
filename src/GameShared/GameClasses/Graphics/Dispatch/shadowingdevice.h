@@ -45,6 +45,8 @@ namespace shadow
         static const u32 KU_MAX_TEXTURE_STATES = 16;
 
         static bool Initialize();
+        static bool FrameBegin();
+        static void FrameEnd();
         static renderengine::VertexProgramState* GetVertexProgramState(
             const renderengine::ProgramBufferData* lpVertexProgram,
             const renderengine::VertexDescriptorData* lpVertexDescriptor);

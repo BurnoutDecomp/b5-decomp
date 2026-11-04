@@ -85,6 +85,12 @@ namespace CgsGraphics
             for (u32 i = 0; i != E_MAX_TEXTURE_PURPOSES; ++i)
                 mTextureScopeElements[i].mpMostRecentCopyInDispatchBin[0] = 0;
         }
+        // ARTIST 823F5E20..823F5E38: reset the dispatch-side cache.
+        void ClearDispatchThreadPointers()
+        {
+            for (u32 i = 0; i != E_MAX_TEXTURE_PURPOSES; ++i)
+                mTextureScopeElements[i].mpMostRecentCopyInDispatchBin[1] = 0;
+        }
         void AddTexturePurpose(TexturePurpose purpose, const char* name, TextureScope scope);
 
         // ARTIST8240BE3C..BEB8, over the single registry at83011A78.

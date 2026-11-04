@@ -54,6 +54,12 @@ namespace CgsLanguage
         meLoadedLanguage = E_LANGUAGE_ENGLISH_US; // +0x04 stw r11(7), 4(r27)
     }
 
+    // ARTIST 825191F4 passes the current language directly to MovieManager::Prepare.
+    ELanguage Sku::GetLanguage() const
+    {
+        return meLanguage;
+    }
+
     // X360 0x828608C0: `b CgsSystem::HardwareSku::FindLanguage` -- a pure tail-call thunk.
     ELanguage Sku::FindLanguage()
     {

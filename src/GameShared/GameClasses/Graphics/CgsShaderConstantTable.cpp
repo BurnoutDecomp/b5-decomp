@@ -301,3 +301,16 @@ void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Matrix44Affine lVal
     lpDest[2].mV = __vrlimi(lValue.zAxis.mV, lZero, 1, 0);
     lpDest[3].mV = __vrlimi(lValue.wAxis.mV, lOne, 1, 0);
 }
+
+// ARTIST 827E8E50. Clear both stage shadows for each used constant.
+void ShaderConstantTable::ResetShadowingForDispatch()
+{
+    for (u32 i = 0; i < mu8NumUsedConstants; ++i)
+    {
+        for (u32 stage = 0; stage < 2; ++stage)
+        {
+            maConstants[i].maShaderState[stage].mpLatestCopyInPushBuffer = 0;
+            maConstantsForInternalVariables[i][stage].mpLatestCopyInPushBuffer = 0;
+        }
+    }
+}

@@ -281,8 +281,6 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
         }
 
         mCrashPlayManager.mbIsInShowtime = true;                           // stbx r18, this+0x1823D
-        WreckLatchWitness("HandlePrepareForModeAction.showtime@0x823099D0",
-                          static_cast<s32>(mePlayerActiveRaceCarIndex), true);
         GetActiveRaceCar(mePlayerActiveRaceCarIndex)->mbIsWrecked = true;  // stb r18, 0x782(car)
     }
 

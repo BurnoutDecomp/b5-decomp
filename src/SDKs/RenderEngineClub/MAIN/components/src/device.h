@@ -134,7 +134,18 @@ namespace renderengine
         static void Clear(const ClearColorParameters& lrColor, RenderTargetState::TargetID leTarget); // ARTIST82B61C88
         static void Clear(const ClearColorParameters& lrColor, const ClearDepthStencilParameters& lrDepthStencil,
                           RenderTargetState::TargetID leTarget); // ARTIST82B61E18
-        static void ShowPixelBuffer(PixelBuffer* lpBuffer); // ARTIST82B63298, body pending
+        static void ShowPixelBuffer(PixelBuffer* lpBuffer); // ARTIST82B63298
+        // DecFIGS device.h:1383; ARTIST82B63398 and 82B63450.
+        struct LockedFrontBuffer
+        {
+            const void* pixelData;
+            PixelFormat format;
+            u32 pitch;
+            u16 width;
+            u16 height;
+        };
+        static bool LockFrontBuffer(LockedFrontBuffer& lrLockedFrontBuffer);
+        static void UnlockFrontBuffer(LockedFrontBuffer& lrLockedFrontBuffer);
         static bool Initialize();
         static bool Start(const Parameters& lrParameters);
 

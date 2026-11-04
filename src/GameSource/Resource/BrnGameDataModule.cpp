@@ -43,6 +43,13 @@ namespace BrnResource
         AssertNativeLayout();
     }
 
+    // ARTIST 82661758 -> 828F4558 forwards to the resource module's pool visitor.
+    void GameDataModule::DebugReportPools(CgsResource::PoolModule::FPoolReportCallback lpfCallback,
+                                         void* lpUserData)
+    {
+        mResourceModule.GetPoolModule().DebugReport(lpfCallback, lpUserData);
+    }
+
     void GameDataModule::AssertNativeLayout()
     {
         CGS_STATIC_ASSERT((sizeof(CgsResource::ResourceModule) == 0x58280), "ARTIST resource allocation extent");

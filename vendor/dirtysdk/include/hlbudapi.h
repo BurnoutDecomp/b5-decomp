@@ -57,7 +57,7 @@ void        HLBApiSetSortFunction(HLBApiRefT* pApi, void* pSortCallback);
 s32         HLBListGetBuddyCount(HLBApiRefT* pApi);
 HLBBudT*    HLBListGetBuddyByIndex(HLBApiRefT* pApi, s32 iIndex);
 HLBBudT*    HLBListGetBuddyByName(HLBApiRefT* pApi, const char* pName);
-void        HLBListSort(HLBApiRefT* pApi);
+s32         HLBListSort(HLBApiRefT* pApi);
 
 // Chat / invite message to a buddy (every message entry point shares this shape).
 s32         HLBListSendChatMsg(HLBApiRefT* pApi, const void* pName, s32 iPayload, void* pCallback,
