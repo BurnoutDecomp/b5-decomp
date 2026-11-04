@@ -103,6 +103,19 @@ local int inflateStateCheck(z_streamp strm) {
     return 0;
 }
 
+/* Rebind a live, saved inflate stream after its owning worker changes. */
+int ZEXPORT CgsZlibRebindInflateStream(z_streamp strm) {
+    struct inflate_state FAR *state;
+    if (strm == Z_NULL || strm->zalloc == (alloc_func)0 ||
+        strm->zfree == (free_func)0 || strm->state == Z_NULL)
+        return Z_STREAM_ERROR;
+    state = (struct inflate_state FAR *)strm->state;
+    if (state->mode < HEAD || state->mode > SYNC)
+        return Z_STREAM_ERROR;
+    state->strm = strm;
+    return Z_OK;
+}
+
 int ZEXPORT inflateResetKeep(z_streamp strm) {
     struct inflate_state FAR *state;
 

@@ -169,6 +169,9 @@ namespace BrnResource
         // Update's mReceiverQueue drain (X360 0x82674670: response type 2/3/4/7/8 switch)
         // routes each CgsResource completion back out to the original requester's receiver
         // queue through the event slot staged at request time.
+        void DispatchInternalResourceResponse(s32 liType, const CgsModule::Event* lpEvent,
+                                              CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                              CgsAttribSys::AttribSysIO::InputBuffer* lpAttribInput);
         void ProcessInternalLoadBundleResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                                const CgsResource::Events::LoadBundleResponse* lpResponse);   // 0x82672630
         void ProcessInternalUnloadResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,

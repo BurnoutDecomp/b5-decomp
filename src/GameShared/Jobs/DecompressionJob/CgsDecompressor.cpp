@@ -7,6 +7,8 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <xtl.h> // OutputDebugStringA (the X360 calls it directly on an inflate error)
 
+extern "C" int ZEXPORT CgsZlibRebindInflateStream(z_streamp lpStream);
+
 // Native EAThread id is the32-bit XDK thread handle (ARTIST82B42560).
 namespace EA { namespace Thread { void* GetThreadId(); } }
 
@@ -85,9 +87,11 @@ namespace CgsResource
 
         muNumEntries = lpJobData->muNumEntries;
 
+        mStream = lpJobData->mpStatus->mDecompressionStream;
         muAmountRead = lpJobData->mpStatus->muAmountRead;
         muAmountWritten = lpJobData->mpStatus->muAmountWritten;
         miLastInflateResult = lpJobData->mpStatus->miLastInflateResult;
+        std::memcpy(maPad1, lpJobData->mpStatus->maPad0, sizeof(maPad1));
 
         const s32 liSavedResult = miLastInflateResult;
         mpHeapMalloc  = lpJobData->mpHeapMalloc;
@@ -97,6 +101,10 @@ namespace CgsResource
         if (liSavedResult == 1)
         {
             BeginDecompressingFirstEntry();
+        }
+        else if (liSavedResult == Z_OK && CgsZlibRebindInflateStream(&mStream) == Z_OK)
+        {
+            mStream.opaque = this;
         }
 
         for (u32 i = 1; i < muNumEntries; ++i)
