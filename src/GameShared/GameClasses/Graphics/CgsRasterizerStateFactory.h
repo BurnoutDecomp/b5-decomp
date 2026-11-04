@@ -154,13 +154,7 @@ public:
     // Body in CgsRasterizerStateFactory.cpp.
     virtual void Construct(rw::IResourceAllocator* lpAllocator);
 
-    // Both are declared in the original header. NEITHER HAS A CONSOLE BODY: a
-    // scan of the whole image finds no Destruct and no Prepare symbol for any of
-    // the three factories, and no cross-reference anywhere names one, so there is nothing to
-    // reconstruct and nothing is invented. They are DEFINED -- as flagged,
-    // never-called link-closure fillers -- at the end of
-    // CgsRasterizerStateFactory.cpp, as for the blend and depth/stencil twins, so that
-    // this class's vtable resolves completely the moment anything constructs it.
+    // Shared console bodies appear in the ARTIST vtable at 0x820CDC28.
     virtual void Destruct();
     virtual bool Prepare();
 

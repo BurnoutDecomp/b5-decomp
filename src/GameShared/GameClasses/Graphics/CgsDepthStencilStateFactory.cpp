@@ -7,8 +7,7 @@
 //   CgsDepthStencilStateFactory::Construct  [EXECUTED in goal trace]
 //
 // Builds the fixed set of depth/stencil states the immediate-mode renderer selects
-// between. Only Construct is console-attested for this TU (Destruct / Prepare / GetState
-// are declaration-only -- see the header).
+// between. GetState is inlined into its readers.
 
 // The five depth/stencil-state slots (five consecutive file-scope words on the console,
 // one per index of saDepthStencilStates). The original header and .cpp declare
@@ -105,4 +104,15 @@ void CgsDepthStencilStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
         CreateDepthStencilState(lpAllocator, &lParameters);
     CGS_ASSERT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON],
                "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZGTEQ_ZWRITEON ]");
+}
+
+// ARTIST vtable 0x820CDC34, slot +0x04 targets the shared return at 0x8284CB38.
+void CgsDepthStencilStateFactory::Destruct()
+{
+}
+
+// ARTIST vtable slot +0x08 targets the shared true return at 0x82C296C8.
+bool CgsDepthStencilStateFactory::Prepare()
+{
+    return true;
 }

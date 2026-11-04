@@ -2,6 +2,8 @@
 #include "GameSource/Graphics/BrnAntiAliasTiling.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 #include "GameSource/Game/BrnGlobalCpuMonitors.h"
+#include "GameSource/Effects/EffectsModule.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelbuffer.h"
 #include "GameSource/Resource/BrnResourceAllocator.h"
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "SDKs/EATech/eajobs/job_scheduler.h"
@@ -23,6 +25,12 @@
 #include <cstring>
 #include <cstdio>
 #include <xgraphics.h>
+
+namespace CgsGraphics
+{
+    extern OcclusionCullManager* spOcclusionCullManager;
+    extern u32 suOcclusionCullIndexCountThreshold;
+}
 
 // ARTIST byte_82FAEDD0: shared with Render's present-interval change check.
 // The original data image initializes this byte to zero.
@@ -1431,4 +1439,651 @@ void BrnRendererModule::ClearGraphicsContext()
     for (u32 stream = 0; stream < 5; ++stream)
         D3DDevice_SetStreamSource(device, stream, 0, 0, 0, 1ULL << (stream / 3));
     D3DDevice_SetIndices(device, 0);
+}
+
+// ARTIST 8240BFA8.
+void BrnRendererModule::Render(BrnEffects::EffectsModule* effects,
+                               const BrnGame::DispatchThreadInputBuffer* input)
+{
+    using namespace CgsGraphics;
+    using CgsDev::PerfMonCpu;
+    using CgsDev::PerfMonGpu;
+    if (!shadow::Device::FrameBegin())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("shadow::Device::FrameBegin()", kRendererSource, 2185);
+        CgsDev::Assert::EndAssert();
+    }
+    PerfMonCpu::StartMonitor(mCpuMonitors.miWholeDispatchThread);
+    PerfMonCpu::StartMonitor(miCpuPerfMonDispatchThread);
+
+    DispatchPacketInterpreter* const interpreter = mpInterpreter;
+    DrawRenderable::SetPreZMode(mbRenderPreZ);
+    DrawRenderable::SetPreZAlpha(mbRenderPreZAlpha);
+    DrawRenderable::SetPreZNearThreshold(mbPreZNearOnly ? mfPreZDistanceThreshold : 100000.0f);
+    CgsGraphics::spOcclusionCullManager = &mOcclusionCullManager;
+    CgsGraphics::suOcclusionCullIndexCountThreshold = muOcclusionCullIndexCountThreshold;
+
+    DispatchObjectContext objectContext;
+    objectContext.miListIdBase = 0;
+    objectContext.mpJobState = 0;
+    objectContext.mbPreZEnabled = mbRenderPreZ;
+    objectContext.mbPreZAlphaEnabled = mbRenderPreZAlpha;
+    __stvx(__vspltw(__lvlx(&mfPreZDistanceThreshold, 0), 0),
+        objectContext.mvPreZDistanceThreshold, 0);
+    objectContext.ResetShadowing();
+    mOcclusionCullManager.mNearClipOffset.SetZ(mfOccludeeNearClipOffset);
+
+    mLoadingScreenRenderer.AddCommand(input->GetLoadingScreenCommand());
+    const char* const readBuffer = "lpDispatchThreadInputBuffer->IsReadBuffer()";
+    if (input->IsWriteBuffer())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(readBuffer, kRendererSource, 2223);
+        CgsDev::Assert::EndAssert();
+    }
+    input->LockForRead();
+    const Matrix44 viewProjection = input->GetOcclusionViewProjectionMatrix();
+    mOcclusionCullManager.mViewProjectionMatrix = viewProjection;
+    input->UnlockForRead();
+
+    DispatchFrame& meshFrame = mSingleBufferedDispatchFrame;
+    meshFrame.Reset();
+    interpreter->SetSingleBufferedDispatchFrame(&meshFrame);
+    interpreter->SetTime(0.0f);
+    PerfMonCpu::StartMonitor(mCpuMonitors.miObjectToMeshListConversion);
+    ConvertObjectsToMeshes(mDoubleBufferedDispatchFrame, meshFrame, interpreter, objectContext);
+    PerfMonCpu::StopMonitor(mCpuMonitors.miObjectToMeshListConversion);
+    PerfMonCpu::StartMonitor(mCpuMonitors.miStartSortJobs);
+    SortDispatchLists(meshFrame);
+    PerfMonCpu::StopMonitor(mCpuMonitors.miStartSortJobs);
+
+    const BrnDirector::Camera::MotionBlurData& motion = mEffectsArbitrator.GetMotionBlurData();
+    const bool motionBlurActive = motion.mbIsActive;
+    const u8 worldStencil = static_cast<u8>(static_cast<s32>(motion.mfWorldBlurAmount * 255.0f));
+    const u8 carStencil = static_cast<u8>(static_cast<s32>(motion.mfCarsBlurAmount * 255.0f));
+
+    PerfMonCpu::StartMonitor(mCpuMonitors.miEffectsUpdate);
+    effects->DispatchThreadUpdate(input);
+    PerfMonCpu::StopMonitor(mCpuMonitors.miEffectsUpdate);
+    const bool drawFrame = meFrameStallStage == E_FRAMESTALL_NOT_STALLED
+        || meFrameStallStage == E_FRAMESTALL_SYNCING_BUFFERS;
+    if (input->IsWriteBuffer())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(readBuffer, kRendererSource, 2274);
+        CgsDev::Assert::EndAssert();
+    }
+    input->LockForRead();
+    if (drawFrame)
+    {
+        bool fullFrameRate = input->GetIsRenderingAtFullFrameRate();
+        if (mLoadingScreenRenderer.IsRenderingLoadingScreen())
+            fullFrameRate = true;
+        if (fullFrameRate != gRendererPresentInterval82FAEDD0)
+        {
+            gRendererPresentInterval82FAEDD0 = fullFrameRate;
+            const u32 interval = fullFrameRate ? 1 : 2;
+            renderengine::Device::m_parameterCopy.numVsyncs = interval;
+            D3DDevice_SetRenderState_PresentInterval(gpD3DDevice, interval);
+        }
+
+        const bool effectsAllowed = input->GetCalibrationUnfriendlyEnablePostFx();
+        const bool inputStalled = input->GetIsStalled();
+        const bool renderParticles = mbRenderParticles && effectsAllowed && !inputStalled;
+        const BrnParticle::ParticleModule::ParticleRenderData* const particleData = input->GetParticleRenderData();
+        BrnParticle::ParticleModule* const particles = particleData->mpParticleModule;
+        PerfMonCpu::StartMonitor(mCpuMonitors.miBuildParticleVertexBuffers);
+        if (renderParticles)
+        {
+            particles->BeginParticleRenderJob(*particleData);
+            particles->BuildLionVertexBuffers(*particleData);
+        }
+        PerfMonCpu::StopMonitor(mCpuMonitors.miBuildParticleVertexBuffers);
+
+        const BrnShaderConstantsFrame& shaderFrame = maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
+        const f32 whiteLevel = shaderFrame.GetWhiteLevel();
+        interpreter->SetTime(shaderFrame.GetGameTime());
+        PerfMonGpu::StartProfiling();
+
+        mu32NumWorldOpaqueObjectTotals += meshFrame.GetList(11)->GetCount();
+        mu32NumCarOpaqueObjectTotals += meshFrame.GetList(19)->GetCount();
+        mu32NumWorldTransparentObjectTotals += meshFrame.GetList(15)->GetCount();
+        mu32NumCarTransparentObjectTotals += meshFrame.GetList(20)->GetCount();
+        u32 shadowCount = 0;
+        for (u32 list = 0; list < 5; ++list)
+            shadowCount += meshFrame.GetList(list)->GetCount();
+        mu32NumShadowObjectTotals += shadowCount;
+        if (++mu32DispatchFrameCounter == 60)
+        {
+            mu32NumWorldOpaqueObjects = mu32NumWorldOpaqueObjectTotals / 60;
+            mu32NumCarOpaqueObjects = mu32NumCarOpaqueObjectTotals / 60;
+            mu32NumWorldTransparentObjects = mu32NumWorldTransparentObjectTotals / 60;
+            mu32NumCarTransparentObjects = mu32NumCarTransparentObjectTotals / 60;
+            mu32NumShadowObjects = mu32NumShadowObjectTotals / 60;
+            mu32NumWorldOpaqueObjectTotals = 0;
+            mu32NumCarOpaqueObjectTotals = 0;
+            mu32NumWorldTransparentObjectTotals = 0;
+            mu32NumCarTransparentObjectTotals = 0;
+            mu32NumShadowObjectTotals = 0;
+            mu32DispatchFrameCounter = 0;
+        }
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miStartTintBlendJob);
+        if (mbRenderPostFX)
+        {
+            rw::graphics::postfx::ColourCube* cubes[BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT];
+            f32 weights[BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT];
+            const bool tintActive = mEffectsArbitrator.EvalTint(cubes, weights) && effectsAllowed;
+            msPostFx.SetTint(tintActive);
+            if (tintActive)
+            {
+                for (u32 i = 0; i < BrnGraphics::EffectsArbitrator::KU_TINT_COLOUR_CUBE_CNT; ++i)
+                {
+                    if (cubes[i])
+                        msPostFx.SetColourCube(i, cubes[i]);
+                    msPostFx.SetTintBlendFactor(i, weights[i]);
+                }
+                msPostFx.BeginTintBlend();
+            }
+        }
+        PerfMonCpu::StopMonitor(mCpuMonitors.miStartTintBlendJob);
+        shadow::Device::ResetShadowing();
+        shadow::Device::SetState(mpShadowMapTextureState[0], 15);
+        if (mpGlassFractureTextureState)
+            shadow::Device::SetState(mpGlassFractureTextureState, 14);
+        shadow::Device::SetState(mpEnvMapTextureState, 13);
+
+        CgsGraphics::DispatchMeshContext meshContext;
+        PerfMonGpu::StartMonitor(mGpuMonitors.miShadowmap);
+        D3DDevice_SetShaderGPRAllocation(gpD3DDevice, 0, 64, 64);
+        if (mRenderSwitches.mbRenderShadows)
+        {
+            for (s32 cascade = 0; cascade < 2; ++cascade)
+            {
+                const s32 dispatchMonitor = cascade == 0 ? mCpuMonitors.miDispatchShadowmapNearCSMList
+                    : mCpuMonitors.miDispatchShadowmapFarCSMList;
+                const s32 sortMonitor = cascade == 0 ? mCpuMonitors.miWaitOnShadowNearSortJob
+                    : mCpuMonitors.miWaitOnShadowFarSortJob;
+                PerfMonCpu::StartMonitor(dispatchMonitor);
+                mShadowMapRenderManager.BeginRenderShadowMap(cascade, true, &mAllocatedRenderTargets);
+                mShadowMapRenderManager.BeginFrontFaceCullRender();
+                PerfMonCpu::StartMonitor(sortMonitor);
+                maShadowMapSortJob[2 * cascade].WaitOn();
+                PerfMonCpu::StopMonitor(sortMonitor);
+                meshFrame.GetList(cascade)->DispatchAllMeshesZOnly(interpreter, &meshContext);
+                mShadowMapRenderManager.EndFrontFaceCullRender();
+
+                PerfMonCpu::StartMonitor(sortMonitor);
+                maShadowMapSortJob[2 * cascade + 1].WaitOn();
+                PerfMonCpu::StopMonitor(sortMonitor);
+                mShadowMapRenderManager.BeginBackFaceCullRender();
+                meshFrame.GetList(cascade + 2)->DispatchAllMeshesZOnly(interpreter, &meshContext);
+                mShadowMapRenderManager.EndBackFaceCullRender();
+                mShadowMapRenderManager.EndRenderShadowMap(cascade, &mAllocatedRenderTargets);
+                PerfMonCpu::StopMonitor(dispatchMonitor);
+            }
+
+            PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchShadowmapFarCSMList);
+            PerfMonCpu::StartMonitor(mCpuMonitors.miWaitOnShadowFarSortJob);
+            maShadowMapSortJob[4].WaitOn();
+            PerfMonCpu::StopMonitor(mCpuMonitors.miWaitOnShadowFarSortJob);
+            mShadowMapRenderManager.BeginRenderShadowMap(2, true, &mAllocatedRenderTargets);
+            mShadowMapRenderManager.BeginFrontFaceCullRender();
+            meshFrame.GetList(4)->DispatchAllMeshesZOnly(interpreter, &meshContext);
+            mShadowMapRenderManager.EndFrontFaceCullRender();
+            mShadowMapRenderManager.EndRenderShadowMap(2, &mAllocatedRenderTargets);
+            PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchShadowmapFarCSMList);
+        }
+        D3DDevice_SetShaderGPRAllocation(gpD3DDevice, 0, 48, 80);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miShadowmap);
+
+        PerfMonGpu::StartMonitor(mGpuMonitors.miEnvironmentMap);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchEnvmapLists);
+        if (mRenderSwitches.mbRenderEnvmap)
+        {
+            for (u32 face = 0; face < 6; ++face)
+            {
+                PerfMonCpu::StartMonitor(mCpuMonitors.miWaitOnEnvmapSortJobs);
+                maEnvmapSortJobs[face].WaitOn();
+                PerfMonCpu::StopMonitor(mCpuMonitors.miWaitOnEnvmapSortJobs);
+                if (input->GetEnvMapFaceRender(face))
+                {
+                    BeginRenderEnvironmentMapFace(face, whiteLevel);
+                    shadow::Device::LockRasteriserState();
+                    shadow::Device::LockDepthStencilState();
+                    meshFrame.GetList(face + 5)->DispatchAllMeshes(interpreter, &meshContext, 0, -1);
+                    shadow::Device::UnlockRasteriserState();
+                    shadow::Device::UnlockDepthStencilState();
+                    const BrnShaderConstantsFrame faceConstants = maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
+                    mSkyDome.RenderToEnvironmentMap(static_cast<BrnGraphics::EEnvironmentMapFace>(face),
+                        &mIm3dRendererSkyDome, mpCloudDensity0Texture, mpCloudLighting0Texture, &faceConstants);
+                    EndRenderEnvironmentMapFace(face);
+                }
+            }
+        }
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchEnvmapLists);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miEnvironmentMap);
+
+        BeginRenderAntiAliased(whiteLevel, motionBlurActive, worldStencil);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchPreZ);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miPreZ);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miWaitOnPreZSortJob);
+        mPreZSortJob.WaitOn();
+        PerfMonCpu::StopMonitor(mCpuMonitors.miWaitOnPreZSortJob);
+        if (mbRenderPreZ)
+            meshFrame.GetList(21)->DispatchAllMeshesZOnly(interpreter, &meshContext);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miPreZ);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchPreZ);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchCarLists);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchCarOpaqueList);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miCarOpaque);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miWaitOnCarOpaqueSortJob);
+        mCarOpaqueSortJob.WaitOn();
+        PerfMonCpu::StopMonitor(mCpuMonitors.miWaitOnCarOpaqueSortJob);
+        if (mbRenderCarsOpaque)
+        {
+            if (motionBlurActive)
+                shadow::Device::BeginForceStencilWrite(carStencil);
+            DispatchList* const list = meshFrame.GetList(19);
+            if (mOcclusionCullManager.mbOcclusionEnabled && mbOcclusionCullCarOpaque)
+            {
+                s32 first = 0;
+                do
+                {
+                    mOcclusionCullManager.BeginQueries();
+                    list->DispatchAllMeshOcclusionQueries(interpreter, first, 64);
+                    mOcclusionCullManager.EndQueries();
+                    mOcclusionCullManager.BeginConditionalRender();
+                    first = list->DispatchAllMeshes(interpreter, &meshContext, first, 64);
+                    mOcclusionCullManager.EndConditionalRender();
+                } while (first != -1);
+            }
+            else
+                list->DispatchAllMeshes(interpreter, &meshContext, 0, -1);
+            if (motionBlurActive)
+                shadow::Device::EndForceStencilWrite();
+        }
+        PerfMonGpu::StopMonitor(mGpuMonitors.miCarOpaque);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchCarOpaqueList);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchCarLists);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchWorldLists);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchWorldOpaqueList);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miWorldOpaque);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miWaitOnWorldOpaqueSortJob);
+        mWorldOpaqueSortJob.WaitOn();
+        PerfMonCpu::StopMonitor(mCpuMonitors.miWaitOnWorldOpaqueSortJob);
+        if (mbRenderWorldOpaque)
+        {
+            DispatchList* const list = meshFrame.GetList(11);
+            if (mOcclusionCullManager.mbOcclusionEnabled && mbOcclusionCullWorldOpaque)
+            {
+                s32 first = 0;
+                do
+                {
+                    PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchOcclusionQueries);
+                    mOcclusionCullManager.BeginQueries();
+                    list->DispatchAllMeshOcclusionQueries(interpreter, first, 64);
+                    mOcclusionCullManager.EndQueries();
+                    PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchOcclusionQueries);
+                    mOcclusionCullManager.BeginConditionalRender();
+                    first = list->DispatchAllMeshes(interpreter, &meshContext, first, 64);
+                    mOcclusionCullManager.EndConditionalRender();
+                } while (first != -1);
+            }
+            else
+                list->DispatchAllMeshes(interpreter, &meshContext, 0, -1);
+        }
+        PerfMonGpu::StopMonitor(mGpuMonitors.miWorldOpaque);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchWorldOpaqueList);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchWorldLists);
+
+        const BrnShaderConstantsFrame* const skyFrame = &maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderSky);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miSky);
+        if (mbRenderSky)
+            mSkyDome.Render(&mIm3dRendererSkyDome, mpCloudDensity0Texture, mpCloudLighting0Texture, skyFrame);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miSky);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderSky);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchWorldLists);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchWorldTransparentList);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miWorldTransparent);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miWaitOnWorldTransparentSortJob);
+        mWorldTransparentSortJob.WaitOn();
+        PerfMonCpu::StopMonitor(mCpuMonitors.miWaitOnWorldTransparentSortJob);
+        if (mbRenderWorldTransparent)
+        {
+            if (mOcclusionCullManager.mbOcclusionEnabled && mbOcclusionCullWorldTransparent)
+            {
+                mOcclusionCullManager.BeginQueries();
+                meshFrame.GetList(15)->DispatchAllMeshOcclusionQueries(interpreter, 0, -1);
+                mOcclusionCullManager.EndQueries();
+                mOcclusionCullManager.BeginConditionalRender();
+                meshFrame.GetList(15)->DispatchAllMeshes(interpreter, &meshContext, 0, -1);
+                mOcclusionCullManager.EndConditionalRender();
+            }
+            else
+                meshFrame.GetList(15)->DispatchAllMeshes(interpreter, &meshContext, 0, -1);
+        }
+        PerfMonGpu::StopMonitor(mGpuMonitors.miWorldTransparent);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchWorldTransparentList);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchWorldLists);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchCarLists);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miDispatchCarTransparentList);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miCarTransparent);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miWaitOnCarTransparentSortJob);
+        mCarTransparentSortJob.WaitOn();
+        PerfMonCpu::StopMonitor(mCpuMonitors.miWaitOnCarTransparentSortJob);
+        if (mbRenderCarsTransparent)
+        {
+            if (mbRenderBlobbyShadows)
+                mBlobbyShadowManager.Render(viewProjection, &mIm3dRenderer, mpBlobbyShadowTexture,
+                    mfBlobbyShadowAlpha, whiteLevel);
+            if (motionBlurActive)
+                shadow::Device::BeginForceStencilWrite(carStencil);
+            if (mOcclusionCullManager.mbOcclusionEnabled && mbOcclusionCullCarTransparent)
+            {
+                mOcclusionCullManager.BeginQueries();
+                meshFrame.GetList(20)->DispatchAllMeshOcclusionQueries(interpreter, 0, -1);
+                mOcclusionCullManager.EndQueries();
+                mOcclusionCullManager.BeginConditionalRender();
+                meshFrame.GetList(20)->DispatchAllMeshes(interpreter, &meshContext, 0, -1);
+                mOcclusionCullManager.EndConditionalRender();
+            }
+            else
+                meshFrame.GetList(20)->DispatchAllMeshes(interpreter, &meshContext, 0, -1);
+            if (motionBlurActive)
+                shadow::Device::EndForceStencilWrite();
+        }
+        PerfMonGpu::StopMonitor(mGpuMonitors.miCarTransparent);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchCarTransparentList);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miDispatchCarLists);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderCoronas);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miCoronas);
+        if (mbRenderCoronas)
+            mCoronaManager.Render(whiteLevel);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miCoronas);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderCoronas);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miWaitOnParticleVertexBuffersJob);
+        if (renderParticles)
+            particles->WaitOnParticleRenderJob(*particleData);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miWaitOnParticleVertexBuffersJob);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderFullResParticles);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miFullResParticles);
+        if (renderParticles)
+            particles->RenderFullResParticles(*particleData);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderFullResParticles);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miFullResParticles);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderIm3d);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miIm3dAndRacePositions);
+        if (mbRenderWorldImmediateMode)
+        {
+            mIm3dRenderBufferUntex.Dispatch(&mIm3dRendererUntex);
+            mIm3dRenderBuffer.Dispatch(&mIm3dRenderer);
+            mIm3dBufferRacePosition.Dispatch(&mIm3dRenderer);
+        }
+        PerfMonGpu::StopMonitor(mGpuMonitors.miIm3dAndRacePositions);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderIm3d);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderDebugData);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miDebug3d);
+        if (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot)
+            mIm3dDebugRenderBuffer.Dispatch(&mIm3dRenderer);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miDebug3d);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderDebugData);
+
+        ResolveMSAA(whiteLevel, worldStencil);
+        if (effectsAllowed)
+            ComputeSunCoronaVisibility();
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderQuarterResParticles);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miQuarterResParticles);
+        if (renderParticles)
+        {
+            BeginQuarterResBuffer();
+            CgsRenderTarget* const particleTarget = mAllocatedRenderTargets.GetParticleBuffer();
+            particleTarget->GetRenderTarget()->Resolve(true, false);
+            particles->RenderQuarterResParticles(*particleData, particleTarget);
+            if (effectsAllowed)
+            {
+                CgsRenderTarget* const coronaTarget = mAllocatedRenderTargets.GetSunCoronaBuffer();
+                const BrnShaderConstantsFrame& coronaFrame = maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
+                const bool overrideBrightness = mDebugComponent.GetOverrideSunBrightness();
+                const f32 brightness = mDebugComponent.GetOverriddenSunBrightness();
+                const f32 coronaWhiteLevel = coronaFrame.GetWhiteLevel();
+                const Vector3 keyLightColour = coronaFrame.GetKeyLightColour();
+                mSunCorona.RenderOccludedFlare(coronaTarget, keyLightColour, coronaWhiteLevel,
+                    brightness, overrideBrightness);
+            }
+            mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget()->Resolve(false, true);
+        }
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderQuarterResParticles);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miQuarterResParticles);
+        EndRenderAntiAliased();
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderPostFX);
+        if (mbRenderPostFX)
+        {
+            D3DDevice_SetShaderGPRAllocation(gpD3DDevice, 0, 64, 64);
+            const f32 degreesToRadians = 0.017453292f;
+            const BrnEffectsFrame& baseEffects = mEffectsArbitrator
+                .GetInternalEffectsFrame(BrnGraphics::E_EFLAYER_BASE, 0);
+
+            BrnEffects::BloomData bloom;
+            const bool evaluateBloom = baseEffects.GetUseBloom();
+            if (evaluateBloom)
+                mEffectsArbitrator.EvalBloom(bloom);
+            const bool useBloom = evaluateBloom && effectsAllowed;
+            msPostFx.SetBloom(useBloom);
+            if (useBloom)
+            {
+                BrnPostFxBloomData* const state = msPostFx.GetBloom();
+                state->mColour = bloom.mv4Scale;
+                state->mfThreshold = bloom.mfThreshold * gfBloomThresholdScale;
+                state->mfLuminance = bloom.mfLuminance * gfBloomLuminanceScale;
+            }
+
+            BrnEffects::VignetteData vignette;
+            const bool evaluateVignette = baseEffects.GetUseVignette();
+            if (evaluateVignette)
+                mEffectsArbitrator.EvalVignette(vignette);
+            const bool useVignette = evaluateVignette && effectsAllowed;
+            msPostFx.SetVignette(useVignette);
+            if (useVignette)
+            {
+                rw::graphics::postfx::Vignette::State* const state = msPostFx.GetVignetteState();
+                state->m_gradientScalars.SetX(vignette.mfSharpness);
+                state->m_gradientScalars.SetY(vignette.mfAngle * degreesToRadians);
+                state->m_innerColour = vignette.mv4InnerColour;
+                state->m_outerColour = vignette.mv4OuterColour;
+                state->m_centerScale.Set(vignette.mv2Centre.mV.x, vignette.mv2Centre.mV.y,
+                    vignette.mv2Amount.mV.x, vignette.mv2Amount.mV.y);
+                msPostFx.GetVignette()->SetState(*state);
+            }
+
+            BrnEffects::DepthOfFieldData depthOfField;
+            const bool evaluateDof = baseEffects.GetUseDepthOfField();
+            if (evaluateDof)
+                mEffectsArbitrator.EvalDepthOfField(depthOfField);
+            const bool useDof = evaluateDof && effectsAllowed;
+            msPostFx.SetDepthOfField(useDof);
+            if (useDof)
+            {
+                rw::graphics::postfx::DepthOfField::State* const state = msPostFx.GetDofState();
+                state->m_focalPlanes[0] = depthOfField.mfNearPlane;
+                state->m_focalPlanes[1] = depthOfField.mfFocalPlane;
+                state->m_focalPlanes[2] = depthOfField.mfFocalPlane2;
+                state->m_focalPlanes[3] = depthOfField.mfFarPlane;
+                state->m_projNearPlane = 0.1f;
+                state->m_projFarPlane = 1000.0f;
+                state->m_dofAmount = depthOfField.mfDofAmount;
+                msPostFx.GetDepthOfField()->SetState(*state);
+            }
+
+            BrnEffects::BlurData blur;
+            const bool evaluateBlur = baseEffects.GetUseBlur();
+            if (evaluateBlur)
+                mEffectsArbitrator.EvalBlur(blur);
+            const bool useBlur = evaluateBlur && effectsAllowed;
+            msPostFx.SetB4Blur(useBlur);
+            if (useBlur)
+            {
+                const __vector4 yaw = __vspltw(baseEffects.GetAngularVelocity().mV, 1);
+                const f32 centreScale = -0.125f;
+                const f32 amountScale = 0.25f;
+                const __vector4 centreBias = __vmulfp(yaw, __vspltw(__lvlx(&centreScale, 0), 0));
+                const __vector4 signedAmountBias = __vmulfp(yaw, __vspltw(__lvlx(&amountScale, 0), 0));
+                const __vector4 signBit = __vslw(__vspltisw(-1), __vspltisw(-1));
+                const __vector4 amountBias = __vandc(signedAmountBias, signBit);
+                f32 speed = baseEffects.GetSpeedMPH() * 0.0060606059f;
+                if (speed > 1.0f)
+                    speed = 1.0f;
+
+                rw::graphics::postfx::B4Blur::State* const state = msPostFx.GetB4BlurState();
+                const f32 blendCentre = blur.mv2BlendCentre.mV.x + centreBias.x;
+                const f32 blurCentre = blur.mv2BlurCentre.mV.x + centreBias.x;
+                const f32 blendLow = static_cast<f32>(__fsel(-blendCentre, 0.0f, blendCentre));
+                const f32 blurLow = static_cast<f32>(__fsel(-blurCentre, 0.0f, blurCentre));
+                const f32 blendX = static_cast<f32>(__fsel(1.0f - blendLow, blendLow, 1.0f));
+                const f32 blurX = static_cast<f32>(__fsel(1.0f - blurLow, blurLow, 1.0f));
+                state->m_blurAmount = blur.mv2BlurAmount;
+                state->m_blurOpacity = blur.mfOpacity;
+                state->m_blendCenter = ::Vector2(blendX, blur.mv2BlendCentre.mV.y);
+                state->m_blurCenter = ::Vector2(blurX, blur.mv2BlurCentre.mV.y);
+                state->m_blurVelocity = blur.mfVelocity * speed * speed;
+                const __vector4 blendAmount = __vsubfp(__vspltw(blur.mv2BlendAmount.mV, 0), amountBias);
+                state->m_blendAmount = ::Vector2(blendAmount.x, blur.mv2BlendAmount.mV.y);
+                state->SetBlendSharpness(blur.mfSharpness);
+                state->m_blendNoise = blur.mfNoise;
+                state->m_blendAngle = blur.mfAngle * degreesToRadians;
+                msPostFx.GetB4Blur()->SetState(*state);
+            }
+        }
+
+        CgsRenderTarget* const postFxTarget = mAllocatedRenderTargets.GetBackBuffer();
+        CgsRenderTarget* const downsampleTarget = mAllocatedRenderTargets.GetDownSampleBuffer();
+        PerfMonGpu::StartMonitor(mGpuMonitors.miPostFX);
+        if (mbRenderPostFX)
+        {
+            const BrnEffectsFrame& baseEffects = mEffectsArbitrator
+                .GetInternalEffectsFrame(BrnGraphics::E_EFLAYER_BASE, 0);
+            BrnEffects::TintData2d tint;
+            tint.mv4Colour.SetZero();
+            if (effectsAllowed && baseEffects.GetUseTint2d())
+                mEffectsArbitrator.EvalTint2d(tint);
+            const f32 brightness = static_cast<f32>(input->GetBrightness()) * 0.01f - 0.5f;
+            const f32 contrast = static_cast<f32>(input->GetContrast()) * 0.01f + 0.5f;
+            const MotionBlurState::EQuality quality = baseEffects.GetMotionBlurData().mbIsExpensiveMotionBlur
+                ? MotionBlurState::E_QUALITY_EXPENSIVE : MotionBlurState::E_QUALITY_CHEAP;
+            const Matrix44& cameraView = particleData->mCgsCamera.mView;
+            const Matrix44Affine affineView(Vector3(cameraView.xAxis.GetVector()),
+                Vector3(cameraView.yAxis.GetVector()), Vector3(cameraView.zAxis.GetVector()),
+                Vector3(cameraView.wAxis.GetVector()));
+            msPostFx.GetMotionBlurState().Update(affineView, particleData->mCgsCamera.mProjection,
+                particleData->mfCurrentTimeStep, quality);
+
+            renderengine::Texture* calibration = 0;
+            if (!effectsAllowed)
+            {
+                const CgsResource::ResourceHandle handle = input->GetCalibrationTextureHandle();
+                if (handle != CgsResource::NULLResourceHandle)
+                    mCalibrationTextureHandle = handle;
+                if (mCalibrationTextureHandle != CgsResource::NULLResourceHandle)
+                    calibration = *static_cast<renderengine::Texture**>(mCalibrationTextureHandle.mpResourceMemory);
+            }
+            msPostFx.Render(mAllocatedRenderTargets, downsampleTarget->GetRenderTarget(),
+                postFxTarget->GetRenderTarget(), tint.mv4Colour, motionBlurActive, brightness,
+                contrast, whiteLevel, mfAspectCorrection, calibration);
+        }
+        EndRenderPostFx(postFxTarget->GetRenderTarget());
+        D3DDevice_SetShaderGPRAllocation(gpD3DDevice, 0, 0, 0);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miPostFX);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderPostFX);
+
+        PerfMonGpu::StartMonitor(mGpuMonitors.miMenusAndHud);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderHUD);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderHUD);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderDebugData);
+        if (mbShowShadowMap)
+        {
+            shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+                E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF));
+            shadow::Device::SetState(CgsBlendStateFactory::GetState(
+                E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
+            miShowShadowMapIndex %= 4;
+            renderengine::Texture* const texture = mAllocatedRenderTargets
+                .GetShadowMapBuffer(miShowShadowMapIndex)->GetDepthTexture();
+            DebugDisplayRenderTarget(texture, ::Vector2(0.7f, 0.0f), ::Vector2(0.3f, 0.3f), 0xffffffffu);
+        }
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderDebugData);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderHUD);
+        if (mbRenderHudImmediateMode)
+        {
+            mLoadingScreenRenderer.RenderBackground(&mIm2dRenderer);
+            mIm2dRenderBuffer.Dispatch(&mIm2dRenderer);
+            mIm3dBufferMenusAndHud.Dispatch(&mIm3dRenderer);
+            mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
+        }
+        if (mfAspectCorrection < 1.0f)
+        {
+            shadow::Device::SetState(CgsDepthStencilStateFactory::GetState(
+                E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF));
+            shadow::Device::SetState(CgsRasterizerStateFactory::GetState(
+                E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE));
+            shadow::Device::SetState(CgsBlendStateFactory::GetState(
+                E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA));
+            RenderLetterBoxBars(mIm2dRenderer, mfAspectCorrection);
+        }
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderHUD);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miMenusAndHud);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderHUD);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderHUD);
+
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderDebugData);
+        PerfMonGpu::StartMonitor(mGpuMonitors.miDebug2d);
+        if (mbRenderHudImmediateMode && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
+            mIm2dDebugRenderBuffer.Dispatch(&mIm2dRenderer);
+        if (mbRenderHudImmediateMode && (!mbDispatchThreadTakeScreenshot || mbCaptureOverlaysInScreenshot))
+        {
+            bool thread0, thread1, thread2;
+            input->GetThreadsOverBudget(thread0, thread1, thread2);
+            RenderThreeThreadMonitors(thread0, thread1, thread2);
+        }
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderDebugData);
+        PerfMonCpu::StartMonitor(mCpuMonitors.miRenderHUD);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miRenderHUD);
+        PerfMonGpu::StopMonitor(mGpuMonitors.miDebug2d);
+    }
+
+    PerfMonCpu::StopMonitor(mCpuMonitors.miWholeDispatchThread);
+    PerfMonCpu::StopMonitor(miCpuPerfMonDispatchThread);
+    PerfMonCpu::StartMonitor(mCpuMonitors.miShowPixelBuffer);
+    shadow::Device::FrameEnd();
+    renderengine::Device::ShowPixelBuffer(&renderengine::gOriginalColorBuffer);
+    PerfMonCpu::StopMonitor(mCpuMonitors.miShowPixelBuffer);
+    if (drawFrame)
+        PerfMonGpu::StopProfiling();
+    PerfMonCpu::StartMonitor(mCpuMonitors.miWholeDispatchThread);
+    PerfMonCpu::StartMonitor(miCpuPerfMonDispatchThread);
+
+    TakeScreenshot();
+    PerfMonCpu::StartMonitor(mCpuMonitors.miClearGraphicsContext);
+    ClearGraphicsContext();
+    PerfMonCpu::StopMonitor(mCpuMonitors.miClearGraphicsContext);
+    if (input->IsWriteBuffer())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(readBuffer, kRendererSource, 3557);
+        CgsDev::Assert::EndAssert();
+    }
+    input->UnlockForRead();
+    PerfMonCpu::StopMonitor(mCpuMonitors.miWholeDispatchThread);
+    PerfMonCpu::StopMonitor(miCpuPerfMonDispatchThread);
 }

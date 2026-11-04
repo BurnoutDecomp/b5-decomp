@@ -14,6 +14,37 @@ void NativeAssert3d(const char* message, int line)
 }
 }
 
+// ARTIST823FEFE0 / 823FF0D8: dispatch through the derived virtual handler,
+// then use the current dispatch buffer again after each assertion/command.
+template<class V> void Im3dRenderBufferBase<V>::Dispatch(Im3dBase<V>* renderer) const
+{
+    if (!this->mpDispatchBuffer->muCommandBufferWritePos) return;
+    const ImCommand* command = reinterpret_cast<const ImCommand*>(this->mpDispatchBuffer->mpu8CommandBuffer);
+    while (command)
+    {
+        if (!this->HandleCommand(command, renderer))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("HandleCommand( lpCurrentCommand, lpImRenderer )",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h", 204);
+            CgsDev::Assert::EndAssert();
+        }
+        const u32 pos = static_cast<u32>(reinterpret_cast<uintptr_t>(command) -
+            reinterpret_cast<uintptr_t>(this->mpDispatchBuffer->mpu8CommandBuffer));
+        const u32 next = pos + command->muSize;
+        if (pos >= this->mpDispatchBuffer->muCommandBufferWritePos)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "luCurrentCommandPos >= 0 && luCurrentCommandPos < mpDispatchBuffer->muCommandBufferWritePos",
+                kBufferFile, 1301);
+            CgsDev::Assert::EndAssert();
+        }
+        if (next >= this->mpDispatchBuffer->muCommandBufferWritePos) break;
+        command = reinterpret_cast<const ImCommand*>(this->mpDispatchBuffer->mpu8CommandBuffer + next);
+    }
+}
+
 template<class V> void Im3dRenderBufferBase<V>::PostCommand3d(u32 type, const ImCommand* source, u32 bytes)
 {
     if (!this->mbInRenderBlock) NativeAssert3d("Command called outside of a BeginRendering/EndRendering block", 1157);
@@ -112,6 +143,7 @@ bool Im3dRenderBuffer::HandleCommand(const ImCommand* c, Im3dBase<BasicColouredT
 }
 
 #define INSTANTIATE(V) \
+template void Im3dRenderBufferBase<V>::Dispatch(Im3dBase<V>*) const; \
 template void Im3dRenderBufferBase<V>::PostCommand3d(u32,const ImCommand*,u32); \
 template void Im3dRenderBufferBase<V>::SetTransform(Matrix44::InParam); \
 template void Im3dRenderBufferBase<V>::SetTransform(Matrix44::InParam,Matrix44::InParam); \

@@ -36,7 +36,7 @@
 class CSchemaAccess : public CBaseEndianBuffer
 {
 public:
-    // The 0x0C-byte record CSchemaData::GetSchemaEntry fills for a schema id.
+    // The 0x18-byte record copied by CSchemaData::GetSchemaEntry.
     // BindToSchema selects one of two (size, offset) pairs from it depending on
     // its `lbUseFirst` flag: the first pair lives at (+0x00 u16, +0x04 u32), the
     // second at (+0x02 u16, +0x08 u32). Field sizes are X360-attested (lhz vs
@@ -47,7 +47,10 @@ public:
         u16 muSizeSecond;   // +0x02  (lhz var_3E)  size for the else path
         u32 muOffsetFirst;  // +0x04  (lwz var_3C)  offset for the lbUseFirst path
         u32 muOffsetSecond; // +0x08  (lwz var_38)  offset for the else path
+        u8 maOtherFields[CSchemaData::KU_SCHEMA_ENTRY_SIZE - 0x0C];
     };
+
+    typedef char SchemaEntrySizeCheck[sizeof(SchemaEntry) == CSchemaData::KU_SCHEMA_ENTRY_SIZE ? 1 : -1];
 
     // @ 0x8297F380 -- bind this cursor to a field of `lpSchema` identified by
     // `luSchemaId`. Looks the id up (CSchemaData::GetSchemaEntry), then binds the

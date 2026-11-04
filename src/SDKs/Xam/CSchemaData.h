@@ -19,12 +19,13 @@
 // LookupConstantFromTable) are kept verbatim per the naming convention's
 // external/platform-API carve-out.
 //
-// LAYOUT (from LookupConstantFromTable's asm -- only the two fields it reads are
-// pinned; the rest of the object is opaque padding sized to reach them):
-//     +0x18  muConstantCount  -- u16: highest valid constant index, inclusive
-//                                (lhz r10,0x18(r3); the guard rejects index>count)
-//     +0x40  mpConstantTable  -- const u32*: base of the constant value table
-//                                (lwz r10,0x40(r3); indexed by `4 * index`)
+// Layout from the native constant lookup, entry lookup and payload binding:
+//     +0x18  muConstantCount  -- highest valid constant index, inclusive
+//     +0x28  muEntryCount     -- number of schema entries
+//     +0x2A  muEntryStride    -- source table stride in bytes
+//     +0x30  mpEntryTable     -- schema entry table
+//     +0x34  mpPayloadBase    -- payload span
+//     +0x40  mpConstantTable  -- constant value table
 // ===========================================================================
 
 class CSchemaData
@@ -35,10 +36,9 @@ public:
     // the index is past the table (luIndex > muConstantCount).
     s32 LookupConstantFromTable(u16 luIndex, u32* lpOut);
 
-    // Look a schema field up by id and fill `lpEntry` (a CSchemaAccess::SchemaEntry:
-    // two u16 sizes + two u32 offsets). Returns a negative status when the id is not
-    // found. Body lives in the CSchemaData/CSchemaAccess marshalling TU; declared
-    // here so CSchemaAccess::BindToSchema @ 0x8297F380 links against the real member.
+    enum { KU_SCHEMA_ENTRY_SIZE = 0x18 };
+
+    // @ 0x8297F228 -- copy the complete native entry, or return E_FAIL.
     s32 GetSchemaEntry(u32 luSchemaId, void* lpEntry);
 
     // +0x34 -- base of the schema payload span BindToSchema binds a cursor over
@@ -48,7 +48,11 @@ public:
 private:
     u8        mPad0[0x18];          // +0x00 .. +0x17 (opaque)
     u16       muConstantCount;      // +0x18  highest valid index (inclusive)
-    u8        mPad1[0x34 - 0x1A];   // +0x1A .. +0x33 (opaque)
+    u8        mPad1[0x28 - 0x1A];   // +0x1A .. +0x27 (opaque)
+    u16       muEntryCount;         // +0x28
+    u16       muEntryStride;        // +0x2A
+    u8        mPadEntry[0x30 - 0x2C];
+    const u8* mpEntryTable;         // +0x30
     u8*       mpPayloadBase;        // +0x34  schema payload span base
     u8        mPad2[0x40 - 0x38];   // +0x38 .. +0x3F (opaque)
     const u32* mpConstantTable;     // +0x40  constant value table base

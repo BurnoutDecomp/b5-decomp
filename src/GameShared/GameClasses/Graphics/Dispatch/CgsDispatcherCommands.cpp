@@ -85,6 +85,13 @@ extern u32                   suOcclusionCullIndexCountThreshold; // @ 0x83010FB0
 OcclusionCullManager* spOcclusionCullManager          = 0;
 u32                   suOcclusionCullIndexCountThreshold = 0;
 
+// ARTIST 83010F96, 83010F97 and 830110E0. The vector initializer at
+// 82C6C6F0 broadcasts float zero into all four lanes.
+bool DrawRenderable::sbPreZEnabled = false;
+bool DrawRenderable::sbPreZAlpha = false;
+CGS_STATIC_ASSERT((__alignof(rw::math::vpu::VecFloat) == 16), "ARTIST Pre-Z vector alignment");
+rw::math::vpu::VecFloat DrawRenderable::sPreZNearThreshold(__vspltisw(0));
+
 // The per-walk technique/material cache (X360 dword_83010FA4 / dword_83010FA8):
 // DispatchAll* reset these to -1, and the mesh walk re-binds programs/states/
 // constants only when the technique actually changes.
@@ -743,10 +750,11 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
 // SHADERS bundle + material states are live. Occlusion-query interleaving is
 // driven by the renderer's recovered per-pass query brackets.
 // =============================================================================
-s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
-                                    DispatchObjectContext* /*lpContext*/,
-                                    u32 luFirst, s32 liCount)
+s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpreter,
+                                    void* /*lpContext*/,
+                                    s32 liFirst, s32 liCount)
 {
+    const u32 luFirst = static_cast<u32>(liFirst);
     // Per-walk cache reset (X360 dword_83010FA4/FA8 + the program shadows).
     spLastTechnique    = reinterpret_cast<const MaterialTechniqueView*>(~uintptr_t(0));
     suLastTechniqueAux = ~uintptr_t(0);
@@ -872,8 +880,8 @@ s32 DispatchList::DispatchAllMeshOcclusionQueries(
 // trap, and every PC caller (shadow cascades / pre-Z) is gated off; the walk is
 // reconstructed so those passes light up with the interpreter.
 // =============================================================================
-void DispatchList::DispatchAllMeshesZOnly(DispatchPacketInterpreter* lpInterpreter,
-                                          DispatchObjectContext* lpContext)
+void DispatchList::DispatchAllMeshesZOnly(const DispatchPacketInterpreter* lpInterpreter,
+                                          void* lpContext)
 {
     spLastTechnique    = reinterpret_cast<const MaterialTechniqueView*>(~uintptr_t(0));
     suLastTechniqueAux = ~uintptr_t(0);
@@ -881,8 +889,6 @@ void DispatchList::DispatchAllMeshesZOnly(DispatchPacketInterpreter* lpInterpret
 
     if (muCount == 0)
         return;
-
-    CGS_ASSERT(mpSortedKeys != 0, "mpSortedKeys != NULL (PrepareSortJobInfo/SortForDispatch must run first)");
 
     for (u32 luIndex = 0; luIndex < muCount; ++luIndex)
     {

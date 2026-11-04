@@ -206,6 +206,14 @@ namespace BrnGame
         bool GetIsRenderingAtFullFrameRate() const   { return mbIsRenderingAtFullFrameRate; }   // h:181
         void SetIsRenderingAtFullFrameRate(bool lbFullRate) { mbIsRenderingAtFullFrameRate = lbFullRate; } // h:185
 
+        // ARTIST 8240E1D4..8240E1DC; DecFIGS h:182.
+        void GetThreadsOverBudget(bool& thread0, bool& thread1, bool& thread2) const
+        {
+            thread0 = mabThreeThreadsOverBudget[0];
+            thread1 = mabThreeThreadsOverBudget[1];
+            thread2 = mabThreeThreadsOverBudget[2];
+        }
+
     private:
         // Members in DWARF declaration order. With the committed CgsModule::IOBuffer base (a single
         // 1-byte FlagSet8 status field, padded to 4), mxRendererFlags lands at +4, miBrightness at

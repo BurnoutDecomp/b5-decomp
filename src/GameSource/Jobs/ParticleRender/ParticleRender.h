@@ -43,3 +43,12 @@ CGS_STATIC_ASSERT((offsetof(ParticleRenderJobData,mbIsCrash) == 0x2A0), "ARTIST 
 CGS_STATIC_ASSERT((offsetof(ParticleRenderJobData,mbRenderParticles) == 0x2A1), "ARTIST simple render flag");
 CGS_STATIC_ASSERT((offsetof(ParticleRenderJobData,mbRenderSparks) == 0x2A2), "ARTIST spark render flag");
 CGS_STATIC_ASSERT((offsetof(ParticleRenderJobData,mSparkFrameDataSet) == 0x2B0), "ARTIST motion blur frames");
+
+// ARTIST 8291DD58..8291DFA4: six one-byte worker contexts.
+#include "SDKs/EATech/eajobs/job_types.h"
+struct ParticleRenderJob
+{
+    void Execute(ParticleRenderJobData* lpData);
+    void RenderSimpleParticles(ParticleRenderJobData* lpData);
+};
+void ParticleRenderEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
