@@ -167,6 +167,16 @@ namespace Attrib
     {
         friend class CollectionExportPolicy;
     public:
+        // ARTIST ClassPrivate constructor clears this header before optional reserve.
+        void Construct()
+        {
+            mTable = NULL;
+            mTableSize = 0;
+            mNumEntries = 0;
+            mFixedAlloc = 0;
+            mWorstCollision = 0;
+        }
+
         // The template worst-collision rebuild threshold (the 96u instantiation param).
         static const u16 KU_WORST_COLLISION_LIMIT = 96;
 
