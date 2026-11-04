@@ -283,7 +283,7 @@ void *FastFirEngine::Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNod
     if (self->mpDist[self->miCurPass].miFftCount > 0)
     {
         s32 block = self->miFftDone;
-        void *fft = self->mFft.mpContext;
+        FFTState* fft = self->mFft.mpContext;
         const s32 inSel = (self->miPingB == 0) ? 1 : 0; // mpInput[!pingB]
         do
         {
@@ -351,9 +351,9 @@ void *FastFirEngine::Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNod
     if (self->mpDist[self->miCurPass].miIfftCount > 0)
     {
         s32 block = self->miIfftDone;
-        void *fft = self->mFft.mpContext;
+        FFTState* fft = self->mFft.mpContext;
         for (; block < self->mpDist[self->miCurPass].miIfftCount + self->miIfftDone; ++block)
-            result = FFT_InverseReal(fft, self->mpConv + self->miBlockFftLen * block);
+            FFT_InverseReal(fft, self->mpConv + self->miBlockFftLen * block);
         self->miIfftDone += self->mpDist[self->miCurPass].miIfftCount;
     }
 

@@ -861,6 +861,10 @@ namespace BrnGui
         bool IsMugshotActive() const        { return mbFreeBurnInputDisabled; }  // +0x4B59 (DWARF mbMugshotActive)
         // (IsLoadingScreenVisible() is declared with the cache accessors above; it reads the
         //  +0x13B90 member carved below.)
+        bool IsEATraxChyronActive() const { return mu8EATraxChyronActive != 0; }
+        bool IsEasyDriveGateActive() const { return mu8EasyDriveGateState == 1; }
+        bool IsGameplayHudReadyC() const { return mbGameplayHudReadyC == true; }
+        bool IsReplayExporting() const { return mbReplayExporting; }
         bool IsFriendsListOpen() const        { return mbFriendsListOpen; }          // +0xB86C
         bool IsFriendsListChangePending() const { return mbFriendsListChangePending; } // +0xB86D
 
@@ -2383,7 +2387,8 @@ namespace BrnGui
         bool mbIsLoadingScreenVisible;                   // +0x13B90 (80784) DWARF h:1895
         u8  mPad_13B91[3];                               // +0x13B91..+0x13B93
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
-        u8  mPad_13B98[2];                               // +0x13B98..+0x13B99
+        u8  mu8EATraxChyronActive;                       // +0x13B98, event 471
+        u8  mu8EasyDriveGateState;                       // +0x13B99, event 96
         bool mbAreRoadRulesAvailable;                    // +0x13B9A (RecEvent 350)
         u8  mPad_13B9B[1];                               // +0x13B9B
         // The replay screens' slot cursor: ReplayClips/ReplayClipsOnline store the highlighted

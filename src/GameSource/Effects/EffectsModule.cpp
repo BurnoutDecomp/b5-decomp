@@ -111,6 +111,9 @@ namespace
     typedef BrnPhysics::Vehicle::RaceCarState                                    RaceCarState;
     typedef BrnPhysics::Vehicle::WheelLite                                       WheelLite;
 
+    bool IsReplayPlayback(BrnReplays::BaseSerialiser::EMode leMode);
+    bool IsReplayRecording(BrnReplays::BaseSerialiser::EMode leMode);
+
     // ---- the X360 data cells this TU owns -------------------------------------------
     EffectsModule* gpEffectsModule = 0;          // off_82FAB594 (Construct stores `this`)
     bool           sbRestartEffects = false;     // byte_82FAB694 (RestartEffects raises, HandleQADebugTests consumes)
@@ -1425,6 +1428,137 @@ void EffectsModule::ProcessActiveRaceCars(const EffectsModuleParams& lrParams,
 // =============================================================================
 // UpdateActiveRaceCars  @0x8229DB30  (DWARF :3069) -- the per-car pipeline.
 // =============================================================================
+void EffectsModule::UpdateActiveRaceCars(EActiveRaceCarIndex lePlayerIndex,
+                                        const EffectsModuleParams& lrParams,
+                                        const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                                        const BoostOutputInfo* lpBoostInfos,
+                                        const DeformationOutputInterface* lpDeformation,
+                                        const AudioEffectsMessageQueue* lpAudioEffects,
+                                        bool lbBumperCam)
+{
+    bool labExhaustPop[KU_NUM_ACTIVE_RACE_CARS] = {};
+    f32 lafExhaustPopIntensity[KU_NUM_ACTIVE_RACE_CARS] = {};
+    const CgsModule::Event* lpEvent = 0;
+    s32 liEventSize;
+    s32 liEventType = lpAudioEffects->GetFirstEvent(&lpEvent, &liEventSize);
+    while (lpEvent)
+    {
+        if (liEventType == BrnSound::Module::Io::E_EFFECTS_MESSAGE_TYPES_POP)
+        {
+            const BrnSound::Module::Io::PopEffectsMessage& lrPop =
+                *reinterpret_cast<const BrnSound::Module::Io::PopEffectsMessage*>(lpEvent);
+            const u32 luRaceCarId = lrPop.muRaceCarID;
+            CGS_ASSERT(luRaceCarId < KU_NUM_ACTIVE_RACE_CARS, "luRaceCarId < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            lafExhaustPopIntensity[luRaceCarId] = lrPop.mfIntensity;
+            labExhaustPop[luRaceCarId] = true;
+        }
+        liEventType = lpAudioEffects->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+    }
+
+    for (u32 luCar = 0; luCar < KU_NUM_ACTIVE_RACE_CARS; ++luCar)
+    {
+        const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(luCar);
+        ActiveRaceCarData& lrData = maActiveRaceCarData[luCar];
+        const CgsID lModelId = lpActiveRaceCars->GetCarModelId(leIndex);
+        const bool lbModelChanged = lrData.GetID() != lModelId;
+        const bool lbLoaded = lpActiveRaceCars->IsRaceCarLoaded(leIndex);
+
+        const f32 lfDebrisTime = mafTimeUntilNextDebrisBurst[luCar] - lrParams.mDt;
+        mafTimeUntilNextDebrisBurst[luCar] = static_cast<f32>(__fsel(lfDebrisTime, lfDebrisTime, 0.0f));
+        const f32 lfSparksTime = mafTimeUntilNextSparksBurst[luCar] - lrParams.mDt;
+        mafTimeUntilNextSparksBurst[luCar] = static_cast<f32>(__fsel(lfSparksTime, lfSparksTime, 0.0f));
+
+        if (lbModelChanged)
+        {
+            ParticleEffectHelper lResetHelper(mParticleModule);
+            lrData.Reset(lResetHelper);
+            if (!lbLoaded)
+                continue;
+        }
+        if (!lpActiveRaceCars->IsRaceCarActive(leIndex) || !lpActiveRaceCars->IsRaceCarLoaded(leIndex))
+            continue;
+
+        const RaceCarState* lpState = lpActiveRaceCars->GetRaceCarState(leIndex);
+        CGS_ASSERT(lpState != 0, "lpActiveRaceCarState != NULL");
+        const RwRGBAReal lColour = lpActiveRaceCars->GetRaceCarColour(leIndex);
+        const u32 luWorldIndex = (leIndex == lePlayerIndex && lbBumperCam) ? 1u : 0u;
+
+        CgsSceneManager::EntityId lEntityId;
+        lEntityId.Set(1u, luCar, 0u);
+        const BrnPhysics::Deformation::VehicleLocatorOutput* lpLocators = 0;
+        for (s32 liLocator = 0; liLocator < lpDeformation->miNumLocatorOutputs; ++liLocator)
+        {
+            if (lpDeformation->maLocatorData[liLocator].mEntityId.muValue == static_cast<u32>(lEntityId))
+            {
+                CGS_ASSERT(liLocator < lpDeformation->miNumLocatorOutputs, "liIndex < miNumLocatorOutputs");
+                lpLocators = &lpDeformation->maLocatorData[liLocator];
+                break;
+            }
+        }
+
+        RaceCarParticleEffectHelper lHelper(*this, lrData, lpState, mParticleModule, &mDebugComponent,
+                                            luWorldIndex, lColour, meCurrentGameMode, lpLocators);
+        if (lbModelChanged)
+        {
+            const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec> lPhysicsResource =
+                lpActiveRaceCars->GetDeformationModelResourcePtr(leIndex);
+            lrData.Initialise(lModelId, lPhysicsResource, lHelper);
+        }
+
+        const BoostOutputInfo& lrBoost = lpBoostInfos[luCar];
+        CarState lCarState;
+        lCarState.muRaceCarIndex = luCar;
+        lCarState.mEffectsModuleParams = lrParams;
+        lCarState.mpEffectsSerialiser = &mEffectsSerialiser;
+        lCarState.mbIsBoosting = lrBoost.mbIsBoosting;
+        lCarState.meBoostType = static_cast<s32>(lrBoost.meBoostType);
+        lCarState.mfBoostAmount = lrBoost.mfBoostAmount;
+        lCarState.mpCarState = lpState;
+        lCarState.mfSpeedMPH = lpState->mfSpeedMPH;
+        lCarState.mfExhaustPopIntensity = lafExhaustPopIntensity[luCar];
+        lCarState.mbExhaustPopThisFrame = labExhaustPop[luCar];
+        lCarState.mbCrashing = lpState->mbCrashing;
+        lCarState.mbJumping = !lCarState.mbCrashing && lpState->mfTimeInAir > 0.0f;
+        lCarState.mbEngineRunning = lpActiveRaceCars->IsRaceCarEngineOn(leIndex);
+
+        if (IsReplayPlayback(mEffectsSerialiser.GetMode()))
+        {
+            u8 luActive;
+            mEffectsSerialiser.GetStaticLayout()->GetBoostData(luCar, luActive, lCarState.mfBoostAmount,
+                                                               lCarState.meBoostType);
+            lCarState.mbIsBoosting = luActive != 0;
+        }
+        if (IsReplayRecording(mEffectsSerialiser.GetMode()))
+        {
+            mEffectsSerialiser.GetStaticLayout()->WriteBoostData(
+                luCar, lCarState.mbIsBoosting, lCarState.mfBoostAmount, lCarState.meBoostType);
+        }
+
+        lrData.Tick(lCarState, *lpState, lHelper, mbEventIntroActive, leIndex == lePlayerIndex);
+        if (lrData.JustStartedCrashing())
+        {
+            mafAccumulatedParticleCountCrash[luCar] = 0.0f;
+            mafAccumulatedParticleCountTyres[luCar] = 0.0f;
+            mafTimeUntilNextDebrisBurst[luCar] = 0.0f;
+            maRaceCarPreviousTransforms[luCar] = lpState->mTransform;
+        }
+
+        HandleWheels(lCarState, lHelper);
+        if (!mbEventIntroActive || leIndex == lePlayerIndex)
+            HandleJumpAndLandingEffects(lCarState, lHelper, lrParams.mDt, lrParams.mTime,
+                                        lrData.GetGroundPositionY());
+
+        const RaceCarState* lpLatestState = lpActiveRaceCars->GetRaceCarState(leIndex);
+        if (lCarState.mbCrashing)
+        {
+            const Attrib::Gen::debrisparams& lrDebris =
+                (leIndex == lePlayerIndex) ? mCrashingDebrisParams : mAIRaceCarCrashingTrailDebris;
+            HandleCrashingTrail(lrData, lrParams.mDt, lrParams.mTime, lpLatestState, leIndex,
+                                lpActiveRaceCars->GetRaceCarColour(leIndex), lrDebris);
+        }
+        maRaceCarPreviousTransforms[luCar] = lpLatestState->mTransform;
+    }
+}
 
 // =============================================================================
 // HandleWheels  @0x82296C80  (DWARF :1743) -- the skid smoke, then THE TYRE MARK.

@@ -151,7 +151,8 @@ struct OptionsDataProfile
 
     void SetLastPlayedSongIndex(s32 liIndex);
     s32  GetLastPlayedSongIndex();
-    void SetLastPlayedPictureParadiseMusicIndex(s32 liIndex);
+    // ARTIST82509D1C..20 inlines this direct cache-owned profile store.
+    void SetLastPlayedPictureParadiseMusicIndex(s32 liIndex) { miLastPictureParadiseMusicIndex = liIndex; }
     s32  GetLastPlayedPictureParadiseMusicIndex();
 
     void SetSFXVolume(s32 liVolume);

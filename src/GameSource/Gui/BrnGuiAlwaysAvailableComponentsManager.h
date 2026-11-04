@@ -74,9 +74,7 @@ namespace BrnGui
         // @0x824F3920 -- latch the input GUI event queue the manager pumps in Update.
         void SetInEventQueue(::InputBuffer::GuiEventQueue* lpInGuiEventQueue) ;
 
-        // @0x82509338 -- pump the input event queue and drive the overlays (save-icon /
-        // showtime / achievement / connect faithful; the in-game EATrax + online-invite
-        // cases are FLAG'd deferrals for their un-homed callees -- see the .cpp).
+        // @0x82509338 -- pump the input event queue and drive the always-available overlays.
         virtual void Update();
 
         // @0x8252A27C..0x8252A2CC -- THE PER-FRAME OVERLAY TICK. GuiModule::Update runs it

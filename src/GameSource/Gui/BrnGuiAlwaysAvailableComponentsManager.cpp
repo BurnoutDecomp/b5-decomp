@@ -33,10 +33,7 @@
 // cache+0xB878 IS GetOptionsDataProfile() (BrnGuiCache.h:1001/:2116), and profile+0x7344 is
 // miLastPlayedSongIndex. Cases 26 and 502 are now written from the asm; see each in place.
 //
-// STILL DEFERRED, and honestly so: the online-invite family (175/43/105), whose
-// OnlineInviteMessageComponent::ShowMessage is genuinely not committed, and case 503 (the
-// CLASSICAL chyron -- a different overlay, DWARF GuiClassicalChyronEvent, carrying two
-// 48-char text ids and writing cache+0x12BC0 == the profile's picture-paradise index).
+// Invite and classical notification routes are recovered from ARTIST82509338.
 // ===================================================================================
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"
@@ -46,6 +43,9 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                        // BrnFlapt::FileRef
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // the in-queue Update walks
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include <cstring>
 #include "GameSource/Gui/BrnGuiCache.h"                                  // BrnGui::GuiCache (event 64 connect)
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"              // CgsGui::GuiEventTimeInfo (event 26)
 #include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"                   // GuiEATraxNewTrackEvent (event 502)
@@ -185,30 +185,46 @@ namespace BrnGui
         };
     }
 
-    // @0x82509338 -- per-frame event pump: walk the in-queue and drive the always-available
-    // overlays. Reconstructed from the X360 body. The two in-game EATrax rich-presence cases
-    // (502/503) reach BrnSound::Module::Io::EaTraxHelper + BrnGui::OptionsDataProfile /
-    // GuiCache FAR members that have no committed type home; those specific accessor calls are
-    // FLAG'd deferrals (documented below) -- the event DISPATCH and every other case (the
-    // save-icon 355, the connect 64, showtime, achievement, the load flags) are faithful.
+    // ARTIST82509B40..CC0: assert on overflow, then copy through NUL.
+    static void CopyClassicalTextId(char* lpDestination, const char* lpSource)
+    {
+        const u32 luLength = static_cast<u32>(std::strlen(lpSource));
+        if (luLength >= 48)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lMessage << "String " << lpSource << " is too long. Buffer size = " << 48
+                << ", string length = " << luLength << "\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+            CgsDev::Assert::EndAssert();
+        }
+        while ((*lpDestination++ = *lpSource++) != '\0') {}
+    }
+
+    // @0x82509338 -- per-frame event pump for the always-available overlays.
     void AlwaysAvailableComponentsManager::Update()
     {
         // The console gates the whole pump on the flapt being bound (this+65988): with no
         // clips bound there is nothing to drive.
-        if (!mbFlaptPrepared || mpInGuiEventQueue == 0)
-            return;
-
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
-        for (s32 liId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
+        s32 liId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
+        if (!mbFlaptPrepared)
+            return;
+        for (;
              lpEvent != 0;
              liId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             switch (liId)
             {
             case 64:   // connect: latch the GuiCache (the far members the in-game cases read)
-                CGS_ASSERT(lpEvent != 0, "Invalid cache in AlwaysAvailableComponentsManager::Update");
-                mpGuiCache = static_cast<const AacGuiEventCache*>(lpEvent)->mpGuiCache;
+                if (!mpGuiCache)
+                {
+                    GuiCache* lpCache = static_cast<const AacGuiEventCache*>(lpEvent)->mpGuiCache;
+                    CGS_ASSERT(lpCache != 0, "Invalid cache in AlwaysAvailableComponentsManager::Update");
+                    mpGuiCache = lpCache;
+                }
                 break;
 
             case 26:   // per-frame time-step: stamp the timed (in-game) overlays
@@ -341,11 +357,86 @@ namespace BrnGui
                 break;
             }
 
-            case 175:
-            case 43:
-            case 105:
-            case 503:
+            case 175:   // host-start notification
+                if (mbContainerMovieClipPlaying)
+                    mOnlineNotificationMessageComponent.ShowMessage(
+                        gacOnlineInviteArgument820046A7,
+                        OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_HOST_START_EVENT);
                 break;
+
+            case 43:    // network-connected/news notification
+            {
+                CGS_ASSERT(lpEvent != 0, "lpConnectedEvent");
+                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                const CgsGui::GuiEventNetworkConnected* lpConnectedEvent =
+                    reinterpret_cast<const CgsGui::GuiEventNetworkConnected*>(lpEvent);
+                if (lpConnectedEvent->maData[1] != 0 && !mbShowNewsNotification)
+                {
+                    mbShowNewsNotification = true;
+                    if (mbContainerMovieClipPlaying)
+                        mOnlineNotificationMessageComponent.ShowMessage(
+                            gacOnlineInviteArgument820046A7,
+                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_NEW_NEWS);
+                }
+                break;
+            }
+
+            case 105:    // invite, buddy-online or online-buddy-count notification
+            {
+                const GuiEventBuddyNotification* lpBuddyNotification =
+                    reinterpret_cast<const GuiEventBuddyNotification*>(lpEvent);
+                const s32 liNotification =
+                    static_cast<s32>(lpBuddyNotification->meBuddyNotification);
+                if (liNotification == 0)
+                {
+                    if (mbContainerMovieClipPlaying)
+                        mOnlineNotificationMessageComponent.ShowMessage(
+                            lpBuddyNotification->mBuddyName.GetPlayerName(),
+                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED);
+                }
+                else if (static_cast<u32>(liNotification) < 3u)
+                {
+                    if (mbContainerMovieClipPlaying)
+                    {
+                        if (liNotification == 1)
+                            mOnlineNotificationMessageComponent.ShowMessage(
+                                lpBuddyNotification->mBuddyName.GetPlayerName(),
+                                OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_BUDDY_ONLINE);
+                        else
+                            mOnlineNotificationMessageComponent.ShowMessage(
+                                lpBuddyNotification->miNumBuddies,
+                                OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_NUM_BUDDIES_ONLINE);
+                    }
+                }
+                else
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                                CgsDev::Assert::giMessageBufferSize);
+                    lMessage << "Invalid buddy notification type : " << liNotification << "\n";
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp", 426);
+                    CgsDev::Assert::EndAssert();
+                    if (mbContainerMovieClipPlaying)
+                        mOnlineNotificationMessageComponent.ShowMessage(
+                            "Invalid Buddy Name",
+                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED);
+                }
+                break;
+            }
+
+            case 503:
+            {
+                const GuiClassicalChyronEvent* lpClassical = reinterpret_cast<const GuiClassicalChyronEvent*>(lpEvent);
+                CopyClassicalTextId(macComposerTextId, lpClassical->macComposerTextId);
+                CopyClassicalTextId(macWorkTextId, lpClassical->macWorkTextId);
+                if (mbContainerMovieClipPlaying)
+                    mEATraxInGameComponent.DisplayNewTrackNotification(macComposerTextId, macWorkTextId,
+                        gacOnlineInviteArgument820046A7, true);
+                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                mpGuiCache->GetOptionsDataProfile()->SetLastPlayedPictureParadiseMusicIndex(lpClassical->miPieceIndex);
+                break;
+            }
 
             default:
                 break;
