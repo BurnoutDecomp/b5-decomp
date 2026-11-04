@@ -295,10 +295,8 @@ namespace MemoryIO
         // DecFIGS :716; ARTIST8266E2F8 loads the response allocator at +0x10.
         void GetAllocator(rw::LinearResourceAllocator** lppAllocator) const { *lppAllocator = mpLinearAllocator; }
         void SetLinearAllocator(rw::LinearResourceAllocator* lpA)        { mpLinearAllocator = lpA; }
-        void SetGeneralAllocator(rw::core::GeneralResourceAllocator* lpA) { mpGeneralAllocator = lpA; }
     private:
         rw::LinearResourceAllocator*        mpLinearAllocator;
-        rw::core::GeneralResourceAllocator* mpGeneralAllocator;
     };
 
     // Reply to a CreateGeneralAllocatorRequest (DWARF :724).

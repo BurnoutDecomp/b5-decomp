@@ -137,6 +137,9 @@ namespace AttribSysIO
     // (KI_ATTRIBSYS_EVENT_QUEUE_MAX_SIZE == 2048).
     struct InputBuffer : public CgsModule::IOBuffer
     {
+        void Construct();
+        void Destruct();
+
         AttribSysEventQueue                              mEventQueue;             // leading generic queue
         AttribSysRequestInterface<KI_ATTRIBSYS_EVENT_QUEUE_MAX_SIZE> mVaultRequestInterface;  // the drained request queue (X360 +2068)
 
