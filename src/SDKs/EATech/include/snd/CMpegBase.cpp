@@ -47,13 +47,11 @@
 namespace Snd
 {
 
+// ARTIST 0x83277C9C. The startup initializer at 0x82C73B80 stores zero.
+u32 guSynthBypass = 0;
+
 namespace
 {
-// dword_83277C9C -- global "skip synth allocation" guard. When non-zero OpenSynth
-// is a no-op. Owned by the Snd allocator/config TU; referenced here as an extern
-// (never fabricated), exactly as the sibling decoders reference their rodata.
-extern "C" u32 dword_83277C9C;
-
 // dword_83277830 -- the shared Snd allocator hook (a function pointer). Takes a
 // byte count and returns the block. Also owned elsewhere; referenced by extern.
 extern "C" void* (*dword_83277830)(u32 auSize);
@@ -276,7 +274,7 @@ s32 CMpegBase::OpenLayer()
 // ----------------------------------------------------------------------------
 void* CMpegBase::OpenSynth()
 {
-    if (dword_83277C9C)
+    if (guSynthBypass)
         return this;
 
     const u32 luSize = 2304u * mucChannelCount;

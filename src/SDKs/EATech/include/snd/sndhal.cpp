@@ -31,13 +31,12 @@ namespace Hal
 // Sample-level scale: level (0..127) maps to 0..1 (X360 flt_82156410, 1/127).
 static const f32 KF_LEVEL_SCALE = 0.0078740157f;
 
-// Owning definitions of the shared HAL tables/counts (see header). Null/zero until
-// the HAL setup path installs them.
+// The HAL setup path installs the channel tables and speaker count.
 Channel*    gpChannels     = 0;
 SpeakerVol* gpChannelPan    = 0;
 u8          gucNumSpeakers  = 0;
 MixChannel* gpMixChannels   = 0;
-s32         giNumOutputs     = 0;
+s32         giNumOutputs    = 1; // ARTIST 0x82F883D0
 
 // ----------------------------------------------------------------------------
 // Snd9::Hal::SetVolInternal @ 0x82B7D228
