@@ -291,13 +291,9 @@ void AptActionInterpreter::_FunctionAptActionAsciiToChar(AptActionInterpreter* p
 void AptActionInterpreter::_FunctionAptActionGetUrl(AptActionInterpreter* pInterp,
                                                     LocalContextT* pContext)
 {
-    // Two inline string-pointer operands at the next aligned position; the PC then
-    // advances past both. Console operands are 4-byte; the x64 stream is the
-    // _parseStream transcode of the serialized .apt action stream and stores native
-    // 8-byte pointers (phase-0 native-8 regime) -- the same x64-native PC model as
-    // the branch ops.
+    // Two native four-byte string pointers follow at the aligned PC.
     const char* const* pOperands = reinterpret_cast<const char* const*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));   // ARTIST: align to 4
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pOperands + 2);
 
     const char* pUrl    = pOperands[0];
