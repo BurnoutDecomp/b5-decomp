@@ -31,12 +31,19 @@
 
 namespace Snd9
 {
-namespace Mix { struct FilterState; }
+namespace Mix { struct FilterState; struct ResampleFilter; }
 namespace Hal
 {
 
-// A single source channel's HAL state (X360 stride 0x84). Only the fields the
-// gain/pan path touches are modelled; the rest is unmodelled HAL state.
+// ARTIST82B80098: each envelope segment contains a frame duration and target level.
+struct EnvelopeSegment
+{
+    s32 miDuration;
+    s32 miTarget;
+};
+CGS_STATIC_ASSERT((sizeof(EnvelopeSegment) == 8), "ARTIST Snd9 envelope segment");
+
+// A source channel's HAL state (X360 stride 0x84).
 struct Channel
 {
     s32  miVoiceHandle;       // +0x00
@@ -45,22 +52,44 @@ struct Channel
     u16  muPanPosition;       // +0x1C  azimuth handed to SNDI_aztospkrvol
     u8   mPad1E;              // +0x1E
     u8   mucPanActive;        // +0x1F  nonzero => channel carries an explicit per-speaker pan
-    u8   mPad20[4];            // +0x20
+    u16  muSampleRate;         // +0x20
+    u8   mPad22;
+    u8   mucSampleVoiceCount;  // +0x23
     u8   mucVoiceGroup;       // +0x24
     u8   mucGroupPrimary;     // +0x25
-    u8   mPad26[2];
+    s16  miPitchPatternDepth;  // +0x26
     s16  miParentVoice;       // +0x28, -1 for the primary voice
     u8   mPad2A;
     u8   mucPacketFlags;      // +0x2B
     u32  muLastVoiceTick;     // +0x2C
-    u8   mPad30[0x48 - 0x30];
+    f32  mfFadeStep;          // +0x30
+    f32  mfFadeTarget;        // +0x34
+    f32  mfFadeCurrent;       // +0x38
+    s32  miEnvelopeStep;      // +0x3C
+    s32  miEnvelopeCurrent;   // +0x40
+    s32  miEnvelopeRemaining; // +0x44
     f32  mfVolume;            // +0x48  linear channel volume
-    u8   mPad4C[0x63 - 0x4C]; // +0x4C
+    u8   mPad4C[2];
+    u8   mucVolumePatternLength; // +0x4E
+    u8   mucPitchPatternLength;  // +0x4F
+    u8   mucVolumePatternIndex;  // +0x50
+    u8   mPad51[0x60 - 0x51];
+    s8   mcEnvelopeCount;     // +0x60
+    s8   mcEnvelopeIndex;     // +0x61
+    u8   mPad62;
     s8   mcLevel;             // +0x63  signed sample level (0..127)
     f32* mpSourceGains;       // +0x64  per-output source gains
-    u8   mPad68;
+    u8   mucPitchPatternIndex; // +0x68
     u8   mucVoiceState;       // +0x69
-    u8   mPad6A[0x84 - 0x6A];
+    u8   mPad6A[2];
+    const EnvelopeSegment* mpEnvelope; // +0x6C
+    const s8* mpcVolumeRemap;  // +0x70
+    const s8* mpcVolumePattern; // +0x74
+    const s8* mpcPitchPattern;  // +0x78
+    s16  miBasePitchCents;    // +0x7C
+    u16  muCachedPitch;        // +0x7E
+    u16  muPitchMultiplier;   // +0x80
+    u16  muComputedPitch;     // +0x82
 };
 CGS_STATIC_ASSERT((sizeof(Channel) == 0x84), "ARTIST HAL channel stride");
 CGS_STATIC_ASSERT((offsetof(Channel, maiSampleVoices) == 4), "ARTIST sample voice group");
@@ -70,6 +99,22 @@ CGS_STATIC_ASSERT((offsetof(Channel, miParentVoice) == 0x28), "ARTIST parent voi
 CGS_STATIC_ASSERT((offsetof(Channel, mucPacketFlags) == 0x2B), "ARTIST packet flags");
 CGS_STATIC_ASSERT((offsetof(Channel, muLastVoiceTick) == 0x2C), "ARTIST voice tick");
 CGS_STATIC_ASSERT((offsetof(Channel, mucVoiceState) == 0x69), "ARTIST voice state");
+CGS_STATIC_ASSERT((offsetof(Channel, mfFadeStep) == 0x30), "ARTIST voice fade step");
+CGS_STATIC_ASSERT((offsetof(Channel, miEnvelopeStep) == 0x3C), "ARTIST envelope delta");
+CGS_STATIC_ASSERT((offsetof(Channel, mucVolumePatternLength) == 0x4E), "ARTIST modulation lengths");
+CGS_STATIC_ASSERT((offsetof(Channel, mcEnvelopeCount) == 0x60), "ARTIST envelope count");
+CGS_STATIC_ASSERT((offsetof(Channel, mucPitchPatternIndex) == 0x68), "ARTIST pitch pattern index");
+CGS_STATIC_ASSERT((offsetof(Channel, mpEnvelope) == 0x6C), "ARTIST envelope pointer");
+CGS_STATIC_ASSERT((offsetof(Channel, mpcVolumePattern) == 0x74), "ARTIST volume pattern");
+CGS_STATIC_ASSERT((offsetof(Channel, mpcPitchPattern) == 0x78), "ARTIST pitch pattern");
+CGS_STATIC_ASSERT((offsetof(Channel, muSampleRate) == 0x20), "ARTIST sample rate");
+CGS_STATIC_ASSERT((offsetof(Channel, mucSampleVoiceCount) == 0x23), "ARTIST sample voice count");
+CGS_STATIC_ASSERT((offsetof(Channel, miPitchPatternDepth) == 0x26), "ARTIST pitch modulation depth");
+CGS_STATIC_ASSERT((offsetof(Channel, mpcVolumeRemap) == 0x70), "ARTIST volume remap");
+CGS_STATIC_ASSERT((offsetof(Channel, miBasePitchCents) == 0x7C), "ARTIST base pitch");
+CGS_STATIC_ASSERT((offsetof(Channel, muCachedPitch) == 0x7E), "ARTIST cached pitch");
+CGS_STATIC_ASSERT((offsetof(Channel, muPitchMultiplier) == 0x80), "ARTIST pitch multiplier");
+CGS_STATIC_ASSERT((offsetof(Channel, muComputedPitch) == 0x82), "ARTIST computed pitch");
 CGS_STATIC_ASSERT((offsetof(Channel, mpSourceGains) == 0x64), "ARTIST HAL channel gains");
 
 // A channel's per-speaker pan gains (0x18 = 24 bytes, all f32 -> byte-exact). The
@@ -95,12 +140,15 @@ struct MixChannel
     f32* mpOutputBuffer;      // +0x38  destination gain buffer
     f32  mfLastSample;        // +0x3C
     Mix::FilterState* mpFilter; // +0x40
-    u8   mPad44[0x5C - 0x44];
+    u8   mPad44[0x50 - 0x44];
+    Mix::ResampleFilter* mpResample; // +0x50
+    u8   mPad54[0x5C - 0x54];
 };
 CGS_STATIC_ASSERT((sizeof(MixChannel) == 0x5C), "ARTIST mixer channel stride");
 CGS_STATIC_ASSERT((offsetof(MixChannel, mafPreviousSpeakerGain) == 0x04), "ARTIST mixer previous gains");
 CGS_STATIC_ASSERT((offsetof(MixChannel, mfLastSample) == 0x3C), "ARTIST mixer last sample");
 CGS_STATIC_ASSERT((offsetof(MixChannel, mpFilter) == 0x40), "ARTIST mixer filter");
+CGS_STATIC_ASSERT((offsetof(MixChannel, mpResample) == 0x50), "ARTIST mixer resampler");
 CGS_STATIC_ASSERT((offsetof(MixChannel, mafSpeakerGain) == 0x1C), "ARTIST mixer speaker gains");
 CGS_STATIC_ASSERT((offsetof(MixChannel, mpPreviousOutputGains) == 0x34), "ARTIST mixer previous output gains");
 CGS_STATIC_ASSERT((offsetof(MixChannel, mpOutputBuffer) == 0x38), "ARTIST mixer output gains");
