@@ -114,6 +114,8 @@ namespace CgsDev
         bool HasResourceFont() const { return !mpFont.IsNull(); }
 
     private:
+        bool Do2DLinesIntersect(Vector2 lv2StartA, Vector2 lv2EndA,
+                                Vector2 lv2StartB, Vector2 lv2EndB) const;
         // ARTIST 82816E50. Bounds are compared as supplied, with inclusive edges
         // and no normalization of reversed corners or unordered coordinates.
         bool Do2DBoxesIntersect(Vector2 lv2MinA, Vector2 lv2MaxA,
