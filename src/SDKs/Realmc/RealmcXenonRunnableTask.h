@@ -31,7 +31,7 @@
 //                            @ 0x82B577C0 frees exactly 20 bytes.
 //
 // XenonRunnableTask is ABSTRACT: it installs its own vtable but leaves the two
-// pure IRunnableTask task virtuals (OnTaskRun / GetTaskType) to the concrete
+// pure IRunnableTask task virtuals (Execute / GetTaskId) to the concrete
 // task subclasses. Its vtable (dumped) is [deleting destructor,
 // RefCount::Unreferenced, the shared empty function (OnTaskComplete), _purecall,
 // _purecall].
@@ -95,8 +95,8 @@ public:
     // and UpdateDeviceInfo runs: 14 -> 8, any other failure -> 1.
     int SelectDevice(int liMode, bool lbKeepActiveCard, int liBytesRequested);
 
-    // slots +4 / +0x08 keep the inherited bodies; +0x0C / +0x10 (OnTaskRun /
-    // GetTaskType) stay pure -- the concrete task subclasses implement them.
+    // slots +4 / +0x08 keep the inherited bodies; +0x0C / +0x10 (Execute /
+    // GetTaskId) stay pure -- the concrete task subclasses implement them.
 
 protected:
     XenonUtil::State* mpState;  // +0x10 -- shared Xenon memory-card state

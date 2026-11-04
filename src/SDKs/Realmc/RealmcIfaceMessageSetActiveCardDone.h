@@ -27,6 +27,15 @@ namespace RealmcIface
 class MessageSetActiveCardDone : public RealmcCore::Message
 {
 public:
+    // The task body constructs this payload inline (ARTIST allocates 16 bytes,
+    // calls Message::Message, then stores the two words at +8 and +0xC).
+    MessageSetActiveCardDone(u32 uField08, u32 uField0C)
+        : RealmcCore::Message()
+        , muField08(uField08)
+        , muField0C(uField0C)
+    {
+    }
+
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x04 slot.
     void Apply(RealmcCore::IMessageProcessor* pProcessor) ;

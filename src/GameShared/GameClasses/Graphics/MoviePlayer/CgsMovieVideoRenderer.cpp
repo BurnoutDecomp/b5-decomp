@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMovieVideoRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"
-#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include <cstring>
 
 #include <new>   // ::operator delete
@@ -65,6 +65,58 @@ namespace CgsGraphics
             CreateOutputTexture(&maTextureInfoTypes[i], luWidth, luHeight);
     }
 
+    // ARTIST 0x827F8120
+    void MovieVideoRenderer::CreateOutputTexture(TextureInfoType* lpTextureTypeInfo,
+                                                 u32 luWidth, u32 luHeight)
+    {
+        const char* const lpcFile =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\MoviePlayer/CgsMovieVideoRenderer.cpp";
+        renderengine::Texture2D::Parameters lTextureParameters;
+        lTextureParameters.muFlags = 0;
+        lTextureParameters.muWidth = luWidth;
+        lTextureParameters.muHeight = luHeight;
+        lTextureParameters.muNumLevels = 1;
+        lTextureParameters.meFormat = renderengine::PIXELFORMAT_A8R8G8B8;
+
+        const rw::ResourceDescriptor lTextureDescriptor =
+            renderengine::Texture2D::GetResourceDescriptor(lTextureParameters);
+        lpTextureTypeInfo->mTextureResource =
+            mpParentMoviePlayer->mpRwAllocator->DoAllocate(lTextureDescriptor, 0);
+        if (!lpTextureTypeInfo->mTextureResource.m_baseResources[2])
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpTextureTypeInfo->mTextureResource.GetPhysicalMemoryResource()",
+                                       lpcFile, 566);
+            CgsDev::Assert::EndAssert();
+        }
+
+        lpTextureTypeInfo->mpTexture =
+            renderengine::Texture2D::Initialize(lpTextureTypeInfo->mTextureResource, lTextureParameters);
+        renderengine::Texture::Locked lLockedTexture;
+        if (!lpTextureTypeInfo->mpTexture->Lock(renderengine::Texture::LOCK_WRITE, 0, 0, lLockedTexture))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "lpTextureTypeInfo->mpTexture->Lock(rw::graphics::core::Texture2D::LOCK_WRITE, 0, lLockedTexture)",
+                lpcFile, 579);
+            CgsDev::Assert::EndAssert();
+        }
+        lpTextureTypeInfo->mpPixelData = static_cast<u32*>(lLockedTexture.mpPixelData);
+
+        renderengine::TextureState::Parameters lStateParameters;
+        lStateParameters.muAddressU = D3DTADDRESS_CLAMP;
+        lStateParameters.muAddressV = D3DTADDRESS_CLAMP;
+        lStateParameters.muMagFilter = D3DTEXF_LINEAR;
+        lStateParameters.muMinFilter = D3DTEXF_LINEAR;
+        lStateParameters.mpTexture = lpTextureTypeInfo->mpTexture;
+        const rw::ResourceDescriptor lStateDescriptor =
+            renderengine::TextureState::GetResourceDescriptor(lStateParameters);
+        lpTextureTypeInfo->mTextureStateResource =
+            mpParentMoviePlayer->mpRwAllocator->DoAllocate(lStateDescriptor, 0);
+        lpTextureTypeInfo->mpTextureState =
+            renderengine::TextureState::Initialize(lpTextureTypeInfo->mTextureStateResource, lStateParameters);
+    }
+
     unsigned int MovieVideoRenderer::GetNumberOfVideoBuffers(rw::movie::VideoRenderable::VideoFormat)
     {
         return 3; // ARTIST vtable slot 2 folds to 826D7F68.
@@ -80,6 +132,105 @@ namespace CgsGraphics
     void MovieVideoRenderer::Render(rw::movie::VideoRenderable* lpRenderable)
     {
         Render(0, lpRenderable, true); // ARTIST 827FF2B0.
+    }
+
+    // ARTIST 0x827EAE48. The movie shader unpacks the three planes from the
+    // texture channels, so the CPU writes the planes without converting to RGB.
+    void MovieVideoRenderer::EncodeYuvOntoRgbaTexture(rw::movie::VideoRenderable* lpVideoRenderable,
+                                                     u32* lpPixels)
+    {
+        typedef rw::movie::VideoRenderable VideoRenderable;
+        CGS_ASSERT(lpVideoRenderable, "lpVideoRenderable");
+        const VideoRenderable::VideoFormat leFormat = lpVideoRenderable->GetFormat();
+        CGS_ASSERT(leFormat == VideoRenderable::VIDEOFORMAT_YV12 ||
+                   leFormat == VideoRenderable::VIDEOFORMAT_YV12_BORDER48,
+                   "lpVideoRenderable->GetFormat()");
+        CGS_ASSERT(lpVideoRenderable->GetNumBuffersUsed() == 3,
+                   "lpVideoRenderable->GetNumBuffersUsed() == 3");
+
+        u32 laBufSizes[3];
+        VideoRenderable::GetDataBufSizes(lpVideoRenderable->GetWidth(), lpVideoRenderable->GetHeight(),
+                                        leFormat, lpVideoRenderable->GetNumBuffersUsed(), laBufSizes);
+        CGS_ASSERT(laBufSizes[0] == 4 * laBufSizes[1] && laBufSizes[0] == 4 * laBufSizes[2],
+                   "laBufSizes[0] == 4 * laBufSizes[1] && laBufSizes[0] == 4 * laBufSizes[2]");
+
+        const u32 KU_PIXELS_PER_LOOP = 8;
+        CGS_ASSERT(lpVideoRenderable->GetWidth() % KU_PIXELS_PER_LOOP == 0,
+                   "lpVideoRenderable->GetWidth() % KU_PIXELS_PER_LOOP == 0");
+
+        const u8* lpLuma = lpVideoRenderable->GetData(0);
+        const u8* lpChroma0 = lpVideoRenderable->GetData(1);
+        const u8* lpChroma1 = lpVideoRenderable->GetData(2);
+        for (u32 luRow = 0; luRow < lpVideoRenderable->GetHeight(); ++luRow)
+        {
+            for (u32 luPixel = 0; luPixel < lpVideoRenderable->GetWidth(); luPixel += KU_PIXELS_PER_LOOP)
+            {
+                for (u32 i = 0; i < KU_PIXELS_PER_LOOP; ++i)
+                {
+                    const u32 luX = luPixel + i;
+                    *lpPixels++ = (static_cast<u32>(lpLuma[luX]) << 16)
+                                | (static_cast<u32>(lpChroma0[luX / 2]) << 8)
+                                | lpChroma1[luX / 2];
+                }
+            }
+            lpLuma += static_cast<s32>(lpVideoRenderable->GetStride(0));
+            if (luRow & 1)
+            {
+                lpChroma0 += static_cast<s32>(lpVideoRenderable->GetStride(1));
+                lpChroma1 += static_cast<s32>(lpVideoRenderable->GetStride(2));
+            }
+        }
+    }
+
+    // ARTIST 0x827FB060
+    void MovieVideoRenderer::Render(s32 liStartRow, rw::movie::VideoRenderable* lpRenderable, bool lbStep)
+    {
+        CGS_ASSERT(lpRenderable, "lpNewVideoRenderable");
+
+        TextureInfoType& lrTexture = maTextureInfoTypes[muTextureIndex];
+        if (lbStep)
+            muTextureIndex = (muTextureIndex + 1) & (KU_NUM_TEXTURES - 1);
+
+        const u32 luWidth = lrTexture.mpTexture->GetWidth();
+        EncodeYuvOntoRgbaTexture(lpRenderable, lrTexture.mpPixelData + luWidth * liStartRow);
+
+        CGS_ASSERT(mpParentMoviePlayer->mpIm2dRenderBuffer, "mpParentMoviePlayer->mpIm2dRenderBuffer");
+        Im2dRenderBuffer* lpBuffer = mpParentMoviePlayer->mpIm2dRenderBuffer;
+        const ImRendererBase::StateLibrary& lrStateLibrary = ImRendererBase::GetStateLibrary();
+        lpBuffer->BeginRendering();
+        lpBuffer->SetState(lrStateLibrary.mpBlendState_Standard);
+        lpBuffer->SetState(lrStateLibrary.mpRasterizerState_CullNone);
+
+        const s32 liFrame = lpRenderable->GetFrameNumber();
+        f32 lfFadeIn = 1.0f;
+        if (liFrame < mpParentMoviePlayer->miCrossfadeInFrames)
+            lfFadeIn = static_cast<f32>(liFrame) / static_cast<f32>(mpParentMoviePlayer->miCrossfadeInFrames);
+        f32 lfFadeOut = 1.0f;
+        if (-liFrame < mpParentMoviePlayer->miCrossfadeOutFrames)
+            lfFadeOut = static_cast<f32>(-liFrame) / static_cast<f32>(mpParentMoviePlayer->miCrossfadeOutFrames);
+        const f32 lfFade = lfFadeIn < lfFadeOut ? lfFadeIn : lfFadeOut;
+        const u8 luAlpha = static_cast<u8>(static_cast<s64>(255.0f * lfFade));
+
+        const f32 lfLeft = mpParentMoviePlayer->mfRectLeft;
+        const f32 lfTop = mpParentMoviePlayer->mfRectTop;
+        const f32 lfRight = mpParentMoviePlayer->mfRectRight;
+        const f32 lfBottom = mpParentMoviePlayer->mfRectBottom;
+        const Basic2dColouredTexturedVertex laVertices[4] = {
+            { { lfLeft, lfTop },       { 255, 255, 255, luAlpha }, { 0.0f, 1.0f } },
+            { { lfLeft, lfBottom },    { 255, 255, 255, luAlpha }, { 0.0f, 0.0f } },
+            { { lfRight, lfTop },      { 255, 255, 255, luAlpha }, { 1.0f, 1.0f } },
+            { { lfRight, lfBottom },   { 255, 255, 255, luAlpha }, { 1.0f, 0.0f } }
+        };
+
+        lpBuffer->SetState(lrTexture.mpTextureState);
+        lpBuffer->SetTransform(Im2dTransform::GetAspectCorrected());
+        lpBuffer->SetProgram(2);
+        lpBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
+        lpBuffer->SetProgram(0);
+        lpBuffer->EndRendering();
+
+        if (mpReleaseFunc)
+            mpReleaseFunc(lpRenderable, mpReleaseFuncContext);
     }
 
     float MovieVideoRenderer::GetPositionY()

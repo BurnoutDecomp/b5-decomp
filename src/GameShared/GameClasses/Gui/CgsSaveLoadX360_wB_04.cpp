@@ -29,6 +29,6 @@ RealmcIface::SaveCheckParams SaveLoadSystem::CreateRealmcSaveCheckParams()
 void SaveLoadSystem::EnableAutosave(s32)
 {
     RealmcIface::SaveCheckParams params = CreateRealmcSaveCheckParams();
-    mpMemcardInterface->CheckSave(1, &params);
+    mpMemcardInterface->SetAutosave(1, &params);
 }
 }

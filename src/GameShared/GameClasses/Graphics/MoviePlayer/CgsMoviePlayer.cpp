@@ -1,7 +1,11 @@
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"
+#include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMovieVideoRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h"
+#include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 #include "SDKs/EATech/include/Common/vp6/vp6_decoder.h"
 
 namespace CgsGraphics
@@ -96,6 +100,120 @@ namespace CgsGraphics
             CgsDev::Assert::EndAssert();
             return false;
         }
+    }
+
+    // ARTIST 0x827EEFB0
+    void MoviePlayer::Update()
+    {
+        if (miCurrentFrame >= maVP6Headers[0].mTotalFrames)
+        {
+            miCurrentFrame = maVP6Headers[0].mTotalFrames;
+            mePlayerState = E_RW_MOVIE_PLAYER_STOPPED;
+            return;
+        }
+        if (mePlayerState != E_RW_MOVIE_PLAYER_PLAYING)
+            return;
+
+        const u64 luNow = CgsSystem::GetSystemTimerBaseTime();
+        s32 liNumFramesToDecode = 1;
+        if (!mbReadyToRender)
+        {
+            muStartTimeInCycles = luNow;
+        }
+        else
+        {
+            const u64 luNumerator = static_cast<u64>(maVP6Headers[0].mFpsNumerator);
+            const s32 liDenominator = maVP6Headers[0].mFpsDenominator;
+            const u64 luDenominator = static_cast<u64>(liDenominator);
+            const u64 luScaledCycles = ((luNow - muStartTimeInCycles) * luNumerator) / luDenominator;
+            const u64 luElapsedFrames = luScaledCycles / CgsSystem::GetSystemTimerFrequency();
+            const u32 luFramesDue = static_cast<u32>(luElapsedFrames) - static_cast<u32>(miCurrentFrame) + 1;
+            liNumFramesToDecode = CgsNumeric::Max(static_cast<s32>(luFramesDue), 0);
+
+            if (liNumFramesToDecode > 4)
+            {
+                // ARTIST multiplies the negative offset in u64 and divides it unsigned.
+                const u64 luFrequency = CgsSystem::GetSystemTimerFrequency();
+                const u64 luCycleOffset = luFrequency * (miCurrentFrame - 1) * (-liDenominator);
+                muStartTimeInCycles = luNow + luCycleOffset / luNumerator;
+
+                const u64 luAdjustedCycles = ((luNow - muStartTimeInCycles) * luNumerator) / luDenominator;
+                const u64 luAdjustedFrames = luAdjustedCycles / CgsSystem::GetSystemTimerFrequency();
+                liNumFramesToDecode = static_cast<s32>(static_cast<u32>(luAdjustedFrames) -
+                                                       static_cast<u32>(miCurrentFrame) + 1);
+                CGS_ASSERT(liNumFramesToDecode == 0, "liNumFramesToDecode == 0");
+            }
+        }
+
+        const s32 liTotalFrames = maVP6Headers[0].mTotalFrames;
+        if (miCurrentFrame + liNumFramesToDecode > liTotalFrames)
+            liNumFramesToDecode = liTotalFrames - miCurrentFrame;
+
+        mbDroppingFrames = true;
+        while (liNumFramesToDecode > 0)
+        {
+            if (!ReadChunkSet(miNumAudios + miNumVideos))
+            {
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint << "Stalling to wait for stream\n";
+                break;
+            }
+
+            StartDecodes();
+            if (liNumFramesToDecode > 1)
+                WaitForDecode();
+            --liNumFramesToDecode;
+            mbReadyToRender = true;
+            mbDroppingFrames = false;
+        }
+    }
+
+    // ARTIST 0x827FF110
+    void MoviePlayer::Render(Im2dRenderBuffer* lpIm2dRenderBuffer)
+    {
+        mpIm2dRenderBuffer = lpIm2dRenderBuffer;
+        if (mePlayerState != E_RW_MOVIE_PLAYER_PLAYING)
+            return;
+
+        CGS_ASSERT(mpIm2dRenderBuffer, "mpIm2dRenderBuffer");
+        CgsDev::PerfMonCpu::StartMonitor(miVideoRender);
+        if (mbReadyToRender)
+        {
+            s32 liRow = 0;
+            for (s32 liIndex = miNumVideos - 1; liIndex >= 0; --liIndex)
+            {
+                rw::movie::VideoRenderable lRenderable;
+                const YUV_BUFFER_CONFIG lYUVConfig = maYUVConfigs[liIndex];
+                const VP6ChunkHeader& lrHeader = maVP6Headers[liIndex];
+                const u32 luWidth = lrHeader.mWidth;
+                const u32 luHeight = lrHeader.mHeight;
+
+                lRenderable.SetWidth(luWidth);
+                lRenderable.SetHeight(luHeight);
+                lRenderable.SetFrameNumber(miCurrentFrame);
+                lRenderable.SetNumBuffersUsed(3);
+                lRenderable.SetFormat(rw::movie::VideoRenderable::VIDEOFORMAT_YV12);
+                lRenderable.SetDropFrameFlag(false);
+                lRenderable.SetReadyToRender(true);
+                lRenderable.SetStride(lYUVConfig.YStride, 0);
+                lRenderable.SetStride(lYUVConfig.UVStride, 1);
+                lRenderable.SetStride(lYUVConfig.UVStride, 2);
+                lRenderable.SetData(reinterpret_cast<u8*>(lYUVConfig.YBuffer), 0);
+                lRenderable.SetData(reinterpret_cast<u8*>(lYUVConfig.UBuffer), 1);
+                lRenderable.SetData(reinterpret_cast<u8*>(lYUVConfig.VBuffer), 2);
+                lRenderable.SetSize(luHeight * lYUVConfig.YStride, 0);
+                const u32 luChromaSize = (luHeight * lYUVConfig.UVStride) >> 2;
+                lRenderable.SetSize(luChromaSize, 1);
+                lRenderable.SetSize(luChromaSize, 2);
+
+                mpRwVideoRenderer->Render(liRow, &lRenderable, liIndex == 0);
+                liRow += lrHeader.mHeight;
+            }
+
+            if (!mbDroppingFrames)
+                WaitForDecode();
+        }
+        CgsDev::PerfMonCpu::StopMonitor(miVideoRender);
     }
 
     // ARTIST 0x827EA448

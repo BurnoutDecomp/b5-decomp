@@ -77,8 +77,8 @@ public:
 
     // The task virtuals (slot +0x04 RefCount::Unreferenced and slot +0x08, the
     // empty IRunnableTask body, are inherited unchanged).
-    void OnTaskRun()  {}             // slot +0x0C: the shared empty function
-    int  GetTaskType()  { return 1; } // slot +0x10: returns 1
+    void Execute() override {}       // slot +0x0C: the shared empty function
+    int  GetTaskId() override { return 1; } // slot +0x10: returns 1
 
 private:
     void* mpField14;  // +0x14 (ctor arg 4; FLAG role/type unrecovered -- pointer word)

@@ -20,7 +20,7 @@
 // so they are 16-aligned -- the struct is therefore alignas(16) and the bit-count
 // bytes sit in the leading 16-byte slot with the remaining 12 bytes as padding.
 //
-// The ctor takes the min/max vectors by const reference (passed in VMX regs v1/v2 on
+// The ctor takes the min/max vectors by value (passed in VMX regs v1/v2 on
 // X360) plus four char bit-counts, and asserts lMin[i] < lMax[i] for each lane i. The
 // X360 body expresses each per-lane compare as a vperm-extract + vcmpgtfp (lMax[i] >
 // lMin[i]); the scalar reconstruction reads the named Vector4 lane directly.
@@ -42,7 +42,7 @@ namespace BrnReplays
     {
         // @0x8265AB58: quantise lrValue through lpCompression into lpDest.
         void Pack(void* lpDest, const QuantisedVector4Compression* lpCompression,
-                  const Vector4& lrValue);
+                  Vector4 lrValue);
 
         // @0x8265ACC8: reconstruct the Vector4 from lpSource into lpDest; returns lpDest.
         //   ABI (store-for-store): r3=lpDest (returned; final stvx128 target),
@@ -55,14 +55,14 @@ namespace BrnReplays
 
         // @0x82653340: log "Vec: <x> <y> <z> <w>\n" to gpDebugPrint (filtered). The vector is
         // passed in VMX v1; the Hex-Rays integer args are dead register leftovers.
-        void PrintVector4(const Vector4& lrValue);
+        void PrintVector4(Vector4 lrValue);
     }
 
     struct CGS_ALIGN(16) QuantisedVector4Compression
     {
         // X360 0x8264C7E8: store the 4 per-lane bit counts (+0..+3), then assert
         // lMin[i] < lMax[i] for each lane and store mMin(+16)/mMax(+32).
-        QuantisedVector4Compression(const Vector4& lrMin, const Vector4& lrMax,
+        QuantisedVector4Compression(Vector4 lrMin, Vector4 lrMax,
                                     u8 luBitsX, u8 luBitsY, u8 luBitsZ, u8 luBitsW);
 
         // Layout pins (compiled into the .cpp).

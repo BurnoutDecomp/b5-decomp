@@ -25,8 +25,8 @@
 //                       named members.
 //   +0x40  muField40 -- a u16 included in the 0x42-byte copy but immediately
 //                       re-zeroed (sth r30, 0x40) -- i.e. always 0 after ctor.
-//   +0x44  muField44 -- u32, zero-stored.
-//   +0x48  muField48 -- u32, zero-stored.
+//   +0x44  mThumbnail -- {data,size}; save task callers pass this address to
+//                       XenonUtil::SaveFiles and CloseContainer.
 //   +0x4C  muField4C -- u32, zero-stored.
 //
 // The 0x42 (66) byte memcpy spans +0x00..+0x41 (name + the +0x40 u16); the u16
@@ -35,6 +35,7 @@
 
 #include <cstddef>
 #include "types.hpp"
+#include "SDKs/Realmc/RealmcXenonUtil.h" // ThumbnailData at +0x44
 
 namespace RealmcIface
 {
@@ -46,13 +47,15 @@ public:
     //                 then zero muField40 and the three trailing u32 fields.
     //                 pSource points at a 66-byte source blob.
     explicit GameInfo(const void* pSource);
+    GameInfo(const GameInfo& rOther);
 
     uint8_t  maName[64];  // +0x00  64-byte name buffer
     uint16_t muField40;   // +0x40  re-zeroed after the copy
-    uint32_t muField44;   // +0x44
-    uint32_t muField48;   // +0x48
+    ThumbnailData mThumbnail; // +0x44
     uint32_t muField4C;   // +0x4C
 };
 // sizeof(GameInfo) == 0x50 (80) bytes.
+CGS_STATIC_ASSERT((offsetof(GameInfo, mThumbnail) == 0x44), "ARTIST GameInfo thumbnail offset");
+CGS_STATIC_ASSERT((offsetof(GameInfo, muField4C) == 0x4C), "ARTIST GameInfo content-area offset");
 
 } // namespace RealmcIface

@@ -61,7 +61,7 @@ bool SaveLoadSystem::Prepare(CgsMemory::HeapMalloc* pHeap,
     mpSystemUserProfile = pProfile;
     RealmcIface::GameInfo gameInfo(macwTitle);
     mpMemcardInterface = RealmcIface::MemcardInterface::CreateInstance(&params, this, gameInfo);
-    mpMemcardInterface->SetActive(1);
+    mpMemcardInterface->SetMonitor(1);
     mpMugshotBufferData = pLinear->Malloc(miExtraFilesSizeBytes *
         miNumberOfMugshotsPerType * miNumberOfMugshotTypes);
     CGS_ASSERT(mpMugshotBufferData != 0, "mpMugshotBufferData");
@@ -150,7 +150,7 @@ void SaveLoadSystem::Save()
     RealmcIface::LoadEntryInfo entries[2];
     {
         RealmcIface::SaveCheckParams params(0, 0);
-        mpMemcardInterface->CheckSave(0, &params);
+        mpMemcardInterface->SetAutosave(0, &params);
     }
     RealmcIface::DataBuffer empty, data;
     data.mpData = mStoredData.mpData;
@@ -159,7 +159,7 @@ void SaveLoadSystem::Save()
     entries[1] = CreateRealmcMugshotLoadEntryInfo();
     RealmcIface::TitleInfo& title = RealmcIface::TitleInfo::Empty();
     RealmcIface::SaveInfo info = CreateRealmcSaveInfo();
-    mpMemcardInterface->WriteSave(&info, 2, entries, 0, &title);
+    mpMemcardInterface->Save(&info, 2, entries, 0, &title);
     Update();
 }
 
@@ -207,7 +207,7 @@ void SaveLoadSystem::Autosave(SaveLoadTaskResultHandler* handler,
     entries[1] = CreateRealmcMugshotLoadEntryInfo();
     RealmcIface::SaveInfo saveInfo = CreateRealmcSaveInfo();
     RealmcIface::TitleInfo& title = RealmcIface::TitleInfo::Empty();
-    mpMemcardInterface->WriteSave(&saveInfo, 2, entries, 1, &title);
+    mpMemcardInterface->Save(&saveInfo, 2, entries, 1, &title);
     Update();
     ShowAutosaveIcon(true);
 }
@@ -247,7 +247,7 @@ void SaveLoadSystem::BootupShowAutosaveWarning()
 // 8284C6D8
 void SaveLoadSystem::HandleMemcardOption(u32 option)
 {
-    mpMemcardInterface->MessageChoice(MessageChoiceForOptionIndex(option));
+    mpMemcardInterface->MessageDone(MessageChoiceForOptionIndex(option));
 }
 // 82855A60
 void SaveLoadSystem::BootupStart(u32)
@@ -263,13 +263,13 @@ void SaveLoadSystem::BootupStart(u32)
         entries[1] = CreateRealmcMugshotLoadEntryInfo();
         RealmcIface::TitleInfo& title = RealmcIface::TitleInfo::Empty();
         RealmcIface::SaveInfo info = CreateRealmcSaveInfo();
-        mpMemcardInterface->Bootup(&info, 2, entries, &title);
+        mpMemcardInterface->BootupCheck(&info, 2, entries, &title);
     }
     else
     {
         RealmcIface::TitleInfo& title = RealmcIface::TitleInfo::Empty();
         RealmcIface::SaveInfo info = CreateRealmcSaveInfo();
-        mpMemcardInterface->Bootup(&info, 0, 0, &title);
+        mpMemcardInterface->BootupCheck(&info, 0, 0, &title);
     }
     Update();
 }
@@ -290,7 +290,7 @@ void SaveLoadSystem::LoadHandleConfirmLoad(u32 option)
     RealmcIface::EntryContentName name(macwMetadataTitle, macTitle,
         miExtraFilesSizeBytes * miNumberOfMugshotsPerType * miNumberOfMugshotTypes + mStoredData.miSize);
     RealmcIface::TitleInfo& title = RealmcIface::TitleInfo::Empty();
-    mpMemcardInterface->ReadSave(&name, 2, entries, 0, &title);
+    mpMemcardInterface->Load(&name, 2, entries, 0, &title);
     Update();
 }
 // 82859C30

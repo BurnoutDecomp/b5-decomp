@@ -33,7 +33,7 @@ namespace BrnReplays
     }
 
     QuantisedVector4Compression::QuantisedVector4Compression(
-        const Vector4& lrMin, const Vector4& lrMax,
+        Vector4 lrMin, Vector4 lrMax,
         u8 luBitsX, u8 luBitsY, u8 luBitsZ, u8 luBitsW)
     {
         // +0..+3: stb r4..r7, 0..3(r31)
@@ -60,7 +60,7 @@ namespace BrnReplays
 
     // @0x82653340 -- log "Vec: <x> <y> <z> <w>\n" to gpDebugPrint (filtered). The vector arrives in
     // VMX v1 (vmr128 v127,v1); the Hex-Rays integer args are dead register leftovers.
-    void QuantisedVector4::PrintVector4(const Vector4& lrValue)
+    void QuantisedVector4::PrintVector4(Vector4 lrValue)
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
@@ -74,7 +74,7 @@ namespace BrnReplays
     // @0x8265AB58 -- quantise lrValue through lpCompression into lpDest.
     void QuantisedVector4::Pack(void* lpDest,
                                const QuantisedVector4Compression* lpCompression,
-                               const Vector4& lrValue)
+                               Vector4 lrValue)
     {
         const QuantisedVector4Compression& lrC = *lpCompression;
 

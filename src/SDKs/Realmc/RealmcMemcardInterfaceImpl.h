@@ -1,27 +1,29 @@
 #pragma once
 
 // ===========================================================================
-// RealmcIface::MemcardInterfaceImpl -- the concrete memory-card interface the
-// factory RealmcIface::MemcardInterface::CreateInstance (@ 0x82B52BF8) allocates
-// (a 0x528 / 1320-byte object) and constructs. It derives from the abstract
-// RealmcIface::MemcardInterface and overrides its interface slots.
+// RealmcIface::MemcardInterfaceImpl -- the X360 concrete memory-card interface.
+// Its constructor is the factory target at 0x82B522D0 and receives the shared
+// ThreadParameters, the game callback object and a GameInfo record.
 //
-// This is a MINIMAL home: it declares only what CreateInstance needs to construct
-// the object faithfully -- the derivation, the four-argument constructor the X360
-// asm calls, and the interface overrides required to make the class concrete
-// (instantiable). The FULL 0x528-byte member layout and every method BODY are
-// owned by the impl's own TU (RealmcMemcardInterfaceImpl.cpp, which so far holds
-// only CreateInstance and is not mounted), extending this header additively.
-// Nothing here fabricates that layout.
-//
-// CreateInstance's construction site (X360 asm @ 0x82B52CC8..0x82B52CD4):
-//   r3 = pMem (the 1320-byte block), r4 = pThreadParams, r5 = liParam2,
-//   r6 = liParam3, then bl MemcardInterfaceImpl::MemcardInterfaceImpl.
+// The member order below follows the ARTIST constructor stores and destructor
+// calls. In particular, the local X360 EA::Thread::Mutex occupies 0x30 bytes,
+// the worker Thread* is at +0x88, the MessageQueue begins at +0x90, the
+// MemcardState begins at +0x14C, the four XenonUtil::State records begin at
+// +0x1A0 with 0xE0 stride, and the shared ThreadParameters* is at +0x520.
+// The factory allocates 0x528 bytes.
 // ===========================================================================
 
-#include "SDKs/Realmc/RealmcMemcardInterface.h"   // RealmcIface::MemcardInterface (base)
+#include "types.hpp"
 
-namespace EA { namespace Thread { struct ThreadParameters; } }
+#include "SDKs/Realmc/RealmcMemcardInterface.h"
+#include "SDKs/Realmc/RealmcGameInfo.h"
+#include "SDKs/Realmc/RealmcMessageQueue.h"
+#include "SDKs/Realmc/RealmcMemcardState.h"
+#include "SDKs/Realmc/RealmcXenonUtil.h"
+#include "SDKs/Realmc/RealmcIfaceGameCallbackProcessor.h"
+#include "SDKs/EATech/eathread/BrnEAThreadX360.h"
+#include <eathread/eathread_mutex.h>
+#include <new>
 
 namespace RealmcIface
 {
@@ -29,35 +31,80 @@ namespace RealmcIface
 class MemcardInterfaceImpl : public MemcardInterface
 {
 public:
-    // @ (its own TU) -- the ctor CreateInstance calls on the freshly-allocated
-    // 1320-byte block: r4 = the shared ThreadParameters, r5/r6 = CreateInstance's
-    // pass-through liParam2/liParam3 (roles owned by the impl TU).
+    // @0x82B522D0 -- constructs the embedded state, callback processor, queue,
+    // mutex and four per-user Xenon states in the native initialization order.
     MemcardInterfaceImpl(EA::Thread::ThreadParameters* pThreadParams,
                          IGameInterface* pGameInterface, const GameInfo& rGameInfo);
 
-    // Interface overrides (bodies owned by the impl TU). Declared here so the class
-    // is concrete and CreateInstance can construct it; each matches the base slot.
-    ~MemcardInterfaceImpl() ;
-    void Reserved01() ;
-    int  Update(int liArg) ;
-    void Reserved03() ;
-    // Wave B: slots 4/5/6/9 were renamed in the base to their consumer-attested
-    // shapes (UserSignedIn/MessageChoice/SetSilent/Bootup) and slot 14 (ReadSave)
-    // was appended -- the override decls track the base so the class stays concrete.
-    void UserSignedIn() ;
-    void MessageChoice(int liChoice) ;
-    void SetSilent(int liSilent, int liArg) ;
-    void Reserved07() ;
-    void Reserved08() ;
-    void Bootup(void* lpSaveInfo, int liNumEntries, void* lpEntries,
-                void* lpTitleInfo) ;
-    void Reserved10() ;
-    void WriteSave(void* lpSaveInfo, int liCount, void* lpEntries,
-                   int liFlags, void* lpTitleInfo) ;
-    void CheckSave(int liArg, void* lpCheckParams) ;
-    void SetActive(int liActive) ;
-    void ReadSave(void* lpEntryContentName, int liNumEntries, void* lpEntries,
-                  int liFlags, void* lpTitleInfo) ;
+    // @0x82B52CF0 -- shuts down the queue, joins/frees the worker, deletes the
+    // callback processor and closes the four Xenon states. C++ then tears down
+    // the embedded MemcardState, MessageQueue, Mutex and base in reverse order.
+    ~MemcardInterfaceImpl();
+
+    // ARTIST vtable off_821485DC, slots +0x04 through +0x38.
+    void Shutdown();
+    int Update(int liArg);
+    bool IsResettable();
+    int SetSignedUserIndex(int liUserIndex);
+    void MessageDone(int liChoice);
+    int SetMessageState(int liMode, int liMask);
+    int CheckCard(int liArg);
+    int SetActiveCard(int liArg1, int liArg2, int liArg3);
+    int BootupCheck(SaveInfo* lpSaveInfo, int liNumEntries,
+                    LoadEntryInfo* lpEntries, TitleInfo* lpTitleInfo);
+    int SaveCheck(SaveCheckParams* lpParams);
+    int Save(SaveInfo* lpSaveInfo, int liCount, LoadEntryInfo* lpEntries,
+             int liFlags, TitleInfo* lpTitleInfo);
+    int SetAutosave(int liEnabled, SaveCheckParams* lpParams);
+    int SetMonitor(int liState);
+    int Load(EntryContentName* lpEntryContentName, int liNumEntries,
+             LoadEntryInfo* lpEntries, int liFlags, TitleInfo* lpTitleInfo);
+
+    static void operator delete(void* lpBlock, size_t luSize)
+    {
+        RealmcCore::FreeMemSize(lpBlock, static_cast<u32>(luSize));
+    }
+
+private:
+    void CleanupThread();
+
+    template <class TTask>
+    int RunAsync(TTask* pTask)
+    {
+        mMutex.Lock();
+
+        if (mMemcardState.GetCurrentTask())
+        {
+            mMemcardState.PutInStartWaitingQueue(pTask);
+            return mMutex.Unlock();
+        }
+
+        CleanupThread();
+        pTask->Starting();
+
+        void* const lpThreadMemory = RealmcCore::AllocateMem(
+            "RealmcCore::Thread", sizeof(EA::Thread::Thread));
+        mpWorkerThread = lpThreadMemory
+            ? new (lpThreadMemory) EA::Thread::Thread()
+            : 0;
+
+        mMutex.Unlock();
+        const EA::Thread::RunnableFunctionUserWrapper lUserWrapper =
+            EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper();
+        return reinterpret_cast<int>(mpWorkerThread->Begin(
+            &RealmcCore::ThrFunction<TTask>, pTask, mpThreadParams, lUserWrapper));
+    }
+
+    GameInfo mGameInfo;                          // +0x04 .. +0x54
+    EA::Thread::Mutex mMutex;                    // +0x58 .. +0x88
+    EA::Thread::Thread* mpWorkerThread;           // +0x88
+    RealmcCore::MessageQueue mMessageQueue;       // +0x90 .. +0x148
+    GameCallbackProcessor* mpCallbackProcessor;   // +0x148
+    RealmcCore::MemcardState mMemcardState;       // +0x14C .. +0x1A0
+    XenonUtil::State maStates[4];                 // +0x1A0 .. +0x520
+    EA::Thread::ThreadParameters* mpThreadParams; // +0x520
 };
+
+CGS_STATIC_ASSERT((sizeof(MemcardInterfaceImpl) == 0x528), "ARTIST memcard implementation size");
 
 } // namespace RealmcIface
