@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> complete for the body
 #include "types.hpp"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysResource.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::AttribSysVaultResourceType::GetSerialisedResourceDescriptor @ 0x828EBA48
@@ -24,6 +26,19 @@ namespace CgsResource
     uint32_t AttribSysVaultResourceType::GetTypeID() const
     {
         return KU_ATTRIB_SYS_VAULT_RESOURCE_TYPE_ID;
+    }
+
+    // ARTIST vtable 0x820A1410 -> 0x828E1598, shared with schema FixUp.
+    void AttribSysVaultResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        AttribSysVaultResource* lpVault = static_cast<AttribSysVaultResource*>(lpResource);
+        const u32 luBase = GetLoadBase(lrResource);
+        if (lpVault->mpau8VltData != 0)
+            lpVault->mpau8VltData = reinterpret_cast<u8*>(
+                reinterpret_cast<uintptr_t>(lpVault->mpau8VltData) + luBase);
+        if (lpVault->mpau8BinData != 0)
+            lpVault->mpau8BinData = reinterpret_cast<u8*>(
+                reinterpret_cast<uintptr_t>(lpVault->mpau8BinData) + luBase);
     }
 
     ResourceDescriptor AttribSysVaultResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
