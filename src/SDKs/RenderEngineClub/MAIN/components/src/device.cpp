@@ -1,8 +1,10 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/rendertargetstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "rw/rwcore_structs.h"
+#include <xgraphics.h>
 
 D3DDevice* gpD3DDevice = 0;
 
@@ -32,6 +34,167 @@ namespace renderengine
     u32 gDeviceFrameCounter83271624 = 0;
     PixelBuffer* gpDeviceColorBuffer = 0;
     PixelBuffer* gpDeviceDepthBuffer = 0;
+    u32 gDeviceTileCount83271620 = 0;
+    D3DRECT gDeviceTileRects83271628[8];
+    u32 gDeviceWord83271604 = 0;
+    struct FrontBufferSlot { Texture2D texture; u8 padding[12]; };
+    CGS_STATIC_ASSERT((sizeof(FrontBufferSlot) == 64), "ARTIST front buffer stride");
+    __declspec(align(16)) FrontBufferSlot gFrontBuffers83271580[2];
+    Texture2D* gpFrontBuffer83271618 = 0;
+    u32 gFrontBufferIndex832716B8 = 0;
+    u32 gFrontBufferCount832716BC = 0;
+
+    // ARTIST82B61850: clear device-owned native state before default parameters.
+    bool Device::Initialize()
+    {
+        gDeviceWord83271604 = 1;
+        gpD3DDevice = 0;
+        gpDeviceColorBuffer = 0;
+        gpDeviceDepthBuffer = 0;
+        gpFrontBuffer83271618 = 0;
+        guTilingEnabled = 0;
+        gDeviceTileCount83271620 = 0;
+        memset(gDeviceTileRects83271628, 0, sizeof(gDeviceTileRects83271628));
+        gDeviceFrameCounter83271624 = 0;
+        gDeviceCounter832716A8 = 0;
+        gDeviceCounter832716AC = 0;
+        gDevicePerformanceCounter832716B0.QuadPart = 0;
+        gFrontBufferIndex832716B8 = 0;
+        gFrontBufferCount832716BC = 0;
+        memset(&gOriginalColorBuffer, 0, sizeof(gOriginalColorBuffer));
+        memset(&gOriginalDepthStencilBuffer, 0, sizeof(gOriginalDepthStencilBuffer));
+        memset(gFrontBuffers83271580, 0, sizeof(gFrontBuffers83271580));
+        m_parameterCopy.Initialize(6);
+        m_currentState = STATE_INITIALIZE;
+        return true;
+    }
+
+    // ARTIST82B63298: resolve, rotate, fence, synchronize and present in order.
+    void Device::ShowPixelBuffer(PixelBuffer* lpBuffer)
+    {
+        D3DDevice* const lpDevice = gpD3DDevice;
+        gpFrontBuffer83271618 = &gFrontBuffers83271580[gFrontBufferIndex832716B8].texture;
+        if (gFrontBufferCount832716BC == 1)
+            D3DDevice_SynchronizeToPresentationInterval(lpDevice);
+        lpBuffer->Xbox2ResolveTo(gpFrontBuffer83271618, 0, 0, 0, 0, 0, 0, 1.0f, 0);
+        guTilingEnabled = 0;
+        gFrontBufferIndex832716B8 = (gFrontBufferIndex832716B8 + 1) % gFrontBufferCount832716BC;
+        gDeviceCounter832716AC = gDeviceCounter832716A8;
+        gDeviceCounter832716A8 = D3DDevice_InsertFence(lpDevice);
+        if (gFrontBufferCount832716BC != 1)
+            D3DDevice_SynchronizeToPresentationInterval(lpDevice);
+        D3DDevice_Swap(lpDevice, gpFrontBuffer83271618, &m_parameterCopy.videoScalerParameters);
+    }
+
+    // ARTIST82B63398: block for the displayed texture and expose its lock.
+    bool Device::LockFrontBuffer(LockedFrontBuffer& lrLockedFrontBuffer)
+    {
+        D3DDevice_BlockUntilIdle(gpD3DDevice);
+        Texture::Locked lLocked;
+        if (gpFrontBuffer83271618->Lock(Texture::LOCK_READ, 0, 0, lLocked))
+        {
+            lrLockedFrontBuffer.pixelData = lLocked.mpPixelData;
+            lrLockedFrontBuffer.format = gpFrontBuffer83271618->GetFormat();
+            lrLockedFrontBuffer.pitch = lLocked.muStride;
+            lrLockedFrontBuffer.width = lLocked.muWidth;
+            lrLockedFrontBuffer.height = lLocked.muHeight;
+            return true;
+        }
+        lrLockedFrontBuffer.pixelData = 0;
+        lrLockedFrontBuffer.format = static_cast<PixelFormat>(-1);
+        lrLockedFrontBuffer.pitch = 0;
+        lrLockedFrontBuffer.width = 0;
+        lrLockedFrontBuffer.height = 0;
+        return false;
+    }
+
+    // ARTIST82B63450: reconstruct the texture lock fields used by Unlock.
+    void Device::UnlockFrontBuffer(LockedFrontBuffer& lrLockedFrontBuffer)
+    {
+        Texture::Locked lLocked;
+        lLocked.mpTexture = gpFrontBuffer83271618;
+        lLocked.mpPixelData = const_cast<void*>(lrLockedFrontBuffer.pixelData);
+        lLocked.muStride = lrLockedFrontBuffer.pitch;
+        lLocked.muWidth = lrLockedFrontBuffer.width;
+        lLocked.muHeight = lrLockedFrontBuffer.height;
+        lLocked.muMipLevel = 0;
+        lLocked.muIndex = 0;
+        gpFrontBuffer83271618->Unlock(lLocked);
+    }
+
+    // ARTIST82B63840: allocate Xenos EDRAM surfaces and native front textures.
+    void Device::InitializeGlobalBuffers()
+    {
+        const u32 width = m_parameterCopy.backBufferWidth;
+        const u32 height = m_parameterCopy.backBufferHeight;
+        u32 tileHeight = height;
+        const D3DMULTISAMPLE_TYPE msaa = m_parameterCopy.multiSampleType;
+        const PixelFormat colorFormat = m_parameterCopy.backBufferFormat;
+        const PixelFormat depthFormat = m_parameterCopy.depthStencilFormat;
+        u32 size = XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(colorFormat), msaa);
+        if (m_parameterCopy.depthStencilAutoCreate)
+            size += XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(depthFormat), msaa);
+        if (size > 0x800)
+        {
+            u32 count = 1;
+            do
+            {
+                ++count;
+                u32 h = height / count;
+                h = (msaa == 1 || msaa == 2) ? (h + 7) & ~7u : (h + 15) & ~15u;
+                tileHeight = (h + 31) & ~31u;
+                size = XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(colorFormat), msaa);
+                if (m_parameterCopy.depthStencilAutoCreate)
+                    size += XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(depthFormat), msaa);
+            } while (size > 0x800);
+            gDeviceTileCount83271620 = count;
+            gDeviceTileRects83271628[0].x1 = 0;
+            gDeviceTileRects83271628[0].y1 = 0;
+            gDeviceTileRects83271628[0].x2 = width;
+            gDeviceTileRects83271628[0].y2 = tileHeight;
+            for (u32 i = 1; i < count; ++i)
+            {
+                gDeviceTileRects83271628[i].x1 = 0;
+                gDeviceTileRects83271628[i].y1 = gDeviceTileRects83271628[i-1].y2;
+                gDeviceTileRects83271628[i].x2 = width;
+                gDeviceTileRects83271628[i].y2 = gDeviceTileRects83271628[i].y1 + tileHeight;
+            }
+            if (gDeviceTileRects83271628[count-1].y2 > height)
+                gDeviceTileRects83271628[count-1].y2 = height;
+        }
+        else gDeviceTileCount83271620 = 0;
+
+        PixelBuffer::Parameters surface = { PixelBuffer::TYPE_RENDERTARGET, 0, width, tileHeight, colorFormat, msaa, 0 };
+        rw::Resource resource;
+        resource.m_baseResources[0] = &gOriginalColorBuffer;
+        gpDeviceColorBuffer = PixelBuffer::Initialize(resource, surface);
+        if (m_parameterCopy.depthStencilAutoCreate)
+        {
+            surface.type = PixelBuffer::TYPE_DEPTHSTENCIL;
+            surface.format = depthFormat;
+            resource = rw::Resource();
+            resource.m_baseResources[0] = &gOriginalDepthStencilBuffer;
+            gpDeviceDepthBuffer = PixelBuffer::Initialize(resource, surface);
+        }
+        else gpDeviceDepthBuffer = 0;
+        Texture2D::Parameters front = { 0, m_parameterCopy.frontBufferWidth, m_parameterCopy.frontBufferHeight, 1, m_parameterCopy.frontBufferFormat };
+        rw::ResourceDescriptor descriptor = Texture2D::GetResourceDescriptor(front);
+        descriptor.m_baseResourceDescriptors[0].m_size = 0;
+        descriptor.m_baseResourceDescriptors[0].m_alignment = 1;
+        resource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->DoAllocate(descriptor, 0);
+        resource.m_baseResources[0] = &gFrontBuffers83271580[0].texture;
+        gpFrontBuffer83271618 = Texture2D::Initialize(resource, front);
+        if (gDeviceTileCount83271620)
+        {
+            resource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->DoAllocate(descriptor, 0);
+            resource.m_baseResources[0] = &gFrontBuffers83271580[1].texture;
+            Texture2D::Initialize(resource, front);
+        }
+        guTilingEnabled = 0;
+        gFrontBufferIndex832716B8 = 0;
+        gFrontBufferCount832716BC = gDeviceTileCount83271620 ? 2 : 1;
+        EnsureDefaultRenderTarget();
+    }
 
     // ARTIST82B63BA8. InitializeGlobalBuffers owns the real surface/texture setup.
     bool Device::Start(const Parameters& lrParameters)
@@ -59,8 +222,6 @@ namespace renderengine
         return true;
     }
 
-    extern u32 gDeviceTileCount83271620;
-    extern D3DRECT gDeviceTileRects83271628[8];
 
     // ARTIST82B61D78: depth/stencil-only clear or the first tile pass.
     void Device::Clear(const ClearDepthStencilParameters& lrDepthStencil)

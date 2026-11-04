@@ -24,6 +24,26 @@ namespace core
 namespace stdc
 {
 
+// ARTIST 82BC7650 skips bytes until a digit, minus sign, or NUL.
+s32 ConvertAToI(const char* lpcString)
+{
+    while (*lpcString && *lpcString != '-' &&
+           (*lpcString < '0' || *lpcString > '9'))
+        ++lpcString;
+
+    const bool lbNegative = *lpcString == '-';
+    if (lbNegative)
+        ++lpcString;
+
+    u32 luValue = 0;
+    while (*lpcString >= '0' && *lpcString <= '9')
+    {
+        luValue = luValue * 10 + static_cast<u32>(*lpcString - '0');
+        ++lpcString;
+    }
+    return static_cast<s32>(lbNegative ? 0u - luValue : luValue);
+}
+
 // memset-style 32-bit fill (0x82BC70B0). Splats the value across luSize bytes of
 // lpDst. The X360 build head-aligns the destination to a 4-byte boundary by
 // emitting the high byte of a left-rotating word, optionally consumes one extra

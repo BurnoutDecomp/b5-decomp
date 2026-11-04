@@ -460,21 +460,58 @@ private:
     // immediate-mode 2D renderer (declared signature CgsGraphics::Im2d& + float).
     void RenderLetterBoxBars(CgsGraphics::Im2d& lIm2d, f32 lfDestAspectRatio);
 
-    // Expand every GDL object list (0..12) of the read-side buffered
-    // frame into the mesh lists (0..24). The original 16-job path is available
-    // with BRN_MESH_JOBS=1; native measurements currently retain the serial default.
-    void ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame* lpGdlFrames,
-                                CgsGraphics::DispatchFrame* lpMeshFrame,
-                                CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
-                                const CgsGraphics::DispatchObjectContext* lpContext);
-    void CreateObjectToMeshJob(u32 luJobIndex,
-                              const CgsGraphics::DispatchObjectContext* lpContext,
-                              CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
-                              u32 luInputList, s32 liGroupIndex, u32 luGroupSize);
+    enum ERendererModelOnlyDispatchJob
+    {
+        eRendererModelOnlyDispatchJob_World_Part0,
+        eRendererModelOnlyDispatchJob_World_Part1,
+        eRendererModelOnlyDispatchJob_World_Part2,
+        eRendererModelOnlyDispatchJob_World_Part3,
+        eRendererModelOnlyDispatchJob_Car_Part0,
+        eRendererModelOnlyDispatchJob_Shadow0,
+        eRendererModelOnlyDispatchJob_Shadow1,
+        eRendererModelOnlyDispatchJob_Shadow0BackFaceCull,
+        eRendererModelOnlyDispatchJob_Shadow1BackFaceCull,
+        eRendererModelOnlyDispatchJob_Shadow2,
+        eRendererModelOnlyDispatchJob_EnvmapPosX,
+        eRendererModelOnlyDispatchJob_EnvmapNegX,
+        eRendererModelOnlyDispatchJob_EnvmapPosY,
+        eRendererModelOnlyDispatchJob_EnvmapNegY,
+        eRendererModelOnlyDispatchJob_EnvmapPosZ,
+        eRendererModelOnlyDispatchJob_EnvmapNegZ,
+        eRendererModelOnlyDispatchJob_End
+    };
 
-    // Sort every pass list of the render frame (on the console, RadixSort jobs;
-    // PC: the synchronous DispatchList::SortForDispatch stand-in).
-    void SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFrame);
+    enum ERendererDoubleBufferedDispatchListID
+    {
+        eRendererModelOnlyDispatchListBegin,
+        eRendererModelOnlyDispatchListShadow0 = eRendererModelOnlyDispatchListBegin,
+        eRendererModelOnlyDispatchListShadow1,
+        eRendererModelOnlyDispatchListShadow0BackFaceCull,
+        eRendererModelOnlyDispatchListShadow1BackFaceCull,
+        eRendererModelOnlyDispatchListShadow2,
+        eRendererModelOnlyDispatchListEnvmapPosX,
+        eRendererModelOnlyDispatchListEnvmapNegX,
+        eRendererModelOnlyDispatchListEnvmapPosY,
+        eRendererModelOnlyDispatchListEnvmapNegY,
+        eRendererModelOnlyDispatchListEnvmapPosZ,
+        eRendererModelOnlyDispatchListEnvmapNegZ,
+        eRendererModelOnlyDispatchListWorld,
+        eRendererModelOnlyDispatchListCar,
+        eRendererModelOnlyDispatchListEnd,
+        eRendererModelOnlyDispatchListMax = eRendererModelOnlyDispatchListEnd
+    };
+
+    void ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame& lrGdlFrames,
+                                CgsGraphics::DispatchFrame& lrMeshFrame,
+                                CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+                                const CgsGraphics::DispatchObjectContext& lrContext);
+    void CreateObjectToMeshJob(ERendererModelOnlyDispatchJob leJob,
+                               const CgsGraphics::DispatchObjectContext& lrContext,
+                               CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+                               ERendererDoubleBufferedDispatchListID leInputList,
+                               s32 liGroupIndex, s32 liGroupSize);
+
+    void SortDispatchLists(CgsGraphics::DispatchFrame& lrMeshFrame);
 
     // Open the frame's ANTI-ALIASED scene pass: publish this frame's background
     // colour into mvBackgroundColour, bind the anti-alias buffer's section-0 surface state, and

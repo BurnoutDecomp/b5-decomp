@@ -104,6 +104,31 @@ namespace shadow
         return lbInitialised;
     }
 
+    // ARTIST 827ED758; the caller checks the returned boolean.
+    bool Device::FrameBegin()
+    {
+        ResetShadowing();
+        mbRasteriserStateLocked = false;
+        mbBlendStateLocked = false;
+        mbDepthStencilStateLocked = false;
+        mbForceStencilWrite = false;
+        muStencilValueToWrite = 0;
+        return true;
+    }
+
+    // ARTIST 827ED7A8, decoded from the raw image: the same reset followed
+    // by the increment at 827ED7E8..F0 of the shared device frame counter.
+    void Device::FrameEnd()
+    {
+        ResetShadowing();
+        mbRasteriserStateLocked = false;
+        mbBlendStateLocked = false;
+        mbDepthStencilStateLocked = false;
+        mbForceStencilWrite = false;
+        muStencilValueToWrite = 0;
+        ++renderengine::gDeviceFrameCounter83271624;
+    }
+
     renderengine::VertexProgramState* Device::GetVertexProgramState(
         const renderengine::ProgramBufferData* lpVertexProgram,
         const renderengine::VertexDescriptorData* lpVertexDescriptor)

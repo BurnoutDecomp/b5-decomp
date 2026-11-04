@@ -76,7 +76,6 @@
 #include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"                                    // BrnDirector::Camera::Utils::CreateLookAt (action 219)
-namespace renderengine { extern u32 guPresentCount; }   // [net] netcar witness: the frame-dump index
 #include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine) / Mult
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::WheelSpec (the authored wheel placements)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h"                // VehicleLocatorData (the rest-pose light-locator stand-in)
@@ -4970,25 +4969,6 @@ void RaceCarEntityModule::PreSceneUpdate(
         {
             lpActivateCar->mbReceivedNetworkDriverControls = true;
         }
-        // [PC HARNESS, NOT X360] bounded witness (LAN runs only): once per 150-present bucket of
-        // the renderer's present counter -- the index BRN_FRAME_DUMP names its bb_<n>.bmp by --
-        // the state of every NETWORK car slot: online state, controls received, active, in the
-        // scene, drawn this frame, and its world position.
-        {
-            static u32 suLastPresentBucket = 0xFFFFFFFFu;
-            static bool sbPrintBucket = false;
-            if (liActivateSlot == 0)
-            {
-                const u32 luBucket = renderengine::guPresentCount / 150u;
-                sbPrintBucket = (luBucket != suLastPresentBucket);
-                suLastPresentBucket = luBucket;
-            }
-            if (sbPrintBucket && lpActivateCar->IsAttached() &&
-                lpActivateCar->GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_NETWORK)
-            {
-                const Vector3 lPos = lpActivateCar->GetPosition();
-            }
-        }
         if (lpActivateCar != 0 && lpActivateCar->mbAIToBeActivated && lpActivateCar->IsAttached())
         {
             CGS_ASSERT(lpActivateCar->IsAttached(), "IsAttached()");   // BrnActiveRaceCar.h:1089
@@ -7069,8 +7049,6 @@ void RaceCarEntityModule::ProcessTakedownEvents(
             mNearMissManager.AddTakenDownRaceCar(lrEvent.meVictimIndex);
         if (lrEvent.meVictimIndex == mePlayerActiveRaceCarIndex)
         {
-            WreckLatchWitness("ProcessTakedownEvents@0x822F6D60",
-                              static_cast<s32>(mePlayerActiveRaceCarIndex), true);
             GetActiveRaceCar(mePlayerActiveRaceCarIndex)->mbIsWrecked = true;
             mBoostManager.GetBoostStrategy()->OnTakenDownByAIOrPlayer();
         }

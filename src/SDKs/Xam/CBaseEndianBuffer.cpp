@@ -20,6 +20,7 @@
 #include "SDKs/Xam/CBaseEndianBuffer.h"
 
 #include <cstring> // memcpy
+#include <cstdlib> // _byteswap_ushort, _byteswap_ulong
 
 // ---------------------------------------------------------------------------
 // CBaseEndianBuffer::Bind @ 0x8297FE18
@@ -69,6 +70,48 @@ s32 CBaseEndianBuffer::GetPointerAndAdvance(void** ppOut, u32* lpSize)
     *ppOut = mpData + muOffset;
     muOffset += *lpSize;
     return 0;
+}
+
+// CBaseEndianBuffer::GetDataAndAdvance @ 0x8297FEB0
+s32 CBaseEndianBuffer::GetDataAndAdvance(void* lpOut, u32* lpSize, u32 lbSwapEndian)
+{
+    void* lpSrc;
+    const s32 lResult = GetPointerAndAdvance(&lpSrc, lpSize);
+    if (lResult < 0)
+    {
+        return lResult;
+    }
+
+    if (!lbSwapEndian)
+    {
+        memcpy(lpOut, lpSrc, *lpSize);
+        return lResult;
+    }
+
+    switch (*lpSize)
+    {
+    case 1:
+        *static_cast<u8*>(lpOut) = *static_cast<const u8*>(lpSrc);
+        break;
+    case 2:
+        *static_cast<u16*>(lpOut) = _byteswap_ushort(*static_cast<const u16*>(lpSrc));
+        break;
+    case 4:
+        *static_cast<u32*>(lpOut) = _byteswap_ulong(*static_cast<const u32*>(lpSrc));
+        break;
+    case 8:
+        {
+            const u32* lpWords = static_cast<const u32*>(lpSrc);
+            const u64 luLow = _byteswap_ulong(lpWords[0]);
+            const u64 luHigh = _byteswap_ulong(lpWords[1]);
+            *static_cast<u64*>(lpOut) = (luHigh << 32) | luLow;
+            break;
+        }
+    default:
+        return static_cast<s32>(0x8007000D);
+    }
+
+    return lResult;
 }
 
 // ---------------------------------------------------------------------------
