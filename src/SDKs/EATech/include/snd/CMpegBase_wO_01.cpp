@@ -66,20 +66,13 @@
 // =====================================================================================
 
 #include "SDKs/EATech/include/snd/CMpegBase.h"
+#include "SDKs/EATech/include/snd/sndmix.h"
 
 namespace Snd
 {
 
 namespace
 {
-// dword_83277834 -- the Snd free hook (a function pointer), the pair of the allocator
-// hook dword_83277830 that the committed OpenSynth calls (830 allocates, 834 frees; the
-// two globals are adjacent). Owned by the Snd allocator TU; referenced by extern here,
-// never fabricated. Measured: `lwz r11, dword_83277834@l(r10); mtctr r11; bctrl` with
-// r3 = mpPolySynthHistory, and the callee's result is discarded (`li r3, 0` follows), so
-// the void return. 16 code xrefs across the Snd audio module (dumped this wave).
-extern "C" void (*dword_83277834)(void* apBlock);
-
 // -------------------------------------------------------------------------------------
 // Poly-phase synthesis window -- unk_8214B6C0 in BURNOUT_X360_ARTIST.XEX (544 f32 =
 // 0x880 bytes; the next rodata object, the DCT row flt_8214BF40, starts at +544).
@@ -463,7 +456,7 @@ s32 CMpegBase::Close()
         void* const lpHistory = mpPolySynthHistory;
         muHeaderWord = 0;
         mucIsOpen = 0;
-        dword_83277834(lpHistory);
+        gpfnSndFree(lpHistory);
     }
 
     return 0;

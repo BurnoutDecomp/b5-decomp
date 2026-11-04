@@ -16,17 +16,12 @@
 // ============================================================================
 
 #include "SDKs/EATech/include/snd/CMpegLayer3Base.h"
+#include "SDKs/EATech/include/snd/sndmix.h"
 
 #include <cstring> // std::memset
 
 namespace Snd
 {
-
-// The Snd system's memory callbacks: the allocator / free function pair every
-// Snd decoder allocates through (CMpegBase::OpenSynth and CMpegBase::Close call
-// the same pair). Installed by the Snd system start-up.
-extern void* (*gpfnSndAlloc)(u32 auSize);
-extern void  (*gpfnSndFree)(void* apBlock);
 
 namespace
 {

@@ -1,7 +1,10 @@
 // DirtySDK 5.5.3 lobby login state primitives, ARTIST 82B20B68..82B20C88.
 #include "lobbylogin.h"
 #include "dirtymem.h"
+#include "dirtynet_x360_internal.h"
 #include <stddef.h>
+#include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct LobbyLoginNameListT
@@ -785,8 +788,8 @@ done:
     return 0;
 }
 // X360 address/name remap parsers at ARTIST 82B1FD80 and 82B20070.
-extern "C" void sub_82B1FD80(LobbyLoginRefT*, const char*);
-extern "C" void sub_82B20070(LobbyLoginRefT*, const char*);
+extern "C" s32 sub_82B1FD80(LobbyLoginRefT*, const char*);
+extern "C" s32 sub_82B20070(LobbyLoginRefT*, const char*);
 
 extern "C" void sub_82B20390(LobbyLoginRefT* pLogin)
 {
@@ -887,4 +890,331 @@ extern "C" u32 sub_82B1FCE0(LobbyLoginRefT*, u32 uServiceId)
             return SocketHtonl(service.serviceIP.s_addr);
     NetPrintfCode("lobbylogin: could not map serviceID 0x%08x - using fallback method\n", uServiceId);
     return static_cast<u32>(NetConnStatus(0x686f7374, 0, 0, 0));
+}
+
+extern "C" u32 SocketInTextGetAddr(const char* text);
+extern "C" const char* SocketInAddrGetText(u32 address);
+
+static bool _LobbyLoginIsDecimalDigit(char value)
+{
+    const u8 uValue = (u8)value;
+    return (uValue >= (u8)'0') && (uValue <= (u8)'9');
+}
+
+static u16 _LobbyLoginReadPortStart(const char** ppCursor)
+{
+    const char* pCursor = *ppCursor;
+    u16 uPort = 0;
+    for (;;)
+    {
+        const char cValue = *pCursor++;
+        if (!_LobbyLoginIsDecimalDigit(cValue))
+        {
+            break;
+        }
+        uPort = (u16)(10 * uPort + ((u8)cValue - (u8)'0'));
+    }
+    *ppCursor = pCursor;
+    return uPort;
+}
+
+static u16 _LobbyLoginReadPortEnd(const char** ppCursor)
+{
+    const char* pCursor = *ppCursor;
+    u16 uPort = 0;
+    while (_LobbyLoginIsDecimalDigit(*pCursor))
+    {
+        uPort = (u16)(10 * uPort + ((u8)*pCursor - (u8)'0'));
+        ++pCursor;
+    }
+    *ppCursor = pCursor;
+    return uPort;
+}
+
+static void _LobbyLoginReadPortRange(const char** ppCursor,
+                                     u16* pPort, u16* pRemapPort)
+{
+    *pPort = _LobbyLoginReadPortStart(ppCursor);
+    *pRemapPort = _LobbyLoginReadPortEnd(ppCursor);
+}
+
+extern "C" s32 sub_82B1FD80(LobbyLoginRefT* pLogin, const char* pText)
+{
+    NetPrintfCode("lobbylogin: parsing new-style remap table\n");
+
+    // ARTIST supplies a 64-DWORD stack buffer (16 SocketAddrMapX360 records)
+    // and clears its first nine entries before constructing the table.
+    SocketAddrMapX360 aMappings[16];
+    memset(aMappings, 0, 144);
+
+    s32 iMappingCount = 0;
+    const char* pRule = pText;
+    while ((*pRule != '\0') && (iMappingCount < 8))
+    {
+        const char* pDelimiter = pRule;
+        while ((*pDelimiter != '\0') && (*pDelimiter != ':') &&
+               (*pDelimiter != '/'))
+        {
+            ++pDelimiter;
+        }
+        if (*pDelimiter == '\0')
+        {
+            break;
+        }
+
+        const u32 uAddress = SocketInTextGetAddr(pRule);
+        const char* pPortList = NULL;
+        const char* pMask;
+        if (*pDelimiter == ':')
+        {
+            pPortList = pDelimiter + 1;
+            const char* pPortSlash = pPortList;
+            while ((*pPortSlash != '\0') && (*pPortSlash != '/'))
+            {
+                ++pPortSlash;
+            }
+            if (*pPortSlash == '\0')
+            {
+                break;
+            }
+            pMask = pPortSlash + 1;
+        }
+        else
+        {
+            pMask = pDelimiter + 1;
+        }
+
+        const u32 uMask = SocketInTextGetAddr(pMask);
+        const char* pServiceSlash = pMask;
+        while ((*pServiceSlash != '\0') && (*pServiceSlash != '/'))
+        {
+            ++pServiceSlash;
+        }
+        if (*pServiceSlash == '\0')
+        {
+            break;
+        }
+
+        // The configuration field is '/$<hex service id>'; ARTIST skips the
+        // slash and dollar before calling strtol with radix 16.
+        const char* pServiceID = pServiceSlash + 2;
+        const u32 uServiceAddress = sub_82B1FCE0(
+            pLogin, (u32)strtol(pServiceID, NULL, 16));
+
+        if (pPortList != NULL)
+        {
+            const char* pPort = pPortList;
+            while ((*pPort != '\0') && (*pPort != '/'))
+            {
+                if (iMappingCount >= 16)
+                {
+                    break;
+                }
+                SocketAddrMapX360* pMapping = &aMappings[iMappingCount++];
+                pMapping->address = uAddress;
+                pMapping->mask = uMask;
+                pMapping->remap = uServiceAddress;
+                _LobbyLoginReadPortRange(&pPort,
+                                         &pMapping->port,
+                                         &pMapping->remapPort);
+                while ((*pPort != '\0') && (*pPort != ',') && (*pPort != '/'))
+                {
+                    ++pPort;
+                }
+                if (*pPort != ',')
+                {
+                    break;
+                }
+                ++pPort;
+            }
+        }
+
+        if (iMappingCount < 16)
+        {
+            SocketAddrMapX360* pMapping = &aMappings[iMappingCount++];
+            pMapping->address = uAddress;
+            pMapping->mask = uMask;
+            pMapping->remap = uServiceAddress;
+            pMapping->port = 0;
+            pMapping->remapPort = 0;
+        }
+
+        const char* pNextRule = pServiceID;
+        while ((*pNextRule != '\0') && (*pNextRule != ','))
+        {
+            ++pNextRule;
+        }
+        if (*pNextRule == '\0')
+        {
+            break;
+        }
+        pRule = pNextRule + 1;
+    }
+
+    for (s32 iIndex = 0; iIndex < iMappingCount; ++iIndex)
+    {
+        const SocketAddrMapX360* pMapping = &aMappings[iIndex];
+        NetPrintfCode("  %d) addr=%s, ", iIndex,
+                      SocketInAddrGetText(pMapping->address));
+        NetPrintfCode("mask=%s, ", SocketInAddrGetText(pMapping->mask));
+        NetPrintfCode("remap=%s ", SocketInAddrGetText(pMapping->remap));
+        NetPrintfCode("port=%d,%d\n", pMapping->port, pMapping->remapPort);
+    }
+
+    if (iMappingCount > 0 && NetConnStatus(0x73656375, 0, NULL, 0) != 0)
+    {
+        NetPrintfCode("lobbylogin: setting remap table\n");
+        NetConnControl(0x786d6170, iMappingCount, 0, aMappings, NULL); // xmap
+        return NetConnControl(0x78646e73, (s32)aMappings[0].address,
+                              0, NULL, NULL); // xdns
+    }
+    return 0;
+}
+
+extern "C" s32 sub_82B20070(LobbyLoginRefT* pLogin, const char* pText)
+{
+    NetPrintfCode("lobbylogin: parsing new-style remap table\n");
+
+    // The native frame contains a 0x400-byte table workspace and clears nine
+    // 104-byte SocketNameMapX360 entries (eight usable entries plus sentinel).
+    u8 aMapStorage[1024];
+    memset(aMapStorage, 0, 936);
+    SocketNameMapX360* pMappings = (SocketNameMapX360*)aMapStorage;
+
+    s32 iMappingCount = 0;
+    const char* pRule = pText;
+    while ((*pRule != '\0') && (iMappingCount < 8))
+    {
+        char strMatch[64];
+        u32 uMatchLength = 0;
+        const char* pDelimiter = pRule;
+        while ((*pDelimiter != '\0') && (*pDelimiter != ':') &&
+               (*pDelimiter != '/'))
+        {
+            if (uMatchLength + 1 < sizeof(strMatch))
+            {
+                strMatch[uMatchLength] = *pDelimiter;
+                ++uMatchLength;
+            }
+            ++pDelimiter;
+        }
+        if (*pDelimiter == '\0')
+        {
+            break;
+        }
+        strMatch[uMatchLength] = '\0';
+
+        const char* pPortList = NULL;
+        const char* pRemap;
+        if (*pDelimiter == ':')
+        {
+            pPortList = pDelimiter + 1;
+            const char* pPortSlash = pPortList;
+            while ((*pPortSlash != '\0') && (*pPortSlash != '/'))
+            {
+                ++pPortSlash;
+            }
+            if (*pPortSlash == '\0')
+            {
+                break;
+            }
+            pRemap = pPortSlash + 1;
+        }
+        else
+        {
+            pRemap = pDelimiter + 1;
+        }
+
+        char strRemapName[32];
+        u32 uRemapAddress = 0;
+        const char* pNextRule = pRemap;
+        if (*pRemap == '$')
+        {
+            uRemapAddress = sub_82B1FCE0(
+                pLogin, (u32)strtol(pRemap + 1, NULL, 16));
+            strRemapName[0] = '\0';
+            ++pNextRule;
+        }
+        else
+        {
+            u32 uNameLength = 0;
+            while ((*pNextRule != '\0') && (*pNextRule != ','))
+            {
+                if (uNameLength + 1 < sizeof(strRemapName))
+                {
+                    strRemapName[uNameLength] = *pNextRule;
+                    ++uNameLength;
+                }
+                ++pNextRule;
+            }
+            strRemapName[uNameLength] = '\0';
+        }
+
+        if (pPortList != NULL)
+        {
+            const char* pPort = pPortList;
+            while ((*pPort != '\0') && (*pPort != '/'))
+            {
+                if (iMappingCount >= 9)
+                {
+                    break;
+                }
+                SocketNameMapX360* pMapping = &pMappings[iMappingCount++];
+                ds_strnzcpy(pMapping->match, strMatch, sizeof(pMapping->match));
+                ds_strnzcpy(pMapping->remapName, strRemapName,
+                            sizeof(pMapping->remapName));
+                pMapping->remapAddress = uRemapAddress;
+                _LobbyLoginReadPortRange(&pPort,
+                                         &pMapping->port,
+                                         &pMapping->remapPort);
+                while ((*pPort != '\0') && (*pPort != ',') && (*pPort != '/'))
+                {
+                    ++pPort;
+                }
+                if (*pPort != ',')
+                {
+                    break;
+                }
+                ++pPort;
+            }
+        }
+
+        if (iMappingCount < 9)
+        {
+            SocketNameMapX360* pMapping = &pMappings[iMappingCount++];
+            ds_strnzcpy(pMapping->match, strMatch, sizeof(pMapping->match));
+            ds_strnzcpy(pMapping->remapName, strRemapName,
+                        sizeof(pMapping->remapName));
+            pMapping->remapAddress = uRemapAddress;
+            pMapping->port = 0;
+            pMapping->remapPort = 0;
+        }
+
+        while ((*pNextRule != '\0') && (*pNextRule != ','))
+        {
+            ++pNextRule;
+        }
+        if (*pNextRule == '\0')
+        {
+            break;
+        }
+        pRule = pNextRule + 1;
+    }
+
+    for (s32 iIndex = 0; iIndex < iMappingCount; ++iIndex)
+    {
+        const SocketNameMapX360* pMapping = &pMappings[iIndex];
+        NetPrintfCode("  %d) dnsname=%s, ", iIndex, pMapping->match);
+        NetPrintfCode("name=%s, ", pMapping->remapName);
+        NetPrintfCode("addr=%s ", SocketInAddrGetText(pMapping->remapAddress));
+        NetPrintfCode("port=%d,%d\n", pMapping->port, pMapping->remapPort);
+    }
+
+    if (iMappingCount > 0 && NetConnStatus(0x73656375, 0, NULL, 0) != 0)
+    {
+        NetPrintfCode("lobbylogin: setting remap table\n");
+        return NetConnControl(0x786e616d, iMappingCount, 0,
+                              aMapStorage, NULL); // xnam
+    }
+    return 0;
 }
