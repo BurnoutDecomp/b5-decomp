@@ -29,10 +29,7 @@
 
 #include <cstring>   // memcpy (the raw shader-constant row copies)
 
-// renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
-// surface BrnIm3d.cpp / BrnSunCorona.cpp / BrnPostFxBloom.cpp declare (defined in
-// ImmediateMode.cpp). Returns the staged row the caller copies the constant into.
-void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 
 namespace BrnGraphics
 {
@@ -40,14 +37,11 @@ namespace BrnGraphics
     {
         // One shader-constant write: open the row for the handle and copy the bytes into it --
         // the X360's `bl renderengine::Device::BeginShaderStates; stvx128 ...` pattern.
-        void PushShaderConstant(renderengine::ProgramVariableHandle* lpHandle, const void* lpValue, u32 luBytes)
+        void PushShaderConstant(const renderengine::ProgramVariableHandle& lrHandle, const void* lpValue, u32 luBytes)
         {
-            void* lpShaderState = 0;
-            RenderEngineDeviceBeginShaderStates(lpHandle, &lpShaderState);
-            if (lpShaderState != 0)
-            {
-                memcpy(lpShaderState, lpValue, luBytes);
-            }
+            renderengine::FloatShaderStateIterator lIterator;
+            renderengine::Device::BeginShaderStates(lrHandle, lIterator);
+            memcpy(lIterator.m_dest, lpValue, luBytes);
         }
     }
 
@@ -94,16 +88,16 @@ namespace BrnGraphics
     // =========================================================================================
     void Im3dSkidsRenderer::SetTransform(Matrix44::InParam lTransform)
     {
-        PushShaderConstant(&mWorldViewProjStateHandle, &lTransform, sizeof(Matrix44));
+        PushShaderConstant(mWorldViewProjStateHandle, &lTransform, sizeof(Matrix44));
     }
 
     void Im3dSkidsRenderer::SetBlendStartColour(Vector4 lColour)
     {
-        PushShaderConstant(&mStartColourStateHandle, &lColour, sizeof(Vector4));
+        PushShaderConstant(mStartColourStateHandle, &lColour, sizeof(Vector4));
     }
 
     void Im3dSkidsRenderer::SetBlendEndColour(Vector4 lColour)
     {
-        PushShaderConstant(&mEndColourStateHandle, &lColour, sizeof(Vector4));
+        PushShaderConstant(mEndColourStateHandle, &lColour, sizeof(Vector4));
     }
 }

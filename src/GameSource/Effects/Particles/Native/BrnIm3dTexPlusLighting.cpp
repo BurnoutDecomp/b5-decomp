@@ -17,10 +17,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 
 
-// renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr): open one shader-constant
-// row for a named program constant and return the write cursor. Shared declaration with the
-// sibling immediate-mode TUs (CgsIm3d.cpp / CgsIm3dSkyDome.cpp spell it identically).
-void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 
 namespace BrnGraphics
 {
@@ -76,8 +73,6 @@ namespace BrnGraphics
     // Inline on the console, so each one is recovered from the stores its call sites make.
     // Every one has the same three-step shape the console emits at each site:
     //   BeginShaderStates(&<the named constant's handle>, &cursor); build the value; store it.
-    // The shader-state row is opened by HANDLE, so an unresolved constant (register count 0)
-    // routes its write to the discard row instead of corrupting the constant file.
     //
     // WHERE EACH ONE IS ATTESTED (the store, not the name):
     //   SetViewProjection / SetEye / SetLightDirection / SetLightColour -- the four
@@ -91,35 +86,18 @@ namespace BrnGraphics
     // xyz only, so the 1.0 is the homogeneous lane -- reproduced because it is what the
     // store writes.
     // =====================================================================================
-    namespace
-    {
-        // Write one float4 constant row through the cursor BeginShaderStates handed back.
-        inline void WriteShaderRow(void* lpShaderState, f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
-        {
-            if (lpShaderState == 0)
-            {
-                return;
-            }
-            f32* const lpfRow = reinterpret_cast<f32*>(lpShaderState);
-            lpfRow[0] = lfX;
-            lpfRow[1] = lfY;
-            lpfRow[2] = lfZ;
-            lpfRow[3] = lfW;
-        }
-    }
-
     void Im3dTexPlusLighting::SetTransformArray(const Matrix44* lpTransforms)
     {
-        void* lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mTransformArrayStateHandle, &lpShaderState);
-        if (lpShaderState == 0 || lpTransforms == 0)
+        renderengine::FloatShaderStateIterator lIterator;
+        renderengine::Device::BeginShaderStates(mTransformArrayStateHandle, lIterator);
+        if (lpTransforms == 0)
         {
             return;
         }
 
         // The console copies the whole 32-matrix batch in one block move (0x800 bytes).
         const u8* const lpSrc = reinterpret_cast<const u8*>(lpTransforms);
-        u8* const       lpDst = reinterpret_cast<u8*>(lpShaderState);
+        u8* const       lpDst = reinterpret_cast<u8*>(lIterator.m_dest);
         for (u32 luByte = 0; luByte < KU_NUM_TRANSFORMS * 64u; ++luByte)
         {
             lpDst[luByte] = lpSrc[luByte];
@@ -128,16 +106,12 @@ namespace BrnGraphics
 
     void Im3dTexPlusLighting::SetViewProjection(Matrix44::InParam lViewProjection)
     {
-        void* lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mViewProjectionMatrixStateHandle, &lpShaderState);
-        if (lpShaderState == 0)
-        {
-            return;
-        }
+        renderengine::FloatShaderStateIterator lIterator;
+        renderengine::Device::BeginShaderStates(mViewProjectionMatrixStateHandle, lIterator);
 
         // Four 16-byte rows, copied straight through (the console's four lvx/stvx pairs).
         const u8* const lpSrc = reinterpret_cast<const u8*>(&lViewProjection);
-        u8* const       lpDst = reinterpret_cast<u8*>(lpShaderState);
+        u8* const       lpDst = reinterpret_cast<u8*>(lIterator.m_dest);
         for (u32 luByte = 0; luByte < 64u; ++luByte)
         {
             lpDst[luByte] = lpSrc[luByte];
@@ -146,29 +120,29 @@ namespace BrnGraphics
 
     void Im3dTexPlusLighting::SetEye(Vector3 lEye)
     {
-        void* lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mEyeStateHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lEye.GetX().GetFloat(), lEye.GetY().GetFloat(), lEye.GetZ().GetFloat(), 1.0f);
+        renderengine::FloatShaderStateIterator lIterator;
+        renderengine::Device::BeginShaderStates(mEyeStateHandle, lIterator);
+        *lIterator.m_dest = rw::math::vpu::Vector4(lEye.GetX().GetFloat(), lEye.GetY().GetFloat(), lEye.GetZ().GetFloat(), 1.0f);
     }
 
     void Im3dTexPlusLighting::SetLightDirection(Vector3 lDirection)
     {
-        void* lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mWorldLightDirectionStateHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lDirection.GetX().GetFloat(), lDirection.GetY().GetFloat(), lDirection.GetZ().GetFloat(), 1.0f);
+        renderengine::FloatShaderStateIterator lIterator;
+        renderengine::Device::BeginShaderStates(mWorldLightDirectionStateHandle, lIterator);
+        *lIterator.m_dest = rw::math::vpu::Vector4(lDirection.GetX().GetFloat(), lDirection.GetY().GetFloat(), lDirection.GetZ().GetFloat(), 1.0f);
     }
 
     void Im3dTexPlusLighting::SetLightColour(Vector3 lColour)
     {
-        void* lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mLightColourStateHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lColour.GetX().GetFloat(), lColour.GetY().GetFloat(), lColour.GetZ().GetFloat(), 1.0f);
+        renderengine::FloatShaderStateIterator lIterator;
+        renderengine::Device::BeginShaderStates(mLightColourStateHandle, lIterator);
+        *lIterator.m_dest = rw::math::vpu::Vector4(lColour.GetX().GetFloat(), lColour.GetY().GetFloat(), lColour.GetZ().GetFloat(), 1.0f);
     }
 
     void Im3dTexPlusLighting::SetShinyParams(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
     {
-        void* lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mShinyParamsStateHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lfX, lfY, lfZ, lfW);
+        renderengine::FloatShaderStateIterator lIterator;
+        renderengine::Device::BeginShaderStates(mShinyParamsStateHandle, lIterator);
+        *lIterator.m_dest = rw::math::vpu::Vector4(lfX, lfY, lfZ, lfW);
     }
 }

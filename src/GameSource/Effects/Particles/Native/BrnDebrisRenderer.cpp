@@ -2,7 +2,7 @@
 #include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"     // BrnDebrisArrayParams table
 
 #include "GameSource/Effects/Particles/Native/BrnIm3dTexPlusLighting.h" // the borrowed renderer
-#include "GameSource/Effects/BrnEffectsUtils.h"                      // BrnEffects::Utils::SinCosCycles
+#include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h" // shadow::Device
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h" // renderengine::BlendState*
@@ -154,7 +154,18 @@ namespace Native
         mpRenderer->SetState(reinterpret_cast<const CgsGraphics::BlendState*>(mpBlendState));
         mpRenderer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpRasterizerState_CullCW);       // dword_83010F44
         mpRenderer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpDepthStencilState_ZBufferOn);   // dword_83010F48
-             // dword_83010F60 on unit 0
+        // ARTIST 82281F34..82281FA4 takes the sampler before asserting the active renderer.
+        const CgsGraphics::SamplerState* const sampler =
+            CgsGraphics::ImRendererBase::GetStateLibrary().mpSamplerState_Linear_MipNearest_ClampUV;
+        CgsGraphics::ImRendererBase& renderer = *mpRenderer;
+        if (CgsGraphics::ImRendererBase::mgpActiveRenderer != &renderer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 839);
+            CgsDev::Assert::EndAssert();
+        }
+        shadow::Device::SetState(sampler, 0);
 
         mpRenderer->SetViewProjection(lViewProjection);
         mpRenderer->SetEye(lEye);
@@ -165,79 +176,201 @@ namespace Native
         mpRenderer->SetLightColour(lLightColour);
     }
 
-    // =====================================================================================
-    // BrnParticle::Native::BrnDebrisRenderer::RenderDebrisArray
-    //
-    // One debris array, start to finish. The original is a hand-vectorised loop that works
-    // four particles at a time in structure-of-arrays lanes; it is reproduced here as the
-    // per-particle scalar loop it is the four-wide form of. Every constant, every store and
-    // every comparison below is recovered -- nothing is fitted.
-    //
-    // SHAPE:
-    //   assert(lpArray);  bail when the array has no live buckets
-    //   assert(lpParams); push gShinyParams = (0, ambient, specularPower, specularIntensity)
-    //   bind the array's texture on unit 0 and dispatch its mesh; flush the vertex-program state
-    //   for each live bucket, for each group of KU_NUM_TRANSFORMS(32) particles:
-    //       build one world matrix per particle into the batch
-    //       if any particle in the group was visible: stage the batch and issue ONE indexed draw
-    //
-    // THE BATCH IS ALWAYS 32 MATRICES WIDE, even at the end of a short bucket. The original
-    // runs its inner block a fixed eight times (eight x four lanes) and lets the per-lane
-    // validity test blank the overrun, rather than trimming the draw -- the instance count is
-    // baked into the mesh, so a short batch would still draw 32 copies. The overrun slots read
-    // particle records that are inside the bucket and are made degenerate by a zero scale.
-    //
-    // THE PER-INSTANCE COLOUR RIDES THE MATRIX'S FOURTH COLUMN. Rows 0..2 carry the scaled
-    // rotation in xyz and the diffuse R / G / B in w; row 3 carries the position in xyz and the
-    // faded alpha in w. The vertex program exports exactly {m0.w, m1.w, m2.w, m3.w} as the
-    // vertex colour, which is why the rotation rows can be three-wide and still fill a float4x4.
-    //
-    // THE FOUR LIFETIMES ARE NOT ONE NUMBER. The lifetime the age is tested against is a
-    // four-lane constant, {7, 9, 8, 10} seconds, indexed by the particle's own position in its
-    // lane group -- so a burst of debris does not evaporate all at once. (The 9 and the 8 are
-    // stored as 9.00000095 and 7.99999905; they are reproduced as stored.) With the caller's
-    // reduced-frame-rate flag clear the whole vector is scaled by 0.2.
-    //
-    // THAT SCALE IS CORROBORATED BY THE OTHER END OF THE SYSTEM, independently of this body:
-    // BrnDebrisArray::FreeExpiredBuckets recycles a bucket once its last particle is older than
-    // TEN seconds at 30 Hz and TWO seconds otherwise. Ten is this vector's largest lane, and two
-    // is that lane times 0.2 -- so the producer's recycle window and the renderer's fade-out
-    // window are the same window, read from two unrelated functions. A misread lifetime or a
-    // misread scale would have made them disagree.
-    // =====================================================================================
     namespace
     {
-        // The per-lane debris lifetimes in seconds, indexed by (particle index & 3).
-        const f32 KAF_DEBRIS_LIFETIME[4] = { 7.0f, 9.00000095f, 7.99999905f, 10.0f };
+        const char kDebrisRendererSource[] =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnDebrisRenderer.cpp";
+        const char kBucketSource[] = "..\\..\\..\\GameSource\\Effects/Particles/Native/FXBuckets.h";
 
-        // The lifetime scale applied when the caller's reduced-frame-rate flag is CLEAR.
-        const f32 KF_DEBRIS_SHORT_LIFETIME_SCALE = 0.2f;
+        CGS_STATIC_ASSERT((sizeof(BrnDebris) == 0x50), "ARTIST debris particle stride");
+        CGS_STATIC_ASSERT((offsetof(BrnDebrisArray::DebrisBucket, maParticleBirthTimes) == 0x10),
+            "ARTIST debris birth times");
+        CGS_STATIC_ASSERT((offsetof(BrnDebrisArray::DebrisBucket, maParticleData) == 0x190),
+            "ARTIST debris particle array");
+        CGS_STATIC_ASSERT((BrnDebrisArray::DebrisBucket::KuMaxNumParticles == 96),
+            "ARTIST debris bucket capacity");
 
-        // Fade-out rate: the last 1/1.25 == 0.8 s of a particle's life fade it out.
-        const f32 KF_DEBRIS_FADE_OUT_RATE = 1.25f;
-
-        // The half-offset the per-lane particle-index ramp carries ({0.5, 1.5, 2.5, 3.5} + 4n),
-        // compared against the bucket's particle count to blank the tail of the last group.
-        const f32 KF_DEBRIS_INDEX_BIAS = 0.5f;
-
-        // The rotation axis a blanked lane falls back to (+Y), with a zero angle.
-        const f32 KAF_DEBRIS_DEFAULT_AXIS[3] = { 0.0f, 1.0f, 0.0f };
-
-        // The primitive topology the draw carries (TRIANGLELIST).
-        const u32 KU_DEBRIS_PRIMITIVE_TYPE = 4u;
-
-        // The serialised BrnVFXMeshCollection is reached by dword offset -- the same
-        // external-serialised-data exception, and the same two indices, that
-        // BrnVFXMeshCollectionResourceType.cpp's FixUp uses.
-        enum EVFXMeshCollectionDword
+        void DebrisAssert(bool condition, const char* expression, const char* file, s32 line)
         {
-            E_MESHCOLLECTION_MESHHELPER   = 33,  // 0x84 -- MeshHelper* (rebased at FixUp)
-            E_MESHCOLLECTION_NUM_INDICES  = 34   // 0x88 -- muNumIndices
-        };
+            if (!condition)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(expression, file, line);
+                CgsDev::Assert::EndAssert();
+            }
+        }
 
-        inline f32 MinF(f32 lfA, f32 lfB) { return (lfA < lfB) ? lfA : lfB; }
+        __vector4 SplatFloat(f32 value)
+        {
+            return __vspltw(__lvlx(&value, 0), 0);
+        }
 
+        // ARTIST 8228B5xx. Cos4_UnitCycles, shared by the cosine and
+        // quarter-turn-shifted sine lanes of the same minimax polynomial.
+        __vector4 DebrisCosine(__vector4 cycles)
+        {
+            const __vector4 fraction = __vsubfp(cycles, __vrfim(cycles));
+            const __vector4 folded = __vaddfp(__vminfp(fraction, __vsubfp(SplatFloat(1.0f), fraction)),
+                SplatFloat(-0.25f));
+            const __vector4 squared = __vmulfp(folded, folded);
+            const __vector4 inner =
+                __vmaddfp(squared, SplatFloat(-71.17897033691406f), SplatFloat(40.897369384765625f));
+            return __vmulfp(__vmaddfp(squared, inner, SplatFloat(-6.278042793273926f)), folded);
+        }
+
+        template<u32 Lane>
+        void SetDebrisTransform(Matrix44& transform, const BrnDebris& particle, __vector4 axis,
+            __vector4 sineLanes, __vector4 cosineLanes, __vector4 fadeInLanes, __vector4 fadeOutLanes,
+            __vector4 visible)
+        {
+            const __vector4 sine = __vspltw(sineLanes, Lane);
+            const __vector4 cosine = __vspltw(cosineLanes, Lane);
+            const __vector4 fadeIn = __vspltw(fadeInLanes, Lane);
+            const __vector4 fadeOut = __vspltw(fadeOutLanes, Lane);
+            const __vector4 zero = __vspltisw(0);
+            const __vector4 one = SplatFloat(1.0f);
+            const __vector4 sign = __vslw(__vspltisw(-1), __vspltisw(-1));
+            const __vector4 axisSine = __vmulfp(axis, sine);
+            const __vector4 negativeSine = __vxor(axisSine, sign);
+            const __vector4 axisComplement = __vmulfp(axis, __vsubfp(one, cosine));
+
+            const Vector4 xTerm(cosine.x, axisSine.z, negativeSine.y, 0.0f);
+            const Vector4 yTerm(negativeSine.z, cosine.x, axisSine.x, 0.0f);
+            const Vector4 zTerm(axisSine.y, negativeSine.x, cosine.x, 0.0f);
+            const __vector4 size = __vsel(zero, __vspltw(particle.mVelocityPlusScale.mV, 3), visible);
+            const __vector4 scale = __vmulfp(fadeIn, size);
+            const __vector4 color = particle.mDiffuseColour.mV;
+
+            const __vector4 rowX = __vmaddfp(axis, __vspltw(axisComplement, 0), xTerm.mV);
+            const __vector4 rowY = __vmaddfp(axis, __vspltw(axisComplement, 1), yTerm.mV);
+            const __vector4 rowZ = __vmaddfp(axis, __vspltw(axisComplement, 2), zTerm.mV);
+            transform.xAxis.mV = __vrlimi(__vmulfp(rowX, scale), __vspltw(color, 0), 1, 0);
+            transform.yAxis.mV = __vrlimi(__vmulfp(rowY, scale), __vspltw(color, 1), 1, 0);
+            transform.zAxis.mV = __vrlimi(__vmulfp(rowZ, scale), __vspltw(color, 2), 1, 0);
+            const __vector4 alpha = __vmulfp(fadeOut, __vspltw(color, 3));
+            transform.wAxis.mV = __vrlimi(particle.mPositionPlusRotVel.mV, alpha, 1, 0);
+        }
     }
 
+    // ARTIST 8228B078. The array ID is passed in r6 and unused.
+    void BrnDebrisRenderer::RenderDebrisArray(f32 currentTime, const BrnDebrisArray* array,
+        EDebrisArrayID, bool fullLifetime)
+    {
+        DebrisAssert(array != 0, "lpArray != NULL", kDebrisRendererSource, 524);
+        if (!array->Buckets())
+            return;
+
+        const BrnDebrisArrayParams* const params = array->Params();
+        DebrisAssert(params != 0, "lpParams != NULL", kDebrisRendererSource, 538);
+        mpRenderer->SetShinyParams(0.0f, params->mfAmbientFactor, params->mfSpecularPower,
+            params->mfSpecularIntensity);
+        mpRenderer->SetTexture(const_cast<renderengine::Texture*>(array->Texture()), 0);
+
+        const BrnVFXMeshCollection* const collection = array->MeshCollection();
+        shadow::Device::SetState(collection->GetMeshHelper());
+        shadow::Device::FlushVertexProgramState();
+        const shadow::Device::DrawIndexedParameters draw = {
+            D3DPT_TRIANGLELIST, 0, 0, collection->GetNumIndices()
+        };
+
+        const __vector4 time = SplatFloat(currentTime);
+        const __vector4 inverseFadeIn = SplatFloat(1.0f / params->mfFadeInTime);
+        const __vector4 fadeOutRate = SplatFloat(1.25f);
+        const __vector4 radiansToCycles = SplatFloat(0.15915493667125702f);
+        const __vector4 one = SplatFloat(1.0f);
+        const __vector4 zero = __vspltisw(0);
+        const Vector4 defaultAxis(0.0f, 1.0f, 0.0f, 0.0f);
+        const Vector4 firstIndices(0.5f, 1.5f, 2.5f, 3.5f);
+        const __vector4 step = __vcfsx(__vspltisw(4), 0);
+        const Vector4 fullLifetimeLanes(7.0f, 9.000000953674316f, 7.999999046325684f, 10.0f);
+        const __vector4 lifetime = fullLifetime ? fullLifetimeLanes.mV
+            : __vmulfp(fullLifetimeLanes.mV, SplatFloat(0.2f));
+
+        Matrix44 transforms[BrnGraphics::Im3dTexPlusLighting::KU_NUM_TRANSFORMS];
+        for (const BrnDebrisArray::DebrisBucket* bucket = array->Buckets(); bucket;
+             bucket = static_cast<const BrnDebrisArray::DebrisBucket*>(bucket->mpNextBucket))
+        {
+            DebrisAssert((reinterpret_cast<uintptr_t>(bucket) & 15u) == 0,
+                "(((uint32_t)lpCurrentBucket) & 0xf) == 0", kDebrisRendererSource, 587);
+            const u32 count = bucket->mu16NumberOfParticlesInBucket;
+            const u32 capacity = BrnDebrisArray::DebrisBucket::KuMaxNumParticles;
+            DebrisAssert(count <= capacity,
+                "mu16NumberOfParticlesInBucket <= KuMaxNumParticles", kBucketSource, 152);
+            DebrisAssert((reinterpret_cast<uintptr_t>(bucket->maParticleBirthTimes) & 15u) == 0,
+                "( ( (uint32_t)maParticleBirthTimes ) & 15 ) == 0", kBucketSource, 123);
+            DebrisAssert(count != 0, "luNumParticles != 0", kDebrisRendererSource, 598);
+
+            const __vector4 countLimit = SplatFloat(static_cast<f32>(count));
+            __vector4 indices = firstIndices.mV;
+            u32 first = 0;
+            do
+            {
+                __vector4 batchVisible = zero;
+                for (u32 slot = 0; slot < BrnGraphics::Im3dTexPlusLighting::KU_NUM_TRANSFORMS; slot += 4)
+                {
+                    const __vector4 born = __lvx(bucket->maParticleBirthTimes + first, 0);
+                    const __vector4 age = __vsubfp(time, born);
+                    const __vector4 remaining = __vsubfp(lifetime, age);
+                    const __vector4 bornMask = __vcmpgefp(age, zero);
+                    const __vector4 expired = __vcmpgefp(age, lifetime);
+                    const __vector4 beyondBucket = __vcmpgefp(indices, countLimit);
+                    const __vector4 visible = __vandc(bornMask, __vor(expired, beyondBucket));
+                    batchVisible = __vor(batchVisible, visible);
+                    const __vector4 fadeIn = __vminfp(one, __vmulfp(age, inverseFadeIn));
+                    const __vector4 fadeOut = __vminfp(one, __vmulfp(remaining, fadeOutRate));
+
+                    for (u32 lane = 0; lane < 4; ++lane)
+                        DebrisAssert(first + lane < capacity, "luParticle < KuMaxNumParticles", kBucketSource, 133);
+
+                    const BrnDebris* const particle = bucket->maParticleData + first;
+                    const __vector4 mask0 = __vspltw(visible, 0);
+                    const __vector4 mask1 = __vspltw(visible, 1);
+                    const __vector4 mask2 = __vspltw(visible, 2);
+                    const __vector4 mask3 = __vspltw(visible, 3);
+                    const __vector4 axis0 = __vsel(defaultAxis.mV, particle[0].mAxisPlusAngle.mV, mask0);
+                    const __vector4 axis1 = __vsel(defaultAxis.mV, particle[1].mAxisPlusAngle.mV, mask1);
+                    const __vector4 axis2 = __vsel(defaultAxis.mV, particle[2].mAxisPlusAngle.mV, mask2);
+                    const __vector4 axis3 = __vsel(defaultAxis.mV, particle[3].mAxisPlusAngle.mV, mask3);
+
+                    __vector4 firstAngles;
+                    firstAngles.u[0] = firstAngles.u[1] = 0x00010203u;
+                    firstAngles.u[2] = 0x0C0D0E0Fu;
+                    firstAngles.u[3] = 0x1C1D1E1Fu;
+                    __vector4 secondAngles;
+                    secondAngles.u[0] = 0x0C0D0E0Fu;
+                    secondAngles.u[1] = 0x1C1D1E1Fu;
+                    secondAngles.u[2] = secondAngles.u[3] = 0x00010203u;
+                    const __vector4 angles = __vsldoi(__vperm(axis0, axis1, firstAngles),
+                        __vperm(axis2, axis3, secondAngles), 8);
+                    const __vector4 sine = DebrisCosine(__vmaddfp(angles, radiansToCycles, SplatFloat(-0.25f)));
+                    const __vector4 cosine = DebrisCosine(__vmulfp(angles, radiansToCycles));
+                    SetDebrisTransform<0>(transforms[slot], particle[0], axis0,
+                        sine, cosine, fadeIn, fadeOut, mask0);
+                    SetDebrisTransform<1>(transforms[slot + 1], particle[1], axis1,
+                        sine, cosine, fadeIn, fadeOut, mask1);
+                    SetDebrisTransform<2>(transforms[slot + 2], particle[2], axis2,
+                        sine, cosine, fadeIn, fadeOut, mask2);
+                    SetDebrisTransform<3>(transforms[slot + 3], particle[3], axis3,
+                        sine, cosine, fadeIn, fadeOut, mask3);
+
+                    first += 4;
+                    indices = __vaddfp(indices, step);
+                }
+
+                // ARTIST 8327F110 packs each lane's high mask byte into a word.
+                __vector4 permute;
+                permute.u[0] = permute.u[1] = permute.u[2] = permute.u[3] = 0x0004080Cu;
+                const __vector4 packed = __vperm(batchVisible, batchVisible, permute);
+                const __vector4 empty = __vcmpequw(packed, zero);
+                unsigned int comparison;
+                __vcmpeqfpR(__vnor(empty, empty), zero, &comparison);
+                if (!XMComparisonAllTrue(comparison))
+                {
+                    mpRenderer->SetTransformArray(transforms);
+                    shadow::Device::DrawIndexedMultipleStreams_Custom(draw);
+                }
+            } while (first < count);
+        }
+    }
 }
 }

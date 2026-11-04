@@ -40,7 +40,7 @@ namespace renderengine { class Texture; }
 
 namespace BrnParticle
 {
-    class BrnVFXMeshCollection;   // resource type held by mMeshCollection
+    struct BrnVFXMeshCollection;   // resource type held by mMeshCollection
 
 namespace Native
 {
@@ -136,19 +136,10 @@ namespace Native
         // which is a read of a private member from outside.
         const BrnDebrisArrayParams* Params() const { return mpParams; }
 
-        // The same "a read of a private member from outside" case Params() documents, for the
-        // two render resources and the live-bucket list. BrnDebrisRenderer::RenderDebrisArray
-        // reads all three off the array it is handed (the original declares no getter for them
-        // because renderer and array share one header there).
-        //
-        // ⚠ Get() rather than the handle's conversion operator: the conversion asserts that the
-        // resource has main memory and then DEREFERENCES it regardless, which is a null read on a
-        // build where the debris FX bundle has not loaded. Get() is the same double-deref with the
-        // null test in front, and RenderDebrisArray gates on the result. Same values when the
-        // resource is present; no crash when it is not.
-        renderengine::Texture*     Texture() const        { return mTexture.Get(); }
-        BrnVFXMeshCollection*      MeshCollection() const { return mMeshCollection.Get(); }
-        const DebrisBucket*        Buckets() const        { return mpBuckets; }
+        // ARTIST 8228B158 and 8228B174 call the const handle conversions.
+        const renderengine::Texture* Texture() const { return mTexture; }
+        const BrnVFXMeshCollection* MeshCollection() const { return mMeshCollection; }
+        const DebrisBucket* Buckets() const { return mpBuckets; }
 
         // The render-resource half of ParticleModule::LoadFXBundle (stages 5..8), the DWARF's own members
         // (BrnDebrisRenderer.h:144 / :151 / :157). The console inlines all three:

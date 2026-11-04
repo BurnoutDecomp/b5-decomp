@@ -24,10 +24,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::WriteToLog
 #include <cstdio>    // [diag] snprintf (the constant-resolve line)
 
-// renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr): open one shader-constant row for
-// a named program constant and return the write cursor. Shared declaration with the sibling
-// immediate-mode TUs (BrnIm3dTexPlusLighting.cpp spells it identically).
-void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 
 namespace BrnGraphics
 {
@@ -43,17 +40,6 @@ namespace BrnGraphics
         const f32 KF_DEPTH_BYTE_MID       = 0.0038909914437681437f;   // flt_82011664 (0x3B7F0001)
         const f32 KF_DEPTH_BYTE_LOW       = 1.5199185327219311e-05f;  // flt_82011660 (0x377F0001)
 
-        // Write one float4 constant row through the cursor BeginShaderStates handed back.
-        inline void WriteShaderRow(void* lpShaderState, f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
-        {
-            if (lpShaderState == 0)
-                return;
-            f32* const lpfRow = reinterpret_cast<f32*>(lpShaderState);
-            lpfRow[0] = lfX;
-            lpfRow[1] = lfY;
-            lpfRow[2] = lfZ;
-            lpfRow[3] = lfW;
-        }
     }
 
     void Im3dSmokeRenderer::Construct(rw::IResourceAllocator* lpAllocator)
@@ -135,22 +121,20 @@ namespace BrnGraphics
         const f32 lfNearMinusFar = lfNearPlane - lfFarPlane;
         const f32 lfFadeConstant = (lfNearPlane * lfFarPlane) / lfFadeDistance;
 
-        void* lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mOffsetHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lvDepthUvOffset.mV.v[0] + KF_HALF, lvDepthUvOffset.mV.v[1] + KF_HALF,
-                       lfFarPlane, KF_ZERO);
+        renderengine::FloatShaderStateIterator lIterator;
+        renderengine::Device::BeginShaderStates(mOffsetHandle, lIterator);
+        *lIterator.m_dest = rw::math::vpu::Vector4(
+            lvDepthUvOffset.mV.v[0] + KF_HALF, lvDepthUvOffset.mV.v[1] + KF_HALF, lfFarPlane, KF_ZERO);
 
-        lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mScaleHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, KF_SCALE_X, KF_SCALE_Y, lfNearMinusFar, KF_ZERO);
+        renderengine::Device::BeginShaderStates(mScaleHandle, lIterator);
+        *lIterator.m_dest = rw::math::vpu::Vector4(KF_SCALE_X, KF_SCALE_Y, lfNearMinusFar, KF_ZERO);
 
-        lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mDepthConversionHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lfNearMinusFar * KF_DEPTH_BYTE_HIGH, lfNearMinusFar * KF_DEPTH_BYTE_MID,
-                       lfNearMinusFar * KF_DEPTH_BYTE_LOW, lfFarPlane);
+        renderengine::Device::BeginShaderStates(mDepthConversionHandle, lIterator);
+        *lIterator.m_dest = rw::math::vpu::Vector4(
+            lfNearMinusFar * KF_DEPTH_BYTE_HIGH, lfNearMinusFar * KF_DEPTH_BYTE_MID,
+            lfNearMinusFar * KF_DEPTH_BYTE_LOW, lfFarPlane);
 
-        lpShaderState = 0;
-        RenderEngineDeviceBeginShaderStates(&mDepthFadeConstantsHandle, &lpShaderState);
-        WriteShaderRow(lpShaderState, lfFadeConstant, KF_ZERO, KF_ZERO, KF_ZERO);
+        renderengine::Device::BeginShaderStates(mDepthFadeConstantsHandle, lIterator);
+        *lIterator.m_dest = rw::math::vpu::Vector4(lfFadeConstant, KF_ZERO, KF_ZERO, KF_ZERO);
     }
 }
