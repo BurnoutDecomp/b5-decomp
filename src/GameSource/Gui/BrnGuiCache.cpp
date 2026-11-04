@@ -434,6 +434,10 @@ namespace BrnGui
         miShowTimeComboMultiplier   = -1;      // stwx  r29  +0xA008
         mfShowTimeDistanceTravelled = -1.0f;   // stfsx f0   +0xA00C  (flt_820037C8)
 
+        // ARTIST 0x82505F08/44: no player race car until the ID event arrives.
+        mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_INVALID;
+
         // ⚠️ THE CONSOLE'S OWN SECOND STORE TO mpSystemUserProfile, reproduced rather than
         // dropped. `stw r30, 0x4058(r31)` @0x82506058, with r30 == 0 for the whole body
         // (`li r30, 0` @0x82505888 / @0x82505FB0, no other definition) and r31 reloaded from
