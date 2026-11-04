@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 #include <cstring>
 #include <cmath>
+#include <ppcintrinsics.h>
 
 // ARTIST owns the native loading path and layout. The four embedded tiled
 // DXT5 arrays are linked from the original data; their symbols retain the
@@ -207,25 +208,33 @@ namespace BrnGame
     {
         switch (leCommand)
         {
-        case E_LSC_SHOW:
-            mbVisible = true; mbHiding = false;
-            mbRenderInBackground = false; mbKillBlackOverlayWhenDone = true;
-            break;
         case E_LSC_HIDE:
             mbHiding = true;
-            break;
-        case E_LSC_SHOWSAVELOADBG:
-            mbRenderInBackground = true; mbVisible = true; mbHiding = false;
+            return;
+        case E_LSC_SHOW:
+            mbVisible = true;
+            mbHiding = false;
+            mbRenderInBackground = false;
             mbKillBlackOverlayWhenDone = true;
-            break;
-        case E_LSC_BLACKFADEIN:
-            mfBlackOverlayFade = 1.2f; mbBlackOverlayVisible = true;
-            mbBlackOverlayHiding = true; mbKillBlackOverlayWhenDone = false;
-            break;
+            return;
+        case E_LSC_SHOWSAVELOADBG:
+            mbRenderInBackground = true;
+            mbVisible = true;
+            mbHiding = false;
+            mbKillBlackOverlayWhenDone = true;
+            return;
         case E_LSC_BLACKFADEOUT:
-            mfBlackOverlayFade = 0.0f; mbBlackOverlayHiding = false;
-            mbBlackOverlayVisible = true; mbKillBlackOverlayWhenDone = false;
-            break;
+            mfBlackOverlayFade = 0.0f;
+            mbBlackOverlayVisible = true;
+            mbBlackOverlayHiding = false;
+            mbKillBlackOverlayWhenDone = false;
+            return;
+        case E_LSC_BLACKFADEIN:
+            mfBlackOverlayFade = 1.2f;
+            mbBlackOverlayVisible = true;
+            mbBlackOverlayHiding = true;
+            mbKillBlackOverlayWhenDone = false;
+            return;
         default:
             break;
         }
@@ -385,21 +394,25 @@ namespace BrnGame
         lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpBlendState_Standard);
         lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpDepthStencilState_ZBufferOff);
 
-        bool lbHideAfterDraw = false;
         if (mbBlackOverlayHiding)
         {
             mfBlackOverlayFade -= mfTimeStep * 2.0f;
-            if (mfBlackOverlayFade < 0.0f) { mfBlackOverlayFade = 0.0f; mbBlackOverlayHiding = false; lbHideAfterDraw = true; }
+            if (mfBlackOverlayFade < 0.0f)
+            {
+                mfBlackOverlayFade = 0.0f;
+                mbBlackOverlayHiding = false;
+                mbBlackOverlayVisible = false;
+            }
         }
         else
         {
             mfBlackOverlayFade += mfTimeStep * 2.0f;
-            if (mfBlackOverlayFade >= 3.0f && mbKillBlackOverlayWhenDone) { lbHideAfterDraw = true; }
+            if (!(mfBlackOverlayFade < 3.0f) && mbKillBlackOverlayWhenDone)
+                mbBlackOverlayVisible = false;
         }
-        if (lbHideAfterDraw) { mbBlackOverlayVisible = false; }
 
-        f32 lfAlpha = mfBlackOverlayFade; if (lfAlpha > 1.0f) { lfAlpha = 1.0f; } if (lfAlpha < 0.0f) { lfAlpha = 0.0f; }
-        const RGBA8 lBlack = { 0, 0, 0, static_cast<u8>(lfAlpha * 255.0f + 0.5f) };
+        const f32 lfAlpha = static_cast<f32>(__fsel(mfBlackOverlayFade - 1.0f, 1.0f, mfBlackOverlayFade));
+        const RGBA8 lBlack = { 0, 0, 0, static_cast<u8>(static_cast<s32>(lfAlpha * 255.0f + 0.5f)) };
         lpIm2d->SetTexture(mpCarTexture);
         EmitQuad(lpIm2d, Point(0.0f,0.0f), Point(KF_SCREEN_W,0.0f), Point(0.0f,KF_SCREEN_H), Point(KF_SCREEN_W,KF_SCREEN_H),
                  0.0f, 0.0f, KF_BG_U, KF_BG_V, lBlack);

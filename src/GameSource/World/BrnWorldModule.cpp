@@ -2140,6 +2140,10 @@ WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
         *lpWorldEntityOutput_PostPhysics->GetResourceRequestInterface());
     lpUpdateOutputBuffer->SetWorldEntityStatusInterface(
         lpWorldEntityOutput_PostPhysics->GetStatusInterface());
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics::GuiEventInputQueue* const lpTrafficGuiEvents =
+        lpTrafficOutput_PostPhysics->GetGuiEventQueue();
+    lpUpdateOutputBuffer->GetGuiEventQueue()->Append(*lpTrafficGuiEvents);
+    lpUpdateOutputBuffer->UnlockForWrite();
     lpTrafficOutput_PostPhysics->UnlockForWrite();
     lpWorldEntityOutput_PostPhysics->UnlockForWrite();
 

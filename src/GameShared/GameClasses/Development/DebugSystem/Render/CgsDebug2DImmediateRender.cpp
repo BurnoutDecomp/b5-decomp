@@ -64,15 +64,33 @@ namespace CgsDev
     // (mfVirtualScreenWidth / mfVirtualScreenHeight) rather than by the X360 0x34/0x38 offsets.
     bool Debug2DImmediateRender::Is2DPointOnScreen(Vector2 lv2Point) const
     {
-        if (!(lv2Point.mV.x >= 0.0f))
-            return false;
-        if (!(lv2Point.mV.y >= 0.0f))
-            return false;
-        if (!(mfVirtualScreenWidth >= lv2Point.mV.x))
-            return false;
-        if (!(mfVirtualScreenHeight >= lv2Point.mV.y))
-            return false;
-        return true;
+        const __vector4 lvZero = __vspltisw(0);
+        __vector4 lvExtent = lvZero;
+        lvExtent.x = mfVirtualScreenWidth;
+        lvExtent.y = mfVirtualScreenHeight;
+        const __vector4 lvX = __vspltw(lv2Point.mV, 0);
+
+        unsigned int luCondition = 0;
+        __vcmpgefpR(lvX, __vspltw(lvZero, 0), &luCondition);
+        if (((luCondition >> 7) & 1u) != 0)
+        {
+            const __vector4 lvY = __vspltw(lv2Point.mV, 1);
+            luCondition = 0;
+            __vcmpgefpR(lvY, __vspltw(lvZero, 1), &luCondition);
+            if (((luCondition >> 7) & 1u) != 0)
+            {
+                luCondition = 0;
+                __vcmpgefpR(__vspltw(lvExtent, 0), lvX, &luCondition);
+                if (((luCondition >> 7) & 1u) != 0)
+                {
+                    luCondition = 0;
+                    __vcmpgefpR(__vspltw(lvExtent, 1), lvY, &luCondition);
+                    if (((luCondition >> 7) & 1u) != 0)
+                        return true;
+                }
+            }
+        }
+        return false;
     }
 
     // ARTIST 0x8281A318. A segment is visible when either endpoint is on-screen or
