@@ -17,8 +17,6 @@ private:
     u32 mPlaneRGBAs[256];
 
 public:
-    cLionFog();
-    ~cLionFog();
     void Enable();
     void Disable();
     u32 IsEnabled() const;

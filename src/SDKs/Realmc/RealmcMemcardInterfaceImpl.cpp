@@ -27,6 +27,46 @@ namespace
     MemcardInterface* s_pInstance = 0;
 }
 
+// @0x82B522D0. Construct the concrete implementation in ARTIST order: base,
+// copied GameInfo, uninitialized mutex wrapper, worker pointer, queue, state
+// machine, four CardData subobjects, then thread parameters. The body performs
+// the native two-phase mutex init, replaces MemcardState's default filter with
+// XenonMessageFilter, initializes the queue, creates the game callback processor,
+// and finally initializes each E0-stride Xenon state.
+MemcardInterfaceImpl::MemcardInterfaceImpl(EA::Thread::ThreadParameters* pThreadParams,
+                                           IGameInterface* pGameInterface,
+                                           const GameInfo& rGameInfo)
+    : MemcardInterface()
+    , mGameInfo(rGameInfo)
+    , mMutex(0, false)
+    , mpWorkerThread(0)
+    , mMessageQueue()
+    , mpCallbackProcessor(0)
+    , mMemcardState(&mMutex)
+    , mpThreadParams(pThreadParams)
+{
+    EA::Thread::MutexParameters lMutexParameters(true, 0);
+    mMutex.Init(&lMutexParameters);
+
+    void* const lpFilterMemory = RealmcCore::AllocateMem(
+        0, sizeof(XenonMessageFilter));
+    XenonMessageFilter* const lpFilter = lpFilterMemory
+        ? new (lpFilterMemory) XenonMessageFilter(&mMemcardState)
+        : 0;
+    mMemcardState.SetMessageFilter(lpFilter);
+
+    mMessageQueue.Initialize(-1);
+
+    void* const lpProcessorMemory = RealmcCore::AllocateMem(
+        0, sizeof(GameCallbackProcessor));
+    mpCallbackProcessor = lpProcessorMemory
+        ? new (lpProcessorMemory) GameCallbackProcessor(pGameInterface, &mMessageQueue)
+        : 0;
+
+    for (int i = 0; i < 4; ++i)
+        XenonUtil::InitState(&maStates[i], mGameInfo.muField4C);
+}
+
 // @0x82B52CF0. Explicit shutdown work precedes the normal reverse-order C++
 // destruction of the embedded MemcardState, MessageQueue, Mutex and base.
 MemcardInterfaceImpl::~MemcardInterfaceImpl()

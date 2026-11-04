@@ -37,15 +37,7 @@
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
-// The four re-authored PC program images (pc/gcm/renderengine/LionBlendProgramsPC.cpp -- the PC
-// stand-in for the four guest Xenos microcode blobs Im3dBlend::Construct hands to
-// ImRenderer<LionBlendVertex>::Construct; see that file's recipe). Declared the same way
-// BrnIm3dSkidsRenderer.cpp declares the skid pair.
-
-// renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
-// surface BrnIm3dSkidsRenderer.cpp / BrnIm3d.cpp / BrnPostFxBloom.cpp declare (defined in
-// ImmediateMode.cpp). Returns the staged row the caller copies the constant into.
-void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 
 // The Lion-blend particle vertex format (BrnLionBlendVertex.h). Only its NAME is needed here -- the
 // template bodies never take sizeof(V) (the vertex descriptor is built from the asm immediates and the
@@ -469,21 +461,6 @@ template void ImRenderer<BasicColouredTexturedVertex>::BeginRendering(s8);
 
 namespace BrnGraphics
 {
-namespace
-{
-    // The console stages each constant with lvx128/stvx128 straight into the row
-    // BeginShaderStates handed back. On the host the staged row is an untyped byte cursor, so
-    // the two copies are spelled by size -- 64 bytes for the matrix (four rows), 16 for a
-    // Vector4 -- exactly as the asm does.
-    void StageShaderConstant(void* lpCursor, const void* lpSource, u32 luBytes)
-    {
-        if (lpCursor != 0)
-        {
-            memcpy(lpCursor, lpSource, luBytes);
-        }
-    }
-}
-
 // =================================================================================================
 // BrnGraphics::Im3dBlend::Construct  @ 0x8229B260   (DWARF BrnLionBlendIm3d.h:58)
 //
@@ -622,9 +599,7 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
         shadow::Device::SetVertexDescriptor(lpVertexDescriptor);
     }
 
-    // The staged shader-constant cursor renderengine::Device::BeginShaderStates advances
-    // (X360 var_B0; every call returns the next row through it).
-    void* lpConstantCursor = 0;
+    renderengine::FloatShaderStateIterator lIterator;
 
     // The tail constant both paths share (X360 var_60..var_54, copied at loc_8228230C).
     Vector4 lvTailConstant( 0.0f, 0.0f, 0.0f, 0.0f );
@@ -663,28 +638,27 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
         const Vector4 lvColourScale( afColourScale, afColourScale, afColourScale, 1.0f );
 
         // +0xC8 "worldViewProj" -- the whole 64-byte matrix (four lvx128/stvx128 pairs).
-        RenderEngineDeviceBeginShaderStates(&mViewProjectionMatrixStateHandle_ZFade,
-                                            &lpConstantCursor);
-        StageShaderConstant(lpConstantCursor, &arViewProjection, sizeof(Matrix44));
+        renderengine::Device::BeginShaderStates(mViewProjectionMatrixStateHandle_ZFade, lIterator);
+        memcpy(lIterator.m_dest, &arViewProjection, sizeof(Matrix44));
 
         // +0xCC "colourScale".
-        RenderEngineDeviceBeginShaderStates(&mColourScaleStateHandle_ZFade, &lpConstantCursor);
-        StageShaderConstant(lpConstantCursor, &lvColourScale, sizeof(Vector4));
+        renderengine::Device::BeginShaderStates(mColourScaleStateHandle_ZFade, lIterator);
+        *lIterator.m_dest = lvColourScale;
 
         // +0xD0 "gOffset".
-        RenderEngineDeviceBeginShaderStates(&mOffsetStateHandle_ZFade, &lpConstantCursor);
-        StageShaderConstant(lpConstantCursor, &lvOffset, sizeof(Vector4));
+        renderengine::Device::BeginShaderStates(mOffsetStateHandle_ZFade, lIterator);
+        *lIterator.m_dest = lvOffset;
 
         // +0xD4 "gScale".
-        RenderEngineDeviceBeginShaderStates(&mScaleStateHandle_ZFade, &lpConstantCursor);
-        StageShaderConstant(lpConstantCursor, &lvScale, sizeof(Vector4));
+        renderengine::Device::BeginShaderStates(mScaleStateHandle_ZFade, lIterator);
+        *lIterator.m_dest = lvScale;
 
         // +0xD8 "gDepthConversion".
-        RenderEngineDeviceBeginShaderStates(&mDepthConversionStateHandle_ZFade, &lpConstantCursor);
-        StageShaderConstant(lpConstantCursor, &lvDepthConversion, sizeof(Vector4));
+        renderengine::Device::BeginShaderStates(mDepthConversionStateHandle_ZFade, lIterator);
+        *lIterator.m_dest = lvDepthConversion;
 
         // +0xDC "gDepthFadeConstants" -- the shared tail below copies it.
-        RenderEngineDeviceBeginShaderStates(&mDepthFadeStateHandle_ZFade, &lpConstantCursor);
+        renderengine::Device::BeginShaderStates(mDepthFadeStateHandle_ZFade, lIterator);
     }
     else
     {
@@ -692,12 +666,11 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
         CgsGraphics::ImRenderer<LionBlendVertex>::BeginRendering(static_cast<s8>(0));
 
         // +0xC0 "worldViewProj".
-        RenderEngineDeviceBeginShaderStates(&mViewProjectionMatrixStateHandle_Normal,
-                                            &lpConstantCursor);
-        StageShaderConstant(lpConstantCursor, &arViewProjection, sizeof(Matrix44));
+        renderengine::Device::BeginShaderStates(mViewProjectionMatrixStateHandle_Normal, lIterator);
+        memcpy(lIterator.m_dest, &arViewProjection, sizeof(Matrix44));
 
         // +0xC4 "colourScale" -- the shared tail below copies it.
-        RenderEngineDeviceBeginShaderStates(&mColourScaleStateHandle_Normal, &lpConstantCursor);
+        renderengine::Device::BeginShaderStates(mColourScaleStateHandle_Normal, lIterator);
         lvTailConstant.mV.x = afColourScale;
         lvTailConstant.mV.y = afColourScale;
         lvTailConstant.mV.z = afColourScale;
@@ -706,7 +679,7 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
 
     // loc_8228230C -- the merged tail: one 16-byte copy into the row the last BeginShaderStates
     // handed back.
-    StageShaderConstant(lpConstantCursor, &lvTailConstant, sizeof(Vector4));
+    *lIterator.m_dest = lvTailConstant;
 }
 
 }  // namespace BrnGraphics

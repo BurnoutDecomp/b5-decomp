@@ -53,7 +53,7 @@ typedef float    FP32;
 class cParticleMaterial;            // ParticleMaterial.h
 class cParticleEmitter;             // owning emitter (opaque at this boundary)
 struct cParticleEmitterManager;     // ParticleEmitterManager.h -- Render takes it by reference
-class cLionFog;                     // fog descriptor (opaque)
+struct cLionFog;
 // ⛔⛔ `struct`, NOT `class` -- AND THAT IS A LINK FACT, NOT A STYLE ONE. MSVC mangles the two
 // class-keys differently (`U` vs `V` in the decorated name), so a `class cTime;` forward
 // declaration here against the real `struct cTime` in ParticleBucket.h produced
