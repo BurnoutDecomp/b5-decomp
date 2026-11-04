@@ -26,6 +26,23 @@ namespace
     // X360: &unk_8324FF10 -- the one DynamicThreadArray instance the facade uses.
     DynamicThreadArray gThreadHandleTable;
 
+    // ARTIST 0x82C73A00/0x82C75A40: initialise the global handle table and
+    // its critical section before threads start, then close live handles at exit.
+    struct DynamicThreadArrayLifetime
+    {
+        DynamicThreadArrayLifetime()
+        {
+            memset(gThreadHandleTable.mhDynamicThreadArray, 0,
+                   sizeof(gThreadHandleTable.mhDynamicThreadArray));
+            InitializeCriticalSection(&gThreadHandleTable.mCriticalSection);
+        }
+        ~DynamicThreadArrayLifetime()
+        {
+            gThreadHandleTable.CheckDynamicThreadArray(true);
+        }
+    };
+    DynamicThreadArrayLifetime gThreadHandleTableLifetime;
+
     // X360: the 24-slot static EAThreadDynamicData pool (&unk_8324F898, 68B each)
     // and its parallel 24-entry busy-flag table (&unk_8324FF90).
     EA::Thread::EAThreadDynamicData gThreadDynamicDataPool[EA::Thread::KI_THREAD_DYNAMIC_DATA_COUNT];

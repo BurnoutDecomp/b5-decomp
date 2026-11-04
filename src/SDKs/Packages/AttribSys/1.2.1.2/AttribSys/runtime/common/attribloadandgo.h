@@ -232,6 +232,8 @@ namespace Attrib
             // (X360 0x82803298)
             void ReleaseAsset(Vault::AssetID lAssetId, IGarbageCollector* lpGC);
 
+            void Clear() { mpData = 0; muKindAndSize = 0; }
+
             bool         Inited()  const { return mpData != 0; }
             void*        GetData() const { return mpData; }
             unsigned int GetSize() const { return muKindAndSize & 0x00FFFFFFu; }
