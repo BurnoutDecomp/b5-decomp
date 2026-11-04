@@ -270,8 +270,8 @@ namespace BrnEffects
                                    BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
         virtual void PreRenderUpdate(BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
         virtual void DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
-        // @0x822793E0 (DWARF :2110). Static: raises the QA "restart effects" latch.
-        static void RestartEffects();
+        // @0x822793E0 (DWARF :2110). Raises the QA "restart effects" latch.
+        void RestartEffects();
 
         // The module's base Update() (CgsModule::Module slot) is not the entry the game
         // module drives; the 5-arg Update above is (console vtable +68).
