@@ -85,8 +85,10 @@ namespace BrnAI
 
     // GetMaxOvertakeSpeed @0x82771618 -- lerp(LO, HI, aggressionLevel)
     // (vmaddfp v0, (HI-LO), LO, aggression; IDA raw field order D,A,B,C => D = A*C + B).
-    const f32 KF_MAX_OVERTAKE_SPEED_MARKED_MAN_HI = 89.4079971f; // 0x8300D714 = init 0x82C68D40, flt_820C4318 (200) * 0.44704
-    const f32 KF_MAX_OVERTAKE_SPEED_MARKED_MAN_LO = 71.5263977f; // 0x8300D6F0 = init 0x82C68D60, flt_820C482C (160) * 0.44704
+    extern f32 gfMarkedManMaxOvertakeSpeed;   // ARTIST 0x8300D714
+    extern f32 gfMarkedManMinOvertakeSpeed;   // ARTIST 0x8300D6F0
+    extern f32 gfMarkedManMinAggression;      // ARTIST 0x82F30170
+    extern f32 gfMarkedManMaxAggression;      // ARTIST 0x82F30174
     const f32 KF_MAX_OVERTAKE_SPEED_DEFAULT_HI    = 84.9375992f; // 0x8300D7A0 = init 0x82C68D00, flt_82022E60 (190) * 0.44704
     const f32 KF_MAX_OVERTAKE_SPEED_DEFAULT_LO    = 71.5263977f; // 0x8300D970 = init 0x82C68D20, flt_820C482C (160) * 0.44704
 

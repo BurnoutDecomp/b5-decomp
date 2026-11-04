@@ -121,11 +121,8 @@ private:
     void DrawAISectionEdge(CgsDev::Debug3DImmediateRender* lpDisplay, const AISection* lpSection,
                            s32 liEdge, Vector3 lv3Direction, s32 liColour) const;
 
-    // @0x82767428  Clears the "drivers stay still" / "max aggression" debug flags on every driver
-    // (a debug-menu action callback). DWARF :1934. DECLARED-ONLY / bodied in a follow-on (matches the
-    // .cpp scope note). When bodied, the asm shape is a free/static `BOOL(<DriverArrayBase>*)` callback
-    // (r3 is the driver base, no `this`), not this member void(void*) form -- adjust the decl then.
-    void DeactiveateDriversCallback(void* lpUserData);
+    // ARTIST 0x82767428 receives the AIModule as callback data.
+    static void DeactiveateDriversCallback(void* lpUserData);
 
     // ---- the HUD state table and the per-car read-outs (bodied in this TU) ----
     void DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDisplay);

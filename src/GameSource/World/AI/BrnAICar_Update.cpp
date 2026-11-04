@@ -93,8 +93,8 @@ namespace BrnAI
     // == 80 mph -> 35.7632 m/s. AICar::Construct seeds mfSpeedOutOfRange (mfDesiredSpeed) with it.
     const f32 KF_DEFAULT_OUT_OF_RANGE_SPEED       = 80.0f * 0.44704f;   // flt_8300D7FC (dyn-init 0x82C68580)
     const f32 KAF_PERSONALITY_BASE_AGGRESSION[E_PERSONALITY_TYPE_COUNT] = { 0.0f, 0.5f };   // flt_820C41A0[personality]
-    const f32 KF_MARKED_MAN_AGGRESSION_LO         = 0.2f;            // flt_82F30170
-    const f32 KF_MARKED_MAN_AGGRESSION_HI         = 1.0f;            // flt_82F30174
+    f32 gfMarkedManMinAggression = 0.2f; // ARTIST 0x82F30170
+    f32 gfMarkedManMaxAggression = 1.0f; // ARTIST 0x82F30174
     const f32 KAF_RANK_AGGRESSION_LO[E_PERSONALITY_TYPE_COUNT] = { 0.1f, 0.1f };   // unk_820C4188[personality]
     const f32 KAF_RANK_AGGRESSION_HI[E_PERSONALITY_TYPE_COUNT] = { 0.6f, 0.6f };   // unk_820C4190[personality]
     // GetUsefulDirection's "velocity is trustworthy above this speed" threshold lives in
@@ -988,8 +988,8 @@ namespace BrnAI
         f32 lfAcceleration;
         if (meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)                              // 0x8277BE84
         {
-            const f32 lfLo = KF_MARKED_MAN_AGGRESSION_LO;
-            const f32 lfHi = KF_MARKED_MAN_AGGRESSION_HI;
+            const f32 lfLo = gfMarkedManMinAggression;
+            const f32 lfHi = gfMarkedManMaxAggression;
             mAggressiveness.SetAggression((lfHi - lfLo) * lfProgressionRankAsRatio + lfLo);
             mAggressiveness.SetProximityToSpeedMatch(1.0f);
             mAggressiveness.SetTimeForSpeedMatch(1.0f);
